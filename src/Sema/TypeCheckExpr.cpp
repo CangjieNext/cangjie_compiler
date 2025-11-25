@@ -28,6 +28,21 @@ bool IsLocalDeclOutOfFuncBody(const Decl& decl, const FuncBody& curFuncBody)
     // Return true if the decl is not toplevel (which scope level is 0) and not in funcBody.
     return decl.scopeLevel > 0 && decl.scopeLevel < curFuncBody.scopeLevel;
 }
+
+void SubstituteTypeMappingForTypeAliasDecl(const TypeAliasDecl& tad, TypeManager& typeManager, TypeSubst& typeMapping)
+{
+    if (tad.generic) {
+        for (auto& ge : tad.generic->typeParameters) {
+            auto newTypeParam = AST::ASTCloner::Clone(ge.get());
+            newTypeParam->ty = Ty::IsTyCorrect(newTypeParam->ty)
+                ? typeManager.SubstituteTypeAliasInTy(*newTypeParam->ty, true, typeMapping)
+                : typeManager.GetInvalidTy();
+            if (auto declGenParam = DynamicCast<TyVar*>(ge->ty)) {
+                typeMapping[declGenParam] = newTypeParam->ty;
+            }
+        }
+    }
+}
 } // namespace
 
 void TypeChecker::TypeCheckerImpl::UpdateAnyTy()
@@ -348,6 +363,7 @@ void TypeChecker::TypeCheckerImpl::HandleAlias(Ptr<Expr> expr, std::vector<Ptr<D
             if (auto ref = DynamicCast<NameReferenceExpr*>(expr)) {
                 auto wasEmpty = ref->typeArguments.empty();
                 auto typeMapping = GenerateTypeMappingForTypeAliasUse(*aliasDecl, *ref);
+                SubstituteTypeMappingForTypeAliasDecl(*aliasDecl, typeManager, typeMapping);
                 SubstituteTypeArguments(*innerTypeAliasTarget, ref->typeArguments, typeMapping);
                 // Try to insert new typeArguments to ref's instTys.
                 UpdateInstTysWithTypeArgs(*ref);

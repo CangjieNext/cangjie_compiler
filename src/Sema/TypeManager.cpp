@@ -2648,7 +2648,15 @@ Ptr<AST::Ty> TypeManager::SubstituteTypeAliasInTy(AST::Ty& ty, bool needSubstitu
             }
             auto found = typeMapping.find(StaticCast<GenericsTy*>(&ty));
             if (found != typeMapping.end()) {
-                return found->second;
+                auto tmp = found->second;
+                while (tmp->IsGeneric()) {
+                    found = typeMapping.find(StaticCast<GenericsTy*>(tmp.get()));
+                    if (found == typeMapping.end()) {
+                        break;
+                    }
+                    tmp = found->second;
+                }
+                return tmp;
             }
             // This type will not be used, just for placeholder and marking current is substituted with typealias.
             return GetIntersectionTy({&ty});
