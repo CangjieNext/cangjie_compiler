@@ -215,6 +215,21 @@ void InstCtxScope::GenerateSubstPackByTyArgs(
     }
 }
 
+void TypeChecker::TypeCheckerImpl::GenerateTypeMappingForTypeAliasRefExpr(
+    AST::RefExpr& typeAliasRefExpr, SubstPack& typeMapping)
+{
+    auto typeAliasDecl = DynamicCast<TypeAliasDecl*>(typeAliasRefExpr.GetTarget());
+    if (!typeAliasDecl || !Ty::IsTyCorrect(typeAliasDecl->ty)) {
+        return;
+    }
+    // Generate type mapping for the entire type alias chain, including:
+    // 1. Mapping from the type alias decl's type parameters to the provided type arguments
+    // 2. Recursive mapping through the type alias chain to the innermost type
+    auto typeSubstMapping = GenerateTypeMappingForTypeAliasUse(*typeAliasDecl, typeAliasRefExpr);
+    // Convert TypeSubst to SubstPack and merge into typeMapping
+    typeManager.PackMapping(typeMapping, typeSubstMapping);
+}
+
 // When the baseExpr of other expr is a memberAccess,
 // we could build the type mapping by the memberAccess's baseExpr's type.
 void TypeChecker::TypeCheckerImpl::GenerateTypeMappingForBaseExpr(const Expr& baseExpr, SubstPack& typeMapping)
@@ -312,6 +327,8 @@ bool InstCtxScope::SetRefDecl(ASTContext& ctx, AST::FuncDecl& fd, CallExpr& ce)
             ReplaceTarget(ce.baseFunc.get(), &fd); // Update target for typeMapping generation.
             // Check the base of memberAccess and generate typeMapping by base.
             typeChecker.GenerateTypeMappingForBaseExpr(*ce.baseFunc, refMaps);
+        } else if (ce.baseFunc->astKind == ASTKind::REF_EXPR) {
+            typeChecker.GenerateTypeMappingForTypeAliasRefExpr(*StaticCast<RefExpr*>(ce.baseFunc.get()), refMaps);
         }
     }
     if (auto generic = GetCurrentGeneric(fd, ce)) {

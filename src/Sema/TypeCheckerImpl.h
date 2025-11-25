@@ -1015,6 +1015,7 @@ private:
      */
     void GenerateTypeMappingForBaseExpr(const AST::Expr& baseExpr, MultiTypeSubst& typeMapping);
     void GenerateTypeMappingForBaseExpr(const AST::Expr& baseExpr, SubstPack& typeMapping);
+    void GenerateTypeMappingForTypeAliasRefExpr(AST::RefExpr& typeAliasRefExpr, SubstPack& typeMapping);
     /**
      * Build the generic type mapping table by current context type and candidate function's context
      * when call base is direct function reference call.
@@ -1265,6 +1266,7 @@ private:
     bool CheckRefTypeCheckAccessLegality(const ASTContext& ctx, AST::RefType& rt, const AST::Decl& target);
     void CheckRefTypeWithRealTarget(AST::RefType& rt);
     void HandleAliasForRefType(AST::RefType& rt, Ptr<AST::Decl>& target);
+    bool CheckTypeParametersForAliasRef(AST::RefType& rt, const AST::TypeAliasDecl& aliasDecl);
 
     void GetRevTypeMapping(
         std::vector<Ptr<AST::Ty>>& params, std::vector<Ptr<AST::Ty>>& args, MultiTypeSubst& revTyMap);
@@ -1550,6 +1552,11 @@ private:
         }
         typeMapping = GenerateTypeMappingForTypeAliasDecl(tad);
         SubstituteTypeForTypeAliasTypeMapping(tad, typeArgs, typeMapping);
+        // Also generate direct mapping from type alias decl's type parameters to the provided type arguments
+        auto directMapping = TypeCheckUtil::GenerateTypeMapping(tad, typeArgs);
+        for (auto& [key, value] : directMapping) {
+            typeMapping[key] = value;
+        }
         return typeMapping;
     }
 

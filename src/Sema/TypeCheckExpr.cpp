@@ -28,6 +28,17 @@ bool IsLocalDeclOutOfFuncBody(const Decl& decl, const FuncBody& curFuncBody)
     // Return true if the decl is not toplevel (which scope level is 0) and not in funcBody.
     return decl.scopeLevel > 0 && decl.scopeLevel < curFuncBody.scopeLevel;
 }
+
+void SubstituteTypeMappingForTypeAliasDecl(const TypeAliasDecl& tad, TypeManager& typeManager, TypeSubst& typeMapping)
+{
+    if (tad.generic) {
+        for (auto& ge : tad.generic->typeParameters) {
+            if (auto declGenParam = DynamicCast<TyVar*>(ge->ty)) {
+                typeMapping[declGenParam] = typeManager.SubstituteTypeAliasInTy(*ge->ty, true, typeMapping);
+            }
+        }
+    }
+}
 } // namespace
 
 void TypeChecker::TypeCheckerImpl::UpdateAnyTy()
@@ -266,13 +277,18 @@ void TypeChecker::TypeCheckerImpl::SubstituteTypeForTypeAliasTypeMapping(
         return;
     }
     auto argsNum = tad.generic->typeParameters.size();
-    for (auto& it : typeMapping) {
-        for (size_t i = 0; i < argsNum; ++i) {
-            if (it.second == tad.generic->typeParameters[i]->ty) {
-                it.second = typeArgs[i];
-                break;
+    // First, create a mapping from type alias parameters to provided type arguments
+    TypeSubst aliasParamMapping;
+    for (size_t i = 0; i < argsNum; ++i) {
+        if (Ty::IsTyCorrect(tad.generic->typeParameters[i]->ty) && Ty::IsTyCorrect(typeArgs[i])) {
+            if (auto declGenParam = DynamicCast<TyVar*>(tad.generic->typeParameters[i]->ty)) {
+                aliasParamMapping[declGenParam] = typeArgs[i];
             }
         }
+    }
+    // Then, substitute type alias parameters in the type mapping recursively
+    for (auto& it : typeMapping) {
+        it.second = typeManager.SubstituteTypeAliasInTy(*it.second, true, aliasParamMapping);
     }
 }
 
@@ -348,6 +364,7 @@ void TypeChecker::TypeCheckerImpl::HandleAlias(Ptr<Expr> expr, std::vector<Ptr<D
             if (auto ref = DynamicCast<NameReferenceExpr*>(expr)) {
                 auto wasEmpty = ref->typeArguments.empty();
                 auto typeMapping = GenerateTypeMappingForTypeAliasUse(*aliasDecl, *ref);
+                SubstituteTypeMappingForTypeAliasDecl(*aliasDecl, typeManager, typeMapping);
                 SubstituteTypeArguments(*innerTypeAliasTarget, ref->typeArguments, typeMapping);
                 // Try to insert new typeArguments to ref's instTys.
                 UpdateInstTysWithTypeArgs(*ref);
