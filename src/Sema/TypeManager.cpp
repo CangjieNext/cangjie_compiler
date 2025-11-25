@@ -2300,6 +2300,23 @@ TypeSubst GetGreedySubst(Constraint& cst)
     }
     return m;
 }
+
+Ptr<AST::Ty> RecursiveSubstituteGenericType(Ptr<GenericsTy> ge, const TypeSubst& typeMapping)
+{
+    auto found = typeMapping.find(ge);
+    if (found != typeMapping.end()) {
+        auto tmp = found->second;
+        while (tmp->IsGeneric()) {
+            found = typeMapping.find(StaticCast<GenericsTy*>(tmp.get()));
+            if (found == typeMapping.end()) {
+                break;
+            }
+            tmp = found->second;
+        }
+        return tmp;
+    }
+    return nullptr;
+}
 }
 
 Ptr<AST::Ty> TypeManager::TryGreedySubst(Ptr<AST::Ty> ty)
@@ -2650,9 +2667,9 @@ Ptr<AST::Ty> TypeManager::SubstituteTypeAliasInTy(AST::Ty& ty, bool needSubstitu
             if (!needSubstituteGeneric) {
                 return &ty;
             }
-            auto found = typeMapping.find(StaticCast<GenericsTy*>(&ty));
-            if (found != typeMapping.end()) {
-                return found->second;
+            auto found = RecursiveSubstituteGenericType(StaticCast<GenericsTy*>(&ty), typeMapping);
+            if (found) {
+                return found;
             }
             // This type will not be used, just for placeholder and marking current is substituted with typealias.
             return GetIntersectionTy({&ty});
