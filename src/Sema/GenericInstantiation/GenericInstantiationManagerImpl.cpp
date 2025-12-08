@@ -286,6 +286,10 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
     RecordExtend(*curPkg);
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "RecordExtend");
 
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "testManager::BeforeInstantiation");
+    testManager->BeforeInstantiation(*curPkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "testManager::BeforeInstantiation");
+
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "instantiate");
     if (curPkg->TestAttr(Attribute::INCRE_COMPILE)) {
         InstantiateForIncrementalPackage();
@@ -296,6 +300,10 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
         Walker(curPkg, instantiationWalkerID, instantiator, contextReset).Walk();
     }
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "instantiate");
+
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "testManager::AfterInstantiation");
+    testManager->AfterInstantiation(*curPkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "testManager::AfterInstantiation");
 
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "TestManager");
     testManager->PreparePackageForTestIfNeeded(*curPkg);
