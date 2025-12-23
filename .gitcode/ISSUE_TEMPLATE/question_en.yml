@@ -1,0 +1,31 @@
+name: Question
+description: If you have any questions about the Cangjie community, feel free to ask.
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for asking a question. We will arrange for someone to respond!
+  - type: textarea
+    attributes:
+      label: Question Description
+      description: Please describe your question.
+    validations:
+      required: true
+  - type: checkboxes
+    id: version
+    attributes:
+      label: Affected Branch Versions
+      description: Please select the branch versions related to your question.
+      options:
+        - label: dev
+          required: false
+        - label: main
+          required: false
+        - label: release/1.0
+          required: false
+        - label: release/OpenHarmony-release-6.0
+          required: false
+    validations:
+      required: true
