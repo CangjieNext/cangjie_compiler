@@ -2841,7 +2841,8 @@ void CHIRChecker::CheckBinaryExprBase(const BinaryExpressionBase& expr, const Fu
 void CHIRChecker::OverflowStrategyMustBeValid(
     const OverflowStrategy& ofs, const Expression& expr, const Function& topLevelFunc)
 {
-    if (ofs == OverflowStrategy::NA || ofs == OverflowStrategy::OVERFLOW_STRATEGY_END || ofs == OverflowStrategy::CHECKED) {
+    if (ofs == OverflowStrategy::NA || ofs == OverflowStrategy::OVERFLOW_STRATEGY_END ||
+        ofs == OverflowStrategy::CHECKED) {
         ErrorInExpr(topLevelFunc, expr, "overflow strategy is invalid.");
     }
 }

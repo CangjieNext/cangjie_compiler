@@ -150,42 +150,32 @@ void SetOverflowStrategyForPkg(Node& node)
     });
     walkerAST.Walk();
 }
-} // namespace
 
-// Set overflow strategy after typechecked.
-void TypeChecker::SetOverflowStrategy(const std::vector<Ptr<AST::Package>>& pkgs) const
+void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, const OverflowStrategy optionStrategy);
+
+void SetOverflowStrategyInFuncBody(Node& curNode, const OverflowStrategy optionStrategy)
 {
-    // Update overflow strategy for desugared decls.
-    impl->SetIntegerOverflowStrategy();
-    // Check integer overflow strategy.
-    for (auto& pkg : pkgs) {
-        SetOverflowStrategyForPkg(*pkg);
+    if (curNode.astKind == ASTKind::FUNC_DECL) {
+        auto& fd = StaticCast<FuncDecl>(curNode);
+        if (fd.funcBody) {
+            SetOverflowStrategy(*fd.funcBody, fd.overflowStrategy, optionStrategy);
+        }
+    } else if (curNode.astKind == ASTKind::LAMBDA_EXPR) {
+        auto& le = StaticCast<LambdaExpr>(curNode);
+        if (le.funcBody) {
+            SetOverflowStrategy(*le.funcBody, le.overflowStrategy, optionStrategy);
+        }
     }
 }
 
-namespace {
 void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, const OverflowStrategy optionStrategy)
 {
-    auto setOverflowStrategyInFuncBody = [optionStrategy](Node& curNode) -> void {
-        if (curNode.astKind == ASTKind::FUNC_DECL) {
-            auto& fd = StaticCast<FuncDecl>(curNode);
-            if (fd.funcBody) {
-                SetOverflowStrategy(*fd.funcBody, fd.overflowStrategy, optionStrategy);
-            }
-        } else if (curNode.astKind == ASTKind::LAMBDA_EXPR) {
-            auto& le = StaticCast<LambdaExpr>(curNode);
-            if (le.funcBody) {
-                SetOverflowStrategy(*le.funcBody, le.overflowStrategy, optionStrategy);
-            }
-        }
-    };
-    auto preVisit = [overflowStrategy, optionStrategy, setOverflowStrategyInFuncBody](
-                        Ptr<Node> curNode) -> VisitAction {
+    auto preVisit = [overflowStrategy, optionStrategy](Ptr<Node> curNode) -> VisitAction {
         switch (curNode->astKind) {
             case ASTKind::FUNC_DECL:
             case ASTKind::LAMBDA_EXPR: {
                 if (curNode->TestAttr(Attribute::NUMERIC_OVERFLOW)) {
-                    setOverflowStrategyInFuncBody(*curNode);
+                    SetOverflowStrategyInFuncBody(*curNode, optionStrategy);
                     return VisitAction::SKIP_CHILDREN;
                 }
                 break;
@@ -196,10 +186,14 @@ void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, co
             case ASTKind::BINARY_EXPR:
             case ASTKind::TYPE_CONV_EXPR: {
                 auto expr = RawStaticCast<Expr*>(curNode);
-                if (overflowStrategy == OverflowStrategy::NA) {
-                    expr->overflowStrategy = optionStrategy;
-                } else {
-                    expr->overflowStrategy = overflowStrategy;
+                // The expression of source code imported may already contain overflow information.
+                // Maintain its own overflow strategy.
+                if (expr->overflowStrategy != OverflowStrategy::NA) {
+                    if (overflowStrategy == OverflowStrategy::NA) {
+                        expr->overflowStrategy = optionStrategy;
+                    } else {
+                        expr->overflowStrategy = overflowStrategy;
+                    }
                 }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
                 // mark call to operator func with overflowStrategy, used in split operator
@@ -220,14 +214,43 @@ void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, co
 } // namespace
 
 // Set integer overflow strategy before sema typechecking.
-void TypeChecker::TypeCheckerImpl::SetIntegerOverflowStrategy() const
+void TypeChecker::TypeCheckerImpl::SetOverflowStrategyAfterSemantic() const
 {
     CJC_NULLPTR_CHECK(ci);
+    if (ci->kind == IncreKind::NO_CHANGE || ci->kind == IncreKind::EMPTY_PKG) {
+        return;
+    }
     if (ci->invocation.globalOptions.overflowStrategy == OverflowStrategy::NA) {
         return;
     }
-    // Choose integer overflow strategy.
     for (auto& pkg : ci->GetSourcePackages()) {
-        ::SetOverflowStrategy(*pkg, OverflowStrategy::NA, ci->invocation.globalOptions.overflowStrategy);
+        // Choose integer overflow strategy.
+        SetOverflowStrategy(*pkg, OverflowStrategy::NA, ci->invocation.globalOptions.overflowStrategy);
+        // Check integer overflow strategy.
+        SetOverflowStrategyForPkg(*pkg);
+    }
+}
+
+void TypeChecker::SetOverflowStrategyForInstantiatedDecl() const
+{
+    impl->SetOverflowStrategyForInstantiatedDecl();
+}
+
+void TypeChecker::TypeCheckerImpl::SetOverflowStrategyForInstantiatedDecl() const
+{
+    CJC_NULLPTR_CHECK(ci);
+    if (ci->kind == IncreKind::NO_CHANGE || ci->kind == IncreKind::EMPTY_PKG) {
+        return;
+    }
+    if (ci->invocation.globalOptions.overflowStrategy == OverflowStrategy::NA) {
+        return;
+    }
+    for (auto& pkg : ci->GetSourcePackages()) {
+        for (auto& decl : pkg->genericInstantiatedDecls) {
+            // Choose integer overflow strategy.
+            SetOverflowStrategy(*decl, OverflowStrategy::NA, ci->invocation.globalOptions.overflowStrategy);
+            // Check integer overflow strategy.
+            SetOverflowStrategyForPkg(*decl);
+        }
     }
 }
