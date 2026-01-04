@@ -1488,11 +1488,6 @@ private:
     std::unordered_map<Ptr<AST::Decl>, std::unordered_set<Ptr<AST::Decl>>> CopyDefaultImplement(
         const AST::Package& pkg);
     void HandleDefaultImplement(const AST::Package& pkg);
-
-    Ptr<AST::Ty> SubstituteTypeAliasInTy(
-        AST::Ty& ty, bool needSubstituteGeneric = false, const TypeSubst& typeMapping = {});
-    Ptr<AST::Ty> GetUnaliasedTypeFromTypeAlias(
-        const AST::TypeAliasTy& target, const std::vector<Ptr<AST::Ty>>& typeArgs);
     void SubstituteTypeForTypeAliasTypeMapping(
         const AST::TypeAliasDecl& tad, const std::vector<Ptr<AST::Ty>>& typeArgs, TypeSubst& typeMapping) const;
     TypeSubst GenerateTypeMappingForTypeAliasDecl(const AST::TypeAliasDecl& tad) const;
@@ -1642,8 +1637,6 @@ private:
     Ptr<AST::Ty> SynLiteralInBinaryExpr(ASTContext& ctx, AST::BinaryExpr& be);
     void SynBinaryLeafs(ASTContext& ctx, AST::BinaryExpr& be);
     void HandleAlias(Ptr<AST::Expr> expr, std::vector<Ptr<AST::Decl>>& targets);
-    std::vector<Ptr<AST::Ty>> RecursiveSubstituteTypeAliasInTy(
-        Ptr<const AST::Ty> ty, bool needSubstituteGeneric, const TypeSubst& typeMapping = {});
     template <class T>
     void SubstituteTypeArguments(std::vector<OwnedPtr<AST::Type>>& typeArguments, T& type, const TypeSubst& typeMapping)
     {
@@ -1658,7 +1651,7 @@ private:
         }
         for (auto& it : type.typeArguments) {
             auto newTypeArg = AST::ASTCloner::Clone(it.get());
-            newTypeArg->ty = newTypeArg->ty ? SubstituteTypeAliasInTy(*newTypeArg->ty, true, typeMapping)
+            newTypeArg->ty = newTypeArg->ty ? typeManager.SubstituteTypeAliasInTy(*newTypeArg->ty, true, typeMapping)
                                             : TypeManager::GetInvalidTy();
             if (auto ity = DynamicCast<AST::IntersectionTy*>(newTypeArg->ty); ity && ity->tys.empty()) {
                 continue;

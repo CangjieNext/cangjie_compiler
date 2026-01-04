@@ -224,7 +224,7 @@ void ImportManager::ExportAST(bool saveFileWithAbsPath, std::vector<uint8_t>& as
             .needAbsPath = saveFileWithAbsPath,
             .compileCjd = opts.compileCjd,
         },
-        *cjoManager);
+        *cjoManager, typeManager);
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
         writer.SetSerializingCommon();
     }
@@ -253,7 +253,7 @@ std::vector<uint8_t> ImportManager::ExportASTSignature(const Package& pkg)
             .exportForIncr = true,
             .compileCjd = opts.compileCjd,
         },
-        *cjoManager);
+        *cjoManager, typeManager);
     auto packageDecl = cjoManager->GetPackageDecl(pkg.fullPackageName);
     CJC_NULLPTR_CHECK(packageDecl);
     writer.PreSaveFullExportDecls(*packageDecl->srcPackage);
@@ -268,7 +268,14 @@ void ImportManager::ExportDeclsWithContent(bool saveFileWithAbsPath, Package& pa
 {
     // NOTE: If 'importSrcCode' is disabled, we also do not need to export source code.
     auto writer = new ASTWriter(diag, GeneratePkgDepInfo(package),
-        {importSrcCode, false, opts.exportForTest, saveFileWithAbsPath, opts.compileCjd}, *cjoManager);
+        {
+            .exportContent = importSrcCode,
+            .exportForIncr = false,
+            .exportForTest = opts.exportForTest,
+            .needAbsPath = saveFileWithAbsPath,
+            .compileCjd = opts.compileCjd,
+        },
+        *cjoManager, typeManager);
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
         writer->SetSerializingCommon();
     }
@@ -1346,7 +1353,7 @@ bool ImportManager::IsExtendAccessible(
 
 const Ptr<Type> ImportManager::FindImplmentInterface(const File& file, const Decl& member, const Ptr<Type>& it) const
 {
-    auto targetDecl = DynamicCast<InheritableDecl>(it->GetTarget());
+    auto targetDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(it->ty);
     if (targetDecl == nullptr) {
         return nullptr;
     }
