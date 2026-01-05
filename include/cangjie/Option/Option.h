@@ -614,9 +614,14 @@ public:
     std::string optPassOptions = ""; /**< customized opt pass options from user.*/
 
     enum class OutputMode : uint8_t {
-        EXECUTABLE, STATIC_LIB, SHARED_LIB, CHIR
+        EXECUTABLE, STATIC_LIB, SHARED_LIB, CHIR, OBJ
     };
     OutputMode outputMode = OutputMode::EXECUTABLE;
+
+    enum class CompileTarget : uint8_t {
+        EXECUTABLE, STATIC_LIB, SHARED_LIB, DEFAULT
+    };
+    CompileTarget compileTarget = CompileTarget::DEFAULT;
 
     bool enableFuncSections = false;
     bool enableDataSections = false;
@@ -837,16 +842,25 @@ public:
     std::vector<std::string> bitcodeFilesName; /** < the name of packageMoudle.bc. */
     std::vector<std::string> symbolsNeedLocalized; /** < Symbols that need to be localized in the compiled binary. */
 
+    bool CompileObjectForExe() const
+    {
+        return (outputMode == GlobalOptions::OutputMode::OBJ && compileTarget == CompileTarget::EXECUTABLE);
+    }
     /**
      * @brief Determine if the output mode is executable.
      *
-     * @return bool Returns true if the output mode is executable, otherwise returns false.
+     * @return bool Returns true if the output mode is executable or obj and compileTarget is executable,
+     * otherwise returns false.
      */
     bool CompileExecutable() const
     {
-        return (outputMode == GlobalOptions::OutputMode::EXECUTABLE);
+        return (outputMode == GlobalOptions::OutputMode::EXECUTABLE || CompileObjectForExe());
     }
 
+    bool CompileObjectForLibrary() const
+    {
+        return (outputMode == GlobalOptions::OutputMode::OBJ && compileTarget != CompileTarget::EXECUTABLE);
+    }
     /**
      * @brief Get options backend type.
      *
@@ -1146,6 +1160,7 @@ private:
 
     bool SetupConditionalCompilationCfg();
     void SetupChirOptions();
+    void SetupCompileTargetOptions();
     bool ReprocessOutputs();
     bool CheckOutputPathLength() const;
     bool ReprocessInputs();
@@ -1154,6 +1169,7 @@ private:
     bool CheckScanDependencyOptions() const;
     bool CheckSanitizerOptions() const;
     bool CheckLtoOptions() const;
+    bool CheckOutputModeOptions();
     bool CheckCompileAsExeOptions() const;
     bool CheckPgoOptions() const;
     bool CheckCompileMacro() const;
@@ -1181,6 +1197,7 @@ private:
     std::string OptimizationLevelToSerializedString() const;
     std::string StackTraceFormatToSerializedString() const;
     std::string OutputModeToSerializedString() const;
+    std::string CompileTargetToSerializedString() const;
     std::string SelectedCHIROptsToSerializedString() const;
     std::string OverflowStrategyToSerializedString() const;
     std::string SanitizerTypeToSerializedString() const;

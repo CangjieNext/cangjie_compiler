@@ -896,7 +896,7 @@ bool DeadCodeElimination::CheckUselessFunc(const Func& func, const GlobalOptions
         // when use chir-interpreter execute cjc-frontend ('cjc-frontend --chir-interpreter ...'), we should not
         // delete main method
         return opts.outputMode == GlobalOptions::OutputMode::STATIC_LIB ||
-            opts.outputMode == GlobalOptions::OutputMode::SHARED_LIB;
+            opts.outputMode == GlobalOptions::OutputMode::SHARED_LIB || opts.CompileObjectForLibrary();
     }
     // Do not check the functions that can be exported.
     if (IsExternalDecl(func)) {
@@ -917,6 +917,12 @@ bool DeadCodeElimination::CheckUselessFunc(const Func& func, const GlobalOptions
     if (!opts.disableReflection) {
         // enable reflect
         return !func.TestAttr(Attribute::PUBLIC) || func.TestAttr(Attribute::NO_REFLECT_INFO);
+    }
+    bool isExecutableStrategy =
+        (opts.outputMode == GlobalOptions::OutputMode::EXECUTABLE || opts.CompileObjectForExe());
+    if (!isExecutableStrategy) {
+        // external func in lib output mode can not be removed.
+        return false;
     }
     return true;
 }
