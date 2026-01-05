@@ -59,8 +59,16 @@ const std::unordered_map<std::string, uint8_t> OUTPUT_MODE_MAP = {
     {"exe", uint8_t(GlobalOptions::OutputMode::EXECUTABLE)},
     {"staticlib", uint8_t(GlobalOptions::OutputMode::STATIC_LIB)},
     {"dylib", uint8_t(GlobalOptions::OutputMode::SHARED_LIB)},
+    {"obj", uint8_t(GlobalOptions::OutputMode::OBJ)},
     {"chir", uint8_t(GlobalOptions::OutputMode::CHIR)},
 };
+
+const std::unordered_map<std::string, uint8_t> COMPILE_TARGET_MAP = {
+    {"exe", uint8_t(GlobalOptions::CompileTarget::EXECUTABLE)},
+    {"staticlib", uint8_t(GlobalOptions::CompileTarget::STATIC_LIB)},
+    {"dylib", uint8_t(GlobalOptions::CompileTarget::SHARED_LIB)},
+};
+
 #endif
 
 const std::unordered_map<std::string, ArchType> STRING_ARCH_MAP = {
@@ -818,6 +826,12 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
             opts.enableHotReload = false;
         }
         opts.enableOutputType = true;
+            return true;
+    }},
+    { Options::ID::COMPILE_TARGET, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        CJC_ASSERT(COMPILE_TARGET_MAP.count(arg.value) != 0);
+        if (COMPILE_TARGET_MAP.count(arg.value) == 0) { return false; }
+        opts.compileTarget = GlobalOptions::CompileTarget(COMPILE_TARGET_MAP.at(arg.value));
         return true;
     }},
      { Options::ID::COMPILE_MACRO, [](GlobalOptions& opts, [[maybe_unused]] const OptionArgInstance& arg) {

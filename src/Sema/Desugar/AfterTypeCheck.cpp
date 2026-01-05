@@ -335,6 +335,7 @@ void TypeChecker::TypeCheckerImpl::GenerateMainInvoke()
     // 3. current process is in incremental compiling strategy
     // 4. main function is invalid.
     // 5. when compiling chir we only depend on whether we have main func or not
+    // 6. output-type is obj and compile-target is not exe (in CompileExecutable)
     bool outputCHIR = ci->invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR;
     if ((!ci->invocation.globalOptions.CompileExecutable() && !outputCHIR) ||
         packageHasMain->TestAttr(Attribute::IMPORTED) ||
