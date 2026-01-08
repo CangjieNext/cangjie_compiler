@@ -17,6 +17,7 @@
 #include <iomanip>
 #else
 #include <spawn.h>
+#include <cstring>
 #include <sys/wait.h>
 #endif
 #include <fstream>
@@ -175,7 +176,7 @@ std::unique_ptr<ToolFuture> Tool::Run() const
     if (!CreateProcessA(
         name.c_str(), const_cast<char*>(commandLine.c_str()), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
         Utils::Semaphore::Get().Release();
-        return nullptr;
+        return std::make_unique<ErrorFuture>(GetSystemErrorMessage(GetLastError()));
     }
 
     return std::make_unique<WindowsProcessFuture>(pi);
@@ -225,7 +226,7 @@ std::unique_ptr<ToolFuture> Tool::Run() const
     // Failed to start the child process
     if (status != 0) {
         Utils::Semaphore::Get().Release();
-        return nullptr;
+        return std::make_unique<ErrorFuture>(GetSystemErrorMessage(status));
     }
 
     return std::make_unique<LinuxProcessFuture>(pid);
