@@ -17,9 +17,11 @@
 #include <iomanip>
 #else
 #include <spawn.h>
+#include <cstring>
 #include <sys/wait.h>
 #endif
 #include <fstream>
+#include <type_traits>
 
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/Utils/Semaphore.h"
@@ -27,7 +29,42 @@
 #include "cangjie/Driver/Utils.h"
 
 using namespace Cangjie;
-
+namespace {
+#ifdef _WIN32
+std::string GetSystemErrorMessage(DWORD errCode)
+{
+    char msg[512] = {0};
+    DWORD size = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, errCode,
+        MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), msg, sizeof(msg), NULL);
+    if (size == 0 || msg[0] == '\0') {
+        return "";
+    }
+    std::string message = std::string(msg);
+    while (!message.empty() && (message.back() == '\r' || message.back() == '\n')) {
+        message.pop_back();
+    }
+    return message;
+}
+#else
+std::string GetSystemErrorMessage(int error)
+{
+    constexpr size_t buffSize = 512;
+    char buf[buffSize] = {0};
+    auto handleError = [&buf](auto res) -> std::string {
+        using T = decltype(res);
+        if constexpr (std::is_integral_v<T>) {
+            // POSIX
+            return res != 0 ? "" : std::string(buf);
+        } else {
+            // GNU
+            return res ? std::string(res) : "";
+        }
+    };
+    // Generic lambda defers semantic checks until instantiation.
+    return handleError(strerror_r(error, buf, buffSize));
+}
+#endif
+} // namespace
 #ifdef __APPLE__
 const static std::string LD_LIBRARY_PATH = "DYLD_LIBRARY_PATH";
 #elif !defined(_WIN32)
@@ -139,7 +176,7 @@ std::unique_ptr<ToolFuture> Tool::Run() const
     if (!CreateProcessA(
         name.c_str(), const_cast<char*>(commandLine.c_str()), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
         Utils::Semaphore::Get().Release();
-        return nullptr;
+        return std::make_unique<ErrorFuture>(GetSystemErrorMessage(GetLastError()));
     }
 
     return std::make_unique<WindowsProcessFuture>(pi);
@@ -189,7 +226,7 @@ std::unique_ptr<ToolFuture> Tool::Run() const
     // Failed to start the child process
     if (status != 0) {
         Utils::Semaphore::Get().Release();
-        return nullptr;
+        return std::make_unique<ErrorFuture>(GetSystemErrorMessage(status));
     }
 
     return std::make_unique<LinuxProcessFuture>(pid);
