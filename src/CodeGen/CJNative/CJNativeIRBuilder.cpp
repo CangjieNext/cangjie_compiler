@@ -125,6 +125,10 @@ llvm::Value* IRBuilder2::CreateCallOrInvoke(const CGFunctionType& calleeType, ll
     auto returnCHIRType = chirFuncType.GetReturnType();
     auto returnCGType = CGType::GetOrCreate(cgMod, returnCHIRType);
     if (calleeType.HasSRet()) {
+        // Determine whether we need to add an extra argument at the beginning to store the result.
+        auto& chirFuncType = StaticCast<const CHIR::FuncType&>(calleeType.GetOriginal());
+        auto& returnCHIRType = *chirFuncType.GetReturnType();
+        auto& returnCGType = *CGType::GetOrCreate(cgMod, &returnCHIRType);
         llvm::Value* allocaForRetVal = nullptr;
         if (!returnCGType->GetSize()) {
             CHIR::Type* retValType = nullptr;
@@ -920,7 +924,6 @@ llvm::Value* IRBuilder2::CreateGEP(
 CGValue IRBuilder2::CreateGEP(
     const CGValue& cgVal, const std::vector<uint64_t>& idxList, [[maybe_unused]] const llvm::Twine& name)
 {
-    std::vector<llvm::Value*> idxes;
     auto ret = cgVal.GetRawValue();
     auto eleType = cgVal.GetCGType()->GetPointerElementType();
     CJC_NULLPTR_CHECK(eleType);
