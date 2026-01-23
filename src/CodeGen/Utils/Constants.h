@@ -35,6 +35,7 @@ const std::string GC_GLOBAL_VAR_TYPE = "GlobalVarType";
 const std::string GC_KLASS_ATTR = "CFileKlass";
 const std::string GC_TI_EXT_ATTR = "CFileTIExt";
 const std::string NOT_MODIFIABLE_CLASS_ATTR = "NotModifiableClass";
+const std::string BOX_CLASS_ATTR = "Box";
 const std::string HAS_EXT_PART = "HasExtPart";
 const std::string GC_MTABLE_ATTR = "CFileMTable";
 const std::string GC_FINALIZER_ATTR = "HasFinalizer";
