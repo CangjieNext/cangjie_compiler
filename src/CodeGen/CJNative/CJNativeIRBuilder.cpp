@@ -1448,7 +1448,9 @@ llvm::Value* IRBuilder2::CreateEnumGEP(const CHIR::Field& field)
         auto res = GetEnumAssociatedValue(field);
         if (auto cgType = dynamic_cast<CGEnumType*>(CGType::GetOrCreate(cgMod, field.GetResult()->GetType()));
             cgType && cgType->IsOptionLikeRef()) {
-            llvm::cast<llvm::Instruction>(res)->setMetadata(
+            auto insRes = llvm::cast<llvm::Instruction>(res);
+            CJC_NULLPTR_CHECK(insRes);
+            insRes->setMetadata(
                 "untrusted_ref", llvm::MDNode::get(cgMod.GetLLVMContext(), {}));
         }
         return res;
