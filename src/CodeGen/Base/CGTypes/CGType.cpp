@@ -251,6 +251,9 @@ llvm::GlobalVariable* CGType::GetOrCreateTypeInfo()
     if (!IsModifiableClass(chirType)) {
         typeInfo->addAttribute(NOT_MODIFIABLE_CLASS_ATTR);
     }
+    if (chirType.IsBox()) {
+        typeInfo->addAttribute(BOX_CLASS_ATTR);
+    }
     if (!typeInfo->hasInitializer()) {
         cgMod.DelayGenTypeInfo(this);
     }
@@ -619,7 +622,6 @@ void CGType::GenTypeInfo()
     CJC_ASSERT(typeInfo);
 
     PreActionOfGenTypeInfo();
-
     auto& llvmCtx = cgMod.GetLLVMContext();
     if (layoutType && !typeInfo->hasMetadata(GC_TYPE_META_NAME)) {
         auto structName = layoutType->getStructName();
@@ -840,6 +842,19 @@ llvm::Constant* CGType::GenOffsetsOfTypeInfo()
 
 llvm::Constant* CGType::GenTypeArgsOfTypeInfo()
 {
+    if (chirType.IsBox()) {
+        auto& boxType = StaticCast<const CHIR::BoxType&>(chirType);
+        CHIR::Type* baseType = boxType.GetBaseType();
+
+        if (baseType != nullptr) {
+            auto cgTypeOfInner = CGType::GetOrCreate(cgMod, DeRef(*baseType));
+            llvm::GlobalVariable* innerTI = cgTypeOfInner->GetOrCreateTypeInfo();
+            if (cgTypeOfInner->IsStaticGI()) {
+                cgCtx.AddDependentPartialOrderOfTypes(innerTI, this->typeInfo);
+            }
+            return llvm::ConstantExpr::getBitCast(innerTI, llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+        }
+    }
     return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
 }
 
