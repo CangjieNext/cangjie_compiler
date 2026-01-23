@@ -773,8 +773,6 @@ bool MPTypeCheckerImpl::MatchCJMPDeclAttrs(
     return true;
 }
 
-
-
 void MPTypeCheckerImpl::CheckCommonSpecificGenericMatch(const AST::Decl& specificDecl, const AST::Decl& commonDecl)
 {
     // check generic constraints
