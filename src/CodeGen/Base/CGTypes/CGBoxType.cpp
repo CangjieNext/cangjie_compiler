@@ -34,4 +34,20 @@ void CGBoxType::CalculateSizeAndAlign()
     size = layOut.getTypeAllocSize(llvmType);
     align = layOut.getABITypeAlignment(llvmType);
 }
+
+llvm::Constant* CGBoxType::GenTypeArgsOfTypeInfo()
+{
+    auto& boxType = StaticCast<const CHIR::BoxType&>(chirType);
+    CHIR::Type* baseType = boxType.GetBaseType();
+
+    if (baseType != nullptr) {
+        auto cgTypeOfInner = CGType::GetOrCreate(cgMod, DeRef(*baseType));
+        llvm::GlobalVariable* innerTI = cgTypeOfInner->GetOrCreateTypeInfo();
+        if (cgTypeOfInner->IsStaticGI()) {
+            cgCtx.AddDependentPartialOrderOfTypes(innerTI, this->typeInfo);
+        }
+        return llvm::ConstantExpr::getBitCast(innerTI, llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    }
+    return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+}
 } // namespace Cangjie::CodeGen
