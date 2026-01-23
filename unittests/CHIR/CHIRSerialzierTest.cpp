@@ -1012,6 +1012,12 @@ PackageFormat::IntrinsicKind Serialize(const IntrinsicKind& kind)
         case IS_ENUM:
             ret = IntrinsicKind_IS_ENUM;
             break;
+        case IS_BOX:
+            ret = IntrinsicKind_IS_BOX;
+            break;
+        case GET_TYPE_ARG:
+            ret = IntrinsicKind_GET_TYPE_ARG;
+            break;
         case GET_OR_CREATE_TYPEINFO_FOR_REFLECT:
             ret = IntrinsicKind_GET_OR_CREATE_TYPEINFO_FOR_REFLECT;
             break;
