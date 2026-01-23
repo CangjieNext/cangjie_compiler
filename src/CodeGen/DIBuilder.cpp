@@ -167,11 +167,7 @@ void DIBuilder::CreateGlobalVar(const CHIR::GlobalVar& variable)
     std::vector<uint64_t> expr;
     // To add the deref flag, need to guarantee the refType is not nullptr, which corresponds to Option<Ref>.None.
     if (IsReferenceType(*ty, cgMod)) {
-        if (IsOptionOrOptionLike(*ty)) {
-            if (!IsOption(*ty)) {
-                type = CreatePointerType(type);
-            }
-        } else {
+        if (!IsOptionOrOptionLike(*ty)) {
             expr.emplace_back(llvm::dwarf::DW_OP_deref);
         }
     }
@@ -321,11 +317,7 @@ void DIBuilder::EmitDeclare(const CHIR::Debug& debugNode, llvm::BasicBlock& curB
     auto hasSize = CGType::GetOrCreate(cgMod, ty)->GetSize();
     if (IsReferenceType(*ty, cgMod) || ty->IsGeneric() || !hasSize) {
         // for the generic option(does not have size), does not need wrap a pointer, because it has typeInfo.
-        if (IsOptionOrOptionLike(*ty) && hasSize) {
-            if (!IsOption(*ty)) {
-                type = CreatePointerType(type);
-            }
-        } else {
+        if (!(IsOptionOrOptionLike(*ty) && hasSize)) {
             flags |= llvm::DINode::FlagObjectPointer;
             expr.emplace_back(llvm::dwarf::DW_OP_deref);
         }
@@ -789,7 +781,7 @@ llvm::DIType* DIBuilder::CreateTupleType(const CHIR::TupleType& tupleTy, const C
         auto elemType = GetOrCreateType(*ty);
         auto bitInSize = GetTypeSize(llvmType->getStructElementType(i));
         auto offset = layOut->getElementOffsetInBits(i) + boxOffset;
-        if (IsReferenceType(*ty, cgMod)) {
+        if (IsReferenceType(*ty, cgMod) && !IsOptionOrOptionLike(*ty)) {
             elemType = CreatePointerType(elemType, CreateRefType()->getSizeInBits());
         }
         auto memberType = createMemberType(fwdDecl, "_" + std::to_string(i), diFile, 0u, bitInSize,
@@ -1146,7 +1138,7 @@ void DIBuilder::CreateStructMemberType(const CHIR::StructType& structTy, llvm::T
         auto elementTy = nonConstStructTy.GetInstantiatedMemberTys(chirBuilder)[i];
         auto elemTy = DeRef(*elementTy);
         auto elemType = GetOrCreateType(*elemTy, it.TestAttr(CHIR::Attribute::READONLY));
-        if (IsReferenceType(*elemTy, cgMod) && !IsOption(*elementTy)) {
+        if (IsReferenceType(*elemTy, cgMod) && !IsOptionOrOptionLike(*elementTy)) {
             elemType = CreatePointerType(elemType);
         }
         auto cgElemType = cgType->getStructElementType(i);
@@ -1353,9 +1345,6 @@ llvm::DICompositeType* DIBuilder::CreateEnumWithNonRefArgsType(
         for (uint32_t argIndex = 0; argIndex < ctor.funcType->GetParamTypes().size(); ++argIndex) {
             auto arg = ctor.funcType->GetParamTypes()[argIndex];
             auto argTy = GetOrCreateType(*arg);
-            if (IsReferenceType(*arg, cgMod)) {
-                argTy = CreatePointerType(argTy, CreateRefType()->getSizeInBits());
-            }
             auto align = 0u;
             uint64_t memberOffset = 0;
             if (useAndroidArm32Layout) {
@@ -1394,8 +1383,8 @@ llvm::DICompositeType* DIBuilder::CreateEnumOptionType(
     // Processing constructor for reference type that is not core/Option.
     if (isRefArg) {
         auto argType = GetOrCreateType(*argTy);
-        auto size = enumTy.IsOption()? CreateRefType()->getSizeInBits() : GetSizeInBits(argType);
-        argType = enumTy.IsOption()? CreatePointerType(argType, size) : argType;
+        auto size = IsOptionOrOptionLike(enumTy) ? CreateRefType()->getSizeInBits() : GetSizeInBits(argType);
+        argType = IsOptionOrOptionLike(enumTy) ? CreatePointerType(argType, size) : argType;
         // It might have been generated when generating argType.
         auto ref = typeCache.find(&enumTy);
         if (ref != typeCache.end()) {
