@@ -58,6 +58,16 @@ llvm::Constant* EnumCtorTIOrTTGenerator::GenSourceGenericOfTypeInfo()
     }
 }
 
+CHIR::Type* EnumCtorTIOrTTGenerator::UnwrapBoxAndRef(CHIR::Type* type)
+{
+    const CHIR::Type* derefedType = DeRef(*type);
+    if (derefedType->IsBox()) {
+        auto innerType = StaticCast<const CHIR::BoxType*>(derefedType)->GetBaseType();
+        return const_cast<CHIR::Type*>(innerType);
+    }
+    return type;
+}
+
 EnumCtorLayout EnumCtorTIOrTTGenerator::ComputeLLVMLayout(
     const std::vector<CHIR::Type*>& fields, const std::string& tiName, const std::string& className)
 {
