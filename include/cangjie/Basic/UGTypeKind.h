@@ -16,6 +16,7 @@ enum UGTypeKind {
     UG_WEAKREF = -123,
     UG_INTEROP_FOREIGN_PROXY = -122,
     UG_INTEROP_EXPORTED_REF = -121,
+    UG_BOX_REF = -120, 
     UG_GENERIC_CUSTOM = -2,
     UG_GENERIC = -1,
 
