@@ -27,7 +27,7 @@ std::string RemovePathPrefix(const std::string& absolutePath, const std::vector<
     // for the path: aa/bb/cc.cj, the absolutePath is "aa/bb", and the last "/" is need to be added.
 #ifdef _WIN32
     char split = '\\';
-    std::string res = absolutePath + split;
+    std::string res = absolutePath + std::string(1, split);
     std::string tempRes{};
     tempRes.reserve(res.size());
     std::transform(res.begin(), res.end(), std::back_inserter(tempRes), &tolower);
@@ -36,7 +36,7 @@ std::string RemovePathPrefix(const std::string& absolutePath, const std::vector<
         auto pos = tempRes.find(prefix);
 #else
     char split = '/';
-    std::string res = absolutePath + split;
+    std::string res = absolutePath + std::string(1, split);
     for (auto& prefix : removedPathPrefix) {
         auto pos = res.find(prefix);
 #endif
@@ -58,11 +58,13 @@ std::string GenerateLinkageName(const CHIR::GlobalVar& variable)
 {
     std::string linkageName = variable.GetPackageName() + "::";
     if (variable.TestAttr(CHIR::Attribute::STATIC)) {
-        auto typeIdentifier = variable.GetParentCustomTypeDef()->GetSrcCodeIdentifier();
+        auto typeDef = variable.GetParentCustomTypeDef();
+        CJC_NULLPTR_CHECK(typeDef);
+        auto typeIdentifier = typeDef->GetSrcCodeIdentifier();
         linkageName += typeIdentifier;
-        if (!variable.GetParentCustomTypeDef()->GetGenericTypeParams().empty()) {
+        if (!typeDef->GetGenericTypeParams().empty()) {
             linkageName += "<";
-            for (auto genericTy : variable.GetParentCustomTypeDef()->GetGenericTypeParams()) {
+            for (auto genericTy : typeDef->GetGenericTypeParams()) {
                 linkageName += genericTy->GetSrcCodeIdentifier() + ",";
             }
             linkageName.pop_back();
@@ -160,7 +162,9 @@ void DIBuilder::CreateGlobalVar(const CHIR::GlobalVar& variable)
     llvm::DIFile* file = GetOrCreateFile(position);
     bool isReadOnly = variable.TestAttr(CHIR::Attribute::READONLY);
     llvm::DIType* type = GetOrCreateType(*ty, isReadOnly);
-    auto llvmValue = llvm::cast<llvm::GlobalVariable>(cgMod.GetMappedCGValue(&variable)->GetRawValue());
+    auto mappedValue = cgMod.GetMappedCGValue(&variable);
+    CJC_NULLPTR_CHECK(mappedValue);
+    auto llvmValue = llvm::cast<llvm::GlobalVariable>(mappedValue->GetRawValue());
     std::vector<uint64_t> expr;
     // To add the deref flag, need to guarantee the refType is not nullptr, which corresponds to Option<Ref>.None.
     if (IsReferenceType(*ty, cgMod)) {

@@ -42,8 +42,11 @@ void CreatePrintStackTraceCall(IRBuilder2& irBuilder, llvm::Value* exceptionValu
         llvm::MDTuple::get(cgCtx.GetLLVMContext(), llvm::MDString::get(cgCtx.GetLLVMContext(), "std.core:Error"));
     funcInt8Ptr->setMetadata("IntroType", meta);
     auto concreteFuncType = static_cast<CGFunctionType*>(CGType::GetOrCreate(cgMod, printStackTraceFuncType));
+    CJC_NULLPTR_CHECK(concreteFuncType);
+    auto funcType = concreteFuncType->GetLLVMFunctionType();
+    CJC_NULLPTR_CHECK(funcType);
     auto funcPtr =
-        irBuilder.LLVMIRBuilder2::CreateBitCast(funcInt8Ptr, concreteFuncType->GetLLVMFunctionType()->getPointerTo());
+        irBuilder.LLVMIRBuilder2::CreateBitCast(funcInt8Ptr, funcType->getPointerTo());
     auto paramCGType = CGType::GetOrCreate(cgMod, printStackTraceFuncType->GetParamTypes()[0]);
     CGValue paramCGValue(exceptionValue, paramCGType);
     irBuilder.CreateCallOrInvoke(*concreteFuncType, funcPtr, {&paramCGValue});
