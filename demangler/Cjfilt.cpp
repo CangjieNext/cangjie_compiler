@@ -11,6 +11,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <filesystem>
 
 #include "CangjieDemangle.h"
 #include "Demangler.h"
@@ -26,9 +27,16 @@ static void Println(const std::string& msg) { std::cout << msg << std::endl; }
 void ReadMapFile(const std::string& name)
 {
     std::string line;
-    std::ifstream file(name);
-    const int elemNum = 2;
+    std::ifstream file;
+    try {
+        std::filesystem::path path = std::filesystem::canonical(name);
+        file.open(path);
+    } catch (const std::filesystem::filesystem_error& fsError) {
+        Println("Invalid path " + fsError.path1().string());
+        return;
+    }
 
+    const int elemNum = 2;
     if (!file.is_open()) {
         Println("Cannot open file " + name);
         return;
