@@ -156,11 +156,23 @@ std::string StringConvertor::GetUnicodeAndToUTF8(
         {'5', 5}, {'6', 6}, {'7', 7}, {'8', 8}, {'9', 9}, {'A', 10}, {'B', 11}, {'C', 12}, {'D', 13}, {'E', 14},
         {'F', 15}, {'a', 10}, {'b', 11}, {'c', 12}, {'d', 13}, {'e', 14}, {'f', 15}};
     auto temp = it;
+
     uint32_t unicodePoint = 0;
+    uint32_t base = 16; // hexadecimal base
+#ifndef NDEBUG
+    // Unicode maximum is 0x10FFFF, so the maximum number of hexadecimal digits is 6.
+    constexpr size_t MAX_HEX_DIGITS = 6;
+    size_t digitCount = 0;
+#endif
+    // limit the number of digits to 6, avoid overflow
     while (temp != strEnd && isxdigit(*temp)) {
-        // hexadecimal to decimal need multiplying 16
-        unicodePoint = (unicodePoint * 16) + hexadecimalMap[*temp];
+        CJC_ASSERT(hexadecimalMap.find(*temp) != hexadecimalMap.end());
+        unicodePoint = (unicodePoint * base) + hexadecimalMap[*temp];
         ++temp;
+#ifndef NDEBUG
+        ++digitCount;
+        CJC_ASSERT(digitCount <= MAX_HEX_DIGITS);
+#endif
     }
     it = temp;
     return CodepointToUTF8(unicodePoint);
@@ -183,9 +195,14 @@ std::string StringConvertor::Normalize(const std::string& str, bool isRawString)
                 // "\u{" need add 3
                 it += 3;
                 str1 += GetUnicodeAndToUTF8(it, str.cend());
-            } else if (escapeList.find(*(it + 1)) != escapeList.end()) {
-                ++it;
-                str1 += escapeList.find(*(it))->second;
+            } else if (it + 1 != str.cend()) {
+                auto escapedChar = escapeList.find(*(it + 1));
+                if (escapedChar != escapeList.end()) {
+                    ++it;
+                    str1 += escapedChar->second;
+                } else {
+                    str1 += *it;
+                }
             }
             if (it == str.cend()) {
                 break;
