@@ -118,6 +118,7 @@ private:
             } else {
                 int maxid = std::max(it->second, last);
                 maxids.push_back(maxid);
+                CJC_ASSERT(md.count(b) == 1);
                 auto decl = md.at(b);
                 if (IsGV(*decl)) { // only gv has impact on other decls and therefore changes maxid of following decls
                     last = maxid;
@@ -222,6 +223,8 @@ private:
         }
         for (auto& [mangled, _] : cur) {
             if (auto cachedIt = cached.find(mangled); cachedIt == cached.end()) {
+                CJC_ASSERT(mangled2Decl.count(mangled) == 1);
+                CJC_NULLPTR_CHECK(mangled2Decl.at(mangled));
                 CollectAddedTopLevelDecl(*mangled2Decl.at(mangled));
             }
         }
