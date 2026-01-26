@@ -563,7 +563,7 @@ void MacroEvaluation::ProcessTokensInQuoteExpr(
             CreateChildMacroCall(input, startIndex, curIndex, macCall, reEval);
             inQuoteInterpolation = false;
         }
-        if (input[curIndex].kind == TokenKind::DOLLAR && input[curIndex + 1].kind == TokenKind::LPAREN) {
+        if (input[curIndex].kind == TokenKind::DOLLAR && curIndex < input.size() - 1 && input[curIndex + 1].kind == TokenKind::LPAREN) {
             inQuoteInterpolation = true;
         }
         // ignore escaped parenthesis \( \)
@@ -767,7 +767,7 @@ void MacroEvaluation::CreateMacroCallTree(MacroCall& macCall, bool reEval)
             (curIndex == tokenSize - 1 || !IsIdentifierOrContextualKeyword(inputTokens[curIndex + 1].kind))) {
             (void)ci->diag.Diagnose(posTmp, DiagKind::macro_expand_invalid_input_tokens);
         }
-        if (inputTokens[curIndex].kind == TokenKind::QUOTE && inputTokens[curIndex + 1].kind == TokenKind::LPAREN) {
+        if (inputTokens[curIndex].kind == TokenKind::QUOTE && curIndex < tokenSize - 1 && inputTokens[curIndex + 1].kind == TokenKind::LPAREN) {
             curIndex++;
             ProcessTokensInQuoteExpr(inputTokens, startIndex, curIndex, macCall, reEval);
             continue;
