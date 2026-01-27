@@ -12,6 +12,7 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/CHIR/CHIR.h"
 #include "cangjie/CHIR/Value.h"
+#include "cangjie/Utils/CheckUtils.h"
 
 namespace Cangjie::CHIR {
 
@@ -42,7 +43,7 @@ struct AnnoInstanceValue
 
 /// object representation in AnnoInstanceValue
 struct AnnoInstanceClassInst {
-    const InheritableDecl* cl;
+    const InheritableDecl* cl{nullptr};
     std::vector<std::pair<std::string, AnnoInstanceValue>> a;
 
     const AnnoInstanceValue* GetField(const std::string& s) const
