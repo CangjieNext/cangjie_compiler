@@ -12,6 +12,7 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/CHIR/CHIR.h"
 #include "cangjie/CHIR/Value.h"
+#include "cangjie/Utils/CheckUtils.h"
 
 namespace Cangjie::CHIR {
 
@@ -56,6 +57,11 @@ struct AnnoInstanceClassInst {
     }
     const AnnoInstanceValue& GetField(size_t i) const { return a[i].second; }
     std::string ToString() const;
+    AnnoInstanceClassInst(const InheritableDecl* cl, std::vector<std::pair<std::string, AnnoInstanceValue>>& a)
+        : cl{cl}, a{a}
+    {
+        CJC_NULLPTR_CHECK(cl);
+    }
 };
 using AnnoInstance = std::shared_ptr<struct AnnoInstanceClassInst>;
 using AnnoMap = std::unordered_map<const Decl*, std::vector<AnnoInstance>>;
