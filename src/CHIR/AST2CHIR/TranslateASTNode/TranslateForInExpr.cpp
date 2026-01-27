@@ -856,7 +856,7 @@ Ptr<Value> Translator::TranslateForInIter(const AST::ForInExpr& forInExpr)
         builder.GetType<RefType>(matchTy), matchTy, currentBlock)->GetResult();
     Ptr<Value> iterInit = MakeNone(*matchTy, condLoc);
     CreateWrappedStore(condLoc, iterInit, iterNextLocation, currentBlock);
-    SetSkipPrintWarning(iterInit);
+    SetSkipPrintWarning(*iterInit);
 
     // 3. Translate condition var
     auto recordBlock = currentBlock;
