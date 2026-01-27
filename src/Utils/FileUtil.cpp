@@ -547,13 +547,18 @@ bool RemoveDirectoryRecursively(const std::string& dirPath)
 
 bool ReadBinaryFileToBuffer(const std::string& filePath, std::vector<uint8_t>& buffer, std::string& failedReason)
 {
+    auto realFilePath = GetAbsPath(filePath);
     failedReason.clear();
-    std::ifstream is(filePath, std::ifstream::in | std::ifstream::binary);
+    if (!realFilePath.has_value()) {
+        failedReason = "open file failed";
+        return false;
+    }
+    std::ifstream is(realFilePath.value(), std::ifstream::in | std::ifstream::binary);
     if (!is.is_open()) {
         failedReason = "open file failed";
         return false;
     }
-    size_t fileLength = GetFileSize(filePath);
+    size_t fileLength = GetFileSize(realFilePath.value());
     if (fileLength == 0) {
         failedReason = "empty binary file";
     }
@@ -584,10 +589,14 @@ bool WriteToFile(const std::string& filePath, const std::string& data)
             return false;
         }
     }
-    std::string normalizedPath = Normalize(filePath);
-    std::ofstream file(normalizedPath);
+    auto normalizedPath = GetAbsPath(filePath);
+    if (!normalizedPath.has_value()) {
+        Errorln("File path illegal: ", filePath);
+        return false;
+    }
+    std::ofstream file(normalizedPath.value());
     if (!file.is_open()) {
-        Errorln("Failed to open file " + normalizedPath);
+        Errorln("Failed to open file " + normalizedPath.value());
         return false;
     }
 
@@ -595,7 +604,7 @@ bool WriteToFile(const std::string& filePath, const std::string& data)
 
     bool didSucceed = !file.fail();
     if (!didSucceed) {
-        Errorln("Failed to write to file " + normalizedPath);
+        Errorln("Failed to write to file " + normalizedPath.value());
     }
     file.close();
 
@@ -604,13 +613,19 @@ bool WriteToFile(const std::string& filePath, const std::string& data)
 
 bool WriteBufferToASTFile(const std::string& filePath, const std::vector<uint8_t>& buffer)
 {
+
     std::string baseDir = GetDirPath(filePath);
     if (!FileExist(baseDir)) {
         if (CreateDirs(baseDir + "/") != 0) {
             return false;
         }
     }
-    std::ofstream outStream(filePath, std::ofstream::out | std::ofstream::binary);
+    auto realFilePath = GetAbsPath(filePath);
+    if (!realFilePath.has_value()) {
+        return false;
+    }
+    auto fileName = GetFileName(filePath);
+    std::ofstream outStream(JoinPath(realFilePath.value(), fileName), std::ofstream::out | std::ofstream::binary);
     if (!outStream.is_open()) {
         return false;
     }
@@ -623,17 +638,22 @@ bool WriteBufferToASTFile(const std::string& filePath, const std::vector<uint8_t
 
 std::optional<std::string> ReadFileContent(const std::string& filePath, std::string& failedReason)
 {
-    failedReason.clear();
     if (!FileExist(filePath)) {
         failedReason = "file not exist";
         return std::nullopt;
     }
-    std::ifstream is(filePath, std::ios::in | std::ios::binary);
+    auto realFilePath = GetAbsPath(filePath);
+    failedReason.clear();
+    if (!realFilePath.has_value()) {
+        failedReason = "file path illegal";
+        return std::nullopt;
+    }
+    std::ifstream is(realFilePath.value(), std::ios::in | std::ios::binary);
     if (!is) {
         failedReason = "open file failed";
         return std::nullopt;
     }
-    size_t len = GetFileSize(filePath);
+    size_t len = GetFileSize(realFilePath.value());
     if (len >= FILE_LEN_LIMIT) {
         failedReason = "exceed the max file length: 4 GB";
         is.close();
