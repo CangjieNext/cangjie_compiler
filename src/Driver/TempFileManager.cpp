@@ -80,13 +80,18 @@ std::string GetErrMessage(int error)
         return "";
     }
     return std::string(buf);
-#elif defined(__ohos__) || defined(__APPLE__)
-    if (strerror_r(error, buf, buffSize) != 0) {
-        return "";
-    }
-    return std::string(buf);
 #else
-    return std::string(strerror_r(error, buf, buffSize));
+    using RetType = decltype(strerror_r(error, buf, buffSize));
+    if constexpr (std::is_same_v<RetType, char*>) {
+        auto res = strerror_r(error, buf, buffSize);
+        return res != nullptr ? std::string(res) : "";
+    } else {
+        auto res = strerror_r(error, buf, buffSize);
+        if (res != 0) {
+            return "";
+        }
+        return std::string(buf);
+    }
 #endif
 }
 
