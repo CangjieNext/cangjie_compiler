@@ -852,7 +852,7 @@ public:
 
     bool CompileObjectForExe() const
     {
-        return (outputMode == GlobalOptions::OutputMode::OBJ && compileTarget == CompileTarget::EXECUTABLE);
+        return (outputMode == GlobalOptions::OutputMode::OBJ && compileTarget == CompileTarget::EXECUTABLE); 
     }
     /**
      * @brief Determine if the output mode is executable.
@@ -862,13 +862,14 @@ public:
      */
     bool CompileExecutable() const
     {
-        return (outputMode == GlobalOptions::OutputMode::EXECUTABLE || CompileObjectForExe());
+        return (outputMode == GlobalOptions::OutputMode::EXECUTABLE) || CompileObjectForExe();
     }
 
-    bool CompileObjectForLibrary() const
+    bool CompileObjectForLibrary() const 
     {
         return (outputMode == GlobalOptions::OutputMode::OBJ && compileTarget != CompileTarget::EXECUTABLE);
     }
+
     /**
      * @brief Get options backend type.
      *
