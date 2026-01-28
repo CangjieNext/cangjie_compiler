@@ -199,6 +199,10 @@ if(NOT CANGJIE_BUILD_CJDB_DISABLE_PYTHON)
             DESTINATION third_party/llvm/lib
             USE_SOURCE_PERMISSIONS
         )
+        if(CANGJIE_INSTALL_CJDB_SCRIPT)
+            install(
+                FILES ${SOURCE_DIR}/lldb/source/Plugins/Platform/MacOSX/cangjie_cjdb.py
+                DESTINATION tools/script/)
     endif()
 endif()
 
