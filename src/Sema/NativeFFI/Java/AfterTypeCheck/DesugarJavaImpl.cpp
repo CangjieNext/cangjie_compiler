@@ -30,6 +30,7 @@ inline Ptr<CallExpr> TryGetSuperCall(const FuncDecl& ctor)
     if (ctor.funcBody->body->body.empty()) {
         return nullptr;
     }
+    CJC_ASSERT_WITH_MSG(!ctor.funcBody->body->body.empty(), "body must have at least one node");
     auto firstNode = ctor.funcBody->body->body[0].get();
     if (auto callExpr = As<ASTKind::CALL_EXPR>(firstNode);
         callExpr && callExpr->callKind == CallKind::CALL_SUPER_FUNCTION) {
@@ -322,6 +323,7 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateNativeFunc4Argument(const FuncArg
 
 OwnedPtr<CallExpr> JavaDesugarManager::DesugarJavaImplSuperCall(const FuncDecl& ctor, Decl& jniEnvVar)
 {
+    CJC_ASSERT_WITH_MSG(!ctor.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& paramList = *ctor.funcBody->paramLists[0];
     auto decl = As<ASTKind::CLASS_LIKE_DECL>(ctor.outerDecl);
     CJC_NULLPTR_CHECK(decl);
@@ -510,6 +512,7 @@ std::string JavaDesugarManager::GetJniMethodName(const FuncDecl& method)
     auto sampleJavaName = GetJavaMemberName(method);
     std::string fqname = GetJavaFQName(*(method.outerDecl));
     MangleJNIName(fqname);
+    CJC_ASSERT_WITH_MSG(!method.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto mangledFuncName = GetMangledMethodName(mangler, method.funcBody->paramLists[0]->params, sampleJavaName);
     MangleJNIName(mangledFuncName);
 
@@ -520,6 +523,7 @@ std::string JavaDesugarManager::GetJniMethodNameForProp(const PropDecl& propDecl
 {
     std::string varDecl = GetJavaMemberName(propDecl);
     std::string varDeclSuffix = varDecl;
+    CJC_ASSERT_WITH_MSG(!varDeclSuffix.empty(), "identifier cannot be an empty string");
     varDeclSuffix[0] = static_cast<char>(toupper(varDeclSuffix[0]));
     std::string fqname = GetJavaFQName(*(propDecl.outerDecl));
     MangleJNIName(fqname);
@@ -538,6 +542,7 @@ std::string JavaDesugarManager::GetJniInitCjObjectFuncName(const FuncDecl& ctor,
 {
     std::string fqname = GetJavaFQName(*(ctor.outerDecl));
     MangleJNIName(fqname);
+    CJC_ASSERT_WITH_MSG(!ctor.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto mangledFuncName = GetMangledJniInitCjObjectFuncName(mangler, ctor.funcBody->paramLists[0]->params,
                                                              isGeneratedCtor);
     MangleJNIName(mangledFuncName);
@@ -685,6 +690,9 @@ OwnedPtr<Expr> JavaDesugarManager::CreateIsInstanceCall(Ptr<VarDecl> jObjectVar,
 
     auto javaRefExpr = CreateJavaRefCall(WithinFile(CreateRefExpr(*jObjectVar), curFile));
 
+    CJC_ASSERT_WITH_MSG(!isInstanceOfDecl->funcBody->paramLists.empty(), "paramLists cannot be empty");
+    CJC_ASSERT_WITH_MSG(isInstanceOfDecl->funcBody->paramLists[0]->params.size() > 2,
+        "at least 3 parameters expected for isInstanceOf function");
     auto nameLit = CreateLitConstExpr(
         LitConstKind::STRING, utils.GetJavaClassNormalizeSignature(*classTy),
         isInstanceOfDecl->funcBody->paramLists[0]->params[2]->ty);

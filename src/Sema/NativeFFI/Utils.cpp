@@ -131,6 +131,7 @@ StructDecl& GetStringDecl(const ImportManager& importManager)
 
 OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes)
 {
+    CJC_ASSERT_WITH_MSG(!nodes.empty(), "cannot create lambda with empty body");
     auto retTy = nodes.back()->ty;
     auto lambda = WrapReturningLambdaExpr(typeManager, std::move(nodes));
     return CreateCallExpr(std::move(lambda), {}, nullptr, retTy);
@@ -138,8 +139,8 @@ OwnedPtr<CallExpr> WrapReturningLambdaCall(TypeManager& typeManager, std::vector
 
 OwnedPtr<LambdaExpr> WrapReturningLambdaExpr(TypeManager& typeManager, std::vector<OwnedPtr<Node>> nodes)
 {
-    auto curFile = nodes[0]->curFile;
     CJC_ASSERT(!nodes.empty());
+    auto curFile = nodes[0]->curFile;
     std::vector<OwnedPtr<FuncParam>> lambdaCallParams;
     std::vector<OwnedPtr<FuncParamList>> paramLists;
     paramLists.push_back(CreateFuncParamList(std::move(lambdaCallParams)));

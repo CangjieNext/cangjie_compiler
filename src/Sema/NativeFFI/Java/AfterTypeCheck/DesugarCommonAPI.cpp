@@ -74,12 +74,12 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(FuncDecl& sampleMethod, 
 {
     auto curFile = sampleMethod.curFile;
     CJC_NULLPTR_CHECK(curFile);
-    auto retTy = StaticCast<FuncTy*>(sampleMethod.ty)->retTy;
 
     std::vector<OwnedPtr<FuncParam>> params;
     PushEnvParams(params);
     // jobject or jclass
     PushObjParams(params, "_");
+    CJC_ASSERT_WITH_MSG(!params.empty(), "jniEnvPtrParam is absent");
     auto& jniEnvPtrParam = *params[0];
     if (!sampleMethod.TestAttr(Attribute::STATIC)) {
         PushSelfParams(params);
@@ -87,6 +87,8 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(FuncDecl& sampleMethod, 
     auto& selfParam = *params.back();
 
     std::vector<OwnedPtr<FuncArg>> methodCallArgs;
+    CJC_NULLPTR_CHECK(sampleMethod.funcBody);
+    CJC_ASSERT_WITH_MSG(!sampleMethod.funcBody->paramLists.empty(), "paramLists cannot be empty");
     for (auto& arg : sampleMethod.funcBody->paramLists[0]->params) {
         if (!FillMethodParamsByArg(params, methodCallArgs, sampleMethod, arg, jniEnvPtrParam)) {
             return nullptr;
@@ -102,6 +104,8 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(FuncDecl& sampleMethod, 
     }
     methodAccess->curFile = curFile;
 
+    auto retTy = StaticCast<FuncTy*>(sampleMethod.ty)->retTy;
+    CJC_NULLPTR_CHECK(retTy);
     auto methodCall = CreateCallExpr(std::move(methodAccess), std::move(methodCallArgs), Ptr(&sampleMethod), retTy,
         CallKind::CALL_DECLARED_FUNCTION);
 
@@ -146,9 +150,11 @@ void JavaDesugarManager::GenerateFuncParamsForNativeDeleteCjObject(
     PushEnvParams(params);
     PushObjParams(params);
     PushSelfParams(params);
+    CJC_ASSERT_WITH_MSG(!params.empty(), "jniEnv is absent");
     jniEnv = &(*params[0]);
     CJC_NULLPTR_CHECK(decl.curFile);
     constexpr int SELF_REF_INDEX = 2;
+    CJC_ASSERT_WITH_MSG(params.size() > SELF_REF_INDEX, "selfRef is absent");
     selfRef = WithinFile(CreateRefExpr(*params[SELF_REF_INDEX]), decl.curFile);
 }
 
@@ -165,6 +171,7 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeFuncDeclBylambda(Decl& decl, Ow
     auto block = CreateBlock(Nodes(std::move(catchingCall)), jniRetTy);
     auto funcBody = CreateFuncBody(std::move(paramLists), nullptr, std::move(block), jniRetTy);
     std::vector<Ptr<Ty>> funcTyParams;
+    CJC_ASSERT_WITH_MSG(!funcBody->paramLists.empty(), "paramLists cannot be empty");
     for (auto& param : funcBody->paramLists[0]->params) {
         funcTyParams.push_back(param->ty);
     }
@@ -190,6 +197,7 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeFuncDeclBylambda(Decl& decl, Ow
 OwnedPtr<Decl> JavaDesugarManager::GenerateNativeInitCjObjectFunc(FuncDecl& ctor, bool isClassLikeDecl)
 {
     if (isClassLikeDecl) {
+        CJC_ASSERT_WITH_MSG(!ctor.funcBody->paramLists.empty(), "paramLists cannot be empty");
         CJC_ASSERT(!ctor.funcBody->paramLists[0]->params.empty()); // it contains obj: JavaEntity as minimum
     }
 
@@ -200,6 +208,7 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeInitCjObjectFunc(FuncDecl& ctor
     PushObjParams(params);
     auto curFile = ctor.curFile;
     CJC_NULLPTR_CHECK(curFile);
+    CJC_ASSERT_WITH_MSG(params.size() > 1, "jniEnvPtrParam and objParam are absent");
     auto& jniEnvPtrParam = *(params[0]);
     auto objParamRef = WithinFile(CreateRefExpr(*params[1]), curFile);
     if (isClassLikeDecl) {
@@ -209,6 +218,7 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeInitCjObjectFunc(FuncDecl& ctor
         ctorCallArgs.push_back(CreateFuncArg(std::move(objWeakRef)));
     }
 
+    CJC_ASSERT_WITH_MSG(!ctor.funcBody->paramLists.empty(), "paramLists cannot be empty");
     for (size_t argIdx = 0; argIdx < ctor.funcBody->paramLists[0]->params.size(); ++argIdx) {
         auto& arg = ctor.funcBody->paramLists[0]->params[argIdx];
 

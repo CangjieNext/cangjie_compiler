@@ -299,12 +299,14 @@ void JavaSourceCodeGenerator::AddProperties()
     for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
         if (declPtr->astKind == ASTKind::PROP_DECL && !declPtr->TestAttr(Attribute::COMPILER_ADD)) {
             const PropDecl& propDecl = *StaticAs<ASTKind::PROP_DECL>(declPtr.get());
+            CJC_ASSERT_WITH_MSG(!propDecl.getters.empty(), "property must have at least one getter");
             const OwnedPtr<FuncDecl>& funcDecl = propDecl.getters[0];
             const std::string type =
                 MapCJTypeToJavaType(funcDecl->funcBody->retType, &imports, &decl->fullPackageName, false);
 
             std::string varDecl = GetJavaMemberName(propDecl);
             std::string varDeclSuffix = varDecl;
+            CJC_ASSERT_WITH_MSG(!varDeclSuffix.empty(), "identifier cannot be an empty string");
             varDeclSuffix[0] = static_cast<char>(toupper(varDeclSuffix[0]));
 
             std::string getSignature = "get" + varDeclSuffix;
@@ -546,6 +548,7 @@ void JavaSourceCodeGenerator::AddConstructor(const FuncDecl& ctor)
 {
     std::vector<std::string> nativeArgs;
     std::string superCall = GenerateConstructorSuperCall(*ctor.funcBody, nativeArgs);
+    CJC_ASSERT_WITH_MSG(!ctor.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& params = ctor.funcBody->paramLists[0]->params;
     // Java side constructor
     AddConstructor(ctor, superCall, false);
@@ -569,6 +572,7 @@ void JavaSourceCodeGenerator::AddAllCtorsForCJMappingEnum(const EnumDecl& enumDe
             auto funcDecl = As<ASTKind::FUNC_DECL>(constructor.get());
             CJC_NULLPTR_CHECK(funcDecl);
             auto funcName = funcDecl->identifier;
+            CJC_ASSERT_WITH_MSG(!funcDecl->funcBody->paramLists.empty(), "paramLists cannot be empty");
             auto& params = funcDecl->funcBody->paramLists[0]->params;
             AddWithIndent(TAB, declaration);
             auto nativeFuncName = GetMangledJniInitCjObjectFuncNameForEnum(mangler, params, funcName);
@@ -631,6 +635,7 @@ void JavaSourceCodeGenerator::AddConstructors()
 
 void JavaSourceCodeGenerator::AddInstanceMethod(const FuncDecl& funcDecl)
 {
+    CJC_ASSERT_WITH_MSG(!funcDecl.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& params = funcDecl.funcBody->paramLists[0]->params;
     auto funcIdentifier = GetJavaMemberName(funcDecl);
     auto mangledNativeName = GetMangledMethodName(mangler, params, funcIdentifier);
@@ -675,6 +680,7 @@ void JavaSourceCodeGenerator::AddInstanceMethod(const FuncDecl& funcDecl)
 
 void JavaSourceCodeGenerator::AddStaticMethod(const FuncDecl& funcDecl)
 {
+    CJC_ASSERT_WITH_MSG(!funcDecl.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& params = funcDecl.funcBody->paramLists[0]->params;
     auto funcIdentifier = GetJavaMemberName(funcDecl);
     auto mangledNativeName = GetMangledMethodName(mangler, params, funcIdentifier);
