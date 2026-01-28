@@ -21,6 +21,7 @@
 #include <sys/wait.h>
 #endif
 #include <fstream>
+#include <type_traits>
 
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/Utils/Semaphore.h"
@@ -49,14 +50,20 @@ std::string GetSystemErrorMessage(int error)
 {
     constexpr size_t buffSize = 512;
     char buf[buffSize] = {0};
-#if defined(__APPLE__)
-    if (strerror_r(error, buf, buffSize) != 0) {
-        return "";
+    using RetType = decltype(strerror_r(error, buf, buffSize));
+    auto res = strerror_r(error, buf, buffSize);
+    // gnu
+    if constexpr (std::is_same_v<RetType, char*>) {
+        char* res = strerror_r(error, buf, buffSize);
+        return res ? std::string(res) : "";
     }
-    return std::string(buf);
-#else
-    return std::string(strerror_r(error, buf, buffSize));
-#endif
+    // POSIX
+    else {
+        if (res != 0) {
+            return "";
+        }
+        return std::string(buf);
+    }
 }
 #endif
 } // namespace
