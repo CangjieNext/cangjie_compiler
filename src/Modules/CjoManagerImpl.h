@@ -172,7 +172,7 @@ public:
      * @brief Substitute imported TypeAliasTy in all loaded packages.
      * @param srcPackageName The source package name where imported TypeAliasTy come from.
      */
-    void SubstituteImportedTypeAliasTy(const std::string& srcPackageName);
+    void SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package>>& srcPackageName);
 
 private:
     DiagnosticEngine& diag;
