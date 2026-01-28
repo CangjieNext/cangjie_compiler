@@ -434,7 +434,8 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterSema(std::vector<Ptr<AST::
     if (ci->invocation.globalOptions.enIncrementalCompilation) {
         ci->CacheSemaUsage(GetSemanticUsage(typeManager, pkgs));
     }
-    if (!ci->invocation.globalOptions.CompileObjectForLibrary()) {
+    if (!(ci->invocation.globalOptions.outputMode == GlobalOptions::OutputMode::OBJ &&
+            ci->invocation.globalOptions.compileTarget != GlobalOptions::CompileTarget::EXECUTABLE)) {
         GenerateMainInvoke();
     }
     // Inline checking needs to process source package and imported packages which has source imported decls.
