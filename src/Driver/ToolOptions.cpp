@@ -191,6 +191,8 @@ void SetOptimizationLevelOptions(SetFuncType setOptionHandler, const DriverOptio
         optimizationLevel = GlobalOptions::OptimizationLevel::O2;
     }
     setOptionHandler(OPTIMIZATION_LEVEL_TO_BACKEND_OPTION.find(optimizationLevel)->second);
+    SetOptionIf(
+        setOptionHandler, optimizationLevel == GlobalOptions::OptimizationLevel::O2, "--cj-safepoint-outline=false");
 }
 
 void SetOptions(SetFuncType setOptionHandler, const DriverOptions& driverOptions)
@@ -255,6 +257,8 @@ void SetLTOOptimizationLevelOptions(SetFuncType setOptionHandler, const DriverOp
         case GlobalOptions::OptimizationLevel::Oz:
         case GlobalOptions::OptimizationLevel::O2:
             setOptionHandler("--lto-O2");
+            setOptionHandler("--mllvm");
+            setOptionHandler("--cj-safepoint-outline=false");
             break;
         case GlobalOptions::OptimizationLevel::O1:
             setOptionHandler("--lto-O1");
