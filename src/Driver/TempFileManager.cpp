@@ -82,7 +82,7 @@ std::string GetErrMessage(int error)
     return std::string(buf);
 #elif defined(__ohos__) || defined(__APPLE__)
     if (strerror_r(error, buf, buffSize) != 0) {
-        return "";
+         return "";
     }
     return std::string(buf);
 #else
