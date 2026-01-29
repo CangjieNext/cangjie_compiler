@@ -202,7 +202,7 @@ Value* Translator::TranslateVarRef(const AST::RefExpr& refExpr)
 }
 
 InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& instFuncType, Value& caller,
-    const AST::FuncDecl& callee, const std::vector<Value*>& args, const OverflowStrategy strategy)
+    const AST::FuncDecl& callee, std::vector<Value*>& args, const OverflowStrategy strategy)
 {
     auto tempDecl = typeManager.GetTopOverriddenFuncDecl(&callee);
     const AST::FuncDecl* originalFuncDecl = tempDecl ? tempDecl.get() : &callee;
@@ -226,9 +226,25 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
     if (IsOverflowOpCall(*originalFuncDecl)) {
         funcName = OverflowStrategyPrefix(strategy) + funcName;
     }
-    
+
+    Value* thisObj = &caller;
+    if (originalFuncDecl->TestAttr(AST::Attribute::STATIC)) {
+        CJC_ASSERT(args.size() == instFuncType.instParamTys.size());
+        for (size_t i = 0; i < args.size(); ++i) {
+            args[i] = TypeCastOrBoxIfNeeded(*args[i], *instFuncType.instParamTys[i]);
+        }
+    } else {
+        CJC_ASSERT(args.size() + 1 == instFuncType.instParamTys.size());
+        CJC_ASSERT(instFuncType.instParentCustomTy->IsClass());
+        auto instParentCustomTyRef = builder.GetType<RefType>(instFuncType.instParentCustomTy);
+        thisObj = TypeCastOrBoxIfNeeded(*thisObj, *instParentCustomTyRef);
+        for (size_t i = 0; i < args.size(); ++i) {
+            args[i] = TypeCastOrBoxIfNeeded(*args[i], *instFuncType.instParamTys[i + 1]);
+        }
+    }
+
     auto invokeInfo = InvokeCallContext {
-        .caller = &caller,
+        .caller = thisObj,
         .funcCallCtx = FuncCallContext {
             .args = args,
             .instTypeArgs = instFuncType.instantiatedTypeArgs,
@@ -293,13 +309,6 @@ Value* Translator::WrapMemberMethodByLambda(
         } else {
             // Invoke
             CJC_NULLPTR_CHECK(thisObj);
-            auto objExpectedType = instFuncType.instParentCustomTy;
-            if (objExpectedType->IsReferenceType()) {
-                objExpectedType = builder.GetType<RefType>(objExpectedType);
-            }
-            if (thisObj->GetType() != objExpectedType) {
-                thisObj = TypeCastOrBoxIfNeeded(*thisObj, *objExpectedType, INVALID_LOCATION);
-            }
             auto invokeInfo = GenerateInvokeCallContext(instFuncType, *thisObj, funcDecl, args);
             ret = CreateAndAppendExpression<Invoke>(lambdaRetType, invokeInfo, currentBlock)->GetResult();
         }
@@ -330,7 +339,7 @@ Value* Translator::WrapMemberMethodByLambda(
         ret = CreateAndAppendExpression<Apply>(
             instFuncType.instRetTy, callee, funcCallContext, currentBlock)->GetResult();
     }
-    CreateWrappedStore(ret, retVal, currentBlock);
+    CreateWrappedStore(*ret, *retVal);
     CreateAndAppendTerminator<Exit>(currentBlock);
     currentBlock = currentBlockBackup;
     return lambda->GetResult();
