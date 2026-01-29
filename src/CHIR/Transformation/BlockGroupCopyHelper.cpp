@@ -170,7 +170,15 @@ void BlockGroupCopyHelper::GetInstMapFromApply(const Apply& apply)
             instMap.emplace(genericType, apply.GetInstantiatedTypeArgs()[index]);
             ++index;
         }
-        thisType = apply.GetThisType();
+        // 4. set this type if needed
+        auto outerFunc = newBodyOuterFunction ? newBodyOuterFunction : apply.GetTopLevelFunc();
+        auto outerDef = outerFunc->GetParentCustomTypeDef();
+        if (customDef && outerDef && outerDef == customDef && outerFunc->TestAttr(Attribute::STATIC)) {
+            // keep this type if same custom type between callee and caller
+            thisType = builder.GetType<ThisType>();
+        } else {
+            thisType = apply.GetThisType();
+        }
     }
 }
 
