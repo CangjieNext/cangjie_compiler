@@ -19,6 +19,7 @@ cp $WORKSPACE/cangjie_compiler/LICENSE cangjie;
 cp $WORKSPACE/cangjie_compiler/Open_Source_Software_Notice.docx cangjie;
 chmod -R 750 cangjie;
 mv $WORKSPACE/cangjie_compiler/output/lib/${kernel}_${cmake_arch}_cjnative/libcangjie-ast-support.a cangjie/lib/${kernel}_${cmake_arch}_cjnative;
+mv $WORKSPACE/cangjie_compiler/output/lib/${kernel}_${cmake_arch}_cjnative/libcangjie-sema-support.a cangjie/lib/${kernel}_${cmake_arch}_cjnative;
 $tar \
   --sort=name --mtime="@${SOURCE_DATE_EPOCH}" \
   --owner=0 \

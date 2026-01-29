@@ -106,6 +106,7 @@ cp $WORKSPACE/cangjie_compiler/LICENSE cangjie;
 cp $WORKSPACE/cangjie_compiler/Open_Source_Software_Notice.docx cangjie;
 chmod -R 750 cangjie;
 mv $WORKSPACE/cangjie_compiler/output-x86_64-w64-mingw32/lib/windows_x86_64_cjnative/libcangjie-ast-support.a cangjie/lib/windows_x86_64_cjnative;
+mv $WORKSPACE/cangjie_compiler/output-x86_64-w64-mingw32/lib/windows_x86_64_cjnative/libcangjie-sema-support.a cangjie/lib/windows_x86_64_cjnative;
 find cangjie -print0 | xargs -0r touch -t "$BEP_BUILD_TIME";
 find cangjie -print0 | LC_ALL=C sort -z | xargs -0 zip -o -X $WORKSPACE/software/cangjie-frontend-windows-x64-${cangjie_version}.zip;
 

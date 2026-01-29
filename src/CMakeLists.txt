@@ -75,11 +75,11 @@ if(NOT CANGJIE_BUILD_CJC AND CANGJIE_BUILD_STD_SUPPORT)
     endif()
 
     set(AST_FFI_OBJECTS
-        $<TARGET_OBJECTS:CangjieASTCommon>
+        $<TARGET_OBJECTS:CangjieASTCommonFFI>
         $<TARGET_OBJECTS:CangjieParseFFI>
         $<TARGET_OBJECTS:CangjieLex>
-        $<TARGET_OBJECTS:CangjieBasic>
-        $<TARGET_OBJECTS:CangjieOption>
+        $<TARGET_OBJECTS:CangjieBasicFFI>
+        $<TARGET_OBJECTS:CangjieOptionFFI>
         $<TARGET_OBJECTS:CangjieAstSerialization>
         $<TARGET_OBJECTS:CangjieCommonUtilFFI>
         $<TARGET_OBJECTS:CangjieUnicodeUtils>
@@ -87,6 +87,28 @@ if(NOT CANGJIE_BUILD_CJC AND CANGJIE_BUILD_STD_SUPPORT)
     add_library(cangjie-ast-support STATIC ${AST_FFI_OBJECTS})
     string(TOLOWER ${TARGET_TRIPLE_DIRECTORY_PREFIX}_${CJNATIVE_BACKEND} output_lib_dir)
     install(TARGETS cangjie-ast-support DESTINATION lib/${output_lib_dir}${SANITIZER_SUBPATH})
+
+    set(AST_FFI_OBJECTS
+        $<TARGET_OBJECTS:CangjieASTExtraFFI>
+        $<TARGET_OBJECTS:CangjieFrontend>
+        $<TARGET_OBJECTS:CangjieMacro>
+        $<TARGET_OBJECTS:CangjieSema>
+        $<TARGET_OBJECTS:CangjieModules>
+        $<TARGET_OBJECTS:CangjieParseRest>
+        $<TARGET_OBJECTS:CangjieConditionalCompilation>
+        $<TARGET_OBJECTS:CangjieIncrementalCompilation>
+        $<TARGET_OBJECTS:CangjieOptionRest>
+        $<TARGET_OBJECTS:CangjieProfileUtils>
+        $<TARGET_OBJECTS:CangjieBasicRest>
+        $<TARGET_OBJECTS:CangjieMangle>
+        $<TARGET_OBJECTS:CangjieMetaTransformation>
+        $<TARGET_OBJECTS:CangjieCHIRBase>
+        $<TARGET_OBJECTS:CangjieCHIRExtra>
+    )
+    add_library(cangjie-sema-support STATIC ${AST_FFI_OBJECTS})
+    string(TOLOWER ${TARGET_TRIPLE_DIRECTORY_PREFIX}_${CJNATIVE_BACKEND} output_lib_dir)
+    install(TARGETS cangjie-sema-support DESTINATION lib/${output_lib_dir}${SANITIZER_SUBPATH})
+
     return()
 endif()
 
@@ -421,11 +443,11 @@ if (CANGJIE_CODEGEN_CJNATIVE_BACKEND)
 endif()
 
 set(AST_FFI_OBJECTS
-    $<TARGET_OBJECTS:CangjieASTCommon>
+    $<TARGET_OBJECTS:CangjieASTCommonFFI>
     $<TARGET_OBJECTS:CangjieParseFFI>
     $<TARGET_OBJECTS:CangjieLex>
-    $<TARGET_OBJECTS:CangjieBasic>
-    $<TARGET_OBJECTS:CangjieOption>
+    $<TARGET_OBJECTS:CangjieBasicFFI>
+    $<TARGET_OBJECTS:CangjieOptionFFI>
     $<TARGET_OBJECTS:CangjieAstSerialization>
     $<TARGET_OBJECTS:CangjieCommonUtilFFI>
     $<TARGET_OBJECTS:CangjieUnicodeUtils>
@@ -433,3 +455,24 @@ set(AST_FFI_OBJECTS
 add_library(cangjie-ast-support STATIC ${AST_FFI_OBJECTS})
 string(TOLOWER ${TARGET_TRIPLE_DIRECTORY_PREFIX}_${CJNATIVE_BACKEND} output_lib_dir)
 install(TARGETS cangjie-ast-support DESTINATION lib/${output_lib_dir}${SANITIZER_SUBPATH})
+
+set(AST_FFI_OBJECTS
+    $<TARGET_OBJECTS:CangjieASTExtraFFI>
+    $<TARGET_OBJECTS:CangjieFrontend>
+    $<TARGET_OBJECTS:CangjieMacro>
+    $<TARGET_OBJECTS:CangjieSema>
+    $<TARGET_OBJECTS:CangjieModules>
+    $<TARGET_OBJECTS:CangjieParseRest>
+    $<TARGET_OBJECTS:CangjieConditionalCompilation>
+    $<TARGET_OBJECTS:CangjieIncrementalCompilation>
+    $<TARGET_OBJECTS:CangjieOptionRest>
+    $<TARGET_OBJECTS:CangjieProfileUtils>
+    $<TARGET_OBJECTS:CangjieBasicRest>
+    $<TARGET_OBJECTS:CangjieMangle>
+    $<TARGET_OBJECTS:CangjieMetaTransformation>
+    $<TARGET_OBJECTS:CangjieCHIRBase>
+    $<TARGET_OBJECTS:CangjieCHIRExtra>
+)
+add_library(cangjie-sema-support STATIC ${AST_FFI_OBJECTS})
+string(TOLOWER ${TARGET_TRIPLE_DIRECTORY_PREFIX}_${CJNATIVE_BACKEND} output_lib_dir)
+install(TARGETS cangjie-sema-support DESTINATION lib/${output_lib_dir}${SANITIZER_SUBPATH})
