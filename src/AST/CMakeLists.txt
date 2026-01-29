@@ -29,3 +29,28 @@ add_library(CangjieASTCommon OBJECT ${LIBAST_FFI_AST})
 add_library(CangjieASTExtra OBJECT ${AST_EXTRA_SRC})
 target_compile_options(CangjieASTCommon PRIVATE ${CJC_EXTRA_WARNINGS})
 target_compile_options(CangjieASTExtra PRIVATE ${CJC_EXTRA_WARNINGS})
+
+set(LIBAST_FFI_AST_FFI
+    Node.cpp
+    RecoverDesugar.cpp
+    Types.cpp
+    IntLiteral.cpp
+    Walker.cpp
+    Clone.cpp
+    Create.cpp
+    Utils.cpp
+    Identifier.cpp)
+set(AST_EXTRA_SRC_FFI
+    Cache.cpp
+    PrintNode.cpp
+    Query.cpp
+    Searcher.cpp
+    ASTContext.cpp
+    ASTTypeValidator.cpp
+    ScopeManagerApi.cpp
+    Comment.cpp)
+
+add_library(CangjieASTCommonFFI OBJECT ${LIBAST_FFI_AST_FFI})
+add_library(CangjieASTExtraFFI OBJECT ${AST_EXTRA_SRC_FFI})
+target_compile_options(CangjieASTCommonFFI PRIVATE ${CJC_EXTRA_WARNINGS})
+target_compile_options(CangjieASTExtraFFI PRIVATE ${CJC_EXTRA_WARNINGS})

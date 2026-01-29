@@ -11,3 +11,11 @@ target_compile_options(CangjieOption PRIVATE ${CJC_EXTRA_WARNINGS})
 if(CANGJIE_VISIBLE_OPTIONS_ONLY)
     target_compile_definitions(CangjieOption PUBLIC CANGJIE_VISIBLE_OPTIONS_ONLY)
 endif()
+
+set(OPTION_FFI_SRC OptionAction.cpp Option.cpp)
+
+add_library(CangjieOptionFFI OBJECT ${OPTION_FFI_SRC})
+
+set(OPTION_REST_SRC OptionTable.cpp)
+
+add_library(CangjieOptionRest OBJECT ${OPTION_REST_SRC})
