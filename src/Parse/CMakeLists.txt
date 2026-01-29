@@ -39,3 +39,9 @@ add_library(CangjieParse OBJECT ${PARSE_SRC})
 add_library(CangjieParseFFI OBJECT ${PARSE_FFI_SRC})
 target_compile_options(CangjieParse PRIVATE ${CJC_EXTRA_WARNINGS})
 target_compile_options(CangjieParseFFI PRIVATE ${CJC_EXTRA_WARNINGS})
+
+set(PARSE_REST_SRC
+    ASTChecker.cpp
+    ASTHasher.cpp
+)
+add_library(CangjieParseRest OBJECT ${PARSE_REST_SRC})
