@@ -532,7 +532,7 @@ bool CHIRChecker::TypeIsExpected(const Type& srcType, const Type& dstType)
         return true;
     }
     // maybe struct S <: I, S is sub type of I, but we can't send S to I directly
-    if (srcType.IsStruct() && dstType.IsClass()) {
+    if (srcType.IsValueType() && dstType.StripAllRefs()->IsClass()) {
         return false;
     }
     // we can set a sub type to a parent type, it's safe in llvm ir,
