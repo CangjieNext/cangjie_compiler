@@ -116,7 +116,7 @@ Ptr<Value> Translator::TransShortCircuitAnd(
     // Create Else Block:
     auto boolLiteral =
         CreateAndAppendConstantExpression<BoolLiteral>(loc, builder.GetBoolTy(), *elseBlock, false)->GetResult();
-    CreateWrappedStore(loc, boolLiteral, alloca, elseBlock);
+    CreateWrappedStore(*boolLiteral, *alloca, *elseBlock, loc);
     CreateAndAppendTerminator<GoTo>(loc, endBlock, elseBlock);
     // Update 'currentBlock' at last.
     currentBlock = endBlock;
@@ -139,7 +139,7 @@ Ptr<Value> Translator::TransShortCircuitOr(
     // Create Then Block:
     auto boolLiteral =
         CreateAndAppendConstantExpression<BoolLiteral>(builder.GetBoolTy(), *thenBlock, true)->GetResult();
-    CreateWrappedStore(rightLoc, boolLiteral, alloca, thenBlock);
+    CreateWrappedStore(*boolLiteral, *alloca, *thenBlock, rightLoc);
     CreateAndAppendTerminator<GoTo>(rightLoc, endBlock, thenBlock);
     // Create Else Block:
     currentBlock = elseBlock;
