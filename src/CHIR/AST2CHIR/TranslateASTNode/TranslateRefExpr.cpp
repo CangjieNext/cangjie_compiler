@@ -330,7 +330,7 @@ Value* Translator::WrapMemberMethodByLambda(
         ret = CreateAndAppendExpression<Apply>(
             instFuncType.instRetTy, callee, funcCallContext, currentBlock)->GetResult();
     }
-    CreateWrappedStore(ret, retVal, currentBlock);
+    CreateWrappedStore(*ret, *retVal);
     CreateAndAppendTerminator<Exit>(currentBlock);
     currentBlock = currentBlockBackup;
     return lambda->GetResult();
