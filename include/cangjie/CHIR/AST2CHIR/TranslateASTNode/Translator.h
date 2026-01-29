@@ -116,14 +116,6 @@ public:
         bool isVirtualFuncCall{false};
     };
 
-    struct InstInvokeCalleeInfo {
-        std::string srcCodeIdentifier;
-        FuncType* instFuncType{nullptr};
-        FuncType* originalFuncType{nullptr}; // not ()->Unit, include this type
-        std::vector<Type*> instantiatedTypeArgs;
-        std::vector<GenericType*> genericTypeParams;
-        Type* thisType{nullptr};
-    };
     // === static helper functions ==
     /**
      * @brief Retrieves the constructor ID of an enum.
@@ -705,17 +697,13 @@ private:
 
     std::vector<Type*> GetFuncInstArgs(const AST::CallExpr& expr);
 
-    Expression* CreateAndAppendFuncCallFromCallExpr(
+    Expression* CreateAndAppendApplyCallFromCallExpr(
         Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::CallExpr& expr);
-    Expression* CreateAndAppendFuncCallFromArray(
+    Expression* CreateAndAppendApplyCallFromArray(
         Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::Expr& array);
     Expression* CreateAndAppendGVInitFuncCall(Value& callee);
-    Expression* CreateAndAppendFuncCall(Value& callee, FuncCallContext& context, const FuncType& instFuncTy);
     void CreateAndAppendVArraySet(
         Value& lhs, Value& rhs, Value& index, Type& elementType, const DebugLocation& loc);
-
-    Expression* GenerateDynmaicDispatchFuncCall(const InstInvokeCalleeInfo& funcInfo, const std::vector<Value*>& args,
-        Value* thisObj = nullptr, Value* thisRTTI = nullptr, DebugLocation loc = INVALID_LOCATION);
 
     CHIR::Type* GetExactParentType(Type& fuzzyParentType, const AST::FuncDecl& resolvedFunction, FuncType& funcType,
         std::vector<Type*>& funcInstTypeArgs, bool checkAbstractMethod, bool checkResult = true);
@@ -965,7 +953,6 @@ private:
         const AST::NameReferenceExpr& expr, Type& thisType, const AST::FuncDecl& funcDecl, bool isVirtualFuncCall);
     InstCalleeInfo GetInstCalleeInfoFromRefExpr(const AST::RefExpr& expr);
     InstCalleeInfo GetInstCalleeInfoFromMemberAccess(const AST::MemberAccess& expr);
-    Ptr<Value> GetBaseFromMemberAccess(const AST::Expr& base);
 
     Ptr<Value> TransformThisType(Value& rawThis, Type& expectedTy, Lambda& curLambda);
 
@@ -1087,10 +1074,11 @@ private:
     void HandleInitializedArgVal(const AST::CallExpr& ce, std::vector<Value*>& args);
 
     Value* TranslateThisObjectForNonStaticMemberFuncCall(const AST::CallExpr& expr, bool needsMutableThis);
-    void TranslateTrivialArgsWithSugar(const AST::CallExpr& expr, std::vector<Value*>& args);
-    Value* TranslateTrivialArgWithNoSugar(const AST::FuncArg& arg, const DebugLocation& loc);
-    void TranslateTrivialArgsWithNoSugar(const AST::CallExpr& expr, std::vector<Value*>& args);
-    std::vector<Value*> TranslateTrivialArgs(const AST::CallExpr& expr);
+    void TranslateFuncArgsWithoutThisObj(
+        const AST::CallExpr& expr, std::vector<Value*>& args, const std::vector<Type*>* expectedParamTys);
+    Value* TranslateTrivialArgWithNoSugar(const AST::FuncArg& arg, const DebugLocation& loc, Type* expectedTy);
+    std::vector<Value*> TranslateFuncArgs(
+        const AST::CallExpr& expr, Type* expectedThisObjTy, const std::vector<Type*>* expectedParamTys);
 
     Ptr<Value> GetCurrentThisObject(const AST::FuncDecl& resolved);
     Value* GetCurrentThisObjectByMemberAccess(const AST::MemberAccess& memAccess, const AST::FuncDecl& resolved,

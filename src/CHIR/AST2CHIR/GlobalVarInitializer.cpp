@@ -742,9 +742,8 @@ Ptr<Func> GlobalVarInitializer::GeneratePackageInitBase(const AST::Package& curP
 
     // 3. set `initFlag` true
     trans.SetCurrentBlock(*applyInitFuncBlock);
-    auto unitTy = builder.GetUnitTy();
     auto trueLit = trans.CreateAndAppendConstantExpression<BoolLiteral>(boolTy, *applyInitFuncBlock, true)->GetResult();
-    trans.CreateAndAppendExpression<Store>(unitTy, trueLit, initFlag, applyInitFuncBlock);
+    trans.CreateWrappedStore(*trueLit, *initFlag);
     return func;
 }
 
@@ -891,7 +890,7 @@ void GlobalVarInitializer::CreatePackageLiteralInit(const AST::Package& curPacka
                         auto globalVar = VirtualCast<GlobalVar>(GetGlobalVariable(*vd));
                         auto initNode = Translator::TranslateASTNode(*vd->initializer, trans);
                         initNode->SetDebugLocation(INVALID_LOCATION);
-                        trans.CreateAndAppendExpression<Store>(builder.GetUnitTy(), initNode, globalVar, curBlock);
+                        trans.CreateWrappedStore(*initNode, *globalVar, *curBlock);
                     }
                 }
                 continue;

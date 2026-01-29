@@ -60,32 +60,33 @@ Ptr<Value> Translator::Visit(const AST::ArrayExpr& array)
     return InitArrayByLambda(array);
 }
 
-Expression* Translator::CreateAndAppendFuncCallFromCallExpr(
+Expression* Translator::CreateAndAppendApplyCallFromCallExpr(
     Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::CallExpr& expr)
 {
-    auto funcCall = CreateAndAppendFuncCall(callee, context, instFuncTy);
+    auto funcCall = TryCreate<Apply>(currentBlock, instFuncTy.GetReturnType(), &callee, context);
     const auto& loc = TranslateLocation(expr);
     funcCall->SetDebugLocation(loc);
     if (expr.callKind == AST::CallKind::CALL_SUPER_FUNCTION) {
-        StaticCast<Apply*>(funcCall)->SetSuperCall();
+        if (auto apply = DynamicCast<Apply*>(funcCall)) {
+            apply->SetSuperCall();
+        }
     }
     if (HasNothingTypeArg(context.args)) {
-        funcCall->Set<DebugLocationInfoForWarning>(loc);
-    }
-    // if it's ApplyWithException, then the TypeCast should be created in its normal block and error block
-    if (funcCall->IsApply()) {
-        auto retType = TranslateType(*expr.ty);
-        auto castedCallRes = TypeCastOrBoxIfNeeded(*funcCall->GetResult(), *retType, loc);
-        return StaticCast<LocalVar*>(castedCallRes)->GetExpr();
+        if (expr.baseFunc != nullptr) {
+            const auto& warningLoc = TranslateLocation(*expr.baseFunc);
+            funcCall->Set<DebugLocationInfoForWarning>(warningLoc);
+        } else {
+            funcCall->Set<DebugLocationInfoForWarning>(loc);
+        }
     }
     return funcCall;
 }
 
-Expression* Translator::CreateAndAppendFuncCallFromArray(
+Expression* Translator::CreateAndAppendApplyCallFromArray(
     Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::Expr& array)
 {
     CJC_ASSERT(array.astKind == AST::ASTKind::ARRAY_EXPR || array.astKind == AST::ASTKind::ARRAY_LIT);
-    auto funcCall = CreateAndAppendFuncCall(callee, context, instFuncTy);
+    auto funcCall = TryCreate<Apply>(currentBlock, instFuncTy.GetReturnType(), &callee, context);
     const auto& loc = TranslateLocation(array);
     funcCall->SetDebugLocation(loc);
     return funcCall;
@@ -95,23 +96,7 @@ Expression* Translator::CreateAndAppendGVInitFuncCall(Value& callee)
 {
     auto instFuncTy = StaticCast<FuncType*>(callee.GetType());
     auto funcCallContext = FuncCallContext {};
-    return CreateAndAppendFuncCall(callee, funcCallContext, *instFuncTy);
-}
-
-Expression* Translator::CreateAndAppendFuncCall(Value& callee, FuncCallContext& context, const FuncType& instFuncTy)
-{
-    // Except for the func with variant param length, args number should equal to params number
-    auto instantiatedParamTys = instFuncTy.GetParamTypes();
-    CJC_ASSERT(context.args.size() == instantiatedParamTys.size() || instFuncTy.HasVarArg());
-    // Step 1: for the func args, cast it to the corresponding func param type if necessary
-    for (size_t i = 0; i < instantiatedParamTys.size(); ++i) {
-        context.args[i] = TypeCastOrBoxIfNeeded(*context.args[i], *instantiatedParamTys[i], INVALID_LOCATION);
-    }
-
-    // Step 2: create the func call (might be a `Apply` or `ApplyWithException`) and set
-    // its instantiated type info
-    // we should make the instantiated type info as a forced input of the constructor of `Apply`
-    return TryCreate<Apply>(currentBlock, instFuncTy.GetReturnType(), &callee, context);
+    return TryCreate<Apply>(currentBlock, instFuncTy->GetReturnType(), &callee, funcCallContext);
 }
 
 Ptr<Value> Translator::InitArrayByLambda(const AST::ArrayExpr& array)
@@ -147,7 +132,7 @@ Ptr<Value> Translator::InitArrayByLambda(const AST::ArrayExpr& array)
         .instTypeArgs = instantiatedTypeArgs,
         .thisType = nullptr
     };
-    CreateAndAppendFuncCallFromArray(*initFn, funcCallContext, *instFuncTy, array);
+    CreateAndAppendApplyCallFromArray(*initFn, funcCallContext, *instFuncTy, array);
 
     return rawArrayRef;
 }
@@ -244,26 +229,28 @@ CHIR::Type* Translator::GetExactParentType(
 
 Ptr<Value> Translator::InitArrayByCollection(const AST::ArrayExpr& array)
 {
-    auto loc = TranslateLocation(array);
-    auto arrayTy = chirTy.TranslateType(*array.ty);
-    CJC_ASSERT(arrayTy->IsRef());
-    auto eleTy = StaticCast<RawArrayType*>(StaticCast<CHIR::RefType*>(arrayTy)->GetBaseType())->GetElementType();
-
     auto collection = TranslateExprArg(*array.args[0]);
     auto sizeTy = builder.GetInt64Ty();
-
-    auto sizeGetInstFuncTy = builder.GetType<FuncType>(std::vector<Type*>({collection->GetType()}), sizeTy);
     Type* originalObjType =
         StaticCast<CustomType*>(collection->GetType()->StripAllRefs())->GetCustomTypeDef()->GetType();
     originalObjType = builder.GetType<RefType>(originalObjType);
-    auto sizeGetOriginalFuncTy = builder.GetType<FuncType>(std::vector<Type*>({originalObjType}), sizeTy);
-    auto collectionDerefType = StaticCast<RefType*>(collection->GetType())->GetBaseType();
-    auto funcName = "$sizeget";
-    InstInvokeCalleeInfo funcInfo{funcName, sizeGetInstFuncTy, sizeGetOriginalFuncTy,
-        std::vector<Type*>{}, std::vector<GenericType*>{}, collectionDerefType};
-    Value* sizeVal = GenerateDynmaicDispatchFuncCall(funcInfo, std::vector<Value*>{}, collection)->GetResult();
+    auto invokeInfo = InvokeCallContext {
+        .caller = collection,
+        .funcCallCtx = FuncCallContext {
+            .thisType = collection->GetType()->StripAllRefs()
+        },
+        .virMethodCtx = VirMethodContext {
+            .srcCodeIdentifier = "$sizeget",
+            .originalFuncType = builder.GetType<FuncType>(std::vector<Type*>({originalObjType}), sizeTy)
+        }
+    };
+    auto loc = TranslateLocation(array);
+    Value* sizeVal = TryCreate<Invoke>(currentBlock, loc, sizeTy, invokeInfo)->GetResult();
 
     // Create the array `RawArrayAllocate(eleTy, collection.size)`
+    auto arrayTy = chirTy.TranslateType(*array.ty);
+    CJC_ASSERT(arrayTy->IsRef());
+    auto eleTy = StaticCast<RawArrayType*>(arrayTy->StripAllRefs())->GetElementType();
     auto rawArrayRef =
         CreateAndAppendExpression<RawArrayAllocate>(loc, arrayTy, eleTy, sizeVal, currentBlock)->GetResult();
 
@@ -284,7 +271,7 @@ Ptr<Value> Translator::InitArrayByCollection(const AST::ArrayExpr& array)
             array.initFunc->TestAttr(AST::Attribute::GENERIC) ? std::vector<Type*>{eleTy} : std::vector<Type*>{},
         .thisType = nullptr
     };
-    CreateAndAppendFuncCallFromArray(*initFn, funcCallContext, *instFuncTy, array);
+    CreateAndAppendApplyCallFromArray(*initFn, funcCallContext, *instFuncTy, array);
     return rawArrayRef;
 }
 
