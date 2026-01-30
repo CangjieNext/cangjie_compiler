@@ -239,13 +239,16 @@ struct VarDeclWithPosition {
  */
 std::vector<VarDeclWithPosition> GetVarsInitializationOrderWithPositions(const Decl& parentDecl);
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet);
 
 void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet);
 
 void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet);
+#endif
 } // namespace Cangjie::AST
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 namespace Cangjie::Interop::Java {
 using namespace Cangjie::AST;
 
@@ -291,5 +294,6 @@ std::string GetSyntheticNameFromClassLike(const ClassLikeDecl& cld);
     */
 void InsertSyntheticClassDecl(ClassLikeDecl& decl, File& file);
 }
+#endif
 
 #endif

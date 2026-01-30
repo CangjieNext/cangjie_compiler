@@ -45,7 +45,9 @@
 #endif
 #include "cangjie/Utils/ProfileRecorder.h"
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 #include "NativeFFI/TypeCastCheck.h"
+#endif
 
 namespace Cangjie::CHIR {
 static void FlattenEffectMap(OptEffectCHIRMap& effectMap)
@@ -418,6 +420,7 @@ bool ToCHIR::RunVarInitChecking()
     return diag.GetErrorCount() == 0;
 }
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 bool ToCHIR::RunNativeFFIChecks()
 {
     Utils::ProfileRecorder recorder("CHIR", "NativeFFIChecks");
@@ -425,6 +428,7 @@ bool ToCHIR::RunNativeFFIChecks()
     checker.RunOnPackage(*chirPkg, opts.GetJobs());
     return diag.GetErrorCount() == 0;
 }
+#endif
 
 void ToCHIR::RunArrayListConstStartOpt()
 {
@@ -683,9 +687,11 @@ bool ToCHIR::RunOptimizationPassAndRulesChecking()
     if (!RunVarInitChecking()) {
         return false;
     }
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     if (!RunNativeFFIChecks()) {
         return false;
     }
+    #endif
     UnreachableBranchReporter();
     // this instantance of block elimination is to maintain dead code warnings
     UnreachableBlockElimination();
@@ -912,9 +918,11 @@ bool ToCHIR::RunAnalysisForCJLint()
     if (!RunVarInitChecking()) {
         return false;
     }
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     if (!RunNativeFFIChecks()) {
         return false;
     }
+    #endif
     UnreachableBlockElimination();
     if (RunConstantPropagationAndSafetyCheck()) {
         constAnalysisWrapper.InvalidateAllAnalysisResults();

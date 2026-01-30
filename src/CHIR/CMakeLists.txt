@@ -12,7 +12,10 @@ add_subdirectory(Expression)
 add_subdirectory(GenerateVTable)
 add_subdirectory(Type)
 add_subdirectory(Visitor)
+
+if(CANGJIE_BUILD_JAVA_OBJC_FFI)
 add_subdirectory(NativeFFI)
+endif()
 
 add_library(CangjieCHIRBase OBJECT ${CHIR_BASE_SRC})
 

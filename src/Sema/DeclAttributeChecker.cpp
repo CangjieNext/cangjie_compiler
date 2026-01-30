@@ -332,15 +332,24 @@ void DeclAttributeChecker::CheckAttributesForPropAndFuncDeclInClass(const ClassD
         return;
     }
     auto type = (member.astKind == ASTKind::PROP_DECL) ? "property" : "function";
+
+    bool isObjCMirror =
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
+        cd.TestAttr(Attribute::OBJ_C_MIRROR);
+#else
+        false;
+#endif
+
     // Member decl cannot be abstract when:
     //  1. member decl is static and not foreign;
     //  2. class decl is not abstract and not foreign;
     //  3. member decl can not be modified with 'open' in a non-inheritable object.
     //  4. member decl is not in a obj c mirror
+
     bool invalidAbstract = member.TestAttr(Attribute::ABSTRACT) &&
         ((member.TestAttr(Attribute::STATIC) && !member.TestAttr(Attribute::FOREIGN)) ||
             (!cd.TestAttr(Attribute::ABSTRACT) && !cd.TestAttr(Attribute::FOREIGN)))
-            && !cd.TestAttr(Attribute::OBJ_C_MIRROR);
+            && !isObjCMirror;
     if (invalidAbstract && !member.TestAttr(Attribute::COMMON_WITH_DEFAULT)) {
         diag.Diagnose(member, DiagKind::sema_missing_func_body, type, member.identifier.Val());
     }
@@ -378,11 +387,16 @@ void DeclAttributeChecker::CheckAttributesForPropAndFuncDeclInClass(const ClassD
 
 void DeclAttributeChecker::CheckPropDeclAttributes(const PropDecl& pd) const
 {
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     if (pd.outerDecl && pd.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR)) {
         return;
     }
+    if (pd.TestAttr(Attribute::JAVA_MIRROR)) {
+        return;
+    }
+#endif
 
-    if (pd.TestAnyAttr(Attribute::ABSTRACT, Attribute::JAVA_MIRROR) || opts.compileCjd) {
+    if (pd.TestAttr(Attribute::ABSTRACT) || opts.compileCjd) {
         return;
     }
     if (IsCommonWithoutDefault(pd)) {

@@ -18,8 +18,12 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 #include "../NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
+#include "NativeFFI/Java/TypeCheck/InheritanceChecker.h"
+#endif
+
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
@@ -34,7 +38,6 @@
 #include "Diags.h"
 #include "TypeCheckUtil.h"
 #include "TypeCheckerImpl.h"
-#include "NativeFFI/Java/TypeCheck/InheritanceChecker.h"
 #include "CJMP/MPTypeCheckerImpl.h"
 
 using namespace Cangjie;
@@ -229,6 +232,7 @@ bool CompMemberSignatureByPosAndTy(Ptr<const MemberSignature> m1, Ptr<const Memb
     return CompTyByNames(m1->ty, m2->ty);
 }
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 /**
  * precondition: instance methods must be merged
  */
@@ -241,6 +245,7 @@ void GenerateNativeFFIJavaMirrorSyntheticWrapper(
     auto cd = StaticCast<ClassDecl*>(&decl);
     Interop::Java::GenerateSyntheticClassMemberStubs(*cd, interfaceMembers, instanceMembers);
 }
+#endif
 
 } // namespace
 
@@ -366,7 +371,9 @@ void StructInheritanceChecker::CheckMembersWithInheritedDecls(InheritableDecl& d
     for (auto& interface : interfaceMembers) {
         CheckExtendExportDependence(decl, interface.second, visibleExtendMembers);
     }
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     GenerateNativeFFIJavaMirrorSyntheticWrapper(decl, interfaceMembers, instanceMembers);
+#endif
     // 1. Merge & check members inherited in from super class or extended type of extend decl first.
     for (auto& member : decl.GetMemberDecls()) {
         if (!Ty::IsTyCorrect(member->ty) || !member->outerDecl || member->TestAttr(Attribute::CONSTRUCTOR)) {
@@ -728,7 +735,9 @@ void StructInheritanceChecker::DiagnoseForInheritedMember(
             CheckInheritanceAttributes(parent, *child.decl);
         }
     }
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     CheckNativeFFI(parent, child);
+#endif
 }
 
 void StructInheritanceChecker::DiagnoseInheritedInsconsistType(const MemberSignature& member, const Node& node) const
@@ -892,7 +901,9 @@ void StructInheritanceChecker::DiagnoseForInheritedInterfaces(
                 CheckMutModifierCompatible(interface, *child.decl);
             }
         }
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
         CheckNativeFFI(interface, child);
+#endif
     }
     if (interface.decl->TestAttr(Attribute::DEFAULT)) {
         interface.decl->EnableAttr(Attribute::INTERFACE_IMPL);
@@ -904,9 +915,14 @@ void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMa
     // Do not check unimplemented function for:
     // 1. Foreign struct.
     // 2. Mirror struct.
-    if (structDecl.TestAttr(Attribute::FOREIGN) || structDecl.TestAnyAttr(Attribute::OBJ_C_MIRROR)) {
+    if (structDecl.TestAttr(Attribute::FOREIGN)) {
         return;
     }
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
+    if (structDecl.TestAttr(Attribute::OBJ_C_MIRROR)) {
+        return;
+    }
+    #endif
     std::string prefix = structDecl.astKind == ASTKind::EXTEND_DECL ? "extend " : "";
     std::string structName = prefix + (structDecl.ty->IsNominal() ? structDecl.ty->name : structDecl.ty->String());
     std::multimap<Ptr<Decl>, const MemberSignature*> unImplementedDecl;
@@ -1455,6 +1471,7 @@ std::vector<Ptr<ExtendDecl>> StructInheritanceChecker::GetAllNeedCheckExtended()
 }
 #endif
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 void StructInheritanceChecker::CheckNativeFFI(
     [[maybe_unused]] const MemberSignature& parent, [[maybe_unused]] const MemberSignature& child) const
 {
@@ -1464,3 +1481,4 @@ void StructInheritanceChecker::CheckNativeFFI(
     }
 #endif
 }
+#endif

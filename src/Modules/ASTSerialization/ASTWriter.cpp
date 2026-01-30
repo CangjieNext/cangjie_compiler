@@ -1746,6 +1746,7 @@ std::vector<TAnnoOffset> ASTWriter::ASTWriterImpl::SaveAnnotations(const Decl& d
             auto frozen = PackageFormat::CreateAnno(builder, PackageFormat::AnnoKind_Frozen,
                 builder.CreateString(annotation->identifier.Val()), builder.CreateVector<TAnnoArgOffset>({}));
             annotations.emplace_back(frozen);
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
         } else if (annotation->kind == AST::AnnotationKind::JAVA_MIRROR) {
             auto args = builder.CreateVector<TAnnoArgOffset>(SaveAnnotationArgs(*annotation));
             auto mirror = PackageFormat::CreateAnno(
@@ -1776,6 +1777,7 @@ std::vector<TAnnoOffset> ASTWriter::ASTWriterImpl::SaveAnnotations(const Decl& d
             auto impl = PackageFormat::CreateAnno(builder, PackageFormat::AnnoKind_ForeignName,
                 builder.CreateString(annotation->identifier.Val()), args);
             annotations.emplace_back(impl);
+#endif
         } else if (annotation->kind == AST::AnnotationKind::CUSTOM &&
             (annotation->isCompileTimeVisible || decl.TestAnyAttr(Attribute::COMMON, Attribute::PLATFORM))) {
             // Save common/platform annotations for consistency checking

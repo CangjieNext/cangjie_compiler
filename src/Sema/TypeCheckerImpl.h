@@ -424,10 +424,14 @@ private:
      * NOTICE: it will change AST Node!
      */
     void AddObjectSuperClass(ASTContext& ctx, AST::ClassDecl& cd);
+
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     /**
      * LLVM-java interop scenario.
      */
     bool AddJObjectSuperClassJavaInterop(ASTContext& ctx, AST::ClassDecl& cd);
+#endif
+
     void AddDefaultSuperCall(const AST::FuncBody& funcBody) const;
     /**
      * If there is no default constructor, insert one.
@@ -625,8 +629,12 @@ private:
 
     void CheckSealedInheritance(const AST::Decl& child, const AST::Type& parent);
     void CheckThreadContextInheritance(const AST::Decl& decl, const AST::Type& parent);
+
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     void CheckJavaInteropLibImport(AST::Decl& decl);
     void CheckObjCInteropLibImport(AST::Decl& decl);
+#endif
+
     void CheckClassDecl(ASTContext& ctx, AST::ClassDecl& cd);
     void CheckInterfaceDecl(ASTContext& ctx, AST::InterfaceDecl& id);
     void CheckStructDecl(ASTContext& ctx, AST::StructDecl& sd);
@@ -1274,13 +1282,15 @@ private:
     bool NeedCheckBodyReturn(const AST::FuncBody& fb) const;
     void CheckAnnotations(ASTContext& ctx, AST::Decl& decl);
     void CheckAnnotationDecl(ASTContext& ctx, AST::Annotation& ann);
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     void CheckJavaHasDefaultAnnotation(AST::Annotation& ann, const AST::Decl& decl) const;
+#endif
     OwnedPtr<AST::CallExpr> CheckCustomAnnotation(ASTContext& ctx, const AST::Decl& decl, AST::Annotation& ann);
     bool HasModifier(const std::set<AST::Modifier>& modifiers, TokenKind kind) const;
 
     void CheckLegalityOfUsage(ASTContext &ctx, AST::Package &pkg);
     void CheckClosures(const ASTContext &ctx, AST::Node &node) const;
-    
+
     // Desugar primary constructor into `init` and fields before cjmp customDef merging
     void CheckPrimaryCtorBeforeMerge(AST::Node& root);
     /**

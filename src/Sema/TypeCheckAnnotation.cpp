@@ -16,7 +16,10 @@
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/RecoverDesugar.h"
+
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 #include "NativeFFI/Java/TypeCheck/TypeCheckAnnotation.h"
+#endif
 
 using namespace Cangjie;
 using namespace AST;
@@ -187,10 +190,12 @@ void TypeChecker::TypeCheckerImpl::CheckAnnotations(ASTContext& ctx, Decl& decl)
             case AnnotationKind::FROZEN: {
                 break;
             }
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
             case AnnotationKind::JAVA_HAS_DEFAULT: {
                 Interop::Java::CheckJavaHasDefaultAnnotation(diag, *anno, decl);
                 break;
             }
+#endif
             default: {
                 for (auto& arg : anno->args) {
                     (void)Synthesize(ctx, arg.get());

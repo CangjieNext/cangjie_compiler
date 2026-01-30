@@ -10,6 +10,7 @@
  * This file declares utility functions for NativeFFI logic in CHIR.
  */
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 #ifndef CANGJIE_CHIR_NATIVE_FFI_UTILS
 #define CANGJIE_CHIR_NATIVE_FFI_UTILS
 
@@ -20,4 +21,5 @@ namespace Cangjie::CHIR::Native::FFI {
     std::vector<uint64_t> FindHasInitedField(const CHIR::ClassDef& classDef);
 }
 
+#endif
 #endif

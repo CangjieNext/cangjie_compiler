@@ -4,5 +4,9 @@
 #
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+if(CANGJIE_BUILD_JAVA_OBJC_FFI)
+
 file(GLOB NATIVE_FFI_SRC *.cpp)
 set(CHIR_BASE_SRC ${CHIR_BASE_SRC} ${NATIVE_FFI_SRC} PARENT_SCOPE)
+
+endif()

@@ -431,12 +431,19 @@ OwnedPtr<Decl> ParserImpl::ParsePropDecl(
 void ParserImpl::CheckClassLikePropAbstractness(AST::PropDecl& prop)
 {
     CJC_NULLPTR_CHECK(prop.outerDecl);
+
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     if (prop.outerDecl->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::OBJ_C_MIRROR)) {
         prop.DisableAttr(Attribute::ABSTRACT);
         return;
     }
+    #endif
     bool isJavaMirrorOrJavaMirrorSubtype =
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
         prop.outerDecl->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE);
+    #else
+        false;
+    #endif
     bool isCommon = prop.TestAttr(Attribute::COMMON);
     auto outerModifiers = prop.outerDecl->modifiers;
     bool inAbstract = HasModifier(outerModifiers, TokenKind::ABSTRACT);

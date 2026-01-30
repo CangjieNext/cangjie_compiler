@@ -22,8 +22,12 @@
 #include "Diags.h"
 #include "ExtraScopes.h"
 #include "JoinAndMeet.h"
+
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 #include "NativeFFI/Java/BeforeTypeCheck/GenerateJavaMirror.h"
 #include "NativeFFI/ObjC/BeforeTypeCheck/Desugar.h"
+#endif
+
 #include "Plugin/PluginCustomAnnoChecker.h"
 #include "TypeCheckUtil.h"
 
@@ -1757,6 +1761,7 @@ void TypeChecker::TypeCheckerImpl::TypeCheckCompositeBody(
     }
 }
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 void TypeChecker::TypeCheckerImpl::CheckJavaInteropLibImport(Decl& decl)
 {
     constexpr auto INTEROPLIB_JAVA_PACKAGE_NAME = "interoplib.interop";
@@ -1766,7 +1771,9 @@ void TypeChecker::TypeCheckerImpl::CheckJavaInteropLibImport(Decl& decl)
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
 }
+#endif
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 void TypeChecker::TypeCheckerImpl::CheckObjCInteropLibImport(Decl& decl)
 {
     constexpr auto INTEROPLIB_OBJ_C_PACKAGE_NAME = "interoplib.objc";
@@ -1776,6 +1783,7 @@ void TypeChecker::TypeCheckerImpl::CheckObjCInteropLibImport(Decl& decl)
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
 }
+#endif
 
 bool TypeChecker::TypeCheckerImpl::IsCapturedInCFuncLambda(const ASTContext& ctx, const AST::RefExpr& re) const
 {
@@ -2185,7 +2193,7 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
     // Merging common classes into platform if any
     mpImpl->PrepareTypeCheck4CJMP(pkg);
 
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     Interop::Java::PrepareTypeCheck(pkg, importManager, typeManager);
     Interop::ObjC::PrepareTypeCheck(pkg);
 #endif

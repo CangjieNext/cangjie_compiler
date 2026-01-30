@@ -42,10 +42,12 @@ namespace {
 // Annotations not serialized in AST are matched via their corresponding attributes
 // Annotations with parameters MUST be serialized for common/platform matching
 const std::unordered_map<AnnotationKind, Attribute> NON_SERIALIZED_ANNOTATIONS = {
-    {AnnotationKind::C, Attribute::C},
-    {AnnotationKind::JAVA_MIRROR, Attribute::JAVA_MIRROR},
+    {AnnotationKind::C, Attribute::C}
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
+    ,{AnnotationKind::JAVA_MIRROR, Attribute::JAVA_MIRROR},
     {AnnotationKind::JAVA_HAS_DEFAULT, Attribute::JAVA_HAS_DEFAULT},
     {AnnotationKind::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR},
+#endif
 };
 
 // Annotations not supported on common/platform (neither serialized nor have attributes)

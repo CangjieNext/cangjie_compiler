@@ -274,8 +274,11 @@ struct ASTHasherImpl {
         auto nonSemaAttr = {Attribute::ABSTRACT, Attribute::CONSTRUCTOR, Attribute::DEFAULT,
             Attribute::ENUM_CONSTRUCTOR, Attribute::INTERNAL, Attribute::FOREIGN, Attribute::COMMON,
             Attribute::PLATFORM, Attribute::GENERIC, Attribute::GLOBAL,
-            Attribute::INTRINSIC, Attribute::JAVA_APP, Attribute::JAVA_MIRROR, Attribute::OBJ_C_MIRROR,
-            Attribute::OBJ_C_MIRROR_SUBTYPE, Attribute::MACRO_EXPANDED_NODE, Attribute::MACRO_FUNC,
+            Attribute::INTRINSIC, Attribute::JAVA_APP,
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
+            Attribute::JAVA_MIRROR, Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE,
+#endif
+            Attribute::MACRO_EXPANDED_NODE, Attribute::MACRO_FUNC,
             Attribute::MUT, Attribute::NUMERIC_OVERFLOW, Attribute::OPERATOR, Attribute::PRIVATE, Attribute::PUBLIC,
             Attribute::PROTECTED, Attribute::STATIC, Attribute::TOOL_ADD, Attribute::UNSAFE};
 
@@ -810,11 +813,13 @@ struct ASTHasherImpl {
             case AnnotationKind::CALLING_CONV:
             case AnnotationKind::INTRINSIC:
             case AnnotationKind::JAVA:
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
             case AnnotationKind::JAVA_MIRROR:
             case AnnotationKind::JAVA_IMPL:
             case AnnotationKind::OBJ_C_MIRROR:
             case AnnotationKind::OBJ_C_IMPL:
             case AnnotationKind::FOREIGN_NAME:
+#endif
             case AnnotationKind::WHEN:
             case AnnotationKind::DEPRECATED:
                 return true;
@@ -846,11 +851,13 @@ struct ASTHasherImpl {
             case AnnotationKind::CALLING_CONV:
             case AnnotationKind::INTRINSIC:
             case AnnotationKind::JAVA:
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
             case AnnotationKind::JAVA_MIRROR:
             case AnnotationKind::JAVA_IMPL:
             case AnnotationKind::OBJ_C_MIRROR:
             case AnnotationKind::OBJ_C_IMPL:
             case AnnotationKind::FOREIGN_NAME:
+#endif
                 // if anno.kind == WHEN, anno can only be in MacroDecl
             case AnnotationKind::WHEN:
                 // annotations combined in body hash are basically the complementary of that combined in mangle name,

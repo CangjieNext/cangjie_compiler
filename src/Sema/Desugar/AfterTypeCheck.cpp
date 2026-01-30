@@ -19,8 +19,10 @@
 
 #include "AutoBoxing.h"
 #include "ExtraScopes.h"
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 #include "NativeFFI/Java/AfterTypeCheck/JavaInteropManager.h"
 #include "NativeFFI/ObjC/AfterTypeCheck/Desugar.h"
+#endif
 #include "TypeCheckUtil.h"
 #include "TypeCheckerImpl.h"
 
@@ -403,6 +405,7 @@ void TypeChecker::TypeCheckerImpl::DesugarForPropDecl(Node& pkg)
 // Perform desugar after typecheck before generic instantiation.
 void TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck(ASTContext& ctx, Package& pkg)
 {
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     Interop::Java::JavaInteropManager jim(importManager, typeManager, diag, *ci->mangler,
         ci->invocation.globalOptions.outputJavaGenDir, ci->invocation.globalOptions.output,
         ci->invocation.globalOptions.enableInteropCJMapping);
@@ -415,6 +418,7 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck(ASTContext& ctx,
     jim.DesugarPackage(pkg);
     Interop::ObjC::Desugar(Interop::ObjC::InteropContext(
         pkg, typeManager, importManager, diag, *ci->mangler, ci->invocation.globalOptions.output));
+#endif
 
     DesugarDeclsForPackage(pkg, ci->invocation.globalOptions.enableCoverage);
     std::function<VisitAction(Ptr<Node>)> preVisit = [this, &ctx](Ptr<Node> node) -> VisitAction {

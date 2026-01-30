@@ -7,6 +7,7 @@
 
 #include "DeCompression.h"
 #include <limits>
+#include <cstdint>
 #ifdef BUILD_LIB_CANGJIE_DEMANGLE // To reuse the code to compile CangjieDemangle.cpp
 #include <cstring>
 #include <string>

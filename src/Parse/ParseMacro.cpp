@@ -577,7 +577,9 @@ template <typename T> OwnedPtr<T> ParserImpl::ParseMacroCall(
     ScopeKind scopeKind, const std::set<Modifier>& modifiers, std::vector<OwnedPtr<Annotation>> annos)
 {
     CheckOverflowAnno(annos, scopeKind);
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     ffiParser->CheckAnnotations(annos, scopeKind);
+#endif
     // @! can be used before decl (param included), but not expr
     if constexpr (std::is_same_v<T, MacroExpandDecl> || std::is_same_v<T, MacroExpandParam>) {
         CJC_ASSERT(SeeingMacroCallDecl());

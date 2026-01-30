@@ -152,7 +152,9 @@ private:
     bool RunConstantPropagationAndSafetyCheck();
     bool RunConstantPropagation();
     void RunRangePropagation();
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     bool RunNativeFFIChecks();
+    #endif
     void RunArrayListConstStartOpt();
     void RunFunctionInline(DevirtualizationInfo& devirtInfo);
     void RunArrayLambdaOpt();

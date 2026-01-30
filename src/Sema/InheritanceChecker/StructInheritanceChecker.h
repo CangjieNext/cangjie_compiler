@@ -107,8 +107,10 @@ private:
     void CheckAllUpperBoundsConfliction();
     void CheckUpperBoundsConfliction(const Generic& generic);
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     /** Checks related to NativeFFI */
     void CheckNativeFFI(const MemberSignature& parent, const MemberSignature& child) const;
+#endif
 
     /**
      * Generates the built-in operator function and adds to ed.members.

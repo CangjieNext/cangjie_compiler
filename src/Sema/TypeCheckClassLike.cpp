@@ -130,12 +130,14 @@ void TypeChecker::TypeCheckerImpl::CheckClassDecl(ASTContext& ctx, ClassDecl& cd
     }
     TypeCheckCompositeBody(ctx, cd, cd.body->decls);
     CheckRecursiveConstructorCall(cd.body->decls);
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     if (cd.TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
         CheckJavaInteropLibImport(cd);
     }
     if (cd.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
         CheckObjCInteropLibImport(cd);
     }
+#endif
 }
 
 void TypeChecker::TypeCheckerImpl::CheckAndAddSubDecls(
@@ -197,6 +199,7 @@ void TypeChecker::TypeCheckerImpl::AddObjectSuperClass(ASTContext& ctx, ClassDec
     }
 }
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 bool TypeChecker::TypeCheckerImpl::AddJObjectSuperClassJavaInterop(ASTContext& ctx, ClassDecl& cd)
 {
     using namespace Interop::Java;
@@ -220,6 +223,7 @@ bool TypeChecker::TypeCheckerImpl::AddJObjectSuperClassJavaInterop(ASTContext& c
     }
     return true;
 }
+#endif
 
 void TypeChecker::TypeCheckerImpl::CheckInterfaceDecl(ASTContext& ctx, InterfaceDecl& id)
 {
@@ -241,10 +245,12 @@ void TypeChecker::TypeCheckerImpl::CheckInterfaceDecl(ASTContext& ctx, Interface
         }
     }
     TypeCheckCompositeBody(ctx, id, id.body->decls);
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     if (id.TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
         CheckJavaInteropLibImport(id);
     }
     if (id.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
         CheckObjCInteropLibImport(id);
     }
+#endif
 }

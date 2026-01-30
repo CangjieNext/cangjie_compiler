@@ -634,6 +634,7 @@ OwnedPtr<Annotation> ASTLoader::ASTLoaderImpl::LoadAnnotation(const PackageForma
         annotation->attrs.emplace_back(TokenKind::IDENTIFIER, "TEST_REGISTER");
     } else if (rawAnno.kind() == PackageFormat::AnnoKind_Frozen) {
         annotation->kind = AnnotationKind::FROZEN;
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     } else if (rawAnno.kind() == PackageFormat::AnnoKind_JavaMirror) {
         annotation->kind = AnnotationKind::JAVA_MIRROR;
     } else if (rawAnno.kind() == PackageFormat::AnnoKind_JavaImpl) {
@@ -646,6 +647,7 @@ OwnedPtr<Annotation> ASTLoader::ASTLoaderImpl::LoadAnnotation(const PackageForma
         annotation->kind = AnnotationKind::OBJ_C_IMPL;
     } else if (rawAnno.kind() == PackageFormat::AnnoKind_ForeignName) {
         annotation->kind = AnnotationKind::FOREIGN_NAME;
+#endif
     } else if (rawAnno.kind() == PackageFormat::AnnoKind_Custom) {
         annotation->kind = AnnotationKind::CUSTOM;
         annotation->isCompileTimeVisible = true;

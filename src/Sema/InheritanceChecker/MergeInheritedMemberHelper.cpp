@@ -18,7 +18,9 @@
 #include "cangjie/Sema/TypeManager.h"
 
 #include "TypeCheckUtil.h"
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 #include "NativeFFI/Java/TypeCheck/InheritanceChecker.h"
+#endif
 
 using namespace Cangjie;
 using namespace AST;
@@ -171,7 +173,9 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
             SetPossibleInconsistentType(parent, child, inconsistentTypes);
         }
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
         CheckNativeFFI(parent, child);
+#endif
 
         if (shouldUpdate) {
             if (parent.decl->TestAttr(Attribute::ABSTRACT) || !child.decl->TestAttr(Attribute::ABSTRACT)) {

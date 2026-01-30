@@ -8,7 +8,9 @@
 
 #include "cangjie/CHIR/CHIRCasting.h"
 #include "cangjie/CHIR/Expression/Terminator.h"
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 #include "cangjie/CHIR/NativeFFI/Utils.h"
+#endif
 #include "cangjie/CHIR/Type/ClassDef.h"
 
 using namespace Cangjie::CHIR;
@@ -16,10 +18,12 @@ namespace {
 
 std::vector<uint64_t> AddHasInitedField(ClassDef& classDef, CHIRBuilder& builder)
 {
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     // Java and Objective-C mirrors have this field generated from AST.
     if (Native::FFI::IsMirror(classDef)) {
         return Native::FFI::FindHasInitedField(classDef);
     }
+    #endif
 
     auto attributeInfo = AttributeInfo();
     attributeInfo.SetAttr(Attribute::NO_REFLECT_INFO, true);

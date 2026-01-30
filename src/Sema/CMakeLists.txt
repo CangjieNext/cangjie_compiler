@@ -10,7 +10,11 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_subdirectory(Desugar)
 add_subdirectory(FFI)
+
+if(CANGJIE_BUILD_JAVA_OBJC_FFI)
 add_subdirectory(NativeFFI)
+endif()
+
 add_subdirectory(GenericInstantiation)
 add_subdirectory(InheritanceChecker)
 add_subdirectory(LegalityOfUsage)
