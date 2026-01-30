@@ -30,7 +30,7 @@
 
   - **条件编译**条件编译可以通过预定义或者自定的条件进行编译。
 
-  - **CHIR 生成及优化**CHIR为 Cangjie High Level IR，此模块将 AST 转换为编译器中间层表示，并进行优化。
+  - **CHIR 生成及优化**CHIR 为 Cangjie High Level IR，此模块将 AST 转换为编译器中间层表示，并进行优化。
 
   - **LLVM IR 代码生成**将中间表示（CHIR）翻译为 LLVM IR，准备生成目标机器码（LLVM BitCode）。
 
@@ -46,7 +46,7 @@
 
 llvm 其他工具链以及更详细的后端工具说明，可以参考[llvm 命令指南](https://llvm.org/docs/CommandGuide/)。
 
-- **OS**：仓颉编译器及 LLVM 相关工具链当前支持在如下平台运行 Windows x86-64、Linux x86-64/AArch64、Mac x86/arm64，鸿蒙平台正在开发中。同时，除可 native 编译出上述平台产物外，仓颉编译器还支持交叉编译出 ohos-aarch64 平台二进制产物，详细请参考[仓颉SDK集成构建指导书](https://gitcode.com/Cangjie/cangjie_build#%E4%BB%93%E9%A2%89sdk%E9%9B%86%E6%88%90%E6%9E%84%E5%BB%BA%E6%8C%87%E5%AF%BC%E4%B9%A6)和[平台支持计划](#平台支持计划)。
+- **OS**：仓颉编译器及 LLVM 相关工具链当前支持在如下平台运行 Windows x86-64、Linux x86-64/AArch64、Mac x86/arm64，鸿蒙平台正在开发中。同时，除可 native 编译出上述平台产物外，仓颉编译器还支持交叉编译出 ohos-aarch64 平台二进制产物，详细请参考[仓颉 SDK 集成构建指导书](https://gitcode.com/Cangjie/cangjie_build#%E4%BB%93%E9%A2%89sdk%E9%9B%86%E6%88%90%E6%9E%84%E5%BB%BA%E6%8C%87%E5%AF%BC%E4%B9%A6)和[平台支持计划](#平台支持计划)。
 
 ## 目录结构
 

@@ -38,7 +38,7 @@ git clone https://gitcode.com/openharmony/third_party_flatbuffers.git -b master 
 
 ### 代码来源说明
 
-LLVM 作为仓颉编译器后端，当前基于官方代码仓 [llvmorg-15.0.4](https://gitcode.com/openharmony/third_party_llvm-project)（对应commit 5c68a1cb123161b54b72ce90e7975d95a8eaf2a4）开源版本修改实现。为了便于代码管理以及支持鸿蒙版本构建，LLVM 在构建时来源有两种：
+LLVM 作为仓颉编译器后端，当前基于官方代码仓 [llvmorg-15.0.4](https://gitcode.com/openharmony/third_party_llvm-project)（对应 commit 5c68a1cb123161b54b72ce90e7975d95a8eaf2a4）开源版本修改实现。为了便于代码管理以及支持鸿蒙版本构建，LLVM 在构建时来源有两种：
 
 - 来源于仓库 https://gitcode.com/Cangjie/llvm-project/ ，使用此代码仓为默认方式，便于日常代码开发、检视和管理。
 
