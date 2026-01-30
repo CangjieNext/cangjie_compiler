@@ -95,8 +95,8 @@ ERROR(
 // where sanity check.
 ERROR(sema_multiple_class_upperbounds,
     "generic parameter '%s' cannot have two or more class upper bounds '%s' without subtype relation")
-ERROR(sema_generic_param_exist_in_class_irrelevant_upperbound_recursively,
-    "generic parameter '%s' cannot be used in class irrelevant upper bounds '%s'")
+ERROR(sema_generic_param_exist_in_not_inheritable_upperbound_recursively,
+    "generic parameter '%s' cannot be used in not inheritable upper bounds '%s'")
 ERROR(sema_generic_param_directly_recursive,
     "generic parameter '%s' is bounded directly recursively with '%s' which is forbidden")
 ERROR(sema_upper_bound_must_be_class_or_interface,
