@@ -120,7 +120,11 @@ void Parser::SetCompileOptions(const GlobalOptions& opts)
     impl->backend = opts.backend;
     impl->scanDepPkg = opts.scanDepPkg;
     impl->calculateLineNum = opts.enableTimer || opts.enableMemoryCollect;
+
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     impl->enableInteropCJMapping = opts.enableInteropCJMapping;
+    #endif
+
     // set compile options for cjmp implementation
     impl->mpImpl->SetCompileOptions(opts);
     // Effect handlers break backwards compatibility by introducing new
@@ -198,8 +202,10 @@ ParserImpl::ParserImpl(unsigned int fileID, const std::string& input, Diagnostic
     bool attachComment, bool parsingDeclFiles)
     : diag(diag), sourceManager(sm),
       lexer{std::make_unique<Lexer>(fileID, input, diag, sm, attachComment)},
-      enableAttachComment(attachComment), parseDeclFile{parsingDeclFiles}, mpImpl{new MPParserImpl(*this)},
-      ffiParser{new FFIParserImpl(*this)}
+      enableAttachComment(attachComment), parseDeclFile{parsingDeclFiles}, mpImpl{new MPParserImpl(*this)}
+      #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
+      ,ffiParser{new FFIParserImpl(*this)}
+      #endif
 {
     // do not call EnterXXXMod here because that would then call enter that mod in lexer, but lexer would initialize
     // itself
@@ -210,8 +216,10 @@ ParserImpl::ParserImpl(const std::string& input, DiagnosticEngine& diag, SourceM
     bool attachComment, bool parsingDeclFiles)
     : diag(diag), sourceManager(sm),
       lexer{std::make_unique<Lexer>(input, diag, sm, pos, attachComment)},
-      enableAttachComment{attachComment}, parseDeclFile{parsingDeclFiles}, mpImpl{new MPParserImpl(*this)},
-      ffiParser{new FFIParserImpl(*this)}
+      enableAttachComment{attachComment}, parseDeclFile{parsingDeclFiles}, mpImpl{new MPParserImpl(*this)}
+      #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
+      ,ffiParser{new FFIParserImpl(*this)}
+      #endif
 {
     ctx.push_back(ParserContext::NORMAL);
 }
@@ -220,8 +228,10 @@ ParserImpl::ParserImpl(const std::vector<Token>& inputTokens, DiagnosticEngine& 
     bool attachComment, bool parsingDeclFiles)
     : diag(diag), sourceManager(sm),
       lexer{std::make_unique<Lexer>(inputTokens, diag, sm, attachComment)},
-      enableAttachComment{attachComment}, parseDeclFile{parsingDeclFiles}, mpImpl{new MPParserImpl(*this)},
-      ffiParser{new FFIParserImpl(*this)}
+      enableAttachComment{attachComment}, parseDeclFile{parsingDeclFiles}, mpImpl{new MPParserImpl(*this)}
+      #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
+      ,ffiParser{new FFIParserImpl(*this)}
+      #endif
 {
     ctx.push_back(ParserContext::NORMAL);
 }
@@ -231,8 +241,10 @@ ParserImpl::~ParserImpl()
     delete mpImpl;
     mpImpl = nullptr;
 
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     delete ffiParser;
     ffiParser = nullptr;
+    #endif
 }
 
 /**

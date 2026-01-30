@@ -87,7 +87,7 @@ const std::unordered_map<Environment, std::string> ENVIRONMENT_STRING_MAP = {
     {Environment::OHOS, "ohos"},
     {Environment::GNU, "gnu"},
     {Environment::ANDROID, "android"},
-    {Environment::SIMULATOR, "simulator"}, 
+    {Environment::SIMULATOR, "simulator"},
     {Environment::NOT_AVAILABLE, ""},
 };
 
@@ -593,7 +593,6 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     }},
     { Options::ID::PACKAGE_COMPILE, OPTION_TRUE_ACTION(opts.compilePackage = true) },
     { Options::ID::NO_PRELUDE, OPTION_TRUE_ACTION(opts.implicitPrelude = false) },
-    { Options::ID::ENABLE_INTEROP_CJMAPPING, OPTION_TRUE_ACTION(opts.enableInteropCJMapping = true) },
     { Options::ID::INT_OVERFLOW_MODE, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         CJC_ASSERT(ValidOverflowStrategy(arg.value));
         if (!ValidOverflowStrategy(arg.value)) { return false; }
@@ -846,10 +845,13 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
         opts.outputDir = {arg.value};
         return true;
     }},
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
+    { Options::ID::ENABLE_INTEROP_CJMAPPING, OPTION_TRUE_ACTION(opts.enableInteropCJMapping = true) },
     { Options::ID::OUTPUT_JAVA_GEN_DIR, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         opts.outputJavaGenDir = {arg.value};
         return true;
     }},
+#endif
     { Options::ID::SAVE_TEMPS, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         if (!IsDir(arg.value)) {
             DiagnosticEngine diag;

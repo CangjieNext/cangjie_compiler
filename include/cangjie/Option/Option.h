@@ -464,7 +464,11 @@ public:
 
     std::optional<std::string> outputDir = std::nullopt;
 
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     std::optional<std::string> outputJavaGenDir = std::nullopt;
+
+    bool enableInteropCJMapping = false; /**< Whether enable cj data structure mapping for interop */
+    #endif
 
     std::vector<std::string> importPaths; /**< .cjo search paths */
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
@@ -589,8 +593,6 @@ public:
 
     bool implicitPrelude = true; /**< Whether import prelude libraries by default. */
 
-    bool enableInteropCJMapping = false; /**< Whether enable cj data structure mapping for interop */
-
     bool enableTimer = false; /**< Whether enable timer report. */
 
     bool enableMemoryCollect = false; /**< Whether enable memory usage report. */
@@ -653,7 +655,7 @@ public:
         return ltoMod != LTOMode::NO_LTO;
     }
 
-     bool IsCompileAsExeEnabled() const 
+     bool IsCompileAsExeEnabled() const
     {
         return enableCompileAsExe;
     }
@@ -786,7 +788,7 @@ public:
     enum class CHIRMode : uint8_t { NA, STANDARD, WITH_ID, ALL };
 
     bool codegenDebugMode = false;
-    bool dumpAST = false; 
+    bool dumpAST = false;
     bool dumpCHIR = false;
     bool dumpIR = false;
     bool dumpAll = false; // dump all of AST, CHIR, IR

@@ -571,6 +571,7 @@ void TypeChecker::TypeCheckerImpl::CheckStructDecl(ASTContext& ctx, StructDecl& 
     CJC_NULLPTR_CHECK(sd.body);
     TypeCheckCompositeBody(ctx, sd, sd.body->decls);
     CheckRecursiveConstructorCall(sd.body->decls);
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     if (sd.TestAnyAttr(Attribute::JAVA_CJ_MAPPING)) {
         CheckJavaInteropLibImport(sd);
         if (sd.generic) {
@@ -582,6 +583,7 @@ void TypeChecker::TypeCheckerImpl::CheckStructDecl(ASTContext& ctx, StructDecl& 
                 DiagKindRefactor::sema_cjmapping_struct_inheritance_interface_not_supported, MakeRange(sd.identifier));
         }
     }
+#endif
 }
 
 void TypeChecker::TypeCheckerImpl::GetRevTypeMapping(

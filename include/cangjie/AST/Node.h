@@ -501,12 +501,14 @@ enum class AnnotationKind {
     JAVA,
     CALLING_CONV,
     C,
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     JAVA_MIRROR,
     JAVA_IMPL,
     JAVA_HAS_DEFAULT,
     OBJ_C_MIRROR,
     OBJ_C_IMPL,
     FOREIGN_NAME,
+#endif
     ATTRIBUTE,
     /**
      * NOTE: 'OVERFLOW' is a macro in early versions of glibc (VERSION < 2.27).
@@ -2739,8 +2741,8 @@ struct FeatureId : Node {
 
 /**
  * FeaturesSet
- *     : LCURL NL* 
- *     FeatureId NL* (COMMA NL* FeatureId NL*)* 
+ *     : LCURL NL*
+ *     FeatureId NL* (COMMA NL* FeatureId NL*)*
  *     RCURL
  *     ;
  */
@@ -2756,7 +2758,7 @@ struct FeaturesSet: Node {
 
 /**
  * featuresDirective
- *     : annotationList? FEATURES NL* 
+ *     : annotationList? FEATURES NL*
  *     FeaturesSet
  *     end+
  *     ;

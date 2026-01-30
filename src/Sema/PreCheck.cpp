@@ -1144,13 +1144,17 @@ void TypeChecker::TypeCheckerImpl::AddSuperClassObjectForClassDecl(ASTContext& c
         if (HasSuperClass(*cd)) {
             continue;
         }
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
         if (cd->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
             if (!AddJObjectSuperClassJavaInterop(ctx, *cd)) {
                 AddObjectSuperClass(ctx, *cd);
             }
         } else {
+#endif
             AddObjectSuperClass(ctx, *cd);
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
         }
+#endif
     }
 }
 

@@ -4,7 +4,11 @@
 #
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+if(CANGJIE_BUILD_JAVA_OBJC_FFI)
+
 file(GLOB SEMA_NATIVE_FFI_SRC *.cpp)
 add_subdirectory(Java)
 add_subdirectory(ObjC)
 set(SEMA_SRC ${SEMA_SRC} ${SEMA_NATIVE_FFI_SRC} PARENT_SCOPE)
+
+endif()

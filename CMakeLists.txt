@@ -57,6 +57,7 @@ option(CANGJIE_WRITE_PROFILE "`--profile-compile-time` and `--profile-compile-me
 option(CANGJIE_ENABLE_ASAN_COV "build with asan and sanitize-coverage, used for cjc_fuzz and lsp_test" OFF)
 option(CANGJIE_VISIBLE_OPTIONS_ONLY "open CANGJIE_VISIBLE_OPTIONS_ONLY to only build options that are visible to users" ON)
 option(CANGJIE_USE_OH_LLVM_REPO "use OpenHarmony llvm repo with Cangjie llvm patch instead of cangjie llvm repo for building" OFF)
+option(CANGJIE_BUILD_JAVA_OBJC_FFI "Build cjc capabilities for java & objective-c FFI" OFF)
 set(CANGJIE_LLVM_BUILD_TYPE Default CACHE STRING "Build type for llvm")
 set(CANGJIE_CJDB_BUILD_TYPE Default CACHE STRING "Build type for cjdb")
 

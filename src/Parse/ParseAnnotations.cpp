@@ -307,6 +307,7 @@ void ParserImpl::CheckDeprecatedAnnotation(const Annotation& anno)
     }
 }
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 void ParserImpl::CheckObjCMirrorAnnotation(const Annotation& anno) const
 {
     static const std::string OBJ_C_MIRROR_NAME = "@ObjCMirror";
@@ -316,6 +317,7 @@ void ParserImpl::CheckObjCMirrorAnnotation(const Annotation& anno) const
         anno.kind == AnnotationKind::OBJ_C_MIRROR ? OBJ_C_MIRROR_NAME : OBJ_C_IMPL_NAME;
     ffiParser->CheckZeroOrSingleStringLitArgAnnotation(anno, annotationName);
 }
+#endif
 
 OwnedPtr<Annotation> ParserImpl::ParseAnnotation()
 {
@@ -352,6 +354,7 @@ OwnedPtr<Annotation> ParserImpl::ParseAnnotation()
             CheckDeprecatedAnnotation(*annotation);
             break;
         }
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
         case AnnotationKind::JAVA_MIRROR:
         case AnnotationKind::JAVA_IMPL: {
             ParseAnnotationArguments(*annotation);
@@ -367,6 +370,7 @@ OwnedPtr<Annotation> ParserImpl::ParseAnnotation()
             CheckObjCMirrorAnnotation(*annotation);
             break;
         }
+#endif
         default: {
             // parse annotation arguments.
             ParseAnnotationArguments(*annotation);

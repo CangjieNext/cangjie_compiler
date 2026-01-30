@@ -27,7 +27,9 @@ set(PARSE_FFI_SRC
     ParserUtils.cpp
 )
 
+if(CANGJIE_BUILD_JAVA_OBJC_FFI)
 add_subdirectory(NativeFFI)
+endif()
 
 if(NOT CMAKE_ENABLE_ASSERT
    AND NOT CMAKE_BUILD_TYPE MATCHES Debug)

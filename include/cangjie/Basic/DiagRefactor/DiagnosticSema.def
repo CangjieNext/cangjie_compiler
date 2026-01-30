@@ -224,11 +224,6 @@ ERROR(sema_shadow_cannot_in_type_args,
     "'%s' is not allowd to be used here as type argument, because it shadows field '%s' with its super type '%s'")
 ERROR(sema_unsupported_type_argument_in_java_interop,
     "type argument in java interoperation should meet 'JType' constraint")
-ERROR(sema_cjmapping_struct_generic_not_supported, "cangjie mirror struct type generic %s is not supported")
-ERROR(sema_cjmapping_struct_inheritance_interface_not_supported, "cangjie mirror struct type inheritance interface is not supported")
-ERROR(sema_cjmapping_decl_not_supported, "cangjie mirror decl type is not supported for %s")
-ERROR(sema_cjmapping_method_arg_not_supported, "argument type of cangjie mirror decl type member function is not supported")
-ERROR(sema_cjmapping_method_ret_unsupported, "return type '%s' of function inside %s type is not supported")
 
 // VArray
 ERROR(sema_varray_size_match, "mismatch 'VArray' type's size", "expected size is %s, found %s")
@@ -315,6 +310,7 @@ ERROR(sema_common_generic_frozen_not_supported, "common/specific declaration %s 
 ERROR(sema_common_generic_rename_not_supported, "common/specific generic rename is not supported yet")
 ERROR(sema_common_platform_annotation_not_allowed, "annotation %s is not allowed on a common/specific declaration")
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 // java mirror
 ERROR(sema_java_mirror_ctor_arg_must_be_java_mirror, "argument type of java-mirrored constructor must be of @JavaMirror type")
 ERROR(sema_java_mirror_method_arg_must_be_java_mirror, "argument type of java-mirrored function must be of @JavaMirror type")
@@ -362,10 +358,16 @@ ERROR(sema_objc_interop_toplevel_ret_must_be_objc_compatible, "return type of Ob
 // CJMapping for Objective-C
 ERROR(sema_objc_cjmapping_inheritance_interface_not_supported, "cangjie mirror decl type inheritance interface is not supported")
 ERROR(sema_objc_cjmapping_generic_not_supported, "cangjie mirror decl type generic %s is not supported")
+ERROR(sema_cjmapping_struct_generic_not_supported, "cangjie mirror struct type generic %s is not supported")
+ERROR(sema_cjmapping_struct_inheritance_interface_not_supported, "cangjie mirror struct type inheritance interface is not supported")
+ERROR(sema_cjmapping_decl_not_supported, "cangjie mirror decl type is not supported for %s")
+ERROR(sema_cjmapping_method_arg_not_supported, "argument type of cangjie mirror decl type member function is not supported")
+ERROR(sema_cjmapping_method_ret_unsupported, "return type '%s' of function inside %s type is not supported")
 
 ERROR(sema_foreign_name_appeared_in_child, "@ForeignName could not appear on overridden declaration")
 ERROR(sema_foreign_name_conflicting_annotation, "Declaration '%s' has a conflicting @ForeignName annotation")
 ERROR(sema_foreign_name_conflicting_derived_annotation, "Declaration '%s' has a conflicting derived @ForeignName '%s'")
+#endif
 
 // @IfAvailable
 ERROR(sema_ifavailable_arg_no_name, "the first argument of @IfAvailable expression must have a name")

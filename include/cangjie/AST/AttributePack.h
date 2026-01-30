@@ -562,6 +562,7 @@ enum class Attribute {
      */
     COMMON_WITH_DEFAULT,
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     /**
      * Mark whether a class is java mirror (binding for a java class).
      * W: Parser.
@@ -581,7 +582,7 @@ enum class Attribute {
      * R: Sema.
      */
     JAVA_HAS_DEFAULT,
-    
+
     /**
      * Mark whether a class is a wrapper synthetic class generated for every mirror interface and abstract class.
      * W: Parser, Sema.
@@ -622,6 +623,7 @@ enum class Attribute {
      * R: AST2CHIR.
      */
     HAS_INITED_FIELD,
+#endif
 
     AST_ATTR_END,
 };
@@ -703,6 +705,7 @@ static const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::COMMON_NON_EXHAUSTIVE, "COMMON_NON_EXHAUSTIVE"},
     {AST::Attribute::PLATFORM, "PLATFORM"},
     {AST::Attribute::COMMON_WITH_DEFAULT, "COMMON_WITH_DEFAULT"},
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     {AST::Attribute::JAVA_MIRROR, "JAVA_MIRROR"},
     {AST::Attribute::JAVA_MIRROR_SUBTYPE, "JAVA_MIRROR_SUBTYPE"},
     {AST::Attribute::JAVA_CJ_MAPPING, "JAVA_CJ_MAPPING"},
@@ -710,6 +713,8 @@ static const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::OBJ_C_MIRROR_SUBTYPE, "OBJ_C_MIRROR_SUBTYPE"},
     {AST::Attribute::DESUGARED_MIRROR_FIELD, "DESUGARED_MIRROR_FIELD"},
     {AST::Attribute::HAS_INITED_FIELD, "HAS_INITED_FIELD"},
+#endif
+
     {AST::Attribute::AST_ATTR_END, "AST_ATTR_END"},
 };
 

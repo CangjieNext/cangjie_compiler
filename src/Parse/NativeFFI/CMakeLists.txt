@@ -4,8 +4,12 @@
 #
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+if(CANGJIE_BUILD_JAVA_OBJC_FFI)
+
 file(GLOB PARSE_NATIVE_FFI_SRC *.cpp)
 add_subdirectory(Java)
 add_subdirectory(ObjC)
 set(PARSE_SRC ${PARSE_SRC} ${PARSE_NATIVE_FFI_SRC} PARENT_SCOPE)
 set(PARSE_FFI_SRC ${PARSE_FFI_SRC} ${PARSE_NATIVE_FFI_SRC} PARENT_SCOPE)
+
+endif()

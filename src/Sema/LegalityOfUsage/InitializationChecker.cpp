@@ -1607,6 +1607,7 @@ void InitializationChecker::CheckInitInConstructors(FuncDecl& fd, const std::vec
         return;
     }
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     if (auto classDecl = As<ASTKind::CLASS_DECL>(fd.funcBody->parentClassLike)) {
         if (auto superClass = classDecl->GetSuperClassDecl(); superClass
             && superClass->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
@@ -1625,6 +1626,7 @@ void InitializationChecker::CheckInitInConstructors(FuncDecl& fd, const std::vec
                 }
         }
     }
+#endif
 
     // If the constructor is terminated by 'ThrowExpr' directly,
     // the initialization check can be ignored, since the object will not be created.

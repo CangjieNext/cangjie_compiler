@@ -15,7 +15,10 @@
 
 #include "cangjie/Parse/Parser.h"
 #include "MPParserImpl.h"
+
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 #include "NativeFFI/FFIParserImpl.h"
+#endif
 
 namespace Cangjie {
 using namespace AST;
@@ -284,7 +287,11 @@ private:
     bool parseDeclFile{false};
 
     bool enableEH{false};
+
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     bool enableInteropCJMapping{false};
+    #endif
+
     Triple::BackendType backend{Triple::BackendType::CJNATIVE};
     bool calculateLineNum{false};
     // we store line number info from all tokens
@@ -297,10 +304,12 @@ private:
     friend class MPParserImpl;
     class MPParserImpl* mpImpl;
 
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     friend class FFIParserImpl;
     friend class JFFIParserImpl;
     friend class OCFFIParserImpl;
     class FFIParserImpl* ffiParser;
+    #endif
 
     /// Common initializer shared among constructors.
     void Init();
@@ -1098,18 +1107,21 @@ private:
     void DiagAnnotationMoreThanOneArgs(const AST::Annotation& node, const std::string& annotationName,
         const std::string& argInfo);
 
-    // Cangjie Native & Java/ObjC FFI
-    void CheckObjCMirrorAnnotation(const AST::Annotation& anno) const;
     // Check whether member decl can be abstract
     bool CanBeAbstract(const AST::Decl& decl, ScopeKind scopeKind) const;
+    void CheckClassLikePropAbstractness(AST::PropDecl& prop);
+    void CheckClassLikeFuncBodyAbstractness(AST::FuncDecl& decl);
     void CheckConstructorBody(AST::FuncDecl& ctor, ScopeKind scopeKind, bool inMacro = false);
+    void CheckInitCtorDeclBody(AST::FuncDecl& ctor);
     void SetMemberParentInheritableDecl(AST::InheritableDecl& ret, const OwnedPtr<AST::Decl>& decl) const;
+
+    #ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
+    // Cangjie Native & Java/ObjC FFI
+    void CheckObjCMirrorAnnotation(const AST::Annotation& anno) const;
     void FFICheckClassLikeFuncBody(
         FuncDecl& decl,
         DiagKindRefactor functionMustHaveReturnType,
         DiagKindRefactor functionCanNotHaveBody);
-    void CheckClassLikePropAbstractness(AST::PropDecl& prop);
-    void CheckClassLikeFuncBodyAbstractness(AST::FuncDecl& decl);
     void CheckJavaInteropMember(Decl& decl);
     void CheckObjCInteropMember(Decl& member);
     void CheckPropDeclJavaMirror(AST::PropDecl& decl);
@@ -1117,12 +1129,12 @@ private:
     void CheckMemberFuncJavaMirror(AST::FuncDecl& decl);
     void CheckMemberFuncObjCMirror(AST::FuncDecl& func);
     void CheckCJMappingAttr(Decl& decl) const;
-    void CheckInitCtorDeclBody(AST::FuncDecl& ctor);
     void CheckInitCtorDeclJavaMirror(AST::FuncDecl& ctor);
     void CheckInitCtorDeclObjCMirror(AST::FuncDecl& ctor);
     void CheckVarDeclObjCMirror(AST::VarDecl& field) const;
     void CheckPropDeclObjCMirror(AST::PropDecl& prop);
     void CheckPrimaryCtorDeclObjCMirror(AST::PrimaryCtorDecl& ctor);
+    #endif
 
     friend class Parser;
 

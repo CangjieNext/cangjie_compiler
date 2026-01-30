@@ -655,6 +655,7 @@ std::vector<VarDeclWithPosition> GetVarsInitializationOrderWithPositions(const D
     return resultDecls;
 }
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
 {
     auto getter = MakeOwned<FuncDecl>();
@@ -678,7 +679,9 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
     getter->funcBody->funcDecl = getter.get();
     prop.getters.emplace_back(std::move(getter));
 }
+#endif
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
 {
     auto setter = MakeOwned<FuncDecl>();
@@ -706,7 +709,9 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
     setter->funcBody->funcDecl = setter.get();
     prop.setters.emplace_back(std::move(setter));
 }
+#endif
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribute attrToBeSet)
 {
     auto propDecl = MakeOwned<PropDecl>();
@@ -737,7 +742,9 @@ void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribute att
     }
     decl.body->decls.emplace_back(std::move(propDecl));
 }
+#endif
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
 {
     auto& members = decl.GetMemberDecls();
@@ -757,9 +764,11 @@ void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
         return node.get()->astKind == ASTKind::VAR_DECL;
         }), members.end());
 }
+#endif
 
 } // namespace Cangjie::AST
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 namespace {
 using namespace Cangjie::AST;
 
@@ -770,7 +779,9 @@ void SetPositionAndCurFileByProvidedNode(Node& consumer, Node& provider)
     consumer.end = provider.end;
 }
 }
+#endif
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
 namespace Cangjie::Interop::Java {
 bool IsImpl(const Decl& decl)
 {
@@ -874,10 +885,10 @@ void InsertSyntheticClassDecl(ClassLikeDecl& decl, File& file)
         synthetic->inheritedTypes.emplace_back(std::move(jobject));
     }
     synthetic->inheritedTypes.emplace_back(CreateRefType(decl));
-    
+
     synthetic->fullPackageName = decl.fullPackageName;
     SetPositionAndCurFileByProvidedNode(*synthetic, decl);
-    
+
     synthetic->body = MakeOwned<ClassBody>();
     SetPositionAndCurFileByProvidedNode(*synthetic->body, *synthetic);
 
@@ -886,3 +897,4 @@ void InsertSyntheticClassDecl(ClassLikeDecl& decl, File& file)
     file.decls.emplace_back(std::move(synthetic));
 }
 } // namespace Cangjie::Interop::Java
+#endif

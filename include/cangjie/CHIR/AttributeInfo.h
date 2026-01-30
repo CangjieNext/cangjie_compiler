@@ -60,12 +60,15 @@ enum class Attribute {
                      ///< Marked functions are package initializer, file initializers, variable initializer or so.
                      ///< On the block is used to search for it among other blocks of the function.
     UNSAFE,   ///< Mark whether a function that was marked as `unsafe`
+
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     // Native FFI attributes
     JAVA_MIRROR,      ///< Mark whether it's @JavaMirror declaration (binding for a java type).
     JAVA_IMPL,        ///< Mark whether it's @JavaImpl declaration.
     OBJ_C_MIRROR,     ///< Mark whether it's @ObjCMirror declaration (binding for an Objective-C type).
-    HAS_INITED_FIELD, ///< Mark whether a node is a special flag, which marks the class instance as initialized.
     JAVA_HAS_DEFAULT, ///< Mark whether JAVA_MIRROR interface has default method.
+#endif
+    HAS_INITED_FIELD, ///< Mark whether a node is a special flag, which marks the class instance as initialized.
 
     ATTR_END
 };
@@ -83,9 +86,13 @@ const std::unordered_map<Attribute, std::string> ATTR_TO_STRING{{Attribute::STAT
     {Attribute::NO_SIDE_EFFECT, "noSideEffect"}, {Attribute::FINAL, "final"},
     {Attribute::COMMON, "common"}, {Attribute::PLATFORM, "platform"},
     {Attribute::SKIP_ANALYSIS, "skip_analysis"}, {Attribute::DESERIALIZED, "deserialized"},
-    {Attribute::INITIALIZER, "initializer"},
-    {Attribute::UNSAFE, "unsafe"}, {Attribute::JAVA_MIRROR, "javaMirror"}, {Attribute::JAVA_IMPL, "javaImpl"},
-    {Attribute::OBJ_C_MIRROR, "objCMirror"}, {Attribute::HAS_INITED_FIELD, "hasInitedField"}};
+    {Attribute::INITIALIZER, "initializer"}, {Attribute::UNSAFE, "unsafe"},
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
+    {Attribute::JAVA_MIRROR, "javaMirror"}, {Attribute::JAVA_IMPL, "javaImpl"},
+    {Attribute::OBJ_C_MIRROR, "objCMirror"},
+#endif
+    {Attribute::HAS_INITED_FIELD, "hasInitedField"}
+};
 
 constexpr uint64_t ATTR_SIZE = 64;
 

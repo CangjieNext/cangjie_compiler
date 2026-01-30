@@ -1022,11 +1022,13 @@ static void SetCustomTypeDefAttr(CustomTypeDef& def, const AST::Decl& decl)
         }
     }
 
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     if (Interop::Java::IsImpl(decl)) {
         def.EnableAttr(Attribute::JAVA_IMPL);
     } else if (Interop::Java::IsMirror(decl)) {
         def.EnableAttr(Attribute::JAVA_MIRROR);
     }
+#endif
 }
 
 void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)

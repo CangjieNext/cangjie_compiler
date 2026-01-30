@@ -537,7 +537,7 @@ bool GlobalOptions::CheckLtoOptions() const
     return true;
 }
 
-bool GlobalOptions::CheckCompileAsExeOptions() const 
+bool GlobalOptions::CheckCompileAsExeOptions() const
 {
     if (!IsCompileAsExeEnabled()) {
         return true;
@@ -1158,7 +1158,7 @@ std::string GlobalOptions::GetCangjieLibTargetPathName() const
     }
     name += "_" + target.ArchToString() + "_" + BackendToString(backend);
     return name;
-    
+
 }
 
 void GlobalOptions::SetCompilationCachedPath()
@@ -1489,7 +1489,9 @@ std::vector<std::string> GlobalOptions::ToSerialized() const
     result.emplace_back(BoolToSerializedString(enableMacroInLSP));
     result.emplace_back(BoolToSerializedString(enableCompileTest));
     result.emplace_back(BoolToSerializedString(implicitPrelude));
+#ifdef CANGJIE_BUILD_JAVA_OBJC_FFI
     result.emplace_back(BoolToSerializedString(enableInteropCJMapping));
+#endif
     result.emplace_back(BoolToSerializedString(chirEA));
     result.emplace_back(BoolToSerializedString(chirLICM));
     result.emplace_back(BoolToSerializedString(chirCC));
