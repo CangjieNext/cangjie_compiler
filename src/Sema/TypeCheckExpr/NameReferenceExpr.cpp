@@ -915,9 +915,21 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetMemberAccessExposedTarget(
         if (!Ty::IsTyCorrect(upperBound)) {
             continue;
         }
+
+        // Check if the type is either an open class or an interface.
+        bool isValidType = false;
+        if (auto classTy = DynamicCast<ClassTy*>(upperBound); classTy && classTy->decl->IsOpen()) {
+            isValidType = true;
+        } else if (auto interfaceTy = DynamicCast<InterfaceTy*>(upperBound); interfaceTy) {
+            isValidType = true;
+        }
+
         auto targets = GetUpperBoundTargets(ctx, ma, *upperBound, isStaticAccess);
         if (!targets.empty()) {
             allTargets.emplace(std::make_pair(upperBound, targets));
+        } else if (!isValidType) {
+            allTargets.clear();
+            break;
         }
     }
     if (allTargets.empty()) {
