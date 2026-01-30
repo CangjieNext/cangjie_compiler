@@ -28,3 +28,18 @@ add_library(CangjieASTCommon OBJECT ${LIBAST_FFI_AST})
 add_library(CangjieASTExtra OBJECT ${AST_EXTRA_SRC})
 target_compile_options(CangjieASTCommon PRIVATE ${CJC_EXTRA_WARNINGS})
 target_compile_options(CangjieASTExtra PRIVATE ${CJC_EXTRA_WARNINGS})
+
+# remove unused Comment.cpp in cangjie-ast-support
+set(AST_FFI_SRC
+    Node.cpp
+    RecoverDesugar.cpp
+    Types.cpp
+    IntLiteral.cpp
+    Walker.cpp
+    Clone.cpp
+    Create.cpp
+    Utils.cpp
+    Identifier.cpp)
+
+add_library(CangjieASTCommonFFI OBJECT ${AST_FFI_SRC})
+target_compile_options(CangjieASTCommonFFI PRIVATE ${CJC_EXTRA_WARNINGS})
