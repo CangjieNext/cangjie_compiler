@@ -126,6 +126,7 @@ if (NOT OHOS)
             -DLLDB_RELOCATABLE_PYTHON=ON
             -DLLDB_EMBED_PYTHON_HOME=OFF
             -DLLDB_PYTHON_RELATIVE_PATH=lib/python${TARGET_PATHON_VERSION}/site-packages
+            -DLLDB_INCLUDE_TESTS=OFF
         )
     endif()
 endif()
