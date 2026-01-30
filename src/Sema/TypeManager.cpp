@@ -1302,6 +1302,8 @@ std::unordered_set<Ptr<Ty>> TypeManager::GetAllExtendInterfaceTyHelper(
             // may be used in generic instantiation
             if (auto genSuper = DynamicCast<TyVar*>(extend->extendedType->ty->typeArgs[i])) {
                 typeMapping[genSuper] = typeArgs[i];
+            } else {
+                typeMapping.merge(GenerateTypeMappingByTy(extend->extendedType->ty->typeArgs[i], typeArgs[i]));
             }
         }
         for (auto& superInterfaceTy : extend->inheritedTypes) {
