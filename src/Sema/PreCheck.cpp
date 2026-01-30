@@ -953,11 +953,17 @@ bool TypeChecker::TypeCheckerImpl::ValidRecursiveConstraintCheck(const Generic& 
                     genericTy->decl->identifier, upperGenericTy->String());
                 return false;
             }
-            if (!upper->IsClassLike() && IsGenericParamExistInUpperBounds(*genericTy, *upper)) {
+            bool checkCycle = false;
+            if (!upper->IsClassLike()) {
+                checkCycle = true;
+            } else if (auto classTy = DynamicCast<ClassTy*>(upper)) {
+                checkCycle = classTy->decl && !classTy->decl->IsOpen();
+            }
+            if (checkCycle && IsGenericParamExistInUpperBounds(*genericTy, *upper)) {
                 genericTy->isUpperBoundLegal = false;
                 CJC_NULLPTR_CHECK(genericTy->decl);
                 diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_generic_param_exist_in_class_irrelevant_upperbound_recursively,
+                    DiagKindRefactor::sema_generic_param_exist_in_not_inheritable_upperbound_recursively,
                     *genericTy->decl, genericTy->decl->identifier, upper->String());
                 return false;
             }
