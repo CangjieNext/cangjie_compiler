@@ -59,11 +59,11 @@ if(NOT CANGJIE_BUILD_CJC AND CANGJIE_BUILD_STD_SUPPORT)
     endif()
 
     set(AST_FFI_OBJECTS
-        $<TARGET_OBJECTS:CangjieASTCommon>
+        $<TARGET_OBJECTS:CangjieASTCommonFFI>
         $<TARGET_OBJECTS:CangjieParseFFI>
         $<TARGET_OBJECTS:CangjieLex>
-        $<TARGET_OBJECTS:CangjieBasic>
-        $<TARGET_OBJECTS:CangjieOption>
+        $<TARGET_OBJECTS:CangjieBasicFFI>
+        $<TARGET_OBJECTS:CangjieOptionFFI>
         $<TARGET_OBJECTS:CangjieAstSerialization>
         $<TARGET_OBJECTS:CangjieCommonUtilFFI>
         $<TARGET_OBJECTS:CangjieUnicodeUtils>
@@ -402,11 +402,11 @@ if (CANGJIE_CODEGEN_CJNATIVE_BACKEND)
 endif()
 
 set(AST_FFI_OBJECTS
-    $<TARGET_OBJECTS:CangjieASTCommon>
+    $<TARGET_OBJECTS:CangjieASTCommonFFI>
     $<TARGET_OBJECTS:CangjieParseFFI>
     $<TARGET_OBJECTS:CangjieLex>
-    $<TARGET_OBJECTS:CangjieBasic>
-    $<TARGET_OBJECTS:CangjieOption>
+    $<TARGET_OBJECTS:CangjieBasicFFI>
+    $<TARGET_OBJECTS:CangjieOptionFFI>
     $<TARGET_OBJECTS:CangjieAstSerialization>
     $<TARGET_OBJECTS:CangjieCommonUtilFFI>
     $<TARGET_OBJECTS:CangjieUnicodeUtils>
