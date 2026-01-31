@@ -931,11 +931,12 @@ bool DeadCodeElimination::CheckUselessFunc(const Func& func, const GlobalOptions
         return false;
     }
     if (func.GetFuncKind() == Cangjie::CHIR::MAIN_ENTRY && !opts.interpreter) {
-        // if output is lib (static or shared), Main method should delete
-        // when use chir-interpreter execute cjc-frontend ('cjc-frontend --chir-interpreter ...'), we should not
-        // delete main method
+        // When the output is a static/shared library, or when the output is an object file with a non-executable
+        // compilation target, Main method should delete
         return opts.outputMode == GlobalOptions::OutputMode::STATIC_LIB ||
-            opts.outputMode == GlobalOptions::OutputMode::SHARED_LIB || opts.CompileObjectForLibrary();
+            opts.outputMode == GlobalOptions::OutputMode::SHARED_LIB ||
+            (opts.outputMode == GlobalOptions::OutputMode::OBJ &&
+                opts.compileTarget != GlobalOptions::CompileTarget::EXECUTABLE);
     }
     if (func.IsCFunc() && func.TestAttr(Attribute::PUBLIC)) {
         // C func may use in c code.
@@ -958,8 +959,7 @@ bool DeadCodeElimination::CheckUselessFunc(const Func& func, const GlobalOptions
         // public function with reflect info can not be removed.
         return false;
     }
-    bool isExecutableStrategy =
-        (opts.outputMode == GlobalOptions::OutputMode::EXECUTABLE || opts.CompileObjectForExe());
+    bool isExecutableStrategy = opts.CompileExecutable();
     if (IsExternalDecl(func) && !isExecutableStrategy) {
         // external func in lib output mode can not be removed. 
         return false;
