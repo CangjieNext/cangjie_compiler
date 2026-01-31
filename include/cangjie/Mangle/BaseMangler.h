@@ -157,16 +157,19 @@ public:
     }
 
     // Key is file hash, value is global VarWithPatternDecl.
-    std::map<Ptr<const AST::File>, std::vector<Ptr<AST::VarWithPatternDecl>>> file2GlobalWildcardVar;
+    std::unordered_map<Ptr<const AST::File>, std::vector<Ptr<AST::VarWithPatternDecl>>> file2GlobalWildcardVar;
     // Key is AST::File/AST::FuncDecl/AST::LambdaExpr node ptr, value is vector of VarWithPatternDecl.
-    std::map<Ptr<const AST::Node>, std::vector<Ptr<AST::VarWithPatternDecl>>> node2LocalWildcardVar;
+    std::unordered_map<Ptr<const AST::Node>, std::vector<Ptr<AST::VarWithPatternDecl>>> node2LocalWildcardVar;
     // Key is AST::File/AST::FuncDecl/AST::LambdaExpr node ptr, value is vector of lambda expr.
-    std::map<Ptr<const AST::Node>, std::vector<Ptr<AST::LambdaExpr>>> node2Lambda;
+    std::unordered_map<Ptr<const AST::Node>, std::vector<Ptr<AST::LambdaExpr>>> node2Lambda;
     // Key is AST::File/AST::FuncDecl/AST::LambdaExpr node ptr, value is map of local var identifier to var decls.
-    std::map<Ptr<const AST::Node>, std::map<std::string, std::vector<Ptr<AST::VarDeclAbstract>>>> node2LocalVar;
+    std::unordered_map<Ptr<const AST::Node>,
+                       std::unordered_map<std::string, std::vector<Ptr<AST::VarDeclAbstract>>>> node2LocalVar;
     // Key is AST::File/AST::FuncDecl/AST::LambdaExpr node ptr, value is map of local func identifier to func decls.
-    std::map<Ptr<const AST::Node>, std::map<std::string, std::vector<Ptr<AST::FuncDecl>>>> node2LocalFunc;
-    std::map<Ptr<const AST::File>, std::map<std::string, std::vector<Ptr<AST::ExtendDecl>>>> file2ExtendDecl;
+    std::unordered_map<Ptr<const AST::Node>,
+                       std::unordered_map<std::string, std::vector<Ptr<AST::FuncDecl>>>> node2LocalFunc;
+    std::unordered_map<Ptr<const AST::File>,
+                       std::unordered_map<std::string, std::vector<Ptr<AST::ExtendDecl>>>> file2ExtendDecl;
 
     std::vector<uint64_t> fileIndexes;
 };

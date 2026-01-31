@@ -1561,7 +1561,7 @@ std::optional<size_t> ManglerContext::GetIndexOfLambda(
         foundFunc = node2Lambda.find(vda);
         foundArrayLit = node2Lambda.find(vda->annotationsArray.get());
     }
-    auto getIndex = [this, &target](std::map<Ptr<const AST::Node>,
+    auto getIndex = [this, &target](std::unordered_map<Ptr<const AST::Node>,
         std::vector<Ptr<AST::LambdaExpr>>>::const_iterator it) -> std::optional<size_t> {
         if (it != node2Lambda.end()) {
             auto targetIt = std::find(it->second.begin(), it->second.end(), target);
