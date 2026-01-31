@@ -1309,7 +1309,7 @@ void ManglerContext::SaveFunc2CurDecl(const Ptr<Node> node)
                 key = GetDeclKey(function->outerDecl);
             }
             if (key != nullptr) {
-                auto& mapOfName2Func = node2LocalFunc[key][function->identifier.Val()];
+                auto& mapOfName2Func = node2LocalFunc[std::make_pair(key, function->identifier.Val())];
                 mapOfName2Func.emplace_back(function);
             }
         }
@@ -1322,7 +1322,7 @@ void ManglerContext::SaveFunc2CurDecl(const Ptr<Node> node)
 
     Walker(key, [this, &key](const Ptr<Node>& node) {
         if (auto fd = DynamicCast<FuncDecl>(node); fd && node != key) {
-            auto& mapOfName2Func = node2LocalFunc[key][fd->identifier.Val()];
+            auto& mapOfName2Func = node2LocalFunc[std::make_pair(key, fd->identifier.Val())];
             mapOfName2Func.emplace_back(fd);
         }  else if (Is<FuncBody>(node) && node != key) {
             return VisitAction::WALK_CHILDREN;
@@ -1374,7 +1374,7 @@ void ManglerContext::SaveVar2CurDecl(const Ptr<Node> node)
     }
     Walker(key, [this, &key](const Ptr<Node>& node) {
         if (auto vda = DynamicCast<VarDeclAbstract>(node); vda && node != key) {
-            auto& mapOfName2Var = node2LocalVar[key][vda->identifier.Val()];
+            auto& mapOfName2Var = node2LocalVar[std::make_pair(key, vda->identifier.Val())];
             mapOfName2Var.emplace_back(vda);
         } else if (Is<FuncBody>(node) && node != key) {
             return VisitAction::SKIP_CHILDREN;
@@ -1485,57 +1485,55 @@ std::optional<size_t> ManglerContext::GetIndexOfLocalWildcardVar(
 std::optional<size_t> ManglerContext::GetIndexOfVar(
     const Ptr<const Node> node, const Ptr<const VarDeclAbstract> target) const
 {
-    auto foundFunc = node2LocalVar.end();
+    Ptr<const AST::Node> func = nullptr;
     if (auto lambda = DynamicCast<LambdaExpr>(node)) {
-        foundFunc = node2LocalVar.find(lambda->funcBody.get());
+        func = lambda->funcBody.get();
     } else if (auto function = DynamicCast<FuncDecl>(node)) {
-        foundFunc = node2LocalVar.find(function->funcBody.get());
+        func = function->funcBody.get();
     } else if (auto pcd = DynamicCast<PrimaryCtorDecl>(node)) {
-        foundFunc = node2LocalVar.find(pcd->funcBody.get());
+        func = pcd->funcBody.get();
     } else if (auto vda = DynamicCast<VarDeclAbstract>(node); vda && vda->TestAttr(Attribute::GLOBAL)) {
-        foundFunc = node2LocalVar.find(vda);
+        func = vda;
     }
-
-    if (foundFunc != node2LocalVar.end()) {
-        auto foundId = foundFunc->second.find(target->identifier);
-        if (foundId == foundFunc->second.end()) {
-            return {};
-        }
-        auto targetIt = std::find(foundId->second.begin(), foundId->second.end(), target);
-        if (targetIt != foundId->second.end()) {
-            return targetIt - foundId->second.begin();
-        }
+    if (!func) {
         return {};
     }
-    return {};
+    auto foundId = node2LocalVar.find(std::make_pair(func, target->identifier));
+    if (foundId == node2LocalVar.end()) {
+        return {};
+    }
+    auto targetIt = std::find(foundId->second.begin(), foundId->second.end(), target);
+    if (targetIt == foundId->second.end()) {
+        return {};
+    }
+    return targetIt - foundId->second.begin();
 }
 
 std::optional<size_t> ManglerContext::GetIndexOfFunc(
     const Ptr<const Node> node, const Ptr<const FuncDecl> target) const
 {
-    auto foundFunc = node2LocalFunc.end();
+    Ptr<const AST::Node> func = nullptr;
     if (auto lambda = DynamicCast<LambdaExpr>(node)) {
-        foundFunc = node2LocalFunc.find(lambda->funcBody.get());
+        func = lambda->funcBody.get();
     } else if (auto function = DynamicCast<FuncDecl>(node)) {
-        foundFunc = node2LocalFunc.find(function->funcBody.get());
+        func = function->funcBody.get();
     } else if (auto pcd = DynamicCast<PrimaryCtorDecl>(node)) {
-        foundFunc = node2LocalFunc.find(pcd->funcBody.get());
+        func = pcd->funcBody.get();
     } else if (auto vda = DynamicCast<VarDeclAbstract>(node)) {
-        foundFunc = node2LocalFunc.find(vda);
+        func = vda;
     }
-
-    if (foundFunc != node2LocalFunc.end()) {
-        auto foundId = foundFunc->second.find(target->identifier);
-        if (foundId == foundFunc->second.end()) {
-            return {};
-        }
-        auto targetIt = std::find(foundId->second.begin(), foundId->second.end(), target);
-        if (targetIt != foundId->second.end()) {
-            return targetIt - foundId->second.begin();
-        }
+    if (!func) {
         return {};
     }
-    return {};
+    auto foundId = node2LocalFunc.find(std::make_pair(func, target->identifier));
+    if (foundId == node2LocalFunc.end()) {
+        return {};
+    }
+    auto targetIt = std::find(foundId->second.begin(), foundId->second.end(), target);
+    if (targetIt == foundId->second.end()) {
+        return {};
+    }
+    return targetIt - foundId->second.begin();
 }
 
 std::optional<size_t> ManglerContext::GetIndexOfLambda(
@@ -1561,7 +1559,7 @@ std::optional<size_t> ManglerContext::GetIndexOfLambda(
         foundFunc = node2Lambda.find(vda);
         foundArrayLit = node2Lambda.find(vda->annotationsArray.get());
     }
-    auto getIndex = [this, &target](std::map<Ptr<const AST::Node>,
+    auto getIndex = [this, &target](std::unordered_map<Ptr<const AST::Node>,
         std::vector<Ptr<AST::LambdaExpr>>>::const_iterator it) -> std::optional<size_t> {
         if (it != node2Lambda.end()) {
             auto targetIt = std::find(it->second.begin(), it->second.end(), target);

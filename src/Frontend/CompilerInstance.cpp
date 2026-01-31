@@ -13,6 +13,8 @@
 #include "cangjie/Frontend/CompilerInstance.h"
 
 #include <fstream>
+#include <utility>
+#include <unordered_set>
 
 #include "PrintSymbolTable.h"
 
@@ -709,7 +711,6 @@ void DoMangling(const BaseMangler& baseMangler, size_t parallelNum, const std::v
         auto tasksNum = topDecls.size() / batchSize;
         size_t start = 0;
         size_t end = batchSize;
-        std::unordered_map<int, std::vector<LambdaAndPackageName>> lambdasCollectedByTask;
         // Creating a Concurrent Task Queue
         Utils::TaskQueue taskQueue(parallelNum);
         for (size_t i = 0; i < tasksNum; ++i) {
@@ -757,11 +758,14 @@ void CompilerInstance::ManglingHelpFunction(const BaseMangler& baseMangler)
 #endif
 {
     // Collect all top-level decls
-    std::vector<DeclAndPackageName> topDecls;
-    auto deduplicatedEmplace = [&topDecls](AST::Decl* decl, std::string pkgName) {
-        if (std::find(topDecls.begin(), topDecls.end(), std::make_pair(decl, pkgName)) == topDecls.end()) {
-            topDecls.emplace_back(decl, pkgName);
+    struct PkgHasher {
+        size_t operator()(const DeclAndPackageName& elem) const noexcept {
+            return std::hash<Ptr<const AST::Node>>()(elem.first);
         }
+    };
+    std::unordered_set<DeclAndPackageName, PkgHasher> topDeclsSet;
+    auto deduplicatedEmplace = [&topDeclsSet](AST::Decl* decl, std::string pkgName) {
+        topDeclsSet.insert(std::make_pair(decl, pkgName));
     };
 
     for (auto& package : GetPackages()) {
@@ -804,7 +808,7 @@ void CompilerInstance::ManglingHelpFunction(const BaseMangler& baseMangler)
             }
         }
     }
-
+    std::vector<DeclAndPackageName> topDecls(topDeclsSet.begin(), topDeclsSet.end());
     DoMangling(baseMangler, invocation.globalOptions.GetJobs(), topDecls);
 }
 
