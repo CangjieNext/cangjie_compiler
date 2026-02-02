@@ -817,6 +817,9 @@ bool MockSupportManager::NeedEraseAccessorTypes(AST::Decl& decl) const
         if (decl.outerDecl->linkage == Linkage::INTERNAL) {
             return false;
         }
+        if (decl.TestAttr(Attribute::HAS_INITIAL)) {
+            return false;
+        }
     }
     return mockUtils->MayContainInternalTypes(decl.ty);
 }
@@ -851,11 +854,15 @@ OwnedPtr<FuncDecl> MockSupportManager::GenerateErasedFuncAccessor(FuncDecl& meth
     for (auto& param : methodAccessor->funcBody->paramLists[0]->params) {
         auto originalTy = typeManager.GetInstantiatedTy(param->ty, typeSubst);
         param->ty = typeManager.GetAnyTy();
+        param->type = MockUtils::CreateType<Type>(param->ty);
         param->outerDecl = methodAccessor.get();
         auto refExpr = CreateRefExpr(*param);
         refExpr->curFile = param->curFile;
         auto arg = mockUtils->CreateTypeCastOrThrow(std::move(refExpr), originalTy, "internal error");
         mockedMethodArgRefs.emplace_back(CreateFuncArg(std::move(arg)));
+
+        param->DisableAttr(AST::Attribute::HAS_INITIAL);
+        param->desugarDecl = nullptr;
     }
 
     auto callOriginalMethod = MakeOwned<CallExpr>();
@@ -922,6 +929,7 @@ OwnedPtr<FuncDecl> MockSupportManager::GenerateFuncAccessor(FuncDecl& methodDecl
     for (std::size_t param_idx = 0; param_idx < accessorParams.size(); ++param_idx) {
         auto& param = accessorParams[param_idx];
         param->ty = typeManager.GetInstantiatedTy(param->ty, typeSubst);
+        param->type = MockUtils::CreateType<Type>(param->ty);
         param->outerDecl = methodAccessor.get();
         auto refExpr = CreateRefExpr(*param);
         refExpr->curFile = param->curFile;
