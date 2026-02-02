@@ -26,6 +26,23 @@
 #include "cangjie/CHIR/Value.h"
 
 namespace Cangjie::CodeGen {
+void PropagateDebugLocToPrev(IRBuilder2& irBuilder)
+{
+    auto* currentBB = irBuilder.GetInsertBlock();
+    if (!currentBB || currentBB->empty()) {
+        return;
+    }
+
+    llvm::Instruction* prevInst = &currentBB->back();
+    bool isStore = llvm::isa<llvm::StoreInst>(prevInst);
+    bool hasNoDebugLoc = !prevInst->getDebugLoc();
+    bool hasCurrentLoc = static_cast<bool>(irBuilder.getCurrentDebugLocation());
+
+    if (isStore && hasNoDebugLoc && hasCurrentLoc) {
+        prevInst->setDebugLoc(irBuilder.getCurrentDebugLocation());
+    }
+}
+
 llvm::Value* HandleExitExpression(IRBuilder2& irBuilder, const CHIR::Exit& exitExpr)
 {
     auto& cgMod = irBuilder.GetCGModule();
@@ -83,6 +100,7 @@ llvm::Value* HandleTerminatorExpression(IRBuilder2& irBuilder, const CHIR::Expre
     auto& cgMod = irBuilder.GetCGModule();
     switch (chirExpr.GetExprKind()) {
         case CHIR::ExprKind::GOTO: {
+            PropagateDebugLocToPrev(irBuilder);
             auto& goTo = StaticCast<const CHIR::GoTo&>(chirExpr);
             auto succ = goTo.GetSuccessors()[0];
             return irBuilder.CreateBr(cgMod.GetMappedBB(succ));
