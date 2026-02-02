@@ -83,6 +83,16 @@ llvm::Value* HandleTerminatorExpression(IRBuilder2& irBuilder, const CHIR::Expre
     auto& cgMod = irBuilder.GetCGModule();
     switch (chirExpr.GetExprKind()) {
         case CHIR::ExprKind::GOTO: {
+            if (auto* currentBB = irBuilder.GetInsertBlock()) {
+                if (!currentBB->empty()) {
+                    llvm::Instruction* prevInst = &currentBB->back();
+                    if (llvm::isa<llvm::StoreInst>(prevInst) &&
+                        !prevInst->getDebugLoc() &&
+                        irBuilder.getCurrentDebugLocation()) {
+                        prevInst->setDebugLoc(irBuilder.getCurrentDebugLocation());
+                    }
+                }
+            }
             auto& goTo = StaticCast<const CHIR::GoTo&>(chirExpr);
             auto succ = goTo.GetSuccessors()[0];
             return irBuilder.CreateBr(cgMod.GetMappedBB(succ));
