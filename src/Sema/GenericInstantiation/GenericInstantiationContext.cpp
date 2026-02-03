@@ -380,6 +380,153 @@ MultiTypeSubst GIM::GenericInstantiationManagerImpl::GetTypeMapping(Ptr<Ty>& bas
     return typeMapping;
 }
 
+bool GIM::GenericInstantiationManagerImpl::IsImplementationFunc(
+    const FuncDecl& srcFunc, const FuncDecl& superFunc, const Ptr<Ty> srcInstFuncTy, const Ptr<Ty> superInstFuncTy)
+{
+    CJC_ASSERT(srcFunc.outerDecl && superFunc.outerDecl);
+    // If function's static or generic status not equal, the will not have relation of implementation.
+    bool noRelation = srcFunc.TestAttr(Attribute::STATIC) != superFunc.TestAttr(Attribute::STATIC) ||
+        srcFunc.TestAttr(Attribute::GENERIC) != superFunc.TestAttr(Attribute::GENERIC) ||
+        srcFunc.identifier != superFunc.identifier;
+    if (noRelation) {
+        return false;
+    }
+    return typeManager.IsSubtype(srcInstFuncTy, superInstFuncTy);
+}
+
+void GIM::GenericInstantiationManagerImpl::CollectDeclMemberFunc(
+    Decl& decl, Ty& instBaseTy, MmeberFuncsWithInstTys& funcs, const std::string& identifier)
+{
+    auto mapping = GenerateTypeMappingByTy(decl.ty, &instBaseTy);
+    for (auto& member : decl.GetMemberDecls()) {
+        WorkForMembers(*member, [this, &funcs, &mapping, &identifier](auto& m) {
+            if (m.identifier != identifier || m.astKind != AST::ASTKind::FUNC_DECL || m.TestAttr(Attribute::ABSTRACT)) {
+                return;
+            }
+            auto memberFunc = StaticCast<FuncDecl>(&m);
+            auto instMemberTy = typeManager.GetInstantiatedTy(memberFunc->ty, mapping);
+
+            for (auto superFuncIt = funcs.begin(); superFuncIt != funcs.end();) {
+                for (auto superFuncInstTyIt = superFuncIt->second.begin();
+                    superFuncInstTyIt != superFuncIt->second.end();) {
+                    if (IsImplementationFunc(*memberFunc, *superFuncIt->first, instMemberTy, *superFuncInstTyIt)) {
+                        superFuncInstTyIt = superFuncIt->second.erase(superFuncInstTyIt);
+                    } else {
+                        ++superFuncInstTyIt;
+                    }
+                }
+                if (superFuncIt->second.empty()) {
+                    superFuncIt = funcs.erase(superFuncIt);
+                } else {
+                    ++superFuncIt;
+                }
+            }
+
+            auto funcIt = funcs.find(memberFunc);
+            if (funcIt != funcs.end()) {
+                funcIt->second.emplace(instMemberTy);
+            } else {
+                funcs.emplace(std::make_pair(memberFunc, std::unordered_set<Ptr<Ty>>{instMemberTy}));
+            }
+        });
+    }
+}
+
+void GIM::GenericInstantiationManagerImpl::GetInstMemberFromSuper(AST::Ty& instBaseTy,
+    Ptr<AST::InheritableDecl> baseDecl, MmeberFuncsWithInstTys& funcs, const std::string& identifier,
+    bool isCheckingInterface)
+{
+    for (auto& type : baseDecl->inheritedTypes) {
+        bool notSkipSuper = isCheckingInterface ? type->ty->IsInterface() : type->ty->IsClass();
+        if (!notSkipSuper) {
+            continue;
+        }
+        GetInstMemberFuncWithInstTy(*type->ty, funcs, identifier);
+    }
+    auto mappingBasePtrDecl2InstTy = GenerateTypeMappingByTy(baseDecl->ty, &instBaseTy);
+    for (auto& superFunc : funcs) {
+        std::unordered_set<Ptr<Ty>> newTySet;
+        for (auto& superFuncInstTy : superFunc.second) {
+            newTySet.emplace(typeManager.GetInstantiatedTy(superFuncInstTy, mappingBasePtrDecl2InstTy));
+        }
+        superFunc.second = std::move(newTySet);
+    }
+}
+
+void GIM::GenericInstantiationManagerImpl::MergeIntoFuncs(
+    MmeberFuncsWithInstTys& funcs, MmeberFuncsWithInstTys& newFuncs)
+{
+    for (auto& newFunc : newFuncs) {
+        for (auto newFuncInstTy : newFunc.second) {
+            bool hasImpl = false;
+            for (auto& func : funcs) {
+                if (Utils::In(newFuncInstTy, func.second)) {
+                    hasImpl = true;
+                    break;
+                }
+            }
+            if (hasImpl) {
+                continue;
+            }
+            auto foundSameFuncDecl = funcs.find(newFunc.first);
+            if (foundSameFuncDecl != funcs.end()) {
+                foundSameFuncDecl->second.emplace(newFuncInstTy);
+            } else {
+                funcs.emplace(newFunc);
+            }
+        }
+    }
+}
+
+/*
+1. 找类型定义自身继承的接口中的成员；
+2. 找类型定义自身父Class中以及其扩展中的成员，如果覆盖1中的成员，则替换；
+3. 找类型定义自身的成员，如果覆盖了1、2中的成员，则替换。候选集记为 funcs。
+
+4. 找到扩展的父接口中的成员；
+5. 找到扩展中的成员，如果覆盖了4中的成员，则替换。
+
+6. 将扩展成员合并到 funcs 中，如果是相同的 funcTy，则保留 funcs 中的成员。
+*/
+void GIM::GenericInstantiationManagerImpl::GetInstMemberFuncWithInstTy(
+    Ty& instBaseTy, MmeberFuncsWithInstTys& funcs, const std::string& identifier)
+{
+    auto key = std::make_pair(&instBaseTy, identifier);
+    if (auto found = instTy2Members.find(key); found != instTy2Members.end()) {
+        funcs = found->second;
+        return;
+    }
+
+    auto baseDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(&instBaseTy);
+    std::set<Ptr<ExtendDecl>> extendDecls;
+    if (baseDecl) {
+        MmeberFuncsWithInstTys superInterfaceFuncs;
+        GetInstMemberFromSuper(instBaseTy, baseDecl, superInterfaceFuncs, identifier, true);
+        GetInstMemberFromSuper(instBaseTy, baseDecl, funcs, identifier, false);
+        MergeIntoFuncs(funcs, superInterfaceFuncs);
+        CollectDeclMemberFunc(*baseDecl, instBaseTy, funcs, identifier);
+        extendDecls = typeManager.GetDeclExtends(*baseDecl);
+    } else {
+        extendDecls = typeManager.GetAllExtendsByTy(instBaseTy);
+    }
+
+    MmeberFuncsWithInstTys extendFuncs;
+    for (auto& ed : extendDecls) {
+        if (!ed || ed->TestAttr(Attribute::GENERIC_INSTANTIATED)) {
+            continue;
+        }
+        GetInstMemberFromSuper(instBaseTy, ed, extendFuncs, identifier, true);
+    }
+    for (auto& ed : extendDecls) {
+        if (!ed || ed->TestAttr(Attribute::GENERIC_INSTANTIATED)) {
+            continue;
+        }
+        CollectDeclMemberFunc(*ed, instBaseTy, extendFuncs, identifier);
+    }
+    MergeIntoFuncs(funcs, extendFuncs);
+    instTy2Members.emplace(key, funcs);
+}
+
 /**
  * Check whether two functions which exist in given type's whole inheritance relationship has
  * implementation/override relation.
@@ -470,6 +617,7 @@ bool GIM::GenericInstantiationManagerImpl::IsImplementationFunc(
 
 void GIM::GenericInstantiationManagerImpl::BuildAbstractFuncMapHelper(Ty& ty)
 {
+    return;
     std::unordered_set<Ptr<FuncDecl>> funcs = GetInheritedMemberFuncs(ty);
     std::unordered_set<Ptr<InheritableDecl>> interfaces = GetInheritedInterfaces(ty);
 
