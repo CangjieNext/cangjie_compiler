@@ -16,6 +16,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "ModulesDiag.h"
@@ -1059,18 +1060,54 @@ std::vector<Ptr<Decl>> ImportManager::GetImportedDeclsByName(const File& file, c
 
 std::vector<std::pair<std::string, std::vector<Ptr<Decl>>>> ImportManager::GetImportedDecls(const File& file) const
 {
-    std::vector<std::pair<std::string, std::vector<Ptr<Decl>>>> res;
-    std::transform(importedDeclsMap.cbegin(), importedDeclsMap.cend(), std::back_inserter(res), [](auto& pair) {
-        std::vector<Ptr<Decl>> decls = Utils::SetToVec<Ptr<Decl>>(pair.second);
-        return std::make_pair(pair.first, decls);
-    });
+    // 预分配空间，减少内存重新分配
+    size_t totalSize = importedDeclsMap.size();
     auto iter = fileImportedDeclsMap.find(file.fileHash);
     if (iter != fileImportedDeclsMap.cend()) {
-        std::transform(iter->second.cbegin(), iter->second.cend(), std::back_inserter(res), [](auto& pair) {
-            std::vector<Ptr<Decl>> decls = Utils::SetToVec<Ptr<Decl>>(pair.second);
-            return std::make_pair(pair.first, decls);
-        });
+        totalSize += iter->second.size();
     }
+    
+    std::vector<std::pair<std::string, std::vector<Ptr<Decl>>>> res;
+    res.reserve(totalSize);
+    
+    // 优化：直接构造，避免临时变量
+    for (const auto& [name, declSet] : importedDeclsMap) {
+        std::vector<Ptr<Decl>> decls(declSet.cbegin(), declSet.cend());
+        res.emplace_back(name, std::move(decls));
+    }
+    
+    if (iter != fileImportedDeclsMap.cend()) {
+        for (const auto& [name, declSet] : iter->second) {
+            std::vector<Ptr<Decl>> decls(declSet.cbegin(), declSet.cend());
+            res.emplace_back(name, std::move(decls));
+        }
+    }
+    
+    return res;
+}
+
+std::vector<Ptr<Decl>> ImportManager::GetAllImportedDecls(const File& file) const
+{
+    // 使用 unordered_set 去重，提高性能
+    std::unordered_set<Ptr<Decl>> declSet;
+    
+    // 收集所有声明
+    for (const auto& [_, decls] : importedDeclsMap) {
+        declSet.insert(decls.cbegin(), decls.cend());
+    }
+    
+    auto iter = fileImportedDeclsMap.find(file.fileHash);
+    if (iter != fileImportedDeclsMap.cend()) {
+        for (const auto& [_, decls] : iter->second) {
+            declSet.insert(decls.cbegin(), decls.cend());
+        }
+    }
+    
+    // 转换为 vector，预分配空间
+    std::vector<Ptr<Decl>> res;
+    res.reserve(declSet.size());
+    res.assign(declSet.cbegin(), declSet.cend());
+    
     return res;
 }
 

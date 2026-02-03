@@ -1910,11 +1910,9 @@ void TypeChecker::TypeCheckerImpl::CollectDeclsWithMember(Ptr<Package> pkg, ASTC
     }
     // collect imported
     for (auto& file : pkg->files) {
-        auto imported = importManager.GetImportedDecls(*file);
-        for (auto& [_, tops] : imported) {
-            for (auto& top : tops) {
-                collectDecl(top);
-            }
+        std::vector<Ptr<Decl>> importedDecls = importManager.GetAllImportedDecls(*file);
+        for (auto decl : importedDecls) {
+            collectDecl(decl);
         }
     }
     // collect builtin extends, which somehow is not included in imported
