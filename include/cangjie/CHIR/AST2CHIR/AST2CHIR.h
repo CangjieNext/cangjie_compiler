@@ -370,6 +370,7 @@ private:
         return deserializedDecls.find(&decl) == deserializedDecls.end();
     }
     void ProcessCommonAndSpecificExtends();
+    void ProcessClassLikeVarInits(Translator&);
     const GlobalOptions& opts;
     const GenericInstantiationManager* gim;
     ImportManager& importManager;

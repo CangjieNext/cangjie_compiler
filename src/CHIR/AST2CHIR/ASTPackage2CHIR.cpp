@@ -1329,9 +1329,13 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     TranslateVecDecl(genericNominalDecls, trans);
     // Update some info for nominal decls.
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "TranslateDecls");
+    // Update some info for common specific
+    Utils::ProfileRecorder::Start("TranslateNominalDecls", "ProcessCommonAndSpecific");
+    ProcessClassLikeVarInits(trans);
     ProcessCommonAndSpecificExtends();
     SetExtendInfo();
     UpdateExtendParent();
+    Utils::ProfileRecorder::Stop("TranslateNominalDecls", "ProcessCommonAndSpecific");
 }
 
 void AST2CHIR::TranslateFuncParams(const AST::FuncDecl& funcDecl, Func& func) const
@@ -1645,5 +1649,28 @@ void AST2CHIR::ProcessCommonAndSpecificExtends()
 
     // 2. Clean up unused extends
     RemoveUnusedCJMPExtends(*package, commonDecls);
+}
+
+void AST2CHIR::ProcessClassLikeVarInits(Translator& trans)
+{
+    bool compileCJMP = opts.IsCompilingCJMP();
+    if (!compileCJMP) {
+        return;
+    }
+    // translate vars init for CJMP.
+    const std::vector<std::vector<Ptr<const AST::Decl>>>& declContainers =
+        {importedNominalDecls, importedGenericInstantiatedNominalDecls, nominalDecls, genericNominalDecls};
+    for (auto& container : declContainers) {
+        for (const auto& decl : container) {
+            if (decl->astKind == AST::ASTKind::CLASS_DECL) {
+                auto& classDecl = *AST::StaticAs<AST::ASTKind::CLASS_DECL>(decl);
+                trans.CreateClassLikeDeclVarInit(classDecl);
+            } else if (decl->astKind == AST::ASTKind::INTERFACE_DECL) {
+                auto& interfaceDecl = *AST::StaticAs<AST::ASTKind::INTERFACE_DECL>(decl);
+                trans.CreateClassLikeDeclVarInit(interfaceDecl);
+            }
+        }
+    }
+    
 }
 } // namespace Cangjie::CHIR
