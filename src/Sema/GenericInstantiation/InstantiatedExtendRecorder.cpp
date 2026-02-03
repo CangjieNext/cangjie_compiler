@@ -14,6 +14,7 @@
 #include "InstantiatedExtendRecorder.h"
 
 #include "ExtendBoxMarker.h"
+#include "GenericInstantiation/GenericInstantiationManagerImpl.h"
 #include "ImplUtils.h"
 #include "TypeCheckUtil.h"
 
@@ -137,17 +138,12 @@ void GenericInstantiationManager::InstantiatedExtendRecorder::RecordExtendForMem
 void GenericInstantiationManager::InstantiatedExtendRecorder::RecordImplExtendDecl(
     Ty& ty, FuncDecl& fd, Ptr<Ty> upperTy)
 {
-    auto baseTy = typeManager.GetTyForExtendMap(ty);
-    auto genericFd = RawStaticCast<FuncDecl*>(gim.GetGeneralDecl(fd));
-    CJC_ASSERT(genericFd->astKind == AST::ASTKind::FUNC_DECL);
-
-    auto declMap = gim.abstractFuncToDeclMap.find(std::make_pair(baseTy, genericFd));
-    if (declMap == gim.abstractFuncToDeclMap.end()) {
-        return;
-    }
+    MemberFuncsWithInstTys funcs;
+    gim.GetInstMemberFuncWithInstTy(ty, funcs, fd.identifier);
     Ptr<Decl> extend = nullptr;
     // All candidates have satisfied functions, choose most matched decl.
-    for (auto [baseDecl, _] : declMap->second) {
+    for (auto [func, _] : funcs) {
+        auto baseDecl = func->outerDecl;
         CJC_ASSERT(baseDecl);
         if (baseDecl->astKind != ASTKind::EXTEND_DECL) {
             continue; // Function implemented in origin decl, ignored.
