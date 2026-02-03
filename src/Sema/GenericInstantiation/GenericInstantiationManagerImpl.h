@@ -66,6 +66,7 @@ struct GenericInfoEqual {
  * maintains cache of generic and instantiated decls' information.
  */
 using Generic2InsMap = std::unordered_map<Ptr<const AST::Decl>, std::unordered_set<Ptr<AST::Decl>>>;
+using MemberFuncsWithInstTys = std::unordered_map<Ptr<AST::FuncDecl>, std::unordered_set<Ptr<AST::Ty>>>;
 
 class GenericInstantiationManager::GenericInstantiationManagerImpl {
 public:
@@ -107,6 +108,8 @@ public:
 
     Generic2InsMap GetAllGenericToInsDecls() const;
 
+    void GetInstMemberFuncWithInstTy(AST::Ty& instBaseTy, MemberFuncsWithInstTys& funcs, const std::string& identifier);
+
     friend class InstantiatedExtendRecorder;
     friend class MockUtils;
 
@@ -134,17 +137,6 @@ private:
     Generic2InsMap instantiatedDeclsMap;
     /** Key: generic decl & instantiated types. Value: instantiated decl. */
     std::unordered_multimap<GenericInfo, Ptr<AST::Decl>, GenericInfoHash, GenericInfoEqual> declInstantiationByTypeMap;
-    /**
-     * This map saves the information of the function in which structure declaration implements the abstract function in
-     * interface.
-     * The key is pair of type and the abstract function in interface.
-     * The value is a set that contains pair of:
-     *    1. the structure declaration which contains the function which implements abstract function.
-     *    2. the index of the implementation function in structure declaration.
-     * */
-    std::unordered_map<std::pair<Ptr<AST::Ty>, Ptr<AST::FuncDecl>>,
-        std::unordered_set<std::pair<Ptr<AST::Decl>, size_t>, HashPair>, HashPair>
-        abstractFuncToDeclMap;
     std::unordered_map<Ptr<AST::Decl>, size_t> membersIndexMap;
     std::unordered_map<Ptr<const AST::Decl>, std::vector<size_t>> skippedMemberOffsets;
     /** Node kinds which should be ignored in walker. */
@@ -163,6 +155,7 @@ private:
     std::unordered_set<Ptr<const AST::Decl>> usedSrcImportedDecls;
     /** Used for incremental compilation, decide whether new created instantiation need to be compiled. */
     bool needCompile = true;
+    std::unordered_map<std::pair<Ptr<AST::Ty>, std::string>, MemberFuncsWithInstTys, HashPair> instTy2Members;
 
     /** Implement working flow for incremental compiling package. */
     void InstantiateForIncrementalPackage();
@@ -257,13 +250,24 @@ private:
 
     /** Build interface function to implemented function map for all type decls */
     void BuildAbstractFuncMap();
-    void BuildAbstractFuncMapHelper(AST::Ty& ty);
     bool IsImplementationFunc(AST::Ty& ty, const AST::FuncDecl& interfaceFunc, const AST::FuncDecl& fd);
+
+    bool IsImplementationFunc(const AST::FuncDecl& srcFunc, const AST::FuncDecl& superFunc,
+        const Ptr<AST::Ty> srcInstFuncTy, const Ptr<AST::Ty> superInstFuncTy);
+    void MergeIntoFuncs(MemberFuncsWithInstTys& funcs, MemberFuncsWithInstTys& newFuncs);
+    /** Check if there's already an implementation for the given function with subtype check */
+    bool HasImplementationWithSubTypeCheck(AST::Ty& instBaseTy, const MemberFuncsWithInstTys& funcs,
+        Ptr<AST::Ty> newFuncInstTy, const std::set<Ptr<AST::Ty>>& newFuncOuterDeclInstTys);
+
+    void MergeExtendSuperMember(AST::Ty& instBaseTy, MemberFuncsWithInstTys& funcs, MemberFuncsWithInstTys& newFuncs);
+
+    void GetInstMemberFromSuper(AST::Ty& instBaseTy, Ptr<AST::InheritableDecl> interfaceDecl,
+        MemberFuncsWithInstTys& funcs, const std::string& identifier, bool isCheckingInterface);
+    void CollectDeclMemberFunc(
+        AST::Decl& decl, AST::Ty& instBaseTy, MemberFuncsWithInstTys& funcs, const std::string& identifier);
+
     MultiTypeSubst GetTypeMapping(Ptr<AST::Ty>& baseTy, AST::Ty& interfaceTy);
-    void MapFuncWithDecl(AST::Ty& ty, AST::FuncDecl& interfaceFunc, const AST::FuncDecl& target);
     void CollectDeclMemberFuncs(AST::Decl& decl, std::unordered_set<Ptr<AST::FuncDecl>>& funcs) const;
-    std::unordered_set<Ptr<AST::FuncDecl>> GetInheritedMemberFuncs(AST::Ty& ty);
-    std::unordered_set<Ptr<AST::InheritableDecl>> GetInheritedInterfaces(AST::Ty& ty);
     /** Collect inherited members for imported decls which is not check during sema stage. */
     std::unordered_set<Ptr<AST::FuncDecl>> MergeMemberFuncs(
         AST::Ty& ty, AST::Decl& decl, const std::unordered_set<Ptr<AST::FuncDecl>>& inheritedMembers);

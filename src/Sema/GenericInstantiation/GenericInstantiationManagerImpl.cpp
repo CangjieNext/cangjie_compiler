@@ -813,35 +813,19 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
     if (shouldIgnore) {
         return &fd;
     }
-    // Get base ty: primitive ty, non-generic ty or generic ty of instantiated ty.
-    auto baseTy = typeManager.GetTyForExtendMap(ty);
-    auto genericFd = StaticCast<FuncDecl*>(GetGeneralDecl(fd, true));
-    if (genericFd->genericDecl) {
-        genericFd = StaticCast<FuncDecl*>(genericFd->genericDecl);
-    }
 
-    auto keyPair = std::make_pair(baseTy, genericFd);
-    auto foundAbstFunc = abstractFuncToDeclMap.find(keyPair);
-    if (foundAbstFunc == abstractFuncToDeclMap.end()) {
-        return &fd;
+    MemberFuncsWithInstTys funcs;
+    GetInstMemberFuncWithInstTy(ty, funcs, fd.identifier);
+    TypeSubst typeMapping = GenerateTypeMappingByTy(fd.outerDecl->ty, &targetBaseTy);
+    auto instFuncTy = typeManager.GetInstantiatedTy(fd.ty, typeMapping);
+    for (auto& [implFunc, instTys] : funcs) {
+        bool isInDiffDecl = implFunc->outerDecl != GetGeneralDecl(*fd.outerDecl, true);
+        auto withSameTy = instTys.find(instFuncTy);
+        if (isInDiffDecl && withSameTy != instTys.end()) {
+            return implFunc;
+        }
     }
-    std::vector<std::pair<Ptr<AST::Decl>, size_t>> candidates;
-    bool accessByInterface = ty.IsInterface();
-    std::copy_if(foundAbstFunc->second.begin(), foundAbstFunc->second.end(), std::back_inserter(candidates),
-        [this, accessByInterface, &fd](auto& it) {
-            bool notInSameDecl = it.first != GetGeneralDecl(*fd.outerDecl, true);
-            bool instInInterface = it.first->astKind == ASTKind::INTERFACE_DECL;
-            // Member access through the interface, looking up only the implementation from the interface.
-            if (accessByInterface) {
-                return notInSameDecl && instInInterface;
-            }
-            return notInSameDecl;
-        });
-    Ptr<Decl> member = SelectTypeMatchedImplMember(ty, fd, candidates, targetBaseTy);
-    if (!member) {
-        return &fd;
-    }
-    return As<ASTKind::FUNC_DECL>(GetUsedMemberDecl(*member, fd.isGetter));
+    return &fd;
 }
 
 Ptr<AST::Decl> GIM::GenericInstantiationManagerImpl::ReinstantiatedPartialMemberDecl(
