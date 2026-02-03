@@ -84,9 +84,11 @@ std::vector<std::string> Utils::SplitQualifiedName(const std::string& qualifiedN
     std::vector<std::string> names;
     std::string::size_type idx = 0;
     std::string_view dc = TOKENS[static_cast<int>(TokenKind::DOUBLE_COLON)];
-    if (auto next = qualifiedName.find(dc); splitDc && next != std::string::npos) {
-        names.push_back(qualifiedName.substr(0, next));
-        idx = next + dc.size();
+    if (splitDc) {
+        if (auto next = qualifiedName.find(dc); next != std::string::npos) {
+            names.push_back(qualifiedName.substr(0, next));
+            idx = next + dc.size();
+        }
     }
     while (idx < qualifiedName.size()) {
         if (qualifiedName[idx] == '.') {

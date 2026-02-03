@@ -24,29 +24,18 @@ PackageRelation GetPackageRelation(const std::string& srcFullPkgName, const std:
     if (pureSrcFullPackageName == pureTargetFullPackageName) {
         return PackageRelation::SAME_PACKAGE;
     }
-    if (pureSrcFullPackageName.empty() || pureTargetFullPackageName.empty()) {
+    if (pureSrcFullPackageName == "" || pureTargetFullPackageName == "") {
         return PackageRelation::NONE;
     }
-    // Optimize: check CHILD relation without full split by comparing prefixes manually
-    if (pureTargetFullPackageName.size() > pureSrcFullPackageName.size() &&
-        pureTargetFullPackageName[pureSrcFullPackageName.size()] == '.' &&
-        pureTargetFullPackageName.compare(0, pureSrcFullPackageName.size(), pureSrcFullPackageName) == 0) {
-        // Verify it's a proper child by checking no additional dots in the prefix
-        // This avoids full split for common case
+
+    auto srcPath = Utils::SplitQualifiedName(pureSrcFullPackageName);
+    auto targetPath = Utils::SplitQualifiedName(pureTargetFullPackageName);
+    if (targetPath.size() < srcPath.size() &&
+        std::equal(targetPath.begin(), targetPath.end(), srcPath.begin(),
+            srcPath.begin() + static_cast<ptrdiff_t>(targetPath.size()))) {
         return PackageRelation::CHILD;
     }
-    // Optimize: check SAME_MODULE by comparing first component without full split
-    auto srcFirstDot = pureSrcFullPackageName.find('.');
-    auto targetFirstDot = pureTargetFullPackageName.find('.');
-    std::string_view srcFirst = srcFirstDot == std::string::npos
-        ? std::string_view(pureSrcFullPackageName)
-        : std::string_view(pureSrcFullPackageName.data(), srcFirstDot);
-    std::string_view targetFirst = targetFirstDot == std::string::npos
-        ? std::string_view(pureTargetFullPackageName)
-        : std::string_view(pureTargetFullPackageName.data(), targetFirstDot);
-    if (srcFirst == targetFirst) {
-        return PackageRelation::SAME_MODULE;
-    }
-    return PackageRelation::NONE;
+
+    return srcPath.front() == targetPath.front() ? PackageRelation::SAME_MODULE : PackageRelation::NONE;
 }
 } // namespace Cangjie::Modules
