@@ -21,14 +21,12 @@ PackageRelation GetPackageRelation(const std::string& srcFullPkgName, const std:
     auto pureTargetFullPackageName = ImportManager::IsTestPackage(targetFullPkgName)
         ? ImportManager::GetMainPartPkgNameForTestPkg(targetFullPkgName)
         : targetFullPkgName;
-
     if (pureSrcFullPackageName == pureTargetFullPackageName) {
         return PackageRelation::SAME_PACKAGE;
     }
     if (pureSrcFullPackageName.empty() || pureTargetFullPackageName.empty()) {
         return PackageRelation::NONE;
     }
-
     // Optimize: check CHILD relation without full split by comparing prefixes manually
     if (pureTargetFullPackageName.size() > pureSrcFullPackageName.size() &&
         pureTargetFullPackageName[pureSrcFullPackageName.size()] == '.' &&
@@ -37,21 +35,18 @@ PackageRelation GetPackageRelation(const std::string& srcFullPkgName, const std:
         // This avoids full split for common case
         return PackageRelation::CHILD;
     }
-
     // Optimize: check SAME_MODULE by comparing first component without full split
     auto srcFirstDot = pureSrcFullPackageName.find('.');
     auto targetFirstDot = pureTargetFullPackageName.find('.');
-    std::string_view srcFirst = srcFirstDot == std::string::npos 
-        ? std::string_view(pureSrcFullPackageName) 
+    std::string_view srcFirst = srcFirstDot == std::string::npos
+        ? std::string_view(pureSrcFullPackageName)
         : std::string_view(pureSrcFullPackageName.data(), srcFirstDot);
-    std::string_view targetFirst = targetFirstDot == std::string::npos 
-        ? std::string_view(pureTargetFullPackageName) 
+    std::string_view targetFirst = targetFirstDot == std::string::npos
+        ? std::string_view(pureTargetFullPackageName)
         : std::string_view(pureTargetFullPackageName.data(), targetFirstDot);
-    
     if (srcFirst == targetFirst) {
         return PackageRelation::SAME_MODULE;
     }
-
     return PackageRelation::NONE;
 }
 } // namespace Cangjie::Modules

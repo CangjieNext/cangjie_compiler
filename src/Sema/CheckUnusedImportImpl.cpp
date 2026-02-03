@@ -45,7 +45,8 @@ private:
     std::unordered_map<std::string, std::unordered_set<Ptr<Decl>>> usedPackageInAST;
     std::unordered_map<Ptr<File>, std::unordered_map<std::string, std::unordered_set<Ptr<Decl>>>> usedPackageInFile;
     std::unordered_map<std::string, std::unordered_set<Ptr<Decl>>> cacheUsedPackageInAST;
-    std::unordered_map<Ptr<File>, std::unordered_map<std::string, std::unordered_set<Ptr<Decl>>>> cacheUsedPackageInFile;
+    std::unordered_map<Ptr<File>, std::unordered_map<std::string, std::unordered_set<Ptr<Decl>>>>
+        cacheUsedPackageInFile;
     std::vector<Ptr<ImportSpec>> needCheckImport;
     Package& pkg;
     DiagnosticEngine& diag;
@@ -70,8 +71,8 @@ void CheckUnusedImportImpl::AddUsedExtendDeclTarget(
     Ptr<Decl> target = nullptr;
     for (auto& type : ed->inheritedTypes) {
         if (target = type->GetTarget(); target) {
-            // 缓存 fullPackageName，避免重复调用
-            const std::string& pkgName = target->fullPackageName.empty() ? target->GetFullPackageName() : target->fullPackageName;
+            const std::string& pkgName =
+                target->fullPackageName.empty() ? target->GetFullPackageName() : target->fullPackageName;
             usedMap[pkgName].insert(target);
         }
     }
@@ -88,7 +89,8 @@ void CheckUnusedImportImpl::AddUsedExtendDeclTarget(
     for (auto& gc : ed->generic->genericConstraints) {
         for (auto& ub : gc->upperBounds) {
             if (target = ub->GetTarget(); target) {
-                const std::string& pkgName = target->fullPackageName.empty() ? target->GetFullPackageName() : target->fullPackageName;
+                const std::string& pkgName =
+                    target->fullPackageName.empty() ? target->GetFullPackageName() : target->fullPackageName;
                 usedMap[pkgName].insert(target);
             }
         }
@@ -97,8 +99,8 @@ void CheckUnusedImportImpl::AddUsedExtendDeclTarget(
 
 void CheckUnusedImportImpl::AddUsedTargetWithIdentifier(Node& node, const std::string& /*identifier*/, Ptr<Decl> target)
 {
-    // 缓存 fullPackageName，避免重复调用
-    const std::string& pkgName = target->fullPackageName.empty() ? target->GetFullPackageName() : target->fullPackageName;
+    const std::string& pkgName =
+        target->fullPackageName.empty() ? target->GetFullPackageName() : target->fullPackageName;
     auto& foundInAST = usedPackageInAST[pkgName];
     foundInAST.insert(target);
     if (target->outerDecl != nullptr) {
