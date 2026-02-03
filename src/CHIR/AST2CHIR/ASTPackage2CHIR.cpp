@@ -1327,9 +1327,13 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     TranslateVecDecl(genericNominalDecls, trans);
     // Update some info for nominal decls.
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "TranslateDecls");
-    ProcessCommonAndPlatformExtends();
+    // Update some info for common specific
+    Utils::ProfileRecorder::Start("TranslateNominalDecls", "ProcessCommonAndSpecific");
+    ProcessClassStructVarInits(trans);
+    ProcessCommonAndSpecificExtends();
     SetExtendInfo();
     UpdateExtendParent();
+    Utils::ProfileRecorder::Stop("TranslateNominalDecls", "ProcessCommonAndSpecific");
 }
 
 void AST2CHIR::TranslateFuncParams(const AST::FuncDecl& funcDecl, Func& func) const
@@ -1620,7 +1624,7 @@ void AST2CHIR::ResetPlatformFunc(const AST::FuncDecl& funcDecl, Func& func)
     }
 }
 
-void AST2CHIR::ProcessCommonAndPlatformExtends()
+void AST2CHIR::ProcessCommonAndSpecificExtends()
 {
     bool compilePlatform = opts.IsCompilingCJMP();
     if (!compilePlatform) {
@@ -1642,5 +1646,30 @@ void AST2CHIR::ProcessCommonAndPlatformExtends()
 
     // 2. Clean up unused extends
     RemoveUnusedCJMPExtends(*package, commonDecls);
+}
+
+void AST2CHIR::ProcessClassStructVarInits(Translator& trans)
+{
+    bool compileCJMP = opts.IsCompilingCJMP();
+    if (!compileCJMP) {
+        return;
+    }
+    // translate vars init for CJMP.
+    const std::vector<std::vector<Ptr<const AST::Decl>>>& declContainers = {
+        importedNominalDecls, importedGenericInstantiatedNominalDecls, nominalDecls, genericNominalDecls
+    };
+    for (auto& container : declContainers) {
+        for (const auto& decl : container) {
+            CJC_NULLPTR_CHECK(decl);
+            // Skip the common part varInit generation while comparing specific parts.
+            if (decl->TestAttr(AST::Attribute::FROM_COMMON_PART)) {
+                continue;
+            }
+            // Just need to generate varInit for class/struct.
+            if (decl->astKind == AST::ASTKind::CLASS_DECL || decl->astKind == AST::ASTKind::STRUCT_DECL) {
+                trans.CreateClassStructDeclVarInit(*decl);
+            }
+        }
+    }
 }
 } // namespace Cangjie::CHIR
