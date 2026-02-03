@@ -510,6 +510,18 @@ public:
     void CollectValueAnnotation(const AST::Decl& decl);
     void CollectTypeAnnotation(const AST::InheritableDecl& decl, const CustomTypeDef& cl);
 
+    /**
+     * @brief Creates var init func for classLike decls, because of cjmp.
+     *
+     * @param classDecl The AST ClassLikeDecl which need to add varInit func.
+     */
+    void CreateClassLikeDeclVarInit(const AST::ClassLikeDecl& classDecl)
+    {
+        ClassDef* classDef = StaticCast<ClassDef*>(GetNominalSymbolTable(classDecl).get());
+        CJC_NULLPTR_CHECK(classDef);
+        classDef->SetVarInitializationFunc(TranslateVarsInit(classDecl));
+    };
+
 private:
     friend class GlobalVarInitializer;
     // Used for add compileTimeVal tag for compile-time evaluation.
