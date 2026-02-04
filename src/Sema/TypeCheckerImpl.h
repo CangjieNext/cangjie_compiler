@@ -1597,6 +1597,8 @@ private:
     void CheckTypeArgLegalityOfJArrayCtor(const AST::NameReferenceExpr& re);
     void CheckStaticMemberAccessLegality(const AST::MemberAccess& ma, const AST::Decl& target);
     void CheckInstanceMemberAccessLegality(const ASTContext& ctx, const AST::MemberAccess& ma, const AST::Decl& target);
+    bool CheckLegalityOfReferenceIsSkip(Ptr<AST::Node> node);
+    AST::VisitAction CheckLegalityOfReferenceForExpr(ASTContext& ctx, Ptr<AST::Expr> node);
     void CheckLegalityOfReference(ASTContext& ctx, AST::Node& node);
     void CheckLegalityOfUnsafeAndInout(AST::Node& root);
 
