@@ -51,10 +51,47 @@ constexpr char BACKSLASH = '\\';
 constexpr char BACKTICK = '`';
 constexpr std::string_view TEST_FILE_NAME{"_test.cj"};
 
+
+#ifdef _WIN32
+// this function name is same with ld.lld
+std::optional<std::wstring> widenPath(const std::string& path)
+{
+    if (path.empty()) std::nullopt;
+    std::string normalizedPath = path;
+    std::replace(normalizedPath.begin(), normalizedPath.end(), '/', '\\');
+    std::optional<std::wstring> converted = StringConvertor::StringToWString(normalizedPath);
+    if (!converted.has_value()) {
+        return std::nullopt;
+    }
+    std::wstring wPath = std::move(converted.value());
+    const std::wstring prefix = L"\\\\?\\";
+    if (wPath.find(prefix) == 0) {
+        return wPath;
+    }
+    //TODO: fix this , ld is MAX_PATH - 12
+    if (wPath.length() < 260) {
+        return wPath;
+    }
+    bool isDisk = (wPath.size() >= 3 && wPath[1] == L':' && wPath[2] == L'\\');
+    bool isUnc = (wPath.size() >= 2 && wPath[0] == L'\\' && wPath[1] == L'\\');
+
+    if (!isDisk && !isUnc) {
+        return wPath;
+    }
+    if (isUnc) {
+        return prefix + L"UNC" + wPath.substr(1);
+    } else {
+        return prefix + wPath;
+    }
+}
+#endif
+
 #ifdef _WIN32
 inline int Mkdir(const std::string& path)
 {
     return _mkdir(path.c_str());
+    // CreateDirectoryW can not create dir recursively
+    // each item can not excess MAX_PATH
 }
 #else
 inline int Mkdir(const std::string& path)
@@ -431,7 +468,9 @@ std::string Normalize(const std::string& input, const bool toUnix)
 bool IsDir(const std::string& filePath)
 {
 #ifdef _WIN32
-    DWORD dwAttr = GetFileAttributesA(filePath.c_str());
+    std::optional<std::wstring> wFilePath = widenPath(filePath);
+    if (!wFilePath.has_value()) return false;
+    DWORD dwAttr = GetFileAttributesW(wFilePath.value().c_str());
     if (dwAttr == INVALID_FILE_ATTRIBUTES) {
         return false;
     }
@@ -481,7 +520,8 @@ bool IsAbsolutePath(const std::string& filePath)
 bool Remove(const std::string& itemPath)
 {
 #ifdef _WIN32
-    DWORD dwAttr = GetFileAttributesA(itemPath.c_str());
+    std::optional<std::wstring> wItemPath = StringConvertor::StringToWString(itemPath);
+    DWORD dwAttr = GetFileAttributesW(wItemPath.value().c_str());
     if (dwAttr == INVALID_FILE_ATTRIBUTES) {
         return false;
     }
@@ -490,6 +530,7 @@ bool Remove(const std::string& itemPath)
         return false;
     }
     return (IsDir(itemPath) ? _rmdir(itemPath.c_str()) : remove(itemPath.c_str())) == 0;
+    // TODO: change rmdir to support long path w api 
 #else
     struct stat statBuf;
     if (lstat(itemPath.c_str(), &statBuf) != 0) {
@@ -508,7 +549,9 @@ bool RemoveDirectoryRecursively(const std::string& dirPath)
         return false;
     }
 #ifdef _WIN32
-    DWORD attr = GetFileAttributesA(dirPath.c_str());
+    // fixme : add "\\?"  or not
+    std::optional<std::wstring> wDirPath = StringConvertor::StringToWString(dirPath);
+    DWORD attr = GetFileAttributesW(wDirPath.value().c_str());
     if (attr == INVALID_FILE_ATTRIBUTES) {
         return false;
     }
@@ -518,13 +561,13 @@ bool RemoveDirectoryRecursively(const std::string& dirPath)
             return false;
         }
         if ((attr & FILE_ATTRIBUTE_DIRECTORY) != 0) {
-            DWORD dirAttr = GetFileAttributesW(widePath.value().c_str());
+            DWORD dirAttr = GetFileAttributesW(wDirPath.value().c_str());
             if (dirAttr != INVALID_FILE_ATTRIBUTES && (dirAttr & FILE_ATTRIBUTE_READONLY) != 0) {
-                SetFileAttributesW(widePath.value().c_str(), dirAttr & ~FILE_ATTRIBUTE_READONLY);
+                SetFileAttributesW(wDirPath.value().c_str(), dirAttr & ~FILE_ATTRIBUTE_READONLY);
             }
-            return RemoveDirectoryW(widePath.value().c_str()) != 0;
+            return RemoveDirectoryW(wDirPath.value().c_str()) != 0;
         }
-        return DeleteFileA(dirPath.c_str()) != 0;
+        return DeleteFileW(wDirPath.value().c_str()) != 0;
     }
     if ((attr & FILE_ATTRIBUTE_DIRECTORY) == 0) {
         return false;
@@ -825,17 +868,28 @@ inline bool AddFileIfNeeded(const std::string& fileName, std::vector<std::string
 void GetAllDirsUnderCurrentPath(const std::string& dir, std::vector<std::string>& allFiles)
 {
     HANDLE hFind;
-    WIN32_FIND_DATA findData;
+    WIN32_FIND_DATAW findData;
     std::string dirNew = JoinPath(dir, "*.*");
-    hFind = FindFirstFileA(dirNew.c_str(), &findData);
+    std::optional<std::wstring> convertedPath = widenPath(dirNew);
+    if (!convertedPath.has_value()) {
+        return ;
+    }
+    std::wstring wPath = convertedPath.value();
+    hFind = FindFirstFileW(dirNew.c_str(), &findData);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    // TODO : is wcscmp(findData.cFileName, "") usefull ?
     do {
-        if ((findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && strcmp(findData.cFileName, "") != 0 &&
-            strcmp(findData.cFileName, ".") != 0 && strcmp(findData.cFileName, "..") != 0) {
-            dirNew = JoinPath(dir, std::string(findData.cFileName));
+        if ((findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && wcscmp(findData.cFileName, L"") != 0 &&
+            wcscmp(findData.cFileName, L".") != 0 && wcscmp(findData.cFileName, L"..") != 0) {
+            std::wstring wFileName(findData.cFileName);
+            std::string fileName = StringConvertor::WStringToUTF8(wFileName);
+            dirNew = JoinPath(dir, fileName);
             allFiles.push_back(dirNew);
             GetAllDirsUnderCurrentPath(dirNew, allFiles);
         }
-    } while (FindNextFile(hFind, &findData));
+    } while (FindNextFileW(hFind, &findData));
     FindClose(hFind);
 }
 
@@ -844,20 +898,31 @@ std::vector<std::string> GetAllFilesUnderCurrentPath(
 {
     std::vector<std::string> allFiles;
     HANDLE hFind;
-    WIN32_FIND_DATAA findData;
+    WIN32_FIND_DATAW findData;
     std::string dirNew = JoinPath(path, "*.*");
-    hFind = FindFirstFileA(dirNew.c_str(), &findData);
+    auto convertedPath = widenPath(dirNew);
+    if(!convertedPath.has_value()) return allFiles;
+    hFind = FindFirstFileW(convertedPath.value().c_str(), &findData);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        return allFiles;
+    }
     do {
-        auto fileName = std::string(findData.cFileName);
+        if (wcscmp(findData.cFileName, L".") == 0 || wcscmp(findData.cFileName, L"..") == 0) {
+            continue;
+        }
+        std::wstring wFileName(findData.cFileName);
+        auto fileName = StringConvertor::WStringToUTF8(wFileName);
+        if(!fileName.has_value()) continue;
+
         bool isFile = (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 &&
-            strcmp(findData.cFileName, ".") != 0 && HasExtension(fileName, extension);
+            wcscmp(findData.cFileName, L".") != 0 && HasExtension(fileName.value(), extension);
         if (!isFile) {
             continue;
         }
-        if (!AddFileIfNeeded(fileName, allFiles, shouldSkipTestFiles, shouldSkipRegularFiles)) {
+        if (!AddFileIfNeeded(fileName.value(), allFiles, shouldSkipTestFiles, shouldSkipRegularFiles)) {
             continue;
         }
-    } while (FindNextFileA(hFind, &findData));
+    } while (FindNextFileW(hFind, &findData));
     FindClose(hFind);
     return allFiles;
 }
@@ -866,18 +931,22 @@ std::vector<Directory> GetDirectories(const std::string& path)
 {
     std::vector<Directory> directories;
     HANDLE hFind;
-    WIN32_FIND_DATAA findData;
+    WIN32_FIND_DATAW findData;
     std::string dirNew = JoinPath(path, "*");
-    hFind = FindFirstFileA(dirNew.c_str(), &findData);
+    std::optional<std::wstring> convertedPath = widenPath(dirNew);
+    if (!convertedPath.has_value()) return directories;
+    hFind = FindFirstFileW(convertedPath.value().c_str(), &findData);
+    // TODO wcscmp(findData.cFileName, "") is usefull ? 
     do {
-        if ((findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && strcmp(findData.cFileName, "") != 0 &&
-            strcmp(findData.cFileName, ".") != 0 && strcmp(findData.cFileName, "..") != 0) {
+        if ((findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && wcscmp(findData.cFileName, L"") != 0 &&
+            wcscmp(findData.cFileName, L".") != 0 && wcscmp(findData.cFileName, L"..") != 0) {
             Directory d;
-            d.name = findData.cFileName;
-            d.path = JoinPath(path, std::string(findData.cFileName));
-            directories.emplace_back(d);
+            std::wstring wFileName(findData.cFileName);
+            d.name = StringConvertor::WStringToUTF8(wFileName);
+            d.path = JoinPath(path, std::string(d.name));
+            directories.emplace_back(std::move(d));
         }
-    } while (FindNextFileA(hFind, &findData));
+    } while (FindNextFileW(hFind, &findData));
     FindClose(hFind);
     return directories;
 }
@@ -1130,10 +1199,28 @@ AccessResultType AccessWithResult(const std::string& path, FileMode mode)
 #endif
 }
 
+
 bool Access(const std::string& path, FileMode mode)
 {
 #ifdef _WIN32
     return _access(path.c_str(), static_cast<int>(mode)) == 0;
+    std::optional<std::wstring> wPath = widenPath(path);
+    if(!wPath.has_value()) {
+        return false;
+    }
+    DWORD attr = GetFileAttributesW(wPath.value().c_str());
+    if (attr == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+    if (mode == FM_EXIST) {
+        return true;
+    }
+    if (mode == FM_WRITE && (attr & FILE_ATTRIBUTE_READONLY))
+        return false;
+    if (mode == FM_EXE && (attr & FILE_ATTRIBUTE_DIRECTORY))
+        return false;
+    return true;
+
 #else
     return access(path.c_str(), static_cast<int>(mode)) == 0;
 #endif
@@ -1154,15 +1241,17 @@ bool FileExist(const std::string& path, [[maybe_unused]] bool caseSensitive)
     }
     const std::string filename = GetFileName(pathWithoutSep);
     HANDLE hFind;
-    WIN32_FIND_DATAA findData;
-    std::string dirNew = JoinPath(GetDirPath(pathWithoutSep), "*.*");
-    hFind = FindFirstFileA(dirNew.c_str(), &findData);
+    WIN32_FIND_DATAW findData;
+    std::optional<std::wstring> dirNew = StringConvertor::StringToWString(JoinPath(GetDirPath(pathWithoutSep), "*.*"));
+    if(!dirNew.has_value()) return false;
+    hFind = FindFirstFileW(dirNew.value().c_str(), &findData);
     do {
-        if (filename == findData.cFileName) {
+        std::wstring wFileName(findData.cFileName);
+        if (filename == StringConvertor::WStringToUTF8(wFileName).value()) {
             FindClose(hFind);
             return true;
         }
-    } while (FindNextFileA(hFind, &findData));
+    } while (FindNextFileW(hFind, &findData));
     FindClose(hFind);
     return false;
 #elif defined(__APPLE__) || defined(__linux__) // On WSL case, we need to consider case sensitivity.
@@ -1317,12 +1406,13 @@ bool CanWrite(const std::string& path)
 {
 #ifdef _WIN32
     std::optional<std::wstring> tempPath = StringConvertor::StringToWString(path);
+    std::optional<std::wstring> wPath = widenPath(path);
     if (!tempPath.has_value()) {
         return false;
     }
-    std::wstring wPath = tempPath.value();
+    
     WIN32_FILE_ATTRIBUTE_DATA wfad;
-    BOOL res = GetFileAttributesExW(wPath.c_str(), GetFileExInfoStandard, &wfad);
+    BOOL res = GetFileAttributesExW(wPath.value().c_str(), GetFileExInfoStandard, &wfad);
     if (!res) {
         return false;
     }
@@ -1367,7 +1457,10 @@ std::string RemovePathPrefix(const std::string& absolutePath, const std::vector<
 #ifdef _WIN32
 void HideFile(const std::string& path)
 {
-    (void)SetFileAttributesA(path.c_str(), FILE_ATTRIBUTE_HIDDEN | GetFileAttributesA(path.c_str()));
+    std::optional<std::wstring> wPath = widenPath(path);
+    DWORD attrs = GetFileAttributesW(wPath.value().c_str());
+    if (attrs == INVALID_FILE_ATTRIBUTES) return ;
+    (void)SetFileAttributesW(wPath.value().c_str(), FILE_ATTRIBUTE_HIDDEN | attrs);
 }
 #endif
 
