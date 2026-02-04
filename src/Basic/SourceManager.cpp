@@ -166,7 +166,7 @@ std::string SourceManager::GetContentBetween(
     }
 
     CJC_ASSERT(INVALID_POSITION < begin && begin <= end);
-
+    CJC_ASSERT(!sources.empty());
     auto& sourceWithFileID = fileID >= sources.size() ? sources[0] : sources[fileID];
     const auto& source = sourceWithFileID.buffer.empty() && !importGenericContent.empty()
         ? Source(sourceWithFileID.fileID, sourceWithFileID.path, importGenericContent)
