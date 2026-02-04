@@ -79,6 +79,7 @@ void Darwin_CJNATIVE::GenerateLinkOptions(Tool& tool)
         tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "libcangjie-runtime.a"));
         tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "libcangjie-thread.a"));
         tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "libboundscheck-static.a"));
+        tool.AppendArg("-lc++");
     } else {
         tool.AppendArg("-lcangjie-runtime");
         tool.AppendArg("-lboundscheck");
