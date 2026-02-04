@@ -723,6 +723,7 @@ private:
     void DiagnoseForUnaryExpr(ASTContext& ctx, AST::UnaryExpr& ue);
     void DiagnoseForUnaryExprWithTarget(ASTContext& ctx, AST::UnaryExpr& ue, AST::Ty& target);
     bool ChkBinaryExpr(ASTContext& ctx, AST::Ty& target, AST::BinaryExpr& be);
+    Ptr<AST::FuncDecl> ChkOperatorRetTyInfer(ASTContext& ctx, AST::BinaryExpr& be);
     Ptr<AST::Ty> SynBinaryExpr(ASTContext& ctx, AST::BinaryExpr& be);
     Ptr<AST::Ty> SynIncOrDecExpr(ASTContext& ctx, AST::IncOrDecExpr& ide);
     bool ChkIncOrDecExpr(ASTContext& ctx, AST::Ty& target, AST::IncOrDecExpr& ide);
