@@ -47,7 +47,7 @@ const static std::string INJECTION_STRING = "^\";|&";
 const std::string DIR_SEPARATOR = "\\/";
 const std::string CURRENT_PATH = ".\\";
 const std::string UPPERLEVEL_PATH = "..\\";
-const size_t FILE_PATH_MAX_LENGTH = 260;
+const size_t FILE_PATH_MAX_LENGTH = 32767;
 const size_t DIR_PATH_MAX_LENGTH = 248;
 #else
 const static std::string INJECTION_STRING = "|;&$><\\!\n"; // Check ` otherwhere.
