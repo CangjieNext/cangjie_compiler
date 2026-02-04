@@ -37,6 +37,7 @@ struct IUnknown;
 namespace Cangjie {
 class DiagnosticEngine;
 const size_t FILE_NAME_MAX_LENGTH = 255;
+const size_t PATH_NAME_MAX_LENGTH = 32677;
 const size_t FILE_LEN_LIMIT = 4ULL * 1024 * 1024 * 1024; // 4 GB
 
 #ifdef _WIN32
