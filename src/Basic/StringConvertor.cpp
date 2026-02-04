@@ -43,6 +43,10 @@ std::optional<std::wstring> CodePageToUTF16(unsigned codepage, const std::string
     return utf16;
 }
 
+inline std::optional<std::string> WStringToUTF8(const std::wstring &wstr) {
+    return UTF16ToCodePage(CP_UTF8, wstr);
+}
+
 std::optional<std::string> UTF16ToCodePage(unsigned codepage, std::wstring& utf16)
 {
     std::string converted;
