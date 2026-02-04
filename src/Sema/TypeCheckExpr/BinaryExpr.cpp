@@ -206,17 +206,51 @@ bool TypeChecker::TypeCheckerImpl::ChkBinaryExpr(ASTContext& ctx, Ty& target, Bi
 
     if (TypeCheckUtil::IsOverloadableOperator(be.op)) {
         DesugarOperatorOverloadExpr(ctx, be);
-        auto ds = DiagSuppressor(diag);
-        if (Check(ctx, &target, be.desugarExpr.get())) {
-            ds.ReportDiag();
-            CJC_NULLPTR_CHECK(be.desugarExpr);
-            be.ty = be.desugarExpr->ty;
-            CJC_ASSERT(be.desugarExpr->astKind == ASTKind::CALL_EXPR);
-            ReplaceTarget(&be, StaticCast<CallExpr*>(be.desugarExpr.get())->resolvedFunction);
-            return true;
-        } else {
-            RecoverToBinaryExpr(be);
-            PData::Reset(typeManager.constraints);
+        Ptr<FuncDecl> operatorFuncDecl = nullptr;
+        
+        {
+            auto ds = DiagSuppressor(diag);
+            if (Check(ctx, &target, be.desugarExpr.get())) {
+                ds.ReportDiag();
+                CJC_NULLPTR_CHECK(be.desugarExpr);
+                be.ty = be.desugarExpr->ty;
+                CJC_ASSERT(be.desugarExpr->astKind == ASTKind::CALL_EXPR);
+                ReplaceTarget(&be, StaticCast<CallExpr*>(be.desugarExpr.get())->resolvedFunction);
+                return true;
+            } else {
+                // Check for return type inference errors in suppressed diagnostics
+                auto suppressedDiags = ds.GetSuppressedDiag();
+                auto it = std::find_if(suppressedDiags.begin(), suppressedDiags.end(),
+                    [](const auto& d) { return d.rKind == DiagKindRefactor::sema_unable_to_infer_return_type; });
+                
+                if (it != suppressedDiags.end()) {
+                    // Extract function declaration - try both resolvedFunction and MemberAccess target
+                    if (be.desugarExpr && be.desugarExpr->astKind == ASTKind::CALL_EXPR) {
+                        auto callExpr = StaticCast<CallExpr*>(be.desugarExpr.get());
+                        
+                        // Try resolvedFunction first, then MemberAccess target as backup
+                        operatorFuncDecl = As<ASTKind::FUNC_DECL>(callExpr->resolvedFunction);
+                        if (!operatorFuncDecl) {
+                            if (auto memberAccess = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc.get())) {
+                                operatorFuncDecl = As<ASTKind::FUNC_DECL>(memberAccess->GetTarget());
+                            }
+                        }
+                    }
+                }
+                
+                if (!operatorFuncDecl) {
+                    RecoverToBinaryExpr(be);
+                    PData::Reset(typeManager.constraints);
+                }
+            }
+        }
+        
+        // Report return type inference error outside DiagSuppressor scope
+        if (operatorFuncDecl) {
+            DiagUnableToInferReturnType(diag, *operatorFuncDecl, be);
+            be.ty = TypeManager::GetInvalidTy();
+            be.EnableAttr(Attribute::IS_BROKEN);
+            return false;
         }
     }
     // Clear the node to `Synthesize` the literals and the corresponding expressions again.
@@ -875,17 +909,51 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBinaryExpr(ASTContext& ctx, BinaryExpr&
 
     if (TypeCheckUtil::IsOverloadableOperator(be.op)) {
         DesugarOperatorOverloadExpr(ctx, be);
-        auto ds = DiagSuppressor(diag);
-        if (Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, be.desugarExpr.get()))) {
-            ds.ReportDiag();
-            // Desugar SubscriptOverloadExpr guarantees the deref and StaticCast.
-            be.ty = be.desugarExpr->ty;
-            ReplaceTarget(&be, StaticCast<CallExpr*>(be.desugarExpr.get())->resolvedFunction);
-        } else {
-            // Recover to BinaryExpr.
-            RecoverToBinaryExpr(be);
+        Ptr<FuncDecl> operatorFuncDecl = nullptr;
+        
+        {
+            auto ds = DiagSuppressor(diag);
+            if (Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, be.desugarExpr.get()))) {
+                ds.ReportDiag();
+                // Desugar SubscriptOverloadExpr guarantees the deref and StaticCast.
+                be.ty = be.desugarExpr->ty;
+                ReplaceTarget(&be, StaticCast<CallExpr*>(be.desugarExpr.get())->resolvedFunction);
+            } else {
+                // Check for return type inference errors in suppressed diagnostics
+                auto suppressedDiags = ds.GetSuppressedDiag();
+                auto it = std::find_if(suppressedDiags.begin(), suppressedDiags.end(),
+                    [](const auto& d) { return d.rKind == DiagKindRefactor::sema_unable_to_infer_return_type; });
+                
+                if (it != suppressedDiags.end()) {
+                    // Extract function declaration - try both resolvedFunction and MemberAccess target
+                    if (be.desugarExpr && be.desugarExpr->astKind == ASTKind::CALL_EXPR) {
+                        auto callExpr = StaticCast<CallExpr*>(be.desugarExpr.get());
+                        
+                        // Try resolvedFunction first, then MemberAccess target as backup
+                        operatorFuncDecl = As<ASTKind::FUNC_DECL>(callExpr->resolvedFunction);
+                        if (!operatorFuncDecl) {
+                            if (auto memberAccess = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc.get())) {
+                                operatorFuncDecl = As<ASTKind::FUNC_DECL>(memberAccess->GetTarget());
+                            }
+                        }
+                    }
+                }
+                
+                if (!operatorFuncDecl) {
+                    // Recover to BinaryExpr.
+                    RecoverToBinaryExpr(be);
+                    be.ty = TypeManager::GetInvalidTy();
+                    PData::Reset(typeManager.constraints);
+                }
+            }
+        }
+        
+        // Report return type inference error outside DiagSuppressor scope
+        if (operatorFuncDecl) {
+            DiagUnableToInferReturnType(diag, *operatorFuncDecl, be);
             be.ty = TypeManager::GetInvalidTy();
-            PData::Reset(typeManager.constraints);
+            be.EnableAttr(Attribute::IS_BROKEN);
+            return be.ty;
         }
     } else {
         be.ty = TypeManager::GetInvalidTy();
