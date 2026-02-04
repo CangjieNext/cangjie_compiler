@@ -26,13 +26,14 @@ using namespace Cangjie;
 
 namespace {
 std::map<std::string, std::string> obfNames;
-
+// TODO: to wcout? 
 static void Println(const std::string& msg) { std::cout << msg << std::endl; }
 
 std::string CanonicalizeFileName(const std::string& name)
 {
     bool success = true;
 #ifdef _WIN32
+    // add \\? 
     char realpathRes[MAX_PATH]{};
     int retval = GetFullPathNameA(name.c_str(), MAX_PATH, realpathRes, nullptr);
     if (retval == 0) {

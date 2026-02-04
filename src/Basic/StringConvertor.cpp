@@ -257,6 +257,10 @@ std::string StringConvertor::CodepointToUTF8(const uint32_t pointValue)
     return result;
 }
 
+std::optional<std::string> StringConvertor::WStringToUTF8(std::wstring &wstr) {
+    return UTF16ToCodePage(CP_UTF8, wstr);
+}
+
 namespace {
 std::string EscapeString(const std::string& str, const std::unordered_map<char, char>& escapeList)
 {

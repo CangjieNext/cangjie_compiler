@@ -49,6 +49,7 @@ public:
     /// Convert escape sequences to literal from.
     /// e.g., "\b" is converted to "\\b", so a literal "\b" is in the result
     static std::string EscapeToJsonString(const std::string& str);
+    static std::optional<std::string> WStringToUTF8(std::wstring &wstr);
 
 #ifdef _WIN32
     enum StrEncoding {
