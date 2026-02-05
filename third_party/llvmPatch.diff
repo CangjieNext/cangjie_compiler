@@ -10393,10 +10393,10 @@ index 000000000..b848ed20d
 +endif()
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.cpp
 new file mode 100644
-index 000000000..ff81cd167
+index 000000000..a6d22f277
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.cpp
-@@ -0,0 +1,826 @@
+@@ -0,0 +1,827 @@
 +//===-- CangjieASTUtils.cpp -----------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -10622,13 +10622,13 @@ index 000000000..ff81cd167
 +  for (int i = 0; i < paramCount; i++) {
 +    auto paramType = func_type.GetFunctionArgumentAtIndex(i);
 +    std::string paramTypeStr = paramType.GetTypeName().GetCString();
-+    ret->paramTypes.emplace_back(CreateAstType({paramTypeStr, paramType}, target, pkg, true));
++    ret->paramTypes.emplace_back(CreateAstType(AstTypeInfo(paramTypeStr, paramType), target, pkg, true));
 +  }
 +
 +  auto retType = func_type.GetFunctionReturnType();
 +  if (retType.IsValid()) {
 +    std::string retTypeStr = retType.GetTypeName().GetCString();
-+    ret->retType = CreateAstType({retTypeStr, retType}, target, pkg, true);
++    ret->retType = CreateAstType(AstTypeInfo(retTypeStr, retType), target, pkg, true);
 +  }
 +  return ret;
 +}
@@ -10753,7 +10753,7 @@ index 000000000..ff81cd167
 +    elements_type = GetEnumElementsType(elements, info.type, pkg);
 +  }
 +  for(size_t i = 0; i < elements.size(); i++) {
-+    ret->typeArguments.emplace_back(CreateAstType({elements[i], elements_type[i]}, target, pkg));
++    ret->typeArguments.emplace_back(CreateAstType(AstTypeInfo(elements[i], elements_type[i]), target, pkg));
 +  }
 +  return ret;
 +}
@@ -10822,7 +10822,7 @@ index 000000000..ff81cd167
 +  if (IsGenericType(info.name)) {
 +   std::vector<std::string> elements = SplitTupleName(info.name);
 +   for (auto& ele:elements) {
-+     ret->fieldTypes.emplace_back(CreateAstType({ele}, target));
++     ret->fieldTypes.emplace_back(CreateAstType(AstTypeInfo(ele), target));
 +   }
 +   return ret;
 +  }
@@ -10839,7 +10839,7 @@ index 000000000..ff81cd167
 +    if (field.IsPointerType()) {
 +      field = field.GetPointeeType();
 +    }
-+    ret->fieldTypes.emplace_back(CreateAstType({field.GetTypeName().AsCString(), field}, target, pkg));
++    ret->fieldTypes.emplace_back(CreateAstType(AstTypeInfo(field.GetTypeName().AsCString(), field), target, pkg));
 +  }
 +  return ret;
 +}
@@ -10871,7 +10871,7 @@ index 000000000..ff81cd167
 +            constType->constantExpr = std::move(lit);
 +            ret->constantType = std::move(constType);
 +        } else {
-+            ret->typeArgument = CreateAstType({typeStr}, target);
++            ret->typeArgument = CreateAstType(AstTypeInfo(typeStr), target);
 +        }
 +        typeStr = "";
 +    }
@@ -10896,7 +10896,8 @@ index 000000000..ff81cd167
 +  OwnedPtr<RefType> ret = MakeOwned<RefType>();
 +  ret->ref.target = target;
 +  ret->ref.identifier = "Option";
-+  ret->typeArguments.emplace_back(CreateAstType({val_type.GetTypeName().AsCString(), val_type}, target, pkg));
++  ret->typeArguments.emplace_back(CreateAstType(AstTypeInfo(val_type.GetTypeName().AsCString(), val_type),
++                                                target, pkg));
 +  return ret;
 +}
 +
@@ -10907,13 +10908,13 @@ index 000000000..ff81cd167
 +  CompilerType type = info.type;
 +  auto subname = GetSubNameWithoutPkgname(name, pkg);
 +  if (!subname.empty()) {
-+    return CreateAstType({subname, type}, target, pkg, isGenericDeclFromTarget);
++    return CreateAstType(AstTypeInfo(subname, type), target, pkg, isGenericDeclFromTarget);
 +  }
 +  if (IsFunctionType(ConstString(name))) {
 +    return CreateFuncType(target, pkg, type);
 +  }
 +  if (StartsWith(name, TUPLE_NAME)) {
-+    return CreateTupleType({name, type}, target, pkg);
++    return CreateTupleType(AstTypeInfo(name, type), target, pkg);
 +  }
 +  if (StartsWith(name, VARRAY_NAME)) {
 +    return CreateVArrayType(name, target);
@@ -10930,7 +10931,7 @@ index 000000000..ff81cd167
 +    primType->str = name;
 +    return primType;
 +  }
-+  return CreateRefType({name, type}, target, pkg, isGenericDeclFromTarget);
++  return CreateRefType(AstTypeInfo(name, type), target, pkg, isGenericDeclFromTarget);
 +}
 +
 +void CangjieASTBuiler::CreateFuncDeclGeneric(Ptr<AST::FuncDecl> decl, CompilerType& type, std::string& name,
@@ -11008,7 +11009,7 @@ index 000000000..ff81cd167
 +    const CompilerType type, std::string name, std::string prefix, Ptr<Decl> target) {
 +  auto decl = MakeOwned<Cangjie::AST::VarDecl>();
 +  decl->identifier = name;
-+  decl->type = CreateAstType({type.GetTypeName().GetCString(), type}, target, prefix, true);
++  decl->type = CreateAstType(AstTypeInfo(type.GetTypeName().GetCString(), type), target, prefix, true);
 +  decl->EnableAttr(Attribute::PUBLIC, Attribute::GLOBAL);
 +  decl->isVar = true;
 +  if (decl->type) {
@@ -11024,7 +11025,7 @@ index 000000000..ff81cd167
 +  decl->funcBody = MakeOwned<FuncBody>();
 +  // For example, a generic type's name can be default::Enum$RGBColor<$G_T>.
 +  std::string typeStr = enumType.GetTypeName().GetCString();
-+  decl->funcBody->retType = CreateAstType({typeStr, enumType}, pdecl, m_current_pkgname, true);
++  decl->funcBody->retType = CreateAstType(AstTypeInfo(typeStr, enumType), pdecl, m_current_pkgname, true);
 +  auto paramList = MakeOwned<FuncParamList>();
 +
 +  if (typeStr.find(E2_PREFIX_NAME_OPTION_LIKE) != std::string::npos) {
@@ -11036,7 +11037,7 @@ index 000000000..ff81cd167
 +    OwnedPtr<FuncParam> param = MakeOwned<FuncParam>();
 +    param->identifier = "a" + std::to_string(1);
 +    auto tempDecl = isMember ? pdecl: decl.get();
-+    param->type = CreateAstType({paramTypeStr, ctorFuncType}, tempDecl, m_current_pkgname, true);
++    param->type = CreateAstType(AstTypeInfo(paramTypeStr, ctorFuncType), tempDecl, m_current_pkgname, true);
 +    paramList->params.emplace_back(std::move(param));
 +  } else {
 +    for (uint32_t i = 1; i < ctorFuncType.GetNumFields(); i++) {
@@ -11047,7 +11048,7 @@ index 000000000..ff81cd167
 +      OwnedPtr<FuncParam> param = MakeOwned<FuncParam>();
 +      param->identifier = "a" + std::to_string(i);
 +      auto tempDecl = isMember ? pdecl: decl.get();
-+      param->type = CreateAstType({paramTypeStr, field}, tempDecl, m_current_pkgname, true);
++      param->type = CreateAstType(AstTypeInfo(paramTypeStr, field), tempDecl, m_current_pkgname, true);
 +      paramList->params.emplace_back(std::move(param));
 +    }
 +  }
@@ -11101,12 +11102,12 @@ index 000000000..ff81cd167
 +  if (pdecl && (identifier == "init" || identifier == pdecl->identifier)) {
 +    decl->EnableAttr(Attribute::CONSTRUCTOR);
 +    decl->EnableAttr(Attribute::TOOL_ADD);
-+    decl->funcBody->retType = CreateAstType({pdecl->identifier, CompilerType()}, pdecl, m_current_pkgname);
++    decl->funcBody->retType = CreateAstType(AstTypeInfo(pdecl->identifier), pdecl, m_current_pkgname);
 +  } else {
 +    auto retType = type.GetFunctionReturnType();
 +    std::string retTypeStr = retType.GetTypeName().GetCString();
 +    auto tempDecl = lldb_private::IsGenericFromFuncDecl(instantiatedNames, retTypeStr) ? decl.get():pdecl;
-+    decl->funcBody->retType = CreateAstType({retTypeStr, retType}, tempDecl, m_current_pkgname, true);
++    decl->funcBody->retType = CreateAstType(AstTypeInfo(retTypeStr, retType), tempDecl, m_current_pkgname, true);
 +  }
 +  auto paramList = MakeOwned<FuncParamList>();
 +  for (int i = 0; i < type.GetFunctionArgumentCount(); i++) {
@@ -11120,7 +11121,7 @@ index 000000000..ff81cd167
 +    OwnedPtr<FuncParam> param = MakeOwned<FuncParam>();
 +    param->identifier = "a" + std::to_string(i);
 +    auto tempDecl = lldb_private::IsGenericFromFuncDecl(instantiatedNames, paramTypeStr) ? decl.get():pdecl;
-+    param->type = CreateAstType({paramTypeStr, paramType}, tempDecl, m_current_pkgname, true);
++    param->type = CreateAstType(AstTypeInfo(paramTypeStr, paramType), tempDecl, m_current_pkgname, true);
 +    paramList->params.emplace_back(std::move(param));
 +  }
 +  decl->funcBody->paramLists.emplace_back(std::move(paramList));
@@ -11225,7 +11226,7 @@ index 000000000..ff81cd167
 +}
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.h b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.h
 new file mode 100644
-index 000000000..602d38904
+index 000000000..844d69389
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.h
 @@ -0,0 +1,105 @@
@@ -11274,7 +11275,7 @@ index 000000000..602d38904
 +  CompilerType type;
 +
 +  AstTypeInfo() = default;
-+  AstTypeInfo(std::string n, CompilerType t = CompilerType())
++  explicit AstTypeInfo(std::string n, CompilerType t = CompilerType())
 +      : name(std::move(n)), type(t) {}
 +};
 +
@@ -11336,10 +11337,10 @@ index 000000000..602d38904
 +#endif
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieCompilerInstance.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieCompilerInstance.cpp
 new file mode 100644
-index 000000000..26615763b
+index 000000000..d515e0503
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieCompilerInstance.cpp
-@@ -0,0 +1,1242 @@
+@@ -0,0 +1,1253 @@
 +//===-- CangjieCompilerInstance.cpp ---------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -11645,6 +11646,17 @@ index 000000000..26615763b
 +    case ASTKind::GENERIC_PARAM_DECL: {
 +      auto gpd = As<ASTKind::GENERIC_PARAM_DECL>(&decl);
 +      return typeManager->GetGenericsTy(*gpd);
++    }
++    case ASTKind::BUILTIN_DECL: {
++      auto builtin = dynamic_cast<AST::BuiltInDecl *>(&decl);
++      auto type = builtin->type;
++      if (type == AST::BuiltInType::POINTER) {
++        auto argdecl = dynamic_cast<AST::StructTy *>(typeArgs[0].get());
++        if (argdecl) {
++          argdecl->declPtr->EnableAttr(Attribute::C);
++        }
++        return typeManager->GetPointerTy(typeArgs[0]);
++      }
 +    }
 +    default:
 +      return decl.ty;
@@ -12665,10 +12677,10 @@ index 000000000..6595dcf91
 +#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CANGJIE_CANGJIECOMPILERINSTANCE_H
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp
 new file mode 100644
-index 000000000..1a441774d
+index 000000000..6a317a064
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp
-@@ -0,0 +1,2264 @@
+@@ -0,0 +1,2265 @@
 +//===-- CangjieDeclMap.cpp ------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -13401,13 +13413,13 @@ index 000000000..1a441774d
 +    bool isFromSubclass = false;
 +    for (auto& param:subclass->generic->typeParameters) {
 +      if (param->identifier.Val() == GetGenericParamDeclName(ele)) {
-+        refType->typeArguments.emplace_back(builder.CreateAstType({ele}, param.get(), m_current_pkgname));
++        refType->typeArguments.emplace_back(builder.CreateAstType(AstTypeInfo(ele), param.get(), m_current_pkgname));
 +        isFromSubclass = true;
 +        break;
 +      }
 +    }
 +    if (!isFromSubclass) {
-+      refType->typeArguments.emplace_back(builder.CreateAstType({ele}, nullptr, m_current_pkgname));
++      refType->typeArguments.emplace_back(builder.CreateAstType(AstTypeInfo(ele), nullptr, m_current_pkgname));
 +    }
 +  }
 +}
@@ -13452,15 +13464,16 @@ index 000000000..1a441774d
 +    Ptr<Decl> target = nullptr;
 +    target = CreateTypeDecl(superType);
 +    if (superName == "Object" || superName == "std.core::Object") {
-+      id->inheritedTypes.emplace_back(builder.CreateAstType({"std.core::Object"}, target, m_current_pkgname));
++      id->inheritedTypes.emplace_back(builder.CreateAstType(AstTypeInfo("std.core::Object"),
++                                                            target, m_current_pkgname));
 +    } else if (superName.find(GENERIC_TYPE_PREFIX_NAME) == std::string::npos) {
 +      // The generic type parameter of the superclass not comes from the subclass.
 +      // For example, class B <: A<Int64>, class B<T> <: A<Int64>
-+      id->inheritedTypes.emplace_back(builder.CreateAstType({superName}, target, m_current_pkgname));
++      id->inheritedTypes.emplace_back(builder.CreateAstType(AstTypeInfo(superName), target, m_current_pkgname));
 +    } else {
 +      // The generic type parameter of the superclass comes from the subclass.
 +      // For example, class B<T> <: A<T>, class B<T,K> <: A<T,Int64>.
-+      OwnedPtr<AST::Type> refType = builder.CreateAstType({superName}, target, m_current_pkgname, false);
++      OwnedPtr<AST::Type> refType = builder.CreateAstType(AstTypeInfo(superName), target, m_current_pkgname, false);
 +      auto rt = RawStaticCast<AST::RefType *>(refType.get());
 +      SetGenericDeclBySubclass(rt, superName, id);
 +      id->inheritedTypes.emplace_back(std::move(refType));
@@ -13531,7 +13544,7 @@ index 000000000..1a441774d
 +    }
 +    Ptr<AST::Decl> decltmp = CreateTypeDecl(superType);
 +    std::string up = DeletePrefixOfType(superType.GetTypeName().AsCString());
-+    OwnedPtr<AST::Type> ctype = builder.CreateAstType({up}, decltmp, m_current_pkgname);
++    OwnedPtr<AST::Type> ctype = builder.CreateAstType(AstTypeInfo(up), decltmp, m_current_pkgname);
 +
 +    gc->upperBounds.emplace_back(std::move(ctype));
 +    std::string superName = superType.GetTypeName().GetCString();
@@ -14296,7 +14309,7 @@ index 000000000..1a441774d
 +        OwnedPtr<FuncParam> param = MakeOwned<FuncParam>();
 +        param->identifier = vd.identifier;
 +        rt->ref.identifier = rt->ref.identifier.Val().substr(pos + CAPTURED_PREFIX.size());
-+        auto capturedType = builder.CreateAstType({rt->ref.identifier.Val()}, nullptr);
++        auto capturedType = builder.CreateAstType(AstTypeInfo(rt->ref.identifier.Val()), nullptr);
 +        param->type = capturedType->astKind == AST::ASTKind::REF_TYPE ?
 +          std::move(vd.type) : std::move(capturedType);
 +        paramList->params.emplace_back(std::move(param));
@@ -24861,7 +24874,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..05b8262fe 100644
+index b391fe1ea..3adcbf8f0 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -24917,7 +24930,7 @@ index b391fe1ea..05b8262fe 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.1.0-alpha.66";
++    g_version_str += "\n  cangjie 1.1.0-alpha.69";
    }
  
    return g_version_str.c_str();
@@ -25663,16 +25676,15 @@ index 000000000..54f7715af
 +#endif
 \ No newline at end of file
 diff --git a/llvm/include/llvm/Analysis/EHPersonalities.h b/llvm/include/llvm/Analysis/EHPersonalities.h
-index 660d431bb..50d45b0ef 100644
+index 660d431bb..c06e66c32 100644
 --- a/llvm/include/llvm/Analysis/EHPersonalities.h
 +++ b/llvm/include/llvm/Analysis/EHPersonalities.h
-@@ -32,7 +32,8 @@ enum class EHPersonality {
+@@ -32,7 +32,7 @@ enum class EHPersonality {
    CoreCLR,
    Rust,
    Wasm_CXX,
 -  XL_CXX
 +  XL_CXX,
-+  Cangjie,
  };
  
  /// See if the given exception handling personality function is one
@@ -32227,26 +32239,6 @@ index 8438f33f4..d4d82e0c8 100644
  /// Initialize CG
  bool CGPassManager::doInitialization(CallGraph &CG) {
    bool Changed = false;
-diff --git a/llvm/lib/Analysis/EHPersonalities.cpp b/llvm/lib/Analysis/EHPersonalities.cpp
-index 277ff6ba7..85f9efb26 100644
---- a/llvm/lib/Analysis/EHPersonalities.cpp
-+++ b/llvm/lib/Analysis/EHPersonalities.cpp
-@@ -41,6 +41,7 @@ EHPersonality llvm::classifyEHPersonality(const Value *Pers) {
-       .Case("rust_eh_personality", EHPersonality::Rust)
-       .Case("__gxx_wasm_personality_v0", EHPersonality::Wasm_CXX)
-       .Case("__xlcxx_personality_v1", EHPersonality::XL_CXX)
-+      .Case("__cj_personality_v0$", EHPersonality::Cangjie)
-       .Default(EHPersonality::Unknown);
- }
- 
-@@ -61,6 +62,7 @@ StringRef llvm::getEHPersonalityName(EHPersonality Pers) {
-   case EHPersonality::Wasm_CXX:      return "__gxx_wasm_personality_v0";
-   case EHPersonality::XL_CXX:
-     return "__xlcxx_personality_v1";
-+  case EHPersonality::Cangjie:       return "__cj_personality_v0$";
-   case EHPersonality::Unknown:       llvm_unreachable("Unknown EHPersonality!");
-   }
- 
 diff --git a/llvm/lib/Analysis/IVDescriptors.cpp b/llvm/lib/Analysis/IVDescriptors.cpp
 index a51e97400..53e928443 100644
 --- a/llvm/lib/Analysis/IVDescriptors.cpp
@@ -34891,6 +34883,21 @@ index 31644959b..773166df5 100644
  }
  
  void EHStreamer::emitTypeInfos(unsigned TTypeEncoding, MCSymbol *TTBaseLabel) {
+diff --git a/llvm/lib/CodeGen/AsmPrinter/WinException.cpp b/llvm/lib/CodeGen/AsmPrinter/WinException.cpp
+index c3ca9c92b..a7760f5cb 100644
+--- a/llvm/lib/CodeGen/AsmPrinter/WinException.cpp
++++ b/llvm/lib/CodeGen/AsmPrinter/WinException.cpp
+@@ -71,6 +71,10 @@ void WinException::beginFunction(const MachineFunction *MF) {
+ 
+   shouldEmitMoves = Asm->needsSEHMoves() && MF->hasWinCFI();
+ 
++  if (F.isCangjieSafepointStub()) {
++    shouldEmitMoves = true;
++  }
++
+   const TargetLoweringObjectFile &TLOF = Asm->getObjFileLowering();
+   unsigned PerEncoding = TLOF.getPersonalityEncoding();
+ 
 diff --git a/llvm/lib/CodeGen/CJBarrierLowering.cpp b/llvm/lib/CodeGen/CJBarrierLowering.cpp
 new file mode 100644
 index 000000000..e6bd87684
@@ -36090,10 +36097,10 @@ index 000000000..e6bd87684
 +}
 diff --git a/llvm/lib/CodeGen/CJMetadata.cpp b/llvm/lib/CodeGen/CJMetadata.cpp
 new file mode 100644
-index 000000000..a62ee714d
+index 000000000..5d2df4d06
 --- /dev/null
 +++ b/llvm/lib/CodeGen/CJMetadata.cpp
-@@ -0,0 +1,894 @@
+@@ -0,0 +1,876 @@
 +//===- CJMetadata.cpp - Self-Defined CJMetadata Section ----------*- C++-*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -36483,42 +36490,8 @@ index 000000000..a62ee714d
 +  return StrCode;
 +}
 +
-+// Filter out the basic library functions when the exception stacktrace is
-+// dumped.
-+std::set<std::string> FiltMangleNameSet = {
-+    "user.main",
-+    "cj_entry$",
-+    "_CNat",
-+    "rt$",
-+};
-+
-+bool isNeedFilt(std::string MangleName) {
-+  for (auto FiltMangleName : FiltMangleNameSet) {
-+    if (MangleName.find(FiltMangleName) == 0)
-+      return true;
-+  }
-+  return false;
-+}
-+
 +void CJMetadataInfo::emitStackTraceInfo(const MCSymbol *FuncSym,
 +                                        const MCSymbol *DescSym) {
-+  unsigned StrSize = 4; // string offset size, 4 bytes
-+  if (NoStackTraceInfo) {
-+    OS.emitIntValue(0, StrSize);
-+    OS.emitIntValue(0, StrSize);
-+    OS.emitIntValue(0, StrSize);
-+    OS.emitIntValue(0, StrSize);
-+    return;
-+  }
-+
-+  std::string MethodNameStr = FuncSym->getName().str();
-+  if (StackTraceFormatFlag == StackTraceFormat::Simple &&
-+      !isNeedFilt(MethodNameStr))
-+    MethodNameStr = "";
-+  // set default value "" for  dir and fileName
-+  std::string DirStr("");
-+  std::string FileNameStr("");
-+
 +  Function *Func = nullptr;
 +  if (IsMachO) {
 +    // 1: FuncSym name is _xxx in macos, so begin from 1 to get xxx.
@@ -36526,7 +36499,21 @@ index 000000000..a62ee714d
 +  } else {
 +    Func = M->getFunction(FuncSym->getName());
 +  }
-+  if (Func != nullptr) {
++  unsigned StrSize = 4; // string offset size, 4 bytes
++  if (NoStackTraceInfo || !Func) {
++    OS.emitIntValue(0, StrSize);
++    OS.emitIntValue(0, StrSize);
++    OS.emitIntValue(0, StrSize);
++    OS.emitIntValue(0, StrSize);
++    return;
++  }
++
++  // set default value "" for  dir and fileName
++  std::string DirStr("");
++  std::string FileNameStr("");
++  std::string MethodNameStr("");
++  if (!Func->hasFnAttribute("cj_stack_trace_omit")) {
++    MethodNameStr = FuncSym->getName().str();
 +    DISubprogram *SP = Func->getSubprogram();
 +    if (SP != nullptr) {
 +      DIFile *File = SP->getFile();
@@ -36536,6 +36523,8 @@ index 000000000..a62ee714d
 +      }
 +    }
 +  }
++  if (StackTraceFormatFlag == StackTraceFormat::Simple)
++    MethodNameStr = "";
 +  std::vector<uint64_t> MethodCompressedCode;
 +  splitStr(MethodNameStr, MethodCompressedCode);
 +  std::string MethodNameStrIndex = ulebEncode(MethodCompressedCode);
@@ -47207,7 +47196,7 @@ index f59860a24..62de8bad7 100644
    /// the function.
    void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
 diff --git a/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp b/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
-index 06e21f90e..fafcd5c65 100644
+index 06e21f90e..cfcd05d62 100644
 --- a/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
 @@ -706,6 +706,8 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
@@ -47294,7 +47283,7 @@ index 06e21f90e..fafcd5c65 100644
  
      // FPDiff will be negative if this tail call requires more space than we
      // would automatically have in our incoming argument space. Positive if we
-@@ -6841,6 +6872,9 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
+@@ -6841,9 +6872,17 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
    // direct call is) turn it into a TargetGlobalAddress/TargetExternalSymbol
    // node so that legalize doesn't hack it.
    if (auto *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
@@ -47304,7 +47293,15 @@ index 06e21f90e..fafcd5c65 100644
      auto GV = G->getGlobal();
      unsigned OpFlags =
          Subtarget->classifyGlobalFunctionReference(GV, getTargetMachine());
-@@ -8700,7 +8734,11 @@ SDValue AArch64TargetLowering::LowerSPONENTRY(SDValue Op,
++    // safepoint stub is local, and safepoint call will still be got load.
++    if (CalleeFunc->isCangjieSafepointStub() ||
++        CalleeFunc->isCangjieSafePoint()) {
++      OpFlags = AArch64II::MO_NO_FLAG;
++    }
+     if (OpFlags & AArch64II::MO_GOT) {
+       Callee = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0, OpFlags);
+       Callee = DAG.getNode(AArch64ISD::LOADgot, DL, PtrVT, Callee);
+@@ -8700,7 +8739,11 @@ SDValue AArch64TargetLowering::LowerSPONENTRY(SDValue Op,
  // this table could be generated automatically from RegInfo.
  Register AArch64TargetLowering::
  getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const {
@@ -47317,7 +47314,7 @@ index 06e21f90e..fafcd5c65 100644
    if (AArch64::X1 <= Reg && Reg <= AArch64::X28) {
      const MCRegisterInfo *MRI = Subtarget->getRegisterInfo();
      unsigned DwarfRegNum = MRI->getDwarfRegNum(Reg, false);
-@@ -8709,8 +8747,7 @@ getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const
+@@ -8709,8 +8752,7 @@ getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const
    }
    if (Reg)
      return Reg;
@@ -47327,7 +47324,7 @@ index 06e21f90e..fafcd5c65 100644
  }
  
  SDValue AArch64TargetLowering::LowerADDROFRETURNADDR(SDValue Op,
-@@ -13636,6 +13673,10 @@ bool AArch64TargetLowering::generateFMAsInMachineCombiner(
+@@ -13636,6 +13678,10 @@ bool AArch64TargetLowering::generateFMAsInMachineCombiner(
           !useSVEForFixedLengthVectorVT(VT);
  }
  
@@ -55355,7 +55352,7 @@ index 90a796a09..3a74a600a 100644
  
    for (unsigned ID : KnownIDs)
 diff --git a/llvm/lib/Transforms/InstCombine/InstructionCombining.cpp b/llvm/lib/Transforms/InstCombine/InstructionCombining.cpp
-index 71c763de4..2ab714b30 100644
+index 71c763de4..a6150137f 100644
 --- a/llvm/lib/Transforms/InstCombine/InstructionCombining.cpp
 +++ b/llvm/lib/Transforms/InstCombine/InstructionCombining.cpp
 @@ -167,6 +167,10 @@ MaxArraySize("instcombine-maxarray-size", cl::init(1024),
@@ -55416,15 +55413,17 @@ index 71c763de4..2ab714b30 100644
            }
          }
  
-@@ -3403,6 +3431,7 @@ static bool isCatchAll(EHPersonality Personality, Constant *TypeInfo) {
+@@ -3403,9 +3431,6 @@ static bool isCatchAll(EHPersonality Personality, Constant *TypeInfo) {
    case EHPersonality::GNU_C:
    case EHPersonality::GNU_C_SjLj:
    case EHPersonality::Rust:
-+  case EHPersonality::Cangjie:
-     // The GCC C EH and Rust personality only exists to support cleanups, so
-     // it's not clear what the semantics of catch clauses are.
+-    // The GCC C EH and Rust personality only exists to support cleanups, so
+-    // it's not clear what the semantics of catch clauses are.
+-    return false;
+   case EHPersonality::Unknown:
      return false;
-@@ -3886,7 +3915,7 @@ bool InstCombinerImpl::freezeOtherUses(FreezeInst &FI) {
+   case EHPersonality::GNU_Ada:
+@@ -3886,7 +3911,7 @@ bool InstCombinerImpl::freezeOtherUses(FreezeInst &FI) {
      while (isa<AllocaInst>(MoveBefore))
        MoveBefore = MoveBefore->getNextNode();
    } else if (auto *PN = dyn_cast<PHINode>(Op)) {
@@ -55433,7 +55432,7 @@ index 71c763de4..2ab714b30 100644
    } else if (auto *II = dyn_cast<InvokeInst>(Op)) {
      MoveBefore = II->getNormalDest()->getFirstNonPHI();
    } else if (auto *CB = dyn_cast<CallBrInst>(Op)) {
-@@ -4389,6 +4418,16 @@ public:
+@@ -4389,6 +4414,16 @@ public:
    }
  };
  
@@ -55450,7 +55449,7 @@ index 71c763de4..2ab714b30 100644
  /// Populate the IC worklist from a function, by walking it in depth-first
  /// order and adding all reachable code to the worklist.
  ///
-@@ -4421,6 +4460,15 @@ static bool prepareICWorklistFromFunction(Function &F, const DataLayout &DL,
+@@ -4421,6 +4456,15 @@ static bool prepareICWorklistFromFunction(Function &F, const DataLayout &DL,
        if (!Inst.use_empty() &&
            (Inst.getNumOperands() == 0 || isa<Constant>(Inst.getOperand(0))))
          if (Constant *C = ConstantFoldInstruction(&Inst, DL, TLI)) {
@@ -58542,10 +58541,10 @@ index 000000000..0c2cf4030
 +}
 diff --git a/llvm/lib/Transforms/Obfuscator/LayoutObfuscator.cpp b/llvm/lib/Transforms/Obfuscator/LayoutObfuscator.cpp
 new file mode 100644
-index 000000000..411a3de25
+index 000000000..317cea86d
 --- /dev/null
 +++ b/llvm/lib/Transforms/Obfuscator/LayoutObfuscator.cpp
-@@ -0,0 +1,560 @@
+@@ -0,0 +1,579 @@
 +//===---------------------- LayoutObfuscator.cpp --------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -58935,12 +58934,31 @@ index 000000000..411a3de25
 +  return true;
 +}
 +
++// Filter out the basic library functions when the exception stacktrace is
++// dumped.
++std::set<std::string> FiltMangleNameSet = {
++    "user.main",
++    "cj_entry$",
++    "_CNat",
++    "rt$",
++};
++
++bool isNeedFilt(std::string MangleName) {
++  for (auto FiltMangleName : FiltMangleNameSet) {
++    if (MangleName.find(FiltMangleName) == 0)
++      return true;
++  }
++  return false;
++}
++
 +void LayoutObfuscator::doObfuscation(Function &F) {
 +  if (!needObfuse(F))
 +    return;
 +  std::string NewName;
 +  std::string OldName = F.getName().str();
 +  std::string MappedName = SymbolMap.getMappedName(OldName);
++  if (isNeedFilt(OldName))
++    F.addFnAttr("cj_stack_trace_omit");
 +  if (MappedName.size() != 0) {
 +    NewName = MappedName;
 +  } else {
