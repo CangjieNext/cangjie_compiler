@@ -785,25 +785,23 @@ void CompilerInstance::ManglingHelpFunction(const BaseMangler& baseMangler)
             deduplicatedEmplace(decl.get(), package->fullPackageName);
         }
     }
-    if (invocation.globalOptions.disableInstantiation) {
-        for (auto& importPkg : importManager.GetAllImportedPackages()) {
-            CJC_NULLPTR_CHECK(importPkg->srcPackage.get());
-            // exclude current package
-            if (!importPkg->srcPackage->TestAttr(AST::Attribute::IMPORTED)) {
-                continue;
+    for (auto& importPkg : importManager.GetAllImportedPackages()) {
+        CJC_NULLPTR_CHECK(importPkg->srcPackage.get());
+        // exclude current package
+        if (!importPkg->srcPackage->TestAttr(AST::Attribute::IMPORTED)) {
+            continue;
+        }
+        for (auto& file : importPkg->srcPackage->files) {
+            for (auto& decl : file->decls) {
+                deduplicatedEmplace(decl.get(), importPkg->fullPackageName);
             }
-            for (auto& file : importPkg->srcPackage->files) {
-                for (auto& decl : file->decls) {
-                    deduplicatedEmplace(decl.get(), importPkg->fullPackageName);
-                }
-                for (auto& decl : file->exportedInternalDecls) {
-                    deduplicatedEmplace(decl.get(), importPkg->fullPackageName);
-                }
+            for (auto& decl : file->exportedInternalDecls) {
+                deduplicatedEmplace(decl.get(), importPkg->fullPackageName);
             }
-            for (auto& decl : importPkg->srcPackage->genericInstantiatedDecls) {
-                if (decl->IsNominalDecl()) {
-                    deduplicatedEmplace(decl.get(), importPkg->fullPackageName);
-                }
+        }
+        for (auto& decl : importPkg->srcPackage->genericInstantiatedDecls) {
+            if (decl->IsNominalDecl()) {
+                deduplicatedEmplace(decl.get(), importPkg->fullPackageName);
             }
         }
     }
@@ -835,13 +833,6 @@ bool CompilerInstance::PerformMangling()
     mangler->lambdaCounter = cachedInfo.lambdaCounter;
     ManglingHelpFunction(*mangler);
     cachedInfo.lambdaCounter = mangler->lambdaCounter;
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    if (!invocation.globalOptions.disableInstantiation) {
-        for (auto& package : GetSourcePackages()) {
-            SortForBep(*package);
-        }
-    }
-#endif
     // when dump to screen, only dump once and dump the ast immediately after mangling
     if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpAST()) {
         DumpAST(GetSourcePackages(), invocation.globalOptions.output, "mangle", invocation.globalOptions.dumpToScreen);
