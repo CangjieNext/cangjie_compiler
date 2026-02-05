@@ -337,6 +337,10 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
     if (pkg.fullPackageName != deserializedPackageName) {
         ReportPackageMismatch(diag, pkg, pkg.fullPackageName, deserializedPackageName);
         return false;
+    auto specificFeatures = std::set<std::string>{};
+    for (auto& file : pkg.files) {
+        auto featureSet = file->GetFeatures();
+        specificFeatures.insert(featureSet.begin(), featureSet.end());
     }
 
     allTypes.resize(package->allTypes()->size(), nullptr);
@@ -357,6 +361,17 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         if (fileInfo->feature()) {
             file->feature = LoadFeaturesDirective(fileInfo->feature());
         }
+
+        auto parentFeatures = file->GetFeatures();
+        if (std::includes(
+            specificFeatures.begin(), specificFeatures.end(),
+            parentFeatures.begin(), parentFeatures.end()
+        )) {
+            diag.DiagnoseRefactor(
+            DiagKindRefactor::feature_is_not_subset_of_child_set, DEFAULT_POSITION, pkg.fullPackageName);
+            continue;
+        }
+
         file->EnableAttr(Attribute::FROM_COMMON_PART);
         file->EnableAttr(Attribute::COMMON);
         file->isCommon = true;
