@@ -110,6 +110,8 @@ constexpr auto REGISTRY_ID_UNINIT_VALUE = "-1";
 
 constexpr auto INDENT_SIZE = 4;
 
+constexpr auto DEFAULT_OUTPUT_DIR = "objc-gen";
+
 template <typename... Args> inline std::string Join(Args&&... args)
 {
     std::stringstream ss;
@@ -1156,7 +1158,8 @@ void ObjCGenerator::WriteToHeader()
 {
     auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName) :
         ctx.nameGenerator.GetObjCDeclName(*decl);
-    auto headerPath = FileUtil::JoinPath(outputFilePath, objCDeclName + ".h");
+    auto outputObjCGenDir = outputFilePath.empty() ? DEFAULT_OUTPUT_DIR : outputFilePath;
+    auto headerPath = FileUtil::JoinPath(outputObjCGenDir, objCDeclName + ".h");
     FileUtil::WriteToFile(headerPath, res);
 }
 
@@ -1164,7 +1167,8 @@ void ObjCGenerator::WriteToSource()
 {
     auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName) :
         ctx.nameGenerator.GetObjCDeclName(*decl);
-    auto sourcePath = FileUtil::JoinPath(outputFilePath, objCDeclName + ".m");
+    auto outputObjCGenDir = outputFilePath.empty() ? DEFAULT_OUTPUT_DIR : outputFilePath;
+    auto sourcePath = FileUtil::JoinPath(outputObjCGenDir, objCDeclName + ".m");
     FileUtil::WriteToFile(sourcePath, resSource);
 }
 
