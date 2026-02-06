@@ -819,12 +819,11 @@ public:
     std::vector<AttrSizeType> GetAllIdxOfAttr() const
     {
         std::vector<AttrSizeType> enableAttrIdxs;
-        for (auto attr : attributes) {
-            for (AttrSizeType i = 0; i < ATTR_SIZE; ++i) {
-                if (!attr[i]) {
-                    continue;
+        for (size_t i = 0; i < attributes.size(); ++i) {
+            for (AttrSizeType j = 0; j < ATTR_SIZE; ++j) {
+                if (attributes[i].test(j)) {
+                    enableAttrIdxs.emplace_back(i * ATTR_SIZE + j);
                 }
-                enableAttrIdxs.emplace_back(i);
             }
         }
         return enableAttrIdxs;
@@ -840,6 +839,10 @@ public:
         std::stringstream ret;
         ret << "[";
         for (auto i : enableAttrIdxs) {
+            if (i >= ATTR2STR.size()) {
+                ret << "UnknownAttr(" << i << ")";
+                continue;
+            }
             ret << ATTR2STR.at(static_cast<AST::Attribute>(i));
             if (i != enableAttrIdxs.back()) {
                 ret << ", ";
