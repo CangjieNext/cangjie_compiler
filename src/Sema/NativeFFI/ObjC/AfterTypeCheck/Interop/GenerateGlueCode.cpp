@@ -22,7 +22,7 @@ void GenerateGlueCode::HandleImpl(InteropContext& ctx)
         if (decl.TestAnyAttr(Attribute::IS_BROKEN, Attribute::HAS_BROKEN)) {
             return;
         }
-        auto codegen = ObjCGenerator(ctx, &decl, "objc-gen", ctx.cjLibOutputPath, this->interopType);
+        auto codegen = ObjCGenerator(ctx, &decl, "objc-gen", ctx.cjLibOutputPath, ctx.sharedLibraryExtension, this->interopType);
         codegen.Generate();
     };
 
@@ -37,6 +37,7 @@ void GenerateGlueCode::HandleImpl(InteropContext& ctx)
             &decl,
             "objc-gen",
             ctx.cjLibOutputPath,
+            ctx.sharedLibraryExtension,
             this->interopType,
             genericConfig,
             isGenericGlueCode

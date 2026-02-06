@@ -33,10 +33,10 @@ using ArgsList = std::vector<std::pair<std::string, std::string>>;
 class ObjCGenerator {
 public:
     ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
-        const std::string& cjLibOutputPath, InteropType interopType);
+        const std::string& cjLibOutputPath, const std::string& sharedLibraryExtension, InteropType interopType);
     ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
-        const std::string& cjLibOutputPath, InteropType interopType, Native::FFI::GenericConfigInfo* genericConfig,
-        bool isGenericGlueCode);
+        const std::string& cjLibOutputPath, const std::string& sharedLibraryExtension, InteropType interopType,
+        Native::FFI::GenericConfigInfo* genericConfig, bool isGenericGlueCode);
     void Generate();
 
 private:
@@ -46,6 +46,7 @@ private:
     std::unordered_set<std::string> typedefs;
     const std::string& outputFilePath;
     const std::string& cjLibOutputPath;
+    const std::string& sharedLibraryExtension;
     size_t currentBlockIndent = 0;
     Ptr<AST::Decl> decl;
     InteropContext& ctx;

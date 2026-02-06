@@ -160,9 +160,10 @@ std::string ToDecl(ObjCFunctionType fType)
 }
 
 ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<Decl> declArg, const std::string& outputFilePath,
-    const std::string& cjLibOutputPath, InteropType interopType)
+    const std::string& cjLibOutputPath, const std::string& sharedLibraryExtension, InteropType interopType)
     : outputFilePath(outputFilePath),
       cjLibOutputPath(cjLibOutputPath),
+      sharedLibraryExtension(sharedLibraryExtension),
       decl(declArg),
       ctx(ctx),
       interopType(interopType)
@@ -170,10 +171,11 @@ ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<Decl> declArg, const std::
 }
 
 ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
-    const std::string& cjLibOutputPath, InteropType interopType, Native::FFI::GenericConfigInfo* genericConfig,
-    bool isGenericGlueCode)
+    const std::string& cjLibOutputPath, const std::string& sharedLibraryExtension, InteropType interopType,
+    Native::FFI::GenericConfigInfo* genericConfig, bool isGenericGlueCode)
     : outputFilePath(outputFilePath),
       cjLibOutputPath(cjLibOutputPath),
+      sharedLibraryExtension(sharedLibraryExtension),
       decl(declArg),
       ctx(ctx),
       interopType(interopType),
@@ -880,8 +882,8 @@ void ObjCGenerator::GenerateInitializer(const string& objCDeclName)
         cjLibName = "lib" + cjLibName;
     }
     size_t extIdx = cjLibName.find_last_of(".");
-    if (extIdx == std::string::npos || cjLibName.substr(extIdx) != ".dylib") {
-        cjLibName += ".dylib"; // what if we compile on linux target?
+    if (extIdx == std::string::npos || cjLibName.substr(extIdx) != sharedLibraryExtension) {
+        cjLibName += sharedLibraryExtension;
     }
 
     cjLibName = "\"" + cjLibName + "\"";
