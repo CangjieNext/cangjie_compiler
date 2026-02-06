@@ -159,8 +159,9 @@ std::string ToDecl(ObjCFunctionType fType)
     return INSTANCE_MODIFIER;
 }
 
-ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<Decl> declArg, const std::string& outputFilePath,
-    const std::string& cjLibOutputPath, InteropType interopType)
+ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<Decl> declArg,
+    const std::optional<std::string>& outputFilePath, const std::string& cjLibOutputPath,
+    InteropType interopType)
     : outputFilePath(outputFilePath),
       cjLibOutputPath(cjLibOutputPath),
       decl(declArg),
@@ -169,8 +170,9 @@ ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<Decl> declArg, const std::
 {
 }
 
-ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
-    const std::string& cjLibOutputPath, InteropType interopType, Native::FFI::GenericConfigInfo* genericConfig,
+ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg,
+    const std::optional<std::string>& outputFilePath, const std::string& cjLibOutputPath,
+    InteropType interopType, Native::FFI::GenericConfigInfo* genericConfig,
     bool isGenericGlueCode)
     : outputFilePath(outputFilePath),
       cjLibOutputPath(cjLibOutputPath),
@@ -1156,7 +1158,8 @@ void ObjCGenerator::WriteToHeader()
 {
     auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName) :
         ctx.nameGenerator.GetObjCDeclName(*decl);
-    auto headerPath = FileUtil::JoinPath(outputFilePath, objCDeclName + ".h");
+    auto headerPath =
+        FileUtil::JoinPath(outputFilePath.value_or(ObjCGenerator::DEFAULT_OUTPUT_DIR), objCDeclName + ".h");
     FileUtil::WriteToFile(headerPath, res);
 }
 
@@ -1164,7 +1167,8 @@ void ObjCGenerator::WriteToSource()
 {
     auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName) :
         ctx.nameGenerator.GetObjCDeclName(*decl);
-    auto sourcePath = FileUtil::JoinPath(outputFilePath, objCDeclName + ".m");
+    auto sourcePath =
+        FileUtil::JoinPath(outputFilePath.value_or(ObjCGenerator::DEFAULT_OUTPUT_DIR), objCDeclName + ".m");
     FileUtil::WriteToFile(sourcePath, resSource);
 }
 
@@ -1595,4 +1599,5 @@ void ObjCGenerator::AddCallCangjieBeforeInitGuard()
     AddWithIndent(FAIL_CALL_CANGJIE_BEFORE_INIT, GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
 }
 
+const std::string ObjCGenerator::DEFAULT_OUTPUT_DIR = "objc-gen";
 } // namespace Cangjie::Interop::ObjC

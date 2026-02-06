@@ -32,19 +32,20 @@ using ArgsList = std::vector<std::pair<std::string, std::string>>;
 
 class ObjCGenerator {
 public:
-    ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
+    ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::optional<std::string>& outputFilePath,
         const std::string& cjLibOutputPath, InteropType interopType);
-    ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
+    ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::optional<std::string>& outputFilePath,
         const std::string& cjLibOutputPath, InteropType interopType, Native::FFI::GenericConfigInfo* genericConfig,
         bool isGenericGlueCode);
     void Generate();
 
 private:
+    static const std::string DEFAULT_OUTPUT_DIR;
     std::string resPreamble;
     std::string res;
     std::string resSource;
     std::unordered_set<std::string> typedefs;
-    const std::string& outputFilePath;
+    const std::optional<std::string>& outputFilePath;
     const std::string& cjLibOutputPath;
     size_t currentBlockIndent = 0;
     Ptr<AST::Decl> decl;
