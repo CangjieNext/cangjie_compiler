@@ -96,7 +96,7 @@ bool Type::IsString() const
     return false;
 }
 
-bool Type::IsClassRef([[maybe_unused]] bool nullable) const
+bool Type::IsClassRef() const
 {
     if (!IsRef()) {
         return false;
@@ -104,6 +104,15 @@ bool Type::IsClassRef([[maybe_unused]] bool nullable) const
     auto& rt = StaticCast<const CHIR::RefType&>(*this);
     const auto tmpTy = rt.GetBaseType();
     return tmpTy->IsClass();
+}
+
+bool Type::IsBoxRef() const
+{
+    if (!IsRef()) {
+        return false;
+    }
+    auto& rt = StaticCast<const CHIR::RefType&>(*this);
+    return rt.GetBaseType()->IsBox();
 }
 
 bool Type::IsConstant() const

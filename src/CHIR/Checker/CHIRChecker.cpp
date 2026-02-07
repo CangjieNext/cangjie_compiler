@@ -275,15 +275,6 @@ std::string VectorTypesToString(
     return res;
 }
 
-bool IsBoxRefType(const Type& type)
-{
-    if (!type.IsRef()) {
-        return false;
-    }
-    auto baseType = Cangjie::StaticCast<const RefType&>(type).GetBaseType();
-    return baseType->IsBox();
-}
-
 bool IsFuncTypeOrClosureBaseRefType(const Type& type)
 {
     if (type.IsFunc()) {
@@ -531,10 +522,6 @@ bool CHIRChecker::TypeIsExpected(const Type& srcType, const Type& dstType)
     if (srcType.IsNothing()) {
         return true;
     }
-    // maybe struct S <: I, S is sub type of I, but we can't send S to I directly
-    if (srcType.IsValueType() && dstType.StripAllRefs()->IsClass()) {
-        return false;
-    }
     // we can set a sub type to a parent type, it's safe in llvm ir,
     // but for legal CHIR, we still need to check this case later
     if (srcType.IsEqualOrSubTypeOf(dstType, builder)) {
@@ -542,10 +529,6 @@ bool CHIRChecker::TypeIsExpected(const Type& srcType, const Type& dstType)
     }
     // it's a hack, in mut wrapper func, CHIR cast param to Any&, this will be corrected later
     if (srcType.StripAllRefs()->IsAny() && dstType.IsClassRef()) {
-        return true;
-    }
-    // a hack way, we will fix later
-    if (IsBoxRefType(srcType) || IsBoxRefType(dstType)) {
         return true;
     }
     return false;
@@ -1486,7 +1469,7 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
     if (auto result = expr.GetResult()) {
         if (!GenericTypeIsInContainer(*result->GetType(), reachableGenericTypes)) {
             auto errMsg = "generic type " + result->GetType()->ToString() +
-                " is unreachable, the type is from result in expression " + expr.ToString() + ".";
+                " is unreachable, the type is from result in expression " + GetExpressionString(expr) + ".";
             ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
         }
     }
@@ -1496,7 +1479,7 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
         // 2. generic type in Allocate must be reachable
         if (!GenericTypeIsInContainer(*base.GetType(), reachableGenericTypes)) {
             auto errMsg = "generic type " + base.GetType()->ToString() +
-                " is unreachable, the type is allocated type in expression " + expr.ToString() + ".";
+                " is unreachable, the type is allocated type in expression " + GetExpressionString(expr) + ".";
             ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
         }
     } else if (Is<FuncCall>(expr) || Is<FuncCallWithException>(expr)) {
@@ -1506,7 +1489,7 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
         for (size_t i = 0; i < instantiatedTypeArgs.size(); ++i) {
             if (!GenericTypeIsInContainer(*instantiatedTypeArgs[i], reachableGenericTypes)) {
                 auto errMsg = "generic type " + instantiatedTypeArgs[i]->ToString() + "is unreachable, the type is " +
-                    std::to_string(i) + "-th instantiated type args in expression " + expr.ToString() + ".";
+                    std::to_string(i) + "-th instantiated type args in expression " + GetExpressionString(expr) + ".";
                 ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
             }
         }
@@ -1514,7 +1497,7 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
         if (auto thisType = base.GetThisType()) {
             if (!GenericTypeIsInContainer(*thisType, reachableGenericTypes)) {
                 auto errMsg = "generic type " + thisType->ToString() +
-                    " is unreachable, the type is ThisType in expression " + expr.ToString() + ".";
+                    " is unreachable, the type is ThisType in expression " + GetExpressionString(expr) + ".";
                 ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
             }
         }
@@ -1522,14 +1505,14 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
         // 5. generic type in GetRTTIStatic must be reachable
         if (!GenericTypeIsInContainer(*rtti->GetRTTIType(), reachableGenericTypes)) {
             auto errMsg = "generic type " + rtti->GetRTTIType()->ToString() +
-                " is unreachable, the type is rtti type in expression " + expr.ToString() + ".";
+                " is unreachable, the type is rtti type in expression " + GetExpressionString(expr) + ".";
             ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
         }
     } else if (auto instanceOf = DynamicCast<const InstanceOf*>(&expr)) {
         // 6. generic type in InstanceOf must be reachable
         if (!GenericTypeIsInContainer(*instanceOf->GetType(), reachableGenericTypes)) {
             auto errMsg = "generic type " + instanceOf->GetType()->ToString() +
-                " is unreachable, the type is instanceOf type in expression " + expr.ToString() + ".";
+                " is unreachable, the type is instanceOf type in expression " + GetExpressionString(expr) + ".";
             ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
         }
     } else if (eKind == ExprKind::RAW_ARRAY_ALLOCATE || eKind == ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION) {
@@ -1537,7 +1520,7 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
         // 7. generic type in RawArrayAllocate must be reachable
         if (!GenericTypeIsInContainer(*base.GetElementType(), reachableGenericTypes)) {
             auto errMsg = "generic type " + base.GetElementType()->ToString() +
-                " is unreachable, the type is element type in expression " + expr.ToString() + ".";
+                " is unreachable, the type is element type in expression " + GetExpressionString(expr) + ".";
             ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
         }
     } else if (eKind == ExprKind::INTRINSIC || eKind == ExprKind::INTRINSIC_WITH_EXCEPTION) {
@@ -1547,7 +1530,7 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
         for (size_t i = 0; i < instantiatedTypeArgs.size(); ++i) {
             if (!GenericTypeIsInContainer(*instantiatedTypeArgs[i], reachableGenericTypes)) {
                 auto errMsg = "generic type " + instantiatedTypeArgs[i]->ToString() + "is unreachable, the type is " +
-                    std::to_string(i) + "-th instantiated type args in expression " + expr.ToString() + ".";
+                    std::to_string(i) + "-th instantiated type args in expression " + GetExpressionString(expr) + ".";
                 ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
             }
         }
@@ -1963,11 +1946,10 @@ void CHIRChecker::CheckApplyBase(const ApplyBase& expr, const Func& topLevelFunc
     auto calleeType = StaticCast<FuncType*>(expr.GetCallee()->GetType());
     auto instFuncType = CalculateInstFuncType(
         *calleeType, instTypeArgs, genericTypeParams, expr.GetInstParentCustomTyOfCallee(builder));
-    CheckApplyFuncArgs(
-        expr.GetArgs(), instFuncType->GetParamTypes(), calleeType->HasVarArg(), *expr.GetRawExpr(), topLevelFunc);
+    CheckApplyFuncArgs(expr, instFuncType->GetParamTypes(), topLevelFunc);
 
     // 6. check return value
-    CheckApplyFuncRetValue(*instFuncType->GetReturnType(), *expr.GetRawExpr(), topLevelFunc);
+    CheckApplyFuncRetValue(*instFuncType->GetReturnType(), expr, topLevelFunc);
 }
 
 bool CHIRChecker::CheckCallee(const Value& callee, const Expression& expr, const Func& topLevelFunc)
@@ -2115,34 +2097,87 @@ FuncType* CHIRChecker::CalculateInstFuncType(
     return StaticCast<FuncType*>(ReplaceRawGenericArgType(originalFuncType, replaceTable, builder));
 }
 
-void CHIRChecker::CheckApplyFuncArgs(const std::vector<Value*>& args,
-    const std::vector<Type*>& instParamTypes, bool varArgs, const Expression& expr, const Func& topLevelFunc)
+void CHIRChecker::CheckApplyFuncArgs(
+    const ApplyBase& expr, const std::vector<Type*>& instParamTypes, const Func& topLevelFunc)
 {
+    auto calleeType = StaticCast<FuncType*>(expr.GetCallee()->GetType());
+    auto varArgs = calleeType->HasVarArg();
+    auto args = expr.GetArgs();
+
     // 1. don't check variable args's size
     // 2. func args' size must be func params' size
     if (!varArgs && args.size() != instParamTypes.size()) {
         auto errMsg = "size mismatched, there are " + std::to_string(args.size()) +
-            " arg(s) in function call `" + GetExpressionString(expr) + "`, but there are " +
+            " arg(s) in function call `" + GetExpressionString(*expr.GetRawExpr()) + "`, but there are " +
             std::to_string(instParamTypes.size()) + " parameter(s) in function declare.";
         ErrorInFunc(topLevelFunc, errMsg);
         return;
     }
-    // 3. func arg can set to func param
+    
+    // 3. func args' size must be func params' size
+    auto paramTypes = calleeType->GetParamTypes();
+    if (!varArgs && args.size() != paramTypes.size()) {
+        auto errMsg = "size mismatched, there are " + std::to_string(args.size()) +
+            " arg(s) in function call `" + GetExpressionString(*expr.GetRawExpr()) + "`, but there are " +
+            std::to_string(paramTypes.size()) + " parameter(s) in function declare.";
+        ErrorInFunc(topLevelFunc, errMsg);
+        return;
+    }
+
+    // 4. func arg can set to func param
+    bool checkSuccess = true;
+    // there may be variable args, so we need to use param types' size, not args' size
+    for (size_t i = 0; i < paramTypes.size(); ++i) {
+        if (!FuncArgTypeIsMatched(*args[i]->GetType(), *paramTypes[i])) {
+            auto errMsg = "value " + args[i]->GetIdentifier() + " used in " + GetExpressionString(*expr.GetRawExpr()) +
+                " has type " + args[i]->GetType()->ToString() + ", but " + paramTypes[i]->ToString() + " type is in function declare.";
+            ErrorInFunc(topLevelFunc, errMsg);
+            checkSuccess = false;
+        }
+    }
+    if (!checkSuccess) {
+        return;
+    }
+
+    // 5. func arg is instantiated to func param
+    std::vector<Type*> argTypes;
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (args[i]->GetType() == instParamTypes[i]) {
+            argTypes.emplace_back(args[i]->GetType());
+            continue;
+        }
+        argTypes.emplace_back(RemoveBoxTypeShellIfNeed(*args[i]->GetType()));
+    }
+    // there may be variable args, so we need to use param types' size, not args' size
     for (size_t i = 0; i < instParamTypes.size(); ++i) {
-        if (!TypeIsExpected(*args[i]->GetType(), *instParamTypes[i])) {
-            TypeCheckError(expr, *args[i], instParamTypes[i]->ToString(), topLevelFunc);
+        if (!TypeIsExpected(*argTypes[i], *instParamTypes[i])) {
+            TypeCheckError(*expr.GetRawExpr(), *args[i], paramTypes[i]->ToString(), topLevelFunc);
         }
     }
 }
 
-void CHIRChecker::CheckApplyFuncRetValue(const Type& instRetType, const Expression& expr, const Func& topLevelFunc)
+void CHIRChecker::CheckApplyFuncRetValue(const Type& instRetType, const ApplyBase& expr, const Func& topLevelFunc)
 {
     // 1. check func return value's type, `instRetType` should be src, the second condition is a hack,
     // because some functions' return type is `This`, need to fix
     auto retValue = expr.GetResult();
     CJC_NULLPTR_CHECK(retValue);
-    if (!TypeIsExpected(instRetType, *retValue->GetType()) && !TypeIsExpected(*retValue->GetType(), instRetType)) {
-        TypeCheckError(expr, *retValue, instRetType.ToString(), topLevelFunc);
+
+    auto calleeType = StaticCast<FuncType*>(expr.GetCallee()->GetType());
+    auto retTyInDecl = calleeType->GetReturnType();
+    if (retTyInDecl == retValue->GetType()) {
+        return;
+    }
+    if (!FuncArgTypeIsMatched(*retValue->GetType(), *retTyInDecl)) {
+        auto errMsg = "value " + retValue->GetIdentifier() + " used in " + GetExpressionString(*expr.GetRawExpr()) +
+            " has type " + retValue->GetType()->ToString() + ", but " + retTyInDecl->ToString() + " type is in function declare.";
+        ErrorInFunc(topLevelFunc, errMsg);
+        return;
+    }
+
+    auto tempType = RemoveBoxTypeShellIfNeed(*retValue->GetType());
+    if (!TypeIsExpected(*tempType, instRetType) && !TypeIsExpected(instRetType, *tempType)) {
+        TypeCheckError(*expr.GetRawExpr(), *retValue, instRetType.ToString(), topLevelFunc);
     }
 }
 
@@ -2200,6 +2235,10 @@ void CHIRChecker::CheckInvokeBase(const InvokeBase& expr, const Func& topLevelFu
     // 4. check func args
     auto paramTypes = expr.GetMethodType()->GetParamTypes();
     CheckInvokeFuncArgs(expr.GetArgs(), paramTypes, *expr.GetRawExpr(), topLevelFunc);
+
+    // 5. check func return value
+    CheckInvokeFuncRetValue(
+        *expr.GetResult(), *expr.GetMethodType()->GetReturnType(), *expr.GetRawExpr(), topLevelFunc);
 }
 
 bool CHIRChecker::CheckInvokeThisType(
@@ -2348,6 +2387,17 @@ bool CHIRChecker::CheckVirtualMethod(
     return result;
 }
 
+void CHIRChecker::CheckInvokeFuncRetValue(
+    const LocalVar& retVal, const Type& originalRetType, const Expression& expr, const Func& topLevelFunc)
+{
+    if (!FuncArgTypeIsMatched(*retVal.GetType(), originalRetType)) {
+        auto errMsg = "value " + retVal.GetIdentifier() + " used in " + GetExpressionString(expr) +
+            " has type " + retVal.GetType()->ToString() + ", but " + originalRetType.ToString() +
+            " type is in function declare.";
+        ErrorInFunc(topLevelFunc, errMsg);
+    }
+}
+
 void CHIRChecker::CheckInvokeFuncArgs(const std::vector<Value*>& args,
     const std::vector<Type*>& originalParamTypes, const Expression& expr, const Func& topLevelFunc)
 {
@@ -2358,6 +2408,23 @@ void CHIRChecker::CheckInvokeFuncArgs(const std::vector<Value*>& args,
         ErrorInFunc(topLevelFunc, errMsg);
         return;
     }
+
+    // 4. func arg can set to func param
+    bool checkSuccess = true;
+    // there may be variable args, so we need to use param types' size, not args' size
+    for (size_t i = 0; i < originalParamTypes.size(); ++i) {
+        if (!FuncArgTypeIsMatched(*args[i]->GetType(), *originalParamTypes[i])) {
+            auto errMsg = "value " + args[i]->GetIdentifier() + " used in " + GetExpressionString(expr) +
+                " has type " + args[i]->GetType()->ToString() + ", but " + originalParamTypes[i]->ToString() +
+                " type is in function declare.";
+            ErrorInFunc(topLevelFunc, errMsg);
+            checkSuccess = false;
+        }
+    }
+    if (!checkSuccess) {
+        return;
+    }
+
     for (size_t i = 0; i < originalParamTypes.size(); ++i) {
         // a hack way, skip to check 1st param type, will check it later
         if (i == 0) {
@@ -2651,6 +2718,10 @@ void CHIRChecker::CheckInvokeStaticBase(const InvokeStaticBase& expr, const Func
     // 5. check func args
     auto paramTypes = expr.GetMethodType()->GetParamTypes();
     CheckInvokeFuncArgs(expr.GetArgs(), paramTypes, *expr.GetRawExpr(), topLevelFunc);
+
+    // 6. check func return value
+    CheckInvokeFuncRetValue(
+        *expr.GetResult(), *expr.GetMethodType()->GetReturnType(), *expr.GetRawExpr(), topLevelFunc);
 }
 
 void CHIRChecker::CheckIntOpWithException(const IntOpWithException& expr, const Func& topLevelFunc)

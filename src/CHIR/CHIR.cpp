@@ -1008,9 +1008,11 @@ std::pair<Value*, Apply*> ToCHIR::DoCFFIFuncWrapper(T& curFunc, bool isForeign, 
     auto entry = builder.CreateBlock(body);
     body->SetEntryBlock(entry);
     auto retType = curFunc.GetReturnType();
-    auto res = builder.CreateExpression<Apply>(
-        curFunc.GetDebugLocation(), retType, &curFunc, FuncCallContext{.args = args}, entry);
-    entry->AppendExpression(res);
+    auto funcCallContext = FuncCallContext {
+        .args = args
+    };
+    auto res = CreateAndAppendWrapperApply(
+        builder, *retType, curFunc, funcCallContext, *entry, curFunc.GetDebugLocation());
     auto retAlloc =
         builder.CreateExpression<Allocate>(DebugLocation(), builder.GetType<RefType>(retType), retType, entry);
     entry->AppendExpression(retAlloc);

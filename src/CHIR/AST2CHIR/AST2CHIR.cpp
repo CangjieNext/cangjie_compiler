@@ -538,9 +538,48 @@ bool AST2CHIR::ToCHIRPackage(AST::Package& node)
     // step 4: translate all colleted decls
     TranslateAllDecls(node, initOrder);
 
-    // step 5: ast2chir check
+    // step 5: add unbox for non func call site
+    AddUnboxForNonFuncCallSite();
+
+    // step 6: ast2chir check
     AST2CHIRCheck();
 
     return !HasFailed();
 }
-} // namespace Cangjie::CHIR
+
+void AST2CHIR::AddUnboxForNonFuncCallSite()
+{
+    Utils::ProfileRecorder recorder("AST to CHIR Translation", "AddUnboxForNonFuncCallSite");
+    std::unordered_map<Expression*, UnBox*> unboxExprs;
+    std::function<VisitResult(Expression&)> preVisit = [this, &preVisit, &unboxExprs](Expression& e) {
+        if (e.GetExprKind() == ExprKind::LAMBDA) {
+            auto& lambda = StaticCast<Lambda&>(e);
+            Visitor::Visit(*lambda.GetBody(), preVisit);
+            return VisitResult::CONTINUE;
+        }
+        auto result = e.GetResult();
+        if (result == nullptr || !result->GetType()->IsBoxRef()) {
+            return VisitResult::CONTINUE;
+        }
+        for (auto user : result->GetUsers()) {
+            if (Is<Apply>(user) || Is<ApplyWithException>(user) ||
+                Is<Invoke>(user) || Is<InvokeWithException>(user) ||
+                Is<InvokeStatic>(user) || Is<InvokeStaticWithException>(user) ||
+                Is<UnBox>(user) || Is<UnBoxToRef>(user)) {
+                continue;
+            }
+            auto expectedTy = RemoveBoxTypeShellIfNeed(*result->GetType());
+            auto unbox = builder.CreateExpression<UnBox>(expectedTy, result, user->GetParentBlock());
+            user->ReplaceOperand(result, unbox->GetResult());
+            unboxExprs.emplace(user, unbox);
+        }
+        return VisitResult::CONTINUE;
+    };
+    for (auto func : package->GetGlobalFuncs()) {
+        Visitor::Visit(*func, preVisit);
+    }
+    for (auto& it : unboxExprs) {
+        it.second->MoveBefore(it.first);
+    }
+}
+}

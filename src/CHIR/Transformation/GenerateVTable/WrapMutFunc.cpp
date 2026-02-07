@@ -163,16 +163,18 @@ void WrapMutFunc::CreateMutFuncWrapper(FuncBase* rawFunc, CustomTypeDef& curDef,
     if (!firstArgType->IsValueType() || rawFunc->TestAttr(Attribute::MUT)) {
         firstArgType = builder.GetType<RefType>(firstArgType);
     }
-    args[0] = Cangjie::CHIR::TypeCastOrBoxIfNeeded(*args[0], *firstArgType, builder, *entry, INVALID_LOCATION);
+    args[0] = CreateAndAppendTypeCastOrBoxIfNeeded(*args[0], *firstArgType, builder, *entry);
 
-    auto apply = Cangjie::CHIR::CreateAndAppendExpression<Apply>(builder, retTy, rawFunc, FuncCallContext{
+    auto funcCallContext = FuncCallContext {
         .args = args,
-        .thisType = curDef.GetType()}, entry);
+        .thisType = curDef.GetType()
+    };
+    auto apply = CreateAndAppendWrapperApply(builder, *retTy, *rawFunc, funcCallContext, *entry);
     Cangjie::CHIR::CreateAndAppendExpression<Store>(
         builder, builder.GetUnitTy(), apply->GetResult(), func->GetReturnValue(), entry);
 
     auto tempThis =
-        Cangjie::CHIR::TypeCastOrBoxIfNeeded(*args[0], *wrapperParamsTy[0], builder, *entry, INVALID_LOCATION);
+        CreateAndAppendTypeCastOrBoxIfNeeded(*args[0], *wrapperParamsTy[0], builder, *entry);
     auto load = Cangjie::CHIR::CreateAndAppendExpression<Load>(builder, parentDefType, tempThis, entry)->GetResult();
     auto structMemberTypes = StaticCast<StructType*>(parentDefType)->GetInstantiatedMemberTys(builder);
 

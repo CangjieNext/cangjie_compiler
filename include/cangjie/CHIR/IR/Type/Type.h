@@ -267,7 +267,8 @@ public:
 
     bool IsString() const;
 
-    bool IsClassRef(bool nullable = false) const;
+    bool IsClassRef() const;
+    bool IsBoxRef() const;
 
     bool IsGeneric() const
     {

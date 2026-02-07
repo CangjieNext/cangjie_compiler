@@ -835,6 +835,11 @@ std::vector<Value*> Apply::GetArgs() const
     return args;
 }
 
+FuncType* Apply::GetMethodType() const
+{
+    return StaticCast<FuncType*>(GetCallee()->GetType());
+}
+
 std::string Apply::ToString([[maybe_unused]] size_t indent) const
 {
     std::stringstream ss;

@@ -250,6 +250,7 @@ private:
     {
     }
 
+    void AddUnboxForNonFuncCallSite();
     void AST2CHIRCheck();
     void CollectImplicitFuncs();
     void AddToImplicitFuncs(AST::FuncDecl& funcDecl, std::vector<ImplicitImportedFunc>& registeredImplicitFuncs,

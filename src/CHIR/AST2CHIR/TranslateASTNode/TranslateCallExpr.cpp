@@ -919,7 +919,7 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
             }
             auto invokeInfo =
                 GenerateInvokeCallContext(instCallInfo, *rtti, *resolvedFunction, args, expr.overflowStrategy);
-            ret = TryCreate<InvokeStatic>(currentBlock, loc, instCallInfo.instRetTy, invokeInfo)->GetResult();
+            ret = TryCreateWrapperInvoke(*instCallInfo.instRetTy, invokeInfo, true, loc)->GetResult();
         } else {
             // Invoke
             CJC_ASSERT(!args.empty());
@@ -927,7 +927,7 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
             args.erase(args.begin());
             auto invokeInfo =
                 GenerateInvokeCallContext(instCallInfo, *obj, *resolvedFunction, args, expr.overflowStrategy);
-            ret = TryCreate<Invoke>(currentBlock, loc, instCallInfo.instRetTy, invokeInfo)->GetResult();
+            ret = TryCreateWrapperInvoke(*instCallInfo.instRetTy, invokeInfo, false, loc)->GetResult();
         }
         if (HasNothingTypeArg(args)) {
             const auto& warningLoc = TranslateLocation(*expr.baseFunc);
