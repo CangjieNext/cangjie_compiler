@@ -289,12 +289,12 @@ Value* Translator::WrapMemberMethodByLambda(
             auto rtti = CreateAndAppendExpression<GetRTTIStatic>(
                 builder.GetUnitTy(), instFuncType.thisType->StripAllRefs(), currentBlock)->GetResult();
             auto invokeInfo = GenerateInvokeCallContext(instFuncType, *rtti, funcDecl, args);
-            ret = CreateAndAppendExpression<InvokeStatic>(lambdaRetType, invokeInfo, currentBlock)->GetResult();
+            ret = CreateAndAppendWrapperInvokeStatic(builder, *lambdaRetType, invokeInfo, *currentBlock)->GetResult();
         } else {
             // Invoke
             CJC_NULLPTR_CHECK(thisObj);
             auto invokeInfo = GenerateInvokeCallContext(instFuncType, *thisObj, funcDecl, args);
-            ret = CreateAndAppendExpression<Invoke>(lambdaRetType, invokeInfo, currentBlock)->GetResult();
+            ret = CreateAndAppendWrapperInvoke(builder, *lambdaRetType, invokeInfo, *currentBlock)->GetResult();
         }
     } else {
         // Apply
@@ -320,8 +320,8 @@ Value* Translator::WrapMemberMethodByLambda(
             .instTypeArgs = instTypeArgs,
             .thisType = instFuncType.thisType
         };
-        ret = CreateAndAppendExpression<Apply>(
-            instFuncType.instRetTy, callee, funcCallContext, currentBlock)->GetResult();
+        ret = CreateAndAppendWrapperApply(
+            builder, *instFuncType.instRetTy, *callee, funcCallContext, *currentBlock)->GetResult();
     }
     CreateAndAppendWrappedStore(*ret, *retVal);
     CreateAndAppendTerminator<Exit>(currentBlock);

@@ -292,6 +292,8 @@ public:
      */
     virtual std::vector<Value*> GetArgs() const = 0;
 
+    virtual FuncType* GetMethodType() const = 0;
+
     /**
      * @brief Retrieves the type of 'this'.
      *
@@ -357,6 +359,8 @@ public:
      */
     Value* GetCallee() const;
 
+    FuncType* GetMethodType() const override;
+
     /**
      * @brief Retrieves a list of the ApplyWithException operation argument nodes.
      *
@@ -410,7 +414,7 @@ public:
      *
      * @return The method type of this Invoke operation.
      */
-    FuncType* GetMethodType() const;
+    FuncType* GetMethodType() const override;
 
     const std::vector<GenericType*>& GetGenericTypeParams() const;
     /**

@@ -292,6 +292,11 @@ std::vector<Value*> ApplyWithException::GetArgs() const
     }
 }
 
+FuncType* ApplyWithException::GetMethodType() const
+{
+    return StaticCast<FuncType*>(GetCallee()->GetType());
+}
+
 Type* ApplyWithException::GetInstParentCustomTyOfCallee(CHIRBuilder& builder) const
 {
     return GetInstParentCustomTypeForAweCallee(*this, builder);

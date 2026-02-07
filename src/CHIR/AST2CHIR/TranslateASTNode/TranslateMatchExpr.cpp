@@ -541,7 +541,8 @@ Ptr<Value> Translator::HandleEnumPattern(const AST::EnumPattern& enumPattern, Pt
     auto cond = CreateAndAppendExpression<BinaryExpression>(
         originLoc, builder.GetBoolTy(), ExprKind::EQUAL, enumIdx, idValue, currentBlock)
                     ->GetResult();
-    CJC_ASSERT(value->GetType()->IsEnum());
+    // is Enum Type or Box<Enum>& Type
+    CJC_ASSERT(RemoveBoxTypeShellIfNeed(*value->GetType())->IsEnum());
     // Set current to 'trueBlock' for generating enum element.
     auto backBlock = currentBlock;
     currentBlock = trueBlock;

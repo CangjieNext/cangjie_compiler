@@ -1769,8 +1769,9 @@ void ClosureConversion::CreateGenericOverrideMethodInAutoEnvImplDef(ClassDef& au
             entry->AppendExpression(typecast);
             applyArgs.emplace_back(typecast->GetResult());
         } else {
-            applyArgs.emplace_back(
-                TypeCastOrBoxIfNeeded(*params[i], *expectedParamTypes[i - offset], builder, *entry, INVALID_LOCATION));
+            auto newArg = CreateAndAppendTypeCastOrBoxIfNeeded(
+                *params[i], *expectedParamTypes[i - offset], builder, *entry);
+            applyArgs.emplace_back(newArg);
         }
     }
     auto applyRetType =
@@ -1784,17 +1785,15 @@ void ClosureConversion::CreateGenericOverrideMethodInAutoEnvImplDef(ClassDef& au
         thisTy = ReplaceRawGenericArgType(*thisTy, originalTypeToNewType, builder);
     }
     // this type equal to parent type
-    auto callSrcFunc = CreateAndAppendExpression<Apply>(builder, applyRetType, &srcFunc, FuncCallContext{
+    auto funcCallContext = FuncCallContext {
         .args = applyArgs,
         .instTypeArgs = instTyArgs,
-        .thisType = thisTy}, entry);
-
-    auto applyRes = TypeCastOrBoxIfNeeded(
-        *callSrcFunc->GetResult(), *newFuncRetType, builder, *entry, INVALID_LOCATION);
+        .thisType = thisTy
+    };
+    auto apply = CreateAndAppendWrapperApply(builder, *applyRetType, srcFunc, funcCallContext, *entry);
 
     // store return value and exit
-    CreateAndAppendExpression<Store>(
-        builder, builder.GetType<UnitType>(), applyRes, retVal->GetResult(), entry);
+    CreateAndAppendWrappedStore(builder, *apply->GetResult(), *retVal->GetResult(), *entry);
     CreateAndAppendTerminator<Exit>(builder, entry);
 }
 
@@ -1850,14 +1849,14 @@ void ClosureConversion::CreateInstOverrideMethodInAutoEnvImplDef(ClassDef& autoE
     if (thisTy != nullptr) {
         thisTy = ReplaceRawGenericArgType(*thisTy, originalTypeToNewType, builder);
     }
-    auto callSrcFunc = CreateAndAppendExpression<Apply>(builder, newFuncRetType, &srcFunc, FuncCallContext{
+    auto funcCallContext = FuncCallContext {
         .args = applyArgs,
         .instTypeArgs = instTyArgs,
-        .thisType = thisTy}, entry);
-
+        .thisType = thisTy
+    };
+    auto callSrcFunc = CreateAndAppendWrapperApply(builder, *newFuncRetType, srcFunc, funcCallContext, *entry);
     // store return value and exit
-    CreateAndAppendExpression<Store>(
-        builder, builder.GetType<UnitType>(), callSrcFunc->GetResult(), retVal->GetResult(), entry);
+    CreateAndAppendWrappedStore(builder, *callSrcFunc->GetResult(), *retVal->GetResult(), *entry);
     CreateAndAppendTerminator<Exit>(builder, entry);
 }
 
@@ -2215,10 +2214,16 @@ void ClosureConversion::ReplaceUserPoint(
         auto retType = apply->GetResult()->GetType();
         auto loc = apply->GetDebugLocation();
         auto thisTy = autoEnvObj->GetType();
-
-        auto newApply = builder.CreateExpression<Apply>(loc, retType, newCallee, FuncCallContext{
+        auto funcCallContext = FuncCallContext {
             .args = newArgs,
-            .thisType = thisTy}, user.GetParentBlock());
+            .thisType = thisTy
+        };
+        auto allExprs = CreateWrapperApply(
+            builder, *retType, *newCallee, funcCallContext, *user.GetParentBlock(), loc);
+        for (auto expr : allExprs) {
+            expr->MoveBefore(apply);
+        }
+        auto newApply = StaticCast<Apply*>(allExprs.back());
         apply->ReplaceWith(*newApply);
     } else if (auto awe = DynamicCast<ApplyWithException*>(&user); awe && awe->GetCallee() == srcFunc.GetResult()) {
         auto methods = autoEnvImplDef.GetMethods();
@@ -2228,10 +2233,17 @@ void ClosureConversion::ReplaceUserPoint(
         auto retType = awe->GetResult()->GetType();
         auto loc = awe->GetDebugLocation();
         auto thisTy = autoEnvObj->GetType();
-
-        auto newApply = builder.CreateExpression<ApplyWithException>(loc, retType, newCallee, FuncCallContext{
+        auto funcCallContext = FuncCallContext {
             .args = newArgs,
-            .thisType = thisTy}, awe->GetSuccessBlock(), awe->GetErrorBlock(), user.GetParentBlock());
+            .thisType = thisTy
+        };
+        auto allExprs = CreateWrapperApplyWithException(
+            builder, *retType, *newCallee, funcCallContext,
+            *awe->GetSuccessBlock(), *awe->GetErrorBlock(), *user.GetParentBlock(), loc);
+        for (size_t i = 0; i < allExprs.size() - 1; ++i) {
+            allExprs[i]->MoveBefore(awe);
+        }
+        auto newApply = StaticCast<ApplyWithException*>(allExprs.back());
         awe->ReplaceWith(*newApply);
     } else {
         auto res = CastTypeFromAutoEnvRefToFuncType(*StaticCast<FuncType*>(srcFunc.GetResult()->GetType()),
@@ -2357,10 +2369,26 @@ void ClosureConversion::ConvertApplyToInvoke(const std::vector<Apply*>& applyExp
                 .originalFuncType = originalFuncType
             }
         };
-        auto invoke = builder.CreateExpression<Invoke>(
-            e->GetDebugLocation(), e->GetResult()->GetType(), invokeInfo, e->GetParentBlock());
-        invoke->Set<VirMethodOffset>(0);
-        e->ReplaceWith(*invoke);
+        auto applyRetType = e->GetResult()->GetType();
+        auto allExprs = CreateWrapperInvoke(
+            builder, *applyRetType, invokeInfo, *e->GetParentBlock(), e->GetDebugLocation());
+        for (size_t i = 0; i < allExprs.size() - 1; ++i) {
+            allExprs[i]->MoveBefore(e);
+        }
+        auto newInvoke = StaticCast<Invoke*>(allExprs.back());
+        newInvoke->Set<VirMethodOffset>(0);
+        e->ReplaceWith(*newInvoke);
+        if (newInvoke->GetResult()->GetType()->IsBoxRefTypeOf(*applyRetType)) {
+            auto unbox = builder.CreateExpression<UnBox>(
+                applyRetType, newInvoke->GetResult(), newInvoke->GetParentBlock());
+            unbox->MoveAfter(newInvoke);
+            for (auto user : newInvoke->GetResult()->GetUsers()) {
+                if (user == unbox) {
+                    continue;
+                }
+                user->ReplaceOperand(newInvoke->GetResult(), unbox->GetResult());
+            }
+        }
     }
 }
 
@@ -2393,10 +2421,23 @@ void ClosureConversion::ConvertApplyWithExceptionToInvokeWithException(
                 .originalFuncType = originalFuncType
             }
         };
-        auto invoke = builder.CreateExpression<InvokeWithException>(e->GetDebugLocation(),
-            e->GetResult()->GetType(), invokeInfo, e->GetSuccessBlock(), e->GetErrorBlock(), e->GetParentBlock());
-        invoke->Set<VirMethodOffset>(0);
-        e->ReplaceWith(*invoke);
+        auto applyRetType = e->GetResult()->GetType();
+        auto allExprs = CreateWrapperInvokeWithException(
+            builder, *applyRetType, invokeInfo, *e->GetSuccessBlock(), *e->GetErrorBlock(), *e->GetParentBlock(), e->GetDebugLocation());
+        for (size_t i = 0; i < allExprs.size() - 1; ++i) {
+            allExprs[i]->MoveBefore(e);
+        }
+        auto newInvoke = StaticCast<InvokeWithException*>(allExprs.back());
+        newInvoke->Set<VirMethodOffset>(0);
+        e->ReplaceWith(*newInvoke);
+        if (newInvoke->GetResult()->GetType()->IsBoxRefTypeOf(*applyRetType)) {
+            for (auto user : newInvoke->GetResult()->GetUsers()) {
+                auto unbox = builder.CreateExpression<UnBox>(
+                    applyRetType, newInvoke->GetResult(), newInvoke->GetParentBlock());
+                unbox->MoveBefore(user);
+                user->ReplaceOperand(newInvoke->GetResult(), unbox->GetResult());
+            }
+        }
     }
 }
 
@@ -2556,11 +2597,11 @@ Func* ClosureConversion::CreateGenericMethodInAutoEnvWrapper(ClassDef& autoEnvWr
             .originalFuncType = originalFuncType
         }
     };
-    auto invokeRes = CreateAndAppendExpression<Invoke>(builder, retType, invokeInfo, entry)->GetResult();
+    auto invokeRes = CreateAndAppendWrapperInvoke(builder, *retType, invokeInfo, *entry)->GetResult();
     invokeRes->GetExpr()->Set<VirMethodOffset>(0);
 
     // 8. store return value and exit
-    CreateAndAppendExpression<Store>(builder, builder.GetType<UnitType>(), invokeRes, retVal->GetResult(), entry);
+    CreateAndAppendWrappedStore(builder, *invokeRes, *retVal->GetResult(), *entry);
     CreateAndAppendTerminator<Exit>(builder, entry);
 
     return func;
@@ -2613,10 +2654,9 @@ void ClosureConversion::CreateInstMethodInAutoEnvWrapper(ClassDef& autoEnvWrappe
         .args = std::vector<Value*>(params.begin(), params.end()),
         .thisType = autoEnvWrapperDef.GetType()
     };
-    auto apply = CreateAndAppendExpression<Apply>(builder, retType, &genericFunc, context, entry);
+    auto apply = CreateAndAppendWrapperApply(builder, *retType, genericFunc, context, *entry);
 
-    CreateAndAppendExpression<Store>(
-        builder, builder.GetType<UnitType>(), apply->GetResult(), retVal->GetResult(), entry);
+    CreateAndAppendWrappedStore(builder, *apply->GetResult(), *retVal->GetResult(), *entry);
     CreateAndAppendTerminator<Exit>(builder, entry);
 
     // 7. create wrapper class if type is mismatched

@@ -116,16 +116,22 @@ static const std::vector<BuiltinOpInfo> COMPARABLE_FUNC_LISTS = {
     {FuncInfo("next", NOT_CARE, {NOT_CARE}, ANY_TYPE, "std.core"), ExprKind::APPLY,    2U}
 };
 
-Ptr<Apply> BuiltinOpCreateNewApply(CHIRBuilder& builder, const Invoke& oriInvoke, Ptr<FuncBase> func,
+Ptr<Apply> BuiltinOpCreateNewApply(CHIRBuilder& builder, Invoke& oriInvoke, Ptr<FuncBase> func,
     const Ptr<Value>& thisValue, const std::vector<Value*>& args)
 {
     auto instRetTy = oriInvoke.GetResultType();
     std::vector<Value*> applyArgs{thisValue};
     applyArgs.insert(applyArgs.end(), args.begin(), args.end());
     auto thisType = builder.GetType<RefType>(thisValue->GetType());
-    return builder.CreateExpression<Apply>(instRetTy, func, FuncCallContext{
+    auto callContext = FuncCallContext {
         .args = applyArgs,
-        .thisType = thisType}, oriInvoke.GetParentBlock());
+        .thisType = thisType
+    };
+    auto allExprs = CreateWrapperApply(builder, *instRetTy, *func, callContext, *oriInvoke.GetParentBlock());
+    for (auto expr : allExprs) {
+        expr->MoveBefore(&oriInvoke);
+    }
+    return StaticCast<Apply*>(allExprs.back());
 }
 
 Ptr<BinaryExpression> BuiltinOpCreateNewBinary(CHIRBuilder& builder, const Invoke& oriInvoke, ExprKind kind,
@@ -236,16 +242,24 @@ void Devirtualization::RewriteToApply(CHIRBuilder& builder, std::vector<RewriteI
             instThisType = builder.GetType<RefType>(builder.GetAnyTy());
         }
         auto instRetTy = invoke->GetResultType();
-        auto typecastRes = TypeCastOrBoxIfNeeded(*args[0], *instThisType, builder, *parent, INVALID_LOCATION);
-        if (typecastRes != args[0]) {
-            StaticCast<LocalVar*>(typecastRes)->GetExpr()->MoveBefore(invoke);
+        auto [typecastRes, castExprs] = TypeCastOrBoxIfNeeded(*args[0], *instThisType, builder, *parent);
+        if (!castExprs.empty()) {
+            for (auto c : castExprs) {
+                c->MoveBefore(invoke);
+            }
             args[0] = typecastRes;
         }
         auto loc = invoke->GetDebugLocation();
-        auto apply = builder.CreateExpression<Apply>(loc, instRetTy, realFunc, FuncCallContext{
+        auto callContext = FuncCallContext {
             .args = args,
             .instTypeArgs = rewriteInfo->typeArgs,
-            .thisType = thisType}, invoke->GetParentBlock());
+            .thisType = thisType
+        };
+        auto allExprs = CreateWrapperApply(builder, *instRetTy, *realFunc, callContext, *invoke->GetParentBlock(), loc);
+        for (auto expr : allExprs) {
+            expr->MoveBefore(invoke);
+        }
+        auto apply = StaticCast<Apply*>(allExprs.back());
         rewriteInfo->newApply = apply;
         invoke->ReplaceWith(*apply);
         invoke->GetResult()->ReplaceWith(*apply->GetResult(), parent->GetParentBlockGroup());
@@ -297,9 +311,9 @@ void Devirtualization::InstantiateFuncIfPossible(CHIRBuilder& builder, std::vect
         auto apply = rewriteInfo->newApply;
         std::vector<Type*> parameterType;
         for (auto param : apply->GetArgs()) {
-            parameterType.emplace_back(param->GetType());
+            parameterType.emplace_back(RemoveBoxTypeShellIfNeed(*param->GetType()));
         }
-        auto retType = apply->GetResultType();
+        auto retType = RemoveBoxTypeShellIfNeed(*apply->GetResultType());
         auto instFuncType = builder.GetType<FuncType>(parameterType, retType);
 
         if (instFuncType->IsGenericRelated()) {
@@ -346,9 +360,38 @@ void Devirtualization::InstantiateFuncIfPossible(CHIRBuilder& builder, std::vect
         // replace apply callee with new inst func
         auto applyParent = apply->GetParentBlock();
         auto loc = apply->GetDebugLocation();
-        auto instApply = builder.CreateExpression<Apply>(
-            loc, retType, newFunc, FuncCallContext{.args = apply->GetArgs()}, applyParent);
+        auto newArgs = apply->GetArgs();
+        for (size_t i = 0; i < newArgs.size(); ++i) {
+            if (newArgs[i]->GetType()->IsBoxRef()) {
+                auto expectedTy = RemoveBoxTypeShellIfNeed(*newArgs[i]->GetType());
+                auto unbox = builder.CreateExpression<UnBox>(expectedTy, newArgs[i], applyParent);
+                unbox->MoveBefore(apply);
+                newArgs[i] = unbox->GetResult();
+            }
+        }
+        auto callContext = FuncCallContext {
+            .args = newArgs
+        };
+        auto allExprs = CreateWrapperApply(builder, *retType, *newFunc, callContext, *applyParent, loc);
+        for (auto expr : allExprs) {
+            expr->MoveBefore(apply);
+        }
+        auto instApply = StaticCast<Apply*>(allExprs.back());
+        auto rawResultType = apply->GetResult()->GetType();
         apply->ReplaceWith(*instApply);
+        auto result = instApply->GetResult();
+        CJC_ASSERT(!result->GetType()->IsBoxRef());
+        if (!FuncArgTypeIsMatched(*retType, *rawResultType)) {
+            // maybe we can remove unbox here, we will do it later
+            auto newBoxExpr = builder.CreateExpression<Box>(rawResultType, result, applyParent);
+            newBoxExpr->MoveAfter(instApply);
+            for (auto user : result->GetUsers()) {
+                if (user == newBoxExpr) {
+                    continue;
+                }
+                user->ReplaceOperand(result, newBoxExpr->GetResult());
+            }
+        }
     }
 }
 

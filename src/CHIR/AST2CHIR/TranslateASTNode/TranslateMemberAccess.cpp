@@ -601,7 +601,7 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
         }
 
         auto baseValRefDims = GetRefDims(*baseVal->GetType());
-        auto baseValTy = baseVal->GetType()->StripAllRefs();
+        auto baseValTy = RemoveBoxTypeShellIfNeed(*baseVal->GetType())->StripAllRefs();
         std::unordered_map<const GenericType*, Type*> instMap;
         if (auto baseValCustomTy = DynamicCast<CustomType*>(baseValTy)) {
             baseValCustomTy->GetInstMap(instMap, builder);

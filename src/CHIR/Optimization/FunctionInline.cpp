@@ -289,11 +289,75 @@ static std::vector<Block*> GetExitBlocks(const BlockGroup& blockGroup)
     return exitBlocks;
 }
 
-static void ReplaceFuncArgs(std::vector<Parameter*>& src, std::vector<Value*>& dst, const BlockGroup& scope)
+static void ReplaceFuncArgs(const Apply& apply, const BlockGroup& scope)
 {
-    CJC_ASSERT(src.size() == dst.size());
-    for (size_t i = 0; i < src.size(); ++i) {
-        src[i]->ReplaceWith(*dst[i], &scope);
+    std::vector<Parameter*> funcParams;
+    if (apply.GetCallee()->IsFuncWithBody()) {
+        auto func = Cangjie::VirtualCast<Func*>(apply.GetCallee());
+        funcParams = func->GetParams();
+    } else {
+        CJC_ASSERT(apply.GetCallee()->IsLocalVar());
+        auto lambda = Cangjie::DynamicCast<Lambda*>(Cangjie::StaticCast<LocalVar*>(apply.GetCallee())->GetExpr());
+        CJC_NULLPTR_CHECK(lambda);
+        funcParams = lambda->GetParams();
+    }
+    auto applyArgs = apply.GetArgs();
+    CJC_ASSERT(funcParams.size() == applyArgs.size());
+    for (size_t i = 0; i < applyArgs.size(); ++i) {
+        // unbox here, because a function with generic type can't be inlined,
+        // only all instantiated types function can be inlined,
+        // so if arg's type is box ref, that means the param type must be generic type
+        if (applyArgs[i]->GetType()->IsBoxRef()) {
+            auto boxExpr = Cangjie::StaticCast<Box*>(Cangjie::StaticCast<LocalVar*>(applyArgs[i])->GetExpr());
+            applyArgs[i] = boxExpr->GetSourceValue();
+            boxExpr->RemoveSelfFromBlock();
+        }
+        funcParams[i]->ReplaceWith(*applyArgs[i], &scope);
+    }
+}
+
+static void ModifyFuncCallArgTypes(BlockGroup& group, CHIRBuilder& builder)
+{
+    std::unordered_map<Expression*, std::vector<Expression*>> funcCallList;
+    std::function<VisitResult(Expression&)> preVisit = [&](Expression& e) {
+        if (auto funcCall = Cangjie::DynamicCast<FuncCall*>(&e)) {
+            auto paramTypes = funcCall->GetMethodType()->GetParamTypes();
+            auto args = funcCall->GetArgs();
+            for (size_t i = 0; i < args.size(); ++i) {
+                auto argType = args[i]->GetType();
+                auto expectedTy = GetExpectedArgType(*argType, *paramTypes[i], builder);
+                if (expectedTy != argType) {
+                    auto [newArg, castExprs] =
+                        TypeCastOrBoxIfNeeded(*args[i], *expectedTy, builder, *e.GetParentBlock());
+                    e.ReplaceOperand(args[i], newArg);
+                    funcCallList.emplace(&e, castExprs);
+                }
+            }
+        } else if (auto funcCallE = Cangjie::DynamicCast<FuncCallWithException*>(&e)) {
+            auto paramTypes = funcCallE->GetMethodType()->GetParamTypes();
+            auto args = funcCallE->GetArgs();
+            for (size_t i = 0; i < args.size(); ++i) {
+                auto argType = args[i]->GetType();
+                auto expectedTy = GetExpectedArgType(*argType, *paramTypes[i], builder);
+                if (expectedTy != argType) {
+                    auto [newArg, castExprs] =
+                        TypeCastOrBoxIfNeeded(*args[i], *expectedTy, builder, *e.GetParentBlock());
+                    e.ReplaceOperand(args[i], newArg);
+                    funcCallList.emplace(&e, castExprs);
+                }
+            }
+        } else if (e.GetExprKind() == ExprKind::LAMBDA) {
+            auto lambda = Cangjie::StaticCast<Lambda*>(&e);
+            Visitor::Visit(*lambda->GetBody(), preVisit);
+        }
+        return VisitResult::CONTINUE;
+    };
+    Visitor::Visit(group, preVisit);
+
+    for (auto [expr, castExprs] : funcCallList) {
+        for (auto c : castExprs) {
+            c->MoveBefore(expr);
+        }
     }
 }
 
@@ -313,13 +377,30 @@ void FunctionInline::ReplaceFuncResult(LocalVar* resNew, LocalVar* resOld)
         auto newLoad =
             builder.CreateExpression<Load>(user->GetDebugLocation(), valType, resNew, user->GetParentBlock());
         newLoad->MoveBefore(user);
+        if (user->GetExprKind() == ExprKind::UNBOX) {
+            auto unbox = Cangjie::StaticCast<UnBox*>(user);
+            auto realRetVal = unbox->GetResult();
+            auto [candidate, castExprs] = TypeCastOrBoxIfNeeded(
+                *newLoad->GetResult(), *realRetVal->GetType(), builder, *newLoad->GetParentBlock());
+            if (!castExprs.empty()) {
+                for (auto c : castExprs) {
+                    c->MoveBefore(user);
+                }
+            }
+            for (auto u : realRetVal->GetUsers()) {
+                u->ReplaceOperand(realRetVal, candidate);
+            }
+            unbox->RemoveSelfFromBlock();
+            continue;
+        }
         user->ReplaceOperand(resOld, newLoad->GetResult());
-        auto cast = TypeCastOrBoxIfNeeded(
+        auto [castRes, castExprs] = TypeCastOrBoxIfNeeded(
             *newLoad->GetResult(), *resOld->GetType(), builder, *newLoad->GetParentBlock(), INVALID_LOCATION);
-        if (cast != newLoad->GetResult()) {
-            CJC_ASSERT(cast->IsLocalVar());
-            StaticCast<LocalVar*>(cast)->GetExpr()->MoveBefore(user);
-            user->ReplaceOperand(newLoad->GetResult(), cast);
+        if (!castExprs.empty()) {
+            for (auto c : castExprs) {
+                c->MoveBefore(user);
+            }
+            user->ReplaceOperand(newLoad->GetResult(), castRes);
         }
     }
     return;
@@ -362,17 +443,14 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
     // step 1: clone function body
     // `oldFuncGroup` is `Block Group: 1`
     BlockGroup* oldFuncGroup = nullptr;
-    std::vector<Parameter*> funcArgs;
     if (apply.GetCallee()->IsFuncWithBody()) {
         auto func = VirtualCast<Func*>(apply.GetCallee());
         oldFuncGroup = func->GetBody();
-        funcArgs = func->GetParams();
     } else {
         CJC_ASSERT(apply.GetCallee()->IsLocalVar());
         auto lambda = DynamicCast<Lambda*>(StaticCast<LocalVar*>(apply.GetCallee())->GetExpr());
         CJC_NULLPTR_CHECK(lambda);
         oldFuncGroup = lambda->GetBody();
-        funcArgs = lambda->GetParams();
     }
     CJC_NULLPTR_CHECK(oldFuncGroup->GetTopLevelFunc());
     // after cloned, we get a new block group, but func arg is value node, can't be cloned:
@@ -407,9 +485,8 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
     //   %21: Unit = Store(%12, %20)    // func arg %7 -> %12
     //   Exit()
     // }
-    auto applyArgs = apply.GetArgs();
-    ReplaceFuncArgs(funcArgs, applyArgs, *newFuncGroup);
-
+    ReplaceFuncArgs(apply, *newFuncGroup);
+    ModifyFuncCallArgTypes(*newFuncGroup, builder);
     FixCastProblemAfterInst(newFuncGroup, builder);
 
     // step 3: move copied blocks

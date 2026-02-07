@@ -230,7 +230,7 @@ void FixCastProblemAfterInst(Ptr<BlockGroup> group, CHIRBuilder& builder)
             // change transformToConcrete to box/unbox/typecast
             auto& cast = StaticCast<TransformToConcrete&>(e);
             if (!cast.GetSourceTy()->IsGenericRelated()) {
-                auto newCast = TypeCastOrBoxIfNeeded(
+                auto [newCast, castExprs] = TypeCastOrBoxIfNeeded(
                     *cast.GetSourceValue(), *cast.GetTargetTy(), builder, *e.GetParentBlock(), e.GetDebugLocation());
                 if (newCast == cast.GetSourceValue()) {
                     for (auto user : e.GetResult()->GetUsers()) {
@@ -242,17 +242,19 @@ void FixCastProblemAfterInst(Ptr<BlockGroup> group, CHIRBuilder& builder)
                 for (auto user : e.GetResult()->GetUsers()) {
                     user->ReplaceOperand(e.GetResult(), newCast);
                 }
-                StaticCast<LocalVar*>(newCast)->GetExpr()->MoveBefore(&e);
+                for (auto c : castExprs) {
+                    c->MoveBefore(&e);
+                }
                 e.RemoveSelfFromBlock();
             }
         } else if (e.GetExprKind() == ExprKind::TRANSFORM_TO_GENERIC) {
             // change TransformToGeneric to box/unbox/typecast
             auto cast = StaticCast<TransformToGeneric*>(&e);
             if (!cast->GetTargetTy()->IsGenericRelated()) {
-                auto newCast =
+                auto [newCast, castExprs] =
                     TypeCastOrBoxIfNeeded(*cast->GetSourceValue(), *cast->GetTargetTy(), builder, *e.GetParentBlock(),
                         e.GetDebugLocation());
-                if (newCast == cast->GetSourceValue()) {
+                if (castExprs.empty()) {
                     for (auto user : e.GetResult()->GetUsers()) {
                         user->ReplaceOperand(e.GetResult(), cast->GetSourceValue());
                     }
@@ -262,7 +264,9 @@ void FixCastProblemAfterInst(Ptr<BlockGroup> group, CHIRBuilder& builder)
                 for (auto user : e.GetResult()->GetUsers()) {
                     user->ReplaceOperand(e.GetResult(), newCast);
                 }
-                StaticCast<LocalVar*>(newCast)->GetExpr()->MoveBefore(&e);
+                for (auto c : castExprs) {
+                    c->MoveBefore(&e);
+                }
                 e.RemoveSelfFromBlock();
             }
         } else if (e.GetExprKind() == ExprKind::TYPECAST) {
@@ -278,10 +282,10 @@ void FixCastProblemAfterInst(Ptr<BlockGroup> group, CHIRBuilder& builder)
             if (cast->GetSourceValue()->GetType()->IsGenericRelated()) {
                 return VisitResult::CONTINUE;
             }
-            auto newCastRes =
+            auto [newCastRes, castExprs] =
                 TypeCastOrBoxIfNeeded(*cast->GetSourceValue(), *e.GetResult()->GetType(), builder, *e.GetParentBlock(),
                     e.GetDebugLocation());
-            if (newCastRes == cast->GetSourceValue()) {
+            if (castExprs.empty()) {
                 return VisitResult::CONTINUE;
             }
             auto newCast = StaticCast<LocalVar*>(newCastRes);
@@ -292,7 +296,9 @@ void FixCastProblemAfterInst(Ptr<BlockGroup> group, CHIRBuilder& builder)
             for (auto user : e.GetResult()->GetUsers()) {
                 user->ReplaceOperand(e.GetResult(), newCast);
             }
-            newCast->GetExpr()->MoveBefore(&e);
+            for (auto c : castExprs) {
+                c->MoveBefore(&e);
+            }
             e.RemoveSelfFromBlock();
         }
         return VisitResult::CONTINUE;
