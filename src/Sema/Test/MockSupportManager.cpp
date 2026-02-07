@@ -522,7 +522,7 @@ void MockSupportManager::GenerateVarDeclAccessors(VarDecl& fieldDecl, AccessorKi
 
 void MockSupportManager::GenerateSpyCallMarker(Package& package)
 {
-    if (package.files.size() == 0) {
+    if (package.files.empty()) {
         return;
     }
 

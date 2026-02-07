@@ -72,7 +72,7 @@ size_t Terminator::GetNumOfSuccessor() const
 
 Block* Terminator::GetSuccessor(size_t index) const
 {
-    CJC_ASSERT(operands.size() == 0 || index + GetFirstSuccessorIndex() < operands.size());
+    CJC_ASSERT(operands.empty() || index + GetFirstSuccessorIndex() < operands.size());
     return StaticCast<Block*>(operands[GetFirstSuccessorIndex() + index]);
 }
 
@@ -117,7 +117,7 @@ void Terminator::ReplaceSuccessor(Block& oldSuccessor, Block& newSuccessor)
 
 void Terminator::ReplaceSuccessor(size_t index, Block& newSuccessor)
 {
-    CJC_ASSERT(operands.size() == 0 || index + GetFirstSuccessorIndex() < operands.size());
+    CJC_ASSERT(operands.empty() || index + GetFirstSuccessorIndex() < operands.size());
     GetSuccessor(index)->RemovePredecessor(*GetParentBlock());
     newSuccessor.AddPredecessor(GetParentBlock());
     operands[GetFirstSuccessorIndex() + index] = &newSuccessor;

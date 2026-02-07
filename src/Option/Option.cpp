@@ -979,15 +979,15 @@ void GlobalOptions::DeprecatedOptionCheck(const OptionArgInstance& arg) const
 bool GlobalOptions::TryParseOption(OptionArgInstance& arg, ArgList& argList)
 {
 #ifdef CANGJIE_VISIBLE_OPTIONS_ONLY
-    if (std::count(arg.info.groups.begin(), arg.info.groups.end(), Options::Group::VISIBLE) == 0) {
+    if (std::find(arg.info.groups.begin(), arg.info.groups.end(), Options::Group::VISIBLE) == arg.info.groups.end()) {
         return false;
     };
 #endif
-    if (!experimentalMode && std::count(arg.info.groups.begin(), arg.info.groups.end(), Options::Group::STABLE) == 0) {
+    if (!experimentalMode && std::find(arg.info.groups.begin(), arg.info.groups.end(), Options::Group::STABLE) == arg.info.groups.end()) {
         ErrorExperimentalOption(arg.str);
         return false;
     }
-    if (arg.info.values.size() != 0) {
+    if (!arg.info.values.empty()) {
         auto result = std::find_if(arg.info.values.begin(), arg.info.values.end(),
             [value = arg.value, this](const Options::OptionValue& optionValue) {
                 std::set<Options::Backend> backends{GetOptionsBackend()};
@@ -996,13 +996,13 @@ bool GlobalOptions::TryParseOption(OptionArgInstance& arg, ArgList& argList)
             });
 #ifdef CANGJIE_VISIBLE_OPTIONS_ONLY
         if (result != arg.info.values.end() &&
-            std::count(result->groups.begin(), result->groups.end(), Options::Group::VISIBLE) == 0) {
+            std::find(result->groups.begin(), result->groups.end(), Options::Group::VISIBLE) == result->groups.end()) {
             Errorf("invalid value: '%s'\n", result->value.c_str());
             return false;
         };
 #endif
         if (result != arg.info.values.end() && !experimentalMode &&
-            std::count(result->groups.begin(), result->groups.end(), Options::Group::STABLE) == 0) {
+            std::find(result->groups.begin(), result->groups.end(), Options::Group::STABLE) == result->groups.end()) {
             ErrorExperimentalOption(arg.str);
             return false;
         }

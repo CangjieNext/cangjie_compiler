@@ -39,11 +39,11 @@ std::string UserMemoryUsage::GetJson() const
     out << std::fixed;
     out.precision(DISPLAY_PRECISION);
     for (auto& phrase : titleOrder) {
-        out << "\n   \"" + phrase + "\": {";
+        out << "\n   \"" << phrase << "\": {";
         auto it = titleInfoMap.find(phrase);
         CJC_ASSERT(it != titleInfoMap.end());
         for (auto& sec : it->second) {
-            out << "\n      \"" + sec.subtitle + "\": " << sec.end << ",";
+            out << "\n      \"" << sec.subtitle << "\": " << sec.end << ",";
         }
         if (!it->second.empty()) {
             // remove last ','
@@ -61,7 +61,7 @@ std::string UserMemoryUsage::GetJson() const
 void UserMemoryUsage::Start(const std::string& title, const std::string& subtitle, const std::string& desc)
 {
     auto infos = titleInfoMap.find(title);
-    if (std::count(titleOrder.begin(), titleOrder.end(), title) == 0) {
+    if (std::find(titleOrder.begin(), titleOrder.end(), title) == titleOrder.end()) {
         titleOrder.push_back(title);
     }
 

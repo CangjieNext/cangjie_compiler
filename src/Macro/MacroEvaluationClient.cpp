@@ -650,7 +650,7 @@ std::string GetMacroSrvCmd(bool enableParallelMacro, std::string& cjcPath)
     sprintf_s(handlebuffer, buffLen, "%d", MacroProcMsger::GetInstance().hChildWrite);
     cmdStr += " " + std::string(handlebuffer);
     cmdStr += enableParallelMacro ? " 1" : " 0";
-    cmdStr += " \"" + cjcPath +"\""; // cjc folder to find runtime for lsp not in sdk
+    cmdStr += " \""; cmdStr += cjcPath; cmdStr += "\""; // cjc folder to find runtime for lsp not in sdk
     return cmdStr;
 }
 

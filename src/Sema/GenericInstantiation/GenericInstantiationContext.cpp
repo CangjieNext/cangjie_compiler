@@ -33,7 +33,7 @@ using GIM = GenericInstantiationManager;
 
 void GIM::GenericInstantiationManagerImpl::ClearCache()
 {
-    structContext.clear();
+    GetStructContext().clear();
     extendGenerated.clear();
     intersectionTyStatus.clear();
     declInstantiationByTypeMap.clear();

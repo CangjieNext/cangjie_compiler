@@ -1999,11 +1999,13 @@ Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDe
     }
     Ptr<const FuncDecl> ret = decls->second.front();
     std::set<Ptr<const FuncDecl>> traversed;
-    while ((overrideMap.find(ret) != overrideMap.end()) && !(overrideMap.find(ret)->second.empty())) {
+    auto it = overrideMap.find(ret);
+    while (it != overrideMap.end() && !it->second.empty()) {
         if (auto [_, succ] = traversed.emplace(ret); !succ) {
             return nullptr; // cycle detected
         }
-        ret = overrideMap.find(ret)->second.front();
+        ret = it->second.front();
+        it = overrideMap.find(ret);
     }
     return ret;
 }
@@ -2312,8 +2314,9 @@ Ptr<AST::Ty> TypeManager::TryGreedySubst(Ptr<AST::Ty> ty)
 
 bool TypeManager::TyVarHasNoSum(TyVar& tv) const
 {
-    return constraints.count(&tv) > 0 && constraints.at(&tv).sum.size() == 1 &&
-        (*constraints.at(&tv).sum.cbegin())->IsAny();
+    auto it = constraints.find(&tv);
+    return it != constraints.end() && it->second.sum.size() == 1 &&
+        (*it->second.sum.cbegin())->IsAny();
 }
 
 Ptr<AST::Decl> TypeManager::GetDummyBuiltInDecl(Ptr<Ty> ty)

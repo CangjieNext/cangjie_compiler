@@ -168,7 +168,7 @@ void RewriteObjCPointerAccess::HandleImpl(InteropContext& ctx)
             }
 
             if (funcDecl->identifier == OBJCPOINTER_READ_METHOD
-                && callExpr->args.size() == 0
+                && callExpr->args.empty()
                 && ctx.typeMapper.IsObjCCompatible(*callExpr->ty)) {
                 HandleObjCPointerRead(ctx, *callExpr);
                 return VisitAction::WALK_CHILDREN;

@@ -503,7 +503,7 @@ OwnedPtr<Expr> ASTFactory::CreateGetObjcEntityOrNullCall(VarDecl &entity, Ptr<Fi
     auto baseTy = typeManager.GetPointerTy(typeManager.GetInvalidTy());
     auto extendTy = typeManager.GetTyForExtendMap(*baseTy);
     auto extends = typeManager.GetBuiltinTyExtends(*extendTy);
-    CJC_ASSERT(extends.size() != 0);
+    CJC_ASSERT(!extends.empty());
     auto members = (extends.begin())->get();
     Ptr<FuncDecl> isNullMember;
     for (auto m : members->GetMemberDeclPtrs()) {
@@ -551,7 +551,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObject(Decl& target, FuncDecl& ctor, 
     std::unordered_map<std::string, Ptr<Ty>> actualTyArgMap;
     std::vector<Ptr<Ty>> funcTyParams;
     std::vector<OwnedPtr<Type>> actualPrimitiveType;
-    if (genericConfig && genericConfig->instTypes.size() != 0) {
+    if (genericConfig && !genericConfig->instTypes.empty()) {
         GetArgsAndRetGenericActualTyVector(
             genericConfig, ctor, actualTyArgMap, funcTyParams, actualPrimitiveType, typeManager);
     }
@@ -796,7 +796,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateMethodWrapper(FuncDecl& method, const Nativ
     std::unordered_map<std::string, Ptr<Ty>> actualTyArgMap;
     std::vector<Ptr<Ty>> funcTyParams;
     std::vector<OwnedPtr<Type>> actualPrimitiveType;
-    if (genericConfig && genericConfig->instTypes.size() != 0) {
+    if (genericConfig && !genericConfig->instTypes.empty()) {
         GetArgsAndRetGenericActualTyVector(
             genericConfig, method, actualTyArgMap, funcTyParams, actualPrimitiveType, typeManager);
     }

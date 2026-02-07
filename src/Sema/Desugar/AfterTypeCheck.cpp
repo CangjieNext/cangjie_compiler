@@ -299,7 +299,7 @@ void TypeChecker::TypeCheckerImpl::ParsePackageConfigFile(
         for (auto& file : pkg->files) {
             for (auto& decl : file->decls) {
                 // Following the symbol exposure strategy "Full" requirement, and included_apis is empty
-                if (pkg->interopCJApiStrategy == InteropCJStrategy::FULL && pkg->interopCJIncludedApis.size() == 0) {
+                if (pkg->interopCJApiStrategy == InteropCJStrategy::FULL && pkg->interopCJIncludedApis.empty()) {
                     if (decl->symbol) {
                         decl->symbol->isNeedExposedToInterop = true;
                     }

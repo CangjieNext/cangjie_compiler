@@ -39,13 +39,14 @@ void AddImplicitImportAll(File& file, const std::string& fullPackageName)
 {
     // Check whether the prefix paths are already cached.
     static FullPackageNameToPrefixPaths fullPackageNameToPrefixPaths;
-    std::vector<std::string> curPrefixPaths{};
-    if (fullPackageNameToPrefixPaths.find(fullPackageName) != fullPackageNameToPrefixPaths.end()) {
-        curPrefixPaths = fullPackageNameToPrefixPaths.at(fullPackageName);
+    const std::vector<std::string>* curPrefixPathsPtr = nullptr;
+    auto cacheIt = fullPackageNameToPrefixPaths.find(fullPackageName);
+    if (cacheIt != fullPackageNameToPrefixPaths.end()) {
+        curPrefixPathsPtr = &cacheIt->second;
     } else {
-        curPrefixPaths = Utils::SplitQualifiedName(fullPackageName);
-        fullPackageNameToPrefixPaths.insert({fullPackageName, curPrefixPaths});
+        curPrefixPathsPtr = &fullPackageNameToPrefixPaths.emplace(fullPackageName, Utils::SplitQualifiedName(fullPackageName)).first->second;
     }
+    const std::vector<std::string>& curPrefixPaths = *curPrefixPathsPtr;
     // Check whether the import is already added.
     for (auto it = file.imports.rbegin(); it != file.imports.rend(); ++it) {
         auto& import = *it;
@@ -55,7 +56,7 @@ void AddImplicitImportAll(File& file, const std::string& fullPackageName)
         if (import->content.kind != ImportKind::IMPORT_ALL) {
             continue;
         }
-        if (import->content.prefixPaths == fullPackageNameToPrefixPaths.at(fullPackageName)) {
+        if (import->content.prefixPaths == curPrefixPaths) {
             return; // The import is already added not add again.
         }
     }
