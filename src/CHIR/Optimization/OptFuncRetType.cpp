@@ -105,8 +105,12 @@ void OptFuncRetType::Unit2Void()
                     .instTypeArgs = apply->GetInstantiatedTypeArgs(),
                     .thisType = apply->GetThisType()
                 };
-                auto newApply = builder.CreateExpression<Apply>(
-                    apply->GetDebugLocation(), func->GetReturnType(), apply->GetCallee(), funcCallContext, apply->GetParentBlock());
+                auto allExprs = CreateWrapperApply(builder, *func->GetReturnType(), *apply->GetCallee(),
+                    funcCallContext, *apply->GetParentBlock(), apply->GetDebugLocation());
+                for (auto expr : allExprs) {
+                    expr->MoveBefore(apply);
+                }
+                auto newApply = StaticCast<Apply*>(allExprs.back());
                 if (apply->IsSuperCall()) {
                     newApply->SetSuperCall();
                 }
@@ -119,9 +123,13 @@ void OptFuncRetType::Unit2Void()
                     .instTypeArgs = awe->GetInstantiatedTypeArgs(),
                     .thisType = awe->GetThisType()
                 };
-                auto newApply = builder.CreateExpression<ApplyWithException>(
-                    awe->GetDebugLocation(), func->GetReturnType(), awe->GetCallee(), funcCallContext,
-                    awe->GetSuccessBlock(), awe->GetErrorBlock(), awe->GetParentBlock());
+                auto allExprs = CreateWrapperApplyWithException(
+                    builder, *func->GetReturnType(), *awe->GetCallee(), funcCallContext,
+                    *awe->GetSuccessBlock(), *awe->GetErrorBlock(), *awe->GetParentBlock(), awe->GetDebugLocation());
+                for (size_t i = 0; i < allExprs.size() - 1; ++i) {
+                    allExprs[i]->MoveBefore(awe);
+                }
+                auto newApply = StaticCast<ApplyWithException*>(allExprs.back());
                 awe->ReplaceWith(*newApply);
             }
         }

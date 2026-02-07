@@ -8,6 +8,7 @@
 
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/IR/Value/LiteralValue.h"
+#include "cangjie/CHIR/Utils/Utils.h"
 
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
@@ -129,9 +130,7 @@ void Translator::CreateAndAppendWrappedStore(Value& rhs, Value& lhs, const Debug
 
 void Translator::CreateAndAppendWrappedStore(Value& rhs, Value& lhs, Block& parent, const DebugLocation& loc)
 {
-    auto resultType = StaticCast<RefType*>(lhs.GetType())->GetBaseType();
-    auto castedRhs = TypeCastOrBoxIfNeeded(rhs, *resultType, loc);
-    CreateAndAppendExpression<Store>(loc, builder.GetUnitTy(), castedRhs, &lhs, &parent);
+    Cangjie::CHIR::CreateAndAppendWrappedStore(builder, rhs, lhs, parent, loc);
 }
 
 Value* Translator::TranslateCompoundAssign(const AssignExpr& assign)

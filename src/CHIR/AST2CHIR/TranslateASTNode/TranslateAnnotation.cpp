@@ -8,6 +8,7 @@
 
 #include "cangjie/CHIR/IR/Annotation.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
+#include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 
 using namespace Cangjie::CHIR;
@@ -104,7 +105,7 @@ void Translator::TranslateAnnotationsArrayBody(const Decl& decl, Func& func)
         .thisType = builder.GetType<RefType>(arrayType)
     };
     auto retType = ReplaceRawGenericArgType(*(*arrayInit)->GetFuncType()->GetReturnType(), table, builder);
-    CreateAndAppendExpression<Apply>(retType, *arrayInit, callContext, currentBlock);
+    CreateAndAppendWrapperApply(builder, *retType, **arrayInit, callContext, *currentBlock);
     // load all Annotation Instances from lifted gv and store them into the return value of annoFactoryFunc
     for (size_t i{0}; i < annoInsts.size(); ++i) {
         auto gv = annoInsts[i];
@@ -146,9 +147,10 @@ void Translator::TranslateAnnotationsArrayBody(const Decl& decl, Func& func)
     blockGroupStack.push_back(pkgInit->GetBody());
     currentBlock = pkgInit->GetEntryBlock()->GetSuccessors()[1];
     currentBlock->GetTerminator()->RemoveSelfFromBlock();
+    auto funcCallContext = FuncCallContext{};
     for (size_t i{0}; i < annoInsts.size(); ++i) {
-        CreateAndAppendExpression<Apply>(
-            builder.GetUnitTy(), annoInsts[i]->GetInitFunc(), FuncCallContext{}, currentBlock);
+        CreateAndAppendWrapperApply(
+            builder, *builder.GetUnitTy(), *annoInsts[i]->GetInitFunc(), funcCallContext, *currentBlock);
     }
     CreateAndAppendTerminator<Exit>(currentBlock);
     blockGroupStack.pop_back();

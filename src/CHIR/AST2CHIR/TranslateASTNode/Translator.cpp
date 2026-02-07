@@ -119,13 +119,16 @@ DebugLocation Translator::TranslateFileLocation(unsigned fileID) const
 
 Ptr<Value> Translator::TypeCastOrBoxIfNeeded(Value& val, Type& expectedTy, const DebugLocation& loc, bool needCheck)
 {
-    return CHIR::TypeCastOrBoxIfNeeded(val, expectedTy, builder, *currentBlock, loc, needCheck);
+    return CHIR::CreateAndAppendTypeCastOrBoxIfNeeded(val, expectedTy, builder, *currentBlock, loc, needCheck);
 }
 
 Ptr<Value> Translator::GetDerefedValue(Ptr<Value> val, const DebugLocation& loc)
 {
     CJC_NULLPTR_CHECK(val);
     auto valType = val->GetType();
+    if (valType->IsBoxRef()) {
+        return val;
+    }
     if (valType->IsRef()) {
         valType = StaticCast<RefType*>(valType)->GetBaseType();
         // For now, raw class type should not exist. Why, spec indicate that class is reference type.

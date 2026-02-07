@@ -723,6 +723,9 @@ private:
     Expression* CreateAndAppendGVInitFuncCall(Value& callee);
     void CreateAndAppendVArraySet(
         Value& lhs, Value& rhs, Value& index, Type& elementType, const DebugLocation& loc);
+    Expression* TryCreateWrapperApply(
+        Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const DebugLocation& loc);
+    Expression* TryCreateWrapperInvoke(Type& retTy, InvokeCallContext& context, bool isStatic, const DebugLocation& loc);
 
     CHIR::Type* GetExactParentType(Type& fuzzyParentType, const AST::FuncDecl& resolvedFunction, FuncType& funcType,
         std::vector<Type*>& funcInstTypeArgs, bool checkAbstractMethod);

@@ -216,8 +216,7 @@ private:
     void CheckFieldByName(const FieldByName& expr, const Func& topLevelFunc);
     void CheckApply(const Apply& expr, const Func& topLevelFunc);
     bool CheckCallee(const Value& callee, const Expression& expr, const Func& topLevelFunc);
-    void CheckApplyFuncArgs(const std::vector<Value*>& args,
-        const std::vector<Type*>& instParamTypes, bool varArgs, const Expression& expr, const Func& topLevelFunc);
+    void CheckApplyFuncArgs(const ApplyBase& expr, const std::vector<Type*>& instParamTypes, const Func& topLevelFunc);
     FuncType* CalculateInstFuncType(
         FuncType& originalFuncType, const std::vector<Type*>& instantiatedTypeArgs,
         const std::vector<GenericType*>& genericTypeParams, Type* instOuterType);
@@ -225,7 +224,7 @@ private:
         const std::vector<GenericType*>& genericTypeParams, const Expression& expr, const Func& topLevelFunc);
     bool CheckApplyThisType(
         const Value& callee, const Type* thisType, const Expression& expr, const Func& topLevelFunc);
-    void CheckApplyFuncRetValue(const Type& instRetType, const Expression& expr, const Func& topLevelFunc);
+    void CheckApplyFuncRetValue(const Type& instRetType, const ApplyBase& expr, const Func& topLevelFunc);
     void CheckInvoke(const Invoke& expr, const Func& topLevelFunc);
     bool CheckInvokeThisType(
         Type& objType, const Type* thisType, const Expression& expr, const Func& topLevelFunc);
@@ -238,6 +237,8 @@ private:
     const std::vector<VirtualMethodInfo>* CheckVTableExist(const GenericType& thisType, const ClassType& srcParentType);
     bool CheckVirtualMethodFuncType(const FuncType& declaredType,
         const FuncType& callSiteType, const std::string& errMsgBase, const Func& topLevelFunc);
+    void CheckInvokeFuncRetValue(
+            const LocalVar& retVal, const Type& originalRetType, const Expression& expr, const Func& topLevelFunc);
     void CheckInvokeFuncArgs(const std::vector<Value*>& args,
         const std::vector<Type*>& originalParamTypes, const Expression& expr, const Func& topLevelFunc);
     void CheckInvokeStatic(const InvokeStatic& expr, const Func& topLevelFunc);

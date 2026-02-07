@@ -467,26 +467,27 @@ FuncType* ConvertRealFuncTypeToVirtualFuncType(const FuncType& type, CHIRBuilder
     return builder.GetType<FuncType>(paramInVtable, builder.GetType<UnitType>());
 }
 
-Value* TypeCastIfNeeded(
+std::vector<Expression*> TypeCastIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
     // Do not cast a nothing type value, otherwise it will mess up the dead code elimination
     if (val.GetType()->IsNothing()) {
-        return &val;
+        return {};
     }
     if (val.GetType() != &expectedTy) {
+        std::vector<Expression*> castExprs;
         Value* tmpValue = &val;
         if (val.GetType()->StripAllRefs()->IsGeneric() && val.GetType()->IsRef()) {
             auto load = builder.CreateExpression<Load>(val.GetType()->StripAllRefs(), &val, &parentBlock);
-            parentBlock.AppendExpression(load);
+            castExprs.emplace_back(load);
             tmpValue = load->GetResult();
         }
         auto ret = builder.CreateExpression<TypeCast>(loc, &expectedTy, tmpValue, &parentBlock);
-        parentBlock.AppendExpression(ret);
+        castExprs.emplace_back(ret);
         ret->Set<NeedCheckCast>(needCheck);
-        return ret->GetResult();
+        return castExprs;
     }
-    return &val;
+    return {};
 }
 
 static bool HasGenericInNonFuncScope(const Type& type)
@@ -505,33 +506,34 @@ static bool HasGenericInNonFuncScope(const Type& type)
     return hasGenericInNonFuncScope;
 }
 
-Ptr<Value> TransformGenericIfNeeded(
+std::vector<Expression*> TransformGenericIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
     (void)needCheck;
+    std::vector<Expression*> castExprs;
     // Specially, the cast for generation/de-generation enum still use type-cast
     if (val.GetType()->IsEnum() && (expectedTy.IsTuple() || expectedTy.IsUnsignedInteger())) {
-        return nullptr;
+        return {};
     }
     if ((val.GetType()->IsTuple() || val.GetType()->IsUnsignedInteger()) && expectedTy.IsEnum()) {
-        return nullptr;
+        return {};
     }
 
     // this should be deleted after supported by codegen
     if (val.GetType()->IsStructArray() && expectedTy.IsStructArray()) {
-        return nullptr;
+        return {};
     }
 
     if (HasGenericInNonFuncScope(expectedTy) && !HasGenericInNonFuncScope(*val.GetType())) {
         auto ret = builder.CreateExpression<TransformToGeneric>(loc, &expectedTy, &val, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        castExprs.emplace_back(ret);
+        return castExprs;
     } else if (HasGenericInNonFuncScope(*val.GetType()) && !HasGenericInNonFuncScope(expectedTy)) {
         auto ret = builder.CreateExpression<TransformToConcrete>(loc, &expectedTy, &val, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        castExprs.emplace_back(ret);
+        return castExprs;
     }
-    return nullptr;
+    return {};
 }
 
 bool LeftTypeIsBoxOfRightType(const Type& left, const Type& right)
@@ -548,10 +550,11 @@ bool LeftTypeIsBoxOfRightType(const Type& left, const Type& right)
     return &right == boxType->GetBaseType();
 }
 
-Ptr<Value> BoxIfNeeded(
+std::vector<Expression*> BoxIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
     (void)needCheck;
+    std::vector<Expression*> castExprs;
     auto srcTy = val.GetType();
     auto srcIsValueTy = srcTy->IsValueType();
     if (auto ref = DynamicCast<RefType*>(srcTy)) {
@@ -571,48 +574,71 @@ Ptr<Value> BoxIfNeeded(
         if (srcTy->IsRef()) {
             auto loadSrc = builder.CreateExpression<Load>(
                 loc, StaticCast<RefType*>(srcTy)->GetBaseType(), boxSrcVal, &parentBlock);
-            parentBlock.AppendExpression(loadSrc);
+            castExprs.emplace_back(loadSrc);
             boxSrcVal = loadSrc->GetResult();
         }
         auto ret = builder.CreateExpression<Box>(loc, &expectedTy, boxSrcVal, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        castExprs.emplace_back(ret);
+        return castExprs;
     } else if (srcIsReferenceTy && dstIsValueTy) {
         if (expectedTy.IsRef()) {
             auto ret = builder.CreateExpression<UnBoxToRef>(loc, &expectedTy, &val, &parentBlock);
-            parentBlock.AppendExpression(ret);
-            return ret->GetResult();
+            castExprs.emplace_back(ret);
+            return castExprs;
         } else {
+            if (srcTy->IsBoxRef()) {
+                auto tempType = RemoveBoxTypeShellIfNeed(*srcTy);
+                auto ret = builder.CreateExpression<UnBox>(loc, tempType, &val, &parentBlock);
+                castExprs.emplace_back(ret);
+                auto [_, tempExprs] =
+                    TypeCastOrBoxIfNeeded(*ret->GetResult(), expectedTy, builder, parentBlock, loc, needCheck);
+                castExprs.insert(castExprs.end(), tempExprs.begin(), tempExprs.end());
+                return castExprs;
+            }
             auto ret = builder.CreateExpression<UnBox>(loc, &expectedTy, &val, &parentBlock);
-            parentBlock.AppendExpression(ret);
-            return ret->GetResult();
+            castExprs.emplace_back(ret);
+            return castExprs;
         }
     } else if (LeftTypeIsBoxOfRightType(*srcTy, expectedTy)) {
         auto ret = builder.CreateExpression<UnBox>(loc, &expectedTy, &val, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        castExprs.emplace_back(ret);
+        return castExprs;
     } else if (LeftTypeIsBoxOfRightType(expectedTy, *srcTy)) {
         auto ret = builder.CreateExpression<Box>(loc, &expectedTy, &val, &parentBlock);
-        parentBlock.AppendExpression(ret);
-        return ret->GetResult();
+        castExprs.emplace_back(ret);
+        return castExprs;
     }
-    return nullptr;
+    return {};
 }
 
 // this API should not force to insert the generated expression into the end of block
-Ptr<Value> TypeCastOrBoxIfNeeded(
+std::pair<Value*, std::vector<Expression*>> TypeCastOrBoxIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
-    Ptr<Value> ret;
-    ret = BoxIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
-    if (ret != nullptr) {
-        return ret;
+    std::vector<Expression*> castExprs;
+    castExprs = BoxIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
+    if (!castExprs.empty()) {
+        return {castExprs.back()->GetResult(), castExprs};
     }
-    ret = TransformGenericIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
-    if (ret != nullptr) {
-        return ret;
+    castExprs = TransformGenericIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
+    if (!castExprs.empty()) {
+        return {castExprs.back()->GetResult(), castExprs};
     }
-    return TypeCastIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
+    castExprs = TypeCastIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
+    if (!castExprs.empty()) {
+        return {castExprs.back()->GetResult(), castExprs};
+    }
+    return {&val, {}};
+}
+
+Value* CreateAndAppendTypeCastOrBoxIfNeeded(Value& val, Type& expectedTy, CHIRBuilder& builder,
+    Block& parentBlock, const DebugLocation& loc, bool needCheck)
+{
+    auto [res, castExprs] = TypeCastOrBoxIfNeeded(val, expectedTy, builder, parentBlock, loc, needCheck);
+    for (auto expr : castExprs) {
+        parentBlock.AppendExpression(expr);
+    }
+    return res;
 }
 
 bool HasNothingType(Type& type)
@@ -1599,5 +1625,189 @@ std::vector<Expression*> GetNonDebugUsers(const Value& val)
         }
     }
     return res;
+}
+
+bool FuncArgTypeIsMatched(const Type& argType, const Type& paramType)
+{
+    if (argType.IsValueType() && !argType.IsGenericRelated() &&
+        (paramType.IsGenericRelated() || paramType.IsBoxRef())) {
+        return false;
+    }
+
+    return true;
+}
+
+Type* GetExpectedArgType(Type& argType, Type& paramType, CHIRBuilder& builder)
+{
+    if (!FuncArgTypeIsMatched(argType, paramType)) {
+        return CreateBoxRefTypeIfNeed(argType, builder);
+    }
+    return &argType;
+}
+
+void CreateAndAppendWrappedStore(CHIRBuilder& builder, Value& rhs, Value& lhs, Block& parent, const DebugLocation& loc)
+{
+    auto resultType = StaticCast<RefType*>(lhs.GetType())->GetBaseType();
+    auto castedRhs = CreateAndAppendTypeCastOrBoxIfNeeded(rhs, *resultType, builder, parent, loc);
+    auto store = builder.CreateExpression<Store>(loc, builder.GetUnitTy(), castedRhs, &lhs, &parent);
+    parent.AppendExpression(store);
+}
+
+Type* GetExpectedRetTypeAndCastedArgs(CHIRBuilder& builder, const FuncType& funcTypeInDecl,
+    Type& instRetType, Block& parentBlock, std::vector<Value*>& args, std::vector<Expression*>& allExprs)
+{
+    auto paramTypes = funcTypeInDecl.GetParamTypes();
+    CJC_ASSERT(paramTypes.size() == args.size());
+    for (size_t i = 0; i < paramTypes.size(); ++i) {
+        auto expectedTy = GetExpectedArgType(*args[i]->GetType(), *paramTypes[i], builder);
+        auto [newArg, castExprs] = TypeCastOrBoxIfNeeded(*args[i], *expectedTy, builder, parentBlock);
+        args[i] = newArg;
+        allExprs.insert(allExprs.end(), castExprs.begin(), castExprs.end());
+    }
+    auto retTyInDecl = funcTypeInDecl.GetReturnType();
+    auto expectedRetTy = GetExpectedArgType(instRetType, *retTyInDecl, builder);
+    return expectedRetTy;
+}
+
+std::vector<Expression*> CreateWrapperApplyWithException(
+    CHIRBuilder& builder, Type& retType, Value& callee, FuncCallContext& context,
+    Block& successBlock, Block& errorBlock, Block& parentBlock, const DebugLocation& loc)
+{
+    std::vector<Expression*> allExprs;
+    auto calleeType = StaticCast<FuncType*>(callee.GetType());
+    Type* expectedRetTy = &retType;
+    if (!calleeType->HasVarArg()) {
+        expectedRetTy = GetExpectedRetTypeAndCastedArgs(
+            builder, *calleeType, retType, parentBlock, context.args, allExprs);
+    }
+    auto apply = builder.CreateExpression<ApplyWithException>(
+        loc, expectedRetTy, &callee, context, &successBlock, &errorBlock, &parentBlock);
+    allExprs.emplace_back(apply);
+    return allExprs;
+}
+
+std::vector<Expression*> CreateWrapperApply(CHIRBuilder& builder, Type& retType,
+    Value& callee, FuncCallContext& context, Block& block, const DebugLocation& loc)
+{
+    std::vector<Expression*> allExprs;
+    auto calleeType = StaticCast<FuncType*>(callee.GetType());
+    Type* expectedRetTy = &retType;
+    if (!calleeType->HasVarArg()) {
+        expectedRetTy = GetExpectedRetTypeAndCastedArgs(
+            builder, *calleeType, retType, block, context.args, allExprs);
+    }
+    auto apply = builder.CreateExpression<Apply>(loc, expectedRetTy, &callee, context, &block);
+    allExprs.emplace_back(apply);
+    return allExprs;
+}
+
+Apply* CreateAndAppendWrapperApply(CHIRBuilder& builder, Type& retType,
+    Value& callee, FuncCallContext& context, Block& block, const DebugLocation& loc)
+{
+    auto allExprs = CreateWrapperApply(builder, retType, callee, context, block, loc);
+    for (auto expr : allExprs) {
+        block.AppendExpression(expr);
+    }
+    return StaticCast<Apply*>(allExprs.back());
+}
+
+std::vector<Expression*> CreateWrapperInvoke(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context, Block& block, const DebugLocation& loc)
+{
+    std::vector<Expression*> allExprs;
+    auto funcType = context.virMethodCtx.originalFuncType;
+    auto paramTypes = funcType->GetParamTypes();
+    paramTypes.erase(paramTypes.begin());
+    auto newFuncType = builder.GetType<FuncType>(paramTypes, funcType->GetReturnType());
+    Type* expectedRetTy = GetExpectedRetTypeAndCastedArgs(
+            builder, *newFuncType, retType, block, context.funcCallCtx.args, allExprs);
+    auto invoke = builder.CreateExpression<Invoke>(loc, expectedRetTy, context, &block);
+    allExprs.emplace_back(invoke);
+    return allExprs;
+}
+
+Invoke* CreateAndAppendWrapperInvoke(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context, Block& block, const DebugLocation& loc)
+{
+    auto allExprs = CreateWrapperInvoke(builder, retType, context, block, loc);
+    for (auto expr : allExprs) {
+        block.AppendExpression(expr);
+    }
+    return StaticCast<Invoke*>(allExprs.back());
+}
+
+std::vector<Expression*> CreateWrapperInvokeWithException(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context,
+    Block& successBlock, Block& errorBlock, Block& parentBlock, const DebugLocation& loc)
+{
+    std::vector<Expression*> allExprs;
+    auto funcType = context.virMethodCtx.originalFuncType;
+    auto paramTypes = funcType->GetParamTypes();
+    paramTypes.erase(paramTypes.begin());
+    auto newFuncType = builder.GetType<FuncType>(paramTypes, funcType->GetReturnType());
+    Type* expectedRetTy = GetExpectedRetTypeAndCastedArgs(
+            builder, *newFuncType, retType, parentBlock, context.funcCallCtx.args, allExprs);
+    auto invoke = builder.CreateExpression<InvokeWithException>(
+        loc, expectedRetTy, context, &successBlock, &errorBlock, &parentBlock);
+    allExprs.emplace_back(invoke);
+    return allExprs;
+}
+
+InvokeWithException* CreateAndAppendWrapperInvokeWithException(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context,
+    Block& successBlock, Block& errorBlock, Block& parentBlock, const DebugLocation& loc)
+{
+    auto allExprs = CreateWrapperInvokeWithException(
+        builder, retType, context, successBlock, errorBlock, parentBlock, loc);
+    for (auto expr : allExprs) {
+        parentBlock.AppendExpression(expr);
+    }
+    return StaticCast<InvokeWithException*>(allExprs.back());
+}
+
+std::vector<Expression*> CreateWrapperInvokeStatic(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context, Block& block, const DebugLocation& loc)
+{
+    std::vector<Expression*> allExprs;
+    Type* expectedRetTy = GetExpectedRetTypeAndCastedArgs(
+            builder, *context.virMethodCtx.originalFuncType, retType, block, context.funcCallCtx.args, allExprs);
+    auto invoke = builder.CreateExpression<InvokeStatic>(loc, expectedRetTy, context, &block);
+    allExprs.emplace_back(invoke);
+    return allExprs;
+}
+
+InvokeStatic* CreateAndAppendWrapperInvokeStatic(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context, Block& block, const DebugLocation& loc)
+{
+    auto allExprs = CreateWrapperInvokeStatic(builder, retType, context, block, loc);
+    for (auto expr : allExprs) {
+        block.AppendExpression(expr);
+    }
+    return StaticCast<InvokeStatic*>(allExprs.back());
+}
+
+std::vector<Expression*> CreateWrapperInvokeStaticWithException(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context,
+    Block& successBlock, Block& errorBlock, Block& parentBlock, const DebugLocation& loc)
+{
+    std::vector<Expression*> allExprs;
+    Type* expectedRetTy = GetExpectedRetTypeAndCastedArgs(
+            builder, *context.virMethodCtx.originalFuncType, retType, parentBlock, context.funcCallCtx.args, allExprs);
+    auto invoke = builder.CreateExpression<InvokeStaticWithException>(
+        loc, expectedRetTy, context, &successBlock, &errorBlock, &parentBlock);
+    allExprs.emplace_back(invoke);
+    return allExprs;
+}
+
+InvokeStaticWithException* CreateAndAppendWrapperInvokeStaticWithException(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context,
+    Block& successBlock, Block& errorBlock, Block& parentBlock, const DebugLocation& loc)
+{
+    auto allExprs = CreateWrapperInvokeStaticWithException(
+        builder, retType, context, successBlock, errorBlock, parentBlock, loc);
+    for (auto expr : allExprs) {
+        parentBlock.AppendExpression(expr);
+    }
+    return StaticCast<InvokeStaticWithException*>(allExprs.back());
 }
 } // namespace Cangjie::CHIR

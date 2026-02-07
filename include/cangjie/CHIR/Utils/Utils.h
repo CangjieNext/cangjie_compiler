@@ -20,6 +20,7 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
+#include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/CHIRContext.h"
@@ -395,8 +396,10 @@ FuncType* ConvertRealFuncTypeToVirtualFuncType(const FuncType& type, CHIRBuilder
  * @param needCheck A flag indicating if a check is needed.
  * @return The value after type casting or boxing if needed.
  */
-Ptr<Value> TypeCastOrBoxIfNeeded(Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock,
-    const DebugLocation& loc = INVALID_LOCATION, bool needCheck = true);
+std::pair<Value*, std::vector<Expression*>> TypeCastOrBoxIfNeeded(Value& val, Type& expectedTy, CHIRBuilder& builder,
+    Block& parentBlock, const DebugLocation& loc = INVALID_LOCATION, bool needCheck = true);
+Value* CreateAndAppendTypeCastOrBoxIfNeeded(Value& val, Type& expectedTy, CHIRBuilder& builder,
+    Block& parentBlock, const DebugLocation& loc = INVALID_LOCATION, bool needCheck = true);
 
 /**
  * @brief Creates and appends an expression to the builder.
@@ -804,5 +807,45 @@ bool IsSTDFunction(const FuncBase& func);
  * @return The non-debug users of the value.
  */
 std::vector<Expression*> GetNonDebugUsers(const Value& val);
+
+bool FuncArgTypeIsMatched(const Type& argType, const Type& paramType);
+Type* GetExpectedArgType(Type& argType, Type& paramType, CHIRBuilder& builder);
+
+void CreateAndAppendWrappedStore(
+    CHIRBuilder& builder, Value& rhs, Value& lhs, Block& parent, const DebugLocation& loc = INVALID_LOCATION);
+
+std::vector<Expression*> CreateWrapperApplyWithException(
+    CHIRBuilder& builder, Type& retType, Value& callee, FuncCallContext& context,
+    Block& successBlock, Block& errorBlock, Block& parentBlock, const DebugLocation& loc = INVALID_LOCATION);
+
+std::vector<Expression*> CreateWrapperApply(CHIRBuilder& builder, Type& retType, Value& callee, FuncCallContext& context,
+    Block& block, const DebugLocation& loc = INVALID_LOCATION);
+
+Apply* CreateAndAppendWrapperApply(CHIRBuilder& builder, Type& retType,
+    Value& callee, FuncCallContext& context, Block& block, const DebugLocation& loc = INVALID_LOCATION);
+
+std::vector<Expression*> CreateWrapperInvoke(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context, Block& block, const DebugLocation& loc = INVALID_LOCATION);
+Invoke* CreateAndAppendWrapperInvoke(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context, Block& block, const DebugLocation& loc = INVALID_LOCATION);
+
+std::vector<Expression*> CreateWrapperInvokeWithException(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context,
+    Block& successBlock, Block& errorBlock, Block& parentBlock, const DebugLocation& loc = INVALID_LOCATION);
+InvokeWithException* CreateAndAppendWrapperInvokeWithException(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context,
+    Block& successBlock, Block& errorBlock, Block& parentBlock, const DebugLocation& loc = INVALID_LOCATION);
+
+std::vector<Expression*> CreateWrapperInvokeStatic(CHIRBuilder& builder,
+    Type& retType, InvokeCallContext& context, Block& block, const DebugLocation& loc = INVALID_LOCATION);
+InvokeStatic* CreateAndAppendWrapperInvokeStatic(CHIRBuilder& builder,
+    Type& retType, InvokeCallContext& context, Block& block, const DebugLocation& loc = INVALID_LOCATION);
+
+std::vector<Expression*> CreateWrapperInvokeStaticWithException(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context,
+    Block& successBlock, Block& errorBlock, Block& parentBlock, const DebugLocation& loc = INVALID_LOCATION);
+InvokeStaticWithException* CreateAndAppendWrapperInvokeStaticWithException(
+    CHIRBuilder& builder, Type& retType, InvokeCallContext& context,
+    Block& successBlock, Block& errorBlock, Block& parentBlock, const DebugLocation& loc = INVALID_LOCATION);
 } // namespace Cangjie::CHIR
 #endif

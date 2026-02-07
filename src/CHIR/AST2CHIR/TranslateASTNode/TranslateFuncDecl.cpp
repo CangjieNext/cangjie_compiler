@@ -354,10 +354,12 @@ void Translator::TranslateVariablesInit(const AST::Decl& parent, CHIR::Parameter
         if (varInitFunc) {
             std::vector<Value*> args{&thisVar};
             auto loc = TranslateLocation(*member);
-            auto apply = CreateAndAppendExpression<Apply>(
-                loc, varInitFunc->GetReturnType(), varInitFunc, FuncCallContext{
+            auto funcCallContext = FuncCallContext{
                 .args = args,
-                .thisType = thisVar.GetType()}, currentBlock);
+                .thisType = thisVar.GetType()
+            };
+            auto apply = CreateAndAppendWrapperApply(
+                builder, *varInitFunc->GetReturnType(), *varInitFunc, funcCallContext, *currentBlock, loc);
 
             auto value = apply->GetResult();
             std::vector<uint64_t> path = {offset + fieldPosition};
@@ -396,10 +398,12 @@ Ptr<Value> Translator::TranslateConstructorFunc(const AST::Decl& parent, const A
         CustomTypeDef* typeDef = GetNominalSymbolTable(parent).get();
         FuncBase* varInitFunc = typeDef->GetVarInitializationFunc();
         CJC_NULLPTR_CHECK(varInitFunc);
-        std::vector<Value*> args{thisVar};
-        CreateAndAppendExpression<Apply>(DebugLocation(), varInitFunc->GetReturnType(), varInitFunc, FuncCallContext{
-            .args = args,
-            .thisType = thisVar->GetType()}, currentBlock);
+        auto funcCallContext = FuncCallContext{
+            .args = std::vector<Value*>{thisVar},
+            .thisType = thisVar->GetType()
+        };
+        CreateAndAppendWrapperApply(
+            builder, *varInitFunc->GetReturnType(), *varInitFunc, funcCallContext, *currentBlock);
     }
     // After generated the initializers, the 'currentBlock' may change.
     auto lastBlock = currentBlock;

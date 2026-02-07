@@ -799,6 +799,8 @@ public:
      */
     virtual std::vector<Value*> GetArgs() const = 0;
 
+    virtual FuncType* GetMethodType() const = 0;
+
     /**
      * @brief Retrieves the type of 'this'.
      *
@@ -874,6 +876,8 @@ public:
      */
     std::vector<Value*> GetArgs() const override;
 
+    FuncType* GetMethodType() const override;
+
     /**
      * @brief Checks if the call is a super call.
      *
@@ -938,7 +942,7 @@ public:
      *
      * @return The method type of this Invoke operation.
      */
-    FuncType* GetMethodType() const;
+    FuncType* GetMethodType() const override;
 
     const std::vector<GenericType*>& GetGenericTypeParams() const;
 

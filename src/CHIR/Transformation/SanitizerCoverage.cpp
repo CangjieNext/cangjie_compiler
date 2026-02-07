@@ -21,18 +21,23 @@
 namespace Cangjie::CHIR {
 
 namespace {
-Ptr<Apply> CreateNonMemberApply(Ptr<Type> resultTy, Ptr<Value> callee, const std::vector<Value*>& args,
+std::vector<Expression*> CreateNonMemberApply(Ptr<Type> resultTy, Ptr<Value> callee, const std::vector<Value*>& args,
     Ptr<Block> parent, CHIRBuilder& builder, DebugLocation loc = INVALID_LOCATION)
 {
-    return builder.CreateExpression<Apply>(loc, resultTy, callee, FuncCallContext{.args = args}, parent);
+    auto funcCallContext = FuncCallContext{
+        .args = args
+    };
+    return CreateWrapperApply(builder, *resultTy, *callee, funcCallContext, *parent, loc);
 }
 
-Ptr<Apply> CreateMemberApply(Ptr<Type> resultTy, Ptr<Value> callee, Ptr<Type> thisType,
+std::vector<Expression*> CreateMemberApply(Ptr<Type> resultTy, Ptr<Value> callee, Ptr<Type> thisType,
     const std::vector<Value*>& args, Ptr<Block> parent, CHIRBuilder& builder, DebugLocation loc = INVALID_LOCATION)
 {
-    return builder.CreateExpression<Apply>(loc, resultTy, callee, FuncCallContext{
+    auto funcCallContext = FuncCallContext{
         .args = args,
-        .thisType = thisType}, parent);
+        .thisType = thisType
+    };
+    return CreateWrapperApply(builder, *resultTy, *callee, funcCallContext, *parent, loc);
 }
 } // namespace
 
@@ -333,10 +338,11 @@ void SanitizerCoverage::InjectTraceForCmp(BinaryExpression& binary, bool isDebug
     auto funcTy = builder.GetType<FuncType>(std::vector<Type*>{lhs->GetType(), rhs->GetType()}, builder.GetUnitTy(),
         /* hasVarLenParam = */ false, /* isCFunc = */ true);
     auto callee = GenerateForeignFunc(callName, binary.GetDebugLocation(), *funcTy, packageName);
-    auto syscall = CreateNonMemberApply(
+    auto allExprs = CreateNonMemberApply(
         builder.GetUnitTy(), callee, std::vector<Value*>{lhs, rhs}, parent, builder, binary.GetDebugLocation());
-
-    syscall->MoveBefore(&binary);
+    for (auto expr : allExprs) {
+        expr->MoveBefore(&binary);
+    }
 
     if (isDebug) {
         std::cout << "[SanitizerCoverage] Add trace compares" << ToPosInfo(binary.GetDebugLocation()) << ".\n";
@@ -389,11 +395,11 @@ void SanitizerCoverage::InjectTraceForSwitch(MultiBranch& mb, bool isDebug)
         typeCast->MoveBefore(&mb);
     }
     // 5. create and insert trace function
-    auto syscall = CreateNonMemberApply(builder.GetUnitTy(), callee,
+    auto allExprs = CreateNonMemberApply(builder.GetUnitTy(), callee,
         std::vector<Value*>{switchVal, rawDataAcquire->GetResult()}, parent, builder, mb.GetDebugLocation());
-
-    syscall->MoveBefore(&mb);
-
+    for (auto expr : allExprs) {
+        expr->MoveBefore(&mb);
+    }
     if (isDebug) {
         std::cout << "[SanitizerCoverage] Add trace switch" << ToPosInfo(mb.GetDebugLocation()) << ".\n";
     }
@@ -450,9 +456,12 @@ std::vector<Value*> SanitizerCoverage::GenerateCStringMemCmp(
     res.push_back(cPointer2->GetResult());
     if (HAS_N_PARAMETER_MEM_CMP_SET.count(fuzzName) != 0) {
         auto getSize = GetImportedFunc(FUNC_MANGLE_NAME_CSTRING_SIZE);
-        auto sizeN = CreateMemberApply(
+        auto allExprs = CreateMemberApply(
             builder.GetInt64Ty(), getSize, oper1.GetType(), {&oper1}, parent, builder, loc);
-        sizeN->MoveBefore(&apply);
+        for (auto expr : allExprs) {
+            expr->MoveBefore(&apply);
+        }
+        auto sizeN = StaticCast<Apply*>(allExprs.back());
         auto sizeNCasted = builder.CreateExpression<TypeCast>(loc, builder.GetUInt32Ty(), sizeN->GetResult(), parent);
         sizeNCasted->MoveBefore(&apply);
         res.push_back(sizeNCasted->GetResult());
@@ -669,7 +678,7 @@ std::pair<Value*, Value*> SanitizerCoverage::CastArrayListToArray(Value& oper1, 
     return std::make_pair(array1->GetResult(), array2->GetResult());
 }
 
-Expression* SanitizerCoverage::CreateMemCmpFunc(const std::string& intrinsicName, Type& paramsType,
+std::vector<Expression*> SanitizerCoverage::CreateMemCmpFunc(const std::string& intrinsicName, Type& paramsType,
     const std::vector<Value*>& params, const DebugLocation& loc, Block* parent)
 {
     // create String or array memory fuzz function with its name and params
@@ -750,16 +759,18 @@ void SanitizerCoverage::InjectTraceMemCmp(Expression& expr, bool isDebug)
     if (intrinsicName == "" || params.empty()) {
         return;
     }
-    Expression* syscall;
+    std::vector<Expression*> allExprs;
     auto parent = expr.GetParentBlock();
     if (intrinsicName == SAN_COV_TRACE_MEM_CMP) {
         auto voidPointerType = builder.GetType<CPointerType>(builder.GetVoidTy());
-        syscall = CreateMemCmpFunc(intrinsicName, *voidPointerType, params, expr.GetDebugLocation(), parent);
+        allExprs = CreateMemCmpFunc(intrinsicName, *voidPointerType, params, expr.GetDebugLocation(), parent);
     } else {
         auto charPointerType = builder.GetType<CPointerType>(builder.GetUInt8Ty());
-        syscall = CreateMemCmpFunc(intrinsicName, *charPointerType, params, expr.GetDebugLocation(), parent);
+        allExprs = CreateMemCmpFunc(intrinsicName, *charPointerType, params, expr.GetDebugLocation(), parent);
     }
-    syscall->MoveBefore(&expr);
+    for (auto e : allExprs) {
+        e->MoveBefore(&expr);
+    }
 
     if (isDebug) {
         std::cout << "[SanitizerCoverage] Add trace Memory Compare" << ToPosInfo(expr.GetDebugLocation()) << ".\n";
@@ -895,12 +906,15 @@ std::vector<Expression*> SanitizerCoverage::GeneratePCGuardExpr(const DebugLocat
         .instTypeArgs = std::vector<Type*>{builder.GetUInt32Ty()}
     };
     auto addPoint = builder.CreateExpression<Intrinsic>(loc, cPointTy, callContext, parent);
-    auto syscall = CreateNonMemberApply(
+    auto allExprs = CreateNonMemberApply(
         builder.GetUnitTy(), pcGuardFunc, std::vector<Value*>{addPoint->GetResult()}, parent, builder, loc);
     if (isDebug) {
         std::cout << "[SanitizerCoverage] Add trace pc guard" << ToPosInfo(loc) << ".\n";
     }
-    return std::vector<Expression*>{arrayTestLoad, offset, addPoint, syscall};
+    allExprs.insert(allExprs.begin(), addPoint);
+    allExprs.insert(allExprs.begin(), offset);
+    allExprs.insert(allExprs.begin(), arrayTestLoad);
+    return allExprs;
 }
 
 std::vector<Expression*> SanitizerCoverage::GenerateInline8bitExpr(
@@ -983,12 +997,12 @@ std::vector<Expression*> SanitizerCoverage::GenerateStackDepthExpr(
     auto& callName = SanCovUpdateStackDepth;
     auto funcTy = builder.GetType<FuncType>(std::vector<Type*>{}, builder.GetUnitTy(), false, true);
     auto callee = GenerateForeignFunc(callName, loc, *funcTy, packageName);
-    auto syscall = CreateNonMemberApply(builder.GetUnitTy(), callee, std::vector<Value*>{}, parent, builder, loc);
+    auto allExprs = CreateNonMemberApply(builder.GetUnitTy(), callee, std::vector<Value*>{}, parent, builder, loc);
 
     if (isDebug) {
         std::cout << "[SanitizerCoverage] Add trace stage depth" << ToPosInfo(loc) << ".\n";
     }
-    return std::vector<Expression*>{syscall};
+    return allExprs;
 }
 
 GlobalVar* SanitizerCoverage::GenerateGlobalVar(
@@ -1063,9 +1077,12 @@ Func* SanitizerCoverage::CreateArrayInitFunc(const std::string& initItemName, Ty
     auto cPointTy = builder.GetType<CPointerType>(&initType);
     auto guardCtorTy = builder.GetType<FuncType>(std::vector<Type*>{builder.GetUInt64Ty()}, cPointTy, false, true);
     auto guardCtorFunc = GenerateForeignFunc(initItemName, INVALID_LOCATION, *guardCtorTy, packageName);
-    auto apply = CreateNonMemberApply(
+    auto allExprs = CreateNonMemberApply(
         cPointTy, guardCtorFunc, std::vector<Value*>{counterVal->GetResult()}, block0, builder, INVALID_LOCATION);
-    block0->AppendExpression(apply);
+    for (auto expr : allExprs) {
+        block0->AppendExpression(expr);
+    }
+    auto apply = StaticCast<Apply*>(allExprs.back());
     auto globalVal = GetGlobalVar(SAN_COV_CTOR2_GLOBAL_VAR_NAME.at(initItemName));
     CJC_NULLPTR_CHECK(globalVal);
     block0->AppendExpression(
@@ -1097,9 +1114,13 @@ Func* SanitizerCoverage::CreatePCTableInitFunc()
     block0->AppendExpression(packExpr);
     auto libc = builder.GetStructType("std.core", "LibC");
     auto libcRef = builder.GetType<RefType>(libc);
-    auto packCString = CreateMemberApply(builder.GetCStringTy(), mallocStringFunc, libcRef,
+    auto allExprs = CreateMemberApply(builder.GetCStringTy(), mallocStringFunc, libcRef,
         {packExpr->GetResult()}, block0, builder, INVALID_LOCATION);
-    block0->AppendExpression(packCString);
+    for (auto expr : allExprs) {
+        block0->AppendExpression(expr);
+    }
+    auto packCString = StaticCast<Apply*>(allExprs.back());
+
     // create arrays of function name, file name and line number
     std::vector<Value*> funcNameArray;
     std::vector<Value*> fileNameArray;
@@ -1108,16 +1129,22 @@ Func* SanitizerCoverage::CreatePCTableInitFunc()
         auto funcName = builder.CreateConstantExpression<StringLiteral>(
             INVALID_LOCATION, builder.GetStringTy(), block0, pcIter.first);
         block0->AppendExpression(funcName);
-        auto cString = CreateMemberApply(builder.GetCStringTy(), mallocStringFunc, libcRef,
+        auto tempExprs = CreateMemberApply(builder.GetCStringTy(), mallocStringFunc, libcRef,
             {funcName->GetResult()}, block0, builder, INVALID_LOCATION);
-        block0->AppendExpression(cString);
+        for (auto expr : tempExprs) {
+            block0->AppendExpression(expr);
+        }
+        auto cString = StaticCast<Apply*>(tempExprs.back());
         funcNameArray.push_back(cString->GetResult());
         auto fileName = builder.CreateConstantExpression<StringLiteral>(INVALID_LOCATION, builder.GetStringTy(), block0,
             builder.GetChirContext().GetSourceFileName(pcIter.second.GetFileID()));
         block0->AppendExpression(fileName);
-        auto fileNameCString = CreateMemberApply(builder.GetCStringTy(), mallocStringFunc, libcRef,
+        auto tempExprs2 = CreateMemberApply(builder.GetCStringTy(), mallocStringFunc, libcRef,
             {fileName->GetResult()}, block0, builder, INVALID_LOCATION);
-        block0->AppendExpression(fileNameCString);
+        for (auto expr : tempExprs2) {
+            block0->AppendExpression(expr);
+        }
+        auto fileNameCString = StaticCast<Apply*>(tempExprs2.back());
         fileNameArray.push_back(fileNameCString->GetResult());
         auto lineId = builder.CreateConstantExpression<IntLiteral>(
             INVALID_LOCATION, builder.GetUInt64Ty(), block0, pcIter.second.GetBeginPos().line);
@@ -1138,10 +1165,13 @@ Func* SanitizerCoverage::CreatePCTableInitFunc()
     auto pcInitFunc = GenerateForeignFunc(SanCovCreatePCTable, INVALID_LOCATION, *pcInitType, packageName);
     auto typecast = builder.CreateExpression<TypeCast>(builder.GetUInt64Ty(), funcSize->GetResult(), block0);
     block0->AppendExpression(typecast);
-    block0->AppendExpression(CreateNonMemberApply(builder.GetUnitTy(), pcInitFunc,
-        std::vector<Value*>{packCString->GetResult(), typecast->GetResult(), rawDataAcquireString->GetResult(),
-            rawDataAcquireFileName->GetResult(), rawDataAcquireLine->GetResult()},
-        block0, builder, INVALID_LOCATION));
+    auto allExprs2 = CreateNonMemberApply(builder.GetUnitTy(), pcInitFunc,
+    std::vector<Value*>{packCString->GetResult(), typecast->GetResult(), rawDataAcquireString->GetResult(),
+        rawDataAcquireFileName->GetResult(), rawDataAcquireLine->GetResult()},
+    block0, builder, INVALID_LOCATION);
+    for (auto expr : allExprs2) {
+        block0->AppendExpression(expr);
+    }
     block0->AppendExpression(builder.CreateTerminator<Exit>(INVALID_LOCATION, block0));
     return func;
 }
@@ -1179,14 +1209,17 @@ void SanitizerCoverage::CreateTopLevelInitFunc(const std::vector<Func*>& initFun
     auto block0 = builder.CreateBlock(body);
     body->SetEntryBlock(block0);
     for (auto init : initFuncs) {
-        block0->AppendExpression(CreateNonMemberApply(
-            init->GetReturnType(), init, std::vector<Value*>{}, block0, builder, INVALID_LOCATION));
+        auto allExprs = CreateNonMemberApply(
+            init->GetReturnType(), init, std::vector<Value*>{}, block0, builder, INVALID_LOCATION);
+        for (auto expr : allExprs) {
+            block0->AppendExpression(expr);
+        }
     }
     block0->AppendExpression(builder.CreateTerminator<Exit>(INVALID_LOCATION, block0));
     // call top level fun in global init func
     auto initExpr = CreateNonMemberApply(builder.GetVoidTy(), initFunc, std::vector<Value*>{},
         globalInitFunc.GetEntryBlock(), builder, INVALID_LOCATION);
-    AddExpressionsToGlobalInitFunc(globalInitFunc, std::vector<Expression*>{initExpr});
+    AddExpressionsToGlobalInitFunc(globalInitFunc, initExpr);
 }
 
 void SanitizerCoverage::GenerateInitFunc(const Func& globalInitFunc, bool isDebug)

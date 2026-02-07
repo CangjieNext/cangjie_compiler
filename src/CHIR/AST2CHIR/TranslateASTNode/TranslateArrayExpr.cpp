@@ -60,12 +60,55 @@ Ptr<Value> Translator::Visit(const AST::ArrayExpr& array)
     return InitArrayByLambda(array);
 }
 
+Expression* Translator::TryCreateWrapperInvoke(
+    Type& retTy, InvokeCallContext& context, bool isStatic, const DebugLocation& loc)
+{
+    auto paramTypes = context.virMethodCtx.originalFuncType->GetParamTypes();
+    auto& args = context.funcCallCtx.args;
+    size_t offset = isStatic ? 0 : 1;
+    CJC_ASSERT(paramTypes.size() == args.size() + offset);
+    // don't need to cast the this object for `invoke`
+    for (size_t i = 0; i < args.size(); ++i) {
+        auto expectedTy = GetExpectedArgType(*args[i]->GetType(), *paramTypes[i + offset], builder);
+        args[i] = TypeCastOrBoxIfNeeded(*args[i], *expectedTy);
+    }
+    auto retTyInDecl = context.virMethodCtx.originalFuncType->GetReturnType();
+    auto expectedRetTy = GetExpectedArgType(retTy, *retTyInDecl, builder);
+    Expression* invoke = nullptr;
+    if (isStatic) {
+        invoke = TryCreate<InvokeStatic>(currentBlock, expectedRetTy, context);
+    } else {
+        invoke = TryCreate<Invoke>(currentBlock, expectedRetTy, context);
+    }
+    invoke->SetDebugLocation(loc);
+    return invoke;
+}
+
+Expression* Translator::TryCreateWrapperApply(
+    Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const DebugLocation& loc)
+{
+    auto calleeType = StaticCast<FuncType*>(callee.GetType());
+    if (!instFuncTy.HasVarArg()) {
+        auto paramTypes = calleeType->GetParamTypes();
+        CJC_ASSERT(paramTypes.size() == context.args.size());
+        for (size_t i = 0; i < paramTypes.size(); ++i) {
+            auto expectedTy = GetExpectedArgType(*context.args[i]->GetType(), *paramTypes[i], builder);
+            context.args[i] = TypeCastOrBoxIfNeeded(*context.args[i], *expectedTy);
+        }
+    }
+    auto retTyInDecl = calleeType->GetReturnType();
+    auto retTyInCallSite = instFuncTy.GetReturnType();
+    auto expectedRetTy = GetExpectedArgType(*retTyInCallSite, *retTyInDecl, builder);
+    auto apply = TryCreate<Apply>(currentBlock, expectedRetTy, &callee, context);
+    apply->SetDebugLocation(loc);
+    return apply;
+}
+
 Expression* Translator::CreateAndAppendApplyCallFromCallExpr(
     Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::CallExpr& expr)
 {
-    auto funcCall = TryCreate<Apply>(currentBlock, instFuncTy.GetReturnType(), &callee, context);
     const auto& loc = TranslateLocation(expr);
-    funcCall->SetDebugLocation(loc);
+    auto funcCall = TryCreateWrapperApply(callee, context, instFuncTy, loc);
     if (expr.callKind == AST::CallKind::CALL_SUPER_FUNCTION) {
         if (auto apply = DynamicCast<Apply*>(funcCall)) {
             apply->SetSuperCall();
@@ -86,10 +129,8 @@ Expression* Translator::CreateAndAppendApplyCallFromArray(
     Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::Expr& array)
 {
     CJC_ASSERT(array.astKind == AST::ASTKind::ARRAY_EXPR || array.astKind == AST::ASTKind::ARRAY_LIT);
-    auto funcCall = TryCreate<Apply>(currentBlock, instFuncTy.GetReturnType(), &callee, context);
     const auto& loc = TranslateLocation(array);
-    funcCall->SetDebugLocation(loc);
-    return funcCall;
+    return TryCreateWrapperApply(callee, context, instFuncTy, loc);
 }
 
 Expression* Translator::CreateAndAppendGVInitFuncCall(Value& callee)
@@ -244,7 +285,7 @@ Ptr<Value> Translator::InitArrayByCollection(const AST::ArrayExpr& array)
         }
     };
     auto loc = TranslateLocation(array);
-    Value* sizeVal = TryCreate<Invoke>(currentBlock, loc, sizeTy, invokeInfo)->GetResult();
+    Value* sizeVal = TryCreateWrapperInvoke(*sizeTy, invokeInfo, false, loc)->GetResult();
 
     // Create the array `RawArrayAllocate(eleTy, collection.size)`
     auto arrayTy = chirTy.TranslateType(*array.ty);

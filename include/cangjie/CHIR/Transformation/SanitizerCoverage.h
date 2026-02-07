@@ -57,8 +57,8 @@ private:
     Expression* CreateOneCPointFromList(Value& array, Apply& apply, Type& elementType, Type& startType);
     std::pair<std::string, std::vector<Value*>> GetMemFuncSymbols(Value& oper1, Value& oper2, Apply& apply);
 
-    Expression* CreateMemCmpFunc(const std::string& intrinsicName, Type& paramsType, const std::vector<Value*>& params,
-        const DebugLocation& loc, Block* parent);
+    std::vector<Expression*> CreateMemCmpFunc(const std::string& intrinsicName, Type& paramsType,
+        const std::vector<Value*>& params, const DebugLocation& loc, Block* parent);
 
     // create coverage call for different option
     std::vector<Expression*> GenerateCoverageCallByOption(const DebugLocation& loc, bool isDebug, Block* parent);
