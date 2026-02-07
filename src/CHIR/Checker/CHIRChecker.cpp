@@ -1669,7 +1669,7 @@ void CHIRChecker::CheckBlock(const Block& block, const Func& topLevelFunc)
 
     // 4. expressions in block can't be empty
     auto exprs = block.GetExpressions();
-    if (optionalRules.find(Rule::EMPTY_BLOCK) != optionalRules.end() && exprs.size() == 0) {
+    if (optionalRules.find(Rule::EMPTY_BLOCK) != optionalRules.end() && exprs.empty()) {
         ErrorInFunc(topLevelFunc, "there is no expression in block " + block.GetIdentifier() + ".");
     }
 

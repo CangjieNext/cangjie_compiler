@@ -98,8 +98,8 @@ CGEnumType::CGEnumTypeKind CGEnumType::CalculateCGEnumTypeKind()
         return CGEnumTypeKind::EXHAUSTIVE_UNASSOCIATED;
     }
     if (ctors.size() == 2U && // OptionLike always has two constructors
-        ((ctors[0].funcType->GetParamTypes().size() == 0U && ctors[1].funcType->GetParamTypes().size() == 1U) ||
-        (ctors[0].funcType->GetParamTypes().size() == 1U && ctors[1].funcType->GetParamTypes().size() == 0U))) {
+        ((ctors[0].funcType->GetParamTypes().empty() && ctors[1].funcType->GetParamTypes().size() == 1U) ||
+         (ctors[0].funcType->GetParamTypes().size() == 1U && ctors[1].funcType->GetParamTypes().empty()))) {
         bool isAntiOptionLike = ctors[0].funcType->GetParamTypes().empty();
         CHIR::Type* associatedValueType = isAntiOptionLike ? ctors[1].funcType->GetParamTypes()[0]
                                                             : ctors[0].funcType->GetParamTypes()[0];

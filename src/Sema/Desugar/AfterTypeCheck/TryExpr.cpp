@@ -123,7 +123,7 @@ OwnedPtr<TryExpr> TypeChecker::TypeCheckerImpl::CreateTryInFinally(
         Ptr<Decl> func = nullptr;
         for (auto& decl : decls) {
             if (auto funcDecl = DynamicCast<FuncDecl*>(decl); funcDecl && funcDecl->funcBody &&
-                !funcDecl->funcBody->paramLists.empty() && funcDecl->funcBody->paramLists.front()->params.size() == 0) {
+                !funcDecl->funcBody->paramLists.empty() && funcDecl->funcBody->paramLists.front()->params.empty()) {
                 func = decl;
                 break;
             }

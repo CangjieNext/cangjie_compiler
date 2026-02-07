@@ -303,7 +303,7 @@ void FunctionInline::ReplaceFuncResult(LocalVar* resNew, LocalVar* resOld)
     CJC_ASSERT(valType->IsRef());
     auto users = resOld->GetUsers();
     // Don't need to handle it when the result of apply is not used.
-    if (users.size() == 0) {
+    if (users.empty()) {
         return;
     }
     valType = Cangjie::StaticCast<RefType*>(valType)->GetBaseType();

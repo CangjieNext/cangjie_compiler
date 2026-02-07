@@ -97,7 +97,7 @@ CallGraph::CallGraph(const Package* package, DevirtualizationInfo& devirtFuncInf
 {
     // build the call graph.
     for (auto func : package->GetGlobalFuncs()) {
-        if (func->GetUsers().size() == 0) {
+        if (func->GetUsers().empty()) {
             AddToCallGraph(*func, true);
         } else {
             AddToCallGraph(*func, false);

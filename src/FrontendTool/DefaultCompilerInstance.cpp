@@ -201,6 +201,9 @@ bool DefaultCIImpl::SaveCjo(const AST::Package& pkg)
     Utils::ProfileRecorder::Start("Save cjo", "Save ast");
     bool res = FileUtil::WriteBufferToASTFile(astFileName, astData);
     Utils::ProfileRecorder::Stop("Save cjo", "Save ast");
+    // Clear astData immediately after writing to reduce memory usage, especially for large packages
+    astData.clear();
+    astData.shrink_to_fit();
     if (!res) {
         Errorln("fail to generate file: " + astFileName);
     } else if (ci.invocation.globalOptions.outputMode != GlobalOptions::OutputMode::CHIR) {
@@ -292,6 +295,12 @@ bool DefaultCIImpl::EmitLLVMSimilarBytecode(Package& pkg, bool enableIncrement)
         auto fileName = GenerateFileName(pkg.fullPackageName, "");
         ci.cachedInfo.bitcodeFilesName = std::vector<std::string>{fileName};
     }
+    
+    // Clear llvmModules immediately after saving bc files to reduce memory usage,
+    // especially when compiling multiple packages. This avoids keeping all modules
+    // in memory until the destructor is called.
+    CodeGen::ClearPackageModules(llvmModules);
+    
     return true;
 }
 #endif

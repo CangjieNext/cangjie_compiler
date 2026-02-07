@@ -85,7 +85,7 @@ void GenericInstantiationManager::InstantiatedExtendRecorder::RecordExtendForRef
 {
     bool ignored = !Ty::IsTyCorrect(re.ty) || !re.ref.target || re.ref.target->IsBuiltIn() ||
         !re.ref.target->TestAttr(Attribute::IN_EXTEND);
-    if (ignored || gim.structContext.empty()) {
+    if (ignored || gim.GetStructContext().empty()) {
         return;
     }
     auto extend = re.ref.target->outerDecl;

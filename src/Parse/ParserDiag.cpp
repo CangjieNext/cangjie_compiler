@@ -413,8 +413,8 @@ static std::pair<Range, std::string> GetSignature(Node& node)
                     KIND_TO_STR.at(node.astKind).second};
             }
         }
-        return {MakeRange(node.begin, node.begin + KIND_TO_STR.at(node.astKind).first.size()),
-            KIND_TO_STR.at(node.astKind).second};
+        const auto& kindStr = KIND_TO_STR.at(node.astKind);
+        return {MakeRange(node.begin, node.begin + kindStr.first.size()), kindStr.second};
     }
 
     if (node.astKind == ASTKind::PRIMARY_CTOR_DECL) {
@@ -572,9 +572,10 @@ void ParserImpl::DiagConflictedModifier(const Modifier& resMod, const Modifier& 
 
     std::string hintN1;
     std::string hintN2;
-    if (KIND_TO_STR.count(node->astKind) != 0) {
-        hintN1 = KIND_TO_STR.at(node->astKind).first;
-        hintN2 = KIND_TO_STR.at(node->astKind).second;
+    auto kindIt = KIND_TO_STR.find(node->astKind);
+    if (kindIt != KIND_TO_STR.end()) {
+        hintN1 = kindIt->second.first;
+        hintN2 = kindIt->second.second;
     } else if (node->astKind == ASTKind::PRIMARY_CTOR_DECL) {
         auto pcd = StaticAs<ASTKind::PRIMARY_CTOR_DECL>(node);
         hintN1 = pcd->identifier;

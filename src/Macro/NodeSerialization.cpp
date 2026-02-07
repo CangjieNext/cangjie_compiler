@@ -599,7 +599,7 @@ flatbuffers::Offset<NodeFormat::Type> NodeWriter::SerializeTupleType(AstType typ
     auto leftParenPos = FlatPosCreateHelper(tupleType->leftParenPos);
     auto rightParenPos = FlatPosCreateHelper(tupleType->rightParenPos);
     auto commaPosVector = CreatePositionVector(tupleType->commaPosVector);
-    if (tupleType->commaPosVector.size() == 0) {
+    if (tupleType->commaPosVector.empty()) {
         Errorln("Legacy tuple type syntax no longer allowed after version 0.28.4, use ',' instead.");
     }
     auto fbTupleType =

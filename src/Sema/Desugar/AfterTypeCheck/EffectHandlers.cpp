@@ -74,7 +74,7 @@ Ptr<FuncDecl> GetDefaultInitDecl(ClassDecl& classDecl)
         CJC_NULLPTR_CHECK(decl);
         if (decl->astKind == ASTKind::FUNC_DECL && decl.get()->TestAttr(Attribute::CONSTRUCTOR)) {
             auto funcDecl = StaticCast<FuncDecl*>(decl.get());
-            if (funcDecl->funcBody->paramLists.size() == 1 && funcDecl->funcBody->paramLists[0]->params.size() == 0) {
+            if (funcDecl->funcBody->paramLists.size() == 1 && funcDecl->funcBody->paramLists[0]->params.empty()) {
                 inits.emplace_back(funcDecl);
             }
         }

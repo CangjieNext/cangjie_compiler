@@ -91,7 +91,7 @@ template <typename T> void CHIR2BCHIR::TranslateIntrinsicExpression(Context& ctx
     auto intrinsicKind = static_cast<Bchir::ByteCodeContent>(intrinsic.GetIntrinsicKind());
     CJC_ASSERT(auxInfo.size() <= Bchir::FLAG_THREE);
     auto opCode =
-        auxInfo.size() == 0 ? OpCode::INTRINSIC0 : (auxInfo.size() == 1 ? OpCode::INTRINSIC1 : OpCode::INTRINSIC2);
+        auxInfo.empty() ? OpCode::INTRINSIC0 : (auxInfo.size() == 1 ? OpCode::INTRINSIC1 : OpCode::INTRINSIC2);
     if (intrinsic.GetExprKind() != ExprKind::INTRINSIC) {
         CJC_ASSERT(intrinsic.GetExprKind() == ExprKind::INTRINSIC_WITH_EXCEPTION);
         opCode = static_cast<OpCode>(static_cast<size_t>(opCode) + Bchir::FLAG_THREE);

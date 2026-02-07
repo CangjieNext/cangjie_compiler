@@ -158,7 +158,7 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(
     std::unordered_map<std::string, Ptr<Ty>> actualTyArgMap;
     std::vector<Ptr<Ty>> funcTyParams;
     std::vector<OwnedPtr<Type>> actualPrimitiveType;
-    if (genericConfig && genericConfig->instTypes.size() != 0) {
+    if (genericConfig && !genericConfig->instTypes.empty()) {
         GetArgsAndRetGenericActualTyVector(
             genericConfig, sampleMethod, actualTyArgMap, funcTyParams, actualPrimitiveType, typeManager);
     }
@@ -355,7 +355,7 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeInitCjObjectFunc(FuncDecl& ctor
     std::unordered_map<std::string, Ptr<Ty>> actualTyArgMap;
     std::vector<Ptr<Ty>> funcTyParams;
     std::vector<OwnedPtr<Type>> actualPrimitiveType;
-    if (genericConfig && genericConfig->instTypes.size() != 0) {
+    if (genericConfig && !genericConfig->instTypes.empty()) {
         GetArgsAndRetGenericActualTyVector(
             genericConfig, ctor, actualTyArgMap, funcTyParams, actualPrimitiveType, typeManager);
     }

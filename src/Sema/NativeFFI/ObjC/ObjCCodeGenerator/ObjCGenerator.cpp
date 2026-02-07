@@ -335,7 +335,7 @@ std::string ObjCGenerator::GenerateObjCCall(const std::string& lhs, const std::s
 std::string ObjCGenerator::GenerateCCall(const std::string& funcName, const std::vector<std::string> args) const
 {
     std::string result = funcName + "(";
-    if (args.size() != 0) {
+    if (!args.empty()) {
         for (size_t i = 0; i < args.size(); i++) {
             result += args.at(i);
             if (i != args.size() - 1) {
@@ -697,7 +697,7 @@ std::string ObjCGenerator::GenerateFuncParamLists(const std::vector<OwnedPtr<Fun
                 }
                 break;
             case FunctionListFormat::STATIC_REF:
-                if (paramLists[0]->params.size() == 0 && type != ObjCFunctionType::STATIC) {
+                if (paramLists[0]->params.empty() && type != ObjCFunctionType::STATIC) {
                     genParams += VOID_POINTER_TYPE;
                 }
                 genParams += ")";
@@ -713,7 +713,7 @@ std::string ObjCGenerator::GenerateFuncParamLists(const std::vector<OwnedPtr<Fun
         }
     }
     if (format == FunctionListFormat::STATIC_REF || format == FunctionListFormat::CANGJIE_DECL) {
-        if (paramLists[0]->params.size() == 0 && type != ObjCFunctionType::STATIC) {
+        if (paramLists[0]->params.empty() && type != ObjCFunctionType::STATIC) {
             genParams += VOID_POINTER_TYPE;
         }
         genParams += ")";

@@ -1222,9 +1222,10 @@ std::vector<ClassType*> GetSuperTypesRecusively(Type& subType, CHIRBuilder& buil
         for (auto upperBound : genericType->GetUpperBounds()) {
             auto classType = StaticCast<ClassType*>(upperBound->StripAllRefs());
             result.emplace_back(classType);
+            std::unordered_set<ClassType*> resultSet(result.begin(), result.end());
             auto tempParents = GetSuperTypesRecusively(*classType, builder);
             for (auto p : tempParents) {
-                if (std::find(result.begin(), result.end(), p) == result.end()) {
+                if (resultSet.insert(p).second) {
                     result.emplace_back(p);
                 }
             }

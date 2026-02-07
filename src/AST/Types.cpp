@@ -819,7 +819,7 @@ std::string TypeAliasTy::String() const
 
 std::string Ty::PrintTypeArgs() const
 {
-    if (typeArgs.size() == 0) {
+    if (typeArgs.empty()) {
         return "";
     }
     return "<" + GetTypesToStr(typeArgs, ", ") + ">";
