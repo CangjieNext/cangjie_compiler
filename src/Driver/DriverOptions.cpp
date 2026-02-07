@@ -326,6 +326,11 @@ bool DriverOptions::CheckStaticOption()
         std::string tripleString = target.ToFullTripleString();
         Warningln("'--static' option is not supported when targeting %s.\n", tripleString.c_str());
     }
+    if (linkStaticStd) {
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_static_dystd_conflict, DEFAULT_POSITION);
+        return false;
+    }
     return true;
 }
 
