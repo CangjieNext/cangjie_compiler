@@ -36,7 +36,7 @@ static const std::string PrintArgTys(const std::string& prefix,
     const std::vector<Type*>& argTys, const std::string& suffix, bool isSrcCodeString = false)
 {
     std::stringstream ss;
-    if (argTys.size() == 0) {
+    if (argTys.empty()) {
         return "";
     }
     if (isSrcCodeString) {

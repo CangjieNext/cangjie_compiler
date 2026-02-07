@@ -262,7 +262,7 @@ bool IsOverflowOperator(const std::string& name, const FuncType& type)
     if (params.size() == 1 && IsOverflowOperator(name)) {
         return CanBeIntegerType(*params[0]) && CanBeIntegerType(*type.GetReturnType());
     }
-    if (params.size() == 0 && name == "-") {
+    if (params.empty() && name == "-") {
         return CanBeIntegerType(*type.GetReturnType());
     }
     return false;

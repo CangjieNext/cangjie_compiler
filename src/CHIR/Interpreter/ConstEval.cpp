@@ -303,7 +303,7 @@ Cangjie::CHIR::ClassType* IVal2CHIR::FindClassType(const std::string& mangledNam
         }
         resultClassDef = *importResult;
     }
-    if (resultClassDef->GetGenericTypeParams().size() != 0) {
+    if (!resultClassDef->GetGenericTypeParams().empty()) {
         return nullptr;
     }
     return chirBuilder.GetType<ClassType>(resultClassDef);

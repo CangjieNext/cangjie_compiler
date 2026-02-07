@@ -183,7 +183,7 @@ OCFFIParserImpl FFIParserImpl::ObjC() const
 void FFIParserImpl::CheckZeroOrSingleStringLitArgAnnotation(const AST::Annotation &anno,
                                                             const std::string &annotationName) const
 {
-    if (anno.args.size() == 0) {
+    if (anno.args.empty()) {
         return;
     }
 

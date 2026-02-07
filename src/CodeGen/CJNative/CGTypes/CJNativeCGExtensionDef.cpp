@@ -17,6 +17,7 @@
 #include "cangjie/CHIR/IR/Type/CustomTypeDef.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 #include <cstdint>
+#include <unordered_set>
 
 using namespace Cangjie;
 using namespace CodeGen;
@@ -542,12 +543,13 @@ bool CGExtensionDef::CreateExtensionDefForType(const CHIR::ClassType& inheritedT
 }
 
 namespace {
-void GetOrderedParentTypesRecusively(
-    CHIR::ClassType& type, std::list<const CHIR::ClassType*>& parents, CHIR::CHIRBuilder& builder)
+void GetOrderedParentTypesRecusively(CHIR::ClassType& type, std::list<const CHIR::ClassType*>& parents,
+    CHIR::CHIRBuilder& builder, std::unordered_set<const CHIR::ClassType*>& parentSet)
 {
     if (auto superClass = type.GetSuperClassTy(&builder)) {
+        parentSet.insert(superClass);
         parents.emplace_front(superClass);
-        GetOrderedParentTypesRecusively(*superClass, parents, builder);
+        GetOrderedParentTypesRecusively(*superClass, parents, builder, parentSet);
     }
 
     auto classDef = type.GetClassDef();
@@ -555,11 +557,12 @@ void GetOrderedParentTypesRecusively(
     CJC_ASSERT(res);
     for (auto ty : classDef->GetImplementedInterfaceTys()) {
         auto instType = StaticCast<CHIR::ClassType*>(ReplaceRawGenericArgType(*ty, replaceTable, builder));
-        if (std::find(parents.begin(), parents.end(), instType) != parents.end()) {
+        if (parentSet.count(instType) != 0) {
             continue;
         }
+        parentSet.insert(instType);
         parents.emplace_back(instType);
-        GetOrderedParentTypesRecusively(*instType, parents, builder);
+        GetOrderedParentTypesRecusively(*instType, parents, builder, parentSet);
     }
 }
 
@@ -567,24 +570,26 @@ void GetOrderedParentTypesRecusively(
  *  all classes are front of all interfaces, and parent class must be front of sub class
  *  but we don't care about the order of interfaces
  */
-void GetOrderedParentTypesRecusively(
-    const CHIR::CustomTypeDef& def, std::list<const CHIR::ClassType*>& parents, CHIR::CHIRBuilder& builder)
+void GetOrderedParentTypesRecusively(const CHIR::CustomTypeDef& def, std::list<const CHIR::ClassType*>& parents,
+    CHIR::CHIRBuilder& builder, std::unordered_set<const CHIR::ClassType*>& parentSet)
 {
     if (auto classDef = DynamicCast<const CHIR::ClassDef*>(&def)) {
         if (auto superClass = classDef->GetSuperClassTy()) {
+            parentSet.insert(superClass);
             parents.emplace_front(superClass);
-            GetOrderedParentTypesRecusively(*superClass, parents, builder);
+            GetOrderedParentTypesRecusively(*superClass, parents, builder, parentSet);
         }
     }
     for (auto interface : def.GetImplementedInterfaceTys()) {
-        if (std::find(parents.begin(), parents.end(), interface) != parents.end()) {
+        if (parentSet.count(interface) != 0) {
             continue;
         }
+        parentSet.insert(interface);
         parents.emplace_back(interface);
         if (def.TestAttr(CHIR::Attribute::COMPILER_ADD) && def.IsExtend()) {
             continue;
         }
-        GetOrderedParentTypesRecusively(*interface, parents, builder);
+        GetOrderedParentTypesRecusively(*interface, parents, builder, parentSet);
     }
 }
 } // namespace
@@ -598,8 +603,10 @@ std::pair<uint32_t, std::vector<std::pair<const CHIR::Type*, const CHIR::Type*>>
         if (chirDef.GetCustomKind() == CHIR::CustomDefKind::TYPE_CLASS) {
             orderedInheritedTypes.push_back(StaticCast<CHIR::ClassType>(targetType));
         }
+        std::unordered_set<const CHIR::ClassType*> parentSet(
+            orderedInheritedTypes.begin(), orderedInheritedTypes.end());
         CHIR::CHIRBuilder& chirBuilder = cgMod.GetCGContext().GetCHIRBuilder();
-        GetOrderedParentTypesRecusively(chirDef, orderedInheritedTypes, chirBuilder);
+        GetOrderedParentTypesRecusively(chirDef, orderedInheritedTypes, chirBuilder, parentSet);
         for (auto iTy : orderedInheritedTypes) {
             if (iTy->IsAny()) {
                 continue;

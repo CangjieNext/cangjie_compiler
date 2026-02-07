@@ -480,7 +480,7 @@ void AST2CHIR::AST2CHIRCheck()
 bool AST2CHIR::TryToDeserializeCHIR()
 {
     auto& chirFiles = opts.inputChirFiles;
-    CJC_ASSERT(chirFiles.size() != 0);
+    CJC_ASSERT(!chirFiles.empty());
     ToCHIR::Phase phase;
     bool success = true;
     for (auto chirFile : chirFiles) {
@@ -506,7 +506,7 @@ static Package::AccessLevel BuildPackageAccessLevel(const AST::AccessLevel& leve
 bool AST2CHIR::ToCHIRPackage(AST::Package& node)
 {
     // It can be not null in case of part of the package was deserialized from .chir
-    bool needDesCHIR = opts.inputChirFiles.size() != 0;
+    bool needDesCHIR = !opts.inputChirFiles.empty();
     if (!needDesCHIR) {
         package = builder.CreatePackage(node.fullPackageName);
         outputCHIR = opts.outputMode == GlobalOptions::OutputMode::CHIR;

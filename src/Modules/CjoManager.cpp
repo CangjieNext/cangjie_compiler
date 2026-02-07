@@ -410,7 +410,7 @@ void CjoManagerImpl::SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package
         // For cjlint tool could have more than one src-package.
         bool isSrcPackage = Utils::In(srcPackages,
             [&pkgName2PkgInfo](Ptr<Package> pkg) { return pkg->fullPackageName == pkgName2PkgInfo.first; });
-        if (isSrcPackage && globalOptions.commonPartCjos.size() == 0) {
+        if (isSrcPackage && globalOptions.commonPartCjos.empty()) {
             continue;
         }
         auto& pkgInfo = pkgName2PkgInfo.second;
@@ -429,7 +429,7 @@ std::vector<OwnedPtr<ASTLoader>>& CjoManagerImpl::GetCommonPartCjos(
 {
     CJC_ASSERT(globalOptions.commonPartCjos.size() > 0);
 
-    if (commonPartLoaders.size() == 0) {
+    if (commonPartLoaders.empty()) {
         for (auto commonPartCjo : globalOptions.commonPartCjos) {
             commonPartLoaders.emplace_back(ReadCjo(packageName, commonPartCjo, cjoManager));
         }

@@ -602,7 +602,7 @@ Func* Block::GetTopLevelFunc() const
 
 Terminator* Block::GetTerminator() const
 {
-    if (exprs.size() == 0) {
+    if (exprs.empty()) {
         return nullptr;
     }
     return DynamicCast<Terminator*>(exprs.back());

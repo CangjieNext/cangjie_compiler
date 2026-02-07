@@ -642,7 +642,7 @@ void DoNewMangling(
     auto handleMangle = [&baseMangler, &prefix](Ptr<Node> node) -> VisitAction {
         std::vector<Ptr<Node>> filteredPrefix;
         for (size_t i = 0; i < prefix.size(); i++) {
-            if (filteredPrefix.size() != 0 && Is<Expr>(filteredPrefix.back().get()) &&
+            if (!filteredPrefix.empty() && Is<Expr>(filteredPrefix.back().get()) &&
                 static_cast<AST::Expr*>(filteredPrefix.back().get())->desugarExpr.get() == prefix[i].get()) {
                 filteredPrefix.pop_back();
             }

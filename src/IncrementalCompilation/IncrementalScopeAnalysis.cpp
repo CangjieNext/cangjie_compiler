@@ -199,17 +199,16 @@ extern void MergeCHIROptEffectMap(
 extern void DeleteRemovedNodesInCHIROptEffectMap(
     const std::list<std::string>& removedDecls, OptEffectStrMap& effectMap)
 {
+    std::unordered_set<std::string> removedSet(removedDecls.begin(), removedDecls.end());
     auto it = effectMap.begin();
     while (it != effectMap.end()) {
-        auto rawIt = std::find(removedDecls.begin(), removedDecls.end(), it->first);
-        if (rawIt != removedDecls.end()) {
+        if (removedSet.count(it->first) != 0) {
             it = effectMap.erase(it);
             continue;
         }
         auto effectedIt = it->second.begin();
         while (effectedIt != it->second.end()) {
-            auto rawIt2 = std::find(removedDecls.begin(), removedDecls.end(), *effectedIt);
-            if (rawIt2 != removedDecls.end()) {
+            if (removedSet.count(*effectedIt) != 0) {
                 effectedIt = it->second.erase(effectedIt);
             } else {
                 ++effectedIt;

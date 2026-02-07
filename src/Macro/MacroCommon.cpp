@@ -212,7 +212,7 @@ void MacroFormatter::LinesToString(bool hasComment)
     auto initialIndent = (offset - 1) / SPACE_NUM;
     auto indentation = 0;
     for (size_t i = 0; i < lines.size(); i++) {
-        if (lines[i].size() == 0) {
+        if (lines[i].empty()) {
             continue;
         }
         if (hasComment && lines[i].size() > 1) {

@@ -72,7 +72,7 @@ bool OptionTable::ShouldArgumentBeRecognized(
     const std::string& argName, bool hasValue, const OptionTable::OptionInfo& i)
 {
 #ifdef CANGJIE_VISIBLE_OPTIONS_ONLY
-    if (std::count(i.groups.begin(), i.groups.end(), Options::Group::VISIBLE) == 0) {
+    if (std::find(i.groups.begin(), i.groups.end(), Options::Group::VISIBLE) == i.groups.end()) {
         return false;
     };
 #endif
@@ -114,7 +114,7 @@ std::optional<OptionArgInstance> OptionTable::ParseOptionArg(const std::string& 
     if (result == std::end(INFO_LIST)) {
         result = std::find_if(INFO_LIST.begin(), INFO_LIST.end(), [&argStr, this] (const OptionTable::OptionInfo& i) {
 #ifdef CANGJIE_VISIBLE_OPTIONS_ONLY
-            if (std::count(i.groups.begin(), i.groups.end(), Options::Group::VISIBLE) == 0) {
+            if (std::find(i.groups.begin(), i.groups.end(), Options::Group::VISIBLE) == i.groups.end()) {
                 return false;
             };
 #endif
@@ -261,7 +261,7 @@ void OptionTable::PrintInfo(const OptionInfo& info, Options::Backend backend, bo
     }
     std::string desc(info.help);
 
-    if (std::count(info.groups.begin(), info.groups.end(), Options::Group::STABLE) == 0) {
+    if (std::find(info.groups.begin(), info.groups.end(), Options::Group::STABLE) == info.groups.end()) {
         desc += " (Experimental)";
     }
 
@@ -274,22 +274,27 @@ void OptionTable::PrintInfo(const OptionInfo& info, Options::Backend backend, bo
 
     for (const Options::OptionValue& optionValue : info.values) {
 #if defined(CANGJIE_VISIBLE_OPTIONS_ONLY)
-        if (std::count(optionValue.groups.begin(), optionValue.groups.end(), Options::Group::VISIBLE) == 0) {
+        if (std::find(optionValue.groups.begin(), optionValue.groups.end(),
+                Options::Group::VISIBLE) == optionValue.groups.end()) {
             continue;
         }
 #endif
-        if (std::count(optionValue.backends.begin(), optionValue.backends.end(), Options::Backend::ALL) == 0 &&
-            std::count(optionValue.backends.begin(), optionValue.backends.end(), backend) == 0) {
+        bool backendMatches = std::count(optionValue.backends.begin(), optionValue.backends.end(),
+                Options::Backend::ALL) != 0
+            || std::count(optionValue.backends.begin(), optionValue.backends.end(), backend) != 0;
+        if (!backendMatches) {
             continue;
         }
-        if (std::count(optionValue.groups.begin(), optionValue.groups.end(), Options::Group::STABLE) == 0 &&
-            !showExperimental) {
+        if (std::find(optionValue.groups.begin(), optionValue.groups.end(),
+                Options::Group::STABLE) == optionValue.groups.end()
+            && !showExperimental) {
             continue;
         }
         // 2 space indent for values
         std::string value = "  <value>=" + optionValue.value;
         std::string help = "  " + optionValue.help;
-        if (std::count(optionValue.groups.begin(), optionValue.groups.end(), Options::Group::STABLE) == 0) {
+        if (std::find(optionValue.groups.begin(), optionValue.groups.end(),
+                Options::Group::STABLE) == optionValue.groups.end()) {
             help += " (Experimental)";
         }
         PrintCommandDesc(value, help, OPTION_WIDTH);
@@ -314,7 +319,7 @@ void OptionTable::Usage(Options::Backend backend, std::set<Options::Group> group
     Println("Options:");
     for (const auto& info : optionInfos) {
 #if defined(CANGJIE_VISIBLE_OPTIONS_ONLY)
-        bool doPrint = std::count(info.groups.begin(), info.groups.end(), Options::Group::VISIBLE) != 0;
+        bool doPrint = std::find(info.groups.begin(), info.groups.end(), Options::Group::VISIBLE) != info.groups.end();
 #else
         bool doPrint = true;
 #endif

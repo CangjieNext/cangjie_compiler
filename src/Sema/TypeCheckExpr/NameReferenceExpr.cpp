@@ -787,7 +787,8 @@ void TypeChecker::TypeCheckerImpl::FilterSumUpperbound(const ASTContext& ctx, AS
     const std::unordered_map<Ptr<Ty>, std::vector<Ptr<Decl>>>& allTargets)
 {
     auto& m = ctx.targetTypeMap;
-    auto tgtTy = m.count(&ma) > 0 ? m.at(&ma) : nullptr;
+    auto it = m.find(&ma);
+    auto tgtTy = (it != m.end()) ? it->second : nullptr;
     if (tgtTy && tgtTy->HasQuestTy()) {
         tgtTy = nullptr;
     }
@@ -848,7 +849,7 @@ bool TypeChecker::TypeCheckerImpl::FilterSumUpperbound(AST::MemberAccess& ma, AS
     }
     if (sum.size() == 1 && !(*sum.begin())->IsAny()) {
         auto eq = *sum.begin();
-        if (cst.eq.size() == 0) {
+        if (cst.eq.empty()) {
             cst.eq.insert(eq);
         }
         if (!typeManager.IsTyEqual(&tv, eq)) {

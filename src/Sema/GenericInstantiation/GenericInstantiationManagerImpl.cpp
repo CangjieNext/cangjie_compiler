@@ -43,14 +43,32 @@
 #include "cangjie/Sema/Desugar.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/ProfileRecorder.h"
+#include "cangjie/Utils/TaskQueue.h"
 
 using namespace Cangjie;
 using namespace AST;
 using namespace TypeCheckUtil;
 using GIM = GenericInstantiationManager;
 
+namespace {
+/** Thread-local context for parallel generic instantiation. */
+thread_local std::vector<Ptr<Decl>> tlsStructContext;
+thread_local Ptr<Node> tlsCurTriggerNode;
+} // namespace
+
+std::vector<Ptr<AST::Decl>>& GIM::GenericInstantiationManagerImpl::GetStructContext()
+{
+    return tlsStructContext;
+}
+
+Ptr<AST::Node>& GIM::GenericInstantiationManagerImpl::GetCurTriggerNode()
+{
+    return tlsCurTriggerNode;
+}
+
 GIM::GenericInstantiationManagerImpl::GenericInstantiationManagerImpl(CompilerInstance& ci)
-    : diag(ci.diag),
+    : compilerInstance(&ci),
+      diag(ci.diag),
       importManager(ci.importManager),
       typeManager(*ci.typeManager),
       testManager(ci.testManager),
@@ -62,10 +80,11 @@ GIM::GenericInstantiationManagerImpl::GenericInstantiationManagerImpl(CompilerIn
     instantiator = [this](auto node) { return CheckNodeInstantiation(*node); };
     rearranger = [this](auto node) { return RearrangeReferencePtr(*node); };
     contextReset = [this](auto node) {
-        if (auto decl = DynamicCast<Decl*>(node); decl && !structContext.empty()) {
+        auto& ctx = GetStructContext();
+        if (auto decl = DynamicCast<Decl*>(node); decl && !ctx.empty()) {
             // Pop context if current is structure declaration or generic decl inside generic structure declaration.
-            if (NeedSwitchContext(*decl) && decl == structContext.back()) {
-                structContext.pop_back();
+            if (NeedSwitchContext(*decl) && decl == ctx.back()) {
+                ctx.pop_back();
             }
         }
         return VisitAction::WALK_CHILDREN;
@@ -278,40 +297,68 @@ Ptr<Decl> GetMemberByOffset(const Decl& decl, size_t offset)
 }
 } // namespace
 
+void GIM::GenericInstantiationManagerImpl::RunNonIncrementalInstantiation()
+{
+    PartialInstantiation::ResetGlobalMap();
+    size_t jobs = compilerInstance != nullptr ? compilerInstance->invocation.globalOptions.GetJobs() : 1;
+    if (jobs <= 1) {
+        Walker(curPkg, instantiationWalkerID, instantiator, contextReset).Walk();
+        return;
+    }
+    std::vector<Ptr<Decl>> toplevelDecls;
+    size_t estimatedDecls = 0;
+    for (const auto& file : curPkg->files) {
+        estimatedDecls += file->decls.size();
+    }
+    toplevelDecls.reserve(estimatedDecls);
+    IterateToplevelDecls(*curPkg, [&toplevelDecls](auto& decl) {
+        if (decl->TestAttr(Attribute::GENERIC)) {
+            return;
+        }
+        toplevelDecls.push_back(decl.get());
+    });
+    if (toplevelDecls.empty()) {
+        return;
+    }
+    Utils::TaskQueue taskQueue(jobs);
+    // Batch so that task count is about 4 * jobs: balances scheduling overhead and load balance.
+    const size_t numBatches = std::min(toplevelDecls.size(), std::max(size_t(1), jobs * 4));
+    const size_t batchSize = std::max(size_t(1), (toplevelDecls.size() + numBatches - 1) / numBatches);
+    for (size_t i = 0; i < toplevelDecls.size(); i += batchSize) {
+        size_t end = std::min(i + batchSize, toplevelDecls.size());
+        taskQueue.AddTask<void>([this, &toplevelDecls, i, end]() {
+            for (size_t j = i; j < end; ++j) {
+                Walker(toplevelDecls[j], instantiationWalkerID, instantiator, contextReset).Walk();
+            }
+        });
+    }
+    taskQueue.RunAndWaitForAllTasksCompleted();
+}
+
 void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pkg)
 {
     this->curPkg = &pkg;
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "instantiate");
-    // Collect extend decls by usage.
     RecordExtend(*curPkg);
     if (curPkg->TestAttr(Attribute::INCRE_COMPILE)) {
         InstantiateForIncrementalPackage();
     } else {
-        // When `GenericInstantiatePackage` is invoked for multiple times, ensure that global data is clean.
-        PartialInstantiation::ResetGlobalMap();
-        // Only walk non-generic or instantiated decl's to perform instantiation.
-        Walker(curPkg, instantiationWalkerID, instantiator, contextReset).Walk();
+        RunNonIncrementalInstantiation();
     }
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "instantiate");
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "testManager");
     testManager->PreparePackageForTestIfNeeded(*curPkg);
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "testManager");
 
-    // Do not perform rearrange, validation and deletion if errors generated.
     if (diag.GetErrorCount() != 0) {
         return;
     }
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "rearrange");
-    // Erase un-visited src imported functions during instantiation step.
     ClearUnusedSrcImportedDecls(
         *curPkg, [this](const Ptr<Decl>& it) { return !it->IsConst() && usedSrcImportedDecls.count(it) == 0; });
-    // After the instantiation finished and there are instantiatedDecls generated in current package,
-    // rearrange the ptr of outer references' target to the instantiated decl.
-    // NOTE: Walker will also walk 'genericInstantiatedDecls' in package node.
     Walker(curPkg, rearrangeWalkerID, rearranger, contextReset).Walk();
     RecoverDesugarForBuiltIn();
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "rearrange");
-    // Do not perform validation and deletion if errors generated.
     if (diag.GetErrorCount() != 0) {
         return;
     }
@@ -346,7 +393,7 @@ void GIM::GenericInstantiationManagerImpl::InstantiateForIncrementalPackage()
         }
         // Enum constructor is part of whole enum decl, so it will not be separately marked as 'toBeCompiled'.
         // Only need using 'GetMemberDecls' here.
-        structContext.push_back(decl.get());
+        GetStructContext().push_back(decl.get());
         for (auto& it : decl->GetMemberDecls()) {
             if (it->TestAttr(Attribute::GENERIC)) {
                 continue;
@@ -359,16 +406,16 @@ void GIM::GenericInstantiationManagerImpl::InstantiateForIncrementalPackage()
                 }
             });
         }
-        structContext.pop_back();
+        GetStructContext().pop_back();
     });
     // Set 'needCompile' to mark instantiations as not to be compiled,
     // then walk and instantiate toplevel decls for full signature.
     needCompile = false;
     for (auto it : unchanged) {
         if (it->outerDecl) {
-            structContext.push_back(it->outerDecl);
+            GetStructContext().push_back(it->outerDecl);
             Walker(it, instantiationWalkerID, instantiator, contextReset).Walk();
-            structContext.pop_back();
+            GetStructContext().pop_back();
         } else {
             Walker(it, instantiationWalkerID, instantiator, contextReset).Walk();
         }
@@ -523,19 +570,18 @@ void GIM::GenericInstantiationManagerImpl::PerformUpdateAttrDuringClone(Node& ge
 Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedDeclWithGenericInfo(const GenericInfo& genericInfo)
 {
     auto genericDecl = genericInfo.decl;
-    Ptr<Decl> instantiatedDecl = FindInCache(genericInfo);
-    // Check if the generic function is already instantiated.
-    if (instantiatedDecl) {
-        // 'toBeCompiled' need be updated, since unchanged cache also may be created during incremental stage.
-        instantiatedDecl->toBeCompiled = instantiatedDecl->toBeCompiled || needCompile;
-        return instantiatedDecl;
+    {
+        std::lock_guard<std::mutex> lock(cacheMtx);
+        Ptr<Decl> instantiatedDecl = FindInCache(genericInfo);
+        if (instantiatedDecl) {
+            instantiatedDecl->toBeCompiled = instantiatedDecl->toBeCompiled || needCompile;
+            return instantiatedDecl;
+        }
     }
     TypeSubst g2gTyMap = {};
     if (IsGenericFuncWithDefaultParam(*genericDecl)) {
         BuildGenericsTyMap(*StaticCast<FuncDecl>(genericDecl), g2gTyMap);
     }
-    // Clone a generic instantiated funcDecl by changing its generic types to instantiated types.
-    // This is a callback function which perform generic type instantiation during the clone period.
     VisitFunc instantiateType = [this, &genericInfo, &g2gTyMap](Node& genericNode, Node& clonedNode) {
         PerformTyInstantiationDuringClone(genericNode, clonedNode, genericInfo, g2gTyMap);
         PerformUpdateAttrDuringClone(genericNode, clonedNode);
@@ -554,8 +600,6 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedDeclWithGenericIn
     clonedDecl->EnableAttr(Attribute::GENERIC_INSTANTIATED);
     clonedDecl->EnableAttr(Attribute::NO_REFLECT_INFO);
     clonedDecl->DisableAttr(Attribute::GENERIC, Attribute::IMPORTED);
-    // NOTE: Remove primary ctor decl from cloned decl to get stable member index for rearrangement.
-    //       This is related to the usage of 'membersIndexMap'.
     auto& members = clonedDecl->GetMemberDecls();
     Utils::EraseIf(members, [](auto& it) { return it->astKind == ASTKind::PRIMARY_CTOR_DECL; });
     for (auto& ptr : members) {
@@ -570,18 +614,23 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedDeclWithGenericIn
         }
     }
 
-    instantiatedDecl = clonedDecl.get();
+    Ptr<Decl> instantiatedDecl = clonedDecl.get();
     CJC_ASSERT(curPkg != nullptr);
-    (void)curPkg->genericInstantiatedDecls.emplace_back(std::move(clonedDecl));
-    instantiatedDecl->genericDecl = genericDecl;
-    // Record this instantiated result to maps.
-    declInstantiationByTypeMap.emplace(genericInfo, instantiatedDecl);
-    instantiatedDeclsMap[genericDecl].insert(instantiatedDecl);
+    {
+        std::lock_guard<std::mutex> lock(cacheMtx);
+        if (Ptr<Decl> existing = FindInCache(genericInfo)) {
+            existing->toBeCompiled = existing->toBeCompiled || needCompile;
+            return existing;
+        }
+        (void)curPkg->genericInstantiatedDecls.emplace_back(std::move(clonedDecl));
+        instantiatedDecl->genericDecl = genericDecl;
+        declInstantiationByTypeMap.emplace(genericInfo, instantiatedDecl);
+        instantiatedDeclsMap[genericDecl].insert(instantiatedDecl);
+    }
 
     if (curPkg->TestAttr(Attribute::TOOL_ADD)) {
-        return instantiatedDecl; // When the package is create by cjogen, the sub nodes do not need to be walked.
+        return instantiatedDecl;
     }
-    // Collect extend decls by usage.
     RecordExtend(*instantiatedDecl);
     Walker(instantiatedDecl, instantiationWalkerID, instantiator, contextReset).Walk();
     return instantiatedDecl;
@@ -877,7 +926,7 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedMemberTarget(Ty& 
     auto genericInfo = ConstructGenericInfo(*target.outerDecl, typeManager.GetTypeArgs(*realStructTy));
     auto structDecl = FindInCache(genericInfo);
     // If current in instantiation step, instantiate structure declaration if not found.
-    if (!structDecl && curTriggerNode && curTriggerNode->visitedByWalkerID == instantiationWalkerID) {
+    if (!structDecl && GetCurTriggerNode() && GetCurTriggerNode()->visitedByWalkerID == instantiationWalkerID) {
         structDecl = GetInstantiatedDeclWithGenericInfo(genericInfo);
     }
     auto [isGetter, targetToFind] = GetRealMemberDecl(target);
@@ -983,7 +1032,7 @@ void GIM::GenericInstantiationManagerImpl::GenericRefExprInstantiate(RefExpr& re
     // found decl inside the instantiated outerDecl which is not current context decl.
     bool needInstantiateParent = target->outerDecl && target->outerDecl->IsNominalDecl() &&
         (IsGenericInGenericStruct(*target) || target->outerDecl->TestAttr(Attribute::GENERIC));
-    auto structDecl = structContext.empty() ? target->outerDecl : GetStructDeclByContext();
+    auto structDecl = GetStructContext().empty() ? target->outerDecl : GetStructDeclByContext();
     Ptr<Ty> baseTy = nullptr;
     if (structDecl != target->outerDecl) {
         baseTy = GetDeclTy(*structDecl);
@@ -1127,7 +1176,7 @@ VisitAction GIM::GenericInstantiationManagerImpl::CheckVisitedNode(Ptr<Node> nod
         }
         // If walk into a structure declaration or generic decl inside generic structure declaration. Update context.
         if (NeedSwitchContext(*decl)) {
-            structContext.push_back(decl);
+            GetStructContext().push_back(decl);
         }
     }
 
@@ -1154,7 +1203,7 @@ VisitAction GIM::GenericInstantiationManagerImpl::CheckNodeInstantiation(Node& n
         return VisitAction::SKIP_CHILDREN;
     }
 
-    curTriggerNode = &node;
+    GetCurTriggerNode() = &node;
     if (Ty::IsTyCorrect(node.ty) && !HasIntersectionTy(*node.ty)) {
         // For memory layout, instantiated all used generics in node's ty.
         InstantiateGenericTysForMemoryLayout(*node.ty);
@@ -1201,7 +1250,7 @@ VisitAction GIM::GenericInstantiationManagerImpl::RearrangeReferencePtr(Node& no
         return VisitAction::SKIP_CHILDREN;
     }
 
-    curTriggerNode = &node;
+    GetCurTriggerNode() = &node;
     switch (node.astKind) {
         case ASTKind::CALL_EXPR:
             // Rearrange call expr.
@@ -1312,7 +1361,7 @@ void GIM::GenericInstantiationManagerImpl::RearrangeRefExprReference(RefExpr& re
     if (IsClassOrEnumConstructor(*re.ref.target)) {
         baseTy = baseTy->IsFunc() ? RawStaticCast<FuncTy*>(baseTy)->retTy : baseTy;
         instTys = typeManager.GetTypeArgs(*baseTy);
-    } else if (!structContext.empty()) {
+    } else if (!GetStructContext().empty()) {
         auto structDecl = GetStructDeclByContext();
         // For member used inside owner decl, the base type is type of current structure declaration.
         baseTy = GetDeclTy(*structDecl);
@@ -1405,7 +1454,7 @@ void GIM::GenericInstantiationManagerImpl::RearrangeArrayLitReference(ArrayLit& 
 
 void GIM::GenericInstantiationManagerImpl::RearrangeFuncBodyReference(FuncBody& fb)
 {
-    if (structContext.empty()) {
+    if (GetStructContext().empty()) {
         return;
     }
 

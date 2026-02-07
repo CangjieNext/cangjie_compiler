@@ -64,7 +64,7 @@ bool IsWarningArg(const std::string& arg)
 void FrontendCmdPrint(const GlobalOptions& globalOptions, const std::string& cangjieHome,
     const std::vector<std::string>& args)
 {
-    CJC_ASSERT(args.size() != 0);
+    CJC_ASSERT(!args.empty());
     std::string binPath = FileUtil::JoinPath(cangjieHome, "bin");
     std::string exeExtension =
 #ifdef _WIN32

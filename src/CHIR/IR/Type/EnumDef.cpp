@@ -19,7 +19,7 @@ bool EnumDef::IsAllCtorsTrivial() const
 {
     // if enum all ctor does not have params, it is a trivial enum
     for (auto& ctor : ctors) {
-        if (ctor.funcType->GetParamTypes().size() != 0) {
+        if (!ctor.funcType->GetParamTypes().empty()) {
             return false;
         }
     }

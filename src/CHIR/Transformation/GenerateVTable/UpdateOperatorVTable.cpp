@@ -29,7 +29,7 @@ bool IsPossiblyOverflowOperator(const VirtualMethodInfo& info)
     if (paramTypes.size() == 1 && IsOverflowOperator(name)) {
         return CanBeIntegerType(*paramTypes[0]) && CanBeIntegerType(*info.GetMethodInstRetType());
     }
-    if (paramTypes.size() == 0 && name == "-") {
+    if (paramTypes.empty() && name == "-") {
         return CanBeIntegerType(*info.GetMethodInstRetType());
     }
     return false;
@@ -48,7 +48,7 @@ bool IsBuiltinOverflowOperator(const CustomTypeDef& def, const VirtualMethodInfo
         paramTypes[0] == info.GetMethodInstRetType()) {
         return IsOverflowOperator(name);
     }
-    if (paramTypes.size() == 0 && info.GetMethodInstRetType()->IsInteger()) {
+    if (paramTypes.empty() && info.GetMethodInstRetType()->IsInteger()) {
         return name == "-";
     }
     return false;

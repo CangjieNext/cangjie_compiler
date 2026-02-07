@@ -137,9 +137,15 @@ void LocalTypeArgumentSynthesis::CopyUpperbound()
         for (auto upper : univ->upperBounds) {
             CJC_NULLPTR_CHECK(upper);
             instTv->upperBounds.emplace(tyMgr.InstOf(upper));
-            if (gcBlames.count(univ) > 0 && gcBlames.at(univ).count(upper) > 0) {
-                gcBlamesInst[instTv][tyMgr.InstOf(upper)] = gcBlames.at(univ).at(upper);
+            auto univIt = gcBlames.find(univ);
+            if (univIt == gcBlames.end()) {
+                continue;
             }
+            auto upperIt = univIt->second.find(upper);
+            if (upperIt == univIt->second.end()) {
+                continue;
+            }
+            gcBlamesInst[instTv][tyMgr.InstOf(upper)] = upperIt->second;
         }
     }
 }
@@ -863,8 +869,10 @@ size_t LocalTypeArgumentSynthesis::CountUnsolvedTyVars(const TypeSubst& subst)
 bool LocalTypeArgumentSynthesis::DoesCSCoverAllTyVars(const Constraint& m)
 {
     auto tyVars = argPack.tyVarsToSolve;
-    return std::all_of(tyVars.begin(), tyVars.end(),
-        [&m](auto tyVar) { return Utils::InKeys(tyVar, m) && (!m.at(tyVar).lbs.empty() || !m.at(tyVar).ubs.empty()); });
+    return std::all_of(tyVars.begin(), tyVars.end(), [&m](auto tyVar) {
+        auto it = m.find(tyVar);
+        return it != m.end() && (!it->second.lbs.empty() || !it->second.ubs.empty());
+    });
 }
 
 std::optional<TypeSubst> LocalTypeArgumentSynthesis::GetBestSolution(const TypeSubsts& substs, bool allowPartial)
