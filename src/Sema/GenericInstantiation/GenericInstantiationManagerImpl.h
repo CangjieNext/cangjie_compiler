@@ -25,6 +25,8 @@
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
+#include <mutex>
+
 namespace Cangjie {
 /** GenericInfoHash is the hash to indicate the uniqueness of a GenericInfo. */
 struct GenericInfoHash {
@@ -73,7 +75,6 @@ public:
     ~GenericInstantiationManagerImpl()
     {
         curPkg = nullptr;
-        curTriggerNode = nullptr;
         testManager = nullptr;
     }
     /** Generic instantiation package entrance. */
@@ -110,7 +111,12 @@ public:
     friend class InstantiatedExtendRecorder;
     friend class MockUtils;
 
+    /** Thread-local context for parallel instantiation; use getters in .cpp. */
+    std::vector<Ptr<AST::Decl>>& GetStructContext();
+    Ptr<AST::Node>& GetCurTriggerNode();
+
 private:
+    CompilerInstance* compilerInstance{nullptr};
     Ptr<AST::Package> curPkg{nullptr};
     DiagnosticEngine& diag;
     ImportManager& importManager;
@@ -123,8 +129,8 @@ private:
     unsigned rearrangeWalkerID;
     /** Current compiling backend. */
     Triple::BackendType backend;
-    /** The node which triggered current instantiation. */
-    Ptr<AST::Node> curTriggerNode{nullptr};
+    /** Mutex for cache and package list updates in parallel instantiation. */
+    mutable std::mutex cacheMtx;
     /** Lambda function for instantiation walker. */
     std::function<AST::VisitAction(Ptr<AST::Node>)> instantiator;
     /** Lambda function for rearrangement walker. */
@@ -153,7 +159,7 @@ private:
         AST::ASTKind::PRIMARY_CTOR_DECL,
         AST::ASTKind::MODIFIER,
     };
-    std::vector<Ptr<AST::Decl>> structContext;
+    /** structContext is thread-local; access via GetStructContext(). */
     /** Key: sema type; Value: whether contains intersection ty. */
     std::unordered_map<Ptr<AST::Ty>, bool> intersectionTyStatus;
     /** Mark whether current type has instantiated related extends for package in gim. */
@@ -282,8 +288,8 @@ private:
 
     Ptr<AST::Decl> GetStructDeclByContext()
     {
-        // Caller guarantees 'structContext' not empty.
-        auto decl = structContext.back();
+        // Caller guarantees GetStructContext() not empty.
+        auto decl = GetStructContext().back();
         while (decl && !decl->IsNominalDecl()) {
             decl = decl->outerDecl;
         }
