@@ -532,8 +532,9 @@ bool GlobalOptions::CheckLtoOptions() const
         return true;
     }
     auto osType = target.GetOSFamily();
-    if (osType == OSType::WINDOWS) {
-        Errorln("Windows does not support LTO optimization.");
+    if (osType == OSType::DARWIN || osType == OSType::IOS || osType == OSType::WINDOWS) {
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_target_lto_unsupported, DEFAULT_POSITION, target.OSToString());
         return false;
     }
     if (outputMode == OutputMode::OBJ) {
