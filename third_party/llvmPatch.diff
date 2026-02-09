@@ -9768,7 +9768,6 @@ index 000000000..58520ffb6
 +  invocation->globalOptions.implicitPrelude = true;
 +  invocation->globalOptions.chirLLVM = true;
 +  invocation->globalOptions.aggressiveParallelCompile = 1;
-+  invocation->globalOptions.disableInstantiation = true;
 +
 +  DiagnosticEngine diag;
 +  diag.SetDisableWarning(true);
