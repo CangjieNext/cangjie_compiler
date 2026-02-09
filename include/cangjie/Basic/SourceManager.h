@@ -70,7 +70,7 @@ struct Source {
  */
 class SourceManager {
 private:
-    std::unordered_map<std::string, int> filePathToFileIDMap;
+    std::unordered_map<std::string, unsigned int> filePathToFileIDMap;
     std::map<unsigned int, Source> sources{{0, {0, "", ""}}};
 
 public:
@@ -97,16 +97,16 @@ public:
     }
 
     /**
-     * Get the file id by file path.
+     * Get the file id by file path or empty if not added yet.
      * @param path file path.
      */
-    int GetFileID(const std::string& path)
+    std::optional<unsigned int> GetFileID(const std::string& path)
     {
         auto exist = filePathToFileIDMap.find(path);
         if (exist != filePathToFileIDMap.end()) {
             return exist->second;
         } else {
-            return -1;
+            return {};
         }
     }
 

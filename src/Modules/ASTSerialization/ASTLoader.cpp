@@ -11,6 +11,8 @@
 
 #include "ASTLoaderImpl.h"
 
+#include "cangjie/AST/Node.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "flatbuffers/ModuleFormat_generated.h"
 
 #include "cangjie/AST/ASTCasting.h"
@@ -241,7 +243,7 @@ OwnedPtr<Package> ASTLoader::ASTLoaderImpl::LoadPackageDependencies()
 }
 
 // Deserialize common part of package into already existing Package node
-void ASTLoader::PreloadCommonPartOfPackage(AST::Package& pkg) const
+bool ASTLoader::PreloadCommonPartOfPackage(AST::Package& pkg) const
 {
     CJC_NULLPTR_CHECK(pImpl);
     pImpl->deserializingCommon = true;
@@ -302,9 +304,16 @@ OwnedPtr<AST::FeaturesDirective> LoadFeaturesDirective(const PackageFormat::Feat
 
     return ftrDirective;
 }
+
+void ReportPackageMismatch(
+    DiagnosticEngine& diag, AST::Node& node, std::string& expectedPackageName, std::string& actualPackageName)
+{
+    diag.DiagnoseRefactor(
+        DiagKindRefactor::module_common_cjo_wrong_package, node, actualPackageName, expectedPackageName);
+}
 } // namespace
 
-void ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
+bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
 {
     if (!VerifyForData("ast")) {
         CJC_ABORT();
@@ -312,8 +321,15 @@ void ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
 
     package = PackageFormat::GetPackage(data.data());
     CJC_NULLPTR_CHECK(package);
+    CJC_NULLPTR_CHECK(package->fullPkgName());
 
     curPackage = &pkg; // Deserialize common part AST into current specific package AST
+
+    auto deserializedPackageName = package->fullPkgName()->str();
+    if (pkg.fullPackageName != deserializedPackageName) {
+        ReportPackageMismatch(diag, pkg, pkg.fullPackageName, deserializedPackageName);
+        return false;
+    }
 
     allTypes.resize(package->allTypes()->size(), nullptr);
     auto fileSize = package->allFiles()->size();
@@ -348,6 +364,8 @@ void ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         std::string importItem = imports->Get(i)->str();
         importedFullPackageNames.emplace_back(importItem);
     }
+
+    return true;
 }
 
 void ASTLoader::LoadPackageDecls() const
@@ -409,7 +427,7 @@ OwnedPtr<AST::File> ASTLoader::ASTLoaderImpl::CreateFileNode(
     auto file = MakeOwned<File>();
     file->curFile = file.get();
     file->curPackage = &pkg;
-    Source& source = sourceManager.GetSource(fileId);
+    auto& source = sourceManager.GetSource(fileId);
     file->fileName = FileUtil::GetFileName(source.path);
     file->filePath = source.path;
     file->fileHash = source.fileHash;

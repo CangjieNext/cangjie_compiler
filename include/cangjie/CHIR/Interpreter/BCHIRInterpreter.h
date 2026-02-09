@@ -298,11 +298,11 @@ private:
         // convert file name (bchir) ID to (source manager) ID
         auto fileName = bchir.GetFileName(pos.fileID);
         auto fileId = sm.GetFileID(fileName);
-        if (fileId == -1) {
-            fileId = static_cast<int>(sm.AddSource(fileName, ""));
+        if (!fileId) {
+            fileId = sm.AddSource(fileName, "");
         }
         Cangjie::Position cjPos{
-            static_cast<unsigned int>(fileId), static_cast<int>(pos.line), static_cast<int>(pos.column)};
+            *fileId, static_cast<int>(pos.line), static_cast<int>(pos.column)};
         if (cjPos.IsZero()) {
             diag.Diagnose(kind, args...);
         } else {

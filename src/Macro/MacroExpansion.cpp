@@ -136,11 +136,11 @@ void CheckWhenAfterMacroExpand(Ptr<const Node> curNode, DiagnosticEngine& diag)
 void MacroExpansion::ReplaceEachFileNode(const File& file)
 {
     auto debugFileID = ci->GetSourceManager().GetFileID(file.macroCallFilePath);
-    if (debugFileID == -1) {
+    if (!debugFileID) {
         return;
     }
-    auto newBuffer = ci->GetSourceManager().GetSource(static_cast<unsigned int>(debugFileID)).buffer;
-    Parser newParser(static_cast<unsigned int>(debugFileID), newBuffer, ci->diag, ci->diag.GetSourceManager(),
+    auto& newBuffer = ci->GetSourceManager().GetSource(*debugFileID).buffer;
+    Parser newParser(*debugFileID, newBuffer, ci->diag, ci->diag.GetSourceManager(),
         ci->invocation.globalOptions.enableAddCommentToAst);
     newParser.SetCompileOptions(ci->invocation.globalOptions);
     auto names = Utils::SplitQualifiedName(file.curPackage->fullPackageName);
