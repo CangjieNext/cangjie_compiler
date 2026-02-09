@@ -288,7 +288,7 @@ void ToCHIR::NothingTypeExprElimination()
 void ToCHIR::UnreachableBranchReporter()
 {
     Utils::ProfileRecorder recorder("CHIR Opt", "UnreachableBranchReporter");
-    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, pkg.fullPackageName);
+    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, chirPkg->GetName());
     check.RunOnPackage(*chirPkg, opts.GetJobs());
 }
 
@@ -768,7 +768,7 @@ void ToCHIR::RecordCodeInfoAtTheBegin()
         for (auto& decl : pkg.genericInstantiatedDecls) {
             auto genericDecl = decl->genericDecl;
             CJC_NULLPTR_CHECK(genericDecl->curFile);
-            if (genericDecl->curFile->curPackage->fullPackageName != pkg.fullPackageName) {
+            if (genericDecl->curFile->curPackage->fullPackageName != chirPkg->GetName()) {
                 continue;
             }
             AST::Walker(decl.get(), [&astNodeCnt](auto /* node */) {
@@ -946,8 +946,8 @@ void ToCHIR::CFFIFuncWrapper()
         bool isForeign = curFunc->TestAttr(Attribute::FOREIGN);
         auto [wrapperFunc, res] = DoCFFIFuncWrapper(*curFunc, isForeign);
         // sanitizer_cov func have empty package name.
-        const auto& funcPkgName = curFunc->GetPackageName().empty() ? pkg.fullPackageName : curFunc->GetPackageName();
-        if (funcPkgName != pkg.fullPackageName) {
+        const auto& funcPkgName = curFunc->GetPackageName().empty() ? chirPkg->GetName() : curFunc->GetPackageName();
+        if (funcPkgName != chirPkg->GetName()) {
             // NOTE: res maybe null!
             ReplaceUsesWithWrapper(*curFunc, res, *wrapperFunc, true);
         }
@@ -966,11 +966,11 @@ std::pair<Value*, Apply*> ToCHIR::DoCFFIFuncWrapper(T& curFunc, bool isForeign, 
             ident.erase(pos, CFFI_FUNC_SUFFIX.size());
         }
     }
-    const auto& funcPkgName = curFunc.GetPackageName().empty() ? pkg.fullPackageName : curFunc.GetPackageName();
+    const auto& funcPkgName = curFunc.GetPackageName().empty() ? chirPkg->GetName() : curFunc.GetPackageName();
     if (isForeign || (curFunc.TestAttr(Attribute::PRIVATE) && isExternal)) {
         ident = funcPkgName + ":" + ident;
     }
-    if (funcPkgName != pkg.fullPackageName) {
+    if (funcPkgName != chirPkg->GetName()) {
         auto wrapperFunc = builder.CreateImportedVarOrFunc<ImportedFunc>(
             curFunc.GetFuncType(), ident, ident, "", funcPkgName, curFunc.GetGenericTypeParams());
         wrapperFunc->SetCFFIWrapper(true);
@@ -1074,6 +1074,7 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     if (!TranslateToCHIR(std::move(annoOnly))) {
         return false;
     }
+    ci.DestroyASTResources();
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
         auto fileName = FileUtil::JoinPath(opts.output, chirPkg->GetName()) + CHIR_SERIALIZATION_FILE_EXTENSION;
@@ -1146,6 +1147,7 @@ bool ToCHIR::Run()
     if (!TranslateToCHIR({})) {
         return false;
     }
+    ci.DestroyASTResources();
     // 2. for cjmp, while compiling common package, just be here and save CHIR to file.
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
         auto fileName = FileUtil::JoinPath(opts.output, chirPkg->GetName()) + CHIR_SERIALIZATION_FILE_EXTENSION;
