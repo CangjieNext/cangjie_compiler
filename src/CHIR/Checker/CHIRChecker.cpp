@@ -940,7 +940,7 @@ bool CHIRChecker::CheckParamTypes(
             if (pType != expectedType && pType != anyTyRef) {
                 auto errMsg = expectedType->ToString() +
                     " type is expected for the 1st parameter, but now it's " + pType->ToString() + ".";
-                ErrorInFunc(topLevelFunc, errMsg);
+                ErrorInFunc(topLevelFunc, errMsg); 
                 typeMatched = false;
             }
             continue;

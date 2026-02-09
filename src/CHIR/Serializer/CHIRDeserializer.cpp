@@ -155,16 +155,6 @@ std::string GetMangleNameFromIdentifier(std::string& identifier)
         return identifier;
     }
 }
-
-std::set<std::string> GetFeatures(const PackageFormat::Value* val)
-{
-    std::set<std::string> features = {};
-    for (unsigned int i = 0; i < val->features()->size(); ++i) {
-        features.insert(val->features()->Get(i)->str());
-    }
-    
-    return features;
-}
 } // namespace
 
 template <> Position CHIRDeserializer::CHIRDeserializerImpl::Create(const PackageFormat::Pos* obj)
@@ -559,9 +549,8 @@ template <> Func* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const Pack
     auto rawMangledName = obj->rawMangledName()->str();
     auto packageName = obj->packageName()->str();
     auto genericTypeParams = GetType<GenericType>(obj->genericTypeParams());
-    std::set<std::string> features = GetFeatures(obj->base());
     auto result = builder.CreateFunc(DebugLocation(), funcTy, GetMangleNameFromIdentifier(identifier),
-        srcCodeIdentifier, rawMangledName, packageName, genericTypeParams, features);
+        srcCodeIdentifier, rawMangledName, packageName, genericTypeParams);
     // Indexes below are needed to modify correctly function body when merging CJMP initializers
     result->SetLocalId(obj->localId());
     result->SetBlockId(obj->localId());
@@ -660,10 +649,9 @@ template <> GlobalVar* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const
     if (compilePlatform) {
         attrs.SetAttr(Attribute::DESERIALIZED, true);
     }
-    std::set<std::string> features = GetFeatures(obj->base());
     auto result = builder.CreateGlobalVar(
         DebugLocation(), type, GetMangleNameFromIdentifier(identifier), srcCodeIdentifier, rawMangledName,
-        packageName, features);
+        packageName);
     result->AppendAttributeInfo(attrs);
     return result;
 }
@@ -1671,9 +1659,6 @@ void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFormat::Importe
 
 template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFormat::Func* buffer, Func& obj)
 {
-    if (obj.TestAttr(Attribute::PREVIOUSLY_DESERIALIZED)) {
-        return;
-    }
     ConfigBase(buffer->base()->base(), obj);
     // the parameter will be inserted into Func when Parameter is created.
     auto params = GetValue<Parameter>(buffer->params());
@@ -1760,9 +1745,6 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFor
 
 template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFormat::GlobalVar* buffer, GlobalVar& obj)
 {
-    if (obj.TestAttr(Attribute::PREVIOUSLY_DESERIALIZED)) {
-        return;
-    }
     ConfigBase(buffer->base()->base(), obj);
     obj.SetAnnoInfo(Create<AnnoInfo>(buffer->base()->annoInfo()));
     if (auto initializer = DynamicCast<LiteralValue*>(GetValue<Value>(buffer->defaultInitVal()))) {
@@ -1809,9 +1791,6 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFor
 
 template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFormat::ExtendDef* buffer, ExtendDef& obj)
 {
-    if (obj.TestAttr(Attribute::PREVIOUSLY_DESERIALIZED)) {
-        return;
-    }
     ConfigCustomTypeDef(buffer->base(), obj);
     auto info = GetType<Type>(buffer->extendedType());
     if (info) {
