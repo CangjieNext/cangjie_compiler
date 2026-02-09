@@ -486,12 +486,8 @@ bool IncrementalCompilerInstance::PerformCodeGen()
     }
     // Before CodeGen, the dependency relationship of a package contains only some packages.
     // So this function rearranges the dependencies of all packages.
-    RearrangeImportedPackageDependence();
-    bool ret = true;
-    for (auto& srcPkg : GetSourcePackages()) {
-        ret = ret && CodegenOnePackage(*srcPkg, kind == IncreKind::INCR);
-    }
-    return ret;
+    // RearrangeImportedPackageDependence();
+    return CodegenOnePackage(kind == IncreKind::INCR);
 }
 
 bool IncrementalCompilerInstance::PerformCjoSaving()
