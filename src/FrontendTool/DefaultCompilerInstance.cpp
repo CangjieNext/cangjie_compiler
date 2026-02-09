@@ -287,6 +287,7 @@ bool DefaultCIImpl::EmitLLVMSimilarBytecode(Package& pkg, bool enableIncrement)
         }
         taskQueueSaveBitcode.RunAndWaitForAllTasksCompleted();
     }
+    CodeGen::ClearPackageModules(llvmModules);
 
     if (ci.invocation.globalOptions.enIncrementalCompilation) {
         auto fileName = GenerateFileName(pkg.fullPackageName, "");
