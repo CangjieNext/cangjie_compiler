@@ -6,40 +6,41 @@
 
 #include "cangjie/CHIR/CHIR.h"
 
-#include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/Analysis/CallGraphAnalysis.h"
+#include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
-#include "cangjie/CHIR/Utils/CHIRPrinter.h"
+#include "cangjie/CHIR/Checker/CHIRChecker.h"
 #include "cangjie/CHIR/Checker/UnreachableBranchCheck.h"
 #include "cangjie/CHIR/Checker/VarInitCheck.h"
-#include "cangjie/CHIR/Checker/CHIRChecker.h"
-#include "cangjie/CHIR/Transformation/GenerateVTable/GenerateVTable.h"
 #include "cangjie/CHIR/Interpreter/ConstEval.h"
-#include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
-#include "cangjie/CHIR/Serializer/CHIRSerializer.h"
 #include "cangjie/CHIR/Optimization/ArrayLambdaOpt.h"
 #include "cangjie/CHIR/Optimization/ArrayListConstStartOpt.h"
-#include "cangjie/CHIR/Transformation/BoxRecursionValueType.h"
-#include "cangjie/CHIR/Transformation/ClosureConversion.h"
 #include "cangjie/CHIR/Optimization/ConstPropagation.h"
 #include "cangjie/CHIR/Optimization/DeadCodeElimination.h"
 #include "cangjie/CHIR/Optimization/Devirtualization.h"
-#include "cangjie/CHIR/Transformation/FlatForInExpr.h"
 #include "cangjie/CHIR/Optimization/FunctionInline.h"
 #include "cangjie/CHIR/Optimization/GetRefToArrayElem.h"
-#include "cangjie/CHIR/Transformation/MarkClassHasInited.h"
 #include "cangjie/CHIR/Optimization/MergeBlocks.h"
-#include "cangjie/CHIR/Transformation/NoSideEffectMarker.h"
+#include "cangjie/CHIR/Optimization/OptFuncRetType.h"
 #include "cangjie/CHIR/Optimization/RangePropagation.h"
 #include "cangjie/CHIR/Optimization/RedundantFutureRemoval.h"
 #include "cangjie/CHIR/Optimization/RedundantGetOrThrowElimination.h"
 #include "cangjie/CHIR/Optimization/RedundantLoadElimination.h"
+#include "cangjie/CHIR/Optimization/UnitUnify.h"
+#include "cangjie/CHIR/Optimization/UselessAllocateElimination.h"
+#include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
+#include "cangjie/CHIR/Serializer/CHIRSerializer.h"
+#include "cangjie/CHIR/Transformation/BoxRecursionValueType.h"
+#include "cangjie/CHIR/Transformation/ClosureConversion.h"
+#include "cangjie/CHIR/Transformation/FlatForInExpr.h"
+#include "cangjie/CHIR/Transformation/GenerateVTable/GenerateVTable.h"
+#include "cangjie/CHIR/Transformation/MarkClassHasInited.h"
+#include "cangjie/CHIR/Transformation/NoSideEffectMarker.h"
 #include "cangjie/CHIR/Transformation/ReplaceSrcCodeImportedVal.h"
 #include "cangjie/CHIR/Transformation/SanitizerCoverage.h"
 #include "cangjie/CHIR/Transformation/UpdateMemberVarPath.h"
-#include "cangjie/CHIR/Optimization/UnitUnify.h"
-#include "cangjie/CHIR/Optimization/UselessAllocateElimination.h"
-#include "cangjie/CHIR/Optimization/OptFuncRetType.h"
+#include "cangjie/CHIR/Utils/CHIRPrinter.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/Driver/TempFileManager.h"
@@ -287,7 +288,7 @@ void ToCHIR::NothingTypeExprElimination()
 void ToCHIR::UnreachableBranchReporter()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBranchReporter");
-    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, pkg.fullPackageName);
+    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, chirPkg->GetName());
     check.RunOnPackage(*chirPkg, opts.GetJobs());
 }
 
@@ -630,7 +631,7 @@ DevirtualizationInfo ToCHIR::CollectDevirtualizationInfo()
     DevirtualizationInfo devirtInfo(chirPkg, opts);
     if (opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::FUNC_INLINING) ||
         (opts.IsOptimizationExisted(GlobalOptions::OptimizationFlag::DEVIRTUALIZATION) &&
-         !opts.enIncrementalCompilation)) {
+            !opts.enIncrementalCompilation)) {
         // Collect all inheritance tree information.
         devirtInfo.CollectInfo();
     }
@@ -950,8 +951,8 @@ void ToCHIR::CFFIFuncWrapper()
         bool isForeign = curFunc->TestAttr(Attribute::FOREIGN);
         auto [wrapperFunc, res] = DoCFFIFuncWrapper(*curFunc, isForeign);
         // sanitizer_cov func have empty package name.
-        const auto& funcPkgName = curFunc->GetPackageName().empty() ? pkg.fullPackageName : curFunc->GetPackageName();
-        if (funcPkgName != pkg.fullPackageName) {
+        const auto& funcPkgName = curFunc->GetPackageName().empty() ? chirPkg->GetName() : curFunc->GetPackageName();
+        if (funcPkgName != chirPkg->GetName()) {
             // NOTE: res maybe null!
             ReplaceUsesWithWrapper(*curFunc, res, *wrapperFunc, true);
         }
@@ -970,11 +971,11 @@ std::pair<Value*, Apply*> ToCHIR::DoCFFIFuncWrapper(T& curFunc, bool isForeign, 
             ident.erase(pos, CFFI_FUNC_SUFFIX.size());
         }
     }
-    const auto& funcPkgName = curFunc.GetPackageName().empty() ? pkg.fullPackageName : curFunc.GetPackageName();
+    const auto& funcPkgName = curFunc.GetPackageName().empty() ? chirPkg->GetName() : curFunc.GetPackageName();
     if (isForeign || (curFunc.TestAttr(Attribute::PRIVATE) && isExternal)) {
         ident = funcPkgName + ":" + ident;
     }
-    if (funcPkgName != pkg.fullPackageName) {
+    if (funcPkgName != chirPkg->GetName()) {
         auto wrapperFunc = builder.CreateImportedVarOrFunc<ImportedFunc>(
             curFunc.GetFuncType(), ident, ident, "", funcPkgName, curFunc.GetGenericTypeParams());
         wrapperFunc->SetCFFIWrapper(true);
@@ -1078,6 +1079,7 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     if (!TranslateToCHIR(std::move(annoOnly))) {
         return false;
     }
+    ClearASTResources();
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
         auto fileName =
@@ -1199,6 +1201,10 @@ bool ToCHIR::Run()
     if (!RunAnnotationChecks()) {
         return false;
     }
+    // It should move to the end of TranslateToCHIR, Waiting for diag to remove its dependency on AST and for CHIR to
+    // stop saving Annotation nodes.
+    ClearASTResources();
+
     RunSanitizerCoverage();
     if (opts.enIncrementalCompilation) {
         UpdateEffectMapToString(effectMap, strEffectMap);
@@ -1317,7 +1323,8 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
                         ->SetComputeAnnotations(isComputingAnnos)
                         ->Build();
     ast2CHIR.SetAnnoOnlyDecls(std::move(annoOnly));
-    auto res = ast2CHIR.ToCHIRPackage(pkg);
+    CJC_NULLPTR_CHECK(pkg);
+    auto res = ast2CHIR.ToCHIRPackage(*pkg);
     if (diag.GetErrorCount() != 0 || !res) {
         return false;
     }
@@ -1335,7 +1342,7 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
         globalNominalCache = std::move(chirTypeCache.globalNominalCache);
     }
 
-    for (auto& file : pkg.files) {
+    for (auto& file : pkg->files) {
         for (auto& macrocall : file->originalMacroCallNodes) {
             auto key = static_cast<uint64_t>(macrocall->begin.Hash64());
             diag.posRange2MacroCallMap[key] = macrocall.get();
@@ -1363,4 +1370,11 @@ VarInitDepMap ToCHIR::GetVarInitDepMap() const
     return dep;
 }
 
+void ToCHIR::ClearASTResources()
+{
+    pkg = nullptr;
+    annoFactoryFuncs.clear();
+    diagEngine.EmitCategoryDiagnostics(DiagCategory::CHIR);
+    ci.DestroyASTResources();
+}
 } // namespace Cangjie::CHIR

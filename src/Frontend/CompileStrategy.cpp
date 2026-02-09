@@ -468,7 +468,7 @@ void ParseAndMergeCjd(Ptr<CompilerInstance> ci, std::pair<const std::string, std
     if (!failedReason.empty() || !sourceCode.has_value()) {
         // In the LSP scenario, the cjd file path cannot be obtained based on the dependency package information
         // configured in the cache. The cjd file path is searched in searchPath.
-        auto searchPath = ci->importManager.GetSearchPath();
+        auto searchPath = ci->importManager->GetSearchPath();
         auto cjdPath = FileUtil::FindSerializationFile(cjdInfo.first, CJ_D_FILE_EXTENSION, searchPath);
         if (cjdPath.empty()) {
             return;
@@ -493,7 +493,7 @@ void ParseAndMergeCjd(Ptr<CompilerInstance> ci, std::pair<const std::string, std
     auto pkg = MakeOwned<Package>(cjdInfo.first);
     fileAst->curPackage = pkg.get();
     pkg->files.emplace_back(std::move(fileAst));
-    auto originPkg = ci->importManager.GetPackage(cjdInfo.first);
+    auto originPkg = ci->importManager->GetPackage(cjdInfo.first);
     if (!originPkg) {
         InternalError(cjdInfo.first + " cannot find origin ast");
     }
@@ -514,7 +514,7 @@ void CompileStrategy::ParseAndMergeCjds() const
         return;
     }
     Utils::ProfileRecorder::Start("ImportPackages", "ParseAndMergeCjds");
-    auto cjdInfos = ci->importManager.GetDepPkgCjdPaths();
+    auto cjdInfos = ci->importManager->GetDepPkgCjdPaths();
     std::vector<std::future<void>> futures;
     futures.reserve(cjdInfos.size());
     // Reuse current CompilerInstance, but the Parser in the macro expansion phase uses the DParser.
@@ -528,7 +528,7 @@ void CompileStrategy::ParseAndMergeCjds() const
             std::lock_guard<std::mutex> guard(g_cjdAstCacheLock);
             auto [iter, succ] = g_cjdAstCache.try_emplace(cjdInfo.first, nullptr);
             if (!succ && iter->second) {
-                auto originPkg = ci->importManager.GetPackage(cjdInfo.first);
+                auto originPkg = ci->importManager->GetPackage(cjdInfo.first);
                 if (!originPkg) {
                     InternalError(cjdInfo.first + " cannot find origin ast");
                 }
