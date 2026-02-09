@@ -23,8 +23,8 @@
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/Utils/Semaphore.h"
 #include "cangjie/Utils/SipHash.h"
-#include "cangjie/Utils/Utils.h"
 #include "cangjie/Utils/Unicode.h"
+#include "cangjie/Utils/Utils.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -65,13 +65,9 @@ std::string BoolToSerializedString(bool val)
     return val ? "t" : "f";
 }
 
-const std::unordered_map<ArchType, std::string> ARCH_STRING_MAP = {
-    {ArchType::X86_64, "x86_64"},
-    {ArchType::AARCH64, "aarch64"},
-    {ArchType::ARM64, "arm64"},
-    {ArchType::ARM32, "arm"},
-    {ArchType::UNKNOWN, "unknown"}
-};
+const std::unordered_map<ArchType, std::string> ARCH_STRING_MAP = {{ArchType::X86_64, "x86_64"},
+    {ArchType::AARCH64, "aarch64"}, {ArchType::ARM64, "arm64"}, {ArchType::ARM32, "arm"},
+    {ArchType::UNKNOWN, "unknown"}};
 
 const std::unordered_map<OSType, std::string> OS_STRING_MAP = {
     {OSType::WINDOWS, "windows"},
@@ -532,8 +528,9 @@ bool GlobalOptions::CheckLtoOptions() const
         return true;
     }
     auto osType = target.GetOSFamily();
-    if (osType == OSType::WINDOWS) {
-        Errorln("Windows does not support LTO optimization.");
+    if (osType == OSType::DARWIN || osType == OSType::IOS || osType == OSType::WINDOWS) {
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_target_lto_unsupported, DEFAULT_POSITION, target.OSToString());
         return false;
     }
     if (outputMode == OutputMode::OBJ) {
@@ -572,7 +569,7 @@ bool GlobalOptions::CheckOutputModeOptions()
     return true;
 }
 
-bool GlobalOptions::CheckCompileAsExeOptions() const 
+bool GlobalOptions::CheckCompileAsExeOptions() const
 {
     if (!IsCompileAsExeEnabled()) {
         return true;
@@ -667,7 +664,7 @@ void GlobalOptions::DisableStaticStdForOhos()
     if (target.env == Triple::Environment::OHOS) {
         if (linkStaticStd.has_value() && linkStaticStd.value()) {
             DiagnosticEngine diag;
-            (void) diag.DiagnoseRefactor(DiagKindRefactor::driver_static_std_for_ohos, DEFAULT_POSITION);
+            (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_static_std_for_ohos, DEFAULT_POSITION);
         }
         linkStaticStd = false;
     }
@@ -1216,7 +1213,6 @@ std::string GlobalOptions::GetCangjieLibTargetPathName() const
     }
     name += "_" + target.ArchToString() + "_" + BackendToString(backend);
     return name;
-    
 }
 
 void GlobalOptions::SetCompilationCachedPath()
