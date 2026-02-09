@@ -287,7 +287,7 @@ void ToCHIR::NothingTypeExprElimination()
 void ToCHIR::UnreachableBranchReporter()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBranchReporter");
-    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, pkg.fullPackageName);
+    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, chirPkg->GetName());
     check.RunOnPackage(*chirPkg, opts.GetJobs());
 }
 
@@ -736,53 +736,9 @@ void ToCHIR::RecordCodeInfoAtTheBegin()
         return;
     }
     Utils::ProfileRecorder recorder("CHIR", "RecordCodeInfo");
-    std::function<int64_t(void)> getASTNodeQuantity = [this]() -> int64_t {
-        int64_t astNodeCnt = 0;
-        AST::Walker(&pkg, [&astNodeCnt](auto /* node */) {
-            astNodeCnt++;
-            return AST::VisitAction::WALK_CHILDREN;
-        }).Walk();
-        return astNodeCnt;
-    };
-    Utils::ProfileRecorder::RecordCodeInfo("AST node", getASTNodeQuantity);
-    Utils::ProfileRecorder::RecordCodeInfo(
-        "generic ins func in AST", static_cast<int64_t>(pkg.genericInstantiatedDecls.size()));
-    std::function<int64_t(void)> getGenericInstantiatedAstNode = [this]() -> int64_t {
-        int64_t astNodeCnt = 0;
-        for (auto& decl : pkg.genericInstantiatedDecls) {
-            AST::Walker(decl.get(), [&astNodeCnt](auto /* node */) {
-                astNodeCnt++;
-                return AST::VisitAction::WALK_CHILDREN;
-            }).Walk();
-        }
-        return astNodeCnt;
-    };
-    Utils::ProfileRecorder::RecordCodeInfo("generic ins ast node", getGenericInstantiatedAstNode);
-    Utils::ProfileRecorder::RecordCodeInfo(
-        "import pkg", static_cast<int64_t>(importManager.GetAllImportedPackages(true).size()));
-    Utils::ProfileRecorder::RecordCodeInfo("src file", static_cast<int64_t>(pkg.files.size()));
     Utils::ProfileRecorder::RecordCodeInfo(
         "global func in CHIR after trans", static_cast<int64_t>(chirPkg->GetGlobalFuncs().size()));
     Utils::ProfileRecorder::RecordCodeInfo("global var in CHIR", static_cast<int64_t>(chirPkg->GetGlobalVars().size()));
-    int64_t funcInlineCnt = std::count_if(
-        pkg.inlineFuncDecls.begin(), pkg.inlineFuncDecls.end(), [](auto func) { return func && func->isInline; });
-    Utils::ProfileRecorder::RecordCodeInfo("imported inline func", funcInlineCnt);
-    std::function<int64_t(void)> getCurPkgInstantiatedAstNode = [this]() -> int64_t {
-        int64_t astNodeCnt = 0;
-        for (auto& decl : pkg.genericInstantiatedDecls) {
-            auto genericDecl = decl->genericDecl;
-            CJC_NULLPTR_CHECK(genericDecl->curFile);
-            if (genericDecl->curFile->curPackage->fullPackageName != pkg.fullPackageName) {
-                continue;
-            }
-            AST::Walker(decl.get(), [&astNodeCnt](auto /* node */) {
-                astNodeCnt++;
-                return AST::VisitAction::WALK_CHILDREN;
-            }).Walk();
-        }
-        return astNodeCnt;
-    };
-    Utils::ProfileRecorder::RecordCodeInfo("cur pkg generic ins ast node", getCurPkgInstantiatedAstNode);
 }
 
 void ToCHIR::RecordCodeInfoAtTheEnd()
@@ -950,8 +906,8 @@ void ToCHIR::CFFIFuncWrapper()
         bool isForeign = curFunc->TestAttr(Attribute::FOREIGN);
         auto [wrapperFunc, res] = DoCFFIFuncWrapper(*curFunc, isForeign);
         // sanitizer_cov func have empty package name.
-        const auto& funcPkgName = curFunc->GetPackageName().empty() ? pkg.fullPackageName : curFunc->GetPackageName();
-        if (funcPkgName != pkg.fullPackageName) {
+        const auto& funcPkgName = curFunc->GetPackageName().empty() ? chirPkg->GetName() : curFunc->GetPackageName();
+        if (funcPkgName != chirPkg->GetName()) {
             // NOTE: res maybe null!
             ReplaceUsesWithWrapper(*curFunc, res, *wrapperFunc, true);
         }
@@ -970,11 +926,11 @@ std::pair<Value*, Apply*> ToCHIR::DoCFFIFuncWrapper(T& curFunc, bool isForeign, 
             ident.erase(pos, CFFI_FUNC_SUFFIX.size());
         }
     }
-    const auto& funcPkgName = curFunc.GetPackageName().empty() ? pkg.fullPackageName : curFunc.GetPackageName();
+    const auto& funcPkgName = curFunc.GetPackageName().empty() ? chirPkg->GetName() : curFunc.GetPackageName();
     if (isForeign || (curFunc.TestAttr(Attribute::PRIVATE) && isExternal)) {
         ident = funcPkgName + ":" + ident;
     }
-    if (funcPkgName != pkg.fullPackageName) {
+    if (funcPkgName != chirPkg->GetName()) {
         auto wrapperFunc = builder.CreateImportedVarOrFunc<ImportedFunc>(
             curFunc.GetFuncType(), ident, ident, "", funcPkgName, curFunc.GetGenericTypeParams());
         wrapperFunc->SetCFFIWrapper(true);
@@ -1078,6 +1034,8 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     if (!TranslateToCHIR(std::move(annoOnly))) {
         return false;
     }
+    ci.DestroyASTResources();
+    pkg = nullptr;
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
         auto fileName =
@@ -1180,6 +1138,10 @@ bool ToCHIR::Run()
     if (!RulesChecking()) {
         return false;
     }
+    // The diagnostic engine relies on the MacroCall node, so the ast must be released after all errors have been
+    // reported.
+    ci.DestroyASTResources();
+    pkg = nullptr;
     // 6. run optimization pass
     RunOptimizationPass();
     RecordCHIRExprNum("opt");
@@ -1317,7 +1279,7 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
                         ->SetComputeAnnotations(isComputingAnnos)
                         ->Build();
     ast2CHIR.SetAnnoOnlyDecls(std::move(annoOnly));
-    auto res = ast2CHIR.ToCHIRPackage(pkg);
+    auto res = ast2CHIR.ToCHIRPackage(*pkg);
     if (diag.GetErrorCount() != 0 || !res) {
         return false;
     }
@@ -1335,7 +1297,7 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
         globalNominalCache = std::move(chirTypeCache.globalNominalCache);
     }
 
-    for (auto& file : pkg.files) {
+    for (auto& file : pkg->files) {
         for (auto& macrocall : file->originalMacroCallNodes) {
             auto key = static_cast<uint64_t>(macrocall->begin.Hash64());
             diag.posRange2MacroCallMap[key] = macrocall.get();

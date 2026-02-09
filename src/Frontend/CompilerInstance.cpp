@@ -13,6 +13,7 @@
 #include "cangjie/Frontend/CompilerInstance.h"
 
 #include <fstream>
+#include <malloc.h>
 
 #include "PrintSymbolTable.h"
 
@@ -24,8 +25,8 @@
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
 #include "cangjie/CHIR/Utils/CHIRPrinter.h"
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
-#include "cangjie/Frontend/CompileStrategy.h"
 #include "cangjie/Driver/TempFileManager.h"
+#include "cangjie/Frontend/CompileStrategy.h"
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
 #include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
 #include "cangjie/Mangle/BaseMangler.h"
@@ -54,16 +55,17 @@ using namespace Cangjie;
 using namespace AST;
 
 CompilerInstance::CompilerInstance(CompilerInvocation& invocation, DiagnosticEngine& diag)
-    : invocation(invocation),
-      diag(diag),
-      packageManager(new PackageManager(importManager)),
-      typeManager(new TypeManager()),
-      importManager(diag, *typeManager, invocation.globalOptions),
-      testManager(new TestManager(importManager, *typeManager, diag, invocation.globalOptions)),
-      mangler(std::make_unique<BaseMangler>())
+    : invocation(invocation), diag(diag), mangler(std::make_unique<BaseMangler>())
 {
+    // allocate managers in safe order
+    typeManager = new TypeManager();
+    importManager = new ImportManager(diag, *typeManager, invocation.globalOptions);
+    packageManager = new PackageManager(*importManager);
+    testManager = new TestManager(*importManager, *typeManager, diag, invocation.globalOptions);
     CJC_NULLPTR_CHECK(typeManager);
+    CJC_NULLPTR_CHECK(importManager);
     CJC_NULLPTR_CHECK(packageManager);
+    CJC_NULLPTR_CHECK(testManager);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     chirData = std::make_unique<CHIRData>();
     chirData->InitData(&fileNameMap, invocation.globalOptions.GetJobs());
@@ -85,21 +87,89 @@ CompilerInstance::CompilerInstance(CompilerInvocation& invocation, DiagnosticEng
 
 CompilerInstance::~CompilerInstance()
 {
+    delete compileStrategy;
+    compileStrategy = nullptr;
+    if (typeChecker) {
+        delete typeChecker;
+        typeChecker = nullptr;
+    }
+    if (testManager) {
+        delete testManager;
+        testManager = nullptr;
+    }
+    if (packageManager) {
+        delete packageManager;
+        packageManager = nullptr;
+    }
+    if (importManager) {
+        delete importManager;
+        importManager = nullptr;
+    }
+    if (typeManager) {
+        delete typeManager;
+        typeManager = nullptr;
+    }
+    if (gim) {
+        delete gim;
+        gim = nullptr;
+    }
     // AST must be released before ASTContext for correct symbol detaching.
     srcPkgs.clear();
     pkgCtxMap.clear();
-    delete compileStrategy;
-    compileStrategy = nullptr;
-    delete typeChecker;
-    typeChecker = nullptr;
-    delete typeManager;
-    typeManager = nullptr;
-    delete testManager;
-    testManager = nullptr;
-    delete gim;
-    gim = nullptr;
-    delete packageManager;
-    packageManager = nullptr;
+}
+
+void CompilerInstance::DestroyASTResources()
+{
+    if (astResourcesDestroyed) {
+        return;
+    }
+    astResourcesDestroyed = true;
+
+    // Note: callers must ensure no background tasks are accessing these resources.
+
+    // 2) Delete TypeChecker as it may hold references to AST and TypeManager.
+    if (typeChecker) {
+        delete typeChecker;
+        typeChecker = nullptr;
+    }
+
+    // 3) Delete TestManager which may depend on TypeManager and GenericInstantiationManager.
+    if (testManager) {
+        delete testManager;
+        testManager = nullptr;
+    }
+
+    // 4) Delete GenericInstantiationManager if exists.
+    if (gim) {
+        delete gim;
+        gim = nullptr;
+    }
+
+    // 5) Delete PackageManager which holds reference to ImportManager->
+    if (packageManager) {
+        delete packageManager;
+        packageManager = nullptr;
+    }
+
+    // 5.1) Delete ImportManager after PackageManager
+    if (importManager) {
+        delete importManager;
+        importManager = nullptr;
+    }
+
+    // 6) Release AST nodes before ASTContext for correct symbol detaching.
+    srcPkgs.clear();
+
+    // 7) Clear ASTContext map.
+    pkgCtxMap.clear();
+
+    // 8) Delete TypeManager last among managers that are heap-allocated here.
+    if (typeManager) {
+        delete typeManager;
+        typeManager = nullptr;
+    }
+
+    (void)malloc_trim(0); // Release freed memory back to OS, which may be significant after a full compile.
 }
 
 bool CompilerInstance::InitCompilerInstance()
@@ -348,9 +418,9 @@ bool CompilerInstance::PerformMacroExpand()
 
     // Constant evaluation and the interpreter needs to load bchir, which requires an AST loader.
     if (!invocation.globalOptions.IsConstEvalEnabled() && !invocation.globalOptions.interpreter) {
-        importManager.DeleteASTLoaders();
+        importManager->DeleteASTLoaders();
     }
-    importManager.ClearPackageBCHIRCache();
+    importManager->ClearPackageBCHIRCache();
 
     if (invocation.globalOptions.compileTestsOnly && invocation.globalOptions.enableVerbose) {
         Print("Source files to compile for the test-only mode: {");
@@ -587,7 +657,7 @@ bool CompilerInstance::PerformDesugarAfterSema()
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 bool CompilerInstance::PerformGenericInstantiation()
 {
-    if (!importManager.IsSourceCodeImported()) {
+    if (!importManager->IsSourceCodeImported()) {
         InternalError("Generic instantiation should not be performed when imported source code is not reparsed.");
         return false;
     }
@@ -763,7 +833,7 @@ void CompilerInstance::ManglingHelpFunction(const BaseMangler& baseMangler)
             deduplicatedEmplace(decl.get(), package->fullPackageName);
         }
     }
-    for (auto& importPkg : importManager.GetAllImportedPackages()) {
+    for (auto& importPkg : importManager->GetAllImportedPackages()) {
         CJC_NULLPTR_CHECK(importPkg->srcPackage.get());
         // exclude current package
         if (!importPkg->srcPackage->TestAttr(AST::Attribute::IMPORTED)) {
@@ -798,7 +868,7 @@ bool CompilerInstance::PerformMangling()
     std::vector<std::unique_ptr<ManglerContext>> manglerCtxVec;
 
     // Get all imported packages and source packages.
-    for (auto& package : importManager.GetAllImportedPackages()) {
+    for (auto& package : importManager->GetAllImportedPackages()) {
         std::string pkgName = ManglerContext::ReduceUnitTestPackageName(package->fullPackageName);
         if (mangler->manglerCtxTable.find(pkgName) == mangler->manglerCtxTable.end()) {
             auto manglerCtx = std::make_unique<ManglerContext>();
@@ -975,16 +1045,16 @@ bool CompilerInstance::ImportPackages()
     AddSourceToMember();
 
     if (invocation.globalOptions.scanDepPkg) {
-        importManager.UpdateSearchPath(cangjieModules);
+        importManager->UpdateSearchPath(cangjieModules);
         if (!invocation.globalOptions.inputCjoFile.empty()) {
-            depPackageInfo = importManager.GeneratePkgDepInfoByCjo(invocation.globalOptions.inputCjoFile);
+            depPackageInfo = importManager->GeneratePkgDepInfoByCjo(invocation.globalOptions.inputCjoFile);
         } else {
-            depPackageInfo = importManager.GeneratePkgDepInfo(pkgs);
+            depPackageInfo = importManager->GeneratePkgDepInfo(pkgs);
         }
         return true;
     }
 
-    if (!importManager.BuildIndex(cangjieModules, invocation.globalOptions, pkgs)) {
+    if (!importManager->BuildIndex(cangjieModules, invocation.globalOptions, pkgs)) {
         return false;
     }
 
@@ -1034,7 +1104,7 @@ std::vector<Ptr<Decl>> CompilerInstance::GetAllVisibleExtendMembers(
         return {};
     }
     for (auto& e : extends) {
-        if (!importManager.IsExtendAccessible(curFile, *e)) {
+        if (!importManager->IsExtendAccessible(curFile, *e)) {
             continue;
         }
         auto& extendMember = e->GetMemberDecls();
@@ -1042,7 +1112,7 @@ std::vector<Ptr<Decl>> CompilerInstance::GetAllVisibleExtendMembers(
             members.insert(members.end(), extendMember.begin(), extendMember.end());
         } else {
             for (auto& m : extendMember) {
-                if (importManager.IsExtendMemberAccessible(curFile, *m, *exprTy)) {
+                if (importManager->IsExtendMemberAccessible(curFile, *m, *exprTy)) {
                     members.emplace_back(m.get());
                 }
             }
@@ -1131,10 +1201,10 @@ bool CompilerInstance::DetectCangjieModules()
 
 bool CompilerInstance::ModularizeCompilation()
 {
-    for (auto& objFile : importManager.GetUsedSTDLibFiles(DepType::DIRECT)) {
+    for (auto& objFile : importManager->GetUsedSTDLibFiles(DepType::DIRECT)) {
         invocation.globalOptions.directBuiltinDependencies.insert(objFile);
     }
-    for (auto& objFile : importManager.GetUsedSTDLibFiles(DepType::INDIRECT)) {
+    for (auto& objFile : importManager->GetUsedSTDLibFiles(DepType::INDIRECT)) {
         invocation.globalOptions.indirectBuiltinDependencies.insert(objFile);
     }
     return packageManager->ResolveDependence(pkgs);
