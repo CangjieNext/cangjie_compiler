@@ -59,7 +59,7 @@ TypeChecker::TypeCheckerImpl::TypeCheckerImpl(CompilerInstance* ci)
       typeManager(*ci->typeManager),
       ci(ci),
       diag(ci->diag),
-      importManager(ci->importManager),
+      importManager(*ci->importManager),
       backendType(ci->invocation.globalOptions.backend),
       mpImpl(new MPTypeCheckerImpl(*ci))
 {
