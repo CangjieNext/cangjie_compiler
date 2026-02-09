@@ -46,12 +46,12 @@ public:
     bool SaveCjo(const AST::Package& pkg);
     bool SaveCjo(const std::vector<Ptr<Package>>& pkgs);
     void RearrangeImportedPackageDependence();
-    bool CodegenOnePackage(AST::Package& pkg, bool enableIncrement);
+    bool CodegenOnePackage(bool enableIncrement);
 
 private:
     DefaultCompilerInstance& ci;
 
-    bool EmitLLVMSimilarBytecode(AST::Package& pkg, bool enableIncrement);
+    bool EmitLLVMSimilarBytecode(bool enableIncrement);
     std::string GenerateFileName(const std::string& fullPackageName, const std::string& idx) const;
     std::string GenerateBCFilePathAndUpdateToInvocation(
         const TempFileKind& kind, const std::string& pkgName, const std::string& idx = "");
@@ -192,7 +192,7 @@ bool DefaultCIImpl::SaveCjo(const AST::Package& pkg)
     }
     std::vector<uint8_t> astData;
     Utils::ProfileRecorder::Start("Save cjo", "Serialize ast");
-    ci.importManager.ExportAST(saveFileWithAbsPath, astData, pkg);
+    ci.importManager->ExportAST(saveFileWithAbsPath, astData, pkg);
     Utils::ProfileRecorder::Stop("Save cjo", "Serialize ast");
     // Write astData into file according to given package name by '--output' opt.
     TempFileInfo astFileInfo =
@@ -219,11 +219,8 @@ bool DefaultCIImpl::SaveCjo(const AST::Package& pkg)
     return res;
 }
 
-bool DefaultCIImpl::CodegenOnePackage(Package& pkg, bool enableIncrement)
+bool DefaultCIImpl::CodegenOnePackage(bool enableIncrement)
 {
-    if (pkg.IsEmpty()) {
-        return true;
-    }
     if (ci.invocation.globalOptions.disableCodeGen) {
         return true;
     }
@@ -232,7 +229,7 @@ bool DefaultCIImpl::CodegenOnePackage(Package& pkg, bool enableIncrement)
     switch (backend) {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
         case Triple::BackendType::CJNATIVE: {
-            if (!EmitLLVMSimilarBytecode(pkg, enableIncrement)) {
+            if (!EmitLLVMSimilarBytecode(enableIncrement)) {
                 return false;
             }
             break;
@@ -253,17 +250,18 @@ bool DefaultCIImpl::CodegenOnePackage(Package& pkg, bool enableIncrement)
     return true;
 }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-bool DefaultCIImpl::EmitLLVMSimilarBytecode(Package& pkg, bool enableIncrement)
+bool DefaultCIImpl::EmitLLVMSimilarBytecode(bool enableIncrement)
 {
     // 1. translate CHIR to LLVM IR
     CHIR::CHIRBuilder builder(ci.chirData.GetCHIRContext());
     llvmModules = CodeGen::GenPackageModules(builder, ci.chirData, ci.invocation.globalOptions, ci, enableIncrement);
 
     // 2. save LLVM IR to bc file
+    auto fullPackageName = ci.chirData.GetCHIRContext().GetCurPackage()->GetName();
     Utils::ProfileRecorder recorder("CodeGen", "Save bc file");
-    ci.invocation.globalOptions.UpdateCachedDirName(pkg.fullPackageName);
+    ci.invocation.globalOptions.UpdateCachedDirName(fullPackageName);
     if (llvmModules.size() == 1) {
-        auto filePath = GenerateBCFilePathAndUpdateToInvocation(TempFileKind::T_BC, pkg.fullPackageName);
+        auto filePath = GenerateBCFilePathAndUpdateToInvocation(TempFileKind::T_BC, fullPackageName);
         if (filePath.empty()) {
             return false;
         }
@@ -273,7 +271,7 @@ bool DefaultCIImpl::EmitLLVMSimilarBytecode(Package& pkg, bool enableIncrement)
         std::vector<std::string> allBCFilePath;
         for (size_t i = 0; i < llvmModules.size(); ++i) {
             auto filePath =
-                GenerateBCFilePathAndUpdateToInvocation(TempFileKind::T_BC, pkg.fullPackageName, std::to_string(i));
+                GenerateBCFilePathAndUpdateToInvocation(TempFileKind::T_BC, fullPackageName, std::to_string(i));
             if (filePath.empty()) {
                 return false;
             }
@@ -289,7 +287,7 @@ bool DefaultCIImpl::EmitLLVMSimilarBytecode(Package& pkg, bool enableIncrement)
     }
 
     if (ci.invocation.globalOptions.enIncrementalCompilation) {
-        auto fileName = GenerateFileName(pkg.fullPackageName, "");
+        auto fileName = GenerateFileName(fullPackageName, "");
         ci.cachedInfo.bitcodeFilesName = std::vector<std::string>{fileName};
     }
     return true;
@@ -307,12 +305,7 @@ bool DefaultCIImpl::PerformCodeGen()
     Utils::ProfileRecorder recorder("Main Stage", "CodeGen");
     // Before CodeGen, the dependency relationship of a package contains only some packages.
     // So this function rearranges the dependencies of all packages.
-    RearrangeImportedPackageDependence();
-    bool ret = true;
-    for (auto& srcPkg : ci.GetSourcePackages()) {
-        ret = ret && CodegenOnePackage(*srcPkg, false);
-    }
-    return ret;
+    return CodegenOnePackage(false);
 }
 
 bool DefaultCIImpl::PerformCjoSaving()
@@ -346,7 +339,7 @@ void DefaultCIImpl::RearrangeImportedPackageDependence()
 {
     Utils::ProfileRecorder recorder("CodeGen", "RearrangeImportedPackageDependence");
     std::vector<Ptr<Package>> allImportedPackages;
-    for (auto pd : ci.importManager.GetAllImportedPackages(true)) {
+    for (auto pd : ci.importManager->GetAllImportedPackages(true)) {
         CJC_ASSERT(pd && pd->srcPackage);
         allImportedPackages.push_back(pd->srcPackage);
     }
@@ -373,8 +366,8 @@ void DefaultCompilerInstance::RearrangeImportedPackageDependence() const
 {
     return impl->RearrangeImportedPackageDependence();
 }
-bool DefaultCompilerInstance::CodegenOnePackage(AST::Package& pkg, bool enableIncrement) const
+bool DefaultCompilerInstance::CodegenOnePackage(bool enableIncrement) const
 {
-    return impl->CodegenOnePackage(pkg, enableIncrement);
+    return impl->CodegenOnePackage(enableIncrement);
 }
 }
