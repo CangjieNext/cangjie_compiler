@@ -23,8 +23,8 @@
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/Utils/Semaphore.h"
 #include "cangjie/Utils/SipHash.h"
-#include "cangjie/Utils/Utils.h"
 #include "cangjie/Utils/Unicode.h"
+#include "cangjie/Utils/Utils.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -532,8 +532,9 @@ bool GlobalOptions::CheckLtoOptions() const
         return true;
     }
     auto osType = target.GetOSFamily();
-    if (osType == OSType::WINDOWS) {
-        Errorln("Windows does not support LTO optimization.");
+    if (osType == OSType::DARWIN || osType == OSType::IOS || osType == OSType::WINDOWS) {
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_target_lto_unsupported, DEFAULT_POSITION, target.OSToString());
         return false;
     }
     if (outputMode == OutputMode::OBJ) {
@@ -572,7 +573,7 @@ bool GlobalOptions::CheckOutputModeOptions()
     return true;
 }
 
-bool GlobalOptions::CheckCompileAsExeOptions() const 
+bool GlobalOptions::CheckCompileAsExeOptions() const
 {
     if (!IsCompileAsExeEnabled()) {
         return true;
@@ -1216,7 +1217,7 @@ std::string GlobalOptions::GetCangjieLibTargetPathName() const
     }
     name += "_" + target.ArchToString() + "_" + BackendToString(backend);
     return name;
-    
+
 }
 
 void GlobalOptions::SetCompilationCachedPath()
