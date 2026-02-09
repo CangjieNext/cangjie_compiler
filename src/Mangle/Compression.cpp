@@ -29,7 +29,7 @@ std::string DecimalToManglingNumber(const std::string& decimal)
         }
     }
     // Because _ represents 1, decimal to mangling number requires subtracting 1.
-    int num = std::stoi(decimal) - 1;
+    long long num = std::stoll(decimal) - 1;
     if (num < 0) {
         return MANGLE_WILDCARD_PREFIX;
     }
@@ -237,7 +237,7 @@ size_t ForwardName(std::string& mangled, bool& isCompressed, size_t idx)
     while (idx < mangled.size() && isdigit(mangled[idx + numberLen])) {
         numberLen++;
     }
-    size_t number = static_cast<size_t>(std::stoi(mangled.substr(idx, numberLen).c_str()));
+    size_t number = static_cast<size_t>(std::stoll(mangled.substr(idx, numberLen).c_str()));
     return idx + numberLen + number;
 }
 
