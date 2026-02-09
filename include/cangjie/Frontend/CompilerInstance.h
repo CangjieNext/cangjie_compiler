@@ -113,6 +113,14 @@ class CompilerInstance {
 public:
     CompilerInstance(CompilerInvocation& invocation, DiagnosticEngine& diag);
     virtual ~CompilerInstance();
+    /**
+     * @brief Destroy AST related resources in a safe order.
+     *
+     * This method will release `srcPkgs`, `pkgCtxMap` and delete managers
+     * such as `typeChecker`, `testManager`, `gim`, `packageManager` etc in
+     * a safe, dependency-aware order. It is idempotent.
+     */
+    void DestroyASTResources();
 
     /**
      * Set different CompileStrategy to do the real compile jobs.
@@ -585,6 +593,9 @@ private:
     std::unordered_map<Ptr<AST::Package>, std::unique_ptr<ASTContext>> pkgCtxMap;
 
     std::vector<std::string> depPackageInfo;
+
+    // Guard for ensuring AST resources are destroyed only once.
+    bool astResourcesDestroyed = false;
 
     virtual void UpdateCachedInfo();
     bool WriteCachedInfo();
