@@ -27,7 +27,7 @@ public:
           opts(ci.invocation.globalOptions),
           typeManager(ci.typeManager),
           sourceManager(ci.GetSourceManager()),
-          importManager(ci.importManager),
+          importManager(*ci.importManager),
           gim(ci.gim),
           diagEngine(ci.diag),
           cangjieHome(ci.cangjieHome),
@@ -163,7 +163,6 @@ private:
     DevirtualizationInfo CollectDevirtualizationInfo();
     bool RunConstantEvaluation();
     bool RunIRChecker(const Phase& phase);
-    void UpdatePosOfMacroExpandNode();
     void RecordCodeInfoAtTheBegin();
     void RecordCodeInfoAtTheEnd();
     void RecordCHIRExprNum(const std::string& suffix);
