@@ -1820,7 +1820,6 @@ OwnedPtr<CallExpr> ASTFactory::CreateObjCMsgSendCall(
     auto selectorCall = CreateRegisterNameCall(selector, nativeHandle->curFile);
 
     auto ft = MakeOwned<FuncType>();
-    ft->isC = true;
     ft->retType = CreateType(retTy);
 
     args.insert(args.begin(), std::move(selectorCall));
@@ -2161,7 +2160,6 @@ OwnedPtr<CallExpr> ASTFactory::CreateObjCMsgSendSuperCall(OwnedPtr<Expr> receive
     auto selCall = CreateRegisterNameCall(selector, receiver->curFile);
 
     auto ft = MakeOwned<FuncType>();
-    ft->isC = true;
     ft->retType = CreateType(retTy);
 
     rawArgs.insert(rawArgs.begin(), ASTCloner::Clone(selCall.get()));
