@@ -101,6 +101,52 @@ CompilerInstance::~CompilerInstance()
     packageManager = nullptr;
 }
 
+void CompilerInstance::DestroyASTResources()
+{
+    if (astResourcesDestroyed) {
+        return;
+    }
+    astResourcesDestroyed = true;
+
+    // Note: callers must ensure no background tasks are accessing these resources.
+
+    // 2) Delete TypeChecker as it may hold references to AST and TypeManager.
+    if (typeChecker) {
+        delete typeChecker;
+        typeChecker = nullptr;
+    }
+
+    // 3) Delete TestManager which may depend on TypeManager and GenericInstantiationManager.
+    if (testManager) {
+        delete testManager;
+        testManager = nullptr;
+    }
+
+    // 4) Delete GenericInstantiationManager if exists.
+    if (gim) {
+        delete gim;
+        gim = nullptr;
+    }
+
+    // 5) Delete PackageManager which holds reference to ImportManager.
+    if (packageManager) {
+        delete packageManager;
+        packageManager = nullptr;
+    }
+
+    // 6) Release AST nodes before ASTContext for correct symbol detaching.
+    srcPkgs.clear();
+
+    // 7) Clear ASTContext map.
+    pkgCtxMap.clear();
+
+    // 8) Delete TypeManager last among managers that are heap-allocated here.
+    if (typeManager) {
+        delete typeManager;
+        typeManager = nullptr;
+    }
+}
+
 bool CompilerInstance::InitCompilerInstance()
 {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND

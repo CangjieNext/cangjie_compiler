@@ -948,10 +948,10 @@ public:
     {
         static_assert(IsAllString<Args...>, "the diagnose only support string type argument");
         CheckRange(Diagnostic::GetDiagnoseCategory(kind), range);
-        auto newRange = MakeRealRange(node, range.begin, range.end);
+        auto newRange = MakeRange(range.begin, range.end);
         Diagnostic diagnostic(true, newRange, kind, args...);
         diagnostic.isInMacroCall = node.isInMacroCall;
-        AddMacroCallNote(diagnostic, node, range.begin);
+        // AddMacroCallNote(diagnostic, node, range.begin);
         return DiagnosticBuilder(*this, diagnostic);
     }
 
@@ -959,10 +959,10 @@ public:
     DiagnosticBuilder DiagnoseRefactor(DiagKindRefactor kind, const AST::Node& node, const Token& token, Args... args)
     {
         static_assert(IsAllString<Args...>, "the diagnose only support string type argument");
-        auto range = MakeRealRange(node, token.Begin(), token.End(), token.kind == TokenKind::END);
+        auto range = MakeRange(token.Begin(), token.End());
         Diagnostic diagnostic(true, range, kind, args...);
         diagnostic.isInMacroCall = node.isInMacroCall;
-        AddMacroCallNote(diagnostic, node, token.Begin());
+        // AddMacroCallNote(diagnostic, node, token.Begin());
         diagnostic.curMacroCall = node.curMacroCall;
         return DiagnosticBuilder(*this, diagnostic);
     }

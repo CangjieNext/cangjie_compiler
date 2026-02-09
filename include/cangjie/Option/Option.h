@@ -593,9 +593,9 @@ public:
 
     bool enableInteropCJMapping = false; /**< Whether enable cj data structure mapping for interop */
 
-    bool enableTimer = false; /**< Whether enable timer report. */
+    bool enableTimer = true; /**< Whether enable timer report. */
 
-    bool enableMemoryCollect = false; /**< Whether enable memory usage report. */
+    bool enableMemoryCollect = true; /**< Whether enable memory usage report. */
 
     enum class InteropLanguage : uint8_t { NA, Java, ObjC };
 
