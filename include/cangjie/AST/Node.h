@@ -2933,7 +2933,7 @@ struct File : Node {
     {
         return !(*this == r);
     }
-    std::set<std::string> GetFeatures()
+    std::set<std::string> GetFeatures() const
     {
         std::set<std::string> features = {};
         if (feature) {

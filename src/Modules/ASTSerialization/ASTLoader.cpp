@@ -304,6 +304,66 @@ OwnedPtr<AST::FeaturesDirective> LoadFeaturesDirective(const PackageFormat::Feat
 }
 } // namespace
 
+std::set<std::string> CollectFeaturesFromPackage(AST::Package& pkg) {
+    auto features = std::set<std::string>{};
+    for (auto& file : pkg.files) {
+        auto featureSet = file->GetFeatures();
+        features.insert(featureSet.begin(), featureSet.end());
+    }
+    return features;
+}
+
+OwnedPtr<AST::File> ASTLoader::ASTLoaderImpl::PreloadCommonFile(uoffset_t indexOfFile) {
+    CJC_NULLPTR_CHECK(package->allFileImports());
+    uoffset_t i = indexOfFile;
+    auto&& importInfos = LoadImportSpecs(package->allFileImports()->Get(i));
+    CJC_NULLPTR_CHECK(package->allFileInfo());
+
+    // Load file info for CJMP
+    auto fileInfo = package->allFileInfo()->Get(i);
+    auto tmpFilePath = package->allFiles()->Get(i)->str();
+    const bool isCJMPFile = true;
+    auto tmpFileId = sourceManager.AddSource(tmpFilePath, "", package->fullPkgName()->str(), isCJMPFile);
+    CJC_ASSERT(tmpFileId == fileInfo->fileID()); // make sure it get same file id as in first compilation stage
+    allFileIds[i] = tmpFileId;
+
+    auto file = CreateFileNode(*curPackage, fileInfo->fileID(), std::move(importInfos));
+    if (fileInfo->feature()) {
+        file->feature = LoadFeaturesDirective(fileInfo->feature());
+    }
+
+    file->EnableAttr(Attribute::FROM_COMMON_PART);
+    file->EnableAttr(Attribute::COMMON);
+    file->isCommon = true;
+    file->begin = LoadPos(fileInfo->begin());
+    file->end = LoadPos(fileInfo->end());
+    return file;
+}
+
+void validateCommonSpecificFeatureSetsRelations(const AST::File& commonFile,
+    const std::set<std::string>& specificFeatures, DiagnosticEngine& diag) {
+    auto parentFeatures = commonFile.GetFeatures();
+    if (!std::includes(
+        specificFeatures.begin(), specificFeatures.end(),
+        parentFeatures.begin(), parentFeatures.end()
+    )) {
+        std::vector<std::string> difference;
+        std::set_difference(
+            parentFeatures.begin(), parentFeatures.end(),
+            specificFeatures.begin(), specificFeatures.end(),
+            std::back_inserter(difference)
+        );
+        std::stringstream ss;
+        ss << "Features that caused problem: ";
+        for (const auto& feature : difference) {
+            ss << "'" << feature << "' ";
+        }
+        diag.DiagnoseRefactor(
+            DiagKindRefactor::feature_is_not_subset_of_child_set, commonFile.GetBegin(), commonFile.GetFullPackageName()
+        ).AddNote(ss.str());
+    }
+}
+
 void ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
 {
     if (!VerifyForData("ast")) {
@@ -315,48 +375,20 @@ void ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
 
     curPackage = &pkg; // Deserialize common part AST into current specific package AST
 
-    auto specificFeatures = std::set<std::string>{};
-    for (auto& file : pkg.files) {
-        auto featureSet = file->GetFeatures();
-        specificFeatures.insert(featureSet.begin(), featureSet.end());
-    }
+    auto specificFeatures = CollectFeaturesFromPackage(pkg);
 
     allTypes.resize(package->allTypes()->size(), nullptr);
     auto fileSize = package->allFiles()->size();
     allFileIds.resize(fileSize);
+
     for (uoffset_t i = 0; i < fileSize; i++) {
-        CJC_NULLPTR_CHECK(package->allFileImports());
-        auto&& importInfos = LoadImportSpecs(package->allFileImports()->Get(i));
-        CJC_NULLPTR_CHECK(package->allFileInfo());
-        // Load file info for CJMP
-        auto fileInfo = package->allFileInfo()->Get(i);
-        auto tmpFilePath = package->allFiles()->Get(i)->str();
-        const bool isCJMPFile = true;
-        auto tmpFileId = sourceManager.AddSource(tmpFilePath, "", package->fullPkgName()->str(), isCJMPFile);
-        CJC_ASSERT(tmpFileId == fileInfo->fileID()); // make sure it get same file id as in first compilation stage
-        allFileIds[i] = tmpFileId;
-        auto file = CreateFileNode(*curPackage, fileInfo->fileID(), std::move(importInfos));
-        if (fileInfo->feature()) {
-            file->feature = LoadFeaturesDirective(fileInfo->feature());
-        }
+        auto file = PreloadCommonFile(i);
 
-        auto parentFeatures = file->GetFeatures();
-        if (std::includes(
-            specificFeatures.begin(), specificFeatures.end(),
-            parentFeatures.begin(), parentFeatures.end()
-        )) {
-            diag.DiagnoseRefactor(
-            DiagKindRefactor::feature_is_not_subset_of_child_set, DEFAULT_POSITION, pkg.fullPackageName);
-            continue;
-        }
+        validateCommonSpecificFeatureSetsRelations(*file, specificFeatures, diag);
 
-        file->EnableAttr(Attribute::FROM_COMMON_PART);
-        file->EnableAttr(Attribute::COMMON);
-        file->isCommon = true;
-        file->begin = LoadPos(fileInfo->begin());
-        file->end = LoadPos(fileInfo->end());
         pkg.files.emplace_back(std::move(file));
     }
+
     AddCurFile(pkg);
     auto imports = package->imports();
     CJC_NULLPTR_CHECK(imports);
