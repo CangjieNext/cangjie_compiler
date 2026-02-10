@@ -717,7 +717,7 @@ private:
         Value* thisObj = nullptr, Value* thisRTTI = nullptr, DebugLocation loc = INVALID_LOCATION);
 
     CHIR::Type* GetExactParentType(Type& fuzzyParentType, const AST::FuncDecl& resolvedFunction, FuncType& funcType,
-        std::vector<Type*>& funcInstTypeArgs, bool checkAbstractMethod, bool checkResult = true);
+        std::vector<Type*>& funcInstTypeArgs, bool checkAbstractMethod);
 
     // translate var decl
     Ptr<Value> TranslateLeftValueOfVarDecl(const AST::VarDecl& decl, bool rValueIsEmpty, bool isLocalVar);

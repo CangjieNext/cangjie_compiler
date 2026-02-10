@@ -1020,6 +1020,7 @@ Value* Translator::TranslateNonStaticMemberFuncCall(const AST::CallExpr& expr)
     } else {
         auto instParentCustomTy =
             GetExactParentType(*thisType, *resolvedFunction, *tempInstTargetFuncTy, funcInstTypeArgs, false);
+        CJC_NULLPTR_CHECK(instParentCustomTy);
         Ptr<Type> instParentTy = instParentCustomTy;
         if (instParentCustomTy->IsReferenceType()) {
             instParentTy = builder.GetType<RefType>(instParentCustomTy);

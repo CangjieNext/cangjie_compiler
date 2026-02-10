@@ -2124,8 +2124,6 @@ Func* ClosureConversion::LiftLambdaToGlobalFunc(
     if (nestedFunc.GetParamDftValHostFunc()) {
         if (auto it = convertedCache.find(nestedFunc.GetParamDftValHostFunc()); it != convertedCache.cend()) {
             globalFunc->SetParamDftValHostFunc(*it->second);
-        } else {
-            InternalError("never come here in ConvertNestedFunctions");
         }
     }
 
