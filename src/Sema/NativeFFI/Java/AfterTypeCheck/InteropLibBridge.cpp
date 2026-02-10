@@ -623,6 +623,23 @@ OwnedPtr<Expr> InteropLibBridge::WrapJavaEntity(OwnedPtr<Expr> cjExpr)
         return CreateJavaEntityCall(cjExpr->curFile);
     }
 
+    if (cjExpr->ty->IsString()) {
+
+        auto fd = GetCangjieStringToJava();
+        CJC_NULLPTR_CHECK(fd);
+        auto env = CreateGetJniEnvCall(cjExpr->curFile);
+        CJC_NULLPTR_CHECK(env);
+
+        auto jstringCall = CreateCall(
+            fd,
+            cjExpr->curFile,
+            std::move(env),
+            std::move(cjExpr)
+        );
+
+        return CreateJavaEntityJobjectCall(std::move(jstringCall));
+    }
+
     return CreateJavaEntityCall(std::move(cjExpr));
 }
 

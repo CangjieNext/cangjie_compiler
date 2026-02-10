@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <cstring>
 #include <string>
+#include <stdint>
 
 namespace Cangjie {
 const char MANGLE_CANGJIE_PREFIX[] = "_C";

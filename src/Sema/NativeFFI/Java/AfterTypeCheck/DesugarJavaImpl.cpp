@@ -490,6 +490,9 @@ Ptr<Ty> JavaDesugarManager::GetJNITy(Ptr<Ty> ty)
     if (!ty) {
         return nullptr;
     }
+    if (ty->IsString()) {
+        return jobjectTy;
+    }
     if (ty->IsCoreOptionType()) {
         return jobjectTy;
     }
