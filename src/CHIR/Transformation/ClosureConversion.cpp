@@ -51,13 +51,13 @@ bool IsMutableVarType(const Value& value)
 }
 
 void CollectNestedLambdaExpr(
-    const Lambda& root, std::vector<Lambda*>& nestedFuncs, Func* curOutFunc, std::set<std::string>& ccOutFuncs)
+    const Lambda& root, std::vector<Lambda*>& nestedFuncs)
 {
-    CJC_NULLPTR_CHECK(curOutFunc);
-    auto preVisit = [&nestedFuncs, &curOutFunc, &ccOutFuncs](Expression& e) {
+    auto preVisit = [&nestedFuncs](Expression& e) {
         if (auto lambdaExpr = DynamicCast<Lambda*>(&e); lambdaExpr) {
-            CollectNestedLambdaExpr(*lambdaExpr, nestedFuncs, curOutFunc, ccOutFuncs);
+            CollectNestedLambdaExpr(*lambdaExpr, nestedFuncs);
             nestedFuncs.emplace_back(lambdaExpr);
+            return VisitResult::SKIP;
         }
         return VisitResult::CONTINUE;
     };
@@ -297,13 +297,12 @@ ClassType* InstantiateAutoEnvBaseType(ClassDef& autoEnvBaseDef, const FuncType& 
 
 void LiftCustomDefType(CustomTypeDef& def, TypeConverterForCC& converter)
 {
-    auto postVisit = [&converter](Expression& e) {
+    auto preVisit = [&converter](Expression& e) {
         converter.VisitExpr(e);
         return VisitResult::CONTINUE;
     };
     for (auto method : def.GetMethods()) {
-        Visitor::Visit(
-            *StaticCast<Func*>(method), [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+        Visitor::Visit(*StaticCast<Func*>(method), preVisit);
         converter.VisitValue(*method);
     }
     converter.VisitDef(def);
@@ -444,12 +443,11 @@ void ReplaceThisTypeInApplyAndInvoke(
         return ReplaceThisTypeToConcreteType(type, *ThisType, builder);
     };
     PrivateTypeConverter converter(convertFunc, builder);
-    auto postVisit = [&converter](Expression& e) {
+    auto preVisit = [&converter](Expression& e) {
         converter.VisitExpr(e);
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(
-        *nestedFunc.GetBody(), [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+    Visitor::Visit(*nestedFunc.GetBody(), preVisit);
 }
 
 std::vector<GenericType*> CreateGenericTypeParamForAutoEnvImplDef(const Value& srcFunc, CHIRBuilder& builder)
@@ -534,41 +532,6 @@ void PrintImportedFuncInfo(const ImportedFunc& func)
     std::string msg = "The imported func " + func.GetSrcCodeIdentifier() + " from package " +
         func.GetSourcePackageName() + " was closure converted";
     std::cout << msg << std::endl;
-}
-
-void ConvertTypeCastToBox(const std::vector<TypeCast*>& typecastExprs, CHIRBuilder& builder)
-{
-    for (auto e : typecastExprs) {
-        auto box = builder.CreateExpression<Box>(e->GetResult()->GetType(), e->GetSourceValue(), e->GetParentBlock());
-        e->ReplaceWith(*box);
-    }
-}
-
-void ConvertTypeCastToUnBox(const std::vector<TypeCast*>& typecastExprs, CHIRBuilder& builder)
-{
-    for (auto e : typecastExprs) {
-        auto unbox =
-            builder.CreateExpression<UnBox>(e->GetResult()->GetType(), e->GetSourceValue(), e->GetParentBlock());
-        e->ReplaceWith(*unbox);
-    }
-}
-
-void ConvertBoxToTypeCast(const std::vector<Box*>& boxExprs, CHIRBuilder& builder)
-{
-    for (auto e : boxExprs) {
-        auto typecast =
-            builder.CreateExpression<TypeCast>(e->GetResult()->GetType(), e->GetSourceValue(), e->GetParentBlock());
-        e->ReplaceWith(*typecast);
-    }
-}
-
-void ConvertUnBoxToTypeCast(const std::vector<UnBox*>& unboxExprs, CHIRBuilder& builder)
-{
-    for (auto e : unboxExprs) {
-        auto typecast =
-            builder.CreateExpression<TypeCast>(e->GetResult()->GetType(), e->GetSourceValue(), e->GetParentBlock());
-        e->ReplaceWith(*typecast);
-    }
 }
 
 bool ApplyNeedConvertToInvoke(Expression& e)
@@ -1041,17 +1004,16 @@ std::vector<Lambda*> ClosureConversion::CollectNestedFunctions()
     Func* curOutFunc = nullptr;
     auto preVisit = [&nestedFuncs, &curOutFunc, this](Expression& e) {
         if (auto lambdaExpr = DynamicCast<Lambda*>(&e); lambdaExpr) {
-            // maybe there is another lambda in current lambda's body, but we can't visit another lambda
-            // by walking Func node, so we need to walk current lambda body manually
-            CollectNestedLambdaExpr(*lambdaExpr, nestedFuncs, curOutFunc, ccOutFuncsRawMangle);
             // we must collect inner lambda first, and then outer lambda,
             // because we need to lift lambda from inner to outer
+            CollectNestedLambdaExpr(*lambdaExpr, nestedFuncs);
             nestedFuncs.emplace_back(lambdaExpr);
             if (opts.enIncrementalCompilation) {
                 if (!curOutFunc->GetRawMangledName().empty()) {
                     ccOutFuncsRawMangle.emplace(curOutFunc->GetRawMangledName());
                 }
             }
+            return VisitResult::SKIP;
         }
         return VisitResult::CONTINUE;
     };
@@ -1575,7 +1537,7 @@ void ClosureConversion::LiftType()
         return builder.GetType<RefType>(InstantiateAutoEnvBaseType(*autoEnvBaseDef, *convertedFuncType, builder));
     };
     TypeConverterForCC converter(convertTypeToClosure, convertTypeToInstBase, builder);
-    auto postVisit = [&converter](Expression& e) {
+    auto preVisit = [&converter](Expression& e) {
         converter.VisitExpr(e);
         return VisitResult::CONTINUE;
     };
@@ -1583,8 +1545,7 @@ void ClosureConversion::LiftType()
         if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;
         }
-        Visitor::Visit(
-            *func, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+        Visitor::Visit(*func, preVisit);
         converter.VisitValue(*func);
     }
 
@@ -2103,12 +2064,11 @@ Func* ClosureConversion::LiftLambdaToGlobalFunc(
         return gConvertor.ConvertToInstantiatedType(type);
     };
     PrivateTypeConverterNoInvokeOriginal converter(convertFunc, builder);
-    auto postVisit = [&converter](Expression& e) {
+    auto preVisit = [&converter](Expression& e) {
         converter.VisitExpr(e);
         return VisitResult::CONTINUE;
     };
-    Visitor::Visit(
-        *globalFunc, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+    Visitor::Visit(*globalFunc, preVisit);
     for (auto& param : globalFunc->GetParams()) {
         converter.VisitValue(*param);
     }
@@ -2329,99 +2289,100 @@ void ClosureConversion::ConvertImportedFunctions()
     }
 }
 
-void ClosureConversion::ConvertApplyToInvoke(const std::vector<Apply*>& applyExprs)
+void ClosureConversion::ConvertApplyToInvoke(Apply& apply)
 {
-    for (auto e : applyExprs) {
-        auto callee = e->GetCallee();
-        ClassDef* autoEnvBaseDef = nullptr;
-        ClassType* instParentType = nullptr;
-        if (auto funcType = DynamicCast<FuncType*>(callee->GetType())) {
-            // callee is still func type
-            autoEnvBaseDef = GetOrCreateAutoEnvBaseDef(*funcType);
-            instParentType = InstantiateAutoEnvBaseType(*autoEnvBaseDef, *funcType, builder);
-        } else {
-            // callee has been replaced in closure conversion, then apply must be converted to invoke
-            instParentType = StaticCast<ClassType*>(StaticCast<RefType*>(callee->GetType())->GetBaseType());
-            autoEnvBaseDef = instParentType->GetClassDef();
-        }
-        auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
-
-        auto invokeInfo = InvokeCallContext {
-            .caller = callee,
-            .funcCallCtx = FuncCallContext {
-                .args = e->GetArgs(),
-                .thisType = instParentType
-            },
-            .virMethodCtx = VirMethodContext {
-                .srcCodeIdentifier = methodName,
-                .originalFuncType = originalFuncType
-            }
-        };
-        auto invoke = builder.CreateExpression<Invoke>(
-            e->GetDebugLocation(), e->GetResult()->GetType(), invokeInfo, e->GetParentBlock());
-        invoke->Set<VirMethodOffset>(0);
-        e->ReplaceWith(*invoke);
+    auto callee = apply.GetCallee();
+    ClassDef* autoEnvBaseDef = nullptr;
+    ClassType* instParentType = nullptr;
+    if (auto funcType = DynamicCast<FuncType*>(callee->GetType())) {
+        // callee is still func type
+        autoEnvBaseDef = GetOrCreateAutoEnvBaseDef(*funcType);
+        instParentType = InstantiateAutoEnvBaseType(*autoEnvBaseDef, *funcType, builder);
+    } else {
+        // callee has been replaced in closure conversion, then apply must be converted to invoke
+        instParentType = StaticCast<ClassType*>(StaticCast<RefType*>(callee->GetType())->GetBaseType());
+        autoEnvBaseDef = instParentType->GetClassDef();
     }
+    auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
+
+    auto invokeInfo = InvokeCallContext {
+        .caller = callee,
+        .funcCallCtx = FuncCallContext {
+            .args = apply.GetArgs(),
+            .thisType = instParentType
+        },
+        .virMethodCtx = VirMethodContext {
+            .srcCodeIdentifier = methodName,
+            .originalFuncType = originalFuncType
+        }
+    };
+    auto invoke = builder.CreateExpression<Invoke>(
+        apply.GetDebugLocation(), apply.GetResult()->GetType(), invokeInfo, apply.GetParentBlock());
+    invoke->Set<VirMethodOffset>(0);
+    apply.ReplaceWith(*invoke);
 }
 
-void ClosureConversion::ConvertApplyWithExceptionToInvokeWithException(
-    const std::vector<ApplyWithException*>& applyExprs)
+void ClosureConversion::ConvertApplyWithExceptionToInvokeWithException(ApplyWithException& apply)
 {
-    for (auto e : applyExprs) {
-        auto callee = e->GetCallee();
-        ClassDef* autoEnvBaseDef = nullptr;
-        ClassType* instParentType = nullptr;
-        if (auto funcType = DynamicCast<FuncType*>(callee->GetType())) {
-            // callee is still func type
-            autoEnvBaseDef = GetOrCreateAutoEnvBaseDef(*funcType);
-            instParentType = InstantiateAutoEnvBaseType(*autoEnvBaseDef, *funcType, builder);
-        } else {
-            // callee has been replaced in closure conversion, then apply must be converted to invoke
-            instParentType = StaticCast<ClassType*>(StaticCast<RefType*>(callee->GetType())->GetBaseType());
-            autoEnvBaseDef = instParentType->GetClassDef();
-        }
-        auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
-
-        auto invokeInfo = InvokeCallContext {
-            .caller = callee,
-            .funcCallCtx = FuncCallContext {
-                .args = e->GetArgs(),
-                .thisType = instParentType
-            },
-            .virMethodCtx = VirMethodContext {
-                .srcCodeIdentifier = methodName,
-                .originalFuncType = originalFuncType
-            }
-        };
-        auto invoke = builder.CreateExpression<InvokeWithException>(e->GetDebugLocation(),
-            e->GetResult()->GetType(), invokeInfo, e->GetSuccessBlock(), e->GetErrorBlock(), e->GetParentBlock());
-        invoke->Set<VirMethodOffset>(0);
-        e->ReplaceWith(*invoke);
+    auto callee = apply.GetCallee();
+    ClassDef* autoEnvBaseDef = nullptr;
+    ClassType* instParentType = nullptr;
+    if (auto funcType = DynamicCast<FuncType*>(callee->GetType())) {
+        // callee is still func type
+        autoEnvBaseDef = GetOrCreateAutoEnvBaseDef(*funcType);
+        instParentType = InstantiateAutoEnvBaseType(*autoEnvBaseDef, *funcType, builder);
+    } else {
+        // callee has been replaced in closure conversion, then apply must be converted to invoke
+        instParentType = StaticCast<ClassType*>(StaticCast<RefType*>(callee->GetType())->GetBaseType());
+        autoEnvBaseDef = instParentType->GetClassDef();
     }
+    auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
+
+    auto invokeInfo = InvokeCallContext {
+        .caller = callee,
+        .funcCallCtx = FuncCallContext {
+            .args = apply.GetArgs(),
+            .thisType = instParentType
+        },
+        .virMethodCtx = VirMethodContext {
+            .srcCodeIdentifier = methodName,
+            .originalFuncType = originalFuncType
+        }
+    };
+    auto invoke = builder.CreateExpression<InvokeWithException>(
+        apply.GetDebugLocation(), apply.GetResult()->GetType(), invokeInfo,
+        apply.GetSuccessBlock(), apply.GetErrorBlock(), apply.GetParentBlock());
+    invoke->Set<VirMethodOffset>(0);
+    apply.ReplaceWith(*invoke);
 }
 
 void ClosureConversion::ConvertExpressions()
 {
-    std::vector<Apply*> applyExprs;
-    std::vector<ApplyWithException*> applyWithExceptionExprs;
-    std::vector<TypeCast*> typecastToBoxExprs;
-    std::vector<TypeCast*> typecastToUnBoxExprs;
-    std::vector<Box*> boxToTypecastExprs;
-    std::vector<UnBox*> unboxToTypecastExprs;
-    auto postVisit = [&applyExprs, &applyWithExceptionExprs, &typecastToBoxExprs, &typecastToUnBoxExprs,
-        &boxToTypecastExprs, &unboxToTypecastExprs](Expression& e) {
+    auto preVisit = [this](Expression& e) {
         if (ApplyNeedConvertToInvoke(e)) {
-            applyExprs.emplace_back(StaticCast<Apply*>(&e));
+            ConvertApplyToInvoke(StaticCast<Apply&>(e));
         } else if (ApplyWithExceptionNeedConvertToInvokeWithException(e)) {
-            applyWithExceptionExprs.emplace_back(StaticCast<ApplyWithException*>(&e));
+            ConvertApplyWithExceptionToInvokeWithException(StaticCast<ApplyWithException&>(e));
         } else if (TypeCastNeedConvertToBox(e)) {
-            typecastToBoxExprs.emplace_back(StaticCast<TypeCast*>(&e));
+            auto& cast = StaticCast<TypeCast&>(e);
+            auto box = builder.CreateExpression<Box>(
+                cast.GetResult()->GetType(), cast.GetSourceValue(), cast.GetParentBlock());
+            cast.ReplaceWith(*box);
         } else if (TypeCastNeedConvertToUnBox(e)) {
-            typecastToUnBoxExprs.emplace_back(StaticCast<TypeCast*>(&e));
+            auto& cast = StaticCast<TypeCast&>(e);
+            auto unbox = builder.CreateExpression<UnBox>(
+                cast.GetResult()->GetType(), cast.GetSourceValue(), cast.GetParentBlock());
+            cast.ReplaceWith(*unbox);
         } else if (BoxNeedConvertToTypeCast(e)) {
-            boxToTypecastExprs.emplace_back(StaticCast<Box*>(&e));
+            auto& box = StaticCast<Box&>(e);
+            auto typecast = builder.CreateExpression<TypeCast>(
+                box.GetResult()->GetType(), box.GetSourceValue(), box.GetParentBlock());
+            box.ReplaceWith(*typecast);
         } else if (UnBoxNeedConvertToTypeCast(e)) {
-            unboxToTypecastExprs.emplace_back(StaticCast<UnBox*>(&e));
+            auto& unbox = StaticCast<UnBox&>(e);
+            auto typecast = builder.CreateExpression<TypeCast>(
+                unbox.GetResult()->GetType(), unbox.GetSourceValue(), unbox.GetParentBlock());
+            unbox.ReplaceWith(*typecast);
         }
         return VisitResult::CONTINUE;
     };
@@ -2429,15 +2390,8 @@ void ClosureConversion::ConvertExpressions()
         if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;
         }
-        Visitor::Visit(
-            *func, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+        Visitor::Visit(*func, preVisit);
     }
-    ConvertApplyToInvoke(applyExprs);
-    ConvertApplyWithExceptionToInvokeWithException(applyWithExceptionExprs);
-    ConvertTypeCastToBox(typecastToBoxExprs, builder);
-    ConvertTypeCastToUnBox(typecastToUnBoxExprs, builder);
-    ConvertBoxToTypeCast(boxToTypecastExprs, builder);
-    ConvertUnBoxToTypeCast(unboxToTypecastExprs, builder);
 }
 
 void ClosureConversion::CreateVTableForAutoEnvDef()

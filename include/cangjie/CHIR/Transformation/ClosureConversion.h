@@ -120,8 +120,8 @@ private:
     void ReplaceUserPoint(
         Lambda& srcFunc, Expression& user, const std::vector<Value*>& envs, ClassDef& autoEnvImplDef);
     void ConvertExpressions();
-    void ConvertApplyWithExceptionToInvokeWithException(const std::vector<ApplyWithException*>& applyExprs);
-    void ConvertApplyToInvoke(const std::vector<Apply*>& applyExprs);
+    void ConvertApplyWithExceptionToInvokeWithException(ApplyWithException& apply);
+    void ConvertApplyToInvoke(Apply& apply);
     void CreateVTableForAutoEnvDef();
     bool LambdaCanBeInlined(const Expression& user, const FuncBase& lambda);
     void DoFunctionInlineForLambda();
