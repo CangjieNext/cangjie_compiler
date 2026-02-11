@@ -322,12 +322,8 @@ void ReportPackageMismatch(
 } // namespace
 
 std::set<std::string> CollectFeaturesFromPackage(AST::Package& pkg) {
-    auto features = std::set<std::string>{};
-    for (auto& file : pkg.files) {
-        auto featureSet = file->GetFeatures();
-        features.insert(featureSet.begin(), featureSet.end());
-    }
-    return features;
+    // All features should be same across parsed at the moment files, so use any file feature set
+    return pkg.files.back()->GetFeatures(".");
 }
 
 OwnedPtr<AST::File> ASTLoader::ASTLoaderImpl::PreloadCommonFile(uoffset_t indexOfFile) {
@@ -358,8 +354,8 @@ OwnedPtr<AST::File> ASTLoader::ASTLoaderImpl::PreloadCommonFile(uoffset_t indexO
 }
 
 void validateCommonSpecificFeatureSetsRelations(const AST::File& commonFile,
-    const std::set<std::string>& specificFeatures, DiagnosticEngine& diag) {
-    auto parentFeatures = commonFile.GetFeatures();
+    const std::set<std::string>& specificFeatures, DiagnosticEngine& diag, const AST::Package& pkg) {
+    auto parentFeatures = commonFile.GetFeatures(".");
     if (!std::includes(
         specificFeatures.begin(), specificFeatures.end(),
         parentFeatures.begin(), parentFeatures.end()
@@ -375,9 +371,14 @@ void validateCommonSpecificFeatureSetsRelations(const AST::File& commonFile,
         for (const auto& feature : difference) {
             ss << "'" << feature << "' ";
         }
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::feature_is_not_subset_of_child_set, commonFile.GetBegin(), commonFile.GetFullPackageName()
-        ).AddNote(ss.str());
+        auto diagBuilder = diag.DiagnoseRefactor(
+            DiagKindRefactor::feature_is_not_subset_of_child_set,
+            commonFile.GetBegin(), commonFile.GetFullPackageName(), commonFile.filePath
+        );
+        diagBuilder.AddNote(ss.str());
+        if (pkg.files.back()->feature) {
+            diagBuilder.AddNote(*pkg.files.back()->feature, "Expected feature set must be subset of:");
+        }
     }
 }
 
@@ -406,7 +407,7 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
     for (uoffset_t i = 0; i < fileSize; i++) {
         auto file = PreloadCommonFile(i);
 
-        validateCommonSpecificFeatureSetsRelations(*file, specificFeatures, diag);
+        validateCommonSpecificFeatureSetsRelations(*file, specificFeatures, diag, pkg);
 
         pkg.files.emplace_back(std::move(file));
     }

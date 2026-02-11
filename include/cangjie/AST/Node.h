@@ -2933,7 +2933,7 @@ struct File : Node {
     {
         return !(*this == r);
     }
-    std::set<std::string> GetFeatures() const
+    std::set<std::string> GetFeatures(std::string separator = "") const
     {
         std::set<std::string> features = {};
         if (feature) {
@@ -2942,6 +2942,9 @@ struct File : Node {
                 std::string featureStr = "";
                 for (size_t i = 0; i < rawFeature.identifiers.size(); i++) {
                     featureStr += rawFeature.identifiers[i].Val();
+                    if (i + 1 != rawFeature.identifiers.size()) {
+                        featureStr += separator;
+                    }
                 }
                 features.insert(featureStr);
             }
