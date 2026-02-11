@@ -616,7 +616,15 @@ template <> flatbuffers::Offset<PackageFormat::Func> CHIRSerializer::CHIRSeriali
         oriLambdaGenericTypeParams = GetId<Type>(obj.GetOriginalGenericTypeParams());
     }
     auto genericTypeParams = GetId<Type>(obj.GetGenericTypeParams());
-    auto paramDftValHostFunc = GetId<Value>(obj.GetParamDftValHostFunc());
+    bool skipParamDftValHostFunc = false;
+    uint32_t paramDftValHostFuncDecl = 0;
+    // genericFunc may be removed body when doing uselessFuncElimination, do not serializer it
+    if (auto paramDftValHostFunc = DynamicCast<Func*>(obj.GetParamDftValHostFunc()); paramDftValHostFunc && !paramDftValHostFunc->GetBody()) {
+        skipParamDftValHostFunc = true;
+    }
+    if (!skipParamDftValHostFunc) {
+        paramDftValHostFuncDecl = GetId<Value>(obj.GetParamDftValHostFunc());
+    }
 
     // FuncBody
     CJC_NULLPTR_CHECK(obj.GetBody());
@@ -632,7 +640,7 @@ template <> flatbuffers::Offset<PackageFormat::Func> CHIRSerializer::CHIRSeriali
     return PackageFormat::CreateFuncDirect(builder, base, srcCodeIdentifier.data(), rawMangledName.data(),
         packageName.data(), declaredParent, genericDecl, funcKind, obj.IsFastNative(), obj.IsCFFIWrapper(),
         oriLambdaFuncTy, oriLambdaGenericTypeParams.empty() ? nullptr : &oriLambdaGenericTypeParams,
-        genericTypeParams.empty() ? nullptr : &genericTypeParams, paramDftValHostFunc, body,
+        genericTypeParams.empty() ? nullptr : &genericTypeParams, paramDftValHostFuncDecl, body,
         params.empty() ? nullptr : &params, retVal, parentName.data(), propLoc, localId, blockId, blockGroupId);
 }
 
