@@ -14,7 +14,6 @@
 #define CANGJIE_CHIR_CHIR_H
 
 #include "cangjie/CHIR/AST2CHIR/AST2CHIR.h"
-#include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Analysis/ValueRangeAnalysis.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/Utils/DiagAdapter.h"

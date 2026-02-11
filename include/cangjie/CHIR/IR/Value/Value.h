@@ -117,6 +117,7 @@ public:
     bool IsParameter() const;
 
     Type* GetType() const;
+    void SetType(Type& newType);
 
     virtual std::string GetSrcCodeIdentifier() const;
     const std::string& GetIdentifier() const;
