@@ -965,19 +965,26 @@ bool LinuxAarch64CJNativeCGCFFI::IsHomogeneousAggregate(llvm::Type& type, llvm::
 void MacAArch64CJNativeCGCFFI::AddFunctionAttr(const CHIR::FuncType& chirFuncTy, llvm::Function& llvmFunc)
 {
     LinuxAarch64CJNativeCGCFFI::AddFunctionAttr(chirFuncTy, llvmFunc);
-    CJC_ASSERT(chirFuncTy.GetNumOfParams() == llvmFunc.arg_size());
+    bool isSRet = chirFuncTy.GetNumOfParams() < llvmFunc.arg_size();
+    if (isSRet) {
+        CJC_ASSERT(chirFuncTy.GetNumOfParams() + 1 == llvmFunc.arg_size());
+    } else {
+        CJC_ASSERT(chirFuncTy.GetNumOfParams() == llvmFunc.arg_size());
+    }
     const unsigned int SMALL_INT_THRESHOLD = 32;
-    for (unsigned i = 0; i < llvmFunc.arg_size(); ++i) {
+    for (unsigned i = 0; i < chirFuncTy.GetNumOfParams(); ++i) {
         if (auto argType = chirFuncTy.GetParamType(i); argType->IsBoolean() || argType->IsInteger()) {
-            AddParamAttr(&llvmFunc, i, llvm::Attribute::NoUndef);
-            auto intArgType = llvm::dyn_cast<llvm::IntegerType>(llvmFunc.getArg(i)->getType());
+            // Sret paramter is on the first.
+            unsigned j = isSRet ? i + 1 : i;
+            AddParamAttr(&llvmFunc, j, llvm::Attribute::NoUndef);
+            auto intArgType = llvm::dyn_cast<llvm::IntegerType>(llvmFunc.getArg(j)->getType());
             if (!intArgType || intArgType->getBitWidth() >= SMALL_INT_THRESHOLD) {
                 continue;
             }
             if (argType->IsSignedInteger()) {  // Signed integers use sign extension.
-                AddParamAttr(&llvmFunc, i, llvm::Attribute::SExt);
+                AddParamAttr(&llvmFunc, j, llvm::Attribute::SExt);
             } else {
-                AddParamAttr(&llvmFunc, i, llvm::Attribute::ZExt);
+                AddParamAttr(&llvmFunc, j, llvm::Attribute::ZExt);
             }
         }
     }
