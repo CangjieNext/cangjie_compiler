@@ -1424,7 +1424,7 @@ void ClosureConversion::CreateGenericOverrideMethodInAutoEnvImplDef(ClassDef& au
     // create override func
     auto mangledName = CHIRMangling::ClosureConversion::GenerateGenericOverrideFuncMangleName(srcFunc);
     auto newFunc = builder.CreateFunc(
-        INVALID_LOCATION, newFuncTy, mangledName, GENERIC_VIRTUAL_FUNC, "", package.GetName());
+        srcFunc.GetDebugLocation(), newFuncTy, mangledName, GENERIC_VIRTUAL_FUNC, "", package.GetName());
     autoEnvImplDef.AddMethod(newFunc);
 
     // set attribute
@@ -1573,7 +1573,7 @@ void ClosureConversion::CreateInstOverrideMethodInAutoEnvImplDef(ClassDef& autoE
     // create override func
     auto mangledName = CHIRMangling::ClosureConversion::GenerateInstOverrideFuncMangleName(srcFunc);
     auto newFunc = builder.CreateFunc(
-        INVALID_LOCATION, newFuncTy, mangledName, INST_VIRTUAL_FUNC, "", package.GetName());
+        srcFunc.GetDebugLocation(), newFuncTy, mangledName, INST_VIRTUAL_FUNC, "", package.GetName());
     autoEnvImplDef.AddMethod(newFunc);
 
     // set attribute
