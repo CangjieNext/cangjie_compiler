@@ -968,6 +968,7 @@ void MacAArch64CJNativeCGCFFI::AddFunctionAttr(const CHIR::FuncType& chirFuncTy,
     bool isSRet = chirFuncTy.GetNumOfParams() < llvmFunc.arg_size();
     if (isSRet) {
         CJC_ASSERT(chirFuncTy.GetNumOfParams() + 1 == llvmFunc.arg_size());
+        exit(1);
     } else {
         CJC_ASSERT(chirFuncTy.GetNumOfParams() == llvmFunc.arg_size());
     }
