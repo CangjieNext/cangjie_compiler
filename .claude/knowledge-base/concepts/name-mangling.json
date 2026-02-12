@@ -1,0 +1,65 @@
+{
+  "documentId": "concept-name-mangling",
+  "documentPath": "/usr1/ace/cangjie_compiler/.claude/knowledge-base/concepts/name-mangling.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "concept": {
+    "name": "Name Mangling",
+    "definition": "名称修饰是将程序中的符号名称编码为唯一字符串的过程，用于解决符号重载、泛型实例化、命名空间等导致的符号名称冲突问题。",
+    "purpose": "名称修饰用于符号唯一性、重载支持、泛型实例化、模块隔离和 ABI 兼容性。",
+    "implementation": {
+      "dataStructures": [
+        "BaseMangler - 名称修饰基类，提供通用算法",
+        "ASTMangler - 基于 AST 的名称修饰器",
+        "CHIRMangler - 基于 CHIR 的名称修饰器",
+        "ManglingContext - 修饰上下文",
+        "CompressionTable - 压缩表"
+      ],
+      "algorithms": [
+        "Compression Algorithm - 压缩算法，减少修饰名称长度",
+        "Type Encoding - 类型编码算法",
+        "Signature Mangling - 函数签名修饰",
+        "Generic Mangling - 泛型修饰",
+        "Module Path Encoding - 模块路径编码"
+      ],
+      "keyFiles": [
+        "/usr1/ace/cangjie_compiler/include/cangjie/Mangle/BaseMangler.h",
+        "/usr1/ace/cangjie_compiler/include/cangjie/Mangle/ASTMangler.h",
+        "/usr1/ace/cangjie_compiler/include/cangjie/Mangle/CHIRMangler.h",
+        "/usr1/ace/cangjie_compiler/src/Mangle/"
+      ]
+    },
+    "relatedModules": [
+      {
+        "moduleName": "mangle",
+        "relationship": "名称修饰的核心实现"
+      },
+      {
+        "moduleName": "sema",
+        "relationship": "语义分析阶段使用 ASTMangler"
+      },
+      {
+        "moduleName": "codegen",
+        "relationship": "代码生成阶段使用 CHIRMangler"
+      },
+      {
+        "moduleName": "modules",
+        "relationship": "使用修饰名称进行符号导出导入"
+      },
+      {
+        "moduleName": "linker",
+        "relationship": "使用修饰名称进行符号解析"
+      }
+    ],
+    "examples": [
+      "函数名称修饰实现",
+      "类型编码算法",
+      "压缩算法示例"
+    ],
+    "furtherReading": [
+      "/usr1/ace/cangjie_compiler/include/cangjie/Mangle/",
+      "/usr1/ace/cangjie_compiler/src/Mangle/",
+      "Itanium C++ ABI"
+    ]
+  }
+}

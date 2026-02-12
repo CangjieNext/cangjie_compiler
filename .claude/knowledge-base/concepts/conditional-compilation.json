@@ -1,0 +1,65 @@
+{
+  "documentId": "concept-conditional-compilation",
+  "documentPath": "/usr1/ace/cangjie_compiler/.claude/knowledge-base/concepts/conditional-compilation.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "concept": {
+    "name": "Conditional Compilation",
+    "definition": "条件编译是一种编译时机制，允许根据编译条件（如目标平台、编译配置、特性标志等）选择性地编译代码。",
+    "purpose": "条件编译用于平台适配、特性控制、调试支持、版本兼容和代码优化。",
+    "implementation": {
+      "dataStructures": [
+        "ConditionalCompilation - 条件编译管理器",
+        "CompilationCondition - 编译条件表达式",
+        "ConditionEvaluator - 条件求值器",
+        "PlatformInfo - 平台信息",
+        "FeatureFlags - 特性标志集合"
+      ],
+      "algorithms": [
+        "Condition Evaluation - 条件评估算法",
+        "Code Block Selection - 代码块选择算法",
+        "Preprocessor Integration - 预处理器集成",
+        "Attribute Processing - 属性处理",
+        "Dead Code Elimination - 死代码消除"
+      ],
+      "keyFiles": [
+        "/usr1/ace/cangjie_compiler/include/cangjie/ConditionalCompilation/ConditionalCompilation.h",
+        "/usr1/ace/cangjie_compiler/src/ConditionalCompilation/",
+        "/usr1/ace/cangjie_compiler/include/cangjie/ConditionalCompilation/PlatformInfo.h",
+        "/usr1/ace/cangjie_compiler/include/cangjie/ConditionalCompilation/FeatureFlags.h"
+      ]
+    },
+    "relatedModules": [
+      {
+        "moduleName": "ConditionalCompilation",
+        "relationship": "条件编译的核心实现模块"
+      },
+      {
+        "moduleName": "parse",
+        "relationship": "解析条件编译指令和属性"
+      },
+      {
+        "moduleName": "sema",
+        "relationship": "条件编译后的语义检查"
+      },
+      {
+        "moduleName": "ast",
+        "relationship": "条件编译相关的 AST 节点"
+      },
+      {
+        "moduleName": "driver",
+        "relationship": "设置编译条件和特性标志"
+      }
+    ],
+    "examples": [
+      "条件编译指令使用",
+      "条件编译属性",
+      "条件编译管理器实现",
+      "平台信息匹配"
+    ],
+    "furtherReading": [
+      "/usr1/ace/cangjie_compiler/include/cangjie/ConditionalCompilation/",
+      "/usr1/ace/cangjie_compiler/src/ConditionalCompilation/"
+    ]
+  }
+}

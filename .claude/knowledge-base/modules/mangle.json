@@ -1,0 +1,39 @@
+{
+  "documentId": "module-mangle",
+  "category": "supporting",
+  "pipelineStage": "name-mangling",
+  "dependencies": ["ast", "chir"],
+  "dependents": [],
+  "components": [
+    {
+      "name": "BaseMangler",
+      "description": "基础修饰器，提供名称修饰的基础功能"
+    },
+    {
+      "name": "ASTMangler",
+      "description": "AST 级修饰器，对声明和类型进行名称修饰"
+    },
+    {
+      "name": "CHIRMangler",
+      "description": "CHIR 级修饰器，在 IR 层面进行名称修饰"
+    },
+    {
+      "name": "Compression",
+      "description": "名称压缩，优化修饰后的符号名称长度"
+    },
+    {
+      "name": "ManglingUtils",
+      "description": "修饰工具函数"
+    }
+  ],
+  "sourceFiles": [
+    "src/Mangle/BaseMangler.cpp",
+    "src/Mangle/ASTMangler.cpp",
+    "src/Mangle/Compression.cpp",
+    "src/Mangle/CHIRMangler.cpp",
+    "src/Mangle/CHIRManglingUtils.cpp",
+    "src/Mangle/CHIRTypeManglingUtils.cpp"
+  ],
+  "tags": ["supporting", "name-mangling"],
+  "searchKeywords": ["名称修饰", "mangle", "demangle", "symbol"]
+}

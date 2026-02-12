@@ -1,0 +1,57 @@
+{
+  "moduleId": "modules",
+  "classes": [
+    {
+      "name": "ImportManager",
+      "methods": [
+        {
+          "name": "resolveImport",
+          "description": "解析 import 语句"
+        },
+        {
+          "name": "loadModule",
+          "description": "加载模块"
+        }
+      ]
+    },
+    {
+      "name": "CjoManager",
+      "methods": [
+        {
+          "name": "readCjo",
+          "description": "读取 CJO 文件"
+        },
+        {
+          "name": "writeCjo",
+          "description": "写入 CJO 文件"
+        }
+      ]
+    },
+    {
+      "name": "PackageManager",
+      "methods": [
+        {
+          "name": "findPackage",
+          "description": "查找包"
+        },
+        {
+          "name": "resolvePackage",
+          "description": "解析包路径"
+        }
+      ]
+    },
+    {
+      "name": "DependencyGraph",
+      "methods": [
+        {
+          "name": "addDependency",
+          "description": "添加依赖关系"
+        },
+        {
+          "name": "topologicalSort",
+          "description": "拓扑排序依赖"
+        }
+      ]
+    }
+  ]
+}

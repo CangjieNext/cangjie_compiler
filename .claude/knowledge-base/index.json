@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-02-12",
+  "categories": [
+    {
+      "id": "architecture",
+      "name": "Architecture Documentation",
+      "description": "编译器架构和设计",
+      "path": "./architecture/index.md",
+      "indexFile": "./architecture/index.json",
+      "documentCount": 5
+    },
+    {
+      "id": "modules",
+      "name": "Module Documentation",
+      "description": "各模块详细说明",
+      "path": "./modules/index.md",
+      "indexFile": "./modules/index.json",
+      "documentCount": 11
+    },
+    {
+      "id": "concepts",
+      "name": "Concept Documentation",
+      "description": "关键概念解释",
+      "path": "./concepts/index.md",
+      "indexFile": "./concepts/index.json",
+      "documentCount": 9
+    },
+    {
+      "id": "workflows",
+      "name": "Workflow Documentation",
+      "description": "常见工作流指南",
+      "path": "./workflows/index.md",
+      "indexFile": "./workflows/index.json",
+      "documentCount": 4
+    },
+    {
+      "id": "code-navigation",
+      "name": "Code Navigation",
+      "description": "代码导航指引",
+      "path": "./code-navigation/index.md",
+      "indexFile": "./code-navigation/index.json",
+      "documentCount": 3
+    }
+  ],
+  "tags": ["compiler", "cangjie", "documentation"],
+  "searchHints": {
+    "moduleQuery": "查找模块信息请访问 modules/index.json",
+    "conceptQuery": "查找概念解释请访问 concepts/index.json",
+    "architectureQuery": "查找架构信息请访问 architecture/index.json",
+    "workflowQuery": "查找工作流请访问 workflows/index.json",
+    "codeNavQuery": "查找代码位置请访问 code-navigation/index.json"
+  }
+}

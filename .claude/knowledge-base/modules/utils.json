@@ -1,0 +1,52 @@
+{
+  "documentId": "module-utils",
+  "category": "supporting",
+  "pipelineStage": "utility",
+  "dependencies": [],
+  "dependents": ["all modules"],
+  "components": [
+    {
+      "name": "FileUtil",
+      "description": "文件操作工具"
+    },
+    {
+      "name": "Unicode",
+      "description": "Unicode 处理工具"
+    },
+    {
+      "name": "Signal",
+      "description": "信号处理"
+    },
+    {
+      "name": "Profiling",
+      "description": "性能分析工具"
+    },
+    {
+      "name": "Casting",
+      "description": "类型转换工具"
+    },
+    {
+      "name": "SafePointer",
+      "description": "安全指针"
+    },
+    {
+      "name": "Semaphore",
+      "description": "信号量"
+    },
+    {
+      "name": "TaskQueue",
+      "description": "任务队列"
+    },
+    {
+      "name": "ParallelUtil",
+      "description": "并行工具"
+    }
+  ],
+  "sourceFiles": [
+    "src/Utils/",
+    "src/Utils/StdUtils/",
+    "src/Utils/UnicodeTables/"
+  ],
+  "tags": ["supporting", "utilities"],
+  "searchKeywords": ["工具", "utility", "文件", "unicode", "signal"]
+}

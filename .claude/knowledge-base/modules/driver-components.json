@@ -1,0 +1,62 @@
+{
+  "moduleId": "driver",
+  "classes": [
+    {
+      "name": "Driver",
+      "methods": [
+        {
+          "name": "buildCompilation",
+          "description": "构建编译任务"
+        },
+        {
+          "name": "executeJobs",
+          "description": "执行编译任务"
+        }
+      ]
+    },
+    {
+      "name": "Tool",
+      "methods": [
+        {
+          "name": "constructCommand",
+          "description": "构造工具命令"
+        },
+        {
+          "name": "execute",
+          "description": "执行工具"
+        }
+      ]
+    },
+    {
+      "name": "ToolOptions",
+      "methods": [
+        {
+          "name": "parse",
+          "description": "解析工具选项"
+        }
+      ]
+    },
+    {
+      "name": "TempFileManager",
+      "methods": [
+        {
+          "name": "createTempFile",
+          "description": "创建临时文件"
+        },
+        {
+          "name": "cleanup",
+          "description": "清理临时文件"
+        }
+      ]
+    },
+    {
+      "name": "Job",
+      "methods": [
+        {
+          "name": "execute",
+          "description": "执行任务"
+        }
+      ]
+    }
+  ]
+}

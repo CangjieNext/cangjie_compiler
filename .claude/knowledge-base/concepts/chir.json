@@ -1,0 +1,67 @@
+{
+  "documentId": "concept-chir",
+  "documentPath": "/usr1/ace/cangjie_compiler/.claude/knowledge-base/concepts/chir.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "concept": {
+    "name": "Cangjie High-level IR (CHIR)",
+    "definition": "仓颉高层中间表示是介于 AST 和 LLVM IR 之间的中间表示层，是一种面向仓颉语言特性的中间表示，保留了高层语言的语义信息。",
+    "purpose": "CHIR 用于语言特性抽象、优化基础、分析支持、降级桥梁和序列化支持。",
+    "implementation": {
+      "dataStructures": [
+        "IR Node System - CHIR 节点体系（指令、基本块、函数）",
+        "CHIRModule - CHIR 模块，包含编译单元的所有 CHIR 代码",
+        "CHIRBuilder - CHIR 构建器，从 AST 生成 CHIR",
+        "CHIRType - CHIR 类型系统",
+        "CHIRValue - CHIR 值系统"
+      ],
+      "algorithms": [
+        "AST2CHIR Conversion - AST 到 CHIR 的转换算法",
+        "SSA Construction - 构建静态单赋值形式",
+        "Optimization Passes - CHIR 层面的优化遍",
+        "Analysis Passes - 程序分析遍",
+        "CHIR Lowering - CHIR 到 LLVM IR 的降级"
+      ],
+      "keyFiles": [
+        "/usr1/ace/cangjie_compiler/include/cangjie/CHIR/CHIR.h",
+        "/usr1/ace/cangjie_compiler/src/CHIR/IR/",
+        "/usr1/ace/cangjie_compiler/src/CHIR/AST2CHIR/",
+        "/usr1/ace/cangjie_compiler/src/CHIR/Optimization/",
+        "/usr1/ace/cangjie_compiler/src/CHIR/Analysis/",
+        "/usr1/ace/cangjie_compiler/schema/BCHIRFormat.fbs"
+      ]
+    },
+    "relatedModules": [
+      {
+        "moduleName": "chir",
+        "relationship": "CHIR 的定义和基本操作"
+      },
+      {
+        "moduleName": "codegen",
+        "relationship": "CHIR 的消费者，转换为 LLVM IR"
+      },
+      {
+        "moduleName": "sema",
+        "relationship": "为 CHIR 生成提供语义信息"
+      },
+      {
+        "moduleName": "ast",
+        "relationship": "CHIR 转换的源数据结构"
+      },
+      {
+        "moduleName": "modules",
+        "relationship": "CHIR 的序列化和模块管理"
+      }
+    ],
+    "examples": [
+      "CHIR 函数和基本块创建",
+      "CHIR 指令生成",
+      "常量折叠优化遍实现"
+    ],
+    "furtherReading": [
+      "/usr1/ace/cangjie_compiler/include/cangjie/CHIR/",
+      "/usr1/ace/cangjie_compiler/src/CHIR/",
+      "/usr1/ace/cangjie_compiler/schema/BCHIRFormat.fbs"
+    ]
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "documentId": "module-codegen",
+  "documentPath": "./codegen.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "module": {
+    "name": "CodeGen",
+    "fullName": "Code Generation Module",
+    "category": "backend",
+    "purpose": "将 CHIR 转换为 LLVM IR",
+    "pipelineStage": "code-generation",
+    "dependencies": ["chir"],
+    "dependents": ["driver"],
+    "components": [
+      {
+        "name": "CGModule",
+        "type": "class",
+        "location": "include/cangjie/CodeGen/CGModule.h",
+        "description": "模块级代码生成"
+      },
+      {
+        "name": "CGFunction",
+        "type": "class",
+        "location": "include/cangjie/CodeGen/CGFunction.h",
+        "description": "函数级代码生成"
+      },
+      {
+        "name": "CGContext",
+        "type": "class",
+        "location": "include/cangjie/CodeGen/CGContext.h",
+        "description": "代码生成上下文"
+      },
+      {
+        "name": "IRBuilder",
+        "type": "class",
+        "location": "include/cangjie/CodeGen/IRBuilder.h",
+        "description": "LLVM IR 构建器"
+      },
+      {
+        "name": "DIBuilder",
+        "type": "class",
+        "location": "include/cangjie/CodeGen/DIBuilder.h",
+        "description": "调试信息构建器"
+      }
+    ],
+    "concepts": [
+      {
+        "name": "llvm-integration",
+        "conceptPath": "../concepts/llvm-integration.md",
+        "relevance": "core"
+      },
+      {
+        "name": "chir",
+        "conceptPath": "../concepts/chir.md",
+        "relevance": "related"
+      }
+    ],
+    "sourceFiles": {
+      "headers": [
+        "include/cangjie/CodeGen/CGModule.h",
+        "include/cangjie/CodeGen/CGContext.h",
+        "include/cangjie/CodeGen/IRBuilder.h",
+        "include/cangjie/CodeGen/DIBuilder.h",
+        "include/cangjie/CodeGen/IRAttribute.h",
+        "include/cangjie/CodeGen/EmitPackageIR.h"
+      ],
+      "implementations": [
+        "src/CodeGen/Base/",
+        "src/CodeGen/CJNative/",
+        "src/CodeGen/IncrementalGen/",
+        "src/CodeGen/Utils/"
+      ],
+      "tests": ["unittests/CodeGen/"]
+    },
+    "tags": ["backend", "codegen", "llvm", "ir"],
+    "searchKeywords": ["CodeGen", "代码生成", "LLVM", "IR", "CGModule"]
+  }
+}

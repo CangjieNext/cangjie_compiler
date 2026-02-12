@@ -1,0 +1,27 @@
+{
+  "category": "code-navigation",
+  "lastUpdated": "2026-02-12",
+  "documents": [
+    {
+      "id": "directory-structure",
+      "title": "逻辑模块到物理目录的映射",
+      "tags": ["directory", "structure", "mapping"],
+      "path": "./directory-structure.md",
+      "metadataFile": "./directory-structure.json"
+    },
+    {
+      "id": "naming-conventions",
+      "title": "代码命名规范",
+      "tags": ["naming", "conventions", "style"],
+      "path": "./naming-conventions.md",
+      "metadataFile": "./naming-conventions.json"
+    },
+    {
+      "id": "key-files",
+      "title": "每个模块的关键文件清单",
+      "tags": ["files", "navigation", "reference"],
+      "path": "./key-files.md",
+      "metadataFile": "./key-files.json"
+    }
+  ]
+}

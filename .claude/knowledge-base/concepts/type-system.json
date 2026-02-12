@@ -1,0 +1,65 @@
+{
+  "documentId": "concept-type-system",
+  "documentPath": "/usr1/ace/cangjie_compiler/.claude/knowledge-base/concepts/type-system.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "concept": {
+    "name": "Type System",
+    "definition": "仓颉语言的类型系统是编译器中负责类型定义、类型检查、类型推断和类型转换的核心组件，确保程序的类型安全性。",
+    "purpose": "类型系统用于类型安全、类型推断、泛型支持、类型兼容性检查和接口实现验证。",
+    "implementation": {
+      "dataStructures": [
+        "Type Hierarchy - 类型层次结构（IntType, FloatType, ClassType 等）",
+        "TypeManager - 类型管理器，负责类型创建和缓存",
+        "TypeChecker - 类型检查器，执行类型检查和推断",
+        "GenericContext - 泛型上下文管理",
+        "TypeConstraints - 类型约束系统"
+      ],
+      "algorithms": [
+        "Type Inference - 基于 Hindley-Milner 的类型推断",
+        "Type Unification - 类型统一算法",
+        "Subtype Checking - 子类型检查算法",
+        "Generic Instantiation - 泛型实例化算法",
+        "Type Compatibility - 类型兼容性检查"
+      ],
+      "keyFiles": [
+        "/usr1/ace/cangjie_compiler/include/cangjie/Sema/TypeChecker.h",
+        "/usr1/ace/cangjie_compiler/include/cangjie/Sema/TypeManager.h",
+        "/usr1/ace/cangjie_compiler/include/cangjie/Sema/Type.h",
+        "/usr1/ace/cangjie_compiler/src/Sema/TypeChecker.cpp",
+        "/usr1/ace/cangjie_compiler/src/Sema/TypeInference.cpp"
+      ]
+    },
+    "relatedModules": [
+      {
+        "moduleName": "sema",
+        "relationship": "类型系统的主要实现模块"
+      },
+      {
+        "moduleName": "ast",
+        "relationship": "类型信息附加到 AST 节点"
+      },
+      {
+        "moduleName": "chir",
+        "relationship": "类型信息传递到 CHIR 层"
+      },
+      {
+        "moduleName": "parse",
+        "relationship": "解析类型声明和类型注解"
+      },
+      {
+        "moduleName": "codegen",
+        "relationship": "根据类型信息生成代码"
+      }
+    ],
+    "examples": [
+      "类型层次结构定义",
+      "类型检查器实现",
+      "泛型实例化算法"
+    ],
+    "furtherReading": [
+      "/usr1/ace/cangjie_compiler/include/cangjie/Sema/",
+      "/usr1/ace/cangjie_compiler/src/Sema/"
+    ]
+  }
+}

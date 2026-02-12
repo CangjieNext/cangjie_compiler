@@ -1,0 +1,56 @@
+{
+  "documentId": "arch-pipeline",
+  "documentPath": "./pipeline.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "architecture": {
+    "name": "Cangjie Compiler Pipeline",
+    "description": "仓颉编译器编译流程管线，描述从源代码到可执行文件的各阶段",
+    "stages": [
+      {
+        "name": "Lex",
+        "input": "Source Code (UTF-8 text)",
+        "output": "Token Stream"
+      },
+      {
+        "name": "Parse",
+        "input": "Token Stream",
+        "output": "AST"
+      },
+      {
+        "name": "Sema",
+        "input": "AST",
+        "output": "Typed AST"
+      },
+      {
+        "name": "CHIR",
+        "input": "Typed AST",
+        "output": "Optimized CHIR"
+      },
+      {
+        "name": "CodeGen",
+        "input": "Optimized CHIR",
+        "output": "LLVM IR"
+      },
+      {
+        "name": "LLVM Backend",
+        "input": "LLVM IR",
+        "output": "Executable"
+      }
+    ],
+    "supportingSystems": [
+      "Macro",
+      "Modules",
+      "Mangle",
+      "ConditionalCompilation",
+      "IncrementalCompilation",
+      "Driver"
+    ],
+    "relatedModules": [
+      "overview",
+      "frontend",
+      "backend",
+      "data-flow"
+    ]
+  }
+}

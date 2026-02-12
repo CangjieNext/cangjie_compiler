@@ -1,0 +1,46 @@
+{
+  "category": "architecture",
+  "lastUpdated": "2026-02-12",
+  "documents": [
+    {
+      "id": "overview",
+      "name": "Overview",
+      "description": "编译器整体架构概览",
+      "path": "./overview.md",
+      "metadataFile": "./overview.json",
+      "tags": ["architecture", "overview", "design"]
+    },
+    {
+      "id": "pipeline",
+      "name": "Pipeline",
+      "description": "从源码到可执行文件的完整编译流程",
+      "path": "./pipeline.md",
+      "metadataFile": "./pipeline.json",
+      "tags": ["architecture", "pipeline", "compilation"]
+    },
+    {
+      "id": "frontend",
+      "name": "Frontend",
+      "description": "前端各阶段详细说明",
+      "path": "./frontend.md",
+      "metadataFile": "./frontend.json",
+      "tags": ["architecture", "frontend", "lex", "parse", "sema"]
+    },
+    {
+      "id": "backend",
+      "name": "Backend",
+      "description": "LLVM 后端集成和代码生成",
+      "path": "./backend.md",
+      "metadataFile": "./backend.json",
+      "tags": ["architecture", "backend", "llvm", "codegen"]
+    },
+    {
+      "id": "data-flow",
+      "name": "Data Flow",
+      "description": "模块间的数据流和交互模式",
+      "path": "./data-flow.md",
+      "metadataFile": "./data-flow.json",
+      "tags": ["architecture", "data-flow", "interaction"]
+    }
+  ]
+}

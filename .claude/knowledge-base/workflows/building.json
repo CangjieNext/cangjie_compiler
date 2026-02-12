@@ -1,0 +1,124 @@
+{
+  "documentId": "workflow-building",
+  "documentPath": "/usr1/ace/cangjie_compiler/.claude/knowledge-base/workflows/building.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "workflow": {
+    "name": "building",
+    "displayName": "Building Workflow - 构建编译器",
+    "objective": "构建仓颉编译器及其依赖，包括 LLVM、编译器本身、Runtime 和标准库",
+    "prerequisites": [
+      "LLVM source code at ../llvm-project",
+      "Python 3",
+      "CMake",
+      "Ninja build system",
+      "Sufficient disk space (at least 50GB recommended)",
+      "GCC or Clang compiler toolchain"
+    ],
+    "steps": [
+      {
+        "number": 1,
+        "name": "准备 LLVM",
+        "description": "Copy LLVM source code to the third_party directory",
+        "command": "cp -R ../llvm-project third_party/",
+        "involvedModules": ["Build system", "LLVM integration"]
+      },
+      {
+        "number": 2,
+        "name": "编译器全量构建",
+        "description": "Build the compiler with specified configuration",
+        "command": "cd compiler && python3 build.py -t release -v 1.1.0.beta.999",
+        "options": [
+          "-t release/debug - Build type",
+          "--no-tests - Skip building tests",
+          "-v version - Specify version number"
+        ],
+        "involvedModules": ["Driver", "Frontend", "Lex", "Parse", "AST", "Sema", "CHIR", "CodeGen"]
+      },
+      {
+        "number": 3,
+        "name": "增量编译",
+        "description": "For faster incremental builds after making changes",
+        "command": "cd build/build && ninja cjc",
+        "involvedModules": ["Build system", "modified modules only"]
+      },
+      {
+        "number": 4,
+        "name": "编译 Runtime",
+        "description": "Build and install the Cangjie runtime",
+        "command": "cd ../cangjie_runtime/runtime && python3 build.py clean && python3 build.py build -t release -v 1.1.0-beta.999 && python3 build.py install && cp -R output/common/linux_release_x86_64/{lib,runtime} ../../cangjie_compiler/output/",
+        "involvedModules": ["Runtime system", "memory management", "GC"]
+      },
+      {
+        "number": 5,
+        "name": "编译标准库",
+        "description": "Build and install the standard library",
+        "command": "source output/envsetup.sh && cd ../cangjie_runtime/stdlib && python3 build.py clean && python3 build.py build -t release --target-lib=$WORKSPACE/cangjie_runtime/runtime/output && python3 build.py install && cp -R output/* $WORKSPACE/cangjie_compiler/output/",
+        "involvedModules": ["Standard library", "runtime integration"]
+      },
+      {
+        "number": 6,
+        "name": "验证",
+        "description": "Verify the build by compiling and running a simple program",
+        "command": "echo 'main() { println(\"Hello, Cangjie\") }' > hello.cj && cjc hello.cj -o hello && ./hello",
+        "involvedModules": ["Complete toolchain"]
+      }
+    ],
+    "troubleshooting": [
+      {
+        "issue": "LLVM not found",
+        "symptoms": "Build fails with 'LLVM not found' or similar error",
+        "solutions": [
+          "Verify LLVM source exists at ../llvm-project",
+          "Check that LLVM was copied correctly to third_party/",
+          "Ensure LLVM version is compatible with the compiler"
+        ]
+      },
+      {
+        "issue": "Build failures",
+        "symptoms": "Compilation errors during build process",
+        "solutions": [
+          "Check that all prerequisites are installed",
+          "Verify Python 3 version is compatible (3.7+ recommended)",
+          "Ensure sufficient disk space is available",
+          "Try cleaning build directory: python3 build.py clean",
+          "Check compiler toolchain (GCC/Clang) version"
+        ]
+      },
+      {
+        "issue": "Missing dependencies",
+        "symptoms": "Linker errors or missing library errors",
+        "solutions": [
+          "Install required system packages (cmake, ninja-build, python3-dev)",
+          "Verify all build steps completed successfully",
+          "Check that runtime and stdlib were installed to correct locations",
+          "Ensure environment variables are set correctly (run envsetup.sh)"
+        ]
+      },
+      {
+        "issue": "Incremental build issues",
+        "symptoms": "Changes not reflected after ninja build",
+        "solutions": [
+          "Perform a full clean rebuild: python3 build.py clean && python3 build.py -t release",
+          "Check that you're building the correct target",
+          "Verify CMake cache is up to date"
+        ]
+      },
+      {
+        "issue": "Runtime or stdlib not found",
+        "symptoms": "Compiled programs fail to run with library errors",
+        "solutions": [
+          "Verify runtime and stdlib were copied to output/ directory",
+          "Check that envsetup.sh was sourced",
+          "Ensure library paths are correct in environment variables",
+          "Rebuild runtime and stdlib if necessary"
+        ]
+      }
+    ],
+    "relatedDocs": [
+      "build-cangjie.md",
+      "/usr1/ace/cangjie_compiler/.claude/knowledge-base/architecture/compiler-pipeline.md",
+      "/usr1/ace/cangjie_compiler/.claude/knowledge-base/modules/build-system.md"
+    ]
+  }
+}

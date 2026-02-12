@@ -1,0 +1,36 @@
+{
+  "moduleId": "mangle",
+  "classes": [
+    {
+      "name": "BaseMangler",
+      "methods": [
+        {
+          "name": "mangle",
+          "description": "基础名称修饰"
+        }
+      ]
+    },
+    {
+      "name": "ASTMangler",
+      "methods": [
+        {
+          "name": "mangleDecl",
+          "description": "修饰 AST 声明"
+        },
+        {
+          "name": "mangleType",
+          "description": "修饰 AST 类型"
+        }
+      ]
+    },
+    {
+      "name": "CHIRMangler",
+      "methods": [
+        {
+          "name": "mangleCHIRSymbol",
+          "description": "修饰 CHIR 符号"
+        }
+      ]
+    }
+  ]
+}

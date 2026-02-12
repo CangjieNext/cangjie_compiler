@@ -1,0 +1,288 @@
+{
+  "documentId": "workflow-testing",
+  "documentPath": "/usr1/ace/cangjie_compiler/.claude/knowledge-base/workflows/testing.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "workflow": {
+    "name": "testing",
+    "displayName": "Testing Workflow - 测试策略",
+    "objective": "仓颉编译器的测试策略，包括单元测试、集成测试和回归测试，确保编译器的正确性和稳定性",
+    "prerequisites": [
+      "编译器已成功构建",
+      "了解测试框架和测试方法",
+      "熟悉编译器各模块的功能",
+      "掌握基本的测试编写技巧"
+    ],
+    "steps": [
+      {
+        "number": 1,
+        "name": "单元测试",
+        "description": "Run unit tests for individual compiler modules",
+        "command": "cd build/build && ninja check-cangjie",
+        "testDirectories": [
+          "unittests/AST/ - Abstract syntax tree tests",
+          "unittests/Basic/ - Basic utilities and data structures",
+          "unittests/CHIR/ - CHIR intermediate representation tests",
+          "unittests/CodeGen/ - Code generation tests",
+          "unittests/ConditionalCompilation/ - Conditional compilation tests",
+          "unittests/Demangle/ - Name demangling tests",
+          "unittests/Driver/ - Compiler driver tests",
+          "unittests/Frontend/ - Frontend integration tests",
+          "unittests/IncrCompile/ - Incremental compilation tests",
+          "unittests/Lex/ - Lexer tests",
+          "unittests/Macro/ - Macro expansion tests",
+          "unittests/Modules/ - Module system tests",
+          "unittests/Option/ - Command-line option tests",
+          "unittests/Parse/ - Parser tests",
+          "unittests/Sema/ - Semantic analysis tests",
+          "unittests/Utils/ - Utility function tests"
+        ],
+        "specificTests": [
+          "./unittests/Lex/LexTests",
+          "./unittests/Parse/ParseTests",
+          "./unittests/Sema/SemaTests",
+          "./unittests/Lex/LexTests --gtest_filter=TokenTest.*"
+        ],
+        "involvedModules": ["All compiler modules"]
+      },
+      {
+        "number": 2,
+        "name": "集成测试",
+        "description": "Run end-to-end integration tests",
+        "purpose": [
+          "Test complete compilation pipeline",
+          "Verify interaction between modules",
+          "Test real-world code scenarios",
+          "Validate generated code correctness"
+        ],
+        "testApproach": [
+          "cjc test_program.cj -o test_program",
+          "./test_program",
+          "echo $? # Check exit code",
+          "cjc -O2 test_program.cj -o test_program_opt",
+          "cjc -g test_program.cj -o test_program_debug"
+        ],
+        "testCategories": [
+          "Basic language features",
+          "Standard library usage",
+          "Error handling",
+          "Edge cases and corner cases",
+          "Performance benchmarks"
+        ],
+        "involvedModules": ["Complete toolchain"]
+      },
+      {
+        "number": 3,
+        "name": "回归测试",
+        "description": "Ensure modifications don't break existing functionality",
+        "purpose": [
+          "Catch regressions early",
+          "Maintain code quality",
+          "Verify bug fixes don't introduce new bugs",
+          "Ensure backward compatibility"
+        ],
+        "strategy": [
+          "ninja check-cangjie > before.log",
+          "# Make changes to compiler",
+          "ninja check-cangjie > after.log",
+          "diff before.log after.log"
+        ],
+        "bestPractices": [
+          "Run tests before committing changes",
+          "Add tests for bug fixes",
+          "Update tests when behavior changes intentionally",
+          "Maintain test coverage metrics",
+          "Use continuous integration (CI) for automated testing"
+        ],
+        "coverage": [
+          "python3 build.py -t debug --coverage",
+          "ninja check-cangjie",
+          "lcov --capture --directory . --output-file coverage.info",
+          "genhtml coverage.info --output-directory coverage_report"
+        ],
+        "involvedModules": ["All modified modules and their dependencies"]
+      }
+    ],
+    "modules": {
+      "core": [
+        "AST - Abstract syntax tree representation and manipulation",
+        "Basic - Fundamental data structures and utilities",
+        "CHIR - High-level intermediate representation",
+        "CodeGen - LLVM IR code generation",
+        "Lex - Lexical analysis and tokenization",
+        "Parse - Syntax analysis and AST construction",
+        "Sema - Semantic analysis and type checking"
+      ],
+      "advanced": [
+        "ConditionalCompilation - Conditional compilation support",
+        "Demangle - Symbol name demangling",
+        "Driver - Compiler driver and orchestration",
+        "Frontend - Frontend integration and coordination",
+        "IncrCompile - Incremental compilation support",
+        "Macro - Macro expansion and processing",
+        "Modules - Module system implementation"
+      ],
+      "support": [
+        "Option - Command-line option parsing",
+        "Utils - Utility functions and helpers"
+      ]
+    },
+    "troubleshooting": [
+      {
+        "issue": "Test compilation failures",
+        "symptoms": "Tests fail to compile",
+        "solutions": [
+          "Verify compiler is built successfully",
+          "Check test dependencies are available",
+          "Ensure test framework (Google Test) is properly linked",
+          "Rebuild tests: ninja clean && ninja check-cangjie",
+          "Check for missing header files or libraries"
+        ]
+      },
+      {
+        "issue": "Test execution failures",
+        "symptoms": "Tests compile but fail at runtime",
+        "solutions": [
+          "Run individual tests to isolate failures",
+          "Check test expectations match implementation",
+          "Verify test input data is correct",
+          "Use debugger to step through failing tests",
+          "Check for environment-specific issues",
+          "Review recent code changes that might affect tests"
+        ]
+      },
+      {
+        "issue": "Flaky tests",
+        "symptoms": "Tests pass sometimes and fail other times",
+        "solutions": [
+          "Check for race conditions in concurrent code",
+          "Verify tests don't depend on timing",
+          "Ensure tests clean up properly",
+          "Check for uninitialized variables",
+          "Verify tests don't depend on execution order",
+          "Use deterministic random seeds for reproducibility"
+        ]
+      },
+      {
+        "issue": "Coverage gaps",
+        "symptoms": "Low test coverage in certain areas",
+        "solutions": [
+          "Identify untested code paths",
+          "Add tests for edge cases",
+          "Test error handling paths",
+          "Add negative tests (invalid input)",
+          "Test boundary conditions",
+          "Review coverage reports regularly"
+        ]
+      },
+      {
+        "issue": "Performance test failures",
+        "symptoms": "Tests timeout or run too slowly",
+        "solutions": [
+          "Profile slow tests to find bottlenecks",
+          "Reduce test input size if appropriate",
+          "Check for infinite loops or excessive recursion",
+          "Optimize test setup and teardown",
+          "Use mocking to avoid expensive operations",
+          "Consider splitting large tests into smaller ones"
+        ]
+      },
+      {
+        "issue": "Integration test failures",
+        "symptoms": "Unit tests pass but integration tests fail",
+        "solutions": [
+          "Check module interactions",
+          "Verify data flow between modules",
+          "Test with realistic input data",
+          "Check for missing initialization",
+          "Verify correct module integration",
+          "Add logging to trace execution flow"
+        ]
+      },
+      {
+        "issue": "Regression test failures",
+        "symptoms": "Previously passing tests now fail",
+        "solutions": [
+          "Identify which change caused the regression",
+          "Use git bisect to find the problematic commit",
+          "Review the failing test to understand expectations",
+          "Determine if test needs updating or code needs fixing",
+          "Check if behavior change was intentional",
+          "Update tests if new behavior is correct"
+        ]
+      },
+      {
+        "issue": "Memory leaks in tests",
+        "symptoms": "Valgrind reports memory leaks",
+        "solutions": [
+          "Run valgrind on specific tests: valgrind ./unittests/Module/ModuleTests",
+          "Check for missing delete/free calls",
+          "Verify smart pointers are used correctly",
+          "Ensure test cleanup is complete",
+          "Check for circular references",
+          "Use RAII patterns for resource management"
+        ]
+      },
+      {
+        "issue": "Test environment issues",
+        "symptoms": "Tests fail in certain environments",
+        "solutions": [
+          "Check environment variables are set correctly",
+          "Verify file paths are correct",
+          "Ensure required files and resources are available",
+          "Check for platform-specific issues",
+          "Verify compiler and library versions",
+          "Use consistent test environments (containers/VMs)"
+        ]
+      },
+      {
+        "issue": "Test data issues",
+        "symptoms": "Tests fail due to incorrect or missing test data",
+        "solutions": [
+          "Verify test data files exist and are readable",
+          "Check test data format is correct",
+          "Ensure test data is version controlled",
+          "Validate test data before running tests",
+          "Use test data generators for complex inputs",
+          "Document test data requirements"
+        ]
+      }
+    ],
+    "bestPractices": {
+      "writing": [
+        "Write tests before fixing bugs (TDD approach)",
+        "Keep tests simple and focused",
+        "Use descriptive test names",
+        "Test one thing per test case",
+        "Avoid test interdependencies",
+        "Use setup and teardown appropriately"
+      ],
+      "organization": [
+        "Group related tests together",
+        "Use test fixtures for common setup",
+        "Organize tests by module and functionality",
+        "Keep test code maintainable",
+        "Document complex test scenarios"
+      ],
+      "maintenance": [
+        "Update tests when requirements change",
+        "Remove obsolete tests",
+        "Refactor tests to reduce duplication",
+        "Keep tests running fast",
+        "Monitor test coverage trends"
+      ],
+      "ci": [
+        "Run tests automatically on commits",
+        "Fail builds on test failures",
+        "Track test metrics over time",
+        "Run tests in multiple environments",
+        "Generate and review coverage reports"
+      ]
+    },
+    "relatedDocs": [
+      "/usr1/ace/cangjie_compiler/.claude/knowledge-base/workflows/debugging.md",
+      "/usr1/ace/cangjie_compiler/.claude/knowledge-base/workflows/adding-feature.md",
+      "/usr1/ace/cangjie_compiler/.claude/knowledge-base/architecture/compiler-pipeline.md"
+    ]
+  }
+}

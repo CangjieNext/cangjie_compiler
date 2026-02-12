@@ -1,0 +1,68 @@
+{
+  "documentId": "concept-module-system",
+  "documentPath": "/usr1/ace/cangjie_compiler/.claude/knowledge-base/concepts/module-system.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "concept": {
+    "name": "Module System",
+    "definition": "仓颉的模块系统是编译器中负责管理代码组织、依赖关系和符号可见性的核心组件，支持包和模块两级组织结构。",
+    "purpose": "模块系统用于代码组织、依赖管理、符号解析、可见性控制和编译缓存。",
+    "implementation": {
+      "dataStructures": [
+        "ImportManager - 导入管理器，处理 import 语句",
+        "PackageManager - 包管理器，管理包的加载和依赖",
+        "CjoManager - CJO 文件管理器，处理编译缓存",
+        "ModuleDecl - 模块声明 AST 节点",
+        "DependencyGraph - 模块依赖图"
+      ],
+      "algorithms": [
+        "Import Resolution - 导入解析算法",
+        "Dependency Analysis - 依赖分析和循环检测",
+        "Module Loading - 模块加载算法",
+        "Symbol Export/Import - 符号导出导入管理",
+        "Incremental Compilation - 增量编译算法"
+      ],
+      "keyFiles": [
+        "/usr1/ace/cangjie_compiler/include/cangjie/Modules/ImportManager.h",
+        "/usr1/ace/cangjie_compiler/include/cangjie/Modules/PackageManager.h",
+        "/usr1/ace/cangjie_compiler/include/cangjie/Modules/CjoManager.h",
+        "/usr1/ace/cangjie_compiler/src/Modules/",
+        "/usr1/ace/cangjie_compiler/schema/ModuleFormat.fbs",
+        "/usr1/ace/cangjie_compiler/schema/PackageFormat.fbs"
+      ]
+    },
+    "relatedModules": [
+      {
+        "moduleName": "modules",
+        "relationship": "模块系统的核心实现"
+      },
+      {
+        "moduleName": "parse",
+        "relationship": "解析 import 语句和模块声明"
+      },
+      {
+        "moduleName": "sema",
+        "relationship": "在模块上下文中进行符号解析"
+      },
+      {
+        "moduleName": "ast",
+        "relationship": "模块相关的 AST 节点"
+      },
+      {
+        "moduleName": "driver",
+        "relationship": "驱动多模块编译流程"
+      }
+    ],
+    "examples": [
+      "导入解析实现",
+      "依赖图构建和循环检测",
+      "CJO 文件序列化和反序列化"
+    ],
+    "furtherReading": [
+      "/usr1/ace/cangjie_compiler/include/cangjie/Modules/",
+      "/usr1/ace/cangjie_compiler/src/Modules/",
+      "/usr1/ace/cangjie_compiler/schema/ModuleFormat.fbs",
+      "/usr1/ace/cangjie_compiler/schema/PackageFormat.fbs"
+    ]
+  }
+}

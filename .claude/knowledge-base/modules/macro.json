@@ -1,0 +1,44 @@
+{
+  "documentId": "module-macro",
+  "category": "supporting",
+  "pipelineStage": "macro-expansion",
+  "dependencies": ["lex", "parse", "ast"],
+  "dependents": ["sema"],
+  "components": [
+    {
+      "name": "MacroEvaluation",
+      "description": "宏求值引擎，负责在编译时执行宏代码"
+    },
+    {
+      "name": "MacroExpansion",
+      "description": "宏展开器，将宏调用展开为实际的 AST 节点"
+    },
+    {
+      "name": "MacroCall",
+      "description": "宏调用解析和处理"
+    },
+    {
+      "name": "NodeSerialization",
+      "description": "AST 节点序列化"
+    },
+    {
+      "name": "TokenSerialization",
+      "description": "Token 序列化"
+    }
+  ],
+  "sourceFiles": [
+    "src/Macro/MacroEvaluation.cpp",
+    "src/Macro/MacroExpansion.cpp",
+    "src/Macro/MacroProcess.cpp",
+    "src/Macro/MacroCall.cpp",
+    "src/Macro/NodeSerialization.cpp",
+    "src/Macro/ExprSerialization.cpp",
+    "src/Macro/TokenSerialization.cpp",
+    "src/Macro/MacroEvalMsgSerializer.cpp",
+    "src/Macro/MacroCommon.cpp",
+    "src/Macro/MacroCallResolve.cpp",
+    "src/Macro/InvokeUtil.cpp"
+  ],
+  "tags": ["supporting", "macro", "expansion"],
+  "searchKeywords": ["宏", "macro", "展开", "expansion"]
+}

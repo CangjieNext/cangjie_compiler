@@ -1,0 +1,18 @@
+{
+  "title": "Naming Conventions",
+  "version": "1.0.0",
+  "last_updated": "2026-02-12",
+  "category": "code-navigation",
+  "tags": ["naming", "conventions", "style", "code-standards"],
+  "summary": "Naming conventions for classes, functions, files, and directories in the Cangjie compiler",
+  "related_docs": [
+    "code-navigation/directory-structure.md",
+    "code-navigation/key-files.md"
+  ],
+  "key_concepts": [
+    "PascalCase for classes",
+    "camelCase for functions",
+    "file naming patterns",
+    "directory naming patterns"
+  ]
+}

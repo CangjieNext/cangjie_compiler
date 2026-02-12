@@ -1,0 +1,77 @@
+{
+  "documentId": "module-chir",
+  "documentPath": "./chir.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "module": {
+    "name": "CHIR",
+    "fullName": "Cangjie High-level IR Module",
+    "category": "intermediate",
+    "purpose": "仓颉高层中间表示，AST 到 CHIR 的转换和优化",
+    "pipelineStage": "ir-generation",
+    "dependencies": ["sema", "ast"],
+    "dependents": ["codegen", "mangle"],
+    "components": [
+      {
+        "name": "CHIR",
+        "type": "class",
+        "location": "include/cangjie/CHIR/CHIR.h",
+        "description": "CHIR 主入口"
+      },
+      {
+        "name": "AST2CHIR",
+        "type": "class",
+        "location": "src/CHIR/AST2CHIR/",
+        "description": "AST 到 CHIR 的转换器"
+      },
+      {
+        "name": "Analysis",
+        "type": "module",
+        "location": "src/CHIR/Analysis/",
+        "description": "CHIR 分析 pass"
+      },
+      {
+        "name": "Optimization",
+        "type": "module",
+        "location": "src/CHIR/Optimization/",
+        "description": "CHIR 优化 pass"
+      },
+      {
+        "name": "Transformation",
+        "type": "module",
+        "location": "src/CHIR/Transformation/",
+        "description": "CHIR 变换 pass"
+      }
+    ],
+    "concepts": [
+      {
+        "name": "chir",
+        "conceptPath": "../concepts/chir.md",
+        "relevance": "core"
+      },
+      {
+        "name": "ast",
+        "conceptPath": "../concepts/ast.md",
+        "relevance": "related"
+      }
+    ],
+    "sourceFiles": {
+      "headers": ["include/cangjie/CHIR/CHIR.h"],
+      "implementations": [
+        "src/CHIR/CHIR.cpp",
+        "src/CHIR/IR/",
+        "src/CHIR/AST2CHIR/",
+        "src/CHIR/Analysis/",
+        "src/CHIR/Checker/",
+        "src/CHIR/Optimization/",
+        "src/CHIR/Transformation/",
+        "src/CHIR/Serializer/",
+        "src/CHIR/Interpreter/",
+        "src/CHIR/Utils/"
+      ],
+      "tests": ["unittests/CHIR/"]
+    },
+    "tags": ["intermediate", "ir", "optimization", "chir"],
+    "searchKeywords": ["CHIR", "中间表示", "IR", "优化", "AST2CHIR"]
+  }
+}
