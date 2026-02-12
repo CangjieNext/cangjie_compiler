@@ -9514,7 +9514,7 @@ index 0c4d9f78c..81b0f2afc 100644
    if (preference == ePreferDemangledWithoutArguments) {
      if (Language *lang = Language::FindPlugin(GuessLanguage())) {
 diff --git a/lldb/source/Core/ValueObject.cpp b/lldb/source/Core/ValueObject.cpp
-index d80139ab1..231486a5a 100644
+index d80139ab1..629ac5aa5 100644
 --- a/lldb/source/Core/ValueObject.cpp
 +++ b/lldb/source/Core/ValueObject.cpp
 @@ -48,6 +48,8 @@
@@ -9693,7 +9693,7 @@ index d80139ab1..231486a5a 100644
        if (!bracket_expr.contains('-')) {
          // if no separator, this is of the form [N].  Note that this cannot be
          // an unbounded range of the form [], because that case was handled
-@@ -3137,3 +3208,113 @@ ValueObjectSP ValueObject::Persist() {
+@@ -3137,3 +3208,109 @@ ValueObjectSP ValueObject::Persist() {
  
    return persistent_var_sp->GetValueObject();
  }
@@ -9770,10 +9770,6 @@ index d80139ab1..231486a5a 100644
 +  if (type_sp != nullptr) {
 +    class_type_or_name.SetTypeSP(type_sp);
 +    class_type_or_name.SetName(type_sp->GetFullCompilerType().GetTypeName().AsCString());
-+    if (should_update) {
-+      m_override_type = type_sp->GetFullCompilerType();
-+      LLDB_LOGF(log, "Found dynamic type with name %s", type_sp->GetFullCompilerType().GetTypeName().AsCString());
-+    }
 +    return true;
 +  }
 +  if (is_ti_type) {
@@ -24874,7 +24870,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..3adcbf8f0 100644
+index b391fe1ea..134fdf2e0 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -24930,7 +24926,7 @@ index b391fe1ea..3adcbf8f0 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.1.0-alpha.69";
++    g_version_str += "\n  cangjie 1.1.0-alpha.70";
    }
  
    return g_version_str.c_str();
@@ -38679,6 +38675,29 @@ index 85d051cfd..1d056da7f 100644
          assert(!refOffset.getScalable() &&
                 "Frame offsets with a scalable component are not supported");
          Offset.setImm(Offset.getImm() + refOffset.getFixed() + SPAdj);
+diff --git a/llvm/lib/CodeGen/SelectionDAG/FastISel.cpp b/llvm/lib/CodeGen/SelectionDAG/FastISel.cpp
+index ff5779967..e1462e762 100644
+--- a/llvm/lib/CodeGen/SelectionDAG/FastISel.cpp
++++ b/llvm/lib/CodeGen/SelectionDAG/FastISel.cpp
+@@ -1560,8 +1560,17 @@ bool FastISel::selectInstruction(const Instruction *I) {
+ /// (fall-through) successor, and update the CFG.
+ void FastISel::fastEmitBranch(MachineBasicBlock *MSucc,
+                               const DebugLoc &DbgLoc) {
++  /// Force branch emission to preserve the source location in debug mode.
++  /// Optimizing this away would cause debug info loss.
++  MachineInstr *PrevInstr = nullptr;
++  if (!FuncInfo.MBB->empty()) {
++      PrevInstr = &FuncInfo.MBB->back();
++  }
++  bool shouldPreserve = (FuncInfo.MF->getMMI().hasDebugInfo()) &&
++                        (!PrevInstr || PrevInstr->getDebugLoc() != DbgLoc);
+   if (FuncInfo.MBB->getBasicBlock()->sizeWithoutDebug() > 1 &&
+-      FuncInfo.MBB->isLayoutSuccessor(MSucc)) {
++      FuncInfo.MBB->isLayoutSuccessor(MSucc) &&
++      !shouldPreserve) {
+     // For more accurate line information if this is the only non-debug
+     // instruction in the block then emit it, otherwise we have the
+     // unconditional fall-through case, which needs no instructions.
 diff --git a/llvm/lib/CodeGen/SelectionDAG/FunctionLoweringInfo.cpp b/llvm/lib/CodeGen/SelectionDAG/FunctionLoweringInfo.cpp
 index aa9c77f9c..ef53e95d2 100644
 --- a/llvm/lib/CodeGen/SelectionDAG/FunctionLoweringInfo.cpp
