@@ -84,13 +84,15 @@ std::string GetErrMessage(int error)
 #else
     auto handleError = [&buf](auto res) -> std::string {
         using T = decltype(res);
-        // GNU
-        if constexpr (std::is_same_v<T, char*>) {
-            return res ? std::string(res) : "";
-        } else {
+
+        if constexpr (std::is_integral_v<T>) {
             // POSIX
-            if (res != 0) return "";
+            if (res != 0)
+                return "";
             return std::string(buf);
+        } else {
+            // GNU
+            return res ? std::string(res) : "";
         }
     };
     // Generic lambda defers semantic checks until instantiation.

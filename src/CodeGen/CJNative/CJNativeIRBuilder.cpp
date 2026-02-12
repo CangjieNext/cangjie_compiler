@@ -169,6 +169,7 @@ std::vector<llvm::Value*> IRBuilder2::TransformFuncArgs(const CGFunctionType& ca
         auto& varrayBuilder = StaticCast<const CHIR::VArrayBuilder&>(this->chirExpr->GetChirExpr());
         auto autoEnvOfInitFunc = varrayBuilder.GetInitFunc();
         auto autoEnvVal = **(cgMod | autoEnvOfInitFunc);
+        CJC_ASSERT(autoEnvVal);
         auto typeInfoPtrType = CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext());
         auto typeInfo = CreateBitCast(GetTypeInfoFromObject(autoEnvVal), typeInfoPtrType);
         (void)argsVal.emplace_back(typeInfo);
