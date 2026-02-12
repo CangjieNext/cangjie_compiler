@@ -293,7 +293,7 @@ bool CheckInheritDeclGlobalMember(
     }
     // member func
     if (decl.astKind == Cangjie::AST::ASTKind::FUNC_DECL) {
-        if (decl.TestAttr(Cangjie::AST::Attribute::PLATFORM) && chirNode.TestAttr(Attribute::DESERIALIZED)) {
+        if (decl.TestAttr(Cangjie::AST::Attribute::SPECIFIC) && chirNode.TestAttr(Attribute::DESERIALIZED)) {
             // `platform` function type can be subtype of `common` function type.
             // We keep origin type in CHIR, however AST type is updated. Thus it's not an error.
             return true;
@@ -354,8 +354,8 @@ bool CheckAbstractMethod(const Cangjie::AST::Decl& decl, const CustomTypeDef& ch
         }
         return true;
     }
-    if (decl.platformImplementation && decl.platformImplementation->TestAttr(AST::Attribute::OPEN)) {
-        // ABSTRACT COMMON was replaced with OPEN PLATFORM
+    if (decl.specificImplementation && decl.specificImplementation->TestAttr(AST::Attribute::OPEN)) {
+        // ABSTRACT COMMON was replaced with OPEN SPECIFIC
         return true;
     }
     Errorln("not find abstract method " + decl.mangledName + " in " + chirNode.GetIdentifier() + ".");
@@ -494,8 +494,8 @@ bool CheckFunc(const Cangjie::AST::FuncDecl& decl, const Value& chirNode)
     auto chirTy = chirNode.GetType();
     if (!CheckType(*astTy, *chirTy)) {
         bool report = true;
-        if (decl.TestAttr(AST::Attribute::PLATFORM) && chirNode.TestAttr(Attribute::DESERIALIZED)) {
-            // `platform` function type can be subtype of `common` function type.
+        if (decl.TestAttr(AST::Attribute::SPECIFIC) && chirNode.TestAttr(Attribute::DESERIALIZED)) {
+            // `specific` function type can be subtype of `common` function type.
             // We keep origin type in CHIR, however AST type is updated. Thus it's not an error.
             report = false;
         }

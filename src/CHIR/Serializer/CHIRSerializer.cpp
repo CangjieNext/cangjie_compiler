@@ -616,7 +616,14 @@ template <> flatbuffers::Offset<PackageFormat::Func> CHIRSerializer::CHIRSeriali
         oriLambdaGenericTypeParams = GetId<Type>(obj.GetOriginalGenericTypeParams());
     }
     auto genericTypeParams = GetId<Type>(obj.GetGenericTypeParams());
-    auto paramDftValHostFunc = GetId<Value>(obj.GetParamDftValHostFunc());
+    Func* paramDftValHostFuncDecl = nullptr;
+    // the host func of desugaring func for named parameter may be removed body when doing uselessFuncElimination,
+    // do not serializer it
+    if (auto paramDftValHostFunc = DynamicCast<Func*>(obj.GetParamDftValHostFunc());
+        paramDftValHostFunc && paramDftValHostFunc->GetBody()) {
+        paramDftValHostFuncDecl = paramDftValHostFunc;
+    }
+    auto paramDftValHostFunc = GetId<Value>(paramDftValHostFuncDecl);
 
     // FuncBody
     CJC_NULLPTR_CHECK(obj.GetBody());
