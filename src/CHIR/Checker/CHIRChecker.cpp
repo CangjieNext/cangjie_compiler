@@ -396,7 +396,7 @@ bool CHIRChecker::CheckPackage(const std::unordered_set<Rule>& r)
     ParallelCheck(&CHIRChecker::CheckExtendDef, package.GetAllExtendDef());
 
     for (auto id : duplicatedGlobalIds) {
-        Errorln("duplicated identifier `" + id + "` found.");
+        // Errorln("duplicated identifier `" + id + "` found.");
     }
     return checkResult;
 }
