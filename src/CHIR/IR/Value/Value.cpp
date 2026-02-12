@@ -225,7 +225,7 @@ void Value::ClearUsersOnly()
 Parameter::Parameter(Type* ty, const std::string& indexStr, Func* ownerFunc)
     : Value(ty, indexStr, ValueKind::KIND_PARAMETER), ownerFunc(ownerFunc)
 {
-    if (ownerFunc && !ownerFunc->TestAttr(Attribute::PREVIOUSLY_DESERIALIZED)) {
+    if (ownerFunc) {
         ownerFunc->AddParam(*this);
     }
 }
