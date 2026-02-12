@@ -1327,7 +1327,7 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     TranslateVecDecl(genericNominalDecls, trans);
     // Update some info for nominal decls.
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "TranslateDecls");
-    ProcessCommonAndPlatformNominals();
+    ProcessCommonAndPlatformExtends();
     SetExtendInfo();
     UpdateExtendParent();
 }
@@ -1408,7 +1408,7 @@ std::vector<Ptr<const AST::Decl>> CollectCommonMatchedDecls(
     std::vector<Ptr<const AST::Decl>> commonDecls;
     for (const auto& container : declContainers) {
         for (const auto& decl : container) {
-            if (decl->IsCommonMatchedWithPlatform()) {
+            if (decl->IsCommonMatchedWithPlatform() && decl->astKind == AST::ASTKind::EXTEND_DECL) {
                 commonDecls.push_back(decl);
             }
         }
@@ -1452,7 +1452,8 @@ void ConvertPlatformMemberMethods(
         return VisitResult::CONTINUE;
     };
 
-    for (auto decl : package->GetAllCustomTypeDef()) {
+    for (auto decl : package->GetExtends()) {
+        // Skip non-platform extends
         if (!decl->TestAttr(CHIR::Attribute::PLATFORM)) {
             continue;
         }
@@ -1619,7 +1620,7 @@ void AST2CHIR::ResetPlatformFunc(const AST::FuncDecl& funcDecl, Func& func)
     }
 }
 
-void AST2CHIR::ProcessCommonAndPlatformNominals()
+void AST2CHIR::ProcessCommonAndPlatformExtends()
 {
     bool compilePlatform = opts.IsCompilingCJMP();
     if (!compilePlatform) {
