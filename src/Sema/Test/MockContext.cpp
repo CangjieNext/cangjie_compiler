@@ -25,9 +25,4 @@ void MockContext::PrepareManglerContext(Ptr<AST::Package> pkg)
         ManglerContext::ReduceUnitTestPackageName(pkg->fullPackageName), mangler.PrepareContextForPackage(pkg));
 }
 
-BaseMangler& MockContext::GetMangler()
-{
-    return mangler;
-}
-
 } // namespace Cangjie
