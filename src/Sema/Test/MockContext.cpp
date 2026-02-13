@@ -27,9 +27,4 @@ void MockContext::PrepareManglerContext(Ptr<AST::Package> pkg)
     }
 }
 
-BaseMangler& MockContext::GetMangler()
-{
-    return mangler;
-}
-
 } // namespace Cangjie
