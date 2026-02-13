@@ -205,9 +205,11 @@ private:
     Ptr<AST::Decl> GetInstantiatedMemberTarget(AST::Ty& baseTy, AST::Decl& target) const;
     Ptr<AST::Decl> GetInstantiatedDeclWithGenericInfo(AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& instTys) const;
     template <typename T> Ptr<T> GetInstantiatedDecl(
-        Ptr<T> decl, const std::vector<Ptr<AST::Ty>>& instTys, bool isInstEnabled, Ptr<AST::Ty> baseTy = nullptr) const
+        Ptr<T> decl, const std::vector<Ptr<AST::Ty>>& instTys, Ptr<AST::Ty> baseTy = nullptr) const
     {
-        if (!isInstEnabled || (!decl->ty->HasGeneric() && !decl->TestAttr(AST::Attribute::GENERIC))) {
+        return decl;
+        // FIXME: what to do?
+        if (!decl->ty->HasGeneric() && !decl->TestAttr(AST::Attribute::GENERIC)) {
             return decl;
         }
         auto memberDeclInInstantiatedClass = baseTy ? GetInstantiatedMemberTarget(*baseTy, *decl) : decl;

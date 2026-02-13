@@ -62,17 +62,16 @@ std::string MockUtils::defaultAccessorSuffix = "$Buddy";
 
 void MockUtils::Instantiate(Node& node) const
 {
-    if (!IS_GENERIC_INSTANTIATION_ENABLED) {
-        return;
-    }
+    return;
+    // FIXME: What to do with this?
     gim->impl->RecordExtend(node);
     gim->impl->WalkNonGenericExtendedType();
     if (Is<ClassDecl>(&node)) {
         gim->impl->CheckNodeInstantiation(node);
     } else {
-        Walker(
-            &node, gim->impl->instantiationWalkerID,
-            [this](auto node) { return gim->impl->CheckNodeInstantiation(*node); }).Walk();
+        Walker(&node, gim->impl->instantiationWalkerID, [this](auto node) {
+            return gim->impl->CheckNodeInstantiation(*node);
+        }).Walk();
     }
 }
 
@@ -97,9 +96,8 @@ Ptr<Decl> MockUtils::GetInstantiatedDeclWithGenericInfo(Decl& decl, const std::v
 
 Ptr<ClassLikeDecl> MockUtils::GetInstantiatedDeclInCurrentPackage(const Ptr<const ClassLikeTy> classLikeToMockTy)
 {
-    if (!IS_GENERIC_INSTANTIATION_ENABLED) {
-        return RawStaticCast<ClassLikeDecl*>(Ty::GetDeclOfTy(classLikeToMockTy));
-    }
+    return RawStaticCast<ClassLikeDecl*>(Ty::GetDeclOfTy(classLikeToMockTy));
+    // FIXME: Is this needed? Can't just GetDeclOfTy?
     auto classLikeToMock = DynamicCast<ClassLikeDecl*>(classLikeToMockTy->commonDecl.get());
     CJC_NULLPTR_CHECK(classLikeToMock);
     Ptr<Decl> genericDecl;
@@ -170,11 +168,6 @@ bool MockUtils::IsMockAccessorRequired(const Decl& decl)
         return false;
     }
 
-    if (IS_GENERIC_INSTANTIATION_ENABLED &&
-        (decl.TestAttr(Attribute::GENERIC_INSTANTIATED) || decl.TestAttr(Attribute::GENERIC))) {
-        return true;
-    }
-
     if (decl.TestAttr(Attribute::PUBLIC) || decl.TestAttr(Attribute::PROTECTED)) {
         return false;
     }
@@ -190,31 +183,20 @@ Ptr<Decl> MockUtils::FindAccessorForMemberAccess(
         return nullptr;
     }
 
-    if (IS_GENERIC_INSTANTIATION_ENABLED) {
-        for (auto tyVar : memberAccess.instTys) {
-            if (tyVar->HasGeneric()) {
-                return nullptr;
-            }
-        }
-    }
-
     auto baseTy = memberAccess.baseExpr->ty;
     auto baseDecl = Ty::GetDeclOfTy(baseTy);
-    if (!baseDecl || !Is<ClassDecl>(baseDecl) ||
-        (IS_GENERIC_INSTANTIATION_ENABLED && baseTy->HasGeneric()) || !baseDecl->TestAttr(Attribute::MOCK_SUPPORTED)
-    ) {
+    if (!baseDecl || !Is<ClassDecl>(baseDecl) || !baseDecl->TestAttr(Attribute::MOCK_SUPPORTED)) {
         return nullptr;
     }
 
     Ptr<ClassDecl> baseClass = As<ASTKind::CLASS_DECL>(baseDecl);
     Ptr<ClassDecl> outerClass;
     if (baseClass->TestAttr(Attribute::GENERIC)) {
-        outerClass = GetInstantiatedDecl(baseClass, baseTy->typeArgs, IS_GENERIC_INSTANTIATION_ENABLED);
+        outerClass = GetInstantiatedDecl(baseClass, baseTy->typeArgs);
     } else if (baseClass->genericDecl != nullptr) {
         // Initially instantiated generic base type points to its original package's type
         // But we need to get the current package's version of that instantiated type
-        outerClass = GetInstantiatedDecl(
-            Ptr(As<ASTKind::CLASS_DECL>(baseClass->genericDecl)), baseTy->typeArgs, IS_GENERIC_INSTANTIATION_ENABLED);
+        outerClass = GetInstantiatedDecl(Ptr(As<ASTKind::CLASS_DECL>(baseClass->genericDecl)), baseTy->typeArgs);
     } else {
         outerClass = baseClass;
     }
@@ -285,8 +267,7 @@ Ptr<Decl> MockUtils::FindAccessor(
                     return decl.get();
                 }
             } else { // For functions we search accessors by using mangled names due to overloading
-                auto instantiatedDecl = GetInstantiatedDecl(
-                    member, instTys, IS_GENERIC_INSTANTIATION_ENABLED, outerClass.ty);
+                auto instantiatedDecl = GetInstantiatedDecl(member, instTys, outerClass.ty);
                 auto originalMangledName = Mangle(*instantiatedDecl);
                 auto originalMangledNameGivenFromAccessor = MangleUtils::ComputeMangledNameWithCustomIdentifier(
                     *decl, originalIdentifier);
@@ -409,13 +390,6 @@ std::string MockUtils::GetOriginalIdentifierOfMockAccessor(const Decl& decl) con
     auto identifier = decl.identifier.Val().substr(
         0, decl.identifier.Val().size() - (MOCKED_ACCESSOR_SUFFIX + outerDeclSuffix).length());
 
-    if (IS_GENERIC_INSTANTIATION_ENABLED && decl.astKind == ASTKind::FUNC_DECL) {
-        auto& fd = static_cast<const FuncDecl&>(decl);
-        if (fd.funcBody->generic) {
-            identifier = identifier.substr(0, identifier.size() - BuildTypeArgumentList(decl).length());
-        }
-    }
-
     return identifier;
 }
 
@@ -457,7 +431,9 @@ std::string MockUtils::BuildArgumentList(const AST::Decl& decl) const
 
 std::string MockUtils::BuildTypeArgumentList(const Decl& decl)
 {
-    if (!IS_GENERIC_INSTANTIATION_ENABLED || decl.astKind != ASTKind::FUNC_DECL) {
+    return "";
+    // FIXME: What to do?
+    if (decl.astKind != ASTKind::FUNC_DECL) {
         return "";
     }
     auto& fd = static_cast<const FuncDecl&>(decl);
@@ -647,9 +623,6 @@ Ptr<Ty> MockUtils::GetInstantiatedTy(const Ptr<Ty> ty, std::vector<TypeSubst>& t
 
 std::vector<TypeSubst> MockUtils::BuildGenericSubsts(const Ptr<InheritableDecl> decl)
 {
-    if (IS_GENERIC_INSTANTIATION_ENABLED) {
-        return {};
-    }
     std::vector<TypeSubst> genericSubsts;
     std::queue<Ptr<InheritableDecl>> workList;
     workList.push(decl);
