@@ -441,11 +441,6 @@ void TestManager::GenerateAccessors(Package& pkg)
             return VisitAction::SKIP_CHILDREN;
         }
 
-        // Don't generate accessors for generics themthelves, do it for instantiated versions
-        if (IS_GENERIC_INSTANTIATION_ENABLED && decl->TestAttr(Attribute::GENERIC)) {
-            return VisitAction::SKIP_CHILDREN;
-        }
-
         // common/specific declarations are not supported
         if (decl->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC, Attribute::FROM_COMMON_PART)) {
             return VisitAction::SKIP_CHILDREN;
@@ -477,10 +472,6 @@ void TestManager::PrepareToSpy(Package& pkg)
         }
 
         if (decl->genericDecl && !decl->genericDecl->TestAttr(Attribute::MOCK_SUPPORTED)) {
-            return VisitAction::SKIP_CHILDREN;
-        }
-
-        if (IS_GENERIC_INSTANTIATION_ENABLED && decl->TestAttr(Attribute::GENERIC)) {
             return VisitAction::SKIP_CHILDREN;
         }
 
@@ -573,11 +564,6 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
         }
 
         if ((node->curFile && !node->IsSamePackage(pkg))) {
-            return VisitAction::SKIP_CHILDREN;
-        }
-
-        if (IS_GENERIC_INSTANTIATION_ENABLED &&
-            (node->TestAttr(Attribute::GENERIC) || (node->ty && node->ty->HasGeneric()))) {
             return VisitAction::SKIP_CHILDREN;
         }
 
@@ -792,14 +778,10 @@ bool TestManager::IsThereMockUsage(Package& pkg) const
     bool mockUsageFound = false;
 
     Walker(&pkg, Walker::GetNextWalkerID(), [&pkg, &mockUsageFound](auto node) {
-        if (auto callExpr = As<ASTKind::CALL_EXPR>(node); callExpr &&
-            (!IS_GENERIC_INSTANTIATION_ENABLED || !callExpr->ty->HasGeneric()) &&
-            callExpr->IsSamePackage(pkg)
-        ) {
+        if (auto callExpr = As<ASTKind::CALL_EXPR>(node); callExpr && callExpr->IsSamePackage(pkg)) {
             auto resolvedFunc = callExpr->resolvedFunction;
             if (MockManager::IsMockCall(*callExpr) ||
-                (!IS_GENERIC_INSTANTIATION_ENABLED && resolvedFunc &&
-                    resolvedFunc->TestAttr(Attribute::CONTAINS_MOCK_CREATION_CALL))
+                (resolvedFunc && resolvedFunc->TestAttr(Attribute::CONTAINS_MOCK_CREATION_CALL))
             ) {
                 mockUsageFound = true;
                 return VisitAction::STOP_NOW;
