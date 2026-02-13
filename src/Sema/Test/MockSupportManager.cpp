@@ -358,9 +358,8 @@ std::vector<OwnedPtr<MatchCase>> MockSupportManager::GenerateHandlerMatchCases(
 
     std::vector<OwnedPtr<MatchCase>> handlerResultCases;
     auto handlerResultPattern = MakeOwned<EnumPattern>();
-    auto handlerResultPatternConstructor = LookupEnumMember(
-        mockUtils->GetInstantiatedDecl(optionFuncRetTy->decl, {handlerRetTy}, IS_GENERIC_INSTANTIATION_ENABLED),
-        OPTION_VALUE_CTOR);
+    auto handlerResultPatternConstructor =
+        LookupEnumMember(mockUtils->GetInstantiatedDecl(optionFuncRetTy->decl, {handlerRetTy}), OPTION_VALUE_CTOR);
     handlerResultPattern->ty = RawStaticCast<FuncTy*>(handlerResultPatternConstructor->ty)->retTy;
     handlerResultPattern->constructor = mockUtils->CreateRefExprWithInstTys(
         *handlerResultPatternConstructor, {handlerRetTy}, OPTION_VALUE_CTOR, *(funcDecl.curFile));
@@ -439,7 +438,7 @@ void MockSupportManager::PrepareStaticDecl(Decl& decl)
         ? typeManager.GetFunctionTy({objectTy, arrayTy, toStrArrayTy}, optionFuncRetTy)
         : typeManager.GetFunctionTy({arrayTy, toStrArrayTy}, optionFuncRetTy);
     auto optionFuncTy = typeManager.GetEnumTy(*mockUtils->optionDecl, { funcTy });
-    auto optionFunc = mockUtils->GetInstantiatedDecl(optionFuncTy->decl, {funcTy}, IS_GENERIC_INSTANTIATION_ENABLED);
+    auto optionFunc = mockUtils->GetInstantiatedDecl(optionFuncTy->decl, {funcTy});
     auto noneCtor = CreateRefExpr(*LookupEnumMember(optionFunc, OPTION_NONE_CTOR));
     noneCtor->curFile = decl.curFile;
     noneCtor->ty = optionFuncTy;
@@ -470,10 +469,6 @@ void MockSupportManager::PrepareStaticDecl(Decl& decl)
         varDecl = newVarDecl.get();
         generatedMockDecls.emplace_back(std::move(newVarDecl));
         genericMockVarsDecls.emplace(&decl, varDecl);
-    }
-
-    if (IS_GENERIC_INSTANTIATION_ENABLED && funcDecl->TestAttr(Attribute::GENERIC)) {
-        return;
     }
 
     auto varDeclRef = CreateRefExpr(*varDecl);
@@ -562,9 +557,7 @@ Ptr<Decl> MockSupportManager::GenerateSpiedObjectVar(const Decl& decl)
     auto mangledName = mockUtils->Mangle(decl);
     auto optionDeclTy = typeManager.GetEnumTy(*mockUtils->optionDecl, { declTy });
     auto noneRef = CreateRefExpr(
-        *LookupEnumMember(
-            mockUtils->GetInstantiatedDecl(optionDeclTy->decl, {declTy}, IS_GENERIC_INSTANTIATION_ENABLED),
-            OPTION_NONE_CTOR));
+        *LookupEnumMember(mockUtils->GetInstantiatedDecl(optionDeclTy->decl, {declTy}), OPTION_NONE_CTOR));
     noneRef->ty = optionDeclTy;
 
     if (auto varDecl = MockUtils::FindGlobalDecl<VarDecl>(
@@ -608,9 +601,8 @@ void MockSupportManager::GenerateSpyCallHandler(FuncDecl& funcDecl, Decl& spiedO
     auto spiedObjOptionTy = StaticCast<EnumTy*>(spiedObjectDecl.ty);
     auto spiedObjTy = spiedObjOptionTy->typeArgs[0];
     auto optionSpiedObjTyPattern = MakeOwned<EnumPattern>();
-    auto optionSpiedObjPatternConstructor = LookupEnumMember(
-        mockUtils->GetInstantiatedDecl(spiedObjOptionTy->decl, {spiedObjTy}, IS_GENERIC_INSTANTIATION_ENABLED),
-        OPTION_VALUE_CTOR);
+    auto optionSpiedObjPatternConstructor =
+        LookupEnumMember(mockUtils->GetInstantiatedDecl(spiedObjOptionTy->decl, {spiedObjTy}), OPTION_VALUE_CTOR);
     optionSpiedObjTyPattern->ty = RawStaticCast<FuncTy*>(optionSpiedObjPatternConstructor->ty)->retTy;
     optionSpiedObjTyPattern->constructor = mockUtils->CreateRefExprWithInstTys(
         *optionSpiedObjPatternConstructor, {spiedObjTy}, OPTION_VALUE_CTOR, *(funcDecl.curFile));
@@ -796,15 +788,11 @@ void MockSupportManager::GenerateAccessors(Decl& decl)
         if (auto propDecl = As<ASTKind::PROP_DECL>(member.get()); propDecl) {
             generatedMockDecls.emplace_back(GeneratePropAccessor(*propDecl));
         } else if (auto methodDecl = As<ASTKind::FUNC_DECL>(member.get()); methodDecl) {
-            if (!IS_GENERIC_INSTANTIATION_ENABLED) {
-                generatedMockDecls.emplace_back(GenerateFuncAccessor(*RawStaticCast<FuncDecl*>(methodDecl)));
-            }
+            generatedMockDecls.emplace_back(GenerateFuncAccessor(*RawStaticCast<FuncDecl*>(methodDecl)));
             if (auto instantiatedDecls = mockUtils->TryGetInstantiatedDecls(*methodDecl)) {
                 for (auto& instantiatedDecl : *instantiatedDecls) {
                     generatedMockDecls.emplace_back(GenerateFuncAccessor(*RawStaticCast<FuncDecl*>(instantiatedDecl)));
                 }
-            } else if (IS_GENERIC_INSTANTIATION_ENABLED) {
-                generatedMockDecls.emplace_back(GenerateFuncAccessor(*RawStaticCast<FuncDecl*>(methodDecl)));
             }
         } else if (auto fieldDecl = As<ASTKind::VAR_DECL>(member.get()); fieldDecl) {
             GenerateVarDeclAccessors(*fieldDecl, AccessorKind::FIELD_GETTER, AccessorKind::FIELD_SETTER);
@@ -1652,11 +1640,6 @@ std::vector<Ptr<Ty>> MockSupportManager::CloneFuncDecl(Ptr<FuncDecl> fromDecl, P
 
 void MockSupportManager::PrepareInterfaceDecl(InterfaceDecl& interfaceDecl)
 {
-    if (IS_GENERIC_INSTANTIATION_ENABLED) {
-        // Do not support CJVM for now
-        return;
-    }
-
     if (interfaceDecl.TestAttr(Attribute::GENERIC)) {
         // Generic interface not yet supported
         return;

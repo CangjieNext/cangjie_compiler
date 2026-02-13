@@ -182,24 +182,12 @@ MockManager::GeneratedClassResult MockManager::GenerateMockClassIfNeededAndGet(
         };
     }
 
-    if (IS_GENERIC_INSTANTIATION_ENABLED &&
-        !originalDecl.TestAttr(Attribute::GENERIC_INSTANTIATED) && originalDecl.generic
-    ) {
-        return {
-            .classDecl=nullptr,
-            .generated=false,
-        };
-    }
-
     // No matter in which file of the package mocked decl would be generated, so take the first file of the package
     auto curFile = Ptr(curPkg.files[0].get());
     auto mockedDecl = MakeOwned<ClassDecl>();
+    mockUtils->AddGenericIfNeeded(originalDecl, *mockedDecl);
 
-    if (!IS_GENERIC_INSTANTIATION_ENABLED) {
-        mockUtils->AddGenericIfNeeded(originalDecl, *mockedDecl);
-    }
-
-    if (IS_GENERIC_INSTANTIATION_ENABLED || !mockedDecl->generic) {
+    if (!mockedDecl->generic) {
         mockedDecl->ty = typeManager.GetClassTy(*mockedDecl, {});
     }
 
@@ -215,14 +203,9 @@ MockManager::GeneratedClassResult MockManager::GenerateMockClassIfNeededAndGet(
     mockedDecl->EnableAttr(Attribute::OPEN);
 
     auto originalDeclRef = CreateRefType(originalDecl);
-    Ptr<Ty> substitutedOriginalTy;
-    if (!IS_GENERIC_INSTANTIATION_ENABLED) {
-        substitutedOriginalTy = typeManager.GetInstantiatedTy(
-            originalDeclRef->ty, GenerateTypeMapping(originalDecl, mockedDecl->ty->typeArgs));
-        originalDeclRef->ty = substitutedOriginalTy;
-    } else {
-        substitutedOriginalTy = originalDecl.ty;
-    }
+    Ptr<Ty> substitutedOriginalTy =
+        typeManager.GetInstantiatedTy(originalDeclRef->ty, GenerateTypeMapping(originalDecl, mockedDecl->ty->typeArgs));
+    originalDeclRef->ty = substitutedOriginalTy;
 
     mockedDecl->inheritedTypes.emplace_back(std::move(originalDeclRef));
     originalDecl.subDecls.insert(mockedDecl.get());
@@ -300,9 +283,8 @@ void MockManager::WrapWithRequireMockObject(Expr& receiverExpr)
     requireMockObjCall->resolvedFunction = requireMockObject;
     requireMockObjCall->curFile = receiverExpr.curFile;
     requireMockObjCall->args = std::move(callArgs);
-    if (IS_GENERIC_INSTANTIATION_ENABLED) {
-        mockUtils->Instantiate(*requireMockObjCall);
-    }
+    // FIXME: Do we need to instantiate anything with UG?
+    mockUtils->Instantiate(*requireMockObjCall);
     receiverExpr.desugarExpr = std::move(requireMockObjCall);
 }
 
@@ -609,8 +591,7 @@ OwnedPtr<MatchCase> MockManager::CreateOnCallCallBaseMatchCase(
         SrcIdentifier{"this"}, typeManager.GetClassThisTy(*mockedClass, mockedClass->ty->typeArgs));
     thisRef->ref.target = mockedClass;
 
-    auto enumMember = mockUtils->GetInstantiatedDecl(
-        mockUtils->optionDecl, {typeManager.GetAnyTy()}, IS_GENERIC_INSTANTIATION_ENABLED);
+    auto enumMember = mockUtils->GetInstantiatedDecl(mockUtils->optionDecl, {typeManager.GetAnyTy()});
     auto someOuterDecl = Sema::Desugar::AfterTypeCheck::LookupEnumMember(enumMember, OPTION_VALUE_CTOR);
     auto someOuterDeclRef = CreateRefExpr(*someOuterDecl);
     auto optionOuterDeclTy = typeManager.GetEnumTy(*mockUtils->optionDecl, {typeManager.GetAnyTy()});
@@ -623,8 +604,7 @@ OwnedPtr<MatchCase> MockManager::CreateOnCallCallBaseMatchCase(
     someOuterDeclCall->resolvedFunction = As<ASTKind::FUNC_DECL>(someOuterDecl);
     someOuterDeclCall->callKind = CallKind::CALL_DECLARED_FUNCTION;
 
-    auto optionOuterDeclMember = mockUtils->GetInstantiatedDecl(
-        optionOuterDeclTy->decl, {mockedClass->ty}, IS_GENERIC_INSTANTIATION_ENABLED);
+    auto optionOuterDeclMember = mockUtils->GetInstantiatedDecl(optionOuterDeclTy->decl, {mockedClass->ty});
     auto noneRef = CreateRefExpr(
         *Sema::Desugar::AfterTypeCheck::LookupEnumMember(optionOuterDeclMember, OPTION_NONE_CTOR));
     noneRef->ty = optionOuterDeclTy;
@@ -1205,11 +1185,9 @@ OwnedPtr<FuncDecl> MockManager::CreateMockedMethodWithoutBody(
 {
     OwnedPtr<FuncDecl> mockedMethod = ASTCloner::Clone(Ptr(&originalMethod));
 
-    if (!IS_GENERIC_INSTANTIATION_ENABLED) {
-        mockUtils->AddGenericIfNeeded(originalMethod, *mockedMethod);
-        MockUtils::PrependFuncGenericSubst(
-            originalMethod.funcBody->generic, mockedMethod->funcBody->generic, classGenericSubsts);
-    }
+    mockUtils->AddGenericIfNeeded(originalMethod, *mockedMethod);
+    MockUtils::PrependFuncGenericSubst(
+        originalMethod.funcBody->generic, mockedMethod->funcBody->generic, classGenericSubsts);
 
     auto funcTy = mockUtils->GetInstantiatedTy(originalMethod.ty, classGenericSubsts);
     auto retTy = mockUtils->GetInstantiatedTy(originalMethod.funcBody->retType->ty, classGenericSubsts);
@@ -1307,11 +1285,6 @@ void MockManager::AddMockedMemberIfNeeded(ClassDecl& mockedDecl,
         }
     }
     if (auto originalMethod = As<ASTKind::FUNC_DECL>(&member); originalMethod) {
-        if (IS_GENERIC_INSTANTIATION_ENABLED && (originalMethod->genericDecl != nullptr ||
-            originalMethod->TestAttr(Attribute::GENERIC) || originalMethod->ty->HasGeneric())
-        ) {
-            return;
-        }
         if (auto mockedMethod = CreateMockedMethod(*originalMethod, mockedDecl, classGenericSubsts); mockedMethod) {
             mockedDecl.body->decls.emplace_back(std::move(mockedMethod));
         }
@@ -1591,8 +1564,7 @@ void MockManager::GenerateCallHandlerForStaticDecl(FuncDecl& decl, Expr& injectT
         ? typeManager.GetFunctionTy({objectTy, arrayTy, toStrArrayTy}, optionFuncRetTy)
         : typeManager.GetFunctionTy({arrayTy, toStrArrayTy}, optionFuncRetTy);
     auto optionFuncTy = typeManager.GetEnumTy(*mockUtils->optionDecl, { funcTy });
-    auto optionFunc = mockUtils->GetInstantiatedDecl(
-        optionFuncTy->decl, {optionFuncTy}, IS_GENERIC_INSTANTIATION_ENABLED);
+    auto optionFunc = mockUtils->GetInstantiatedDecl(optionFuncTy->decl, {optionFuncTy});
     auto handlerSomeDecl = Sema::Desugar::AfterTypeCheck::LookupEnumMember(optionFunc, OPTION_VALUE_CTOR);
     auto handlerSomeRef = CreateRefExpr(*handlerSomeDecl);
     handlerSomeRef->ty = typeManager.GetFunctionTy({funcTy}, optionFuncTy);
@@ -1645,8 +1617,7 @@ void MockManager::HandleMockAnnotatedLambdaWithCall(CallExpr& callExpr)
         target->TestAttr(Attribute::DEFAULT);
 
     CJC_ASSERT(isInInterfaceWithDefault || target->TestAttr(Attribute::IN_EXTEND) || target->IsStaticOrGlobal());
-    Ptr<FuncDecl> funcDecl = mockUtils->GetInstantiatedDecl(
-        target, StaticCast<NameReferenceExpr*>(callExpr.baseFunc.get())->instTys, IS_GENERIC_INSTANTIATION_ENABLED);
+    Ptr<FuncDecl> funcDecl = mockUtils->GetInstantiatedDecl(target, StaticCast<NameReferenceExpr*>(callExpr.baseFunc.get())->instTys);
 
     if (isInInterfaceWithDefault) {
         GenerateCallHandlerForMethodWithDefault(callExpr);
