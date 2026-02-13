@@ -9514,7 +9514,7 @@ index 0c4d9f78c..81b0f2afc 100644
    if (preference == ePreferDemangledWithoutArguments) {
      if (Language *lang = Language::FindPlugin(GuessLanguage())) {
 diff --git a/lldb/source/Core/ValueObject.cpp b/lldb/source/Core/ValueObject.cpp
-index d80139ab1..231486a5a 100644
+index d80139ab1..629ac5aa5 100644
 --- a/lldb/source/Core/ValueObject.cpp
 +++ b/lldb/source/Core/ValueObject.cpp
 @@ -48,6 +48,8 @@
@@ -9693,7 +9693,7 @@ index d80139ab1..231486a5a 100644
        if (!bracket_expr.contains('-')) {
          // if no separator, this is of the form [N].  Note that this cannot be
          // an unbounded range of the form [], because that case was handled
-@@ -3137,3 +3208,113 @@ ValueObjectSP ValueObject::Persist() {
+@@ -3137,3 +3208,109 @@ ValueObjectSP ValueObject::Persist() {
  
    return persistent_var_sp->GetValueObject();
  }
@@ -9770,10 +9770,6 @@ index d80139ab1..231486a5a 100644
 +  if (type_sp != nullptr) {
 +    class_type_or_name.SetTypeSP(type_sp);
 +    class_type_or_name.SetName(type_sp->GetFullCompilerType().GetTypeName().AsCString());
-+    if (should_update) {
-+      m_override_type = type_sp->GetFullCompilerType();
-+      LLDB_LOGF(log, "Found dynamic type with name %s", type_sp->GetFullCompilerType().GetTypeName().AsCString());
-+    }
 +    return true;
 +  }
 +  if (is_ti_type) {
@@ -24874,7 +24870,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..3adcbf8f0 100644
+index b391fe1ea..134fdf2e0 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -24930,7 +24926,7 @@ index b391fe1ea..3adcbf8f0 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.1.0-alpha.69";
++    g_version_str += "\n  cangjie 1.1.0-alpha.70";
    }
  
    return g_version_str.c_str();
@@ -38679,6 +38675,29 @@ index 85d051cfd..1d056da7f 100644
          assert(!refOffset.getScalable() &&
                 "Frame offsets with a scalable component are not supported");
          Offset.setImm(Offset.getImm() + refOffset.getFixed() + SPAdj);
+diff --git a/llvm/lib/CodeGen/SelectionDAG/FastISel.cpp b/llvm/lib/CodeGen/SelectionDAG/FastISel.cpp
+index ff5779967..e1462e762 100644
+--- a/llvm/lib/CodeGen/SelectionDAG/FastISel.cpp
++++ b/llvm/lib/CodeGen/SelectionDAG/FastISel.cpp
+@@ -1560,8 +1560,17 @@ bool FastISel::selectInstruction(const Instruction *I) {
+ /// (fall-through) successor, and update the CFG.
+ void FastISel::fastEmitBranch(MachineBasicBlock *MSucc,
+                               const DebugLoc &DbgLoc) {
++  /// Force branch emission to preserve the source location in debug mode.
++  /// Optimizing this away would cause debug info loss.
++  MachineInstr *PrevInstr = nullptr;
++  if (!FuncInfo.MBB->empty()) {
++      PrevInstr = &FuncInfo.MBB->back();
++  }
++  bool shouldPreserve = (FuncInfo.MF->getMMI().hasDebugInfo()) &&
++                        (!PrevInstr || PrevInstr->getDebugLoc() != DbgLoc);
+   if (FuncInfo.MBB->getBasicBlock()->sizeWithoutDebug() > 1 &&
+-      FuncInfo.MBB->isLayoutSuccessor(MSucc)) {
++      FuncInfo.MBB->isLayoutSuccessor(MSucc) &&
++      !shouldPreserve) {
+     // For more accurate line information if this is the only non-debug
+     // instruction in the block then emit it, otherwise we have the
+     // unconditional fall-through case, which needs no instructions.
 diff --git a/llvm/lib/CodeGen/SelectionDAG/FunctionLoweringInfo.cpp b/llvm/lib/CodeGen/SelectionDAG/FunctionLoweringInfo.cpp
 index aa9c77f9c..ef53e95d2 100644
 --- a/llvm/lib/CodeGen/SelectionDAG/FunctionLoweringInfo.cpp
@@ -50587,10 +50606,10 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..05902b684
+index 000000000..b0332af40
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
-@@ -0,0 +1,3354 @@
+@@ -0,0 +1,3403 @@
 +//===- CJPartialEscapeAnalysis.cpp - escape analysis for Cangjie ----------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -50628,6 +50647,8 @@ index 000000000..05902b684
 +#include "llvm/Transforms/Utils/CallGraphUpdater.h"
 +#include "llvm/Transforms/Utils/Local.h"
 +#include "llvm/Transforms/Scalar.h"
++
++#include <algorithm>
 +
 +#define DEBUG_TYPE "escape-analysis"
 +using namespace llvm;
@@ -52918,8 +52939,8 @@ index 000000000..05902b684
 +    }
 +    if (BeforeRun) {
 +      LLVM_DEBUG(dbgs() << "    defs:\n");
-+      for (auto DefInfo : Def[&BB]) {
-+        for (auto ValueVec : DefInfo.second) {
++      for (const auto &DefInfo : Def[&BB]) {
++        for (const auto &ValueVec : DefInfo.second) {
 +          LLVM_DEBUG(dbgs() << "      " << *DefInfo.first
 +                            << " offset :" << ValueVec.first << "\n");
 +          for (auto Value : ValueVec.second) {
@@ -52929,8 +52950,8 @@ index 000000000..05902b684
 +      }
 +    } else {
 +      LLVM_DEBUG(dbgs() << "    ins:\n");
-+      for (auto InInfo : In[&BB]) {
-+        for (auto ValueVec : InInfo.second) {
++      for (const auto &InInfo : In[&BB]) {
++        for (const auto &ValueVec : InInfo.second) {
 +          LLVM_DEBUG(dbgs() << "      " << *InInfo.first
 +                            << " offset :" << ValueVec.first << "\n");
 +          for (auto Value : ValueVec.second) {
@@ -53117,16 +53138,16 @@ index 000000000..05902b684
 +        auto &SuccOut = Out[&BB];
 +        auto &InInfo = In[&BB];
 +        if (NotInitialize) { // first time to initialize.
-+          for (auto SuccDefs : Def[&BB]) {
-+            for (auto SuccDef : SuccDefs.second) {
++          for (const auto &SuccDefs : Def[&BB]) {
++            for (const auto &SuccDef : SuccDefs.second) {
 +              SuccOut[SuccDefs.first][SuccDef.first].insert(
 +                  SuccDef.second.begin(), SuccDef.second.end());
 +            }
 +          }
 +        }
 +        for (auto *Pred : predecessors(&BB)) {
-+          for (auto LivVal : Out[Pred]) {
-+            for (auto ValVec : LivVal.second) {
++          for (const auto &LivVal : Out[Pred]) {
++            for (const auto &ValVec : LivVal.second) {
 +              for (auto Val : ValVec.second) {
 +                if (!InInfo[LivVal.first][ValVec.first].count(Val)) {
 +                  InInfo[LivVal.first][ValVec.first].insert(Val);
@@ -53138,8 +53159,8 @@ index 000000000..05902b684
 +          if (Pred == &BB) {
 +            continue;
 +          }
-+          for (auto LivVal : Out[Pred]) {
-+            for (auto ValVec : LivVal.second) {
++          for (const auto &LivVal : Out[Pred]) {
++            for (const auto &ValVec : LivVal.second) {
 +              for (auto Val : ValVec.second) {
 +                if (SuccBBInfo[LivVal.first].count(ValVec.first) &&
 +                    SuccBBInfo[LivVal.first][ValVec.first].size() != 0) {
@@ -53353,12 +53374,17 @@ index 000000000..05902b684
 +      CopyType =
 +          cast<PointerType>(BaseV->getType())->getNonOpaquePointerElementType();
 +    }
-+    if (isa<StructType>(CopyType)) {
-+      if (!containsGCPtrType(CopyType)) {
++    if (auto *CopyST = dyn_cast<StructType>(CopyType)) {
++      if (!containsGCPtrType(CopyST)) {
 +        return;
 +      }
-+      countRefOffsets(cast<StructType>(CopyType), RefOffsets, 0, DL, BeginOff,
-+                      BeginOff + Size);
++      uint64_t Left = static_cast<uint64_t>(BeginOff);
++      uint64_t Right = Left + Size;
++      const auto &Offsets = getStructRefOffsets(CopyST, Right, DL);
++      auto It = std::lower_bound(Offsets.begin(), Offsets.end(), Left);
++      for (; It != Offsets.end() && *It < Right; ++It) {
++        RefOffsets.push_back(*It);
++      }
 +    } else {
 +      // 64: large size threshold
 +      if (Size > 64) {
@@ -53388,10 +53414,19 @@ index 000000000..05902b684
 +      }
 +      return;
 +    }
++    SmallDenseMap<std::pair<Value *, uint64_t>, GCPtr *, 8> SrcMPCache;
 +    for (auto Offset : RefOffsets) {
 +      uint64_t PVOffset = POffset + Offset - BeginOff;
 +      uint64_t VPOffset = Off + Offset - BeginOff;
-+      GCPtr *SrcMP = findSrcMP(BaseV, VPOffset, I->getParent());
++      auto CacheKey = std::make_pair(BaseV, VPOffset);
++      GCPtr *SrcMP = nullptr;
++      auto CacheIt = SrcMPCache.find(CacheKey);
++      if (CacheIt != SrcMPCache.end()) {
++        SrcMP = CacheIt->second;
++      } else {
++        SrcMP = findSrcMP(BaseV, VPOffset, I->getParent());
++        SrcMPCache.insert({CacheKey, SrcMP});
++      }
 +      MemPtr *MP = MemPtr::create(Base, PVOffset, *this, LI);
 +      MP->insertDefine(I->getParent(), SrcMP);
 +      if (!Def[I->getParent()][Base][PVOffset].empty()) {
@@ -53401,19 +53436,52 @@ index 000000000..05902b684
 +    }
 +  }
 +
-+  GCPtr *findSrcMP(Value *BaseV, uint64_t VPOffset, BasicBlock *CurBB) {
-+    if (Def[CurBB][BaseV][VPOffset].empty()) {
-+      return MemPtr::create(BaseV, VPOffset, *this, LI);
++  const SmallVector<uint64_t, 8> &
++  getStructRefOffsets(StructType *ST, uint64_t RangeEnd,
++                      const DataLayout &DL) {
++    auto &BySize = StructRefOffsetsCache[ST];
++    auto It = BySize.find(RangeEnd);
++    if (It != BySize.end()) {
++      return It->second;
 +    }
++    SmallVector<uint64_t, 8> Offsets;
++    if (RangeEnd != 0) {
++      countRefOffsets(ST, Offsets, 0, DL, 0, RangeEnd);
++      std::sort(Offsets.begin(), Offsets.end());
++      Offsets.erase(std::unique(Offsets.begin(), Offsets.end()),
++                    Offsets.end());
++    }
++    auto Inserted = BySize.insert({RangeEnd, std::move(Offsets)});
++    return Inserted.first->second;
++  }
++
++  GCPtr *findSrcMP(Value *BaseV, uint64_t VPOffset, BasicBlock *CurBB) {
++    auto BBIt = Def.find(CurBB);
++    if (BBIt == Def.end())
++      return MemPtr::create(BaseV, VPOffset, *this, LI);
++    auto &BBDefs = BBIt->second;
++    auto FindInMap = [&BBDefs, this](Value *BaseV,
++                                     uint64_t VPOffset) -> GCPtr * {
++      auto BaseIt = BBDefs.find(BaseV);
++      if (BaseIt == BBDefs.end())
++        return nullptr;
++      auto OffIt = BaseIt->second.find(VPOffset);
++      if (OffIt == BaseIt->second.end() || OffIt->second.empty())
++        return nullptr;
++      return *OffIt->second.begin();
++    };
++    GCPtr *Temp = FindInMap(BaseV, VPOffset);
++    if (!Temp)
++      return MemPtr::create(BaseV, VPOffset, *this, LI);
 +    GCPtr *CurP = nullptr;
-+    while (!Def[CurBB][BaseV][VPOffset].empty()) {
-+      CurP = *Def[CurBB][BaseV][VPOffset].begin();
++    do {
++      CurP = Temp;
 +      if (CurP->isPtr())
 +        return CurP;
 +      MemPtr *MP = reinterpret_cast<MemPtr *>(CurP);
 +      VPOffset = MP->Offset;
 +      BaseV = MP->P;
-+    }
++    } while ((Temp = FindInMap(BaseV, VPOffset)));
 +    return CurP;
 +  }
 +
@@ -53832,16 +53900,16 @@ index 000000000..05902b684
 +  DenseMap<Value *, SmallSetVector<GCPtr *, 8>> LoadBaseValue;
 +  DenseMap<Value *, unsigned> LoadState;
 +  SmallSetVector<GCPtr *, 8> LoadValues;
++  using StructRefOffsetsBySize =
++      DenseMap<uint64_t, SmallVector<uint64_t, 8>>;
++  DenseMap<StructType *, StructRefOffsetsBySize> StructRefOffsetsCache;
 +
-+  std::map<BasicBlock *,
-+           std::map<Value *, std::map<int, SmallSetVector<GCPtr *, 8>>>>
-+      Def;
-+  std::map<BasicBlock *,
-+           std::map<Value *, std::map<int, SmallSetVector<GCPtr *, 8>>>>
-+      Out;
-+  std::map<BasicBlock *,
-+           std::map<Value *, std::map<int, SmallSetVector<GCPtr *, 8>>>>
-+      In;
++  using DefOffsetMap = DenseMap<int, SmallSetVector<GCPtr *, 8>>;
++  using DefBaseMap = DenseMap<Value *, DefOffsetMap>;
++  using DefBBMap = std::map<BasicBlock *, DefBaseMap>;
++  DefBBMap Def;
++  DefBBMap Out;
++  DefBBMap In;
 +};
 +
 +static bool skipLargeFunction(Function *F) {
