@@ -1,0 +1,1164 @@
+# 仓颉编译器 AST 内存释放方案
+
+---
+
+## 一、需求背景
+
+### 1.1 问题
+
+仓颉编译器在 AST 阶段结束后，AST 数据结构仍驻留内存直到编译器实例析构。对于大型项目，AST 占用的内存可达数百 MB，而后续的 CHIR lowering 和 CodeGen 阶段不再需要 AST。需要在 CHIR lowering 完成后主动释放 AST 内存，降低编译峰值内存。
+
+### 1.2 核心前提（已验证）
+
+**CHIR IR 节点不持有 AST 指针**：
+- `CHIR::Package`、`CHIR::Func`、`CHIR::Block`、`CHIR::Value` 等 IR 节点使用独立的 `DebugLocation`（文件名 + 行号），不引用 AST 节点
+- `GenPackageModules()`（`EmitPackageIR.cpp:587`）签名接收 `CHIRData&`，不依赖 `AST::Package`
+- CodeGen 的类型信息完全来自 CHIR 类型系统（`CHIR::Type`），与 AST 类型系统（`AST::Ty`）独立
+
+### 1.3 编译流水线
+
+```
+PARSE → CONDITION_COMPILE → IMPORT_PACKAGE → MACRO_EXPAND → AST_DIFF →
+SEMA → MANGLING → SAVE_CJO → CHIR → [RELEASE_AST] → CODEGEN → SAVE_RESULTS
+                                       ↑ 新增阶段
+```
+
+`CompileStage` 枚举（`CompilerInstance.h:45-65`）驱动 `Compile()` 主循环（`CompilerInstance.cpp:175-213`），每个阶段对应一个 `Perform*()` 虚方法。
+
+---
+
+## 二、方案总览
+
+方案由两个互补部分组成：
+
+| 方案 | 释放时机 | 释放粒度 | 内存收益 | 改动量 |
+|------|---------|---------|---------|--------|
+| **函数体粒度释放** | CHIR lowering Step 4 中逐步释放 | `FuncBody::body`、`VarDeclAbstract::initializer` | 60-80% AST | ~60 行 |
+| **完整清理** | CHIR 完成后独立阶段一次性释放 | 整棵 AST + 管理器 + imported packages | 90-95% AST | ~320 行 |
+| **组合（推荐）** | Step 4 中 + CHIR 后 | 全部 | 95%+ AST | ~380 行 |
+
+内存曲线对比：
+
+```
+当前：AST 存活到编译器析构
+ 内存 ┌──────────────────────────────────────────────┐
+      │   AST (全量)                                  │
+      └──────────────────────────────────────────────┘
+
+组合方案：边翻译边释放 + CHIR 后完整清理
+ 内存 ┌──────────┐
+      │ AST 全量  │╲
+      │           │  ╲  ← 函数体粒度释放（Step 4 中）
+      │           │    ╲
+      │           │ 骨架 ╲──┐
+      │           │         │ ← 完整清理（RELEASE_AST 阶段）
+      └───────────┘         └──────────────────────►
+      Step1-3    Step4    RELEASE_AST           CodeGen
+```
+
+---
+
+## 三、函数体粒度释放
+
+### 3.1 原理
+
+AST 声明节点（`FuncDecl`、`VarDecl`）在整个 lowering 过程中被 `globalCache`、`AST2CHIRCheck`、`CompilationCache` 反复引用，必须保留。但函数体内部的代码块和变量初始化表达式在翻译完成后不再被访问：
+
+```
+FuncDecl (声明节点 — 必须保留)
+├── identifier, mangledName, ty, attrs  ← 签名信息，被 globalCache/AST2CHIRCheck 引用
+├── funcBody: OwnedPtr<FuncBody>
+│   ├── paramLists  ← 被 GlobalDeclAnalysis 引用（GlobalDeclAnalysis.cpp:46-48）
+│   ├── retType     ← 签名信息
+│   └── body: OwnedPtr<Block>  ← 实际代码块，翻译后可释放 ✅
+│       ├── statements
+│       ├── expressions
+│       └── nested blocks
+
+VarDeclAbstract (声明节点 — 必须保留)
+├── identifier, mangledName, ty, attrs  ← 签名信息
+├── type: OwnedPtr<Type>  ← 类型信息，保留
+└── initializer: OwnedPtr<Expr>  ← 初始化表达式，翻译后可释放 ✅
+```
+
+**安全边界**：仅释放 `funcBody->body`（`OwnedPtr<Block>`），不释放 `funcBody` 本身。`funcBody->paramLists`、`funcBody->retType` 等签名级成员不受影响。不得将释放粒度扩大到整个 `funcBody`（`TranslateNominalDecls` 内部的 genericFuncMap 构建依赖 `paramLists`，见 `ASTPackage2CHIR.cpp:1308-1312`）。
+
+### 3.2 安全性验证
+
+`ToCHIRPackage()` 的 5 步流程中，各步骤对 `funcBody->body` 和 `initializer` 的访问情况：
+
+| 步骤 | 操作 | 读取 body | 读取 initializer |
+|------|------|-----------|-----------------|
+| Step 1: CollectTopLevelDecls | 收集声明指针 | ❌ | ❌ |
+| Step 2: SortGlobalVarDecl | 依赖分析 | ❌（仅读 paramLists） | ✅ 读取 |
+| Step 3: CacheSomeDeclsToGlobalSymbolTable | 创建签名 | ❌ | ❌ |
+| Step 4a: TranslateNominalDecls | 翻译类型方法体 | ✅ 读取并翻译 | — |
+| Step 4a 内部: genericFuncMap 构建 | 泛型参数验证 | ❌（仅读 paramLists） | — |
+| Step 4b: TranslateInitOfGlobalVars | 翻译全局变量初始化 | — | ✅ 读取并翻译 |
+| Step 4c: TranslateTopLevelDecls | 翻译函数体 | ✅ 读取并翻译 | — |
+| Step 5: AST2CHIRCheck | 验证 | ❌ 仅读 ty/identifier/mangledName | ❌ 仅读 ty |
+
+关键验证结果：
+
+1. `AST2CHIRCheck`（`AST2CHIRChecker.cpp:481-522`）：`CheckFunc` 仅访问 `decl.outerDecl`、`decl.ty`、`decl.TestAttr()`；`CheckVar` 仅访问 `decl.ty`。不读取函数体和初始化表达式。
+
+2. `GlobalDeclAnalysis`（`GlobalDeclAnalysis.cpp:20-53`）：`CollectDepInCallExpr` 访问 `funcBody->paramLists[0]->params[i]->desugarDecl`，但不访问 `funcBody->body`。
+
+3. 并行翻译（`ParallelUtil::RunAST2CHIRInParallel`）：每个函数的 body 只被一个线程读取，释放不存在竞争。
+
+4. `globalCache` 引用其他函数时只查找 CHIR 签名，不读取其他函数的 AST body。
+
+5. Lowering 阶段不执行内联展开（`@inline` 在 CodeGen 阶段处理），并行翻译中不存在函数体交叉引用。
+
+### 3.3 释放策略
+
+| 翻译子步骤 | 释放方式 | 理由 |
+|-----------|---------|------|
+| TranslateNominalDecls | 返回后**批量释放**方法体 | 内部逻辑复杂（泛型实例化、extends），侵入性高 |
+| TranslateInitOfGlobalVars | 返回后**批量释放** initializer | 委托给 GlobalVarInitializer，侵入性高 |
+| TranslateTopLevelDecls（串行） | 循环中**逐个释放** | 循环结构简单，峰值内存收益最大 |
+| TranslateTopLevelDecls（并行） | 返回后**批量释放** | 避免修改 ParallelUtil 通用接口 |
+| annoFactoryFuncs | 循环中**逐个释放** | 串行循环，结构简单 |
+
+### 3.4 实现代码
+
+#### 辅助方法声明
+
+```cpp
+// AST2CHIR.h — 新增 private 方法
+private:
+    void ReleaseFuncBody(const AST::Decl& decl);
+    void ReleaseVarInitializer(AST::VarDeclAbstract& decl);
+    void ReleaseTranslatedNominalBodies(const AST::Package& pkg);
+    void ReleaseTranslatedInitializers(const InitOrder& initOrder);
+    void ReleaseAllTranslatedFuncBodies();
+```
+
+#### 辅助方法实现
+
+```cpp
+// AST2CHIR.cpp
+
+void AST2CHIR::ReleaseFuncBody(const AST::Decl& decl)
+{
+    if (auto* funcDecl = DynamicCast<const AST::FuncDecl*>(&decl)) {
+        if (funcDecl->funcBody && funcDecl->funcBody->body) {
+            // OwnedPtr::get() 是 const 方法，返回 Ptr<T>
+            // 通过 Ptr<FuncBody> 访问 body 得到 OwnedPtr<Block>&（非 const），reset() 合法
+            funcDecl->funcBody->body.reset();
+        }
+    }
+}
+
+void AST2CHIR::ReleaseVarInitializer(AST::VarDeclAbstract& decl)
+{
+    if (decl.initializer) {
+        decl.initializer.reset();
+    }
+}
+
+void AST2CHIR::ReleaseTranslatedNominalBodies(const AST::Package& pkg)
+{
+    // 只遍历当前包的 nominal 类型，跳过 imported 类型
+    auto releaseMethodBodies = [this](const auto& declList) {
+        for (auto& decl : declList) {
+            if (!NeedTranslate(*decl)) { continue; }
+            // ClassDecl、InterfaceDecl 继承 ClassLikeDecl
+            if (auto* classLike = DynamicCast<const AST::ClassLikeDecl*>(decl.get())) {
+                for (auto& member : classLike->members) {
+                    ReleaseFuncBody(*member);
+                }
+            }
+            // StructDecl 不继承 ClassLikeDecl，独立处理
+            if (auto* structDecl = DynamicCast<const AST::StructDecl*>(decl.get())) {
+                for (auto& member : structDecl->members) {
+                    ReleaseFuncBody(*member);
+                }
+            }
+            // EnumDecl 不继承 ClassLikeDecl，独立处理
+            if (auto* enumDecl = DynamicCast<const AST::EnumDecl*>(decl.get())) {
+                for (auto& member : enumDecl->members) {
+                    ReleaseFuncBody(*member);
+                }
+            }
+        }
+    };
+    releaseMethodBodies(nominalDecls);
+    releaseMethodBodies(genericNominalDecls);
+}
+
+void AST2CHIR::ReleaseTranslatedInitializers(const InitOrder& initOrder)
+{
+    for (auto& [decl, deps] : initOrder) {
+        if (auto* varDecl = DynamicCast<AST::VarDeclAbstract*>(
+                const_cast<AST::Decl*>(decl))) {
+            ReleaseVarInitializer(*varDecl);
+        }
+    }
+}
+
+void AST2CHIR::ReleaseAllTranslatedFuncBodies()
+{
+    for (auto decl : globalAndMemberFuncs) {
+        if (NeedTranslate(*decl)) {
+            ReleaseFuncBody(*decl);
+        }
+    }
+    for (auto decl : std::as_const(localConstFuncs.stableOrderValue)) {
+        ReleaseFuncBody(*decl);
+    }
+}
+```
+
+#### TranslateAllDecls 修改
+
+```cpp
+// AST2CHIR.cpp — TranslateAllDecls 修改
+void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initOrder)
+{
+    // step 1: translate nominal decls
+    Utils::ProfileRecorder::Start("TranslateAllDecls", "TranslateNominalDecls");
+    TranslateNominalDecls(pkg);
+    ReleaseTranslatedNominalBodies(pkg);  // 批量释放 nominal 方法体
+    Utils::ProfileRecorder::Stop("TranslateAllDecls", "TranslateNominalDecls");
+
+    // step 2: translate initialization of global var
+    Utils::ProfileRecorder::Start("TranslateAllDecls", "TranslateInitOfGlobalVars");
+    TranslateInitOfGlobalVars(pkg, initOrder);
+    ReleaseTranslatedInitializers(initOrder);  // 批量释放 initializer
+    Utils::ProfileRecorder::Stop("TranslateAllDecls", "TranslateInitOfGlobalVars");
+
+    // step 3: translate body of all funcs
+    Utils::ProfileRecorder::Start("TranslateAllDecls", "TranslateOtherTopLevelDecls");
+    if (opts.GetJobs() > 1) {
+        TranslateTopLevelDeclsInParallel();
+        ReleaseAllTranslatedFuncBodies();  // 并行完成后批量释放
+    } else {
+        for (auto decl : globalAndMemberFuncs) {
+            if (!NeedTranslate(*decl)) { continue; }
+            auto trans = CreateTranslator();
+            trans.SetTopLevel(*decl);
+            Translator::TranslateASTNode(*decl, trans);
+            if (decl->TestAttr(AST::Attribute::GLOBAL)) {
+                trans.CollectValueAnnotation(*decl);
+            }
+            ReleaseFuncBody(*decl);  // 逐个释放
+        }
+        for (auto decl : std::as_const(localConstFuncs.stableOrderValue)) {
+            auto trans = CreateTranslator();
+            trans.SetTopLevel(*decl);
+            Translator::TranslateASTNode(*decl, trans);
+            ReleaseFuncBody(*decl);  // 逐个释放
+        }
+    }
+    // annoFactoryFuncs
+    for (auto decl : annoFactoryFuncs) {
+        auto trans = CreateTranslator();
+        trans.SetTopLevel(*decl.first);
+        trans.TranslateAnnoFactoryFuncBody(*decl.first, *decl.second);
+        ReleaseFuncBody(*decl.first);  // 逐个释放
+    }
+    Utils::ProfileRecorder::Stop("TranslateAllDecls", "TranslateOtherTopLevelDecls");
+
+    // step 4: set CompileTimeValue for lambda — 不受影响，操作 CHIR IR
+    Utils::ProfileRecorder::Start("TranslateAllDecls", "SetCompileTimeValueFlag");
+    for (auto func : package->GetGlobalFuncs()) {
+        if (func->TestAttr(Attribute::CONST)) {
+            SetCompileTimeValueFlagRecursivly(*func);
+        }
+    }
+    Utils::ProfileRecorder::Stop("TranslateAllDecls", "SetCompileTimeValueFlag");
+}
+```
+
+### 3.5 接口稳定性
+
+- 不修改任何现有公开接口
+- `ReleaseFuncBody` 等方法均为 `AST2CHIR` 的 private 方法
+- `TranslateAllDecls` 的签名和语义不变
+- `OwnedPtr::reset()` 将指针置 null 并 delete 旧对象，后续任何误访问会立即暴露为 null 解引用
+
+---
+
+## 四、CHIR 完成后完整清理
+
+### 4.1 流水线集成
+
+#### CompileStage 枚举扩展
+
+```cpp
+// CompilerInstance.h
+enum class CompileStage {
+    // ... 现有阶段 ...
+    SAVE_CJO,
+    CHIR,
+    RELEASE_AST,    // 新增：AST 内存释放
+    CODEGEN,
+    SAVE_RESULTS,
+};
+```
+
+#### Compile() 主循环扩展
+
+```cpp
+// CompilerInstance.cpp — Compile() 中添加 case
+case CompileStage::RELEASE_AST:
+    ret = PerformASTRelease();
+    break;
+```
+
+#### PerformASTRelease 虚方法
+
+```cpp
+// CompilerInstance.h — 新增
+protected:
+    bool astReleased = false;
+    void ReleaseASTMemory();
+
+public:
+    bool IsASTReleased() const { return astReleased; }
+    virtual bool PerformASTRelease();
+```
+
+```cpp
+// CompilerInstance.cpp
+bool CompilerInstance::PerformASTRelease()
+{
+    // 无论是否释放 AST，都提取 CodeGen 元信息（统一单路径）
+    if (codeGenPkgInfos.empty()) {
+        PrepareCodeGenInfo();
+    }
+    if (!packageDependenceResolved) {
+        MaterializePackageDependence();
+    }
+
+    if (invocation.globalOptions.noReleaseAST) {
+        return true;
+    }
+
+    ReleaseASTMemory();
+    return true;
+}
+```
+
+### 4.2 PackageCodeGenInfo — CodeGen 脱离 srcPkgs 依赖
+
+AST 释放后 `srcPkgs` 为空，`GetSourcePackages()` 返回空列表，CodeGen 循环体不执行。解决方案：在 AST 释放前提取 CodeGen 所需的最小元信息，CodeGen 统一走单路径。
+
+```cpp
+// CompilerInstance.h — 新增
+struct PackageCodeGenInfo {
+    std::string fullPackageName;
+    bool isEmpty;
+};
+
+class CompilerInstance {
+    // ...
+    std::vector<PackageCodeGenInfo> codeGenPkgInfos;
+    bool packageDependenceResolved = false;
+};
+```
+
+```cpp
+// CompilerInstance.cpp
+void CompilerInstance::PrepareCodeGenInfo()
+{
+    codeGenPkgInfos.clear();
+    for (auto& srcPkg : srcPkgs) {
+        codeGenPkgInfos.push_back({srcPkg->fullPackageName, srcPkg->IsEmpty()});
+    }
+}
+```
+
+#### CodeGen 统一单路径
+
+不保留旧路径，始终通过 `PackageCodeGenInfo` 驱动。即使 AST 未释放（`--no-release-ast`），也在 `RELEASE_AST` 阶段提取 `PackageCodeGenInfo`（但不释放 AST）。
+
+```cpp
+// DefaultCompilerInstance.cpp — 统一后的 PerformCodeGen
+bool DefaultCIImpl::PerformCodeGen()
+{
+    MaterializePackageDependenceIfNeeded();
+    bool ret = true;
+    for (auto& info : ci.codeGenPkgInfos) {
+        ret = ret && CodegenOnePackage(info, false);
+    }
+    return ret;
+}
+
+bool DefaultCIImpl::CodegenOnePackage(
+    const PackageCodeGenInfo& pkgInfo, bool enableIncrement)
+{
+    if (pkgInfo.isEmpty) { return true; }
+    if (ci.invocation.globalOptions.disableCodeGen) { return true; }
+
+    auto backend = ci.invocation.globalOptions.backend;
+    switch (backend) {
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+        case Triple::BackendType::CJNATIVE: {
+            if (!EmitLLVMSimilarBytecode(pkgInfo.fullPackageName, enableIncrement)) {
+                return false;
+            }
+            break;
+        }
+#endif
+        // ... 其他 backend
+    }
+    return true;
+}
+
+bool DefaultCIImpl::EmitLLVMSimilarBytecode(
+    const std::string& fullPackageName, bool enableIncrement)
+{
+    CHIR::CHIRBuilder builder(ci.chirData.GetCHIRContext());
+    // GenPackageModules 不依赖 AST::Package
+    llvmModules = CodeGen::GenPackageModules(
+        builder, ci.chirData, ci.invocation.globalOptions, ci, enableIncrement);
+
+    Utils::ProfileRecorder recorder("CodeGen", "Save bc file");
+    ci.invocation.globalOptions.UpdateCachedDirName(fullPackageName);
+    if (llvmModules.size() == 1) {
+        auto filePath = GenerateBCFilePathAndUpdateToInvocation(
+            TempFileKind::T_BC, fullPackageName);
+        if (filePath.empty()) { return false; }
+        CodeGen::SavePackageModule(*llvmModules[0], filePath);
+    } else {
+        // 多模块并行保存，使用 fullPackageName 字符串
+        // ...
+    }
+    if (ci.invocation.globalOptions.enIncrementalCompilation) {
+        auto fileName = GenerateFileName(fullPackageName, "");
+        ci.cachedInfo.bitcodeFilesName = std::vector<std::string>{fileName};
+    }
+    return true;
+}
+```
+
+#### 包依赖关系物化
+
+```cpp
+// CompilerInstance.cpp
+void CompilerInstance::MaterializePackageDependence()
+{
+    std::vector<Ptr<AST::Package>> allImportedPackages;
+    for (auto pd : importManager.GetAllImportedPackages(true)) {
+        if (pd && pd->srcPackage) {
+            allImportedPackages.push_back(pd->srcPackage);
+        }
+    }
+    packageManager->ResolveDependence(allImportedPackages);
+    packageDependenceResolved = true;
+}
+
+// DefaultCompilerInstance.cpp
+void DefaultCIImpl::MaterializePackageDependenceIfNeeded()
+{
+    if (ci.packageDependenceResolved) {
+        return;  // 已在 AST 释放前完成
+    }
+    // fallback：--no-release-ast 模式下首次调用
+    ci.MaterializePackageDependence();
+}
+```
+
+### 4.3 ReleaseASTMemory — 完整 5 阶段清理
+
+```cpp
+// CompilerInstance.cpp
+void CompilerInstance::ReleaseASTMemory()
+{
+    if (astReleased) { return; }
+
+    // ═══════════════════════════════════════════════════
+    // Phase 0: 前置操作（必须在 AST 释放前完成）
+    // ═══════════════════════════════════════════════════
+
+    // 0a. 提取 CodeGen 所需的最小元信息
+    if (codeGenPkgInfos.empty()) {
+        PrepareCodeGenInfo();
+    }
+
+    // 0b. 物化包依赖关系
+    if (!packageDependenceResolved) {
+        MaterializePackageDependence();
+    }
+
+    // 0c. 物化 CompilationCache 中的 AST 引用
+    //     必须在 CHIR 阶段完成后执行（GlobalDeclAnalysis.cpp:490 重写 varAndFuncDep）
+    MaterializeCachedASTReferences();
+
+    // 0d. 增量编译缓存写入
+    //     WriteCachedInfo 原本在 FrontendTool.cpp:216 的 ExecuteCompile() 返回后调用，
+    //     但它解引用 srcPkgs[0]、order 中的 AST 指针、varAndFuncDep 和 semaInfo.usages。
+    //     必须在 AST 释放前完成。
+    if (ShouldWriteCacheFile() && !cacheWritten) {
+        WriteCachedInfoBeforeRelease();
+        cacheWritten = true;
+    }
+
+    // 0e. 增量编译结果保存
+    //     PerformResultsSaving 中的 ExportASTSignature 和 SaveCjo 需要完整 AST。
+    if (!resultsSaved) {
+        PerformResultsSaving();
+        resultsSaved = true;
+    }
+
+    // ═══════════════════════════════════════════════════
+    // Phase 1: 清除 CHIR 层持有的 AST 引用
+    // ═══════════════════════════════════════════════════
+
+    // 1a. CHIR 类型缓存（chirTypeCache.typeMap: AST::Ty* → CHIR::Type*）
+    chirData.ClearASTTypeCache();
+
+    // 1b. DiagAdapter 的宏调用映射
+    for (auto* chirPkg : chirData.GetAllCHIRPackages()) {
+        if (chirPkg) {
+            chirPkg->diag.posRange2MacroCallMap.clear();
+        }
+    }
+
+    // 1c. 全局 annotation 信息（清除全部三个全局变量）
+    CHIR::ClearGlobalAnnotationInfo();
+
+    // ═══════════════════════════════════════════════════
+    // Phase 2: 清除 CompilerInstance 直接成员的 AST 引用
+    // ═══════════════════════════════════════════════════
+
+    // 2a. astPkg2chirPkgMap → chirPkgByName 替换
+    for (auto& [astPkg, chirPkg] : astPkg2chirPkgMap) {
+        chirPkgByName[astPkg->fullPackageName] = chirPkg;
+    }
+    astPkg2chirPkgMap.clear();
+
+    // 2b. 直接成员清理
+    currentPkg = nullptr;
+    mangledName2DeclMap.clear();
+    rawMangleName2DeclMap.clear();
+    declsWithDuplicatedRawMangleName.clear();
+    directExtends.clear();
+    order.clear();
+    chirInfo.ccTys.clear();
+
+    // 2c. 合并后的包列表
+    pkgs.clear();
+
+    // ═══════════════════════════════════════════════════
+    // Phase 3: 清理/释放管理器（析构顺序关键）
+    // ═══════════════════════════════════════════════════
+
+    // 3a. TypeChecker — 持有 TypeManager& 引用，必须先于 TypeManager 释放
+    delete typeChecker;    typeChecker = nullptr;
+
+    // 3b. TypeManager — 持有 15+ 个 AST 指针集合
+    delete typeManager;    typeManager = nullptr;
+
+    // 3c. GenericInstantiationManager
+    delete gim;            gim = nullptr;
+
+    // 3d. TestManager — 持有 ImportManager 和 TypeManager 引用
+    delete testManager;    testManager = nullptr;
+
+    // 3e. BaseMangler — ManglerContext 持有 6 个 AST 指针 map
+    mangler.reset();
+
+    // 3f. ImportManager — 栈成员，不能 delete，调用清理方法
+    importManager.ClearASTReferences();
+
+    // 3g. PackageManager — 持有包依赖关系（已物化），清理 AST 引用
+    packageManager->ClearASTReferences();
+
+    // 3h. CachedMangleMap — 持有 AST 裸指针（在 CodeGen 拷贝之前清除）
+    cacheMangles.ClearASTPointers();
+
+    // ═══════════════════════════════════════════════════
+    // Phase 4: 释放 AST 核心数据（严格顺序）
+    // ═══════════════════════════════════════════════════
+
+    // 4a. 先释放 AST 节点（触发 Symbol detach）
+    srcPkgs.clear();
+
+    // 4b. 再释放 ASTContext（依赖 AST 节点已析构）
+    pkgCtxMap.clear();
+
+    // ═══════════════════════════════════════════════════
+    // Phase 5: 标记完成
+    // ═══════════════════════════════════════════════════
+    astReleased = true;
+}
+```
+
+### 4.4 管理器清理接口
+
+#### ImportManager
+
+```cpp
+// ImportManager.h — 新增
+void ImportManager::ClearASTReferences()
+{
+    curPackage = nullptr;
+    // 释放 imported packages 以回收内存
+    cjoManager->ClearImportedPackages();
+    // 清除 packageNameMap 中的 AST::Package 指针
+    cjoManager->ClearPackagePointers();
+}
+```
+
+```cpp
+// CjoManagerImpl.h — 新增
+void CjoManagerImpl::ClearImportedPackages()
+{
+    importedPackages.clear();
+    for (auto& [name, info] : packageNameMap) {
+        info.pkg = nullptr;
+    }
+}
+```
+
+#### PackageManager
+
+```cpp
+// PackageManager.h — 新增
+void PackageManager::ClearASTReferences()
+{
+    packageDependence.clear();
+}
+```
+
+#### CachedMangleMap
+
+```cpp
+// CachedMangleMap.h — 新增
+void CachedMangleMap::ClearASTPointers()
+{
+    importedInlineDeclsPtr.clear();
+}
+
+// 自定义拷贝构造函数，不复制 importedInlineDeclsPtr（防止悬空指针传播到 CodeGen）
+CachedMangleMap(const CachedMangleMap& other)
+    : importedInlineDecls(other.importedInlineDecls)
+    // 复制字符串集合，不复制 AST 裸指针集合
+    // importedInlineDeclsPtr 在 MANGLING 阶段使用，CodeGen 不需要
+{
+}
+```
+
+#### CHIRType
+
+```cpp
+// CHIRType.h — 新增
+void CHIRType::ClearASTTypeCache()
+{
+    chirTypeCache.typeMap.clear();
+}
+```
+
+#### AnnotationChecker
+
+```cpp
+// AnnotationChecker.h — 新增
+namespace Cangjie::CHIR {
+void ClearGlobalAnnotationInfo()
+{
+    g_annoInfo.clear();
+    g_typeAnnoInfo.clear();
+    g_valueAnnoInfo.clear();
+}
+}
+```
+
+### 4.5 增量编译缓存写入
+
+#### 问题
+
+`WriteCachedInfo()` 在 `FrontendTool.cpp:214-217` 中，`ExecuteCompile()` 返回后调用。此时 AST 已释放，以下数据已不可访问：
+- `*srcPkgs[0]`（`CompilerInstance.cpp:478`）— 获取包名和传递给 `WriteCache`
+- `order`（`std::vector<const AST::Decl*>`，`CompilerInstance.h:519`）— `WriteCachedAST` 解引用读取 `rawMangleName`（`CachedDataSerialization.cpp:91-95`）
+- `cachedInfo.varAndFuncDep`（`Ptr<const AST::Decl>` 键）— `SetVarAndFuncDependency` 解引用读取 `rawMangleName`（`CachedDataSerialization.cpp:262`）
+- `cachedInfo.semaInfo.usages`（`Ptr<const AST::Decl>` 键）— `CreateUsages` 解引用读取 `rawMangleName`（`DependencySerialization.cpp:59`）
+
+此外，`GlobalDeclAnalysis.cpp:490` 在 CHIR 阶段重写 `cachedInfo.varAndFuncDep`，因此物化必须在 CHIR 完成后执行。
+
+#### 解决方案：缓存写入前移
+
+将 `WriteCachedInfo()` 的执行从 `FrontendTool.cpp` 移到 `ReleaseASTMemory()` Phase 0d 中，在 AST 释放前完成。
+
+```cpp
+// CompilerInstance.h — 新增成员变量和方法
+class CompilerInstance {
+    // ...
+    bool cacheWritten = false;   // 缓存是否已写入
+    bool resultsSaved = false;   // 结果是否已保存
+
+    void WriteCachedInfoBeforeRelease();
+    bool IsCacheWritten() const { return cacheWritten; }
+};
+```
+
+```cpp
+// CompilerInstance.cpp — 缓存写入前移
+void CompilerInstance::WriteCachedInfoBeforeRelease()
+{
+    // 物化 varAndFuncDep：Ptr<const AST::Decl> → rawMangleName 字符串
+    MaterializeCachedASTReferences();
+
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    auto& pkg{*srcPkgs[0]};  // AST 尚未释放，安全访问
+    std::string path{invocation.globalOptions.GenerateCachedPathName(
+        pkg.fullPackageName, CACHED_AST_EXTENSION)};
+    WriteCache(pkg, std::move(cachedInfo), std::move(order), path);
+#endif
+}
+```
+
+```cpp
+// FrontendTool.cpp — 适配：跳过已写入的缓存
+if (ExecuteCompile(*instance)) {
+    {
+        Cangjie::ICE::TriggerPointSetter iceSetter(
+            Cangjie::ICE::TriggerPointSetter::writeCahedTP);
+        if (!instance->IsCacheWritten()) {
+            // --no-release-ast 模式下，缓存未在 RELEASE_AST 阶段写入
+            instance->UpdateAndWriteCachedInfoToDisk();
+        }
+    }
+    return 0;
+}
+```
+
+#### MaterializeCachedASTReferences 完整实现
+
+```cpp
+// CompilerInstance.cpp
+void CompilerInstance::MaterializeCachedASTReferences()
+{
+    // 1. 物化 varAndFuncDep
+    MaterializedVarFuncDep matDep;
+    for (auto& [decl, deps] : cachedInfo.varAndFuncDep) {
+        // 空键 fallback：使用 mangledName（Mangling 阶段已填充）
+        std::string key = decl->rawMangleName.empty()
+            ? decl->mangledName : decl->rawMangleName;
+        CJC_ASSERT(!key.empty() && "Decl has neither rawMangleName nor mangledName");
+
+        std::vector<std::string> depNames;
+        for (auto& dep : deps) {
+            std::string depKey = dep->rawMangleName.empty()
+                ? dep->mangledName : dep->rawMangleName;
+            depNames.push_back(std::move(depKey));
+        }
+        matDep.emplace_back(std::move(key), std::move(depNames));
+    }
+    CJC_ASSERT(matDep.size() == cachedInfo.varAndFuncDep.size()
+        && "Materialization lost entries");
+
+    // 2. 物化 semaInfo.usages
+    MaterializedUsages matUsages;
+    for (auto& [decl, usage] : cachedInfo.semaInfo.usages) {
+        std::string key = decl->rawMangleName.empty()
+            ? decl->mangledName : decl->rawMangleName;
+        matUsages.emplace(std::move(key), std::move(usage));
+    }
+
+    // 3. 物化 order
+    MaterializedOrder matOrder;
+    for (auto* decl : order) {
+        CJC_ASSERT(decl != nullptr);
+        std::string name;
+        if (Is<MainDecl>(decl)) {
+            name = StaticCast<MainDecl>(*decl).desugarDecl->rawMangleName;
+        } else {
+            name = decl->rawMangleName;
+        }
+        matOrder.push_back(std::move(name));
+    }
+
+    // 4. 替换原始数据
+    cachedInfo.varAndFuncDep.clear();
+    cachedInfo.materializedVarFuncDep = std::move(matDep);
+    cachedInfo.semaInfo.usages.clear();
+    cachedInfo.semaInfo.materializedUsages = std::move(matUsages);
+    order.clear();
+    materializedOrder = std::move(matOrder);
+}
+```
+
+```cpp
+// CompilationCache.h — 新增数据结构
+using MaterializedVarFuncDep =
+    std::vector<std::pair<std::string, std::vector<std::string>>>;
+using MaterializedUsages =
+    std::unordered_map<std::string, SemaUsage>;
+using MaterializedOrder = std::vector<std::string>;
+
+struct SemaInfo {
+    // 现有字段...
+    std::unordered_map<Ptr<const AST::Decl>, SemaUsage> usages;
+    MaterializedUsages materializedUsages;  // 物化后的 usages
+};
+
+struct CompilationCache {
+    // 现有字段...
+    MaterializedVarFuncDep materializedVarFuncDep;
+};
+
+// CompilerInstance.h — 新增
+class CompilerInstance {
+    // ...
+    MaterializedOrder materializedOrder;
+};
+```
+
+**注意**：`WriteCachedInfoBeforeRelease()` 直接使用原始的 `cachedInfo`、`order`、`srcPkgs[0]`（此时 AST 尚未释放），不需要使用物化后的数据。`MaterializeCachedASTReferences()` 的物化操作是为了确保 AST 释放之后，如果有其他代码路径（如 `--no-release-ast` 模式下的延迟写入）仍能安全访问。
+
+### 4.6 IncrementalCompilerInstance 适配
+
+```cpp
+// IncrementalCompilerInstance.h — override
+bool PerformASTRelease() override;
+bool PerformResultsSaving() override;
+
+// IncrementalCompilerInstance.cpp
+bool IncrementalCompilerInstance::PerformASTRelease()
+{
+    // 无论是否释放 AST，都提取 CodeGen 元信息（统一单路径）
+    if (codeGenPkgInfos.empty()) {
+        PrepareCodeGenInfo();
+    }
+    if (!packageDependenceResolved) {
+        MaterializePackageDependence();
+    }
+
+    if (invocation.globalOptions.noReleaseAST) {
+        return true;
+    }
+
+    // 增量编译特有：在释放前完成结果保存
+    // PerformResultsSaving 需要 srcPkgs 存活（ExportASTSignature、SaveCjo）
+    if (!resultsSaved) {
+        PerformResultsSaving();
+        resultsSaved = true;
+    }
+
+    // 增量编译特有：在释放前完成缓存写入
+    if (ShouldWriteCacheFile() && !cacheWritten) {
+        WriteCachedInfoBeforeRelease();
+        cacheWritten = true;
+    }
+
+    // 清理增量编译特有的 AST 指针
+    changedTypes.clear();
+    declsToBeReCompiled.clear();
+
+    // 清理 cacheMangles 中的 AST 裸指针
+    cacheMangles.ClearASTPointers();
+
+    // 调用基类的释放逻辑（Phase 0 中的缓存写入和结果保存会被跳过，因为标志已设置）
+    ReleaseASTMemory();
+    return true;
+}
+
+bool IncrementalCompilerInstance::PerformResultsSaving()
+{
+    if (resultsSaved) {
+        return true;  // 已在 PerformASTRelease 中完成
+    }
+
+    bool ret = true;
+    for (auto srcPkg : GetSourcePackages()) {
+        if (invocation.globalOptions.outputMode == OutputMode::CHIR) {
+            ret = ret && SaveCjo(*srcPkg);
+        }
+        if (invocation.globalOptions.enIncrementalCompilation) {
+            auto cachedCjo = invocation.globalOptions.GenerateCachedPathName(
+                    srcPkg->fullPackageName, SERIALIZED_FILE_EXTENSION);
+            ret = ret && FileUtil::WriteBufferToASTFile(
+                cachedCjo, importManager.ExportASTSignature(*srcPkg));
+        }
+    }
+    return ret;
+}
+```
+
+关键时序：
+- `IncrementalCompilerInstance::PerformCHIRCompilation()` 在基类方法返回后读取 `chirInfo.ccTys` 复制到 `changedTypes`。由于 `RELEASE_AST` 是独立阶段（在 `CHIR` 之后），`ccTys` 在 `PerformCHIRCompilation()` 期间仍然存活，不存在时序冲突。
+- `PerformResultsSaving()` 在 `PerformASTRelease()` 中被提前调用（AST 尚未释放），后续 `SAVE_RESULTS` 阶段的 `PerformResultsSaving()` 通过 `resultsSaved` 标志跳过。
+- `WriteCachedInfoBeforeRelease()` 在 `PerformASTRelease()` 中被提前调用，后续 `FrontendTool.cpp` 的 `UpdateAndWriteCachedInfoToDisk()` 通过 `cacheWritten` 标志跳过。
+
+### 4.7 析构函数适配
+
+```cpp
+// CompilerInstance.cpp
+CompilerInstance::~CompilerInstance()
+{
+    if (!astReleased) {
+        // AST 未释放（--no-release-ast 模式或编译中途退出）
+        srcPkgs.clear();
+        pkgCtxMap.clear();
+        delete typeChecker;   typeChecker = nullptr;
+        delete typeManager;   typeManager = nullptr;
+        delete testManager;   testManager = nullptr;
+        delete gim;           gim = nullptr;
+    }
+    // 以下资源无论是否释放 AST 都需要清理
+    delete compileStrategy;   compileStrategy = nullptr;
+    delete packageManager;    packageManager = nullptr;
+    // mangler 是 unique_ptr，自动析构
+    // importManager 是栈成员，自动析构
+}
+```
+
+### 4.8 GetSourcePackages 保护
+
+```cpp
+// CompilerInstance.cpp
+std::vector<Ptr<Package>> CompilerInstance::GetSourcePackages()
+{
+    if (astReleased) {
+        // Release 构建中也能捕获误调用
+        return {};
+    }
+    // ... 原有逻辑
+}
+```
+
+### 4.9 --no-release-ast 编译选项
+
+```cpp
+// CompilerInvocation.h — GlobalOptions 新增
+bool noReleaseAST = false;  // --no-release-ast 调试开关
+```
+
+语义：设置后 `PerformASTRelease()` 提取 `PackageCodeGenInfo` 和物化包依赖后直接返回，不执行 `ReleaseASTMemory()`。缓存写入和结果保存在原有位置执行（`FrontendTool.cpp` 和 `SAVE_RESULTS` 阶段）。LSP 子类可 override `PerformASTRelease()` 为 no-op（保留 AST 供 IDE 使用）。
+
+---
+
+## 五、接口契约
+
+```cpp
+/**
+ * @brief 释放 AST 阶段使用的内存。
+ *
+ * @pre  CHIR lowering 已完成（CompileStage::CHIR 已执行）
+ * @pre  SAVE_CJO 已完成（标准模式）或将在此方法内完成（CHIR/增量模式）
+ * @post srcPkgs 为空，pkgCtxMap 为空
+ * @post typeChecker, typeManager, gim, testManager 已释放
+ * @post mangler 已释放
+ * @post importManager 中的 AST 引用已清除，imported packages 已释放
+ * @post CompilationCache 中的 AST 引用已物化为字符串键
+ * @post codeGenPkgInfos 已填充，CodeGen 可通过此结构驱动
+ * @post packageDependenceResolved == true
+ * @post cacheWritten == true（增量编译缓存已写入磁盘）
+ * @post resultsSaved == true（增量编译结果已保存）
+ * @post IsASTReleased() 返回 true
+ *
+ * @invariant CHIR IR 节点（Package, Func, Block, Expression, Value）不受影响
+ * @invariant CHIRData 中的 CHIR::Package 和 CHIR::Type 不受影响
+ * @invariant DiagnosticEngine 不受影响（使用 SourceManager，非 AST）
+ * @invariant SourceManager 不受影响
+ * @invariant CompilerInvocation/GlobalOptions 不受影响
+ *
+ * @note 此方法是 protected 的，子类通过 PerformASTRelease() 调用
+ * @note 子类可 override PerformASTRelease()：
+ *       - DefaultCompilerInstance: 标准行为
+ *       - IncrementalCompilerInstance: 在释放前完成缓存写入和 AST 签名导出
+ *       - LSP 子类: 可 override 为 no-op（保留 AST 供 IDE 使用）
+ * @note 通过 --no-release-ast 编译选项可禁用
+ */
+```
+
+---
+
+## 六、完整架构图
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        编译流水线                                        │
+│                                                                          │
+│  PARSE → IMPORT → SEMA → MANGLING → SAVE_CJO → CHIR → RELEASE_AST → CODEGEN │
+│                                                   │         │              │
+│                                                   ▼         ▼              │
+│                                              ┌─────────┐ ┌──────────┐     │
+│                                              │ 函数体  │ │ 完整清理 │     │
+│                                              │ 增量释放│ │          │     │
+│                                              └─────────┘ └──────────┘     │
+└──────────────────────────────────────────────────────────────────────────┘
+
+函数体粒度释放（在 CHIR lowering Step 4 内部）：
+┌─────────────────────────────────────────────────────────────────┐
+│ TranslateAllDecls                                               │
+│                                                                 │
+│ Step 4a: TranslateNominalDecls(pkg)                            │
+│          → ReleaseTranslatedNominalBodies(pkg)  [批量释放]      │
+│                                                                 │
+│ Step 4b: TranslateInitOfGlobalVars(pkg, initOrder)             │
+│          → ReleaseTranslatedInitializers(initOrder) [批量释放]  │
+│                                                                 │
+│ Step 4c: TranslateTopLevelDecls (串行/并行)                     │
+│          串行 → 逐个 ReleaseFuncBody [逐个释放]                 │
+│          并行 → ReleaseAllTranslatedFuncBodies [批量释放]       │
+│                                                                 │
+│ annoFactoryFuncs → 逐个 ReleaseFuncBody [逐个释放]             │
+└─────────────────────────────────────────────────────────────────┘
+
+完整清理（RELEASE_AST 阶段）：
+┌─────────────────────────────────────────────────────────────────┐
+│ PerformASTRelease()                                             │
+│ ├── PrepareCodeGenInfo()          → codeGenPkgInfos 填充       │
+│ ├── MaterializePackageDependence() → 包依赖物化                 │
+│ └── ReleaseASTMemory()                                          │
+│     ├── Phase 0: 前置操作                                       │
+│     │   ├── MaterializeCachedASTReferences()                    │
+│     │   ├── WriteCachedInfoBeforeRelease()                      │
+│     │   └── PerformResultsSaving()                              │
+│     ├── Phase 1: 清除 CHIR 层 AST 引用                         │
+│     │   ├── ClearASTTypeCache()                                 │
+│     │   ├── posRange2MacroCallMap.clear()                       │
+│     │   └── ClearGlobalAnnotationInfo()                         │
+│     ├── Phase 2: 清除 CompilerInstance 直接成员                 │
+│     │   ├── astPkg2chirPkgMap → chirPkgByName                   │
+│     │   ├── currentPkg, mangledName2DeclMap, order, ...         │
+│     │   └── pkgs.clear()                                        │
+│     ├── Phase 3: 清理管理器（析构顺序关键）                     │
+│     │   ├── typeChecker → typeManager → gim → testManager       │
+│     │   ├── mangler.reset()                                     │
+│     │   ├── importManager.ClearASTReferences()                  │
+│     │   ├── packageManager->ClearASTReferences()                │
+│     │   └── cacheMangles.ClearASTPointers()                     │
+│     ├── Phase 4: 释放 AST 核心数据                              │
+│     │   ├── srcPkgs.clear()                                     │
+│     │   └── pkgCtxMap.clear()                                   │
+│     └── Phase 5: astReleased = true                             │
+└─────────────────────────────────────────────────────────────────┘
+
+IncrementalCompilerInstance 特化：
+┌─────────────────────────────────────────────────────────────────┐
+│ IncrementalCI::PerformASTRelease()                              │
+│ ├── PrepareCodeGenInfo()                                        │
+│ ├── MaterializePackageDependence()                              │
+│ ├── PerformResultsSaving()  ← 前移：ExportASTSignature + SaveCjo│
+│ ├── WriteCachedInfoBeforeRelease()  ← 前移：缓存写入           │
+│ ├── changedTypes.clear()                                        │
+│ ├── declsToBeReCompiled.clear()                                 │
+│ ├── cacheMangles.ClearASTPointers()                             │
+│ └── ReleaseASTMemory()  ← 基类方法（Phase 0 中的写入被跳过）   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 七、修改文件清单
+
+| 文件 | 改动类型 | 改动量 |
+|------|---------|--------|
+| `src/CHIR/AST2CHIR/AST2CHIR.cpp` | 函数体粒度释放 + 辅助方法 | ~60 行 |
+| `src/CHIR/AST2CHIR/AST2CHIR.h` | 辅助方法声明 | ~5 行 |
+| `include/cangjie/Frontend/CompilerInstance.h` | 枚举 + 成员变量 + 方法声明 + PackageCodeGenInfo | ~40 行 |
+| `src/Frontend/CompilerInstance.cpp` | Compile() 分支 + ReleaseASTMemory + MaterializeCachedASTReferences + WriteCachedInfoBeforeRelease + 析构函数 | ~180 行 |
+| `src/Frontend/DefaultCompilerInstance.cpp` | CodeGen 单路径 + MaterializePackageDependence | ~60 行 |
+| `src/Frontend/DefaultCompilerInstance.h` | 方法声明 | ~10 行 |
+| `src/FrontendTool/IncrementalCompilerInstance.h` | PerformASTRelease override 声明 | ~5 行 |
+| `src/FrontendTool/IncrementalCompilerInstance.cpp` | PerformASTRelease 实现 + PerformResultsSaving 适配 | ~40 行 |
+| `src/FrontendTool/FrontendTool.cpp` | IsCacheWritten 守卫 | ~5 行 |
+| `include/cangjie/Frontend/CachedMangleMap.h` | ClearASTPointers + 自定义拷贝构造函数 | ~10 行 |
+| `include/cangjie/IncrementalCompilation/CompilationCache.h` | MaterializedVarFuncDep/MaterializedUsages/MaterializedOrder 类型定义 | ~10 行 |
+| `src/Frontend/ImportManager.h` | ClearASTReferences | ~5 行 |
+| `src/Frontend/CjoManagerImpl.h` | ClearImportedPackages | ~5 行 |
+| `include/cangjie/Frontend/PackageManager.h` | ClearASTReferences | ~3 行 |
+| `src/CHIR/AST2CHIR/CHIRType.h` | ClearASTTypeCache | ~3 行 |
+| `src/CHIR/AST2CHIR/AnnotationChecker.h` | ClearGlobalAnnotationInfo 扩展 | ~3 行 |
+| `include/cangjie/Frontend/CompilerInvocation.h` | noReleaseAST 选项 | ~2 行 |
+
+---
+
+## 八、关键设计决策
+
+| 决策 | 内容 | 理由 |
+|------|------|------|
+| RELEASE_AST 独立流水线阶段 | 不在 `PerformCHIRCompilation()` 内部释放 | 增量编译的 `ccTys` 在 `PerformCHIRCompilation()` 返回后被复制到 `changedTypes`，内部释放会导致时序冲突 |
+| CodeGen 统一为单路径 | 始终通过 `PackageCodeGenInfo` 驱动，不保留旧 `CodegenOnePackage` | 旧路径对 `AST::Package` 的实际依赖仅为 `fullPackageName` 和 `IsEmpty()`，双路径维护成本不可接受 |
+| 增量编译缓存写入前移 | `WriteCachedInfo()` 和 `PerformResultsSaving()` 在 `RELEASE_AST` 阶段、AST 释放前执行 | 两者在 `ExecuteCompile()` 返回后执行，解引用已释放的 `srcPkgs[0]`、`order`、`varAndFuncDep`、`semaInfo.usages` |
+| 函数体粒度释放纳入实施 | 在 CHIR lowering Step 4 中逐步释放 `funcBody->body` 和 `initializer` | 代码审计证明 body 翻译后不再被访问，60-80% 内存收益 |
+| ReleaseASTMemory 设为 protected | 子类通过 `PerformASTRelease()` 调用 | 防止绕过 `IncrementalCompilerInstance` 的前置保存逻辑 |
+| Phase 3 析构顺序：typeChecker → typeManager | `TypeChecker` 持有 `TypeManager&` 引用 | 与现有析构函数一致 |
+| NominalDecls 批量释放 | 在 `TranslateNominalDecls` 返回后批量释放方法体 | 避免侵入内部复杂逻辑（泛型实例化、extends） |
+| 并行模式批量释放 | 在 `TranslateTopLevelDeclsInParallel` 返回后批量释放，不修改 ParallelUtil | `ParallelUtil` 是通用并行工具，添加回调会污染接口 |
+| AST 签名导出在释放前完成 | `ExportASTSignature` 在 `PerformASTRelease()` 中执行 | `IncrementalCI::PerformResultsSaving` 依赖 `srcPkgs` |
+
+---
+
+## 九、实施路线图
+
+### Phase 0：函数体粒度释放
+
+**改动量**：~60 行，集中在 `AST2CHIR.cpp` 和 `AST2CHIR.h`
+
+**内容**：
+1. 新增 `ReleaseFuncBody`、`ReleaseVarInitializer`、`ReleaseTranslatedNominalBodies`、`ReleaseTranslatedInitializers`、`ReleaseAllTranslatedFuncBodies` 辅助方法
+2. 修改 `TranslateAllDecls`，在各翻译子步骤后添加释放调用
+3. 串行模式逐个释放，并行模式批量释放
+
+**验证**：
+- ASan Debug 构建全量测试
+- 内存峰值对比（预期降低 60-80% AST 内存）
+
+### Phase 1：完整清理
+
+**改动量**：~320 行，涉及 17 个文件
+
+**内容**：
+1. `CompileStage` 枚举新增 `RELEASE_AST`
+2. `CompilerInstance` 新增 `astReleased`、`cacheWritten`、`resultsSaved`、`PackageCodeGenInfo`、`chirPkgByName` 等基础设施
+3. `--no-release-ast` 编译选项
+4. CodeGen 单路径重构（`PrepareCodeGenInfo` + `MaterializePackageDependence`）
+5. `ReleaseASTMemory()` 完整 5 阶段清理实现
+6. 管理器清理接口（ImportManager、PackageManager、CachedMangleMap、CHIRType、AnnotationChecker）
+7. `MaterializeCachedASTReferences()` 完整实现（含 `varAndFuncDep`、`semaInfo.usages`、`order` 三项物化）
+8. `WriteCachedInfoBeforeRelease()` 缓存写入前移
+9. `IncrementalCompilerInstance::PerformASTRelease()` override（含 `PerformResultsSaving` 前移）
+10. `FrontendTool.cpp` 适配（`IsCacheWritten()` 守卫）
+11. 析构函数适配（`astReleased` 守卫）
+12. `GetSourcePackages()` Release 构建保护
+
+**验证**：
+- ASan/MSan 全量回归（Debug 构建）
+- 增量编译专项测试（closure 类型变化、泛型实例化场景）
+- 内存峰值对比（预期在函数体粒度释放基础上再降低 15-35%，总计 95%+ AST 内存）
+- `--no-release-ast` 回退验证
+- .bc 文件 diff 验证（新旧路径产出一致）
+- 现有测试套件全量回归
+
+---
+
+## 十、风险矩阵
+
+| 风险 | 概率 | 影响 | Phase | 缓解措施 |
+|------|------|------|-------|---------|
+| 释放后仍有代码路径访问 body | 低 | 高（crash） | 0 | ASan 全量测试；body.reset() 后为 null，解引用立即暴露 |
+| NominalDecls 批量释放遗漏某些方法体 | 中 | 低（内存未完全释放） | 0 | 覆盖 ClassLikeDecl + StructDecl + EnumDecl，通过 NeedTranslate 过滤 |
+| 并行翻译后批量释放的时序安全 | 低 | 高（crash） | 0 | 批量释放在 TranslateTopLevelDeclsInParallel() 返回后执行，所有线程已 join |
+| CodeGen 单路径遗漏旧路径逻辑 | 中 | 高（编译产出错误） | 1 | .bc 文件 diff 验证 |
+| IncrementalCI 缓存保存遗漏 | 中 | 高（增量编译错误） | 1 | 增量编译专项测试 |
+| 析构函数与 ReleaseASTMemory 交互 | 低 | 中（退出时 crash） | 1 | astReleased 守卫 + delete nullptr 安全 |
+| WriteCachedInfo 前移后与原调用点重复执行 | 低 | 中（I/O 浪费） | 1 | cacheWritten 标志守卫 |
+| PerformResultsSaving 前移后与 SAVE_RESULTS 阶段重复 | 低 | 中（I/O 浪费） | 1 | resultsSaved 标志守卫 |
+| CompileStage 枚举插入影响 | 低 | 低 | 1 | 所有引用通过枚举名访问，非整数值 |
+
+---
+
+## 十一、回退策略
+
+- **Phase 0 回退**：删除 `ReleaseFuncBody` 调用和辅助方法，零副作用
+- **Phase 1 运行时回退**：`--no-release-ast` 命令行开关，禁用整个 RELEASE_AST 阶段
+- **Phase 1 代码回退**：revert git commits，恢复到 Phase 0 状态
+- **紧急回退**：revert Phase 0 + Phase 1 的 git commits，恢复到释放前状态
+
+---
+
+## 十二、备选方案（供参考）
+
+### 方案 B：选择性瘦身（保留声明骨架）
+
+保留 AST 声明节点，仅释放函数体、表达式树等大体积子树。向后兼容性最好（指针不悬空），但内存收益有限（50-70%），且需要为每种节点类型实现瘦身逻辑。适合 IDE/LSP 场景（需要保留 AST 供代码导航使用）。
+
+### 方案 C：Arena 分配器重构
+
+将 AST 节点分配到 Arena 中，整个 Arena 一次性释放。符合 LLVM/Clang 最佳实践（`BumpPtrAllocator`），内存收益 100%，但需要修改所有 AST 节点创建点（`new` → `Arena::Allocate`），重构工作量巨大。适合作为长期架构演进目标。
