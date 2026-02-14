@@ -265,7 +265,6 @@ endif()
 if(CMAKE_BUILD_TYPE MATCHES Release)
     add_definitions(-DRELEASE)
 endif()
-
 # BUILD_GCC_TOOLCHAIN specifies toolchain for cjc, stdlib and BE at the same time, which means
 # that it is used for both targets for HOST (e.g. cjc, llc) and targets for TARGET
 # (e.g. stdlib, runtime). In the case that we need to build a cjc for a host which is not a target,
