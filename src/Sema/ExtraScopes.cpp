@@ -287,6 +287,13 @@ bool InstCtxScope::SetRefDecl(ASTContext& ctx, AST::FuncDecl& fd, CallExpr& ce)
 {
     refMaps = {};
     std::vector<Ptr<Type>> typeArgs = ce.baseFunc->GetTypeArgs();
+    // Type args from type-alias expansion (compiler-added) are not user-provided; still require inference.
+    if (ce.baseFunc->astKind == ASTKind::REF_EXPR) {
+        auto* ref = StaticCast<RefExpr*>(ce.baseFunc.get());
+        if (ref->compilerAddedTyArgs) {
+            typeArgs = {};
+        }
+    }
     bool isInStructDecl = fd.outerDecl && fd.outerDecl->IsNominalDecl() && !IsTypeObjectCreation(fd, ce);
     if (IsGenericUpperBoundCall(*ce.baseFunc, fd)) { // Handle upperbound function.
         tyMgr.GenerateTypeMappingForUpperBounds(
