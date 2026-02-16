@@ -84,11 +84,10 @@ bool JavaDesugarManager::FillMethodParamsByArg(std::vector<OwnedPtr<FuncParam>>&
     } else if (IsImpl(*actualArgTy)) {
         auto entity = lib.CreateJavaEntityJobjectCall(std::move(paramRef));
         methodArg = CreateFuncArg(lib.UnwrapJavaEntity(std::move(entity), actualArgTy, *outerDecl));
-    } else if (actualArgTy->IsCoreOptionType() && IsMirror(*actualArgTy->typeArgs[0])) {
+    } else if (actualArgTy->IsCoreOptionType() && (IsMirror(*actualArgTy->typeArgs[0]) ||
+                                                   IsImpl(*actualArgTy->typeArgs[0]) ||
+                                                   actualArgTy->typeArgs[0]->IsString())) {
         // funcDecl(Java_CFFI_JavaEntity(arg)) // if arg is null (as jobject == 0) -> java entity will preserve it
-        auto entity = lib.CreateJavaEntityJobjectCall(std::move(paramRef));
-        methodArg = CreateFuncArg(lib.UnwrapJavaEntity(std::move(entity), actualArgTy, *outerDecl));
-    } else if (actualArgTy->IsCoreOptionType() && IsImpl(*actualArgTy->typeArgs[0])) {
         auto entity = lib.CreateJavaEntityJobjectCall(std::move(paramRef));
         methodArg = CreateFuncArg(lib.UnwrapJavaEntity(std::move(entity), actualArgTy, *outerDecl));
     } else if (IsCJMapping(*actualArgTy)) {
@@ -125,6 +124,10 @@ bool JavaDesugarManager::FillMethodParamsByArg(std::vector<OwnedPtr<FuncParam>>&
         auto getCjLambdaFd = CheckCjLambdaDeclByTy(actualArgTy);
         auto getCjLambdaCallExpr = CreateCall(getCjLambdaFd, funcDecl.curFile, std::move(paramRef));
         methodArg = CreateFuncArg(std::move(getCjLambdaCallExpr));
+    } else if (actualArgTy->IsString()) {
+        // Convert JNI jobject (jstring) to Cangjie String:
+        // jobject -> JavaEntity -> Struct-String.
+        methodArg = CreateFuncArg(lib.JObjectToString(CreateRefExpr(*param), funcDecl.curFile));
     } else {
         methodArg = CreateFuncArg(std::move(paramRef));
     }
@@ -236,12 +239,22 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(
             sampleMethod.outerDecl->EnableAttr(Attribute::IS_BROKEN);
             return nullptr;
         }
+    } else if (retActualTy->IsString()) {
+		// Convert Cangjie String to JNI jobject (jstring):
+		// JNI boundary: jstring (represented as jobject / CPointer<Unit>)
+        retExpr = lib.StringToJObject(CreateRefExpr(*methodCallRes), curFile, jniEnvPtrParam, *sampleMethod.outerDecl);
+        retActualTy = lib.GetJobjectTy();
     } else if (retActualTy->IsFunc()) {
         CheckCjLambdaDeclByTy(retActualTy);
         std::string lambdaJavaClassSign =
             NormalizeJavaSignature(sampleMethod.fullPackageName + "." + GetLambdaJavaClassName(retActualTy) + "$Box");
         auto refExpr = WithinFile(CreateRefExpr(*methodCallRes), curFile);
         retExpr = lib.CreateGetJavaLambdaObjectCall(std::move(refExpr), lambdaJavaClassSign, curFile);
+    } else if (IsOptionOfString(retActualTy)) {
+        retExpr = lib.OptionStringToJObject(WithinFile(CreateRefExpr(*methodCallRes), curFile),
+                                            jniEnvPtrParam,
+                                            *sampleMethod.outerDecl);
+        retActualTy = lib.GetJobjectTy();
     } else {
         OwnedPtr<Expr> methodResRef = WithinFile(CreateRefExpr(*methodCallRes), curFile);
         auto entity = lib.WrapJavaEntity(std::move(methodResRef));
