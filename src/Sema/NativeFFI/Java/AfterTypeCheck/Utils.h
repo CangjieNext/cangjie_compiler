@@ -223,6 +223,7 @@ OwnedPtr<Expr> CreateMirrorConstructorCall(
 
 bool IsJArray(const Decl& decl);
 bool IsJArray(const Ty& ty);
+bool IsOptionOfString(Ptr<Ty> ty);
 
 bool IsMirror(const Ty& ty);
 
