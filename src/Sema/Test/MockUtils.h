@@ -132,6 +132,7 @@ public:
     std::string GetOriginalIdentifierOfMockAccessor(const AST::Decl& decl) const;
 
     bool MayContainInternalTypes(Ptr<AST::Ty> ty) const;
+    bool NeedEraseAccessorTypes(AST::Decl& decl) const;
 private:
     ImportManager& importManager;
     TypeManager& typeManager;
@@ -198,8 +199,6 @@ private:
         return decl;
     }
 
-    // Type instantiation helpers
-    void Instantiate(AST::Node& node) const;
     Ptr<AST::ClassLikeDecl> GetInstantiatedDeclInCurrentPackage(const Ptr<const AST::ClassLikeTy> classLikeToMockTy);
     std::optional<std::unordered_set<Ptr<AST::Decl>>> TryGetInstantiatedDecls(AST::Decl& decl) const;
     Ptr<AST::Decl> GetInstantiatedMemberTarget(AST::Ty& baseTy, AST::Decl& target) const;

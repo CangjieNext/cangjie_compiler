@@ -113,8 +113,6 @@ private:
     std::vector<Ptr<AST::Ty>> CloneFuncDecl(Ptr<AST::FuncDecl> fromDecl, Ptr<AST::FuncDecl> toDecl);
     void GenerateSpyCallHandler(AST::FuncDecl& funcDecl, AST::Decl& spiedObjectDecl);
     void PrepareInterfaceDecl(AST::InterfaceDecl& interfaceDecl);
-
-    bool NeedEraseAccessorTypes(AST::Decl& decl) const;
 };
 } // namespace Cangjie
 

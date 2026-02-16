@@ -499,7 +499,6 @@ void MockSupportManager::PrepareStaticDecl(Decl& decl)
         *funcDecl, std::move(optionFuncTyPattern), std::move(handlerCallExpr));
     auto handlerMatch = CreateMatchExpr(std::move(varDeclRef), std::move(handlerCases), UNIT_TY);
     handlerMatch->curFile = funcDecl->curFile;
-    mockUtils->Instantiate(*handlerMatch);
     body->body.push_back(std::move(handlerMatch));
     std::rotate(body->body.rbegin(), body->body.rbegin() + 1, body->body.rend());
 
@@ -718,7 +717,6 @@ void MockSupportManager::GenerateSpyCallHandler(FuncDecl& funcDecl, Decl& spiedO
 
     auto spyCallMarkerMatch = CreateMatchExpr(CreateRefExpr(*spyCallMarker), std::move(callMarkerCases), UNIT_TY);
 
-    mockUtils->Instantiate(*spyCallMarkerMatch);
     body->body.push_back(std::move(spyCallMarkerMatch));
     std::rotate(body->body.rbegin(), body->body.rbegin() + 1, body->body.rend());
 }
@@ -800,19 +798,6 @@ void MockSupportManager::GenerateAccessors(Decl& decl)
     }
 }
 
-bool MockSupportManager::NeedEraseAccessorTypes(AST::Decl& decl) const
-{
-    if (decl.outerDecl) {
-        if (decl.outerDecl->linkage == Linkage::INTERNAL) {
-            return false;
-        }
-        if (decl.TestAttr(Attribute::HAS_INITIAL)) {
-            return false;
-        }
-    }
-    return mockUtils->MayContainInternalTypes(decl.ty);
-}
-
 OwnedPtr<FuncDecl> MockSupportManager::GenerateErasedFuncAccessor(FuncDecl& methodDecl) const
 {
     auto outerClassDecl = As<ASTKind::CLASS_DECL>(methodDecl.outerDecl);
@@ -886,7 +871,7 @@ OwnedPtr<FuncDecl> MockSupportManager::GenerateErasedFuncAccessor(FuncDecl& meth
 
 OwnedPtr<FuncDecl> MockSupportManager::GenerateFuncAccessor(FuncDecl& methodDecl)
 {
-    bool needEraseTypes = NeedEraseAccessorTypes(methodDecl);
+    bool needEraseTypes = mockUtils->NeedEraseAccessorTypes(methodDecl);
 
     auto outerClassDecl = As<ASTKind::CLASS_DECL>(methodDecl.outerDecl);
     CJC_ASSERT(outerClassDecl);
@@ -1005,7 +990,7 @@ OwnedPtr<PropDecl> MockSupportManager::GeneratePropAccessor(PropDecl& propDecl)
     propAccessor->setters = std::move(accessorForSetters);
     propAccessor->identifier = mockUtils->BuildMockAccessorIdentifier(propDecl, AccessorKind::PROP);
     propAccessor->mangledName = mockUtils->Mangle(*propAccessor);
-    if (NeedEraseAccessorTypes(propDecl)) {
+    if (mockUtils->NeedEraseAccessorTypes(propDecl)) {
         MarkMockAccessorWithAttributes(*propAccessor, GetAccessLevel(propDecl));
         propAccessor->linkage = propDecl.linkage;
     } else {
@@ -1255,7 +1240,6 @@ void MockSupportManager::WriteGeneratedMockDecls()
     while (!generatedMockDecls.empty()) {
         auto accessorDecl = std::move(generatedMockDecls.front());
         generatedMockDecls.erase(generatedMockDecls.begin());
-        mockUtils->Instantiate(*accessorDecl);
         if (auto outerDecl = As<ASTKind::CLASS_DECL>(accessorDecl->outerDecl); outerDecl) {
             outerDecl->body->decls.emplace_back(std::move(accessorDecl));
         } else if (accessorDecl->curFile) {

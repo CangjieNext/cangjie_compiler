@@ -283,8 +283,6 @@ void MockManager::WrapWithRequireMockObject(Expr& receiverExpr)
     requireMockObjCall->resolvedFunction = requireMockObject;
     requireMockObjCall->curFile = receiverExpr.curFile;
     requireMockObjCall->args = std::move(callArgs);
-    // FIXME: Do we need to instantiate anything with UG?
-    mockUtils->Instantiate(*requireMockObjCall);
     receiverExpr.desugarExpr = std::move(requireMockObjCall);
 }
 
@@ -351,7 +349,6 @@ void MockManager::FindOverridesInSuperDecl(
 void MockManager::WriteGeneratedClasses()
 {
     for (auto& [mn, mockedClass] : mockedClassDecls) {
-        mockUtils->Instantiate(*mockedClass);
         mockedClass->curFile->decls.emplace_back(std::move(mockedClass));
     }
     mockedClassDecls.clear();
@@ -1592,7 +1589,6 @@ void MockManager::GenerateCallHandlerForStaticDecl(FuncDecl& decl, Expr& injectT
     replacedExprs.emplace_back(ASTCloner::Clone(Ptr(&injectTo)));
 
     injectTo.desugarExpr = CreateBlock(std::move(replacedExprs), injectTo.ty);
-    mockUtils->Instantiate(*injectTo.desugarExpr);
 }
 
 void MockManager::HandleMockAnnotatedLambdaValue(Expr& expr)

@@ -60,21 +60,6 @@ std::string MockUtils::spyObjVarName = "spiedObjectRef";
 std::string MockUtils::spyCallMarkerVarName = "shouldReturnZeroForSpy";
 std::string MockUtils::defaultAccessorSuffix = "$Buddy";
 
-void MockUtils::Instantiate(Node& node) const
-{
-    return;
-    // FIXME: What to do with this?
-    gim->impl->RecordExtend(node);
-    gim->impl->WalkNonGenericExtendedType();
-    if (Is<ClassDecl>(&node)) {
-        gim->impl->CheckNodeInstantiation(node);
-    } else {
-        Walker(&node, gim->impl->instantiationWalkerID, [this](auto node) {
-            return gim->impl->CheckNodeInstantiation(*node);
-        }).Walk();
-    }
-}
-
 std::optional<std::unordered_set<Ptr<Decl>>> MockUtils::TryGetInstantiatedDecls(Decl& decl) const
 {
     if (!decl.TestAttr(AST::Attribute::GENERIC) && !decl.ty->HasGeneric()) {
@@ -206,16 +191,13 @@ Ptr<Decl> MockUtils::FindAccessorForMemberAccess(
 
 Ptr<FuncDecl> MockUtils::FindTopLevelAccessor(Ptr<Decl> member, AccessorKind kind) const
 {
+    auto accessorIdentifier = BuildMockAccessorIdentifier(*member, kind);
     for (auto& decl : member->curFile->decls) {
         if (!IsMockAccessor(*decl) || !Is<VarDecl>(member)) {
             continue;
         }
-        auto originalIdentifier = GetOriginalIdentifierOfMockAccessor(*decl);
-        if (kind == AccessorKind::TOP_LEVEL_VARIABLE_GETTER &&
-            originalIdentifier == member->identifier + GETTER_SUFFIX) {
-            return As<ASTKind::FUNC_DECL>(decl.get());
-        } else if (kind == AccessorKind::TOP_LEVEL_VARIABLE_SETTER &&
-            originalIdentifier == member->identifier + SETTER_SUFFIX) {
+
+        if (decl->identifier == accessorIdentifier) {
             return As<ASTKind::FUNC_DECL>(decl.get());
         }
     }
@@ -245,6 +227,9 @@ Ptr<Decl> MockUtils::FindAccessor(
     if (member->TestAttr(Attribute::IN_EXTEND)) {
         return nullptr;
     }
+    // bool includeArgumentTypes = NeedEraseAccessorTypes(*member);
+    auto instantiatedDecl = GetInstantiatedDecl(member, instTys, outerClass.ty);
+    auto accessorIdentifier = BuildMockAccessorIdentifier(*instantiatedDecl, kind);
     for (auto& superDecl : outerClass.GetAllSuperDecls()) {
         // Accessors are generated only for classes
         if (superDecl->astKind != ASTKind::CLASS_DECL) {
@@ -255,25 +240,15 @@ Ptr<Decl> MockUtils::FindAccessor(
                 continue;
             }
 
-            auto originalIdentifier = GetOriginalIdentifierOfMockAccessor(*decl);
-            if (Is<PropDecl>(member) && originalIdentifier == member->identifier) {
+            if (decl->identifier == accessorIdentifier) {
+                // if (auto funcDecl = DynamicCast<FuncDecl>(decl.get())) {
+                //     if (auto instFuncDecl = DynamicCast<FuncDecl>(instantiatedDecl)) {
+                //         if (!typeManager.IsFuncDeclEqualType(*funcDecl, *instFuncDecl)) {
+                //             continue;
+                //         }
+                //     }
+                // }
                 return decl.get();
-            } else if (Is<VarDecl>(member)) {
-                if (kind == AccessorKind::FIELD_GETTER &&
-                    originalIdentifier == member->identifier + GETTER_SUFFIX) {
-                    return decl.get();
-                } else if (kind == AccessorKind::FIELD_SETTER &&
-                    originalIdentifier == member->identifier + SETTER_SUFFIX) {
-                    return decl.get();
-                }
-            } else { // For functions we search accessors by using mangled names due to overloading
-                auto instantiatedDecl = GetInstantiatedDecl(member, instTys, outerClass.ty);
-                auto originalMangledName = Mangle(*instantiatedDecl);
-                auto originalMangledNameGivenFromAccessor = MangleUtils::ComputeMangledNameWithCustomIdentifier(
-                    *decl, originalIdentifier);
-                if (originalMangledName == originalMangledNameGivenFromAccessor) {
-                    return decl.get();
-                }
             }
         }
     }
@@ -431,8 +406,6 @@ std::string MockUtils::BuildArgumentList(const AST::Decl& decl) const
 
 std::string MockUtils::BuildTypeArgumentList(const Decl& decl)
 {
-    return "";
-    // FIXME: What to do?
     if (decl.astKind != ASTKind::FUNC_DECL) {
         return "";
     }
@@ -457,7 +430,7 @@ std::string MockUtils::BuildTypeArgumentList(const Decl& decl)
 }
 
 std::string MockUtils::BuildMockAccessorIdentifier(
-    const Decl& originalDecl, AccessorKind kind, bool includeArgumentTypes) const
+    const Decl& originalDecl, AccessorKind kind, [[maybe_unused]] bool includeArgumentTypes) const
 {
     std::string additionalSuffix;
     switch (kind) {
@@ -478,9 +451,7 @@ std::string MockUtils::BuildMockAccessorIdentifier(
 
     auto mangledName = Mangle(originalDecl);
     auto outerDeclSuffix = originalDecl.outerDecl ? "_" + originalDecl.outerDecl->identifier.Val() : "";
-    auto argumentSuffix = includeArgumentTypes ? BuildArgumentList(originalDecl) : "";
-    return originalDecl.identifier + argumentSuffix + BuildTypeArgumentList(originalDecl) +
-        additionalSuffix + MOCKED_ACCESSOR_SUFFIX + outerDeclSuffix;
+    return mangledName + additionalSuffix + MOCKED_ACCESSOR_SUFFIX + outerDeclSuffix;
 }
 
 bool MockUtils::IsGeneratedGetter(AccessorKind kind)
@@ -884,6 +855,19 @@ struct InternalTypesChecker {
 bool MockUtils::MayContainInternalTypes(Ptr<Ty> ty) const
 {
     return InternalTypesChecker{}.Check(ty);
+}
+
+bool MockUtils::NeedEraseAccessorTypes(AST::Decl& decl) const
+{
+    if (decl.outerDecl) {
+        if (decl.outerDecl->linkage == Linkage::INTERNAL) {
+            return false;
+        }
+        if (decl.TestAttr(Attribute::HAS_INITIAL)) {
+            return false;
+        }
+    }
+    return MayContainInternalTypes(decl.ty);
 }
 
 } // namespace Cangjie
