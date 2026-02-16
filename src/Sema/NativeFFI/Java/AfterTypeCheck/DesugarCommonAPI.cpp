@@ -125,6 +125,13 @@ bool JavaDesugarManager::FillMethodParamsByArg(std::vector<OwnedPtr<FuncParam>>&
         auto getCjLambdaFd = CheckCjLambdaDeclByTy(actualArgTy);
         auto getCjLambdaCallExpr = CreateCall(getCjLambdaFd, funcDecl.curFile, std::move(paramRef));
         methodArg = CreateFuncArg(std::move(getCjLambdaCallExpr));
+    }else if (actualArgTy->IsString()) {
+		// Convert JNI jobject (jstring) to Cangjie String:
+		// jobject -> JavaEntity -> Struct-String.
+        auto jniEnvRef = WithinFile(CreateRefExpr(jniEnvPtrParam), funcDecl.curFile);
+        OwnedPtr<Expr> entity = lib.CreateJavaEntityJobjectCall(WithinFile(CreateRefExpr(*param), funcDecl.curFile));
+        auto converted = lib.CreateJavaStringToCangjieCall(std::move(jniEnvRef),std::move(entity));
+        methodArg = CreateFuncArg(std::move(converted));
     } else {
         methodArg = CreateFuncArg(std::move(paramRef));
     }
@@ -236,6 +243,14 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(
             sampleMethod.outerDecl->EnableAttr(Attribute::IS_BROKEN);
             return nullptr;
         }
+    } else if (retActualTy->IsString()) {
+		// Convert Cangjie String to JNI jobject (jstring):
+		// JNI boundary: jstring (represented as jobject / CPointer<Unit>)
+        auto entity = lib.CreateCangjieStringToJavaCall(WithinFile(CreateRefExpr(jniEnvPtrParam), curFile),
+                                                        WithinFile(CreateRefExpr(*methodCallRes), curFile));
+        auto jobjectTy = typeManager.GetPointerTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+        retExpr = lib.UnwrapJavaEntity(WithinFile(std::move(entity), curFile), jobjectTy, *sampleMethod.outerDecl, true);
+        retActualTy = GetJNITy(retActualTy);
     } else if (retActualTy->IsFunc()) {
         CheckCjLambdaDeclByTy(retActualTy);
         std::string lambdaJavaClassSign =
@@ -257,6 +272,7 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(
     std::vector<OwnedPtr<FuncParamList>> paramLists;
     paramLists.push_back(CreateFuncParamList(std::move(params)));
 
+    retActualTy = GetJNITy(retActualTy);
     return GenerateNativeFuncDeclBylambda(decl, wrappedNodesLambda, paramLists, jniEnvPtrParam, retActualTy, funcName);
 }
 
