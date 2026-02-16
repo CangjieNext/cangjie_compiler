@@ -206,16 +206,13 @@ Ptr<Decl> MockUtils::FindAccessorForMemberAccess(
 
 Ptr<FuncDecl> MockUtils::FindTopLevelAccessor(Ptr<Decl> member, AccessorKind kind) const
 {
+    auto accessorIdentifier = BuildMockAccessorIdentifier(*member, kind);
     for (auto& decl : member->curFile->decls) {
         if (!IsMockAccessor(*decl) || !Is<VarDecl>(member)) {
             continue;
         }
-        auto originalIdentifier = GetOriginalIdentifierOfMockAccessor(*decl);
-        if (kind == AccessorKind::TOP_LEVEL_VARIABLE_GETTER &&
-            originalIdentifier == member->identifier + GETTER_SUFFIX) {
-            return As<ASTKind::FUNC_DECL>(decl.get());
-        } else if (kind == AccessorKind::TOP_LEVEL_VARIABLE_SETTER &&
-            originalIdentifier == member->identifier + SETTER_SUFFIX) {
+
+        if (decl->identifier == accessorIdentifier) {
             return As<ASTKind::FUNC_DECL>(decl.get());
         }
     }
@@ -245,6 +242,8 @@ Ptr<Decl> MockUtils::FindAccessor(
     if (member->TestAttr(Attribute::IN_EXTEND)) {
         return nullptr;
     }
+    auto instantiatedDecl = GetInstantiatedDecl(member, instTys, outerClass.ty);
+    auto accessorIdentifier = BuildMockAccessorIdentifier(*instantiatedDecl, kind);
     for (auto& superDecl : outerClass.GetAllSuperDecls()) {
         // Accessors are generated only for classes
         if (superDecl->astKind != ASTKind::CLASS_DECL) {
@@ -255,25 +254,15 @@ Ptr<Decl> MockUtils::FindAccessor(
                 continue;
             }
 
-            auto originalIdentifier = GetOriginalIdentifierOfMockAccessor(*decl);
-            if (Is<PropDecl>(member) && originalIdentifier == member->identifier) {
+            if (decl->identifier == accessorIdentifier) {
+                if (auto declFuncTy = DynamicCast<FuncTy>(decl->ty)) {
+                    if (auto instDeclFuncTy = DynamicCast<FuncTy>(instantiatedDecl->ty)) {
+                        if (!typeManager.IsFuncParameterTypesIdentical(*declFuncTy, *instDeclFuncTy)) {
+                            continue;
+                        }
+                    }
+                }
                 return decl.get();
-            } else if (Is<VarDecl>(member)) {
-                if (kind == AccessorKind::FIELD_GETTER &&
-                    originalIdentifier == member->identifier + GETTER_SUFFIX) {
-                    return decl.get();
-                } else if (kind == AccessorKind::FIELD_SETTER &&
-                    originalIdentifier == member->identifier + SETTER_SUFFIX) {
-                    return decl.get();
-                }
-            } else { // For functions we search accessors by using mangled names due to overloading
-                auto instantiatedDecl = GetInstantiatedDecl(member, instTys, outerClass.ty);
-                auto originalMangledName = Mangle(*instantiatedDecl);
-                auto originalMangledNameGivenFromAccessor = MangleUtils::ComputeMangledNameWithCustomIdentifier(
-                    *decl, originalIdentifier);
-                if (originalMangledName == originalMangledNameGivenFromAccessor) {
-                    return decl.get();
-                }
             }
         }
     }
@@ -431,8 +420,6 @@ std::string MockUtils::BuildArgumentList(const AST::Decl& decl) const
 
 std::string MockUtils::BuildTypeArgumentList(const Decl& decl)
 {
-    return "";
-    // FIXME: What to do?
     if (decl.astKind != ASTKind::FUNC_DECL) {
         return "";
     }
