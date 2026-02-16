@@ -482,6 +482,10 @@ OwnedPtr<PrimitiveType> JavaDesugarManager::CreateUnitType()
     return type;
 }
 
+
+/**
+ *  Map Cangjie type to corresponding JNI-level type used in generated native method.
+ */
 Ptr<Ty> JavaDesugarManager::GetJNITy(Ptr<Ty> ty)
 {
     static auto jobjectTy = lib.GetJobjectTy();
@@ -489,6 +493,10 @@ Ptr<Ty> JavaDesugarManager::GetJNITy(Ptr<Ty> ty)
 
     if (!ty) {
         return nullptr;
+    }
+    if (ty->IsString()) {
+        // String is passed as jobject.
+        return jobjectTy;
     }
     if (ty->IsCoreOptionType()) {
         return jobjectTy;

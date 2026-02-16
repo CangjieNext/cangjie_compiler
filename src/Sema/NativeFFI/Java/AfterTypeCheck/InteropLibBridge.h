@@ -519,6 +519,11 @@ public:
     OwnedPtr<CallExpr> CreateJavaStringToCangjieCall(OwnedPtr<Expr> env, OwnedPtr<Expr> jstring);
 
     /**
+     * Java_CFFI_CangjieStringToJava(env, string)
+     */
+    OwnedPtr<CallExpr> CreateCangjieStringToJavaCall(OwnedPtr<Expr> env, OwnedPtr<Expr> string);
+
+    /**
      * Java_CFFI_getFromRegistry<ty>(env, self)
      */
     OwnedPtr<CallExpr> CreateGetFromRegistryCall(OwnedPtr<Expr> env, OwnedPtr<Expr> self, Ptr<Ty> ty);
