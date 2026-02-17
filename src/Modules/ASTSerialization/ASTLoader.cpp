@@ -398,6 +398,7 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
     if (pkg.fullPackageName != deserializedPackageName) {
         ReportPackageMismatch(diag, pkg, pkg.fullPackageName, deserializedPackageName);
         return false;
+    }
     auto specificFeatures = CollectFeaturesFromPackage(pkg);
 
     allTypes.resize(package->allTypes()->size(), nullptr);
