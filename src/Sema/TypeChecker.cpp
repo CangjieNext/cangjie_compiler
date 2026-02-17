@@ -2139,7 +2139,7 @@ std::vector<Ptr<ASTContext>> TypeChecker::TypeCheckerImpl::PreTypeCheck(const st
     }
 
     for (auto pkg : pkgs) {
-        mpImpl->MatchPlatformWithCommon(*pkg);
+        mpImpl->MatchSpecificWithCommon(*pkg);
         mpImpl->CheckNotAllowedAnnotations(*pkg);
     }
 
@@ -2182,7 +2182,7 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
     ctx.searcher->InvalidateCache();
 
     CheckPrimaryCtorBeforeMerge(pkg);
-    // Merging common classes into platform if any
+    // Merging common classes into specific if any
     mpImpl->PrepareTypeCheck4CJMP(pkg);
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
