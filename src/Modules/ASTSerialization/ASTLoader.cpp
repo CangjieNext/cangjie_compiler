@@ -323,7 +323,7 @@ void ReportPackageMismatch(
 
 std::set<std::string> CollectFeaturesFromPackage(AST::Package& pkg) {
     // All features should be same across parsed at the moment files, so use any file feature set
-    return pkg.files.back()->GetFeatures(".");
+    return (*pkg.files.begin())->GetFeatures(".");
 }
 
 OwnedPtr<AST::File> ASTLoader::ASTLoaderImpl::PreloadCommonFile(uoffset_t indexOfFile) {
