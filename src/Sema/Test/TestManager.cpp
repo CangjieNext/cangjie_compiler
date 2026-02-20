@@ -432,20 +432,6 @@ void TestManager::GenerateAccessors(Package& pkg)
             return VisitAction::WALK_CHILDREN;
         }
 
-        /* Don't generate accessors for instantiated versions
-         * if the original generic declaration wasn't compiled with mocking support
-         * othewise we cannot guarantee that all other instantiated versions
-         * including from other packages' ones would be compatible with this declaration with accessors
-         */
-        if (decl->genericDecl && !decl->genericDecl->TestAttr(Attribute::MOCK_SUPPORTED)) {
-            return VisitAction::SKIP_CHILDREN;
-        }
-
-        // common/specific declarations are not supported
-        if (decl->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC, Attribute::FROM_COMMON_PART)) {
-            return VisitAction::SKIP_CHILDREN;
-        }
-
         mockSupportManager->GenerateAccessors(*decl);
 
         return VisitAction::SKIP_CHILDREN;

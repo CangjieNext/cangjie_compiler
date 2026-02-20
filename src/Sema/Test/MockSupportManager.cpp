@@ -128,6 +128,7 @@ void MockSupportManager::WriteUsedInternalDecl(Decl& decl) {
     usedInternalDecls.insert(&decl);
 }
 
+// TODO: Get rid of this piece of function
 void MockSupportManager::MarkNodeMockSupportedIfNeeded(Node& node)
 {
     auto decl = As<ASTKind::DECL>(&node);
@@ -742,11 +743,7 @@ void MockSupportManager::PrepareToSpy(Decl& decl)
 
 void MockSupportManager::GenerateAccessors(Decl& decl)
 {
-    if (decl.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC, Attribute::FROM_COMMON_PART)) {
-        // TODO: cjmp common/specific support
-        return;
-    }
-    if (auto varDecl = As<ASTKind::VAR_DECL>(&decl); varDecl && varDecl->TestAttr(Attribute::GLOBAL)) {
+    if (auto varDecl = As<ASTKind::VAR_DECL>(&decl); varDecl && MockUtils::IsMockAccessorRequired(*varDecl)) {
         GenerateVarDeclAccessors(
             *varDecl, AccessorKind::TOP_LEVEL_VARIABLE_GETTER, AccessorKind::TOP_LEVEL_VARIABLE_SETTER);
         return;
@@ -759,7 +756,7 @@ void MockSupportManager::GenerateAccessors(Decl& decl)
     }
 
     for (auto& member : classDecl->GetMemberDecls()) {
-        if (member->TestAttr(Attribute::CONSTRUCTOR)) {
+        if (!MockUtils::IsMockAccessorRequired(*member)) {
             continue;
         }
         if (member->TestAttr(Attribute::STATIC)) {
@@ -1640,6 +1637,7 @@ std::vector<Ptr<Ty>> MockSupportManager::CloneFuncDecl(Ptr<FuncDecl> fromDecl, P
 
 void MockSupportManager::PrepareInterfaceDecl(InterfaceDecl& interfaceDecl)
 {
+    // TODO: Move these checks to CollectDecls function
     if (interfaceDecl.TestAttr(Attribute::GENERIC)) {
         // Generic interface not yet supported
         return;
@@ -1711,6 +1709,7 @@ void MockSupportManager::PrepareClassLikeWithDefaults(
 {
     Ptr<InterfaceDecl> accessorInterfaceDecl = FindGeneratedGlobalDecl<InterfaceDecl>(
         interfaceDecl.curFile, interfaceDecl.identifier + MockUtils::defaultAccessorSuffix);
+    // TODO: Replace with ASSERT somehow
     if (!accessorInterfaceDecl) {
         // Interface is in package, which was compiled without mocking support
         return;
