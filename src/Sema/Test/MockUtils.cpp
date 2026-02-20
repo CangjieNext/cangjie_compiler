@@ -151,8 +151,24 @@ bool MockUtils::IsMockAccessor(const Decl& decl)
 
 bool MockUtils::IsMockAccessorRequired(const Decl& decl)
 {
+    // common/specific declarations are not supported
+    if (decl.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC, Attribute::FROM_COMMON_PART)) {
+        return false;
+    }
+
+    // Member variables
     if (decl.astKind == ASTKind::VAR_DECL && decl.outerDecl) {
         return true;
+    }
+
+    // Global variables
+    if (decl.astKind == ASTKind::VAR_DECL && decl.TestAttr(Attribute::GLOBAL)) {
+        return true;
+    }
+
+    // Constructors don't need accessors
+    if (decl.astKind == ASTKind::FUNC_DECL && decl.TestAttr(Attribute::CONSTRUCTOR)) {
+        return false;
     }
 
     if (decl.astKind != ASTKind::FUNC_DECL && decl.astKind != ASTKind::PROP_DECL) {
