@@ -271,6 +271,8 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
 
     commonDecl.doNotExport = true;
     commonDecl.specificImplementation = &specificDecl;
+
+    specificDecl.ty = commonDecl.ty;
 }
 }
 
