@@ -653,10 +653,10 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
     }
     // Try get deserialized func.
     Func* fn = TryGetDeserialized<Func>(funcDecl);
-    bool isPlatform = funcDecl.TestAttr(AST::Attribute::PLATFORM);
+    bool isSpecific = funcDecl.TestAttr(AST::Attribute::SPECIFIC);
     if (fn) {
-        if (isPlatform) {
-            ResetPlatformFunc(funcDecl, *fn);
+        if (isSpecific) {
+            ResetSpecificFunc(funcDecl, *fn);
             const auto& loc = GetDeclLoc(builder.GetChirContext(), funcDecl);
             fn->SetDebugLocation(loc);
         }
@@ -1098,8 +1098,8 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
     if (decl.TestAttr(AST::Attribute::COMMON) && !decl.TestAttr(AST::Attribute::FROM_COMMON_PART)) {
         customTypeDef->EnableAttr(Attribute::COMMON);
     }
-    if (decl.TestAttr(AST::Attribute::PLATFORM)) {
-        customTypeDef->EnableAttr(Attribute::PLATFORM);
+    if (decl.TestAttr(AST::Attribute::SPECIFIC)) {
+        customTypeDef->EnableAttr(Attribute::SPECIFIC);
         customTypeDef->DisableAttr(Attribute::COMMON);
     }
 }
@@ -1327,9 +1327,14 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     TranslateVecDecl(genericNominalDecls, trans);
     // Update some info for nominal decls.
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "TranslateDecls");
-    ProcessCommonAndPlatformNominals();
+
+    // Update some info for common specific
+    Utils::ProfileRecorder::Start("TranslateNominalDecls", "ProcessCommonAndSpecific");
+    ProcessCommonAndSpecificExtends();
     SetExtendInfo();
     UpdateExtendParent();
+    ProcessClassStructVarInits(trans);
+    Utils::ProfileRecorder::Stop("TranslateNominalDecls", "ProcessCommonAndSpecific");
 }
 
 void AST2CHIR::TranslateFuncParams(const AST::FuncDecl& funcDecl, Func& func) const
@@ -1364,9 +1369,9 @@ void AST2CHIR::TranslateVecDecl(const std::vector<Ptr<const AST::Decl>>& decls, 
 // Check whether the decl is deserialized for CJMP.
 bool AST2CHIR::MaybeDeserialized(const AST::Decl& decl) const
 {
-    // When the platform is compiled and decl is from common part or generic instantiated or imported or platform decl.
-    if (mergingPlatform &&
-        decl.TestAnyAttr(AST::Attribute::PLATFORM, AST::Attribute::FROM_COMMON_PART,
+    // When the specific is compiled and decl is from common part or generic instantiated or imported or specific decl.
+    if (mergingSpecific &&
+        decl.TestAnyAttr(AST::Attribute::SPECIFIC, AST::Attribute::FROM_COMMON_PART,
             AST::Attribute::GENERIC_INSTANTIATED, AST::Attribute::IMPORTED)) {
         return true;
     }
@@ -1408,7 +1413,7 @@ std::vector<Ptr<const AST::Decl>> CollectCommonMatchedDecls(
     std::vector<Ptr<const AST::Decl>> commonDecls;
     for (const auto& container : declContainers) {
         for (const auto& decl : container) {
-            if (decl->IsCommonMatchedWithPlatform()) {
+            if (decl->IsCommonMatchedWithSpecific() && decl->astKind == AST::ASTKind::EXTEND_DECL) {
                 commonDecls.push_back(decl);
             }
         }
@@ -1419,31 +1424,31 @@ std::vector<Ptr<const AST::Decl>> CollectCommonMatchedDecls(
 std::unordered_map<const GenericType*, Type*> BuildGenericTypeMapping(
     const std::vector<Ptr<const AST::Decl>>& commonDecls, CHIRType& chirType)
 {
-    std::unordered_map<const GenericType*, Type*> commonGenericTy2platformGenericTy;
+    std::unordered_map<const GenericType*, Type*> commonGenericTy2specificGenericTy;
 
     for (const auto& commonDecl : commonDecls) {
         if (commonDecl->TestAttr(AST::Attribute::GENERIC)) {
             auto commonGeneric = commonDecl->GetGeneric();
-            auto platformGeneric = commonDecl->platformImplementation->GetGeneric();
-            CJC_ASSERT(commonGeneric && platformGeneric);
+            auto specificGeneric = commonDecl->specificImplementation->GetGeneric();
+            CJC_ASSERT(commonGeneric && specificGeneric);
             auto& commonTypeParameters = commonGeneric->typeParameters;
-            auto& platformTypeParameters = platformGeneric->typeParameters;
-            CJC_ASSERT(commonTypeParameters.size() == platformTypeParameters.size() && !commonTypeParameters.empty());
+            auto& specificTypeParameters = specificGeneric->typeParameters;
+            CJC_ASSERT(commonTypeParameters.size() == specificTypeParameters.size() && !commonTypeParameters.empty());
             for (size_t i = 0; i < commonTypeParameters.size(); i++) {
                 auto cTypeArg = commonTypeParameters[i]->ty;
-                auto pTypeArg = platformTypeParameters[i]->ty;
+                auto pTypeArg = specificTypeParameters[i]->ty;
                 if (cTypeArg->IsGeneric() && pTypeArg->IsGeneric()) {
                     auto commonGenericTy = StaticCast<GenericType*>(chirType.TranslateType(*cTypeArg));
-                    auto platformGenericTy = chirType.TranslateType(*pTypeArg);
-                    commonGenericTy2platformGenericTy[commonGenericTy] = platformGenericTy;
+                    auto specificGenericTy = chirType.TranslateType(*pTypeArg);
+                    commonGenericTy2specificGenericTy[commonGenericTy] = specificGenericTy;
                 }
             }
         }
     }
-    return commonGenericTy2platformGenericTy;
+    return commonGenericTy2specificGenericTy;
 }
 
-void ConvertPlatformMemberMethods(
+void ConvertSpecificMemberMethods(
     Package* package, CHIRBuilder& builder, const std::function<Type*(Type&)>& replaceGenericFunc)
 {
     PrivateTypeConverter converter(replaceGenericFunc, builder);
@@ -1452,8 +1457,9 @@ void ConvertPlatformMemberMethods(
         return VisitResult::CONTINUE;
     };
 
-    for (auto decl : package->GetAllCustomTypeDef()) {
-        if (!decl->TestAttr(CHIR::Attribute::PLATFORM)) {
+    for (auto decl : package->GetExtends()) {
+        // Skip non-platform extends
+        if (!decl->TestAttr(CHIR::Attribute::SPECIFIC)) {
             continue;
         }
 
@@ -1489,41 +1495,41 @@ static std::unordered_set<std::string> CollectMethodNames(const ExtendDef& exten
     return names;
 }
 
-// Remove common extends if any member exists in platform extends
+// Remove common extends if any member exists in specific extends
 static std::vector<ExtendDef*> ProcessExtends(std::vector<ExtendDef*>&& extends)
 {
     std::vector<ExtendDef*> commonExtends;
-    std::vector<ExtendDef*> platformExtends;
+    std::vector<ExtendDef*> specificExtends;
 
-    // Separate common and platform extends
+    // Separate common and specific extends
     for (const auto& ed : extends) {
         if (ed->TestAttr(CHIR::Attribute::COMMON)) {
             commonExtends.push_back(ed);
-        } else if (ed->TestAttr(CHIR::Attribute::PLATFORM)) {
-            platformExtends.push_back(ed);
+        } else if (ed->TestAttr(CHIR::Attribute::SPECIFIC)) {
+            specificExtends.push_back(ed);
         }
     }
 
-    // Collect all platform method names
-    std::unordered_set<std::string> platformMethodNames;
-    for (auto& platformEd : platformExtends) {
-        auto names = CollectMethodNames(*platformEd);
-        platformMethodNames.insert(names.begin(), names.end());
+    // Collect all specific method names
+    std::unordered_set<std::string> specificMethodNames;
+    for (auto& specificEd : specificExtends) {
+        auto names = CollectMethodNames(*specificEd);
+        specificMethodNames.insert(names.begin(), names.end());
     }
 
-    // Find common extends to remove (if any method exists in platform)
+    // Find common extends to remove (if any method exists in specific)
     std::unordered_set<ExtendDef*> commonToRemove;
     for (auto& commonEd : commonExtends) {
-        // Check if any method exists in platform
+        // Check if any method exists in specific
         for (auto& method : commonEd->GetMethods()) {
-            if (method && platformMethodNames.count(method->GetIdentifier())) {
+            if (method && specificMethodNames.count(method->GetIdentifier())) {
                 commonToRemove.insert(const_cast<ExtendDef*>(commonEd));
                 break;
             }
         }
     }
 
-    // Remove common extends that have members in platform extends
+    // Remove common extends that have members in specific extends
     auto it = std::remove_if(extends.begin(), extends.end(),
         [&commonToRemove](ExtendDef* ed) {
             return commonToRemove.find(ed) != commonToRemove.end();
@@ -1554,11 +1560,12 @@ static std::vector<ExtendDef*> ProcessExtendsByCommonDecl(
 
 void RemoveUnusedCJMPExtends(CHIR::Package& chirPkg, const std::vector<Ptr<const AST::Decl>>& commonDecls)
 {
-    // Process package extends: remove if commonDecl has platformImplementation
+    // Process package extends: remove if commonDecl has specificImplementation
     chirPkg.SetExtends(ProcessExtendsByCommonDecl(chirPkg.GetExtends(), commonDecls));
 
-    // Process imported extends: remove if any member exists in platform extends
-    // Temporary solution: imported packages won't do matching, so imported commonDecls don't have platformImplementation
+    // Process imported extends: remove if any member exists in specific extends
+    // Temporary solution: imported packages won't do matching,
+    // so imported commonDecls don't have specificImplementation
     chirPkg.SetImportedExtends(ProcessExtends(chirPkg.GetImportedExtends()));
 }
 } // namespace
@@ -1579,8 +1586,8 @@ void AST2CHIR::BuildDeserializedTable()
         std::vector<Func*>{package->GetPackageInitFunc(), package->GetPackageLiteralInitFunc()});
 }
 
-// Reset platform func for CJMP.
-void AST2CHIR::ResetPlatformFunc(const AST::FuncDecl& funcDecl, Func& func)
+// Reset specific func for CJMP.
+void AST2CHIR::ResetSpecificFunc(const AST::FuncDecl& funcDecl, Func& func)
 {
     // Reset body
     auto body = builder.CreateBlockGroup(func);
@@ -1592,7 +1599,7 @@ void AST2CHIR::ResetPlatformFunc(const AST::FuncDecl& funcDecl, Func& func)
     func.SetDebugLocation(loc);
     // Reset attrs: to do incremental change.
     SetFuncAttributeAndLinkageType(funcDecl, func);
-    func.EnableAttr(Attribute::PLATFORM);
+    func.EnableAttr(Attribute::SPECIFIC);
     func.DisableAttr(Attribute::COMMON);
     func.DisableAttr(Attribute::SKIP_ANALYSIS);
 
@@ -1619,27 +1626,52 @@ void AST2CHIR::ResetPlatformFunc(const AST::FuncDecl& funcDecl, Func& func)
     }
 }
 
-void AST2CHIR::ProcessCommonAndPlatformNominals()
+void AST2CHIR::ProcessCommonAndSpecificExtends()
 {
-    bool compilePlatform = opts.IsCompilingCJMP();
-    if (!compilePlatform) {
+    bool compileSpecific = opts.IsCompilingCJMPSpecific();
+    if (!compileSpecific) {
         return;
     }
 
     // Collect common generic extends and build type mapping
     std::vector<Ptr<const AST::Decl>> commonDecls = CollectCommonMatchedDecls(
         {importedNominalDecls, importedGenericInstantiatedNominalDecls, nominalDecls, genericNominalDecls});
-    std::unordered_map<const GenericType*, Type*> commonGenericTy2platformGenericTy =
+    std::unordered_map<const GenericType*, Type*> commonGenericTy2specificGenericTy =
         BuildGenericTypeMapping(commonDecls, chirType);
 
-    // 1. Convert platform extend methods if type mapping exists
-    if (!commonGenericTy2platformGenericTy.empty()) {
-        ConvertPlatformMemberMethods(package, builder, [this, &commonGenericTy2platformGenericTy](Type& type) {
-            return ReplaceRawGenericArgType(type, commonGenericTy2platformGenericTy, builder);
+    // 1. Convert specific extend methods if type mapping exists
+    if (!commonGenericTy2specificGenericTy.empty()) {
+        ConvertSpecificMemberMethods(package, builder, [this, &commonGenericTy2specificGenericTy](Type& type) {
+            return ReplaceRawGenericArgType(type, commonGenericTy2specificGenericTy, builder);
         });
     }
 
     // 2. Clean up unused extends
     RemoveUnusedCJMPExtends(*package, commonDecls);
+}
+
+void AST2CHIR::ProcessClassStructVarInits(Translator& trans)
+{
+    bool compileCJMP = opts.IsCompilingCJMP();
+    if (!compileCJMP) {
+        return;
+    }
+    // translate vars init for CJMP.
+    const std::vector<std::vector<Ptr<const AST::Decl>>>& declContainers = {
+        importedNominalDecls, importedGenericInstantiatedNominalDecls, nominalDecls, genericNominalDecls
+    };
+    for (auto& container : declContainers) {
+        for (const auto& decl : container) {
+            CJC_NULLPTR_CHECK(decl);
+            // Skip the common part varInit generation while comparing specific parts.
+            if (decl->TestAttr(AST::Attribute::FROM_COMMON_PART)) {
+                continue;
+            }
+            // Just need to generate varInit for class/struct.
+            if (decl->astKind == AST::ASTKind::CLASS_DECL || decl->astKind == AST::ASTKind::STRUCT_DECL) {
+                trans.CreateClassStructDeclVarInit(*decl);
+            }
+        }
+    }
 }
 } // namespace Cangjie::CHIR

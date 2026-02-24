@@ -37,9 +37,9 @@ using namespace TypeCheckUtil;
 namespace {
 void InsertEnumConstructors(ASTContext& ctx, const EnumDecl& ed, bool enableMacroInLsp)
 {
-    // Skip enum constructor insertion when common enum has platform match.
-    // During platform compilation, platform constructors take priority over common ones.
-    if (ed.IsCommonMatchedWithPlatform()) {
+    // Skip enum constructor insertion when common enum has specific match.
+    // During specific compilation, specific constructors take priority over common ones.
+    if (ed.IsCommonMatchedWithSpecific()) {
         return;
     }
     for (auto& ctor : ed.constructors) {
@@ -531,6 +531,7 @@ void TypeChecker::TypeCheckerImpl::SetEnumEleTyHandleFuncDecl(FuncDecl& funcDecl
     funcDecl.funcBody->retType->ty = ctorTy->retTy;
     funcDecl.funcBody->retType->begin = funcDecl.begin;
     funcDecl.funcBody->retType->end = funcDecl.end;
+    funcDecl.funcBody->retType->EnableAttr(Attribute::COMPILER_ADD);
     // Check c ffi type usage.
     if (funcDecl.outerDecl->TestAttr(Attribute::C)) {
         diag.Diagnose(funcDecl, DiagKind::sema_enum_pattern_func_cty_error, funcDecl.identifier.Val(),

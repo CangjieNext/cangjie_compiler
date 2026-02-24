@@ -13,6 +13,7 @@
 
 #include <queue>
 
+#include "cangjie/AST/AttributePack.h"
 #include "flatbuffers/ModuleFormat_generated.h"
 
 #include "cangjie/AST/Create.h"
@@ -159,7 +160,7 @@ inline bool IsExternalNorminalDecl(const Decl& decl)
 
 inline bool ShouldAlwaysExport(const Decl& decl, bool serializingCommon)
 {
-    if (decl.IsCommonMatchedWithPlatform()) {
+    if (decl.IsCommonMatchedWithSpecific()) {
         return false;
     }
 
@@ -198,7 +199,14 @@ void CollectBodyToQueue(const Decl& decl, std::queue<Ptr<Decl>>& queue)
 
 bool IsGenericInCommonSerialization(bool serializingCommon, const Decl& decl)
 {
-    return serializingCommon && decl.outerDecl && decl.outerDecl->TestAttr(Attribute::GENERIC);
+    bool shouldSerialize = serializingCommon && decl.outerDecl && decl.outerDecl->TestAttr(Attribute::GENERIC);
+    if (auto fd = DynamicCast<const AST::FuncDecl*>(&decl); shouldSerialize && fd) {
+        // `static init` never gets deserialized (LoadDecl) when compiling platform part
+        // so, this declaration is skipped to avoid other decls becoming dependent to never loaded declaration.
+        shouldSerialize = !(fd->TestAttr(AST::Attribute::STATIC, AST::Attribute::CONSTRUCTOR) &&
+            fd->identifier == STATIC_INIT_FUNC);
+    }
+    return shouldSerialize;
 }
 
 void CollectFullExportParamDecl(
@@ -302,7 +310,7 @@ bool ShouldExportSource(const VarDecl& varDecl)
     if (!Ty::IsTyCorrect(varDecl.ty) || !varDecl.initializer || varDecl.TestAttr(Attribute::IMPORTED)) {
         return false;
     }
-    if (varDecl.IsCommonMatchedWithPlatform()) {
+    if (varDecl.IsCommonMatchedWithSpecific()) {
         return false;
     }
     // If 'varDecl' is not global variable and:
@@ -396,9 +404,9 @@ std::string GetImportPackageNameByImportSpec(const AST::ImportSpec& importSpec)
 } // namespace
 
 ASTWriter::ASTWriter(DiagnosticEngine& diag, const std::string& packageDepInfo, const ExportConfig& exportCfg,
-    const CjoManager& cjoManager)
+    const CjoManager& cjoManager, TypeManager& typeManager)
 {
-    pImpl = std::make_unique<ASTWriter::ASTWriterImpl>(diag, packageDepInfo, exportCfg, cjoManager);
+    pImpl = std::make_unique<ASTWriter::ASTWriterImpl>(diag, packageDepInfo, exportCfg, cjoManager, typeManager);
 }
 
 ASTWriter::~ASTWriter()
@@ -421,8 +429,8 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
 {
     // Body.
     std::vector<FormattedIndex> body;
-    // Track platform implementations that have been added to avoid duplicates
-    std::unordered_set<Decl*> addedPlatformImpls;
+    // Track specific implementations that have been added to avoid duplicates
+    std::unordered_set<Decl*> addedSpecificImpls;
     // Incr compilation need load ty by cached cjo, so not only cache visible signature
     bool onlyVisibleSig = !config.exportForIncr && !config.exportContent;
     // For LSP usage, when decl is not external, ignore all members, only keep the typeDecl it self.
@@ -444,6 +452,9 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
         if (decl.astKind == AST::ASTKind::EXTEND_DECL && serializingCommon) {
             return true;
         }
+        if (IsGenericInCommonSerialization(this->serializingCommon, *d)) {
+            return true;
+        }
         // Incr compilation need load ty by cached cjo, so still cache internal or inst member var decls
         if (!config.exportForIncr && !decl.TestAttr(Attribute::COMMON) && !isInstMemberVar &&
             d->linkage == Linkage::INTERNAL) {
@@ -454,15 +465,15 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
 
     for (auto& it : decl.GetMemberDeclPtrs()) {
         CJC_NULLPTR_CHECK(it);
-        // Skip if this decl is already added as a platform implementation
-        if (it->TestAttr(AST::Attribute::PLATFORM) && addedPlatformImpls.count(it.get()) > 0) {
+        // Skip if this decl is already added as a specific implementation
+        if (it->TestAttr(AST::Attribute::SPECIFIC) && addedSpecificImpls.count(it.get()) > 0) {
             continue;
         }
-        // Process platform implementation first, applying same filter logic
-        if (it->platformImplementation) {
-            addedPlatformImpls.insert(it->platformImplementation.get());
-            if (shouldExportDecl(it->platformImplementation.get())) {
-                body.push_back(GetDeclIndex(it->platformImplementation));
+        // Process specific implementation first, applying same filter logic
+        if (it->specificImplementation) {
+            addedSpecificImpls.insert(it->specificImplementation.get());
+            if (shouldExportDecl(it->specificImplementation.get())) {
+                body.push_back(GetDeclIndex(it->specificImplementation));
             }
         }
         if (shouldExportDecl(it.get())) {
@@ -615,7 +626,7 @@ void ASTWriter::ASTWriterImpl::MarkImplicitExportOfImportSpec(Package& package)
                 continue;
             }
             auto importPkgName = GetImportPackageNameByImportSpec(*import);
-            // Compile with common part, all imports should be load when compile platform part.
+            // Compile with common part, all imports should be load when compile specific part.
             if (!Utils::In(importPkgName, importedDeclPkgNames) && !import->IsReExport(package.noSubPkg) &&
                 !serializingCommon) {
                 import->withImplicitExport = false;
@@ -854,25 +865,26 @@ FormattedIndex ASTWriter::SaveType(Ptr<const Ty> pType) const
 
 namespace {
 
-template <typename T> std::optional<Ptr<const Ty>> TryGetPlatformImplementationTy(const Ptr<const Ty>& pType)
+template <typename T>
+std::optional<Ptr<const Ty>> TryGetSpecificImplementationTy(const Ptr<const Ty>& pType)
 {
     auto ty = StaticCast<T*>(pType);
-    if (ty->decl && ty == ty->decl->ty && ty->decl->platformImplementation) {
-        return ty->decl->platformImplementation->ty;
+    if (ty->decl && ty == ty->decl->ty && ty->decl->specificImplementation) {
+        return ty->decl->specificImplementation->ty;
     }
 
     return std::nullopt;
 }
 
-std::optional<Ptr<const Ty>> TryGetPlatformImplementationTy(const Ptr<const Ty>& pType)
+std::optional<Ptr<const Ty>> TryGetSpecificImplementationTy(const Ptr<const Ty>& pType)
 {
     switch (pType->kind) {
         case TypeKind::TYPE_CLASS:
-            return TryGetPlatformImplementationTy<ClassTy>(pType);
+            return TryGetSpecificImplementationTy<ClassTy>(pType);
         case TypeKind::TYPE_STRUCT:
-            return TryGetPlatformImplementationTy<StructTy>(pType);
+            return TryGetSpecificImplementationTy<StructTy>(pType);
         case TypeKind::TYPE_ENUM:
-            return TryGetPlatformImplementationTy<EnumTy>(pType);
+            return TryGetSpecificImplementationTy<EnumTy>(pType);
         default:
             return std::nullopt;
     }
@@ -895,10 +907,10 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveType(Ptr<const Ty> pType)
         return found->second;
     }
 
-    // Checking if has already saved platform decl
-    auto platformImplTy = TryGetPlatformImplementationTy(pType);
-    if (platformImplTy) {
-        found = savedTypeMap.find(*platformImplTy);
+    // Checking if has already saved specific decl
+    auto specificImplTy = TryGetSpecificImplementationTy(pType);
+    if (specificImplTy) {
+        found = savedTypeMap.find(*specificImplTy);
         if (found != savedTypeMap.end()) {
             savedTypeMap.emplace(pType, found->second);
             return found->second;
@@ -912,9 +924,9 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveType(Ptr<const Ty> pType)
     allTypes.emplace_back(TTypeOffset());
     savedTypeMap.emplace(pType, typeIndex);
 
-    // Also saving type for platform decl if any
-    if (platformImplTy) {
-        savedTypeMap.emplace(*platformImplTy, typeIndex);
+    // Also saving type for specific decl if any
+    if (specificImplTy) {
+        savedTypeMap.emplace(*specificImplTy, typeIndex);
     }
 
     TTypeOffset typeObject;
@@ -1111,7 +1123,7 @@ flatbuffers::Offset<PackageFormat::Generic> ASTWriter::ASTWriterImpl::SaveGeneri
         std::vector<FormattedIndex> uppers;
         for (auto& upper : constraint->upperBounds) {
             CJC_NULLPTR_CHECK(upper);
-            uppers.emplace_back(SaveType(upper->ty));
+            uppers.emplace_back(SaveType(typeManager.ObtainsAliasType(upper)));
         }
         constraint->ty = constraint->type->ty; // Sync ty to re-use 'PackNodeInfo'.
         auto info = PackNodeInfo(*constraint);
@@ -1228,7 +1240,8 @@ TFuncBodyOffset ASTWriter::ASTWriterImpl::SaveFuncBody(const FuncBody& funcBody)
         return PackageFormat::CreateFuncBody(builder, dummyList, INVALID_FORMAT_INDEX, INVALID_FORMAT_INDEX, false, 0);
     }
     auto vparamLists = GetVirtualParamLists(funcBody);
-    FormattedIndex retType = funcBody.retType ? SaveType(funcBody.retType->ty) : INVALID_FORMAT_INDEX;
+    FormattedIndex retType =
+        funcBody.retType ? SaveType(typeManager.ObtainsAliasType(funcBody.retType)) : INVALID_FORMAT_INDEX;
     // The frozen attribute is passed to a nested function.
     if (fd && fd->outerDecl && fd->outerDecl->astKind == ASTKind::FUNC_DECL) {
         auto outerFunc = StaticCast<FuncDecl>(fd->outerDecl);
@@ -1242,8 +1255,12 @@ TFuncBodyOffset ASTWriter::ASTWriterImpl::SaveFuncBody(const FuncBody& funcBody)
     // 5. funcBody of default implementation which is defined in interface.
     // 6. funcBody of generic-related functions from common side
     // NOTE: desugared param function has same 'outerDecl' and 'GLOBAL' attribute will its owner function.
+    // also note that generic decls are handled in the beginning already but non-generic static members
+    // inside of generis don't need to be stored
+    bool isNonStaticGenericCJMP = fd && IsGenericInCommonSerialization(serializingCommon, *fd) &&
+        !fd->TestAttr(Attribute::STATIC);
     bool shouldExportBody = config.exportContent && exportFuncBody &&
-        (!fd || CanBeSrcExported(*fd) || IsGenericInCommonSerialization(serializingCommon, *fd));
+        (!fd || CanBeSrcExported(*fd) || isNonStaticGenericCJMP);
     bool validBody = shouldExportBody && Ty::IsTyCorrect(funcBody.ty) && funcBody.body;
     auto bodyIdx = validBody ? SaveExpr(*funcBody.body) : INVALID_FORMAT_INDEX;
     // CaptureKind is need if the 'funcBody' is exported.
@@ -1407,7 +1424,7 @@ TDeclOffset ASTWriter::ASTWriterImpl::SaveExtendDecl(const ExtendDecl& extendDec
 
 TDeclOffset ASTWriter::ASTWriterImpl::SaveTypeAliasDecl(const TypeAliasDecl& typeAliasDecl, const DeclInfo& declInfo)
 {
-    FormattedIndex aliasedTy = SaveType(typeAliasDecl.type->ty);
+    FormattedIndex aliasedTy = SaveType(typeManager.ObtainsAliasType(typeAliasDecl.type));
     auto generic = SaveGeneric(typeAliasDecl);
     auto info = PackageFormat::CreateAliasInfo(builder, aliasedTy);
     PackageFormat::DeclBuilder dbuilder(builder);
@@ -1542,7 +1559,7 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveDecl(const Decl& decl, bool isTopLe
 
     if (auto varDecl = DynamicCast<VarDecl>(&decl)) {
         if (varDecl->TestAttr(Attribute::FROM_COMMON_PART) && varDecl->outerDecl &&
-            varDecl->outerDecl->TestAttr(Attribute::PLATFORM)) {
+            varDecl->outerDecl->TestAttr(Attribute::SPECIFIC)) {
             attrs.SetAttr(Attribute::COMMON, false);
             attrs.SetAttr(Attribute::FROM_COMMON_PART, false);
         }
@@ -1554,11 +1571,12 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveDecl(const Decl& decl, bool isTopLe
             }
         }
 
-        if (varDecl->TestAttr(Attribute::PLATFORM)) {
-            attrs.SetAttr(Attribute::PLATFORM, false);
+        if (varDecl->TestAttr(Attribute::SPECIFIC)) {
+            attrs.SetAttr(Attribute::SPECIFIC, false);
         }
     }
-    auto type = attrs.TestAttr(Attribute::UNREACHABLE) ? INVALID_FORMAT_INDEX : SaveType(decl.ty);
+    auto type =
+        attrs.TestAttr(Attribute::UNREACHABLE) ? INVALID_FORMAT_INDEX : SaveType(typeManager.ObtainsAliasType(&decl));
     auto begin = decl.GetBegin();
     auto end = decl.GetEnd();
     auto [pkgIndex, fileIndex] = GetFileIndex(begin.fileID);
@@ -1665,9 +1683,9 @@ std::vector<TAnnoOffset> ASTWriter::ASTWriterImpl::SaveAnnotations(const Decl& d
                 builder.CreateString(annotation->identifier.Val()), args);
             annotations.emplace_back(impl);
         } else if (annotation->kind == AST::AnnotationKind::CUSTOM &&
-            (annotation->isCompileTimeVisible || decl.TestAnyAttr(Attribute::COMMON, Attribute::PLATFORM))) {
-            // Save common/platform annotations for consistency checking
-            // This ensures that common and platform sides can be validated for annotation consistency
+            (annotation->isCompileTimeVisible || decl.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC))) {
+            // Save common/specific annotations for consistency checking
+            // This ensures that common and specific sides can be validated for annotation consistency
             auto args = builder.CreateVector<TAnnoArgOffset>(SaveAnnotationArgs(*annotation));
             Ptr<Expr> baseExpr = annotation->baseExpr;
             TFullIdOffset targetIdx = INVALID_FORMAT_INDEX;

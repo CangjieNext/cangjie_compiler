@@ -892,11 +892,13 @@ bool DeadCodeElimination::CheckUselessFunc(const Func& func, const GlobalOptions
         return false;
     }
     if (func.GetFuncKind() == Cangjie::CHIR::MAIN_ENTRY && !opts.interpreter) {
-        // if output is lib (static or shared), Main method should delete
-        // when use chir-interpreter execute cjc-frontend ('cjc-frontend --chir-interpreter ...'), we should not
-        // delete main method
+        // `main()` function should be deleted in the following cases:
+        // 1、output is a static or shared library
+        // 2、output is an object file and the compilation target is static or shared library
         return opts.outputMode == GlobalOptions::OutputMode::STATIC_LIB ||
-            opts.outputMode == GlobalOptions::OutputMode::SHARED_LIB;
+            opts.outputMode == GlobalOptions::OutputMode::SHARED_LIB ||
+            (opts.outputMode == GlobalOptions::OutputMode::OBJ &&
+                opts.compileTarget != GlobalOptions::CompileTarget::EXECUTABLE);
     }
     // Do not check the functions that can be exported.
     if (IsExternalDecl(func)) {
@@ -917,6 +919,10 @@ bool DeadCodeElimination::CheckUselessFunc(const Func& func, const GlobalOptions
     if (!opts.disableReflection) {
         // enable reflect
         return !func.TestAttr(Attribute::PUBLIC) || func.TestAttr(Attribute::NO_REFLECT_INFO);
+    }
+    if (!opts.CompileExecutable()) {
+        // external func in lib output mode can not be removed.
+        return false;
     }
     return true;
 }

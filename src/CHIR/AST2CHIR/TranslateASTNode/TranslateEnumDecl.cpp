@@ -13,13 +13,22 @@ using namespace Cangjie::CHIR;
 using namespace Cangjie;
 
 namespace {
-    bool ShouldTranslateConstructor(const AST::EnumDecl& decl, const AST::Decl& ctor)
+    bool SkipConstructorInSpecificMerging(EnumDef& enumDef, const AST::Decl& newCtor)
     {
-        CJC_ASSERT(ctor.astKind == AST::ASTKind::VAR_DECL || ctor.astKind == AST::ASTKind::FUNC_DECL);
-        if (ctor.TestAttr(AST::Attribute::COMMON) && decl.platformImplementation) {
+        CJC_ASSERT(newCtor.astKind == AST::ASTKind::VAR_DECL || newCtor.astKind == AST::ASTKind::FUNC_DECL);
+        // Check if we're merging deserialized enum
+        if (!enumDef.TestAttr(CHIR::Attribute::DESERIALIZED)) {
             return false;
         }
-        return true;
+
+        // Check if constructor already exists in deserialized enum
+        for (auto& ctor : enumDef.GetCtors()) {
+            if (ctor.mangledName == newCtor.mangledName) {
+                return true; // Enum constructor already exists, skip processing
+            }
+        }
+
+        return false;
     }
 }
 
@@ -42,14 +51,19 @@ Ptr<Value> Translator::Visit(const AST::EnumDecl& decl)
     // `red`, `yellow` and `blue(Int32)` are called constructors
     // `red` and `yellow` are defined as `VarDecl`, `blue(Int32)` is defined as `FuncDecl`
     for (auto& ctor : decl.constructors) {
-        if (!ShouldTranslateConstructor(decl, *ctor)) {
+        if (mergingSpecific && SkipConstructorInSpecificMerging(*enumDef, *ctor)) {
             continue;
         }
+
         switch (ctor->astKind) {
             case AST::ASTKind::VAR_DECL: {
                 // default enum member store as {} -> EnumType
-                enumDef->AddCtor(
-                    {ctor->identifier, ctor->mangledName, builder.GetType<FuncType>(std::vector<Type*>{}, chirType)});
+                enumDef->AddCtor({
+                    .name = ctor->identifier,
+                    .mangledName = ctor->mangledName,
+                    .funcType = builder.GetType<FuncType>(std::vector<Type*>{}, chirType),
+                    .annoInfo = CreateAnnoFactoryFuncSig(*ctor, enumDef)
+                });
                 break;
             }
             case AST::ASTKind::FUNC_DECL: {
@@ -62,8 +76,12 @@ Ptr<Value> Translator::Visit(const AST::EnumDecl& decl)
                         paramTypes.emplace_back(TranslateType(*ctor->ty->typeArgs[i]));
                     }
                 }
-                enumDef->
-                    AddCtor({ctor->identifier, ctor->mangledName, builder.GetType<FuncType>(paramTypes, chirType)});
+                enumDef->AddCtor({
+                        .name = ctor->identifier,
+                        .mangledName = ctor->mangledName,
+                        .funcType = builder.GetType<FuncType>(paramTypes, chirType),
+                        .annoInfo = CreateAnnoFactoryFuncSig(*ctor, enumDef)
+                    });
                 break;
             }
             default: {
