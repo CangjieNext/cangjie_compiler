@@ -208,24 +208,6 @@ void FixCastProblemAfterInst(Ptr<BlockGroup> group, CHIRBuilder& builder)
         if (e.GetExprKind() == ExprKind::LAMBDA) {
             auto lambda = StaticCast<Lambda*>(&e);
             FixCastProblemAfterInst(lambda->GetBody(), builder);
-        } else if (e.GetExprKind() == ExprKind::INSTANCEOF) {
-            // fix instanceOf problem
-            auto instance = StaticCast<InstanceOf*>(&e);
-            auto objType = instance->GetObject()->GetType();
-            if (objType->IsGenericRelated() ||
-                (objType->IsRef() && StaticCast<RefType*>(objType)->GetBaseType()->IsClass()) ||
-                instance->GetType()->IsGenericRelated()) {
-                return VisitResult::CONTINUE;
-            }
-            if (objType->IsEqualOrSubTypeOf(*instance->GetType(), builder)) {
-                auto trueExpr =
-                    builder.CreateConstantExpression<BoolLiteral>(builder.GetBoolTy(), e.GetParentBlock(), true);
-                e.ReplaceWith(*trueExpr);
-            } else {
-                auto falseExpr =
-                    builder.CreateConstantExpression<BoolLiteral>(builder.GetBoolTy(), e.GetParentBlock(), false);
-                e.ReplaceWith(*falseExpr);
-            }
         } else if (e.GetExprKind() == ExprKind::TRANSFORM_TO_CONCRETE) {
             // change transformToConcrete to box/unbox/typecast
             auto& cast = StaticCast<TransformToConcrete&>(e);
