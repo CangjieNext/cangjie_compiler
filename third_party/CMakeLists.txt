@@ -385,7 +385,12 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND) # i.e. "--compile-backend" option
         if(NOT WIN32 AND NOT IOS)
             list(APPEND CLANG_RT_LIBS ${LIB_FUZZER_NOMAIN_PATH})
         endif()
-        set(CLANG_RT_TARGET_SUFFIX ${CMAKE_SYSTEM_PROCESSOR}$<$<BOOL:${ANDROID}>:-android>)
+        set(NORMALIZED_SYS_PROC ${CMAKE_SYSTEM_PROCESSOR})
+        if(ANDROID AND NORMALIZED_SYS_PROC MATCHES "^armv7")
+            set(NORMALIZED_SYS_PROC "arm")
+        endif()
+        # set(CLANG_RT_TARGET_SUFFIX ${CMAKE_SYSTEM_PROCESSOR}$<$<BOOL:${ANDROID}>:-android>)
+        set(CLANG_RT_TARGET_SUFFIX ${NORMALIZED_SYS_PROC}$<$<BOOL:${ANDROID}>:-android>)
         if(CANGJIE_ASAN_SUPPORT)
             list(APPEND CLANG_RT_LIBS ${LIB_RTLIB_ROOT_PATH}/libclang_rt-asan.a)
             set(SANITIZER_COPY_CMD
