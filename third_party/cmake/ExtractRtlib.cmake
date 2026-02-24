@@ -19,6 +19,7 @@ set(NEW_SPECIFIC_LIB_PATH ${CMAKE_ARGV5})
 set(CANGJIE_TARGET_ARCH ${CMAKE_ARGV6})
 set(CANGJIE_BUILD_CJC ${CMAKE_ARGV7})
 set(THIRD_PARTY_LLVM ${CMAKE_ARGV8})
+
 set(IOS ${CMAKE_ARGV9})
 
 set(LIB_SUFFIX ".a")
@@ -66,7 +67,7 @@ if(NOT "${OLD_SPECIFIC_LIB_PATH}" STREQUAL "" AND EXISTS ${OLD_SPECIFIC_LIB_PATH
         file(RENAME ${OLD_SPECIFIC_LIB_PATH} ${NEW_SPECIFIC_LIB_PATH})
     endif()
 else()
-    message(STATUS "The libclang_rt.${SPECIFIC_LIB}-${CANGJIE_TARGET_ARCH}.a has been extracted and does not exist.")
+    message(FATAL_ERROR "libclang_rt.${SPECIFIC_LIB}-${CANGJIE_TARGET_ARCH}.a not found! Expected path: ${OLD_SPECIFIC_LIB_PATH}")
 endif()
 
 # 3. Avoid installing redundant empty folder when cross-compiling.
