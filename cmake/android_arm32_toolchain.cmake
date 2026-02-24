@@ -30,3 +30,7 @@ set(TRIPLE arm-linux-android${CMAKE_ANDROID_API})
 # 格式参考：linux_android23_arm
 set(TARGET_TRIPLE_DIRECTORY_PREFIX linux_android${CMAKE_ANDROID_API}_arm)
 set(CMAKE_RANLIB "${CANGJIE_TARGET_TOOLCHAIN}/llvm-ranlib")
+if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=shorten-64-to-32 -Wno-error=conversion -Wno-shift-count-overflow")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-error=shorten-64-to-32 -Wno-error=conversion -Wno-shift-count-overflow")
+endif()
