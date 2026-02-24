@@ -213,25 +213,7 @@ void BlockGroupCopyHelper::InstBlockGroup(std::vector<Block*>& blocks)
 void FixCastProblemAfterInst(std::vector<Block*>& blocks, CHIRBuilder& builder)
 {
     auto preVisit = [&builder](Expression& e) {
-        if (e.GetExprKind() == ExprKind::INSTANCEOF) {
-            // fix instanceOf problem
-            auto instance = StaticCast<InstanceOf*>(&e);
-            auto objType = instance->GetObject()->GetType();
-            if (objType->IsGenericRelated() ||
-                (objType->IsRef() && StaticCast<RefType*>(objType)->GetBaseType()->IsClass()) ||
-                instance->GetType()->IsGenericRelated()) {
-                return VisitResult::CONTINUE;
-            }
-            if (objType->IsEqualOrSubTypeOf(*instance->GetType(), builder)) {
-                auto trueExpr =
-                    builder.CreateConstantExpression<BoolLiteral>(builder.GetBoolTy(), e.GetParentBlock(), true);
-                e.ReplaceWith(*trueExpr);
-            } else {
-                auto falseExpr =
-                    builder.CreateConstantExpression<BoolLiteral>(builder.GetBoolTy(), e.GetParentBlock(), false);
-                e.ReplaceWith(*falseExpr);
-            }
-        } else if (e.GetExprKind() == ExprKind::TRANSFORM_TO_CONCRETE) {
+        if (e.GetExprKind() == ExprKind::TRANSFORM_TO_CONCRETE) {
             // change transformToConcrete to box/unbox/typecast
             auto& cast = StaticCast<TransformToConcrete&>(e);
             if (!cast.GetSourceTy()->IsGenericRelated()) {
