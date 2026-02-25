@@ -17,6 +17,7 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
+#include "cangjie/Option/Option.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "NativeFFI/ObjC/Utils/ASTFactory.h"
 #include "NativeFFI/ObjC/Utils/InteropLibBridge.h"
@@ -30,11 +31,13 @@ struct InteropContext {
     explicit InteropContext(
         AST::Package& pkg, TypeManager& typeManager, ImportManager& importManager, DiagnosticEngine& diag,
         const BaseMangler& mangler, const std::string& cjLibOutputPath,
-        const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& structMemberSignatures)
+        const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& structMemberSignatures,
+        const Triple::OSType targetOsType)
         : pkg(pkg), diag(diag), typeManager(typeManager), importManager(importManager), bridge(importManager, diag),
           typeMapper(bridge, typeManager), mangler(mangler), nameGenerator(mangler, typeManager),
           factory(bridge, typeManager, nameGenerator, typeMapper, importManager),
-          cjLibOutputPath(cjLibOutputPath), structMemberSignatures(structMemberSignatures)
+          cjLibOutputPath(cjLibOutputPath), structMemberSignatures(structMemberSignatures),
+          sharedLibraryExtension(GlobalOptions::GetSharedLibraryExtension(targetOsType))
     {
     }
 
@@ -62,6 +65,7 @@ struct InteropContext {
     ASTFactory factory;
     const std::string& cjLibOutputPath;
     const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& structMemberSignatures;
+    const std::string sharedLibraryExtension;
 };
 
 } // namespace Cangjie::Interop::ObjC
