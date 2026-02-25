@@ -63,7 +63,7 @@ void Devirtualization::RunOnFunc(const Func* func, CHIRBuilder& builder)
         // Grab the function from the classMap.
         auto [realCallee, thisType] = FindRealCallee(builder, resVal,
             {invoke->GetMethodName(), std::move(paramTys), invoke->GetInstantiatedTypeArgs()});
-        if (!realCallee) {
+        if (realCallee == std::nullopt || realCallee == nullptr) {
             return;
         }
         if (thisType->IsGenericRelated()) {
@@ -88,7 +88,8 @@ void Devirtualization::RunOnFunc(const Func* func, CHIRBuilder& builder)
                 return;
             }
         }
-        rewriteInfos.emplace_back(RewriteInfo{invoke, realCallee, thisType, invoke->GetInstantiatedTypeArgs()});
+        rewriteInfos.emplace_back(
+            RewriteInfo{invoke, realCallee.value(), thisType, invoke->GetInstantiatedTypeArgs()});
     };
 
     const auto actionAfterVisitExpr = [](const TypeDomain&, Expression*, size_t) {};
@@ -472,7 +473,7 @@ bool Devirtualization::IsValidSubType(CHIRBuilder& builder, const Type* expected
     return true;
 }
 
-std::pair<FuncBase*, Type*> Devirtualization::FindRealCallee(
+Devirtualization::CallCandidate Devirtualization::FindRealCallee(
     CHIRBuilder& builder, const TypeValue* typeState, const FuncSig& method) const
 {
     auto typeStateKind = typeState->GetTypeKind();
@@ -506,7 +507,7 @@ std::pair<FuncBase*, Type*> Devirtualization::FindRealCallee(
     } else {
         // The specific type is an interface or a class, and the state kind is SUBCLASS_OF.
         ClassType* specificType1 = StaticCast<ClassType*>(typeState->GetSpecificType());
-        std::pair<FuncBase*, Type*> res{nullptr, nullptr};
+        CallCandidate res;
         CollectCandidates(builder, specificType1, res, method);
         return res;
     }
@@ -533,7 +534,7 @@ FuncBase* Devirtualization::GetCandidateFromSpecificType(
 }
 
 void Devirtualization::CollectCandidates(
-    CHIRBuilder& builder, ClassType* specific, std::pair<FuncBase*, Type*>& res, const FuncSig& method) const
+    CHIRBuilder& builder, ClassType* specific, CallCandidate& res, const FuncSig& method) const
 {
     auto specificDef = specific->GetClassDef();
     if (specificDef->CanBeInherited() && !devirtFuncInfo.CheckCustomTypeInternal(*specificDef)) {
@@ -543,9 +544,9 @@ void Devirtualization::CollectCandidates(
     // 1. Get candidate from this type
     auto targetFromSpecificType = GetCandidateFromSpecificType(builder, *specific, method);
     if (targetFromSpecificType != nullptr) {
-        if (res.first == nullptr) {
+        if (res.candidateFunc == std::nullopt) {
             res = {targetFromSpecificType, specific};
-        } else if (res.first != targetFromSpecificType) {
+        } else if (res.candidateFunc.value() != targetFromSpecificType) {
             res = {nullptr, nullptr};
             return;
         }
@@ -581,9 +582,9 @@ void Devirtualization::CollectCandidates(
                     }
                     if (auto target = FindFunctionInVtable(
                         vtableIt.GetSrcParentType(), vtableIt.GetVirtualMethods(), method, builder)) {
-                        if (res.first == nullptr) {
+                        if (res.candidateFunc == std::nullopt) {
                             res = {target, subtypeCustom};
-                        } else if (res.first != target) {
+                        } else if (res.candidateFunc.value() != target) {
                             res = {nullptr, nullptr};
                             return;
                         }

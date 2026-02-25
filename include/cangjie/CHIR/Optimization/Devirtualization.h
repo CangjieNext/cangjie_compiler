@@ -33,6 +33,11 @@ public:
         Apply* newApply = nullptr;
     };
 
+    struct CallCandidate {
+        std::optional<FuncBase*> candidateFunc = std::nullopt;
+        Type* thisType = nullptr;
+    };
+
     Devirtualization() = delete;
 
     /**
@@ -74,7 +79,7 @@ public:
 private:
     void RunOnFunc(const Func* func, CHIRBuilder& builder);
 
-    std::pair<FuncBase*, Type*> FindRealCallee(
+    CallCandidate FindRealCallee(
         CHIRBuilder& builder, const TypeValue* typeState, const FuncSig& method) const;
 
     bool IsValidSubType(CHIRBuilder& builder, const Type* expected, Type* specific,
@@ -85,7 +90,7 @@ private:
     void InstantiateFuncIfPossible(CHIRBuilder& builder, std::vector<RewriteInfo>& rewriteInfoList);
 
     void CollectCandidates(
-        CHIRBuilder& builder, ClassType* specific, std::pair<FuncBase*, Type*>& res, const FuncSig& method) const;
+        CHIRBuilder& builder, ClassType* specific, CallCandidate& res, const FuncSig& method) const;
 
     FuncBase* GetCandidateFromSpecificType(
         CHIRBuilder& builder, ClassType& specific, const FuncSig& method) const;
