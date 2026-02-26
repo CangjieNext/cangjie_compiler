@@ -6,16 +6,16 @@
 
 /include/cangjie/AST/ @Augus_Jan
 /include/cangjie/AST/ASTKind.inc @mini-tang
-/include/cangjie/Basic/ @Cangjie-hljyaozhen
+/include/cangjie/Basic/ @kkkkkkkbbbbbbb
 /include/cangjie/CHIR/ @Mr_Kang_Yi
 /include/cangjie/CHIR/Interpreter @claudio_
-/include/cangjie/CHIR/Serializer @Cangjie-hljyaozhen
+/include/cangjie/CHIR/Serializer @Mr_Kang_Yi
 /include/cangjie/CodeGen/ @Yessy
 /include/cangjie/ConditionalCompilation/ @mini-tang
 /include/cangjie/Driver/ @neilliuistaken
 /include/cangjie/Frontend/ @wyq1213
 /include/cangjie/FrontendTool/ @wyq1213
-/include/cangjie/IncrementalCompilation/ @Cangjie-hljyaozhen
+/include/cangjie/IncrementalCompilation/ @kkkkkkkbbbbbbb
 /include/cangjie/Lex/ @kkkkkkkbbbbbbb
 /include/cangjie/Lex/Tokens.inc @mini-tang
 /include/cangjie/Macro/ @mini-tang
@@ -32,14 +32,14 @@
 /schema/ModuleFormat.fbs @Augus_Jan
 
 /src/AST/ @Augus_Jan
-/src/Basic/ @Cangjie-hljyaozhen
+/src/Basic/ @kkkkkkkbbbbbbb
 /src/CHIR/ @Mr_Kang_Yi
 /src/CodeGen/ @Yessy
 /src/ConditionalCompilation/ @mini-tang
 /src/Driver/ @neilliuistaken
 /src/Frontend/ @wyq1213
 /src/FrontendTool/ @wyq1213
-/src/IncrementalCompilation/ @Cangjie-hljyaozhen
+/src/IncrementalCompilation/ @kkkkkkkbbbbbbb
 /src/Lex/ @kkkkkkkbbbbbbb
 /src/Macro/ @mini-tang
 /src/Mangle/ @Yessy
@@ -61,13 +61,13 @@
 /third_party/ @neilliuistaken
 
 /unittests/AST/ @Augus_Jan
-/unittests/Basic/ @Cangjie-hljyaozhen
+/unittests/Basic/ @kkkkkkkbbbbbbb
 /unittests/CHIR/ @Mr_Kang_Yi
 /unittests/CodeGen/ @Yessy
 /unittests/ConditionalCompilation/ @mini-tang
 /unittests/Driver/ @neilliuistaken
 /unittests/Frontend/ @wyq1213
-/unittests/IncrCompile/ @Cangjie-hljyaozhen
+/unittests/IncrCompile/ @kkkkkkkbbbbbbb
 /unittests/Lex/ @kkkkkkkbbbbbbb
 /unittests/Macro/ @mini-tang
 /unittests/Modules/ @Augus_Jan
