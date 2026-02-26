@@ -737,6 +737,9 @@ OPTION("--disable-codegen", DISABLE_CODEGEN, FLAG, { BACKEND(ALL) },
 OPTION("--disable-reflection", DISABLE_REFLECTION, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Disable reflection")
+OPTION("--no-release-ast", NO_RELEASE_AST, FLAG, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Skip AST memory release after CHIR lowering (for debugging)")
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 OPTION("--stack-trace-format", STACK_TRACE_FORMAT, SEPARATED, {BACKEND(CJNATIVE)},
     {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, stack_trace_format, SINGLE_OCCURRENCE,

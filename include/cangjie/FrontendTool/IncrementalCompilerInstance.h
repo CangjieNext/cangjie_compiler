@@ -38,6 +38,7 @@ public:
     bool PerformGenericInstantiation() override;
     bool PerformMangling() override;
     bool PerformCHIRCompilation() override;
+    bool PerformASTRelease() override;
     bool PerformCodeGen() override;
     bool PerformCjoSaving() override;
     virtual bool PerformResultsSaving() override;

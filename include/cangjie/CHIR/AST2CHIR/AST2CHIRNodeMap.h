@@ -62,6 +62,11 @@ public:
         (void)cache.erase(&node);
     }
 
+    void Clear()
+    {
+        cache.clear();
+    }
+
 private:
     std::unordered_map<const Cangjie::AST::Node*, T*> cache;
 };

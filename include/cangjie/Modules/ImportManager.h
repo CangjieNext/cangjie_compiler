@@ -347,6 +347,27 @@ public:
     void DeleteASTWriters() noexcept;
     void DeleteASTLoaders() noexcept;
 
+    /**
+     * Clear AST references held by ImportManager after CHIR lowering.
+     * Releases imported packages via CjoManager and nullifies all AST pointer holders.
+     */
+    void ClearASTReferences()
+    {
+        curPackage = nullptr;
+        cjoManager->ClearImportedPackages();
+        // Clear all maps holding AST Decl/Package pointers to prevent dangling references.
+        fileImportedDeclsMap.clear();
+        fileUsedMacroDeclsMap.clear();
+        importedDeclsMap.clear();
+        DeleteASTWriters();  // Must delete ASTWriter* before clearing to avoid memory leak.
+        directMacroDeps.clear();
+        declsImportedByNodeMap.clear();
+        declToTypeAlias.clear();
+        if (dependencyGraph) {
+            dependencyGraph.reset();
+        }
+    }
+
     std::unordered_map<std::string, std::string> GetDepPkgCjoPaths() const
     {
         return cjoFilePaths;

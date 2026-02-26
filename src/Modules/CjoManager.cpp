@@ -644,6 +644,22 @@ void CjoManager::RemovePackage(const std::string& fullPkgName, const Ptr<Package
     }
 }
 
+void CjoManager::ClearImportedPackages() const
+{
+    // Release ownership of imported AST packages to reclaim memory.
+    impl->GetImportedPackages().clear();
+    // Clear all AST pointer fields in PackageInfo to eliminate dangling references.
+    // After importedPackages.clear(), the AST::Package objects are destroyed, so
+    // pkg, pkgDecl, exportIDDeclMap, declMap, implicitDeclMap all become dangling.
+    for (auto& [name, info] : impl->GetPackageNameMap()) {
+        info->pkg = nullptr;
+        info->pkgDecl.reset();
+        info->exportIDDeclMap.clear();
+        info->declMap.clear();
+        info->implicitDeclMap.clear();
+    }
+}
+
 void CjoManagerImpl::ClearForReBuildIndex()
 {
     // Delete all AST loaders first
