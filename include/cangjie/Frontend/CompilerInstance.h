@@ -58,6 +58,7 @@ enum class CompileStage {
     MANGLING,              /**< Mangling all decls. */
     SAVE_CJO,              /**< Save CJO. */
     CHIR,                  /**< CHIR. */
+    RELEASE_AST,           /**< Release AST memory after CHIR lowering. */
     CODEGEN,               /**< Generate target code. */
     SAVE_RESULTS,          /**< Save AST and CHIR results to files. */
 
@@ -240,6 +241,23 @@ public:
     virtual bool PerformResultsSaving()
     {
         return true;
+    }
+
+    /**
+     * Release AST memory after CHIR lowering is complete.
+     *
+     * @pre  CHIR lowering has completed (CompileStage::CHIR executed).
+     * @post AST nodes, ASTContext, and related managers are freed.
+     *       GetSourcePackages() returns empty. IsASTReleased() returns true.
+     */
+    virtual bool PerformASTRelease();
+
+    /**
+     * Check whether AST memory has been released.
+     */
+    bool IsASTReleased() const
+    {
+        return astReleased;
     }
 
     /**
@@ -529,6 +547,21 @@ public:
         buildTrie = flag;
     }
 
+    /**
+     * Minimal metadata extracted from AST::Package before release, used by CodeGen.
+     * Decouples CodeGen from srcPkgs so it works after AST is freed.
+     */
+    struct PackageCodeGenInfo {
+        std::string fullPackageName;
+        bool isEmpty = false;
+    };
+
+    /// Public accessors for AST release state, used by DefaultCIImpl and subclasses.
+    const std::vector<PackageCodeGenInfo>& GetCodeGenPkgInfos() const { return codeGenPkgInfos; }
+    bool IsResultsSaved() const { return resultsSaved; }
+    void SetResultsSaved(bool saved) { resultsSaved = saved; }
+    bool IsCacheWritten() const { return cacheWritten; }
+
     /************** Used by Incremental Compilation End **************/
 
     bool DeserializeCHIR();
@@ -552,6 +585,28 @@ protected:
 
     CompileStrategy* compileStrategy = nullptr;
     TypeChecker* typeChecker = nullptr;
+
+    /// AST release state tracking.
+    bool astReleased = false;
+
+    /// Guards against double cache-write after AST release moves it earlier.
+    bool cacheWritten = false;
+
+    /// Guards against double results-save after AST release moves it earlier.
+    bool resultsSaved = false;
+
+    std::vector<PackageCodeGenInfo> codeGenPkgInfos;
+
+    /// Extract CodeGen metadata from srcPkgs before AST release.
+    void PrepareCodeGenInfo();
+
+    /**
+     * Release AST memory. Only callable from PerformASTRelease() or subclass overrides.
+     *
+     * Clears AST nodes, ASTContext, managers, and all dangling AST pointer holders.
+     * Destruction order: CHIR refs → CompilerInstance members → managers → AST core.
+     */
+    void ReleaseASTMemory();
     // Modularize compilation.
     bool ModularizeCompilation();
     // Build Trie tree or not;
@@ -571,6 +626,10 @@ protected:
     void CacheSemaUsage(SemanticInfo&& info);
     void UpdateMangleNameForCachedInfo();
 
+    virtual void UpdateCachedInfo();
+    bool WriteCachedInfo();
+    bool ShouldWriteCacheFile() const;
+
 private:
     // Guess the CANGJIE_HOME.
     bool DetectCangjieHome();
@@ -585,10 +644,6 @@ private:
     std::unordered_map<Ptr<AST::Package>, std::unique_ptr<ASTContext>> pkgCtxMap;
 
     std::vector<std::string> depPackageInfo;
-
-    virtual void UpdateCachedInfo();
-    bool WriteCachedInfo();
-    bool ShouldWriteCacheFile() const;
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     std::vector<HANDLE> pluginHandles;

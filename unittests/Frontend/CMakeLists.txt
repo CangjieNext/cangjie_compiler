@@ -11,3 +11,11 @@ target_link_libraries(
     GTest::gtest
     GTest::gtest_main)
 add_test(NAME CompilerInstanceTest COMMAND CompilerInstanceTest)
+
+add_executable(ASTReleaseTest ASTReleaseTest.cpp ${CANGJIE_SRC_OBJECTS})
+target_link_libraries(
+    ASTReleaseTest
+    ${LINK_LIBS}
+    GTest::gtest
+    GTest::gtest_main)
+add_test(NAME ASTReleaseTest COMMAND ASTReleaseTest)

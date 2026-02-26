@@ -70,6 +70,17 @@ public:
     std::unordered_map<std::string, std::set<std::string>> packageToOtherSccMap;
     std::unordered_map<std::string, std::unique_ptr<PackageInfo>> packageInfoMap;
 
+    /**
+     * Clear AST-derived dependency data after CHIR lowering.
+     * The dependency info has already been resolved and is no longer needed.
+     */
+    void ClearASTReferences()
+    {
+        packageToOtherSccMap.clear();
+        packageInfoMap.clear();
+        orderedPackageInfos.clear();
+    }
+
 private:
     ImportManager& importManager;
     std::vector<std::vector<PackageInfo*>> orderedPackageInfos;

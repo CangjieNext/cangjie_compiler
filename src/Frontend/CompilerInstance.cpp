@@ -84,21 +84,26 @@ CompilerInstance::CompilerInstance(CompilerInvocation& invocation, DiagnosticEng
 
 CompilerInstance::~CompilerInstance()
 {
-    // AST must be released before ASTContext for correct symbol detaching.
-    srcPkgs.clear();
-    pkgCtxMap.clear();
+    if (!astReleased) {
+        // AST must be released before ASTContext for correct symbol detaching.
+        srcPkgs.clear();
+        pkgCtxMap.clear();
+        delete typeChecker;
+        typeChecker = nullptr;
+        delete typeManager;
+        typeManager = nullptr;
+        delete testManager;
+        testManager = nullptr;
+        delete gim;
+        gim = nullptr;
+    }
+    // These resources must be cleaned regardless of AST release state.
     delete compileStrategy;
     compileStrategy = nullptr;
-    delete typeChecker;
-    typeChecker = nullptr;
-    delete typeManager;
-    typeManager = nullptr;
-    delete testManager;
-    testManager = nullptr;
-    delete gim;
-    gim = nullptr;
     delete packageManager;
     packageManager = nullptr;
+    // mangler is unique_ptr, auto-destructed.
+    // importManager is a stack member, auto-destructed.
 }
 
 bool CompilerInstance::InitCompilerInstance()
@@ -118,6 +123,7 @@ bool CompilerInstance::InitCompilerInstance()
     performMap.insert_or_assign(CompileStage::MANGLING, &CompilerInstance::PerformMangling);
     performMap.insert_or_assign(CompileStage::SAVE_CJO, &CompilerInstance::PerformCjoSaving);
     performMap.insert_or_assign(CompileStage::CHIR, &CompilerInstance::PerformCHIRCompilation);
+    performMap.insert_or_assign(CompileStage::RELEASE_AST, &CompilerInstance::PerformASTRelease);
     performMap.insert_or_assign(CompileStage::CODEGEN, &CompilerInstance::PerformCodeGen);
     performMap.insert_or_assign(CompileStage::SAVE_RESULTS, &CompilerInstance::PerformResultsSaving);
     return true;
@@ -395,6 +401,9 @@ void CompilerInstance::CacheSemaUsage(SemanticInfo&& info)
 
 bool CompilerInstance::ShouldWriteCacheFile() const
 {
+    if (astReleased) {
+        return false;
+    }
     if (!invocation.globalOptions.enIncrementalCompilation) {
         return false;
     }
@@ -484,12 +493,137 @@ bool CompilerInstance::WriteCachedInfo()
 
 bool CompilerInstance::UpdateAndWriteCachedInfoToDisk()
 {
+    // If cache was already written during PerformASTRelease (before AST was freed), skip.
+    if (cacheWritten) {
+        return true;
+    }
     if (!ShouldWriteCacheFile()) {
         return true;
     }
 
     UpdateCachedInfo();
     return WriteCachedInfo();
+}
+
+void CompilerInstance::PrepareCodeGenInfo()
+{
+    if (!codeGenPkgInfos.empty()) {
+        return;
+    }
+    for (auto& srcPkg : srcPkgs) {
+        PackageCodeGenInfo info;
+        info.fullPackageName = srcPkg->fullPackageName;
+        info.isEmpty = srcPkg->IsEmpty();
+        codeGenPkgInfos.push_back(std::move(info));
+    }
+}
+
+bool CompilerInstance::PerformASTRelease()
+{
+    Utils::ProfileRecorder recorder("Main Stage", "Release AST");
+
+    // Always extract CodeGen metadata before potential release.
+    PrepareCodeGenInfo();
+
+    // Save results (e.g., CJO in CHIR output mode) before AST is freed.
+    // PerformResultsSaving() may need srcPkgs, so it must run before ReleaseASTMemory().
+    if (!resultsSaved) {
+        if (!PerformResultsSaving()) {
+            return false;  // Propagate save failure to abort compilation.
+        }
+        resultsSaved = true;
+    }
+
+    // Write incremental compilation cache before AST is freed (ADR-009).
+    // WriteCachedInfo dereferences srcPkgs[0], order, varAndFuncDep, semaInfo.usages.
+    if (ShouldWriteCacheFile() && !cacheWritten) {
+        UpdateCachedInfo();
+        WriteCachedInfo();
+        cacheWritten = true;
+    }
+
+    // Allow skipping AST release for debugging (e.g., ASan leak analysis).
+    if (invocation.globalOptions.noReleaseAST) {
+        return true;
+    }
+
+    ReleaseASTMemory();
+    return true;
+}
+
+void CompilerInstance::ReleaseASTMemory()
+{
+    if (astReleased) {
+        return;
+    }
+
+    // ═══════════════════════════════════════════════════
+    // Phase 1: Clear CHIR-layer AST references
+    // ═══════════════════════════════════════════════════
+
+    // 1a. Global annotation info (holds AST ClassDef*/Decl* pointers)
+    CHIR::ClearGlobalAnnotationInfo();
+
+    // ═══════════════════════════════════════════════════
+    // Phase 2: Clear CompilerInstance direct member AST references
+    // ═══════════════════════════════════════════════════
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    astPkg2chirPkgMap.clear();
+#endif
+    currentPkg = nullptr;
+    mangledName2DeclMap.clear();
+    rawMangleName2DeclMap.clear();
+    declsWithDuplicatedRawMangleName.clear();
+    directExtends.clear();
+    order.clear();
+    chirInfo.ccTys.clear();
+    pkgs.clear();
+
+    // ═══════════════════════════════════════════════════
+    // Phase 3: Release managers (destruction order matters)
+    // ═══════════════════════════════════════════════════
+
+    // 3a. TypeChecker holds TypeManager& reference, must be freed first.
+    delete typeChecker;
+    typeChecker = nullptr;
+
+    // 3b. TypeManager holds 15+ AST pointer collections.
+    delete typeManager;
+    typeManager = nullptr;
+
+    // 3c. GenericInstantiationManager
+    delete gim;
+    gim = nullptr;
+
+    // 3d. TestManager holds ImportManager and TypeManager references.
+    delete testManager;
+    testManager = nullptr;
+
+    // 3e. BaseMangler — ManglerContext holds AST pointer maps.
+    mangler.reset();
+
+    // 3f. ImportManager — stack member, clear AST references and release imported packages.
+    importManager.ClearASTReferences();
+
+    // 3g. PackageManager — clear resolved dependency data.
+    if (packageManager) {
+        packageManager->ClearASTReferences();
+    }
+
+    // ═══════════════════════════════════════════════════
+    // Phase 4: Release AST core data (strict order)
+    // ═══════════════════════════════════════════════════
+
+    // 4a. Release AST nodes first (triggers Symbol detach).
+    srcPkgs.clear();
+
+    // 4b. Release ASTContext (depends on AST nodes being destructed).
+    pkgCtxMap.clear();
+
+    // ═══════════════════════════════════════════════════
+    // Phase 5: Mark completion
+    // ═══════════════════════════════════════════════════
+    astReleased = true;
 }
 
 bool CompilerInstance::CalculateASTCache()
@@ -933,6 +1067,9 @@ SourceManager& CompilerInstance::GetSourceManager()
 
 std::vector<Ptr<Package>> CompilerInstance::GetSourcePackages()
 {
+    if (astReleased) {
+        return {};
+    }
     std::vector<Ptr<Package>> packages;
     for (auto& srcPkg : srcPkgs) {
         packages.push_back(srcPkg.get());

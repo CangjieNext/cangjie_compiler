@@ -1029,6 +1029,7 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
         return true;
     }},
     { Options::ID::DISABLE_REFLECTION, OPTION_TRUE_ACTION(opts.disableReflection = true) },
+    { Options::ID::NO_RELEASE_AST, OPTION_TRUE_ACTION(opts.noReleaseAST = true) },
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     { Options::ID::FUNC_SECTIONS, OPTION_TRUE_ACTION(opts.enableFuncSections = true) },
     { Options::ID::NO_FUNC_SECTIONS, OPTION_TRUE_ACTION(opts.enableFuncSections = false) },

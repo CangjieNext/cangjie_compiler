@@ -58,6 +58,10 @@ public:
             }
         }
     }
+    std::vector<OwnedPtr<AST::Package>>& GetImportedPackages()
+    {
+        return importedPackages;
+    }
     auto AddLoadedPackages(const std::string& pkgName)
     {
         return loadedPackages.emplace(pkgName);
