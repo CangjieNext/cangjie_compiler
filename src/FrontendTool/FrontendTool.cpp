@@ -144,19 +144,15 @@ static bool ExecuteCompile(DefaultCompilerInstance& instance)
     }
 
     // Process compilation of frontend.
-    if (!instance.Compile(CompileStage::CHIR)) {
-        return false;
+    // The pipeline now includes RELEASE_AST between CHIR and CODEGEN,
+    // so AST memory is freed before code generation begins.
+    CompileStage endStage = CompileStage::SAVE_RESULTS;
+    if (isEmitCHIR) {
+        endStage = CompileStage::RELEASE_AST;
+    } else if (instance.invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR) {
+        endStage = CompileStage::SAVE_RESULTS;
     }
-    bool res = true;
-    if (!isEmitCHIR && instance.invocation.globalOptions.outputMode != GlobalOptions::OutputMode::CHIR) {
-        Cangjie::ICE::TriggerPointSetter iceSetter(CompileStage::CODEGEN);
-        res = instance.PerformCodeGen() && res;
-    }
-    if (!isEmitCHIR) {
-        Cangjie::ICE::TriggerPointSetter iceSetter(CompileStage::SAVE_RESULTS);
-        res = instance.PerformResultsSaving() && res;
-    }
-    return res;
+    return instance.Compile(endStage);
 }
 
 int Cangjie::ExecuteFrontend(const std::string& exePath, const std::vector<std::string>& args,

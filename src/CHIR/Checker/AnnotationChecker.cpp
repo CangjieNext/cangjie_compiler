@@ -50,6 +50,13 @@ std::vector<CustomAnnoInfoOnType> g_typeAnnoInfo{};
 std::vector<CustomAnnoInfoOnDecl> g_valueAnnoInfo{}; // custom annotation info on var, func, and prop
 } // namespace
 
+void ClearGlobalAnnotationInfo()
+{
+    g_annoInfo.clear();
+    g_typeAnnoInfo.clear();
+    g_valueAnnoInfo.clear();
+}
+
 class AnnotationTranslator {
 public:
     AnnotationTranslator(Translator& translator, CHIRBuilder& builder, const GlobalOptions& opts)

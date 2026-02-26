@@ -29,6 +29,16 @@ public:
         : typeMap(typeMap), globalNominalCache(globalNominalCache)
     {
     }
+
+    /**
+     * Clear AST type cache to release AST::Ty* keys after CHIR lowering.
+     * CHIR types themselves remain valid (owned by CHIRContext).
+     */
+    void ClearASTTypeCache()
+    {
+        typeMap.clear();
+        globalNominalCache.Clear();
+    }
 };
 // typeTranslate
 class CHIRType {

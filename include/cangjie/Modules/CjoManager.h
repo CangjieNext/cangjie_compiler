@@ -115,6 +115,12 @@ public:
     void ClearCjoCache() const;
     void DeleteASTLoaders() const noexcept;
 
+    /**
+     * Release imported packages to reclaim AST memory after CHIR lowering.
+     * Clears the importedPackages ownership vector and nullifies package pointers in packageNameMap.
+     */
+    void ClearImportedPackages() const;
+
     void ClearVisitedPkgs() const;
     void ClearForReBuildIndex() const;
     bool HasBuildIndex() const;

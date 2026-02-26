@@ -465,6 +465,49 @@ bool IncrementalCompilerInstance::PerformCHIRCompilation()
     return ret;
 }
 
+bool IncrementalCompilerInstance::PerformASTRelease()
+{
+    Utils::ProfileRecorder recorder("Main Stage", "Release AST");
+
+    // Always extract CodeGen metadata before potential release.
+    PrepareCodeGenInfo();
+
+    // For NO_CHANGE / EMPTY_PKG, no AST was built — nothing to release.
+    if (kind == IncreKind::NO_CHANGE || kind == IncreKind::EMPTY_PKG) {
+        return true;
+    }
+
+    // Save results before AST is freed (ADR-009, F-02).
+    // PerformResultsSaving needs srcPkgs for ExportASTSignature and SaveCjo.
+    if (!resultsSaved) {
+        if (!PerformResultsSaving()) {
+            return false;  // Propagate save failure to abort compilation.
+        }
+        resultsSaved = true;
+    }
+
+    // Write incremental compilation cache before AST is freed (ADR-009).
+    if (ShouldWriteCacheFile() && !cacheWritten) {
+        UpdateCachedInfo();
+        WriteCachedInfo();
+        cacheWritten = true;
+    }
+
+    // Allow skipping AST release for debugging (e.g., ASan leak analysis).
+    if (invocation.globalOptions.noReleaseAST) {
+        return true;
+    }
+
+    // Clean incremental-compilation-specific AST pointers.
+    changedTypes.clear();
+    declsToBeReCompiled.clear();
+    cacheMangles.Clear();
+
+    // Delegate to base class for the 5-phase cleanup.
+    ReleaseASTMemory();
+    return true;
+}
+
 void IncrementalCompilerInstance::LoadCachedCodegenResult() const
 {
     for (auto fileName : cachedInfo.bitcodeFilesName) {
@@ -478,9 +521,17 @@ bool IncrementalCompilerInstance::PerformCodeGen()
 {
     Utils::ProfileRecorder recorder("Main Stage", "CodeGen");
     if (kind == IncreKind::NO_CHANGE) {
-        for (auto& srcPkg : GetSourcePackages()) {
-            LoadCachedCodegenResult();
-            invocation.globalOptions.UpdateCachedDirName(srcPkg->fullPackageName);
+        // Use codeGenPkgInfos if AST is released, otherwise use srcPkgs.
+        if (IsASTReleased()) {
+            for (auto& info : codeGenPkgInfos) {
+                LoadCachedCodegenResult();
+                invocation.globalOptions.UpdateCachedDirName(info.fullPackageName);
+            }
+        } else {
+            for (auto& srcPkg : GetSourcePackages()) {
+                LoadCachedCodegenResult();
+                invocation.globalOptions.UpdateCachedDirName(srcPkg->fullPackageName);
+            }
         }
         return true;
     }
@@ -488,8 +539,14 @@ bool IncrementalCompilerInstance::PerformCodeGen()
     // So this function rearranges the dependencies of all packages.
     RearrangeImportedPackageDependence();
     bool ret = true;
-    for (auto& srcPkg : GetSourcePackages()) {
-        ret = ret && CodegenOnePackage(*srcPkg, kind == IncreKind::INCR);
+    if (IsASTReleased()) {
+        for (auto& info : codeGenPkgInfos) {
+            ret = ret && CodegenOnePackage(info.fullPackageName, info.isEmpty, kind == IncreKind::INCR);
+        }
+    } else {
+        for (auto& srcPkg : GetSourcePackages()) {
+            ret = ret && CodegenOnePackage(*srcPkg, kind == IncreKind::INCR);
+        }
     }
     return ret;
 }
@@ -518,6 +575,9 @@ bool IncrementalCompilerInstance::PerformCjoSaving()
 
 bool IncrementalCompilerInstance::PerformResultsSaving()
 {
+    if (resultsSaved) {
+        return true;
+    }
     Utils::ProfileRecorder recorder("Main Stage", "Save results");
     if (kind == IncreKind::NO_CHANGE || kind == IncreKind::EMPTY_PKG) {
         return true;

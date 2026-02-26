@@ -224,5 +224,12 @@ private:
     std::vector<std::pair<const AST::Decl*, Func*>> annoFactoryFuncs;
     AST2CHIRNodeMap<CustomTypeDef> globalNominalCache;
 };
+
+/**
+ * Clear global annotation info collected during CHIR lowering.
+ * Must be called during AST release to avoid dangling AST pointers in the global maps.
+ */
+void ClearGlobalAnnotationInfo();
+
 } // namespace Cangjie::CHIR
 #endif

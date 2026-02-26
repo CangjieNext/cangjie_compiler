@@ -47,11 +47,13 @@ public:
     bool SaveCjo(const std::vector<Ptr<Package>>& pkgs);
     void RearrangeImportedPackageDependence();
     bool CodegenOnePackage(AST::Package& pkg, bool enableIncrement);
+    bool CodegenOnePackageByName(const std::string& fullPackageName, bool isEmpty, bool enableIncrement);
 
 private:
     DefaultCompilerInstance& ci;
 
     bool EmitLLVMSimilarBytecode(AST::Package& pkg, bool enableIncrement);
+    bool EmitLLVMSimilarBytecodeByName(const std::string& fullPackageName, bool enableIncrement);
     std::string GenerateFileName(const std::string& fullPackageName, const std::string& idx) const;
     std::string GenerateBCFilePathAndUpdateToInvocation(
         const TempFileKind& kind, const std::string& pkgName, const std::string& idx = "");
@@ -252,6 +254,85 @@ bool DefaultCIImpl::CodegenOnePackage(Package& pkg, bool enableIncrement)
 #endif
     return true;
 }
+
+bool DefaultCIImpl::CodegenOnePackageByName(
+    const std::string& fullPackageName, bool isEmpty, bool enableIncrement)
+{
+    if (isEmpty) {
+        return true;
+    }
+    if (ci.invocation.globalOptions.disableCodeGen) {
+        return true;
+    }
+
+    auto backend = ci.invocation.globalOptions.backend;
+    switch (backend) {
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+        case Triple::BackendType::CJNATIVE: {
+            if (!EmitLLVMSimilarBytecodeByName(fullPackageName, enableIncrement)) {
+                return false;
+            }
+            break;
+        }
+#endif
+        case Triple::BackendType::UNKNOWN: {
+            Errorln("unknown backend");
+            break;
+        }
+        default:
+            return false;
+    }
+
+#ifdef SIGNAL_TEST
+    Cangjie::SignalTest::ExecuteSignalTestCallbackFunc(Cangjie::SignalTest::TriggerPointer::CODEGEN_POINTER);
+#endif
+    return true;
+}
+
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+bool DefaultCIImpl::EmitLLVMSimilarBytecodeByName(const std::string& fullPackageName, bool enableIncrement)
+{
+    // 1. translate CHIR to LLVM IR
+    CHIR::CHIRBuilder builder(ci.chirData.GetCHIRContext());
+    llvmModules = CodeGen::GenPackageModules(builder, ci.chirData, ci.invocation.globalOptions, ci, enableIncrement);
+
+    // 2. save LLVM IR to bc file
+    Utils::ProfileRecorder recorder("CodeGen", "Save bc file");
+    ci.invocation.globalOptions.UpdateCachedDirName(fullPackageName);
+    if (llvmModules.size() == 1) {
+        auto filePath = GenerateBCFilePathAndUpdateToInvocation(TempFileKind::T_BC, fullPackageName);
+        if (filePath.empty()) {
+            return false;
+        }
+        CodeGen::SavePackageModule(*llvmModules[0], filePath);
+    } else {
+        Utils::TaskQueue taskQueueSaveBitcode(llvmModules.size());
+        std::vector<std::string> allBCFilePath;
+        for (size_t i = 0; i < llvmModules.size(); ++i) {
+            auto filePath =
+                GenerateBCFilePathAndUpdateToInvocation(TempFileKind::T_BC, fullPackageName, std::to_string(i));
+            if (filePath.empty()) {
+                return false;
+            }
+            allBCFilePath.emplace_back(filePath);
+        }
+        for (size_t i = 0; i < llvmModules.size(); ++i) {
+            auto& module = *llvmModules[i];
+            auto& bcFilePath = allBCFilePath[i];
+            taskQueueSaveBitcode.AddTask<void>(
+                [&module, &bcFilePath]() { CodeGen::SavePackageModule(module, bcFilePath); });
+        }
+        taskQueueSaveBitcode.RunAndWaitForAllTasksCompleted();
+    }
+
+    if (ci.invocation.globalOptions.enIncrementalCompilation) {
+        auto fileName = GenerateFileName(fullPackageName, "");
+        ci.cachedInfo.bitcodeFilesName = std::vector<std::string>{fileName};
+    }
+    return true;
+}
+#endif
+
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 bool DefaultCIImpl::EmitLLVMSimilarBytecode(Package& pkg, bool enableIncrement)
 {
@@ -309,8 +390,15 @@ bool DefaultCIImpl::PerformCodeGen()
     // So this function rearranges the dependencies of all packages.
     RearrangeImportedPackageDependence();
     bool ret = true;
-    for (auto& srcPkg : ci.GetSourcePackages()) {
-        ret = ret && CodegenOnePackage(*srcPkg, false);
+    if (ci.IsASTReleased()) {
+        // AST has been freed — use pre-extracted PackageCodeGenInfo (ADR-002).
+        for (auto& info : ci.GetCodeGenPkgInfos()) {
+            ret = ret && CodegenOnePackageByName(info.fullPackageName, info.isEmpty, false);
+        }
+    } else {
+        for (auto& srcPkg : ci.GetSourcePackages()) {
+            ret = ret && CodegenOnePackage(*srcPkg, false);
+        }
     }
     return ret;
 }
@@ -328,6 +416,9 @@ bool DefaultCIImpl::PerformCjoSaving()
 
 bool DefaultCIImpl::PerformResultsSaving()
 {
+    if (ci.IsResultsSaved()) {
+        return true;
+    }
     if (ci.invocation.globalOptions.outputMode != GlobalOptions::OutputMode::CHIR) {
         return true;
     }
@@ -344,6 +435,9 @@ void DefaultCompilerInstance::DumpDepPackage()
 
 void DefaultCIImpl::RearrangeImportedPackageDependence()
 {
+    if (ci.IsASTReleased()) {
+        return;
+    }
     Utils::ProfileRecorder recorder("CodeGen", "RearrangeImportedPackageDependence");
     std::vector<Ptr<Package>> allImportedPackages;
     for (auto pd : ci.importManager.GetAllImportedPackages(true)) {
@@ -376,5 +470,10 @@ void DefaultCompilerInstance::RearrangeImportedPackageDependence() const
 bool DefaultCompilerInstance::CodegenOnePackage(AST::Package& pkg, bool enableIncrement) const
 {
     return impl->CodegenOnePackage(pkg, enableIncrement);
+}
+bool DefaultCompilerInstance::CodegenOnePackage(
+    const std::string& fullPackageName, bool isEmpty, bool enableIncrement) const
+{
+    return impl->CodegenOnePackageByName(fullPackageName, isEmpty, enableIncrement);
 }
 }

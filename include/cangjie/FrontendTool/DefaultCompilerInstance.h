@@ -43,6 +43,8 @@ protected:
     bool SaveCjo(const AST::Package& pkg) const;
     void RearrangeImportedPackageDependence() const;
     bool CodegenOnePackage(AST::Package& pkg, bool enableIncrement) const;
+    /// CodeGen path that works after AST release, using pre-extracted package name.
+    bool CodegenOnePackage(const std::string& fullPackageName, bool isEmpty, bool enableIncrement) const;
 
 private:
     class DefaultCIImpl* impl;

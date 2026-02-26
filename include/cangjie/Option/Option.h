@@ -637,6 +637,8 @@ public:
 
     bool disableReflection = false;
 
+    bool noReleaseAST = false; /**< Skip AST memory release after CHIR lowering (for debugging). */
+
     bool enablePgoInstrGen = false;
     bool enablePgoInstrUse = false;
     std::string pgoProfileFile = "";

@@ -303,6 +303,15 @@ private:
     void TranslateTopLevelDeclsInParallel();
     void TranslateInParallel(const std::vector<Ptr<const AST::Decl>>& decls);
 
+    // A-3: Release translated AST function bodies and initializers to reduce peak memory.
+    // Only the code block (FuncBody::body) is released; signature-level members (paramLists, retType)
+    // are preserved because GlobalDeclAnalysis and AST2CHIRCheck still reference them.
+    void ReleaseFuncBody(const AST::Decl& decl);
+    void ReleaseVarInitializer(AST::VarDeclAbstract& decl);
+    void ReleaseTranslatedNominalBodies(const AST::Package& pkg);
+    void ReleaseTranslatedInitializers(const InitOrder& initOrder);
+    void ReleaseAllTranslatedFuncBodies();
+
     /** @brief Returns true if the AST2Chir process is unsuccessfull **/
     bool HasFailed() const;
 
