@@ -412,9 +412,14 @@ void AST2CHIR::ReleaseAllTranslatedFuncBodies()
 void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initOrder)
 {
     Utils::ProfileRecorder recorder("AST to CHIR Translation", "TranslateAllDecls");
-    // step 1: translate nominal decls first
+    // step 1: translate nominal decls first (signatures only — method bodies are translated in step 3)
     TranslateNominalDecls(pkg);
-    ReleaseTranslatedNominalBodies(pkg);
+    // NOTE: Do NOT call ReleaseTranslatedNominalBodies() here.
+    // TranslateNominalDecls only translates signatures (types, params, attributes).
+    // Method bodies are translated in step 3 via globalAndMemberFuncs, and released there
+    // by ReleaseFuncBody (serial) or ReleaseAllTranslatedFuncBodies (parallel).
+    // Releasing here would null funcBody->body before step 3 translates it,
+    // causing null pointer dereference in HasDelegatedThisCall / TranslateNestedFunc.
 
     // step 2: translate initialization of global var
     TranslateInitOfGlobalVars(pkg, initOrder);
