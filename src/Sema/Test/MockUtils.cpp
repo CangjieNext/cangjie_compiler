@@ -583,7 +583,20 @@ OwnedPtr<Expr> MockUtils::WrapCallTypeArgsIntoArray(const Decl& decl)
     return arrayLitOfGetTypeCalls;
 }
 
-Ptr<ClassDecl> MockUtils::GetExtendedClassDecl(FuncDecl& decl) const
+Ptr<AST::Decl> MockUtils::GetOuterDecl(AST::Decl& decl) const
+{
+    if (!decl.outerDecl) {
+        return nullptr;
+    }
+
+    if (auto extendDecl = DynamicCast<ExtendDecl>(decl.outerDecl)) {
+        return Ty::GetDeclOfTy(extendDecl->extendedType->ty);
+    }
+
+    return decl.outerDecl;
+}
+
+Ptr<Decl> MockUtils::GetExtendedTypeDecl(FuncDecl& decl) const
 {
     CJC_ASSERT(decl.TestAttr(Attribute::IN_EXTEND));
 
@@ -593,14 +606,7 @@ Ptr<ClassDecl> MockUtils::GetExtendedClassDecl(FuncDecl& decl) const
     Ptr<ExtendDecl> extendDecl = As<ASTKind::EXTEND_DECL>(outerDecl);
     CJC_NULLPTR_CHECK(extendDecl);
 
-    Ptr<RefType> extendedRefType = As<ASTKind::REF_TYPE>(extendDecl->extendedType);
-    CJC_NULLPTR_CHECK(extendedRefType);
-    CJC_NULLPTR_CHECK(extendedRefType->ref.target);
-
-    Ptr<ClassDecl> classLikeDecl = As<ASTKind::CLASS_DECL>(extendedRefType->ref.target);
-    CJC_NULLPTR_CHECK(classLikeDecl);
-
-    return classLikeDecl;
+    return Ty::GetDeclOfTy(extendDecl->extendedType->ty);
 }
 
 void MockUtils::PrependFuncGenericSubst(
@@ -741,12 +747,18 @@ std::vector<Ptr<Ty>> MockUtils::AddGenericIfNeeded(Decl& originalDecl, Decl& moc
 
 void MockUtils::SetGetTypeForTypeParamDecl(Package& pkg)
 {
-    getTypeForTypeParamDecl = GenerateGetTypeForTypeParamIntrinsic(pkg, typeManager, stringDecl->ty);
+    getTypeForTypeParamDecl = FindGlobalDecl<FuncDecl>(pkg.files[0], GET_TYPE_FOR_TYPE_PARAMETER_FUNC_NAME);
+    if (!getTypeForTypeParamDecl) {
+        getTypeForTypeParamDecl = GenerateGetTypeForTypeParamIntrinsic(pkg, typeManager, stringDecl->ty);
+    }
 }
 
 void MockUtils::SetIsSubtypeTypes(Package& pkg)
 {
-    isSubtypeTypesDecl = GenerateIsSubtypeTypesIntrinsic(pkg, typeManager);
+    isSubtypeTypesDecl = FindGlobalDecl<FuncDecl>(pkg.files[0], IS_SUBTYPE_TYPES_FUNC_NAME);
+    if (!isSubtypeTypesDecl) {
+        isSubtypeTypesDecl = GenerateIsSubtypeTypesIntrinsic(pkg, typeManager);
+    }
 }
 
 OwnedPtr<CallExpr> MockUtils::CreateZeroValue(Ptr<Ty> ty, File& curFile) const

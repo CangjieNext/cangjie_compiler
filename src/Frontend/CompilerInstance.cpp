@@ -413,6 +413,10 @@ bool CompilerInstance::ShouldWriteCacheFile() const
     if (srcPkgs.size() != 1) {
         InternalError("source packages should only have one element.");
     }
+    if (!invocation.globalOptions.compilePackage && invocation.globalOptions.srcFiles.empty() &&
+        !invocation.globalOptions.inputObjs.empty()) {
+        return false;
+    }
     // if current package is empty package, we don't write cache file
     if (srcPkgs[0]->IsEmpty() || kind == IncreKind::NO_CHANGE) {
         return false;
@@ -972,9 +976,7 @@ ASTContext* CompilerInstance::GetASTContextByPackage(Ptr<Package> pkg) const
 
 void CompilerInstance::AddSourceToMember()
 {
-    if (!pkgs.empty()) {
-        return;
-    }
+    pkgs.clear(); // clear the pkgs to avoid the cache of the previous compilation in lsp.
     for (auto& it : GetSourcePackages()) {
         pkgs.push_back(it);
     }
@@ -1015,6 +1017,7 @@ bool CompilerInstance::ImportPackages()
 
 void CompilerInstance::MergePackages()
 {
+    pkgCtxMap.clear(); // clear the pkgCtxMap to avoid the cache of the previous compilation in lsp.
     for (auto& pkg : srcPkgs) {
         pkgCtxMap.insert_or_assign(pkg.get(), std::make_unique<ASTContext>(diag, *pkg));
     }
