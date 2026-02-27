@@ -19,6 +19,7 @@
 #include "ScopeManager.h"
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Walker.h"
@@ -1488,11 +1489,6 @@ private:
     std::unordered_map<Ptr<AST::Decl>, std::unordered_set<Ptr<AST::Decl>>> CopyDefaultImplement(
         const AST::Package& pkg);
     void HandleDefaultImplement(const AST::Package& pkg);
-
-    Ptr<AST::Ty> SubstituteTypeAliasInTy(
-        AST::Ty& ty, bool needSubstituteGeneric = false, const TypeSubst& typeMapping = {});
-    Ptr<AST::Ty> GetUnaliasedTypeFromTypeAlias(
-        const AST::TypeAliasTy& target, const std::vector<Ptr<AST::Ty>>& typeArgs);
     void SubstituteTypeForTypeAliasTypeMapping(
         const AST::TypeAliasDecl& tad, const std::vector<Ptr<AST::Ty>>& typeArgs, TypeSubst& typeMapping) const;
     TypeSubst GenerateTypeMappingForTypeAliasDecl(const AST::TypeAliasDecl& tad) const;
@@ -1567,6 +1563,10 @@ private:
     void CheckTypeArgLegalityOfJArrayCtor(const AST::NameReferenceExpr& re);
     void CheckStaticMemberAccessLegality(const AST::MemberAccess& ma, const AST::Decl& target);
     void CheckInstanceMemberAccessLegality(const ASTContext& ctx, const AST::MemberAccess& ma, const AST::Decl& target);
+    bool CheckLegalityOfReferenceIsSkip(Ptr<AST::Node> node);
+    AST::VisitAction CheckLegalityOfReferenceForNameReferenceExpr(ASTContext& ctx, Ptr<AST::NameReferenceExpr> nameRef);
+    AST::VisitAction CheckLegalityOfReferenceForExpr(unsigned id, ASTContext& ctx, Ptr<AST::Expr> node);
+    void CheckLegalityOfReference(unsigned id, ASTContext& ctx, AST::Node& node);
     void CheckLegalityOfReference(ASTContext& ctx, AST::Node& node);
     void CheckLegalityOfUnsafeAndInout(AST::Node& root);
 
@@ -1642,8 +1642,6 @@ private:
     Ptr<AST::Ty> SynLiteralInBinaryExpr(ASTContext& ctx, AST::BinaryExpr& be);
     void SynBinaryLeafs(ASTContext& ctx, AST::BinaryExpr& be);
     void HandleAlias(Ptr<AST::Expr> expr, std::vector<Ptr<AST::Decl>>& targets);
-    std::vector<Ptr<AST::Ty>> RecursiveSubstituteTypeAliasInTy(
-        Ptr<const AST::Ty> ty, bool needSubstituteGeneric, const TypeSubst& typeMapping = {});
     template <class T>
     void SubstituteTypeArguments(std::vector<OwnedPtr<AST::Type>>& typeArguments, T& type, const TypeSubst& typeMapping)
     {
@@ -1658,7 +1656,7 @@ private:
         }
         for (auto& it : type.typeArguments) {
             auto newTypeArg = AST::ASTCloner::Clone(it.get());
-            newTypeArg->ty = newTypeArg->ty ? SubstituteTypeAliasInTy(*newTypeArg->ty, true, typeMapping)
+            newTypeArg->ty = newTypeArg->ty ? typeManager.SubstituteTypeAliasInTy(*newTypeArg->ty, true, typeMapping)
                                             : TypeManager::GetInvalidTy();
             if (auto ity = DynamicCast<AST::IntersectionTy*>(newTypeArg->ty); ity && ity->tys.empty()) {
                 continue;
