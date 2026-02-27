@@ -1327,9 +1327,14 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     TranslateVecDecl(genericNominalDecls, trans);
     // Update some info for nominal decls.
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "TranslateDecls");
-    ProcessCommonAndSpecificNominals();
+
+    // Update some info for common specific
+    Utils::ProfileRecorder::Start("TranslateNominalDecls", "ProcessCommonAndSpecific");
+    ProcessCommonAndSpecificExtends();
     SetExtendInfo();
     UpdateExtendParent();
+    ProcessClassStructVarInits(trans);
+    Utils::ProfileRecorder::Stop("TranslateNominalDecls", "ProcessCommonAndSpecific");
 }
 
 void AST2CHIR::TranslateFuncParams(const AST::FuncDecl& funcDecl, Func& func) const
@@ -1408,7 +1413,7 @@ std::vector<Ptr<const AST::Decl>> CollectCommonMatchedDecls(
     std::vector<Ptr<const AST::Decl>> commonDecls;
     for (const auto& container : declContainers) {
         for (const auto& decl : container) {
-            if (decl->IsCommonMatchedWithSpecific()) {
+            if (decl->IsCommonMatchedWithSpecific() && decl->astKind == AST::ASTKind::EXTEND_DECL) {
                 commonDecls.push_back(decl);
             }
         }
@@ -1452,8 +1457,8 @@ void ConvertSpecificMemberMethods(
         return VisitResult::CONTINUE;
     };
 
-    for (auto decl : package->GetAllCustomTypeDef()) {
-        // Skip non-specific extends
+    for (auto decl : package->GetExtends()) {
+        // Skip non-platform extends
         if (!decl->TestAttr(CHIR::Attribute::SPECIFIC)) {
             continue;
         }
@@ -1621,9 +1626,9 @@ void AST2CHIR::ResetSpecificFunc(const AST::FuncDecl& funcDecl, Func& func)
     }
 }
 
-void AST2CHIR::ProcessCommonAndSpecificNominals()
+void AST2CHIR::ProcessCommonAndSpecificExtends()
 {
-    bool compileSpecific = opts.IsCompilingCJMP();
+    bool compileSpecific = opts.IsCompilingCJMPSpecific();
     if (!compileSpecific) {
         return;
     }
@@ -1643,5 +1648,30 @@ void AST2CHIR::ProcessCommonAndSpecificNominals()
 
     // 2. Clean up unused extends
     RemoveUnusedCJMPExtends(*package, commonDecls);
+}
+
+void AST2CHIR::ProcessClassStructVarInits(Translator& trans)
+{
+    bool compileCJMP = opts.IsCompilingCJMP();
+    if (!compileCJMP) {
+        return;
+    }
+    // translate vars init for CJMP.
+    const std::vector<std::vector<Ptr<const AST::Decl>>>& declContainers = {
+        importedNominalDecls, importedGenericInstantiatedNominalDecls, nominalDecls, genericNominalDecls
+    };
+    for (auto& container : declContainers) {
+        for (const auto& decl : container) {
+            CJC_NULLPTR_CHECK(decl);
+            // Skip the common part varInit generation while comparing specific parts.
+            if (decl->TestAttr(AST::Attribute::FROM_COMMON_PART)) {
+                continue;
+            }
+            // Just need to generate varInit for class/struct.
+            if (decl->astKind == AST::ASTKind::CLASS_DECL || decl->astKind == AST::ASTKind::STRUCT_DECL) {
+                trans.CreateClassStructDeclVarInit(*decl);
+            }
+        }
+    }
 }
 } // namespace Cangjie::CHIR

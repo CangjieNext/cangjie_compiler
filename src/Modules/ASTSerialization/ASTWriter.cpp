@@ -13,6 +13,7 @@
 
 #include <queue>
 
+#include "cangjie/AST/AttributePack.h"
 #include "flatbuffers/ModuleFormat_generated.h"
 
 #include "cangjie/AST/Create.h"
@@ -198,7 +199,14 @@ void CollectBodyToQueue(const Decl& decl, std::queue<Ptr<Decl>>& queue)
 
 bool IsGenericInCommonSerialization(bool serializingCommon, const Decl& decl)
 {
-    return serializingCommon && decl.outerDecl && decl.outerDecl->TestAttr(Attribute::GENERIC);
+    bool shouldSerialize = serializingCommon && decl.outerDecl && decl.outerDecl->TestAttr(Attribute::GENERIC);
+    if (auto fd = DynamicCast<const AST::FuncDecl*>(&decl); shouldSerialize && fd) {
+        // `static init` never gets deserialized (LoadDecl) when compiling platform part
+        // so, this declaration is skipped to avoid other decls becoming dependent to never loaded declaration.
+        shouldSerialize = !(fd->TestAttr(AST::Attribute::STATIC, AST::Attribute::CONSTRUCTOR) &&
+            fd->identifier == STATIC_INIT_FUNC);
+    }
+    return shouldSerialize;
 }
 
 void CollectFullExportParamDecl(
@@ -396,9 +404,9 @@ std::string GetImportPackageNameByImportSpec(const AST::ImportSpec& importSpec)
 } // namespace
 
 ASTWriter::ASTWriter(DiagnosticEngine& diag, const std::string& packageDepInfo, const ExportConfig& exportCfg,
-    const CjoManager& cjoManager)
+    const CjoManager& cjoManager, TypeManager& typeManager)
 {
-    pImpl = std::make_unique<ASTWriter::ASTWriterImpl>(diag, packageDepInfo, exportCfg, cjoManager);
+    pImpl = std::make_unique<ASTWriter::ASTWriterImpl>(diag, packageDepInfo, exportCfg, cjoManager, typeManager);
 }
 
 ASTWriter::~ASTWriter()
@@ -442,6 +450,9 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
             return false;
         }
         if (decl.astKind == AST::ASTKind::EXTEND_DECL && serializingCommon) {
+            return true;
+        }
+        if (IsGenericInCommonSerialization(this->serializingCommon, *d)) {
             return true;
         }
         // Incr compilation need load ty by cached cjo, so still cache internal or inst member var decls
@@ -1112,7 +1123,7 @@ flatbuffers::Offset<PackageFormat::Generic> ASTWriter::ASTWriterImpl::SaveGeneri
         std::vector<FormattedIndex> uppers;
         for (auto& upper : constraint->upperBounds) {
             CJC_NULLPTR_CHECK(upper);
-            uppers.emplace_back(SaveType(upper->ty));
+            uppers.emplace_back(SaveType(typeManager.ObtainsAliasType(upper)));
         }
         constraint->ty = constraint->type->ty; // Sync ty to re-use 'PackNodeInfo'.
         auto info = PackNodeInfo(*constraint);
@@ -1229,7 +1240,8 @@ TFuncBodyOffset ASTWriter::ASTWriterImpl::SaveFuncBody(const FuncBody& funcBody)
         return PackageFormat::CreateFuncBody(builder, dummyList, INVALID_FORMAT_INDEX, INVALID_FORMAT_INDEX, false, 0);
     }
     auto vparamLists = GetVirtualParamLists(funcBody);
-    FormattedIndex retType = funcBody.retType ? SaveType(funcBody.retType->ty) : INVALID_FORMAT_INDEX;
+    FormattedIndex retType =
+        funcBody.retType ? SaveType(typeManager.ObtainsAliasType(funcBody.retType)) : INVALID_FORMAT_INDEX;
     // The frozen attribute is passed to a nested function.
     if (fd && fd->outerDecl && fd->outerDecl->astKind == ASTKind::FUNC_DECL) {
         auto outerFunc = StaticCast<FuncDecl>(fd->outerDecl);
@@ -1243,8 +1255,12 @@ TFuncBodyOffset ASTWriter::ASTWriterImpl::SaveFuncBody(const FuncBody& funcBody)
     // 5. funcBody of default implementation which is defined in interface.
     // 6. funcBody of generic-related functions from common side
     // NOTE: desugared param function has same 'outerDecl' and 'GLOBAL' attribute will its owner function.
+    // also note that generic decls are handled in the beginning already but non-generic static members
+    // inside of generis don't need to be stored
+    bool isNonStaticGenericCJMP = fd && IsGenericInCommonSerialization(serializingCommon, *fd) &&
+        !fd->TestAttr(Attribute::STATIC);
     bool shouldExportBody = config.exportContent && exportFuncBody &&
-        (!fd || CanBeSrcExported(*fd) || IsGenericInCommonSerialization(serializingCommon, *fd));
+        (!fd || CanBeSrcExported(*fd) || isNonStaticGenericCJMP);
     bool validBody = shouldExportBody && Ty::IsTyCorrect(funcBody.ty) && funcBody.body;
     auto bodyIdx = validBody ? SaveExpr(*funcBody.body) : INVALID_FORMAT_INDEX;
     // CaptureKind is need if the 'funcBody' is exported.
@@ -1408,7 +1424,7 @@ TDeclOffset ASTWriter::ASTWriterImpl::SaveExtendDecl(const ExtendDecl& extendDec
 
 TDeclOffset ASTWriter::ASTWriterImpl::SaveTypeAliasDecl(const TypeAliasDecl& typeAliasDecl, const DeclInfo& declInfo)
 {
-    FormattedIndex aliasedTy = SaveType(typeAliasDecl.type->ty);
+    FormattedIndex aliasedTy = SaveType(typeManager.ObtainsAliasType(typeAliasDecl.type));
     auto generic = SaveGeneric(typeAliasDecl);
     auto info = PackageFormat::CreateAliasInfo(builder, aliasedTy);
     PackageFormat::DeclBuilder dbuilder(builder);
@@ -1559,7 +1575,8 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveDecl(const Decl& decl, bool isTopLe
             attrs.SetAttr(Attribute::SPECIFIC, false);
         }
     }
-    auto type = attrs.TestAttr(Attribute::UNREACHABLE) ? INVALID_FORMAT_INDEX : SaveType(decl.ty);
+    auto type =
+        attrs.TestAttr(Attribute::UNREACHABLE) ? INVALID_FORMAT_INDEX : SaveType(typeManager.ObtainsAliasType(&decl));
     auto begin = decl.GetBegin();
     auto end = decl.GetEnd();
     auto [pkgIndex, fileIndex] = GetFileIndex(begin.fileID);
