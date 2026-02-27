@@ -130,6 +130,7 @@ public:
     }
 
     virtual std::string GetSrcCodeIdentifier() const;
+    virtual void SetSrcCodeIdentifier(const std::string& newName);
     const std::string& GetIdentifier() const;
     std::string GetIdentifierWithoutPrefix() const;
 
@@ -198,7 +199,8 @@ public:
     // Base Information
     // ===--------------------------------------------------------------------===//
     std::string GetSrcCodeIdentifier() const override;
-    
+    void SetSrcCodeIdentifier(const std::string& newName) override;
+
     std::string ToString() const override;
 
     // ===--------------------------------------------------------------------===//
@@ -221,10 +223,11 @@ public:
 private:
     Func* ownerFunc = nullptr;
     Lambda* ownerLambda = nullptr;
+    std::string srcCodeIdentifier;
 
 private:
-    explicit Parameter(Type* ty, const std::string& indexStr, Func* ownerFunc);
-    explicit Parameter(Type* ty, const std::string& indexStr, Lambda& ownerLambda);
+    explicit Parameter(Type* ty, const std::string& id, Func* ownerFunc);
+    explicit Parameter(Type* ty, const std::string& id, Lambda& ownerLambda);
     ~Parameter() override = default;
 };
 
@@ -242,6 +245,7 @@ public:
     Expression* GetExpr() const;
 
     std::string GetSrcCodeIdentifier() const override;
+    void SetSrcCodeIdentifier(const std::string& newName) override;
 
     std::string ToString() const override;
 
@@ -271,6 +275,7 @@ private:
 private:
     Expression* expr;        // The owner of this result value.
     bool isRetValue = false; // If func return value or not
+    std::string srcCodeIdentifier;
 };
 
 /**
