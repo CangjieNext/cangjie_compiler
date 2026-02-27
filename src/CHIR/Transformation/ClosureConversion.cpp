@@ -1810,7 +1810,8 @@ Func* ClosureConversion::LiftLambdaToGlobalFunc(
     // Specially, the lifted lambda should inherit local var ID
     globalFunc->InheritIDFromFunc(*nestedFunc.GetBody()->GetTopLevelFunc());
     // Specially, record the `env` value
-    Value* thisPtr = builder.CreateParameter(classRefTy, INVALID_LOCATION, *globalFunc);
+    auto thisPtr = builder.CreateParameter(classRefTy, INVALID_LOCATION, *globalFunc);
+    thisPtr->SetSrcCodeIdentifier("$env");
     for (auto param : nestedFunc.GetParams()) {
         globalFunc->AddParam(*param);
     }
