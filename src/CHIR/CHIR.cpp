@@ -1127,6 +1127,7 @@ bool ToCHIR::RulesChecking()
     // 1. Array and VArray out of bounds
     // 2. arithmetic operation overflow
     RunConstantPropagation();
+    ci.chirData->FreeConstAnalysisWrapper();
     if (diag.GetErrorCount() != 0) {
         return false;
     }
