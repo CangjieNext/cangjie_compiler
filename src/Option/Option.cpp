@@ -186,6 +186,17 @@ std::string Triple::Info::GetEffectiveTripleString() const
     if (tripleString == "aarch64-ios-simulator") {
         return "arm64-apple-ios17.5-simulator";
     }
+    constexpr std::string_view androidPrefix = "arm-linux-android";
+    if (tripleString.size() >= androidPrefix.size() &&
+        tripleString.compare(0, androidPrefix.size(), androidPrefix.data()) == 0) {
+        std::string result;
+        result.reserve(tripleString.size() + 4); // fixme: eliminate 4 
+        result = "arm-linux-androideabi";
+        // add api level
+        result.append(tripleString, androidPrefix.size(), std::string::npos);
+        return result;
+    }
+
     return tripleString;
 }
 

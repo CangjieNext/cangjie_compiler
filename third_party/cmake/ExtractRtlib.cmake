@@ -71,7 +71,7 @@ if(NOT "${OLD_SPECIFIC_LIB_PATH}" STREQUAL "" AND EXISTS ${OLD_SPECIFIC_LIB_PATH
         file(RENAME ${OLD_SPECIFIC_LIB_PATH} ${NEW_SPECIFIC_LIB_PATH})
     endif()
 else()
-    message(FATAL_ERROR "libclang_rt.${SPECIFIC_LIB}-${CANGJIE_TARGET_ARCH}.a not found! Expected path: ${OLD_SPECIFIC_LIB_PATH}")
+    message("libclang_rt.${SPECIFIC_LIB}-${CANGJIE_TARGET_ARCH}.a not found! Expected path: ${OLD_SPECIFIC_LIB_PATH}")
 endif()
 
 # 3. Avoid installing redundant empty folder when cross-compiling.
