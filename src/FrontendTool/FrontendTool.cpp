@@ -150,7 +150,9 @@ static bool ExecuteCompile(DefaultCompilerInstance& instance)
     if (isEmitCHIR) {
         endStage = CompileStage::RELEASE_AST;
     } else if (instance.invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR) {
-        endStage = CompileStage::SAVE_RESULTS;
+        // CHIR output mode should stop at RELEASE_AST to avoid running CODEGEN after AST is freed.
+        // PerformResultsSaving() is called inside PerformASTRelease() before ReleaseASTMemory().
+        endStage = CompileStage::RELEASE_AST;
     }
     return instance.Compile(endStage);
 }

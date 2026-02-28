@@ -13,6 +13,9 @@
 #include "cangjie/Frontend/CompilerInstance.h"
 
 #include <fstream>
+#ifdef __linux__
+#include <malloc.h>
+#endif
 
 #include "PrintSymbolTable.h"
 
@@ -621,9 +624,16 @@ void CompilerInstance::ReleaseASTMemory()
     pkgCtxMap.clear();
 
     // ═══════════════════════════════════════════════════
-    // Phase 5: Mark completion
+    // Phase 5: Mark completion and force memory return to OS
     // ═══════════════════════════════════════════════════
     astReleased = true;
+
+    // Force memory allocator to return freed memory to OS.
+    // Without this, glibc's malloc keeps freed memory in the process heap,
+    // causing RSS to remain high even though AST is freed.
+#ifdef __linux__
+    malloc_trim(0);
+#endif
 }
 
 bool CompilerInstance::CalculateASTCache()
