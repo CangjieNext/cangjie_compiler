@@ -1484,69 +1484,6 @@ Type* GetInstSubType(Type& genericSubType, const ClassType& instParentType, CHIR
     return ReplaceRawGenericArgType(genericSubType, replaceTable, builder);
 }
 
-bool TypeIsMatched(const Type& type1, const Type& type2)
-{
-    if (type1.GetTypeKind() != type2.GetTypeKind()) {
-        return false;
-    }
-    auto typeArgs1 = type1.GetTypeArgs();
-    auto typeArgs2 = type2.GetTypeArgs();
-    if (typeArgs1.size() != typeArgs2.size()) {
-        return false;
-    }
-    for (size_t i = 0; i < typeArgs1.size(); ++i) {
-        if (!TypeIsMatched(*typeArgs1[i], *typeArgs2[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool VirMethodTypeIsMatched(const FuncType& type1, const FuncType& type2)
-{
-    auto type1ParamTypes = type1.GetParamTypes();
-    auto type2ParamTypes = type2.GetParamTypes();
-    if (type1ParamTypes.size() != type2ParamTypes.size()) {
-        return false;
-    }
-    for (size_t i = 0; i < type1ParamTypes.size(); ++i) {
-        if (!VirMethodParamTypeIsMatched(*type1ParamTypes[i], *type2ParamTypes[i])) {
-            return false;
-        }
-    }
-    return VirMethodReturnTypeIsMatched(*type1.GetReturnType(), *type2.GetReturnType());
-}
-
-bool VirMethodParamTypeIsMatched(const Type& type1, const Type& type2)
-{
-    // FuncType will be converted to Class-AutoEnv&, so we can treat it as class&
-    if ((type1.IsGeneric() || type1.IsRef() || type1.IsCJFunc()) &&
-        (type2.IsGeneric() || type2.IsRef() || type2.IsCJFunc())) {
-        return true;
-    } else if (type1.IsStructArray() && type2.IsStructArray()) {
-        return true;
-    } else {
-        return TypeIsMatched(type1, type2);
-    }
-}
-
-bool VirMethodReturnTypeIsMatched(const Type& type1, const Type& type2)
-{
-    if (type1.IsGeneric() && type2.IsGeneric()) {
-        return true;
-    }
-    // FuncType will be converted to Class-AutoEnv&, so we can treat it as class&
-    // in fact, there can't be ref type in parent virtual method, but a func type in child virtual method
-    // but we don't care about this kind of case here, let ir checker do
-    if ((type1.IsRef() || type1.IsCJFunc()) && (type2.IsRef() || type2.IsCJFunc())) {
-        return true;
-    }
-    if (type1.IsStructArray() && type2.IsStructArray()) {
-        return true;
-    }
-    return TypeIsMatched(type1, type2);
-}
-
 Type* RemoveBoxTypeShellIfNeed(Type& type)
 {
     if (!type.IsRef()) {
@@ -1629,7 +1566,7 @@ std::vector<Expression*> GetNonDebugUsers(const Value& val)
 
 bool FuncArgTypeIsMatched(const Type& argType, const Type& paramType)
 {
-    if (argType.IsValueType() && !argType.IsGenericRelated() &&
+    if (argType.IsValueType() && !argType.IsGenericRelated() && !argType.IsCJFunc() &&
         (paramType.IsGenericRelated() || paramType.IsBoxRef())) {
         return false;
     }

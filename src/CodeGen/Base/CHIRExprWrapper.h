@@ -134,6 +134,7 @@ public:
     }
     virtual CHIR::Type* GetThisType() const = 0;
     virtual std::vector<CHIR::Type*> GetInstantiatedTypeArgs() const = 0;
+    virtual std::vector<CHIR::Value*> GetArgs() const = 0;
     virtual bool IsCalleeMethod() const = 0;
     virtual bool IsCalleeStructInstanceMethod() const = 0;
     virtual bool IsCalleeStatic() const = 0;
@@ -174,7 +175,7 @@ public:
         }
     }
 
-    std::vector<CHIR::Value*> GetArgs() const
+    std::vector<CHIR::Value*> GetArgs() const override
     {
         if (GetExprKind() == CHIR::ExprKind::APPLY) {
             return StaticCast<const CHIR::Apply&>(chirExpr).GetArgs();
@@ -302,7 +303,7 @@ public:
         }
     }
 
-    std::vector<CHIR::Value*> GetArgs() const
+    std::vector<CHIR::Value*> GetArgs() const override
     {
         if (GetExprKind() == CHIR::ExprKind::INVOKE) {
             return StaticCast<const CHIR::Invoke&>(chirExpr).GetArgs();
@@ -428,7 +429,7 @@ public:
         }
     }
 
-    std::vector<CHIR::Value*> GetArgs() const
+    std::vector<CHIR::Value*> GetArgs() const override
     {
         if (GetExprKind() == CHIR::ExprKind::INVOKESTATIC) {
             return StaticCast<const CHIR::InvokeStatic&>(chirExpr).GetArgs();
