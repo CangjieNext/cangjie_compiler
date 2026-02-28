@@ -6,6 +6,7 @@
 
 #include "cangjie/CodeGen/EmitPackageIR.h"
 
+#include <malloc.h>
 #include "llvm/IR/Verifier.h"
 
 #include "Base/CGTypes/CGEnumType.h"
@@ -593,6 +594,8 @@ std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(CHIR::CHIRBuilder& 
     }
     auto temp = PackageGeneratorImpl(chirBuilder, chirData, options, enableIncrement, cachedMangleMap);
     temp.EmitIR();
+    chirBuilder.GetChirContext().FreeWholePackage();
+    malloc_trim(0);
     return temp.ReleaseLLVMModules();
 }
 #endif

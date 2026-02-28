@@ -4,6 +4,7 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include <malloc.h>
 #include "EmitFunctionIR.h"
 
 #include "Base/CGTypes/CGEnumType.h"
@@ -230,9 +231,15 @@ void FunctionGeneratorImpl::EmitIR()
 #endif
 }
 
-void EmitFunctionIR(CGModule& cgMod, const CHIR::Func& chirFunc)
+void EmitFunctionIR(CGModule& cgMod, CHIR::Func& chirFunc)
 {
+    // printf("EmitFunctionIR: %s\n", chirFunc.GetIdentifier().c_str());
     IRGenerator<FunctionGeneratorImpl>(cgMod, chirFunc).EmitIR();
+    // printf("free memory in func: %s, body: %p\n", chirFunc.GetIdentifier().c_str(), chirFunc.GetBody());
+    
+    auto body = chirFunc.GetBody();
+    cgMod.GetCGContext().GetCHIRBuilder().GetChirContext().FreeMemoryInFunc(*body);
+    malloc_trim(0);
 }
 
 void EmitFunctionIR(CGModule& cgMod, const std::vector<CHIR::Func*>& chirFuncs)

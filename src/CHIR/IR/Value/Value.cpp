@@ -605,6 +605,13 @@ Func* Block::GetTopLevelFunc() const
     return blockGroup->GetTopLevelFunc();
 }
 
+BlockGroup* Block::GetFuncOrLambdaBody() const
+{
+    auto blockGroup = GetParentBlockGroup();
+    CJC_NULLPTR_CHECK(blockGroup);
+    return blockGroup->GetFuncOrLambdaBody();
+}
+
 Terminator* Block::GetTerminator() const
 {
     if (exprs.size() == 0) {
@@ -762,6 +769,15 @@ Func* BlockGroup::GetTopLevelFunc() const
     }
     CJC_ASSERT(users.size() == 1);
     return users[0]->GetTopLevelFunc();
+}
+
+BlockGroup* BlockGroup::GetFuncOrLambdaBody() const
+{
+    if (ownerFunc != nullptr) {
+        return ownerFunc->GetBody();
+    }
+    CJC_ASSERT(users.size() == 1);
+    return users[0]->GetFuncOrLambdaBody();
 }
 
 void BlockGroup::SetOwnerFunc(Func* func)
