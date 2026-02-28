@@ -593,6 +593,7 @@ std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(CHIR::CHIRBuilder& 
     }
     auto temp = PackageGeneratorImpl(chirBuilder, chirData, options, enableIncrement, cachedMangleMap);
     temp.EmitIR();
+    chirBuilder.GetChirContext().FreeWholePackage();
     return temp.ReleaseLLVMModules();
 }
 #endif

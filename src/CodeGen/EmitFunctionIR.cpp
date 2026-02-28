@@ -230,9 +230,14 @@ void FunctionGeneratorImpl::EmitIR()
 #endif
 }
 
-void EmitFunctionIR(CGModule& cgMod, const CHIR::Func& chirFunc)
+void EmitFunctionIR(CGModule& cgMod, CHIR::Func& chirFunc)
 {
+    printf("EmitFunctionIR: %s\n", chirFunc.GetIdentifier().c_str());
     IRGenerator<FunctionGeneratorImpl>(cgMod, chirFunc).EmitIR();
+    printf("free memory in func: %s, body: %p\n", chirFunc.GetIdentifier().c_str(), chirFunc.GetBody());
+    
+    auto body = chirFunc.GetBody();
+    cgMod.GetCGContext().GetCHIRBuilder().GetChirContext().FreeMemoryInFunc(*body);
 }
 
 void EmitFunctionIR(CGModule& cgMod, const std::vector<CHIR::Func*>& chirFuncs)

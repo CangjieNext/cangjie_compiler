@@ -605,6 +605,13 @@ Func* Block::GetTopLevelFunc() const
     return blockGroup->GetTopLevelFunc();
 }
 
+BlockGroup* Block::GetFuncOrLambdaBody() const
+{
+    auto blockGroup = GetParentBlockGroup();
+    CJC_NULLPTR_CHECK(blockGroup);
+    return blockGroup->GetFuncOrLambdaBody();
+}
+
 Terminator* Block::GetTerminator() const
 {
     if (exprs.size() == 0) {
@@ -762,6 +769,15 @@ Func* BlockGroup::GetTopLevelFunc() const
     }
     CJC_ASSERT(users.size() == 1);
     return users[0]->GetTopLevelFunc();
+}
+
+BlockGroup* BlockGroup::GetFuncOrLambdaBody() const
+{
+    if (ownerFunc != nullptr) {
+        return ownerFunc->GetBody();
+    }
+    CJC_ASSERT(users.size() == 1);
+    return users[0]->GetFuncOrLambdaBody();
 }
 
 void BlockGroup::SetOwnerFunc(Func* func)
@@ -1278,6 +1294,9 @@ Func::Func(Type* ty, const std::string& identifier, const std::string& srcCodeId
 
 uint64_t Func::GenerateLocalId()
 {
+    if (identifier == "@_CNat11compositionIG_G0_G1_HF0G0_G_EF0G1_G0_E") {
+        printf("");
+    }
     return localId++;
 }
 
@@ -1416,6 +1435,9 @@ LocalVar* Func::GetReturnValue() const
 
 uint64_t Func::GenerateBlockId()
 {
+    if (identifier == "@_CNat11compositionIG_G0_G1_HF0G0_G_EF0G1_G0_E") {
+        printf("");
+    }
     return blockId++;
 }
 

@@ -221,6 +221,23 @@ Block* Expression::GetParentBlock() const
     return parent;
 }
 
+BlockGroup* Expression::GetFuncOrLambdaBody() const
+{
+    if (this->GetExprKind() == ExprKind::LAMBDA) {
+        return StaticCast<Lambda*>(this)->GetBody();
+    }
+    auto blockGroup = GetParentBlockGroup();
+    if (auto ownerFunc = blockGroup->GetOwnerFunc()) {
+        return ownerFunc->GetBody();
+    }
+    auto ownerExpr = blockGroup->GetOwnerExpression();
+    CJC_NULLPTR_CHECK(ownerExpr);
+    if (auto ownerLambda = DynamicCast<Lambda*>(ownerExpr)) {
+        return ownerLambda->GetBody();
+    }
+    return ownerExpr->GetFuncOrLambdaBody();
+}
+
 const std::vector<BlockGroup*>& Expression::GetBlockGroups() const
 {
     return blockGroups;
@@ -257,9 +274,7 @@ Type* Expression::GetResultType() const
  */
 BlockGroup* Expression::GetParentBlockGroup() const
 {
-    if (parent == nullptr) {
-        return nullptr;
-    }
+    CJC_NULLPTR_CHECK(parent);
     return parent->GetParentBlockGroup();
 }
 

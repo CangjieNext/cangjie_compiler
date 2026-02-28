@@ -1214,6 +1214,18 @@ bool ToCHIR::Run()
             TempFileManager::Instance().CreateNewFileInfo({.fileName = chirPkg->GetName()}, TempFileKind::O_CHIR);
         CHIRSerializer::Serialize(*chirPkg, tempFileInfo.filePath, Phase::OPT);
     }
+    for (auto func : chirPkg->GetGlobalFuncs()) {
+        if (func->GetIdentifier() != "@_CNat11compositionIG_G0_G1_HF0G0_G_EF0G1_G0_EEL_E") {
+            continue;
+        }
+        printf("body: %p\n", func->GetBody());
+        for (auto bb : func->GetBody()->GetBlocks()) {
+            printf("  block: %p\n", bb);
+            for (auto expr : bb->GetExpressions()) {
+                printf("    expr: %p\n", expr);
+            }
+        }
+    }
     return true;
 }
 
