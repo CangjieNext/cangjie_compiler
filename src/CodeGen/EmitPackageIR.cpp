@@ -6,6 +6,7 @@
 
 #include "cangjie/CodeGen/EmitPackageIR.h"
 
+#include <malloc.h>
 #include "llvm/IR/Verifier.h"
 
 #include "Base/CGTypes/CGEnumType.h"
@@ -584,15 +585,17 @@ void PackageGeneratorImpl::EmitIR()
 #endif
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(CHIR::CHIRBuilder& chirBuilder, const CHIRData& chirData,
+std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(CHIR::CHIRBuilder& chirBuilder, CHIRData& chirData,
     const GlobalOptions& options, DefaultCompilerInstance& compilerInstance, bool enableIncrement)
 {
     CachedMangleMap cachedMangleMap;
+    chirData.FreeConstAnalysisWrapper();
     if (enableIncrement) {
         cachedMangleMap = StaticCast<Cangjie::IncrementalCompilerInstance&>(compilerInstance).cacheMangles;
     }
     auto temp = PackageGeneratorImpl(chirBuilder, chirData, options, enableIncrement, cachedMangleMap);
     temp.EmitIR();
+    compilerInstance.FreeCHIRData();
     return temp.ReleaseLLVMModules();
 }
 #endif
