@@ -29,7 +29,7 @@ namespace Cangjie::CodeGen {
  *         multiple llvm::Modules are returned. Otherwise, only one llvm::Module is returned.
  */
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(CHIR::CHIRBuilder& chirBuilder, const CHIRData& chirData,
+std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(CHIR::CHIRBuilder& chirBuilder, CHIRData& chirData,
     const GlobalOptions& options, DefaultCompilerInstance& compilerInstance, bool enableIncrement);
 #endif
 
