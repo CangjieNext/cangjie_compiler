@@ -99,9 +99,48 @@ std::vector<llvm::Value*> IRBuilder2::FixFuncArgs(const CGFunctionType& calleeTy
 {
     const auto& structParamNeedsBasePtr = calleeType.GetStructParamNeedsBasePtrIndices();
     const auto& realArgIndices = calleeType.GetRealArgIndices();
+
+    // Step 1: Pre-process args to replace Box expressions with their source values when possible
+    std::vector<CGValue*> processedArgs;
+    if (applyWrapper) {
+        auto chirArgs = applyWrapper->GetArgs();
+        for (size_t i = 0; i < args.size(); ++i) {
+            const CGType* paramType = calleeType.GetParamType(i);
+
+            // Check if we should skip Box for this argument (including 'this' parameter)
+            if (paramType && paramType->GetSize() && i < chirArgs.size()) {
+                auto chirArg = chirArgs[i];
+                auto localVar = DynamicCast<CHIR::LocalVar*>(chirArg);
+                if (localVar) {
+                    auto expr = localVar->GetExpr();
+                    if (expr && expr->GetExprKind() == CHIR::ExprKind::BOX) {
+                        auto argType = localVar->GetType();
+                        auto argDeref = DeRef(*argType);
+                        if (argDeref && argDeref->IsBox()) {
+                            auto boxType = StaticCast<const CHIR::BoxType*>(argDeref);
+                            auto boxedType = boxType->GetBaseType();
+                            // Only skip box for non-class types
+                            if (!boxedType->IsClass()) {
+                                // Replace arg with Box's source value
+                                auto& boxExpr = StaticCast<const CHIR::Box&>(*expr);
+                                processedArgs.emplace_back(cgMod | boxExpr.GetSourceValue());
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+            // Keep original arg
+            processedArgs.emplace_back(args[i]);
+        }
+    } else {
+        processedArgs = args;
+    }
+
+    // Step 2: Process arguments with standard logic
     std::vector<llvm::Value*> argsVal;
     size_t idx = 0;
-    for (auto arg : args) {
+    for (auto arg : processedArgs) {
         bool isThis = idx == 0 && applyWrapper && applyWrapper->IsCalleeStructInstanceMethod();
         auto& paramType = *calleeType.GetParamType(idx);
         auto llvmVal = isThis ? DoSimpleCast(*this, *arg, paramType) : FixFuncArg(*arg, paramType);
@@ -201,11 +240,9 @@ llvm::Value* IRBuilder2::CreateSRetForUnknownSize(const CHIR::Type& returnCHIRTy
     bool isGenericOrBoxed = retValType.IsGeneric() || isBoxed;
     if (isGenericOrBoxed) {
         // `retValType` is `T`, enum or struct that have unknown size at compile time
-        if (isBoxed) {
-            const auto& boxedType = *StaticCast<const CHIR::BoxType>(DeRef(retValType))->GetBaseType();
-            return CreateSRetGeneric(*this, returnCGType, boxedType);
-        }
-        return CreateSRetGeneric(*this, returnCGType, retValType);
+        const CHIR::Type* actualType =
+            isBoxed ? StaticCast<const CHIR::BoxType>(DeRef(retValType))->GetBaseType() : &retValType;
+        return CreateSRetGeneric(*this, returnCGType, *actualType);
     }
 
     // `retValType` is NOT `T`
@@ -221,7 +258,13 @@ llvm::Value* IRBuilder2::CreateSRetForUnknownSize(const CHIR::Type& returnCHIRTy
         }
     } else if (returnCHIRType.IsStruct() || returnCHIRType.IsTuple() ||
         (returnCHIRType.IsEnum() && StaticCast<CGEnumType>(returnCGType).IsOptionLike())) {
-        std::vector<llvm::Value*> parameters{CreateTypeInfo(retValType), GetLayoutSize_32(retValType)};
+
+        const CHIR::Type* actualType = &retValType;
+        if (retValType.IsRef() && DeRef(retValType)->IsBox()) {
+            actualType = StaticCast<const CHIR::BoxType>(DeRef(retValType))->GetBaseType();
+        }
+
+        std::vector<llvm::Value*> parameters{CreateTypeInfo(*actualType), GetLayoutSize_32(*actualType)};
         allocaForRetVal = CallIntrinsicAllocaGeneric(parameters);
     } else {
         CJC_ASSERT_WITH_MSG(false, "Unreachable");

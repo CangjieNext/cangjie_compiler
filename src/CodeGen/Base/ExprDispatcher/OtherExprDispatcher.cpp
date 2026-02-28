@@ -229,9 +229,32 @@ llvm::Value* HandleBoxExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirEx
         return cgVal.GetRawValue();
     }
 
+    // For struct types, check if the unspecialized generic definition has known size
+    // If yes, no need to box (e.g., S<T> { var x = 1 })
+    // if (srcCHIRType->IsStruct()) {
+    //     auto structType = StaticCast<const CHIR::StructType*>(srcCHIRType);
+    //     auto structDef = structType->GetStructDef();
+    //     auto unspecializedType = CGType::GetOrCreate(cgMod, structDef->GetType());
+    //     if (unspecializedType->GetSize()) {
+    //         // Generic definition has known compile-time size, no need to box
+    //         // return cgVal.GetRawValue();
+    //         structDef->Dump();
+    //         cgVal.GetRawValue()->print(llvm::outs());
+    //         return cgVal.GetRawValue();
+    //     }
+    // }
+
     if (srcCGType->GetSize()) {
         // 1. Allocate memory for boxing srcValue.
-        llvm::Value* temp = irBuilder.CallClassIntrinsicAlloc(*DeRef(*srcCHIRType));
+        llvm::Value* temp;
+        if (boxExpr.GetTargetTy()->IsBoxRef()) {
+            auto ti = irBuilder.CreateTypeInfo(*DeRef(*srcCHIRType));
+            auto size = irBuilder.GetLayoutSize_32(*DeRef(*srcCHIRType));
+            temp = irBuilder.CallIntrinsicAllocaGeneric({ti, size});
+        } else {
+            temp = irBuilder.CallClassIntrinsicAlloc(*DeRef(*srcCHIRType));
+        }
+
         // 2. store srcValue to temp
         auto payloadPtr = irBuilder.GetPayloadFromObject(temp);
         auto addr = irBuilder.CreateBitCast(payloadPtr,
@@ -269,6 +292,15 @@ llvm::Value* HandleUnBoxExpr(IRBuilder2& irBuilder, const CHIR::Expression& chir
     auto cgVal = (cgMod | unboxExpr.GetSourceValue());
     auto targetCHIRType = unboxExpr.GetTargetTy();
     auto targetCGType = CGType::GetOrCreate(cgMod, targetCHIRType);
+
+    // Optimization: if srcValue is in addrspace 0, no need to unbox
+    // Addrspace 0 means it's already a direct reference, not a boxed object
+    auto rawValueType = cgVal->GetRawValue()->getType();
+    if (rawValueType->isPointerTy() && rawValueType->getPointerAddressSpace() == 0) {
+        // Addrspace 0 pointer (e.g., i8*, Array<T>*, etc.) - no need to unbox
+        return cgVal->GetRawValue();
+    }
+
     // if unbox a boxtype parameter, need to check the real type from OverrideSrcFuncType
     // and if the real type has size, then we just return the src value
     auto srcFuncType = chirExpr.GetTopLevelFunc()->Get<CHIR::OverrideSrcFuncType>();

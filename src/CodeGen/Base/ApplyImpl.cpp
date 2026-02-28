@@ -371,7 +371,7 @@ llvm::Value* CodeGen::GenerateApply(IRBuilder2& irBuilder, const CHIRApplyWrappe
     auto funcPtrType = funcType->GetLLVMFunctionType()->getPointerTo();
     llvm::Value* calleeVal = callee->GetRawValue();
     if (!apply.GetCallee()->TestAttr(CHIR::Attribute::STATIC)) {
-        if (IsStructOrExtendMethod(*apply.GetCallee()) &&
+        if (IsStructOrExtendMethod(*apply.GetCallee()) && !apply.GetArgs()[0]->GetType()->IsBoxRef() &&
             argsVal[0]->GetRawValue()->getType()->getPointerAddressSpace() == 1U &&
             !cgMod.GetCGContext().GetBasePtrOf(**argsVal[0])) {
             auto wrapper = StaticCast<CGFunction*>(callee)->GetWrapperFunction();
