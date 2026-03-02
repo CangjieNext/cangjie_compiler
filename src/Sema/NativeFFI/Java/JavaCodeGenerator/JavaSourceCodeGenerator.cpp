@@ -918,7 +918,7 @@ void JavaSourceCodeGenerator::AddInstanceMethod(const FuncDecl& funcDecl)
     auto& params = funcDecl.funcBody->paramLists[0]->params;
     auto funcIdentifier = GetJavaMemberName(funcDecl);
     auto mangledNativeName = GetMangledMethodName(mangler, params, funcIdentifier, typeManager);
-    auto modifier = IsCJMapping(funcDecl) ? GetMethodModifier(&funcDecl) : "public ";
+    auto modifier = IsCJMappingOpenClass(funcDecl) ? GetMethodModifier(&funcDecl) : "public ";
     if (funcDecl.TestAttr(Attribute::OVERRIDE)) {
         AddWithIndent(TAB, "@Override");
     }
