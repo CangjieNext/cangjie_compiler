@@ -757,12 +757,6 @@ BuiltinType* GetBuiltinTypeWithVTable(BuiltinType& type, CHIRBuilder& builder);
  */
 Type* GetInstSubType(Type& genericSubType, const ClassType& instParentType, CHIRBuilder& builder);
 
-bool VirMethodTypeIsMatched(const FuncType& type1, const FuncType& type2);
-
-bool VirMethodParamTypeIsMatched(const Type& type1, const Type& type2);
-
-bool VirMethodReturnTypeIsMatched(const Type& type1, const Type& type2);
-
 Type* RemoveBoxTypeShellIfNeed(Type& type);
 
 Type* CreateBoxRefTypeIfNeed(Type& baseTy, CHIRBuilder& builder);

@@ -96,9 +96,9 @@ Type* Value::GetType() const
     return ty;
 }
 
-void Value::SetType(Type& newType)
+void Value::SetType(Type& newTy)
 {
-    ty = &newType;
+    ty = &newTy;
 }
 
 /**

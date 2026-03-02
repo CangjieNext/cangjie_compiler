@@ -117,7 +117,7 @@ public:
     bool IsParameter() const;
 
     Type* GetType() const;
-    void SetType(Type& newType);
+    void SetType(Type& newTy);
 
     const std::set<std::string>& GetFeatures() const
     {

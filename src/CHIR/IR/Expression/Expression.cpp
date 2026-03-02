@@ -920,7 +920,7 @@ ClassType* DynamicDispatch::GetInstSrcParentCustomTypeOfMethod(CHIRBuilder& buil
             auto def = r.instSrcParentType->GetClassDef();
             const auto& parentFuncInfo = def->GetDefVTable().GetExpectedTypeVTable(*def->GetType());
             auto originalType = parentFuncInfo.GetVirtualMethods()[r.offset].GetOriginalFuncType();
-            if (VirMethodTypeIsMatched(*originalType, *GetMethodType())) {
+            if (FuncArgTypeIsMatched(*GetMethodType(), *originalType)) {
                 CJC_NULLPTR_CHECK(r.instSrcParentType);
                 return r.instSrcParentType;
             }
