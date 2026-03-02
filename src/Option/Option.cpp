@@ -191,7 +191,7 @@ std::string Triple::Info::GetEffectiveTripleString() const
         tripleString.compare(0, androidPrefix.size(), androidPrefix.data()) == 0) {
         std::string result;
         result.reserve(tripleString.size() + 4); // fixme: eliminate 4 
-        result = "arm-linux-androideabi";
+        result = "armv7a-linux-androideabi";
         // add api level
         result.append(tripleString, androidPrefix.size(), std::string::npos);
         return result;
