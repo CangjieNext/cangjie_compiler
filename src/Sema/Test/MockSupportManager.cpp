@@ -1467,7 +1467,8 @@ OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(
     return accessorCall;
 }
 
-std::vector<Ptr<Ty>> MockSupportManager::CloneFuncDecl(Ptr<FuncDecl> fromDecl, Ptr<FuncDecl> toDecl)
+std::vector<Ptr<Ty>> MockSupportManager::CloneFuncDecl(
+    Ptr<FuncDecl> fromDecl, Ptr<FuncDecl> toDecl, Ptr<File> curFile, std::string fullPackageName)
 {
     CopyBasicInfo(fromDecl, toDecl);
     toDecl->CloneAttrs(*fromDecl);
@@ -1475,6 +1476,13 @@ std::vector<Ptr<Ty>> MockSupportManager::CloneFuncDecl(Ptr<FuncDecl> fromDecl, P
     toDecl->fullPackageName = fromDecl->fullPackageName;
     toDecl->identifier = fromDecl->identifier;
     toDecl->outerDecl = fromDecl->outerDecl;
+
+    if (curFile) {
+        toDecl->curFile = curFile;
+    }
+    if (!fullPackageName.empty()) {
+        toDecl->fullPackageName = fullPackageName;
+    }
 
     toDecl->funcBody = MakeOwned<FuncBody>();
 
@@ -1498,6 +1506,8 @@ std::vector<Ptr<Ty>> MockSupportManager::CloneFuncDecl(Ptr<FuncDecl> fromDecl, P
         clonedParam->type = MockUtils::CreateType<Type>(clonedParam->ty);
         clonedParam->outerDecl = toDecl;
         clonedParam->identifier = param->identifier;
+        clonedParam->curFile = toDecl->curFile;
+        clonedParam->fullPackageName = toDecl->fullPackageName;
         paramList->params.emplace_back(std::move(clonedParam));
     }
     toDecl->funcBody->paramLists.emplace_back(std::move(paramList));
@@ -1628,7 +1638,11 @@ void MockSupportManager::PrepareClassWithDefaults(ClassDecl& classDecl, Interfac
         accessorImplDecl->identifier = accessorDecl->identifier;
         accessorImplDecl->outerDecl = extendDecl;
         accessorImplDecl->curFile = extendDecl->curFile;
-        CJC_ASSERT(accessorImplDecl->TestAttr(Attribute::ABSTRACT));
+        if (accessorDecl->TestAttr(Attribute::STATIC)) {
+            accessorImplDecl->EnableAttr(Attribute::REDEF);
+        } else {
+            CJC_ASSERT(accessorImplDecl->TestAttr(Attribute::ABSTRACT));
+        }
         accessorImplDecl->DisableAttr(Attribute::ABSTRACT);
         accessorImplDecl->EnableAttr(Attribute::GENERATED_TO_MOCK);
 
