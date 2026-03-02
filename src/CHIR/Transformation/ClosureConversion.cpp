@@ -365,14 +365,14 @@ std::pair<std::vector<Type*>, Type*> CreateFuncTypeWithBoxType(
     CJC_ASSERT(genericParamTypes.size() == instFuncTypeArgs.size() - 1);
     for (size_t i = 0; i < instFuncTypeArgs.size() - 1; ++i) {
         auto paramTy = ReplaceRawGenericArgType(*instFuncTypeArgs[i], replaceTable, builder);
-        if (!VirMethodParamTypeIsMatched(*genericParamTypes[i], *paramTy)) {
+        if (!FuncArgTypeIsMatched(*paramTy, *genericParamTypes[i])) {
             paramTypes.emplace_back(CreateBoxRefTypeIfNeed(*paramTy, builder));
         } else {
             paramTypes.emplace_back(paramTy);
         }
     }
     Type* retType = ReplaceRawGenericArgType(*instFuncTypeArgs.back(), replaceTable, builder);
-    if (!VirMethodReturnTypeIsMatched(*retType, *parentFuncType->GetReturnType())) {
+    if (!FuncArgTypeIsMatched(*retType, *parentFuncType->GetReturnType())) {
         retType = CreateBoxRefTypeIfNeed(*retType, builder);
     }
     return {paramTypes, retType};

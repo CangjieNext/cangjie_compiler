@@ -96,6 +96,11 @@ Type* Value::GetType() const
     return ty;
 }
 
+void Value::SetType(Type& newTy)
+{
+    ty = &newTy;
+}
+
 /**
  * @brief obtains the identifier of the corresponding Cangjie source code.
  */

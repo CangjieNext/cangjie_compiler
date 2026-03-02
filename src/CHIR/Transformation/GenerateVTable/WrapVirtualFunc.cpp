@@ -21,11 +21,11 @@ bool FuncTypeMatch(const FuncType& parentFuncType, const FuncType& curFuncType)
     auto curFuncParamTypes = curFuncType.GetParamTypes();
     CJC_ASSERT(parentFuncParamTypes.size() == curFuncParamTypes.size());
     for (size_t i = 0; i < parentFuncParamTypes.size(); ++i) {
-        if (!VirMethodParamTypeIsMatched(*parentFuncParamTypes[i], *curFuncParamTypes[i])) {
+        if (!FuncArgTypeIsMatched(*curFuncParamTypes[i], *parentFuncParamTypes[i])) {
             return false;
         }
     }
-    return VirMethodReturnTypeIsMatched(*parentFuncType.GetReturnType(), *curFuncType.GetReturnType());
+    return FuncArgTypeIsMatched(*curFuncType.GetReturnType(), *parentFuncType.GetReturnType());
 }
 
 bool JudgeIfNeedVirtualWrapper(
@@ -281,11 +281,11 @@ FuncType* WrapVirtualFunc::GetWrapperFuncType(FuncType& parentFuncTyWithoutThisA
     auto parentRetType = parentFuncTyWithoutThisArg.GetReturnType();
     CJC_ASSERT(wrapperParamTypes.size() == parentParamTypes.size());
     for (size_t i = 0; i < wrapperParamTypes.size(); ++i) {
-        if (!VirMethodParamTypeIsMatched(*wrapperParamTypes[i], *parentParamTypes[i])) {
+        if (!FuncArgTypeIsMatched(*wrapperParamTypes[i], *parentParamTypes[i])) {
             wrapperParamTypes[i] = CreateBoxRefTypeIfNeed(*wrapperParamTypes[i], builder);
         }
     }
-    if (!VirMethodReturnTypeIsMatched(*wrapperRetTy, *parentRetType)) {
+    if (!FuncArgTypeIsMatched(*wrapperRetTy, *parentRetType)) {
         wrapperRetTy = CreateBoxRefTypeIfNeed(*wrapperRetTy, builder);
     }
 
