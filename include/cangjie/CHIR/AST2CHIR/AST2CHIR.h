@@ -354,7 +354,12 @@ private:
             auto it = deserializedVals.find(key);
             res = it == deserializedVals.end() ? nullptr : dynamic_cast<T*>(it->second);
         }
-        if (res && !decl.TestAttr(AST::Attribute::SPECIFIC)) {
+        // When common part chir is deserialized, the list of members of imported nominal declarations
+        // might be lacking new declarations, which were added when compiling specific part of multiplatform dependency
+        if (res &&
+            !decl.TestAttr(AST::Attribute::SPECIFIC) &&
+            !(decl.TestAttr(AST::Attribute::COMMON) && decl.TestAttr(AST::Attribute::IMPORTED))
+        ) {
             deserializedDecls.insert(&decl);
         }
         return res;
