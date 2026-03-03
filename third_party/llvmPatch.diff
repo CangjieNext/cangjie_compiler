@@ -24395,10 +24395,10 @@ index 5e900e916..17d033867 100644
  
 diff --git a/llvm/include/llvm/CodeGen/CJMetadata.h b/llvm/include/llvm/CodeGen/CJMetadata.h
 new file mode 100644
-index 000000000..8b477ab78
+index 000000000..c9d4f8061
 --- /dev/null
 +++ b/llvm/include/llvm/CodeGen/CJMetadata.h
-@@ -0,0 +1,153 @@
+@@ -0,0 +1,155 @@
 +//===- CodeGen/CJMetadata.h - Self-Defined CJMetadata Section ---*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -24418,6 +24418,8 @@ index 000000000..8b477ab78
 +#include "llvm/ADT/SmallVector.h"
 +#include "llvm/ADT/Triple.h"
 +#include "llvm/CodeGen/StackMapEncode.h"
++#include "llvm/IR/GlobalValue.h"
++
 +#include <cstdint>
 +
 +namespace llvm {
@@ -24495,8 +24497,8 @@ index 000000000..8b477ab78
 +  void emitGCFlags();
 +  void emitReflectInfo();
 +  void emitReflectGenericTI();
-+  void emitSubExpr(StringRef Label, const GlobalVariable *GV);
-+  const MCExpr *getGVRefSymbol(const GlobalVariable *GV);
++  void emitSubExpr(StringRef Label, const GlobalValue *GV);
++  const MCExpr *getGVRefSymbol(const GlobalValue *GV);
 +  const MCExpr *getOrInsertStrPoolOffset(std::string &Str,
 +                                         const MCSymbol *DescSym,
 +                                         bool MachONeedNoOffset = false);
@@ -24535,7 +24537,7 @@ index 000000000..8b477ab78
 +  SmallVector<const GlobalVariable *, 100> TIFieldsTable;
 +  SmallVector<const GlobalVariable *, 100> MTableTable;
 +  SmallVector<const GlobalVariable *, 100> GCTibTable;
-+  SmallVector<const GlobalVariable *, 100> StaticGenericTI;
++  SmallVector<const GlobalValue *, 100> StaticGenericTI;
 +  SmallVector<const GlobalVariable *, 50> ReflectGeneticTI;
 +  SmallVector<const Function *, 100> ExternalMethod;
 +  SmallVector<const GlobalVariable *, 100> ReflectStrGV;
@@ -26141,10 +26143,10 @@ index 7945c64c8..f6b3a339e 100644
    void allocHungoffUselist();
    template<int Idx> void setHungoffOperand(Constant *C);
 diff --git a/llvm/include/llvm/IR/GlobalVariable.h b/llvm/include/llvm/IR/GlobalVariable.h
-index e772964fc..f89a08d11 100644
+index e772964fc..970413139 100644
 --- a/llvm/include/llvm/IR/GlobalVariable.h
 +++ b/llvm/include/llvm/IR/GlobalVariable.h
-@@ -159,6 +159,51 @@ public:
+@@ -159,6 +159,52 @@ public:
      isExternallyInitializedConstant = Val;
    }
  
@@ -26173,6 +26175,7 @@ index e772964fc..f89a08d11 100644
 +  bool isCJGlobalValue() const { return hasAttribute("CJGlobalValue"); }
 +  bool isCJGCTib() const { return hasAttribute("CFileGCTib"); }
 +  bool isCJMTable() const { return hasAttribute("CFileMTable"); }
++  bool isCJTypeExt() const { return hasAttribute("CFileTIExt"); }
 +  bool isCJInnerTypeExtensions() const {
 +    return hasAttribute("InnerTypeExtensions");
 +  }
@@ -27491,10 +27494,10 @@ index 000000000..1ec3ef1f2
 +
 +#endif
 diff --git a/llvm/include/llvm/Transforms/IPO/GlobalDCE.h b/llvm/include/llvm/Transforms/IPO/GlobalDCE.h
-index a24196efb..0bb3b5311 100644
+index a24196efb..7df48133a 100644
 --- a/llvm/include/llvm/Transforms/IPO/GlobalDCE.h
 +++ b/llvm/include/llvm/Transforms/IPO/GlobalDCE.h
-@@ -18,7 +18,9 @@
+@@ -18,9 +18,12 @@
  #define LLVM_TRANSFORMS_IPO_GLOBALDCE_H
  
  #include "llvm/ADT/DenseMap.h"
@@ -27503,16 +27506,19 @@ index a24196efb..0bb3b5311 100644
 +#include "llvm/ADT/SmallVector.h"
  #include "llvm/IR/GlobalValue.h"
  #include "llvm/IR/PassManager.h"
++#include "llvm/Transforms/Scalar/CJFillMetadata.h"
  #include <unordered_map>
-@@ -70,6 +72,44 @@ private:
+ 
+ namespace llvm {
+@@ -70,6 +73,70 @@ private:
    void ScanVTableLoad(Function *Caller, Metadata *TypeId, uint64_t CallOffset);
  
    void ComputeDependencies(Value *V, SmallPtrSetImpl<GlobalValue *> &U);
 +
-+  friend struct CangjieVFE;
++  friend struct CangjieDCE;
 +};
 +
-+struct CangjieVFE {
++struct CangjieDCE {
 +  struct GenericFuncInfo {
 +    bool IsValid= false;
 +    GenericFuncInfo *Prev = nullptr;
@@ -27521,12 +27527,33 @@ index a24196efb..0bb3b5311 100644
 +    DenseMap<GlobalVariable *, GenericFuncInfo *> Next;
 +  };
 +
++  // These are used for eliminating the useless virtual func.
 +  GlobalDCEPass &DCE;
 +  GenericFuncInfo *Root;
 +
-+  CangjieVFE() = delete;
-+  CangjieVFE(GlobalDCEPass &DCE) : DCE(DCE) { Root = new GenericFuncInfo; }
-+  ~CangjieVFE();
++  // This is used for eliminating the useless typeinfo.
++  DenseMap<Value *, SmallPtrSet<GlobalVariable *, 8>> ReverseDeps;
++
++  CangjieDCE() = delete;
++  CangjieDCE(GlobalDCEPass &DCE) : DCE(DCE) { Root = new GenericFuncInfo; }
++  ~CangjieDCE();
++
++  static bool isCangjieType(GlobalVariable *GV) {
++    return GV->isCJTypeInfo() || GV->isCJTypeTemplate();
++  }
++  static bool isMetaAssociatedWithType(GlobalVariable *GV) {
++    return GV->isCJTypeExt() || GV->isCJMTable();
++  }
++
++  static bool maybeFakeLiveOfTypeMeta(GlobalVariable *GVU, GlobalVariable *GV);
++
++  int getReverseDepsIndex(GlobalVariable *GV) {
++    if (GV->isCJMTable())
++      return ExtensionDefFieldType::ET_TARGET_TYPE;
++    if (GV->isCJTypeExt())
++      return 0; // 0: dependence typeinfo
++    return -1;
++  }
 +
 +  GenericFuncInfo *insertInstance(const SmallVectorImpl<GlobalVariable *> &,
 +                                  GlobalVariable *FT);
@@ -27546,6 +27573,11 @@ index a24196efb..0bb3b5311 100644
 +  // Add dependencies between caller and callee.
 +  void updateDependencies(Function *,
 +                          DenseMap<GenericFuncInfo *, SmallSet<uint64_t, 4>> &);
++
++  void initTIE(Module &);
++  void updateLiveExtensions();
++  void rewriteExtensions(Module &);
++  void rewriteLLVMUsed(Module &);
  };
  
  }
@@ -34107,10 +34139,10 @@ index 000000000..b3ea0df0a
 +}
 diff --git a/llvm/lib/CodeGen/CJMetadata.cpp b/llvm/lib/CodeGen/CJMetadata.cpp
 new file mode 100644
-index 000000000..88fe140be
+index 000000000..58f1bbbb8
 --- /dev/null
 +++ b/llvm/lib/CodeGen/CJMetadata.cpp
-@@ -0,0 +1,874 @@
+@@ -0,0 +1,880 @@
 +//===- CJMetadata.cpp - Self-Defined CJMetadata Section ----------*- C++-*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -34132,6 +34164,7 @@ index 000000000..88fe140be
 +#include "llvm/CodeGen/GCMetadata.h"
 +#include "llvm/CodeGen/StackMaps.h"
 +#include "llvm/IR/DebugInfoMetadata.h"
++#include "llvm/IR/GlobalValue.h"
 +#include "llvm/MC/MCContext.h"
 +#include "llvm/MC/MCObjectFileInfo.h"
 +#include "llvm/MC/MCSectionCOFF.h"
@@ -34282,7 +34315,7 @@ index 000000000..88fe140be
 +      assert(GV->hasInitializer() && "StaticGenericTI has no Initializer!");
 +      const Constant *C = GV->getInitializer();
 +      for (unsigned Idx = 0; Idx < C->getNumOperands(); Idx++)
-+        StaticGenericTI.push_back(cast<GlobalVariable>(C->getOperand(Idx)));
++        StaticGenericTI.push_back(cast<GlobalValue>(C->getOperand(Idx)));
 +      return;
 +    }
 +
@@ -34370,7 +34403,12 @@ index 000000000..88fe140be
 +  }
 +}
 +
-+const MCExpr *CJMetadataInfo::getGVRefSymbol(const GlobalVariable *GV) {
++const MCExpr *CJMetadataInfo::getGVRefSymbol(const GlobalValue *GV) {
++  if (const GlobalAlias *GA = dyn_cast<GlobalAlias>(GV)) {
++    // Directly use the alias symbol itself
++    MCSymbol *GASymbol = AP.TM.getSymbol(GV);
++    return MCSymbolRefExpr::create(GASymbol, Context);
++  }
 +  MCSymbol *GVSymbol = AP.TM.getSymbol(GV);
 +  if (GV->hasExactDefinition()) {
 +    MCSymbol *RefSym =
@@ -34784,7 +34822,7 @@ index 000000000..88fe140be
 +    AP.emitGlobalVariable(GCTib);
 +}
 +
-+void CJMetadataInfo::emitSubExpr(StringRef Label, const GlobalVariable *GV) {
++void CJMetadataInfo::emitSubExpr(StringRef Label, const GlobalValue *GV) {
 +  MCSymbol *CurSymbol = Context.createTempSymbol(Label);
 +  OS.emitLabel(CurSymbol);
 +  const MCExpr *CurRefSym = MCSymbolRefExpr::create(CurSymbol, Context);
@@ -48491,10 +48529,10 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..1681820be
+index 000000000..39d4cf897
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
-@@ -0,0 +1,3340 @@
+@@ -0,0 +1,3404 @@
 +//===- CJPartialEscapeAnalysis.cpp - escape analysis for Cangjie ----------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -48532,6 +48570,8 @@ index 000000000..1681820be
 +#include "llvm/Transforms/Utils/CallGraphUpdater.h"
 +#include "llvm/Transforms/Utils/Local.h"
 +#include "llvm/Transforms/Scalar.h"
++
++#include <algorithm>
 +
 +#define DEBUG_TYPE "escape-analysis"
 +using namespace llvm;
@@ -48914,6 +48954,19 @@ index 000000000..1681820be
 +        Values, IRB.getInt8(0), IRB.getInt64(MemSetSize), MaybeAlign(0), false);
 +    if (UseCJMemset) {
 +      CI->setCalledFunction(CJMemset);
++    }
++    addLoopIterationMemsetForHoistedArray(I, CI);
++  }
++
++  void addLoopIterationMemsetForHoistedArray(CallBase *I, CallInst *MemsetCI) {
++    IRBuilder<> IRB(I);
++    if (I && I->getCalledFunction()) {
++      Function *F = I->getCalledFunction();
++      auto FuncName = F->getName();
++      if (FuncName.startswith("CJ_MCC_NewArray")) {
++        CallInst *NewMemset = cast<CallInst>(MemsetCI->clone());
++        NewMemset->insertBefore(I);
++      }
 +    }
 +  }
 +
@@ -50808,8 +50861,8 @@ index 000000000..1681820be
 +    }
 +    if (BeforeRun) {
 +      LLVM_DEBUG(dbgs() << "    defs:\n");
-+      for (auto DefInfo : Def[&BB]) {
-+        for (auto ValueVec : DefInfo.second) {
++      for (const auto &DefInfo : Def[&BB]) {
++        for (const auto &ValueVec : DefInfo.second) {
 +          LLVM_DEBUG(dbgs() << "      " << *DefInfo.first
 +                            << " offset :" << ValueVec.first << "\n");
 +          for (auto Value : ValueVec.second) {
@@ -50819,8 +50872,8 @@ index 000000000..1681820be
 +      }
 +    } else {
 +      LLVM_DEBUG(dbgs() << "    ins:\n");
-+      for (auto InInfo : In[&BB]) {
-+        for (auto ValueVec : InInfo.second) {
++      for (const auto &InInfo : In[&BB]) {
++        for (const auto &ValueVec : InInfo.second) {
 +          LLVM_DEBUG(dbgs() << "      " << *InInfo.first
 +                            << " offset :" << ValueVec.first << "\n");
 +          for (auto Value : ValueVec.second) {
@@ -51007,16 +51060,16 @@ index 000000000..1681820be
 +        auto &SuccOut = Out[&BB];
 +        auto &InInfo = In[&BB];
 +        if (NotInitialize) { // first time to initialize.
-+          for (auto SuccDefs : Def[&BB]) {
-+            for (auto SuccDef : SuccDefs.second) {
++          for (const auto &SuccDefs : Def[&BB]) {
++            for (const auto &SuccDef : SuccDefs.second) {
 +              SuccOut[SuccDefs.first][SuccDef.first].insert(
 +                  SuccDef.second.begin(), SuccDef.second.end());
 +            }
 +          }
 +        }
 +        for (auto *Pred : predecessors(&BB)) {
-+          for (auto LivVal : Out[Pred]) {
-+            for (auto ValVec : LivVal.second) {
++          for (const auto &LivVal : Out[Pred]) {
++            for (const auto &ValVec : LivVal.second) {
 +              for (auto Val : ValVec.second) {
 +                if (!InInfo[LivVal.first][ValVec.first].count(Val)) {
 +                  InInfo[LivVal.first][ValVec.first].insert(Val);
@@ -51028,8 +51081,8 @@ index 000000000..1681820be
 +          if (Pred == &BB) {
 +            continue;
 +          }
-+          for (auto LivVal : Out[Pred]) {
-+            for (auto ValVec : LivVal.second) {
++          for (const auto &LivVal : Out[Pred]) {
++            for (const auto &ValVec : LivVal.second) {
 +              for (auto Val : ValVec.second) {
 +                if (SuccBBInfo[LivVal.first].count(ValVec.first) &&
 +                    SuccBBInfo[LivVal.first][ValVec.first].size() != 0) {
@@ -51243,12 +51296,17 @@ index 000000000..1681820be
 +      CopyType =
 +          cast<PointerType>(BaseV->getType())->getNonOpaquePointerElementType();
 +    }
-+    if (isa<StructType>(CopyType)) {
-+      if (!containsGCPtrType(CopyType)) {
++    if (auto *CopyST = dyn_cast<StructType>(CopyType)) {
++      if (!containsGCPtrType(CopyST)) {
 +        return;
 +      }
-+      countRefOffsets(cast<StructType>(CopyType), RefOffsets, 0, DL, BeginOff,
-+                      BeginOff + Size);
++      uint64_t Left = static_cast<uint64_t>(BeginOff);
++      uint64_t Right = Left + Size;
++      const auto &Offsets = getStructRefOffsets(CopyST, Right, DL);
++      auto It = std::lower_bound(Offsets.begin(), Offsets.end(), Left);
++      for (; It != Offsets.end() && *It < Right; ++It) {
++        RefOffsets.push_back(*It);
++      }
 +    } else {
 +      // 64: large size threshold
 +      if (Size > 64) {
@@ -51278,10 +51336,21 @@ index 000000000..1681820be
 +      }
 +      return;
 +    }
++    SmallDenseMap<std::pair<Value *, uint64_t>, GCPtr *, 8> SrcMPCache;
 +    for (auto Offset : RefOffsets) {
 +      uint64_t PVOffset = POffset + Offset - BeginOff;
 +      uint64_t VPOffset = Off + Offset - BeginOff;
-+      GCPtr *SrcMP = findSrcMP(BaseV, VPOffset, I->getParent());
++      auto CacheKey = std::make_pair(BaseV, VPOffset);
++      GCPtr *SrcMP = nullptr;
++      auto CacheIt = SrcMPCache.find(CacheKey);
++      if (CacheIt != SrcMPCache.end()) {
++        SrcMP = CacheIt->second;
++      } else {
++        SrcMP = findSrcMP(BaseV, VPOffset, I->getParent());
++        SrcMPCache.insert({CacheKey, SrcMP});
++      }
++      if (SrcMP->P == Base && VPOffset == PVOffset)
++        continue;
 +      MemPtr *MP = MemPtr::create(Base, PVOffset, *this, LI);
 +      MP->insertDefine(I->getParent(), SrcMP);
 +      if (!Def[I->getParent()][Base][PVOffset].empty()) {
@@ -51291,19 +51360,52 @@ index 000000000..1681820be
 +    }
 +  }
 +
-+  GCPtr *findSrcMP(Value *BaseV, uint64_t VPOffset, BasicBlock *CurBB) {
-+    if (Def[CurBB][BaseV][VPOffset].empty()) {
-+      return MemPtr::create(BaseV, VPOffset, *this, LI);
++  const SmallVector<uint64_t, 8> &
++  getStructRefOffsets(StructType *ST, uint64_t RangeEnd,
++                      const DataLayout &DL) {
++    auto &BySize = StructRefOffsetsCache[ST];
++    auto It = BySize.find(RangeEnd);
++    if (It != BySize.end()) {
++      return It->second;
 +    }
++    SmallVector<uint64_t, 8> Offsets;
++    if (RangeEnd != 0) {
++      countRefOffsets(ST, Offsets, 0, DL, 0, RangeEnd);
++      std::sort(Offsets.begin(), Offsets.end());
++      Offsets.erase(std::unique(Offsets.begin(), Offsets.end()),
++                    Offsets.end());
++    }
++    auto Inserted = BySize.insert({RangeEnd, std::move(Offsets)});
++    return Inserted.first->second;
++  }
++
++  GCPtr *findSrcMP(Value *BaseV, uint64_t VPOffset, BasicBlock *CurBB) {
++    auto BBIt = Def.find(CurBB);
++    if (BBIt == Def.end())
++      return MemPtr::create(BaseV, VPOffset, *this, LI);
++    auto &BBDefs = BBIt->second;
++    auto FindInMap = [&BBDefs, this](Value *BaseV,
++                                     uint64_t VPOffset) -> GCPtr * {
++      auto BaseIt = BBDefs.find(BaseV);
++      if (BaseIt == BBDefs.end())
++        return nullptr;
++      auto OffIt = BaseIt->second.find(VPOffset);
++      if (OffIt == BaseIt->second.end() || OffIt->second.empty())
++        return nullptr;
++      return *OffIt->second.begin();
++    };
++    GCPtr *Temp = FindInMap(BaseV, VPOffset);
++    if (!Temp)
++      return MemPtr::create(BaseV, VPOffset, *this, LI);
 +    GCPtr *CurP = nullptr;
-+    while (!Def[CurBB][BaseV][VPOffset].empty()) {
-+      CurP = *Def[CurBB][BaseV][VPOffset].begin();
++    do {
++      CurP = Temp;
 +      if (CurP->isPtr())
 +        return CurP;
 +      MemPtr *MP = reinterpret_cast<MemPtr *>(CurP);
 +      VPOffset = MP->Offset;
 +      BaseV = MP->P;
-+    }
++    } while ((Temp = FindInMap(BaseV, VPOffset)));
 +    return CurP;
 +  }
 +
@@ -51722,16 +51824,16 @@ index 000000000..1681820be
 +  DenseMap<Value *, SmallSetVector<GCPtr *, 8>> LoadBaseValue;
 +  DenseMap<Value *, unsigned> LoadState;
 +  SmallSetVector<GCPtr *, 8> LoadValues;
++  using StructRefOffsetsBySize =
++      DenseMap<uint64_t, SmallVector<uint64_t, 8>>;
++  DenseMap<StructType *, StructRefOffsetsBySize> StructRefOffsetsCache;
 +
-+  std::map<BasicBlock *,
-+           std::map<Value *, std::map<int, SmallSetVector<GCPtr *, 8>>>>
-+      Def;
-+  std::map<BasicBlock *,
-+           std::map<Value *, std::map<int, SmallSetVector<GCPtr *, 8>>>>
-+      Out;
-+  std::map<BasicBlock *,
-+           std::map<Value *, std::map<int, SmallSetVector<GCPtr *, 8>>>>
-+      In;
++  using DefOffsetMap = DenseMap<int, SmallSetVector<GCPtr *, 8>>;
++  using DefBaseMap = DenseMap<Value *, DefOffsetMap>;
++  using DefBBMap = std::map<BasicBlock *, DefBaseMap>;
++  DefBBMap Def;
++  DefBBMap Out;
++  DefBBMap In;
 +};
 +
 +static bool skipLargeFunction(Function *F) {
@@ -51848,10 +51950,55 @@ index f9833224d..b612f0d37 100644
    CrossDSOCFI.cpp
    DeadArgumentElimination.cpp
 diff --git a/llvm/lib/Transforms/IPO/ConstantMerge.cpp b/llvm/lib/Transforms/IPO/ConstantMerge.cpp
-index 73af30ece..848dbd75b 100644
+index 73af30ece..58015ae45 100644
 --- a/llvm/lib/Transforms/IPO/ConstantMerge.cpp
 +++ b/llvm/lib/Transforms/IPO/ConstantMerge.cpp
-@@ -154,6 +154,10 @@ static bool mergeConstants(Module &M) {
+@@ -31,6 +31,7 @@
+ #include "llvm/InitializePasses.h"
+ #include "llvm/Pass.h"
+ #include "llvm/Support/Casting.h"
++#include "llvm/Support/CommandLine.h"
+ #include "llvm/Transforms/IPO.h"
+ #include <algorithm>
+ #include <cassert>
+@@ -38,10 +39,24 @@
+ 
+ using namespace llvm;
+ 
++namespace llvm {
++  extern cl::opt<bool> CJPipeline;
++}
++
+ #define DEBUG_TYPE "constmerge"
+ 
+ STATISTIC(NumIdenticalMerged, "Number of identical global constants merged");
+ 
++static bool CJGVMergeable(GlobalVariable &GV) {
++  if (CJPipeline &&
++      (GV.hasAttribute("CJTITypeArgs") || GV.hasAttribute("CJTypeName") ||
++       GV.hasAttribute("CJTIFields") || GV.hasAttribute("CJTIOffsets") ||
++       GV.hasAttribute("CFileReflect"))) {
++    return true;
++  }
++  return false;
++}
++
+ /// Find values that are marked as llvm.used.
+ static void FindUsedValues(GlobalVariable *LLVMUsed,
+                            SmallPtrSetImpl<const GlobalValue*> &UsedValues) {
+@@ -105,9 +120,9 @@ enum class CanMerge { No, Yes };
+ static CanMerge makeMergeable(GlobalVariable *Old, GlobalVariable *New) {
+   if (!Old->hasGlobalUnnamedAddr() && !New->hasGlobalUnnamedAddr())
+     return CanMerge::No;
+-  if (hasMetadataOtherThanDebugLoc(Old))
++  if (hasMetadataOtherThanDebugLoc(Old) && !CJGVMergeable(*Old))
+     return CanMerge::No;
+-  assert(!hasMetadataOtherThanDebugLoc(New));
++  assert(!(hasMetadataOtherThanDebugLoc(New) && !CJGVMergeable(*New)));
+   if (!Old->hasGlobalUnnamedAddr())
+     New->setUnnamedAddr(GlobalValue::UnnamedAddr::None);
+   return CanMerge::Yes;
+@@ -154,6 +169,10 @@ static bool mergeConstants(Module &M) {
    while (true) {
      // Find the canonical constants others will be merged with.
      for (GlobalVariable &GV : llvm::make_early_inc_range(M.globals())) {
@@ -51862,6 +52009,15 @@ index 73af30ece..848dbd75b 100644
        // If this GV is dead, remove it.
        GV.removeDeadConstantUsers();
        if (GV.use_empty() && GV.hasLocalLinkage()) {
+@@ -173,7 +192,7 @@ static bool mergeConstants(Module &M) {
+         continue;
+ 
+       // Don't touch globals with metadata other then !dbg.
+-      if (hasMetadataOtherThanDebugLoc(&GV))
++      if (hasMetadataOtherThanDebugLoc(&GV) && !CJGVMergeable(GV))
+         continue;
+ 
+       Constant *Init = GV.getInitializer();
 diff --git a/llvm/lib/Transforms/IPO/DeadArgumentElimination.cpp b/llvm/lib/Transforms/IPO/DeadArgumentElimination.cpp
 index 99fa4baf3..c3695524b 100644
 --- a/llvm/lib/Transforms/IPO/DeadArgumentElimination.cpp
@@ -51973,7 +52129,7 @@ index 50710eaa1..b9065ec1a 100644
  
  /// Deduce returned attributes for the SCC.
 diff --git a/llvm/lib/Transforms/IPO/GlobalDCE.cpp b/llvm/lib/Transforms/IPO/GlobalDCE.cpp
-index f35827220..2cb899381 100644
+index f35827220..ed439e278 100644
 --- a/llvm/lib/Transforms/IPO/GlobalDCE.cpp
 +++ b/llvm/lib/Transforms/IPO/GlobalDCE.cpp
 @@ -18,6 +18,7 @@
@@ -51984,15 +52140,7 @@ index f35827220..2cb899381 100644
  #include "llvm/IR/Instructions.h"
  #include "llvm/IR/IntrinsicInst.h"
  #include "llvm/IR/Module.h"
-@@ -25,6 +26,7 @@
- #include "llvm/Pass.h"
- #include "llvm/Support/CommandLine.h"
- #include "llvm/Transforms/IPO.h"
-+#include "llvm/Transforms/Scalar/CJFillMetadata.h"
- #include "llvm/Transforms/Utils/CtorUtils.h"
- #include "llvm/Transforms/Utils/GlobalStatus.h"
- 
-@@ -32,10 +34,18 @@ using namespace llvm;
+@@ -32,10 +33,23 @@ using namespace llvm;
  
  #define DEBUG_TYPE "globaldce"
  
@@ -52008,22 +52156,55 @@ index f35827220..2cb899381 100644
 +    ClEnableCJVFE("enable-cangjie-vfe", cl::Hidden, cl::init(true),
 +                cl::desc("Enable cangjie virtual function elimination"));
 +
++static cl::opt<bool>
++    ClEnableCJTIE("enable-cangjie-typeinfo-elimination", cl::Hidden,
++                  cl::init(true),
++                  cl::desc("Enable cangjie typeinfo elimination"));
++
  STATISTIC(NumAliases  , "Number of global aliases removed");
  STATISTIC(NumFunctions, "Number of functions removed");
  STATISTIC(NumIFuncs,    "Number of indirect functions removed");
-@@ -318,6 +328,11 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -138,6 +152,10 @@ void GlobalDCEPass::UpdateGVDependencies(GlobalValue &GV) {
+                         << GV.getName() << "\n");
+       continue;
+     }
++    if (CJPipeline &&
++        CangjieDCE::maybeFakeLiveOfTypeMeta(dyn_cast<GlobalVariable>(GVU),
++                                            dyn_cast<GlobalVariable>(&GV)))
++      continue;
+     GVDependencies[GVU].insert(&GV);
+   }
+ }
+@@ -290,6 +308,7 @@ void GlobalDCEPass::AddVirtualFunctionDependencies(Module &M) {
+ 
+ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+   bool Changed = false;
++  CangjieDCE CJDCE(*this);
+ 
+   // The algorithm first computes the set L of global variables that are
+   // trivially live.  Then it walks the initialization of these variables to
+@@ -318,6 +337,11 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
    // might call, if we have that information.
    AddVirtualFunctionDependencies(M);
  
-+  if (CJPipeline && ClEnableCJVFE) {
-+    CangjieVFE CVFE(*this);
-+    CVFE.addCangjieVirtualFunctionDependencies(M);
-+  }
++  if (CJPipeline && ClEnableCJVFE)
++    CJDCE.addCangjieVirtualFunctionDependencies(M);
++  if (CJPipeline && ClEnableCJTIE)
++    CJDCE.initTIE(M);
 +
    // Loop over the module, adding globals which are obviously necessary.
    for (GlobalObject &GO : M.global_objects()) {
      GO.removeDeadConstantUsers();
-@@ -367,9 +382,14 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -361,15 +385,23 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+       MarkLive(*GVD, &NewLiveGVs);
+   }
+ 
++  if (CJPipeline && ClEnableCJTIE)
++    CJDCE.updateLiveExtensions();
++
+   // Now that all globals which are needed are in the AliveGlobals set, we loop
+   // through the program, deleting those which are not alive.
+   //
  
    // The first pass is to drop initializers of global variables which are dead.
    std::vector<GlobalVariable *> DeadGlobalVars; // Keep track of dead globals
@@ -52040,7 +52221,7 @@ index f35827220..2cb899381 100644
        if (GV.hasInitializer()) {
          Constant *Init = GV.getInitializer();
          GV.setInitializer(nullptr);
-@@ -377,16 +397,20 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -377,16 +409,20 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
            Init->destroyConstant();
        }
      }
@@ -52065,13 +52246,39 @@ index f35827220..2cb899381 100644
    // The third pass drops targets of aliases which are dead...
    std::vector<GlobalAlias*> DeadAliases;
    for (GlobalAlias &GA : M.aliases())
-@@ -458,3 +482,207 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -435,8 +471,12 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+   }
+ 
+   NumVariables += DeadGlobalVars.size();
+-  for (GlobalVariable *GV : DeadGlobalVars)
++  for (GlobalVariable *GV : DeadGlobalVars) {
++    if (CangjieDCE::isCangjieType(GV) ||
++        CangjieDCE::isMetaAssociatedWithType(GV))
++      GV->replaceNonMetadataUsesWith(ConstantPointerNull::get(GV->getType()));
+     EraseUnusedGlobalValue(GV);
++  }
+ 
+   NumAliases += DeadAliases.size();
+   for (GlobalAlias *GA : DeadAliases)
+@@ -446,6 +486,11 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+   for (GlobalIFunc *GIF : DeadIFuncs)
+     EraseUnusedGlobalValue(GIF);
+ 
++  if (CJPipeline && ClEnableCJTIE) {
++    CJDCE.rewriteExtensions(M);
++    CJDCE.rewriteLLVMUsed(M);
++  }
++
+   // Make sure that all memory is released
+   AliveGlobals.clear();
+   ConstantDependenciesCache.clear();
+@@ -458,3 +503,377 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
      return PreservedAnalyses::none();
    return PreservedAnalyses::all();
  }
 +
-+CangjieVFE::GenericFuncInfo *
-+CangjieVFE::insertInstance(const SmallVectorImpl<GlobalVariable *> &Path,
++CangjieDCE::GenericFuncInfo *
++CangjieDCE::insertInstance(const SmallVectorImpl<GlobalVariable *> &Path,
 +                           GlobalVariable *FT = nullptr) {
 +  GenericFuncInfo *CurRoot = this->Root;
 +  for (GlobalVariable *GV : Path) {
@@ -52091,8 +52298,8 @@ index f35827220..2cb899381 100644
 +  return CurRoot;
 +}
 +
-+CangjieVFE::GenericFuncInfo *
-+CangjieVFE::findTargetInstance(const SmallVectorImpl<GlobalVariable *> &Path) {
++CangjieDCE::GenericFuncInfo *
++CangjieDCE::findTargetInstance(const SmallVectorImpl<GlobalVariable *> &Path) {
 +  GenericFuncInfo *Root = this->Root;
 +  for (GlobalVariable *GV : Path) {
 +    auto It = Root->Next.find(GV);
@@ -52103,7 +52310,7 @@ index f35827220..2cb899381 100644
 +  return Root->IsValid ? Root : nullptr;
 +}
 +
-+CangjieVFE::GenericFuncInfo *CangjieVFE::resolveVFEMeta(Metadata *MD,
++CangjieDCE::GenericFuncInfo *CangjieDCE::resolveVFEMeta(Metadata *MD,
 +                                                        Module &M) {
 +  SmallVector<GlobalVariable *, 4> Path;
 +  MDNode *N;
@@ -52130,7 +52337,7 @@ index f35827220..2cb899381 100644
 +
 +// Obtain the function table FT that achieves P from C, return {C, P, FT}.
 +std::tuple<GlobalVariable *, GlobalVariable *, GlobalVariable *>
-+CangjieVFE::scanVTable(GlobalVariable &GV) {
++CangjieDCE::scanVTable(GlobalVariable &GV) {
 +  assert(GV.hasInitializer());
 +  assert(GV.getType()->getNonOpaquePointerElementType()->getStructName() ==
 +         "ExtensionDef");
@@ -52160,7 +52367,7 @@ index f35827220..2cb899381 100644
 +    // O is typeinfo
 +    auto *TT = cast<GlobalVariable>(O)
 +                   ->getInitializer()
-+                   ->getOperand(CalssInfoFieldType::CIT_GENERIC_FROM)
++                   ->getOperand(ClassInfoFieldType::CIT_GENERIC_FROM)
 +                   ->stripPointerCasts();
 +    O = isa<ConstantPointerNull>(TT) ? O : TT;
 +  }
@@ -52170,7 +52377,7 @@ index f35827220..2cb899381 100644
 +  return {TI, IF, FT};
 +}
 +
-+void CangjieVFE::updateDependencies(
++void CangjieDCE::updateDependencies(
 +    Function *Caller,
 +    DenseMap<GenericFuncInfo *, SmallSet<uint64_t, 4>> &Relation) {
 +  auto Mark = [Caller, this](SmallPtrSetImpl<GlobalVariable *> &FTs,
@@ -52208,7 +52415,7 @@ index f35827220..2cb899381 100644
 +  }
 +}
 +
-+void CangjieVFE::addCangjieVirtualFunctionDependencies(Module &M) {
++void CangjieDCE::addCangjieVirtualFunctionDependencies(Module &M) {
 +  // For cangjie, it has the following rules:
 +  //  - If A implements I, then apart from extend, the visibility of I must be
 +  //  greater than or equal to that of A.
@@ -52220,7 +52427,7 @@ index f35827220..2cb899381 100644
 +  // can be performed.
 +  for (auto &GV : M.globals()) {
 +    // If typeArgs >= 2, skip it.
-+    if (!GV.hasAttribute("CFileMTable") || !GV.hasMetadata("inheritedType"))
++    if (!GV.isCJMTable() || !GV.hasMetadata("inheritedType"))
 +      continue;
 +    if (!GV.hasInitializer())
 +      report_fatal_error("ExtensionDef must be initialized.");
@@ -52261,7 +52468,7 @@ index f35827220..2cb899381 100644
 +  }
 +}
 +
-+CangjieVFE::~CangjieVFE() {
++CangjieDCE::~CangjieDCE() {
 +  SmallVector<GenericFuncInfo *> Worklist = {Root};
 +  SmallVector<GenericFuncInfo *> Stack;
 +  while (!Worklist.empty()) {
@@ -52273,7 +52480,176 @@ index f35827220..2cb899381 100644
 +  while (!Stack.empty())
 +    delete Stack.pop_back_val();
 +}
-\ No newline at end of file
++
++bool CangjieDCE::maybeFakeLiveOfTypeMeta(GlobalVariable *GVU,
++                                         GlobalVariable *GV) {
++  if (!GV || !GVU)
++    return false;
++  // All metadata about typeinfo should be regarded as a whole.
++  if (GVU->isCJInnerTypeExtensions()) {
++    assert(GV->isCJMTable());
++    return true;
++  }
++  if (GVU->isCJStaticGenericTI()) {
++    assert(GV->isCJTypeInfo());
++    return true;
++  }
++  if (GV->isCJTypeExt()) {
++    assert(GVU->getName().startswith("llvm.used"));
++    return true;
++  }
++  // For the extended function, if both target type and interface are public,
++  // mtable needs to remain alive even though neither target type nor interface
++  // is in use.
++  if (GVU->isCJOuterTypeExtensions()) {
++    auto IsInternalType = [](GlobalVariable *Ty) {
++      if (Ty->isCJTypeTemplate())
++        return GlobalVariable::isInternalLinkage(Ty->getLinkage());
++      auto *TT = Ty->getInitializer()
++                     ->getOperand(ClassInfoFieldType::CIT_GENERIC_FROM)
++                     ->stripPointerCasts();
++      if (isa<ConstantPointerNull>(TT))
++        return GlobalVariable::isInternalLinkage(Ty->getLinkage());
++      return GlobalVariable::isInternalLinkage(
++          cast<GlobalVariable>(TT)->getLinkage());
++    };
++    bool IsTypeInternal = false, IsIFInternal = false;
++    auto *Ty = cast<GlobalVariable>(
++        GV->getInitializer()
++            ->getOperand(ExtensionDefFieldType::ET_TARGET_TYPE)
++            ->stripPointerCasts());
++    if (Ty->hasInitializer())
++      IsTypeInternal = IsInternalType(Ty);
++    auto *IFN = GV->getInitializer()
++                    ->getOperand(ExtensionDefFieldType::ET_INTERFACE_FN)
++                    ->stripPointerCasts();
++    if (auto *IF = dyn_cast<GlobalVariable>(IFN))
++      IsIFInternal = IF->hasInitializer() && IsInternalType(IF);
++    else if (auto *F =
++                 dyn_cast<Function>(IFN)) // TODO check whether tt is internal
++      IsIFInternal = false;
++    return IsTypeInternal || IsIFInternal;
++  }
++  return false;
++}
++
++void CangjieDCE::initTIE(Module &M) {
++  for (GlobalVariable &GV : M.globals())
++    if (int Idx = getReverseDepsIndex(&GV); Idx != -1) {
++      ReverseDeps[GV.getInitializer()->getOperand(Idx)->stripPointerCasts()]
++          .insert(&GV);
++    }
++}
++
++void CangjieDCE::updateLiveExtensions() {
++  auto NeedToUpdate = [this](GlobalValue *G) {
++    auto *GV = dyn_cast<GlobalVariable>(G);
++    if (GV && ReverseDeps.count(GV)) {
++      // If typeinfo is alive, then the associated metadata are also alive. Some
++      // typeinfo or typetemplate are declaration and do not have attribute.
++      assert(isCangjieType(GV) || GV->isDeclaration());
++      return true;
++    }
++    return false;
++  };
++  auto MarkRelatedMeta = [this, &NeedToUpdate](
++                             SmallPtrSetImpl<GlobalVariable *> &LiveSet,
++                             SmallVectorImpl<GlobalVariable *> &Updates) {
++    // Note that in scenarios where the type and target type are the same,
++    // filtering is required to avoid duplicate marking, which could lead to an
++    // infinite loop.
++    for (auto *GV : LiveSet)
++      DCE.MarkLive(*GV);
++    SmallVector<GlobalValue *, 8> NewLiveGVs{LiveSet.begin(), LiveSet.end()};
++    while (!NewLiveGVs.empty()) {
++      GlobalValue *LGV = NewLiveGVs.pop_back_val();
++      for (auto *GVD : DCE.GVDependencies[LGV]) {
++        DCE.MarkLive(*GVD, &NewLiveGVs);
++        if (NeedToUpdate(GVD)) // Recursively handle typeinfo.
++          Updates.push_back(cast<GlobalVariable>(GVD));
++      }
++    }
++  };
++
++  SmallVector<GlobalVariable *, 8> LiveTypes;
++  for (GlobalValue *G : DCE.AliveGlobals) {
++    if (NeedToUpdate(G))
++      LiveTypes.push_back(cast<GlobalVariable>(G));
++  }
++  SmallPtrSet<GlobalVariable *, 8> Visited;
++  while (!LiveTypes.empty()) {
++    auto *Ty = LiveTypes.pop_back_val();
++    if (!Visited.insert(Ty).second)
++      continue;
++    assert(ReverseDeps.count(Ty));
++    MarkRelatedMeta(ReverseDeps[Ty], LiveTypes);
++  }
++}
++
++void CangjieDCE::rewriteExtensions(Module &M) {
++  SmallPtrSet<GlobalVariable *, 4> Candidates;
++  // There might also be InnerTypeExtensions. Considering the runtime's parsing
++  // method, not rewriting this part does not affect correctness; it only
++  // slightly impacts the optimization effect on code size.
++  for (GlobalVariable &GV : M.globals())
++    if (GV.isCJStaticGenericTI() || GV.isCJOuterTypeExtensions())
++      Candidates.insert(&GV);
++  for (auto *GV : Candidates) {
++    if (!GV->hasInitializer())
++      report_fatal_error("Must have initializer");
++    auto *C = GV->getInitializer();
++    std::vector<Constant *> LiveGVs;
++    Type *ATy = nullptr;
++    // Create NewGV
++    for (unsigned I = 0, E = C->getNumOperands(); I != E; ++I) {
++      if (isa<ConstantPointerNull>(C->getOperand(I)))
++        continue;
++      ATy = cast<GlobalVariable>(C->getOperand(I))->getType();
++      LiveGVs.push_back(cast<GlobalVariable>(C->getOperand(I)));
++    }
++    if (LiveGVs.empty() || LiveGVs.size() == C->getNumOperands())
++      continue;
++    ArrayType *AT = ArrayType::get(ATy, LiveGVs.size());
++    Constant *NewC = ConstantArray::get(AT, LiveGVs);
++    GlobalVariable *NewGV = cast<GlobalVariable>(
++        M.getOrInsertGlobal(GV->getName().str() + ".new", AT));
++    NewGV->setLinkage(GlobalVariable::PrivateLinkage);
++    NewGV->setInitializer(NewC);
++    NewGV->copyAttributesFrom(GV);
++    NewGV->copyMetadata(GV, /*Offset=*/0);
++    // Replace GV
++    if (GV->getNumUses() != 1) // 1: llvm.used
++      report_fatal_error("User number should be one");
++    auto *Expr = dyn_cast<ConstantExpr>(GV->use_begin()->getUser());
++    Expr->handleOperandChange(GV, NewGV);
++    GV->eraseFromParent();
++  }
++}
++
++void CangjieDCE::rewriteLLVMUsed(Module &M) {
++  GlobalVariable *GV = M.getNamedGlobal("llvm.used");
++  if (!GV)
++    return;
++  auto *C = GV->getInitializer();
++  std::vector<Constant *> LiveGVs;
++  for (unsigned I = 0, E = C->getNumOperands(); I != E; ++I) {
++    if (isa<ConstantPointerNull>(C->getOperand(I)))
++      continue;
++    LiveGVs.push_back(cast<Constant>(C->getOperand(I)));
++  }
++  if (LiveGVs.empty() || LiveGVs.size() == C->getNumOperands())
++    return;
++  auto *AT = ArrayType::get(Type::getInt8PtrTy(M.getContext()), LiveGVs.size());
++  auto *NewC = ConstantArray::get(AT, LiveGVs);
++  GV->setName("llvm.used.old");
++  GlobalVariable *NewGV =
++      cast<GlobalVariable>(M.getOrInsertGlobal("llvm.used", AT));
++  NewGV->setLinkage(GlobalVariable::AppendingLinkage);
++  NewGV->setInitializer(NewC);
++  NewGV->copyAttributesFrom(GV);
++  NewGV->copyMetadata(GV, /*Offset=*/0);
++  GV->eraseFromParent();
++}
 diff --git a/llvm/lib/Transforms/IPO/GlobalOpt.cpp b/llvm/lib/Transforms/IPO/GlobalOpt.cpp
 index 6df040925..86462261b 100644
 --- a/llvm/lib/Transforms/IPO/GlobalOpt.cpp
@@ -63838,10 +64214,10 @@ index 000000000..14b0d3f87
 +                    "Cangjie Loop Float Optimize", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJRSSCE.cpp b/llvm/lib/Transforms/Scalar/CJRSSCE.cpp
 new file mode 100644
-index 000000000..b83e440ed
+index 000000000..aa08d570c
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJRSSCE.cpp
-@@ -0,0 +1,1338 @@
+@@ -0,0 +1,1345 @@
 +//===- CJRSSCE.cpp ----------------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -63903,22 +64279,29 @@ index 000000000..b83e440ed
 +using Interval = std::pair<uint64_t, uint64_t>;
 +
 +static std::pair<Value *, uint64_t>
-+getBasePtrAndOffset(const DataLayout &DL, Value *V, Instruction *I) {
++getBasePtrAndOffset(const DataLayout &DL, Value *V, Instruction *I,
++                    Instruction **LastClobberI = nullptr) {
 +  // For example:
 +  //   %16 = llvm.cj.gcread.ref(%cmp, %15)
 +  //   store i8 addrspace(1)* %16, %17
 +  // The Ptr now is %16, and we need to find cmp to check if cmp is same as
-+  // BasePtr.
++  // BasePtr. And if V is a load instruction, we need to ensure that the load
++  // pointer is not clobbered starting from here.
 +  V = V->stripPointerCasts();
 +  if (isa<StoreInst>(I)) {
++    Instruction *StartI = I->getFunction()->getEntryBlock().getFirstNonPHI();
 +    if (auto *II = dyn_cast<IntrinsicInst>(V)) {
 +      if (II->getIntrinsicID() == Intrinsic::cj_gcread_ref)
 +        V = II->getArgOperand(1)->stripPointerCasts();
 +      else if (II->getIntrinsicID() == Intrinsic::cj_gcread_static_ref)
 +        V = II->getArgOperand(0)->stripPointerCasts();
++      StartI = II;
 +    } else if (auto *LI = dyn_cast<LoadInst>(V)) {
 +      V = LI->getPointerOperand()->stripPointerCasts();
++      StartI = LI;
 +    }
++    if (LastClobberI)
++      *LastClobberI = StartI;
 +  }
 +  // V is not a memory object.
 +  if (!isa<PointerType>(V->getType()))
@@ -64350,7 +64733,7 @@ index 000000000..b83e440ed
 +      }
 +      assert((isa<StoreInst>(I) || isa<MemCpyInst>(I)) &&
 +             "Only support to deal store or memcpy");
-+      auto [SrcBPtr, SrcOff] = getBasePtrAndOffset(DL, Src, I);
++      auto [SrcBPtr, SrcOff] = getBasePtrAndOffset(DL, Src, I, &LastClobberI);
 +      auto [DstBPtr, DstOff] = getBasePtrAndOffset(DL, Dst, I);
 +      if (!SrcBPtr || !DstBPtr)
 +        break;
@@ -70823,10 +71206,10 @@ index 000000000..247781471
 +                "Cangjie simple range analysis.", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp b/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp
 new file mode 100644
-index 000000000..c6a7e4253
+index 000000000..ab3187578
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp
-@@ -0,0 +1,446 @@
+@@ -0,0 +1,497 @@
 +//===- CJSpecificOpt.cpp ----------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -71216,8 +71599,59 @@ index 000000000..c6a7e4253
 +  return Changed;
 +}
 +
++static bool generateAliasForStaticGI(Module &M) {
++  bool Changed = false;
++  for (GlobalVariable &GV : M.globals()) {
++
++    if (GV.isCJStaticGenericTI()) {
++      assert(GV.hasInitializer() && "StaticGenericTI has no Initializer!");
++
++      Constant *C = GV.getInitializer();
++
++      SmallVector<Constant *, 16> NewOperands;
++      for (unsigned Idx = 0; Idx < C->getNumOperands(); Idx++) {
++        GlobalVariable *TI = cast<GlobalVariable>(C->getOperand(Idx));
++
++        // Skip two cases where the original symbol should be preserved:
++        // 1. ExternalLinkage: In ThinLTO, linkonce_odr symbols not set as
++        // Prevailing
++        //    are downgraded to ExternalLinkage by the 'ElimAvailExtern' pass,
++        //    and will eventually become external declarations.
++        // 2. AvailableExternallyLinkage: In FullLTO, when a symbol from a
++        // static library
++        //    (.a file) is set as Prevailing, the corresponding symbol in the
++        //    bitcode will be marked as AvailableExternallyLinkage and later
++        //    eliminated by the optimizer, so no alias creation is needed.
++        if (TI->hasExternalLinkage() || TI->hasAvailableExternallyLinkage()) {
++          NewOperands.push_back(TI);
++          continue;
++        }
++
++        std::string AliasName = "alias_" + TI->getName().str();
++        auto *Alias = GlobalAlias::create(
++            TI->getValueType(), TI->getType()->getPointerAddressSpace(),
++            GlobalValue::PrivateLinkage, AliasName, TI, &M);
++
++        NewOperands.push_back(Alias);
++        Changed = true;
++      }
++
++      ArrayType *ArrayTy = cast<ArrayType>(C->getType());
++      Constant *NewInit = ConstantArray::get(ArrayTy, NewOperands);
++      GV.setInitializer(NewInit);
++    }
++  }
++  return Changed;
++}
++
 +static bool processCangjieIR(Module &M, unsigned OptLevel) {
 +  bool Changed = false;
++
++  llvm::Triple T(M.getTargetTriple());
++  if (!T.isOSWindows()) {
++    Changed |= generateAliasForStaticGI(M);
++  }
++
 +  for (Function &F : M) {
 +    Changed |= runOnFunction(F, OptLevel);
 +  }
@@ -105007,6 +105441,234 @@ index 000000000..5864a81e2
 +
 +attributes #0 = { nofree nosync nounwind readnone willreturn}
 \ No newline at end of file
+diff --git a/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie-vfe-1.ll b/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie-vfe-1.ll
+new file mode 100644
+index 000000000..35d630569
+--- /dev/null
++++ b/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie-vfe-1.ll
+@@ -0,0 +1,176 @@
++; RUN: opt < %s -passes='globaldce' --cangjie-pipeline -S | FileCheck %s
++
++; interface I1<T> {
++;   func func_I11() {}
++;   func func_I12() {}
++;   func func_I13() {}
++; }
++; interface I2<T> {
++;   func func_I21() {}
++;   func func_I22() {}
++;   func func_I23() {}
++; }
++; class A<T> <: I1<T> & I2<I1<T>> {
++;   public func func_I1() {}
++;   public func func_I22() { func_A() }
++;   public func func_A() { println("A::func_A") }
++; }
++; class B <: I2<Int64> {}
++; class C<T> <: I2<T> {}
++; public func call_I2_1<T>(v: I2<I1<T>>) { v.func_I22() }
++
++%TypeTemplate = type { i8*, i8, i8, i16, i16, i8*, i8*, i8*, i8*, %ExtensionDef**, i16 }
++%ExtensionDef = type { i32, i8, i8*, i8*, i8*, i8* }
++%TypeInfo = type { i8*, i8, i8, i16, i32, i8*, i32, i8, i8, i16, i32*, i8*, i8*, i8*, %TypeInfo*, %ExtensionDef**, i8*, i8* }
++%Unit.Type = type {}
++
++@"default:A.tt" = private global %TypeTemplate { i8* null, i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** getelementptr inbounds ([6 x %ExtensionDef*], [6 x %ExtensionDef*]* @NonExternalExtensionDefs, i32 0, i32 0), i16 -32768 }
++@"default:B.tt" = private global %TypeTemplate { i8* null, i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** getelementptr inbounds ([6 x %ExtensionDef*], [6 x %ExtensionDef*]* @NonExternalExtensionDefs, i32 0, i32 2), i16 -32768 }
++@"default:I1.tt" = private global %TypeTemplate { i8* null, i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** null, i16 -32768 }
++@"default:I2.ti" = internal global %TypeInfo { i8* null, i8 -127, i8 0, i16 0, i32 0, i8* null, i32 0, i8 1, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo *null, %ExtensionDef** null, i8* null, i8* null }
++
++@"default:A<T>_ed_default:I1<T>.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @_CN7default1AIG_E7func_I1Hv to i8*)]
++@"default:A<T>_ed_default:I1<T>" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i8* bitcast (i8* (i32, %TypeInfo**)* @"default:A<T>_ed_default:I1<T>_iFn" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:A<T>_ed_default:I1<T>.ft" to i8*) }, !inheritedType !0 #0
++; CHECK: @"default:A<T>_ed_default:I2.ft = private global [1 x i8*] zeroinitializer"
++@"default:A<T>_ed_default:I2.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @_CN7default1AIG_E7func_I2Hv to i8*)]
++@"default:A<T>_ed_default:I2" = private global %ExtensionDef { i32 1, i8 1, i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i8* bitcast (%TypeInfo* @"default:I2.ti" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:A<T>_ed_default:I2.ft" to i8*) }, !inheritedType !1 #0
++; CHECK: @"default:B<T>_ed_default:A<T>.ft" = private global [1 x i8*] zeroinitializer
++@"default:B<T>_ed_default:A<T>.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @_CN7default1BIG_E6func_AHv to i8*)]
++@"default:B<T>_ed_default:A<T>" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"default:B.tt" to i8*), i8* bitcast (i8* (i32, %TypeInfo**)* @"default:B<T>_ed_default:A<T>_iFn" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:B<T>_ed_default:A<T>.ft" to i8*) }, !inheritedType !2 #0
++@"default:B<T>_ed_default:I1<T>.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @_CN7default1BIG_E7func_I1Hv to i8*)]
++@"default:B<T>_ed_default:I1<T>" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"default:B.tt" to i8*), i8* bitcast (i8* (i32, %TypeInfo**)* @"default:B<T>_ed_default:I1<T>_iFn" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:B<T>_ed_default:I1<T>.ft" to i8*) }, !inheritedType !0 #0
++; CHECK: @"default:B<T>_ed_default:I2.ft" = private global [1 x i8*] zeroinitializer
++@"default:B<T>_ed_default:I2.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @"_CVN7default1AIG_E7func_I2Hv$N7default1BIG_E$CN7default2I2E" to i8*)]
++@"default:B<T>_ed_default:I2" = private global %ExtensionDef { i32 1, i8 1, i8* bitcast (%TypeTemplate* @"default:B.tt" to i8*), i8* bitcast (%TypeInfo* @"default:I2.ti" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:B<T>_ed_default:I2.ft" to i8*) }, !inheritedType !1 #0
++
++@NonExternalExtensionDefs = private global [6 x %ExtensionDef*] [%ExtensionDef* @"default:A<T>_ed_default:I1<T>", %ExtensionDef* @"default:A<T>_ed_default:I2", %ExtensionDef* @"default:B<T>_ed_default:A<T>", %ExtensionDef* @"default:B<T>_ed_default:I1<T>", %ExtensionDef* @"default:B<T>_ed_default:I2", %ExtensionDef* null]
++@llvm.used = appending global [1 x i8*] [i8* bitcast ([6 x %ExtensionDef*]* @NonExternalExtensionDefs to i8*)]
++
++define private i8* @"default:A<T>_ed_default:I1<T>_iFn"(i32 %0, %TypeInfo** %1) {
++allocas:
++  %2 = alloca [1 x %TypeInfo*], align 8
++  br label %prepTi
++
++prepTi:
++  %3 = getelementptr %TypeInfo*, %TypeInfo** %1, i32 0
++  %4 = load %TypeInfo*, %TypeInfo** %3, align 8
++  %5 = getelementptr inbounds [1 x %TypeInfo*], [1 x %TypeInfo*]* %2, i32 0, i32 0
++  store %TypeInfo* %4, %TypeInfo** %5, align 8
++  %6 = bitcast [1 x %TypeInfo*]* %2 to i8**
++  %7 = call i8* @CJ_MCC_GetOrCreateTypeInfo(i8* bitcast (%TypeTemplate* @"default:I1.tt" to i8*), i32 1, i8** %6)
++  ret i8* %7
++}
++
++define private i8* @"default:B<T>_ed_default:A<T>_iFn"(i32 %0, %TypeInfo** %1) {
++allocas:
++  %2 = alloca [1 x %TypeInfo*], align 8
++  br label %prepTi
++
++prepTi:
++  %3 = getelementptr %TypeInfo*, %TypeInfo** %1, i32 0
++  %4 = load %TypeInfo*, %TypeInfo** %3, align 8
++  %5 = getelementptr inbounds [1 x %TypeInfo*], [1 x %TypeInfo*]* %2, i32 0, i32 0
++  store %TypeInfo* %4, %TypeInfo** %5, align 8 
++  %6 = bitcast [1 x %TypeInfo*]* %2 to i8**
++  %7 = call i8* @CJ_MCC_GetOrCreateTypeInfo(i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i32 1, i8** %6)
++  ret i8* %7
++}
++
++
++define private i8* @"default:B<T>_ed_default:I1<T>_iFn"(i32 %0, %TypeInfo** %1) {
++allocas:
++  %2 = alloca [1 x %TypeInfo*], align 8
++  br label %prepTi
++
++prepTi:
++  %3 = getelementptr %TypeInfo*, %TypeInfo** %1, i32 0
++  %4 = load %TypeInfo*, %TypeInfo** %3, align 8
++  %5 = getelementptr inbounds [1 x %TypeInfo*], [1 x %TypeInfo*]* %2, i32 0, i32 0
++  store %TypeInfo* %4, %TypeInfo** %5, align 8 
++  %6 = bitcast [1 x %TypeInfo*]* %2 to i8**
++  %7 = call i8* @CJ_MCC_GetOrCreateTypeInfo(i8* bitcast (%TypeTemplate* @"default:I1.tt" to i8*), i32 1, i8** %6)
++  ret i8* %7
++}
++
++define internal void @_CN7default1AIG_E7func_I1Hv(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %this, %TypeInfo* %outerTI) gc "cangjie" {
++  ret void
++}
++
++define internal void @_CN7default1AIG_E7func_I2Hv(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %this, %TypeInfo* %outerTI) gc "cangjie" {
++allocas:
++  %1 = alloca %Unit.Type, align 8
++  br label %1
++
++prepTi:
++  %2 = bitcast i8 addrspace(1)* %this to %TypeInfo* addrspace(1)*
++  %ti = load %TypeInfo*, %TypeInfo* addrspace(1)* %2, align 8
++  %3 = bitcast %TypeInfo* %ti to i8*
++  %4 = bitcast %TypeInfo* %outerTI to i8*
++  %5 = call i8* @CJ_MCC_GetMTable(i8* %3, i8* %4)
++  %6 = bitcast i8* %5 to void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)**
++  %7 = load void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)*, void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)** %6, align 8, !objType !2, !FuncTable !3
++  %ti1 = load %TypeInfo*, %TypeInfo* addrspace(1)* %2, align 8
++  call void %7(%Unit.Type* noalias sret(%Unit.Type) %1, i8 addrspace(1)* %this, %TypeInfo* ti1)
++  ret void
++}
++
++define internal void @_CN7default1BIG_E6func_AHv(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %this, %TypeInfo* %outerTI) gc "cangjie" {
++  ret void
++}
++
++define internal void @_CN7default1BIG_E7func_I1Hv(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %this, %TypeInfo* %outerTI) gc "cangjie" {
++  ret void
++}
++
++define internal void @"_CVN7default1AIG_E7func_I2Hv$N7default1BIG_E$CN7default2I2E"(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %this, %TypeInfo* %outerTI) gc "cangjie" {
++allocas:
++  %2 = alloca %Unit.Type, align 8
++  %3 = alloca [1 x %TypeInfo*], align 8
++  br label %prepTi
++
++prepTi:
++  %ti.typeArgs = getelementptr inbounds %TypeInfo, %TypeInfo* %outerTI, i32 0, i32 12
++  %4 = load i8*, i8** %ti.typeArgs, align 8
++  %5 = bitcast i8* %4 to %TypeInfo**
++  %6 = getelementptr inbounds %TypeInfo*, %TypeInfo** %5, i32 0
++  %7 = load %TypeInfo*, %TypeInfo** %6, align 8
++  %8 = getelementptr inbounds [1 x %TypeInfo*], [1 x %TypeInfo*]* %3, i32 0, i32 0
++  store %TypeInfo* %7, %TypeInfo** %8, align 8
++  %9 = bitcast [1 x %TypeInfo*]* %3 to i8**
++  %10 = call i8* @CJ_MCC_GetOrCreateTypeInfo(i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i32 1, i8** %9)
++  %11 = bitcast i8* %10 to %TypeInfo*
++  call void @_CN7default1AIG_E7func_I2Hv(%Unit.Type* noalias sret(%Unit.Type) %2, i8 addrspace(1)* %1, %TypeInfo& %11)
++  ret void
++}
++
++define void @use_I1(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %v, %TypeInfo* %ti.T) gc "cangjie" {
++allocas:
++  %1 = alloca %Unit.Type, align 8
++  %2 = alloca [1 x %TypeInfo*], align 8
++  br label %prepTi
++
++prepTi:
++  %3 = getelementptr inbounds [1 x %TypeInfo*], [1 x %TypeInfo*]* %2, i32 0, i32 0
++  store %TypeInfo* %ti.T, %TypeInfo** %3, align 8
++  %4 = bitcast [1 x %TypeInfo*]* %2 to i8**
++  %5 = call i8* @CJ_MCC_GetOrCreateTypeInfo(i8* bitcast (%TypeTemplate* @"default:I1.tt" to i8*), i32 1, i8** %4)
++  %6 = bitcast i8 addrspace(1)* %v to %TypeInfo* addrspace(1)*
++  %ti = load %TypeInfo*, %TypeInfo* addrspace(1)* %6, align 8
++  %7 = bitcast %TypeInfo* %ti to i8*
++  %8 = call i8* @CJ_MCC_GetMTable(i8* %7, i8* %5)
++  %9 = bitcast i8* %8 to void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)**
++  %10 = load void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)*, void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)** %9, align 8, !objType !0, !FuncTable !3
++  %ti1 = load %TypeInfo*, %TypeInfo* addrspace(1)* %6, align 8
++  call void %10(%Unit.Type* noalias sret(%Unit.Type) %1, i8 addrspace(1)* %v, %TypeInfo* %ti1)
++  ret void
++}
++
++declare i8* @CJ_MCC_GetOrCreateTypeInfo(i8*, i32, i8**)
++declare i8* @CJ_MCC_GetMTable(i8*, i8*)
++
++attributes #0 = { "CFileMTable" }
++
++!0 = !{!"default:I1.tt"}
++!1 = !{!"default:I2.ti"}
++!2 = !{!"default:A.tt"}
++!3 = !{i64 0}
+\ No newline at end of file
+diff --git a/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie_metadata_elim_1.ll b/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie_metadata_elim_1.ll
+new file mode 100644
+index 000000000..89b65d8be
+--- /dev/null
++++ b/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie_metadata_elim_1.ll
+@@ -0,0 +1,38 @@
++; RUN: opt < %s -passes='globaldce' --cangjie-pipeline -S | FileCheck %s
++
++%TypeTemplate = type { i8*, i8, i8, i16, i16, i8*, i8*, i8*, i8*, %ExtensionDef**, i16 }
++%ExtensionDef = type { i32, i8, i8*, i8*, i8*, i8* }
++%TypeInfo = type { i8*, i8, i8, i16, i32, i8*, i32, i8, i8, i16, i32*, i8*, i8*, i8*, %TypeInfo*, %ExtensionDef**, i8*, i8* }
++
++@Int32.ti = external global %TypeInfo #0
++@"std.core:Object.ti" = external global %TypeInfo #0
++@"A:I1.ti" = external global %TypeInfo #0
++
++; CHECK-NOT: @"default:A.tt"
++; CHECK-NOT: @"default:A.name"
++; CHECK-NOT: @"default:A<Int32>.name"
++; CHECK-NOT: @"default:A<Int32>.ti"
++; CHECK-NOT: @"default:A<Int32>.ti.typeArgs"
++; CHECK-NOT: @"default:A<T>_ed_A:I1"
++@"default:A.tt" = internal global %TypeTemplate { i8* getelementptr inbounds ([10 x i8], [10 x i8]* @"default:A.name", i32 0, i32 0), i8 -128, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** getelementptr inbounds ([2 x %ExtensionDef*], [2 x %ExtensionDef*]* @NonExternalExtensionDefs, i32 0, i32 0), i16 -32768 } #1
++@"default:I2.tt" = global %TypeTemplate { i8* getelementptr inbounds ([11 x i8], [11 x i8]* @"default:I2.name", i32 0, i32 0), i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** null, i16 -32768 } #1
++@"default:I2.name" = private global [11 x i8] c"default:I2\00", align 1 #3
++@"default:A.name" = private global [10 x i8] c"default:A\00", align 1 #3
++@"default:A<Int32>.name" = private global [17 x i8] c"default:A<Int32>\00", align 1 #3
++@"default:A<Int32>.ti" = internal global %TypeInfo { i8* getelementptr inbounds ([17 x i8], [17 x i8]* @"default:A<Int32>.name", i32 0, i32 0), i8 -128, i8 0, i16 0, i32 0, i8* null, i32 0, i8 1, i8 1, i16 -32768, i32* null, i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i8* bitcast ([1 x %TypeInfo*]* @"default:A<Int32>.ti.typeArgs" to i8*), i8* null, %TypeInfo* @"std.core:Object.ti", %ExtensionDef** getelementptr inbounds ([2 x %ExtensionDef*], [2 x %ExtensionDef*]* @NonExternalExtensionDefs, i32 0, i32 0), i8* inttoptr (i64 -9223372036854775807 to i8*), i8* null } #0
++@"default:A<Int32>.ti.typeArgs" = private global [1 x %TypeInfo*] [%TypeInfo* @Int32.ti] #2
++@"default:A<T>_ed_A:I1" = private global %ExtensionDef { i32 1, i8 1, i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i8* bitcast (%TypeInfo* @"A:I1.ti" to i8*), i8* null, i8* null } #5
++; CHECK: @NonExternalExtensionDefs = private global [2 x %ExtensionDef*] zeroinitializer
++@NonExternalExtensionDefs = private global [2 x %ExtensionDef*] [%ExtensionDef* @"default:A<T>_ed_A:I1", %ExtensionDef* null] #4
++; CHECK: @StaticGenericTIs = private global [1 x %TypeInfo*] zeroinitializer
++@StaticGenericTIs = private global [1 x %TypeInfo*] [%TypeInfo* @"default:A<Int32>.ti"] #6
++; CHECK: @llvm.used = appending global [2 x i8*] [i8* bitcast ([2 x %ExtensionDef*]* @NonExternalExtensionDefs to i8*), i8* bitcast ([1 x %TypeInfo*]* @StaticGenericTIs to i8*)], section "llvm.metadata"
++@llvm.used = appending global [2 x i8*] [i8* bitcast ([2 x %ExtensionDef*]* @NonExternalExtensionDefs to i8*), i8* bitcast ([1 x %TypeInfo*]* @StaticGenericTIs to i8*)], section "llvm.metadata"
++
++attributes #0 = { "CFileKlass" }
++attributes #1 = { "cj_tt" }
++attributes #2 = { "CJTITypeArgs" }
++attributes #3 = { "CJTypeName" }
++attributes #4 = { "InnerTypeExtensions" }
++attributes #5 = { "CFileMTable" }
++attributes #6 = { "CFileStaticGenericTI" }
+\ No newline at end of file
 diff --git a/llvm/test/Transforms/Cangjie/DeadArgElim/dead-arg-elim-1.ll b/llvm/test/Transforms/Cangjie/DeadArgElim/dead-arg-elim-1.ll
 new file mode 100644
 index 000000000..3d297ab2a
@@ -105594,189 +106256,6 @@ index 000000000..a4a15526e
 +!4 = !{!"S", !0, i64 0, !3, i64 8, !3, i64 16}
 +!5 = !{!"T", !4, i64 0, !3, i64 24}
 +!6 = !{!4, !0, i64 0}
-\ No newline at end of file
-diff --git a/llvm/test/Transforms/Cangjie/VFE/cangjie-vfe-1.ll b/llvm/test/Transforms/Cangjie/VFE/cangjie-vfe-1.ll
-new file mode 100644
-index 000000000..35d630569
---- /dev/null
-+++ b/llvm/test/Transforms/Cangjie/VFE/cangjie-vfe-1.ll
-@@ -0,0 +1,176 @@
-+; RUN: opt < %s -passes='globaldce' --cangjie-pipeline -S | FileCheck %s
-+
-+; interface I1<T> {
-+;   func func_I11() {}
-+;   func func_I12() {}
-+;   func func_I13() {}
-+; }
-+; interface I2<T> {
-+;   func func_I21() {}
-+;   func func_I22() {}
-+;   func func_I23() {}
-+; }
-+; class A<T> <: I1<T> & I2<I1<T>> {
-+;   public func func_I1() {}
-+;   public func func_I22() { func_A() }
-+;   public func func_A() { println("A::func_A") }
-+; }
-+; class B <: I2<Int64> {}
-+; class C<T> <: I2<T> {}
-+; public func call_I2_1<T>(v: I2<I1<T>>) { v.func_I22() }
-+
-+%TypeTemplate = type { i8*, i8, i8, i16, i16, i8*, i8*, i8*, i8*, %ExtensionDef**, i16 }
-+%ExtensionDef = type { i32, i8, i8*, i8*, i8*, i8* }
-+%TypeInfo = type { i8*, i8, i8, i16, i32, i8*, i32, i8, i8, i16, i32*, i8*, i8*, i8*, %TypeInfo*, %ExtensionDef**, i8*, i8* }
-+%Unit.Type = type {}
-+
-+@"default:A.tt" = private global %TypeTemplate { i8* null, i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** getelementptr inbounds ([6 x %ExtensionDef*], [6 x %ExtensionDef*]* @NonExternalExtensionDefs, i32 0, i32 0), i16 -32768 }
-+@"default:B.tt" = private global %TypeTemplate { i8* null, i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** getelementptr inbounds ([6 x %ExtensionDef*], [6 x %ExtensionDef*]* @NonExternalExtensionDefs, i32 0, i32 2), i16 -32768 }
-+@"default:I1.tt" = private global %TypeTemplate { i8* null, i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** null, i16 -32768 }
-+@"default:I2.ti" = internal global %TypeInfo { i8* null, i8 -127, i8 0, i16 0, i32 0, i8* null, i32 0, i8 1, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo *null, %ExtensionDef** null, i8* null, i8* null }
-+
-+@"default:A<T>_ed_default:I1<T>.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @_CN7default1AIG_E7func_I1Hv to i8*)]
-+@"default:A<T>_ed_default:I1<T>" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i8* bitcast (i8* (i32, %TypeInfo**)* @"default:A<T>_ed_default:I1<T>_iFn" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:A<T>_ed_default:I1<T>.ft" to i8*) }, !inheritedType !0 #0
-+; CHECK: @"default:A<T>_ed_default:I2.ft = private global [1 x i8*] zeroinitializer"
-+@"default:A<T>_ed_default:I2.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @_CN7default1AIG_E7func_I2Hv to i8*)]
-+@"default:A<T>_ed_default:I2" = private global %ExtensionDef { i32 1, i8 1, i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i8* bitcast (%TypeInfo* @"default:I2.ti" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:A<T>_ed_default:I2.ft" to i8*) }, !inheritedType !1 #0
-+; CHECK: @"default:B<T>_ed_default:A<T>.ft" = private global [1 x i8*] zeroinitializer
-+@"default:B<T>_ed_default:A<T>.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @_CN7default1BIG_E6func_AHv to i8*)]
-+@"default:B<T>_ed_default:A<T>" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"default:B.tt" to i8*), i8* bitcast (i8* (i32, %TypeInfo**)* @"default:B<T>_ed_default:A<T>_iFn" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:B<T>_ed_default:A<T>.ft" to i8*) }, !inheritedType !2 #0
-+@"default:B<T>_ed_default:I1<T>.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @_CN7default1BIG_E7func_I1Hv to i8*)]
-+@"default:B<T>_ed_default:I1<T>" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"default:B.tt" to i8*), i8* bitcast (i8* (i32, %TypeInfo**)* @"default:B<T>_ed_default:I1<T>_iFn" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:B<T>_ed_default:I1<T>.ft" to i8*) }, !inheritedType !0 #0
-+; CHECK: @"default:B<T>_ed_default:I2.ft" = private global [1 x i8*] zeroinitializer
-+@"default:B<T>_ed_default:I2.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @"_CVN7default1AIG_E7func_I2Hv$N7default1BIG_E$CN7default2I2E" to i8*)]
-+@"default:B<T>_ed_default:I2" = private global %ExtensionDef { i32 1, i8 1, i8* bitcast (%TypeTemplate* @"default:B.tt" to i8*), i8* bitcast (%TypeInfo* @"default:I2.ti" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:B<T>_ed_default:I2.ft" to i8*) }, !inheritedType !1 #0
-+
-+@NonExternalExtensionDefs = private global [6 x %ExtensionDef*] [%ExtensionDef* @"default:A<T>_ed_default:I1<T>", %ExtensionDef* @"default:A<T>_ed_default:I2", %ExtensionDef* @"default:B<T>_ed_default:A<T>", %ExtensionDef* @"default:B<T>_ed_default:I1<T>", %ExtensionDef* @"default:B<T>_ed_default:I2", %ExtensionDef* null]
-+@llvm.used = appending global [1 x i8*] [i8* bitcast ([6 x %ExtensionDef*]* @NonExternalExtensionDefs to i8*)]
-+
-+define private i8* @"default:A<T>_ed_default:I1<T>_iFn"(i32 %0, %TypeInfo** %1) {
-+allocas:
-+  %2 = alloca [1 x %TypeInfo*], align 8
-+  br label %prepTi
-+
-+prepTi:
-+  %3 = getelementptr %TypeInfo*, %TypeInfo** %1, i32 0
-+  %4 = load %TypeInfo*, %TypeInfo** %3, align 8
-+  %5 = getelementptr inbounds [1 x %TypeInfo*], [1 x %TypeInfo*]* %2, i32 0, i32 0
-+  store %TypeInfo* %4, %TypeInfo** %5, align 8
-+  %6 = bitcast [1 x %TypeInfo*]* %2 to i8**
-+  %7 = call i8* @CJ_MCC_GetOrCreateTypeInfo(i8* bitcast (%TypeTemplate* @"default:I1.tt" to i8*), i32 1, i8** %6)
-+  ret i8* %7
-+}
-+
-+define private i8* @"default:B<T>_ed_default:A<T>_iFn"(i32 %0, %TypeInfo** %1) {
-+allocas:
-+  %2 = alloca [1 x %TypeInfo*], align 8
-+  br label %prepTi
-+
-+prepTi:
-+  %3 = getelementptr %TypeInfo*, %TypeInfo** %1, i32 0
-+  %4 = load %TypeInfo*, %TypeInfo** %3, align 8
-+  %5 = getelementptr inbounds [1 x %TypeInfo*], [1 x %TypeInfo*]* %2, i32 0, i32 0
-+  store %TypeInfo* %4, %TypeInfo** %5, align 8 
-+  %6 = bitcast [1 x %TypeInfo*]* %2 to i8**
-+  %7 = call i8* @CJ_MCC_GetOrCreateTypeInfo(i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i32 1, i8** %6)
-+  ret i8* %7
-+}
-+
-+
-+define private i8* @"default:B<T>_ed_default:I1<T>_iFn"(i32 %0, %TypeInfo** %1) {
-+allocas:
-+  %2 = alloca [1 x %TypeInfo*], align 8
-+  br label %prepTi
-+
-+prepTi:
-+  %3 = getelementptr %TypeInfo*, %TypeInfo** %1, i32 0
-+  %4 = load %TypeInfo*, %TypeInfo** %3, align 8
-+  %5 = getelementptr inbounds [1 x %TypeInfo*], [1 x %TypeInfo*]* %2, i32 0, i32 0
-+  store %TypeInfo* %4, %TypeInfo** %5, align 8 
-+  %6 = bitcast [1 x %TypeInfo*]* %2 to i8**
-+  %7 = call i8* @CJ_MCC_GetOrCreateTypeInfo(i8* bitcast (%TypeTemplate* @"default:I1.tt" to i8*), i32 1, i8** %6)
-+  ret i8* %7
-+}
-+
-+define internal void @_CN7default1AIG_E7func_I1Hv(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %this, %TypeInfo* %outerTI) gc "cangjie" {
-+  ret void
-+}
-+
-+define internal void @_CN7default1AIG_E7func_I2Hv(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %this, %TypeInfo* %outerTI) gc "cangjie" {
-+allocas:
-+  %1 = alloca %Unit.Type, align 8
-+  br label %1
-+
-+prepTi:
-+  %2 = bitcast i8 addrspace(1)* %this to %TypeInfo* addrspace(1)*
-+  %ti = load %TypeInfo*, %TypeInfo* addrspace(1)* %2, align 8
-+  %3 = bitcast %TypeInfo* %ti to i8*
-+  %4 = bitcast %TypeInfo* %outerTI to i8*
-+  %5 = call i8* @CJ_MCC_GetMTable(i8* %3, i8* %4)
-+  %6 = bitcast i8* %5 to void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)**
-+  %7 = load void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)*, void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)** %6, align 8, !objType !2, !FuncTable !3
-+  %ti1 = load %TypeInfo*, %TypeInfo* addrspace(1)* %2, align 8
-+  call void %7(%Unit.Type* noalias sret(%Unit.Type) %1, i8 addrspace(1)* %this, %TypeInfo* ti1)
-+  ret void
-+}
-+
-+define internal void @_CN7default1BIG_E6func_AHv(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %this, %TypeInfo* %outerTI) gc "cangjie" {
-+  ret void
-+}
-+
-+define internal void @_CN7default1BIG_E7func_I1Hv(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %this, %TypeInfo* %outerTI) gc "cangjie" {
-+  ret void
-+}
-+
-+define internal void @"_CVN7default1AIG_E7func_I2Hv$N7default1BIG_E$CN7default2I2E"(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %this, %TypeInfo* %outerTI) gc "cangjie" {
-+allocas:
-+  %2 = alloca %Unit.Type, align 8
-+  %3 = alloca [1 x %TypeInfo*], align 8
-+  br label %prepTi
-+
-+prepTi:
-+  %ti.typeArgs = getelementptr inbounds %TypeInfo, %TypeInfo* %outerTI, i32 0, i32 12
-+  %4 = load i8*, i8** %ti.typeArgs, align 8
-+  %5 = bitcast i8* %4 to %TypeInfo**
-+  %6 = getelementptr inbounds %TypeInfo*, %TypeInfo** %5, i32 0
-+  %7 = load %TypeInfo*, %TypeInfo** %6, align 8
-+  %8 = getelementptr inbounds [1 x %TypeInfo*], [1 x %TypeInfo*]* %3, i32 0, i32 0
-+  store %TypeInfo* %7, %TypeInfo** %8, align 8
-+  %9 = bitcast [1 x %TypeInfo*]* %3 to i8**
-+  %10 = call i8* @CJ_MCC_GetOrCreateTypeInfo(i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i32 1, i8** %9)
-+  %11 = bitcast i8* %10 to %TypeInfo*
-+  call void @_CN7default1AIG_E7func_I2Hv(%Unit.Type* noalias sret(%Unit.Type) %2, i8 addrspace(1)* %1, %TypeInfo& %11)
-+  ret void
-+}
-+
-+define void @use_I1(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %v, %TypeInfo* %ti.T) gc "cangjie" {
-+allocas:
-+  %1 = alloca %Unit.Type, align 8
-+  %2 = alloca [1 x %TypeInfo*], align 8
-+  br label %prepTi
-+
-+prepTi:
-+  %3 = getelementptr inbounds [1 x %TypeInfo*], [1 x %TypeInfo*]* %2, i32 0, i32 0
-+  store %TypeInfo* %ti.T, %TypeInfo** %3, align 8
-+  %4 = bitcast [1 x %TypeInfo*]* %2 to i8**
-+  %5 = call i8* @CJ_MCC_GetOrCreateTypeInfo(i8* bitcast (%TypeTemplate* @"default:I1.tt" to i8*), i32 1, i8** %4)
-+  %6 = bitcast i8 addrspace(1)* %v to %TypeInfo* addrspace(1)*
-+  %ti = load %TypeInfo*, %TypeInfo* addrspace(1)* %6, align 8
-+  %7 = bitcast %TypeInfo* %ti to i8*
-+  %8 = call i8* @CJ_MCC_GetMTable(i8* %7, i8* %5)
-+  %9 = bitcast i8* %8 to void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)**
-+  %10 = load void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)*, void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)** %9, align 8, !objType !0, !FuncTable !3
-+  %ti1 = load %TypeInfo*, %TypeInfo* addrspace(1)* %6, align 8
-+  call void %10(%Unit.Type* noalias sret(%Unit.Type) %1, i8 addrspace(1)* %v, %TypeInfo* %ti1)
-+  ret void
-+}
-+
-+declare i8* @CJ_MCC_GetOrCreateTypeInfo(i8*, i32, i8**)
-+declare i8* @CJ_MCC_GetMTable(i8*, i8*)
-+
-+attributes #0 = { "CFileMTable" }
-+
-+!0 = !{!"default:I1.tt"}
-+!1 = !{!"default:I2.ti"}
-+!2 = !{!"default:A.tt"}
-+!3 = !{i64 0}
 \ No newline at end of file
 diff --git a/llvm/test/Transforms/InstCombine/cj-instcombine1.ll b/llvm/test/Transforms/InstCombine/cj-instcombine1.ll
 new file mode 100644
