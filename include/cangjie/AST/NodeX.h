@@ -25,6 +25,8 @@ struct IfAvailableExpr : public Expr {
     {
     }
 
+    std::string ToString() const override;
+
     Ptr<FuncArg> GetArg() const
     {
         return arg.get();

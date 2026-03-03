@@ -11,6 +11,7 @@
  */
 
 #include "cangjie/AST/Node.h"
+#include "cangjie/AST/NodeX.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -20,6 +21,7 @@
 #include <numeric>
 #include <queue>
 #include <sstream>
+#include <string_view>
 #include <vector>
 
 #include "cangjie/AST/Match.h"
@@ -61,6 +63,163 @@ std::ostream& operator<<(std::ostream& out, Span const& span)
     }
     out << std::right << std::setw(span.width) << span.str;
     return out;
+}
+
+std::string GetIdentifierOrAnonymous(const SrcIdentifier& ident)
+{
+    auto text = ident.GetRawText();
+    if (text.empty()) {
+        return "<anonymous>";
+    }
+    return text;
+}
+
+std::string GetIdentifierOrAnonymous(const Identifier& ident)
+{
+    auto text = ident.Val();
+    if (text.empty()) {
+        return "<anonymous>";
+    }
+    return text;
+}
+
+void AppendAnnotations(const std::vector<OwnedPtr<Annotation>>& annotations, std::stringstream& ss)
+{
+    for (const auto& annotation : annotations) {
+        if (!annotation) {
+            continue;
+        }
+        ss << annotation->ToString() << "\n";
+    }
+}
+
+void AppendModifiers(const std::set<Modifier>& modifiers, std::stringstream& ss)
+{
+    bool hasModifier = false;
+    for (const auto& modifier : modifiers) {
+        auto text = modifier.ToString();
+        if (text.empty()) {
+            continue;
+        }
+        if (hasModifier) {
+            ss << " ";
+        }
+        ss << text;
+        hasModifier = true;
+    }
+    if (hasModifier) {
+        ss << " ";
+    }
+}
+
+void AppendTypeList(const std::vector<OwnedPtr<Type>>& types, std::stringstream& ss, std::string_view delimiter = ", ")
+{
+    bool first = true;
+    for (const auto& ty : types) {
+        if (!ty) {
+            continue;
+        }
+        if (!first) {
+            ss << delimiter;
+        }
+        ss << ty->ToString();
+        first = false;
+    }
+}
+
+void AppendDeclNames(const std::vector<OwnedPtr<Decl>>& decls, std::stringstream& ss)
+{
+    bool first = true;
+    for (const auto& decl : decls) {
+        if (!decl) {
+            continue;
+        }
+        if (!first) {
+            ss << ", ";
+        }
+        ss << GetIdentifierOrAnonymous(decl->identifier);
+        first = false;
+    }
+}
+
+void AppendBraceWrappedDecls(const std::vector<OwnedPtr<Decl>>& decls, std::stringstream& ss)
+{
+    if (decls.empty()) {
+        ss << " {}";
+        return;
+    }
+    ss << " { ";
+    AppendDeclNames(decls, ss);
+    ss << " }";
+}
+
+void AppendMacroInvocationNodes(const MacroInvocation& invocation, std::stringstream& ss)
+{
+    if (invocation.nodes.empty()) {
+        ss << "()";
+        return;
+    }
+    ss << "(";
+    bool first = true;
+    for (const auto& node : invocation.nodes) {
+        if (!node) {
+            continue;
+        }
+        if (!first) {
+            ss << ", ";
+        }
+        ss << node->ToString();
+        first = false;
+    }
+    ss << ")";
+}
+
+std::string_view BuiltInTypeName(BuiltInType type)
+{
+    switch (type) {
+        case BuiltInType::ARRAY:
+            return "Array";
+        case BuiltInType::POINTER:
+            return "Pointer";
+        case BuiltInType::CSTRING:
+            return "CString";
+        case BuiltInType::CFUNC:
+            return "CFunc";
+        case BuiltInType::VARRAY:
+            return "VArray";
+    }
+    return "Unknown";
+}
+
+std::string_view TokenLiteral(TokenKind kind)
+{
+    if (kind == TokenKind::ILLEGAL) {
+        return "";
+    }
+    return TOKENS[static_cast<size_t>(kind)];
+}
+
+std::string_view TypeKindName(TypeKind kind)
+{
+    switch (kind) {
+#define TYPE_KIND(KIND, TYPE, NAME) \
+    case TypeKind::KIND:             \
+        return NAME;
+#include "cangjie/AST/TypeKind.inc"
+#undef TYPE_KIND
+        case TypeKind::TYPE_ANY:
+            return "Any";
+        case TypeKind::TYPE_INTERSECTION:
+            return "Intersection";
+        case TypeKind::TYPE_UNION:
+            return "Union";
+        case TypeKind::TYPE_QUEST:
+            return "Quest";
+        case TypeKind::TYPE_INITIAL:
+            return "Initial";
+        default:
+            return "Type";
+    }
 }
 
 /**
@@ -163,6 +322,15 @@ Position GetMacroSourcePos(const MacroInvocation& invocation, const Position& po
 }
 } // namespace
 
+std::string Node::ToString() const
+{
+    auto it = ASTKIND_TO_STR.find(astKind);
+    if (it != ASTKIND_TO_STR.end()) {
+        return it->second;
+    }
+    return "";
+}
+
 std::string Modifier::ToString() const
 {
     if (isExplicit) {
@@ -205,6 +373,117 @@ std::string VarDecl::ToString() const
     return ss.str();
 }
 
+std::string Annotation::ToString() const
+{
+    std::stringstream ss;
+    ss << "@";
+    if (isCompileTimeVisible) {
+        ss << "!";
+    }
+    if (baseExpr) {
+        ss << baseExpr->ToString();
+    } else {
+        ss << identifier.Val();
+    }
+    std::vector<std::string> elements;
+    elements.reserve(attrs.size() + args.size() + (condExpr ? 1 : 0));
+    for (const auto& attr : attrs) {
+        elements.emplace_back(attr.Value());
+    }
+    if (condExpr) {
+        elements.emplace_back(condExpr->ToString());
+    }
+    for (const auto& arg : args) {
+        if (arg) {
+            elements.emplace_back(arg->ToString());
+        }
+    }
+    if (!elements.empty()) {
+        ss << "[";
+        for (size_t i = 0; i < elements.size(); ++i) {
+            if (i > 0) {
+                ss << ", ";
+            }
+            ss << elements[i];
+        }
+        ss << "]";
+    }
+    return ss.str();
+}
+
+std::string GenericParamDecl::ToString() const
+{
+    return identifier.GetRawText();
+}
+
+std::string GenericConstraint::ToString() const
+{
+    std::stringstream ss;
+    if (type) {
+        ss << type->ToString();
+    }
+    if (!upperBounds.empty()) {
+        if (type) {
+            ss << " <: ";
+        }
+        for (size_t i = 0; i < upperBounds.size(); ++i) {
+            if (i > 0) {
+                ss << " & ";
+            }
+            if (upperBounds[i]) {
+                ss << upperBounds[i]->ToString();
+            }
+        }
+    }
+    return ss.str();
+}
+
+std::string Generic::ToString() const
+{
+    std::stringstream ss;
+    if (!typeParameters.empty()) {
+        ss << "<";
+        for (size_t i = 0; i < typeParameters.size(); ++i) {
+            if (i > 0) {
+                ss << ", ";
+            }
+            if (typeParameters[i]) {
+                ss << typeParameters[i]->ToString();
+            }
+        }
+        ss << ">";
+    }
+    if (!genericConstraints.empty()) {
+        ss << " where ";
+        for (size_t i = 0; i < genericConstraints.size(); ++i) {
+            if (i > 0) {
+                ss << ", ";
+            }
+            if (genericConstraints[i]) {
+                ss << genericConstraints[i]->ToString();
+            }
+        }
+    }
+    return ss.str();
+}
+
+std::string Decl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    ss << GetIdentifierOrAnonymous(identifier);
+    if (generic) {
+        ss << generic->ToString();
+    }
+    return ss.str();
+}
+
+std::string ClassLikeDecl::ToString() const
+{
+    return Decl::ToString();
+}
+
 std::string EnumPattern::GetIdentifier() const
 {
     if (!constructor) {
@@ -224,15 +503,164 @@ std::string EnumPattern::GetIdentifier() const
     }
 }
 
+std::string Pattern::ToString() const
+{
+    return Node::ToString();
+}
+
+std::string InvalidPattern::ToString() const
+{
+    return "<invalid pattern>";
+}
+
+std::string ConstPattern::ToString() const
+{
+    return literal ? literal->ToString() : "";
+}
+
+std::string WildcardPattern::ToString() const
+{
+    return "_";
+}
+
+std::string VarPattern::ToString() const
+{
+    if (!varDecl) {
+        return "";
+    }
+    return varDecl->identifier.GetRawText();
+}
+
+std::string TuplePattern::ToString() const
+{
+    std::stringstream ss;
+    ss << "(";
+    for (size_t i = 0; i < patterns.size(); ++i) {
+        if (i > 0) {
+            ss << ", ";
+        }
+        if (patterns[i]) {
+            ss << patterns[i]->ToString();
+        }
+    }
+    ss << ")";
+    return ss.str();
+}
+
+std::string TypePattern::ToString() const
+{
+    std::stringstream ss;
+    if (pattern) {
+        ss << pattern->ToString();
+    }
+    if (type) {
+        if (pattern) {
+            ss << ": ";
+        }
+        ss << type->ToString();
+    }
+    return ss.str();
+}
+
+std::string EnumPattern::ToString() const
+{
+    std::stringstream ss;
+    if (constructor) {
+        ss << constructor->ToString();
+    }
+    if (!patterns.empty()) {
+        ss << "(";
+        for (size_t i = 0; i < patterns.size(); ++i) {
+            if (i > 0) {
+                ss << ", ";
+            }
+            if (patterns[i]) {
+                ss << patterns[i]->ToString();
+            }
+        }
+        ss << ")";
+    }
+    return ss.str();
+}
+
+std::string VarOrEnumPattern::ToString() const
+{
+    if (pattern) {
+        return pattern->ToString();
+    }
+    return identifier.GetRawText();
+}
+
+static std::string JoinTypes(const std::vector<OwnedPtr<Type>>& types)
+{
+    std::stringstream ss;
+    for (size_t i = 0; i < types.size(); ++i) {
+        if (i > 0) {
+            ss << " | ";
+        }
+        if (types[i]) {
+            ss << types[i]->ToString();
+        }
+    }
+    return ss.str();
+}
+
+static std::string InlineBlock(const Block* block)
+{
+    if (!block) {
+        return "";
+    }
+    if (block->body.size() == 1 && block->body[0]) {
+        return block->body[0]->ToString();
+    }
+    return block->ToString();
+}
+
+std::string ExceptTypePattern::ToString() const
+{
+    std::stringstream ss;
+    if (pattern) {
+        ss << pattern->ToString();
+    }
+    if (!types.empty()) {
+        if (pattern) {
+            ss << ": ";
+        }
+        ss << JoinTypes(types);
+    }
+    return ss.str();
+}
+
+std::string CommandTypePattern::ToString() const
+{
+    std::stringstream ss;
+    if (pattern) {
+        ss << pattern->ToString();
+    }
+    if (!types.empty()) {
+        if (pattern) {
+            ss << ": ";
+        }
+        ss << JoinTypes(types);
+    }
+    return ss.str();
+}
+
 std::string CallExpr::ToString() const
 {
     std::stringstream ss;
+    if (!baseFunc) {
+        return ss.str();
+    }
     Position curSpanBegin = baseFunc->begin;
     ss << NextSpan(baseFunc->ToString(), curSpanBegin, baseFunc->end);
     curSpanBegin = baseFunc->end;
     ss << NextSpan("(", curSpanBegin, leftParenPos, 1);
     curSpanBegin = leftParenPos + Position{0, 0, 1};
     for (auto& arg : args) {
+        if (!arg) {
+            continue;
+        }
         ss << NextSpan(arg->ToString(), curSpanBegin, arg->end);
         curSpanBegin = arg->end;
         if (arg->commaPos != INVALID_POSITION) {
@@ -248,7 +676,9 @@ void CallExpr::Clear() noexcept
 {
     RecoverToCallExpr(*this);
     Expr::Clear();
-    baseFunc->Clear();
+    if (baseFunc) {
+        baseFunc->Clear();
+    }
     callKind = CallKind::CALL_INVALID;
     resolvedFunction = nullptr;
 }
@@ -263,19 +693,500 @@ std::string FuncArg::ToString() const
         curSpanBegin += Position{0, 0, static_cast<int>(name.Length())};
         ss << NextSpan(":", curSpanBegin, colonPos, 1);
         curSpanBegin += Position{0, 0, 1};
-    } else {
+    } else if (expr) {
         curSpanBegin = expr->begin;
     }
     if (withInout) {
         ss << "inout ";
     }
-    ss << NextSpan(expr->ToString(), curSpanBegin, expr->end);
+    if (expr) {
+        ss << NextSpan(expr->ToString(), curSpanBegin, expr->end);
+    }
+    return ss.str();
+}
+
+std::string FuncParam::ToString() const
+{
+    std::stringstream ss;
+    if (hasLetOrVar) {
+        ss << (isVar ? "var " : "let ");
+    }
+    ss << identifier.GetRawText();
+    if (isNamedParam) {
+        ss << "!";
+    }
+    if (type) {
+        ss << ": " << type->ToString();
+    }
+    const Expr* defaultValue = nullptr;
+    if (assignment) {
+        defaultValue = assignment.get();
+    } else if (initializer) {
+        defaultValue = initializer.get();
+    }
+    if (defaultValue) {
+        ss << " = " << defaultValue->ToString();
+    }
+    return ss.str();
+}
+
+std::string FuncParamList::ToString() const
+{
+    std::stringstream ss;
+    ss << "(";
+    for (size_t i = 0; i < params.size(); ++i) {
+        if (i > 0) {
+            ss << ", ";
+        }
+        if (params[i]) {
+            ss << params[i]->ToString();
+        }
+    }
+    ss << ")";
+    return ss.str();
+}
+
+std::string FuncBody::ToString() const
+{
+    std::stringstream ss;
+    if (generic) {
+        ss << generic->ToString();
+    }
+    for (const auto& paramList : paramLists) {
+        if (paramList) {
+            ss << paramList->ToString();
+        }
+    }
+    if (retType) {
+        ss << ": " << retType->ToString();
+    }
+    if (doubleArrowPos != INVALID_POSITION) {
+        ss << " => " << InlineBlock(body.get());
+    } else if (body) {
+        ss << " " << body->ToString();
+    }
+    return ss.str();
+}
+
+std::string FuncDecl::ToString() const
+{
+    std::stringstream ss;
+    for (size_t i = 0; i < annotations.size(); ++i) {
+        if (annotations[i]) {
+            ss << annotations[i]->ToString();
+            ss << "\n";
+        }
+    }
+    bool needSpace = false;
+    for (const auto& modifier : modifiers) {
+        auto text = modifier.ToString();
+        if (text.empty()) {
+            continue;
+        }
+        if (needSpace) {
+            ss << " ";
+        }
+        ss << text;
+        needSpace = true;
+    }
+    if (needSpace) {
+        ss << " ";
+    }
+    ss << "func " << identifier.GetRawText();
+    if (funcBody) {
+        ss << funcBody->ToString();
+    }
+    return ss.str();
+}
+
+std::string MacroDecl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    ss << "macro " << GetIdentifierOrAnonymous(identifier);
+    if (funcBody) {
+        ss << funcBody->ToString();
+    }
+    return ss.str();
+}
+
+std::string MainDecl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    ss << "main func " << GetIdentifierOrAnonymous(identifier);
+    if (funcBody) {
+        ss << funcBody->ToString();
+    }
+    return ss.str();
+}
+
+std::string PrimaryCtorDecl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    ss << "init";
+    if (!identifier.GetRawText().empty()) {
+        ss << " " << identifier.GetRawText();
+    }
+    if (funcBody) {
+        ss << funcBody->ToString();
+    }
+    return ss.str();
+}
+
+std::string TypeAliasDecl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    ss << "typealias " << GetIdentifierOrAnonymous(identifier);
+    if (generic) {
+        ss << generic->ToString();
+    }
+    if (type) {
+        ss << " = " << type->ToString();
+    }
+    return ss.str();
+}
+
+std::string BuiltInDecl::ToString() const
+{
+    std::stringstream ss;
+    ss << "builtin " << GetIdentifierOrAnonymous(identifier) << " (" << BuiltInTypeName(type) << ")";
+    return ss.str();
+}
+
+std::string VarWithPatternDecl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    ss << (isVar ? "var " : "let ");
+    if (irrefutablePattern) {
+        ss << irrefutablePattern->ToString();
+    } else {
+        ss << GetIdentifierOrAnonymous(identifier);
+    }
+    if (type) {
+        ss << ": " << type->ToString();
+    }
+    if (initializer) {
+        ss << " = " << initializer->ToString();
+    }
+    return ss.str();
+}
+
+std::string PropDecl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    ss << "prop " << GetIdentifierOrAnonymous(identifier);
+    if (type) {
+        ss << ": " << type->ToString();
+    }
+    if (!getters.empty() || !setters.empty()) {
+        ss << " {";
+        if (!getters.empty()) {
+            ss << " get";
+        }
+        if (!setters.empty()) {
+            if (!getters.empty()) {
+                ss << ";";
+            }
+            ss << " set";
+        }
+        ss << " }";
+    }
+    return ss.str();
+}
+
+std::string ExtendDecl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    ss << "extend ";
+    if (extendedType) {
+        ss << extendedType->ToString();
+    } else {
+        ss << GetIdentifierOrAnonymous(identifier);
+    }
+    if (generic) {
+        ss << generic->ToString();
+    }
+    if (!inheritedTypes.empty()) {
+        ss << " : ";
+        AppendTypeList(inheritedTypes, ss);
+    }
+    AppendBraceWrappedDecls(members, ss);
+    return ss.str();
+}
+
+std::string EnumDecl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    ss << "enum " << GetIdentifierOrAnonymous(identifier);
+    if (generic) {
+        ss << generic->ToString();
+    }
+    ss << " {";
+    if (!constructors.empty()) {
+        ss << " constructors: ";
+        AppendDeclNames(constructors, ss);
+        if (!members.empty()) {
+            ss << ";";
+        }
+    }
+    if (!members.empty()) {
+        ss << " members: ";
+        AppendDeclNames(members, ss);
+    }
+    ss << " }";
+    return ss.str();
+}
+
+std::string StructDecl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    ss << "struct " << GetIdentifierOrAnonymous(identifier);
+    if (generic) {
+        ss << generic->ToString();
+    }
+    if (!inheritedTypes.empty()) {
+        ss << " : ";
+        AppendTypeList(inheritedTypes, ss);
+    }
+    if (body) {
+        ss << body->ToString();
+    } else {
+        ss << " {}";
+    }
+    return ss.str();
+}
+
+std::string InterfaceDecl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    ss << "interface " << GetIdentifierOrAnonymous(identifier);
+    if (generic) {
+        ss << generic->ToString();
+    }
+    if (!inheritedTypes.empty()) {
+        ss << " : ";
+        AppendTypeList(inheritedTypes, ss);
+    }
+    if (body) {
+        ss << body->ToString();
+    } else {
+        ss << " {}";
+    }
+    return ss.str();
+}
+
+std::string ClassDecl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    ss << "class " << GetIdentifierOrAnonymous(identifier);
+    if (generic) {
+        ss << generic->ToString();
+    }
+    if (!inheritedTypes.empty()) {
+        ss << " : ";
+        AppendTypeList(inheritedTypes, ss);
+    }
+    if (body) {
+        ss << body->ToString();
+    } else {
+        ss << " {}";
+    }
+    return ss.str();
+}
+
+std::string MacroExpandExpr::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    AppendModifiers(modifiers, ss);
+    auto name = invocation.fullName.empty() ? GetIdentifierOrAnonymous(identifier) : invocation.fullName;
+    ss << "@" << name;
+    AppendMacroInvocationNodes(invocation, ss);
+    return ss.str();
+}
+
+std::string IfAvailableExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "@IfAvailable(";
+    bool needComma = false;
+    if (arg) {
+        ss << arg->ToString();
+        needComma = true;
+    }
+    if (lambda1) {
+        if (needComma) {
+            ss << ", ";
+        }
+        ss << lambda1->ToString();
+        needComma = true;
+    }
+    if (lambda2) {
+        if (needComma) {
+            ss << ", ";
+        }
+        ss << lambda2->ToString();
+    }
+    ss << ")";
+    return ss.str();
+}
+
+std::string MacroExpandDecl::ToString() const
+{
+    std::stringstream ss;
+    auto name = invocation.fullName.empty() ? GetIdentifierOrAnonymous(identifier) : invocation.fullName;
+    ss << "@" << name;
+    AppendMacroInvocationNodes(invocation, ss);
+    return ss.str();
+}
+
+std::string MacroExpandParam::ToString() const
+{
+    std::stringstream ss;
+    ss << FuncParam::ToString();
+    if (!invocation.fullName.empty()) {
+        ss << " @" << invocation.fullName;
+    }
+    return ss.str();
+}
+
+std::string InvalidDecl::ToString() const
+{
+    return "<invalid decl>";
+}
+
+std::string StructBody::ToString() const
+{
+    std::stringstream ss;
+    AppendBraceWrappedDecls(decls, ss);
+    return ss.str();
+}
+
+std::string InterfaceBody::ToString() const
+{
+    std::stringstream ss;
+    AppendBraceWrappedDecls(decls, ss);
+    return ss.str();
+}
+
+std::string ClassBody::ToString() const
+{
+    std::stringstream ss;
+    AppendBraceWrappedDecls(decls, ss);
+    return ss.str();
+}
+
+std::string DummyBody::ToString() const
+{
+    return "{}";
+}
+
+std::string ImportSpec::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    if (modifier) {
+        ss << modifier->ToString() << ' ';
+    }
+    ss << "import " << content.ToString();
+    return ss.str();
+}
+
+std::string PackageSpec::ToString() const
+{
+    std::stringstream ss;
+    if (modifier) {
+        ss << modifier->ToString() << ' ';
+    }
+    if (hasMacro) {
+        ss << "macro ";
+    }
+    if (hasPlatform) {
+        ss << "platform ";
+    }
+    if (hasCommon) {
+        ss << "common ";
+    }
+    ss << "package " << GetPackageName();
+    return ss.str();
+}
+
+std::string FeaturesDirective::ToString() const
+{
+    if (content.empty()) {
+        return "features";
+    }
+    std::stringstream ss;
+    ss << "features ";
+    for (size_t i = 0; i < content.size(); ++i) {
+        if (i > 0) {
+            ss << ", ";
+        }
+        ss << content[i].ToString();
+    }
+    return ss.str();
+}
+
+std::string Package::ToString() const
+{
+    std::stringstream ss;
+    ss << "package " << fullPackageName << " (files=" << files.size() << ", decls=" << genericInstantiatedDecls.size()
+       << ")";
+    if (HasFeature()) {
+        ss << " features";
+    }
+    if (isMacroPackage) {
+        ss << " macro";
+    }
+    return ss.str();
+}
+
+std::string PackageDecl::ToString() const
+{
+    std::stringstream ss;
+    AppendAnnotations(annotations, ss);
+    ss << "package " << (srcPackage ? srcPackage->fullPackageName : GetIdentifierOrAnonymous(identifier));
+    return ss.str();
+}
+
+std::string File::ToString() const
+{
+    std::stringstream ss;
+    ss << "file " << (!filePath.empty() ? filePath : fileName);
+    if (package) {
+        ss << " in " << package->GetPackageName();
+    }
+    ss << " (decls=" << decls.size() << ")";
     return ss.str();
 }
 
 std::string MemberAccess::ToString() const
 {
     std::stringstream ss;
+    if (!baseExpr) {
+        return ss.str();
+    }
     Position curSpanBegin = baseExpr->begin;
     ss << NextSpan(baseExpr->ToString(), curSpanBegin, baseExpr->end);
     curSpanBegin = baseExpr->end;
@@ -354,21 +1265,170 @@ TypeKind LitConstExpr::GetNumLitTypeKind()
     return TypeKind::TYPE_INVALID;
 }
 
+std::string Type::ToString() const
+{
+    if (!typeParameterName.empty()) {
+        return GetTypeParameterNameRawText();
+    }
+    return Node::ToString();
+}
+
+std::string InvalidType::ToString() const
+{
+    return "<invalid type>";
+}
+
+std::string PrimitiveType::ToString() const
+{
+    if (!str.empty()) {
+        return str;
+    }
+    return std::string(TypeKindName(kind));
+}
+
 std::string RefType::ToString() const
 {
     std::stringstream ss;
-    ss << ref.identifier.Val();
-    Position curSpanBegin = ref.identifier.End();
+    ss << ref.identifier.GetRawText();
     if (!typeArguments.empty()) {
-        ss << NextSpan("<", curSpanBegin, leftAnglePos, 1);
-        curSpanBegin = leftAnglePos + Position{0, 0, 1};
-        for (auto& typeArgument : typeArguments) {
-            ss << NextSpan(typeArgument->ToString(), curSpanBegin, typeArgument->end);
-            curSpanBegin = typeArgument->end;
+        ss << "<";
+        for (size_t i = 0; i < typeArguments.size(); ++i) {
+            if (i > 0) {
+                ss << ", ";
+            }
+            if (typeArguments[i]) {
+                ss << typeArguments[i]->ToString();
+            }
         }
-        ss << NextSpan(">", curSpanBegin, rightAnglePos, 1);
+        ss << ">";
     }
     return ss.str();
+}
+
+std::string QualifiedType::ToString() const
+{
+    std::stringstream ss;
+    if (baseType) {
+        ss << baseType->ToString() << ".";
+    }
+    ss << field.GetRawText();
+    if (!typeArguments.empty()) {
+        ss << "<";
+        for (size_t i = 0; i < typeArguments.size(); ++i) {
+            if (i > 0) {
+                ss << ", ";
+            }
+            if (typeArguments[i]) {
+                ss << typeArguments[i]->ToString();
+            }
+        }
+        ss << ">";
+    }
+    return ss.str();
+}
+
+std::string OptionType::ToString() const
+{
+    std::stringstream ss;
+    size_t count = questNum;
+    if (count == 0) {
+        count = questVector.size();
+    }
+    for (size_t i = 0; i < count; ++i) {
+        ss << "?";
+    }
+    if (componentType) {
+        ss << componentType->ToString();
+    }
+    return ss.str();
+}
+
+std::string ConstantType::ToString() const
+{
+    std::stringstream ss;
+    ss << "$";
+    if (constantExpr) {
+        ss << constantExpr->ToString();
+    }
+    return ss.str();
+}
+
+std::string VArrayType::ToString() const
+{
+    std::stringstream ss;
+    ss << "VArray<";
+    if (typeArgument) {
+        ss << typeArgument->ToString();
+        if (constantType) {
+            ss << ", ";
+        }
+    }
+    if (constantType) {
+        ss << constantType->ToString();
+    }
+    ss << ">";
+    return ss.str();
+}
+
+std::string ParenType::ToString() const
+{
+    std::stringstream ss;
+    ss << "(";
+    if (type) {
+        ss << type->ToString();
+    }
+    ss << ")";
+    return ss.str();
+}
+
+std::string FuncType::ToString() const
+{
+    std::stringstream ss;
+    ss << "(";
+    for (size_t i = 0; i < paramTypes.size(); ++i) {
+        if (i > 0) {
+            ss << ", ";
+        }
+        auto param = paramTypes[i].get();
+        if (!param) {
+            continue;
+        }
+        if (!param->typeParameterName.empty()) {
+            ss << param->GetTypeParameterNameRawText() << ": ";
+        }
+        ss << param->ToString();
+    }
+    ss << ")";
+    if (retType) {
+        ss << " -> " << retType->ToString();
+    }
+    return ss.str();
+}
+
+std::string TupleType::ToString() const
+{
+    std::stringstream ss;
+    ss << "(";
+    for (size_t i = 0; i < fieldTypes.size(); ++i) {
+        if (i > 0) {
+            ss << ", ";
+        }
+        auto field = fieldTypes[i].get();
+        if (!field) {
+            continue;
+        }
+        if (!field->typeParameterName.empty()) {
+            ss << field->GetTypeParameterNameRawText() << ": ";
+        }
+        ss << field->ToString();
+    }
+    ss << ")";
+    return ss.str();
+}
+
+std::string ThisType::ToString() const
+{
+    return TOKENS[static_cast<int>(TokenKind::THISTYPE)];
 }
 
 std::string RefExpr::ToString() const
@@ -381,15 +1441,17 @@ std::string ArrayLit::ToString() const
     std::stringstream ss;
     ss << "[";
     Position curSpanBegin = begin + Position{0, 0, 1};
-    size_t i = 0;
-    for (auto& child : children) {
+    for (size_t i = 0; i < children.size(); ++i) {
+        auto& child = children[i];
+        if (!child) {
+            continue;
+        }
         ss << NextSpan(child->ToString(), curSpanBegin, child->end);
         curSpanBegin = child->end;
         if (i < commaPosVector.size()) {
             ss << NextSpan(",", curSpanBegin, commaPosVector[i], 1);
             curSpanBegin = commaPosVector[i] + Position{0, 0, 1};
         }
-        i++;
     }
     ss << NextSpan("]", curSpanBegin, rightSquarePos, 1);
     return ss.str();
@@ -398,12 +1460,18 @@ std::string ArrayLit::ToString() const
 std::string ArrayExpr::ToString() const
 {
     std::stringstream ss;
+    if (!type) {
+        return ss.str();
+    }
     Position curSpanBegin = begin;
     ss << NextSpan(type->ToString(), curSpanBegin, type->end);
     curSpanBegin = type->end;
     ss << NextSpan("(", curSpanBegin, leftParenPos, 1);
     curSpanBegin = leftParenPos + Position{0, 0, 1};
     for (size_t i = 0; i < args.size(); ++i) {
+        if (!args[i]) {
+            continue;
+        }
         ss << NextSpan(args[i]->ToString(), curSpanBegin, args[i]->end);
         curSpanBegin = args[i]->end;
         if (i < commaPosVector.size()) {
@@ -440,6 +1508,640 @@ std::string PointerExpr::ToString() const
         ss << NextSpan(expr, curSpanBegin, curSpanEnd);
     }
     ss << NextSpan(")", curSpanBegin, curSpanBegin + Position{0, 0, 1});
+    return ss.str();
+}
+
+std::string ParenExpr::ToString() const
+{
+    std::stringstream ss;
+    Position curSpanBegin = leftParenPos;
+    ss << NextSpan("(", curSpanBegin, leftParenPos, 1);
+    curSpanBegin = leftParenPos + Position{0, 0, 1};
+    if (expr) {
+        ss << NextSpan(expr->ToString(), curSpanBegin, expr->end);
+        curSpanBegin = expr->end;
+    }
+    ss << NextSpan(")", curSpanBegin, rightParenPos, 1);
+    return ss.str();
+}
+
+std::string TupleLit::ToString() const
+{
+    std::stringstream ss;
+    ss << "(";
+    Position curSpanBegin = leftParenPos + Position{0, 0, 1};
+    for (size_t i = 0; i < children.size(); ++i) {
+        auto& child = children[i];
+        if (!child) {
+            continue;
+        }
+        ss << NextSpan(child->ToString(), curSpanBegin, child->end);
+        curSpanBegin = child->end;
+        if (i < commaPosVector.size()) {
+            ss << NextSpan(",", curSpanBegin, commaPosVector[i], 1);
+            curSpanBegin = commaPosVector[i] + Position{0, 0, 1};
+        }
+    }
+    ss << NextSpan(")", curSpanBegin, rightParenPos, 1);
+    return ss.str();
+}
+
+std::string ForInExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "for (";
+    if (pattern) {
+        ss << pattern->ToString();
+    }
+    ss << " in ";
+    if (inExpression) {
+        ss << inExpression->ToString();
+    }
+    ss << ")";
+    if (patternGuard) {
+        ss << " if ";
+        ss << patternGuard->ToString();
+    }
+    if (body) {
+        ss << " " << body->ToString();
+    }
+    return ss.str();
+}
+
+std::string IfExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "if (";
+    if (condExpr) {
+        ss << condExpr->ToString();
+    }
+    ss << ")";
+    if (thenBody) {
+        ss << " " << thenBody->ToString();
+    }
+    if (hasElse && elseBody) {
+        ss << " else ";
+        ss << elseBody->ToString();
+    }
+    return ss.str();
+}
+
+std::string UnaryExpr::ToString() const
+{
+    std::stringstream ss;
+    std::string opStr = TOKENS[static_cast<int>(op)];
+    Position curSpanBegin = operatorPos;
+    ss << NextSpan(opStr, curSpanBegin, operatorPos, static_cast<int>(opStr.size()));
+    curSpanBegin = operatorPos + Position{0, 0, static_cast<int>(opStr.size())};
+    if (expr) {
+        ss << NextSpan(expr->ToString(), curSpanBegin, expr->end);
+    }
+    return ss.str();
+}
+
+std::string BinaryExpr::ToString() const
+{
+    std::stringstream ss;
+    if (leftExpr) {
+        Position curSpanBegin = leftExpr->begin;
+        ss << NextSpan(leftExpr->ToString(), curSpanBegin, leftExpr->end);
+        curSpanBegin = leftExpr->end;
+        std::string opStr = TOKENS[static_cast<int>(op)];
+        ss << NextSpan(opStr, curSpanBegin, operatorPos, static_cast<int>(opStr.size()));
+        curSpanBegin = operatorPos + Position{0, 0, static_cast<int>(opStr.size())};
+        if (rightExpr) {
+            ss << NextSpan(rightExpr->ToString(), curSpanBegin, rightExpr->end);
+        }
+    }
+    return ss.str();
+}
+
+std::string AssignExpr::ToString() const
+{
+    std::stringstream ss;
+    if (leftValue) {
+        Position curSpanBegin = leftValue->begin;
+        ss << NextSpan(leftValue->ToString(), curSpanBegin, leftValue->end);
+        curSpanBegin = leftValue->end;
+        std::string opStr;
+        if (isCompound && op != TokenKind::ILLEGAL) {
+            opStr = TOKENS[static_cast<int>(op)];
+        } else {
+            opStr = "=";
+        }
+        ss << NextSpan(opStr, curSpanBegin, assignPos, static_cast<int>(opStr.size()));
+        curSpanBegin = assignPos + Position{0, 0, static_cast<int>(opStr.size())};
+        if (rightExpr) {
+            ss << NextSpan(rightExpr->ToString(), curSpanBegin, rightExpr->end);
+        }
+    }
+    return ss.str();
+}
+
+std::string SubscriptExpr::ToString() const
+{
+    std::stringstream ss;
+    if (baseExpr) {
+        Position curSpanBegin = baseExpr->begin;
+        ss << NextSpan(baseExpr->ToString(), curSpanBegin, baseExpr->end);
+        curSpanBegin = baseExpr->end;
+        ss << NextSpan("[", curSpanBegin, leftParenPos, 1);
+        curSpanBegin = leftParenPos + Position{0, 0, 1};
+        for (size_t i = 0; i < indexExprs.size(); ++i) {
+            auto& idx = indexExprs[i];
+            if (!idx) {
+                continue;
+            }
+            ss << NextSpan(idx->ToString(), curSpanBegin, idx->end);
+            curSpanBegin = idx->end;
+            if (i < commaPos.size()) {
+                ss << NextSpan(",", curSpanBegin, commaPos[i], 1);
+                curSpanBegin = commaPos[i] + Position{0, 0, 1};
+            }
+        }
+        ss << NextSpan("]", curSpanBegin, rightParenPos, 1);
+    }
+    return ss.str();
+}
+
+std::string Expr::ToString() const
+{
+    return Node::ToString();
+}
+
+std::string WildcardExpr::ToString() const
+{
+    return "_";
+}
+
+std::string TokenPart::ToString() const
+{
+    if (tokens.empty()) {
+        return "";
+    }
+    std::stringstream ss;
+    for (const auto& token : tokens) {
+        const auto& value = token.Value();
+        if (!value.empty()) {
+            ss << value;
+        } else {
+            ss << TokenLiteral(token.kind);
+        }
+    }
+    return ss.str();
+}
+
+std::string QuoteExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "quote(";
+    for (size_t i = 0; i < exprs.size(); ++i) {
+        if (i > 0) {
+            ss << ", ";
+        }
+        if (exprs[i]) {
+            ss << exprs[i]->ToString();
+        }
+    }
+    ss << ")";
+    return ss.str();
+}
+
+std::string InterpolationExpr::ToString() const
+{
+    if (!rawString.empty()) {
+        return rawString;
+    }
+    std::stringstream ss;
+    ss << "${";
+    if (block) {
+        ss << block->ToString();
+    }
+    ss << "}";
+    return ss.str();
+}
+
+std::string StrInterpolationExpr::ToString() const
+{
+    if (!rawString.empty()) {
+        return rawString;
+    }
+    std::stringstream ss;
+    ss << '"';
+    for (const auto& part : strPartExprs) {
+        if (part) {
+            ss << part->ToString();
+        }
+    }
+    ss << '"';
+    return ss.str();
+}
+
+std::string IncOrDecExpr::ToString() const
+{
+    auto operand = expr ? expr->ToString() : std::string{};
+    auto opStr = std::string(TokenLiteral(op));
+    if (operand.empty()) {
+        return opStr;
+    }
+    if (expr && expr->begin < operatorPos) {
+        return operand + opStr;
+    }
+    return opStr + operand;
+}
+
+std::string OptionalExpr::ToString() const
+{
+    if (!baseExpr) {
+        return "?";
+    }
+    return baseExpr->ToString() + "?";
+}
+
+std::string OptionalChainExpr::ToString() const
+{
+    if (!expr) {
+        return "?.";
+    }
+    return expr->ToString() + "?.";
+}
+
+std::string PrimitiveTypeExpr::ToString() const
+{
+    return std::string(TypeKindName(typeKind));
+}
+
+std::string LambdaExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "lambda";
+    if (funcBody) {
+        ss << funcBody->ToString();
+    }
+    return ss.str();
+}
+
+std::string TrailingClosureExpr::ToString() const
+{
+    std::stringstream ss;
+    if (expr) {
+        ss << expr->ToString();
+    } else {
+        ss << "<expr>";
+    }
+    ss << " trailing ";
+    if (lambda) {
+        ss << lambda->ToString();
+    } else {
+        ss << "<lambda>";
+    }
+    return ss.str();
+}
+
+std::string TypeConvExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << (type ? type->ToString() : "typeconv") << "(";
+    if (expr) {
+        ss << expr->ToString();
+    }
+    ss << ")";
+    return ss.str();
+}
+
+std::string SpawnExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "spawn";
+    if (task) {
+        ss << " " << task->ToString();
+    }
+    if (arg) {
+        ss << " with " << arg->ToString();
+    }
+    if (futureObj) {
+        ss << " -> " << futureObj->ToString();
+    }
+    return ss.str();
+}
+
+std::string SynchronizedExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "synchronized(";
+    if (mutex) {
+        ss << mutex->ToString();
+    }
+    ss << ")";
+    if (body) {
+        ss << " " << body->ToString();
+    }
+    return ss.str();
+}
+
+std::string InvalidExpr::ToString() const
+{
+    if (!value.empty()) {
+        return value;
+    }
+    return "<invalid expr>";
+}
+
+std::string Block::ToString() const
+{
+    std::stringstream ss;
+    ss << "{";
+    Position curSpanBegin = leftCurlPos + Position{0, 0, 1};
+    for (auto& child : body) {
+        if (!child) continue;
+        ss << NextSpan(child->ToString(), curSpanBegin, child->end);
+        curSpanBegin = child->end;
+    }
+    ss << NextSpan("}", curSpanBegin, rightCurlPos, 1);
+    return ss.str();
+}
+
+std::string ReturnExpr::ToString() const
+{
+    std::stringstream ss;
+    Position curSpanBegin = returnPos;
+    ss << NextSpan("return", curSpanBegin, returnPos, 6);
+    curSpanBegin = returnPos + Position{0, 0, 6};
+    if (expr) {
+        ss << NextSpan(expr->ToString(), curSpanBegin, expr->end);
+        curSpanBegin = expr->end;
+    }
+    if (semiPos != INVALID_POSITION) {
+        ss << NextSpan(";", curSpanBegin, semiPos, 1);
+    }
+    return ss.str();
+}
+
+std::string IsExpr::ToString() const
+{
+    std::stringstream ss;
+    if (leftExpr) {
+        Position curSpanBegin = leftExpr->begin;
+        ss << NextSpan(leftExpr->ToString(), curSpanBegin, leftExpr->end);
+        curSpanBegin = leftExpr->end;
+        ss << NextSpan("is", curSpanBegin, isPos, 2);
+        curSpanBegin = isPos + Position{0, 0, 2};
+        if (isType) {
+            ss << NextSpan(isType->ToString(), curSpanBegin, isType->end);
+        }
+    }
+    return ss.str();
+}
+
+std::string AsExpr::ToString() const
+{
+    std::stringstream ss;
+    if (leftExpr) {
+        Position curSpanBegin = leftExpr->begin;
+        ss << NextSpan(leftExpr->ToString(), curSpanBegin, leftExpr->end);
+        curSpanBegin = leftExpr->end;
+        ss << NextSpan("as", curSpanBegin, asPos, 2);
+        curSpanBegin = asPos + Position{0, 0, 2};
+        if (asType) {
+            ss << NextSpan(asType->ToString(), curSpanBegin, asType->end);
+        }
+    }
+    return ss.str();
+}
+
+std::string RangeExpr::ToString() const
+{
+    std::stringstream ss;
+    Position curSpanBegin = begin;
+    if (startExpr) {
+        ss << NextSpan(startExpr->ToString(), curSpanBegin, startExpr->end);
+        curSpanBegin = startExpr->end;
+    }
+    ss << NextSpan("...", curSpanBegin, rangePos, 3);
+    curSpanBegin = rangePos + Position{0, 0, 3};
+    if (stopExpr) {
+        ss << NextSpan(stopExpr->ToString(), curSpanBegin, stopExpr->end);
+        curSpanBegin = stopExpr->end;
+    }
+    if (stepExpr) {
+        ss << NextSpan(":", curSpanBegin, colonPos, 1);
+        curSpanBegin = colonPos + Position{0, 0, 1};
+        ss << NextSpan(stepExpr->ToString(), curSpanBegin, stepExpr->end);
+    }
+    return ss.str();
+}
+
+std::string LetPatternDestructor::ToString() const
+{
+    std::stringstream ss;
+    ss << "let ";
+    for (size_t i = 0; i < patterns.size(); ++i) {
+        if (i > 0) {
+            ss << " | ";
+        }
+        if (patterns[i]) {
+            ss << patterns[i]->ToString();
+        }
+    }
+    ss << " <- ";
+    if (initializer) {
+        ss << initializer->ToString();
+    }
+    if (semiPos != INVALID_POSITION) {
+        ss << ";";
+    }
+    return ss.str();
+}
+
+std::string MatchCase::ToString() const
+{
+    std::stringstream ss;
+    for (size_t i = 0; i < patterns.size(); ++i) {
+        if (i > 0) {
+            ss << " | ";
+        }
+        if (patterns[i]) {
+            ss << patterns[i]->ToString();
+        }
+    }
+    if (patternGuard) {
+        ss << " where " << patternGuard->ToString();
+    }
+    ss << " => ";
+    if (exprOrDecls) {
+        ss << exprOrDecls->ToString();
+    }
+    return ss.str();
+}
+
+std::string MatchCaseOther::ToString() const
+{
+    std::stringstream ss;
+    if (matchExpr) {
+        ss << matchExpr->ToString();
+    }
+    ss << " => ";
+    if (exprOrDecls) {
+        ss << exprOrDecls->ToString();
+    }
+    return ss.str();
+}
+
+std::string MatchExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "match";
+    if (selector) {
+        ss << " (" << selector->ToString() << ")";
+    }
+    ss << " {";
+    bool hasCase = false;
+    for (auto& matchCase : matchCases) {
+        if (!matchCase) {
+            continue;
+        }
+        ss << " " << matchCase->ToString();
+        hasCase = true;
+    }
+    for (auto& other : matchCaseOthers) {
+        if (!other) {
+            continue;
+        }
+        ss << " " << other->ToString();
+        hasCase = true;
+    }
+    if (hasCase) {
+        ss << " ";
+    }
+    ss << "}";
+    if (semiPos != INVALID_POSITION) {
+        ss << ";";
+    }
+    return ss.str();
+}
+
+std::string TryExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "try";
+    if (!resourceSpec.empty()) {
+        ss << " (";
+        for (size_t i = 0; i < resourceSpec.size(); ++i) {
+            if (i > 0) {
+                ss << ", ";
+            }
+            if (resourceSpec[i]) {
+                ss << resourceSpec[i]->ToString();
+            }
+        }
+        ss << ")";
+    }
+    if (tryBlock) {
+        ss << " " << tryBlock->ToString();
+    }
+    size_t catchCount = std::max(catchBlocks.size(), catchPatterns.size());
+    for (size_t i = 0; i < catchCount; ++i) {
+        ss << " catch";
+        if (i < catchPatterns.size() && catchPatterns[i]) {
+            ss << " (" << catchPatterns[i]->ToString() << ")";
+        }
+        if (i < catchBlocks.size() && catchBlocks[i]) {
+            ss << " " << catchBlocks[i]->ToString();
+        }
+    }
+    if (finallyBlock) {
+        ss << " finally " << finallyBlock->ToString();
+    }
+    if (semiPos != INVALID_POSITION) {
+        ss << ";";
+    }
+    return ss.str();
+}
+
+std::string ThrowExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "throw";
+    if (expr) {
+        ss << " " << expr->ToString();
+    }
+    if (semiPos != INVALID_POSITION) {
+        ss << ";";
+    }
+    return ss.str();
+}
+
+std::string PerformExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "perform";
+    if (expr) {
+        ss << " " << expr->ToString();
+    }
+    if (semiPos != INVALID_POSITION) {
+        ss << ";";
+    }
+    return ss.str();
+}
+
+std::string ResumeExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "resume";
+    if (withExpr) {
+        ss << " with " << withExpr->ToString();
+    }
+    if (throwingExpr) {
+        ss << " throwing " << throwingExpr->ToString();
+    }
+    if (semiPos != INVALID_POSITION) {
+        ss << ";";
+    }
+    return ss.str();
+}
+
+std::string JumpExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << (isBreak ? "break" : "continue");
+    if (semiPos != INVALID_POSITION) {
+        ss << ";";
+    }
+    return ss.str();
+}
+
+std::string WhileExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "while (";
+    if (condExpr) {
+        ss << condExpr->ToString();
+    }
+    ss << ")";
+    if (body) {
+        ss << " " << body->ToString();
+    }
+    if (semiPos != INVALID_POSITION) {
+        ss << ";";
+    }
+    return ss.str();
+}
+
+std::string DoWhileExpr::ToString() const
+{
+    std::stringstream ss;
+    ss << "do";
+    if (body) {
+        ss << " " << body->ToString();
+    }
+    ss << " while (";
+    if (condExpr) {
+        ss << condExpr->ToString();
+    }
+    ss << ")";
+    if (semiPos != INVALID_POSITION) {
+        ss << ";";
+    }
     return ss.str();
 }
 
@@ -499,9 +2201,13 @@ bool Node::IsSamePackage(const Node& other) const
 void SubscriptExpr::Clear() noexcept
 {
     RecoverToSubscriptExpr(*this);
-    baseExpr->Clear();
+    if (baseExpr) {
+        baseExpr->Clear();
+    }
     for (auto& indexExpr : indexExprs) {
-        indexExpr->Clear();
+        if (indexExpr) {
+            indexExpr->Clear();
+        }
     }
     commaPos.clear();
     Expr::Clear();
@@ -517,21 +2223,29 @@ void UnaryExpr::Clear() noexcept
 {
     RecoverToUnaryExpr(*this);
     Expr::Clear();
-    expr->Clear();
+    if (expr) {
+        expr->Clear();
+    }
 }
 
 void BinaryExpr::Clear() noexcept
 {
     RecoverToBinaryExpr(*this);
     Expr::Clear();
-    leftExpr->Clear();
-    rightExpr->Clear();
+    if (leftExpr) {
+        leftExpr->Clear();
+    }
+    if (rightExpr) {
+        rightExpr->Clear();
+    }
 }
 
 void ParenExpr::Clear() noexcept
 {
     Expr::Clear();
-    expr->Clear();
+    if (expr) {
+        expr->Clear();
+    }
 }
 
 bool RefType::IsGenericThisType() const
@@ -1256,5 +2970,6 @@ bool PropDecl::IsOpen() const noexcept
     }
     return !TestAttr(AST::Attribute::IMPORTED) && getters.empty() && setters.empty();
 }
+
 
 } // namespace Cangjie

@@ -184,10 +184,7 @@ struct Node {
     {
     }
     virtual ~Node();
-    virtual std::string ToString() const
-    {
-        return "";
-    }
+    virtual std::string ToString() const;
 
     /**
      * Get the @p attr.
@@ -602,6 +599,7 @@ struct Annotation : public Node {
     {
         return (kind < rhs.kind);
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -665,6 +663,7 @@ struct Type : Node {
     {
         return typeParameterNameIsRawId ? ("`" + typeParameterName + "`") : typeParameterName;
     }
+    std::string ToString() const override;
 
 protected:
     Type(ASTKind kind) : Node(kind)
@@ -682,6 +681,7 @@ struct InvalidType : Type {
         begin = pos;
         end = pos;
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -722,6 +722,7 @@ struct ThisType : Type {
         end = begin;
         end.column += Len(TokenKind::THISTYPE);
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -733,10 +734,7 @@ struct PrimitiveType : Type {
     PrimitiveType() : Type(ASTKind::PRIMITIVE_TYPE)
     {
     }
-    std::string ToString() const override
-    {
-        return str;
-    }
+    std::string ToString() const override;
 };
 
 /**
@@ -749,6 +747,7 @@ struct ParenType : Type {
     ParenType() : Type(ASTKind::PAREN_TYPE)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -783,6 +782,7 @@ struct QualifiedType : Type {
      *  field position in curfile otherwise.
      */
     Position GetFieldPos() const;
+    std::string ToString() const override;
 };
 
 /**
@@ -796,6 +796,7 @@ struct OptionType : Type {
     OptionType() : Type(ASTKind::OPTION_TYPE)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -808,6 +809,7 @@ struct ConstantType : public Type {
     ConstantType() : Type(ASTKind::CONSTANT_TYPE)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -822,6 +824,7 @@ struct VArrayType : public Type {
     VArrayType() : Type(ASTKind::VARRAY_TYPE)
     {
     }
+    std::string ToString() const override;
 };
 /**
  * A FuncType node represents a function type, example: `(Int32, Int32)->Int32`, @p paramType is (Int32, Int32), @p
@@ -837,6 +840,7 @@ struct FuncType : Type {
     {
     }
     bool isC{false};
+    std::string ToString() const override;
 };
 
 /**
@@ -850,6 +854,7 @@ struct TupleType : Type {
     TupleType() : Type(ASTKind::TUPLE_TYPE)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -874,6 +879,7 @@ struct GenericConstraint : public Node {
     GenericConstraint() : Node(ASTKind::GENERIC_CONSTRAINT)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -888,6 +894,7 @@ struct Generic : public Node {
     Generic() : Node(ASTKind::GENERIC)
     {
     }
+    std::string ToString() const override;
 };
 
 struct DeclHash {
@@ -966,6 +973,7 @@ struct Decl : Node {
         checkFlag = InheritanceVisitStatus::UNVISITED;
         Node::Clear();
     }
+    std::string ToString() const override;
     virtual std::vector<OwnedPtr<Decl>>& GetMemberDecls()
     {
         static std::vector<OwnedPtr<Decl>> empty;
@@ -1052,6 +1060,7 @@ struct BuiltInDecl : public Decl {
     {
         return ty == type;
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1062,6 +1071,7 @@ struct GenericParamDecl : public Decl {
     GenericParamDecl() : Decl(ASTKind::GENERIC_PARAM_DECL)
     {
     }
+    std::string ToString() const override;
 };
 
 struct VarDeclAbstract : Decl {
@@ -1102,6 +1112,7 @@ struct VarWithPatternDecl : VarDeclAbstract {
     VarWithPatternDecl() : VarDeclAbstract(ASTKind::VAR_WITH_PATTERN_DECL)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1123,6 +1134,7 @@ struct FuncParam : VarDecl {
         Decl::Clear();
         DisableAttr(Attribute::HAS_INITIAL);
     }
+    std::string ToString() const override;
 
 protected:
     explicit FuncParam(ASTKind astKind) : VarDecl(astKind)
@@ -1137,6 +1149,7 @@ struct DummyBody : Node {
     DummyBody() : Node(ASTKind::DUMMY_BODY)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1165,6 +1178,7 @@ struct EnumDecl : InheritableDecl {
     {
         return members;
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1176,6 +1190,7 @@ struct TypeAliasDecl : Decl {
     TypeAliasDecl() : Decl(ASTKind::TYPE_ALIAS_DECL)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1190,6 +1205,7 @@ struct FuncParamList : Node {
     FuncParamList() : Node(ASTKind::FUNC_PARAM_LIST)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1223,6 +1239,7 @@ struct FuncBody : Node {
         Node::Clear();
         capturedVars.clear();
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1273,6 +1290,7 @@ struct FuncDecl : Decl {
     bool IsExportedDecl() const override;
 
     bool IsOpen() const noexcept override;
+    std::string ToString() const override;
 };
 
 /**
@@ -1287,6 +1305,7 @@ struct MacroDecl : Decl {
     MacroDecl() : Decl(ASTKind::MACRO_DECL)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1301,6 +1320,7 @@ struct MainDecl : Decl {
     MainDecl() : Decl(ASTKind::MAIN_DECL)
     {
     }
+    std::string ToString() const override;
 };
 
 struct PrimaryCtorDecl : Decl {
@@ -1315,6 +1335,7 @@ struct PrimaryCtorDecl : Decl {
         // Valid 'PrimaryCtorDecl' must be desugared to 'FuncDecl', 'PrimaryCtorDecl' always not export.
         doNotExport = true;
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1332,6 +1353,7 @@ struct PropDecl : VarDecl {
     bool IsExportedDecl() const override;
 
     bool IsOpen() const noexcept override;
+    std::string ToString() const override;
 };
 
 /**
@@ -1344,6 +1366,7 @@ struct StructBody : Node {
     StructBody() : Node(ASTKind::STRUCT_BODY)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1371,6 +1394,7 @@ struct StructDecl : InheritableDecl {
     {
         return body ? body->decls : Decl::GetMemberDecls();
     }
+    std::string ToString() const override;
 
 private:
     std::optional<bool> hasConstOrFrozenInit{std::nullopt};
@@ -1386,6 +1410,7 @@ struct InterfaceBody : Node {
     InterfaceBody() : Node(ASTKind::INTERFACE_BODY)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1393,6 +1418,7 @@ struct InterfaceBody : Node {
  */
 struct ClassLikeDecl : InheritableDecl {
     std::set<Ptr<Decl>> subDecls; /**< A <: B ==>  B.subDecls = {A}. */
+    std::string ToString() const override;
 protected:
     ClassLikeDecl(ASTKind kind) : InheritableDecl(kind)
     {
@@ -1416,6 +1442,7 @@ struct InterfaceDecl : ClassLikeDecl {
     {
         return true;
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1428,6 +1455,7 @@ struct ClassBody : Node {
     ClassBody() : Node(ASTKind::CLASS_BODY)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1472,6 +1500,7 @@ struct ClassDecl : ClassLikeDecl {
     {
         return TestAnyAttr(Attribute::OPEN, Attribute::ABSTRACT);
     }
+    std::string ToString() const override;
 
 private:
     std::optional<bool> hasConstOrFrozenInit{std::nullopt};
@@ -1495,6 +1524,7 @@ struct ExtendDecl : InheritableDecl {
         return members;
     }
     bool IsExportedDecl() const override;
+    std::string ToString() const override;
 };
 
 /**
@@ -1508,6 +1538,7 @@ struct InvalidDecl : Decl {
         end = pos;
         doNotExport = true;
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1515,6 +1546,7 @@ struct InvalidDecl : Decl {
  */
 struct Pattern : Node {
     Ptr<Expr> ctxExpr{nullptr}; /**< Expr to match pattern. */
+    std::string ToString() const override;
 
 protected:
     Pattern(ASTKind kind) : Node(kind)
@@ -1537,6 +1569,7 @@ struct InvalidPattern : Pattern {
         begin = pos;
         end = pos;
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1548,6 +1581,7 @@ struct ConstPattern : Pattern {
     ConstPattern() : Pattern(ASTKind::CONST_PATTERN)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1563,6 +1597,7 @@ struct WildcardPattern : Pattern {
         this->begin = begin;
         this->end = begin + static_cast<size_t>(Len(TokenKind::WILDCARD));
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1587,6 +1622,7 @@ struct VarPattern : Pattern {
         end = varDecl->end;
         varDecl->parentPattern = this;
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1600,6 +1636,7 @@ struct TuplePattern : Pattern {
     TuplePattern() : Pattern(ASTKind::TUPLE_PATTERN)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1616,6 +1653,7 @@ struct TypePattern : Pattern {
     TypePattern() : Pattern(ASTKind::TYPE_PATTERN)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1630,6 +1668,7 @@ struct EnumPattern : Pattern {
     EnumPattern() : Pattern(ASTKind::ENUM_PATTERN)
     {
     }
+    std::string ToString() const override;
     std::string GetIdentifier() const;
 };
 
@@ -1645,6 +1684,7 @@ struct VarOrEnumPattern : public Pattern {
     VarOrEnumPattern(const SrcIdentifier& id) : Pattern(ASTKind::VAR_OR_ENUM_PATTERN), identifier{id}
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1659,6 +1699,7 @@ struct ExceptTypePattern : Pattern {
     ExceptTypePattern() : Pattern(ASTKind::EXCEPT_TYPE_PATTERN)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1673,6 +1714,7 @@ struct CommandTypePattern : Pattern {
     CommandTypePattern() : Pattern(ASTKind::COMMAND_TYPE_PATTERN)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1732,6 +1774,7 @@ struct Expr : Node {
     {
         return {};
     }
+    std::string ToString() const override;
 
     bool IsReferenceExpr() const noexcept
     {
@@ -1757,6 +1800,7 @@ struct WildcardExpr : Expr {
         this->begin = begin;
         this->end = begin + static_cast<size_t>(Len(TokenKind::WILDCARD));
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1770,6 +1814,7 @@ struct Block : Expr {
     Block() : Expr(ASTKind::BLOCK)
     {
     }
+    std::string ToString() const override;
     Ptr<Node> GetLastExprOrDecl() const;
 };
 
@@ -1787,6 +1832,7 @@ struct IfExpr : Expr {
     bool isElseIf{false};     /**< Whether has else if block. Generated by Parser*/
     bool hasElse{false};      /**< Whether has else block. Generated by Parser*/
     SugarKind sugarKind = SugarKind::NO_SUGAR;
+    std::string ToString() const override;
     IfExpr() : Expr(ASTKind::IF_EXPR)
     {
     }
@@ -1804,6 +1850,7 @@ struct LetPatternDestructor : Expr {
     LetPatternDestructor() : Expr{ASTKind::LET_PATTERN_DESTRUCTOR}
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1821,6 +1868,7 @@ struct TokenPart : Expr {
             end = tokens.back().End();
         }
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1837,6 +1885,7 @@ struct QuoteExpr : Expr {
     QuoteExpr() : Expr(ASTKind::QUOTE_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1852,6 +1901,7 @@ struct MatchCase : Node {
     MatchCase() : Node(ASTKind::MATCH_CASE)
     {
     }
+    std::string ToString() const override;
     void SetCtxExprForPatterns(Ptr<Expr> ctxExpr)
     {
         for (auto& pattern : patterns) {
@@ -1872,6 +1922,7 @@ struct MatchCaseOther : Node {
     MatchCaseOther() : Node(ASTKind::MATCH_CASE_OTHER)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1890,6 +1941,7 @@ struct MatchExpr : Expr {
     MatchExpr() : Expr(ASTKind::MATCH_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 struct Handler {
@@ -1928,6 +1980,7 @@ struct TryExpr : Expr {
     TryExpr() : Expr(ASTKind::TRY_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1939,6 +1992,7 @@ struct ThrowExpr : Expr {
     ThrowExpr() : Expr(ASTKind::THROW_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1950,6 +2004,7 @@ struct PerformExpr : Expr {
     PerformExpr() : Expr(ASTKind::PERFORM_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1965,6 +2020,7 @@ struct ResumeExpr : Expr {
     ResumeExpr() : Expr(ASTKind::RESUME_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 /**
  * A ReturnExpr node represents return expression.
@@ -1973,6 +2029,7 @@ struct ReturnExpr : Expr {
     Position returnPos;                 /**< Position of 'return'. */
     OwnedPtr<Expr> expr;                /**< Return expr. Generated by Parser.*/
     Ptr<FuncBody> refFuncBody{nullptr}; /**< In which function body. */
+    std::string ToString() const override;
     ReturnExpr() : Expr(ASTKind::RETURN_EXPR)
     {
     }
@@ -1987,6 +2044,7 @@ struct JumpExpr : Expr {
     JumpExpr() : Expr(ASTKind::JUMP_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2000,6 +2058,7 @@ struct ForInExpr : Expr {
     OwnedPtr<Expr> inExpression; /**< In some expr. Generated by Parser.*/
     Position rightParenPos;      /**< Position of ')'. */
     Position wherePos;           /**< Position of 'if'. */
+    std::string ToString() const override;
     OwnedPtr<Expr> patternGuard; /**< Same PatternGuard in the pattern match. Generated by Parser.*/
     OwnedPtr<Block> body;        /**< Body of the ForInExpr. Generated by Parser.*/
     ForInKind forInKind;
@@ -2027,6 +2086,7 @@ struct WhileExpr : Expr {
     WhileExpr() : Expr(ASTKind::WHILE_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2042,6 +2102,7 @@ struct DoWhileExpr : Expr {
     DoWhileExpr() : Expr(ASTKind::DO_WHILE_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2070,11 +2131,13 @@ struct AssignExpr : OverloadableExpr {
     AssignExpr() : OverloadableExpr(ASTKind::ASSIGN_EXPR)
     {
     }
+    std::string ToString() const override;
     void Clear() noexcept override;
 };
 
 /**
  * An IncOrDecExpr node represents inc or dec expression.
+    std::string ToString() const override;
  * e.g.
  *          a++  or  a--
  *          ^^^      ^^^
@@ -2085,6 +2148,7 @@ struct IncOrDecExpr : OverloadableExpr {
     IncOrDecExpr() : OverloadableExpr(ASTKind::INC_OR_DEC_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2099,6 +2163,7 @@ struct UnaryExpr : OverloadableExpr {
     UnaryExpr() : OverloadableExpr(ASTKind::UNARY_EXPR)
     {
     }
+    std::string ToString() const override;
     void Clear() noexcept override;
 };
 
@@ -2115,6 +2180,7 @@ struct BinaryExpr : OverloadableExpr {
     BinaryExpr() : OverloadableExpr(ASTKind::BINARY_EXPR)
     {
     }
+    std::string ToString() const override;
     void Clear() noexcept override;
 };
 
@@ -2128,6 +2194,7 @@ struct IsExpr : Expr {
     IsExpr() : Expr(ASTKind::IS_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2140,6 +2207,7 @@ struct AsExpr : Expr {
     AsExpr() : Expr(ASTKind::AS_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2156,6 +2224,7 @@ struct RangeExpr : Expr {
     RangeExpr() : Expr(ASTKind::RANGE_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2182,6 +2251,7 @@ struct SubscriptExpr : OverloadableExpr {
     SubscriptExpr() : OverloadableExpr(ASTKind::SUBSCRIPT_EXPR)
     {
     }
+    std::string ToString() const override;
     void Clear() noexcept override;
 };
 
@@ -2195,6 +2265,7 @@ struct InterpolationExpr : Expr {
     InterpolationExpr() : Expr(ASTKind::INTERPOLATION_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2210,6 +2281,7 @@ struct StrInterpolationExpr : Expr {
     StrInterpolationExpr() : Expr(ASTKind::STR_INTERPOLATION_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2273,6 +2345,8 @@ struct LitConstExpr : Expr {
             case LitConstKind::NONE:
                 return "None";
         }
+        // Should never reach here; include a fallback to satisfy compiler warnings/errors
+        return "<invalid>";
     }
     std::string ToString() const override;
     // Get number literal type kind from suffix, if no suffix TYPE_IDEAL will be returned
@@ -2356,6 +2430,7 @@ struct MacroExpandExpr : Expr {
     Ptr<struct LambdaExpr> GetLambda(size_t i) const;
     /// Get the inner exprs. Used in desugar.
     std::tuple<OwnedPtr<FuncArg>, OwnedPtr<struct LambdaExpr>, OwnedPtr<struct LambdaExpr>> Decompose();
+    std::string ToString() const override;
 };
 
 /**
@@ -2366,6 +2441,7 @@ struct MacroExpandDecl : Decl {
     MacroExpandDecl() : Decl(ASTKind::MACRO_EXPAND_DECL)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2377,6 +2453,7 @@ struct MacroExpandParam : FuncParam {
     {
         invocation.isFuncParam = true;
     }
+    std::string ToString() const override;
 };
 /**
  * Function arguments in CallExpr.
@@ -2534,6 +2611,7 @@ struct ParenExpr : Expr {
     ParenExpr() : Expr(ASTKind::PAREN_EXPR)
     {
     }
+    std::string ToString() const override;
     void Clear() noexcept override;
 };
 
@@ -2549,6 +2627,7 @@ struct LambdaExpr : Expr {
     explicit LambdaExpr(OwnedPtr<FuncBody> body) : Expr(ASTKind::LAMBDA_EXPR), funcBody(std::move(body))
     {
     }
+    std::string ToString() const override;
 };
 
 struct TrailingClosureExpr : Expr {
@@ -2559,6 +2638,7 @@ struct TrailingClosureExpr : Expr {
     TrailingClosureExpr() : Expr(ASTKind::TRAIL_CLOSURE_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 struct OptionalExpr : Expr {
@@ -2567,6 +2647,7 @@ struct OptionalExpr : Expr {
     explicit OptionalExpr() : Expr(ASTKind::OPTIONAL_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 struct OptionalChainExpr : Expr {
@@ -2574,6 +2655,7 @@ struct OptionalChainExpr : Expr {
     explicit OptionalChainExpr() : Expr(ASTKind::OPTIONAL_CHAIN_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2650,6 +2732,7 @@ struct TupleLit : Expr {
     TupleLit() : Expr(ASTKind::TUPLE_LIT)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2663,6 +2746,7 @@ struct TypeConvExpr : Expr {
     TypeConvExpr() : Expr(ASTKind::TYPE_CONV_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2704,6 +2788,7 @@ struct PrimitiveTypeExpr : Expr {
     explicit PrimitiveTypeExpr(TypeKind typeKind) : Expr(ASTKind::PRIMITIVE_TYPE_EXPR), typeKind(typeKind)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2721,6 +2806,7 @@ struct InvalidExpr : Expr {
         begin = pos;
         end = pos;
     }
+    std::string ToString() const override;
 };
 
  /**
@@ -2750,6 +2836,7 @@ struct FeaturesDirective : Node {
     FeaturesDirective() : Node(ASTKind::FEATURES_DIRECTIVE)
     {
     }
+    std::string ToString() const override;
 };
 
 enum class ImportKind {
@@ -2803,6 +2890,8 @@ struct ImportSpec : Node {
     {
     }
 
+    std::string ToString() const override;
+
     bool IsReExport() const
     {
         return modifier && modifier->modifier != TokenKind::PRIVATE;
@@ -2851,6 +2940,7 @@ struct PackageSpec : Node {
     {
     }
     std::string GetPackageName() const;
+    std::string ToString() const override;
 };
 
 /**
@@ -2885,6 +2975,7 @@ struct File : Node {
     {
         return !(*this == r);
     }
+    std::string ToString() const override;
 };
 
 enum class AccessLevel {
@@ -2942,6 +3033,7 @@ struct Package : Node {
         }
         return false;
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2957,6 +3049,7 @@ struct PackageDecl : Decl {
             EnableAttr(Attribute::IMPORTED);
         }
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2972,6 +3065,7 @@ struct SpawnExpr : Expr {
     SpawnExpr() : Expr(ASTKind::SPAWN_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2986,6 +3080,7 @@ struct SynchronizedExpr : Expr {
     SynchronizedExpr() : Expr(ASTKind::SYNCHRONIZED_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 inline bool CompNodeByPos(Ptr<const AST::Node> n1, Ptr<const AST::Node> n2)
