@@ -969,6 +969,8 @@ OwnedPtr<FuncDecl> ParserImpl::ParseConstructor(
     funcDecl->keywordPos = lookahead.Begin();
     funcDecl->EnableAttr(Attribute::CONSTRUCTOR);
     if (HasModifier(modifiers, TokenKind::STATIC)) {
+        funcDecl->identifier = STATIC_INIT_FUNC;
+        funcDecl->identifierForLsp = "init";
         CheckNoDeprecatedAnno(annos, "static constructor");
     }
     if (HasModifier(modifiers, TokenKind::COMMON)) {
