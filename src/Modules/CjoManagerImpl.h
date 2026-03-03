@@ -14,6 +14,7 @@
 #define CANGJIE_MODULES_CJO_MANAGERIMPL_H
 
 #include "cangjie/Modules/CjoManager.h"
+#include <unordered_set>
 
 namespace Cangjie {
 class CjoManagerImpl {
@@ -172,7 +173,13 @@ public:
      * @brief Substitute imported TypeAliasTy in all loaded packages.
      * @param srcPackages The source packages where imported TypeAliasTy come from.
      */
-    void SubstituteImportedTypeAliasTy(const std::vector<Ptr<AST::Package>>& srcPackages);
+    void SubstituteImportedTypeAliasTy(const std::vector<Ptr<AST::Package>>& srcPackages, const bool fromLsp);
+
+    /**
+     * @brief Replace TypeAliasTy in a node.
+     * @param node The node to replace TypeAliasTy.
+     */
+    void ReplaceTypeAliasInNode(Ptr<AST::Node> node);
 
 private:
     DiagnosticEngine& diag;
@@ -199,6 +206,9 @@ private:
     std::unordered_map<std::string, std::string> cjoPathFindCache;
     // Flag to track if BuildIndex has been called
     bool hasBuildIndex{false};
+    // Flag that package has been substituted type alias.
+    std::unordered_set<Ptr<AST::Package>> substitutedPackagesCache;
+    std::unordered_map<Ptr<AST::Ty>, Ptr<AST::Ty>> typeAliasCache;
 };
 } // namespace Cangjie
 #endif
