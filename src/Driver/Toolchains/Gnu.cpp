@@ -308,6 +308,9 @@ void Gnu::HandleLLVMLinkOptions(
     tool.AppendArgIf(driverOptions.enablePgoInstrGen, "-u", "__llvm_profile_runtime");
     tool.AppendArgIf(driverOptions.enablePgoInstrGen || driverOptions.enableCoverage,
         FileUtil::JoinPath(cangjieLibPath, GetClangRTProfileLibraryName()));
+    if (driverOptions.target.env == Cangjie::Triple::Environment::OHOS) {
+        tool.AppendArgIf(driverOptions.enablePgoInstrGen, FileUtil::JoinPath(cangjieLibPath, "cjpgo.o"));
+    }
     HandleSanitizer(tool, cangjieLibPath, gccLibPath);
     // 4. built-in library dependencies
     GenerateLinkOptionsOfBuiltinLibs(tool);
