@@ -4,6 +4,7 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include "Base/CGTypes/CGVArrayType.h"
 #include "IRBuilder.h"
 
 #include "llvm/IR/Value.h"
@@ -78,7 +79,7 @@ llvm::Value* IRBuilder2::FixFuncArg(const CGValue& srcValue, const CGType& destT
             //   the "struct" mentioned above is the `this` parameter of the method.
             auto size = GetLayoutSize_64(*srcDerefType);
             if (IsTypeContainsRef(srcDerefCGType->GetLLVMType())) {
-                CallGCWriteAgg(srcDerefCGType->GetLLVMType(), {temp, payloadPtr, &srcRawVal, size});
+                CallGCWriteAgg(llvm::cast<llvm::StructType>(srcDerefCGType->GetLLVMType()), {temp, payloadPtr, &srcRawVal, size});
             } else {
                 CreateMemCpy(payloadPtr, llvm::MaybeAlign(), &srcRawVal, llvm::MaybeAlign(), size);
             }
@@ -116,8 +117,8 @@ std::vector<llvm::Value*> IRBuilder2::FixFuncArgs(const CGFunctionType& calleeTy
                 auto addrspace = paramType.GetAddrspace();
                 auto basePtrVal = llvm::Constant::getNullValue(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext(), addrspace));
                 if (!applyWrapper->GetOperand(realArgIndices[idx])->IsLocalVar()) {
-                    llvm::Value* int1Val = llvm::ConstantInt::get(llvm::Type::getInt64Ty(cgMod.GetLLVMContext()), 1);
-                    basePtrVal = static_cast<llvm::ConstantInt*>(CreateIntToPtr(int1Val, llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext(), addrspace)));
+                    basePtrVal = llvm::ConstantExpr::getIntToPtr(
+ 	                llvm::ConstantInt::get(llvm::Type::getInt64Ty(cgMod.GetLLVMContext()), 0x1), llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext(), addrspace));
                 }
                 (void)argsVal.emplace_back(basePtrVal);
             }
@@ -450,7 +451,7 @@ llvm::Instruction* IRBuilder2::CallGCReadWeakRef(std::vector<llvm::Value*> args)
     return CreateCall(func, args);
 }
 
-llvm::Instruction* IRBuilder2::CallGCReadAgg(llvm::Type* structType, std::vector<llvm::Value*> args)
+llvm::Instruction* IRBuilder2::CallGCReadAgg(llvm::StructType* structType, std::vector<llvm::Value*> args)
 {
     // Func: void @llvm.cj.gcread.struct(i8 addr1* baseObj, i8 addr1* dst, i8 addr1*/ i8* src, i64 length)
     auto func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_gcread_struct, {GetSizetLLVMType()});
@@ -496,7 +497,7 @@ llvm::Instruction* IRBuilder2::CallGCWrite(std::vector<llvm::Value*> args)
     return CreateCall(func, args);
 }
 
-llvm::Instruction* IRBuilder2::CallGCWriteAgg(llvm::Type* structType, std::vector<llvm::Value*> args)
+llvm::Instruction* IRBuilder2::CallGCWriteAgg(llvm::StructType* structType, std::vector<llvm::Value*> args)
 {
     // The intrinsic function has 4 arguments.
     CJC_ASSERT(args.size() == 4);
@@ -626,7 +627,7 @@ llvm::Instruction* IRBuilder2::CreateStore(const CGValue& cgVal, const CGValue& 
                 if (!destDerefType->GetSize()) {
                     auto dataPtr = GetPayloadFromObject(destAddr);
                     auto size = GetLayoutSize_32(cgVal.GetCGType()->GetOriginal());
-                    return CallGCWriteAgg(cgVal.GetCGType()->GetLLVMType(), {destAddr, dataPtr, val, size});
+                    return CallGCWriteAgg(llvm::cast<llvm::StructType>(cgVal.GetCGType()->GetLLVMType()), {destAddr, dataPtr, val, size});
                 }
             } else {
                 CJC_ASSERT(!destDerefType->GetSize());
@@ -682,8 +683,7 @@ llvm::Instruction* IRBuilder2::CreateStore(const CGValue& cgVal, const CGValue& 
                     return CallGCWriteAgg(heapStructType, {basePtr, cgDestAddr.GetRawValue(), tempVal, size});
                 }
                 auto size = llvm::ConstantInt::get(llvm::Type::getInt64Ty(GetLLVMContext()), layOut->getSizeInBytes());
-                return CallGCWriteAgg(cgValType->GetPointerElementType()->GetLLVMType(),
-                    {basePtr, cgDestAddr.GetRawValue(), cgVal.GetRawValue(), size});
+                return CallGCWriteAgg(llvm::cast<llvm::StructType>(cgValType->GetPointerElementType()->GetLLVMType()), {basePtr, cgDestAddr.GetRawValue(), cgVal.GetRawValue(), size});
             }
             auto align = layOut->getAlignment();
             return CreateMemCpy(cgDestAddr.GetRawValue(), align, cgVal.GetRawValue(), align, layOut->getSizeInBytes());
@@ -692,7 +692,7 @@ llvm::Instruction* IRBuilder2::CreateStore(const CGValue& cgVal, const CGValue& 
             auto layout = cgMod.GetLLVMModule()->getDataLayout();
             auto size = getInt64(layout.getTypeAllocSize(valueType));
             if (IsTypeContainsRef(cgValType->GetPointerElementType()->GetLLVMType())) {
-                return CallGCWriteAgg(valueType, {basePtr, cgDestAddr.GetRawValue(), cgVal.GetRawValue(), size});
+                return CallGCWriteAgg(llvm::cast<llvm::StructType>(StaticCast<CGVArrayType>(cgValType->GetPointerElementType())->GetLayoutType()), {basePtr, cgDestAddr.GetRawValue(), cgVal.GetRawValue(), size});
             }
             auto align = llvm::Align(layout.getABITypeAlignment(valueType));
             return CreateMemCpy(cgDestAddr.GetRawValue(), align, cgVal.GetRawValue(), align, size);
@@ -1212,7 +1212,7 @@ llvm::Value* IRBuilder2::CallArrayIntrinsicInitWithContent(const CHIR::RawArrayL
             auto size = getInt64(layOut->getSizeInBytes());
             CJC_NULLPTR_CHECK(layOut);
             if (IsTypeContainsRef(elemType->GetLLVMType())) {
-                CallGCWriteAgg(elemType->GetLLVMType(), {arrayV, elemPtr, elemValue, size});
+                CallGCWriteAgg(llvm::cast<llvm::StructType>(elemType->GetLLVMType()), {arrayV, elemPtr, elemValue, size});
             } else {
                 auto align = layOut->getAlignment();
                 CreateMemCpy(elemPtr, align, elemValue, align, size);
@@ -1221,7 +1221,7 @@ llvm::Value* IRBuilder2::CallArrayIntrinsicInitWithContent(const CHIR::RawArrayL
             auto layout = GetLLVMModule()->getDataLayout();
             auto size = getInt64(layout.getTypeAllocSize(elemType->GetLLVMType()));
             if (IsTypeContainsRef(elemType->GetLLVMType())) {
-                CallGCWriteAgg(elemType->GetLLVMType(), {arrayV, elemPtr, elemValue, size});
+                CallGCWriteAgg(llvm::cast<llvm::StructType>(StaticCast<CGVArrayType>(elemType)->GetLayoutType()), {arrayV, elemPtr, elemValue, size});
             } else {
                 auto align = llvm::Align(layout.getABITypeAlignment(elemType->GetLLVMType()));
                 CreateMemCpy(elemPtr, align, elemValue, align, size);
@@ -1433,7 +1433,7 @@ void InitArrayData(
         }
     } else if (elemType->isArrayTy()) {
         auto size = irBuilder.getInt64(irBuilder.GetLLVMModule()->getDataLayout().getTypeAllocSize(elemType));
-        irBuilder.CallGCWriteAgg(elemType, {arrPtr, elemPtr, value, size});
+        irBuilder.CallGCWriteAgg(llvm::cast<llvm::StructType>(arrayType), {arrPtr, elemPtr, value, size});
     } else if (elemType == CGType::GetRefType(irBuilder.GetLLVMContext())) {
         irBuilder.CallGCWrite({value, arrPtr, elemPtr});
     } else {
