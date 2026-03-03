@@ -1,55 +1,55 @@
 diff --git a/.gitcode/ISSUE_TEMPLATE/bug-report.yml b/.gitcode/ISSUE_TEMPLATE/bug-report.yml
 new file mode 100644
-index 000000000..58e84ce22
+index 000000000..2672d0d19
 --- /dev/null
 +++ b/.gitcode/ISSUE_TEMPLATE/bug-report.yml
 @@ -0,0 +1,57 @@
-+name: 缺陷反馈|Bug
-+description: 当您发现了一个缺陷，需要向社区反馈时，请使用此模板。
++name: "缺陷反馈|Bug"
++description: "当您发现了一个缺陷，需要向社区反馈时，请使用此模板。 Please use this template when you find a bug and want to report it to the community."
 +title: "[Bug]: "
 +labels: ["bug"]
 +body:
 +  - type: markdown
 +    attributes:
 +      value: |
-+        感谢对仓颉社区的支持与关注，欢迎反馈缺陷。
++        感谢对仓颉社区的支持与关注，欢迎反馈缺陷。 | Thanks for your support and attention to the community. We welcome feedback on any issues.
 +  - type: textarea
 +    attributes:
-+      label: 发生了什么问题？
-+      description: 提供尽可能多的信息描述产生了什么问题：
++      label: "发生了什么问题？ | Describe the issue that occurred."
++      description: "提供尽可能多的信息描述产生了什么问题： | Provide as much information as possible describing what issue occurred."
 +      placeholder: ""
 +    validations:
 +      required: true
 +  - type: textarea
 +    attributes:
-+      label: 期望行为是什么？
-+      description: 描述期望行为或效果应如何：
++      label: "期望行为是什么？ | What is the expected behavior?"
++      description: "描述期望行为或效果应如何： | Describe what the expected behavior or effect should be."
 +      placeholder: ""
 +    validations:
 +      required: true
 +  - type: textarea
 +    attributes:
-+      label: 如何复现该缺陷
-+      description: 提供尽可能多的信息描述如何复现该缺陷：
++      label: "如何复现该缺陷？ | How to reproduce the bug?"
++      description: "提供尽可能多的信息描述如何复现该缺陷： | Provide as much information as possible on how to reproduce the bug."
 +    validations:
 +      required: true
 +  - type: textarea
 +    attributes:
-+      label: 其他补充信息
-+      description: 补充下其他您认为需要提供的信息：
++      label: "其他补充信息 | Additional information"
++      description: "补充下其他您认为需要提供的信息： | Add any other information you think is necessary to provide."
 +    validations:
 +      required: false
 +  - type: textarea
 +    attributes:
-+      label: cjc版本信息
-+      description: 请将cjc -v的输出结果以图片或者文字的形式填写在下方：
++      label: "cjc版本信息 | cjc version information"
++      description: "请将cjc -v的输出结果以图片或者文字的形式填写在下方： | Please provide the output of 'cjc -v' as text or an image below."
 +      placeholder: ""
 +    validations:
 +      required: true
 +  - type: checkboxes
 +    attributes:
-+      label: 分支版本信息
-+      description: 在哪些分支版本存在该缺陷？
++      label: "分支版本信息 | Branch version information"
++      description: "在哪些分支版本存在该缺陷？ | In which branch versions does this bug exist?"
 +      options:
 +        - label: dev
 +          required: false
@@ -72,36 +72,36 @@ index 000000000..ec4bb386b
 \ No newline at end of file
 diff --git a/.gitcode/ISSUE_TEMPLATE/feature-request.yml b/.gitcode/ISSUE_TEMPLATE/feature-request.yml
 new file mode 100644
-index 000000000..5c0abbfcc
+index 000000000..8b024d69e
 --- /dev/null
 +++ b/.gitcode/ISSUE_TEMPLATE/feature-request.yml
 @@ -0,0 +1,37 @@
-+name: 新需求|Feature
-+description: 您需要反馈或实现一个新需求时，使用此模板。
-+title: "[新需求]: "
++name: "新需求|Feature"
++description: "您需要反馈或实现一个新需求时，使用此模板。 Please use this template when you need to request or implement a new feature."
++title: "[Feature]: "
 +labels: ["enhancement"]
 +body:
 +  - type: markdown
 +    attributes:
 +      value: |
-+        感谢提出新需求。
++        感谢提出新需求。 | Thanks for proposing a new feature.
 +  - type: textarea
 +    attributes:
-+      label: 新需求提供了什么功能？
-+      description: 请描述下新需求的功能是什么，解决了什么问题：
++      label: "新需求提供了什么功能？ | What functionality does the new feature provide?"
++      description: "请描述下新需求的功能是什么，解决了什么问题： | Please describe the functionality of the new feature and what problem it solves."
 +    validations:
 +      required: true
 +  - type: textarea
 +    attributes:
-+      label: 该需求带来的价值、应用场景？
-+      description: 请描述下该需求的价值，应用场景等：
++      label: "该需求带来的价值、应用场景？ | Value and application scenarios of the feature?"
++      description: "请描述下该需求的价值，应用场景等： | Please describe the value, application scenarios, etc., of the feature."
 +    validations:
 +      required: false
 +  - type: checkboxes
 +    id: version
 +    attributes:
-+      label: 新需求涉及的分支版本
-+      description: 请选择涉及的分支版本：
++      label: "新需求涉及的分支版本 | Branch versions involved in the new feature"
++      description: "请选择涉及的分支版本： | Please select the involved branch versions."
 +      options:
 +        - label: dev
 +          required: false
@@ -116,30 +116,30 @@ index 000000000..5c0abbfcc
 \ No newline at end of file
 diff --git a/.gitcode/ISSUE_TEMPLATE/question.yml b/.gitcode/ISSUE_TEMPLATE/question.yml
 new file mode 100644
-index 000000000..126942a58
+index 000000000..eefece8f2
 --- /dev/null
 +++ b/.gitcode/ISSUE_TEMPLATE/question.yml
 @@ -0,0 +1,31 @@
-+name: 问题咨询|Question
-+description: 如果您对Cangjie社区有疑问，欢迎反馈咨询。
-+title: "[问题咨询]: "
++name: "问题咨询|Question"
++description: "如果您对Cangjie社区有疑问，欢迎反馈咨询。| If you have any questions about the community, feel free to ask."
++title: "[Question]: "
 +labels: ["question"]
 +body:
 +  - type: markdown
 +    attributes:
 +      value: |
-+        感谢提出问题，我们将安排人答复！
++        感谢提出问题，我们将安排人答复！ | Thanks for asking, we will arrange for someone to reply!
 +  - type: textarea
 +    attributes:
-+      label: 问题描述
-+      description: 请描述下您的问题
++      label: "问题描述 | Question description"
++      description: "请描述下您的问题： | Please describe your question."
 +    validations:
 +      required: true
 +  - type: checkboxes
 +    id: version
 +    attributes:
-+      label: 受影响的分支版本
-+      description: 请选择您的问题涉及的分支版本：
++      label: "受影响的分支版本 | Affected branch versions"
++      description: "请选择您的问题涉及的分支版本： | Please select the branch versions involved in your question."
 +      options:
 +        - label: dev
 +          required: false
@@ -151,6 +151,7 @@ index 000000000..126942a58
 +          required: false
 +    validations:
 +      required: true
+\ No newline at end of file
 diff --git a/.gitcode/PULL_REQUEST_TEMPLATE/PULL_REQUEST_TEMPLATE.md b/.gitcode/PULL_REQUEST_TEMPLATE/PULL_REQUEST_TEMPLATE.md
 new file mode 100644
 index 000000000..024f40f50
@@ -9514,7 +9515,7 @@ index 0c4d9f78c..81b0f2afc 100644
    if (preference == ePreferDemangledWithoutArguments) {
      if (Language *lang = Language::FindPlugin(GuessLanguage())) {
 diff --git a/lldb/source/Core/ValueObject.cpp b/lldb/source/Core/ValueObject.cpp
-index d80139ab1..231486a5a 100644
+index d80139ab1..2769268bf 100644
 --- a/lldb/source/Core/ValueObject.cpp
 +++ b/lldb/source/Core/ValueObject.cpp
 @@ -48,6 +48,8 @@
@@ -9693,7 +9694,7 @@ index d80139ab1..231486a5a 100644
        if (!bracket_expr.contains('-')) {
          // if no separator, this is of the form [N].  Note that this cannot be
          // an unbounded range of the form [], because that case was handled
-@@ -3137,3 +3208,113 @@ ValueObjectSP ValueObject::Persist() {
+@@ -3137,3 +3208,114 @@ ValueObjectSP ValueObject::Persist() {
  
    return persistent_var_sp->GetValueObject();
  }
@@ -9756,6 +9757,11 @@ index d80139ab1..231486a5a 100644
 +    // "::" size is 2.
 +    pos = dynamic_name.find(":", pos + 2);
 +  }
++  pos = dynamic_name.find("/");
++  while (pos != std::string::npos) {
++    dynamic_name.replace(pos, 1, "::");
++    pos = dynamic_name.find("/", pos + 2);  // size of "::" is 2
++  }
 +  lldb_private::TypeList types;
 +  llvm::DenseSet<SymbolFile *> searched_symbol_files;
 +  bool is_ti_type = false;
@@ -9770,10 +9776,6 @@ index d80139ab1..231486a5a 100644
 +  if (type_sp != nullptr) {
 +    class_type_or_name.SetTypeSP(type_sp);
 +    class_type_or_name.SetName(type_sp->GetFullCompilerType().GetTypeName().AsCString());
-+    if (should_update) {
-+      m_override_type = type_sp->GetFullCompilerType();
-+      LLDB_LOGF(log, "Found dynamic type with name %s", type_sp->GetFullCompilerType().GetTypeName().AsCString());
-+    }
 +    return true;
 +  }
 +  if (is_ti_type) {
@@ -11337,10 +11339,10 @@ index 000000000..844d69389
 +#endif
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieCompilerInstance.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieCompilerInstance.cpp
 new file mode 100644
-index 000000000..d515e0503
+index 000000000..c1de6c155
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieCompilerInstance.cpp
-@@ -0,0 +1,1253 @@
+@@ -0,0 +1,1263 @@
 +//===-- CangjieCompilerInstance.cpp ---------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -12203,6 +12205,9 @@ index 000000000..d515e0503
 +      continue;
 +    }
 +    auto impkg = Utils::JoinStrings(im->content.prefixPaths, ".");
++    if (im->content.hasDoubleColon) {
++      impkg.replace(impkg.find("."), 1, PACKAGE_SUFFIX);
++    }
 +    auto find = std::find_if(m_package_names.begin(), m_package_names.end(),
 +        [&impkg](auto& pkg) { return pkg == impkg; });
 +    if (find == m_package_names.end()) {
@@ -12215,6 +12220,7 @@ index 000000000..d515e0503
 +    import->content.prefixDotPoses.resize(prefixLen);
 +    import->content.identifier = "*";
 +    import->content.kind = ImportKind::IMPORT_ALL;
++    import->content.hasDoubleColon = im->content.hasDoubleColon;
 +    import->EnableAttr(Attribute::IMPLICIT_ADD, Attribute::COMPILER_ADD);
 +    import->curFile = file.get();
 +    file->imports.emplace_back(std::move(import));
@@ -12224,11 +12230,16 @@ index 000000000..d515e0503
 +void CangjieCompilerInstance::AddImportSpecToLLDBExprPackage() {
 +  auto tempPkg = this->GetSourcePackages()[0];
 +  for (auto& fPkg : this->m_fake_packages) {
++    auto hasDoubleColon = false;
 +    auto pkgName = fPkg->fullPackageName;
 +    auto pos = pkgName.find(PACKAGE_SUFFIX);
++    if (pos != std::string::npos) {
++      hasDoubleColon = true;
++      pkgName.replace(pos, PACKAGE_SUFFIX.size(), ".");
++    }
 +    auto pkgPath = Utils::SplitQualifiedName(pkgName);
 +    for (auto &file : tempPkg->files) {
-+      auto collectImport = [&file, &pkgPath](Ptr<const Node> curNode) -> VisitAction {
++      auto collectImport = [&file, &pkgPath, &hasDoubleColon](Ptr<const Node> curNode) -> VisitAction {
 +        // locals: vardecl or funcdecl
 +        if (pkgPath.back() == LOCAL_PACKAGE_NAME &&
 +          (curNode->astKind == ASTKind::VAR_DECL || curNode->astKind == ASTKind::FUNC_DECL)) {
@@ -12265,6 +12276,7 @@ index 000000000..d515e0503
 +          importPackage->content.prefixDotPoses.resize(pkgPath.size());
 +          importPackage->content.identifier = "*";
 +          importPackage->content.kind = ImportKind::IMPORT_ALL;
++          importPackage->content.hasDoubleColon = hasDoubleColon;
 +          importPackage->curFile = file.get();
 +          importPackage->EnableAttr(Attribute::IMPLICIT_ADD, Attribute::COMPILER_ADD);
 +          file->imports.emplace_back(std::move(importPackage));
@@ -12677,10 +12689,10 @@ index 000000000..6595dcf91
 +#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CANGJIE_CANGJIECOMPILERINSTANCE_H
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp
 new file mode 100644
-index 000000000..6a317a064
+index 000000000..b775b90b7
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp
-@@ -0,0 +1,2265 @@
+@@ -0,0 +1,2285 @@
 +//===-- CangjieDeclMap.cpp ------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -14094,8 +14106,18 @@ index 000000000..6a317a064
 +      continue;
 +    }
 +    auto import = MakeOwned<ImportSpec>();
-+    import->content.prefixPaths = Utils::SplitQualifiedName(fullpkg);
-+
++    auto pos = fullpkg.find(":");
++    if (pos != std::string::npos) {
++      // fullpkg: "org:a"
++      import->content.hasDoubleColon = true;
++      import->content.prefixPaths.emplace_back(fullpkg.substr(0, pos));
++      std::vector<std::string> paths = Utils::SplitQualifiedName(fullpkg.substr(pos + 1));
++      for (auto path : paths) {
++        import->content.prefixPaths.emplace_back(path);
++      }
++    } else {
++      import->content.prefixPaths = Utils::SplitQualifiedName(fullpkg);
++    }
 +    const size_t prefixLen = import->content.prefixPaths.size();
 +    import->content.prefixPoses.resize(prefixLen);
 +    import->content.prefixDotPoses.resize(prefixLen);
@@ -14127,6 +14149,16 @@ index 000000000..6a317a064
 +    pkgname = pkgname.substr(0, pos);
 +    if (pkgname.empty() || pkgname == "std") {
 +      return;
++    }
++    pos = pkgname.find(PACKAGE_SUFFIX);
++    if (pos != std::string::npos) {
++      // "org::a" -> "org:a"
++      pkgname.replace(pos, 1, "");
++    }
++    pos = pkgname.find("/");
++    if (pos != std::string::npos) {
++      // "org/a" -> "org:a"
++      pkgname.replace(pos, 1, ":");
 +    }
 +    m_fullpkgs.insert(pkgname);
 +    Log *log = GetLog(LLDBLog::Expressions);
@@ -15709,10 +15741,10 @@ index 000000000..4d9a88c12
 +#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CANGJIE_CANGJIEEXPRESSIONSOUECECODE_H
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieIRForTarget.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieIRForTarget.cpp
 new file mode 100644
-index 000000000..41ec67c0e
+index 000000000..3fbe52394
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieIRForTarget.cpp
-@@ -0,0 +1,553 @@
+@@ -0,0 +1,558 @@
 +//===-- CangjieIRForTarget.cpp --------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -16194,6 +16226,11 @@ index 000000000..41ec67c0e
 +lldb_private::CompilerType CangjieIRForTarget::GetCompilerTypeByName(std::string &name) {
 +  std::string demangled_name = lldb_private::Mangled::GetDemangledTypeName(name);
 +  lldb_private::Log *log = GetLog(LLDBLog::Expressions);
++  auto pos = demangled_name.find(":");
++  if (pos != std::string::npos && pos != demangled_name.find("::")) {
++    // org:a::AA
++    demangled_name.replace(pos, 1, "::");
++  }
 +  auto type = m_decl_map->FindParsedTypesByName(demangled_name);
 +  if (type.GetTypeClass() == lldb::eTypeClassStruct &&
 +    type.GetTypeName().GetStringRef().contains(lldb_private::E0_PREFIX_NAME)) {
@@ -18908,7 +18945,7 @@ index 5ab494414..6521e8519 100644
    ItaniumABILanguageRuntime.cpp
  
 diff --git a/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp b/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp
-index 1595335cf..90392cdb9 100644
+index 1595335cf..36c2ad755 100644
 --- a/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp
 +++ b/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp
 @@ -4,37 +4,30 @@
@@ -18965,7 +19002,7 @@ index 1595335cf..90392cdb9 100644
  
  char ItaniumABILanguageRuntime::ID = 0;
  
-@@ -182,6 +176,1018 @@ TypeAndOrName ItaniumABILanguageRuntime::GetTypeInfoFromVTableAddress(
+@@ -182,6 +176,1026 @@ TypeAndOrName ItaniumABILanguageRuntime::GetTypeInfoFromVTableAddress(
    return TypeAndOrName();
  }
  
@@ -19080,10 +19117,18 @@ index 1595335cf..90392cdb9 100644
 +    // type_name: "default:A"  ==> "default::A"
 +    while (pos != std::string::npos) {
 +      // type_name: "default:$Captured_Int64"  ==> "default::$Captured_Int64"
-+      temp_name.replace(pos, 1, "::");
++      if (pos != temp_name.find("::")) {
++        // type_name: "org::default:C1", if type_name has org, no need to replace ":" with "::"
++        temp_name.replace(pos, 1, "::");
++      }
 +      pos = temp_name.find(":", pos + 2); // size of "::" is 2
 +    }
-+
++    // "org/pkg::CC"  ==>  "org::pkg::CC"
++    pos = temp_name.find("/");
++    while (pos != std::string::npos) {
++      temp_name.replace(pos, 1, "::");
++      pos = temp_name.find("/", pos + 2); // size of "::" is 2
++    }
 +    return ConstString(temp_name.c_str());
 +}
 +
@@ -19984,7 +20029,7 @@ index 1595335cf..90392cdb9 100644
  bool ItaniumABILanguageRuntime::GetDynamicTypeAndAddress(
      ValueObject &in_value, lldb::DynamicValueType use_dynamic,
      TypeAndOrName &class_type_or_name, Address &dynamic_address,
-@@ -193,7 +1199,16 @@ bool ItaniumABILanguageRuntime::GetDynamicTypeAndAddress(
+@@ -193,7 +1207,16 @@ bool ItaniumABILanguageRuntime::GetDynamicTypeAndAddress(
    // contain the full class name. The second pointer above the "address point"
    // is the "offset_to_top".  We'll use that to get the start of the value
    // object which holds the dynamic type.
@@ -24874,7 +24919,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..134fdf2e0 100644
+index b391fe1ea..5e179447d 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -24930,7 +24975,7 @@ index b391fe1ea..134fdf2e0 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.1.0-alpha.70";
++    g_version_str += "\n  cangjie 1.1.0-beta.20";
    }
  
    return g_version_str.c_str();
@@ -29824,10 +29869,10 @@ index 000000000..18bd5afdd
 +#endif // LLVM_TRANSFORMS_SCALAR_CJ_DEVIRTUAL_OPT_H
 diff --git a/llvm/include/llvm/Transforms/Scalar/CJFillMetadata.h b/llvm/include/llvm/Transforms/Scalar/CJFillMetadata.h
 new file mode 100644
-index 000000000..8431ff969
+index 000000000..c11499277
 --- /dev/null
 +++ b/llvm/include/llvm/Transforms/Scalar/CJFillMetadata.h
-@@ -0,0 +1,274 @@
+@@ -0,0 +1,279 @@
 +//===- CJFillMetadata.h - ---------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -29973,7 +30018,12 @@ index 000000000..8431ff969
 +  RMT_HAS_SRET1 = 0x1 << 18, // has sret and it is 'T'
 +  RMT_HAS_SRET2 = 0x1 << 19, // has sret and it is 'known struct T'
 +  RMT_HAS_SRET3 = 0x1 << 20, // has sret and it is 'unknow struct T'
-+  RMT_MAX = 0x1 << 21,
++  RMT_ENUM_CTOR = 0x1 << 21,
++  RMT_UNKNOWN_SIZE = 0x1 << 22,
++  RMT_REFLECT_VER_BIT1 = 0x1 << 28,
++  RMT_REFLECT_VER_BIT2 = 0x1 << 29,
++  RMT_REFLECT_VER_BIT3 = 0x1 << 30,
++  RMT_MAX = 0x1U << 31,
 +};
 +
 +struct ExtensionDefData {
@@ -30102,6 +30152,109 @@ index 000000000..8431ff969
 +} // namespace llvm
 +
 +#endif // LLVM_TRANSFORMS_SCALAR_FILL_CJ_METADATA_H
+diff --git a/llvm/include/llvm/Transforms/Scalar/CJGCInstrReplace.h b/llvm/include/llvm/Transforms/Scalar/CJGCInstrReplace.h
+new file mode 100644
+index 000000000..b8c108ae8
+--- /dev/null
++++ b/llvm/include/llvm/Transforms/Scalar/CJGCInstrReplace.h
+@@ -0,0 +1,45 @@
++//===- CJGCInstrReplace.h - -----------------------------------------*- C++
++//-*-===//
++//
++// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
++// This source file is part of the Cangjie project, licensed under Apache-2.0
++// with Runtime Library Exception.
++//
++// See https://cangjie-lang.cn/pages/LICENSE for license information.
++//
++//===----------------------------------------------------------------------===//
++//
++// This file provides interface to "Cangjie GC Instruction Replace" pass.
++//===----------------------------------------------------------------------===//
++
++#ifndef LLVM_TRANSFORMS_CJ_GC_INSTR_REPLACE_H
++#define LLVM_TRANSFORMS_CJ_GC_INSTR_REPLACE_H
++
++#include "llvm/ADT/SmallVector.h"
++#include "llvm/IR/InstrTypes.h"
++#include "llvm/IR/PassManager.h"
++
++namespace llvm {
++
++class CJGCInstrReplace : public PassInfoMixin<CJGCInstrReplace> {
++public:
++  CJGCInstrReplace() = default;
++  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
++  static constexpr StringRef GC_READ_REF_IID = "GC_Read_Ref_IID";
++  static constexpr StringRef GC_WRITE_REF_IID = "GC_Write_Ref_IID";
++  static SmallDenseMap<Intrinsic::ID, StringRef> GCIntrinsicIDToLabel;
++
++private:
++  bool runImpl(Function &F);
++  void collectGCInstr(Function &F);
++  void dispatchGCInstr(CallBase *CB);
++  bool changeGCInstrToLSInstr();
++  void initContainer();
++  SmallVector<CallBase *, 4> GCReadRefs;
++  SmallVector<CallBase *, 4> GCWriteRefs;
++  SmallDenseMap<Intrinsic::ID, SmallVector<CallBase *, 4> *> GCInstrDispatchMap;
++};
++
++} // end namespace llvm
++
++#endif // LLVM_TRANSFORMS_CJ_GC_INSTR_REPLACE_H
+\ No newline at end of file
+diff --git a/llvm/include/llvm/Transforms/Scalar/CJGCInstrRestore.h b/llvm/include/llvm/Transforms/Scalar/CJGCInstrRestore.h
+new file mode 100644
+index 000000000..71aef9476
+--- /dev/null
++++ b/llvm/include/llvm/Transforms/Scalar/CJGCInstrRestore.h
+@@ -0,0 +1,44 @@
++//===- CJGCInstrRestore.h - -----------------------------------------*- C++
++//-*-===//
++//
++// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
++// This source file is part of the Cangjie project, licensed under Apache-2.0
++// with Runtime Library Exception.
++//
++// See https://cangjie-lang.cn/pages/LICENSE for license information.
++//
++//===----------------------------------------------------------------------===//
++//
++// This file provides interface to "Cangjie GC Instruction Restore" pass.
++//===----------------------------------------------------------------------===//
++
++#ifndef LLVM_TRANSFORMS_CJ_GC_INSTR_RESTORE_H
++#define LLVM_TRANSFORMS_CJ_GC_INSTR_RESTORE_H
++
++#include "llvm/ADT/SmallVector.h"
++#include "llvm/IR/InstrTypes.h"
++#include "llvm/IR/PassManager.h"
++
++namespace llvm {
++
++class CJGCInstrRestore : public PassInfoMixin<CJGCInstrRestore> {
++public:
++  CJGCInstrRestore() = default;
++  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
++
++private:
++  bool runImpl(Function &F);
++  void collectLSInstr(Function &F);
++  void dispatchLSInstr(Instruction *Instr);
++  bool restoreLSInstrToGCInstr();
++  void initContainer();
++  SmallVector<Instruction *, 4> LoadForGCReadRefs;
++  SmallVector<Instruction *, 4> StoreForGCWriteRefs;
++  SmallDenseMap<Intrinsic::ID, SmallVector<Instruction *, 4> *>
++      LSInstrDispatchMap;
++  SmallDenseMap<Value *, Value *, 4> ValueToBasePointer;
++};
++
++} // end namespace llvm
++
++#endif // LLVM_TRANSFORMS_CJ_GC_INSTR_RESTORE_H
+\ No newline at end of file
 diff --git a/llvm/include/llvm/Transforms/Scalar/CJGCLiveAnalysis.h b/llvm/include/llvm/Transforms/Scalar/CJGCLiveAnalysis.h
 new file mode 100644
 index 000000000..a0f3bb93a
@@ -30991,10 +31144,10 @@ index 000000000..8868a53b3
 \ No newline at end of file
 diff --git a/llvm/include/llvm/Transforms/Scalar/ReflectionInfo.h b/llvm/include/llvm/Transforms/Scalar/ReflectionInfo.h
 new file mode 100644
-index 000000000..7b2f79b52
+index 000000000..ea43b39a0
 --- /dev/null
 +++ b/llvm/include/llvm/Transforms/Scalar/ReflectionInfo.h
-@@ -0,0 +1,272 @@
+@@ -0,0 +1,296 @@
 +//===- ReflectionInfo.h - ---------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -31044,10 +31197,16 @@ index 000000000..7b2f79b52
 +enum EnumReflectionType : uint8_t {
 +  ERT_TYPE_NAME = 0,
 +  ERT_ENUM_CTOR,
++  ERT_GENERIC_CLASS,
 +  ERT_INSTANCE_METHOD,
 +  ERT_STATIC_METHOD,
 +  ERT_ATTRIBUTE,
 +  ERT_MAX,
++};
++
++enum EnumCtorReflectionType : uint8_t {
++  ECRT_ATTRIBUTE = 0,
++  ECRT_MAX,
 +};
 +
 +enum EnumDebugInfoType : uint8_t {
@@ -31101,7 +31260,15 @@ index 000000000..7b2f79b52
 +  FET_INSTANCE_METHOD,
 +  FET_STATIC_METHOD,
 +  FET_ANNOTATION = 5,
++  FET_GENERIC_CLASS,
 +  FET_PTRS,
++};
++
++enum FillEnumCtorReflectInfoType : uint8_t {
++  FECT_ANNOTATION = 0,
++  FECT_MODIFIER,
++  FECT_CTOR_CNT,
++  FECT_PTRS,
 +};
 +
 +struct BaseInfo {
@@ -31188,6 +31355,7 @@ index 000000000..7b2f79b52
 +struct EnumReflectInfo : BaseInfo {
 +  unsigned Modifier = 0;
 +  Constant *Annotation;
++  StringRef GenericClass;
 +  SmallVector<EnumCtorInfo, 8> EnumCtors;
 +  SmallVector<MethodInfo *, 8> InstanceMethods;
 +  SmallVector<MethodInfo *, 8> StaticMethods;
@@ -31195,6 +31363,12 @@ index 000000000..7b2f79b52
 +  explicit EnumReflectInfo(Module &M) : BaseInfo(M) {}
 +
 +  Constant *fillEnumCtorInfos(StringRef TypeInfoName);
++};
++
++struct EnumCtorReflectInfo : BaseInfo {
++  unsigned Modifier = 0;
++  Constant *Annotation;
++  explicit EnumCtorReflectInfo(Module &M) : BaseInfo(M) {}
 +};
 +
 +class ReflectInfo : BaseInfo {
@@ -31210,6 +31384,7 @@ index 000000000..7b2f79b52
 +  Constant *getReflectionInfo(GlobalVariable *GV, bool IsEnum);
 +  Constant *getClassReflectInfo(const MDTuple *ReflectMD);
 +  Constant *getEnumReflectInfo(const MDTuple *ReflectMD);
++  Constant *getEnumCtorReflectInfo(const MDTuple *ReflectMD);
 +  Constant *getClassDebugInfo(const MDTuple *ReflectMD);
 +  Constant *getEnumDebugInfo(const MDTuple *ReflectMD);
 +  bool fillPackageInfo();
@@ -31251,6 +31426,8 @@ index 000000000..7b2f79b52
 +                            SmallVector<Constant *, 0> &BodyVec);
 +  void fillEnumReflectInfo(EnumReflectInfo &Info,
 +                           SmallVector<Constant *, 0> &BodyVec);
++  void fillEnumCtorReflectInfo(EnumCtorReflectInfo &Info,
++                               SmallVector<Constant *, 0> &BodyVec);
 +  void getGlobalsFromNamedMD(SetVector<GlobalVariable *> &GVs,
 +                             NamedMDNode *MDNode);
 +  MethodInfo *getMethodInfo() {
@@ -44990,7 +45167,7 @@ index 703969f8b..c2992aa79 100644
    Coroutines
    IPO
 diff --git a/llvm/lib/Passes/PassBuilder.cpp b/llvm/lib/Passes/PassBuilder.cpp
-index 42fde3752..a1fa77096 100644
+index 42fde3752..e9bc1975c 100644
 --- a/llvm/lib/Passes/PassBuilder.cpp
 +++ b/llvm/lib/Passes/PassBuilder.cpp
 @@ -26,6 +26,7 @@
@@ -45025,7 +45202,7 @@ index 42fde3752..a1fa77096 100644
  #include "llvm/Transforms/IPO/ConstantMerge.h"
  #include "llvm/Transforms/IPO/CrossDSOCFI.h"
  #include "llvm/Transforms/IPO/DeadArgumentElimination.h"
-@@ -140,12 +144,27 @@
+@@ -140,12 +144,29 @@
  #include "llvm/Transforms/Instrumentation/PoisonChecking.h"
  #include "llvm/Transforms/Instrumentation/SanitizerCoverage.h"
  #include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
@@ -45040,6 +45217,8 @@ index 42fde3752..a1fa77096 100644
 +#include "llvm/Transforms/Scalar/CJBarrierOpt.h"
 +#include "llvm/Transforms/Scalar/CJBarrierSplit.h"
 +#include "llvm/Transforms/Scalar/CJDevirtualOpt.h"
++#include "llvm/Transforms/Scalar/CJGCInstrReplace.h"
++#include "llvm/Transforms/Scalar/CJGCInstrRestore.h"
 +#include "llvm/Transforms/Scalar/CJSimpleOpt.h"
 +#include "llvm/Transforms/Scalar/CJGenericIntrinsicOpt.h"
 +#include "llvm/Transforms/Scalar/CJLoopFloatOpt.h"
@@ -45053,7 +45232,7 @@ index 42fde3752..a1fa77096 100644
  #include "llvm/Transforms/Scalar/ConstantHoisting.h"
  #include "llvm/Transforms/Scalar/ConstraintElimination.h"
  #include "llvm/Transforms/Scalar/CorrelatedValuePropagation.h"
-@@ -154,6 +173,7 @@
+@@ -154,6 +175,7 @@
  #include "llvm/Transforms/Scalar/DeadStoreElimination.h"
  #include "llvm/Transforms/Scalar/DivRemPairs.h"
  #include "llvm/Transforms/Scalar/EarlyCSE.h"
@@ -45061,7 +45240,7 @@ index 42fde3752..a1fa77096 100644
  #include "llvm/Transforms/Scalar/FlattenCFG.h"
  #include "llvm/Transforms/Scalar/Float2Int.h"
  #include "llvm/Transforms/Scalar/GVN.h"
-@@ -162,6 +182,7 @@
+@@ -162,6 +184,7 @@
  #include "llvm/Transforms/Scalar/IndVarSimplify.h"
  #include "llvm/Transforms/Scalar/InductiveRangeCheckElimination.h"
  #include "llvm/Transforms/Scalar/InferAddressSpaces.h"
@@ -45069,7 +45248,7 @@ index 42fde3752..a1fa77096 100644
  #include "llvm/Transforms/Scalar/InstSimplifyPass.h"
  #include "llvm/Transforms/Scalar/JumpThreading.h"
  #include "llvm/Transforms/Scalar/LICM.h"
-@@ -199,6 +220,7 @@
+@@ -199,6 +222,7 @@
  #include "llvm/Transforms/Scalar/NaryReassociate.h"
  #include "llvm/Transforms/Scalar/NewGVN.h"
  #include "llvm/Transforms/Scalar/PartiallyInlineLibCalls.h"
@@ -45077,7 +45256,7 @@ index 42fde3752..a1fa77096 100644
  #include "llvm/Transforms/Scalar/Reassociate.h"
  #include "llvm/Transforms/Scalar/Reg2Mem.h"
  #include "llvm/Transforms/Scalar/RewriteStatepointsForGC.h"
-@@ -251,14 +273,65 @@
+@@ -251,14 +275,66 @@
  
  using namespace llvm;
  
@@ -45138,12 +45317,13 @@ index 42fde3752..a1fa77096 100644
               "(best-effort only)."));
 +extern cl::opt<bool> CJPipeline;
 +extern cl::opt<bool> EnableCJBarrierSplit;
++extern cl::opt<bool> EnableCJGCInstrTransform;
 +extern cl::opt<bool> RunPartialInlining;
 +extern cl::opt<bool> IVCallInstrEnable;
  } // namespace llvm
  
  namespace {
-@@ -1136,10 +1209,61 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
+@@ -1136,10 +1212,67 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
                                .Case("O3", OptimizationLevel::O3)
                                .Case("Os", OptimizationLevel::Os)
                                .Case("Oz", OptimizationLevel::Oz);
@@ -45173,6 +45353,9 @@ index 42fde3752..a1fa77096 100644
 +      MPM.addPass(CJRuntimeLowering());
 +      if (EnableCJBarrierSplit)
 +        MPM.addPass(CJBarrierSplit());
++      if (CJPipeline && L.getSpeedupLevel() == 2 && EnableCJGCInstrTransform) {
++        MPM.addPass(createModuleToFunctionPassAdaptor(CJGCInstrReplace()));
++      }
 +
 +      if (L.getSpeedupLevel() > 1)
 +        MPM.addPass(createModuleToFunctionPassAdaptor(CJSimpleOpt()));
@@ -45181,6 +45364,9 @@ index 42fde3752..a1fa77096 100644
 +        MPM.addPass(PtrAuthBackwardCFI());
 +    }
 +    auto addCangjiePasses = [&]() {
++      if (CJPipeline && L.getSpeedupLevel() == 2 && EnableCJGCInstrTransform) {
++        MPM.addPass(createModuleToFunctionPassAdaptor(CJGCInstrRestore()));
++      }
 +      if (CJPipeline && !CangjieLTOPreOpt) {
 +        MPM.addPass(CJSpecificOpt(L.getSpeedupLevel()));
 +        MPM.addPass(PlaceSafepoints());
@@ -45205,7 +45391,7 @@ index 42fde3752..a1fa77096 100644
        return Error::success();
      }
  
-@@ -1152,7 +1276,7 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
+@@ -1152,7 +1285,7 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
          L.getSpeedupLevel() > 1 && L != OptimizationLevel::Oz;
  
      if (Matches[1] == "default") {
@@ -45214,7 +45400,7 @@ index 42fde3752..a1fa77096 100644
      } else if (Matches[1] == "thinlto-pre-link") {
        MPM.addPass(buildThinLTOPreLinkDefaultPipeline(L));
      } else if (Matches[1] == "thinlto") {
-@@ -1163,6 +1287,7 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
+@@ -1163,6 +1296,7 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
        assert(Matches[1] == "lto" && "Not one of the matched options!");
        MPM.addPass(buildLTODefaultPipeline(L, nullptr));
      }
@@ -45223,7 +45409,7 @@ index 42fde3752..a1fa77096 100644
    }
  
 diff --git a/llvm/lib/Passes/PassBuilderPipelines.cpp b/llvm/lib/Passes/PassBuilderPipelines.cpp
-index 945ef5123..cc979176c 100644
+index 945ef5123..d77b59f45 100644
 --- a/llvm/lib/Passes/PassBuilderPipelines.cpp
 +++ b/llvm/lib/Passes/PassBuilderPipelines.cpp
 @@ -17,6 +17,7 @@
@@ -45352,17 +45538,18 @@ index 945ef5123..cc979176c 100644
  // TODO: Investigate the cost/benefit of tail call elimination on debugging.
  FunctionPassManager
  PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
-@@ -399,6 +469,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
+@@ -399,6 +469,10 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
  
    FunctionPassManager FPM;
  
-+  if (CJPipeline && Level == OptimizationLevel::O2)
++  if (CJPipeline && Level == OptimizationLevel::O2) {
 +    FPM.addPass(CJSimpleOpt());
++  }
 +
    // Form SSA out of local memory accesses after breaking apart aggregates into
    // scalars.
    FPM.addPass(SROAPass());
-@@ -429,6 +502,12 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
+@@ -429,6 +503,12 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
    FPM.addPass(JumpThreadingPass());
    FPM.addPass(CorrelatedValuePropagationPass());
  
@@ -45375,7 +45562,7 @@ index 945ef5123..cc979176c 100644
    FPM.addPass(
        SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
    FPM.addPass(InstCombinePass());
-@@ -446,7 +525,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
+@@ -446,7 +526,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
        !Level.isOptimizingForSize())
      FPM.addPass(PGOMemOPSizeOpt());
  
@@ -45386,7 +45573,7 @@ index 945ef5123..cc979176c 100644
    FPM.addPass(
        SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
  
-@@ -466,6 +547,16 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
+@@ -466,6 +548,16 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
    // `LoopInstSimplify`.
    LoopPassManager LPM1, LPM2;
  
@@ -45403,7 +45590,7 @@ index 945ef5123..cc979176c 100644
    // Simplify the loop body. We do this initially to clean up after other loop
    // passes run, either when iterating on a loop or on inner loops with
    // implications on the outer loop.
-@@ -528,6 +619,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
+@@ -528,6 +620,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
    FPM.addPass(
        SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
    FPM.addPass(InstCombinePass());
@@ -45413,7 +45600,7 @@ index 945ef5123..cc979176c 100644
    // The loop passes in LPM2 (LoopIdiomRecognizePass, IndVarSimplifyPass,
    // LoopDeletionPass and LoopFullUnrollPass) do not preserve MemorySSA.
    // *All* loop passes must preserve it, in order to be able to use it.
-@@ -581,6 +675,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
+@@ -581,6 +676,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
    // Specially optimize memory movement as it doesn't look like dataflow in SSA.
    FPM.addPass(MemCpyOptPass());
  
@@ -45423,7 +45610,7 @@ index 945ef5123..cc979176c 100644
    FPM.addPass(DSEPass());
    FPM.addPass(createFunctionToLoopPassAdaptor(
        LICMPass(PTO.LicmMssaOptCap, PTO.LicmMssaNoAccForPromotionCap,
-@@ -728,10 +825,9 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
+@@ -728,10 +826,9 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
    if (PGOOpt)
      IP.EnableDeferral = EnablePGOInlineDeferral;
  
@@ -45437,7 +45624,7 @@ index 945ef5123..cc979176c 100644
  
    // Require the GlobalsAA analysis for the module so we can query it within
    // the CGSCC pipeline.
-@@ -775,6 +871,20 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
+@@ -775,6 +872,20 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
    for (auto &C : CGSCCOptimizerLateEPCallbacks)
      C(MainCGPipeline, Level);
  
@@ -45458,7 +45645,7 @@ index 945ef5123..cc979176c 100644
    // Lastly, add the core function simplification pipeline nested inside the
    // CGSCC walk.
    MainCGPipeline.addPass(createCGSCCToFunctionPassAdaptor(
-@@ -819,6 +929,22 @@ PassBuilder::buildModuleInlinerPipeline(OptimizationLevel Level,
+@@ -819,6 +930,22 @@ PassBuilder::buildModuleInlinerPipeline(OptimizationLevel Level,
  
    MPM.addPass(ModuleInlinerPass(IP, UseInlineAdvisor, Phase));
  
@@ -45481,7 +45668,7 @@ index 945ef5123..cc979176c 100644
    MPM.addPass(createModuleToFunctionPassAdaptor(
        buildFunctionSimplificationPipeline(Level, Phase),
        PTO.EagerlyInvalidateAnalyses));
-@@ -874,6 +1000,9 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
+@@ -874,6 +1001,9 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
    // Create an early function pass manager to cleanup the output of the
    // frontend.
    FunctionPassManager EarlyFPM;
@@ -45491,7 +45678,7 @@ index 945ef5123..cc979176c 100644
    // Lower llvm.expect to metadata before attempting transforms.
    // Compare/branch metadata may alter the behavior of passes like SimplifyCFG.
    EarlyFPM.addPass(LowerExpectIntrinsicPass());
-@@ -971,14 +1100,15 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
+@@ -971,14 +1101,15 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
                                                  PTO.EagerlyInvalidateAnalyses));
  
    // Add all the requested passes for instrumentation PGO, if requested.
@@ -45509,7 +45696,7 @@ index 945ef5123..cc979176c 100644
    }
    if (PGOOpt && Phase != ThinOrFullLTOPhase::ThinLTOPostLink &&
        PGOOpt->CSAction == PGOOptions::CSIRInstr)
-@@ -1008,7 +1138,6 @@ void PassBuilder::addVectorPasses(OptimizationLevel Level,
+@@ -1008,7 +1139,6 @@ void PassBuilder::addVectorPasses(OptimizationLevel Level,
                                    FunctionPassManager &FPM, bool IsFullLTO) {
    FPM.addPass(LoopVectorizePass(
        LoopVectorizeOptions(!PTO.LoopInterleaving, !PTO.LoopVectorization)));
@@ -45517,7 +45704,7 @@ index 945ef5123..cc979176c 100644
    if (IsFullLTO) {
      // The vectorizer may have significantly shortened a loop body; unroll
      // again. Unroll small loops to hide loop backedge latency and saturate any
-@@ -1154,8 +1283,9 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
+@@ -1154,8 +1284,9 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
    // may make globals referenced by available external functions dead and saves
    // running remaining passes on the eliminated functions. These should be
    // preserved during prelinking for link-time inlining decisions.
@@ -45528,7 +45715,7 @@ index 945ef5123..cc979176c 100644
  
    if (EnableOrderFileInstrumentation)
      MPM.addPass(InstrOrderFilePass());
-@@ -1211,6 +1341,16 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
+@@ -1211,6 +1342,16 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
    for (auto &C : VectorizerStartEPCallbacks)
      C(OptimizePM, Level);
  
@@ -45545,7 +45732,7 @@ index 945ef5123..cc979176c 100644
    LoopPassManager LPM;
    // First rotate loops that may have been un-rotated by prior passes.
    // Disable header duplication at -Oz.
-@@ -1235,6 +1375,14 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
+@@ -1235,6 +1376,14 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
  
    addVectorPasses(Level, OptimizePM, /* IsFullLTO */ false);
  
@@ -45560,7 +45747,7 @@ index 945ef5123..cc979176c 100644
    // LoopSink pass sinks instructions hoisted by LICM, which serves as a
    // canonicalization pass that enables other optimizations. As a result,
    // LoopSink pass needs to be a very late IR pass to avoid undoing LICM
-@@ -1250,7 +1398,8 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
+@@ -1250,7 +1399,8 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
    OptimizePM.addPass(DivRemPairsPass());
  
    // Try to annotate calls that were created during optimization.
@@ -45570,7 +45757,7 @@ index 945ef5123..cc979176c 100644
  
    // LoopSink (and other loop passes since the last simplifyCFG) might have
    // resulted in single-entry-single-exit or empty blocks. Clean up the CFG.
-@@ -1278,9 +1427,13 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
+@@ -1278,9 +1428,13 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
      MPM.addPass(IROutlinerPass());
  
    // Merge functions if requested.
@@ -45585,7 +45772,7 @@ index 945ef5123..cc979176c 100644
    // Now we need to do some global optimization transforms.
    // FIXME: It would seem like these should come first in the optimization
    // pipeline and maybe be the bottom of the canonicalization pipeline? Weird
-@@ -1308,6 +1461,8 @@ PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
+@@ -1308,6 +1462,8 @@ PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
  
    ModulePassManager MPM;
  
@@ -45594,7 +45781,7 @@ index 945ef5123..cc979176c 100644
    // Convert @llvm.global.annotations to !annotation metadata.
    MPM.addPass(Annotation2MetadataPass());
  
-@@ -1321,9 +1476,12 @@ PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
+@@ -1321,9 +1477,12 @@ PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
    if (PGOOpt && PGOOpt->DebugInfoForProfiling)
      MPM.addPass(createModuleToFunctionPassAdaptor(AddDiscriminatorsPass()));
  
@@ -45610,7 +45797,7 @@ index 945ef5123..cc979176c 100644
    // Add the core simplification pipeline.
    MPM.addPass(buildModuleSimplificationPipeline(Level, LTOPhase));
  
-@@ -1350,6 +1508,8 @@ PassBuilder::buildThinLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
+@@ -1350,6 +1509,8 @@ PassBuilder::buildThinLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
  
    ModulePassManager MPM;
  
@@ -45619,7 +45806,7 @@ index 945ef5123..cc979176c 100644
    // Convert @llvm.global.annotations to !annotation metadata.
    MPM.addPass(Annotation2MetadataPass());
  
-@@ -1404,6 +1564,8 @@ ModulePassManager PassBuilder::buildThinLTODefaultPipeline(
+@@ -1404,6 +1565,8 @@ ModulePassManager PassBuilder::buildThinLTODefaultPipeline(
      OptimizationLevel Level, const ModuleSummaryIndex *ImportSummary) {
    ModulePassManager MPM;
  
@@ -45628,7 +45815,7 @@ index 945ef5123..cc979176c 100644
    // Convert @llvm.global.annotations to !annotation metadata.
    MPM.addPass(Annotation2MetadataPass());
  
-@@ -1470,6 +1632,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1470,6 +1633,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
                                       ModuleSummaryIndex *ExportSummary) {
    ModulePassManager MPM;
  
@@ -45637,7 +45824,7 @@ index 945ef5123..cc979176c 100644
    // Convert @llvm.global.annotations to !annotation metadata.
    MPM.addPass(Annotation2MetadataPass());
  
-@@ -1479,8 +1643,20 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1479,8 +1644,20 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
    // Create a function that performs CFI checks for cross-DSO calls with targets
    // in the current module.
    MPM.addPass(CrossDSOCFIPass());
@@ -45658,7 +45845,7 @@ index 945ef5123..cc979176c 100644
      // The WPD and LowerTypeTest passes need to run at -O0 to lower type
      // metadata and intrinsics.
      MPM.addPass(WholeProgramDevirtPass(ExportSummary, nullptr));
-@@ -1498,6 +1674,17 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1498,6 +1675,17 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
      return MPM;
    }
  
@@ -45676,7 +45863,7 @@ index 945ef5123..cc979176c 100644
    if (PGOOpt && PGOOpt->Action == PGOOptions::SampleUse) {
      // Load sample profile before running the LTO optimization pipeline.
      MPM.addPass(SampleProfileLoaderPass(PGOOpt->ProfileFile,
-@@ -1617,6 +1804,23 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1617,6 +1805,23 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
        InlineContext{ThinOrFullLTOPhase::FullLTOPostLink,
                            InlinePass::CGSCCInliner}));
  
@@ -45700,7 +45887,7 @@ index 945ef5123..cc979176c 100644
    // Optimize globals again after we ran the inliner.
    MPM.addPass(GlobalOptPass());
  
-@@ -1627,6 +1831,16 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1627,6 +1832,16 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
    // transform it to pass arguments by value instead of by reference.
    MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(ArgumentPromotionPass()));
  
@@ -45717,7 +45904,7 @@ index 945ef5123..cc979176c 100644
    FunctionPassManager FPM;
    // The IPO Passes may leave cruft around. Clean up after them.
    FPM.addPass(InstCombinePass());
-@@ -1654,7 +1868,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1654,7 +1869,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
  
    // LTO provides additional opportunities for tailcall elimination due to
    // link-time inlining, and visibility of nocapture attribute.
@@ -45727,7 +45914,7 @@ index 945ef5123..cc979176c 100644
  
    // Run a few AA driver optimizations here and now to cleanup the code.
    MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM),
-@@ -1672,23 +1887,7 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+@@ -1672,23 +1888,7 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
        createModuleToFunctionPassAdaptor(InvalidateAnalysisPass<AAManager>()));
  
    FunctionPassManager MainFPM;
@@ -45752,7 +45939,7 @@ index 945ef5123..cc979176c 100644
  
    if (EnableConstraintElimination)
      MainFPM.addPass(ConstraintEliminationPass());
-@@ -1776,8 +1975,9 @@ ModulePassManager PassBuilder::buildO0DefaultPipeline(OptimizationLevel Level,
+@@ -1776,8 +1976,9 @@ ModulePassManager PassBuilder::buildO0DefaultPipeline(OptimizationLevel Level,
    if (PGOOpt && PGOOpt->PseudoProbeForProfiling)
      MPM.addPass(SampleProfileProbePass(TM));
  
@@ -45764,7 +45951,7 @@ index 945ef5123..cc979176c 100644
      addPGOInstrPassesForO0(
          MPM,
          /* RunProfileGen */ (PGOOpt->Action == PGOOptions::IRInstr),
-@@ -1886,6 +2086,9 @@ AAManager PassBuilder::buildDefaultAAPipeline() {
+@@ -1886,6 +2087,9 @@ AAManager PassBuilder::buildDefaultAAPipeline() {
    AA.registerFunctionAnalysis<ScopedNoAliasAA>();
    AA.registerFunctionAnalysis<TypeBasedAA>();
  
@@ -45775,7 +45962,7 @@ index 945ef5123..cc979176c 100644
    // Because the `AAManager` is a function analysis and `GlobalsAA` is a module
    // analysis, all that the `AAManager` can do is query for any *cached*
 diff --git a/llvm/lib/Passes/PassRegistry.def b/llvm/lib/Passes/PassRegistry.def
-index 7c29bffbc..9dbc3c8b7 100644
+index 7c29bffbc..4c16f4063 100644
 --- a/llvm/lib/Passes/PassRegistry.def
 +++ b/llvm/lib/Passes/PassRegistry.def
 @@ -28,6 +28,7 @@ MODULE_ANALYSIS("verify", VerifierAnalysis())
@@ -45837,7 +46024,7 @@ index 7c29bffbc..9dbc3c8b7 100644
  FUNCTION_PASS("dot-dom", DomPrinter())
  FUNCTION_PASS("dot-dom-only", DomOnlyPrinter())
  FUNCTION_PASS("dot-post-dom", PostDomPrinter())
-@@ -378,10 +395,18 @@ FUNCTION_PASS("verify<safepoint-ir>", SafepointIRVerifierPass())
+@@ -378,10 +395,20 @@ FUNCTION_PASS("verify<safepoint-ir>", SafepointIRVerifierPass())
  FUNCTION_PASS("verify<scalar-evolution>", ScalarEvolutionVerifierPass())
  FUNCTION_PASS("view-cfg", CFGViewerPass())
  FUNCTION_PASS("view-cfg-only", CFGOnlyViewerPass())
@@ -45848,6 +46035,8 @@ index 7c29bffbc..9dbc3c8b7 100644
  FUNCTION_PASS("memprof", MemProfilerPass())
 +FUNCTION_PASS("cj-generic-intrinsic-opt", CJGenericIntrinsicOpt())
 +FUNCTION_PASS("insert-cj-tbaa", InsertCJTBAA())
++FUNCTION_PASS("cj-gcinstr-replace", CJGCInstrReplace())
++FUNCTION_PASS("cj-gcinstr-restore", CJGCInstrRestore())
 +FUNCTION_PASS("cj-simple-opt", CJSimpleOpt())
 +FUNCTION_PASS("cj-after-inline-simple-opt", CJAfterInlineSimpleOpt())
 +FUNCTION_PASS("cj-loop-float-opt", CJLoopFloatOpt())
@@ -50610,10 +50799,10 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..05902b684
+index 000000000..b0332af40
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
-@@ -0,0 +1,3354 @@
+@@ -0,0 +1,3403 @@
 +//===- CJPartialEscapeAnalysis.cpp - escape analysis for Cangjie ----------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -50651,6 +50840,8 @@ index 000000000..05902b684
 +#include "llvm/Transforms/Utils/CallGraphUpdater.h"
 +#include "llvm/Transforms/Utils/Local.h"
 +#include "llvm/Transforms/Scalar.h"
++
++#include <algorithm>
 +
 +#define DEBUG_TYPE "escape-analysis"
 +using namespace llvm;
@@ -52941,8 +53132,8 @@ index 000000000..05902b684
 +    }
 +    if (BeforeRun) {
 +      LLVM_DEBUG(dbgs() << "    defs:\n");
-+      for (auto DefInfo : Def[&BB]) {
-+        for (auto ValueVec : DefInfo.second) {
++      for (const auto &DefInfo : Def[&BB]) {
++        for (const auto &ValueVec : DefInfo.second) {
 +          LLVM_DEBUG(dbgs() << "      " << *DefInfo.first
 +                            << " offset :" << ValueVec.first << "\n");
 +          for (auto Value : ValueVec.second) {
@@ -52952,8 +53143,8 @@ index 000000000..05902b684
 +      }
 +    } else {
 +      LLVM_DEBUG(dbgs() << "    ins:\n");
-+      for (auto InInfo : In[&BB]) {
-+        for (auto ValueVec : InInfo.second) {
++      for (const auto &InInfo : In[&BB]) {
++        for (const auto &ValueVec : InInfo.second) {
 +          LLVM_DEBUG(dbgs() << "      " << *InInfo.first
 +                            << " offset :" << ValueVec.first << "\n");
 +          for (auto Value : ValueVec.second) {
@@ -53140,16 +53331,16 @@ index 000000000..05902b684
 +        auto &SuccOut = Out[&BB];
 +        auto &InInfo = In[&BB];
 +        if (NotInitialize) { // first time to initialize.
-+          for (auto SuccDefs : Def[&BB]) {
-+            for (auto SuccDef : SuccDefs.second) {
++          for (const auto &SuccDefs : Def[&BB]) {
++            for (const auto &SuccDef : SuccDefs.second) {
 +              SuccOut[SuccDefs.first][SuccDef.first].insert(
 +                  SuccDef.second.begin(), SuccDef.second.end());
 +            }
 +          }
 +        }
 +        for (auto *Pred : predecessors(&BB)) {
-+          for (auto LivVal : Out[Pred]) {
-+            for (auto ValVec : LivVal.second) {
++          for (const auto &LivVal : Out[Pred]) {
++            for (const auto &ValVec : LivVal.second) {
 +              for (auto Val : ValVec.second) {
 +                if (!InInfo[LivVal.first][ValVec.first].count(Val)) {
 +                  InInfo[LivVal.first][ValVec.first].insert(Val);
@@ -53161,8 +53352,8 @@ index 000000000..05902b684
 +          if (Pred == &BB) {
 +            continue;
 +          }
-+          for (auto LivVal : Out[Pred]) {
-+            for (auto ValVec : LivVal.second) {
++          for (const auto &LivVal : Out[Pred]) {
++            for (const auto &ValVec : LivVal.second) {
 +              for (auto Val : ValVec.second) {
 +                if (SuccBBInfo[LivVal.first].count(ValVec.first) &&
 +                    SuccBBInfo[LivVal.first][ValVec.first].size() != 0) {
@@ -53376,12 +53567,17 @@ index 000000000..05902b684
 +      CopyType =
 +          cast<PointerType>(BaseV->getType())->getNonOpaquePointerElementType();
 +    }
-+    if (isa<StructType>(CopyType)) {
-+      if (!containsGCPtrType(CopyType)) {
++    if (auto *CopyST = dyn_cast<StructType>(CopyType)) {
++      if (!containsGCPtrType(CopyST)) {
 +        return;
 +      }
-+      countRefOffsets(cast<StructType>(CopyType), RefOffsets, 0, DL, BeginOff,
-+                      BeginOff + Size);
++      uint64_t Left = static_cast<uint64_t>(BeginOff);
++      uint64_t Right = Left + Size;
++      const auto &Offsets = getStructRefOffsets(CopyST, Right, DL);
++      auto It = std::lower_bound(Offsets.begin(), Offsets.end(), Left);
++      for (; It != Offsets.end() && *It < Right; ++It) {
++        RefOffsets.push_back(*It);
++      }
 +    } else {
 +      // 64: large size threshold
 +      if (Size > 64) {
@@ -53411,10 +53607,19 @@ index 000000000..05902b684
 +      }
 +      return;
 +    }
++    SmallDenseMap<std::pair<Value *, uint64_t>, GCPtr *, 8> SrcMPCache;
 +    for (auto Offset : RefOffsets) {
 +      uint64_t PVOffset = POffset + Offset - BeginOff;
 +      uint64_t VPOffset = Off + Offset - BeginOff;
-+      GCPtr *SrcMP = findSrcMP(BaseV, VPOffset, I->getParent());
++      auto CacheKey = std::make_pair(BaseV, VPOffset);
++      GCPtr *SrcMP = nullptr;
++      auto CacheIt = SrcMPCache.find(CacheKey);
++      if (CacheIt != SrcMPCache.end()) {
++        SrcMP = CacheIt->second;
++      } else {
++        SrcMP = findSrcMP(BaseV, VPOffset, I->getParent());
++        SrcMPCache.insert({CacheKey, SrcMP});
++      }
 +      MemPtr *MP = MemPtr::create(Base, PVOffset, *this, LI);
 +      MP->insertDefine(I->getParent(), SrcMP);
 +      if (!Def[I->getParent()][Base][PVOffset].empty()) {
@@ -53424,19 +53629,52 @@ index 000000000..05902b684
 +    }
 +  }
 +
-+  GCPtr *findSrcMP(Value *BaseV, uint64_t VPOffset, BasicBlock *CurBB) {
-+    if (Def[CurBB][BaseV][VPOffset].empty()) {
-+      return MemPtr::create(BaseV, VPOffset, *this, LI);
++  const SmallVector<uint64_t, 8> &
++  getStructRefOffsets(StructType *ST, uint64_t RangeEnd,
++                      const DataLayout &DL) {
++    auto &BySize = StructRefOffsetsCache[ST];
++    auto It = BySize.find(RangeEnd);
++    if (It != BySize.end()) {
++      return It->second;
 +    }
++    SmallVector<uint64_t, 8> Offsets;
++    if (RangeEnd != 0) {
++      countRefOffsets(ST, Offsets, 0, DL, 0, RangeEnd);
++      std::sort(Offsets.begin(), Offsets.end());
++      Offsets.erase(std::unique(Offsets.begin(), Offsets.end()),
++                    Offsets.end());
++    }
++    auto Inserted = BySize.insert({RangeEnd, std::move(Offsets)});
++    return Inserted.first->second;
++  }
++
++  GCPtr *findSrcMP(Value *BaseV, uint64_t VPOffset, BasicBlock *CurBB) {
++    auto BBIt = Def.find(CurBB);
++    if (BBIt == Def.end())
++      return MemPtr::create(BaseV, VPOffset, *this, LI);
++    auto &BBDefs = BBIt->second;
++    auto FindInMap = [&BBDefs, this](Value *BaseV,
++                                     uint64_t VPOffset) -> GCPtr * {
++      auto BaseIt = BBDefs.find(BaseV);
++      if (BaseIt == BBDefs.end())
++        return nullptr;
++      auto OffIt = BaseIt->second.find(VPOffset);
++      if (OffIt == BaseIt->second.end() || OffIt->second.empty())
++        return nullptr;
++      return *OffIt->second.begin();
++    };
++    GCPtr *Temp = FindInMap(BaseV, VPOffset);
++    if (!Temp)
++      return MemPtr::create(BaseV, VPOffset, *this, LI);
 +    GCPtr *CurP = nullptr;
-+    while (!Def[CurBB][BaseV][VPOffset].empty()) {
-+      CurP = *Def[CurBB][BaseV][VPOffset].begin();
++    do {
++      CurP = Temp;
 +      if (CurP->isPtr())
 +        return CurP;
 +      MemPtr *MP = reinterpret_cast<MemPtr *>(CurP);
 +      VPOffset = MP->Offset;
 +      BaseV = MP->P;
-+    }
++    } while ((Temp = FindInMap(BaseV, VPOffset)));
 +    return CurP;
 +  }
 +
@@ -53855,16 +54093,16 @@ index 000000000..05902b684
 +  DenseMap<Value *, SmallSetVector<GCPtr *, 8>> LoadBaseValue;
 +  DenseMap<Value *, unsigned> LoadState;
 +  SmallSetVector<GCPtr *, 8> LoadValues;
++  using StructRefOffsetsBySize =
++      DenseMap<uint64_t, SmallVector<uint64_t, 8>>;
++  DenseMap<StructType *, StructRefOffsetsBySize> StructRefOffsetsCache;
 +
-+  std::map<BasicBlock *,
-+           std::map<Value *, std::map<int, SmallSetVector<GCPtr *, 8>>>>
-+      Def;
-+  std::map<BasicBlock *,
-+           std::map<Value *, std::map<int, SmallSetVector<GCPtr *, 8>>>>
-+      Out;
-+  std::map<BasicBlock *,
-+           std::map<Value *, std::map<int, SmallSetVector<GCPtr *, 8>>>>
-+      In;
++  using DefOffsetMap = DenseMap<int, SmallSetVector<GCPtr *, 8>>;
++  using DefBaseMap = DenseMap<Value *, DefOffsetMap>;
++  using DefBBMap = std::map<BasicBlock *, DefBaseMap>;
++  DefBBMap Def;
++  DefBBMap Out;
++  DefBBMap In;
 +};
 +
 +static bool skipLargeFunction(Function *F) {
@@ -54160,7 +54398,7 @@ index 50710eaa1..b9065ec1a 100644
  
  /// Deduce returned attributes for the SCC.
 diff --git a/llvm/lib/Transforms/IPO/GlobalDCE.cpp b/llvm/lib/Transforms/IPO/GlobalDCE.cpp
-index f35827220..e709ce09f 100644
+index f35827220..7314c5751 100644
 --- a/llvm/lib/Transforms/IPO/GlobalDCE.cpp
 +++ b/llvm/lib/Transforms/IPO/GlobalDCE.cpp
 @@ -18,6 +18,7 @@
@@ -54303,7 +54541,7 @@ index f35827220..e709ce09f 100644
    // Make sure that all memory is released
    AliveGlobals.clear();
    ConstantDependenciesCache.clear();
-@@ -458,3 +503,376 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -458,3 +503,357 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
      return PreservedAnalyses::none();
    return PreservedAnalyses::all();
  }
@@ -54384,26 +54622,6 @@ index f35827220..e709ce09f 100644
 +  GlobalVariable *IF = GV.getParent()->getNamedGlobal(
 +      dyn_cast<MDString>(GV.getMetadata("inheritedType")->getOperand(0))
 +          ->getString());
-+
-+#ifndef NDEBUG
-+  // Verify that the interface type obtained from metadata matches the one
-+  // parsed from global variable.
-+  Value *O = C->getOperand(ExtensionDefFieldType::ET_INTERFACE_FN)
-+                 ->stripPointerCasts();
-+  if (auto *F = dyn_cast<Function>(O)) {
-+    auto *CB = dyn_cast<CallBase>(F->back().getTerminator()->getPrevNode());
-+    assert(CB->getCalledFunction()->getName() == "CJ_MCC_GetOrCreateTypeInfo");
-+    O = CB->getArgOperand(0)->stripPointerCasts();
-+  } else {
-+    // O is typeinfo
-+    auto *TT = cast<GlobalVariable>(O)
-+                   ->getInitializer()
-+                   ->getOperand(ClassInfoFieldType::CIT_GENERIC_FROM)
-+                   ->stripPointerCasts();
-+    O = isa<ConstantPointerNull>(TT) ? O : TT;
-+  }
-+  assert(IF == O);
-+#endif
 +
 +  return {TI, IF, FT};
 +}
@@ -54533,23 +54751,24 @@ index f35827220..e709ce09f 100644
 +  // mtable needs to remain alive even though neither target type nor interface
 +  // is in use.
 +  if (GVU->isCJOuterTypeExtensions()) {
-+    auto IsInternalType = [](GlobalVariable *TI) {
-+      auto *TT = TI->getInitializer()
++    auto IsInternalType = [](GlobalVariable *Ty) {
++      if (Ty->isCJTypeTemplate())
++        return GlobalVariable::isInternalLinkage(Ty->getLinkage());
++      auto *TT = Ty->getInitializer()
 +                     ->getOperand(ClassInfoFieldType::CIT_GENERIC_FROM)
 +                     ->stripPointerCasts();
 +      if (isa<ConstantPointerNull>(TT))
-+        return GlobalVariable::isInternalLinkage(TI->getLinkage());
-+
++        return GlobalVariable::isInternalLinkage(Ty->getLinkage());
 +      return GlobalVariable::isInternalLinkage(
 +          cast<GlobalVariable>(TT)->getLinkage());
 +    };
 +    bool IsTypeInternal = false, IsIFInternal = false;
-+    auto *TI = cast<GlobalVariable>(
++    auto *Ty = cast<GlobalVariable>(
 +        GV->getInitializer()
 +            ->getOperand(ExtensionDefFieldType::ET_TARGET_TYPE)
 +            ->stripPointerCasts());
-+    if (TI->hasInitializer())
-+      IsTypeInternal = IsInternalType(TI);
++    if (Ty->hasInitializer())
++      IsTypeInternal = IsInternalType(Ty);
 +    auto *IFN = GV->getInitializer()
 +                    ->getOperand(ExtensionDefFieldType::ET_INTERFACE_FN)
 +                    ->stripPointerCasts();
@@ -54930,7 +55149,7 @@ index b850591b4..f5754d089 100644
        LLVM_DEBUG(dbgs() << "canCreateThunkFor: " << F->getName()
                          << " is too small to bother creating a thunk for\n");
 diff --git a/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp b/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
-index f1b6f2bb7..7ce4fa79f 100644
+index f1b6f2bb7..eb6a58c34 100644
 --- a/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
 +++ b/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
 @@ -17,6 +17,7 @@
@@ -54941,7 +55160,7 @@ index f1b6f2bb7..7ce4fa79f 100644
  #include "llvm/Analysis/GlobalsModRef.h"
  #include "llvm/Analysis/ScopedNoAliasAA.h"
  #include "llvm/Analysis/TargetLibraryInfo.h"
-@@ -44,8 +45,16 @@
+@@ -44,9 +45,18 @@
  using namespace llvm;
  
  namespace llvm {
@@ -54950,15 +55169,18 @@ index f1b6f2bb7..7ce4fa79f 100644
 +                                      cl::init(false));
  cl::opt<bool> RunPartialInlining("enable-partial-inlining", cl::Hidden,
                                   cl::desc("Run Partial inlinining pass"));
+-
 +cl::opt<bool> EnableCJBarrierSplit("enable-cj-barrier-split", cl::Hidden,
 +                                   cl::init(true));
 +cl::opt<bool> EnableCJGenericIntrinsicOpt(
 +    "enable-cj-generic-intrinsic-opt", cl::init(true), cl::Hidden,
 +    cl::desc("Enable cangjie generic intrinsics optimization"));
- 
++cl::opt<bool> EnableCJGCInstrTransform("enable-cj-gcinstr-transform",
++                                       cl::Hidden, cl::init(true));
  static cl::opt<bool>
  UseGVNAfterVectorization("use-gvn-after-vectorization",
-@@ -165,14 +174,15 @@ cl::opt<AttributorRunOption> AttributorRun(
+   cl::init(false), cl::Hidden,
+@@ -165,14 +175,15 @@ cl::opt<AttributorRunOption> AttributorRun(
  
  extern cl::opt<bool> EnableKnowledgeRetention;
  } // namespace llvm
@@ -54976,7 +55198,7 @@ index f1b6f2bb7..7ce4fa79f 100644
      LoopVectorize = true;
      LoopsInterleaved = true;
      RerollLoops = RunLoopRerolling;
-@@ -273,12 +283,13 @@ void PassManagerBuilder::addInitialAliasAnalysisPasses(
+@@ -273,12 +284,13 @@ void PassManagerBuilder::addInitialAliasAnalysisPasses(
    // support "obvious" type-punning idioms.
    PM.add(createTypeBasedAAWrapperPass());
    PM.add(createScopedNoAliasAAWrapperPass());
@@ -54991,7 +55213,7 @@ index f1b6f2bb7..7ce4fa79f 100644
    // Add LibraryInfo if we have some.
    if (LibraryInfo)
      FPM.add(new TargetLibraryInfoWrapperPass(*LibraryInfo));
-@@ -307,6 +318,7 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
+@@ -307,6 +319,7 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
    // Start of function pass.
    // Break up aggregate allocas, using SSAUpdater.
    assert(OptLevel >= 1 && "Calling function optimizer with no optimization level!");
@@ -54999,7 +55221,7 @@ index f1b6f2bb7..7ce4fa79f 100644
    MPM.add(createSROAPass());
    MPM.add(createEarlyCSEPass(true /* Enable mem-ssa. */)); // Catch trivial redundancies
    if (EnableKnowledgeRetention)
-@@ -332,9 +344,12 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
+@@ -332,9 +345,12 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
      MPM.add(createJumpThreadingPass());         // Thread jumps.
      MPM.add(createCorrelatedValuePropagationPass()); // Propagate conditionals
    }
@@ -55012,7 +55234,7 @@ index f1b6f2bb7..7ce4fa79f 100644
    // Combine silly seq's
    if (OptLevel > 2)
      MPM.add(createAggressiveInstCombinerPass());
-@@ -350,7 +365,14 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
+@@ -350,7 +366,14 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
        createCFGSimplificationPass(SimplifyCFGOptions().convertSwitchRangeToICmp(
            true)));                            // Merge & remove BBs
    MPM.add(createReassociatePass());           // Reassociate expressions
@@ -55028,7 +55250,7 @@ index f1b6f2bb7..7ce4fa79f 100644
    // The matrix extension can introduce large vector operations early, which can
    // benefit from running vector-combine early on.
    if (EnableMatrix)
-@@ -384,6 +406,9 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
+@@ -384,6 +407,9 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
    MPM.add(createCFGSimplificationPass(
        SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
    MPM.add(createInstructionCombiningPass());
@@ -55038,7 +55260,7 @@ index f1b6f2bb7..7ce4fa79f 100644
    // We resume loop passes creating a second loop pipeline here.
    if (EnableLoopFlatten) {
      MPM.add(createLoopFlattenPass()); // Flatten loops
-@@ -575,6 +600,33 @@ void PassManagerBuilder::addVectorPasses(legacy::PassManagerBase &PM,
+@@ -575,6 +601,33 @@ void PassManagerBuilder::addVectorPasses(legacy::PassManagerBase &PM,
  
  void PassManagerBuilder::populateModulePassManager(
      legacy::PassManagerBase &MPM) {
@@ -55072,7 +55294,7 @@ index f1b6f2bb7..7ce4fa79f 100644
    MPM.add(createAnnotation2MetadataLegacyPass());
  
    // Allow forcing function attributes as a debugging and tuning aid.
-@@ -601,6 +653,7 @@ void PassManagerBuilder::populateModulePassManager(
+@@ -601,6 +654,7 @@ void PassManagerBuilder::populateModulePassManager(
      addExtensionsToPM(EP_EnabledOnOptLevel0, MPM);
  
      MPM.add(createAnnotationRemarksLegacyPass());
@@ -55080,7 +55302,7 @@ index f1b6f2bb7..7ce4fa79f 100644
      return;
    }
  
-@@ -655,6 +708,11 @@ void PassManagerBuilder::populateModulePassManager(
+@@ -655,6 +709,11 @@ void PassManagerBuilder::populateModulePassManager(
      RunInliner = true;
    }
  
@@ -55092,7 +55314,7 @@ index f1b6f2bb7..7ce4fa79f 100644
    // Infer attributes on declarations, call sites, arguments, etc. for an SCC.
    if (AttributorRun & AttributorRunOption::CGSCC)
      MPM.add(createAttributorCGSCCLegacyPass());
-@@ -798,6 +856,7 @@ void PassManagerBuilder::populateModulePassManager(
+@@ -798,6 +857,7 @@ void PassManagerBuilder::populateModulePassManager(
    addExtensionsToPM(EP_OptimizerLast, MPM);
  
    MPM.add(createAnnotationRemarksLegacyPass());
@@ -60941,10 +61163,10 @@ index 000000000..3409036f1
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp b/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp
 new file mode 100644
-index 000000000..f527f64da
+index 000000000..e02675f85
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp
-@@ -0,0 +1,1567 @@
+@@ -0,0 +1,1626 @@
 +//===- CJFillMetadata.cpp - Fill Cangjie Metadata ---------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -61525,6 +61747,31 @@ index 000000000..f527f64da
 +}
 +
 +unsigned llvm::getTypeModifier(StringRef Name) {
++  constexpr StringRef REFLECT_VERSION_PREFIX = "reflectVersion";
++  constexpr size_t REFLECT_VERSION_PREFIX_LEN = REFLECT_VERSION_PREFIX.size();
++  constexpr unsigned MAX_REFLECT_VERSION = 7; // 3 bits: 0b111
++  constexpr unsigned VERSION_BIT_MASK_1 = 1; // 0b001
++  constexpr unsigned VERSION_BIT_MASK_2 = 2; // 0b010
++  constexpr unsigned VERSION_BIT_MASK_3 = 4; // 0b100
++
++  if (Name.startswith(REFLECT_VERSION_PREFIX)) {
++    StringRef VersionStr = Name.substr(REFLECT_VERSION_PREFIX_LEN);
++    unsigned Version = 0;
++    if (!VersionStr.getAsInteger(10, Version) &&
++        Version > 0 &&
++        Version <= MAX_REFLECT_VERSION) {
++      unsigned Result = 0;
++      if (Version & VERSION_BIT_MASK_1)
++        Result |= RMT_REFLECT_VER_BIT1;
++      if (Version & VERSION_BIT_MASK_2)
++        Result |= RMT_REFLECT_VER_BIT2;
++      if (Version & VERSION_BIT_MASK_3)
++        Result |= RMT_REFLECT_VER_BIT3;
++      return Result;
++    }
++    return RMT_MAX;
++  }
++
 +  return StringSwitch<unsigned>(Name)
 +      .Case("default", RMT_DEFAULT)
 +      .Case("private", RMT_PRIVATE)
@@ -61547,6 +61794,8 @@ index 000000000..f527f64da
 +      .Case("hasSRet1", RMT_HAS_SRET1)
 +      .Case("hasSRet2", RMT_HAS_SRET2)
 +      .Case("hasSRet3", RMT_HAS_SRET3)
++      .Case("enumCtor", RMT_ENUM_CTOR)
++      .Case("unknownSize", RMT_UNKNOWN_SIZE)
 +      .Default(RMT_MAX);
 +}
 +
@@ -61790,20 +62039,25 @@ index 000000000..f527f64da
 +  TIName = GV->getName();
 +  if (enable(M)) {
 +    if (GV->hasAttribute(CFileKlassStr)) {
-+      if (!TypeInfos.contains(GV)) {
++      if (!IsEnum && !TypeInfos.contains(GV)) {
 +        report_fatal_error(GV->getName() +
 +                           ": typeinfo's reflect info don't exist in package "
 +                           "info at the same time!");
 +      }
 +    } else if (GV->hasAttribute("cj_tt")) {
-+      if (!TypeTemplates.contains(GV)) {
++      if (!IsEnum && !TypeTemplates.contains(GV)) {
 +        report_fatal_error(GV->getName() +
 +                           ": type_template's reflect info don't exist in "
 +                           "package info at the same time!");
 +      }
 +    }
 +    if (IsEnum) {
-+      return getEnumReflectInfo(ReflectMD);
++      if (ReflectMD->getNumOperands() == ERT_MAX)
++        return getEnumReflectInfo(ReflectMD);
++      if (ReflectMD->getNumOperands() == ECRT_MAX)
++        return getEnumCtorReflectInfo(ReflectMD);
++      report_fatal_error(GV->getName() +
++                         ": enum reflect info's operand number error!");
 +    } else {
 +      return getClassReflectInfo(ReflectMD);
 +    }
@@ -61844,6 +62098,7 @@ index 000000000..f527f64da
 +Constant *ReflectInfo::getEnumReflectInfo(const MDTuple *ReflectMD) {
 +  // record all reflection info
 +  EnumReflectInfo Info(M);
++  Info.GenericClass = getStringFromMD(ReflectMD, ERT_GENERIC_CLASS);
 +  parseAttributes(getMDOperand(ReflectMD, ERT_ATTRIBUTE), Info.Modifier,
 +                  Info.Annotation);
 +  parseEnumCtorMDs(Info.EnumCtors, getMDOperand(ReflectMD, ERT_ENUM_CTOR));
@@ -61854,6 +62109,20 @@ index 000000000..f527f64da
 +
 +  SmallVector<Constant *, 0> BodyVec(FET_PTRS);
 +  fillEnumReflectInfo(Info, BodyVec);
++
++  std::string GVName = TIName.str() + ".reflect";
++  auto *ReflectGV = createGlobalVal(GVName, GVName + "Type", BodyVec);
++  return ConstantExpr::getBitCast(ReflectGV, Int8PtrTy);
++}
++
++// Reflection: !{type attributes}
++Constant *ReflectInfo::getEnumCtorReflectInfo(const MDTuple *ReflectMD) {
++  EnumCtorReflectInfo Info(M);
++  parseAttributes(getMDOperand(ReflectMD, ECRT_ATTRIBUTE), Info.Modifier,
++                  Info.Annotation);
++
++  SmallVector<Constant *, 0> BodyVec(FECT_PTRS);
++  fillEnumCtorReflectInfo(Info, BodyVec);
 +
 +  std::string GVName = TIName.str() + ".reflect";
 +  auto *ReflectGV = createGlobalVal(GVName, GVName + "Type", BodyVec);
@@ -62068,6 +62337,11 @@ index 000000000..f527f64da
 +  BodyVec[FET_STATIC_METHOD] =
 +      ConstantInt::get(Int32Ty, Info.StaticMethods.size());
 +  BodyVec[FET_ANNOTATION] = Info.Annotation;
++  if (Info.GenericClass.empty()) {
++    BodyVec[FET_GENERIC_CLASS] = Int8PtrNull;
++  } else {
++    BodyVec[FET_GENERIC_CLASS] = getNameGlobal(M, Info.GenericClass);
++  }
 +
 +  for (unsigned Idx = 0; Idx < Info.InstanceMethods.size(); ++Idx) {
 +    BodyVec.push_back(Info.InstanceMethods[Idx]->fillMethodInfo(Idx, TIName));
@@ -62075,6 +62349,13 @@ index 000000000..f527f64da
 +  for (unsigned Idx = 0; Idx < Info.StaticMethods.size(); ++Idx) {
 +    BodyVec.push_back(Info.StaticMethods[Idx]->fillMethodInfo(Idx, TIName));
 +  }
++}
++
++void ReflectInfo::fillEnumCtorReflectInfo(EnumCtorReflectInfo &Info,
++                                          SmallVector<Constant *, 0> &BodyVec) {
++  BodyVec[FECT_ANNOTATION] = Info.Annotation;
++  BodyVec[FECT_MODIFIER] = ConstantInt::get(Int32Ty, Info.Modifier);
++  BodyVec[FECT_CTOR_CNT] = ConstantInt::get(Int32Ty, 0);
 +}
 +
 +void ReflectInfo::parseAttributes(MDTuple *Attr, unsigned &Modifier,
@@ -62512,6 +62793,474 @@ index 000000000..f527f64da
 +
 +INITIALIZE_PASS(CJFillMetadataLegacyPass, "cj-fill-metadata", "Fill Cangjie Metadata", false,
 +                false)
+diff --git a/llvm/lib/Transforms/Scalar/CJGCInstrReplace.cpp b/llvm/lib/Transforms/Scalar/CJGCInstrReplace.cpp
+new file mode 100644
+index 000000000..8983672b8
+--- /dev/null
++++ b/llvm/lib/Transforms/Scalar/CJGCInstrReplace.cpp
+@@ -0,0 +1,154 @@
++//===- CJGCInstrReplace.cpp - -----------------------------------------*- C++
++//-*-===//
++//
++// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
++// This source file is part of the Cangjie project, licensed under Apache-2.0
++// with Runtime Library Exception.
++//
++// See https://cangjie-lang.cn/pages/LICENSE for license information.
++//
++//===----------------------------------------------------------------------===//
++//
++// This file provides interface to "Cangjie GC Instruction Replace" pass.
++//
++// This pass will replace gcread/gcwrite with load/store in pass pipeline
++// beginning.
++//===----------------------------------------------------------------------===//
++
++#include "llvm/Transforms/Scalar/CJGCInstrReplace.h"
++
++#include "llvm/IR/Constant.h"
++#include "llvm/IR/Function.h"
++#include "llvm/IR/IRBuilder.h"
++#include "llvm/IR/InstIterator.h"
++#include "llvm/IR/InstrTypes.h"
++#include "llvm/IR/Instruction.h"
++#include "llvm/IR/Instructions.h"
++#include "llvm/Pass.h"
++#include "llvm/Transforms/Scalar.h"
++
++using namespace llvm;
++
++#define DEBUG_TYPE "CJGCInstrReplace"
++
++SmallDenseMap<Intrinsic::ID, StringRef> CJGCInstrReplace::GCIntrinsicIDToLabel =
++    {{Intrinsic::cj_gcread_ref, CJGCInstrReplace::GC_READ_REF_IID},
++     {Intrinsic::cj_gcwrite_ref, CJGCInstrReplace::GC_WRITE_REF_IID}};
++
++PreservedAnalyses CJGCInstrReplace::run(Function &F,
++                                        FunctionAnalysisManager &FAM) {
++  if (runImpl(F)) {
++    return PreservedAnalyses::none();
++  }
++  return PreservedAnalyses::all();
++}
++
++bool CJGCInstrReplace::runImpl(Function &F) {
++  LLVM_DEBUG(dbgs() << "CJGCInstrReplace: " << F.getName().str() << "start."
++                    << "\n");
++  initContainer();
++  collectGCInstr(F);
++  bool changed = changeGCInstrToLSInstr();
++
++  LLVM_DEBUG({
++    if (changed) {
++      dbgs() << "CJGCInstrReplace: " << F.getName().str() << " changed."
++             << "\n";
++    }
++  });
++
++  LLVM_DEBUG(dbgs() << "CJGCInstrReplace: " << F.getName().str() << "end."
++                    << "\n");
++
++  return changed;
++}
++
++void CJGCInstrReplace::initContainer() {
++  GCInstrDispatchMap.clear();
++  GCReadRefs.clear();
++  GCWriteRefs.clear();
++  GCInstrDispatchMap[Intrinsic::cj_gcread_ref] = &GCReadRefs;
++  GCInstrDispatchMap[Intrinsic::cj_gcwrite_ref] = &GCWriteRefs;
++}
++
++inline void CJGCInstrReplace::dispatchGCInstr(CallBase *CB) {
++  auto IID = CB->getIntrinsicID();
++  if (GCInstrDispatchMap.count(IID)) {
++    GCInstrDispatchMap[IID]->push_back(CB);
++    LLVM_DEBUG(dbgs() << "dispatchGCInstr: " << *CB << "\n");
++  }
++}
++
++void CJGCInstrReplace::collectGCInstr(Function &F) {
++  for (auto &I : instructions(F)) {
++    if (auto *CB = dyn_cast<CallBase>(&I)) {
++      dispatchGCInstr(CB);
++    }
++  }
++}
++
++namespace {
++
++void addGCInstrMetadata(Instruction *Inst, CallBase *SourceGCInstr) {
++  LLVMContext &Ctx = Inst->getContext();
++  auto IID = SourceGCInstr->getIntrinsicID();
++  Constant *ConstVal = ConstantInt::get(Type::getInt64Ty(Ctx), uint64_t(IID));
++  ConstantAsMetadata *CAM = ConstantAsMetadata::get(ConstVal);
++  MDNode *Node = MDNode::get(Ctx, CAM);
++  Inst->setMetadata(CJGCInstrReplace::GCIntrinsicIDToLabel[IID], Node);
++  SmallVector<std::pair<unsigned, MDNode *>, 4> MDs;
++  SourceGCInstr->getAllMetadata(MDs);
++  for (const auto &MD : MDs) {
++    Inst->setMetadata(MD.first, MD.second);
++  }
++}
++
++bool changeGCReadRef(SmallVector<CallBase *, 4> *GCInstrs) {
++  bool Changed = false;
++  for (auto *GCReadRef : *GCInstrs) {
++    Changed = true;
++    IRBuilder<> IRB(GCReadRef);
++    auto *AddedLoadInstr = IRB.CreateLoad(
++        GCReadRef->getArgOperand(0)->getType(), GCReadRef->getArgOperand(1));
++    addGCInstrMetadata(AddedLoadInstr, GCReadRef);
++    GCReadRef->replaceAllUsesWith(AddedLoadInstr);
++  }
++  for (auto *GCReadRef : *GCInstrs) {
++    GCReadRef->eraseFromParent();
++  }
++  return Changed;
++}
++
++bool changeGCWriteRef(SmallVector<CallBase *, 4> *GCInstrs) {
++  bool Changed = false;
++  for (auto *GCWriteRef : *GCInstrs) {
++    Changed = true;
++    IRBuilder<> IRB(GCWriteRef);
++    auto *AddedStoreInstr = IRB.CreateStore(GCWriteRef->getArgOperand(0),
++                                            GCWriteRef->getArgOperand(2));
++    addGCInstrMetadata(AddedStoreInstr, GCWriteRef);
++  }
++  for (auto *GCWriteRef : *GCInstrs) {
++    GCWriteRef->eraseFromParent();
++  }
++  return Changed;
++}
++
++} // namespace
++
++bool CJGCInstrReplace::changeGCInstrToLSInstr() {
++  bool Changed = false;
++  for (auto [IID, GCInstrs] : GCInstrDispatchMap) {
++    switch (IID) {
++    case Intrinsic::cj_gcread_ref:
++      Changed |= changeGCReadRef(GCInstrs);
++      break;
++    case Intrinsic::cj_gcwrite_ref:
++      Changed |= changeGCWriteRef(GCInstrs);
++      break;
++    default:
++      break;
++    }
++  }
++  return Changed;
++}
+diff --git a/llvm/lib/Transforms/Scalar/CJGCInstrRestore.cpp b/llvm/lib/Transforms/Scalar/CJGCInstrRestore.cpp
+new file mode 100644
+index 000000000..80e8be1e5
+--- /dev/null
++++ b/llvm/lib/Transforms/Scalar/CJGCInstrRestore.cpp
+@@ -0,0 +1,301 @@
++//===- CJGCInstrRestore.cpp - -----------------------------------------*- C++
++//-*-===//
++//
++// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
++// This source file is part of the Cangjie project, licensed under Apache-2.0
++// with Runtime Library Exception.
++//
++// See https://cangjie-lang.cn/pages/LICENSE for license information.
++//
++//===----------------------------------------------------------------------===//
++//
++// This file provides interface to "Cangjie GC Instruction Restore" pass.
++//
++// This pass will restore load/store to gcread/gcwrite in pass pipeline ending.
++//===----------------------------------------------------------------------===//
++
++#include "llvm/Transforms/Scalar/CJGCInstrRestore.h"
++#include "llvm/Analysis/ValueTracking.h"
++#include "llvm/IR/Function.h"
++#include "llvm/IR/IRBuilder.h"
++#include "llvm/IR/InstIterator.h"
++#include "llvm/IR/InstrTypes.h"
++#include "llvm/IR/Instruction.h"
++#include "llvm/IR/Instructions.h"
++#include "llvm/IR/Value.h"
++#include "llvm/Pass.h"
++#include "llvm/Transforms/Scalar.h"
++
++using namespace llvm;
++
++#define DEBUG_TYPE "CJGCInstrRestore"
++
++PreservedAnalyses CJGCInstrRestore::run(Function &F,
++                                        FunctionAnalysisManager &FAM) {
++  if (runImpl(F)) {
++    return PreservedAnalyses::none();
++  }
++  return PreservedAnalyses::all();
++}
++
++bool CJGCInstrRestore::runImpl(Function &F) {
++  LLVM_DEBUG(dbgs() << "CJGCInstrRestore: " << F.getName().str() << " start."
++                    << "\n");
++  initContainer();
++  collectLSInstr(F);
++  bool changed = restoreLSInstrToGCInstr();
++
++  LLVM_DEBUG({
++    if (changed) {
++      dbgs() << "CJGCInstrRestore: " << F.getName().str() << " changed."
++             << "\n";
++    }
++  });
++
++  LLVM_DEBUG(dbgs() << "CJGCInstrRestore: " << F.getName().str() << " end."
++                    << "\n");
++
++  return changed;
++}
++
++void CJGCInstrRestore::initContainer() {
++  LSInstrDispatchMap.clear();
++  LoadForGCReadRefs.clear();
++  StoreForGCWriteRefs.clear();
++  ValueToBasePointer.clear();
++  LSInstrDispatchMap[Intrinsic::cj_gcread_ref] = &LoadForGCReadRefs;
++  LSInstrDispatchMap[Intrinsic::cj_gcwrite_ref] = &StoreForGCWriteRefs;
++}
++
++// should use metadata to restore LSInstr more precisely
++inline void CJGCInstrRestore::dispatchLSInstr(Instruction *Instr) {
++  if (isa<StoreInst>(Instr)) {
++    LSInstrDispatchMap[Intrinsic::cj_gcwrite_ref]->push_back(Instr);
++  } else if (isa<LoadInst>(Instr)) {
++    LSInstrDispatchMap[Intrinsic::cj_gcread_ref]->push_back(Instr);
++  }
++}
++
++void CJGCInstrRestore::collectLSInstr(Function &F) {
++  for (auto &I : instructions(F)) {
++    dispatchLSInstr(&I);
++  }
++}
++
++namespace {
++
++bool operandTypeCheck(Type *Ty) {
++  if (!Ty->isPointerTy()) {
++    return false;
++  }
++  auto *PtrTy = dyn_cast<PointerType>(Ty);
++  if (PtrTy->getAddressSpace() != 1) {
++    return false;
++  }
++  return true;
++}
++
++bool isFromAlloc(Value *V, std::set<Value *> &Visited) {
++  // indicate the cyclic tracking chain gains nothing info,
++  // return true to continue other incoming values anlysis.
++  if (Visited.count(V)) {
++    return true;
++  }
++  Visited.insert(V);
++  auto *SourceInstr = getUnderlyingObject(V);
++  if (!isa<PHINode>(SourceInstr)) {
++    return isa<AllocaInst>(SourceInstr);
++  }
++  PHINode *PhiInstr = const_cast<PHINode *>(dyn_cast<PHINode>(SourceInstr));
++  for (Value *IncValue : PhiInstr->incoming_values()) {
++    if (!isFromAlloc(IncValue, Visited)) {
++      return false;
++    }
++  }
++  return true;
++}
++
++bool shouldRestore(Instruction *Instr) {
++  if (isa<StoreInst>(Instr)) {
++    std::set<Value *> Visited;
++    return operandTypeCheck(Instr->getOperand(0)->getType()) &&
++           operandTypeCheck(Instr->getOperand(1)->getType()) &&
++           !isFromAlloc(Instr->getOperand(1), Visited);
++  }
++  if (isa<LoadInst>(Instr)) {
++    std::set<Value *> Visited;
++    return operandTypeCheck(Instr->getOperand(0)->getType()) &&
++           operandTypeCheck(Instr->getType()) &&
++           !isFromAlloc(Instr->getOperand(0), Visited);
++  }
++  return false;
++}
++
++Value *castToTargetType(Value *V, IRBuilder<> &IRB, Type *TargetType) {
++  if (V->getType() == TargetType) {
++    return V;
++  }
++  auto *VTy = V->getType();
++  assert(VTy->isPointerTy() &&
++         "invalid type in CJGCInstrRestore pass castToValueOperandType.");
++  auto *PtrTy = dyn_cast<PointerType>(VTy);
++  auto *TargetPtrTy = dyn_cast<PointerType>(TargetType);
++  bool AddressSpaceEqual =
++      PtrTy->getAddressSpace() == TargetPtrTy->getAddressSpace();
++  Value *Res = nullptr;
++  if (!AddressSpaceEqual) {
++    Type *TmpType = PointerType::get(TargetPtrTy->getElementType(),
++                                     PtrTy->getAddressSpace());
++    Res = IRB.CreateBitCast(V, TmpType);
++    Res = IRB.CreateAddrSpaceCast(Res, TargetType);
++  } else {
++    Res = IRB.CreateBitCast(V, TargetType);
++  }
++  return Res;
++}
++
++// i8 addrspace(1)*
++inline Value *castToI8AddrSpace1PtrType(Value *V, IRBuilder<> &IRB) {
++  LLVMContext &Ctx = IRB.getContext();
++  return castToTargetType(V, IRB, PointerType::get(Type::getInt8Ty(Ctx), 1));
++}
++
++// i8 addrspace(1)* addrspace(1)*
++inline Value *castToI8AddrSpace1PtrTypeAddrSpace1PtrType(Value *V, IRBuilder<> &IRB) {
++  LLVMContext &Ctx = IRB.getContext();
++  return castToTargetType(
++      V, IRB, PointerType::get(PointerType::get(Type::getInt8Ty(Ctx), 1), 1));
++}
++
++Value *getBasePointer(Value *V, Function *F,
++                      SmallDenseMap<Value *, Value *> &ValueToBasePointer) {
++  assert(V->getType()->isPointerTy() &&
++         "Unexpected operand type in getBasePointer!");
++  if (ValueToBasePointer.count(V)) {
++    return ValueToBasePointer[V];
++  }
++
++  auto *Res = getUnderlyingObject(V);
++  if (!isa<PHINode>(Res)) {
++    ValueToBasePointer[V] = Res;
++    return Res;
++  }
++
++  PHINode *PhiInstr = const_cast<PHINode *>(dyn_cast<PHINode>(Res));
++  LLVMContext &Ctx = PhiInstr->getContext();
++  auto *TargetType = PointerType::get(Type::getInt8Ty(Ctx), 1);
++  unsigned IncomingNum = PhiInstr->getNumIncomingValues();
++  BasicBlock *BB = PhiInstr->getParent();
++  BasicBlock::iterator It = ++(PhiInstr->getIterator());
++  IRBuilder<> Builder(Ctx);
++  Builder.SetInsertPoint(BB, It);
++  auto *AddPhiNode = Builder.CreatePHI(TargetType, IncomingNum);
++  ValueToBasePointer[V] = AddPhiNode;
++  SmallVector<Value *, 4> IncomingValues;
++
++  for (Value *IncValue : PhiInstr->incoming_values()) {
++    auto *BasePoint = getBasePointer(IncValue, F, ValueToBasePointer);
++    IRBuilder<> IncValueCastBuilder(Ctx);
++    if (auto *DefInstr = dyn_cast<Instruction>(BasePoint)) {
++      BasicBlock *BB = DefInstr->getParent();
++      BasicBlock::iterator It = ++(DefInstr->getIterator());
++      while (It != BB->end() && isa<PHINode>(It))
++        ++It;
++      IncValueCastBuilder.SetInsertPoint(BB, It);
++    } else {
++      BasicBlock *BB = &(F->getEntryBlock());
++      IncValueCastBuilder.SetInsertPoint(BB,
++                                         BB->getFirstNonPHI()->getIterator());
++    }
++    IncomingValues.push_back(
++        castToTargetType(BasePoint, IncValueCastBuilder, TargetType));
++  }
++
++  unsigned Index = 0;
++  for (auto *IncValue : IncomingValues) {
++    AddPhiNode->addIncoming(IncValue, PhiInstr->getIncomingBlock(Index++));
++  }
++  return AddPhiNode;
++}
++
++void addMetadataToGCInstr(CallBase *RestoreGCInstr, Instruction *Inst) {
++  SmallVector<std::pair<unsigned, MDNode *>, 4> MDs;
++  Inst->getAllMetadata(MDs);
++  for (const auto &MD : MDs) {
++    RestoreGCInstr->setMetadata(MD.first, MD.second);
++  }
++}
++
++bool restoreGCReadRef(SmallVector<Instruction *, 4> *Instrs, SmallDenseMap<Value *, Value *> &ValueToBasePointer) {
++  bool Changed = false;
++  SmallVector<Instruction *, 4> ToBeErased;
++  for (auto *LI : *Instrs) {
++    if (shouldRestore(LI)) {
++      Changed = true;
++      IRBuilder<> IRB(LI);
++      Module *M = IRB.GetInsertBlock()->getModule();
++      Function *IntrinsicFunc =
++          Intrinsic::getDeclaration(M, Intrinsic::cj_gcread_ref);
++      auto *BasePtr = castToI8AddrSpace1PtrType(
++          getBasePointer(LI->getOperand(0), LI->getFunction(), ValueToBasePointer), IRB);
++      auto *DerivedPtr =
++          castToI8AddrSpace1PtrTypeAddrSpace1PtrType(LI->getOperand(0), IRB);
++      auto *GCInstr = IRB.CreateCall(IntrinsicFunc, {BasePtr, DerivedPtr});
++      addMetadataToGCInstr(GCInstr, LI);
++      auto * ReplacerValue = castToTargetType(GCInstr, IRB, LI->getType());
++      for (auto &[V, BasePointer] : ValueToBasePointer) {
++        if (BasePointer == LI) {
++          ValueToBasePointer[V] = ReplacerValue;
++        }
++      }
++      LI->replaceAllUsesWith(ReplacerValue);
++      LI->eraseFromParent();
++    }
++  }
++  return Changed;
++}
++
++bool restoreGCWriteRef(SmallVector<Instruction *, 4> *Instrs, SmallDenseMap<Value *, Value *> &ValueToBasePointer) {
++  bool Changed = false;
++  SmallVector<Instruction *, 4> ToBeErased;
++  for (auto *SI : *Instrs) {
++    if (shouldRestore(SI)) {
++      Changed = true;
++      IRBuilder<> IRB(SI);
++      Module *M = IRB.GetInsertBlock()->getModule();
++      Function *IntrinsicFunc =
++          Intrinsic::getDeclaration(M, Intrinsic::cj_gcwrite_ref);
++      auto *BasePtr = castToI8AddrSpace1PtrType(
++          getBasePointer(SI->getOperand(1), SI->getFunction(), ValueToBasePointer), IRB);
++      auto *ValuePtr = castToI8AddrSpace1PtrType(SI->getOperand(0), IRB);
++      auto *DerivedPtr =
++          castToI8AddrSpace1PtrTypeAddrSpace1PtrType(SI->getOperand(1), IRB);
++      auto *GCInstr = IRB.CreateCall(IntrinsicFunc, {ValuePtr, BasePtr, DerivedPtr});
++      addMetadataToGCInstr(GCInstr, SI);
++      ToBeErased.push_back(SI);
++    }
++  }
++  for (auto *I : ToBeErased) {
++    I->eraseFromParent();
++  }
++  return Changed;
++}
++
++} // namespace
++
++bool CJGCInstrRestore::restoreLSInstrToGCInstr() {
++  bool Changed = false;
++  for (auto [IID, Instrs] : LSInstrDispatchMap) {
++    switch (IID) {
++    case Intrinsic::cj_gcread_ref:
++      Changed |= restoreGCReadRef(Instrs, ValueToBasePointer);
++      break;
++    case Intrinsic::cj_gcwrite_ref:
++      Changed |= restoreGCWriteRef(Instrs, ValueToBasePointer);
++      break;
++    default:
++      break;
++    }
++  }
++  return Changed;
++}
+\ No newline at end of file
 diff --git a/llvm/lib/Transforms/Scalar/CJGCLiveAnalysis.cpp b/llvm/lib/Transforms/Scalar/CJGCLiveAnalysis.cpp
 new file mode 100644
 index 000000000..51e8f13b3
@@ -64799,10 +65548,10 @@ index 000000000..2a47341d0
 +                "Cangjie Generic Intrinsics Optimize", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJIRVerifier.cpp b/llvm/lib/Transforms/Scalar/CJIRVerifier.cpp
 new file mode 100644
-index 000000000..14707f4d0
+index 000000000..c39ac195d
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJIRVerifier.cpp
-@@ -0,0 +1,808 @@
+@@ -0,0 +1,815 @@
 +//===- CJIRVerifier.cpp - Cangjie IR Verifier --------------*- C++ -*------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -65243,6 +65992,8 @@ index 000000000..14707f4d0
 +      StructType *ST = Klass.getLayoutType();
 +      Assert(ST, "Klass can not find RelatedType!", &GV);
 +      for (unsigned Idx = 0; Idx < Klass.getFieldNum(); Idx++) {
++        if (Klass.isEnum())
++          break;
 +        GlobalVariable *FieldGV = Klass.getField(Idx);
 +        if (!FieldGV->hasInitializer())
 +          continue;
@@ -65322,9 +66073,14 @@ index 000000000..14707f4d0
 +  // !{<name>, !{enum ctors}, !{instance methods}, !{static methods},
 +  //   !{attributes}}
 +  void verifyEnumReflection(MDTuple *ReflectMD) {
-+    Assert(ReflectMD->getNumOperands() == ERT_MAX,
++    Assert(ReflectMD->getNumOperands() == ERT_MAX ||
++           ReflectMD->getNumOperands() == ECRT_MAX,
 +           "EnumReflection format: operand numbers error!", ReflectMD);
-+
++    if (ReflectMD->getNumOperands() == ECRT_MAX) {
++      const MDTuple *AttributeMD = getMDOperand(ReflectMD, ECRT_ATTRIBUTE);
++      verifyReflectionAttribute(AttributeMD);
++      return;
++    }
 +    // check enum ctors
 +    const MDTuple *CtorMDs = getMDOperand(ReflectMD, ERT_ENUM_CTOR);
 +    for (unsigned Idx = 0; Idx < CtorMDs->getNumOperands(); ++Idx) {
@@ -66289,10 +67045,10 @@ index 000000000..14b0d3f87
 +                    "Cangjie Loop Float Optimize", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJRSSCE.cpp b/llvm/lib/Transforms/Scalar/CJRSSCE.cpp
 new file mode 100644
-index 000000000..fb4aa8ebd
+index 000000000..cdc7e67f9
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJRSSCE.cpp
-@@ -0,0 +1,1338 @@
+@@ -0,0 +1,1345 @@
 +//===- CJRSSCE.cpp ----------------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -66354,22 +67110,29 @@ index 000000000..fb4aa8ebd
 +using Interval = std::pair<uint64_t, uint64_t>;
 +
 +static std::pair<Value *, uint64_t>
-+getBasePtrAndOffset(const DataLayout &DL, Value *V, Instruction *I) {
++getBasePtrAndOffset(const DataLayout &DL, Value *V, Instruction *I,
++                    Instruction **LastClobberI = nullptr) {
 +  // For example:
 +  //   %16 = llvm.cj.gcread.ref(%cmp, %15)
 +  //   store i8 addrspace(1)* %16, %17
 +  // The Ptr now is %16, and we need to find cmp to check if cmp is same as
-+  // BasePtr.
++  // BasePtr. And if V is a load instruction, we need to ensure that the load
++  // pointer is not clobbered starting from here.
 +  V = V->stripPointerCasts();
 +  if (isa<StoreInst>(I)) {
++    Instruction *StartI = I->getFunction()->getEntryBlock().getFirstNonPHI();
 +    if (auto *II = dyn_cast<IntrinsicInst>(V)) {
 +      if (II->getIntrinsicID() == Intrinsic::cj_gcread_ref)
 +        V = II->getArgOperand(1)->stripPointerCasts();
 +      else if (II->getIntrinsicID() == Intrinsic::cj_gcread_static_ref)
 +        V = II->getArgOperand(0)->stripPointerCasts();
++      StartI = II;
 +    } else if (auto *LI = dyn_cast<LoadInst>(V)) {
 +      V = LI->getPointerOperand()->stripPointerCasts();
++      StartI = LI;
 +    }
++    if (LastClobberI)
++      *LastClobberI = StartI;
 +  }
 +  // V is not a memory object.
 +  if (!isa<PointerType>(V->getType()))
@@ -66801,7 +67564,7 @@ index 000000000..fb4aa8ebd
 +      }
 +      assert((isa<StoreInst>(I) || isa<MemCpyInst>(I)) &&
 +             "Only support to deal store or memcpy");
-+      auto [SrcBPtr, SrcOff] = getBasePtrAndOffset(DL, Src, I);
++      auto [SrcBPtr, SrcOff] = getBasePtrAndOffset(DL, Src, I, &LastClobberI);
 +      auto [DstBPtr, DstOff] = getBasePtrAndOffset(DL, Dst, I);
 +      if (!SrcBPtr || !DstBPtr)
 +        break;
@@ -73827,7 +74590,7 @@ index 000000000..ab3187578
 +INITIALIZE_PASS(CangjieSpecificOptLegacyPass, "cj-specific-opt",
 +                "Cangjie Specific Optimize", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CMakeLists.txt b/llvm/lib/Transforms/Scalar/CMakeLists.txt
-index eb008c159..21018612e 100644
+index eb008c159..ef4b478a0 100644
 --- a/llvm/lib/Transforms/Scalar/CMakeLists.txt
 +++ b/llvm/lib/Transforms/Scalar/CMakeLists.txt
 @@ -3,6 +3,10 @@ add_llvm_component_library(LLVMScalarOpts
@@ -73841,11 +74604,13 @@ index eb008c159..21018612e 100644
    CallSiteSplitting.cpp
    ConstantHoisting.cpp
    ConstraintElimination.cpp
-@@ -12,6 +16,16 @@ add_llvm_component_library(LLVMScalarOpts
+@@ -12,6 +16,18 @@ add_llvm_component_library(LLVMScalarOpts
    DFAJumpThreading.cpp
    DivRemPairs.cpp
    EarlyCSE.cpp
 +  CJBarrierOpt.cpp
++  CJGCInstrReplace.cpp
++  CJGCInstrRestore.cpp
 +  CJSimpleOpt.cpp
 +  CJGenericIntrinsicOpt.cpp
 +  CJSimpleRangeAnalysis.cpp
@@ -73858,7 +74623,7 @@ index eb008c159..21018612e 100644
    FlattenCFGPass.cpp
    Float2Int.cpp
    GuardWidening.cpp
-@@ -22,6 +36,7 @@ add_llvm_component_library(LLVMScalarOpts
+@@ -22,6 +38,7 @@ add_llvm_component_library(LLVMScalarOpts
    InductiveRangeCheckElimination.cpp
    IndVarSimplify.cpp
    InferAddressSpaces.cpp
@@ -73866,7 +74631,7 @@ index eb008c159..21018612e 100644
    InstSimplifyPass.cpp
    JumpThreading.cpp
    LICM.cpp
-@@ -96,4 +111,5 @@ add_llvm_component_library(LLVMScalarOpts
+@@ -96,4 +113,5 @@ add_llvm_component_library(LLVMScalarOpts
    InstCombine
    Support
    TransformUtils
