@@ -161,13 +161,7 @@ struct ErrorData {
 /**
  *  This is new diagKind for refactoring, will replace previous DiagKind if all diag have been modified.
  */
-const ErrorData errorData[] = {
-#define ERROR(Kind, ...) {__VA_ARGS__},
-#define WARNING(Kind, Group, ...) {__VA_ARGS__},
-#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
-#undef WARNING
-#undef ERROR
-};
+extern const ErrorData errorData[];
 
 const std::map<DiagSeverity, DiagColor> SEVE_TO_COLOR{
     {DiagSeverity::DS_ERROR, DiagColor::RED}, {DiagSeverity::DS_WARNING, DiagColor::YELLOW},

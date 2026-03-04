@@ -320,8 +320,8 @@ bool CompilerInstance::PerformParse()
         Utils::ProfileRecorder::SetPackageName(srcPkgs[0]->fullPackageName);
         Utils::ProfileRecorder::SetOutputDir(globalOpts.output);
         if (IsNeedSaveIncrCompilationLogFile(globalOpts, invocation.frontendOptions)) {
-            std::string incrLogPath =
-                invocation.globalOptions.GenerateCachedPathName(srcPkgs[0]->fullPackageName, CACHED_LOG_EXTENSION);
+            std::string incrLogPath = invocation.globalOptions.GenerateCachedPathName(
+                srcPkgs[0]->fullPackageName, std::string(CACHED_LOG_EXTENSION));
             IncrementalCompilationLogger::GetInstance().InitLogFile(incrLogPath);
             IncrementalCompilationLogger::GetInstance().WriteBuffToFile();
         }
