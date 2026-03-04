@@ -1228,7 +1228,9 @@ std::string GlobalOptions::GetCangjieLibTargetPathName() const
         std::string envName = target.EnvironmentToString();
         if (target.env == Triple::Environment::ANDROID) {
             auto envNameLen = envName.size();
-            envName.erase(envNameLen - target.apiLevel.size());
+            if(target.ArchToString() !="arm"){
+                envName.erase(envNameLen - target.apiLevel.size());
+            }
         }
         name += "_" + envName;
     }
