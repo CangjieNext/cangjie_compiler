@@ -6,6 +6,9 @@
 
 #include "cangjie/CHIR/Transformation/GenerateVTable/GenerateVTable.h"
 
+#include <memory>
+#include <vector>
+
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Transformation/GenerateVTable/UpdateOperatorVTable.h"
 #include "cangjie/CHIR/Transformation/GenerateVTable/VTableGenerator.h"
@@ -15,6 +18,7 @@
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 #include "cangjie/Utils/ProfileRecorder.h"
+#include "cangjie/Utils/TaskQueue.h"
 
 using namespace Cangjie;
 using namespace Cangjie::CHIR;
@@ -48,17 +52,46 @@ GenerateVTable::GenerateVTable(
 void GenerateVTable::CreateVTable()
 {
     Utils::ProfileRecorder recorder("GenerateVTable", "CreateVTable");
-    auto vtableGenerator = VTableGenerator(builder);
+
+    std::vector<CustomTypeDef*> defsToProcess;
     for (auto customDef : candidateDefs) {
         if (customDef->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;
         }
-        vtableGenerator.GenerateVTable(*customDef);
+        defsToProcess.push_back(customDef);
+    }
+    
+    if (defsToProcess.empty()) {
+        return;
+    }
+
+    size_t threadNum = opts.GetJobs();
+    if (threadNum == 1) {
+        auto vtableGenerator = VTableGenerator(builder);
+        for (auto customDef : defsToProcess) {
+            vtableGenerator.GenerateVTable(*customDef);
+        }
+    } else {
+        Utils::TaskQueue taskQueue(threadNum);
+        std::vector<std::unique_ptr<VTableGenerator>> vtableGeneratorList;
+        
+        for (auto customDef : defsToProcess) {
+            auto vtableGenerator = std::make_unique<VTableGenerator>(builder);
+            VTableGenerator* generatorPtr = vtableGenerator.get();
+            vtableGeneratorList.emplace_back(std::move(vtableGenerator));
+            
+            taskQueue.AddTask<void>([generatorPtr, customDef]() {
+                generatorPtr->GenerateVTable(*customDef);
+            });
+        }
+
+        taskQueue.RunAndWaitForAllTasksCompleted();
     }
 }
 
 void GenerateVTable::UpdateOperatorVirFunc()
 {
+    Utils::ProfileRecorder recorder("GenerateVTable", "UpdateOperatorVirFunc");
     UpdateOperatorVTable(package, builder).Update();
 }
 

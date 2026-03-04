@@ -15,7 +15,7 @@ void Translator::HandleVarWithVarPattern(
     const AST::VarPattern& pattern, const Ptr<Value>& initNode, bool isLocalPattern)
 {
     auto varDecl = pattern.varDecl.get();
-    Ptr<Value> leftValue = TranslateLeftValueOfVarDecl(*varDecl, initNode == nullptr, isLocalPattern);
+    Ptr<Value> leftValue = TranslateLeftValueOfVarDecl(*varDecl, isLocalPattern);
     if (initNode != nullptr) {
         StoreRValueToLValue(*varDecl, *initNode, leftValue);
         if (leftValue->IsGlobalVarInCurPackage()) {
