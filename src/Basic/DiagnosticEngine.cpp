@@ -30,6 +30,15 @@
 #endif
 
 namespace Cangjie {
+// Define the errorData array (declaration is in DiagnosticEngine.h)
+const ErrorData errorData[] = {
+#define ERROR(Kind, ...) {__VA_ARGS__},
+#define WARNING(Kind, Group, ...) {__VA_ARGS__},
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+
 Range MakeRange(const Position& begin, Position end)
 {
     // The fileID of position may be different, may come from the macro definition or from the macrocall.
