@@ -33,7 +33,7 @@ namespace {
 #ifdef _WIN32
 std::string GetSystemErrorMessage(DWORD errCode)
 {
-    char msg[512] = {0};
+    LPWSTR wBuffer = nullptr;
     DWORD size = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, errCode,
         MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), msg, sizeof(msg), NULL);
     if (size == 0 || msg[0] == '\0') {
