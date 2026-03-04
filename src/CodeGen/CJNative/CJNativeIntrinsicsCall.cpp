@@ -398,7 +398,9 @@ void IRBuilder2::CreateRefStore(CGValue* cgValue, llvm::Value* basePtr, llvm::Va
     } else if (isDstAddrspace1 && valueCGType->IsVArrayPtrType()) {
         auto valueType = valueCGType->GetPointerElementType()->GetLLVMType();
         auto size = getInt64(cgMod.GetLLVMModule()->getDataLayout().getTypeAllocSize(valueType));
-        CallGCWriteAgg(llvm::cast<llvm::StructType>(StaticCast<CGVArrayType>(valueCGType->GetPointerElementType())->GetLayoutType()), {base, place, value, size});
+        CallGCWriteAgg(llvm::cast<llvm::StructType>(
+                           StaticCast<CGVArrayType>(valueCGType->GetPointerElementType())->GetLayoutType()),
+            {base, place, value, size});
     } else if (isDstAddrspace1 && valueCGType->IsRefType()) {
         CallGCWrite({value, base, place});
     } else {
