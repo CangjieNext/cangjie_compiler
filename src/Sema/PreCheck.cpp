@@ -190,6 +190,14 @@ void CreateGenericConstraints(Generic& generic)
         }
     }
 }
+
+inline std::string GetNormalizedName(const Symbol& sym)
+{
+    // Deserialized `static init()` identifier is "static.init".
+    // But duplication conflict need to be reported with just parsed `static init()` with identifier "init".
+    const bool isStaticConstructor = sym.node->TestAttr(Attribute::STATIC) && sym.node->TestAttr(Attribute::CONSTRUCTOR);
+    return isStaticConstructor && sym.name == "static.init" ? "init" : sym.name;
+}
 } // namespace
 
 void TypeChecker::TypeCheckerImpl::CheckRedefinition(ASTContext& ctx)
@@ -1613,11 +1621,7 @@ void TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinition(const ASTContext& ct
             continue; // Do not collect invalid/macro expanded node.
         }
         std::string scopeName = ScopeManagerApi::GetScopeNameWithoutTail(sym->scopeName);
-        // Deserialized `static init()` identifier is "static.init".
-        // But duplication conflict need to be reported with just parsed `static init()` with identifier "init".
-        const bool isStaticConstructor = sym->node->TestAttr(Attribute::STATIC) && sym->node->TestAttr(Attribute::CONSTRUCTOR);
-        const auto name = isStaticConstructor && sym->name == "static.init" ? "init" : sym->name;
-        auto names = std::make_pair(name, scopeName);
+        auto names = std::make_pair(GetNormalizedName(*sym), scopeName);
         auto fd = StaticAs<ASTKind::FUNC_DECL>(sym->node);
         if (fd->propDecl) {
             continue; // Do not check for property's getter/setter.
