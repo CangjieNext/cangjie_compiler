@@ -83,8 +83,8 @@ inline const std::string VARRAY_NAME = "VArray";
 inline const std::string TOSTRING_NAME = "ToString";
 inline const std::string BOX_NAME = "Box";
 
-const std::string JTYPE_NAME = "JType";
-const std::string JARRAY_NAME = "JArray";
+inline const std::string JTYPE_NAME = "JType";
+inline const std::string JARRAY_NAME = "JArray";
 
 // Macro with context.
 inline const int MACRO_DEF_NUM = 2;
