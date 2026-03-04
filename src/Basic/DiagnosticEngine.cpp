@@ -30,6 +30,88 @@
 #endif
 
 namespace Cangjie {
+// Define the errorData array (declaration is in DiagnosticEngine.h)
+const ErrorData errorData[] = {
+#define ERROR(Kind, ...) {__VA_ARGS__},
+#define WARNING(Kind, Group, ...) {__VA_ARGS__},
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+
+// Define DIAG_KIND_STR array
+const char* const DIAG_KIND_STR[] = {
+#define ERROR(Kind, ...) #Kind,
+#define WARNING(Kind, ...) #Kind,
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+const size_t DIAG_KIND_STR_SIZE = sizeof(DIAG_KIND_STR) / sizeof(*DIAG_KIND_STR);
+
+// Define DiagSeveritys array
+const DiagSeverity DiagSeveritys[] = {
+#define ERROR(Kind, ...) DiagSeverity::DS_ERROR,
+#define WARNING(Kind, ...) DiagSeverity::DS_WARNING,
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+
+// Define DiagMessages array
+const char* const DiagMessages[] = {
+#define ERROR(Kind, msg, ...) msg,
+#define WARNING(Kind, Group, msg, ...) msg,
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+
+// Define warnGroups array
+const WarnGroup warnGroups[] = {
+#define ERROR(Kind, ...) WarnGroup::NONE,
+#define WARNING(Kind, Group, ...) WarnGroup::Group,
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+
+// Define rDiagSeveritys array
+const DiagSeverity rDiagSeveritys[] = {
+#define ERROR(Kind, ...) DiagSeverity::DS_ERROR,
+#define WARNING(Kind, ...) DiagSeverity::DS_WARNING,
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+
+// Define rWarnGroups array
+const WarnGroup rWarnGroups[] = {
+#define ERROR(Kind, ...) WarnGroup::NONE,
+#define WARNING(Kind, Group, ...) WarnGroup::Group,
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+
+// Define warnGroupDescrs array
+const char* warnGroupDescrs[] = {
+#define WARN_GROUP(DESCR, KIND) DESCR,
+#include "cangjie/Basic/DiagRefactor/DiagnosticWarnGroupKind.def"
+#undef WARN_GROUP
+};
+const size_t WARN_GROUP_DESCRS_SIZE = sizeof(warnGroupDescrs) / sizeof(*warnGroupDescrs);
+
+// Define RE_DIAG_KIND_STR array
+const char* const RE_DIAG_KIND_STR[] = {
+#define ERROR(Kind, ...) #Kind,
+#define WARNING(Kind, ...) #Kind,
+#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#undef WARNING
+#undef ERROR
+};
+const size_t RE_DIAG_KIND_STR_SIZE = sizeof(RE_DIAG_KIND_STR) / sizeof(*RE_DIAG_KIND_STR);
+
 Range MakeRange(const Position& begin, Position end)
 {
     // The fileID of position may be different, may come from the macro definition or from the macrocall.
