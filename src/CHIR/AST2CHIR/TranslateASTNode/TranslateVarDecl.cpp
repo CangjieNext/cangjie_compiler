@@ -11,62 +11,23 @@
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
 
-namespace {
-// Static member func and global func should create alloc node for print `unused variable` warning.
-bool ShouldCreateAlloc(const AST::VarDecl& decl, const Cangjie::GlobalOptions& opts, bool rValueIsEmpty)
-{
-    if (decl.isConst) {
-        // rvalue is empty means this is a const local variable in member function, which requires an Allocate
-        return !rValueIsEmpty;
-    }
-    if (rValueIsEmpty || decl.isVar || opts.enableCompileDebug || opts.enableCoverage) {
-        return true;
-    }
-    // Note: example cangjie code: let (a, b) : (Int64, Int64) = (1, 2)
-    // In this scenario, `rValueIsEmpty` is false, but initializer of varDecl desugared by VarWithPattern is nullptr,
-    // so we can't create an `allocate` node by determining whether the initializer is nullptr, because redundant
-    // `allocate` and `store` will affect the performance.
-    if (decl.initializer && decl.initializer->astKind == AST::ASTKind::REF_EXPR) {
-        auto& refExpr = StaticCast<AST::RefExpr>(*decl.initializer);
-        if (refExpr.ref.target && refExpr.ref.target->astKind == AST::ASTKind::FUNC_DECL &&
-            refExpr.ref.target->TestAnyAttr(AST::Attribute::GLOBAL, AST::Attribute::STATIC)) {
-            return true;
-        }
-    }
-    if (decl.initializer && decl.initializer->astKind == AST::ASTKind::MEMBER_ACCESS) {
-        auto target = StaticCast<AST::MemberAccess>(*decl.initializer).target;
-        if (target && target->astKind == AST::ASTKind::FUNC_DECL && target->TestAttr(AST::Attribute::STATIC)) {
-            return true;
-        }
-    }
-    return false;
-}
-} // namespace
-
-Ptr<Value> Translator::TranslateLeftValueOfVarDecl(const AST::VarDecl& decl, bool rValueIsEmpty, bool isLocalVar)
+Ptr<Value> Translator::TranslateLeftValueOfVarDecl(const AST::VarDecl& decl, bool isLocalVar)
 {
     Ptr<Value> leftValue = nullptr;
     auto varPos = TranslateLocation(decl);
     auto leftType = TranslateType(*(decl.ty));
     if (isLocalVar) {
-        // need to create allocate node:
-        // 1. mutable variable: `var a = 1`
-        // 2. has no initializer: `var a: Int32` or `let a: Int32`
-        // 3. if 'debug' is enabled, all decl must be allocated.
-        // 4. global func and Member static func should create `Alloc` for print `unused variable` warning.
-        if (ShouldCreateAlloc(decl, opts, rValueIsEmpty)) {
-            auto allocate =
-                CreateAndAppendExpression<Allocate>(varPos, builder.GetType<RefType>(leftType), leftType, currentBlock);
-            leftValue = allocate->GetResult();
-            // Debug is only useful for allocated value, but not for implicit added
-            // it will generate bug in cjdb if we generate debug expr for implicit added
-            if (!decl.TestAttr(AST::Attribute::IMPLICIT_ADD)) {
-                StaticCast<LocalVar*>(leftValue)->SetSrcCodeIdentifier(decl.identifier);
-                CreateAndAppendExpression<Debug>(GetDeclLoc(builder.GetChirContext(), decl), varPos, builder.GetUnitTy(),
-                    leftValue, decl.identifier, currentBlock);
-            }
-            leftValue->AppendAttributeInfo(BuildVarDeclAttr(decl));
+        auto allocate =
+            CreateAndAppendExpression<Allocate>(varPos, builder.GetType<RefType>(leftType), leftType, currentBlock);
+        leftValue = allocate->GetResult();
+        // Debug is only useful for allocated value, but not for implicit added
+        // it will generate bug in cjdb if we generate debug expr for implicit added
+        if (!decl.TestAttr(AST::Attribute::IMPLICIT_ADD)) {
+            StaticCast<LocalVar*>(leftValue)->SetSrcCodeIdentifier(decl.identifier);
+            CreateAndAppendExpression<Debug>(GetDeclLoc(builder.GetChirContext(), decl), varPos, builder.GetUnitTy(),
+                leftValue, decl.identifier, currentBlock);
         }
+        leftValue->AppendAttributeInfo(BuildVarDeclAttr(decl));
     } else {
         leftValue = GetSymbolTable(decl);
         leftValue->AppendAttributeInfo(BuildVarDeclAttr(decl));
@@ -114,7 +75,7 @@ Ptr<Value> Translator::Visit(const AST::VarDecl& decl)
     // Since current block will be changed during translation,
     // creation order should be 'alloca' -> 'debug' -> 'init' -> 'store'.
     Ptr<AST::Expr> init = decl.initializer.get();
-    Ptr<Value> leftValue = TranslateLeftValueOfVarDecl(decl, init == nullptr, true);
+    Ptr<Value> leftValue = TranslateLeftValueOfVarDecl(decl, true);
     if (init != nullptr) {
         // Need to try to get rvalue, otherwise next step will cast reftype to non-reftype. eg: cast Int64& to Int64.
         auto oldCompileTimeValueMark = builder.GetCompileTimeValueMark();

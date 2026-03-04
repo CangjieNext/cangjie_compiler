@@ -6,6 +6,9 @@
 
 #include "cangjie/CHIR/Transformation/GenerateVTable/GenerateVTable.h"
 
+#include <memory>
+#include <vector>
+
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Transformation/GenerateVTable/UpdateOperatorVTable.h"
 #include "cangjie/CHIR/Transformation/GenerateVTable/VTableGenerator.h"
@@ -15,6 +18,7 @@
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 #include "cangjie/Utils/ProfileRecorder.h"
+#include "cangjie/Utils/TaskQueue.h"
 
 using namespace Cangjie;
 using namespace Cangjie::CHIR;
@@ -48,17 +52,48 @@ GenerateVTable::GenerateVTable(
 void GenerateVTable::CreateVTable()
 {
     Utils::ProfileRecorder recorder("GenerateVTable", "CreateVTable");
-    auto vtableGenerator = VTableGenerator(builder);
+    size_t threadNum = opts.GetJobs();
+    
+    // 收集需要处理的 customDef
+    std::vector<CustomTypeDef*> defsToProcess;
     for (auto customDef : candidateDefs) {
         if (customDef->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;
         }
-        vtableGenerator.GenerateVTable(*customDef);
+        defsToProcess.push_back(customDef);
+    }
+    
+    if (threadNum == 1 || defsToProcess.empty()) {
+        // 单线程模式或没有需要处理的任务
+        auto vtableGenerator = VTableGenerator(builder);
+        for (auto customDef : defsToProcess) {
+            vtableGenerator.GenerateVTable(*customDef);
+        }
+    } else {
+        // 多线程模式：每个 customDef 启动一个线程
+        Utils::TaskQueue taskQueue(threadNum);
+        std::vector<std::unique_ptr<VTableGenerator>> vtableGeneratorList;
+        
+        for (auto customDef : defsToProcess) {
+            // 为每个任务创建独立的 VTableGenerator 实例
+            auto vtableGenerator = std::make_unique<VTableGenerator>(builder);
+            VTableGenerator* generatorPtr = vtableGenerator.get();
+            vtableGeneratorList.emplace_back(std::move(vtableGenerator));
+            
+            // 添加任务到队列
+            taskQueue.AddTask<void>([generatorPtr, customDef]() {
+                generatorPtr->GenerateVTable(*customDef);
+            });
+        }
+        
+        // 等待所有任务完成
+        taskQueue.RunAndWaitForAllTasksCompleted();
     }
 }
 
 void GenerateVTable::UpdateOperatorVirFunc()
 {
+    Utils::ProfileRecorder recorder("GenerateVTable", "UpdateOperatorVirFunc");
     UpdateOperatorVTable(package, builder).Update();
 }
 

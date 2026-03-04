@@ -728,7 +728,7 @@ private:
         std::vector<Type*>& funcInstTypeArgs, bool checkAbstractMethod);
 
     // translate var decl
-    Ptr<Value> TranslateLeftValueOfVarDecl(const AST::VarDecl& decl, bool rValueIsEmpty, bool isLocalVar);
+    Ptr<Value> TranslateLeftValueOfVarDecl(const AST::VarDecl& decl, bool isLocalVar);
     void StoreRValueToLValue(const AST::VarDecl& decl, Value& rval, Ptr<Value>& lval);
     void HandleVarWithVarPattern(const AST::VarPattern& pattern, const Ptr<Value>& initNode, bool isLocalPattern);
     void HandleVarWithTupleAndEnumPattern(const AST::Pattern& pattern,
