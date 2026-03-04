@@ -306,11 +306,11 @@ void Collector::CollectFuncDecl(ASTContext& ctx, FuncDecl& fd, bool buildTrie)
         scopeManager.FinalizeScope(ctx);
     }
     auto pkg = ctx.curPackage;
-    static const std::unordered_set<std::string> intrinsicPkgs{CORE_PACKAGE_NAME, SYNC_PACKAGE_NAME, MATH_PACKAGE_NAME,
-        OVERFLOW_PACKAGE_NAME, RUNTIME_PACKAGE_NAME, NET_PACKAGE_NAME, REFLECT_PACKAGE_NAME,
-        UNITTEST_MOCK_INTERNAL_PACKAGE_NAME, EFFECT_PACKAGE_NAME, INTEROP_PACKAGE_NAME};
+    static const std::unordered_set<std::string> intrinsicPkgs{std::string(CORE_PACKAGE_NAME), std::string(SYNC_PACKAGE_NAME), std::string(MATH_PACKAGE_NAME),
+        std::string(OVERFLOW_PACKAGE_NAME), std::string(RUNTIME_PACKAGE_NAME), std::string(NET_PACKAGE_NAME), std::string(REFLECT_PACKAGE_NAME),
+        std::string(UNITTEST_MOCK_INTERNAL_PACKAGE_NAME), std::string(EFFECT_PACKAGE_NAME), std::string(INTEROP_PACKAGE_NAME)};
     static const std::unordered_set<std::string> headlessIntrinsics{
-        GET_TYPE_FOR_TYPE_PARAMETER_FUNC_NAME, IS_SUBTYPE_TYPES_FUNC_NAME};
+        std::string(GET_TYPE_FOR_TYPE_PARAMETER_FUNC_NAME), std::string(IS_SUBTYPE_TYPES_FUNC_NAME)};
 
     if (Utils::In(fd.identifier.Val(), headlessIntrinsics)) {
         return;

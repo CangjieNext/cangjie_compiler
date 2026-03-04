@@ -954,13 +954,13 @@ std::string ParserImpl::ExpectOperatorIdentifier(FuncDecl& fd)
     if (operatorTok.kind == TokenKind::ILLEGAL) {
         DiagInvalidOverloadedOperator();
         Next();
-        return INVALID_IDENTIFIER;
+        return std::string(INVALID_IDENTIFIER);
     }
     // operator function do not support generic, but we do error check in sema.
     if (!Seeing(TokenKind::LPAREN) && !Seeing(TokenKind::LT)) {
         DiagExpectCharacter("'('");
         Next();
-        return INVALID_IDENTIFIER;
+        return std::string(INVALID_IDENTIFIER);
     }
     fd.identifier.SetPos(operatorTok.Begin(), operatorTok.End());
     fd.op = operatorTok.kind;

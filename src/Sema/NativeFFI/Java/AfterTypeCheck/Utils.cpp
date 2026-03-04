@@ -1075,7 +1075,7 @@ OwnedPtr<MatchExpr> InteropLibBridge::CreateMatchByTypeArgument(
 
     for (auto& [typeDesc, expr] : typeToCaseMap) {
         auto isOption =
-            typeDesc.rfind(std::string(CORE_PACKAGE_NAME) + ":" + OPTION_NAME, 0) == 0; // starts_with actually
+            typeDesc.rfind(std::string(CORE_PACKAGE_NAME) + ":" + std::string(OPTION_NAME), 0) == 0; // starts_with actually
         auto caseCall = MakeOwned<CallExpr>();
         auto caseMa = CreateMemberAccess(ASTCloner::Clone(cStrToStringCall.get()), isOption ? "startsWith" : "==");
         caseMa->ty = isOption ? strStartsWithDecl->ty : strEqualsDecl->ty;
@@ -1164,3 +1164,5 @@ void GenerateSyntheticClassMemberStubs(ClassDecl& synthetic, const MemberMap& me
     }
 }
 } // namespace Cangjie::Interop::Java
+
+```

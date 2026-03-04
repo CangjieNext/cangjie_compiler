@@ -386,7 +386,7 @@ bool ImportManager::HandleParsedPackage(
 void ImportManager::SaveDepPkgCjoPath(const std::string& fullPackageName, const std::string& cjoPath)
 {
     cjoFilePaths.emplace(fullPackageName, cjoPath);
-    auto cjdPath = cjoPath.substr(0, cjoPath.rfind(SERIALIZED_FILE_EXTENSION)) + CJ_D_FILE_EXTENSION;
+    auto cjdPath = cjoPath.substr(0, cjoPath.rfind(SERIALIZED_FILE_EXTENSION)) + std::string(CJ_D_FILE_EXTENSION);
     cjdFilePaths.emplace(fullPackageName, cjdPath);
 }
 
@@ -1551,3 +1551,5 @@ void ImportManager::ClearCachesForRebuild()
     // clear for ResolveImports.
     directMacroDeps.clear();
 }
+
+```

@@ -169,18 +169,18 @@ public:
         auto decl = GetAstDecl(name);
         return DynamicCast<T*>(decl);
     }
-    Ptr<AST::Decl> GetCoreDecl(const std::string& name) const
+    Ptr<AST::Decl> GetCoreDecl(std::string_view name) const
     {
-        return GetImportedDecl(CORE_PACKAGE_NAME, name);
+        return GetImportedDecl(CORE_PACKAGE_NAME, std::string(name));
     }
-    template <typename T> T* GetCoreDecl(const std::string& name) const
+    template <typename T> T* GetCoreDecl(std::string_view name) const
     {
         Ptr<AST::Decl> decl = GetCoreDecl(name);
         return DynamicCast<T*>(decl);
     }
-    Ptr<AST::Decl> GetSyncDecl(const std::string& name) const
+    Ptr<AST::Decl> GetSyncDecl(std::string_view name) const
     {
-        return GetImportedDecl(SYNC_PACKAGE_NAME, name);
+        return GetImportedDecl(SYNC_PACKAGE_NAME, std::string(name));
     }
 
     /**
@@ -526,3 +526,4 @@ private:
 };
 } // namespace Cangjie
 #endif // CANGJIE_MODULES_IMPORTMANAGER_H
+
