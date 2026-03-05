@@ -568,7 +568,9 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
         }
 
         if (auto arg = As<ASTKind::FUNC_ARG>(node); arg && arg->withInout) {
-            // TODO: Support mocking inout parameters
+            // Logic for handling inout func args is managed by ReplaceInoutFuncArgWithAccessor func in MockSupportManager.cpp
+            // cause we need to construct block node and add all necessary accessors and call expresion with replaced func args
+            // so here just skip visit action
             return VisitAction::SKIP_CHILDREN;
         }
 
