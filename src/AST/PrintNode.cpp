@@ -60,23 +60,32 @@ void PrintTarget(unsigned indent, const Decl& target, std::string addition = "ta
 void PrintBasic(unsigned indent, const Node& node)
 {
     // Basic info:
-    std::string filePath = node.curFile ? node.curFile->filePath : "not in file";
-    PrintIndent(indent, "curFile:", filePath);
+    if (node.curFile) {
+        PrintIndent(indent, "curFile:", node.curFile->filePath);
+    }
     PrintIndent(indent, "position:", node.begin.ToString(), node.end.ToString());
-    PrintIndent(indent, "scopeName:", "\"" + node.scopeName + "\"");
-    PrintIndent(indent, "ty:", node.ty->String());
+    if (!node.scopeName.empty()) {
+        PrintIndent(indent, "scopeName:", "\"" + node.scopeName + "\"");
+    }
+    if (node.ty) {
+        PrintIndent(indent, "ty:", node.ty->String());
+    }
     auto fullPkgName = node.GetFullPackageName();
     if (!fullPkgName.empty()) {
         PrintIndent(indent, "fullPackageName:", fullPkgName);
-    } else {
-        PrintIndent(indent, "fullPackageName is empty");
     }
-    PrintIndent(indent, "attributes:", node.GetAttrs().ToString());
+    const auto attrsString = node.GetAttrs().ToString();
+    const auto emptyAttrsString = AttributePack().ToString();
+    if (attrsString != emptyAttrsString) {
+        PrintIndent(indent, "attributes:", attrsString);
+    }
     if (!node.exportId.empty()) {
         PrintIndent(indent, "exportId:", "\"" + node.exportId + "\"");
     }
     if (auto d = DynamicCast<Decl>(&node)) {
-        PrintIndent(indent, "linkage:", static_cast<int>(d->linkage), ", isConst:", static_cast<int>(d->IsConst()));
+        if (d->linkage != Linkage::EXTERNAL || d->IsConst()) {
+            PrintIndent(indent, "linkage:", static_cast<int>(d->linkage), ", isConst:", static_cast<int>(d->IsConst()));
+        }
         if (!d->mangledName.empty()) {
             PrintIndent(indent, "mangledName:", "\"" + d->mangledName + "\"");
         }
