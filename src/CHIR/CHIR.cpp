@@ -259,14 +259,14 @@ void ToCHIR::DoClosureConversion()
 void ToCHIR::UnreachableBlockReporter()
 {
     Utils::ProfileRecorder recorder("CHIR", "UnreachableBlockWarningReporter");
-    auto dce = DeadCodeElimination(builder, diag, pkg.fullPackageName);
+    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.UnreachableBlockWarningReporter(*chirPkg, opts.GetJobs(), maybeUnreachable);
 }
 
 void ToCHIR::UnreachableBlockElimination()
 {
     Utils::ProfileRecorder recorder("CHIR Opt", "UnreachableBlockElimination");
-    auto dce = DeadCodeElimination(builder, diag, pkg.fullPackageName);
+    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.UnreachableBlockElimination(*chirPkg, opts.chirDebugOptimizer);
     DumpCHIRToFile("UnreachableBlockElimination");
 
@@ -276,7 +276,7 @@ void ToCHIR::UnreachableBlockElimination()
 void ToCHIR::NothingTypeExprElimination()
 {
     Utils::ProfileRecorder recorder("CHIR Opt", "NothingTypeExprElimination");
-    auto dce = DeadCodeElimination(builder, diag, pkg.fullPackageName);
+    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.NothingTypeExprElimination(*chirPkg, opts.chirDebugOptimizer);
     DumpCHIRToFile("NothingTypeExprElimination");
 }
@@ -294,7 +294,7 @@ void ToCHIR::UselessExprElimination()
         return;
     }
     Utils::ProfileRecorder recorder("CHIR Opt", "UselessExprElimination");
-    auto dce = DeadCodeElimination(builder, diag, pkg.fullPackageName);
+    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.UselessExprElimination(*chirPkg, opts.chirDebugOptimizer);
     DumpCHIRToFile("UselessExprElimination");
 }
@@ -302,7 +302,7 @@ void ToCHIR::UselessExprElimination()
 void ToCHIR::UselessFuncElimination()
 {
     Utils::ProfileRecorder recorder("CHIR Opt", "UselessFuncElimination");
-    auto dce = DeadCodeElimination(builder, diag, pkg.fullPackageName);
+    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.UselessFuncElimination(*chirPkg, opts);
     DumpCHIRToFile("UselessFuncElimination");
 }
@@ -310,7 +310,7 @@ void ToCHIR::UselessFuncElimination()
 void ToCHIR::ReportUnusedCode()
 {
     Utils::ProfileRecorder recorder("CHIR Opt", "ReportUnusedCode");
-    auto dce = DeadCodeElimination(builder, diag, pkg.fullPackageName);
+    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.ReportUnusedCode(*chirPkg, opts);
 }
 
@@ -470,7 +470,7 @@ void ToCHIR::RunFunctionInline(DevirtualizationInfo& devirtInfo)
 void ToCHIR::RunUnreachableMarkBlockRemoval()
 {
     Utils::ProfileRecorder recorder("CHIR", "Clear Blocks Marked as Unreachable");
-    auto dce = DeadCodeElimination(builder, diag, pkg.fullPackageName);
+    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
     dce.ClearUnreachableMarkBlock(*chirPkg);
     DumpCHIRToFile("ClearBlocksMarkAsUnreachable");
 }
@@ -492,7 +492,7 @@ void ToCHIR::RunConstantPropagation()
 {
     Utils::ProfileRecorder recorder("CHIR Opt", "Constant Propagation & Safety Check");
     size_t threadNum = opts.GetJobs();
-    DeadCodeElimination dce(builder, diag, pkg.fullPackageName);
+    DeadCodeElimination dce(builder, diag, *chirPkg);
     if (threadNum == 1) {
         auto cp = CHIR::ConstPropagation(builder, &constAnalysisWrapper, opts);
         cp.RunOnPackage(chirPkg, opts.chirDebugOptimizer, ci.isCJLint);
@@ -536,7 +536,7 @@ void ToCHIR::RunRangePropagation()
     AnalysisWrapper<RangeAnalysis, RangeDomain> vra(builder);
     vra.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), &diag);
     size_t threadNum = opts.GetJobs();
-    DeadCodeElimination dce(builder, diag, pkg.fullPackageName);
+    DeadCodeElimination dce(builder, diag, *chirPkg);
     if (threadNum == 1) {
         auto cp = CHIR::RangePropagation(builder, &vra, &diag, opts.enIncrementalCompilation);
         cp.RunOnPackage(chirPkg, opts.chirDebugOptimizer);

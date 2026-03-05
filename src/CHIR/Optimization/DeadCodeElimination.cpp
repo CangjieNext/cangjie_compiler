@@ -16,13 +16,14 @@
 
 using namespace Cangjie::CHIR;
 
-DeadCodeElimination::DeadCodeElimination(CHIRBuilder& builder, DiagAdapter& diag,
-    const std::string& packageName)
-    : builder(builder), diag(diag), currentPackageName(packageName)
+DeadCodeElimination::DeadCodeElimination(CHIRBuilder& builder, DiagAdapter& diag, const Package& curPkg)
+    : builder(builder), diag(diag), curPkg(curPkg)
 {
 }
 
 namespace {
+const std::string STD_CORE_FUTURE_MANGLED_NAME = "_CNat6Future";
+
 void DumpForDebug(const Ptr<Expression> expr, const Ptr<Func> func, bool isDebug)
 {
     if (!isDebug) {
@@ -109,6 +110,26 @@ bool ShouldSkipUselessFuncElimination(const Package& package, const Cangjie::Glo
     }
     return false;
 }
+
+bool ReflectPackageIsUsed(const Package& package) {
+    for (auto def : package.GetAllImportedCustomTypeDef()) {
+
+        if (def->GetPackageName() == Cangjie::REFLECT_PACKAGE_NAME) {
+            return true;
+        }
+    }
+    for (auto func: package.GetGlobalFuncs()) {
+        if (func->IsImportedFunc() && func->GetPackageName() == Cangjie::REFLECT_PACKAGE_NAME) {
+            return true;
+        }
+    }
+    for (auto var : package.GetGlobalVars()) {
+        if (var->IsImportedVar() && var->GetPackageName() == Cangjie::REFLECT_PACKAGE_NAME) {
+            return true;
+        }
+    }
+    return false;
+}
 } // namespace
 
 static inline const std::unordered_map<ExprKind, std::string> EXPR_KIND_TO_STR = {
@@ -149,6 +170,7 @@ void DeadCodeElimination::UselessFuncElimination(Package& package, const GlobalO
         return;
     }
     auto allFuncs = package.GetGlobalFuncs();
+    auto usingReflectPackage = ReflectPackageIsUsed(curPkg);
     std::vector<Func*> funcsToBeRemoved;
     do {
         funcsToBeRemoved.clear();
@@ -158,7 +180,7 @@ void DeadCodeElimination::UselessFuncElimination(Package& package, const GlobalO
                 ++it;
                 continue;
             }
-            if (CheckUselessFunc(**it, opts)) {
+            if (CheckUselessFunc(**it, opts, usingReflectPackage)) {
                 funcsToBeRemoved.emplace_back(*it);
                 DumpForDebug(nullptr, *it, opts.chirDebugOptimizer);
                 it = allFuncs.erase(it);
@@ -237,7 +259,7 @@ void DeadCodeElimination::ReportUnusedFunc(const Func& func, const GlobalOptions
                 continue;
             }
             auto [res, nodeRange] = GetDebugPos(*expr);
-            if (res && !IsCrossPackage(nodeRange.begin, currentPackageName, diag)) {
+            if (res && !IsCrossPackage(nodeRange.begin, curPkg.GetName(), diag)) {
                 diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_function, nodeRange);
             }
             continue;
@@ -248,7 +270,8 @@ void DeadCodeElimination::ReportUnusedFunc(const Func& func, const GlobalOptions
         return;
     }
     // check unused function
-    if (!func.TestAttr(Attribute::COMPILER_ADD) && CheckUselessFunc(func, opts)) {
+    auto usingReflectPackage = ReflectPackageIsUsed(curPkg);
+ 	if (!func.TestAttr(Attribute::COMPILER_ADD) && CheckUselessFunc(func, opts, usingReflectPackage)) {
         auto ident = GetFuncIdent(func);
         auto debugPos = GetDebugPos(func);
         if (ident == "main") {
@@ -363,7 +386,7 @@ void DeadCodeElimination::DiagUnusedVariableForLocalVar(const Debug& expr, bool 
 void DeadCodeElimination::DiagUnusedVariable(const Debug& expr)
 {
     auto nodeRange = GetDebugPos(expr);
-    if (nodeRange.first && !IsCrossPackage(nodeRange.second.begin, currentPackageName, diag)) {
+    if (nodeRange.first && !IsCrossPackage(nodeRange.second.begin, curPkg.GetName(), diag)) {
         diag.DiagnoseRefactor(
             DiagKindRefactor::chir_dce_unused_variable, nodeRange.second, expr.GetSrcCodeIdentifier());
     }
@@ -452,7 +475,7 @@ void DeadCodeElimination::ReportUnusedExpression(Expression& expr)
         }
         auto res = GetDebugPos(expr);
         if (res.first) {
-            if (IsCrossPackage(res.second.begin, currentPackageName, diag)) {
+            if (IsCrossPackage(res.second.begin, curPkg.GetName(), diag)) {
                 return;
             }
             if (expr.GetExprKind() == ExprKind::LAMBDA) {
@@ -871,7 +894,7 @@ void DeadCodeElimination::ClearUnreachableMarkBlockForFunc(const BlockGroup& bod
     }
 }
 
-bool DeadCodeElimination::CheckUselessFunc(const Func& func, const GlobalOptions& opts)
+bool DeadCodeElimination::CheckUselessFunc(const Func& func, const GlobalOptions& opts, bool usingReflectPackage)
 {
     if (!func.GetUsers().empty()) {
         return false;
@@ -882,8 +905,8 @@ bool DeadCodeElimination::CheckUselessFunc(const Func& func, const GlobalOptions
     if (func.GetIdentifierWithoutPrefix() == USER_MAIN_MANGLED_NAME) {
         return false;
     }
-    // All func names contains "*_global_init*" is global variables initial function.
-    if (func.GetIdentifier().find(GLOBAL_INIT_MANGLED_NAME) != std::string::npos) {
+    if (&func == curPkg.GetPackageInitFunc() || &func == curPkg.GetPackageLiteralInitFunc()) {
+        // skip package init function
         return false;
     }
     if (func.GetIdentifier().find(STD_CORE_FUTURE_MANGLED_NAME) != std::string::npos) {
@@ -903,27 +926,28 @@ bool DeadCodeElimination::CheckUselessFunc(const Func& func, const GlobalOptions
             (opts.outputMode == GlobalOptions::OutputMode::OBJ &&
                 opts.compileTarget != GlobalOptions::CompileTarget::EXECUTABLE);
     }
-    // Do not check the functions that can be exported.
-    if (IsExternalDecl(func)) {
+    if (func.IsCFunc() && func.TestAttr(Attribute::PUBLIC)) {
+        // C func may use in c code.
         return false;
     }
-    // The func is in vtable.
     if (func.IsVirtualFunc()) {
+        // The func is in vtable.
         return false;
     }
-    // should be revised
     if (func.GetFuncKind() == Cangjie::CHIR::CLASS_CONSTRUCTOR) {
+        // should be revised
         return false;
     }
-    // The Finalizer func of a class, can not be removed.
     if (func.GetFuncKind() == Cangjie::CHIR::FINALIZER) {
+        // The Finalizer func of a class, can not be removed.
         return false;
     }
-    if (!opts.disableReflection) {
-        // enable reflect
-        return !func.TestAttr(Attribute::PUBLIC) || func.TestAttr(Attribute::NO_REFLECT_INFO);
+    if (usingReflectPackage && !opts.disableReflection && func.TestAttr(Attribute::PUBLIC) &&
+        !func.TestAttr(Attribute::NO_REFLECT_INFO)) {
+        // public function with reflect info can not be removed.
+        return false;
     }
-    if (!opts.CompileExecutable()) {
+    if (IsExternalDecl(func) && !opts.CompileExecutable()) {
         // external func in lib output mode can not be removed.
         return false;
     }
@@ -969,7 +993,7 @@ Ptr<Expression> DeadCodeElimination::GetUnreachableExpression(const CHIR::Block&
         }
         auto& debugInfo = expression->GetDebugLocation();
         auto [newResult, debugRange] = ToRangeIfNotZero(debugInfo);
-        if (newResult && !IsCrossPackage(debugRange.begin, currentPackageName, diag)) {
+        if (newResult && !IsCrossPackage(debugRange.begin, curPkg.GetName(), diag)) {
             resExpression = expression;
             isNormal = true;
             return true;
@@ -999,7 +1023,7 @@ void DeadCodeElimination::PrintUnreachableBlockWarning(
             if (terminalNodeRange.begin == range.begin) {
                 return;
             }
-            if (IsCrossPackage(terminalNodeRange.begin, currentPackageName, diag)) {
+            if (IsCrossPackage(terminalNodeRange.begin, curPkg.GetName(), diag)) {
                 return;
             }
             if (unreableExpr->Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING) {
@@ -1088,7 +1112,7 @@ template <typename... Args>
 void DeadCodeElimination::DiagUnusedCode(
     const std::pair<bool, Cangjie::Range>& nodeRange, DiagKindRefactor diagKind, Args&&... args)
 {
-    if (nodeRange.first && !IsCrossPackage(nodeRange.second.begin, currentPackageName, diag)) {
+    if (nodeRange.first && !IsCrossPackage(nodeRange.second.begin, curPkg.GetName(), diag)) {
         diag.DiagnoseRefactor(diagKind, nodeRange.second, args...);
     }
 }
