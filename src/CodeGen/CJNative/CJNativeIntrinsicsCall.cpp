@@ -1287,10 +1287,14 @@ llvm::Instruction* IRBuilder2::CallIntrinsicMTable(const std::vector<llvm::Value
 llvm::Instruction* IRBuilder2::CallIntrinsicMethodOuterType(const std::vector<llvm::Value*>& parameters)
 {
     CJC_ASSERT(parameters.size() == 3U);
-    llvm::Function* func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_get_method_outertype);
+    llvm::Function* func =
+        llvm::Intrinsic::getDeclaration(GetLLVMModule(), llvm::Intrinsic::cj_get_method_outertype);
     auto fixedParams = {
         CreateBitCast(parameters[0], getInt8PtrTy()), CreateBitCast(parameters[1], getInt8PtrTy()), parameters[2]};
-    return CreateCall(func, fixedParams);
+    auto outerType = CreateCall(func, fixedParams);
+    // outerType->setMetadata(GET_METHOD_OUTER_TI_CALL,
+    //     llvm::MDTuple::get(GetLLVMContext(), llvm::MDString::get(GetLLVMContext(), GET_METHOD_OUTER_TI_CALL)));
+    return outerType;
 }
 
 llvm::Instruction* IRBuilder2::CallIntrinsicGetVTableFunc(

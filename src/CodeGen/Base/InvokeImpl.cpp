@@ -37,6 +37,82 @@ llvm::MDTuple* GenObjTyMetaForVirtualCall(IRBuilder2& irBuilder, const CHIR::Typ
     }
     return llvm::MDTuple::get(llvmCtx, objTyMeta);
 }
+
+bool VirtualCallCanBeHoisted(IRBuilder2& irBuilder, const CHIRCallExpr& callExprWrapper)
+{
+    if (irBuilder.GetCGContext().GetCompileOptions().enableCompileDebug) {
+        return false;
+    }
+    return callExprWrapper.GetThisType(false)->IsGeneric();
+}
+
+// Compute and cache the outer type info for a hoistable virtual call.
+llvm::Value* ComputeHoistedLookUpVirtualMethod(IRBuilder2& irBuilder, const CHIR::Type& thisCHIRType,
+    const CHIR::ClassType& outerCHIRType, std::size_t virtualMethodOffset)
+{
+    auto& cgCtx = irBuilder.GetCGContext();
+    auto i8PtrTy = irBuilder.getInt8PtrTy();
+
+    auto backupBB = irBuilder.GetInsertBlock();
+    auto backupIt = irBuilder.GetInsertPoint();
+    auto vmCachePtr = irBuilder.CreateEntryAlloca(i8PtrTy, nullptr, "virtual_method_cache");
+
+    irBuilder.SetInsertPointForPreparingTypeInfo();
+    auto prepTiBB = irBuilder.GetInsertBlock();
+    auto successorOfPrepTi = prepTiBB->getUniqueSuccessor();
+    auto computeBB = prepTiBB->splitBasicBlock(&*prepTiBB->rbegin(), "compute.virtual.method");
+    irBuilder.SetInsertPoint(computeBB);
+    computeBB->getTerminator()->eraseFromParent();
+    auto thisTI = irBuilder.CreateTypeInfo(thisCHIRType);
+    auto isRef = irBuilder.CreateTypeInfoIsReferenceCall(thisTI);
+    auto [nonRefBB] = Vec2Tuple<1>(irBuilder.CreateAndInsertBasicBlocks({GenNameForBB("thisTI.non.ref")}));
+    irBuilder.LLVMIRBuilder2::CreateCondBr(isRef, successorOfPrepTi, nonRefBB);
+    irBuilder.SetInsertPoint(nonRefBB);
+    auto introTi1 = irBuilder.CreateTypeInfo(outerCHIRType);
+    auto funcPtr1 = irBuilder.CallIntrinsicMTable({thisTI, introTi1, irBuilder.getInt64(virtualMethodOffset)});
+    if (outerCHIRType.GetTypeArgs().size() <= 1) {
+        auto objTyMeta = GenObjTyMetaForVirtualCall(irBuilder, outerCHIRType);
+        llvm::cast<llvm::Instruction>(funcPtr1)->setMetadata("objType", objTyMeta);
+    }
+    irBuilder.CreateStore(funcPtr1, vmCachePtr);
+    irBuilder.LLVMIRBuilder2::CreateBr(successorOfPrepTi);
+
+    irBuilder.SetInsertPoint(backupBB, backupIt);
+    auto vmCache = irBuilder.CreateLoad(i8PtrTy, vmCachePtr);
+    auto isNull = irBuilder.CreateICmpEQ(vmCache, llvm::ConstantPointerNull::get(i8PtrTy));
+    auto [vmCacheEqNull, vmCacheNotNull] = Vec2Tuple<2>(irBuilder.CreateAndInsertBasicBlocks(
+        {GenNameForBB("vmCache.eq.null"), GenNameForBB("vmCache.not.null")}));
+    irBuilder.CreateCondBr(isNull, vmCacheEqNull, vmCacheNotNull);
+
+    irBuilder.SetInsertPoint(vmCacheEqNull);
+    //
+    auto introTi2 = irBuilder.CreateTypeInfo(outerCHIRType);
+    llvm::Value* funcPtr2 = nullptr;
+    if (outerCHIRType.GetClassDef()->IsInterface()) {
+        funcPtr2 = irBuilder.CallIntrinsicMTable({thisTI, introTi2, irBuilder.getInt64(virtualMethodOffset)});
+    } else {
+        auto vtableSizeOfIntroType = cgCtx.GetVTableSizeOf(&outerCHIRType);
+        CJC_ASSERT(vtableSizeOfIntroType > 0);
+        auto idxOfIntroType = irBuilder.getInt64(vtableSizeOfIntroType - 1U);
+        funcPtr2 = irBuilder.CallIntrinsicGetVTableFunc(
+            thisTI, idxOfIntroType, irBuilder.getInt64(virtualMethodOffset), introTi2);
+        auto meta = llvm::MDTuple::get(irBuilder.GetLLVMContext(),
+            llvm::MDString::get(irBuilder.GetLLVMContext(), GetTypeQualifiedName(outerCHIRType)));
+        llvm::cast<llvm::Instruction>(funcPtr2)->setMetadata("IntroType", meta);
+    }
+    if (outerCHIRType.GetTypeArgs().size() <= 1) {
+        auto objTyMeta = GenObjTyMetaForVirtualCall(irBuilder, outerCHIRType);
+        llvm::cast<llvm::Instruction>(funcPtr2)->setMetadata("objType", objTyMeta);
+    }
+    //
+    irBuilder.CreateBr(vmCacheNotNull);
+
+    irBuilder.SetInsertPoint(vmCacheNotNull);
+    auto phi = irBuilder.CreatePHI(i8PtrTy, 2U); // 2U: num of branches
+    phi->addIncoming(funcPtr2, vmCacheEqNull);
+    phi->addIncoming(vmCache, backupBB);
+    return phi;
+}
 } // namespace
 llvm::Value* CodeGen::GenerateInvoke(IRBuilder2& irBuilder, const CHIRInvokeWrapper& invoke)
 {
@@ -59,6 +135,9 @@ llvm::Value* CodeGen::GenerateInvoke(IRBuilder2& irBuilder, const CHIRInvokeWrap
         auto vtableOffset = invoke.GetVirtualMethodOffset();
         auto idxOfVFunc = irBuilder.getInt64(vtableOffset);
         auto introType = StaticCast<const CHIR::ClassType*>(invoke.GetOuterType(cgCtx.GetCHIRBuilder()));
+        if (VirtualCallCanBeHoisted(irBuilder, invoke)) {
+            funcPtr = ComputeHoistedLookUpVirtualMethod(irBuilder, *invoke.GetThisType(false), *introType, vtableOffset);
+        } else {
         if (introType->GetClassDef()->IsInterface()) {
             auto introTi = irBuilder.CreateTypeInfo(introType);
             funcPtr = irBuilder.CallIntrinsicMTable({ti, introTi, idxOfVFunc});
@@ -75,6 +154,7 @@ llvm::Value* CodeGen::GenerateInvoke(IRBuilder2& irBuilder, const CHIRInvokeWrap
         if (introType->GetTypeArgs().size() <= 1) {
             auto objTyMeta = GenObjTyMetaForVirtualCall(irBuilder, *introType);
             llvm::cast<llvm::Instruction>(funcPtr)->setMetadata("objType", objTyMeta);
+        }
         }
     } else {
         auto i8PtrTy = irBuilder.getInt8PtrTy();

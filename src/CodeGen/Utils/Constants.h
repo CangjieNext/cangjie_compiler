@@ -30,6 +30,7 @@ const std::string INTERNAL_CFUNC_ATTR = "internal";
 const std::string FAST_NATIVE_ATTR = "gc-leaf-function";
 #endif
 const std::string VTABLE_LOOKUP = "VTABLE_LOOKUP"; // Indicates that it is the instruction of VTable lookup.
+const std::string GET_METHOD_OUTER_TI_CALL = "GET_METHOD_OUTER_TI_CALL";
 const std::string GC_TYPE_META_NAME = "RelatedType";
 const std::string GC_GLOBAL_VAR_TYPE = "GlobalVarType";
 const std::string GC_KLASS_ATTR = "CFileKlass";
