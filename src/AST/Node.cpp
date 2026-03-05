@@ -124,7 +124,7 @@ Position GetMacroSourcePos(const MacroInvocation& invocation, const Position& po
     auto key = invocation.isCurFile ? pos.Hash32() : static_cast<uint32_t>(pos.column);
     if (isLowerBound) {
         // Get end position.
-        if (invocation.isForLSP) { // For lsp.
+        if (invocation.isForLSP || invocation.isForDebug) { // For lsp.
             auto posIt = invocation.new2originPosMap.find(pos.Hash32());
             if (posIt != invocation.new2originPosMap.end()) {
                 ++posIt;
@@ -147,7 +147,7 @@ Position GetMacroSourcePos(const MacroInvocation& invocation, const Position& po
         return pos;
     }
     // Get begin/identifier/field position.
-    if (invocation.isForLSP) { // For lsp.
+    if (invocation.isForLSP || invocation.isForDebug) { // For lsp.
         if (invocation.new2originPosMap.find(pos.Hash32()) == invocation.new2originPosMap.end()) {
             return pos;
         }

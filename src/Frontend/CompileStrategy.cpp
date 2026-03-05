@@ -14,6 +14,7 @@
 
 #include "MergeAnnoFromCjd.h"
 #include "cangjie/AST/PrintNode.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
 #include "cangjie/Frontend/CompilerInstance.h"
@@ -41,6 +42,30 @@ void CompileStrategy::TypeCheck() const
         CJC_NULLPTR_CHECK(ci->typeChecker);
     }
     ci->typeChecker->TypeCheckForPackages(ci->GetSourcePackages());
+
+    const bool enableCompileDebug = ci->invocation.globalOptions.enableCompileDebug;
+    const bool displayLineInfo = ci->invocation.globalOptions.displayLineInfo;
+    if (!enableCompileDebug && !displayLineInfo) {
+        return;
+    }
+
+    auto packages = ci->GetSourcePackages();
+    auto visit = [](Ptr<AST::Node> curNode) -> AST::VisitAction {
+        if (!curNode->IsExpr() || !curNode->TestAttr(AST::Attribute::MACRO_EXPANDED_NODE)) {
+            return AST::VisitAction::WALK_CHILDREN;
+        }
+        curNode->begin = curNode->curMacroCall->GetBegin();
+        curNode->end = curNode->curMacroCall->GetEnd();
+        return AST::VisitAction::WALK_CHILDREN;
+    };
+
+    for (auto pkg : packages) {
+        if (!pkg) {
+            continue;
+        }
+        AST::Walker walker(pkg, visit);
+        walker.Walk();
+    }
 }
 
 void CompileStrategy::InteropConfigTomlCheck() {
