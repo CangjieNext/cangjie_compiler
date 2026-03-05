@@ -556,7 +556,7 @@ llvm::Value* GenerateGenericTypeCast(IRBuilder2& irBuilder, const CGValue& cgSrc
         auto tmp = irBuilder.CreateEntryAlloca(*targetCGType);
         auto dataPtr = irBuilder.GetPayloadFromObject(srcValue);
         if (IsTypeContainsRef(targetCGType->GetLLVMType())) {
-            irBuilder.CallGCReadAgg(llvm::cast<llvm::StructType>(targetCGType->GetLLVMType()),
+            irBuilder.CallGCReadAgg(targetCGType->GetLayoutType(),
                 {tmp, srcValue, dataPtr, irBuilder.GetLayoutSize_64(targetTy)});
         } else {
             llvm::MaybeAlign align{};

@@ -254,7 +254,7 @@ llvm::Value* HandleBoxExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirEx
         //   the "struct" mentioned above is the `this` parameter of the method.
         if (IsTypeContainsRef(srcCGType->GetLLVMType())) {
             irBuilder.CallGCWriteAgg(
-                llvm::cast<llvm::StructType>(srcCGType->GetLLVMType()), {tmp, payloadPtr, cgVal.GetRawValue(), size});
+                srcCGType->GetLayoutType(), {tmp, payloadPtr, cgVal.GetRawValue(), size});
         } else {
             irBuilder.CreateMemCpy(payloadPtr, llvm::MaybeAlign(), cgVal.GetRawValue(), llvm::MaybeAlign(), size);
         }
