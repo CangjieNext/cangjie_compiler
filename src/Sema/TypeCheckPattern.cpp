@@ -136,9 +136,34 @@ void SetTyForEnumPatternConstructor(TypeManager& typeManager, EnumTy& targetTy, 
         FillEnumPatternMemberAccessTypeArgumentsTy(typeManager, targetTy, ma);
     } else if (targetTy.GetGenericTy()) {
         CJC_ASSERT(ep.constructor->astKind == ASTKind::REF_EXPR);
-        MultiTypeSubst typeMapping;
-        typeManager.GenerateGenericMapping(typeMapping, targetTy);
-        ep.constructor->ty = typeManager.GetBestInstantiatedTy(ep.constructor->ty, typeMapping);
+        auto* funcTy = DynamicCast<FuncTy*>(ep.constructor->ty);
+        bool useDirectPath = false;
+        if (funcTy && targetTy.decl && targetTy.decl->generic &&
+            static_cast<size_t>(funcTy->paramTys.size()) <= targetTy.decl->generic->typeParameters.size() &&
+            static_cast<size_t>(funcTy->paramTys.size()) <= targetTy.typeArgs.size()) {
+            useDirectPath = true;
+            for (size_t i = 0; i < funcTy->paramTys.size(); ++i) {
+                if (funcTy->paramTys[i] != targetTy.decl->generic->typeParameters[i]->ty) {
+                    useDirectPath = false;
+                    break;
+                }
+            }
+        }
+        if (useDirectPath) {
+            // Constructor param types are exactly the enum's type params (e.g. AA(X)); use selector's type args.
+            std::vector<Ptr<Ty>> paramTys(
+                targetTy.typeArgs.begin(),
+                targetTy.typeArgs.begin() + static_cast<ptrdiff_t>(funcTy->paramTys.size()));
+            ep.constructor->ty = typeManager.GetFunctionTy(
+                paramTys, &targetTy,
+                {funcTy->IsCFunc(), funcTy->isClosureTy, funcTy->hasVariableLenArg});
+        } else {
+            if (targetTy.decl) {
+                MultiTypeSubst typeMapping;
+                MergeTypeSubstToMultiTypeSubst(typeMapping, GenerateTypeMapping(*targetTy.decl, targetTy.typeArgs));
+                ep.constructor->ty = typeManager.GetBestInstantiatedTy(ep.constructor->ty, typeMapping);
+            }
+        }
     }
 }
 
