@@ -123,6 +123,23 @@ void FillEnumPatternMemberAccessTypeArgumentsTy(TypeManager& typeManager, EnumTy
     ma.ty = typeManager.GetBestInstantiatedTy(ma.ty, typeMapping);
 }
 
+static bool ConstructorParamTysMatchEnumTypeParams(const FuncTy* funcTy, const EnumTy& targetTy)
+{
+    if (!funcTy || !targetTy.decl || !targetTy.decl->generic) {
+        return false;
+    }
+    const auto& typeParams = targetTy.decl->generic->typeParameters;
+    if (funcTy->paramTys.size() > typeParams.size() || funcTy->paramTys.size() > targetTy.typeArgs.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < funcTy->paramTys.size(); ++i) {
+        if (funcTy->paramTys[i] != typeParams[i]->ty) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void SetTyForEnumPatternConstructor(TypeManager& typeManager, EnumTy& targetTy, const EnumPattern& ep)
 {
     if (!ep.constructor) {
@@ -134,10 +151,27 @@ void SetTyForEnumPatternConstructor(TypeManager& typeManager, EnumTy& targetTy, 
             return;
         }
         FillEnumPatternMemberAccessTypeArgumentsTy(typeManager, targetTy, ma);
-    } else if (targetTy.GetGenericTy()) {
-        CJC_ASSERT(ep.constructor->astKind == ASTKind::REF_EXPR);
+        return;
+    }
+    if (!targetTy.GetGenericTy()) {
+        return;
+    }
+    CJC_ASSERT(ep.constructor->astKind == ASTKind::REF_EXPR);
+    auto* funcTy = DynamicCast<FuncTy*>(ep.constructor->ty);
+    bool useDirectPath = funcTy && ConstructorParamTysMatchEnumTypeParams(funcTy, targetTy);
+    if (useDirectPath) {
+        // Constructor param types are exactly the enum's type params (e.g. AA(X)); use selector's type args.
+        std::vector<Ptr<Ty>> paramTys(
+            targetTy.typeArgs.begin(),
+            targetTy.typeArgs.begin() + static_cast<ptrdiff_t>(funcTy->paramTys.size()));
+        ep.constructor->ty = typeManager.GetFunctionTy(
+            paramTys, &targetTy,
+            {funcTy->IsCFunc(), funcTy->isClosureTy, funcTy->hasVariableLenArg});
+        return;
+    }
+    if (targetTy.decl) {
         MultiTypeSubst typeMapping;
-        typeManager.GenerateGenericMapping(typeMapping, targetTy);
+        MergeTypeSubstToMultiTypeSubst(typeMapping, GenerateTypeMapping(*targetTy.decl, targetTy.typeArgs));
         ep.constructor->ty = typeManager.GetBestInstantiatedTy(ep.constructor->ty, typeMapping);
     }
 }
