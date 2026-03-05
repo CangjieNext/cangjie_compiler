@@ -26,6 +26,25 @@ using namespace AST;
 
 namespace {
 
+void RefreshNodePos(Node& root, bool enableCompileDebug, bool displayLineInfo)
+{
+    if (!enableCompileDebug && !displayLineInfo) {
+        return;
+    }
+    auto visit = [](Ptr<Node> curNode) -> VisitAction {
+        if (!curNode->TestAttr(Attribute::MACRO_EXPANDED_NODE) || !curNode->curMacroCall) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        auto mappedBegin = curNode->curMacroCall->GetDebugPos(curNode->begin);
+        auto mappedEnd = curNode->curMacroCall->GetDebugPos(curNode->end);
+        curNode->begin = mappedBegin;
+        curNode->end = mappedEnd;
+        return VisitAction::WALK_CHILDREN;
+    };
+    Walker walker(&root, visit);
+    walker.Walk();
+}
+
 bool HasNoMacros(const MacroCollector& mc)
 {
     return mc.macroDefFuncs.empty() && mc.macCalls.empty();
@@ -366,6 +385,8 @@ void MacroExpansion::ReplaceEachMacro(MacroCall& macCall)
             return;
         }
         CheckWhenAfterMacroExpand(node, ci->diag);
+        RefreshNodePos(*node, ci->invocation.globalOptions.enableCompileDebug,
+            ci->invocation.globalOptions.displayLineInfo);
     }
     ReplaceEachMacroHelper(macCall, nodes);
 }
