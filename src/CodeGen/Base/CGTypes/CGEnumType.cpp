@@ -411,8 +411,8 @@ llvm::Constant* CGEnumType::GenFieldsOfTypeInfo()
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_REF: {
             CJC_NULLPTR_CHECK(optionLikeInfo);
-            fieldTypes.emplace_back(const_cast<CHIR::Type*>(&CGType::GetUnitCGType(cgMod)->GetOriginal()));
             fieldTypes.emplace_back(optionLikeInfo->associatedValueType);
+            fieldTypes.emplace_back(const_cast<CHIR::Type*>(&CGType::GetUnitCGType(cgMod)->GetOriginal()));
             break;
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_NONREF: {
