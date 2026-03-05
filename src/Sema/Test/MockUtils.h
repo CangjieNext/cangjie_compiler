@@ -49,6 +49,13 @@ public:
         return type;
     }
 
+    Ptr<Cangjie::AST::PointerTy> WrapTy2CPointer(const Ptr<AST::Ty> ty)
+    {
+        CJC_NULLPTR_CHECK(ty);
+        auto pointerTy = typeManager.GetPointerTy(ty);
+        return pointerTy;
+    }
+
     static std::string mockAccessorSuffix;
     static std::string spyObjVarName;
     static std::string spyCallMarkerVarName;

@@ -281,6 +281,12 @@ Ptr<Decl> MockUtils::FindAccessor(
                 } else if (kind == AccessorKind::FIELD_SETTER &&
                     originalIdentifier == member->identifier + SETTER_SUFFIX) {
                     return decl.get();
+                } else if (kind == AccessorKind::STATIC_FIELD_GETTER &&
+                    originalIdentifier == member->identifier + GETTER_SUFFIX) {
+                    return decl.get();
+                } else if (kind == AccessorKind::STATIC_FIELD_SETTER &&
+                    originalIdentifier == member->identifier + SETTER_SUFFIX) {
+                    return decl.get();
                 }
             } else { // For functions we search accessors by using mangled names due to overloading
                 auto instantiatedDecl = GetInstantiatedDecl(
