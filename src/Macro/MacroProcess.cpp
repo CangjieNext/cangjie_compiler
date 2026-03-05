@@ -333,6 +333,7 @@ void GenerateMacroCallFile(const std::vector<Ptr<File>>& fileSucVec,
             // Map macro information.
             RefreshTokensPosMap(*node, sm, ci);
             pMacroInvocation->isForLSP = ci.invocation.globalOptions.enableMacroInLSP;
+            pMacroInvocation->isForDebug = ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo;
         }
         content = sm.GetContentBetween(curFilePosBase.fileID, curFilePosBase, file->end);
         (void)sm.AppendSource(file->macroCallFilePath, content, isCjmpFile);
