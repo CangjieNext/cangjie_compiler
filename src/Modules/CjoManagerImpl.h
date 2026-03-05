@@ -14,6 +14,7 @@
 #define CANGJIE_MODULES_CJO_MANAGERIMPL_H
 
 #include "cangjie/Modules/CjoManager.h"
+#include <unordered_set>
 
 namespace Cangjie {
 class CjoManagerImpl {
@@ -58,13 +59,13 @@ public:
             }
         }
     }
-    auto AddLoadedPackages(std::string pkgName)
+    auto AddLoadedPackages(const std::string& pkgName)
     {
         return loadedPackages.emplace(pkgName);
     }
     bool AlreadyLoaded(std::string pkgName)
     {
-        return std::find(loadedPackages.begin(), loadedPackages.end(), pkgName) != loadedPackages.end();
+        return loadedPackages.find(pkgName) != loadedPackages.end();
     }
     bool IsReExportBy(const std::string& srcPackage, const std::string& reExportPackage) const;
     void AddImportedPackageName(Ptr<const AST::ImportSpec> importSpec, std::pair<std::string, bool> pkgNamePair)
@@ -94,14 +95,23 @@ public:
     {
         return searchPath;
     }
-    void SetPackageCjoCache(const std::string& fullPackageName, const std::vector<uint8_t>& cjoData)
+    void SetPackageCjoCache(
+        const std::string& fullPackageName, const std::vector<uint8_t>& cjoData, CjoManager::CjoChangeState changeState)
     {
         if (fullPackageName.empty() || cjoData.empty()) {
             return;
         }
-        cjoFileCacheMap[fullPackageName] = cjoData;
+        cjoFileCacheMap[fullPackageName] = {
+            .state = changeState,
+            .data = cjoData,
+        };
     }
-    std::unordered_map<std::string, std::vector<uint8_t>>& GetCjoFileCacheMap()
+    struct CjoCacheInfo {
+        CjoManager::CjoChangeState state{CjoManager::CjoChangeState::UNCHANGED};
+        std::vector<uint8_t> data;
+    };
+    using CjoCacheMap = std::unordered_map<std::string, CjoCacheInfo>;
+    CjoCacheMap& GetCjoFileCacheMap()
     {
         return cjoFileCacheMap;
     }
@@ -123,12 +133,49 @@ public:
     {
         visitedPkgs.clear();
     }
+    void ClearForReBuildIndex();
+    bool HasBuildIndex() const
+    {
+        return hasBuildIndex;
+    }
+    void SetHasBuildIndex(bool value)
+    {
+        hasBuildIndex = value;
+    }
     std::optional<std::vector<std::string>> PreReadCommonPartCjoFiles(CjoManager& cjoManager);
     Ptr<ASTLoader> GetCommonPartCjo(std::string expectedName);
+
     const GlobalOptions& GetGlobalOptions()
     {
         return globalOptions;
     }
+    /**
+     * @brief Get the Cjo Path From Cache
+     *
+     * @param cjoName
+     * @param cjoPath
+     * @return true if found
+     * @return false if not found
+     */
+    bool GetCjoPathFromFindCache(const std::string& cjoName, std::string& cjoPath) const
+    {
+        auto found = cjoPathFindCache.find(cjoName);
+        if (found == cjoPathFindCache.end()) {
+            return false;
+        }
+        cjoPath = found->second;
+        return true;
+    }
+    void CacheCjoPathForFind(const std::string& cjoName, const std::string& cjoPath)
+    {
+        cjoPathFindCache[cjoName] = cjoPath;
+    }
+
+    /**
+     * @brief Substitute imported TypeAliasTy in all loaded packages.
+     * @param srcPackages The source packages where imported TypeAliasTy come from.
+     */
+    void SubstituteImportedTypeAliasTy(const std::vector<Ptr<AST::Package>>& srcPackages);
 
 private:
     DiagnosticEngine& diag;
@@ -139,7 +186,7 @@ private:
     /** Only used to hold ownership of imported packages. */
     std::vector<OwnedPtr<AST::Package>> importedPackages;
     std::unordered_map<std::string, OwnedPtr<CjoManagerImpl::PackageInfo>> packageNameMap;
-    std::unordered_map<std::string, std::vector<uint8_t>> cjoFileCacheMap;
+    CjoCacheMap cjoFileCacheMap;
     std::unordered_map<Ptr<const AST::ImportSpec>, std::pair<std::string, bool>> importedPackageNameMap;
     // Searching cache.
     std::unordered_set<std::string> visitedPkgs;
@@ -149,6 +196,14 @@ private:
     // common part loader also stored in `packageNameMap`.
     OwnedPtr<ASTLoader> commonPartLoader;
     bool canInline{false};
+
+    // cache cjo file path result for skip FindSerializationFile call, key is possible cjo name without extension, value
+    // is cjo path (empty string means not found).
+    std::unordered_map<std::string, std::string> cjoPathFindCache;
+    // Flag to track if BuildIndex has been called
+    bool hasBuildIndex{false};
+    // Flag that package has been substituted type alias.
+    std::unordered_set<Ptr<AST::Package>> substitutedPackagesCache;
 };
 } // namespace Cangjie
 #endif

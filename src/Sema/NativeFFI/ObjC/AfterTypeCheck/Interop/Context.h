@@ -31,7 +31,7 @@ struct InteropContext {
         const BaseMangler& mangler,
         const std::string& cjLibOutputPath)
         : pkg(pkg), diag(diag), typeManager(typeManager), importManager(importManager), bridge(importManager, diag),
-          typeMapper(bridge, typeManager), mangler(mangler), nameGenerator(mangler),
+          typeMapper(bridge, typeManager), mangler(mangler), nameGenerator(mangler, typeManager),
           factory(bridge, typeManager, nameGenerator, typeMapper, importManager),
           cjLibOutputPath(cjLibOutputPath)
     {
@@ -39,6 +39,7 @@ struct InteropContext {
 
     AST::Package& pkg;
     std::vector<Ptr<AST::ClassLikeDecl>> mirrors;
+    std::vector<Ptr<AST::FuncDecl>> mirrorTopLevelFuncs;
     std::vector<Ptr<AST::ClassDecl>> impls;
     std::vector<OwnedPtr<AST::Decl>> genDecls;
 

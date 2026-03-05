@@ -39,7 +39,7 @@ std::tuple<bool, std::optional<std::size_t>> ObtainingAuxiliaryInformation(
     std::optional<std::size_t> sizeOfConstructorUnion = std::nullopt;
 
     const auto& ctors = chirEnumType.GetConstructorInfos(cgMod.GetCGContext().GetCHIRBuilder());
-    CJC_ASSERT(!ctors.empty() && "The enum type has at least one constructor.");
+    CJC_ASSERT_WITH_MSG(!ctors.empty(), "The enum type has at least one constructor.");
     for (auto ctor : ctors) {
         const auto& paramTypes = ctor.funcType->GetParamTypes();
         std::optional<std::size_t> sizeOfConstructorUnionTemp =
@@ -153,7 +153,7 @@ std::string CGEnumType::GetEnumTypeName() const
             return ENUM_TYPE_PREFIX + "Empty";
         }
         default:
-            CJC_ASSERT(false && "Should not reach here: UNKNOWN enum kind");
+            CJC_ASSERT_WITH_MSG(false, "Should not reach here: UNKNOWN enum kind");
             return "";
     }
 }
@@ -189,7 +189,7 @@ llvm::Type* CGEnumType::GenLLVMType()
             return GenZeroSizeEnumLLVMType();
         }
         default: {
-            CJC_ASSERT(false && "Should not reach here: UNKNOWN enum kind");
+            CJC_ASSERT_WITH_MSG(false, "Should not reach here: UNKNOWN enum kind");
             return nullptr;
         }
     }
@@ -317,7 +317,7 @@ void CGEnumType::GenContainedCGTypes()
             break;
         }
         default: {
-            CJC_ASSERT(false && "Should not reach here: UNKNOWN enum kind");
+            CJC_ASSERT_WITH_MSG(false, "Should not reach here: UNKNOWN enum kind");
             break;
         }
     }
@@ -369,7 +369,7 @@ void CGEnumType::CalculateSizeAndAlign()
             return;
         }
         default:    // unexpected CGEnumTypeKind
-            CJC_ASSERT(false && "Should not reach here: UNKNOWN enum kind");
+            CJC_ASSERT_WITH_MSG(false, "Should not reach here: UNKNOWN enum kind");
             return;
     }
 }
@@ -393,7 +393,7 @@ llvm::Constant* CGEnumType::GenFieldsNumOfTypeInfo()
             return llvm::ConstantInt::get(llvm::Type::getInt16Ty(cgMod.GetLLVMContext()), 0U);
         }
         default:    // unexpected CGEnumTypeKind
-            CJC_ASSERT(false && "Should not reach here: UNKNOWN enum kind");
+            CJC_ASSERT_WITH_MSG(false, "Should not reach here: UNKNOWN enum kind");
             return nullptr;
     }
 }
@@ -411,8 +411,8 @@ llvm::Constant* CGEnumType::GenFieldsOfTypeInfo()
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_REF: {
             CJC_NULLPTR_CHECK(optionLikeInfo);
-            fieldTypes.emplace_back(optionLikeInfo->associatedValueType);
             fieldTypes.emplace_back(const_cast<CHIR::Type*>(&CGType::GetZeroSizedCGType(cgMod)->GetOriginal()));
+            fieldTypes.emplace_back(optionLikeInfo->associatedValueType);
             break;
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_NONREF: {
@@ -427,11 +427,11 @@ llvm::Constant* CGEnumType::GenFieldsOfTypeInfo()
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_T:
         default:
-            CJC_ASSERT(false && "Should not reach here");
+            CJC_ASSERT_WITH_MSG(false, "Should not reach here");
             break;
     }
     std::vector<llvm::Constant*> fieldConstants = GenTypeInfoConstantVectorForTypes(cgMod, fieldTypes);
-    return GenTypeInfoArray(cgMod, CGType::GetNameOfTypeInfoGV(chirType) + ".fields", fieldConstants);
+    return GenTypeInfoArray(cgMod, CGType::GetNameOfTypeInfoGV(chirType) + ".fields", fieldConstants, CJTI_FIELDS_ATTR);
 }
 
 llvm::Constant* CGEnumType::GenOffsetsOfTypeInfo()
@@ -462,12 +462,12 @@ llvm::Constant* CGEnumType::GenFieldsNumOfTypeTemplate()
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_NONREF:
         default:
-            CJC_ASSERT(false && "Should not reach here: UNKNOWN enum kind");
+            CJC_ASSERT_WITH_MSG(false, "Should not reach here: UNKNOWN enum kind");
             return nullptr;
     }
 }
 
-llvm::Constant* GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& cgMod, const std::string& funcPrefixName)
+llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& cgMod, const std::string& funcPrefixName)
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
     auto p0i8 = llvm::Type::getInt8PtrTy(llvmCtx);
@@ -492,7 +492,8 @@ llvm::Constant* GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& cgMod, const 
     auto [refBB, nonRefBB] = Vec2Tuple<2>(irBuilder.CreateAndInsertBasicBlocks({"ref", "nonRef"}));
     irBuilder.CreateCondBr(isRef, refBB, nonRefBB);
     irBuilder.SetInsertPoint(refBB);
-    irBuilder.CreateRet(irBuilder.CreateBitCast(ti, p0i8));
+    irBuilder.CreateRet(
+        irBuilder.CreateBitCast(CGType::GetZeroSizedCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
     irBuilder.SetInsertPoint(nonRefBB);
     irBuilder.CreateRet(irBuilder.CreateBitCast(CGType::GetBoolCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
 
@@ -507,8 +508,7 @@ llvm::Constant* GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& cgMod, const 
     auto [refBB2, nonRefBB2] = Vec2Tuple<2>(irBuilder.CreateAndInsertBasicBlocks({"ref", "nonRef"}));
     irBuilder.CreateCondBr(isRef, refBB2, nonRefBB2);
     irBuilder.SetInsertPoint(refBB2);
-    irBuilder.CreateRet(
-        irBuilder.CreateBitCast(CGType::GetZeroSizedCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
+    irBuilder.CreateRet(irBuilder.CreateBitCast(ti, p0i8));
     irBuilder.SetInsertPoint(nonRefBB2);
     irBuilder.CreateRet(irBuilder.CreateBitCast(ti, p0i8));
 
@@ -553,7 +553,7 @@ llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplate()
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_NONREF:
         default:
-            CJC_ASSERT(false && "Should not reach here: UNKNOWN enum kind");
+            CJC_ASSERT_WITH_MSG(false, "Should not reach here: UNKNOWN enum kind");
             break;
     }
     return CGTypeInfo::GenFieldsFnsOfTypeTemplate(cgMod, funcPrefixName, fieldTypes, localGenericParamIndicesMap);

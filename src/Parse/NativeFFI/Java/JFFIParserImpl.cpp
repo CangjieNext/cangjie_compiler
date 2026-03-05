@@ -62,7 +62,6 @@ void JFFIParserImpl::CheckMirrorAnnoArgs(const Annotation& anno) const
 void JFFIParserImpl::CheckImplAnnoArgs(const Annotation& anno) const
 {
     static const std::string JAVA_IMPL_NAME = "@JavaImpl";
-
     p.ffiParser->CheckZeroOrSingleStringLitArgAnnotation(anno, JAVA_IMPL_NAME);
 }
 
@@ -84,7 +83,8 @@ void JFFIParserImpl::CheckImplSignature(AST::ClassLikeDecl& decl, const PtrVecto
     CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::JAVA_IMPL));
     decl.EnableAttr(Attribute::JAVA_MIRROR_SUBTYPE);
 
-    if (decl.GetGeneric() != nullptr) {
+    // Avoid CJ-MAPPING Generic Check.
+    if (decl.GetGeneric() != nullptr && !decl.TestAttr(Attribute::JAVA_CJ_MAPPING)) {
         DiagJavaImplCannotBeGeneric(decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
@@ -106,4 +106,27 @@ void JFFIParserImpl::CheckImplSignature(AST::ClassLikeDecl& decl, const PtrVecto
         p.diag.DiagnoseRefactor(DiagKindRefactor::parse_java_impl_cannot_be_interface, decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
+}
+
+void JFFIParserImpl::CheckJavaHasDefaultAnnotation(const Annotation& anno) const
+{
+    if (p.Seeing(TokenKind::FUNC)) {
+        return;
+    }
+    auto& lah = p.lookahead;
+    p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, lah.Value());
+}
+
+bool JFFIParserImpl::IsAbstractFunction(const FuncDecl& fd, const Decl& outerDecl) const
+{
+    auto hasAbstractModifier = p.HasModifier(fd.modifiers, TokenKind::ABSTRACT);
+    auto hasStaticModifier = p.HasModifier(fd.modifiers, TokenKind::STATIC);
+    auto hasOuterDeclAbstractModifier = p.HasModifier(outerDecl.modifiers, TokenKind::ABSTRACT);
+    auto isOuterDeclInterface = outerDecl.astKind == ASTKind::INTERFACE_DECL;
+    auto isOuterDeclClass = outerDecl.astKind == ASTKind::CLASS_DECL;
+    auto isOuterDeclJavaImpl = Interop::Java::IsImpl(outerDecl);
+    auto isAbstractInsideAbsractClass = hasAbstractModifier && isOuterDeclClass && hasOuterDeclAbstractModifier;
+    auto isAbstractInsideInterface = isOuterDeclInterface && !hasStaticModifier;
+
+    return (isAbstractInsideAbsractClass || isAbstractInsideInterface) && !isOuterDeclJavaImpl;
 }

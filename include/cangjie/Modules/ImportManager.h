@@ -101,6 +101,12 @@ public:
     std::vector<std::pair<std::string, std::vector<Ptr<AST::Decl>>>> GetImportedDecls(const AST::File& file) const;
 
     /**
+     * Get all imported decls as a flat vector (without grouping by name).
+     * This is more efficient when you only need all decls without name grouping.
+     */
+    std::vector<Ptr<AST::Decl>> GetAllImportedDecls(const AST::File& file) const;
+
+    /**
      * Get all accessible decls by @param file and @param name, and return decls.
      */
     std::vector<Ptr<AST::Decl>> GetImportedDeclsByName(const AST::File& file, const std::string& name) const;
@@ -185,9 +191,9 @@ public:
     std::unordered_set<std::string> GetUsedSTDLibFiles(DepType type)
     {
         std::unordered_set<std::string> result;
-        for (auto& item : stdDepsMap) {
-            if (item.second == type || item.second == DepType::BOTH) {
-                (void)result.emplace(item.first);
+        for (auto& [cjoPath, typeWithFullPkgName] : stdDepsMap) {
+            if (typeWithFullPkgName.first == type || typeWithFullPkgName.first == DepType::BOTH) {
+                (void)result.emplace(cjoPath);
             }
         }
         return result;
@@ -234,9 +240,10 @@ public:
 
     /**
      * For LSP, set cached cjo data @p cjoData and optional corresponding sha256 digest @p encrypt
-     * for @param fullPackageName .
+     * for @param fullPackageName and @p changeState.
      */
-    void SetPackageCjoCache(const std::string& fullPackageName, const std::vector<uint8_t>& cjoData) const;
+    void SetPackageCjoCache(const std::string& fullPackageName, const std::vector<uint8_t>& cjoData,
+        CjoManager::CjoChangeState changeState = CjoManager::CjoChangeState::ADDED) const;
 
     /**
      * For LSP, clear all cached cjo data.
@@ -295,6 +302,11 @@ public:
     Ptr<AST::Package> GetPackage(const std::string& fullPackageName) const;
     void SetImportedPackageFromASTNode(std::vector<OwnedPtr<AST::Package>>& pkgs);
     using DeclImportsMap = std::unordered_map<Ptr<const AST::Decl>, std::vector<Ptr<const AST::ImportSpec>>>;
+    /**
+     * Note: After the macro expansion, the ImportSpec pointer returned by this interface might be unreliable.
+     * @param fullPackageName [in]: full package name.
+     * @return map of imported decl to the 'ImportSpec' which imports the decl.
+     */
     const DeclImportsMap& GetImportsOfDecl(const std::string& fullPackageName) const
     {
         static const DeclImportsMap EMPTY{};
@@ -328,10 +340,19 @@ public:
     {
         return cjoManager->GetSearchPath();
     }
+    void UpdateSearchPath(const std::string& cangjieModules)
+    {
+        return cjoManager->UpdateSearchPath(cangjieModules);
+    }
     void DeleteASTWriters() noexcept;
     void DeleteASTLoaders() noexcept;
 
-    std::unordered_map<std::string, std::string> GetDepPkgCjdPaths()
+    std::unordered_map<std::string, std::string> GetDepPkgCjoPaths() const
+    {
+        return cjoFilePaths;
+    }
+
+    std::unordered_map<std::string, std::string> GetDepPkgCjdPaths() const
     {
         return cjdFilePaths;
     }
@@ -366,8 +387,8 @@ private:
     std::map<std::string, AST::OrderedDeclSet> importedDeclsMap;
     std::unordered_map<Ptr<const AST::Package>, ASTWriter*> astWriters;
 
-    /** Store the cjo file path of STD packages on used. */
-    std::unordered_map<std::string, DepType> stdDepsMap;
+    /** Store all standard package dependencies. Key is cjopath, value is pair of DepType and fullPackageName. */
+    std::unordered_map<std::string, std::pair<DepType, std::string>> stdDepsMap;
 
     /** Direct imported macro packages. */
     std::unordered_set<Ptr<AST::Package>> directMacroDeps;
@@ -387,6 +408,24 @@ private:
 
 private:
     /**
+    * @brief Parameters for handling already parsed packages
+    */
+    struct ParsedPackageContext {
+        const std::string& fullPackageName;
+        const std::string& cjoPath;
+        AST::Package& curPkg;
+        AST::Package& importPkg;
+        bool isMacroRelated;
+        bool isVisible;
+        bool isRecursive;
+    };
+
+    /**
+     * Handle already parsed package logic.
+     */
+    void HandleAlreadyParsedPackage(const ParsedPackageContext& context, bool& success);
+
+    /**
      * Used in `ResolveImportedPackageForFile` to handle package which has been parsed.
      * @return `false` if error occurred in recursive call of `ResolveImportedPackageForFile`,
      *          return `true` for normal case.
@@ -394,7 +433,7 @@ private:
     bool HandleParsedPackage(
         const AST::Package& package, const std::string& filePath, bool isUsedAsCommon, bool isRecursive);
 
-    void SaveDepPkgCjdPath(const std::string& fullPackageName, const std::string& cjoPath);
+    void SaveDepPkgCjoPath(const std::string& fullPackageName, const std::string& cjoPath);
 
     /**
      * Resolve all packages imported.
@@ -407,7 +446,7 @@ private:
      */
     bool ResolveImportedPackageForFile(AST::File& file, bool isRecursive = false);
 
-    void HandleSTDPackage(const std::string& fullPackageName, const std::string& cjoPath, bool isRecursive = false);
+    void HandleStdPackage(const std::string& fullPackageName, const std::string& cjoPath, bool isRecursive = false);
 
     void AddImportedDeclsForSourcePackage(const AST::Package& pkg);
 
@@ -429,6 +468,15 @@ private:
     bool IsDeclAccessible(const AST::File& file, AST::Decl& decl) const;
     const Ptr<AST::Type> FindImplmentInterface(
         const AST::File& file, const AST::Decl& member, const Ptr<AST::Type>& id) const;
+    /**
+     * Check if BuildIndex has been called.
+     */
+    bool HasBuildIndex() const;
+
+    /**
+     * Clear all caches for rebuild index in LSP.
+     */
+    void ClearCachesForRebuild();
 
     friend class PackageManager;
 
@@ -443,6 +491,7 @@ private:
         const std::set<std::string>& GetAllDependencyPackageNames(
             const std::string& fullPackageName, bool includeMacroPkg);
         void AddDependenciesForPackage(AST::Package& pkg);
+        void Clear();
 
     private:
         const std::map<std::string, std::set<Ptr<const AST::ImportSpec>, AST::CmpNodeByPos>>& GetEdges(
@@ -468,7 +517,11 @@ private:
     Ptr<AST::Package> curPackage;
     TypeManager& typeManager;
 
-    // Key is cjd fullPackageName, and value is .cj.d file path.
+    // Key is fullPackageName, and value is .cjo file path.
+    // Save the path of the imported external cjo and the path of binary dependencies' standard library cjo.
+    std::unordered_map<std::string, std::string> cjoFilePaths;
+    // Key is fullPackageName, and value is .cj.d file path.
+    // Save the path of the imported external cj.d and the path of the imported standard library cjd.
     std::unordered_map<std::string, std::string> cjdFilePaths;
 };
 } // namespace Cangjie

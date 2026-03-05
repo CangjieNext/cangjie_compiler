@@ -22,11 +22,11 @@ using namespace Cangjie::Utils;
 
 void ParserImpl::ParseCommonImportSpec(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos)
 {
-    while (SeeingImport2() || (SeeingBuiltinAnnotation())) {
+    while (SeeingImport() || (SeeingBuiltinAnnotation())) {
         if (SeeingBuiltinAnnotation()) {
             ParseAnnotations(annos);
         }
-        if (!SeeingImport2()) {
+        if (!SeeingImport()) {
             break;
         }
         ParseImportSpec(imports, annos);
@@ -225,9 +225,14 @@ bool ParserImpl::ParseImportSingle(ImportContent& content, bool inMultiImport)
             content.begin = curIdent.Begin();
             firstIter = false;
         }
-        if (content.prefixPaths.empty() && Skip(TokenKind::DOUBLE_COLON)) {
+        if (content.prefixPaths.empty() && !inMultiImport && Skip(TokenKind::DOUBLE_COLON)) {
             content.hasDoubleColon = true;
             skipDc = true;
+            // illegal to use raw identifier as org name
+            if (curIdent.IsRaw() && !content.TestAttr(Attribute::IS_BROKEN)) {
+                ParseDiagnoseRefactor(DiagKindRefactor::parse_package_name_has_backtick,
+                    MakeRange(curIdent.Begin() - 1, curIdent.End() + 1));
+            }
         }
     } while (skipDc || Skip(TokenKind::DOT));
 

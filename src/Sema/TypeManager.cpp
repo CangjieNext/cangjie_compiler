@@ -735,8 +735,8 @@ bool TypeManager::IsGenericSubtype(Ty& leaf, Ty& root, bool implicitBoxed, bool 
     return false;
 }
 
-// Treating platform and common classes/struct/enums types as subtypes of each other
-bool IsCommonAndPlatformRelation(const Ty& leafTy, const Ty& rootTy)
+// Treating specific and common classes/struct/enums types as subtypes of each other
+bool IsCommonAndSpecificRelation(const Ty& leafTy, const Ty& rootTy)
 {
     if (!leafTy.IsNominal() || !rootTy.IsNominal()) {
         return false;
@@ -744,9 +744,9 @@ bool IsCommonAndPlatformRelation(const Ty& leafTy, const Ty& rootTy)
     auto leafDecl = Ty::GetDeclOfTy(&leafTy);
     auto rootDecl = Ty::GetDeclOfTy(&rootTy);
     if (leafDecl && rootDecl) {
-        leafDecl = leafDecl->platformImplementation == nullptr ? leafDecl : leafDecl->platformImplementation;
-        rootDecl = rootDecl->platformImplementation == nullptr ? rootDecl : rootDecl->platformImplementation;
-        if (!leafDecl->TestAttr(Attribute::PLATFORM) || !rootDecl->TestAttr(Attribute::PLATFORM)) {
+        leafDecl = leafDecl->specificImplementation == nullptr ? leafDecl : leafDecl->specificImplementation;
+        rootDecl = rootDecl->specificImplementation == nullptr ? rootDecl : rootDecl->specificImplementation;
+        if (!leafDecl->TestAttr(Attribute::SPECIFIC) || !rootDecl->TestAttr(Attribute::SPECIFIC)) {
             return false;
         }
         return leafDecl == rootDecl;
@@ -790,7 +790,7 @@ bool TypeManager::IsPlaceholderEqual(Ty& leaf, Ty& root)
 
 bool TypeManager::IsClassTyEqual(Ty& leaf, Ty& root)
 {
-    if (&leaf == &root || IsCommonAndPlatformRelation(leaf, root)) {
+    if (&leaf == &root || IsCommonAndSpecificRelation(leaf, root)) {
         return true;
     }
     if (auto ctt = DynamicCast<ClassThisTy*>(&leaf); ctt) {
@@ -1025,7 +1025,7 @@ bool TypeManager::IsSubtype(Ptr<Ty> leaf, Ptr<Ty> root, bool implicitBoxed, bool
         return cacheResult->second;
     }
     auto cacheEntry = subtypeCache.emplace(std::make_pair(cacheKey, false)).first;
-    if (IsCommonAndPlatformRelation(*leaf, *root)) {
+    if (IsCommonAndSpecificRelation(*leaf, *root)) {
         cacheEntry->second = true;
     } else if (IsPlaceholderSubtype(*leaf, *root)) {
         cacheEntry->second = true;
@@ -1169,7 +1169,7 @@ TypeCompatibility TypeManager::CheckTypeCompatibility(
     if (!Ty::AreTysCorrect(std::set{lvalue, rvalue})) {
         return TypeCompatibility::INCOMPATIBLE;
     }
-    if (lvalue == rvalue || IsCommonAndPlatformRelation(*lvalue, *rvalue)) {
+    if (lvalue == rvalue || IsCommonAndSpecificRelation(*lvalue, *rvalue)) {
         return TypeCompatibility::IDENTICAL;
     }
     if (IsSubtype(lvalue, rvalue, implicitBoxed)) {
@@ -1299,10 +1299,20 @@ std::unordered_set<Ptr<Ty>> TypeManager::GetAllExtendInterfaceTyHelper(
         }
         TypeSubst typeMapping;
         for (size_t i = 0; i < typeArgs.size(); ++i) {
-            // may be used in generic instantiation
-            if (auto genSuper = DynamicCast<TyVar*>(extend->extendedType->ty->typeArgs[i])) {
-                typeMapping[genSuper] = typeArgs[i];
-            }
+            /**
+             * typeArgs in extendedType of extend may not be the same as typeVar in the extend declaration,
+             * so we need to generate the type mapping, which may be used in generic instantiation.
+             * E.g.
+             * interface I<T1> {}
+             * interface SA<T2> {}
+             * open class A<T3> {}
+             * extend<T4> A<SA<T4>> <: I<T4> {}
+             * let a: I<Int64> = A<SA<Int64>>()
+             * then typeArgs in extendedType is [SA<T4>], typeVar in the extend declaration is T4,
+             * but typeArgs in the extend used in instantiation of A is [SA<Int64>].
+             * so we need to generate the type mapping: [T4 |-> Int64].
+             */
+            typeMapping.merge(GenerateTypeMappingByTy(extend->extendedType->ty->typeArgs[i], typeArgs[i]));
         }
         for (auto& superInterfaceTy : extend->inheritedTypes) {
             if (!IsInheritableType(superInterfaceTy->ty)) {
@@ -1696,7 +1706,7 @@ void TypeManager::AddOverrideCache(
     OverrideOrShadowKey key(&src, &target, baseTy, expectInstParent);
     overrideOrShadowCache.emplace(key, val);
     if (val && src.outerDecl && src.outerDecl == Ty::GetDeclPtrOfTy(baseTy)) {
-        UpdateTopOverriddenFuncDeclCache(&src, &target);
+        UpdateTopOverriddenFuncDeclMap(&src, &target);
     }
 }
 
@@ -1938,16 +1948,20 @@ void TypeManager::RestoreJavaGenericsTy(AST::Decl& decl) const
 }
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+
 bool TypeManager::IsFuncDeclSubType(const AST::FuncDecl& decl, const AST::FuncDecl& funcDecl)
 {
     auto declType = StaticCast<FuncTy*>(decl.ty);
     auto resolvedFuncType = DynamicCast<FuncTy*>(funcDecl.ty);
-    if (resolvedFuncType && decl.identifier == funcDecl.identifier &&
-        IsFuncParameterTypesIdentical(declType->paramTys, resolvedFuncType->paramTys) &&
-        IsSubtype(declType->retTy, resolvedFuncType->retTy)) {
+    if (resolvedFuncType && decl.identifier == funcDecl.identifier && IsFuncTySubType(*declType, *resolvedFuncType)) {
         return true;
     }
     return false;
+}
+
+bool TypeManager::IsFuncTySubType(const AST::FuncTy& type1, const AST::FuncTy& type2)
+{
+    return IsFuncParameterTypesIdentical(type1.paramTys, type2.paramTys) && IsSubtype(type1.retTy, type2.retTy);
 }
 #endif
 
@@ -1956,19 +1970,19 @@ bool TypeManager::IsFuncDeclEqualType(const AST::FuncDecl& decl, const AST::Func
     return IsFuncDeclSubType(decl, funcDecl) && IsFuncDeclSubType(funcDecl, decl);
 }
 
-void TypeManager::UpdateTopOverriddenFuncDeclCache(const AST::Decl* src, const AST::Decl* target)
+void TypeManager::UpdateTopOverriddenFuncDeclMap(const AST::Decl* src, const AST::Decl* target)
 {
     if (auto funcDecl = DynamicCast<AST::FuncDecl>(src)) {
-        auto& temp = overrideCache[funcDecl];
+        auto& temp = overrideMap[funcDecl];
         temp.emplace_back(StaticCast<AST::FuncDecl*>(target));
     } else if (auto propDecl = DynamicCast<AST::PropDecl>(src)) {
         auto targetPropDecl = StaticCast<AST::PropDecl*>(target);
         if (!propDecl->getters.empty() && !targetPropDecl->getters.empty()) {
-            auto& temp = overrideCache[propDecl->getters.front().get()];
+            auto& temp = overrideMap[propDecl->getters.front().get()];
             temp.emplace_back(targetPropDecl->getters.front().get());
         }
         if (!propDecl->setters.empty() && !targetPropDecl->setters.empty()) {
-            auto& temp = overrideCache[propDecl->setters.front().get()];
+            auto& temp = overrideMap[propDecl->setters.front().get()];
             temp.emplace_back(targetPropDecl->setters.front().get());
         }
     }
@@ -1976,13 +1990,17 @@ void TypeManager::UpdateTopOverriddenFuncDeclCache(const AST::Decl* src, const A
 
 Ptr<const AST::FuncDecl> TypeManager::GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl) const
 {
-    const auto& decls = overrideCache.find(funcDecl);
-    if (decls == overrideCache.end() || decls->second.empty()) {
+    const auto& decls = overrideMap.find(funcDecl);
+    if (decls == overrideMap.end() || decls->second.empty()) {
         return nullptr;
     }
-    Ptr<const AST::FuncDecl> ret = decls->second.front();
-    while ((overrideCache.find(ret) != overrideCache.end()) && !(overrideCache.find(ret)->second.empty())) {
-        ret = overrideCache.find(ret)->second.front();
+    Ptr<const FuncDecl> ret = decls->second.front();
+    std::set<Ptr<const FuncDecl>> traversed;
+    while ((overrideMap.find(ret) != overrideMap.end()) && !(overrideMap.find(ret)->second.empty())) {
+        if (auto [_, succ] = traversed.emplace(ret); !succ) {
+            return nullptr; // cycle detected
+        }
+        ret = overrideMap.find(ret)->second.front();
     }
     return ret;
 }
@@ -2302,5 +2320,273 @@ Ptr<AST::Decl> TypeManager::GetDummyBuiltInDecl(Ptr<Ty> ty)
         dummyBuiltInDecls[ty]->ty = ty;
     }
     return dummyBuiltInDecls[ty].get();
+}
+
+// Create semantic type by substituting type arguments into base type.
+Ptr<Ty> TypeManager::SubstituteTypeArgs(Ptr<Ty> baseTy, std::vector<Ptr<Ty>>& typeArgs)
+{
+    if (!Ty::IsTyCorrect(baseTy)) {
+        return TypeManager::GetInvalidTy();
+    }
+    switch (baseTy->kind) {
+        case TypeKind::TYPE_CLASS: {
+            if (auto ctt = DynamicCast<ClassThisTy>(baseTy)) {
+                return GetClassThisTy(*ctt->declPtr, typeArgs);
+            }
+            return GetClassTy(*StaticCast<ClassTy>(baseTy)->declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_STRUCT: {
+            return GetStructTy(*StaticCast<StructTy>(baseTy)->declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_INTERFACE: {
+            return GetInterfaceTy(*StaticCast<InterfaceTy>(baseTy)->declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_ENUM: {
+            return GetEnumTy(*StaticCast<EnumTy>(baseTy)->declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_FUNC: {
+            auto returnTy = typeArgs.back();
+            typeArgs.pop_back();
+            auto funcTy = StaticCast<FuncTy>(baseTy);
+            return GetFunctionTy(typeArgs, returnTy, {funcTy->isC, false, funcTy->hasVariableLenArg});
+        }
+        case TypeKind::TYPE: {
+            return baseTy;
+        }
+        case TypeKind::TYPE_TUPLE: {
+            return GetTupleTy(typeArgs);
+        }
+        case TypeKind::TYPE_ARRAY: {
+            auto arrayTy = StaticCast<ArrayTy>(baseTy);
+            return GetArrayTy(typeArgs[0], arrayTy->dims);
+        }
+        case TypeKind::TYPE_VARRAY: {
+            auto varrayTy = StaticCast<VArrayTy>(baseTy);
+            return GetVArrayTy(*typeArgs[0], varrayTy->size);
+        }
+        case TypeKind::TYPE_POINTER: {
+            return GetPointerTy(typeArgs[0]);
+        }
+        default:
+            return baseTy;
+    }
+}
+
+Ptr<Ty> TypeManager::ObtainsAliasTypeOfRefType(Ptr<const RefType> rt)
+{
+    if (rt->ty->IsCFunc()) {
+        CJC_ASSERT(rt->typeArguments.size() == 1);
+        auto funcType = DynamicCast<FuncType>(rt->typeArguments[0].get());
+        CJC_NULLPTR_CHECK(funcType);
+        funcType->isC = true;
+        return ObtainsAliasType(funcType);
+    }
+    // 'This' type cannot use alias types. And typeArguments always be empty for 'This' type.
+    if (auto thisTy = DynamicCast<ClassThisTy>(rt->ty)) {
+        return rt->ty;
+    }
+    std::vector<Ptr<AST::Ty>> typeArgs;
+    for (auto& typeArg : rt->typeArguments) {
+        typeArgs.emplace_back(ObtainsAliasType(typeArg.get()));
+    }
+    return SubstituteTypeArgs(rt->ty, typeArgs);
+}
+
+Ptr<Ty> TypeManager::ObtainsAliasTypeOfFuncDecl(Ptr<const FuncDecl> fd)
+{
+    auto& fb = fd->funcBody;
+    std::vector<Ptr<Ty>> typeArgs;
+    for (auto& param : fb->paramLists[0]->params) {
+        typeArgs.emplace_back(ObtainsAliasType(param.get()));
+    }
+    if (fb->retType) {
+        typeArgs.emplace_back(ObtainsAliasType(fb->retType.get()));
+    } else {
+        auto funcTy = StaticCast<FuncTy>(fd->ty);
+        typeArgs.emplace_back(funcTy->retTy);
+    }
+    return SubstituteTypeArgs(fd->ty, typeArgs);
+}
+
+Ptr<Ty> TypeManager::ObtainsAliasType(Ptr<const Node> node)
+{
+    if (node == nullptr || !Ty::IsTyCorrect(node->ty)) {
+        return TypeManager::GetInvalidTy();
+    }
+    // Return type create by compiler will be ignored.
+    if (node->TestAttr(Attribute::COMPILER_ADD)) {
+        return node->ty;
+    }
+    if (auto typeNode = DynamicCast<Type>(node); typeNode && !Ty::IsInitialTy(typeNode->aliasTy)) {
+        auto tad = Ty::GetDeclPtrOfTy(typeNode->aliasTy);
+        CJC_NULLPTR_CHECK(tad);
+        // If typeAlias is not exported, give up replasement. The current semantics allow an exteranl declaration to use
+        // internal alias declaration.
+        if (!tad->IsExportedDecl() && !tad->TestAttr(Attribute::IMPLICIT_USED)) {
+            return node->ty;
+        }
+        return typeNode->aliasTy;
+    }
+    Ptr<Ty> ret = TypeManager::GetInvalidTy();
+    switch (node->astKind) {
+        case ASTKind::REF_TYPE: {
+            ret = ObtainsAliasTypeOfRefType(StaticCast<RefType>(node));
+            break;
+        }
+        case ASTKind::PAREN_TYPE: {
+            ret = ObtainsAliasType(StaticCast<ParenType>(node)->type.get());
+            break;
+        }
+        case ASTKind::VARRAY_TYPE: {
+            auto vat = StaticCast<VArrayType>(node);
+            std::vector<Ptr<AST::Ty>> typeArgs;
+            typeArgs.emplace_back(ObtainsAliasType(vat->typeArgument));
+            ret = SubstituteTypeArgs(node->ty, typeArgs);
+            break;
+        }
+        case ASTKind::FUNC_TYPE: {
+            auto ft = StaticCast<FuncType>(node);
+            auto fTy = StaticCast<FuncTy>(ft->ty);
+            std::vector<Ptr<Ty>> params;
+            for (auto& param : ft->paramTypes) {
+                params.emplace_back(ObtainsAliasType(param.get()));
+            }
+            auto retTy = ObtainsAliasType(ft->retType.get());
+            ret = GetFunctionTy(params, retTy, {ft->isC, false, fTy->hasVariableLenArg});
+            break;
+        }
+        case ASTKind::TUPLE_TYPE: {
+            auto tt = StaticCast<TupleType>(node);
+            std::vector<Ptr<Ty>> typeArgs;
+            for (auto& field : tt->fieldTypes) {
+                typeArgs.emplace_back(ObtainsAliasType(field.get()));
+            }
+            ret = SubstituteTypeArgs(node->ty, typeArgs);
+            break;
+        }
+        case ASTKind::VAR_DECL:
+        case ASTKind::FUNC_PARAM:
+        case ASTKind::VAR_WITH_PATTERN_DECL: {
+            auto vda = StaticCast<VarDeclAbstract>(node);
+            std::vector<Ptr<Ty>> typeArgs;
+            ret = vda->type ? ObtainsAliasType(vda->type) : node->ty;
+            break;
+        }
+        case ASTKind::FUNC_DECL: {
+            ret = ObtainsAliasTypeOfFuncDecl(StaticCast<FuncDecl>(node));
+            break;
+        }
+        case ASTKind::EXTEND_DECL: {
+            auto ed = StaticCast<ExtendDecl>(node);
+            ret = ObtainsAliasType(ed->extendedType.get());
+            break;
+        }
+        default:
+            ret = node->ty;
+            break;
+    }
+    return ret;
+}
+
+std::vector<Ptr<Ty>> TypeManager::RecursiveSubstituteTypeAliasInTy(
+    Ptr<const Ty> ty, bool needSubstituteGeneric, const TypeSubst& typeMapping)
+{
+    CJC_ASSERT(ty); // Caller guarantees;
+    std::vector<Ptr<Ty>> typeArgs;
+    for (auto typeArg : ty->typeArgs) {
+        CJC_ASSERT(typeArg);
+        if (Ty::IsTyCorrect(typeArg) || needSubstituteGeneric) {
+            auto noTypeAliasArg = SubstituteTypeAliasInTy(*typeArg, needSubstituteGeneric, typeMapping);
+            typeArgs.push_back(noTypeAliasArg);
+        } else {
+            typeArgs.push_back(typeArg);
+        }
+    }
+    return typeArgs;
+}
+
+Ptr<Ty> TypeManager::GetUnaliasedTypeFromTypeAlias(const TypeAliasTy& target, const std::vector<Ptr<Ty>>& typeArgs,
+    bool needSubstituteGeneric, const TypeSubst& customMapping)
+{
+    CJC_NULLPTR_CHECK(target.declPtr);
+    auto tad = target.declPtr;
+    if (tad->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
+        return tad->ty;
+    }
+    CJC_NULLPTR_CHECK(tad->type);
+    auto aliasedType = tad->type.get();
+    TypeSubst typeMapping = GenerateTypeMapping(*tad, typeArgs);
+    auto instAliasedTy = GetInstantiatedTy(aliasedType->ty, typeMapping);
+    // If the aliased type is still a type alias or contain a alias type, perform recursive substitution.
+    if (!Ty::IsInitialTy(aliasedType->aliasTy) || instAliasedTy->kind == TypeKind::TYPE) {
+        return SubstituteTypeAliasInTy(*instAliasedTy, needSubstituteGeneric, customMapping);
+    }
+    return instAliasedTy;
+}
+
+Ptr<AST::Ty> TypeManager::SubstituteTypeAliasInTy(AST::Ty& ty, bool needSubstituteGeneric, const TypeSubst& typeMapping)
+{
+    if (!Ty::IsTyCorrect(&ty)) {
+        return TypeManager::GetInvalidTy();
+    }
+    if (ty.kind <= TypeKind::TYPE_BOOLEAN) {
+        return &ty;
+    }
+    std::vector<Ptr<Ty>> typeArgs = RecursiveSubstituteTypeAliasInTy(&ty, needSubstituteGeneric, typeMapping);
+    switch (ty.kind) {
+        case TypeKind::TYPE_CLASS: {
+            if (auto ctt = DynamicCast<ClassThisTy*>(&ty); ctt) {
+                return GetClassThisTy(*ctt->declPtr, typeArgs);
+            }
+            return GetClassTy(*static_cast<ClassTy&>(ty).declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_STRUCT: {
+            return GetStructTy(*static_cast<StructTy&>(ty).declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_INTERFACE: {
+            return GetInterfaceTy(*static_cast<InterfaceTy&>(ty).declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_ENUM: {
+            return GetEnumTy(*static_cast<EnumTy&>(ty).declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_FUNC: {
+            auto returnTy = typeArgs.back();
+            typeArgs.pop_back();
+            auto& funcTy = static_cast<FuncTy&>(ty);
+            return GetFunctionTy(typeArgs, returnTy, {funcTy.isC, false, funcTy.hasVariableLenArg});
+        }
+        case TypeKind::TYPE: {
+            return GetUnaliasedTypeFromTypeAlias(
+                static_cast<TypeAliasTy&>(ty), typeArgs, needSubstituteGeneric, typeMapping);
+        }
+        case TypeKind::TYPE_TUPLE: {
+            return GetTupleTy(typeArgs);
+        }
+        case TypeKind::TYPE_ARRAY: {
+            auto& arrayTy = static_cast<ArrayTy&>(ty);
+            return GetArrayTy(typeArgs[0], arrayTy.dims);
+        }
+        case TypeKind::TYPE_VARRAY: {
+            auto& varrayTy = static_cast<VArrayTy&>(ty);
+            CJC_ASSERT(!typeArgs.empty() && typeArgs[0] != nullptr);
+            return GetVArrayTy(*typeArgs[0], varrayTy.size);
+        }
+        case TypeKind::TYPE_POINTER: {
+            return GetPointerTy(typeArgs[0]);
+        }
+        case TypeKind::TYPE_GENERICS: {
+            if (!needSubstituteGeneric) {
+                return &ty;
+            }
+            auto found = typeMapping.find(StaticCast<GenericsTy*>(&ty));
+            if (found != typeMapping.end()) {
+                return found->second;
+            }
+            // This type will not be used, just for placeholder and marking current is substituted with typealias.
+            return GetIntersectionTy({&ty});
+        }
+        default:
+            return &ty;
+    }
 }
 } // namespace Cangjie

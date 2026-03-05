@@ -341,7 +341,7 @@ bool TypeChecker::TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, Ty& target, NameR
     CJC_ASSERT(refNode.IsReferenceExpr());
     RemoveDuplicateElements(targets);
     // Add for cjmp
-    mpImpl->RemoveCommonCandidatesIfHasPlatform(targets);
+    mpImpl->RemoveCommonCandidatesIfHasSpecific(targets);
     auto [genericIgnored, candidates] = CollectValidFuncTys(ctx, targets, refNode, DynamicCast<FuncTy*>(&target));
     TypeSubst resultMapping;
     Ptr<FuncDecl> matchedFd = nullptr;
@@ -473,7 +473,7 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
         re.ty = TypeManager::GetInvalidTy();
         return;
     }
-    re.ty = SubstituteTypeAliasInTy(*re.ref.target->ty);
+    re.ty = typeManager.SubstituteTypeAliasInTy(*re.ref.target->ty);
     if (!decl->IsFunc() || re.isAlone) {
         // Only check non-function or non-call target. Functions will be check after function overload resolution.
         InstantiateReferenceType(ctx, re);
@@ -585,7 +585,7 @@ void TypeChecker::TypeCheckerImpl::InferMemberAccess(ASTContext& ctx, MemberAcce
         ma.ty = TypeManager::GetInvalidTy();
         return;
     }
-    ma.ty = SubstituteTypeAliasInTy(*ma.target->ty);
+    ma.ty = typeManager.SubstituteTypeAliasInTy(*ma.target->ty);
     // Only instantiate ty for non-function or non-call. Function's will be done after overload resolution.
     if (!ma.target->IsFunc() || ma.isAlone) {
         InstantiateReferenceType(ctx, ma);

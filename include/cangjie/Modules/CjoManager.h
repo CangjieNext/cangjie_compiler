@@ -41,7 +41,7 @@ public:
     void AddImportedPackageFromASTNode(OwnedPtr<AST::Package>&& pkg) const;
     bool LoadPackageHeader(const std::string& fullPackageName, const std::string& cjoPath) const;
     void LoadAllDeclsAndRefs() const;
-    bool NeedCollectDependency(std::string curName, bool isCurMacro, std::string depName) const;
+    bool NeedCollectDependency(const std::string& curName, bool isCurMacro, const std::string& depName) const;
     /**
      * Loads the declaration of each package in packages on demand.
      * If @p fromLsp is false, only the dependent packages of each package in @p packages are loaded.
@@ -54,12 +54,16 @@ public:
      */
     void AddPackageDeclMap(const std::string& fullPackageName, const std::string& importedPackage = "");
     /** For loading cached types during incremental compilation. */
-    std::unordered_set<std::string> LoadCachedPackage(const AST::Package& pkg,
-        const std::string& cjoPath, const std::map<std::string, Ptr<AST::Decl>>& mangledName2DeclMap) const;
+    std::unordered_set<std::string> LoadCachedPackage(const AST::Package& pkg, const std::string& cjoPath,
+        const std::map<std::string, Ptr<AST::Decl>>& mangledName2DeclMap) const;
     /** For --scan-dependency of cjo. */
     std::string GetPackageDepInfo(const std::string& cjoPath) const;
 
     Ptr<AST::PackageDecl> GetPackageDecl(const std::string& fullPackageName) const;
+    /* Load files from common part to current package.
+     * This is required to correctly handle imports from common part.
+     */
+    void LoadFilesOfCommonPart(Ptr<AST::Package> pkg);
     std::optional<std::vector<std::string>> PreReadCommonPartCjoFiles();
     Ptr<ASTLoader> GetCommonPartCjo(std::string expectedName) const;
     Ptr<AST::Package> GetPackage(const std::string& fullPackageName) const;
@@ -67,13 +71,12 @@ public:
 
     void RemovePackage(const std::string& fullPkgName, const Ptr<AST::Package> package) const;
 
-    const std::map<std::string, AST::OrderedDeclSet>& GetPackageMembers(
-        const std::string& fullPackageName) const;
+    const std::map<std::string, AST::OrderedDeclSet>& GetPackageMembers(const std::string& fullPackageName) const;
     const AST::OrderedDeclSet& GetPackageMembersByName(
         const std::string& fullPackageName, const std::string& name) const;
     Ptr<AST::Decl> GetImplicitPackageMembersByName(const std::string& fullPackageName, const std::string& name) const;
 
-    std::optional<std::string> GetPackageCjoPath(std::string fullPackageName) const;
+    std::string GetPackageCjoPath(const std::string& fullPackageName) const;
     /** return {fullPackageName, cjoPath} */
     std::pair<std::string, std::string> GetPackageCjo(const AST::ImportSpec& importSpec) const;
     std::vector<std::string> GetFullPackageNames(const AST::ImportSpec& import) const;
@@ -94,16 +97,28 @@ public:
 
     bool GetCanInline() const;
 
+    enum class CjoChangeState : uint8_t {
+        UNCHANGED = 0,
+        CHANGED = 1,
+        ADDED = 2,
+        DELETED = 3,
+    };
     /**
      * For LSP, set cached cjo data @p cjoData and optional corresponding sha256 digest @p encrypt
-     * for @param fullPackageName .
+     * for @param fullPackageName and @p changeState.
      */
-    void SetPackageCjoCache(const std::string& fullPackageName, const std::vector<uint8_t>& cjoData) const;
+    void SetPackageCjoCache(
+        const std::string& fullPackageName,
+        const std::vector<uint8_t>& cjoData,
+        CjoChangeState changeState = CjoChangeState::ADDED) const;
 
     void ClearCjoCache() const;
     void DeleteASTLoaders() const noexcept;
 
     void ClearVisitedPkgs() const;
+    void ClearForReBuildIndex() const;
+    bool HasBuildIndex() const;
+    void SetHasBuildIndex(bool value) const;
     DiagnosticEngine& GetDiag() const;
     Ptr<std::unordered_map<std::string, Ptr<AST::Decl>>> GetExportIdDeclMap(const std::string& fullPackageName) const;
 

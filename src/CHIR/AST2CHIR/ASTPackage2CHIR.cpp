@@ -13,11 +13,14 @@
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/CHIRCasting.h"
 #include "cangjie/CHIR/ConstantUtils.h"
+#include "cangjie/CHIR/Type/CustomTypeDef.h"
 #include "cangjie/CHIR/Type/ExtendDef.h"
 #include "cangjie/CHIR/Utils.h"
+#include "cangjie/CHIR/Visitor/Visitor.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include "cangjie/CHIR/Type/PrivateTypeConverter.h"
 
 namespace Cangjie::CHIR {
 namespace {
@@ -631,10 +634,6 @@ void AST2CHIR::SetFuncAttributeAndLinkageType(const AST::FuncDecl& astFunc, Func
         chirFunc.SetParamDftValHostFunc(*VirtualCast<FuncBase*>(globalCache.Get(*astFunc.ownerFunc)));
     }
     chirFunc.SetFastNative(astFunc.isFastNative);
-
-    if (astFunc.TestAttr(AST::Attribute::UNSAFE)) {
-        chirFunc.EnableAttr(Attribute::UNSAFE);
-    }
 }
 
 void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDecl)
@@ -654,10 +653,12 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
     }
     // Try get deserialized func.
     Func* fn = TryGetDeserialized<Func>(funcDecl);
-    bool isPlatform = funcDecl.TestAttr(AST::Attribute::PLATFORM);
+    bool isSpecific = funcDecl.TestAttr(AST::Attribute::SPECIFIC);
     if (fn) {
-        if (isPlatform) {
-            ResetPlatformFunc(funcDecl, *fn);
+        if (isSpecific) {
+            ResetSpecificFunc(funcDecl, *fn);
+            const auto& loc = GetDeclLoc(builder.GetChirContext(), funcDecl);
+            fn->SetDebugLocation(loc);
         }
         globalCache.Set(funcDecl, *fn);
         if (implicitDecls.count(&funcDecl) != 0) {
@@ -761,14 +762,34 @@ void AST2CHIR::CreatePseudoImportedFuncSignatureAndSetGlobalCache(const AST::Fun
     globalCache.Set(funcDecl, *fn);
 }
 
+namespace {
+void ConvertImportedFunctionType(
+    ImportedFunc& fn, const AST::FuncDecl& funcDecl, CHIRType& chirType, CHIRBuilder& builder)
+{
+    auto fnTy = chirType.TranslateType(*funcDecl.ty);
+    fnTy = AdjustFuncType(*StaticCast<FuncType*>(fnTy), funcDecl, builder, chirType);
+    if (fn.GetFuncType() == fnTy) {
+        return;
+    }
+    auto replaceTable = fn.GetFuncType()->CalculateGenericTyMapping(*fnTy).second;
+    ConvertTypeFunc convertTypeFunc = [&replaceTable, &builder](
+                                          Type& type) { return ReplaceRawGenericArgType(type, replaceTable, builder); };
+    ValueTypeConverter converter(convertTypeFunc, builder);
+    converter.VisitSubValue(fn);
+}
+} // namespace
+
 void AST2CHIR::CreateImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDecl)
 {
     ImportedFunc* fn = TryGetDeserialized<ImportedFunc>(funcDecl);
     if (fn) {
+        ConvertImportedFunctionType(*fn, funcDecl, chirType, builder);
         globalCache.Set(funcDecl, *fn);
         if (implicitDecls.count(&funcDecl) != 0) {
             implicitFuncs.emplace(fn->GetIdentifierWithoutPrefix(), fn);
         }
+        const auto& loc = GetDeclLoc(builder.GetChirContext(), funcDecl);
+        fn->SetDebugLocation(loc);
         return;
     }
     bool isGeneric = funcDecl.TestAttr(AST::Attribute::GENERIC);
@@ -833,6 +854,8 @@ void AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalCon
         if (IsSrcCodeImportedGlobalDecl(decl, opts)) {
             srcCodeImportedVars.emplace(VirtualCast<GlobalVar*>(gv));
         }
+        const auto& loc = GetDeclLoc(builder.GetChirContext(), decl);
+        gv->SetDebugLocation(loc);
         return;
     }
     auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), decl.begin, decl.end);
@@ -841,7 +864,7 @@ void AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalCon
     auto rawMangledName = decl.rawMangleName;
     auto packageName = decl.fullPackageName;
     auto ty = builder.GetType<RefType>(chirType.TranslateType(*decl.ty));
-    auto warnPos = GetVarLoc(builder.GetChirContext(), decl);
+    auto warnPos = GetDeclLoc(builder.GetChirContext(), decl);
     Value* gv = nullptr;
     if (kind == IncreKind::INCR && !decl.toBeCompiled && !IsSrcCodeImportedGlobalDecl(decl, opts)) {
         gv = builder.CreateImportedVarOrFunc<ImportedVar>(ty, mangledName, srcCodeName, rawMangledName, packageName);
@@ -894,7 +917,7 @@ void AST2CHIR::CacheTopLevelDeclToGlobalSymbolTable()
 
     CreateGlobalVarSignature(globalAndStaticVars);
     creatingLocalConstVarSignature = true;
-    
+
     // collect Annotation of global vars
     auto tr = CreateTranslator();
     for (auto var : globalAndStaticVars) {
@@ -1022,6 +1045,8 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
             if (customTypeDef == nullptr) {
                 customTypeDef = builder.CreateClass(
                     loc, identifier, mangledName, pkgName, decl.astKind == AST::ASTKind::CLASS_DECL, isImported);
+            } else {
+                customTypeDef->SetDebugLocation(loc);
             }
             uniqueDecl = StaticCast<AST::ClassLikeTy*>(decl.ty)->commonDecl;
             break;
@@ -1029,6 +1054,8 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
             customTypeDef = TryGetDeserialized<StructDef>(decl);
             if (customTypeDef == nullptr) {
                 customTypeDef = builder.CreateStruct(loc, identifier, mangledName, pkgName, isImported);
+            } else {
+                customTypeDef->SetDebugLocation(loc);
             }
             uniqueDecl = StaticCast<AST::StructTy*>(decl.ty)->decl;
             break;
@@ -1037,6 +1064,8 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
             if (customTypeDef == nullptr) {
                 customTypeDef = builder.CreateEnum(
                     loc, identifier, mangledName, pkgName, isImported, StaticCast<AST::EnumDecl>(decl).hasEllipsis);
+            } else {
+                customTypeDef->SetDebugLocation(loc);
             }
             uniqueDecl = StaticCast<AST::EnumTy*>(decl.ty)->decl;
             break;
@@ -1045,6 +1074,8 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
             if (customTypeDef == nullptr) {
                 auto gts = GetGenericParamType(decl, chirType);
                 customTypeDef = builder.CreateExtend(loc, mangledName, pkgName, isImported, gts);
+            } else {
+                customTypeDef->SetDebugLocation(loc);
             }
             break;
         }
@@ -1067,8 +1098,8 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
     if (decl.TestAttr(AST::Attribute::COMMON) && !decl.TestAttr(AST::Attribute::FROM_COMMON_PART)) {
         customTypeDef->EnableAttr(Attribute::COMMON);
     }
-    if (decl.TestAttr(AST::Attribute::PLATFORM)) {
-        customTypeDef->EnableAttr(Attribute::PLATFORM);
+    if (decl.TestAttr(AST::Attribute::SPECIFIC)) {
+        customTypeDef->EnableAttr(Attribute::SPECIFIC);
         customTypeDef->DisableAttr(Attribute::COMMON);
     }
 }
@@ -1250,42 +1281,6 @@ void AST2CHIR::SetExtendInfo()
     }
 }
 
-namespace {
-/**
- * Removes redundant deserialized extends, preserving only the most specific platform implementation.
- * Example: Compiling linux-x86 target:
- *   // common.cj (common definitions)
- *   common extend Int64 {}
- *   common extend Int64 {}
- *
- *   // linux.cj (platform-specific)
- *   platform extend Int64 {}
- *
- *   // linux-x86.cj (architecture-specific)
- *   platform extend Int64 {}
- *
- *  Produces after deserialization:
- *   4 extends (2 common, 1 platform from linux.cj, 1 platform from linux-x86.cj)
- *
- *  This function removes the 3 deserialized extends, keeping only linux-x86.cj's version.
- *
- */
-void RemoveUnusedCJMPExtends(CHIR::Package& chirPkg, bool compilePlatform)
-{
-    if (!compilePlatform) {
-        return;
-    }
-    auto extends = chirPkg.GetExtends();
-    auto it = std::remove_if(extends.begin(), extends.end(), [](const ExtendDef* ed) {
-        CJC_NULLPTR_CHECK(ed);
-        return ed->TestAttr(CHIR::Attribute::DESERIALIZED) &&
-            (ed->TestAttr(CHIR::Attribute::COMMON) || ed->TestAttr(CHIR::Attribute::PLATFORM));
-    });
-
-    extends.erase(it, extends.end());
-    chirPkg.SetExtends(std::move(extends));
-}
-} // namespace
 void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
 {
     Utils::ProfileRecorder recorder("TranslateAllDecls", "TranslateNominalDecls");
@@ -1332,9 +1327,14 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     TranslateVecDecl(genericNominalDecls, trans);
     // Update some info for nominal decls.
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "TranslateDecls");
-    RemoveUnusedCJMPExtends(*package, opts.inputChirFiles.size() == 1);
+
+    // Update some info for common specific
+    Utils::ProfileRecorder::Start("TranslateNominalDecls", "ProcessCommonAndSpecific");
+    ProcessCommonAndSpecificExtends();
     SetExtendInfo();
     UpdateExtendParent();
+    ProcessClassStructVarInits(trans);
+    Utils::ProfileRecorder::Stop("TranslateNominalDecls", "ProcessCommonAndSpecific");
 }
 
 void AST2CHIR::TranslateFuncParams(const AST::FuncDecl& funcDecl, Func& func) const
@@ -1369,9 +1369,9 @@ void AST2CHIR::TranslateVecDecl(const std::vector<Ptr<const AST::Decl>>& decls, 
 // Check whether the decl is deserialized for CJMP.
 bool AST2CHIR::MaybeDeserialized(const AST::Decl& decl) const
 {
-    // When the platform is compiled and decl is from common part or generic instantiated or imported or platform decl.
-    if (mergingPlatform &&
-        decl.TestAnyAttr(AST::Attribute::PLATFORM, AST::Attribute::FROM_COMMON_PART,
+    // When the specific is compiled and decl is from common part or generic instantiated or imported or specific decl.
+    if (mergingSpecific &&
+        decl.TestAnyAttr(AST::Attribute::SPECIFIC, AST::Attribute::FROM_COMMON_PART,
             AST::Attribute::GENERIC_INSTANTIATED, AST::Attribute::IMPORTED)) {
         return true;
     }
@@ -1406,7 +1406,169 @@ BuildDeserializedVec(std::unordered_map<std::string, U*>& table, const std::vect
         BuildDeserializedVec(table, args...);
     }
 }
+
+std::vector<Ptr<const AST::Decl>> CollectCommonMatchedDecls(
+    const std::vector<std::vector<Ptr<const AST::Decl>>>& declContainers)
+{
+    std::vector<Ptr<const AST::Decl>> commonDecls;
+    for (const auto& container : declContainers) {
+        for (const auto& decl : container) {
+            if (decl->IsCommonMatchedWithSpecific() && decl->astKind == AST::ASTKind::EXTEND_DECL) {
+                commonDecls.push_back(decl);
+            }
+        }
+    }
+    return commonDecls;
 }
+
+std::unordered_map<const GenericType*, Type*> BuildGenericTypeMapping(
+    const std::vector<Ptr<const AST::Decl>>& commonDecls, CHIRType& chirType)
+{
+    std::unordered_map<const GenericType*, Type*> commonGenericTy2specificGenericTy;
+
+    for (const auto& commonDecl : commonDecls) {
+        if (commonDecl->TestAttr(AST::Attribute::GENERIC)) {
+            auto commonGeneric = commonDecl->GetGeneric();
+            auto specificGeneric = commonDecl->specificImplementation->GetGeneric();
+            CJC_ASSERT(commonGeneric && specificGeneric);
+            auto& commonTypeParameters = commonGeneric->typeParameters;
+            auto& specificTypeParameters = specificGeneric->typeParameters;
+            CJC_ASSERT(commonTypeParameters.size() == specificTypeParameters.size() && !commonTypeParameters.empty());
+            for (size_t i = 0; i < commonTypeParameters.size(); i++) {
+                auto cTypeArg = commonTypeParameters[i]->ty;
+                auto pTypeArg = specificTypeParameters[i]->ty;
+                if (cTypeArg->IsGeneric() && pTypeArg->IsGeneric()) {
+                    auto commonGenericTy = StaticCast<GenericType*>(chirType.TranslateType(*cTypeArg));
+                    auto specificGenericTy = chirType.TranslateType(*pTypeArg);
+                    commonGenericTy2specificGenericTy[commonGenericTy] = specificGenericTy;
+                }
+            }
+        }
+    }
+    return commonGenericTy2specificGenericTy;
+}
+
+void ConvertSpecificMemberMethods(
+    Package* package, CHIRBuilder& builder, const std::function<Type*(Type&)>& replaceGenericFunc)
+{
+    PrivateTypeConverter converter(replaceGenericFunc, builder);
+    auto postVisit = [&converter](Expression& e) {
+        converter.VisitExpr(e);
+        return VisitResult::CONTINUE;
+    };
+
+    for (auto decl : package->GetExtends()) {
+        // Skip non-platform extends
+        if (!decl->TestAttr(CHIR::Attribute::SPECIFIC)) {
+            continue;
+        }
+
+        for (auto func : decl->GetMethods()) {
+            // Skip non-deserialized functions
+            if (!func->TestAttr(CHIR::Attribute::DESERIALIZED)) {
+                continue;
+            }
+
+            auto f = DynamicCast<Func*>(func);
+            if (!f) {
+                continue;
+            }
+
+            bool hasBodyFromCommonPart = f->GetBody();
+            if (hasBodyFromCommonPart) {
+                Visitor::Visit(*f, [](Expression&) { return VisitResult::CONTINUE; }, postVisit);
+            }
+            converter.VisitValue(*f);
+        }
+    }
+}
+
+// Collect all method names from an ExtendDef
+static std::unordered_set<std::string> CollectMethodNames(const ExtendDef& extend)
+{
+    std::unordered_set<std::string> names;
+
+    for (const auto& method : extend.GetMethods()) {
+        names.insert(method->GetIdentifier());
+    }
+
+    return names;
+}
+
+// Remove common extends if any member exists in specific extends
+static std::vector<ExtendDef*> ProcessExtends(std::vector<ExtendDef*>&& extends)
+{
+    std::vector<ExtendDef*> commonExtends;
+    std::vector<ExtendDef*> specificExtends;
+
+    // Separate common and specific extends
+    for (const auto& ed : extends) {
+        if (ed->TestAttr(CHIR::Attribute::COMMON)) {
+            commonExtends.push_back(ed);
+        } else if (ed->TestAttr(CHIR::Attribute::SPECIFIC)) {
+            specificExtends.push_back(ed);
+        }
+    }
+
+    // Collect all specific method names
+    std::unordered_set<std::string> specificMethodNames;
+    for (auto& specificEd : specificExtends) {
+        auto names = CollectMethodNames(*specificEd);
+        specificMethodNames.insert(names.begin(), names.end());
+    }
+
+    // Find common extends to remove (if any method exists in specific)
+    std::unordered_set<ExtendDef*> commonToRemove;
+    for (auto& commonEd : commonExtends) {
+        // Check if any method exists in specific
+        for (auto& method : commonEd->GetMethods()) {
+            if (method && specificMethodNames.count(method->GetIdentifier())) {
+                commonToRemove.insert(const_cast<ExtendDef*>(commonEd));
+                break;
+            }
+        }
+    }
+
+    // Remove common extends that have members in specific extends
+    auto it = std::remove_if(extends.begin(), extends.end(),
+        [&commonToRemove](ExtendDef* ed) {
+            return commonToRemove.find(ed) != commonToRemove.end();
+        });
+    extends.erase(it, extends.end());
+
+    return extends;
+}
+
+static std::vector<ExtendDef*> ProcessExtendsByCommonDecl(
+    std::vector<ExtendDef*>&& extends,
+    const std::vector<Ptr<const AST::Decl>>& commonDecls)
+{
+    std::unordered_set<std::string> commonDeclMangledNames;
+    for (const auto& commonDecl : commonDecls) {
+        commonDeclMangledNames.insert(commonDecl->mangledName);
+    }
+
+    auto it = std::remove_if(extends.begin(), extends.end(),
+        [&commonDeclMangledNames](ExtendDef* ed) {
+            return ed->TestAttr(CHIR::Attribute::COMMON) &&
+                   commonDeclMangledNames.count(ed->GetIdentifierWithoutPrefix());
+        });
+    extends.erase(it, extends.end());
+
+    return extends;
+}
+
+void RemoveUnusedCJMPExtends(CHIR::Package& chirPkg, const std::vector<Ptr<const AST::Decl>>& commonDecls)
+{
+    // Process package extends: remove if commonDecl has specificImplementation
+    chirPkg.SetExtends(ProcessExtendsByCommonDecl(chirPkg.GetExtends(), commonDecls));
+
+    // Process imported extends: remove if any member exists in specific extends
+    // Temporary solution: imported packages won't do matching,
+    // so imported commonDecls don't have specificImplementation
+    chirPkg.SetImportedExtends(ProcessExtends(chirPkg.GetImportedExtends()));
+}
+} // namespace
 
 void AST2CHIR::BuildDeserializedTable()
 {
@@ -1424,8 +1586,8 @@ void AST2CHIR::BuildDeserializedTable()
         std::vector<Func*>{package->GetPackageInitFunc(), package->GetPackageLiteralInitFunc()});
 }
 
-// Reset platform func for CJMP.
-void AST2CHIR::ResetPlatformFunc(const AST::FuncDecl& funcDecl, Func& func)
+// Reset specific func for CJMP.
+void AST2CHIR::ResetSpecificFunc(const AST::FuncDecl& funcDecl, Func& func)
 {
     // Reset body
     auto body = builder.CreateBlockGroup(func);
@@ -1437,8 +1599,79 @@ void AST2CHIR::ResetPlatformFunc(const AST::FuncDecl& funcDecl, Func& func)
     func.SetDebugLocation(loc);
     // Reset attrs: to do incremental change.
     SetFuncAttributeAndLinkageType(funcDecl, func);
-    func.EnableAttr(Attribute::PLATFORM);
+    func.EnableAttr(Attribute::SPECIFIC);
     func.DisableAttr(Attribute::COMMON);
     func.DisableAttr(Attribute::SKIP_ANALYSIS);
+
+    // Reset TypeArguments if has TypeArguments.
+    auto newGenericParamTys = GetGenericParamType(funcDecl, chirType);
+    auto oldGenericParamTys = func.GetGenericTypeParams();
+    std::unordered_map<const GenericType*, Type*> replaceTable;
+    if (!oldGenericParamTys.empty()) {
+        CJC_ASSERT(newGenericParamTys.size() == oldGenericParamTys.size());
+        for (size_t i = 0; i < oldGenericParamTys.size(); ++i) {
+            if (oldGenericParamTys[i] == newGenericParamTys[i]) {
+                continue;
+            }
+            replaceTable[oldGenericParamTys[i]] = newGenericParamTys[i];
+        }
+        if (replaceTable.empty()) {
+            return;
+        }
+        ConvertTypeFunc convertTypeFunc = [this, replaceTable](Type& type) {
+            return ReplaceRawGenericArgType(type, replaceTable, builder);
+        };
+        ValueTypeConverter converter(convertTypeFunc, builder);
+        converter.VisitSubValue(func);
+    }
+}
+
+void AST2CHIR::ProcessCommonAndSpecificExtends()
+{
+    bool compileSpecific = opts.IsCompilingCJMPSpecific();
+    if (!compileSpecific) {
+        return;
+    }
+
+    // Collect common generic extends and build type mapping
+    std::vector<Ptr<const AST::Decl>> commonDecls = CollectCommonMatchedDecls(
+        {importedNominalDecls, importedGenericInstantiatedNominalDecls, nominalDecls, genericNominalDecls});
+    std::unordered_map<const GenericType*, Type*> commonGenericTy2specificGenericTy =
+        BuildGenericTypeMapping(commonDecls, chirType);
+
+    // 1. Convert specific extend methods if type mapping exists
+    if (!commonGenericTy2specificGenericTy.empty()) {
+        ConvertSpecificMemberMethods(package, builder, [this, &commonGenericTy2specificGenericTy](Type& type) {
+            return ReplaceRawGenericArgType(type, commonGenericTy2specificGenericTy, builder);
+        });
+    }
+
+    // 2. Clean up unused extends
+    RemoveUnusedCJMPExtends(*package, commonDecls);
+}
+
+void AST2CHIR::ProcessClassStructVarInits(Translator& trans)
+{
+    bool compileCJMP = opts.IsCompilingCJMP();
+    if (!compileCJMP) {
+        return;
+    }
+    // translate vars init for CJMP.
+    const std::vector<std::vector<Ptr<const AST::Decl>>>& declContainers = {
+        importedNominalDecls, importedGenericInstantiatedNominalDecls, nominalDecls, genericNominalDecls
+    };
+    for (auto& container : declContainers) {
+        for (const auto& decl : container) {
+            CJC_NULLPTR_CHECK(decl);
+            // Skip the common part varInit generation while comparing specific parts.
+            if (decl->TestAttr(AST::Attribute::FROM_COMMON_PART)) {
+                continue;
+            }
+            // Just need to generate varInit for class/struct.
+            if (decl->astKind == AST::ASTKind::CLASS_DECL || decl->astKind == AST::ASTKind::STRUCT_DECL) {
+                trans.CreateClassStructDeclVarInit(*decl);
+            }
+        }
+    }
 }
 } // namespace Cangjie::CHIR

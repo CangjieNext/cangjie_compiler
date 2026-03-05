@@ -194,6 +194,15 @@ llvm::Value* IRBuilder2::CreateCallOrInvoke(const CGFunctionType& calleeType, ll
                         typeInfo = CreateBitCast(CreateTypeInfo(applyWrapper->GetThisType()),
                             CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext()));
                     }
+                    auto outerCHIRType =
+                        StaticCast<CHIR::ClassType*>(applyWrapper->GetOuterType(GetCGContext().GetCHIRBuilder()));
+                    if (GetCGContext().GetCGPkgContext().NeedOuterTypeInfo(*outerCHIRType)) {
+                        auto introType = CreateBitCast(
+                            CreateTypeInfo(outerCHIRType), CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext()));
+                        auto outerType = CallIntrinsicMethodOuterType({typeInfo, introType,
+                            getInt64(StaticCast<CHIRInvokeStaticWrapper>(applyWrapper)->GetVirtualMethodOffset())});
+                        typeInfo = CreateBitCast(outerType, CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext()));
+                    }
                 }
             } else {
                 if (this->chirExpr->GetExprKind() == CHIR::ExprKind::APPLY ||
@@ -204,6 +213,17 @@ llvm::Value* IRBuilder2::CreateCallOrInvoke(const CGFunctionType& calleeType, ll
                 } else {
                     auto thisVal = **(cgMod | applyWrapper->GetThisParam());
                     typeInfo = GetTypeInfoFromObject(thisVal);
+                    auto outerCHIRType =
+                        StaticCast<CHIR::ClassType*>(applyWrapper->GetOuterType(GetCGContext().GetCHIRBuilder()));
+                    if (!DeRef(*StaticCast<CHIRInvokeWrapper>(applyWrapper)->GetObject()->GetType())->IsAutoEnv() &&
+                        GetCGContext().GetCGPkgContext().NeedOuterTypeInfo(*outerCHIRType)) {
+                        auto introType =
+                            CreateBitCast(CreateTypeInfo(applyWrapper->GetOuterType(GetCGContext().GetCHIRBuilder())),
+                                CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext()));
+                        auto outerType = CallIntrinsicMethodOuterType({typeInfo, introType,
+                            getInt64(StaticCast<CHIRInvokeWrapper>(applyWrapper)->GetVirtualMethodOffset())});
+                        typeInfo = CreateBitCast(outerType, CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext()));
+                    }
                 }
             }
             (void)argsVal.emplace_back(typeInfo);
@@ -900,7 +920,6 @@ llvm::Value* IRBuilder2::CreateGEP(
 CGValue IRBuilder2::CreateGEP(
     const CGValue& cgVal, const std::vector<uint64_t>& idxList, [[maybe_unused]] const llvm::Twine& name)
 {
-    std::vector<llvm::Value*> idxes;
     auto ret = cgVal.GetRawValue();
     auto eleType = cgVal.GetCGType()->GetPointerElementType();
     CJC_NULLPTR_CHECK(eleType);
@@ -1802,6 +1821,18 @@ llvm::Value* IRBuilder2::GetAlign(const CHIR::Type& type, llvm::Type* targetType
     sizePHI->addIncoming(llvm::ConstantInt::get(targetType, GetPayloadOffset()), refAlignBB);
     sizePHI->addIncoming(nonRefAlign, nonRefAlignBB);
     return sizePHI;
+}
+
+llvm::Value* IRBuilder2::GetUUIDFromTypeInfo(llvm::Value* typeInfo)
+{
+    auto& llvmCtx = cgMod.GetLLVMContext();
+    auto typeInfoTy = CGType::GetOrCreateTypeInfoType(llvmCtx);
+    auto typeInfoPtrTy = typeInfoTy->getPointerTo();
+    auto ptr = CreateStructGEP(
+        typeInfoTy, LLVMIRBuilder2::CreateBitCast(typeInfo, typeInfoPtrTy), static_cast<uint64_t>(TYPEINFO_UUID));
+    auto inst = LLVMIRBuilder2::CreateLoad(llvm::Type::getInt32Ty(llvmCtx), ptr, "ti.uuid");
+    inst->setMetadata(llvm::LLVMContext::MD_invariant_load, llvm::MDNode::get(llvmCtx, {}));
+    return inst;
 }
 
 llvm::Value* IRBuilder2::GetTypeKindFromTypeInfo(llvm::Value* typeInfo)

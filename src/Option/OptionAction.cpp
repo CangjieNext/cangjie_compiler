@@ -42,6 +42,10 @@ const std::unordered_map<std::string, uint8_t> LTO_MODE_MAP = {
     {"thin", uint8_t(GlobalOptions::LTOMode::THIN_LTO)},
 };
 
+const std::unordered_map<std::string, GlobalOptions::InteropLanguage> INTEROP_LANGUAGE_MAP = {
+    {"Java", GlobalOptions::InteropLanguage::Java}, {"ObjC", GlobalOptions::InteropLanguage::ObjC},
+};
+
 const std::unordered_map<std::string, uint8_t> WARN_GROUP_MAP = {
 #define WARN_GROUP(DESCR, KIND) {DESCR, uint8_t(WarnGroup::KIND)},
 #include "cangjie/Basic/DiagRefactor/DiagnosticWarnGroupKind.def"
@@ -59,8 +63,16 @@ const std::unordered_map<std::string, uint8_t> OUTPUT_MODE_MAP = {
     {"exe", uint8_t(GlobalOptions::OutputMode::EXECUTABLE)},
     {"staticlib", uint8_t(GlobalOptions::OutputMode::STATIC_LIB)},
     {"dylib", uint8_t(GlobalOptions::OutputMode::SHARED_LIB)},
+    {"obj", uint8_t(GlobalOptions::OutputMode::OBJ)},
     {"chir", uint8_t(GlobalOptions::OutputMode::CHIR)},
 };
+
+const std::unordered_map<std::string, uint8_t> COMPILE_TARGET_MAP = {
+    {"exe", uint8_t(GlobalOptions::CompileTarget::EXECUTABLE)},
+    {"staticlib", uint8_t(GlobalOptions::CompileTarget::STATIC_LIB)},
+    {"dylib", uint8_t(GlobalOptions::CompileTarget::SHARED_LIB)},
+};
+
 #endif
 
 const std::unordered_map<std::string, ArchType> STRING_ARCH_MAP = {
@@ -86,7 +98,6 @@ const std::unordered_map<std::string, Environment> STRING_ENVIRONMENT_MAP = {
 const std::unordered_map<Environment, std::string> ENVIRONMENT_STRING_MAP = {
     {Environment::OHOS, "ohos"},
     {Environment::GNU, "gnu"},
-    {Environment::GNU, "mingw32"},
     {Environment::ANDROID, "android"},
     {Environment::SIMULATOR, "simulator"}, 
     {Environment::NOT_AVAILABLE, ""},
@@ -226,14 +237,32 @@ bool ParseTargetTriple(GlobalOptions& opts, const std::string& triple)
     if (auto env = STRING_ENVIRONMENT_MAP.find(envStr); env != STRING_ENVIRONMENT_MAP.end()) {
         opts.target.env = env->second;
         if (opts.target.env == Environment::ANDROID) {
-            opts.target.apiLevel = "31";
+            opts.target.apiLevel = Triple::MIN_ANDROID_API;
             Infoln("ANDROID API level is not suggested in the target. Use API level " +
                 opts.target.apiLevel + " by default.");
         }
     // If targeting Android, the env field may contains the API level like "android31"
     } else if (envStr.rfind(ENVIRONMENT_STRING_MAP.at(Environment::ANDROID), 0) == 0) {
         opts.target.env = Environment::ANDROID;
-        opts.target.apiLevel = envStr.substr(7); // 7 is the length of "android"
+        for (size_t i = 0; i < envStr.size(); ++i) {
+            if (envStr[i] >= '0' && envStr[i] <= '9') {
+                opts.target.apiLevel = envStr.substr(i);
+                break;
+            }
+        }
+        if (!opts.target.apiLevel.empty()) {
+            try {
+                const int num{std::stoi(opts.target.apiLevel)};
+                // The default Android magic version number is 10000.
+                // The minimum Android API level that cangjie supports.
+                if (num < 26 || num > 10000) {
+                    Errorln("The Android API level is not supported in the target."
+                        " Please use a valid API level which is larger than 26.");
+                }
+            } catch (std::exception const&) {
+                Errorln("The Android API level is illegal. Please use a valid API level which is greater than or equal to 26.");
+            }
+        }
     } else {
         Errorln("The environment \"" + envStr + "\" is not found or supported!");
         return false;
@@ -317,7 +346,7 @@ bool ParseAndCheckConditionVar(
     std::string& id, std::unordered_map<std::string, std::string>& res, DiagnosticEngine& diag)
 {
     if (id.size() > std::string("``").size() && id[0] == '`') {
-        id.substr(1, id.size() - std::string("``").size()); // parse raw id
+        id = id.substr(1, id.size() - std::string("``").size()); // parse raw id
     }
     Unicode::NFC(id);
     if (BUILTIN_CONDITION.find(id) != BUILTIN_CONDITION.end()) {
@@ -576,7 +605,15 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     }},
     { Options::ID::PACKAGE_COMPILE, OPTION_TRUE_ACTION(opts.compilePackage = true) },
     { Options::ID::NO_PRELUDE, OPTION_TRUE_ACTION(opts.implicitPrelude = false) },
-    { Options::ID::ENABLE_INTEROP_CJMAPPING, OPTION_TRUE_ACTION(opts.enableInteropCJMapping = true) },
+    { Options::ID::USE_INTEROP_CJ_PACKAGE_CONFIG_RPATH, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        // Not allowed to be empty.
+        if (arg.value.empty()) {
+            Errorf("'%s' requires a non-empty value.\n", arg.name.c_str());
+            return false;
+        }
+        opts.interopCJPackageConfigPath = arg.value;
+        return true;
+    }},
     { Options::ID::INT_OVERFLOW_MODE, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         CJC_ASSERT(ValidOverflowStrategy(arg.value));
         if (!ValidOverflowStrategy(arg.value)) { return false; }
@@ -801,6 +838,12 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
             opts.enableHotReload = false;
         }
         opts.enableOutputType = true;
+            return true;
+    }},
+    { Options::ID::COMPILE_TARGET, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        CJC_ASSERT(COMPILE_TARGET_MAP.count(arg.value) != 0);
+        if (COMPILE_TARGET_MAP.count(arg.value) == 0) { return false; }
+        opts.compileTarget = GlobalOptions::CompileTarget(COMPILE_TARGET_MAP.at(arg.value));
         return true;
     }},
      { Options::ID::COMPILE_MACRO, [](GlobalOptions& opts, [[maybe_unused]] const OptionArgInstance& arg) {
@@ -808,6 +851,17 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
             opts.outputMode = GlobalOptions::OutputMode::SHARED_LIB;
 #endif
+        return true;
+    }},
+     { Options::ID::ENABLE_INTEROP_CJMAPPING, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        if (arg.value.empty()) {
+            return false;
+        }
+        if (INTEROP_LANGUAGE_MAP.count(arg.value) == 0) {
+            return false;
+        }
+        opts.targetInteropLanguage = INTEROP_LANGUAGE_MAP.at(arg.value);
+        opts.enableInteropCJMapping = true;
         return true;
     }},
     // ---------- OUTPUT CONTROL OPTIONS ----------
@@ -875,10 +929,11 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     }},
     { Options::ID::DEBUG_CODEGEN, OPTION_TRUE_ACTION(opts.codegenDebugMode = true) },
     { Options::ID::CHIR_OPT_DEBUG, OPTION_TRUE_ACTION(opts.chirDebugOptimizer = true) },
-    { Options::ID::DUMP_CHIR_DEBUG, [](GlobalOptions& opts, [[maybe_unused]] const OptionArgInstance& arg) {
-        opts.chirDumpDebugMode = true;
-        return true;
-    }},
+    { Options::ID::DUMP_AST, OPTION_TRUE_ACTION(opts.dumpAST = true)},
+    { Options::ID::DUMP_CHIR, OPTION_TRUE_ACTION(opts.dumpCHIR = true)},
+    { Options::ID::DUMP_IR, OPTION_TRUE_ACTION(opts.dumpIR = true)},
+    { Options::ID::DUMP_ALL, OPTION_TRUE_ACTION(opts.dumpAll = true)},
+    { Options::ID::DUMP_TO_SCREEN, OPTION_TRUE_ACTION(opts.dumpToScreen = true)},
     { Options::ID::EMIT_CHIR, [](GlobalOptions& opts, [[maybe_unused]] const OptionArgInstance& arg) {
         if (arg.value.empty()) {
             opts.emitCHIRPhase = GlobalOptions::CandidateEmitCHIRPhase::OPT;
@@ -974,7 +1029,13 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     { Options::ID::NO_DATA_SECTIONS, OPTION_TRUE_ACTION(opts.enableDataSections = false) },
     { Options::ID::GC_SECTIONS, OPTION_TRUE_ACTION(opts.enableGcSections = true) },
     { Options::ID::NO_GC_SECTIONS, OPTION_TRUE_ACTION(opts.enableGcSections = false) },
-    { Options::ID::PGO_INSTR_GEN, OPTION_TRUE_ACTION(opts.enablePgoInstrGen = true) },
+    { Options::ID::PGO_INSTR_GEN, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        opts.enablePgoInstrGen = true;
+        if (arg.value != "") {
+            opts.pgoProfileFile = arg.value;
+        }
+        return true;
+    }},
     { Options::ID::PGO_INSTR_USE, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         opts.enablePgoInstrUse = true;
         opts.pgoProfileFile = arg.value;
@@ -1009,6 +1070,16 @@ std::string Triple::Info::EnvironmentToString() const
         if (env == Environment::ANDROID) {
             return search->second + apiLevel;
         }
+        return search->second;
+    } else {
+        return "";
+    }
+}
+
+// conditionalCompilation doesn't need android + api level
+std::string Triple::Info::EnvironmentToSimpleString() const
+{
+    if (auto search = ENVIRONMENT_STRING_MAP.find(env); search != ENVIRONMENT_STRING_MAP.end()) {
         return search->second;
     } else {
         return "";

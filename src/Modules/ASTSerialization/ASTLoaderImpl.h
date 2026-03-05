@@ -63,7 +63,7 @@ public:
     bool isChirNow = false;
 
 private:
-friend ASTLoader;
+    friend ASTLoader;
     std::vector<uint8_t> data;
     TypeManager& typeManager;
     DiagnosticEngine& diag;
@@ -116,6 +116,7 @@ friend ASTLoader;
     // Load super class type or super interface types.
     void LoadInheritedTypes(const PackageFormat::Decl& decl, AST::InheritableDecl& id);
     void LoadGenericConstraintsRef(const PackageFormat::Generic* genericRef, Ptr<AST::Generic> generic);
+    void LoadAnnotationBaseExpr(const PackageFormat::Anno& rawAnno, AST::Annotation& anno);
     template <typename DeclT> void LoadNominalDeclRef(const PackageFormat::Decl& decl, DeclT& astDecl);
     void LoadTypeAliasDeclRef(const PackageFormat::Decl& decl, AST::TypeAliasDecl& tad);
     void LoadDeclDependencies(const PackageFormat::Decl& decl, AST::Decl& astDecl);
@@ -363,7 +364,7 @@ friend ASTLoader;
     void LoadMatchCaseRef(FormattedIndex index, AST::MatchCase& mc, AST::Expr& selector);
 
     OwnedPtr<AST::Annotation> LoadAnnotation(const PackageFormat::Anno& rawAnno);
-    OwnedPtr<AST::FuncArg> LoadAnnotationArg(const PackageFormat::AnnoArg& rawArg);
+    std::vector<OwnedPtr<AST::FuncArg>> LoadAnnotationArgs(const PackageFormat::Anno& rawAnno);
 };
 } // namespace Cangjie
 

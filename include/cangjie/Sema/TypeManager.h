@@ -57,6 +57,10 @@ public:
     {
         return &theCStringTy;
     }
+    static Ptr<AST::PrimitiveTy> GetBoolTy()
+    {
+        return GetPrimitiveTy(AST::TypeKind::TYPE_BOOLEAN);
+    }
     /**
      * Check if there are generic types in ty.
      */
@@ -230,7 +234,9 @@ public:
         tyExtendInterfaceTyMap.clear();
         tyToSuperTysMap.clear();
         overrideOrShadowCache.clear();
+        overrideMap.clear();
         ClearRecordUsedExtends();
+        subtypeCache.clear();
     }
 
     std::unordered_set<Ptr<AST::ExtendDecl>> GetBoxUsedExtends() const
@@ -265,12 +271,13 @@ public:
     Ptr<AST::Decl> GetOverrideDeclInClassLike(
         AST::Decl& baseDecl, const AST::FuncDecl& funcDecl, bool withAbstractOverrides = false);
 
-    void UpdateTopOverriddenFuncDeclCache(const AST::Decl* src, const AST::Decl* target);
+    void UpdateTopOverriddenFuncDeclMap(const AST::Decl* src, const AST::Decl* target);
     Ptr<const AST::FuncDecl> GetTopOverriddenFuncDecl(const AST::FuncDecl* funcDecl) const;
     /**
      * whether the decl is override the funcDecl.
      */
     bool IsFuncDeclSubType(const AST::FuncDecl& decl, const AST::FuncDecl& funcDecl);
+    bool IsFuncTySubType(const AST::FuncTy& type1, const AST::FuncTy& type2);
 
     bool IsFuncDeclEqualType(const AST::FuncDecl& decl, const AST::FuncDecl& funcDecl);
 
@@ -330,6 +337,23 @@ public:
     Ptr<AST::Ty> TryGreedySubst(Ptr<AST::Ty> ty);
     // constraints for placeholder type vars
     Constraint constraints;
+    /**
+     * @brief Obtains the alias type of node if node's ty have alias type reference.
+     * @param node the node which map contain alias type reference.
+     * @return the TypeAliasTy or Ty contain TypeAliasTy.
+     */
+    Ptr<AST::Ty> ObtainsAliasType(Ptr<const AST::Node> node);
+
+    /**
+     * @brief Substitute type alias in ty recursively.
+     * @param ty the type need to substitute type alias.
+     * @param needSubstituteGeneric whether need to substitute generic type vars.
+     * @param typeMapping the custom type mapping for substitution.
+     * @return the substituted type.
+     */
+    Ptr<AST::Ty> SubstituteTypeAliasInTy(
+        AST::Ty& ty, bool needSubstituteGeneric = false, const TypeSubst& typeMapping = {});
+
 private:
     friend class TyVarScope;
     friend class InstCtxScope;
@@ -507,7 +531,12 @@ private:
     };
     /** Stores the overwrite or shadow judgment result determined based on BaseTy, src funcDecl, and target funcDecl. */
     std::unordered_map<OverrideOrShadowKey, bool, OverrideOrShadowHash, OverrideOrShadowEqual> overrideOrShadowCache;
-    std::unordered_map<Ptr<const AST::FuncDecl>, std::vector<Ptr<const AST::FuncDecl>>> overrideCache;
+    /**
+     * Cache that maps a function declaration to the list of function declarations it overrides.
+     * For each key `f`, `overrideMap[f]` contains the parent/super function(s) overridden by `f`.
+     * This is used to find the top overridden function(s) for a given function declaration.
+     */
+    std::unordered_map<Ptr<const AST::FuncDecl>, std::vector<Ptr<const AST::FuncDecl>>> overrideMap;
 
     // a counter for naming tyvars
     unsigned long long nextUniqId{0};
@@ -595,6 +624,14 @@ private:
         const std::set<Ptr<AST::ExtendDecl>>& extends, const std::vector<Ptr<AST::Ty>>& typeArgs);
     bool HasExtendInterfaceTyHelper(AST::Ty& superTy, const std::set<Ptr<AST::ExtendDecl>>& extends,
         const std::vector<Ptr<AST::Ty>>& typeArgs);
+
+    Ptr<AST::Ty> SubstituteTypeArgs(Ptr<AST::Ty> baseTy, std::vector<Ptr<AST::Ty>>& typeArgs);
+    std::vector<Ptr<AST::Ty>> RecursiveSubstituteTypeAliasInTy(
+        Ptr<const AST::Ty> ty, bool needSubstituteGeneric, const TypeSubst& typeMapping = {});
+    Ptr<AST::Ty> GetUnaliasedTypeFromTypeAlias(const AST::TypeAliasTy& target,
+        const std::vector<Ptr<AST::Ty>>& typeArgs, bool needSubstituteGeneric, const TypeSubst& customMapping);
+    Ptr<AST::Ty> ObtainsAliasTypeOfRefType(Ptr<const AST::RefType> rt);
+    Ptr<AST::Ty> ObtainsAliasTypeOfFuncDecl(Ptr<const AST::FuncDecl> fd);
 };
 } // namespace Cangjie
 

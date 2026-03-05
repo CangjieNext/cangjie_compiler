@@ -69,6 +69,8 @@ static const std::string CJ_TLS_DYN_SSL_INIT_NAME = "CJ_TLS_DYN_SslInit";
 
 static const std::string FILL_IN_STACK_TRACE_NAME = "fillInStackTrace";
 static const std::string DECODE_STACK_TRACE_NAME = "decodeStackTrace";
+static const std::string DUMP_CURRENT_THREAD_INFO_NAME = "dumpCurrentThreadInfo";
+static const std::string DUMP_ALL_THREADS_INFO_NAME = "dumpAllThreadsInfo";
 
 static const std::string CPOINTER_GET_POINTER_ADDRESS_NAME = "getPointerAddress";
 static const std::string CPOINTER_READ_NAME = "readPointer";
@@ -83,8 +85,11 @@ static const std::string BIT_CAST_NAME = "bitCast";
  * The intrinsic doesn't have a declaration and for its call,
  * it's intended to be generated dynamically in the compiler front-end
  */
-static const std::string GET_TYPE_FOR_TYPE_PARAMETER_NAME = GET_TYPE_FOR_TYPE_PARAMETER_FUNC_NAME;
-static const std::string IS_SUBTYPE_TYPES_NAME = IS_SUBTYPE_TYPES_FUNC_NAME;
+// Cannot assign the variable from other headers, variable may not be assigned yet on windows.
+static const std::string GET_TYPE_FOR_TYPE_PARAMETER_NAME = "getTypeForTypeParameter";
+static const std::string IS_SUBTYPE_TYPES_NAME = "isSubtypeTypes";
+// exclusiveScope is the name of the public function, so we add an "Impl" suffix.
+constexpr std::string_view EXCLUSIVE_SCOPE_NAME = "exclusiveScopeImpl";
 
 // Package runtime
 static const std::string INVOKE_GC_NAME = "invokeGC";
@@ -107,7 +112,7 @@ static const std::string FUTURE_INIT_NAME = "futureInit";
 static const std::string OBJECT_REFEQ_NAME = "intrinsicRefEq";
 
 static const std::string RAW_ARRAY_REFEQ_NAME = "intrinsicRefEqRawArray"; // cjnative only
-
+static const std::string FUNC_REFEQ_NAME = "intrinsicRefEqFunc"; // cjnative only
 static const std::string OBJECT_ZERO_VALUE_NAME = "zeroValue";
 
 static const std::string IS_THREAD_OBJECT_INITED_NAME = "isThreadObjectInited";
@@ -298,6 +303,8 @@ enum IntrinsicKind : uint16_t {
     ARRAY_SLICE_SET_ELEMENT_UNCHECKED,
     FILL_IN_STACK_TRACE,
     DECODE_STACK_TRACE,
+    DUMP_CURRENT_THREAD_INFO,
+    DUMP_ALL_THREADS_INFO,
 
     CHR,
     ORD,
@@ -319,6 +326,7 @@ enum IntrinsicKind : uint16_t {
     OBJECT_REFEQ,
 
     RAW_ARRAY_REFEQ, // cjnative only
+    FUNC_REFEQ, // cjnative only
 
     OBJECT_ZERO_VALUE,
 
@@ -607,6 +615,9 @@ enum IntrinsicKind : uint16_t {
 
     GET_TYPE_FOR_TYPE_PARAMETER,
     IS_SUBTYPE_TYPES,
+
+    // cjnative only
+    EXCLUSIVE_SCOPE,
 };
 
 static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
@@ -639,6 +650,8 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
 
     {FILL_IN_STACK_TRACE_NAME, FILL_IN_STACK_TRACE},
     {DECODE_STACK_TRACE_NAME, DECODE_STACK_TRACE},
+    {DUMP_CURRENT_THREAD_INFO_NAME, DUMP_CURRENT_THREAD_INFO},
+    {DUMP_ALL_THREADS_INFO_NAME, DUMP_ALL_THREADS_INFO},
 
     {CPOINTER_GET_POINTER_ADDRESS_NAME, CPOINTER_GET_POINTER_ADDRESS},
     {CPOINTER_READ_NAME, CPOINTER_READ},
@@ -690,6 +703,8 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
 
     {GET_TYPE_FOR_TYPE_PARAMETER_NAME, GET_TYPE_FOR_TYPE_PARAMETER},
     {IS_SUBTYPE_TYPES_NAME, IS_SUBTYPE_TYPES},
+
+    {std::string{EXCLUSIVE_SCOPE_NAME}, EXCLUSIVE_SCOPE},
 };
 
 static const std::unordered_map<std::string, IntrinsicKind> overflowIntrinsicMap = {
@@ -791,6 +806,7 @@ static const std::unordered_map<std::string, IntrinsicKind> runtimeIntrinsicMap 
     {CREATE_EXPORT_HANDLE_NAME, CREATE_EXPORT_HANDLE},
     {GET_EXPORTED_REF_NAME, GET_EXPORTED_REF},
     {REMOVE_EXPORTED_REF_NAME, REMOVE_EXPORTED_REF},
+    {FUNC_REFEQ_NAME, FUNC_REFEQ},
 };
 static const std::unordered_map<std::string, IntrinsicKind> mathIntrinsicMap = {
     {ABS_NAME, ABS},

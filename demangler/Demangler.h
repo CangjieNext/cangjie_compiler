@@ -13,6 +13,9 @@
 #include <vector>
 #include "Base/CString.h"
 #endif
+#ifdef BUILD_LIB_CANGJIE_DEMANGLE
+#include <string>
+#endif
 #include <functional>
 #include <cassert>
 #include <cstdint>
@@ -38,6 +41,7 @@ enum class TypeKind {
     LAMBDA_FUNCTION,
     GENERIC_TYPES,
     GENERIC_CONSTRAINTS,
+    WRAPPED_FUNCTION
 };
 
 template<typename T>
@@ -265,6 +269,7 @@ private:
     DemangleInfo<T> DemangleFunctionParameterTypes();
     DemangleInfo<T> DemangleGlobalInit();
     DemangleInfo<T> DemangleParamInit();
+    DemangleInfo<T> DemangleWrappedFunction();
 
     bool IsFileName() const;
     bool IsProp() const;
@@ -274,6 +279,7 @@ private:
     bool IsGlobalInit() const;
     bool IsParamInit() const;
     bool IsCFunctionWrapper() const;
+    bool IsWrappedFunction() const;
     bool IsQualifiedType() const;
     bool IsDecl() const;
     bool IsNotEndOfMangledName() const;

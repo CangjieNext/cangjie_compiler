@@ -736,6 +736,12 @@ PackageFormat::IntrinsicKind Serialize(const IntrinsicKind& kind)
         case DECODE_STACK_TRACE:
             ret = IntrinsicKind_DECODE_STACK_TRACE;
             break;
+        case DUMP_CURRENT_THREAD_INFO:
+            ret = IntrinsicKind_DUMP_CURRENT_THREAD_INFO;
+            break;
+        case DUMP_ALL_THREADS_INFO:
+            ret = IntrinsicKind_DUMP_ALL_THREADS_INFO;
+            break;
         case CHR:
             ret = IntrinsicKind_CHR;
             break;
@@ -777,6 +783,9 @@ PackageFormat::IntrinsicKind Serialize(const IntrinsicKind& kind)
             break;
         case RAW_ARRAY_REFEQ:
             ret = IntrinsicKind_RAW_ARRAY_REFEQ;
+            break;
+        case FUNC_REFEQ:
+            ret = IntrinsicKind_FUNC_REFEQ;
             break;
         case OBJECT_ZERO_VALUE:
             ret = IntrinsicKind_OBJECT_ZERO_VALUE;
@@ -994,6 +1003,21 @@ PackageFormat::IntrinsicKind Serialize(const IntrinsicKind& kind)
         case IS_GENERIC:
             ret = IntrinsicKind_IS_GENERIC;
             break;
+        case IS_TUPLE:
+            ret = IntrinsicKind_IS_TUPLE;
+            break;
+        case IS_FUNCTION:
+            ret = IntrinsicKind_IS_FUNCTION;
+            break;
+        case IS_ENUM:
+            ret = IntrinsicKind_IS_ENUM;
+            break;
+        case IS_BOX:
+            ret = IntrinsicKind_IS_BOX;
+            break;
+        case GET_TYPE_ARGS:
+            ret = IntrinsicKind_GET_TYPE_ARGS;
+            break;
         case GET_OR_CREATE_TYPEINFO_FOR_REFLECT:
             ret = IntrinsicKind_GET_OR_CREATE_TYPEINFO_FOR_REFLECT;
             break;
@@ -1117,17 +1141,17 @@ PackageFormat::IntrinsicKind Serialize(const IntrinsicKind& kind)
         case GET_STATIC_FIELD_ANNOTATIONS:
             ret = IntrinsicKind_GET_STATIC_FIELD_ANNOTATIONS;
             break;
-        case GET_FIELD_NAME:
-            ret = IntrinsicKind_GET_FIELD_NAME;
+        case GET_INSTANCE_FIELD_NAME:
+            ret = IntrinsicKind_GET_INSTANCE_FIELD_NAME;
             break;
-        case GET_FIELD_TYPE:
-            ret = IntrinsicKind_GET_FIELD_TYPE;
+        case GET_INSTANCE_FIELD_TYPE:
+            ret = IntrinsicKind_GET_INSTANCE_FIELD_TYPE;
             break;
-        case GET_FIELD_ANNOTATIONS:
-            ret = IntrinsicKind_GET_FIELD_ANNOTATIONS;
+        case GET_INSTANCE_FIELD_ANNOTATIONS:
+            ret = IntrinsicKind_GET_INSTANCE_FIELD_ANNOTATIONS;
             break;
-        case GET_FIELD_MODIFIER:
-            ret = IntrinsicKind_GET_FIELD_MODIFIER;
+        case GET_INSTANCE_FIELD_MODIFIER:
+            ret = IntrinsicKind_GET_INSTANCE_FIELD_MODIFIER;
             break;
         case GET_STATIC_FIELD_MODIFIER:
             ret = IntrinsicKind_GET_STATIC_FIELD_MODIFIER;
@@ -1194,6 +1218,36 @@ PackageFormat::IntrinsicKind Serialize(const IntrinsicKind& kind)
             break;
         case GET_SUB_PACKAGES:
             ret = IntrinsicKind_GET_SUB_PACKAGES;
+            break;
+        case GET_NUM_OF_FIELD_TYPES:
+            ret = IntrinsicKind_GET_NUM_OF_FIELD_TYPES;
+            break;
+        case GET_FIELD_TYPES:
+            ret = IntrinsicKind_GET_FIELD_TYPES;
+            break;
+        case NEW_AND_INIT_OBJECT:
+            ret = IntrinsicKind_NEW_AND_INIT_OBJECT;
+            break;
+        case GET_ASSOCIATED_VALUES:
+            ret = IntrinsicKind_GET_ASSOCIATED_VALUES;
+            break;
+        case GET_NUM_OF_FUNCTION_SIGNATURETYPES:
+            ret = IntrinsicKind_GET_NUM_OF_FUNCTION_SIGNATURETYPES;
+            break;
+        case GET_FUNCTION_SIGNATURE_TYPES:
+            ret = IntrinsicKind_GET_FUNCTION_SIGNATURE_TYPES;
+            break;
+        case GET_NUM_OF_ENUM_CONSTRUCTOR_INFOS:
+            ret = IntrinsicKind_GET_NUM_OF_ENUM_CONSTRUCTOR_INFOS;
+            break;
+        case GET_ENUM_CONSTRUCTOR_INFO:
+            ret = IntrinsicKind_GET_ENUM_CONSTRUCTOR_INFO;
+            break;
+        case GET_ENUM_CONSTRUCTOR_NAME:
+            ret = IntrinsicKind_GET_ENUM_CONSTRUCTOR_NAME;
+            break;
+        case GET_ENUM_CONSTRUCTOR_INFO_FROM_ANY:
+            ret = IntrinsicKind_GET_ENUM_CONSTRUCTOR_INFO_FROM_ANY;
             break;
         case REFLECTION_INTRINSIC_END_FLAG:
             ret = IntrinsicKind_REFLECTION_INTRINSIC_END_FLAG;
@@ -1684,6 +1738,9 @@ PackageFormat::IntrinsicKind Serialize(const IntrinsicKind& kind)
         case IS_SUBTYPE_TYPES:
             ret = IntrinsicKind_IS_SUBTYPE_TYPES;
             break;
+        case EXCLUSIVE_SCOPE:
+            ret = IntrinsicKind_EXCLUSIVE_SCOPE;
+            break;
             // no defalut here, due to we need use compiler to check all value be handled.
     }
     return ret;
@@ -1873,7 +1930,7 @@ TEST_F(CHIRSerialzierTest, IntrinsicKindEnum)
 {
     using namespace PackageFormat;
     Cangjie::CHIR::IntrinsicKind enumBegin = NOT_INTRINSIC;
-    Cangjie::CHIR::IntrinsicKind enumEnd = IS_SUBTYPE_TYPES; // make sure this is max one we defined
+    Cangjie::CHIR::IntrinsicKind enumEnd = EXCLUSIVE_SCOPE; // make sure this is max one we defined
 
     EXPECT_EQ(static_cast<size_t>(enumBegin), 0);
     for (size_t i = static_cast<size_t>(enumBegin); i <= static_cast<size_t>(enumEnd); i++) {

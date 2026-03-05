@@ -37,6 +37,11 @@ using namespace TypeCheckUtil;
 namespace {
 void InsertEnumConstructors(ASTContext& ctx, const EnumDecl& ed, bool enableMacroInLsp)
 {
+    // Skip enum constructor insertion when common enum has specific match.
+    // During specific compilation, specific constructors take priority over common ones.
+    if (ed.IsCommonMatchedWithSpecific()) {
+        return;
+    }
     for (auto& ctor : ed.constructors) {
         CJC_NULLPTR_CHECK(ctor);
         if (ctor->astKind == ASTKind::VAR_DECL) {
@@ -526,6 +531,7 @@ void TypeChecker::TypeCheckerImpl::SetEnumEleTyHandleFuncDecl(FuncDecl& funcDecl
     funcDecl.funcBody->retType->ty = ctorTy->retTy;
     funcDecl.funcBody->retType->begin = funcDecl.begin;
     funcDecl.funcBody->retType->end = funcDecl.end;
+    funcDecl.funcBody->retType->EnableAttr(Attribute::COMPILER_ADD);
     // Check c ffi type usage.
     if (funcDecl.outerDecl->TestAttr(Attribute::C)) {
         diag.Diagnose(funcDecl, DiagKind::sema_enum_pattern_func_cty_error, funcDecl.identifier.Val(),
@@ -568,10 +574,6 @@ void TypeChecker::TypeCheckerImpl::CheckStructDecl(ASTContext& ctx, StructDecl& 
     CheckRecursiveConstructorCall(sd.body->decls);
     if (sd.TestAnyAttr(Attribute::JAVA_CJ_MAPPING)) {
         CheckJavaInteropLibImport(sd);
-        if (sd.generic) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmapping_struct_generic_not_supported,
-                MakeRange(sd.generic->leftAnglePos, sd.generic->rightAnglePos), std::string{sd.identifier});
-        }
         if (!sd.inheritedTypes.empty()) {
             diag.DiagnoseRefactor(
                 DiagKindRefactor::sema_cjmapping_struct_inheritance_interface_not_supported, MakeRange(sd.identifier));

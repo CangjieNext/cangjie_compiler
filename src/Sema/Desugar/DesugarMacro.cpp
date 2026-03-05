@@ -696,8 +696,19 @@ void DesugarQuoteExpr(QuoteExpr& qe)
             funcArgs.emplace_back(CreateFuncArg(std::move(tokensExpr)));
             qe.desugarExpr = CreateCallExpr(std::move(tokens1), std::move(funcArgs));
             qe.desugarExpr->EnableAttr(Attribute::COMPILER_ADD);
+        } else if (!(expr->astKind == ASTKind::QUOTE_EXPR || expr->astKind == ASTKind::TOKEN_PART)) {
+            auto transRef = CreateRefExprInAST("transformTokens");
+            transRef->begin = expr->begin;
+            transRef->end = expr->end;
+            std::vector<OwnedPtr<FuncArg>> funcArgs;
+            (void)funcArgs.emplace_back(CreateFuncArg(ASTCloner::Clone(expr.get(), SetIsClonedSourceCode)));
+            (void)funcArgs.emplace_back(CreateFuncArg(std::move(tokensExpr)));
+            auto transform = CreateCallExpr(std::move(transRef), std::move(funcArgs));
+            qe.desugarExpr = std::move(transform);
+            qe.desugarExpr->EnableAttr(Attribute::COMPILER_ADD);
         } else {
             qe.desugarExpr = std::move(tokensExpr);
+            qe.desugarExpr->EnableAttr(Attribute::COMPILER_ADD);
         }
     }
     auto curFile = qe.curFile;

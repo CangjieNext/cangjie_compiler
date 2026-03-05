@@ -13,6 +13,7 @@
 #ifndef CANGJIE_CONSTANTSUTILS_H
 #define CANGJIE_CONSTANTSUTILS_H
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <string_view>
@@ -43,6 +44,7 @@ inline const std::string SANCOV_VARIABLE_FLAG = "$sancov$";
 
 // File extension.
 inline const std::string SERIALIZED_FILE_EXTENSION = ".cjo";
+constexpr std::string_view SERIALIZED_FILE_FLAG_EXTENSION = ".cjo.flag";
 inline const std::string CJ_D_FILE_EXTENSION = ".cj.d";
 inline const std::string FULL_BCHIR_SERIALIZED_FILE_EXTENSION = ".full.bchir";
 inline const std::string BCHIR_SERIALIZED_FILE_EXTENSION = ".bchir";
@@ -71,6 +73,7 @@ inline const std::string OPTION_NONE_CTOR = "None";
 inline const std::string ANY_NAME = "Any";
 inline const std::string OBJECT_NAME = "Object";
 inline const std::string JOBJECT_NAME = "JObject";
+inline const std::string OCOBJECT_NAME = "NSObject";
 inline const std::string CTYPE_NAME = "CType";
 inline const std::string RAW_ARRAY_NAME = "RawArray";
 constexpr std::string_view CPOINTER_NAME = "CPointer";
@@ -134,6 +137,8 @@ inline const std::string INST_VIRTUAL_FUNC = "$InstVirtualFunc";
 // CFFI
 inline const std::string CFFI_FUNC_SUFFIX = "$real";
 
+// Identifier for generated flag to check if instance of a class is initialized.
+inline const std::string HAS_INITED_IDENT = "$hasInited";
 
 namespace Interop::Java {
 inline const std::string INTEROP_JOBJECT_NAME = "JObject";
@@ -141,8 +146,16 @@ inline const std::string INTEROP_JSTRING_NAME = "JString";
 inline const std::string INTEROP_JARRAY_NAME = "JArray";
 inline const std::string INTEROP_JAVA_LANG_PACKAGE = "java.lang";
 inline const std::string JAVA_REF_FIELD_NAME = "$javaref";
+inline const std::string JAVA_FWD_CLASS_SUFFIX = "_fwd";
+inline const std::string JAVA_INTERFACE_FWD_CLASS_DEFAULT_METHOD_SUFFIX = "_default_impl" ;
+inline const std::string JAVA_SELF_OBJECT = "selfobj";
 constexpr auto JAVA_REF_GETTER_FUNC_NAME = "$getJavaRef";
 constexpr auto INTEROPLIB_CFFI_JAVA_ENTITY = "Java_CFFI_JavaEntity";
+constexpr auto JAVA_OBJECT_CONTROLLER = "JavaObjectController";
+constexpr auto JAVA_OBJECT_CONTROLLER_NAME = "controller";
+constexpr auto JAVA_OVERRIDE_MASK_NAME = "overrideMask";
+constexpr auto ENV = "env";
+
 } // namespace Cangjie::Interop::Java
 
 // Headless instrinsics

@@ -18,6 +18,9 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "../NativeFFI/Java/AfterTypeCheck/Utils.h"
+#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
@@ -27,13 +30,13 @@
 #include "cangjie/Modules/ModulesUtils.h"
 #include "cangjie/Sema/TestManager.h"
 #include "cangjie/Sema/TypeManager.h"
-#include "../NativeFFI/Java/AfterTypeCheck/Utils.h"
-
+#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 
 #include "Diags.h"
 #include "TypeCheckUtil.h"
 #include "TypeCheckerImpl.h"
 #include "NativeFFI/Java/TypeCheck/InheritanceChecker.h"
+#include "CJMP/MPTypeCheckerImpl.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -126,46 +129,6 @@ std::string StringifyInconsistentTypes(
     return "'" + Ty::GetTypesToStr(sortedTys, "', '") + "'";
 }
 
-std::vector<std::unordered_set<Ptr<Ty>>> GetAllGenericUpperBounds(TypeManager& tyMgr, const Decl& decl)
-{
-    auto generic = decl.GetGeneric();
-    if (!generic) {
-        return {};
-    }
-    std::vector<std::unordered_set<Ptr<Ty>>> allUpperBounds;
-    for (auto& type : generic->typeParameters) {
-        auto genericTy = DynamicCast<GenericsTy*>(type->ty);
-        if (!genericTy) {
-            continue;
-        }
-        // NOTE: Since 'upperBounds' contains all direct and transitive non-generic upperbounds,
-        //       we also need to collect generic upperBounds to check generic constraints correctly.
-        std::set<Ptr<Ty>> tys(genericTy->upperBounds.begin(), genericTy->upperBounds.end());
-        std::queue<Ptr<GenericsTy>> q;
-        q.push(genericTy);
-        std::unordered_set<Ptr<GenericsTy>> traversedTy = {};
-        while (!q.empty()) {
-            auto gTy = q.front();
-            q.pop();
-            if (auto [_, success] = traversedTy.emplace(gTy); !success) {
-                continue;
-            }
-            for (auto upper : gTy->upperBounds) {
-                if (upper->IsGeneric()) {
-                    q.push(RawStaticCast<GenericsTy*>(upper));
-                    tys.emplace(upper);
-                }
-            }
-        }
-        if (tys.size() > 1) {
-            allUpperBounds.emplace_back(std::unordered_set<Ptr<Ty>>{tyMgr.GetIntersectionTy(tys)});
-        } else {
-            allUpperBounds.emplace_back(tys.begin(), tys.end());
-        }
-    }
-    return allUpperBounds;
-}
-
 // Caller guarantees the given 'index' has corresponding constraint node.
 Ptr<Node> GetConstraintNodeByIndex(size_t index, Generic& generic)
 {
@@ -225,8 +188,8 @@ bool NeedRecheck(InheritableDecl& id)
     if (id.astKind == ASTKind::EXTEND_DECL) {
         auto ed = RawStaticCast<ExtendDecl*>(&id);
         if (auto decl = Ty::GetDeclPtrOfTy(ed->extendedType->ty); decl && decl->IsNominalDecl()) {
-            // extend in common part for platform decl.
-            if (decl->TestAttr(Attribute::PLATFORM)) {
+            // extend in common part for specific decl.
+            if (decl->TestAttr(Attribute::SPECIFIC)) {
                 return true;
             }
             extendDecls = RawStaticCast<InheritableDecl*>(decl)->GetAllSuperDecls();
@@ -266,12 +229,77 @@ bool CompMemberSignatureByPosAndTy(Ptr<const MemberSignature> m1, Ptr<const Memb
     }
     return CompTyByNames(m1->ty, m2->ty);
 }
+
 } // namespace
+
+namespace Cangjie {
+
+std::vector<std::unordered_set<Ptr<Ty>>> GetAllGenericUpperBounds(TypeManager& tyMgr, const Decl& decl)
+{
+    auto generic = decl.GetGeneric();
+    if (!generic) {
+        return {};
+    }
+    std::vector<std::unordered_set<Ptr<Ty>>> allUpperBounds;
+    for (auto& type : generic->typeParameters) {
+        auto genericTy = DynamicCast<GenericsTy*>(type->ty);
+        if (!genericTy) {
+            continue;
+        }
+        // NOTE: Since 'upperBounds' contains all direct and transitive non-generic upperbounds,
+        //       we also need to collect generic upperBounds to check generic constraints correctly.
+        std::set<Ptr<Ty>> tys(genericTy->upperBounds.begin(), genericTy->upperBounds.end());
+        std::queue<Ptr<GenericsTy>> q;
+        q.push(genericTy);
+        std::unordered_set<Ptr<GenericsTy>> traversedTy = {};
+        while (!q.empty()) {
+            auto gTy = q.front();
+            q.pop();
+            if (auto [_, success] = traversedTy.emplace(gTy); !success) {
+                continue;
+            }
+            for (auto upper : gTy->upperBounds) {
+                if (upper->IsGeneric()) {
+                    q.push(RawStaticCast<GenericsTy*>(upper));
+                    tys.emplace(upper);
+                }
+            }
+        }
+        if (tys.size() > 1) {
+            allUpperBounds.emplace_back(std::unordered_set<Ptr<Ty>>{tyMgr.GetIntersectionTy(tys)});
+        } else {
+            allUpperBounds.emplace_back(tys.begin(), tys.end());
+        }
+    }
+    return allUpperBounds;
+}
+
+} // namespace Cangjie
 
 void TypeChecker::TypeCheckerImpl::CheckInheritance(Package& pkg)
 {
     StructInheritanceChecker checker(diag, typeManager, pkg, importManager, ci->invocation.globalOptions);
     checker.Check();
+
+    auto movedMembers = checker.MoveStructInheritedMembers();
+    // Ensure javaCache is empty before moving in (it should be if called at the correct point in pipeline).
+    CJC_ASSERT_WITH_MSG(this->structMemberMap.empty(),
+        "structMemberMap should be empty when moving inherited members");
+
+    this->structMemberMap = std::move(movedMembers);
+}
+
+/**
+ * Moves stored structInheritedMembers out of the StructInheritanceChecker.
+ * After move, this instance must not be used again.
+ *
+ * NOTE: This can only be called once after check phase and before destruction.
+ */
+std::unordered_map<Ptr<const InheritableDecl>, MemberMap> StructInheritanceChecker::MoveStructInheritedMembers()
+{
+    auto out = std::move(structInheritedMembers);
+    structInheritedMembers.clear(); // The standard does not guarantee to leave `structInheritedMembers` empty
+    return out;
 }
 
 void StructInheritanceChecker::Check()
@@ -279,35 +307,49 @@ void StructInheritanceChecker::Check()
     if (pkg.TestAnyAttr(Attribute::IMPORTED, Attribute::TOOL_ADD)) {
         return;
     }
-    std::vector<Ptr<InheritableDecl>> structDecls;
-    std::vector<Ptr<ExtendDecl>> extendDecls;
-    Walker(&pkg, [&structDecls, &extendDecls](auto node) {
-        if (NeedCheck(*node)) {
-            if (node->astKind == ASTKind::EXTEND_DECL) {
-                extendDecls.emplace_back(RawStaticCast<ExtendDecl*>(node));
-            } else {
-                structDecls.emplace_back(RawStaticCast<InheritableDecl*>(node));
-            }
+    std::vector<Ptr<const InheritableDecl>> structDecls;
+    std::vector<Ptr<const ExtendDecl>> extendDecls;
+
+    // Optimized: filter invalid declarations during collection to avoid second pass.
+    Walker(&pkg, [&structDecls, &extendDecls, this](auto node) {
+        if (!NeedCheck(*node)) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        // Optimized: early filter for broken or invalid type declarations during collection.
+        if (node->TestAttr(Attribute::IS_BROKEN) || !Ty::IsTyCorrect(node->ty)) {
             return VisitAction::SKIP_CHILDREN;
         }
-        return VisitAction::WALK_CHILDREN;
+        if (node->astKind == ASTKind::EXTEND_DECL) {
+            auto extendDecl = RawStaticCast<ExtendDecl*>(node);
+            // Optimized: check visibility during collection for extend decls.
+            if (IsExtendVisibleInCurpkg(*extendDecl)) {
+                extendDecls.emplace_back(extendDecl);
+            }
+        } else {
+            structDecls.emplace_back(RawStaticCast<InheritableDecl*>(node));
+        }
+        return VisitAction::SKIP_CHILDREN;
     }).Walk();
-
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     auto sortedExtends = GetAllNeedCheckExtended();
-    extendDecls.insert(extendDecls.end(), sortedExtends.cbegin(), sortedExtends.cend());
+    // Optimized: filter and reserve space before inserting to avoid reallocation.
+    if (!sortedExtends.empty()) {
+        extendDecls.reserve(extendDecls.size() + sortedExtends.size());
+        for (auto extendDecl : sortedExtends) {
+            // Optimized: filter broken, invalid type, or invisible extends during insertion.
+            if (!extendDecl->TestAttr(Attribute::IS_BROKEN) && Ty::IsTyCorrect(extendDecl->ty) &&
+                IsExtendVisibleInCurpkg(*extendDecl)) {
+                extendDecls.emplace_back(extendDecl);
+            }
+        }
+    }
 #endif
 
+    // Optimized: all declarations are already filtered, so we can directly process them.
     for (auto decl : structDecls) {
-        if (decl->TestAttr(Attribute::IS_BROKEN) || !Ty::IsTyCorrect(decl->ty)) {
-            continue; // Do not check for incorrect structure declaration.
-        }
         CheckMembersWithInheritedDecls(*decl);
     }
     for (auto decl : extendDecls) {
-        if (decl->TestAttr(Attribute::IS_BROKEN) || !Ty::IsTyCorrect(decl->ty) || !IsExtendVisibleInCurpkg(*decl)) {
-            continue; // Do not check for incorrect structure declaration.
-        }
         CheckMembersWithInheritedDecls(*decl);
     }
     // Check generic upper bounds member confliction.
@@ -460,9 +502,9 @@ MemberMap StructInheritanceChecker::GetAndCheckInheritedMembers(const Inheritabl
     if (!baseDecl || !Ty::IsTyCorrect(baseTy) || baseDecl->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
         return {};
     }
-    // If common decl is with platform implementation, using platform one.
-    if (baseDecl->platformImplementation) {
-        baseDecl = RawStaticCast<InheritableDecl*>(baseDecl->platformImplementation);
+    // If common decl is with specific implementation, using specific one.
+    if (baseDecl->specificImplementation) {
+        baseDecl = RawStaticCast<InheritableDecl*>(baseDecl->specificImplementation);
     }
     CheckMembersWithInheritedDecls(*baseDecl);
     if (decl.curFile) {
@@ -522,7 +564,7 @@ void StructInheritanceChecker::CollectExtendByInterfaceInherit(const std::set<Pt
 }
 
 std::optional<bool> StructInheritanceChecker::DeterminingSkipExtendByInheritanceRelationship(
-    const ExtendDecl& curDecl, const ExtendDecl& ed, const Ptr<Decl>& extendedDecl)
+    const ExtendDecl& curDecl, ExtendDecl& ed, const Ptr<Decl>& extendedDecl)
 {
     std::optional<bool> skipExtend = std::nullopt;
     std::pair<Ptr<Ty>, Ptr<Ty>> lastInherTy;
@@ -541,7 +583,9 @@ std::optional<bool> StructInheritanceChecker::DeterminingSkipExtendByInheritance
                 GenerateTypeMappingByTy(mappingOfExtended2CurExtend[tyArgGen], mappingOfExtended2Ed[tyArgGen]);
             curDeclSuperInsTy = typeManager.GetInstantiatedTy(curDeclSuperInsTy, mappingOfCurExtend2Extend);
         }
-        for (auto& edSuper : std::as_const(ed.inheritedTypes)) {
+        Cangjie::MPTypeCheckerImpl::GetInheritedTypesWithSpecificImpl(
+            ed.inheritedTypes, ed.specificImplementation != nullptr, opts.commonPartCjo != std::nullopt);
+        for (auto& edSuper : ed.inheritedTypes) {
             if (edSuper->ty == curDeclSuperInsTy) {
                 continue;
             }
@@ -862,6 +906,33 @@ void StructInheritanceChecker::DiagnoseForInheritedInterfaces(
     }
 }
 
+/**
+ * Diagnoses unimplemented interface members and abstract methods in structs/classes.
+ * 
+ * This method identifies members that should be implemented but are not, according to inheritance rules.
+ * 
+ * CHECK EXCLUSIONS (skips checking for):
+ * 1. Foreign structs (marked with FOREIGN attribute)
+ * 2. Mirror structs (marked with OBJ_C_MIRROR attribute)
+ * 
+ * MEMBER EXCLUSIONS (members that are skipped):
+ * 1. Non-inheritable members (non-properties, non-functions)
+ * 2. Members defined in extend declarations
+ * 3. Built-in operator functions in extend declarations
+ * 4. Common interface members with no body (IsCommonWithoutDefault)
+ * 5. Members defined in foreign types (member.decl->outerDecl has FOREIGN attribute)
+ * 6. Abstract members from abstract classes in extend declarations
+ * 7. Abstract members from interfaces inherited by extend declarations
+ * 
+ * UNIMPLEMENTED MEMBER DETECTION RULES:
+ * - An abstract member is unimplemented if:
+ *   * The member has ABSTRACT attribute
+ *   * The containing type is NOT abstract AND NOT an interface
+ *   * The member's outerDecl is the struct being checked
+ * 
+ * @param members Map of all members in the struct
+ * @param structDecl The struct/class/interface/extend being checked
+ */
 void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMap& members, const Decl& structDecl)
 {
     // Do not check unimplemented function for:
@@ -935,9 +1006,9 @@ void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMa
         for (auto member : unImplementedMembers) {
             std::string identifierName;
             if (unImplementedDecl.count(member->decl) > 1) {
-                identifierName = member->decl->identifier.Val() + ", of type: " + member->ty->String();
+                identifierName = "'" + member->decl->identifier.Val() + "', of type: " + member->ty->String();
             } else {
-                identifierName = member->decl->identifier.Val();
+                identifierName = "'" + member->decl->identifier.Val() + "'";
             }
             std::string abstractType =
                 member->decl->outerDecl->astKind == ASTKind::CLASS_DECL ? "abstract" : "interface";
@@ -982,7 +1053,7 @@ bool StructInheritanceChecker::CheckExtendMemberValid(const MemberSignature& par
         diag.DiagnoseRefactor(
             DiagKindRefactor::sema_extend_member_cannot_shadow, child, childRange, child.identifier, typeName);
     } else if (auto isExtended = IsExtendedDefaultImpl(parent, child);
-               isExtended || parent.decl->outerDecl->astKind == ASTKind::EXTEND_DECL) {
+        isExtended || parent.decl->outerDecl->astKind == ASTKind::EXTEND_DECL) {
         std::string type = DeclKindToString(*parent.decl);
         auto diagnose = diag.DiagnoseRefactor(
             DiagKindRefactor::sema_extend_function_cannot_overridden, child, childRange, type, child.identifier);
@@ -1133,29 +1204,40 @@ void StructInheritanceChecker::CheckAccessVisibility(const Decl& parent, const D
     }
 }
 
-void StructInheritanceChecker::CheckGenericTypeArgInfo(
-    const MemberSignature& parent, const MemberSignature& child) const
+static size_t GenericsCount(const Decl& decl)
 {
-    auto parentGeneric = parent.decl->GetGeneric();
-    auto childGeneric = child.decl->GetGeneric();
-    bool diffStatus = parent.decl->TestAttr(Attribute::STATIC) != child.decl->TestAttr(Attribute::STATIC);
-    if (!parentGeneric || !childGeneric || diffStatus) {
+    auto generic = decl.GetGeneric();
+    if (!generic) {
+        return 0;
+    }
+    return generic->typeParameters.size();
+}
+
+namespace Cangjie {
+void CheckGenericTypeBoundsMapped(const Decl& parent, const Decl& child,
+    std::vector<std::unordered_set<Ptr<Ty>>> parentBounds, std::vector<std::unordered_set<Ptr<Ty>>> childBounds,
+    DiagnosticEngine& diag, TypeManager& typeManager)
+{
+    if (GenericsCount(parent) != GenericsCount(child)) {
+        diag.Diagnose(child, DiagKind::sema_generic_member_type_argument_different, child.identifier.Val());
         return;
     }
-    if (parentGeneric->typeParameters.size() != childGeneric->typeParameters.size()) {
-        diag.Diagnose(*child.decl, DiagKind::sema_generic_member_type_argument_different, child.decl->identifier.Val());
+    auto childGeneric = child.GetGeneric();
+    TypeSubst typeMapping = typeManager.GenerateGenericMappingFromGeneric(parent, child);
+
+    if (!childGeneric) {
         return;
     }
-    TypeSubst typeMapping = typeManager.GenerateGenericMappingFromGeneric(*parent.decl, *child.decl);
-    CJC_ASSERT(parent.upperBounds.size() == child.upperBounds.size());
+
+    CJC_ASSERT(parentBounds.size() == childBounds.size());
     // Child's constraint should be looser or same with the parent's constraint;
-    for (size_t i = 0; i < parent.upperBounds.size(); ++i) {
-        auto childUppers = child.upperBounds[i];
+    for (size_t i = 0; i < parentBounds.size(); ++i) {
+        auto childUppers = childBounds[i];
         (void)childUppers.erase(typeManager.GetAnyTy()); // Remove upper bound of type 'Any'.
         if (childUppers.empty()) {
             continue; // Empty upperBounds is always looser.
         }
-        auto& parentUppers = parent.upperBounds[i];
+        auto& parentUppers = parentBounds[i];
         std::unordered_set<Ptr<Ty>> instUppers;
         for (auto it : parentUppers) {
             instUppers.emplace(typeManager.GetInstantiatedTy(it, typeMapping));
@@ -1164,7 +1246,7 @@ void StructInheritanceChecker::CheckGenericTypeArgInfo(
         for (auto upper : childUppers) {
             // At least one parent upperBounds is the subtype of child upperBound.
             childLooser = std::any_of(instUppers.begin(), instUppers.end(),
-                [this, &upper](auto it) { return typeManager.IsSubtype(it, upper); });
+                [&typeManager, &upper](auto it) { return typeManager.IsSubtype(it, upper); });
             if (!childLooser) {
                 break;
             }
@@ -1174,7 +1256,7 @@ void StructInheritanceChecker::CheckGenericTypeArgInfo(
                 break;
             }
             // Cannot exist any child upperBound that is the subtype of parent upperBound.
-            childLooser = !std::any_of(childUppers.begin(), childUppers.end(), [this, &upper](auto it) {
+            childLooser = !std::any_of(childUppers.begin(), childUppers.end(), [&typeManager, &upper](auto it) {
                 return !typeManager.IsTyEqual(it, upper) && typeManager.IsSubtype(it, upper);
             });
         }
@@ -1186,6 +1268,37 @@ void StructInheritanceChecker::CheckGenericTypeArgInfo(
             builder.AddNote("parent constraint is " + parentConstraints);
         }
     }
+}
+} // namespace Cangjie
+
+void StructInheritanceChecker::CheckGenericTypeArgInfo(const Decl& parent, const Decl& child)
+{
+    auto parentGeneric = parent.GetGeneric();
+    auto childGeneric = child.GetGeneric();
+
+    if (parentGeneric->typeParameters.size() != childGeneric->typeParameters.size()) {
+        diag.Diagnose(child, DiagKind::sema_generic_member_type_argument_different, child.identifier.Val());
+        return;
+    }
+
+    auto parentBounds = GetAllGenericUpperBounds(typeManager, parent);
+    auto childBounds = GetAllGenericUpperBounds(typeManager, child);
+
+    Cangjie::CheckGenericTypeBoundsMapped(parent, child, parentBounds, childBounds, diag, typeManager);
+}
+
+void StructInheritanceChecker::CheckGenericTypeArgInfo(
+    const MemberSignature& parent, const MemberSignature& child) const
+{
+    auto parentGeneric = parent.decl->GetGeneric();
+    auto childGeneric = child.decl->GetGeneric();
+    bool diffStatus = parent.decl->TestAttr(Attribute::STATIC) != child.decl->TestAttr(Attribute::STATIC);
+    if (!parentGeneric || !childGeneric || diffStatus) {
+        return;
+    }
+
+    Cangjie::CheckGenericTypeBoundsMapped(
+        *parent.decl, *child.decl, parent.upperBounds, child.upperBounds, diag, typeManager);
 }
 
 void StructInheritanceChecker::CheckPropertyInheritance(const MemberSignature& parent, const Decl& child) const
@@ -1336,9 +1449,9 @@ void StructInheritanceChecker::CheckMutModifierCompatible(const MemberSignature&
 }
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-std::vector<Ptr<ExtendDecl>> StructInheritanceChecker::GetAllNeedCheckExtended()
+std::vector<Ptr<const ExtendDecl>> StructInheritanceChecker::GetAllNeedCheckExtended()
 {
-    std::vector<Ptr<ExtendDecl>> needCheckExtendDecls = {};
+    std::vector<Ptr<const ExtendDecl>> needCheckExtendDecls = {};
     // If the extend decls are all imported from same package, do not check their inheritance again.
     auto filter = [&needCheckExtendDecls](const std::set<Ptr<ExtendDecl>> extends) -> void {
         std::unordered_set<std::string> pkgNames;

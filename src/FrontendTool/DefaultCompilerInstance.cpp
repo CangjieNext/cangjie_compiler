@@ -40,13 +40,11 @@ public:
     ~DefaultCIImpl();
 
     bool PerformCodeGen();
-    bool PerformCjoAndBchirSaving();
+    bool PerformCjoSaving();
+    bool PerformResultsSaving();
     void DumpDepPackage();
-
-    void DumpIR();
-    void DumpBC();
-    bool SaveCjoAndBchir(AST::Package& pkg);
     bool SaveCjo(const AST::Package& pkg);
+    bool SaveCjo(const std::vector<Ptr<Package>>& pkgs);
     void RearrangeImportedPackageDependence();
     bool CodegenOnePackage(AST::Package& pkg, bool enableIncrement);
 
@@ -54,11 +52,6 @@ private:
     DefaultCompilerInstance& ci;
 
     bool EmitLLVMSimilarBytecode(AST::Package& pkg, bool enableIncrement);
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    void SaveBchir([[maybe_unused]] const AST::Package& pkg) const
-    {
-    }
-#endif
     std::string GenerateFileName(const std::string& fullPackageName, const std::string& idx) const;
     std::string GenerateBCFilePathAndUpdateToInvocation(
         const TempFileKind& kind, const std::string& pkgName, const std::string& idx = "");
@@ -143,9 +136,8 @@ std::string DefaultCIImpl::GenerateFileName(const std::string& fullPackageName, 
         fileName = (idx.empty() ? "" : (idx + "-")) + pkgNameSuffix;
     } else if (fullPackageName != DEFAULT_PACKAGE_NAME) {
         fileName = (idx.empty() ? "" : (idx + "-")) + pkgNameSuffix;
-    } else if (ci.invocation.globalOptions.srcFiles.empty()) {
-        fileName = (idx.empty() ? "" : (idx + "-")) + pkgNameSuffix;
     } else {
+        CJC_ASSERT(!ci.invocation.globalOptions.srcFiles.empty());
         fileName = (idx.empty() ? "" : (idx + "-")) +
             FileUtil::GetFileNameWithoutExtension(ci.invocation.globalOptions.srcFiles[0]);
     }
@@ -175,6 +167,15 @@ std::string DefaultCIImpl::GenerateBCFilePathAndUpdateToInvocation(
     return bcFilePath;
 }
 
+bool DefaultCIImpl::SaveCjo(const std::vector<Ptr<Package>>& pkgs)
+{
+    bool ret = true;
+    for (auto& pkg : pkgs) {
+        ret = ret && SaveCjo(*pkg);
+    }
+    return ret;
+}
+
 bool DefaultCIImpl::SaveCjo(const AST::Package& pkg)
 {
     if (pkg.IsEmpty()) {
@@ -190,26 +191,32 @@ bool DefaultCIImpl::SaveCjo(const AST::Package& pkg)
         saveFileWithAbsPath = ci.invocation.globalOptions.enableCoverage;
     }
     std::vector<uint8_t> astData;
-    Utils::ProfileRecorder::Start("Save cjo and bchir", "Serialize ast");
+    Utils::ProfileRecorder::Start("Save cjo", "Serialize ast");
     ci.importManager.ExportAST(saveFileWithAbsPath, astData, pkg);
-    Utils::ProfileRecorder::Stop("Save cjo and bchir", "Serialize ast");
+    Utils::ProfileRecorder::Stop("Save cjo", "Serialize ast");
     // Write astData into file according to given package name by '--output' opt.
     TempFileInfo astFileInfo =
         TempFileManager::Instance().CreateNewFileInfo(TempFileInfo{pkgName, ""}, TempFileKind::O_CJO);
     std::string astFileName = astFileInfo.filePath;
-    Utils::ProfileRecorder::Start("Save cjo and bchir", "Save ast");
+    Utils::ProfileRecorder::Start("Save cjo", "Save ast");
     bool res = FileUtil::WriteBufferToASTFile(astFileName, astData);
-    Utils::ProfileRecorder::Stop("Save cjo and bchir", "Save ast");
+    Utils::ProfileRecorder::Stop("Save cjo", "Save ast");
     if (!res) {
         Errorln("fail to generate file: " + astFileName);
+    } else if (ci.invocation.globalOptions.outputMode != GlobalOptions::OutputMode::CHIR) {
+        // Update cjo.flag file to indicate the cjo file is generated.
+        // if update failed, cjpm will wait for cjo ready until cjc exits.
+        TempFileInfo astFlagFileInfo =
+            TempFileManager::Instance().CreateNewFileInfo(TempFileInfo{pkgName, ""}, TempFileKind::O_CJO_FLAG);
+        if (FileUtil::FileExist(astFlagFileInfo.filePath)) {
+            FileUtil::Remove(astFlagFileInfo.filePath);
+        }
+        std::ofstream file(astFlagFileInfo.filePath);
+        if (file.is_open()) {
+            file.close();
+        }
     }
     return res;
-}
-
-bool DefaultCIImpl::SaveCjoAndBchir(Package& pkg)
-{
-    SaveBchir(pkg);
-    return SaveCjo(pkg);
 }
 
 bool DefaultCIImpl::CodegenOnePackage(Package& pkg, bool enableIncrement)
@@ -308,79 +315,24 @@ bool DefaultCIImpl::PerformCodeGen()
     return ret;
 }
 
-bool DefaultCIImpl::PerformCjoAndBchirSaving()
+bool DefaultCIImpl::PerformCjoSaving()
 {
-    Utils::ProfileRecorder recorder("Main Stage", "Save cjo and bchir");
-    bool ret = true;
-    for (auto& srcPkg : ci.GetSourcePackages()) {
-        ret = ret && SaveCjoAndBchir(*srcPkg);
+    Utils::ProfileRecorder recorder("Main Stage", "Save cjo");
+    // Skip saving cjo when output mode is CHIR. The cjo will be saved in PerformResultsSaving instead.
+    // Reason: cjmp updates the dependencies result of declarations in the common part during the chir stage.
+    if (ci.invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR) {
+        return true;
     }
-    return ret;
+    return SaveCjo(ci.GetSourcePackages());
 }
 
-void DefaultCIImpl::DumpIR()
+bool DefaultCIImpl::PerformResultsSaving()
 {
-    auto backend = ci.invocation.globalOptions.backend;
-    switch (backend) {
-        case Triple::BackendType::CJNATIVE:
-            for (auto& llvmModule : llvmModules) {
-                llvmModule->print(llvm::outs(), nullptr);
-            }
-            break;
-        case Triple::BackendType::UNKNOWN:
-            Errorln("unknown backend");
-            break;
-        default:
-            break;
+    if (ci.invocation.globalOptions.outputMode != GlobalOptions::OutputMode::CHIR) {
+        return true;
     }
-}
-
-void DefaultCIImpl::DumpBC()
-{
-    auto backend = ci.invocation.globalOptions.backend;
-    auto output = ci.invocation.globalOptions.output;
-
-    if (output.empty() || output == "-") {
-        Errorln("Output path must be specified with -o for bitcode dump");
-        return;
-    }
-
-    auto dumpBitcode = [&output](llvm::Module const& mod) {
-        auto ec = std::error_code();
-#ifdef _WIN32
-
-        std::optional<std::string> tempPath = StringConvertor::NormalizeStringToUTF8(output);
-        if (!tempPath.has_value()) {
-            Errorln("Incorrect file name encoding.");
-        }
-        auto os = llvm::raw_fd_ostream(tempPath.value(), ec);
-#else
-        auto os = llvm::raw_fd_ostream(output, ec);
-#endif
-
-        if (ec) {
-            Errorln(ec.message());
-        } else {
-            WriteBitcodeToFile(mod, os);
-        }
-    };
-
-    switch (backend) {
-        case Triple::BackendType::CJNATIVE:
-            for (auto& llvmModule : llvmModules) {
-                if (!llvmModule) {
-                    Errorln("No valid codegen module!");
-                    return;
-                }
-                dumpBitcode(*llvmModule);
-            }
-            break;
-        case Triple::BackendType::UNKNOWN:
-            Errorln("bitcode dumping is only supported on CJNATIVE backend");
-            break;
-        default:
-            break;
-    }
+    Utils::ProfileRecorder recorder("Main Stage", "Save results");
+    return SaveCjo(ci.GetSourcePackages());
 }
 
 void DefaultCompilerInstance::DumpDepPackage()
@@ -405,21 +357,13 @@ bool DefaultCompilerInstance::PerformCodeGen()
 {
     return impl->PerformCodeGen();
 }
-bool DefaultCompilerInstance::PerformCjoAndBchirSaving()
+bool DefaultCompilerInstance::PerformCjoSaving()
 {
-    return impl->PerformCjoAndBchirSaving();
+    return impl->PerformCjoSaving();
 }
-void DefaultCompilerInstance::DumpIR() const
+bool DefaultCompilerInstance::PerformResultsSaving()
 {
-    impl->DumpIR();
-}
-void DefaultCompilerInstance::DumpBC() const
-{
-    impl->DumpBC();
-}
-bool DefaultCompilerInstance::SaveCjoAndBchir(AST::Package& pkg) const
-{
-    return impl->SaveCjoAndBchir(pkg);
+    return impl->PerformResultsSaving();
 }
 bool DefaultCompilerInstance::SaveCjo(const AST::Package& pkg) const
 {

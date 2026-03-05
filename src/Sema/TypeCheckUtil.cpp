@@ -22,6 +22,7 @@
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/Modules/ModulesUtils.h"
 
 namespace Cangjie::TypeCheckUtil {
 using namespace AST;
@@ -283,6 +284,12 @@ bool IsOverrideOrShadow(TypeManager& typeManager, const FuncDecl& src, const Fun
     if (auto ret = typeManager.GetOverrideCache(&src, &target, baseTy, expectInstParent); ret.has_value()) {
         return ret.value();
     }
+    if (src.TestAttr(Attribute::STATIC) != target.TestAttr(Attribute::STATIC)) {
+        // Static and non-static functions cannot override each other. Because this is an early, deterministic check,
+        // we do not record a negative result in `overrideOrShadowCache` (to avoid unnecessary cache growth) and
+        // return false directly.
+        return false;
+    }
     auto srcFt = DynamicCast<FuncTy*>(src.ty);
     auto targetFt = DynamicCast<FuncTy*>(target.ty);
     MultiTypeSubst mts;
@@ -328,8 +335,8 @@ bool IsOverrideOrShadow(TypeManager& typeManager, const FuncDecl& src, const Fun
         }
         if (typeManager.IsFuncParameterTypesIdentical(srcParamTys, targetParamTys)) {
             bool isCrossPlatform =
-                (src.TestAttr(AST::Attribute::COMMON) && target.TestAttr(AST::Attribute::PLATFORM)) ||
-                (src.TestAttr(AST::Attribute::PLATFORM) && target.TestAttr(AST::Attribute::COMMON));
+                (src.TestAttr(AST::Attribute::COMMON) && target.TestAttr(AST::Attribute::SPECIFIC)) ||
+                (src.TestAttr(AST::Attribute::SPECIFIC) && target.TestAttr(AST::Attribute::COMMON));
             if (isCrossPlatform) {
                 continue;
             }
@@ -361,8 +368,13 @@ bool IsOverrideOrShadow(TypeManager& typeManager, const PropDecl& src, const Pro
     auto srcTy = src.type ? src.type->ty : src.ty;
     auto targetTy = target.type ? target.type->ty : target.ty;
     bool ret = srcTy == typeManager.GetInstantiatedTy(targetTy, typeMapping);
-    if (ret && src.outerDecl == Ty::GetDeclPtrOfTy(baseTy)) {
-        typeManager.UpdateTopOverriddenFuncDeclCache(&src, &target);
+
+    // If property `src` overrides `target` within the same instantiated type (i.e. `src.outerDecl` equals the
+    // declaration of `baseTy`) and both have the same `static` attribute, update the cached overridden function
+    // declaration for the property.
+    if (ret && src.outerDecl == Ty::GetDeclPtrOfTy(baseTy) &&
+        src.TestAttr(Attribute::STATIC) == target.TestAttr(Attribute::STATIC)) {
+        typeManager.UpdateTopOverriddenFuncDeclMap(&src, &target);
     }
     return ret;
 }
@@ -610,6 +622,16 @@ Ptr<const Modifier> FindModifier(const Decl& d, TokenKind kind)
     return mod;
 }
 
+Ptr<Annotation> FindFirstAnnotation(const Decl& decl, AnnotationKind kind)
+{
+    auto found = std::find_if(decl.annotations.begin(), decl.annotations.end(),
+        [&kind](const auto& anno) { return anno.get()->kind == kind; });
+    if (found != decl.annotations.end()) {
+        return (*found).get();
+    }
+    return nullptr;
+}
+
 void AddArrayLitConstructor(ArrayLit& al)
 {
     auto decl = Ty::GetDeclPtrOfTy(al.ty);
@@ -782,7 +804,7 @@ std::vector<Ptr<Ty>> GetParamTysInArgsOrder(TypeManager& tyMgr, const CallExpr& 
             paramHasTy[index] = true;
         } else {
             return {};
-        }    
+        }
     }
     for (auto it : std::as_const(paramHasTy)) {
         if (!it) {
@@ -841,6 +863,24 @@ bool AcceptPlaceholderTarget(const AST::Node& n)
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 bool IsNeedRuntimeCheck(TypeManager& typeManager, Ty& srcTy, Ty& targetTy)
 {
+    auto isFinalType = [](Ty& ty) {
+        if (ty.IsStruct() || ty.IsEnum() || ty.IsPointer() || ty.IsCString() || ty.IsPrimitive() || Is<VArrayTy>(ty) ||
+            ty.IsArray()) {
+            return true;
+        }
+        if (ty.IsClass()) {
+            auto decl = Ty::GetDeclPtrOfTy(&ty);
+            return decl && !decl->TestAnyAttr(Attribute::ABSTRACT, Attribute::OPEN);
+        }
+        return false;
+    };
+    if (isFinalType(srcTy) && isFinalType(targetTy)) {
+        auto srcDecl = Ty::GetDeclPtrOfTy(&srcTy);
+        auto targetDecl = Ty::GetDeclPtrOfTy(&targetTy);
+        if (srcDecl || targetDecl) {
+            return srcDecl == targetDecl;
+        }
+    }
     return (srcTy.IsClassLike() && targetTy.IsClassLike()) || srcTy.IsGeneric() || targetTy.IsGeneric() ||
         srcTy.HasGeneric() || targetTy.HasGeneric() || typeManager.IsSubtype(&srcTy, &targetTy, true, false) ||
         typeManager.IsSubtype(&targetTy, &srcTy, true, false);
@@ -1010,7 +1050,7 @@ std::set<Ptr<AST::Ty>> GetGenericParamsForCall(const AST::CallExpr& ce, const AS
     return ret;
 }
 
-std::optional<std::pair<Ptr<FuncDecl>, Ptr<Ty>>> FindInitDecl(InheritableDecl& decl, TypeManager& typeManager,
+std::optional<std::pair<Ptr<FuncDecl>, Ptr<Ty>>> FindInitDecl(const InheritableDecl& decl, TypeManager& typeManager,
     std::vector<OwnedPtr<Expr>>& valueArgs, const std::vector<Ptr<Ty>> instTys)
 {
     std::vector<Ptr<Ty>> valueParamTys;
@@ -1020,7 +1060,7 @@ std::optional<std::pair<Ptr<FuncDecl>, Ptr<Ty>>> FindInitDecl(InheritableDecl& d
     return FindInitDecl(decl, typeManager, valueParamTys, instTys);
 }
 
-std::optional<std::pair<Ptr<FuncDecl>, Ptr<Ty>>> FindInitDecl(InheritableDecl& decl, TypeManager& typeManager,
+std::optional<std::pair<Ptr<FuncDecl>, Ptr<Ty>>> FindInitDecl(const InheritableDecl& decl, TypeManager& typeManager,
     const std::vector<Ptr<Ty>> valueParamTys, const std::vector<Ptr<Ty>> instTys)
 {
     auto initFuncDecl = GetMemberDecl<FuncDecl>(decl, "init", valueParamTys, typeManager);
@@ -1057,7 +1097,7 @@ OwnedPtr<CallExpr> CreateInitCall(const std::pair<Ptr<FuncDecl>, Ptr<Ty>> initDe
 }
 
 OwnedPtr<ThrowExpr> CreateThrowException(
-    ClassDecl& exceptionDecl, std::vector<OwnedPtr<Expr>> args, File& curFile, TypeManager& typeManager)
+    const ClassDecl& exceptionDecl, std::vector<OwnedPtr<Expr>> args, File& curFile, TypeManager& typeManager)
 {
     auto throwExpr = MakeOwned<ThrowExpr>();
     throwExpr->expr = CreateInitCall(FindInitDecl(exceptionDecl, typeManager, args).value(), args, curFile);
@@ -1090,11 +1130,14 @@ Ptr<FuncDecl> GenerateGetTypeForTypeParamIntrinsic(Package& pkg, TypeManager& ty
     funcBody->paramLists.emplace_back(CreateFuncParamList(std::vector<OwnedPtr<FuncParam>>{}));
     funcBody->retType = MakeOwned<RefType>();
     funcBody->retType->ty = retTy;
+    funcBody->retType->EnableAttr(Attribute::COMPILER_ADD);
     funcBody->generic = MakeOwned<Generic>();
     funcBody->generic->typeParameters.emplace_back(CreateGenericParamDecl(*decl, typeManager));
     funcBody->ty = funcTy;
 
     decl->curFile = file;
+    decl->begin = file->begin;
+    decl->end = file->begin;
     decl->identifier = GET_TYPE_FOR_TYPE_PARAMETER_FUNC_NAME;
     decl->fullPackageName = pkg.fullPackageName;
     decl->ty = funcTy;
@@ -1121,11 +1164,13 @@ Ptr<FuncDecl> GenerateIsSubtypeTypesIntrinsic(Package& pkg, TypeManager& typeMan
     funcBody->retType = MakeOwned<RefType>();
     funcBody->retType->ty = retTy;
     funcBody->generic = MakeOwned<Generic>();
-    funcBody->generic->typeParameters.emplace_back(CreateGenericParamDecl(*decl, typeManager));
-    funcBody->generic->typeParameters.emplace_back(CreateGenericParamDecl(*decl, typeManager));
+    funcBody->generic->typeParameters.emplace_back(CreateGenericParamDecl(*decl, "T1", typeManager));
+    funcBody->generic->typeParameters.emplace_back(CreateGenericParamDecl(*decl, "T2", typeManager));
     funcBody->ty = funcTy;
 
     AddCurFile(*decl, file);
+    decl->begin = file->begin;
+    decl->end = file->begin;
     decl->identifier = IS_SUBTYPE_TYPES_FUNC_NAME;
     decl->fullPackageName = pkg.fullPackageName;
     decl->ty = funcTy;
@@ -1140,6 +1185,131 @@ Ptr<FuncDecl> GenerateIsSubtypeTypesIntrinsic(Package& pkg, TypeManager& typeMan
     std::rotate(file->decls.rbegin(), file->decls.rbegin() + 1, file->decls.rend());
 
     return declPtr;
+}
+
+bool SearchTargetDeclForProtectMember(const Node& curComposite, const Decl& outerDeclOfTarget, TypeManager& typeManager)
+{
+    auto typeDecl = &curComposite;
+    // For protected members, need check the extended type.
+    if (curComposite.astKind == ASTKind::EXTEND_DECL) {
+        auto outerED = RawStaticCast<const ExtendDecl*>(&curComposite);
+        auto decl = Ty::GetDeclPtrOfTy(outerED->extendedType->ty);
+        if (decl == &outerDeclOfTarget) {
+            return true;
+        }
+        if (decl) {
+            typeDecl = decl; // Let the BFS search start from the extended declaration.
+        }
+    }
+    // For protected members, need check superclass.
+    if (typeDecl->IsClassLikeDecl()) {
+        auto outerCLD = RawStaticCast<const ClassLikeDecl*>(typeDecl);
+        std::queue<Ptr<const InheritableDecl>> res;
+        res.push(outerCLD);
+        while (!res.empty()) {
+            auto iter = res.front();
+            if (iter == &outerDeclOfTarget) {
+                return true;
+            }
+            for (const auto& extend : typeManager.GetDeclExtends(*iter)) {
+                res.push(extend);
+            }
+            if (auto cd = DynamicCast<ClassDecl*>(iter); cd && cd->GetSuperClassDecl()) {
+                auto superClass = cd->GetSuperClassDecl();
+                res.push(superClass);
+            }
+            res.pop();
+        }
+    }
+    return false;
+}
+
+inline bool IsNormalCtorRef(const AST::Node& node)
+{
+    auto re = DynamicCast<RefExpr>(&node);
+    return !re || (!re->isThis && !re->isSuper);
+}
+
+bool IsLegalAccess(Symbol* curComposite, const Decl& d, const AST::Node& node, ImportManager& importManager,
+    TypeManager& typeManager)
+{
+    auto vd = DynamicCast<const VarDecl*>(&d);
+    auto fd = DynamicCast<const FuncDecl*>(&d);
+    auto cld = DynamicCast<const ClassLikeDecl*>(&d);
+    if (!vd && !fd && !cld) {
+        // There are four kinds of members in class, VarDecl, funcDecl, classDecl and interfaceDecl. If decl is not one
+        // of these, then there is no need to check visibility.
+        return true;
+    }
+    // Public & external decls are always accessible. But public in extend may not export.
+    // The node with 'IN_CORE' or 'IN_MACRO' attribute is created by compiler,
+    // allowing access any kind of decl for special.
+    if (node.TestAnyAttr(Attribute::IN_CORE, Attribute::IN_MACRO)) {
+        return true;
+    }
+    if (!node.IsSamePackage(d) && node.curFile && node.astKind == ASTKind::MEMBER_ACCESS) {
+        auto ma = StaticCast<MemberAccess>(&node);
+        if (ma->baseExpr && ma->baseExpr->ty &&
+            !importManager.IsExtendMemberAccessible(*node.curFile, d, *ma->baseExpr->ty)) {
+            return false;
+        }
+    }
+    if (d.TestAttr(Attribute::PUBLIC)) {
+        return true;
+    }
+    CJC_ASSERT(node.curFile && node.curFile->curPackage);
+    auto relation = Modules::GetPackageRelation(node.curFile->curPackage->fullPackageName, d.GetFullPackageName());
+    // `flag` indicates whether the type name is used to construct an object outside a type declaration
+    // or in a type without inheritance relationship.
+    bool flag = IsClassOrEnumConstructor(d) && !d.TestAttr(Attribute::PRIVATE) && IsNormalCtorRef(node) &&
+        (!curComposite || !SearchTargetDeclForProtectMember(*curComposite->node, *d.outerDecl, typeManager));
+    if (d.TestAttr(Attribute::GLOBAL) || flag) {
+        // When decl is private it can only be accessed in same file,
+        if (d.TestAttr(Attribute::PRIVATE)) {
+            // In the LSP, the 'node' may be a new ast node, 'curFile' pointer consistency cannot be ensured.
+            return node.curFile && d.curFile && *node.curFile == *d.curFile;
+        }
+        return Modules::IsVisible(d, relation);
+    }
+    Ptr<Decl> outerDeclOfTarget = d.outerDecl;
+    if (outerDeclOfTarget == nullptr || !outerDeclOfTarget->IsNominalDecl()) {
+        return true; // Access local decls, must be valid (outerDecl is empty or non-nominal decl).
+    }
+    CJC_ASSERT(!curComposite || curComposite->node);
+    // 1. When decl is internal, checking the package relation.
+    if (d.TestAttr(Attribute::INTERNAL)) {
+        return Modules::IsVisible(d, relation);
+    } else if (d.TestAttr(Attribute::PROTECTED)) {
+        // 2. when decl is protected, checking the package relation, if relation is none, checking composite relation.
+        // 3. Access decl in same composite decl is always allowed.
+        return Modules::IsVisible(d, relation) ||
+            (curComposite &&
+                (curComposite->node == outerDeclOfTarget ||
+                    SearchTargetDeclForProtectMember(*curComposite->node, *outerDeclOfTarget, typeManager)));
+    }
+    // 4. otherwise accessing private decl must inside same decl.
+    auto expectedOuter = outerDeclOfTarget;
+    if (expectedOuter->specificImplementation) {
+        expectedOuter = expectedOuter->specificImplementation;
+    }
+    return curComposite && curComposite->node == expectedOuter;
+}
+
+Ptr<Decl> FindCorrespondingCommonDecl(const Decl& specificDecl)
+{
+    if (specificDecl.curFile == nullptr || specificDecl.curFile->curPackage == nullptr) {
+        return nullptr;
+    }
+
+    for (const auto& file : specificDecl.curFile->curPackage->files) {
+        for (const auto& decl : file->decls) {
+            if (decl->specificImplementation == &specificDecl) {
+                return decl;
+            }
+        }
+    }
+
+    return nullptr;
 }
 
 } // namespace Cangjie::TypeCheckUtil

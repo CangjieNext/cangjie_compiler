@@ -13,9 +13,9 @@
 #include "CGModule.h"
 #include "CJNative/CGTypes/CGExtensionDef.h"
 #include "CJNative/CGTypes/EnumCtorTIOrTTGenerator.h"
+#include "CJNative/CJNativeMetadata.h"
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 #include "CJNative/CHIRSplitter.h"
-#include "CJNative/CJNativeReflectionInfo.h"
 #endif
 #include "DIBuilder.h"
 #include "EmitFunctionIR.h"
@@ -51,6 +51,20 @@ const std::string CANGJIE_SDK_VERSION = "";
 #endif
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+// Encapsulate repeated IR dump logic used in GenSubCHIRPackage
+static inline void DumpIRIfNeeded(const CGModule& cgMod, const std::string& suffix, size_t& subDirNum)
+{
+    const auto& cgPkgCtx = cgMod.GetCGContext().GetCGPkgContext();
+    const auto& options = cgPkgCtx.GetGlobalOptions();
+    if (!options.NeedDumpIRToFile()) {
+        return;
+    }
+    const auto& dumpPath = GenDumpPath(options.output, cgPkgCtx.GetCurrentPkgName(),
+        std::to_string(subDirNum) + "_" + suffix, cgMod.GetLLVMModule()->getSourceFileName());
+    DumpIR(*cgMod.GetLLVMModule(), dumpPath);
+    subDirNum++;
+}
+
 void GenerateExtensionDefs(CGModule& cgMod)
 {
     for (auto& def : cgMod.GetAllCGExtensionDefs()) {
@@ -92,7 +106,7 @@ void GenerateExtensionDefs(CGModule& cgMod)
     }
 }
 
-std::vector<llvm::Constant*> TopologicalSortStaticGIs(CGContext& cgCtx, std::vector<llvm::Constant*> content)
+std::vector<llvm::Constant*> TopologicalSortStaticGIs(const CGContext& cgCtx, std::vector<llvm::Constant*> content)
 {
     auto indegree = cgCtx.GetIndegreeOfTypes();
     auto& partialOrder = cgCtx.GetDependentPartialOrderOfTypes();
@@ -108,10 +122,12 @@ std::vector<llvm::Constant*> TopologicalSortStaticGIs(CGContext& cgCtx, std::vec
         q.pop();
         res.emplace_back(u);
         for (auto c : content) {
-            if (auto it = partialOrder.find(CGContext::PartialOrderPair{u, c}); it != partialOrder.end()) {
-                if (auto& i = indegree.at(c); --i == 0) {
-                    q.push(c);
-                }
+            auto it = partialOrder.find(CGContext::PartialOrderPair{u, c});
+            if (it == partialOrder.end()) {
+                continue;
+            }
+            if (auto& i = indegree.at(c); --i == 0) {
+                q.push(c);
             }
         }
     }
@@ -123,7 +139,7 @@ void GenerateStaticGIs(CGModule& cgMod)
 {
     std::vector<llvm::Constant*> content;
     for (auto staticGI : cgMod.GetAliveStaticGIs()) {
-        if (staticGI->getNumUses() > 0 || !staticGI->isLocalLinkage(staticGI->getLinkage())) {
+        if (staticGI->getNumUses() > 0 || (!staticGI->hasLocalLinkage() && !staticGI->hasLinkOnceODRLinkage())) {
             CJC_ASSERT(staticGI->hasInitializer());
             (void)content.emplace_back(staticGI);
         }
@@ -295,12 +311,9 @@ void EmitTIOrTTForCustomDefs(CGModule& cgMod)
         switch (customDef->GetCustomKind()) {
             case CHIR::CustomDefKind::TYPE_ENUM: {
                 auto chirEnumType = StaticCast<CHIR::EnumDef*>(customDef)->GetType();
-                auto cgEnumType = StaticCast<CGEnumType*>(CGType::GetOrCreate(cgMod, chirEnumType));
-                if (!cgEnumType->IsTrivial() && !cgEnumType->IsZeroSizeEnum()) {
-                    const auto& ctors = chirEnumType->GetConstructorInfos(cgMod.GetCGContext().GetCHIRBuilder());
-                    for (auto ctorIndex = 0U; ctorIndex < ctors.size(); ++ctorIndex) {
-                        EnumCtorTIOrTTGenerator(cgMod, *chirEnumType, ctorIndex).Emit();
-                    }
+                const auto& ctors = chirEnumType->GetConstructorInfos(cgMod.GetCGContext().GetCHIRBuilder());
+                for (auto ctorIndex = 0U; ctorIndex < ctors.size(); ++ctorIndex) {
+                    EnumCtorTIOrTTGenerator(cgMod, *chirEnumType, ctorIndex).Emit();
                 }
                 break;
             }
@@ -328,9 +341,52 @@ void EmitCJSDKVersion(const CGModule& cgMod)
     cgMod.GetCGContext().AddLLVMUsedVars(cjSdkVersion->getName().str());
 }
 
+void GenerateReflectionMetadata(CGModule& module, const SubCHIRPackage& subCHIRPkg)
+{
+    auto& globalOptions = module.GetCGContext().GetCGPkgContext().GetGlobalOptions();
+    uint8_t reflectionMode = globalOptions.disableReflection
+        ? GenReflectMode::NO_REFLECT
+        : GenReflectMode::FULL_REFLECT;
+
+    const std::array<MetadataKind, 6> allKinds = {
+        CodeGen::MetadataKind::PKG_METADATA,
+        CodeGen::MetadataKind::CLASS_METADATA,
+        CodeGen::MetadataKind::STRUCT_METADATA,
+        CodeGen::MetadataKind::ENUM_METADATA,
+        CodeGen::MetadataKind::GF_METADATA,
+        CodeGen::MetadataKind::GV_METADATA
+    };
+
+    auto runTask = [&](CodeGen::MetadataKind kind) {
+        std::unique_ptr<MetadataInfo> info = nullptr;
+        switch (kind) {
+            case CodeGen::MetadataKind::PKG_METADATA:
+                info = std::make_unique<PkgMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::CLASS_METADATA:
+                info = std::make_unique<ClassMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::STRUCT_METADATA:
+                info = std::make_unique<StructMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::ENUM_METADATA:
+                info = std::make_unique<EnumMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::GF_METADATA:
+                info = std::make_unique<GFMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            case CodeGen::MetadataKind::GV_METADATA:
+                info = std::make_unique<GVMetadataInfo>(module, subCHIRPkg, reflectionMode); break;
+            default: break;
+        }
+
+        if (info) {
+            info->Gen();
+        }
+    };
+
+    for (auto kind : allKinds) {
+        runTask(kind);
+    }
+}
+
 void GenSubCHIRPackage(CGModule& cgMod)
 {
-    auto& cgPkgCtx = cgMod.GetCGContext().GetCGPkgContext();
     auto& subCHIRPkg = cgMod.GetCGContext().GetSubCHIRPackage();
     EmitTIOrTTForCustomDefs(cgMod);
     EmitGlobalVariableIR(cgMod, std::vector<CHIR::GlobalVar*>(subCHIRPkg.chirGVs.begin(), subCHIRPkg.chirGVs.end()));
@@ -344,56 +400,57 @@ void GenSubCHIRPackage(CGModule& cgMod)
         CreatePackageInitResetFunction(cgMod);
         SpecifyPackageInitFunc(cgMod);
     }
+    size_t subDirNum = 0; // for sub-directory naming, starts from 0, increments after each dump.
+    DumpIRIfNeeded(cgMod, "TranslateCHIRNode", subDirNum);
     GenerateExtensionDefs(cgMod);
+    DumpIRIfNeeded(cgMod, "GenExtensionDefs", subDirNum);
     cgMod.GenTypeTemplate();
+    DumpIRIfNeeded(cgMod, "GenTypeTemplates", subDirNum);
     cgMod.GenTypeInfo();
-    auto& globalOptions = cgPkgCtx.GetGlobalOptions();
-    DumpIR(*cgMod.GetLLVMModule(),
-        cgPkgCtx.GetCurrentPkgName() + "/00_subModules/" + cgMod.GetLLVMModule()->getSourceFileName(),
-        globalOptions.codegenDebugMode);
+    DumpIRIfNeeded(cgMod, "GenTypeInfos", subDirNum);
     ReplaceFunction(cgMod);
     cgMod.Opt();
     InlineFunction(cgMod);
-    CJNativeReflectionInfo(cgMod, subCHIRPkg).Gen();
+    DumpIRIfNeeded(cgMod, "ReplaceAndInlineFunc", subDirNum);
+    GenerateReflectionMetadata(cgMod, subCHIRPkg);
     cgMod.GenTypeInfo(); // for reflect generated typeinfo
+    DumpIRIfNeeded(cgMod, "GenReflectionInfo", subDirNum);
     cgMod.diBuilder->Finalize();
     TransformFFIs(cgMod);
+    DumpIRIfNeeded(cgMod, "TransformFFIs", subDirNum);
     InitializeCjStringLiteral(cgMod);
+    DumpIRIfNeeded(cgMod, "InitCJStringLiteral", subDirNum);
     GenerateBinarySectionInfo(cgMod);
     KeepSomeTypesManually(cgMod);
-
-    DumpIR(*cgMod.GetLLVMModule(),
-        cgPkgCtx.GetCurrentPkgName() + "/01_subModules/" + cgMod.GetLLVMModule()->getSourceFileName(),
-        globalOptions.codegenDebugMode);
+    DumpIRIfNeeded(cgMod, "GenBinarySectionInfo", subDirNum);
     cgMod.EraseUselessInstsAndDeclarations();
+    DumpIRIfNeeded(cgMod, "EraseUselessInstsAndDecls", subDirNum);
     RecordCodeInfoInCodeGen("CodeGen EmitIR", cgMod);
     cgMod.GenIncremental();
     SetSymbolLinkageType(cgMod);
-    DumpIR(*cgMod.GetLLVMModule(),
-        cgPkgCtx.GetCurrentPkgName() + "/02_subModules/" + cgMod.GetLLVMModule()->getSourceFileName(),
-        globalOptions.codegenDebugMode);
-
+    DumpIRIfNeeded(cgMod, "GenIncremental", subDirNum);
     cgMod.EraseUselessGVAndFunctions();
+    DumpIRIfNeeded(cgMod, "EraseUselessGVAndFuncs", subDirNum);
     GenerateStaticGIs(cgMod);
+    DumpIRIfNeeded(cgMod, "GenStaticGIs", subDirNum);
     CreateLLVMUsedGVs(cgMod);
-
-    // Incremental compilation generates invalid IRs, which need to be deleted by EraseUselessGVAndFunctions. Therefore,
-    // the verification is performed after incremental compilation.
-    if (!cgMod.Verify()) {
+    // Incremental compilation generates invalid IRs, which need to be deleted by EraseUselessGVAndFunctions.
+    // Therefore, the verification is performed after incremental compilation.
+    auto success = cgMod.Verify();
 #ifndef NDEBUG
+    if (!success) {
+        auto& cgPkgCtx = cgMod.GetCGContext().GetCGPkgContext();
         std::string path = cgPkgCtx.GetCurrentPkgName() + "/brokenIR/" + cgMod.GetLLVMModule()->getSourceFileName();
-        DumpIR(*cgMod.GetLLVMModule(), path, true);
+        DumpIR(*cgMod.GetLLVMModule(), path);
         InternalError("Broken llvm ir! The result is saved in " + path);
-#else
-        InternalError("Broken llvm ir!");
-#endif
     }
-    DumpIR(*cgMod.GetLLVMModule(),
-        cgPkgCtx.GetCurrentPkgName() + "/03_subModules/" + cgMod.GetLLVMModule()->getSourceFileName(),
-        globalOptions.codegenDebugMode);
-
+#endif
+    DumpIRIfNeeded(cgMod, "Final", subDirNum);
+    if (!success) {
+        InternalError("Broken llvm ir!");
+    }
     RecordCodeInfoInCodeGen("CodeGen stage", cgMod);
-}
+    }
 #endif
 } // namespace
 
@@ -448,6 +505,10 @@ private:
     {
         Utils::ProfileRecorder::Start("EmitIR", "GenSubCHIRPackages");
         auto& cgMods = cgPkgCtx.GetCGModules();
+        auto& globalOptions = cgPkgCtx.GetGlobalOptions();
+        if (globalOptions.NeedDumpIRToFile()) {
+            ClearOldIRDumpFiles(globalOptions.output, cgPkgCtx.GetCurrentPkgName());
+        }
         size_t threadNum = cgPkgCtx.GetGlobalOptions().codegenDebugMode ? 1 : cgMods.size();
         if (threadNum == 1) {
             for (auto& cgMod : cgMods) {
@@ -459,6 +520,11 @@ private:
                 taskQueueCHIRIR2LLVMIR.AddTask<void>([&cgMod]() { GenSubCHIRPackage(*cgMod); });
             }
             taskQueueCHIRIR2LLVMIR.RunAndWaitForAllTasksCompleted();
+        }
+        if (cgPkgCtx.GetGlobalOptions().NeedDumpIRToScreen()) {
+            for (auto& cgMod : cgPkgCtx.GetCGModules()) {
+                DumpIR(*cgMod->GetLLVMModule());
+            }
         }
         Utils::ProfileRecorder::Stop("EmitIR", "GenSubCHIRPackages");
     }
@@ -516,14 +582,14 @@ llvm::Value* GenerateMainRetVal(IRBuilder2& irBuilder, llvm::Value* userMainRetV
 
 llvm::Function* CreateMainFunc(const CGModule& cgMod)
 {
-    auto& context = cgMod.GetCGContext().GetLLVMContext();
-    auto i32Ty = llvm::Type::getInt32Ty(context);
-    auto i8PtrPtrTy = llvm::Type::getInt8PtrTy(context)->getPointerTo();
     // Create @main func.
     auto module = cgMod.GetLLVMModule();
     auto mainFunc = module->getFunction("main");
     CJC_ASSERT(!mainFunc && "The main function is generated repeatedly.");
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    auto& context = cgMod.GetCGContext().GetLLVMContext();
+    auto i32Ty = llvm::Type::getInt32Ty(context);
+    auto i8PtrPtrTy = llvm::Type::getInt8PtrTy(context)->getPointerTo();
     auto voidType = llvm::Type::getVoidTy(context);
     auto mainFuncType = llvm::FunctionType::get(voidType, {i32Ty, i8PtrPtrTy}, false);
     mainFunc = llvm::cast<llvm::Function>(module->getOrInsertFunction("main", mainFuncType).getCallee());

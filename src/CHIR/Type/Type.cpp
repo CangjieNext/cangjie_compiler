@@ -297,7 +297,7 @@ std::vector<ClassType*> CustomType::GetSuperTypesRecusively(CHIRBuilder& builder
     std::set<std::pair<const Type*, const Type*>>* visited)
 {
     std::vector<ClassType*> inheritanceList;
-    for (auto interface : GetImplementedInterfaceTys(&builder)) {
+    for (auto interface : GetImplementedInterfaceTys(&builder, visited)) {
         GetAllInstantiatedParentType(*interface, builder, inheritanceList, visited);
     }
     if (auto classTy = DynamicCast<ClassType*>(this)) {
@@ -561,6 +561,29 @@ std::vector<AbstractMethodInfo> ClassType::GetInstAbstractMethodTypes(CHIRBuilde
     return methods;
 }
 
+bool ClassType::IsDirectSuperTypeOf(Type& subType, CHIRBuilder& builder) const
+{
+    if (auto builtinTy = DynamicCast<BuiltinType*>(&subType)) {
+        for (auto super : builtinTy->GetSuperTypes(builder)) {
+            if (super == this) {
+                return true;
+            }
+        }
+    } else if (auto customTy = DynamicCast<CustomType*>(&subType)) {
+        for (auto super : customTy->GetImplementedInterfaceTys(&builder)) {
+            if (super == this) {
+                return true;
+            }
+        }
+        if (auto classTy = DynamicCast<ClassType*>(customTy)) {
+            if (classTy->GetSuperClassTy(&builder) == this) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 static void CollectGenericReplaceTable(
     Type& mayBeGeneric, Type& instType, std::unordered_map<const GenericType*, Type*>& replaceTable)
 {
@@ -819,7 +842,11 @@ std::vector<ClassType*> CustomType::CalculateExtendImplementedInterfaceTys(CHIRB
 {
     std::vector<ClassType*> allParents;
     for (auto extendDef : def->GetExtends()) {
-        if (!IsEqualOrInstantiatedTypeOf(*extendDef->GetExtendedType(), builder, visited)) {
+        std::set<std::pair<const Type*, const Type*>> visited2;
+        if (visited != nullptr) {
+            visited2 = *visited;
+        }
+        if (!IsEqualOrInstantiatedTypeOf(*extendDef->GetExtendedType(), builder, &visited2)) {
             continue;
         }
         auto res = extendDef->GetExtendedType()->CalculateGenericTyMapping(*this);
@@ -1252,7 +1279,11 @@ std::vector<ClassType*> BuiltinType::GetSuperTypesRecusively(CHIRBuilder& builde
 {
     std::vector<ClassType*> inheritanceList;
     for (auto extendDef : GetExtends(&builder)) {
-        if (!IsEqualOrInstantiatedTypeOf(*extendDef->GetExtendedType(), builder, visited)) {
+        std::set<std::pair<const Type*, const Type*>> visited2;
+        if (visited != nullptr) {
+            visited2 = *visited;
+        }
+        if (!IsEqualOrInstantiatedTypeOf(*extendDef->GetExtendedType(), builder, &visited2)) {
             continue;
         }
         for (auto interface : extendDef->GetImplementedInterfaceTys()) {
@@ -1285,6 +1316,20 @@ std::vector<FuncBase*> BuiltinType::GetExtendMethods() const
 std::vector<FuncBase*> BuiltinType::GetDeclareAndExtendMethods([[maybe_unused]] CHIRBuilder& builder) const
 {
     return GetExtendMethods();
+}
+
+std::vector<ClassType*> BuiltinType::GetSuperTypes(CHIRBuilder& builder) const
+{
+    std::vector<ClassType*> superTypes;
+    for (auto extend : GetExtends(&builder)) {
+        if (!IsEqualOrInstantiatedTypeOf(*extend->GetExtendedType(), builder)) {
+            continue;
+        }
+        for (auto interface : extend->GetImplementedInterfaceTys()) {
+            superTypes.emplace_back(interface);
+        }
+    }
+    return superTypes;
 }
 
 static bool TupleTypeIsEqualOrSub(const TupleType& subType, const TupleType& parentType, CHIRBuilder& builder)
@@ -1473,7 +1518,11 @@ bool Type::SatisfyGenericConstraints(const GenericType& type, CHIRBuilder& build
     std::set<std::pair<const Type*, const Type*>>* visited) const
 {
     for (auto upperBound : type.GetUpperBounds()) {
-        if (!IsEqualOrSubTypeOf(*ReplaceRawGenericArgType(*upperBound, instMap, builder), builder, visited)) {
+        std::set<std::pair<const Type*, const Type*>> visited2;
+        if (visited != nullptr) {
+            visited2 = *visited;
+        }
+        if (!IsEqualOrSubTypeOf(*ReplaceRawGenericArgType(*upperBound, instMap, builder), builder, &visited2)) {
             return false;
         }
     }

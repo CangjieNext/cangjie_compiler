@@ -7,15 +7,15 @@
 /**
  * @file
  *
- * This file declares APILevelAnnoChecker class and APILevel information.
+ * This file declares PluginCustomAnnoChecker class and APILevel information.
  */
 
-#ifndef CHECK_APILEVEL_H
-#define CHECK_APILEVEL_H
+#ifndef PLUGIN_CUSTOM_ANNO_CHECKER_H
+#define PLUGIN_CUSTOM_ANNO_CHECKER_H
 
 #include <set>
 #include <string>
-#include <unordered_set>
+#include <set>
 
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/NodeX.h"
@@ -26,7 +26,7 @@
 #include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie {
-namespace APILevelCheck {
+namespace PluginCheck {
 
 /**
  * It should same as cangjie code follow:
@@ -64,49 +64,75 @@ namespace APILevelCheck {
 
 using LevelType = uint32_t;
 
-struct APILevelAnnoInfo {
+/**
+ * @brief Structure to hold custom annotation information.
+ */
+struct PluginCustomAnnoInfo {
     LevelType since{0};
     std::string syscap{""};
+    std::optional<bool> hasHideAnno{std::nullopt};
 };
 
-using SysCapSet = std::vector<std::string>;
+using SysCapSet = std::set<std::string>;
 
-class APILevelAnnoChecker {
+class PluginCustomAnnoChecker {
 public:
-    APILevelAnnoChecker(CompilerInstance& ci, DiagnosticEngine& diag, ImportManager& importManager)
+    PluginCustomAnnoChecker(CompilerInstance& ci, DiagnosticEngine& diag, ImportManager& importManager)
         : ci(ci), diag(diag), importManager(importManager)
     {
         ParseOption();
     }
-    APILevelAnnoInfo Parse(const AST::Decl& decl);
+
+    /**
+     * @brief Parse custom annotations from declaration.
+     * @param decl Declaration to parse.
+     * @param annoInfo Output parameter to store parsed annotation information.
+     */
+    void Parse(const AST::Decl& decl, PluginCustomAnnoInfo& annoInfo);
+
+    /**
+     * @brief Check custom annotations in the package.
+     * @param pkg Package to check.
+     */
     void Check(AST::Package& pkg);
 
 private:
     void ParseOption() noexcept;
-    void ParseJsonFile(const std::vector<uint8_t>& in) noexcept;
-    bool CheckLevel(
-        const AST::Node& node, const AST::Decl& target, const APILevelAnnoInfo& scopeAPILevel, bool reportDiag);
-    bool CheckSyscap(
-        const AST::Node& node, const AST::Decl& target, const APILevelAnnoInfo& scopeAPILevel, bool reportDiag);
-    bool CheckNode(Ptr<AST::Node> node, APILevelAnnoInfo& scopeAPILevel, bool reportDiag = true);
-    void CheckIfAvailableExpr(AST::IfAvailableExpr& iae, APILevelAnnoInfo& scopeAPILevel);
+    bool ParseJsonFile(const std::vector<uint8_t>& in) noexcept;
+    struct DiagConfig {
+        bool reportDiag{true};
+        Ptr<AST::Node> node{nullptr};
+        std::vector<std::string> message{};
+    };
+    bool CheckLevel(const AST::Decl& target, const PluginCustomAnnoInfo& scopeAnnoInfo, DiagConfig diagCfg);
+    bool CheckSyscap(const AST::Decl& target, const PluginCustomAnnoInfo& scopeAnnoInfo, DiagConfig diagCfg);
+    bool CheckCheckingHide(const AST::Decl& target, DiagConfig diagCfg);
+    bool CheckNode(Ptr<AST::Node> node, const PluginCustomAnnoInfo& scopeAnnoInfo, bool reportDiag = true);
+    void CheckIfAvailableExpr(AST::IfAvailableExpr& iae, const PluginCustomAnnoInfo& scopeAnnoInfo);
     bool IsAnnoAPILevel(Ptr<AST::Annotation> anno, const AST::Decl& decl);
+    bool IsAnnoHide(Ptr<AST::Annotation> anno);
+    void ParseHideArg(const AST::Annotation& anno, PluginCustomAnnoInfo& annoInfo);
+    void ParseAPILevelArgs(const AST::Decl& decl, const AST::Annotation& anno, PluginCustomAnnoInfo& annoInfo);
+    void CheckHideOfExtendDecl(const AST::Decl& decl, const PluginCustomAnnoInfo& annoInfo);
+    void CheckHideOfOverrideFunction(const AST::Decl& decl, const PluginCustomAnnoInfo& annoInfo);
+    void CheckAnnoBeforeMacro(AST::Package& pkg);
 
 private:
     CompilerInstance& ci;
     DiagnosticEngine& diag;
     ImportManager& importManager;
+    Ptr<ASTContext> ctx;
 
     LevelType globalLevel{0};
     SysCapSet intersectionSet;
     SysCapSet unionSet;
-    std::unordered_map<Ptr<const AST::Decl>, APILevelAnnoInfo> levelCache;
-    Ptr<ASTContext> ctx;
+    std::unordered_map<Ptr<const AST::Decl>, PluginCustomAnnoInfo> levelCache;
+    std::string curModuleName{""};
 
     bool optionWithLevel{false};
     bool optionWithSyscap{false};
 };
-} // namespace APILevelCheck
+} // namespace PluginCheck
 } // namespace Cangjie
 
 #endif

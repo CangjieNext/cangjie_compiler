@@ -51,13 +51,19 @@ std::string NormalizeQuery(const Query& query, const Order& order)
 void Trie::Insert(const std::string& value)
 {
     TrieNode* n = root.get();
+    std::string prefix;  // Accumulate prefix incrementally to avoid substr calls
+    prefix.reserve(value.size());
     for (unsigned i = 0; i < value.size(); ++i) {
         if (n->next.find(value[i]) == n->next.end()) {
             n->next.emplace(value[i], std::make_unique<TrieNode>(value[i]));
         }
         n = n->next[value[i]].get();
-        n->prefix = value.substr(0, i + 1);
-        n->suffixes.insert(value.substr(i + 1));
+        prefix += value[i];  // Build prefix incrementally
+        n->prefix = prefix;
+        // Only compute suffix if it's non-empty to avoid unnecessary string creation
+        if (i + 1 < value.size()) {
+            n->suffixes.insert(std::string(value.data() + i + 1, value.size() - i - 1));
+        }
     }
     n->value = value;
 }
@@ -65,6 +71,8 @@ void Trie::Insert(const std::string& value)
 void Trie::Insert(const std::string& value, Symbol& id)
 {
     TrieNode* n = root.get();
+    std::string prefix;  // Accumulate prefix incrementally to avoid substr calls
+    prefix.reserve(value.size());
     for (unsigned i = 0; i < value.size(); ++i) {
         if (n->next.find(value[i]) == n->next.end()) {
             n->next.emplace(value[i], std::make_unique<TrieNode>(value[i]));
@@ -74,8 +82,12 @@ void Trie::Insert(const std::string& value, Symbol& id)
         next->parent = n;
         next->ids.insert(&id);
         n = next;
-        n->prefix = value.substr(0, i + 1);
-        n->suffixes.insert(value.substr(i + 1));
+        prefix += value[i];  // Build prefix incrementally
+        n->prefix = prefix;
+        // Only compute suffix if it's non-empty to avoid unnecessary string creation
+        if (i + 1 < value.size()) {
+            n->suffixes.insert(std::string(value.data() + i + 1, value.size() - i - 1));
+        }
     }
     n->value = value;
 }
@@ -143,11 +155,31 @@ std::vector<std::string> Trie::SuffixMatch(const std::string& suffix) const
     return matches;
 }
 
+uint32_t PosSearchApi::MAX_DIGITS_FILE = 4;   /**< Max num of files to compile once is 9999. */
+uint32_t PosSearchApi::MAX_DIGITS_LINE = 5;   /**< Max num of lines of a file is 99999. */
+uint32_t PosSearchApi::MAX_DIGITS_COLUMN = 5; /**< Max column width is 99999. */
+
+void PosSearchApi::UpdatePosLimit(unsigned int fileId, int line, int column)
+{
+    uint32_t digitsFile = static_cast<uint32_t>(FillZero(static_cast<int>(fileId), 0).size());
+    uint32_t digitsLine = static_cast<uint32_t>(FillZero(line, 0).size());
+    uint32_t digitsColumn = static_cast<uint32_t>(FillZero(column, 0).size());
+    if (digitsFile > MAX_DIGITS_FILE) {
+        MAX_DIGITS_FILE = digitsFile;
+    }
+    if (digitsLine > MAX_DIGITS_LINE) {
+        MAX_DIGITS_LINE = digitsLine;
+    }
+    if (digitsColumn > MAX_DIGITS_COLUMN) {
+        MAX_DIGITS_COLUMN = digitsColumn;
+    }
+}
+
 std::string PosSearchApi::PosToStr(const Position& pos)
 {
-    std::string ret = FillZero(static_cast<int>(pos.fileID), MAX_DIGITS_FILE);
-    ret += FillZero(pos.line, MAX_DIGITS_LINE);
-    ret += FillZero(pos.column, MAX_DIGITS_COLUMN);
+    std::string ret = FillZero(static_cast<int>(pos.fileID), static_cast<int>(MAX_DIGITS_FILE));
+    ret += FillZero(pos.line, static_cast<int>(MAX_DIGITS_LINE));
+    ret += FillZero(pos.column, static_cast<int>(MAX_DIGITS_COLUMN));
     return ret;
 }
 
@@ -185,7 +217,7 @@ std::set<Symbol*> PosSearchApi::GetIDsGreaterThanPos(const Trie& posTrie, const 
     TrieNode::Next::const_iterator startIter;
     std::set<Symbol*> ids;
     while (n->depth > MAX_DIGITS_FILE) {
-        if (n->depth == MAX_DIGITS_POSITION) {
+        if (n->depth == GetMaxDigitsPostion()) {
             n = n->parent;
             continue;
         }
@@ -226,7 +258,8 @@ std::set<Symbol*> PosSearchApi::GetIDsLessThanPos(const Trie& posTrie, const Pos
     TrieNode* n = FindCommonRootInPosTrie(posTrie, posStr);
     std::set<Symbol*> ids;
     while (n->depth > MAX_DIGITS_FILE) {
-        if (n->depth == MAX_DIGITS_POSITION) {
+        if (n->depth == GetMaxDigitsPostion()) {
+            CJC_ASSERT(n->next.empty());
             n = n->parent;
             continue;
         }
@@ -550,12 +583,12 @@ std::set<Symbol*> Searcher::GetIDsByScopeLevel(const ASTContext& ctx, const Quer
         }
     } else if (query.sign == "<") {
         for (uint32_t scopelevel = 0; scopelevel < std::strtoul(query.value.c_str(), nullptr, decimalBase);
-             ++scopelevel) {
+            ++scopelevel) {
             ids = Union(ids, GetIDsByScopeLevel(ctx, scopelevel));
         }
     } else if (query.sign == "<=") {
         for (uint32_t scopelevel = 0; scopelevel <= std::strtoul(query.value.c_str(), nullptr, decimalBase);
-             ++scopelevel) {
+            ++scopelevel) {
             ids = Union(ids, GetIDsByScopeLevel(ctx, scopelevel));
         }
     }

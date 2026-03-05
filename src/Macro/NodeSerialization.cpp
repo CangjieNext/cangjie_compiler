@@ -41,33 +41,49 @@ flatbuffers::Offset<flatbuffers::Vector<const NodeFormat::Position*>> NodeWriter
 }
 
 flatbuffers::Offset<NodeFormat::FeaturesDirective> NodeWriter::SerializeFeaturesDirective(
-    AstFeaturesDirective featuresDirective)
+    AstFeaturesDirective ftrDirective)
 {
-    if (featuresDirective == nullptr) {
+    if (ftrDirective == nullptr) {
         return flatbuffers::Offset<NodeFormat::FeaturesDirective>();
     }
-    auto ftrNodeBase = SerializeNodeBase(featuresDirective);
-    auto commas = CreatePositionVector(featuresDirective->commaPoses);
+    auto ftrNodeBase = SerializeNodeBase(ftrDirective);
+    auto featuresPos = NodeFormat::Position(ftrDirective->featuresPos.fileID,
+                                            ftrDirective->featuresPos.line, ftrDirective->featuresPos.column);
+    std::vector<flatbuffers::Offset<NodeFormat::Annotation>> annosVec;
+    for (const auto &item : ftrDirective->annotations) {
+        annosVec.emplace_back(SerializeAnnotation(item));
+    }
+    auto annos = builder.CreateVector(annosVec);
+    auto featuresSet = SerializeFeaturesSet(*ftrDirective->featuresSet.get());
+    return NodeFormat::CreateFeaturesDirective(builder, ftrNodeBase, annos, featuresSet, &featuresPos);
+}
+
+flatbuffers::Offset<NodeFormat::FeaturesSet> NodeWriter::SerializeFeaturesSet(const AST::FeaturesSet &fSet)
+{
+    auto ftrSetBase = SerializeNodeBase(&fSet);
+    auto lCurlPos = NodeFormat::Position(fSet.lCurlPos.fileID, fSet.lCurlPos.line, fSet.lCurlPos.column);
     std::vector<flatbuffers::Offset<NodeFormat::FeatureId>> itemsVec;
-    for (const auto& item : featuresDirective->content) {
+    for (const auto &item : fSet.content) {
         itemsVec.emplace_back(SerializeFeatureId(item));
     }
     auto items = builder.CreateVector(itemsVec);
-    return NodeFormat::CreateFeaturesDirective(builder, ftrNodeBase, items, commas);
+    auto rCurlPos = NodeFormat::Position(fSet.rCurlPos.fileID, fSet.rCurlPos.line, fSet.rCurlPos.column);
+    auto commas = CreatePositionVector(fSet.commaPoses);
+    return NodeFormat::CreateFeaturesSet(builder, ftrSetBase, &lCurlPos, items, commas, &rCurlPos);
 }
- 
-flatbuffers::Offset<NodeFormat::FeatureId> NodeWriter::SerializeFeatureId(const AST::FeatureId& content)
+
+flatbuffers::Offset<NodeFormat::FeatureId> NodeWriter::SerializeFeatureId(const AST::FeatureId &ftrId)
 {
-    auto nodeBase = SerializeNodeBase(&content);
+    auto nodeBase = SerializeNodeBase(&ftrId);
     std::vector<std::string> idents;
     std::vector<Position> poses;
-    for (auto& ident : content.identifiers) {
+    for (auto &ident : ftrId.identifiers) {
         idents.emplace_back(ident.Val());
         poses.emplace_back(ident.Begin());
     }
     auto identifiers = builder.CreateVectorOfStrings(idents);
     auto identPoses = CreatePositionVector(poses);
-    auto dotPoses = CreatePositionVector(content.dotPoses);
+    auto dotPoses = CreatePositionVector(ftrId.dotPoses);
     return NodeFormat::CreateFeatureId(builder, nodeBase, identifiers, identPoses, dotPoses);
 }
 
@@ -92,7 +108,7 @@ flatbuffers::Offset<NodeFormat::PackageSpec> NodeWriter::SerializePackageSpec(As
         : packageSpec->modifier->modifier == TokenKind::PROTECTED ? NodeFormat::AccessibleKind_ACCESSIBLE_PROTECTED
                                                                   : NodeFormat::AccessibleKind_ACCESSIBLE_PUBLIC;
     return NodeFormat::CreatePackageSpec(builder, paNodeBase, &macroPos, &packagePos, prefixPaths, prefixPoses,
-        prefixDotPoses, packageName, &packageNamePos, accessible, packageSpec->hasMacro);
+        prefixDotPoses, packageName, &packageNamePos, accessible, packageSpec->hasMacro, packageSpec->hasDoubleColon);
 }
 
 flatbuffers::Offset<NodeFormat::ImportContent> NodeWriter::SerializeImportContent(const AST::ImportContent& content)
@@ -123,8 +139,9 @@ flatbuffers::Offset<NodeFormat::ImportContent> NodeWriter::SerializeImportConten
     auto rightCurlPos =
         NodeFormat::Position(content.rightCurlPos.fileID, content.rightCurlPos.line, content.rightCurlPos.column);
 
-    return NodeFormat::CreateImportContent(builder, icNodeBase, kind, prefixPaths, prefixPoses, prefixDotPoses, ident,
-        &identPos, &asPos, asIdent, &asIdentPos, &leftCurlPos, items, commaPoses, &rightCurlPos);
+    return NodeFormat::CreateImportContent(
+        builder, icNodeBase, kind, prefixPaths, prefixPoses, prefixDotPoses, ident, &identPos,
+        &asPos, asIdent, &asIdentPos, &leftCurlPos, items, commaPoses, &rightCurlPos, content.hasDoubleColon);
 }
 
 flatbuffers::Offset<NodeFormat::ImportSpec> NodeWriter::SerializeImportSpec(AstImportSpec importSpec)
@@ -374,6 +391,16 @@ flatbuffers::Offset<NodeFormat::Decl> NodeWriter::SerializeDeclOfFuncParam(const
         builder, SerializeDeclBase(funcParam), NodeFormat::AnyDecl_FUNC_PARAM, fbFuncParam.Union());
 }
 
+flatbuffers::Offset<NodeFormat::Decl> NodeWriter::SerializeDeclOfMacroExpandParam(const Decl* decl)
+{
+    auto mep = RawStaticCast<const MacroExpandParam*>(decl);
+    auto base = SerializeFuncParam(mep);
+    auto invocation = MacroInvocationCreateHelper(mep->invocation);
+    auto mepNode = NodeFormat::CreateMacroExpandParam(builder, base, invocation);
+    return NodeFormat::CreateDecl(
+        builder, SerializeDeclBase(mep), NodeFormat::AnyDecl_MACRO_EXPAND_PARAM, mepNode.Union());
+}
+ 
 flatbuffers::Offset<NodeFormat::Block> NodeWriter::SerializeBlock(AstBlock block)
 {
     if (block == nullptr) {
@@ -870,6 +897,7 @@ flatbuffers::Offset<NodeFormat::Decl> NodeWriter::SerializeDecl(AstDecl decl)
             {ASTKind::MACRO_EXPAND_DECL,
                 [](NodeWriter& nw, AstDecl decl) { return nw.SerializeMacroExpandDecl(decl); }},
             {ASTKind::FUNC_PARAM, [](NodeWriter& nw, AstDecl decl) { return nw.SerializeDeclOfFuncParam(decl); }},
+            {ASTKind::MACRO_EXPAND_PARAM, [](NodeWriter& nw, AstDecl decl) { return nw.SerializeDeclOfMacroExpandParam(decl); }},
             {ASTKind::VAR_WITH_PATTERN_DECL,
                 [](NodeWriter& nw, AstDecl decl) { return nw.SerializeVarWithPatternDecl(decl); }},
         };
@@ -1009,14 +1037,6 @@ flatbuffers::Offset<NodeFormat::MacroExpandDecl> NodeWriter::SerializeMacroExpan
     return NodeFormat::CreateMacroExpandDecl(builder, base, invocation);
 }
 
-flatbuffers::Offset<NodeFormat::Decl> NodeWriter::SerializeMacroExpandParamOfDecl(const Decl* decl)
-{
-    auto macroExpandParam = RawStaticCast<const MacroExpandParam*>(decl);
-    auto fbMacroExpandParam = SerializeMacroExpandParam(macroExpandParam);
-    return NodeFormat::CreateDecl(
-        builder, SerializeDeclBase(macroExpandParam), NodeFormat::AnyDecl_MACRO_EXPAND_PARAM, fbMacroExpandParam.Union());
-}
-
 flatbuffers::Offset<NodeFormat::FuncParam> NodeWriter::SerializeMacroExpandParam(AstMacroExpandParam mep)
 {
     auto macroExpandParam = RawStaticCast<const MacroExpandParam*>(mep);
@@ -1086,7 +1106,8 @@ std::vector<flatbuffers::Offset<NodeFormat::Token>> NodeWriter::TokensVectorCrea
             pos = FlatPosCreateHelper(token.Begin() + 1);
         } else {
             pos = FlatPosCreateHelper(token.Begin());
-        }        vecToken.push_back(NodeFormat::CreateToken(builder, kind, value, &pos));
+        }
+        vecToken.push_back(NodeFormat::CreateToken(builder, kind, value, &pos));
     }
     return vecToken;
 }
@@ -1110,11 +1131,7 @@ flatbuffers::Offset<NodeFormat::MacroInvocation> NodeWriter::MacroInvocationCrea
 
     flatbuffers::Offset<NodeFormat::Decl> decl;
     if (macroInvocation.decl != nullptr) {
-        if (macroInvocation.decl->astKind == ASTKind::MACRO_EXPAND_PARAM) {
-            decl = SerializeMacroExpandParamOfDecl(macroInvocation.decl.get());
-        } else {
-            decl = SerializeDecl(macroInvocation.decl.get());
-        }
+        decl = SerializeDecl(macroInvocation.decl.get());
     }
     auto hasParenthesis = macroInvocation.hasParenthesis;
     auto isCompileTimeVisible = macroInvocation.isCompileTimeVisible;

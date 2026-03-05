@@ -47,7 +47,7 @@ const std::vector<TokenKind>& GetContextualKeyword()
 {
     static const std::vector<TokenKind> CONTEXTUAL_KEYWORD_TOKEN = {TokenKind::PUBLIC, TokenKind::PRIVATE,
         TokenKind::INTERNAL, TokenKind::PROTECTED, TokenKind::OVERRIDE, TokenKind::REDEF, TokenKind::ABSTRACT,
-        TokenKind::SEALED, TokenKind::OPEN, TokenKind::COMMON, TokenKind::PLATFORM, TokenKind::FEATURES};
+        TokenKind::SEALED, TokenKind::OPEN, TokenKind::COMMON, TokenKind::SPECIFIC, TokenKind::FEATURES};
     return CONTEXTUAL_KEYWORD_TOKEN;
 }
 bool IsContextualKeyword(std::string_view s)
@@ -303,9 +303,10 @@ void LexerImpl::Back()
     pNext = pCurrent;
 }
 
+using namespace Unicode;
 std::string LexerImpl::GetSuffix(const char* pSuffixStart)
 {
-    while (std::isalnum(currentChar)) {
+    while (IsAlnum(currentChar)) {
         ReadUTF8Char();
     }
     std::string suffix;
@@ -358,23 +359,27 @@ bool LexerImpl::ProcessXdigit(const int& base, bool& hasDigit, const char* reaso
 /// if the digit >= base,report error.
 /// finally return hasDigit and the index of invalid char.
 //  return true if it has integer suffix, false otherwise.
-bool LexerImpl::ProcessDigits(const int& base, bool& hasDigit, const char* reasonPoint)
+bool LexerImpl::ProcessDigits(const int& base, bool& hasDigit, const char* reasonPoint, bool* isFloat)
 {
     bool hasTypeSuffix = false;
     int max = base + static_cast<int>('0');
-    for (;;) {
+    for (int i{0}; ; ++i) {
+        if (i == 0 && isFloat && IsDigit(currentChar)) {
+            *isFloat = true;
+            tokenKind = TokenKind::FLOAT_LITERAL;
+        }
         if (currentChar > ASCII_BASE) {
             if (success) {
                 DiagExpectedDigit(*reasonPoint);
                 success = false;
             }
-        } else if (isdigit(currentChar) && base <= DEC_BASE) { // Process base <= 10.
+        } else if (IsDigit(currentChar) && base <= DEC_BASE) { // Process base <= 10.
             hasDigit = true;
             if (currentChar >= max && success) {
                 DiagUnexpectedDigit(base, reasonPoint);
                 success = false;
             }
-        } else if (isxdigit(currentChar)) { // Process hexadecimal.
+        } else if (IsXDigit(currentChar)) { // Process hexadecimal.
             if (!ProcessXdigit(base, hasDigit, reasonPoint)) {
                 break;
             }
@@ -451,15 +456,14 @@ bool LexerImpl::ScanNumberIntegerPart(
     return ProcessDigits(base, hasDigit, reasonPoint);
 }
 
-void LexerImpl::ScanNumberDecimalPart(const int& base, const char& prefix, bool& hasDigit, const char* reasonPoint)
+void LexerImpl::ScanNumberDecimalPart(int base, char prefix, bool& hasDigit, bool& isFloat, const char* reasonPoint)
 {
-    tokenKind = TokenKind::FLOAT_LITERAL;
     if ((prefix == 'o' || prefix == 'b') && success) {
         DiagUnexpectedDecimalPoint(reasonPoint);
         success = false;
     }
-    ReadUTF8Char();
-    ProcessDigits(base, hasDigit, reasonPoint);
+    ReadUTF8Char(); // skip '.'
+    ProcessDigits(base, hasDigit, reasonPoint, &isFloat);
 }
 
 void LexerImpl::ScanNumberExponentPart(const char* reasonPoint)
@@ -482,7 +486,7 @@ void LexerImpl::ScanNumberExponentPart(const char* reasonPoint)
     }
 }
 
-void LexerImpl::ProcessFloatSuffix(const char prefix)
+void LexerImpl::ProcessFloatSuffix(char prefix)
 {
     tokenKind = TokenKind::FLOAT_LITERAL; // 0f64 should be float token
     const char* pSuffixStart = pCurrent;
@@ -499,7 +503,7 @@ void LexerImpl::ProcessFloatSuffix(const char prefix)
     }
 }
 
-void LexerImpl::ProcessNumberExponentPart(const char prefix, const char* reasonPoint, bool& isFloat)
+void LexerImpl::ProcessNumberExponentPart(char prefix, const char* reasonPoint, bool& isFloat)
 {
     char exp = static_cast<char>(std::tolower(static_cast<char>(currentChar)));
     if (exp == 'e' || exp == 'p') {
@@ -508,27 +512,26 @@ void LexerImpl::ProcessNumberExponentPart(const char prefix, const char* reasonP
             DiagUnexpectedExponentPart(exp, prefix, reasonPoint);
             success = false;
         }
-        if (exp == 'e') {
-            isFloat = true;
-        }
+        // cannot use exponent part in integer
+        isFloat = true;
+        tokenKind = TokenKind::FLOAT_LITERAL;
         ScanNumberExponentPart(reasonPoint);
-    } else if (success && prefix == 'x' && tokenKind == TokenKind::FLOAT_LITERAL) {
+    } else if (success && prefix == 'x' && tokenKind == TokenKind::FLOAT_LITERAL && isFloat) {
         DiagExpectedExponentPart(reasonPoint);
         success = false;
     }
 }
 
-void LexerImpl::ProcessNumberFloatSuffix(const char& prefix, bool isFloat)
+void LexerImpl::ProcessNumberFloatSuffix(const char& prefix, bool isFloat, bool hasDot)
 {
-    using namespace Unicode;
-    auto tempPoint = pCurrent;
+    auto nonDigitStart = pCurrent; // pos to first non-digit char (non-xidigit if prefix is 'x')
     auto hasSuffix{false};
     if (currentChar == 'f') {
         ProcessFloatSuffix(prefix);
         hasSuffix = true;
     }
     auto suffixBegin = pCurrent;
-    while (std::isalnum(currentChar) || currentChar == '.' || currentChar == '_') {
+    while (IsAlnum(currentChar) || currentChar == '.' || currentChar == '_') {
         // The range .. is legal.
         if (currentChar == '.' && GetNextChar(0) == '.' && GetNextChar(1) != '.') {
             Back();
@@ -570,8 +573,9 @@ void LexerImpl::ProcessNumberFloatSuffix(const char& prefix, bool isFloat)
         }
         currentChar = static_cast<int>(cp);
     }
-    if (((!isFloat && hasSuffix) || (suffixBegin != pNext && !IsAdjacent(suffixBegin, pNext))) && success) {
-        auto errPoint = isFloat ? suffixBegin : tempPoint;
+    if (((!isFloat && hasSuffix) || (suffixBegin != pNext && !IsAdjacent(suffixBegin, pNext)
+        && (isFloat || !hasDot))) && success) {
+        auto errPoint = isFloat ? suffixBegin : nonDigitStart;
         auto args = std::string{errPoint, pCurrent};
         /// the suffix is empty, add dot to prevent empty string in diag message
         if (args.empty()) {
@@ -622,6 +626,7 @@ Token LexerImpl::ScanNumber(const char* pStart)
     char prefix = 'd';   // 0(default), d(decimal),'O'(octal),'x'(Hex),'b'(bin)
     const char* reasonPoint{pStart};
     bool hasDigit = false; // hasDigit is true when digit present
+    const char* dotPos{};
     // 1. Process integer part.
     if (currentChar != '.') {
         if (ScanNumberIntegerPart(pStart, base, prefix, hasDigit, reasonPoint)) {
@@ -632,8 +637,10 @@ Token LexerImpl::ScanNumber(const char* pStart)
             Back();
             return Token(tokenKind, std::string(pStart, pNext), pos, GetPos(pNext));
         }
+        dotPos = pCurrent;
     }
     bool isFloat{false};
+    bool hasDot{false};
     // 2. Process fractional part.
     if (currentChar == '.') {
         // 0. is not a float number 0.b is lex to 0 DOT b
@@ -651,12 +658,12 @@ Token LexerImpl::ScanNumber(const char* pStart)
             }
         }
         hasDigit = false;
-        isFloat = true;
         if (IsIllegalStartDecimalPart(pStart, pCurrent)) {
             diag.DiagnoseRefactor(
                 DiagKindRefactor::lex_cannot_start_with_digit, GetPos(pStart), "float", std::string{*pStart});
         }
-        ScanNumberDecimalPart(base, prefix, hasDigit, reasonPoint);
+        ScanNumberDecimalPart(base, prefix, hasDigit, isFloat, reasonPoint);
+        hasDot = true;
     } else {
         if (IsIllegalStartDecimalPart(pStart, pCurrent)) {
             diag.DiagnoseRefactor(
@@ -669,7 +676,12 @@ Token LexerImpl::ScanNumber(const char* pStart)
     ProcessNumberExponentPart(prefix, reasonPoint, isFloat);
 
     // 4. Process float number suffix
-    ProcessNumberFloatSuffix(prefix, isFloat);
+    ProcessNumberFloatSuffix(prefix, isFloat, hasDot);
+    // int DOT identifier, rollback to DOT
+    if (!isFloat && hasDot && success && dotPos > pInputStart) { // implies dotPos is valid
+        pNext = dotPos;
+        pCurrent = dotPos - 1;
+    }
 
     return Token(tokenKind, std::string(pStart, pNext), pos, GetPos(pNext));
 }
@@ -692,7 +704,6 @@ Token LexerImpl::ScanDotPrefixSymbol()
     }
 }
 
-using namespace Unicode;
 bool LexerImpl::TryConsumeIdentifierUTF8Char()
 {
     CJC_ASSERT(pNext != pCurrent);
@@ -906,7 +917,7 @@ void LexerImpl::ProcessUnicodeEscape()
             Back();
             break;
         }
-        if (isxdigit(currentChar)) {
+        if (IsXDigit(currentChar)) {
             hexNum++;
             UTF32 n{0};
             constexpr UTF32 base{4}; // count to shift when converting hexademical to decimal
@@ -929,7 +940,7 @@ void LexerImpl::ProcessUnicodeEscape()
         DiagExpectedDigit('x');
         success = false;
     }
-    if (hexNum == UNICODE_MAX_NUM && isxdigit(currentChar) && success) { // 1 to 8 hex digits allowed
+    if (hexNum == UNICODE_MAX_NUM && IsXDigit(currentChar) && success) { // 1 to 8 hex digits allowed
         DiagExpectedRightBracket(uniStart - 1);
         Back();
         success = false;
@@ -1240,6 +1251,47 @@ void LexerImpl::ConsumeNChar(uint32_t n)
     }
 }
 
+void LexerImpl::EnterQuoteMod()
+{
+    ctx.push_back(LexerContext::QUOTE);
+}
+void LexerImpl::ExitQuoteMod()
+{
+    CJC_ASSERT(ctx.back() == LexerContext::QUOTE);
+    ctx.pop_back();
+}
+
+void LexerImpl::EnterNormalMod()
+{
+    ctx.push_back(LexerContext::NORMAL);
+}
+void LexerImpl::ExitNormalMod()
+{
+    CJC_ASSERT(ctx.back() == LexerContext::NORMAL);
+    ctx.pop_back();
+}
+bool LexerImpl::IsQuoteContext() const
+{
+    return ctx.back() == LexerContext::QUOTE;
+}
+
+void Lexer::EnterQuoteMod()
+{
+    impl->EnterQuoteMod();
+}
+void Lexer::ExitQuoteMod()
+{
+    impl->ExitQuoteMod();
+}
+void Lexer::EnterNormalMod()
+{
+    impl->EnterNormalMod();
+}
+void Lexer::ExitNormalMod()
+{
+    impl->ExitNormalMod();
+}
+
 std::pair<Token, bool> LexerImpl::ScanMultiLineRawString(const char* pStart)
 {
     uint32_t delimiterNum = 0;
@@ -1248,6 +1300,12 @@ std::pair<Token, bool> LexerImpl::ScanMultiLineRawString(const char* pStart)
         ReadUTF8Char();
     }
     if (currentChar != '"' && currentChar != '\'' && success) {
+        if (IsQuoteContext()) {
+            // send the first scanned # as a HASH token
+            pNext = pStart + 1;
+            pCurrent = pStart;
+            return {Token(TokenKind::HASH, std::string(pStart, pNext), GetPos(pStart), GetPos(pNext)), false};
+        }
         auto builder = diag.DiagnoseRefactor(
             DiagKindRefactor::lex_expected_quote_in_raw_string, GetPos(pCurrent), ConvertCurrentChar());
         builder.AddHint(MakeRange(GetPos(pStart), GetPos(pCurrent)));
@@ -1271,6 +1329,13 @@ std::pair<Token, bool> LexerImpl::ScanMultiLineRawString(const char* pStart)
             count = delimiterNum;
         } else if (currentChar == -1) {
             if (success) {
+                if (IsQuoteContext()) {
+                    // #'s not matched or meet eof before raw string end, send the first # as a token
+                    // the next round it scans till here, the possiblity of scanning a raw string end increases
+                    pCurrent = pStart;
+                    pNext = pCurrent + 1;
+                    return {Token(TokenKind::HASH, std::string(pStart, pNext), GetPos(pStart), GetPos(pNext)), false};
+                }
                 DiagUnterminatedRawString(pStart);
                 success = false;
             }
@@ -1788,7 +1853,7 @@ Token LexerImpl::ScanBase()
     if (currentChar == '`') {
         return ScanBackquotedIdentifier(pStart);
     }
-    if (isdigit(currentChar) || currentChar == '.') { // number
+    if (IsDigit(currentChar) || currentChar == '.') { // number
         return ScanNumberOrDotPrefixSymbol(pStart);
     }
     if (currentChar == '/') {
@@ -1924,7 +1989,7 @@ const std::list<Token>& LexerImpl::LookAhead(size_t num)
  * if Scan reaching the end of file, lookAheadCache will pad TokenKind::END(s) and eventually num ==
  * lookAheadCache.size()
  */
-void LexerImpl::ReserveToken(size_t num, bool skipNewline)
+void LexerImpl::ReserveToken(size_t num, bool skipNewline, bool skipComments)
 {
     size_t index = 0;
     if (skipNewline) {
@@ -1937,7 +2002,7 @@ void LexerImpl::ReserveToken(size_t num, bool skipNewline)
 
     while (index < num) {
         Token token = Scan();
-        if (token.kind == TokenKind::COMMENT) { // Skip comments.
+        if (token.kind == TokenKind::COMMENT && skipComments) {
             continue;
         }
         lookAheadCache.push_back(token);
@@ -1946,11 +2011,11 @@ void LexerImpl::ReserveToken(size_t num, bool skipNewline)
 }
 
 bool LexerImpl::Seeing(const std::vector<TokenKind>::const_iterator& begin,
-    const std::vector<TokenKind>::const_iterator& end, bool skipNewline)
+    const std::vector<TokenKind>::const_iterator& end, bool skipNewline, bool skipComments)
 {
     CJC_ASSERT(begin <= end);
     size_t kindSize = static_cast<size_t>(std::distance(begin, end));
-    ReserveToken(kindSize + 1, skipNewline);
+    ReserveToken(kindSize + 1, skipNewline, skipComments);
     if (!skipNewline) {
         return std::equal(begin, end, lookAheadCache.begin(),
             [](const TokenKind kind, const Token& token) { return kind == token.kind; });
@@ -1973,9 +2038,9 @@ bool LexerImpl::Seeing(const std::vector<TokenKind>::const_iterator& begin,
     return true;
 }
 
-bool LexerImpl::Seeing(const std::vector<TokenKind>& kinds, bool skipNewline)
+bool LexerImpl::Seeing(const std::vector<TokenKind>& kinds, bool skipNewline, bool skipComments)
 {
-    return Seeing(kinds.begin(), kinds.end(), skipNewline);
+    return Seeing(kinds.begin(), kinds.end(), skipNewline, skipComments);
 }
 
 std::list<Token> LexerImpl::LookAheadSkipNL(size_t num)
@@ -2028,6 +2093,7 @@ bool LexerImpl::StartCollectTokens()
     }
     enableCollect = true;
     collectTokens.clear();
+    collectTokensFindCache.clear();
     return true;
 }
 
@@ -2043,9 +2109,10 @@ void LexerImpl::CollectToken(const Token& token)
     if (!enableCollect) {
         return;
     }
-    auto it = std::find_if(collectTokens.begin(), collectTokens.end(), [&token](auto& t) { return t == token; });
-    if (it == collectTokens.end()) {
+    // Use cache for O(1) lookup instead of O(n) linear search
+    if (collectTokensFindCache.find(token.Begin()) == collectTokensFindCache.end()) {
         collectTokens.push_back(token);
+        collectTokensFindCache.insert(token.Begin());
     }
 }
 

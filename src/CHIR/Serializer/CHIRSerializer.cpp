@@ -616,7 +616,14 @@ template <> flatbuffers::Offset<PackageFormat::Func> CHIRSerializer::CHIRSeriali
         oriLambdaGenericTypeParams = GetId<Type>(obj.GetOriginalGenericTypeParams());
     }
     auto genericTypeParams = GetId<Type>(obj.GetGenericTypeParams());
-    auto paramDftValHostFunc = GetId<Value>(obj.GetParamDftValHostFunc());
+    Func* paramDftValHostFuncDecl = nullptr;
+    // the host func of desugaring func for named parameter may be removed body when doing uselessFuncElimination,
+    // do not serializer it
+    if (auto paramDftValHostFunc = DynamicCast<Func*>(obj.GetParamDftValHostFunc());
+        paramDftValHostFunc && paramDftValHostFunc->GetBody()) {
+        paramDftValHostFuncDecl = paramDftValHostFunc;
+    }
+    auto paramDftValHostFunc = GetId<Value>(paramDftValHostFuncDecl);
 
     // FuncBody
     CJC_NULLPTR_CHECK(obj.GetBody());
@@ -1350,8 +1357,12 @@ flatbuffers::Offset<PackageFormat::ClassDef> CHIRSerializer::CHIRSerializerImpl:
     auto isAnnotation = obj.IsAnnotation();
     auto superClass = GetId<Type>(obj.GetSuperClassTy());
     auto abstractMethods = SerializeVec<PackageFormat::AbstractMethodInfo>(obj.GetAbstractMethods());
-
-    return PackageFormat::CreateClassDefDirect(builder, base, kind, isAnnotation, superClass, &abstractMethods);
+    std::vector<flatbuffers::Offset<flatbuffers::String>> namesVec;
+    for (const auto& name : obj.GetAllMethodMangledNames()) {
+        namesVec.push_back(builder.CreateSharedString(name));
+    }
+    return PackageFormat::CreateClassDefDirect(builder, base, kind, isAnnotation,
+        superClass, &abstractMethods, &namesVec);
 }
 
 template <>

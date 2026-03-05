@@ -22,19 +22,16 @@
 #include "cangjie/Basic/Version.h"
 #include "cangjie/CHIR/CHIR.h"
 #include "cangjie/CHIR/CHIRPrinter.h"
-#include "cangjie/CHIR/Interpreter/CHIR2BCHIR.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
-#include "cangjie/CHIR/Serializer/CHIRSerializer.h"
 #include "cangjie/CHIR/UserDefinedType.h"
+#include "cangjie/Driver/TempFileManager.h"
 #include "cangjie/Frontend/CompileStrategy.h"
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
 #include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
-#include "cangjie/Modules/ModulesUtils.h"
 #include "cangjie/Modules/PackageManager.h"
 #include "cangjie/Parse/ASTHasher.h"
-#include "cangjie/Sema/Desugar.h"
 #include "cangjie/Sema/GenericInstantiationManager.h"
 #include "cangjie/Sema/TestManager.h"
 #include "cangjie/Sema/TypeChecker.h"
@@ -46,14 +43,15 @@
 #include "cangjie/Utils/Utils.h"
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-#include "cangjie/Mangle/CHIRMangler.h"
 #include "cangjie/CHIR/Checker/ComputeAnnotations.h"
+#include "cangjie/Mangle/CHIRMangler.h"
 #endif
 #ifdef RELEASE
 #include "cangjie/Utils/Signal.h"
 #endif
 
 using namespace Cangjie;
+using namespace AST;
 
 CompilerInstance::CompilerInstance(CompilerInvocation& invocation, DiagnosticEngine& diag)
     : invocation(invocation),
@@ -118,11 +116,69 @@ bool CompilerInstance::InitCompilerInstance()
     performMap.insert_or_assign(CompileStage::GENERIC_INSTANTIATION, &CompilerInstance::PerformGenericInstantiation);
     performMap.insert_or_assign(CompileStage::OVERFLOW_STRATEGY, &CompilerInstance::PerformOverflowStrategy);
     performMap.insert_or_assign(CompileStage::MANGLING, &CompilerInstance::PerformMangling);
+    performMap.insert_or_assign(CompileStage::SAVE_CJO, &CompilerInstance::PerformCjoSaving);
     performMap.insert_or_assign(CompileStage::CHIR, &CompilerInstance::PerformCHIRCompilation);
     performMap.insert_or_assign(CompileStage::CODEGEN, &CompilerInstance::PerformCodeGen);
-    performMap.insert_or_assign(CompileStage::SAVE_RESULTS, &CompilerInstance::PerformCjoAndBchirSaving);
+    performMap.insert_or_assign(CompileStage::SAVE_RESULTS, &CompilerInstance::PerformResultsSaving);
     return true;
 }
+
+namespace {
+void DumpASTToScreen(const std::vector<Ptr<Package>>& srcPkgs)
+{
+    if (srcPkgs.empty()) {
+        return;
+    }
+    for (auto& srcPkg : srcPkgs) {
+        PrintNode(srcPkg.get());
+    }
+}
+void DumpAST(const std::vector<Ptr<Package>>& srcPkgs, const std::string& outputOfProduct = "",
+    const std::string& prefix = "", bool dumpToScreen = false)
+{
+    if (srcPkgs.empty()) {
+        return;
+    }
+    CJC_ASSERT(srcPkgs.size() == 1);
+    const std::string& pkgName = srcPkgs[0]->fullPackageName;
+    if (dumpToScreen) {
+        DumpASTToScreen(srcPkgs);
+        return;
+    }
+    static std::string dumpDir;
+    static bool checkDumpDir = false;
+    static size_t fileNum = 0;
+    if (!checkDumpDir) {
+        if (FileUtil::IsDir(outputOfProduct)) {
+            dumpDir = FileUtil::JoinPath(outputOfProduct, pkgName + "_AST");
+        } else {
+            dumpDir = FileUtil::GetFileBase(outputOfProduct) + "_AST";
+        }
+        if (FileUtil::FileExist(dumpDir)) {
+            FileUtil::RemoveDirectoryRecursively(dumpDir);
+        }
+        FileUtil::CreateDirs(dumpDir + DIR_SEPARATOR);
+        checkDumpDir = true;
+    }
+    auto realDirPath = Cangjie::FileUtil::GetAbsPath(dumpDir);
+    if (!realDirPath.has_value()) {
+        Errorln("Cannot get absolute path of dump directory: " + dumpDir, ", not dump ", prefix, " AST");
+        return;
+    }
+    std::string dumpPath =
+        FileUtil::JoinPath(realDirPath.value(), std::to_string(fileNum) + "_" + prefix + "_ast" + ".txt");
+    std::ofstream ofs(dumpPath);
+    if (!ofs) {
+        Errorln("Cannot open file to dump AST: " + dumpPath);
+        return;
+    }
+    for (auto& srcPkg : srcPkgs) {
+        PrintNode(srcPkg.get(), 0, "", ofs);
+    }
+    ofs.close();
+    fileNum++;
+}
+} // namespace
 
 bool CompilerInstance::Compile(CompileStage stage)
 {
@@ -130,16 +186,22 @@ bool CompilerInstance::Compile(CompileStage stage)
         diag.ReportErrorAndWarningCount();
         return false;
     }
-    for (int i = 0; i <= static_cast<int>(stage); i++) {
+    auto endStageNum = static_cast<int>(stage);
+    int i = 0;
+    bool success = true;
+    for (; i <= endStageNum; i++) {
         Cangjie::ICE::TriggerPointSetter iceSetter(static_cast<CompileStage>(i));
         if (!performMap[static_cast<CompileStage>(i)](this)) {
-            diag.ReportErrorAndWarningCount();
-            return false;
+            success = false;
+            break;
         }
     }
-    Cangjie::ICE::TriggerPointSetter iceSetter(stage);
+    // Dump AST to screen if needed before mangling stage.
+    if (invocation.globalOptions.NeedDumpASTToScreen() && i < static_cast<int>(CompileStage::MANGLING)) {
+        DumpASTToScreen(GetSourcePackages());
+    }
     diag.ReportErrorAndWarningCount();
-    return true;
+    return success;
 }
 
 static bool IsNeedSaveIncrCompilationLogFile(const GlobalOptions& globalOpts, const FrontendOptions& frontOpts)
@@ -259,13 +321,20 @@ bool CompilerInstance::PerformParse()
             IncrementalCompilationLogger::GetInstance().InitLogFile(incrLogPath);
             IncrementalCompilationLogger::GetInstance().WriteBuffToFile();
         }
+        if (globalOpts.NeedDumpASTToFile()) {
+            DumpAST(GetSourcePackages(), globalOpts.output, "parse");
+        }
     }
     return ret;
 }
 
 bool CompilerInstance::PerformConditionCompile()
 {
-    return compileStrategy->ConditionCompile();
+    auto ret = compileStrategy->ConditionCompile();
+    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
+        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "condcomp");
+    }
+    return ret;
 }
 
 bool CompilerInstance::PerformMacroExpand()
@@ -287,7 +356,9 @@ bool CompilerInstance::PerformMacroExpand()
         }
         Println("}");
     }
-
+    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
+        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "macroexp");
+    }
     return ret;
 }
 
@@ -341,6 +412,10 @@ bool CompilerInstance::ShouldWriteCacheFile() const
     if (srcPkgs.size() != 1) {
         InternalError("source packages should only have one element.");
     }
+    if (!invocation.globalOptions.compilePackage && invocation.globalOptions.srcFiles.empty() &&
+        !invocation.globalOptions.inputObjs.empty()) {
+        return false;
+    }
     // if current package is empty package, we don't write cache file
     if (srcPkgs[0]->IsEmpty() || kind == IncreKind::NO_CHANGE) {
         return false;
@@ -356,7 +431,7 @@ void UpdateMemberDeclMangleNameForCachedInfo(const RawMangled2DeclMap& rawMangle
     } else {
         CJC_ABORT();
     }
-    for (auto &m : memCache.members) {
+    for (auto& m : memCache.members) {
         UpdateMemberDeclMangleNameForCachedInfo(rawMangleName2DeclMap, m);
     }
 }
@@ -369,19 +444,19 @@ void UpdateTopLevelDeclMangleNameForCachedInfo(
     } else {
         CJC_ABORT();
     }
-    for (auto &m : topCache.members) {
+    for (auto& m : topCache.members) {
         UpdateMemberDeclMangleNameForCachedInfo(rawMangleName2DeclMap, m);
     }
 }
-}
+} // namespace
 
 void CompilerInstance::UpdateMangleNameForCachedInfo()
 {
-    for (auto &it : cachedInfo.curPkgASTCache) {
+    for (auto& it : cachedInfo.curPkgASTCache) {
         auto rawMangle = it.first;
         UpdateTopLevelDeclMangleNameForCachedInfo(rawMangleName2DeclMap, rawMangle, it.second);
     }
-    for (auto &it : cachedInfo.importedASTCache) {
+    for (auto& it : cachedInfo.importedASTCache) {
         auto rawMangle = it.first;
         UpdateTopLevelDeclMangleNameForCachedInfo(rawMangleName2DeclMap, rawMangle, it.second);
     }
@@ -465,12 +540,20 @@ bool CompilerInstance::PerformIncrementalScopeAnalysis()
 
 bool CompilerInstance::PerformImportPackage()
 {
-    return compileStrategy->ImportPackages();
+    auto ret = compileStrategy->ImportPackages();
+    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
+        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "import");
+    }
+    return ret;
 }
 
 bool CompilerInstance::PerformSema()
 {
-    return compileStrategy->Sema();
+    auto ret = compileStrategy->Sema();
+    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
+        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "sema");
+    }
+    return ret;
 }
 
 bool CompilerInstance::PerformOverflowStrategy()
@@ -479,6 +562,9 @@ bool CompilerInstance::PerformOverflowStrategy()
         return true;
     }
     compileStrategy->OverflowStrategy();
+    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
+        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "overflow");
+    }
     return true;
 }
 
@@ -486,6 +572,9 @@ bool CompilerInstance::PerformDesugarAfterSema()
 {
     testManager->MarkDeclsForTestIfNeeded(GetSourcePackages());
     compileStrategy->DesugarAfterSema();
+    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
+        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "desugar");
+    }
     return true;
 }
 
@@ -523,6 +612,9 @@ bool CompilerInstance::PerformGenericInstantiation()
         auto astCtx = GetASTContextByPackage(srcPkg.get());
         CJC_ASSERT(astCtx);
         typeChecker->PerformDesugarAfterInstantiation(*astCtx, *srcPkg);
+    }
+    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
+        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "genericinst");
     }
     return true;
 }
@@ -566,8 +658,7 @@ void DoNewMangling(
                 if (lambda.TestAttr(Attribute::GENERIC) || !Ty::IsTyCorrect(lambda.ty)) {
                     return VisitAction::SKIP_CHILDREN;
                 }
-                lambda.mangledName = baseMangler.MangleLambda(lambda,
-                    filteredPrefix);
+                lambda.mangledName = baseMangler.MangleLambda(lambda, filteredPrefix);
                 return VisitAction::WALK_CHILDREN;
             },
             []([[maybe_unused]] const Annotation& anno) {
@@ -729,7 +820,7 @@ bool CompilerInstance::PerformMangling()
             mangler->manglerCtxTable[pkgName] = manglerCtx.get();
             manglerCtxVec.emplace_back(std::move(manglerCtx));
         }
-        mangler->CollectVarOrLambda(*mangler->manglerCtxTable.at(pkgName), *package->srcPackage);
+        mangler->CollectLocalDecls(*mangler->manglerCtxTable.at(pkgName), *package->srcPackage);
     }
 #endif
     mangler->lambdaCounter = cachedInfo.lambdaCounter;
@@ -742,6 +833,10 @@ bool CompilerInstance::PerformMangling()
         }
     }
 #endif
+    // when dump to screen, only dump once and dump the ast immediately after mangling
+    if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpAST()) {
+        DumpAST(GetSourcePackages(), invocation.globalOptions.output, "mangle", invocation.globalOptions.dumpToScreen);
+    }
     return true;
 }
 
@@ -758,10 +853,14 @@ bool CompilerInstance::GenerateCHIRForPkg(AST::Package& pkg)
 #endif
     CHIR::CHIRBuilder builder1(GetCHIRContext(), invocation.globalOptions.GetJobs());
     CHIR::ToCHIR convertor(*this, pkg, constAnalysisWrapper, builder1);
-    if (!convertor.Run()) {
+    bool success = convertor.Run();
+    auto chirPkg = convertor.GetPackage();
+    if (chirPkg && invocation.globalOptions.NeedDumpCHIRToScreen()) {
+        CHIR::CHIRPrinter::PrintPackage(*chirPkg, std::cout);
+    }
+    if (!success) {
         return false;
     }
-    auto chirPkg = convertor.GetPackage();
     CJC_NULLPTR_CHECK(chirPkg);
     astPkg2chirPkgMap.emplace(&pkg, chirPkg);
     chirInfo.optEffectMap = convertor.GetOptEffectMap();
@@ -856,7 +955,7 @@ SourceManager& CompilerInstance::GetSourceManager()
     return sm;
 }
 
-std::vector<Ptr<Package>> CompilerInstance::GetSourcePackages() const
+std::vector<Ptr<Package>> CompilerInstance::GetSourcePackages()
 {
     std::vector<Ptr<Package>> packages;
     for (auto& srcPkg : srcPkgs) {
@@ -876,9 +975,7 @@ ASTContext* CompilerInstance::GetASTContextByPackage(Ptr<Package> pkg) const
 
 void CompilerInstance::AddSourceToMember()
 {
-    if (!pkgs.empty()) {
-        return;
-    }
+    pkgs.clear(); // clear the pkgs to avoid the cache of the previous compilation in lsp.
     for (auto& it : GetSourcePackages()) {
         pkgs.push_back(it);
     }
@@ -900,6 +997,7 @@ bool CompilerInstance::ImportPackages()
     AddSourceToMember();
 
     if (invocation.globalOptions.scanDepPkg) {
+        importManager.UpdateSearchPath(cangjieModules);
         if (!invocation.globalOptions.inputCjoFile.empty()) {
             depPackageInfo = importManager.GeneratePkgDepInfoByCjo(invocation.globalOptions.inputCjoFile);
         } else {
@@ -919,6 +1017,7 @@ bool CompilerInstance::ImportPackages()
 
 void CompilerInstance::MergePackages()
 {
+    pkgCtxMap.clear(); // clear the pkgCtxMap to avoid the cache of the previous compilation in lsp.
     for (auto& pkg : srcPkgs) {
         pkgCtxMap.insert_or_assign(pkg.get(), std::make_unique<ASTContext>(diag, *pkg));
     }
@@ -1012,8 +1111,8 @@ bool CompilerInstance::DetectCangjieHome()
     }
     // Detect from exepath.
     if (invocation.globalOptions.executablePath.empty()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::frontend_failed_to_detect_cangjie_home,
-            DEFAULT_POSITION, "can not resolve executable path");
+        diag.DiagnoseRefactor(DiagKindRefactor::frontend_failed_to_detect_cangjie_home, DEFAULT_POSITION,
+            "can not resolve executable path");
         return false;
     } else {
         cangjieHome =
@@ -1037,12 +1136,13 @@ bool CompilerInstance::DetectCangjieModules()
         return false;
     }
     auto libPathName = invocation.globalOptions.GetCangjieLibTargetPathName();
+    auto modulesName = FileUtil::JoinPath(cangjieHome, "modules");
     if (libPathName.empty()) {
         diag.DiagnoseRefactor(DiagKindRefactor::frontend_failed_to_detect_cangjie_modules,
             MakeRange(DEFAULT_POSITION, DEFAULT_POSITION), "target library path name is empty");
         return false;
     }
-    cangjieModules = FileUtil::JoinPath(FileUtil::JoinPath(cangjieHome, "modules"), libPathName);
+    cangjieModules = FileUtil::JoinPath(modulesName, libPathName);
     if (!FileUtil::FileExist(cangjieModules)) {
         diag.DiagnoseRefactor(DiagKindRefactor::frontend_failed_to_detect_cangjie_modules,
             MakeRange(DEFAULT_POSITION, DEFAULT_POSITION), "target library path is not exist : " + cangjieModules);

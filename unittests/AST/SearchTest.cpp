@@ -18,8 +18,10 @@
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
+#include "cangjie/AST/PrintNode.h"
 #include "cangjie/AST/Searcher.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Position.h"
 
 using namespace Cangjie;
@@ -254,8 +256,7 @@ TEST_F(SearchTest, DISABLED_WildcardCharacterTest)
 
     res = searcher.Search(ctx, "name:Int64*");
     res.erase(std::remove_if(
-        res.begin(), res.end(),
-        [](Symbol* sym) { return sym->node->TestAttr(Attribute::COMPILER_ADD); }),
+                  res.begin(), res.end(), [](Symbol* sym) { return sym->node->TestAttr(Attribute::COMPILER_ADD); }),
         res.end());
     EXPECT_EQ(res.size(), 2);
 
@@ -1494,6 +1495,49 @@ main() {
     EXPECT_EQ(decls[0]->ty->String(), "Class-A");
 }
 
+TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_NameReference_Extend)
+{
+    std::string codeTest = R"(
+class A<T> {
+    var value: T
+    public init(a: T) {
+        value = a
+    }
+}
+
+interface I {
+    func demos(): Bool
+}
+
+extend<T> A<T> where T <: I {
+    public func foo() {
+        value
+    }
+}
+    )";
+
+    std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->code = codeTest;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->Compile(CompileStage::SEMA);
+    Searcher searcher;
+    auto pkgs = instance->GetSourcePackages();
+    ASSERT_EQ(pkgs.size(), 1);
+    auto ctx = instance->GetASTContextByPackage(pkgs[0]);
+    auto res = searcher.Search(*ctx, "_ = (1, 15, 9)");
+    EXPECT_EQ(res[0]->name, "value");
+    auto re = CreateRefExpr("value");
+    re->curFile = pkgs[0]->files[0].get();
+    auto results = instance->GetGivenReferenceTarget(*ctx, res[0]->scopeName, *re, true);
+    ASSERT_FALSE(results.hasDecl);
+    ASSERT_EQ(results.tys.size(), 1);
+    EXPECT_EQ((*results.tys.begin())->name, "T");
+    EXPECT_EQ((*results.tys.begin())->kind, TypeKind::TYPE_GENERICS);
+    auto ty = DynamicCast<GenericsTy*>(results.tys.begin()->get());
+    EXPECT_EQ(ty->upperBounds.size(), 1);
+    EXPECT_EQ(ty->upperBounds.begin()->get()->name, "I");
+}
+
 TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_NameReference_ThisAndSuper)
 {
     // Test for normal name reference accessing.
@@ -2181,4 +2225,44 @@ main() {
     tys = results.tys;
     // Fuzzy result given result size 1.
     ASSERT_EQ(tys.size(), 1);
+}
+
+TEST_F(SearchTest, Search_BigColumn)
+{
+    std::string codeTest = R"(
+main() {
+}
+    )";
+    std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->code = codeTest;
+    instance->invocation.globalOptions.implicitPrelude = false;
+    instance->Compile(CompileStage::IMPORT_PACKAGE);
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+    auto srcPkg = instance->GetSourcePackages()[0];
+
+    Walker(srcPkg, [](Ptr<Node> node) {
+        if (!node->begin.IsZero()) {
+            node->begin.column += 224650;
+            node->end.column += 224650;
+        }
+        if (Is<FuncBody>(node)) {
+            node->begin.column = 22465;
+            node->end.column = 22465;
+        }
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+    instance->PerformSema();
+    PrintNode(srcPkg);
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+
+    EXPECT_EQ(PosSearchApi::MAX_DIGITS_FILE, 4);
+    EXPECT_EQ(PosSearchApi::MAX_DIGITS_LINE, 5);
+    EXPECT_EQ(PosSearchApi::MAX_DIGITS_COLUMN, 6);
+    ASTContext& ctx = *instance->GetASTContextByPackage(srcPkg);
+    auto res = Searcher().Search(ctx, "_ = (1, 2, 22465)");
+    EXPECT_EQ(res.size(), 2); // FuncBody and File Node will be found.
+    EXPECT_EQ(res[0]->node->begin.fileID, 1);
+    EXPECT_EQ(res[0]->node->begin.line, 2);
+    EXPECT_EQ(res[0]->node->begin.column, 22465);
+    EXPECT_EQ(res[0]->node->astKind, ASTKind::FUNC_BODY);
 }

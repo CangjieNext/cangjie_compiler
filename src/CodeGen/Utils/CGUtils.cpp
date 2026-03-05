@@ -8,6 +8,7 @@
 
 #include <queue>
 #include <sstream>
+#include <cctype>
 
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/InstrTypes.h"
@@ -481,18 +482,47 @@ CGType* FixedCGTypeOfFuncArg(CGModule& cgMod, const CHIR::Value& chirFuncArg, ll
         (chirFuncArgType->IsEnum() && (StaticCast<CGEnumType*>(cgType)->PassByReference()));
     if (byRef) {
         auto refType = CGType::GetRefTypeOf(cgMod.GetCGContext().GetCHIRBuilder(), *chirFuncArgType);
-        cgType = CGType::GetOrCreate(cgMod, refType, {llvmValue.getType()->getPointerAddressSpace()});
+        cgType =
+            CGType::GetOrCreate(cgMod, refType, CGType::TypeExtraInfo(llvmValue.getType()->getPointerAddressSpace()));
     }
     cgMod.SetOrUpdateMappedCGValue(&chirFuncArg, std::make_unique<CGValue>(&llvmValue, cgType));
     return cgType;
 }
 
-void DumpIR(const llvm::Module& llvmModule, const std::string& filePath, bool debugMode)
+void ClearOldIRDumpFiles(const std::string& output, const std::string& pkgName)
 {
-#ifndef NDEBUG
-    if (!debugMode) {
+    // Clear all previously dumped IR phase directories for the given package.
+    // New IR dumping now uses numbered directories with human-readable phase suffixes
+    // (e.g. 0_TranslateCHIRNode, 1_GenExtensionDefs, ... Final, Incre). Instead of a
+    // fixed maxSubDirNum heuristic we remove any matching directories under <pkg>_IR.
+    std::string dumpDir;
+    if (FileUtil::IsDir(output)) {
+        dumpDir = FileUtil::JoinPath(output, pkgName + "_IR");
+    } else {
+        dumpDir = FileUtil::GetFileBase(output) + "_IR";
+    }
+    if (!FileUtil::FileExist(dumpDir)) {
         return;
     }
+    FileUtil::RemoveDirectoryRecursively(dumpDir);
+}
+
+std::string GenDumpPath(const std::string& output, const std::string& pkgName, const std::string& subName,
+    const std::string& srcFileName, const std::string& suffix)
+{
+    std::string dumpPath, dumpDir, subDir;
+    if (FileUtil::IsDir(output)) {
+        dumpDir = FileUtil::JoinPath(output, pkgName + "_IR");
+    } else {
+        dumpDir = FileUtil::GetFileBase(output) + "_IR";
+    }
+    subDir = FileUtil::JoinPath(dumpDir, subName);
+    dumpPath = FileUtil::JoinPath(subDir, srcFileName + "."+ suffix);
+    return dumpPath;
+}
+
+void DumpIR(const llvm::Module& llvmModule, const std::string& filePath)
+{
     if (filePath.empty()) {
         llvmModule.print(llvm::outs(), nullptr);
         return;
@@ -510,11 +540,6 @@ void DumpIR(const llvm::Module& llvmModule, const std::string& filePath, bool de
     std::error_code errorCode;
     llvm::raw_fd_ostream fileOS(normalizedPath, errorCode);
     llvmModule.print(fileOS, nullptr);
-#else
-    (void)llvmModule;
-    (void)filePath;
-    (void)debugMode;
-#endif
 }
 
 llvm::StructType* GetLLVMStructType(
@@ -577,6 +602,49 @@ bool IsThisArgOfStructMethod(const CHIR::Value& chirValue)
         return false;
     }
     return true;
+}
+
+bool IsModifiableClass(const CHIR::Type& chirTy)
+{
+    if (!chirTy.IsClass()) {
+        return false;
+    }
+    auto classDef = StaticCast<const CHIR::ClassType&>(chirTy).GetClassDef();
+    return classDef->IsClass() &&
+        !classDef->TestAttr(CHIR::Attribute::COMPILER_ADD) && !classDef->TestAttr(CHIR::Attribute::VIRTUAL);
+}
+
+bool IsSizeTrustedInCompileUnit(CGModule& cgMod, const CHIR::Type& chirTy)
+{
+    if (!IsModifiableClass(chirTy)) {
+        return false;
+    }
+    auto cgType = CGType::GetOrCreate(cgMod, &chirTy);
+    if (!cgType->GetSize()) {
+        return false;
+    }
+    auto typePackageName = StaticCast<const CHIR::ClassType&>(chirTy).GetClassDef()->GetPackageName();
+    auto compileUnitPkgName = cgMod.GetCGContext().GetCHIRPackage().GetName();
+    CJC_ASSERT(!typePackageName.empty() && !compileUnitPkgName.empty() && "Invalid package name.");
+    size_t pos = 0;
+    char ch = typePackageName[pos];
+    while (ch == compileUnitPkgName[pos]) {
+        if (ch == '.') {
+            return true;
+        }
+        ++pos;
+        if (pos == typePackageName.size() || pos == compileUnitPkgName.size()) {
+            return true;
+        }
+        ch = typePackageName[pos];
+    }
+    return false;
+}
+
+void ReplaceDelimiterAfterOrgName(std::string& packageName) {
+    if (auto splitterIt = packageName.find("::"); splitterIt != std::string::npos) {
+        packageName.replace(splitterIt, 2U, "/");
+    }
 }
 } // namespace CodeGen
 } // namespace Cangjie

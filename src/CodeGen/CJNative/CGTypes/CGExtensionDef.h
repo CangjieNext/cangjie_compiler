@@ -63,7 +63,9 @@ private:
      * The first element is FuncPtr if the second is `false` or TypeInfo if the second is `true`.
      */
     std::pair<llvm::Constant*, bool> GenerateInterfaceFn(const CHIR::ClassType& inheritedType);
-    llvm::Constant* GenerateFuncTableForType(const std::vector<CHIR::VirtualFuncInfo>& virtualFuncInfos);
+    llvm::Constant* GenerateOuterTi(const CHIR::VirtualFuncInfo& funcInfo);
+    llvm::Constant* GenerateOuterTiFn(const CHIR::VirtualFuncInfo& funcInfo);
+    llvm::Constant* GenerateFuncTableForType(const std::vector<CHIR::VirtualFuncInfo>& vtableInType);
     llvm::Constant* GenerateWhereConditionFn();
     llvm::Value* CreateTypeComparison(
         IRBuilder2& irBuilder, llvm::Value* typeInfo, const CHIR::Type& staticType, const std::string& prefix);
@@ -80,7 +82,7 @@ private:
     const CHIR::CustomTypeDef& chirDef;
     std::string typeMangle;
     std::string extendDefName;
-    const CHIR::Type* targetType{nullptr};
+    CHIR::Type* targetType{nullptr};
     bool isForExternalType = false;
     llvm::Constant* whereCondFn{nullptr};
     std::unordered_map<const CHIR::Type*, std::function<llvm::Value*(IRBuilder2&)>> genericParamsMap;

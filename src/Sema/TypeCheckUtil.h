@@ -245,6 +245,13 @@ inline bool IsTypeObjectCreation(const AST::FuncDecl& fd, const AST::CallExpr& c
  * Get a specific modifier of a given declaration @p d.
  */
 Ptr<const AST::Modifier> FindModifier(const AST::Decl& d, TokenKind kind);
+
+/**
+ * Returns the first annotation occurrence of a given kind on the declaration, returns null pointer
+ * if no annotation of the given kind is found.
+ */
+Ptr<AST::Annotation> FindFirstAnnotation(const AST::Decl& decl, AST::AnnotationKind kind);
+
 inline bool HasCFuncAttr(const AST::Decl& decl)
 {
     return decl.TestAnyAttr(AST::Attribute::C, AST::Attribute::FOREIGN);
@@ -271,13 +278,13 @@ std::set<Ptr<AST::Ty>> GetGenericParamsForTy(const AST::Ty& ty);
 std::set<Ptr<AST::Ty>> GetGenericParamsForCall(const AST::CallExpr& ce, const AST::FuncDecl& fd);
 
 OwnedPtr<AST::ThrowExpr> CreateThrowException(
-    AST::ClassDecl& exceptionDecl, std::vector<OwnedPtr<AST::Expr>> args,
+    const AST::ClassDecl& exceptionDecl, std::vector<OwnedPtr<AST::Expr>> args,
     AST::File& curFile, TypeManager& typeManager);
 std::optional<std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>>> FindInitDecl(
-    AST::InheritableDecl& decl, TypeManager& typeManager,
+    const AST::InheritableDecl& decl, TypeManager& typeManager,
     std::vector<OwnedPtr<AST::Expr>>& valueArgs, const std::vector<Ptr<AST::Ty>> instTys = {});
 std::optional<std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>>> FindInitDecl(
-    AST::InheritableDecl& decl, TypeManager& typeManager,
+    const AST::InheritableDecl& decl, TypeManager& typeManager,
     const std::vector<Ptr<AST::Ty>> valueParamTys, const std::vector<Ptr<AST::Ty>> instTys = {});
 OwnedPtr<AST::CallExpr> CreateInitCall(
     const std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>> initDeclInfo,
@@ -304,7 +311,7 @@ static bool const IS_GENERIC_INSTANTIATION_ENABLED =
 #endif
 
 template <typename T> T* GetMemberDecl(
-    AST::Decl& decl, const std::string& identifier, std::vector<Ptr<AST::Ty>> paramTys, TypeManager& typeManager)
+    const AST::Decl& decl, const std::string& identifier, std::vector<Ptr<AST::Ty>> paramTys, TypeManager& typeManager)
 {
     for (auto& member : decl.GetMemberDecls()) {
         if (member->identifier != identifier) {
@@ -334,5 +341,20 @@ template <typename T> T* GetMemberDecl(
 
     return nullptr;
 }
+
+/**
+ * Filter out the targets without access rights in the searched targets.
+ * @param curComposite Represents the position of the referrer.
+ * NOTICE: Whether the modifier will be downgraded in spec is not yet determined.
+ */
+bool IsLegalAccess(AST::Symbol* curComposite, const AST::Decl& d, const AST::Node& node, ImportManager& importManager,
+    TypeManager& typeManager);
+
+/**
+ * Find the corresponding common declaration for a given specific declaration.
+ * @param specificDecl The specific declaration to find the common declaration for.
+ * @return The corresponding common declaration if found, nullptr otherwise.
+ */
+Ptr<AST::Decl> FindCorrespondingCommonDecl(const AST::Decl& specificDecl);
 } // namespace Cangjie::TypeCheckUtil
 #endif

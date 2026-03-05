@@ -310,7 +310,9 @@ enum AnnoKind : uint16 {
   JavaImpl,
   ObjCMirror,
   ObjCImpl,
-  ForeignName
+  ForeignName,
+  JavaHasDefault,
+  Annotation
 }
 
 // Current annotation representation is a balance between needs of @Deprecated
@@ -319,6 +321,7 @@ table Anno { // Short name "Anno" because of the clash with "Annotation" from "P
   kind:AnnoKind;
   identifier:string;
   args:[AnnoArg];
+  target:FullId;
 }
 
 table AnnoArg {
@@ -624,6 +627,7 @@ table ImportSpec {
   reExport:AccessModifier = Private;
   isDecl:bool=false;
   hasDoubleColon:bool;
+  withImplicitExport:bool=true;
 }
 
 table Imports {
@@ -673,6 +677,8 @@ table Package {
   moduleName:string;
   // append some info of File for CJMP
   allFileInfo: [FileInfo];
+  // record all std full package name dependencies.
+  allDependentStdPkgs:[string];
 }
 
 root_type Package;

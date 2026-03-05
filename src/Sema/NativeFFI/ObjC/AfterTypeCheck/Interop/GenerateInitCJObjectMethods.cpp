@@ -17,12 +17,12 @@ using namespace Cangjie::Interop::ObjC;
 
 void GenerateInitCJObjectMethods::HandleImpl(InteropContext& ctx)
 {
-    for (auto& impl : ctx.impls) {
-        if (impl->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
+    auto genNativeInitMethod = [&ctx](Decl& decl) {
+        if (decl.TestAttr(Attribute::IS_BROKEN)) {
+            return;
         }
 
-        for (auto& memberDecl : impl->GetMemberDeclPtrs()) {
+        for (auto& memberDecl : decl.GetMemberDeclPtrs()) {
             if (memberDecl->TestAttr(Attribute::IS_BROKEN)) {
                 continue;
             }
@@ -31,10 +31,17 @@ void GenerateInitCJObjectMethods::HandleImpl(InteropContext& ctx)
                 continue;
             }
 
+            if (!memberDecl->TestAttr(Attribute::PUBLIC)) {
+                continue;
+            }
+
             if (memberDecl->astKind != ASTKind::FUNC_DECL) {
                 // skip primary ctor, as it is desugared to init already
                 continue;
             }
+
+            CJC_ASSERT_WITH_MSG(memberDecl->astKind == ASTKind::FUNC_DECL,
+                "Expected ASTKind::FUNC_DECL, found " + ASTKIND_TO_STR.at(memberDecl->astKind));
 
             auto& ctorDecl = *StaticAs<ASTKind::FUNC_DECL>(memberDecl);
 
@@ -43,9 +50,14 @@ void GenerateInitCJObjectMethods::HandleImpl(InteropContext& ctx)
                 continue;
             }
 
-            auto initCjObject = ctx.factory.CreateInitCjObject(*impl, ctorDecl);
+            auto initCjObject = ctx.factory.CreateInitCjObject(decl, ctorDecl, false);
             CJC_ASSERT(initCjObject);
             ctx.genDecls.emplace_back(std::move(initCjObject));
         }
+    };
+
+    for (auto& impl : ctx.impls) {
+        genNativeInitMethod(*impl);
     }
+
 }

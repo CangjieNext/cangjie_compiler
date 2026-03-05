@@ -31,11 +31,13 @@ void TypeCastCheck::RunOnPackage(const Package& package, size_t threadNum)
     }
     if (threadNum == 1) {
         for (auto func : funcs) {
+            CJC_NULLPTR_CHECK(func);
             RunOnFunc(*func);
         }
     } else {
         Utils::TaskQueue taskQueue(threadNum);
         for (auto func : funcs) {
+            CJC_NULLPTR_CHECK(func);
             taskQueue.AddTask<void>([this, func]() { return RunOnFunc(*func); });
         }
         taskQueue.RunAndWaitForAllTasksCompleted();
@@ -51,13 +53,16 @@ bool IsNativeFIIType(Type& type)
     }
 
     auto classType = StaticCast<ClassType>(valueType);
+    CJC_NULLPTR_CHECK(classType);
     auto classDef = classType->GetClassDef();
+    CJC_NULLPTR_CHECK(classDef);
     return classDef->TestAttr(Attribute::JAVA_IMPL) || classDef->TestAttr(Attribute::JAVA_MIRROR);
 }
 
 std::string GetClassName(Type& type)
 {
     auto valueType = type.StripAllRefs();
+    CJC_NULLPTR_CHECK(valueType);
     CJC_ASSERT(valueType->IsClass());
     return StaticCast<ClassType>(valueType)->GetClassDef()->GetSrcCodeIdentifier();
 }
@@ -80,7 +85,12 @@ std::optional<std::tuple<Type*, Type*>> TryExtractTypeCast(Expression& expr)
 
 void TypeCastCheck::RunOnFunc(const Func& func)
 {
-    Visitor::Visit(func, [this, &func](Expression& expr) {
+    std::function<VisitResult(Expression&)> visitor = [this, &func, &visitor](Expression& expr) {
+        if (expr.IsLambda()) {
+            Visitor::Visit(*StaticCast<Lambda>(expr).GetBody(), visitor);
+            return VisitResult::CONTINUE;
+        }
+
         auto typeCast = TryExtractTypeCast(expr);
         if (!typeCast) {
             return VisitResult::CONTINUE;
@@ -103,6 +113,7 @@ void TypeCastCheck::RunOnFunc(const Func& func)
         }
 
         return VisitResult::CONTINUE;
-    });
+    };
+    Visitor::Visit(func, visitor);
 }
 } // namespace Cangjie::CHIR::NativeFFI

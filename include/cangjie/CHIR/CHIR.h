@@ -130,7 +130,7 @@ private:
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     bool PerformPlugin(CHIR::Package& package);
 #endif
-    void DumpCHIRDebug(const std::string& suffix, bool checkFlag = true);
+    void DumpCHIRToFile(const std::string& suffix, bool checkFlag = true);
     void DoClosureConversion();
     void ReportUnusedCode();
     void Devirtualization(DevirtualizationInfo& devirtInfo);
@@ -175,7 +175,6 @@ private:
     bool RunAnnotationChecks();
     void EraseDebugExpr();
     void CFFIFuncWrapper();
-    void RemoveUnusedImports();
     void ReplaceSrcCodeImportedValueWithSymbol();
     void CreateBoxTypeForRecursionValueType();
     void CreateVTableAndUpdateFuncCall();

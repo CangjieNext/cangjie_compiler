@@ -84,6 +84,8 @@ enum TypeTemplateFields : uint8_t {
 enum ExtensionDefFields : uint8_t {
     TYPE_PARAM_COUNT = 0,         // i32
     IS_INTERFACE_TI,              // i8
+    FLAG,                         // i8
+    FUNC_TABLE_SIZE,              // i16
     TARGET_TYPE,                  // i8*
     INTERFACE_FN_OR_INTERFACE_TI, // i8*
     WHERE_CONDITION_FN,           // i8*
@@ -112,7 +114,7 @@ struct IntrinsicFuncInfo {
 
 struct GenericTypeAndPath {
 public:
-    GenericTypeAndPath(const CHIR::GenericType& gt, std::vector<size_t> path) : genericType(gt), path(path)
+    GenericTypeAndPath(const CHIR::GenericType& gt, const std::vector<size_t>& path) : genericType(gt), path(path)
     {
     }
     const std::vector<size_t>& GetPath() const
@@ -146,7 +148,7 @@ const std::unordered_map<CHIR::Type::TypeKind, uint64_t> G_UNSIGNED_INT_MAP = {
 
 const std::set<std::string> REFLECT_INTRINSIC_FUNC = {"CJ_MCC_ApplyCJInstanceMethod", "CJ_MCC_ApplyCJStaticMethod",
     "CJ_MCC_ApplyCJGenericInstanceMethod", "CJ_MCC_ApplyCJGenericStaticMethod", "CJ_MCC_CheckMethodActualArgs",
-    "CJ_MCC_GetOrCreateTypeInfoForReflect"};
+    "CJ_MCC_GetOrCreateTypeInfoForReflect", "CJ_MCC_NewAndInitEnumTupleObject"};
 
 const std::unordered_map<CHIR::IntrinsicKind, IntrinsicFuncInfo> INTRINSIC_KIND_TO_FUNCNAME_MAP = {
     // future

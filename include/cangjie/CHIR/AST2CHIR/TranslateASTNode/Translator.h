@@ -23,7 +23,9 @@
 #include "cangjie/CHIR/Value.h"
 #include "cangjie/Option/Option.h"
 #include "cangjie/Sema/GenericInstantiationManager.h"
+#include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/SafePointer.h"
+#include "cangjie/Utils/Utils.h"
 
 namespace Cangjie::CHIR {
 
@@ -47,7 +49,7 @@ public:
           opts(opts),
           gim(gim),
           increKind(kind),
-          mergingPlatform(opts.inputChirFiles.size() == 1),
+          mergingSpecific(opts.IsCompilingCJMPSpecific()),
           deserializedVals(deserializedVals),
           annoFactoryFuncs(annoFactories),
           maybeUnreachable(maybeUnreachable),
@@ -517,6 +519,20 @@ public:
     void CollectValueAnnotation(const AST::Decl& decl);
     void CollectTypeAnnotation(const AST::InheritableDecl& decl, const CustomTypeDef& cl);
 
+    /**
+     * @brief Creates var init func for class/struct decls, because of cjmp.
+     *
+     * @param decl The AST class/struct which need to add varInit func.
+     */
+    void CreateClassStructDeclVarInit(const AST::Decl& decl)
+    {
+        CJC_ASSERT(decl.astKind == AST::ASTKind::CLASS_DECL ||
+            decl.astKind == AST::ASTKind::STRUCT_DECL);
+        auto def = StaticCast<CustomTypeDef*>(GetNominalSymbolTable(decl));
+        CJC_NULLPTR_CHECK(def);
+        def->SetVarInitializationFunc(TranslateVarsInit(decl));
+    };
+
 private:
     friend class GlobalVarInitializer;
     // Used for add compileTimeVal tag for compile-time evaluation.
@@ -600,7 +616,7 @@ private:
     // Record nesting scope info, it is used for 1. debug info; 2. compare scope of try-finally and control flow expr.
     std::vector<int> scopeInfo{0};
     const IncreKind& increKind;
-    const bool mergingPlatform; // add by cjmp
+    const bool mergingSpecific; // add by cjmp
     const std::unordered_map<std::string, Value*>& deserializedVals; // add by cjmp
     std::vector<std::pair<const AST::Decl*, Func*>>& annoFactoryFuncs;
     std::unordered_map<Block*, Terminator*>& maybeUnreachable;
@@ -650,6 +666,7 @@ private:
     /** @brief Wrapped expression creation to handle both normal context and try-catch context.*/
     template <typename TExpr, typename... Args> Expression* TryCreate(Block* parent, Args&&... args)
     {
+        CJC_NULLPTR_CHECK(parent);
         if (tryCatchContext.empty()) {
             auto expr = CreateAndAppendExpression<CHIRNodeNormalT<TExpr>>(std::forward<Args>(args)..., parent);
             return expr;
@@ -664,15 +681,27 @@ private:
     template <typename TExpr, typename... Args>
     Expression* TryCreateWithOV(Block* parent, bool mayThrowE, OverflowStrategy ofs, Args&&... args)
     {
+        CJC_NULLPTR_CHECK(parent);
         if (tryCatchContext.empty() || !mayThrowE) {
             return CreateAndAppendExpression<CHIRNodeNormalT<TExpr>>(std::forward<Args>(args)..., ofs, parent);
         }
-        return TryCreateExceptionTerminator<CHIRNodeExceptionT<TExpr>>(*parent, std::forward<Args>(args)...);
+        return TryCreateExceptionTerminator<CHIRNodeExceptionT<TExpr>>(*parent, std::forward<Args>(args)..., ofs);
     }
- 
+
+    template <typename... Args>
+    Expression* TryCreateCastWithOV(Block* parent, bool mayThrowE, OverflowStrategy ofs, Args&&... args)
+    {
+        CJC_NULLPTR_CHECK(parent);
+        if (tryCatchContext.empty() || !mayThrowE) {
+            return CreateAndAppendExpression<TypeCast>(std::forward<Args>(args)..., ofs, parent);
+        }
+        return TryCreateExceptionTerminator<TypeCastWithException>(*parent, std::forward<Args>(args)...);
+    }
+
     template <typename TEx, typename... Args>
     TEx* TryCreateExceptionTerminator(Block& parent, Args&&... args)
     {
+        CJC_ASSERT(!tryCatchContext.empty());
         auto errBB = tryCatchContext.top();
         auto sucBB = CreateBlock();
         if (delayExitSignal && !blockGroupStack.empty() && blockGroupStack.back() != errBB->GetParentBlockGroup()) {
@@ -702,7 +731,7 @@ private:
         Value* thisObj = nullptr, Value* thisRTTI = nullptr, DebugLocation loc = INVALID_LOCATION);
 
     CHIR::Type* GetExactParentType(Type& fuzzyParentType, const AST::FuncDecl& resolvedFunction, FuncType& funcType,
-        std::vector<Type*>& funcInstTypeArgs, bool checkAbstractMethod, bool checkResult = true);
+        std::vector<Type*>& funcInstTypeArgs, bool checkAbstractMethod);
 
     // translate var decl
     Ptr<Value> TranslateLeftValueOfVarDecl(const AST::VarDecl& decl, bool rValueIsEmpty, bool isLocalVar);
@@ -718,22 +747,25 @@ private:
     */
     Ptr<FuncType> CreateVirtualFuncType(const AST::FuncDecl& decl);
     void AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl);
-    inline bool IsOpenPlatformReplaceAbstractCommon(ClassDef& classDef, const AST::FuncDecl& decl) const;
+    inline bool IsOpenSpecificReplaceAbstractCommon(ClassDef& classDef, const AST::FuncDecl& decl) const;
     inline void RemoveAbstractMethod(ClassDef& classDef, const AST::FuncDecl& decl) const;
     void TranslateClassLikeMemberFuncDecl(ClassDef& classDef, const AST::FuncDecl& decl);
+    bool SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::FuncDecl& decl);
+    void AddMemberFunctionGenericInstantiations(
+        ClassDef& classDef, const std::vector<AST::FuncDecl*>& instFuncs, const AST::FuncDecl& originalDecl);
     void AddMemberPropDecl(CustomTypeDef& def, const AST::PropDecl& decl);
     void TranslateAbstractMethod(ClassDef& classDef, const AST::FuncDecl& decl, bool hasBody);
-    
+
     /* Add methods for CJMP. */
     // Micro refactoring for CJMP.
     void SetClassSuperClass(ClassDef& classDef, const AST::ClassLikeDecl& decl);
     void SetClassImplementedInterface(ClassDef& classDef, const AST::ClassLikeDecl& decl);
-    // Translate member var init func for common/platform decls.
-    // Return empty `xxx$varInit` func for member var of common/platform decl, otherwise return nullptr.
+    // Translate member var init func for common/specific decls.
+    // Return empty `xxx$varInit` func for member var of common/specific decl, otherwise return nullptr.
     Func* ClearOrCreateVarInitFunc(const AST::Decl& decl);
-    // Translate `xxx$varInit` func for member var of common/platform decl, otherwise return nullptr.
+    // Translate `xxx$varInit` func for member var of common/specific decl, otherwise return nullptr.
     Func* TranslateVarInit(const AST::VarDecl& varDecl);
-    // Translate `A$varInit` func for member vars of common/platform decl, otherwise return nullptr.
+    // Translate `A$varInit` func for member vars of common/specific decl, otherwise return nullptr.
     Func* TranslateVarsInit(const AST::Decl& decl);
     // Add `apply` `xxx$varInit` func of all fields into `A$varInit` func.
     void TranslateVariablesInit(const AST::Decl& parent, CHIR::Parameter& thisVar);

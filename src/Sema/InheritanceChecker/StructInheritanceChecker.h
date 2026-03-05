@@ -18,23 +18,11 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Modules/ImportManager.h"
+#include "MemberSignature.h"
 
 namespace Cangjie {
 using namespace AST;
-struct MemberSignature {
-    Ptr<Decl> decl = nullptr;
-    Ptr<Ty> ty = nullptr;
-    Ptr<Ty> structTy = nullptr;
-    Ptr<ExtendDecl> extendDecl = nullptr; // If the member is a member of another visible extension, it points to the
-                                          // extension declaration. Otherwise, it is null.
-    std::vector<std::unordered_set<Ptr<Ty>>> upperBounds;
-    std::unordered_set<Ptr<const Ty>> inconsistentTypes; // List of the corresponding types came from super-types which
-                                                         // are inconsistent
-    bool shouldBeImplemented = false;                    // True: if this member has multiple default implementation.
-    bool replaceOther = false;                           // True: if this member override others.
-    bool isInheritedInterface = false; // True: if current member is implementing inherited interface decl.
-};
-using MemberMap = std::multimap<std::string, MemberSignature>;
+
 class StructInheritanceChecker {
 public:
     StructInheritanceChecker(DiagnosticEngine& diag, TypeManager& manger, Package& pkg, ImportManager& importManager,
@@ -50,6 +38,8 @@ public:
      */
     void Check();
 
+    std::unordered_map<Ptr<const InheritableDecl>, MemberMap> MoveStructInheritedMembers();
+
 private:
     void CheckMembersWithInheritedDecls(const InheritableDecl& decl);
     MemberMap GetAndCheckInheritedInterfaces(const InheritableDecl& decl);
@@ -59,7 +49,7 @@ private:
     void CollectExtendByInterfaceInherit(const std::set<Ptr<ExtendDecl>>& otherExtends, const ExtendDecl& curDecl,
         std::set<Ptr<ExtendDecl>, CmpNodeByPos>& ordered);
     std::optional<bool> DeterminingSkipExtendByInheritanceRelationship(
-        const AST::ExtendDecl& curDecl, const AST::ExtendDecl& ed, const Ptr<AST::Decl>& extendedDecl);
+        const AST::ExtendDecl& curDecl, AST::ExtendDecl& ed, const Ptr<AST::Decl>& extendedDecl);
     std::pair<MemberMap, MemberMap> GetVisibleExtendMembersForExtend(const InheritableDecl& decl);
     void CheckExtendExportDependence(
         const InheritableDecl& curExtend, const MemberSignature& interface, const MemberMap& implDecl);
@@ -82,6 +72,7 @@ private:
     void CheckSameNameInheritanceInfo(const MemberSignature& parent, const Decl& child) const;
     void CheckInheritanceAttributes(const MemberSignature& parent, const Decl& child) const;
     void CheckPropertyInheritance(const MemberSignature& parent, const Decl& child) const;
+    void CheckGenericTypeArgInfo(const Decl& parent, const Decl& child);
     void CheckGenericTypeArgInfo(const MemberSignature& parent, const MemberSignature& child) const;
     void CheckInheritanceForInterface(const MemberSignature& interface, const MemberSignature& child) const;
     bool CheckImplementationRelation(const MemberSignature& parent, const MemberSignature& child) const;
@@ -150,7 +141,7 @@ private:
         return !pkg.files.empty() && *pkg.files.begin() && importManager.IsExtendAccessible(**pkg.files.begin(), ed);
     }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    std::vector<Ptr<ExtendDecl>> GetAllNeedCheckExtended();
+    std::vector<Ptr<const ExtendDecl>> GetAllNeedCheckExtended();
 #endif
 
     DiagnosticEngine& diag;
@@ -200,5 +191,12 @@ private:
         bool needUpdate;
     };
 };
+
+std::vector<std::unordered_set<Ptr<Ty>>> GetAllGenericUpperBounds(TypeManager& tyMgr, const Decl& decl);
+
+void CheckGenericTypeBoundsMapped(const Decl& parent, const Decl& child,
+    std::vector<std::unordered_set<Ptr<Ty>>> parentBounds, std::vector<std::unordered_set<Ptr<Ty>>> childBounds,
+    DiagnosticEngine& diag, TypeManager& typeManager);
+
 } // namespace Cangjie
 #endif

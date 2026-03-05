@@ -62,14 +62,9 @@ public:
         return llvmType == that.llvmType;
     }
 
-    CGContext& GetCGContext() const
-    {
-        return cgCtx;
-    }
-
     llvm::Type* GetLLVMType() const
     {
-        CJC_ASSERT(llvmType != nullptr);
+        CJC_NULLPTR_CHECK(llvmType);
         return llvmType;
     }
 
@@ -301,7 +296,7 @@ public:
               instantiatedParamTypes(instantiatedParamTypes)
         {
         }
-        TypeExtraInfo(size_t addrspace) : addrspace(addrspace)
+        explicit TypeExtraInfo(size_t addrspace) : addrspace(addrspace)
         {
         }
         bool operator==(const TypeExtraInfo& rhs) const
@@ -355,6 +350,7 @@ public:
     static CGType* GetInt16CGType(CGModule& cgMod);
     static CGType* GetInt32CGType(CGModule& cgMod);
     static CGType* GetInt64CGType(CGModule& cgMod);
+    static CGType* GetIntNativeCGType(CGModule& cgMod);
     static CGType* GetUInt8CGType(CGModule& cgMod);
     static CGType* GetUInt16CGType(CGModule& cgMod);
     static CGType* GetUInt32CGType(CGModule& cgMod);
@@ -373,6 +369,7 @@ public:
 
     static std::string GetNameOfTypeInfoGV(const CHIR::Type& chirType);
     static std::string GetNameOfTypeTemplateGV(const CHIR::Type& chirType);
+    static llvm::StructType* GetClassTTExtTypeVer1(llvm::LLVMContext& llvmCtx);
 
 protected:
     CGType(CGModule& cgMod, CGContext& cgCtx, const CHIR::Type& chirType, CGTypeKind cgTypeKind = CGTypeKind::OTHERS);

@@ -50,8 +50,12 @@ struct NodeInfo {
 class ASTWriter::ASTWriterImpl {
 public:
     ASTWriterImpl(DiagnosticEngine& diag, const std::string& packageDepInfo, const ExportConfig& exportCfg,
-        const CjoManager& cjoManager)
-        : diag(diag), config(exportCfg), packageDepInfo(packageDepInfo), cjoManager(cjoManager)
+        const CjoManager& cjoManager, TypeManager& typeManager)
+        : diag(diag),
+          config(exportCfg),
+          packageDepInfo(packageDepInfo),
+          cjoManager(cjoManager),
+          typeManager(typeManager)
     {
     }
     ~ASTWriterImpl()
@@ -59,7 +63,6 @@ public:
     }
 
     void SetSerializingCommon();
-    void SetAttributesIfSerializingCommonPartOfPackage(AST::Package &package);
     void PreSaveFullExportDecls(AST::Package& package);
     inline bool NeedToExportDecl(Ptr<const AST::Decl> decl);
     void DFSCollectFilesDeclarations(Ptr<AST::File> file,
@@ -83,6 +86,7 @@ private:
     flatbuffers::FlatBufferBuilder builder{INITIAL_FILE_SIZE};
     std::string packageDepInfo;
     const CjoManager& cjoManager;
+    TypeManager& typeManager;
     /** All serialized node index in order. */
     // Save all imported packages, the vector pos is package index.
     std::vector<TStringOffset> allPackages;
@@ -106,7 +110,9 @@ private:
 
     std::unordered_set<Ptr<const AST::Decl>> topLevelDecls;
     std::unordered_set<Ptr<const AST::Decl>> preSavedDecls;
-    
+
+    std::unordered_set<std::string> importedDeclPkgNames;
+
     inline FormattedIndex PreSaveDecl(const AST::Decl& decl)
     {
         if (auto found = savedDeclMap.find(&decl); found != savedDeclMap.end()) {
@@ -205,10 +211,11 @@ private:
         // SuperInterfaceTypes.
         std::vector<FormattedIndex> superInterfaceTypes;
         for (auto& it : decl.inheritedTypes) {
-            superInterfaceTypes.push_back(SaveType(it->ty));
+            superInterfaceTypes.push_back(SaveType(typeManager.ObtainsAliasType(it.get())));
         }
         return builder.CreateVector<FormattedIndex>(superInterfaceTypes);
     }
+    void MarkImplicitExportOfImportSpec(AST::Package& package);
 
     NodeInfo PackNodeInfo(const AST::Node& node);
     /** NOTE: Main entrance of 'SaveExpr' is only from 'SaveFuncBody', 'SaveVarDecl' and 'SaveVarWithPatternDecl'. */

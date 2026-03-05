@@ -15,6 +15,7 @@
 
 #include "cangjie/AST/ScopeManagerApi.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/Modules/ModulesUtils.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -69,6 +70,7 @@ private:
         bool isSetter, std::vector<Ptr<Decl>>& results);
     bool FindRealResult(const Node& node, bool isSetter, std::vector<Ptr<Decl>>& results,
         std::multimap<Position, Ptr<Decl>>& resultsMap, bool isInDeclBody);
+    bool IsTargetMemberVisibleToNode(const Decl& target, const Node& node);
 
     const ASTContext& ctx;
     DiagnosticEngine& diag;
@@ -98,10 +100,10 @@ void UpdatePropOverriddenCache(
 }
 
 template <typename T>
-inline Ptr<T> GetPlatformDecl(Ptr<Decl> decl)
+inline Ptr<T> GetSpecificDecl(Ptr<Decl> decl)
 {
     CJC_ASSERT(decl);
-    return StaticCast<T*>(decl->platformImplementation == nullptr ? decl : decl->platformImplementation);
+    return StaticCast<T*>(decl->specificImplementation == nullptr ? decl : decl->specificImplementation);
 }
 } // namespace
 
@@ -291,7 +293,7 @@ void LookUpImpl::FieldLookup(
 void LookUpImpl::FieldLookup(
     InterfaceTy& idTy, const std::string& fieldName, std::vector<Ptr<Decl>>& results, const LookupInfo& info)
 {
-    auto id = GetPlatformDecl<InterfaceDecl>(idTy.declPtr);
+    auto id = GetSpecificDecl<InterfaceDecl>(idTy.declPtr);
     // NOTE: decl which has 'IN_REFERENCE_CYCLE' should only be intercepted during checking 'inheritedTypes'.
     if (!id->body) {
         return;
@@ -401,9 +403,9 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(Ptr<Decl> decl, const std::string
     if (!decl) {
         return results;
     }
-    // All method from common type are moved to platform one
-    // So looking up method in platform type
-    decl = GetPlatformDecl<Decl>(decl);
+    // All method from common type are moved to specific one
+    // So looking up method in specific type
+    decl = GetSpecificDecl<Decl>(decl);
     if (auto cd = DynamicCast<ClassDecl*>(decl)) {
         FieldLookup(*cd, fieldName, results, info);
         return results;
@@ -501,6 +503,16 @@ bool IsTargetVisibleToNode(const Decl& target, const Node& node)
 }
 } // namespace
 
+bool LookUpImpl::IsTargetMemberVisibleToNode(const Decl& target, const Node& node)
+{
+    // In the LSP, the 'node' may be a new ast node, 'curFile' pointer consistency cannot be ensured.
+    if (target.curFile && node.curFile && *target.curFile == *node.curFile) {
+        return true;
+    }
+    Symbol* sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, node.scopeName);
+    return IsLegalAccess(sym, target, node, importManager, typeManager);
+}
+
 bool LookUpImpl::FindRealResult(const Node& node, bool isSetter, std::vector<Ptr<Decl>>& results,
     std::multimap<Position, Ptr<Decl>>& resultsMap, bool isInDeclBody)
 {
@@ -591,7 +603,7 @@ void LookUpImpl::ProcessStructDeclBody(
         if (auto vd = DynamicCast<VarDecl*>(it);
             vd && it->astKind != ASTKind::PROP_DECL && IsNodeInVarDecl(ctx, node, *vd)) {
             continue;
-        } else {
+        } else if (IsTargetMemberVisibleToNode(*it, node)) {
             results.emplace_back(it);
         }
     }

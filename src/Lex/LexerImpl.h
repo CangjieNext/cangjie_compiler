@@ -16,6 +16,7 @@
 #include "cangjie/Lex/Lexer.h"
 
 #include <unordered_map>
+#include <unordered_set>
 
 namespace Cangjie {
 /// arg pack for creation of LexerImpl
@@ -44,6 +45,7 @@ public:
           enableCollectTokenStream{args.collectTokenStream}
     {
         Init();
+        EnterNormalMod();
     }
     LexerImpl(const std::vector<Token>& inputTokens, DiagnosticEngine& diag, SourceManager& sm, LexerConfig args)
         : diag{diag},
@@ -54,6 +56,8 @@ public:
           enableScan{false},
           enableCollectTokenStream{args.collectTokenStream}
     {
+        Init();
+        EnterNormalMod();
         lineResetOffsetsFromBase = 0;
         for (auto& tk : inputTokens) {
             if (tk.kind == TokenKind::IDENTIFIER && LookupKeyword(tk.Value()) != TokenKind::IDENTIFIER) {
@@ -79,13 +83,13 @@ public:
     // FrontendTool/SourceManager/Parse/Macro/stdlib/unittests.
     Token Next(); // read and return next token
 
-    void ReserveToken(size_t num, bool skipNewline);
+    void ReserveToken(size_t num, bool skipNewline, bool skipComments);
 
     // Parse/unittests.
     const std::list<Token>& LookAhead(size_t num);
     bool Seeing(const std::vector<TokenKind>::const_iterator& begin, const std::vector<TokenKind>::const_iterator& end,
-        bool skipNewline = false);
-    bool Seeing(const std::vector<TokenKind>& kinds, bool skipNewline = false);
+        bool skipNewline = false, bool skipComments = true);
+    bool Seeing(const std::vector<TokenKind>& kinds, bool skipNewline = false, bool skipComments = true);
 
     // Parse.
     std::list<Token> LookAheadSkipNL(size_t num);
@@ -126,7 +130,6 @@ public:
 
 private:
     friend class Lexer;
-    std::vector<int> resetLineOffsets{0};
     std::map<Token, std::vector<StringPart>> stringPartsMap;
     bool IsCurrentCharLineTerminator() const;
     bool ScanInterpolationString(const char* pStart, bool allowNewLine);
@@ -184,6 +187,15 @@ private:
     size_t resetToken{0};
     bool enableCollect{false};
     bool enableCollectTokenStream{false};
+    /// Hash function for Position using Hash32
+    struct PositionHash32 {
+        std::size_t operator()(const Position& p) const
+        {
+            return p.Hash32();
+        }
+    };
+    // Cache for fast lookup of token positions in collectTokens using Position::Hash32
+    std::unordered_set<Position, PositionHash32> collectTokensFindCache;
     std::vector<Token> collectTokens;
     std::vector<Token> tokenStream;
     mutable bool success{true};                                     /// Used for diagnostic.
@@ -195,7 +207,7 @@ private:
     void ReadUTF8CharFromMultiBytes(int32_t& ch);
     bool CheckUnicodeSecurity(const int32_t& c) const;
     bool ProcessXdigit(const int& base, bool& hasDigit, const char* reasonPoint);
-    bool ProcessDigits(const int& base, bool& hasDigit, const char* reasonPoint);
+    bool ProcessDigits(const int& base, bool& hasDigit, const char* reasonPoint, bool* isFloat = nullptr);
     std::string GetSuffix(const char* pSuffixStart);
     void ProcessIntegerSuffix();
     TokenKind LookupKeyword(const std::string& literal);
@@ -232,24 +244,36 @@ private:
     std::pair<Token, bool> ScanComment(const char* pStart, bool allowNewLine = true);
     std::pair<Token, bool> ScanMultiLineComment(const char* pStart, bool allowNewLine);
     /// Check if there are f32, f64 after a float literal
-    void ProcessFloatSuffix(const char prefix);
-    void ProcessNumberExponentPart(const char prefix, const char* reasonPoint, bool& isFloat);
+    void ProcessFloatSuffix(char prefix);
+    void ProcessNumberExponentPart(char prefix, const char* reasonPoint, bool& isFloat);
     /// Check if there a f32, f64 after a float literal. After that, this float is completed; if there are excessive
     /// '.' and chars following it without space between, check whether the following chars are possibly valid.
     /// The valid cases are
     /// 1.3f32.. -> .. is range operator
     /// 1.3f32.什么 -> .什么 is a member prop/func access (in this case Float32/Float64 is extended)
-    void ProcessNumberFloatSuffix(const char& prefix, bool isFloat);
+    void ProcessNumberFloatSuffix(const char& prefix, bool isFloat, bool hasDot);
     Token ScanNumber(const char* pStart);
     Token ScanNumberOrDotPrefixSymbol(const char* pStart);
     bool ScanNumberIntegerPart(const char* pStart, int& base, char& prefix, bool& hasDigit, const char*& reasonPoint);
-    void ScanNumberDecimalPart(const int& base, const char& prefix, bool& hasDigit, const char* reasonPoint);
+    void ScanNumberDecimalPart(int base, char prefix, bool& hasDigit, bool& isFloat, const char* reasonPoint);
     void ScanNumberExponentPart(const char* reasonPoint);
     Token ScanDotPrefixSymbol();
     Token ScanBackquotedIdentifier(const char* pStart);
     void ScanIdentifierOrKeyword(Token& res, const char* pStart);
     Token ScanSingleOrMultiLineString(const char* pStart);
     bool IsIllegalStartDecimalPart(const char* pStart, const char* pEnd) const;
+
+    enum class LexerContext {
+        NORMAL,
+        QUOTE,
+    };
+    std::vector<LexerContext> ctx;
+    void EnterQuoteMod();
+    void ExitQuoteMod();
+    void EnterNormalMod();
+    void ExitNormalMod();
+    bool IsQuoteContext() const;
+
     void DiagUnexpectedDecimalPoint(const char* reasonPoint);
     void DiagExpectedDigit(const char base);
     inline void DiagSmallExpectedDigit(const bool& hasDigit, const char base);
@@ -304,7 +328,7 @@ private:
         tokenMap[TOKENS[atExclIndex]] = static_cast<TokenKind>(atExclIndex);
         auto commonIndex = static_cast<unsigned char>(TokenKind::COMMON);
         tokenMap[TOKENS[commonIndex]] = static_cast<TokenKind>(commonIndex);
-        auto platformIndex = static_cast<unsigned char>(TokenKind::PLATFORM);
+        auto platformIndex = static_cast<unsigned char>(TokenKind::SPECIFIC);
         tokenMap[TOKENS[platformIndex]] = static_cast<TokenKind>(platformIndex);
         auto dcIndex = static_cast<unsigned char>(TokenKind::DOUBLE_COLON);
         tokenMap[TOKENS[dcIndex]] = static_cast<TokenKind>(dcIndex);

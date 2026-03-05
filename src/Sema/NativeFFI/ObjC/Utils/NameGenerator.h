@@ -19,9 +19,9 @@
 namespace Cangjie::Interop::ObjC {
 class NameGenerator {
 public:
-    explicit NameGenerator(const BaseMangler& mangler);
+    explicit NameGenerator(const BaseMangler& mangler, TypeManager& typeManager);
     std::string GenerateInitCjObjectName(const AST::FuncDecl& target);
-    std::string GenerateDeleteCjObjectName(const AST::ClassDecl& target);
+    std::string GenerateDeleteCjObjectName(const AST::Decl& target);
     std::string GenerateMethodWrapperName(const AST::FuncDecl& target);
     std::string GeneratePropGetterWrapperName(const AST::PropDecl& target);
     std::string GetPropSetterWrapperName(const AST::PropDecl& target);
@@ -34,6 +34,12 @@ public:
     std::string GetObjCDeclName(const AST::Decl& target);
 
     /**
+     * Returns name declared in @ForeignName split by ':' 
+     * or function name followed by argument names if no @ForeignName is specified
+     */
+    std::vector<std::string> GetObjCDeclSelectorComponents(const AST::FuncDecl& target);
+
+    /**
      * Returns name declared in @ObjC attribute or {target.fullPackageName}.{target.identifier}
      * if no name in attribute specified
      */
@@ -42,6 +48,7 @@ public:
 private:
     Ptr<std::string> GetUserDefinedObjCName(const AST::Decl& target);
     const BaseMangler& mangler;
+    TypeManager& typeManager;
 };
 } // namespace Cangjie::Interop::ObjC
 

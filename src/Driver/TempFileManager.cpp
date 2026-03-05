@@ -222,6 +222,7 @@ bool TempFileManager::Init(const GlobalOptions& options, bool isFrontend)
         {TempFileKind::O_EXE, [this]() { return opts.target.os == Triple::OSType::WINDOWS ? ".exe" : ""; }},
         {TempFileKind::O_DYLIB, [this]() { return GetDylibSuffix(); }},
         {TempFileKind::O_MACRO, [this]() { return GetDylibSuffix(); }},
+        {TempFileKind::O_OBJ, [this]() { return GetObjSuffix(); }},
         {TempFileKind::T_OPT_BC, []() { return ".opt.bc"; }},
         {TempFileKind::O_OPT_BC, []() { return ".bc"; }},
         {TempFileKind::T_ASM, []() { return ".s"; }},
@@ -230,6 +231,7 @@ bool TempFileManager::Init(const GlobalOptions& options, bool isFrontend)
         {TempFileKind::T_OBJ, []() { return ".o"; }},
         {TempFileKind::T_EXE_MAC, []() { return  "_temp"; }},
         {TempFileKind::T_DYLIB_MAC, []() { return "_temp.dylib"; }},
+        {TempFileKind::O_CJO_FLAG, []() { return std::string(SERIALIZED_FILE_FLAG_EXTENSION); }},
     };
     return InitTempDir();
 }
@@ -302,6 +304,7 @@ TempFileInfo TempFileManager::CreateNewFileInfo(const TempFileInfo& info, TempFi
         case TempFileKind::O_CJO:
         case TempFileKind::O_FULL_BCHIR:
         case TempFileKind::O_BCHIR:
+        case TempFileKind::O_CJO_FLAG:
             newInfo = CreateIntermediateFileInfo(info, kind);
             break;
         case TempFileKind::O_CHIR:
@@ -315,6 +318,7 @@ TempFileInfo TempFileManager::CreateNewFileInfo(const TempFileInfo& info, TempFi
         case TempFileKind::O_MACRO:
         case TempFileKind::O_DYLIB:
         case TempFileKind::O_STATICLIB:
+        case TempFileKind::O_OBJ:
             newInfo = CreateOutputFileInfo(info, kind);
             break;
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
@@ -493,4 +497,12 @@ std::string TempFileManager::GetDylibSuffix() const
         default:
             return ".so";
     }
+}
+
+std::string TempFileManager::GetObjSuffix() const
+{
+    if (opts.target.os == Triple::OSType::WINDOWS) {
+        return ".obj";
+    }
+    return ".o";
 }

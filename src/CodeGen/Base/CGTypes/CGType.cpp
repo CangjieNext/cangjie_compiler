@@ -49,15 +49,6 @@ bool HasGenericTypeArg(const CHIR::Type& type)
     }
     return false;
 }
-
-bool CanMallocUseFixedSize(const CHIR::Type& chirType)
-{
-    if (!chirType.IsClass()) {
-        return true;
-    }
-    auto classDef = StaticCast<CHIR::ClassType>(chirType).GetClassDef();
-    return classDef->TestAttr(CHIR::Attribute::VIRTUAL) || !classDef->TestAttr(CHIR::Attribute::PUBLIC);
-}
 } // namespace
 
 CGType* CGTypeMgr::GetConcreteCGTypeFor(CGModule& cgMod, const CHIR::Type& chirType,
@@ -143,7 +134,7 @@ CGType* CGTypeMgr::GetConcreteCGTypeFor(CGModule& cgMod, const CHIR::Type& chirT
             break;
         }
         default:
-            CJC_ASSERT(false && "Should not reach here: not a contract type from chir.");
+            CJC_ASSERT_WITH_MSG(false, "Should not reach here: not a contract type from chir.");
             return nullptr;
     }
     cgMod.GetCGContext().Add2CGTypePool(cgType);
@@ -196,6 +187,7 @@ CGType* CGType::GetOrCreateWithNode(CGModule& cgModule, const CHIR::Value* chirN
     bool forWrapper)
 {
     auto chirTy = chirNode->GetType();
+    CJC_NULLPTR_CHECK(chirTy);
     CGType* cgType = nullptr;
     if (DynamicCast<const CHIR::LocalVar*>(chirNode)) {
         cgType = CGTypeMgr::GetConcreteCGTypeFor(cgModule, *chirTy, TypeExtraInfo{0, true, false, false, {}});
@@ -245,8 +237,8 @@ CGType::CGType(CGModule& cgMod, CGContext& cgCtx, const CHIR::Type& chirType, CG
 
 llvm::GlobalVariable* CGType::GetOrCreateTypeInfo()
 {
-    CJC_ASSERT(!chirType.IsThis() && "Should not get typeinfo of ThisType.");
-    CJC_ASSERT(!chirType.IsRef() && "Should not get typeinfo of RefType.");
+    CJC_ASSERT_WITH_MSG(!chirType.IsThis(), "Should not get typeinfo of ThisType.");
+    CJC_ASSERT_WITH_MSG(!chirType.IsRef(), "Should not get typeinfo of RefType.");
     if (typeInfo) {
         return typeInfo;
     }
@@ -263,10 +255,10 @@ llvm::GlobalVariable* CGType::GetOrCreateTypeInfo()
         return GetOrCreateGenericCustomTypeInfo();
     }
     cgMod.GetCGContext().AddCodeGenAddedFuncsOrVars(chirType, tiName);
-    CJC_ASSERT(typeInfo && "This type does not have a typeinfo GV, please check the caller.");
+    CJC_ASSERT_WITH_MSG(typeInfo, "This type does not have a typeinfo GV, please check the caller.");
     typeInfo->addAttribute(GC_KLASS_ATTR);
-    if (CanMallocUseFixedSize(chirType)) {
-        typeInfo->addAttribute(GC_CAN_MALLOC_WITH_FIXED_SIZE);
+    if (!IsModifiableClass(chirType)) {
+        typeInfo->addAttribute(NOT_MODIFIABLE_CLASS_ATTR);
     }
     if (!typeInfo->hasInitializer()) {
         cgMod.DelayGenTypeInfo(this);
@@ -291,7 +283,7 @@ llvm::GlobalVariable* CGType::GetOrCreateTypeTemplate()
             llvm::cast<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getOrInsertGlobal(ttName, typeTemplateType));
         cgMod.GetCGContext().AddCodeGenAddedFuncsOrVars(chirType, ttName);
     }
-    CJC_ASSERT(typeTemplate && "This type does not have a type-template GV, please check the caller.");
+    CJC_ASSERT_WITH_MSG(typeTemplate, "This type does not have a type-template GV, please check the caller.");
     cgMod.DelayGenTypeTemplate(this);
     return typeTemplate;
 }
@@ -324,6 +316,13 @@ CGType* CGType::GetInt32CGType(CGModule& cgMod)
 CGType* CGType::GetInt64CGType(CGModule& cgMod)
 {
     return CGType::GetOrCreate(cgMod, cgMod.GetCGContext().GetCHIRBuilder().GetInt64Ty());
+}
+
+CGType* CGType::GetIntNativeCGType(CGModule& cgMod)
+{
+    return cgMod.GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::ARM32
+        ? CGType::GetOrCreate(cgMod, cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty())
+        : CGType::GetOrCreate(cgMod, cgMod.GetCGContext().GetCHIRBuilder().GetInt64Ty());
 }
 
 CGType* CGType::GetUInt8CGType(CGModule& cgMod)
@@ -519,6 +518,21 @@ llvm::PointerType* CGType::GetOrCreateTypeInfoPtrType(llvm::LLVMContext& llvmCtx
     return CGType::GetOrCreateTypeInfoType(llvmCtx)->getPointerTo();
 }
 
+llvm::StructType* CGType::GetClassTTExtTypeVer1(llvm::LLVMContext& llvmCtx)
+{
+    auto type = llvm::StructType::getTypeByName(llvmCtx, "ext_class_type_ver_1");
+    if (type == nullptr) {
+        std::vector<llvm::Type*> containedTypes = {
+            llvm::Type::getInt8PtrTy(llvmCtx),
+            llvm::Type::getInt16Ty(llvmCtx),
+            llvm::Type::getInt32Ty(llvmCtx),
+            llvm::Type::getInt8Ty(llvmCtx)
+        };
+        type = llvm::StructType::create(llvmCtx, containedTypes, "ext_class_type_ver_1");
+    }
+    return type;
+}
+
 llvm::StructType* CGType::GetOrCreateTypeTemplateType(llvm::LLVMContext& llvmCtx)
 {
     auto typeTemplateType = llvm::StructType::getTypeByName(llvmCtx, "TypeTemplate");
@@ -550,15 +564,18 @@ llvm::StructType* CGType::GetOrCreateExtensionDefType(llvm::LLVMContext& llvmCtx
 {
     auto extensionDefType = llvm::StructType::getTypeByName(llvmCtx, "ExtensionDef");
     if (extensionDefType == nullptr) {
+        auto i16Ty = llvm::Type::getInt16Ty(llvmCtx);
         auto i32Ty = llvm::Type::getInt32Ty(llvmCtx);
         auto i8PtrTy = llvm::Type::getInt8PtrTy(llvmCtx);
         extensionDefType = llvm::StructType::create(llvmCtx, "ExtensionDef");
         std::vector<llvm::Type*> bodyVec(static_cast<size_t>(EXTENSION_DEF_FIELDS_NUM));
         bodyVec[static_cast<size_t>(TYPE_PARAM_COUNT)] = i32Ty;
         bodyVec[static_cast<size_t>(IS_INTERFACE_TI)] = llvm::Type::getInt8Ty(llvmCtx);
+        bodyVec[static_cast<size_t>(FLAG)] = llvm::Type::getInt8Ty(llvmCtx);
         bodyVec[static_cast<size_t>(TARGET_TYPE)] = i8PtrTy;
         bodyVec[static_cast<size_t>(INTERFACE_FN_OR_INTERFACE_TI)] = i8PtrTy;
         bodyVec[static_cast<size_t>(FUNC_TABLE)] = i8PtrTy;
+        bodyVec[static_cast<size_t>(FUNC_TABLE_SIZE)] = i16Ty;
         bodyVec[static_cast<size_t>(WHERE_CONDITION_FN)] = i8PtrTy;
         SetStructTypeBody(extensionDefType, bodyVec);
     }
@@ -611,7 +628,6 @@ void CGType::GenTypeInfo()
     CJC_ASSERT(typeInfo);
 
     PreActionOfGenTypeInfo();
-
     auto& llvmCtx = cgMod.GetLLVMContext();
     if (layoutType && !typeInfo->hasMetadata(GC_TYPE_META_NAME)) {
         auto structName = layoutType->getStructName();
@@ -642,7 +658,7 @@ void CGType::GenTypeInfo()
     typeInfoVec[static_cast<size_t>(TYPEINFO_FIELDS_NUM)] = GenFieldsNumOfTypeInfo();
     typeInfoVec[static_cast<size_t>(TYPEINFO_FIELDS)] = GenFieldsOfTypeInfo();
     typeInfoVec[static_cast<size_t>(TYPEINFO_SIZE)] = GenSizeOfTypeInfo();
-    typeInfoVec[static_cast<size_t>(TYPEINFO_UUID)] = llvm::Constant::getNullValue(llvm::Type::getInt32Ty(llvmCtx));
+    typeInfoVec[static_cast<size_t>(TYPEINFO_UUID)] = llvm::ConstantInt::get(llvm::Type::getInt32Ty(llvmCtx), 0);
     typeInfoVec[static_cast<size_t>(TYPEINFO_ALIGN)] = GenAlignOfTypeInfo();
     typeInfoVec[static_cast<size_t>(TYPEINFO_SOURCE_GENERIC)] = GenSourceGenericOfTypeInfo();
     typeInfoVec[static_cast<size_t>(TYPEINFO_TYPE_ARGS_NUM)] = GenTypeArgsNumOfTypeInfo();
@@ -660,7 +676,11 @@ void CGType::GenTypeInfo()
 
     typeInfo->setInitializer(llvm::ConstantStruct::get(CGType::GetOrCreateTypeInfoType(llvmCtx), typeInfoVec));
     if (IsStaticGI()) {
-        typeInfo->setLinkage(llvm::GlobalValue::InternalLinkage);
+        if (cgMod.GetCGContext().GetCompileOptions().target.os == Triple::OSType::WINDOWS) {
+            typeInfo->setLinkage(llvm::GlobalValue::InternalLinkage);
+        } else {
+            typeInfo->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+        }
     } else { // For Concrete type:
         // Note: The chirType that enters this branch is expected to be of CustomType.
         auto customType = dynamic_cast<const CHIR::CustomType*>(&chirType);
@@ -1023,7 +1043,7 @@ std::string GetTypeQualifiedNameForReflect(CGModule& cgMod, const CHIR::Type& t,
             return forNameFieldOfTi ? typeQualifiedName : (CHIR::MANGLE_BOX_STR + typeQualifiedName + ">");
         }
         default:
-            CJC_ASSERT(false && "Should not reach here.");
+            CJC_ASSERT_WITH_MSG(false, "Should not reach here.");
             return "";
     }
 }

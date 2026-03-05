@@ -423,7 +423,7 @@ void TestEntryConstructor::ConstructTestEntry(AST::Package& pkg, TestModule& mod
     auto ifExpr = CreateIfExpr(std::move(binaryExpr), std::move(thenExprBlock));
     ifExpr->hasElse = false;
     entryFunc->funcBody->body->body.emplace_back(std::move(ifExpr));
-    // 4. Create result return, return 0.
+    // 5. Create result return, return 0.
     auto retExpr = MakeOwnedNode<ReturnExpr>();
     auto litExpr = MakeOwnedNode<LitConstExpr>();
     litExpr->kind = LitConstKind::INTEGER;
@@ -434,8 +434,9 @@ void TestEntryConstructor::ConstructTestEntry(AST::Package& pkg, TestModule& mod
     pkg.files[0]->decls.emplace_back(std::move(entryFunc));
 }
 
-void TestEntryConstructor::ConstructTestSuite(const std::string& moduleName, std::vector<OwnedPtr<Package>>& srcPkgs,
-    const std::vector<Ptr<PackageDecl>> importedPkgs, bool compileTestsOnly)
+void TestEntryConstructor::ConstructTestSuite(const std::string& moduleName,
+    std::vector<OwnedPtr<Package>>& srcPkgs, const std::vector<Ptr<PackageDecl>> importedPkgs,
+    bool compileTestsOnly)
 {
     auto currentPkg = srcPkgs.back().get();
     auto importedMainPartPkgForTestPkg = compileTestsOnly && ImportManager::IsTestPackage(currentPkg->fullPackageName)

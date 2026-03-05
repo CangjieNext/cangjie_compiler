@@ -165,7 +165,9 @@ void DIBuilder::CreateGlobalVar(const CHIR::GlobalVar& variable)
     // To add the deref flag, need to guarantee the refType is not nullptr, which corresponds to Option<Ref>.None.
     if (IsReferenceType(*ty, cgMod)) {
         if (IsOptionOrOptionLike(*ty)) {
-            type = CreatePointerType(type);
+            if (!IsOption(*ty)) {
+                type = CreatePointerType(type);
+            }
         } else {
             expr.emplace_back(llvm::dwarf::DW_OP_deref);
         }
@@ -230,7 +232,8 @@ void DIBuilder::SetSubprogram(const CHIR::Func* func, llvm::Function* function)
     auto funcIdentifier = lineInfoOnly || IsParaInitFunc(*func)
         ? "" 
         : GenerateGenericFuncName(func->GetSrcCodeIdentifier(), func->GetOriginalGenericTypeParams());
-    auto& position = func->GetDebugLocation();
+    auto rawMethod = func->Get<CHIR::WrappedRawMethod>();
+    auto& position = rawMethod ? rawMethod->GetDebugLocation() : func->GetDebugLocation();
     auto diFile = GetOrCreateFile(position);
     bool isGV = funcName.find(MANGLE_CANGJIE_PREFIX + MANGLE_GLOBAL_VARIABLE_INIT_PREFIX) == 0;
     bool isCompilerAddInit = func->GetSrcCodeIdentifier() == "init" && func->TestAttr(CHIR::Attribute::NO_DEBUG_INFO);
@@ -313,7 +316,9 @@ void DIBuilder::EmitDeclare(const CHIR::Debug& debugNode, llvm::BasicBlock& curB
     if (IsReferenceType(*ty, cgMod) || ty->IsGeneric() || !hasSize) {
         // for the generic option(does not have size), does not need wrap a pointer, because it has typeInfo.
         if (IsOptionOrOptionLike(*ty) && hasSize) {
-            type = CreatePointerType(type);
+            if (!IsOption(*ty)) {
+                type = CreatePointerType(type);
+            }
         } else {
             flags |= llvm::DINode::FlagObjectPointer;
             expr.emplace_back(llvm::dwarf::DW_OP_deref);
@@ -409,9 +414,9 @@ void DIBuilder::CreateParameter(const CHIR::Debug& debugNode, llvm::BasicBlock& 
             auto cgType = CGType::GetOrCreate(cgMod, paraTy);
             bool isRefOption =
                 paraTy->IsEnum() && (cgType->IsOptionLikeRef() || StaticCast<CGEnumType*>(cgType)->IsOptionLikeT());
-            if (isRefOption || isEnv) {
+            if (isEnv) {
                 type = CreatePointerType(type);
-            } else {
+            } else if (!isRefOption) {
                 expr.emplace_back(llvm::dwarf::DW_OP_deref);
             }
         } else if (pointerWrapper) {
@@ -441,7 +446,7 @@ llvm::DILocation* DIBuilder::HandleDefaultParamLocation(const CHIRExprWrapper& c
         static_cast<unsigned>(curLocation.column), scope);
 }
 
-llvm::DILocation* DIBuilder::CreateDILoc(const CHIRExprWrapper& chirNode)
+llvm::DILocation* DIBuilder::CreateDILoc(const CHIRExprWrapper& chirNode, const bool removable)
 {
     CJC_ASSERT(enabled || enableLineInfo);
     llvm::BasicBlock* currentBB = cgMod.GetMappedBB(chirNode.GetParentBlock());
@@ -451,14 +456,18 @@ llvm::DILocation* DIBuilder::CreateDILoc(const CHIRExprWrapper& chirNode)
     if (!currentBB->getParent()->getSubprogram()) {
         return nullptr;
     }
+    if (removable && position.IsInvalidPos()) {
+        return nullptr;
+    }
     needSubprogram = true;
     llvm::DIScope* scope = GetOrCreateScope(position, *currentBB);
     auto parentFunc = chirNode.GetTopLevelFunc();
     if (parentFunc && parentFunc->GetFuncKind() == CHIR::DEFAULT_PARAMETER_FUNC) {
         return HandleDefaultParamLocation(chirNode, scope);
     }
+    auto [line, column] = position.GetBeginPos();
     return llvm::DILocation::get(
-        cgMod.GetLLVMContext(), position.GetBeginPos().line, position.GetBeginPos().column, scope);
+        cgMod.GetLLVMContext(), line, column, scope, nullptr, !position.GetBeginPos().IsLegal());
 }
 
 llvm::DILocation* DIBuilder::CreateDILoc(llvm::DIScope* currentScope, const CHIR::Position& position)
@@ -466,7 +475,8 @@ llvm::DILocation* DIBuilder::CreateDILoc(llvm::DIScope* currentScope, const CHIR
     if (!enabled && !enableLineInfo) {
         return nullptr;
     }
-    return llvm::DILocation::get(cgMod.GetLLVMContext(), position.line, position.column, currentScope);
+    return llvm::DILocation::get(
+        cgMod.GetLLVMContext(), position.line, position.column, currentScope, nullptr, !position.IsLegal());
 }
 
 llvm::DIScope* DIBuilder::GetOrCreateScope(const CHIR::DebugLocation& position, llvm::BasicBlock& currentBB)
@@ -775,7 +785,7 @@ llvm::DIType* DIBuilder::CreateTupleType(const CHIR::TupleType& tupleTy, const C
         auto elemType = GetOrCreateType(*ty);
         auto bitInSize = GetTypeSize(llvmType->getStructElementType(i));
         auto offset = layOut->getElementOffsetInBits(i) + boxOffset;
-        if (IsReferenceType(*ty, cgMod) || ty->IsRawArray()) {
+        if (IsReferenceType(*ty, cgMod)) {
             elemType = CreatePointerType(elemType, CreateRefType()->getSizeInBits());
         }
         auto memberType = createMemberType(fwdDecl, "_" + std::to_string(i), diFile, 0u, bitInSize,
@@ -903,6 +913,11 @@ void DIBuilder::CreateInheritedInterface(
 void DIBuilder::CreateMethodType(
     const CHIR::CustomTypeDef& customDef, CodeGenDIVector16& elements, llvm::DICompositeType* fwdDecl)
 {
+    bool isMockMode = (cgMod.GetCGContext().GetCompileOptions().mock == MockMode::ON) 
+                      || cgMod.GetCGContext().GetCompileOptions().enableCompileTest;
+    if(customDef.TestAttr(CHIR::Attribute::IMPORTED) && !isMockMode) {
+        return;
+    }
     auto allMethods = customDef.GetType()->GetDeclareAndExtendMethods(cgMod.GetCGContext().GetCHIRBuilder());
     if (allMethods.empty()) {
         return;
@@ -957,13 +972,13 @@ llvm::DIType* DIBuilder::CreateClassType(const CHIR::ClassType& classTy)
     if (IsCapturedClass(*classDef)) {
         name = "$Captured_";
         auto capturedTy = DeRef(*classDef->GetDirectInstanceVar(0).type);
-        if (capturedTy->IsClass() || capturedTy->IsStruct() || capturedTy->IsEnum()) {
-            name += RemoveCustomTypePrefix(GenerateTypeName(*capturedTy));
+        if (capturedTy->IsCustomType()) {
+            name += GenerateCustomTypeName(StaticCast<const CHIR::CustomType>(*capturedTy), false);
         } else {
             name += GenerateTypeName(*capturedTy);
         }
     } else {
-        name = RemoveCustomTypePrefix(GenerateTypeName(classTy));
+        name = GenerateCustomTypeName(classTy, false);
     }
     auto diFile = GetOrCreateFile(position);
     auto classSize = GetClassSize(classLayout) + 64u;
@@ -992,7 +1007,7 @@ llvm::DIType* DIBuilder::CreateGenericClassType(const CHIR::ClassType& classTy)
     auto& position = classDef->GetDebugLocation();
     auto diFile = GetOrCreateFile(position);
     auto defPackage = createNameSpace(diCompileUnit, classDef->GetPackageName(), false);
-    auto name = RemoveCustomTypePrefix(GenerateTypeName(classTy));
+    auto name = GenerateCustomTypeName(classTy, false);
     auto tag = static_cast<unsigned>(llvm::dwarf::DW_TAG_class_type);
     auto size = 64 + classDef->GetDirectInstanceVars().size() * 64;
     llvm::DICompositeType* fwdDecl = createReplaceableCompositeType(tag, name, defPackage, diFile,
@@ -1073,7 +1088,7 @@ llvm::DIType* DIBuilder::CreateStructType(const CHIR::StructType& structTy, cons
         auto& position = structDef->GetDebugLocation();
         auto diFile = GetOrCreateFile(position);
         auto defPackage = createNameSpace(diCompileUnit, structDef->GetPackageName(), false);
-        auto name = RemoveCustomTypePrefix(GenerateTypeName(structTy));
+        auto name = GenerateCustomTypeName(structTy, false);
         auto size = 64 + structDef->GetAllInstanceVars().size() * 64;
         auto fwdDecl = createStructType(defPackage, name, diFile, position.GetBeginPos().line, size, 0u,
             llvm::DINode::FlagZero, nullptr, {}, 0u, nullptr, identifier);
@@ -1086,7 +1101,7 @@ llvm::DIType* DIBuilder::CreateStructType(const CHIR::StructType& structTy, cons
         replaceArrays(fwdDecl, getOrCreateArray(elements));
         return fwdDecl;
     }
-    auto name = RemoveCustomTypePrefix(GenerateTypeName(structTy));
+    auto name = GenerateCustomTypeName(structTy, false);
     auto& position = structDef->GetDebugLocation();
     auto diFile = GetOrCreateFile(position);
     auto cgType = CGType::GetOrCreate(cgMod, &structTy)->GetLLVMType();
@@ -1123,9 +1138,8 @@ void DIBuilder::CreateStructMemberType(const CHIR::StructType& structTy, llvm::T
     for (auto& it : structDef->GetAllInstanceVars()) {
         auto elementTy = nonConstStructTy.GetInstantiatedMemberTys(chirBuilder)[i];
         auto elemTy = DeRef(*elementTy);
-        bool isRef = IsReferenceType(*elemTy, cgMod);
         auto elemType = GetOrCreateType(*elemTy, it.TestAttr(CHIR::Attribute::READONLY));
-        if (isRef) {
+        if (IsReferenceType(*elemTy, cgMod) && !IsOption(*elementTy)) {
             elemType = CreatePointerType(elemType);
         }
         auto cgElemType = cgType->getStructElementType(i);
@@ -1157,8 +1171,11 @@ llvm::DIType* DIBuilder::CreateEnumType(const CHIR::EnumType& enumTy, const CHIR
         CJC_ASSERT(cgType->IsOptionLike() || cgType->IsAllAssociatedValuesAreNonRef());
         // There are just two cases where we cannot calculate enum size: OptionLike and EnumWithNonRef.
         // Ugly implementation, needs to be refactored
-        auto prefix = cgType->IsOptionLike() ? "E2$" : "E3$";
-        auto name = prefix + RemoveCustomTypePrefix(GenerateTypeName(enumTy));
+        auto prefix = "E3$";
+        if (cgType->IsOptionLike()) {
+            prefix = enumTy.IsOption() ? "" : "E2$";
+        }
+        auto name = prefix + GenerateCustomTypeName(enumTy,false);
         auto size = 64 + enumDef->GetAllInstanceVars().size() * 64;
         size = cgType->IsOptionLike() ? size + 32 : size; // The size of Int32 is 32-bit.
         fwdDecl = createStructType(defPackage, name, diFile, position.GetBeginPos().line, size, 0u,
@@ -1203,7 +1220,7 @@ llvm::DICompositeType* DIBuilder::GetOrCreateEnumCtorType(const CHIR::EnumType& 
         return llvm::cast<llvm::DICompositeType>(ref->second);
     }
     auto enumDef = enumTy.GetEnumDef();
-    auto name = RemoveCustomTypePrefix(GenerateTypeName(enumTy));
+    auto name = GenerateCustomTypeName(enumTy, false);
     auto& position = enumDef->GetDebugLocation();
     auto diFile = GetOrCreateFile(position);
     CodeGenDIVector16 ctors;
@@ -1243,7 +1260,7 @@ llvm::DICompositeType* DIBuilder::CreateTrivial(const CHIR::EnumType& enumTy, Co
     auto defPackage = createNameSpace(diCompileUnit, enumDef->GetPackageName(), false);
     auto& position = enumDef->GetDebugLocation();
     auto diFile = GetOrCreateFile(position);
-    auto typeName = RemoveCustomTypePrefix(GenerateTypeName(enumTy));
+    auto typeName = GenerateCustomTypeName(enumTy, false);
     auto fwdDecl = createStructType(defPackage, "E0$" + typeName, diFile, position.GetBeginPos().line, 32u, 0u,
         llvm::DINode::FlagZero, nullptr, {}, 0u, nullptr, "$" + enumTy.ToString());
     auto constructorType = GetOrCreateEnumCtorType(enumTy);
@@ -1266,7 +1283,7 @@ llvm::DICompositeType* DIBuilder::CreateEnumWithNonRefArgsType(
     auto defPackage = createNameSpace(diCompileUnit, enumDef->GetPackageName(), false);
     auto& position = enumDef->GetDebugLocation();
     auto diFile = GetOrCreateFile(position);
-    auto typeName = RemoveCustomTypePrefix(GenerateTypeName(enumTy));
+    auto typeName = GenerateCustomTypeName(enumTy, false);
     auto cgType = StaticCast<const CGEnumType*>(CGType::GetOrCreate(cgMod, &enumTy));
     auto fwdDecl = createStructType(defPackage, "E3$" + typeName, diFile, position.GetBeginPos().line,
         cgType->GetsizeOfConstructorUnion() + 32, 0u, llvm::DINode::FlagZero, nullptr, {}, 0u, nullptr,
@@ -1277,7 +1294,7 @@ llvm::DICompositeType* DIBuilder::CreateEnumWithNonRefArgsType(
     for (auto& ctor : enumTy.GetConstructorInfos(cgMod.GetCGContext().GetCHIRBuilder())) {
         CodeGenDIVector4 enumLayer{};
         auto size = 32u;
-        std::string ctorName = RemoveCustomTypePrefix(GenerateTypeName(enumTy)) + "_ctor_" + std::to_string(fieldIdx);
+        std::string ctorName = GenerateCustomTypeName(enumTy, false) + "_ctor_" + std::to_string(fieldIdx);
         // For the constructor without args.
         if (ctor.funcType->GetParamTypes().empty()) {
             auto subEnumType =
@@ -1315,7 +1332,7 @@ llvm::DICompositeType* DIBuilder::CreateEnumWithNonRefArgsType(
         for (uint32_t argIndex = 0; argIndex < ctor.funcType->GetParamTypes().size(); ++argIndex) {
             auto arg = ctor.funcType->GetParamTypes()[argIndex];
             auto argTy = GetOrCreateType(*arg);
-            if (IsReferenceType(*arg, cgMod) || arg->IsRawArray()) {
+            if (IsReferenceType(*arg, cgMod)) {
                 argTy = CreatePointerType(argTy, CreateRefType()->getSizeInBits());
             }
             offset += sizeOfCtors[argIndex];
@@ -1350,6 +1367,8 @@ llvm::DICompositeType* DIBuilder::CreateEnumOptionType(
     // Processing constructor for reference type that is not core/Option.
     if (isRefArg) {
         auto argType = GetOrCreateType(*argTy);
+        auto size = enumTy.IsOption()? CreateRefType()->getSizeInBits() : GetSizeInBits(argType);
+        argType = enumTy.IsOption()? CreatePointerType(argType, size) : argType;
         // It might have been generated when generating argType.
         auto ref = typeCache.find(&enumTy);
         if (ref != typeCache.end()) {
@@ -1361,16 +1380,16 @@ llvm::DICompositeType* DIBuilder::CreateEnumOptionType(
         }
         uint64_t boxOffset = boxTy ? 64u : 0u;
         auto defPackage = createNameSpace(diCompileUnit, enumDef->GetPackageName(), false);
-        auto name = enumTy.IsOption() ? RemoveCustomTypePrefix(GenerateTypeName(enumTy))
-                                      : "E2$" + RemoveCustomTypePrefix(GenerateTypeName(enumTy));
+        auto name = enumTy.IsOption() ? GenerateCustomTypeName(enumTy, false)
+                                      : "E2$" + GenerateCustomTypeName(enumTy, false);
         fwdDecl = createStructType(defPackage, name, diFile, position.GetBeginPos().line,
-            GetSizeInBits(argType) + boxOffset, argType->getAlignInBits(), llvm::DINode::FlagZero, nullptr,
+            size + boxOffset, argType->getAlignInBits(), llvm::DINode::FlagZero, nullptr,
             getOrCreateArray({}), 0u, nullptr, "$" + std::to_string(boxOffset) + "_" + enumTy.ToString());
         if (boxTy) {
             typeCache[boxTy] = llvm::TrackingMDRef(fwdDecl);
         }
-        auto offsetBits = argTy->IsRawArray() ? GetSizeInBits(argType) : 0u;
-        auto valueType = createMemberType(fwdDecl, "val", diFile, 0u, GetSizeInBits(argType), 0u,
+        auto offsetBits = argTy->IsRawArray() ? size : 0u;
+        auto valueType = createMemberType(fwdDecl, "val", diFile, 0u, size, 0u,
             offsetBits + boxOffset, llvm::DINode::FlagZero, argType);
         // For optionLike, should generate constructor.
         if (!enumTy.IsOption()) {
@@ -1395,7 +1414,7 @@ llvm::DICompositeType* DIBuilder::CreateBoxSelfOptionType(const CHIR::EnumType& 
     auto& position = enumDef->GetDebugLocation();
     auto diFile = GetOrCreateFile(position);
     auto defPackage = createNameSpace(diCompileUnit, enumDef->GetPackageName(), false);
-    auto name = "E2$" + RemoveCustomTypePrefix(GenerateTypeName(enumTy));
+    auto name = "E2$" + GenerateCustomTypeName(enumTy, false);
     auto fwdDecl = createStructType(defPackage, name, diFile, position.GetBeginPos().line, 128u, 0u,
         llvm::DINode::FlagZero, nullptr, getOrCreateArray({}), 0u, nullptr, enumTy.ToString());
     auto constructorType = GetOrCreateEnumCtorType(enumTy);
@@ -1430,8 +1449,8 @@ llvm::DICompositeType* DIBuilder::CreateNestedOptionType(
 #endif
     if (IsReferenceType(*optionTy, cgMod) && !hasCoreOption) {
         auto defPackage = createNameSpace(diCompileUnit, enumDef->GetPackageName(), false);
-        auto name = enumTy.IsOption() ? RemoveCustomTypePrefix(GenerateTypeName(enumTy))
-                                      : "E2$" + RemoveCustomTypePrefix(GenerateTypeName(enumTy));
+        auto name = enumTy.IsOption() ? GenerateCustomTypeName(enumTy, false)
+                                      : "E2$" + GenerateCustomTypeName(enumTy, false);
         uint64_t boxOffset = boxTy ? 64u : 0u;
         fwdDecl = createStructType(defPackage, name, diFile, position.GetBeginPos().line,
             64u + enumFieldAlignment + boxOffset, 0u, llvm::DINode::FlagZero, nullptr, getOrCreateArray({}), 0u,
@@ -1442,7 +1461,9 @@ llvm::DICompositeType* DIBuilder::CreateNestedOptionType(
             typeCache[&enumTy] = llvm::TrackingMDRef(fwdDecl);
         }
         auto argType = GetOrCreateType(*optionTy);
-        argType = CreatePointerType(argType);
+        if (!optionTy->IsOption()) {
+            argType = CreatePointerType(argType);
+        }
         CJC_NULLPTR_CHECK(argType);
         auto ctorType = createMemberType(
             fwdDecl, "constructor", diFile, 0u, 8u, 0u, boxOffset, llvm::DINode::FlagZero, constructorType);
@@ -1470,8 +1491,8 @@ llvm::DICompositeType* DIBuilder::CreateNonRefOptionType(
     auto cgType = CGType::GetOrCreate(cgMod, &enumTy)->GetLLVMType();
     auto totalSize = GetTypeSize(cgType);
     auto defPackage = createNameSpace(diCompileUnit, enumDef->GetPackageName(), false);
-    auto name = enumTy.IsOption() ? RemoveCustomTypePrefix(GenerateTypeName(enumTy))
-                                  : "E2$" + RemoveCustomTypePrefix(GenerateTypeName(enumTy));
+    auto name = enumTy.IsOption() ? GenerateCustomTypeName(enumTy, false)
+                                  : "E2$" + GenerateCustomTypeName(enumTy, false);
     uint64_t boxOffset = boxTy ? 64u : 0u;
     auto fwdDecl = createStructType(defPackage, name, diFile, position.GetBeginPos().line, totalSize + boxOffset,
         argType->getAlignInBits(), llvm::DINode::FlagZero, nullptr, getOrCreateArray({}), 0u, nullptr,

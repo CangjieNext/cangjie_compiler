@@ -326,7 +326,7 @@ Ptr<ClassDecl> TestManager::GenerateMockClassIfNeededAndGet(const CallExpr& call
         if (generated) {
             CJC_ASSERT(classDecl);
             if (auto ifaceDecl = DynamicCast<InterfaceDecl>(declToMock)) {
-                mockSupportManager->PrepareClassWithDefaults(*classDecl, *ifaceDecl);
+                mockSupportManager->PrepareClassLikeWithDefaults(*classDecl, *ifaceDecl, nullptr);
                 mockSupportManager->WriteGeneratedMockDecls();
             }
         }
@@ -360,6 +360,10 @@ bool ShouldPrepareDecl(Node& node, const Package& pkg)
             // Will prepare them when encounter their generic decl
             return false;
         }
+    }
+
+    if (node.TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC, Attribute::FROM_COMMON_PART)) {
+        return false;
     }
 
     return true;
@@ -423,6 +427,11 @@ void TestManager::GenerateAccessors(Package& pkg)
             return VisitAction::SKIP_CHILDREN;
         }
 
+        // common/specific declarations are not supported
+        if (decl->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC, Attribute::FROM_COMMON_PART)) {
+            return VisitAction::SKIP_CHILDREN;
+        }
+
         mockSupportManager->GenerateAccessors(*decl);
 
         return VisitAction::SKIP_CHILDREN;
@@ -453,6 +462,10 @@ void TestManager::PrepareToSpy(Package& pkg)
         }
 
         if (IS_GENERIC_INSTANTIATION_ENABLED && decl->TestAttr(Attribute::GENERIC)) {
+            return VisitAction::SKIP_CHILDREN;
+        }
+
+        if (decl->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC, Attribute::FROM_COMMON_PART)) {
             return VisitAction::SKIP_CHILDREN;
         }
 
@@ -519,10 +532,10 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
 
     bool isInConstructor = false;
     bool isInMockAnnotatedLambda = false;
-    Ptr<Decl> outerClassLike;
+    Ptr<Ty> outerTy;
 
     Walker(&pkg, Walker::GetNextWalkerID(),
-        [this, &isInConstructor, &isInMockAnnotatedLambda, &outerClassLike, &pkg](const Ptr<Node> node) {
+        [this, &isInConstructor, &isInMockAnnotatedLambda, &outerTy, &pkg](const Ptr<Node> node) {
         if (node->astKind == ASTKind::PRIMARY_CTOR_DECL) {
             // Primary init has been already desugared to regular init
             return VisitAction::SKIP_CHILDREN;
@@ -532,12 +545,12 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
             isInMockAnnotatedLambda = true;
         }
 
-        if (auto classLikeDecl = DynamicCast<ClassLikeDecl>(node)) {
-            CJC_ASSERT(!outerClassLike);
-            outerClassLike = classLikeDecl;
+        if (auto inheritableDecl = DynamicCast<InheritableDecl>(node)) {
+            CJC_ASSERT(!outerTy);
+            outerTy = inheritableDecl->ty;
         } else if (auto extendDecl = DynamicCast<ExtendDecl>(node)) {
-            CJC_ASSERT(!outerClassLike);
-            outerClassLike = extendDecl->extendedType->GetTarget();
+            CJC_ASSERT(!outerTy);
+            outerTy = extendDecl->extendedType->ty;
         }
 
         if ((node->curFile && !node->IsSamePackage(pkg))) {
@@ -554,29 +567,34 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
             return VisitAction::WALK_CHILDREN;
         }
 
+        if (auto arg = As<ASTKind::FUNC_ARG>(node); arg && arg->withInout) {
+            // TODO: Support mocking inout parameters
+            return VisitAction::SKIP_CHILDREN;
+        }
+
         if (!MockSupportManager::NeedToSearchCallsToReplaceWithAccessors(*node)) {
             return VisitAction::SKIP_CHILDREN;
         }
 
         if (auto expr = As<ASTKind::EXPR>(node); expr) {
             mockSupportManager->ReplaceExprWithAccessor(*expr, isInConstructor);
-            mockSupportManager->ReplaceInterfaceDefaultFunc(*expr, outerClassLike, isInMockAnnotatedLambda);
+            mockSupportManager->ReplaceInterfaceDefaultFunc(*expr, outerTy, isInMockAnnotatedLambda);
         }
 
         return VisitAction::WALK_CHILDREN;
-    }, [&isInConstructor, &isInMockAnnotatedLambda, &outerClassLike](const Ptr<Node> node) {
+    }, [&isInConstructor, &isInMockAnnotatedLambda, &outerTy](const Ptr<Node> node) {
         if (node->TestAttr(Attribute::CONSTRUCTOR)) {
             isInConstructor = false;
         }
         if (IsMockAnnotedLambda(node)) {
             isInMockAnnotatedLambda = false;
         }
-        if (auto classLikeDecl = DynamicCast<ClassLikeDecl>(node)) {
-            CJC_ASSERT(outerClassLike == classLikeDecl);
-            outerClassLike = nullptr;
+        if (auto inheritableDecl = DynamicCast<InheritableDecl>(node)) {
+            CJC_ASSERT(outerTy == inheritableDecl->ty);
+            outerTy = nullptr;
         } else if (auto extendDecl = DynamicCast<ExtendDecl>(node)) {
-            CJC_ASSERT(outerClassLike == extendDecl->extendedType->GetTarget());
-            outerClassLike = nullptr;
+            CJC_ASSERT(outerTy == extendDecl->extendedType->ty);
+            outerTy = nullptr;
         }
         return VisitAction::KEEP_DECISION;
     }).Walk();

@@ -142,6 +142,17 @@ bool TypeChecker::TypeCheckerImpl::IsGenericTypeWithTypeArgs(AST::Type& type) co
     return !(type.GetTypeArgs().empty() && generic != nullptr);
 }
 
+bool TypeChecker::TypeCheckerImpl::CheckTypeParametersForAliasRef(AST::RefType& rt, const AST::TypeAliasDecl& aliasDecl)
+{
+    auto aliasDeclGenericTypeParametersNum = aliasDecl.generic ? aliasDecl.generic->typeParameters.size() : 0;
+    if (rt.typeArguments.size() != aliasDeclGenericTypeParametersNum) {
+        auto range = MakeRange(rt.begin, rt.end.IsZero() ? rt.begin + 1 : rt.end);
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_argument_no_match, rt, range);
+        return false;
+    }
+    return true;
+}
+
 void TypeChecker::TypeCheckerImpl::HandleAliasForRefType(RefType& rt, Ptr<Decl>& target)
 {
     if (!target || target->astKind != ASTKind::TYPE_ALIAS_DECL) {
@@ -149,6 +160,10 @@ void TypeChecker::TypeCheckerImpl::HandleAliasForRefType(RefType& rt, Ptr<Decl>&
     }
     auto aliasDecl = StaticCast<TypeAliasDecl*>(target);
     if (aliasDecl->type == nullptr) {
+        return;
+    }
+
+    if (!CheckTypeParametersForAliasRef(rt, *aliasDecl)) {
         return;
     }
     auto innerTypeAliasTarget = GetLastTypeAliasTarget(*aliasDecl);
@@ -287,7 +302,7 @@ bool TypeChecker::TypeCheckerImpl::CheckRefTypeCheckAccessLegality(
     const ASTContext& ctx, RefType& rt, const Decl& target)
 {
     auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, rt.scopeName);
-    if (!IsLegalAccess(sym, target, rt)) {
+    if (!IsLegalAccess(sym, target, rt, importManager, typeManager)) {
         diag.Diagnose(rt, DiagKind::sema_invalid_access_control, target.identifier.Val());
         // Unbind target-user relationship when error happens.
         ReplaceTarget(&rt, nullptr);
@@ -349,7 +364,7 @@ void TypeChecker::TypeCheckerImpl::CheckQualifiedType(const ASTContext& ctx, Qua
     }
     // Get field target and check access legality.
     auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, qt.scopeName);
-    if (!IsLegalAccess(sym, *target, qt)) {
+    if (!IsLegalAccess(sym, *target, qt, importManager, typeManager)) {
         diag.Diagnose(qt, DiagKind::sema_invalid_access_control, target->identifier.Val());
     }
     // Type must have typeArguments when its target is a generic type declaration.

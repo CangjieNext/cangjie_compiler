@@ -8,12 +8,14 @@
 
 #include "Base/CGTypes/CGArrayType.h"
 #include "Base/CGTypes/CGClassType.h"
+#include "Base/CGTypes/CGType.h"
 #include "Base/CHIRExprWrapper.h"
 #include "CGModule.h"
 #include "IRAttribute.h"
 #include "Utils/CGCommonDef.h"
 #include "Utils/CGUtils.h"
 #include "cangjie/CHIR/Type/ClassDef.h"
+#include "cangjie/CHIR/Type/Type.h"
 
 namespace Cangjie::CodeGen {
 
@@ -134,6 +136,53 @@ llvm::Value* IRBuilder2::CallStackTraceIntrinsic(const CHIRIntrinsicWrapper& sys
             CGType::GetOrCreate(cgMod, CGType::GetRefTypeOfCHIRInt8(cgCtx.GetCHIRBuilder())));
         parameters.emplace_back(&tempVal);
         return CallIntrinsicFunction(retCGType->GetLLVMType(), "CJ_MCC_DecodeStackTrace", parameters, {});
+    }
+    CJC_ASSERT(false && "Unsupported syscall.");
+    return nullptr;
+}
+
+llvm::Value* IRBuilder2::CallThreadInfoIntrinsic(const CHIRIntrinsicWrapper& syscall, std::vector<CGValue*>& parameters)
+{
+    auto intrinsicKind = syscall.GetIntrinsicKind();
+    auto& cgCtx = GetCGContext();
+    if (intrinsicKind == CHIR::IntrinsicKind::DUMP_CURRENT_THREAD_INFO) {
+        auto retCHIRType = syscall.GetResult()->GetType();
+        auto retCGType = CGType::GetOrCreate(cgMod, retCHIRType);
+        // Get the structDef of ThreadShapshotInfo
+        auto snapShotInfoDef = StaticCast<CHIR::StructType*>(retCHIRType)->GetStructDef();
+        // Get the CHIRType of RawArray<StackTraceData>
+        auto arrayStackTraceType = StaticCast<CHIR::RawArrayType*>(DeRef(*snapShotInfoDef->GetInstanceVar(2).type));
+        auto arrayStackTraceVal = CGValue(CreateBitCast(CreateTypeInfo(*arrayStackTraceType), getInt8PtrTy()),
+            CGType::GetOrCreate(cgMod, CGType::GetRefTypeOfCHIRInt8(cgCtx.GetCHIRBuilder())));
+        parameters.emplace_back(&arrayStackTraceVal);
+        // Get the CHIRType of RawArray<UInt8>
+        auto charArrayType = StaticCast<CHIR::RawArrayType*>(DeRef(*snapShotInfoDef->GetInstanceVar(0).type));
+        auto charArrayVal = CGValue(CreateBitCast(CreateTypeInfo(*charArrayType), getInt8PtrTy()),
+            CGType::GetOrCreate(cgMod, CGType::GetRefTypeOfCHIRInt8(cgCtx.GetCHIRBuilder())));
+        parameters.emplace_back(&charArrayVal);
+        return CallIntrinsicFunction(retCGType->GetLLVMType(), "CJ_MCC_GetCurrentThreadSnapshot", parameters, {});
+    } else if (intrinsicKind == CHIR::IntrinsicKind::DUMP_ALL_THREADS_INFO) {
+        // Add three parameters, (TypeInfo* Array<ThreadSnapInfo>, TypeInfo* Array<StackTraceData>, TypeInfo* RawArray<UInt8>)
+        auto retCHIRType = syscall.GetResult()->GetType();
+        auto retCGType = CGType::GetOrCreate(cgMod, retCHIRType);
+        // Get the CHIRType of RawArray<ThreadSnapInfo>
+        auto arraySnapshotType = StaticCast<CHIR::RawArrayType*>(DeRef(*retCHIRType));
+        // Get the structDef of ThreadShapshotInfo
+        auto snapShotInfoDef = StaticCast<CHIR::StructType*>(arraySnapshotType->GetTypeArgs()[0])->GetStructDef();
+        auto arraySnapshotVal = CGValue(CreateBitCast(CreateTypeInfo(*arraySnapshotType), getInt8PtrTy()),
+            CGType::GetOrCreate(cgMod, CGType::GetRefTypeOfCHIRInt8(cgCtx.GetCHIRBuilder())));
+        parameters.emplace_back(&arraySnapshotVal);
+        // Get the CHIRType of RawArray<StackTraceData>
+        auto arrayStackTraceType = StaticCast<CHIR::RawArrayType*>(DeRef(*snapShotInfoDef->GetInstanceVar(2).type));
+        auto arrayStackTraceVal = CGValue(CreateBitCast(CreateTypeInfo(*arrayStackTraceType), getInt8PtrTy()),
+            CGType::GetOrCreate(cgMod, CGType::GetRefTypeOfCHIRInt8(cgCtx.GetCHIRBuilder())));
+        parameters.emplace_back(&arrayStackTraceVal);
+        // Get the CHIRType of RawArray<UInt8>
+        auto charArrayType = StaticCast<CHIR::RawArrayType*>(DeRef(*snapShotInfoDef->GetInstanceVar(0).type));
+        auto charArrayVal = CGValue(CreateBitCast(CreateTypeInfo(*charArrayType), getInt8PtrTy()),
+            CGType::GetOrCreate(cgMod, CGType::GetRefTypeOfCHIRInt8(cgCtx.GetCHIRBuilder())));
+        parameters.emplace_back(&charArrayVal);
+        return CallIntrinsicFunction(retCGType->GetLLVMType(), "CJ_MCC_GetAllThreadSnapshot", parameters, {});
     }
     CJC_ASSERT(false && "Unsupported syscall.");
     return nullptr;
@@ -647,11 +696,11 @@ llvm::Function* GetGCIntrinsicAlloc(const CGModule& cgMod)
 llvm::Value* IRBuilder2::CallClassIntrinsicAlloc(const CHIR::Type& type)
 {
     auto value = CallClassIntrinsicAlloc({CreateTypeInfo(type), GetLayoutSize_32(type)});
+    auto& llvmCtx = getContext();
     if (type.IsClass()) {
         CJC_ASSERT(!type.IsAutoEnvBase() && "Should not reach here, please check CHIR.");
         auto& classDef = *static_cast<const CHIR::ClassType&>(type).GetClassDef();
         std::vector<llvm::Metadata*> mallocType;
-        auto& llvmCtx = getContext();
         if (classDef.GetFinalizer()) {
             mallocType.emplace_back(llvm::MDString::get(llvmCtx, GC_FINALIZER_ATTR));
         }
@@ -662,6 +711,9 @@ llvm::Value* IRBuilder2::CallClassIntrinsicAlloc(const CHIR::Type& type)
             auto meta = llvm::MDTuple::get(llvmCtx, mallocType);
             value->setMetadata("MallocType", meta);
         }
+    }
+    if (IsSizeTrustedInCompileUnit(cgMod, type)) {
+        value->setMetadata("TrustedSize", llvm::MDNode::get(llvmCtx, {}));
     }
     return value;
 }
@@ -1226,11 +1278,21 @@ llvm::Instruction* IRBuilder2::CallIntrinsicMTable(const std::vector<llvm::Value
     return CreateCall(func, fixedParams);
 }
 
+llvm::Instruction* IRBuilder2::CallIntrinsicMethodOuterType(const std::vector<llvm::Value*>& parameters)
+{
+    CJC_ASSERT(parameters.size() == 3U);
+    llvm::Function* func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_get_method_outertype);
+    auto fixedParams = {
+        CreateBitCast(parameters[0], getInt8PtrTy()), CreateBitCast(parameters[1], getInt8PtrTy()), parameters[2]};
+    return CreateCall(func, fixedParams);
+}
+
 llvm::Instruction* IRBuilder2::CallIntrinsicGetVTableFunc(
-    llvm::Value* ti, llvm::Value* introTypeIdx, llvm::Value* funcOffset)
+    llvm::Value* ti, llvm::Value* introTypeIdx, llvm::Value* funcOffset, llvm::Value* introTI)
 {
     llvm::Function* func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_get_vtable_func);
-    return CreateCall(func, {CreateBitCast(ti, getInt8PtrTy()), introTypeIdx, funcOffset});
+    auto i8Ptr = getInt8PtrTy();
+    return CreateCall(func, {CreateBitCast(ti, i8Ptr), introTypeIdx, funcOffset, CreateBitCast(introTI, i8Ptr)});
 }
 
 // parameters = {i8 any addrspace* dst, i8 addrspace(1)* src, TypeInfo* ti}
@@ -1418,5 +1480,47 @@ llvm::Value* IRBuilder2::CallInteropIntrinsics(
     const CHIRIntrinsicWrapper& intrinsic, const std::vector<CGValue*>& parameters)
 {
     return CallIntrinsic(intrinsic, parameters);
+}
+
+namespace {
+llvm::Value* GetRealUUIDForAutoEnvClass(IRBuilder2& irBuilder, llvm::Value* obj)
+{
+    auto i80PtrTy = irBuilder.getInt8PtrTy();
+    auto i81PtrTy = irBuilder.getInt8PtrTy(1U);
+    const size_t realAutoEnvClassIdx = 2;
+    auto [judgeBB, wrapperClassBB, endBB] = Vec2Tuple<3>(irBuilder.CreateAndInsertBasicBlocks({"judge", "wrapperClass", "end"}));
+    
+    auto newObjPtr = irBuilder.CreateEntryAlloca(i81PtrTy, nullptr, "obj");
+    irBuilder.CreateStore(obj, newObjPtr);
+    irBuilder.CreateBr(judgeBB);
+
+    irBuilder.SetInsertPoint(judgeBB);
+    auto newObj0 = irBuilder.CreateLoad(i81PtrTy, newObjPtr);
+    auto cgTi = CGValue(irBuilder.CreateBitCast(irBuilder.GetTypeInfoFromObject(newObj0), i80PtrTy), CGType::GetOrCreate(irBuilder.GetCGModule(), CGType::GetRefTypeOfCHIRInt8(irBuilder.GetCGContext().GetCHIRBuilder())));
+    auto isWrapperClass = irBuilder.CallIntrinsicFunction(llvm::Type::getInt1Ty(irBuilder.GetLLVMContext()), "CJ_MCC_IsWrapperClassForAutoEnv", {&cgTi}, {});
+    irBuilder.CreateCondBr(isWrapperClass, wrapperClassBB, endBB);
+
+    irBuilder.SetInsertPoint(wrapperClassBB);
+    auto newObj1 = irBuilder.CreateLoad(i81PtrTy, newObjPtr);
+    auto payload = irBuilder.GetPayloadFromObject(newObj1);
+    auto realAutoEnvClass = irBuilder.CreateConstGEP1_32(i81PtrTy, irBuilder.CreateBitCast(payload, i81PtrTy->getPointerTo(1U)), static_cast<unsigned>(realAutoEnvClassIdx), "realAutoEnvClass");
+    auto loadInst = irBuilder.CallGCRead({newObj1, realAutoEnvClass});
+    irBuilder.CreateStore(loadInst, newObjPtr);
+    irBuilder.CreateBr(judgeBB);
+
+    irBuilder.SetInsertPoint(endBB);
+    auto newObj2 = irBuilder.CreateLoad(i81PtrTy, newObjPtr);
+    auto ti = irBuilder.GetTypeInfoFromObject(newObj2);
+    auto uuid = irBuilder.GetUUIDFromTypeInfo(ti);
+    return uuid;
+} 
+}
+
+llvm::Value* IRBuilder2::CallIntrinsicFuncRefEq(std::vector<CGValue*> parameters)
+{
+    CJC_ASSERT(parameters.size() == 2 && "Func refEq should have two parameters");
+    auto realUUID0 = GetRealUUIDForAutoEnvClass(*this, **parameters[0]);
+    auto realUUID1 = GetRealUUIDForAutoEnvClass(*this, **parameters[1]);
+    return CreateICmpEQ(realUUID0, realUUID1);
 }
 } // namespace Cangjie::CodeGen

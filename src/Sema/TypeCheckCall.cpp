@@ -371,6 +371,22 @@ size_t GetPositionalParamSize(const FuncDecl& fd)
     return params.size() - namedSize;
 }
 
+size_t GetInitializedlNameParamSize(const FuncDecl& fd)
+{
+    CJC_ASSERT(fd.funcBody && !fd.funcBody->paramLists.empty());
+    auto& params = fd.funcBody->paramLists.front()->params;
+    size_t result = 0;
+    for (auto iter = params.crbegin(); iter < params.crend(); ++iter) {
+        CJC_NULLPTR_CHECK(*iter);
+        if ((*iter)->isNamedParam) {
+            result += (*iter)->TestAttr(Attribute::HAS_INITIAL);
+        } else {
+            break;
+        }
+    }
+    return result;
+}
+
 size_t GetPositionalArgSize(const CallExpr& ce)
 {
     size_t count = 0;
@@ -1799,10 +1815,13 @@ void TypeChecker::TypeCheckerImpl::FilterIncompatibleCandidatesForCall(
     if (!candidates.empty()) {
         return;
     }
-    if (badFd->funcBody->paramLists.front()->params.size() != ce.args.size()) {
-        DiagWrongNumberOfArguments(diag, ce, *badFd);
-    } else {
+
+    size_t initializedParamSize = GetInitializedlNameParamSize(*badFd);
+    size_t paramsSize = badFd->funcBody->paramLists.front()->params.size();
+    if ((ce.args.size() >= paramsSize - initializedParamSize) && (ce.args.size() <= paramsSize)) {
         CheckArgsWithParamName(ce, *badFd);
+    } else {
+        DiagWrongNumberOfArguments(diag, ce, *badFd);
     }
 }
 
@@ -1821,7 +1840,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::FilterCandidates(
         }
         // Check candidate's accessibility, filter invisible candidate.
         Symbol* sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, ce.baseFunc->scopeName);
-        return !IsLegalAccess(sym, *fd, *ce.baseFunc);
+        return !IsLegalAccess(sym, *fd, *ce.baseFunc, importManager, typeManager);
     };
     candidates.erase(std::remove_if(candidates.begin(), candidates.end(), isInvalidAndInvisible), candidates.end());
 
@@ -2246,8 +2265,8 @@ bool TypeChecker::TypeCheckerImpl::GetCallBaseCandidates(
     const ASTContext& ctx, const CallExpr& ce, Expr& expr, Ptr<Decl>& target, std::vector<Ptr<FuncDecl>>& candidates)
 {
     target = GetRealTarget(&expr, expr.GetTarget());
-    if (target->TestAttr(Attribute::COMMON) && target->platformImplementation) {
-        target = target->platformImplementation;
+    if (target->TestAttr(Attribute::COMMON) && target->specificImplementation) {
+        target = target->specificImplementation;
     }
     CJC_NULLPTR_CHECK(target);
     if (IsBuiltinTypeAlias(*target) || target->IsBuiltIn()) {
@@ -2275,13 +2294,13 @@ bool TypeChecker::TypeCheckerImpl::GetCallBaseCandidates(
     if (ce.callKind == CallKind::CALL_ANNOTATION) {
         RemoveNonAnnotationCandidates(candidates);
     }
+    // Add for cjmp
+    mpImpl->RemoveCommonCandidatesIfHasSpecific(candidates);
     auto ds = DiagSuppressor(diag);
     candidates = FilterCandidatesWithReExport(ctx, candidates, ce);
     if (expr.astKind == ASTKind::REF_EXPR && candidates.empty() && target->astKind == ASTKind::PACKAGE_DECL) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_ref_to_pkg_name, expr);
     }
-    // Add for cjmp
-    mpImpl->RemoveCommonCandidatesIfHasPlatform(candidates);
     if (ds.HasError()) {
         ds.ReportDiag();
         return false;

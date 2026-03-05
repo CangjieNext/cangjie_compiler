@@ -121,6 +121,7 @@ void Parser::SetCompileOptions(const GlobalOptions& opts)
     impl->scanDepPkg = opts.scanDepPkg;
     impl->calculateLineNum = opts.enableTimer || opts.enableMemoryCollect;
     impl->enableInteropCJMapping = opts.enableInteropCJMapping;
+    impl->targetInteropLanguage = opts.targetInteropLanguage;
     // set compile options for cjmp implementation
     impl->mpImpl->SetCompileOptions(opts);
     // Effect handlers break backwards compatibility by introducing new
@@ -201,6 +202,9 @@ ParserImpl::ParserImpl(unsigned int fileID, const std::string& input, Diagnostic
       enableAttachComment(attachComment), parseDeclFile{parsingDeclFiles}, mpImpl{new MPParserImpl(*this)},
       ffiParser{new FFIParserImpl(*this)}
 {
+    // do not call EnterXXXMod here because that would then call enter that mod in lexer, but lexer would initialize
+    // itself
+    ctx.push_back(ParserContext::NORMAL);
 }
 
 ParserImpl::ParserImpl(const std::string& input, DiagnosticEngine& diag, SourceManager& sm, const Position& pos,
@@ -210,6 +214,7 @@ ParserImpl::ParserImpl(const std::string& input, DiagnosticEngine& diag, SourceM
       enableAttachComment{attachComment}, parseDeclFile{parsingDeclFiles}, mpImpl{new MPParserImpl(*this)},
       ffiParser{new FFIParserImpl(*this)}
 {
+    ctx.push_back(ParserContext::NORMAL);
 }
 
 ParserImpl::ParserImpl(const std::vector<Token>& inputTokens, DiagnosticEngine& diag, SourceManager& sm,
@@ -219,6 +224,7 @@ ParserImpl::ParserImpl(const std::vector<Token>& inputTokens, DiagnosticEngine& 
       enableAttachComment{attachComment}, parseDeclFile{parsingDeclFiles}, mpImpl{new MPParserImpl(*this)},
       ffiParser{new FFIParserImpl(*this)}
 {
+    ctx.push_back(ParserContext::NORMAL);
 }
 
 ParserImpl::~ParserImpl()
@@ -254,7 +260,7 @@ bool ParserImpl::CanBeAbstract(const AST::Decl& decl, ScopeKind scopeKind) const
         }
         case ASTKind::PRIMARY_CTOR_DECL: {
             auto pcd = StaticAs<ASTKind::PRIMARY_CTOR_DECL>(pdecl);
-            if (!pcd->funcBody && pcd->funcBody->body) {
+            if (pcd->funcBody && pcd->funcBody->body) {
                 return false;
             }
             break;

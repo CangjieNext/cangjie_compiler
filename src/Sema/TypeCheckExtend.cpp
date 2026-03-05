@@ -25,7 +25,10 @@ using namespace AST;
 
 void TypeChecker::TypeCheckerImpl::CheckExtendGenerics(const ExtendDecl& ed)
 {
-    if (!ed.generic || !Ty::IsTyCorrect(ed.extendedType->ty) || !ed.extendedType->ty->IsExtendable()) {
+    bool isMovedCommonED =
+        !ed.TestAttr(Attribute::IMPORTED) && ed.TestAttr(Attribute::FROM_COMMON_PART) && ed.TestAttr(Attribute::COMMON);
+    if (!ed.generic || !Ty::IsTyCorrect(ed.extendedType->ty) || !ed.extendedType->ty->IsExtendable() ||
+        isMovedCommonED) {
         return;
     }
     auto usedGenericTys = GetAllGenericTys(ed.extendedType->ty);
@@ -345,10 +348,9 @@ void UpdateExtendMap(TypeManager& typeManager, const std::unordered_set<Ptr<AST:
     // For single package or file compilation case: clear right before invocation of this function is OK.
     for (const auto& extendDecl : extends) {
         CJC_NULLPTR_CHECK(extendDecl);
-        if (extendDecl->isInMacroCall || !extendDecl->extendedType ||
-            (!extendDecl->TestAttr(Attribute::IMPORTED) && extendDecl->TestAttr(Attribute::FROM_COMMON_PART) &&
-                extendDecl->TestAttr(Attribute::COMMON))) {
+        if (extendDecl->isInMacroCall || !extendDecl->extendedType || extendDecl->specificImplementation) {
             // The extendDecl in macrocall is only for lsp, and does not need to be updated.
+            // The common extend with specificImplementation is skipped because its specific version already exists.
             continue;
         }
         auto extendTy = extendDecl->extendedType->ty;
@@ -402,6 +404,9 @@ void TypeChecker::TypeCheckerImpl::BuildExtendMap(ASTContext& ctx)
             PreCheckExtend(ctx, *ed);
         }
     }
+    // The matching of `common/specific extend` depends on the resolved symbol type.
+    // Here is the first step after resolving the final symbol type, and also the first step in processing extendDecl.
+    mpImpl->PrepareTypeCheck4CJMPExtension(*ci, scopeManager, ctx, allExtends);
     UpdateExtendMap(typeManager, allExtends);
 }
 
@@ -592,7 +597,9 @@ void TypeChecker::TypeCheckerImpl::SetExtendExternalAttr(const ASTContext& ctx, 
     if (ed.generic) {
         for (auto& tp : ed.generic->genericConstraints) {
             for (auto& up : tp->upperBounds) {
-                Ptr<Decl> decl = up->GetTarget();
+                // If upperbound is alias type, the extend decl access level should be less than or equal to the access
+                // level of the alias decl. However, due to compatibility issues, the actual type is used here.
+                Ptr<Decl> decl = TypeCheckUtil::GetRealTarget(up->GetTarget());
                 if (decl == nullptr) {
                     continue;
                 }

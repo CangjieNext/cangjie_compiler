@@ -39,26 +39,30 @@ void WarnConflictImport(DiagnosticEngine& diag, const std::string& name, const R
 void WarnRepeatedFeatureName(DiagnosticEngine& diag, std::string& name, const Range& current, const Range& previous)
 {
     auto builder = diag.DiagnoseRefactor(DiagKindRefactor::feature_already_seen_name, current);
-    builder.AddNote(previous, "feature '" +  name + "' previously used here");
+    builder.AddNote(previous, "feature '" + name + "' previously used here");
 }
 
-// void DiagForNullPackageFeature(DiagnosticEngine& diag, const Ptr<File> file, const Ptr<FeaturesDirective> refFeature)
 void DiagForNullPackageFeature(DiagnosticEngine& diag, const Range& current, const Ptr<FeaturesDirective> refFeature)
 {
     auto builder = diag.DiagnoseRefactor(DiagKindRefactor::feature_null_declaration, current);
     builder.AddNote(
-        MakeRange(refFeature->content[0].begin, refFeature->end),
-        "perhapse you meant these features");
+        MakeRange(refFeature->featuresSet->begin, refFeature->featuresSet->end),
+        "perhaps you meant these features");
 }
 
 void DiagForDifferentPackageFeatureConsistency(DiagnosticEngine& diag, const Ptr<FeaturesDirective> feature,
-    const Ptr<FeaturesDirective> refFeature)
+    const Ptr<FeaturesDirective> refFeature, bool hasAnno)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::feature_different_consistency,
-        MakeRange(feature->content[0].begin, feature->end));
-    builder.AddNote(
-        MakeRange(refFeature->content[0].begin, refFeature->end),
-        "perhapse you meant these features");
+    if (feature->annotations.empty() && hasAnno) {
+        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::parse_fail_expected_annotation,
+            MakeRange(feature->featuresPos, feature->featuresPos + std::string("features").size()), "@NonProduct");
+    } else {
+        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::feature_different_consistency,
+            MakeRange(feature->featuresSet->begin, feature->featuresSet->end));
+        builder.AddNote(
+            MakeRange(refFeature->featuresSet->begin, refFeature->featuresSet->end),
+            "perhaps you meant these features");
+    }
 }
 
 void DiagForDifferentPackageNames(DiagnosticEngine& diag,

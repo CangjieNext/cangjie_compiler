@@ -15,67 +15,6 @@
 
 namespace Cangjie::CHIR {
 namespace {
-void CreateNewExtendDef(Package& package, CustomTypeDef& curDef, ClassType& parentType,
-    const std::vector<VirtualFuncInfo>& virtualFunc, CHIRBuilder& builder)
-{
-    auto mangledName = "extend_" + curDef.GetIdentifier() + "_p_" + parentType.ToString();
-    auto genericParams = curDef.GetGenericTypeParams();
-    auto extendDef = builder.CreateExtend(
-        INVALID_LOCATION, mangledName, package.GetName(), false, genericParams);
-    extendDef->SetExtendedType(*curDef.GetType());
-    extendDef->AddImplementedInterfaceTy(parentType);
-    extendDef->EnableAttr(Attribute::COMPILER_ADD);
-    if (curDef.TestAttr(Attribute::GENERIC)) {
-        extendDef->EnableAttr(Attribute::GENERIC);
-    }
-
-    VTableType vtable;
-    vtable.emplace(&parentType, virtualFunc);
-    extendDef->SetVTable(vtable);
-}
-
-void CreateExtendDefForImportedCustomTypeDef(Package& package, CHIRBuilder& builder, bool incr)
-{
-    if (incr) {
-        return;
-    }
-    /*  codegen will create extension def according to CHIR's vtable, in order not to create duplicate
-        extension def, codegen won't visit vtable from imported CustomTypeDef, these vtables are assumed that
-        must be created in imported package. but there is a special case:
-        ================ package A ================
-        public interface I {}
-        open public class A {}
-
-        ================ package B ================
-        import package A
-        public class B <: A {} // extension def B_ed_A will be created in codegen
-
-        ================ package C ================
-        import package A
-        extend A <: I {} // extension def A_ed_I will be created in codegen
-
-        ================ package D ================
-        import package A, B, C
-        // extension def B_ed_I is needed, but there isn't in imported packages
-
-        so we need to create extension def B_ed_I in current package, in order to deal with this case,
-        a compiler added extend def is needed:
-        [COMPILER_ADD] extend B <: I {}
-        this def is create in current package, so extension def B_ed_I will be created in codegen
-    */
-    for (auto def : package.GetAllImportedCustomTypeDef()) {
-        if (def->IsExtend()) {
-            continue;
-        }
-        for (const auto& it : def->GetVTable()) {
-            if (ParentDefIsFromExtend(*def, *(it.first->GetClassDef()))) {
-                CreateNewExtendDef(package, *def, *it.first, it.second, builder);
-                continue;
-            }
-        }
-    }
-}
-
 void ReplaceCustomTypeDefVtable(CustomTypeDef& def, const std::unordered_map<Value*, Value*>& symbol)
 {
     auto vtable = def.GetVTable();
@@ -151,7 +90,6 @@ void ReplaceMethodAndStaticVar(
         }
     }
 }
-}
 
 bool IsEmptyInitFunc(Func& func)
 {
@@ -169,7 +107,7 @@ bool IsEmptyInitFunc(Func& func)
     return isEmpty;
 }
 
-static std::unordered_map<ClassDef*, std::unordered_set<CustomTypeDef*>> CollectSubClasses(
+std::unordered_map<ClassDef*, std::unordered_set<CustomTypeDef*>> CollectSubClasses(
     const Package& pkg, CHIRBuilder& builder)
 {
     //                 parent     sub
@@ -181,7 +119,7 @@ static std::unordered_map<ClassDef*, std::unordered_set<CustomTypeDef*>> Collect
     }
     return subClasses;
 }
-namespace {
+
 void CreateSrcImportedFuncSymbol(
     CHIRBuilder& builder, Func& fn, std::unordered_map<Func*, ImportedFunc*>& srcCodeImportedFuncMap)
 {
@@ -341,13 +279,5 @@ void ToCHIR::ReplaceSrcCodeImportedValueWithSymbol()
         }
     }
     chirPkg->SetGlobalVars(std::move(globalVars));
-}
-
-void ToCHIR::RemoveUnusedImports()
-{
-    Utils::ProfileRecorder r{"CHIR", "RemoveUnusedImports"};
-    ReplaceSrcCodeImportedValueWithSymbol();
-    CreateExtendDefForImportedCustomTypeDef(*GetPackage(), builder, kind == IncreKind::INCR);
-    DumpCHIRDebug("RemoveUnusedImports");
 }
 }  // namespace Cangjie::CHIR

@@ -45,7 +45,7 @@ class TestManager;
  */
 enum class CompileStage {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    LOAD_PLUGINS,      /**< Load compiler plugins. */
+    LOAD_PLUGINS, /**< Load compiler plugins. */
 #endif
     PARSE,             /**< Parse the source code. */
     CONDITION_COMPILE, /**< Conditional compile. */
@@ -57,6 +57,7 @@ enum class CompileStage {
     GENERIC_INSTANTIATION, /**< GenericInstantiation. */
     OVERFLOW_STRATEGY,     /**< Overflow strategy. */
     MANGLING,              /**< Mangling all decls. */
+    SAVE_CJO,              /**< Save CJO. */
     CHIR,                  /**< CHIR. */
     CODEGEN,               /**< Generate target code. */
     SAVE_RESULTS,          /**< Save AST and CHIR results to files. */
@@ -227,9 +228,17 @@ public:
     }
 
     /**
-     * Export AST and generate cjo, bchir.
+     * Export AST and generate cjo.
      */
-    virtual bool PerformCjoAndBchirSaving()
+    virtual bool PerformCjoSaving()
+    {
+        return true;
+    }
+
+    /**
+     * Export AST and generate results.
+     */
+    virtual bool PerformResultsSaving()
     {
         return true;
     }
@@ -249,7 +258,7 @@ public:
      *
      * @return empty vector If Parse failed.
      */
-    std::vector<Ptr<AST::Package>> GetSourcePackages() const;
+    std::vector<Ptr<AST::Package>> GetSourcePackages();
 
     /**
      * Get Source Manager.
@@ -413,8 +422,28 @@ public:
     bool compileOnePackageFromSrcFiles = false;
     // Read source code from cache.
     bool loadSrcFilesFromCache = false;
-    // the source code cache map use for LSP. Key is path, Value is source code.
-    std::unordered_map<std::string, std::string> bufferCache;
+    // SrcCodeChangeState
+    enum class SrcCodeChangeState : uint8_t {
+        UNCHANGED = 0,
+        CHANGED = 1,
+        ADDED = 2,
+        DELETED = 3,
+    };
+    struct SrcCodeCacheInfo {
+        SrcCodeChangeState state{SrcCodeChangeState::ADDED};
+        std::string code;
+        SrcCodeCacheInfo() = default;
+        SrcCodeCacheInfo(SrcCodeCacheInfo&& info) = default;
+        SrcCodeCacheInfo(const SrcCodeCacheInfo& info) = default;
+        SrcCodeCacheInfo& operator=(SrcCodeCacheInfo&& info) = default;
+        SrcCodeCacheInfo& operator=(const SrcCodeCacheInfo& info) = default;
+        SrcCodeCacheInfo(const std::string& code) : code(code) {};
+        SrcCodeCacheInfo(std::string&& code) : code(std::move(code)) {};
+        SrcCodeCacheInfo(SrcCodeChangeState state, const std::string& code) : state(state), code(code) {};
+        SrcCodeCacheInfo(SrcCodeChangeState state, std::string&& code) : state(state), code(std::move(code)) {};
+    };
+    // the source code cache map use for LSP and cjdb. Key is path, Value is source change state and source code.
+    std::unordered_map<std::string, SrcCodeCacheInfo> bufferCache;
 
     // tokensEvalInMacro for DumpMacro, error report.
     std::vector<std::string> tokensEvalInMacro;
@@ -491,6 +520,11 @@ public:
     std::vector<const AST::Decl*> order;
 
     /// Used by CJLint
+    bool IsBuildTrie() const
+    {
+        return buildTrie;
+    }
+
     void SetBuildTrie(bool flag)
     {
         buildTrie = flag;
@@ -506,6 +540,10 @@ public:
     // we need to remove this later
     std::unordered_map<Ptr<AST::Package>, Ptr<CHIR::Package>> astPkg2chirPkgMap;
 #endif
+    bool HasTypeChecker() const
+    {
+        return typeChecker != nullptr;
+    }
 
 protected:
     /**

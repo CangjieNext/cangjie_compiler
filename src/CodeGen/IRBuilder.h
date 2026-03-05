@@ -174,7 +174,7 @@ public:
     void CreateLocalVarPointer(const CHIR::Debug& debugNode, const CGValue& cgValue);
     void CreateUnBoxDeclare(const CHIR::Debug& debugNode, const CGValue& cgValue);
     void CreateEnvDeclare(const CHIR::GetElementRef& getEleRef, llvm::Value* gep);
-    void EmitLocation(const CHIRExprWrapper& debugNode);
+    void EmitLocation(const CHIRExprWrapper& debugNode, const bool removable = false);
     llvm::Type* HandleArgPointerType(const CGType& argType) const;
     void CreateValuePointer(const CHIR::Debug& debugNode, const CGValue& cgValue);
     void CreateBoxedValueForValueType(const CHIR::Debug& debugNode, const CGValue& cgValue);
@@ -274,7 +274,7 @@ public:
         CGType* fieldType{nullptr};
         llvm::Value* instance{nullptr};
         const CHIR::Type& baseTy;
-        CodeGenFieldInfo(const std::string className, const std::string& qualifiedName, const std::string fieldName,
+        CodeGenFieldInfo(const std::string& className, const std::string& qualifiedName, const std::string& fieldName,
             const CHIR::Type* fieldChirType, CGType* fieldType, llvm::Value* instance, const CHIR::Type& baseTy)
             : className(className),
               qualifiedName(qualifiedName),
@@ -318,6 +318,7 @@ public:
     void CallExceptionIntrinsicThrow(llvm::Value* exceptionValue);
     void CallExceptionIntrinsicThrow(CGValue* exceptionValue)
     {
+        CJC_ASSERT(exceptionValue);
         CallExceptionIntrinsicThrow(exceptionValue->GetRawValue());
     }
     llvm::Value* CallExceptionIntrinsicGetExceptionValue();
@@ -327,6 +328,8 @@ public:
     llvm::Value* CallRuntimeIntrinsics(const CHIRIntrinsicWrapper& syscall, const std::vector<CGValue*>& parameters);
     ///*----------------- Fill Or Get StackTrace related --------------------//
     llvm::Value* CallStackTraceIntrinsic(const CHIRIntrinsicWrapper& syscall, std::vector<CGValue*>& parameters);
+    ///*----------------- ThreadInfo related --------------//
+    llvm::Value* CallThreadInfoIntrinsic(const CHIRIntrinsicWrapper& syscall, std::vector<CGValue*>& parameters);
     ///*----------------- Math related --------------------//
     llvm::Value* CallMathIntrinsics(const CHIRIntrinsicWrapper& intrinsic, std::vector<llvm::Value*>& parameters);
     ///*----------------- zeroValue related --------------------//
@@ -350,6 +353,8 @@ public:
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     ///*----------------- FFI OHOS related --------------------//
     llvm::Value* CallInteropIntrinsics(const CHIRIntrinsicWrapper& intrinsic, const std::vector<CGValue*>& parameters);
+    ///*----------------- Func RefEq related --------------------//
+    llvm::Value* CallIntrinsicFuncRefEq(std::vector<CGValue*> parameters);
     ///*----------------- VArray related --------------------//
     void CallVArrayIntrinsicIndexCheck(const CGValue* arrayPtr, std::vector<llvm::Value*>& index);
     void CreateVArrayStore(CGValue* cgValue, llvm::Value* place);
@@ -401,6 +406,7 @@ public:
     llvm::Value* GetSize_64(const CHIR::Type& type);
     llvm::Value* GetSize_Native(const CHIR::Type& type);
     llvm::Value* GetAlign(const CHIR::Type& type, llvm::Type* targetType);
+    llvm::Value* GetUUIDFromTypeInfo(llvm::Value* typeInfo);
     llvm::Value* GetTypeKindFromTypeInfo(llvm::Value* typeInfo);
     llvm::Value* GetTypeForTypeParameter(llvm::Value* typeInfo);
     llvm::Value* GetTypeArgsFromTypeInfo(llvm::Value* typeInfo);
@@ -430,7 +436,9 @@ public:
     llvm::Instruction* CallGCWriteGenericPayload(const std::vector<llvm::Value*>& parameters);
     llvm::Instruction* CallGCReadGeneric(const std::vector<llvm::Value*>& parameters);
     llvm::Instruction* CallIntrinsicMTable(const std::vector<llvm::Value*>& parameters);
-    llvm::Instruction* CallIntrinsicGetVTableFunc(llvm::Value* ti, llvm::Value* introTypeIdx, llvm::Value* funcOffset);
+    llvm::Instruction* CallIntrinsicMethodOuterType(const std::vector<llvm::Value*>& parameters);
+    llvm::Instruction* CallIntrinsicGetVTableFunc(
+        llvm::Value* ti, llvm::Value* introTypeIdx, llvm::Value* funcOffset, llvm::Value* introTI);
     llvm::Instruction* CallIntrinsicAssignGeneric(const std::vector<llvm::Value*>& parameters);
 
     llvm::Value* CreateTypeInfoIsReferenceCall(llvm::Value* ti);

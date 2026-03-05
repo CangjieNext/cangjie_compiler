@@ -51,6 +51,8 @@ const std::unordered_map<CHIR::IntrinsicKind, std::string> INTRINSIC_KIND_TO_STR
     {CHIR::ARRAY_SLICE_SET_ELEMENT_UNCHECKED, CHIR::ARRAY_SLICE_SET_ELEMENT_UNCHECKED_NAME},
     {CHIR::FILL_IN_STACK_TRACE, CHIR::FILL_IN_STACK_TRACE_NAME},
     {CHIR::DECODE_STACK_TRACE, CHIR::DECODE_STACK_TRACE_NAME},
+    {CHIR::DUMP_CURRENT_THREAD_INFO, CHIR::DUMP_CURRENT_THREAD_INFO_NAME},
+    {CHIR::DUMP_ALL_THREADS_INFO, CHIR::DUMP_ALL_THREADS_INFO_NAME},
 
     {CHIR::CHR, "chr"}, {CHIR::ORD, "ord"},
 
@@ -71,6 +73,7 @@ const std::unordered_map<CHIR::IntrinsicKind, std::string> INTRINSIC_KIND_TO_STR
     {CHIR::OBJECT_REFEQ, CHIR::OBJECT_REFEQ_NAME},
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     {CHIR::RAW_ARRAY_REFEQ, CHIR::RAW_ARRAY_REFEQ_NAME},
+    {CHIR::FUNC_REFEQ, CHIR::FUNC_REFEQ_NAME},
 #endif
     {CHIR::OBJECT_ZERO_VALUE, CHIR::OBJECT_ZERO_VALUE_NAME},
 
@@ -193,7 +196,10 @@ const std::unordered_map<CHIR::IntrinsicKind, std::string> INTRINSIC_KIND_TO_STR
 
     // Box cast intrinsic
     {CHIR::OBJECT_AS, "object.as"}, {CHIR::IS_NULL, "isNull"},
-    {CHIR::BLACK_BOX, "blackBox"}
+    {CHIR::BLACK_BOX, "blackBox"},
+
+    // spawn related
+    {CHIR::EXCLUSIVE_SCOPE, "exclusiveScopeImpl"},
 };
 
 const std::unordered_map<CHIR::Package::AccessLevel, std::string> PACKAGE_ACCESS_LEVEL_TO_STRING_MAP = {

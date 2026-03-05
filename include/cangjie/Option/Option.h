@@ -14,6 +14,7 @@
 #define CANGJIE_OPTION_OPTION_H
 
 #include <climits>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <set>
@@ -69,7 +70,6 @@ enum class DiagFormat : uint8_t { JSON, NO_COLOR, DEFAULT };
  * default: compile with no passed explicit mock option
  * */
 enum class MockMode : uint8_t { ON, OFF, RUNTIME_ERROR, DEFAULT };
-
 
 class Option {
 public:
@@ -130,6 +130,9 @@ enum class Environment : uint8_t {
     SIMULATOR,
     NOT_AVAILABLE,
 };
+
+inline static const std::string DEFALUT_ANDROID_API {"31"};
+inline static const std::string MIN_ANDROID_API {"26"};
 
 struct Info {
     ArchType arch;
@@ -247,6 +250,13 @@ struct Info {
      * @return std::string The environment name.
      */
     std::string EnvironmentToString() const;
+
+    /**
+     * @brief Convert environment to string without api level.
+     *
+     * @return std::string The environment name.
+     */
+    std::string EnvironmentToSimpleString() const;
 };
 
 /**
@@ -386,6 +396,68 @@ public:
      */
     void UpdateCachedDirName(const std::string& fullPackageName);
 
+    /**
+     * @brief Check if AST dump is needed.
+     *
+     * @return bool Return true if AST dump is needed.
+     */
+    bool NeedDumpAST() const;
+
+    /**
+     * @brief Check if AST should be dumped to file.
+     *
+     * @return bool Return true if AST should be dumped to file.
+     */
+    bool NeedDumpASTToFile() const;
+
+    /**
+     * @brief Check if AST should be dumped to screen.
+     *
+     * @return bool Return true if AST should be dumped to screen.
+     */
+    bool NeedDumpASTToScreen() const;
+
+    /**
+     * @brief Check if CHIR dump is needed.
+     *
+     * @return bool Return true if CHIR dump is needed.
+     */
+    bool NeedDumpCHIR() const;
+
+    /**
+     * @brief Check if CHIR should be dumped to screen.
+     *
+     * @return bool Return true if CHIR should be dumped to screen.
+     */
+    bool NeedDumpCHIRToScreen() const;
+
+    /**
+     * @brief Check if CHIR should be dumped to file.
+     *
+     * @return bool Return true if CHIR should be dumped to file.
+     */
+    bool NeedDumpCHIRToFile() const;
+    /**
+     * @brief Check if IR dump is needed.
+     *
+     * @return bool Return true if IR dump is needed.
+     */
+    bool NeedDumpIR() const;
+
+    /**
+     * @brief Check if IR should be dumped to file.
+     *
+     * @return bool Return true if IR should be dumped to file.
+     */
+    bool NeedDumpIRToFile() const;
+
+    /**
+     * @brief Check if IR should be dumped to screen.
+     *
+     * @return bool Return true if IR should be dumped to screen.
+     */
+    bool NeedDumpIRToScreen() const;
+
     std::string cangjieHome;
 
     std::string output = "./";
@@ -523,6 +595,10 @@ public:
 
     bool enableMemoryCollect = false; /**< Whether enable memory usage report. */
 
+    enum class InteropLanguage : uint8_t { NA, Java, ObjC };
+
+    InteropLanguage targetInteropLanguage{InteropLanguage::NA};
+
     std::optional<unsigned int> errorCountLimit = 8; /**< limits the amount of errors compiler prints */
 
 #ifdef CANGJIE_CHIR_WFC_OFF
@@ -542,9 +618,14 @@ public:
     std::string optPassOptions = ""; /**< customized opt pass options from user.*/
 
     enum class OutputMode : uint8_t {
-        EXECUTABLE, STATIC_LIB, SHARED_LIB, CHIR
+        EXECUTABLE, STATIC_LIB, SHARED_LIB, CHIR, OBJ
     };
     OutputMode outputMode = OutputMode::EXECUTABLE;
+
+    enum class CompileTarget : uint8_t {
+        EXECUTABLE, STATIC_LIB, SHARED_LIB, DEFAULT
+    };
+    CompileTarget compileTarget = CompileTarget::DEFAULT;
 
     bool enableFuncSections = false;
     bool enableDataSections = false;
@@ -714,7 +795,11 @@ public:
     enum class CHIRMode : uint8_t { NA, STANDARD, WITH_ID, ALL };
 
     bool codegenDebugMode = false;
-    bool chirDumpDebugMode = false;
+    bool dumpAST = false; 
+    bool dumpCHIR = false;
+    bool dumpIR = false;
+    bool dumpAll = false; // dump all of AST, CHIR, IR
+    bool dumpToScreen = false; // dump to screen instead of file
     bool chirDeserialize = false;
     std::string chirDeserializePath;
 
@@ -742,6 +827,10 @@ public:
     /// Whether to compile .cj.d files. Note that when true, .cj files are not processed.
     bool compileCjd{false};
 
+    bool cjdbMode = false; /** whether the option used in cjdb */
+
+    std::string interopCJPackageConfigPath = "./"; /**< cjinterop .toml package config file paths */
+    
     enum class SanitizerType : uint8_t {
         NONE,
         ADDRESS,
@@ -762,11 +851,13 @@ public:
     /**
      * @brief Determine if the output mode is executable.
      *
-     * @return bool Returns true if the output mode is executable, otherwise returns false.
+     * @return bool Returns true if the output mode is executable or obj and compileTarget is executable,
+     * otherwise returns false.
      */
     bool CompileExecutable() const
     {
-        return (outputMode == GlobalOptions::OutputMode::EXECUTABLE);
+        return (outputMode == GlobalOptions::OutputMode::EXECUTABLE) ||
+            (outputMode == GlobalOptions::OutputMode::OBJ && compileTarget == CompileTarget::EXECUTABLE);
     }
 
     /**
@@ -1051,6 +1142,16 @@ public:
         return emitCHIRPhase != CandidateEmitCHIRPhase::NA;
     }
 
+    bool IsCompilingCJMPSpecific() const
+    {
+        return inputChirFiles.size() > 0;
+    }
+
+    bool IsCompilingCJMP() const
+    {
+        return IsCompilingCJMPSpecific() || outputMode == GlobalOptions::OutputMode::CHIR;
+    }
+
 protected:
     virtual std::optional<bool> ParseOption(OptionArgInstance& arg);
     virtual bool PerformPostActions();
@@ -1063,6 +1164,7 @@ private:
 
     bool SetupConditionalCompilationCfg();
     void SetupChirOptions();
+    void SetupCompileTargetOptions();
     bool ReprocessOutputs();
     bool CheckOutputPathLength() const;
     bool ReprocessInputs();
@@ -1071,6 +1173,7 @@ private:
     bool CheckScanDependencyOptions() const;
     bool CheckSanitizerOptions() const;
     bool CheckLtoOptions() const;
+    bool CheckOutputModeOptions();
     bool CheckCompileAsExeOptions() const;
     bool CheckPgoOptions() const;
     bool CheckCompileMacro() const;
@@ -1098,6 +1201,7 @@ private:
     std::string OptimizationLevelToSerializedString() const;
     std::string StackTraceFormatToSerializedString() const;
     std::string OutputModeToSerializedString() const;
+    std::string CompileTargetToSerializedString() const;
     std::string SelectedCHIROptsToSerializedString() const;
     std::string OverflowStrategyToSerializedString() const;
     std::string SanitizerTypeToSerializedString() const;

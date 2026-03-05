@@ -98,10 +98,10 @@ public:
     /// Returns true if the next token is any of the TokenKind's described by range \ref begin and \ref end.
     /// \param skipNewline whether to ignore NL
     bool Seeing(const std::vector<TokenKind>::const_iterator& begin, const std::vector<TokenKind>::const_iterator& end,
-        bool skipNewline = false);
+        bool skipNewline = false, bool skipComments = true);
     /// Returns true if the next token is any of \ref kinds.
     /// \param skipNewline whether to ignore NL
-    bool Seeing(const std::vector<TokenKind>& kinds, bool skipNewline = false);
+    bool Seeing(const std::vector<TokenKind>& kinds, bool skipNewline = false, bool skipComments = true);
 
     // Parse.
     // Parse/unittests.
@@ -111,6 +111,16 @@ public:
     /// Return all comments collected, and clear the comment cache
     std::vector<Token> GetComments();
     const std::vector<Token>& GetTokenStream() const;
+
+    /// interface between Lexer and Parser
+    /// Enter quote context. That is, # ` \\ can be parsed as tokens.
+    void EnterQuoteMod();
+    /// Exit quote context
+    void ExitQuoteMod();
+    /// Enter normal context. This is usually called upon init.
+    void EnterNormalMod();
+    /// Exit normal context
+    void ExitNormalMod();
 
     /// Cache the current lookahead and read pointer.
     void SetResetPoint();

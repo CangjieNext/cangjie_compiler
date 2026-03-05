@@ -16,6 +16,7 @@
 #include "Utils/CGUtils.h"
 #include "cangjie/CHIR/Type/CustomTypeDef.h"
 #include "cangjie/CHIR/Value.h"
+#include <cstdint>
 
 using namespace Cangjie;
 using namespace CodeGen;
@@ -125,7 +126,7 @@ llvm::Value* CGExtensionDef::CreateCompareArgs(
 {
     auto typeInfoPtrType = CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext());
     auto argSize = typeArgs.size();
-    llvm::Value* retVal;
+    llvm::Value* retVal = nullptr;
     for (size_t i = 0; i < argSize; ++i) {
         auto backupBB = irBuilder.GetInsertBlock();
         auto backupIt = irBuilder.GetInsertPoint();
@@ -216,7 +217,7 @@ llvm::Value* CGExtensionDef::GetTypeInfoOfGeneric(IRBuilder2& irBuilder, CHIR::G
 {
     std::stack<std::pair<const CHIR::Type*, std::queue<size_t>>> candidates;
     std::queue<size_t> remainPath;
-    auto currentType = targetType;
+    const CHIR::Type* currentType = targetType;
     for (auto idx : gtAccessPathMap[&gt]) {
         remainPath.push(idx);
     }
@@ -318,29 +319,81 @@ llvm::Constant* CGExtensionDef::GenerateWhereConditionFn()
     return whereCondFn;
 }
 
-llvm::Constant* CGExtensionDef::GenerateFuncTableForType(const std::vector<CHIR::VirtualFuncInfo>& virtualFuncInfos)
+llvm::Constant* CGExtensionDef::GenerateOuterTi(const CHIR::VirtualFuncInfo& funcInfo)
 {
-    auto i8PtrType = llvm::Type::getInt8PtrTy(cgCtx.GetLLVMContext());
-    auto funcTableSize = virtualFuncInfos.size();
-    if (funcTableSize == 0) {
+    auto& llvmCtx = cgMod.GetLLVMContext();
+    if (funcInfo.instance == nullptr) {
+        return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(llvmCtx));
+    }
+    auto parentType = DeRef(*funcInfo.typeInfo.parentType);
+    if (parentType->GetTypeArgs().empty()) {
+        // If `parentType` has no type arguments, it will not be accessed in the function, meaning
+        // the value of `outerTypeinfo` is unimportant and can be filled with any data. To reduce
+        // relocation, we choose to fill it with 0x1 instead of a TypeInfo pointer.
+        return llvm::ConstantExpr::getIntToPtr(
+            llvm::ConstantInt::get(llvm::Type::getInt64Ty(llvmCtx), 0x1), llvm::Type::getInt8PtrTy(llvmCtx));
+    }
+    auto outerTi = CGType::GetOrCreate(cgMod, parentType)->GetOrCreateTypeInfo();
+    return llvm::ConstantExpr::getBitCast(outerTi, llvm::Type::getInt8PtrTy(llvmCtx));
+}
+
+llvm::Constant* CGExtensionDef::GenerateOuterTiFn(const CHIR::VirtualFuncInfo& funcInfo)
+{
+    auto& llvmCtx = cgMod.GetLLVMContext();
+    if (funcInfo.instance == nullptr) {
+        return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(llvmCtx));
+    }
+
+    auto fnName = extendDefName + "_" + funcInfo.instance->GetIdentifierWithoutPrefix() + "_GetOuterTiFn";
+    auto getOuterTiFn = cgMod.GetLLVMModule()->getFunction(fnName);
+    if (!getOuterTiFn) {
+        cgCtx.AddLLVMUsedVars(fnName);
+        auto typeInfoPtrType = CGType::GetOrCreateTypeInfoPtrType(llvmCtx);
+        llvm::FunctionType* getOuterTiFnType = llvm::FunctionType::get(typeInfoPtrType, {typeInfoPtrType}, false);
+        getOuterTiFn =
+            llvm::Function::Create(getOuterTiFnType, llvm::Function::PrivateLinkage, fnName, cgMod.GetLLVMModule());
+        auto entryBB = llvm::BasicBlock::Create(llvmCtx, "entry", getOuterTiFn);
+        IRBuilder2 irBuilder(cgMod, entryBB);
+        innerTypeMap.emplace(targetType, InnerTiInfo{getOuterTiFn->getArg(0), true});
+        auto parentType = DeRef(*funcInfo.typeInfo.parentType);
+        auto outerTi = irBuilder.CreateTypeInfo(*parentType, genericParamsMap, false);
+        innerTypeMap.clear();
+        irBuilder.CreateRet(irBuilder.CreateBitCast(outerTi, typeInfoPtrType));
+    } else {
+        CJC_ASSERT(false &&
+            "GenerateOuterTiFn should not be called multiple times for the same function. Something is wrong.");
+    }
+    return llvm::ConstantExpr::getBitCast(getOuterTiFn, llvm::Type::getInt8PtrTy(llvmCtx));
+}
+
+llvm::Constant* CGExtensionDef::GenerateFuncTableForType(const std::vector<CHIR::VirtualFuncInfo>& vtableInType)
+{
+    auto& llvmCtx = cgMod.GetLLVMContext();
+    auto i8PtrType = llvm::Type::getInt8PtrTy(llvmCtx);
+    if (vtableInType.empty()) {
         return llvm::Constant::getNullValue(i8PtrType);
     }
-    auto tableType = llvm::ArrayType::get(i8PtrType, funcTableSize);
+
+    auto funcTableSize = vtableInType.size();
+    CJC_ASSERT(funcTableSize != 0);
+    auto tableType = llvm::ArrayType::get(i8PtrType, 2 * funcTableSize);
     auto funcTableGV =
         llvm::cast<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getOrInsertGlobal(extendDefName + ".ft", tableType));
     if (funcTableGV->hasInitializer()) {
         return llvm::ConstantExpr::getBitCast(funcTableGV, i8PtrType);
     }
     funcTableGV->setLinkage(llvm::GlobalVariable::PrivateLinkage);
-    std::vector<llvm::Constant*> funcTable(funcTableSize);
+    std::vector<llvm::Constant*> funcTable(2 * funcTableSize);
     for (size_t i = 0; i < funcTableSize; ++i) {
-        auto funcInfo = virtualFuncInfos[i];
+        auto funcInfo = vtableInType[i];
         if (funcInfo.instance) {
             auto function = cgMod.GetOrInsertCGFunction(funcInfo.instance)->GetRawFunction();
             funcTable[i] = llvm::ConstantExpr::getBitCast(function, i8PtrType);
         } else {
-            funcTable[i] = llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+            funcTable[i] = llvm::ConstantPointerNull::get(i8PtrType);
         }
+        funcTable[funcTableSize + i] = targetType->GetTypeArgs().empty() ? GenerateOuterTi(funcInfo)
+                                                                         : GenerateOuterTiFn(funcInfo);
     }
 
     funcTableGV->setInitializer(llvm::ConstantArray::get(tableType, funcTable));
@@ -385,12 +438,14 @@ std::vector<llvm::Constant*> CGExtensionDef::GetEmptyExtensionDefContent(CGModul
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
     auto i8NullVal = llvm::ConstantInt::getNullValue(llvm::Type::getInt8Ty(llvmCtx));
+    auto i16NullVal = llvm::ConstantInt::getNullValue(llvm::Type::getInt16Ty(llvmCtx));
     auto i8PtrNullVal = llvm::ConstantInt::getNullValue(llvm::Type::getInt8PtrTy(llvmCtx));
     std::vector<llvm::Constant*> defConstants(static_cast<unsigned>(EXTENSION_DEF_FIELDS_NUM));
     defConstants[static_cast<size_t>(IS_INTERFACE_TI)] = i8NullVal;
     defConstants[static_cast<size_t>(INTERFACE_FN_OR_INTERFACE_TI)] = i8PtrNullVal;
     defConstants[static_cast<size_t>(WHERE_CONDITION_FN)] = i8PtrNullVal;
     defConstants[static_cast<size_t>(FUNC_TABLE)] = i8PtrNullVal;
+    defConstants[static_cast<size_t>(FUNC_TABLE_SIZE)] = i16NullVal;
     defConstants[static_cast<size_t>(TARGET_TYPE)] = GetTargetType(cgMod, targetType);
     auto cgType = CGType::GetOrCreate(cgMod, &targetType);
     auto i32Ty = llvm::Type::getInt32Ty(llvmCtx);
@@ -430,12 +485,27 @@ bool CGExtensionDef::CreateExtensionDefForType(CGModule& cgMod, const std::strin
     return true;
 }
 
+namespace {
+bool IsSameRootPackage(const std::string& packageName1, const std::string& packageName2)
+{
+    // 1) a::b and a::b.c have the same root package
+    // 2) a::b and a::b have the same root package
+    // 3) a::b and a::bb don't have the same root package
+    // Here we add a dot at the end:
+    // e.g., com::pkga.b -> com::pkga.b.
+    // This transformation will make the following judgement easier.
+    std::string pkgName1 = packageName1 + '.';
+    std::string pkgName2 = packageName2+ '.';
+    return pkgName1.substr(0, pkgName1.find('.')) == pkgName2.substr(0, pkgName2.find('.'));
+}
+}
+
 bool CGExtensionDef::CreateExtensionDefForType(const CHIR::ClassType& inheritedType)
 {
     auto& vtable = chirDef.GetVTable();
     auto found = vtable.find(const_cast<CHIR::ClassType*>(&inheritedType));
     auto funcTableSize = found == vtable.end() ? 0 : found->second.size();
-    if (funcTableSize == 0 && inheritedType.GetClassDef()->IsClass()) {
+    if (funcTableSize == 0 && inheritedType.GetClassDef()->IsInterface() && &inheritedType == targetType) {
         return false;
     }
 
@@ -445,25 +515,34 @@ bool CGExtensionDef::CreateExtensionDefForType(const CHIR::ClassType& inheritedT
     auto [iFnOrTi, isTi] = GenerateInterfaceFn(inheritedType);
     content[static_cast<size_t>(INTERFACE_FN_OR_INTERFACE_TI)] = iFnOrTi;
     content[static_cast<size_t>(IS_INTERFACE_TI)] =
-        llvm::ConstantInt::get(llvm::Type::getInt8Ty(cgCtx.GetLLVMContext()), static_cast<uint64_t>(isTi));
+        llvm::ConstantInt::get(llvm::Type::getInt8Ty(cgCtx.GetLLVMContext()), static_cast<uint8_t>(isTi));
+    // "the lowest bit is 1" means funcTable has outerTypeInfos besides vfuncPtrs.
+    // outerTypeInfos are designed to optimize runtime performance.
+    uint8_t flag = 0b00000001;
+    // "the highest bit is 1" means inheritedType is the direct super type of targetType.
+    // It is designed to optimize runtime performance.
+    flag |= inheritedType.IsDirectSuperTypeOf(*targetType, cgCtx.GetCHIRBuilder()) ? 0b10000000 : 0b00000000;
+    if (targetType->IsCustomType()) {
+        const auto& name1 = StaticCast<CHIR::CustomType>(targetType)->GetCustomTypeDef()->GetPackageName();
+        const auto& name2 = inheritedType.GetClassDef()->GetPackageName();
+        if (IsSameRootPackage(name1, name2)) {
+            // "the 2nd and 3rd bits are 11" means inheritedType and targetType are within the same root package,
+            // so there is no need for the runtime to refresh the funcTable. It is designed to optimize runtime
+            // performance.
+            flag |= 0b00000110;
+        }
+    }
+    content[static_cast<size_t>(FLAG)] = llvm::ConstantInt::get(llvm::Type::getInt8Ty(cgCtx.GetLLVMContext()), flag);
     content[static_cast<size_t>(WHERE_CONDITION_FN)] = GenerateWhereConditionFn();
     content[static_cast<size_t>(FUNC_TABLE)] =
         GenerateFuncTableForType(funcTableSize == 0 ? std::vector<CHIR::VirtualFuncInfo>() : found->second);
+    content[static_cast<size_t>(FUNC_TABLE_SIZE)] =
+        llvm::ConstantInt::get(llvm::Type::getInt16Ty(cgCtx.GetLLVMContext()), funcTableSize);
 
     return CreateExtensionDefForType(cgMod, extendDefName, content, inheritedType, isForExternalType);
 }
 
 namespace {
-bool HasStaticMethods(const CHIR::CustomTypeDef& chirDef)
-{
-    for (auto method : chirDef.GetMethods()) {
-        if (method->TestAttr(Cangjie::CHIR::Attribute::STATIC)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void GetOrderedParentTypesRecusively(
     CHIR::ClassType& type, std::list<const CHIR::ClassType*>& parents, CHIR::CHIRBuilder& builder)
 {
@@ -518,11 +597,7 @@ std::pair<uint32_t, std::vector<std::pair<const CHIR::Type*, const CHIR::Type*>>
         CollectGenericParamIndicesMap();
         std::list<const CHIR::ClassType*> orderedInheritedTypes;
         if (chirDef.GetCustomKind() == CHIR::CustomDefKind::TYPE_CLASS) {
-            auto& def = StaticCast<CHIR::ClassDef>(chirDef);
-            auto isClassOrHasStaticMethods = def.IsClass() || HasStaticMethods(chirDef);
-            if (isClassOrHasStaticMethods) {
-                orderedInheritedTypes.push_back(StaticCast<CHIR::ClassType>(targetType));
-            }
+            orderedInheritedTypes.push_back(StaticCast<CHIR::ClassType>(targetType));
         }
         CHIR::CHIRBuilder& chirBuilder = cgMod.GetCGContext().GetCHIRBuilder();
         GetOrderedParentTypesRecusively(chirDef, orderedInheritedTypes, chirBuilder);

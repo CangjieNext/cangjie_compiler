@@ -4,7 +4,9 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-
+#include "Demangler.h"
+#include <limits>
+#include <stdexcept>
 #ifdef BUILD_LIB_CANGJIE_DEMANGLE // to reuse the code to compile CangjieDemangle.cpp
 #include <cstring>
 #include <string>
@@ -15,7 +17,6 @@
 #endif
 #include "DeCompression.h"
 #include "Utils.h"
-#include "Demangler.h"
 
 namespace {
 constexpr char MANGLE_TUPLE_PREFIX = 'T';
@@ -45,8 +46,11 @@ const char MANGLE_GLOBAL_INIT_SUFFIX[] = "iiHv";
 const char MANGLE_GLOBAL_INIT_RESET_SUFFIX[] = "irHv";
 const char MANGLE_GLOBAL_INIT_FLAG_RESET_SUFFIX[] = "ifHv";
 const char MANGLE_GLOBAL_INIT_LITERAL_RESET_SUFFIX[] = "ilHv";
+const char MANGLE_GLOBAL_INIT_IMPORTS_INIT[] = "fiHv";
+const char MANGLE_GLOBAL_LITERAL_IMPORTS_INIT[] = "flHv";
 const char MANGLE_INNER_FUNCTION_PREFIX[] = "$lambda.";
 const char MANGLE_CFUNCTION_WRAPPER[] = "$real";
+const char MANGLE_WRAPPED_FUNCTION_PREFIX[] = "_CV";
 const char BOX_DECL_PREFIX[] = "$BOX_";
 const char CJ_FILE_EXT[] = ".cj";
 const char ERROR_EXCEED_THE_INPUT_STRING_LENGTH[] = "exceed the input string length";
@@ -57,6 +61,7 @@ const char MANGLE_PTR_STR[] = "CPointer";
 const char MANGLE_CSTRING_STR[] = "CString";
 const char BASE62_CHARS[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const char DECIMAL_CHARS[] = "0123456789";
+const char WRAPPED_FUNCTION_SUFFIX_INFO[] = "<compiler generated>";
 
 constexpr size_t BASE62_CHARS_SIZE = 62;
 constexpr uint32_t MAX_ARGS_SIZE = 16;
@@ -179,9 +184,9 @@ T ReplaceString(T str, const char* pattern, const char* replacement)
     auto pos = str.Find(pattern);
     auto n = str.Length();
     auto pLen = strlen(pattern);
-    while (pos > -1 && n - pos - pLen > 0) {
+    while (pos > -1 && n - static_cast<size_t>(pos) - pLen > 0) {
         n = str.Length();
-        str = str.SubStr(0, pos) + replacement + str.SubStr(pos + pLen, n - pos - pLen);
+        str = str.SubStr(0, pos) + replacement + str.SubStr(pos + pLen, n - static_cast<size_t>(pos) - pLen);
         pos = str.Find(pattern);
     }
     return str;
@@ -272,7 +277,17 @@ uint32_t Demangler<T>::DemangleLength()
         ++currentIndex;
         isValid = true;
     }
-    return atoi(numStr.Str());
+    try {
+        std::string numString = numStr.Str();
+        long long num = std::stoll(numString);
+        if (num > std::numeric_limits<uint32_t>::max() || num < 0) {
+            return 0;
+        }
+        return static_cast<uint32_t>(num);
+    } catch (const std::exception& ex) {
+        // Failed to convert to int
+        return 0;
+    }
 }
 
 template<typename T>
@@ -313,6 +328,11 @@ bool Demangler<T>::IsCFunctionWrapper() const
     return false;
 }
 
+template<typename T>
+bool Demangler<T>::IsWrappedFunction() const 
+{
+    return mangledName.Find(MANGLE_WRAPPED_FUNCTION_PREFIX, 0) == 0;
+}
 template<typename T>
 bool Demangler<T>::IsQualifiedType() const
 {
@@ -545,7 +565,7 @@ T DemangleInfo<T>::GetArgTypesName(const uint32_t argsNum) const
 template<typename T>
 bool DemangleInfo<T>::IsFunctionLike() const
 {
-    return type == TypeKind::FUNCTION_DECL || type == TypeKind::LAMBDA_FUNCTION || type == TypeKind::FUNCTION;
+    return type == TypeKind::FUNCTION_DECL || type == TypeKind::LAMBDA_FUNCTION || type == TypeKind::FUNCTION || type == TypeKind::WRAPPED_FUNCTION;
 }
 
 template<typename T>
@@ -591,6 +611,10 @@ DemangleInfo<T> Demangler<T>::DemangleGlobalInit()
         return DemangleInfo<T>{ prefix + T{ "_global_flag_reset" }, TypeKind::NAME, isValid };
     } else if (mangledName.EndsWith(MANGLE_GLOBAL_INIT_LITERAL_RESET_SUFFIX)) {
         return DemangleInfo<T>{ prefix + T{ "_global_init_literal" }, TypeKind::NAME, isValid };
+    } else if (mangledName.EndsWith(MANGLE_GLOBAL_INIT_IMPORTS_INIT)) {
+        return DemangleInfo<T>{ prefix + T{ "_global_init_imports" }, TypeKind::NAME, isValid };
+    } else if (mangledName.EndsWith(MANGLE_GLOBAL_LITERAL_IMPORTS_INIT)) {
+        return DemangleInfo<T>{ prefix + T{ "_global_init_import_literal" }, TypeKind::NAME, isValid };
     } else if (!mangledName.EndsWith(MANGLE_GLOBAL_INIT_SUFFIX)) {
         return Reject("global init function should end with iiHv");
     }
@@ -668,6 +692,10 @@ DemangleInfo<T> Demangler<T>::Demangle(bool isType)
         return DemangleInfo<T>{ mangledName.SubStr(0, mangledName.Length() - strlen(MANGLE_CFUNCTION_WRAPPER)),
                                 TypeKind::NAME, isValid };
     }
+    // Wrapped func like ""_CVN7default1S4testHv$N7default1SE$CN7default1IE""
+    if(IsWrappedFunction()) {
+        return DemangleWrappedFunction();
+    }
     return DemangleDecl();
 }
 
@@ -699,8 +727,8 @@ DemangleInfo<T> Demangler<T>::DemanglePackageName()
     if (pkg.IsEmpty()) {
         pkg = DemangleStringName();
         auto pos = pkg.Find(':');
-        if (pos > -1 && pkg.Length() - pos > 0) {
-            pkg = pkg.SubStr(0, pos) + T{':'} + pkg.SubStr(pos, pkg.Length() - pos);
+        if (pos > -1 && pkg.Length() - static_cast<size_t>(pos) > 0) {
+            pkg = pkg.SubStr(0, pos) + T{':'} + pkg.SubStr(pos, pkg.Length() - static_cast<size_t>(pos));
         }
     }
     if (IsFileName()) {
@@ -761,7 +789,7 @@ void Demangler<T>::SkipPrivateTopLevelDeclHash()
     }
     size_t oldIdx = currentIndex;
     uint32_t hashLen = DemangleLength();
-    if (currentIndex + hashLen >= mangledName.Length() || mangledName[currentIndex] != MANGLE_FILE_NUMBER_END) {
+    if (currentIndex + hashLen >= mangledName.Length() || mangledName[currentIndex] != MANGLE_END) {
         currentIndex = oldIdx;
         return;
     }
@@ -835,7 +863,7 @@ void Demangler<T>::DemangleFileNameNumber()
             (void)Reject("mangling number has no termination symbol");
             return;
         }
-        if (c == MANGLE_FILE_NUMBER_END) {
+        if (c == MANGLE_END) {
             return;
         } else {
             content += T{ c };
@@ -1352,6 +1380,18 @@ DemangleInfo<T> Demangler<T>::DemangleInnerFunction()
     auto funcName = mangledName.SubStr(prefixIndex + MANGLE_CHAR_LEN); // Skip "$"
     di.demangled = funcName;
     currentIndex = mangledName.Length();
+    return di;
+}
+
+template<typename T>
+DemangleInfo<T> Demangler<T>::DemangleWrappedFunction() 
+{
+    auto endIndex = mangledName.Find(MANGLE_END, currentIndex);
+    auto prefixIndex = currentIndex + strlen(MANGLE_WRAPPED_FUNCTION_PREFIX);
+    mangledName = T(MANGLE_CANGJIE_PREFIX) + mangledName.SubStr(prefixIndex, endIndex - prefixIndex);
+    auto di = DemangleDecl();
+    di.demangled += WRAPPED_FUNCTION_SUFFIX_INFO;
+    di.type = TypeKind::WRAPPED_FUNCTION;    
     return di;
 }
 

@@ -298,9 +298,9 @@ bool IsCrossPackage(const Cangjie::Position& pos, const std::string& currentPack
  *
  * @param value The value to set the skip print warning flag for.
  */
-inline void SetSkipPrintWarning(Ptr<Value> value)
+inline void SetSkipPrintWarning(Value& value)
 {
-    value->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+    value.Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
 }
 
 inline void MergeEffectMap(const OptEffectCHIRMap& from, OptEffectCHIRMap& to)
@@ -738,5 +738,15 @@ bool ParamTypeIsEquivalent(const Type& paramType, const Type& argType);
  * @return type with vtable.
  */
 BuiltinType* GetBuiltinTypeWithVTable(BuiltinType& type, CHIRBuilder& builder);
+
+/**
+ * @brief try to get instantiated parent type from instantiated subtype and generic parent type.
+ *
+ * @param instSubType instantiated subtype.
+ * @param genericParentType generic parent type.
+ * @param builder CHIR builder.
+ * @return instantiated parent type when `instSubType` and `genericParentType` have parent-child relationship.
+ */
+ Type* GetInstParentType(Type& instSubType, Type& genericParentType, CHIRBuilder& builder);
 } // namespace Cangjie::CHIR
 #endif

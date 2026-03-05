@@ -6,18 +6,16 @@
 
 cmake_minimum_required(VERSION 3.16.5)
 project(cangjie)
-set(CJ_SDK_VERSION "1.0.6")
+# Set default version if not provided externally
+if(NOT DEFINED CJ_SDK_VERSION)
+    set(CJ_SDK_VERSION "0.0.1" CACHE STRING "Cangjie SDK Version")
+endif()
 # Add path for custom CMake modules and add cmake modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CJNATIVE_BACKEND "cjnative")
-
-if(NOT CMAKE_INCLUDE_SYSTEM_FLAG_CXX)
-    set(CXX_SYSTEM_INCLUDE_CONFIGURATION_FLAG /experimental:external /external:W0)
-    set(CMAKE_INCLUDE_SYSTEM_FLAG_CXX /external:I)
-endif()
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(STATUS "No build type selected, default to Debug")
@@ -90,7 +88,11 @@ if(NOT EXISTS ${BOUNDSCHECK})
         COMMAND git clone --branch OpenHarmony-v6.0-Release ${REPOSITORY_PATH} ${BOUNDSCHECK}
     )
 endif()
-file(COPY ${CMAKE_SOURCE_DIR}/third_party/cmake/CMakeLists.txt DESTINATION ${BOUNDSCHECK}/)
+configure_file(
+    ${CMAKE_SOURCE_DIR}/third_party/cmake/BoundsCheck.cmake
+    ${BOUNDSCHECK}/CMakeLists.txt
+    COPYONLY
+)
 
 if(CANGJIE_ENABLE_COMPILER_TSAN)
     if(NOT CANGJIE_BUILD_CJC)
@@ -101,10 +103,25 @@ if(CANGJIE_ENABLE_COMPILER_TSAN)
     endif()
 endif()
 
+if(CANGJIE_ENABLE_SANITIZE_OPTION)
+    add_compile_definitions(CANGJIE_ENABLE_SANITIZE_OPTION)
+endif()
+
 set(CANGJIE_ASAN_SUPPORT OFF)
 set(CANGJIE_TSAN_SUPPORT OFF)
 set(CANGJIE_HWASAN_SUPPORT OFF)
 set(CANGJIE_SANITIZER_SUPPORT_ENABLED OFF)
+set(CANGJIE_SANITIZER_SUPPORT "" CACHE STRING "Enable cangjie sanitizer support for cangjie libraries")
+if ("${CANGJIE_SANITIZER_SUPPORT}" STREQUAL "asan")
+    set(CANGJIE_ASAN_SUPPORT ON)
+    set(CANGJIE_SANITIZER_SUPPORT_ENABLED ON)
+elseif ("${CANGJIE_SANITIZER_SUPPORT}" STREQUAL "tsan")
+    set(CANGJIE_TSAN_SUPPORT ON)
+    set(CANGJIE_SANITIZER_SUPPORT_ENABLED ON)
+elseif ("${CANGJIE_SANITIZER_SUPPORT}" STREQUAL "hwasan")
+    set(CANGJIE_HWASAN_SUPPORT ON)
+    set(CANGJIE_SANITIZER_SUPPORT_ENABLED ON)
+endif()
 
 if(CANGJIE_SANITIZER_SUPPORT_ENABLED)
     if(NOT CANGJIE_CODEGEN_CJNATIVE_BACKEND)
@@ -346,9 +363,11 @@ if(CANGJIE_BUILD_CJC)
     add_subdirectory(utils)
 endif()
 
-find_package(GTest)
-if(NOT GTest_FOUND)
-    message(WARNING "GTest is not found. Unittests are disabled.")
+if (CANGJIE_BUILD_TESTS)
+    find_package(GTest)
+    if(NOT GTest_FOUND)
+        message(WARNING "GTest is not found. Unittests are disabled.")
+    endif()
 endif()
 
 if(CANGJIE_BUILD_CJC AND CANGJIE_BUILD_TESTS AND GTest_FOUND)

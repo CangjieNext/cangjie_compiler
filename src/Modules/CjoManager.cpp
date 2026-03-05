@@ -126,9 +126,10 @@ bool CjoManager::GetCanInline() const
     return impl->GetCanInline();
 }
 
-void CjoManager::SetPackageCjoCache(const std::string& fullPackageName, const std::vector<uint8_t>& cjoData) const
+void CjoManager::SetPackageCjoCache(
+    const std::string& fullPackageName, const std::vector<uint8_t>& cjoData, CjoChangeState changeState) const
 {
-    impl->SetPackageCjoCache(fullPackageName, cjoData);
+    impl->SetPackageCjoCache(fullPackageName, cjoData, changeState);
 }
 
 void CjoManager::ClearCjoCache() const
@@ -139,6 +140,21 @@ void CjoManager::ClearCjoCache() const
 void CjoManager::ClearVisitedPkgs() const
 {
     impl->ClearVisitedPkgs();
+}
+
+void CjoManager::ClearForReBuildIndex() const
+{
+    impl->ClearForReBuildIndex();
+}
+
+bool CjoManager::HasBuildIndex() const
+{
+    return impl->HasBuildIndex();
+}
+
+void CjoManager::SetHasBuildIndex(bool value) const
+{
+    impl->SetHasBuildIndex(value);
 }
 
 DiagnosticEngine& CjoManager::GetDiag() const
@@ -272,22 +288,10 @@ bool CjoManagerImpl::IsReExportBy(const std::string& srcPackage, const std::stri
     return false;
 }
 
-bool CjoManager::NeedCollectDependency(std::string curName, bool isCurMacro, std::string depName) const
+bool CjoManager::NeedCollectDependency(const std::string& curName, bool isCurMacro, const std::string& depName) const
 {
     if (depName == curName || impl->AlreadyLoaded(depName)) {
         return false;
-    }
-
-    auto pkgInfo = impl->GetPackageInfo(depName);
-    if (!pkgInfo) {
-        // This common dependency was not imported in current platform part, so it need to be add manually
-        auto cjoPath = GetPackageCjoPath(depName);
-        if (!cjoPath || !LoadPackageHeader(depName, *cjoPath)) {
-            DiagnosticBuilder builder = GetDiag().DiagnoseRefactor(DiagKindRefactor::package_search_error,
-                DEFAULT_POSITION, depName);
-            builder.AddHelp(DiagHelp(Modules::NO_CJO_HELP_INFO));
-            return false;
-        }
     }
 
     // If current is macro package, only load decls for dependent macro package,
@@ -301,6 +305,21 @@ bool CjoManager::NeedCollectDependency(std::string curName, bool isCurMacro, std
     }
 
     return false;
+}
+
+void CjoManager::LoadFilesOfCommonPart(Ptr<Package> pkg)
+{
+    if (!impl->GetGlobalOptions().IsCompilingCJMPSpecific() && !impl->GetGlobalOptions().commonPartCjo.has_value()) {
+        return;
+    }
+    CJC_NULLPTR_CHECK(pkg);
+    // Remove existing isCommon files from pkg before loading new common part for lsp incremental compilation.
+    Utils::EraseIf(pkg->files, [](const auto& file) { return file->TestAttr(Attribute::FROM_COMMON_PART); });
+    auto commonLoader = GetCommonPartCjo(pkg->fullPackageName);
+    if (!commonLoader) {
+        return;
+    }
+    commonLoader->PreloadCommonPartOfPackage(*pkg);
 }
 
 void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packages, bool fromLsp) const
@@ -322,22 +341,17 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
     }
 
     std::vector<Ptr<ASTLoader>> loaders;
+    loaders.reserve(q.size());
     // Load common part cjo
     for (auto pkg : packages) {
-        if (impl->GetGlobalOptions().inputChirFiles.size() > 0) {
+        if (impl->GetGlobalOptions().IsCompilingCJMPSpecific() || impl->GetGlobalOptions().commonPartCjo.has_value()) {
             std::string expectedPackageName = pkg->fullPackageName;
             auto commonLoader = GetCommonPartCjo(expectedPackageName);
             if (!commonLoader) {
                 continue;
             }
-            commonLoader->PreloadCommonPartOfPackage(*pkg);
             commonLoader->LoadPackageDecls();
             loaders.emplace_back(commonLoader);
-            for (auto commonDependencyName : commonLoader->GetDependentPackageNames()) {
-                if (NeedCollectDependency(expectedPackageName, pkg->isMacroPackage, commonDependencyName)) {
-                    q.push(impl->GetPackageInfo(commonDependencyName));
-                }
-            }
         }
     }
 
@@ -347,15 +361,15 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
         if (cur == nullptr || cur->loader == nullptr) {
             continue; // If any error happens during loading 'cjo', the loader will be null.
         }
-        auto pkgName = cur->loader->GetImportedPackageName();
+        const auto& pkgName = cur->loader->GetImportedPackageName();
         if (auto [_, success] = impl->AddLoadedPackages(pkgName); !success) {
             continue;
         }
         loaders.emplace_back(cur->loader);
         cur->loader->LoadPackageDecls();
         bool isCurMacro = cur->pkg->isMacroPackage;
-        auto deps = cur->loader->GetDependentPackageNames();
-        for (auto pkg : deps) {
+        const auto& deps = cur->loader->GetDependentPackageNames();
+        for (const auto& pkg : deps) {
             if (NeedCollectDependency(pkgName, isCurMacro, pkg)) {
                 q.push(impl->GetPackageInfo(pkg));
             }
@@ -365,6 +379,10 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
     for (auto loader : loaders) {
         loader->LoadRefs();
     }
+
+    // Node's ty may reference TypeAliasTy from imported package, need to substitute them to real type.
+    // It must be done after all type references are loaded.
+    impl->SubstituteImportedTypeAliasTy(packages);
 }
 
 void CjoManager::LoadAllDeclsAndRefs() const
@@ -384,14 +402,46 @@ void CjoManager::LoadAllDeclsAndRefs() const
     }
 }
 
+void CjoManagerImpl::SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package>>& srcPackages)
+{
+    auto replaceAliasUseTy = [this](Ptr<Node> node) {
+        if (node->astKind == ASTKind::TYPE_ALIAS_DECL) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        if (node->IsDecl() || Is<FuncBody>(node)) {
+            node->ty = typeManager.SubstituteTypeAliasInTy(*node->ty);
+        } else if (auto type = DynamicCast<Type>(node); type && !Ty::IsInitialTy(type->aliasTy)) {
+            type->ty = typeManager.SubstituteTypeAliasInTy(*type->ty);
+        }
+        return VisitAction::WALK_CHILDREN;
+    };
+    for (auto& pkgName2PkgInfo : GetPackageNameMap()) {
+        // For cjlint tool could have more than one src-package.
+        bool isSrcPackage = Utils::In(srcPackages,
+            [&pkgName2PkgInfo](Ptr<Package> pkg) { return pkg->fullPackageName == pkgName2PkgInfo.first; });
+        if (isSrcPackage && !globalOptions.commonPartCjo.has_value()) {
+            continue;
+        }
+        auto& pkgInfo = pkgName2PkgInfo.second;
+        if (substitutedPackagesCache.find(pkgInfo->pkg.get()) != substitutedPackagesCache.end()) {
+            continue;
+        }
+        substitutedPackagesCache.emplace(pkgInfo->pkg.get());
+        for (auto& file : pkgInfo->pkg->files) {
+            // For compile platform part, need only substitute type alias in common part files.
+            if (isSrcPackage && !file->TestAttr(Attribute::FROM_COMMON_PART)) {
+                continue;
+            }
+            Walker(file.get(), replaceAliasUseTy).Walk();
+        }
+    }
+}
+
 // Reading common part .cjo is required before parsing to keep fileID stable.
 // This method only reads file content and does not build ast nodes.
 std::optional<std::vector<std::string>> CjoManagerImpl::PreReadCommonPartCjoFiles(CjoManager& cjoManager)
 {
     // use `cjoFileCacheMap`
-    std::vector<uint8_t> buffer;
-    std::string failedReason;
-
     if (!globalOptions.commonPartCjo) {
         diag.DiagnoseRefactor(DiagKindRefactor::module_common_part_path_is_required, DEFAULT_POSITION);
         return std::nullopt;
@@ -399,19 +449,11 @@ std::optional<std::vector<std::string>> CjoManagerImpl::PreReadCommonPartCjoFile
 
     CJC_ASSERT(globalOptions.commonPartCjo);
     std::string commonPartCjoPath = *globalOptions.commonPartCjo;
-    FileUtil::ReadBinaryFileToBuffer(commonPartCjoPath, buffer, failedReason);
-    if (!failedReason.empty()) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, commonPartCjoPath, failedReason);
+    commonPartLoader = ReadCjo(commonPartCjoPath, commonPartCjoPath, cjoManager, false);
+    if (commonPartLoader == nullptr) {
         return {};
     }
-
-    // name of package is unknown before parsing and reading .cjo, so fake is used.
-    std::string fakeName = "";
-    commonPartLoader = MakeOwned<ASTLoader>(std::move(buffer), fakeName, typeManager, cjoManager, globalOptions);
-    commonPartLoader->SetImportSourceCode(importSrcCode);
     commonPartLoader->PreReadAndSetPackageName();
-
     return commonPartLoader->ReadFileNames();
 }
 
@@ -435,7 +477,7 @@ OwnedPtr<ASTLoader> CjoManagerImpl::ReadCjo(
 {
     std::vector<uint8_t> buffer;
     if (auto found = cjoFileCacheMap.find(fullPackageName); found != cjoFileCacheMap.end()) {
-        buffer = found->second;
+        buffer = found->second.data;
     } else {
         std::string failedReason;
         FileUtil::ReadBinaryFileToBuffer(cjoPath, buffer, failedReason);
@@ -542,15 +584,18 @@ void CjoManager::AddPackageDeclMap(const std::string& fullPackageName, const std
     }
 }
 
-std::optional<std::string> CjoManager::GetPackageCjoPath(std::string fullPackageName) const
+std::string CjoManager::GetPackageCjoPath(const std::string& fullPackageName) const
 {
     if (auto found = impl->GetCjoFileCacheMap().find(fullPackageName); found != impl->GetCjoFileCacheMap().end()) {
         return fullPackageName; // Set dummy path for cached cjo data.
-    } else {
-        return FileUtil::FindSerializationFile(fullPackageName, SERIALIZED_FILE_EXTENSION, GetSearchPath());
     }
-
-    return std::nullopt;
+    std::string cjoPath = "";
+    if (impl->GetCjoPathFromFindCache(fullPackageName, cjoPath)) {
+        return cjoPath;
+    }
+    cjoPath = FileUtil::FindSerializationFile(fullPackageName, SERIALIZED_FILE_EXTENSION, GetSearchPath());
+    impl->CacheCjoPathForFind(fullPackageName, cjoPath);
+    return cjoPath;
 }
 
 std::pair<std::string, std::string> CjoManager::GetPackageCjo(const AST::ImportSpec& importSpec) const
@@ -559,10 +604,15 @@ std::pair<std::string, std::string> CjoManager::GetPackageCjo(const AST::ImportS
     std::string cjoName;
     for (auto it : GetPossibleCjoNames(importSpec)) {
         cjoName = it;
-        if (auto found = impl->GetCjoFileCacheMap().find(cjoName); found != impl->GetCjoFileCacheMap().end()) {
+        if (auto found = impl->GetCjoFileCacheMap().find(FileUtil::ToPackageName(cjoName));
+            found != impl->GetCjoFileCacheMap().end()) {
             cjoPath = cjoName; // Set dummy path for cached cjo data.
         } else {
-            cjoPath = FileUtil::FindSerializationFile(cjoName, SERIALIZED_FILE_EXTENSION, GetSearchPath());
+            if (!impl->GetCjoPathFromFindCache(cjoName, cjoPath)) {
+                cjoPath = FileUtil::FindSerializationFile(
+                    FileUtil::ToPackageName(cjoName), SERIALIZED_FILE_EXTENSION, GetSearchPath());
+                impl->CacheCjoPathForFind(cjoName, cjoPath);
+            }
         }
         if (!cjoPath.empty()) {
             break;
@@ -572,8 +622,9 @@ std::pair<std::string, std::string> CjoManager::GetPackageCjo(const AST::ImportS
     auto cjoPackageName = FileUtil::ToPackageName(cjoName);
     // Store importSpec with packageName.
     std::string possibleName = importSpec.content.GetImportedPackageName();
-    impl->AddImportedPackageName(&importSpec, std::make_pair(cjoPackageName,
-        cjoPackageName == possibleName && importSpec.content.kind != ImportKind::IMPORT_ALL));
+    impl->AddImportedPackageName(&importSpec,
+        std::make_pair(
+            cjoPackageName, cjoPackageName == possibleName && importSpec.content.kind != ImportKind::IMPORT_ALL));
     return {cjoPackageName, cjoPath};
 }
 
@@ -587,20 +638,21 @@ std::vector<std::string> CjoManager::GetPossibleCjoNames(const ImportSpec& impor
     std::string name;
     std::string_view dot = TOKENS[static_cast<int>(TokenKind::DOT)];
     bool needDc{import.content.hasDoubleColon};
-    for (size_t i{0}; i < import.content.prefixPaths.size(); ++i) {
+    for (size_t i{needDc ? 1UL : 0UL}; i < import.content.prefixPaths.size(); ++i) {
         name += import.content.prefixPaths[i];
-        if (i == import.content.prefixPaths.size() - 1) {
-            break;
-        }
-        if (i == 0 && needDc) {
-            name += ORG_NAME_SEPARATOR;
-            needDc = false;
-        } else {
+        if (i != import.content.prefixPaths.size() - 1) {
             name += dot;
         }
+        needDc = false;
     }
+    auto appendOrg = [&import](const std::string& name) {
+        if (import.content.hasDoubleColon) {
+            return name + std::string{ORG_NAME_SEPARATOR} + import.content.prefixPaths[0];
+        }
+        return name;
+    };
     if (import.content.kind == ImportKind::IMPORT_ALL) {
-        return {std::move(name)};
+        return {appendOrg(name)};
     }
     if (auto it = GetPackageNameByImport(import); !it.empty()) {
         return {FileUtil::ToCjoFileName(it)};
@@ -608,10 +660,10 @@ std::vector<std::string> CjoManager::GetPossibleCjoNames(const ImportSpec& impor
     // if needDc, this import must be of from a::b
     // in this case, the only possible pacakge name is a::b
     if (needDc) {
-        return {name + std::string{ORG_NAME_SEPARATOR} + import.content.identifier};
+        return {appendOrg(import.content.identifier)};
     }
     auto maybePackageName = name + std::string{dot} + import.content.identifier.Val();
-    return {std::move(maybePackageName), std::move(name)};
+    return {appendOrg(maybePackageName), appendOrg(name)};
 }
 
 std::string CjoManager::GetPackageNameByImport(const AST::ImportSpec& importSpec) const
@@ -647,5 +699,23 @@ void CjoManager::RemovePackage(const std::string& fullPkgName, const Ptr<Package
         found->second->loader = nullptr;
         impl->GetPackageNameMap().erase(fullPkgName);
     }
+}
+
+void CjoManagerImpl::ClearForReBuildIndex()
+{
+    // Delete all AST loaders first
+    for (auto& p : packageNameMap) {
+        delete p.second->loader.get();
+        p.second->loader = nullptr;
+    }
+    // Clear all package-related maps and caches
+    packageNameMap.clear();
+    importedPackageNameMap.clear();
+    visitedPkgs.clear();
+    loadedPackages.clear();
+    importedPackages.clear();
+    // Reset BuildIndex flag
+    hasBuildIndex = false;
+    // Don't clear cjoFileCacheMap and cjoPathCache, because they are used for rebuild index.
 }
 } // namespace Cangjie

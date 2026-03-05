@@ -13,6 +13,7 @@
 #include "cangjie/Basic/SourceManager.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/FileUtil.h"
+#include "cangjie/Utils/SafePointer.h"
 
 using namespace Cangjie;
 
@@ -94,9 +95,10 @@ unsigned int SourceManager::AddSource(
     uint64_t fileHash = Utils::GetHash(normalizePath);
     auto existed = filePathToFileIDMap.find(normalizePath);
     if (existed != filePathToFileIDMap.end()) {
-        sources[static_cast<size_t>(existed->second)] =
-            Source{static_cast<unsigned>(existed->second), normalizePath, buffer, fileHash, packageName};
-        return static_cast<unsigned>(existed->second);
+        unsigned int fileID = static_cast<unsigned int>(existed->second);
+        CJC_ASSERT(static_cast<size_t>(fileID) < sources.size());
+        sources[fileID] = Source{fileID, normalizePath, buffer, fileHash, packageName};
+        return fileID;
     } else {
         auto fileID = static_cast<unsigned int>(sources.size());
         SaveSourceFile(fileID, normalizePath, buffer, fileHash, packageName);
@@ -111,10 +113,11 @@ unsigned int SourceManager::AppendSource(const std::string& path, const std::str
     uint64_t fileHash = Utils::GetHash(normalizePath);
     auto existed = filePathToFileIDMap.find(normalizePath);
     if (existed != filePathToFileIDMap.end()) {
-        auto newBuffer = sources[static_cast<size_t>(existed->second)].buffer + buffer;
-        sources[static_cast<size_t>(existed->second)] =
-            Source{static_cast<unsigned>(existed->second), normalizePath, newBuffer, fileHash};
-        return static_cast<unsigned>(existed->second);
+        unsigned int fileID = static_cast<unsigned int>(existed->second);
+        CJC_ASSERT(static_cast<size_t>(fileID) < sources.size());
+        auto newBuffer = sources[fileID].buffer + buffer;
+        sources[fileID] = Source{fileID, normalizePath, newBuffer, fileHash};
+        return fileID;
     } else {
         auto fileID = static_cast<unsigned int>(sources.size());
         sources.emplace_back(fileID, normalizePath, buffer, fileHash);
@@ -166,19 +169,29 @@ std::string SourceManager::GetContentBetween(
     }
 
     CJC_ASSERT(INVALID_POSITION < begin && begin <= end);
+    CJC_ASSERT(!sources.empty());
+    auto& sourceWithFileID = fileID >= sources.size() ? sources.at(0) : sources.at(fileID);
 
-    auto& sourceWithFileID = fileID >= sources.size() ? sources[0] : sources[fileID];
-    const auto& source = sourceWithFileID.buffer.empty() && !importGenericContent.empty()
-        ? Source(sourceWithFileID.fileID, sourceWithFileID.path, importGenericContent)
-        : sourceWithFileID;
-    const auto& buffer = source.buffer;
+    // Use OwnedPtr for temporary Source to avoid mixed return types in ternary operator (? tempObj : ref).
+    // This helps compiler optimization by having consistent pointer types
+    OwnedPtr<Source> tempSource;
+    Ptr<const Source> sourcePtr;
+
+    if (sourceWithFileID.buffer.empty() && !importGenericContent.empty()) {
+        tempSource = MakeOwned<Source>(sourceWithFileID.fileID, sourceWithFileID.path, importGenericContent);
+        sourcePtr = tempSource.get();
+    } else {
+        sourcePtr = &sourceWithFileID;
+    }
+
+    const auto& buffer = sourcePtr->buffer;
 
     if (buffer.empty()) {
         return "";
     }
 
-    auto startOffset = source.PosToOffset(begin);
-    auto endOffset = source.PosToOffset(end);
+    auto startOffset = sourcePtr->PosToOffset(begin);
+    auto endOffset = sourcePtr->PosToOffset(end);
     return buffer.substr(startOffset, endOffset - startOffset);
 }
 

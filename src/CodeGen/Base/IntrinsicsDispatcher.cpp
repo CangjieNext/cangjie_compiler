@@ -40,6 +40,8 @@ CGIntrinsicKind GetCGIntrinsicKind(CHIR::IntrinsicKind intrinsicKind)
         case CHIR::IntrinsicKind::GET_EXPORTED_REF:
         case CHIR::IntrinsicKind::REMOVE_EXPORTED_REF:
             return CGIntrinsicKind::INTEROP;
+        case CHIR::IntrinsicKind::EXCLUSIVE_SCOPE:
+            return CGIntrinsicKind::EXCLUSIVE_SCOPE;
         default:
             break;
     }
@@ -59,6 +61,8 @@ CGIntrinsicKind GetCGIntrinsicKind(CHIR::IntrinsicKind intrinsicKind)
         return CGIntrinsicKind::MATH;
     } else if (IsStackTraceIntrinsic(intrinsicKind)) {
         return CGIntrinsicKind::STACK_TRACE;
+    } else if (IsThreadInfoIntrinsic(intrinsicKind)) {
+        return CGIntrinsicKind::THREAD_INFO;
     } else if (IsReflectIntrinsic(intrinsicKind)) {
         return CGIntrinsicKind::REFLECT;
     } else if (IsVArrayIntrinsic(intrinsicKind)) {
@@ -97,7 +101,7 @@ llvm::Value* GenerateExceptionCatchIntrinsics(IRBuilder2& irBuilder, const CHIRI
             return irBuilder.CallPostThrowExceptionIntrinsic(exceptionValue->GetRawValue());
         }
         default:
-            CJC_ASSERT(false && "unimplemented exception-catch intrinsic.");
+            CJC_ASSERT_WITH_MSG(false, "unimplemented exception-catch intrinsic.");
             return nullptr;
     }
 }
@@ -158,7 +162,7 @@ llvm::Value* GenerateVarrayIntrinsics(IRBuilder2& irBuilder, const CHIRIntrinsic
             return irBuilder.CreateLoad(retCGType->GetLLVMType(), elePtr);
         }
         default:
-            CJC_ASSERT(false && "unimplemented varray intrinsic.");
+            CJC_ASSERT_WITH_MSG(false, "unimplemented varray intrinsic.");
             return nullptr;
     }
 }
@@ -384,7 +388,7 @@ llvm::Value* GenerateVectorIntrinsics(IRBuilder2& irBuilder, const CHIRIntrinsic
         default:
             break;
     }
-    CJC_ASSERT(false && "unreachable at GenerateVectorIntrinsic");
+    CJC_ASSERT_WITH_MSG(false, "unreachable at GenerateVectorIntrinsic");
     return nullptr;
 }
 
@@ -426,7 +430,7 @@ inline llvm::Value* HandleValuePtr(IRBuilder2& irBuilder, llvm::Value* valPtr)
 
 inline llvm::Type* GetPointerToWithSpecificAddrspace(llvm::Type* srcType, unsigned dstAddrspace)
 {
-    CJC_ASSERT(srcType->isPointerTy() && "a pointer type is expected");
+    CJC_ASSERT_WITH_MSG(srcType->isPointerTy(), "a pointer type is expected");
     return GetPointerElementType(srcType)->getPointerTo(dstAddrspace);
 }
 
@@ -559,6 +563,8 @@ llvm::Value* GenerateBuiltinCall(IRBuilder2& irBuilder, const CHIRIntrinsicWrapp
     auto kind = intrinsic.GetIntrinsicKind();
     switch (kind) {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+        case CHIR::IntrinsicKind::FUNC_REFEQ:
+            return irBuilder.CallIntrinsicFuncRefEq(parameters);
         case CHIR::IntrinsicKind::RAW_ARRAY_REFEQ:
 #endif
         case CHIR::IntrinsicKind::OBJECT_REFEQ:
@@ -613,7 +619,7 @@ llvm::Value* GenerateBuiltinCall(IRBuilder2& irBuilder, const CHIRIntrinsicWrapp
             break;
     }
 
-    CJC_ASSERT(false && "unimplemented builtin call.");
+    CJC_ASSERT_WITH_MSG(false, "unimplemented builtin call.");
     return nullptr;
 }
 
@@ -693,6 +699,12 @@ llvm::Value* GenerateStackTraceIntrinsics(IRBuilder2& irBuilder, const CHIRIntri
     return irBuilder.CallStackTraceIntrinsic(intrinsic, parameters);
 }
 
+llvm::Value* GenerateThreadInfoIntrinsics(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
+{
+    auto parameters = HandleSyscallIntrinsicArguments(irBuilder, intrinsic.GetOperands());
+    return irBuilder.CallThreadInfoIntrinsic(intrinsic, parameters);
+}
+
 llvm::Value* GenerateFutureIntrinsics(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
 {
     auto parameters = HandleSyscallIntrinsicArguments(irBuilder, intrinsic.GetOperands());
@@ -765,6 +777,16 @@ llvm::Value* GenerateInout(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& in
     return irBuilder.CreatePointerCast(argVal, i8PtrTy);
 }
 
+llvm::Value* GenerateExclusiveScope(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
+{
+    auto& cgMod = irBuilder.GetCGModule();
+    auto exec = cgMod | intrinsic.GetOperand(0);
+    auto closure = cgMod | intrinsic.GetOperand(1);
+    auto ty = CGType::GetOrCreate(cgMod, intrinsic.GetResult()->GetType());
+    return irBuilder.CallIntrinsicFunction(
+        ty->GetLLVMType(), PREFIX_OF_BACKEND_SYMS + "ExclusiveScope", {exec, closure}, {});
+}
+
 llvm::Value* GenerateIntrinsic(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
 {
     using GenerateFunc = std::function<llvm::Value*(IRBuilder2&, const CHIRIntrinsicWrapper&)>;
@@ -778,6 +800,7 @@ llvm::Value* GenerateIntrinsic(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper
         {CGIntrinsicKind::OVERFLOW_APPLY, &GenerateOverflowApply},
         {CGIntrinsicKind::SYNC, &GenerateSyncIntrinsics},
         {CGIntrinsicKind::STACK_TRACE, &GenerateStackTraceIntrinsics},
+        {CGIntrinsicKind::THREAD_INFO, &GenerateThreadInfoIntrinsics},
         {CGIntrinsicKind::FUTURE, &GenerateFutureIntrinsics},
         {CGIntrinsicKind::EXCEPTION_CATCH, &GenerateExceptionCatchIntrinsics},
         {CGIntrinsicKind::BUILTIN, &GenerateBuiltinCall},
@@ -787,13 +810,14 @@ llvm::Value* GenerateIntrinsic(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper
         {CGIntrinsicKind::MATH, &GenerateMathIntrinsics},
         {CGIntrinsicKind::PREINITIALIZE, &GeneratePreInitializeIntrinsics},
         {CGIntrinsicKind::INTEROP, &GenerateInteropIntrinsics},
+        {CGIntrinsicKind::EXCLUSIVE_SCOPE, &GenerateExclusiveScope},
 #endif
         {CGIntrinsicKind::RUNTIME, &GenerateRuntimeIntrinsics},
     };
 
     CGIntrinsicKind ikind = GetCGIntrinsicKind(intrinsic.GetIntrinsicKind());
     auto iter = generateFuncMap.find(ikind);
-    CJC_ASSERT(iter != generateFuncMap.end() && "Unsupported Syscall.");
+    CJC_ASSERT_WITH_MSG(iter != generateFuncMap.end(), "Unsupported Syscall.");
     llvm::Value* retVal = iter->second(irBuilder, intrinsic);
 
     // For syscall func, the return value isn't obtained from the first argument.

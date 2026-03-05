@@ -15,6 +15,7 @@ import multiprocessing
 import os
 import platform
 import re
+import tarfile
 import shutil
 import stat
 import subprocess
@@ -52,6 +53,22 @@ DELTA_JOBS = 2
 MAKE_JOBS = multiprocessing.cpu_count() + DELTA_JOBS
 
 PYTHON_EXECUTABLE = sys.executable
+TARGET_DICTIONARY = {
+    "native": None,
+    "ohos-aarch64": "aarch64-linux-ohos",
+    "ohos-arm": "arm-linux-ohos",
+    "ohos-x86_64": "x86_64-linux-ohos",
+    "windows-x86_64": "x86_64-w64-mingw32",
+    "ios-simulator-aarch64": "arm64-apple-ios11-simulator",
+    "ios-simulator-x86_64": "x86_64-apple-ios11-simulator",
+    "ios-aarch64": "arm64-apple-ios11",
+    "android-aarch64": "aarch64-linux-android31",
+    "android31-aarch64": "aarch64-linux-android31",
+    "android26-aarch64": "aarch64-linux-android26",
+    "android-x86_64": "x86_64-linux-android",
+    "android31-x86_64": "x86_64-linux-android31",
+    "android26-x86_64": "x86_64-linux-android26"
+}
 
 def resolve_path(path):
     if os.path.isabs(path):
@@ -109,6 +126,8 @@ def generate_cmake_defs(args):
             toolchain_file = "mingw_x86_64_toolchain.cmake"
         elif args.target == "arm64-apple-ios11-simulator":
             toolchain_file = "ios_simulator_arm64_toolchain.cmake"
+        elif args.target == "x86_64-apple-ios11-simulator":
+ 	        toolchain_file = "ios_simulator_x86_64_toolchain.cmake"
         elif args.target == "arm64-apple-ios11":
             toolchain_file = "ios_arm64_toolchain.cmake"
         elif "aarch64-linux-android" in args.target:
@@ -138,6 +157,8 @@ def generate_cmake_defs(args):
         "-DCANGJIE_BUILD_CJC=" + bool_to_opt(args.product in ['all', 'cjc']),
         "-DCANGJIE_BUILD_STD_SUPPORT=" + bool_to_opt(args.product in ['all', 'libs']),
         "-DCANGJIE_BUILD_CJDB=" + bool_to_opt(args.build_cjdb),
+        "-DCANGJIE_BUILD_CJDB_DISABLE_PYTHON=" + bool_to_opt(args.cjdb_disable_python),
+        "-DCANGJIE_INSTALL_CJDB_SCRIPT=" + bool_to_opt(args.install_cjdb_script),
         "-DCANGJIE_ENABLE_HWASAN=" + bool_to_opt(args.hwasan),
         "-DCANGJIE_VERSION=" + generate_version_tail(args.target),
         "-DBUILD_GCC_TOOLCHAIN=" + (args.gcc_toolchain if args.gcc_toolchain and args.target is None else ""),
@@ -147,39 +168,94 @@ def generate_cmake_defs(args):
         "-DCANGJIE_TARGET_SYSROOT=" + (args.target_sysroot if args.target_sysroot else ""),
         "-DCANGJIE_LINK_JOB_POOL=" + (str(args.link_jobs) if args.link_jobs != 0 else ""),
         "-DCANGJIE_DISABLE_STACK_GROW_FEATURE=" + bool_to_opt(args.disable_stack_grow_feature),
-        "-DCANGJIE_USE_OH_LLVM_REPO=" + bool_to_opt(args.use_oh_llvm_repo)]
+        "-DCANGJIE_USE_OH_LLVM_REPO=" + bool_to_opt(args.use_oh_llvm_repo),
+        "-DCANGJIE_ENABLE_SANITIZE_OPTION=" + bool_to_opt(args.enable_sanitize_option)]
+
+    if args.version:
+        result.append("-DCJ_SDK_VERSION=" + args.version)
 
     if args.target and "aarch64-linux-android" in args.target:
         android_api_level = re.match(r'aarch64-linux-android(\d{2})?', args.target).group(1)
         result.append("-DCMAKE_ANDROID_NDK=" + (args.android_ndk if args.android_ndk else ""))
         result.append("-DCMAKE_ANDROID_API=" + (android_api_level if android_api_level else ""))
 
+    if args.sanitizer_support:
+        result.append("-DCANGJIE_SANITIZER_SUPPORT=" + args.sanitizer_support)
     return result
+
+def download_and_patch_tinytoml():
+    """Set up the tinytoml third-party library"""
+    TINYTOML_DIR = os.path.join(HOME_DIR, "third_party", "tinytoml")
+    PATCH_FILE = os.path.join(TINYTOML_DIR, "fixFloatEqualError.patch")
+    TAR_PATH = os.path.join(TINYTOML_DIR, "tinytoml-0.4.tar.gz")
+    TINYTOMLTAR_PATH = os.path.join(TINYTOML_DIR, "tinytoml-0.4")
+
+    LOG.info("Setting up tinytoml...")
+
+    # Create Parent Directory
+    os.makedirs(os.path.dirname(TINYTOML_DIR), exist_ok=True)
+
+    try:
+
+        if not os.path.exists(TAR_PATH):
+            # Fetch tinytoml from the remote repostory
+            subprocess.run(
+                ["git", "clone", "https://gitcode.com/src-openeuler/tinytoml.git",
+                 TINYTOML_DIR],
+                 check=True
+            )
+            # Switch to the specified tag
+            subprocess.run(
+                ["git", "checkout", "openEuler-24.03-LTS-SP1"],
+                cwd=TINYTOML_DIR,
+                check=True
+            )
+
+        # Extract the package
+        LOG.info("Extracting tinytoml package...")
+        with tarfile.open(TAR_PATH) as tar:
+            tar.extractall(path=TINYTOML_DIR)
+
+        # Apply Patch
+        patch_file_exists = os.path.exists(PATCH_FILE)
+        target_dir_exists = os.path.exists(TINYTOMLTAR_PATH) and os.path.isdir(TINYTOMLTAR_PATH)
+        if patch_file_exists and target_dir_exists:
+            LOG.info("Applying tinytoml patch...")
+            subprocess.run(
+                f"patch -p0 -l -f < {PATCH_FILE}",
+                cwd=TINYTOMLTAR_PATH,
+                shell=True,
+                check=True
+            )
+        else:
+            LOG.warning(f"Patch file not found: {PATCH_FILE}")
+
+        TOML_H_SRC = os.path.join(TINYTOMLTAR_PATH, "include", "toml", "toml.h")
+        TOML_H_DST = os.path.join(TINYTOML_DIR, "toml.h")
+
+        if os.path.exists(TOML_H_SRC):
+            LOG.info(f"Copying toml.h from {TOML_H_SRC} to {TOML_H_DST}")
+            shutil.copy2(TOML_H_SRC, TOML_H_DST)
+
+    except subprocess.CalledProcessError as e:
+        LOG.error(f"Failed to setup tinytoml: {str(e)}")
+        # Clean Files
+        if os.path.exists(TINYTOML_DIR):
+            shutil.rmtree(TINYTOML_DIR)
+        raise
 
 def build(args):
     # The target also affects the prefix concatenation of the compiler executable file; it is specific.
     if args.target:
-        if args.target == "native":
-            args.target = None
-        elif args.target == "ohos-aarch64":
-            args.target = "aarch64-linux-ohos"
-        elif args.target == "ohos-arm":
-            args.target = "arm-linux-ohos"
-        elif args.target == "ohos-x86_64":
-            args.target = "x86_64-linux-ohos"
-        elif args.target == "windows-x86_64":
-            args.target = "x86_64-w64-mingw32"
-        elif args.target == "ios-simulator-aarch64":
-            args.target = "arm64-apple-ios11-simulator"
-        elif args.target == "ios-aarch64":
-            args.target = "arm64-apple-ios11"
-        elif args.target == "android-aarch64":
-            args.target = "aarch64-linux-android31"
-        elif args.target == "android-x86_64":
-            args.target = "x86_64-linux-android31"
+        args.target = TARGET_DICTIONARY[args.target]
 
     if args.gcc_toolchain and args.target and args.product != "cjc":
         LOG.warning("There is no intermediate or product targeting the host platform in this build, so --gcc-toolchain won't take effect")
+
+    # Add the tinytoml third-party library for acquisition and customize code application.
+    tinytoml_target = os.path.join(HOME_DIR, "third_party", "tinytoml", "toml.h")
+    if not os.path.exists(tinytoml_target):
+        download_and_patch_tinytoml()
 
     check_compiler(args)
 
@@ -239,7 +315,12 @@ def build(args):
     if not os.path.exists(BUILD_DIR):
         os.makedirs(BUILD_DIR)
 
-    cmake_build_dir = os.path.join(BUILD_DIR, "build-{}-{}".format(args.product, args.target)) if args.target else CMAKE_BUILD_DIR
+    if args.sanitizer_support:
+        cmake_build_dir = os.path.join(BUILD_DIR, "build-libs-{}".format(args.sanitizer_support))
+        if args.target:
+            cmake_build_dir += "-{}".format(args.target)
+    else:
+        cmake_build_dir = os.path.join(BUILD_DIR, "build-{}-{}".format(args.product, args.target)) if args.target else CMAKE_BUILD_DIR
 
     if not os.path.exists(os.path.join(cmake_build_dir, "build.ninja")):
         os.makedirs(cmake_build_dir, exist_ok=True)
@@ -306,24 +387,7 @@ def unit_test(args):
 def install(args):
     """install targets"""
     if args.host:
-        if args.host == "native":
-            args.host = None
-        elif args.host == "ohos-aarch64":
-            args.host = "aarch64-linux-ohos"
-        elif args.host == "ohos-arm":
-            args.host = "arm-linux-ohos"
-        elif args.host == "ohos-x86_64":
-            args.host = "x86_64-linux-ohos"
-        elif args.host == "windows-x86_64":
-            args.host = "x86_64-w64-mingw32"
-        elif args.host == "ios-simulator-aarch64":
-            args.host = "arm64-apple-ios11-simulator"
-        elif args.host == "ios-aarch64":
-            args.host = "arm64-apple-ios11"
-        elif args.host == "android-aarch64":
-            args.host = "aarch64-linux-android"
-        elif args.host == "android-x86_64":
-            args.host = "x86_64-linux-android"
+        args.host = TARGET_DICTIONARY[args.host]
 
     LOG.info("begin install targets...")
     targets = []
@@ -501,18 +565,6 @@ class BuildType(Enum):
         except KeyError:
             return s.build_type
 
-SupportedTarget = [
-    "native",
-    "windows-x86_64",
-    "ohos-aarch64",
-    "ohos-arm",
-    "ohos-x86_64",
-    "ios-simulator-aarch64",
-    "ios-aarch64",
-    "android-aarch64",
-    "android-x86_64"
-]
-
 def main():
     """build entry"""
     parser = argparse.ArgumentParser(description="build cangjie project")
@@ -555,7 +607,7 @@ def main():
         "--gcc-toolchain", dest="gcc_toolchain", help="Specify toolchain for cjc, stdlib & BE build"
     )
     parser_build.add_argument(
-        "--target", dest="target", type=str, choices=SupportedTarget,
+        "--target", dest="target", type=str, choices=TARGET_DICTIONARY.keys(),
         help="build a second stdlib for the target triple specified"
     )
     parser_build.add_argument(
@@ -588,14 +640,39 @@ def main():
         help="build cjc with cjdb"
     )
     parser_build.add_argument(
+        "--cjdb-disable-python", action="store_true",
+        help="build cjdb without python extension"
+    )
+    parser_build.add_argument(
+        "--install-cjdb-script", action="store_true",
+        help="install cjdb with python script"
+    )
+    parser_build.add_argument(
         "--use-oh-llvm-repo", action="store_true",
         help="use OpenHarmony llvm repo with Cangjie llvm patch instead of cangjie llvm repo for building"
+    )
+    parser_build.add_argument(
+        "--cjlib-sanitizer-support",
+        type=str,
+        choices=["asan", "tsan", "hwasan"],
+        dest="sanitizer_support",
+        help="Enable cangjie sanitizer support for cangjie libraries."
+    )
+    parser_build.add_argument(
+        "--enable-sanitize-option", action="store_true",
+        help="enable --sanitize option for cjc"
+    )
+    parser_build.add_argument(
+        "-v", "--version",
+        dest="version",
+        default="0.0.1",
+        help="Version string, e.g., 0.0.1"
     )
     parser_build.set_defaults(func=build)
 
     parser_install = subparsers.add_parser("install", help="install targets")
     parser_install.add_argument(
-        "--host", dest="host", type=str, choices=SupportedTarget,
+        "--host", dest="host", type=str, choices=TARGET_DICTIONARY.keys(),
         help="Generate installation package for the host. When --prefix is specified, this option will not take effect"
     )
     parser_install.add_argument(

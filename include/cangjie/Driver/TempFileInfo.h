@@ -27,6 +27,7 @@ struct TempFileInfo {
 
 enum class TempFileKind {
     O_CJO,         // output .cjo file
+    O_CJO_FLAG,    // output .cjo.flag file
     O_FULL_BCHIR, // output .full.bchir file
     O_BCHIR,      // output .bchir file
     T_BC,          // temp .bc(bitcode) file
@@ -41,6 +42,7 @@ enum class TempFileKind {
     O_OPT_BC, // output .opt.bc(optimized bitcode) file
     T_ASM,    // temp .s(assembled) file
 #endif
+    O_OBJ,         // output .o(binary object) file
     T_OBJ,         // temp .o(binary object) file
     T_EXE_MAC,     // temp executable file for macro strip
     T_DYLIB_MAC,   // temp dynamic library file for macro strip

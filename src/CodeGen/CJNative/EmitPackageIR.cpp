@@ -23,8 +23,6 @@ llvm::Value* GenerateMainRetVal(IRBuilder2& irBuilder, llvm::Value* userMainRetV
 namespace {
 void CreatePrintStackTraceCall(IRBuilder2& irBuilder, llvm::Value* exceptionValue)
 {
-    const std::string errorClassName = "_CNat5ErrorE";
-    const std::string printStackTraceIdent = "printStackTrace";
     const std::string printStackTraceFuncName = "_CNat5Error15printStackTraceHv";
 
     auto& cgMod = irBuilder.GetCGModule();
@@ -35,9 +33,11 @@ void CreatePrintStackTraceCall(IRBuilder2& irBuilder, llvm::Value* exceptionValu
     auto exceptionTi = irBuilder.GetTypeInfoFromObject(exceptionValue);
     // Get the func ptr of `printStackTrace`
     // `printStackTrace` is the 3rd virtual method defined in `class Error`
-    auto idxOfError = irBuilder.getInt64(0U);
+    auto idxOfError = irBuilder.getInt64(1U);
     auto idxOfPrintStackTrace = irBuilder.getInt64(2U);
-    auto funcInt8Ptr = irBuilder.CallIntrinsicGetVTableFunc(exceptionTi, idxOfError, idxOfPrintStackTrace);
+    auto funcInt8Ptr = irBuilder.CallIntrinsicGetVTableFunc(
+        exceptionTi, idxOfError, idxOfPrintStackTrace,
+        irBuilder.CreateTypeInfo(printStackTraceFuncNode->GetParentCustomTypeDef()->GetType()));
     auto meta =
         llvm::MDTuple::get(cgCtx.GetLLVMContext(), llvm::MDString::get(cgCtx.GetLLVMContext(), "std.core:Error"));
     funcInt8Ptr->setMetadata("IntroType", meta);
@@ -692,6 +692,9 @@ llvm::Constant* GetReadOnlyArrayKlassInfo(const CGModule& cgMod)
     std::vector<llvm::Constant*> klassConstants = cgMod.InitRawArrayUInt8Constants();
     gv->setInitializer(llvm::ConstantStruct::get(llvm::cast<llvm::StructType>(classInfoType), klassConstants));
     gv->addAttribute(GC_KLASS_ATTR);
+    if (cgCtx.GetCompileOptions().target.os != Triple::OSType::WINDOWS) {
+        gv->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    }
     AddLinkageTypeMetadata(*gv, llvm::GlobalValue::InternalLinkage, false);
 
     // Generate ArrayLayout.UInt8 here to ensure it is created.

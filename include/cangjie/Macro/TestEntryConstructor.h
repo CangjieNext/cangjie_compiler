@@ -50,6 +50,7 @@ public:
     static void ConstructTestSuite(const std::string& moduleName,
         std::vector<OwnedPtr<AST::Package>>& srcPkgs,
         const std::vector<Ptr<AST::PackageDecl>> importedPkgs, bool compileTestsOnly);
+
     static bool IsTestRegistrationFunction(const Ptr<AST::Decl> funcDecl);
     DiagnosticEngine& diag;
 

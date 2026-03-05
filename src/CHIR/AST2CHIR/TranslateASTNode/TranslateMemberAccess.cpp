@@ -257,6 +257,10 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
         }
     }
     auto parentType = GetExactParentType(*thisDerefTy, *funcDecl, *funcType, funcInstArgs, isVirtualFuncCall);
+    if (parentType == nullptr) {
+        parentType = GetExactParentType(*thisDerefTy, *funcDecl, *funcType, funcInstArgs, true);
+        isVirtualFuncCall = true;
+    }
     return InstCalleeInfo {
         .instParentCustomTy = parentType,
         .thisType = thisType,

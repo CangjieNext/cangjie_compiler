@@ -164,9 +164,16 @@ PREDEFVALUE(output_type_list, {
     VALUE("staticlib", "emit static library", { BACKEND(CJNATIVE) }, { GROUP(STABLE) COMMA GROUP(VISIBLE) }) COMMA
     VALUE("dylib", "emit dynamic library", { BACKEND(CJNATIVE) }, { GROUP(STABLE) COMMA GROUP(VISIBLE) }) COMMA
     VALUE("chir", "emit partially compiled package", { BACKEND(CJNATIVE) }, { GROUP(VISIBLE) }) COMMA
+    VALUE("obj", "emit obj", { BACKEND(CJNATIVE) }, { GROUP(VISIBLE) }) COMMA
 #if !defined(CANGJIE_VISIBLE_OPTIONS_ONLY)
     VALUE("hotreload", "emit dynamic library with hot reload supports", { BACKEND(CJNATIVE) }, { GROUP(VISIBLE) })
 #endif
+});
+PREDEFVALUE(compile_target_list, {
+    // for CJNATIVE backend
+    VALUE("exe", "compile executable (default)", { BACKEND(CJNATIVE) }, { GROUP(VISIBLE) }) COMMA
+    VALUE("staticlib", "compile static library", { BACKEND(CJNATIVE) }, { GROUP(VISIBLE) }) COMMA
+    VALUE("dylib", "compile dynamic library", { BACKEND(CJNATIVE) }, { GROUP(VISIBLE) }) COMMA
 });
 PREDEFVALUE(lto_mode, {
     VALUE("full", "", { BACKEND(CJNATIVE) }, { GROUP(STABLE) COMMA GROUP(VISIBLE) }) COMMA
@@ -226,27 +233,12 @@ OPTION("--dump-tokens", DUMP_TOKENS, FLAG, { BACKEND(ALL) },
     { GROUP(FRONTEND) COMMA GROUP(STABLE) },
     nullptr, {}, MULTIPLE_OCCURRENCE,
     "Print all of the tokens in one compile unit")
-OPTION("--dump-parse", DUMP_PARSE, FLAG, { BACKEND(ALL) },
-    { GROUP(FRONTEND) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
-    "Print AST after parser")
-OPTION("--dump-ast", DUMP_AST, FLAG, { BACKEND(ALL) },
-    { GROUP(FRONTEND) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
-    "Print AST after semantic analysis")
 OPTION("--dump-symbols", DUMP_SYMBOLS, FLAG, { BACKEND(ALL) },
     { GROUP(FRONTEND) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Print symbols after semantic analysis")
-OPTION("--dump-ir", DUMP_IR, FLAG, { BACKEND(ALL) },
-    { GROUP(FRONTEND) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
-    "Print human readable IR")
-OPTION("--dump-bc", DUMP_BC, FLAG, { BACKEND(ALL) },
-    { GROUP(FRONTEND) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
-    "Dump machine-readable LLVM bitcode")
 OPTION("--typecheck", TYPE_CHECK, FLAG, { BACKEND(ALL) },
     { GROUP(FRONTEND) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Parse and check type of input file(s)")
-OPTION("--dump-macro", DUMP_MACRO, FLAG, { BACKEND(ALL) },
-    { GROUP(FRONTEND) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
-    "Dump tokens after macro expansion")
 OPTION("-d", COMPILE_CJD, FLAG, { BACKEND(ALL) },
     { GROUP(FRONTEND) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Compile declaration file(s) (.cj.d)")
@@ -309,8 +301,9 @@ OPTION("--output-javagen-dir", OUTPUT_JAVA_GEN_DIR, SEPARATED, { BACKEND(ALL) },
 OPTION("--no-prelude", NO_PRELUDE, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Not import cangjie std.core package by default, only applicable when compiling std.core")
-OPTION("--enable-interop-cjmapping", ENABLE_INTEROP_CJMAPPING, FLAG, {BACKEND(CJNATIVE)}, { GROUP(GLOBAL) COMMA GROUP(VISIBLE)}, nullptr, {},
-    MULTIPLE_OCCURRENCE, "enable cj data structure mapping for interop")
+OPTION("--enable-interop-cjmapping", ENABLE_INTEROP_CJMAPPING, FLAG_WITH_ARG, {BACKEND(CJNATIVE)},
+    { GROUP(GLOBAL) COMMA GROUP(VISIBLE)}, nullptr, {}, MULTIPLE_OCCURRENCE, 
+    "enable cj data structure mapping for interop")
 OPTION("--static", STATIC, FLAG, { BACKEND(CJNATIVE) },
     { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Statically link cangjie library")
@@ -343,9 +336,24 @@ OPTION("--enable-eh", ENABLE_EFFECTS, FLAG, { BACKEND(CJNATIVE) },
     { GROUP(GLOBAL) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Enables experimental support for effect handlers")
 #endif
-OPTION("--dump-chir-debug", DUMP_CHIR_DEBUG, FLAG, { BACKEND(ALL) },
-    { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
-    "Dump CHIR readable txt file when compiling for debug")
+OPTION("--dump-ast", DUMP_AST, FLAG, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Dump human readable AST when compiling for debug")
+OPTION("--dump-chir", DUMP_CHIR, FLAG, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Dump human readable CHIR when compiling for debug")
+OPTION("--dump-ir", DUMP_IR, FLAG, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Dump human readable IR")
+OPTION("--dump-all", DUMP_ALL, FLAG, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Dump all of AST, CHIR, IR")
+OPTION("--dump-to-screen", DUMP_TO_SCREEN, FLAG, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Dump to screen instead of file")
+OPTION("--import-interop-cj-package-config-path", USE_INTEROP_CJ_PACKAGE_CONFIG_RPATH, SEPARATED, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, SINGLE_OCCURRENCE,
+    "Add interop cj package config directory to path")
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 OPTION("--debug-annotations", DUMP_ANNOTATIONS_DEBUG, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
@@ -537,6 +545,9 @@ OPTION("--sysroot", SYSROOT, SEPARATED, { BACKEND(CJNATIVE) },
 OPTION("--output-type", OUTPUT_TYPE, SEPARATED, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, output_type_list, SINGLE_OCCURRENCE,
     "Specify output file type")
+OPTION("--compile-target", COMPILE_TARGET, SEPARATED, { BACKEND(ALL) },
+    { GROUP(DRIVER) COMMA GROUP(VISIBLE) }, nullptr, compile_target_list, SINGLE_OCCURRENCE,
+    "Specify compile target for obj")
 OPTION("-O0", OPTIMIZATION_0, FLAG, { BACKEND(CJNATIVE) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Optimization level 0 (default)")
@@ -629,12 +640,21 @@ OPTION("--aggressive-parallel-compile", AGGRESSIVE_PARALLEL_COMPILE, FLAG_WITH_A
     "Enable agrressive parallel compile and specify the number of tasks to run at once")
 
 // ---------- SANITIZER OPTIONS ----------
+#ifdef CANGJIE_ENABLE_SANITIZE_OPTION
+OPTION("--sanitize", SANITIZE, SEPARATED, { BACKEND(CJNATIVE) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, sanitizer_type, SINGLE_OCCURRENCE,
+    "Enable sanitizer: ")
+OPTION("--sanitize-set-rpath", SANITIZE_SET_RPATH, FLAG, { BACKEND(CJNATIVE) },
+    { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Add -rpath with cangjie runtime directory to linker flags for sanitizer-enabled product")
+#else
 OPTION("--sanitize", SANITIZE, SEPARATED, { BACKEND(CJNATIVE) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, sanitizer_type, SINGLE_OCCURRENCE,
     "Enable sanitizer: ")
 OPTION("--sanitize-set-rpath", SANITIZE_SET_RPATH, FLAG, { BACKEND(CJNATIVE) },
     { GROUP(DRIVER) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Add -rpath with cangjie runtime directory to linker flags for sanitizer-enabled product")
+#endif
 
 // ---------- CODE OBFUSCATION OPTIONS ----------
 OPTION("--fobf-string", OBF_STRING, FLAG, { BACKEND(CJNATIVE) },
@@ -743,7 +763,7 @@ OPTION("--gc-sections", GC_SECTIONS, FLAG, { BACKEND(CJNATIVE) },
 OPTION("--no-gc-sections", NO_GC_SECTIONS, FLAG, { BACKEND(CJNATIVE) },
     { GROUP(DRIVER) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "disable gc-sections")
-OPTION("--pgo-instr-gen", PGO_INSTR_GEN, FLAG, { BACKEND(CJNATIVE) },
+OPTION("--pgo-instr-gen", PGO_INSTR_GEN, FLAG_WITH_ARG, { BACKEND(CJNATIVE) },
     { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "PGO instrumentation")
 OPTION("--pgo-instr-use", PGO_INSTR_USE, SEPARATED, { BACKEND(CJNATIVE) },

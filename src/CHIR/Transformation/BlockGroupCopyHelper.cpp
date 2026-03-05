@@ -133,7 +133,7 @@ void BlockGroupCopyHelper::ReplaceExprOperands(
     }
 }
 
-void BlockGroupCopyHelper::GetInstMapFromApply(const Apply& apply)
+void BlockGroupCopyHelper::GetInstMapFromApply(const Apply& apply, const FuncBase* newBodyOuterFunction)
 {
     if (apply.GetCallee()->IsLocalVar()) {
         auto lambda = DynamicCast<Lambda*>(StaticCast<LocalVar*>(apply.GetCallee())->GetExpr());
@@ -147,7 +147,8 @@ void BlockGroupCopyHelper::GetInstMapFromApply(const Apply& apply)
         thisType = builder.GetType<ThisType>();
     } else {
         auto func = VirtualCast<FuncBase*>(apply.GetCallee());
-        if (auto customDef = func->GetParentCustomTypeDef(); customDef && customDef->IsGenericDef()) {
+        auto customDef = func->GetParentCustomTypeDef();
+        if (customDef && customDef->IsGenericDef()) {
             // 1. get customType where function in.
             auto instParentCustomType = apply.GetInstParentCustomTyOfCallee(builder);
             if (instParentCustomType == nullptr) {
@@ -170,7 +171,15 @@ void BlockGroupCopyHelper::GetInstMapFromApply(const Apply& apply)
             instMap.emplace(genericType, apply.GetInstantiatedTypeArgs()[index]);
             ++index;
         }
-        thisType = apply.GetThisType();
+        // 4. set this type if needed
+        auto outerFunc = newBodyOuterFunction ? newBodyOuterFunction : apply.GetTopLevelFunc();
+        auto outerDef = outerFunc->GetParentCustomTypeDef();
+        if (customDef && outerDef && outerDef == customDef && outerFunc->TestAttr(Attribute::STATIC)) {
+            // keep this type if same custom type between callee and caller
+            thisType = builder.GetType<ThisType>();
+        } else {
+            thisType = apply.GetThisType();
+        }
     }
 }
 
@@ -199,8 +208,7 @@ void FixCastProblemAfterInst(Ptr<BlockGroup> group, CHIRBuilder& builder)
         if (e.GetExprKind() == ExprKind::LAMBDA) {
             auto lambda = StaticCast<Lambda*>(&e);
             FixCastProblemAfterInst(lambda->GetBody(), builder);
-        }
-        if (e.GetExprKind() == ExprKind::INSTANCEOF) {
+        } else if (e.GetExprKind() == ExprKind::INSTANCEOF) {
             // fix instanceOf problem
             auto instance = StaticCast<InstanceOf*>(&e);
             auto objType = instance->GetObject()->GetType();
@@ -218,8 +226,7 @@ void FixCastProblemAfterInst(Ptr<BlockGroup> group, CHIRBuilder& builder)
                     builder.CreateConstantExpression<BoolLiteral>(builder.GetBoolTy(), e.GetParentBlock(), false);
                 e.ReplaceWith(*falseExpr);
             }
-        }
-        if (e.GetExprKind() == ExprKind::TRANSFORM_TO_CONCRETE) {
+        } else if (e.GetExprKind() == ExprKind::TRANSFORM_TO_CONCRETE) {
             // change transformToConcrete to box/unbox/typecast
             auto& cast = StaticCast<TransformToConcrete&>(e);
             if (!cast.GetSourceTy()->IsGenericRelated()) {
@@ -238,8 +245,7 @@ void FixCastProblemAfterInst(Ptr<BlockGroup> group, CHIRBuilder& builder)
                 StaticCast<LocalVar*>(newCast)->GetExpr()->MoveBefore(&e);
                 e.RemoveSelfFromBlock();
             }
-        }
-        if (e.GetExprKind() == ExprKind::TRANSFORM_TO_GENERIC) {
+        } else if (e.GetExprKind() == ExprKind::TRANSFORM_TO_GENERIC) {
             // change TransformToGeneric to box/unbox/typecast
             auto cast = StaticCast<TransformToGeneric*>(&e);
             if (!cast->GetTargetTy()->IsGenericRelated()) {
@@ -259,8 +265,7 @@ void FixCastProblemAfterInst(Ptr<BlockGroup> group, CHIRBuilder& builder)
                 StaticCast<LocalVar*>(newCast)->GetExpr()->MoveBefore(&e);
                 e.RemoveSelfFromBlock();
             }
-        }
-        if (e.GetExprKind() == ExprKind::TYPECAST) {
+        } else if (e.GetExprKind() == ExprKind::TYPECAST) {
             /* change typecast to unbox/box
              * func foo<T>(a: T) {
              *   let b: CA<T> = TypeCast(a, CA<T>)   // typecast to CA<T>

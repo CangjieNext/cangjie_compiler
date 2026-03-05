@@ -155,9 +155,11 @@ void CGModule::GenIncremental()
         if (llvm::verifyModule(*module, &llvmStdout)) {
             InternalError("Incremental part failed to be compiled");
         }
-        DumpIR(*module, cgCtx->GetCurrentPkgName() + "/Incre/" + module->getSourceFileName() + ".incre.bc",
-            option.codegenDebugMode);
-
+        if (option.NeedDumpIRToFile()) {
+            const auto& dp = GenDumpPath(
+                option.output, cgCtx->GetCurrentPkgName(), "Incre", module->getSourceFileName(), "incre.ll");
+            DumpIR(*module, dp);
+        }
         auto newModule = incrementalGen->LinkModules(ReleaseLLVMModule(), cgCtx->GetCachedMangleMap());
         for (auto name: incrementalGen->GetIncrLLVMUsedNames()) {
             GetCGContext().AddLLVMUsedVars(name);
@@ -184,7 +186,7 @@ void CGModule::GenIncremental()
 void CGModule::GenCodeGenAddedMetadata() const
 {
     auto codegenAddedNamedMD = GetLLVMModule()->getOrInsertNamedMetadata("CodeGenAddedForIncr");
-    auto codegenAddedFuncsOrVars = GetCGContext().GetCodeGenAddedFuncsOrVars();
+    const auto& codegenAddedFuncsOrVars = GetCGContext().GetCodeGenAddedFuncsOrVars();
     for (auto& kv : codegenAddedFuncsOrVars) {
         std::vector<llvm::Metadata*> ops;
         ops.push_back(llvm::MDString::get(GetLLVMContext(), kv.first));
@@ -278,7 +280,9 @@ CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func, bool forWra
 {
     CJC_NULLPTR_CHECK(func);
     if (auto it = valueMapping.find(func); it != valueMapping.end()) {
-        return dynamic_cast<CGFunction*>(it->second);
+        auto cgFunction = dynamic_cast<CGFunction*>(it->second);
+        CJC_NULLPTR_CHECK(cgFunction);
+        return cgFunction;
     }
     auto cgFuncType = StaticCast<CGFunctionType*>(CGType::GetOrCreateWithNode(*this, func, true, forWrapper));
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
@@ -303,8 +307,6 @@ CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func, bool forWra
     auto chirFunc = VirtualCast<const CHIR::FuncBase*>(func);
     auto chirLinkage = chirFunc->Get<CHIR::LinkTypeInfo>();
     if (func->IsFuncWithBody()) {
-        auto chirFunc = VirtualCast<const CHIR::Func*>(func);
-        auto chirLinkage = chirFunc->Get<CHIR::LinkTypeInfo>();
         bool markByMD = cgCtx->IsCGParallelEnabled() && !IsCHIRWrapper(func->GetIdentifierWithoutPrefix());
         AddLinkageTypeMetadata(*function, CHIRLinkage2LLVMLinkage(chirLinkage), markByMD);
     } else if (chirLinkage == Linkage::EXTERNAL_WEAK) {
@@ -372,8 +374,9 @@ CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func, bool forWra
 
 CGValue* CGModule::GetOrInsertGlobalVariable(const CHIR::Value* chirGV)
 {
-    CJC_ASSERT(chirGV && "chirGV is null");
+    CJC_ASSERT_WITH_MSG(chirGV, "chirGV is null");
     if (auto it = valueMapping.find(chirGV); it != valueMapping.end()) {
+        CJC_NULLPTR_CHECK(it->second);
         return it->second;
     }
     auto cgVarType = CGType::GetOrCreate(*this, chirGV->GetType());
@@ -417,7 +420,7 @@ CGValue* CGModule::GetMappedCGValue(const CHIR::Value* chirValue)
         auto chirGV = DynamicCast<const CHIR::GlobalVarBase*>(chirValue);
         return GetOrInsertGlobalVariable(chirGV);
     } else {
-        CJC_ASSERT(false && "Should not reach here: value not dominate all uses in CHIR.");
+        CJC_ASSERT_WITH_MSG(false, "Should not reach here: value not dominate all uses in CHIR.");
         return nullptr;
     }
 }
@@ -494,16 +497,19 @@ void CGModule::InitDebugInfo()
     diBuilder->CreateNameSpace(GetCGContext().GetCurrentPkgName()); // Create current package as namespace.
 }
 
-llvm::Constant* CGModule::GenerateTypeNameConstantString(const std::string& typeMangledName, bool isWeakODR) const
+llvm::Constant* CGModule::GenerateTypeNameConstantString(const std::string& typeMangledName, bool isWeakODR, const std::string& qualifiedName) const
 {
     auto linkageType =
         isWeakODR ? llvm::GlobalValue::LinkageTypes::WeakODRLinkage : llvm::GlobalValue::LinkageTypes::PrivateLinkage;
-    auto strConstant = llvm::ConstantDataArray::getString(module->getContext(), typeMangledName);
+    auto strConstant =
+        llvm::ConstantDataArray::getString(module->getContext(), qualifiedName != "" ? qualifiedName : typeMangledName);
     auto globalValue = module->getOrInsertGlobal(typeMangledName + ".name", strConstant->getType());
     auto klassName = llvm::cast<llvm::GlobalVariable>(globalValue);
     klassName->setInitializer(strConstant);
     klassName->setAlignment(llvm::Align(1));
     klassName->addAttribute(CJTYPE_NAME_ATTR);
+    klassName->setConstant(true);
+    klassName->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     AddLinkageTypeMetadata(*klassName, linkageType, false);
     return llvm::ConstantExpr::getBitCast(klassName, llvm::Type::getInt8PtrTy(module->getContext()));
 }

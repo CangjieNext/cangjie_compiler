@@ -44,7 +44,7 @@ std::vector<llvm::Constant*> CGCustomType::GenTypeInfoConstantVectorForTypes(
 }
 
 llvm::Constant* CGCustomType::GenTypeInfoArray(
-    CGModule& cgMod, std::string name, std::vector<llvm::Constant*> constants)
+    CGModule& cgMod, std::string name, std::vector<llvm::Constant*> constants, const std::string_view& attr)
 {
     auto p0i8 = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
     if (constants.empty()) {
@@ -57,23 +57,25 @@ llvm::Constant* CGCustomType::GenTypeInfoArray(
         llvm::cast<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getOrInsertGlobal(name, typeOfFieldsGV));
     typeInfoOfFields->setInitializer(llvm::ConstantArray::get(typeOfFieldsGV, constants));
     typeInfoOfFields->setLinkage(llvm::GlobalValue::LinkageTypes::PrivateLinkage);
-    typeInfoOfFields->addAttribute(CJTI_FIELDS_ATTR);
+    typeInfoOfFields->addAttribute(attr);
+    typeInfoOfFields->setConstant(true);
+    typeInfoOfFields->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     return llvm::ConstantExpr::getBitCast(typeInfoOfFields, p0i8);
 }
 
 llvm::Constant* CGCustomType::GenFieldsOfTypeInfo()
 {
-    CJC_ASSERT(!chirType.IsEnum() && "CGEnumType should override this method.");
+    CJC_ASSERT_WITH_MSG(!chirType.IsEnum(), "CGEnumType should override this method.");
     auto& customType = StaticCast<const CHIR::CustomType&>(chirType);
     auto& nonConstCustomType = const_cast<CHIR::CustomType&>(customType);
     auto instanceMemberTypes = nonConstCustomType.GetInstantiatedMemberTys(cgMod.GetCGContext().GetCHIRBuilder());
     std::vector<llvm::Constant*> fieldConstants = GenTypeInfoConstantVectorForTypes(cgMod, instanceMemberTypes);
     if (chirType.IsAutoEnv()) {
         CJC_ASSERT(!chirType.IsAutoEnvInstBase());
-        (void)fieldConstants.insert(fieldConstants.begin(), CGType::GetInt64CGType(cgMod)->GetOrCreateTypeInfo());
-        (void)fieldConstants.insert(fieldConstants.begin(), CGType::GetInt64CGType(cgMod)->GetOrCreateTypeInfo());
+        (void)fieldConstants.insert(fieldConstants.begin(), CGType::GetIntNativeCGType(cgMod)->GetOrCreateTypeInfo());
+        (void)fieldConstants.insert(fieldConstants.begin(), CGType::GetIntNativeCGType(cgMod)->GetOrCreateTypeInfo());
     }
-    return GenTypeInfoArray(cgMod, CGType::GetNameOfTypeInfoGV(chirType) + ".fields", fieldConstants);
+    return GenTypeInfoArray(cgMod, CGType::GetNameOfTypeInfoGV(chirType) + ".fields", fieldConstants, CJTI_FIELDS_ATTR);
 }
 
 llvm::Constant* CGCustomType::GenOffsetsArray(CGModule& cgMod, std::string name, llvm::StructType* layoutType)
@@ -95,6 +97,8 @@ llvm::Constant* CGCustomType::GenOffsetsArray(CGModule& cgMod, std::string name,
     typeInfoOfFields->setInitializer(llvm::ConstantArray::get(i32ArrType, elements));
     typeInfoOfFields->setLinkage(llvm::GlobalValue::LinkageTypes::PrivateLinkage);
     typeInfoOfFields->addAttribute(CJTI_OFFSETS_ATTR);
+    typeInfoOfFields->setConstant(true);
+    typeInfoOfFields->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     return llvm::ConstantExpr::getBitCast(typeInfoOfFields, i32Ty->getPointerTo());
 }
 
@@ -154,6 +158,8 @@ llvm::Constant* CGCustomType::GenTypeArgsOfTypeInfo()
     typeInfoOfGenericArgs->setInitializer(llvm::ConstantArray::get(typeOfGenericArgsGV, constants));
     typeInfoOfGenericArgs->setLinkage(llvm::GlobalValue::LinkageTypes::PrivateLinkage);
     typeInfoOfGenericArgs->addAttribute(CJTI_TYPE_ARGS_ATTR);
+    typeInfoOfGenericArgs->setConstant(true);
+    typeInfoOfGenericArgs->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     return llvm::ConstantExpr::getBitCast(typeInfoOfGenericArgs, p0i8);
 }
 
@@ -162,13 +168,20 @@ llvm::Constant* CGCustomType::GenNameOfTypeTemplate()
     auto& customType = static_cast<const CHIR::CustomType&>(chirType);
     auto customDefShortName = CHIR::GetCustomTypeIdentifier(customType);
     auto customDef = customType.GetCustomTypeDef();
-    return cgMod.GenerateTypeNameConstantString(
-        (chirType.IsAutoEnvBase() ? "" : (customDef->GetPackageName() + ":")) + customDefShortName, false);
+    // to ensure compatibility, when dealing with scenarios involving package name containing organization name,
+    // we need to generate names as follows:
+    // "orgName::pkgName:xxx.ti.name" = "orgName/pkgName:xxx.ti"
+    // oldPrefix is "orgName::pkgName" and newPrefix is "orgName/pkgName"
+    auto packageName = customDef->GetPackageName();
+    auto oldPrefix = (chirType.IsAutoEnvBase() ? "" : (packageName + ":"));
+    ReplaceDelimiterAfterOrgName(packageName);
+    auto newPrefix = (chirType.IsAutoEnvBase() ? "" : (packageName + ":"));
+    return cgMod.GenerateTypeNameConstantString(oldPrefix + customDefShortName, false, newPrefix + customDefShortName);
 }
 
 llvm::Constant* CGCustomType::GenFieldsNumOfTypeTemplate()
 {
-    CJC_ASSERT(!chirType.IsEnum() && "CGEnumType should override this method.");
+    CJC_ASSERT_WITH_MSG(!chirType.IsEnum(), "CGEnumType should override this method.");
     auto& customType = static_cast<const CHIR::CustomType&>(chirType);
     auto& nonConstCustomType = const_cast<CHIR::CustomType&>(customType);
     auto fieldsNum = nonConstCustomType.GetInstantiatedMemberTys(cgMod.GetCGContext().GetCHIRBuilder()).size();
@@ -194,9 +207,9 @@ llvm::Constant* CGCustomType::GenFieldsFnsOfTypeTemplate()
     auto fieldTypes = StaticCast<CHIR::CustomType*>(
         customTypeDef->GetType())->GetInstantiatedMemberTys(cgMod.GetCGContext().GetCHIRBuilder());
     if (chirType.IsAutoEnv()) {
-        auto chirInt64Type = const_cast<CHIR::Type*>(&CGType::GetInt64CGType(cgMod)->GetOriginal());
-        fieldTypes.insert(fieldTypes.begin(), chirInt64Type);
-        fieldTypes.insert(fieldTypes.begin(), chirInt64Type);
+        auto chirIntNativeType = const_cast<CHIR::Type*>(&CGType::GetIntNativeCGType(cgMod)->GetOriginal());
+        fieldTypes.insert(fieldTypes.begin(), chirIntNativeType);
+        fieldTypes.insert(fieldTypes.begin(), chirIntNativeType);
     }
 
     return CGTypeInfo::GenFieldsFnsOfTypeTemplate(
@@ -259,8 +272,8 @@ void CGCustomType::GenTypeTemplate()
     auto& customType = StaticCast<const CHIR::CustomType&>(chirType);
     auto customTypeDef = customType.GetCustomTypeDef();
 
-    CJC_ASSERT(customTypeDef->IsGenericDef() && "Should be a generic type here.");
-    CJC_ASSERT(typeTemplate);
+    CJC_ASSERT_WITH_MSG(customTypeDef->IsGenericDef(), "Should be a generic type here.");
+    CJC_NULLPTR_CHECK(typeTemplate);
 
     PreActionOfGenTypeTemplate();
 

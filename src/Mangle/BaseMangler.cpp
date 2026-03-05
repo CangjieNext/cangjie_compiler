@@ -189,7 +189,7 @@ std::string BaseMangler::MangleFullPackageName(const std::string& packageName) c
 
 std::string BaseMangler::MangleFullPackageName(const AST::Decl& decl) const
 {
-    return MangleFullPackageName(decl.fullPackageName);
+    return MangleFullPackageName(decl.GetFullPackageName());
 }
 
 std::string BaseMangler::GetPrefixOfType(const AST::Ty& ty) const
@@ -443,6 +443,7 @@ std::string BaseMangler::MangleVarWithPatternDecl(
     }
 
     std::optional<size_t> index = GetIndexOfWildcard(vwpDecl, prefix);
+    CJC_ASSERT_WITH_MSG(index.has_value(), "Index of wildcard should not be empty");
     mangleStr += MANGLE_CANGJIE_PREFIX + MANGLE_NESTED_PREFIX;
     std::vector<std::string> genericsTypeStack;
     mangleStr += ManglePrefix(vwpDecl, prefix, genericsTypeStack, true);
@@ -605,12 +606,27 @@ std::string BaseMangler::MangleDecl(const Decl& decl, const std::vector<Ptr<Node
                 (decl.identifier.Val().size() - MANGLE_PROP_LEN) ? "ps" : "pg";
         } else {
             std::string name = decl.identifier;
-            if (decl.TestAttr(Attribute::HAS_INITIAL)) {
+            if (decl.astKind == ASTKind::GENERIC_PARAM_DECL && decl.outerDecl &&
+                decl.outerDecl->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC) &&
+                decl.outerDecl->TestAttr(Attribute::GENERIC)) {
+                auto genericsTy = StaticCast<const GenericsTy*>(decl.ty);
+                auto result = std::find_if(genericsTypeStack.rbegin(), genericsTypeStack.rend(),
+                    [&genericsTy](const std::string& name) { return name == genericsTy->name; });
+                auto index = static_cast<size_t>(std::distance(result, genericsTypeStack.rend())) - MANGLE_CHAR_LEN;
+                CJC_ASSERT(result != genericsTypeStack.rend() && "Using undeclared generic type!");
+                auto number = MangleUtils::DecimalToManglingNumber(std::to_string(index));
+                name = MANGLE_GENERIC_TYPE_PREFIX + number;
+            } else if (decl.TestAttr(Attribute::HAS_INITIAL)) {
                 // eg: c.2 ==> pos = 1, name = c, idx = "2"
                 size_t pos = decl.identifier.Val().find(MANGLE_DOT_PREFIX);
                 name = decl.identifier.Val().substr(0, pos);
             }
             newMangled += MangleUtils::MangleName(name);
+            if (decl.IsFunc()) {
+                auto& funcDecl = static_cast<const AST::FuncDecl&>(decl);
+                newMangled +=
+                    IsLocalFunc(funcDecl) ? GetMangledLocalFuncIndex(static_cast<const FuncDecl&>(decl), prefix) : "";
+            }
         }
         newMangled += MangleGenericArguments(decl, genericsTypeStack, true);
     }
@@ -666,10 +682,12 @@ std::string BaseMangler::ManglePrefix(const Node& node, const std::vector<Ptr<No
                 break;
             case ASTKind::FUNC_DECL: {
                 auto& decl = static_cast<const FuncDecl&>(*curPrefix);
-                auto funcMangled = MangleUtils::MangleName(decl.identifier) +
-                    MangleGenericArgumentsHelper(decl, genericsTypeStack, true);
-                funcMangled += MANGLE_FUNC_PARAM_TYPE_PREFIX + MangleFuncParams(decl, genericsTypeStack, false);
-                mangled += funcMangled + MANGLE_SUFFIX;
+                mangled += MangleUtils::MangleName(decl.identifier);
+                if (IsLocalFunc(decl)) {
+                    mangled += GetMangledLocalFuncIndex(decl, prefix);
+                }
+                mangled += MangleGenericArgumentsHelper(decl, genericsTypeStack, true) + MANGLE_FUNC_PARAM_TYPE_PREFIX +
+                    MangleFuncParams(decl, genericsTypeStack, false) + MANGLE_SUFFIX;
                 break;
             }
             case ASTKind::EXTEND_DECL: {
@@ -796,6 +814,7 @@ std::string BaseMangler::ManglePrefix(const Node& node, const std::vector<Ptr<No
                 }
 
                 std::optional<size_t> index = GetIndexOfWildcard(vwpDecl, prefix);
+                CJC_ASSERT_WITH_MSG(index.has_value(), "Index of wildcard should not be empty");
                 mangleStr += MANGLE_ANONYMOUS_VARIABLE_PREFIX;
                 mangleStr += MangleUtils::DecimalToManglingNumber(std::to_string(index.value()));
                 mangled += mangleStr;
@@ -833,7 +852,7 @@ std::string BaseMangler::ManglePrefix(const Node& node, const std::vector<Ptr<No
 std::string BaseMangler::ManglePackage(const Decl& decl) const
 {
     std::string genericPackageName = ManglePackageNameForGeneric(decl);
-    return genericPackageName.empty() ? MangleFullPackageName(decl.fullPackageName) : genericPackageName;
+    return genericPackageName.empty() ? MangleFullPackageName(decl) : genericPackageName;
 }
 
 std::unique_ptr<ManglerContext> BaseMangler::PrepareContextForPackage(const Ptr<AST::Package> pkg)
@@ -864,6 +883,21 @@ Ptr<AST::Node> BaseMangler::FindOuterNodeOfLambda(
     }
     CJC_ASSERT(false && "no outer container of lambda found.");
     return Ptr<AST::Node>();
+}
+
+std::string BaseMangler::GetMangledLocalFuncIndex(const AST::FuncDecl& decl, const std::vector<Ptr<AST::Node>>& prefix) const
+{
+    auto outerNode = GetOuterDecl(decl);
+    std::string pkgName = decl.fullPackageName;
+    pkgName = ManglerContext::ReduceUnitTestPackageName(pkgName);
+    auto mangleCtx = manglerCtxTable.at(pkgName);
+    std::optional<size_t> index = mangleCtx->GetIndexOfFunc(outerNode, &decl);
+    CJC_ASSERT(index.has_value());
+    if (index.value() > 0) {
+        return MANGLE_COUNT_PREFIX + MangleUtils::DecimalToManglingNumber(std::to_string(index.value() - 1));
+    } else {
+        return "";
+    }
 }
 
 std::string BaseMangler::MangleLambda(const LambdaExpr& lambda, const::std::vector<Ptr<AST::Node>>& prefix) const
@@ -897,7 +931,7 @@ std::string BaseMangler::MangleLambda(const LambdaExpr& lambda, const::std::vect
     return Compression::CJMangledCompression(mangleStr);
 }
 
-void BaseMangler::CollectVarOrLambda(ManglerContext& ctx, AST::Package& pkg) const
+void BaseMangler::CollectLocalDecls(ManglerContext& ctx, AST::Package& pkg) const
 {
     Walker(&pkg, [&ctx](const Ptr<Node> node) {
         if (auto ed = DynamicCast<ExtendDecl>(node); ed) {
@@ -918,6 +952,7 @@ void BaseMangler::CollectVarOrLambda(ManglerContext& ctx, AST::Package& pkg) con
             ctx.SaveVar2CurDecl(node);
             ctx.SaveLambda2CurDecl(node);
             ctx.SaveLocalWildcardVar2Decl(node);
+            ctx.SaveFunc2CurDecl(node);
         }
         return VisitAction::WALK_CHILDREN;
     }).Walk();
@@ -928,7 +963,7 @@ void BaseMangler::MangleExportId(Package& pkg)
     std::string pkgName = ManglerContext::ReduceUnitTestPackageName(pkg.fullPackageName);
     auto manglerCtx = std::make_unique<ManglerContext>();
     manglerCtxTable[pkgName] = manglerCtx.get();
-    CollectVarOrLambda(*manglerCtxTable.at(pkgName), pkg);
+    CollectLocalDecls(*manglerCtxTable.at(pkgName), pkg);
 
     exportIdMode = true;
     Walker(&pkg, [this](auto node) {
@@ -1162,6 +1197,19 @@ bool BaseMangler::IsLocalVariable(const AST::Decl& decl) const
     return false;
 }
 
+bool BaseMangler::IsLocalFunc(const AST::FuncDecl& funcDecl) const
+{
+    if (funcDecl.TestAttr(AST::Attribute::GLOBAL)) {
+        return false;
+    }
+
+    if (funcDecl.outerDecl && !funcDecl.outerDecl->IsNominalDecl()) {
+        return true;
+    }
+
+    return false;
+}
+
 std::string BaseMangler::HashToBase62(const std::string& input)
 {
     uint32_t hashValue = Fnv1aHash(input);
@@ -1233,25 +1281,76 @@ bool ManglerContext::CheckAllElementsWildcard(const Ptr<AST::Pattern>& root)
     return areAllElementsWildcard;
 }
 
-void ManglerContext::SaveLocalWildcardVar2Decl(const Ptr<AST::Node> node)
+namespace {
+    Ptr<Node> GetDeclKey(const Ptr<Node> node)
+    {
+        if (auto lambda = DynamicCast<LambdaExpr>(node)) {
+            return lambda->funcBody.get();
+        } else if (auto function = DynamicCast<FuncDecl>(node)) {
+            return function->funcBody.get();
+        } else if (auto pcd = DynamicCast<PrimaryCtorDecl>(node)) {
+            return pcd->funcBody.get();
+        } else if (auto vda = DynamicCast<VarDeclAbstract>(node)) {
+            return vda;
+        }
+        return nullptr;
+    }
+}
+
+void ManglerContext::SaveFunc2CurDecl(const Ptr<Node> node)
 {
     Ptr<Node> key = nullptr;
-    if (auto lambda = DynamicCast<LambdaExpr>(node)) {
-        key = lambda->funcBody.get();
-    } else if (auto function = DynamicCast<FuncDecl>(node)) {
-        key = function->funcBody.get();
-    } else if (auto pcd = DynamicCast<PrimaryCtorDecl>(node)) {
-        key = pcd->funcBody.get();
-    } else if (auto vda = DynamicCast<VarDeclAbstract>(node); vda && vda->TestAttr(Attribute::GLOBAL)) {
-        key = vda;
+
+    // for local generic instantiated function which is lifted to global, this local decl should be saved under its
+    // outerDecl's key.
+    if (auto function = DynamicCast<FuncDecl>(node)) {
+        if (function->TestAttr(AST::Attribute::GENERIC_INSTANTIATED) && !function->TestAttr(AST::Attribute::GLOBAL)) {
+            if (function->outerDecl && !function->outerDecl->IsNominalDecl()) {
+                key = GetDeclKey(function->outerDecl);
+            }
+            if (key != nullptr) {
+                auto& mapOfName2Func = node2LocalFunc[key][function->identifier.Val()];
+                mapOfName2Func.emplace_back(function);
+            }
+        }
     }
-    if (!key) {
+
+    key = GetDeclKey(node);
+    if (key == nullptr) {
         return;
     }
+
     Walker(key, [this, &key](const Ptr<Node>& node) {
-        if (auto vda = DynamicCast<VarWithPatternDecl>(node); vda && node != key) {
-            node2LocalWildcardVar[key].emplace_back(vda);
-        } else if (Is<FuncBody>(node) && node != key) {
+        if (auto fd = DynamicCast<FuncDecl>(node); fd && node != key) {
+            auto& mapOfName2Func = node2LocalFunc[key][fd->identifier.Val()];
+            mapOfName2Func.emplace_back(fd);
+        }  else if (Is<FuncBody>(node) && node != key) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+}
+
+void ManglerContext::SaveLocalWildcardVar2Decl(const Ptr<AST::Node> node)	
+{	
+    Ptr<Node> key = nullptr;	
+    if (auto lambda = DynamicCast<LambdaExpr>(node)) {	
+        key = lambda->funcBody.get();	
+    } else if (auto function = DynamicCast<FuncDecl>(node)) {	
+        key = function->funcBody.get();	
+    } else if (auto pcd = DynamicCast<PrimaryCtorDecl>(node)) {	
+        key = pcd->funcBody.get();	
+    } else if (auto vda = DynamicCast<VarDeclAbstract>(node); vda && vda->TestAttr(Attribute::GLOBAL)) {	
+        key = vda;	
+    }	
+    if (!key) {	
+        return;	
+    }	
+
+    Walker(key, [this, &key](const Ptr<Node>& node) {	
+        if (auto vda = DynamicCast<VarWithPatternDecl>(node); vda && node != key) {	
+            node2LocalWildcardVar[key].emplace_back(vda);	
+        } else if (Is<FuncBody>(node) && node != key) {	
             return VisitAction::SKIP_CHILDREN;
         }
         return VisitAction::WALK_CHILDREN;
@@ -1398,6 +1497,34 @@ std::optional<size_t> ManglerContext::GetIndexOfVar(
     }
 
     if (foundFunc != node2LocalVar.end()) {
+        auto foundId = foundFunc->second.find(target->identifier);
+        if (foundId == foundFunc->second.end()) {
+            return {};
+        }
+        auto targetIt = std::find(foundId->second.begin(), foundId->second.end(), target);
+        if (targetIt != foundId->second.end()) {
+            return targetIt - foundId->second.begin();
+        }
+        return {};
+    }
+    return {};
+}
+
+std::optional<size_t> ManglerContext::GetIndexOfFunc(
+    const Ptr<const Node> node, const Ptr<const FuncDecl> target) const
+{
+    auto foundFunc = node2LocalFunc.end();
+    if (auto lambda = DynamicCast<LambdaExpr>(node)) {
+        foundFunc = node2LocalFunc.find(lambda->funcBody.get());
+    } else if (auto function = DynamicCast<FuncDecl>(node)) {
+        foundFunc = node2LocalFunc.find(function->funcBody.get());
+    } else if (auto pcd = DynamicCast<PrimaryCtorDecl>(node)) {
+        foundFunc = node2LocalFunc.find(pcd->funcBody.get());
+    } else if (auto vda = DynamicCast<VarDeclAbstract>(node)) {
+        foundFunc = node2LocalFunc.find(vda);
+    }
+
+    if (foundFunc != node2LocalFunc.end()) {
         auto foundId = foundFunc->second.find(target->identifier);
         if (foundId == foundFunc->second.end()) {
             return {};

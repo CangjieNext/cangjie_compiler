@@ -434,6 +434,23 @@ void ExpandBuildInMacro(TokenVector& attrTokens, MacroCall& macCall)
         replaceTokens(begin, buildInMacro, pos);
     }
 }
+
+void refreshNewTokensPosition(std::vector<Position>& originPos, TokenVector& tokensToParse)
+{
+    for (size_t i = 0; i < tokensToParse.size(); i++) {
+        originPos.emplace_back(tokensToParse[i].Begin());
+    }
+    for (size_t i = 1; i < tokensToParse.size(); i++) {
+        auto begin = tokensToParse[i - 1].End() + 1;
+        auto end = begin + tokensToParse[i].Value().size();
+        // The positions of the two quoest token must be connected together without any spaces in between
+        if (tokensToParse[i].kind == TokenKind::QUEST && tokensToParse[i - 1].kind == TokenKind::QUEST) {
+            begin = tokensToParse[i - 1].End();
+            end = begin + tokensToParse[i].Value().size();
+        }
+        tokensToParse[i].SetValuePos(tokensToParse[i].Value(), begin, end);
+    }
+}
 } // namespace
 
 bool MacroEvaluation::CheckAttrTokens(TokenVector& attrTokens, MacroCall& macCall)
@@ -546,6 +563,10 @@ void MacroEvaluation::ProcessTokensInQuoteExpr(
             CreateChildMacroCall(input, startIndex, curIndex, macCall, reEval);
             inQuoteInterpolation = false;
         }
+        // Check if the current token is '$' and the next token is '('.
+        // If so, enable strInterpolation mode (like $(expression)).
+        // When curIndex == input.size() - 1 and input[curIndex].kind == TokenKind::DOLLAR,
+        // an error will be reported during Lexer, so no bounds check for the array index.
         if (input[curIndex].kind == TokenKind::DOLLAR && input[curIndex + 1].kind == TokenKind::LPAREN) {
             inQuoteInterpolation = true;
         }
@@ -584,14 +605,7 @@ void MacroEvaluation::CreateChildMacroCall(
     // and parser relay on position information to collect macro input tokens
     std::vector<Position> originPos;
     if (reEval) {
-        for (size_t i = 0; i < tokensToParse.size(); i++) {
-            originPos.emplace_back(tokensToParse[i].Begin());
-        }
-        for (size_t i = 1; i < tokensToParse.size(); i++) {
-            auto begin = tokensToParse[i - 1].End() + 1;
-            auto end = begin + tokensToParse[i].Value().size();
-            tokensToParse[i].SetValuePos(tokensToParse[i].Value(), begin, end);
-        }
+        refreshNewTokensPosition(originPos, tokensToParse);
     }
     Parser parser{tokensToParse, diag, ci->diag.GetSourceManager(), false,
         ci->invocation.globalOptions.compileCjd};
@@ -757,6 +771,10 @@ void MacroEvaluation::CreateMacroCallTree(MacroCall& macCall, bool reEval)
             (curIndex == tokenSize - 1 || !IsIdentifierOrContextualKeyword(inputTokens[curIndex + 1].kind))) {
             (void)ci->diag.Diagnose(posTmp, DiagKind::macro_expand_invalid_input_tokens);
         }
+        // Check if the current token is 'quote' and the next token is '('.
+        // If so, process Tokens in QuoteExpr (like quote()).
+        // When curIndex == inputTokens.size() - 1 and inputTokens[curIndex].kind == TokenKind::QUOTE,
+        // an error will be reported during Lexer, so no bounds check for the array index.
         if (inputTokens[curIndex].kind == TokenKind::QUOTE && inputTokens[curIndex + 1].kind == TokenKind::LPAREN) {
             curIndex++;
             ProcessTokensInQuoteExpr(inputTokens, startIndex, curIndex, macCall, reEval);

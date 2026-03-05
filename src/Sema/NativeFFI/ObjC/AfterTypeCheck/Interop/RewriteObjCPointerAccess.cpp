@@ -59,6 +59,7 @@ void HandleObjCPointerRead(InteropContext& ctx, CallExpr& callExpr)
     auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr.baseFunc);
     CJC_NULLPTR_CHECK(ma);
     auto receiver = ASTCloner::Clone<Expr>(ma->baseExpr);
+    CJC_NULLPTR_CHECK(receiver);
     auto elementType = receiver->ty->typeArgs[0];
     auto rawCType = ctx.typeMapper.Cj2CType(elementType);
     Ptr<Ty> pointerType = ctx.typeManager.GetPointerTy(rawCType);
@@ -69,7 +70,7 @@ void HandleObjCPointerRead(InteropContext& ctx, CallExpr& callExpr)
     auto readPointerFunc = ctx.importManager.GetCoreDecl<FuncDecl>(READ_POINTER_INTRINSIC);
     CJC_NULLPTR_CHECK(readPointerFunc);
     auto readPointerRef = CreateRefExpr(*readPointerFunc, callExpr);
-    readPointerRef->typeArguments.push_back(CreateType(rawCType));
+    readPointerRef->instTys.push_back(rawCType);
     readPointerRef->ty = ctx.typeManager.GetFunctionTy(std::vector { pointerType, int64Type }, rawCType);
 
     auto ptrExpr = ctx.factory.CreateUnsafePointerCast(
@@ -117,6 +118,7 @@ void HandleObjCPointerWrite(InteropContext& ctx, CallExpr& callExpr)
     auto receiver = ASTCloner::Clone<Expr>(ma->baseExpr);
     CJC_ASSERT(callExpr.args.size() == 1);
     auto valueArg = ASTCloner::Clone<Expr>(callExpr.args[0]->expr);
+    CJC_ASSERT_WITH_MSG(!receiver->ty->typeArgs.empty(), "ObjCPointer typeArgs is empty");
     auto elementType = receiver->ty->typeArgs[0];
     auto rawCType = ctx.typeMapper.Cj2CType(elementType);
     Ptr<Ty> pointerType = ctx.typeManager.GetPointerTy(rawCType);
@@ -128,7 +130,7 @@ void HandleObjCPointerWrite(InteropContext& ctx, CallExpr& callExpr)
     auto writePointerFunc = ctx.importManager.GetCoreDecl<FuncDecl>(WRITE_POINTER_INTRINSIC);
     CJC_NULLPTR_CHECK(writePointerFunc);
     auto writePointerRef = CreateRefExpr(*writePointerFunc, callExpr);
-    writePointerRef->typeArguments.push_back(CreateType(rawCType));
+    writePointerRef->instTys.push_back(rawCType);
     writePointerRef->ty =
         ctx.typeManager.GetFunctionTy({ pointerType, int64Type, rawCType }, unitType);
 

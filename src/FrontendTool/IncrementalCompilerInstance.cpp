@@ -430,7 +430,7 @@ void UpdateIncrRemovedDeclsForVirtualFuncDep(CachedMangleMap& cacheMangles, std:
         }
     }
     for (auto& [delRaw, del] : delVirtFuncWrapForIncr) {
-            logger.LogLn("[delVirDep][change] raw: " + delRaw + " mg: " + del);
+        logger.LogLn("[delVirDep][change] raw: " + delRaw + " mg: " + del);
         cacheMangles.incrRemovedDecls.emplace(del);
     }
 }
@@ -494,15 +494,39 @@ bool IncrementalCompilerInstance::PerformCodeGen()
     return ret;
 }
 
-bool IncrementalCompilerInstance::PerformCjoAndBchirSaving()
+bool IncrementalCompilerInstance::PerformCjoSaving()
 {
-    Utils::ProfileRecorder recorder("Main Stage", "Save cjo and bchir");
+    if (auto& logger = IncrementalCompilationLogger::GetInstance(); logger.IsEnable()) {
+        std::string message;
+        if (kind == IncreKind::NO_CHANGE) {
+            message = "no change, skip cjo saving";
+        } else if (kind == IncreKind::EMPTY_PKG) {
+            message = "empty pkg, skip cjo saving";
+        } else if (invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR) {
+            message = " chir output mode, skip cjo saving";
+        } else {
+            message = "incremental cjo saving";
+        }
+        logger.LogLn(message);
+    }
+    if (kind == IncreKind::NO_CHANGE || kind == IncreKind::EMPTY_PKG) {
+        return true;
+    }
+
+    return DefaultCompilerInstance::PerformCjoSaving();
+}
+
+bool IncrementalCompilerInstance::PerformResultsSaving()
+{
+    Utils::ProfileRecorder recorder("Main Stage", "Save results");
     if (kind == IncreKind::NO_CHANGE || kind == IncreKind::EMPTY_PKG) {
         return true;
     }
     bool ret = true;
     for (auto& srcPkg : GetSourcePackages()) {
-        ret = ret && SaveCjoAndBchir(*srcPkg);
+        if (invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR) {
+            ret = ret && SaveCjo(*srcPkg);
+        }
         if (ret && !srcPkg->IsEmpty()) {
             // Write astData for incremental compilation in cache path.
             std::string cachedCjo =

@@ -435,9 +435,10 @@ void MacroExpansion::Execute(std::vector<OwnedPtr<AST::Package>>& packages)
             Execute(*package);
         }
     }
-    if (ci->invocation.globalOptions.enableCompileTest) {
+    if (ci->invocation.globalOptions.enableCompileTest && ci->invocation.globalOptions.CompileExecutable()) {
         TestEntryConstructor::ConstructTestSuite(ci->invocation.globalOptions.moduleName, packages,
-            ci->importManager.GetAllImportedPackages(), ci->invocation.globalOptions.compileTestsOnly);
+            ci->importManager.GetAllImportedPackages(),
+            ci->invocation.globalOptions.compileTestsOnly);
     }
     for (auto& package : packages) {
         AddCurFile(*package);

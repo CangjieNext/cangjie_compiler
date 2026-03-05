@@ -46,6 +46,7 @@ enum class CGIntrinsicKind {
     SYNC,
     MATH,
     STACK_TRACE,
+    THREAD_INFO,
     IDENTITY_HASHCODE,
     FUTURE,
     NET,
@@ -55,6 +56,7 @@ enum class CGIntrinsicKind {
     RUNTIME,
     EXCEPTION_CATCH,
     PREINITIALIZE,
+    EXCLUSIVE_SCOPE,
     UNKNOWN
 };
 
@@ -93,6 +95,7 @@ const std::unordered_set<CHIR::IntrinsicKind> BUILTIN_FUNC_SET = {
     /// This comment is used to keep the code neat under format.
     CHIR::IntrinsicKind::OBJECT_REFEQ,
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    CHIR::IntrinsicKind::FUNC_REFEQ,
     CHIR::IntrinsicKind::RAW_ARRAY_REFEQ,
 #endif
     CHIR::IntrinsicKind::OBJECT_ZERO_VALUE,
@@ -110,6 +113,7 @@ const std::unordered_set<CHIR::IntrinsicKind> BUILTIN_FUNC_SET = {
     CHIR::IntrinsicKind::IS_NULL,
     CHIR::IntrinsicKind::GET_TYPE_FOR_TYPE_PARAMETER,
     CHIR::IntrinsicKind::IS_SUBTYPE_TYPES,
+    CHIR::IntrinsicKind::EXCLUSIVE_SCOPE,
 };
 
 inline bool IsBuiltinIntrinsic(const CHIR::IntrinsicKind intrinsicKind)
@@ -144,6 +148,14 @@ inline bool IsStackTraceIntrinsic(const CHIR::IntrinsicKind intrinsicKind)
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     return intrinsicKind == CHIR::IntrinsicKind::FILL_IN_STACK_TRACE ||
         intrinsicKind == CHIR::IntrinsicKind::DECODE_STACK_TRACE;
+#endif
+}
+
+inline bool IsThreadInfoIntrinsic(const CHIR::IntrinsicKind intrinsicKind)
+{
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    return intrinsicKind == CHIR::IntrinsicKind::DUMP_CURRENT_THREAD_INFO ||
+        intrinsicKind == CHIR::IntrinsicKind::DUMP_ALL_THREADS_INFO;
 #endif
 }
 

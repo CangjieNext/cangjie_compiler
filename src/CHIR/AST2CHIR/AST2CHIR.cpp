@@ -17,6 +17,7 @@
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/Visitor/Visitor.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
+#include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Utils/ParallelUtil.h"
 
@@ -169,7 +170,7 @@ std::pair<InitOrder, bool> AST2CHIR::SortGlobalVarDecl(const AST::Package& pkg)
     }
 
     auto analysis = GlobalDeclAnalysis(
-        diag, gim, kind, funcsAndVars, localConstVars, staticInitFuncInfoMap, outputCHIR, mergingPlatform);
+        diag, gim, kind, funcsAndVars, localConstVars, staticInitFuncInfoMap, outputCHIR, mergingSpecific);
     auto initOrder = analysis.Run(nodesWithDeps, fileAndVarMap, cachedInfo);
 
     // Speically, now we want to flattern the local const VarWithPattern decl which will be useful in translation later.
@@ -247,9 +248,9 @@ void AST2CHIR::FlatternPattern(const AST::Pattern& pattern, bool isLocalConst)
 void AST2CHIR::SetInitFuncForStaticVar()
 {
     for (auto& skipedStaticVar : varsInitedByStaticInitFunc) {
-        // If common var with platform one, need to skip
+        // If common var with specific one, need to skip
         auto skipedStaticVarVal = globalCache.TryGet(*skipedStaticVar);
-        if (skipedStaticVarVal == nullptr || skipedStaticVar->platformImplementation) {
+        if (skipedStaticVarVal == nullptr || skipedStaticVar->specificImplementation) {
             continue;
         }
         CJC_ASSERT(skipedStaticVar->astKind == AST::ASTKind::VAR_DECL);
@@ -478,16 +479,15 @@ void AST2CHIR::AST2CHIRCheck()
 bool AST2CHIR::TryToDeserializeCHIR()
 {
     auto& chirFiles = opts.inputChirFiles;
+    CJC_ASSERT(chirFiles.size() != 0);
     ToCHIR::Phase phase;
     if (chirFiles.size() == 1) {
-        CHIRDeserializer::Deserialize(chirFiles.at(0), builder, phase, true);
-        mergingPlatform = true;
-        return true;
-    } else if (chirFiles.size() != 0) {
-        // synthetic limitation, however need to distinguish different chir sources
-        diag.DiagnoseRefactor(DiagKindRefactor::frontend_can_not_handle_to_many_chir, DEFAULT_POSITION);
+        bool success = CHIRDeserializer::Deserialize(chirFiles.at(0), builder, phase, true);
+        mergingSpecific = true;
+        return success;
     }
-
+    // synthetic limitation, however need to distinguish different chir sources
+    diag.DiagnoseRefactor(DiagKindRefactor::frontend_can_not_handle_to_many_chir, DEFAULT_POSITION);
     return false;
 }
 
@@ -507,15 +507,18 @@ static Package::AccessLevel BuildPackageAccessLevel(const AST::AccessLevel& leve
 bool AST2CHIR::ToCHIRPackage(AST::Package& node)
 {
     // It can be not null in case of part of the package was deserialized from .chir
-    if (TryToDeserializeCHIR()) {
+    bool needDesCHIR = opts.inputChirFiles.size() != 0;
+    if (!needDesCHIR) {
+        package = builder.CreatePackage(node.fullPackageName);
+        outputCHIR = opts.outputMode == GlobalOptions::OutputMode::CHIR;
+    } else if (TryToDeserializeCHIR()) {
         package = builder.GetCurPackage();
         BuildDeserializedTable();
     } else {
-        package = builder.CreatePackage(node.fullPackageName);
-        outputCHIR = opts.outputMode == GlobalOptions::OutputMode::CHIR;
+        return false;
     }
-    // Translating common alongside with merging platform is not supported
-    CJC_ASSERT(!(outputCHIR && mergingPlatform));
+    // Translating common alongside with merging specific is not supported
+    CJC_ASSERT(!(outputCHIR && mergingSpecific));
     package->SetPackageAccessLevel(BuildPackageAccessLevel(node.accessible));
     RegisterAllSources();
     CJC_NULLPTR_CHECK(package);

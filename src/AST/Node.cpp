@@ -226,6 +226,9 @@ std::string EnumPattern::GetIdentifier() const
 
 std::string CallExpr::ToString() const
 {
+    if (baseFunc == nullptr) {
+        return "";
+    }
     std::stringstream ss;
     if (!baseFunc) {
         ss << "(";
@@ -265,6 +268,9 @@ void CallExpr::Clear() noexcept
 {
     RecoverToCallExpr(*this);
     Expr::Clear();
+    if (baseFunc == nullptr) {
+        return;
+    }
     baseFunc->Clear();
     callKind = CallKind::CALL_INVALID;
     resolvedFunction = nullptr;
@@ -272,6 +278,9 @@ void CallExpr::Clear() noexcept
 
 std::string FuncArg::ToString() const
 {
+    if (expr == nullptr) {
+        return "";
+    }
     std::stringstream ss;
     if (!expr) {
         if (!name.Empty()) {
@@ -307,6 +316,9 @@ std::string FuncArg::ToString() const
 
 std::string MemberAccess::ToString() const
 {
+    if (baseExpr == nullptr) {
+        return "";
+    }
     std::stringstream ss;
     if (!baseExpr) {
         return field.Val();
@@ -557,7 +569,9 @@ bool Node::IsSamePackage(const Node& other) const
 void SubscriptExpr::Clear() noexcept
 {
     RecoverToSubscriptExpr(*this);
-    baseExpr->Clear();
+    if (baseExpr) {
+        baseExpr->Clear();
+    }
     for (auto& indexExpr : indexExprs) {
         indexExpr->Clear();
     }
@@ -575,13 +589,18 @@ void UnaryExpr::Clear() noexcept
 {
     RecoverToUnaryExpr(*this);
     Expr::Clear();
-    expr->Clear();
+    if (expr) {
+        expr->Clear();
+    }
 }
 
 void BinaryExpr::Clear() noexcept
 {
     RecoverToBinaryExpr(*this);
     Expr::Clear();
+    if (leftExpr == nullptr || rightExpr == nullptr) {
+        return;
+    }
     leftExpr->Clear();
     rightExpr->Clear();
 }
@@ -589,7 +608,9 @@ void BinaryExpr::Clear() noexcept
 void ParenExpr::Clear() noexcept
 {
     Expr::Clear();
-    expr->Clear();
+    if (expr) {
+        expr->Clear();
+    }
 }
 
 bool RefType::IsGenericThisType() const
@@ -658,14 +679,17 @@ std::vector<Ptr<Decl>> Decl::GetMemberDeclPtrs() const
 {
     std::vector<Ptr<Decl>> results;
     if (auto cd = DynamicCast<const ClassDecl*>(this); cd) {
+        CJC_NULLPTR_CHECK(cd->body);
         for (auto& decl : cd->body->decls) {
             results.push_back(decl.get());
         }
     } else if (auto id = DynamicCast<const InterfaceDecl*>(this); id) {
+        CJC_NULLPTR_CHECK(id->body);
         for (auto& decl : id->body->decls) {
             results.push_back(decl.get());
         }
     } else if (auto sd = DynamicCast<const StructDecl*>(this); sd) {
+        CJC_NULLPTR_CHECK(sd->body);
         for (auto& decl : sd->body->decls) {
             results.push_back(decl.get());
         }
@@ -994,7 +1018,7 @@ Ptr<Generic> Decl::GetGeneric() const
     }
     if (auto vd = DynamicCast<const VarDecl*>(this);
         vd && vd->outerDecl && vd->outerDecl->astKind == ASTKind::ENUM_DECL) {
-        return StaticAs<ASTKind::ENUM_DECL>(vd->outerDecl)->generic.get();
+        return vd->outerDecl->generic.get();
     }
     return generic.get();
 }
@@ -1043,14 +1067,14 @@ Ptr<FuncDecl> Decl::GetDesugarDecl() const
     return nullptr;
 }
 
-bool Decl::IsCommonOrPlatform() const
+bool Decl::IsCommonOrSpecific() const
 {
-    return TestAttr(AST::Attribute::COMMON) || TestAttr(AST::Attribute::PLATFORM);
+    return TestAttr(AST::Attribute::COMMON) || TestAttr(AST::Attribute::SPECIFIC);
 }
 
-bool Decl::IsCommonMatchedWithPlatform() const
+bool Decl::IsCommonMatchedWithSpecific() const
 {
-    return TestAttr(AST::Attribute::COMMON) && platformImplementation;
+    return TestAttr(AST::Attribute::COMMON) && specificImplementation;
 }
 
 /**
@@ -1120,7 +1144,7 @@ std::string ImportContent::GetPrefixPath() const
     }
     return ss.str();
 }
- 
+
 std::string ImportContent::GetImportedPackageName() const
 {
     std::stringstream ss;
@@ -1142,11 +1166,37 @@ std::string ImportContent::GetImportedPackageName() const
     return ss.str();
 }
 
+std::string ImportContent::GetImportedPackageNameWithIsDecl() const
+{
+    std::stringstream ss;
+    for (size_t i{0}; i < prefixPaths.size(); ++i) {
+        ss << prefixPaths[i];
+        // do not add . if this is the last of import xxx.*, because * is not part of package name
+        if (kind == ImportKind::IMPORT_ALL && i + 1 == prefixPaths.size()) {
+            continue;
+        }
+        if (i == 0 && hasDoubleColon) {
+            ss << TOKENS[static_cast<int>(TokenKind::DOUBLE_COLON)];
+        } else if (i + 1 != prefixPaths.size()) {
+            ss << TOKENS[static_cast<int>(TokenKind::DOT)];
+        }
+    }
+    if (kind != ImportKind::IMPORT_ALL && !isDecl) {
+        ss << TOKENS[static_cast<int>(TokenKind::DOT)] << identifier.Val();
+    }
+    return ss.str();
+}
+
 std::string ImportContent::ToString() const
 {
     std::function<void(std::stringstream&, const ImportContent&)> toString = [](auto& ss, auto& content) {
-        for (const auto& prefix : content.prefixPaths) {
-            ss << prefix << ".";
+        for (size_t i{0}; i < content.prefixPaths.size(); ++i) {
+            ss << content.prefixPaths[i];
+            if (i == 0 && content.hasDoubleColon) {
+                ss << TOKENS[static_cast<int>(TokenKind::DOUBLE_COLON)];
+            } else {
+                ss << TOKENS[static_cast<int>(TokenKind::DOT)];
+            }
         }
         if (content.kind != ImportKind::IMPORT_MULTI) {
             ss << content.identifier.Val();

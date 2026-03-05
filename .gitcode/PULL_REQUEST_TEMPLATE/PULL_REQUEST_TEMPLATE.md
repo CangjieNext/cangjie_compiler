@@ -4,7 +4,7 @@ Please describe the changes in this Pull Request.
 
 ## Change Type (Required)
 
-Please describe the type of changes in this Pull Request (reason). **Simply save and click the checkbox, or when editing, change `[ ]` to `[x]` for the relevant item.**
+**Simply save and click the checkbox, or when editing, change `[ ]` to `[x]` for the relevant item.**
 
 - [ ] Feature
 - [ ] Bugfix

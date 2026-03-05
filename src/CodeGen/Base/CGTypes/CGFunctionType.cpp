@@ -176,19 +176,20 @@ void CGFunctionType::GenContainedCGTypes()
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     auto cgType = CGType::GetOrCreate(cgMod, &chirType);
     if (chirType.IsRef() && chirType.GetTypeArgs()[0]->IsStruct()) {
-        return CGType::GetOrCreate(cgMod, &chirType, 1U);
+        return CGType::GetOrCreate(cgMod, &chirType, CGType::TypeExtraInfo(1U));
     } else if (chirType.IsStruct() || chirType.IsTuple() || (!cgType->GetSize() && !chirType.IsGeneric())) {
         auto refType =  CGType::GetRefTypeOf(cgCtx.GetCHIRBuilder(), chirType);
         // If current parameter is the first parameter in a struct method, aka `this`
         if (!forWrapper && containedCGTypeIndex == 1U && this->chirFunc && IsStructOrExtendMethod(*chirFunc)) {
             return CGType::GetOrCreate(cgMod, refType);
         } else {
-            return CGType::GetOrCreate(cgMod, refType, cgType->GetSize() ? 0U : 1U);
+            return CGType::GetOrCreate(cgMod, refType, CGType::TypeExtraInfo(cgType->GetSize() ? 0U : 1U));
         }
     } else if (cgType->IsStructType() || cgType->IsVArrayType()) {
-        return CGType::GetOrCreate(cgMod, CGType::GetRefTypeOf(cgCtx.GetCHIRBuilder(), chirType), 0U);
+        return CGType::GetOrCreate(
+            cgMod, CGType::GetRefTypeOf(cgCtx.GetCHIRBuilder(), chirType), CGType::TypeExtraInfo(0U));
     } else if (cgType->IsStructPtrType() || cgType->IsVArrayPtrType()) {
-        return CGType::GetOrCreate(cgMod, &chirType, 1U);
+        return CGType::GetOrCreate(cgMod, &chirType, CGType::TypeExtraInfo(1U));
     } else {
         return CGType::GetOrCreate(cgMod, &chirType);
     }
@@ -238,9 +239,17 @@ llvm::Constant* CGFunctionType::GenTypeArgsOfTypeInfo()
     auto typeInfoPtrTy = CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext());
 
     std::vector<llvm::Constant*> constants;
-    (void)constants.emplace_back(CGType::GetOrCreate(cgMod, DeRef(*funcType.GetReturnType()))->GetOrCreateTypeInfo());
+    auto returnCGType = CGType::GetOrCreate(cgMod, DeRef(*funcType.GetReturnType()));
+    (void)constants.emplace_back(returnCGType->GetOrCreateTypeInfo());
+    if (returnCGType->IsStaticGI()) {
+        cgCtx.AddDependentPartialOrderOfTypes(constants[0], this->typeInfo);
+    }
     for (auto paramType : funcType.GetParamTypes()) {
-        (void)constants.emplace_back(CGType::GetOrCreate(cgMod, DeRef(*paramType))->GetOrCreateTypeInfo());
+        auto paramCGType = CGType::GetOrCreate(cgMod, DeRef(*paramType));
+        auto it =constants.emplace_back(paramCGType->GetOrCreateTypeInfo());
+        if (paramCGType->IsStaticGI()) {
+            cgCtx.AddDependentPartialOrderOfTypes(it, this->typeInfo);
+        }
     }
 
     auto typeOfGenericArgsGV = llvm::ArrayType::get(typeInfoPtrTy, constants.size());
@@ -249,6 +258,8 @@ llvm::Constant* CGFunctionType::GenTypeArgsOfTypeInfo()
     typeInfoOfGenericArgs->setInitializer(llvm::ConstantArray::get(typeOfGenericArgsGV, constants));
     typeInfoOfGenericArgs->setLinkage(llvm::GlobalValue::LinkageTypes::PrivateLinkage);
     typeInfoOfGenericArgs->addAttribute(CJTI_TYPE_ARGS_ATTR);
+    typeInfoOfGenericArgs->setConstant(true);
+    typeInfoOfGenericArgs->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     return llvm::ConstantExpr::getBitCast(typeInfoOfGenericArgs, llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
 }
 

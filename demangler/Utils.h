@@ -9,7 +9,9 @@
 #define CANGJIE_DEMANGLER_UTILS_H
 
 #include <unordered_map>
+#include <cstdint>
 #include <cstring>
+#include <string>
 
 namespace Cangjie {
 const char MANGLE_CANGJIE_PREFIX[] = "_C";
@@ -22,7 +24,7 @@ constexpr char MANGLE_EXTEND_PREFIX = 'X';
 constexpr char MANGLE_LAMBDA_PREFIX = 'L';
 constexpr char MANGLE_UNDERSCORE_PREFIX = '_';
 constexpr char END = 'E';
-constexpr char MANGLE_FILE_NUMBER_END = '$';
+constexpr char MANGLE_END = '$'; //The '$' represents file number end and wrapper funtion end.
 constexpr size_t FILE_HASH_LEN = 13;
 constexpr size_t SPECIAL_NAME_LEN = 2;
 constexpr size_t MANGLE_CHAR_LEN = 1;
@@ -43,7 +45,7 @@ struct StdPkgHash {
         size_t id = 0;
         const size_t n = cPkg.size();
         while (id < n) {
-            hash = ((hash << offset) + hash) + cPkg[id++];
+            hash = ((hash << offset) + hash) + static_cast<uint8_t>(cPkg[id++]);
         }
         return hash & (0x7FFFFFFF);
     }

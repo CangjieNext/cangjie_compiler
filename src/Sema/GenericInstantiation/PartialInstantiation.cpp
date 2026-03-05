@@ -23,6 +23,7 @@ using namespace Cangjie::Meta;
 
 namespace {
 auto g_optLevel = GlobalOptions::OptimizationLevel::O0;
+auto g_outputMode = GlobalOptions::OutputMode::EXECUTABLE;
 
 inline bool IsCPointerFrozenMember(const Decl& decl)
 {
@@ -38,6 +39,7 @@ inline bool IsCPointerFrozenMember(const Decl& decl)
 void SetOptLevel(const Cangjie::GlobalOptions& opts)
 {
     g_optLevel = opts.optimizationLevel;
+    g_outputMode = opts.outputMode;
 }
 
 GlobalOptions::OptimizationLevel GetOptLevel()
@@ -79,6 +81,14 @@ bool IsInOpenContext(const std::vector<Ptr<AST::Decl>>& contextDecl)
 
 bool RequireInstantiation(const Decl& decl, bool isInOpenContext)
 {
+    // Skip instantiations in common code compilation because:
+    // 1. Common code may be incomplete at this stage
+    // 2. Specific source sets can modify the implementation
+    //
+    // Also skip common declarations with specific implementations
+    if (g_outputMode == GlobalOptions::OutputMode::CHIR || decl.IsCommonMatchedWithSpecific()) {
+        return false;
+    }
     if (IsCPointerFrozenMember(decl)) {
         return true;
     }
@@ -426,6 +436,7 @@ OwnedPtr<Decl> PartialInstantiation::InstantiateEnumDecl(const EnumDecl& ed, con
     ret->bitOrPosVector = ed.bitOrPosVector;
     ret->rightCurlPos = ed.rightCurlPos;
     ret->upperBoundPos = ed.upperBoundPos;
+    ret->hasEllipsis = ed.hasEllipsis;
     ret->EnableAttr(Attribute::COMPILER_ADD);
     return ret;
 }
@@ -1373,7 +1384,8 @@ OwnedPtr<StructBody> PartialInstantiation::InstantiateStructBody(const StructBod
     ret->leftCurlPos = sb.leftCurlPos;
     for (auto& it : sb.decls) {
         if (it->astKind == ASTKind::PRIMARY_CTOR_DECL ||
-            (it->astKind != ASTKind::VAR_DECL && !RequireInstantiation(*it)) || IsStaticVar(*it)) {
+            (it->astKind != ASTKind::VAR_DECL && !RequireInstantiation(*it)) || IsStaticVar(*it) ||
+            IsStaticInitializer(*it)) {
             continue;
         }
         ret->decls.push_back(InstantiateDecl(it.get(), visitor));
@@ -1486,6 +1498,7 @@ OwnedPtr<Annotation> PartialInstantiation::InstantiateAnnotation(const Annotatio
     CopyNodeField(ret.get(), annotation);
     ret->kind = annotation.kind;
     ret->definedPackage = annotation.definedPackage;
+    ret->isCompileTimeVisible = annotation.isCompileTimeVisible;
     ret->identifier = annotation.identifier;
     ret->attrs = annotation.attrs;
     ret->attrCommas = annotation.attrCommas;
@@ -1693,6 +1706,7 @@ OwnedPtr<Node> PartialInstantiation::InstantiateWithRearrange(Ptr<Node> node, co
                 auto& maTarget = static_cast<MemberAccess&>(target);
                 TargetAddrMapInsert(maFrom.target, maTarget.target);
                 TargetAddrMapInsert(maFrom.callOrPattern, maTarget.callOrPattern);
+                CJC_ASSERT(maFrom.targets.size() == maTarget.targets.size());
                 for (size_t i = 0; i < maFrom.targets.size(); i++) {
                     TargetAddrMapInsert(maFrom.targets[i], maTarget.targets[i]);
                 }
