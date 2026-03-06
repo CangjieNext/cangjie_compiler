@@ -867,23 +867,17 @@ bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(const InheritableDecl
 }
 
 namespace {
-size_t GenericsCount(const Decl& decl)
-{
-    if (!decl.TestAttr(Attribute::GENERIC)) { // fast path
-        return 0;
-    }
-    auto generic = decl.GetGeneric();
-    if (!generic) {
-        return 0;
-    }
-    return generic->typeParameters.size();
-}
-
+/**
+ * Whether the function node is a constructor declaration
+ */
 bool IsConstructor(const FuncDecl& func)
 {
     return func.TestAttr(Attribute::CONSTRUCTOR);
 }
 
+/**
+ * Whether the function node is a primary constructor declaration
+ */
 bool IsPrimaryConstructor(const FuncDecl& func)
 {
     return func.TestAttr(Attribute::PRIMARY_CONSTRUCTOR);
@@ -909,7 +903,7 @@ bool MPTypeCheckerImpl::IsCJMPDeclMatchable(Decl& lhsDecl, Decl& rhsDecl) const
         }
     }
 
-    if (GenericsCount(lhsDecl) != GenericsCount(rhsDecl)) {
+    if (lhsDecl.GetGenericsCount() != rhsDecl.GetGenericsCount()) {
         return false;
     }
 
@@ -1286,7 +1280,7 @@ void MPTypeCheckerImpl::MapCJMPGenericTypeArgs(
     }
 
     CheckCommonSpecificGenericMatch(specificDecl, commonDecl);
-    if (GenericsCount(commonDecl) != GenericsCount(specificDecl)) {
+    if (commonDecl.GetGenericsCount() != specificDecl.GetGenericsCount()) {
         return;
     }
     auto mapping = typeManager.GenerateGenericMappingFromGeneric(commonDecl, specificDecl);
