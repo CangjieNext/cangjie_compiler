@@ -93,6 +93,7 @@ void GenerateVTable::CreateVTable()
 
 void GenerateVTable::UpdateOperatorVirFunc()
 {
+    Utils::ProfileRecorder recorder("GenerateVTable", "UpdateOperatorVirFunc");
     UpdateOperatorVTable(package, builder).Update();
 }
 
