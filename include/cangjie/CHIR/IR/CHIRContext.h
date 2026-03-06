@@ -239,7 +239,7 @@ public:
 
     void DeleteAllocatedInstance(std::vector<size_t>& idxs);
     void DeleteAllocatedTys();
-    void MergeAllocatedPtrInFuncOrLambda(std::unordered_map<BlockGroup*, std::unordered_set<Base*>>& input);
+    void MergeAllocatedPtrInFuncOrLambda(std::unordered_map<BlockGroup*, std::vector<Base*>>& input);
     void FreeMemoryInFunc(BlockGroup& funcBody);
     void FreeWholePackage();
 
@@ -260,7 +260,7 @@ private:
     std::vector<EnumDef*> allocatedEnums;
     std::vector<ExtendDef*> allocatedExtends;
     std::unordered_set<CustomTypeDef*> allocatedCustomDefs;
-    std::unordered_map<BlockGroup*, std::unordered_set<Base*>> allocatedPtrInFuncOrLambda;
+    std::unordered_map<BlockGroup*, std::vector<Base*>> allocatedPtrInFuncOrLambda;
 
     static std::mutex allocatedListMtx;
     UnitType* unitTy{nullptr};

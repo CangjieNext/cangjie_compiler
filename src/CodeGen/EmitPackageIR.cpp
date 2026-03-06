@@ -6,7 +6,6 @@
 
 #include "cangjie/CodeGen/EmitPackageIR.h"
 
-#include <malloc.h>
 #include "llvm/IR/Verifier.h"
 
 #include "Base/CGTypes/CGEnumType.h"
@@ -31,6 +30,7 @@
 #include "cangjie/FrontendTool/IncrementalCompilerInstance.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 #include "cangjie/Utils/TaskQueue.h"
+#include "cangjie/Utils/Utils.h"
 
 namespace Cangjie::CodeGen {
 void EmitMain(CGModule& cgMod);
@@ -596,7 +596,7 @@ std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(CHIR::CHIRBuilder& 
     auto temp = PackageGeneratorImpl(chirBuilder, chirData, options, enableIncrement, cachedMangleMap);
     temp.EmitIR();
     compilerInstance.FreeCHIRData();
-    malloc_trim(0);
+    Utils::FreeIdleMemoryToOS();
     return temp.ReleaseLLVMModules();
 }
 #endif

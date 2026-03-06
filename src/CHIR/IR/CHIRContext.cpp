@@ -221,14 +221,14 @@ Type* CHIRContext::ToSelectorType(Type::TypeKind kind) const
     }
 }
 
-void CHIRContext::MergeAllocatedPtrInFuncOrLambda(std::unordered_map<BlockGroup*, std::unordered_set<Base*>>& input)
+void CHIRContext::MergeAllocatedPtrInFuncOrLambda(std::unordered_map<BlockGroup*, std::vector<Base*>>& input)
 {
     for (auto& [bg, ptrs] : input) {
         auto it = allocatedPtrInFuncOrLambda.find(bg);
         if (it == allocatedPtrInFuncOrLambda.end()) {
             allocatedPtrInFuncOrLambda.emplace(bg, ptrs);
         } else {
-            it->second.merge(ptrs);
+            it->second.insert(it->second.end(), ptrs.begin(), ptrs.end());
         }
     }
 }

@@ -332,11 +332,11 @@ void CHIRBuilder::StoreAllocatedPtrInFuncOrLambda(BlockGroup& bg, Base* ptr)
     auto it = allocatedPtrInFuncOrLambda.find(&bg);
     if (it == allocatedPtrInFuncOrLambda.end()) {
         if (ptr == nullptr) {
-            allocatedPtrInFuncOrLambda.emplace(&bg, std::unordered_set<Base*>{});
+            allocatedPtrInFuncOrLambda.emplace(&bg, std::vector<Base*>{});
         } else {
-            allocatedPtrInFuncOrLambda.emplace(&bg, std::unordered_set<Base*>{ptr});
+            allocatedPtrInFuncOrLambda.emplace(&bg, std::vector<Base*>{ptr});
         }
     } else {
-        it->second.emplace(ptr);
+        it->second.emplace_back(ptr);
     }
 }
