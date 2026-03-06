@@ -36,7 +36,7 @@ ToolFuture::State WindowsProcessFuture::GetState()
     } else if (state == WAIT_TIMEOUT) {
         return State::RUNNING;
     }
-    if (FALSE == GetExitCodeProcess(pi.hProcess, &exitCode)) {
+    if (GetExitCodeProcess(pi.hProcess, &exitCode) == FALSE) {
         return State::FAILED;
     }
     CloseHandle(pi.hProcess);

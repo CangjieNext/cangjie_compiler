@@ -27,23 +27,44 @@
 #include "cangjie/Utils/Semaphore.h"
 #include "cangjie/Driver/TempFileManager.h"
 #include "cangjie/Driver/Utils.h"
+#ifdef _WIN32
+#include "cangjie/Basic/StringConvertor.h"
+#endif
 
 using namespace Cangjie;
 namespace {
 #ifdef _WIN32
 std::string GetSystemErrorMessage(DWORD errCode)
 {
-    char msg[512] = {0};
-    DWORD size = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, errCode,
-        MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), msg, sizeof(msg), NULL);
-    if (size == 0 || msg[0] == '\0') {
+    if (errCode == 0) {
         return "";
     }
-    std::string message = std::string(msg);
-    while (!message.empty() && (message.back() == '\r' || message.back() == '\n')) {
-        message.pop_back();
+
+    LPWSTR wMsgBuf = nullptr;
+
+    DWORD size =
+        FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+            NULL, errCode, MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), (LPWSTR)&wMsgBuf, 0, NULL);
+    if (size == 0 || wMsgBuf == nullptr) {
+        return "Unknown system error code: " + std::to_string(errCode);
     }
-    return message;
+
+    std::wstring wmessage(wMsgBuf, size);
+
+    LocalFree(wMsgBuf);
+
+    while (!wmessage.empty() && (wmessage.back() == L'\r' || wmessage.back() == L'\n')) {
+        wmessage.pop_back();
+    }
+
+    if (wmessage.empty()) {
+        return "";
+    }
+    int utf8_size = WideCharToMultiByte(CP_UTF8, 0, wmessage.c_str(), (int)wmessage.length(), NULL, 0, NULL, NULL);
+    std::string result(utf8_size, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wmessage.c_str(), (int)wmessage.length(), &result[0], utf8_size, NULL, NULL);
+
+    return result;
 }
 #else
 std::string GetSystemErrorMessage(int error)
