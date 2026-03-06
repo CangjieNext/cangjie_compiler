@@ -26,7 +26,7 @@ constexpr auto WRAPPER_GETTER_SUFFIX = "_get";
 constexpr auto WRAPPER_SETTER_SUFFIX = "_set";
 } // namespace
 
-NameGenerator::NameGenerator(const BaseMangler& mangler, TypeManager& typeManager) 
+NameGenerator::NameGenerator(const BaseMangler& mangler, TypeManager& typeManager)
     : mangler(mangler), typeManager(typeManager)
 {
 }
