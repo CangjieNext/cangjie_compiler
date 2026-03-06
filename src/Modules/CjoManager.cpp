@@ -404,17 +404,26 @@ void CjoManager::LoadAllDeclsAndRefs() const
 
 void CjoManagerImpl::SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package>>& srcPackages)
 {
-    auto replaceAliasUseTy = [this](Ptr<Node> node) {
+    std::unordered_map<Ptr<AST::Ty>, Ptr<AST::Ty>> typeAliasCache;
+
+    auto replaceAliasUseTy = [this, &typeAliasCache](Ptr<Node> node) {
         if (node->astKind == ASTKind::TYPE_ALIAS_DECL) {
             return VisitAction::WALK_CHILDREN;
         }
-        if (node->IsDecl() || Is<FuncBody>(node)) {
-            node->ty = typeManager.SubstituteTypeAliasInTy(*node->ty);
-        } else if (auto type = DynamicCast<Type>(node); type && !Ty::IsInitialTy(type->aliasTy)) {
-            type->ty = typeManager.SubstituteTypeAliasInTy(*type->ty);
+
+        if (node->ty->HasAliasTy()) {
+            Ptr<Ty> key = node->ty;
+            auto cacheIt = typeAliasCache.find(key);
+            if (cacheIt != typeAliasCache.end()) {
+                node->ty = cacheIt->second;
+            } else {
+                node->ty = typeManager.SubstituteTypeAliasInTy(*key);
+                typeAliasCache.emplace(key, node->ty);
+            }
         }
         return VisitAction::WALK_CHILDREN;
     };
+
     for (auto& pkgName2PkgInfo : GetPackageNameMap()) {
         // For cjlint tool could have more than one src-package.
         bool isSrcPackage = Utils::In(srcPackages,
