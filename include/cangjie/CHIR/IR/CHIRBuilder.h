@@ -385,7 +385,7 @@ private:
     std::vector<ClassDef*> allocatedClasses;
     std::vector<EnumDef*> allocatedEnums;
     std::vector<ExtendDef*> allocatedExtends;
-    std::unordered_map<BlockGroup*, std::unordered_set<Base*>> allocatedPtrInFuncOrLambda;
+    std::unordered_map<BlockGroup*, std::vector<Base*>> allocatedPtrInFuncOrLambda;
 };
 } // namespace Cangjie::CHIR
 #endif // CANGJIE_CHIR_CHIRBUILDER_H
