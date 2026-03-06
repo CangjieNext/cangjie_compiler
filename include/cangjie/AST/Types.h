@@ -293,6 +293,7 @@ struct Ty {
      * U: Sema.
      */
     bool HasPlaceholder() const;
+    bool HasAliasTy() const;
     static Ptr<Ty> GetPrimitiveUpperBound(Ptr<Ty> ty);
     /** Return whether two tys has the same typeArgs number.
      * U: Sema.

@@ -20,6 +20,7 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/ModulesUtils.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -326,15 +327,18 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
 {
     // Add all directly imported package's loader.
     std::queue<Ptr<CjoManagerImpl::PackageInfo>> q;
-    for (auto pkg : packages) {
-        if (fromLsp) {
-            q.push(impl->GetPackageInfo(pkg->fullPackageName));
-        }
-        for (auto& file : pkg->files) {
-            for (auto& import : file->imports) {
-                auto pkgName = GetPackageNameByImport(*import);
-                if (!pkgName.empty()) {
-                    q.push(impl->GetPackageInfo(pkgName));
+    {
+        Utils::ProfileRecorder collectLoadersRecorder("LoadPackageDeclsOnDemand", "CollectImportedPackageLoaders");
+        for (auto pkg : packages) {
+            if (fromLsp) {
+                q.push(impl->GetPackageInfo(pkg->fullPackageName));
+            }
+            for (auto& file : pkg->files) {
+                for (auto& import : file->imports) {
+                    auto pkgName = GetPackageNameByImport(*import);
+                    if (!pkgName.empty()) {
+                        q.push(impl->GetPackageInfo(pkgName));
+                    }
                 }
             }
         }
@@ -343,46 +347,59 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
     std::vector<Ptr<ASTLoader>> loaders;
     loaders.reserve(q.size());
     // Load common part cjo
-    for (auto pkg : packages) {
-        if (impl->GetGlobalOptions().IsCompilingCJMPSpecific() || impl->GetGlobalOptions().commonPartCjo.has_value()) {
-            std::string expectedPackageName = pkg->fullPackageName;
-            auto commonLoader = GetCommonPartCjo(expectedPackageName);
-            if (!commonLoader) {
+    {
+        Utils::ProfileRecorder loadCommonPartRecorder("LoadPackageDeclsOnDemand", "LoadCommonPartCjo");
+        for (auto pkg : packages) {
+            if (impl->GetGlobalOptions().IsCompilingCJMPSpecific() ||
+                impl->GetGlobalOptions().commonPartCjo.has_value()) {
+                std::string expectedPackageName = pkg->fullPackageName;
+                auto commonLoader = GetCommonPartCjo(expectedPackageName);
+                if (!commonLoader) {
+                    continue;
+                }
+                commonLoader->LoadPackageDecls();
+                loaders.emplace_back(commonLoader);
+            }
+        }
+    }
+
+    {
+        Utils::ProfileRecorder loadPkgDeclsRecorder("LoadPackageDeclsOnDemand", "LoadPackageDecls");
+        while (!q.empty()) {
+            auto cur = q.front();
+            q.pop();
+            if (cur == nullptr || cur->loader == nullptr) {
+                continue; // If any error happens during loading 'cjo', the loader will be null.
+            }
+            const auto& pkgName = cur->loader->GetImportedPackageName();
+            if (auto [_, success] = impl->AddLoadedPackages(pkgName); !success) {
                 continue;
             }
-            commonLoader->LoadPackageDecls();
-            loaders.emplace_back(commonLoader);
-        }
-    }
-
-    while (!q.empty()) {
-        auto cur = q.front();
-        q.pop();
-        if (cur == nullptr || cur->loader == nullptr) {
-            continue; // If any error happens during loading 'cjo', the loader will be null.
-        }
-        const auto& pkgName = cur->loader->GetImportedPackageName();
-        if (auto [_, success] = impl->AddLoadedPackages(pkgName); !success) {
-            continue;
-        }
-        loaders.emplace_back(cur->loader);
-        cur->loader->LoadPackageDecls();
-        bool isCurMacro = cur->pkg->isMacroPackage;
-        const auto& deps = cur->loader->GetDependentPackageNames();
-        for (const auto& pkg : deps) {
-            if (NeedCollectDependency(pkgName, isCurMacro, pkg)) {
-                q.push(impl->GetPackageInfo(pkg));
+            loaders.emplace_back(cur->loader);
+            cur->loader->LoadPackageDecls();
+            bool isCurMacro = cur->pkg->isMacroPackage;
+            const auto& deps = cur->loader->GetDependentPackageNames();
+            for (const auto& pkg : deps) {
+                if (NeedCollectDependency(pkgName, isCurMacro, pkg)) {
+                    q.push(impl->GetPackageInfo(pkg));
+                }
             }
         }
     }
 
-    for (auto loader : loaders) {
-        loader->LoadRefs();
+    {
+        Utils::ProfileRecorder loadRefsRecorder("LoadPackageDeclsOnDemand", "LoadRefs");
+        for (auto loader : loaders) {
+            loader->LoadRefs();
+        }
     }
 
     // Node's ty may reference TypeAliasTy from imported package, need to substitute them to real type.
     // It must be done after all type references are loaded.
-    impl->SubstituteImportedTypeAliasTy(packages);
+    {
+        Utils::ProfileRecorder substituteTyRecorder("LoadPackageDeclsOnDemand", "SubstituteImportedTypeAliasTy");
+        impl->SubstituteImportedTypeAliasTy(packages);
+    }
 }
 
 void CjoManager::LoadAllDeclsAndRefs() const
@@ -404,17 +421,26 @@ void CjoManager::LoadAllDeclsAndRefs() const
 
 void CjoManagerImpl::SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package>>& srcPackages)
 {
-    auto replaceAliasUseTy = [this](Ptr<Node> node) {
+    std::unordered_map<Ptr<AST::Ty>, Ptr<AST::Ty>> typeAliasCache;
+
+    auto replaceAliasUseTy = [this, &typeAliasCache](Ptr<Node> node) {
         if (node->astKind == ASTKind::TYPE_ALIAS_DECL) {
             return VisitAction::WALK_CHILDREN;
         }
-        if (node->IsDecl() || Is<FuncBody>(node)) {
-            node->ty = typeManager.SubstituteTypeAliasInTy(*node->ty);
-        } else if (auto type = DynamicCast<Type>(node); type && !Ty::IsInitialTy(type->aliasTy)) {
-            type->ty = typeManager.SubstituteTypeAliasInTy(*type->ty);
+
+        if (node->ty->HasAliasTy()) {
+            Ptr<Ty> key = node->ty;
+            auto cacheIt = typeAliasCache.find(key);
+            if (cacheIt != typeAliasCache.end()) {
+                node->ty = cacheIt->second;
+            } else {
+                node->ty = typeManager.SubstituteTypeAliasInTy(*key);
+                typeAliasCache.emplace(key, node->ty);
+            }
         }
         return VisitAction::WALK_CHILDREN;
     };
+
     for (auto& pkgName2PkgInfo : GetPackageNameMap()) {
         // For cjlint tool could have more than one src-package.
         bool isSrcPackage = Utils::In(srcPackages,

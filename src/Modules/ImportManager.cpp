@@ -30,6 +30,7 @@
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/ModulesUtils.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -517,6 +518,8 @@ bool ImportManager::CheckCjoPathLegality(const OwnedPtr<ImportSpec>& import, con
 
 bool ImportManager::ResolveImportedPackageHeaders(const Package& package, bool isRecursive)
 {
+    Utils::ProfileRecorder resolveHeadersRecorder("ResolveImportedPackageHeaders", "ResolveImportedPackageHeaders");
+
     bool success{true};
     for (auto& file : package.files) {
         if (!ResolveImportedPackageForFile(*file, isRecursive)) {
@@ -543,15 +546,24 @@ bool ImportManager::ResolveImportedPackages(const std::vector<Ptr<Package>>& pac
         curPackage = pkg;
         // Files of common part need to be loaded in advance,
         // to be able to handle `import`s of common part.
-        cjoManager->LoadFilesOfCommonPart(pkg);
-        success = ResolveImportedPackageHeaders(*curPackage, false) && success;
+        {
+            Utils::ProfileRecorder loadCommonPartRecorder("ResolveImportedPackages", "LoadFilesOfCommonPart");
+            cjoManager->LoadFilesOfCommonPart(pkg);
+        }
+        {
+            Utils::ProfileRecorder resolveHeadersRecorder("ResolveImportedPackages", "ResolveImportedPackageHeaders");
+            success = ResolveImportedPackageHeaders(*curPackage, false) && success;
+        }
         curPackage->ClearAllDependentStdPkgs();
         for (auto [_, typeWithFullPkgName] : stdDepsMap) {
             curPackage->AddDependentStdPkg(typeWithFullPkgName.second);
         }
     }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    cjoManager->LoadPackageDeclsOnDemand(packages);
+    {
+        Utils::ProfileRecorder loadOnDemandRecorder("ResolveImportedPackages", "LoadPackageDeclsOnDemand");
+        cjoManager->LoadPackageDeclsOnDemand(packages);
+    }
 #endif
     for (auto pkg : packages) {
         cjoManager->AddPackageDeclMap(pkg->fullPackageName);
@@ -914,30 +926,47 @@ bool ImportManager::BuildIndex(
     } else {
         ClearCachesForRebuild();
     }
-    for (auto pkg : packages) {
-        if (pkg->HasFtrDirective()) {
-            CheckPackageFeatureSpec(diag, *pkg);
+
+    {
+        Utils::ProfileRecorder processPackagesRecorder("BuildIndex", "ProcessPackages");
+        for (auto pkg : packages) {
+            if (pkg->HasFtrDirective()) {
+                CheckPackageFeatureSpec(diag, *pkg);
+            }
+            CheckPackageSpecsIdentical(diag, *pkg);
+            if (opts.compileTestsOnly) {
+                pkg->fullPackageName = pkg->fullPackageName + SourceManager::testPkgSuffix;
+            }
+            AddImplicitImports(*pkg, globalOptions);
+            cjoManager->AddSourcePackage(*pkg);
         }
-        CheckPackageSpecsIdentical(diag, *pkg);
-        if (opts.compileTestsOnly) {
-            pkg->fullPackageName = pkg->fullPackageName + SourceManager::testPkgSuffix;
-        }
-        AddImplicitImports(*pkg, globalOptions);
-        cjoManager->AddSourcePackage(*pkg);
     }
-    ResolveImportedPackages(packages);
+
+    {
+        Utils::ProfileRecorder resolveImportsRecorder("BuildIndex", "ResolveImportedPackages");
+        ResolveImportedPackages(packages);
+    }
     ClearPackageCjoCache();
 
-    for (auto pkg : packages) {
-        dependencyGraph->AddDependenciesForPackage(*pkg);
+    {
+        Utils::ProfileRecorder addDepsRecorder("BuildIndex", "AddDependenciesForPackage");
+        for (auto pkg : packages) {
+            dependencyGraph->AddDependenciesForPackage(*pkg);
+        }
     }
 
-    for (auto pkg : packages) {
-        AddImportedDeclsForSourcePackage(*pkg);
+    {
+        Utils::ProfileRecorder addImportedDeclsRecorder("BuildIndex", "AddImportedDeclsForSourcePackage");
+        for (auto pkg : packages) {
+            AddImportedDeclsForSourcePackage(*pkg);
+        }
     }
 
-    for (auto pkg : packages) {
-        ResolveImports(*pkg);
+    {
+        Utils::ProfileRecorder resolveImportsPerPkgRecorder("BuildIndex", "ResolveImports");
+        for (auto pkg : packages) {
+            ResolveImports(*pkg);
+        }
     }
     for (auto& pd : GetAllImportedPackages()) {
         if (pd->srcPackage->hasSourceImportedDecl) {

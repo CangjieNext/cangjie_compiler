@@ -459,6 +459,7 @@ OwnedPtr<Type> ASTCloner::CloneType(Ptr<Type> type, const VisitFunc& visitor)
     ret->typeParameterNameIsRawId = type->typeParameterNameIsRawId;
     ret->typePos = type->typePos;
     ret->colonPos = type->colonPos;
+    ret->aliasTy = type->aliasTy;
 
     CopyNodeField(ret.get(), *type);
     visitor(*type, *ret);
