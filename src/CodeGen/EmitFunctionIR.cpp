@@ -4,7 +4,6 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-#include <malloc.h>
 #include "EmitFunctionIR.h"
 
 #include "Base/CGTypes/CGEnumType.h"
