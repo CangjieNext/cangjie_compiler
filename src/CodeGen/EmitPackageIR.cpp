@@ -596,6 +596,7 @@ std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(CHIR::CHIRBuilder& 
     auto temp = PackageGeneratorImpl(chirBuilder, chirData, options, enableIncrement, cachedMangleMap);
     temp.EmitIR();
     compilerInstance.FreeCHIRData();
+    malloc_trim(0);
     return temp.ReleaseLLVMModules();
 }
 #endif
