@@ -1036,6 +1036,12 @@ struct Decl : Node {
 
     bool IsCommonMatchedWithSpecific() const;
 
+    /**
+     * For a generic declaration finds generic parameters and returns them
+     * @return the number of generic parameters or 0 if not applicable.
+     */
+    size_t GetGenericsCount() const;
+
 protected:
     Decl(ASTKind kind) : Node(kind)
     {
