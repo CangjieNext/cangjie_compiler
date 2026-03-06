@@ -538,10 +538,9 @@ void ReplaceFunction(CGModule& cgMod)
         for (auto& arg : oldCall->args()) {
             argsVal.emplace_back(&(*arg));
         }
-        bool& isCalleeMutOrCtor = item.isCalleeMutOrCtor;
         // drop the `basePtr` parameter for mut function
         llvm::Value* basePtr = nullptr;
-        if (isCalleeMutOrCtor) {
+        if (item.isCalleeMutOrCtor) {
             auto basePtrItor = argsVal.begin() + thisParamOffset + 1U;
             basePtr = *basePtrItor;
             argsVal.erase(basePtrItor);
@@ -558,7 +557,7 @@ void ReplaceFunction(CGModule& cgMod)
         /// step3: store `this` without TypeInfo to the memory allocated by step2
         auto payloadPtr = irBuilder.GetPayloadFromObject(thisParamWithTI);
         if (auto thisType = CGType::GetOrCreate(cgMod, thisCHIRType)->GetLLVMType(); IsTypeContainsRef(thisType)) {
-            if (isCalleeMutOrCtor) {
+            if (item.isCalleeMutOrCtor) {
                 auto load = irBuilder.CreateEntryAlloca(thisType);
                 (void)irBuilder.CreateCJMemSetStructWith0(load);
                 irBuilder.CallGCReadAgg({load, basePtr, thisParamWithoutTI, size64});
@@ -570,7 +569,7 @@ void ReplaceFunction(CGModule& cgMod)
             irBuilder.CreateMemCpy(payloadPtr, llvm::MaybeAlign(), thisParamWithoutTI, llvm::MaybeAlign(), size32);
         }
         /// step4: emit a new CallInst with "xxx"
-        auto callee = item.cgFuncCallee->GetWrapperFunction();
+        auto callee = item.cgFuncCallee.GetWrapperFunction();
         CJC_NULLPTR_CHECK(callee);
         llvm::CallBase* newCall = nullptr;
         if (llvm::isa<llvm::CallInst>(oldCall)) {
@@ -592,7 +591,7 @@ void ReplaceFunction(CGModule& cgMod)
         oldCall->eraseFromParent();
         /// step5: find out the BB to update `this` without TypeInfo
         // Note: non-mut function could skip this step. mut or ctor function should do this step.
-        if (!isCalleeMutOrCtor) {
+        if (!item.isCalleeMutOrCtor) {
             continue;
         }
         if (auto thisType = CGType::GetOrCreate(cgMod, thisCHIRType)->GetLLVMType(); IsTypeContainsRef(thisType)) {
