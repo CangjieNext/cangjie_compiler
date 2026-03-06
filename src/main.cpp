@@ -24,6 +24,23 @@
 #include <libloaderapi.h>
 #endif
 
+// mimalloc integration
+#ifdef CANGJIE_USE_MIMALLOC
+#include <mimalloc.h>
+#ifdef _WIN32
+// Windows: Include new/delete override header for Strategy B
+#include <mimalloc-new-delete.h>
+
+// Windows: Ensure mimalloc is initialized before any global constructors
+// This is required for static linking scenarios where global object
+// construction order is not guaranteed
+struct MimallocInit {
+    MimallocInit() { mi_process_init(); }
+};
+static MimallocInit g_mimallocInit;
+#endif
+#endif
+
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Utils/Signal.h"
 
@@ -41,6 +58,38 @@ void RegisterSignalHandler()
 }
 #endif
 
+#ifdef CANGJIE_USE_MIMALLOC
+/**
+ * Initialize mimalloc options.
+ * Must be called at the beginning of main() before any allocation.
+ * This ensures options like reset_delay take effect for all allocations.
+ */
+static void InitMimallocOptions()
+{
+    // Disable reset delay for immediate memory return
+    // This improves memory return efficiency in CI environments
+    mi_option_set(mi_option_reset_delay, 0);
+    // Reduce commit delay for more aggressive memory management
+    mi_option_set(mi_option_eager_commit_delay, 0);
+}
+
+/**
+ * Verify mimalloc is properly initialized.
+ * Called early in main() to catch initialization issues.
+ */
+static void CheckMimallocInit()
+{
+    void* test = mi_malloc(16);
+    if (!test) {
+        fprintf(stderr,
+            "Warning: mimalloc initialization failed. "
+            "This may cause allocation failures.\n");
+    } else {
+        mi_free(test);
+    }
+}
+#endif
+
 const int EXIT_CODE_SUCCESS = 0;
 const int EXIT_CODE_ERROR = 1; // Normal compiler error
 
@@ -52,6 +101,12 @@ int main(int argc, const char** argv, const char** envp)
 {
 #ifndef CANGJIE_ENABLE_GCOV
     try {
+#endif
+#ifdef CANGJIE_USE_MIMALLOC
+        // Initialize mimalloc options at the very beginning
+        // This must be done before any memory allocation
+        InitMimallocOptions();
+        CheckMimallocInit();
 #endif
 #if (defined RELEASE)
         RegisterSignalHandler();

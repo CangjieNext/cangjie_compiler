@@ -146,6 +146,11 @@ if(MINGW)
     target_link_libraries(cjc ${GET_CRT_GLOB_OUTPUT})
 endif()
 
+# mimalloc integration for cjc (add after all other link calls)
+if(CANGJIE_USE_MIMALLOC)
+    target_link_libraries(cjc cangjie_mimalloc)
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES Release AND MINGW)
     # Add static link option for cjc when building MinGW release. This use
     # case is defined in GCC Runtime Libraries Exception and has no GPL issue.

@@ -4,6 +4,21 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+// mimalloc integration
+#ifdef CANGJIE_USE_MIMALLOC
+#include <mimalloc.h>
+#ifdef _WIN32
+// Windows: Include new/delete override header for Strategy B
+#include <mimalloc-new-delete.h>
+
+// Windows: Ensure mimalloc is initialized before any global constructors
+struct MimallocInit {
+    MimallocInit() { mi_process_init(); }
+};
+static MimallocInit g_mimallocInit;
+#endif
+#endif
+
 #include "cangjie/Macro/InvokeUtil.h"
 #include "cangjie/Macro/MacroEvaluation.h"
 
@@ -129,6 +144,11 @@ bool CheckPipe(int read, int write)
 
 int main(int argc, const char* argv[], [[maybe_unused]] const char** envp)
 {
+#ifdef CANGJIE_USE_MIMALLOC
+    // Initialize mimalloc options at the very beginning
+    mi_option_set(mi_option_reset_delay, 0);
+    mi_option_set(mi_option_eager_commit_delay, 0);
+#endif
     auto args = Utils::StringifyArgumentVector(argc, argv);
     if (!IsArgsValid(args)) {
         return -1;
