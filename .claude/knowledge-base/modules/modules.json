@@ -1,0 +1,35 @@
+{
+  "documentId": "module-modules",
+  "category": "supporting",
+  "pipelineStage": "module-management",
+  "dependencies": ["ast", "sema"],
+  "dependents": [],
+  "components": [
+    {
+      "name": "ImportManager",
+      "description": "导入管理器，负责解析和处理 import 语句"
+    },
+    {
+      "name": "CjoManager",
+      "description": "CJO 文件管理器，处理编译后的模块文件"
+    },
+    {
+      "name": "PackageManager",
+      "description": "包管理器，管理包的查找和加载"
+    },
+    {
+      "name": "DependencyGraph",
+      "description": "依赖图，管理模块间的依赖关系"
+    },
+    {
+      "name": "ASTSerialization",
+      "description": "AST 序列化子系统"
+    }
+  ],
+  "sourceFiles": [
+    "src/Modules/",
+    "src/Modules/ASTSerialization/"
+  ],
+  "tags": ["supporting", "module-system", "package"],
+  "searchKeywords": ["模块", "包", "import", "module", "package"]
+}

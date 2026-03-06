@@ -1,0 +1,87 @@
+{
+  "category": "concepts",
+  "lastUpdated": "2026-02-12",
+  "documents": [
+    {
+      "id": "ast",
+      "name": "AST (Abstract Syntax Tree)",
+      "description": "抽象语法树",
+      "path": "./ast.md",
+      "metadataFile": "./ast.json",
+      "tags": ["ast", "data-structure", "syntax"],
+      "relatedModules": ["ast", "parse", "sema"]
+    },
+    {
+      "id": "chir",
+      "name": "CHIR (Cangjie High-level IR)",
+      "description": "仓颉高层中间表示",
+      "path": "./chir.md",
+      "metadataFile": "./chir.json",
+      "tags": ["chir", "ir", "optimization"],
+      "relatedModules": ["chir", "codegen"]
+    },
+    {
+      "id": "conditional-compilation",
+      "name": "Conditional Compilation",
+      "description": "条件编译",
+      "path": "./conditional-compilation.md",
+      "metadataFile": "./conditional-compilation.json",
+      "tags": ["conditional-compilation", "preprocessor"],
+      "relatedModules": ["lex", "parse"]
+    },
+    {
+      "id": "llvm-integration",
+      "name": "LLVM Integration",
+      "description": "LLVM 集成",
+      "path": "./llvm-integration.md",
+      "metadataFile": "./llvm-integration.json",
+      "tags": ["llvm", "backend", "codegen"],
+      "relatedModules": ["codegen"]
+    },
+    {
+      "id": "macro-expansion",
+      "name": "Macro Expansion",
+      "description": "宏展开",
+      "path": "./macro-expansion.md",
+      "metadataFile": "./macro-expansion.json",
+      "tags": ["macro", "expansion", "metaprogramming"],
+      "relatedModules": ["macro"]
+    },
+    {
+      "id": "module-system",
+      "name": "Module System",
+      "description": "模块系统",
+      "path": "./module-system.md",
+      "metadataFile": "./module-system.json",
+      "tags": ["module", "package", "import"],
+      "relatedModules": ["modules"]
+    },
+    {
+      "id": "name-mangling",
+      "name": "Name Mangling",
+      "description": "名称修饰",
+      "path": "./name-mangling.md",
+      "metadataFile": "./name-mangling.json",
+      "tags": ["mangling", "symbol", "linking"],
+      "relatedModules": ["mangle"]
+    },
+    {
+      "id": "serialization",
+      "name": "Serialization",
+      "description": "序列化格式",
+      "path": "./serialization.md",
+      "metadataFile": "./serialization.json",
+      "tags": ["serialization", "flatbuffers", "binary"],
+      "relatedModules": ["modules", "macro"]
+    },
+    {
+      "id": "type-system",
+      "name": "Type System",
+      "description": "类型系统",
+      "path": "./type-system.md",
+      "metadataFile": "./type-system.json",
+      "tags": ["type", "inference", "checking"],
+      "relatedModules": ["sema"]
+    }
+  ]
+}

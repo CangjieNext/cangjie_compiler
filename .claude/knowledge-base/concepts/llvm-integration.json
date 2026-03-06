@@ -1,0 +1,22 @@
+{
+  "documentId": "concept-llvm-integration",
+  "documentPath": "./llvm-integration.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "concept": {
+    "name": "LLVM Integration",
+    "definition": "仓颉编译器与 LLVM 的集成，用于代码生成和优化",
+    "purpose": "利用 LLVM 成熟的后端基础设施，将仓颉高层 IR 转换为高效的目标代码",
+    "implementation": {
+      "dataStructures": ["llvm::Module", "llvm::Function", "llvm::IRBuilder", "llvm::PassManager"],
+      "algorithms": ["LLVM IR generation", "Optimization passes", "Debug info generation"],
+      "keyFiles": ["include/cangjie/CodeGen/IRBuilder.h", "src/CodeGen/CGModule.cpp", "llvmPatch.diff"]
+    },
+    "relatedModules": [
+      {"moduleName": "codegen", "relationship": "使用 LLVM API 生成 IR"},
+      {"moduleName": "driver", "relationship": "调用 LLVM 后端工具链"}
+    ],
+    "examples": [],
+    "furtherReading": []
+  }
+}

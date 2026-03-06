@@ -1,0 +1,71 @@
+{
+  "documentId": "arch-data-flow",
+  "documentPath": "./data-flow.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "architecture": {
+    "name": "Cangjie Compiler Data Flow",
+    "description": "仓颉编译器数据流描述，说明数据在各模块之间的流转方式",
+    "dataTransformations": [
+      {
+        "from": "Source Text",
+        "to": "Token Stream",
+        "module": "Lex"
+      },
+      {
+        "from": "Token Stream",
+        "to": "AST",
+        "module": "Parse"
+      },
+      {
+        "from": "AST",
+        "to": "Typed AST",
+        "module": "Sema"
+      },
+      {
+        "from": "Typed AST",
+        "to": "CHIR",
+        "module": "CHIR"
+      },
+      {
+        "from": "CHIR",
+        "to": "LLVM IR",
+        "module": "CodeGen"
+      },
+      {
+        "from": "LLVM IR",
+        "to": "Object Code",
+        "module": "LLVM Backend"
+      },
+      {
+        "from": "Object Code",
+        "to": "Executable",
+        "module": "Linker"
+      }
+    ],
+    "supportingDataFlows": [
+      {
+        "system": "Macro",
+        "flow": "Macro invocation tokens → expanded tokens → re-parsed AST"
+      },
+      {
+        "system": "Modules",
+        "flow": "Import statements → external symbol tables → Sema scope injection"
+      },
+      {
+        "system": "IncrementalCompilation",
+        "flow": "Previous cache + changed files → minimal recompilation set"
+      },
+      {
+        "system": "Driver",
+        "flow": "CLI arguments → compilation options → stage orchestration"
+      }
+    ],
+    "relatedModules": [
+      "overview",
+      "pipeline",
+      "frontend",
+      "backend"
+    ]
+  }
+}

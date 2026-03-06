@@ -1,0 +1,66 @@
+{
+  "documentId": "concept-serialization",
+  "documentPath": "/usr1/ace/cangjie_compiler/.claude/knowledge-base/concepts/serialization.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "concept": {
+    "name": "Serialization Formats",
+    "definition": "序列化格式是仓颉编译器用于持久化和传输数据结构的二进制格式规范，主要基于 FlatBuffers 框架，用于 AST、CHIR、模块等数据结构的序列化。",
+    "purpose": "序列化格式用于编译缓存、模块通信、宏展开、持久化存储和跨进程通信。",
+    "implementation": {
+      "dataStructures": [
+        "FlatBuffers Schema - FlatBuffers 模式定义",
+        "Serializer - 序列化器，转换为二进制格式",
+        "Deserializer - 反序列化器，恢复数据结构",
+        "Buffer - 序列化缓冲区",
+        "Verifier - 验证器"
+      ],
+      "algorithms": [
+        "FlatBuffers Serialization - 零拷贝序列化",
+        "AST Serialization - 递归序列化 AST 节点树",
+        "CHIR Serialization - 序列化 CHIR 模块和指令",
+        "Type Serialization - 序列化类型信息",
+        "Incremental Serialization - 增量序列化"
+      ],
+      "keyFiles": [
+        "/usr1/ace/cangjie_compiler/schema/BCHIRFormat.fbs",
+        "/usr1/ace/cangjie_compiler/schema/CachedASTFormat.fbs",
+        "/usr1/ace/cangjie_compiler/schema/MacroMsgFormat.fbs",
+        "/usr1/ace/cangjie_compiler/schema/ModuleFormat.fbs",
+        "/usr1/ace/cangjie_compiler/schema/NodeFormat.fbs",
+        "/usr1/ace/cangjie_compiler/schema/PackageFormat.fbs"
+      ]
+    },
+    "relatedModules": [
+      {
+        "moduleName": "modules",
+        "relationship": "使用序列化格式实现 AST 和模块序列化"
+      },
+      {
+        "moduleName": "macro",
+        "relationship": "使用序列化格式传递宏消息"
+      },
+      {
+        "moduleName": "chir",
+        "relationship": "使用序列化格式缓存 CHIR"
+      },
+      {
+        "moduleName": "ast",
+        "relationship": "AST 节点的序列化和反序列化"
+      },
+      {
+        "moduleName": "codegen",
+        "relationship": "使用序列化格式存储编译产物"
+      }
+    ],
+    "examples": [
+      "FlatBuffers Schema 定义",
+      "AST 序列化器实现",
+      "AST 反序列化器实现"
+    ],
+    "furtherReading": [
+      "/usr1/ace/cangjie_compiler/schema/",
+      "FlatBuffers Documentation - https://google.github.io/flatbuffers/"
+    ]
+  }
+}

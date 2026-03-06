@@ -1,0 +1,50 @@
+{
+  "documentId": "arch-backend",
+  "documentPath": "./backend.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "architecture": {
+    "name": "Cangjie Compiler Backend",
+    "description": "仓颉编译器后端架构，涵盖 CHIR 生成、代码生成和 LLVM 集成",
+    "stages": [
+      {
+        "name": "CHIR",
+        "sourceDir": "src/CHIR/",
+        "headerDir": "include/cangjie/CHIR/",
+        "input": "Typed AST",
+        "output": "Optimized CHIR"
+      },
+      {
+        "name": "CodeGen",
+        "sourceDir": "src/CodeGen/",
+        "headerDir": "include/cangjie/CodeGen/",
+        "input": "Optimized CHIR",
+        "output": "LLVM IR",
+        "keyClasses": ["CGModule", "CGFunction", "IRBuilder"]
+      },
+      {
+        "name": "LLVM Backend",
+        "input": "LLVM IR",
+        "output": "Executable"
+      }
+    ],
+    "llvmComponents": [
+      "llvm::Module",
+      "llvm::Function",
+      "llvm::IRBuilder",
+      "llvm::PassManager",
+      "llvm::TargetMachine"
+    ],
+    "supportingModules": [
+      "Mangle",
+      "Driver",
+      "IncrementalCompilation"
+    ],
+    "relatedModules": [
+      "overview",
+      "pipeline",
+      "frontend",
+      "data-flow"
+    ]
+  }
+}

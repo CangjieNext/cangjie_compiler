@@ -1,0 +1,34 @@
+{
+  "category": "workflows",
+  "lastUpdated": "2026-02-12",
+  "documents": [
+    {
+      "id": "building",
+      "title": "构建编译器",
+      "tags": ["build", "compilation", "setup"],
+      "path": "./building.md",
+      "metadataFile": "./building.json"
+    },
+    {
+      "id": "adding-feature",
+      "title": "添加新语言特性",
+      "tags": ["feature", "development", "pipeline"],
+      "path": "./adding-feature.md",
+      "metadataFile": "./adding-feature.json"
+    },
+    {
+      "id": "debugging",
+      "title": "调试编译问题",
+      "tags": ["debug", "troubleshooting", "diagnostics"],
+      "path": "./debugging.md",
+      "metadataFile": "./debugging.json"
+    },
+    {
+      "id": "testing",
+      "title": "测试策略",
+      "tags": ["testing", "unittest", "validation"],
+      "path": "./testing.md",
+      "metadataFile": "./testing.json"
+    }
+  ]
+}

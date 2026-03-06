@@ -1,0 +1,72 @@
+{
+  "documentId": "concept-ast",
+  "documentPath": "/usr1/ace/cangjie_compiler/.claude/knowledge-base/concepts/ast.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "concept": {
+    "name": "Abstract Syntax Tree (AST)",
+    "definition": "抽象语法树是源代码的树状结构表示，是编译器前端的核心数据结构，将源代码的语法结构以树形式组织，每个节点代表源代码中的一个语法构造。",
+    "purpose": "AST 在仓颉编译器中用于语法结构表示、语义分析基础、代码转换、序列化支持和工具支持。",
+    "implementation": {
+      "dataStructures": [
+        "Node Hierarchy - 所有 AST 节点的基类和派生类层次结构",
+        "ASTContext - AST 的内存管理器，使用 arena 分配策略",
+        "SourceLocation - 源代码位置信息",
+        "Type Nodes - 类型相关的 AST 节点",
+        "Attribute Nodes - 属性节点"
+      ],
+      "algorithms": [
+        "AST Construction - 递归下降解析构建 AST",
+        "AST Traversal - Walker 模式遍历 AST",
+        "AST Annotation - 语义分析阶段注解 AST",
+        "AST Serialization - 基于 FlatBuffers 的序列化",
+        "AST Deserialization - 从二进制格式恢复 AST"
+      ],
+      "keyFiles": [
+        "/usr1/ace/cangjie_compiler/include/cangjie/AST/Node.h",
+        "/usr1/ace/cangjie_compiler/include/cangjie/AST/Types.h",
+        "/usr1/ace/cangjie_compiler/include/cangjie/AST/Expr.h",
+        "/usr1/ace/cangjie_compiler/include/cangjie/AST/Stmt.h",
+        "/usr1/ace/cangjie_compiler/include/cangjie/AST/Decl.h",
+        "/usr1/ace/cangjie_compiler/src/AST/",
+        "/usr1/ace/cangjie_compiler/schema/NodeFormat.fbs"
+      ]
+    },
+    "relatedModules": [
+      {
+        "moduleName": "ast",
+        "relationship": "AST 数据结构的定义和基本操作"
+      },
+      {
+        "moduleName": "parse",
+        "relationship": "负责从源代码构建 AST"
+      },
+      {
+        "moduleName": "sema",
+        "relationship": "对 AST 进行语义分析和注解"
+      },
+      {
+        "moduleName": "modules",
+        "relationship": "AST 的序列化和反序列化"
+      },
+      {
+        "moduleName": "macro",
+        "relationship": "宏展开过程中的 AST 操作"
+      },
+      {
+        "moduleName": "codegen",
+        "relationship": "将 AST 转换为 CHIR"
+      }
+    ],
+    "examples": [
+      "AST 节点创建和内存管理",
+      "AST 遍历器模式实现",
+      "二元表达式 AST 构建"
+    ],
+    "furtherReading": [
+      "/usr1/ace/cangjie_compiler/include/cangjie/AST/",
+      "/usr1/ace/cangjie_compiler/src/AST/",
+      "/usr1/ace/cangjie_compiler/schema/NodeFormat.fbs"
+    ]
+  }
+}

@@ -13,7 +13,13 @@
 #include "cangjie/FrontendTool/FrontendTool.h"
 
 #ifdef __linux__
+#ifndef CANGJIE_USE_MIMALLOC
 #include <malloc.h>
+#endif
+#endif
+
+#ifdef CANGJIE_USE_MIMALLOC
+#include <mimalloc.h>
 #endif
 #include <memory>
 #include <string>

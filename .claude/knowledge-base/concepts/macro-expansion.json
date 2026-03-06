@@ -1,0 +1,66 @@
+{
+  "documentId": "concept-macro-expansion",
+  "documentPath": "/usr1/ace/cangjie_compiler/.claude/knowledge-base/concepts/macro-expansion.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "concept": {
+    "name": "Macro Expansion",
+    "definition": "仓颉的宏展开是编译时的元编程机制，允许在编译期执行代码生成和转换，支持编译时计算、代码生成和 AST 转换。",
+    "purpose": "宏展开用于代码生成、编译时计算、DSL 支持、语法扩展和元编程。",
+    "implementation": {
+      "dataStructures": [
+        "MacroEvaluation - 宏求值器，执行宏代码",
+        "MacroExpansion - 宏展开器，管理宏展开过程",
+        "MacroCall - 宏调用节点",
+        "MacroDefinition - 宏定义",
+        "EvaluationServer - 宏求值服务器"
+      ],
+      "algorithms": [
+        "Macro Call Resolution - 宏调用解析和参数匹配",
+        "AST Serialization - AST 节点序列化",
+        "Token Serialization - Token 序列序列化",
+        "Macro Evaluation - 独立进程执行宏代码",
+        "Result Integration - 宏展开结果集成"
+      ],
+      "keyFiles": [
+        "/usr1/ace/cangjie_compiler/include/cangjie/Macro/MacroEvaluation.h",
+        "/usr1/ace/cangjie_compiler/include/cangjie/Macro/MacroExpansion.h",
+        "/usr1/ace/cangjie_compiler/src/Macro/",
+        "/usr1/ace/cangjie_compiler/schema/MacroMsgFormat.fbs",
+        "/usr1/ace/cangjie_compiler/schema/NodeFormat.fbs"
+      ]
+    },
+    "relatedModules": [
+      {
+        "moduleName": "macro",
+        "relationship": "宏系统的核心实现"
+      },
+      {
+        "moduleName": "parse",
+        "relationship": "解析宏定义和宏调用"
+      },
+      {
+        "moduleName": "sema",
+        "relationship": "宏展开前后的语义检查"
+      },
+      {
+        "moduleName": "ast",
+        "relationship": "宏相关的 AST 节点和序列化"
+      },
+      {
+        "moduleName": "modules",
+        "relationship": "宏定义的导出和导入"
+      }
+    ],
+    "examples": [
+      "宏定义和宏调用",
+      "宏展开器实现",
+      "宏求值服务器"
+    ],
+    "furtherReading": [
+      "/usr1/ace/cangjie_compiler/include/cangjie/Macro/",
+      "/usr1/ace/cangjie_compiler/src/Macro/",
+      "/usr1/ace/cangjie_compiler/schema/MacroMsgFormat.fbs"
+    ]
+  }
+}

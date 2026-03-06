@@ -10,6 +10,21 @@
  * This file is the main entry of chir-dis.
  */
 
+// mimalloc integration
+#ifdef CANGJIE_USE_MIMALLOC
+#include <mimalloc.h>
+#ifdef _WIN32
+// Windows: Include new/delete override header for Strategy B
+#include <mimalloc-new-delete.h>
+
+// Windows: Ensure mimalloc is initialized before any global constructors
+struct MimallocInit {
+    MimallocInit() { mi_process_init(); }
+};
+static MimallocInit g_mimallocInit;
+#endif
+#endif
+
 #include <string>
 #include <unordered_set>
 #include <exception>
@@ -146,6 +161,11 @@ int main(int argc, const char** argv)
 {
 #ifndef CANGJIE_ENABLE_GCOV
     try {
+#endif
+#ifdef CANGJIE_USE_MIMALLOC
+        // Initialize mimalloc options at the very beginning
+        mi_option_set(mi_option_reset_delay, 0);
+        mi_option_set(mi_option_eager_commit_delay, 0);
 #endif
         RegisterSignalHandler();
         auto args = Utils::StringifyArgumentVector(argc, argv);

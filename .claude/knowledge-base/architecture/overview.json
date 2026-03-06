@@ -1,0 +1,40 @@
+{
+  "documentId": "arch-overview",
+  "documentPath": "./overview.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "architecture": {
+    "name": "Cangjie Compiler Architecture",
+    "description": "仓颉编译器整体架构概览，涵盖所有模块及其关系",
+    "components": [
+      "Lex",
+      "Parse",
+      "Sema",
+      "CHIR",
+      "CodeGen",
+      "LLVM Backend",
+      "AST",
+      "Macro",
+      "Modules",
+      "Mangle",
+      "Driver",
+      "Frontend",
+      "FrontendTool",
+      "Basic",
+      "Utils",
+      "Option",
+      "ConditionalCompilation",
+      "IncrementalCompilation",
+      "MetaTransformation"
+    ],
+    "relatedModules": [
+      "pipeline",
+      "frontend",
+      "backend",
+      "data-flow"
+    ],
+    "diagrams": [
+      "figures/Compiler_Architecture_Diagram_zh.png"
+    ]
+  }
+}

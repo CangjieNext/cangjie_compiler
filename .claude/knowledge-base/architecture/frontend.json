@@ -1,0 +1,46 @@
+{
+  "documentId": "arch-frontend",
+  "documentPath": "./frontend.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "architecture": {
+    "name": "Cangjie Compiler Frontend",
+    "description": "仓颉编译器前端架构，涵盖词法分析、语法分析和语义分析",
+    "stages": [
+      {
+        "name": "Lex",
+        "sourceDir": "src/Lex/",
+        "headerDir": "include/cangjie/Lex/",
+        "keyClasses": ["Lexer", "Token", "TokenKind"]
+      },
+      {
+        "name": "Parse",
+        "sourceDir": "src/Parse/",
+        "headerDir": "include/cangjie/Parse/",
+        "keyClasses": ["Parser", "ASTNode", "Decl", "Stmt", "Expr"]
+      },
+      {
+        "name": "Sema",
+        "sourceDir": "src/Sema/",
+        "headerDir": "include/cangjie/Sema/",
+        "keyClasses": ["TypeChecker", "Scope", "Type"]
+      }
+    ],
+    "coreDataStructure": "AST",
+    "supportingModules": [
+      "AST",
+      "Frontend",
+      "FrontendTool",
+      "Macro",
+      "Modules",
+      "Mangle",
+      "ConditionalCompilation"
+    ],
+    "relatedModules": [
+      "overview",
+      "pipeline",
+      "backend",
+      "data-flow"
+    ]
+  }
+}

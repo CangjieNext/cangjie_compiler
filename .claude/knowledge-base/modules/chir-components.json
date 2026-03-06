@@ -1,0 +1,28 @@
+{
+  "moduleId": "chir",
+  "components": {
+    "classes": [
+      {
+        "name": "CHIR",
+        "fullName": "cangjie::CHIR::CHIR",
+        "location": "include/cangjie/CHIR/CHIR.h",
+        "description": "CHIR 模块主入口类",
+        "publicMethods": [
+          {
+            "name": "convert",
+            "signature": "void convert(AST& ast)",
+            "description": "将 AST 转换为 CHIR"
+          },
+          {
+            "name": "optimize",
+            "signature": "void optimize()",
+            "description": "执行 CHIR 优化 pass"
+          }
+        ],
+        "relatedClasses": ["AST2CHIR", "Analysis", "Optimization"]
+      }
+    ],
+    "functions": [],
+    "enums": []
+  }
+}

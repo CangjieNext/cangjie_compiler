@@ -1,0 +1,342 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-02-12",
+  "references": {
+    "modules": {
+      "lex": {
+        "referencedBy": {
+          "modules": ["parse", "macro", "driver"],
+          "concepts": ["macro-expansion"],
+          "workflows": ["building", "adding-feature", "debugging", "testing"],
+          "architecture": ["frontend", "pipeline", "overview", "data-flow"]
+        },
+        "references": {
+          "modules": ["utils"],
+          "concepts": ["ast"],
+          "architecture": ["frontend", "pipeline"]
+        }
+      },
+      "ast": {
+        "referencedBy": {
+          "modules": ["parse", "sema", "chir", "macro", "modules", "mangle", "codegen", "driver"],
+          "concepts": ["ast", "chir", "type-system", "macro-expansion", "module-system", "serialization", "conditional-compilation", "name-mangling"],
+          "workflows": ["building", "adding-feature", "debugging", "testing"],
+          "architecture": ["frontend", "pipeline", "overview", "data-flow", "backend"]
+        },
+        "references": {
+          "modules": ["utils"],
+          "concepts": ["ast", "type-system"],
+          "architecture": ["frontend", "pipeline"]
+        }
+      },
+      "parse": {
+        "referencedBy": {
+          "modules": ["sema", "macro", "driver"],
+          "concepts": ["ast", "macro-expansion", "module-system", "type-system", "conditional-compilation"],
+          "workflows": ["building", "adding-feature", "debugging", "testing"],
+          "architecture": ["frontend", "pipeline", "overview", "data-flow"]
+        },
+        "references": {
+          "modules": ["lex", "ast", "utils"],
+          "concepts": ["ast"],
+          "architecture": ["frontend", "pipeline"]
+        }
+      },
+      "sema": {
+        "referencedBy": {
+          "modules": ["chir", "modules", "driver"],
+          "concepts": ["type-system", "chir", "macro-expansion", "module-system", "conditional-compilation", "name-mangling"],
+          "workflows": ["building", "adding-feature", "debugging", "testing"],
+          "architecture": ["frontend", "pipeline", "overview", "data-flow"]
+        },
+        "references": {
+          "modules": ["parse", "ast", "utils"],
+          "concepts": ["type-system", "ast"],
+          "architecture": ["frontend", "pipeline"]
+        }
+      },
+      "chir": {
+        "referencedBy": {
+          "modules": ["codegen", "mangle", "driver"],
+          "concepts": ["chir", "serialization"],
+          "workflows": ["building", "adding-feature", "debugging", "testing"],
+          "architecture": ["backend", "pipeline", "overview", "data-flow"]
+        },
+        "references": {
+          "modules": ["sema", "ast", "utils"],
+          "concepts": ["chir", "ast"],
+          "architecture": ["backend", "pipeline"]
+        }
+      },
+      "codegen": {
+        "referencedBy": {
+          "modules": ["driver"],
+          "concepts": ["llvm-integration", "chir", "type-system", "name-mangling", "serialization"],
+          "workflows": ["building", "adding-feature", "debugging", "testing"],
+          "architecture": ["backend", "pipeline", "overview", "data-flow"]
+        },
+        "references": {
+          "modules": ["chir", "ast", "mangle", "utils"],
+          "concepts": ["llvm-integration", "chir"],
+          "architecture": ["backend", "pipeline"]
+        }
+      },
+      "macro": {
+        "referencedBy": {
+          "modules": ["sema", "driver"],
+          "concepts": ["macro-expansion", "serialization"],
+          "workflows": ["building", "testing"],
+          "architecture": ["frontend", "pipeline", "overview"]
+        },
+        "references": {
+          "modules": ["lex", "parse", "ast", "utils"],
+          "concepts": ["macro-expansion"],
+          "architecture": ["frontend", "pipeline"]
+        }
+      },
+      "modules": {
+        "referencedBy": {
+          "modules": ["driver"],
+          "concepts": ["module-system", "serialization", "macro-expansion", "name-mangling", "chir"],
+          "workflows": ["building", "testing"],
+          "architecture": ["frontend", "pipeline", "overview"]
+        },
+        "references": {
+          "modules": ["ast", "sema", "utils"],
+          "concepts": ["module-system", "serialization"],
+          "architecture": ["frontend", "pipeline"]
+        }
+      },
+      "mangle": {
+        "referencedBy": {
+          "modules": ["codegen", "driver"],
+          "concepts": ["name-mangling"],
+          "workflows": ["building", "testing"],
+          "architecture": ["backend", "pipeline", "overview"]
+        },
+        "references": {
+          "modules": ["ast", "chir", "utils"],
+          "concepts": ["name-mangling"],
+          "architecture": ["backend", "pipeline"]
+        }
+      },
+      "driver": {
+        "referencedBy": {
+          "modules": [],
+          "concepts": ["llvm-integration", "conditional-compilation", "module-system"],
+          "workflows": ["building", "adding-feature", "debugging", "testing"],
+          "architecture": ["pipeline", "overview", "data-flow", "backend"]
+        },
+        "references": {
+          "modules": ["lex", "parse", "sema", "chir", "codegen", "macro", "modules", "mangle", "ast", "utils"],
+          "concepts": ["llvm-integration"],
+          "architecture": ["pipeline", "overview"]
+        }
+      },
+      "utils": {
+        "referencedBy": {
+          "modules": ["lex", "parse", "ast", "sema", "chir", "codegen", "macro", "modules", "mangle", "driver"],
+          "concepts": [],
+          "workflows": ["testing"],
+          "architecture": ["overview"]
+        },
+        "references": {
+          "modules": [],
+          "concepts": [],
+          "architecture": []
+        }
+      }
+    },
+    "concepts": {
+      "ast": {
+        "referencedBy": {
+          "modules": ["ast", "parse", "sema", "chir", "macro", "modules", "codegen"],
+          "concepts": ["chir", "type-system", "macro-expansion", "module-system", "serialization", "conditional-compilation"],
+          "workflows": ["adding-feature", "debugging"]
+        },
+        "references": {
+          "modules": ["ast", "parse", "sema", "modules", "macro", "codegen"],
+          "concepts": ["type-system", "serialization"]
+        }
+      },
+      "chir": {
+        "referencedBy": {
+          "modules": ["chir", "codegen"],
+          "concepts": ["llvm-integration"],
+          "workflows": ["adding-feature", "debugging"]
+        },
+        "references": {
+          "modules": ["chir", "codegen", "sema", "ast", "modules"],
+          "concepts": ["ast"]
+        }
+      },
+      "type-system": {
+        "referencedBy": {
+          "modules": ["sema", "ast"],
+          "concepts": ["chir", "name-mangling"],
+          "workflows": ["adding-feature"]
+        },
+        "references": {
+          "modules": ["sema", "ast", "chir", "parse", "codegen"],
+          "concepts": ["ast"]
+        }
+      },
+      "name-mangling": {
+        "referencedBy": {
+          "modules": ["mangle"],
+          "concepts": [],
+          "workflows": []
+        },
+        "references": {
+          "modules": ["mangle", "sema", "codegen", "modules"],
+          "concepts": ["type-system"]
+        }
+      },
+      "module-system": {
+        "referencedBy": {
+          "modules": ["modules"],
+          "concepts": ["serialization"],
+          "workflows": []
+        },
+        "references": {
+          "modules": ["modules", "parse", "sema", "ast", "driver"],
+          "concepts": ["serialization"]
+        }
+      },
+      "macro-expansion": {
+        "referencedBy": {
+          "modules": ["macro"],
+          "concepts": ["serialization"],
+          "workflows": []
+        },
+        "references": {
+          "modules": ["macro", "parse", "sema", "ast", "modules"],
+          "concepts": ["ast", "serialization"]
+        }
+      },
+      "conditional-compilation": {
+        "referencedBy": {
+          "modules": [],
+          "concepts": [],
+          "workflows": []
+        },
+        "references": {
+          "modules": ["parse", "sema", "ast", "driver"],
+          "concepts": ["ast"]
+        }
+      },
+      "serialization": {
+        "referencedBy": {
+          "modules": [],
+          "concepts": ["ast", "module-system", "macro-expansion", "chir"],
+          "workflows": []
+        },
+        "references": {
+          "modules": ["modules", "macro", "chir", "ast", "codegen"],
+          "concepts": ["ast", "chir", "module-system", "macro-expansion"]
+        }
+      },
+      "llvm-integration": {
+        "referencedBy": {
+          "modules": ["codegen"],
+          "concepts": [],
+          "workflows": []
+        },
+        "references": {
+          "modules": ["codegen", "driver"],
+          "concepts": ["chir"]
+        }
+      }
+    },
+    "workflows": {
+      "building": {
+        "referencedBy": {
+          "workflows": ["adding-feature"]
+        },
+        "references": {
+          "modules": ["driver", "lex", "parse", "ast", "sema", "chir", "codegen", "macro", "modules", "mangle", "utils"],
+          "concepts": ["llvm-integration"],
+          "workflows": []
+        }
+      },
+      "adding-feature": {
+        "referencedBy": {
+          "workflows": []
+        },
+        "references": {
+          "modules": ["lex", "parse", "ast", "sema", "chir", "codegen"],
+          "concepts": ["ast", "type-system", "chir", "llvm-integration"],
+          "workflows": ["building", "debugging", "testing"]
+        }
+      },
+      "debugging": {
+        "referencedBy": {
+          "workflows": ["adding-feature"]
+        },
+        "references": {
+          "modules": ["driver", "lex", "parse", "ast", "sema", "chir", "codegen"],
+          "concepts": ["ast", "chir", "llvm-integration"],
+          "workflows": ["adding-feature", "testing"]
+        }
+      },
+      "testing": {
+        "referencedBy": {
+          "workflows": ["adding-feature", "debugging"]
+        },
+        "references": {
+          "modules": ["driver", "lex", "parse", "ast", "sema", "chir", "codegen", "macro", "modules", "mangle", "utils"],
+          "concepts": [],
+          "workflows": ["debugging", "adding-feature"]
+        }
+      }
+    }
+  },
+  "dependencyGraph": {
+    "modules": {
+      "lex": {
+        "dependencies": [],
+        "dependents": ["parse", "macro", "driver"]
+      },
+      "ast": {
+        "dependencies": [],
+        "dependents": ["parse", "sema", "chir", "macro", "modules", "mangle", "codegen"]
+      },
+      "parse": {
+        "dependencies": ["lex", "ast"],
+        "dependents": ["sema", "macro", "driver"]
+      },
+      "sema": {
+        "dependencies": ["parse", "ast"],
+        "dependents": ["chir", "modules", "driver"]
+      },
+      "chir": {
+        "dependencies": ["sema", "ast"],
+        "dependents": ["codegen", "mangle", "driver"]
+      },
+      "codegen": {
+        "dependencies": ["chir", "ast", "mangle"],
+        "dependents": ["driver"]
+      },
+      "macro": {
+        "dependencies": ["lex", "parse", "ast"],
+        "dependents": ["sema", "driver"]
+      },
+      "modules": {
+        "dependencies": ["ast", "sema"],
+        "dependents": ["driver"]
+      },
+      "mangle": {
+        "dependencies": ["ast", "chir"],
+        "dependents": ["codegen", "driver"]
+      },
+      "driver": {
+        "dependencies": ["lex", "parse", "sema", "chir", "codegen", "macro", "modules", "mangle", "ast"],
+        "dependents": []
+      },
+      "utils": {
+        "dependencies": [],
+        "dependents": ["lex", "parse", "ast", "sema", "chir", "codegen", "macro", "modules", "mangle", "driver"]
+      }
+    }
+  }
+}

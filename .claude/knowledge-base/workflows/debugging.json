@@ -1,0 +1,280 @@
+{
+  "documentId": "workflow-debugging",
+  "documentPath": "/usr1/ace/cangjie_compiler/.claude/knowledge-base/workflows/debugging.md",
+  "lastUpdated": "2026-02-12",
+  "version": "1.0.0",
+  "workflow": {
+    "name": "debugging",
+    "displayName": "Debugging Workflow - 调试编译问题",
+    "objective": "调试仓颉编译器的编译问题，包括定位问题阶段、分析诊断信息、使用调试工具等",
+    "prerequisites": [
+      "编译器 debug 构建（使用 -t debug 选项）",
+      "熟悉 GDB 或 LLDB 调试器",
+      "了解编译器各阶段的功能",
+      "掌握基本的调试技巧",
+      "了解 LLVM IR 基础知识"
+    ],
+    "steps": [
+      {
+        "number": 1,
+        "name": "确定问题阶段",
+        "description": "Use compiler flags to identify which compilation stage has the issue",
+        "flags": [
+          "-dump-tokens - Dump lexer tokens",
+          "-dump-ast - Dump abstract syntax tree",
+          "-dump-chir - Dump Cangjie high-level IR",
+          "-emit-llvm - Output LLVM IR",
+          "-v - Verbose output showing all stages"
+        ],
+        "examples": [
+          "cjc -dump-ast problematic.cj",
+          "cjc -dump-chir problematic.cj",
+          "cjc -emit-llvm problematic.cj -o output.ll"
+        ],
+        "involvedModules": ["Driver", "all compilation stages"]
+      },
+      {
+        "number": 2,
+        "name": "查看诊断信息",
+        "description": "Check DiagnosticEngine output for error messages",
+        "tasks": [
+          "分析错误消息的位置和类型",
+          "检查警告信息",
+          "查看诊断的严重级别（error, warning, note）",
+          "追踪错误的源代码位置",
+          "理解错误的上下文信息"
+        ],
+        "diagnosticCategories": [
+          "Lexical errors (token recognition)",
+          "Syntax errors (parsing)",
+          "Semantic errors (type checking, symbol resolution)",
+          "Code generation errors"
+        ],
+        "involvedModules": ["DiagnosticEngine", "all compilation stages"]
+      },
+      {
+        "number": 3,
+        "name": "使用 GDB/LLDB",
+        "description": "Set breakpoints and debug the compiler",
+        "commands": {
+          "start": [
+            "gdb --args cjc problematic.cj",
+            "lldb -- cjc problematic.cj"
+          ],
+          "breakpoints": [
+            "break main",
+            "break Parser::parseExpression",
+            "break Sema::checkType",
+            "break CodeGen::emitFunction",
+            "catch throw"
+          ],
+          "debugging": [
+            "run - Run the program",
+            "next - Step over",
+            "step - Step into",
+            "continue - Continue execution",
+            "print variableName - Print variable",
+            "backtrace - Print backtrace",
+            "list - List source code"
+          ]
+        },
+        "involvedModules": ["All modules, depending on breakpoint location"]
+      },
+      {
+        "number": 4,
+        "name": "检查 AST",
+        "description": "Use PrintNode to print and inspect the AST",
+        "methods": [
+          "Use -dump-ast flag to output AST structure",
+          "Implement custom AST visitor for detailed inspection",
+          "Check node types and relationships",
+          "Verify AST structure matches expected grammar",
+          "Inspect node attributes and metadata"
+        ],
+        "commonIssues": [
+          "Missing or incorrect node types",
+          "Broken parent-child relationships",
+          "Incorrect source location information",
+          "Missing type information"
+        ],
+        "involvedModules": ["AST", "Parse"]
+      },
+      {
+        "number": 5,
+        "name": "检查 CHIR",
+        "description": "Use CHIR dump functionality to inspect intermediate representation",
+        "methods": [
+          "Use -dump-chir flag to output CHIR",
+          "Verify CHIR instructions are correct",
+          "Check operand types and values",
+          "Inspect control flow graph",
+          "Verify SSA form properties"
+        ],
+        "inspectionPoints": [
+          "Instruction sequences",
+          "Basic block structure",
+          "Control flow edges",
+          "Type information",
+          "Symbol references"
+        ],
+        "commonIssues": [
+          "Incorrect instruction generation",
+          "Type mismatches",
+          "Invalid operands",
+          "Broken control flow"
+        ],
+        "involvedModules": ["CHIR", "CHIRGen"]
+      },
+      {
+        "number": 6,
+        "name": "检查 LLVM IR",
+        "description": "Use -emit-llvm to output and validate LLVM IR",
+        "commands": [
+          "cjc -emit-llvm problematic.cj -o output.ll",
+          "llvm-as output.ll -o output.bc",
+          "llvm-dis output.bc -o output.ll",
+          "opt -O2 output.ll -S -o optimized.ll",
+          "opt -dot-cfg output.ll"
+        ],
+        "inspectionPoints": [
+          "Check function signatures",
+          "Verify instruction sequences",
+          "Inspect type definitions",
+          "Check metadata and attributes",
+          "Validate control flow"
+        ],
+        "commonIssues": [
+          "Type mismatches",
+          "Invalid instructions",
+          "Incorrect function calls",
+          "Memory access errors",
+          "Missing or incorrect metadata"
+        ],
+        "involvedModules": ["CodeGen", "LLVM backend"]
+      }
+    ],
+    "troubleshooting": [
+      {
+        "issue": "Lexer issues",
+        "symptoms": "Unexpected tokens, tokenization errors",
+        "solutions": [
+          "Use -dump-tokens to see token stream",
+          "Check input file encoding (UTF-8 expected)",
+          "Verify token definitions in Tokens.inc",
+          "Check lexer state machine logic",
+          "Test with minimal input to isolate issue"
+        ]
+      },
+      {
+        "issue": "Parser issues",
+        "symptoms": "Syntax errors, unexpected parse failures",
+        "solutions": [
+          "Use -dump-ast to see partial AST",
+          "Add parser debug output",
+          "Check grammar rules and precedence",
+          "Verify error recovery logic",
+          "Test with simplified input",
+          "Check for ambiguous grammar"
+        ]
+      },
+      {
+        "issue": "Semantic analysis issues",
+        "symptoms": "Type errors, symbol resolution failures",
+        "solutions": [
+          "Check symbol table contents",
+          "Verify type inference logic",
+          "Inspect scope hierarchy",
+          "Add diagnostic output in Sema",
+          "Test with explicit type annotations",
+          "Check for circular dependencies"
+        ]
+      },
+      {
+        "issue": "AST issues",
+        "symptoms": "Malformed AST, missing nodes",
+        "solutions": [
+          "Use AST dump to visualize structure",
+          "Check node construction in parser",
+          "Verify parent-child relationships",
+          "Inspect node source locations",
+          "Check memory management (use valgrind)"
+        ]
+      },
+      {
+        "issue": "CHIR generation issues",
+        "symptoms": "CHIR generation fails or produces invalid IR",
+        "solutions": [
+          "Use -dump-chir to inspect output",
+          "Check AST to CHIR transformation logic",
+          "Verify instruction operand types",
+          "Test with simpler AST structures",
+          "Add debug output in CHIRGen"
+        ]
+      },
+      {
+        "issue": "Code generation issues",
+        "symptoms": "LLVM IR generation fails, runtime crashes",
+        "solutions": [
+          "Use -emit-llvm to inspect generated IR",
+          "Validate IR with llvm-as",
+          "Check type mappings",
+          "Verify function signatures",
+          "Test generated code with simple inputs",
+          "Use LLVM verification passes",
+          "Check runtime library linkage"
+        ]
+      },
+      {
+        "issue": "Debugger issues",
+        "symptoms": "Debugger crashes, cannot set breakpoints",
+        "solutions": [
+          "Ensure debug build is used (-t debug)",
+          "Check debug symbols are present (file cjc)",
+          "Verify source paths are correct",
+          "Use info sources to list source files",
+          "Rebuild with -g flag if needed"
+        ]
+      },
+      {
+        "issue": "Performance issues",
+        "symptoms": "Compilation is very slow",
+        "solutions": [
+          "Profile the compiler with perf or gprof",
+          "Check for infinite loops or recursion",
+          "Identify hot spots in the code",
+          "Use sampling profiler to find bottlenecks",
+          "Check memory usage with valgrind --tool=massif"
+        ]
+      },
+      {
+        "issue": "Memory issues",
+        "symptoms": "Crashes, segmentation faults, memory leaks",
+        "solutions": [
+          "Run with valgrind: valgrind --leak-check=full cjc input.cj",
+          "Check for null pointer dereferences",
+          "Verify memory allocation and deallocation",
+          "Use AddressSanitizer: compile with -fsanitize=address",
+          "Check for use-after-free errors",
+          "Verify smart pointer usage"
+        ]
+      },
+      {
+        "issue": "Diagnostic message issues",
+        "symptoms": "Unclear or missing error messages",
+        "solutions": [
+          "Check DiagnosticEngine configuration",
+          "Verify diagnostic IDs are defined",
+          "Add more detailed diagnostic messages",
+          "Include source location information",
+          "Add fix-it hints where appropriate"
+        ]
+      }
+    ],
+    "relatedDocs": [
+      "/usr1/ace/cangjie_compiler/.claude/knowledge-base/workflows/adding-feature.md",
+      "/usr1/ace/cangjie_compiler/.claude/knowledge-base/workflows/testing.md",
+      "/usr1/ace/cangjie_compiler/.claude/knowledge-base/modules/diagnostic-engine.md",
+      "/usr1/ace/cangjie_compiler/.claude/knowledge-base/architecture/compiler-pipeline.md"
+    ]
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "moduleId": "utils",
+  "classes": [
+    {
+      "name": "FileUtil",
+      "methods": [
+        {
+          "name": "readFile",
+          "description": "读取文件"
+        },
+        {
+          "name": "writeFile",
+          "description": "写入文件"
+        },
+        {
+          "name": "exists",
+          "description": "检查文件是否存在"
+        }
+      ]
+    },
+    {
+      "name": "Unicode",
+      "methods": [
+        {
+          "name": "isIdentifier",
+          "description": "判断是否为标识符字符"
+        },
+        {
+          "name": "normalize",
+          "description": "Unicode 规范化"
+        }
+      ]
+    },
+    {
+      "name": "Signal",
+      "methods": [
+        {
+          "name": "registerHandler",
+          "description": "注册信号处理器"
+        }
+      ]
+    },
+    {
+      "name": "ProfileRecorder",
+      "methods": [
+        {
+          "name": "start",
+          "description": "开始性能记录"
+        },
+        {
+          "name": "stop",
+          "description": "停止性能记录"
+        },
+        {
+          "name": "report",
+          "description": "生成性能报告"
+        }
+      ]
+    },
+    {
+      "name": "SafePointer",
+      "methods": [
+        {
+          "name": "get",
+          "description": "安全获取指针"
+        }
+      ]
+    },
+    {
+      "name": "Semaphore",
+      "methods": [
+        {
+          "name": "wait",
+          "description": "等待信号量"
+        },
+        {
+          "name": "signal",
+          "description": "发送信号量"
+        }
+      ]
+    },
+    {
+      "name": "TaskQueue",
+      "methods": [
+        {
+          "name": "enqueue",
+          "description": "添加任务"
+        },
+        {
+          "name": "execute",
+          "description": "执行任务"
+        }
+      ]
+    }
+  ]
+}

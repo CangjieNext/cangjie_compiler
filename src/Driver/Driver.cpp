@@ -19,6 +19,10 @@
 #include <utility>
 #include <vector>
 
+#ifdef CANGJIE_USE_MIMALLOC
+#include <mimalloc.h>
+#endif
+
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Basic/Version.h"
 #include "cangjie/Driver/TempFileManager.h"
@@ -85,9 +89,18 @@ bool DeleteInstance(DefaultCompilerInstance* instance)
 {
     Utils::ProfileRecorder recorder("DeleteInstance", "CompleteTime");
     delete instance;
-#if defined(__linux__) && !defined(__ohos__)
+#if defined(__linux__) || defined(__APPLE__)
+#ifndef __ohos__
+#ifdef CANGJIE_USE_MIMALLOC
+    // Enhanced memory return using mimalloc
+    // Note: mi_option_set(reset_delay, 0) was called in main() earlier
+    mi_collect(true);                              // Collect delayed free queue from all threads
+    mi_heap_collect(mi_heap_get_default(), true); // Force collect default heap
+#else
     (void)malloc_trim(0); // After the memory is released, the heap memory space shrinks to the minimum size, which
                           // makes better use of the memory space and avoids memory waste.
+#endif
+#endif
 #endif
     return true;
 }
@@ -204,11 +217,18 @@ bool Driver::ExecuteCompilation() const
         return true;
     }
 
+    // When mimalloc is enabled, use synchronous destruction to avoid race condition
+    // with mi_collect (which scans all thread's free-lists)
+#ifdef CANGJIE_USE_MIMALLOC
+    DeleteInstance(instance);
+    bool res = InvokeCompileToolchain();
+#else
     std::future<bool> future = std::async(DeleteInstance, instance);
     bool res = InvokeCompileToolchain();
     Utils::ProfileRecorder::Start("Main Stage", "DeleteInstanceLeftTime");
     future.get();
     Utils::ProfileRecorder::Stop("Main Stage", "DeleteInstanceLeftTime");
+#endif
     return res;
 }
 

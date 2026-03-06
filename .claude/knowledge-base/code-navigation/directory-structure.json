@@ -1,0 +1,19 @@
+{
+  "title": "Directory Structure",
+  "version": "1.0.0",
+  "last_updated": "2026-02-12",
+  "category": "code-navigation",
+  "tags": ["directory", "structure", "modules", "organization"],
+  "summary": "Maps logical modules to physical directories in the Cangjie compiler codebase",
+  "related_docs": [
+    "code-navigation/naming-conventions.md",
+    "code-navigation/key-files.md",
+    "modules/index.md"
+  ],
+  "key_concepts": [
+    "module organization",
+    "source/header separation",
+    "test directory mapping",
+    "schema definitions"
+  ]
+}

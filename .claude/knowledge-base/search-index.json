@@ -1,0 +1,972 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-02-12",
+  "index": {
+    "keywords": {
+      "词法分析": {
+        "documents": [
+          {"type": "module", "id": "lex", "path": "modules/lex.json", "relevance": 1.0},
+          {"type": "architecture", "id": "frontend", "path": "architecture/frontend.json", "relevance": 0.7}
+        ]
+      },
+      "lexical analysis": {
+        "documents": [
+          {"type": "module", "id": "lex", "path": "modules/lex.json", "relevance": 1.0},
+          {"type": "architecture", "id": "frontend", "path": "architecture/frontend.json", "relevance": 0.7}
+        ]
+      },
+      "lexer": {
+        "documents": [
+          {"type": "module", "id": "lex", "path": "modules/lex.json", "relevance": 1.0},
+          {"type": "architecture", "id": "frontend", "path": "architecture/frontend.json", "relevance": 0.7}
+        ]
+      },
+      "语法分析": {
+        "documents": [
+          {"type": "module", "id": "parse", "path": "modules/parse.json", "relevance": 1.0},
+          {"type": "architecture", "id": "frontend", "path": "architecture/frontend.json", "relevance": 0.7}
+        ]
+      },
+      "parsing": {
+        "documents": [
+          {"type": "module", "id": "parse", "path": "modules/parse.json", "relevance": 1.0},
+          {"type": "architecture", "id": "frontend", "path": "architecture/frontend.json", "relevance": 0.7}
+        ]
+      },
+      "parser": {
+        "documents": [
+          {"type": "module", "id": "parse", "path": "modules/parse.json", "relevance": 1.0},
+          {"type": "architecture", "id": "frontend", "path": "architecture/frontend.json", "relevance": 0.7}
+        ]
+      },
+      "抽象语法树": {
+        "documents": [
+          {"type": "module", "id": "ast", "path": "modules/ast.json", "relevance": 1.0},
+          {"type": "concept", "id": "ast", "path": "concepts/ast.json", "relevance": 1.0},
+          {"type": "module", "id": "parse", "path": "modules/parse.json", "relevance": 0.7}
+        ]
+      },
+      "AST": {
+        "documents": [
+          {"type": "module", "id": "ast", "path": "modules/ast.json", "relevance": 1.0},
+          {"type": "concept", "id": "ast", "path": "concepts/ast.json", "relevance": 1.0},
+          {"type": "module", "id": "parse", "path": "modules/parse.json", "relevance": 0.7}
+        ]
+      },
+      "语义分析": {
+        "documents": [
+          {"type": "module", "id": "sema", "path": "modules/sema.json", "relevance": 1.0},
+          {"type": "concept", "id": "type-system", "path": "concepts/type-system.json", "relevance": 0.8}
+        ]
+      },
+      "semantic analysis": {
+        "documents": [
+          {"type": "module", "id": "sema", "path": "modules/sema.json", "relevance": 1.0},
+          {"type": "concept", "id": "type-system", "path": "concepts/type-system.json", "relevance": 0.8}
+        ]
+      },
+      "类型检查": {
+        "documents": [
+          {"type": "module", "id": "sema", "path": "modules/sema.json", "relevance": 1.0},
+          {"type": "concept", "id": "type-system", "path": "concepts/type-system.json", "relevance": 1.0}
+        ]
+      },
+      "type checking": {
+        "documents": [
+          {"type": "module", "id": "sema", "path": "modules/sema.json", "relevance": 1.0},
+          {"type": "concept", "id": "type-system", "path": "concepts/type-system.json", "relevance": 1.0}
+        ]
+      },
+      "类型推断": {
+        "documents": [
+          {"type": "module", "id": "sema", "path": "modules/sema.json", "relevance": 1.0},
+          {"type": "concept", "id": "type-system", "path": "concepts/type-system.json", "relevance": 1.0}
+        ]
+      },
+      "type inference": {
+        "documents": [
+          {"type": "module", "id": "sema", "path": "modules/sema.json", "relevance": 1.0},
+          {"type": "concept", "id": "type-system", "path": "concepts/type-system.json", "relevance": 1.0}
+        ]
+      },
+      "CHIR": {
+        "documents": [
+          {"type": "module", "id": "chir", "path": "modules/chir.json", "relevance": 1.0},
+          {"type": "concept", "id": "chir", "path": "concepts/chir.json", "relevance": 1.0},
+          {"type": "architecture", "id": "pipeline", "path": "architecture/pipeline.json", "relevance": 0.7}
+        ]
+      },
+      "中间表示": {
+        "documents": [
+          {"type": "module", "id": "chir", "path": "modules/chir.json", "relevance": 1.0},
+          {"type": "concept", "id": "chir", "path": "concepts/chir.json", "relevance": 1.0},
+          {"type": "architecture", "id": "pipeline", "path": "architecture/pipeline.json", "relevance": 0.7}
+        ]
+      },
+      "intermediate representation": {
+        "documents": [
+          {"type": "module", "id": "chir", "path": "modules/chir.json", "relevance": 1.0},
+          {"type": "concept", "id": "chir", "path": "concepts/chir.json", "relevance": 1.0},
+          {"type": "architecture", "id": "pipeline", "path": "architecture/pipeline.json", "relevance": 0.7}
+        ]
+      },
+      "代码生成": {
+        "documents": [
+          {"type": "module", "id": "codegen", "path": "modules/codegen.json", "relevance": 1.0},
+          {"type": "architecture", "id": "backend", "path": "architecture/backend.json", "relevance": 0.8},
+          {"type": "concept", "id": "llvm-integration", "path": "concepts/llvm-integration.json", "relevance": 0.7}
+        ]
+      },
+      "code generation": {
+        "documents": [
+          {"type": "module", "id": "codegen", "path": "modules/codegen.json", "relevance": 1.0},
+          {"type": "architecture", "id": "backend", "path": "architecture/backend.json", "relevance": 0.8},
+          {"type": "concept", "id": "llvm-integration", "path": "concepts/llvm-integration.json", "relevance": 0.7}
+        ]
+      },
+      "LLVM": {
+        "documents": [
+          {"type": "module", "id": "codegen", "path": "modules/codegen.json", "relevance": 1.0},
+          {"type": "architecture", "id": "backend", "path": "architecture/backend.json", "relevance": 0.8},
+          {"type": "concept", "id": "llvm-integration", "path": "concepts/llvm-integration.json", "relevance": 1.0}
+        ]
+      },
+      "宏": {
+        "documents": [
+          {"type": "module", "id": "macro", "path": "modules/macro.json", "relevance": 1.0},
+          {"type": "concept", "id": "macro-expansion", "path": "concepts/macro-expansion.json", "relevance": 0.9}
+        ]
+      },
+      "macro": {
+        "documents": [
+          {"type": "module", "id": "macro", "path": "modules/macro.json", "relevance": 1.0},
+          {"type": "concept", "id": "macro-expansion", "path": "concepts/macro-expansion.json", "relevance": 0.9}
+        ]
+      },
+      "宏展开": {
+        "documents": [
+          {"type": "module", "id": "macro", "path": "modules/macro.json", "relevance": 1.0},
+          {"type": "concept", "id": "macro-expansion", "path": "concepts/macro-expansion.json", "relevance": 1.0}
+        ]
+      },
+      "macro expansion": {
+        "documents": [
+          {"type": "module", "id": "macro", "path": "modules/macro.json", "relevance": 1.0},
+          {"type": "concept", "id": "macro-expansion", "path": "concepts/macro-expansion.json", "relevance": 1.0}
+        ]
+      },
+      "条件编译": {
+        "documents": [
+          {"type": "concept", "id": "conditional-compilation", "path": "concepts/conditional-compilation.json", "relevance": 1.0},
+          {"type": "module", "id": "macro", "path": "modules/macro.json", "relevance": 0.6}
+        ]
+      },
+      "conditional compilation": {
+        "documents": [
+          {"type": "concept", "id": "conditional-compilation", "path": "concepts/conditional-compilation.json", "relevance": 1.0},
+          {"type": "module", "id": "macro", "path": "modules/macro.json", "relevance": 0.6}
+        ]
+      },
+      "模块系统": {
+        "documents": [
+          {"type": "module", "id": "modules", "path": "modules/modules.json", "relevance": 1.0},
+          {"type": "concept", "id": "module-system", "path": "concepts/module-system.json", "relevance": 1.0}
+        ]
+      },
+      "module system": {
+        "documents": [
+          {"type": "module", "id": "modules", "path": "modules/modules.json", "relevance": 1.0},
+          {"type": "concept", "id": "module-system", "path": "concepts/module-system.json", "relevance": 1.0}
+        ]
+      },
+      "包管理": {
+        "documents": [
+          {"type": "module", "id": "modules", "path": "modules/modules.json", "relevance": 1.0},
+          {"type": "concept", "id": "module-system", "path": "concepts/module-system.json", "relevance": 0.9}
+        ]
+      },
+      "名称修饰": {
+        "documents": [
+          {"type": "module", "id": "mangle", "path": "modules/mangle.json", "relevance": 1.0},
+          {"type": "concept", "id": "name-mangling", "path": "concepts/name-mangling.json", "relevance": 1.0}
+        ]
+      },
+      "name mangling": {
+        "documents": [
+          {"type": "module", "id": "mangle", "path": "modules/mangle.json", "relevance": 1.0},
+          {"type": "concept", "id": "name-mangling", "path": "concepts/name-mangling.json", "relevance": 1.0}
+        ]
+      },
+      "序列化": {
+        "documents": [
+          {"type": "concept", "id": "serialization", "path": "concepts/serialization.json", "relevance": 1.0},
+          {"type": "module", "id": "ast", "path": "modules/ast.json", "relevance": 0.6},
+          {"type": "module", "id": "modules", "path": "modules/modules.json", "relevance": 0.6}
+        ]
+      },
+      "serialization": {
+        "documents": [
+          {"type": "concept", "id": "serialization", "path": "concepts/serialization.json", "relevance": 1.0},
+          {"type": "module", "id": "ast", "path": "modules/ast.json", "relevance": 0.6},
+          {"type": "module", "id": "modules", "path": "modules/modules.json", "relevance": 0.6}
+        ]
+      },
+      "FlatBuffers": {
+        "documents": [
+          {"type": "concept", "id": "serialization", "path": "concepts/serialization.json", "relevance": 1.0},
+          {"type": "module", "id": "ast", "path": "modules/ast.json", "relevance": 0.5},
+          {"type": "module", "id": "modules", "path": "modules/modules.json", "relevance": 0.5}
+        ]
+      },
+      "编译驱动": {
+        "documents": [
+          {"type": "module", "id": "driver", "path": "modules/driver.json", "relevance": 1.0},
+          {"type": "workflow", "id": "building", "path": "workflows/building.json", "relevance": 0.7}
+        ]
+      },
+      "driver": {
+        "documents": [
+          {"type": "module", "id": "driver", "path": "modules/driver.json", "relevance": 1.0},
+          {"type": "workflow", "id": "building", "path": "workflows/building.json", "relevance": 0.7}
+        ]
+      },
+      "构建": {
+        "documents": [
+          {"type": "workflow", "id": "building", "path": "workflows/building.json", "relevance": 1.0},
+          {"type": "module", "id": "driver", "path": "modules/driver.json", "relevance": 0.7}
+        ]
+      },
+      "build": {
+        "documents": [
+          {"type": "workflow", "id": "building", "path": "workflows/building.json", "relevance": 1.0},
+          {"type": "module", "id": "driver", "path": "modules/driver.json", "relevance": 0.7}
+        ]
+      },
+      "调试": {
+        "documents": [
+          {"type": "workflow", "id": "debugging", "path": "workflows/debugging.json", "relevance": 1.0}
+        ]
+      },
+      "debug": {
+        "documents": [
+          {"type": "workflow", "id": "debugging", "path": "workflows/debugging.json", "relevance": 1.0}
+        ]
+      },
+      "测试": {
+        "documents": [
+          {"type": "workflow", "id": "testing", "path": "workflows/testing.json", "relevance": 1.0}
+        ]
+      },
+      "test": {
+        "documents": [
+          {"type": "workflow", "id": "testing", "path": "workflows/testing.json", "relevance": 1.0}
+        ]
+      },
+      "编译流程": {
+        "documents": [
+          {"type": "architecture", "id": "pipeline", "path": "architecture/pipeline.json", "relevance": 1.0},
+          {"type": "architecture", "id": "overview", "path": "architecture/overview.json", "relevance": 0.9}
+        ]
+      },
+      "compilation pipeline": {
+        "documents": [
+          {"type": "architecture", "id": "pipeline", "path": "architecture/pipeline.json", "relevance": 1.0},
+          {"type": "architecture", "id": "overview", "path": "architecture/overview.json", "relevance": 0.9}
+        ]
+      },
+      "前端": {
+        "documents": [
+          {"type": "architecture", "id": "frontend", "path": "architecture/frontend.json", "relevance": 1.0},
+          {"type": "module", "id": "lex", "path": "modules/lex.json", "relevance": 0.7},
+          {"type": "module", "id": "parse", "path": "modules/parse.json", "relevance": 0.7},
+          {"type": "module", "id": "ast", "path": "modules/ast.json", "relevance": 0.7},
+          {"type": "module", "id": "sema", "path": "modules/sema.json", "relevance": 0.7}
+        ]
+      },
+      "frontend": {
+        "documents": [
+          {"type": "architecture", "id": "frontend", "path": "architecture/frontend.json", "relevance": 1.0},
+          {"type": "module", "id": "lex", "path": "modules/lex.json", "relevance": 0.7},
+          {"type": "module", "id": "parse", "path": "modules/parse.json", "relevance": 0.7},
+          {"type": "module", "id": "ast", "path": "modules/ast.json", "relevance": 0.7},
+          {"type": "module", "id": "sema", "path": "modules/sema.json", "relevance": 0.7}
+        ]
+      },
+      "后端": {
+        "documents": [
+          {"type": "architecture", "id": "backend", "path": "architecture/backend.json", "relevance": 1.0},
+          {"type": "module", "id": "codegen", "path": "modules/codegen.json", "relevance": 0.8}
+        ]
+      },
+      "backend": {
+        "documents": [
+          {"type": "architecture", "id": "backend", "path": "architecture/backend.json", "relevance": 1.0},
+          {"type": "module", "id": "codegen", "path": "modules/codegen.json", "relevance": 0.8}
+        ]
+      },
+      "数据流": {
+        "documents": [
+          {"type": "architecture", "id": "data-flow", "path": "architecture/data-flow.json", "relevance": 1.0}
+        ]
+      },
+      "data flow": {
+        "documents": [
+          {"type": "architecture", "id": "data-flow", "path": "architecture/data-flow.json", "relevance": 1.0}
+        ]
+      }
+    },
+    "sourceFiles": {
+      "include/cangjie/Lex/Lexer.h": {
+        "module": "lex",
+        "component": "Lexer",
+        "documentation": "modules/lex.json",
+        "metadata": "modules/lex-components.json"
+      },
+      "include/cangjie/Lex/Token.h": {
+        "module": "lex",
+        "component": "Token",
+        "documentation": "modules/lex.json",
+        "metadata": "modules/lex-components.json"
+      },
+      "include/cangjie/Lex/AnnotationToken.h": {
+        "module": "lex",
+        "component": "Token",
+        "documentation": "modules/lex.json",
+        "metadata": "modules/lex-components.json"
+      },
+      "include/cangjie/Lex/Tokens.inc": {
+        "module": "lex",
+        "component": "TokenKind",
+        "documentation": "modules/lex.json",
+        "metadata": "modules/lex-components.json"
+      },
+      "include/cangjie/Lex/AnnotationTokens.inc": {
+        "module": "lex",
+        "component": "TokenKind",
+        "documentation": "modules/lex.json",
+        "metadata": "modules/lex-components.json"
+      },
+      "src/Lex/Lexer.cpp": {
+        "module": "lex",
+        "component": "Lexer",
+        "documentation": "modules/lex.json",
+        "metadata": "modules/lex-components.json"
+      },
+      "src/Lex/LexerDiag.cpp": {
+        "module": "lex",
+        "component": "Lexer",
+        "documentation": "modules/lex.json",
+        "metadata": "modules/lex-components.json"
+      },
+      "src/Lex/LexerImpl.cpp": {
+        "module": "lex",
+        "component": "Lexer",
+        "documentation": "modules/lex.json",
+        "metadata": "modules/lex-components.json"
+      },
+      "include/cangjie/Parse/Parser.h": {
+        "module": "parse",
+        "component": "Parser",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "include/cangjie/Parse/ASTChecker.h": {
+        "module": "parse",
+        "component": "ASTChecker",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "include/cangjie/Parse/ASTHasher.h": {
+        "module": "parse",
+        "component": "ASTHasher",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "src/Parse/Parser.cpp": {
+        "module": "parse",
+        "component": "Parser",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "src/Parse/ParseDecl.cpp": {
+        "module": "parse",
+        "component": "Parser",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "src/Parse/ParseExpr.cpp": {
+        "module": "parse",
+        "component": "Parser",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "src/Parse/ParseAtom.cpp": {
+        "module": "parse",
+        "component": "Parser",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "src/Parse/ParseType.cpp": {
+        "module": "parse",
+        "component": "Parser",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "src/Parse/ParsePattern.cpp": {
+        "module": "parse",
+        "component": "Parser",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "src/Parse/ParseMacro.cpp": {
+        "module": "parse",
+        "component": "Parser",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "src/Parse/ParseAnnotations.cpp": {
+        "module": "parse",
+        "component": "Parser",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "src/Parse/ParseModifiers.cpp": {
+        "module": "parse",
+        "component": "Parser",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "src/Parse/ParseImports.cpp": {
+        "module": "parse",
+        "component": "Parser",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "src/Parse/ASTChecker.cpp": {
+        "module": "parse",
+        "component": "ASTChecker",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "src/Parse/ASTHasher.cpp": {
+        "module": "parse",
+        "component": "ASTHasher",
+        "documentation": "modules/parse.json",
+        "metadata": "modules/parse-components.json"
+      },
+      "include/cangjie/AST/Node.h": {
+        "module": "ast",
+        "component": "Node",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "include/cangjie/AST/NodeX.h": {
+        "module": "ast",
+        "component": "Node",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "include/cangjie/AST/Types.h": {
+        "module": "ast",
+        "component": "Types",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "include/cangjie/AST/Create.h": {
+        "module": "ast",
+        "component": "Create",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "include/cangjie/AST/Clone.h": {
+        "module": "ast",
+        "component": "Clone",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "include/cangjie/AST/Query.h": {
+        "module": "ast",
+        "component": "Query",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "include/cangjie/AST/Searcher.h": {
+        "module": "ast",
+        "component": "Searcher",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "include/cangjie/AST/ASTContext.h": {
+        "module": "ast",
+        "component": "ASTContext",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "include/cangjie/AST/Walker.h": {
+        "module": "ast",
+        "component": "Walker",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "include/cangjie/AST/PrintNode.h": {
+        "module": "ast",
+        "component": "Node",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "src/AST/Node.cpp": {
+        "module": "ast",
+        "component": "Node",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "src/AST/Types.cpp": {
+        "module": "ast",
+        "component": "Types",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "src/AST/Create.cpp": {
+        "module": "ast",
+        "component": "Create",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "src/AST/Clone.cpp": {
+        "module": "ast",
+        "component": "Clone",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "src/AST/Utils.cpp": {
+        "module": "ast",
+        "component": "Node",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "src/AST/Walker.cpp": {
+        "module": "ast",
+        "component": "Walker",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "src/AST/PrintNode.cpp": {
+        "module": "ast",
+        "component": "Node",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "src/AST/ASTContext.cpp": {
+        "module": "ast",
+        "component": "ASTContext",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "src/AST/Query.cpp": {
+        "module": "ast",
+        "component": "Query",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "src/AST/Searcher.cpp": {
+        "module": "ast",
+        "component": "Searcher",
+        "documentation": "modules/ast.json",
+        "metadata": "modules/ast-components.json"
+      },
+      "include/cangjie/Sema/TypeChecker.h": {
+        "module": "sema",
+        "component": "TypeChecker",
+        "documentation": "modules/sema.json",
+        "metadata": "modules/sema-components.json"
+      },
+      "include/cangjie/Sema/TypeManager.h": {
+        "module": "sema",
+        "component": "TypeManager",
+        "documentation": "modules/sema.json",
+        "metadata": "modules/sema-components.json"
+      },
+      "include/cangjie/Sema/Desugar.h": {
+        "module": "sema",
+        "component": "Desugar",
+        "documentation": "modules/sema.json",
+        "metadata": "modules/sema-components.json"
+      },
+      "include/cangjie/Sema/GenericInstantiationManager.h": {
+        "module": "sema",
+        "component": "GenericInstantiationManager",
+        "documentation": "modules/sema.json",
+        "metadata": "modules/sema-components.json"
+      },
+      "include/cangjie/Sema/CommonTypeAlias.h": {
+        "module": "sema",
+        "component": "TypeChecker",
+        "documentation": "modules/sema.json",
+        "metadata": "modules/sema-components.json"
+      },
+      "include/cangjie/Sema/TestManager.h": {
+        "module": "sema",
+        "component": "TypeChecker",
+        "documentation": "modules/sema.json",
+        "metadata": "modules/sema-components.json"
+      },
+      "include/cangjie/Sema/IncrementalUtils.h": {
+        "module": "sema",
+        "component": "TypeChecker",
+        "documentation": "modules/sema.json",
+        "metadata": "modules/sema-components.json"
+      },
+      "include/cangjie/CHIR/CHIR.h": {
+        "module": "chir",
+        "component": "CHIR",
+        "documentation": "modules/chir.json",
+        "metadata": "modules/chir-components.json"
+      },
+      "src/CHIR/CHIR.cpp": {
+        "module": "chir",
+        "component": "CHIR",
+        "documentation": "modules/chir.json",
+        "metadata": "modules/chir-components.json"
+      },
+      "src/CHIR/IR/": {
+        "module": "chir",
+        "component": "CHIR",
+        "documentation": "modules/chir.json",
+        "metadata": "modules/chir-components.json"
+      },
+      "src/CHIR/AST2CHIR/": {
+        "module": "chir",
+        "component": "AST2CHIR",
+        "documentation": "modules/chir.json",
+        "metadata": "modules/chir-components.json"
+      },
+      "src/CHIR/Analysis/": {
+        "module": "chir",
+        "component": "Analysis",
+        "documentation": "modules/chir.json",
+        "metadata": "modules/chir-components.json"
+      },
+      "src/CHIR/Checker/": {
+        "module": "chir",
+        "component": "CHIR",
+        "documentation": "modules/chir.json",
+        "metadata": "modules/chir-components.json"
+      },
+      "src/CHIR/Optimization/": {
+        "module": "chir",
+        "component": "Optimization",
+        "documentation": "modules/chir.json",
+        "metadata": "modules/chir-components.json"
+      },
+      "src/CHIR/Transformation/": {
+        "module": "chir",
+        "component": "Transformation",
+        "documentation": "modules/chir.json",
+        "metadata": "modules/chir-components.json"
+      },
+      "src/CHIR/Serializer/": {
+        "module": "chir",
+        "component": "CHIR",
+        "documentation": "modules/chir.json",
+        "metadata": "modules/chir-components.json"
+      },
+      "src/CHIR/Interpreter/": {
+        "module": "chir",
+        "component": "CHIR",
+        "documentation": "modules/chir.json",
+        "metadata": "modules/chir-components.json"
+      },
+      "src/CHIR/Utils/": {
+        "module": "chir",
+        "component": "CHIR",
+        "documentation": "modules/chir.json",
+        "metadata": "modules/chir-components.json"
+      },
+      "include/cangjie/CodeGen/CGModule.h": {
+        "module": "codegen",
+        "component": "CGModule",
+        "documentation": "modules/codegen.json",
+        "metadata": "modules/codegen-components.json"
+      },
+      "include/cangjie/CodeGen/CGContext.h": {
+        "module": "codegen",
+        "component": "CGContext",
+        "documentation": "modules/codegen.json",
+        "metadata": "modules/codegen-components.json"
+      },
+      "include/cangjie/CodeGen/CGFunction.h": {
+        "module": "codegen",
+        "component": "CGFunction",
+        "documentation": "modules/codegen.json",
+        "metadata": "modules/codegen-components.json"
+      },
+      "include/cangjie/CodeGen/IRBuilder.h": {
+        "module": "codegen",
+        "component": "IRBuilder",
+        "documentation": "modules/codegen.json",
+        "metadata": "modules/codegen-components.json"
+      },
+      "include/cangjie/CodeGen/DIBuilder.h": {
+        "module": "codegen",
+        "component": "DIBuilder",
+        "documentation": "modules/codegen.json",
+        "metadata": "modules/codegen-components.json"
+      },
+      "include/cangjie/CodeGen/IRAttribute.h": {
+        "module": "codegen",
+        "component": "CGModule",
+        "documentation": "modules/codegen.json",
+        "metadata": "modules/codegen-components.json"
+      },
+      "include/cangjie/CodeGen/EmitPackageIR.h": {
+        "module": "codegen",
+        "component": "CGModule",
+        "documentation": "modules/codegen.json",
+        "metadata": "modules/codegen-components.json"
+      },
+      "src/CodeGen/Base/": {
+        "module": "codegen",
+        "component": "CGModule",
+        "documentation": "modules/codegen.json",
+        "metadata": "modules/codegen-components.json"
+      },
+      "src/CodeGen/CJNative/": {
+        "module": "codegen",
+        "component": "CGModule",
+        "documentation": "modules/codegen.json",
+        "metadata": "modules/codegen-components.json"
+      },
+      "src/CodeGen/IncrementalGen/": {
+        "module": "codegen",
+        "component": "CGModule",
+        "documentation": "modules/codegen.json",
+        "metadata": "modules/codegen-components.json"
+      },
+      "src/CodeGen/Utils/": {
+        "module": "codegen",
+        "component": "CGModule",
+        "documentation": "modules/codegen.json",
+        "metadata": "modules/codegen-components.json"
+      },
+      "src/Macro/MacroEvaluation.cpp": {
+        "module": "macro",
+        "component": "MacroEvaluation",
+        "documentation": "modules/macro.json",
+        "metadata": "modules/macro-components.json"
+      },
+      "src/Macro/MacroExpansion.cpp": {
+        "module": "macro",
+        "component": "MacroExpansion",
+        "documentation": "modules/macro.json",
+        "metadata": "modules/macro-components.json"
+      },
+      "src/Macro/MacroProcess.cpp": {
+        "module": "macro",
+        "component": "MacroExpansion",
+        "documentation": "modules/macro.json",
+        "metadata": "modules/macro-components.json"
+      },
+      "src/Macro/MacroCall.cpp": {
+        "module": "macro",
+        "component": "MacroCall",
+        "documentation": "modules/macro.json",
+        "metadata": "modules/macro-components.json"
+      },
+      "src/Macro/NodeSerialization.cpp": {
+        "module": "macro",
+        "component": "NodeSerialization",
+        "documentation": "modules/macro.json",
+        "metadata": "modules/macro-components.json"
+      },
+      "src/Macro/ExprSerialization.cpp": {
+        "module": "macro",
+        "component": "NodeSerialization",
+        "documentation": "modules/macro.json",
+        "metadata": "modules/macro-components.json"
+      },
+      "src/Macro/TokenSerialization.cpp": {
+        "module": "macro",
+        "component": "TokenSerialization",
+        "documentation": "modules/macro.json",
+        "metadata": "modules/macro-components.json"
+      },
+      "src/Macro/MacroEvalMsgSerializer.cpp": {
+        "module": "macro",
+        "component": "MacroEvaluation",
+        "documentation": "modules/macro.json",
+        "metadata": "modules/macro-components.json"
+      },
+      "src/Macro/MacroCommon.cpp": {
+        "module": "macro",
+        "component": "MacroExpansion",
+        "documentation": "modules/macro.json",
+        "metadata": "modules/macro-components.json"
+      },
+      "src/Macro/MacroCallResolve.cpp": {
+        "module": "macro",
+        "component": "MacroCall",
+        "documentation": "modules/macro.json",
+        "metadata": "modules/macro-components.json"
+      },
+      "src/Macro/InvokeUtil.cpp": {
+        "module": "macro",
+        "component": "MacroEvaluation",
+        "documentation": "modules/macro.json",
+        "metadata": "modules/macro-components.json"
+      },
+      "src/Modules/": {
+        "module": "modules",
+        "component": "ImportManager",
+        "documentation": "modules/modules.json",
+        "metadata": "modules/modules-components.json"
+      },
+      "src/Modules/ASTSerialization/": {
+        "module": "modules",
+        "component": "ASTSerialization",
+        "documentation": "modules/modules.json",
+        "metadata": "modules/modules-components.json"
+      },
+      "src/Mangle/BaseMangler.cpp": {
+        "module": "mangle",
+        "component": "BaseMangler",
+        "documentation": "modules/mangle.json",
+        "metadata": "modules/mangle-components.json"
+      },
+      "src/Mangle/ASTMangler.cpp": {
+        "module": "mangle",
+        "component": "ASTMangler",
+        "documentation": "modules/mangle.json",
+        "metadata": "modules/mangle-components.json"
+      },
+      "src/Mangle/Compression.cpp": {
+        "module": "mangle",
+        "component": "Compression",
+        "documentation": "modules/mangle.json",
+        "metadata": "modules/mangle-components.json"
+      },
+      "src/Mangle/CHIRMangler.cpp": {
+        "module": "mangle",
+        "component": "CHIRMangler",
+        "documentation": "modules/mangle.json",
+        "metadata": "modules/mangle-components.json"
+      },
+      "src/Mangle/CHIRManglingUtils.cpp": {
+        "module": "mangle",
+        "component": "ManglingUtils",
+        "documentation": "modules/mangle.json",
+        "metadata": "modules/mangle-components.json"
+      },
+      "src/Mangle/CHIRTypeManglingUtils.cpp": {
+        "module": "mangle",
+        "component": "ManglingUtils",
+        "documentation": "modules/mangle.json",
+        "metadata": "modules/mangle-components.json"
+      },
+      "src/Driver/": {
+        "module": "driver",
+        "component": "Driver",
+        "documentation": "modules/driver.json",
+        "metadata": "modules/driver-components.json"
+      },
+      "src/Driver/Backend/": {
+        "module": "driver",
+        "component": "Backend",
+        "documentation": "modules/driver.json",
+        "metadata": "modules/driver-components.json"
+      },
+      "src/Driver/Toolchains/": {
+        "module": "driver",
+        "component": "Toolchains",
+        "documentation": "modules/driver.json",
+        "metadata": "modules/driver-components.json"
+      },
+      "src/Utils/": {
+        "module": "utils",
+        "component": "FileUtil",
+        "documentation": "modules/utils.json",
+        "metadata": "modules/utils-components.json"
+      },
+      "src/Utils/StdUtils/": {
+        "module": "utils",
+        "component": "FileUtil",
+        "documentation": "modules/utils.json",
+        "metadata": "modules/utils-components.json"
+      },
+      "src/Utils/UnicodeTables/": {
+        "module": "utils",
+        "component": "Unicode",
+        "documentation": "modules/utils.json",
+        "metadata": "modules/utils-components.json"
+      },
+      "src/Sema/": {
+        "module": "sema",
+        "component": "TypeChecker",
+        "documentation": "modules/sema.json",
+        "metadata": "modules/sema-components.json"
+      }
+    },
+    "concepts": {
+      "ast": {
+        "path": "concepts/ast.json",
+        "relatedModules": ["ast", "parse", "sema"]
+      },
+      "chir": {
+        "path": "concepts/chir.json",
+        "relatedModules": ["chir", "codegen"]
+      },
+      "type-system": {
+        "path": "concepts/type-system.json",
+        "relatedModules": ["sema"]
+      },
+      "name-mangling": {
+        "path": "concepts/name-mangling.json",
+        "relatedModules": ["mangle"]
+      },
+      "module-system": {
+        "path": "concepts/module-system.json",
+        "relatedModules": ["modules"]
+      },
+      "macro-expansion": {
+        "path": "concepts/macro-expansion.json",
+        "relatedModules": ["macro"]
+      },
+      "conditional-compilation": {
+        "path": "concepts/conditional-compilation.json",
+        "relatedModules": ["macro", "driver"]
+      },
+      "serialization": {
+        "path": "concepts/serialization.json",
+        "relatedModules": ["ast", "modules"]
+      },
+      "llvm-integration": {
+        "path": "concepts/llvm-integration.json",
+        "relatedModules": ["codegen"]
+      }
+    }
+  },
+  "aliases": {
+    "lexer": "lex",
+    "parser": "parse",
+    "semantic analysis": "sema",
+    "语义分析": "sema",
+    "code generation": "codegen",
+    "代码生成": "codegen",
+    "抽象语法树": "ast",
+    "中间表示": "chir",
+    "intermediate representation": "chir",
+    "name mangling": "mangle",
+    "名称修饰": "mangle",
+    "module system": "modules",
+    "模块系统": "modules",
+    "包管理": "modules",
+    "macro expansion": "macro",
+    "宏展开": "macro",
+    "条件编译": "conditional-compilation",
+    "FlatBuffers": "serialization",
+    "序列化": "serialization",
+    "编译驱动": "driver",
+    "构建": "building",
+    "调试": "debugging",
+    "测试": "testing"
+  }
+}

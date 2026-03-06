@@ -1,0 +1,19 @@
+{
+  "title": "Key Files",
+  "version": "1.0.0",
+  "last_updated": "2026-02-12",
+  "category": "code-navigation",
+  "tags": ["files", "modules", "entry-points", "core-files"],
+  "summary": "Lists the most important files in each module of the Cangjie compiler",
+  "related_docs": [
+    "code-navigation/directory-structure.md",
+    "modules/index.md",
+    "architecture/index.md"
+  ],
+  "key_concepts": [
+    "module entry points",
+    "core interfaces",
+    "implementation files",
+    "schema definitions"
+  ]
+}

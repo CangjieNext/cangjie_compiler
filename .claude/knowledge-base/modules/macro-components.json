@@ -1,0 +1,62 @@
+{
+  "moduleId": "macro",
+  "classes": [
+    {
+      "name": "MacroEvaluation",
+      "methods": [
+        {
+          "name": "evaluate",
+          "description": "求值宏表达式"
+        },
+        {
+          "name": "expandMacro",
+          "description": "展开宏定义"
+        }
+      ]
+    },
+    {
+      "name": "MacroExpansion",
+      "methods": [
+        {
+          "name": "expand",
+          "description": "执行宏展开"
+        }
+      ]
+    },
+    {
+      "name": "MacroCall",
+      "methods": [
+        {
+          "name": "resolve",
+          "description": "解析宏调用"
+        },
+        {
+          "name": "invoke",
+          "description": "调用宏函数"
+        }
+      ]
+    },
+    {
+      "name": "NodeSerialization",
+      "methods": [
+        {
+          "name": "serialize",
+          "description": "序列化 AST 节点"
+        },
+        {
+          "name": "deserialize",
+          "description": "反序列化 AST 节点"
+        }
+      ]
+    },
+    {
+      "name": "TokenSerialization",
+      "methods": [
+        {
+          "name": "serializeTokens",
+          "description": "序列化 Token 流"
+        }
+      ]
+    }
+  ]
+}

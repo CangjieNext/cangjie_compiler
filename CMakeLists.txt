@@ -62,6 +62,9 @@ option(CANGJIE_WRITE_PROFILE "`--profile-compile-time` and `--profile-compile-me
 option(CANGJIE_ENABLE_ASAN_COV "build with asan and sanitize-coverage, used for cjc_fuzz and lsp_test" OFF)
 option(CANGJIE_VISIBLE_OPTIONS_ONLY "open CANGJIE_VISIBLE_OPTIONS_ONLY to only build options that are visible to users" ON)
 option(CANGJIE_USE_OH_LLVM_REPO "use OpenHarmony llvm repo with Cangjie llvm patch instead of cangjie llvm repo for building" OFF)
+option(CANGJIE_USE_MIMALLOC
+    "Use mimalloc as the default memory allocator for performance improvement"
+    OFF)  # Default OFF, enable after validation
 set(CANGJIE_LLVM_BUILD_TYPE Default CACHE STRING "Build type for llvm")
 set(CANGJIE_CJDB_BUILD_TYPE Default CACHE STRING "Build type for cjdb")
 
@@ -184,6 +187,9 @@ if(CANGJIE_ENABLE_CCACHE
    OR CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
     include(cmake/optional/CangjieCCache.cmake)
 endif()
+
+# mimalloc integration (must be after Sanitizer setup)
+include(cmake/optional/CangjieMimalloc.cmake)
 
 if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
     add_compile_definitions(CANGJIE_CODEGEN_CJNATIVE_BACKEND)

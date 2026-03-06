@@ -1,0 +1,147 @@
+{
+  "category": "modules",
+  "lastUpdated": "2026-02-12",
+  "subcategories": [
+    {
+      "subcategory": "frontend",
+      "modules": [
+        {
+          "id": "ast",
+          "name": "AST",
+          "description": "抽象语法树数据结构",
+          "path": "./ast.md",
+          "metadataFile": "./ast.json",
+          "tags": ["frontend", "ast", "data-structure"],
+          "dependencies": [],
+          "relatedConcepts": ["ast", "syntax-tree"],
+          "sourceLocations": ["src/AST/", "include/cangjie/AST/"]
+        },
+        {
+          "id": "lex",
+          "name": "Lex",
+          "description": "词法分析，将源码转换为 token 流",
+          "path": "./lex.md",
+          "metadataFile": "./lex.json",
+          "tags": ["frontend", "lexer", "tokenization"],
+          "dependencies": [],
+          "relatedConcepts": ["tokenization"],
+          "sourceLocations": ["src/Lex/", "include/cangjie/Lex/"]
+        },
+        {
+          "id": "parse",
+          "name": "Parse",
+          "description": "语法分析，构建 AST",
+          "path": "./parse.md",
+          "metadataFile": "./parse.json",
+          "tags": ["frontend", "parser", "grammar"],
+          "dependencies": ["lex", "ast"],
+          "relatedConcepts": ["ast", "grammar"],
+          "sourceLocations": ["src/Parse/", "include/cangjie/Parse/"]
+        },
+        {
+          "id": "sema",
+          "name": "Sema",
+          "description": "语义分析，类型检查和推断",
+          "path": "./sema.md",
+          "metadataFile": "./sema.json",
+          "tags": ["frontend", "semantic-analysis", "type-checking"],
+          "dependencies": ["parse", "ast"],
+          "relatedConcepts": ["type-system", "semantic-analysis"],
+          "sourceLocations": ["src/Sema/", "include/cangjie/Sema/"]
+        }
+      ]
+    },
+    {
+      "subcategory": "intermediate",
+      "modules": [
+        {
+          "id": "chir",
+          "name": "CHIR",
+          "description": "仓颉高层中间表示和优化",
+          "path": "./chir.md",
+          "metadataFile": "./chir.json",
+          "tags": ["intermediate", "ir", "optimization"],
+          "dependencies": ["sema", "ast"],
+          "relatedConcepts": ["chir", "ir-optimization"],
+          "sourceLocations": ["src/CHIR/", "include/cangjie/CHIR/"]
+        }
+      ]
+    },
+    {
+      "subcategory": "backend",
+      "modules": [
+        {
+          "id": "codegen",
+          "name": "CodeGen",
+          "description": "LLVM IR 代码生成",
+          "path": "./codegen.md",
+          "metadataFile": "./codegen.json",
+          "tags": ["backend", "llvm", "code-generation"],
+          "dependencies": ["chir"],
+          "relatedConcepts": ["llvm-integration", "code-generation"],
+          "sourceLocations": ["src/CodeGen/", "include/cangjie/CodeGen/"]
+        }
+      ]
+    },
+    {
+      "subcategory": "supporting",
+      "modules": [
+        {
+          "id": "macro",
+          "name": "Macro",
+          "description": "宏展开和求值",
+          "path": "./macro.md",
+          "metadataFile": "./macro.json",
+          "tags": ["supporting", "macro", "expansion"],
+          "dependencies": ["lex", "parse", "ast"],
+          "relatedConcepts": ["macro-expansion"],
+          "sourceLocations": ["src/Macro/", "include/cangjie/Macro/"]
+        },
+        {
+          "id": "modules",
+          "name": "Modules",
+          "description": "包和模块管理",
+          "path": "./modules.md",
+          "metadataFile": "./modules.json",
+          "tags": ["supporting", "module-system", "package"],
+          "dependencies": ["ast", "sema"],
+          "relatedConcepts": ["module-system"],
+          "sourceLocations": ["src/Modules/", "include/cangjie/Modules/"]
+        },
+        {
+          "id": "mangle",
+          "name": "Mangle",
+          "description": "名称修饰",
+          "path": "./mangle.md",
+          "metadataFile": "./mangle.json",
+          "tags": ["supporting", "name-mangling"],
+          "dependencies": ["ast", "chir"],
+          "relatedConcepts": ["name-mangling"],
+          "sourceLocations": ["src/Mangle/", "include/cangjie/Mangle/"]
+        },
+        {
+          "id": "driver",
+          "name": "Driver",
+          "description": "编译驱动和工具链",
+          "path": "./driver.md",
+          "metadataFile": "./driver.json",
+          "tags": ["supporting", "driver", "toolchain"],
+          "dependencies": ["codegen", "frontend"],
+          "relatedConcepts": ["compilation-pipeline"],
+          "sourceLocations": ["src/Driver/", "include/cangjie/Driver/"]
+        },
+        {
+          "id": "utils",
+          "name": "Utils",
+          "description": "工具函数和辅助模块",
+          "path": "./utils.md",
+          "metadataFile": "./utils.json",
+          "tags": ["supporting", "utilities"],
+          "dependencies": [],
+          "relatedConcepts": [],
+          "sourceLocations": ["src/Utils/", "include/cangjie/Utils/"]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "documentId": "module-driver",
+  "category": "supporting",
+  "pipelineStage": "compilation-driver",
+  "dependencies": ["codegen", "frontend"],
+  "dependents": [],
+  "components": [
+    {
+      "name": "Driver",
+      "description": "主驱动器，编译流程的核心控制器"
+    },
+    {
+      "name": "Tool",
+      "description": "编译工具抽象，封装各种编译工具"
+    },
+    {
+      "name": "ToolOptions",
+      "description": "工具选项管理，处理命令行参数"
+    },
+    {
+      "name": "TempFileManager",
+      "description": "临时文件管理器"
+    },
+    {
+      "name": "Job",
+      "description": "编译任务，表示编译流程中的单个任务单元"
+    },
+    {
+      "name": "Backend",
+      "description": "后端工具支持"
+    },
+    {
+      "name": "Toolchains",
+      "description": "工具链支持"
+    }
+  ],
+  "sourceFiles": [
+    "src/Driver/",
+    "src/Driver/Backend/",
+    "src/Driver/Toolchains/"
+  ],
+  "tags": ["supporting", "driver", "toolchain"],
+  "searchKeywords": ["驱动", "driver", "编译", "toolchain"]
+}

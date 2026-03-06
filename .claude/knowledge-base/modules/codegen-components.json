@@ -1,0 +1,81 @@
+{
+  "moduleId": "codegen",
+  "components": {
+    "classes": [
+      {
+        "name": "CGModule",
+        "fullName": "cangjie::CodeGen::CGModule",
+        "location": "include/cangjie/CodeGen/CGModule.h",
+        "description": "模块级代码生成类",
+        "publicMethods": [
+          {
+            "name": "emitModule",
+            "signature": "void emitModule(CHIRModule& module)",
+            "description": "从 CHIR 模块生成 LLVM 模块"
+          },
+          {
+            "name": "emitFunction",
+            "signature": "void emitFunction(CHIRFunction& function)",
+            "description": "从 CHIR 函数生成 LLVM 函数"
+          }
+        ],
+        "relatedClasses": ["CGFunction", "CGContext", "IRBuilder"]
+      },
+      {
+        "name": "CGFunction",
+        "fullName": "cangjie::CodeGen::CGFunction",
+        "location": "include/cangjie/CodeGen/CGFunction.h",
+        "description": "函数级代码生成类",
+        "publicMethods": [],
+        "relatedClasses": ["CGModule", "CGContext", "IRBuilder"]
+      },
+      {
+        "name": "CGContext",
+        "fullName": "cangjie::CodeGen::CGContext",
+        "location": "include/cangjie/CodeGen/CGContext.h",
+        "description": "代码生成上下文类",
+        "publicMethods": [],
+        "relatedClasses": ["CGModule", "CGFunction"]
+      },
+      {
+        "name": "IRBuilder",
+        "fullName": "cangjie::CodeGen::IRBuilder",
+        "location": "include/cangjie/CodeGen/IRBuilder.h",
+        "description": "LLVM IR 构建器类",
+        "publicMethods": [
+          {
+            "name": "createAlloca",
+            "signature": "llvm::AllocaInst* createAlloca(llvm::Type* type)",
+            "description": "创建 alloca 指令"
+          },
+          {
+            "name": "createStore",
+            "signature": "llvm::StoreInst* createStore(llvm::Value* value, llvm::Value* ptr)",
+            "description": "创建 store 指令"
+          },
+          {
+            "name": "createLoad",
+            "signature": "llvm::LoadInst* createLoad(llvm::Type* type, llvm::Value* ptr)",
+            "description": "创建 load 指令"
+          },
+          {
+            "name": "createCall",
+            "signature": "llvm::CallInst* createCall(llvm::Function* func, llvm::ArrayRef<llvm::Value*> args)",
+            "description": "创建 call 指令"
+          }
+        ],
+        "relatedClasses": ["CGModule", "CGFunction"]
+      },
+      {
+        "name": "DIBuilder",
+        "fullName": "cangjie::CodeGen::DIBuilder",
+        "location": "include/cangjie/CodeGen/DIBuilder.h",
+        "description": "调试信息构建器类",
+        "publicMethods": [],
+        "relatedClasses": ["CGModule", "IRBuilder"]
+      }
+    ],
+    "functions": [],
+    "enums": []
+  }
+}
