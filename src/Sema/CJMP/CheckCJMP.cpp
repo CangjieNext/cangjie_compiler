@@ -884,6 +884,17 @@ bool IsPrimaryConstructor(const FuncDecl& func)
 }
 }
 
+bool IsConstructor(const FuncDecl& func)
+{
+    return func.TestAttr(Attribute::CONSTRUCTOR);
+}
+
+bool IsPrimaryConstructor(const FuncDecl& func)
+{
+    return func.TestAttr(Attribute::PRIMARY_CONSTRUCTOR);
+}
+}
+
 bool MPTypeCheckerImpl::IsCJMPDeclMatchable(Decl& lhsDecl, Decl& rhsDecl) const
 {
     bool isLeftCommon = lhsDecl.TestAttr(Attribute::COMMON);
