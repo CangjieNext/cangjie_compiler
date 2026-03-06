@@ -1405,31 +1405,42 @@ void ToCHIR::UpdateMemberVarPath()
 void ToCHIR::Canonicalization()
 {
     Utils::ProfileRecorder record("CHIR", "Canonicalization");
-    auto allDefs = chirPkg->GetAllCustomTypeDef();
-    // 1. create vtable
-    auto generator = GenerateVTable(*chirPkg, allDefs, builder, opts);
-    generator.CreateVTable();
-    generator.UpdateOperatorVirFunc();
-    generator.CreateVirtualFuncWrapper(kind, cachedInfo, curVirtFuncWrapDep, delVirtFuncWrapForIncr);
-    generator.SetSrcFuncType();
-    generator.CreateMutFuncWrapper();
-    DumpCHIRToFile("CreateVTable");
+    {
+        Utils::ProfileRecorder vtableRecorder("Canonicalization", "GenerateVTable");
+        // 1. create vtable
+        auto allDefs = chirPkg->GetAllCustomTypeDef();
+        auto generator = GenerateVTable(*chirPkg, allDefs, builder, opts);
+        generator.CreateVTable();
+        generator.UpdateOperatorVirFunc();
+        generator.CreateVirtualFuncWrapper(kind, cachedInfo, curVirtFuncWrapDep, delVirtFuncWrapForIncr);
+        generator.SetSrcFuncType();
+        generator.CreateMutFuncWrapper();
 
-    // 2. calculate virtual method offset and store it in Invoke/InvokeStatic
-    // 3. update callee of Apply, it may be replaced by mut wrapper func
-    generator.UpdateFuncCall();
+        // 2. calculate virtual method offset and store it in Invoke/InvokeStatic
+        // 3. update callee of Apply, it may be replaced by mut wrapper func
+        generator.UpdateFuncCall();
+        DumpCHIRToFile("CreateVTable");
+    }
 
     // 4. add has invited flag to class which has finalizer, in case of finalize before init
+    Utils::ProfileRecorder::Start("Canonicalization", "MarkClassHasInited");
     MarkClassHasInited(builder).RunOnPackage(*chirPkg);
+    Utils::ProfileRecorder::Stop("Canonicalization", "MarkClassHasInited");
 
     // 5. update member var path, from name to offset
+    Utils::ProfileRecorder::Start("Canonicalization", "UpdateMemberVarPath");
     UpdateMemberVarPath();
+    Utils::ProfileRecorder::Stop("Canonicalization", "UpdateMemberVarPath");
 
     // 6. set mark on some functions that have no side effect
+    Utils::ProfileRecorder::Start("Canonicalization", "NoSideEffectMarker");
     NoSideEffectMarker(*chirPkg).Run();
+    Utils::ProfileRecorder::Stop("Canonicalization", "NoSideEffectMarker");
 
     // 7. create box type for recursion value type
+    Utils::ProfileRecorder::Start("Canonicalization", "BoxRecursionValueType");
     BoxRecursionValueType(*chirPkg, builder).Run();
+    Utils::ProfileRecorder::Stop("Canonicalization", "BoxRecursionValueType");
 
     DumpCHIRToFile("Canonicalization");
 }
