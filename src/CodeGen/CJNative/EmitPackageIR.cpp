@@ -527,8 +527,7 @@ void ReplaceFunction(CGModule& cgMod)
     IRBuilder2 irBuilder(cgMod);
     auto& callBasesToReplace = cgMod.GetCGContext().GetCallBasesToReplace();
     for (auto& item : callBasesToReplace) {
-        auto& applyW = item.applyExprW;
-        irBuilder.SetInsertCGFunction(*cgMod.GetOrInsertCGFunction(applyW.GetTopLevelFunc()));
+        irBuilder.SetInsertCGFunction(item.cgFuncCaller);
         auto oldCall = item.callWithoutTI;
         irBuilder.SetInsertPoint(oldCall);
         /// step1: prepare new arguments
@@ -539,7 +538,7 @@ void ReplaceFunction(CGModule& cgMod)
         for (auto& arg : oldCall->args()) {
             argsVal.emplace_back(&(*arg));
         }
-        bool isCalleeMutOrCtor = applyW.IsCalleeStructMutOrCtorMethod();
+        bool& isCalleeMutOrCtor = item.isCalleeMutOrCtor;
         // drop the `basePtr` parameter for mut function
         llvm::Value* basePtr = nullptr;
         if (isCalleeMutOrCtor) {
@@ -548,8 +547,7 @@ void ReplaceFunction(CGModule& cgMod)
             argsVal.erase(basePtrItor);
         }
         /// step2: alloca memory for `this` with TypeInfo
-        CJC_NULLPTR_CHECK(applyW.GetThisParam());
-        auto thisCHIRType = DeRef(*applyW.GetThisParam()->GetType());
+        auto thisCHIRType = DeRef(item.thisParamType);
         cgMod.GetCGContext().genericParamsCacheMap[irBuilder.GetInsertFunction()].clear();
         cgMod.GetCGContext().genericParamsSizeBlockLevelCacheMap[irBuilder.GetInsertBlock()].clear();
         auto thisParamTypeInfo = irBuilder.CreateTypeInfo(thisCHIRType);
@@ -572,7 +570,7 @@ void ReplaceFunction(CGModule& cgMod)
             irBuilder.CreateMemCpy(payloadPtr, llvm::MaybeAlign(), thisParamWithoutTI, llvm::MaybeAlign(), size32);
         }
         /// step4: emit a new CallInst with "xxx"
-        auto callee = cgMod.GetOrInsertCGFunction(applyW.GetCallee())->GetWrapperFunction();
+        auto callee = item.cgFuncCallee->GetWrapperFunction();
         CJC_NULLPTR_CHECK(callee);
         llvm::CallBase* newCall = nullptr;
         if (llvm::isa<llvm::CallInst>(oldCall)) {
