@@ -24919,7 +24919,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..3f125b499 100644
+index b391fe1ea..116297d0e 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -24975,7 +24975,7 @@ index b391fe1ea..3f125b499 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.1.0-beta.21";
++    g_version_str += "\n  cangjie 1.1.0-beta.22";
    }
  
    return g_version_str.c_str();
@@ -44483,7 +44483,7 @@ index cc7be24c1..8b8e2b289 100644
    if (!Result)
      Result = runThinLTO(AddStream, Cache, GUIDPreservedSymbols);
 diff --git a/llvm/lib/LTO/LTOBackend.cpp b/llvm/lib/LTO/LTOBackend.cpp
-index 2e32469b4..95327fab0 100644
+index 2e32469b4..c33abc50e 100644
 --- a/llvm/lib/LTO/LTOBackend.cpp
 +++ b/llvm/lib/LTO/LTOBackend.cpp
 @@ -20,6 +20,7 @@
@@ -44555,7 +44555,7 @@ index 2e32469b4..95327fab0 100644
    if (!Conf.SampleProfile.empty())
      PGOOpt = PGOOptions(Conf.SampleProfile, "", Conf.ProfileRemapping,
                          PGOOptions::SampleUse, PGOOptions::NoCSAction, true);
-@@ -291,6 +329,41 @@ static void runNewPMPasses(const Config &Conf, Module &Mod, TargetMachine *TM,
+@@ -291,6 +329,39 @@ static void runNewPMPasses(const Config &Conf, Module &Mod, TargetMachine *TM,
    if (!Conf.DisableVerify)
      MPM.addPass(VerifierPass());
  
@@ -44587,9 +44587,7 @@ index 2e32469b4..95327fab0 100644
 +    if (CJPipeline) {
 +      MPM.addPass(CJSpecificOpt(OptLevel));
 +      MPM.addPass(PlaceSafepoints());
-+      if (OptLevel > 1) {
-+        MPM.addPass(CJBarrierOpt());
-+      }
++      MPM.addPass(CJBarrierOpt());
 +      MPM.addPass(CJRewriteStatepoint(OptLevel));
 +    }
 +  };
@@ -44597,7 +44595,7 @@ index 2e32469b4..95327fab0 100644
    OptimizationLevel OL;
  
    switch (OptLevel) {
-@@ -324,6 +397,8 @@ static void runNewPMPasses(const Config &Conf, Module &Mod, TargetMachine *TM,
+@@ -324,6 +395,8 @@ static void runNewPMPasses(const Config &Conf, Module &Mod, TargetMachine *TM,
      MPM.addPass(PB.buildLTODefaultPipeline(OL, ExportSummary));
    }
  
@@ -44606,7 +44604,7 @@ index 2e32469b4..95327fab0 100644
    if (!Conf.DisableVerify)
      MPM.addPass(VerifierPass());
  
-@@ -360,6 +435,11 @@ bool lto::opt(const Config &Conf, TargetMachine *TM, unsigned Task, Module &Mod,
+@@ -360,6 +433,11 @@ bool lto::opt(const Config &Conf, TargetMachine *TM, unsigned Task, Module &Mod,
  static void codegen(const Config &Conf, TargetMachine *TM,
                      AddStreamFn AddStream, unsigned Task, Module &Mod,
                      const ModuleSummaryIndex &CombinedIndex) {
@@ -44618,7 +44616,7 @@ index 2e32469b4..95327fab0 100644
    if (Conf.PreCodeGenModuleHook && !Conf.PreCodeGenModuleHook(Task, Mod))
      return;
  
-@@ -450,7 +530,7 @@ static void splitCodeGen(const Config &C, TargetMachine *TM,
+@@ -450,7 +528,7 @@ static void splitCodeGen(const Config &C, TargetMachine *TM,
                std::unique_ptr<TargetMachine> TM =
                    createTargetMachine(C, T, *MPartInCtx);
  
@@ -44627,7 +44625,7 @@ index 2e32469b4..95327fab0 100644
                        CombinedIndex);
              },
              // Pass BC using std::move to ensure that it get moved rather than
-@@ -507,7 +587,7 @@ Error lto::backend(const Config &C, AddStreamFn AddStream,
+@@ -507,7 +585,7 @@ Error lto::backend(const Config &C, AddStreamFn AddStream,
    }
  
    if (ParallelCodeGenParallelismLevel == 1) {
@@ -44636,7 +44634,7 @@ index 2e32469b4..95327fab0 100644
    } else {
      splitCodeGen(C, TM.get(), AddStream, ParallelCodeGenParallelismLevel, Mod,
                   CombinedIndex);
-@@ -564,7 +644,7 @@ Error lto::thinBackend(const Config &Conf, unsigned Task, AddStreamFn AddStream,
+@@ -564,7 +642,7 @@ Error lto::thinBackend(const Config &Conf, unsigned Task, AddStreamFn AddStream,
    updatePublicTypeTestCalls(Mod, CombinedIndex.withWholeProgramVisibility());
  
    if (Conf.CodeGenOnly) {
@@ -44645,7 +44643,7 @@ index 2e32469b4..95327fab0 100644
      return finalizeOptimizationRemarks(std::move(DiagnosticOutputFile));
    }
  
-@@ -579,7 +659,7 @@ Error lto::thinBackend(const Config &Conf, unsigned Task, AddStreamFn AddStream,
+@@ -579,7 +657,7 @@ Error lto::thinBackend(const Config &Conf, unsigned Task, AddStreamFn AddStream,
                   CmdArgs))
            return finalizeOptimizationRemarks(std::move(DiagnosticOutputFile));
  
@@ -45167,7 +45165,7 @@ index 703969f8b..c2992aa79 100644
    Coroutines
    IPO
 diff --git a/llvm/lib/Passes/PassBuilder.cpp b/llvm/lib/Passes/PassBuilder.cpp
-index 42fde3752..e9bc1975c 100644
+index 42fde3752..e050a7b57 100644
 --- a/llvm/lib/Passes/PassBuilder.cpp
 +++ b/llvm/lib/Passes/PassBuilder.cpp
 @@ -26,6 +26,7 @@
@@ -45323,7 +45321,7 @@ index 42fde3752..e9bc1975c 100644
  } // namespace llvm
  
  namespace {
-@@ -1136,10 +1212,67 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
+@@ -1136,10 +1212,65 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
                                .Case("O3", OptimizationLevel::O3)
                                .Case("Os", OptimizationLevel::Os)
                                .Case("Oz", OptimizationLevel::Oz);
@@ -45370,9 +45368,7 @@ index 42fde3752..e9bc1975c 100644
 +      if (CJPipeline && !CangjieLTOPreOpt) {
 +        MPM.addPass(CJSpecificOpt(L.getSpeedupLevel()));
 +        MPM.addPass(PlaceSafepoints());
-+        if (L.getSpeedupLevel() > 1) {
-+          MPM.addPass(CJBarrierOpt());
-+        }
++        MPM.addPass(CJBarrierOpt());
 +        MPM.addPass(CJRewriteStatepoint(L.getSpeedupLevel()));
 +        if (EnableConfigFlatten || EnableConfigBcf)
 +          MPM.addPass(ControlFlowObfuscator());
@@ -45391,7 +45387,7 @@ index 42fde3752..e9bc1975c 100644
        return Error::success();
      }
  
-@@ -1152,7 +1285,7 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
+@@ -1152,7 +1283,7 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
          L.getSpeedupLevel() > 1 && L != OptimizationLevel::Oz;
  
      if (Matches[1] == "default") {
@@ -45400,7 +45396,7 @@ index 42fde3752..e9bc1975c 100644
      } else if (Matches[1] == "thinlto-pre-link") {
        MPM.addPass(buildThinLTOPreLinkDefaultPipeline(L));
      } else if (Matches[1] == "thinlto") {
-@@ -1163,6 +1296,7 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
+@@ -1163,6 +1294,7 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
        assert(Matches[1] == "lto" && "Not one of the matched options!");
        MPM.addPass(buildLTODefaultPipeline(L, nullptr));
      }
@@ -61166,10 +61162,10 @@ index 000000000..3409036f1
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp b/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp
 new file mode 100644
-index 000000000..e02675f85
+index 000000000..c22ba410c
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp
-@@ -0,0 +1,1626 @@
+@@ -0,0 +1,1627 @@
 +//===- CJFillMetadata.cpp - Fill Cangjie Metadata ---------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -62058,7 +62054,8 @@ index 000000000..e02675f85
 +      if (ReflectMD->getNumOperands() == ERT_MAX)
 +        return getEnumReflectInfo(ReflectMD);
 +      if (ReflectMD->getNumOperands() == ECRT_MAX)
-+        return getEnumCtorReflectInfo(ReflectMD);
++        // for compatibility: old runtime cannot parse this metadata field
++        return Int8PtrNull;
 +      report_fatal_error(GV->getName() +
 +                         ": enum reflect info's operand number error!");
 +    } else {
