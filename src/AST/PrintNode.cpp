@@ -62,6 +62,17 @@ template <typename... Args> static inline void PrintIndent(std::ostream& stream,
     PrintIndentOnly(stream, indent);
     Println(stream, args...);
 }
+
+static inline const char* LinkageToString(Linkage linkage) {
+    switch (linkage) {
+        case Linkage::WEAK_ODR: return "WEAK_ODR";
+        case Linkage::EXTERNAL: return "EXTERNAL";
+        case Linkage::INTERNAL: return "INTERNAL";
+        case Linkage::LINKONCE_ODR: return "LINKONCE_ODR";
+        case Linkage::EXTERNAL_WEAK: return "EXTERNAL_WEAK";
+        default: return "UNKNOWN";
+    }
+}
 } // namespace
 
 namespace {
@@ -116,8 +127,11 @@ void PrintBasic(unsigned indent, const Node& node, std::ostream& stream = std::c
         PrintIndent(stream, indent, "exportId:", "\"" + node.exportId + "\"");
     }
     if (auto d = DynamicCast<Decl>(&node)) {
-        if (d->linkage != Linkage::EXTERNAL || d->IsConst()) {
-            PrintIndent(stream, indent, "linkage:", static_cast<int>(d->linkage), ", isConst:", static_cast<int>(d->IsConst()));
+        if (d->linkage != Linkage::EXTERNAL) {
+            PrintIndent(stream, indent, "linkage:", LinkageToString(d->linkage));
+        }
+        if (d->IsConst()) {
+            PrintIndent(stream, indent, "isConst: 1");
         }
         if (!d->mangledName.empty()) {
             PrintIndent(stream, indent, "mangledName:", "\"" + d->mangledName + "\"");

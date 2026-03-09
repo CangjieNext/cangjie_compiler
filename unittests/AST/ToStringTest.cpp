@@ -8,6 +8,9 @@
 
 #include "cangjie/AST/Node.h"
 
+#include "cangjie/Parse/Parser.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
+
 using namespace Cangjie;
 using namespace AST;
 
@@ -15,6 +18,16 @@ namespace {
 Position Pos(int line, int column)
 {
     return Position{0, line, column};
+}
+
+OwnedPtr<Expr> ParseExprFromSrc(const std::string& src)
+{
+    static DiagnosticEngine diag;
+    static SourceManager sm;
+    sm.AddSource("./", src);
+    diag.SetSourceManager(&sm);
+    Parser parser(src, diag, diag.GetSourceManager(), {});
+    return parser.ParseExpr();
 }
 
 void InitIdentifier(Identifier& id, std::string value, const Position& begin, const Position& end)
@@ -45,28 +58,18 @@ OwnedPtr<LitConstExpr> MakeIntLiteral(const std::string& value, int line, int co
 
 TEST(ToStringTest, BasicNodeSourceRestore)
 {
-    MemberAccess member;
-    member.baseExpr = MakeRefExpr("a", 1, 1);
-    member.dotPos = Pos(1, 2);
-    InitIdentifier(member.field, "b", Pos(1, 3), Pos(1, 4));
-    EXPECT_EQ("a.b", member.ToString());
+    auto ExpectExprToString = [](const std::string& src) {
+        auto expr = ParseExprFromSrc(src);
+        ASSERT_NE(expr, nullptr) << "Failed to parse: " << src;
+        EXPECT_EQ(src, expr->ToString());
+    };
 
-    CallExpr call;
-    call.baseFunc = MakeRefExpr("foo", 2, 1);
-    call.leftParenPos = Pos(2, 4);
-    call.rightParenPos = Pos(2, 6);
-    auto arg = MakeOwned<FuncArg>();
-    arg->expr = MakeIntLiteral("1", 2, 5);
-    arg->begin = arg->expr->begin;
-    arg->end = arg->expr->end;
-    call.args.emplace_back(std::move(arg));
-    EXPECT_EQ("foo(1)", call.ToString());
-
-    ArrayLit arrayLit;
-    arrayLit.begin = Pos(3, 1);
-    arrayLit.rightSquarePos = Pos(3, 4);
-    arrayLit.children.emplace_back(MakeIntLiteral("1", 3, 2));
-    EXPECT_EQ("[1 ]", arrayLit.ToString());
+    ExpectExprToString("a.b");
+    ExpectExprToString("foo()");
+    ExpectExprToString("foo(1)");
+    ExpectExprToString("foo(1, 2)");
+    ExpectExprToString("[1]");
+    ExpectExprToString("[1, 2]");
 }
 
 TEST(ToStringTest, BasicNodeNullSafety)

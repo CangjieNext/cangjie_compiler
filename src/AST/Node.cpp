@@ -226,9 +226,6 @@ std::string EnumPattern::GetIdentifier() const
 
 std::string CallExpr::ToString() const
 {
-    if (baseFunc == nullptr) {
-        return "";
-    }
     std::stringstream ss;
     if (!baseFunc) {
         ss << "(";
@@ -278,9 +275,6 @@ void CallExpr::Clear() noexcept
 
 std::string FuncArg::ToString() const
 {
-    if (expr == nullptr) {
-        return "";
-    }
     std::stringstream ss;
     if (!expr) {
         if (!name.Empty()) {
@@ -316,9 +310,6 @@ std::string FuncArg::ToString() const
 
 std::string MemberAccess::ToString() const
 {
-    if (baseExpr == nullptr) {
-        return "";
-    }
     std::stringstream ss;
     if (!baseExpr) {
         return field.Val();
