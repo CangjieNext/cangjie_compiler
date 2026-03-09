@@ -17,6 +17,7 @@ get_target_property(LINK_LIBS cjc LINK_LIBRARIES)
 list(APPEND LINK_LIBS ffi)
 
 if(CANGJIE_BUILD_TESTS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
     add_compile_definitions(CANGJIE_BUILD_TESTS)
     add_subdirectory(TestCompilerInstance)
     add_subdirectory(Driver)

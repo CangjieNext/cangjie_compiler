@@ -62,6 +62,17 @@ template <typename... Args> static inline void PrintIndent(std::ostream& stream,
     PrintIndentOnly(stream, indent);
     Println(stream, args...);
 }
+
+static inline const char* LinkageToString(Linkage linkage) {
+    switch (linkage) {
+        case Linkage::WEAK_ODR: return "WEAK_ODR";
+        case Linkage::EXTERNAL: return "EXTERNAL";
+        case Linkage::INTERNAL: return "INTERNAL";
+        case Linkage::LINKONCE_ODR: return "LINKONCE_ODR";
+        case Linkage::EXTERNAL_WEAK: return "EXTERNAL_WEAK";
+        default: return "UNKNOWN";
+    }
+}
 } // namespace
 
 namespace {
@@ -93,25 +104,35 @@ void PrintTarget(unsigned indent, const Decl& target, std::ostream& stream = std
 void PrintBasic(unsigned indent, const Node& node, std::ostream& stream = std::cout)
 {
     // Basic info:
-    std::string filePath = node.curFile ? node.curFile->filePath : "not in file";
-    PrintIndent(stream, indent, "curFile:", filePath);
+    if (node.curFile) {
+        PrintIndent(stream, indent, "curFile:", node.curFile->filePath);
+    }
     PrintIndent(stream, indent, "position:", node.begin.ToString(), node.end.ToString());
-    PrintIndent(stream, indent, "scopeName:", "\"" + node.scopeName + "\"");
-    PrintIndent(stream, indent, "ty:", node.ty->String());
-    PrintIndent(stream, indent, "ptr:", &node);
-    const auto& fullPkgName = node.GetFullPackageName();
+    if (!node.scopeName.empty()) {
+        PrintIndent(stream, indent, "scopeName:", "\"" + node.scopeName + "\"");
+    }
+    if (node.ty) {
+        PrintIndent(stream, indent, "ty:", node.ty->String());
+    }
+    auto fullPkgName = node.GetFullPackageName();
     if (!fullPkgName.empty()) {
         PrintIndent(stream, indent, "fullPackageName:", fullPkgName);
-    } else {
-        PrintIndent(stream, indent, "fullPackageName is empty");
     }
-    PrintIndent(stream, indent, "attributes:", node.GetAttrs().ToString());
+    const auto attrsString = node.GetAttrs().ToString();
+    const auto emptyAttrsString = AttributePack().ToString();
+    if (attrsString != emptyAttrsString) {
+        PrintIndent(stream, indent, "attributes:", attrsString);
+    }
     if (!node.exportId.empty()) {
         PrintIndent(stream, indent, "exportId:", "\"" + node.exportId + "\"");
     }
     if (auto d = DynamicCast<Decl>(&node)) {
-        PrintIndent(
-            stream, indent, "linkage:", static_cast<int>(d->linkage), ", isConst:", static_cast<int>(d->IsConst()));
+        if (d->linkage != Linkage::EXTERNAL) {
+            PrintIndent(stream, indent, "linkage:", LinkageToString(d->linkage));
+        }
+        if (d->IsConst()) {
+            PrintIndent(stream, indent, "isConst: 1");
+        }
         if (!d->mangledName.empty()) {
             PrintIndent(stream, indent, "mangledName:", "\"" + d->mangledName + "\"");
         }

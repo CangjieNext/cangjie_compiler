@@ -226,16 +226,30 @@ std::string EnumPattern::GetIdentifier() const
 
 std::string CallExpr::ToString() const
 {
-    if (baseFunc == nullptr) {
-        return "";
-    }
     std::stringstream ss;
+    if (!baseFunc) {
+        ss << "(";
+        for (size_t i = 0; i < args.size(); ++i) {
+            auto& arg = args[i];
+            if (arg) {
+                ss << arg->ToString();
+            }
+            if (i + 1 < args.size()) {
+                ss << ",";
+            }
+        }
+        ss << ")";
+        return ss.str();
+    }
     Position curSpanBegin = baseFunc->begin;
     ss << NextSpan(baseFunc->ToString(), curSpanBegin, baseFunc->end);
     curSpanBegin = baseFunc->end;
     ss << NextSpan("(", curSpanBegin, leftParenPos, 1);
     curSpanBegin = leftParenPos + Position{0, 0, 1};
     for (auto& arg : args) {
+        if (!arg) {
+            continue;
+        }
         ss << NextSpan(arg->ToString(), curSpanBegin, arg->end);
         curSpanBegin = arg->end;
         if (arg->commaPos != INVALID_POSITION) {
@@ -261,10 +275,22 @@ void CallExpr::Clear() noexcept
 
 std::string FuncArg::ToString() const
 {
-    if (expr == nullptr) {
-        return "";
-    }
     std::stringstream ss;
+    if (!expr) {
+        if (!name.Empty()) {
+            ss << name.Val();
+            if (colonPos != INVALID_POSITION) {
+                ss << ":";
+            }
+        }
+        if (withInout) {
+            if (!ss.str().empty()) {
+                ss << " ";
+            }
+            ss << "inout";
+        }
+        return ss.str();
+    }
     Position curSpanBegin = begin;
     if (!name.Empty()) {
         curSpanBegin = name.Begin();
@@ -284,10 +310,10 @@ std::string FuncArg::ToString() const
 
 std::string MemberAccess::ToString() const
 {
-    if (baseExpr == nullptr) {
-        return "";
-    }
     std::stringstream ss;
+    if (!baseExpr) {
+        return field.Val();
+    }
     Position curSpanBegin = baseExpr->begin;
     ss << NextSpan(baseExpr->ToString(), curSpanBegin, baseExpr->end);
     curSpanBegin = baseExpr->end;
@@ -375,6 +401,9 @@ std::string RefType::ToString() const
         ss << NextSpan("<", curSpanBegin, leftAnglePos, 1);
         curSpanBegin = leftAnglePos + Position{0, 0, 1};
         for (auto& typeArgument : typeArguments) {
+            if (!typeArgument) {
+                continue;
+            }
             ss << NextSpan(typeArgument->ToString(), curSpanBegin, typeArgument->end);
             curSpanBegin = typeArgument->end;
         }
@@ -395,6 +424,10 @@ std::string ArrayLit::ToString() const
     Position curSpanBegin = begin + Position{0, 0, 1};
     size_t i = 0;
     for (auto& child : children) {
+        if (!child) {
+            i++;
+            continue;
+        }
         ss << NextSpan(child->ToString(), curSpanBegin, child->end);
         curSpanBegin = child->end;
         if (i < commaPosVector.size()) {
@@ -410,12 +443,28 @@ std::string ArrayLit::ToString() const
 std::string ArrayExpr::ToString() const
 {
     std::stringstream ss;
+    if (!type) {
+        ss << "(";
+        for (size_t i = 0; i < args.size(); ++i) {
+            if (args[i]) {
+                ss << args[i]->ToString();
+            }
+            if (i < commaPosVector.size() || i + 1 < args.size()) {
+                ss << ",";
+            }
+        }
+        ss << ")";
+        return ss.str();
+    }
     Position curSpanBegin = begin;
     ss << NextSpan(type->ToString(), curSpanBegin, type->end);
     curSpanBegin = type->end;
     ss << NextSpan("(", curSpanBegin, leftParenPos, 1);
     curSpanBegin = leftParenPos + Position{0, 0, 1};
     for (size_t i = 0; i < args.size(); ++i) {
+        if (!args[i]) {
+            continue;
+        }
         ss << NextSpan(args[i]->ToString(), curSpanBegin, args[i]->end);
         curSpanBegin = args[i]->end;
         if (i < commaPosVector.size()) {
