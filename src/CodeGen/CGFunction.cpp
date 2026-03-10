@@ -187,12 +187,13 @@ llvm::Argument* CGFunction::GetArgByIndexFromCHIR(size_t idx) const
 
 void CGFunction::Opt() const
 {
+    LICMOptimizer(cgMod, *this).Run();
+
     auto function = GetRawFunction();
     RemoveUnreachableBlocks(*function);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     EraseReplaceableAlloca(cgMod, *function);
     AddZeroInitForStructWithRefField(cgMod, *function);
-    LICMOptimizer(cgMod, *this).Run();
 #endif
 }
 
