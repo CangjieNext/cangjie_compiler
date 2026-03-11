@@ -203,35 +203,34 @@ std::vector<llvm::BasicBlock*> IRBuilder2::CreateAndInsertBasicBlocks(
     return ret;
 }
 
-void IRBuilder2::EmitDeclare(const CHIR::Debug& debugNode, bool pointerWrapper)
+void IRBuilder2::EmitDeclare(const CHIR::Value& value, bool pointerWrapper)
 {
     CJC_ASSERT(cgMod.GetCGContext().GetCompileOptions().enableCompileDebug);
-    cgMod.diBuilder->EmitDeclare(debugNode, *GetInsertBlock(), pointerWrapper);
-    EmitLocation(CHIRExprWrapper(debugNode));
+    cgMod.diBuilder->EmitDeclare(value, *GetInsertBlock(), pointerWrapper);
 }
 
-void IRBuilder2::CreateLocalVarPointer(const CHIR::Debug& debugNode, const CGValue& cgValue)
+void IRBuilder2::CreateLocalVarPointer(const CHIR::Value& value, const CGValue& cgValue)
 {
     CJC_ASSERT(cgMod.GetCGContext().GetCompileOptions().enableCompileDebug);
     auto cgType = cgValue.GetCGType();
     auto arg = cgValue.GetRawValue();
     auto tmpArg = CreateEntryAlloca(
-        llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext(), 1), nullptr, debugNode.GetSrcCodeIdentifier() + ".debug");
+        llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext(), 1), nullptr, value.GetSrcCodeIdentifier() + ".debug");
     auto inst = CreateStore(arg, tmpArg);
     llvm::cast<llvm::Instruction>(tmpArg)->setDebugLoc(llvm::DebugLoc());
     CJC_NULLPTR_CHECK(inst);
     inst->setDebugLoc(llvm::DebugLoc());
-    cgMod.SetOrUpdateMappedCGValue(debugNode.GetValue(), std::make_unique<CGValue>(tmpArg, cgType));
-    EmitDeclare(debugNode);
-    cgMod.SetValuesToLoad(debugNode.GetValue(), llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext(), 1), tmpArg);
-    cgMod.SetOrUpdateMappedCGValue(debugNode.GetValue(), std::make_unique<CGValue>(arg, cgType));
+    cgMod.SetOrUpdateMappedCGValue(&value, std::make_unique<CGValue>(tmpArg, cgType));
+    EmitDeclare(value);
+    cgMod.SetValuesToLoad(&value, llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext(), 1), tmpArg);
+    cgMod.SetOrUpdateMappedCGValue(&value, std::make_unique<CGValue>(arg, cgType));
 }
 
-void IRBuilder2::CreateUnBoxDeclare(const CHIR::Debug& debugNode, const CGValue& cgValue)
+void IRBuilder2::CreateUnBoxDeclare(const CHIR::Value& value, const CGValue& cgValue)
 {
     // For capturedVars, should unbox from the class "$Captured_xxx", and store as a pointer.
-    CJC_ASSERT(DeRef(*debugNode.GetOperand(0)->GetType())->IsClass());
-    auto capturedTy = StaticCast<CHIR::ClassType*>(DeRef(*debugNode.GetOperand(0)->GetType()))
+    CJC_ASSERT(DeRef(*value.GetType())->IsClass());
+    auto capturedTy = StaticCast<CHIR::ClassType*>(DeRef(*value.GetType()))
                           ->GetClassDef()
                           ->GetDirectInstanceVar(0)
                           .type;
@@ -245,16 +244,16 @@ void IRBuilder2::CreateUnBoxDeclare(const CHIR::Debug& debugNode, const CGValue&
     CJC_ASSERT(ret->getType()->isPointerTy());
     llvm::Value* alloca;
     if (capturedCGType->IsRefType() || capturedCGType->IsStructType()) {
-        alloca = CreateEntryAlloca(getInt8PtrTy(1), nullptr, debugNode.GetSrcCodeIdentifier() + ".debug");
+        alloca = CreateEntryAlloca(getInt8PtrTy(1), nullptr, value.GetSrcCodeIdentifier() + ".debug");
         auto bitCast = CreateBitCast(ret, getInt8PtrTy(1));
         CreateStore(bitCast, alloca);
     } else {
-        alloca = CreateEntryAlloca(ret->getType(), nullptr, debugNode.GetSrcCodeIdentifier() + ".debug");
+        alloca = CreateEntryAlloca(ret->getType(), nullptr, value.GetSrcCodeIdentifier() + ".debug");
         CreateStore(ret, alloca);
     }
+    auto& localVar = StaticCast<const CHIR::LocalVar&>(value);
     cgMod.diBuilder->EmitUnBoxDeclare(
-        debugNode, *DeRef(*capturedTy), debugNode.GetSrcCodeIdentifier(), alloca, *GetInsertBlock());
-    EmitLocation(CHIRExprWrapper(debugNode));
+        *localVar.GetExpr(), *DeRef(*capturedTy), value.GetSrcCodeIdentifier(), alloca, *GetInsertBlock());
 }
 
 void IRBuilder2::CreateEnvDeclare(const CHIR::GetElementRef& getEleRef, llvm::Value* gep)
@@ -323,7 +322,7 @@ llvm::Type* IRBuilder2::HandleArgPointerType(const CGType& argType) const
     }
 }
 
-void IRBuilder2::CreateValuePointer(const CHIR::Debug& debugNode, const CGValue& cgValue)
+void IRBuilder2::CreateValuePointer(const CHIR::Value& value, const CGValue& cgValue)
 {
     auto cgType = cgValue.GetCGType();
     CJC_NULLPTR_CHECK(cgType);
@@ -343,37 +342,37 @@ void IRBuilder2::CreateValuePointer(const CHIR::Debug& debugNode, const CGValue&
     llvm::cast<llvm::Instruction>(tmpArg)->setDebugLoc(llvm::DebugLoc());
     CJC_NULLPTR_CHECK(inst);
     inst->setDebugLoc(llvm::DebugLoc());
-    cgMod.SetOrUpdateMappedCGValue(debugNode.GetValue(), std::make_unique<CGValue>(tmpArg, cgType));
-    EmitDeclare(debugNode);
+    cgMod.SetOrUpdateMappedCGValue(&value, std::make_unique<CGValue>(tmpArg, cgType));
+    EmitDeclare(value);
     if (!isDeriveType) {
-        cgMod.SetValuesToLoad(debugNode.GetValue(), argType, tmpArg);
+        cgMod.SetValuesToLoad(&value, argType, tmpArg);
     }
-    cgMod.SetOrUpdateMappedCGValue(debugNode.GetValue(), std::make_unique<CGValue>(arg, cgType));
+    cgMod.SetOrUpdateMappedCGValue(&value, std::make_unique<CGValue>(arg, cgType));
 }
 
-void IRBuilder2::CreateBoxedValueForValueType(const CHIR::Debug& debugNode, const CGValue& cgValue)
+void IRBuilder2::CreateBoxedValueForValueType(const CHIR::Value& value, const CGValue& cgValue)
 {
     auto curLoc = getCurrentDebugLocation();
     SetCurrentDebugLocation(llvm::DebugLoc());
     auto arg = cgValue.GetRawValue();
     auto cgType = cgValue.GetCGType();
-    auto payloadSize = GetLayoutSize_32(*debugNode.GetValue()->GetType());
+    auto payloadSize = GetLayoutSize_32(*value.GetType());
     CJC_NULLPTR_CHECK(arg);
     auto argType = arg->getType();
 
     // Alloca and store typeInfo
-    auto tiValue = CreateTypeInfo(DeRef(*debugNode.GetValue()->GetType()));
+    auto tiValue = CreateTypeInfo(DeRef(*value.GetType()));
     auto thisDebug = CallIntrinsicAllocaGeneric({tiValue, payloadSize});
     thisDebug->setName(arg->getName() + ".generic.alloca");
 
     // Store value for parameter
-    auto ty = DeRef(*debugNode.GetValue()->GetType());
+    auto ty = DeRef(*value.GetType());
     CJC_NULLPTR_CHECK(ty);
-    if (debugNode.GetValue()->IsParameter()) {
+    if (value.IsParameter()) {
         auto payload = GetPayloadFromObject(thisDebug);
         auto castedPtr = CreateBitCast(payload, argType->getPointerTo(1));
         auto addrType = CGType::GetOrCreate(cgMod,
-            CGType::GetRefTypeOf(cgMod.GetCGContext().GetCHIRBuilder(), *debugNode.GetValue()->GetType()),
+            CGType::GetRefTypeOf(cgMod.GetCGContext().GetCHIRBuilder(), *value.GetType()),
             CGType::TypeExtraInfo(1U));
         CreateStore(cgValue, CGValue(castedPtr, addrType));
         if (ty->IsStruct()) {
@@ -396,13 +395,13 @@ void IRBuilder2::CreateBoxedValueForValueType(const CHIR::Debug& debugNode, cons
     } else {
         thisDebug->setName(arg->getName() + ".debug");
     }
-    cgMod.SetOrUpdateMappedCGValue(debugNode.GetValue(), std::make_unique<CGValue>(tempAlloca, cgType));
-    EmitDeclare(debugNode, pointerWrapper);
-    bool isStructThis = ty->IsStruct() && debugNode.GetSrcCodeIdentifier() == "this";
-    if (!debugNode.GetValue()->IsParameter() || isStructThis) {
-        cgMod.SetBoxedValuesToLoad(debugNode.GetValue(), argType, thisDebug);
+    cgMod.SetOrUpdateMappedCGValue(&value, std::make_unique<CGValue>(tempAlloca, cgType));
+    EmitDeclare(value, pointerWrapper);
+    bool isStructThis = ty->IsStruct() && value.GetSrcCodeIdentifier() == "this";
+    if (!value.IsParameter() || isStructThis) {
+        cgMod.SetBoxedValuesToLoad(&value, argType, thisDebug);
     }
-    cgMod.SetOrUpdateMappedCGValue(debugNode.GetValue(), std::make_unique<CGValue>(arg, cgType));
+    cgMod.SetOrUpdateMappedCGValue(&value, std::make_unique<CGValue>(arg, cgType));
     SetCurrentDebugLocation(curLoc);
 }
 
