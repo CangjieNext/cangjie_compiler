@@ -184,7 +184,9 @@ bool IsSrcImportedDecl(const AST::Decl& decl, const GlobalOptions& opts)
         return false;
     }
     // 1. imported const func or var
-    if (decl.IsConst()) {
+    // `private const` can be imported in case if it was serialized. But it's not imported with src code!
+    // It can be serialized if parent decl is COMMON, therefore even if it is private it can be reached from SPECIFIC.
+    if (decl.IsConst() && !decl.TestAttr(AST::Attribute::PRIVATE)) {
         return true;
     }
     // 2. imported frozen func
