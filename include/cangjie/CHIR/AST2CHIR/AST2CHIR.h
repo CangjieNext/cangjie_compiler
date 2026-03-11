@@ -326,7 +326,8 @@ private:
     Translator CreateTranslator();
     /* Micro refactoring for CJMP. */
     void TranslateFuncParams(const AST::FuncDecl& funcDecl, Func& func) const;
-    void TranslateVecDecl(const std::vector<Ptr<const AST::Decl>>& decls, Translator& trans) const;
+    void TranslateVecDecl(const std::vector<Ptr<const AST::Decl>>& decls,
+        const std::unordered_map<const AST::FuncDecl*, std::vector<AST::FuncDecl*>>& instFuncMap);
 
     /* Add methods for CJMP. */
     // Try to deserialize common part for CJMP.
