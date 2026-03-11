@@ -218,7 +218,38 @@ llvm::Value* HandleMemoryExpression(IRBuilder2& irBuilder, const CHIR::Expressio
                 }
             }
             irBuilder.EmitLocation(CHIRExprWrapper(alloca));
-            return GenerateAllocate(irBuilder, CHIRAllocateWrapper(alloca));
+            auto result = GenerateAllocate(irBuilder, CHIRAllocateWrapper(alloca));
+
+            auto* localVar = alloca.GetResult();
+            auto srcName = localVar->GetSrcCodeIdentifier();
+            // Set LLVM IR value name from LocalVar's srcCodeIdentifier
+            if (!srcName.empty() && !result->getType()->isVoidTy() &&
+                !llvm::isa<llvm::GlobalObject>(result)) {
+                result->setName(srcName);
+            }
+            // Generate DWARF debug info for this local variable
+            if (irBuilder.GetCGContext().GetCompileOptions().enableCompileDebug) {
+                auto& cgMod = irBuilder.GetCGModule();
+                auto cgType = CGType::GetOrCreate(cgMod, localVar->GetType());
+                cgMod.SetOrUpdateMappedCGValue(localVar, std::make_unique<CGValue>(result, cgType));
+                auto cgVal = *(cgMod | localVar);
+                auto ty = DeRef(*localVar->GetType());
+                bool isBoxClass = ty->IsClass() &&
+                    IsCapturedClass(*StaticCast<CHIR::ClassType*>(ty)->GetClassDef());
+                auto hasSize = CGType::GetOrCreate(cgMod, ty)->GetSize();
+                if (!IsReferenceType(*ty, cgMod) && hasSize && ty->IsGenericRelated()) {
+                    irBuilder.CreateBoxedValueForValueType(*localVar, cgVal);
+                } else if (!llvm::isa<llvm::AllocaInst>(cgVal.GetRawValue())) {
+                    CJC_ASSERT(!llvm::isa<llvm::AllocaInst>(cgVal.GetRawValue()) == (!hasSize && !ty->IsClass()));
+                    irBuilder.CreateLocalVarPointer(*localVar, cgVal);
+                } else if (isBoxClass) {
+                    irBuilder.CreateUnBoxDeclare(*localVar, cgVal);
+                } else {
+                    irBuilder.EmitDeclare(*localVar);
+                }
+            }
+
+            return result;
         }
         case CHIR::ExprKind::LOAD: {
             auto& load = StaticCast<const CHIR::Load&>(chirExpr);
