@@ -8,6 +8,8 @@
 #include "cangjie/CHIR/AST2CHIR/AST2CHIR.h"
 
 #include <fstream>
+#include <memory>
+#include <vector>
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
@@ -20,6 +22,7 @@
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include "cangjie/Utils/TaskQueue.h"
 #include "cangjie/CHIR/IR/Type/PrivateTypeConverter.h"
 
 namespace Cangjie::CHIR {
@@ -1314,10 +1317,12 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
 
     Utils::ProfileRecorder::Start("TranslateNominalDecls", "TranslateDecls");
     // Translate all nominal decls.
-    TranslateVecDecl(importedNominalDecls, trans);
-    TranslateVecDecl(importedGenericInstantiatedNominalDecls, trans);
-    TranslateVecDecl(nominalDecls, trans);
-    TranslateVecDecl(genericNominalDecls, trans);
+    std::vector<Ptr<const AST::Decl>> decls;
+    decls.insert(decls.end(), importedNominalDecls.begin(), importedNominalDecls.end());
+    decls.insert(decls.end(), importedGenericInstantiatedNominalDecls.begin(), importedGenericInstantiatedNominalDecls.end());
+    decls.insert(decls.end(), nominalDecls.begin(), nominalDecls.end());
+    decls.insert(decls.end(), genericNominalDecls.begin(), genericNominalDecls.end());
+    TranslateVecDecl(decls, genericFuncMap);
     // Update some info for nominal decls.
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "TranslateDecls");
     // Update some info for common specific
@@ -1352,13 +1357,47 @@ void AST2CHIR::TranslateFuncParams(const AST::FuncDecl& funcDecl, Func& func) co
     }
 }
 
-void AST2CHIR::TranslateVecDecl(const std::vector<Ptr<const AST::Decl>>& decls, Translator& trans) const
+void AST2CHIR::TranslateVecDecl(const std::vector<Ptr<const AST::Decl>>& decls,
+    const std::unordered_map<const AST::FuncDecl*, std::vector<AST::FuncDecl*>>& instFuncMap)
 {
+    size_t threadNum = opts.GetJobs();
+    
+    // 收集需要处理的 decl
+    std::vector<Ptr<const AST::Decl>> declsToProcess;
     for (auto decl : decls) {
         if (!NeedTranslate(*decl)) {
             continue;
         }
-        Translator::TranslateASTNode(*decl, trans);
+        declsToProcess.push_back(decl);
+    }
+    if (declsToProcess.empty()) {
+        return;
+    }
+    
+    if (threadNum == 1) {
+        auto trans = CreateTranslator();
+        trans.SetGenericFuncMap(instFuncMap);
+        for (auto decl : declsToProcess) {
+            Translator::TranslateASTNode(*decl, trans);
+        }
+    } else {
+        Utils::TaskQueue taskQueue(threadNum);
+        std::vector<std::unique_ptr<Translator>> translatorList;
+        
+        for (auto decl : declsToProcess) {
+            auto translator = std::make_unique<Translator>(
+                builder, chirType, opts, gim, globalCache, localConstVars, localConstFuncs, kind,
+                deserializedVals, annoFactoryFuncs, maybeUnreachable, isComputingAnnos, initFuncsForAnnoFactory, types);
+            translator->SetGenericFuncMap(instFuncMap);
+            Translator* translatorPtr = translator.get();
+            translatorList.emplace_back(std::move(translator));
+            
+            taskQueue.AddTask<void>([translatorPtr, decl]() {
+                Translator::TranslateASTNode(*decl, *translatorPtr);
+            });
+        }
+        
+        taskQueue.RunAndWaitForAllTasksCompleted();
     }
 }
 
