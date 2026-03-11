@@ -105,6 +105,10 @@ void HandleFuncParams(CGModule& cgMod, const CHIR::Func& chirFunc, const CGFunct
     for (size_t idx = 0; idx < chirFunc.GetNumOfParams(); ++idx) {
         auto chirFuncArg = chirFunc.GetParam(idx);
         auto llvmArg = cgFunc.GetArgByIndexFromCHIR(idx);
+        auto srcName = chirFuncArg->GetSrcCodeIdentifier();
+        if (!srcName.empty()) {
+            llvmArg->setName(srcName);
+        }
         auto fixedCGType = FixedCGTypeOfFuncArg(cgMod, *chirFuncArg, *llvmArg);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
         if (chirFunc.IsConstructor() && idx == 0) {
@@ -209,6 +213,22 @@ void FunctionGeneratorImpl::EmitIR()
 
     auto entryBB = chirFunc.GetBody()->GetEntryBlock();
     EmitBasicBlockIR(cgMod, *entryBB);
+    // Generate DWARF debug info for function parameters
+    if (cgMod.GetCGContext().GetCompileOptions().enableCompileDebug) {
+        auto llvmEntryBB = cgMod.GetMappedBB(entryBB);
+        builder.SetInsertPoint(llvmEntryBB, llvmEntryBB->getFirstInsertionPt());
+        for (size_t idx = 0; idx < chirFunc.GetNumOfParams(); ++idx) {
+            auto param = chirFunc.GetParam(idx);
+            auto cgVal = *(cgMod | param);
+            auto ty = DeRef(*param->GetType());
+            auto hasSize = CGType::GetOrCreate(cgMod, ty)->GetSize();
+            if (!IsReferenceType(*ty, cgMod) && hasSize && ty->IsGenericRelated()) {
+                builder.CreateBoxedValueForValueType(*param, cgVal);
+            } else {
+                builder.CreateValuePointer(*param, cgVal);
+            }
+        }
+    }
     if (rawFunction->getSubprogram()) {
         cgMod.GetCGContext().debugValue = nullptr;
         cgMod.diBuilder->FinalizeSubProgram(*rawFunction);

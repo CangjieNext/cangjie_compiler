@@ -49,38 +49,6 @@ llvm::Value* HandleInvokeStaticExpr(IRBuilder2& irBuilder, const CHIR::Expressio
     return GenerateInvokeStatic(irBuilder, CHIRInvokeStaticWrapper(StaticCast<const CHIR::InvokeStatic&>(chirExpr)));
 }
 
-llvm::Value* HandleDebugExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
-{
-    auto& debug = StaticCast<const CHIR::Debug&>(chirExpr);
-    auto& cgMod = irBuilder.GetCGModule();
-    auto cgVal = *(cgMod | debug.GetValue());
-    auto rawVal = cgVal.GetRawValue();
-    // Usually value is a local variable,
-    // when it is a global variable, it means that it is a const literal and be lifted to global.
-    if (!rawVal->getType()->isVoidTy() && !llvm::isa<llvm::GlobalObject>(rawVal)) {
-        rawVal->setName(debug.GetSrcCodeIdentifier());
-    }
-    if (!irBuilder.GetCGContext().GetCompileOptions().enableCompileDebug) {
-        return nullptr;
-    }
-    auto ty = DeRef(*debug.GetValue()->GetType());
-    bool isBoxClass = ty->IsClass() && IsCapturedClass(*StaticCast<CHIR::ClassType*>(ty)->GetClassDef());
-    auto hasSize = CGType::GetOrCreate(cgMod, ty)->GetSize();
-    if (!IsReferenceType(*ty, cgMod) && hasSize && ty->IsGenericRelated()) {
-        irBuilder.CreateBoxedValueForValueType(debug, cgVal);
-    } else if (debug.GetValue()->IsParameter()) {
-        irBuilder.CreateValuePointer(debug, cgVal);
-    } else if (!llvm::isa<llvm::AllocaInst>(cgVal.GetRawValue())) {
-        CJC_ASSERT(!llvm::isa<llvm::AllocaInst>(cgVal.GetRawValue()) == (!hasSize && !ty->IsClass()));
-        irBuilder.CreateLocalVarPointer(debug, cgVal);
-    } else if (isBoxClass) {
-        irBuilder.CreateUnBoxDeclare(debug, cgVal);
-    } else {
-        irBuilder.EmitDeclare(debug);
-    }
-    return rawVal;
-}
-
 llvm::Value* HandleFieldExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
 {
     auto& field = StaticCast<const CHIR::Field&>(chirExpr);
@@ -403,7 +371,7 @@ llvm::Value* HandleOthersExpression(IRBuilder2& irBuilder, const CHIR::Expressio
     static const std::unordered_map<CHIR::ExprKind, std::function<llvm::Value*(IRBuilder2&, const CHIR::Expression&)>>
         handleExprMap = {
             {CHIR::ExprKind::APPLY, HandleApplyExpr}, {CHIR::ExprKind::INVOKE, HandleInvokeExpr},
-            {CHIR::ExprKind::INVOKESTATIC, HandleInvokeStaticExpr}, {CHIR::ExprKind::DEBUGEXPR, HandleDebugExpr},
+            {CHIR::ExprKind::INVOKESTATIC, HandleInvokeStaticExpr},
             {CHIR::ExprKind::FIELD, HandleFieldExpr}, {CHIR::ExprKind::TYPECAST, HandleTypecastExpr},
             {CHIR::ExprKind::TUPLE, HandleTupleExpr}, {CHIR::ExprKind::VARRAY, HandleVArrayExpr},
             {CHIR::ExprKind::VARRAY_BUILDER, HandleVArrayBuilderExpr},
