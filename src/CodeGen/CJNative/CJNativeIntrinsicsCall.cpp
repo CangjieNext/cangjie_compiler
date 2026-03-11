@@ -1306,6 +1306,17 @@ llvm::Instruction* IRBuilder2::CallIntrinsicAssignGeneric(const std::vector<llvm
 {
     CJC_ASSERT(parameters.size() == 3U);
     llvm::Function* func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_assign_generic);
+    // 检查第一、二个参数类型必须是 i8 addrspace(1)*
+    llvm::Type* param0Type = parameters[0]->getType();
+    CJC_ASSERT(llvm::isa<llvm::PointerType>(param0Type) &&
+        llvm::cast<llvm::PointerType>(param0Type)->getAddressSpace() == 1 &&
+        llvm::cast<llvm::PointerType>(param0Type)->getElementType()->isIntegerTy(8));
+
+    llvm::Type* param1Type = parameters[1]->getType();
+    CJC_ASSERT(llvm::isa<llvm::PointerType>(param1Type) &&
+        llvm::cast<llvm::PointerType>(param1Type)->getAddressSpace() == 1 &&
+        llvm::cast<llvm::PointerType>(param1Type)->getElementType()->isIntegerTy(8));
+
     auto fixedParams = {parameters[0], parameters[1], CreateBitCast(parameters[2], getInt8PtrTy())};
     return CreateCall(func, fixedParams);
 }
