@@ -71,14 +71,28 @@ llvm::Value* HandleStoreExpr(IRBuilder2& irBuilder, const CHIR::Store& store)
     // 2. for Box<Enum<UInt32>>& override Enum<T>, we will translate from Store(Box<Enum<UInt32>>& xxx,
     // Box<Enum<UInt32>>&& xxx) into Store(Enum<T>&, Enum<T>&)
     if (auto var = DynamicCast<CHIR::LocalVar*>(addr); var && var->IsRetValue() &&
-        store.GetTopLevelFunc()->Get<CHIR::OverrideSrcFuncType>() && DeRef(*addr->GetType())->IsBox()) {
+        store.GetTopLevelFunc()->Get<CHIR::OverrideSrcFuncType>() &&
+        (DeRef(*addr->GetType())->IsBox() || DeRef(*addr->GetType())->IsEnum())) {
         auto overrideSrcRetType = store.GetTopLevelFunc()->Get<CHIR::OverrideSrcFuncType>()->GetReturnType();
         auto ptrCGType = CGType::GetOrCreate(
             cgMod, CGType::GetRefTypeOf(cgMod.GetCGContext().GetCHIRBuilder(), *overrideSrcRetType));
         auto valCGType = !overrideSrcRetType->IsGeneric() ? ptrCGType : CGType::GetOrCreate(cgMod, overrideSrcRetType);
-        return irBuilder.CreateStore(CGValue(valueVal.GetRawValue(), valCGType, valueVal.IsSRetArg()),
-            CGValue((cgMod | addr)->GetRawValue(), ptrCGType, (cgMod | addr)->IsSRetArg()),
-            DeRef(*addr->GetType())->GetTypeArgs()[0]);
+        // auto boxTypeArg =  DeRef(*addr->GetType())->IsBox() ? DeRef(*addr->GetType())->GetTypeArgs()[0]: nullptr;
+        auto* derefType = DeRef(*addr->GetType());
+        CHIR::Type* boxTypeArg = derefType->IsBox() ? derefType->GetTypeArgs()[0] : const_cast<CHIR::Type*>(derefType);
+        // Check if types mismatch, if so, get source value from Box expression
+        CGValue finalValueVal = valueVal;
+        if (valueVal.GetRawValue()->getType() != (cgMod | addr)->GetRawValue()->getType() && ptrCGType == valCGType) {
+            if (auto valueVar = DynamicCast<CHIR::LocalVar*>(value);
+                valueVar && valueVar->GetExpr() && valueVar->GetExpr()->GetExprKind() == CHIR::ExprKind::BOX) {
+                auto& boxExpr = StaticCast<const CHIR::Box&>(*valueVar->GetExpr());
+                finalValueVal = *(cgMod | boxExpr.GetSourceValue());
+            }
+        }
+
+        auto cgValueVal = CGValue(finalValueVal.GetRawValue(), valCGType, valueVal.IsSRetArg());
+        auto cgAddr = CGValue((cgMod | addr)->GetRawValue(), ptrCGType, (cgMod | addr)->IsSRetArg());
+        return irBuilder.CreateStore(cgValueVal, cgAddr, boxTypeArg);
     }
     return irBuilder.CreateStore(valueVal, *(cgMod | addr));
 }

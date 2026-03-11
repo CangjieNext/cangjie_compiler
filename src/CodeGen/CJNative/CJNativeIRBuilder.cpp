@@ -138,12 +138,41 @@ std::vector<llvm::Value*> IRBuilder2::FixFuncArgs(const CGFunctionType& calleeTy
     }
 
     // Step 2: Process arguments with standard logic
+
+    // Get OverrideSrcFuncType if available
+    const CHIR::FuncType* srcFuncType = nullptr;
+    if (applyWrapper) {
+        srcFuncType = applyWrapper->GetTopLevelFunc()->Get<CHIR::OverrideSrcFuncType>();
+    }
+
     std::vector<llvm::Value*> argsVal;
     size_t idx = 0;
     for (auto arg : processedArgs) {
         bool isThis = idx == 0 && applyWrapper && applyWrapper->IsCalleeStructInstanceMethod();
         auto& paramType = *calleeType.GetParamType(idx);
-        auto llvmVal = isThis ? DoSimpleCast(*this, *arg, paramType) : FixFuncArg(*arg, paramType);
+
+        // Check if we need UnBox conversion for override func parameters
+        llvm::Value* llvmVal = nullptr;
+        if (srcFuncType && !isThis && applyWrapper) {
+            auto chirArg = applyWrapper->GetArgs()[idx];
+            auto& rawVal = *arg->GetRawValue();
+            auto rawValType = rawVal.getType();
+
+            if (chirArg->IsParameter() && rawValType->isPointerTy() && rawValType->getPointerAddressSpace() == 1 &&
+                paramType.GetAddrspace() == 0 && chirArg->GetType()->IsStruct()) {
+                // This is a Class -> Struct conversion, do UnBox
+                auto payload = GetPayloadFromObject(&rawVal);
+                auto elementType = paramType.GetLLVMType();
+                auto castedPayload = CreateBitCast(payload, elementType->getPointerTo(1U));
+                llvmVal = CreateLoad(elementType, castedPayload);
+            }
+        }
+
+        if (!llvmVal) {
+            // Use standard conversion
+            llvmVal = isThis ? DoSimpleCast(*this, *arg, paramType) : FixFuncArg(*arg, paramType);
+        }
+
         (void)argsVal.emplace_back(llvmVal); // Insert the fixed argument, may do some casting meanwhile.
         auto cgType = arg->GetCGType();
         CJC_ASSERT(!cgType->IsStructType());
