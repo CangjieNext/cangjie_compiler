@@ -275,10 +275,12 @@ public:
     void Gen() override
     {
         GeneratePkgMetadata();
-    }
+        GenerateDependentsLibrary();
+    }   
 
 private:
     void GeneratePkgMetadata() const;
+    void GenerateDependentsLibrary() const;
     void AddPrimitiveTypeInfoToCorePkgInfo() const;
 };
 

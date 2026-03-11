@@ -15,6 +15,7 @@
 #include "Base/CGTypes/CGEnumType.h"
 #include "IRBuilder.h"
 #include "Utils/CGUtils.h"
+#include "cangjie/Utils/FileUtil.h"
 
 using namespace Cangjie;
 using namespace CodeGen;
@@ -323,6 +324,29 @@ void PkgMetadataInfo::GeneratePkgMetadata() const
             .CreateMDTuple());
     if (pkgName == CORE_PACKAGE_NAME && currentIdx == 0) {
         AddPrimitiveTypeInfoToCorePkgInfo();
+    }
+}
+
+void PkgMetadataInfo::GenerateDependentsLibrary() const
+{
+    auto llvmMod = module.GetLLVMModule();
+    auto& llvmCtx = module.GetLLVMContext();
+    auto depBuiltinMaps = module.GetCGContext().GetCompileOptions().directBuiltinDependencies;
+    auto& indirectBuiltinDependencies = module.GetCGContext().GetCompileOptions().indirectBuiltinDependencies;
+    depBuiltinMaps.insert(indirectBuiltinDependencies.begin(), indirectBuiltinDependencies.end());
+
+    if (depBuiltinMaps.empty()) {
+        return;
+    }
+
+    llvm::NamedMDNode *depLibsNode = llvmMod->getOrInsertNamedMetadata("llvm.dependent-libraries");
+
+    for (const std::string& fullPath : depBuiltinMaps) {
+        auto libBaseName = FileUtil::ConvertFilenameToLibCangjieBaseFormat(fullPath);
+        if (!libBaseName.empty()) {
+            llvm::Metadata *ops[] = {llvm::MDString::get(llvmCtx, libBaseName)};
+            depLibsNode->addOperand(llvm::MDNode::get(llvmCtx, ops));
+        }
     }
 }
 
