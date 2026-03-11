@@ -49,36 +49,12 @@ llvm::Value* HandleInvokeStaticExpr(IRBuilder2& irBuilder, const CHIR::Expressio
     return GenerateInvokeStatic(irBuilder, CHIRInvokeStaticWrapper(StaticCast<const CHIR::InvokeStatic&>(chirExpr)));
 }
 
-llvm::Value* HandleDebugExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
+// Debug instructions are no longer needed by CodeGen.
+// Name setting and DWARF generation are now handled in Allocate handler and FunctionGeneratorImpl::EmitIR.
+// This handler is kept as a no-op until CHIR fully removes Debug instructions.
+llvm::Value* HandleDebugExpr(IRBuilder2&, const CHIR::Expression&)
 {
-    auto& debug = StaticCast<const CHIR::Debug&>(chirExpr);
-    auto& cgMod = irBuilder.GetCGModule();
-    auto cgVal = *(cgMod | debug.GetValue());
-    auto rawVal = cgVal.GetRawValue();
-    // Usually value is a local variable,
-    // when it is a global variable, it means that it is a const literal and be lifted to global.
-    if (!rawVal->getType()->isVoidTy() && !llvm::isa<llvm::GlobalObject>(rawVal)) {
-        rawVal->setName(debug.GetSrcCodeIdentifier());
-    }
-    if (!irBuilder.GetCGContext().GetCompileOptions().enableCompileDebug) {
-        return nullptr;
-    }
-    auto ty = DeRef(*debug.GetValue()->GetType());
-    bool isBoxClass = ty->IsClass() && IsCapturedClass(*StaticCast<CHIR::ClassType*>(ty)->GetClassDef());
-    auto hasSize = CGType::GetOrCreate(cgMod, ty)->GetSize();
-    if (!IsReferenceType(*ty, cgMod) && hasSize && ty->IsGenericRelated()) {
-        irBuilder.CreateBoxedValueForValueType(debug, cgVal);
-    } else if (debug.GetValue()->IsParameter()) {
-        irBuilder.CreateValuePointer(debug, cgVal);
-    } else if (!llvm::isa<llvm::AllocaInst>(cgVal.GetRawValue())) {
-        CJC_ASSERT(!llvm::isa<llvm::AllocaInst>(cgVal.GetRawValue()) == (!hasSize && !ty->IsClass()));
-        irBuilder.CreateLocalVarPointer(debug, cgVal);
-    } else if (isBoxClass) {
-        irBuilder.CreateUnBoxDeclare(debug, cgVal);
-    } else {
-        irBuilder.EmitDeclare(debug);
-    }
-    return rawVal;
+    return nullptr;
 }
 
 llvm::Value* HandleFieldExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)

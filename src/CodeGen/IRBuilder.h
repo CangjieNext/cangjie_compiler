@@ -168,14 +168,14 @@ public:
             *dynamic_cast<const CGFunctionType*>(callee.GetCGType()), callee.GetRawFunction(), args, isClosureCall);
     }
 
-    void EmitDeclare(const CHIR::Debug& debugNode, bool pointerWrapper = false);
-    void CreateLocalVarPointer(const CHIR::Debug& debugNode, const CGValue& cgValue);
-    void CreateUnBoxDeclare(const CHIR::Debug& debugNode, const CGValue& cgValue);
+    void EmitDeclare(const CHIR::Value& value, bool pointerWrapper = false);
+    void CreateLocalVarPointer(const CHIR::Value& value, const CGValue& cgValue);
+    void CreateUnBoxDeclare(const CHIR::Value& value, const CGValue& cgValue);
     void CreateEnvDeclare(const CHIR::GetElementRef& getEleRef, llvm::Value* gep);
     void EmitLocation(const CHIRExprWrapper& debugNode, const bool removable = false);
     llvm::Type* HandleArgPointerType(const CGType& argType) const;
-    void CreateValuePointer(const CHIR::Debug& debugNode, const CGValue& cgValue);
-    void CreateBoxedValueForValueType(const CHIR::Debug& debugNode, const CGValue& cgValue);
+    void CreateValuePointer(const CHIR::Value& value, const CGValue& cgValue);
+    void CreateBoxedValueForValueType(const CHIR::Value& value, const CGValue& cgValue);
     void CreateLoadInstForParameter(const CHIR::Expression& chirExpression);
     void CreateGenericParaDeclare(const CGFunction& cgFunc);
 

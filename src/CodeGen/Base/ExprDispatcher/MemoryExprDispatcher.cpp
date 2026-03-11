@@ -222,6 +222,27 @@ void HandleStoreElementRef(IRBuilder2& irBuilder, const CHIR::StoreElementRef& s
     }
 }
 
+void EmitLocalVarDebugInfo(IRBuilder2& irBuilder, const CHIR::LocalVar& localVar, llvm::Value* result)
+{
+    auto& cgMod = irBuilder.GetCGModule();
+    auto cgType = CGType::GetOrCreate(cgMod, localVar.GetType());
+    cgMod.SetOrUpdateMappedCGValue(&localVar, std::make_unique<CGValue>(result, cgType));
+    auto cgVal = *(cgMod | &localVar);
+    auto ty = DeRef(*localVar.GetType());
+    bool isBoxClass = ty->IsClass() &&
+        IsCapturedClass(*StaticCast<CHIR::ClassType*>(ty)->GetClassDef());
+    auto hasSize = CGType::GetOrCreate(cgMod, ty)->GetSize();
+    if (!IsReferenceType(*ty, cgMod) && hasSize && ty->IsGenericRelated()) {
+        irBuilder.CreateBoxedValueForValueType(localVar, cgVal);
+    } else if (!llvm::isa<llvm::AllocaInst>(cgVal.GetRawValue())) {
+        irBuilder.CreateLocalVarPointer(localVar, cgVal);
+    } else if (isBoxClass) {
+        irBuilder.CreateUnBoxDeclare(localVar, cgVal);
+    } else {
+        irBuilder.EmitDeclare(localVar);
+    }
+}
+
 llvm::Value* HandleMemoryExpression(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
 {
     CJC_ASSERT(chirExpr.GetExprMajorKind() == CHIR::ExprMajorKind::MEMORY_EXPR);
@@ -238,7 +259,26 @@ llvm::Value* HandleMemoryExpression(IRBuilder2& irBuilder, const CHIR::Expressio
                 }
             }
             irBuilder.EmitLocation(CHIRExprWrapper(alloca));
-            return GenerateAllocate(irBuilder, CHIRAllocateWrapper(alloca));
+            auto result = GenerateAllocate(irBuilder, CHIRAllocateWrapper(alloca));
+
+            auto* localVar = alloca.GetResult();
+            auto srcName = localVar->GetSrcCodeIdentifier();
+            // Set LLVM IR value name from LocalVar's srcCodeIdentifier
+            if (!srcName.empty() && !result->getType()->isVoidTy() &&
+                !llvm::isa<llvm::GlobalObject>(result)) {
+                result->setName(srcName);
+            }
+            // Generate DWARF debug info for this local variable.
+            // Only emit for user-visible variables (non-empty srcName and no NO_DEBUG_INFO
+            // attribute), mirroring the original Debug CHIR node creation policy and the
+            // filter used in EmitParamDebugInfo for parameters.
+            if (irBuilder.GetCGContext().GetCompileOptions().enableCompileDebug &&
+                !srcName.empty() &&
+                !localVar->TestAttr(CHIR::Attribute::NO_DEBUG_INFO)) {
+                EmitLocalVarDebugInfo(irBuilder, *localVar, result);
+            }
+
+            return result;
         }
         case CHIR::ExprKind::LOAD: {
             auto& load = StaticCast<const CHIR::Load&>(chirExpr);
