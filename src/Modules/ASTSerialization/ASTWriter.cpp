@@ -479,7 +479,7 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
             return true;
         }
         // Incr compilation need load ty by cached cjo, so still cache internal or inst member var decls
-        if (!config.exportForIncr && !decl.TestAttr(Attribute::COMMON) && !isInstMemberVar &&
+        if (!config.exportForIncr && !d->TestAttr(Attribute::COMMON) && !isInstMemberVar &&
             d->linkage == Linkage::INTERNAL) {
             return false;
         }
