@@ -10,14 +10,13 @@
  * This file implements desugaring of ObjCPointer struct accessors
  */
 
-
-#include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
-#include "cangjie/AST/Create.h"
-#include "cangjie/AST/Walker.h"
-#include "cangjie/AST/Match.h"
-#include "cangjie/AST/Clone.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/Utils.h"
+#include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Create.h"
+#include "cangjie/AST/Match.h"
+#include "cangjie/AST/Walker.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -49,16 +48,12 @@ OwnedPtr<Expr> CreateReceiverExpr(Ptr<Expr> expr)
     return referencedExpr;
 }
 
-enum class ObjCFTypeKind {
-    BLOCK, FUNCPTR, NONE
-};
+enum class ObjCFTypeKind { BLOCK, FUNCPTR, NONE };
 
 ObjCFTypeKind FTypeKindByCallPropertyDecl(TypeMapper& tm, Ptr<Decl> decl)
 {
-    if (decl == nullptr
-     || decl->astKind != ASTKind::PROP_DECL
-     || decl->outerDecl == nullptr
-     || decl->identifier != "call") {
+    if (decl == nullptr || decl->astKind != ASTKind::PROP_DECL || decl->outerDecl == nullptr ||
+        decl->identifier != "call") {
         return ObjCFTypeKind::NONE;
     }
     auto typeDecl = decl->outerDecl;
@@ -82,9 +77,8 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
             if (!node->IsSamePackage(*file->curPackage)) {
                 return VisitAction::WALK_CHILDREN;
             }
-            if (node->astKind != ASTKind::CALL_EXPR
-              && node->astKind != ASTKind::MEMBER_ACCESS
-              && node->astKind != ASTKind::REF_EXPR) {
+            if (node->astKind != ASTKind::CALL_EXPR && node->astKind != ASTKind::MEMBER_ACCESS &&
+                node->astKind != ASTKind::REF_EXPR) {
                 return VisitAction::WALK_CHILDREN;
             }
             if (safeUsage.count(node)) {
@@ -93,9 +87,7 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
             auto decl = GetDirectlyReferencedMemberDecl(StaticCast<Expr>(node));
 
             if (FTypeKindByCallPropertyDecl(ctx.typeMapper, decl) != ObjCFTypeKind::NONE) {
-                ctx.diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_objc_func_call_property_can_only_be_called,
-                    *node,
+                ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_func_call_property_can_only_be_called, *node,
                     decl->outerDecl->identifier.Val());
                 node->EnableAttr(Attribute::IS_BROKEN);
                 return VisitAction::WALK_CHILDREN;
@@ -116,34 +108,23 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
             std::vector<OwnedPtr<Expr>> unwrappedArguments;
             auto tmpVar = CreateTmpVarDecl(nullptr, CreateReceiverExpr(ma));
             if (fTypeKind == ObjCFTypeKind::BLOCK) {
-                unwrappedArguments.push_back(
-                    CreateMemberCall(
-                        WithinFile(CreateRefExpr(*tmpVar), node->curFile),
-                        ctx.bridge.GetObjCBlockAbiPointerAccessor()));
+                unwrappedArguments.push_back(CreateMemberCall(
+                    WithinFile(CreateRefExpr(*tmpVar), node->curFile), ctx.bridge.GetObjCBlockAbiPointerAccessor()));
             }
             for (auto& originalArg : callExpr->args) {
                 OwnedPtr<Expr> cloned = ASTCloner::Clone(originalArg->expr.get());
-                unwrappedArguments.push_back(
-                    ctx.factory.UnwrapEntity(std::move(cloned)));
+                unwrappedArguments.push_back(ctx.factory.UnwrapEntity(std::move(cloned)));
             }
-            auto fptrAccessor = fTypeKind == ObjCFTypeKind::BLOCK ?
-                ctx.bridge.GetObjCBlockFPointerAccessor() : ctx.bridge.GetObjCFuncFPointerAccessor();
+            auto fptrAccessor = fTypeKind == ObjCFTypeKind::BLOCK ? ctx.bridge.GetObjCBlockFPointerAccessor()
+                                                                  : ctx.bridge.GetObjCFuncFPointerAccessor();
 
             auto call = ctx.factory.CreateFuncCallViaOpaquePointer(
-                CreateMemberCall(
-                    WithinFile(CreateRefExpr(*tmpVar), node->curFile),
-                    fptrAccessor),
-                ctx.typeMapper.Cj2CType(callExpr->ty),
-                std::move(unwrappedArguments));
+                CreateMemberCall(WithinFile(CreateRefExpr(*tmpVar), node->curFile), fptrAccessor),
+                ctx.typeMapper.Cj2CType(callExpr->ty), std::move(unwrappedArguments));
             std::vector<OwnedPtr<Node>> block;
             block.emplace_back(std::move(tmpVar));
             block.emplace_back(ctx.factory.WrapEntity(std::move(call), *callExpr->ty));
-            ctx.factory.SetDesugarExpr(
-                callExpr,
-                WrapReturningLambdaCall(
-                    ctx.typeManager,
-                    std::move(block))
-            );
+            ctx.factory.SetDesugarExpr(callExpr, WrapReturningLambdaCall(ctx.typeManager, std::move(block)));
             return VisitAction::WALK_CHILDREN;
         }).Walk();
     }

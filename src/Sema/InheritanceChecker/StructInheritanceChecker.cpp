@@ -30,14 +30,13 @@
 #include "cangjie/Modules/ModulesUtils.h"
 #include "cangjie/Sema/TestManager.h"
 #include "cangjie/Sema/TypeManager.h"
-#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 
+#include "CJMP/MPTypeCheckerImpl.h"
 #include "Diags.h"
-#include "TypeCheckUtil.h"
-#include "TypeCheckerImpl.h"
 #include "NativeFFI/Java/TypeCheck/InheritanceChecker.h"
 #include "NativeFFI/ObjC/Utils/OCStructInheritanceCheckerImpl.h"
-#include "CJMP/MPTypeCheckerImpl.h"
+#include "TypeCheckUtil.h"
+#include "TypeCheckerImpl.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -284,8 +283,7 @@ void TypeChecker::TypeCheckerImpl::CheckInheritance(Package& pkg)
 
     auto movedMembers = checker.MoveStructInheritedMembers();
     // Ensure javaCache is empty before moving in (it should be if called at the correct point in pipeline).
-    CJC_ASSERT_WITH_MSG(this->structMemberMap.empty(),
-        "structMemberMap should be empty when moving inherited members");
+    CJC_ASSERT_WITH_MSG(this->structMemberMap.empty(), "structMemberMap should be empty when moving inherited members");
 
     this->structMemberMap = std::move(movedMembers);
 }
@@ -939,7 +937,8 @@ void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMa
     // Do not check unimplemented function for:
     // 1. Foreign struct.
     // 2. Mirror struct.
-    if (structDecl.TestAttr(Attribute::FOREIGN) || structDecl.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER)) {
+    if (structDecl.TestAttr(Attribute::FOREIGN) ||
+        structDecl.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER)) {
         return;
     }
     std::string prefix = structDecl.astKind == ASTKind::EXTEND_DECL ? "extend " : "";

@@ -317,8 +317,8 @@ void TypeChecker::TypeCheckerImpl::CheckConflictDeclWithSubPackage(const Package
     for (auto decl : toplevelDecls) {
         if (subPkgNames.count(decl->identifier) != 0) {
             auto fullSubName = pkg.fullPackageName + "." + decl->identifier;
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_conflict_with_sub_package, *decl,
-                MakeRange(decl->identifier), decl->identifier.Val(), fullSubName);
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_conflict_with_sub_package, *decl, MakeRange(decl->identifier),
+                decl->identifier.Val(), fullSubName);
         }
     }
 }
@@ -404,18 +404,17 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, RefType&
     // Remove all non-type decls.
     Utils::EraseIf(targets, [](Ptr<const Decl> d) { return !d || !d->IsTypeDecl(); });
 
-    std::sort(targets.begin(), targets.end(),
-        [](Ptr<const Decl> d1, Ptr<const Decl> d2) {
-            if (d1->scopeLevel > d2->scopeLevel) {
+    std::sort(targets.begin(), targets.end(), [](Ptr<const Decl> d1, Ptr<const Decl> d2) {
+        if (d1->scopeLevel > d2->scopeLevel) {
+            return true;
+        } else if (d1->scopeLevel == d2->scopeLevel) {
+            // Ranking overloads also by specific > common
+            if (d1->TestAttr(Attribute::SPECIFIC)) {
                 return true;
-            } else if (d1->scopeLevel == d2->scopeLevel) {
-                // Ranking overloads also by specific > common
-                if (d1->TestAttr(Attribute::SPECIFIC)) {
-                    return true;
-                }
             }
-            return false;
-        });
+        }
+        return false;
+    });
 
     Ptr<Decl> target{nullptr};
     if (targets.empty()) {
@@ -1178,7 +1177,6 @@ void TypeChecker::TypeCheckerImpl::AddSuperClassObjectForClassDecl(ASTContext& c
 
 void TypeChecker::TypeCheckerImpl::AddSuperInterfaceForClassLikeDecl(ASTContext& ctx)
 {
-    // TODO: move it to Interop::ObjC
     std::vector<Symbol*> syms = GetAllDecls(ctx);
     for (auto& sym : syms) {
         CJC_ASSERT(sym && sym->node);
@@ -1419,9 +1417,9 @@ void TypeChecker::TypeCheckerImpl::AddAssumptionForExtendDecls(ASTContext& ctx)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::AddUpperBoundOnTypeParameters(
-    ASTContext& ctx, const Generic& generic, const Decl& typeTarget, MultiTypeSubst& revTypeMapping,
-    TyVarUB& allAssumptionMap, const TypeSubst& typeArgAppliedMap)
+void TypeChecker::TypeCheckerImpl::AddUpperBoundOnTypeParameters(ASTContext& ctx, const Generic& generic,
+    const Decl& typeTarget, MultiTypeSubst& revTypeMapping, TyVarUB& allAssumptionMap,
+    const TypeSubst& typeArgAppliedMap)
 {
     for (auto& typeParameter : generic.typeParameters) {
         auto genericTy = DynamicCast<GenericsTy*>(typeParameter->ty);
@@ -1526,8 +1524,8 @@ void TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionForEnum(const std::ve
         auto funcTy = DynamicCast<FuncTy*>(func->ty);
         auto paramTys = funcTy ? funcTy->paramTys : GetParamTys(*func);
         if (paramNum.find(paramTys.size()) != paramNum.end()) {
-            diag.Diagnose(*func, DiagKind::sema_duplicated_item_in_enum,
-                func->identifier.Val().c_str(), ed->identifier.Val().c_str());
+            diag.Diagnose(*func, DiagKind::sema_duplicated_item_in_enum, func->identifier.Val().c_str(),
+                ed->identifier.Val().c_str());
         } else {
             paramNum.insert(paramTys.size());
         }
@@ -1567,7 +1565,7 @@ void TypeChecker::TypeCheckerImpl::PreCheckFuncStaticConflict(const std::vector<
         for (const auto& func : staticFuncs) {
             DiagStaticAndNonStaticOverload(diag, *func, *firstNonStatic);
         }
-}
+    }
 }
 
 bool TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
@@ -1900,9 +1898,7 @@ Ptr<Decl> GetTypeDeclOfMember(TypeManager& tyMgr, const Decl& d)
 MemSig MemDecl2Sig(Decl& d)
 {
     if (auto fd = DynamicCast<FuncDecl*>(&d)) {
-        return MemSig{fd->identifier,
-            false,
-            fd->funcBody->paramLists[0]->params.size(),
+        return MemSig{fd->identifier, false, fd->funcBody->paramLists[0]->params.size(),
             fd->generic ? fd->generic->typeParameters.size() : 0};
     } else {
         return MemSig{d.identifier, true};

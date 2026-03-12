@@ -11,8 +11,8 @@
  */
 
 #include "Handlers.h"
-#include "NativeFFI/Utils.h"
 #include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/Utils.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
@@ -138,7 +138,8 @@ void DesugarMirrors::DesugarMethod(InteropContext& ctx, ClassLikeDecl& mirror, F
         [&ctx, curFile](auto& param) { return ctx.factory.UnwrapEntity(WithinFile(CreateRefExpr(*param), curFile)); });
 
     auto arpScopeCall = ctx.factory.CreateAutoreleasePoolScope(methodTy->retTy,
-        Nodes(ctx.factory.CreateMethodCallViaMsgSend(method, ASTCloner::Clone(nativeHandle.get()), std::move(msgSendArgs))));
+        Nodes(ctx.factory.CreateMethodCallViaMsgSend(
+            method, ASTCloner::Clone(nativeHandle.get()), std::move(msgSendArgs))));
     arpScopeCall->curFile = curFile;
 
     method.funcBody->body = CreateBlock({}, methodTy->retTy);
@@ -161,11 +162,8 @@ void DesugarMirrors::DesugarTopLevelFunc(InteropContext& ctx, FuncDecl& func)
     std::vector<Ptr<Ty>> cParamTys;
     std::transform(methodTy->paramTys.begin(), methodTy->paramTys.end(), std::back_inserter(cParamTys),
         [&ctx](auto& paramTy) { return ctx.typeMapper.Cj2CType(paramTy); });
-    auto cFuncTy = ctx.typeManager.GetFunctionTy(
-        cParamTys,
-        ctx.typeMapper.Cj2CType(methodTy->retTy),
-        FuncTy::Config { .isC = true }
-    );
+    auto cFuncTy =
+        ctx.typeManager.GetFunctionTy(cParamTys, ctx.typeMapper.Cj2CType(methodTy->retTy), FuncTy::Config{.isC = true});
     auto curFile = func.curFile;
     std::vector<OwnedPtr<FuncParam>> funcParams;
     std::transform(cParamTys.begin(), cParamTys.end(), std::back_inserter(funcParams),
@@ -174,19 +172,9 @@ void DesugarMirrors::DesugarTopLevelFunc(InteropContext& ctx, FuncDecl& func)
     std::vector<OwnedPtr<FuncParamList>> funcParamLists;
     funcParamLists.push_back(std::move(funcParamList));
     auto cFuncDecl = CreateFuncDecl(
-            func.identifier.Val(),
-            CreateFuncBody(std::move(funcParamLists), CreateType(cFuncTy->retTy), nullptr,
-                cFuncTy
-            )
-        );
+        func.identifier.Val(), CreateFuncBody(std::move(funcParamLists), CreateType(cFuncTy->retTy), nullptr, cFuncTy));
     CopyBasicInfo(&func, cFuncDecl);
-    cFuncDecl->EnableAttr(
-        Attribute::C,
-        Attribute::GLOBAL,
-        Attribute::NO_MANGLE,
-        Attribute::UNSAFE,
-        Attribute::FOREIGN
-    );
+    cFuncDecl->EnableAttr(Attribute::C, Attribute::GLOBAL, Attribute::NO_MANGLE, Attribute::UNSAFE, Attribute::FOREIGN);
     cFuncDecl->curFile = func.curFile;
     cFuncDecl->moduleName = func.moduleName;
     cFuncDecl->fullPackageName = func.fullPackageName;
@@ -194,12 +182,14 @@ void DesugarMirrors::DesugarTopLevelFunc(InteropContext& ctx, FuncDecl& func)
     std::vector<OwnedPtr<FuncArg>> nativeCallArgs;
 
     auto& params = func.funcBody->paramLists[0]->params;
-    std::transform(params.begin(), params.end(), std::back_inserter(nativeCallArgs),
-        [&ctx, curFile](auto& param) { return CreateFuncArg(ctx.factory.UnwrapEntity(WithinFile(CreateRefExpr(*param), curFile))); });
+    std::transform(params.begin(), params.end(), std::back_inserter(nativeCallArgs), [&ctx, curFile](auto& param) {
+        return CreateFuncArg(ctx.factory.UnwrapEntity(WithinFile(CreateRefExpr(*param), curFile)));
+    });
 
     auto funcAccess = WithinFile(CreateRefExpr(*cFuncDecl), func.curFile);
 
-    auto call = CreateCallExpr(std::move(funcAccess), std::move(nativeCallArgs), cFuncDecl, cFuncTy->retTy, CallKind::CALL_DECLARED_FUNCTION);
+    auto call = CreateCallExpr(
+        std::move(funcAccess), std::move(nativeCallArgs), cFuncDecl, cFuncTy->retTy, CallKind::CALL_DECLARED_FUNCTION);
     CopyBasicInfo(&func, call);
 
     auto arpScopeCall = ctx.factory.CreateAutoreleasePoolScope(methodTy->retTy, Nodes(std::move(call)));
