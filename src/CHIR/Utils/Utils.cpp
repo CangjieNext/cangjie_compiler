@@ -1751,7 +1751,7 @@ InvokeStaticWithException* CreateAndAppendWrapperInvokeStaticWithException(
 
 void ModifyFuncCallArgTypes(BlockGroup& group, CHIRBuilder& builder)
 {
-    std::function<VisitResult(Expression&)> preVisit = [&](Expression& e) {
+    auto preVisit = [&](Expression& e) {
         if (auto funcCall = Cangjie::DynamicCast<FuncCall*>(&e)) {
             auto funcDeclType = funcCall->GetMethodType();
             auto paramTypes = funcDeclType->GetParamTypes();
@@ -1822,9 +1822,6 @@ void ModifyFuncCallArgTypes(BlockGroup& group, CHIRBuilder& builder)
                     u->ReplaceOperand(funcCallE->GetResult(), castedRet);
                 }
             }
-        } else if (e.GetExprKind() == ExprKind::LAMBDA) {
-            auto lambda = Cangjie::StaticCast<Lambda*>(&e);
-            Visitor::Visit(*lambda->GetBody(), preVisit);
         }
         return VisitResult::CONTINUE;
     };
