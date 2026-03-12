@@ -1278,6 +1278,9 @@ Func::Func(Type* ty, const std::string& identifier, const std::string& srcCodeId
 
 uint64_t Func::GenerateLocalId()
 {
+    if (localId == 39 && identifier == "@_CINat13RangeIteratorIG_E4nextHv$l") {
+        printf("");
+    }
     return localId++;
 }
 

@@ -841,5 +841,7 @@ std::vector<Expression*> CreateWrapperInvokeStaticWithException(
 InvokeStaticWithException* CreateAndAppendWrapperInvokeStaticWithException(
     CHIRBuilder& builder, Type& retType, InvokeCallContext& context,
     Block& successBlock, Block& errorBlock, Block& parentBlock, const DebugLocation& loc = INVALID_LOCATION);
+
+void ModifyFuncCallArgTypes(BlockGroup& group, CHIRBuilder& builder);
 } // namespace Cangjie::CHIR
 #endif
