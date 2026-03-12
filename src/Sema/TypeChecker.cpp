@@ -226,6 +226,30 @@ void TypeChecker::TypeCheckerImpl::AddRetTypeNode(FuncBody& fb) const
     fb.retType->EnableAttr(Attribute::IS_CHECK_VISITED);
 }
 
+void TypeChecker::TypeCheckerImpl::UpdatePosForMacroExpandedNodes(const std::vector<Ptr<AST::Package>>& pkgs)
+{
+    if (!ci->invocation.globalOptions.enableCompileDebug && !ci->invocation.globalOptions.displayLineInfo) {
+        return;
+    }
+
+    auto visit = [](Ptr<AST::Node> curNode) -> AST::VisitAction {
+        if (!curNode->IsExpr() || !curNode->TestAttr(AST::Attribute::MACRO_EXPANDED_NODE) || !curNode->curMacroCall) {
+            return AST::VisitAction::WALK_CHILDREN;
+        }
+        curNode->begin = curNode->GetDebugPos(curNode->begin);
+        curNode->end = curNode->GetDebugPos(curNode->end);
+        return AST::VisitAction::WALK_CHILDREN;
+    };
+
+    for (auto pkg : pkgs) {
+        if (!pkg) {
+            continue;
+        }
+        AST::Walker walker(pkg, visit);
+        walker.Walk();
+    }
+}
+
 bool TypeChecker::TypeCheckerImpl::CheckNormalFuncBody(ASTContext& ctx, FuncBody& fb, std::vector<Ptr<Ty>>& paramTys)
 {
     if (fb.paramLists.empty()) {

@@ -138,6 +138,7 @@ public:
         auto contexts = PreTypeCheck(pkgs);
         DoTypeCheck(contexts);
         PostTypeCheck(contexts);
+        UpdatePosForMacroExpandedNodes(pkgs);
     }
     /**
      * Perform auto boxing and recursive type resolving of enum.
@@ -163,6 +164,10 @@ public:
     void RemoveTargetNotMeetExtendConstraint(const Ptr<AST::Ty> baseTy, std::vector<Ptr<AST::Decl>>& targets);
 
 private:
+    /**
+     * Update source positions for nodes expanded from macros when debug info is enabled.
+     */
+    void UpdatePosForMacroExpandedNodes(const std::vector<Ptr<AST::Package>>& pkgs);
     /**
      * Main entry of the synthesis mode of the type checking.
      * Context is read from ctx.SynthesizePos(). Use ctx.WithSynthesizePos() before calling.
