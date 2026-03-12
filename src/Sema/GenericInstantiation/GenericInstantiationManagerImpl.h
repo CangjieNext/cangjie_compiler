@@ -113,6 +113,7 @@ public:
 private:
     Ptr<AST::Package> curPkg{nullptr};
     DiagnosticEngine& diag;
+    CompilerInstance* const ci{nullptr};
     ImportManager& importManager;
     TypeManager& typeManager;
     TestManager* testManager{nullptr};
