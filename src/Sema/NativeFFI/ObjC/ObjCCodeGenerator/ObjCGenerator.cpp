@@ -218,8 +218,8 @@ void ObjCGenerator::Generate()
         return;
     }
 
-    const auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName) :
-        ctx.nameGenerator.GetObjCDeclName(*decl);
+    const auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName)
+                                            : ctx.nameGenerator.GetObjCDeclName(*decl);
     GenerateImports(objCDeclName);
 
     GenerateForwardDeclarations();
@@ -246,7 +246,8 @@ void ObjCGenerator::Generate()
 }
 
 // Filter out elements not currently instantiated.
-bool ObjCGenerator::IsNotThisActualTyFunc(const OwnedPtr<Decl>& declPtr) {
+bool ObjCGenerator::IsNotThisActualTyFunc(const OwnedPtr<Decl>& declPtr)
+{
     if (genericConfig) {
         auto actualOuterDeclName = genericConfig->declInstName;
         if (declPtr->identifier.Val().find(actualOuterDeclName) == std::string::npos) {
@@ -350,8 +351,7 @@ std::string ObjCGenerator::GenerateCCall(const std::string& funcName, const std:
 std::string ObjCGenerator::WrapperCallByInitForCJMappingReturn(const Ty& retTy, const std::string& nativeCall) const
 {
     std::string retName = isGenericGlueCode ? genericConfig->declInstName : retTy.name;
-    std::string result =
-        std::string("[[") + retName + " alloc]" + INIT_WITH_REGISTRY_ID_NAME + ": " + nativeCall + "]";
+    std::string result = std::string("[[") + retName + " alloc]" + INIT_WITH_REGISTRY_ID_NAME + ": " + nativeCall + "]";
     return result;
 }
 
@@ -543,8 +543,7 @@ std::string ObjCGenerator::GenerateStaticFunctionReference(
     std::string result = STATIC_MODIFIER;
     std::string objCDeclName = funcName;
     if (genericConfig) {
-        objCDeclName.erase(std::remove_if(objCDeclName.begin(), objCDeclName.end(),
-            [](char c) { return c == '$'; }),
+        objCDeclName.erase(std::remove_if(objCDeclName.begin(), objCDeclName.end(), [](char c) { return c == '$'; }),
             objCDeclName.end());
     }
     result += " ";
@@ -589,8 +588,8 @@ void ObjCGenerator::GenerateFunctionSymbolsInitialization()
             const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(declPtr.get());
             std::string objCDeclName = funcDecl.identifier;
             if (genericConfig) {
-                objCDeclName.erase(std::remove_if(objCDeclName.begin(), objCDeclName.end(),
-                    [](char c) { return c == '$'; }),
+                objCDeclName.erase(
+                    std::remove_if(objCDeclName.begin(), objCDeclName.end(), [](char c) { return c == '$'; }),
                     objCDeclName.end());
             }
             GenerateFunctionSymInit(objCDeclName);
@@ -639,8 +638,8 @@ void ObjCGenerator::GenerateInterfaceDecl()
     if (interopType == InteropType::CJ_Mapping && ctx.typeMapper.IsOneWayMapping(*decl) && !decl->IsOpen()) {
         AddWithIndent(FINAL_MODIFIER, GenerationTarget::HEADER);
     }
-    auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName) :
-        ctx.nameGenerator.GetObjCDeclName(*decl);
+    auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName)
+                                      : ctx.nameGenerator.GetObjCDeclName(*decl);
     resultH += INTERFACE_KEYWORD;
     resultH += " ";
     resultH += objCDeclName;
@@ -791,10 +790,10 @@ void ObjCGenerator::AddProperties()
         if (genericConfig && !varDecl.ty->HasGeneric()) {
             isInnerGenericProp = genericConfig->funcNames.find(name) != genericConfig->funcNames.end();
         }
-        auto implementationName = genericConfig ? ctx.nameGenerator.GetFieldGetterWrapperName(varDecl, &genericConfig->declInstName,
-            isInnerGenericProp) : ctx.nameGenerator.GetFieldGetterWrapperName(varDecl);
-        AddWithIndent(
-            GenerateDefaultFunctionImplementation(implementationName, *varDecl.ty, argList, staticType),
+        auto implementationName = genericConfig
+            ? ctx.nameGenerator.GetFieldGetterWrapperName(varDecl, &genericConfig->declInstName, isInnerGenericProp)
+            : ctx.nameGenerator.GetFieldGetterWrapperName(varDecl);
+        AddWithIndent(GenerateDefaultFunctionImplementation(implementationName, *varDecl.ty, argList, staticType),
             GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
 
         if (!genSetter) {
@@ -833,8 +832,9 @@ void ObjCGenerator::AddCtorsForCjMappingEnum(AST::EnumDecl& enumDecl)
         const ::std::string ctorName = ctor->identifier.Val();
         result += GenerateFunctionDeclaration(ObjCFunctionType::STATIC, retType, ctorName);
         std::vector<std::string> argList;
-        std::string nativeFuncName = genericConfig ? ctx.nameGenerator.GenerateInitCjObjectName(*ctor.get(), &genericConfig->declInstName):
-            ctx.nameGenerator.GenerateInitCjObjectName(*ctor.get());
+        std::string nativeFuncName = genericConfig
+            ? ctx.nameGenerator.GenerateInitCjObjectName(*ctor.get(), &genericConfig->declInstName)
+            : ctx.nameGenerator.GenerateInitCjObjectName(*ctor.get());
 
         if (ctor->astKind == ASTKind::FUNC_DECL) {
             auto funcDecl = As<ASTKind::FUNC_DECL>(ctor.get());
@@ -952,8 +952,9 @@ void ObjCGenerator::AddConstructors()
         const auto selectorComponents = ctx.nameGenerator.GetObjCDeclSelectorComponents(funcDecl);
         CJC_ASSERT(selectorComponents.size() > 0);
         // wrapper name MUST use generated ctor
-        const auto cjWrapperName = genericConfig ? ctx.nameGenerator.GenerateInitCjObjectName(*ctor, &genericConfig->declInstName) :
-            ctx.nameGenerator.GenerateInitCjObjectName(*ctor);
+        const auto cjWrapperName = genericConfig
+            ? ctx.nameGenerator.GenerateInitCjObjectName(*ctor, &genericConfig->declInstName)
+            : ctx.nameGenerator.GenerateInitCjObjectName(*ctor);
         const auto staticType = ObjCFunctionType::INSTANCE;
 
         std::string result = "";
@@ -1035,10 +1036,12 @@ void ObjCGenerator::GenerateDeleteObject()
     }
     AddWithIndent(GenerateFunctionDeclaration(ObjCFunctionType::INSTANCE, VOID_TYPE, DELETE_FUNC_NAME),
         GenerationTarget::BOTH, OptionalBlockOp::OPEN);
-    auto deleteObjName = genericConfig ? ctx.nameGenerator.GenerateDeleteCjObjectName(*decl, &genericConfig->declInstName) :
-        ctx.nameGenerator.GenerateDeleteCjObjectName(*decl);
-    AddWithIndent(GenerateDefaultFunctionImplementation(deleteObjName, *ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT),
-                      {std::pair<std::string, std::string>(INT64_T, string(SELF_NAME) + "." + SELF_WEAKLINK_NAME)}),
+    auto deleteObjName = genericConfig
+        ? ctx.nameGenerator.GenerateDeleteCjObjectName(*decl, &genericConfig->declInstName)
+        : ctx.nameGenerator.GenerateDeleteCjObjectName(*decl);
+    AddWithIndent(
+        GenerateDefaultFunctionImplementation(deleteObjName, *ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT),
+            {std::pair<std::string, std::string>(INT64_T, string(SELF_NAME) + "." + SELF_WEAKLINK_NAME)}),
         GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
 }
 
@@ -1092,13 +1095,13 @@ void ObjCGenerator::AddMethods()
                 if (staticType == ObjCFunctionType::INSTANCE) {
                     AddCallCangjieBeforeInitGuard();
                 }
-                auto methodName = genericConfig ? ctx.nameGenerator.GenerateMethodWrapperName(funcDecl,
-                    &genericConfig->declInstName) : ctx.nameGenerator.GenerateMethodWrapperName(funcDecl);
-                AddWithIndent(
-                    GenerateDefaultFunctionImplementation(methodName, *retTy,
-                        ConvertParamsListToArgsList(
-                            funcDecl.funcBody->paramLists, staticType == ObjCFunctionType::INSTANCE),
-                        staticType),
+                auto methodName = genericConfig
+                    ? ctx.nameGenerator.GenerateMethodWrapperName(funcDecl, &genericConfig->declInstName)
+                    : ctx.nameGenerator.GenerateMethodWrapperName(funcDecl);
+                AddWithIndent(GenerateDefaultFunctionImplementation(methodName, *retTy,
+                                  ConvertParamsListToArgsList(
+                                      funcDecl.funcBody->paramLists, staticType == ObjCFunctionType::INSTANCE),
+                                  staticType),
                     GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
             }
         }
@@ -1154,16 +1157,16 @@ void ObjCGenerator::WriteToFile()
 
 void ObjCGenerator::WriteToHeader()
 {
-    auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName) :
-        ctx.nameGenerator.GetObjCDeclName(*decl);
+    auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName)
+                                      : ctx.nameGenerator.GetObjCDeclName(*decl);
     auto headerPath = FileUtil::JoinPath(outputFilePath, objCDeclName + ".h");
     FileUtil::WriteToFile(headerPath, res);
 }
 
 void ObjCGenerator::WriteToSource()
 {
-    auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName) :
-        ctx.nameGenerator.GetObjCDeclName(*decl);
+    auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName)
+                                      : ctx.nameGenerator.GetObjCDeclName(*decl);
     auto sourcePath = FileUtil::JoinPath(outputFilePath, objCDeclName + ".m");
     FileUtil::WriteToFile(sourcePath, resSource);
 }
@@ -1590,7 +1593,8 @@ void ObjCGenerator::AddCallCangjieBeforeInitGuard()
         return;
     }
 
-    AddWithIndent(GenerateIfStatement(std::string(SELF_NAME) + "." + SELF_WEAKLINK_NAME, REGISTRY_ID_UNINIT_VALUE, EQ_CHECK_OP),
+    AddWithIndent(
+        GenerateIfStatement(std::string(SELF_NAME) + "." + SELF_WEAKLINK_NAME, REGISTRY_ID_UNINIT_VALUE, EQ_CHECK_OP),
         GenerationTarget::SOURCE, OptionalBlockOp::OPEN);
     AddWithIndent(FAIL_CALL_CANGJIE_BEFORE_INIT, GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
 }

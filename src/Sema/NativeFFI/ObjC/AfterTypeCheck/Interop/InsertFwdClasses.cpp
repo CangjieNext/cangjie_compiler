@@ -27,14 +27,15 @@ OwnedPtr<ClassDecl> InsertFwdClasses::InitInterfaceFwdClassDecl(const Ptr<AST::C
     fwdclassDecl->moduleName = ::Cangjie::Utils::GetRootPackageName(interfaceDecl->fullPackageName);
     fwdclassDecl->curFile = interfaceDecl->curFile;
 
-    fwdclassDecl->EnableAttr(Attribute::PUBLIC, Attribute::COMPILER_ADD, Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD,  Attribute::ABSTRACT);
+    fwdclassDecl->EnableAttr(
+        Attribute::PUBLIC, Attribute::COMPILER_ADD, Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD, Attribute::ABSTRACT);
 
     fwdclassDecl->body = MakeOwned<ClassBody>();
     return fwdclassDecl;
 }
 
-OwnedPtr<FuncDecl> InsertFwdClasses::GenerateInterfaceFwdclassMethod(InteropContext& ctx,
-    AST::ClassDecl& fwdclassDecl, FuncDecl& interfaceFuncDecl, Native::FFI::GenericConfigInfo* genericConfig)
+OwnedPtr<FuncDecl> InsertFwdClasses::GenerateInterfaceFwdclassMethod(InteropContext& ctx, AST::ClassDecl& fwdclassDecl,
+    FuncDecl& interfaceFuncDecl, Native::FFI::GenericConfigInfo* genericConfig)
 {
     auto funcDecl = ASTCloner::Clone(Ptr<FuncDecl>(&interfaceFuncDecl));
     funcDecl->DisableAttr(Attribute::ABSTRACT, Attribute::OPEN);
@@ -49,19 +50,20 @@ OwnedPtr<FuncDecl> InsertFwdClasses::GenerateInterfaceFwdclassMethod(InteropCont
     return funcDecl;
 }
 
-void InsertFwdClasses::GenerateInterfaceFwdClassBody(InteropContext& ctx, AST::ClassDecl& fwdclassDecl, AST::ClassLikeDecl& interfaceDecl,
-    Native::FFI::GenericConfigInfo* genericConfig)
+void InsertFwdClasses::GenerateInterfaceFwdClassBody(InteropContext& ctx, AST::ClassDecl& fwdclassDecl,
+    AST::ClassLikeDecl& interfaceDecl, Native::FFI::GenericConfigInfo* genericConfig)
 {
     for (auto& decl : interfaceDecl.GetMemberDecls()) {
         if (FuncDecl* fd = As<ASTKind::FUNC_DECL>(decl.get());
             fd && !fd->TestAttr(Attribute::CONSTRUCTOR) && !fd->TestAttr(Attribute::STATIC)) {
-            fwdclassDecl.body->decls.emplace_back(GenerateInterfaceFwdclassMethod(ctx, fwdclassDecl, *fd, genericConfig));
+            fwdclassDecl.body->decls.emplace_back(
+                GenerateInterfaceFwdclassMethod(ctx, fwdclassDecl, *fd, genericConfig));
         }
     }
 }
 
-OwnedPtr<ClassDecl> InsertFwdClasses::GenerateGenericInterfaceFwdclassMethod(InteropContext& ctx,
-    Ptr<AST::ClassLikeDecl>& interfaceDecl, Native::FFI::GenericConfigInfo* genericConfig)
+OwnedPtr<ClassDecl> InsertFwdClasses::GenerateGenericInterfaceFwdclassMethod(
+    InteropContext& ctx, Ptr<AST::ClassLikeDecl>& interfaceDecl, Native::FFI::GenericConfigInfo* genericConfig)
 {
     auto fwdclassDecl = InitInterfaceFwdClassDecl(interfaceDecl);
     fwdclassDecl->identifier = genericConfig->declInstName + OBJ_C_FWD_CLASS_SUFFIX;
@@ -98,7 +100,8 @@ void InsertFwdClasses::HandleImpl(InteropContext& ctx)
     for (auto& interfaceDecl : ctx.cjMappingInterfaces) {
         std::vector<Native::FFI::GenericConfigInfo*> genericConfigsVector;
         bool isGenericGlueCode = false;
-        Native::FFI::InitGenericConfigs(*interfaceDecl->curFile, interfaceDecl.get(), genericConfigsVector, isGenericGlueCode);
+        Native::FFI::InitGenericConfigs(
+            *interfaceDecl->curFile, interfaceDecl.get(), genericConfigsVector, isGenericGlueCode);
         if (isGenericGlueCode) {
             for (auto genericConfig : genericConfigsVector) {
                 ctx.genDecls.emplace_back(GenerateGenericInterfaceFwdclassMethod(ctx, interfaceDecl, genericConfig));
