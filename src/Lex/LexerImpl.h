@@ -44,7 +44,6 @@ public:
           splitAmbiguousToken{args.splitAmbiguousToken},
           enableCollectTokenStream{args.collectTokenStream}
     {
-        Init();
         EnterNormalMod();
     }
     LexerImpl(const std::vector<Token>& inputTokens, DiagnosticEngine& diag, SourceManager& sm, LexerConfig args)
@@ -56,7 +55,6 @@ public:
           enableScan{false},
           enableCollectTokenStream{args.collectTokenStream}
     {
-        Init();
         EnterNormalMod();
         lineResetOffsetsFromBase = 0;
         for (auto& tk : inputTokens) {
@@ -98,7 +96,7 @@ public:
     {
         enableCollectTokenStream = true;
     }
-    const std::vector<Token>& GetTokenStream() const
+    const std::set<Token>& GetTokenStream() const
     {
         return tokenStream;
     }
@@ -152,20 +150,14 @@ private:
     const char* pCurrent{nullptr};  // point to the current character
     const char* pResetCurrent{nullptr};
     int32_t currentChar{-1}; // currently processing character
-    std::unordered_map<std::string_view, TokenKind> tokenMap{};
+    bool ehEnabled{false};   // EH keywords enabled flag (replaces dynamic tokenMap modification)
     unsigned lineResetOffsetsFromBase{0};
     TokenKind tokenKind{TokenKind::ILLEGAL};
     Position pos;
     Position posBase{0, 1, 1};
     // ambiguous tokens like <=, <<, <<=, ??, will be splited for parser case. e.g.(a < b, c >= d) and let a: ??T = 1
     bool splitAmbiguousToken = true;
-    const std::unordered_map<TokenKind, std::tuple<TokenKind, std::string_view, TokenKind, std::string_view>>
-        ambiCombinedTokensDegTable{
-            {TokenKind::COALESCING, {TokenKind::QUEST, "?", TokenKind::QUEST, "?"}},
-            {TokenKind::RSHIFT_ASSIGN, {TokenKind::GT, ">", TokenKind::GE, ">="}},
-            {TokenKind::RSHIFT, {TokenKind::GT, ">", TokenKind::GT, ">"}},
-            {TokenKind::GE, {TokenKind::GT, ">", TokenKind::ASSIGN, "="}},
-        };
+
     /*
      * Record the offset of the start position of each line in the source code relative to pInputStart.
      * every two adjacent elements in this vector can be seen as a left closed right open interval pair,
@@ -197,7 +189,8 @@ private:
     // Cache for fast lookup of token positions in collectTokens using Position::Hash32
     std::unordered_set<Position, PositionHash32> collectTokensFindCache;
     std::vector<Token> collectTokens;
-    std::vector<Token> tokenStream;
+    std::set<Token> tokenStream; // use set because ParseModifiers before import may cause the tokens of the first decl
+        // to be Scan()'ed multiple times.
     mutable bool success{true};                                     /// Used for diagnostic.
     mutable std::vector<std::pair<const char*, bool>> stringStarts; /// Used for diagnostic, string start position.
     mutable std::vector<const char*> interpolations; /// Used for diagnostic, string interpolation position.
@@ -317,25 +310,6 @@ private:
     template <typename... T> void Diagnose(const Position diagPos, DiagKind kind, T... args)
     {
         diag.Diagnose(diagPos, kind, args...);
-    }
-    void Init()
-    {
-        for (unsigned char i = 0; i < static_cast<unsigned char>(TokenKind::IDENTIFIER); i++) {
-            tokenMap[TOKENS[i]] = static_cast<TokenKind>(i);
-        }
-        // @! is added after TokenKind::IDENTIFIER
-        auto atExclIndex = static_cast<unsigned char>(TokenKind::AT_EXCL);
-        tokenMap[TOKENS[atExclIndex]] = static_cast<TokenKind>(atExclIndex);
-        auto commonIndex = static_cast<unsigned char>(TokenKind::COMMON);
-        tokenMap[TOKENS[commonIndex]] = static_cast<TokenKind>(commonIndex);
-        auto platformIndex = static_cast<unsigned char>(TokenKind::SPECIFIC);
-        tokenMap[TOKENS[platformIndex]] = static_cast<TokenKind>(platformIndex);
-        auto dcIndex = static_cast<unsigned char>(TokenKind::DOUBLE_COLON);
-        tokenMap[TOKENS[dcIndex]] = static_cast<TokenKind>(dcIndex);
-        tokenMap["true"] = TokenKind::BOOL_LITERAL;
-        tokenMap["false"] = TokenKind::BOOL_LITERAL;
-        auto ftrIndex = static_cast<unsigned char>(TokenKind::FEATURES);
-        tokenMap[TOKENS[ftrIndex]] = TokenKind::FEATURES;
     }
     void Back();
     bool IsCharOrString() const;

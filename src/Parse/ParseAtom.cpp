@@ -22,21 +22,85 @@
 using namespace Cangjie;
 using namespace Cangjie::AST;
 
+ParserImpl::ExprHandler ParserImpl::LookupExprHandler(TokenKind kind)
+{
+    static constexpr int FIRST_KIND = static_cast<int>(TokenKind::LPAREN);
+    static constexpr int LAST_KIND = static_cast<int>(TokenKind::RESUME);
+    static constexpr int ARRAY_SIZE = LAST_KIND - FIRST_KIND + 1;
+
+    // clang-format off
+    static const ExprHandler HANDLERS[ARRAY_SIZE] = {
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseLeftParenExpr),
+        nullptr, // RPAREN
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseArrayLitExpr),
+        nullptr, // RSQUARE
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseLambdaExpr),
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // RCURL..INCR
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // DECR..BITOR
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // BITXOR..ASSIGN
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // ADD_ASSIGN..OR_ASSIGN
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // BITAND_ASSIGN..BACKARROW
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // DOUBLE_ARROW..LT
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // GT..WILDCARD
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // INT8..UINT8
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // UINT16..RUNE
+        nullptr, nullptr, // BOOLEAN..NOTHING
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseVArrayExpr),
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // THISTYPE..MACRO
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseQuoteExpr),
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // DOLLAR..INIT
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseThisOrSuper),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseThisOrSuper),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseIfExpr),
+        nullptr, nullptr, // ELSE, CASE
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseTryExpr),
+        nullptr, nullptr, // CATCH, FINALLY
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseForInExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseDoWhileExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseWhileExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseThrowExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseReturnExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseContinueJumpExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseBreakJumpExpr),
+        nullptr, nullptr, // IN, NOT_IN
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseMatchExpr),
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // WHERE..OVERRIDE
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // REDEF..MUT
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseUnsafeBlock),
+        nullptr, // OPERATOR
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseSpawnExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseSynchronizedExpr),
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // UPPERBOUND..FLOAT_LITERAL
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // COMMENT..MULTILINE_RAW_STRING
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // BOOL_LITERAL..PLATFORM
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParsePerformExpr),
+        reinterpret_cast<ExprHandler>(&ParserImpl::ParseResumeExpr),
+    };
+    // clang-format on
+
+    int index = static_cast<int>(kind) - FIRST_KIND;
+    if (index < 0 || index >= ARRAY_SIZE) {
+        return nullptr;
+    }
+    return HANDLERS[index];
+}
+
 OwnedPtr<Expr> ParserImpl::ParseAtom(ExprKind ek)
 {
     if (IsConditionExpr(ek) && Skip(TokenKind::LPAREN)) {
         return ParseLeftParenExprInKind(ek);
     }
-    if (const TokenKind peekKind = Peek().kind; exprHandlerMap.count(peekKind) != 0) {
+    auto tokenKind = Peek().kind;
+    if (auto handler = LookupExprHandler(tokenKind)) {
         lastToken = lookahead;
         // we put enter/exit here because the following Next() would scan inner tokens of quote expr if it is one.
         // otherwise we must call Next() as the first line of each expr handler.
-        if (peekKind == TokenKind::QUOTE) {
+        if (tokenKind == TokenKind::QUOTE) {
             EnterQuoteExprMod();
         }
         Next();
-        auto ret = exprHandlerMap[peekKind](this);
-        if (peekKind == TokenKind::QUOTE) {
+        auto ret = (this->*handler)(tokenKind);
+        if (tokenKind == TokenKind::QUOTE) {
             ExitQuoteExprMod();
         }
         return ret;
@@ -57,7 +121,7 @@ OwnedPtr<Expr> ParserImpl::ParseAtom(ExprKind ek)
     // Optimize those Seeing().
     // If seeing a primitive type + dot, should be a static function call like Int64.foo().
     if (SeeingPrimitiveTypeAndDot()) {
-        auto ret = MakeOwned<PrimitiveTypeExpr>(TOKENKIND_TO_PRIMITIVE_TYPEKIND_MAP.at(lookahead.kind));
+        auto ret = MakeOwned<PrimitiveTypeExpr>(LookupPrimitiveTypeKind(lookahead.kind));
         ret->begin = lookahead.Begin();
         Next(); // Consume the TYPE token but keep the DOT token.
         ret->end = lastToken.End();
@@ -194,9 +258,6 @@ OwnedPtr<LitConstExpr> ParserImpl::GetLitConstExprFromStr(
     } else if (token.kind == TokenKind::STRING_LITERAL) {
         ret->kind = LitConstKind::STRING;
         ret->stringKind = StringKind::NORMAL;
-    } else if (token.kind == TokenKind::JSTRING_LITERAL) {
-        ret->kind = LitConstKind::JSTRING;
-        ret->stringKind = StringKind::JSTRING;
     }
     ret->stringValue = StringConvertor::Normalize(value);
     ret->codepoint = StringConvertor::UTF8ToCodepoint(ret->stringValue);
@@ -262,9 +323,6 @@ OwnedPtr<Expr> ParserImpl::ParseInterpolationExpr(const std::string& value, cons
 
 OwnedPtr<Expr> ParserImpl::ProcessStringInterpolation(const Token& token)
 {
-    if (token.kind == TokenKind::JSTRING_LITERAL) {
-        return GetLitConstExprFromStr(token.Value(), token, token.Begin());
-    }
     std::vector<StringPart> strParts = lexer->GetStrParts(token);
     auto tokenValue = token.Value();
     if (strParts.size() == 1) {
@@ -409,7 +467,7 @@ void ParserImpl::ParseElse(IfExpr& ret)
 OwnedPtr<Block> ParserImpl::ParseExprOrDeclsInMatchCase()
 {
     OwnedPtr<Block> exprOrDecls = MakeOwned<Block>();
-    exprOrDecls->begin = lastToken.Begin();
+    exprOrDecls->begin = lookahead.Begin();
     auto flag = false;
     auto hasSemi = false;
     while (!SeeingAny({TokenKind::CASE, TokenKind::RCURL})) {
@@ -423,6 +481,10 @@ OwnedPtr<Block> ParserImpl::ParseExprOrDeclsInMatchCase()
         }
         if (SeeingMacroCallDecl() || SeeingDecl() || SeeingExpr()) {
             auto node = ParseExprOrDecl(ScopeKind::FUNC_BODY);
+            // only set the begin of the block when parsing the first expr of the block
+            if (exprOrDecls->body.empty()) {
+                exprOrDecls->begin = node->begin;
+            }
             exprOrDecls->body.emplace_back(std::move(node));
         } else {
             DiagMatchCaseExpectedExprOrDecl();
@@ -784,7 +846,7 @@ void ParserImpl::ParseMatchNoSelector(AST::MatchExpr& matchExpr)
         }
         matchCaseOther->arrowPos = lookahead.Begin();
         matchCaseOther->exprOrDecls = ParseExprOrDeclsInMatchCase();
-        matchCaseOther->end = lastToken.Begin();
+        matchCaseOther->end = lastToken.End();
         if (matchCaseOther->exprOrDecls->body.empty() && !matchCaseOther->TestAttr(Attribute::HAS_BROKEN)) {
             DiagMatchCaseBodyCannotBeEmpty(matchCaseOther->arrowPos + std::string("=>").size());
             matchCaseOther->EnableAttr(Attribute::HAS_BROKEN);
@@ -872,9 +934,8 @@ OwnedPtr<ReturnExpr> ParserImpl::ParseReturnExpr()
     } else {
         if (newlineSkipped) {
             auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_nl_warning, firstNLPosition);
-            auto iter = std::find_if(
-                combinator.rbegin(), combinator.rend(), [this](auto& k) { return SeeingCombinator(k.first); });
-            std::string tkValue = (iter != combinator.rend()) ? std::string(iter->second.second) : lookahead.Value();
+            auto* combInfo = LookupSeenCombinator();
+            std::string tkValue = combInfo ? std::string(combInfo->value) : lookahead.Value();
             builder.AddHint(
                 MakeRange(lastNoneNLToken.Begin(), lookahead.Begin() + 1), lastNoneNLToken.Value(), tkValue);
         }
@@ -1049,9 +1110,10 @@ OwnedPtr<AST::Expr> ParserImpl::ParseLeftParenExprInKind(ExprKind ek)
         }
     }
     // Not identifier.
-    OwnedPtr<Expr> expr = ParseExpr(ek == ExprKind::IF_COND_EXPR ? ExprKind::EXPR_IN_IF_COND_TUPLE
-            : ek == ExprKind::WHILE_COND_EXPR                    ? ExprKind::EXPR_IN_WHILE_COND_TUPLE
-                                                                 : ExprKind::EXPR_IN_TUPLE);
+    OwnedPtr<Expr> expr = ParseExpr(
+        ek == ExprKind::IF_COND_EXPR || ek == ExprKind::EXPR_IN_IF_COND_TUPLE ? ExprKind::EXPR_IN_IF_COND_TUPLE
+        : ek == ExprKind::WHILE_COND_EXPR || ek == ExprKind::EXPR_IN_WHILE_COND_TUPLE
+        ? ExprKind::EXPR_IN_WHILE_COND_TUPLE : ExprKind::EXPR_IN_TUPLE);
     if (Seeing(TokenKind::COMMA)) {
         // It's actually a tuple literal.
         auto ret = ParseTupleLitForParenExprComma(leftParenPos, std::move(expr));
@@ -1375,6 +1437,7 @@ OwnedPtr<Expr> ParserImpl::ParseAnnotationLambdaExpr(bool isTailClosure)
             DiagExpectedDeclaration(ret->begin, "lambda expression");
         }
     }
+    SetBeginToAnnotationsBegin(*ret, annos);
     return ret;
 }
 
@@ -1581,7 +1644,7 @@ OwnedPtr<AST::Expr> ParserImpl::ParseTypeConvExpr()
     type->begin = lookahead.Begin();
     type->end = lookahead.End();
     type->str = lookahead.Value();
-    type->kind = TOKENKIND_TO_PRIMITIVE_TYPEKIND_MAP.at(lookahead.kind);
+    type->kind = LookupPrimitiveTypeKind(lookahead.kind);
     Next();
     ret->type = std::move(type);
     if (!Skip(TokenKind::LPAREN)) {

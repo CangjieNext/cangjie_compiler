@@ -40,7 +40,7 @@ std::vector<Token> Lexer::GetComments()
 {
     return std::move(impl->comments);
 }
-const std::vector<Token>& Lexer::GetTokenStream() const
+const std::set<Token>& Lexer::GetTokenStream() const
 {
     return impl->tokenStream;
 }
@@ -70,20 +70,7 @@ void Lexer::ClearStringParts(const Token& t)
 
 void Lexer::SetEHEnabled(bool enabled) const
 {
-    static const auto EH_KEYWORDS = {
-        TokenKind::PERFORM,
-        TokenKind::RESUME,
-        TokenKind::THROWING,
-        TokenKind::HANDLE
-    };
-    for (auto keyword : EH_KEYWORDS) {
-        const auto tokenStr = TOKENS[static_cast<size_t>(keyword)];
-        if (enabled) {
-            impl->tokenMap[tokenStr] = keyword;
-        } else {
-            impl->tokenMap.erase(tokenStr);
-        }
-    }
+    impl->ehEnabled = enabled;
 }
 
 const std::vector<StringPart>& Lexer::GetStrParts(const Token& t)

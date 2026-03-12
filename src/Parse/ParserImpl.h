@@ -202,70 +202,27 @@ private:
     std::string ParseForImportToGetContentBetween(
         unsigned int fileID, int beginLine, int beginColumn, int endLine, int endColumn);
 
-    std::unordered_map<TokenKind, std::function<OwnedPtr<AST::Expr>(ParserImpl*)>> exprHandlerMap{
-        {TokenKind::IF, &ParserImpl::ParseIfExpr},
-        {TokenKind::MATCH, &ParserImpl::ParseMatchExpr},
-        {TokenKind::QUOTE, &ParserImpl::ParseQuoteExpr},
-        {TokenKind::TRY, &ParserImpl::ParseTryExpr},
-        {TokenKind::THROW, &ParserImpl::ParseThrowExpr},
-        {TokenKind::PERFORM, &ParserImpl::ParsePerformExpr},
-        {TokenKind::RESUME, &ParserImpl::ParseResumeExpr},
-        {TokenKind::RETURN, &ParserImpl::ParseReturnExpr},
-        {TokenKind::FOR, &ParserImpl::ParseForInExpr},
-        {TokenKind::WHILE, &ParserImpl::ParseWhileExpr},
-        {TokenKind::DO, &ParserImpl::ParseDoWhileExpr},
-        {TokenKind::SPAWN, &ParserImpl::ParseSpawnExpr},
-        {TokenKind::SYNCHRONIZED, &ParserImpl::ParseSynchronizedExpr},
-        {TokenKind::LPAREN, &ParserImpl::ParseLeftParenExpr},
-        {TokenKind::CONTINUE, &ParserImpl::ParseContinueJumpExpr},
-        {TokenKind::BREAK, &ParserImpl::ParseBreakJumpExpr},
-        {TokenKind::LSQUARE, &ParserImpl::ParseArrayLitExpr},
-        {TokenKind::THIS, &ParserImpl::ParseThisOrSuper},
-        {TokenKind::SUPER, &ParserImpl::ParseThisOrSuper},
-        {TokenKind::LCURL, &ParserImpl::ParseLambdaExpr},
-        {TokenKind::UNSAFE, &ParserImpl::ParseUnsafeBlock},
-        {TokenKind::VARRAY, &ParserImpl::ParseVArrayExpr},
+    // declaration handler type, use ScopeKind, parsed modifiers and annotations
+    using DeclHandler = OwnedPtr<AST::Decl> (ParserImpl::*)(
+        ScopeKind, const std::set<AST::Modifier>&, std::vector<OwnedPtr<AST::Annotation>>);
+    // lookup declaration handler by token kind
+    static DeclHandler LookupDeclHandler(TokenKind kind);
+    // expression handler type, use token kind
+    using ExprHandler = OwnedPtr<AST::Expr> (ParserImpl::*)(TokenKind);
+    // lookup expression handler by token kind
+    static ExprHandler LookupExprHandler(TokenKind kind);
+    // lookup expression followed commas by expression kind
+    static const std::pair<TokenKind, TokenKind>* LookupExprsFollowedCommas(ExprKind ek);
+    // lookup combinator info by token kind
+    struct CombinatorInfo {
+        TokenKind kind;
+        std::string_view value;
     };
-
-    std::unordered_map<TokenKind,
-        std::function<OwnedPtr<AST::Decl>(
-            ParserImpl*, ScopeKind, const std::set<AST::Modifier>&, std::vector<OwnedPtr<AST::Annotation>>)>>
-        declHandlerMap{
-            {TokenKind::CLASS, &ParserImpl::ParseClassDecl},
-            {TokenKind::INTERFACE, &ParserImpl::ParseInterfaceDecl},
-            {TokenKind::MAIN, &ParserImpl::ParseMainDecl},
-            {TokenKind::MACRO, &ParserImpl::ParseMacroDecl},
-            {TokenKind::STRUCT, &ParserImpl::ParseStructDecl},
-            {TokenKind::ENUM, &ParserImpl::ParseEnumDecl},
-            {TokenKind::TYPE, &ParserImpl::ParseTypeAlias},
-            {TokenKind::EXTEND, &ParserImpl::ParseExtendDecl},
-            {TokenKind::PROP, &ParserImpl::ParsePropDecl},
-            {TokenKind::FUNC, &ParserImpl::ParseFuncDecl},
-            {TokenKind::INIT, &ParserImpl::ParseConstructor},
-            {TokenKind::VAR, &ParserImpl::ParseVarOrLet},
-            {TokenKind::LET, &ParserImpl::ParseVarOrLet},
-        };
-
-    const std::map<ExprKind, std::pair<TokenKind, TokenKind>> exprsFollowedCommas{
-        {ExprKind::EXPR_IN_TUPLE, {TokenKind::LPAREN, TokenKind::RPAREN}},
-        {ExprKind::EXPR_IN_ARRAY, {TokenKind::LSQUARE, TokenKind::RSQUARE}},
-        {ExprKind::EXPR_IN_CALLSUFFIX, {TokenKind::LPAREN, TokenKind::RPAREN}},
-        {ExprKind::EXPR_IN_ANNOTATION, {TokenKind::LSQUARE, TokenKind::RSQUARE}},
-    };
-
-    const std::map<std::vector<TokenKind>, std::pair<TokenKind, std::string_view>> combinator{
-        {{TokenKind::GT, TokenKind::GT, TokenKind::ASSIGN}, {TokenKind::RSHIFT_ASSIGN, ">>="}},
-        {{TokenKind::GT, TokenKind::ASSIGN}, {TokenKind::GE, ">="}},
-        {{TokenKind::GT, TokenKind::GT}, {TokenKind::RSHIFT, ">>"}},
-        {{TokenKind::QUEST, TokenKind::QUEST}, {TokenKind::COALESCING, "??"}}};
-
-    // Note that RSHIFT_ASSIGN should come before RSHIFT, because RSHIFT_ASSIGN contains RSHIFT.
-    const std::vector<std::tuple<TokenKind, std::vector<TokenKind>, std::string>> ambiguoussCombinedTokens{
-        {TokenKind::COALESCING, {TokenKind::QUEST, TokenKind::QUEST}, "??"},
-        {TokenKind::RSHIFT_ASSIGN, {TokenKind::GT, TokenKind::GT, TokenKind::ASSIGN}, ">>="},
-        {TokenKind::RSHIFT, {TokenKind::GT, TokenKind::GT}, ">>"},
-        {TokenKind::GE, {TokenKind::GT, TokenKind::ASSIGN}, ">="},
-    };
+    // lookup combinator info by token kind
+    const CombinatorInfo* LookupSeenCombinator();
+    static const std::vector<std::tuple<TokenKind, std::vector<TokenKind>, std::string>>& GetAmbiguousCombinedTokens();
+    using DiagIdentifierHandler = void (ParserImpl::*)(Ptr<AST::Node>);
+    static DiagIdentifierHandler LookupDiagExpectedIdentifierHandler(AST::ASTKind kind);
 
     const std::vector<TokenKind> combinedDoubleArrow{TokenKind::ASSIGN, TokenKind::GT};
     static const std::vector<TokenKind> combinedBackarrow;
@@ -313,19 +270,8 @@ private:
      * Attach comment group to the ast nodes in File
      */
     void AttachCommentToFile(Ptr<AST::File> node);
-    /**
-     * Attach comment group to the ast nodes(sorted by range)
-     */
-    void AttachCommentToSortedNodes(std::vector<Ptr<AST::Node>>& nodes);
-    /**
-     * Attach comment group to the ast nodes
-     * note : only run in ParseNodes in macro expansion
-     */
-    void AttachCommentToNodes(std::vector<OwnedPtr<AST::Node>>& nodes);
-    /**
-     * Collect comment groups from token stream
-     */
-    void CollectCommentGroups(AST::CommentGroupsLocInfo& cgInfo) const;
+
+    void AttachCommentToNodes(std::vector<OwnedPtr<Node>>& nodes);
     bool SeeingExprOperator();
     Token GetExprOperator();
     void SkipExprOperator();
@@ -347,7 +293,7 @@ private:
     std::string ExpectOperatorIdentifier(AST::FuncDecl& fd);
     inline bool IsExprFollowedComma(ExprKind ek) const
     {
-        return exprsFollowedCommas.find(ek) != exprsFollowedCommas.end();
+        return LookupExprsFollowedCommas(ek) != nullptr;
     }
     inline bool SeeingAnnotationLambdaExpr()
     {
@@ -449,8 +395,9 @@ private:
             return false;
         }
         return (SeeingModifier() && !Seeing({TokenKind::UNSAFE, TokenKind::LCURL})) ||
-            SeeingAny({TokenKind::FUNC, TokenKind::MACRO,TokenKind::LET, TokenKind::VAR, TokenKind::ENUM, TokenKind::TYPE,
-                TokenKind::STRUCT, TokenKind::CLASS, TokenKind::INTERFACE, TokenKind::MAIN, TokenKind::EXTEND}) ||
+            SeeingAny(
+                {TokenKind::FUNC, TokenKind::MACRO, TokenKind::LET, TokenKind::VAR, TokenKind::ENUM, TokenKind::TYPE,
+                    TokenKind::STRUCT, TokenKind::CLASS, TokenKind::INTERFACE, TokenKind::MAIN, TokenKind::EXTEND}) ||
             (SeeingBuiltinAnnotation() && !SeeingAnnotationLambdaExpr());
     }
     bool SeeingPrimaryIdentifer();
@@ -475,17 +422,15 @@ private:
         return Seeing(TokenKind::IDENTIFIER) && (lookahead == "get" || lookahead == "set");
     }
 
-    bool SeeingInitializer()
-    {
-        return Seeing(TokenKind::INIT);
-    }
-
     bool SeeingEnumConstructor(const ScopeKind& scopeKind)
     {
         return (Seeing(TokenKind::IDENTIFIER) || SeeingContextualKeyword()) &&
             (scopeKind == ScopeKind::ENUM_BODY || scopeKind == ScopeKind::ENUM_CONSTRUCTOR);
     }
-
+    bool SeeingInitializer()
+    {
+        return Seeing(TokenKind::INIT);
+    }
     bool SeeingFinalizer()
     {
         if (Seeing({TokenKind::BITNOT, TokenKind::INIT}, false)) {
@@ -554,10 +499,13 @@ private:
     // return: seeing end of file.
     bool ParsePackageHeaderEnd();
     void CheckAndHandleUnexpectedTopLevelDeclAfterFeatures();
+    void CheckExpectedTopLevelDeclWhenNoPackage(
+        const PtrVector<AST::Annotation>& annos, const std::set<AST::Modifier>& modifiers);
     bool IsExpectedTokenAfterFeaturesOrPackage(bool allowPackageKeyword);
     void ParseTopLevelDecls(AST::File& file, std::vector<OwnedPtr<AST::Annotation>>& annos);
     void ParseTopLevelDecl(AST::File& file, std::vector<OwnedPtr<AST::Annotation>>& annos);
     void ParseAnnotations(PtrVector<AST::Annotation>& annos);
+    void SetBeginToAnnotationsBegin(Node& node, const PtrVector<Annotation>& annos);
     OwnedPtr<AST::Annotation> ParseCustomAnnotation();
     OwnedPtr<AST::Annotation> ParseAnnotation();
     void ParseModifiers(std::set<AST::Modifier>& modifiers);
@@ -683,8 +631,6 @@ private:
     OwnedPtr<AST::Expr> ParseCallExpr(OwnedPtr<AST::Expr> baseExpr);
     AST::SuffixKind ParseSuffix(OwnedPtr<AST::Expr>& baseExpr);
     void ParseBaseExprPostfix(OwnedPtr<AST::Expr>& baseExpr, ExprKind ek = ExprKind::ALL);
-    OwnedPtr<AST::Expr> ParseOptionalExpr(
-        const Position questPos, OwnedPtr<AST::Expr> baseExpr, AST::SuffixKind suffix) const;
     void ParseQuestSuffixExpr(OwnedPtr<AST::Expr>& expr);
     OwnedPtr<AST::Expr> ParseAtom(ExprKind ek = ExprKind::ALL);
     bool IsNeedToCreateOptionalChain(TokenKind token, AST::Expr& expr) const;
@@ -798,7 +744,7 @@ private:
     OwnedPtr<AST::ClassBody> ParseClassBody(AST::ClassDecl& cd);
     OwnedPtr<AST::InterfaceBody> ParseInterfaceBody(AST::InterfaceDecl& id);
     OwnedPtr<AST::Decl> ParseEnumConstructor(
-        const std::set<AST::Modifier>& modifiers, PtrVector<AST::Annotation>& annos);
+        const std::set<AST::Modifier>& modifiers, PtrVector<AST::Annotation>&& annos);
     OwnedPtr<AST::TypePattern> ParseTypePattern(const Position& begin);
     OwnedPtr<AST::ConstPattern> ParseConstPattern();
 
@@ -862,8 +808,6 @@ private:
     /// Note that trailing comma is invalid if there are zero elements.
     void ParseZeroOrMoreSepTrailing(std::function<void(const Position&)>&& storeSeparator,
         std::function<void()>&& parseElement, TokenKind end, TokenKind separator = TokenKind::COMMA);
-    void ParseZeroOrMoreWithSeparator(TokenKind separator, const std::function<void(const Position)>& storeSeparator,
-        const std::function<void()>& parseElement, TokenKind terminator);
     void CheckOverflowAnno(
         std::vector<OwnedPtr<AST::Annotation>>& annos, ScopeKind scopeKind = ScopeKind::UNKNOWN_SCOPE);
     void CheckAnnotationAnno(PtrVector<AST::Annotation>& annos, std::set<AST::Modifier> modifiers);
@@ -910,8 +854,6 @@ private:
      * @param del left symbol
      * @param pos position of left symbol
      */
-    void DiagAndSuggestKeywordForExpectedDeclaration(
-        const std::vector<std::string>& keywords, size_t minLevDis = 1, ScopeKind scopeKind = ScopeKind::TOPLEVEL);
     void DiagRawIdentifierNotAllowed(std::string& str);
     void DiagExpectedRightDelimiter(const std::string& del, const Position& pos);
     void DiagInvalidIncreExpr(const AST::Expr& expr);
@@ -948,6 +890,14 @@ private:
     void DiagRedundantArrowAfterFunc(const AST::Type& type);
     void DiagExpectedDeclaration(ScopeKind scopeKind);
     void DiagExpectedDeclaration(const Position& pos, const std::string& str);
+    /**
+        * Suggest keywords for expected declaration.
+        * @param keywords keywords to suggest
+        * @param minLevDis minimum Levenshtein distance to suggest
+        * @param scopeKind scope kind to determine which keywords to suggest
+    */
+    void DiagAndSuggestKeywordForExpectedDeclaration(
+        const std::vector<std::string>& keywords, size_t minLevDis = 1, ScopeKind scopeKind = ScopeKind::TOPLEVEL);
     void DiagUnExpectedModifierOnDeclaration(const AST::Decl& vd);
     void DiagConstVariableExpectedStatic(const Token& key);
     void DiagConstVariableExpectedInitializer(AST::Decl& vd);
@@ -1034,40 +984,15 @@ private:
         std::vector<OwnedPtr<AST::Annotation>> annos = {});
     OwnedPtr<AST::FuncArg> ParseFuncArg();
     OwnedPtr<AST::FuncArg> ParseAnnotationArgument();
-    std::set<AST::Attribute> GetModifierAttrs(const ScopeKind& scopeKind,
-        std::unordered_map<TokenKind, std::vector<TokenKind>>& scopeRules,
-        const std::unordered_map<TokenKind, std::vector<TokenKind>>& scopeWarningRules,
-        const std::vector<Ptr<const AST::Modifier>>& modifiersVec);
-    void ReportModifierWarning(ScopeKind scopeKind,
-        const std::unordered_map<TokenKind, std::vector<TokenKind>>& scopeWarningRules,
-        const std::vector<Ptr<const AST::Modifier>>& modifiers);
+    std::set<AST::Attribute> GetModifierAttrs(
+        DefKind defKind, ScopeKind scopeKind, const std::vector<Ptr<const AST::Modifier>>& modifiersVec);
+    void ReportModifierWarning(
+        DefKind defKind, ScopeKind scopeKind, const std::vector<Ptr<const AST::Modifier>>& modifiers);
     void ParseTypeAndExpr(Ptr<AST::VarDeclAbstract> const ret);
     void DiagMatchCase(DiagnosticBuilder& builder);
     OwnedPtr<AST::Expr> GetInvalidExprInAtom(Position pos);
     OwnedPtr<AST::Type> ParseTypeParameterInTupleType(std::unordered_map<std::string, Position>& typeNameMap);
     OwnedPtr<AST::LambdaExpr> ParseBaseLambdaExpr();
-    std::unordered_map<AST::ASTKind, std::function<void(ParserImpl*, Ptr<AST::Node>)>> diagExpectedIdentifierMap{
-        {AST::ASTKind::ENUM_DECL, &ParserImpl::DiagExpectedIdentifierEnumDecl},
-        {AST::ASTKind::GENERIC, &ParserImpl::DiagExpectedIdentifierGeneric},
-        {AST::ASTKind::GENERIC_CONSTRAINT, &ParserImpl::DiagExpectedIdentifierGenericConstraint},
-        {AST::ASTKind::IMPORT_CONTENT, &ParserImpl::DiagExpectedIdentifierImportContent},
-        {AST::ASTKind::IMPORT_SPEC, &ParserImpl::DiagExpectedIdentifierImportSpec},
-        {AST::ASTKind::PACKAGE_SPEC, &ParserImpl::DiagExpectedIdentifierPackageSpec},
-        {AST::ASTKind::PROP_DECL, &ParserImpl::DiagExpectedIdentifierPropDecl},
-        {AST::ASTKind::REF_TYPE, &ParserImpl::DiagExpectedIdentifierRefType},
-        {AST::ASTKind::FUNC_PARAM, &ParserImpl::DiagExpectedIdentifierFuncParam},
-        {AST::ASTKind::QUALIFIED_TYPE, &ParserImpl::DiagExpectedIdentifierQualifiedType},
-        {AST::ASTKind::MEMBER_ACCESS, &ParserImpl::DiagExpectedIdentifierMemberAccess},
-        {AST::ASTKind::MACRO_DECL, &ParserImpl::DiagExpectedIdentifierMacroDecl},
-        {AST::ASTKind::FUNC_BODY, &ParserImpl::DiagExpectedIdentifierFuncBody},
-        {AST::ASTKind::FUNC_DECL, &ParserImpl::DiagExpectedIdentifierFuncDecl},
-        {AST::ASTKind::CLASS_DECL, &ParserImpl::DiagExpectedIdentifierClassDecl},
-        {AST::ASTKind::INTERFACE_DECL, &ParserImpl::DiagExpectedIdentifierInterfaceDecl},
-        {AST::ASTKind::STRUCT_DECL, &ParserImpl::DiagExpectedIdentifierStructDecl},
-        {AST::ASTKind::TYPE_ALIAS_DECL, &ParserImpl::DiagExpectedIdentifierTypeAliasDecl},
-        {AST::ASTKind::MACRO_EXPAND_DECL, &ParserImpl::DiagExpectedIdentifierMacroExpandDecl},
-        {AST::ASTKind::MACRO_EXPAND_EXPR, &ParserImpl::DiagExpectedIdentifierMacroExpandExpr},
-    };
     void DiagExpectedIdentifierEnumDecl(Ptr<AST::Node> node);
     void DiagExpectedIdentifierGeneric(Ptr<AST::Node> node);
     void DiagExpectedIdentifierGenericConstraint(Ptr<AST::Node> node);
@@ -1236,28 +1161,35 @@ private:
     bool oldNewlineSkipped;
 };
 
-/**
- * All primitive type kind map.
- */
-const std::unordered_map<TokenKind, AST::TypeKind> TOKENKIND_TO_PRIMITIVE_TYPEKIND_MAP{
-    {TokenKind::INT8, AST::TypeKind::TYPE_INT8},
-    {TokenKind::INT16, AST::TypeKind::TYPE_INT16},
-    {TokenKind::INT32, AST::TypeKind::TYPE_INT32},
-    {TokenKind::INT64, AST::TypeKind::TYPE_INT64},
-    {TokenKind::INTNATIVE, AST::TypeKind::TYPE_INT_NATIVE},
-    {TokenKind::UINT8, AST::TypeKind::TYPE_UINT8},
-    {TokenKind::UINT16, AST::TypeKind::TYPE_UINT16},
-    {TokenKind::UINT32, AST::TypeKind::TYPE_UINT32},
-    {TokenKind::UINT64, AST::TypeKind::TYPE_UINT64},
-    {TokenKind::UINTNATIVE, AST::TypeKind::TYPE_UINT_NATIVE},
-    {TokenKind::FLOAT16, AST::TypeKind::TYPE_FLOAT16},
-    {TokenKind::FLOAT32, AST::TypeKind::TYPE_FLOAT32},
-    {TokenKind::FLOAT64, AST::TypeKind::TYPE_FLOAT64},
-    {TokenKind::RUNE, AST::TypeKind::TYPE_RUNE},
-    {TokenKind::BOOLEAN, AST::TypeKind::TYPE_BOOLEAN},
-    {TokenKind::NOTHING, AST::TypeKind::TYPE_NOTHING},
-    {TokenKind::UNIT, AST::TypeKind::TYPE_UNIT},
-};
+inline AST::TypeKind LookupPrimitiveTypeKind(TokenKind kind)
+{
+    static constexpr int FIRST = static_cast<int>(TokenKind::INT8);
+    static constexpr int LAST = static_cast<int>(TokenKind::UNIT);
+    static constexpr AST::TypeKind TABLE[] = {
+        AST::TypeKind::TYPE_INT8,
+        AST::TypeKind::TYPE_INT16,
+        AST::TypeKind::TYPE_INT32,
+        AST::TypeKind::TYPE_INT64,
+        AST::TypeKind::TYPE_INT_NATIVE,
+        AST::TypeKind::TYPE_UINT8,
+        AST::TypeKind::TYPE_UINT16,
+        AST::TypeKind::TYPE_UINT32,
+        AST::TypeKind::TYPE_UINT64,
+        AST::TypeKind::TYPE_UINT_NATIVE,
+        AST::TypeKind::TYPE_FLOAT16,
+        AST::TypeKind::TYPE_FLOAT32,
+        AST::TypeKind::TYPE_FLOAT64,
+        AST::TypeKind::TYPE_RUNE,
+        AST::TypeKind::TYPE_BOOLEAN,
+        AST::TypeKind::TYPE_NOTHING,
+        AST::TypeKind::TYPE_UNIT,
+    };
+    int idx = static_cast<int>(kind) - FIRST;
+    if (idx < 0 || idx > LAST - FIRST) {
+        return AST::TypeKind::TYPE_INVALID;
+    }
+    return TABLE[idx];
+}
 
 // Levenshtein distance calculation for suggesting similar names in diagnostics.
 unsigned LevenshteinDistance(const std::string& source, const std::string& target);
