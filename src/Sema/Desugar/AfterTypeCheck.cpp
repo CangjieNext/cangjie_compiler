@@ -277,6 +277,26 @@ void DesugarSetForPropDecl(TypeManager& tyMgr, Expr& expr)
     }
     expr.desugarExpr = std::move(lastCallExpr);
 }
+
+void UpdatePosForMacroExpandedNodes(const std::vector<Ptr<AST::Package>>& pkgs)
+{
+    auto visit = [](Ptr<AST::Node> curNode) -> AST::VisitAction {
+        if (!curNode->IsExpr() || !curNode->TestAttr(AST::Attribute::MACRO_EXPANDED_NODE) || !curNode->curMacroCall) {
+            return AST::VisitAction::WALK_CHILDREN;
+        }
+        curNode->begin = curNode->GetDebugPos(curNode->begin);
+        curNode->end = curNode->GetDebugPos(curNode->end);
+        return AST::VisitAction::WALK_CHILDREN;
+    };
+
+    for (auto pkg : pkgs) {
+        if (!pkg) {
+            continue;
+        }
+        AST::Walker walker(pkg, visit);
+        walker.Walk();
+    }
+}
 } // namespace
 
 void TypeChecker::PerformDesugarAfterSema(std::vector<Ptr<Package>>& pkgs) const
@@ -452,6 +472,10 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterSema(std::vector<Ptr<AST::
             : saveFileWithAbsPath;
         importManager.ExportDeclsWithContent(saveAbsPath, *pkg);
     }
+    if (!ci->invocation.globalOptions.enableCompileDebug && !ci->invocation.globalOptions.displayLineInfo) {
+        return;
+    }
+    UpdatePosForMacroExpandedNodes(pkgs);
 }
 
 void TypeChecker::TypeCheckerImpl::GenerateMainInvoke()
