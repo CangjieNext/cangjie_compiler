@@ -71,6 +71,16 @@ TestManager::TestManager(
       mockCompatible(mockCompatibleIfNeeded || mockMode == MockMode::ON),
       exportForTest(compilationOptions.exportForTest)
 {
+    if (!mockCompatible) {
+        return;
+    }
+
+    mockUtils = new MockUtils(importManager, typeManager, ctx->mangler);
+    mockSupportManager = MakeOwned<MockSupportManager>(typeManager, mockUtils);
+
+    if (mockCompatible && testEnabled) {
+        mockManager = MakeOwned<MockManager>(importManager, typeManager, mockUtils);
+    }
 }
 
 void TestManager::ReportDoesntSupportMocking(
