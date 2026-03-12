@@ -10,11 +10,10 @@
  * This file implements checks of types used with ObjCPointer
  */
 
-
-#include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
-#include "cangjie/AST/Walker.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/Utils.h"
+#include "cangjie/AST/Walker.h"
 
 using namespace Cangjie;
 using namespace Cangjie::AST;
@@ -22,7 +21,8 @@ using namespace Cangjie::Interop::ObjC;
 
 namespace {
 
-void ReportObjCIncompatibleType(const InteropContext& ctx, Ptr<Type> typeUsage) {
+void ReportObjCIncompatibleType(const InteropContext& ctx, Ptr<Type> typeUsage)
+{
     Ptr<Node> errorRef = typeUsage;
     // find the concrete type node that is not compatible
     if (typeUsage->GetTypeArgs().size() > 0) {
@@ -40,9 +40,7 @@ void ReportObjCIncompatibleType(const InteropContext& ctx, Ptr<Type> typeUsage) 
             }
         }
     }
-    ctx.diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_objc_func_argument_must_be_objc_compatible,
-        *errorRef,
+    ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_func_argument_must_be_objc_compatible, *errorRef,
         Ty::GetDeclOfTy(typeUsage->ty)->identifier.Val());
     typeUsage->EnableAttr(Attribute::IS_BROKEN);
 }
@@ -56,18 +54,15 @@ void CheckObjCFuncTypeArguments::HandleImpl(InteropContext& ctx)
             if (!node->IsSamePackage(*file->curPackage)) {
                 return VisitAction::WALK_CHILDREN;
             }
-            if (Ptr<Decl> decl = As<ASTKind::DECL>(node);
-                decl && ctx.typeMapper.IsObjCFuncOrBlock(*decl)) {
+            if (Ptr<Decl> decl = As<ASTKind::DECL>(node); decl && ctx.typeMapper.IsObjCFuncOrBlock(*decl)) {
                 return VisitAction::SKIP_CHILDREN;
             }
             Ptr<Type> typeUsage = As<ASTKind::TYPE>(node);
             if (typeUsage && typeUsage->TestAttr(Attribute::COMPILER_ADD)) {
                 return VisitAction::SKIP_CHILDREN;
             }
-            if (typeUsage
-             && typeUsage->ty
-             && typeUsage->ty->typeArgs.size() == 1
-             && ctx.typeMapper.IsObjCFuncOrBlock(*typeUsage->ty)) {
+            if (typeUsage && typeUsage->ty && typeUsage->ty->typeArgs.size() == 1 &&
+                ctx.typeMapper.IsObjCFuncOrBlock(*typeUsage->ty)) {
                 auto tyArg = typeUsage->ty->typeArgs[0];
                 auto valid = tyArg->IsFunc();
                 valid &= !tyArg->IsCFunc();

@@ -10,8 +10,8 @@
  * This file implements generating Objective-C glue code.
  */
 
-#include "NativeFFI/ObjC/ObjCCodeGenerator/ObjCGenerator.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/ObjCCodeGenerator/ObjCGenerator.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -28,19 +28,12 @@ void GenerateGlueCode::HandleImpl(InteropContext& ctx)
 
     // For Generic Glue Code
     auto genGlueCodeWithGenericConfigs = [this, &ctx](Decl& decl, Native::FFI::GenericConfigInfo* genericConfig,
-        bool isGenericGlueCode) {
+                                             bool isGenericGlueCode) {
         if (decl.TestAnyAttr(Attribute::IS_BROKEN, Attribute::HAS_BROKEN)) {
             return;
         }
         auto codegen = ObjCGenerator(
-            ctx,
-            &decl,
-            "objc-gen",
-            ctx.cjLibOutputPath,
-            this->interopType,
-            genericConfig,
-            isGenericGlueCode
-        );
+            ctx, &decl, "objc-gen", ctx.cjLibOutputPath, this->interopType, genericConfig, isGenericGlueCode);
         codegen.Generate();
     };
 
@@ -48,12 +41,7 @@ void GenerateGlueCode::HandleImpl(InteropContext& ctx)
         for (auto& item : container) {
             std::vector<Native::FFI::GenericConfigInfo*> genericConfigsVector;
             bool isGenericGlueCode = false;
-            Native::FFI::InitGenericConfigs(
-                *item->curFile,
-                item.get(),
-                genericConfigsVector,
-                isGenericGlueCode
-            );
+            Native::FFI::InitGenericConfigs(*item->curFile, item.get(), genericConfigsVector, isGenericGlueCode);
             if (isGenericGlueCode) {
                 for (auto genericConfig : genericConfigsVector) {
                     genGlueCodeWithGenericConfigs(*item, genericConfig, isGenericGlueCode);
