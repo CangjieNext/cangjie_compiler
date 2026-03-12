@@ -276,6 +276,21 @@ Ptr<Decl> GetMemberByOffset(const Decl& decl, size_t offset)
     }
     return implMemberIt->get();
 }
+
+void UpdatePosForMacroExpandedNodes(const Ptr<AST::Package>& pkg)
+{
+    auto visit = [](Ptr<AST::Node> curNode) -> AST::VisitAction {
+        if (!curNode->IsExpr() || !curNode->TestAttr(AST::Attribute::MACRO_EXPANDED_NODE) || !curNode->curMacroCall) {
+            return AST::VisitAction::WALK_CHILDREN;
+        }
+        curNode->begin = curNode->GetDebugPos(curNode->begin);
+        curNode->end = curNode->GetDebugPos(curNode->end);
+        return AST::VisitAction::WALK_CHILDREN;
+    };
+
+    AST::Walker walker(pkg, visit);
+    walker.Walk();
+}
 } // namespace
 
 void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pkg)
@@ -321,6 +336,9 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
     ClearImportedUnusedInstantiatedDecls();
     ValidateUsedNodes(diag, pkg);
     UnsetBoxStatus(pkg);
+    if (ci->invocation.globalOptions.enableCompileDebug || ci->invocation.globalOptions.displayLineInfo) {
+        UpdatePosForMacroExpandedNodes(curPkg);
+    }
 }
 
 void GIM::GenericInstantiationManagerImpl::RecordExtend(AST::Node& node)
