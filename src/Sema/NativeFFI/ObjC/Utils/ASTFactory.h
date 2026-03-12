@@ -15,11 +15,11 @@
 
 #include "InteropLibBridge.h"
 #include "NameGenerator.h"
+#include "NativeFFI/Utils.h"
 #include "TypeMapper.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/Utils/SafePointer.h"
-#include "NativeFFI/Utils.h"
 
 namespace Cangjie::Interop::ObjC {
 
@@ -82,9 +82,8 @@ public:
     OwnedPtr<AST::FuncDecl> CreateGetObjCClassDecl(AST::ClassLikeDecl& target);
     OwnedPtr<AST::FuncDecl> CreateGetObjCClass(AST::ClassLikeDecl& target);
     OwnedPtr<AST::FuncDecl> CreateInitCjObjectReturningObjCSelf(const AST::Decl& target, AST::FuncDecl& ctor);
-    OwnedPtr<AST::FuncDecl> CreateInitCjObject(
-        AST::Decl& target, AST::FuncDecl& ctor, bool generateForOneWayMapping = false,
-        const Native::FFI::GenericConfigInfo* genericConfig = nullptr);
+    OwnedPtr<AST::FuncDecl> CreateInitCjObject(AST::Decl& target, AST::FuncDecl& ctor,
+        bool generateForOneWayMapping = false, const Native::FFI::GenericConfigInfo* genericConfig = nullptr);
     /**
      * @C
      * public func CJImpl_ObjC_PackageName_VarDeclNameInitCJObject() : RegistryID {
@@ -98,11 +97,12 @@ public:
     /**
      * Returns generated top-level @C function (callable from obj-c) that calls @ObjCImpl `originMethod`.
      */
-    OwnedPtr<AST::FuncDecl> CreateMethodWrapper(AST::FuncDecl& method,
-        const Native::FFI::GenericConfigInfo* genericConfig = nullptr);
+    OwnedPtr<AST::FuncDecl> CreateMethodWrapper(
+        AST::FuncDecl& method, const Native::FFI::GenericConfigInfo* genericConfig = nullptr);
     OwnedPtr<AST::FuncDecl> CreateGetterWrapper(AST::PropDecl& prop);
     OwnedPtr<AST::FuncDecl> CreateSetterWrapper(AST::PropDecl& prop);
-    OwnedPtr<AST::FuncDecl> CreateGetterWrapper(AST::VarDecl& field, const Native::FFI::GenericConfigInfo* genericConfig = nullptr);
+    OwnedPtr<AST::FuncDecl> CreateGetterWrapper(
+        AST::VarDecl& field, const Native::FFI::GenericConfigInfo* genericConfig = nullptr);
     OwnedPtr<AST::FuncDecl> CreateSetterWrapper(AST::VarDecl& field);
     OwnedPtr<AST::ThrowExpr> CreateThrowUnreachableCodeExpr(AST::File& file);
     OwnedPtr<AST::ThrowExpr> CreateThrowOptionalMethodUnimplemented(AST::File& file);
@@ -130,7 +130,8 @@ public:
     OwnedPtr<AST::CallExpr> CreateRegisterNameCall(const std::string& selector, Ptr<AST::File> curFile);
     OwnedPtr<AST::Expr> CreateGetClassCall(const AST::ClassLikeDecl& ty, Ptr<AST::File> curFile);
     OwnedPtr<AST::Expr> CreateGetClassCall(AST::ClassLikeTy& ty, Ptr<AST::File> curFile);
-    OwnedPtr<AST::Expr> CreateObjCRespondsToSelectorCall(OwnedPtr<AST::Expr> id, OwnedPtr<AST::Expr> sel, Ptr<AST::File> file);
+    OwnedPtr<AST::Expr> CreateObjCRespondsToSelectorCall(
+        OwnedPtr<AST::Expr> id, OwnedPtr<AST::Expr> sel, Ptr<AST::File> file);
     OwnedPtr<AST::Expr> CreateGetSuperClassExpr(OwnedPtr<AST::Expr> objCSuper, Ptr<AST::File> file);
 
     /**
@@ -155,21 +156,12 @@ public:
      */
     OwnedPtr<AST::Expr> CreateAllocInitCall(AST::FuncDecl& fd);
 
-    OwnedPtr<AST::Expr> CreatePropGetterCallViaMsgSend(
-        AST::PropDecl& pd,
-        OwnedPtr<AST::Expr> nativeHandle
-    );
+    OwnedPtr<AST::Expr> CreatePropGetterCallViaMsgSend(AST::PropDecl& pd, OwnedPtr<AST::Expr> nativeHandle);
     OwnedPtr<AST::Expr> CreatePropSetterCallViaMsgSend(
-        AST::PropDecl& pd,
-        OwnedPtr<AST::Expr> nativeHandle,
-        OwnedPtr<AST::Expr> arg
-    );
+        AST::PropDecl& pd, OwnedPtr<AST::Expr> nativeHandle, OwnedPtr<AST::Expr> arg);
 
     OwnedPtr<AST::Expr> CreateFuncCallViaOpaquePointer(
-        OwnedPtr<AST::Expr> ptr,
-        Ptr<AST::Ty> retTy,
-        std::vector<OwnedPtr<AST::Expr>> args
-    );
+        OwnedPtr<AST::Expr> ptr, Ptr<AST::Ty> retTy, std::vector<OwnedPtr<AST::Expr>> args);
 
     OwnedPtr<AST::Expr> CreateAutoreleasePoolScope(Ptr<AST::Ty> ty, std::vector<OwnedPtr<AST::Node>> actions);
     OwnedPtr<AST::FuncDecl> CreateFinalizer(AST::ClassDecl& target);
@@ -195,9 +187,11 @@ public:
      * objCRelease($obj)
      */
     OwnedPtr<AST::Expr> CreateObjCReleaseCall(OwnedPtr<AST::Expr> nativeHandle);
-    OwnedPtr<AST::Expr> CreateWithMethodEnvScope(OwnedPtr<AST::Expr> nativeHandle, AST::ClassDecl& outerDecl, Ptr<AST::Ty> retTy,
+    OwnedPtr<AST::Expr> CreateWithMethodEnvScope(OwnedPtr<AST::Expr> nativeHandle, AST::ClassDecl& outerDecl,
+        Ptr<AST::Ty> retTy,
         std::function<std::vector<OwnedPtr<AST::Node>>(OwnedPtr<AST::Expr>, OwnedPtr<AST::Expr>)> bodyFactory);
-    OwnedPtr<AST::Expr> CreateWithObjCSuperScope(OwnedPtr<AST::Expr> nativeHandle, AST::ClassDecl& outerDecl, Ptr<AST::Ty> retTy,
+    OwnedPtr<AST::Expr> CreateWithObjCSuperScope(OwnedPtr<AST::Expr> nativeHandle, AST::ClassDecl& outerDecl,
+        Ptr<AST::Ty> retTy,
         std::function<std::vector<OwnedPtr<AST::Node>>(OwnedPtr<AST::Expr>, OwnedPtr<AST::Expr>)> bodyFactory);
 
     OwnedPtr<AST::Expr> CreateMethodCallViaMsgSendSuper(AST::FuncDecl& fd, OwnedPtr<AST::Expr> receiver,
@@ -220,13 +214,15 @@ public:
      *      true => msgSend()
      *      false => throw ObjCOptionalMethodUnimplementedException()
      * }
-    */
+     */
     OwnedPtr<AST::Expr> CreateOptionalMethodGuard(OwnedPtr<AST::Expr> msgSend, OwnedPtr<AST::Expr> cls,
         const std::string& selector, const Ptr<AST::File> curFile);
     static std::vector<OwnedPtr<AST::FuncParamList>> CreateParamLists(std::vector<OwnedPtr<AST::FuncParam>>&& params);
     static std::vector<OwnedPtr<AST::FuncParam>>& GetParams(const AST::FuncDecl& fn);
-    static OwnedPtr<AST::VarDecl> CreateVar(const std::string& name, Ptr<AST::Ty> ty, bool isVar, OwnedPtr<AST::Expr> initializer = nullptr);
-    static OwnedPtr<AST::FuncDecl> CreateFunc(const std::string& name, Ptr<AST::FuncTy> fnTy, std::vector<OwnedPtr<AST::FuncParam>>&& params, std::vector<OwnedPtr<AST::Node>>&& nodes);
+    static OwnedPtr<AST::VarDecl> CreateVar(
+        const std::string& name, Ptr<AST::Ty> ty, bool isVar, OwnedPtr<AST::Expr> initializer = nullptr);
+    static OwnedPtr<AST::FuncDecl> CreateFunc(const std::string& name, Ptr<AST::FuncTy> fnTy,
+        std::vector<OwnedPtr<AST::FuncParam>>&& params, std::vector<OwnedPtr<AST::Node>>&& nodes);
     static OwnedPtr<AST::ParenExpr> CreateParenExpr(OwnedPtr<AST::Expr> expr);
 
     OwnedPtr<AST::Expr> CreateNativeLambdaForBlockType(AST::Ty& ty, Ptr<AST::File> curFile);

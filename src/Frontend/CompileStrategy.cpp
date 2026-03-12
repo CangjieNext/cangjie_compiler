@@ -43,12 +43,14 @@ void CompileStrategy::TypeCheck() const
     ci->typeChecker->TypeCheckForPackages(ci->GetSourcePackages());
 }
 
-void CompileStrategy::InteropConfigTomlCheck() {
+void CompileStrategy::InteropConfigTomlCheck()
+{
     InteropCJPackageConfigReader packagesFullConfig;
     if (ci->invocation.globalOptions.enableInteropCJMapping &&
         ci->invocation.globalOptions.interopCJPackageConfigPath != "./" &&
         !packagesFullConfig.Parse(ci->invocation.globalOptions.interopCJPackageConfigPath)) {
-        ci->diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_generic_method_not_get_instance_config, DEFAULT_POSITION, ci->invocation.globalOptions.interopCJPackageConfigPath);
+        ci->diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_generic_method_not_get_instance_config,
+            DEFAULT_POSITION, ci->invocation.globalOptions.interopCJPackageConfigPath);
     }
 }
 
@@ -167,10 +169,10 @@ public:
         }
         if (auto packageSpec = package.files[0]->package.get()) {
             package.fullPackageName = packageSpec->GetPackageName();
-            package.accessible = !packageSpec->modifier                  ? AccessLevel::PUBLIC
+            package.accessible = !packageSpec->modifier                   ? AccessLevel::PUBLIC
                 : packageSpec->modifier->modifier == TokenKind::PROTECTED ? AccessLevel::PROTECTED
                 : packageSpec->modifier->modifier == TokenKind::INTERNAL  ? AccessLevel::INTERNAL
-                                                                            : AccessLevel::PUBLIC;
+                                                                          : AccessLevel::PUBLIC;
         }
     }
 
@@ -229,8 +231,7 @@ public:
      * @param fileInfoQueue Queue of file information (content, fileID) to parse
      * @return Vector of futures containing parsed files
      */
-    ParseTaskResults ParseFilesWithTaskQueue(
-        std::queue<std::tuple<std::string, unsigned>>& fileInfoQueue) const
+    ParseTaskResults ParseFilesWithTaskQueue(std::queue<std::tuple<std::string, unsigned>>& fileInfoQueue) const
     {
         size_t threadsNum = s.ci->invocation.globalOptions.GetJobs();
         Utils::TaskQueue taskQueue(threadsNum);
@@ -239,30 +240,28 @@ public:
         // Add all parsing tasks to the queue
         while (!fileInfoQueue.empty()) {
             auto curFile = fileInfoQueue.front();
-            auto taskResult = taskQueue.AddTask<ParseResult>(
-                [this, curFile]() -> ParseResult {
+            auto taskResult = taskQueue.AddTask<ParseResult>([this, curFile]() -> ParseResult {
 #if (defined RELEASE)
 #if (defined __unix__)
-                    // Since alternate signal stack is per thread, we have to create an alternate signal stack for each
-                    // thread.
-                    Cangjie::CreateAltSignalStack();
+                // Since alternate signal stack is per thread, we have to create an alternate signal stack for each
+                // thread.
+                Cangjie::CreateAltSignalStack();
 #elif _WIN32
-                    // When the SIGABRT, SIGFPE, SIGSEGV and SIGILL signals are triggered in a subthread,
-                    // the signals cannot be captured and the process exits directly. Therefore,
-                    // the signal processing function must be set for each thread.
-                    Cangjie::RegisterCrashSignalHandler();
+                // When the SIGABRT, SIGFPE, SIGSEGV and SIGILL signals are triggered in a subthread,
+                // the signals cannot be captured and the process exits directly. Therefore,
+                // the signal processing function must be set for each thread.
+                Cangjie::RegisterCrashSignalHandler();
 #endif
 #endif
-                    auto parser = CreateParser(curFile);
-                    parser->SetCompileOptions(s.ci->invocation.globalOptions);
-                    auto file = parser->ParseTopLevel();
+                auto parser = CreateParser(curFile);
+                parser->SetCompileOptions(s.ci->invocation.globalOptions);
+                auto file = parser->ParseTopLevel();
 #ifdef SIGNAL_TEST
-                    // The interrupt signal triggers the function. In normal cases, this function does not take effect.
-                    Cangjie::SignalTest::ExecuteSignalTestCallbackFunc(
-                        Cangjie::SignalTest::TriggerPointer::PARSER_POINTER);
+                // The interrupt signal triggers the function. In normal cases, this function does not take effect.
+                Cangjie::SignalTest::ExecuteSignalTestCallbackFunc(Cangjie::SignalTest::TriggerPointer::PARSER_POINTER);
 #endif
-                    return {std::move(file), parser->GetCommentsMap(), parser->GetLineNum()};
-                });
+                return {std::move(file), parser->GetCommentsMap(), parser->GetLineNum()};
+            });
             taskResults.push_back(std::move(taskResult));
             fileInfoQueue.pop();
         }
@@ -283,8 +282,8 @@ public:
      * @param package The existing package to add parsed files to
      * @param fileInfoQueue Queue of file information (content, fileID) to parse
      */
-    void MultiThreadParseOnePackage(Package& package,
-        std::queue<std::tuple<std::string, unsigned>>& fileInfoQueue) const
+    void MultiThreadParseOnePackage(
+        Package& package, std::queue<std::tuple<std::string, unsigned>>& fileInfoQueue) const
     {
         auto taskResults = ParseFilesWithTaskQueue(fileInfoQueue);
         size_t lineCountOfAddedFiles = AddFilesToPackage(package, taskResults);
@@ -306,9 +305,8 @@ public:
 
     void DeleteFileInPackage(Package& pkg, const std::string& filePath)
     {
-        pkg.files.erase(
-            std::remove_if(pkg.files.begin(), pkg.files.end(),
-            [&filePath](const OwnedPtr<File>& file) { return file->filePath == filePath; }),
+        pkg.files.erase(std::remove_if(pkg.files.begin(), pkg.files.end(),
+                            [&filePath](const OwnedPtr<File>& file) { return file->filePath == filePath; }),
             pkg.files.end());
     }
 
@@ -323,11 +321,11 @@ public:
         for (auto& it : s.ci->bufferCache) {
             const std::string& filePath = it.first;
             const CompilerInstance::SrcCodeChangeState state = it.second.state;
-            
+
             if (state == CompilerInstance::SrcCodeChangeState::UNCHANGED) {
                 continue;
             }
-            
+
             if (state == CompilerInstance::SrcCodeChangeState::DELETED) {
                 DeleteFileInPackage(package, filePath);
                 deletedFiles.push_back(filePath);

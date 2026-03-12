@@ -30,14 +30,13 @@
 #include "cangjie/Modules/ModulesUtils.h"
 #include "cangjie/Sema/TestManager.h"
 #include "cangjie/Sema/TypeManager.h"
-#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 
+#include "CJMP/MPTypeCheckerImpl.h"
 #include "Diags.h"
-#include "TypeCheckUtil.h"
-#include "TypeCheckerImpl.h"
 #include "NativeFFI/Java/TypeCheck/InheritanceChecker.h"
 #include "NativeFFI/ObjC/Utils/OCStructInheritanceCheckerImpl.h"
-#include "CJMP/MPTypeCheckerImpl.h"
+#include "TypeCheckUtil.h"
+#include "TypeCheckerImpl.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -284,8 +283,7 @@ void TypeChecker::TypeCheckerImpl::CheckInheritance(Package& pkg)
 
     auto movedMembers = checker.MoveStructInheritedMembers();
     // Ensure javaCache is empty before moving in (it should be if called at the correct point in pipeline).
-    CJC_ASSERT_WITH_MSG(this->structMemberMap.empty(),
-        "structMemberMap should be empty when moving inherited members");
+    CJC_ASSERT_WITH_MSG(this->structMemberMap.empty(), "structMemberMap should be empty when moving inherited members");
 
     this->structMemberMap = std::move(movedMembers);
 }
@@ -909,13 +907,13 @@ void StructInheritanceChecker::DiagnoseForInheritedInterfaces(
 
 /**
  * Diagnoses unimplemented interface members and abstract methods in structs/classes.
- * 
+ *
  * This method identifies members that should be implemented but are not, according to inheritance rules.
- * 
+ *
  * CHECK EXCLUSIONS (skips checking for):
  * 1. Foreign structs (marked with FOREIGN attribute)
  * 2. Mirror structs (marked with OBJ_C_MIRROR attribute)
- * 
+ *
  * MEMBER EXCLUSIONS (members that are skipped):
  * 1. Non-inheritable members (non-properties, non-functions)
  * 2. Members defined in extend declarations
@@ -924,13 +922,13 @@ void StructInheritanceChecker::DiagnoseForInheritedInterfaces(
  * 5. Members defined in foreign types (member.decl->outerDecl has FOREIGN attribute)
  * 6. Abstract members from abstract classes in extend declarations
  * 7. Abstract members from interfaces inherited by extend declarations
- * 
+ *
  * UNIMPLEMENTED MEMBER DETECTION RULES:
  * - An abstract member is unimplemented if:
  *   * The member has ABSTRACT attribute
  *   * The containing type is NOT abstract AND NOT an interface
  *   * The member's outerDecl is the struct being checked
- * 
+ *
  * @param members Map of all members in the struct
  * @param structDecl The struct/class/interface/extend being checked
  */
@@ -939,7 +937,8 @@ void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMa
     // Do not check unimplemented function for:
     // 1. Foreign struct.
     // 2. Mirror struct.
-    if (structDecl.TestAttr(Attribute::FOREIGN) || structDecl.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER)) {
+    if (structDecl.TestAttr(Attribute::FOREIGN) ||
+        structDecl.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SYNTHETIC_WRAPPER)) {
         return;
     }
     std::string prefix = structDecl.astKind == ASTKind::EXTEND_DECL ? "extend " : "";
