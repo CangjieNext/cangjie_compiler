@@ -300,6 +300,11 @@ llvm::Value* HandleUnBoxExpr(IRBuilder2& irBuilder, const CHIR::Expression& chir
         // Addrspace 0 pointer (e.g., i8*, Array<T>*, etc.) - no need to unbox
         return cgVal->GetRawValue();
     }
+    // Optimization: if srcValue is an integer type, no need to unbox
+    // Integer types (i32, i64, etc.) are value types, not boxed objects
+    if (rawValueType->isIntegerTy()) {
+        return cgVal->GetRawValue();
+    }
 
     // if unbox a boxtype parameter, need to check the real type from OverrideSrcFuncType
     // and if the real type has size, then we just return the src value
