@@ -1259,7 +1259,7 @@ void CHIRChecker::CheckFuncParams(
         errMsg = "inconsistent parameter type between func body and func type";
     }
     for (auto i : errIdx) {
-        errMsg += ", " + std::to_string(i) + "-th";
+        errMsg += ", " + IndexToString(i);
     }
     if (!errIdx.empty()) {
         errMsg += " parameter type(s) are mismatched.\n";
@@ -1363,7 +1363,7 @@ void CHIRChecker::CheckUnreachableOpAndGenericTyInBG(const BlockGroup& blockGrou
             // 1. generic type in lambda parameter must be reachable
             if (!GenericTypeIsInContainer(*params[i]->GetType(), reachableGenericTypes)) {
                 auto errMsg = "generic type " + params[i]->ToString() + "is unreachable, the type is " +
-                    std::to_string(i) + "-th parameter in lambda " + lambda->GetIdentifier() + ".";
+                IndexToString(i) + " parameter in lambda " + lambda->GetIdentifier() + ".";
                 ErrorInFunc(*blockGroup.GetTopLevelFunc(), errMsg);
             }
         }
@@ -1382,7 +1382,7 @@ void CHIRChecker::CheckUnreachableOpAndGenericTyInBG(const BlockGroup& blockGrou
             // 2. generic type in global func parameter must be reachable
             if (!GenericTypeIsInContainer(*params[i]->GetType(), reachableGenericTypes)) {
                 auto errMsg = "generic type " + params[i]->ToString() + "is unreachable, the type is " +
-                    std::to_string(i) + "-th parameter in function " + func->GetIdentifier() + ".";
+                IndexToString(i) + " parameter in function " + func->GetIdentifier() + ".";
                 ErrorInFunc(*func, errMsg);
             }
         }
@@ -1489,7 +1489,7 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
         for (size_t i = 0; i < instantiatedTypeArgs.size(); ++i) {
             if (!GenericTypeIsInContainer(*instantiatedTypeArgs[i], reachableGenericTypes)) {
                 auto errMsg = "generic type " + instantiatedTypeArgs[i]->ToString() + "is unreachable, the type is " +
-                    std::to_string(i) + "-th instantiated type args in expression " + GetExpressionString(expr) + ".";
+                IndexToString(i) + " instantiated type args in expression " + GetExpressionString(expr) + ".";
                 ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
             }
         }
@@ -1530,7 +1530,7 @@ void CHIRChecker::CheckUnreachableGenericTypeInExpr(
         for (size_t i = 0; i < instantiatedTypeArgs.size(); ++i) {
             if (!GenericTypeIsInContainer(*instantiatedTypeArgs[i], reachableGenericTypes)) {
                 auto errMsg = "generic type " + instantiatedTypeArgs[i]->ToString() + "is unreachable, the type is " +
-                    std::to_string(i) + "-th instantiated type args in expression " + GetExpressionString(expr) + ".";
+                IndexToString(i) + " instantiated type args in expression " + GetExpressionString(expr) + ".";
                 ErrorInFunc(*expr.GetTopLevelFunc(), errMsg);
             }
         }
@@ -2364,7 +2364,7 @@ bool CHIRChecker::CheckVirtualMethod(
     const auto& funcInfo = (*vtablePtr)[methodCtx.offset];
     auto errMsgBase = "invoke a wrong virtual method in " + GetExpressionString(expr) +
         ", in vtable of [" + methodCtx.thisType->ToString() + "][" + methodCtx.srcParentType->ToString() + "], the " +
-        std::to_string(methodCtx.offset) + "-th ";
+        IndexToString(methodCtx.offset) + " ";
     // 3. `InvokeStatic` must call a static member method
     // 4. `Invoke` must call a non-static member method
     if (expr.IsInvokeStaticBase() && !funcInfo.TestAttr(Attribute::STATIC)) {
@@ -3556,17 +3556,14 @@ void CHIRChecker::CheckEnumTuple(const Tuple& expr, const Func& topLevelFunc)
     auto paramTypes = ctors[idx].funcType->GetParamTypes();
     if (operands.size() - 1 != paramTypes.size()) {
         auto errMsg = "size mismatched, there are " + std::to_string(paramTypes.size()) +
-            " parameter(s) in the " + std::to_string(idx) + "-th constructor, but " +
+            " parameter(s) in the " + IndexToString(idx) + " constructor, but " +
             std::to_string(operands.size() - 1) + " arguments are provided in `" + result->ToString() + "`.";
         ErrorInFunc(topLevelFunc, errMsg);
         return;
     }
     for (size_t i = 1; i < operands.size(); ++i) {
         if (!TypeIsExpected(*operands[i]->GetType(), *paramTypes[i - 1])) {
-            auto errMsg = "type mismatched, the " + std::to_string(i - 1) + "-th parameter type is " +
-                paramTypes[i - 1]->ToString() + ", but " + operands[i]->GetIdentifier() + "'s type is " +
-                operands[i]->GetType()->ToString() + " in `" + result->ToString() + "`.";
-            ErrorInFunc(topLevelFunc, errMsg);
+            TypeCheckError(expr, *operands[i], paramTypes[i - 1]->ToString(), topLevelFunc);
         }
     }
 }
@@ -3590,7 +3587,7 @@ void CHIRChecker::CheckStructTuple(const Tuple& expr, const Func& topLevelFunc)
     }
     for (size_t i = 0; i < memberVarTypes.size(); ++i) {
         if (!TypeIsExpected(*operands[i]->GetType(), *memberVarTypes[i])) {
-            auto errMsg = "type mismatched, the " + std::to_string(i) + "-th member var type in struct " +
+            auto errMsg = "type mismatched, the " + IndexToString(i) + " member var type in struct " +
                 structDef->GetIdentifier() + " is " + memberVarTypes[i]->ToString() + ", but " +
                 operands[i]->GetIdentifier() + "'s type is " + operands[i]->GetType()->ToString() +
                 " in `" + result->ToString() + "`.";
@@ -3619,7 +3616,7 @@ void CHIRChecker::CheckNormalTuple(const Tuple& expr, const Func& topLevelFunc)
     // 2. operand's type must equal to element type
     for (size_t i = 0; i < elementTypes.size(); ++i) {
         if (!TypeIsExpected(*operands[i]->GetType(), *elementTypes[i])) {
-            auto errMsg = "type mismatched, the " + std::to_string(i) + "-th element type in tuple type `" +
+            auto errMsg = "type mismatched, the " + IndexToString(i) + " element type in tuple type `" +
                 resultTy->ToString() + "` is " + elementTypes[i]->ToString() + ", but " +
                 operands[i]->GetIdentifier() + "'s type is " + operands[i]->GetType()->ToString() +
                 " in `" + result->ToString() + "`.";

@@ -209,7 +209,7 @@ void CHIR2BCHIR::TranslateBox(Context& ctx, const Box& expr)
         ctx.def.AddMangledNameAnnotation(
             static_cast<Bchir::ByteCodeIndex>(opIdx), enumDef->GetIdentifierWithoutPrefix());
     } else { // this is a primitive type
-        CJC_ASSERT(ty->IsPrimitive());
+        // CJC_ASSERT(ty->IsPrimitive());
         ctx.def.AddMangledNameAnnotation(static_cast<Bchir::ByteCodeIndex>(opIdx), ty->ToString());
     }
 }

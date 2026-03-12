@@ -353,6 +353,7 @@ void Devirtualization::InstantiateFuncIfPossible(CHIRBuilder& builder, std::vect
             helper.SubstituteValue(newGroup, paramMap);
 
             FixCastProblemAfterInst(newGroup, builder);
+            ModifyFuncCallArgTypes(*newGroup, builder);
             newFunc->SetReturnValue(*newBlockGroupRetValue);
             frozenInstFuns.push_back(newFunc);
             frozenInstFuncMap[newId] = newFunc;

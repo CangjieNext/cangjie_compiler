@@ -307,95 +307,13 @@ static void ReplaceFuncArgs(const Apply& apply, const BlockGroup& scope)
         // unbox here, because a function with generic type can't be inlined,
         // only all instantiated types function can be inlined,
         // so if arg's type is box ref, that means the param type must be generic type
-        if (applyArgs[i]->GetType()->IsBoxRef()) {
+        if (applyArgs[i]->GetType()->IsBoxRef() && !funcParams[i]->GetType()->IsBoxRef()) {
             auto boxExpr = Cangjie::StaticCast<Box*>(Cangjie::StaticCast<LocalVar*>(applyArgs[i])->GetExpr());
             applyArgs[i] = boxExpr->GetSourceValue();
             boxExpr->RemoveSelfFromBlock();
         }
         funcParams[i]->ReplaceWith(*applyArgs[i], &scope);
     }
-}
-
-static void ModifyFuncCallArgTypes(BlockGroup& group, CHIRBuilder& builder)
-{
-    std::function<VisitResult(Expression&)> preVisit = [&](Expression& e) {
-        if (auto funcCall = Cangjie::DynamicCast<FuncCall*>(&e)) {
-            auto funcDeclType = funcCall->GetMethodType();
-            auto paramTypes = funcDeclType->GetParamTypes();
-            auto args = funcCall->GetArgs();
-            std::vector<Expression*> castExprs;
-            for (size_t i = 0; i < args.size(); ++i) {
-                auto argType = args[i]->GetType();
-                auto expectedTy = GetExpectedArgType(*argType, *paramTypes[i], builder);
-                if (expectedTy != argType) {
-                    auto [newArg, tempCastExprs] =
-                        TypeCastOrBoxIfNeeded(*args[i], *expectedTy, builder, *e.GetParentBlock());
-                    e.ReplaceOperand(args[i], newArg);
-                    castExprs.insert(castExprs.end(), tempCastExprs.begin(), tempCastExprs.end());
-                }
-            }
-            for (auto c : castExprs) {
-                c->MoveBefore(&e);
-            }
-            auto instRetTy = funcCall->GetResult()->GetType();
-            auto expectedRetTy = GetExpectedArgType(*instRetTy, *funcDeclType->GetReturnType(), builder);
-            if (expectedRetTy != instRetTy) {
-                funcCall->GetResult()->SetType(*expectedRetTy);
-                auto [castedRet, tempCastExprs] =
-                    TypeCastOrBoxIfNeeded(*funcCall->GetResult(), *instRetTy, builder, *e.GetParentBlock());
-                CJC_ASSERT(!tempCastExprs.empty());
-                for (size_t i = 0; i < tempCastExprs.size(); ++i) {
-                    if (i == 0) {
-                        tempCastExprs[i]->MoveAfter(&e);
-                    } else {
-                        tempCastExprs[i]->MoveAfter(tempCastExprs[i - 1]);
-                    }
-                }
-                for (auto u : funcCall->GetResult()->GetUsers()) {
-                    if (u == tempCastExprs[0]) {
-                        continue;
-                    }
-                    u->ReplaceOperand(funcCall->GetResult(), castedRet);
-                }
-            }
-        } else if (auto funcCallE = Cangjie::DynamicCast<FuncCallWithException*>(&e)) {
-            auto funcDeclType = funcCallE->GetMethodType();
-            auto paramTypes = funcDeclType->GetParamTypes();
-            auto args = funcCallE->GetArgs();
-            std::vector<Expression*> castExprs;
-            for (size_t i = 0; i < args.size(); ++i) {
-                auto argType = args[i]->GetType();
-                auto expectedTy = GetExpectedArgType(*argType, *paramTypes[i], builder);
-                if (expectedTy != argType) {
-                    auto [newArg, tempCastExprs] =
-                        TypeCastOrBoxIfNeeded(*args[i], *expectedTy, builder, *e.GetParentBlock());
-                    e.ReplaceOperand(args[i], newArg);
-                    castExprs.insert(castExprs.end(), tempCastExprs.begin(), tempCastExprs.end());
-                }
-            }
-            for (auto c : castExprs) {
-                c->MoveBefore(&e);
-            }
-            auto instRetTy = funcCallE->GetResult()->GetType();
-            auto expectedRetTy = GetExpectedArgType(*instRetTy, *funcDeclType->GetReturnType(), builder);
-            if (expectedRetTy != instRetTy) {
-                funcCallE->GetResult()->SetType(*expectedRetTy);
-                for (auto u : funcCallE->GetResult()->GetUsers()) {
-                    auto [castedRet, tempCastExprs] =
-                        TypeCastOrBoxIfNeeded(*funcCallE->GetResult(), *instRetTy, builder, *e.GetParentBlock());
-                    for (auto c : tempCastExprs) {
-                        c->MoveBefore(u);
-                    }
-                    u->ReplaceOperand(funcCallE->GetResult(), castedRet);
-                }
-            }
-        } else if (e.GetExprKind() == ExprKind::LAMBDA) {
-            auto lambda = Cangjie::StaticCast<Lambda*>(&e);
-            Visitor::Visit(*lambda->GetBody(), preVisit);
-        }
-        return VisitResult::CONTINUE;
-    };
-    Visitor::Visit(group, preVisit);
 }
 
 void FunctionInline::ReplaceFuncResult(LocalVar* resNew, LocalVar* resOld)

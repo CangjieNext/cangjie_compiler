@@ -2225,6 +2225,17 @@ void ClosureConversion::ReplaceUserPoint(
         }
         auto newApply = StaticCast<Apply*>(allExprs.back());
         apply->ReplaceWith(*newApply);
+        if (retType != newApply->GetResult()->GetType()) {
+            auto applyRetUsers = newApply->GetResult()->GetUsers();
+            auto [newRet, castExprs] =
+                TypeCastOrBoxIfNeeded(*newApply->GetResult(), *retType, builder, *newApply->GetParentBlock());
+            for (auto expr : castExprs) {
+                expr->MoveAfter(apply);
+            }
+            for (auto u : applyRetUsers) {
+                u->ReplaceOperand(newApply->GetResult(), newRet);
+            }
+        }
     } else if (auto awe = DynamicCast<ApplyWithException*>(&user); awe && awe->GetCallee() == srcFunc.GetResult()) {
         auto methods = autoEnvImplDef.GetMethods();
         auto newCallee = methods.back();
@@ -2245,6 +2256,16 @@ void ClosureConversion::ReplaceUserPoint(
         }
         auto newApply = StaticCast<ApplyWithException*>(allExprs.back());
         awe->ReplaceWith(*newApply);
+        if (retType != newApply->GetResult()->GetType()) {
+            for (auto u : newApply->GetResult()->GetUsers()) {
+                auto [newRet, castExprs] =
+                    TypeCastOrBoxIfNeeded(*newApply->GetResult(), *retType, builder, *u->GetParentBlock());
+                for (auto expr : castExprs) {
+                    expr->MoveBefore(u);
+                }
+                u->ReplaceOperand(newApply->GetResult(), newRet);
+            }
+        }
     } else {
         auto res = CastTypeFromAutoEnvRefToFuncType(*StaticCast<FuncType*>(srcFunc.GetResult()->GetType()),
             *autoEnvObj, user, GetOutDefDeclaredTypes(*srcFunc.GetResult()), builder);
