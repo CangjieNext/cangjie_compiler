@@ -160,6 +160,7 @@ def generate_cmake_defs(args):
         "-DCANGJIE_INSTALL_CJDB_SCRIPT=" + bool_to_opt(args.install_cjdb_script),
         "-DCANGJIE_ENABLE_HWASAN=" + bool_to_opt(args.hwasan),
         "-DCANGJIE_VERSION=" + generate_version_tail(args.target),
+        "-DCANGJIE_TARGET_TRIPLE=" + (args.target if args.target else ""),
         "-DBUILD_GCC_TOOLCHAIN=" + (args.gcc_toolchain if args.gcc_toolchain and args.target is None else ""),
         "-DCANGJIE_TARGET_LIB=" + (";".join(args.target_lib) if args.target_lib else ""),
         "-DCANGJIE_TARGET_TOOLCHAIN=" + (args.target_toolchain if args.target_toolchain else ""),
