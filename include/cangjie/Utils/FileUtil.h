@@ -37,8 +37,11 @@ struct IUnknown;
 namespace Cangjie {
 class DiagnosticEngine;
 const size_t FILE_NAME_MAX_LENGTH = 255;
-const size_t FILE_LEN_LIMIT = 4ULL * 1024 * 1024 * 1024; // 4 GB
-
+#if defined(__arm__)
+    const size_t FILE_LEN_LIMIT = 4ULL * 1024 * 1024 * 1024 - 1; // 4 GB - 1 for arm32
+#else
+    const size_t FILE_LEN_LIMIT = 4ULL * 1024 * 1024 * 1024; // 4 GB
+#endif
 #ifdef _WIN32
 const static std::string INJECTION_STRING = "^\";|&";
 // On Windows, both dos and unix dir separators ('\\' and '/') are supported.
