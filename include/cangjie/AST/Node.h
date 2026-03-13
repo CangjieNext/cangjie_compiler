@@ -891,10 +891,11 @@ enum class InheritanceVisitStatus {
 struct GenericConstraint : public Node {
     Position wherePos;                       /**< The position of where. */
     OwnedPtr<RefType> type;                  /**< Type variable. */
-    Position operatorPos;                    /**< The position of upper bound operator. */
+    Position operatorPos;                     /**< The position of upper bound operator. */
     std::vector<Position> bitAndPos;         /**< The position of '&'. */
     std::vector<OwnedPtr<Type>> upperBounds; /**< Upper bounds, class, interface */
     Position commaPos;                       /**< The position of where. */
+    bool isImplicitlyIntroduced{false};                 /**< Whether this constraint was inherited from extended type. */
     GenericConstraint() : Node(ASTKind::GENERIC_CONSTRAINT)
     {
     }
