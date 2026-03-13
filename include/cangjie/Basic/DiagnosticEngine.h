@@ -19,6 +19,7 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/Basic/Position.h"
 #include "cangjie/Basic/SourceManager.h"
+#include "cangjie/Basic/Types.h"
 #include "cangjie/Option/Option.h"
 
 namespace Cangjie {
@@ -177,12 +178,7 @@ struct Range {
     {
         return begin == right.begin && end == right.end;
     }
-    size_t Hash() const
-    {
-        return (static_cast<size_t>(begin.fileID)) ^ (static_cast<size_t>(begin.line) << 8u) ^
-            (static_cast<size_t>(begin.column) << 16u) ^ (static_cast<size_t>(begin.fileID) << 24u) ^
-            (static_cast<size_t>(begin.line) << 32u) ^ (static_cast<size_t>(begin.column) << 40u);
-    }
+    TargetUInt Hash() const;
     bool EqualForHash(const Range& right) const
     {
         return begin.fileID == right.begin.fileID && begin == right.begin && end == right.end;
