@@ -21,6 +21,7 @@
 #include "cangjie/Basic/DiagnosticJsonFormatter.h"
 #include "cangjie/Basic/Display.h"
 #include "cangjie/Basic/Print.h"
+#include "cangjie/Basic/Types.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/Unicode.h"
 
@@ -118,6 +119,30 @@ const std::vector<std::string_view> RE_DIAG_KIND_STR = {
 #undef ERROR
 };
 const size_t RE_DIAG_KIND_STR_SIZE = RE_DIAG_KIND_STR.size();
+
+TargetUInt Range::Hash() const
+{
+    #ifdef CANGJIE_TARGET_TRIPLE
+        const std::string targetTriple = CANGJIE_TARGET_TRIPLE;
+        if (targetTriple == "arm-linux-android23") {
+            // hash of begin
+            TargetUInt beginHash = static_cast<TargetUInt>(begin.fileID) ^ (static_cast<TargetUInt>(begin.line) << 10u) ^
+                (static_cast<TargetUInt>(begin.column) << 20u);
+
+            // hash of end
+            TargetUInt endHash = static_cast<TargetUInt>(end.fileID) ^ (static_cast<TargetUInt>(end.line) << 10u) ^
+                (static_cast<TargetUInt>(end.column) << 20u);
+            // Golden ratio magic constant for better hash mixing
+            constexpr TargetUInt GOLDEN_RATIO_HASH_CONSTANT = 0x9e3779b9;
+            // combine the two hashes using a common technique to reduce collisions
+            return beginHash ^ (endHash + GOLDEN_RATIO_HASH_CONSTANT + (beginHash << 6) + (beginHash >> 2));
+        }
+    #else
+        return (static_cast<TargetUInt>(begin.fileID)) ^ (static_cast<TargetUInt>(begin.line) << 8u) ^
+            (static_cast<TargetUInt>(begin.column) << 16u) ^ (static_cast<TargetUInt>(end.fileID) << 24u) ^
+            (static_cast<TargetUInt>(end.line) << 32u) ^ (static_cast<TargetUInt>(end.column) << 40u);
+    #endif
+}
 
 Range MakeRange(const Position& begin, Position end)
 {
