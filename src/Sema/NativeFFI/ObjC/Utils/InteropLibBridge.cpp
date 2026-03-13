@@ -64,8 +64,7 @@ constexpr auto INTEROPLIB_OBJ_C_OBJECT_GET_CLASS = "objectGetClass";
 constexpr auto OBJ_C_FUNC_GET_FPOINTER = "unsafeGetFunctionPointer";
 constexpr auto OBJ_C_BLOCK_GET_ABI_POINTER = "unsafeGetNativeABIPointer";
 
-template<typename T>
-Ptr<T> GetMemberOfDecl(Decl& decl, std::function<bool(const Decl&)> pred)
+template <typename T> Ptr<T> GetMemberOfDecl(Decl& decl, std::function<bool(const Decl&)> pred)
 {
     Ptr<Decl> result = nullptr;
     for (auto& member : decl.GetMemberDeclPtrs()) {
@@ -106,9 +105,7 @@ Ptr<FuncDecl> InteropLibBridge::GetMutexLock()
     }
     auto decl = Ty::GetDeclOfTy(GetForwarderMutexTy());
     CJC_NULLPTR_CHECK(decl);
-    result = GetMemberOfDecl<FuncDecl>(*decl, [](const Decl& mem) {
-        return mem.identifier == MUTEX_LOCK_IDENT;
-    });
+    result = GetMemberOfDecl<FuncDecl>(*decl, [](const Decl& mem) { return mem.identifier == MUTEX_LOCK_IDENT; });
     CJC_NULLPTR_CHECK(result);
     return result;
 }
@@ -124,9 +121,7 @@ Ptr<FuncDecl> InteropLibBridge::GetMutexUnlock()
     }
     auto decl = Ty::GetDeclOfTy(GetForwarderMutexTy());
     CJC_NULLPTR_CHECK(decl);
-    result = GetMemberOfDecl<FuncDecl>(*decl, [](const Decl& mem) {
-        return mem.identifier == MUTEX_UNLOCK_IDENT;
-    });
+    result = GetMemberOfDecl<FuncDecl>(*decl, [](const Decl& mem) { return mem.identifier == MUTEX_UNLOCK_IDENT; });
     CJC_NULLPTR_CHECK(result);
     return result;
 }
@@ -142,9 +137,7 @@ Ptr<FuncDecl> InteropLibBridge::GetMutexConstructor()
     }
     auto decl = Ty::GetDeclOfTy(GetForwarderMutexTy());
     CJC_NULLPTR_CHECK(decl);
-    result = GetMemberOfDecl<FuncDecl>(*decl, [](const Decl& mem) {
-        return mem.TestAttr(Attribute::CONSTRUCTOR);
-    });
+    result = GetMemberOfDecl<FuncDecl>(*decl, [](const Decl& mem) { return mem.TestAttr(Attribute::CONSTRUCTOR); });
     CJC_NULLPTR_CHECK(result);
     return result;
 }
@@ -213,8 +206,8 @@ Ptr<ClassDecl> InteropLibBridge::GetObjCOptionalMethodUnimplementedExceptionDecl
 
 Ptr<ClassDecl> InteropLibBridge::GetObjCStaticMethodCallOnIntefaceExceptionDecl()
 {
-    static auto decl = GetInteropLibDecl<ASTKind::CLASS_DECL>(
-        INTEROPLIB_OBJ_C_STATIC_METHOD_CALL_ON_INTERFACE_EXCEPTION);
+    static auto decl =
+        GetInteropLibDecl<ASTKind::CLASS_DECL>(INTEROPLIB_OBJ_C_STATIC_METHOD_CALL_ON_INTERFACE_EXCEPTION);
     return decl;
 }
 
@@ -296,7 +289,6 @@ Ptr<FuncDecl> InteropLibBridge::GetGetClassDecl()
     return decl;
 }
 
-
 Ptr<FuncDecl> InteropLibBridge::GetGetSuperClassDecl()
 {
     static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_GET_SUPER_CLASS);
@@ -365,11 +357,12 @@ Ptr<StructDecl> InteropLibBridge::GetObjCPointerDecl()
 
 Ptr<StructDecl> InteropLibBridge::GetObjCFuncDecl()
 {
-    static auto result =  GetObjCLangDecl<ASTKind::STRUCT_DECL>(OBJ_C_FUNC_IDENT);
+    static auto result = GetObjCLangDecl<ASTKind::STRUCT_DECL>(OBJ_C_FUNC_IDENT);
     return result;
 }
 
-Ptr<ClassDecl> InteropLibBridge::GetObjCBlockDecl() {
+Ptr<ClassDecl> InteropLibBridge::GetObjCBlockDecl()
+{
     static auto result = GetObjCLangDecl<ASTKind::CLASS_DECL>(OBJ_C_BLOCK_IDENT);
     return result;
 }
@@ -383,10 +376,8 @@ Ptr<FuncDecl> InteropLibBridge::GetObjCPointerConstructor()
     auto outer = GetObjCPointerDecl();
     for (auto& member : outer->body->decls) {
         if (auto funcDecl = DynamicCast<FuncDecl*>(member.get())) {
-            if (funcDecl->TestAttr(Attribute::CONSTRUCTOR)
-                && funcDecl->funcBody
-                && funcDecl->funcBody->paramLists[0]
-                && funcDecl->funcBody->paramLists[0]->params.size() == 1) {
+            if (funcDecl->TestAttr(Attribute::CONSTRUCTOR) && funcDecl->funcBody && funcDecl->funcBody->paramLists[0] &&
+                funcDecl->funcBody->paramLists[0]->params.size() == 1) {
                 result = funcDecl;
                 break;
             }
@@ -422,10 +413,8 @@ Ptr<FuncDecl> InteropLibBridge::GetObjCFuncConstructor()
     auto outer = GetObjCFuncDecl();
     for (auto& member : outer->body->decls) {
         if (auto funcDecl = DynamicCast<FuncDecl*>(member.get())) {
-            if (funcDecl->TestAttr(Attribute::CONSTRUCTOR)
-                && funcDecl->funcBody
-                && funcDecl->funcBody->paramLists[0]
-                && funcDecl->funcBody->paramLists[0]->params.size() == 1) {
+            if (funcDecl->TestAttr(Attribute::CONSTRUCTOR) && funcDecl->funcBody && funcDecl->funcBody->paramLists[0] &&
+                funcDecl->funcBody->paramLists[0]->params.size() == 1) {
                 result = funcDecl;
                 break;
             }
@@ -454,17 +443,16 @@ Ptr<FuncDecl> InteropLibBridge::GetObjCFuncFPointerAccessor()
 
 namespace {
 
-Ptr<FuncDecl> GetObjCBlockConstructorByABIName(InteropLibBridge& bridge, const std::string& abiTypeName) {
+Ptr<FuncDecl> GetObjCBlockConstructorByABIName(InteropLibBridge& bridge, const std::string& abiTypeName)
+{
     auto outer = bridge.GetObjCBlockDecl();
     for (auto& member : outer->body->decls) {
         if (auto funcDecl = DynamicCast<FuncDecl*>(member.get())) {
             if (!funcDecl->TestAttr(Attribute::CONSTRUCTOR)) {
                 continue;
             }
-            if (funcDecl->funcBody == nullptr
-                || funcDecl->funcBody->paramLists.size() != 1
-                || funcDecl->funcBody->paramLists[0] == nullptr
-                || funcDecl->funcBody->paramLists[0]->params.size() != 1) {
+            if (funcDecl->funcBody == nullptr || funcDecl->funcBody->paramLists.size() != 1 ||
+                funcDecl->funcBody->paramLists[0] == nullptr || funcDecl->funcBody->paramLists[0]->params.size() != 1) {
                 continue;
             }
             Ptr<Ty> paramTy = funcDecl->funcBody->paramLists[0]->params[0]->ty;
@@ -480,14 +468,16 @@ Ptr<FuncDecl> GetObjCBlockConstructorByABIName(InteropLibBridge& bridge, const s
     return nullptr;
 }
 
-} // empty namespace
+} // namespace
 
-Ptr<FuncDecl> InteropLibBridge::GetObjCBlockConstructorFromObjC() {
+Ptr<FuncDecl> InteropLibBridge::GetObjCBlockConstructorFromObjC()
+{
     static Ptr<FuncDecl> result = GetObjCBlockConstructorByABIName(*this, INTEROPLIB_NATIVE_BLOCK_ABI);
     return result;
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetObjCBlockConstructorFromCangjie() {
+Ptr<FuncDecl> InteropLibBridge::GetObjCBlockConstructorFromCangjie()
+{
     static Ptr<FuncDecl> result = GetObjCBlockConstructorByABIName(*this, INTEROPLIB_CANGJIE_BLOCK_ABI);
     return result;
 }

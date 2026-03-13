@@ -71,17 +71,16 @@ private:
     std::string GenerateFunctionDeclaration(
         const ObjCFunctionType type, const std::string& returnType, const std::string& name) const;
     std::string GeneratePropertyDeclaration(const ObjCFunctionType staticType, const std::string& mode,
-        const std::string& type, const std::string& name, const std::string& getterName, const std::string& setterName) const;
+        const std::string& type, const std::string& name, const std::string& getterName,
+        const std::string& setterName) const;
     std::string GenerateImport(const std::string& name);
     std::string GenerateStaticFunctionReference(
         const std::string& funcName, const std::string& retType, const std::string& argTypes) const;
-    std::string GenerateStaticReference(const std::string& name, const std::string& type,
-        const std::string& defaultValue) const;
+    std::string GenerateStaticReference(
+        const std::string& name, const std::string& type, const std::string& defaultValue) const;
     std::string GenerateFuncParamLists(const std::vector<OwnedPtr<AST::FuncParamList>>& paramLists,
-        const std::vector<std::string>& selectorComponents,
-        FunctionListFormat format = FunctionListFormat::DECLARATION,
-        const ObjCFunctionType type = ObjCFunctionType::INSTANCE,
-        bool hasForeignNameAnno = true);
+        const std::vector<std::string>& selectorComponents, FunctionListFormat format = FunctionListFormat::DECLARATION,
+        const ObjCFunctionType type = ObjCFunctionType::INSTANCE, bool hasForeignNameAnno = true);
     std::string GenerateArgumentCast(const AST::Ty& retTy, std::string value) const;
     std::string MapCJTypeToObjCType(const AST::Ty& ty);
     std::string MapCJTypeToObjCType(const OwnedPtr<AST::Type>& type);
