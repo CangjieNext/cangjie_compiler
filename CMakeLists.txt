@@ -314,6 +314,10 @@ if(CANGJIE_VERSION)
     add_compile_definitions(VERSION_TAIL="${CANGJIE_VERSION}")
 endif()
 
+if(CANGJIE_TARGET_TRIPLE)
+    add_compile_definitions(CANGJIE_TARGET_TRIPLE="${CANGJIE_TARGET_TRIPLE}")
+endif()
+
 string(TOLOWER "${CMAKE_SYSTEM_NAME}" TARGET_OS)
 add_compile_definitions(__${TARGET_OS}__)
 

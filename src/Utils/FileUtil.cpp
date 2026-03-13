@@ -23,6 +23,7 @@
 
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Basic/Utils.h"
+#include "cangjie/Basic/Types.h"
 #include "cangjie/Driver/StdlibMap.h"
 #include "cangjie/Lex/Lexer.h"
 #include "cangjie/Modules/ImportManager.h"
@@ -51,6 +52,18 @@ constexpr char BACKSLASH = '\\';
 constexpr char BACKTICK = '`';
 constexpr std::string_view TEST_FILE_NAME{"_test.cj"};
 
+#ifdef CANGJIE_TARGET_TRIPLE
+    #if (CANGJIE_TARGET_TRIPLE == "arm-linux-android23")
+        const TargetUInt FILE_LEN_LIMIT = 2ULL * 1024 * 1024 * 1024; // 2 GB for arm32
+        const std::string FILE_LEN_LIMIT_STR = "2 GB";
+    #else
+        const TargetUInt FILE_LEN_LIMIT = 4ULL * 1024 * 1024 * 1024; // 4 GB
+        const std::string FILE_LEN_LIMIT_STR = "4 GB";
+    #endif
+#else
+    const TargetUInt FILE_LEN_LIMIT = 4ULL * 1024 * 1024 * 1024; // 4 GB
+    const std::string FILE_LEN_LIMIT_STR = "4 GB";
+#endif
 #ifdef _WIN32
 inline int Mkdir(const std::string& path)
 {
@@ -558,12 +571,12 @@ bool ReadBinaryFileToBuffer(const std::string& filePath, std::vector<uint8_t>& b
         failedReason = "open file failed";
         return false;
     }
-    size_t fileLength = GetFileSize(realFilePath.value());
+    TargetUInt fileLength = GetFileSize(realFilePath.value());
     if (fileLength == 0) {
         failedReason = "empty binary file";
     }
     if (fileLength >= FILE_LEN_LIMIT) {
-        failedReason = "exceed the max file length: 4 GB";
+        failedReason = "exceed the max file length: " + FILE_LEN_LIMIT_STR;
     }
     if (!failedReason.empty()) {
         is.close();
@@ -653,9 +666,9 @@ std::optional<std::string> ReadFileContent(const std::string& filePath, std::str
         failedReason = "open file failed";
         return std::nullopt;
     }
-    size_t len = GetFileSize(realFilePath.value());
+    TargetUInt len = GetFileSize(realFilePath.value());
     if (len >= FILE_LEN_LIMIT) {
-        failedReason = "exceed the max file length: 4 GB";
+        failedReason = "exceed the max file length: " + FILE_LEN_LIMIT_STR;
         is.close();
         return std::nullopt;
     }
@@ -811,18 +824,18 @@ std::vector<std::string> GetAllDirsUnderCurrentPath(const std::string& path)
     return allDirs;
 }
 
-size_t GetFileSize(const std::string& filePath)
+TargetUInt GetFileSize(const std::string& filePath)
 {
     // `tellg` does not report the size of the file.
     // Though it usually works, it may fail.
 #ifdef _WIN32
     struct __stat64 statBuf;
     int rc = _stat64(filePath.c_str(), &statBuf);
-    return rc == 0 ? static_cast<size_t>(statBuf.st_size) : 0;
+    return rc == 0 ? static_cast<TargetUInt>(statBuf.st_size) : 0;
 #else
     struct stat statBuf;
     int rc = stat(filePath.c_str(), &statBuf);
-    return rc == 0 ? static_cast<size_t>(statBuf.st_size) : 0;
+    return rc == 0 ? static_cast<TargetUInt>(statBuf.st_size) : 0;
 #endif
 }
 
