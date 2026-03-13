@@ -119,6 +119,27 @@ const std::vector<std::string_view> RE_DIAG_KIND_STR = {
 };
 const size_t RE_DIAG_KIND_STR_SIZE = RE_DIAG_KIND_STR.size();
 
+size_t Range::Hash() const
+{
+    #if defined(__arm__)
+        // hash of begin
+        size_t beginHash = static_cast<size_t>(begin.fileID) ^ (static_cast<size_t>(begin.line) << 10u) ^
+            (static_cast<size_t>(begin.column) << 20u);
+
+        // hash of end
+        size_t endHash = static_cast<size_t>(end.fileID) ^ (static_cast<size_t>(end.line) << 10u) ^
+            (static_cast<size_t>(end.column) << 20u);
+        // Golden ratio magic constant for better hash mixing
+        constexpr size_t GOLDEN_RATIO_HASH_CONSTANT = 0x9e3779b9;
+        // combine the two hashes using a common technique to reduce collisions
+        return beginHash ^ (endHash + GOLDEN_RATIO_HASH_CONSTANT + (beginHash << 6) + (beginHash >> 2));
+    #else
+        return (static_cast<size_t>(begin.fileID)) ^ (static_cast<size_t>(begin.line) << 8u) ^
+            (static_cast<size_t>(begin.column) << 16u) ^ (static_cast<size_t>(end.fileID) << 24u) ^
+            (static_cast<size_t>(end.line) << 32u) ^ (static_cast<size_t>(end.column) << 40u);
+    #endif
+}
+
 Range MakeRange(const Position& begin, Position end)
 {
     // The fileID of position may be different, may come from the macro definition or from the macrocall.
