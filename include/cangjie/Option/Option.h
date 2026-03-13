@@ -319,6 +319,8 @@ public:
         Triple::ArchType::AARCH64,
 #elif __x86_64__
         Triple::ArchType::X86_64,
+#elif __arm__
+        Triple::ArchType::ARM32,
 #else
         Triple::ArchType::UNKNOWN,
 #endif
