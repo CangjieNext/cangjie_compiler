@@ -314,6 +314,13 @@ if(CANGJIE_VERSION)
     add_compile_definitions(VERSION_TAIL="${CANGJIE_VERSION}")
 endif()
 
+if(CANGJIE_TARGET_ARCH_NAME)
+    add_compile_definitions(CANGJIE_TARGET_ARCH_NAME="${CANGJIE_TARGET_ARCH_NAME}")
+    if(CANGJIE_TARGET_ARCH_NAME STREQUAL "arm")
+        add_compile_definitions(CANGJIE_TARGET_IS_ARM=1)
+    endif()
+endif()
+
 string(TOLOWER "${CMAKE_SYSTEM_NAME}" TARGET_OS)
 add_compile_definitions(__${TARGET_OS}__)
 
