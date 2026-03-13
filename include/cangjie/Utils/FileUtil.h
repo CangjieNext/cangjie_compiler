@@ -37,8 +37,6 @@ struct IUnknown;
 namespace Cangjie {
 class DiagnosticEngine;
 const size_t FILE_NAME_MAX_LENGTH = 255;
-const size_t FILE_LEN_LIMIT = 4ULL * 1024 * 1024 * 1024; // 4 GB
-
 #ifdef _WIN32
 const static std::string INJECTION_STRING = "^\";|&";
 // On Windows, both dos and unix dir separators ('\\' and '/') are supported.
@@ -214,7 +212,7 @@ bool ReadBinaryFileToBuffer(const std::string& filePath, std::vector<uint8_t>& b
  * @param Path to the file.
  * @return file sizse.
  */
-size_t GetFileSize(const std::string& filePath);
+TargetUInt GetFileSize(const std::string& filePath);
 
 /**
  * Read file and return its content.
