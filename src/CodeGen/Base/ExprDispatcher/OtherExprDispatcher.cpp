@@ -283,6 +283,7 @@ llvm::Value* HandleUnBoxExpr(IRBuilder2& irBuilder, const CHIR::Expression& chir
             }
         }
     }
+
     if (targetCGType->IsReference()) {
         return cgVal->GetRawValue();
     }
