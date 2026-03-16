@@ -614,6 +614,53 @@ public:
      */
     OwnedPtr<Expr> UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, const Decl& outerDecl, bool toRaw = false);
 
+    /**
+     * @brief Creates a match expression that dispatches based on the runtime type name of a generic parameter.
+     *
+     * This function generates a pattern matching expression that compares the string representation
+     * of a generic parameter's type at runtime. It constructs match cases for each type in the provided
+     * map, comparing type names obtained via the intrinsic `GetTypeForTypeParameter` function.
+     *
+     * The function handles two types of comparisons:
+     * - For Option<T> types (identified by "cangjie:Option" prefix): uses `startsWith` comparison
+     *   to match any Option instantiation (e.g., Option<SomeType>)
+     * - For all other types: uses exact equality (`==`) comparison
+     *
+     * A wildcard pattern is automatically added as the final default case to handle any
+     * unmatched type.
+     *
+     * @param[in] genericParam The generic parameter declaration whose runtime type will be inspected.
+     *                        Must be a valid pointer to a GenericParamDecl.
+     * @param[in] typeToCaseMap A map where keys are fully qualified type name strings (e.g., "cangjie:Int64",
+     *                          "cangjie:Option<String>") and values are the corresponding match case expressions.
+     *                          The expressions must be compatible with the return type.
+     * @param[in] retTy The common return type of all match cases. Must be compatible with expressions
+     *                  in the typeToCaseMap and defaultCase.
+     * @param[in] defaultCase The expression to execute when no type in the map matches.
+     *                        Must have type compatible with retTy.
+     *
+     * @return An OwnedPtr<AST::MatchExpr> to the generated MatchExpr that can be used in the AST.
+     *
+     * @note The generated match expression has the following structure:
+     *       @code
+     *       match (getTypeForTypeParameter(genericParam).toString()) {
+     *           case "<type1>" => <expr1>
+     *           case "<type2>" => <expr2>
+     *           ...
+     *           case _ => <defaultCase>
+     *       }
+     *       @endcode
+     *
+     * @note Option types use `startsWith` for matching, so "cangjie:Option" matches
+     *       Option<Int64>, Option<String>, etc.
+     *
+     * @warning The type names in typeToCaseMap must match the exact string representation
+     *          returned by the GetTypeForTypeParameter intrinsic.
+     *
+     * @see FindGetTypeForTypeParamDecl()
+     * @see FindStringEqualsDecl()
+     * @see FindStringStartsWithDecl()
+     */
     OwnedPtr<AST::MatchExpr> CreateMatchByTypeArgument(
         const Ptr<AST::GenericParamDecl> genericParam,
         std::map<std::string, OwnedPtr<Expr>> typeToCaseMap, Ptr<Ty> retTy, OwnedPtr<Expr> defaultCase);
