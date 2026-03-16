@@ -14,6 +14,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
+#include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
 
@@ -1072,6 +1073,10 @@ OwnedPtr<MatchExpr> InteropLibBridge::CreateMatchByTypeArgument(
     cStrToStringCall->curFile = file;
 
     std::vector<OwnedPtr<MatchCase>> cases;
+
+    auto jstringDecl = utils.GetJStringDecl(); // utils.GetStringDecl();
+    typeToCaseMap[Ty::ToString(jstringDecl->ty)] = 
+        SelectJSigByTypeKind(TypeKind::TYPE_STRUCT, jstringDecl->ty);
 
     for (auto& [typeDesc, expr] : typeToCaseMap) {
         auto isOption =
