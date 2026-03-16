@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+git// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -30,6 +30,7 @@ constexpr unsigned int CORES_REQUIRED_WARMUP = 8;
 
 void TypeChecker::TypeCheckerImpl::WarmupCache(const ASTContext& ctx) const
 {
+    Utils::ProfileRecorder recorder("PrepareTypeCheck", "WarmupCache");
     auto numProcessors = std::thread::hardware_concurrency();
     if (numProcessors < CORES_REQUIRED_WARMUP) {
         return;

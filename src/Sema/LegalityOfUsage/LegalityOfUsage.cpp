@@ -71,6 +71,7 @@ void SetFuncBodyCaptureKind(FuncBody& fb)
 
 void TypeChecker::TypeCheckerImpl::CheckLegalityOfUsage(ASTContext& ctx, AST::Package& pkg)
 {
+    Utils::ProfileRecorder recorder("Post TypeCheck", "CheckLegalityOfUsage");
     // Check whether value type decl contains value type recursive dependency.
     CheckValueTypeRecursive(pkg);
     // Check legality of reference usage.

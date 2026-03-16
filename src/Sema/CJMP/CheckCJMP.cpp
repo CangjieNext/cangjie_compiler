@@ -277,6 +277,7 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
 // PrepareTypeCheck for CJMP
 void MPTypeCheckerImpl::PrepareTypeCheck4CJMP(Package& pkg)
 {
+    Utils::ProfileRecorder recorder("PrepareTypeCheck", "PrepareTypeCheck4CJMP");
     if (!compilePlatform) {
         return;
     }
