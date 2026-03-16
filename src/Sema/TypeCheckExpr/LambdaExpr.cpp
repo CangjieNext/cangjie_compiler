@@ -396,6 +396,14 @@ bool TypeChecker::TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, Ty& target, Lambd
         std::vector<Ptr<Ty>> lamParamTys;
         // Check arguments' types against parameters' types.
         bool paramsMatched = ChkLamParamTys(ctx, le, tgtTy->paramTys, lamParamTys);
+        // While the parameter list is incompatible with this target, the body is still checked below
+        // ("Should not be short-circuited") but only for diagnostics: its checks run under parameter
+        // types that the lambda will not actually have, so their failures must not enter the negative
+        // type-check cache. See the inhibitNegCache member comment in ASTContext.h. The increment and
+        // decrement below are strictly paired: no return, throw or loop exit happens in between.
+        if (!paramsMatched) {
+            ctx.inhibitNegCache++;
+        }
         // In the check mode, a lambda's return type is explicitly given.
         // To ease the following check, we create a retType node from the given target type.
         le.funcBody->retType = MakeOwned<RefType>();
@@ -406,7 +414,11 @@ bool TypeChecker::TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, Ty& target, Lambd
         ClearLambdaBodyForReCheck(le);
 
         // Should not be short-circuited.
-        if (ChkLamBody(ctx, *le.funcBody) && paramsMatched) {
+        bool bodyOk = ChkLamBody(ctx, *le.funcBody);
+        if (!paramsMatched) {
+            ctx.inhibitNegCache--;
+        }
+        if (bodyOk && paramsMatched) {
             ds.ReportDiag();
             // The call to GetFunctionTy is necessary to create (cached) CPointer types if necessary.
             le.funcBody->SetTy(typeManager.GetFunctionTy(lamParamTys, StaticCast<FuncTy*>(le.funcBody->GetTy())->retTy,
