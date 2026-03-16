@@ -2011,22 +2011,28 @@ std::vector<Ptr<ASTContext>> TypeChecker::TypeCheckerImpl::PreTypeCheck(const st
             contexts.emplace_back(ctx);
         }
     });
+    Utils::ProfileRecorder::Start("Pre TypeCheck", "PrepareTypeCheck");
     for (auto& ctx : contexts) {
         PrepareTypeCheck(*ctx, *ctx->curPackage);
     }
+    Utils::ProfileRecorder::Stop("Pre TypeCheck", "PrepareTypeCheck");
     // Pre checking for resolving types and rules without semantic type.
     PreCheck(contexts);
 
+    Utils::ProfileRecorder::Start("Pre TypeCheck", "CollectDeclsWithMember");
     for (auto pkg : pkgs) {
         if (auto ctx = ci->GetASTContextByPackage(pkg)) {
             CollectDeclsWithMember(pkg, *ctx);
         }
     }
+    Utils::ProfileRecorder::Stop("Pre TypeCheck", "CollectDeclsWithMember");
 
+    Utils::ProfileRecorder::Start("Pre TypeCheck", "MatchSpecificWithCommon");
     for (auto pkg : pkgs) {
         mpImpl->MatchSpecificWithCommon(*pkg);
         mpImpl->CheckNotAllowedAnnotations(*pkg);
     }
+    Utils::ProfileRecorder::Stop("Pre TypeCheck", "MatchSpecificWithCommon");
 
     return contexts;
 }
@@ -2036,27 +2042,47 @@ void TypeChecker::TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& c
     Utils::ProfileRecorder recorder("Semantic", "Post TypeCheck");
     // Post checking for legality of semantic.
     for (auto& ctx : contexts) {
+        Utils::ProfileRecorder::Start("Post TypeCheck", "CheckOverflow");
         CheckOverflow(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckOverflow");
+        Utils::ProfileRecorder::Start("Post TypeCheck", "CheckUnusedImportSpec");
         CheckUnusedImportSpec(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckUnusedImportSpec");
         // Check duplicated super interfaces in class, interface when type arguments applied.
+        Utils::ProfileRecorder::Start("Post TypeCheck", "CheckInstDupSuperInterfacesEntry");
         CheckInstDupSuperInterfacesEntry(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckInstDupSuperInterfacesEntry");
         // Check legality of usage after sema type completed.
+        Utils::ProfileRecorder::Start("Post TypeCheck", "CheckLegalityOfUsage");
         CheckLegalityOfUsage(*ctx, *ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckLegalityOfUsage");
         // Check cjmp match rules.
+        Utils::ProfileRecorder::Start("Post TypeCheck", "CheckCJMPRules");
         mpImpl->CheckReturnAndVariableTypes(*ctx->curPackage);
         mpImpl->ValidateMatchedAnnotationsAndModifiers(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckCJMPRules");
+        Utils::ProfileRecorder::Start("Post TypeCheck", "AddAttrForDefaultFuncParam");
         AddAttrForDefaultFuncParam(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "AddAttrForDefaultFuncParam");
         // Because of the cjlint checking policy, desugar of propDecl should be done in sema stage for now.
+        Utils::ProfileRecorder::Start("Post TypeCheck", "DesugarForPropDecl");
         DesugarForPropDecl(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "DesugarForPropDecl");
+        Utils::ProfileRecorder::Start("Post TypeCheck", "CheckConstEvaluation");
         CheckConstEvaluation(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckConstEvaluation");
+        Utils::ProfileRecorder::Start("Post TypeCheck", "MarkImplicitUsedFunctions");
         MarkImplicitUsedFunctions(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "MarkImplicitUsedFunctions");
         // Collect program entry separately.
         IterateToplevelDecls(*ctx->curPackage, [this](auto& decl) {
             if (auto md = DynamicCast<MainDecl*>(decl.get()); md && md->desugarDecl) {
                 (void)mainFunctionMap[md->curFile].emplace(md->desugarDecl.get());
             }
         });
+        Utils::ProfileRecorder::Start("Post TypeCheck", "PluginCheck");
         PluginCheck::PluginCustomAnnoChecker(*ci, diag, importManager).Check(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "PluginCheck");
     }
     CheckWhetherHasProgramEntry();
 }
@@ -2068,14 +2094,19 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
 
     CheckPrimaryCtorBeforeMerge(pkg);
     // Merging common classes into specific if any
+    Utils::ProfileRecorder::Start("PrepareTypeCheck", "PrepareTypeCheck4CJMP");
     mpImpl->PrepareTypeCheck4CJMP(pkg);
+    Utils::ProfileRecorder::Stop("PrepareTypeCheck", "PrepareTypeCheck4CJMP");
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    Utils::ProfileRecorder::Start("PrepareTypeCheck", "InteropPrepare");
     Interop::Java::PrepareTypeCheck(pkg, importManager, typeManager);
     Interop::ObjC::PrepareTypeCheck(pkg);
+    Utils::ProfileRecorder::Stop("PrepareTypeCheck", "InteropPrepare");
 #endif
 
     // Phase: add some default function.
+    Utils::ProfileRecorder::Start("PrepareTypeCheck", "AddDefaultFunction");
     AddDefaultFunction(pkg);
     // Add built-in decls to core package.
     if (pkg.fullPackageName == CORE_PACKAGE_NAME && !pkg.files.empty() && !pkg.TestAttr(Attribute::IMPORTED)) {
@@ -2085,14 +2116,19 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
         AddBuiltinCFuncDecl(pkg);
         AddBuiltInCStringDecl(pkg);
     }
+    Utils::ProfileRecorder::Stop("PrepareTypeCheck", "AddDefaultFunction");
 
     // Phase: build symbol table.
+    Utils::ProfileRecorder::Start("PrepareTypeCheck", "BuildSymbolTable");
     Collector collector(scopeManager, ci->invocation.globalOptions.enableMacroInLSP);
     collector.BuildSymbolTable(ctx, &pkg, ci->buildTrie);
+    Utils::ProfileRecorder::Stop("PrepareTypeCheck", "BuildSymbolTable");
     // Phase: mark outermost binary expressions.
+    Utils::ProfileRecorder::Start("PrepareTypeCheck", "MarkAndPrepare");
     MarkOutermostBinaryExpressions(pkg);
     AddCurFile(pkg);
     MarkParamWithInitialValue(pkg);
+    Utils::ProfileRecorder::Stop("PrepareTypeCheck", "MarkAndPrepare");
     // Warmup cache to speed up search.
     WarmupCache(ctx);
 }
