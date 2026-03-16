@@ -164,7 +164,7 @@ llvm::MDTuple* MetadataInfo::GenerateAttrsMetadata(const CHIR::AttributeInfo& at
             // the extended metadata fields (such as generic type info), regardless
             // of the specific field order which might be adjusted by the LLVM backend.
             // ---------------------------------------------------------
-            attrsStr.emplace("reflectVersion1");
+            attrsStr.emplace("reflectVersion2");
             break;
         case ExtraAttribute::BOX_CLASS:
             attrsStr.emplace("box");
@@ -649,7 +649,8 @@ void EnumMetadataInfo::GenerateEnumMetadata(const CHIR::EnumDef& ed)
         GenerateEnumConstructorMetadata(ed), llvm::MDTuple::get(llvmCtx, {}), llvm::MDTuple::get(llvmCtx, methodsVec),
         llvm::MDTuple::get(llvmCtx, staticMethodsVec),
         GenerateAttrsMetadata(ed.GetAttributeInfo(), ExtraAttribute::ENUM, ed.GetAnnoInfo().mangledName,
-            SRetMode::NO_SRET, GetEnumKindName(module, ed)));
+            SRetMode::NO_SRET, GetEnumKindName(module, ed)),
+        GenerateEnumCtorAnnoMetadata(ed));
     auto mdTuple = item.CreateMDTuple(llvmCtx, true);
     typesMD->addOperand(mdTuple);
     reflectTIOrTT->addMetadata("Reflection", *mdTuple);
@@ -671,6 +672,21 @@ llvm::MDTuple* EnumMetadataInfo::GenerateEnumConstructorMetadata(const CHIR::Enu
         fieldsVec.AddSubItem(MetadataVector(llvmCtx).Concat(ctorName).Concat(ti));
     }
     return fieldsVec.CreateMDTuple();
+}
+
+llvm::MDTuple* EnumMetadataInfo::GenerateEnumCtorAnnoMetadata(const CHIR::EnumDef& ed)
+{
+    llvm::LLVMContext& llvmCtx = module.GetLLVMContext();
+    MetadataVector annoVec(llvmCtx);
+    for (auto& ctor : ed.GetCtors()) {
+        std::string mangledName = ctor.annoInfo.mangledName;
+        // Use empty string for constructors without annotation (i.e. "none" means no annotation)
+        if (mangledName == "none") {
+            mangledName = "";
+        }
+        annoVec.Concat(mangledName);
+    }
+    return annoVec.CreateMDTuple();
 }
 
 std::string EnumMetadataInfo::GenerateCtorFn(
