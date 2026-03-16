@@ -182,6 +182,25 @@ void ASTContext::ClearTypeCheckCache(const AST::Node& root)
     cleaner.Walk();
 }
 
+void ASTContext::ClearNegSynCache(const AST::Node& root)
+{
+    AST::ConstWalker cleaner(&root, [this](Ptr<const Node> node) {
+        auto it = typeCheckCache.find(node);
+        if (it != typeCheckCache.end()) {
+            auto& synCache = it->second.synCache;
+            for (auto cit = synCache.begin(); cit != synCache.end();) {
+                if (!cit->second.successful) {
+                    cit = synCache.erase(cit);
+                } else {
+                    ++cit;
+                }
+            }
+        }
+        return VisitAction::WALK_CHILDREN;
+    });
+    cleaner.Walk();
+}
+
 void ASTContext::RemoveTypeCheckCache(const AST::Node& node)
 {
     typeCheckCache.erase(&node);

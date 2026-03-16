@@ -88,6 +88,9 @@ public:
     void DeleteCurrentInvertedIndexes(Ptr<const AST::Node> node);
     // recursively clear all cache entries of sub-tree
     void ClearTypeCheckCache(const AST::Node& root);
+    // recursively clear only negative (failed) synCache entries of sub-tree,
+    // preserving positive entries to avoid exponential re-checking in nested overload resolution
+    void ClearNegSynCache(const AST::Node& root);
     // only remove cache for this node
     void RemoveTypeCheckCache(const AST::Node& node);
     // set a dummy last key so that the synthesize of the node will be skipped when possible
