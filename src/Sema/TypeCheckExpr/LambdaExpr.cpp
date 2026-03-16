@@ -121,6 +121,17 @@ bool IsLambdaIncompatible(const LambdaExpr& le, bool paramsMismatched)
     return paramsMismatched && IsAnyParamTypeOmitted(le);
 }
 
+// In the check mode, a lambda's return type is explicitly given by the target.
+// To ease the following check, create a retType node from the given target type.
+void SetLambdaRetTypeFromTarget(LambdaExpr& le, const FuncTy& tgtTy)
+{
+    le.funcBody->retType = MakeOwned<RefType>();
+    le.funcBody->retType->begin = le.begin;
+    le.funcBody->retType->end = le.end;
+    le.funcBody->retType->SetTy(tgtTy.retTy);
+    le.funcBody->retType->EnableAttr(AST::Attribute::COMPILER_ADD);
+}
+
 // return: true if error, false if no error
 bool DiagInferParamTyFail(DiagnosticEngine& diag, LambdaExpr& le)
 {
@@ -396,15 +407,18 @@ bool TypeChecker::TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, Ty& target, Lambd
         std::vector<Ptr<Ty>> lamParamTys;
         // Check arguments' types against parameters' types.
         bool paramsMatched = ChkLamParamTys(ctx, le, tgtTy->paramTys, lamParamTys);
+        // While the parameter list is incompatible with this target, the body is still checked below
+        // ("Should not be short-circuited") but only for diagnostics: its checks run under parameter
+        // types that the lambda will not actually have, so their failures must not enter the negative
+        // type-check cache. See the inhibitNegCache member comment in ASTContext.h.
+        unsigned inhibit = paramsMatched ? 0 : 1;
+        ctx.inhibitNegCache += inhibit;
         // In the check mode, a lambda's return type is explicitly given.
         // To ease the following check, we create a retType node from the given target type.
-        le.funcBody->retType = MakeOwned<RefType>();
-        le.funcBody->retType->begin = le.begin;
-        le.funcBody->retType->end = le.end;
-        le.funcBody->retType->SetTy(tgtTy->retTy);
-        le.funcBody->retType->EnableAttr(AST::Attribute::COMPILER_ADD);
+        SetLambdaRetTypeFromTarget(le, *tgtTy);
         ClearLambdaBodyForReCheck(le);
 
+        ctx.inhibitNegCache -= inhibit;
         // Should not be short-circuited.
         if (ChkLamBody(ctx, *le.funcBody) && paramsMatched) {
             ds.ReportDiag();
