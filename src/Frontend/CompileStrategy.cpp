@@ -36,6 +36,7 @@ using namespace FileUtil;
 
 void CompileStrategy::TypeCheck() const
 {
+    Utils::ProfileRecorder recorder("Semantic", "TypeCheck");
     if (!ci->typeChecker) {
         ci->typeChecker = new TypeChecker(ci);
         CJC_NULLPTR_CHECK(ci->typeChecker);
@@ -45,6 +46,7 @@ void CompileStrategy::TypeCheck() const
 
 void CompileStrategy::InteropConfigTomlCheck()
 {
+    Utils::ProfileRecorder recorder("Semantic", "InteropConfigTomlCheck");
     InteropCJPackageConfigReader packagesFullConfig;
     if (ci->invocation.globalOptions.enableInteropCJMapping &&
         ci->invocation.globalOptions.interopCJPackageConfigPath != "./" &&
@@ -84,6 +86,7 @@ bool CompileStrategy::OverflowStrategy() const
 
 void CompileStrategy::PerformDesugar() const
 {
+    Utils::ProfileRecorder recorder("Semantic", "Desugar Before TypeCheck");
     for (auto& [pkg, ctx] : ci->pkgCtxMap) {
         Cangjie::PerformDesugarBeforeTypeCheck(*pkg, ci->invocation.globalOptions.enableMacroInLSP);
     }
@@ -577,10 +580,7 @@ bool CompileStrategy::MacroExpand() const
 
 bool FullCompileStrategy::Sema()
 {
-    {
-        Utils::ProfileRecorder recorder("Semantic", "Desugar Before TypeCheck");
-        PerformDesugar();
-    }
+    PerformDesugar();
     // Interop config toml file check format.
     InteropConfigTomlCheck();
     TypeCheck();
