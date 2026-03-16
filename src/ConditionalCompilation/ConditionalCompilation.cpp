@@ -136,28 +136,152 @@ const std::map<std::string, std::vector<std::string>> CONDITION_VALUES = {
 };
 } // namespace
 
-static auto GetVersionUInt(const std::string& version) -> uint32_t
+namespace {
+constexpr uint32_t VERSION_NUM_MIN = 0;
+constexpr uint32_t VERSION_NUM_MAX = 99;
+constexpr uint32_t PRE_RELEASE_SUB_NUM_MIN = 0;
+constexpr uint32_t PRE_RELEASE_SUB_NUM_MAX = 10;
+
+constexpr size_t REGEX_MAJOR_IDX = 1;
+constexpr size_t REGEX_MINOR_IDX = 2;
+constexpr size_t REGEX_PATCH_IDX = 3;
+constexpr size_t REGEX_PRE_RELEASE_TYPE_IDX = 4;
+constexpr size_t REGEX_PRE_RELEASE_NUM_IDX = 5;
+constexpr size_t REGEX_PRE_RELEASE_SUB_NUM_IDX = 6;
+constexpr size_t REGEX_NIGHTLY_DATE_IDX = 7;
+}
+
+bool ConditionalCompilationImpl::IsValidVersionNumber(uint32_t num)
 {
-    std::string res = "";
-    const int digitaSize = 2;
-    auto digitals = Utils::SplitString(version, ".");
-    for (const auto& it : digitals) {
-        if (it.size() == digitaSize) {
-            res += it;
-        } else if (it.size() == 1) {
-            res += "0" + it;
+    return num >= VERSION_NUM_MIN && num <= VERSION_NUM_MAX;
+}
+
+/**
+ * @brief Parse version string into VersionInfo structure.
+ * @param version Version string in format: x.y.z[-alpha.xy|-beta.xy|-YYYYMMDDHHMMSS]
+ * @return VersionInfo structure with parsed values, isValid is false if parsing fails.
+ */
+VersionInfo ConditionalCompilationImpl::ParseVersion(const std::string& version)
+{
+    VersionInfo info;
+    std::regex pattern(
+        "([0-9]{1,2})[.]([0-9]{1,2})[.]([0-9]{1,2})"
+        "(?:-(alpha|beta)[.]([0-9]{1,2})([0-9]{1,2})|-([0-9]{14}))?"
+    );
+
+    std::smatch match;
+    if (!std::regex_match(version, match, pattern)) {
+        return info;
+    }
+
+    info.major = static_cast<uint32_t>(std::stoul(match[REGEX_MAJOR_IDX].str()));
+    info.minor = static_cast<uint32_t>(std::stoul(match[REGEX_MINOR_IDX].str()));
+    info.patch = static_cast<uint32_t>(std::stoul(match[REGEX_PATCH_IDX].str()));
+
+    if (!IsValidVersionNumber(info.major) || !IsValidVersionNumber(info.minor) ||
+        !IsValidVersionNumber(info.patch)) {
+        return info;
+    }
+
+    if (match[REGEX_PRE_RELEASE_TYPE_IDX].matched) {
+        std::string type = match[REGEX_PRE_RELEASE_TYPE_IDX].str();
+        info.preReleaseType = (type == "alpha") ?
+            VersionInfo::PreReleaseType::ALPHA :
+            VersionInfo::PreReleaseType::BETA;
+        info.preReleaseNum = static_cast<uint32_t>(std::stoul(match[REGEX_PRE_RELEASE_NUM_IDX].str()));
+        info.preReleaseSubNum = static_cast<uint32_t>(std::stoul(match[REGEX_PRE_RELEASE_SUB_NUM_IDX].str()));
+        if (!IsValidVersionNumber(info.preReleaseNum) ||
+            info.preReleaseSubNum < PRE_RELEASE_SUB_NUM_MIN ||
+            info.preReleaseSubNum > PRE_RELEASE_SUB_NUM_MAX) {
+            return info;
+        }
+    } else if (match[REGEX_NIGHTLY_DATE_IDX].matched) {
+        info.preReleaseType = VersionInfo::PreReleaseType::NIGHTLY;
+        info.nightlyDateTime = std::stoull(match[REGEX_NIGHTLY_DATE_IDX].str());
+    }
+
+    info.isValid = true;
+    return info;
+}
+
+/**
+ * @brief Compare two version information.
+ * @param left Left version to compare.
+ * @param right Right version to compare.
+ * @return -1 if left < right, 0 if left == right, 1 if left > right.
+ * 
+ * Comparison priority: major.minor.patch first, then pre-release type.
+ * Pre-release type priority: NONE > BETA > ALPHA > NIGHTLY.
+ */
+int ConditionalCompilationImpl::CompareVersion(const VersionInfo& left, const VersionInfo& right)
+{
+    if (left.major != right.major) {
+        return (left.major < right.major) ? -1 : 1;
+    }
+    if (left.minor != right.minor) {
+        return (left.minor < right.minor) ? -1 : 1;
+    }
+    if (left.patch != right.patch) {
+        return (left.patch < right.patch) ? -1 : 1;
+    }
+
+    if (left.preReleaseType != right.preReleaseType) {
+        if (left.preReleaseType == VersionInfo::PreReleaseType::NONE) return 1;
+        if (right.preReleaseType == VersionInfo::PreReleaseType::NONE) return -1;
+        return (static_cast<int>(left.preReleaseType) < static_cast<int>(right.preReleaseType)) ? -1 : 1;
+    }
+
+    if (left.preReleaseType == VersionInfo::PreReleaseType::ALPHA ||
+        left.preReleaseType == VersionInfo::PreReleaseType::BETA) {
+        if (left.preReleaseNum != right.preReleaseNum) {
+            return (left.preReleaseNum < right.preReleaseNum) ? -1 : 1;
+        }
+        if (left.preReleaseSubNum != right.preReleaseSubNum) {
+            return (left.preReleaseSubNum < right.preReleaseSubNum) ? -1 : 1;
+        }
+    } else if (left.preReleaseType == VersionInfo::PreReleaseType::NIGHTLY) {
+        if (left.nightlyDateTime != right.nightlyDateTime) {
+            return (left.nightlyDateTime < right.nightlyDateTime) ? -1 : 1;
         }
     }
-    int32_t iRes = std::stoi(res);
-    CJC_ASSERT(iRes >= 0);
-    return static_cast<uint32_t>(iRes);
+
+    return 0;
+}
+
+/**
+ * @brief Evaluate version comparison expression.
+ * @param expr Binary expression with comparison operator.
+ * @param left Left version operand.
+ * @param right Right version operand.
+ * @return true if comparison result matches the operator.
+ */
+bool ConditionalCompilationImpl::EvalVersion(const BinaryExpr& expr,
+    const VersionInfo& left, const VersionInfo& right) const
+{
+    int cmp = CompareVersion(left, right);
+    switch (expr.op) {
+        case TokenKind::EQUAL:
+            return cmp == 0;
+        case TokenKind::NOTEQ:
+            return cmp != 0;
+        case TokenKind::GT:
+            return cmp > 0;
+        case TokenKind::LT:
+            return cmp < 0;
+        case TokenKind::GE:
+            return cmp >= 0;
+        case TokenKind::LE:
+            return cmp <= 0;
+        default:
+            return false;
+    }
 }
 
 ConditionalCompilationImpl::ConditionalCompilationImpl(CompilerInstance* c)
     : ci(c),
       backendType(ci->invocation.globalOptions.backend),
       triple(ci->invocation.globalOptions.target),
-      cjcVersion(GetVersionUInt(CANGJIE_VERSION)),
+      cjcVersionInfo(ParseVersion(CANGJIE_VERSION)),
       debug(ci->invocation.globalOptions.enableCompileDebug),
       test(ci->invocation.globalOptions.enableCompileTest),
       passedCondition(ci->invocation.globalOptions.passedWhenKeyValue)
@@ -230,6 +354,36 @@ std::string ConditionalCompilationImpl::GetOSType() const
     return triple.OSToString();
 }
 
+/**
+ * @brief Get current cjc version string.
+ * @return Version string in format: x.y.z[-alpha.xy|-beta.xy|-YYYYMMDDHHMMSS]
+ */
+std::string ConditionalCompilationImpl::GetCJCVersion() const
+{
+    std::string version = std::to_string(cjcVersionInfo.major) + "." +
+                          std::to_string(cjcVersionInfo.minor) + "." +
+                          std::to_string(cjcVersionInfo.patch);
+    
+    switch (cjcVersionInfo.preReleaseType) {
+        case VersionInfo::PreReleaseType::ALPHA:
+            version += "-alpha." + std::to_string(cjcVersionInfo.preReleaseNum) +
+                       std::to_string(cjcVersionInfo.preReleaseSubNum);
+            break;
+        case VersionInfo::PreReleaseType::BETA:
+            version += "-beta." + std::to_string(cjcVersionInfo.preReleaseNum) +
+                       std::to_string(cjcVersionInfo.preReleaseSubNum);
+            break;
+        case VersionInfo::PreReleaseType::NIGHTLY:
+            version += "-" + std::to_string(cjcVersionInfo.nightlyDateTime);
+            break;
+        case VersionInfo::PreReleaseType::NONE:
+        default:
+            break;
+    }
+    
+    return version;
+}
+
 std::optional<std::string> ConditionalCompilationImpl::GetUserDefinedInfoByName(const std::string& name) const
 {
     auto passedValues = GetPassedValues();
@@ -272,7 +426,10 @@ bool ConditionalCompilationImpl::ConditionCheck(
     }
     // Check `cjc_version`.
     if (conditionStr == CJC_VERSION_STR) {
-        std::regex cjcVersionRegex("[0-9]{1,2}[.][0-9]{1,2}[.][0-9]{1,2}");
+        std::regex cjcVersionRegex(
+            "[0-9]{1,2}[.][0-9]{1,2}[.][0-9]{1,2}"
+            "(?:-(alpha|beta)[.][0-9]{1,2}[0-9]{1,2}|-[0-9]{14})?"
+        );
         if (!std::regex_match(right, cjcVersionRegex)) {
             (void)ci->diag.DiagnoseRefactor(
                 DiagKindRefactor::conditional_compilation_not_support_cjc_version_format, begin);
@@ -340,10 +497,15 @@ bool ConditionalCompilationImpl::EvalJudgeBinaryExpr(const BinaryExpr& be)
             conditionStr.Val(), TOKENS[static_cast<int>(be.op)]);
         return false;
     }
-    // Decode cjc version to judge.
+    // Use version comparison for cjc_version
     if (conditionStr == CJC_VERSION_STR) {
-        std::string version = std::to_string(GetVersionUInt(right->stringValue));
-        right->stringValue = RefreshVersionStr(version);
+        VersionInfo rightVersion = ParseVersion(right->stringValue);
+        if (!rightVersion.isValid) {
+            (void)ci->diag.DiagnoseRefactor(
+                DiagKindRefactor::conditional_compilation_not_support_cjc_version_format, be.begin);
+            return false;
+        }
+        return EvalVersion(be, cjcVersionInfo, rightVersion);
     }
     auto leftValue = relatedInfo.value();
     return Eval(be, leftValue, right->stringValue);
