@@ -971,7 +971,9 @@ bool CompilerInstance::ImportPackages()
             return false;
         }
     }
+    Utils::ProfileRecorder::Start("ImportPackages", "AddSourceToMember");
     AddSourceToMember();
+    Utils::ProfileRecorder::Stop("ImportPackages", "AddSourceToMember");
 
     if (invocation.globalOptions.scanDepPkg) {
         importManager.UpdateSearchPath(cangjieModules);
@@ -983,12 +985,18 @@ bool CompilerInstance::ImportPackages()
         return true;
     }
 
+    Utils::ProfileRecorder::Start("ImportPackages", "BuildIndex");
     if (!importManager.BuildIndex(cangjieModules, invocation.globalOptions, pkgs)) {
         return false;
     }
+    Utils::ProfileRecorder::Stop("ImportPackages", "BuildIndex");
 
+    Utils::ProfileRecorder::Start("ImportPackages", "MergePackages");
     MergePackages();
+    Utils::ProfileRecorder::Stop("ImportPackages", "MergePackages");
+    Utils::ProfileRecorder::Start("ImportPackages", "ModularizeCompilation");
     ModularizeCompilation();
+    Utils::ProfileRecorder::Stop("ImportPackages", "ModularizeCompilation");
     return true;
 }
 
