@@ -271,6 +271,7 @@ void TypeChecker::TypeCheckerImpl::CheckSpecializationExtendDupImstantation(cons
 
 void TypeChecker::TypeCheckerImpl::PreCheckAllExtendInterface()
 {
+    Utils::ProfileRecorder recorder("PreCheck", "PreCheckAllExtendInterface");
     // Check extend decls of primitive types in stable order.
     std::set<Ptr<Ty>, CmpTyByName> keys;
     std::for_each(typeManager.builtinTyToExtendMap.begin(), typeManager.builtinTyToExtendMap.end(),
@@ -411,6 +412,7 @@ void TypeChecker::TypeCheckerImpl::BuildExtendMap(ASTContext& ctx)
 
 void TypeChecker::TypeCheckerImpl::BuildImportedExtendMap()
 {
+    Utils::ProfileRecorder recorder("PreCheck", "BuildImportedExtendMap");
     std::unordered_set<Ptr<ExtendDecl>> allExtends;
     // Collect all imported extends.
     auto emplaceExtend = [&allExtends](const OwnedPtr<Decl>& decl) {

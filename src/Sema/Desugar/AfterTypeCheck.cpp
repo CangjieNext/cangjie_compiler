@@ -517,6 +517,7 @@ void TypeChecker::TypeCheckerImpl::GenerateMainInvoke()
 // Perform desugar after typecheck before generic instantiation.
 void TypeChecker::TypeCheckerImpl::DesugarForPropDecl(Node& pkg)
 {
+    Utils::ProfileRecorder recorder("Post TypeCheck", "DesugarForPropDecl");
     Walker(&pkg, [this](Ptr<Node> node) -> VisitAction {
         if (node->TestAnyAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN)) {
             return VisitAction::SKIP_CHILDREN;
