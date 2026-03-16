@@ -1493,10 +1493,19 @@ Ptr<AST::Ty> TypeChecker::TypeCheckerImpl::SynthesizeAndCache(
     dc.ToExclude(ctx.Ctx().diag);
     auto ret = Synthesize(ctx, node);
     dc.BackUp(ctx.Ctx().diag);
-    ctx.Ctx().typeCheckCache[node].synCache[key] = {.successful = ret && Ty::IsTyCorrect(ret) && dc.NoError(),
-        .result = ret,
-        .diags = std::move(dc),
-        .targets = CollectTargets(*node)};
+    bool success = ret && Ty::IsTyCorrect(ret) && dc.NoError();
+    // Skip caching failures while the check runs in an incompatible lambda-parameter context; such
+    // negative entries would be stale for a later check under the right context. See ASTContext
+    // member comment for details. The node's lastKey is still set by Synthesize, so a later
+    // effective-cache hit with no entry falls into the un-Cleared re-check branch; re-checking a
+    // node that was not Cleared is safe (this branch is reachable for bare Synthesize calls too),
+    // it only costs a repeated walk.
+    if (success || ctx.Ctx().inhibitNegCache == 0) {
+        ctx.Ctx().typeCheckCache[node].synCache[key] = {.successful = success,
+            .result = ret,
+            .diags = std::move(dc),
+            .targets = CollectTargets(*node)};
+    }
     return ret;
 }
 
@@ -1506,8 +1515,12 @@ bool TypeChecker::TypeCheckerImpl::CheckAndCache(ASTContext& ctx, Ptr<Ty> target
     dc.ToExclude(ctx.diag);
     bool ret = Check(ctx, target, node);
     dc.BackUp(ctx.diag);
-    ctx.typeCheckCache[node].chkCache[key] = {
-        .successful = ret, .result = node->GetTy(), .diags = std::move(dc), .targets = CollectTargets(*node)};
+    // Same inhibit rule as SynthesizeAndCache above; the skipped-caching note there also applies
+    // to Check's lastKey/un-Cleared re-check interplay.
+    if (ret || ctx.inhibitNegCache == 0) {
+        ctx.typeCheckCache[node].chkCache[key] = {
+            .successful = ret, .result = node->GetTy(), .diags = std::move(dc), .targets = CollectTargets(*node)};
+    }
     return ret;
 }
 
