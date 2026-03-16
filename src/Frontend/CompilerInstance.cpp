@@ -971,9 +971,9 @@ bool CompilerInstance::ImportPackages()
             return false;
         }
     }
-    Utils::ProfileRecorder::Start("ImportPackages", "AddSourceToMember");
+    Utils::ProfileRecorder::Start("ImportPackages", "AddSourceToMember ");
     AddSourceToMember();
-    Utils::ProfileRecorder::Stop("ImportPackages", "AddSourceToMember");
+    Utils::ProfileRecorder::Stop("ImportPackages", "AddSourceToMember ");
 
     if (invocation.globalOptions.scanDepPkg) {
         importManager.UpdateSearchPath(cangjieModules);
