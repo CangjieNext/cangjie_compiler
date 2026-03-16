@@ -30,6 +30,7 @@
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/ModulesUtils.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -539,6 +540,7 @@ void ImportManager::UpdateMacroPackageUsage(const AST::Package& pkg)
 bool ImportManager::ResolveImportedPackages(const std::vector<Ptr<Package>>& packages)
 {
     bool success = true;
+    Utils::ProfileRecorder::Start("ResolveImportedPackages", "ResolveImportedPackageHeaders");
     for (auto pkg : packages) {
         curPackage = pkg;
         // Files of common part need to be loaded in advance,
@@ -552,12 +554,17 @@ bool ImportManager::ResolveImportedPackages(const std::vector<Ptr<Package>>& pac
             curPackage->AddDependentStdPkg(typeWithFullPkgName.second);
         }
     }
+    Utils::ProfileRecorder::Stop("ResolveImportedPackages", "ResolveImportedPackageHeaders");
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    Utils::ProfileRecorder::Start("ResolveImportedPackages", "LoadPackageDeclsOnDemand");
     cjoManager->LoadPackageDeclsOnDemand(packages);
+    Utils::ProfileRecorder::Stop("ResolveImportedPackages", "LoadPackageDeclsOnDemand");
 #endif
+    Utils::ProfileRecorder::Start("ResolveImportedPackages", "AddPackageDeclMap");
     for (auto pkg : packages) {
         cjoManager->AddPackageDeclMap(pkg->fullPackageName);
     }
+    Utils::ProfileRecorder::Stop("ResolveImportedPackages", "AddPackageDeclMap");
     return success;
 }
 
@@ -915,6 +922,7 @@ bool ImportManager::BuildIndex(
     } else {
         ClearCachesForRebuild();
     }
+    Utils::ProfileRecorder::Start("BuildIndex", "AddImplicitImports");
     for (auto pkg : packages) {
         if (pkg->HasFtrDirective()) {
             CheckPackageFeatureSpec(diag, *pkg);
@@ -926,17 +934,25 @@ bool ImportManager::BuildIndex(
         AddImplicitImports(*pkg, globalOptions);
         cjoManager->AddSourcePackage(*pkg);
     }
+    Utils::ProfileRecorder::Stop("BuildIndex", "AddImplicitImports");
+    Utils::ProfileRecorder::Start("BuildIndex", "ResolveImportedPackages");
     ResolveImportedPackages(packages);
+    Utils::ProfileRecorder::Stop("BuildIndex", "ResolveImportedPackages");
     ClearPackageCjoCache();
 
+    Utils::ProfileRecorder::Start("BuildIndex", "AddDependencies");
     for (auto pkg : packages) {
         dependencyGraph->AddDependenciesForPackage(*pkg);
     }
+    Utils::ProfileRecorder::Stop("BuildIndex", "AddDependencies");
 
+    Utils::ProfileRecorder::Start("BuildIndex", "AddImportedDeclsForSourcePackage");
     for (auto pkg : packages) {
         AddImportedDeclsForSourcePackage(*pkg);
     }
+    Utils::ProfileRecorder::Stop("BuildIndex", "AddImportedDeclsForSourcePackage");
 
+    Utils::ProfileRecorder::Start("BuildIndex", "ResolveImports");
     for (auto pkg : packages) {
         ResolveImports(*pkg);
     }
@@ -945,6 +961,7 @@ bool ImportManager::BuildIndex(
             packages.push_back(pd->srcPackage);
         }
     }
+    Utils::ProfileRecorder::Stop("BuildIndex", "ResolveImports");
     curPackage = packages.front();
     // Set BuildIndex flag
     cjoManager->SetHasBuildIndex(true);

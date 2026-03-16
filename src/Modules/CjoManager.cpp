@@ -20,6 +20,7 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/ModulesUtils.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -349,6 +350,7 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
         }
     }
 
+    Utils::ProfileRecorder::Start("LoadPackageDeclsOnDemand", "LoadPackageDecls");
     while (!q.empty()) {
         auto cur = q.front();
         q.pop();
@@ -369,16 +371,21 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
             }
         }
     }
+    Utils::ProfileRecorder::Stop("LoadPackageDeclsOnDemand", "LoadPackageDecls");
 
+    Utils::ProfileRecorder::Start("LoadPackageDeclsOnDemand", "LoadRefs");
     for (auto loader : loaders) {
         loader->LoadRefs();
     }
+    Utils::ProfileRecorder::Stop("LoadPackageDeclsOnDemand", "LoadRefs");
 
     // For LSP, packages are only used to indexing, so no need to substitute TypeAliasTy.
     if (!fromLsp) {
         // Node's ty may reference TypeAliasTy from imported package, need to substitute them to real type.
         // It must be done after all type references are loaded.
+        Utils::ProfileRecorder::Start("LoadPackageDeclsOnDemand", "SubstituteImportedTypeAliasTy");
         impl->SubstituteImportedTypeAliasTy(packages);
+        Utils::ProfileRecorder::Stop("LoadPackageDeclsOnDemand", "SubstituteImportedTypeAliasTy");
     }
 }
 
