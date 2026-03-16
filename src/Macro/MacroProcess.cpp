@@ -60,45 +60,6 @@ size_t GetTokenLenth(const Token& token)
     return GetTokenLength(token.Value().size(), token.kind, token.delimiterNum);
 }
 
-void CollectMacroDebugPosition(
-    MacroInvocation& invocation, const Token& token, unsigned int lastColumn)
-{
-    if (!token.Begin().isCurFile || token.kind == TokenKind::COMMENT) {
-        return;
-    }
-    auto key = token.Begin().Hash64();
-    if (invocation.origin2newPosMap.find(key) != invocation.origin2newPosMap.end()) {
-        return;
-    }
-    // Collect the position information of tokens from macrocalls for debugging purposes.
-    if (token.kind == TokenKind::NL) {
-        if (!invocation.macroDebugMap.empty()) {
-            auto lastPos = invocation.macroDebugMap.begin()->second;
-            // If the last token is newline, then the lastPos's column is 1, and it only needs to be collected once.
-            if (lastPos.column != 1) {
-                invocation.macroDebugMap[lastColumn] = Position{lastPos.fileID, lastPos.line + 1, 1};
-            }
-        }
-        return;
-    }
-    // Other tokens except newline.
-    if (!invocation.macroDebugMap.empty()) {
-        auto lastPos = invocation.macroDebugMap.begin()->second;
-        if (lastPos == token.Begin()) {
-            // No need to collect the same position.
-            return;
-        }
-        // If the last token is newline, replace the last position with the position of current token.
-        if (lastPos.column == 1) {
-            invocation.macroDebugMap.begin()->second = token.Begin();
-            invocation.macroDebugMap[static_cast<unsigned>(lastColumn + GetTokenLenth(token))] = token.End();
-            return;
-        }
-    }
-    invocation.macroDebugMap[lastColumn] = token.Begin();
-    invocation.macroDebugMap[static_cast<unsigned>(lastColumn + GetTokenLenth(token))] = token.End();
-}
-
 static void HandleInterplationStringPosMap(Token& strToken, Position newStartPos,
                                            const Ptr<MacroInvocation> pMacroInvocation,
                                            const CompilerInstance& ci,
@@ -199,9 +160,6 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
         if (!IsSpecialToken(prevTokenKind, token.kind)) {
             lastColumn += 1;
         }
-        if (ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo) {
-            CollectMacroDebugPosition(*pMacroInvocation, token, lastColumn);
-        }
         // still have problem with MULTILINE_STRING, turns out Node generated from interpolation part
         // not stay in same line, impossible to establish a mapping
         Position keyPos(mcPos.line, static_cast<int>(lastColumn));
@@ -230,9 +188,6 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
             pMacroInvocation->origin2newPosMap[key] = token.Begin();
         }
         prevTokenKind = token.kind;
-    }
-    if (ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo) {
-        pMacroInvocation->macroDebugMap[lastColumn] = node.end;
     }
 }
 

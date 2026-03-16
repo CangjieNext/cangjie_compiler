@@ -1033,15 +1033,28 @@ Position Node::GetDebugPos(const Position& curPos) const
         }
         // Current node is expanded from macrocall node.
         pInvocation = this->curMacroCall->GetConstInvocation();
-        if (!pInvocation || pInvocation->macroDebugMap.empty()) {
+        if (!pInvocation || pInvocation->new2originPosMap.empty()) {
             return curPos;
         }
     }
-    auto key = static_cast<unsigned int>(curPos.column);
-    if (pInvocation->macroDebugMap.lower_bound(key) == pInvocation->macroDebugMap.end()) {
+    
+    auto key = curPos.Hash32();
+    if (pInvocation->new2originPosMap.find(key) != pInvocation->new2originPosMap.end()) {
+        return pInvocation->new2originPosMap.find(key)->second;
+    }
+    // end position
+    auto it = pInvocation->new2originPosMap.find(key);
+    if (it != pInvocation->new2originPosMap.end()) {
+        ++it;
+    }
+    if (it == pInvocation->new2originPosMap.end()) {
+        it = pInvocation->new2originPosMap.lower_bound(key);
+    }
+    if (it == pInvocation->new2originPosMap.end()) {
         return curPos;
     }
-    return pInvocation->macroDebugMap.lower_bound(key)->second;
+
+    return GetMacroCallEndPosforLsp(key, it->first, it->second);
 }
 
 const std::string& Node::GetFullPackageName() const

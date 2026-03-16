@@ -2341,8 +2341,6 @@ struct MacroInvocation {
     bool isFuncParam{false};
     bool isCustom{false}; /**< Indicates Custom Annotation. */
     bool isCompileTimeVisible{}; /**< True when @! Annotation. */
-    // Mapping between new position column and origin source position in macrocall for debug.
-    std::map<unsigned int, Position, std::greater<unsigned int>> macroDebugMap;
     // Mapping between new position column and origin source position before macro expansion.
     std::map<unsigned int, Position, std::greater<unsigned int>> new2originPosMap;
     // Mapping between new position column and new source position after macro expansion.
