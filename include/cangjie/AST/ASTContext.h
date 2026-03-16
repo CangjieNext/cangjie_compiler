@@ -163,6 +163,16 @@ public:
      * `VarDecl`, `FuncDecl` or other high level check target, and pop the node after finishing the checking.
      */
     std::stack<Ptr<AST::Node>> currentCheckingNodes{};
+    /**
+     * When > 0, failed type-check results must not be written into typeCheckCache. Set while checking the
+     * body of a lambda whose parameter list is incompatible with the current target (e.g. a different
+     * overload candidate): such failures describe the wrong parameter context, and caching them would let
+     * later checks against the right context hit stale negative entries. Disabling caching only loses
+     * reuse, never correctness. The counter lives on each ASTContext, and Check/Synthesize may switch to
+     * another package's context mid-recursion; that only disables inhibition for imported nodes, whose
+     * results do not depend on the caller's lambda parameters, so such entries are not poison.
+     */
+    unsigned inhibitNegCache{0};
 
     std::unordered_map<Ptr<const AST::Node>, Ptr<AST::Ty>>
         targetTypeMap; /**< The node should be inferred to the corresponding type. */
