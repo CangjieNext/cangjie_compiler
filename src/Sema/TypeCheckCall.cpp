@@ -1217,6 +1217,13 @@ bool TypeChecker::TypeCheckerImpl::CheckCallCompatible(ASTContext& ctx, Function
     }
     for (size_t i = 0; i < paramTysInArgsOrder.size(); ++i) {
         ce.args[i]->Clear();
+        // If the argument is a lambda, clear the typeCheckCache of its body to prevent stale negative
+        // cache entries (from a previous overload candidate) from polluting the check of this candidate.
+        // SynthesizeWithNegCache caches failures keyed only on targetTypeMap and diagKey, so when the
+        // lambda's parameter types change across candidates, inner nodes must be re-checked.
+        if (auto lamArg = DynamicCast<LambdaExpr>(ce.args[i]->expr.get()); lamArg && lamArg->funcBody) {
+            ctx.ClearTypeCheckCache(*lamArg->funcBody);
+        }
         if (!CheckWithCache(ctx, paramTysInArgsOrder[i], ce.args[i].get())) {
             if (ce.args[i]->ShouldDiagnose() && !CanSkipDiag(*ce.args[i])) {
                 DiagMismatchedTypes(diag, *ce.args[i], *paramTysInArgsOrder[i]);
