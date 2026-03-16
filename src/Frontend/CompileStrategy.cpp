@@ -563,13 +563,16 @@ bool CompileStrategy::MacroExpand() const
 
 bool FullCompileStrategy::Sema()
 {
-    {
-        Utils::ProfileRecorder recorder("Semantic", "Desugar Before TypeCheck");
-        PerformDesugar();
-    }
+    Utils::ProfileRecorder::Start("Semantic", "Desugar Before TypeCheck");
+    PerformDesugar();
+    Utils::ProfileRecorder::Stop("Semantic", "Desugar Before TypeCheck");
     // Interop config toml file check format.
+    Utils::ProfileRecorder::Start("Semantic", "InteropConfigTomlCheck");
     InteropConfigTomlCheck();
+    Utils::ProfileRecorder::Stop("Semantic", "InteropConfigTomlCheck");
+    Utils::ProfileRecorder::Start("Semantic", "TypeCheck");
     TypeCheck();
+    Utils::ProfileRecorder::Stop("Semantic", "TypeCheck");
 #ifdef SIGNAL_TEST
     // The interrupt signal triggers the function. In normal cases, this function does not take effect.
     Cangjie::SignalTest::ExecuteSignalTestCallbackFunc(Cangjie::SignalTest::TriggerPointer::SEMA_POINTER);
