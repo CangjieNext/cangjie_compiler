@@ -18945,7 +18945,7 @@ index 5ab494414..6521e8519 100644
    ItaniumABILanguageRuntime.cpp
  
 diff --git a/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp b/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp
-index 1595335cf..36c2ad755 100644
+index 1595335cf..f47a78847 100644
 --- a/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp
 +++ b/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp
 @@ -4,37 +4,30 @@
@@ -19002,7 +19002,7 @@ index 1595335cf..36c2ad755 100644
  
  char ItaniumABILanguageRuntime::ID = 0;
  
-@@ -182,6 +176,1026 @@ TypeAndOrName ItaniumABILanguageRuntime::GetTypeInfoFromVTableAddress(
+@@ -182,6 +176,1029 @@ TypeAndOrName ItaniumABILanguageRuntime::GetTypeInfoFromVTableAddress(
    return TypeAndOrName();
  }
  
@@ -20013,6 +20013,9 @@ index 1595335cf..36c2ad755 100644
 +    if (!error.Success()) {
 +      return false;
 +    }
++    if (GetTypeName(*m_process, typeInfo) == in_value.GetCompilerType().GetTypeName()) {
++      return false;
++    }
 +    auto dynamic_type = GetDynamicTypeFromGenericTypeInfo(*ast, typeInfo);
 +    if (!dynamic_type.IsValid()) {
 +      return false;
@@ -20029,7 +20032,7 @@ index 1595335cf..36c2ad755 100644
  bool ItaniumABILanguageRuntime::GetDynamicTypeAndAddress(
      ValueObject &in_value, lldb::DynamicValueType use_dynamic,
      TypeAndOrName &class_type_or_name, Address &dynamic_address,
-@@ -193,7 +1207,16 @@ bool ItaniumABILanguageRuntime::GetDynamicTypeAndAddress(
+@@ -193,7 +1210,16 @@ bool ItaniumABILanguageRuntime::GetDynamicTypeAndAddress(
    // contain the full class name. The second pointer above the "address point"
    // is the "offset_to_top".  We'll use that to get the start of the value
    // object which holds the dynamic type.
@@ -24919,7 +24922,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..8db71f9e5 100644
+index b391fe1ea..696554e1a 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -24975,7 +24978,7 @@ index b391fe1ea..8db71f9e5 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.1.0-beta.23";
++    g_version_str += "\n  cangjie 1.1.0-beta.24";
    }
  
    return g_version_str.c_str();
@@ -29305,7 +29308,7 @@ index 000000000..1ec3ef1f2
 +
 +#endif
 diff --git a/llvm/include/llvm/Transforms/IPO/GlobalDCE.h b/llvm/include/llvm/Transforms/IPO/GlobalDCE.h
-index a24196efb..7df48133a 100644
+index a24196efb..79d0ee061 100644
 --- a/llvm/include/llvm/Transforms/IPO/GlobalDCE.h
 +++ b/llvm/include/llvm/Transforms/IPO/GlobalDCE.h
 @@ -18,9 +18,12 @@
@@ -29321,7 +29324,7 @@ index a24196efb..7df48133a 100644
  #include <unordered_map>
  
  namespace llvm {
-@@ -70,6 +73,70 @@ private:
+@@ -70,6 +73,75 @@ private:
    void ScanVTableLoad(Function *Caller, Metadata *TypeId, uint64_t CallOffset);
  
    void ComputeDependencies(Value *V, SmallPtrSetImpl<GlobalValue *> &U);
@@ -29331,11 +29334,16 @@ index a24196efb..7df48133a 100644
 +
 +struct CangjieDCE {
 +  struct GenericFuncInfo {
-+    bool IsValid= false;
++    bool IsValid = false;
 +    GenericFuncInfo *Prev = nullptr;
 +    // Save all func tables with current type.
 +    SmallPtrSet<GlobalVariable *, 4> FuncTables;
++    DenseMap<GlobalVariable *, bool> HasCompilerInfo;
 +    DenseMap<GlobalVariable *, GenericFuncInfo *> Next;
++
++#ifndef NDEBUG
++    GlobalVariable *Ty = nullptr;
++#endif
 +  };
 +
 +  // These are used for eliminating the useless virtual func.
@@ -48081,7 +48089,7 @@ index ca7d53dce..407631e03 100644
    intrinsics_gen
  
 diff --git a/llvm/lib/Target/ARM/ARMAsmPrinter.cpp b/llvm/lib/Target/ARM/ARMAsmPrinter.cpp
-index 57cbd7a3b..e3fa94c78 100644
+index 57cbd7a3b..ba89fe4ee 100644
 --- a/llvm/lib/Target/ARM/ARMAsmPrinter.cpp
 +++ b/llvm/lib/Target/ARM/ARMAsmPrinter.cpp
 @@ -27,11 +27,13 @@
@@ -48129,11 +48137,11 @@ index 57cbd7a3b..e3fa94c78 100644
  }
  
  //===----------------------------------------------------------------------===//
-@@ -1332,6 +1342,166 @@ void ARMAsmPrinter::EmitUnwindingInstruction(const MachineInstr *MI) {
+@@ -1332,6 +1342,168 @@ void ARMAsmPrinter::EmitUnwindingInstruction(const MachineInstr *MI) {
    }
  }
  
-+//   ldr	R12, .Ltmp1
++//  ldr	R12, .Ltmp1
 +// .Ltmp0:
 +// 	add	R12, pc, R12
 +// 	ldr	R12, [R12]
@@ -48142,8 +48150,10 @@ index 57cbd7a3b..e3fa94c78 100644
 +// 	mov	r12, #0
 +// 	str	R12, [sp, #4] // CallFrameSize
 +// 	bl	CJ_MCC_N2CStub
++//  b .Ltmp2
 +// .Ltmp1:
 +//   .long	.Ltmp1-(.calleefunc+8)
++// .Ltmp2:
 +void ARMAsmPrinter::emitCangjieCallStubInstImpl(const MachineInstr *MI,
 +                                               const Function *F,
 +                                               const MachineOperand &MOSym,
@@ -48296,7 +48306,7 @@ index 57cbd7a3b..e3fa94c78 100644
  // Simple pseudo-instructions have their lowering (with expansion to real
  // instructions) auto-generated.
  #include "ARMGenMCPseudoLowering.inc"
-@@ -1363,6 +1533,9 @@ void ARMAsmPrinter::emitInstruction(const MachineInstr *MI) {
+@@ -1363,6 +1535,9 @@ void ARMAsmPrinter::emitInstruction(const MachineInstr *MI) {
    assert(!convertAddSubFlagsOpcode(MI->getOpcode()) &&
           "Pseudo flag setting opcode should be expanded early");
  
@@ -48306,7 +48316,7 @@ index 57cbd7a3b..e3fa94c78 100644
    // Check for manual lowerings.
    unsigned Opc = MI->getOpcode();
    switch (Opc) {
-@@ -2319,6 +2492,37 @@ void ARMAsmPrinter::emitInstruction(const MachineInstr *MI) {
+@@ -2319,6 +2494,37 @@ void ARMAsmPrinter::emitInstruction(const MachineInstr *MI) {
    case ARM::SEH_EpilogEnd:
      ATS.emitARMWinCFIEpilogEnd();
      return;
@@ -48775,6 +48785,29 @@ index 4c24d7020..f2a8b4124 100644
      return Builder.CreateCall(Strex, {Lo, Hi, Addr});
    }
  
+diff --git a/llvm/lib/Target/ARM/ARMSubtarget.cpp b/llvm/lib/Target/ARM/ARMSubtarget.cpp
+index 79244f634..224eaf0eb 100644
+--- a/llvm/lib/Target/ARM/ARMSubtarget.cpp
++++ b/llvm/lib/Target/ARM/ARMSubtarget.cpp
+@@ -72,6 +72,9 @@ ForceFastISel("arm-force-fast-isel",
+ static cl::opt<bool> EnableSubRegLiveness("arm-enable-subreg-liveness",
+                                           cl::init(false), cl::Hidden);
+ 
++namespace llvm {
++extern cl::opt<bool> CJPipeline;
++}
+ /// initializeSubtargetDependencies - Initializes using a CPU and feature string
+ /// so that we can use initializer lists for subtarget initialization.
+ ARMSubtarget &ARMSubtarget::initializeSubtargetDependencies(StringRef CPU,
+@@ -206,7 +209,7 @@ void ARMSubtarget::initSubtargetFeatures(StringRef CPU, StringRef FS) {
+ 
+   if (isAAPCS_ABI())
+     stackAlignment = Align(8);
+-  if (isTargetNaCl() || isAAPCS16_ABI())
++  if (isTargetNaCl() || isAAPCS16_ABI() || CJPipeline)
+     stackAlignment = Align(16);
+ 
+   // FIXME: Completely disable sibcall for Thumb1 since ThumbRegisterInfo::
 diff --git a/llvm/lib/Target/TargetLoweringObjectFile.cpp b/llvm/lib/Target/TargetLoweringObjectFile.cpp
 index 29cc28403..1ddd4ea6a 100644
 --- a/llvm/lib/Target/TargetLoweringObjectFile.cpp
@@ -54621,7 +54654,7 @@ index 50710eaa1..b9065ec1a 100644
  
  /// Deduce returned attributes for the SCC.
 diff --git a/llvm/lib/Transforms/IPO/GlobalDCE.cpp b/llvm/lib/Transforms/IPO/GlobalDCE.cpp
-index f35827220..7314c5751 100644
+index f35827220..1c2f6496f 100644
 --- a/llvm/lib/Transforms/IPO/GlobalDCE.cpp
 +++ b/llvm/lib/Transforms/IPO/GlobalDCE.cpp
 @@ -18,6 +18,7 @@
@@ -54656,18 +54689,22 @@ index f35827220..7314c5751 100644
  STATISTIC(NumAliases  , "Number of global aliases removed");
  STATISTIC(NumFunctions, "Number of functions removed");
  STATISTIC(NumIFuncs,    "Number of indirect functions removed");
-@@ -138,6 +152,10 @@ void GlobalDCEPass::UpdateGVDependencies(GlobalValue &GV) {
+@@ -138,6 +152,14 @@ void GlobalDCEPass::UpdateGVDependencies(GlobalValue &GV) {
                          << GV.getName() << "\n");
        continue;
      }
-+    if (CJPipeline &&
-+        CangjieDCE::maybeFakeLiveOfTypeMeta(dyn_cast<GlobalVariable>(GVU),
-+                                            dyn_cast<GlobalVariable>(&GV)))
-+      continue;
++    if (CJPipeline) {
++      auto *Usee = dyn_cast<GlobalVariable>(&GV);
++      auto *User = dyn_cast<GlobalVariable>(GVU);
++      if (VFESafeVTables.count(User) && Usee && Usee->isCJTypeInfo())
++        continue;
++      if (CangjieDCE::maybeFakeLiveOfTypeMeta(User, Usee))
++        continue;
++    }
      GVDependencies[GVU].insert(&GV);
    }
  }
-@@ -290,6 +308,7 @@ void GlobalDCEPass::AddVirtualFunctionDependencies(Module &M) {
+@@ -290,6 +312,7 @@ void GlobalDCEPass::AddVirtualFunctionDependencies(Module &M) {
  
  PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
    bool Changed = false;
@@ -54675,7 +54712,7 @@ index f35827220..7314c5751 100644
  
    // The algorithm first computes the set L of global variables that are
    // trivially live.  Then it walks the initialization of these variables to
-@@ -318,6 +337,11 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -318,6 +341,11 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
    // might call, if we have that information.
    AddVirtualFunctionDependencies(M);
  
@@ -54687,7 +54724,7 @@ index f35827220..7314c5751 100644
    // Loop over the module, adding globals which are obviously necessary.
    for (GlobalObject &GO : M.global_objects()) {
      GO.removeDeadConstantUsers();
-@@ -361,15 +385,23 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -361,15 +389,23 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
        MarkLive(*GVD, &NewLiveGVs);
    }
  
@@ -54713,7 +54750,7 @@ index f35827220..7314c5751 100644
        if (GV.hasInitializer()) {
          Constant *Init = GV.getInitializer();
          GV.setInitializer(nullptr);
-@@ -377,16 +409,20 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -377,16 +413,20 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
            Init->destroyConstant();
        }
      }
@@ -54738,7 +54775,7 @@ index f35827220..7314c5751 100644
    // The third pass drops targets of aliases which are dead...
    std::vector<GlobalAlias*> DeadAliases;
    for (GlobalAlias &GA : M.aliases())
-@@ -435,8 +471,12 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -435,8 +475,12 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
    }
  
    NumVariables += DeadGlobalVars.size();
@@ -54752,7 +54789,7 @@ index f35827220..7314c5751 100644
  
    NumAliases += DeadAliases.size();
    for (GlobalAlias *GA : DeadAliases)
-@@ -446,6 +486,11 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -446,6 +490,11 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
    for (GlobalIFunc *GIF : DeadIFuncs)
      EraseUnusedGlobalValue(GIF);
  
@@ -54764,7 +54801,7 @@ index f35827220..7314c5751 100644
    // Make sure that all memory is released
    AliveGlobals.clear();
    ConstantDependenciesCache.clear();
-@@ -458,3 +503,357 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -458,3 +507,395 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
      return PreservedAnalyses::none();
    return PreservedAnalyses::all();
  }
@@ -54780,6 +54817,9 @@ index f35827220..7314c5751 100644
 +      continue;
 +    }
 +    auto *GFI = new GenericFuncInfo;
++#ifndef NDEBUG
++    GFI->Ty = GV;
++#endif
 +    GFI->Prev = CurRoot;
 +    CurRoot->Next[GV] = GFI;
 +    CurRoot = GFI;
@@ -54845,7 +54885,6 @@ index f35827220..7314c5751 100644
 +  GlobalVariable *IF = GV.getParent()->getNamedGlobal(
 +      dyn_cast<MDString>(GV.getMetadata("inheritedType")->getOperand(0))
 +          ->getString());
-+
 +  return {TI, IF, FT};
 +}
 +
@@ -54853,6 +54892,7 @@ index f35827220..7314c5751 100644
 +    Function *Caller,
 +    DenseMap<GenericFuncInfo *, SmallSet<uint64_t, 4>> &Relation) {
 +  auto Mark = [Caller, this](SmallPtrSetImpl<GlobalVariable *> &FTs,
++                             DenseMap<GlobalVariable *, bool> &HasCompilerInfo,
 +                             uint64_t Offset) {
 +    for (auto *FT : FTs) {
 +      auto *C = FT->getInitializer();
@@ -54864,24 +54904,33 @@ index f35827220..7314c5751 100644
 +        continue;
 +      assert(Callee != nullptr);
 +      this->DCE.GVDependencies[Caller].insert(Callee);
++      if (!HasCompilerInfo[FT])
++        continue;
++      unsigned N = C->getNumOperands();
++      assert(N % 2 == 0 && Offset < N / 2 &&
++             "front end generate error functable");
++      if (auto *Pair = dyn_cast_or_null<GlobalVariable>(
++              C->getOperand(Offset + N / 2)->stripPointerCasts()))
++        this->DCE.GVDependencies[Caller].insert(Pair);
 +    }
 +  };
 +  for (auto &[GFI, Offsets] : Relation) {
 +    for (auto I : Offsets) {
++      auto *CurGFI = GFI;
 +      // 1. Mark all child nodes.
-+      SmallVector<GenericFuncInfo *, 8> Worklist = {GFI};
++      SmallVector<GenericFuncInfo *, 8> Worklist = {CurGFI};
 +      while (!Worklist.empty()) {
 +        auto *Child = Worklist.pop_back_val();
 +        for (auto [_, N] : Child->Next) {
-+          Mark(N->FuncTables, I);
++          Mark(N->FuncTables, N->HasCompilerInfo, I);
 +          Worklist.push_back(N);
 +        }
 +      }
 +      // 2. Recursively mark all parent nodes.
-+      while (GFI != Root) {
-+        auto &FTs = GFI->FuncTables;
-+        GFI = GFI->Prev;
-+        Mark(FTs, I);
++      while (CurGFI != Root) {
++        auto &FTs = CurGFI->FuncTables;
++        CurGFI = CurGFI->Prev;
++        Mark(FTs, CurGFI->HasCompilerInfo, I);
 +      }
 +    }
 +  }
@@ -54910,6 +54959,10 @@ index f35827220..7314c5751 100644
 +      auto *GFI = resolveVFEMeta(GV.getMetadata("inheritedType"), M);
 +      assert(GFI);
 +      GFI->FuncTables.insert(FT);
++      GFI->HasCompilerInfo[FT] =
++          cast<ConstantInt>(
++              GV.getInitializer()->getOperand(ExtensionDefFieldType::ET_FLAG))
++              ->getZExtValue() != 0;
 +      DCE.VFESafeVTables.insert(FT);
 +    }
 +  }
@@ -54920,21 +54973,43 @@ index f35827220..7314c5751 100644
 +    for (auto &I : instructions(F)) {
 +      // There is an overlap between MD_obj_type and MD_intro_type, which needs
 +      // to be considered for merging in the future.
-+      auto *MD = I.getMetadata(LLVMContext::MD_obj_type);
-+      if (!MD)
++      auto *TypeMD = I.getMetadata(LLVMContext::MD_obj_type);
++      if (!TypeMD)
 +        continue;
 +      assert(isa<LoadInst>(&I));
-+      auto *GFI = resolveVFEMeta(MD, M);
-+      if (!GFI)
-+        continue;
-+      if (!I.hasMetadata(LLVMContext::MD_func_table))
-+        report_fatal_error("Missing metadata");
-+      auto Offset =
-+          mdconst::extract<ConstantInt>(
-+              I.getMetadata(LLVMContext::MD_func_table)->getOperand(0))
-+              ->getZExtValue();
-+      // The last operand is the index of functable.
-+      RelatedGV[GFI].insert(Offset);
++      auto *OffsetMD = I.getMetadata(LLVMContext::MD_func_table);
++      if (!OffsetMD)
++        report_fatal_error("objType present without FuncTable");
++
++      // Merged format: operand(0) is MDNode (vs MDString for single-entry).
++      // Each operand pair (TypeMD[i], OffsetMD[i]) represents one (obj_type, offset).
++      if (TypeMD->getNumOperands() > 0 && isa<MDNode>(TypeMD->getOperand(0))) {
++        if (TypeMD->getNumOperands() != OffsetMD->getNumOperands())
++          report_fatal_error(
++              "Merged objType and FuncTable have different operand counts");
++        for (unsigned i = 0; i < TypeMD->getNumOperands(); i++) {
++          auto *SubType = dyn_cast<MDNode>(TypeMD->getOperand(i));
++          auto *SubOff = dyn_cast<MDNode>(OffsetMD->getOperand(i));
++          if (!SubType || !SubOff || SubOff->getNumOperands() == 0)
++            report_fatal_error("Malformed merged objType or FuncTable");
++          auto *GFI = resolveVFEMeta(SubType, M);
++          if (!GFI)
++            continue;
++          auto Offset =
++              mdconst::extract<ConstantInt>(SubOff->getOperand(0))
++                  ->getZExtValue();
++          RelatedGV[GFI].insert(Offset);
++        }
++      } else {
++        // Single-entry format.
++        auto *GFI = resolveVFEMeta(TypeMD, M);
++        if (!GFI)
++          continue;
++        auto Offset =
++            mdconst::extract<ConstantInt>(OffsetMD->getOperand(0))
++                ->getZExtValue();
++        RelatedGV[GFI].insert(Offset);
++      }
 +    }
 +    updateDependencies(&F, RelatedGV);
 +  }
@@ -60905,10 +60980,10 @@ index 000000000..f55d9b667
 +                "Cangjie Barriers Split", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJDevirtualOpt.cpp b/llvm/lib/Transforms/Scalar/CJDevirtualOpt.cpp
 new file mode 100644
-index 000000000..3409036f1
+index 000000000..584438e2a
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJDevirtualOpt.cpp
-@@ -0,0 +1,475 @@
+@@ -0,0 +1,483 @@
 +//===- CJDevirtualOpt.cpp - -------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -60975,7 +61050,8 @@ index 000000000..3409036f1
 +        break;
 +      }
 +      case Instruction::Load: {
-+        if (I->hasMetadata(LLVMContext::MD_func_table)) {
++        if (I->hasMetadata(LLVMContext::MD_func_table) &&
++            I->hasMetadata(LLVMContext::MD_intro_type)) {
 +          FTLIS.push_back(cast<LoadInst>(I));
 +          break;
 +        }
@@ -61273,6 +61349,13 @@ index 000000000..3409036f1
 +    for (auto *FTLI : FTLIS) {
 +      MDNode *MDFT = FTLI->getMetadata(LLVMContext::MD_func_table);
 +      assert(MDFT != nullptr && "metadata IntroType must have value");
++      // Skip merged metadata format (produced when instructions with different
++      // VFE metadata are combined). Merged format has MDNode operands instead
++      // of ConstantAsMetadata.
++      if (isa<MDNode>(MDFT->getOperand(0))) {
++        UnresolvedLoad.push_back(FTLI);
++        continue;
++      }
 +      uint64_t FuncIndex =
 +          mdconst::extract<ConstantInt>(MDFT->getOperand(0))->getZExtValue();
 +      bool Resolved = DevirtualImpl(Klass0, GetKlass1(FTLI), FTLI, FuncIndex);
@@ -71688,7 +71771,7 @@ index 000000000..2b87826d1
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
 new file mode 100644
-index 000000000..9e00c13d3
+index 000000000..03797260f
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
 @@ -0,0 +1,1152 @@
@@ -72304,7 +72387,7 @@ index 000000000..9e00c13d3
 +    auto *GEP = IRB.CreateGEP(Int8PtrTy, BC0, {CB->getArgOperand(2)});
 +    auto *LI = IRB.CreateLoad(Int8PtrTy, GEP);
 +    LI->setMetadata(LLVMContext::MD_invariant_load, MDNode::get(C, {}));
-+    LI->setMetadata("FuncTable",
++    LI->setMetadata(LLVMContext::MD_func_table,
 +                    MDNode::get(C, {ConstantAsMetadata::get(cast<ConstantInt>(
 +                                       CB->getArgOperand(2)))}));
 +    LI->setMetadata(LLVMContext::MD_obj_type,
@@ -75149,7 +75232,7 @@ index cf2824954..8fa54674a 100644
            Changed = true;
          }
 diff --git a/llvm/lib/Transforms/Scalar/GVN.cpp b/llvm/lib/Transforms/Scalar/GVN.cpp
-index b460637b7..4280ca3b7 100644
+index b460637b7..a32a7a139 100644
 --- a/llvm/lib/Transforms/Scalar/GVN.cpp
 +++ b/llvm/lib/Transforms/Scalar/GVN.cpp
 @@ -49,15 +49,18 @@
@@ -75220,7 +75303,20 @@ index b460637b7..4280ca3b7 100644
    // Unknown def - must be conservative
    LLVM_DEBUG(
        // fast print dep, using operator<< on instruction is too slow.
-@@ -2023,6 +2054,10 @@ static void patchAndReplaceAllUsesWith(Instruction *I, Value *Repl) {
+@@ -1373,6 +1404,12 @@ void GVNPass::eliminatePartiallyRedundantLoad(
+       if (LI &&
+           LI->getLoopFor(Load->getParent()) == LI->getLoopFor(UnavailableBlock))
+         NewLoad->setMetadata(LLVMContext::MD_access_group, AccessMD);
++    if (auto *ObjTypeMD = Load->getMetadata(LLVMContext::MD_obj_type))
++      NewLoad->setMetadata(LLVMContext::MD_obj_type, ObjTypeMD);
++    if (auto *FuncTableMD = Load->getMetadata(LLVMContext::MD_func_table))
++      NewLoad->setMetadata(LLVMContext::MD_func_table, FuncTableMD);
++    if (auto *IntroTypeMD = Load->getMetadata(LLVMContext::MD_intro_type))
++      NewLoad->setMetadata(LLVMContext::MD_intro_type, IntroTypeMD);
+ 
+     // We do not propagate the old load's debug location, because the new
+     // load now lives in a different BB, and we want to avoid a jumpy line
+@@ -2023,6 +2060,10 @@ static void patchAndReplaceAllUsesWith(Instruction *I, Value *Repl) {
  /// Attempt to eliminate a load, first by eliminating it
  /// locally, and then attempting non-local elimination if that fails.
  bool GVNPass::processLoad(LoadInst *L) {
@@ -76314,7 +76410,7 @@ index b31eab50c..e336cd470 100644
      NewPN->addIncoming(SI->getTrueValue(), Term->getParent());
      NewPN->addIncoming(SI->getFalseValue(), BB);
 diff --git a/llvm/lib/Transforms/Scalar/LICM.cpp b/llvm/lib/Transforms/Scalar/LICM.cpp
-index f54264b1d..0b525b16b 100644
+index f54264b1d..39a783638 100644
 --- a/llvm/lib/Transforms/Scalar/LICM.cpp
 +++ b/llvm/lib/Transforms/Scalar/LICM.cpp
 @@ -65,13 +65,19 @@
@@ -76454,7 +76550,7 @@ index f54264b1d..0b525b16b 100644
          hoist(I, DT, CurLoop, CFH.getOrCreateHoistedBlock(BB), SafetyInfo,
                MSSAU, SE, ORE);
          HoistedInstructions.push_back(&I);
-@@ -1715,8 +1782,14 @@ static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
+@@ -1715,8 +1782,16 @@ static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
        // The check on hasMetadataOtherThanDebugLoc is to prevent us from burning
        // time in isGuaranteedToExecute if we don't actually have anything to
        // drop.  It is a compile time optimization, not required for correctness.
@@ -76463,7 +76559,9 @@ index f54264b1d..0b525b16b 100644
 +      !SafetyInfo->isGuaranteedToExecute(I, DT, CurLoop)) {
 +    if (CJPipeline) {
 +      I.dropUndefImplyingAttrsAndUnknownMetadata(
-+          {LLVMContext::MD_tbaa, LLVMContext::MD_untrusted_ref});
++          {LLVMContext::MD_tbaa, LLVMContext::MD_untrusted_ref,
++           LLVMContext::MD_obj_type, LLVMContext::MD_intro_type,
++           LLVMContext::MD_func_table});
 +    } else {
 +      I.dropUndefImplyingAttrsAndUnknownMetadata();
 +    }
@@ -76471,7 +76569,7 @@ index f54264b1d..0b525b16b 100644
  
    if (isa<PHINode>(I))
      // Move the new node to the end of the phi list in the destination block.
-@@ -1734,6 +1807,149 @@ static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
+@@ -1734,6 +1809,149 @@ static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
    ++NumHoisted;
  }
  
@@ -76621,7 +76719,7 @@ index f54264b1d..0b525b16b 100644
  /// Only sink or hoist an instruction if it is not a trapping instruction,
  /// or if the instruction is known not to trap when moved to the preheader.
  /// or if it is a trapping instruction and is guaranteed to execute.
-@@ -1741,9 +1957,13 @@ static bool isSafeToExecuteUnconditionally(
+@@ -1741,9 +1959,13 @@ static bool isSafeToExecuteUnconditionally(
      Instruction &Inst, const DominatorTree *DT, const TargetLibraryInfo *TLI,
      const Loop *CurLoop, const LoopSafetyInfo *SafetyInfo,
      OptimizationRemarkEmitter *ORE, const Instruction *CtxI,
@@ -76636,7 +76734,7 @@ index f54264b1d..0b525b16b 100644
  
    bool GuaranteedToExecute =
        SafetyInfo->isGuaranteedToExecute(Inst, DT, CurLoop);
-@@ -1765,6 +1985,7 @@ static bool isSafeToExecuteUnconditionally(
+@@ -1765,6 +1987,7 @@ static bool isSafeToExecuteUnconditionally(
  namespace {
  class LoopPromoter : public LoadAndStorePromoter {
    Value *SomePtr; // Designated pointer to store to.
@@ -76644,7 +76742,7 @@ index f54264b1d..0b525b16b 100644
    const SmallSetVector<Value *, 8> &PointerMustAliases;
    SmallVectorImpl<BasicBlock *> &LoopExitBlocks;
    SmallVectorImpl<Instruction *> &LoopInsertPts;
-@@ -1804,11 +2025,13 @@ public:
+@@ -1804,11 +2027,13 @@ public:
                 SmallVectorImpl<MemoryAccess *> &MSSAIP, PredIteratorCache &PIC,
                 MemorySSAUpdater &MSSAU, LoopInfo &li, DebugLoc dl,
                 Align Alignment, bool UnorderedAtomic, const AAMDNodes &AATags,
@@ -76663,7 +76761,7 @@ index f54264b1d..0b525b16b 100644
          SafetyInfo(SafetyInfo),
          CanInsertStoresInExitBlocks(CanInsertStoresInExitBlocks) {}
  
-@@ -1817,6 +2040,9 @@ public:
+@@ -1817,6 +2042,9 @@ public:
      Value *Ptr;
      if (LoadInst *LI = dyn_cast<LoadInst>(I))
        Ptr = LI->getOperand(0);
@@ -76673,7 +76771,7 @@ index f54264b1d..0b525b16b 100644
      else
        Ptr = cast<StoreInst>(I)->getPointerOperand();
      return PointerMustAliases.count(Ptr);
-@@ -1833,23 +2059,53 @@ public:
+@@ -1833,23 +2061,53 @@ public:
        LiveInValue = maybeInsertLCSSAPHI(LiveInValue, ExitBlock);
        Value *Ptr = maybeInsertLCSSAPHI(SomePtr, ExitBlock);
        Instruction *InsertPos = LoopInsertPts[i];
@@ -76740,7 +76838,7 @@ index f54264b1d..0b525b16b 100644
        MSSAInsertPts[i] = NewMemAcc;
        MSSAU.insertDef(cast<MemoryDef>(NewMemAcc), true);
        // FIXME: true for safety, false may still be correct.
-@@ -1869,6 +2125,10 @@ public:
+@@ -1869,6 +2127,10 @@ public:
    bool shouldDelete(Instruction *I) const override {
      if (isa<StoreInst>(I))
        return CanInsertStoresInExitBlocks;
@@ -76751,7 +76849,7 @@ index f54264b1d..0b525b16b 100644
      return true;
    }
  };
-@@ -1904,18 +2164,20 @@ bool isNotVisibleOnUnwindInLoop(const Value *Object, const Loop *L,
+@@ -1904,18 +2166,20 @@ bool isNotVisibleOnUnwindInLoop(const Value *Object, const Loop *L,
  /// loop invariant.
  ///
  bool llvm::promoteLoopAccessesToScalars(
@@ -76774,7 +76872,7 @@ index f54264b1d..0b525b16b 100644
    Value *SomePtr = *PointerMustAliases.begin();
    BasicBlock *Preheader = CurLoop->getLoopPreheader();
  
-@@ -2018,7 +2280,8 @@ bool llvm::promoteLoopAccessesToScalars(
+@@ -2018,7 +2282,8 @@ bool llvm::promoteLoopAccessesToScalars(
          if (!DereferenceableInPH || (InstAlignment > Alignment))
            if (isSafeToExecuteUnconditionally(
                    *Load, DT, TLI, CurLoop, SafetyInfo, ORE,
@@ -76784,7 +76882,7 @@ index f54264b1d..0b525b16b 100644
              DereferenceableInPH = true;
              Alignment = std::max(Alignment, InstAlignment);
            }
-@@ -2069,6 +2332,40 @@ bool llvm::promoteLoopAccessesToScalars(
+@@ -2069,6 +2334,40 @@ bool llvm::promoteLoopAccessesToScalars(
                Store->getPointerOperand(), Store->getValueOperand()->getType(),
                Store->getAlign(), MDL, Preheader->getTerminator(), DT, TLI);
          }
@@ -76825,7 +76923,7 @@ index f54264b1d..0b525b16b 100644
        } else
          return false; // Not a load or store.
  
-@@ -2154,7 +2451,7 @@ bool llvm::promoteLoopAccessesToScalars(
+@@ -2154,7 +2453,7 @@ bool llvm::promoteLoopAccessesToScalars(
    LoopPromoter Promoter(SomePtr, LoopUses, SSA, PointerMustAliases, ExitBlocks,
                          InsertPts, MSSAInsertPts, PIC, MSSAU, *LI, DL,
                          Alignment, SawUnorderedAtomic, AATags, *SafetyInfo,
@@ -76834,7 +76932,7 @@ index f54264b1d..0b525b16b 100644
  
    // Set up the preheader to have a definition of the value.  It is the live-out
    // value from the preheader that uses in the loop will use.
-@@ -2203,7 +2500,7 @@ static void foreachMemoryAccess(MemorySSA *MSSA, Loop *L,
+@@ -2203,7 +2502,7 @@ static void foreachMemoryAccess(MemorySSA *MSSA, Loop *L,
            Fn(MUD->getMemoryInst());
  }
  
@@ -76843,7 +76941,7 @@ index f54264b1d..0b525b16b 100644
  collectPromotionCandidates(MemorySSA *MSSA, AliasAnalysis *AA, Loop *L) {
    AliasSetTracker AST(*AA);
  
-@@ -2212,6 +2509,9 @@ collectPromotionCandidates(MemorySSA *MSSA, AliasAnalysis *AA, Loop *L) {
+@@ -2212,6 +2511,9 @@ collectPromotionCandidates(MemorySSA *MSSA, AliasAnalysis *AA, Loop *L) {
        return L->isLoopInvariant(SI->getPointerOperand());
      if (const auto *LI = dyn_cast<LoadInst>(I))
        return L->isLoopInvariant(LI->getPointerOperand());
@@ -76853,7 +76951,7 @@ index f54264b1d..0b525b16b 100644
      return false;
    };
  
-@@ -2243,12 +2543,12 @@ collectPromotionCandidates(MemorySSA *MSSA, AliasAnalysis *AA, Loop *L) {
+@@ -2243,12 +2545,12 @@ collectPromotionCandidates(MemorySSA *MSSA, AliasAnalysis *AA, Loop *L) {
      });
    });
  
@@ -79361,7 +79459,7 @@ index 421f1f329..56965aaf0 100644
    if (BFI && NumExitBlocks > 1)
      calculateNewCallTerminatorWeights(codeReplacer, ExitWeights, BPI);
 diff --git a/llvm/lib/Transforms/Utils/Local.cpp b/llvm/lib/Transforms/Utils/Local.cpp
-index 2f1d0c2f9..09f1c9d3c 100644
+index 2f1d0c2f9..876b939e8 100644
 --- a/llvm/lib/Transforms/Utils/Local.cpp
 +++ b/llvm/lib/Transforms/Utils/Local.cpp
 @@ -2485,6 +2485,16 @@ void llvm::removeUnwindEdge(BasicBlock *BB, DomTreeUpdater *DTU) {
@@ -79381,26 +79479,103 @@ index 2f1d0c2f9..09f1c9d3c 100644
    SmallPtrSet<BasicBlock *, 16> Reachable;
    bool Changed = markAliveBlocks(F, Reachable, DTU);
  
-@@ -2588,6 +2598,9 @@ void llvm::combineMetadata(Instruction *K, const Instruction *J,
+@@ -2588,6 +2598,18 @@ void llvm::combineMetadata(Instruction *K, const Instruction *J,
        case LLVMContext::MD_preserve_access_index:
          // Preserve !preserve.access.index in K.
          break;
 +      case LLVMContext::MD_cj_agg:
 +        K->setMetadata(Kind, JMD);
 +        break;
++      case LLVMContext::MD_obj_type:
++      case LLVMContext::MD_func_table:
++        // Handled after the loop - these two must be kept in sync.
++        break;
++      case LLVMContext::MD_intro_type:
++        // Only set the !IntroType if it is same in both instructions.
++        if (K->getMetadata(Kind) != JMD)
++          K->setMetadata(Kind, nullptr);
++        break;
      }
    }
    // Set !invariant.group from J if J has it. If both instructions have it
-@@ -2608,7 +2621,7 @@ void llvm::combineMetadataForCSE(Instruction *K, const Instruction *J,
+@@ -2599,6 +2621,62 @@ void llvm::combineMetadata(Instruction *K, const Instruction *J,
+   if (auto *JMD = J->getMetadata(LLVMContext::MD_invariant_group))
+     if (isa<LoadInst>(K) || isa<StoreInst>(K))
+       K->setMetadata(LLVMContext::MD_invariant_group, JMD);
++
++  // MD_obj_type and MD_func_table are CangjieVFE (virtual function elimination)
++  // metadata that must coexist and be kept in sync. GlobalDCE uses them to
++  // mark virtual function dependencies; dropping them causes functions to be
++  // incorrectly eliminated. When merging two instructions with different
++  // values, we produce a merged representation where each operand is a
++  // sub-MDNode, preserving the union of dependency information.
++  //   Original format:  !{!"A.tt"}          / !{i64 0}
++  //   Merged format:    !{!{!"A.tt"}, ...}  / !{!{i64 0}, ...}
++  if (J->getFunction()->hasCangjieGC()) {
++    auto &Ctx = K->getContext();
++    MDNode *KObj = K->getMetadata(LLVMContext::MD_obj_type);
++    MDNode *JObj = J->getMetadata(LLVMContext::MD_obj_type);
++    MDNode *KFT = K->getMetadata(LLVMContext::MD_func_table);
++    MDNode *JFT = J->getMetadata(LLVMContext::MD_func_table);
++
++    if (!KObj && JObj) {
++      // K didn't have VFE metadata but J did — preserve J's.
++      if (!JFT)
++          report_fatal_error("MD_obj_type present without MD_func_table");
++      K->setMetadata(LLVMContext::MD_obj_type, JObj);
++      K->setMetadata(LLVMContext::MD_func_table, JFT);
++    } else if (KObj && JObj && (KObj != JObj || KFT != JFT)) {
++      // Both have VFE metadata with different values: merge into wrapped
++      // format.
++      SmallSet<std::pair<llvm::Metadata *, llvm::Metadata *>, 4> Visited;
++      auto Expand = [&Visited](MDNode *Obj, MDNode *FT,
++                       SmallVectorImpl<llvm::Metadata *> &ObjEntries,
++                       SmallVectorImpl<llvm::Metadata *> &FTEntries) {
++        if (!FT || Obj->getNumOperands() != FT->getNumOperands())
++          report_fatal_error("objType present without FuncTable or objType and "
++                             "FuncTable have different operand counts");
++        if (Obj->getNumOperands() > 0 && isa<MDNode>(Obj->getOperand(0))) {
++          // Already in merged format — expand existing entries.
++          for (unsigned i = 0; i < Obj->getNumOperands(); i++) {
++            if (!Visited.insert({Obj->getOperand(i), FT->getOperand(i)}).second)
++              continue;
++            ObjEntries.push_back(Obj->getOperand(i));
++            FTEntries.push_back(FT->getOperand(i));
++          }
++        } else {
++          if (!Visited.insert({Obj, FT}).second)
++            return;
++          // Single-entry format.
++          ObjEntries.push_back(Obj);
++          FTEntries.push_back(FT);
++        }
++      };
++      SmallVector<llvm::Metadata *, 4> ObjEntries, FTEntries;
++      Expand(KObj, KFT, ObjEntries, FTEntries);
++      Expand(JObj, JFT, ObjEntries, FTEntries);
++      K->setMetadata(LLVMContext::MD_obj_type, MDNode::get(Ctx, ObjEntries));
++      K->setMetadata(LLVMContext::MD_func_table, MDNode::get(Ctx, FTEntries));
++    }
++    // else: only K has metadata, or both are identical — K is already correct.
++  }
+ }
+ 
+ void llvm::combineMetadataForCSE(Instruction *K, const Instruction *J,
+@@ -2608,9 +2686,11 @@ void llvm::combineMetadataForCSE(Instruction *K, const Instruction *J,
        LLVMContext::MD_noalias,         LLVMContext::MD_range,
        LLVMContext::MD_invariant_load,  LLVMContext::MD_nonnull,
        LLVMContext::MD_invariant_group, LLVMContext::MD_align,
 -      LLVMContext::MD_dereferenceable,
 +      LLVMContext::MD_dereferenceable, LLVMContext::MD_cj_agg,
        LLVMContext::MD_dereferenceable_or_null,
-       LLVMContext::MD_access_group,    LLVMContext::MD_preserve_access_index};
+-      LLVMContext::MD_access_group,    LLVMContext::MD_preserve_access_index};
++      LLVMContext::MD_access_group,    LLVMContext::MD_preserve_access_index,
++      LLVMContext::MD_obj_type,        LLVMContext::MD_func_table,
++      LLVMContext::MD_intro_type,};
    combineMetadata(K, J, KnownIDs, KDominatesJ);
-@@ -2642,6 +2655,11 @@ void llvm::copyMetadataForLoad(LoadInst &Dest, const LoadInst &Source) {
+ }
+ 
+@@ -2642,6 +2722,11 @@ void llvm::copyMetadataForLoad(LoadInst &Dest, const LoadInst &Source) {
      case LLVMContext::MD_nontemporal:
      case LLVMContext::MD_mem_parallel_loop_access:
      case LLVMContext::MD_access_group:
@@ -79412,17 +79587,18 @@ index 2f1d0c2f9..09f1c9d3c 100644
        // All of these directly apply.
        Dest.setMetadata(ID, N);
        break;
-@@ -2693,7 +2711,8 @@ void llvm::patchReplacementInstruction(Instruction *I, Value *Repl) {
+@@ -2693,7 +2778,9 @@ void llvm::patchReplacementInstruction(Instruction *I, Value *Repl) {
        LLVMContext::MD_noalias,         LLVMContext::MD_range,
        LLVMContext::MD_fpmath,          LLVMContext::MD_invariant_load,
        LLVMContext::MD_invariant_group, LLVMContext::MD_nonnull,
 -      LLVMContext::MD_access_group,    LLVMContext::MD_preserve_access_index};
 +      LLVMContext::MD_access_group,    LLVMContext::MD_preserve_access_index,
-+      LLVMContext::MD_cj_agg};
++      LLVMContext::MD_cj_agg,          LLVMContext::MD_obj_type,
++      LLVMContext::MD_func_table,      LLVMContext::MD_intro_type,};
    combineMetadata(ReplInst, I, KnownIDs, false);
  }
  
-@@ -2762,7 +2781,8 @@ bool llvm::callsGCLeafFunction(const CallBase *Call,
+@@ -2762,7 +2849,8 @@ bool llvm::callsGCLeafFunction(const CallBase *Call,
        return IID != Intrinsic::experimental_gc_statepoint &&
               IID != Intrinsic::experimental_deoptimize &&
               IID != Intrinsic::memcpy_element_unordered_atomic &&
@@ -79721,7 +79897,7 @@ index 37019e3bf..01a0b2a02 100644
  
      // The last stored value that happened is the live-out for the block.
 diff --git a/llvm/lib/Transforms/Utils/SimplifyCFG.cpp b/llvm/lib/Transforms/Utils/SimplifyCFG.cpp
-index 180608167..56f97e7c0 100644
+index 180608167..7b526100c 100644
 --- a/llvm/lib/Transforms/Utils/SimplifyCFG.cpp
 +++ b/llvm/lib/Transforms/Utils/SimplifyCFG.cpp
 @@ -57,6 +57,7 @@
@@ -79743,17 +79919,20 @@ index 180608167..56f97e7c0 100644
  cl::opt<bool> llvm::RequireAndPreserveDomTree(
      "simplifycfg-require-and-preserve-domtree", cl::Hidden,
  
-@@ -1551,7 +1556,8 @@ bool SimplifyCFGOpt::HoistThenElseCodeToIf(BranchInst *BI,
+@@ -1551,7 +1556,11 @@ bool SimplifyCFGOpt::HoistThenElseCodeToIf(BranchInst *BI,
                               LLVMContext::MD_dereferenceable_or_null,
                               LLVMContext::MD_mem_parallel_loop_access,
                               LLVMContext::MD_access_group,
 -                             LLVMContext::MD_preserve_access_index};
 +                             LLVMContext::MD_preserve_access_index,
-+                             LLVMContext::MD_cj_agg};
++                             LLVMContext::MD_cj_agg,
++                             LLVMContext::MD_obj_type,
++                             LLVMContext::MD_func_table,
++                             LLVMContext::MD_intro_type};
        combineMetadata(I1, I2, KnownIDs, true);
  
        // I1 and I2 are being combined into a single instruction.  Its debug
-@@ -6213,6 +6219,20 @@ static void reuseTableCompare(
+@@ -6213,6 +6222,20 @@ static void reuseTableCompare(
    }
  }
  
@@ -79774,7 +79953,7 @@ index 180608167..56f97e7c0 100644
  /// If the switch is only used to initialize one or more phi nodes in a common
  /// successor block with different constant values, replace the switch with
  /// lookup tables.
-@@ -6284,6 +6304,13 @@ static bool SwitchToLookupTable(SwitchInst *SI, IRBuilder<> &Builder,
+@@ -6284,6 +6307,13 @@ static bool SwitchToLookupTable(SwitchInst *SI, IRBuilder<> &Builder,
    // Keep track of the result types.
    for (PHINode *PHI : PHIs) {
      ResultTypes[PHI] = ResultLists[PHI][0].second->getType();
@@ -108748,6 +108927,129 @@ index 000000000..35d630569
 +!2 = !{!"default:A.tt"}
 +!3 = !{i64 0}
 \ No newline at end of file
+diff --git a/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie-vfe-merged-simplifycfg.ll b/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie-vfe-merged-simplifycfg.ll
+new file mode 100644
+index 000000000..1d41649a1
+--- /dev/null
++++ b/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie-vfe-merged-simplifycfg.ll
+@@ -0,0 +1,117 @@
++; RUN: opt < %s -passes='function(simplifycfg),globaldce' -sink-common-insts --cangjie-pipeline -S | FileCheck %s
++
++%TypeTemplate = type { i8*, i8, i8, i16, i16, i8*, i8*, i8*, i8*, %ExtensionDef**, i16 }
++%ExtensionDef = type { i32, i8, i8*, i8*, i8*, i8* }
++%Unit.Type = type {}
++
++@"I.tt" = internal global %TypeTemplate zeroinitializer #1
++@"J.tt" = internal global %TypeTemplate zeroinitializer #1
++@"K.tt" = internal global %TypeTemplate zeroinitializer #1
++@"L.tt" = internal global %TypeTemplate zeroinitializer #1
++@"A.tt" = internal global %TypeTemplate zeroinitializer #1
++; CHECK: @A_ed_I.ft = private global [1 x i8*] [i8* bitcast (void ()* @funcA_I to i8*)]
++@"A_ed_I.ft" = private global [1 x i8*] [i8* bitcast (void ()* @funcA_I to i8*)]
++@"A_ed_I" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"A.tt" to i8*), i8* null, i8* null, i8* bitcast ([1 x i8*]* @"A_ed_I.ft" to i8*) }, !inheritedType !0 #0
++; CHECK: @A_ed_J.ft = private global [1 x i8*] [i8* bitcast (void ()* @funcA_J to i8*)]
++@"A_ed_J.ft" = private global [1 x i8*] [i8* bitcast (void ()* @funcA_J to i8*)]
++@"A_ed_J" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"A.tt" to i8*), i8* null, i8* null, i8* bitcast ([1 x i8*]* @"A_ed_J.ft" to i8*) }, !inheritedType !1 #0
++; CHECK: @A_ed_K.ft = private global [1 x i8*] zeroinitializer
++@"A_ed_K.ft" = private global [1 x i8*] [i8* bitcast (void ()* @funcA_K to i8*)]
++@"A_ed_K" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"A.tt" to i8*), i8* null, i8* null, i8* bitcast ([1 x i8*]* @"A_ed_K.ft" to i8*) }, !inheritedType !2 #0
++; CHECK: @A_ed_L.ft = private global [1 x i8*] [i8* bitcast (void ()* @funcA_L to i8*)]
++@"A_ed_L.ft" = private global [1 x i8*] [i8* bitcast (void ()* @funcA_L to i8*)]
++@"A_ed_L" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"A.tt" to i8*), i8* null, i8* null, i8* bitcast ([1 x i8*]* @"A_ed_L.ft" to i8*) }, !inheritedType !3 #0
++
++
++@NonExternalExtensionDefs = private global [5 x %ExtensionDef*] [
++  %ExtensionDef* @"A_ed_I",
++  %ExtensionDef* @"A_ed_J",
++  %ExtensionDef* @"A_ed_K",
++  %ExtensionDef* @"A_ed_L",
++  %ExtensionDef* null
++]
++@llvm.used = appending global [1 x i8*] [i8* bitcast ([5 x %ExtensionDef*]* @NonExternalExtensionDefs to i8*)]
++
++define internal void @funcA_I() gc "cangjie" {
++  ret void
++}
++define internal void @funcA_J() gc "cangjie" {
++  ret void
++}
++define internal void @funcA_K() gc "cangjie" {
++  ret void
++}
++define internal void @funcA_L() gc "cangjie" {
++  ret void
++}
++
++; CHECK: define internal void @funcA_I()
++; CHECK: define internal void @funcA_J()
++; CHECK-NOT: @funcA_K
++
++define void @caller1(i1 %cond, void ()** %ptr0, void ()** %ptr1) gc "cangjie" {
++entry:
++  br i1 %cond, label %then, label %else
++
++then:
++  %fp1 = load void ()*, void ()** %ptr0, !objType !0, !FuncTable !7
++  br label %merge
++
++else:
++  %fp2 = load void ()*, void ()** %ptr1, !objType !1, !FuncTable !7
++  br label %merge
++
++merge:
++  %fp = phi void ()* [ %fp1, %then ], [ %fp2, %else ]
++  call void %fp()
++  ret void
++}
++
++define void @caller2(i1 %cond, void ()** %ptr0, void ()** %ptr1) gc "cangjie" {
++entry:
++  br i1 %cond, label %then, label %else
++
++then:
++  %fp1 = load void ()*, void ()** %ptr0, !objType !0, !FuncTable !7
++  br label %merge
++
++else:
++  %fp2 = load void ()*, void ()** %ptr1, !objType !4, !FuncTable !5
++  br label %merge
++
++merge:
++  %fp = phi void ()* [ %fp1, %then ], [ %fp2, %else ]
++  call void %fp()
++  ret void
++}
++
++define void @caller3(i1 %cond, void ()** %ptr0, void ()** %ptr1) gc "cangjie" {
++entry:
++  br i1 %cond, label %then, label %else
++
++then:
++  %fp1 = load void ()*, void ()** %ptr0, !objType !4, !FuncTable !5
++  br label %merge
++
++else:
++  %fp2 = load void ()*, void ()** %ptr1, !objType !6, !FuncTable !5
++  br label %merge
++
++merge:
++  %fp = phi void ()* [ %fp1, %then ], [ %fp2, %else ]
++  call void %fp()
++  ret void
++}
++
++attributes #0 = { "CFileMTable" }
++attributes #1 = { "cj_tt" }
++
++!0 = !{!"I.tt"}
++!1 = !{!"J.tt"}
++!2 = !{!"K.tt"}
++!3 = !{!"L.tt"}
++!4 = !{!0, !1}
++!5 = !{!7, !7}
++!6 = !{!0, !3}
++!7 = !{i64 0}
++
 diff --git a/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie_metadata_elim_1.ll b/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie_metadata_elim_1.ll
 new file mode 100644
 index 000000000..89b65d8be
