@@ -627,6 +627,7 @@ OwnedPtr<Expr> InteropLibBridge::CreateJavaEntityCall(OwnedPtr<Expr> arg)
 OwnedPtr<Expr> InteropLibBridge::WrapJavaEntity(OwnedPtr<Expr> cjExpr)
 {
     CJC_NULLPTR_CHECK(cjExpr->curFile);
+
     if (cjExpr->ty->kind == TypeKind::TYPE_UNIT) {
         return CreateJavaEntityCall(cjExpr->curFile);
     }
