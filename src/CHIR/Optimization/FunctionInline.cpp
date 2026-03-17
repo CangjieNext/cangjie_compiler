@@ -299,11 +299,23 @@ static std::vector<Block*> GetExitBlocks(std::vector<Block*>& blocks)
     return exitBlocks;
 }
 
-static void ReplaceFuncArgs(std::vector<Parameter*>& src, std::vector<Value*>& dst, const BlockGroup& scope)
+static void ReplaceFuncArgs(
+    std::vector<Parameter*>& src, std::vector<Value*>& dst, const std::vector<Block*>& newBlocks)
 {
     CJC_ASSERT(src.size() == dst.size());
-    for (size_t i = 0; i < src.size(); ++i) {
-        src[i]->ReplaceWith(*dst[i], &scope);
+    auto preVisit = [&src, &dst](Expression& expr) {
+        for (size_t i = 0; i < expr.GetNumOfOperands(); ++i) {
+            auto op = expr.GetOperand(i);
+            for (size_t j = 0; j < src.size(); ++j) {
+                if (op == src[j]) {
+                    expr.ReplaceOperand(i, dst[j]);
+                }
+            }
+        }
+        return VisitResult::CONTINUE;
+    };
+    for (auto block : newBlocks) {
+        Visitor::Visit(*block, preVisit);
     }
 }
 
@@ -417,7 +429,7 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
     //   Exit()
     // }
     auto applyArgs = apply.GetArgs();
-    ReplaceFuncArgs(funcArgs, applyArgs, *apply.GetParentBlockGroup());
+    ReplaceFuncArgs(funcArgs, applyArgs, newBlocks);
 
     FixCastProblemAfterInst(newBlocks, builder);
 
