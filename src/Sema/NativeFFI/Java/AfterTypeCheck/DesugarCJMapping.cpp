@@ -780,6 +780,7 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateFwdClassMethod(
     CJC_NULLPTR_CHECK(curFile);
 
     // generate thenbody
+    // No exclusiveScope, Java-uses-Cangjie (CJMapping) does not support threading.
     // let env = Java_CFFI_get_env()
     OwnedPtr<CallExpr> jniEnvCall = lib.CreateGetJniEnvCall(curFile);
     if (!jniEnvCall) {
@@ -1149,6 +1150,7 @@ OwnedPtr<LambdaExpr> JavaDesugarManager::GenerateLambdaExpr(File& file, LambdaPa
         NormalizeJavaSignature(file.curPackage->fullPackageName + "/" + GetLambdaJavaClassName(pattern)), "call",
         utils.GetJavaTypeSignature(*retTy, paramTys));
 
+    // No exclusiveScope, Java-uses-Cangjie (CJMapping) does not support threading.
     OwnedPtr<Expr> methodCall = lib.CreateCFFICallMethodCall(lib.CreateGetJniEnvCall(curFile),
         lib.CreateJavaEntityJobjectCall(std::move(objParamRef)), MemberJNISignature, *funcParamList, *curFile);
     CJC_NULLPTR_CHECK(methodCall);
