@@ -418,6 +418,8 @@ private:
      */
     void DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror, GenericConfigInfo *config = nullptr);
 
+    OwnedPtr<Expr> WrapWithExclusiveScope(std::vector<OwnedPtr<Node>>&& bodyNodes, Ptr<Ty> retTy);
+
     /**
      * used in DesugarJavaMirrorMethod for method's body generation
      *
