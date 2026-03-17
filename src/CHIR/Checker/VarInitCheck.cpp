@@ -183,6 +183,11 @@ void VarInitCheck::UseBeforeInitCheck(
         if (!func->IsConstructor()) {
             return;
         }
+
+        if (func->TestAttr(Attribute::JAVA_MIRROR)) {
+            return;
+        }
+
         // If the current function is a initialiesr of a class/struct. We need to check if all the member
         // variables has been initialised before exiting the initialiser.
         // In CHIR, we will this when the currently processed expression is an Exit. We does not check
