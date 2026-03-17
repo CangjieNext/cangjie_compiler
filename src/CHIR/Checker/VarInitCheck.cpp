@@ -177,12 +177,31 @@ void VarInitCheck::UseBeforeInitCheck(
             }
         }
     };
+//#include "cangjie/Utils/ConstantsUtils.h"
+
+//using namespace Interop::Java;    
 
     const auto actionOnTerminator = [this, func, &members](const MaybeUninitDomain& state, const Terminator* terminator,
                                         std::optional<Block*>) {
         if (!func->IsConstructor()) {
             return;
         }
+        
+        if (func->TestAttr(Attribute::JAVA_MIRROR)) {
+            auto customTypeDef = func->GetOuterDeclaredOrExtendedDef();
+            CJC_NULLPTR_CHECK(customTypeDef);
+             //  std::cout << customTypeDef->ToString() << "\n";
+            if (customTypeDef->GetCustomKind() == CustomDefKind::TYPE_CLASS) {
+                auto classDef = StaticCast<ClassDef*>(customTypeDef);
+                //  std::cout << "Super" << classDef->GetSuperClassTy()->ToString() << "\n";
+                if (!classDef->HasSuperClass()) {
+                    return;
+                }
+                // return;
+            }
+            return;
+        } 
+   
         // If the current function is a initialiesr of a class/struct. We need to check if all the member
         // variables has been initialised before exiting the initialiser.
         // In CHIR, we will this when the currently processed expression is an Exit. We does not check

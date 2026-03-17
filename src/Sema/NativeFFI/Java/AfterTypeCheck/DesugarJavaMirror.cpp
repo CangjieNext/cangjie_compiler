@@ -328,6 +328,7 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     }
 
     auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, jniEnvCall);
+    //auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, std::move(jniEnvCall)); ??
     OwnedPtr<CallExpr> newObjectCall;
 
     if (IsJArray(*ctor.outerDecl)) {
@@ -342,16 +343,63 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
             *ctor.funcBody->paramLists[0], true, *curFile);
     }
 
-    if (newObjectCall) {
-        std::vector<OwnedPtr<Node>> nodes;
-        nodes.push_back(std::move(jniEnvVar));
-        nodes.push_back(std::move(newObjectCall));
-
-        thisCall->args.push_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(nodes))));
-        ctor.funcBody->body->body.push_back(std::move(thisCall));
-    } else {
+    if (!newObjectCall) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
+        return;
     }
+    
+    auto envRef = WithinFile(CreateRefExpr(*jniEnvVar), curFile);
+    auto globalCall = lib.CreateNewGlobalRefCall(std::move(envRef), std::move(newObjectCall), false);  
+    auto javaEntityDecl = lib.GetJavaEntityDecl();
+    auto tmpVar = CreateTmpVarDecl(CreateRefType(*javaEntityDecl), std::move(globalCall));
+    auto tmpRef = WithinFile(CreateRefExpr(*tmpVar), curFile);
+    auto ret = CreateReturnExpr(std::move(tmpRef), nullptr);
+    ret->ty = lib.GetJavaEntityTy();
+
+    std::vector<OwnedPtr<Node>> lambdaNodes;
+    lambdaNodes.push_back(std::move(ret));
+
+    auto lambdaCall = WrapReturningLambdaCall(typeManager, std::move(lambdaNodes));
+    thisCall->args.push_back(CreateFuncArg(std::move(lambdaCall)));
+
+    std::vector<OwnedPtr<Node>> bodyNodes;
+    bodyNodes.push_back(std::move(jniEnvVar));
+    bodyNodes.push_back(std::move(tmpVar));
+    bodyNodes.push_back(std::move(thisCall));
+    auto exclusive = WrapWithExclusiveScope(std::move(bodyNodes), ctor.funcBody->retType->ty);
+    ctor.funcBody->body->body.push_back(std::move(exclusive));   
+}
+
+OwnedPtr<Expr> JavaDesugarManager::WrapWithExclusiveScope(std::vector<OwnedPtr<Node>> bodyNodes, Ptr<Ty> retTy)
+{
+    auto exclusiveDecl = importManager.GetCoreDecl<FuncDecl>("exclusiveScope");
+    CJC_NULLPTR_CHECK(exclusiveDecl);
+    auto exclusiveRef = CreateRefExpr(*exclusiveDecl);
+
+    exclusiveRef->instTys.emplace_back(retTy);
+    auto mapping = TypeCheckUtil::GenerateTypeMapping(*exclusiveDecl, exclusiveRef->instTys);
+    exclusiveRef->ty = typeManager.GetInstantiatedTy(exclusiveDecl->ty, mapping);
+    exclusiveRef->typeArguments.emplace_back(CreateType(retTy));
+    auto curFile = bodyNodes.empty() ? nullptr : bodyNodes[0]->curFile;
+
+    auto lambdaBody = CreateBlock(std::move(bodyNodes), retTy);
+    auto paramLists = Nodes<FuncParamList>(CreateFuncParamList(Nodes<FuncParam>()));
+    auto retTypeNode = CreateType(retTy);
+
+    auto lambdaFuncBody = CreateFuncBody(
+        std::move(paramLists),
+        std::move(retTypeNode),
+        std::move(lambdaBody),
+        retTy
+    );
+
+    auto lambda = CreateLambdaExpr(std::move(lambdaFuncBody));
+    lambda->curFile = curFile;
+    lambda->ty = typeManager.GetFunctionTy({}, retTy);
+
+    auto args = Nodes<FuncArg>(CreateFuncArg(std::move(lambda)));
+    auto realRetTy = StaticCast<FuncTy>(exclusiveRef->ty)->retTy;
+    return CreateCallExpr(std::move(exclusiveRef), std::move(args), exclusiveDecl, realRetTy, CallKind::CALL_DECLARED_FUNCTION);
 }
 
 void JavaDesugarManager::AddJavaMirrorMethodBody(
@@ -370,7 +418,6 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     }
 
     OwnedPtr<Expr> methodCall;
-    CJC_ASSERT_WITH_MSG(!fun.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& paramList = *fun.funcBody->paramLists[0].get();
     if (fun.TestAttr(Attribute::STATIC)) {
         auto memberJNISignature =
@@ -379,8 +426,6 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
             lib.CreateCFFICallStaticMethodCall(std::move(jniEnvCall), memberJNISignature, paramList, *curFile);
     } else {
         if (IsJArray(mirror)) {
-            CJC_ASSERT_WITH_MSG(
-                !mirror.generic->typeParameters.empty(), "JArray ctor must be generic");
             auto genericParam = mirror.generic->typeParameters[0].get();
             CJC_ASSERT(genericParam);
             methodCall = lib.CreateCFFICallArrayMethodCall(
@@ -407,9 +452,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     auto callResRef = CreateRefExpr(*methodCallRes);
     CopyBasicInfo(methodCallRes.get(), callResRef.get());
 
-
     OwnedPtr<Expr> retCallExpr = nullptr;
-    // cjmapping interface return param support lambda.
     if (fun.funcBody->retType->ty->kind == TypeKind::TYPE_FUNC &&
         fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
         retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), fun.funcBody->retType->ty, mirror);
@@ -421,15 +464,24 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
         fun.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
+
+    auto lambdaRet = CreateReturnExpr(std::move(retCallExpr));
+    lambdaRet->ty = TypeManager::GetNothingTy();
+
+    std::vector<OwnedPtr<Node>> scopeBodyNodes;
+    scopeBodyNodes.push_back(std::move(methodCallRes));  
+    scopeBodyNodes.push_back(std::move(lambdaRet));    
+    auto exclusiveCall = WrapWithExclusiveScope(std::move(scopeBodyNodes), fun.funcBody->retType->ty);
+
+    auto retExpr = CreateReturnExpr(std::move(exclusiveCall), fun.funcBody.get());
     std::vector<OwnedPtr<Node>> blockNodes;
-    auto retExpr = CreateReturnExpr(std::move(retCallExpr), fun.funcBody.get());
     retExpr->ty = TypeManager::GetNothingTy();
     retExpr->refFuncBody = fun.funcBody.get();
-    blockNodes.push_back(std::move(methodCallRes));
     blockNodes.push_back(std::move(retExpr));
-    // Return type has to be specified, so it's safe to use it below
+
     fun.funcBody->body = CreateBlock(std::move(blockNodes), fun.funcBody->retType->ty);
     fun.funcBody->ty = TypeManager::GetNothingTy();
+    
     if(fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
         fun.funcBody->parentClassLike = &mirror;
     }
@@ -481,13 +533,29 @@ void JavaDesugarManager::InsertJavaMirrorPropGetter(PropDecl& prop)
         return;
     }
 
+    // lambda body = jniGetterCallRes; return unwrap;
+
+    auto lambdaReturn = CreateReturnExpr(std::move(unwrapJavaEntityCall));
+    lambdaReturn->ty = TypeManager::GetNothingTy();
+
+    std::vector<OwnedPtr<Node>> scopeNodes;
+    scopeNodes.push_back(std::move(jniGetterCallRes));
+    scopeNodes.push_back(std::move(lambdaReturn));
+
+    auto exclusive = WrapWithExclusiveScope(std::move(scopeNodes), prop.ty);
+
+    // outer return
+
     auto& getter = *prop.getters.begin();
     auto& getterBody = getter->funcBody;
-    getterBody->body = CreateBlock({}, prop.ty);
-    getterBody->ty = prop.ty;
+        
+    auto outerReturn = CreateReturnExpr(std::move(exclusive), getterBody);
+    outerReturn->ty = TypeManager::GetNothingTy();
 
-    getterBody->body->body.emplace_back(std::move(jniGetterCallRes));
-    getterBody->body->body.emplace_back(CreateReturnExpr(std::move(unwrapJavaEntityCall), getterBody.get()));
+    std::vector<OwnedPtr<Node>> bodyNodes;
+    bodyNodes.push_back(std::move(outerReturn));
+    getterBody->body = CreateBlock(std::move(bodyNodes), prop.ty);
+    getterBody->ty = prop.ty;
 }
 
 void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
@@ -500,6 +568,7 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
     CJC_ASSERT_WITH_MSG(!prop.setters[0]->funcBody->paramLists.empty(), "setter paramLists cannot be empty");
     CJC_ASSERT_WITH_MSG(!prop.setters[0]->funcBody->paramLists[0]->params.empty(), "setter params cannot be empty");
     auto paramRef = WithinFile(CreateRefExpr(*prop.setters[0]->funcBody->paramLists[0]->params[0]), curFile);
+    Ptr<FuncBody> setterBody = prop.setters[0]->funcBody.get();
 
     if (prop.TestAttr(Attribute::STATIC)) {
         jniSetterCall = lib.CreateSetStaticFieldCall(
@@ -512,17 +581,30 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
             std::move(paramRef));
     }
 
-    auto block = CreateBlock({}, prop.ty);
+    // -------- lambda body --------
+
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    auto unitLit = CreateLitConstExpr(LitConstKind::UNIT, "()", TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    auto lambdaReturnUnit = CreateReturnExpr(std::move(unitLit));
+    lambdaReturnUnit->ty = TypeManager::GetNothingTy();
 
-    auto& setter = *prop.setters.begin();
-    auto& setterBody = setter->funcBody;
-    setterBody->body = std::move(block);
-    setterBody->ty = unitTy;
+    std::vector<OwnedPtr<Node>> lambdaNodes;
+    lambdaNodes.push_back(std::move(jniSetterCall));
+    lambdaNodes.push_back(std::move(lambdaReturnUnit));
 
-    setterBody->body->body.emplace_back(std::move(jniSetterCall));
-}
+    auto exclusiveCall = WrapWithExclusiveScope(std::move(lambdaNodes), unitTy);
 
+    // -------- function body --------
+
+    auto ret = CreateReturnExpr(std::move(exclusiveCall), setterBody);
+    ret->ty = TypeManager::GetNothingTy();
+
+    std::vector<OwnedPtr<Node>> blockNodes;
+    blockNodes.push_back(std::move(ret));
+    setterBody->body = CreateBlock(std::move(blockNodes), unitTy);
+    setterBody->ty = TypeManager::GetNothingTy();
+}        
+        
 void JavaDesugarManager::DesugarJavaMirrorProp(PropDecl& prop)
 {
     CJC_ASSERT(prop.outerDecl);
