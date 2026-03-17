@@ -28,7 +28,7 @@ bool HasFuncCallWithNothingRetVal(const Block& block)
     return false;
 }
 }
-VarInitCheck::VarInitCheck(DiagAdapter* diag) : diag(diag)
+VarInitCheck::VarInitCheck(DiagnosticEngine* diag) : diag(diag)
 {
 }
 

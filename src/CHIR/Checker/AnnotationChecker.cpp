@@ -371,7 +371,7 @@ const std::string_view ANNOTATION_TARGET_2_STRING[]{
 
 class AnnotationChecker {
 public:
-    explicit AnnotationChecker(const DiagAdapter& d) : diag{d}
+    explicit AnnotationChecker(DiagnosticEngine& d) : diag{d}
     {
     }
 
@@ -384,7 +384,7 @@ public:
     }
 
 private:
-    const DiagAdapter& diag;
+    DiagnosticEngine& diag;
 
     // write @Annotation info from the result of consteval back to the AST nodes
     void BuildCheckMap()
@@ -525,7 +525,7 @@ private:
                 targets = checkMap.at(annotation.def);
             }
             if (!targets.Matches(target)) {
-                (void)diag.diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_not_applicable, *annotation.src,
+                diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_not_applicable, *annotation.src,
                     annotation.src->identifier, std::string{ANNOTATION_TARGET_2_STRING[targetid]});
                 res = false;
             }
@@ -554,7 +554,7 @@ private:
                 targets = checkMap.at(annotation.def);
             }
             if (!targets.Matches(target)) {
-                (void)diag.diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_not_applicable, *annotation.src,
+                diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_not_applicable, *annotation.src,
                     annotation.src->identifier, std::string{ANNOTATION_TARGET_2_STRING[targetid]});
                 res = false;
             }
@@ -567,9 +567,6 @@ private:
 bool ToCHIR::RunAnnotationChecks()
 {
     Utils::ProfileRecorder r{"CHIR", "AnnotationCheck"};
-    if (!AnnotationChecker{diag}.CheckAnnotations()) {
-        return false;
-    }
-    return true;
+    return AnnotationChecker{diagEngine}.CheckAnnotations();
 }
 } // namespace Cangjie::CHIR

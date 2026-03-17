@@ -264,14 +264,14 @@ void ToCHIR::DoClosureConversion()
 void ToCHIR::UnreachableBlockReporter()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBlockWarningReporter");
-    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
+    auto dce = DeadCodeElimination(builder, diagEngine, *chirPkg);
     dce.UnreachableBlockWarningReporter(*chirPkg, opts.GetJobs(), maybeUnreachable);
 }
 
 void ToCHIR::UnreachableBlockElimination()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBlockElimination");
-    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
+    auto dce = DeadCodeElimination(builder, diagEngine, *chirPkg);
     dce.UnreachableBlockElimination(*chirPkg, opts.chirDebugOptimizer);
     DumpCHIRToFile("UnreachableBlockElimination");
 }
@@ -279,7 +279,7 @@ void ToCHIR::UnreachableBlockElimination()
 void ToCHIR::NothingTypeExprElimination()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "NothingTypeExprElimination");
-    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
+    auto dce = DeadCodeElimination(builder, diagEngine, *chirPkg);
     dce.NothingTypeExprElimination(*chirPkg, opts.chirDebugOptimizer);
     DumpCHIRToFile("NothingTypeExprElimination");
 }
@@ -287,7 +287,7 @@ void ToCHIR::NothingTypeExprElimination()
 void ToCHIR::UnreachableBranchReporter()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBranchReporter");
-    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, pkg.fullPackageName);
+    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diagEngine, pkg.fullPackageName);
     check.RunOnPackage(*chirPkg, opts.GetJobs());
 }
 
@@ -297,7 +297,7 @@ void ToCHIR::UselessExprElimination()
         return;
     }
     Utils::ProfileRecorder recorder("RulesChecking", "UselessExprElimination");
-    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
+    auto dce = DeadCodeElimination(builder, diagEngine, *chirPkg);
     dce.UselessExprElimination(*chirPkg, opts.chirDebugOptimizer);
     DumpCHIRToFile("UselessExprElimination");
 }
@@ -309,7 +309,7 @@ void ToCHIR::UselessFuncElimination(const std::string& passName)
         return;
     }
     Utils::ProfileRecorder recorder(passName, "UselessFuncElimination");
-    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
+    auto dce = DeadCodeElimination(builder, diagEngine, *chirPkg);
     dce.UselessFuncElimination(*chirPkg, opts);
     DumpCHIRToFile("UselessFuncElimination");
 }
@@ -317,7 +317,7 @@ void ToCHIR::UselessFuncElimination(const std::string& passName)
 void ToCHIR::ReportUnusedCode()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "ReportUnusedCode");
-    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
+    auto dce = DeadCodeElimination(builder, diagEngine, *chirPkg);
     dce.ReportUnusedCode(*chirPkg, opts);
 }
 
@@ -416,17 +416,17 @@ void ToCHIR::FlatForInExpr()
 bool ToCHIR::RunVarInitChecking()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "VarInitCheck");
-    auto vic = CHIR::VarInitCheck(&diag);
+    auto vic = CHIR::VarInitCheck(&diagEngine);
     vic.RunOnPackage(chirPkg, opts.GetJobs());
-    return diag.GetErrorCount() == 0;
+    return diagEngine.GetErrorCount() == 0;
 }
 
 bool ToCHIR::RunNativeFFIChecks()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "NativeFFIChecks");
-    auto checker = CHIR::NativeFFI::TypeCastCheck(diag);
+    auto checker = CHIR::NativeFFI::TypeCastCheck(diagEngine);
     checker.RunOnPackage(*chirPkg, opts.GetJobs());
-    return diag.GetErrorCount() == 0;
+    return diagEngine.GetErrorCount() == 0;
 }
 
 void ToCHIR::RunArrayListConstStartOpt()
@@ -477,7 +477,7 @@ void ToCHIR::RunFunctionInline(DevirtualizationInfo& devirtInfo)
 void ToCHIR::RunUnreachableMarkBlockRemoval()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "Clear Blocks Marked as Unreachable");
-    auto dce = DeadCodeElimination(builder, diag, *chirPkg);
+    auto dce = DeadCodeElimination(builder, diagEngine, *chirPkg);
     dce.ClearUnreachableMarkBlock(*chirPkg);
     DumpCHIRToFile("ClearBlocksMarkAsUnreachable");
 }
@@ -492,14 +492,14 @@ void ToCHIR::RunMergingBlocks(const std::string& firstName, const std::string& s
 void ToCHIR::RunConstantAnalysis()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "Constant Analysis");
-    constAnalysisWrapper.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), &diag);
+    constAnalysisWrapper.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), &diagEngine);
 }
 
 void ToCHIR::RunConstantPropagation()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "Constant Propagation & Safety Check");
     size_t threadNum = opts.GetJobs();
-    DeadCodeElimination dce(builder, diag, *chirPkg);
+    DeadCodeElimination dce(builder, diagEngine, *chirPkg);
     if (threadNum == 1) {
         auto cp = CHIR::ConstPropagation(builder, &constAnalysisWrapper, opts);
         MergeEffectMap(cp.GetEffectMap(), effectMap);
@@ -541,11 +541,11 @@ void ToCHIR::RunRangePropagation()
     }
     Utils::ProfileRecorder::Start("CHIR Opt", "Range Propagation");
     AnalysisWrapper<RangeAnalysis, RangeDomain> vra(builder);
-    vra.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), &diag);
+    vra.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), &diagEngine);
     size_t threadNum = opts.GetJobs();
-    DeadCodeElimination dce(builder, diag, *chirPkg);
+    DeadCodeElimination dce(builder, diagEngine, *chirPkg);
     if (threadNum == 1) {
-        auto cp = CHIR::RangePropagation(builder, &vra, &diag, opts.enIncrementalCompilation);
+        auto cp = CHIR::RangePropagation(builder, &vra, &diagEngine, opts.enIncrementalCompilation);
         cp.RunOnPackage(chirPkg, opts.chirDebugOptimizer);
         MergeEffectMap(cp.GetEffectMap(), effectMap);
         dce.UnreachableBlockElimination(cp.GetFuncsNeedRemoveBlocks(), opts.chirDebugOptimizer);
@@ -560,7 +560,7 @@ void ToCHIR::RunRangePropagation()
         for (size_t idx = 0; idx < funcNum; ++idx) {
             auto func = globalFuncs.at(idx);
             auto cp = std::make_unique<CHIR::RangePropagation>(
-                *builderList[idx], &vra, &diag, opts.enIncrementalCompilation);
+                *builderList[idx], &vra, &diagEngine, opts.enIncrementalCompilation);
             taskQueue.AddTask<void>(
                 [rangePropagation = cp.get(), func, isDebug]() { return rangePropagation->RunOnFunc(func, isDebug); });
             cpList.emplace_back(std::move(cp));
@@ -609,7 +609,7 @@ void ToCHIR::RunSanitizerCoverage()
     }
     Utils::ProfileRecorder recorder("CHIR", "Sanitizer Coverage");
     auto sanCovOpt = CHIR::SanitizerCoverage(opts, builder);
-    sanCovOpt.RunOnPackage(chirPkg, diag, opts.chirDebugOptimizer);
+    sanCovOpt.RunOnPackage(chirPkg, diagEngine, opts.chirDebugOptimizer);
     DumpCHIRToFile("Sanitizer_Coverage");
 }
 
@@ -885,7 +885,7 @@ bool ToCHIR::RunAnalysisForCJLint()
     }
     UnreachableBlockElimination();
     RunConstantPropagation();
-    if (diag.GetErrorCount() > 0) {
+    if (diagEngine.GetErrorCount() > 0) {
         return false;
     }
     constAnalysisWrapper.InvalidateAllAnalysisResults();
@@ -1134,7 +1134,7 @@ bool ToCHIR::RulesChecking()
     // 2. arithmetic operation overflow
     RunConstantPropagation();
     ci.chirData->FreeConstAnalysisWrapper();
-    return diag.GetErrorCount() == 0;
+    return diagEngine.GetErrorCount() == 0;
 }
 
 bool ToCHIR::Run()
@@ -1252,7 +1252,7 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
     }
 #endif
     if (!succeed) {
-        diag.DiagnoseRefactor(DiagKindRefactor::plugin_throws_exception, DEFAULT_POSITION);
+        diagEngine.DiagnoseRefactor(DiagKindRefactor::plugin_throws_exception, DEFAULT_POSITION);
     } else if (hasPluginForCHIR && builder.IsEnableIRCheckerAfterPlugin()) {
         DumpCHIRToFile("PLUGIN");
         succeed = RunIRChecker(Phase::PLUGIN);
@@ -1310,7 +1310,7 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
                         ->SetGlobalOptions(opts)
                         ->SetIncreKind(kind)
                         ->SetCachedInfo(cachedInfo)
-                        ->SetDiag(diag)
+                        ->SetDiag(diagEngine)
                         ->SetCHIRBuilder(builder)
                         ->SetCHIRType(*chirType)
                         ->SetOutputPath(outputPath)
@@ -1318,7 +1318,7 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
                         ->Build();
     ast2CHIR.SetAnnoOnlyDecls(std::move(annoOnly));
     auto res = ast2CHIR.ToCHIRPackage(pkg);
-    if (diag.GetErrorCount() != 0 || !res) {
+    if (diagEngine.GetErrorCount() != 0 || !res) {
         return false;
     }
     chirPkg = ast2CHIR.GetPackage();
@@ -1333,15 +1333,6 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
     if (isComputingAnnos) {
         annoFactoryFuncs = ast2CHIR.GetAnnoFactoryFuncs();
         globalNominalCache = std::move(chirTypeCache.globalNominalCache);
-    }
-
-    for (auto& file : pkg.files) {
-        for (auto& macrocall : file->originalMacroCallNodes) {
-            auto key = static_cast<uint64_t>(macrocall->begin.Hash64());
-            diag.posRange2MacroCallMap[key] = macrocall.get();
-            key = static_cast<uint64_t>(macrocall->end.Hash64());
-            diag.posRange2MacroCallMap[key] = nullptr;
-        }
     }
     return true;
 }
