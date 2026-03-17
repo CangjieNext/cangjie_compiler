@@ -131,6 +131,23 @@ void TryUpdateExistingValue(T* existing, const std::set<std::string>& newFeature
 
 } // namespace
 
+GlobalVar* CHIRBuilder::CreateGlobalVar(const DebugLocation& loc, RefType* ty, const std::string& mangledName,
+    const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
+    std::set<std::string> features)
+{
+    auto identifier = "@" + mangledName;
+    GlobalVar* globalVar = nullptr;
+    if (compileCJMP && context.GetCurPackage() != nullptr) {
+        if (auto exist = context.GetCurPackage()->TryGetGlobalVar(identifier)) {
+            globalVar = exist;
+            // Update features set
+            TryUpdateExistingValue(globalVar, features);
+        }
+    }
+}
+
+} // namespace
+
 GlobalVar* CHIRBuilder::CreateGlobalVar(
     Type* ty, const std::string& mangledName, const std::string& srcCodeIdentifier,
     const std::string& rawMangledName, const std::string& packageName)

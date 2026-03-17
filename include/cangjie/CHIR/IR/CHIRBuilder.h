@@ -306,6 +306,11 @@ public:
         return markAsCompileTimeValue;
     }
 
+    void SetCompileCJMP(bool val)
+    {
+        compileCJMP = val;
+    }
+
     CHIRContext& GetChirContext()
     {
         return context;
@@ -357,6 +362,7 @@ private:
 
     // A flag indicate if the created CHIR value/expression should be marked as compile time value for const evaluation
     bool markAsCompileTimeValue = false;
+    bool compileCJMP = false;
     bool enableIRCheckerAfterPlugin = true;
     size_t threadIdx;
     std::vector<Value*> allocatedValues;
