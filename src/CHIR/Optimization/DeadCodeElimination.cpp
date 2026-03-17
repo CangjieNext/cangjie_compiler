@@ -16,7 +16,7 @@
 
 namespace Cangjie::CHIR {
 
-DeadCodeElimination::DeadCodeElimination(CHIRBuilder& builder, DiagAdapter& diag, const Package& curPkg)
+DeadCodeElimination::DeadCodeElimination(CHIRBuilder& builder, DiagnosticEngine& diag, const Package& curPkg)
     : builder(builder), diag(diag), curPkg(curPkg)
 {
 }

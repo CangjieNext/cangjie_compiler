@@ -106,7 +106,7 @@ template <> RangeValueDomain HandleNonNullLiteralValue<RangeValueDomain>(const L
     }
 }
 
-RangeAnalysis::RangeAnalysis(const Func* func, CHIRBuilder& builder, bool isDebug, const Ptr<DiagAdapter>& diag)
+RangeAnalysis::RangeAnalysis(const Func* func, CHIRBuilder& builder, bool isDebug, const Ptr<DiagnosticEngine>& diag)
     : ValueAnalysis(func, builder, isDebug), diag(diag)
 {
 }
@@ -288,7 +288,7 @@ std::string GenerateTypeRangePrompt(const Ptr<Type>& type)
 }
 
 template <typename TBinary, typename T>
-void RaiseArithmeticOverflowError(const TBinary* expr, ExprKind kind, T leftVal, T rightVal, DiagAdapter& diag)
+void RaiseArithmeticOverflowError(const TBinary* expr, ExprKind kind, T leftVal, T rightVal, DiagnosticEngine& diag)
 {
     auto& loc = expr->GetDebugLocation();
     auto ty = expr->GetResult()->GetType();
@@ -311,7 +311,7 @@ void RaiseArithmeticOverflowError(const TBinary* expr, ExprKind kind, T leftVal,
 }
 
 template <typename T>
-bool CheckDivZero(ExprKind exprKind, const Ptr<const BinaryExpression>& binary, T rVal, DiagAdapter& diag)
+bool CheckDivZero(ExprKind exprKind, const Ptr<const BinaryExpression>& binary, T rVal, DiagnosticEngine& diag)
 {
     if (rVal == 0 && (exprKind == ExprKind::DIV || exprKind == ExprKind::MOD)) {
         auto& loc = binary->GetDebugLocation();
@@ -324,7 +324,7 @@ bool CheckDivZero(ExprKind exprKind, const Ptr<const BinaryExpression>& binary, 
 }
 
 SIntDomain CheckSingleValueOverflow(
-    const CHIRArithmeticBinopArgs& args, const Ptr<const BinaryExpression>& expr, ExprKind exprKind, DiagAdapter& diag)
+    const CHIRArithmeticBinopArgs& args, const Ptr<const BinaryExpression>& expr, ExprKind exprKind, DiagnosticEngine& diag)
 {
     bool isOv = false;
     if (args.uns) {
