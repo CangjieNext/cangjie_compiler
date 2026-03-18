@@ -280,7 +280,7 @@ std::string OverflowStrategyPrefix(OverflowStrategy ovf)
     }
 }
 
-void SetCompileTimeValueFlagRecursivly(Func& initFunc)
+void SetCompileTimeValueFlagRecursivly(Function& initFunc)
 {
     auto preVisit = [](Expression& expr) {
         if (expr.GetExprKind() == CHIR::ExprKind::LAMBDA) {
