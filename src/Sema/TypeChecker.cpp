@@ -2694,7 +2694,7 @@ VisitAction TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfaces(const Expr
 
 void TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfacesEntry(Node& n)
 {
-    Utils::ProfileRecorder recorder("Post TypeCheck", "CheckInstDupSuperInterfacesEntry");
+    Utils::ProfileRecorder recorder("Post TypeCheck", "CheckInstDupSuperInterfaceEntry");
     std::function<VisitAction(Ptr<Node>)> visitor = [this, &visitor](Ptr<Node> n) {
         switch (n->astKind) {
             case ASTKind::PACKAGE: {
