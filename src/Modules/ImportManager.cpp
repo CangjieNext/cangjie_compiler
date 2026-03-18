@@ -916,7 +916,6 @@ static void CheckPackageSpecsIdentical(DiagnosticEngine& diag, const Package& pk
 bool ImportManager::BuildIndex(
     const std::string& cangjieModules, const GlobalOptions& globalOptions, std::vector<Ptr<Package>>& packages)
 {
-    Utils::ProfileRecorder recorder("ImportPackages", "BuildIndex");
     bool incrBuildIndex = HasBuildIndex();
     CJC_ASSERT(!packages.empty());
     if (!incrBuildIndex) {
