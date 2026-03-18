@@ -32,7 +32,6 @@
 #include <algorithm>
 #include <optional>
 
-
 using namespace Cangjie;
 using namespace AST;
 using namespace TypeCheckUtil;
