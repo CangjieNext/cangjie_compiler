@@ -90,14 +90,6 @@ void UpdateInstantiatedDeclsLinkage(const Package& pkg)
     }
 }
 
-inline void UnsetBoxStatus(Package& pkg)
-{
-    Walker(&pkg, [](auto node) {
-        node->DisableAttr(Attribute::NEED_AUTO_BOX);
-        return VisitAction::WALK_CHILDREN;
-    }).Walk();
-}
-
 void ClearUnusedSrcImportedDecls(Package& pkg, const std::function<bool(const Ptr<Decl>&)>& checkUnvisited)
 {
     for (auto it = pkg.srcImportedNonGenericDecls.begin(); it != pkg.srcImportedNonGenericDecls.end();) {
@@ -332,7 +324,6 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
     ValidateUsedNodes(diag, pkg);
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "ValidateUsedNodes");
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "UnsetBoxStatus");
-    UnsetBoxStatus(pkg);
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "UnsetBoxStatus");
 }
 
