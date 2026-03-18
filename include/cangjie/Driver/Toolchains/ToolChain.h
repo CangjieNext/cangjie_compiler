@@ -66,6 +66,14 @@ protected:
     const DriverOptions& driverOptions;
     std::vector<ToolBatch>& backendCmds;
 
+    bool UseStaticStdLink() const;
+    bool IsStdModuleLibrary(const std::string& libName) const;
+    std::string GetCangjieBuiltinLibPath() const;
+    std::string GetCangjieRuntimeLibPath() const;
+    std::string GetCangjieStdModulesPath() const;
+    std::string GetStdLibrarySearchPath() const;
+    std::string GetBuiltinStaticLibraryPath(const std::string& libName) const;
+
     virtual std::string GetSharedLibraryExtension() const
     {
         return ".so";
@@ -165,7 +173,8 @@ protected:
 #endif
     // Check other dependencies of 'staticLib' and emplace them in 'otherLibs'.
     void CheckOtherDependeniesOfStaticLib(
-        const std::string& libName, std::set<std::string>& dynamicLibraries, std::set<std::string>& otherLibs) const;
+        const std::string& libName, std::set<std::string>& dynamicLibraries, std::set<std::string>& otherLibs,
+        bool skipMergedFFILibs = false) const;
 
     void AppendObjectsFromCompiled(Tool& tool, const std::vector<TempFileInfo>& objFiles,
         std::vector<std::tuple<std::string, uint64_t>>& inputOrderTuples);
