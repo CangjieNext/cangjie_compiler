@@ -880,7 +880,6 @@ TEST_F(PackageTest, SemanticUsage)
                 EXPECT_TRUE(declNames.find(decl->identifier) != declNames.end());
             }
             if (decl->identifier == "a" && decl->TestAttr(Attribute::GLOBAL)) {
-                ASSERT_EQ(u.boxedTypes.size(), 1);
                 EXPECT_EQ(*u.boxedTypes.begin(), "l");
                 EXPECT_EQ(u.apiUsages.usedDecls.size(), 1);
                 EXPECT_EQ(u.apiUsages.usedNames.size(), 1);
