@@ -432,7 +432,7 @@ bool IRBuilder2::IsGlobalVariableBasePtr(llvm::Value* val) const
 
 llvm::Instruction* IRBuilder2::CallGCRead(std::vector<llvm::Value*> args)
 {
-    // Func: i8 addr1* @llvm.cj.gcread.ref(i8 addr1* baseObj, i8 addr1*addr1* place)
+    // Function: i8 addr1* @llvm.cj.gcread.ref(i8 addr1* baseObj, i8 addr1*addr1* place)
     auto func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_gcread_ref);
     ConvertArgsType(*this, func, args);
     return CreateCall(func, args);
@@ -440,7 +440,7 @@ llvm::Instruction* IRBuilder2::CallGCRead(std::vector<llvm::Value*> args)
 
 llvm::Instruction* IRBuilder2::CallGCReadWeakRef(std::vector<llvm::Value*> args)
 {
-    // Func: i8 addr1* @llvm.cj.gcread.weakref(i8 addr1* baseObj, i8 addr1*addr1* place)
+    // Function: i8 addr1* @llvm.cj.gcread.weakref(i8 addr1* baseObj, i8 addr1*addr1* place)
     auto func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_gcread_weakref);
     ConvertArgsType(*this, func, args);
     return CreateCall(func, args);
@@ -448,7 +448,7 @@ llvm::Instruction* IRBuilder2::CallGCReadWeakRef(std::vector<llvm::Value*> args)
 
 llvm::Instruction* IRBuilder2::CallGCReadAgg(std::vector<llvm::Value*> args)
 {
-    // Func: void @llvm.cj.gcread.struct(i8 addr1* baseObj, i8 addr1* dst, i8 addr1*/ i8* src, i64 length)
+    // Function: void @llvm.cj.gcread.struct(i8 addr1* baseObj, i8 addr1* dst, i8 addr1*/ i8* src, i64 length)
     auto func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_gcread_struct, {GetSizetLLVMType()});
     args[3] = CreateZExtOrTrunc(args[3], GetSizetLLVMType());
     ConvertArgsType(*this, func, args);
@@ -457,14 +457,14 @@ llvm::Instruction* IRBuilder2::CallGCReadAgg(std::vector<llvm::Value*> args)
 
 llvm::Instruction* IRBuilder2::CallGCReadStaticRef(const std::vector<llvm::Value*>& args)
 {
-    // Func: void @llvm.cj.gcread.static.ref(i8 addr1** val)
+    // Function: void @llvm.cj.gcread.static.ref(i8 addr1** val)
     return CreateCall(
         llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_gcread_static_ref), args);
 }
 
 llvm::Instruction* IRBuilder2::CallGCReadStaticAgg(llvm::StructType* type, std::vector<llvm::Value*> args)
 {
-    // Func: void @llvm.cj.gcread.static.struct(i8* dst, i8* src, i64 len)
+    // Function: void @llvm.cj.gcread.static.struct(i8* dst, i8* src, i64 len)
     // 3 arguments.
     CJC_ASSERT(args.size() == 3);
     llvm::LLVMContext& ctx = getContext();
@@ -480,7 +480,7 @@ llvm::Instruction* IRBuilder2::CallGCReadStaticAgg(llvm::StructType* type, std::
 
 llvm::Instruction* IRBuilder2::CallGCWrite(std::vector<llvm::Value*> args)
 {
-    // Func: void @llvm.cj.gcwrite.ref(type val, i8 addr1* baseObj, type addr1* place)
+    // Function: void @llvm.cj.gcwrite.ref(type val, i8 addr1* baseObj, type addr1* place)
     // E.g. void @llvm.cj.gcwrite.ref(i8 addr1* val, i8 addr1* baseObj, i8 addr1*addr1* refPtr)
     auto func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_gcwrite_ref);
     ConvertArgsType(*this, func, args);
@@ -497,7 +497,7 @@ llvm::Instruction* IRBuilder2::CallGCWriteAgg(std::vector<llvm::Value*> args)
     }
     // real type of third parameter: args[2]->getType()
     llvm::Type* type = llvm::Type::getInt8PtrTy(GetLLVMContext(), args[2]->getType()->getPointerAddressSpace());
-    // Func: void @llvm.cj.gcwrite.struct(i8 addr1* baseObj, i8 addr1* dst, i8 addr1*/ i8* src, i64 length)
+    // Function: void @llvm.cj.gcwrite.struct(i8 addr1* baseObj, i8 addr1* dst, i8 addr1*/ i8* src, i64 length)
     auto func = llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_gcwrite_struct, {type, GetSizetLLVMType()});
     args[3] = CreateZExtOrTrunc(args[3], GetSizetLLVMType());
     ConvertArgsType(*this, func, args);
@@ -506,14 +506,14 @@ llvm::Instruction* IRBuilder2::CallGCWriteAgg(std::vector<llvm::Value*> args)
 
 llvm::Instruction* IRBuilder2::CallGCWriteStaticRef(const std::vector<llvm::Value*>& args)
 {
-    // Func: void @llvm.cj.gcwrite.static(i8 addr1* val, i8 addr1** place)
+    // Function: void @llvm.cj.gcwrite.static(i8 addr1* val, i8 addr1** place)
     return CreateCall(
         llvm::Intrinsic::getDeclaration(cgMod.GetLLVMModule(), llvm::Intrinsic::cj_gcwrite_static_ref), args);
 }
 
 llvm::Instruction* IRBuilder2::CallGCWriteStaticAgg(llvm::StructType* type, std::vector<llvm::Value*> args)
 {
-    // Func: void @llvm.cj.gcwrite.static.struct(i8* dst, i8* src, i64 len)
+    // Function: void @llvm.cj.gcwrite.static.struct(i8* dst, i8* src, i64 len)
     // 3 arguments.
     CJC_ASSERT(args.size() == 3);
     // The last one (2nd) argument means size.

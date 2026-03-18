@@ -29,7 +29,7 @@ CGFunctionType::CGFunctionType(
 }
 
 CGFunctionType::CGFunctionType(
-    CGModule& cgMod, CGContext& cgCtx, const CHIR::FuncBase& chirFunc, const TypeExtraInfo& extraInfo)
+    CGModule& cgMod, CGContext& cgCtx, const CHIR::Function& chirFunc, const TypeExtraInfo& extraInfo)
     : CGType(cgMod, cgCtx,
           chirFunc.Get<CHIR::OverrideSrcFuncType>() ? *chirFunc.Get<CHIR::OverrideSrcFuncType>() : *chirFunc.GetType(),
           CGTypeKind::CG_FUNCTION)
@@ -55,9 +55,9 @@ llvm::Type* CGFunctionType::GenLLVMType()
     }
 
     auto& llvmCtx = cgCtx.GetLLVMContext();
-    layoutType = llvm::StructType::getTypeByName(llvmCtx, "Func.Type");
+    layoutType = llvm::StructType::getTypeByName(llvmCtx, "Function.Type");
     if (!layoutType) {
-        layoutType = llvm::StructType::create(llvmCtx, {llvm::Type::getInt8PtrTy(llvmCtx)}, "Func.Type");
+        layoutType = llvm::StructType::create(llvmCtx, {llvm::Type::getInt8PtrTy(llvmCtx)}, "Function.Type");
     }
 
     auto& funcTy = StaticCast<const CHIR::FuncType&>(chirType);

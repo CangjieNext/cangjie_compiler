@@ -347,7 +347,7 @@ void Translator::TranslateFuncArgsWithoutThisObj(
              * if `foo` is instantiated by `Bool`, then new instantiated func `foo_Bool` is global func,
              * not a member func, so instantiated func `x.0` is also a global func.
              */
-            if (auto funcBase = DynamicCast<FuncBase*>(defaultValueFunc); funcBase &&
+            if (auto funcBase = DynamicCast<Function*>(defaultValueFunc); funcBase &&
                 funcBase->GetParentCustomTypeDef() == nullptr) {
                 thisInstType = nullptr;
             }
@@ -1007,7 +1007,7 @@ Ptr<Type> Translator::GetMemberFuncCallerInstType(const AST::CallExpr& expr, boo
         } else if (IsStaticInit(*expr.resolvedFunction)) {
             // 3. in CHIR, we treat `static.init()` as global function, not member function,
             // because its outerDecl is something like `class A<T>`, if it's member function, ir is as follows:
-            // Func gv$_init() {
+            // Function gv$_init() {
             //     Apply(static.init)(A<T>, [], Unit) // `T` is not declared in this scope
             // }
             callerType = nullptr;

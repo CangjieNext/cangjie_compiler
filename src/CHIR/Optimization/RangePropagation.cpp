@@ -45,7 +45,7 @@ const OptEffectCHIRMap& RangePropagation::GetEffectMap() const
     return effectMap;
 }
 
-const std::vector<const Func*>& RangePropagation::GetFuncsNeedRemoveBlocks() const
+const std::vector<const Function*>& RangePropagation::GetFuncsNeedRemoveBlocks() const
 {
     return funcsNeedRemoveBlocks;
 }
@@ -57,7 +57,7 @@ void RangePropagation::RunOnPackage(const Ptr<const Package>& package, bool isDe
     }
 }
 
-void RangePropagation::RunOnFunc(const Ptr<const Func>& func, bool isDebug)
+void RangePropagation::RunOnFunc(const Ptr<const Function>& func, bool isDebug)
 {
     auto result = analysisWrapper->CheckFuncResult(func);
     if (!result) {
@@ -174,7 +174,7 @@ GlobalVar* RecordLoadEffectMap(const Ptr<const Load>& load)
     if (loc->IsGlobalVarInCurPackage()) {
         // let a = 3
         // Load(gv_a)
-        gv = DynamicCast<GlobalVar*>(loc);
+        gv = StaticCast<GlobalVar*>(loc);
     } else if (loc->IsLocalVar()) {
         // let sa = SA(); sa.x
         // %0 = GetElementRef(gv_sa); %1 = Load(%0)
@@ -182,7 +182,7 @@ GlobalVar* RecordLoadEffectMap(const Ptr<const Load>& load)
         if (locExpr->GetExprKind() == ExprKind::GET_ELEMENT_REF) {
             auto base = StaticCast<GetElementRef*>(locExpr)->GetLocation();
             if (base->IsGlobalVarInCurPackage()) {
-                gv = DynamicCast<GlobalVar*>(base);
+                gv = StaticCast<GlobalVar*>(base);
             }
         }
     }
@@ -200,7 +200,7 @@ GlobalVar* RecordFieldEffectMap(const Ptr<const Field>& field)
             if (loc->IsGlobalVarInCurPackage()) {
                 // let a = (1, 2); a[0]
                 // %0 = Load(gv_a); %1 = Field(%0, 0)
-                gv = DynamicCast<GlobalVar*>(loc);
+                gv = StaticCast<GlobalVar*>(loc);
             }
         }
     }
@@ -209,7 +209,7 @@ GlobalVar* RecordFieldEffectMap(const Ptr<const Field>& field)
 
 static std::mutex g_mtx;
 OptEffectCHIRMap RangePropagation::effectMap;
-void RangePropagation::RecordEffectMap(const Expression* expr, const Func* func) const
+void RangePropagation::RecordEffectMap(const Expression* expr, const Function* func) const
 {
     if (!enIncre) {
         return;
@@ -222,7 +222,7 @@ void RangePropagation::RecordEffectMap(const Expression* expr, const Func* func)
     }
     if (gv) {
         std::lock_guard<std::mutex> guard(g_mtx);
-        effectMap[gv].emplace(const_cast<Func*>(func));
+        effectMap[gv].emplace(const_cast<Function*>(func));
     }
 }
 

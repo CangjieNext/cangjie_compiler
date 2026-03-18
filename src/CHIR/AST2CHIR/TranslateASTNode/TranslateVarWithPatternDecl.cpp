@@ -20,7 +20,7 @@ void Translator::HandleVarWithVarPattern(
         StoreRValueToLValue(*varDecl, *initNode, leftValue);
         if (leftValue->IsGlobalVarInCurPackage()) {
             CJC_ASSERT(GetTopLevelFunc(*initNode));
-            VirtualCast<GlobalVar*>(leftValue)->SetInitFunc(*GetTopLevelFunc(*initNode));
+            StaticCast<GlobalVar*>(leftValue)->SetInitFunc(*GetTopLevelFunc(*initNode));
         }
     }
     SetSymbolTable(*varDecl, *leftValue);
