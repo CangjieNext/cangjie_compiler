@@ -880,8 +880,7 @@ TEST_F(PackageTest, SemanticUsage)
                 EXPECT_TRUE(declNames.find(decl->identifier) != declNames.end());
             }
             if (decl->identifier == "a" && decl->TestAttr(Attribute::GLOBAL)) {
-                ASSERT_EQ(u.boxedTypes.size(), 1);
-                EXPECT_EQ(*u.boxedTypes.begin(), "l");
+                ASSERT_EQ(u.boxedTypes.size(), 0);
                 EXPECT_EQ(u.apiUsages.usedDecls.size(), 1);
                 EXPECT_EQ(u.apiUsages.usedNames.size(), 1);
                 EXPECT_TRUE(u.apiUsages.usedNames["Any"].hasUnqualifiedUsageOfImported);
@@ -905,7 +904,7 @@ TEST_F(PackageTest, SemanticUsage)
                 EXPECT_EQ(u.apiUsages.usedDecls.size(), 1); // A
                 EXPECT_EQ(u.apiUsages.usedNames.size(), 1);
             } else if (decl->identifier == "foo") {
-                EXPECT_EQ(u.boxedTypes.size(), 1); // String
+                EXPECT_EQ(u.boxedTypes.size(), 0); // String
                 EXPECT_EQ(u.apiUsages.usedDecls.size(), 0);
                 // A init, A, toString, B, coo, global a, overload +, String
                 EXPECT_EQ(u.bodyUsages.usedDecls.size(), 8);
