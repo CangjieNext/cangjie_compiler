@@ -17,6 +17,8 @@
 namespace {
 const std::string LINK_PREFIX = "-l:";
 const std::string STATIC_LIB_EXTEBSION = ".a";
+const std::string STD_LIB_PREFIX = "libcangjie-std-";
+const std::string STD_MODULE_SUBDIR = "std";
 
 const std::map<std::string, std::string> LLVM_LTO_CSTD_FFI_OPTION_MAP = {
 #define CJNATIVE_LTO_CSTD_FFI_OPTIONS(STATILIB, FFILIB) {STATILIB, FFILIB},
@@ -38,22 +40,68 @@ std::optional<std::tuple<std::string, uint64_t>> GetElementFromOrderVector(
     }
     return result;
 }
+
 }; // namespace
 
 using namespace Cangjie;
 
 void ToolChain::GenerateLinkOptionsOfBuiltinLibs(Tool& tool) const
 {
-    bool notOutputDylib = driverOptions.outputMode != GlobalOptions::OutputMode::SHARED_LIB;
-    // When user compiling to a shared library, standard library must be dynamic linked or there might be multiple
-    // versions of standard library exists in different dynamic libraries. A user could still specify --static-std
-    // to reproduct the problem. Here we only ensure the default behavior of cjc is correct.
-    bool isStaticLink = driverOptions.linkStaticStd.value_or(notOutputDylib);
+    bool isStaticLink = UseStaticStdLink();
     if (isStaticLink) {
         return GenerateLinkOptionsOfBuiltinLibsForStaticLink(tool);
     } else {
         return GenerateLinkOptionsOfBuiltinLibsForDyLink(tool);
     }
+}
+
+bool ToolChain::UseStaticStdLink() const
+{
+    bool notOutputDylib = driverOptions.outputMode != GlobalOptions::OutputMode::SHARED_LIB;
+    // When user compiling to a shared library, standard library must be dynamic linked or there might be multiple
+    // versions of standard library exists in different dynamic libraries. A user could still specify --static-std
+    // to reproduct the problem. Here we only ensure the default behavior of cjc is correct.
+    return driverOptions.linkStaticStd.value_or(notOutputDylib);
+}
+
+bool ToolChain::IsStdModuleLibrary(const std::string& libName) const
+{
+    return libName.rfind(STD_LIB_PREFIX, 0) == 0;
+}
+
+// cangjieHome/lib/linux_x86_cjnative 
+std::string ToolChain::GetCangjieBuiltinLibPath() const
+{
+    return FileUtil::JoinPath(FileUtil::JoinPath(driver.cangjieHome, "lib"), driverOptions.GetCangjieLibTargetPathName());
+}
+
+std::string ToolChain::GetCangjieRuntimeLibPath() const
+{
+    return FileUtil::JoinPath(
+        FileUtil::JoinPath(driver.cangjieHome, "runtime/lib"), driverOptions.GetCangjieLibTargetPathName());
+}
+
+std::string ToolChain::GetCangjieStdModulesPath() const
+{
+    return FileUtil::JoinPath(
+        FileUtil::JoinPath(FileUtil::JoinPath(driver.cangjieHome, "modules"), driverOptions.GetCangjieLibTargetPathName()),
+        STD_MODULE_SUBDIR);
+}
+
+std::string ToolChain::GetStdLibrarySearchPath() const
+{
+    if (!UseStaticStdLink()) {
+        return GetCangjieRuntimeLibPath();
+    }
+    return driverOptions.IsLTOEnabled() ? GetCangjieStdModulesPath() : GetCangjieBuiltinLibPath();
+}
+
+std::string ToolChain::GetBuiltinStaticLibraryPath(const std::string& libName) const
+{
+    auto basePath = IsStdModuleLibrary(libName) && driverOptions.IsLTOEnabled()
+        ? GetCangjieStdModulesPath()
+        : GetCangjieBuiltinLibPath();
+    return FileUtil::JoinPath(basePath, libName);
 }
 
 void ToolChain::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
@@ -87,14 +135,22 @@ void ToolChain::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
                     FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, GetSharedLibraryExtension()));
                 return;
             }
-            if (driverOptions.IsLTOEnabled()) {
+            //TODO: IsStdModuleLibrary 应该可以去掉
+            bool useMergedBcArchiveForLTO = driverOptions.IsLTOEnabled() && UseStaticStdLink() &&
+                IsStdModuleLibrary(staticLib) && FileUtil::FileExist(GetBuiltinStaticLibraryPath(staticLib));
+            if (useMergedBcArchiveForLTO) {
+                // Keep std module lookup on modules/<target>/std so LTO still sees bitcode members inside the archive.
+                staticLibraries.emplace(LINK_PREFIX + staticLib);
+            } else if (driverOptions.IsLTOEnabled()) {
+                //TODO : 为了兼容之前没有 合成一个的情况
                 auto found = LLVM_LTO_CSTD_FFI_OPTION_MAP.find(staticLib);
                 if (found != LLVM_LTO_CSTD_FFI_OPTION_MAP.end()) {
                     staticLibraries.emplace(LINK_PREFIX + found->second);
                 }
                 ltoBuiltInDependencies.emplace(FileUtil::ConvertFilenameToLtoLibCangjieFormat(cjoFileName));
             } else {
-                // search sanitizer path
+                // Search sanitizer path for non-LTO static libraries. In LTO mode, std archives are
+                // resolved through -L ordering so llvm.dependent-libraries can pick the right input.
                 if (driverOptions.sanitizerType != GlobalOptions::SanitizerType::NONE) {
                     auto cangjieLibPath = FileUtil::JoinPath(
                         FileUtil::JoinPath(FileUtil::JoinPath(driver.cangjieHome, "lib"),
@@ -104,7 +160,9 @@ void ToolChain::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
                 }
                 staticLibraries.emplace(LINK_PREFIX + staticLib);
             }
-            CheckOtherDependeniesOfStaticLib(staticLib, dynamicLibraries, staticLibraries);
+            // TODO: 为什么这里是需要 调用两次这个函数
+            CheckOtherDependeniesOfStaticLib(
+                staticLib, dynamicLibraries, staticLibraries, useMergedBcArchiveForLTO);
         };
 
     ForEachBuiltinDependencies(driverOptions.directBuiltinDependencies, appendStaticLibsToTool);
@@ -144,7 +202,8 @@ void ToolChain::GenerateLinkOptionsOfBuiltinLibsForDyLink(Tool& tool) const
 }
 
 void ToolChain::CheckOtherDependeniesOfStaticLib(
-    const std::string& libName, std::set<std::string>& dynamicLibraries, std::set<std::string>& otherLibs) const
+    const std::string& libName, std::set<std::string>& dynamicLibraries, std::set<std::string>& otherLibs,
+    bool skipMergedFFILibs) const
 {
     if (libName == "libcangjie-std-net.a") {
         if (driverOptions.target.IsMinGW()) {
@@ -163,7 +222,9 @@ void ToolChain::CheckOtherDependeniesOfStaticLib(
         // Here we have to also link against `libdl` instead of `libdl.so` for compatibility.
         dynamicLibraries.emplace("-ldl");
     } else if (libName == "libcangjie-std-ast.a") {
-        otherLibs.emplace("-l:libcangjie-std-astFFI.a");
+        if (!skipMergedFFILibs) {
+            otherLibs.emplace("-l:libcangjie-std-astFFI.a");
+        }
         // std-ast relies on unwind symbols, which supplied by clang or gcc runtime library. Linking some versions of
         // gcc.a before clang_rt-builtins causes multiple definitions, thus we need to link clang_rt-builtins first.
         if (driverOptions.target.arch != Triple::ArchType::AARCH64 &&

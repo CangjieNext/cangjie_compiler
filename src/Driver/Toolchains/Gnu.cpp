@@ -321,21 +321,24 @@ void Gnu::HandleLLVMLinkOptions(
 
 void Gnu::HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath)
 {
+    auto cangjieRuntimeLibPath = GetCangjieRuntimeLibPath();
+    auto stdLibrarySearchPath = GetStdLibrarySearchPath();
     // Append -L (those specified in command) as search paths
     tool.AppendArg(PrependToPaths("-L", driverOptions.librarySearchPaths));
     // Path to built-in libraries is placed between -L search paths and LIBRARY_PATH so that
     // 1) user can explicitly specify a library path which contains libcangjie-<sth> to force Linker
     //    link against such libraries.
     // 2) Linker will not be confused if user's LIBRARY_PATH is polluted, for example, LIBRARY_PATH
-    //    contains the path to the library folder of a different version of cjc.
+    //    contains the path to the library folder of a different version of cjc. For std libraries,
+    //    the path order also controls whether llvm.dependent-libraries resolves to modules/ (LTO),
+    //    runtime/lib/ (--dy-std) or lib/ (non-LTO static).
     tool.AppendArgIf(driverOptions.EnableSanitizer(),
         "-L" + FileUtil::JoinPath(cangjieLibPath, driverOptions.SanitizerTypeToShortString()));
-    tool.AppendArg("-L" + cangjieLibPath);
-    auto cangjieRuntimeLibPath = FileUtil::JoinPath(
-        FileUtil::JoinPath(driver.cangjieHome, "runtime/lib"), driverOptions.GetCangjieLibTargetPathName());
+    tool.AppendArg("-L" + stdLibrarySearchPath);
+    tool.AppendArgIf(stdLibrarySearchPath != cangjieLibPath, "-L" + cangjieLibPath);
     tool.AppendArgIf(driverOptions.EnableSanitizer(),
         "-L" + FileUtil::JoinPath(cangjieRuntimeLibPath, driverOptions.SanitizerTypeToShortString()));
-    tool.AppendArg("-L" + cangjieRuntimeLibPath);
+    tool.AppendArgIf(stdLibrarySearchPath != cangjieRuntimeLibPath, "-L" + cangjieRuntimeLibPath);
     // Append LIBRARY_PATH as search paths
     tool.AppendArg(PrependToPaths("-L", GetLibraryPaths()));
     if (driverOptions.IsCrossCompiling() && !driverOptions.target.IsMinGW()) {
