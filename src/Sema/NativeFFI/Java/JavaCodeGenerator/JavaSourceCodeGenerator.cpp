@@ -177,6 +177,7 @@ JavaSourceCodeGenerator::JavaSourceCodeGenerator(const BaseMangler& mangler, Typ
     Ptr<LambdaPattern> pattern)
     : AbstractSourceCodeGenerator(
           outputFolderPath.value_or(JavaSourceCodeGenerator::DEFAULT_OUTPUT_DIR), outputFileName),
+      decl(nullptr),
       cjLibName(std::move(cjLibName)),
       mangler(mangler),
       typeManager(typeManager),
