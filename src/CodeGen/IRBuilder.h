@@ -351,7 +351,7 @@ public:
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     ///*----------------- FFI OHOS related --------------------//
     llvm::Value* CallInteropIntrinsics(const CHIRIntrinsicWrapper& intrinsic, const std::vector<CGValue*>& parameters);
-    ///*----------------- Func RefEq related --------------------//
+    ///*----------------- Function RefEq related --------------------//
     llvm::Value* CallIntrinsicFuncRefEq(std::vector<CGValue*> parameters);
     ///*----------------- VArray related --------------------//
     void CallVArrayIntrinsicIndexCheck(const CGValue* arrayPtr, std::vector<llvm::Value*>& index);

@@ -78,7 +78,7 @@ llvm::Value* IRBuilder2::CallSetLocation()
     if (!GetCGContext().GetCompileOptions().enableCompileDebug) {
         return nullptr;
     }
-    // Func: anyregcc void @llvm.cj.set.location()
+    // Function: anyregcc void @llvm.cj.set.location()
     auto setLocation = llvm::Intrinsic::getDeclaration(GetLLVMModule(), llvm::Intrinsic::cj_set_location);
     auto callInst = CreateCall(setLocation);
     if (GetCGContext().GetCompileOptions().target.arch != Triple::ArchType::ARM32) {
@@ -1520,7 +1520,7 @@ llvm::Value* GetRealUUIDForAutoEnvClass(IRBuilder2& irBuilder, llvm::Value* obj)
 
 llvm::Value* IRBuilder2::CallIntrinsicFuncRefEq(std::vector<CGValue*> parameters)
 {
-    CJC_ASSERT(parameters.size() == 2 && "Func refEq should have two parameters");
+    CJC_ASSERT(parameters.size() == 2 && "Function refEq should have two parameters");
     auto realUUID0 = GetRealUUIDForAutoEnvClass(*this, **parameters[0]);
     auto realUUID1 = GetRealUUIDForAutoEnvClass(*this, **parameters[1]);
     return CreateICmpEQ(realUUID0, realUUID1);
