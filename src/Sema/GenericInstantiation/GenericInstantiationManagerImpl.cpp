@@ -90,13 +90,13 @@ void UpdateInstantiatedDeclsLinkage(const Package& pkg)
     }
 }
 
-inline void UnsetBoxStatus(Package& pkg)
-{
-    Walker(&pkg, [](auto node) {
-        node->DisableAttr(Attribute::NEED_AUTO_BOX);
-        return VisitAction::WALK_CHILDREN;
-    }).Walk();
-}
+// inline void UnsetBoxStatus(Package& pkg)
+// {
+//     Walker(&pkg, [](auto node) {
+//         node->DisableAttr(Attribute::NEED_AUTO_BOX);
+//         return VisitAction::WALK_CHILDREN;
+//     }).Walk();
+// }
 
 void ClearUnusedSrcImportedDecls(Package& pkg, const std::function<bool(const Ptr<Decl>&)>& checkUnvisited)
 {
@@ -320,7 +320,7 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
     UpdateInstantiatedDeclsLinkage(pkg);
     ClearImportedUnusedInstantiatedDecls();
     ValidateUsedNodes(diag, pkg);
-    UnsetBoxStatus(pkg);
+    // UnsetBoxStatus(pkg);
 }
 
 void GIM::GenericInstantiationManagerImpl::RecordExtend(AST::Node& node)
