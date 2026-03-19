@@ -10,7 +10,14 @@
 # ** NOTE: Please use `source' command to execute this script. **
 
 # Get current shell name.
-shell_name=$(basename -- $(ps -o comm= $$))
+# Prefer shell-provided variables when sourced, then fall back to ps.
+if [ -n "${ZSH_VERSION-}" ]; then
+    shell_name="zsh"
+elif [ -n "${BASH_VERSION-}" ]; then
+    shell_name="bash"
+else
+    shell_name="$(basename -- "$(ps -o comm= $$ 2>/dev/null)")"
+fi
 
 # Get the absolute path of this script according to different shells.
 case "${shell_name}" in
@@ -26,16 +33,20 @@ case "${shell_name}" in
         ;;
 esac
 
-if [ -L ${source_dir} ]; then
-    if command -v realpath 2>&1 >/dev/null; then
-        source_dir=$(realpath "${source_dir}")
+if [ -n "${source_dir}" ] && [ -L "${source_dir}" ]; then
+    if command -v realpath >/dev/null 2>&1; then
+        source_dir="$(realpath "${source_dir}")"
     else
         echo '`realpath` is not found, setup may not process properly.'
     fi
 fi
-script_dir=$(cd "$(dirname "${source_dir}")"; pwd)
+script_dir="$(cd -P "$(dirname "${source_dir}")" 2>/dev/null && pwd -P)"
+if [ -z "${script_dir}" ]; then
+    echo "[ERROR] Failed to locate script directory."
+    return 1
+fi
 
-export CANGJIE_HOME=${script_dir}
+export CANGJIE_HOME="${script_dir}"
 
 hw_arch=$(uname -m)
 if [ "$hw_arch" = "" ]; then
@@ -43,13 +54,18 @@ if [ "$hw_arch" = "" ]; then
 elif [ "$hw_arch" = "arm64" ]; then
     hw_arch="aarch64"
 fi
-export PATH=${CANGJIE_HOME}/bin:${CANGJIE_HOME}/tools/bin:$PATH:${HOME}/.cjpm/bin
-export DYLD_LIBRARY_PATH=${CANGJIE_HOME}/runtime/lib/darwin_${hw_arch}_cjnative:${CANGJIE_HOME}/tools/lib:${DYLD_LIBRARY_PATH}
+export PATH="${CANGJIE_HOME}/bin:${CANGJIE_HOME}/tools/bin${PATH:+:${PATH}}:${HOME}/.cjpm/bin"
+export DYLD_FALLBACK_LIBRARY_PATH="${CANGJIE_HOME}/runtime/lib/darwin_${hw_arch}_cjnative:${CANGJIE_HOME}/tools/lib${DYLD_FALLBACK_LIBRARY_PATH:+:${DYLD_FALLBACK_LIBRARY_PATH}}"
 unset hw_arch
 
 if [ -z ${SDKROOT+x} ]; then
-    export SDKROOT=`xcrun --sdk macosx --show-sdk-path`
+    if command -v xcrun >/dev/null 2>&1; then
+        export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+    else
+        echo "[ERROR] `xcrun` is not found, setup may not process properly."
+        return 1
+    fi
 fi
 
-xattr -dr com.apple.quarantine ${script_dir}/* &> /dev/null || true
-codesign -s - -f --preserve-metadata=entitlements,requirements,flags,runtime ${script_dir}/third_party/llvm/bin/debugserver &> /dev/null || true
+xattr -dr com.apple.quarantine "${script_dir}"/* &> /dev/null || true
+codesign -s - -f --preserve-metadata=entitlements,requirements,flags,runtime "${script_dir}/third_party/llvm/bin/debugserver" &> /dev/null || true
