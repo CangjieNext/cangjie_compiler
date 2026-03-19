@@ -281,9 +281,12 @@ Ptr<Decl> GetMemberByOffset(const Decl& decl, size_t offset)
 void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pkg)
 {
     this->curPkg = &pkg;
-    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "instantiate");
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "RecordExtend");
     // Collect extend decls by usage.
     RecordExtend(*curPkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "RecordExtend");
+
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "instantiate");
     if (curPkg->TestAttr(Attribute::INCRE_COMPILE)) {
         InstantiateForIncrementalPackage();
     } else {
@@ -293,14 +296,15 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
         Walker(curPkg, instantiationWalkerID, instantiator, contextReset).Walk();
     }
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "instantiate");
-    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "testManager");
-    testManager->PreparePackageForTestIfNeeded(*curPkg);
-    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "testManager");
 
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "TestManager");
+    testManager->PreparePackageForTestIfNeeded(*curPkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "TestManager");
     // Do not perform rearrange, validation and deletion if errors generated.
     if (diag.GetErrorCount() != 0) {
         return;
     }
+
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "rearrange");
     // Erase un-visited src imported functions during instantiation step.
     ClearUnusedSrcImportedDecls(
@@ -315,12 +319,23 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
     if (diag.GetErrorCount() != 0) {
         return;
     }
+
     Utils::ProfileRecorder recorder("GenericInstantiatePackage", "cleanup");
+    Utils::ProfileRecorder::Start("cleanup", "UpdateInstantiatedExtendMap");
     UpdateInstantiatedExtendMap();
+    Utils::ProfileRecorder::Stop("cleanup", "UpdateInstantiatedExtendMap");
+    Utils::ProfileRecorder::Start("cleanup", "UpdateInstantiatedDeclsLinkage");
     UpdateInstantiatedDeclsLinkage(pkg);
+    Utils::ProfileRecorder::Stop("cleanup", "UpdateInstantiatedDeclsLinkage");
+    Utils::ProfileRecorder::Start("cleanup", "ClearImportedUnusedInstantiatedDecls");
     ClearImportedUnusedInstantiatedDecls();
+    Utils::ProfileRecorder::Stop("cleanup", "ClearImportedUnusedInstantiatedDecls");
+    Utils::ProfileRecorder::Start("cleanup", "ValidateUsedNodes");
     ValidateUsedNodes(diag, pkg);
+    Utils::ProfileRecorder::Stop("cleanup", "ValidateUsedNodes");
+    Utils::ProfileRecorder::Start("cleanup", "UnsetBoxStatus");
     UnsetBoxStatus(pkg);
+    Utils::ProfileRecorder::Stop("cleanup", "UnsetBoxStatus");
 }
 
 void GIM::GenericInstantiationManagerImpl::RecordExtend(AST::Node& node)
