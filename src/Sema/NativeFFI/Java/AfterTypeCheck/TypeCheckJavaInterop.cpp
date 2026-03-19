@@ -384,6 +384,8 @@ struct JavaInteropTypeChecker {
             }
         }
         
+        std::unordered_map<std::string, std::vector<std::pair<std::string, PropDecl*>>> propGeneratedMethods;
+        
         for (auto& member : decl.GetMemberDecls()) {
             if (auto prop = As<ASTKind::PROP_DECL>(member.get())) {
                 std::string propName = GetJavaMemberName(*prop);
@@ -403,6 +405,8 @@ struct JavaInteropTypeChecker {
                     }
                 }
                 
+                propGeneratedMethods[getterName].push_back({"property", prop});
+                
                 if (!prop->isVar) {
                     continue;
                 }
@@ -421,6 +425,21 @@ struct JavaInteropTypeChecker {
                         decl.EnableAttr(Attribute::HAS_BROKEN);
                         decl.EnableAttr(Attribute::IS_BROKEN);
                     }
+                }
+                
+                propGeneratedMethods[setterName].push_back({"property", prop});
+            }
+        }
+        
+        for (auto& [methodName, props] : propGeneratedMethods) {
+            if (props.size() > 1) {
+                for (size_t i = 1; i < props.size(); ++i) {
+                    diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_name_clash, 
+                        *props[i].second, "property", props[i].second->identifier, methodName,
+                        "method", methodName);
+                    props[i].second->EnableAttr(Attribute::IS_BROKEN);
+                    decl.EnableAttr(Attribute::HAS_BROKEN);
+                    decl.EnableAttr(Attribute::IS_BROKEN);
                 }
             }
         }
