@@ -348,8 +348,7 @@ void TypeChecker::TypeCheckerImpl::ParsePackageConfigFile(
                             }
                             for (auto& member : decl->GetMemberDecls()) {
                                 if (member->symbol &&
-                                    (!decl->symbol->isNeedExposedToInterop &&
-                                        (element == (decl->symbol->name + "." + member->symbol->name)))) {
+                                    (element == (decl->symbol->name + "." + member->symbol->name))) {
                                     member->symbol->isNeedExposedToInterop = false;
                                 }
                             }

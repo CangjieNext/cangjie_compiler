@@ -77,9 +77,18 @@ struct JavaInteropTypeChecker {
         }
     }
 
+    bool ContainsGenericTypeParam(const std::string& typeStr) const
+    {
+        return typeStr.find("Generics-") != std::string::npos;
+    }
+
     bool IsLambdaTypeConfigured(const Ptr<Ty>& ty) const
     {
         if (!curPackage || ty->kind != TypeKind::TYPE_FUNC) {
+            return true;
+        }
+        std::string typeStr = ty->String();
+        if (ContainsGenericTypeParam(typeStr)) {
             return true;
         }
         const auto& lambdaPatterns = curPackage->GetLambdaPatterns();
@@ -115,13 +124,20 @@ struct JavaInteropTypeChecker {
         if (!curPackage || !ty->IsTuple()) {
             return true;
         }
+        std::string tupleStr = ty->String();
+        if (ContainsGenericTypeParam(tupleStr)) {
+            return true;
+        }
         const auto& interopTuples = curPackage->interopTuples;
         if (interopTuples.empty()) {
             return false;
         }
-        std::string tupleStr = ty->String();
+        std::string configStr = tupleStr;
+        if (configStr.substr(0, 6) == "Tuple<") {
+            configStr = "(" + configStr.substr(6, configStr.size() - 7) + ")";
+        }
         for (const auto& config : interopTuples) {
-            if (config == tupleStr) {
+            if (config == tupleStr || config == configStr) {
                 return true;
             }
         }
