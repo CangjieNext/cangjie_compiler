@@ -952,6 +952,7 @@ ASTContext* CompilerInstance::GetASTContextByPackage(Ptr<Package> pkg) const
 
 void CompilerInstance::AddSourceToMember()
 {
+    Utils::ProfileRecorder recorder("ImportPackages", "AddSourceToMember");
     pkgs.clear(); // clear the pkgs to avoid the cache of the previous compilation in lsp.
     for (auto& it : GetSourcePackages()) {
         pkgs.push_back(it);
@@ -971,7 +972,9 @@ bool CompilerInstance::ImportPackages()
             return false;
         }
     }
+    Utils::ProfileRecorder::Start("ImportPackages", "AddSourceToMember");
     AddSourceToMember();
+    Utils::ProfileRecorder::Stop("ImportPackages", "AddSourceToMember");
 
     if (invocation.globalOptions.scanDepPkg) {
         importManager.UpdateSearchPath(cangjieModules);
@@ -983,17 +986,24 @@ bool CompilerInstance::ImportPackages()
         return true;
     }
 
+    Utils::ProfileRecorder::Start("ImportPackages", "BuildIndex");
     if (!importManager.BuildIndex(cangjieModules, invocation.globalOptions, pkgs)) {
         return false;
     }
+    Utils::ProfileRecorder::Stop("ImportPackages", "BuildIndex");
 
+    Utils::ProfileRecorder::Start("ImportPackages", "MergePackages");
     MergePackages();
+    Utils::ProfileRecorder::Stop("ImportPackages", "MergePackages");
+    Utils::ProfileRecorder::Start("ImportPackages", "ModularizeCompilation");
     ModularizeCompilation();
+    Utils::ProfileRecorder::Stop("ImportPackages", "ModularizeCompilation");
     return true;
 }
 
 void CompilerInstance::MergePackages()
 {
+    Utils::ProfileRecorder recorder("ImportPackages", "MergePackages");
     pkgCtxMap.clear(); // clear the pkgCtxMap to avoid the cache of the previous compilation in lsp.
     for (auto& pkg : srcPkgs) {
         pkgCtxMap.insert_or_assign(pkg.get(), std::make_unique<ASTContext>(diag, *pkg));
@@ -1130,6 +1140,7 @@ bool CompilerInstance::DetectCangjieModules()
 
 bool CompilerInstance::ModularizeCompilation()
 {
+    Utils::ProfileRecorder recorder("ImportPackages", "ModularizeCompilation");
     for (auto& objFile : importManager.GetUsedSTDLibFiles(DepType::DIRECT)) {
         invocation.globalOptions.directBuiltinDependencies.insert(objFile);
     }
