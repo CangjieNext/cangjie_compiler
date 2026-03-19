@@ -36,10 +36,10 @@ private:
     };
 
     void MoveLoopInvariant4GetMethodOuterTI();
-    std::pair<llvm::Value*, llvm::Value*> GenCreateCacheLogic(
+    std::vector<llvm::Value*> GenCreateCacheLogic(
         IRBuilder2& irBuilder, llvm::BasicBlock* preHdr, const VirtualCallInfo4LICM& virtualCallInfo4LICM);
 
-    void GenCheckAndUseCacheLogic(IRBuilder2& irBuilder, llvm::Value* vmCachePtr, llvm::Value* outerTICachePtr,
+    void GenCheckAndUseCacheLogic(IRBuilder2& irBuilder, const std::vector<llvm::Value*>& cacheValues,
         const VirtualCallInfo4LICM& virtualCallInfo4LICM);
 
     llvm::Loop* GetMostOuterLoopFor(const llvm::Instruction& inst);

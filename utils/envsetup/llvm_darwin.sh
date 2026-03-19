@@ -44,7 +44,7 @@ elif [ "$hw_arch" = "arm64" ]; then
     hw_arch="aarch64"
 fi
 export PATH=${CANGJIE_HOME}/bin:${CANGJIE_HOME}/tools/bin:$PATH:${HOME}/.cjpm/bin
-export DYLD_LIBRARY_PATH=${CANGJIE_HOME}/runtime/lib/darwin_${hw_arch}_cjnative:${CANGJIE_HOME}/tools/lib:${DYLD_LIBRARY_PATH}
+export DYLD_FALLBACK_LIBRARY_PATH=${CANGJIE_HOME}/runtime/lib/darwin_${hw_arch}_cjnative:${CANGJIE_HOME}/tools/lib:${DYLD_FALLBACK_LIBRARY_PATH }
 unset hw_arch
 
 if [ -z ${SDKROOT+x} ]; then

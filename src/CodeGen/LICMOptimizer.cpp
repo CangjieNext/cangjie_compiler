@@ -76,13 +76,13 @@ void LICMOptimizer::MoveLoopInvariant4GetMethodOuterTI()
                 continue;
             }
 
-            auto [vmCachePtr, outerTICachePtr] = GenCreateCacheLogic(irBuilder, preHdr, virtualCallInfo4LICM);
-            GenCheckAndUseCacheLogic(irBuilder, vmCachePtr, outerTICachePtr, virtualCallInfo4LICM);
+            std::vector<llvm::Value*> cacheValues = GenCreateCacheLogic(irBuilder, preHdr, virtualCallInfo4LICM);
+            GenCheckAndUseCacheLogic(irBuilder, cacheValues, virtualCallInfo4LICM);
         }
     }
 }
 
-std::pair<llvm::Value*, llvm::Value*> LICMOptimizer::GenCreateCacheLogic(
+std::vector<llvm::Value*> LICMOptimizer::GenCreateCacheLogic(
     IRBuilder2& irBuilder, llvm::BasicBlock* preHdr, const VirtualCallInfo4LICM& virtualCallInfo4LICM)
 {
     auto i8PtrTy = irBuilder.getInt8PtrTy();
@@ -119,43 +119,45 @@ std::pair<llvm::Value*, llvm::Value*> LICMOptimizer::GenCreateCacheLogic(
     }
     irBuilder.LLVMIRBuilder2::CreateBr(preHdrSuccessor);
 
-    return {vmCachePtr, outerTICachePtr};
+    irBuilder.SetInsertPoint(preHdrSuccessor->getFirstNonPHI());
+    auto vmCacheLoaded = irBuilder.CreateLoad(i8PtrTy, vmCachePtr);
+    auto outerTICacheLoaded = outerTICachePtr ? irBuilder.CreateLoad(i8PtrTy, outerTICachePtr) : nullptr;
+    auto vmCacheIsNull = irBuilder.CreateICmpEQ(vmCacheLoaded, llvm::ConstantPointerNull::get(i8PtrTy));
+    return {vmCacheIsNull, vmCacheLoaded, outerTICacheLoaded};
 }
 
-void LICMOptimizer::GenCheckAndUseCacheLogic(IRBuilder2& irBuilder, llvm::Value* vmCachePtr,
-    llvm::Value* outerTICachePtr, const VirtualCallInfo4LICM& virtualCallInfo4LICM)
+void LICMOptimizer::GenCheckAndUseCacheLogic(IRBuilder2& irBuilder, const std::vector<llvm::Value*>& cacheValues,
+    const VirtualCallInfo4LICM& virtualCallInfo4LICM)
 {
+    CJC_ASSERT(cacheValues.size() == 3);
     auto i8PtrTy = irBuilder.getInt8PtrTy();
     auto lookupVirtualInst = virtualCallInfo4LICM.lookupVirtualInst;
     auto getOuterTypeInst = virtualCallInfo4LICM.getOuterTypeInst;
     auto prepForVirtualCallBB = virtualCallInfo4LICM.prepForVirtualCallBB;
     auto prepForVirtualCallEndBB = prepForVirtualCallBB->getUniqueSuccessor();
 
+    auto [vmCacheIsNull, vmCacheLoaded, outerTICacheLoaded] = Vec2Tuple<3>(cacheValues);
+
     // gen check cache logic
-    auto oldBB = prepForVirtualCallBB->splitBasicBlock(&*prepForVirtualCallBB->begin(), "prepForVirtualCall.bb.old");
+    auto recalculateBB =
+        prepForVirtualCallBB->splitBasicBlock(&*prepForVirtualCallBB->begin(), "prepForVirtualCall.recalculate");
     irBuilder.SetInsertPoint(prepForVirtualCallBB);
     if (auto terminator = prepForVirtualCallBB->getTerminator()) {
         terminator->eraseFromParent();
     }
-    auto vmCacheLoaded = irBuilder.CreateLoad(i8PtrTy, vmCachePtr);
-    auto isNull = irBuilder.CreateICmpEQ(vmCacheLoaded, llvm::ConstantPointerNull::get(i8PtrTy));
-    auto [nonNullBB] = Vec2Tuple<1>(irBuilder.CreateAndInsertBasicBlocks({GenNameForBB("cache.non.null")}));
-    irBuilder.LLVMIRBuilder2::CreateCondBr(isNull, oldBB, nonNullBB);
-    irBuilder.SetInsertPoint(nonNullBB);
-    auto outerTICacheLoaded = outerTICachePtr ? irBuilder.CreateLoad(i8PtrTy, outerTICachePtr) : nullptr;
-    irBuilder.LLVMIRBuilder2::CreateBr(prepForVirtualCallEndBB);
+    irBuilder.LLVMIRBuilder2::CreateCondBr(vmCacheIsNull, recalculateBB, prepForVirtualCallEndBB);
 
     // gen replace uses logic
     irBuilder.SetInsertPoint(prepForVirtualCallEndBB, prepForVirtualCallEndBB->begin());
     auto vmPHI = irBuilder.CreatePHI(i8PtrTy, 2U);
     lookupVirtualInst->replaceAllUsesWith(vmPHI);
-    vmPHI->addIncoming(lookupVirtualInst, oldBB);
-    vmPHI->addIncoming(vmCacheLoaded, nonNullBB);
+    vmPHI->addIncoming(lookupVirtualInst, recalculateBB);
+    vmPHI->addIncoming(vmCacheLoaded, prepForVirtualCallBB);
     if (getOuterTypeInst) {
         auto outerTIPHI = irBuilder.CreatePHI(i8PtrTy, 2U);
         getOuterTypeInst->replaceAllUsesWith(outerTIPHI);
-        outerTIPHI->addIncoming(getOuterTypeInst, oldBB);
-        outerTIPHI->addIncoming(outerTICacheLoaded, nonNullBB);
+        outerTIPHI->addIncoming(getOuterTypeInst, recalculateBB);
+        outerTIPHI->addIncoming(outerTICacheLoaded, prepForVirtualCallBB);
     }
 }
 
