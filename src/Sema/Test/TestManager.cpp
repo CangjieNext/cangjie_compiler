@@ -842,11 +842,10 @@ void TestManager::PreparePackageForTestIfNeeded(Package& pkg)
     if (pkg.files.empty()) {
         return;
     }
-
+    Utils::ProfileRecorder::Start("TestManager", "mack checker");
     std::optional<ManglerCtxGuard> manglerCtxGuard;
     if (mockMode == MockMode::ON || (mockCompatibleIfNeeded && IsThereMockUsage(pkg))) {
         manglerCtxGuard.emplace(mockUtils->mangler, pkg);
-
         mockUtils->SetGetTypeForTypeParamDecl(pkg);
         mockUtils->SetIsSubtypeTypes(pkg);
         CollectInternalDeclUsages(pkg);
@@ -858,7 +857,10 @@ void TestManager::PreparePackageForTestIfNeeded(Package& pkg)
     } else {
         CheckIfNoMockSupportDependencies(pkg);
     }
+    Utils::ProfileRecorder::Stop("TestManager", "mack checker");
+    Utils::ProfileRecorder::Start("TestManager", "HandleMockCalls");
     HandleMockCalls(pkg);
+    Utils::ProfileRecorder::Stop("TestManager", "HandleMockCalls");
 }
 
 void TestManager::Init(GenericInstantiationManager* instantiationManager)
