@@ -451,6 +451,8 @@ private:
         }
         while (data.size() > BASE_STATE_POOL_SIZE) {
             auto stateFirst = first;
+            CJC_NOT_NULL(stateFirst);
+            CJC_NOT_NULL(stateFirst->next);
             stateFirst->next->prev = nullptr;
             first = stateFirst->next;
             auto obj = stateFirst->value;
