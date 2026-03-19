@@ -322,6 +322,7 @@ bool CjoManager::LoadFilesOfCommonPart(Ptr<Package> pkg)
 void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packages, bool fromLsp) const
 {
     Utils::ProfileRecorder recorder("ResolveImportedPackages", "LoadPackageDeclsOnDemand");
+    Utils::ProfileRecorder::Start("LoadPackageDeclsOnDemand", "LoadPackageDecls");
     // Add all directly imported package's loader.
     std::queue<Ptr<CjoManagerImpl::PackageInfo>> q;
     for (auto pkg : packages) {
@@ -351,7 +352,6 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
         }
     }
 
-    Utils::ProfileRecorder::Start("LoadPackageDeclsOnDemand", "LoadPackageDecls");
     while (!q.empty()) {
         auto cur = q.front();
         q.pop();

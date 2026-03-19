@@ -2091,7 +2091,7 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
 #endif
 
     // Phase: add some default function.
-    Utils::ProfileRecorder::Start("PrepareTypeCheck", "AddDefaultFunction");
+    Utils::ProfileRecorder::Start("PrepareTypeCheck", "AddDefaultFuncAndBuiltinDecl");
     AddDefaultFunction(pkg);
     // Add built-in decls to core package.
     if (pkg.fullPackageName == CORE_PACKAGE_NAME && !pkg.files.empty() && !pkg.TestAttr(Attribute::IMPORTED)) {
@@ -2101,7 +2101,7 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
         AddBuiltinCFuncDecl(pkg);
         AddBuiltInCStringDecl(pkg);
     }
-    Utils::ProfileRecorder::Stop("PrepareTypeCheck", "AddDefaultFunction");
+    Utils::ProfileRecorder::Stop("PrepareTypeCheck", "AddDefaultFuncAndBuiltinDecl");
 
     // Phase: build symbol table.
     Utils::ProfileRecorder::Start("PrepareTypeCheck", "BuildSymbolTable");

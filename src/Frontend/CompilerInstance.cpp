@@ -984,11 +984,9 @@ bool CompilerInstance::ImportPackages()
         return true;
     }
 
-    Utils::ProfileRecorder::Start("ImportPackages", "BuildIndex");
     if (!importManager.BuildIndex(cangjieModules, invocation.globalOptions, pkgs)) {
         return false;
     }
-    Utils::ProfileRecorder::Stop("ImportPackages", "BuildIndex");
 
     MergePackages();
     ModularizeCompilation();
