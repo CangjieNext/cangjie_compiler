@@ -651,6 +651,13 @@ void InitializationChecker::CheckLetFlagInMemberAccess(const Expr& ae, const Mem
     if (ma.baseExpr == nullptr) {
         return;
     }
+    if (auto pd = DynamicCast<PropDecl*>(ma.target); pd) {
+        bool hasUsableSetter = pd->isVar && (GetUsableSetterForProperty(*pd) != nullptr);
+        if (!hasUsableSetter) {
+            DiagCannotAssignToImmutable(diag, ae, ma);
+        }
+        return;
+    }
     if (auto vd = DynamicCast<VarDecl*>(ma.target); vd) {
         auto& realBaseExpr = ma.baseExpr->desugarExpr ? ma.baseExpr->desugarExpr : ma.baseExpr;
         if (realBaseExpr == nullptr) {
