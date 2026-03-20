@@ -136,3 +136,38 @@ TEST(ToStringTest, ExtendedNodesParsing)
     expectFileToString("import some_pkg.*\n");
     EXPECT_NO_THROW({ (void)ParseFileFromSrc("@C\nfunc c_foo() {}\n")->ToString(); });
 }
+
+TEST(ToStringTest, TypeAndConvert_Restore)
+{
+    auto expectTypeToString = [](const std::string& src) {
+        auto type = ParseTypeFromSrc(src);
+        ASSERT_NE(type, nullptr) << "Failed to parse type: " << src;
+        EXPECT_EQ(src, type->ToString());
+    };
+
+    auto expectExprToString = [](const std::string& src) {
+        auto expr = ParseExprFromSrc(src);
+        ASSERT_NE(expr, nullptr) << "Failed to parse expr: " << src;
+        EXPECT_EQ(src, expr->ToString());
+    };
+
+    // Types
+    expectTypeToString("Int64");
+    expectTypeToString("(Int64)");
+    expectTypeToString("?Int64");
+    expectTypeToString("??Int64");
+    expectTypeToString("(Int64, Int64)");
+    expectTypeToString("() -> Unit");
+    expectTypeToString("(Int64) -> Int64");
+    expectTypeToString("(Int64, Float64) -> Unit");
+    expectTypeToString("My.Type<Int64>");
+    expectTypeToString("VArray<Int64, $3>");
+
+    // Exprs
+    expectExprToString("(1)");
+    expectExprToString("1 as Int64");
+    expectExprToString("1 is Int64");
+    expectExprToString("Int64(1)");
+    expectExprToString("a?.b");
+    expectExprToString("Int64.foo()");
+}
