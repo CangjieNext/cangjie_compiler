@@ -30,6 +30,7 @@
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/ModulesUtils.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -538,6 +539,7 @@ void ImportManager::UpdateMacroPackageUsage(const AST::Package& pkg)
 
 bool ImportManager::ResolveImportedPackages(const std::vector<Ptr<Package>>& packages)
 {
+    Utils::ProfileRecorder recorder("ImportPackages", "ResolveImportedPackages");
     bool success = true;
     for (auto pkg : packages) {
         curPackage = pkg;

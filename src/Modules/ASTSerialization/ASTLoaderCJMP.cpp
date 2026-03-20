@@ -14,6 +14,7 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 #include "ASTLoaderImpl.h"
 
@@ -124,6 +125,7 @@ OwnedPtr<AST::File> ASTLoader::ASTLoaderImpl::PreloadCommonFile(uoffset_t indexO
 
 bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
 {
+    Utils::ProfileRecorder recorder("ImportPackages", "PreloadCommonPartOfPackage");
     if (!VerifyForData("ast")) {
         return false;
     }

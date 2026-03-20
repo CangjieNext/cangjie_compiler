@@ -29,6 +29,7 @@ using namespace Cangjie::CHIR;
 
 void CHIRSerializer::Serialize(const Package& package, const std::string filename, ToCHIR::Phase phase)
 {
+    Utils::ProfileRecorder recorder("AST to CHIR Translation", "CHIR serialization");
     CHIRSerializerImpl serializer(package);
     serializer.Initialize();
     serializer.Dispatch();
