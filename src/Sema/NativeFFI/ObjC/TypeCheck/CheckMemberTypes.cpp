@@ -11,6 +11,7 @@
  */
 
 #include "Handlers.h"
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 
 using namespace Cangjie::AST;
@@ -67,7 +68,7 @@ void CheckMemberTypes::CheckVarTypes(VarDecl& vd, TypeCheckContext& ctx)
 
 void CheckMemberTypes::CheckFuncTypes(FuncDecl& fd, TypeCheckContext& ctx)
 {
-    if (!fd.funcBody) {
+    if (!fd.funcBody || fd.TestAttr(Attribute::OBJ_C_MIRROR_GENERATED_MEMBER)) {
         return;
     }
 
