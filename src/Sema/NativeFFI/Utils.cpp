@@ -232,11 +232,11 @@ Ptr<std::string> GetSingleArgumentAnnotationValue(const Decl& target, Annotation
             continue;
         }
 
-        CJC_ASSERT(anno->args.size() == 1);
-        if (anno->args.empty()) {
+        if (anno->args.size() != 1) {
             break;
         }
 
+        CJC_ASSERT(anno->args.size() == 1);
         CJC_ASSERT(anno->args[0]->expr->astKind == ASTKind::LIT_CONST_EXPR);
         auto lce = As<ASTKind::LIT_CONST_EXPR>(anno->args[0]->expr.get());
         CJC_ASSERT(lce);
