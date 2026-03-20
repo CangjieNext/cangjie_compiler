@@ -41,7 +41,7 @@ CHIRBuilder::~CHIRBuilder()
 BlockGroup* CHIRBuilder::CreateBlockGroup(Func& func)
 {
     auto blockGroup = new BlockGroup(std::to_string(func.GenerateBlockGroupId()));
-    this->allocatedBlockGroups.push_back(blockGroup);
+    StoreAllocatedPtrInFuncOrLambda(*blockGroup);
     return blockGroup;
 }
 
@@ -54,9 +54,9 @@ Block* CHIRBuilder::CreateBlock(BlockGroup* parentGroup)
     auto func = parentGroup->GetTopLevelFunc();
     CJC_NULLPTR_CHECK(func);
     std::string idstr = "#" + std::to_string(func->GenerateBlockId());
-
     auto basicBlock = new Block(idstr, parentGroup);
-    this->allocatedBlocks.push_back(basicBlock);
+    auto bg = basicBlock->GetFuncOrLambdaBody();
+    StoreAllocatedPtrInFuncOrLambda(*bg, basicBlock);
     if (markAsCompileTimeValue) {
         basicBlock->EnableAttr(Attribute::CONST);
     }
@@ -100,8 +100,9 @@ Parameter* CHIRBuilder::CreateParameter(Type* ty, const DebugLocation& loc, Func
 
 Parameter* CHIRBuilder::CreateParameter(Type* ty, const DebugLocation& loc, Lambda& parentLambda)
 {
-    CJC_NULLPTR_CHECK(parentLambda.GetTopLevelFunc());
-    auto id = parentLambda.GetTopLevelFunc()->GenerateLocalId();
+    auto topFunc = parentLambda.GetTopLevelFunc();
+    CJC_NULLPTR_CHECK(topFunc);
+    auto id = topFunc->GenerateLocalId();
     auto param = new Parameter(ty, "%" + std::to_string(id), parentLambda);
     param->EnableAttr(Attribute::READONLY);
     param->SetDebugLocation(loc);
@@ -109,29 +110,38 @@ Parameter* CHIRBuilder::CreateParameter(Type* ty, const DebugLocation& loc, Lamb
     return param;
 }
 
+namespace {
+// Helper function to check if new features is a superset of old features
+// and update the value's features and PREVIOUSLY_DESERIALIZED attribute accordingly
+template <typename T>
+void TryUpdateExistingValue(T* existing, const std::set<std::string>& newFeatures)
+{
+    auto oldFeatures = existing->GetFeatures();
+    bool newIsSuperSet = std::includes(newFeatures.begin(), newFeatures.end(),
+        oldFeatures.begin(), oldFeatures.end()) && newFeatures.size() > oldFeatures.size();
+    if (!newIsSuperSet) {
+        // already existed value more specific, so no need to update
+        existing->EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+    } else {
+        // will be updated as it is loaded first time
+        existing->DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
+        existing->SetFeatures(newFeatures);
+    }
+}
+
+} // namespace
+
 GlobalVar* CHIRBuilder::CreateGlobalVar(const DebugLocation& loc, RefType* ty, const std::string& mangledName,
     const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
     std::set<std::string> features)
 {
     auto identifier = "@" + mangledName;
     GlobalVar* globalVar = nullptr;
-    if (context.GetCurPackage() != nullptr) {
+    if (compileCJMP && context.GetCurPackage() != nullptr) {
         if (auto exist = context.GetCurPackage()->TryGetGlobalVar(identifier)) {
             globalVar = exist;
             // Update features set
-            auto newFuncFeatures = features;
-            auto oldFuncFeatures = globalVar->GetFeatures();
-
-            bool newIsSuperSet = std::includes(newFuncFeatures.begin(), newFuncFeatures.end(), oldFuncFeatures.begin(),
-                oldFuncFeatures.end()) && newFuncFeatures.size() > oldFuncFeatures.size();
-            if (!newIsSuperSet) {
-                // already existed variable more specific, so no need to update
-                globalVar->EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
-            } else {
-                // will be updated as it is loaded first time
-                globalVar->DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
-                globalVar->SetFeatures(features);
-            }
+            TryUpdateExistingValue(globalVar, features);
         }
     }
     if (globalVar == nullptr) {
@@ -156,23 +166,11 @@ Func* CHIRBuilder::CreateFunc(const DebugLocation& loc, FuncType* funcTy, const 
 {
     auto identifier = "@" + mangledName;
     Func* func = nullptr;
-    if (context.GetCurPackage() != nullptr) {
+    if (compileCJMP && context.GetCurPackage() != nullptr) {
         if (auto exist = context.GetCurPackage()->TryGetGlobalFunc(identifier)) {
             func = exist;
             // Update features set
-            auto newFuncFeatures = features;
-            auto oldFuncFeatures = func->GetFeatures();
-
-            bool newIsSuperSet = std::includes(newFuncFeatures.begin(), newFuncFeatures.end(), oldFuncFeatures.begin(),
-                oldFuncFeatures.end()) && newFuncFeatures.size() > oldFuncFeatures.size();
-            if (!newIsSuperSet) {
-                // already existed function more specific, so no need to update
-                func->EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
-            } else {
-                // will be updated as it is loaded first time
-                func->DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
-                func->SetFeatures(features);
-            }
+            TryUpdateExistingValue(func, features);
         }
     }
     if (func == nullptr) {
@@ -324,4 +322,18 @@ void CHIRBuilder::DisableIRCheckerAfterPlugin()
 bool CHIRBuilder::IsEnableIRCheckerAfterPlugin() const
 {
     return enableIRCheckerAfterPlugin;
+}
+
+void CHIRBuilder::StoreAllocatedPtrInFuncOrLambda(BlockGroup& bg, Base* ptr)
+{
+    auto it = allocatedPtrInFuncOrLambda.find(&bg);
+    if (it == allocatedPtrInFuncOrLambda.end()) {
+        if (ptr == nullptr) {
+            allocatedPtrInFuncOrLambda.emplace(&bg, std::vector<Base*>{});
+        } else {
+            allocatedPtrInFuncOrLambda.emplace(&bg, std::vector<Base*>{ptr});
+        }
+    } else {
+        it->second.emplace_back(ptr);
+    }
 }
