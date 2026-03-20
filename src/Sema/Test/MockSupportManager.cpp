@@ -280,7 +280,6 @@ void MockSupportManager::CollectDeclsToPrepare(Decl& decl, DeclsToPrepare& decls
             auto extendDecl = As<ASTKind::EXTEND_DECL>(&decl);
             CJC_ASSERT(extendDecl);
 
-            // auto mangleCtx = mockUtils->mangler.manglerCtxTable.at(extendDecl->fullPackageName);
             auto mangleCtx = mockUtils->mangler.manglerCtxTable.find(
                         ManglerContext::ReduceUnitTestPackageName(extendDecl->fullPackageName));
             CJC_ASSERT(mangleCtx != mockUtils->mangler.manglerCtxTable.end());
@@ -979,14 +978,15 @@ OwnedPtr<PropDecl> MockSupportManager::GeneratePropAccessor(PropDecl& propDecl)
 
 namespace {
 
-OwnedPtr<RefExpr> CreateRefForFieldAccess(Ptr<Decl> outerDecl, FuncBody& funcBody, AccessorKind kind)
+OwnedPtr<RefExpr> CreateRefForFieldAccess(Ptr<Decl> outerDecl, AccessorKind kind)
 {
     auto outerClassDecl = As<ASTKind::CLASS_DECL>(outerDecl);
     CJC_ASSERT(outerClassDecl);
     if (kind == AccessorKind::STATIC_FIELD_GETTER || kind == AccessorKind::STATIC_FIELD_SETTER) {
         auto ref = CreateRefExpr(*outerClassDecl);
-        if (funcBody.generic) {
-            for (auto& param : funcBody.generic->typeParameters) {
+        // Accessor for static fields is always inside class (outerDecl), can reference its generics
+        if (outerDecl->generic) {
+            for (auto& param : outerDecl->generic->typeParameters) {
                 ref->instTys.emplace_back(param->ty);
             }
         }
@@ -1006,7 +1006,7 @@ std::vector<OwnedPtr<Node>> MockSupportManager::GenerateFieldGetterAccessorBody(
     if (kind == AccessorKind::TOP_LEVEL_VARIABLE_GETTER) {
         retExpr = CreateRefExpr(fieldDecl);
     } else {
-        auto ref = CreateRefForFieldAccess(fieldDecl.outerDecl, funcBody, kind);
+        auto ref = CreateRefForFieldAccess(fieldDecl.outerDecl, kind);
         retExpr = CreateMemberAccess(std::move(ref), fieldDecl.identifier);
     }
 
@@ -1024,7 +1024,7 @@ std::vector<OwnedPtr<Node>> MockSupportManager::GenerateFieldSetterAccessorBody(
     if (kind == AccessorKind::TOP_LEVEL_VARIABLE_SETTER) {
         retExpr = CreateRefExpr(fieldDecl);
     } else {
-        auto ref = CreateRefForFieldAccess(fieldDecl.outerDecl, funcBody, kind);
+        auto ref = CreateRefForFieldAccess(fieldDecl.outerDecl, kind);
         retExpr = CreateMemberAccess(std::move(ref), fieldDecl.identifier);
     }
 
@@ -1151,15 +1151,6 @@ OwnedPtr<FuncDecl> MockSupportManager::GenerateVarDeclAccessor(VarDecl& fieldDec
 
     auto accessorDecl = CreateFieldAccessorDecl(fieldDecl, accessorTy, kind);
     accessorDecl->funcBody = MakeOwned<FuncBody>();
-
-    if (fieldDecl.IsStaticOrGlobal() && fieldDecl.outerDecl && fieldDecl.outerDecl->generic) {
-        accessorDecl->funcBody->generic = MakeOwned<Generic>();
-        CopyBasicInfo(fieldDecl.outerDecl->generic, accessorDecl->funcBody->generic);
-        for (auto& param : fieldDecl.outerDecl->generic->typeParameters) {
-            accessorDecl->funcBody->generic->typeParameters.emplace_back(
-                CreateGenericParamDecl(*accessorDecl, param->identifier, typeManager));
-        }
-    }
 
     if (isGetter) {
         body = GenerateFieldGetterAccessorBody(fieldDecl, *accessorDecl->funcBody, kind);
