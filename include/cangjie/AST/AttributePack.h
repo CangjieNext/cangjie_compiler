@@ -682,6 +682,13 @@ enum class Attribute {
      */
     ALREADY_LOADED,
 
+    /**
+     * Mark whether a class is a compiler generated class in ObjC mirror interfaces.
+     * W: Desugar.
+     * R: Sema.
+     */
+    OBJ_C_MIRROR_GENERATED_MEMBER,
+
     AST_ATTR_END,
 };
 
@@ -779,6 +786,7 @@ static const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::CJ_MIRROR_JAVA_INTERFACE_DEFAULT, "CJ_MIRROR_JAVA_INTERFACE_DEFAULT"},
     {AST::Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD, "CJ_MIRROR_OBJC_INTERFACE_FWD"},
     {AST::Attribute::ALREADY_LOADED, "ALREADY_LOADED"},
+    {AST::Attribute::OBJ_C_MIRROR_GENERATED_MEMBER, "OBJ_C_MIRROR_GENERATED_MEMBER"},
     {AST::Attribute::AST_ATTR_END, "AST_ATTR_END"},
 };
 

@@ -148,6 +148,10 @@ public:
 
     Ptr<AST::FuncDecl> GetWithObjCSuperDecl();
 
+    Ptr<AST::FuncDecl> GetConvertToNSStringDecl();
+
+    Ptr<AST::FuncDecl> GetDescriptionAsStringDecl();
+
     /**
      * Get objc.lang.ObjCPointer declaration
     */

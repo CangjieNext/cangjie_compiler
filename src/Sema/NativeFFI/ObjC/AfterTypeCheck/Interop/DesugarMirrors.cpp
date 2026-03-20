@@ -13,6 +13,7 @@
 #include "Handlers.h"
 #include "NativeFFI/Utils.h"
 #include "NativeFFI/ObjC/Utils/Common.h"
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
