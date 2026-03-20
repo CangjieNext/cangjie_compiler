@@ -134,6 +134,9 @@ Value* Translator::TranslateCompoundAssign(const AssignExpr& assign)
     auto lhsLeftValueInfo = TranslateExprAsLeftValue(*assign.leftValue);
     auto lhsLeftValuePath = lhsLeftValueInfo.path;
     auto lhsLeftValueBase = lhsLeftValueInfo.base;
+    if (!lhsLeftValueBase) {
+        return nullptr;
+    }
     auto lhsLeftValueBaseRefTy = lhsLeftValueBase->GetType();
     CJC_ASSERT(lhsLeftValueBaseRefTy->IsRef());
     auto lhsLeftValueBaseTy = StaticCast<RefType*>(lhsLeftValueBaseRefTy)->GetBaseType();
@@ -205,6 +208,9 @@ Value* Translator::TranslateTrivialAssign(const AST::AssignExpr& assign)
         // compound assignment, left first, right second
         auto linfo = TranslateExprAsLeftValue(*assign.leftValue);
         lhs = linfo.base;
+        if (!lhs) {
+            return nullptr;
+        }
         path = std::move(linfo.path);
         if (!path.empty()) {
             auto lhsCustomType = StaticCast<CustomType*>(lhs->GetType()->StripAllRefs());

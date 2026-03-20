@@ -342,6 +342,9 @@ void Translator::TranslateThisObjectForNonStaticMemberFuncCall(
             // Case B: otherwise, we will generate the base part of the member access and get the "this"
             auto thisObjValueInfo = TranslateExprAsLeftValue(*memAccess->baseExpr);
             thisObj = thisObjValueInfo.base;
+            if (thisObj == nullptr) {
+                return;
+            }
             // polish this
             if (!thisObjValueInfo.path.empty()) {
                 auto lhsCustomType = StaticCast<CustomType*>(thisObj->GetType()->StripAllRefs());
@@ -1508,6 +1511,9 @@ void Translator::TranslateCompoundAssignmentElementRef(const AST::MemberAccess& 
     auto baseResLeftValueInfo = TranslateExprAsLeftValue(*ma.baseExpr);
     auto baseResLeftValuePath = baseResLeftValueInfo.path;
     auto baseResLeftValue = baseResLeftValueInfo.base;
+    if (!baseResLeftValue) {
+        return;
+    }
     if (baseResLeftValuePath.empty()) {
         exprValueTable.Set(*ma.baseExpr, *baseResLeftValue);
     } else {

@@ -556,7 +556,9 @@ Ptr<Value> Translator::TranslateInstanceMemberMemberAccess(const AST::MemberAcce
             break;
         }
         default:
-            CJC_ABORT();
+            InternalError("TranslateInstanceMemberMemberAccess: unexpected target kind ",
+                static_cast<int>(member.target->astKind));
+            return nullptr;
     }
     return res;
 }
@@ -564,6 +566,11 @@ Ptr<Value> Translator::TranslateInstanceMemberMemberAccess(const AST::MemberAcce
 Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST::MemberAccess& member)
 {
     auto target = member.target;
+    if (target->astKind == AST::ASTKind::PROP_DECL) {
+        InternalError("TranslateMemberAccessAsLeftValue: PROP_DECL target indicates "
+            "Sema missed a read-only property assignment check (forward reference)");
+        return LeftValueInfo(nullptr, {});
+    }
     CJC_ASSERT(target->astKind == AST::ASTKind::VAR_DECL);
     const auto& loc = TranslateLocation(member);
 

@@ -360,7 +360,10 @@ void TypeChecker::TypeCheckerImpl::CheckPropDecl(ASTContext& ctx, PropDecl& pd)
         (void)diag.Diagnose(*redefModifier, DiagKind::sema_redef_modify_static_func, "property");
         pd.ty = TypeManager::GetInvalidTy();
     }
-    CJC_NULLPTR_CHECK(pd.type);
+    if (pd.type == nullptr) {
+        pd.ty = TypeManager::GetInvalidTy();
+        return;
+    }
     (void)Synthesize(ctx, pd.type.get());
     pd.ty = pd.type->ty;
     for (auto& pmd : pd.getters) {
