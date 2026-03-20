@@ -16,6 +16,7 @@
 #include "cangjie/Basic/Print.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Package.h"
+#include "cangjie/CHIR/IR/PackageSpec.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Type/EnumDef.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
@@ -111,12 +112,17 @@ Parameter* CHIRBuilder::CreateParameter(Type* ty, const DebugLocation& loc, Lamb
 }
 
 namespace {
-// Helper function to check if new features is a superset of old features
-// and update the value's features and PREVIOUSLY_DESERIALIZED attribute accordingly
+// Helper function to update PREVIOUSLY_DESERIALIZED attribute based on PackageSpec comparison
 template <typename T>
-void TryUpdateExistingValue(T* existing, const std::set<std::string>& newFeatures)
+void TryUpdateExistingValue(T* existing, PackageSpec* currentSpec)
 {
-    auto oldFeatures = existing->GetFeatures();
+    if (!currentSpec || !existing->GetCreationSpec()) {
+        return;
+    }
+
+    auto oldFeatures = existing->GetCreationSpec()->GetFeatures();
+    auto newFeatures = currentSpec->GetFeatures();
+
     bool newIsSuperSet = std::includes(newFeatures.begin(), newFeatures.end(),
         oldFeatures.begin(), oldFeatures.end()) && newFeatures.size() > oldFeatures.size();
     if (!newIsSuperSet) {
@@ -125,31 +131,35 @@ void TryUpdateExistingValue(T* existing, const std::set<std::string>& newFeature
     } else {
         // will be updated as it is loaded first time
         existing->DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
-        existing->SetFeatures(newFeatures);
+        // Update the creationSpec
+        existing->SetCreationSpec(currentSpec);
     }
 }
 
 } // namespace
 
 GlobalVar* CHIRBuilder::CreateGlobalVar(const DebugLocation& loc, RefType* ty, const std::string& mangledName,
-    const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
-    std::set<std::string> features)
+    const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName)
 {
     auto identifier = "@" + mangledName;
     GlobalVar* globalVar = nullptr;
-    if (compileCJMP && context.GetCurPackage() != nullptr) {
-        if (auto exist = context.GetCurPackage()->TryGetGlobalVar(identifier)) {
-            globalVar = exist;
-            // Update features set
-            TryUpdateExistingValue(globalVar, features);
+    Package* currentPackage = context.GetCurPackage();
+    PackageSpec* currentSpec = currentPackage ? currentPackage->GetCurrentSpec() : nullptr;
+
+    if (compileCJMP && currentPackage != nullptr) {
+        if (auto exist = currentPackage->TryGetGlobalVar(identifier)) {
+            globalVar = *exist;
+            // Update based on PackageSpec comparison
+            TryUpdateExistingValue(globalVar, currentSpec);
         }
     }
+
     if (globalVar == nullptr) {
         globalVar = new GlobalVar(ty, identifier, srcCodeIdentifier, rawMangledName, packageName);
-        globalVar->SetFeatures(features);
+        globalVar->SetCreationSpec(currentSpec);
         this->allocatedValues.push_back(globalVar);
-        if (context.GetCurPackage() != nullptr) {
-            context.GetCurPackage()->AddGlobalVar(globalVar);
+        if (currentPackage != nullptr) {
+            currentPackage->AddGlobalVar(globalVar);
         }
     }
     globalVar->SetDebugLocation(loc);
@@ -162,24 +172,28 @@ GlobalVar* CHIRBuilder::CreateGlobalVar(const DebugLocation& loc, RefType* ty, c
 
 Func* CHIRBuilder::CreateFunc(const DebugLocation& loc, FuncType* funcTy, const std::string& mangledName,
     const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
-    const std::vector<GenericType*>& genericTypeParams, std::set<std::string> features)
+    const std::vector<GenericType*>& genericTypeParams)
 {
     auto identifier = "@" + mangledName;
     Func* func = nullptr;
-    if (compileCJMP && context.GetCurPackage() != nullptr) {
-        if (auto exist = context.GetCurPackage()->TryGetGlobalFunc(identifier)) {
-            func = exist;
-            // Update features set
-            TryUpdateExistingValue(func, features);
+    Package* currentPackage = context.GetCurPackage();
+    PackageSpec* currentSpec = currentPackage ? currentPackage->GetCurrentSpec() : nullptr;
+
+    if (compileCJMP && currentPackage != nullptr) {
+        if (auto exist = currentPackage->TryGetGlobalFunc(identifier)) {
+            func = *exist;
+            // Update based on PackageSpec comparison
+            TryUpdateExistingValue(func, currentSpec);
         }
     }
+
     if (func == nullptr) {
         func = new Func(
             funcTy, identifier, srcCodeIdentifier, rawMangledName, packageName, genericTypeParams);
-        func->SetFeatures(features);
+        func->SetCreationSpec(currentSpec);
         this->allocatedValues.push_back(func);
-        if (context.GetCurPackage() != nullptr) {
-            context.GetCurPackage()->AddGlobalFunc(func);
+        if (currentPackage != nullptr) {
+            currentPackage->AddGlobalFunc(func);
         }
     }
     func->SetDebugLocation(loc);

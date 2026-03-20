@@ -16,9 +16,11 @@
 #include <vector>
 
 namespace Cangjie::CHIR {
+
+class PackageSpec;
 class Package {
     explicit Package(const std::string& name);
-    ~Package() = default;
+    ~Package();
     friend class CHIRContext;
     friend class CHIRBuilder;
 
@@ -119,6 +121,12 @@ public:
     std::vector<ExtendDef*> GetAllExtendDef() const;
 
     // ===--------------------------------------------------------------------===//
+    // PackageSpec API
+    // ===--------------------------------------------------------------------===//
+    PackageSpec* CreatePackageSpec(const std::set<std::string>& features);
+    PackageSpec* GetCurrentSpec() const;
+
+    // ===--------------------------------------------------------------------===//
     // Others API
     // ===--------------------------------------------------------------------===//
     std::vector<CustomTypeDef*> GetAllCustomTypeDef() const;
@@ -144,6 +152,7 @@ private:
     std::vector<ExtendDef*> extends;
     Func* packageInitFunc = nullptr;
     Func* packageLiteralInitFunc = nullptr; // global literals init function in one package
+    std::vector<PackageSpec*> specs;  // Compilation specifications (one per compilation stage)
 };
 
 } // namespace Cangjie::CHIR

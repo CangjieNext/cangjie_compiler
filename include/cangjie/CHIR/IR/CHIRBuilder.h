@@ -177,8 +177,7 @@ public:
     Parameter* CreateParameter(Type* ty, const DebugLocation& loc, Func& parentFunc);
     Parameter* CreateParameter(Type* ty, const DebugLocation& loc, Lambda& parentLambda);
     GlobalVar* CreateGlobalVar(const DebugLocation& loc, RefType* ty, const std::string& mangledName,
-        const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
-        std::set<std::string> features = {});
+        const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName);
     // ===--------------------------------------------------------------------===//
     // Expression API
     // ===--------------------------------------------------------------------===//
@@ -266,7 +265,7 @@ public:
 
     Func* CreateFunc(const DebugLocation& loc, FuncType* funcTy, const std::string& mangledName,
         const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
-        const std::vector<GenericType*>& genericTypeParams = {}, std::set<std::string> features = {});
+        const std::vector<GenericType*>& genericTypeParams = {});
     // ===--------------------------------------------------------------------===//
     // StructDef API
     // ===--------------------------------------------------------------------===//

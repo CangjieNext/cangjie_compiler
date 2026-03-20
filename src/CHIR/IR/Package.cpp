@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "cangjie/CHIR/IR/Package.h"
+#include "cangjie/CHIR/IR/PackageSpec.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/Utils/ToStringUtils.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
@@ -18,6 +19,15 @@ using namespace Cangjie::CHIR;
 
 Package::Package(const std::string& name) : name(name)
 {
+}
+
+Package::~Package()
+{
+    // Clean up PackageSpec objects
+    for (auto spec : specs) {
+        delete spec;
+    }
+    specs.clear();
 }
 
 std::string Package::GetName() const
@@ -370,4 +380,19 @@ std::vector<ExtendDef*> Package::GetAllExtendDef() const
     all.insert(all.end(), importedExtends.begin(), importedExtends.end());
 
     return all;
+}
+
+// ===--------------------------------------------------------------------===//
+// PackageSpec API
+// ===--------------------------------------------------------------------===//
+PackageSpec* Package::CreatePackageSpec(const std::set<std::string>& features)
+{
+    auto spec = new PackageSpec(name, features);
+    specs.push_back(spec);
+    return spec;
+}
+
+PackageSpec* Package::GetCurrentSpec() const
+{
+    return specs.empty() ? nullptr : specs.back();
 }

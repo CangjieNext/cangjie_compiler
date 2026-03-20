@@ -509,8 +509,6 @@ Ptr<Func> GlobalVarInitializer::TranslateFileInitializer(
     std::vector<Ptr<Value>> varInitFuncs;
     for (auto decl : decls) {
         if (auto initFunc = TranslateVarInit(*decl)) {
-            auto features = decl->curFile->GetFeatures();
-            initFunc->SetFeatures(features);
             if (decl->IsConst()) {
                 initFuncsForConstVar.emplace_back(initFunc);
                 // In incremental compilation scenarios, only changes need to be re-evaluated.
