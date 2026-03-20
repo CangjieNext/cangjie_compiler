@@ -608,6 +608,32 @@ private:
     Ptr<AST::FuncDecl> objcAutoReleaseFunc{nullptr};
 };
 
+/**
+ * Adds implementations to previously created `init(String): NSString` constructor and `toString(): String` member
+ * function in `NSString` and `NSObject` mirrors respectively. Their declarations are created in
+ * `BeforeTypeCheck/Desugar`.
+ *
+ * ```cangjie
+ * @ObjCMirror
+ * public class NSString <: NSObject {
+ *     init(str: String) {
+ *         this(convertToNSString(str))
+ *     }
+ * }
+ *
+ * @ObjCMirror
+ * public class NSObject {
+ *     toString(): String {
+ *         return descriptionAsString($getObj)
+ *     }
+ * }
+ * ```
+ */
+class InsertStringConversions : public Handler<InsertStringConversions, InteropContext> {
+public:
+    void HandleImpl(InteropContext& ctx);
+};
+
 } // namespace Cangjie::Interop::ObjC
 
 #endif // CANGJIE_SEMA_DESUGAR_OBJ_C_INTEROP_INTEROP_HANDLERS
