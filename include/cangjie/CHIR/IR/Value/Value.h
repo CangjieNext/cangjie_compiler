@@ -11,6 +11,7 @@
 #include "cangjie/CHIR/IR/AttributeInfo.h"
 #include "cangjie/CHIR/IR/Base.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
+#include "cangjie/CHIR/IR/PackageSpec.h"
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/Utils/SafePointer.h"
 
@@ -27,6 +28,8 @@
 #include <vector>
 
 namespace Cangjie::CHIR {
+
+class Package;
 class Allocate;
 class Expression;
 class Constant;
@@ -119,16 +122,6 @@ public:
     Type* GetType() const;
     void SetType(Type& newType);
 
-    const std::set<std::string>& GetFeatures() const
-    {
-        return features;
-    }
-
-    void SetFeatures(std::set<std::string> newFeatures)
-    {
-        features = newFeatures;
-    }
-
     virtual std::string GetSrcCodeIdentifier() const;
     const std::string& GetIdentifier() const;
     std::string GetIdentifierWithoutPrefix() const;
@@ -157,7 +150,20 @@ public:
     // ===--------------------------------------------------------------------===//
     const AnnoInfo& GetAnnoInfo() const;
     void SetAnnoInfo(AnnoInfo&& info);
-    
+
+    // ===--------------------------------------------------------------------===//
+    // PackageSpec
+    // ===--------------------------------------------------------------------===//
+    PackageSpec* GetCreationSpec() const
+    {
+        return creationSpec;
+    }
+
+    void SetCreationSpec(PackageSpec* spec)
+    {
+        creationSpec = spec;
+    }
+
 protected:
     explicit Value(Type* ty, std::string identifier, ValueKind kind);
     virtual ~Value() = default;
@@ -184,7 +190,7 @@ private:
     ValueKind GetValueKind() const;
 
     ValueKind kind;                 // value kind
-    std::set<std::string> features = {};
+    PackageSpec* creationSpec = nullptr;  // Package specification when this value was created
 };
 
 class Parameter : public Value {

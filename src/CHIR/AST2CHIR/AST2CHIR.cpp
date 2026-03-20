@@ -511,6 +511,11 @@ bool AST2CHIR::ToCHIRPackage(AST::Package& node)
     if (!needDesCHIR) {
         package = builder.CreatePackage(node.fullPackageName);
         outputCHIR = opts.outputMode == GlobalOptions::OutputMode::CHIR;
+        // Create PackageSpec with features from the first file
+        if (!node.files.empty() && node.files[0]) {
+            auto features = node.files[0]->GetFeatures();
+            package->CreatePackageSpec(features);
+        }
     } else if (TryToDeserializeCHIR()) {
         package = builder.GetCurPackage();
         BuildDeserializedTable();
