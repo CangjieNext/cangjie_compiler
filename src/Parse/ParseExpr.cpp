@@ -776,7 +776,7 @@ void ParserImpl::ParseQuestSuffixExpr(OwnedPtr<Expr>& expr)
         auto pos = lastToken.Begin();
         OwnedPtr<OptionalExpr> ret = MakeOwned<OptionalExpr>();
         ret->begin = expr->begin;
-        ret->end = expr->end;
+        ret->end = lastToken.End();
         ret->questPos = pos;
         ret->baseExpr = std::move(expr);
         expr = std::move(ret);
