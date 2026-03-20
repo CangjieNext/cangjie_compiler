@@ -156,15 +156,6 @@ std::string GetMangleNameFromIdentifier(std::string& identifier)
     }
 }
 
-std::set<std::string> GetFeatures(const PackageFormat::Value* val)
-{
-    std::set<std::string> features = {};
-    for (unsigned int i = 0; i < val->features()->size(); ++i) {
-        features.insert(val->features()->Get(i)->str());
-    }
-    
-    return features;
-}
 } // namespace
 
 template <> Position CHIRDeserializer::CHIRDeserializerImpl::Create(const PackageFormat::Pos* obj)
@@ -559,9 +550,8 @@ template <> Func* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const Pack
     auto rawMangledName = obj->rawMangledName()->str();
     auto packageName = obj->packageName()->str();
     auto genericTypeParams = GetType<GenericType>(obj->genericTypeParams());
-    std::set<std::string> features = GetFeatures(obj->base());
     auto result = builder.CreateFunc(DebugLocation(), funcTy, GetMangleNameFromIdentifier(identifier),
-        srcCodeIdentifier, rawMangledName, packageName, genericTypeParams, features);
+        srcCodeIdentifier, rawMangledName, packageName, genericTypeParams);
     // Indexes below are needed to modify correctly function body when merging CJMP initializers
     result->SetLocalId(obj->localId());
     result->SetBlockId(obj->localId());
@@ -662,10 +652,9 @@ template <> GlobalVar* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const
     if (compilePlatform) {
         attrs.SetAttr(Attribute::DESERIALIZED, true);
     }
-    std::set<std::string> features = GetFeatures(obj->base());
     auto result = builder.CreateGlobalVar(
         DebugLocation(), type, GetMangleNameFromIdentifier(identifier), srcCodeIdentifier, rawMangledName,
-        packageName, features);
+        packageName);
     result->AppendAttributeInfo(attrs);
     return result;
 }
@@ -2510,7 +2499,25 @@ void CHIRDeserializer::CHIRDeserializerImpl::Run(const PackageFormat::CHIRPackag
     if (!builder.GetCurPackage()) {
         builder.CreatePackage(pool->name()->str());
         builder.GetCurPackage()->SetPackageAccessLevel(Package::AccessLevel(pool->pkgAccessLevel()));
+    } else {
+        // Validate that existing package's access level matches deserialized CHIRPackage's access level
+        if (Package::AccessLevel(pool->pkgAccessLevel()) != builder.GetCurPackage()->GetPackageAccessLevel()) {
+            Errorln("Package access level mismatch during deserialization for package '",
+                    pool->name()->str(), "': expected ",
+                    static_cast<int>(builder.GetCurPackage()->GetPackageAccessLevel()),
+                    " but got ", static_cast<int>(pool->pkgAccessLevel()));
+        }
     }
+
+    // Create PackageSpec from deserialized CHIRPackage features
+    std::set<std::string> features;
+    if (pool->features()) {
+        for (unsigned int i = 0; i < pool->features()->size(); ++i) {
+            features.insert(pool->features()->Get(i)->str());
+        }
+    }
+    builder.GetCurPackage()->CreatePackageSpec(features);
+
     // To keep order, get CustomTypeDef first
     for (unsigned id = 1; id <= pool->defs()->size(); ++id) {
         GetCustomTypeDef<CustomTypeDef>(id);

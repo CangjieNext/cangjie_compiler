@@ -333,7 +333,6 @@ kind: ValueKind;
 valueID: uint32; // current id in values
 attributes: uint64;
 annoInfo: AnnoInfo;
-features: [string]; // features set to which declaration belongs
 }
 
 enum ConstantValueKind: uint8 {
@@ -1622,6 +1621,7 @@ table CHIRPackage {
   maxImportedClassId: uint32;
   maxImportedEnumId: uint32;
   maxImportedExtendId: uint32;
+  features: [string]; // features set to which declarations in this package belong
 }
 
 root_type CHIRPackage;

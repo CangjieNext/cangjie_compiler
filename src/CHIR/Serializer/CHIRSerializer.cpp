@@ -534,13 +534,9 @@ template <> flatbuffers::Offset<PackageFormat::Value> CHIRSerializer::CHIRSerial
     auto kind = PackageFormat::ValueKind(obj.GetValueKind());
     auto attributes = obj.GetAttributeInfo().GetRawAttrs().to_ulong();
     auto annoInfo = Serialize<PackageFormat::AnnoInfo>(obj.GetAnnoInfo());
-    std::vector<flatbuffers::Offset<flatbuffers::String>> features;
-    for (const auto& name : obj.GetFeatures()) {
-        features.push_back(builder.CreateSharedString(name));
-    }
 
     return PackageFormat::CreateValueDirect(
-        builder, base, type, identifier.data(), kind, valueId, attributes, annoInfo, &features);
+        builder, base, type, identifier.data(), kind, valueId, attributes, annoInfo);
 }
 
 template <>
@@ -1765,11 +1761,21 @@ void CHIRSerializer::CHIRSerializerImpl::Save(const std::string& filename, ToCHI
 {
     auto accesslevel = package.GetPackageAccessLevel();
     auto packageName = package.GetName();
+
+    // Collect features from current PackageSpec
+    std::vector<flatbuffers::Offset<flatbuffers::String>> features;
+    auto currentSpec = package.GetCurrentSpec();
+    if (currentSpec != nullptr) {
+        for (const auto& feature : currentSpec->GetFeatures()) {
+            features.push_back(builder.CreateSharedString(feature));
+        }
+    }
+
     auto serializedPackage = PackageFormat::CreateCHIRPackageDirect(builder, packageName.c_str(), "",
         PackageFormat::PackageAccessLevel(accesslevel), &typeKind, &allType, &valueKind, &allValue, &exprKind,
         &allExpression, &defKind, &allCustomTypeDef, packageInitFunc, PackageFormat::Phase(phase),
         packageLiteralInitFunc, maxImportedValueId, maxImportedStructId, maxImportedClassId, maxImportedEnumId,
-        maxImportedExtendId);
+        maxImportedExtendId, &features);
 
     builder.Finish(serializedPackage);
     const uint8_t* buf = builder.GetBufferPointer();
