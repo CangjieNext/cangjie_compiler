@@ -20,6 +20,11 @@
 #include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie::Native::FFI {
+constexpr std::string_view NSSTRING_CLASS_IDENT = "NSString";
+constexpr std::string_view NSOBJECT_CLASS_IDENT = "NSObject";
+constexpr std::string_view TOSTRING_METHOD_IDENT = "toString";
+constexpr std::string_view INIT_IDENT = "init";
+
 using namespace AST;
 
 /*
@@ -164,7 +169,29 @@ std::string GetMangledMethodName(const BaseMangler& mangler, const std::vector<O
 Ptr<Annotation> GetForeignNameAnnotation(const Decl& decl);
 Ptr<Annotation> GetAnnotation(const Decl& decl, AnnotationKind annotationKind);
 
-Ptr<std::string> GetSingleArgumentAnnotationValue(const Decl& target, AnnotationKind annotationKind);
+Ptr<const std::string> GetSingleArgumentAnnotationValue(const Decl& target, AnnotationKind annotationKind);
+std::string GetObjCMirrorForeignName(const ClassLikeDecl& target);
+bool IsObjCGeneratedNSStringCtor(const Decl& target);
+bool IsObjCGeneratedNSObjectToString(const Decl& target);
+bool IsObjCGeneratedMember(const Decl& target);
+
+// NOCHECKIN: Move method from Java utils?
+template<typename MemberDecl, ASTKind MemberKind>
+Ptr<MemberDecl> FindFirstMemberDecl(
+    const Decl& sourceDecl,
+    const std::function<bool(const Decl&)>& memberPredicate
+)
+{
+    for (auto& member : sourceDecl.GetMemberDecls()) {
+        if (memberPredicate(*member)) {
+            auto ptr = As<MemberKind>(member);
+            CJC_ASSERT(ptr);
+            return Ptr(ptr);
+        }
+    }
+    CJC_ABORT();
+    return nullptr;
+}
 
 bool IsSuperConstructorCall(const CallExpr& call);
 bool IsThisConstructorCall(const CallExpr& call);

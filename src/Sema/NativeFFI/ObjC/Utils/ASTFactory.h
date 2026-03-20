@@ -238,6 +238,9 @@ public:
     OwnedPtr<AST::Expr> CreateNativeLambdaForBlockType(AST::Ty& ty, Ptr<AST::File> curFile);
     OwnedPtr<AST::Expr> CreateObjCBlockFromLambdaCall(OwnedPtr<AST::Expr> funcExpr);
     OwnedPtr<AST::Expr> CreateObjectGetClassCall(OwnedPtr<AST::Expr> id, Ptr<AST::File> curFile);
+    OwnedPtr<AST::Expr> CreateConvertToNSStringCall(OwnedPtr<AST::Expr> id, AST::ClassDecl& classDecl,
+        Ptr<AST::File> curFile);
+    OwnedPtr<AST::Expr> CreateDescriptionAsStringCall(OwnedPtr<AST::Expr> id);
 
 private:
     void PutDeclToClassLikeBody(AST::Decl& decl, AST::ClassLikeDecl& target);

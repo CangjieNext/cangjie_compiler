@@ -63,6 +63,8 @@ constexpr auto INTEROPLIB_OBJC_GET_LAMBDA_FROM_BLOCK = "getCangjieLambdaFromBloc
 constexpr auto INTEROPLIB_OBJ_C_OBJECT_GET_CLASS = "objectGetClass";
 constexpr auto INTEROPLIB_OBJ_C_IS_KIND_OF_CLASS = "isKindOfClass";
 constexpr auto INTEROPLIB_OBJ_C_CONFORMS_TO_PROTOCOL = "conformsToProtocol";
+constexpr auto INTEROPLIB_OBJ_C_CONVERT_TO_NSSTRING = "convertToNSString";
+constexpr auto INTEROPLIB_OBJ_C_DESCRIPTION_AS_STRING = "descriptionAsString";
 
 // objc.lang
 constexpr auto OBJ_C_FUNC_GET_FPOINTER = "unsafeGetFunctionPointer";
@@ -381,6 +383,18 @@ Ptr<FuncDecl> InteropLibBridge::GetObjCIsKindOfClassDecl()
 Ptr<FuncDecl> InteropLibBridge::GetObjCConformsToProtocolDecl()
 {
     static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_CONFORMS_TO_PROTOCOL);
+    return decl;
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetConvertToNSStringDecl()
+{
+    static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_CONVERT_TO_NSSTRING);
+    return decl;
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetDescriptionAsStringDecl()
+{
+    static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_DESCRIPTION_AS_STRING);
     return decl;
 }
 
