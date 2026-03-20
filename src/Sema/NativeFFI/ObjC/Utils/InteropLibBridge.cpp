@@ -59,6 +59,8 @@ constexpr auto MUTEX_UNLOCK_IDENT = "unlock";
 constexpr auto INTEROPLIB_OBJC_STORE_LAMBDA_AS_BLOCK = "registerCangjieLambdaAsBlock";
 constexpr auto INTEROPLIB_OBJC_GET_LAMBDA_FROM_BLOCK = "getCangjieLambdaFromBlock";
 constexpr auto INTEROPLIB_OBJ_C_OBJECT_GET_CLASS = "objectGetClass";
+constexpr auto INTEROPLIB_OBJ_C_CONVERT_TO_NSSTRING = "convertToNSString";
+constexpr auto INTEROPLIB_OBJ_C_DESCRIPTION_AS_STRING = "descriptionAsString";
 
 // objc.lang
 constexpr auto OBJ_C_FUNC_GET_FPOINTER = "unsafeGetFunctionPointer";
@@ -354,6 +356,18 @@ Ptr<FuncDecl> InteropLibBridge::GetObjCAutoReleaseDecl()
 Ptr<FuncDecl> InteropLibBridge::GetWithObjCSuperDecl()
 {
     static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_WITH_OBJ_C_SUPER);
+    return decl;
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetConvertToNSStringDecl()
+{
+    static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_CONVERT_TO_NSSTRING);
+    return decl;
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetDescriptionAsStringDecl()
+{
+    static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_DESCRIPTION_AS_STRING);
     return decl;
 }
 
