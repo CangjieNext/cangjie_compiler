@@ -284,8 +284,11 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "RecordExtend");
     // Collect extend decls by usage.
     RecordExtend(*curPkg);
-    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "RecordExtend");
 
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "RecordExtend");
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "testManager::PrepareToMock");
+    testManager->PrepareToMock(*curPkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "testManager::PrepareToMock");
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "instantiate");
     if (curPkg->TestAttr(Attribute::INCRE_COMPILE)) {
         InstantiateForIncrementalPackage();
@@ -296,6 +299,10 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
         Walker(curPkg, instantiationWalkerID, instantiator, contextReset).Walk();
     }
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "instantiate");
+
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "testManager::HandleCreateMock");
+    testManager->HandleCreateMock(*curPkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "testManager::HandleCreateMock");
 
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "TestManager");
     testManager->PreparePackageForTestIfNeeded(*curPkg);
