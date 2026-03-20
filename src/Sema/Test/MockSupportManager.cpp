@@ -1253,7 +1253,7 @@ bool MockSupportManager::IsMemberAccessOnThis(const MemberAccess& memberAccess) 
  *  }
  */
 void MockSupportManager::TransformAccessorCallForMutOperation(
-    NameReferenceExpr& originalNre, Expr& replacedNre, Expr& topLevelExpr)
+    NameReferenceExpr& originalNre, Ptr<Ty> outerTy, Expr& replacedNre, Expr& topLevelExpr)
 {
     CJC_ASSERT(Is<AssignExpr>(topLevelExpr) ||
         (Is<CallExpr>(topLevelExpr) &&
@@ -1295,7 +1295,7 @@ void MockSupportManager::TransformAccessorCallForMutOperation(
 
     auto backAssignExpr = CreateAssignExpr(std::move(newOriginalMa), std::move(tmpVarRefToAssign));
     backAssignExpr->ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-    ReplaceFieldSetWithAccessor(*backAssignExpr, false);
+    ReplaceFieldSetWithAccessor(*backAssignExpr, outerTy, false);
     backAssignExpr->EnableAttr(Attribute::GENERATED_TO_MOCK);
 
     std::vector<OwnedPtr<Node>> nodes {};
@@ -1319,17 +1319,18 @@ void MockSupportManager::TransformAccessorCallForMutOperation(
 }
 
 void MockSupportManager::ReplaceSubMemberAccessWithAccessor(
-    const MemberAccess& memberAccess, bool isInConstructor, const Ptr<Expr> topLevelMutExpr)
+    const MemberAccess& memberAccess, Ptr<Ty> outerTy, bool isInConstructor, const Ptr<Expr> topLevelMutExpr)
 {
     if (auto nre = DynamicCast<NameReferenceExpr*>(ExtractLastDesugaredExpr(*memberAccess.baseExpr)); nre) {
-        auto replacedNre = ReplaceExprWithAccessor(*nre, isInConstructor, true);
+        auto replacedNre = ReplaceExprWithAccessor(*nre, outerTy, isInConstructor, true);
         if (topLevelMutExpr && replacedNre) {
-            TransformAccessorCallForMutOperation(*nre, *replacedNre, *topLevelMutExpr);
+            TransformAccessorCallForMutOperation(*nre, outerTy, *replacedNre, *topLevelMutExpr);
         }
     }
 }
 
-Ptr<Expr> MockSupportManager::ReplaceExprWithAccessor(Expr& originalExpr, bool isInConstructor, bool isSubMemberAccess)
+Ptr<Expr> MockSupportManager::ReplaceExprWithAccessor(
+    Expr& originalExpr, Ptr<Ty> outerTy, bool isInConstructor, bool isSubMemberAccess)
 {
     auto expr = ExtractLastDesugaredExpr(originalExpr);
     if (!expr) {
@@ -1337,15 +1338,15 @@ Ptr<Expr> MockSupportManager::ReplaceExprWithAccessor(Expr& originalExpr, bool i
     }
 
     if (auto member = As<ASTKind::MEMBER_ACCESS>(expr)) {
-        return ReplaceMemberAccess(*member, isInConstructor, isSubMemberAccess);
+        return ReplaceMemberAccess(*member, outerTy, isInConstructor, isSubMemberAccess);
     }
 
     if (auto assignment = As<ASTKind::ASSIGN_EXPR>(expr)) {
-        return ReplaceAssignment(*assignment, isInConstructor);
+        return ReplaceAssignment(*assignment, outerTy, isInConstructor);
     }
 
     if (auto refExpr = As<ASTKind::REF_EXPR>(expr)) {
-        return ReplaceRefExpr(*refExpr);
+        return ReplaceRefExpr(*refExpr, outerTy);
     }
 
     if (auto callExpr = As<ASTKind::CALL_EXPR>(expr)) {
@@ -1355,7 +1356,8 @@ Ptr<Expr> MockSupportManager::ReplaceExprWithAccessor(Expr& originalExpr, bool i
     return nullptr;
 }
 
-Ptr<Expr> MockSupportManager::ReplaceMemberAccess(MemberAccess& member, bool isInConstructor, bool isSubMemberAccess)
+Ptr<Expr> MockSupportManager::ReplaceMemberAccess(
+    MemberAccess& member, Ptr<Ty> outerTy, bool isInConstructor, bool isSubMemberAccess)
 {
     if (!member.target) {
         return nullptr;
@@ -1371,13 +1373,13 @@ Ptr<Expr> MockSupportManager::ReplaceMemberAccess(MemberAccess& member, bool isI
             return nullptr;
         }
 
-        return ReplaceFieldGetWithAccessor(member, isInConstructor);
+        return ReplaceFieldGetWithAccessor(member, outerTy, isInConstructor);
     }
 
-    return ReplaceMemberAccessWithAccessor(member, isInConstructor);
+    return ReplaceMemberAccessWithAccessor(member, outerTy, isInConstructor);
 }
 
-Ptr<Expr> MockSupportManager::ReplaceAssignment(AssignExpr& assignment, bool isInConstructor)
+Ptr<Expr> MockSupportManager::ReplaceAssignment(AssignExpr& assignment, Ptr<Ty> outerTy, bool isInConstructor)
 {   
     if (assignment.TestAttr(Attribute::GENERATED_TO_MOCK)) {
         return nullptr;
@@ -1392,10 +1394,10 @@ Ptr<Expr> MockSupportManager::ReplaceAssignment(AssignExpr& assignment, bool isI
     }
 
     // Support all compound assignments
-    return ReplaceFieldSetWithAccessor(assignment, isInConstructor);
+    return ReplaceFieldSetWithAccessor(assignment, outerTy, isInConstructor);
 }
 
-Ptr<Expr> MockSupportManager::ReplaceRefExpr(RefExpr& refExpr)
+Ptr<Expr> MockSupportManager::ReplaceRefExpr(RefExpr& refExpr, Ptr<Ty> outerTy)
 {
     if (!refExpr.GetTarget() || refExpr.TestAttr(Attribute::LEFT_VALUE)) {
         return nullptr;
@@ -1412,7 +1414,7 @@ Ptr<Expr> MockSupportManager::ReplaceRefExpr(RefExpr& refExpr)
     }
 
     if (target->TestAttr(Attribute::STATIC)) {
-        return ReplaceStaticRefExprWithGetAccessor(refExpr);
+        return ReplaceStaticRefExprWithGetAccessor(refExpr, outerTy);
     }
 
     return nullptr;
@@ -1433,12 +1435,16 @@ Ptr<Expr> MockSupportManager::ReplaceCallExpr(CallExpr& callExpr)
     return nullptr;
 }
 
-Ptr<Expr> MockSupportManager::ReplaceStaticRefExprWithGetAccessor(RefExpr& refExpr)
+Ptr<Expr> MockSupportManager::ReplaceStaticRefExprWithGetAccessor(RefExpr& refExpr, Ptr<Ty> outerTy)
 {
-    auto target = refExpr.GetTarget();
-    auto ref = CreateRefExpr(*target->outerDecl);
-    auto memberAccess = CreateMemberAccess(std::move(ref), target->identifier);
-    auto accessorCall = GenerateAccessorCallForField(*memberAccess, AccessorKind::STATIC_FIELD_GETTER);
+    CJC_ASSERT(outerTy);
+    auto outerDecl = Ty::GetDeclOfTy(outerTy);
+    CJC_ASSERT(outerDecl);
+    auto ref = CreateRefExpr(*outerDecl);
+    ref->instTys = outerTy->typeArgs;
+    ref->ty = outerTy;
+    auto accessorCall = GenerateAccessorCallForField(
+        std::move(ref), refExpr.GetTarget(), refExpr.ty, AccessorKind::STATIC_FIELD_GETTER);
     if (!accessorCall) {
         return nullptr;
     }
@@ -1559,7 +1565,8 @@ Ptr<Expr> MockSupportManager::ReplaceInoutFuncArgWithAccessor(CallExpr& callExpr
     return nullptr;
 }
 
-Ptr<Expr> MockSupportManager::ReplaceMemberAccessWithAccessor(MemberAccess& memberAccess, bool isInConstructor)
+Ptr<Expr> MockSupportManager::ReplaceMemberAccessWithAccessor(
+    MemberAccess& memberAccess, Ptr<Ty> outerTy, bool isInConstructor)
 {
     Ptr<Expr> parentMutExpr = nullptr;
     if (auto ce = DynamicCast<CallExpr*>(memberAccess.callOrPattern)) {
@@ -1568,7 +1575,7 @@ Ptr<Expr> MockSupportManager::ReplaceMemberAccessWithAccessor(MemberAccess& memb
             parentMutExpr = ce;
         }
     }
-    ReplaceSubMemberAccessWithAccessor(memberAccess, isInConstructor, parentMutExpr);
+    ReplaceSubMemberAccessWithAccessor(memberAccess, outerTy, isInConstructor, parentMutExpr);
 
     if (isInConstructor && IsMemberAccessOnThis(memberAccess)) {
         return nullptr;
@@ -1597,9 +1604,10 @@ Ptr<Expr> MockSupportManager::ReplaceMemberAccessWithAccessor(MemberAccess& memb
     return &memberAccess;
 }
 
-Ptr<Expr> MockSupportManager::ReplaceFieldGetWithAccessor(MemberAccess& memberAccess, bool isInConstructor)
+Ptr<Expr> MockSupportManager::ReplaceFieldGetWithAccessor(
+    MemberAccess& memberAccess, Ptr<Ty> outerTy, bool isInConstructor)
 {
-    ReplaceSubMemberAccessWithAccessor(memberAccess, isInConstructor);
+    ReplaceSubMemberAccessWithAccessor(memberAccess, outerTy, isInConstructor);
     if (!memberAccess.target || (isInConstructor && IsMemberAccessOnThis(memberAccess))) {
         return nullptr;
     }
@@ -1631,7 +1639,7 @@ Ptr<Expr> MockSupportManager::ReplaceTopLevelVariableGetWithAccessor(RefExpr& re
     return nullptr;
 }
 
-Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr, bool isInConstructor)
+Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr, Ptr<Ty> outerTy, bool isInConstructor)
 {
     auto leftValue = assignExpr.leftValue.get();
     OwnedPtr<CallExpr> accessorCall;
@@ -1646,10 +1654,14 @@ Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr
                 return nullptr;
             }
         } else if (target->TestAttr(Attribute::STATIC)) {
-            CJC_ASSERT(target->outerDecl);
-            auto ref = CreateRefExpr(*target->outerDecl);
-            auto tmpMemberAccess = CreateMemberAccess(std::move(ref), target->identifier);
-            accessorCall = GenerateAccessorCallForField(*tmpMemberAccess, AccessorKind::STATIC_FIELD_SETTER);
+            CJC_ASSERT(outerTy);
+            auto outerDecl = Ty::GetDeclOfTy(outerTy);
+            CJC_ASSERT(outerDecl);
+            auto ref = CreateRefExpr(*outerDecl);
+            ref->instTys = outerTy->typeArgs;
+            ref->ty = outerTy;
+            accessorCall =
+                GenerateAccessorCallForField(std::move(ref), target, refExpr->ty, AccessorKind::STATIC_FIELD_SETTER);
             if (!accessorCall) {
                 return nullptr;
             }
@@ -1666,7 +1678,7 @@ Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr
         }
         accessorCall = GenerateAccessorCallForField(*memberAccess, AccessorKind::FIELD_SETTER);
         if (!accessorCall) {
-            ReplaceSubMemberAccessWithAccessor(*memberAccess, isInConstructor,
+            ReplaceSubMemberAccessWithAccessor(*memberAccess, outerTy, isInConstructor,
                 Is<StructDecl>(memberAccess->target->outerDecl) ? &assignExpr : nullptr);
             return &assignExpr;
         }
@@ -1706,30 +1718,35 @@ OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForTopLevelVariable(
     return accessorCall;
 }
 
-OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(
-    const MemberAccess& memberAccess, AccessorKind kind)
+OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(const MemberAccess& memberAccess, AccessorKind kind)
 {
-    Ptr<FuncDecl> accessorDecl = As<ASTKind::FUNC_DECL>(
-        mockUtils->FindAccessorForMemberAccess(memberAccess.baseExpr->ty, memberAccess.target, kind));
+    return GenerateAccessorCallForField(
+        ASTCloner::Clone(memberAccess.baseExpr.get()), memberAccess.GetTarget(), memberAccess.ty, kind);
+}
+
+OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(
+    OwnedPtr<Expr> baseExpr, Ptr<Decl> memberDecl, Ptr<Ty> memberTy, AccessorKind kind)
+{
+    Ptr<FuncDecl> accessorDecl =
+        As<ASTKind::FUNC_DECL>(mockUtils->FindAccessorForMemberAccess(baseExpr->ty, memberDecl, kind));
 
     if (!accessorDecl) {
         return nullptr;
     }
 
-    auto maTy = memberAccess.ty;
+    auto curFile = baseExpr->curFile;
     auto accessorCall = MakeOwned<CallExpr>();
-    auto accessorMemberAccess = CreateMemberAccess(
-        ASTCloner::Clone(memberAccess.baseExpr.get()), accessorDecl->identifier);
+    auto accessorMemberAccess = CreateMemberAccess(std::move(baseExpr), accessorDecl->identifier);
 
-    accessorMemberAccess->curFile = memberAccess.curFile;
+    accessorMemberAccess->curFile = curFile;
     accessorMemberAccess->target = accessorDecl;
     accessorMemberAccess->callOrPattern = accessorCall.get();
 
     if (kind == AccessorKind::FIELD_GETTER) {
-        accessorMemberAccess->ty = typeManager.GetFunctionTy({}, maTy);
-        accessorCall->ty = maTy;
+        accessorMemberAccess->ty = typeManager.GetFunctionTy({}, memberTy);
+        accessorCall->ty = memberTy;
     } else {
-        accessorMemberAccess->ty = typeManager.GetFunctionTy({maTy}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+        accessorMemberAccess->ty = typeManager.GetFunctionTy({memberTy}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
         accessorCall->ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     }
 
@@ -1738,7 +1755,7 @@ OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(
     std::vector<OwnedPtr<FuncArg>> mockedMethodArgRefs {};
     accessorCall->args = std::move(mockedMethodArgRefs);
     accessorCall->callKind = CallKind::CALL_DECLARED_FUNCTION;
-    accessorCall->curFile = memberAccess.curFile;
+    accessorCall->curFile = curFile;
 
     return accessorCall;
 }

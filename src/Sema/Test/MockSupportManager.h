@@ -29,7 +29,7 @@ public:
     void GenerateSpyCallMarker(AST::Package& package);
     void GenerateAccessors(AST::Decl& decl);
     Ptr<AST::Expr> ReplaceExprWithAccessor(
-        AST::Expr& originalExpr, bool isInConstructor, bool isSubMemberAccess = false);
+        AST::Expr& originalExpr, Ptr<AST::Ty> outerTy, bool isInConstructor, bool isSubMemberAccess = false);
     void ReplaceInterfaceDefaultFunc(AST::Expr& originalExpr, Ptr<AST::Ty> outerTy, bool isInMockAnnotatedLambda);
     void ReplaceInterfaceDefaultFuncInCall(AST::Node& node, Ptr<AST::Ty> outerty, bool isInMockAnnotatedLambda);
     static void MarkNodeMockSupportedIfNeeded(AST::Node& node);
@@ -90,14 +90,18 @@ private:
         AST::FuncDecl& funcDecl, std::vector<OwnedPtr<AST::FuncParamList>> accessorFuncParamLists) const;
     OwnedPtr<AST::FuncDecl> GenerateVarDeclAccessor(AST::VarDecl& fieldDecl, AccessorKind kind);
     OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(const AST::MemberAccess& memberAccess, AccessorKind kind);
-    Ptr<AST::Expr> ReplaceFieldGetWithAccessor(AST::MemberAccess& memberAccess, bool isInConstructor);
-    Ptr<AST::Expr> ReplaceFieldSetWithAccessor(AST::AssignExpr& assignExpr, bool isInConstructor);
-    Ptr<AST::Expr> ReplaceMemberAccessWithAccessor(AST::MemberAccess& memberAccess, bool isInConstructor);
-    Ptr<AST::Expr> ReplaceMemberAccess(AST::MemberAccess& member, bool isInConstructor, bool isSubMemberAccess);
-    Ptr<AST::Expr> ReplaceAssignment(AST::AssignExpr& assignment, bool isInConstructor);
-    Ptr<AST::Expr> ReplaceRefExpr(AST::RefExpr& refExpr);
+    OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(
+        OwnedPtr<AST::Expr> baseExpr, Ptr<AST::Decl> memberDecl, Ptr<AST::Ty> memberTy, AccessorKind kind);
+    Ptr<AST::Expr> ReplaceFieldGetWithAccessor(
+        AST::MemberAccess& memberAccess, Ptr<AST::Ty> outerTy, bool isInConstructor);
+    Ptr<AST::Expr> ReplaceFieldSetWithAccessor(AST::AssignExpr& assignExpr, Ptr<AST::Ty> outerTy, bool isInConstructor);
+    Ptr<AST::Expr> ReplaceMemberAccessWithAccessor(AST::MemberAccess& memberAccess, Ptr<AST::Ty> outerTy, bool isInConstructor);
+    Ptr<AST::Expr> ReplaceMemberAccess(
+        AST::MemberAccess& member, Ptr<AST::Ty> outerTy, bool isInConstructor, bool isSubMemberAccess);
+    Ptr<AST::Expr> ReplaceAssignment(AST::AssignExpr& assignment, Ptr<AST::Ty> outerTy, bool isInConstructor);
+    Ptr<AST::Expr> ReplaceRefExpr(AST::RefExpr& refExpr, Ptr<AST::Ty> outerTy);
     Ptr<AST::Expr> ReplaceCallExpr(AST::CallExpr& callExpr);
-    Ptr<AST::Expr> ReplaceStaticRefExprWithGetAccessor(AST::RefExpr& refExpr);
+    Ptr<AST::Expr> ReplaceStaticRefExprWithGetAccessor(AST::RefExpr& refExpr, Ptr<AST::Ty> outerTy);
 
     /**
      * 
@@ -121,9 +125,9 @@ private:
         Ptr<AST::FuncDecl> original);
     Ptr<AST::FuncDecl> FindDefaultAccessorImplementation(Ptr<AST::Ty> baseTy, Ptr<AST::FuncDecl> accessorDecl);
     void TransformAccessorCallForMutOperation(
-        AST::NameReferenceExpr& originalNre, AST::Expr& replacedNre, AST::Expr& topLevelExpr);
-    void ReplaceSubMemberAccessWithAccessor(
-        const AST::MemberAccess& memberAccess, bool isInConstructor, const Ptr<AST::Expr> topLevelMutExpr = nullptr);
+        AST::NameReferenceExpr& originalNre, Ptr<AST::Ty> outerTy, AST::Expr& replacedNre, AST::Expr& topLevelExpr);
+    void ReplaceSubMemberAccessWithAccessor(const AST::MemberAccess& memberAccess, Ptr<AST::Ty> outerTy,
+        bool isInConstructor, const Ptr<AST::Expr> topLevelMutExpr = nullptr);
     Ptr<AST::Expr> ReplaceTopLevelVariableGetWithAccessor(AST::RefExpr& refExpr);
     OwnedPtr<AST::CallExpr> GenerateAccessorCallForTopLevelVariable(const AST::RefExpr& refExpr, AccessorKind kind);
     void GenerateVarDeclAccessors(AST::VarDecl& fieldDecl, AccessorKind getterKind, AccessorKind setterKind);
