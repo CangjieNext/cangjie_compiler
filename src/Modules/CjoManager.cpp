@@ -20,6 +20,7 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/ModulesUtils.h"
+#include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -320,6 +321,7 @@ bool CjoManager::LoadFilesOfCommonPart(Ptr<Package> pkg)
 
 void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packages, bool fromLsp) const
 {
+    Utils::ProfileRecorder recorder("ImportPackages", "LoadPackageDeclsOnDemand");
     // Add all directly imported package's loader.
     std::queue<Ptr<CjoManagerImpl::PackageInfo>> q;
     for (auto pkg : packages) {
