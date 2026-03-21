@@ -11,7 +11,7 @@ if(NOT DEFINED CJ_SDK_VERSION)
     set(CJ_SDK_VERSION "0.0.1" CACHE STRING "Cangjie SDK Version")
 endif()
 # Add path for custom CMake modules and add cmake modules
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules"
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
