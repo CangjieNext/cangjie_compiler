@@ -63,6 +63,12 @@ TempFileInfo IOS_CJNATIVE::GenerateLinkingTool(
     if (driverOptions.outputMode == GlobalOptions::OutputMode::EXECUTABLE) {
         tool->AppendArg("-pie");
     }
+
+    if (driverOptions.IsLTOEnabled()) {
+        tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
+        GenerateLinkOptionsForLTO(*tool);
+    }
+
     HandleLLVMLinkOptions(objFiles, *tool);
     GenerateRuntimePath(*tool);
     backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));

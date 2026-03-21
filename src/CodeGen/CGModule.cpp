@@ -70,10 +70,11 @@ CGModule::CGModule(SubCHIRPackage& subCHIRPackage, CGPkgContext& cgPkgCtx)
     module->addModuleFlag(llvm::Module::Warning, "CJBC", static_cast<uint32_t>(1));
     // This flag is used to specify that the generated bc has not been opt-optimized.
     module->addModuleFlag(llvm::Module::Warning, "Cangjie_OPT", static_cast<uint32_t>(0));
-    // LLVM BE requires package name to distinguish difference instantiations of generic functions between packages.
-    if (cgCtx->GetCompileOptions().target.IsMacOS()) {
-        auto identifier = cgCtx->GetCurrentPkgName();
-        std::replace(identifier.begin(), identifier.end(), '/', '.');
+    // Mach-O full LTO merges bitcode from multiple packages into one module. Keep a stable
+    // package id here so the merged module flag does not conflict across SDK modules.
+    if (cgCtx->GetCompileOptions().target.IsMacOS() ||
+        cgCtx->GetCompileOptions().target.GetOSFamily() == Triple::OSType::IOS) {
+        std::string identifier = "default";
         module->addModuleFlag(
             llvm::Module::Warning, "Cangjie_PACKAGE_ID", llvm::MDString::get(module->getContext(), identifier));
     }

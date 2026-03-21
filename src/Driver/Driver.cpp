@@ -127,6 +127,7 @@ void Driver::EnvironmentSetup(const std::unordered_map<std::string, std::string>
     CJC_NULLPTR_CHECK(driverOptions);
     driverOptions->ReadPathsFromEnvironmentVars(environmentVars);
     driverOptions->cangjieHome = driverOptions->environment.cangjieHome.value_or(cangjieHome);
+    cangjieHome = driverOptions->cangjieHome;
 }
 
 bool Driver::ExecuteCompilation() const

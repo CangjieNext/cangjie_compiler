@@ -551,7 +551,8 @@ bool GlobalOptions::CheckLtoOptions() const
     } else if (!osName.empty()) {
         osName[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(osName[0])));
     }
-    if (osType == OSType::DARWIN || osType == OSType::IOS || osType == OSType::WINDOWS) {
+    // LTO is supported on macOS and iOS; only Windows remains unsupported here.
+    if (osType == OSType::WINDOWS) {
         DiagnosticEngine diag;
         diag.DiagnoseRefactor(DiagKindRefactor::driver_target_lto_unsupported, DEFAULT_POSITION, osName);
         return false;
@@ -603,7 +604,8 @@ bool GlobalOptions::CheckCompileAsExeOptions() const
         return false;
     }
     auto osType = target.GetOSFamily();
-    if (osType == OSType::WINDOWS || osType == OSType::DARWIN || osType == OSType::IOS) {
+    // --compile-as-exe is supported on macOS and iOS with LTO; only Windows remains unsupported.
+    if (osType == OSType::WINDOWS) {
         DiagnosticEngine diag;
         diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_compile_as_exe_platform, DEFAULT_POSITION);
         return false;

@@ -38,6 +38,12 @@ std::optional<std::tuple<std::string, uint64_t>> GetElementFromOrderVector(
     }
     return result;
 }
+
+bool EndsWith(const std::string& value, const std::string& suffix)
+{
+    return value.size() >= suffix.size() &&
+        value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
 }; // namespace
 
 using namespace Cangjie;
@@ -219,8 +225,44 @@ void ToolChain::AppendObjectsFromInput(std::vector<std::tuple<std::string, uint6
 
 void ToolChain::AppendLibrariesFromInput(std::vector<std::tuple<std::string, uint64_t>>& inputOrderTuples)
 {
+    auto isMachOFamily = driverOptions.target.IsMacOS() || driverOptions.target.GetOSFamily() == Triple::OSType::IOS;
+    auto normalizeLibraryArg = [this, isMachOFamily](const std::string& library) {
+        if (!isMachOFamily || library.empty() || library[0] != ':') {
+            return std::string("-l") + library;
+        }
+
+        const std::string exactLib = library.substr(1);
+        if (EndsWith(exactLib, GetSharedLibraryExtension())) {
+            auto baseName = exactLib.substr(0, exactLib.size() - GetSharedLibraryExtension().size());
+            if (baseName.compare(0, 3, "lib") == 0) {
+                baseName = baseName.substr(3);
+            }
+            if (!baseName.empty()) {
+                return std::string("-l") + baseName;
+            }
+        }
+
+        if (EndsWith(exactLib, STATIC_LIB_EXTEBSION)) {
+            std::vector<std::string> candidatePaths = driverOptions.librarySearchPaths;
+            candidatePaths.emplace_back(FileUtil::JoinPath(
+                FileUtil::JoinPath(driver.cangjieHome, "runtime/lib"), driverOptions.GetCangjieLibTargetPathName()));
+            candidatePaths.emplace_back(FileUtil::JoinPath(
+                FileUtil::JoinPath(driver.cangjieHome, "lib"), driverOptions.GetCangjieLibTargetPathName()));
+            auto envLibraryPaths = GetLibraryPaths();
+            candidatePaths.insert(candidatePaths.end(), envLibraryPaths.begin(), envLibraryPaths.end());
+            for (const auto& path : candidatePaths) {
+                auto fullPath = FileUtil::JoinPath(path, exactLib);
+                if (FileUtil::FileExist(fullPath)) {
+                    return fullPath;
+                }
+            }
+        }
+
+        return std::string("-l") + library;
+    };
+
     for (const std::tuple<std::string, uint64_t>& library : driverOptions.inputLibraryOrder) {
-        inputOrderTuples.emplace_back(std::make_tuple("-l" + std::get<0>(library), std::get<1>(library)));
+        inputOrderTuples.emplace_back(std::make_tuple(normalizeLibraryArg(std::get<0>(library)), std::get<1>(library)));
     }
 }
 

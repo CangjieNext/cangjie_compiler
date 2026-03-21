@@ -284,14 +284,29 @@ void MachO::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
     std::set<std::string> ltoBuiltInDependencies;
     std::unordered_set<std::string> dyDependencies;
 
-    const std::function<void(const std::unordered_set<std::string>&)> getDyDependencies =
-        [this, &dyDependencies](const std::unordered_set<std::string>& dependencies) {
-            for (auto& cjoFileName : dependencies) {
-                auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION);
-                if (ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.find(staticLib) != ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.end()) {
-                    dyDependencies.emplace(staticLib);
-                    dyDependencies.insert(ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.at(staticLib).begin(),
-                        ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.at(staticLib).end());
+    const std::function<void(std::string)> appendStaticLibsToTool =
+        [this, &dynamicLibraries, &staticLibraries, &ltoBuiltInDependencies](const std::string& cjoFileName) {
+            auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION);
+            if (ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.find(staticLib) !=
+                ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.end()) {
+                dynamicLibraries.emplace(LINK_PREFIX +
+                    FileUtil::ConvertFilenameToLibCangjieBaseFormat(cjoFileName));
+                return;
+            }
+            if (driverOptions.IsLTOEnabled()) {
+                auto found = LLVM_LTO_CSTD_FFI_OPTION_MAP.find(staticLib);
+                if (found != LLVM_LTO_CSTD_FFI_OPTION_MAP.end()) {
+                    // Convert "libcangjie-std-coreFFI.a" to "-lcangjie-std-coreFFI"
+                    std::string ffiLibName = found->second;
+                    // Remove "lib" prefix if present
+                    if (ffiLibName.substr(0, 3) == "lib") {
+                        ffiLibName = ffiLibName.substr(3);
+                    }
+                    // Remove ".a" suffix if present
+                    if (ffiLibName.size() > 2 && ffiLibName.substr(ffiLibName.size() - 2) == ".a") {
+                        ffiLibName = ffiLibName.substr(0, ffiLibName.size() - 2);
+                    }
+                    staticLibraries.emplace(LINK_PREFIX + ffiLibName);
                 }
             }
         };

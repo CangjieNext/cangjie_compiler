@@ -279,8 +279,11 @@ void SetLTOOptimizationLevelOptions(SetFuncType setOptionHandler, const DriverOp
 
 void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOptions)
 {
+    bool isDarwinFamily =
+        driverOptions.target.IsMacOS() || driverOptions.target.GetOSFamily() == Triple::OSType::IOS;
+    const std::string& mllvmOption = isDarwinFamily ? "-mllvm" : "--mllvm";
     if (driverOptions.IsFullLTOEnabled()) {
-        setOptionHandler("--mllvm");
+        setOptionHandler(mllvmOption);
         setOptionHandler("--cangjie-full-lto");
     } else {
         // The backend lld defaults to supporting incremental compilation in thin LTO mode.
@@ -288,15 +291,24 @@ void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
     }
     // safepoint outline improves codesize but may lead to performance degrade.
     if (GetEffectiveOptimizationLevel(driverOptions) == GlobalOptions::OptimizationLevel::O2) {
-        setOptionHandler("--mllvm");
+        setOptionHandler(mllvmOption);
         setOptionHandler("--cj-safepoint-outline=false");
     }
     // Differentiate the optimization in the LLD and OPT phases.
-    setOptionHandler("--mllvm");
+    setOptionHandler(mllvmOption);
     setOptionHandler("--cj-lto-opt");
-    setOptionHandler("--allow-multiple-definition");
-    setOptionHandler("--plugin-opt=no-opaque-pointers");
-    if (driverOptions.IsCompileAsExeEnabled()) {
+    // ld64.lld does not support plugin-opt, so disable opaque pointers via -mllvm on Darwin.
+    if (isDarwinFamily) {
+        setOptionHandler("-mllvm");
+        setOptionHandler("-opaque-pointers=0");
+    } else {
+        setOptionHandler("--allow-multiple-definition");
+        setOptionHandler("--plugin-opt=no-opaque-pointers");
+    }
+    // Some older cjpm binaries still forward --compile-as-exe on non-executable Darwin LTO links.
+    // The linker only accepts this mode for executable outputs, so ignore it for other output kinds.
+    if (driverOptions.IsCompileAsExeEnabled() &&
+        driverOptions.outputMode == GlobalOptions::OutputMode::EXECUTABLE) {
         setOptionHandler("--compile-as-exe");
     }
 }
