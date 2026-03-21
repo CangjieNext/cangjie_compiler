@@ -294,7 +294,17 @@ void MachO::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
             if (driverOptions.IsLTOEnabled()) {
                 auto found = LLVM_LTO_CSTD_FFI_OPTION_MAP.find(staticLib);
                 if (found != LLVM_LTO_CSTD_FFI_OPTION_MAP.end()) {
-                    staticLibraries.emplace(LINK_PREFIX + found->second);
+                    // Convert "libcangjie-std-coreFFI.a" to "-lcangjie-std-coreFFI"
+                    std::string ffiLibName = found->second;
+                    // Remove "lib" prefix if present
+                    if (ffiLibName.substr(0, 3) == "lib") {
+                        ffiLibName = ffiLibName.substr(3);
+                    }
+                    // Remove ".a" suffix if present
+                    if (ffiLibName.size() > 2 && ffiLibName.substr(ffiLibName.size() - 2) == ".a") {
+                        ffiLibName = ffiLibName.substr(0, ffiLibName.size() - 2);
+                    }
+                    staticLibraries.emplace(LINK_PREFIX + ffiLibName);
                 }
                 ltoBuiltInDependencies.emplace(FileUtil::ConvertFilenameToLtoLibCangjieFormat(cjoFileName));
             } else {
