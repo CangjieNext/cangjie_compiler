@@ -306,9 +306,11 @@ void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
         setOptionHandler("--plugin-opt=no-opaque-pointers");
     }
     // Some older cjpm binaries still forward --compile-as-exe on non-executable Darwin LTO links.
-    // The linker only accepts this mode for executable outputs, so ignore it for other output kinds.
-    if (driverOptions.IsCompileAsExeEnabled() &&
-        driverOptions.outputMode == GlobalOptions::OutputMode::EXECUTABLE) {
+    // Keep filtering that Darwin-only case, but preserve the flag for Android/OHOS/Linux dylib LTO links
+    // where the final linker stage still needs it for code size optimization.
+    bool ignoreCompileAsExe = isDarwinFamily &&
+        driverOptions.outputMode != GlobalOptions::OutputMode::EXECUTABLE;
+    if (driverOptions.IsCompileAsExeEnabled() && !ignoreCompileAsExe) {
         setOptionHandler("--compile-as-exe");
     }
 }
