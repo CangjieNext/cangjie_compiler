@@ -1086,7 +1086,7 @@ void ObjCGenerator::AddMethods()
         if (declPtr->astKind == ASTKind::FUNC_DECL &&
             !declPtr->TestAnyAttr(Attribute::CONSTRUCTOR, Attribute::FINALIZER)) {
             const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(declPtr.get());
-            if (!IsVisibalFunc(funcDecl, *decl, genericConfig)) {
+            if (!IsVisibleFunc(funcDecl, *decl, genericConfig)) {
                 continue;
             }
             if (funcDecl.funcBody && funcDecl.funcBody->retType) {

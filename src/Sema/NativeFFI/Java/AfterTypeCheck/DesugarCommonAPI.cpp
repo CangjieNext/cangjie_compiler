@@ -137,6 +137,9 @@ bool JavaDesugarManager::FillMethodParamsByArg(std::vector<OwnedPtr<FuncParam>>&
 OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(
     FuncDecl& sampleMethod, Decl& decl, const GenericConfigInfo* genericConfig)
 {
+    if (sampleMethod.op != TokenKind::ILLEGAL) {
+        return nullptr;
+    }
     auto curFile = sampleMethod.curFile;
     CJC_NULLPTR_CHECK(curFile);
 
