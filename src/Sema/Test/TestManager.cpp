@@ -826,7 +826,7 @@ void TestManager::PrepareToMock(AST::Package& pkg)
     if (mockManager) {
         mockManager->LoadMockLibDecls();
     }
-
+    Utils::ProfileRecorder::Start("TestManager", "mock check");
     if (mockMode == MockMode::ON || (mockCompatibleIfNeeded && IsThereMockUsage(pkg))) {
         ctx->PrepareManglerContext(&pkg);
 
@@ -844,7 +844,10 @@ void TestManager::PrepareToMock(AST::Package& pkg)
     } else {
         CheckIfNoMockSupportDependencies(pkg);
     }
+    Utils::ProfileRecorder::Stop("TestManager", "mock check");
+    Utils::ProfileRecorder::Start("TestManager", "HandleMockCalls");
     HandleEnsurePreparedToMock(pkg);
+    Utils::ProfileRecorder::Stop("TestManager", "HandleMockCalls");
 }
 
 TestManager::~TestManager()
