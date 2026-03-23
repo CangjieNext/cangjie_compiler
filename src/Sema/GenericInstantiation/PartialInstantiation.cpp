@@ -79,6 +79,12 @@ bool RequireInstantiation(const Decl& decl)
         if (g_optLevel >= GlobalOptions::OptimizationLevel::O2 && !decl.TestAttr(Attribute::IMPORTED)) {
             return true;
         }
+        // Generic enum declarations must be fully instantiated even at -O0/-O1, because pattern matching
+        // relies on type-specific enum memory layouts to correctly extract constructor tags.
+        if (decl.astKind == ASTKind::ENUM_DECL && decl.TestAttr(Attribute::GENERIC) &&
+            !decl.TestAttr(Attribute::IMPORTED)) {
+            return true;
+        }
         if (decl.TestAttr(Attribute::GENERIC)) {
             auto& members = decl.GetMemberDecls();
             return std::any_of(
@@ -106,6 +112,19 @@ bool RequireInstantiation(const Decl& decl)
         return true;
     }
     if (g_optLevel < GlobalOptions::OptimizationLevel::O2) {
+        // Generic functions must be fully instantiated even at -O0/-O1 so that match expressions
+        // on generic enum types use concrete (type-specific) layouts instead of generic ones.
+        if (decl.IsFunc() && decl.GetGeneric() &&
+            !IsInDeclWithAttribute(decl, Attribute::IMPORTED)) {
+            return true;
+        }
+        // Generic enum constructors must also be instantiated at -O0/-O1 so that
+        // RearrangeRefExprReference can find the instantiated constructor targets.
+        if (decl.outerDecl && decl.outerDecl->astKind == ASTKind::ENUM_DECL &&
+            decl.outerDecl->GetGeneric() &&
+            !decl.outerDecl->TestAttr(Attribute::IMPORTED)) {
+            return true;
+        }
         return false;
     }
     return !IsInDeclWithAttribute(decl, Attribute::IMPORTED) || decl.HasAnno(AnnotationKind::FROZEN);

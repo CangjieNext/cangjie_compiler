@@ -910,11 +910,11 @@ private:
             std::vector<Constructor> ctors;
             auto& enumTy = StaticCast<EnumTy>(ty);
             for (const auto& decl : enumTy.declPtr->constructors) {
+                Ptr<Ty> instCtorTy = typeManager.GetBestInstantiatedTy(decl->ty, m);
                 if (auto varDecl = DynamicCast<const VarDecl*>(decl.get()); varDecl) {
-                    ctors.emplace_back(Constructor::Enum(*varDecl, ty));
+                    ctors.emplace_back(Constructor::Enum(*varDecl, *instCtorTy));
                 } else if (auto funcDecl = DynamicCast<const FuncDecl*>(decl.get()); funcDecl) {
-                    ctors.emplace_back(
-                        Constructor::Enum(*funcDecl, *typeManager.GetBestInstantiatedTy(funcDecl->ty, m)));
+                    ctors.emplace_back(Constructor::Enum(*funcDecl, *instCtorTy));
                 }
             }
             if (enumTy.IsNonExhaustive()) {
