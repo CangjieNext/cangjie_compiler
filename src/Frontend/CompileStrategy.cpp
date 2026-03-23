@@ -564,7 +564,7 @@ bool CompileStrategy::MacroExpand() const
 bool FullCompileStrategy::Sema()
 {
     {
-        Utils::ProfileRecorder recorder("Semantic", "Desugar Before TypeCheck");
+        Utils::ProfileRecorder recorder("Semantic", "DesugarBeforeTypeCheck");
         PerformDesugar();
     }
     // Interop config toml file check format.

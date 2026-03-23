@@ -2002,7 +2002,7 @@ void TypeChecker::TypeCheckForPackages(const std::vector<Ptr<Package>>& pkgs) co
 
 std::vector<Ptr<ASTContext>> TypeChecker::TypeCheckerImpl::PreTypeCheck(const std::vector<Ptr<AST::Package>>& pkgs)
 {
-    Utils::ProfileRecorder recorder("Semantic", "Pre TypeCheck");
+    Utils::ProfileRecorder recorder("Semantic", "PreTypeCheck");
     std::vector<Ptr<ASTContext>> contexts;
     // Only check for packages that have corresponding ASTContext.
     std::for_each(pkgs.begin(), pkgs.end(), [this, &contexts](Ptr<Package> pkg) {
@@ -2025,7 +2025,7 @@ std::vector<Ptr<ASTContext>> TypeChecker::TypeCheckerImpl::PreTypeCheck(const st
 
     for (auto pkg : pkgs) {
         mpImpl->MatchSpecificWithCommon(*pkg);
-        mpImpl->CheckNotAllowedAnnotations(*pkg);
+        mpImpl->CheckNotAllowedAnnotations4CJMP(*pkg);
     }
 
     return contexts;
@@ -2033,7 +2033,7 @@ std::vector<Ptr<ASTContext>> TypeChecker::TypeCheckerImpl::PreTypeCheck(const st
 
 void TypeChecker::TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& contexts)
 {
-    Utils::ProfileRecorder recorder("Semantic", "Post TypeCheck");
+    Utils::ProfileRecorder recorder("Semantic", "PostTypeCheck");
     // Post checking for legality of semantic.
     for (auto& ctx : contexts) {
         CheckOverflow(*ctx->curPackage);
@@ -2043,7 +2043,7 @@ void TypeChecker::TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& c
         // Check legality of usage after sema type completed.
         CheckLegalityOfUsage(*ctx, *ctx->curPackage);
         // Check cjmp match rules.
-        mpImpl->CheckReturnAndVariableTypes(*ctx->curPackage);
+        mpImpl->CheckNotAllowedAnnotations4CJMP(*ctx->curPackage);
         mpImpl->ValidateMatchedAnnotationsAndModifiers(*ctx->curPackage);
         AddAttrForDefaultFuncParam(*ctx->curPackage);
         // Because of the cjlint checking policy, desugar of propDecl should be done in sema stage for now.
