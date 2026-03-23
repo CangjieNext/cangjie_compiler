@@ -403,27 +403,6 @@ std::string GetImportPackageNameByImportSpec(const AST::ImportSpec& importSpec)
     }
     return ss.str();
 }
-
-void CollectAnnotations(const Decl& decl, std::vector<Ptr<Expr>>& fullExportExprs)
-{
-    if (auto classDecl = DynamicCast<ClassDecl>(&decl)) {
-        for (auto &it : classDecl->annotations) {
-            if (it->astKind == AST::ASTKind::ANNOTATION && it->args.size() > 0) {
-                fullExportExprs.emplace_back(it->args.front()->expr);
-            }
-        }
-    }
-}
-
-void CollectMembers(const Decl& decl, std::queue<Ptr<Decl>>& searchingQueue, bool serializingCommon)
-{
-    for (auto& member : decl.GetMemberDecls()) {
-        CJC_NULLPTR_CHECK(member);
-        if (member->linkage != Linkage::INTERNAL || IsGenericInCommonSerialization(serializingCommon, *member)) {
-            searchingQueue.emplace(member.get());
-        }
-    }
-}
 } // namespace
 
 ASTWriter::ASTWriter(DiagnosticEngine& diag, const std::string& packageDepInfo, const ExportConfig& exportCfg,
@@ -531,7 +510,6 @@ void ASTWriter::ASTWriterImpl::PreSaveFullExportDecls(Package& package)
     // Since using 'searched' to avoid duplication, we can use vector to collect all decls.
     // Visiting order of 'searchingQueue' is base on user code's calling stack, it will have stable order.
     std::vector<Ptr<Decl>> fullExportDecls;
-    std::vector<Ptr<Expr>> fullExportExprs;
     std::queue<Ptr<Decl>> searchingQueue;
     std::unordered_set<Ptr<Decl>> searched;
     IterateToplevelDecls(package, [&searchingQueue, this](auto& decl) {
@@ -564,8 +542,12 @@ void ASTWriter::ASTWriterImpl::PreSaveFullExportDecls(Package& package)
         if (!IsExternalNorminalDecl(*decl)) {
             continue;
         }
-        CollectAnnotations(*decl, fullExportExprs);
-        CollectMembers(*decl, searchingQueue, serializingCommon);
+        for (auto& member : decl->GetMemberDecls()) {
+            CJC_NULLPTR_CHECK(member);
+            if (member->linkage != Linkage::INTERNAL || IsGenericInCommonSerialization(serializingCommon, *member)) {
+                searchingQueue.emplace(member.get());
+            }
+        }
     }
 
     if (fullExportDecls.empty()) {
@@ -575,9 +557,6 @@ void ASTWriter::ASTWriterImpl::PreSaveFullExportDecls(Package& package)
     // Serialize decls.
     for (auto decl : fullExportDecls) {
         (void)GetDeclIndex(decl);
-    }
-    for (auto &expr : fullExportExprs) {
-        SaveExpr(*expr);
     }
 }
 
