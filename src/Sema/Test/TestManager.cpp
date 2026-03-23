@@ -843,9 +843,16 @@ void TestManager::PreparePackageForTestIfNeeded(Package& pkg)
         return;
     }
     Utils::ProfileRecorder::Start("TestManager", "mack checker");
-    std::optional<ManglerCtxGuard> manglerCtxGuard;
+    // FIXME: Load decls lazy
+    if (mockUtils) {
+        mockUtils->LoadStdDecls();
+    }
+    if (mockManager) {
+        mockManager->LoadMockLibDecls();
+    }
     if (mockMode == MockMode::ON || (mockCompatibleIfNeeded && IsThereMockUsage(pkg))) {
-        manglerCtxGuard.emplace(mockUtils->mangler, pkg);
+        ctx->PrepareManglerContext(&pkg);
+
         mockUtils->SetGetTypeForTypeParamDecl(pkg);
         mockUtils->SetIsSubtypeTypes(pkg);
         CollectInternalDeclUsages(pkg);
@@ -858,23 +865,7 @@ void TestManager::PreparePackageForTestIfNeeded(Package& pkg)
         CheckIfNoMockSupportDependencies(pkg);
     }
     Utils::ProfileRecorder::Stop("TestManager", "mack checker");
-    Utils::ProfileRecorder::Start("TestManager", "HandleMockCalls");
-    HandleMockCalls(pkg);
-    Utils::ProfileRecorder::Stop("TestManager", "HandleMockCalls");
-}
-
-void TestManager::Init(GenericInstantiationManager* instantiationManager)
-{
-    if (!mockCompatible) {
-        return;
-    }
-
-    mockUtils = new MockUtils(importManager, typeManager, instantiationManager);
-    mockSupportManager = MakeOwned<MockSupportManager>(typeManager, mockUtils);
-
-    if (mockCompatible && testEnabled) {
-        mockManager = MakeOwned<MockManager>(importManager, typeManager, mockUtils);
-    }
+    HandleEnsurePreparedToMock(pkg);
 }
 
 TestManager::~TestManager()
