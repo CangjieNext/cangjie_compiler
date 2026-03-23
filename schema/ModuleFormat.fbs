@@ -312,8 +312,7 @@ enum AnnoKind : uint16 {
   ObjCMirror,
   ObjCImpl,
   ForeignName,
-  JavaHasDefault,
-  Annotation
+  JavaHasDefault
 }
 
 // Current annotation representation is a balance between needs of @Deprecated
