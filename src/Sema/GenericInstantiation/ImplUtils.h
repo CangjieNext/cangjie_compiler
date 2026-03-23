@@ -76,7 +76,7 @@ inline bool NeedSwitchContext(const AST::Decl& decl)
 {
     auto outerDecl = GetOuterStructDecl(decl);
     return decl.IsNominalDecl() ||
-        (outerDecl && outerDecl->IsNominalDecl() && (decl.GetGeneric() || decl.TestAttr(AST::Attribute::IMPORTED)));
+        (outerDecl && outerDecl->IsNominalDecl() && (decl.GetGeneric() || outerDecl->GetGeneric() || decl.TestAttr(AST::Attribute::IMPORTED)));
 }
 } // namespace Cangjie
 #endif
