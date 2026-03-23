@@ -336,10 +336,6 @@ private:
 
     void CollectNameUsage(Node& node, SemaUsage& usage) const
     {
-        // {
-        //     std::lock_guard lockGuard{ExtendBoxMarker::mtx};
-        //     Walker(&node, ExtendBoxMarker::GetMarkExtendBoxFunc(tyMgr)).Walk();
-        // }
         auto boxedTys = tyMgr.GetAllBoxedTys();
         tyMgr.ClearRecordUsedExtends(); // Unset collection status.
         for (auto ty : boxedTys) {
