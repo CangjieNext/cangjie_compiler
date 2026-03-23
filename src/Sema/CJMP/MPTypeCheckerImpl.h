@@ -30,12 +30,12 @@ public:
     void PreCheck4CJMP(const AST::Package& pkg);
     // TypeCheck for CJMP
     void RemoveCommonCandidatesIfHasSpecific(std::vector<Ptr<AST::FuncDecl>>& candidates);
-    void CheckReturnAndVariableTypes(AST::Package& pkg);
+    void CheckReturnAndVariableTypes4CJMP(AST::Package& pkg);
     void ValidateMatchedAnnotationsAndModifiers(AST::Package& pkg);
     void CheckMatchedFunctionReturnTypes(AST::FuncDecl& specificFunc, AST::FuncDecl& commonFunc);
     void CheckMatchedVariableTypes(AST::VarDecl& specificVar, AST::VarDecl& commonVar);
     void MatchSpecificWithCommon(AST::Package& pkg);
-    void CheckNotAllowedAnnotations(AST::Package& pkg);
+    void CheckNotAllowedAnnotations4CJMP(AST::Package& pkg);
 
     static void FilterOutCommonCandidatesIfSpecificExist(std::map<Names, std::vector<Ptr<AST::FuncDecl>>>& candidates);
     void MapCJMPGenericTypeArgs(TypeSubst& genericTyMap, const AST::Decl& commonDecl, const AST::Decl& specificDecl);
