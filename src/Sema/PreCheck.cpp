@@ -1461,6 +1461,7 @@ void TypeChecker::TypeCheckerImpl::AddAssumptionForType(ASTContext& ctx, const T
     if (!aliasedTypeTarget || !type.ty || type.ty->typeArgs.empty()) {
         return;
     }
+    size_t originalConstraintCount = generic.genericConstraints.size();
     MultiTypeSubst revTypeMapping;
     TyVarUB allAssumptionMap;
     GetRevTypeMapping(aliasedTypeTarget->ty->typeArgs, type.ty->typeArgs, revTypeMapping);
@@ -1468,6 +1469,9 @@ void TypeChecker::TypeCheckerImpl::AddAssumptionForType(ASTContext& ctx, const T
     AddUpperBoundOnTypeParameters(
         ctx, generic, *aliasedTypeTarget, revTypeMapping, allAssumptionMap, typeArgAppliedMap);
     CreateGenericConstraints(generic);
+    for (size_t i = originalConstraintCount; i < generic.genericConstraints.size(); ++i) {
+        generic.genericConstraints[i]->isImplicitlyIntroduced = true;
+    }
 }
 
 void TypeChecker::TypeCheckerImpl::PreCheckMacroRedefinition(const std::vector<Ptr<FuncDecl>>& funcs) const
@@ -2002,13 +2006,17 @@ void TypeChecker::TypeCheckerImpl::PreCheck(const std::vector<Ptr<ASTContext>>& 
     }
     Utils::ProfileRecorder::Stop("PreCheck", "ResolveDecls");
     // Resolve type alias separately after all user-defined type resolved.
+    Utils::ProfileRecorder::Start("PreCheck", "ResolveTypeAlias");
     ResolveTypeAlias(contexts);
+    Utils::ProfileRecorder::Stop("PreCheck", "ResolveTypeAlias");
 
     // Clear extend related data before iteration of all packages.
     typeManager.ClearMapCache();
     // First part does not need sema check.
     // Collect all imported non-source extends before checking each package.
+    Utils::ProfileRecorder::Start("PreCheck", "BuildImportedExtendMap");
     BuildImportedExtendMap();
+    Utils::ProfileRecorder::Stop("PreCheck", "BuildImportedExtendMap");
     Utils::ProfileRecorder::Start("PreCheck", "PreCheckUsage");
     for (auto& ctx : contexts) {
         // Phase: check annotation for FFI.
@@ -2016,7 +2024,9 @@ void TypeChecker::TypeCheckerImpl::PreCheck(const std::vector<Ptr<ASTContext>>& 
         PreCheckUsage(*ctx, *ctx->curPackage);
     }
     Utils::ProfileRecorder::Stop("PreCheck", "PreCheckUsage");
+    Utils::ProfileRecorder::Start("PreCheck", "PreCheckAllExtendInterface");
     PreCheckAllExtendInterface();
+    Utils::ProfileRecorder::Stop("PreCheck", "PreCheckAllExtendInterface");
     // CHIR's closure conversion cannot be used without 'Object' class.
     // If '-no-prelude' is given, should check dependencies of class.
     if (ci->invocation.globalOptions.chirCC && !ci->invocation.globalOptions.implicitPrelude) {

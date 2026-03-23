@@ -2020,7 +2020,9 @@ std::vector<Ptr<ASTContext>> TypeChecker::TypeCheckerImpl::PreTypeCheck(const st
     }
     Utils::ProfileRecorder::Stop("Pre TypeCheck", "PrepareTypeCheck");
     // Pre checking for resolving types and rules without semantic type.
+    Utils::ProfileRecorder::Start("Pre TypeCheck", "PreCheck");
     PreCheck(contexts);
+    Utils::ProfileRecorder::Stop("Pre TypeCheck", "PreCheck");
 
     Utils::ProfileRecorder::Start("Pre TypeCheck", "CollectDeclsWithMember");
     for (auto pkg : pkgs) {
@@ -2045,22 +2047,38 @@ void TypeChecker::TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& c
     Utils::ProfileRecorder recorder("Semantic", "Post TypeCheck");
     // Post checking for legality of semantic.
     for (auto& ctx : contexts) {
+        Utils::ProfileRecorder::Start("Post TypeCheck", "CheckOverflow");
         CheckOverflow(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckOverflow");
+        Utils::ProfileRecorder::Start("Post TypeCheck", "CheckUnusedImportSpec");
         CheckUnusedImportSpec(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckUnusedImportSpec");
         // Check duplicated super interfaces in class, interface when type arguments applied.
+        Utils::ProfileRecorder::Start("Post TypeCheck", "CheckInstDupSuperInterfacesEntry");
         CheckInstDupSuperInterfacesEntry(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckInstDupSuperInterfacesEntry");
         // Check legality of usage after sema type completed.
+        Utils::ProfileRecorder::Start("Post TypeCheck", "CheckLegalityOfUsage");
         CheckLegalityOfUsage(*ctx, *ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckLegalityOfUsage");
         // Check cjmp match rules.
         Utils::ProfileRecorder::Start("Post TypeCheck", "CheckCJMPRules");
         mpImpl->CheckReturnAndVariableTypes(*ctx->curPackage);
         mpImpl->ValidateMatchedAnnotationsAndModifiers(*ctx->curPackage);
         Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckCJMPRules");
+        Utils::ProfileRecorder::Start("Post TypeCheck", "AddAttrForDefaultFuncParam");
         AddAttrForDefaultFuncParam(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "AddAttrForDefaultFuncParam");
         // Because of the cjlint checking policy, desugar of propDecl should be done in sema stage for now.
+        Utils::ProfileRecorder::Start("Post TypeCheck", "DesugarForPropDecl");
         DesugarForPropDecl(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "DesugarForPropDecl");
+        Utils::ProfileRecorder::Start("Post TypeCheck", "CheckConstEvaluation");
         CheckConstEvaluation(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckConstEvaluation");
+        Utils::ProfileRecorder::Start("Post TypeCheck", "MarkImplicitUsedFunctions");
         MarkImplicitUsedFunctions(*ctx->curPackage);
+        Utils::ProfileRecorder::Stop("Post TypeCheck", "MarkImplicitUsedFunctions");
         // Collect program entry separately.
         IterateToplevelDecls(*ctx->curPackage, [this](auto& decl) {
             if (auto md = DynamicCast<MainDecl*>(decl.get()); md && md->desugarDecl) {
@@ -2079,9 +2097,13 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
     // Reset search's cache.
     ctx.searcher->InvalidateCache();
 
+    Utils::ProfileRecorder::Start("PrepareTypeCheck", "CheckPrimaryCtorBeforeMerge");
     CheckPrimaryCtorBeforeMerge(pkg);
+    Utils::ProfileRecorder::Stop("PrepareTypeCheck", "CheckPrimaryCtorBeforeMerge");
     // Merging common classes into specific if any
+    Utils::ProfileRecorder::Start("PrepareTypeCheck", "PrepareTypeCheck4CJMP");
     mpImpl->PrepareTypeCheck4CJMP(pkg);
+    Utils::ProfileRecorder::Stop("PrepareTypeCheck", "PrepareTypeCheck4CJMP");
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     Utils::ProfileRecorder::Start("PrepareTypeCheck", "InteropPrepare");
@@ -2102,7 +2124,7 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
         AddBuiltInCStringDecl(pkg);
     }
     Utils::ProfileRecorder::Stop("PrepareTypeCheck", "AddDefaultFuncAndBuiltinDecl");
-
+    
     // Phase: build symbol table.
     Utils::ProfileRecorder::Start("PrepareTypeCheck", "BuildSymbolTable");
     Collector collector(scopeManager, ci->invocation.globalOptions.enableMacroInLSP);
@@ -2115,7 +2137,9 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
     MarkParamWithInitialValue(pkg);
     Utils::ProfileRecorder::Stop("PrepareTypeCheck", "MarkAndPrepare");
     // Warmup cache to speed up search.
+    Utils::ProfileRecorder::Start("PrepareTypeCheck", "WarmupCache");
     WarmupCache(ctx);
+    Utils::ProfileRecorder::Stop("PrepareTypeCheck", "WarmupCache");
 }
 
 void TypeChecker::TypeCheckerImpl::TypeCheckTopLevelDecl(ASTContext& ctx, Decl& decl)
@@ -2403,6 +2427,7 @@ void CollectGenericParam(const FuncDecl& funcDecl, Ptr<FuncDecl> desugared)
     }
     for (auto& constraint : std::as_const(funcDecl.funcBody->generic->genericConstraints)) {
         auto gc = MakeOwnedNode<GenericConstraint>();
+        CopyBasicInfo(constraint.get(), gc.get());
         auto& constraintType = constraint->type;
         auto rt = MakeOwnedNode<RefType>();
         rt->ref.identifier = orig2New[constraintType->ref.identifier];

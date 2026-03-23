@@ -384,7 +384,9 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
     if (!fromLsp) {
         // Node's ty may reference TypeAliasTy from imported package, need to substitute them to real type.
         // It must be done after all type references are loaded.
+        Utils::ProfileRecorder::Start("LoadPackageDeclsOnDemand", "SubstituteImportedTypeAliasTy");
         impl->SubstituteImportedTypeAliasTy(packages);
+        Utils::ProfileRecorder::Stop("LoadPackageDeclsOnDemand", "SubstituteImportedTypeAliasTy");
     }
 }
 

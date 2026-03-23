@@ -557,9 +557,9 @@ bool ImportManager::ResolveImportedPackages(const std::vector<Ptr<Package>>& pac
     }
     Utils::ProfileRecorder::Stop("ResolveImportedPackages", "ResolveImportedPackageHeaders");
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    
+    Utils::ProfileRecorder::Start("ResolveImportedPackages", "LoadPackageDeclsOnDemand");
     cjoManager->LoadPackageDeclsOnDemand(packages);
-    
+    Utils::ProfileRecorder::Stop("ResolveImportedPackages", "LoadPackageDeclsOnDemand");
 #endif
     Utils::ProfileRecorder::Start("ResolveImportedPackages", "AddPackageDeclMap");
     for (auto pkg : packages) {
@@ -937,7 +937,9 @@ bool ImportManager::BuildIndex(
         cjoManager->AddSourcePackage(*pkg);
     }
     Utils::ProfileRecorder::Stop("BuildIndex", "AddImplicitImports");
+    Utils::ProfileRecorder::Start("BuildIndex", "ResolveImportedPackages");
     ResolveImportedPackages(packages);
+    Utils::ProfileRecorder::Stop("BuildIndex", "ResolveImportedPackages");
     ClearPackageCjoCache();
 
     Utils::ProfileRecorder::Start("BuildIndex", "AddDependencies");
