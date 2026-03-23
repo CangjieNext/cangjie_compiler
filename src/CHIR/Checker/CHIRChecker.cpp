@@ -633,7 +633,7 @@ void CHIRChecker::CheckGlobalVar(const GlobalVar& var)
     }
 
     // 3. must have initializer or init func
-    bool shouldHaveInitializer = IsGlobalVarAndShouldHaveInitializer(var);
+    bool shouldHaveInitializer = !var.TestAttr(Attribute::IMPORTED) || var.IsCompileTimeValue();
     if (optionalRules.find(Rule::IMPORTED_CONST_VAR_SHOULD_HAVE_INITIALIZER) == optionalRules.end() &&
         var.TestAttr(Attribute::IMPORTED)) {
         shouldHaveInitializer = false;

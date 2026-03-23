@@ -145,7 +145,7 @@ AnnoInstanceValue CreateValue(const Value& v)
             }
         }
         if (auto l = DynamicCast<Load>(obj->GetExpr())) {
-            if (l->GetLocation()->IsGlobalVarInCurPackage()) {
+            if (l->GetLocation()->IsGlobalVarWithInitializer()) {
                 // load of gv, valid iff the location is a const global variable lifted from annotationsArray.
                 // Threotically we check it's of Annotation class type, but we do not have such utilities.
                 auto gv = StaticCast<GlobalVar*>(l->GetLocation());

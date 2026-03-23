@@ -93,7 +93,7 @@ public:
     // 2. global var in current package
     bool IsGlobalVar() const;
 
-    bool IsGlobalVarInCurPackage() const;
+    bool IsGlobalVarWithInitializer() const;
 
     bool IsImportedFunc() const;
     

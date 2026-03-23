@@ -290,7 +290,7 @@ static bool IsExternalDecl(const Value& v)
     }
     // const var/func never have external linkage
     if (!v.TestAttr(Attribute::PRIVATE) && v.TestAttr(Attribute::CONST)) {
-        if (v.IsGlobalVarInCurPackage()) {
+        if (v.IsGlobalVarWithInitializer()) {
             auto gv = StaticCast<GlobalVar*>(&v);
             return !gv->IsLocalConst();
         }

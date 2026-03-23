@@ -256,12 +256,10 @@ void AST2CHIR::SetInitFuncForStaticVar()
         }
         CJC_ASSERT(skipedStaticVar->astKind == AST::ASTKind::VAR_DECL);
         // Also set the init func here
-        if (IsGlobalVarAndShouldHaveInitializer(*skipedStaticVarVal)) {
-            auto skipedStaticVarInCHIR = StaticCast<GlobalVar*>(skipedStaticVarVal);
-            auto staticInitFuncInAST = staticInitFuncInfoMap.at(skipedStaticVar->outerDecl).staticInitFunc;
-            auto staticInitFuncInCHIR = StaticCast<Function*>(globalCache.Get(*staticInitFuncInAST));
-            skipedStaticVarInCHIR->SetInitFunc(*staticInitFuncInCHIR);
-        }
+        auto skipedStaticVarInCHIR = StaticCast<GlobalVar*>(skipedStaticVarVal);
+        auto staticInitFuncInAST = staticInitFuncInfoMap.at(skipedStaticVar->outerDecl).staticInitFunc;
+        auto staticInitFuncInCHIR = StaticCast<Function*>(globalCache.Get(*staticInitFuncInAST));
+        skipedStaticVarInCHIR->SetInitFunc(*staticInitFuncInCHIR);
     }
 }
 

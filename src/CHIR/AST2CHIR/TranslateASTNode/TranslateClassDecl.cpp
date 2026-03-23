@@ -103,7 +103,7 @@ void Translator::AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl)
     if (decl.TestAttr(AST::Attribute::STATIC)) {
         auto staticVar = StaticCast<GlobalVar*>(GetSymbolTable(decl));
         def.AddStaticMemberVar(staticVar);
-        if (staticVar->IsGlobalVarInCurPackage()) {
+        if (staticVar->IsGlobalVarWithInitializer()) {
             CreateAnnotationInfo<GlobalVar>(decl, *staticVar, &def);
         }
     } else {

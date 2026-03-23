@@ -301,10 +301,8 @@ Function* GlobalVarInitializer::TranslateInitializerToFunction(const AST::VarDec
 {
     auto variable = GetGlobalVariable(decl);
     auto func = CreateGVInitFunc<AST::VarDecl>(decl);
-    if (IsGlobalVarAndShouldHaveInitializer(*variable)) {
-        auto globalVar = StaticCast<GlobalVar*>(variable);
-        globalVar->SetInitFunc(*func);
-    }
+    auto globalVar = StaticCast<GlobalVar*>(variable);
+    globalVar->SetInitFunc(*func);
     // No debug location generated for const var initializer
     auto initNode = trans.TranslateExprArg(
         *decl.initializer, *StaticCast<RefType*>(variable->GetType())->GetBaseType());

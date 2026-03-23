@@ -81,9 +81,9 @@ bool Value::IsImportedSymbol() const
     return IsImportedFunc() || IsImportedVar();
 }
 
-bool Value::IsGlobalVarInCurPackage() const
+bool Value::IsGlobalVarWithInitializer() const
 {
-    return kind == ValueKind::KIND_GLOBALVAR && !TestAttr(Attribute::IMPORTED);
+    return kind == ValueKind::KIND_GLOBALVAR && StaticCast<const GlobalVar*>(this)->GetInitializerValue() != nullptr;
 }
 
 bool Value::IsFuncWithBody() const
