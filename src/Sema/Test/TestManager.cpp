@@ -818,7 +818,7 @@ void TestManager::PrepareToMock(AST::Package& pkg)
     if (pkg.files.empty()) {
         return;
     }
-
+    Utils::ProfileRecorder::Start("TestManager", "mock checker");
     // FIXME: Load decls lazy
     if (mockUtils) {
         mockUtils->LoadStdDecls();
@@ -844,6 +844,7 @@ void TestManager::PrepareToMock(AST::Package& pkg)
     } else {
         CheckIfNoMockSupportDependencies(pkg);
     }
+    Utils::ProfileRecorder::Stop("TestManager", "mock checker");
     HandleEnsurePreparedToMock(pkg);
 }
 
