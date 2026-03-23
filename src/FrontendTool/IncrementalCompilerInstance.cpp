@@ -494,17 +494,15 @@ bool IncrementalCompilerInstance::PerformCodeGen()
     return ret;
 }
 
-bool IncrementalCompilerInstance::PerformResultsSaving()
+bool IncrementalCompilerInstance::PerformCjoAndBchirSaving()
 {
-    Utils::ProfileRecorder recorder("Main Stage", "Save results");
+    Utils::ProfileRecorder recorder("Main Stage", "Save cjo and bchir");
     if (kind == IncreKind::NO_CHANGE || kind == IncreKind::EMPTY_PKG) {
         return true;
     }
     bool ret = true;
     for (auto& srcPkg : GetSourcePackages()) {
-        if (invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR) {
-            ret = ret && SaveCjo(*srcPkg);
-        }
+        ret = ret && SaveCjoAndBchir(*srcPkg);
         if (ret && !srcPkg->IsEmpty()) {
             // Write astData for incremental compilation in cache path.
             std::string cachedCjo =
