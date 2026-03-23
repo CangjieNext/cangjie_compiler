@@ -103,7 +103,7 @@ void Translator::AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl)
     if (decl.TestAttr(AST::Attribute::STATIC)) {
         auto staticVar = StaticCast<GlobalVar*>(GetSymbolTable(decl));
         def.AddStaticMemberVar(staticVar);
-        if (staticVar->IsGlobalVarInCurPackage()) {
+        if (staticVar->IsGlobalVarWithInitializer()) {
             CreateAnnotationInfo<GlobalVar>(decl, *staticVar, &def);
         }
     } else {
@@ -175,7 +175,7 @@ Function* Translator::ClearOrCreateVarInitFunc(const AST::Decl& decl)
         auto loc = DebugLocation(TranslateLocationWithoutScope(builder.GetChirContext(), decl.begin, decl.end));
 
         auto customTypeDef = chirTy.GetGlobalNominalCache(outerDecl);
-        func = builder.CreateCurPkgFunction(loc, funcType, mangledName, identifier, rawMangledName, pkgName);
+        func = builder.CreateFuncWithBody(loc, funcType, mangledName, identifier, rawMangledName, pkgName);
         customTypeDef->AddMethod(func);
         func->SetFuncKind(FuncKind::INSTANCEVAR_INIT);
         func->EnableAttr(Attribute::PRIVATE);

@@ -1188,7 +1188,7 @@ private:
 
     void HandleStoreToGlobal(State<ValueDomain, ValueStatePool>& state, Value* location, Value* value)
     {
-        if (this->isStable || !location->IsGlobalVarInCurPackage()) {
+        if (this->isStable || !location->IsGlobalVarWithInitializer()) {
             return;
         }
         auto gv = StaticCast<GlobalVar*>(location);
@@ -1291,7 +1291,7 @@ private:
             return;
         }
         auto loc = load->GetLocation();
-        if (!loc->IsGlobalVarInCurPackage()) {
+        if (!loc->IsGlobalVarWithInitializer()) {
             return state.InitToTopOrTopRef(dest, dest->GetType()->IsRef());
         }
         auto globalVar = StaticCast<GlobalVar*>(loc);

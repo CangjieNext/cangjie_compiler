@@ -1595,9 +1595,4 @@ std::vector<Expression*> GetNonDebugUsers(const Value& val)
     }
     return res;
 }
-
-bool IsGlobalVarAndShouldHaveInitializer(const Value& value)
-{
-    return value.IsGlobalVarInCurPackage() || value.IsCompileTimeValue();
-}
 } // namespace Cangjie::CHIR

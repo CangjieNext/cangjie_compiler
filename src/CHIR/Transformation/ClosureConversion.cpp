@@ -26,7 +26,7 @@ const std::string GENERIC_THIS_SRC_NAME = "This";
 
 // Check if the srcFunc is a lambda with signature (JSContext, JSCallInfo) -> JSValue
 // Only such lambdas need debug location info for cross-lang debugging
-bool IsArkInteropLambdaSignature(const FuncBase& srcFunc)
+bool IsArkInteropLambdaSignature(const Function& srcFunc)
 {
     auto* originalType = srcFunc.GetOriginalLambdaType();
     if (originalType == nullptr) {
@@ -1068,7 +1068,7 @@ void ClosureConversion::LiftNestedFunctionWithCFuncType(Lambda& nestedFunc)
     // move lambda to global function
     auto globalFuncId = GenerateGlobalFuncIdentifier(nestedFunc);
     auto genericParamTypes = nestedFunc.GetGenericTypeParams();
-    auto globalFunc = builder.CreateCurPkgFunction(loc, StaticCast<FuncType*>(nestedFunc.GetResult()->GetType()),
+    auto globalFunc = builder.CreateFuncWithBody(loc, StaticCast<FuncType*>(nestedFunc.GetResult()->GetType()),
     globalFuncId, nestedFunc.GetSrcCodeIdentifier(), "", package.GetName(), genericParamTypes);
     // After globalFunc is used, new localId needs to be generated based on the ID in oldFunc during subsequent
     // optimization. Otherwise, duplicate IDs may exist. Therefore, the ID in oldFunc is transferred to globalFunc.
@@ -1462,7 +1462,7 @@ void ClosureConversion::CreateGenericOverrideMethodInAutoEnvImplDef(ClassDef& au
     // create override func
     auto mangledName = CHIRMangling::ClosureConversion::GenerateGenericOverrideFuncMangleName(srcFunc);
     auto debugLoc = IsArkInteropLambdaSignature(srcFunc) ? srcFunc.GetDebugLocation() : INVALID_LOCATION;
-    auto newFunc = builder.CreateCurPkgFunction(
+    auto newFunc = builder.CreateFuncWithBody(
         debugLoc, newFuncTy, mangledName, GENERIC_VIRTUAL_FUNC, "", package.GetName());
     autoEnvImplDef.AddMethod(newFunc);
 
@@ -1614,7 +1614,7 @@ void ClosureConversion::CreateInstOverrideMethodInAutoEnvImplDef(ClassDef& autoE
     // create override func
     auto mangledName = CHIRMangling::ClosureConversion::GenerateInstOverrideFuncMangleName(srcFunc);
     auto debugLoc = IsArkInteropLambdaSignature(srcFunc) ? srcFunc.GetDebugLocation() : INVALID_LOCATION;
-    auto newFunc = builder.CreateCurPkgFunction(
+    auto newFunc = builder.CreateFuncWithBody(
         debugLoc, newFuncTy, mangledName, INST_VIRTUAL_FUNC, "", package.GetName());
     autoEnvImplDef.AddMethod(newFunc);
 
@@ -1843,7 +1843,7 @@ Function* ClosureConversion::LiftLambdaToGlobalFunc(
     }
 
     // 4. create global function declare
-    auto globalFunc = builder.CreateCurPkgFunction(loc, newFuncTy, globalFuncIdentifier, srcCodeIdentifier, "",
+    auto globalFunc = builder.CreateFuncWithBody(loc, newFuncTy, globalFuncIdentifier, srcCodeIdentifier, "",
         nestedFunc.GetTopLevelFunc()->GetPackageName(), convertedGenericTypeParams);
     SetLiftedLambdaAttr(*globalFunc, nestedFunc);
     auto sigInfo = FuncSigInfo{
@@ -2306,7 +2306,7 @@ Function* ClosureConversion::CreateGenericMethodInAutoEnvWrapper(ClassDef& autoE
     // 2. create function
     auto funcMangledName =
         CHIRMangling::ClosureConversion::GenerateWrapperClassGenericOverrideFuncMangleName(autoEnvWrapperDef);
-    auto func = builder.CreateCurPkgFunction(
+    auto func = builder.CreateFuncWithBody(
         INVALID_LOCATION, funcType, funcMangledName, GENERIC_VIRTUAL_FUNC, "", package.GetName());
     autoEnvWrapperDef.AddMethod(func);
 
@@ -2384,7 +2384,7 @@ void ClosureConversion::CreateInstMethodInAutoEnvWrapper(ClassDef& autoEnvWrappe
     auto funcNamePrefix = autoEnvWrapperDef.GetIdentifierWithoutPrefix();
     auto funcMangledName =
         CHIRMangling::ClosureConversion::GenerateWrapperClassInstOverrideFuncMangleName(autoEnvWrapperDef);
-    auto func = builder.CreateCurPkgFunction(
+    auto func = builder.CreateFuncWithBody(
         INVALID_LOCATION, funcType, funcMangledName, INST_VIRTUAL_FUNC, "", package.GetName());
     autoEnvWrapperDef.AddMethod(func);
 

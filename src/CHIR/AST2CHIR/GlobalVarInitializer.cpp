@@ -301,10 +301,8 @@ Function* GlobalVarInitializer::TranslateInitializerToFunction(const AST::VarDec
 {
     auto variable = GetGlobalVariable(decl);
     auto func = CreateGVInitFunc<AST::VarDecl>(decl);
-    if (IsGlobalVarAndShouldHaveInitializer(*variable)) {
-        auto globalVar = StaticCast<GlobalVar*>(variable);
-        globalVar->SetInitFunc(*func);
-    }
+    auto globalVar = StaticCast<GlobalVar*>(variable);
+    globalVar->SetInitFunc(*func);
     // No debug location generated for const var initializer
     auto initNode = trans.TranslateExprArg(
         *decl.initializer, *StaticCast<RefType*>(variable->GetType())->GetBaseType());
@@ -333,7 +331,7 @@ Function* GlobalVarInitializer::TranslateIncrementalNoChangeVar(const AST::VarDe
 {
     GVInit<AST::VarDecl> context{decl, trans};
     auto ty = builder.GetType<FuncType>(std::vector<Type*>{}, builder.GetUnitTy());
-    auto func = builder.CreateImportedFunction(ty, std::move(context.mangledName),
+    auto func = builder.CreateImportedFuncSig(ty, std::move(context.mangledName),
         std::move(context.srcCodeIdentifier), std::move(context.rawMangledName), context.packageName);
     func->SetFuncKind(FuncKind::GLOBALVAR_INIT);
     func->Set<LinkTypeInfo>(Cangjie::Linkage::INTERNAL);
@@ -447,7 +445,7 @@ Function* GlobalVarInitializer::TranslateVarInit(const AST::Decl& var)
     }
 }
 
-Ptr<Function> GlobalVarInitializer::TryGetFileInitialializer(const AST::File& file, const std::string& suffix)
+Ptr<Function> GlobalVarInitializer::TryGetFileInitializer(const AST::File& file, const std::string& suffix)
 {
     auto initializerName = GetFileInitFuncName(file.curPackage->fullPackageName, file.fileName, suffix);
 
@@ -498,7 +496,7 @@ void GlobalVarInitializer::RemoveCommonInitializersReplacedWithSpecific(
 Ptr<Function> GlobalVarInitializer::TranslateFileInitializer(
     const AST::File& file, const std::vector<Ptr<const AST::Decl>>& decls)
 {
-    auto fileInit = TryGetFileInitialializer(file);
+    auto fileInit = TryGetFileInitializer(file);
     if (fileInit) {
         CJC_ASSERT(fileInit->TestAttr(Attribute::INITIALIZER));
 
@@ -516,7 +514,7 @@ Ptr<Function> GlobalVarInitializer::TranslateFileInitializer(
                 initFuncsForConstVar.emplace_back(initFunc);
                 // In incremental compilation scenarios, only changes need to be re-evaluated.
                 if (!enableIncre || decl->toBeCompiled) {
-                    SetCompileTimeValueFlagRecursivly(*StaticCast<Function*>(initFunc));
+                    SetCompileTimeValueFlagRecursively(*StaticCast<Function*>(initFunc));
                 }
             }
             varInitFuncs.push_back(initFunc);
@@ -615,7 +613,7 @@ void GlobalVarInitializer::AddImportedPackageInit(const AST::Package& curPackage
         }
         auto attrs = AttributeInfo();
         attrs.SetAttr(Attribute::INITIALIZER, true);
-        initFunc = builder.CreateImportedFunction(
+        initFunc = builder.CreateImportedFuncSig(
             initFuncTy, context.mangledName, context.srcCodeIdentifier, context.rawMangledName, pkgName);
         initFunc->AppendAttributeInfo(attrs);
         initFunc->EnableAttr(Attribute::PUBLIC);
@@ -680,7 +678,7 @@ void GlobalVarInitializer::UpdateImportsInit(
 
         auto attrs = AttributeInfo();
         attrs.SetAttr(Attribute::INITIALIZER, true);
-        auto importInit = builder.CreateImportedFunction(initFuncTy, context.mangledName,
+        auto importInit = builder.CreateImportedFuncSig(initFuncTy, context.mangledName,
             context.srcCodeIdentifier, context.rawMangledName, dep->srcPackage->fullPackageName);
         importInit->AppendAttributeInfo(attrs);
         importInit->SetFuncKind(FuncKind::GLOBALVAR_INIT);
@@ -718,7 +716,7 @@ Ptr<Function> GlobalVarInitializer::GeneratePackageInitBase(const AST::Package& 
     auto initFlagName = suffix.empty() ? GV_PKG_INIT_ONCE_FLAG : "has_invoked_pkg_init_literal";
     GlobalVar* initFlag = TryGetDeserialized<GlobalVar>(initFlagName);
     if (!initFlag) {
-        initFlag = builder.CreateCurPkgGlobalVar(
+        initFlag = builder.CreateGlobalVarWithInit(
             INVALID_LOCATION, builder.GetType<RefType>(boolTy), initFlagName, initFlagName, "", func->GetPackageName());
         initFlag->SetInitializer(*builder.CreateLiteralValue<BoolLiteral>(boolTy, false));
         initFlag->EnableAttr(Attribute::NO_REFLECT_INFO);

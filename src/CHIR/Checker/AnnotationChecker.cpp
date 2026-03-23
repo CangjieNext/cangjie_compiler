@@ -243,7 +243,7 @@ private:
         auto annotationTargetType = tr.TranslateType(*expr.ty);
         auto varType = bd.GetType<RefType>(annotationTargetType);
         auto srcCodeIdentifier = decl.identifier.Val() + ANNOTATION_VAR_POSTFIX + std::to_string(i);
-        auto var = bd.CreateCurPkgGlobalVar(
+        auto var = bd.CreateGlobalVarWithInit(
             std::move(loc), varType, varname, std::move(srcCodeIdentifier), varname, decl.fullPackageName);
         var->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
         var->EnableAttr(Attribute::COMPILER_ADD);
