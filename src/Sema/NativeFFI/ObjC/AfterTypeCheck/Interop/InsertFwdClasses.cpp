@@ -49,13 +49,14 @@ OwnedPtr<FuncDecl> InsertFwdClasses::GenerateInterfaceFwdclassMethod(InteropCont
     return funcDecl;
 }
 
-void InsertFwdClasses::GenerateInterfaceFwdClassBody(InteropContext& ctx, AST::ClassDecl& fwdclassDecl, AST::ClassLikeDecl& interfaceDecl,
-    Native::FFI::GenericConfigInfo* genericConfig)
+void InsertFwdClasses::GenerateInterfaceFwdClassBody(InteropContext& ctx, AST::ClassDecl& fwdclassDecl,
+    AST::ClassLikeDecl& interfaceDecl, Native::FFI::GenericConfigInfo* genericConfig)
 {
     for (auto& decl : interfaceDecl.GetMemberDecls()) {
-        if (FuncDecl* fd = As<ASTKind::FUNC_DECL>(decl.get());
-            fd && !fd->TestAttr(Attribute::CONSTRUCTOR) && !fd->TestAttr(Attribute::STATIC)) {
-            fwdclassDecl.body->decls.emplace_back(GenerateInterfaceFwdclassMethod(ctx, fwdclassDecl, *fd, genericConfig));
+        if (FuncDecl* fd = As<ASTKind::FUNC_DECL>(decl.get()); fd && !fd->TestAttr(Attribute::CONSTRUCTOR) &&
+            !fd->TestAttr(Attribute::STATIC) && fd->op == TokenKind::ILLEGAL) {
+            fwdclassDecl.body->decls.emplace_back(
+                GenerateInterfaceFwdclassMethod(ctx, fwdclassDecl, *fd, genericConfig));
         }
     }
 }

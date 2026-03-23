@@ -619,6 +619,10 @@ bool TypeMapper::IsObjCCJMappingMember(const AST::Decl& decl)
         }
     }
     if (decl.astKind == ASTKind::FUNC_DECL) {
+        auto fd = StaticCast<const FuncDecl>(&decl);
+        if (fd->op != TokenKind::ILLEGAL) {
+            return false;
+        }
         std::function<bool(Ptr<Ty>)> validTy = [](auto ty) { return IsValidCJMapping(*ty) && !IsOpenClassTy(*ty); };
         if (decl.IsOpen()) {
             validTy = [](auto ty) { return IsPrimitiveMapping(*ty); };

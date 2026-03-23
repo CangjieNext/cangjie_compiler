@@ -608,27 +608,30 @@ bool IsGenericParam(const Ptr<Ty> ty, const AST::Decl& decl, Native::FFI::Generi
     return false;
 }
 
-bool IsVisibalFunc(const FuncDecl& funcDecl, const AST::Decl& decl, Native::FFI::GenericConfigInfo* genericConfig)
+bool IsVisibleFunc(const FuncDecl& funcDecl, const AST::Decl& decl, Native::FFI::GenericConfigInfo* genericConfig)
 {
-    bool hasGenericParm = false;
+    if (funcDecl.op != TokenKind::ILLEGAL) {
+        return false;
+    }
+    bool hasGenericParam = false;
     auto& params = funcDecl.funcBody->paramLists[0]->params;
     auto& retType = funcDecl.funcBody->retType;
     for (auto& param : params) {
         if (IsGenericParam(param->type->ty, decl, genericConfig)) {
-            hasGenericParm = true;
+            hasGenericParam = true;
             break;
         }
     }
-    if (!hasGenericParm) {
-        hasGenericParm = IsGenericParam(retType->ty, decl, genericConfig);
+    if (!hasGenericParam) {
+        hasGenericParam = IsGenericParam(retType->ty, decl, genericConfig);
     }
 
-    if (!hasGenericParm) {
+    if (!hasGenericParam) {
         return true;
     }
 
     bool isVisibalFunc = genericConfig->funcNames.count(funcDecl.identifier.Val()) > 0;
-    return hasGenericParm && isVisibalFunc;
+    return hasGenericParam && isVisibalFunc;
 }
 
 std::string GetCjMappingTupleName(const Ty& tupleTy)
