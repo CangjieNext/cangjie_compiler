@@ -39,7 +39,6 @@ public:
     bool PerformMangling() override;
     bool PerformCHIRCompilation() override;
     bool PerformCodeGen() override;
-    bool PerformCjoSaving() override;
     virtual bool PerformResultsSaving() override;
 
     CachedMangleMap cacheMangles;
