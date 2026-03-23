@@ -44,7 +44,7 @@ class TestManager;
  */
 enum class CompileStage {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    LOAD_PLUGINS, /**< Load compiler plugins. */
+    LOAD_PLUGINS,      /**< Load compiler plugins. */
 #endif
     PARSE,             /**< Parse the source code. */
     CONDITION_COMPILE, /**< Conditional compile. */
@@ -56,7 +56,6 @@ enum class CompileStage {
     GENERIC_INSTANTIATION, /**< GenericInstantiation. */
     OVERFLOW_STRATEGY,     /**< Overflow strategy. */
     MANGLING,              /**< Mangling all decls. */
-    SAVE_CJO,              /**< Save CJO. */
     CHIR,                  /**< CHIR. */
     CODEGEN,               /**< Generate target code. */
     SAVE_RESULTS,          /**< Save AST and CHIR results to files. */
@@ -227,17 +226,9 @@ public:
     }
 
     /**
-     * Export AST and generate cjo.
+     * Export AST and generate cjo, bchir.
      */
-    virtual bool PerformCjoSaving()
-    {
-        return true;
-    }
-
-    /**
-     * Export AST and generate results.
-     */
-    virtual bool PerformResultsSaving()
+    virtual bool PerformCjoAndBchirSaving()
     {
         return true;
     }
