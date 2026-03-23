@@ -1129,7 +1129,7 @@ TEST_F(PackageTest, LoadAnnotationTarget)
     instance->invocation.globalOptions.implicitPrelude = true;
     instance->invocation.globalOptions.enIncrementalCompilation = true;
     instance->code = R"(
-        @Annotation[target: [Init, Type]]
+        @Annotation
         public class A {
             public const init() {}
         }
