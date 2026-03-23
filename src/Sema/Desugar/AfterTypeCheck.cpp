@@ -277,6 +277,22 @@ void DesugarSetForPropDecl(TypeManager& tyMgr, Expr& expr)
     }
     expr.desugarExpr = std::move(lastCallExpr);
 }
+
+void UpdatePosForMacroExpandedNodes(const std::vector<Ptr<AST::Package>>& pkgs)
+{
+    auto visit = [](Ptr<AST::Node> curNode) -> AST::VisitAction {
+        if (!curNode->IsExpr() || !curNode->TestAttr(AST::Attribute::MACRO_EXPANDED_NODE) || !curNode->curMacroCall) {
+            return AST::VisitAction::WALK_CHILDREN;
+        }
+        curNode->begin = curNode->GetDebugPos(curNode->begin);
+        curNode->end = curNode->GetDebugPos(curNode->end);
+        return AST::VisitAction::WALK_CHILDREN;
+    };
+    for (auto pkg : pkgs) {
+        AST::Walker walker(pkg, visit);
+        walker.Walk();
+    }
+}
 } // namespace
 
 void TypeChecker::PerformDesugarAfterSema(std::vector<Ptr<Package>>& pkgs) const
@@ -452,6 +468,11 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterSema(std::vector<Ptr<AST::
             : saveFileWithAbsPath;
         importManager.ExportDeclsWithContent(saveAbsPath, *pkg);
     }
+    // Update positions of macro-expanded nodes for user-facing locations.
+    // Affects exception stack line numbers, coverage hit lines, and cjdb jump/source locations.
+    if (ci->invocation.globalOptions.enableCompileDebug || ci->invocation.globalOptions.displayLineInfo) {
+        UpdatePosForMacroExpandedNodes(pkgs);
+    }
 }
 
 void TypeChecker::TypeCheckerImpl::GenerateMainInvoke()
@@ -552,7 +573,8 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck(ASTContext& ctx,
     jim.DesugarPackage(pkg, structMemberMap);
     Interop::ObjC::Desugar(Interop::ObjC::InteropContext(
         pkg, typeManager, importManager, diag, *ci->mangler,
-        ci->invocation.globalOptions.output, ci->invocation.globalOptions.outputObjCGenDir, structMemberMap));
+        ci->invocation.globalOptions.output, ci->invocation.globalOptions.outputObjCGenDir,
+        structMemberMap, ci->invocation.globalOptions.target.os));
 
     DesugarDeclsForPackage(pkg, ci->invocation.globalOptions.enableCoverage);
     std::function<VisitAction(Ptr<Node>)> preVisit = [this, &ctx](Ptr<Node> node) -> VisitAction {
