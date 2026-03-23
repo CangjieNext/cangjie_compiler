@@ -1022,7 +1022,7 @@ void JavaSourceCodeGenerator::AddMethods()
         if (isInteropCJPackageConfig && funcDecl.symbol && !funcDecl.symbol->isNeedExposedToInterop) {
             continue;
         }
-        if (!IsVisibalFunc(funcDecl, *decl, genericConfig)) {
+        if (!IsVisibleFunc(funcDecl, *decl, genericConfig)) {
             continue;
         }
         if (funcDecl.funcBody && funcDecl.funcBody->retType) {
@@ -1078,7 +1078,7 @@ void JavaSourceCodeGenerator::AddInterfaceMethods()
         }
         if (!declPtr->TestAttr(Attribute::PRIVATE) && IsFuncDeclAndNotConstructor(declPtr)) {
             const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(declPtr.get());
-            if (!IsVisibalFunc(funcDecl, *decl, genericConfig)) {
+            if (!IsVisibleFunc(funcDecl, *decl, genericConfig)) {
                 continue;
             }
             if (funcDecl.funcBody && funcDecl.funcBody->retType) {
@@ -1182,7 +1182,7 @@ void JavaSourceCodeGenerator::AddInterfaceFwdClassNativeMethod()
             if (!declPtr->TestAttr(Attribute::DEFAULT)) {
                 continue;
             }
-            if (!IsVisibalFunc(funcDecl, *decl, genericConfig)) {
+            if (!IsVisibleFunc(funcDecl, *decl, genericConfig)) {
                 continue;
             }
             if (funcDecl.funcBody && funcDecl.funcBody->retType) {

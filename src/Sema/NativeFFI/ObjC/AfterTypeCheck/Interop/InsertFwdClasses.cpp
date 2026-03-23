@@ -54,7 +54,7 @@ void InsertFwdClasses::GenerateInterfaceFwdClassBody(InteropContext& ctx, AST::C
 {
     for (auto& decl : interfaceDecl.GetMemberDecls()) {
         if (FuncDecl* fd = As<ASTKind::FUNC_DECL>(decl.get());
-            fd && !fd->TestAttr(Attribute::CONSTRUCTOR) && !fd->TestAttr(Attribute::STATIC)) {
+            fd && !fd->TestAttr(Attribute::CONSTRUCTOR) && !fd->TestAttr(Attribute::STATIC) && fd->op == TokenKind::ILLEGAL) {
             fwdclassDecl.body->decls.emplace_back(GenerateInterfaceFwdclassMethod(ctx, fwdclassDecl, *fd, genericConfig));
         }
     }

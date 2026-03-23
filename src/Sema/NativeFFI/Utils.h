@@ -181,7 +181,7 @@ Ptr<Ty> GetTyByName(std::string typeStr);
 
 bool IsGenericParam(const Ptr<Ty> ty, const AST::Decl& decl, Native::FFI::GenericConfigInfo* genericConfig);
 
-bool IsVisibalFunc(const FuncDecl& funcDecl, const AST::Decl& decl, Native::FFI::GenericConfigInfo* genericConfig);
+bool IsVisibleFunc(const FuncDecl& funcDecl, const AST::Decl& decl, Native::FFI::GenericConfigInfo* genericConfig);
 
 bool IsCJMappingGeneric(const Decl& decl);
 
