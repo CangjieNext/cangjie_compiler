@@ -1531,7 +1531,8 @@ llvm::Value* IRBuilder2::GetEnumTag(const CHIR::Field& field)
             auto i1Ty = getInt1Ty();
             auto payload = GetPayloadFromObject(enumVal);
             auto [refBB, nonRefBB, endBB] = Vec2Tuple<3>(CreateAndInsertBasicBlocks({"ref", "nonRef", "end"}));
-            auto isRef = CreateTypeInfoIsReferenceCall(*chirType->GetTypeArgs()[0]);
+            auto assocValTI = CreateTypeInfo(*cgEnumType->GetAssociatedValueTypeOfOptionLike());
+            auto isRef = CreateTypeInfoIsReferenceCall(assocValTI);
             CreateCondBr(isRef, refBB, nonRefBB);
 
             SetInsertPoint(refBB);
@@ -1708,7 +1709,8 @@ llvm::Value* IRBuilder2::GetEnumAssociatedValue(const CHIR::Field& field)
         case CGEnumType::CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_T: {
             CJC_ASSERT(index == 1);
             auto [refBB, nonRefBB, endBB] = Vec2Tuple<3>(CreateAndInsertBasicBlocks({"ref", "nonRef", "end"}));
-            auto isRef = CreateTypeInfoIsReferenceCall(*cgEnumType->GetOriginal().GetTypeArgs()[0]);
+            auto assocValTI = CreateTypeInfo(*cgEnumType->GetAssociatedValueTypeOfOptionLike());
+            auto isRef = CreateTypeInfoIsReferenceCall(assocValTI);
             CreateCondBr(isRef, refBB, nonRefBB);
 
             SetInsertPoint(refBB);
