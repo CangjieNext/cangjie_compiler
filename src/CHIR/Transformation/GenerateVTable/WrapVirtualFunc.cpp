@@ -335,10 +335,10 @@ Function* WrapVirtualFunc::CreateVirtualWrapperIfNeeded(const VirtualMethodInfo&
     bool parentIsFromExtend = ParentDefIsFromExtend(customTypeDef, *parentTy.GetClassDef());
     Function* funcBase = nullptr;
     if (isImported && !parentIsFromExtend) {
-        funcBase = builder.CreateImportedFunction(wrapperTy,
+        funcBase = builder.CreateImportedFuncSig(wrapperTy,
             funcIdentifier, funcSrcIdentifier, rawMangledName, packageName, genericTable.funcGenericTypeParams);
     } else {
-        funcBase = builder.CreateCurPkgFunction(INVALID_LOCATION, wrapperTy, funcIdentifier,
+        funcBase = builder.CreateFuncWithBody(INVALID_LOCATION, wrapperTy, funcIdentifier,
             funcSrcIdentifier, "", packageName, genericTable.funcGenericTypeParams);
     }
     CJC_NULLPTR_CHECK(funcBase);

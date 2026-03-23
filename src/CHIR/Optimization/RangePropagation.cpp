@@ -171,7 +171,7 @@ GlobalVar* RecordLoadEffectMap(const Ptr<const Load>& load)
 {
     GlobalVar* gv = nullptr;
     auto loc = load->GetLocation();
-    if (loc->IsGlobalVarInCurPackage()) {
+    if (loc->IsGlobalVarWithInitializer()) {
         // let a = 3
         // Load(gv_a)
         gv = StaticCast<GlobalVar*>(loc);
@@ -181,7 +181,7 @@ GlobalVar* RecordLoadEffectMap(const Ptr<const Load>& load)
         auto locExpr = StaticCast<LocalVar*>(loc)->GetExpr();
         if (locExpr->GetExprKind() == ExprKind::GET_ELEMENT_REF) {
             auto base = StaticCast<GetElementRef*>(locExpr)->GetLocation();
-            if (base->IsGlobalVarInCurPackage()) {
+            if (base->IsGlobalVarWithInitializer()) {
                 gv = StaticCast<GlobalVar*>(base);
             }
         }
@@ -197,7 +197,7 @@ GlobalVar* RecordFieldEffectMap(const Ptr<const Field>& field)
         auto baseExpr = StaticCast<LocalVar*>(base)->GetExpr();
         if (baseExpr->GetExprKind() == ExprKind::LOAD) {
             auto loc = StaticCast<Load*>(baseExpr)->GetLocation();
-            if (loc->IsGlobalVarInCurPackage()) {
+            if (loc->IsGlobalVarWithInitializer()) {
                 // let a = (1, 2); a[0]
                 // %0 = Load(gv_a); %1 = Field(%0, 0)
                 gv = StaticCast<GlobalVar*>(loc);

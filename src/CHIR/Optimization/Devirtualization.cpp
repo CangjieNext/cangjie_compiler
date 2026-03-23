@@ -324,7 +324,7 @@ void Devirtualization::InstantiateFuncIfPossible(CHIRBuilder& builder, std::vect
         if (frozenInstFuncMap.count(newId) != 0) {
             newFunc = frozenInstFuncMap.at(newId);
         } else {
-            newFunc = builder.CreateCurPkgFunction(callee->GetDebugLocation(), instFuncType, newId,
+            newFunc = builder.CreateFuncWithBody(callee->GetDebugLocation(), instFuncType, newId,
                 callee->GetSrcCodeIdentifier(), callee->GetRawMangledName(), callee->GetPackageName());
             
             newFunc->AppendAttributeInfo(callee->GetAttributeInfo());

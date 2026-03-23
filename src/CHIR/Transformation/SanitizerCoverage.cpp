@@ -996,7 +996,7 @@ GlobalVar* SanitizerCoverage::GenerateGlobalVar(
     if (auto it = globalVarBag.find(globalVarName); it != globalVarBag.end()) {
         return it->second;
     }
-    auto globalVar = builder.CreateCurPkgGlobalVar(
+    auto globalVar = builder.CreateGlobalVarWithInit(
         loc, builder.GetType<RefType>(&globalType), globalVarName, globalVarName, "", packageName);
     globalVar->EnableAttr(Attribute::READONLY);
     globalVar->EnableAttr(Attribute::COMPILER_ADD);
@@ -1018,7 +1018,7 @@ Function* SanitizerCoverage::GenerateForeignFunc(const std::string& globalFuncNa
     if (auto it = funcBag.find(globalFuncName); it != funcBag.end()) {
         return it->second;
     }
-    auto func = builder.CreateImportedFunction(&funcType, globalFuncName, globalFuncName, "", packName);
+    auto func = builder.CreateImportedFuncSig(&funcType, globalFuncName, globalFuncName, "", packName);
     func->EnableAttr(Attribute::FOREIGN);
     funcBag.insert(std::make_pair(globalFuncName, func));
     return func;
@@ -1034,7 +1034,7 @@ Function* SanitizerCoverage::GetImportedFunc(const std::string& mangledName)
 Function* SanitizerCoverage::CreateInitFunc(
     const std::string& name, FuncType& funcType, [[maybe_unused]] const DebugLocation& loc)
 {
-    auto func = builder.CreateCurPkgFunction(loc, &funcType, name, name, "", packageName);
+    auto func = builder.CreateFuncWithBody(loc, &funcType, name, name, "", packageName);
     auto body = builder.CreateBlockGroup(*func);
     func->InitBody(*body);
     func->EnableAttr(Attribute::NO_INLINE);

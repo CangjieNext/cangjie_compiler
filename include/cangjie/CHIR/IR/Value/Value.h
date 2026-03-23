@@ -93,7 +93,7 @@ public:
     // 2. global var in current package
     bool IsGlobalVar() const;
 
-    bool IsGlobalVarInCurPackage() const;
+    bool IsGlobalVarWithInitializer() const;
 
     bool IsImportedFunc() const;
     
@@ -524,7 +524,7 @@ private:
     Expression* ownerExpression = nullptr;
 };
 
-class GlobalSymbol : public Value {
+class GlobalValue : public Value {
     friend class CustomTypeDef;
 public:
     // ===--------------------------------------------------------------------===//
@@ -547,12 +547,12 @@ public:
     virtual void DestroySelf() = 0;
 
 protected:
-    explicit GlobalSymbol(ValueKind kind, Type* ty, const std::string& identifier,
+    explicit GlobalValue(ValueKind kind, Type* ty, const std::string& identifier,
         const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName);
 
 private:
-    GlobalSymbol(const GlobalSymbol&) = delete;
-    GlobalSymbol& operator=(const GlobalSymbol&) = delete;
+    GlobalValue(const GlobalValue&) = delete;
+    GlobalValue& operator=(const GlobalValue&) = delete;
 
 protected:
     std::string srcCodeIdentifier;
@@ -562,7 +562,7 @@ protected:
     std::set<std::string> features;
 };
 
-class Function : public GlobalSymbol {
+class Function : public GlobalValue {
     friend class CHIRContext;
     friend class CHIRBuilder;
     friend class CHIRDeserializer;
@@ -745,7 +745,7 @@ private:
     DebugLocation propLoc;
 };
 
-class GlobalVar : public GlobalSymbol {
+class GlobalVar : public GlobalValue {
     friend class CHIRContext;
     friend class CHIRBuilder;
     friend class CHIRDeserializer;

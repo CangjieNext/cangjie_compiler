@@ -83,7 +83,7 @@ void ReplaceMethodAndStaticVar(
         it.first->SetStaticMemberVars(staticVars);
 
         for (auto& it2 : it.second) {
-            Cangjie::StaticCast<GlobalSymbol*>(it2.first)->DestroySelf();
+            Cangjie::StaticCast<GlobalValue*>(it2.first)->DestroySelf();
         }
     }
 }
@@ -159,7 +159,7 @@ void ReplaceSrcCodeImportedVal::CreateSrcImportedFuncSymbol(Function& fn)
     auto mangledName = fn.GetIdentifierWithoutPrefix();
     auto srcCodeName = fn.GetSrcCodeIdentifier();
     auto rawMangledName = fn.GetRawMangledName();
-    auto importedFunc = builder.CreateImportedFunction(
+    auto importedFunc = builder.CreateImportedFuncSig(
         funcTy, mangledName, srcCodeName, rawMangledName, pkgName, genericParamTy);
     importedFunc->AppendAttributeInfo(fn.GetAttributeInfo());
     importedFunc->SetFuncKind(fn.GetFuncKind());

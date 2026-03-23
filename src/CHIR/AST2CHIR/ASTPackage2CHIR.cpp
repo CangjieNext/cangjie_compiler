@@ -601,7 +601,7 @@ void AST2CHIR::SetFuncAttributeAndLinkageType(const AST::FuncDecl& astFunc, Func
     // in CHIR, we treat `static.init()` as global function, not member function,
     // because its outerDecl is something like `class A<T>`, if it's member function,
     // initializer will be translated as follows:
-    // Function gv$_init() {
+    // Func gv$_init() {
     //     Apply(static.init)(A<T>, [], Unit) // `T` is not declared in this scope
     // }
     // we still store its outerDecl in Sema, because it's used in `GlobalVarSort`
@@ -691,7 +691,7 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
     }
     auto srcCodeName = funcDecl.identifier;
     auto rawMangledName = funcDecl.rawMangleName;
-    fn = builder.CreateCurPkgFunction(
+    fn = builder.CreateFuncWithBody(
         loc, funcTy, mangledName, srcCodeName, rawMangledName, pkgName, genericParamTy, features);
     // This is the logic that applied when compiling common part of package
     // Ideally such logic should be be visually discernible
@@ -738,7 +738,7 @@ void AST2CHIR::CreatePseudoImportedFuncSignatureAndSetGlobalCache(const AST::Fun
     FuncType* funcTy = StaticCast<FuncType*>(fnTy);
     auto genericParamTy = GetGenericParamType(funcDecl, chirType);
     // Global or member function. Must not be nested func.
-    auto fn = builder.CreateImportedFunction(funcTy, funcDecl.mangledName, funcDecl.identifier,
+    auto fn = builder.CreateImportedFuncSig(funcTy, funcDecl.mangledName, funcDecl.identifier,
         funcDecl.rawMangleName, funcDecl.fullPackageName, genericParamTy);
     CJC_ASSERT(fn);
     SetFuncAttributeAndLinkageType(funcDecl, *fn);
@@ -801,7 +801,7 @@ void AST2CHIR::CreateImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl&
     auto fnTy = chirType.TranslateType(*funcDecl.ty);
     fnTy = AdjustFuncType(*StaticCast<FuncType*>(fnTy), funcDecl, builder, chirType);
     auto genericParamTy = GetGenericParamType(funcDecl, chirType);
-    fn = builder.CreateImportedFunction(fnTy, funcDecl.mangledName, funcDecl.identifier,
+    fn = builder.CreateImportedFuncSig(fnTy, funcDecl.mangledName, funcDecl.identifier,
         funcDecl.rawMangleName, funcDecl.fullPackageName, genericParamTy);
     CJC_NULLPTR_CHECK(fn);
     auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), funcDecl.begin, funcDecl.end);
@@ -868,7 +868,7 @@ void AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalCon
     if (kind == IncreKind::INCR && !decl.toBeCompiled && !IsSrcCodeImportedGlobalDecl(decl, opts)) {
         gv = builder.CreateImportedGlobalVar(ty, mangledName, srcCodeName, rawMangledName, packageName);
     } else {
-        gv = builder.CreateCurPkgGlobalVar(loc, ty, mangledName, srcCodeName, rawMangledName, packageName);
+        gv = builder.CreateGlobalVarWithInit(loc, ty, mangledName, srcCodeName, rawMangledName, packageName);
         if (isLocalConst) {
             // use COMPILER_ADD to mark this global const var as lifted
             gv->EnableAttr(Attribute::COMPILER_ADD);
@@ -965,7 +965,7 @@ void AST2CHIR::CreatePseudoDefForAnnoOnlyDecl(const AST::Decl& decl)
     }
     Value* val;
     if (auto func = DynamicCast<AST::FuncDecl>(&decl)) {
-        auto fn = builder.CreateCurPkgFunction(INVALID_LOCATION,
+        auto fn = builder.CreateFuncWithBody(INVALID_LOCATION,
             builder.GetType<FuncType>(
                 std::vector<Type*>{func->funcBody->paramLists[0]->params.size(), builder.GetInt64Ty()},
                 builder.GetUnitTy()),
@@ -976,7 +976,7 @@ void AST2CHIR::CreatePseudoDefForAnnoOnlyDecl(const AST::Decl& decl)
         val = fn;
     }
     if (Is<AST::VarDecl>(&decl)) {
-        val = builder.CreateCurPkgGlobalVar(tr.TranslateLocation(decl), builder.GetType<RefType>(builder.GetInt64Ty()),
+        val = builder.CreateGlobalVarWithInit(tr.TranslateLocation(decl), builder.GetType<RefType>(builder.GetInt64Ty()),
             decl.mangledName, decl.identifier, decl.rawMangleName, decl.fullPackageName);
     }
     // such function does not have body (because it is a pseudo func, just a hook for annoFactoryFunc).

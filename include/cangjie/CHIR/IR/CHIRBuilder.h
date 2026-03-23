@@ -176,7 +176,7 @@ public:
     }
     Parameter* CreateParameter(Type* ty, const DebugLocation& loc, Function& parentFunc);
     Parameter* CreateParameter(Type* ty, const DebugLocation& loc, Lambda& parentLambda);
-    GlobalVar* CreateCurPkgGlobalVar(const DebugLocation& loc, RefType* ty, const std::string& mangledName,
+    GlobalVar* CreateGlobalVarWithInit(const DebugLocation& loc, RefType* ty, const std::string& mangledName,
         const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
         std::set<std::string> features = {});
     GlobalVar* CreateImportedGlobalVar(Type* ty, const std::string& mangledName, const std::string& srcCodeIdentifier,
@@ -266,11 +266,11 @@ public:
         return expr;
     }
 
-    Function* CreateCurPkgFunction(const DebugLocation& loc, FuncType* funcTy, const std::string& mangledName,
+    Function* CreateFuncWithBody(const DebugLocation& loc, FuncType* funcTy, const std::string& mangledName,
         const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
         const std::vector<GenericType*>& genericTypeParams = {}, std::set<std::string> features = {});
 
-    Function* CreateImportedFunction(Type* funcTy, const std::string& mangledName,
+    Function* CreateImportedFuncSig(Type* funcTy, const std::string& mangledName,
         const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
         const std::vector<GenericType*>& genericTypeParams = {}, bool addToIR = true);
     
