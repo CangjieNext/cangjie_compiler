@@ -363,6 +363,23 @@ void ParserImpl::DiagNameLengthOverflow(const Range& r, const std::string& tar, 
     builder.AddNote(note);
 }
 
+void ParserImpl::DiagIdentifierLengthOverflow(
+    const Range& r, const std::string& tar, size_t maxLength, size_t realLength) const
+{
+    auto n = MakeOwned<AST::Node>();
+    n->begin = r.begin;
+    n->end = r.end;
+    if (curMacroCall) {
+        n->EnableAttr(AST::Attribute::MACRO_EXPANDED_NODE);
+        n->curMacroCall = curMacroCall;
+    }
+    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::parse_identifier_length_overflow, *n, r, tar);
+
+    auto note = SubDiagnostic(
+        "the maximum length is " + std::to_string(maxLength) + ", the real length is " + std::to_string(realLength));
+    builder.AddNote(note);
+}
+
 static const std::unordered_map<ASTKind, std::pair<std::string, std::string>> KIND_TO_STR = {
     {ASTKind::VAR_DECL, {"var", "variable declaration"}},
     {ASTKind::VAR_WITH_PATTERN_DECL, {"var", "variable declaration"}},

@@ -227,6 +227,7 @@ ERROR(parse_expected_macro_decl_in_macro_package, "cannot use 'public' on %s dec
 ERROR(parse_package_as_all, "The alias name should contain '.*' suffix after import-all", "expected '%s*'", {
     "after import-all"
 })
+ERROR(parse_identifier_length_overflow, "length of identifier '%s' overflow", "length overflow", {})
 ERROR(parse_package_name_length_overflow, "length of package name '%s' overflow", "length overflow", {})
 ERROR(parse_package_name_has_backtick, "cannot using '`' in package name")
 

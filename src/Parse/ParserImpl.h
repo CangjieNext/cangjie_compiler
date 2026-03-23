@@ -20,6 +20,7 @@
 namespace Cangjie {
 using namespace AST;
 
+const size_t IDENTIFIER_NAME_LEN_LIMIT = 1024U;
 const size_t PACKAGE_NAME_LEN_LIMIT = 200U;
 
 enum class DefKind : uint8_t {
@@ -842,6 +843,8 @@ private:
         const std::string& afterName = "after this", const bool callHelp = true);
     void DiagExpectedIdentifierWithNode(Ptr<AST::Node> node);
     void DiagImportingByPackageNameIsNotSupported(const Position& expectPos);
+    void DiagIdentifierLengthOverflow(
+        const Range& r, const std::string& tar, size_t maxLength, size_t realLength) const;
     void DiagNameLengthOverflow(const Range& r, const std::string& tar, size_t maxLength, size_t realLength);
     void DiagIllegalModifierInScope(const AST::Modifier& mod);
     void DiagConflictedModifier(const AST::Modifier& resMod, const AST::Modifier& tarMod);
