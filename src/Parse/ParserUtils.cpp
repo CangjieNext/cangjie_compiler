@@ -609,6 +609,9 @@ SrcIdentifier ParserImpl::ParseIdentifierFromName(
     const std::string& name = isRaw ? ParseNameFromRawIdentifier(identifier) : identifier;
     Position pos = isRaw ? (tkPos + 1) : tkPos;
     Position endPos = isRaw ? (end - 1) : end;
+    if (name.size() > IDENTIFIER_NAME_LEN_LIMIT) {
+        DiagIdentifierLengthOverflow(MakeRange(pos, endPos), name, IDENTIFIER_NAME_LEN_LIMIT, name.size());
+    }
     (void)len;
     return {name, pos, endPos, isRaw};
 }
