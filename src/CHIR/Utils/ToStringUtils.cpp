@@ -219,7 +219,7 @@ std::string FuncSymbolStr(const Function& func)
     if (func.IsCFFIWrapper()) {
         ss << "[CFFIWrapper] ";
     }
-    ss << "Function " << func.GetIdentifier();
+    ss << "Func " << func.GetIdentifier();
     ss << GetGenericTypeParamsStr(func.GetGenericTypeParams());
     ss << "(";
     auto& params = func.GetParams();

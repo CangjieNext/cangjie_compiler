@@ -384,7 +384,7 @@ CGValue* CGModule::GetOrInsertGlobalVariable(const CHIR::Value* chirGV)
     auto cgVarType = CGType::GetOrCreate(*this, chirGV->GetType());
     llvm::GlobalVariable* gv = llvm::cast<llvm::GlobalVariable>(module->getOrInsertGlobal(
         chirGV->GetIdentifierWithoutPrefix(), cgVarType->GetPointerElementType()->GetLLVMType()));
-    if (chirGV->IsGlobalVarInCurPackage()) {
+    if (chirGV->IsGlobalVarWithInitializer()) {
         auto chirLinkage = chirGV->Get<CHIR::LinkTypeInfo>();
         AddLinkageTypeMetadata(*gv, CHIRLinkage2LLVMLinkage(chirLinkage), cgCtx->IsCGParallelEnabled());
     }
@@ -411,7 +411,7 @@ CGValue* CGModule::GetMappedCGValue(const CHIR::Value* chirValue)
     }
     if (chirValue->IsImportedFunc() || chirValue->IsFuncWithBody()) {
         return GetOrInsertCGFunction(chirValue);
-    } else if (chirValue->IsImportedVar() || chirValue->IsGlobalVarInCurPackage()) {
+    } else if (chirValue->IsImportedVar() || chirValue->IsGlobalVarWithInitializer()) {
         return GetOrInsertGlobalVariable(chirValue);
     } else {
         CJC_ASSERT_WITH_MSG(false, "Should not reach here: value not dominate all uses in CHIR.");

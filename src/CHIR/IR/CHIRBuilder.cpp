@@ -131,7 +131,7 @@ void TryUpdateExistingValue(T* existing, const std::set<std::string>& newFeature
 
 } // namespace
 
-GlobalVar* CHIRBuilder::CreateCurPkgGlobalVar(const DebugLocation& loc, RefType* ty, const std::string& mangledName,
+GlobalVar* CHIRBuilder::CreateGlobalVarWithInit(const DebugLocation& loc, RefType* ty, const std::string& mangledName,
     const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
     std::set<std::string> features)
 {
@@ -170,7 +170,7 @@ GlobalVar* CHIRBuilder::CreateImportedGlobalVar(
     return var;
 }
 
-Function* CHIRBuilder::CreateCurPkgFunction(const DebugLocation& loc, FuncType* funcTy, const std::string& mangledName,
+Function* CHIRBuilder::CreateFuncWithBody(const DebugLocation& loc, FuncType* funcTy, const std::string& mangledName,
     const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
     const std::vector<GenericType*>& genericTypeParams, std::set<std::string> features)
 {
@@ -196,7 +196,7 @@ Function* CHIRBuilder::CreateCurPkgFunction(const DebugLocation& loc, FuncType* 
     return func;
 }
 
-Function* CHIRBuilder::CreateImportedFunction(Type* funcTy, const std::string& mangledName,
+Function* CHIRBuilder::CreateImportedFuncSig(Type* funcTy, const std::string& mangledName,
     const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
     const std::vector<GenericType*>& genericTypeParams, bool addToIR)
 {

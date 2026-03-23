@@ -124,9 +124,9 @@ void WrapMutFunc::CreateMutFuncWrapper(Function* rawFunc, CustomTypeDef& curDef,
     bool isImported = curDef.TestAttr(Attribute::IMPORTED);
     Function* func = nullptr;
     if (isImported) {
-        func = builder.CreateImportedFunction(wrapperFuncTy, funcIdentifier, "", "", pkgName);
+        func = builder.CreateImportedFuncSig(wrapperFuncTy, funcIdentifier, "", "", pkgName);
     } else {
-        func = builder.CreateCurPkgFunction(INVALID_LOCATION, wrapperFuncTy, funcIdentifier, "", "", pkgName);
+        func = builder.CreateFuncWithBody(INVALID_LOCATION, wrapperFuncTy, funcIdentifier, "", "", pkgName);
     }
     wrapperFuncs.emplace(funcIdentifier, func);
     CJC_NULLPTR_CHECK(func);

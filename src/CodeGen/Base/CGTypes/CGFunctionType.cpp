@@ -55,9 +55,9 @@ llvm::Type* CGFunctionType::GenLLVMType()
     }
 
     auto& llvmCtx = cgCtx.GetLLVMContext();
-    layoutType = llvm::StructType::getTypeByName(llvmCtx, "Function.Type");
+    layoutType = llvm::StructType::getTypeByName(llvmCtx, "Func.Type");
     if (!layoutType) {
-        layoutType = llvm::StructType::create(llvmCtx, {llvm::Type::getInt8PtrTy(llvmCtx)}, "Function.Type");
+        layoutType = llvm::StructType::create(llvmCtx, {llvm::Type::getInt8PtrTy(llvmCtx)}, "Func.Type");
     }
 
     auto& funcTy = StaticCast<const CHIR::FuncType&>(chirType);

@@ -397,8 +397,8 @@ table LocalVar {
   srcCodeIdentifier: string(shared);
 }
 
-// Shared by Function and GlobalVar (maps to C++ GlobalSymbol)
-table GlobalSymbol {
+// Shared by Function and GlobalVar (maps to C++ GlobalValue)
+table GlobalValue {
   base: Value;
   srcCodeIdentifier: string(shared);
   rawMangledName: string(shared);
@@ -407,7 +407,7 @@ table GlobalSymbol {
 }
 
 table GlobalVar {
-  base: GlobalSymbol;
+  base: GlobalValue;
   // LiteralValue or Function (GLOBALVAR_INIT), 0 for none or imported var
   initializer: uint32; // use values id
 }
@@ -431,7 +431,7 @@ enum FuncKind: uint8 {
 }
 
 table Function {
-  base: GlobalSymbol;
+  base: GlobalValue;
 
   genericDecl: uint32; // use values id
   funcKind: FuncKind;

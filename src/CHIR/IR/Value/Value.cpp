@@ -81,9 +81,9 @@ bool Value::IsImportedSymbol() const
     return IsImportedFunc() || IsImportedVar();
 }
 
-bool Value::IsGlobalVarInCurPackage() const
+bool Value::IsGlobalVarWithInitializer() const
 {
-    return kind == ValueKind::KIND_GLOBALVAR && !TestAttr(Attribute::IMPORTED);
+    return kind == ValueKind::KIND_GLOBALVAR && StaticCast<const GlobalVar*>(this)->GetInitializerValue() != nullptr;
 }
 
 bool Value::IsFuncWithBody() const
@@ -374,7 +374,7 @@ std::string LocalVar::ToString() const
 // GlobalVar
 GlobalVar::GlobalVar(Type* ty, const std::string& identifier, const std::string& srcCodeIdentifier,
     const std::string& rawMangledName, const std::string& packageName)
-    : GlobalSymbol(ValueKind::KIND_GLOBALVAR, ty, identifier, srcCodeIdentifier, rawMangledName, packageName)
+    : GlobalValue(ValueKind::KIND_GLOBALVAR, ty, identifier, srcCodeIdentifier, rawMangledName, packageName)
 {
 }
 
@@ -899,7 +899,7 @@ size_t BlockGroup::GetExpressionsNum() const
 Function::Function(Type* ty, const std::string& identifier, const std::string& srcCodeIdentifier,
     const std::string& rawMangledName, const std::string& packageName,
     const std::vector<GenericType*>& genericTypeParams)
-    : GlobalSymbol(ValueKind::KIND_FUNC, ty, identifier, srcCodeIdentifier, rawMangledName, packageName),
+    : GlobalValue(ValueKind::KIND_FUNC, ty, identifier, srcCodeIdentifier, rawMangledName, packageName),
     genericTypeParams(genericTypeParams)
 {
 }
@@ -1308,34 +1308,34 @@ std::string AbstractMethodParam::ToString()
     return paramName + ": " + type->ToString();
 }
 
-GlobalSymbol::GlobalSymbol(ValueKind kind, Type* ty, const std::string& identifier,
+GlobalValue::GlobalValue(ValueKind kind, Type* ty, const std::string& identifier,
     const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName)
     : Value(ty, identifier, kind),
     srcCodeIdentifier(srcCodeIdentifier), rawMangledName(rawMangledName), packageName(packageName)
 {
 }
 
-const std::string& GlobalSymbol::GetPackageName() const
+const std::string& GlobalValue::GetPackageName() const
 {
     return packageName;
 }
 
-std::string GlobalSymbol::GetSrcCodeIdentifier() const
+std::string GlobalValue::GetSrcCodeIdentifier() const
 {
     return srcCodeIdentifier;
 }
 
-const std::string& GlobalSymbol::GetRawMangledName() const
+const std::string& GlobalValue::GetRawMangledName() const
 {
     return rawMangledName;
 }
 
-void GlobalSymbol::SetRawMangledName(const std::string& name)
+void GlobalValue::SetRawMangledName(const std::string& name)
 {
     rawMangledName = name;
 }
 
-CustomTypeDef* GlobalSymbol::GetParentCustomTypeDef() const
+CustomTypeDef* GlobalValue::GetParentCustomTypeDef() const
 {
     return declaredParent;
 }

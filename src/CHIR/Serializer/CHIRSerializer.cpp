@@ -592,7 +592,7 @@ flatbuffers::Offset<PackageFormat::GlobalVar> CHIRSerializer::CHIRSerializerImpl
 {
     auto valueOffset = Serialize<PackageFormat::Value>(static_cast<const Value&>(obj));
     auto declaredParent = obj.GetParentCustomTypeDef() ? GetId<CustomTypeDef>(obj.GetParentCustomTypeDef()) : 0u;
-    auto globalSymbolOffset = PackageFormat::CreateGlobalSymbolDirect(builder, valueOffset,
+    auto globalSymbolOffset = PackageFormat::CreateGlobalValueDirect(builder, valueOffset,
         obj.GetSrcCodeIdentifier().data(), obj.GetRawMangledName().data(), obj.GetPackageName().data(),
         declaredParent);
     uint32_t initializerId = obj.GetInitializerValue() ? GetId<Value>(obj.GetInitializerValue()) : 0;
@@ -629,7 +629,7 @@ template <> flatbuffers::Offset<PackageFormat::Function> CHIRSerializer::CHIRSer
 {
     auto valueOffset = Serialize<PackageFormat::Value>(static_cast<const Value&>(obj));
     auto declaredParent = obj.GetParentCustomTypeDef() ? GetId<CustomTypeDef>(obj.GetParentCustomTypeDef()) : 0u;
-    auto globalSymbolOffset = PackageFormat::CreateGlobalSymbolDirect(builder, valueOffset,
+    auto globalSymbolOffset = PackageFormat::CreateGlobalValueDirect(builder, valueOffset,
         obj.GetSrcCodeIdentifier().data(), obj.GetRawMangledName().data(), obj.GetPackageName().data(),
         declaredParent);
 

@@ -12,7 +12,6 @@
 namespace Cangjie {
 namespace CHIR {
 class Function;
-class Function;
 } // namespace CHIR
 
 namespace CodeGen {
