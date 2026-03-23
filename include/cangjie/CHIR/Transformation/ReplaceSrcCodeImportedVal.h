@@ -37,7 +37,7 @@ public:
         const std::unordered_set<Function*>& uselessLambda);
 
 private:
-    void CreateSrcImpotedValueSymbol(const std::unordered_set<Function*>& srcCodeImportedFuncs,
+    void CreateSrcImportedValueSymbol(const std::unordered_set<Function*>& srcCodeImportedFuncs,
         const std::unordered_set<GlobalVar*>& srcCodeImportedVars);
     void CreateSrcImportedFuncSymbol(Function& fn);
     void CreateSrcImportedVarSymbol(GlobalVar& gv);

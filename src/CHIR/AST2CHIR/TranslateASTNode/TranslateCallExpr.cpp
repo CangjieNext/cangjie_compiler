@@ -1007,7 +1007,7 @@ Ptr<Type> Translator::GetMemberFuncCallerInstType(const AST::CallExpr& expr, boo
         } else if (IsStaticInit(*expr.resolvedFunction)) {
             // 3. in CHIR, we treat `static.init()` as global function, not member function,
             // because its outerDecl is something like `class A<T>`, if it's member function, ir is as follows:
-            // Function gv$_init() {
+            // Func gv$_init() {
             //     Apply(static.init)(A<T>, [], Unit) // `T` is not declared in this scope
             // }
             callerType = nullptr;

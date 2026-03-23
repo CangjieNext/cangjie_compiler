@@ -23,8 +23,6 @@ class ExtendDef;
 class GlobalVar;
 class Value;
 class Function;
-class Function;
-class Function;
 }
 namespace CodeGen {
 class CGPkgContext;

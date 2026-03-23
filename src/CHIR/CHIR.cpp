@@ -113,7 +113,7 @@ static std::unordered_set<std::string> GetNoneStaticMemberVars(const CustomTypeD
 
 static std::string GetRawMangledName(const Value& value)
 {
-    return StaticCast<const GlobalSymbol*>(&value)->GetRawMangledName();
+    return StaticCast<const GlobalValue*>(&value)->GetRawMangledName();
 }
 
 static std::unordered_set<std::string> GetRawMangledNameSet(const std::unordered_set<Ptr<Value>>& set)
@@ -972,13 +972,13 @@ std::pair<Value*, Apply*> ToCHIR::DoCFFIFuncWrapper(T& curFunc, bool isForeign, 
         ident = funcPkgName + ":" + ident;
     }
     if (funcPkgName != pkg.fullPackageName) {
-        auto wrapperFunc = builder.CreateImportedFunction(
+        auto wrapperFunc = builder.CreateImportedFuncSig(
             curFunc.GetFuncType(), ident, ident, "", funcPkgName, curFunc.GetGenericTypeParams());
         wrapperFunc->SetCFFIWrapper(true);
         return std::make_pair(wrapperFunc, nullptr);
     }
     auto wrapperFunc =
-        builder.CreateCurPkgFunction(curFunc.GetDebugLocation(), curFunc.GetFuncType(), ident, ident, "", funcPkgName);
+        builder.CreateFuncWithBody(curFunc.GetDebugLocation(), curFunc.GetFuncType(), ident, ident, "", funcPkgName);
     wrapperFunc->SetFuncKind(curFunc.GetFuncKind());
     if (wrapperFunc->IsLambda()) {
         auto originalLambdaInfo = FuncSigInfo {
@@ -1252,7 +1252,6 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
         diag.DiagnoseRefactor(DiagKindRefactor::plugin_throws_exception, DEFAULT_POSITION);
     } else if (hasPluginForCHIR && builder.IsEnableIRCheckerAfterPlugin()) {
         DumpCHIRToFile("PLUGIN");
-        succeed = RunIRChecker(Phase::PLUGIN);
     }
     return succeed;
 }

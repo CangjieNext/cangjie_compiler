@@ -52,7 +52,7 @@ private:
     void RemoveInitializerForVarDecl(const AST::VarDecl& varDecl, Function& fileInit) const;
     void RemoveCommonInitializersReplacedWithSpecific(
         Function& fileInit, const std::vector<Ptr<const AST::Decl>>& decls) const;
-    Ptr<Function> TryGetFileInitialializer(const AST::File& file, const std::string& suffix = "");
+    Ptr<Function> TryGetFileInitializer(const AST::File& file, const std::string& suffix = "");
     Ptr<Function> TranslateFileInitializer(const AST::File& file, const std::vector<Ptr<const AST::Decl>>& decls);
     Ptr<Function> TranslateFileLiteralInitializer(
         const AST::File& file, const std::vector<Ptr<const AST::Decl>>& decls);

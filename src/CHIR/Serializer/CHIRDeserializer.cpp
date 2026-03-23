@@ -652,7 +652,7 @@ template <> GlobalVar* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const
             type, GetMangleNameFromIdentifier(identifier), srcCodeIdentifier, rawMangledName, packageName);
     } else {
         std::set<std::string> features = GetFeatures(valueBase);
-        result = builder.CreateCurPkgGlobalVar(
+        result = builder.CreateGlobalVarWithInit(
             DebugLocation(), type, GetMangleNameFromIdentifier(identifier), srcCodeIdentifier, rawMangledName,
             packageName, features);
     }
@@ -677,7 +677,7 @@ template <> Function* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const 
     }
     Function* result = nullptr;
     if (obj->body() == 0) {
-        result = builder.CreateImportedFunction(type, GetMangleNameFromIdentifier(identifier),
+        result = builder.CreateImportedFuncSig(type, GetMangleNameFromIdentifier(identifier),
             srcCodeIdentifier, rawMangledName, packageName, genericTypeParams);
         result->SetFuncKind(static_cast<FuncKind>(obj->funcKind()));
         result->SetRawMangledName(rawMangledName);
@@ -685,7 +685,7 @@ template <> Function* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const 
         result->SetCFFIWrapper(obj->isCFFIWrapper());
     } else {
         std::set<std::string> features = GetFeatures(valueBase);
-        result = builder.CreateCurPkgFunction(DebugLocation(), StaticCast<FuncType*>(type),
+        result = builder.CreateFuncWithBody(DebugLocation(), StaticCast<FuncType*>(type),
             GetMangleNameFromIdentifier(identifier), srcCodeIdentifier, rawMangledName, packageName,
             genericTypeParams, features);
         result->SetLocalId(obj->localId());

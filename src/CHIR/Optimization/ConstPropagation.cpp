@@ -331,7 +331,7 @@ void ConstPropagation::RecordEffectMap(const Expression* expr, const Function* f
     GlobalVar* gv = nullptr;
     if (expr->GetExprKind() == ExprKind::LOAD) {
         auto loc = StaticCast<Load*>(expr)->GetLocation();
-        if (loc->IsGlobalVarInCurPackage()) {
+        if (loc->IsGlobalVarWithInitializer()) {
             // let a = 3
             // Load(gv_a)
             gv = StaticCast<GlobalVar*>(loc);
@@ -341,7 +341,7 @@ void ConstPropagation::RecordEffectMap(const Expression* expr, const Function* f
             auto locExpr = StaticCast<LocalVar*>(loc)->GetExpr();
             if (locExpr->GetExprKind() == ExprKind::GET_ELEMENT_REF) {
                 auto base = StaticCast<GetElementRef*>(locExpr)->GetLocation();
-                if (base->IsGlobalVarInCurPackage()) {
+                if (base->IsGlobalVarWithInitializer()) {
                     gv = StaticCast<GlobalVar*>(base);
                 }
             }
@@ -352,7 +352,7 @@ void ConstPropagation::RecordEffectMap(const Expression* expr, const Function* f
             auto baseExpr = StaticCast<LocalVar*>(base)->GetExpr();
             if (baseExpr->GetExprKind() == ExprKind::LOAD) {
                 auto loc = StaticCast<Load*>(baseExpr)->GetLocation();
-                if (loc->IsGlobalVarInCurPackage()) {
+                if (loc->IsGlobalVarWithInitializer()) {
                     // let a = (1, 2); a[0]
                     // %0 = Load(gv_a); %1 = Field(%0, 0)
                     gv = StaticCast<GlobalVar*>(loc);

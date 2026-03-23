@@ -804,7 +804,5 @@ bool IsSTDFunction(const Function& func);
  * @return The non-debug users of the value.
  */
 std::vector<Expression*> GetNonDebugUsers(const Value& val);
-
-bool IsGlobalVarAndShouldHaveInitializer(const Value& value);
 } // namespace Cangjie::CHIR
 #endif

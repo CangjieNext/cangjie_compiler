@@ -442,7 +442,7 @@ std::optional<Cangjie::CHIR::BlockGroup*> ConstEvalPass::CreateNewInitializer(
                 continue;
             }
             auto location = StaticCast<const Store*>(expr)->GetLocation();
-            if (!location->IsGlobalVarInCurPackage()) {
+            if (!location->IsGlobalVarWithInitializer()) {
                 continue;
             }
             auto global = StaticCast<GlobalVar*>(location);
