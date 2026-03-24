@@ -685,13 +685,19 @@ bool CompilerInstance::PerformGenericInstantiation()
         }
         Utils::ProfileRecorder::Stop("Generic Instantiation", "GenericInstantiatePackage");
     }
-    Utils::ProfileRecorder recorder("Generic Instantiation", "desugar after instantiation");
     // Perform desugar after generic instantiation.
     // NOTE: This step will not generate any error.
     for (auto& srcPkg : srcPkgs) {
         auto astCtx = GetASTContextByPackage(srcPkg.get());
         CJC_ASSERT(astCtx);
-        typeChecker->PerformDesugarAfterInstantiation(*astCtx, *srcPkg);
+        {
+            Utils::ProfileRecorder recorder("Generic Instantiation", "desugar after instantiation");
+            typeChecker->PerformDesugarAfterInstantiation(*astCtx, *srcPkg);
+        }
+        {
+            Utils::ProfileRecorder removeUnusedRocord("Generic Instantiation", "RemoveUnusedImportedDecls");
+            importManager.RemoveUnusedImportedDecls(rawMangleName2DeclMap);
+        }
     }
     if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
         DumpAST(GetSourcePackages(), invocation.globalOptions.output, "genericinst");

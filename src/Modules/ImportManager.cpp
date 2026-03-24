@@ -24,6 +24,7 @@
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/SourceManager.h"
@@ -1575,4 +1576,144 @@ void ImportManager::ClearCachesForRebuild()
     declToTypeAlias.clear();
     // clear for ResolveImports.
     directMacroDeps.clear();
+}
+
+bool AddUsedDecl(UsedDeclMap& usedItems, Ptr<AST::Decl> decl)
+{
+    auto& declSet = usedItems[decl->GetFullPackageName()];
+    return declSet.emplace(decl).second;
+}
+
+void IterateTyWithArgs(Ptr<Ty> ty, const std::function<void(Ptr<Ty>)>& func)
+{
+    if (!Ty::IsTyCorrect(ty)) {
+        return;
+    }
+    func(ty);
+    for (auto& tyArg : ty->typeArgs) {
+        IterateTyWithArgs(tyArg, func);
+    }
+}
+
+/*
+主体逻辑：
+1. 先处理隐式使用的声明，对隐式使用的声明进行遍历，找出所有依赖；
+2. 处理所有内建类型的扩展声明，由于扩展会影响虚表的生成，因此需要将扩展以及扩展所依赖的声明进行收集；
+3. 遍历源码文件，对文件中的每个声明进行遍历，找出所有依赖；
+4. 处理实例化出来的声明，并收集所有实例化声明的依赖
+5. 删除未使用的源码导入声明及inline函数（一定是导入声明）。
+
+依赖查询：
+1. 通过本包或导入包的Decl进行查询。
+*/
+void ImportManager::CollectUsedPackageInFile(Ptr<Package> srcPkg, UsedDeclMap& usedItems)
+{
+    Utils::ProfileRecorder recorder("RemoveUnusedImportedDecls", "CollectUsedPackageInFile");
+    const std::unordered_set<std::string_view> implicitUsedDecls = {"CJ_CORE_ExecAtexitCallbacks", "getCommandLineArgs",
+        "eprintln", "handleException", "NegativeArraySizeException", "createOverflowExceptionMsg",
+        "createArithmeticExceptionMsg", "SpawnException"};
+    unsigned walkerId = Walker::GetNextWalkerID();
+    std::function<VisitAction(Ptr<Node>)> collectUsed = [this, &walkerId, &usedItems, &collectUsed](
+                                                            Ptr<Node> node) -> VisitAction {
+        auto procTy = [&walkerId, &collectUsed](Ptr<Ty> ty) {
+            if (auto decl = Ty::GetDeclOfTy(ty)) {
+                Walker(decl, walkerId, collectUsed).Walk();
+            }
+        };
+        IterateTyWithArgs(node->ty, procTy);
+        if (auto type = DynamicCast<Type>(node); type && !Ty::IsInitialTy(type->aliasTy)) {
+            IterateTyWithArgs(type->aliasTy, procTy);
+        } else if (auto decl = DynamicCast<Decl>(node)) {
+            // 函数参数和泛型参数不算被使用，因为它们的类型可能会引用其他声明，但它们本身不需要被导入。
+            if (Is<FuncParam>(decl) || Is<GenericParamDecl>(decl)) {
+                return VisitAction::WALK_CHILDREN;
+            }
+            if (decl->TestAttr(Attribute::GENERIC_INSTANTIATED) && decl->genericDecl &&
+                decl->genericDecl->TestAttr(Attribute::IMPORTED)) {
+                Walker(decl->genericDecl, walkerId, collectUsed).Walk();
+            }
+            if (!decl->TestAttr(Attribute::IMPORTED)) {
+                return VisitAction::WALK_CHILDREN;
+            }
+            if (!AddUsedDecl(usedItems, decl)) {
+                return VisitAction::SKIP_CHILDREN;
+            }
+            if (auto fd = DynamicCast<FuncDecl>(decl); fd && fd->propDecl) {
+                AddUsedDecl(usedItems, fd->propDecl);
+            }
+            if (decl->outerDecl) {
+                Walker(decl->outerDecl, walkerId, collectUsed).Walk();
+            }
+            if (!decl->IsNominalDecl()) {
+                return VisitAction::WALK_CHILDREN;
+            }
+            auto extends = typeManager.GetAllExtendsByTy(*decl->ty);
+            for (auto extend : extends) {
+                if (extend == decl || !extend->TestAttr(Attribute::IMPORTED)) {
+                    continue;
+                }
+                Walker(extend, walkerId, collectUsed).Walk();
+            }
+            return VisitAction::WALK_CHILDREN;
+        } else if (auto ae = DynamicCast<ArrayExpr>(node); ae && ae->initFunc) {
+            Walker(ae->initFunc, walkerId, collectUsed).Walk();
+        }
+        Ptr<Decl> target = node->GetTarget();
+        if (auto ce = DynamicCast<CallExpr>(node); ce && ce->resolvedFunction) {
+            target = ce->resolvedFunction;
+        }
+        if (!target) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        Walker(target, walkerId, collectUsed).Walk();
+        return VisitAction::WALK_CHILDREN;
+    };
+    for (auto implicitUsedDecl : implicitUsedDecls) {
+        auto decl = GetCoreDecl(std::string(implicitUsedDecl));
+        Walker(decl, walkerId, collectUsed).Walk();
+    }
+    for (auto& [_, builtinExtends] : typeManager.builtinTyToExtendMap) {
+        for (auto& extend : builtinExtends) {
+            Walker(extend, walkerId, collectUsed).Walk();
+        }
+    }
+    for (auto& file : srcPkg->files) {
+        Walker(file.get(), walkerId, collectUsed).Walk();
+    }
+    for (auto& instDecl : srcPkg->genericInstantiatedDecls) {
+        Walker(instDecl.get(), walkerId, collectUsed).Walk();
+    }
+    // 删除源码包中的无用的源码依赖。
+    auto isUnusedDecls = [&usedItems](Ptr<Decl> decl) {
+        auto found = usedItems.find(decl->GetFullPackageName());
+        if (found != usedItems.end()) {
+            return found->second.find(decl) == found->second.end();
+        }
+        return true;
+    };
+    Utils::EraseIf(srcPkg->srcImportedNonGenericDecls, isUnusedDecls);
+    Utils::EraseIf(srcPkg->inlineFuncDecls, isUnusedDecls);
+}
+
+void ImportManager::RemoveUnusedImportedDecls(RawMangled2DeclMap& rawMangleName2DeclMap)
+{
+    UsedDeclMap usedItems;
+    CollectUsedPackageInFile(curPackage, usedItems);
+    cjoManager->RemoveDecls(curPackage->fullPackageName, usedItems);
+    for (auto it = rawMangleName2DeclMap.begin(); it != rawMangleName2DeclMap.end();) {
+        if (it->second->fullPackageName == curPackage->fullPackageName) {
+            ++it;
+            continue;
+        }
+        auto usedDecls = usedItems.find(it->second->GetFullPackageName());
+        if (usedDecls != usedItems.end()) {
+            if (usedDecls->second.find(it->second) != usedDecls->second.end()) {
+                ++it;
+            } else {
+                it = rawMangleName2DeclMap.erase(it);
+            }
+        } else {
+            it = rawMangleName2DeclMap.erase(it);
+        }
+    }
 }
