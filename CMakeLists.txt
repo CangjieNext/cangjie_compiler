@@ -51,7 +51,8 @@ option(CANGJIE_BUILD_TESTS "Build cangjie tests" ON)
 option(CANGJIE_BUILD_CJC "Build cangjie compiler" ON)
 option(CANGJIE_SKIP_BUILD_CLANG_RT "Do not build clang_rt libraries, only for cross-compiling" OFF)
 option(CANGJIE_BUILD_STD_SUPPORT "Build cangjie depndency of libast" ON)
-option(CANGJIE_ENABLE_CCACHE "Build cangjie with ccache" OFF)
+option(CANGJIE_ENABLE_CCACHE "Build cangjie with compiler cache (ccache or sccache)" ON)
+set(CANGJIE_CACHE_TOOL "sccache" CACHE STRING "Compiler cache tool: ccache, sccache, or auto")
 option(CANGJIE_DOWNLOAD_FLATBUFFERS "Download flatbuffers" ON)
 option(COMPILER_EXPLORER_RACE_FIX "Enable patched behaviour specific to CE" OFF)
 option(CANGJIE_DISABLE_STACK_GROW_FEATURE "Disable stack grow feature for cjnative BE" OFF)
@@ -178,6 +179,8 @@ if(CANGJIE_BUILD_STDLIB_WITH_CJ_SANCOV)
         message(FATAL_ERROR "Cangjie with Sanitizer Coverage support only supports cjnative")
     endif()
 endif()
+
+set(CMAKE_VERBOSE_MAKEFILE ON)
 
 if(CANGJIE_ENABLE_CCACHE
    OR CMAKE_BUILD_TYPE MATCHES Debug
