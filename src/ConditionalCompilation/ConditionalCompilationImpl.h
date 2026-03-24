@@ -28,6 +28,30 @@
 
 namespace Cangjie::AST {
 
+// Version structure for better semantic representation
+struct CjcVersion {
+    uint8_t major = 0;
+    uint8_t minor = 0;
+    uint8_t patch = 0;
+    enum class PreReleaseType { NONE, ALPHA, BETA } preRelease = PreReleaseType::NONE;
+    uint32_t preReleaseNumber = 0;  // For nightly builds or iteration numbers
+
+    // Constructor from string
+    explicit CjcVersion(const std::string& versionStr);
+    
+    // Comparison operators
+    bool operator<(const CjcVersion& other) const;
+    bool operator<=(const CjcVersion& other) const;
+    bool operator>(const CjcVersion& other) const;
+    bool operator>=(const CjcVersion& other) const;
+    bool operator==(const CjcVersion& other) const;
+    bool operator!=(const CjcVersion& other) const;
+    
+    // Utility methods
+    std::string ToString() const;
+    bool IsValid() const;
+};
+
 const std::size_t CJC_VERSION_LENGTH = 6; // length of cjc version
 
 class ConditionalCompilationImpl {
@@ -56,8 +80,7 @@ private:
     std::string GetOSType() const;
     inline std::string GetCJCVersion() const
     {
-        std::string version = std::to_string(cjcVersion);
-        return RefreshVersionStr(version);
+        return cjcVersion;  // Return stored string directly
     }
     inline std::string GetDebug() const
     {
@@ -77,7 +100,7 @@ private:
     CompilerInstance* ci{nullptr};
     Triple::BackendType backendType;
     Triple::Info triple;
-    uint32_t cjcVersion;
+    std::string cjcVersion;
     bool debug;
     bool test;
     std::unordered_map<std::string, std::string> passedCondition;
@@ -86,7 +109,8 @@ private:
 
     bool ConditionCheck(const std::string& conditionStr, const Position& begin, const std::string& right);
 
-    bool Eval(const BinaryExpr& expr, const std::string& left, const std::string& right) const;
+    template<typename T>
+    bool Eval(const BinaryExpr& expr, const T& left, const T& right) const;
 
     bool EvalBinaryExpr(const BinaryExpr& be);
     bool EvalParenExpr(const ParenExpr& pe);
@@ -95,14 +119,6 @@ private:
 
     bool EvalLogicBinaryExpr(const BinaryExpr& be);
     bool EvalJudgeBinaryExpr(const BinaryExpr& be);
-
-    std::string RefreshVersionStr(std::string& version) const
-    {
-        while (version.size() < CJC_VERSION_LENGTH) {
-            version = "0" + version;
-        }
-        return version;
-    }
 
     template <typename T> bool EvalNodeCondition(Ptr<T> node);
 };
