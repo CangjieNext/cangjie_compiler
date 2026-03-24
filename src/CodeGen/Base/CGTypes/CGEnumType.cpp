@@ -109,9 +109,13 @@ CGEnumType::CGEnumTypeKind CGEnumType::CalculateCGEnumTypeKind()
             return CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_T;
         }
         auto baseTypeOfAssociatedValue = DeRef(*associatedValueType);
-        if (baseTypeOfAssociatedValue->IsEnum() &&
-            StaticCast<CGEnumType*>(CGType::GetOrCreate(cgMod, baseTypeOfAssociatedValue))->IsCommonEnum()) {
-            return CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_REF;
+        if (baseTypeOfAssociatedValue->IsEnum()) {
+            if (associatedValueType->IsGenericRelated()) {
+                return CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_T;
+            }
+            if (StaticCast<CGEnumType*>(CGType::GetOrCreate(cgMod, baseTypeOfAssociatedValue))->IsCommonEnum()) {
+                return CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_REF;
+            }
         }
         if (baseTypeOfAssociatedValue->IsReferenceType()) {
             return CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_REF;
@@ -480,7 +484,20 @@ llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& c
     std::vector<llvm::Type*> argTypes{llvm::Type::getInt32Ty(llvmCtx), typeInfoPtrType->getPointerTo()};
     auto fieldFnType = llvm::FunctionType::get(p0i8, argTypes, false);
 
-    // 1. create fieldTiFn 0
+    // Build generic param indices map for the enum's type parameters
+    std::unordered_map<const CHIR::GenericType*, size_t> localGenericParamIndicesMap;
+    std::size_t gTIdx = 0;
+    for (auto typeArg : GetGenericArgsFromCHIRType(chirEnumType)) {
+        auto gt = typeArg.GetGenericType();
+        localGenericParamIndicesMap.emplace(gt, gTIdx++);
+    }
+
+    // 1. create fieldTiFn 1: resolves the actual associated value type's TI
+    auto getTiFn2 = CGTypeInfo::GenTypeInfoFns(
+        fieldFnType, cgMod, funcPrefixName + ".fieldTiFn.1",
+        localGenericParamIndicesMap, *optionLikeInfo->associatedValueType, "assocVal");
+
+    // 2. create fieldTiFn 0: checks isRef on the associated value type, returns Unit TI or Bool TI
     auto getTiFn1 = llvm::Function::Create(
         fieldFnType, llvm::Function::PrivateLinkage, funcPrefixName + ".fieldTiFn.0", cgMod.GetLLVMModule());
     getTiFn1->addFnAttr("native-interface-fn");
@@ -488,8 +505,9 @@ llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& c
     CodeGen::IRBuilder2 irBuilder(cgMod);
     auto entryBB = irBuilder.CreateEntryBasicBlock(getTiFn1, "entry");
     irBuilder.SetInsertPoint(entryBB);
-    auto ti = irBuilder.LLVMIRBuilder2::CreateLoad(typeInfoPtrType, getTiFn1->getArg(1));
-    auto isRef = irBuilder.CreateTypeInfoIsReferenceCall(ti);
+    // Call fieldTiFn 1 to get the associated value type's TI, then check isRef on it
+    auto assocValTI = irBuilder.LLVMIRBuilder2::CreateCall(getTiFn2, {getTiFn1->getArg(0), getTiFn1->getArg(1)});
+    auto isRef = irBuilder.CreateTypeInfoIsReferenceCall(irBuilder.CreateBitCast(assocValTI, typeInfoPtrType));
     auto [refBB, nonRefBB] = Vec2Tuple<2>(irBuilder.CreateAndInsertBasicBlocks({"ref", "nonRef"}));
     irBuilder.CreateCondBr(isRef, refBB, nonRefBB);
     irBuilder.SetInsertPoint(refBB);
@@ -497,16 +515,6 @@ llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& c
         irBuilder.CreateBitCast(CGType::GetUnitCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
     irBuilder.SetInsertPoint(nonRefBB);
     irBuilder.CreateRet(irBuilder.CreateBitCast(CGType::GetBoolCGType(cgMod)->GetOrCreateTypeInfo(), p0i8));
-
-    // 2. create fieldTiFn 1
-    auto getTiFn2 = llvm::Function::Create(
-        fieldFnType, llvm::Function::PrivateLinkage, funcPrefixName + ".fieldTiFn.1", cgMod.GetLLVMModule());
-    getTiFn2->addFnAttr("native-interface-fn");
-    getTiFn2->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
-    entryBB = irBuilder.CreateEntryBasicBlock(getTiFn2, "entry");
-    irBuilder.SetInsertPoint(entryBB);
-    ti = irBuilder.LLVMIRBuilder2::CreateLoad(typeInfoPtrType, getTiFn2->getArg(1));
-    irBuilder.CreateRet(irBuilder.CreateBitCast(ti, p0i8));
 
     return CGTypeInfo::GenFieldsFnsOfTypeTemplate(cgMod, funcPrefixName, {getTiFn1, getTiFn2});
 }
