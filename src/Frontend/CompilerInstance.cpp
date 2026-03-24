@@ -781,8 +781,14 @@ void CompilerInstance::ManglingHelpFunction(const BaseMangler& baseMangler)
 {
     // Collect all top-level decls
     std::unordered_set<DeclAndPackageName, DeclAndPackageNameHasher> topDeclsSet;
-    auto deduplicatedEmplace = [&topDeclsSet](AST::Decl* decl, std::string pkgName) {
-        topDeclsSet.insert(std::make_pair(decl, pkgName));
+    auto deduplicatedEmplace = [this, &topDeclsSet](AST::Decl* decl, std::string pkgName) {
+        if (invocation.globalOptions.cjdbMode || !decl->TestAttr(AST::Attribute::IMPORTED)) {
+            topDeclsSet.insert(std::make_pair(decl, pkgName));
+            return;
+        }
+        if (decl->TestAttr(AST::Attribute::USED_IMPORTS)) {
+            topDeclsSet.insert(std::make_pair(decl, pkgName));
+        }
     };
 
     for (auto& package : GetPackages()) {

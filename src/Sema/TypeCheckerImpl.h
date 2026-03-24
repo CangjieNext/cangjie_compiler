@@ -1732,6 +1732,10 @@ private:
     bool ChkIfAvailableExpr(ASTContext& ctx, AST::Ty& ty, AST::IfAvailableExpr& ie);
     Ptr<AST::Ty> SynIfAvailableExpr(ASTContext& ctx, AST::IfAvailableExpr& iae);
 
+    void CollectUsedPackageInFile(Ptr<AST::Package> pkg);
+    void CollectUsedNode(Ptr<AST::Node> node, unsigned walkerId);
+    AST::VisitAction CollectUsedDecl(Ptr<AST::Decl> decl, unsigned walkerId);
+
     /** Members */
     Promotion promotion;
     TypeManager& typeManager;
