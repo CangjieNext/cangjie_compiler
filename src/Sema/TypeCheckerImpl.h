@@ -542,7 +542,7 @@ private:
     std::vector<Ptr<ASTContext>> PreTypeCheck(const std::vector<Ptr<AST::Package>>& pkgs);
     void DoTypeCheck(std::vector<Ptr<ASTContext>>& contexts)
     {
-        Utils::ProfileRecorder recorder("Semantic", "In TypeCheck");
+        Utils::ProfileRecorder recorder("TypeCheck", "InTypeCheck");
         // Type checking to add semantic type values.
         for (auto& ctx : contexts) {
             TypeCheck(*ctx, *ctx->curPackage);

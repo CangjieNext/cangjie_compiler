@@ -367,6 +367,6 @@ void CheckUnusedImportImpl::Check()
 
 void TypeChecker::TypeCheckerImpl::CheckUnusedImportSpec(Package& pkg)
 {
-    Utils::ProfileRecorder recorder("Post TypeCheck", "CheckUnusedImportSpec");
+    Utils::ProfileRecorder recorder("PostTypeCheck", "CheckUnusedImportSpec");
     CheckUnusedImportImpl(pkg, diag, importManager).Check();
 }

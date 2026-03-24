@@ -13,7 +13,7 @@
  * Key Components:
  * - MatchCJMPDeclAnnotations(): Validates that common and specific declarations have matching annotations
  * - PropagateCJMPDeclAnnotations(): Propagates special annotations from common to specific declarations
- * - CheckNotAllowedAnnotations(): Validates that unsupported annotations are not used on common/specific declarations
+ * - CheckNotAllowedAnnotations4CJMP(): Validates that unsupported annotations are not used on common/specific declarations
  *
  * The implementation maintains consistency between common and specific-specific code annotations in the
  * multi-specific compilation model, ensuring proper annotation inheritance and synchronization.
@@ -29,6 +29,7 @@
 #include "cangjie/Parse/Parser.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/SafePointer.h"
+#include <cangjie/Utils/ProfileRecorder.h>
 #include <algorithm>
 #include <unordered_set>
 
@@ -299,8 +300,9 @@ bool IsUnsupported(const Annotation& anno)
 }
 } // namespace
 
-void MPTypeCheckerImpl::CheckNotAllowedAnnotations(AST::Package& pkg)
+void MPTypeCheckerImpl::CheckNotAllowedAnnotations4CJMP(AST::Package& pkg)
 {
+    Utils::ProfileRecorder recorder("MatchSpecificWithCommon", "CheckNotAllowedAnnotations4CJMP");
     std::function<VisitAction(Ptr<Node>)> visitor = [this](const Ptr<Node>& node) {
         if (node->IsDecl() && IsCommonOrSpecific(*node) && !node->TestAttr(Attribute::FROM_COMMON_PART)) {
             for (auto& anno : StaticCast<Decl>(node)->annotations) {

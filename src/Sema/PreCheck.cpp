@@ -1990,7 +1990,7 @@ void TypeChecker::TypeCheckerImpl::CollectDeclsWithMember(Ptr<Package> pkg, ASTC
 
 void TypeChecker::TypeCheckerImpl::PreCheck(const std::vector<Ptr<ASTContext>>& contexts)
 {
-    Utils::ProfileRecorder recorder("Pre TypeCheck", "PreCheck");
+    Utils::ProfileRecorder recorder("PreTypeCheck", "PreCheck");
     // NOTE: PreCheck should not contains any 'Synthesize' call.
     Utils::ProfileRecorder::Start("PreCheck", "CheckRedefinition");
     for (auto& ctx : contexts) {
