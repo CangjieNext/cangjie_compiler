@@ -294,7 +294,7 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
     commonDecl.doNotExport = true;
     commonDecl.specificImplementation = &specificDecl;
 }
-}
+} // namespace
 
 // PrepareTypeCheck for CJMP
 void MPTypeCheckerImpl::PrepareTypeCheck4CJMP(Package& pkg)
@@ -309,6 +309,7 @@ void MPTypeCheckerImpl::PrepareTypeCheck4CJMP(Package& pkg)
 
 void MPTypeCheckerImpl::MergeCJMPNominalsExceptExtension(Package& pkg)
 {
+    Utils::ProfileRecorder recorder("PrepareTypeCheck4CJMP", "MergeCJMPNominalsExceptExtension");
     std::unordered_map<std::string, Ptr<Decl>> matchedDecls;
     Walker walkerPackage(&pkg, [this, &matchedDecls](const Ptr<Node>& node) -> VisitAction {
         if (!node->IsDecl()) {
@@ -339,6 +340,7 @@ void MPTypeCheckerImpl::MergeCJMPNominalsExceptExtension(Package& pkg)
 void MPTypeCheckerImpl::PrepareTypeCheck4CJMPExtension(CompilerInstance& ci, ScopeManager& scopeManager,
     ASTContext& ctx, const std::unordered_set<Ptr<AST::ExtendDecl>>& extends)
 {
+    Utils::ProfileRecorder recorder("PreCheckUsage", "PrepareTypeCheck4CJMPExtension");
     if (!compilePlatform) {
         return;
     }
@@ -388,6 +390,7 @@ void UpdateDeclMap(DiagnosticEngine& diag, ASTContext& ctx, Ptr<ExtendDecl>& ed)
 void MPTypeCheckerImpl::MergeCJMPExtensions(CompilerInstance& ci, ScopeManager& scopeManager, ASTContext& ctx,
     const std::unordered_set<Ptr<ExtendDecl>>& extends)
 {
+    Utils::ProfileRecorder recorder("PrepareTypeCheck4CJMPExtension", "MergeCJMPExtensions");
     std::unordered_map<std::string, Ptr<ExtendDecl>> specificExtendDecls;
     std::unordered_map<std::string, std::set<Ptr<ExtendDecl>>> commonExtendDecls;
     for (auto ed : extends) {
@@ -465,11 +468,12 @@ bool HasGeneralSubClass(const AST::ClassDecl& cls)
     }
     return false;
 }
-}
+} // namespace
 
 // Precheck for CJMP
 void MPTypeCheckerImpl::PreCheck4CJMP(const Package& pkg)
 {
+    Utils::ProfileRecorder recorder("PreCheckUsage", "PreCheck4CJMP");
     if (!compileCommon) {
         return;
     }
@@ -604,8 +608,9 @@ static bool IsEnumConstructor(const AST::Node& decl)
     return decl.TestAttr(Attribute::ENUM_CONSTRUCTOR);
 }
 
-void MPTypeCheckerImpl::CheckReturnAndVariableTypes(AST::Package& pkg)
+void MPTypeCheckerImpl::CheckReturnAndVariableTypes4CJMP(AST::Package& pkg)
 {
+    Utils::ProfileRecorder recorder("CheckCJMPRules", "CheckReturnAndVariableTypes4CJMP");
     std::function<VisitAction(Ptr<Node>)> visitor = [this](const Ptr<Node>& node) {
         if (node->astKind == ASTKind::FUNC_DECL) {
             if (!IsCommon(*node) || IsEnumConstructor(*node)) {
@@ -650,6 +655,7 @@ void MPTypeCheckerImpl::CheckReturnAndVariableTypes(AST::Package& pkg)
 
 void MPTypeCheckerImpl::ValidateMatchedAnnotationsAndModifiers(AST::Package& pkg)
 {
+    Utils::ProfileRecorder recorder("CheckCJMPRules", "ValidateMatchedAnnotationsAndModifiers");
     std::function<VisitAction(Ptr<Node>)> visitor = [this](const Ptr<Node> &node) {
         if (node->IsDecl()) {
             if (!IsCommon(*node)) { return VisitAction::WALK_CHILDREN; }
@@ -681,6 +687,7 @@ void CollectDecl(
 // Collect common and specific decls.
 void CollectCJMPDecls(Package& pkg, std::vector<Ptr<Decl>>& commonDecls, std::vector<Ptr<Decl>>& specificDecls)
 {
+    Utils::ProfileRecorder recorder("MatchSpecificWithCommon", "CollectCJMPDecls");
     std::function<VisitAction(Ptr<Node>)> visitor = [&commonDecls, &specificDecls](const Ptr<Node> &node) {
         if (node->IsDecl() && node->astKind != ASTKind::PRIMARY_CTOR_DECL) {
             CollectDecl(StaticAs<ASTKind::DECL>(node), commonDecls, specificDecls);
@@ -1281,21 +1288,29 @@ void MPTypeCheckerImpl::MatchSpecificWithCommon(Package& pkg)
     std::vector<Ptr<Decl>> commonDecls;
     std::vector<Ptr<Decl>> specificDecls;
     CollectCJMPDecls(pkg, commonDecls, specificDecls);
+
+    Utils::ProfileRecorder::Start("MatchSpecificWithCommon", "CheckCommonExtensions");
     if (compileCommon) { // check common extensions
         CheckCommonExtensions(commonDecls);
     }
+    Utils::ProfileRecorder::Stop("MatchSpecificWithCommon", "CheckCommonExtensions");
+
     // This does not contradict to previous check.
     // A source code can be relatively platform and common at the same time.
+    Utils::ProfileRecorder::Start("MatchSpecificWithCommon", "MatchCJMPDecls");
     if (compilePlatform) { // match common decls and platform decls
         MatchCJMPDecls(commonDecls, specificDecls);
     }
+    Utils::ProfileRecorder::Stop("MatchSpecificWithCommon", "MatchCJMPDecls");
 
+    Utils::ProfileRecorder::Start("MatchSpecificWithCommon", "PropagateCJMPDeclAnnotations");
     for (auto common : commonDecls) {
         auto specific = common->specificImplementation;
         if (specific) {
             PropagateCJMPDeclAnnotations(*common, *specific);
         }
     }
+    Utils::ProfileRecorder::Stop("MatchSpecificWithCommon", "PropagateCJMPDeclAnnotations");
 }
 
 // Maps type parameters between common and specific declarations.
@@ -1344,6 +1359,7 @@ void MPTypeCheckerImpl::UpdateGenericTyInMemberFromCommon(TypeSubst& genericTyMa
 void MPTypeCheckerImpl::UpdateSpecificMemberGenericTy(
     ASTContext& ctx, const std::function<std::vector<AST::Symbol*>(ASTContext&, ASTKind)>& getSymsFunc)
 {
+    Utils::ProfileRecorder recorder("PreCheckUsage", "UpdateSpecificMemberGenericTy");
     // Collect all relevant symbol types
     auto syms = getSymsFunc(ctx, ASTKind::CLASS_DECL);
     auto interfaceSyms = getSymsFunc(ctx, ASTKind::INTERFACE_DECL);
@@ -1374,7 +1390,6 @@ void MPTypeCheckerImpl::UpdateSpecificMemberGenericTy(
         }
     }
 }
-
 
 void MPTypeCheckerImpl::GetInheritedTypesWithSpecificImpl(
     std::vector<OwnedPtr<AST::Type>>& inheritedTypes, bool hasSpecificImpl, bool compilePlatform)

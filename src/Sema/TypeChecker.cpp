@@ -1860,7 +1860,7 @@ void AddBuiltinCFuncDecl(Package& pkg)
 
 void AddAttrForDefaultFuncParam(Package& pkg)
 {
-    Utils::ProfileRecorder recorder("Post TypeCheck", "AddAttrForDefaultFuncParam");
+    Utils::ProfileRecorder recorder("PostTypeCheck", "AddAttrForDefaultFuncParam");
     Walker(&pkg, [](auto node) {
         if (node->astKind != ASTKind::FUNC_DECL) {
             return VisitAction::WALK_CHILDREN;
@@ -1882,7 +1882,7 @@ void AddAttrForDefaultFuncParam(Package& pkg)
 
 void MarkImplicitUsedFunctions(const Package& pkg)
 {
-    Utils::ProfileRecorder recorder("Post TypeCheck", "MarkImplicitUsedFunctions");
+    Utils::ProfileRecorder recorder("PostTypeCheck", "MarkImplicitUsedFunctions");
     // NOTE: These are special toplevel functions that are not exported but will be reference in other package.
     static const std::unordered_map<std::string, std::unordered_set<std::string>> SPECIAL_EXPORTED_FUNCS{
         {CORE_PACKAGE_NAME,
@@ -2005,7 +2005,7 @@ void TypeChecker::TypeCheckForPackages(const std::vector<Ptr<Package>>& pkgs) co
 
 std::vector<Ptr<ASTContext>> TypeChecker::TypeCheckerImpl::PreTypeCheck(const std::vector<Ptr<AST::Package>>& pkgs)
 {
-    Utils::ProfileRecorder recorder("Semantic", "Pre TypeCheck");
+    Utils::ProfileRecorder recorder("TypeCheck", "PreTypeCheck");
     std::vector<Ptr<ASTContext>> contexts;
     // Only check for packages that have corresponding ASTContext.
     std::for_each(pkgs.begin(), pkgs.end(), [this, &contexts](Ptr<Package> pkg) {
@@ -2014,35 +2014,35 @@ std::vector<Ptr<ASTContext>> TypeChecker::TypeCheckerImpl::PreTypeCheck(const st
             contexts.emplace_back(ctx);
         }
     });
-    Utils::ProfileRecorder::Start("Pre TypeCheck", "PrepareTypeCheck");
+    Utils::ProfileRecorder::Start("PreTypeCheck", "PrepareTypeCheck");
     for (auto& ctx : contexts) {
         PrepareTypeCheck(*ctx, *ctx->curPackage);
     }
-    Utils::ProfileRecorder::Stop("Pre TypeCheck", "PrepareTypeCheck");
+    Utils::ProfileRecorder::Stop("PreTypeCheck", "PrepareTypeCheck");
     // Pre checking for resolving types and rules without semantic type.
     PreCheck(contexts);
 
-    Utils::ProfileRecorder::Start("Pre TypeCheck", "CollectDeclsWithMember");
+    Utils::ProfileRecorder::Start("PreTypeCheck", "CollectDeclsWithMember");
     for (auto pkg : pkgs) {
         if (auto ctx = ci->GetASTContextByPackage(pkg)) {
             CollectDeclsWithMember(pkg, *ctx);
         }
     }
-    Utils::ProfileRecorder::Stop("Pre TypeCheck", "CollectDeclsWithMember");
+    Utils::ProfileRecorder::Stop("PreTypeCheck", "CollectDeclsWithMember");
 
-    Utils::ProfileRecorder::Start("Pre TypeCheck", "MatchSpecificWithCommon");
+    Utils::ProfileRecorder::Start("PreTypeCheck", "MatchSpecificWithCommon");
     for (auto pkg : pkgs) {
         mpImpl->MatchSpecificWithCommon(*pkg);
-        mpImpl->CheckNotAllowedAnnotations(*pkg);
+        mpImpl->CheckNotAllowedAnnotations4CJMP(*pkg);
     }
-    Utils::ProfileRecorder::Stop("Pre TypeCheck", "MatchSpecificWithCommon");
+    Utils::ProfileRecorder::Stop("PreTypeCheck", "MatchSpecificWithCommon");
 
     return contexts;
 }
 
 void TypeChecker::TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& contexts)
 {
-    Utils::ProfileRecorder recorder("Semantic", "Post TypeCheck");
+    Utils::ProfileRecorder recorder("TypeCheck", "PostTypeCheck");
     // Post checking for legality of semantic.
     for (auto& ctx : contexts) {
         CheckOverflow(*ctx->curPackage);
@@ -2052,10 +2052,10 @@ void TypeChecker::TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& c
         // Check legality of usage after sema type completed.
         CheckLegalityOfUsage(*ctx, *ctx->curPackage);
         // Check cjmp match rules.
-        Utils::ProfileRecorder::Start("Post TypeCheck", "CheckCJMPRules");
-        mpImpl->CheckReturnAndVariableTypes(*ctx->curPackage);
+        Utils::ProfileRecorder::Start("PostTypeCheck", "CheckCJMPRules");
+        mpImpl->CheckReturnAndVariableTypes4CJMP(*ctx->curPackage);
         mpImpl->ValidateMatchedAnnotationsAndModifiers(*ctx->curPackage);
-        Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckCJMPRules");
+        Utils::ProfileRecorder::Stop("PostTypeCheck", "CheckCJMPRules");
         AddAttrForDefaultFuncParam(*ctx->curPackage);
         // Because of the cjlint checking policy, desugar of propDecl should be done in sema stage for now.
         DesugarForPropDecl(*ctx->curPackage);
@@ -2067,9 +2067,9 @@ void TypeChecker::TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& c
                 (void)mainFunctionMap[md->curFile].emplace(md->desugarDecl.get());
             }
         });
-        Utils::ProfileRecorder::Start("Post TypeCheck", "PluginCheck");
+        Utils::ProfileRecorder::Start("PostTypeCheck", "PluginCheck");
         PluginCheck::PluginCustomAnnoChecker(*ci, diag, importManager).Check(*ctx->curPackage);
-        Utils::ProfileRecorder::Stop("Post TypeCheck", "PluginCheck");
+        Utils::ProfileRecorder::Stop("PostTypeCheck", "PluginCheck");
     }
     CheckWhetherHasProgramEntry();
 }
@@ -2693,7 +2693,7 @@ VisitAction TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfaces(const Expr
 
 void TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfacesEntry(Node& n)
 {
-    Utils::ProfileRecorder recorder("Post TypeCheck", "CheckInstDupSuperInterfacesEntry");
+    Utils::ProfileRecorder recorder("PostTypeCheck", "CheckInstDupSuperInterfacesEntry");
     std::function<VisitAction(Ptr<Node>)> visitor = [this, &visitor](Ptr<Node> n) {
         switch (n->astKind) {
             case ASTKind::PACKAGE: {
@@ -2723,7 +2723,7 @@ void TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfacesEntry(Node& n)
 // Remove after Chir's constant folding really works.
 void TypeChecker::TypeCheckerImpl::CheckOverflow(Node& node)
 {
-    Utils::ProfileRecorder recorder("Post TypeCheck", "CheckOverflow");
+    Utils::ProfileRecorder recorder("PostTypeCheck", "CheckOverflow");
     Walker walker(&node, nullptr, [this](Ptr<Node> node) -> VisitAction {
         switch (node->astKind) {
             case ASTKind::LIT_CONST_EXPR: {

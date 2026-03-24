@@ -914,7 +914,7 @@ private:
 
 void TypeChecker::TypeCheckerImpl::CheckConstEvaluation(Package& pkg)
 {
-    Utils::ProfileRecorder recorder("Post TypeCheck", "CheckConstEvaluation");
+    Utils::ProfileRecorder recorder("PostTypeCheck", "CheckConstEvaluation");
     ConstEvaluationChecker(diag, pkg).Check();
 }
 } // namespace Cangjie
