@@ -73,6 +73,7 @@ ERROR(sema_nonexhuastive_patterns, "non-exhaustive patterns", "the selector is o
 WARNING(sema_unreachable_pattern, UNUSED, "unreachable pattern")
 ERROR(sema_lambdaExpr_must_have_type_annotation, "parameters of this lambda expression must have type annotations")
 ERROR(sema_use_func_capture_var_alone, "%s capturing mutable variables needs to be called directly")
+ERROR(sema_try_handle_capture_var, "'try'-'handle' expressions cannot capture mutable variables; consider using 'let' or boxing")
 ERROR(sema_enum_constructor_with_param_must_have_args, "enum constructor '%s' must be used with arguments")
 
 ERROR(sema_optional_chain_non_optional, "cannot use optional chaining",
