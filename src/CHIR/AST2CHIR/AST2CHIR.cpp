@@ -566,7 +566,6 @@ bool AST2CHIR::ToCHIRPackage(AST::Package& node)
     package->SetPackageAccessLevel(BuildPackageAccessLevel(node.accessible));
     RegisterAllSources();
     CJC_NULLPTR_CHECK(package);
-    dependencyPkg = importManager.GetAllDependentPackageNames(node.fullPackageName);
 
     // step 1: collect all top-level decls
     CollectTopLevelDecls(node);
