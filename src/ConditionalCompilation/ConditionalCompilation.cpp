@@ -135,31 +135,83 @@ const std::map<std::string, std::vector<std::string>> CONDITION_VALUES = {
 };
 } // namespace
 
-static auto GetVersionUInt(const std::string& version) -> uint32_t
+// Implementation of CjcVersion struct
+CjcVersion::CjcVersion(const std::string& versionStr)
 {
-    std::string res = "";
-    const int digitaSize = 2;
-    auto digitals = Utils::SplitString(version, ".");
-    for (const auto& it : digitals) {
-        if (it.size() == digitaSize) {
-            res += it;
-        } else if (it.size() == 1) {
-            res += "0" + it;
+    // Parse version string: x.y.z[-(alpha|beta).number]
+    size_t dashPos = versionStr.find('-');
+    std::string baseVersion = (dashPos != std::string::npos) ? versionStr.substr(0, dashPos) : versionStr;
+    std::string prerelease = (dashPos != std::string::npos) ? versionStr.substr(dashPos + 1) : "";
+    
+    // Parse base version (x.y.z)
+    auto parts = Utils::SplitString(baseVersion, ".");
+    if (parts.size() >= 1) major = static_cast<uint8_t>(std::stoi(parts[0]));
+    if (parts.size() >= 2) minor = static_cast<uint8_t>(std::stoi(parts[1]));
+    if (parts.size() >= 3) patch = static_cast<uint8_t>(std::stoi(parts[2]));
+    
+    // Parse pre-release info
+    if (!prerelease.empty()) {
+        size_t dotPos = prerelease.find('.');
+        if (dotPos != std::string::npos) {
+            std::string type = prerelease.substr(0, dotPos);
+            std::string num = prerelease.substr(dotPos + 1);
+            
+            if (type == "alpha") {
+                preRelease = PreReleaseType::ALPHA;
+            } else if (type == "beta") {
+                preRelease = PreReleaseType::BETA;
+            }
+            
+            if (!num.empty()) {
+                preReleaseNumber = static_cast<uint32_t>(std::stoul(num));
+            }
         }
     }
-    int32_t iRes = std::stoi(res);
-    CJC_ASSERT(iRes >= 0);
-    return static_cast<uint32_t>(iRes);
+}
+
+bool CjcVersion::operator<(const CjcVersion& other) const
+{
+    if (major != other.major) return major < other.major;
+    if (minor != other.minor) return minor < other.minor;
+    if (patch != other.patch) return patch < other.patch;
+    if (preRelease != other.preRelease) return preRelease < other.preRelease;
+    return preReleaseNumber < other.preReleaseNumber;
+}
+
+bool CjcVersion::operator<=(const CjcVersion& other) const
+{
+    return *this < other || *this == other;
+}
+
+bool CjcVersion::operator>(const CjcVersion& other) const
+{
+    return !(*this <= other);
+}
+
+bool CjcVersion::operator>=(const CjcVersion& other) const
+{
+    return !(*this < other);
+}
+
+bool CjcVersion::operator==(const CjcVersion& other) const
+{
+    return major == other.major && minor == other.minor && patch == other.patch &&
+           preRelease == other.preRelease && preReleaseNumber == other.preReleaseNumber;
+}
+
+bool CjcVersion::operator!=(const CjcVersion& other) const
+{
+    return !(*this == other);
 }
 
 ConditionalCompilationImpl::ConditionalCompilationImpl(CompilerInstance* c)
-    : ci(c),
-      backendType(ci->invocation.globalOptions.backend),
-      triple(ci->invocation.globalOptions.target),
-      cjcVersion(GetVersionUInt(CANGJIE_VERSION)),
-      debug(ci->invocation.globalOptions.enableCompileDebug),
-      test(ci->invocation.globalOptions.enableCompileTest),
-      passedCondition(ci->invocation.globalOptions.passedWhenKeyValue)
+    : ci(c)
+    , backendType(ci->invocation.globalOptions.backend)
+    , triple(ci->invocation.globalOptions.target)
+    , cjcVersion(CANGJIE_VERSION)  // Store as string
+    , debug(ci->invocation.globalOptions.enableCompileDebug)
+    , test(ci->invocation.globalOptions.enableCompileTest)
+    , passedCondition(ci->invocation.globalOptions.passedWhenKeyValue)
 {
     // in cjc cfg has been parsed, in lsp need parse and check cfg here.
     if (ci->invocation.globalOptions.enableMacroInLSP) {
@@ -271,7 +323,8 @@ bool ConditionalCompilationImpl::ConditionCheck(
     }
     // Check `cjc_version`.
     if (conditionStr == CJC_VERSION_STR) {
-        std::regex cjcVersionRegex("[0-9]{1,2}[.][0-9]{1,2}[.][0-9]{1,2}");
+        // Enhanced regex to support all version formats including pre-release
+        std::regex cjcVersionRegex("[0-9]{1,2}[.][0-9]{1,2}[.][0-9]{1,2}(-(alpha|beta)[.]([0-9]{1,2}|[0-9]{14}))?");
         if (!std::regex_match(right, cjcVersionRegex)) {
             (void)ci->diag.DiagnoseRefactor(
                 DiagKindRefactor::conditional_compilation_not_support_cjc_version_format, begin);
@@ -282,9 +335,10 @@ bool ConditionalCompilationImpl::ConditionCheck(
     return true;
 }
 
-bool ConditionalCompilationImpl::Eval(const BinaryExpr& expr, const std::string& left, const std::string& right) const
+template<typename T>
+bool ConditionalCompilationImpl::Eval(const BinaryExpr& expr, const T& left, const T& right) const
 {
-    // Eval value.
+    // Generic evaluation for any comparable type
     switch (expr.op) {
         case TokenKind::EQUAL: {
             return left == right;
@@ -302,6 +356,12 @@ bool ConditionalCompilationImpl::Eval(const BinaryExpr& expr, const std::string&
             return left <= right;
     }
 }
+
+// Explicit instantiation for std::string to maintain backward compatibility
+template bool ConditionalCompilationImpl::Eval<std::string>(const BinaryExpr& expr, const std::string& left, const std::string& right) const;
+
+// Explicit instantiation for CjcVersion
+template bool ConditionalCompilationImpl::Eval<CjcVersion>(const BinaryExpr& expr, const CjcVersion& left, const CjcVersion& right) const;
 
 bool ConditionalCompilationImpl::EvalJudgeBinaryExpr(const BinaryExpr& be)
 {
@@ -339,10 +399,18 @@ bool ConditionalCompilationImpl::EvalJudgeBinaryExpr(const BinaryExpr& be)
             conditionStr.Val(), TOKENS[static_cast<int>(be.op)]);
         return false;
     }
-    // Decode cjc version to judge.
+    // Decode cjc version to judge using struct-based comparison when needed
     if (conditionStr == CJC_VERSION_STR) {
-        std::string version = std::to_string(GetVersionUInt(right->stringValue));
-        right->stringValue = RefreshVersionStr(version);
+        // Parse strings to CjcVersion objects for comparison
+        CjcVersion userVersion(right);
+        CjcVersion compilerVersion(cjcVersion);  // Use stored string version
+        
+        // Use generic Eval function for CjcVersion comparison
+        bool result = Eval(be, userVersion, compilerVersion);
+        
+        // Return string representation of boolean result for compatibility
+        right->stringValue = result ? "1" : "0";
+        leftValue = result ? "1" : "0";
     }
     auto leftValue = relatedInfo.value();
     return Eval(be, leftValue, right->stringValue);
