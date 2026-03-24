@@ -230,6 +230,9 @@ ERROR(sema_cjmapping_decl_not_supported, "cangjie mirror decl type is not suppor
 ERROR(sema_cjmapping_method_arg_not_supported, "argument type of cangjie mirror decl type member function is not supported")
 ERROR(sema_cjmapping_method_ret_unsupported, "return type '%s' of function inside %s type is not supported")
 ERROR(sema_cj_mapping_generic_method_not_get_instance_config, "Instance configuration '%s' has incorrect format.")
+ERROR(sema_cj_mapping_func_type_not_configured, "function type '%s' used in Java interop must be configured in lambda_patterns")
+ERROR(sema_cj_mapping_tuple_type_not_configured, "tuple type '%s' used in Java interop must be configured in tuple_configuration")
+ERROR(sema_cj_mapping_generic_type_not_configured, "generic type '%s' used in Java interop must be configured in generic_object_configuration")
 
 // VArray
 ERROR(sema_varray_size_match, "mismatch 'VArray' type's size", "expected size is %s, found %s")
