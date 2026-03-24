@@ -13,6 +13,7 @@
 
 #include "ParserImpl.h"
 
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
@@ -511,6 +512,7 @@ static OwnedPtr<LambdaExpr> CreateLambdaFromBlock(
     auto le = CreateLambdaExpr(std::move(fb));
     le->begin = expr.begin;
     le->end = expr.end;
+    le->EnableAttr(Attribute::TRY_HANDLE_ADDED_LAMBDA);
 
     return le;
 }
