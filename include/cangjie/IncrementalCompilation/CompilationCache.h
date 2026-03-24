@@ -17,7 +17,7 @@
 
 namespace Cangjie {
 using RawMangledName = std::string;
-using RawMangled2DeclMap = std::unordered_map<RawMangledName, Ptr<const AST::Decl>>;
+using RawMangled2DeclMap = std::unordered_map<RawMangledName, Ptr<AST::Decl>>;
 // A map to record the CHIR optimizations effects on incremental compilation, where the key
 // is the raw mangle name of the source decl, and the value is the set of the raw mangle name
 // of the polluted decls
