@@ -65057,10 +65057,10 @@ index 000000000..51e8f13b3
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJGenericIntrinsicOpt.cpp b/llvm/lib/Transforms/Scalar/CJGenericIntrinsicOpt.cpp
 new file mode 100644
-index 000000000..2a47341d0
+index 000000000..d72186c0a
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJGenericIntrinsicOpt.cpp
-@@ -0,0 +1,814 @@
+@@ -0,0 +1,856 @@
 +//===- CJInstanceOfOpt.cpp --------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -65475,26 +65475,64 @@ index 000000000..2a47341d0
 +    return {AB, AV, AS};
 +  }
 +
-+  // Return the Value after strip.
-+  Value *getDerivedOffset(Value *Ptr,
-+                          SmallVector<std::pair<Value *, bool>, 4> &Offsets) {
-+    Ptr = Ptr->stripPointerCasts();
-+    GetElementPtrInst *GEP = nullptr;
-+    while ((GEP = dyn_cast<GetElementPtrInst>(Ptr))) {
-+      if (GEP->getNumIndices() == 1) {
-+        Offsets.push_back({GEP->getOperand(1), true});
-+        Ptr = GEP->getPointerOperand();
-+      }
-+      break;
-+    }
-+    return GEP ? GEP->getPointerOperand() : nullptr;
-+  }
-+
 +  bool isConstantEqual(Value *LHS, Value *RHS) {
 +    if (!isa<ConstantInt>(LHS) || !isa<ConstantInt>(RHS))
 +      return false;
 +    return cast<ConstantInt>(LHS)->getSExtValue() ==
 +           cast<ConstantInt>(RHS)->getSExtValue();
++  }
++
++  bool hasSameOffsetValue(Value *LHS, Value *RHS) {
++    return LHS == RHS || isConstantEqual(LHS, RHS);
++  }
++
++  bool hasSameOffsets(const ArrayRef<std::pair<Value *, bool>> LHS,
++                      const ArrayRef<std::pair<Value *, bool>> RHS) {
++    if (LHS.size() != RHS.size())
++      return false;
++    for (unsigned I = 0, E = LHS.size(); I != E; ++I) {
++      if (LHS[I].second != RHS[I].second ||
++          !hasSameOffsetValue(LHS[I].first, RHS[I].first))
++        return false;
++    }
++    return true;
++  }
++
++  // Return the Value after strip.
++  Value *getDerivedOffset(Value *Ptr,
++                          SmallVector<std::pair<Value *, bool>, 4> &Offsets) {
++    Ptr = Ptr->stripPointerCasts();
++    if (auto *PN = dyn_cast<PHINode>(Ptr)) {
++      SmallVector<std::pair<Value *, bool>, 4> PhiOffsets;
++      SmallVector<std::pair<Value *, bool>, 4> IncomingOffsets;
++      Value *Base = nullptr;
++      for (unsigned I = 0, E = PN->getNumIncomingValues(); I != E; ++I) {
++        Value *Incoming = PN->getIncomingValue(I)->stripPointerCasts();
++        if (isa<PHINode>(Incoming))
++          return nullptr;
++        IncomingOffsets.clear();
++        Value *IncomingBase = getDerivedOffset(Incoming, IncomingOffsets);
++        if (!IncomingBase)
++          return nullptr;
++        IncomingBase = IncomingBase->stripPointerCasts();
++        if (!Base) {
++          Base = IncomingBase;
++          PhiOffsets.append(IncomingOffsets.begin(), IncomingOffsets.end());
++          continue;
++        }
++        if (Base != IncomingBase || !hasSameOffsets(PhiOffsets, IncomingOffsets))
++          return nullptr;
++      }
++      Offsets.append(PhiOffsets.begin(), PhiOffsets.end());
++      return Base;
++    }
++
++    auto *GEP = dyn_cast<GetElementPtrInst>(Ptr);
++    if (!GEP || GEP->getNumIndices() != 1)
++      return nullptr;
++
++    Offsets.push_back({GEP->getOperand(1), true});
++    return GEP->getPointerOperand();
 +  }
 +
 +  // IsWrite: offset should be logical negation
@@ -65610,7 +65648,9 @@ index 000000000..2a47341d0
 +        else {
 +          SmallVector<std::pair<Value *, bool>, 4> TmpOffsets;
 +          auto *BV = getDerivedOffset(getSource(II), TmpOffsets);
-+          if (BV && BV != getBaseObj(II)) {
++          // TmpOffsets is empty means we cannot get the offset from source,
++          // which is not expected, so conservatively break.
++          if ((BV && BV != getBaseObj(II)) || TmpOffsets.empty()) {
 +            Stop = true;
 +            break;
 +          }
@@ -65668,6 +65708,8 @@ index 000000000..2a47341d0
 +            break;
 +          }
 +          pushAndPopSameOffset(Offsets, TmpOffsets, true);
++          if (LastBase)
++            LastBase = false;
 +          Base = nullptr;
 +          TI = nullptr;
 +          Loc = MemoryLocation::getAfter(getSource(II));
@@ -95317,10 +95359,10 @@ index 000000000..b61eee475
 +!10 = !{!"enumKind0", !"none"}
 diff --git a/llvm/test/Transforms/CJGenericIntrinsicOpt/copy_generic_opt_non_phi.ll b/llvm/test/Transforms/CJGenericIntrinsicOpt/copy_generic_opt_non_phi.ll
 new file mode 100644
-index 000000000..e25779d12
+index 000000000..3e95fce6e
 --- /dev/null
 +++ b/llvm/test/Transforms/CJGenericIntrinsicOpt/copy_generic_opt_non_phi.ll
-@@ -0,0 +1,175 @@
+@@ -0,0 +1,188 @@
 +; RUN: opt -passes=cj-generic-intrinsic-opt --cangjie-pipeline -S < %s | FileCheck %s
 +
 +%fake_typeinfo = type { i8*, i8, i8, i16, i32, i8*, i32, i8, i8, i32*, i8*, i8*, i8*, %fake_typeinfo*, i8*, i8* }
@@ -95485,6 +95527,19 @@ index 000000000..e25779d12
 +  ret void
 +}
 +
++define void @test_func_6(i8 addrspace(1)* noalias %this, i8 addrspace(1)* noalias %0, i8 addrspace(1)* noalias %1, i8 addrspace(1)* noalias %2, i64 %offset1, i64 %offset2, %fake_typeinfo* %ti) {
++  %ti.size3 = getelementptr inbounds %fake_typeinfo, %fake_typeinfo* %ti, i64 0, i32 4
++  %size = load i32, i32* %ti.size3, align 4
++  %4 = getelementptr inbounds i8, i8 addrspace(1)* %this, i64 %offset1
++  call void @llvm.cj.gcread.generic(i8 addrspace(1)* %0, i8 addrspace(1)* %this, i8 addrspace(1)* %4, i32 %size)
++  %5 = getelementptr inbounds i8, i8 addrspace(1)* %1, i64 %offset2
++  call void @llvm.cj.gcwrite.generic(i8 addrspace(1)* %1, i8 addrspace(1)* %5, i8 addrspace(1)* %0, i32 %size)
++  ; CHECK: %7 = getelementptr i8, i8 addrspace(1)* %this, i64 %offset1
++  ; CHECK-NEXT: call void @llvm.cj.gcread.generic(i8 addrspace(1)* %2, i8 addrspace(1)* %this, i8 addrspace(1)* %7, i32 %size)
++  call void @llvm.cj.gcread.generic(i8 addrspace(1)* %2, i8 addrspace(1)* %1, i8 addrspace(1)* %5, i32 %size)
++  ret void
++}
++
 +declare void @init_func(i8 addrspace(1)* noalias sret(i8))
 +declare i64 @get_offsets(i8*) #1
 +declare void @llvm.cj.assign.generic(i8 addrspace(1)* noalias nocapture writeonly %0, i8 addrspace(1)* noalias nocapture readonly %1, i8* noalias nocapture readonly %2) #0
@@ -95498,10 +95553,10 @@ index 000000000..e25779d12
 +attributes #2 = { nounwind "cj-heapmalloc" "cj-runtime" }
 diff --git a/llvm/test/Transforms/CJGenericIntrinsicOpt/copy_generic_opt_phi.ll b/llvm/test/Transforms/CJGenericIntrinsicOpt/copy_generic_opt_phi.ll
 new file mode 100644
-index 000000000..db8b0c4b2
+index 000000000..9d7f76ef0
 --- /dev/null
 +++ b/llvm/test/Transforms/CJGenericIntrinsicOpt/copy_generic_opt_phi.ll
-@@ -0,0 +1,172 @@
+@@ -0,0 +1,206 @@
 +; RUN: opt -passes=cj-generic-intrinsic-opt --cangjie-pipeline -S < %s | FileCheck %s
 +
 +%fake_typeinfo = type { i8*, i8, i8, i16, i32, i8*, i32, i8, i8, i32*, i8*, i8*, i8*, %fake_typeinfo*, i8*, i8* }
@@ -95660,6 +95715,40 @@ index 000000000..db8b0c4b2
 +  br label %common.ret
 +
 +common.ret:
++  ret void
++}
++
++define void @test_func_6(i8 addrspace(1)* noalias %base, i8 addrspace(1)* noalias %mid, i8 addrspace(1)* noalias %dst,
++                         %fake_typeinfo* %ti0, %fake_typeinfo* %ti1, i64 %offset, i1 %cond) {
++  %ti0.i8 = bitcast %fake_typeinfo* %ti0 to i8*
++  %ti.size0 = getelementptr inbounds i8, i8* %ti0.i8, i64 12
++  %ti.size0.ptr = bitcast i8* %ti.size0 to i32*
++  %size0 = load i32, i32* %ti.size0.ptr, align 4
++  %ti1.i8 = bitcast %fake_typeinfo* %ti1 to i8*
++  %ti.size1 = getelementptr inbounds i8, i8* %ti1.i8, i64 12
++  %ti.size1.ptr = bitcast i8* %ti.size1 to i32*
++  %size1 = load i32, i32* %ti.size1.ptr, align 4
++  br i1 %cond, label %left, label %right
++
++left:
++  %src.left = getelementptr inbounds i8, i8 addrspace(1)* %base, i64 8
++  br label %merge
++
++right:
++  %src.right = getelementptr inbounds i8, i8 addrspace(1)* %base, i64 8
++  br label %merge
++
++merge:
++  ; CHECK-LABEL: @test_func_6(
++  ; CHECK: [[SRC:%.*]] = phi i8 addrspace(1)* [ %src.left, %left ], [ %src.right, %right ]
++  ; CHECK-NEXT: call void @llvm.cj.gcread.generic(i8 addrspace(1)* %mid, i8 addrspace(1)* %base, i8 addrspace(1)* [[SRC]], i32 %size0)
++  ; CHECK-NOT: sub i64 %offset, 8
++  ; CHECK: [[FIELD:%.*]] = getelementptr i8, i8 addrspace(1)* %base, i64 %offset
++  ; CHECK-NEXT: call void @llvm.cj.gcread.generic(i8 addrspace(1)* %dst, i8 addrspace(1)* %base, i8 addrspace(1)* [[FIELD]], i32 %size1)
++  %src = phi i8 addrspace(1)* [ %src.left, %left ], [ %src.right, %right ]
++  call void @llvm.cj.gcread.generic(i8 addrspace(1)* %mid, i8 addrspace(1)* %base, i8 addrspace(1)* %src, i32 %size0)
++  %field = getelementptr inbounds i8, i8 addrspace(1)* %mid, i64 %offset
++  call void @llvm.cj.gcread.generic(i8 addrspace(1)* %dst, i8 addrspace(1)* %mid, i8 addrspace(1)* %field, i32 %size1)
 +  ret void
 +}
 +
