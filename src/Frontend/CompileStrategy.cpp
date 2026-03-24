@@ -84,7 +84,7 @@ bool CompileStrategy::OverflowStrategy() const
 
 void CompileStrategy::PerformDesugar() const
 {
-    Utils::ProfileRecorder recorder("Semantic", "Desugar Before TypeCheck");
+    Utils::ProfileRecorder recorder("Semantic", "DesugarBeforeTypeCheck");
     for (auto& [pkg, ctx] : ci->pkgCtxMap) {
         Cangjie::PerformDesugarBeforeTypeCheck(*pkg, ci->invocation.globalOptions.enableMacroInLSP);
     }
