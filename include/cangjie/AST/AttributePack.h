@@ -683,6 +683,13 @@ enum class Attribute {
      */
     ALREADY_LOADED,
 
+    /**
+     * Mark a lambda expression inserted by try-handle parsing.
+     * W: Parse.
+     * R: Sema.
+     */
+    TRY_HANDLE_ADDED_LAMBDA,
+
     AST_ATTR_END,
 };
 
