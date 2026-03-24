@@ -1295,12 +1295,21 @@ void PrintOptionType(unsigned indent, const OptionType& type, std::ostream& stre
     PrintIndent(stream, indent, "}");
 }
 
+void PrintConstantType(unsigned indent, const ConstantType& type, std::ostream& stream = std::cout)
+{
+    PrintIndent(stream, indent, "ConstantType {");
+    PrintBasic(indent + ONE_INDENT, type, stream);
+    PrintNode(type.constantExpr.get(), indent + ONE_INDENT, "constantExpr", stream);
+    PrintIndent(stream, indent, "}");
+}
+
 void PrintVArrayType(unsigned indent, const VArrayType& type, std::ostream& stream = std::cout)
 {
     PrintIndent(stream, indent, "VArrayType {");
     PrintBasic(indent + ONE_INDENT, type, stream);
     PrintIndent(stream, indent + ONE_INDENT, "typeArguments:");
     PrintNode(type.typeArgument.get(), indent + TWO_INDENT, "", stream);
+    PrintNode(type.constantType.get(), indent + ONE_INDENT, "constantType", stream);
     PrintIndent(stream, indent, "}");
 }
 
@@ -1310,6 +1319,13 @@ void PrintQualifiedType(unsigned indent, const QualifiedType& type, std::ostream
     PrintBasic(indent + ONE_INDENT, type, stream);
     PrintNode(type.baseType.get(), indent + ONE_INDENT, "baseType", stream);
     PrintIndent(stream, indent + ONE_INDENT, "field:", type.field.Val());
+    if (!type.typeArguments.empty()) {
+        PrintIndent(stream, indent + ONE_INDENT, "typeArguments [");
+        for (auto& typeArgument : type.typeArguments) {
+            PrintNode(typeArgument.get(), indent + TWO_INDENT, "", stream);
+        }
+        PrintIndent(stream, indent + ONE_INDENT, "]");
+    }
     if (type.target) {
         PrintTarget(indent + ONE_INDENT, *type.target, stream);
     }
@@ -1558,8 +1574,9 @@ void PrintNode(Ptr<const Node> node, unsigned indent, const std::string& additio
         [&indent, &stream](const OptionalExpr& expr) { PrintOptionalExpr(indent, expr, stream); },
         [&indent, &stream](const OptionalChainExpr& expr) { PrintOptionalChainExpr(indent, expr, stream); },
         [&indent, &stream](const LetPatternDestructor& expr) { PrintLetPatternDestructor(indent, expr, stream); },
-        [&indent, &stream](
-            const PrimitiveTypeExpr& pte) { PrintIndent(stream, indent, "PrimitiveTypeExpr: " + pte.ty->String()); },
+        [&indent, &stream](const PrimitiveTypeExpr& pte) {
+            PrintIndent(stream, indent, "PrimitiveTypeExpr:", Ty::KindName(pte.typeKind));
+        },
         [&indent, &stream](const SpawnExpr& expr) { PrintSpawnExpr(indent, expr, stream); },
         [&indent, &stream](const SynchronizedExpr& expr) { PrintSynchronizedExpr(indent, expr, stream); },
         [&indent, &stream](
@@ -1584,6 +1601,7 @@ void PrintNode(Ptr<const Node> node, unsigned indent, const std::string& additio
         [&indent, &stream](const ThisType& type) { PrintThisType(indent, type, stream); },
         [&indent, &stream](const PrimitiveType& type) { PrintPrimitiveType(indent, type, stream); },
         [&indent, &stream](const OptionType& type) { PrintOptionType(indent, type, stream); },
+        [&indent, &stream](const ConstantType& type) { PrintConstantType(indent, type, stream); },
         [&indent, &stream](const VArrayType& type) { PrintVArrayType(indent, type, stream); },
         [&indent, &stream](const QualifiedType& type) { PrintQualifiedType(indent, type, stream); },
         [&indent, &stream](const GenericConstraint& generic) { PrintGenericConstraint(indent, generic, stream); },
