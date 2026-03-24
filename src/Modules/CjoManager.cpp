@@ -12,10 +12,12 @@
 
 #include "cangjie/Modules/CjoManager.h"
 
+#include <fstream>
 #include <queue>
 
 #include "CjoManagerImpl.h"
 #include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/PrintNode.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Modules/ASTSerialization.h"
@@ -686,5 +688,68 @@ void CjoManagerImpl::ClearForReBuildIndex()
     // Reset BuildIndex flag
     hasBuildIndex = false;
     // Don't clear cjoFileCacheMap and cjoPathCache, because they are used for rebuild index.
+}
+
+void CjoManager::RemoveDecls(const std::string& srcPkgName, const UsedDeclMap& usedItems)
+{
+    impl->RemoveDecls(srcPkgName, usedItems);
+}
+
+void CjoManagerImpl::RemoveDecls(const std::string& srcPkgName, const UsedDeclMap& usedItems)
+{
+    Utils::ProfileRecorder recorder("RemoveUnusedImportedDecls", "RemoveDecls");
+    for (auto& [fullPkgName, pkgInfo] : packageNameMap) {
+        if (fullPkgName == srcPkgName) {
+            continue; // Don't remove decls from source package.
+        }
+        auto usedDeclIt = usedItems.find(fullPkgName);
+        auto usedDecls = usedDeclIt != usedItems.end() ? usedDeclIt->second : std::unordered_set<Ptr<Decl>>{};
+
+        // 1. Remove from declMap.
+        // auto declMap = &pkgInfo->declMap;
+        // for (auto declIter = declMap->begin(); declIter != declMap->end();) {
+        //     if (usedDecls.find(*declIter) == usedDecls.end()) {
+        //         declIter = declMap->erase(declIter);
+        //     } else {
+        //         ++declIter;
+        //     }
+        // }
+        // 2. Remove from ast.
+        // ------------------------debug------------------------ //
+        // std::ofstream ofs{};
+        // ofs.open("before_remove.txt", std::ios::out);
+        // PrintNode(pkgInfo->pkg, 0, "", ofs);
+        // ofs.flush();
+        // ofs.close();
+        // ------------------------debug------------------------ //
+        size_t total = 0;
+        size_t remaining = 0;
+        for (auto& file : pkgInfo->pkg->files) {
+            total += file->decls.size();
+            Utils::EraseIf(
+                file->decls, [&usedDecls](const auto& decl) { return usedDecls.find(decl.get()) == usedDecls.end(); });
+            remaining += file->decls.size();
+            total += file->exportedInternalDecls.size();
+            Utils::EraseIf(file->exportedInternalDecls,
+                [&usedDecls](const auto& decl) { return usedDecls.find(decl.get()) == usedDecls.end(); });
+            remaining += file->exportedInternalDecls.size();
+
+            for (auto& toplevelDecl : file->decls) {
+                total += toplevelDecl->GetMemberDecls().size();
+                Utils::EraseIf(toplevelDecl->GetMemberDecls(),
+                    [&usedDecls](const auto& decl) { return usedDecls.find(decl.get()) == usedDecls.end(); });
+                remaining += toplevelDecl->GetMemberDecls().size();
+            }
+        }
+        Utils::EraseIf(pkgInfo->pkg->srcImportedNonGenericDecls,
+            [&usedDecls](const auto& decl) { return usedDecls.find(decl.get()) == usedDecls.end(); });
+        Println("Remove decls for package", fullPkgName, ", total decls:", total, ", remaining decls:", remaining);
+        // ------------------------debug------------------------ //
+        // ofs.open("after_remove.txt", std::ios::out);
+        // PrintNode(pkgInfo->pkg, 0, "", ofs);
+        // ofs.flush();
+        // ofs.close();
+        // ------------------------debug------------------------ //
+    }
 }
 } // namespace Cangjie

@@ -261,6 +261,12 @@ public:
         return cjoManager.get();
     }
 
+    /**
+     * Remove all declarations from imported package by package name.
+     * This will clear all decls in each file of the package and clean up declMap in PackageInfo.
+     */
+    void RemoveUnusedImportedDecls();
+
     /** @brief Clear the cache for BCHIR packages. */
     void ClearPackageBCHIRCache()
     {
@@ -477,6 +483,8 @@ private:
      * Clear all caches for rebuild index in LSP.
      */
     void ClearCachesForRebuild();
+
+    void CollectUsedPackageInFile(Ptr<AST::Package> srcPkg, UsedDeclMap& usedItems);
 
     friend class PackageManager;
 
