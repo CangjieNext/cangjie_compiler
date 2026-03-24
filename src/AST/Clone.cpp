@@ -753,6 +753,7 @@ OwnedPtr<ParenExpr> ASTCloner::CloneParenExpr(const ParenExpr& pe, const VisitFu
 OwnedPtr<LambdaExpr> ASTCloner::CloneLambdaExpr(const LambdaExpr& le, const VisitFunc& visitor)
 {
     auto expr = MakeOwned<LambdaExpr>(CloneNode(le.funcBody.get(), visitor));
+    expr->addedByTryHandle = le.addedByTryHandle;
     if (le.TestAttr(Attribute::MOCK_SUPPORTED)) {
         expr->EnableAttr(Attribute::MOCK_SUPPORTED);
     }
