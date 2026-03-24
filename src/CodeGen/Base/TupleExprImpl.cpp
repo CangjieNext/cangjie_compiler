@@ -103,9 +103,11 @@ llvm::Value* GenerateOptionLikeT(IRBuilder2& irBuilder, const CHIR::Tuple& tuple
     auto enumVal = irBuilder.CallIntrinsicAllocaGeneric({enumTi, irBuilder.GetSizeFromTypeInfo(enumTi)});
     auto payload = irBuilder.GetPayloadFromObject(enumVal);
     auto castedPayload = irBuilder.CreateBitCast(payload, p1i8);
-    auto associatedType = chirEnumType->GetTypeArgs()[0];
+    auto cgEnumType = StaticCast<CGEnumType*>(CGType::GetOrCreate(cgMod, chirEnumType));
+    auto associatedType = cgEnumType->GetAssociatedValueTypeOfOptionLike();
     bool hasAssociatedValue = tuple.GetNumOfOperands() > 1;
-    auto isRef = irBuilder.CreateTypeInfoIsReferenceCall(*associatedType);
+    auto associatedTypeTI = irBuilder.CreateTypeInfo(*associatedType);
+    auto isRef = irBuilder.CreateTypeInfoIsReferenceCall(associatedTypeTI);
     auto [refBB, nonRefBB, endBB] = Vec2Tuple<3>(irBuilder.CreateAndInsertBasicBlocks({"ref", "nonRef", "endBB"}));
     irBuilder.CreateCondBr(isRef, refBB, nonRefBB);
     irBuilder.SetInsertPoint(refBB);
