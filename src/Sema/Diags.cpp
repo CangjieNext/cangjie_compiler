@@ -21,6 +21,7 @@
 
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Utils/CheckUtils.h"
@@ -639,8 +640,11 @@ void DiagAmbiguousUpperBoundTargets(DiagnosticEngine& diag, const MemberAccess& 
 
 void DiagUseClosureCaptureVarAlone(DiagnosticEngine& diag, const Expr& expr)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_use_func_capture_var_alone, expr,
-        expr.astKind == ASTKind::LAMBDA_EXPR ? "lambda" : "function");
+    auto builder = expr.astKind == ASTKind::LAMBDA_EXPR
+        ? (StaticCast<LambdaExpr>(expr).addedByTryHandle
+            ? diag.DiagnoseRefactor(DiagKindRefactor::sema_try_handle_capture_var, expr)
+            : diag.DiagnoseRefactor(DiagKindRefactor::sema_use_func_capture_var_alone, expr, "lambda"))
+        : diag.DiagnoseRefactor(DiagKindRefactor::sema_use_func_capture_var_alone, expr, "function");
     Ptr<FuncBody> fb = nullptr;
     if (auto le = DynamicCast<const LambdaExpr*>(&expr)) {
         fb = le->funcBody.get();

@@ -13,6 +13,7 @@
 
 #include "ParserImpl.h"
 
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
@@ -498,7 +499,7 @@ OwnedPtr<Block> ParserImpl::ParseExprOrDeclsInMatchCase()
     return exprOrDecls;
 }
 
-static OwnedPtr<LambdaExpr> CreateLambdaFromBlock(
+static OwnedPtr<LambdaExpr> CreateLambdaForTryHandle(
     OwnedPtr<Block> block, const Expr& expr, OwnedPtr<FuncParamList> paramList)
 {
     std::vector<OwnedPtr<FuncParamList>> paramLists;
@@ -511,6 +512,7 @@ static OwnedPtr<LambdaExpr> CreateLambdaFromBlock(
     auto le = CreateLambdaExpr(std::move(fb));
     le->begin = expr.begin;
     le->end = expr.end;
+    le->addedByTryHandle = true;
 
     return le;
 }
@@ -538,7 +540,7 @@ static void DesugarTry(const OwnedPtr<TryExpr>& expr)
         lambdaBodyExprs.emplace_back(std::move(teWithoutHandle));
         lambdaBlock = CreateBlock(std::move(lambdaBodyExprs));
     }
-    expr->tryLambda = CreateLambdaFromBlock(std::move(lambdaBlock), *expr->tryBlock, MakeOwned<FuncParamList>());
+    expr->tryLambda = CreateLambdaForTryHandle(std::move(lambdaBlock), *expr->tryBlock, MakeOwned<FuncParamList>());
 
     // handler lambdas
     for (auto& handler : expr->handlers) {
@@ -563,12 +565,13 @@ static void DesugarTry(const OwnedPtr<TryExpr>& expr)
         CopyBasicInfo(cmdPat->pattern, command);
         paramList->params.emplace_back(std::move(command));
 
-        handler.desugaredLambda = CreateLambdaFromBlock(
+        handler.desugaredLambda = CreateLambdaForTryHandle(
             ASTCloner::Clone(handler.block.get(), SetIsClonedSourceCode), *handler.block, std::move(paramList));
     }
 
     if (expr->finallyBlock) {
-        expr->finallyLambda = CreateLambdaFromBlock(ASTCloner::Clone(expr->finallyBlock.get(), SetIsClonedSourceCode),
+        expr->finallyLambda = CreateLambdaForTryHandle(
+            ASTCloner::Clone(expr->finallyBlock.get(), SetIsClonedSourceCode),
             *expr->finallyBlock, MakeOwned<FuncParamList>());
     }
 }
