@@ -20,6 +20,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import time
 from enum import Enum
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
@@ -180,6 +181,11 @@ def generate_cmake_defs(args):
 
     if args.sanitizer_support:
         result.append("-DCANGJIE_SANITIZER_SUPPORT=" + args.sanitizer_support)
+
+    if args.cache_tool:
+        result.append("-DCANGJIE_ENABLE_CCACHE=ON")
+        result.append("-DCANGJIE_CACHE_TOOL=" + args.cache_tool)
+
     return result
 
 def download_and_patch_tinytoml():
@@ -594,9 +600,6 @@ def main():
     parser_build.add_argument(
         "--no-tests", action="store_true", help="build without unittests"
     )
-    # cjnative BE supports stack grow feature and cjc enables stack grow feature by default. However, the feature is
-    # supported at a cost of code-size and performance. In code-size and performance sensitive scenario, the feature
-    # can be disabled by specifying the following build option.
     parser_build.add_argument(
         "--disable-stack-grow-feature", action="store_true", help="disable default stack grow feature for cjnative BE"
     )
@@ -665,6 +668,14 @@ def main():
         default="0.0.1",
         help="Version string, e.g., 0.0.1"
     )
+    parser_build.add_argument(
+        "--cache-tool",
+        dest="cache_tool",
+        type=str,
+        choices=["auto", "ccache", "sccache"],
+        default="auto",
+        help="Specify compiler cache tool: auto (default), ccache, or sccache"
+    )
     parser_build.set_defaults(func=build)
 
     parser_install = subparsers.add_parser("install", help="install targets")
@@ -681,7 +692,90 @@ def main():
     parser_test.set_defaults(func=test)
 
     args = parser.parse_args()
+    start_time = time.time()
     args.func(args)
+    elapsed_time = time.time() - start_time
+    hours, remainder = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    LOG.info("Total build time: %02d:%02d:%05.2f", int(hours), int(minutes), seconds)
+    cache_tool = getattr(args, 'cache_tool', None)
+    if cache_tool:
+        if cache_tool == "auto":
+            if shutil.which("ccache"):
+                print_cache_stats("ccache")
+            elif shutil.which("sccache"):
+                print_cache_stats("sccache")
+        else:
+            print_cache_stats(cache_tool)
+
+def print_cache_stats(cache_tool):
+    cache_exe = shutil.which(cache_tool)
+    if not cache_exe:
+        return
+    try:
+        output = subprocess.run(
+            [cache_exe, "--show-stats"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        if cache_tool == "sccache":
+            hits = 0
+            misses = 0
+            cache_size = 0.0
+            for line in output.stdout.splitlines():
+                if line.startswith("Cache hits") and "rate" not in line:
+                    parts = line.split()
+                    hits = int(parts[-1])
+                elif line.startswith("Cache misses"):
+                    parts = line.split()
+                    misses = int(parts[-1])
+                elif line.startswith("Cache size"):
+                    match = re.search(r"Cache size\s+([\d.]+)\s*(KiB|MiB|GiB|TiB)", line)
+                    if match:
+                        size_val = float(match.group(1))
+                        size_unit = match.group(2)
+                        if size_unit == "KiB":
+                            cache_size = size_val / (1024 * 1024)
+                        elif size_unit == "MiB":
+                            cache_size = size_val / 1024
+                        elif size_unit == "GiB":
+                            cache_size = size_val
+                        elif size_unit == "TiB":
+                            cache_size = size_val * 1024
+            if hits > 0 or misses > 0:
+                total = hits + misses
+                hit_rate = (hits / total * 100) if total > 0 else 0
+                LOG.info("sccache stats: hit_rate=%.1f%%, hits=%d, misses=%d, cache_size=%.2fGB",
+                         hit_rate, hits, misses, cache_size)
+        else:
+            hits = 0
+            misses = 0
+            cache_size = 0.0
+            for line in output.stdout.splitlines():
+                if "Hits:" in line and "/" in line:
+                    parts = line.split()
+                    for i, p in enumerate(parts):
+                        if p == "Hits:" and i + 2 < len(parts):
+                            hits = int(parts[i + 1])
+                            break
+                elif "Misses:" in line:
+                    parts = line.split()
+                    for i, p in enumerate(parts):
+                        if p == "Misses:" and i + 1 < len(parts):
+                            misses = int(parts[i + 1])
+                            break
+                elif "Cache size" in line:
+                    match = re.search(r"Cache size.*?:\s*([\d.]+)\s*GB", line)
+                    if match:
+                        cache_size = float(match.group(1))
+            if hits > 0 or misses > 0:
+                total = hits + misses
+                hit_rate = (hits / total * 100) if total > 0 else 0
+                LOG.info("CCache stats: hit_rate=%.1f%%, hits=%d, misses=%d, cache_size=%.2fGB",
+                         hit_rate, hits, misses, cache_size)
+    except (subprocess.CalledProcessError, ValueError, IndexError):
+        pass
 
 def check_compiler(args):
     # If user didn't specify --target-toolchain, we search for an available compiler in $PATH.
