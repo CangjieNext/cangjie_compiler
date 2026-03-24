@@ -1383,7 +1383,9 @@ std::string QualifiedType::ToString() const
     if (!typeArguments.empty()) {
         ret += "<";
         for (size_t i = 0; i < typeArguments.size(); ++i) {
-            if (i > 0) ret += ", ";
+            if (i > 0) {
+                ret += ", ";
+            }
             auto arg = typeArguments[i].get();
             CJC_ASSERT(arg != nullptr);
             ret += arg->ToString();
