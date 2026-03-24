@@ -355,6 +355,7 @@ OwnedPtr<Expr> ASTLoader::ASTLoaderImpl::LoadLambdaExpr(const PackageFormat::Exp
     if (info->supportMock()) {
         le->EnableAttr(Attribute::MOCK_SUPPORTED);
     }
+    le->addedByTryHandle = info->addedByTryHandle();
     return le;
 }
 

@@ -2576,6 +2576,7 @@ struct LambdaExpr : Expr {
     }
     OwnedPtr<FuncBody> funcBody; /**< Funcbody of lambda. */
     std::string mangledName; /**< The name after mangling. */
+    bool addedByTryHandle{false}; /**< Whether this lambda was introduced as a try/handle/finally body. */
     explicit LambdaExpr(OwnedPtr<FuncBody> body) : Expr(ASTKind::LAMBDA_EXPR), funcBody(std::move(body))
     {
     }

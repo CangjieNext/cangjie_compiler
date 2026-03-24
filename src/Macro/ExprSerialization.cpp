@@ -356,7 +356,8 @@ flatbuffers::Offset<NodeFormat::LambdaExpr> NodeWriter::SerializeLambdaExpr(cons
     auto fbNodeBase = SerializeNodeBase(lambdaExpr);
     auto fbBody = SerializeFuncBody(lambdaExpr->funcBody.get());
     auto mockSupported = lambdaExpr->TestAttr(Attribute::MOCK_SUPPORTED);
-    return NodeFormat::CreateLambdaExpr(builder, fbNodeBase, fbBody, mockSupported);
+    auto addedByTryHandle = lambdaExpr->addedByTryHandle;
+    return NodeFormat::CreateLambdaExpr(builder, fbNodeBase, fbBody, mockSupported, addedByTryHandle);
 }
 
 flatbuffers::Offset<NodeFormat::Expr> NodeWriter::SerializeLambdaExpr(const Expr* expr)

@@ -508,7 +508,8 @@ TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const LambdaExpr& le, const
 {
     CJC_NULLPTR_CHECK(le.funcBody);
     auto funcBody = SaveFuncBody(*le.funcBody);
-    auto eInfo = PackageFormat::CreateLambdaInfo(builder, funcBody, le.TestAttr(Attribute::MOCK_SUPPORTED));
+    auto eInfo = PackageFormat::CreateLambdaInfo(
+        builder, funcBody, le.TestAttr(Attribute::MOCK_SUPPORTED), le.addedByTryHandle);
     PackageFormat::ExprBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::ExprKind_LambdaExpr);
     SaveBasicNodeInfo(dbuilder, info);

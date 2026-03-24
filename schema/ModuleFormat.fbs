@@ -458,6 +458,7 @@ table ReferenceInfo {
 table LambdaInfo {
   funcBody:FuncBody (required); // LambdaExpr
   supportMock:bool;
+  addedByTryHandle:bool;
 }
 table AssignInfo {
   isCompound:bool;
