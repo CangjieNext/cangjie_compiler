@@ -222,5 +222,7 @@ private:
     std::vector<std::pair<const AST::Decl*, Func*>> annoFactoryFuncs;
     AST2CHIRNodeMap<CustomTypeDef> globalNominalCache;
 };
+
+std::string PhaseToString(const ToCHIR::Phase phase);
 } // namespace Cangjie::CHIR
 #endif
