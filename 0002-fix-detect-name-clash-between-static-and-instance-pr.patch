@@ -1,0 +1,98 @@
+From 24e2cde69ea4f4a7d60548cf0484c8cc01e0c87f Mon Sep 17 00:00:00 2001
+From: guanjiahui <guanjiahui@example.com>
+Date: Thu, 19 Mar 2026 19:55:47 +0800
+Subject: [PATCH 2/3] fix: detect name clash between static and instance
+ properties in Java interop
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Created-by: guanjiahui <guanjiahui@example.com>
+Commit-by: guanjiahui <guanjiahui@example.com>
+Merged-by:
+Description: ## 变更内容（必填）
+
+1. 增强名称冲突检测：在CheckCJMappingNameClash函数中添加了对静态属性和实例属性之间名称冲突的检测。
+2. 修复问题：之前编译器无法检测到静态属性和实例属性生成的同名getter/setter方法之间的冲突。
+3. 实现方式：
+   - 添加propGeneratedMethods映射来跟踪所有属性生成的方法名
+   - 在遍历属性时，记录每个属性生成的getter和setter方法名
+   - 检查是否有多个属性生成了相同的方法名，如果有则报告名称冲突
+
+## 变更类型（必填）
+
+- [ ] 新增需求
+- [x] 问题修复
+- [ ] 构建过程或辅助工具变动
+- [ ] 文档更新
+
+## 变更内容自检（必填）
+
+### 编译本地自验证结果：
+
+- [x] 仓颉编译器编译通过
+- [ ] 仓颉运行时编译通过
+- [ ] 仓颉标准库编译通过
+- [x] 不涉及，辅助工具变动或者文档更新可以直接选择此项
+
+### 测试用例本地自验证结果：
+
+- [x] 通过，请在下方提供截图证明
+- [ ] 不涉及，请在下方说明情况
+
+测试结果：所有测试用例通过（3个.info用例，7个.cj用例，100%通过率）
+
+## 关联的issue（必填）
+
+https://gitcode.com/Cangjie/cangjie_compiler/issues/663
+---
+ .../AfterTypeCheck/TypeCheckJavaInterop.cpp   | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/src/Sema/NativeFFI/Java/AfterTypeCheck/TypeCheckJavaInterop.cpp b/src/Sema/NativeFFI/Java/AfterTypeCheck/TypeCheckJavaInterop.cpp
+index 7a2bf2a9..9b0e3656 100644
+--- a/src/Sema/NativeFFI/Java/AfterTypeCheck/TypeCheckJavaInterop.cpp
++++ b/src/Sema/NativeFFI/Java/AfterTypeCheck/TypeCheckJavaInterop.cpp
+@@ -384,6 +384,8 @@ struct JavaInteropTypeChecker {
+             }
+         }
+         
++        std::unordered_map<std::string, std::vector<std::pair<std::string, PropDecl*>>> propGeneratedMethods;
++        
+         for (auto& member : decl.GetMemberDecls()) {
+             if (auto prop = As<ASTKind::PROP_DECL>(member.get())) {
+                 std::string propName = GetJavaMemberName(*prop);
+@@ -403,6 +405,8 @@ struct JavaInteropTypeChecker {
+                     }
+                 }
+                 
++                propGeneratedMethods[getterName].push_back({"property", prop});
++                
+                 if (!prop->isVar) {
+                     continue;
+                 }
+@@ -422,6 +426,21 @@ struct JavaInteropTypeChecker {
+                         decl.EnableAttr(Attribute::IS_BROKEN);
+                     }
+                 }
++                
++                propGeneratedMethods[setterName].push_back({"property", prop});
++            }
++        }
++        
++        for (auto& [methodName, props] : propGeneratedMethods) {
++            if (props.size() > 1) {
++                for (size_t i = 1; i < props.size(); ++i) {
++                    diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_name_clash, 
++                        *props[i].second, "property", props[i].second->identifier, methodName,
++                        "method", methodName);
++                    props[i].second->EnableAttr(Attribute::IS_BROKEN);
++                    decl.EnableAttr(Attribute::HAS_BROKEN);
++                    decl.EnableAttr(Attribute::IS_BROKEN);
++                }
+             }
+         }
+     }
+-- 
+2.43.0
+

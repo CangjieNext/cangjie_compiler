@@ -1,0 +1,138 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: guan_jh_dut <guan_jh_dut@163.com>
+Date: Wed, 18 Mar 2026 19:22:08 +0800
+Subject: [PATCH 2/2] fix: add name clash detection in Java interop
+
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Created-by: guan_jh_dut <guan_jh_dut@163.com>
+Commit-by: guan_jh_dut <guan_jh_dut@163.com>
+Merged-by:
+Description: ## 变更内容（必填）
+
+1. 添加名称冲突检测：检测属性生成的getter/setter方法名是否与现有方法名冲突。
+2. 新增诊断错误信息：
+   - sema_cj_mapping_name_clash
+
+## 变更类型（必填）
+
+- [ ] 新增需求
+- [x] 问题修复
+- [ ] 构建过程或辅助工具变动
+- [ ] 文档更新
+
+## 变更内容自检（必填）
+
+### 编译本地自验证结果：
+
+- [x] 仓颉编译器编译通过
+- [ ] 仓颉运行时编译通过
+- [ ] 仓颉标准库编译通过
+- [x] 不涉及，辅助工具变动或者文档更新可以直接选择此项
+
+### 测试用例本地自验证结果：
+
+- [x] 通过，请在下方提供截图证明
+- [ ] 不涉及，请在下方说明情况
+
+## 关联的issue（必填）
+
+https://gitcode.com/Cangjie/cangjie_compiler/issues/663
+---
+ .../Basic/DiagRefactor/DiagnosticSema.def     |   1 +
+ .../AfterTypeCheck/TypeCheckJavaInterop.cpp   |  59 ++++++++++++++++++
+ 2 files changed, 60 insertions(+)
+
+diff --git a/include/cangjie/Basic/DiagRefactor/DiagnosticSema.def b/include/cangjie/Basic/DiagRefactor/DiagnosticSema.def
+index d4a6f8bb..e611f8aa 100644
+--- a/include/cangjie/Basic/DiagRefactor/DiagnosticSema.def
++++ b/include/cangjie/Basic/DiagRefactor/DiagnosticSema.def
+@@ -232,6 +232,7 @@ ERROR(sema_cj_mapping_func_type_not_configured, "function type '%s' used in Java
+ ERROR(sema_cj_mapping_tuple_type_not_configured, "tuple type '%s' used in Java interop must be configured in tuple_configuration")
+ ERROR(sema_cj_mapping_generic_type_not_configured, "generic type '%s' used in Java interop must be configured in generic_object_configuration")
+ 
++ERROR(sema_cj_mapping_name_clash, "name clash detected: %s '%s' generates method '%s()' which conflicts with existing %s '%s()'")
+ 
+ // VArray
+ ERROR(sema_varray_size_match, "mismatch 'VArray' type's size", "expected size is %s, found %s")
+diff --git a/src/Sema/NativeFFI/Java/AfterTypeCheck/TypeCheckJavaInterop.cpp b/src/Sema/NativeFFI/Java/AfterTypeCheck/TypeCheckJavaInterop.cpp
+index a1b2c3d4..7a2bf2a9 100644
+--- a/src/Sema/NativeFFI/Java/AfterTypeCheck/TypeCheckJavaInterop.cpp
++++ b/src/Sema/NativeFFI/Java/AfterTypeCheck/TypeCheckJavaInterop.cpp
+@@ -369,6 +369,62 @@ struct JavaInteropTypeChecker {
+             }
+         }
+     }
++
++    inline void CheckCJMappingNameClash(ClassLikeDecl& decl)
++    {
++        std::unordered_map<std::string, std::vector<std::pair<std::string, Decl*>>> methodNameToDecls;
++        
++        for (auto& member : decl.GetMemberDecls()) {
++            if (auto fd = As<ASTKind::FUNC_DECL>(member.get())) {
++                if (fd->TestAttr(Attribute::CONSTRUCTOR)) {
++                    continue;
++                }
++                std::string methodName = GetJavaMemberName(*fd);
++                methodNameToDecls[methodName].push_back({"method", fd});
++            }
++        }
++        
++        for (auto& member : decl.GetMemberDecls()) {
++            if (auto prop = As<ASTKind::PROP_DECL>(member.get())) {
++                std::string propName = GetJavaMemberName(*prop);
++                std::string getterName = "get" + propName;
++                if (getterName.size() > 3) {
++                    getterName[3] = static_cast<char>(std::toupper(static_cast<unsigned char>(getterName[3])));
++                }
++                
++                if (methodNameToDecls.find(getterName) != methodNameToDecls.end()) {
++                    for (auto& conflict : methodNameToDecls[getterName]) {
++                        diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_name_clash, 
++                            *prop, "property", prop->identifier, getterName,
++                            conflict.first, conflict.second->identifier);
++                        prop->EnableAttr(Attribute::IS_BROKEN);
++                        decl.EnableAttr(Attribute::HAS_BROKEN);
++                        decl.EnableAttr(Attribute::IS_BROKEN);
++                    }
++                }
++                
++                if (!prop->isVar) {
++                    continue;
++                }
++                
++                std::string setterName = "set" + propName;
++                if (setterName.size() > 3) {
++                    setterName[3] = static_cast<char>(std::toupper(static_cast<unsigned char>(setterName[3])));
++                }
++                
++                if (methodNameToDecls.find(setterName) != methodNameToDecls.end()) {
++                    for (auto& conflict : methodNameToDecls[setterName]) {
++                        diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_name_clash, 
++                            *prop, "property", prop->identifier, setterName,
++                            conflict.first, conflict.second->identifier);
++                        prop->EnableAttr(Attribute::IS_BROKEN);
++                        decl.EnableAttr(Attribute::HAS_BROKEN);
++                        decl.EnableAttr(Attribute::IS_BROKEN);
++                    }
++                }
++            }
++        }
++    }
+ };
+ } // namespace
+ 
+@@ -608,6 +664,9 @@ void JavaInteropManager::CheckCJMappingType(Decl& decl)
+         }
+     }
+     
++    if (auto classLikeDecl = As<ASTKind::CLASS_LIKE_DECL>(&decl)) {
++        checker.CheckCJMappingNameClash(*classLikeDecl);
++    }
+     
+     for (auto& member : decl.GetMemberDecls()) {
+         switch (member->astKind) {
+-- 
+2.43.0

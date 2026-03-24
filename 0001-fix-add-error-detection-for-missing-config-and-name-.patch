@@ -1,0 +1,280 @@
+From d3e574c54b2a5afdce2efae6808939bc9b6891ce Mon Sep 17 00:00:00 2001
+From: guanjiahui <guanjiahui@example.com>
+Date: Wed, 18 Mar 2026 19:22:08 +0800
+Subject: [PATCH 1/3] fix: add error detection for missing config and name
+ clash in Java interop
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Created-by: guanjiahui <guanjiahui@example.com>
+Commit-by: guanjiahui <guanjiahui@example.com>
+Merged-by:
+Description: ## 变更内容（必填）
+
+1. 添加缺少配置时的错误检测：当lambda_patterns、tuple_configuration或generic_object_configuration缺失时，编译器不再崩溃，而是报告明确的错误信息。
+2. 添加名称冲突检测：检测属性生成的getter/setter方法名是否与现有方法名冲突。
+3. 新增诊断错误信息：
+   - sema_cj_mapping_func_type_not_configured
+   - sema_cj_mapping_tuple_type_not_configured
+   - sema_cj_mapping_generic_type_not_configured
+   - sema_cj_mapping_name_clash
+
+## 变更类型（必填）
+
+- [ ] 新增需求
+- [x] 问题修复
+- [ ] 构建过程或辅助工具变动
+- [ ] 文档更新
+
+## 变更内容自检（必填）
+
+### 编译本地自验证结果：
+
+- [x] 仓颉编译器编译通过
+- [ ] 仓颉运行时编译通过
+- [ ] 仓颉标准库编译通过
+- [x] 不涉及，辅助工具变动或者文档更新可以直接选择此项
+
+### 测试用例本地自验证结果：
+
+- [x] 通过，请在下方提供截图证明
+- [ ] 不涉及，请在下方说明情况
+
+## 关联的issue（必填）
+
+https://gitcode.com/Cangjie/cangjie_compiler/issues/663
+---
+ .../Basic/DiagRefactor/DiagnosticSema.def     |   4 +
+ .../AfterTypeCheck/TypeCheckJavaInterop.cpp   | 171 ++++++++++++++++++
+ 2 files changed, 175 insertions(+)
+
+diff --git a/include/cangjie/Basic/DiagRefactor/DiagnosticSema.def b/include/cangjie/Basic/DiagRefactor/DiagnosticSema.def
+index 120c27e7..e611f8aa 100644
+--- a/include/cangjie/Basic/DiagRefactor/DiagnosticSema.def
++++ b/include/cangjie/Basic/DiagRefactor/DiagnosticSema.def
+@@ -230,6 +230,10 @@ ERROR(sema_cjmapping_decl_not_supported, "cangjie mirror decl type is not suppor
+ ERROR(sema_cjmapping_method_arg_not_supported, "argument type of cangjie mirror decl type member function is not supported")
+ ERROR(sema_cjmapping_method_ret_unsupported, "return type '%s' of function inside %s type is not supported")
+ ERROR(sema_cj_mapping_generic_method_not_get_instance_config, "Instance configuration '%s' has incorrect format.")
++ERROR(sema_cj_mapping_func_type_not_configured, "function type '%s' used in Java interop must be configured in lambda_patterns")
++ERROR(sema_cj_mapping_tuple_type_not_configured, "tuple type '%s' used in Java interop must be configured in tuple_configuration")
++ERROR(sema_cj_mapping_generic_type_not_configured, "generic type '%s' used in Java interop must be configured in generic_object_configuration")
++ERROR(sema_cj_mapping_name_clash, "name clash detected: %s '%s' generates method '%s()' which conflicts with existing %s '%s()'")
+ 
+ // VArray
+ ERROR(sema_varray_size_match, "mismatch 'VArray' type's size", "expected size is %s, found %s")
+diff --git a/src/Sema/NativeFFI/Java/AfterTypeCheck/TypeCheckJavaInterop.cpp b/src/Sema/NativeFFI/Java/AfterTypeCheck/TypeCheckJavaInterop.cpp
+index 9f954a34..7a2bf2a9 100644
+--- a/src/Sema/NativeFFI/Java/AfterTypeCheck/TypeCheckJavaInterop.cpp
++++ b/src/Sema/NativeFFI/Java/AfterTypeCheck/TypeCheckJavaInterop.cpp
+@@ -63,6 +63,7 @@ struct JavaInteropTypeChecker {
+     bool isImpl;
+     bool isCJMappingTypeCheck = false;
+     DiagnosticEngine& diag;
++    Package* curPackage = nullptr;
+ 
+     auto GetJavaClassKind() const
+     {
+@@ -76,6 +77,57 @@ struct JavaInteropTypeChecker {
+         }
+     }
+ 
++    bool IsLambdaTypeConfigured(const Ptr<Ty>& ty) const
++    {
++        if (!curPackage || ty->kind != TypeKind::TYPE_FUNC) {
++            return true;
++        }
++        const auto& lambdaPatterns = curPackage->GetLambdaPatterns();
++        if (lambdaPatterns.empty()) {
++            return false;
++        }
++        auto funcTy = StaticCast<FuncTy*>(ty.get());
++        for (const auto& pattern : lambdaPatterns) {
++            if (pattern.parameterTypes.size() != funcTy->paramTys.size()) {
++                continue;
++            }
++            bool paramsMatch = true;
++            for (size_t i = 0; i < pattern.parameterTypes.size(); ++i) {
++                std::string paramStr = funcTy->paramTys[i]->String();
++                if (paramStr != pattern.parameterTypes[i]) {
++                    paramsMatch = false;
++                    break;
++                }
++            }
++            if (!paramsMatch) {
++                continue;
++            }
++            std::string retStr = funcTy->retTy ? funcTy->retTy->String() : "Unit";
++            if (retStr == pattern.returnType) {
++                return true;
++            }
++        }
++        return false;
++    }
++
++    bool IsTupleTypeConfigured(const Ptr<Ty>& ty) const
++    {
++        if (!curPackage || !ty->IsTuple()) {
++            return true;
++        }
++        const auto& interopTuples = curPackage->interopTuples;
++        if (interopTuples.empty()) {
++            return false;
++        }
++        std::string tupleStr = ty->String();
++        for (const auto& config : interopTuples) {
++            if (config == tupleStr) {
++                return true;
++            }
++        }
++        return false;
++    }
++
+     /*
+      * Checks if [ty] is supported in signature.
+      * - @JavaMirror class types
+@@ -250,6 +302,51 @@ struct JavaInteropTypeChecker {
+         }
+ 
+         CheckCJMappingCompatibleParamTypes(fd);
++        CheckCJMappingTypeConfig(fd);
++    }
++
++    inline void CheckCJMappingTypeConfig(FuncDecl& fd)
++    {
++        if (!fd.funcBody || !curPackage) {
++            return;
++        }
++        
++        if (fd.funcBody->retType && fd.funcBody->retType->ty) {
++            auto& retTy = fd.funcBody->retType->ty;
++            if (retTy->kind == TypeKind::TYPE_FUNC && !IsLambdaTypeConfigured(retTy)) {
++                diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_func_type_not_configured, 
++                    *fd.funcBody->retType, Ty::ToString(retTy));
++                fd.EnableAttr(Attribute::IS_BROKEN);
++                fd.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
++                fd.outerDecl->EnableAttr(Attribute::IS_BROKEN);
++            }
++            if (retTy->IsTuple() && !IsTupleTypeConfigured(retTy)) {
++                diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_tuple_type_not_configured, 
++                    *fd.funcBody->retType, Ty::ToString(retTy));
++                fd.EnableAttr(Attribute::IS_BROKEN);
++                fd.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
++                fd.outerDecl->EnableAttr(Attribute::IS_BROKEN);
++            }
++        }
++
++        for (auto& paramList : fd.funcBody->paramLists) {
++            for (auto& param : paramList->params) {
++                if (param->ty->kind == TypeKind::TYPE_FUNC && !IsLambdaTypeConfigured(param->ty)) {
++                    diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_func_type_not_configured, 
++                        *param, Ty::ToString(param->ty));
++                    fd.EnableAttr(Attribute::IS_BROKEN);
++                    fd.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
++                    fd.outerDecl->EnableAttr(Attribute::IS_BROKEN);
++                }
++                if (param->ty->IsTuple() && !IsTupleTypeConfigured(param->ty)) {
++                    diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_tuple_type_not_configured, 
++                        *param, Ty::ToString(param->ty));
++                    fd.EnableAttr(Attribute::IS_BROKEN);
++                    fd.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
++                    fd.outerDecl->EnableAttr(Attribute::IS_BROKEN);
++                }
++            }
++        }
+     }
+ 
+     inline void CheckCJMappingCompatibleParamTypes(FuncDecl& fdecl)
+@@ -272,6 +369,62 @@ struct JavaInteropTypeChecker {
+             }
+         }
+     }
++
++    inline void CheckCJMappingNameClash(ClassLikeDecl& decl)
++    {
++        std::unordered_map<std::string, std::vector<std::pair<std::string, Decl*>>> methodNameToDecls;
++        
++        for (auto& member : decl.GetMemberDecls()) {
++            if (auto fd = As<ASTKind::FUNC_DECL>(member.get())) {
++                if (fd->TestAttr(Attribute::CONSTRUCTOR)) {
++                    continue;
++                }
++                std::string methodName = GetJavaMemberName(*fd);
++                methodNameToDecls[methodName].push_back({"method", fd});
++            }
++        }
++        
++        for (auto& member : decl.GetMemberDecls()) {
++            if (auto prop = As<ASTKind::PROP_DECL>(member.get())) {
++                std::string propName = GetJavaMemberName(*prop);
++                std::string getterName = "get" + propName;
++                if (getterName.size() > 3) {
++                    getterName[3] = static_cast<char>(std::toupper(static_cast<unsigned char>(getterName[3])));
++                }
++                
++                if (methodNameToDecls.find(getterName) != methodNameToDecls.end()) {
++                    for (auto& conflict : methodNameToDecls[getterName]) {
++                        diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_name_clash, 
++                            *prop, "property", prop->identifier, getterName,
++                            conflict.first, conflict.second->identifier);
++                        prop->EnableAttr(Attribute::IS_BROKEN);
++                        decl.EnableAttr(Attribute::HAS_BROKEN);
++                        decl.EnableAttr(Attribute::IS_BROKEN);
++                    }
++                }
++                
++                if (!prop->isVar) {
++                    continue;
++                }
++                
++                std::string setterName = "set" + propName;
++                if (setterName.size() > 3) {
++                    setterName[3] = static_cast<char>(std::toupper(static_cast<unsigned char>(setterName[3])));
++                }
++                
++                if (methodNameToDecls.find(setterName) != methodNameToDecls.end()) {
++                    for (auto& conflict : methodNameToDecls[setterName]) {
++                        diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_name_clash, 
++                            *prop, "property", prop->identifier, setterName,
++                            conflict.first, conflict.second->identifier);
++                        prop->EnableAttr(Attribute::IS_BROKEN);
++                        decl.EnableAttr(Attribute::HAS_BROKEN);
++                        decl.EnableAttr(Attribute::IS_BROKEN);
++                    }
++                }
++            }
++        }
++    }
+ };
+ } // namespace
+ 
+@@ -444,7 +597,25 @@ void JavaInteropManager::CheckCJMappingType(Decl& decl)
+         .isImpl = false,
+         .isCJMappingTypeCheck = true,
+         .diag = diag,
++        .curPackage = decl.curFile ? decl.curFile->curPackage : nullptr,
+     };
++    
++    // Check if generic type is configured
++    if (checker.curPackage && decl.generic) {
++        const auto& genericConfigs = checker.curPackage->allowedInteropCJGenericInstantiations;
++        std::string declName = decl.identifier;
++        if (genericConfigs.find(declName) == genericConfigs.end()) {
++            diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_generic_type_not_configured, 
++                decl, decl.identifier);
++            decl.EnableAttr(Attribute::IS_BROKEN);
++        }
++    }
++    
++    // Check for name clashes between properties and methods
++    if (auto classLikeDecl = As<ASTKind::CLASS_LIKE_DECL>(&decl)) {
++        checker.CheckCJMappingNameClash(*classLikeDecl);
++    }
++    
+     for (auto& member : decl.GetMemberDecls()) {
+         switch (member->astKind) {
+             case ASTKind::FUNC_DECL:
+-- 
+2.43.0
+
