@@ -582,7 +582,7 @@ enum class Attribute {
      * R: Sema.
      */
     JAVA_HAS_DEFAULT,
-    
+
     /**
      * Mark whether a class is a wrapper synthetic class generated for every mirror interface and abstract class.
      * W: Parser, Sema.
@@ -682,6 +682,13 @@ enum class Attribute {
      * R: ASTLoader
      */
     ALREADY_LOADED,
+
+    /**
+     * Mark whether a imported declaration is used in current package.
+     * W: After Generic Instantiation
+     * R: MANGLING, CHIR
+     */
+    USED_IMPORTS,
 
     AST_ATTR_END,
 };
