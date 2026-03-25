@@ -297,9 +297,9 @@ private:
     bool SeeingAnnotationTrailingClosure(const std::vector<TokenKind>& tokenKinds);
     bool IsRawIdentifier(const std::string& identifier) const;
     std::string ParseNameFromRawIdentifier(const std::string& rawIdentifier) const;
-    SrcIdentifier ParseIdentifierFromToken(const Token& token) const;
+    SrcIdentifier ParseIdentifierFromToken(const Token& token);
     SrcIdentifier ParseIdentifierFromName(
-        const std::string& identifier, const Position& tkPos, const Position& end, size_t len) const;
+        const std::string& identifier, const Position& tkPos, const Position& end, size_t len);
     SrcIdentifier ExpectIdentifierWithPos(AST::Node& node);
     SrcIdentifier ExpectPackageIdentWithPos(AST::Node& node);
     std::string ExpectOperatorIdentifier(AST::FuncDecl& fd);
@@ -843,8 +843,7 @@ private:
         const std::string& afterName = "after this", const bool callHelp = true);
     void DiagExpectedIdentifierWithNode(Ptr<AST::Node> node);
     void DiagImportingByPackageNameIsNotSupported(const Position& expectPos);
-    void DiagIdentifierLengthOverflow(
-        const Range& r, const std::string& tar, size_t maxLength, size_t realLength) const;
+    void DiagIdentifierLengthOverflow(const Range& r, const std::string& tar, size_t maxLength, size_t realLength);
     void DiagNameLengthOverflow(const Range& r, const std::string& tar, size_t maxLength, size_t realLength);
     void DiagIllegalModifierInScope(const AST::Modifier& mod);
     void DiagConflictedModifier(const AST::Modifier& resMod, const AST::Modifier& tarMod);

@@ -364,16 +364,9 @@ void ParserImpl::DiagNameLengthOverflow(const Range& r, const std::string& tar, 
 }
 
 void ParserImpl::DiagIdentifierLengthOverflow(
-    const Range& r, const std::string& tar, size_t maxLength, size_t realLength) const
+    const Range& r, const std::string& tar, size_t maxLength, size_t realLength)
 {
-    auto n = MakeOwned<AST::Node>();
-    n->begin = r.begin;
-    n->end = r.end;
-    if (curMacroCall) {
-        n->EnableAttr(AST::Attribute::MACRO_EXPANDED_NODE);
-        n->curMacroCall = curMacroCall;
-    }
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::parse_identifier_length_overflow, *n, r, tar);
+    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_identifier_length_overflow, r, tar);
 
     auto note = SubDiagnostic(
         "the maximum length is " + std::to_string(maxLength) + ", the real length is " + std::to_string(realLength));

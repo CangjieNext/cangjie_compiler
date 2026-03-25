@@ -596,14 +596,14 @@ std::string ParserImpl::ParseNameFromRawIdentifier(const std::string& rawIdentif
     return rawIdentifier.substr(1, rawIdentifier.size() - std::string("``").size());
 }
 
-SrcIdentifier ParserImpl::ParseIdentifierFromToken(const Token& token) const
+SrcIdentifier ParserImpl::ParseIdentifierFromToken(const Token& token)
 {
     size_t len{static_cast<size_t>(static_cast<ssize_t>((token.End() - token.Begin()).column))};
     return ParseIdentifierFromName(token.Value(), token.Begin(), token.End(), len);
 }
 
 SrcIdentifier ParserImpl::ParseIdentifierFromName(
-    const std::string& identifier, const Position& tkPos, const Position& end, size_t len) const
+    const std::string& identifier, const Position& tkPos, const Position& end, size_t len)
 {
     bool isRaw = IsRawIdentifier(identifier);
     const std::string& name = isRaw ? ParseNameFromRawIdentifier(identifier) : identifier;
