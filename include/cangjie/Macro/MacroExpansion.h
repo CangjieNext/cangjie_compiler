@@ -29,6 +29,16 @@ public:
     }
     void Execute(AST::Package& package);
     void Execute(std::vector<OwnedPtr<AST::Package>>& packages);
+
+    /**
+     * Expand macros for a top-level decl node.
+     * @param decl The top-level decl node to expand. Can be any type of top-level declaration.
+     *             If the decl contains macro calls, those macros will be expanded.
+     * @return A vector of expanded top-level decl nodes after macro expansion.
+     *         The returned nodes replace the original AST nodes with expanded versions.
+     */
+    std::vector<OwnedPtr<AST::Decl>> ExpandDecl(OwnedPtr<AST::Decl> decl);
+
     // String format of macro generated Tokens, for pretty print.
     std::vector<std::string> tokensEvalInMacro;
 
