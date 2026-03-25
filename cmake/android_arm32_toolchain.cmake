@@ -10,8 +10,7 @@ include("${CMAKE_DIR}/linux_toolchain.cmake")
 set(CMAKE_SYSTEM_NAME "Android")
 set(CMAKE_SYSTEM_PROCESSOR armv7-a)
 
-# 2. 设置 Android API Level
-# Android 6.0 对应 API Level 23
+# Android API Level
 if(NOT CMAKE_ANDROID_API)
     set(CMAKE_ANDROID_API 23)
     message(STATUS "Android API level is not set, use default setting: ${CMAKE_ANDROID_API} (Android 6.0)")
@@ -19,15 +18,14 @@ endif()
 
 set(CMAKE_ANDROID_ARCH_ABI "armeabi-v7a")
 
-# 4. 配置 NDK 工具链路径
+# NDK root
 string(TOLOWER ${CMAKE_HOST_SYSTEM_NAME} HOST_OS)
 
 set(CANGJIE_TARGET_TOOLCHAIN "${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/${HOST_OS}-${CMAKE_HOST_SYSTEM_PROCESSOR}/bin")
 
 set(TRIPLE arm-linux-android${CMAKE_ANDROID_API})
 
-# 6. 设置输出目录前缀
-# 格式参考：linux_android23_arm
+# output prefix
 set(TARGET_TRIPLE_DIRECTORY_PREFIX linux_android${CMAKE_ANDROID_API}_arm)
 set(CMAKE_RANLIB "${CANGJIE_TARGET_TOOLCHAIN}/llvm-ranlib")
 if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm")
