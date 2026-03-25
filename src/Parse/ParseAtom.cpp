@@ -18,6 +18,7 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/StringConvertor.h"
 #include "cangjie/Utils/FileUtil.h"
+#include "cangjie/Utils/Macros.h"
 
 using namespace Cangjie;
 using namespace Cangjie::AST;
@@ -30,6 +31,7 @@ ParserImpl::ExprHandler ParserImpl::LookupExprHandler(TokenKind kind)
 
     // clang-format off
     static const ExprHandler HANDLERS[ARRAY_SIZE] = {
+SUPPRESS_WARNING("-Wcast-function-type-mismatch")
         reinterpret_cast<ExprHandler>(&ParserImpl::ParseLeftParenExpr),
         nullptr, // RPAREN
         reinterpret_cast<ExprHandler>(&ParserImpl::ParseArrayLitExpr),
@@ -75,6 +77,7 @@ ParserImpl::ExprHandler ParserImpl::LookupExprHandler(TokenKind kind)
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, // BOOL_LITERAL..PLATFORM
         reinterpret_cast<ExprHandler>(&ParserImpl::ParsePerformExpr),
         reinterpret_cast<ExprHandler>(&ParserImpl::ParseResumeExpr),
+UNSUPPRESS_WARNING()
     };
     // clang-format on
 

@@ -32,17 +32,17 @@ Ptr<Value> Translator::Visit(const AST::LambdaExpr& lambdaExpr)
     lambda->InitBody(*body);
 
     std::vector<DebugLocation> paramLoc;
-    std::vector<std::string> paramNames;
+    std::vector<std::string> paramSrcCodeIdentifiers;
     for (auto& astParam : lambdaExpr.funcBody->paramLists[0]->params) {
         paramLoc.emplace_back(TranslateLocationWithoutScope(builder.GetChirContext(), astParam->begin, astParam->end));
-        paramNames.emplace_back(astParam->identifier);
+        paramSrcCodeIdentifiers.emplace_back(astParam->identifier.GetRawText());
     }
     auto paramTypes = funcTy->GetParamTypes();
     CJC_ASSERT(paramTypes.size() == paramLoc.size());
-    CJC_ASSERT(paramTypes.size() == paramNames.size());
+    CJC_ASSERT(paramTypes.size() == paramSrcCodeIdentifiers.size());
     for (size_t i = 0; i < paramTypes.size(); ++i) {
         auto param = builder.CreateParameter(paramTypes[i], paramLoc[i], *lambda);
-        param->SetSrcCodeIdentifier(paramNames[i]);
+        param->SetSrcCodeIdentifier(paramSrcCodeIdentifiers[i]);
     }
 
     if (auto lambdaBody = lambda->GetBody(); lambdaBody && lambdaExpr.TestAttr(AST::Attribute::MOCK_SUPPORTED)) {
