@@ -40,7 +40,7 @@ void Android_CJNATIVE::InitializeLibraryPaths()
             }
         }
         if (!selectedClangPath.empty()) {
-            if(driverOptions.target.ArchToString() == "arm"){
+            if (driverOptions.target.arch == Triple::ArchType::ARM32) {
                 AddLibraryPath(FileUtil::JoinPath(selectedClangPath, "lib/linux/arm"));
             } else {
                 AddLibraryPath(FileUtil::JoinPath(selectedClangPath, "lib/linux/aarch64"));
@@ -63,11 +63,10 @@ void Android_CJNATIVE::InitializeLibraryPaths()
     // 2. Deduce libs path from sysroot.
     if (!sysroot.empty()) {
         std::string tripleDirectory = "usr/lib/" + driverOptions.target.ArchToString();
-        if(driverOptions.target.ArchToString() == "arm"){
-            tripleDirectory +="-linux-androideabi/";
-        }
-        else {
-            tripleDirectory +="-linux-android/";
+        if (driverOptions.target.arch == Triple::ArchType::ARM32) {
+            tripleDirectory += "-linux-androideabi/";
+        } else {
+            tripleDirectory += "-linux-android/";
         }
         AddLibraryPath(FileUtil::JoinPath(sysroot, tripleDirectory + driverOptions.target.apiLevel));
         AddLibraryPath(FileUtil::JoinPath(sysroot, tripleDirectory));
@@ -88,11 +87,8 @@ void Android_CJNATIVE::AddCRuntimeLibraryPaths()
     std::string tripleDirectory;
     tripleDirectory.reserve(prefix.size() + arch.size() + suffix.size() + target.apiLevel.size());
 
-    tripleDirectory.append(prefix)
-           .append(arch)
-           .append(suffix)
-           .append(target.apiLevel);
-    
+    tripleDirectory.append(prefix).append(arch).append(suffix).append(target.apiLevel);
+
     AddCRuntimeLibraryPath(FileUtil::JoinPath(sysroot, std::move(tripleDirectory)));
 }
  
@@ -160,10 +156,9 @@ void Android_CJNATIVE::GenerateLinkOptions(Tool& tool)
     tool.AppendArg(LINUX_CJNATIVE_LINK_OPTIONS);
     tool.AppendArg("-lclang_rt.builtins-" + driverOptions.target.ArchToString() + "-android");
     tool.AppendArg("-ldl");
-    if( driverOptions.target.ArchToString() =="arm"){
+    if (driverOptions.target.arch == Triple::ArchType::ARM32) {
         tool.AppendArg("-z", "max-page-size=4096");
-    }
-    else {
+    } else {
         tool.AppendArg("-z", "max-page-size=16384");
     }
 }
