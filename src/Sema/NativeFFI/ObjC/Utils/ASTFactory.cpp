@@ -1739,6 +1739,30 @@ OwnedPtr<Expr> ASTFactory::CreateObjCReleaseCall(OwnedPtr<Expr> nativeHandle)
         TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT), CallKind::CALL_DECLARED_FUNCTION);
 }
 
+OwnedPtr<Expr> ASTFactory::CreateObjCIsKindOfClassCall(OwnedPtr<Expr> id, OwnedPtr<Expr> cls, Ptr<File> file)
+{
+    auto kindOfClassDecl = bridge.GetObjCIsKindOfClassDecl();
+    auto kindOfClassExpr = CreateRefExpr(*kindOfClassDecl);
+
+    std::vector<OwnedPtr<FuncArg>> args;
+    args.emplace_back(CreateFuncArg(std::move(id)));
+    args.emplace_back(CreateFuncArg(std::move(cls)));
+    return WithinFile(CreateCallExpr(std::move(kindOfClassExpr), std::move(args), kindOfClassDecl,
+        typeManager.GetBoolTy(), CallKind::CALL_DECLARED_FUNCTION), file);
+}
+
+OwnedPtr<Expr> ASTFactory::CreateObjCConformsToProtocolCall(OwnedPtr<Expr> id, OwnedPtr<Expr> cls, Ptr<File> file)
+{
+    auto conformsToProtocolDecl = bridge.GetObjCConformsToProtocolDecl();
+    auto conformsToProtocolExpr = CreateRefExpr(*conformsToProtocolDecl);
+
+    std::vector<OwnedPtr<FuncArg>> args;
+    args.emplace_back(CreateFuncArg(std::move(id)));
+    args.emplace_back(CreateFuncArg(std::move(cls)));
+    return WithinFile(CreateCallExpr(std::move(conformsToProtocolExpr), std::move(args), conformsToProtocolDecl,
+        typeManager.GetBoolTy(), CallKind::CALL_DECLARED_FUNCTION), file);
+}
+
 OwnedPtr<Expr> ASTFactory::CreateObjCRespondsToSelectorCall(OwnedPtr<Expr> cls, OwnedPtr<Expr> sel, Ptr<File> file)
 {
     auto responseToSelDecl = bridge.GetObjCRespondsToSelectorDecl();
@@ -1898,6 +1922,24 @@ OwnedPtr<Expr> ASTFactory::CreateGetClassCall(ClassLikeTy& ty, Ptr<File> curFile
     auto getClassExpr = CreateRefExpr(*getClassFuncDecl);
 
     auto cnameAsLit = CreateLitConstExpr(LitConstKind::STRING, ty.name, GetStringDecl(importManager).ty);
+    return CreateCall(getClassFuncDecl, curFile, std::move(cnameAsLit));
+}
+
+OwnedPtr<Expr> ASTFactory::CreateGetClassCall(std::string& className, Ptr<File> curFile)
+{
+    auto getClassFuncDecl = bridge.GetGetClassDecl();
+    auto getClassExpr = CreateRefExpr(*getClassFuncDecl);
+
+    auto cnameAsLit = CreateLitConstExpr(LitConstKind::STRING, className, GetStringDecl(importManager).ty);
+    return CreateCall(getClassFuncDecl, curFile, std::move(cnameAsLit));
+}
+
+OwnedPtr<Expr> ASTFactory::CreateGetProtoCall(std::string& protoName, Ptr<File> curFile)
+{
+    auto getClassFuncDecl = bridge.GetGetProtoDecl();
+    auto getClassExpr = CreateRefExpr(*getClassFuncDecl);
+
+    auto cnameAsLit = CreateLitConstExpr(LitConstKind::STRING, protoName, GetStringDecl(importManager).ty);
     return CreateCall(getClassFuncDecl, curFile, std::move(cnameAsLit));
 }
 
