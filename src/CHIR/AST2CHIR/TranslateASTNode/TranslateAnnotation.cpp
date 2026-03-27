@@ -180,6 +180,11 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
         decl.TestAttr(AST::Attribute::SPECIFIC)) {
         return {"none"};
     }
+    // Runtime annotation factory functions are only needed by reflection.
+    // Keep the compute-annotations path intact because it is used for compile-time annotation evaluation.
+    if (opts.disableReflection && !isComputingAnnos) {
+        return {"none"};
+    }
     auto found = annotationFuncMap.find(&decl);
     if (found != annotationFuncMap.end()) {
         return {found->second}; // Property's getters and setters share the same annotation function.
