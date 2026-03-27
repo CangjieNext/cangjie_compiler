@@ -312,9 +312,14 @@ void EmitTIOrTTForCustomDefs(CGModule& cgMod)
         switch (customDef->GetCustomKind()) {
             case CHIR::CustomDefKind::TYPE_ENUM: {
                 auto chirEnumType = StaticCast<CHIR::EnumDef*>(customDef)->GetType();
-                const auto& ctors = chirEnumType->GetConstructorInfos(cgMod.GetCGContext().GetCHIRBuilder());
-                for (auto ctorIndex = 0U; ctorIndex < ctors.size(); ++ctorIndex) {
-                    EnumCtorTIOrTTGenerator(cgMod, *chirEnumType, ctorIndex).Emit();
+                auto* cgEnumType = StaticCast<const CGEnumType*>(CGType::GetOrCreate(cgMod, chirEnumType));
+                bool needEmit = !cgMod.GetCGContext().GetCompileOptions().disableReflection ||
+                    (!cgEnumType->IsTrivial() && !cgEnumType->IsZeroSizeEnum());
+                if (needEmit) {
+                    const auto& ctors = chirEnumType->GetConstructorInfos(cgMod.GetCGContext().GetCHIRBuilder());
+                    for (auto ctorIndex = 0U; ctorIndex < ctors.size(); ++ctorIndex) {
+                        EnumCtorTIOrTTGenerator(cgMod, *chirEnumType, ctorIndex).Emit();
+                    }
                 }
                 break;
             }
