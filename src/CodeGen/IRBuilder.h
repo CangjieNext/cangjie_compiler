@@ -412,6 +412,11 @@ public:
     llvm::Value* GetTypeInfoFromObject(llvm::Value* obj);
     llvm::Value* GetPayloadFromObject(llvm::Value* obj);
 
+    // Lookup generic type info by semantic equivalence when pointer comparison fails.
+    llvm::Value* LookupGenericTypeInfo(const CHIR::Type* baseType,
+        const std::unordered_map<const CHIR::Type*, std::function<llvm::Value*(IRBuilder2&)>>& map,
+        bool canChangeBB);
+
     // `canChangeBB` is just used in `CJNativeExtensionDef.cpp`, it is a workaround for now :(
     // This parameter should be removed at some point!
     llvm::Value* CreateTypeInfo(const CHIR::Type& type,
