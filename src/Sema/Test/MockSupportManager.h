@@ -67,12 +67,6 @@ private:
     std::vector<OwnedPtr<AST::Decl>> generatedMockDecls;
     std::unordered_set<Ptr<AST::Decl>> usedInternalDecls;
 
-    // NOTE: To check whether the class implements accessor interface for interface with defaults.
-    // Because TypeManager caches super types and extends (?)
-    std::unordered_map<Ptr<AST::Ty>, std::unordered_set<Ptr<AST::Ty>>> defaultInterfaceAccessorExtends;
-
-    bool HasDefaultInterfaceAccessor(Ptr<AST::Ty> declTy, Ptr<AST::Ty> accessorInterfaceDeclTy);
-
     static void MakeOpenToMockIfNeeded(AST::Decl& decl);
     static void MarkMockAccessorWithAttributes(AST::Decl& decl, AST::AccessLevel accessLevel);
     bool IsMemberAccessOnThis(const AST::MemberAccess& memberAccess) const;
