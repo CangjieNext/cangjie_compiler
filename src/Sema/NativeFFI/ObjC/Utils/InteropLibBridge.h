@@ -52,6 +52,8 @@ public:
      */
     Ptr<AST::TypeAliasDecl> GetNativeObjCIdDecl();
 
+    Ptr<AST::InterfaceDecl> GetObjCIdDecl();
+
     /**
      * Gets NativeObjCId semantic type.
      */
@@ -128,6 +130,8 @@ public:
 
     Ptr<AST::FuncDecl> GetGetClassDecl();
 
+    Ptr<AST::FuncDecl> GetGetProtoDecl();
+
     Ptr<AST::FuncDecl> GetWithMethodEnvDecl();
 
     Ptr<AST::FuncDecl> GetWithMethodEnvObjDecl();
@@ -147,6 +151,10 @@ public:
     Ptr<AST::FuncDecl> GetObjCAutoReleaseDecl();
 
     Ptr<AST::FuncDecl> GetWithObjCSuperDecl();
+
+    Ptr<AST::FuncDecl> GetObjCIsKindOfClassDecl();
+
+    Ptr<AST::FuncDecl> GetObjCConformsToProtocolDecl();
 
     /**
      * Get objc.lang.ObjCPointer declaration
