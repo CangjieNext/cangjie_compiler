@@ -373,6 +373,14 @@ public:
 };
 
 /**
+ * Rewrite typechecks that involve ObjC-compatible types
+ */
+class RewriteObjCTypechecks : public Handler<RewriteObjCTypechecks, InteropContext> {
+public:
+    void HandleImpl(InteropContext& ctx);
+};
+
+/**
  * Rewrite pointer access performed by ObjCPointer methods to proper FFI calls
  */
 class RewriteObjCPointerAccess : public Handler<RewriteObjCPointerAccess, InteropContext> {
