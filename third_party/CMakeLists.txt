@@ -257,8 +257,10 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND) # i.e. "--compile-backend" option
         endif()
         list(APPEND LLVM_CMAKE_ARGS -DCMAKE_EXE_LINKER_FLAGS=${LLVM_CMAKE_EXE_LINKER_FLAGS})
         list(APPEND LLVM_CMAKE_ARGS -DCMAKE_SHARED_LINKER_FLAGS=${LLVM_CMAKE_SHARED_LINKER_FLAGS})
-        # ranlib / ar on Windows may fail to create temp files when multiple processes are invoked simultaneously,
-        # so the maximum number of parallel linking jobs needs to be limit to 1.
+        if(CANGJIE_CACHE_PROGRAM)
+            list(APPEND LLVM_CMAKE_ARGS -DCMAKE_C_COMPILER_LAUNCHER=${CANGJIE_CACHE_PROGRAM})
+            list(APPEND LLVM_CMAKE_ARGS -DCMAKE_CXX_COMPILER_LAUNCHER=${CANGJIE_CACHE_PROGRAM})
+        endif()
         if(CMAKE_HOST_WIN32)
             list(APPEND LLVM_CMAKE_ARGS -DLLVM_PARALLEL_LINK_JOBS=1)
         endif()
