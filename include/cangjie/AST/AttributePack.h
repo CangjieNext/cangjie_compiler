@@ -683,6 +683,13 @@ enum class Attribute {
      */
     ALREADY_LOADED,
 
+    /**
+     * Marks synthetic match-case as produced by desugaring of as/is expression
+     * W: Sema.
+     * R: Sema.
+     */
+    OBJ_C_DESUGARED_MATCH_CASE,
+
     AST_ATTR_END,
 };
 
