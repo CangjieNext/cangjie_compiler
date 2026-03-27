@@ -68,6 +68,7 @@ private:
         IRBuilder2& irBuilder, llvm::Value* typeInfo, const CHIR::Type& staticType, const std::string& prefix);
     llvm::Value* CreateCompareArgs(IRBuilder2& irBuilder, llvm::Value* typeInfos,
         const std::vector<CHIR::Type*>& typeArgs, const std::string& prefix = "");
+    llvm::Value* CreateCompareArgs4ExtraConstraints(IRBuilder2& irBuilder, llvm::Value* retVal);
     llvm::Value* GetTypeInfoOfGeneric(IRBuilder2& irBuilder, CHIR::GenericType& gt);
     void CollectGenericParamIndicesMap();
     llvm::Value* CheckGenericParams(IRBuilder2& irBuilder, llvm::Value* retVal);
