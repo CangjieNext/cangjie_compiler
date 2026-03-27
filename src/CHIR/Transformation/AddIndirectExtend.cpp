@@ -118,8 +118,8 @@ struct ExtendInfo {
 };
 
 /// Condition for adding indirect extend.
-/// For class X, if X has a generic parent class Z (we check all generic parent classes), for each interface Y that Z extends
-/// (through ExtendDef, including parent interfaces of extended interface, but not through inheritance in Z),
+/// For class X, if X has a generic parent class Z (we check all generic parent classes), for each interface Y that Z
+/// extends (through ExtendDef, including parent interfaces of extended interface, but not through inheritance in Z),
 /// then in X's vtable find subtable T with key Y. Such T must exist.
 /// For each function f in T: if f is declared in Y, and f is defined in a generic interface or generic extend
 /// but not within Y's definition, then generate extend X<:Y. (A function in vtable for Y is declared in Y.)
@@ -216,7 +216,6 @@ std::string BuildExtendGenericNamingBase(const std::string& pkgName, const Class
 /// Impl class to encapsulate type matching state and operations
 class TypeMatchingImpl {
 public:
-    TypeMatchingImpl(CHIRBuilder& b) : extendGenericNamingBase(""), builder(b) {}
     TypeMatchingImpl(CHIRBuilder& b, const std::string& pkgName, const ClassDef& classDef)
         : extendGenericNamingBase(BuildExtendGenericNamingBase(pkgName, classDef)), builder(b) {}
 

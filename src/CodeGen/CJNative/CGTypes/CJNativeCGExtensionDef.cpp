@@ -34,7 +34,7 @@ CGExtensionDef::CGExtensionDef(CGModule& cgMod, const CHIR::CustomTypeDef& chirD
 }
 
 namespace {
-inline void HandleShortcutBranch(IRBuilder2& irBuilder, llvm::Value* condition, const std::string& prefix)
+inline void HandleShortcutBranch(IRBuilder2& irBuilder, llvm::Value* condition, const std::string& prefix = "")
 {
     auto [trueBB, falseBB] = Vec2Tuple<2>(
         irBuilder.CreateAndInsertBasicBlocks({GenNameForBB(prefix + "_true"), GenNameForBB(prefix + "_false")}));
@@ -125,7 +125,7 @@ llvm::Value* CGExtensionDef::CreateCompareArgs(
 {
     auto typeInfoPtrType = CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext());
     auto argSize = typeArgs.size();
-    llvm::Value* retVal;
+    llvm::Value* retVal = nullptr;
     for (size_t i = 0; i < argSize; ++i) {
         auto backupBB = irBuilder.GetInsertBlock();
         auto backupIt = irBuilder.GetInsertPoint();
@@ -142,6 +142,28 @@ llvm::Value* CGExtensionDef::CreateCompareArgs(
             HandleShortcutBranch(irBuilder, retVal, idxStr);
             retVal = CreateTypeComparison(irBuilder, ti, *chirType, idxStr);
         }
+    }
+    return retVal;
+}
+
+llvm::Value* CGExtensionDef::CreateCompareArgs4ExtraConstraints(IRBuilder2& irBuilder, llvm::Value* retVal)
+{
+    if (chirDef.GetCustomKind() != CHIR::CustomDefKind::TYPE_EXTEND) {
+        return retVal;
+    }
+
+    auto& extraConstraints = StaticCast<CHIR::ExtendDef>(chirDef).GetExtraConstraintPairs();
+    if (extraConstraints.empty()) {
+        return retVal;
+    }
+
+    for (auto [chirType, upperBoundType] : extraConstraints) {
+        auto tiOfChirType = irBuilder.CreateTypeInfo(*chirType, genericParamsMap, false);
+        auto tiOfUpperBound = irBuilder.CreateTypeInfo(*upperBoundType, genericParamsMap, false);
+        if (retVal) {
+            HandleShortcutBranch(irBuilder, retVal);
+        }
+        retVal = irBuilder.CallIntrinsicIsSubtype({tiOfChirType, tiOfUpperBound});
     }
     return retVal;
 }
@@ -278,6 +300,10 @@ llvm::Constant* CGExtensionDef::GenerateWhereConditionFn()
         // OR, if the extended type's type arguments are in same order of 'ExtendDef's GetGenericTypeParams,
         //    we do not need to generate the 'whereCondFn' function.
         // Otherwise, we always need to generate the 'whereCondFn' function.
+        if (chirDef.GetCustomKind() == CHIR::CustomDefKind::TYPE_EXTEND &&
+            !StaticCast<CHIR::ExtendDef>(chirDef).GetExtraConstraintPairs().empty()) {
+            return true;
+        }
         std::vector<CHIR::Type*> genericTypes;
         for (auto gt : chirDef.GetGenericTypeParams()) {
             if (!gt->GetUpperBounds().empty()) {
@@ -311,6 +337,7 @@ llvm::Constant* CGExtensionDef::GenerateWhereConditionFn()
     auto typeInfos = fn->getArg(1);
     innerTypeMap.emplace(targetType, InnerTiInfo{typeInfos, false}); // Parameter with index 1 is an array of typeinfo.
     llvm::Value* retVal = CreateCompareArgs(irBuilder, typeInfos, targetType->GetTypeArgs());
+    retVal = CreateCompareArgs4ExtraConstraints(irBuilder, retVal);
     retVal = CheckGenericParams(irBuilder, retVal);
     irBuilder.CreateRet(retVal);
     innerTypeMap.clear();

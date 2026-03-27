@@ -1222,6 +1222,7 @@ void AST2CHIR::SetVTable()
     bool targetIsWin = opts.target.os == Triple::OSType::WINDOWS;
     IncreKind tempKind = opts.enIncrementalCompilation ? kind : IncreKind::INVALID;
     auto wrapper = WrapVirtualFunc(builder, cachedInfo, tempKind, targetIsWin);
+    allCustomTypeDef = package->GetAllCustomTypeDef();
     for (auto customDef : allCustomTypeDef) {
         if (customDef->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;

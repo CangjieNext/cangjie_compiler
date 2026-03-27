@@ -719,8 +719,27 @@ bool ToCHIR::RunConstantEvaluation()
 
 bool ToCHIR::RunIRChecker(const Phase& phase) const
 {
-    (void) phase;
-    return true;
+    if (!opts.chirWFC) {
+        return true;
+    }
+    std::string suffix;
+    switch (phase) {
+        case Phase::RAW:
+            suffix = "after translation";
+            break;
+        case Phase::OPT:
+            suffix = "after compiler optimization";
+            break;
+        case Phase::PLUGIN:
+            suffix = "after perform pulgin";
+            break;
+        case Phase::ANALYSIS_FOR_CJLINT:
+            suffix = "after analysis for cjlint";
+            break;
+    }
+    Utils::ProfileRecorder recorder("CHIR", "IRCheck " + suffix);
+    CJC_NULLPTR_CHECK(chirPkg);
+    return IRCheck(*chirPkg, opts, builder, phase);
 }
 
 void ToCHIR::RecordCodeInfoAtTheBegin()
@@ -1225,7 +1244,7 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
     } else if (hasPluginForCHIR && builder.IsEnableIRCheckerAfterPlugin()) {
         DumpCHIRToFile("PLUGIN");
         Utils::ProfileRecorder rec2("CHIR", "IRCheck after plugins");
-        succeed = true;
+        succeed = IRCheck(package, opts, builder, Phase::PLUGIN);
     }
     return succeed;
 }
