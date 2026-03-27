@@ -365,13 +365,13 @@ struct AnnotationTarget {
     }
 };
 
-const std::string_view ANNOTATION_TARGET_2_STRING[]{
-    "type", "parameter", "init", "member property", "member function", "member variable", "enum constructor",
-    "global function", "global variable", "extend"};
+// const std::string_view ANNOTATION_TARGET_2_STRING[]{
+//     "type", "parameter", "init", "member property", "member function", "member variable", "enum constructor",
+//     "global function", "global variable", "extend"};
 
 class AnnotationChecker {
 public:
-    explicit AnnotationChecker(const DiagAdapter& d) : diag{d}
+    explicit AnnotationChecker()// : diag{d}
     {
     }
 
@@ -384,7 +384,7 @@ public:
     }
 
 private:
-    const DiagAdapter& diag;
+    // const DiagAdapter& diag;
 
     // write @Annotation info from the result of consteval back to the AST nodes
     void BuildCheckMap()
@@ -525,9 +525,9 @@ private:
                 targets = checkMap.at(annotation.def);
             }
             if (!targets.Matches(target)) {
-                (void)diag.diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_not_applicable, *annotation.src,
-                    annotation.src->identifier, std::string{ANNOTATION_TARGET_2_STRING[targetid]});
-                res = false;
+                // (void)diag.diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_not_applicable, *annotation.src,
+                //     annotation.src->identifier, std::string{ANNOTATION_TARGET_2_STRING[targetid]});
+                // res = false;
             }
         }
         return res;
@@ -554,9 +554,9 @@ private:
                 targets = checkMap.at(annotation.def);
             }
             if (!targets.Matches(target)) {
-                (void)diag.diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_not_applicable, *annotation.src,
-                    annotation.src->identifier, std::string{ANNOTATION_TARGET_2_STRING[targetid]});
-                res = false;
+                // (void)diag.diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_not_applicable, *annotation.src,
+                //     annotation.src->identifier, std::string{ANNOTATION_TARGET_2_STRING[targetid]});
+                // res = false;
             }
         }
         return res;
@@ -567,7 +567,7 @@ private:
 bool ToCHIR::RunAnnotationChecks()
 {
     Utils::ProfileRecorder r{"CHIR", "AnnotationCheck"};
-    if (!AnnotationChecker{diag}.CheckAnnotations()) {
+    if (!AnnotationChecker{}.CheckAnnotations()) {
         return false;
     }
     return true;
