@@ -1391,8 +1391,33 @@ llvm::Value* IRBuilder2::CreateTypeInfo(const CHIR::Type& gt,
         res = foundIt->second(*this);
         LLVMIRBuilder2::SetInsertPoint(curBB, curPt);
     } else if (baseType->IsGeneric()) {
-        CJC_ASSERT(false && "CHIR uses an unexpected Generic-Type.");
-        return nullptr;
+        // When the generic type is not found by pointer comparison,
+        // try to find a semantically equivalent generic type by identifier.
+        // This can happen when generic types from constraint clauses use different
+        // GenericType pointer instances than those declared in the extend definition.
+        bool found = false;
+        auto& genericType = StaticCast<CHIR::GenericType&>(*baseType);
+        const auto& identifier = genericType.GetSrcCodeIdentifier();
+        for (const auto& [keyType, generator] : map) {
+            if (keyType->IsGeneric()) {
+                auto& keyGenericType = StaticCast<CHIR::GenericType&>(*keyType);
+                if (keyGenericType.GetSrcCodeIdentifier() == identifier) {
+                    auto curPt = LLVMIRBuilder2::GetInsertPoint();
+                    auto curBB = LLVMIRBuilder2::GetInsertBlock();
+                    if (canChangeBB) {
+                        SetInsertPointForPreparingTypeInfo();
+                    }
+                    res = generator(*this);
+                    LLVMIRBuilder2::SetInsertPoint(curBB, curPt);
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found) {
+            CJC_ASSERT(false && "CHIR uses an unexpected Generic-Type.");
+            return nullptr;
+        }
     } else if (cgType->IsConcrete()) {
         res = cgType->GetOrCreateTypeInfo();
     } else if (cgType->IsStaticGI()) {
