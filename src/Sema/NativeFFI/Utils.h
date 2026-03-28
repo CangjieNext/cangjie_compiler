@@ -220,6 +220,8 @@ std::string GetLambdaJavaClassName(Ptr<Ty> ty);
 
 std::string GetCjMappingTupleName(const Ty& tupleTy);
 
+bool ShouldSkipOperatorOverload(const FuncDecl& funcDecl);
+
 } // namespace Cangjie::Native::FFI
 
 #endif // CANGJIE_SEMA_NATIVE_FFI_UTILS
