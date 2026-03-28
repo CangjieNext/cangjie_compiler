@@ -13,6 +13,7 @@
 #include <limits>
 
 #include "JavaSourceCodeGenerator.h"
+#include "NativeFFI/Utils.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/Utils/FileUtil.h"
@@ -1022,6 +1023,9 @@ void JavaSourceCodeGenerator::AddMethods()
     }
     for (auto& fdecl : funcDecls) {
         const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(fdecl);
+        if (ShouldSkipOperatorOverload(funcDecl)) {
+            continue;
+        }
         // Hidden interopCJ configure unexposed symbol.
         if (isInteropCJPackageConfig && funcDecl.symbol && !funcDecl.symbol->isNeedExposedToInterop) {
             continue;
@@ -1082,6 +1086,9 @@ void JavaSourceCodeGenerator::AddInterfaceMethods()
         }
         if (!declPtr->TestAttr(Attribute::PRIVATE) && IsFuncDeclAndNotConstructor(declPtr)) {
             const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(declPtr.get());
+            if (ShouldSkipOperatorOverload(funcDecl)) {
+                continue;
+            }
             if (!IsVisibalFunc(funcDecl, *decl, genericConfig)) {
                 continue;
             }
