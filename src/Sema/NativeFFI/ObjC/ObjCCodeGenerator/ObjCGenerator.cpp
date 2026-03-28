@@ -523,6 +523,9 @@ void ObjCGenerator::GenerateStaticReferences()
 
         if (declPtr->astKind == ASTKind::FUNC_DECL) {
             const auto& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(declPtr.get());
+            // if (ShouldSkipOperatorOverload(funcDecl)) {
+            //     continue;
+            // }
             CJC_ASSERT(funcDecl.ty->IsFunc());
             auto& retTy = *StaticCast<const FuncTy*>(funcDecl.ty)->retTy;
             const auto retType = ctx.typeMapper.IsObjCObjectType(retTy) || ctx.typeMapper.IsObjCBlock(retTy)
@@ -598,6 +601,9 @@ void ObjCGenerator::GenerateFunctionSymbolsInitialization()
                 continue;
             }
             const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(declPtr.get());
+            // if (ShouldSkipOperatorOverload(funcDecl)) {
+            //     continue;
+            // }
             std::string objCDeclName = funcDecl.identifier;
             if (genericConfig) {
                 objCDeclName.erase(std::remove_if(objCDeclName.begin(), objCDeclName.end(),
@@ -1086,6 +1092,9 @@ void ObjCGenerator::AddMethods()
         if (declPtr->astKind == ASTKind::FUNC_DECL &&
             !declPtr->TestAnyAttr(Attribute::CONSTRUCTOR, Attribute::FINALIZER)) {
             const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(declPtr.get());
+            if (ShouldSkipOperatorOverload(funcDecl)) {
+                continue;
+            }
             if (!IsVisibalFunc(funcDecl, *decl, genericConfig)) {
                 continue;
             }

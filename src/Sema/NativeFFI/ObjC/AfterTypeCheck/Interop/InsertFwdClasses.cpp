@@ -55,6 +55,9 @@ void InsertFwdClasses::GenerateInterfaceFwdClassBody(InteropContext& ctx, AST::C
     for (auto& decl : interfaceDecl.GetMemberDecls()) {
         if (FuncDecl* fd = As<ASTKind::FUNC_DECL>(decl.get());
             fd && !fd->TestAttr(Attribute::CONSTRUCTOR) && !fd->TestAttr(Attribute::STATIC)) {
+            if (ShouldSkipOperatorOverload(*fd)) {
+                continue;
+            }
             fwdclassDecl.body->decls.emplace_back(GenerateInterfaceFwdclassMethod(ctx, fwdclassDecl, *fd, genericConfig));
         }
     }

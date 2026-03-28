@@ -667,4 +667,13 @@ std::string GetLambdaJavaClassName(Ptr<Ty> ty)
     return name;
 }
 
+bool ShouldSkipOperatorOverload(const FuncDecl& funcDecl)
+{
+    if (funcDecl.op == TokenKind::ILLEGAL) {
+        return false;
+    }
+    
+    return GetForeignNameAnnotation(funcDecl) == nullptr;
+}
+
 } // namespace Cangjie::Native::FFI

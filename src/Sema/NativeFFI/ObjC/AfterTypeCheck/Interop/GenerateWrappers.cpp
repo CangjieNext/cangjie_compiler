@@ -82,6 +82,9 @@ void GenerateWrappers::HandleImpl(InteropContext& ctx)
 void GenerateWrappers::GenerateWrapper(InteropContext& ctx, FuncDecl& method, bool isGenericGlueCode,
     const std::vector<Native::FFI::GenericConfigInfo*>& genericConfigsVector)
 {
+    if (Native::FFI::ShouldSkipOperatorOverload(method)) {
+        return;
+    }
     if (isGenericGlueCode) {
         for (auto genericConfig : genericConfigsVector) {
             auto wrapper = ctx.factory.CreateMethodWrapper(method, genericConfig);
