@@ -63,6 +63,7 @@ struct JavaInteropTypeChecker {
     bool isImpl;
     bool isCJMappingTypeCheck = false;
     DiagnosticEngine& diag;
+    Package* curPackage = nullptr;
 
     auto GetJavaClassKind() const
     {
@@ -160,7 +161,7 @@ struct JavaInteropTypeChecker {
 
     inline void CheckJavaCompatibleParamTypes(FuncDecl& fdecl, DiagKindRefactor errkind)
     {
-        if (!fdecl.funcBody) {
+        if (!fdecl.funcBody || !fdecl.outerDecl) {
             return;
         }
         auto isJavaArray = IsJArray(*fdecl.outerDecl);
@@ -250,11 +251,115 @@ struct JavaInteropTypeChecker {
         }
 
         CheckCJMappingCompatibleParamTypes(fd);
+        CheckCJMappingTypeConfig(fd);
+    }
+
+    bool IsLambdaTypeConfigured(const Ptr<Ty>& ty) const
+    {
+        // Skip check if curPackage is null (caller should ensure curPackage is set) or type is not func
+        if (ty->kind != TypeKind::TYPE_FUNC) {
+            return true;
+        }
+        CJC_ASSERT(curPackage && "curPackage must be set before checking lambda configuration");
+        const auto& lambdaPatterns = curPackage->GetLambdaPatterns();
+        // No patterns configured means lambda type is not supported
+        if (lambdaPatterns.empty()) {
+            return false;
+        }
+        auto funcTy = StaticCast<FuncTy*>(ty.get());
+        for (const auto& pattern : lambdaPatterns) {
+            if (pattern.parameterTypes.size() != funcTy->paramTys.size()) {
+                continue;
+            }
+            bool paramsMatch = true;
+            for (size_t i = 0; i < pattern.parameterTypes.size(); ++i) {
+                std::string paramStr = funcTy->paramTys[i]->String();
+                if (paramStr != pattern.parameterTypes[i]) {
+                    paramsMatch = false;
+                    break;
+                }
+            }
+            if (!paramsMatch) {
+                continue;
+            }
+            std::string retStr = funcTy->retTy ? funcTy->retTy->String() : "Unit";
+            if (retStr == pattern.returnType) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool IsTupleTypeConfigured(const Ptr<Ty>& ty) const
+    {
+        // Skip check if type is not tuple
+        if (!ty->IsTuple()) {
+            return true;
+        }
+        CJC_ASSERT(curPackage && "curPackage must be set before checking tuple configuration");
+        const auto& interopTuples = curPackage->interopTuples;
+        // No tuples configured means tuple type is not supported
+        if (interopTuples.empty()) {
+            return false;
+        }
+        // Convert ty to config format: (Type1, Type2, ...)
+        std::string tupleStr = "(";
+        for (size_t i = 0; i < ty->typeArgs.size(); ++i) {
+            if (i > 0) {
+                tupleStr += ", ";
+            }
+            tupleStr += Ty::ToString(ty->typeArgs[i]);
+        }
+        tupleStr += ")";
+        for (const auto& config : interopTuples) {
+            if (config == tupleStr) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    inline void MarkBrokenFuncDecl(FuncDecl& fd)
+    {
+        fd.EnableAttr(Attribute::IS_BROKEN);
+        if (fd.outerDecl) {
+            fd.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
+            fd.outerDecl->EnableAttr(Attribute::IS_BROKEN);
+        }
+    }
+
+    inline void CheckCJMappingTypeConfigured(FuncDecl& fd, Node& node, const Ptr<Ty>& ty)
+    {
+        if (ty->kind == TypeKind::TYPE_FUNC && !IsLambdaTypeConfigured(ty)) {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_func_type_not_configured, node, Ty::ToString(ty));
+            MarkBrokenFuncDecl(fd);
+        }
+        if (ty->IsTuple() && !IsTupleTypeConfigured(ty)) {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_tuple_type_not_configured, node, Ty::ToString(ty));
+            MarkBrokenFuncDecl(fd);
+        }
+    }
+
+    inline void CheckCJMappingTypeConfig(FuncDecl& fd)
+    {
+        if (!fd.funcBody || !curPackage) {
+            return;
+        }
+
+        if (fd.funcBody->retType && fd.funcBody->retType->ty) {
+            CheckCJMappingTypeConfigured(fd, *fd.funcBody->retType, fd.funcBody->retType->ty);
+        }
+
+        for (auto& paramList : fd.funcBody->paramLists) {
+            for (auto& param : paramList->params) {
+                CheckCJMappingTypeConfigured(fd, *param, param->ty);
+            }
+        }
     }
 
     inline void CheckCJMappingCompatibleParamTypes(FuncDecl& fdecl)
     {
-        if (!fdecl.funcBody) {
+        if (!fdecl.funcBody || !fdecl.outerDecl) {
             return;
         }
         for (auto& paramList : fdecl.funcBody->paramLists) {
@@ -444,7 +549,19 @@ void JavaInteropManager::CheckCJMappingType(Decl& decl)
         .isImpl = false,
         .isCJMappingTypeCheck = true,
         .diag = diag,
+        .curPackage = decl.curFile ? decl.curFile->curPackage : nullptr,
     };
+
+    // Check if generic type is configured
+    if (checker.curPackage && decl.generic) {
+        const auto& genericConfigs = checker.curPackage->allowedInteropCJGenericInstantiations;
+        std::string declName = decl.identifier;
+        if (genericConfigs.find(declName) == genericConfigs.end()) {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_generic_type_not_configured, decl, decl.identifier);
+            decl.EnableAttr(Attribute::IS_BROKEN);
+        }
+    }
+
     for (auto& member : decl.GetMemberDecls()) {
         switch (member->astKind) {
             case ASTKind::FUNC_DECL:
