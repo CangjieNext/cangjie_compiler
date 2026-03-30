@@ -1722,31 +1722,48 @@ OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(OwnedPtr<Exp
     Ptr<Decl> memberDecl, Ptr<Ty> memberTy, AccessorKind kind, Ptr<File> curFile)
 {
     Ptr<FuncDecl> accessorDecl =
-        As<ASTKind::FUNC_DECL>(mockUtils->FindAccessorForMemberAccess(baseExpr->ty, memberDecl, kind));
+        As<ASTKind::FUNC_DECL>(mockUtils->FindAccessorForMemberAccess(memberDecl->outerDecl->ty, memberDecl, kind));
 
     if (!accessorDecl) {
         return nullptr;
     }
 
-    auto curFile = baseExpr->curFile;
     auto accessorCall = MakeOwned<CallExpr>();
-    auto accessorMemberAccess = CreateMemberAccess(std::move(baseExpr), accessorDecl->identifier);
 
-    accessorMemberAccess->curFile = curFile;
-    accessorMemberAccess->target = accessorDecl;
-    accessorMemberAccess->callOrPattern = accessorCall.get();
+    auto nameRefExpr = [&]() -> OwnedPtr<NameReferenceExpr> {
+        if (baseExpr) {
+            return CreateMemberAccess(std::move(baseExpr), *accessorDecl);
+        } else {
+            return CreateRefExpr(*accessorDecl);
+        }
+    }();
 
-    if (kind == AccessorKind::FIELD_GETTER) {
-        accessorMemberAccess->ty = typeManager.GetFunctionTy({}, memberTy);
-        accessorCall->ty = memberTy;
-    } else {
-        accessorMemberAccess->ty = typeManager.GetFunctionTy({memberTy}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
-        accessorCall->ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    nameRefExpr->curFile = curFile;
+    nameRefExpr->SetTarget(accessorDecl);
+    nameRefExpr->callOrPattern = accessorCall.get();
+
+    // FIXME: Use some helper function to check
+    switch (kind) {
+        case AccessorKind::FIELD_GETTER:
+        case AccessorKind::STATIC_FIELD_GETTER: {
+            nameRefExpr->ty = typeManager.GetFunctionTy({}, memberTy);
+            accessorCall->ty = memberTy;
+            break;
+        }
+        case AccessorKind::FIELD_SETTER:
+        case AccessorKind::STATIC_FIELD_SETTER: {
+            nameRefExpr->ty = typeManager.GetFunctionTy({memberTy}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+            accessorCall->ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+            break;
+        }
+        default: {
+            CJC_ABORT_WITH_MSG("Unhadled accessor kind");
+        }
     }
 
     accessorCall->resolvedFunction = accessorDecl;
-    accessorCall->baseFunc = std::move(accessorMemberAccess);
-    std::vector<OwnedPtr<FuncArg>> mockedMethodArgRefs {};
+    accessorCall->baseFunc = std::move(nameRefExpr);
+    std::vector<OwnedPtr<FuncArg>> mockedMethodArgRefs{};
     accessorCall->args = std::move(mockedMethodArgRefs);
     accessorCall->callKind = CallKind::CALL_DECLARED_FUNCTION;
     accessorCall->curFile = curFile;
