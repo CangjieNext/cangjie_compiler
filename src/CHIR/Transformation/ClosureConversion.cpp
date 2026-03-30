@@ -843,7 +843,7 @@ std::vector<Lambda*> ClosureConversion::CollectNestedFunctions()
         }
         return VisitResult::CONTINUE;
     };
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;
         }
@@ -1068,8 +1068,9 @@ void ClosureConversion::LiftNestedFunctionWithCFuncType(Lambda& nestedFunc)
     // move lambda to global function
     auto globalFuncId = GenerateGlobalFuncIdentifier(nestedFunc);
     auto genericParamTypes = nestedFunc.GetGenericTypeParams();
-    auto globalFunc = builder.CreateFuncWithBody(loc, StaticCast<FuncType*>(nestedFunc.GetResult()->GetType()),
+    auto globalFunc = builder.CreateFunction(StaticCast<FuncType*>(nestedFunc.GetResult()->GetType()),
     globalFuncId, nestedFunc.GetSrcCodeIdentifier(), "", package.GetName(), genericParamTypes);
+    globalFunc->SetDebugLocation(loc);
     // After globalFunc is used, new localId needs to be generated based on the ID in oldFunc during subsequent
     // optimization. Otherwise, duplicate IDs may exist. Therefore, the ID in oldFunc is transferred to globalFunc.
     CJC_NULLPTR_CHECK(nestedFunc.GetBody()->GetTopLevelFunc());
@@ -1372,7 +1373,7 @@ void ClosureConversion::LiftType()
         converter.VisitExpr(e);
         return VisitResult::CONTINUE;
     };
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;
         }
@@ -1386,7 +1387,7 @@ void ClosureConversion::LiftType()
     for (auto& importedVar : package.GetImportedGlobalVars()) {
         converter.VisitValue(*importedVar);
     }
-    for (auto& globalVar : package.GetGlobalVars()) {
+    for (auto& globalVar : package.GetGlobalVarsWithInit()) {
         converter.VisitValue(*globalVar);
     }
 
@@ -1462,8 +1463,8 @@ void ClosureConversion::CreateGenericOverrideMethodInAutoEnvImplDef(ClassDef& au
     // create override func
     auto mangledName = CHIRMangling::ClosureConversion::GenerateGenericOverrideFuncMangleName(srcFunc);
     auto debugLoc = IsArkInteropLambdaSignature(srcFunc) ? srcFunc.GetDebugLocation() : INVALID_LOCATION;
-    auto newFunc = builder.CreateFuncWithBody(
-        debugLoc, newFuncTy, mangledName, GENERIC_VIRTUAL_FUNC, "", package.GetName());
+    auto newFunc = builder.CreateFunction(newFuncTy, mangledName, GENERIC_VIRTUAL_FUNC, "", package.GetName());
+    newFunc->SetDebugLocation(debugLoc);
     autoEnvImplDef.AddMethod(newFunc);
 
     // set attribute
@@ -1614,8 +1615,8 @@ void ClosureConversion::CreateInstOverrideMethodInAutoEnvImplDef(ClassDef& autoE
     // create override func
     auto mangledName = CHIRMangling::ClosureConversion::GenerateInstOverrideFuncMangleName(srcFunc);
     auto debugLoc = IsArkInteropLambdaSignature(srcFunc) ? srcFunc.GetDebugLocation() : INVALID_LOCATION;
-    auto newFunc = builder.CreateFuncWithBody(
-        debugLoc, newFuncTy, mangledName, INST_VIRTUAL_FUNC, "", package.GetName());
+    auto newFunc = builder.CreateFunction(newFuncTy, mangledName, INST_VIRTUAL_FUNC, "", package.GetName());
+    newFunc->SetDebugLocation(debugLoc);
     autoEnvImplDef.AddMethod(newFunc);
 
     // set attribute
@@ -1843,8 +1844,9 @@ Function* ClosureConversion::LiftLambdaToGlobalFunc(
     }
 
     // 4. create global function declare
-    auto globalFunc = builder.CreateFuncWithBody(loc, newFuncTy, globalFuncIdentifier, srcCodeIdentifier, "",
+    auto globalFunc = builder.CreateFunction(newFuncTy, globalFuncIdentifier, srcCodeIdentifier, "",
         nestedFunc.GetTopLevelFunc()->GetPackageName(), convertedGenericTypeParams);
+    globalFunc->SetDebugLocation(loc);
     SetLiftedLambdaAttr(*globalFunc, nestedFunc);
     auto sigInfo = FuncSigInfo{
         .funcName = nestedFunc.GetSrcCodeIdentifier(),
@@ -2074,7 +2076,7 @@ ClassDef* ClosureConversion::GetOrCreateInstAutoEnvBaseDef(const FuncType& funcT
 void ClosureConversion::ConvertGlobalFunctions()
 {
     Utils::ProfileRecorder recorder("ClosureConversion", "ConvertGlobalFunctions");
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         if (func->IsCFunc()) {
             continue; // never lift CFunc
         }
@@ -2230,7 +2232,7 @@ void ClosureConversion::ConvertExpressions()
         }
         return VisitResult::CONTINUE;
     };
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;
         }
@@ -2306,8 +2308,7 @@ Function* ClosureConversion::CreateGenericMethodInAutoEnvWrapper(ClassDef& autoE
     // 2. create function
     auto funcMangledName =
         CHIRMangling::ClosureConversion::GenerateWrapperClassGenericOverrideFuncMangleName(autoEnvWrapperDef);
-    auto func = builder.CreateFuncWithBody(
-        INVALID_LOCATION, funcType, funcMangledName, GENERIC_VIRTUAL_FUNC, "", package.GetName());
+    auto func = builder.CreateFunction(funcType, funcMangledName, GENERIC_VIRTUAL_FUNC, "", package.GetName());
     autoEnvWrapperDef.AddMethod(func);
 
     // 3. set attribute
@@ -2384,8 +2385,7 @@ void ClosureConversion::CreateInstMethodInAutoEnvWrapper(ClassDef& autoEnvWrappe
     auto funcNamePrefix = autoEnvWrapperDef.GetIdentifierWithoutPrefix();
     auto funcMangledName =
         CHIRMangling::ClosureConversion::GenerateWrapperClassInstOverrideFuncMangleName(autoEnvWrapperDef);
-    auto func = builder.CreateFuncWithBody(
-        INVALID_LOCATION, funcType, funcMangledName, INST_VIRTUAL_FUNC, "", package.GetName());
+    auto func = builder.CreateFunction(funcType, funcMangledName, INST_VIRTUAL_FUNC, "", package.GetName());
     autoEnvWrapperDef.AddMethod(func);
 
     // 3. set attribute
@@ -3015,7 +3015,7 @@ void ClosureConversion::ModifyTypeMismatchInExpr()
         }
         return VisitResult::CONTINUE;
     };
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;
         }
@@ -3053,7 +3053,7 @@ void ClosureConversion::ModifyTypeMismatchInFunc(Function& func, size_t paramInd
 
 void ClosureConversion::ModifyTypeMismatchInVTable()
 {
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         if (func->TestAttr(Attribute::SKIP_ANALYSIS)) {
             continue;
         }

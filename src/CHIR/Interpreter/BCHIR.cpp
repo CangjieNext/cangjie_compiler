@@ -187,7 +187,7 @@ void Bchir::AddGlobalVar(std::string mangledName, Definition&& def)
     globalVars.emplace(mangledName, def);
 }
 
-const std::map<std::string, Bchir::Definition>& Bchir::GetGlobalVars() const
+const std::map<std::string, Bchir::Definition>& Bchir::GetGlobalVarsWithInit() const
 {
     return globalVars;
 }
