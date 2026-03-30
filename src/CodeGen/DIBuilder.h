@@ -153,13 +153,6 @@ private:
         return StaticCast<const CGEnumType*>(CGType::GetOrCreate(cgMod, &ty))->IsOptionLike();
     }
 
-    static std::string RemoveCustomTypePrefix(const std::string& typeName)
-    {
-        std::string prefix = "::";
-        auto prefixPos = typeName.find(prefix);
-        return typeName.substr(prefixPos + prefix.length());
-    }
-
     bool IsOption(const CHIR::Type& ty)
     {
         if (!ty.IsEnum()) {
@@ -167,7 +160,7 @@ private:
         }
         return StaticCast<const CHIR::EnumType&>(ty).IsOption();
     }
-
+    
     static std::string GenerateGenericFuncName(
         const std::string& funcName, const std::vector<CHIR::GenericType*>& genericTypeParams)
     {
@@ -286,7 +279,7 @@ private:
             return GenerateClosureTypeName(StaticCast<const CHIR::ClassType&>(type));
         }
         auto pkgName = type.GetCustomTypeDef()->GetPackageName();
-        std::string typeName = pkgName + "::" + CHIR::GetCustomTypeIdentifier(type);
+        std::string typeName = (needPkgPrefix ? (pkgName + "::") :"") + CHIR::GetCustomTypeIdentifier(type);
         if (!type.GetTypeArgs().empty()) {
             typeName += "<";
             for (auto arg : type.GetTypeArgs()) {
