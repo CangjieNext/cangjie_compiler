@@ -84,8 +84,8 @@ private:
         AST::FuncDecl& funcDecl, std::vector<OwnedPtr<AST::FuncParamList>> accessorFuncParamLists) const;
     OwnedPtr<AST::FuncDecl> GenerateVarDeclAccessor(AST::VarDecl& fieldDecl, AccessorKind kind);
     OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(const AST::MemberAccess& memberAccess, AccessorKind kind);
-    OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(
-        OwnedPtr<AST::Expr> baseExpr, Ptr<AST::Decl> memberDecl, Ptr<AST::Ty> memberTy, AccessorKind kind);
+    OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(Ptr<AST::Ty> outerTy, OwnedPtr<AST::Expr> baseExpr,
+        Ptr<AST::Decl> memberDecl, Ptr<AST::Ty> memberTy, AccessorKind kind, Ptr<AST::File> curFile);
     Ptr<AST::Expr> ReplaceFieldGetWithAccessor(
         AST::MemberAccess& memberAccess, Ptr<AST::Ty> outerTy, bool isInConstructor);
     Ptr<AST::Expr> ReplaceFieldSetWithAccessor(AST::AssignExpr& assignExpr, Ptr<AST::Ty> outerTy, bool isInConstructor);
