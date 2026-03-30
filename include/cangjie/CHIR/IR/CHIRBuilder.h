@@ -176,11 +176,9 @@ public:
     }
     Parameter* CreateParameter(Type* ty, const DebugLocation& loc, Function& parentFunc);
     Parameter* CreateParameter(Type* ty, const DebugLocation& loc, Lambda& parentLambda);
-    GlobalVar* CreateGlobalVarWithInit(const DebugLocation& loc, RefType* ty, const std::string& mangledName,
-        const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
-        std::set<std::string> features = {});
-    GlobalVar* CreateImportedGlobalVar(Type* ty, const std::string& mangledName, const std::string& srcCodeIdentifier,
-        const std::string& rawMangledName, const std::string& packageName, bool addToIR = true);
+
+    GlobalVar* CreateGlobalVar(Type* ty, const std::string& mangledName,
+        const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName);
     // ===--------------------------------------------------------------------===//
     // Expression API
     // ===--------------------------------------------------------------------===//
@@ -266,13 +264,9 @@ public:
         return expr;
     }
 
-    Function* CreateFuncWithBody(const DebugLocation& loc, FuncType* funcTy, const std::string& mangledName,
+    Function* CreateFunction(FuncType* funcTy, const std::string& mangledName,
         const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
-        const std::vector<GenericType*>& genericTypeParams = {}, std::set<std::string> features = {});
-
-    Function* CreateImportedFuncSig(Type* funcTy, const std::string& mangledName,
-        const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName,
-        const std::vector<GenericType*>& genericTypeParams = {}, bool addToIR = true);
+        const std::vector<GenericType*>& genericTypeParams = {});
     
     // ===--------------------------------------------------------------------===//
     // StructDef API
@@ -310,11 +304,6 @@ public:
     bool GetCompileTimeValueMark() const
     {
         return markAsCompileTimeValue;
-    }
-
-    void SetCompileCJMP(bool val)
-    {
-        compileCJMP = val;
     }
 
     CHIRContext& GetChirContext()
@@ -368,7 +357,6 @@ private:
 
     // A flag indicate if the created CHIR value/expression should be marked as compile time value for const evaluation
     bool markAsCompileTimeValue = false;
-    bool compileCJMP = false;
     bool enableIRCheckerAfterPlugin = true;
     size_t threadIdx;
     std::vector<Value*> allocatedValues;

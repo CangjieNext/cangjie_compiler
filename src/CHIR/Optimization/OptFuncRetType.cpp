@@ -22,7 +22,7 @@ std::vector<Function*> GetAllGlobalFuncs(const Package& package)
         }
         result.emplace_back(func);
     }
-    for (auto func : package.GetGlobalFuncs()) {
+    for (auto func : package.GetGlobalFuncsWithBody()) {
         if (!ReturnTypeShouldBeVoid(*func)) {
             continue;
         }
