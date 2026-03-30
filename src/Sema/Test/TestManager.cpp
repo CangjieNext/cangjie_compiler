@@ -586,7 +586,7 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
         }
 
         if (auto expr = As<ASTKind::EXPR>(node); expr) {
-            mockSupportManager->ReplaceExprWithAccessor(*expr, isInConstructor);
+            mockSupportManager->ReplaceExprWithAccessor(*expr, outerTy, isInConstructor);
             mockSupportManager->ReplaceInterfaceDefaultFunc(*expr, outerTy, isInMockAnnotatedLambda);
         }
 
