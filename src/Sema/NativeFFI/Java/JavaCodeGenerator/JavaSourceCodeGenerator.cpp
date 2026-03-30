@@ -545,6 +545,20 @@ void JavaSourceCodeGenerator::AddSelfIdField()
 
 void JavaSourceCodeGenerator::AddProperties()
 {
+    std::set<std::string> reservedMethodNames;
+    for (auto extendDecl : extendDecls) {
+        for (OwnedPtr<Decl>& declPtr : extendDecl->GetMemberDecls()) {
+            if (declPtr->astKind == ASTKind::FUNC_DECL && !declPtr->TestAttr(Attribute::CONSTRUCTOR)) {
+                reservedMethodNames.insert(GetJavaMemberName(*declPtr));
+            }
+        }
+    }
+    for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
+        if (declPtr->astKind == ASTKind::FUNC_DECL && !declPtr->TestAttr(Attribute::CONSTRUCTOR)) {
+            reservedMethodNames.insert(GetJavaMemberName(*declPtr));
+        }
+    }
+
     std::vector<Ptr<Decl>> propDecls;
     for (auto extendDecl : extendDecls) {
         for (OwnedPtr<Decl>& declPtr : extendDecl->GetMemberDecls()) {
@@ -558,6 +572,20 @@ void JavaSourceCodeGenerator::AddProperties()
             propDecls.emplace_back(declPtr.get());
         }
     }
+
+    auto GenerateUniqueName = [&reservedMethodNames](const std::string& baseName) -> std::string {
+        if (!reservedMethodNames.count(baseName)) {
+            return baseName;
+        }
+        int suffix = 0;
+        std::string candidate;
+        do {
+            candidate = baseName + "_prop" + std::to_string(suffix);
+            ++suffix;
+        } while (reservedMethodNames.count(candidate));
+        return candidate;
+    };
+
     for (auto& pdecl : propDecls) {
         const PropDecl& propDecl = *StaticAs<ASTKind::PROP_DECL>(pdecl);
         CJC_ASSERT_WITH_MSG(!propDecl.getters.empty(), "property must have at least one getter");
@@ -570,11 +598,11 @@ void JavaSourceCodeGenerator::AddProperties()
         CJC_ASSERT_WITH_MSG(!varDeclSuffix.empty(), "identifier cannot be an empty string");
         varDeclSuffix[0] = static_cast<char>(toupper(varDeclSuffix[0]));
 
-        std::string getSignature = "get" + varDeclSuffix;
+        std::string getSignature = GenerateUniqueName("get" + varDeclSuffix);
+        reservedMethodNames.insert(getSignature);
 
         bool isStaticProp = propDecl.TestAttr(Attribute::STATIC);
 
-        // add getter
         std::string getPublicHead = isStaticProp ? "public static " : "public ";
         AddWithIndent(TAB, getPublicHead + type + " " + getSignature + "() {");
         std::string getSelfStr = isStaticProp ? "" : "this.self";
@@ -584,10 +612,10 @@ void JavaSourceCodeGenerator::AddProperties()
         std::string getSelfNativeStr = isStaticProp ? "" : "long self";
         AddWithIndent(TAB, getNativeHead + type + " " + getSignature + "Impl(" + getSelfNativeStr + ");\n");
 
-        // add setter
         if (!propDecl.setters.empty()) {
             std::string setPublicHead = isStaticProp ? "public static void " : "public void ";
-            std::string setSignature = "set" + varDeclSuffix;
+            std::string setSignature = GenerateUniqueName("set" + varDeclSuffix);
+            reservedMethodNames.insert(setSignature);
             AddWithIndent(TAB, setPublicHead + setSignature + "(" + type + " " + varDecl + ") {");
             std::string setSelfStr = isStaticProp ? "" : "this.self, ";
             AddWithIndent(TAB2, setSignature + "Impl(" + setSelfStr + varDecl + ");");
