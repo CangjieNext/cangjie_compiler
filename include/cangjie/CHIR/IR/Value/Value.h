@@ -116,16 +116,6 @@ public:
     Type* GetType() const;
     void SetType(Type& newType);
 
-    const std::set<std::string>& GetFeatures() const
-    {
-        return features;
-    }
-
-    void SetFeatures(std::set<std::string> newFeatures)
-    {
-        features = newFeatures;
-    }
-
     virtual std::string GetSrcCodeIdentifier() const;
     const std::string& GetIdentifier() const;
     std::string GetIdentifierWithoutPrefix() const;
@@ -181,7 +171,6 @@ private:
     ValueKind GetValueKind() const;
 
     ValueKind kind;                 // value kind
-    std::set<std::string> features = {};
 };
 
 class Parameter : public Value {
@@ -536,10 +525,18 @@ public:
     const std::string& GetRawMangledName() const;
     void SetRawMangledName(const std::string& name);
 
+    const std::set<std::string>& GetFeatures() const;
+    void SetFeatures(const std::set<std::string>& newFeatures);
+
     // ===--------------------------------------------------------------------===//
     // Parent
     // ===--------------------------------------------------------------------===//
     CustomTypeDef* GetParentCustomTypeDef() const;
+
+    // ===--------------------------------------------------------------------===//
+    // Attribute
+    // ===--------------------------------------------------------------------===//
+    virtual bool IsSrcCodeImported() const = 0;
 
     // ===--------------------------------------------------------------------===//
     // Modify Self
@@ -688,11 +685,20 @@ public:
 
     bool IsVirtualFunc() const;
 
+    bool IsPureAbstract() const;
+
+    // including:
+    // 1. declared in imported package, is marked with @Frozen and compiled with O2
+    // 2. declared in imported package, is marked with `const`
+    // 3. a generic function from imported package, is instantiated in current package
+    bool IsSrcCodeImported() const override;
+
     // ===--------------------------------------------------------------------===//
     // Modify Self
     // ===--------------------------------------------------------------------===//
     void DestroySelf() override;
 
+    void DestroyFuncBody();
     /**
      * @brief Replace the return value of this function and update the function type accordingly.
      *
@@ -720,7 +726,6 @@ private:
     Function(const Function&) = delete;
     Function& operator=(const Function&) = delete;
 
-    void DestroyFuncBody();
     void RemoveBody();
     void RemoveParams();
 
@@ -766,9 +771,19 @@ public:
 
     std::string ToString() const override;
 
-    void DestroySelf() override;
+    // ===--------------------------------------------------------------------===//
+    // Attribute
+    // ===--------------------------------------------------------------------===//
+    bool IsSrcCodeImported() const override;
 
     bool IsLocalConst() const;
+
+    // ===--------------------------------------------------------------------===//
+    // Modify Self
+    // ===--------------------------------------------------------------------===//
+    void DestroySelf() override;
+
+    void DestroyInitializer();
 
 private:
     explicit GlobalVar(Type* ty, const std::string& identifier, const std::string& srcCodeIdentifier,
