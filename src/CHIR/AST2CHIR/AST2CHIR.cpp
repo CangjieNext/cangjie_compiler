@@ -396,7 +396,7 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
 
     // step 4: set `CompileTimeValue` for lambda
     Utils::ProfileRecorder::Start("TranslateAllDecls", "SetCompileTimeValueFlag");
-    for (auto func : package->GetGlobalFuncs()) {
+    for (auto func : package->GetGlobalFuncsWithBody()) {
         if (func->TestAttr(Attribute::CONST)) {
             SetCompileTimeValueFlagRecursively(*func);
         }
@@ -503,7 +503,6 @@ static Package::AccessLevel BuildPackageAccessLevel(const AST::AccessLevel& leve
 
 bool AST2CHIR::ToCHIRPackage(AST::Package& node)
 {
-    builder.SetCompileCJMP(opts.IsCompilingCJMP());
     // It can be not null in case of part of the package was deserialized from .chir
     bool needDesCHIR = opts.IsCompilingCJMPSpecific();
     if (!needDesCHIR) {
