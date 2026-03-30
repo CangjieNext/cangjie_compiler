@@ -122,17 +122,17 @@ void WrapMutFunc::CreateMutFuncWrapper(Function* rawFunc, CustomTypeDef& curDef,
     auto pkgName = curDef.GetPackageName();
 
     bool isImported = curDef.TestAttr(Attribute::IMPORTED);
-    Function* func = nullptr;
-    if (isImported) {
-        func = builder.CreateImportedFuncSig(wrapperFuncTy, funcIdentifier, "", "", pkgName);
-    } else {
-        func = builder.CreateFuncWithBody(INVALID_LOCATION, wrapperFuncTy, funcIdentifier, "", "", pkgName);
-    }
+    auto func = builder.CreateFunction(wrapperFuncTy, funcIdentifier, "", "", pkgName);;
     wrapperFuncs.emplace(funcIdentifier, func);
     CJC_NULLPTR_CHECK(func);
 
     func->Set<WrappedRawMethod>(rawFunc);
     func->AppendAttributeInfo(rawFunc->GetAttributeInfo());
+    if (isImported) {
+        func->EnableAttr(Attribute::IMPORTED);
+    } else {
+        func->DisableAttr(Attribute::IMPORTED);
+    }
     func->DisableAttr(Attribute::VIRTUAL);
     func->EnableAttr(Attribute::NO_REFLECT_INFO);
     curDef.AddMethod(func);
