@@ -1212,6 +1212,7 @@ OwnedPtr<FuncDecl> MockManager::CreateMockedMethodWithoutBody(
     mockedMethod->EnableAttr(Attribute::OVERRIDE);
     mockedMethod->DisableAttr(Attribute::ABSTRACT);
     mockedMethod->EnableAttr(Attribute::IN_CLASSLIKE);
+    // NOTE: Static methods probably shouldn't be open
     mockedMethod->EnableAttr(Attribute::OPEN);
     mockedMethod->curFile = mockedDecl.curFile;
     mockedMethod->funcBody = std::move(mockedMethodBody);
