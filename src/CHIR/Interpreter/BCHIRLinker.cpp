@@ -228,7 +228,7 @@ void BCHIRLinker::LinkClass(const Bchir& bchir, const std::string& mangledName)
 void BCHIRLinker::LinkAndInitGlobalVars(
     const Bchir& bchir, std::unordered_map<Bchir::ByteCodeIndex, IVal>& gvarId2InitIVal, bool isLast)
 {
-    for (auto& p : bchir.GetGlobalVars()) {
+    for (auto& p : bchir.GetGlobalVarsWithInit()) {
         auto& name = p.first;
         CJC_ASSERT(name.size() > 0);
         if (mName2GvarId.find(name) != mName2GvarId.end()) {
