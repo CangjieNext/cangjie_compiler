@@ -1199,6 +1199,12 @@ bool MockSupportManager::NeedToSearchCallsToReplaceWithAccessors(Node& node)
         return false;
     }
 
+    // Calls to static instance functions inside static initializer of generic class are forbiden
+    if (auto funcDecl = DynamicCast<FuncDecl>(&node); funcDecl && funcDecl->outerDecl &&
+        funcDecl->outerDecl->TestAttr(Attribute::GENERIC) && IsStaticInitializer(*funcDecl)) {
+        return false;
+    }
+
     return true;
 }
 
