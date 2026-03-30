@@ -909,6 +909,11 @@ void JavaSourceCodeGenerator::AddConstructors()
         if (IsGeneratedJavaImplConstructor(funcDecl)) {
             continue;
         }
+        if (genericConfig != nullptr) {
+            if (genericConfig->funcNames.count(fd->identifier.Val()) == 0) {
+                continue;
+            }
+        }
         AddConstructor(*fd);
     }
 
