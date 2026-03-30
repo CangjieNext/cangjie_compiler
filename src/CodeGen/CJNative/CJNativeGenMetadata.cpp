@@ -168,6 +168,11 @@ llvm::MDTuple* MetadataInfo::GenerateAttrsMetadata(const CHIR::AttributeInfo& at
             break;
         case ExtraAttribute::BOX_CLASS:
             attrsStr.emplace("box");
+            attrsStr.emplace("reflectVersion1");
+            break;
+        case ExtraAttribute::CLASS:
+        case ExtraAttribute::STRUCT:
+            attrsStr.emplace("reflectVersion1");
             break;
         default:
             break;
