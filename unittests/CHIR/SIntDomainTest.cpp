@@ -179,8 +179,8 @@ TEST(SIntDomainTest, DomainLevel)
     CHIRBuilder builder(cctx);
     Type* unitTy = builder.GetUnitTy();
     FuncType* funcTy = builder.GetType<FuncType>(std::vector<Type*>{}, unitTy);
-    auto func = builder.CreateFuncWithBody({"test.cj", 1, {1, 1}, {1, 1}}, funcTy, "aaa", "bbb", "", "ccc");
-    auto body = builder.CreateBlockGroup(*func);
+    auto func = builder.CreateFunction(funcTy, "aaa", "bbb", "", "ccc");
+	auto body = builder.CreateBlockGroup(*func);
     func->InitBody(*body);
     auto block = builder.CreateBlock(body);
     body->SetEntryBlock(block);
