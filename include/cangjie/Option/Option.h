@@ -1195,6 +1195,8 @@ public:
         return emitCHIRPhase != CandidateEmitCHIRPhase::NA;
     }
 
+    bool continueAfterEmit = false;
+
     bool IsCompilingCJMPSpecific() const
     {
         return commonPartChirs.size() > 0;

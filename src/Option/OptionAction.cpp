@@ -963,6 +963,8 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
         opts.emitCHIRPhase = EMIT_CHIR_PHASE_MAP.at(arg.value);
         return true;
     }},
+    { Options::ID::CONTINUE_COMPILE, OPTION_TRUE_ACTION(opts.continueAfterEmit = true) },
+
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     { Options::ID::DUMP_ANNOTATIONS_DEBUG, [](GlobalOptions& opts, [[maybe_unused]] const OptionArgInstance& arg) {
         opts.computeAnnotationsDebug = true;

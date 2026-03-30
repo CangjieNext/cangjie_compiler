@@ -106,6 +106,7 @@ static bool ExecuteCompile(DefaultCompilerInstance& instance)
 {
     FrontendOptions& opts = instance.invocation.frontendOptions;
     bool isEmitCHIR = instance.invocation.globalOptions.IsEmitCHIREnable();
+    bool continueCompile = instance.invocation.globalOptions.continueAfterEmit;
     if (IsEmptyInputFile(instance) && opts.dumpAction != FrontendOptions::DumpAction::DESERIALIZE_CHIR) {
         return HandleEmptyInputFileSituation(instance);
     }
@@ -145,11 +146,12 @@ static bool ExecuteCompile(DefaultCompilerInstance& instance)
         return false;
     }
     bool res = true;
-    if (!isEmitCHIR && instance.invocation.globalOptions.outputMode != GlobalOptions::OutputMode::CHIR) {
+    bool skipCodeGen = isEmitCHIR && !continueCompile;
+    if (!skipCodeGen && instance.invocation.globalOptions.outputMode != GlobalOptions::OutputMode::CHIR) {
         Cangjie::ICE::TriggerPointSetter iceSetter(CompileStage::CODEGEN);
         res = instance.PerformCodeGen() && res;
     }
-    if (!isEmitCHIR) {
+    if (!skipCodeGen) {
         Cangjie::ICE::TriggerPointSetter iceSetter(CompileStage::SAVE_RESULTS);
         res = instance.PerformResultsSaving() && res;
     }

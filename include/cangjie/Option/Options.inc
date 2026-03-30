@@ -366,6 +366,11 @@ OPTION("--deserialize-chir-and-dump", DESERIALIZE_CHIR_AND_DUMP, SEPARATED, { BA
 OPTION("--emit-chir", EMIT_CHIR, FLAG_WITH_ARG, {BACKEND(ALL)},
     {GROUP(GLOBAL) COMMA GROUP(VISIBLE) COMMA GROUP(STABLE)}, nullptr, emit_chir_phase, SINGLE_OCCURRENCE,
     "emit CHIR serialization file of the specified phase. Candidate phases:")
+
+OPTION("--continue", CONTINUE_COMPILE, FLAG, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) },
+    nullptr, {}, SINGLE_OCCURRENCE,
+    "Continue compilation after emitting any files (use with --emit-xxx)")
 OPTION("--chir-wfc", CHIR_WFC, SEPARATED, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) }, nullptr, simple_on_off_mode, SINGLE_OCCURRENCE,
     "Well-formedness check for CHIR. Candidate modes: ")

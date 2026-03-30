@@ -234,8 +234,8 @@ bool Driver::ExecuteCompilation() const
     }
     // cjc main.cj or cjc main.o
     bool noBackendInputs = driverOptions->frontendOutputFiles.empty() && driverOptions->inputObjs.empty();
-    if (noBackendInputs || driverOptions->IsEmitCHIREnable() ||
-        driverOptions->outputMode == GlobalOptions::OutputMode::CHIR) {
+    bool stopCompile = (driverOptions->IsEmitCHIREnable() && !driverOptions->continueAfterEmit) || driverOptions->outputMode == GlobalOptions::OutputMode::CHIR;
+    if (noBackendInputs || stopCompile) {
         DeleteInstance(instance);
         return true;
     }
