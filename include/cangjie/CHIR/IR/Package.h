@@ -42,33 +42,29 @@ public:
     // Global Var API
     // ===--------------------------------------------------------------------===//
     void AddGlobalVar(GlobalVar* item);
-    GlobalVar* TryGetGlobalVar(const std::string identifier);
-    std::vector<GlobalVar*> GetGlobalVars() const;
-    void SetGlobalVars(std::vector<GlobalVar*>&& vars);
+    GlobalVar* TryGetGlobalVar(const std::string& identifier);
+
+    std::vector<GlobalVar*> GetImportedGlobalVars() const;
+    std::vector<GlobalVar*> GetGlobalVarsWithInit() const;
+    std::vector<GlobalVar*> GetAllGlobalVars() const;
+    void SetAllGlobalVars(std::vector<GlobalVar*>&& vars);
 
     // ===--------------------------------------------------------------------===//
     // Global Function API
     // ===--------------------------------------------------------------------===//
     void AddGlobalFunc(Function* item);
-    Function* TryGetGlobalFunc(const std::string identifier);
-    std::vector<Function*> GetGlobalFuncs() const;
-    void SetGlobalFuncs(const std::vector<Function*>& funcs);
+    Function* TryGetGlobalFunc(const std::string& identifier);
+    
+    std::vector<Function*> GetImportedFunctions() const;
+    std::vector<Function*> GetGlobalFuncsWithBody() const;
+    std::vector<Function*> GetAllGlobalFuncs() const;
+    void SetAllGlobalFuncs(std::vector<Function*>&& funcs);
 
     Function* GetPackageInitFunc() const;
     void SetPackageInitFunc(Function* func);
 
     void SetPackageLiteralInitFunc(Function* func);
     Function* GetPackageLiteralInitFunc() const;
-    // ===--------------------------------------------------------------------===//
-    // Imported Var and Function API
-    // ===--------------------------------------------------------------------===//
-    void AddImportedGlobalVar(GlobalVar* item);
-    std::vector<GlobalVar*> GetImportedGlobalVars() const;
-    void SetImportedGlobalVars(std::vector<GlobalVar*>&& items);
-
-    void AddImportedFunction(Function* item);
-    std::vector<Function*> GetImportedFunctions() const;
-    void SetImportedFunctions(std::vector<Function*>&& items);
 
     // ===--------------------------------------------------------------------===//
     // StructDef API
@@ -82,6 +78,7 @@ public:
     void SetImportedStructs(std::vector<StructDef*>&& s);
 
     std::vector<StructDef*> GetAllStructDef() const;
+    StructDef* TryGetStructDef(const std::string& identifier);
 
     // ===--------------------------------------------------------------------===//
     // ClassDef API
@@ -95,6 +92,7 @@ public:
     void SetImportedClasses(std::vector<ClassDef*>&& s);
 
     std::vector<ClassDef*> GetAllClassDef() const;
+    ClassDef* TryGetClassDef(const std::string& identifier);
 
     // ===--------------------------------------------------------------------===//
     // EnumDef API
@@ -108,6 +106,7 @@ public:
     void SetImportedEnums(std::vector<EnumDef*>&& s);
 
     std::vector<EnumDef*> GetAllEnumDef() const;
+    EnumDef* TryGetEnumDef(const std::string& identifier);
 
     // ===--------------------------------------------------------------------===//
     // ExtendDef API
@@ -121,6 +120,7 @@ public:
     void SetImportedExtends(std::vector<ExtendDef*>&& items);
 
     std::vector<ExtendDef*> GetAllExtendDef() const;
+    ExtendDef* TryGetExtendDef(const std::string& identifier);
 
     // ===--------------------------------------------------------------------===//
     // Others API
@@ -133,8 +133,6 @@ private:
     AccessLevel pkgAccessLevel{AccessLevel::INVALID};  // public/internal/protected, get from AST
 
     // imported decls
-    std::vector<GlobalVar*> importedGlobalVars;
-    std::vector<Function*> importedFuncs;
     std::vector<StructDef*> importedStructs;
     std::vector<ClassDef*> importedClasses;
     std::vector<EnumDef*> importedEnums;

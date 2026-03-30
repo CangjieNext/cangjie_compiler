@@ -261,7 +261,7 @@ public:
     /** @brief add global variable */
     void AddGlobalVar(std::string mangledName, Definition&& def);
     /** @brief get all global variables */
-    const std::map<std::string, Definition>& GetGlobalVars() const;
+    const std::map<std::string, Definition>& GetGlobalVarsWithInit() const;
 
     /** @brief Add a new file name to the file names section. */
     size_t AddFileName(const std::string& name);
