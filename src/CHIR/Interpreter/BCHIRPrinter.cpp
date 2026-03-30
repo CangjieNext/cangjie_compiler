@@ -68,7 +68,7 @@ void BCHIRPrinter::Print(std::string header)
         mainDefPrinter.Print();
     } else {
         os << "====== Global vars before linkage ======" << std::endl;
-        for (auto& [mangled, def] : bchir.GetGlobalVars()) {
+        for (auto& [mangled, def] : bchir.GetGlobalVarsWithInit()) {
             os << "---- " << mangled << std::endl;
             auto defPrinter = DefinitionPrinter(bchir, def, os);
             defPrinter.Print();

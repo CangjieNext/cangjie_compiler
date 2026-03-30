@@ -175,7 +175,8 @@ Function* Translator::ClearOrCreateVarInitFunc(const AST::Decl& decl)
         auto loc = DebugLocation(TranslateLocationWithoutScope(builder.GetChirContext(), decl.begin, decl.end));
 
         auto customTypeDef = chirTy.GetGlobalNominalCache(outerDecl);
-        func = builder.CreateFuncWithBody(loc, funcType, mangledName, identifier, rawMangledName, pkgName);
+        func = builder.CreateFunction(funcType, mangledName, identifier, rawMangledName, pkgName);
+        func->SetDebugLocation(loc);
         customTypeDef->AddMethod(func);
         func->SetFuncKind(FuncKind::INSTANCEVAR_INIT);
         func->EnableAttr(Attribute::PRIVATE);
