@@ -481,6 +481,7 @@ bool AST2CHIR::TryToDeserializeCHIR()
 {
     auto& chirFiles = opts.inputChirFiles;
     CJC_ASSERT(chirFiles.size() != 0);
+    Utils::ProfileRecorder recorder("AST to CHIR Translation", "TryToDeserializeCHIR");
     ToCHIR::Phase phase;
     bool success = true;
     for (auto chirFile : chirFiles) {

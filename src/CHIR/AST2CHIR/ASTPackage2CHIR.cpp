@@ -1569,6 +1569,7 @@ void RemoveUnusedCJMPExtends(CHIR::Package& chirPkg, const std::vector<Ptr<const
 
 void AST2CHIR::BuildDeserializedTable()
 {
+    Utils::ProfileRecorder recorder("AST to CHIR Translation", "BuildDeserializedTable");
     CJC_NULLPTR_CHECK(package);
     // build for CustomTypeDef
     std::vector<CustomTypeDef*> defs;
