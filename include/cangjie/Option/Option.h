@@ -663,6 +663,7 @@ public:
     enum class LTOMode : uint8_t { FULL_LTO, THIN_LTO, NO_LTO };
     LTOMode ltoMod = LTOMode::NO_LTO;
     bool enableCompileAsExe = false;
+    bool ltoHideAllPkgs = false;
 
     /**
      * @brief Checks whether LTO is enabled.
@@ -674,9 +675,44 @@ public:
         return ltoMod != LTOMode::NO_LTO;
     }
 
+    /**
+     * @brief Checks whether --compile-as-exe is enabled.
+     *
+     * @return bool Returns true if LTO is enabled, otherwise returns false.
+     */
     bool IsCompileAsExeEnabled() const 
     {
         return enableCompileAsExe;
+    }
+
+    /**
+     * @brief Checks whether --lto-keep-pkg-visibility is enabled.
+     *
+     * @return bool Returns true if LTO is enabled, otherwise returns false.
+     */
+    bool IsLTOPkgVisibilityEnabled() const
+    {
+        return !ltoVisiblePkgs.empty() || ltoHideAllPkgs;
+    }
+
+    /**
+     * @brief Gets the visible packages for LTO.
+     *
+     * @return const std::vector<std::string>& The visible packages list.
+     */
+    const std::vector<std::string>& GetLtoVisiblePkgs() const
+    {
+        return ltoVisiblePkgs;
+    }
+
+    /**
+     * @brief Adds a package to the LTO visible packages list.
+     *
+     * @param pkg The package name to add.
+     */
+    void AddLtoVisiblePkg(const std::string& pkg)
+    {
+        ltoVisiblePkgs.emplace_back(pkg);
     }
 
     /**
@@ -1192,6 +1228,7 @@ private:
     bool CheckLtoOptions() const;
     bool CheckOutputModeOptions();
     bool CheckCompileAsExeOptions() const;
+    bool CheckLTOPkgVisibilityOptions() const;
     bool CheckPgoOptions() const;
     bool CheckCompileMacro() const;
     bool CheckCJMPOptions() const;
@@ -1225,6 +1262,8 @@ private:
     std::string OverflowStrategyToSerializedString() const;
     std::string SanitizerTypeToSerializedString() const;
     void CollectOrderedInputFiles(ArgInstance& arg, uint64_t idx);
+
+    std::vector<std::string> ltoVisiblePkgs;
 };
 
 extern const std::unordered_map<GlobalOptions::OptimizationLevel, std::string> OPTIMIZATION_LEVEL_TO_BACKEND_OPTION;
