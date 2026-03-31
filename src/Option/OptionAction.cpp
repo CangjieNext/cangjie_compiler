@@ -635,6 +635,23 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
         return true;
     }},
     { Options::ID::COMPILE_AS_EXE, OPTION_TRUE_ACTION(opts.enableCompileAsExe = true) },
+
+    { Options::ID::VISIBLE_PKGS, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+    if (arg.value.empty()) {
+        opts.visiblePkgsHideAll = true;
+    } else {
+        auto pkgs = SplitString(arg.value, ",");
+        for (auto pkg : pkgs) {
+            TrimString(pkg);
+            if (!pkg.empty()) {
+                opts.visiblePkgs.emplace_back(pkg);
+            }
+        }
+    }
+    return true;
+    }},
+
+
     { Options::ID::TARGET, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         return ParseTargetTriple(opts, arg.value);
     }},

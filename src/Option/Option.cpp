@@ -268,6 +268,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckSanitizerOptions();
     success = success && CheckLtoOptions();
     success = success && CheckCompileAsExeOptions();
+    success = success && CheckVisiblePkgsOptions();
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
     success = success && ReprocessObfuseOption();
@@ -607,6 +608,25 @@ bool GlobalOptions::CheckCompileAsExeOptions() const
         DiagnosticEngine diag;
         diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_compile_as_exe_platform, DEFAULT_POSITION);
         return false;
+    }
+    return true;
+}
+
+bool GlobalOptions::CheckVisiblePkgsOptions() const
+{   
+    if(IsVisiblePkgsSpecifiedEnabled() && !IsLTOEnabled()) {
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_visible_pkgs, DEFAULT_POSITION);
+        return false;
+    }
+    if (!visiblePkgs.empty() && visiblePkgsHideAll) {
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_visible_pkgs_conflict, DEFAULT_POSITION);
+        return false;
+    }
+    if(IsVisiblePkgsSpecifiedEnabled() && outputMode != OutputMode::SHARED_LIB) {
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_visible_pkgs_only_for_dylib, DEFAULT_POSITION);    
     }
     return true;
 }

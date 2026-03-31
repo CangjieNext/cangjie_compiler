@@ -660,6 +660,8 @@ public:
     enum class LTOMode : uint8_t { FULL_LTO, THIN_LTO, NO_LTO };
     LTOMode ltoMod = LTOMode::NO_LTO;
     bool enableCompileAsExe = false;
+    std::vector<std::string> visiblePkgs;
+    bool visiblePkgsHideAll = false;
 
     /**
      * @brief Checks whether LTO is enabled.
@@ -674,6 +676,11 @@ public:
     bool IsCompileAsExeEnabled() const 
     {
         return enableCompileAsExe;
+    }
+
+    bool IsVisiblePkgsSpecifiedEnabled() const
+    {
+        return !visiblePkgs.empty() || visiblePkgsHideAll;
     }
 
     /**
@@ -1189,6 +1196,7 @@ private:
     bool CheckLtoOptions() const;
     bool CheckOutputModeOptions();
     bool CheckCompileAsExeOptions() const;
+    bool CheckVisiblePkgsOptions() const;
     bool CheckPgoOptions() const;
     bool CheckCompileMacro() const;
     void RefactJobs();

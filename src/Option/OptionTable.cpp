@@ -152,9 +152,10 @@ std::optional<OptionArgInstance> OptionTable::ParseOptionArg(const std::string& 
 
 std::optional<OptionArgInstance> OptionTable::SetArgValue(
     OptionArgInstance& arg, const std::string& value, bool isSeparatedOptionWithoutSpace) const
-{
+{   
+    // --visible-pkgs="" is valid (means hide all packages), don't report warning
     if (arg.hasJoinedValue || arg.info.GetKind() == Kind::CONTINOUS) {
-        if (value.empty()) {
+        if (value.empty() && arg.info.GetID() != Options::ID::VISIBLE_PKGS) {
             Warningf("option '%s' requires some values, format: option=value or option=\"v1, v2...\"\n",
                 arg.name.c_str());
         }
