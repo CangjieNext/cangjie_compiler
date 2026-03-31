@@ -59,14 +59,6 @@ public:
             }
         }
     }
-
-    /**
-     * @brief Remove all declarations from imported package by package name.
-     * This will clear all decls in each file of the package and clean up declMap in PackageInfo.
-     * @param fullPackageName The full name of the package to clean.
-     */
-    void RemoveDecls(const std::string& srcPkgName, const UsedDeclMap& usedItems);
-
     auto AddLoadedPackages(const std::string& pkgName)
     {
         return loadedPackages.emplace(pkgName);

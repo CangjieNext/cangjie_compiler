@@ -26,8 +26,6 @@ const uint8_t CJO_MINOR_VERSION = 1;
 const uint8_t CJO_PATCH_VERSION = 0;
 #endif
 
-using UsedDeclMap = std::unordered_map<std::string, std::unordered_set<Ptr<AST::Decl>>>;
-
 class CjoManager {
 public:
     struct Config {
@@ -123,8 +121,6 @@ public:
     void SetHasBuildIndex(bool value) const;
     DiagnosticEngine& GetDiag() const;
     Ptr<std::unordered_map<std::string, Ptr<AST::Decl>>> GetExportIdDeclMap(const std::string& fullPackageName) const;
-
-    void RemoveDecls(const std::string& srcPkgName, const UsedDeclMap& usedItems);
 
 private:
     class CjoManagerImpl* impl;
