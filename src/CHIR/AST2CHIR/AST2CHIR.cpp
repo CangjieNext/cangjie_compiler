@@ -477,7 +477,7 @@ void AST2CHIR::AST2CHIRCheck()
 /// Return true if chir was deserialized
 bool AST2CHIR::TryToDeserializeCHIR()
 {
-    auto& chirFiles = opts.inputChirFiles;
+    auto& chirFiles = opts.commonChirFiles;
     CJC_ASSERT(chirFiles.size() != 0);
     ToCHIR::Phase phase;
     bool success = true;
