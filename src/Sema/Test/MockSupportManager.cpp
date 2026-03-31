@@ -1464,6 +1464,16 @@ Ptr<FuncArg> MockSupportManager::GenerateDesugarFuncArg(Ptr<FuncArg> funcArg, Pt
     return ret;
 }
 
+namespace {
+
+bool IsStaticClassMember(Ptr<Decl> decl)
+{
+    return decl && decl->TestAttr(Attribute::STATIC) && decl->outerDecl &&
+        decl->outerDecl->astKind == ASTKind::CLASS_DECL;
+}
+
+} // namespace
+
 Ptr<Expr> MockSupportManager::ReplaceInoutFuncArgWithAccessor(CallExpr& callExpr)
 {
     std::vector<OwnedPtr<Node>> accessorGetCalls;
@@ -1476,14 +1486,20 @@ Ptr<Expr> MockSupportManager::ReplaceInoutFuncArgWithAccessor(CallExpr& callExpr
         OwnedPtr<CallExpr> accessorGet;
         OwnedPtr<CallExpr> accessorSet;
         auto& arg = callExpr.args[i];
-        if (auto memberAccess = DynamicCast<MemberAccess>(arg->expr.get()); memberAccess && arg->withInout) {
+        if (!arg->withInout) {
+            continue;
+        }
+
+        if (auto memberAccess = DynamicCast<MemberAccess>(arg->expr.get());
+            memberAccess && IsStaticClassMember(memberAccess->GetTarget())) {
             accessorGet = GenerateAccessorCallForField(*memberAccess, AccessorKind::STATIC_FIELD_GETTER);
             accessorSet = GenerateAccessorCallForField(*memberAccess, AccessorKind::STATIC_FIELD_SETTER);
-        } else if (auto refExpr = DynamicCast<RefExpr>(arg->expr.get()); refExpr && arg->withInout) {
-            if (refExpr->ref.target && refExpr->ref.target->TestAttr(Attribute::STATIC)) {
+        } else if (auto refExpr = DynamicCast<RefExpr>(arg->expr.get())) {
+            auto target = refExpr->GetTarget();
+            if (IsStaticClassMember(target)) {
                 accessorGet = GenerateAccessorCallForField(*refExpr, AccessorKind::STATIC_FIELD_GETTER);
                 accessorSet = GenerateAccessorCallForField(*refExpr, AccessorKind::STATIC_FIELD_SETTER);
-            } else if (refExpr->ref.target && refExpr->ref.target->TestAttr(Attribute::GLOBAL)) {
+            } else if (target && target->TestAttr(Attribute::GLOBAL)) {
                 accessorGet =
                     GenerateAccessorCallForTopLevelVariable(*refExpr, AccessorKind::TOP_LEVEL_VARIABLE_GETTER);
                 accessorSet =
@@ -1491,6 +1507,8 @@ Ptr<Expr> MockSupportManager::ReplaceInoutFuncArgWithAccessor(CallExpr& callExpr
             } else {
                 continue;
             }
+        } else {
+            continue;
         }
         CJC_ASSERT(accessorGet && accessorSet);
 
