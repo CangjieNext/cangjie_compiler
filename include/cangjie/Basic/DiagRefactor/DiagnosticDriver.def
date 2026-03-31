@@ -75,6 +75,12 @@ WARNING(driver_cfg_path_ignored, DRIVER_ARG,
 
 ERROR(driver_invalid_compile_as_exe, "--compile-as-exe only takes effect when lto mode is enabled")
 ERROR(driver_invalid_compile_as_exe_platform, "Windows, Mac, IOS does not support --compile-as-exe")
+
+
+ERROR(driver_invalid_visible_pkgs, "--visible-pkgs only takes effect when lto mode is enabled")
+ERROR(driver_invalid_visible_pkgs_conflict, "--visible-pkgs=\"\" and specific package names cannot be used together")
+WARNING(driver_visible_pkgs_only_for_dylib, DRIVER_ARG, "--visible-pkgs will be ignored when compiling staticlib and exe")
+
 WARNING(driver_useless_option, DEPRECATED, "option '%s' is deprecated and will be removed in the future")
 
 // module arg warning

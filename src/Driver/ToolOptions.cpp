@@ -297,8 +297,17 @@ void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
     setOptionHandler("--allow-multiple-definition");
     setOptionHandler("--plugin-opt=no-opaque-pointers");
     if (driverOptions.IsCompileAsExeEnabled()) {
-        setOptionHandler("--compile-as-exe");
+        setOptionHandler("--visible-pkgs=");
     }
+    
+    if (driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB) {
+        if(!driverOptions.visiblePkgs.empty()){
+            setOptionHandler("--visible-pkgs=" + Utils::JoinStrings(driverOptions.visiblePkgs, ","));
+        }else if(driverOptions.visiblePkgsHideAll){
+            setOptionHandler("--visible-pkgs=");
+        }
+    }
+
 }
 
 void SetPgoOptions(SetFuncType setOptionHandler, const DriverOptions& driverOptions)
