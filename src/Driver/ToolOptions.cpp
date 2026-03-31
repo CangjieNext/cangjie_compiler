@@ -11,7 +11,7 @@
  */
 
 #include "cangjie/Driver/ToolOptions.h"
-
+#include "cangjie/Basic/Print.h"
 #include <unordered_map>
 
 namespace {
@@ -299,6 +299,16 @@ void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
     if (driverOptions.IsCompileAsExeEnabled()) {
         setOptionHandler("--compile-as-exe");
     }
+    
+    if (driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB) {
+        if(!driverOptions.visiblePkgs.empty()){
+            auto tmp = Utils::JoinStrings(driverOptions.visiblePkgs, ",");
+             setOptionHandler("--visible-pkgs=" + tmp);
+        }else if(driverOptions.visiblePkgsHideAll){
+            setOptionHandler("--visible-pkgs=");
+        }
+    }
+
 }
 
 void SetPgoOptions(SetFuncType setOptionHandler, const DriverOptions& driverOptions)
