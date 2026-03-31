@@ -37,6 +37,7 @@ protected:
     };
     // Gather library paths from LIBRARY_PATH and compiler guesses.
     void AddSystemLibraryPaths() override;
+    void GenerateLinkOptionsForLTO(Tool& tool, const std::string& outputFile) const;
     TempFileInfo GenerateLinkingTool(
         const std::vector<TempFileInfo>& objFiles, const std::string& darwinSDKVersion) override;
     void GenerateLinkOptions(Tool& tool) override;

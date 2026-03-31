@@ -538,7 +538,7 @@ bool GlobalOptions::CheckLtoOptions() const
     } else if (!osName.empty()) {
         osName[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(osName[0])));
     }
-    if (osType == OSType::DARWIN || osType == OSType::IOS || osType == OSType::WINDOWS) {
+    if (osType == OSType::WINDOWS) {
         DiagnosticEngine diag;
         diag.DiagnoseRefactor(DiagKindRefactor::driver_target_lto_unsupported, DEFAULT_POSITION, osName);
         return false;

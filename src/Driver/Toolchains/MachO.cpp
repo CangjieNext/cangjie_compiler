@@ -291,21 +291,23 @@ void MachO::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
                     FileUtil::ConvertFilenameToLibCangjieBaseFormat(cjoFileName));
                 return;
             }
+            auto cangjieLibPath = FileUtil::JoinPath(FileUtil::JoinPath(driver.cangjieHome, "lib"),
+                driverOptions.GetCangjieLibTargetPathName());
+            // Search sanitizer path
+            if (driverOptions.sanitizerType != GlobalOptions::SanitizerType::NONE) {
+                cangjieLibPath = FileUtil::JoinPath(cangjieLibPath, driverOptions.SanitizerTypeToShortString());
+            }
             if (driverOptions.IsLTOEnabled()) {
                 auto found = LLVM_LTO_CSTD_FFI_OPTION_MAP.find(staticLib);
                 if (found != LLVM_LTO_CSTD_FFI_OPTION_MAP.end()) {
-                    staticLibraries.emplace(LINK_PREFIX + found->second);
+                    // ld64 does not support GNU -l:<filename> syntax. Use the archive path directly for
+                    // LTO-only C FFI dependencies such as libcangjie-std-coreFFI.a.
+                    staticLibraries.emplace(FileUtil::JoinPath(cangjieLibPath, found->second));
                 }
                 ltoBuiltInDependencies.emplace(FileUtil::ConvertFilenameToLtoLibCangjieFormat(cjoFileName));
             } else {
                 // In the case of static linkage, we pass full path of static library to the linker, otherwise
                 // we use -l<libname> passing style.
-                auto cangjieLibPath = FileUtil::JoinPath(FileUtil::JoinPath(driver.cangjieHome, "lib"),
-                    driverOptions.GetCangjieLibTargetPathName());
-                // Search sanitizer path
-                if (driverOptions.sanitizerType != GlobalOptions::SanitizerType::NONE) {
-                    cangjieLibPath = FileUtil::JoinPath(cangjieLibPath, driverOptions.SanitizerTypeToShortString());
-                }
                 std::string libLinkOpt = driverOptions.linkStaticStd.value_or(true)
                     ? FileUtil::JoinPath(cangjieLibPath, staticLib)
                     : LINK_PREFIX + FileUtil::ConvertFilenameToLibCangjieBaseFormat(cjoFileName);
