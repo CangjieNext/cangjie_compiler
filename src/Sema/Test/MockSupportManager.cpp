@@ -1480,10 +1480,12 @@ Ptr<Expr> MockSupportManager::ReplaceInoutFuncArgWithAccessor(CallExpr& callExpr
             accessorGet = GenerateAccessorCallForField(*memberAccess, AccessorKind::STATIC_FIELD_GETTER);
             accessorSet = GenerateAccessorCallForField(*memberAccess, AccessorKind::STATIC_FIELD_SETTER);
         } else if (auto refExpr = DynamicCast<RefExpr>(arg->expr.get()); refExpr && arg->withInout) {
-            if (refExpr->ref.target && refExpr->ref.target->TestAttr(Attribute::STATIC)) {
+            auto target = refExpr->GetTarget();
+            if (target && target->TestAttr(Attribute::STATIC) && target->outerDecl &&
+                target->outerDecl->IsClassLikeDecl()) {
                 accessorGet = GenerateAccessorCallForField(*refExpr, AccessorKind::STATIC_FIELD_GETTER);
                 accessorSet = GenerateAccessorCallForField(*refExpr, AccessorKind::STATIC_FIELD_SETTER);
-            } else if (refExpr->ref.target && refExpr->ref.target->TestAttr(Attribute::GLOBAL)) {
+            } else if (target && target->TestAttr(Attribute::GLOBAL)) {
                 accessorGet =
                     GenerateAccessorCallForTopLevelVariable(*refExpr, AccessorKind::TOP_LEVEL_VARIABLE_GETTER);
                 accessorSet =
