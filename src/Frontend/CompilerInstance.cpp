@@ -651,19 +651,13 @@ bool CompilerInstance::PerformGenericInstantiation()
         }
         Utils::ProfileRecorder::Stop("Generic Instantiation", "GenericInstantiatePackage");
     }
+    Utils::ProfileRecorder recorder("Generic Instantiation", "desugar after instantiation");
     // Perform desugar after generic instantiation.
     // NOTE: This step will not generate any error.
     for (auto& srcPkg : srcPkgs) {
         auto astCtx = GetASTContextByPackage(srcPkg.get());
         CJC_ASSERT(astCtx);
-        {
-            Utils::ProfileRecorder recorder("Generic Instantiation", "desugar after instantiation");
-            typeChecker->PerformDesugarAfterInstantiation(*astCtx, *srcPkg);
-        }
-        {
-            Utils::ProfileRecorder removeUnusedRocord("Generic Instantiation", "RemoveUnusedImportedDecls");
-            importManager.RemoveUnusedImportedDecls(rawMangleName2DeclMap);
-        }
+        typeChecker->PerformDesugarAfterInstantiation(*astCtx, *srcPkg);
     }
     if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
         DumpAST(GetSourcePackages(), invocation.globalOptions.output, "genericinst");
@@ -788,7 +782,13 @@ void CompilerInstance::ManglingHelpFunction(const BaseMangler& baseMangler)
     // Collect all top-level decls
     std::unordered_set<DeclAndPackageName, DeclAndPackageNameHasher> topDeclsSet;
     auto deduplicatedEmplace = [&topDeclsSet](AST::Decl* decl, std::string pkgName) {
-        topDeclsSet.insert(std::make_pair(decl, pkgName));
+        if (!decl->TestAttr(AST::Attribute::IMPORTED)) {
+            topDeclsSet.insert(std::make_pair(decl, pkgName));
+            return;
+        }
+        if (decl->TestAttr(AST::Attribute::USED_IMPORTS)) {
+            topDeclsSet.insert(std::make_pair(decl, pkgName));
+        }
     };
 
     for (auto& package : GetPackages()) {
