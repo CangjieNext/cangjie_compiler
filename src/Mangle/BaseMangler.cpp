@@ -15,6 +15,7 @@
 #include <sstream>
 
 #include "Compression.h"
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
@@ -948,6 +949,7 @@ void BaseMangler::CollectLocalDecls(ManglerContext& ctx, AST::Package& pkg) cons
             (vda->outerDecl->astKind == ASTKind::CLASS_DECL || vda->outerDecl->astKind == ASTKind::INTERFACE_DECL ||
                 vda->outerDecl->astKind == ASTKind::STRUCT_DECL || vda->outerDecl->astKind == ASTKind::ENUM_DECL);
         bool needCollect = isFunc || isLambda || isGlobal || isCompositeType;
+        needCollect = needCollect && node->TestAttr(Attribute::IMPORTED, Attribute::USED_IMPORTS);
         if (needCollect) {
             ctx.SaveVar2CurDecl(node);
             ctx.SaveLambda2CurDecl(node);

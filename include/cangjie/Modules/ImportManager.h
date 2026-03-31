@@ -43,8 +43,6 @@ struct ExternalLibCfg {
 
 enum class DepType { DIRECT, INDIRECT, BOTH };
 
-using RawMangledName = std::string;
-using RawMangled2DeclMap = std::unordered_map<RawMangledName, Ptr<const AST::Decl>>;
 /**
  * ImportManager is used to manage all imported packages. It can do these things:
  * 1. Load a saved package to a @see PackageDecl node using deserialization method.
@@ -267,7 +265,7 @@ public:
      * Remove all declarations from imported package by package name.
      * This will clear all decls in each file of the package and clean up declMap in PackageInfo.
      */
-    void RemoveUnusedImportedDecls(RawMangled2DeclMap& rawMangleName2DeclMap);
+    void RemoveUnusedImportedDecls();
 
     /** @brief Clear the cache for BCHIR packages. */
     void ClearPackageBCHIRCache()
@@ -486,7 +484,7 @@ private:
      */
     void ClearCachesForRebuild();
 
-    void CollectUsedPackageInFile(Ptr<AST::Package> srcPkg, UsedDeclMap& usedItems);
+    void CollectUsedPackageInFile(Ptr<AST::Package> srcPkg);
 
     friend class PackageManager;
 

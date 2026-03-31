@@ -4,6 +4,7 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/CHIR/AST2CHIR/AST2CHIR.h"
 
@@ -517,10 +518,10 @@ void AST2CHIR::CollectImportedPropDecl(AST::PropDecl& propDecl)
 
 void AST2CHIR::CollectImportedDeclUsedInCurPkg(AST::Decl& decl)
 {
-    // don't need to collect intrinsic func decl, because in CHIR, if we visit an intrinsic call expr, we will create
+    // Don't need to collect intrinsic func decl, because in CHIR, if we visit an intrinsic call expr, we will create
     // an `intrinsic` expression of CHIR, and pass in intrinsic kind, then codegen will know which function need to be
-    // called. we don't need to translate intrinsic func decl to any CHIR node
-    if (decl.TestAttr(AST::Attribute::INTRINSIC)) {
+    // called. we don't need to translate intrinsic func decl to any CHIR node.
+    if (decl.TestAttr(AST::Attribute::INTRINSIC) || !decl.TestAttr(AST::Attribute::USED_IMPORTS)) {
         return;
     }
     // 1. imported generic decl

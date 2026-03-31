@@ -16,6 +16,7 @@
 
 #include "PrintSymbolTable.h"
 
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"
@@ -24,8 +25,8 @@
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
 #include "cangjie/CHIR/Utils/CHIRPrinter.h"
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
-#include "cangjie/Frontend/CompileStrategy.h"
 #include "cangjie/Driver/TempFileManager.h"
+#include "cangjie/Frontend/CompileStrategy.h"
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
 #include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
 #include "cangjie/Mangle/BaseMangler.h"
@@ -621,7 +622,7 @@ bool CompilerInstance::PerformGenericInstantiation()
         }
         {
             Utils::ProfileRecorder removeUnusedRocord("Generic Instantiation", "RemoveUnusedImportedDecls");
-            importManager.RemoveUnusedImportedDecls(rawMangleName2DeclMap);
+            importManager.RemoveUnusedImportedDecls();
         }
     }
     if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
@@ -747,7 +748,13 @@ void CompilerInstance::ManglingHelpFunction(const BaseMangler& baseMangler)
     // Collect all top-level decls
     std::unordered_set<DeclAndPackageName, DeclAndPackageNameHasher> topDeclsSet;
     auto deduplicatedEmplace = [&topDeclsSet](AST::Decl* decl, std::string pkgName) {
-        topDeclsSet.insert(std::make_pair(decl, pkgName));
+        if (!decl->TestAttr(AST::Attribute::IMPORTED)) {
+            topDeclsSet.insert(std::make_pair(decl, pkgName));
+            return;
+        }
+        if (decl->TestAttr(Attribute::USED_IMPORTS)) {
+            topDeclsSet.insert(std::make_pair(decl, pkgName));
+        }
     };
 
     for (auto& package : GetPackages()) {
