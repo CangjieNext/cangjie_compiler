@@ -98,7 +98,128 @@ void ClearLineInfoAfterSema(Package& pkg)
         Walker(decl, clearGenericInst).Walk();
     }
 }
+
+void IterateTyWithArgs(Ptr<Ty> ty, const std::function<void(Ptr<Ty>)>& func)
+{
+    if (!Ty::IsTyCorrect(ty)) {
+        return;
+    }
+    func(ty);
+    for (auto& tyArg : ty->typeArgs) {
+        IterateTyWithArgs(tyArg, func);
+    }
+}
 } // namespace
+
+VisitAction TypeChecker::TypeCheckerImpl::CollectUsedDecl(Ptr<Decl> decl, unsigned walkerId)
+{
+    // 函数参数和泛型参数不算被使用，因为它们的类型可能会引用其他声明，但它们本身不需要被导入。但这个可能导致Mangle有问题？
+    if (Is<FuncParam>(decl) || Is<GenericParamDecl>(decl)) {
+        return VisitAction::WALK_CHILDREN;
+    }
+    // 使用到的泛型实例化声明要连着原始的泛型声明一起标记为被使用。
+    if (decl->TestAttr(Attribute::GENERIC_INSTANTIATED) && decl->genericDecl &&
+        decl->genericDecl->TestAttr(Attribute::IMPORTED)) {
+        CollectUsedNode(decl->genericDecl, walkerId);
+    }
+    // 非导入的声明不标记。
+    if (!decl->TestAttr(Attribute::IMPORTED)) {
+        return VisitAction::WALK_CHILDREN;
+    }
+    // 已经标记过的声明不重复标记，避免死循环，且无需再重复处理子节点。
+    if (decl->TestAttr(Attribute::USED_IMPORTS)) {
+        return VisitAction::SKIP_CHILDREN;
+    }
+    decl->EnableAttr(Attribute::USED_IMPORTS);
+    // 属性的解糖函数被使用，propDecl也算被使用。
+    if (auto fd = DynamicCast<FuncDecl>(decl); fd && fd->propDecl) {
+        fd->propDecl->EnableAttr(Attribute::USED_IMPORTS);
+    }
+    // 如果成员被使用，那么它所在的类型也要被标记为使用。
+    if (decl->outerDecl) {
+        CollectUsedNode(decl->outerDecl, walkerId);
+    }
+    if (!decl->IsNominalDecl()) {
+        return VisitAction::WALK_CHILDREN;
+    }
+    // 类型的扩展都要保留。
+    auto extends = typeManager.GetAllExtendsByTy(*decl->ty);
+    for (auto extend : extends) {
+        if (extend == decl || !extend->TestAttr(Attribute::IMPORTED)) {
+            continue;
+        }
+        CollectUsedNode(extend, walkerId);
+    }
+    return VisitAction::WALK_CHILDREN;
+}
+
+void TypeChecker::TypeCheckerImpl::CollectUsedNode(Ptr<Node> node, unsigned walkerId)
+{
+    std::function<VisitAction(Ptr<Node>)> collectUsed = [this, &walkerId, &collectUsed](Ptr<Node> node) -> VisitAction {
+        auto procTy = [&walkerId, &collectUsed](Ptr<Ty> ty) {
+            if (auto decl = Ty::GetDeclOfTy(ty)) {
+                Walker(decl, walkerId, collectUsed).Walk();
+            }
+        };
+        IterateTyWithArgs(node->ty, procTy);
+        if (auto type = DynamicCast<Type>(node); type && !Ty::IsInitialTy(type->aliasTy)) {
+            IterateTyWithArgs(type->aliasTy, procTy);
+        } else if (auto decl = DynamicCast<Decl>(node)) {
+            return CollectUsedDecl(decl, walkerId);
+        } else if (auto ae = DynamicCast<ArrayExpr>(node); ae && ae->initFunc) {
+            Walker(ae->initFunc, walkerId, collectUsed).Walk();
+        }
+        Ptr<Decl> target = node->GetTarget();
+        if (auto ce = DynamicCast<CallExpr>(node); ce && ce->resolvedFunction) {
+            target = ce->resolvedFunction;
+        }
+        if (!target) {
+            return VisitAction::WALK_CHILDREN;
+        }
+        Walker(target, walkerId, collectUsed).Walk();
+        return VisitAction::WALK_CHILDREN;
+    };
+    Walker(node, walkerId, collectUsed).Walk();
+}
+
+/*
+主体逻辑：
+1. 先处理隐式使用的声明，对隐式使用的声明进行遍历，找出所有依赖；
+2. 处理所有内建类型的扩展声明，由于扩展会影响虚表的生成，因此需要将扩展以及扩展所依赖的声明进行收集；
+3. 遍历源码文件，对文件中的每个声明进行遍历，找出所有依赖；
+4. 处理实例化出来的声明，并收集所有实例化声明的依赖
+5. 删除未使用的源码导入声明及inline函数（一定是导入声明）。
+
+依赖查询：
+1. 通过本包或导入包的Decl进行查询。
+*/
+void TypeChecker::TypeCheckerImpl::CollectUsedPackageInFile(Ptr<Package> pkg)
+{
+    const std::unordered_set<std::string_view> implicitUsedDecls = {"CJ_CORE_ExecAtexitCallbacks", "getCommandLineArgs",
+        "eprintln", "handleException", "NegativeArraySizeException", "createOverflowExceptionMsg",
+        "createArithmeticExceptionMsg", "SpawnException"};
+    unsigned walkerId = Walker::GetNextWalkerID();
+
+    for (auto implicitUsedDecl : implicitUsedDecls) {
+        auto decl = importManager.GetCoreDecl(std::string(implicitUsedDecl));
+        CollectUsedNode(decl, walkerId);
+    }
+    for (auto& [_, builtinExtends] : typeManager.builtinTyToExtendMap) {
+        for (auto& extend : builtinExtends) {
+            CollectUsedNode(extend, walkerId);
+        }
+    }
+    for (auto& file : curPackage->files) {
+        CollectUsedNode(file.get(), walkerId);
+    }
+    for (auto& instDecl : curPackage->genericInstantiatedDecls) {
+        CollectUsedNode(instDecl.get(), walkerId);
+    }
+    // 删除源码包中的无用的源码依赖。
+    auto isUnusedDecls = [](Ptr<Decl> decl) { return !decl->TestAttr(Attribute::USED_IMPORTS); };
+    Utils::EraseIf(curPackage->srcImportedNonGenericDecls, isUnusedDecls);
+    Utils::EraseIf(curPackage->inlineFuncDecls, isUnusedDecls);
+}
 
 void TypeChecker::TypeCheckerImpl::PerformDesugarAfterInstantiation([[maybe_unused]] ASTContext& ctx, Package& pkg)
 {
@@ -110,6 +231,8 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterInstantiation([[maybe_unus
     if (ci->invocation.globalOptions.enableCoverage) {
         ClearLineInfoAfterSema(pkg);
     }
+    Utils::ProfileRecorder removeUnusedRocord("PerformDesugarAfterInstantiation", "CollectUsedPackageInFile");
+    CollectUsedPackageInFile(&pkg);
 }
 
 bool AutoBoxing::NeedBoxOption(Ty& child, Ty& target)
