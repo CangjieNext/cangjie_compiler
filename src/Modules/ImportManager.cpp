@@ -24,7 +24,6 @@
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/SourceManager.h"
@@ -1578,12 +1577,6 @@ void ImportManager::ClearCachesForRebuild()
     directMacroDeps.clear();
 }
 
-bool AddUsedDecl(UsedDeclMap& usedItems, Ptr<AST::Decl> decl)
-{
-    auto& declSet = usedItems[decl->GetFullPackageName()];
-    return declSet.emplace(decl).second;
-}
-
 void IterateTyWithArgs(Ptr<Ty> ty, const std::function<void(Ptr<Ty>)>& func)
 {
     if (!Ty::IsTyCorrect(ty)) {
@@ -1606,15 +1599,13 @@ void IterateTyWithArgs(Ptr<Ty> ty, const std::function<void(Ptr<Ty>)>& func)
 依赖查询：
 1. 通过本包或导入包的Decl进行查询。
 */
-void ImportManager::CollectUsedPackageInFile(Ptr<Package> srcPkg, UsedDeclMap& usedItems)
+void ImportManager::CollectUsedPackageInFile()
 {
-    Utils::ProfileRecorder recorder("RemoveUnusedImportedDecls", "CollectUsedPackageInFile");
     const std::unordered_set<std::string_view> implicitUsedDecls = {"CJ_CORE_ExecAtexitCallbacks", "getCommandLineArgs",
         "eprintln", "handleException", "NegativeArraySizeException", "createOverflowExceptionMsg",
         "createArithmeticExceptionMsg", "SpawnException"};
     unsigned walkerId = Walker::GetNextWalkerID();
-    std::function<VisitAction(Ptr<Node>)> collectUsed = [this, &walkerId, &usedItems, &collectUsed](
-                                                            Ptr<Node> node) -> VisitAction {
+    std::function<VisitAction(Ptr<Node>)> collectUsed = [this, &walkerId, &collectUsed](Ptr<Node> node) -> VisitAction {
         auto procTy = [&walkerId, &collectUsed](Ptr<Ty> ty) {
             if (auto decl = Ty::GetDeclOfTy(ty)) {
                 Walker(decl, walkerId, collectUsed).Walk();
@@ -1635,11 +1626,12 @@ void ImportManager::CollectUsedPackageInFile(Ptr<Package> srcPkg, UsedDeclMap& u
             if (!decl->TestAttr(Attribute::IMPORTED)) {
                 return VisitAction::WALK_CHILDREN;
             }
-            if (!AddUsedDecl(usedItems, decl)) {
+            if (decl->TestAttr(Attribute::USED_IMPORTS)) {
                 return VisitAction::SKIP_CHILDREN;
             }
+            decl->EnableAttr(Attribute::USED_IMPORTS);
             if (auto fd = DynamicCast<FuncDecl>(decl); fd && fd->propDecl) {
-                AddUsedDecl(usedItems, fd->propDecl);
+                fd->propDecl->EnableAttr(Attribute::USED_IMPORTS);
             }
             if (decl->outerDecl) {
                 Walker(decl->outerDecl, walkerId, collectUsed).Walk();
@@ -1677,43 +1669,14 @@ void ImportManager::CollectUsedPackageInFile(Ptr<Package> srcPkg, UsedDeclMap& u
             Walker(extend, walkerId, collectUsed).Walk();
         }
     }
-    for (auto& file : srcPkg->files) {
+    for (auto& file : curPackage->files) {
         Walker(file.get(), walkerId, collectUsed).Walk();
     }
-    for (auto& instDecl : srcPkg->genericInstantiatedDecls) {
+    for (auto& instDecl : curPackage->genericInstantiatedDecls) {
         Walker(instDecl.get(), walkerId, collectUsed).Walk();
     }
     // 删除源码包中的无用的源码依赖。
-    auto isUnusedDecls = [&usedItems](Ptr<Decl> decl) {
-        auto found = usedItems.find(decl->GetFullPackageName());
-        if (found != usedItems.end()) {
-            return found->second.find(decl) == found->second.end();
-        }
-        return true;
-    };
-    Utils::EraseIf(srcPkg->srcImportedNonGenericDecls, isUnusedDecls);
-    Utils::EraseIf(srcPkg->inlineFuncDecls, isUnusedDecls);
-}
-
-void ImportManager::RemoveUnusedImportedDecls(RawMangled2DeclMap& rawMangleName2DeclMap)
-{
-    UsedDeclMap usedItems;
-    CollectUsedPackageInFile(curPackage, usedItems);
-    cjoManager->RemoveDecls(curPackage->fullPackageName, usedItems);
-    for (auto it = rawMangleName2DeclMap.begin(); it != rawMangleName2DeclMap.end();) {
-        if (it->second->fullPackageName == curPackage->fullPackageName) {
-            ++it;
-            continue;
-        }
-        auto usedDecls = usedItems.find(it->second->GetFullPackageName());
-        if (usedDecls != usedItems.end()) {
-            if (usedDecls->second.find(it->second) != usedDecls->second.end()) {
-                ++it;
-            } else {
-                it = rawMangleName2DeclMap.erase(it);
-            }
-        } else {
-            it = rawMangleName2DeclMap.erase(it);
-        }
-    }
+    auto isUnusedDecls = [](Ptr<Decl> decl) { return !decl->TestAttr(Attribute::USED_IMPORTS); };
+    Utils::EraseIf(curPackage->srcImportedNonGenericDecls, isUnusedDecls);
+    Utils::EraseIf(curPackage->inlineFuncDecls, isUnusedDecls);
 }
