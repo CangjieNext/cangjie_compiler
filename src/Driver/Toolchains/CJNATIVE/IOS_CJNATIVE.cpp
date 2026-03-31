@@ -29,6 +29,46 @@ void IOS_CJNATIVE::AddSystemLibraryPaths()
     MachO::AddSystemLibraryPaths();
 }
 
+TempFileInfo IOS_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>& objFiles)
+{
+    std::optional<std::string> darwinSDKVersion = GetDarwinSDKVersion(driverOptions.sysroot);
+    if (driverOptions.enableVerbose) {
+        Infoln("selected Darwin SDK path: " + driverOptions.sysroot +
+            " (SDK Version: " + darwinSDKVersion.value_or("N/A") + ")");
+    }
+    auto tool = std::make_unique<Tool>(ldPath, ToolType::BACKEND, driverOptions.environment.allVariables);
+    tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
+    auto tempBinaryInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_DYLIB);
+    auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_OBJ);
+    auto ltoObjectDir = outputFileInfo.filePath + ".lto";
+    auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, "0." + GetTargetArchString() + ".lto.o");
+    tool->AppendArg("-o", tempBinaryInfo.filePath);
+    GenerateLinkOptionsForLTO(*tool);
+    tool->AppendArg("-object_path_lto", ltoObjectDir);
+    tool->AppendArg("-dylib");
+    tool->AppendArg("-arch", GetTargetArchString());
+
+    tool->AppendArg("-platform_version");
+    if (driverOptions.target.env == Triple::Environment::SIMULATOR) {
+        tool->AppendArg("ios-simulator");
+        tool->AppendArg("17.5.0");
+    } else {
+        tool->AppendArg("ios");
+        tool->AppendArg("17.5.0");
+    }
+    tool->AppendArg(darwinSDKVersion.value_or("17.5"));
+
+    tool->AppendArg("-syslibroot");
+    tool->AppendArg(driverOptions.sysroot.empty() ? "/" : driverOptions.sysroot);
+    HandleLLVMLinkOptions(objFiles, *tool);
+    GenerateRuntimePath(*tool);
+
+    backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
+    outputFileInfo.filePath = ltoObjectPath;
+    outputFileInfo.rawPath = ltoObjectDir;
+    return outputFileInfo;
+}
+
 TempFileInfo IOS_CJNATIVE::GenerateLinkingTool(
     const std::vector<TempFileInfo>& objFiles, const std::string& darwinSDKVersion)
 {
@@ -44,6 +84,10 @@ TempFileInfo IOS_CJNATIVE::GenerateLinkingTool(
     }
     std::string outputFile = outputFileInfo.filePath;
     tool->AppendArg("-o", outputFile);
+    if (driverOptions.IsLTOEnabled()) {
+        tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
+        GenerateLinkOptionsForLTO(*tool);
+    }
     tool->AppendArgIf(driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB, "-dylib");
     tool->AppendArg("-arch", GetTargetArchString());
 

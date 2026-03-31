@@ -543,6 +543,16 @@ bool GlobalOptions::CheckSanitizerOptions() const
 
 bool GlobalOptions::CheckLtoOptions() const
 {
+    if (emitObjectLibInLTO) {
+        if (outputMode != OutputMode::STATIC_LIB) {
+            Errorln("Option '--emit-object-in-lto' requires '--output-type=staticlib'.");
+            return false;
+        }
+        if (target.os != OSType::DARWIN && target.os != OSType::IOS) {
+            Errorln("Option '--emit-object-in-lto' is only supported on Apple platforms.");
+            return false;
+        }
+    }
     if (!IsLTOEnabled()) {
         return true;
     }
@@ -553,7 +563,7 @@ bool GlobalOptions::CheckLtoOptions() const
     } else if (!osName.empty()) {
         osName[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(osName[0])));
     }
-    if (osType == OSType::DARWIN || osType == OSType::IOS || osType == OSType::WINDOWS) {
+    if (osType == OSType::WINDOWS) {
         DiagnosticEngine diag;
         diag.DiagnoseRefactor(DiagKindRefactor::driver_target_lto_unsupported, DEFAULT_POSITION, osName);
         return false;
@@ -562,7 +572,7 @@ bool GlobalOptions::CheckLtoOptions() const
         Errorln("--output-type=obj is not allowed in LTO mode");
         return false;
     }
-    if (outputMode == OutputMode::STATIC_LIB && !bcInputFiles.empty()) {
+    if (outputMode == OutputMode::STATIC_LIB && !bcInputFiles.empty() &&!emitObjectLibInLTO) {
         Errorln("The input file cannot be bc files When generating a static library in LTO mode.");
         return false;
     }
@@ -1631,6 +1641,7 @@ std::vector<std::string> GlobalOptions::ToSerialized() const
     result.emplace_back(BoolToSerializedString(enableCoverage));
     result.emplace_back(SanitizerTypeToSerializedString());
     result.emplace_back(BoolToSerializedString(experimentalMode));
+    result.emplace_back(BoolToSerializedString(emitObjectLibInLTO));
     result.emplace_back(OverflowStrategyToSerializedString());
     (void)result.emplace_back(BoolToSerializedString(interpreter));
     (void)result.emplace_back(VectorStrToSerializedString(interpreterSearchPaths, ":"));
