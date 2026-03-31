@@ -660,6 +660,8 @@ public:
     enum class LTOMode : uint8_t { FULL_LTO, THIN_LTO, NO_LTO };
     LTOMode ltoMod = LTOMode::NO_LTO;
     bool enableCompileAsExe = false;
+    std::vector<std::string> ltoVisiblePkgs;
+    bool ltoHideAllPkgs = false;
 
     /**
      * @brief Checks whether LTO is enabled.
@@ -671,9 +673,24 @@ public:
         return ltoMod != LTOMode::NO_LTO;
     }
 
+    /**
+     * @brief Checks whether --compile-as-exe is enabled.
+     *
+     * @return bool Returns true if LTO is enabled, otherwise returns false.
+     */
     bool IsCompileAsExeEnabled() const 
     {
         return enableCompileAsExe;
+    }
+
+    /**
+     * @brief Checks whether --lto-keep-pkg-visibility is enabled.
+     *
+     * @return bool Returns true if LTO is enabled, otherwise returns false.
+     */
+    bool IsLTOPkgVisibilityEnabled() const
+    {
+        return !ltoVisiblePkgs.empty() || ltoHideAllPkgs;
     }
 
     /**
@@ -1189,6 +1206,7 @@ private:
     bool CheckLtoOptions() const;
     bool CheckOutputModeOptions();
     bool CheckCompileAsExeOptions() const;
+    bool CheckLTOPkgVisibilityOptions() const;
     bool CheckPgoOptions() const;
     bool CheckCompileMacro() const;
     bool CheckCJMPOptions() const;
