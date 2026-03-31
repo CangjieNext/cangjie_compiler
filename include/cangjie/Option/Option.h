@@ -768,7 +768,7 @@ public:
         CE_LINKED,
         ALL
     };
-    std::vector<bool> printBCHIR = {false, false, false, false, false, false, false};
+    std::vector<bool> printBCHIR = {false, false, false, false, false, false, true};
 
     /**
      * @brief Print the PrintBCHIROption object.

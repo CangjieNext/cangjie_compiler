@@ -80,14 +80,14 @@ bool ClassDef::IsClass() const
     return isClass;
 }
 
-void ClassDef::SetAnnotation(bool value)
+void ClassDef::SetAnnotationTargets(std::vector<GlobalVar*>&& targets)
 {
-    isAnnotation = value;
+    annotationTargets = std::move(targets);
 }
 
 bool ClassDef::IsAnnotation() const
 {
-    return isAnnotation;
+    return annotationTargets.has_value();
 }
 
 ClassType* ClassDef::GetSuperClassTy() const
@@ -142,11 +142,28 @@ ClassType* ClassDef::GetType() const
 void ClassDef::PrintComment(std::stringstream& ss) const
 {
     CustomTypeDef::PrintComment(ss);
+    if (!IsAnnotation()) {
+        return;
+    }
     AddCommaOrNot(ss);
     if (ss.str().empty()) {
         ss << " // ";
     }
-    ss << "isAnnotation: " << BoolToString(isAnnotation);
+    std::string targetStr;
+    const auto& targets = annotationTargets.value();
+    if (targets.empty()) {
+        targetStr = "ALL";
+    } else {
+        targetStr = "[";
+        for (size_t i = 0; i < targets.size(); ++i) {
+            targetStr += targets[i]->GetIdentifier();
+            if (i != targets.size() - 1) {
+                targetStr += ", ";
+            }
+        }
+        targetStr += "]";
+    }
+    ss << "Annotation: " << targetStr;
 }
 
 void ClassDef::AddMethod(Function* method, bool recordOrder)
