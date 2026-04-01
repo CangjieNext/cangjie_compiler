@@ -322,6 +322,9 @@ OPTION("--dy-libs", DY_LIBS, FLAG, { BACKEND(CJNATIVE) },
 OPTION("--lto", LTO, SEPARATED, {BACKEND(CJNATIVE)},
     {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, lto_mode, SINGLE_OCCURRENCE,
     "Enable LTO to either 'full' or 'thin' (Not available for Windows target)")
+OPTION("--emit-object-in-lto", EMIT_OBJECT_IN_LTO, FLAG, { BACKEND(CJNATIVE) },
+    { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Run Darwin Full LTO for static library builds and preserve the linker-generated LTO object")
 OPTION("--compile-as-exe", COMPILE_AS_EXE, FLAG, {BACKEND(CJNATIVE)},
     {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Hide symbols from bitcode files in LTO mode, and only the package init symbols remain visible")
