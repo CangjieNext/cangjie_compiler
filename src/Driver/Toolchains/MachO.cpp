@@ -65,7 +65,10 @@ void MachO::GenerateArchiveTool(const std::vector<TempFileInfo>& objFiles)
 
     // If archive exists, ar attempts to insert given obj files into the archive.
     // We always try to remove the archive before creating a new one.
-    (void)FileUtil::Remove(outputFile.c_str());
+    auto removeTool =
+        std::make_unique<Tool>("RemoveFile", ToolType::INTERNAL_IMPLEMENTED, driverOptions.environment.allVariables);
+    removeTool->AppendArg(outputFile);
+    backendCmds.emplace_back(MakeSingleToolBatch({std::move(removeTool)}));
     tool->AppendArg(outputFile);
 
     // Note: We do not use tool->inputs here since it is always placed right after executable

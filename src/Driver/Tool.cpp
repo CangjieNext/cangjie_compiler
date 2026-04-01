@@ -141,6 +141,11 @@ std::string Tool::GenerateCommand() const
 bool Tool::InternalImplementedCommandExec() const
 {
     bool res = false;
+    if (type == ToolType::INTERNAL_IMPLEMENTED && name == "RemoveFile") {
+        auto& arguments = GetFullArgs();
+        // arguments[1] - absolute name of file to remove
+        return !FileUtil::FileExist(arguments[1]) || FileUtil::Remove(arguments[1]);
+    }
     if (type == ToolType::INTERNAL_IMPLEMENTED && name == "CacheCopy") {
         auto& arguments = GetFullArgs();
         // arguments[0] - name of command
