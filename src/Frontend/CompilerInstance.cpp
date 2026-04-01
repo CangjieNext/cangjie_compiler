@@ -1179,6 +1179,16 @@ bool CompilerInstance::DetectCangjieModules()
 bool CompilerInstance::ModularizeCompilation()
 {
     Utils::ProfileRecorder recorder("ImportPackages", "ModularizeCompilation");
+
+    // process stdlib deps of .bc inputs
+    if (!invocation.globalOptions.bcPackageNames.empty()) {
+        for (const auto& bcpkg : invocation.globalOptions.bcPackageNames) {
+            if(!importManager->AnalyzeDepStdPkgsOfBC(bcpkg)){
+                return false;
+            }
+        }
+    }
+
     for (auto& objFile : importManager->GetUsedSTDLibFiles(DepType::DIRECT)) {
         invocation.globalOptions.directBuiltinDependencies.insert(objFile);
     }
