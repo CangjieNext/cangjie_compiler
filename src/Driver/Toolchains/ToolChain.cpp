@@ -163,7 +163,11 @@ void ToolChain::CheckOtherDependeniesOfStaticLib(
         // Here we have to also link against `libdl` instead of `libdl.so` for compatibility.
         dynamicLibraries.emplace("-ldl");
     } else if (libName == "libcangjie-std-ast.a") {
-        otherLibs.emplace("-l:libcangjie-std-astFFI.a");
+        if (driverOptions.target.os == Triple::OSType::DARWIN) {
+            otherLibs.emplace("-lcangjie-std-astFFI");
+        } else {
+            otherLibs.emplace("-l:libcangjie-std-astFFI.a");
+        }
         // std-ast relies on unwind symbols, which supplied by clang or gcc runtime library. Linking some versions of
         // gcc.a before clang_rt-builtins causes multiple definitions, thus we need to link clang_rt-builtins first.
         if (driverOptions.target.arch != Triple::ArchType::AARCH64 &&
