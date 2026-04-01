@@ -22,13 +22,6 @@
 using namespace Cangjie;
 using namespace Cangjie::Triple;
 
-namespace {
-GlobalOptions::OptimizationLevel GetEffectiveOptimizationLevel(const DriverOptions& driverOptions)
-{
-    return driverOptions.disableBackendOpt ? GlobalOptions::OptimizationLevel::O0 : driverOptions.optimizationLevel;
-}
-} // namespace
-
 void Darwin_CJNATIVE::AddSystemLibraryPaths()
 {
     if (driverOptions.IsCrossCompiling() && driverOptions.customizedSysroot) {
@@ -38,52 +31,50 @@ void Darwin_CJNATIVE::AddSystemLibraryPaths()
     MachO::AddSystemLibraryPaths();
 }
 
-void Darwin_CJNATIVE::GenerateLinkOptionsForLTO(Tool& tool, const std::string& outputFile) const
+void Darwin_CJNATIVE::GenerateLinkOptionsForLTO(Tool& tool) const
 {
     using namespace ToolOptions;
 
+    // Set LTO lld options.
     SetFuncType setOptionHandler = [&tool](const std::string& option) { tool.AppendArg(option); };
-    SetOptions(setOptionHandler, driverOptions, LLD::SetLTOOptimizationLevelOptions);
+    std::vector<ToolOptionType> setOptionsPass = {
+        LLD::SetLTOOptimizationLevelOptions, // Comment ensure vector members are arranged vertically.
+        LLD::SetLTOOptions,                  //
+    };
+    SetOptions(setOptionHandler, driverOptions, setOptionsPass);
 
-    if (driverOptions.saveTemps) {
-        tool.AppendArg("-save-temps");
+    // Set opt passes.
+    std::string passesCollector = "--lto-newpm-passes=";
+    std::vector<std::string> passItems;
+    {
+        using namespace ToolOptions;
+        // remove the initial hyphen in the options.
+        SetFuncType handler = [&passItems](const std::string& option) { passItems.emplace_back(option.substr(1)); };
+        SetOptions(handler, driverOptions, OPT::SetNewPassManagerOptions);
     }
-
-    if (driverOptions.IsFullLTOEnabled()) {
-        tool.AppendArg("-object_path_lto");
-        tool.AppendArg(outputFile + ".lto.o");
-        tool.AppendArg("-mllvm");
-        tool.AppendArg("--cangjie-full-lto");
-    } else {
-        tool.AppendArg("-cache_path_lto");
-        tool.AppendArg(driverOptions.compilationCachedPath);
-        tool.AppendArg("-object_path_lto");
-        tool.AppendArg(FileUtil::JoinPath(driverOptions.compilationCachedPath, "thinlto-objects"));
+    for (auto& it : passItems) {
+        passesCollector += it;
+        if (&it != &passItems.back()) {
+            passesCollector += ",";
+        }
     }
-
-    if (GetEffectiveOptimizationLevel(driverOptions) == GlobalOptions::OptimizationLevel::O2) {
-        tool.AppendArg("-mllvm");
-        tool.AppendArg("--cj-safepoint-outline=false");
-    }
-
-    tool.AppendArg("-mllvm");
-    tool.AppendArg("--cj-lto-opt");
+    tool.AppendArg(passesCollector);
 
     std::unordered_set<std::string> optionSet = {};
     SetFuncType setCompositeOption = [&tool, &optionSet](const std::string& option) {
         if (optionSet.find(option) == optionSet.end()) {
             optionSet.emplace(option);
-            tool.AppendArg("-mllvm");
+            tool.AppendArg("--mllvm");
             tool.AppendArg(option);
         }
     };
     std::vector<ToolOptionType> setCompositeOptionsPass = {
         OPT::SetOptions,                // Comment ensure vector members are arranged vertically.
         OPT::SetCodeObfuscationOptions, //
-        OPT::SetTransparentOptions,     //
+        OPT::SetTransparentOptions,     // The transparent OPT options must after other OPT options.
         LLD::SetPgoOptions,             //
         LLC::SetOptions,                //
-        LLC::SetTransparentOptions,     //
+        LLC::SetTransparentOptions,     // The transparent LLC options must after other LLC options.
     };
     SetOptions(setCompositeOption, driverOptions, setCompositeOptionsPass);
 }
@@ -104,8 +95,8 @@ TempFileInfo Darwin_CJNATIVE::GenerateLinkingTool(const std::vector<TempFileInfo
     std::string outputFile = outputFileInfo.filePath;
     tool->AppendArg("-o", outputFile);
     if (driverOptions.IsLTOEnabled()) {
-        //tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
-        GenerateLinkOptionsForLTO(*tool, outputFile);
+        tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
+        GenerateLinkOptionsForLTO(*tool);
     }
     tool->AppendArgIf(driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB, "-dylib");
     tool->AppendArg("-arch", GetTargetArchString());
