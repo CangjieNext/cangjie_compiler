@@ -1374,4 +1374,25 @@ void ToCHIR::ClearASTResources()
     diagEngine.EmitCategoryDiagnostics(DiagCategory::CHIR);
     ci.DestroyASTResources();
 }
+
+std::string PhaseToString(const ToCHIR::Phase phase)
+{
+    switch (phase) {
+        case ToCHIR::Phase::RAW:
+            return "raw";
+            break;
+        case ToCHIR::Phase::OPT:
+            return "opt";
+            break;
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+        case ToCHIR::Phase::PLUGIN:
+            return "plugin";
+            break;
+        case ToCHIR::Phase::ANALYSIS_FOR_CJLINT:
+            return  "analysis for cjlint";
+            break;
+#endif
+    }
+}
+
 } // namespace Cangjie::CHIR
