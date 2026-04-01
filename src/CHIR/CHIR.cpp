@@ -1034,13 +1034,17 @@ template <typename T> bool ToCHIR::IsAllApply(const T* curFunc)
 
 namespace {
 void EmitCHIR(const std::string& outputPath, const CHIR::Package& package, ToCHIR::Phase phase, bool dump,
-    bool useDefaultPath = false)
+    bool useOutputDirOnly = false, const std::optional<std::string>& outputDir = std::nullopt)
 {
     std::string path;
-    // When useDefaultPath is true (e.g., --emit-chir with --continue),
-    // use package name with .chir extension in current directory
-    if (useDefaultPath) {
-        path = package.GetName() + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
+    // When useOutputDirOnly is true (e.g., --emit-chir with --continue),
+    // use outputDir if specified, otherwise use current directory
+    if (useOutputDirOnly) {
+        if (outputDir.has_value()) {
+            path = FileUtil::JoinPath(outputDir.value(), package.GetName() + std::string(CHIR_SERIALIZATION_FILE_EXTENSION));
+        } else {
+            path = package.GetName() + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
+        }
     } else if (FileUtil::IsDir(outputPath)) {
         path = FileUtil::JoinPath(outputPath, package.GetName() + std::string(CHIR_SERIALIZATION_FILE_EXTENSION));
     } else {
@@ -1152,10 +1156,10 @@ bool ToCHIR::Run()
         return false;
     }
     if (opts.emitCHIRPhase == GlobalOptions::CandidateEmitCHIRPhase::RAW) {
-        // When --emit-chir is used with --continue, use default path for .chir file
+        // When --emit-chir is used with --continue, use outputDir for .chir file
         // so that -o option only affects the final compilation product
-        bool useDefaultPath = opts.continueAfterEmit;
-        EmitCHIR(outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR(), useDefaultPath);
+        bool useOutputDirOnly = opts.continueAfterEmit;
+        EmitCHIR(outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR(), useOutputDirOnly, opts.outputDir);
         return true;
     }
     RecordCHIRExprNum("trans");
@@ -1200,10 +1204,10 @@ bool ToCHIR::Run()
         return false;
     }
     if (opts.emitCHIRPhase == GlobalOptions::CandidateEmitCHIRPhase::OPT) {
-        // When --emit-chir is used with --continue, use default path for .chir file
+        // When --emit-chir is used with --continue, use outputDir for .chir file
         // so that -o option only affects the final compilation product
-        bool useDefaultPath = opts.continueAfterEmit;
-        EmitCHIR(outputPath, *chirPkg, Phase::OPT, opts.NeedDumpCHIR(), useDefaultPath);
+        bool useOutputDirOnly = opts.continueAfterEmit;
+        EmitCHIR(outputPath, *chirPkg, Phase::OPT, opts.NeedDumpCHIR(), useOutputDirOnly, opts.outputDir);
     } else if (opts.saveTemps) {
         auto tempFileInfo =
             TempFileManager::Instance().CreateNewFileInfo({.fileName = chirPkg->GetName()}, TempFileKind::O_CHIR);
