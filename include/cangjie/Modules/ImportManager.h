@@ -199,6 +199,11 @@ public:
         return result;
     }
 
+    /**
+     * process std dependency，where 'fullPackageName' comes from .bc inputs
+    */
+    bool AnalyzeBCPkgSTD(const std::string& fullPackageName);
+    
     bool IsMacroRelatedPackageName(const std::string& fullPackageName) const;
 
     /**
@@ -447,6 +452,8 @@ private:
     bool ResolveImportedPackageForFile(AST::File& file, bool isRecursive = false);
 
     void HandleStdPackage(const std::string& fullPackageName, const std::string& cjoPath, bool isRecursive = false);
+    
+    void AddStdDependency(const std::string& cjoPath, DepType type, const std::string& fullPackageName);
 
     void AddImportedDeclsForSourcePackage(const AST::Package& pkg);
 

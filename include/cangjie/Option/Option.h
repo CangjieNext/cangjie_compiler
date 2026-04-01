@@ -532,7 +532,7 @@ public:
     std::vector<std::string> removedPathPrefix; /**< The removed path prefix of debug info. */
 
     std::vector<std::string> bcInputFiles;
-
+    std::vector<std::string> bcPackageNames;
     // Mark the input files and their input order.
     std::vector<std::tuple<std::string, uint64_t>> inputFileOrder;
     // Mark the input library(-l) files and their input order.

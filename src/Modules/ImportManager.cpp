@@ -485,6 +485,13 @@ void ImportManager::SetImportedPackageFromASTNode(std::vector<OwnedPtr<AST::Pack
 void ImportManager::HandleStdPackage(const std::string& fullPackageName, const std::string& cjoPath, bool isRecursive)
 {
     auto type = isRecursive ? DepType::INDIRECT : DepType::DIRECT;
+    AddStdDependency(cjoPath, type, fullPackageName);
+
+}
+
+void ImportManager::AddStdDependency(const std::string& cjoPath,
+                                        DepType type,
+                                        const std::string& fullPackageName) {
     auto typeWithFullPkgName = stdDepsMap.find(cjoPath);
     if (typeWithFullPkgName != stdDepsMap.end()) {
         if (typeWithFullPkgName->second.first != type) {
@@ -1576,3 +1583,33 @@ void ImportManager::ClearCachesForRebuild()
     // clear for ResolveImports.
     directMacroDeps.clear();
 }
+
+bool ImportManager::AnalyzeBCPkgSTD(const std::string& fullPackageName) {
+
+    std::string cjoPath = FileUtil::FindSerializationFile(fullPackageName, SERIALIZED_FILE_EXTENSION, GetSearchPath());
+    auto existingPkg = cjoManager->GetPackage(fullPackageName);
+
+    if (!existingPkg) {
+        if (cjoPath.empty()) {
+            diag.DiagnoseRefactor(DiagKindRefactor::bc_cjo_search_error, DEFAULT_POSITION, fullPackageName);
+            return false;
+        }
+        if (cjoManager->LoadPackageHeader(fullPackageName, cjoPath)){
+            auto package = cjoManager->GetPackage(fullPackageName);
+            if(package){
+                for (const auto& depStdPkg : package->GetAllDependentStdPkgs()) {
+                    if (STANDARD_LIBS.find(depStdPkg) != STANDARD_LIBS.end()) {
+                        AddStdDependency(cjoPath, DepType::INDIRECT, depStdPkg);
+                    }
+                }
+            }
+        }else{
+            return false;
+        }
+    } 
+    return true;
+}
+
+
+// src/Modules/ImportManager.cpp
+
