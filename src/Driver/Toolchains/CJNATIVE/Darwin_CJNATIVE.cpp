@@ -22,6 +22,13 @@
 using namespace Cangjie;
 using namespace Cangjie::Triple;
 
+namespace {
+GlobalOptions::OptimizationLevel GetEffectiveOptimizationLevel(const DriverOptions& driverOptions)
+{
+    return driverOptions.disableBackendOpt ? GlobalOptions::OptimizationLevel::O0 : driverOptions.optimizationLevel;
+}
+} // namespace
+
 void Darwin_CJNATIVE::AddSystemLibraryPaths()
 {
     if (driverOptions.IsCrossCompiling() && driverOptions.customizedSysroot) {
@@ -35,36 +42,31 @@ void Darwin_CJNATIVE::GenerateLinkOptionsForLTO(Tool& tool) const
 {
     using namespace ToolOptions;
 
-    // Set LTO lld options.
+    // Set LTO linker options supported by ld64.lld.
     SetFuncType setOptionHandler = [&tool](const std::string& option) { tool.AppendArg(option); };
-    std::vector<ToolOptionType> setOptionsPass = {
-        LLD::SetLTOOptimizationLevelOptions, // Comment ensure vector members are arranged vertically.
-        LLD::SetLTOOptions,                  //
-    };
-    SetOptions(setOptionHandler, driverOptions, setOptionsPass);
-
-    // Set opt passes.
-    std::string passesCollector = "--lto-newpm-passes=";
-    std::vector<std::string> passItems;
-    {
-        using namespace ToolOptions;
-        // remove the initial hyphen in the options.
-        SetFuncType handler = [&passItems](const std::string& option) { passItems.emplace_back(option.substr(1)); };
-        SetOptions(handler, driverOptions, OPT::SetNewPassManagerOptions);
+    SetOptions(setOptionHandler, driverOptions, LLD::SetLTOOptimizationLevelOptions);
+    if (driverOptions.IsFullLTOEnabled()) {
+        tool.AppendArg("-mllvm");
+        tool.AppendArg("--cangjie-full-lto");
+    } else {
+        tool.AppendArg("-cache_path_lto");
+        tool.AppendArg(driverOptions.compilationCachedPath);
     }
-    for (auto& it : passItems) {
-        passesCollector += it;
-        if (&it != &passItems.back()) {
-            passesCollector += ",";
-        }
+    if (driverOptions.saveTemps) {
+        tool.AppendArg("-save-temps");
     }
-    tool.AppendArg(passesCollector);
+    if (GetEffectiveOptimizationLevel(driverOptions) == GlobalOptions::OptimizationLevel::O2) {
+        tool.AppendArg("-mllvm");
+        tool.AppendArg("--cj-safepoint-outline=false");
+    }
+    tool.AppendArg("-mllvm");
+    tool.AppendArg("--cj-lto-opt");
 
     std::unordered_set<std::string> optionSet = {};
     SetFuncType setCompositeOption = [&tool, &optionSet](const std::string& option) {
         if (optionSet.find(option) == optionSet.end()) {
             optionSet.emplace(option);
-            tool.AppendArg("--mllvm");
+            tool.AppendArg("-mllvm");
             tool.AppendArg(option);
         }
     };
