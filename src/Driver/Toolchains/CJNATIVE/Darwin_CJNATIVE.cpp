@@ -22,6 +22,13 @@
 using namespace Cangjie;
 using namespace Cangjie::Triple;
 
+namespace {
+GlobalOptions::OptimizationLevel GetEffectiveOptimizationLevel(const DriverOptions& driverOptions)
+{
+    return driverOptions.disableBackendOpt ? GlobalOptions::OptimizationLevel::O0 : driverOptions.optimizationLevel;
+}
+} // namespace
+
 void Darwin_CJNATIVE::AddSystemLibraryPaths()
 {
     if (driverOptions.IsCrossCompiling() && driverOptions.customizedSysroot) {
@@ -35,36 +42,32 @@ void Darwin_CJNATIVE::GenerateLinkOptionsForLTO(Tool& tool) const
 {
     using namespace ToolOptions;
 
-    // Set LTO lld options.
+    // Set LTO linker options supported by ld64.lld.
     SetFuncType setOptionHandler = [&tool](const std::string& option) { tool.AppendArg(option); };
-    std::vector<ToolOptionType> setOptionsPass = {
-        LLD::SetLTOOptimizationLevelOptions, // Comment ensure vector members are arranged vertically.
-        LLD::SetLTOOptions,                  //
-    };
-    SetOptions(setOptionHandler, driverOptions, setOptionsPass);
+    SetOptions(setOptionHandler, driverOptions, LLD::SetLTOOptimizationLevelOptions);
+    if (driverOptions.IsFullLTOEnabled()) {
+        tool.AppendArg("-mllvm");
+        tool.AppendArg("-cangjie-full-lto");
+    } else {
+        tool.AppendArg("-cache_path_lto");
+        tool.AppendArg(driverOptions.compilationCachedPath);
+    }
+    if (driverOptions.saveTemps) {
+        tool.AppendArg("-save-temps");
 
-    // Set opt passes.
-    std::string passesCollector = "--lto-newpm-passes=";
-    std::vector<std::string> passItems;
-    {
-        using namespace ToolOptions;
-        // remove the initial hyphen in the options.
-        SetFuncType handler = [&passItems](const std::string& option) { passItems.emplace_back(option.substr(1)); };
-        SetOptions(handler, driverOptions, OPT::SetNewPassManagerOptions);
     }
-    for (auto& it : passItems) {
-        passesCollector += it;
-        if (&it != &passItems.back()) {
-            passesCollector += ",";
-        }
+    if (GetEffectiveOptimizationLevel(driverOptions) == GlobalOptions::OptimizationLevel::O2) {
+        tool.AppendArg("-mllvm");
+        tool.AppendArg("--cj-safepoint-outline=false");
     }
-    tool.AppendArg(passesCollector);
+    tool.AppendArg("-mllvm");
+    tool.AppendArg("--cj-lto-opt");
 
     std::unordered_set<std::string> optionSet = {};
     SetFuncType setCompositeOption = [&tool, &optionSet](const std::string& option) {
         if (optionSet.find(option) == optionSet.end()) {
             optionSet.emplace(option);
-            tool.AppendArg("--mllvm");
+            tool.AppendArg("-mllvm");
             tool.AppendArg(option);
         }
     };
@@ -77,6 +80,55 @@ void Darwin_CJNATIVE::GenerateLinkOptionsForLTO(Tool& tool) const
         LLC::SetTransparentOptions,     // The transparent LLC options must after other LLC options.
     };
     SetOptions(setCompositeOption, driverOptions, setCompositeOptionsPass);
+}
+
+void Darwin_CJNATIVE::GenerateArchiveTool(const std::vector<TempFileInfo>& objFiles)
+{
+    if (!driverOptions.ShouldemitObjectLibInLTO()) {
+        MachO::GenerateArchiveTool(objFiles);
+        return;
+    }
+    auto ltoObject = GenerateLTOObjectFile(objFiles);
+    if (driverOptions.enableVerbose) {
+        Infoln("preserved Darwin LTO object at: " + ltoObject.filePath);
+    }
+    MachO::GenerateArchiveTool({ltoObject});
+}
+
+TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>& objFiles)
+{
+    std::optional<std::string> darwinSDKVersion = GetDarwinSDKVersion(driverOptions.sysroot);
+    if (driverOptions.enableVerbose) {
+        Infoln("selected Darwin SDK path: " + driverOptions.sysroot +
+            " (SDK Version: " + darwinSDKVersion.value_or("N/A") + ")");
+    }
+    auto tool = std::make_unique<Tool>(ldPath, ToolType::BACKEND, driverOptions.environment.allVariables);
+    tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
+    auto tempBinaryInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_DYLIB);
+    auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_OBJ);
+    auto ltoObjectDir = outputFileInfo.filePath + ".lto";
+    auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, "0." + GetTargetArchString() + ".lto.o");
+    tool->AppendArg("-o", tempBinaryInfo.filePath);
+    GenerateLinkOptionsForLTO(*tool);
+    tool->AppendArg("-object_path_lto", ltoObjectDir);
+    tool->AppendArg("-lto-emit-obj-only");
+    tool->AppendArg("-dylib");
+    tool->AppendArg("-arch", GetTargetArchString());
+
+    tool->AppendArg("-platform_version");
+    tool->AppendArg("macos");
+    tool->AppendArg("12.0.0");
+    tool->AppendArg(darwinSDKVersion.value_or("12"));
+
+    tool->AppendArg("-syslibroot");
+    tool->AppendArg(driverOptions.sysroot.empty() ? "/" : driverOptions.sysroot);
+    HandleLLVMLinkOptions(objFiles, *tool);
+    GenerateRuntimePath(*tool);
+
+    backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
+    outputFileInfo.filePath = ltoObjectPath;
+    outputFileInfo.rawPath = ltoObjectDir;
+    return outputFileInfo;
 }
 
 TempFileInfo Darwin_CJNATIVE::GenerateLinkingTool(const std::vector<TempFileInfo>& objFiles,
