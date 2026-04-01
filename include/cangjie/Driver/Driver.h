@@ -40,6 +40,8 @@ public:
      */
     bool ParseArgs();
 
+    bool ExtractBCPackageNames();
+
     /**
      * @brief Read necessary paths from environment variables and store them in GlobalOptions.
      *
