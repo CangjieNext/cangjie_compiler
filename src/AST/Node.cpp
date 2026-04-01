@@ -1363,6 +1363,9 @@ bool PropDecl::IsOpen() const noexcept
 
 std::string PrimitiveType::ToString() const
 {
+    if (!str.empty()) {
+        return str;
+    }
     return Ty::KindName(kind);
 }
 

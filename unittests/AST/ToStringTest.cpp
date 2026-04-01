@@ -194,6 +194,15 @@ TEST(ToStringTest, TypeAndSpecialTypeRestore)
     EXPECT_EQ("$3", parsedVArrayType->constantType->ToString());
 }
 
+TEST(ToStringTest, PrimitiveTypeToStringPrefersSourceSpelling)
+{
+    auto primitiveType = MakeOwned<PrimitiveType>();
+    primitiveType->str = "Int32";
+    primitiveType->kind = TypeKind::TYPE_INVALID;
+
+    EXPECT_EQ("Int32", primitiveType->ToString());
+}
+
 TEST(ToStringTest, TypeAndOptionalExprRestore)
 {
     ExpectExprToStringAndKind<ParenExpr>("(1)");
