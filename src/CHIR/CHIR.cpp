@@ -1033,10 +1033,15 @@ template <typename T> bool ToCHIR::IsAllApply(const T* curFunc)
 }
 
 namespace {
-void EmitCHIR(const std::string& outputPath, const CHIR::Package& package, ToCHIR::Phase phase, bool dump)
+void EmitCHIR(const std::string& outputPath, const CHIR::Package& package, ToCHIR::Phase phase, bool dump,
+    bool useDefaultPath = false)
 {
     std::string path;
-    if (FileUtil::IsDir(outputPath)) {
+    // When useDefaultPath is true (e.g., --emit-chir with --continue),
+    // use package name with .chir extension in current directory
+    if (useDefaultPath) {
+        path = package.GetName() + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
+    } else if (FileUtil::IsDir(outputPath)) {
         path = FileUtil::JoinPath(outputPath, package.GetName() + std::string(CHIR_SERIALIZATION_FILE_EXTENSION));
     } else {
         path = outputPath;
@@ -1147,7 +1152,10 @@ bool ToCHIR::Run()
         return false;
     }
     if (opts.emitCHIRPhase == GlobalOptions::CandidateEmitCHIRPhase::RAW) {
-        EmitCHIR(outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR());
+        // When --emit-chir is used with --continue, use default path for .chir file
+        // so that -o option only affects the final compilation product
+        bool useDefaultPath = opts.continueAfterEmit;
+        EmitCHIR(outputPath, *chirPkg, Phase::RAW, opts.NeedDumpCHIR(), useDefaultPath);
         return true;
     }
     RecordCHIRExprNum("trans");
@@ -1192,7 +1200,10 @@ bool ToCHIR::Run()
         return false;
     }
     if (opts.emitCHIRPhase == GlobalOptions::CandidateEmitCHIRPhase::OPT) {
-        EmitCHIR(outputPath, *chirPkg, Phase::OPT, opts.NeedDumpCHIR());
+        // When --emit-chir is used with --continue, use default path for .chir file
+        // so that -o option only affects the final compilation product
+        bool useDefaultPath = opts.continueAfterEmit;
+        EmitCHIR(outputPath, *chirPkg, Phase::OPT, opts.NeedDumpCHIR(), useDefaultPath);
     } else if (opts.saveTemps) {
         auto tempFileInfo =
             TempFileManager::Instance().CreateNewFileInfo({.fileName = chirPkg->GetName()}, TempFileKind::O_CHIR);
