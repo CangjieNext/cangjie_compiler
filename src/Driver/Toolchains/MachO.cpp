@@ -300,9 +300,11 @@ void MachO::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
             if (driverOptions.IsLTOEnabled()) {
                 auto found = LLVM_LTO_CSTD_FFI_OPTION_MAP.find(staticLib);
                 if (found != LLVM_LTO_CSTD_FFI_OPTION_MAP.end()) {
-                    // ld64 does not support GNU -l:<filename> syntax. Use the archive path directly for
-                    // LTO-only C FFI dependencies such as libcangjie-std-coreFFI.a.
-                    staticLibraries.emplace(FileUtil::JoinPath(cangjieLibPath, found->second));
+                    auto ffiLib = FileUtil::GetFileNameWithoutExtension(found->second);
+                    if (ffiLib.rfind("lib", 0) == 0) {
+                        ffiLib.erase(0, 3);
+                    }
+                    staticLibraries.emplace(LINK_PREFIX + ffiLib);
                 }
                 ltoBuiltInDependencies.emplace(FileUtil::ConvertFilenameToLtoLibCangjieFormat(cjoFileName));
             } else {
