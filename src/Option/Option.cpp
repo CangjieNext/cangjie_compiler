@@ -40,7 +40,6 @@ namespace {
 const std::string CJO_EXTENSION = "cjo";
 const std::string BC_EXTENSION = "bc";
 const std::string CJ_EXTENSION = "cj";
-const std::string CHIR_EXTENSION = "chir";
 const std::string ARCHIVE_EXTENSION = "a";
 const std::string OBJECT_EXTENSION = "o";
 const std::string COFF_OBJECT_EXTENSION = "obj";
@@ -261,6 +260,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
     success = success && ReprocessObfuseOption();
+    success = success && CheckCJMPOptions();
     RefactJobs();
     RefactAggressiveParallelCompileOption();
     DisableStaticStdForOhos();
@@ -628,6 +628,17 @@ bool GlobalOptions::CheckPgoOptions() const
     return true;
 }
 
+bool GlobalOptions::CheckCJMPOptions() const
+{
+    DiagnosticEngine diag;
+    if (commonPartCjos.size() != commonChirFiles.size()) {
+        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_require_common_chir_for_each_common_cjo, DEFAULT_POSITION);
+        return false;
+    }
+
+    return true;
+}
+
 void GlobalOptions::RefactJobs()
 {
     if (jobs.has_value()) {
@@ -724,20 +735,6 @@ bool GlobalOptions::HandleCJOExtension(DiagnosticEngine& diag, const std::string
     return true;
 }
 
-bool GlobalOptions::HandleCHIRExtension(DiagnosticEngine& diag, const std::string& value)
-{
-    auto maybePath = ValidateInputFilePath(value, DiagKindRefactor::no_such_file_or_directory);
-    if (!maybePath.has_value()) {
-        return false;
-    }
-    if (GetFileExtension(maybePath.value()) != CHIR_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_chir_file, value, maybePath.value());
-        return true;
-    }
-    inputChirFiles.push_back(maybePath.value());
-    return true;
-}
-
 bool GlobalOptions::HandleCJExtension(DiagnosticEngine& diag, const std::string& value)
 {
     if (compilePackage) {
@@ -819,8 +816,7 @@ bool GlobalOptions::ProcessInputs(const std::vector<std::string>& inputs)
 {
     DiagnosticEngine diag;
     bool ret = true;
-    bool needChir = commonPartCjos.size() > 0;
-    std::for_each(inputs.begin(), inputs.end(), [this, &ret, &diag, &needChir](const std::string& value) {
+    std::for_each(inputs.begin(), inputs.end(), [this, &ret, &diag](const std::string& value) {
         if (!ret) {
             return;
         }
@@ -831,9 +827,6 @@ bool GlobalOptions::ProcessInputs(const std::vector<std::string>& inputs)
             ret = HandleCJExtension(diag, value);
         } else if (ext == BC_EXTENSION) {
             ret = HandleBCExtension(diag, value);
-        } else if (ext == CHIR_EXTENSION) {
-            needChir = false;
-            ret = HandleCHIRExtension(diag, value);
         } else if (ext == CJO_EXTENSION) {
             ret = HandleCJOExtension(diag, value);
         } else if (HasCJDExtension(value) && compileCjd) {
@@ -845,10 +838,6 @@ bool GlobalOptions::ProcessInputs(const std::vector<std::string>& inputs)
     // Check inputs.
     if (compilePackage && packagePaths.empty()) {
         (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_require_package_directory, DEFAULT_POSITION);
-        return false;
-    }
-    if (needChir) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_require_chir_directory, DEFAULT_POSITION);
         return false;
     }
     if (compilePackage && packagePaths.size() > 1) {
