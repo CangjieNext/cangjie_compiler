@@ -310,7 +310,8 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND) # i.e. "--compile-backend" option
                 DEPENDS cangjie-demangler boundscheck)
         else()
             set(LLVM_REPO_DOWNLOAD_ARGS
-                DOWNLOAD_COMMAND git clone -b ${LLVM_TAG} --depth=1 ${REPOSITORY_PATH} <SOURCE_DIR>)
+                DOWNLOAD_COMMAND ${CMAKE_COMMAND} -E rm -rf <SOURCE_DIR>
+                    COMMAND git clone -b ${LLVM_TAG} --depth=1 ${REPOSITORY_PATH} <SOURCE_DIR>)
             if(CANGJIE_USE_OH_LLVM_REPO)
                 set(APPLY_LLVM_PATCH_COMMAND ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyLLVMPatch.cmake" <SOURCE_DIR> ${CMAKE_SOURCE_DIR}/third_party/llvmPatch.diff)
                 set(LLVM_REPO_DOWNLOAD_ARGS

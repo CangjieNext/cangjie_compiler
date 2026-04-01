@@ -17,6 +17,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CJNATIVE_BACKEND "cjnative")
 
+# Shared targets such as cangjie-lsp-share reuse many OBJECT libraries.
+# Build all objects as PIC so they can be linked into shared libraries.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 if(NOT CMAKE_INCLUDE_SYSTEM_FLAG_CXX)
     set(CXX_SYSTEM_INCLUDE_CONFIGURATION_FLAG /experimental:external /external:W0)
     set(CMAKE_INCLUDE_SYSTEM_FLAG_CXX /external:I)

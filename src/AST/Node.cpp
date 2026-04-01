@@ -11,6 +11,7 @@
  */
 
 #include "cangjie/AST/Node.h"
+#include "cangjie/AST/Types.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -300,6 +301,9 @@ std::string MemberAccess::ToString() const
         curSpanBegin = baseExpr->begin;
         ss << NextSpan(baseExpr->ToString(), curSpanBegin, baseExpr->end);
         curSpanBegin = baseExpr->end;
+        if (Is<OptionalExpr>(baseExpr.get())) {
+            curSpanBegin += Position{0, 0, 1};
+        }
         ss << NextSpan(".", curSpanBegin, dotPos, 1);
         curSpanBegin = dotPos + Position{0, 0, 1};
     }
@@ -1374,6 +1378,153 @@ bool PropDecl::IsOpen() const noexcept
         return true;
     }
     return !TestAttr(AST::Attribute::IMPORTED) && getters.empty() && setters.empty();
+}
+
+std::string PrimitiveType::ToString() const
+{
+    if (!str.empty()) {
+        return str;
+    }
+    return Ty::KindName(kind);
+}
+
+std::string ParenType::ToString() const
+{
+    CJC_ASSERT(type != nullptr);
+    return "(" + type->ToString() + ")";
+}
+
+std::string QualifiedType::ToString() const
+{
+    std::string ret;
+    CJC_ASSERT(baseType != nullptr);
+    ret = baseType->ToString();
+    ret += ".";
+    ret += field.GetRawText();
+
+    if (!typeArguments.empty()) {
+        ret += "<";
+        for (size_t i = 0; i < typeArguments.size(); ++i) {
+            if (i > 0) {
+                ret += ", ";
+            }
+            auto arg = typeArguments[i].get();
+            CJC_ASSERT(arg != nullptr);
+            ret += arg->ToString();
+        }
+        ret += ">";
+    }
+    return ret;
+}
+
+std::string OptionType::ToString() const
+{
+    std::string ret;
+    size_t count = (questNum > 0) ? questNum : questVector.size();
+    for (size_t i = 0; i < count; ++i) {
+        ret += "?";
+    }
+    CJC_ASSERT(componentType != nullptr);
+    ret += componentType->ToString();
+    return ret;
+}
+
+std::string ConstantType::ToString() const
+{
+    CJC_ASSERT(constantExpr != nullptr);
+    return "$" + constantExpr->ToString();
+}
+
+std::string VArrayType::ToString() const
+{
+    std::string ret = "VArray<";
+    CJC_ASSERT(typeArgument != nullptr);
+    ret += typeArgument->ToString();
+    if (constantType != nullptr) {
+        ret += ", " + constantType->ToString();
+    }
+    ret += ">";
+    return ret;
+}
+
+std::string FuncType::ToString() const
+{
+    std::string ret = "(";
+    for (size_t i = 0; i < paramTypes.size(); ++i) {
+        if (i > 0) {
+            ret += ", ";
+        }
+        CJC_ASSERT(paramTypes[i] != nullptr);
+        ret += paramTypes[i]->ToString();
+    }
+    ret += ")";
+    if (retType != nullptr) {
+        ret += " -> " + retType->ToString();
+    }
+    return ret;
+}
+
+std::string TupleType::ToString() const
+{
+    std::string ret = "(";
+    for (size_t i = 0; i < fieldTypes.size(); ++i) {
+        if (i > 0) {
+            ret += ", ";
+        }
+        CJC_ASSERT(fieldTypes[i] != nullptr);
+        ret += fieldTypes[i]->ToString();
+    }
+    ret += ")";
+    return ret;
+}
+
+std::string ThisType::ToString() const
+{
+    return TOKENS[static_cast<int>(TokenKind::THISTYPE)];
+}
+
+std::string ParenExpr::ToString() const
+{
+    CJC_ASSERT(expr != nullptr);
+    return "(" + expr->ToString() + ")";
+}
+
+std::string AsExpr::ToString() const
+{
+    CJC_ASSERT(leftExpr != nullptr);
+    CJC_ASSERT(asType != nullptr);
+    return leftExpr->ToString() + " as " + asType->ToString();
+}
+
+std::string IsExpr::ToString() const
+{
+    CJC_ASSERT(leftExpr != nullptr);
+    CJC_ASSERT(isType != nullptr);
+    return leftExpr->ToString() + " is " + isType->ToString();
+}
+
+std::string TypeConvExpr::ToString() const
+{
+    CJC_ASSERT(type != nullptr);
+    CJC_ASSERT(expr != nullptr);
+    return type->ToString() + "(" + expr->ToString() + ")";
+}
+
+std::string OptionalExpr::ToString() const
+{
+    CJC_ASSERT(baseExpr != nullptr);
+    return baseExpr->ToString() + "?";
+}
+
+std::string OptionalChainExpr::ToString() const
+{
+    CJC_ASSERT(expr != nullptr);
+    return expr->ToString();
+}
+
+std::string PrimitiveTypeExpr::ToString() const
+{
+    return Ty::KindName(typeKind);
 }
 
 } // namespace Cangjie

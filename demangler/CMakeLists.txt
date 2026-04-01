@@ -20,12 +20,14 @@ if(CANGJIE_DEMANGLER_USE_CSTRING)
     add_library(cangjie-demangle STATIC
         ${CMAKE_CURRENT_SOURCE_DIR}/Demangler.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/DeCompression.cpp)
+    set_target_properties(cangjie-demangle PROPERTIES POSITION_INDEPENDENT_CODE ON)
 else()
     # A library for demangling, which using std::string as its string implementation.
     add_library(cangjie-demangle STATIC
         ${CMAKE_CURRENT_SOURCE_DIR}/DeCompression.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Demangler.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/CangjieDemangle.cpp)
+    set_target_properties(cangjie-demangle PROPERTIES POSITION_INDEPENDENT_CODE ON)
     target_compile_definitions(cangjie-demangle PRIVATE BUILD_LIB_CANGJIE_DEMANGLE)
 endif()
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/CangjieDemangle.h DESTINATION include)
