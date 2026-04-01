@@ -46,7 +46,7 @@ TempFileInfo IOS_CJNATIVE::GenerateLinkingTool(
     tool->AppendArg("-o", outputFile);
     if (driverOptions.IsLTOEnabled()) {
         tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
-        GenerateLinkOptionsForLTO(*tool, outputFile);
+        GenerateLinkOptionsForLTO(*tool);
     }
     tool->AppendArgIf(driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB, "-dylib");
     tool->AppendArg("-arch", GetTargetArchString());
