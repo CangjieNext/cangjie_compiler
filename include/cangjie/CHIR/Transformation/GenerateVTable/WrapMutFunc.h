@@ -35,7 +35,7 @@ public:
     std::unordered_map<std::string, Function*>&& GetWrappers();
 
 private:
-    void CreateMutFuncWrapper(Function* rawFunc, CustomTypeDef& curDef, ClassType& srcClassTy);
+    void CreateMutFuncWrapper(Function& rawFunc, CustomTypeDef& curDef, ClassType& srcClassTy);
 
     CHIRBuilder& builder;
     std::unordered_map<std::string, Function*> wrapperFuncs;
