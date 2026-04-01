@@ -747,6 +747,7 @@ struct ThisType : Type {
         end = begin;
         end.column += Len(TokenKind::THISTYPE);
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -758,10 +759,7 @@ struct PrimitiveType : Type {
     PrimitiveType() : Type(ASTKind::PRIMITIVE_TYPE)
     {
     }
-    std::string ToString() const override
-    {
-        return str;
-    }
+    std::string ToString() const override;
 };
 
 /**
@@ -774,6 +772,7 @@ struct ParenType : Type {
     ParenType() : Type(ASTKind::PAREN_TYPE)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -798,6 +797,8 @@ struct QualifiedType : Type {
         target = nullptr;
     }
 
+    std::string ToString() const override;
+
     std::vector<Ptr<Type>> GetTypeArgs() const override
     {
         return ConverVector(typeArguments);
@@ -821,6 +822,7 @@ struct OptionType : Type {
     OptionType() : Type(ASTKind::OPTION_TYPE)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -833,6 +835,7 @@ struct ConstantType : public Type {
     ConstantType() : Type(ASTKind::CONSTANT_TYPE)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -847,6 +850,7 @@ struct VArrayType : public Type {
     VArrayType() : Type(ASTKind::VARRAY_TYPE)
     {
     }
+    std::string ToString() const override;
 };
 /**
  * A FuncType node represents a function type, example: `(Int32, Int32)->Int32`, @p paramType is (Int32, Int32), @p
@@ -862,6 +866,7 @@ struct FuncType : Type {
     {
     }
     bool isC{false};
+    std::string ToString() const override;
 };
 
 /**
@@ -875,6 +880,7 @@ struct TupleType : Type {
     TupleType() : Type(ASTKind::TUPLE_TYPE)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2158,6 +2164,7 @@ struct IsExpr : Expr {
     IsExpr() : Expr(ASTKind::IS_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2170,6 +2177,7 @@ struct AsExpr : Expr {
     AsExpr() : Expr(ASTKind::AS_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2564,6 +2572,7 @@ struct ParenExpr : Expr {
     ParenExpr() : Expr(ASTKind::PAREN_EXPR)
     {
     }
+    std::string ToString() const override;
     void Clear() noexcept override;
 };
 
@@ -2597,6 +2606,7 @@ struct OptionalExpr : Expr {
     explicit OptionalExpr() : Expr(ASTKind::OPTIONAL_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 struct OptionalChainExpr : Expr {
@@ -2604,6 +2614,7 @@ struct OptionalChainExpr : Expr {
     explicit OptionalChainExpr() : Expr(ASTKind::OPTIONAL_CHAIN_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2693,6 +2704,7 @@ struct TypeConvExpr : Expr {
     TypeConvExpr() : Expr(ASTKind::TYPE_CONV_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2734,6 +2746,7 @@ struct PrimitiveTypeExpr : Expr {
     explicit PrimitiveTypeExpr(TypeKind typeKind) : Expr(ASTKind::PRIMITIVE_TYPE_EXPR), typeKind(typeKind)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
