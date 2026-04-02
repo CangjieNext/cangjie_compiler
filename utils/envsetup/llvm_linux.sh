@@ -187,6 +187,27 @@ if [ "$hw_arch" = "" ]; then
 fi
 hw_arch="${sys_name}_${hw_arch}"
 
+# Remove Cangjie-related paths from an environment variable
+_remove_cangjie_paths() {
+    local var_name="$1"
+    local var_value="${!var_name}"
+    
+    if [ -n "${var_value}" ]; then
+        local new_value=""
+        IFS=':' read -ra PATHS <<< "${var_value}"
+        for item in "${PATHS[@]}"; do
+            if [[ ! "$item" == "${CANGJIE_HOME}"* ]]; then
+                new_value="${new_value}${new_value:+:}$item"
+            fi
+        done
+        export "${var_name}=${new_value}"
+    fi
+}
+if [ -n "${CANGJIE_HOME-}" ]; then
+    _remove_cangjie_paths "PATH"
+    _remove_cangjie_paths "LD_LIBRARY_PATH"
+fi
+
 # Set Cangjie related environment variables
 export CANGJIE_HOME="${script_dir}"
 export PATH="${CANGJIE_HOME}/bin:${CANGJIE_HOME}/tools/bin${PATH:+:${PATH}}:${HOME}/.cjpm/bin"
