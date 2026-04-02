@@ -471,10 +471,36 @@ const std::string CANIUSE_IDENTIFIER = "canIUse";
 
 // Before desugar: `@IfAvaliable(level: 11, {=>...}, {=>...})`
 // Desugar as: `if (DeviceInfo.sdkApiVersion >= 11) {...} else {...}`
+// Also supports: `@IfAvailable(level: "20.0.0", {=>...}, {=>...})`
+// Desugar as: `if (DeviceInfo.sdkApiVersion >= 20) {...} else {...}`
 OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae)
 {
     auto me = CreateMemberAccess(CreateRefExpr(SrcIdentifier(DEVICE_INFO)), SDK_API_VERSION);
-    auto condition = CreateBinaryExpr(std::move(me), std::move(iae.GetArg()->expr), TokenKind::GE);
+
+    // Check if the level argument is a string literal (semantic version)
+    OwnedPtr<Expr> levelExpr;
+    if (iae.GetArg()->expr && iae.GetArg()->expr->astKind == ASTKind::LIT_CONST_EXPR) {
+        auto lce = StaticCast<LitConstExpr>(iae.GetArg()->expr.get());
+        if (lce->kind == LitConstKind::STRING) {
+            // Parse semantic version string (e.g., "20.0.0") and extract major version
+            std::string versionStr = lce->stringValue;
+            size_t dotPos = versionStr.find('.');
+            std::string majorVersion = (dotPos != std::string::npos) ?
+                versionStr.substr(0, dotPos) : versionStr;
+
+            // Create an integer literal with the major version
+            levelExpr = CreateLitConstExpr(LitConstKind::INTEGER, majorVersion, lce->ty);
+            CopyBasicInfo(lce, levelExpr.get());
+        } else {
+            // Integer literal, use as is
+            levelExpr = std::move(iae.GetArg()->expr);
+        }
+    } else {
+        // Use the expression as is
+        levelExpr = std::move(iae.GetArg()->expr);
+    }
+
+    auto condition = CreateBinaryExpr(std::move(me), std::move(levelExpr), TokenKind::GE);
     AddCurFile(*condition, iae.curFile);
     CopyBasicInfo(&iae, condition.get());
     return std::move(condition);
