@@ -49,16 +49,64 @@ if [ -z "${script_dir}" ]; then
     return 1
 fi
 
-export CANGJIE_HOME="${script_dir}"
-
+# Get current hardware architecture
 hw_arch=$(uname -m)
 if [ "$hw_arch" = "" ]; then
     hw_arch="x86_64"
 elif [ "$hw_arch" = "arm64" ]; then
     hw_arch="aarch64"
 fi
+
+# Remove Cangjie-related paths from an environment variable
+_remove_cangjie_paths() {
+    local env_var_name="$1"
+    local env_var_value=""
+    local new_env_var_value=""
+    local item=""
+
+    # Read environment variable by name in a way that works in both bash and zsh.
+    eval "env_var_value=\${$env_var_name}"
+
+    if [ -n "${env_var_value}" ]; then
+        case "${shell_name}" in
+        "zsh" | "-zsh")
+            local -a path_items
+            path_items=("${(@s/:/)env_var_value}")
+            for item in "${path_items[@]}"; do
+                case "${item}" in
+                    "${CANGJIE_HOME}"*) ;;
+                    *)
+                        new_env_var_value="${new_env_var_value}${new_env_var_value:+:}${item}"
+                        ;;
+                esac
+            done
+            ;;
+        *)
+            local -a path_items
+            IFS=':' read -r -a path_items <<< "${env_var_value}"
+            for item in "${path_items[@]}"; do
+                case "${item}" in
+                    "${CANGJIE_HOME}"*) ;;
+                    *)
+                        new_env_var_value="${new_env_var_value}${new_env_var_value:+:}${item}"
+                        ;;
+                esac
+            done
+            ;;
+        esac
+
+        eval "export ${env_var_name}=\"\${new_env_var_value}\""
+    fi
+}
+if [ -n "${CANGJIE_HOME-}" ]; then
+    _remove_cangjie_paths "PATH"
+    _remove_cangjie_paths "DYLD_LIBRARY_PATH"
+    _remove_cangjie_paths "DYLD_FALLBACK_LIBRARY_PATH"
+fi
+
+export CANGJIE_HOME="${script_dir}"
 export PATH="${CANGJIE_HOME}/bin:${CANGJIE_HOME}/tools/bin${PATH:+:${PATH}}:${HOME}/.cjpm/bin"
-export DYLD_LIBRARY_PATH="${CANGJIE_HOME}/runtime/lib/darwin_${hw_arch}_cjnative:${CANGJIE_HOME}/tools/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+export DYLD_FALLBACK_LIBRARY_PATH="${CANGJIE_HOME}/runtime/lib/darwin_${hw_arch}_cjnative:${CANGJIE_HOME}/tools/lib${DYLD_FALLBACK_LIBRARY_PATH:+:${DYLD_FALLBACK_LIBRARY_PATH}}"
 unset hw_arch
 
 if [ -z ${SDKROOT+x} ]; then
