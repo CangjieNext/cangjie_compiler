@@ -46,8 +46,18 @@ const LevelType IFAVAILABLE_LOWER_LIMITLEVEL = 19;
 constexpr std::string_view HIDE_ANNO_NAME = "Hide";
 constexpr std::string_view HIDE_ARG_NAME = "isChecked";
 
+// Parse semantic version string (e.g., "20.0.0") or simple version (e.g., "20") to LevelType
+// For semantic versions, only the major version is used
 LevelType Str2LevelType(std::string s)
 {
+    // Check if it's a semantic version (contains dots)
+    size_t dotPos = s.find('.');
+    if (dotPos != std::string::npos) {
+        // Extract major version (first part before dot)
+        std::string majorVersion = s.substr(0, dotPos);
+        return static_cast<LevelType>(Stoull(majorVersion).value_or(0));
+    }
+    // Simple version string (e.g., "20")
     return static_cast<LevelType>(Stoull(s).value_or(0));
 }
 
