@@ -311,6 +311,12 @@ CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func, bool forWra
     if (func->IsFuncWithBody()) {
         bool markByMD = cgCtx->IsCGParallelEnabled() && !IsCHIRWrapper(func->GetIdentifierWithoutPrefix());
         AddLinkageTypeMetadata(*function, CHIRLinkage2LLVMLinkage(chirLinkage), markByMD);
+        // Mark non-public functions as dso_local to enable direct calls and eliminate PLT
+        // indirection. Non-public symbols are not in the export table and cannot be
+        // interposed by another DSO, so this is safe for all linkage types.
+        if (!func->TestAttr(CHIR::Attribute::PUBLIC)) {
+            function->setDSOLocal(true);
+        }
     } else if (chirLinkage == Linkage::EXTERNAL_WEAK) {
         // Import function in if branch of @IfAvailable need to mark as EXTERNAL_WEAK.
         function->setLinkage(llvm::GlobalValue::ExternalWeakLinkage);
