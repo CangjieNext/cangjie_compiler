@@ -107,40 +107,68 @@ void CompilerInstance::DestroyASTResources()
         return;
     }
     astResourcesDestroyed = true;
+    Utils::ProfileRecorder recorder("ClearASTResources", "DestroyASTResources");
 
     // Note: callers must ensure no background tasks are accessing these resources.
 
     // 2) Delete TypeChecker as it may hold references to AST and TypeManager.
-    delete typeChecker;
-    typeChecker = nullptr;
+    {
+        Utils::ProfileRecorder recorderStage("DestroyASTResources", "delete typeChecker");
+        delete typeChecker;
+        typeChecker = nullptr;
+    }
 
     // 3) Delete TestManager which may depend on TypeManager and GenericInstantiationManager.
-    delete testManager;
-    testManager = nullptr;
+    {
+        Utils::ProfileRecorder recorderStage("DestroyASTResources", "delete testManager");
+        delete testManager;
+        testManager = nullptr;
+    }
 
     // 4) Delete GenericInstantiationManager if exists.
-    delete gim;
-    gim = nullptr;
+    {
+        Utils::ProfileRecorder recorderStage("DestroyASTResources", "delete generic instantiation manager");
+        delete gim;
+        gim = nullptr;
+    }
 
     // 5) Delete PackageManager which holds reference to ImportManager->
-    delete packageManager;
-    packageManager = nullptr;
+    {
+        Utils::ProfileRecorder recorderStage("DestroyASTResources", "delete packageManager");
+        delete packageManager;
+        packageManager = nullptr;
+    }
 
     // 5.1) Delete ImportManager after PackageManager
-    delete importManager;
-    importManager = nullptr;
+    {
+        Utils::ProfileRecorder recorderStage("DestroyASTResources", "delete importManager");
+        delete importManager;
+        importManager = nullptr;
+    }
 
     // 6) Release AST nodes before ASTContext for correct symbol detaching.
-    srcPkgs.clear();
+    {
+        Utils::ProfileRecorder recorderStage("DestroyASTResources", "clear srcPkgs");
+        srcPkgs.clear();
+    }
 
     // 7) Clear ASTContext map.
-    pkgCtxMap.clear();
+    {
+        Utils::ProfileRecorder recorderStage("DestroyASTResources", "clear pkgCtxMap");
+        pkgCtxMap.clear();
+    }
 
     // 8) Delete TypeManager last among managers that are heap-allocated here.
-    delete typeManager;
-    typeManager = nullptr;
+    {
+        Utils::ProfileRecorder recorderStage("DestroyASTResources", "delete typeManager");
+        delete typeManager;
+        typeManager = nullptr;
+    }
 
-    Utils::FreeIdleMemoryToOS();
+    {
+        Utils::ProfileRecorder recorderStage("DestroyASTResources", "free idle memory to OS");
+        Utils::FreeIdleMemoryToOS();
+    }
 }
 
 bool CompilerInstance::InitCompilerInstance()
