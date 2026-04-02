@@ -49,16 +49,39 @@ if [ -z "${script_dir}" ]; then
     return 1
 fi
 
-export CANGJIE_HOME="${script_dir}"
-
+# Get current hardware architecture
 hw_arch=$(uname -m)
 if [ "$hw_arch" = "" ]; then
     hw_arch="x86_64"
 elif [ "$hw_arch" = "arm64" ]; then
     hw_arch="aarch64"
 fi
+
+# Remove Cangjie-related paths from an environment variable
+_remove_cangjie_paths() {
+    local var_name="$1"
+    local var_value="${!var_name}"
+    
+    if [ -n "${var_value}" ]; then
+        local new_value=""
+        IFS=':' read -ra PATHS <<< "${var_value}"
+        for item in "${PATHS[@]}"; do
+            if [[ ! "$item" == "${CANGJIE_HOME}"* ]]; then
+                new_value="${new_value}${new_value:+:}$item"
+            fi
+        done
+        export "${var_name}=${new_value}"
+    fi
+}
+if [ -n "${CANGJIE_HOME-}" ]; then
+    _remove_cangjie_paths "PATH"
+    _remove_cangjie_paths "DYLD_LIBRARY_PATH"
+    _remove_cangjie_paths "DYLD_FALLBACK_LIBRARY_PATH"
+fi
+
+export CANGJIE_HOME="${script_dir}"
 export PATH="${CANGJIE_HOME}/bin:${CANGJIE_HOME}/tools/bin${PATH:+:${PATH}}:${HOME}/.cjpm/bin"
-export DYLD_LIBRARY_PATH="${CANGJIE_HOME}/runtime/lib/darwin_${hw_arch}_cjnative:${CANGJIE_HOME}/tools/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+export DYLD_FALLBACK_LIBRARY_PATH="${CANGJIE_HOME}/runtime/lib/darwin_${hw_arch}_cjnative:${CANGJIE_HOME}/tools/lib${DYLD_FALLBACK_LIBRARY_PATH:+:${DYLD_FALLBACK_LIBRARY_PATH}}"
 unset hw_arch
 
 if [ -z ${SDKROOT+x} ]; then
