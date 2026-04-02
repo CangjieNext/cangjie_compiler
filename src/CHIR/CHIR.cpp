@@ -1369,9 +1369,13 @@ VarInitDepMap ToCHIR::GetVarInitDepMap() const
 
 void ToCHIR::ClearASTResources()
 {
+    Utils::ProfileRecorder recorder("CHIR", "ClearASTResources");
     pkg = nullptr;
     annoFactoryFuncs.clear();
     diagEngine.EmitCategoryDiagnostics(DiagCategory::CHIR);
-    ci.DestroyASTResources();
+
+    // Perform AST resources destruction in background to avoid blocking CHIR flow.
+    // Capture pointer to CompilerInstance and run DestroyASTResources in a detached thread.
+    std::thread([&ci]() { ci.DestroyASTResources(); }).detach();
 }
 } // namespace Cangjie::CHIR
