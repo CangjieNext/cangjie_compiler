@@ -92,6 +92,11 @@ private:
     OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(const AST::MemberAccess& memberAccess, AccessorKind kind);
     Ptr<AST::Expr> ReplaceFieldGetWithAccessor(AST::MemberAccess& memberAccess, bool isInConstructor);
     Ptr<AST::Expr> ReplaceFieldSetWithAccessor(AST::AssignExpr& assignExpr, bool isInConstructor);
+    Ptr<AST::Expr> ReplaceVarRefExprWithGetAccessor(AST::RefExpr& refExpr);
+    OwnedPtr<AST::CallExpr> ReplaceRefExprFieldSetWithAccessor(AST::RefExpr& refExpr, bool isInConstructor);
+    OwnedPtr<AST::CallExpr> ReplaceMemberAccessFieldSetWithAccessor(AST::MemberAccess& memAccess, bool isInConstructor);
+    Ptr<AST::Expr> ReplaceRefExprWithGetAccessor(AST::RefExpr& refExpr, AccessorKind kind);
+    OwnedPtr<AST::CallExpr> ReplaceRefExprFieldSetWithAccessorImpl(AST::RefExpr& refExpr, AccessorKind kind);
     Ptr<AST::Expr> ReplaceMemberAccessWithAccessor(AST::MemberAccess& memberAccess, bool isInConstructor);
     Ptr<AST::Expr> ReplaceMemberAccess(AST::MemberAccess& member, bool isInConstructor, bool isSubMemberAccess);
     Ptr<AST::Expr> ReplaceAssignment(AST::AssignExpr& assignment, bool isInConstructor);

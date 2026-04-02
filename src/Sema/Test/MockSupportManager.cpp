@@ -1330,7 +1330,7 @@ void MockSupportManager::TransformAccessorCallForMutOperation(
 void MockSupportManager::ReplaceSubMemberAccessWithAccessor(
     const MemberAccess& memberAccess, bool isInConstructor, const Ptr<Expr> topLevelMutExpr)
 {
-    if (auto nre = DynamicCast<NameReferenceExpr*>(ExtractLastDesugaredExpr(*memberAccess.baseExpr)); nre) {
+    if (auto nre = DynamicCast<NameReferenceExpr*>(ExtractLastDesugaredExpr(*memberAccess.baseExpr))) {
         auto replacedNre = ReplaceExprWithAccessor(*nre, isInConstructor, true);
         if (topLevelMutExpr && replacedNre) {
             TransformAccessorCallForMutOperation(*nre, *replacedNre, *topLevelMutExpr);
@@ -1372,10 +1372,8 @@ Ptr<Expr> MockSupportManager::ReplaceMemberAccess(MemberAccess& member, bool isI
 
     // Left values of an assignment are handled below, by `ReplaceFieldSetWithAccessor`
     const bool isField = member.target->astKind == ASTKind::VAR_DECL && member.target->astKind != ASTKind::PROP_DECL;
-
     if (isField) {
         const bool isLeftValue = member.TestAttr(Attribute::LEFT_VALUE) || (!member.isAlone && !isSubMemberAccess);
-
         if (isLeftValue) {
             return nullptr;
         }
@@ -1424,7 +1422,7 @@ Ptr<Expr> MockSupportManager::ReplaceRefExpr(RefExpr& refExpr)
         return ReplaceStaticRefExprWithGetAccessor(refExpr);
     }
 
-    return nullptr;
+    return ReplaceVarRefExprWithGetAccessor(refExpr);
 }
 
 Ptr<Expr> MockSupportManager::ReplaceCallExpr(CallExpr& callExpr)
@@ -1432,7 +1430,7 @@ Ptr<Expr> MockSupportManager::ReplaceCallExpr(CallExpr& callExpr)
     if (callExpr.TestAttr(Attribute::GENERATED_TO_MOCK)) {
         return nullptr;
     }
-    
+
     for (auto& arg : callExpr.args) {
         if (arg->withInout) {
             return ReplaceInoutFuncArgWithAccessor(callExpr);
@@ -1442,18 +1440,36 @@ Ptr<Expr> MockSupportManager::ReplaceCallExpr(CallExpr& callExpr)
     return nullptr;
 }
 
-Ptr<Expr> MockSupportManager::ReplaceStaticRefExprWithGetAccessor(RefExpr& refExpr)
+Ptr<Expr> MockSupportManager::ReplaceRefExprWithGetAccessor(RefExpr& refExpr, AccessorKind kind)
 {
     auto target = refExpr.GetTarget();
     auto ref = CreateRefExpr(*target->outerDecl);
+    ref->isThis = target->TestAttr(Attribute::STATIC) ? false : true;
+
     auto memberAccess = CreateMemberAccess(std::move(ref), target->identifier);
-    auto accessorCall = GenerateAccessorCallForField(*memberAccess, AccessorKind::STATIC_FIELD_GETTER);
+    auto accessorCall = GenerateAccessorCallForField(*memberAccess, kind);
     if (!accessorCall) {
         return nullptr;
     }
     accessorCall->sourceExpr = Ptr(&refExpr);
+
     refExpr.desugarExpr = std::move(accessorCall);
     return refExpr.desugarExpr;
+}
+
+Ptr<Expr> MockSupportManager::ReplaceVarRefExprWithGetAccessor(RefExpr& refExpr)
+{
+    auto target = refExpr.GetTarget();
+    if (target->TestAttr(Attribute::COMPILER_ADD) || !target->outerDecl) {
+        return nullptr;
+    }
+
+    return ReplaceRefExprWithGetAccessor(refExpr, AccessorKind::FIELD_GETTER);
+}
+
+Ptr<Expr> MockSupportManager::ReplaceStaticRefExprWithGetAccessor(RefExpr& refExpr)
+{
+    return ReplaceRefExprWithGetAccessor(refExpr, AccessorKind::STATIC_FIELD_GETTER);
 }
 
 Ptr<FuncArg> MockSupportManager::GenerateDesugarFuncArg(Ptr<FuncArg> funcArg, Ptr<VarDecl> varDecl)
@@ -1615,7 +1631,7 @@ Ptr<Expr> MockSupportManager::ReplaceFieldGetWithAccessor(MemberAccess& memberAc
 
     AccessorKind kind = memberAccess.target->TestAttr(Attribute::STATIC) ? AccessorKind::STATIC_FIELD_GETTER
                                                                          : AccessorKind::FIELD_GETTER;
-    if (auto accessorCall = GenerateAccessorCallForField(memberAccess, kind); accessorCall) {
+    if (auto accessorCall = GenerateAccessorCallForField(memberAccess, kind)) {
         accessorCall->sourceExpr = Ptr(&memberAccess);
         memberAccess.desugarExpr = std::move(accessorCall);
         return memberAccess.desugarExpr;
@@ -1640,42 +1656,62 @@ Ptr<Expr> MockSupportManager::ReplaceTopLevelVariableGetWithAccessor(RefExpr& re
     return nullptr;
 }
 
+OwnedPtr<CallExpr> MockSupportManager::ReplaceRefExprFieldSetWithAccessor(RefExpr& refExpr, bool isInConstructor)
+{
+    auto target = refExpr.GetTarget();
+    if (!target) {
+        return nullptr;
+    }
+
+    if (target->TestAttr(Attribute::GLOBAL)) {
+        return GenerateAccessorCallForTopLevelVariable(refExpr, AccessorKind::TOP_LEVEL_VARIABLE_SETTER);
+    }
+
+    if (target->TestAttr(Attribute::STATIC)) {
+        return ReplaceRefExprFieldSetWithAccessorImpl(refExpr, AccessorKind::STATIC_FIELD_SETTER);
+    }
+
+    // Expressions may appear in body of extend methods
+    if (!isInConstructor) {
+        return ReplaceRefExprFieldSetWithAccessorImpl(refExpr, AccessorKind::FIELD_SETTER);
+    }
+
+    return nullptr;
+}
+
+OwnedPtr<CallExpr> MockSupportManager::ReplaceRefExprFieldSetWithAccessorImpl(RefExpr& refExpr, AccessorKind kind)
+{
+    auto target = refExpr.GetTarget();
+    if (target->TestAttr(Attribute::COMPILER_ADD) || !target->outerDecl) {
+        return nullptr;
+    }
+    auto ref = CreateRefExpr(*target->outerDecl);
+    ref->isThis = target->TestAttr(Attribute::STATIC) ? false : true;
+    auto tmpMemberAccess = CreateMemberAccess(std::move(ref), target->identifier);
+    return GenerateAccessorCallForField(*tmpMemberAccess, kind); 
+}
+
+OwnedPtr<CallExpr> MockSupportManager::ReplaceMemberAccessFieldSetWithAccessor(
+    MemberAccess& memberAccess, bool isInConstructor)
+{
+    if (!memberAccess.target || (isInConstructor && IsMemberAccessOnThis(memberAccess))) {
+        return nullptr;
+    }
+
+    return GenerateAccessorCallForField(memberAccess, AccessorKind::FIELD_SETTER);
+}
+
 Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr, bool isInConstructor)
 {
     auto leftValue = assignExpr.leftValue.get();
     OwnedPtr<CallExpr> accessorCall;
-    if (auto refExpr = As<ASTKind::REF_EXPR>(leftValue); refExpr) {
-        auto target = refExpr->GetTarget();
-        if (!target) {
-            return nullptr;
-        }
-        if (target->TestAttr(Attribute::GLOBAL)) {
-            accessorCall = GenerateAccessorCallForTopLevelVariable(*refExpr, AccessorKind::TOP_LEVEL_VARIABLE_SETTER);
-            if (!accessorCall) {
-                return nullptr;
-            }
-        } else if (target->TestAttr(Attribute::STATIC)) {
-            CJC_ASSERT(target->outerDecl);
-            auto ref = CreateRefExpr(*target->outerDecl);
-            auto tmpMemberAccess = CreateMemberAccess(std::move(ref), target->identifier);
-            accessorCall = GenerateAccessorCallForField(*tmpMemberAccess, AccessorKind::STATIC_FIELD_SETTER);
-            if (!accessorCall) {
-                return nullptr;
-            }
-        } else if (!isInConstructor) {
-            // TODO: Should be replaced with call to accessor for member variable
-            //       Such expressions may appear in body of extend methods
-            return nullptr;
-        } else {
-            return nullptr;
-        }
-    } else if (auto memberAccess = As<ASTKind::MEMBER_ACCESS>(leftValue); memberAccess) {
-        if (!memberAccess->target || (isInConstructor && IsMemberAccessOnThis(*memberAccess))) {
-            return nullptr;
-        }
-        accessorCall = GenerateAccessorCallForField(*memberAccess, AccessorKind::FIELD_SETTER);
+
+    if (auto refExpr = As<ASTKind::REF_EXPR>(leftValue)) {
+        accessorCall = ReplaceRefExprFieldSetWithAccessor(*refExpr, isInConstructor);
+    } else if (auto memberAccess = As<ASTKind::MEMBER_ACCESS>(leftValue)) {
+        accessorCall = ReplaceMemberAccessFieldSetWithAccessor(*memberAccess, isInConstructor);
         if (!accessorCall) {
-            ReplaceSubMemberAccessWithAccessor(*memberAccess, isInConstructor,
+            ReplaceSubMemberAccessWithAccessor(*memberAccess, isInConstructor, 
                 Is<StructDecl>(memberAccess->target->outerDecl) ? &assignExpr : nullptr);
             return &assignExpr;
         }
@@ -1688,7 +1724,10 @@ Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr
         }
     }
 
-    CJC_ASSERT(accessorCall);
+    if (!accessorCall) {
+        return nullptr;
+    }
+
     accessorCall->args.emplace_back(CreateFuncArg(ASTCloner::Clone(assignExpr.rightExpr.get())));
     accessorCall->sourceExpr = Ptr(&assignExpr);
     assignExpr.desugarExpr = std::move(accessorCall);
