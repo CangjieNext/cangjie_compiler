@@ -472,7 +472,8 @@ const std::string CANIUSE_IDENTIFIER = "canIUse";
 // Before desugar: `@IfAvaliable(level: 11, {=>...}, {=>...})`
 // Desugar as: `if (DeviceInfo.sdkApiVersion >= 11) {...} else {...}`
 // Also supports: `@IfAvailable(level: "20.0.0", {=>...}, {=>...})`
-// Desugar as: `if (DeviceInfo.sdkApiVersion >= 20) {...} else {...}`
+// Desugar as: `if (DeviceInfo.sdkApiVersion >= 20000000) {...} else {...}`
+// Semantic version encoding: major * 1000000 + minor * 1000 + patch
 OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae)
 {
     auto me = CreateMemberAccess(CreateRefExpr(SrcIdentifier(DEVICE_INFO)), SDK_API_VERSION);
@@ -482,21 +483,52 @@ OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae)
     if (iae.GetArg()->expr && iae.GetArg()->expr->astKind == ASTKind::LIT_CONST_EXPR) {
         auto lce = StaticCast<LitConstExpr>(iae.GetArg()->expr.get());
         if (lce->kind == LitConstKind::STRING) {
-            // Parse semantic version string (e.g., "20.0.0") and extract major version
+            // Parse semantic version string (e.g., "20.0.0") to encoded integer
             std::string versionStr = lce->stringValue;
-            size_t dotPos = versionStr.find('.');
-            std::string majorVersion = (dotPos != std::string::npos) ?
-                versionStr.substr(0, dotPos) : versionStr;
 
-            // Create an integer literal with the major version
-            levelExpr = CreateLitConstExpr(LitConstKind::INTEGER, majorVersion, lce->ty);
+            // Parse major.minor.patch components
+            uint32_t major = 0, minor = 0, patch = 0;
+            std::vector<std::string> parts;
+            size_t start = 0;
+            size_t end = versionStr.find('.');
+
+            while (end != std::string::npos) {
+                parts.push_back(versionStr.substr(start, end - start));
+                start = end + 1;
+                end = versionStr.find('.', start);
+            }
+            parts.push_back(versionStr.substr(start));
+
+            // Parse each component
+            if (parts.size() >= 1 && !parts[0].empty()) {
+                major = std::stoul(parts[0]);
+            }
+            if (parts.size() >= 2 && !parts[1].empty()) {
+                minor = std::stoul(parts[1]);
+            }
+            if (parts.size() >= 3 && !parts[2].empty()) {
+                patch = std::stoul(parts[2]);
+            }
+
+            // Encode as: major * 1000000 + minor * 1000 + patch
+            // This allows proper version comparison: 20.0.0 < 20.1.0 < 21.0.0
+            uint64_t encodedVersion = static_cast<uint64_t>(major) * 1000000ULL +
+                                      static_cast<uint64_t>(minor) * 1000ULL +
+                                      static_cast<uint64_t>(patch);
+
+            // Create an integer literal with the encoded version
+            levelExpr = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(encodedVersion), lce->ty);
             CopyBasicInfo(lce, levelExpr.get());
         } else {
-            // Integer literal, use as is
-            levelExpr = std::move(iae.GetArg()->expr);
+            // Integer literal: treat as major version only (20 -> 20000000)
+            std::string versionStr = lce->stringValue;
+            uint64_t major = std::stoull(versionStr);
+            uint64_t encodedVersion = major * 1000000ULL;
+            levelExpr = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(encodedVersion), lce->ty);
+            CopyBasicInfo(lce, levelExpr.get());
         }
     } else {
-        // Use the expression as is
+        // Use the expression as is (shouldn't happen in normal flow)
         levelExpr = std::move(iae.GetArg()->expr);
     }
 

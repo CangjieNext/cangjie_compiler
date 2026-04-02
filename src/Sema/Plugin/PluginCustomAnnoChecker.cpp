@@ -46,19 +46,42 @@ const LevelType IFAVAILABLE_LOWER_LIMITLEVEL = 19;
 constexpr std::string_view HIDE_ANNO_NAME = "Hide";
 constexpr std::string_view HIDE_ARG_NAME = "isChecked";
 
-// Parse semantic version string (e.g., "20.0.0") or simple version (e.g., "20") to LevelType
-// For semantic versions, only the major version is used
+// Parse semantic version string (e.g., "20.0.0") or simple version (e.g., "20")
+// Returns SemanticVersion with major.minor.patch components
+SemanticVersion ParseSemanticVersion(const std::string& s)
+{
+    SemanticVersion version;
+
+    // Split the string by dots
+    std::vector<std::string> parts;
+    size_t start = 0;
+    size_t end = s.find('.');
+
+    while (end != std::string::npos) {
+        parts.push_back(s.substr(start, end - start));
+        start = end + 1;
+        end = s.find('.', start);
+    }
+    parts.push_back(s.substr(start));
+
+    // Parse each component
+    if (parts.size() >= 1 && !parts[0].empty()) {
+        version.major = static_cast<uint32_t>(Stoull(parts[0]).value_or(0));
+    }
+    if (parts.size() >= 2 && !parts[1].empty()) {
+        version.minor = static_cast<uint32_t>(Stoull(parts[1]).value_or(0));
+    }
+    if (parts.size() >= 3 && !parts[2].empty()) {
+        version.patch = static_cast<uint32_t>(Stoull(parts[2]).value_or(0));
+    }
+
+    return version;
+}
+
+// Legacy function for backward compatibility - now wraps ParseSemanticVersion
 LevelType Str2LevelType(std::string s)
 {
-    // Check if it's a semantic version (contains dots)
-    size_t dotPos = s.find('.');
-    if (dotPos != std::string::npos) {
-        // Extract major version (first part before dot)
-        std::string majorVersion = s.substr(0, dotPos);
-        return static_cast<LevelType>(Stoull(majorVersion).value_or(0));
-    }
-    // Simple version string (e.g., "20")
-    return static_cast<LevelType>(Stoull(s).value_or(0));
+    return ParseSemanticVersion(s).major;
 }
 
 void ParseLevel(const Expr& e, PluginCustomAnnoInfo& apilevel, DiagnosticEngine& diag)
@@ -75,8 +98,13 @@ void ParseLevel(const Expr& e, PluginCustomAnnoInfo& apilevel, DiagnosticEngine&
         diag.DiagnoseRefactor(DiagKindRefactor::sema_only_literal_support, e, "integer");
         return;
     }
-    auto newLevel = Str2LevelType(lce->stringValue);
-    apilevel.since = apilevel.since == 0 ? newLevel : std::min(newLevel, apilevel.since);
+    // Integer literal: treat as major version (20 -> 20.0.0)
+    auto newLevel = SemanticVersion(Str2LevelType(lce->stringValue));
+    if (apilevel.since.IsZero()) {
+        apilevel.since = newLevel;
+    } else if (newLevel < apilevel.since) {
+        apilevel.since = newLevel;
+    }
 }
 
 void ParseSince(const Expr& e, PluginCustomAnnoInfo& apilevel, DiagnosticEngine& diag)
@@ -93,8 +121,13 @@ void ParseSince(const Expr& e, PluginCustomAnnoInfo& apilevel, DiagnosticEngine&
         diag.DiagnoseRefactor(DiagKindRefactor::sema_only_literal_support, e, "string");
         return;
     }
-    auto newLevel = Str2LevelType(lce->stringValue);
-    apilevel.since = apilevel.since == 0 ? newLevel : std::min(newLevel, apilevel.since);
+    // Parse full semantic version from string
+    auto newLevel = ParseSemanticVersion(lce->stringValue);
+    if (apilevel.since.IsZero()) {
+        apilevel.since = newLevel;
+    } else if (newLevel < apilevel.since) {
+        apilevel.since = newLevel;
+    }
 }
 
 void ParseSysCap(const Expr& e, PluginCustomAnnoInfo& apilevel, DiagnosticEngine& diag)
@@ -290,7 +323,7 @@ void PluginCustomAnnoChecker::ParseOption() noexcept
     auto& option = ci.invocation.globalOptions;
     auto found = option.passedWhenKeyValue.find(std::string(CFG_PARAM_LEVEL_NAME));
     if (found != option.passedWhenKeyValue.end()) {
-        globalLevel = Str2LevelType(found->second);
+        globalLevel = ParseSemanticVersion(found->second);
         optionWithLevel = true;
     }
     found = option.passedWhenKeyValue.find(std::string(CFG_PARAM_SYSCAP_NAME));
@@ -523,13 +556,13 @@ bool PluginCustomAnnoChecker::CheckLevel(
     if (!optionWithLevel) {
         return true;
     }
-    LevelType scopeLevel = scopeAnnoInfo.since != 0 ? scopeAnnoInfo.since : globalLevel;
+    SemanticVersion scopeLevel = !scopeAnnoInfo.since.IsZero() ? scopeAnnoInfo.since : globalLevel;
     PluginCustomAnnoInfo targetAPILevel;
     Parse(target, targetAPILevel);
     if (targetAPILevel.since > scopeLevel && !diagCfg.node->begin.IsZero()) {
         if (diagCfg.reportDiag && !diagCfg.message.empty()) {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_apilevel_ref_higher, *diagCfg.node, diagCfg.message[0],
-                std::to_string(targetAPILevel.since), std::to_string(scopeLevel));
+                targetAPILevel.since.ToString(), scopeLevel.ToString());
         }
         return false;
     }
@@ -642,7 +675,7 @@ void PluginCustomAnnoChecker::CheckIfAvailableExpr(IfAvailableExpr& iae, PluginC
     }
     auto ifscopeAnnoInfo = PluginCustomAnnoInfo();
     parseNameParam[arg->name.Val()](*ifExpr->condExpr, ifscopeAnnoInfo, diag);
-    if (ifscopeAnnoInfo.since != 0 && ifscopeAnnoInfo.since < IFAVAILABLE_LOWER_LIMITLEVEL) {
+    if (!ifscopeAnnoInfo.since.IsZero() && ifscopeAnnoInfo.since < SemanticVersion(IFAVAILABLE_LOWER_LIMITLEVEL)) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_level_limit, *arg);
         return;
     }
