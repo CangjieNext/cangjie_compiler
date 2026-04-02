@@ -83,6 +83,15 @@ CompilerInstance::~CompilerInstance()
 {
     delete compileStrategy;
     if (astResourcesDestroyed) {
+#ifndef CANGJIE_ENABLE_GCOV
+        try {
+#endif
+            destroyFut.get();
+#ifndef CANGJIE_ENABLE_GCOV
+        } catch (...) {
+            // Ignore for delete exception.
+        }
+#endif
         return;
     }
     delete typeChecker;
@@ -101,46 +110,77 @@ void CompilerInstance::DestroyASTResources()
     // The following situations do not allow for the destruction or partial destruction of ast:
     // 1. In the incremental mode, after the compilation is completed, the AST information needs to be cached in the
     // cache file and cannot be deleted.
-    // 2. When used as an expression in cjdb cannot destroy the ast.
+    // 2. When used as a library, the ast resources will be released by the library user.
+    // 3. In cjdb mode, the ast resources will be released by the cjdb client expression in cjdb cannot destroy the ast.
     if (astResourcesDestroyed || invocation.globalOptions.enIncrementalCompilation ||
         invocation.globalOptions.cjdbMode) {
         return;
     }
     astResourcesDestroyed = true;
+    Utils::ProfileRecorder recorder("ClearASTResources", "DestroyASTResources");
 
     // Note: callers must ensure no background tasks are accessing these resources.
+    struct ToBeDestroyInfo {
+        TypeChecker* typeChecker{nullptr};
+        TestManager* testManager{nullptr};
+        PackageManager* packageManager{nullptr};
+        ImportManager* importManager{nullptr};
+        TypeManager* typeManager{nullptr};
+        GenericInstantiationManager* gim{nullptr};
+        std::vector<OwnedPtr<Package>> srcPkgs;
+        std::unordered_set<std::unique_ptr<ASTContext>> pkgCtxMap;
+    };
+    ToBeDestroyInfo info;
 
     // 2) Delete TypeChecker as it may hold references to AST and TypeManager.
-    delete typeChecker;
+    info.typeChecker = typeChecker;
     typeChecker = nullptr;
 
     // 3) Delete TestManager which may depend on TypeManager and GenericInstantiationManager.
-    delete testManager;
+    info.testManager = testManager;
     testManager = nullptr;
 
     // 4) Delete GenericInstantiationManager if exists.
-    delete gim;
+    info.gim = gim;
     gim = nullptr;
 
     // 5) Delete PackageManager which holds reference to ImportManager->
-    delete packageManager;
+    info.packageManager = packageManager;
     packageManager = nullptr;
 
     // 5.1) Delete ImportManager after PackageManager
-    delete importManager;
+    info.importManager = importManager;
     importManager = nullptr;
 
     // 6) Release AST nodes before ASTContext for correct symbol detaching.
+    for (auto& pkg : srcPkgs) {
+        info.srcPkgs.emplace_back(std::move(pkg));
+    }
     srcPkgs.clear();
 
     // 7) Clear ASTContext map.
+    for (auto& [_, ctx] : pkgCtxMap) {
+        info.pkgCtxMap.emplace(std::move(ctx));
+    }
     pkgCtxMap.clear();
 
     // 8) Delete TypeManager last among managers that are heap-allocated here.
-    delete typeManager;
+    info.typeManager = typeManager;
     typeManager = nullptr;
 
-    Utils::FreeIdleMemoryToOS();
+    std::function<void(ToBeDestroyInfo info)> destroyFunc = [](ToBeDestroyInfo info) {
+        // Explicitly reset unique_ptr members to trigger their destruction before the function returns.
+        delete info.typeChecker;
+        delete info.testManager;
+        delete info.packageManager;
+        delete info.importManager;
+        delete info.typeManager;
+        delete info.gim;
+        info.srcPkgs.clear();
+        info.pkgCtxMap.clear();
+        Utils::FreeIdleMemoryToOS();
+    };
+    destroyFut = std::async(std::launch::async, destroyFunc, std::move(info));
 }
 
 bool CompilerInstance::InitCompilerInstance()

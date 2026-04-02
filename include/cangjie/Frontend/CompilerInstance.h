@@ -606,6 +606,7 @@ private:
 
     // Guard for ensuring AST resources are destroyed only once.
     bool astResourcesDestroyed = false;
+    std::future<void> destroyFut;
 
     virtual void UpdateCachedInfo();
     bool WriteCachedInfo();
