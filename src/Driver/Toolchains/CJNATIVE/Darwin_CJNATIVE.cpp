@@ -47,7 +47,7 @@ void Darwin_CJNATIVE::GenerateLinkOptionsForLTO(Tool& tool) const
     SetOptions(setOptionHandler, driverOptions, LLD::SetLTOOptimizationLevelOptions);
     if (driverOptions.IsFullLTOEnabled()) {
         tool.AppendArg("-mllvm");
-        tool.AppendArg("--cangjie-full-lto");
+        tool.AppendArg("-cangjie-full-lto");
     } else {
         tool.AppendArg("-cache_path_lto");
         tool.AppendArg(driverOptions.compilationCachedPath);
