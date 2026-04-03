@@ -15,8 +15,8 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynOptionalChainExpr(
     const CheckerContext& ctx, OptionalChainExpr& oce)
 {
     CJC_NULLPTR_CHECK(oce.desugarExpr);
-    oce.ty = Synthesize(ctx, oce.desugarExpr.get());
-    return oce.ty;
+    oce.SetTy(Synthesize(ctx, oce.desugarExpr.get()));
+    return oce.GetTy();
 }
 
 bool TypeChecker::TypeCheckerImpl::ChkOptionalChainExpr(ASTContext& ctx, Ty& target, OptionalChainExpr& oce)
@@ -25,10 +25,10 @@ bool TypeChecker::TypeCheckerImpl::ChkOptionalChainExpr(ASTContext& ctx, Ty& tar
     if (!Ty::IsTyCorrect(SynOptionalChainExpr({ctx, SynPos::EXPR_ARG}, oce))) {
         return false;
     }
-    if (!CheckOptionBox(target, *oce.desugarExpr->ty)) {
+    if (!CheckOptionBox(target, *oce.desugarExpr->GetTy())) {
         DiagMismatchedTypes(diag, oce, target);
-        oce.desugarExpr->ty = TypeManager::GetInvalidTy();
-        oce.ty = TypeManager::GetInvalidTy();
+        oce.desugarExpr->SetTy(TypeManager::GetInvalidTy());
+        oce.SetTy(TypeManager::GetInvalidTy());
         return false;
     }
     return true;

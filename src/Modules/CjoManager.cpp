@@ -411,16 +411,16 @@ void CjoManagerImpl::ReplaceTypeAliasInNode(Ptr<Node> node)
         if (node->astKind == ASTKind::TYPE_ALIAS_DECL) {
             return VisitAction::WALK_CHILDREN;
         }
-        if (!Ty::IsTyCorrect(node->ty) || !node->ty->HasAliasTy()) {
+        if (!Ty::IsTyCorrect(node->GetTy()) || !node->GetTy()->HasAliasTy()) {
             return VisitAction::WALK_CHILDREN;
         }
-        Ptr<Ty> key = node->ty;
+        Ptr<Ty> key = node->GetTy();
         auto cacheIt = typeAliasCache.find(key);
         if (cacheIt != typeAliasCache.end()) {
-            node->ty = cacheIt->second;
+            node->SetTy(cacheIt->second);
         } else {
-            node->ty = typeManager.SubstituteTypeAliasInTy(*key);
-            typeAliasCache.emplace(key, node->ty);
+            node->SetTy(typeManager.SubstituteTypeAliasInTy(*key));
+            typeAliasCache.emplace(key, node->GetTy());
         }
         return VisitAction::WALK_CHILDREN;
     };

@@ -384,8 +384,9 @@ std::string PointerExpr::ToString() const
     ss << NextSpan(expr, curSpanBegin, curSpanEnd);
 
     curSpanBegin = curSpanEnd;
-    if (ty && !ty->typeArgs.empty()) {
-        expr = Ty::ToString(ty->typeArgs[0]);
+    auto pointeeTy = GetTy();
+    if (pointeeTy && !pointeeTy->typeArgs.empty()) {
+        expr = Ty::ToString(pointeeTy->typeArgs[0]);
         curSpanEnd = curSpanBegin + Position{0, 0, static_cast<int>(expr.size())};
         ss << NextSpan(expr, curSpanBegin, curSpanEnd);
     }
@@ -517,8 +518,8 @@ std::set<Ptr<InterfaceTy>> InheritableDecl::GetSuperInterfaceTys() const
 {
     std::set<Ptr<InterfaceTy>> ret;
     for (auto& types : inheritedTypes) {
-        if (types && types->ty && types->ty->kind == TypeKind::TYPE_INTERFACE) {
-            ret.insert(RawStaticCast<InterfaceTy*>(types->ty));
+        if (types && types->GetTy() && types->TyKind() == TypeKind::TYPE_INTERFACE) {
+            ret.insert(RawStaticCast<InterfaceTy*>(types->GetTy()));
         }
     }
     return ret;
@@ -530,8 +531,8 @@ std::vector<Ptr<InterfaceTy>> InheritableDecl::GetStableSuperInterfaceTys() cons
 
     std::set<Ptr<InterfaceTy>, decltype(cmp)> ret(cmp);
     for (auto& types : inheritedTypes) {
-        if (types && types->ty && types->ty->kind == TypeKind::TYPE_INTERFACE) {
-            ret.emplace(RawStaticCast<InterfaceTy*>(types->ty));
+        if (types && types->GetTy() && types->TyKind() == TypeKind::TYPE_INTERFACE) {
+            ret.emplace(RawStaticCast<InterfaceTy*>(types->GetTy()));
         }
     }
     return std::vector<Ptr<InterfaceTy>>(ret.begin(), ret.end());
@@ -551,12 +552,12 @@ std::vector<Ptr<ClassLikeDecl>> InheritableDecl::GetAllSuperDecls()
         auto curDecl = workList.front();
         workList.pop();
         for (auto& it : curDecl->inheritedTypes) {
-            if (auto clsTy = DynamicCast<ClassTy*>(it->ty); clsTy && visited.count(clsTy->declPtr) == 0) {
+            if (auto clsTy = DynamicCast<ClassTy*>(it->GetTy()); clsTy && visited.count(clsTy->declPtr) == 0) {
                 workList.push(clsTy->declPtr);
                 visited.emplace(clsTy->declPtr);
                 ret.emplace_back(clsTy->declPtr);
-            } else if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->ty);
-                       interfaceTy && visited.count(interfaceTy->declPtr) == 0) {
+            } else if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy());
+                interfaceTy && visited.count(interfaceTy->declPtr) == 0) {
                 workList.push(interfaceTy->declPtr);
                 visited.emplace(interfaceTy->declPtr);
                 ret.emplace_back(interfaceTy->declPtr);
@@ -1192,7 +1193,7 @@ bool ExtendDecl::IsExportedDecl() const
             }
         }
     }
-    auto extendedDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(ty);
+    auto extendedDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(GetTy());
     bool isInSamePkg = extendedDecl && extendedDecl->fullPackageName == fullPackageName;
     auto isUpperBoundExport = [this]() {
         bool isUpperboundAllExported = true;
@@ -1259,7 +1260,7 @@ bool PropDecl::IsExportedDecl() const
         return Decl::IsExportedDecl();
     }
     auto extend = StaticCast<ExtendDecl>(outerDecl);
-    auto extendedDecl = Ty::GetDeclPtrOfTy(extend->ty);
+    auto extendedDecl = Ty::GetDeclPtrOfTy(extend->GetTy());
     // If extend and extended decleration in same package, all member of extend will be exported.
     if (!extendedDecl || extendedDecl->fullPackageName == extend->fullPackageName) {
         return Decl::IsExportedDecl();
@@ -1277,7 +1278,7 @@ bool FuncDecl::IsExportedDecl() const
         return Decl::IsExportedDecl();
     }
     auto extend = StaticCast<ExtendDecl>(outerDecl);
-    auto extendedDecl = Ty::GetDeclPtrOfTy(extend->ty);
+    auto extendedDecl = Ty::GetDeclPtrOfTy(extend->GetTy());
     // If extend and extended decleration in same package, all member of extend will be exported.
     if (!extendedDecl || extendedDecl->fullPackageName == extend->fullPackageName) {
         return Decl::IsExportedDecl();

@@ -32,9 +32,9 @@ struct MemberJNISignature {
     MemberJNISignature(Utils& utils, FuncDecl& member)
         : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
     {
-            auto& retTy = *member.funcBody->retType->ty;
-            std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
-            signature = utils.GetJavaTypeSignature(retTy, paramTys, member.fullPackageName);
+        auto& retTy = *member.funcBody->retType->GetTy();
+        std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
+        signature = utils.GetJavaTypeSignature(retTy, paramTys, member.fullPackageName);
     }
 
     // Constructor added for using generic types in Java
@@ -42,7 +42,7 @@ struct MemberJNISignature {
     {
         auto jobject = StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl);
         CJC_ASSERT(jobject);
-        Ptr<Ty> ty = jobject->ty;
+        Ptr<Ty> ty = jobject->GetTy();
         classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
         // turn "cj/A" to "cj/A${type}"
         classTypeSignature = ReplaceClassName(classTypeSignature, genericConfig->declInstName);
@@ -50,7 +50,7 @@ struct MemberJNISignature {
 
         CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL);
 
-        auto& retTy = *member.funcBody->retType->ty;
+        auto& retTy = *member.funcBody->retType->GetTy();
         std::vector<Ptr<Ty>> paramTys = Native::FFI::GetParamTys(*member.funcBody->paramLists[0]);
         signature = utils.GetJavaTypeSignature(retTy, paramTys, member.fullPackageName);
     }
@@ -58,26 +58,26 @@ struct MemberJNISignature {
     MemberJNISignature(Utils& utils, PropDecl& member)
         : MemberJNISignature(utils, member, StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl))
     {
-            signature = utils.GetJavaTypeSignature(*member.ty, member.fullPackageName);
+        signature = utils.GetJavaTypeSignature(*member.GetTy(), member.fullPackageName);
     }
 
     MemberJNISignature(Utils& utils, Decl& member, Ptr<ClassLikeDecl> jobject)
     {
         CJC_ASSERT(jobject);
-        Ptr<Ty> ty = jobject->ty;
+        Ptr<Ty> ty = jobject->GetTy();
 
         if (IsSynthetic(*jobject)) {
             if (jobject->inheritedTypes.size() > 1) {
-                ty = jobject->inheritedTypes[1]->ty; // take interface ty
+                ty = jobject->inheritedTypes[1]->GetTy(); // take interface ty
             } else {
                 CJC_ASSERT_WITH_MSG(!jobject->inheritedTypes.empty(), "JObject must inherit Cangjie Object");
-                ty = jobject->inheritedTypes[0]->ty; // take superclass ty
+                ty = jobject->inheritedTypes[0]->GetTy(); // take superclass ty
             }
         }
         classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
         name = GetJavaMemberName(member);
         CJC_ASSERT(member.astKind == ASTKind::FUNC_DECL || member.astKind == ASTKind::PROP_DECL);
-        signature = utils.GetJavaTypeSignature(*member.ty, member.fullPackageName);
+        signature = utils.GetJavaTypeSignature(*member.GetTy(), member.fullPackageName);
     }
 };
 

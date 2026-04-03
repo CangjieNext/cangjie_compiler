@@ -494,8 +494,8 @@ struct ASTHasherImpl {
         SUPERHash<whatTypeToHash>(ma.baseExpr, ma.field, ma.typeArguments, ma.isPattern);
         if (auto maTarget = ma.target) {
             SUPERHash<whatTypeToHash>(maTarget->rawMangleName);
-            CJC_ASSERT(maTarget->ty);
-            SUPERHash<whatTypeToHash>(maTarget->ty->String());
+            CJC_ASSERT(maTarget->GetTy());
+            SUPERHash<whatTypeToHash>(maTarget->GetTy()->String());
         }
     }
     template <int whatTypeToHash> void HashTypeConvExpr(const TypeConvExpr& ntc)
@@ -531,8 +531,8 @@ struct ASTHasherImpl {
             re.ref.identifier.Val(), re.typeArguments, re.isThis, re.isSuper, re.isQuoteDollar);
         if (auto refTarget = re.ref.target) {
             SUPERHash<whatTypeToHash>(refTarget->rawMangleName);
-            CJC_ASSERT(refTarget->ty);
-            SUPERHash<whatTypeToHash>(refTarget->ty->String());
+            CJC_ASSERT(refTarget->GetTy());
+            SUPERHash<whatTypeToHash>(refTarget->GetTy()->String());
         }
     }
     template <int whatTypeToHash> void HashReturnExpr(const ReturnExpr& re)
@@ -687,8 +687,8 @@ struct ASTHasherImpl {
         SUPERHash<whatTypeToHash>(qt.baseType, qt.field, qt.typeArguments);
         if (auto refTarget = qt.target) {
             SUPERHash<whatTypeToHash>(refTarget->rawMangleName);
-            CJC_ASSERT(refTarget->ty);
-            SUPERHash<whatTypeToHash>(refTarget->ty->String());
+            CJC_ASSERT(refTarget->GetTy());
+            SUPERHash<whatTypeToHash>(refTarget->GetTy()->String());
         }
     }
 
@@ -698,8 +698,8 @@ struct ASTHasherImpl {
         SUPERHash<whatTypeToHash>(rt.ref.identifier.Val(), rt.typeArguments);
         if (auto refTarget = rt.ref.target) {
             SUPERHash<whatTypeToHash>(refTarget->rawMangleName);
-            CJC_ASSERT(refTarget->ty);
-            SUPERHash<whatTypeToHash>(refTarget->ty->String());
+            CJC_ASSERT(refTarget->GetTy());
+            SUPERHash<whatTypeToHash>(refTarget->GetTy()->String());
         }
     }
 

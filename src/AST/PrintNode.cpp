@@ -117,8 +117,8 @@ void PrintBasic(unsigned indent, const Node& node, std::ostream& stream = std::c
     if (!node.scopeName.empty()) {
         PrintIndent(stream, indent, "scopeName:", "\"" + node.scopeName + "\"");
     }
-    if (!Ty::IsInitialTy(node.ty)) {
-        PrintIndent(stream, indent, "ty:", node.ty->String());
+    if (!Ty::IsInitialTy(node.GetTy())) {
+        PrintIndent(stream, indent, "ty:", node.GetTy()->String());
     }
     PrintIndent(stream, indent, "ptr:", &node);
     const auto& fullPkgName = node.GetFullPackageName();
@@ -1559,8 +1559,9 @@ void PrintNode(Ptr<const Node> node, unsigned indent, const std::string& additio
         [&indent, &stream](const OptionalExpr& expr) { PrintOptionalExpr(indent, expr, stream); },
         [&indent, &stream](const OptionalChainExpr& expr) { PrintOptionalChainExpr(indent, expr, stream); },
         [&indent, &stream](const LetPatternDestructor& expr) { PrintLetPatternDestructor(indent, expr, stream); },
-        [&indent, &stream](
-            const PrimitiveTypeExpr& pte) { PrintIndent(stream, indent, "PrimitiveTypeExpr: " + pte.ty->String()); },
+        [&indent, &stream](const PrimitiveTypeExpr& pte) {
+            PrintIndent(stream, indent, "PrimitiveTypeExpr: " + pte.GetTy()->String());
+        },
         [&indent, &stream](const SpawnExpr& expr) { PrintSpawnExpr(indent, expr, stream); },
         [&indent, &stream](const SynchronizedExpr& expr) { PrintSynchronizedExpr(indent, expr, stream); },
         [&indent, &stream](
