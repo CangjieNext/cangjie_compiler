@@ -15,11 +15,11 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIsExpr(ASTContext& ctx, IsExpr& ie)
 {
     if (Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ie.leftExpr.get())) &&
         Ty::IsTyCorrect(Synthesize({ctx, SynPos::NONE}, ie.isType.get())) && ReplaceIdealTy(*ie.leftExpr)) {
-        ie.ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
+        ie.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN));
     } else {
-        ie.ty = TypeManager::GetInvalidTy();
+        ie.SetTy(TypeManager::GetInvalidTy());
     }
-    return ie.ty;
+    return ie.GetTy();
 }
 
 bool TypeChecker::TypeCheckerImpl::ChkIsExpr(ASTContext& ctx, Ty& target, IsExpr& ie)
@@ -37,7 +37,7 @@ bool TypeChecker::TypeCheckerImpl::ChkIsExpr(ASTContext& ctx, Ty& target, IsExpr
         isWellTyped = false;
     }
 
-    ie.ty = isWellTyped ? ie.ty : TypeManager::GetInvalidTy();
+    ie.SetTy(isWellTyped ? ie.GetTy() : TypeManager::GetInvalidTy());
     return isWellTyped;
 }
 
@@ -47,15 +47,15 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAsExpr(ASTContext& ctx, AsExpr& ae)
         Ty::IsTyCorrect(Synthesize({ctx, SynPos::NONE}, ae.asType.get())) && ReplaceIdealTy(*ae.leftExpr)) {
         auto optionDecl = RawStaticCast<EnumDecl*>(importManager.GetCoreDecl("Option"));
         if (optionDecl) {
-            ae.ty = typeManager.GetEnumTy(*optionDecl, {ae.asType->ty});
+            ae.SetTy(typeManager.GetEnumTy(*optionDecl, {ae.asType->GetTy()}));
         } else {
             diag.Diagnose(ae, DiagKind::sema_no_core_object);
-            ae.ty = TypeManager::GetInvalidTy();
+            ae.SetTy(TypeManager::GetInvalidTy());
         }
     } else {
-        ae.ty = TypeManager::GetInvalidTy();
+        ae.SetTy(TypeManager::GetInvalidTy());
     }
-    return ae.ty;
+    return ae.GetTy();
 }
 
 bool TypeChecker::TypeCheckerImpl::ChkAsExpr(ASTContext& ctx, Ty& target, AsExpr& ae)
@@ -63,9 +63,9 @@ bool TypeChecker::TypeCheckerImpl::ChkAsExpr(ASTContext& ctx, Ty& target, AsExpr
     if (!Ty::IsTyCorrect(SynAsExpr(ctx, ae))) {
         return false;
     }
-    if (!CheckOptionBox(target, *ae.ty)) {
+    if (!CheckOptionBox(target, *ae.GetTy())) {
         DiagMismatchedTypes(diag, ae, target);
-        ae.ty = TypeManager::GetInvalidTy();
+        ae.SetTy(TypeManager::GetInvalidTy());
         return false;
     }
     return true;

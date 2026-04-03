@@ -21,22 +21,22 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTryWithResourcesExpr(ASTContext& ctx, T
 {
     auto resourceDecl = importManager.GetCoreDecl("Resource");
     if (resourceDecl == nullptr) {
-        te.ty = TypeManager::GetInvalidTy();
-        return te.ty;
+        te.SetTy(TypeManager::GetInvalidTy());
+        return te.GetTy();
     }
-    Ptr<Ty> resourceTy = resourceDecl->ty;
+    Ptr<Ty> resourceTy = resourceDecl->GetTy();
     bool isWellTyped = true;
     for (auto& vd : te.resourceSpec) {
         CJC_NULLPTR_CHECK(vd);
         if (!SynthesizeAndReplaceIdealTy({ctx, SynPos::NONE}, *vd)) {
             isWellTyped = false;
-            vd->ty = TypeManager::GetInvalidTy(); // Avoid chaining errors.
+            vd->SetTy(TypeManager::GetInvalidTy()); // Avoid chaining errors.
             continue;
         }
-        if (vd->ty->IsNothing() || !typeManager.IsSubtype(vd->ty, resourceTy)) {
+        if (vd->GetTy()->IsNothing() || !typeManager.IsSubtype(vd->GetTy(), resourceTy)) {
             DiagMismatchedTypes(
                 diag, *vd, *resourceTy, "the resource specification should implement interface 'Resource'");
-            vd->ty = TypeManager::GetInvalidTy(); // Avoid chaining errors.
+            vd->SetTy(TypeManager::GetInvalidTy()); // Avoid chaining errors.
         }
     }
     CJC_NULLPTR_CHECK(te.tryBlock);
@@ -48,11 +48,11 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTryWithResourcesExpr(ASTContext& ctx, T
     }
     isWellTyped = ChkTryExprFinallyBlock(ctx, te) && isWellTyped;
     if (isWellTyped) {
-        te.ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+        te.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
     } else {
-        te.ty = TypeManager::GetInvalidTy();
+        te.SetTy(TypeManager::GetInvalidTy());
     }
-    return te.ty;
+    return te.GetTy();
 }
 
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTryExpr(ASTContext& ctx, TryExpr& te)
@@ -75,16 +75,16 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTryExpr(ASTContext& ctx, TryExpr& te)
     isWellTyped = optJTy.has_value() && isWellTyped;
     isWellTyped = ChkTryExprFinallyBlock(ctx, te) && isWellTyped;
 
-    te.ty = isWellTyped ? *optJTy : TypeManager::GetInvalidTy();
-    return te.ty;
+    te.SetTy(isWellTyped ? *optJTy : TypeManager::GetInvalidTy());
+    return te.GetTy();
 }
 
 std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::SynTryExprCatchesAndHandles(ASTContext& ctx, TryExpr& te)
 {
     CJC_NULLPTR_CHECK(te.tryBlock);
-    Ptr<Ty> jTy = Ty::IsTyCorrect(te.tryBlock->ty) ? te.tryBlock->ty : TypeManager::GetNothingTy();
-    if (te.tryLambda && Ty::IsTyCorrect(te.tryLambda->ty)) {
-        jTy = DynamicCast<FuncTy*>(te.tryLambda->ty)->retTy;
+    Ptr<Ty> jTy = Ty::IsTyCorrect(te.tryBlock->GetTy()) ? te.tryBlock->GetTy() : TypeManager::GetNothingTy();
+    if (te.tryLambda && Ty::IsTyCorrect(te.tryLambda->GetTy())) {
+        jTy = DynamicCast<FuncTy*>(te.tryLambda->GetTy())->retTy;
     }
     if ((te.catchPatterns.empty() || te.catchBlocks.empty()) && te.handlers.empty()) {
         return {jTy};
@@ -100,17 +100,16 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::SynTryExprCatchesAndHandles
             continue;
         }
         auto joinRes = JoinAndMeet(
-            typeManager, std::initializer_list<Ptr<Ty>>{jTy, catchBlock->ty}, {}, &importManager, te.curFile)
+            typeManager, std::initializer_list<Ptr<Ty>>{jTy, catchBlock->GetTy()}, {}, &importManager, te.curFile)
                            .JoinAsVisibleTy();
-        // Do not overwrite the previous jTy immediately for the sake of error reporting. Use a fresh type here.
-        Ptr<Ty> tmpJTy{};
-        if (auto optErrs = JoinAndMeet::SetJoinedType(tmpJTy, joinRes)) {
+        // Do not overwrite the previous jTy immediately for the sake of error reporting; pass current jTy (sink only).
+        if (auto [optErrs, tmpJTy] = JoinAndMeet::SetJoinedType(jTy, joinRes); optErrs) {
             isWellTyped = false;
             if (te.ShouldDiagnose()) {
                 diag.Diagnose(*catchBlock, DiagKind::sema_diag_report_error_message,
-                              "The type of this catch block is '" + Ty::ToString(catchBlock->ty) +
-                              "', which mismatches the smallest common supertype '" + jTy->String() +
-                              "' of previous branches.")
+                    "The type of this catch block is '" + Ty::ToString(catchBlock->GetTy()) +
+                        "', which mismatches the smallest common supertype '" + jTy->String() +
+                        "' of previous branches.")
                     .AddNote(te, DiagKind::sema_diag_report_note_message, *optErrs);
             }
         } else {
@@ -140,7 +139,7 @@ std::optional<Ptr<ClassTy>> TypeChecker::TypeCheckerImpl::PromoteToCommandTy(con
     if (!cmdClassDecl) {
         return std::nullopt;
     }
-    auto promotedTys = promotion.Promote(cmdTy, *cmdClassDecl->ty);
+    auto promotedTys = promotion.Promote(cmdTy, *cmdClassDecl->GetTy());
     if (promotedTys.size() != 1) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_command_incompatible_type, cause, Ty::ToString(&cmdTy));
         return std::nullopt;
@@ -160,21 +159,20 @@ bool TypeChecker::TypeCheckerImpl::SynHandler(ASTContext& ctx, Handler& handler,
     }
 
     auto joinRes = JoinAndMeet(
-        typeManager, std::initializer_list<Ptr<Ty>>{tgtTy, handler.block->ty}, {}, &importManager, te.curFile)
+        typeManager, std::initializer_list<Ptr<Ty>>{tgtTy, handler.block->GetTy()}, {}, &importManager, te.curFile)
                        .JoinAsVisibleTy();
-    // Do not overwrite the previous jTy immediately for the sake of error reporting. Use a fresh type here.
-    Ptr<Ty> tmpJTy{};
-    if (auto optErrs = JoinAndMeet::SetJoinedType(tmpJTy, joinRes)) {
+    // Do not overwrite tgtTy on error; pass current tgtTy (sink only for now).
+    auto [optErrs, tmpJTy] = JoinAndMeet::SetJoinedType(tgtTy, joinRes);
+    if (optErrs) {
         if (te.ShouldDiagnose()) {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatching_handle_block, *handler.block,
-                Ty::ToString(handler.block->ty), tgtTy->String())
+                                  Ty::ToString(handler.block->GetTy()), tgtTy->String())
                 .AddNote(te, DiagKind::sema_diag_report_note_message, *optErrs);
         }
         return false;
-    } else {
-        // Only overwrite jTy if the join operation succeeds.
-        tgtTy = tmpJTy;
     }
+    // Only overwrite tgtTy if the join operation succeeds.
+    tgtTy = tmpJTy;
     return ChkHandler(ctx, handler, *tgtTy);
 }
 
@@ -187,7 +185,7 @@ bool TypeChecker::TypeCheckerImpl::ChkHandler(ASTContext& ctx, Handler& handler,
     if (!ValidateHandler(handler)) {
         return false;
     }
-    auto cmdTy = StaticAs<ASTKind::COMMAND_TYPE_PATTERN>(handler.commandPattern.get())->pattern->ty;
+    auto cmdTy = StaticAs<ASTKind::COMMAND_TYPE_PATTERN>(handler.commandPattern.get())->pattern->GetTy();
     if (cmdTy->IsInvalid()) {
         return false;
     }
@@ -222,19 +220,19 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExpr(ASTContext& ctx, Ty& tgtTy, TryExp
         auto tryLambdaTy = typeManager.GetFunctionTy({}, &tgtTy);
         if (!te.tryLambda || !Check(ctx, tryLambdaTy, te.tryLambda)) {
             isWellTyped = false;
-            if (!CanSkipDiag(*te.tryBlock) && !typeManager.IsSubtype(te.tryBlock->ty, &tgtTy)) {
+            if (!CanSkipDiag(*te.tryBlock) && !typeManager.IsSubtype(te.tryBlock->GetTy(), &tgtTy)) {
                 DiagMismatchedTypes(diag, *te.tryBlock, tgtTy);
             }
         }
     } else if (!Check(ctx, &tgtTy, te.tryBlock.get())) {
         isWellTyped = false;
-        if (!CanSkipDiag(*te.tryBlock) && !typeManager.IsSubtype(te.tryBlock->ty, &tgtTy)) {
+        if (!CanSkipDiag(*te.tryBlock) && !typeManager.IsSubtype(te.tryBlock->GetTy(), &tgtTy)) {
             DiagMismatchedTypes(diag, *te.tryBlock, tgtTy);
         }
     }
     isWellTyped = ChkTryExprCatchesAndHandles(ctx, tgtTy, te) && isWellTyped;
     isWellTyped = ChkTryExprFinallyBlock(ctx, te) && isWellTyped;
-    te.ty = isWellTyped ? &tgtTy : TypeManager::GetInvalidTy();
+    te.SetTy(isWellTyped ? &tgtTy : TypeManager::GetInvalidTy());
     return isWellTyped;
 }
 
@@ -246,7 +244,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExprCatchesAndHandles(ASTContext& ctx, 
             continue;
         }
         isWellTyped = false;
-        if (!CanSkipDiag(*catchBlock) && !typeManager.IsSubtype(catchBlock->ty, &tgtTy)) {
+        if (!CanSkipDiag(*catchBlock) && !typeManager.IsSubtype(catchBlock->GetTy(), &tgtTy)) {
             DiagMismatchedTypes(diag, *catchBlock, tgtTy);
             // Do not return immediately. Report errors for each case.
         }
@@ -281,8 +279,8 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExprFinallyBlock(ASTContext& ctx, const
             isWellTyped = Check(ctx, finallyLamTy, te.finallyLambda) && isWellTyped;
         }
     }
-    te.finallyBlock->ty =
-        isWellTyped ? StaticCast<Ty*>(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)) : TypeManager::GetInvalidTy();
+    te.finallyBlock->SetTy(
+        isWellTyped ? StaticCast<Ty*>(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)) : TypeManager::GetInvalidTy());
     return isWellTyped;
 }
 
@@ -294,10 +292,11 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExprCatchPatterns(ASTContext& ctx, TryE
         CJC_NULLPTR_CHECK(pattern);
         if (pattern->astKind == ASTKind::WILDCARD_PATTERN) {
             if (exception == nullptr ||
-                !ChkTryWildcardPattern(exception->ty, *StaticAs<ASTKind::WILDCARD_PATTERN>(pattern.get()), included)) {
+                !ChkTryWildcardPattern(
+                    exception->GetTy(), *StaticAs<ASTKind::WILDCARD_PATTERN>(pattern.get()), included)) {
                 return false;
             }
-            included.push_back(exception->ty);
+            included.push_back(exception->GetTy());
         } else if (pattern->astKind == ASTKind::EXCEPT_TYPE_PATTERN) {
             if (!ChkExceptTypePattern(ctx, *StaticAs<ASTKind::EXCEPT_TYPE_PATTERN>(pattern.get()), included)) {
                 return false;

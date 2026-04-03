@@ -51,7 +51,7 @@ bool IsAnyTypeParamUsedInTypeArgs(
 {
     for (auto& typeParam : typeParams) {
         for (auto& typeArg : std::as_const(typeArgs)) {
-            if (typeArg->ty->Contains(typeParam->ty)) {
+            if (typeArg->GetTy()->Contains(typeParam->GetTy())) {
                 return true;
             }
         }
@@ -156,7 +156,7 @@ bool IsLocalDecl(const Decl& decl)
 VisitAction TestManager::HandleCreateMockCall(CallExpr& callExpr, Package& pkg)
 {
     bool isMockCall = MockManager::IsMockCall(callExpr);
-    if (!isMockCall || (callExpr.ty && callExpr.ty->HasGeneric())) {
+    if (!isMockCall || (callExpr.GetTy() && callExpr.GetTy()->HasGeneric())) {
         if (isMockCall) {
             callExpr.desugarExpr =
                 MockManager::CreateIllegalMockCallException(*callExpr.curFile, typeManager, importManager);
@@ -165,8 +165,7 @@ VisitAction TestManager::HandleCreateMockCall(CallExpr& callExpr, Package& pkg)
     }
 
     // The first type argument is a declaration to mock
-    auto typeArgument = callExpr.baseFunc->ty->typeArgs[1];
-
+    auto typeArgument = callExpr.baseFunc->GetTy()->typeArgs[1];
     if (!typeArgument->IsClass() && !typeArgument->IsInterface()) {
         ReportUnsupportedType(callExpr);
         return VisitAction::SKIP_CHILDREN;
@@ -179,10 +178,10 @@ VisitAction TestManager::HandleCreateMockCall(CallExpr& callExpr, Package& pkg)
         }
 
         std::vector<Ptr<Ty>> valueParamTys;
-        valueParamTys.emplace_back(callExpr.args[0]->ty);
+        valueParamTys.emplace_back(callExpr.args[0]->GetTy());
 
         if (MockManager::GetMockKind(callExpr) == MockKind::SPY) {
-            valueParamTys.emplace_back(mockClass->ty);
+            valueParamTys.emplace_back(mockClass->GetTy());
         }
 
         callExpr.desugarExpr = MockManager::CreateInitCallOfMockClass(
@@ -366,7 +365,7 @@ void TestManager::HandleEnsurePreparedToMock(Package& pkg)
 
 Ptr<ClassDecl> TestManager::GenerateMockClassIfNeededAndGet(const CallExpr& callExpr, Package& pkg)
 {
-    auto typeArgument = callExpr.baseFunc->ty->typeArgs[1];
+    auto typeArgument = callExpr.baseFunc->GetTy()->typeArgs[1];
     if (!typeArgument->IsClass() && !typeArgument->IsInterface()) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_mock_unsupported_type, callExpr);
         return nullptr;
@@ -592,10 +591,10 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
 
         if (auto inheritableDecl = DynamicCast<InheritableDecl>(node)) {
             CJC_ASSERT(!outerTy);
-            outerTy = inheritableDecl->ty;
+            outerTy = inheritableDecl->GetTy();
         } else if (auto extendDecl = DynamicCast<ExtendDecl>(node)) {
             CJC_ASSERT(!outerTy);
-            outerTy = extendDecl->extendedType->ty;
+            outerTy = extendDecl->extendedType->GetTy();
         }
 
         if ((node->curFile && !node->IsSamePackage(pkg))) {
@@ -625,10 +624,10 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
             isInMockAnnotatedLambda = false;
         }
         if (auto inheritableDecl = DynamicCast<InheritableDecl>(node)) {
-            CJC_ASSERT(outerTy == inheritableDecl->ty);
+            CJC_ASSERT(outerTy == inheritableDecl->GetTy());
             outerTy = nullptr;
         } else if (auto extendDecl = DynamicCast<ExtendDecl>(node)) {
-            CJC_ASSERT(outerTy == extendDecl->extendedType->ty);
+            CJC_ASSERT(outerTy == extendDecl->extendedType->GetTy());
             outerTy = nullptr;
         }
         return VisitAction::KEEP_DECISION;
