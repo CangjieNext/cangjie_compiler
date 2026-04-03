@@ -164,7 +164,29 @@ std::string GetMangledMethodName(const BaseMangler& mangler, const std::vector<O
 Ptr<Annotation> GetForeignNameAnnotation(const Decl& decl);
 Ptr<Annotation> GetAnnotation(const Decl& decl, AnnotationKind annotationKind);
 
-Ptr<std::string> GetSingleArgumentAnnotationValue(const Decl& target, AnnotationKind annotationKind);
+Ptr<const std::string> GetSingleArgumentAnnotationValue(const Decl& target, AnnotationKind annotationKind);
+Ptr<const std::string> GetObjCMirrorForeignName(const ClassLikeDecl& target);
+bool IsObjCGeneratedNSStringCtor(const Decl& target);
+bool IsObjCGeneratedNSObjectToString(const Decl& target);
+bool IsObjCGeneratedMember(const Decl& target);
+
+// NOCHECKIN: Move method from Java utils?
+template<typename MemberDecl, ASTKind MemberKind>
+Ptr<MemberDecl> FindFirstMemberDecl(
+    const Decl& sourceDecl,
+    const std::function<bool(const Decl&)>& memberPredicate
+)
+{
+    for (auto& member : sourceDecl.GetMemberDecls()) {
+        if (memberPredicate(*member)) {
+            auto ptr = As<MemberKind>(member);
+            CJC_ASSERT(ptr);
+            return Ptr(ptr);
+        }
+    }
+    CJC_ABORT();
+    return nullptr;
+}
 
 bool IsSuperConstructorCall(const CallExpr& call);
 bool IsThisConstructorCall(const CallExpr& call);

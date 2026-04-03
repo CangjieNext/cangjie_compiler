@@ -683,13 +683,6 @@ enum class Attribute {
      */
     ALREADY_LOADED,
 
-    /**
-     * Mark whether a class is a compiler generated class in ObjC mirror interfaces.
-     * W: Desugar.
-     * R: Sema.
-     */
-    OBJ_C_MIRROR_GENERATED_MEMBER,
-
     AST_ATTR_END,
 };
 

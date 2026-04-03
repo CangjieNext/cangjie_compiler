@@ -8,10 +8,12 @@
 #include "TypeCheckUtil.h"
 
 #include "Desugar/AfterTypeCheck.h"
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
+#include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
@@ -225,7 +227,7 @@ Ptr<Annotation> GetAnnotation(const Decl& decl, AnnotationKind annotationKind)
     return it != decl.annotations.end() ? it->get() : nullptr;
 }
 
-Ptr<std::string> GetSingleArgumentAnnotationValue(const Decl& target, AnnotationKind annotationKind)
+Ptr<const std::string> GetSingleArgumentAnnotationValue(const Decl& target, AnnotationKind annotationKind)
 {
     for (auto& anno : target.annotations) {
         if (anno->kind != annotationKind) {
@@ -245,6 +247,56 @@ Ptr<std::string> GetSingleArgumentAnnotationValue(const Decl& target, Annotation
     }
 
     return nullptr;
+}
+
+Ptr<const std::string> GetObjCMirrorForeignName(const ClassLikeDecl& target) {
+    if (auto customName = GetSingleArgumentAnnotationValue(target, AnnotationKind::OBJ_C_MIRROR)) {
+        return customName;
+    }
+
+    return &target.identifier.Val();
+}
+
+bool IsObjCGeneratedNSStringCtor(const Decl& target) {
+    auto funcDecl = DynamicCast<const FuncDecl>(&target);
+    if (!funcDecl || funcDecl->identifier.Val() != "init" ||
+        !funcDecl->TestAttr(Attribute::CONSTRUCTOR, Attribute::COMPILER_ADD)) {
+        return false;
+    }
+
+    auto classDecl = DynamicCast<ClassDecl>(funcDecl->outerDecl.get());
+    if (!classDecl || *GetObjCMirrorForeignName(*classDecl) != "NSString") {
+        return false;
+    }
+
+    auto& paramLists = funcDecl->funcBody->paramLists;
+    CJC_ASSERT(paramLists.size() > 0);
+    auto& params = paramLists[0]->params;
+    if (params.size() != 1 || params[0]->type->symbol->name != STD_LIB_STRING) {
+        return false;
+    }
+
+    return true;
+}
+
+bool IsObjCGeneratedNSObjectToString(const Decl& target) {
+    auto funcDecl = DynamicCast<const FuncDecl>(&target);
+    if (!funcDecl || funcDecl->identifier.Val() != "toString" ||
+        funcDecl->funcBody->retType->symbol->name != STD_LIB_STRING ||
+        !funcDecl->TestAttr(Attribute::COMPILER_ADD)) {
+        return false;
+    }
+
+    auto classDecl = DynamicCast<ClassDecl>(funcDecl->outerDecl.get());
+    if (!classDecl || *GetObjCMirrorForeignName(*classDecl) != "NSObject") {
+        return false;
+    }
+
+    return true;
+}
+
+bool IsObjCGeneratedMember(const Decl& target) {
+    return IsObjCGeneratedNSObjectToString(target) || IsObjCGeneratedNSStringCtor(target);
 }
 
 OwnedPtr<PrimitiveType> GetPrimitiveType(std::string typeName, AST::TypeKind typekind)

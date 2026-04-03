@@ -1383,11 +1383,9 @@ OwnedPtr<FuncDecl> ASTFactory::CreateImplCtor(FuncDecl& from)
 
 bool ASTFactory::IsGeneratedMember(const Decl& decl) const
 {
-    // With the growing number of generated methods, we might want to mark them all as
-    // OBJ_C_MIRROR_GENERATED_MEMEBER and do a simple check for this attribute
     return IsGeneratedNativeHandleField(decl) || IsGeneratedGetObjCClassFunction(decl) ||
         IsGeneratedHasInitedField(decl) || IsGeneratedCtor(decl) || IsGeneratedNativeHandleGetter(decl) ||
-        decl.TestAttr(AST::Attribute::OBJ_C_MIRROR_GENERATED_MEMBER);
+        IsObjCGeneratedMember(decl);
 }
 
 bool ASTFactory::IsGeneratedNativeHandleField(const Decl& decl) const
@@ -2295,22 +2293,12 @@ OwnedPtr<Expr> ASTFactory::CreateConvertToNSStringCall(OwnedPtr<Expr> id, ClassD
     ctorArgs.emplace_back(CreateFuncArg(std::move(convertCallExpr)));
 
     auto realTarget = GetGeneratedBaseCtor(classDecl);
-    auto ctorCallExpr = CreateThisCall(classDecl, *realTarget, realTarget->ty, curFile, std::move(ctorArgs));
-
-    return ctorCallExpr;
+    return CreateThisCall(classDecl, *realTarget, realTarget->ty, curFile, std::move(ctorArgs));
 }
 
 OwnedPtr<Expr> ASTFactory::CreateDescriptionAsStringCall(OwnedPtr<Expr> id)
 {
     auto convertDecl = bridge.GetDescriptionAsStringDecl();
     auto convertExpr = CreateRefExpr(*convertDecl);
-
-    std::vector<OwnedPtr<FuncArg>> args;
-    args.emplace_back(CreateFuncArg(std::move(id)));
-
-    auto returnTy = convertDecl->funcBody->retType->ty;
-    auto convertCallExpr = CreateCallExpr(std::move(convertExpr), std::move(args), convertDecl, returnTy,
-        CallKind::CALL_DECLARED_FUNCTION);
-
-    return convertCallExpr;
+    return CreateCall(std::move(convertDecl), convertDecl->curFile, std::move(id));
 }

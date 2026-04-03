@@ -22,6 +22,7 @@ constexpr std::string_view NSSTRING_CLASS_IDENT = "NSString";
 constexpr std::string_view NSOBJECT_CLASS_IDENT = "NSObject";
 constexpr std::string_view TOSTRING_METHOD_IDENT = "toString";
 constexpr std::string_view INIT_IDENT = "init";
+constexpr std::string_view INIT_PARAM_IDENT = "str";
 
 void PutDeclToClassBody(FuncDecl& decl, ClassDecl& target)
 {
@@ -33,7 +34,7 @@ void PutDeclToClassBody(FuncDecl& decl, ClassDecl& target)
 
 OwnedPtr<Decl> CreateNSStringFromStringCtorDecl(ClassDecl& target)
 {
-    auto param = CreateFuncParam("str", CreateRefType(STD_LIB_STRING));
+    auto param = CreateFuncParam(std::string(INIT_PARAM_IDENT), CreateRefType(STD_LIB_STRING));
 
     std::vector<OwnedPtr<FuncParam>> ctorParams;
     ctorParams.emplace_back(std::move(param));
@@ -47,7 +48,6 @@ OwnedPtr<Decl> CreateNSStringFromStringCtorDecl(ClassDecl& target)
 
     auto ctorBody = CreateFuncBody(std::move(paramLists), nullptr, std::move(block));
     auto ctorDecl = CreateFuncDecl(std::string(INIT_IDENT), std::move(ctorBody), nullptr);
-    ctorDecl->EnableAttr(Attribute::PUBLIC, Attribute::CONSTRUCTOR, Attribute::OBJ_C_MIRROR_GENERATED_MEMBER);
 
     PutDeclToClassBody(*ctorDecl, target);
 
@@ -67,7 +67,6 @@ OwnedPtr<Decl> CreateNSObjectToStringDecl(ClassDecl& target)
 
     auto funcBody = CreateFuncBody(std::move(paramLists), CreateRefType(STD_LIB_STRING), std::move(block));
     auto funcDecl = CreateFuncDecl(std::string(TOSTRING_METHOD_IDENT), std::move(funcBody), nullptr);
-    funcDecl->EnableAttr(Attribute::PUBLIC, Attribute::OBJ_C_MIRROR_GENERATED_MEMBER);
 
     PutDeclToClassBody(*funcDecl, target);
 

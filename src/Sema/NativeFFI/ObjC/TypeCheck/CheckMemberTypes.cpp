@@ -11,11 +11,13 @@
  */
 
 #include "Handlers.h"
+#include "NativeFFI/Utils.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
+using namespace Cangjie::Native::FFI;
 
 void CheckMemberTypes::HandleImpl(TypeCheckContext& ctx)
 {
@@ -68,7 +70,7 @@ void CheckMemberTypes::CheckVarTypes(VarDecl& vd, TypeCheckContext& ctx)
 
 void CheckMemberTypes::CheckFuncTypes(FuncDecl& fd, TypeCheckContext& ctx)
 {
-    if (!fd.funcBody || fd.TestAttr(Attribute::OBJ_C_MIRROR_GENERATED_MEMBER)) {
+    if (!fd.funcBody || IsObjCGeneratedMember(fd)) {
         return;
     }
 

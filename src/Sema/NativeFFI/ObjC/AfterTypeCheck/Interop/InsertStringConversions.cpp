@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -7,7 +7,9 @@
 /**
  * @file
  *
- * This file implements inserting $getObjCClass function in Objective-C mirrors and impls
+ * This file implements inserting string conversions class member bodies for specific mirror classes:
+ *  - `init(str: String)` for NSString class;
+ *  - `toString(): String` for NSObject class.
  */
 
 #include "NativeFFI/ObjC/Utils/Common.h"
@@ -29,20 +31,6 @@ constexpr std::string_view NSSTRING_CLASS_IDENT = "NSString";
 constexpr std::string_view NSOBJECT_CLASS_IDENT = "NSObject";
 constexpr std::string_view TOSTRING_METHOD_IDENT = "toString";
 constexpr std::string_view INIT_IDENT = "init";
-
-Ptr<FuncDecl> FindFirstMirrorGeneratedFunction(ClassDecl& decl, std::string identifier)
-{
-    auto found = std::find_if(decl.GetMemberDecls().begin(), decl.GetMemberDecls().end(),
-        [identifier] (const OwnedPtr<Decl>& decl) {
-            return decl->astKind == Cangjie::AST::ASTKind::FUNC_DECL &&
-                decl->TestAttr(Attribute::OBJ_C_MIRROR_GENERATED_MEMBER) &&
-                decl->identifier.Val() == identifier;
-        });
-    if (found != decl.GetMemberDecls().end()) {
-        return As<ASTKind::FUNC_DECL>(found->get());
-    }
-    return nullptr;
-}
 } // namespace
 
 void InsertStringConversions::HandleImpl(InteropContext& ctx)
@@ -62,24 +50,28 @@ void InsertStringConversions::HandleImpl(InteropContext& ctx)
             }
 
             if (foreignName == NSSTRING_CLASS_IDENT) {
-                auto funcDecl = FindFirstMirrorGeneratedFunction(*classDecl, std::string(INIT_IDENT));
+                auto funcDecl = As<ASTKind::FUNC_DECL>(FindMirrorMember(std::string(INIT_IDENT), *classDecl));
                 CJC_NULLPTR_CHECK(funcDecl);
-                auto funcParam = funcDecl->funcBody->paramLists[0]->params[0].get();
+                CJC_ASSERT(funcDecl->funcBody->paramLists.size() > 0);
+                auto& funcParams = funcDecl->funcBody->paramLists[0]->params;
+                CJC_ASSERT(funcParams.size() == 1);
+                auto funcParam = funcParams[0].get();
                 auto funcParamRefExpr = CreateRefExpr(*funcParam);
                 auto convertCall = ctx.factory.CreateConvertToNSStringCall(
                     std::move(funcParamRefExpr), *classDecl, classDecl->curFile);
                 auto& block = funcDecl->funcBody->body;
-                block->body.emplace_back(std::move(convertCall));
+                block->body.push_back(std::move(convertCall));
             }
 
             if (foreignName == NSOBJECT_CLASS_IDENT) {
-                auto funcDecl = FindFirstMirrorGeneratedFunction(*classDecl, std::string(TOSTRING_METHOD_IDENT));
+                auto funcDecl = As<ASTKind::FUNC_DECL>(
+                    FindMirrorMember(std::string(TOSTRING_METHOD_IDENT), *classDecl));
                 CJC_NULLPTR_CHECK(funcDecl);
                 auto nativeHandle = GetNativeVarHandle(*classDecl);
                 auto nativeHandleRefExpr = CreateRefExpr(*nativeHandle);
                 auto convertCall = ctx.factory.CreateDescriptionAsStringCall(std::move(nativeHandleRefExpr));
                 auto& block = funcDecl->funcBody->body;
-                block->body.emplace_back(std::move(convertCall));
+                block->body.push_back(std::move(convertCall));
             }
         }
     }
