@@ -313,7 +313,7 @@ enum class Attribute {
      * W: MacroExpansion.
      * R: None.
      */
-    MACRO_EXPANDED_NODE,
+    MACRO_EXPANDED_NODE[[deprecated("Redundant with Node->curMacroCall; will be removed in the future.")]],
 
     /**
      * Mark whether a function definition is a macro definition.
