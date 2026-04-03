@@ -458,7 +458,7 @@ TEST_F(PackageTest, LSPCompileWithConstraint)
             count++;
             for (auto& constraint : extend->generic->genericConstraints) {
                 ASSERT_TRUE(constraint != nullptr && constraint->type != nullptr);
-                auto gTy = RawStaticCast<GenericsTy*>(constraint->type->ty);
+                auto gTy = RawStaticCast<GenericsTy*>(constraint->type->GetTy());
                 EXPECT_TRUE(gTy && !gTy->upperBounds.empty());
                 EXPECT_FALSE(constraint->upperBounds.empty());
             }
@@ -1232,7 +1232,7 @@ TEST_F(PackageTest, LoadPackageFromCjo)
         for (auto& file : std::as_const(pkg->files)) {
             if (file->decls.size() > 0) {
                 for (auto& decl : std::as_const(file->decls)) {
-                    EXPECT_TRUE(Ty::IsTyCorrect(decl->ty));
+                    EXPECT_TRUE(Ty::IsTyCorrect(decl->GetTy()));
                 }
             }
         }
@@ -1395,7 +1395,7 @@ TEST_F(PackageTest, TypeAliasRefExport)
     }
     Walker(depPkg, [](Ptr<Node> node) {
         if (node->astKind != ASTKind::TYPE_ALIAS_DECL) {
-            EXPECT_NE(node->ty->kind, TypeKind::TYPE);
+            EXPECT_NE(node->TyKind(), TypeKind::TYPE);
         }
         return VisitAction::WALK_CHILDREN;
     }).Walk();

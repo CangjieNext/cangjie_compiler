@@ -194,12 +194,12 @@ void LookUpImpl::FieldLookupExtend(
             if (it == nullptr) {
                 continue;
             }
-            auto interfaceDecl = Ty::GetDeclPtrOfTy(it->ty);
+            auto interfaceDecl = Ty::GetDeclPtrOfTy(it->GetTy());
             if (!interfaceDecl || interfaceDecl->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
                 continue;
             }
-            auto mappingExtendWithDecl = GenerateTypeMappingByTy(extend->ty, &ty);
-            auto interfaceTy = typeManager.GetInstantiatedTy(it->ty, mappingExtendWithDecl);
+            auto mappingExtendWithDecl = GenerateTypeMappingByTy(extend->GetTy(), &ty);
+            auto interfaceTy = typeManager.GetInstantiatedTy(it->GetTy(), mappingExtendWithDecl);
             FieldLookup(*StaticCast<InterfaceTy>(interfaceTy), fieldName, results, info);
         }
     }
@@ -220,7 +220,7 @@ void LookUpImpl::ResolveOverrideOrShadow(std::vector<Ptr<Decl>>& results, Decl& 
         }
         auto newDecl = RawStaticCast<Decl*>(&decl);
         auto inResult = RawStaticCast<Decl*>(results[i]);
-        Ptr<Ty> inResultOuter = inResult->outerDecl->ty;
+        Ptr<Ty> inResultOuter = inResult->outerDecl->GetTy();
         if (resultsWithInstTyV.size() > i && resultsWithInstTyV[i].second) {
             inResultOuter = resultsWithInstTyV[i].second;
         } else if (inResult->outerDecl->astKind == ASTKind::EXTEND_DECL &&
@@ -228,10 +228,10 @@ void LookUpImpl::ResolveOverrideOrShadow(std::vector<Ptr<Decl>>& results, Decl& 
             // If the decl in results is from extend, we need to check whether the outer type of decl in results
             // is subtype of parentTy. If not, we need to get the instantiated type of the outer type of decl in
             // results.
-            auto extendTy = inResult->outerDecl->ty;
+            auto extendTy = inResult->outerDecl->GetTy();
             auto extendedDecl = Ty::GetDeclPtrOfTy(extendTy);
             if (extendedDecl) {
-                auto mappingExtendWithDecl = GenerateTypeMappingByTy(extendTy, extendedDecl->ty);
+                auto mappingExtendWithDecl = GenerateTypeMappingByTy(extendTy, extendedDecl->GetTy());
                 inResultOuter = typeManager.GetInstantiatedTy(inResultOuter, mappingExtendWithDecl);
             }
         }
@@ -295,7 +295,7 @@ void LookUpImpl::FieldLookup(
     }
     // Lookup field in super class and its extend or super interfaces.
     for (auto& it : cd.inheritedTypes) {
-        auto super = it ? Ty::GetDeclPtrOfTy(it->ty) : nullptr;
+        auto super = it ? Ty::GetDeclPtrOfTy(it->GetTy()) : nullptr;
         if (!super || super->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
             continue;
         }
@@ -304,11 +304,11 @@ void LookUpImpl::FieldLookup(
             superInfo.lookupExtend = true;
             FieldLookup(*superClass, fieldName, results, superInfo);
         } else if (Is<InterfaceDecl*>(super)) {
-            FieldLookup(*StaticCast<InterfaceTy>(it->ty), fieldName, results, {info.baseTy});
+            FieldLookup(*StaticCast<InterfaceTy>(it->GetTy()), fieldName, results, {info.baseTy});
         }
     }
     if (info.lookupExtend) {
-        FieldLookupExtend(*cd.ty, fieldName, results, info);
+        FieldLookupExtend(*cd.GetTy(), fieldName, results, info);
     }
 }
 
@@ -347,9 +347,9 @@ void LookUpImpl::FieldLookup(
         if (!it) {
             continue;
         }
-        if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->ty);
+        if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy());
             interfaceTy && interfaceTy->decl && !interfaceTy->decl->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
-            auto promTys = Promotion(typeManager).Promote(idTy, *it->ty);
+            auto promTys = Promotion(typeManager).Promote(idTy, *it->GetTy());
             for (auto promTy : promTys) {
                 FieldLookup(*StaticCast<InterfaceTy>(promTy), fieldName, results, {info.baseTy});
             }
@@ -372,13 +372,13 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(const EnumDecl& ed, const std::st
         }
     }
     for (auto& it : ed.inheritedTypes) {
-        if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->ty);
+        if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy());
             interfaceTy && interfaceTy->decl && !interfaceTy->decl->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
             FieldLookup(*interfaceTy, fieldName, results, info);
         }
     }
     if (info.lookupExtend) {
-        FieldLookupExtend(*ed.ty, fieldName, results, info);
+        FieldLookupExtend(*ed.GetTy(), fieldName, results, info);
     }
     return results;
 }
@@ -397,7 +397,7 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(
         if (it == nullptr) {
             return;
         }
-        if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->ty);
+        if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy());
             interfaceTy && interfaceTy->decl && !interfaceTy->decl->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
             FieldLookup(*interfaceTy, fieldName, results, info);
         }
@@ -405,7 +405,7 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(
     std::for_each(sd.body->decls.begin(), sd.body->decls.end(), bodySetter);
     std::for_each(sd.inheritedTypes.begin(), sd.inheritedTypes.end(), inheritedTypesSetter);
     if (info.lookupExtend) {
-        FieldLookupExtend(*sd.ty, fieldName, results, info);
+        FieldLookupExtend(*sd.GetTy(), fieldName, results, info);
     }
     return results;
 }
@@ -433,9 +433,9 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(Ptr<Decl> decl, const std::string
         FieldLookup(*cd, fieldName, results, info);
         return results;
     }
-    if (auto id = DynamicCast<InterfaceDecl*>(decl); id && Ty::IsTyCorrect(id->ty)) {
-        CJC_ASSERT(id->ty->kind == TypeKind::TYPE_INTERFACE);
-        FieldLookup(*StaticCast<InterfaceTy>(id->ty), fieldName, results, info);
+    if (auto id = DynamicCast<InterfaceDecl*>(decl); id && Ty::IsTyCorrect(id->GetTy())) {
+        CJC_ASSERT(id->TyKind() == TypeKind::TYPE_INTERFACE);
+        FieldLookup(*StaticCast<InterfaceTy>(id->GetTy()), fieldName, results, info);
         return results;
     }
     if (auto ed = DynamicCast<EnumDecl*>(decl)) {
@@ -613,12 +613,13 @@ void LookUpImpl::ProcessStructDeclBody(
     }
     CJC_NULLPTR_CHECK(node.curFile);
     auto currentDecl = StaticCast<Decl*>(parentScopeGateSym->node);
-    LookupInfo info{
-        .baseTy = currentDecl->ty, .file = node.curFile, .lookupExtend = currentDecl->astKind == ASTKind::EXTEND_DECL};
-    auto typeDecl = Ty::GetDeclPtrOfTy(currentDecl->ty);
+    LookupInfo info{.baseTy = currentDecl->GetTy(),
+        .file = node.curFile,
+        .lookupExtend = currentDecl->astKind == ASTKind::EXTEND_DECL};
+    auto typeDecl = Ty::GetDeclPtrOfTy(currentDecl->GetTy());
     if (!typeDecl) {
         // Lookup for extend of builtin type.
-        FieldLookupExtend(*currentDecl->ty, name, results, info);
+        FieldLookupExtend(*currentDecl->GetTy(), name, results, info);
         return;
     }
     auto fields = FieldLookup(typeDecl, name, info);
