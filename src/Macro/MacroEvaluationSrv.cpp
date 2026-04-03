@@ -183,7 +183,7 @@ bool MacroEvaluation::FindDef(const std::vector<uint8_t>& msg) const
     MacroEvalMsgSerializer::DeSerializeDeflibMsg(macroLibs, msg);
     for (auto& obj : std::as_const(macroLibs)) {
         auto dyfile = FileUtil::NormalizePath(obj);
-        auto handle = InvokeRuntime::OpenSymbolTable(dyfile);
+        auto handle = InvokeRuntime::OpenSymbolTable(dyfile, RTLD_LAZY | RTLD_LOCAL);
         if (!handle) {
             resMsg += dyfile;
             break;
