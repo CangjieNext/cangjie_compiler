@@ -311,6 +311,7 @@ enum class Attribute {
      * Mark whether a node is expanded from macros.
      * W: MacroExpansion.
      * R: None.
+     * @deprecated Redundant with Node->curMacroCall; will be removed in the future.
      */
     MACRO_EXPANDED_NODE,
 
