@@ -213,7 +213,7 @@ bool IsGenericInCommonSerialization(bool serializingCommon, const Decl& decl)
 void CollectFullExportParamDecl(
     std::vector<Ptr<Decl>>& decls, FuncDecl& fd, std::queue<Ptr<Decl>>& queue, bool serializingCommon)
 {
-    if (!Ty::IsTyCorrect(fd.ty)) {
+    if (!Ty::IsTyCorrect(fd.GetTy())) {
         return;
     }
     // When 'fd''s type is correct, following conditions must fit.
@@ -259,15 +259,15 @@ std::unordered_set<Ty*> CollectInstantiations(const Decl& decl)
     std::unordered_set<Ty*> instTys;
     if (auto id = DynamicCast<const InheritableDecl*>(&decl)) {
         for (auto& it : id->inheritedTypes) {
-            CollectInstantiatedTys(it->ty, instTys);
+            CollectInstantiatedTys(it->GetTy(), instTys);
         }
         for (auto it : id->GetMemberDeclPtrs()) {
             if (!it->TestAttr(Attribute::GENERIC)) {
-                CollectInstantiatedTys(it->ty, instTys);
+                CollectInstantiatedTys(it->GetTy(), instTys);
             }
         }
     } else {
-        CollectInstantiatedTys(decl.ty, instTys);
+        CollectInstantiatedTys(decl.GetTy(), instTys);
     }
     return instTys;
 }
@@ -289,11 +289,11 @@ void CollectInstantiationRecursively(std::unordered_set<Ty*>& instTys)
         CJC_NULLPTR_CHECK(id);
         std::unordered_set<Ty*> newTys;
         for (auto& it : id->inheritedTypes) {
-            CollectInstantiatedTys(it->ty, newTys);
+            CollectInstantiatedTys(it->GetTy(), newTys);
         }
         for (auto it : id->GetMemberDeclPtrs()) {
             if (!it->TestAttr(Attribute::GENERIC)) {
-                CollectInstantiatedTys(it->ty, newTys);
+                CollectInstantiatedTys(it->GetTy(), newTys);
             }
         }
         for (auto it : newTys) {
@@ -310,7 +310,7 @@ inline Ptr<Decl> GetCallee(const CallExpr& ce)
 
 bool ShouldExportSource(const VarDecl& varDecl)
 {
-    if (!Ty::IsTyCorrect(varDecl.ty) || !varDecl.initializer || varDecl.TestAttr(Attribute::IMPORTED)) {
+    if (!Ty::IsTyCorrect(varDecl.GetTy()) || !varDecl.initializer || varDecl.TestAttr(Attribute::IMPORTED)) {
         return false;
     }
     if (varDecl.IsCommonMatchedWithSpecific()) {
@@ -357,7 +357,7 @@ void SaveDeclBasicInfo(const DeclInfo& declInfo, PackageFormat::DeclBuilder& dbu
     dbuilder.add_end(&declInfo.end);
     dbuilder.add_identifierPos(&declInfo.identifierPos);
     dbuilder.add_attributes(declInfo.attributes);
-    dbuilder.add_type(declInfo.ty);
+    dbuilder.add_type(declInfo.serializedTypeIdx);
     dbuilder.add_isTopLevel(declInfo.isTopLevel);
     // For incremental compilation.
     dbuilder.add_mangledBeforeSema(declInfo.mangledBeforeSema);
@@ -965,8 +965,8 @@ template <typename T>
 std::optional<Ptr<const Ty>> TryGetSpecificImplementationTy(const Ptr<const Ty>& pType)
 {
     auto ty = StaticCast<T*>(pType);
-    if (ty->decl && ty == ty->decl->ty && ty->decl->specificImplementation) {
-        return ty->decl->specificImplementation->ty;
+    if (ty->decl && ty == ty->decl->GetTy() && ty->decl->specificImplementation) {
+        return ty->decl->specificImplementation->GetTy();
     }
 
     return std::nullopt;
@@ -1208,7 +1208,7 @@ flatbuffers::Offset<PackageFormat::Generic> ASTWriter::ASTWriterImpl::SaveGeneri
     std::vector<FormattedIndex> typeParameters;
     std::vector<flatbuffers::Offset<PackageFormat::Constraint>> constraints;
     for (auto& gpd : generic->typeParameters) {
-        auto gty = DynamicCast<GenericsTy*>(gpd->ty);
+        auto gty = DynamicCast<GenericsTy*>(gpd->GetTy());
         // When 'gty' is valid, and its parent decl is a local function, using generic type decl,
         // otherwise keep 'gpd' itself.
         CJC_NULLPTR_CHECK(gpd->outerDecl);
@@ -1221,11 +1221,11 @@ flatbuffers::Offset<PackageFormat::Generic> ASTWriter::ASTWriterImpl::SaveGeneri
             CJC_NULLPTR_CHECK(upper);
             uppers.emplace_back(SaveType(typeManager.ObtainsAliasType(upper)));
         }
-        constraint->ty = constraint->type->ty; // Sync ty to re-use 'PackNodeInfo'.
+        constraint->SetTy(constraint->type->GetTy()); // Sync ty to re-use 'PackNodeInfo'.
         auto info = PackNodeInfo(*constraint);
         auto vUppers = builder.CreateVector<FormattedIndex>(uppers);
         constraints.emplace_back(PackageFormat::CreateConstraint(
-            builder, &info.begin, &info.end, info.ty, vUppers, constraint->isImplicitlyIntroduced));
+            builder, &info.begin, &info.end, info.serializedTypeIdx, vUppers, constraint->isImplicitlyIntroduced));
     }
     auto vTypeParameters = builder.CreateVector<FormattedIndex>(typeParameters);
     auto vConstraints = builder.CreateVector<flatbuffers::Offset<PackageFormat::Constraint>>(constraints);
@@ -1356,7 +1356,7 @@ TFuncBodyOffset ASTWriter::ASTWriterImpl::SaveFuncBody(const FuncBody& funcBody)
     bool isGenericCJMP = fd && IsGenericInCommonSerialization(serializingCommon, *fd);
     bool shouldExportBody = config.exportContent && exportFuncBody &&
         (!fd || CanBeSrcExported(*fd) || isGenericCJMP);
-    bool validBody = shouldExportBody && Ty::IsTyCorrect(funcBody.ty) && funcBody.body;
+    bool validBody = shouldExportBody && Ty::IsTyCorrect(funcBody.GetTy()) && funcBody.body;
     auto bodyIdx = validBody ? SaveExpr(*funcBody.body) : INVALID_FORMAT_INDEX;
     // CaptureKind is need if the 'funcBody' is exported.
     uint8_t kind = validBody ? static_cast<uint8_t>(funcBody.captureKind) : 0;

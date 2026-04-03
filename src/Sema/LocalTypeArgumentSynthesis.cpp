@@ -386,7 +386,9 @@ bool LocalTypeArgumentSynthesis::UnifyTyVarCollectConstraints(
             lbTy = &lb;
         } else {
             auto joinRes = JoinAndMeet(tyMgr, c[&tyVar].lbs, argPack.tyVarsToSolve).JoinAsVisibleTy();
-            if (JoinAndMeet::SetJoinedType(lbTy, joinRes).has_value() || lbTy->IsAny()) {
+            auto [joinErr, joinedLb] = JoinAndMeet::SetJoinedType(lbTy, joinRes);
+            lbTy = joinedLb;
+            if (joinErr.has_value() || lbTy->IsAny()) {
                 lbTy = &lb;
             }
         }
@@ -737,14 +739,14 @@ Ptr<Ty> MeetUpperBounds(TypeManager& tyMgr, Ptr<TyVar> tyVar, const UpperBounds&
     // First calculate meet result with ty without tyVars. If there exists valid result 'tyM',
     // than instantiating 'tysWithTyVar' with the mapping "tyVar -> tyM", and calculate final meet result
     // using substituted tys and 'tyM'.
-    Ptr<Ty> tyM = nullptr; // Must set by 'SetMetType'.
+    Ptr<Ty> tyM = nullptr;
     std::set<Ptr<Ty>> tysWithoutTyVar;
     std::set<Ptr<Ty>> tysWithTyVar;
     // Step 1, classify tys.
     std::for_each(ubs.begin(), ubs.end(),
         [&](auto ty) { ty->Contains(tyVar) ? tysWithTyVar.emplace(ty) : tysWithoutTyVar.emplace(ty); });
     auto meetRes = JoinAndMeet(tyMgr, tysWithoutTyVar, ignoredTyVars).MeetAsVisibleTy();
-    JoinAndMeet::SetMetType(tyM, meetRes);
+    tyM = JoinAndMeet::SetMetType(tyM, meetRes).second;
     if (Ty::IsTyCorrect(tyM) && !tysWithTyVar.empty()) {
         tysWithoutTyVar.clear();
         // Step 2, substitute tys with the 'tyVar'.
@@ -756,7 +758,7 @@ Ptr<Ty> MeetUpperBounds(TypeManager& tyMgr, Ptr<TyVar> tyVar, const UpperBounds&
         // For the case 'T <: Interface<T>', the valid meet result will only be the given 'tyM',
         // the result will never be any of the instantiated ty substituted in step 2.
         meetRes = JoinAndMeet(tyMgr, tysWithoutTyVar, ignoredTyVars).MeetAsVisibleTy();
-        JoinAndMeet::SetMetType(tyM, meetRes);
+        tyM = JoinAndMeet::SetMetType(tyM, meetRes).second;
     }
     return tyM;
 }
@@ -780,9 +782,9 @@ std::optional<TypeSubst> LocalTypeArgumentSynthesis::FindSolution(
                 break;
             }
 
-            Ptr<Ty> tyJ{};
             auto joinRes = JoinAndMeet(tyMgr, thisM[tyVar].lbs, tyVarsOfThisM).JoinAsVisibleTy();
-            JoinAndMeet::SetJoinedType(tyJ, joinRes);
+            Ptr<Ty> tyJ{};
+            tyJ = JoinAndMeet::SetJoinedType(tyJ, joinRes).second;
             Ptr<Ty> tyM = MeetUpperBounds(tyMgr, tyVar, thisM[tyVar].ubs, tyVarsOfThisM);
             bool validAnyTy = hasAnyTy || (deterministic && thisM[tyVar].ubs.count(tyMgr.GetAnyTy()) > 0);
             bool validNothingTy =
