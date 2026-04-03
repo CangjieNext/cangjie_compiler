@@ -77,7 +77,7 @@ namespace InvokeRuntime {
      * @param dlopenMode The MODE argument to `dlopen'
      * @return
      */
-    HANDLE OpenSymbolTable(const std::string& libPath, int dlopenMode = RTLD_LAZY | RTLD_GLOBAL);
+    HANDLE OpenSymbolTable(const std::string& libPath, int dlopenMode = RTLD_LAZY | RTLD_LOCAL);
 #endif
 
     /**

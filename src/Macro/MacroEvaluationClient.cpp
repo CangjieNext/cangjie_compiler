@@ -40,6 +40,23 @@ namespace {
 
 const std::string MACRO_SRV_NAME = "LSPMacroServer";
 
+std::string GetMacroSrvAbsolutePath(const std::string& executablePath)
+{
+    size_t lastSlash = executablePath.find_last_of("/\\");
+    std::string compilerDir = (lastSlash != std::string::npos) ? executablePath.substr(0, lastSlash) : ".";
+    std::string macSrvPath = compilerDir + "/" + MACRO_SRV_NAME;
+
+#if defined(__linux__) || defined(__APPLE__)
+    char* realpathRes = realpath(macSrvPath.c_str(), nullptr);
+    if (realpathRes) {
+        std::string result(realpathRes);
+        free(realpathRes);
+        return result;
+    }
+#endif
+    return macSrvPath;
+}
+
 void SignalHandler(int)
 {
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
@@ -498,19 +515,19 @@ void MacroEvaluation::ExecMacroSrv(pid_t pid) const
 {
     // args
     std::vector<char*> cstrings;
-    std::string macSrvName = MACRO_SRV_NAME;
+    std::string macSrvPath = GetMacroSrvAbsolutePath(ci->invocation.globalOptions.executablePath);
     std::string hRead = std::to_string(MacroProcMsger::GetInstance().pipefdP2C[0]);
     std::string hWrite = std::to_string(MacroProcMsger::GetInstance().pipefdC2P[1]);
     std::string enPara = enableParallelMacro ? "1" : "0";
     std::string pidStr = std::to_string(pid);
-    cstrings.push_back(macSrvName.data());
+    cstrings.push_back(macSrvPath.data());
     cstrings.push_back(hRead.data());
     cstrings.push_back(hWrite.data());
     cstrings.push_back(enPara.data());
     cstrings.push_back(ci->invocation.globalOptions.executablePath.data());
     cstrings.push_back(pidStr.data());
-    cstrings.push_back(nullptr);  // for execvp argv
-    execvp(macSrvName.c_str(), cstrings.data());
+    cstrings.push_back(nullptr);  // for execv argv
+    execv(macSrvPath.c_str(), cstrings.data());
 }
 
 void MacroEvaluation::CreateMacroSrvProcess()
