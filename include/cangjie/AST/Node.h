@@ -120,7 +120,20 @@ struct Node {
      * (Save) FFTSerialization, Sema, Mangle, Utils/Utils.
      * Problems: CodeGenHLIR etc should not write this field.
      * */
-    Ptr<Ty> ty{Ty::GetInitialTy()};
+    Ptr<Ty> GetTy() const
+    {
+        return ty;
+    }
+    TypeKind TyKind() const
+    {
+        return ty->kind;
+    }
+
+    void SetTy(Ptr<Ty> newTy)
+    {
+        ty = newTy;
+    }
+
     /**
      * The Symbol of the Node.
      * W: Collector.
@@ -486,6 +499,7 @@ protected:
 
 private:
     AttributePack attributes;
+    Ptr<Ty> ty{Ty::GetInitialTy()};
 };
 
 /**
@@ -1509,8 +1523,8 @@ struct ClassDecl : ClassLikeDecl {
     {
         Ptr<ClassDecl> ret = nullptr;
         for (auto& it : inheritedTypes) {
-            if (it->ty && it->ty->kind == TypeKind::TYPE_CLASS) {
-                ret = static_cast<ClassTy*>(it->ty.get())->decl;
+            if (it->GetTy() && it->TyKind() == TypeKind::TYPE_CLASS) {
+                ret = static_cast<ClassTy*>(it->GetTy().get())->decl;
                 break;
             }
         }
@@ -2260,7 +2274,7 @@ struct SubscriptExpr : OverloadableExpr {
     bool isTupleAccess{false};
     bool IsVArrayAccess() const
     {
-        return baseExpr && baseExpr->ty->kind == TypeKind::TYPE_VARRAY;
+        return baseExpr && baseExpr->TyKind() == TypeKind::TYPE_VARRAY;
     }
     SubscriptExpr() : OverloadableExpr(ASTKind::SUBSCRIPT_EXPR)
     {

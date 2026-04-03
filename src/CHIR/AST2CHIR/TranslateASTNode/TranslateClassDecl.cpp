@@ -23,7 +23,7 @@ Ptr<Value> Translator::Visit(const AST::ClassDecl& decl)
 
 void Translator::SetClassSuperClass(ClassDef& classDef, const AST::ClassLikeDecl& decl)
 {
-    if (auto astTy = DynamicCast<AST::ClassTy*>(decl.ty); astTy && astTy->GetSuperClassTy() != nullptr) {
+    if (auto astTy = DynamicCast<AST::ClassTy*>(decl.GetTy()); astTy && astTy->GetSuperClassTy() != nullptr) {
         auto type = TranslateType(*astTy->GetSuperClassTy());
         // The super class must be of the reference.
         CJC_ASSERT(type->IsRef());
@@ -51,7 +51,7 @@ void Translator::TranslateClassLikeDecl(ClassDef& classDef, const AST::ClassLike
     CreateAnnotationInfo<ClassDef>(decl, classDef, &classDef);
 
     // set type
-    auto classTy = TranslateType(*decl.ty);
+    auto classTy = TranslateType(*decl.GetTy());
     auto baseTy = StaticCast<ClassType*>(RawStaticCast<RefType*>(classTy)->GetBaseType());
     classDef.SetType(*baseTy);
     bool isImportedInstantiated =
@@ -104,7 +104,7 @@ void Translator::AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl)
             CreateAnnotationInfo<GlobalVar>(decl, *staticVar, &def);
         }
     } else {
-        Ptr<Type> ty = TranslateType(*decl.ty);
+        Ptr<Type> ty = TranslateType(*decl.GetTy());
         auto loc = TranslateLocation(decl);
         MemberVarInfo varInfo{
             .name = decl.identifier,
@@ -155,10 +155,10 @@ Function* Translator::ClearOrCreateVarInitFunc(const AST::Decl& decl)
         auto pkgName = outerDecl.fullPackageName;
         const std::vector<Type*> params = {};
 
-        auto returnTy = decl.ty;
+        auto returnTy = decl.GetTy();
         if (auto varDecl = DynamicCast<AST::VarDecl>(&decl)) {
             if (varDecl->initializer) {
-                returnTy = varDecl->initializer->ty;
+                returnTy = varDecl->initializer->GetTy();
             }
         }
         CJC_ASSERT(returnTy);

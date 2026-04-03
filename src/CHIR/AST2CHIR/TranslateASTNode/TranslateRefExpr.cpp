@@ -22,7 +22,7 @@ Translator::LeftValueInfo Translator::TranslateThisOrSuperRefAsLeftValue(const A
     CJC_ASSERT(curFunc);
     auto thisParam = GetImplicitThisParam();
     if (refExpr.isSuper) {
-        auto superTy = TranslateType(*refExpr.ty);
+        auto superTy = TranslateType(*refExpr.GetTy());
         auto loc = TranslateLocation(refExpr);
         thisParam = TypeCastOrBoxIfNeeded(*thisParam, *superTy, loc);
     }
@@ -63,7 +63,7 @@ Translator::LeftValueInfo Translator::TranslateEnumMemberVarRef(const AST::RefEx
     auto loc = TranslateLocation(refExpr);
 
     // polish here
-    auto enumTy = StaticCast<EnumTy*>(refExpr.ty);
+    auto enumTy = StaticCast<EnumTy*>(refExpr.GetTy());
     auto enumType = StaticCast<EnumType*>(chirTy.TranslateType(*enumTy));
     uint64_t enumId = GetEnumCtorId(*target);
     auto selectorTy = GetSelectorType(*enumTy);
@@ -206,7 +206,7 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
 {
     auto tempDecl = typeManager.GetTopOverriddenFuncDecl(&callee);
     const AST::FuncDecl* originalFuncDecl = tempDecl ? tempDecl.get() : &callee;
-    auto originalFuncType = StaticCast<FuncType*>(TranslateType(*originalFuncDecl->ty));
+    auto originalFuncType = StaticCast<FuncType*>(TranslateType(*originalFuncDecl->GetTy()));
     if (!originalFuncDecl->TestAttr(AST::Attribute::STATIC)) {
         auto outerDecl = originalFuncDecl->outerDecl;
         CJC_NULLPTR_CHECK(outerDecl);
@@ -219,7 +219,7 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
     std::vector<GenericType*> originalGenericTypeParams;
     if (originalFuncDecl->TestAttr(AST::Attribute::GENERIC)) {
         for (const auto& genericTy : originalFuncDecl->funcBody->generic->typeParameters) {
-            originalGenericTypeParams.emplace_back(StaticCast<GenericType*>(TranslateType(*(genericTy->ty))));
+            originalGenericTypeParams.emplace_back(StaticCast<GenericType*>(TranslateType(*(genericTy->GetTy()))));
         }
     }
     auto funcName = originalFuncDecl->identifier.Val();
@@ -414,7 +414,7 @@ Value* Translator::TranslateGlobalOrLocalFuncRef(const AST::RefExpr& refExpr, Va
     }
 
     // 3. create GetInstantiateValue
-    auto resTy = TranslateType(*refExpr.ty);
+    auto resTy = TranslateType(*refExpr.GetTy());
     auto loc = TranslateLocation(refExpr);
     return CreateAndAppendExpression<GetInstantiateValue>(loc, resTy, &originalFunc, instArgs, currentBlock)
         ->GetResult();

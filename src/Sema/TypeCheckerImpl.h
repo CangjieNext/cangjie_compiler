@@ -1547,7 +1547,7 @@ private:
         }
         std::vector<Ptr<AST::Ty>> typeArgs;
         for (auto& it : usage.GetTypeArgs()) {
-            typeArgs.push_back(it->ty);
+            typeArgs.push_back(it->GetTy());
         }
         auto target = tad.type->GetTarget();
         if (!target || target->astKind != AST::ASTKind::TYPE_ALIAS_DECL) {
@@ -1694,7 +1694,7 @@ private:
     {
         std::vector<Ptr<AST::Ty>> typeArgs;
         for (auto& it : typeArguments) {
-            typeArgs.push_back(it->ty);
+            typeArgs.push_back(it->GetTy());
         }
         if (!typeArguments.empty()) {
             Ptr<AST::File> file = typeArguments[0]->curFile;
@@ -1703,9 +1703,10 @@ private:
         }
         for (auto& it : type.typeArguments) {
             auto newTypeArg = AST::ASTCloner::Clone(it.get());
-            newTypeArg->ty = newTypeArg->ty ? typeManager.SubstituteTypeAliasInTy(*newTypeArg->ty, true, typeMapping)
-                                            : TypeManager::GetInvalidTy();
-            if (auto ity = DynamicCast<AST::IntersectionTy*>(newTypeArg->ty); ity && ity->tys.empty()) {
+            newTypeArg->SetTy(newTypeArg->GetTy()
+                    ? typeManager.SubstituteTypeAliasInTy(*newTypeArg->GetTy(), true, typeMapping)
+                    : TypeManager::GetInvalidTy());
+            if (auto ity = DynamicCast<AST::IntersectionTy*>(newTypeArg->GetTy()); ity && ity->tys.empty()) {
                 continue;
             }
             newTypeArg->EnableAttr(AST::Attribute::COMPILER_ADD);

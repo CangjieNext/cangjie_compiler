@@ -378,7 +378,7 @@ void PluginCustomAnnoChecker::CheckHideOfExtendDecl(const Decl& decl, const Plug
     if (decl.astKind != ASTKind::EXTEND_DECL) {
         return;
     }
-    auto extendedDecl = Ty::GetDeclPtrOfTy(decl.ty);
+    auto extendedDecl = Ty::GetDeclPtrOfTy(decl.GetTy());
     if (!extendedDecl) {
         return;
     }

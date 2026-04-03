@@ -19,7 +19,17 @@ namespace Cangjie {
 
 struct MemberSignature {
     Ptr<AST::Decl> decl = nullptr;
-    Ptr<AST::Ty> ty = nullptr;
+
+    Ptr<AST::Ty> GetTy() const
+    {
+        return ty;
+    }
+
+    void SetTy(Ptr<AST::Ty> newTy)
+    {
+        ty = newTy;
+    }
+
     Ptr<AST::Ty> structTy = nullptr;
     Ptr<AST::ExtendDecl> extendDecl = nullptr; // If the member is a member of another visible extension, it points to the
                                           // extension declaration. Otherwise, it is null.
@@ -29,6 +39,21 @@ struct MemberSignature {
     bool shouldBeImplemented = false;                    // True: if this member has multiple default implementation.
     bool replaceOther = false;                           // True: if this member override others.
     bool isInheritedInterface = false; // True: if current member is implementing inherited interface decl.
+
+    MemberSignature() = default;
+
+    MemberSignature(Ptr<AST::Decl> declIn, Ptr<AST::Ty> memberTyIn, Ptr<AST::Ty> structTyIn = nullptr,
+        Ptr<AST::ExtendDecl> extendDeclIn = nullptr, std::vector<std::unordered_set<Ptr<AST::Ty>>> upperBoundsIn = {})
+        : decl(std::move(declIn)),
+          structTy(std::move(structTyIn)),
+          extendDecl(std::move(extendDeclIn)),
+          upperBounds(std::move(upperBoundsIn)),
+          ty(std::move(memberTyIn))
+    {
+    }
+
+private:
+    Ptr<AST::Ty> ty = nullptr;
 };
 
 using MemberMap = std::multimap<std::string, MemberSignature>;
