@@ -204,7 +204,7 @@ static bool IsSimpleLiteralValue(const AST::Expr& node)
     if (realNode->astKind != AST::ASTKind::LIT_CONST_EXPR) {
         return false;
     }
-    switch (realNode->ty->kind) {
+    switch (realNode->TyKind()) {
         case AST::TypeKind::TYPE_FLOAT16:
         case AST::TypeKind::TYPE_FLOAT64:
         case AST::TypeKind::TYPE_IDEAL_FLOAT:
@@ -224,7 +224,7 @@ static bool IsSimpleLiteralValue(const AST::Expr& node)
         case AST::TypeKind::TYPE_BOOLEAN:
             return true;
         case AST::TypeKind::TYPE_STRUCT:
-            return node.ty->IsString();
+            return node.GetTy()->IsString();
         default:
             return false;
     }
@@ -254,7 +254,7 @@ bool NeedInitGlobalVarByInitFunc(const AST::VarDecl& decl)
     if (decl.IsCommonOrSpecific()) {
         return true;
     }
-    return !(IsSimpleLiteralValue(*decl.initializer) && decl.ty == decl.initializer->ty);
+    return !(IsSimpleLiteralValue(*decl.initializer) && decl.GetTy() == decl.initializer->GetTy());
 }
 
 inline bool CanInitBeGenerated(const AST::VarDeclAbstract& varDecl)
@@ -550,7 +550,7 @@ bool GlobalVarInitializer::NeedVarLiteralInitFunc(const AST::Decl& decl)
     CJC_ASSERT(vd->initializer->astKind == AST::ASTKind::LIT_CONST_EXPR);
     auto litExpr = StaticCast<AST::LitConstExpr*>(vd->initializer.get());
     auto globalVar = StaticCast<GlobalVar*>(GetGlobalVariable(*vd));
-    globalVar->SetInitializer(*trans.TranslateLitConstant(*litExpr, *litExpr->ty));
+    globalVar->SetInitializer(*trans.TranslateLitConstant(*litExpr, *litExpr->GetTy()));
 
     // mutable var decl need to be initialized in `file_literal`, codegen will call `file_literal` in
     // macro expand situation, immutable var decl doesn't need to

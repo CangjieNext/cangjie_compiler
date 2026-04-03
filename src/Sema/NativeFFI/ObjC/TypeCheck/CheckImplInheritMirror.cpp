@@ -18,12 +18,12 @@ using namespace Cangjie::Interop::ObjC;
 
 void CheckImplInheritMirror::HandleImpl(TypeCheckContext& ctx)
 {
-    if (!ctx.typeMapper.IsObjCImpl(*ctx.target.ty)) {
+    if (!ctx.typeMapper.IsObjCImpl(*ctx.target.GetTy())) {
         return;
     }
 
     // TODO: remove the whole if when hierarchy root @ObjCImpl is supported
-    if (auto classTy = DynamicCast<ClassTy*>(ctx.target.ty); classTy) {
+    if (auto classTy = DynamicCast<ClassTy*>(ctx.target.GetTy()); classTy) {
         auto hasOnlyMirrorSuperInterfaces = classTy->GetSuperInterfaceTys().size() > 0;
         for (auto superInterfaceTy : classTy->GetSuperInterfaceTys()) {
             if (!ctx.typeMapper.IsValidObjCMirror(*superInterfaceTy)) {
@@ -38,7 +38,7 @@ void CheckImplInheritMirror::HandleImpl(TypeCheckContext& ctx)
         }
     }
 
-    if (ctx.typeMapper.IsValidObjCMirrorSubtype(*ctx.target.ty)) {
+    if (ctx.typeMapper.IsValidObjCMirrorSubtype(*ctx.target.GetTy())) {
         return;
     }
 

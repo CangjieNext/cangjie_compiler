@@ -710,7 +710,7 @@ void ParserImpl::CheckInitCtorDeclJavaMirror(FuncDecl& ctor)
         body->begin = ctor.end;
         body->curFile = ctor.curFile;
         body->end = ctor.end;
-        body->ty = ctor.ty;
+        body->SetTy(ctor.GetTy());
         ctor.funcBody->body = std::move(body);
     }
 }
@@ -751,7 +751,7 @@ void ParserImpl::CheckInitCtorDeclObjCMirror(FuncDecl& ctor)
         body->begin = ctor.end;
         body->curFile = ctor.curFile;
         body->end = ctor.end;
-        body->ty = ctor.ty;
+        body->SetTy(ctor.GetTy());
         ctor.funcBody->body = std::move(body);
     }
 }

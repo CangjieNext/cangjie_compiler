@@ -104,7 +104,7 @@ Value* Translator::GetCurrentThisObjectByMemberAccess(const AST::MemberAccess& m
     // member access except this or super call
     auto curObj = TranslateExprArg(*memAccess.baseExpr);
     CJC_NULLPTR_CHECK(curObj);
-    if (memAccess.baseExpr->ty->IsClassLike()) {
+    if (memAccess.baseExpr->GetTy()->IsClassLike()) {
         // class A {func foo(){return 0}
         // var a = A()
         // a.f()           // a is A&& need add `Load`
@@ -124,7 +124,7 @@ Value* Translator::GetCurrentThisObjectByMemberAccess(const AST::MemberAccess& m
             }
         }
         return curObj;
-    } else if (!memAccess.baseExpr->ty->IsStruct() || !resolved.TestAttr(AST::Attribute::MUT)) {
+    } else if (!memAccess.baseExpr->GetTy()->IsStruct() || !resolved.TestAttr(AST::Attribute::MUT)) {
         // Non-struct and non-classlike type must perform deref.
         // If `this` obj's type is struct, and resolved function is not `mut`, need add `Load`.
         // struct A {func foo(){return 0}
@@ -255,10 +255,10 @@ Value* Translator::TranslateThisObjectForNonStaticMemberFuncCall(const AST::Call
         }
         // this case only happends when extending Unit or Nothing type
         if (thisObj == nullptr) {
-            if (memAccess->baseExpr->ty->IsUnit()) {
+            if (memAccess->baseExpr->GetTy()->IsUnit()) {
                 thisObj = CreateAndAppendConstantExpression<UnitLiteral>(builder.GetUnitTy(), *currentBlock)
                     ->GetResult();
-            } else if (memAccess->baseExpr->ty->IsNothing()) {
+            } else if (memAccess->baseExpr->GetTy()->IsNothing()) {
                 thisObj = CreateAndAppendConstantExpression<NullLiteral>(builder.GetNothingType(), *currentBlock)
                     ->GetResult();
             } else {
@@ -332,7 +332,7 @@ void Translator::TranslateFuncArgsWithoutThisObj(
             }
 
             // 3) calculte the instantiated type of the default-value-func
-            auto instDefaultValueFuncRetTy = TranslateType(*argExprs[i]->ty);
+            auto instDefaultValueFuncRetTy = TranslateType(*argExprs[i]->GetTy());
             std::vector<Type*> instDefaultValueFuncParamInstTys;
             for (size_t k = 0; k < defaultValueFuncArgs.size(); ++k) {
                 instDefaultValueFuncParamInstTys.emplace_back(defaultValueFuncArgs[k]->GetType());
@@ -395,7 +395,7 @@ Value* Translator::TranslateTrivialArgWithNoSugar(const AST::FuncArg& arg, const
     if (arg.withInout) {
         auto argLeftValInfo = TranslateExprAsLeftValue(*arg.expr);
         argVal = GenerateLeftValue(argLeftValInfo, loc);
-        auto ty = TranslateType(*arg.ty);
+        auto ty = TranslateType(*arg.GetTy());
         auto callContext = IntrisicCallContext {
             .kind = IntrinsicKind::INOUT_PARAM,
             .args = std::vector<Value*>{argVal}
@@ -463,7 +463,7 @@ std::vector<Value*> Translator::TranslateFuncArgs(
         } else {
             // For trivial constructor call site, the object allocation is lifted out and then pass into constructor as
             // `this` arg
-            auto thisTy = chirTy.TranslateType(*expr.ty)->StripAllRefs();
+            auto thisTy = chirTy.TranslateType(*expr.GetTy())->StripAllRefs();
             auto allocateThis = TryCreate<Allocate>(currentBlock, loc, builder.GetType<RefType>(thisTy), thisTy);
             allocateThis->Set<DebugLocationInfoForWarning>(loc);
             thisObj = allocateThis->GetResult();
@@ -526,7 +526,7 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
     // Translate code position info
     const auto& loc = TranslateLocation(expr);
 
-    auto ty = chirTy.TranslateType(*expr.ty);
+    auto ty = chirTy.TranslateType(*expr.GetTy());
 
     // Get the intrinsic kind
     std::string packageName{};
@@ -564,7 +564,7 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
     auto intriVar = TryCreate<Intrinsic>(currentBlock, loc, retTy, callContext)->GetResult();
 
     // what is this for
-    if (expr.ty->IsUnit()) {
+    if (expr.GetTy()->IsUnit()) {
         // Codegen will not generate valid 'unit' value for intrinsic call.
         return CreateAndAppendConstantExpression<UnitLiteral>(builder.GetUnitTy(), *currentBlock)->GetResult();
     }
@@ -588,8 +588,8 @@ Ptr<Value> Translator::TranslateForeignFuncCall(const AST::CallExpr& expr)
     auto resolvedFunction = expr.resolvedFunction;
     // polish this API
     auto [paramInstTys, retInstTy] = GetMemberFuncParamAndRetInstTypes(expr);
-    bool hasVarArg = StaticCast<AST::FuncTy*>(expr.resolvedFunction->ty)->hasVariableLenArg;
-    bool isCFunc = StaticCast<AST::FuncTy*>(expr.resolvedFunction->ty)->isC;
+    bool hasVarArg = StaticCast<AST::FuncTy*>(expr.resolvedFunction->GetTy())->hasVariableLenArg;
+    bool isCFunc = StaticCast<AST::FuncTy*>(expr.resolvedFunction->GetTy())->isC;
     auto instTargetFuncTy = builder.GetType<FuncType>(paramInstTys, retInstTy, hasVarArg, isCFunc);
 
     // Translate arguments
@@ -607,7 +607,7 @@ Ptr<Value> Translator::TranslateCStringCtorCall(const AST::CallExpr& expr)
 {
     if (auto target = DynamicCast<AST::BuiltInDecl*>(expr.baseFunc->GetTarget());
         target && target->type == AST::BuiltInType::CSTRING) {
-        auto ty = TranslateType(*expr.ty);
+        auto ty = TranslateType(*expr.GetTy());
         const auto& loc = TranslateLocation(expr);
         CJC_ASSERT(expr.args.size() == 1);
         auto argVal = TranslateExprArg(*expr.args[0]);
@@ -650,8 +650,8 @@ Ptr<Value> Translator::TranslateEnumCtorCall(const AST::CallExpr& expr)
 
     // Translate arguments
     auto args = TranslateFuncArgs(expr, nullptr, &paramInstTys);
-    auto ty = chirTy.TranslateType(*expr.ty);
-    auto selectorTy = GetSelectorType(*StaticCast<AST::EnumTy>(expr.ty));
+    auto ty = chirTy.TranslateType(*expr.GetTy());
+    auto selectorTy = GetSelectorType(*StaticCast<AST::EnumTy>(expr.GetTy()));
     CJC_ASSERT(ty->IsEnum());
     auto constExpr = (selectorTy->IsBoolean()
             ? CreateAndAppendConstantExpression<BoolLiteral>(
@@ -685,7 +685,7 @@ Translator::LeftValueInfo Translator::TranslateStructOrClassCtorCallAsLeftValue(
     }
 
     // Calculate instantiated callee func type
-    auto thisTy = chirTy.TranslateType(*expr.ty)->StripAllRefs();
+    auto thisTy = chirTy.TranslateType(*expr.GetTy())->StripAllRefs();
     auto thisTyRef = builder.GetType<RefType>(thisTy);
     auto [paramInstTys, retInstTy] = GetMemberFuncParamAndRetInstTypes(expr);
 
@@ -720,7 +720,7 @@ Value* Translator::TranslateStructOrClassCtorCall(const AST::CallExpr& expr)
     const auto& loc = TranslateLocation(expr);
 
     // Calculate instantiated callee func type
-    auto thisTy = chirTy.TranslateType(*expr.ty)->StripAllRefs();
+    auto thisTy = chirTy.TranslateType(*expr.GetTy())->StripAllRefs();
     auto thisTyRef = builder.GetType<RefType>(thisTy);
     auto [paramInstTys, retInstTy] = GetMemberFuncParamAndRetInstTypes(expr);
     auto paramInstTysWithoutThis = paramInstTys;
@@ -759,7 +759,7 @@ Ptr<Value> Translator::TranslateCFuncConstructorCall(const AST::CallExpr& expr)
         return nullptr;
     }
     auto& arg = expr.args[0]->expr;
-    auto argValue = TranslateExprArg(*arg, *TranslateType(*expr.ty), true);
+    auto argValue = TranslateExprArg(*arg, *TranslateType(*expr.GetTy()), true);
     return argValue;
 }
 
@@ -831,7 +831,7 @@ bool Translator::IsOverflowOpCall(const AST::FuncDecl& func)
     if (!Is<AST::InterfaceDecl>(func.outerDecl)) {
         return false;
     }
-    return IsOverflowOperator(func.identifier, *StaticCast<FuncType>(TranslateType(*func.ty)));
+    return IsOverflowOperator(func.identifier, *StaticCast<FuncType>(TranslateType(*func.GetTy())));
 }
 
 Value* Translator::CreateGetRTTIWrapper(Value* value, Block* bl, const DebugLocation& loc)
@@ -970,7 +970,7 @@ static bool IsCallingConstructor(const AST::CallExpr& expr)
     if (expr.callKind == AST::CallKind::CALL_SUPER_FUNCTION) {
         return true;
     }
-    // non-static init func, because expr.ty is Unit in static init
+    // non-static init func, because expr.GetTy() is Unit in static init
     return expr.resolvedFunction->TestAttr(AST::Attribute::CONSTRUCTOR) &&
         !expr.resolvedFunction->TestAttr(AST::Attribute::STATIC);
 }
@@ -981,12 +981,12 @@ Ptr<Type> Translator::GetMemberFuncCallerInstType(const AST::CallExpr& expr, boo
     if (auto memAccess = DynamicCast<AST::MemberAccess*>(expr.baseFunc.get()); memAccess) {
         // xxx.memberFunc()
         if (!IsPackageMemberAccess(*memAccess)) {
-            callerType = TranslateType(*memAccess->baseExpr->ty);
+            callerType = TranslateType(*memAccess->baseExpr->GetTy());
         } else if (IsCallingConstructor(expr)) {
-            callerType = TranslateType(*expr.ty);
+            callerType = TranslateType(*expr.GetTy());
         }
     } else if (IsCallingConstructor(expr)) {
-        callerType = TranslateType(*expr.ty);
+        callerType = TranslateType(*expr.GetTy());
     } else if (expr.resolvedFunction != nullptr && expr.resolvedFunction->outerDecl != nullptr &&
         expr.resolvedFunction->outerDecl->IsNominalDecl()) {
         // call own member function in nominal decl, there are 3 cases:
@@ -1014,7 +1014,7 @@ Ptr<Type> Translator::GetMemberFuncCallerInstType(const AST::CallExpr& expr, boo
         } else {
             // 4. struct A { static let a = foo(); func foo() {} }
             //                              ^^^ call `foo` while initializing static member var, then return `A`
-            callerType = TranslateType(*expr.resolvedFunction->outerDecl->ty);
+            callerType = TranslateType(*expr.resolvedFunction->outerDecl->GetTy());
         }
     }
 
@@ -1053,11 +1053,11 @@ Ptr<Type> Translator::GetMemberFuncCallerInstType(const AST::CallExpr& expr, boo
 std::pair<std::vector<Type*>, Type*> Translator::GetMemberFuncParamAndRetInstTypes(const AST::CallExpr& expr)
 {
     FuncType* funcType = nullptr;
-    if (auto genericTy = DynamicCast<AST::GenericsTy*>(expr.baseFunc->ty); genericTy) {
+    if (auto genericTy = DynamicCast<AST::GenericsTy*>(expr.baseFunc->GetTy()); genericTy) {
         CJC_ASSERT(genericTy->upperBounds.size() == 1 && "not support multi-upperBounds for funcType in CHIR");
         funcType = StaticCast<FuncType*>(TranslateType(**genericTy->upperBounds.begin()));
     } else {
-        funcType = StaticCast<FuncType*>(TranslateType(*expr.baseFunc->ty));
+        funcType = StaticCast<FuncType*>(TranslateType(*expr.baseFunc->GetTy()));
     }
     if (expr.resolvedFunction->TestAttr(AST::Attribute::CONSTRUCTOR) || expr.resolvedFunction->IsFinalizer()) {
         return std::pair<std::vector<Type*>, Type*>{funcType->GetParamTypes(), builder.GetUnitTy()};
@@ -1142,7 +1142,7 @@ Ptr<Value> Translator::ProcessCallExpr(const AST::CallExpr& expr)
     if (IsCtorCall(expr)) {
         return TranslateStructOrClassCtorCall(expr);
     }
-    if (bool isNothingCall = !expr.resolvedFunction && expr.baseFunc->ty->kind == AST::TypeKind::TYPE_NOTHING;
+    if (bool isNothingCall = !expr.resolvedFunction && expr.baseFunc->TyKind() == AST::TypeKind::TYPE_NOTHING;
         isNothingCall) {
         return TranslateExprArg(*expr.baseFunc);
     }

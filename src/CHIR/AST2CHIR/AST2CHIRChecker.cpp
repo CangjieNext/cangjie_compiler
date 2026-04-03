@@ -228,8 +228,8 @@ bool CheckClass(const Cangjie::AST::ClassDecl& decl, const ClassDef& classDef)
     }
     AST::ClassTy* astSupClsTy = nullptr;
     for (auto& super : decl.inheritedTypes) {
-        if (super->ty->kind == AST::TypeKind::TYPE_CLASS) {
-            astSupClsTy = StaticCast<AST::ClassTy*>(super->ty);
+        if (super->TyKind() == AST::TypeKind::TYPE_CLASS) {
+            astSupClsTy = StaticCast<AST::ClassTy*>(super->GetTy());
         }
     }
     auto chirSupClsTy = classDef.GetSuperClassTy();
@@ -296,14 +296,14 @@ bool CheckInheritDeclGlobalMember(
         if (StaticCast<const Cangjie::AST::FuncDecl&>(decl).TestAttr(AST::Attribute::CONSTRUCTOR) || StaticCast<const Cangjie::AST::FuncDecl&>(decl).IsFinalizer()) {
             return true;
         }
-        if (!decl.TestAttr(Cangjie::AST::Attribute::STATIC) && !CheckMethodType(*decl.ty, *chirCache->GetType())) {
-            Errorln(chirCache->GetIdentifier() + " is expected to be promoted " + Cangjie::AST::Ty::ToString(decl.ty) +
-                ".");
+        if (!decl.TestAttr(Cangjie::AST::Attribute::STATIC) && !CheckMethodType(*decl.GetTy(), *chirCache->GetType())) {
+            Errorln(chirCache->GetIdentifier() + " is expected to be promoted " +
+                Cangjie::AST::Ty::ToString(decl.GetTy()) + ".");
             return false;
         }
-        if (decl.TestAttr(Cangjie::AST::Attribute::STATIC) && !CheckFuncType(*decl.ty, *chirCache->GetType())) {
-            Errorln(chirCache->GetIdentifier() + " is expected to be promoted " + Cangjie::AST::Ty::ToString(decl.ty) +
-                ".");
+        if (decl.TestAttr(Cangjie::AST::Attribute::STATIC) && !CheckFuncType(*decl.GetTy(), *chirCache->GetType())) {
+            Errorln(chirCache->GetIdentifier() + " is expected to be promoted " +
+                Cangjie::AST::Ty::ToString(decl.GetTy()) + ".");
             return false;
         }
     }
@@ -321,8 +321,8 @@ bool CheckLocalVar(const Cangjie::AST::Decl& decl, const CustomTypeDef& chirNode
         if (it.name != decl.identifier.Val()) {
             continue;
         }
-        if (!DynamicCast<AST::RefEnumTy*>(decl.ty) && !CheckType(*decl.ty, *it.type)) {
-            Errorln(it.name + " is expected to be " + Cangjie::AST::Ty::ToString(decl.ty) + " in " +
+        if (!DynamicCast<AST::RefEnumTy*>(decl.GetTy()) && !CheckType(*decl.GetTy(), *it.type)) {
+            Errorln(it.name + " is expected to be " + Cangjie::AST::Ty::ToString(decl.GetTy()) + " in " +
                 chirNode.GetIdentifier() + ".");
             return false;
         }
@@ -421,7 +421,7 @@ bool CheckFunc(const Cangjie::AST::FuncDecl& decl, const Value& chirNode)
     if (decl.outerDecl != nullptr) {
         return true;
     }
-    auto astTy = decl.ty;
+    auto astTy = decl.GetTy();
     auto chirTy = chirNode.GetType();
     if (!CheckType(*astTy, *chirTy)) {
         bool report = true;
@@ -445,7 +445,7 @@ bool CheckVar(const Cangjie::AST::VarDecl& decl, const Value& chirNode)
         Errorln(chirNode.GetIdentifier() + " is expected to be a globalVar.");
         return false;
     }
-    auto astTy = decl.ty;
+    auto astTy = decl.GetTy();
     auto chirTy = chirNode.GetType();
     if (!CheckType(*astTy, *chirTy)) {
         Errorln(chirNode.GetIdentifier() + " is expected to be " + Cangjie::AST::Ty::ToString(astTy) + ".");

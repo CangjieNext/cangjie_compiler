@@ -740,14 +740,14 @@ void DoNewMangling(
                     desugar.mangledName = baseMangler.Mangle(desugar);
                     return VisitAction::WALK_CHILDREN;
                 }
-                if (!Ty::IsTyCorrect(decl.ty)) {
+                if (!Ty::IsTyCorrect(decl.GetTy())) {
                     return VisitAction::SKIP_CHILDREN;
                 }
                 decl.mangledName = baseMangler.Mangle(decl, filteredPrefix);
                 return VisitAction::WALK_CHILDREN;
             },
             [&baseMangler, &filteredPrefix](LambdaExpr& lambda) {
-                if (lambda.TestAttr(Attribute::GENERIC) || !Ty::IsTyCorrect(lambda.ty)) {
+                if (lambda.TestAttr(Attribute::GENERIC) || !Ty::IsTyCorrect(lambda.GetTy())) {
                     return VisitAction::SKIP_CHILDREN;
                 }
                 lambda.mangledName = baseMangler.MangleLambda(lambda,
@@ -1132,7 +1132,7 @@ std::vector<Ptr<Decl>> CompilerInstance::GetAllVisibleExtendMembers(
     if (type.index() == 0) {
         exprTy = std::get<Ptr<Ty>>(type);
     } else if (type.index() == 1) {
-        exprTy = std::get<Ptr<InheritableDecl>>(type)->ty;
+        exprTy = std::get<Ptr<InheritableDecl>>(type)->GetTy();
     }
     if (!Ty::IsTyCorrect(exprTy)) {
         return {};

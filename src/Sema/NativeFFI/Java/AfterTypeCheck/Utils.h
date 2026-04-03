@@ -126,7 +126,7 @@ OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, ClassLikeDecl& mirrorLike)
 OwnedPtr<Expr> CreateJavaRefCall(ClassLikeDecl& mirrorLike, Ptr<File> curFile);
 
 /**
- * Acts like `CreateJavaRefCall(expr, *StaticCast<ClassLikeTy*>(expr->ty))->commonDecl`
+ * Acts like `CreateJavaRefCall(expr, *StaticCast<ClassLikeTy*>(expr->GetTy()))->commonDecl`
  */
 OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr);
 
@@ -270,7 +270,7 @@ OwnedPtr<CallExpr> CreateCall(Ptr<FuncDecl> fd, Ptr<File> curFile, OwnedPtr<Args
 
     (WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
 
-    auto funcTy = StaticCast<FuncTy*>(fd->ty);
+    auto funcTy = StaticCast<FuncTy*>(fd->GetTy());
 
     return CreateCallExpr(WithinFile(CreateRefExpr(*fd), curFile), std::move(funcArgs), fd, funcTy->retTy,
                           CallKind::CALL_DECLARED_FUNCTION);

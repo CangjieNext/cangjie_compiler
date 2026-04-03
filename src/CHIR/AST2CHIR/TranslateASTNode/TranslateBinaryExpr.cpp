@@ -65,7 +65,7 @@ Ptr<Value> Translator::ProcessBinaryExpr(const AST::BinaryExpr& binaryExpr)
         {Cangjie::TokenKind::NOTEQ, ExprKind::NOTEQUAL},
         {Cangjie::TokenKind::EQUAL, ExprKind::EQUAL},
     };
-    const auto chirType = TranslateType(*binaryExpr.ty);
+    const auto chirType = TranslateType(*binaryExpr.GetTy());
     const auto& loc = TranslateLocation(binaryExpr);
     auto it = OP2_EXPR_KIND.find(binaryExpr.op);
     CJC_ASSERT(it != OP2_EXPR_KIND.end());
@@ -80,7 +80,7 @@ Ptr<Value> Translator::ProcessBinaryExpr(const AST::BinaryExpr& binaryExpr)
     }
     auto rightExpr = TranslateExprArg(*binaryExpr.rightExpr);
     bool mayHaveException = OverloadableExprMayThrowException(binaryExpr, *chirType);
-    if (binaryExpr.leftExpr->ty->IsNothing()) {
+    if (binaryExpr.leftExpr->GetTy()->IsNothing()) {
         const auto& rightExprLoc = TranslateLocation(*binaryExpr.rightExpr);
         return TryCreateWithOV<BinaryExpression>(currentBlock, mayHaveException, binaryExpr.overflowStrategy,
             rightExprLoc, loc, chirType, kd, lhs, rightExpr)
