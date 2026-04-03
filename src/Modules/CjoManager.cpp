@@ -305,7 +305,7 @@ bool CjoManager::NeedCollectDependency(const std::string& curName, bool isCurMac
 
 bool CjoManager::LoadFilesOfCommonPart(Ptr<Package> pkg)
 {
-    if (!impl->GetGlobalOptions().IsCompilingCJMPSpecific() && impl->GetGlobalOptions().commonPartCjos.empty()) {
+    if (!impl->GetGlobalOptions().IsCompilingCJMPSpecific() && impl->GetGlobalOptions().commonCjoFiles.empty()) {
         return true;
     }
     CJC_NULLPTR_CHECK(pkg);
@@ -342,7 +342,7 @@ void CjoManager::LoadPackageDeclsOnDemand(const std::vector<Ptr<Package>>& packa
     loaders.reserve(q.size());
     // Load common part cjo
     for (auto pkg : packages) {
-        if (impl->GetGlobalOptions().IsCompilingCJMPSpecific() || !impl->GetGlobalOptions().commonPartCjos.empty()) {
+        if (impl->GetGlobalOptions().IsCompilingCJMPSpecific() || !impl->GetGlobalOptions().commonCjoFiles.empty()) {
             std::string expectedPackageName = pkg->fullPackageName;
             for (Ptr<ASTLoader> commonLoader : GetCommonPartCjos(expectedPackageName)) {
                 commonLoader->LoadPackageDecls();
@@ -434,7 +434,7 @@ void CjoManagerImpl::SubstituteImportedTypeAliasTy(const std::vector<Ptr<Package
         // For cjlint tool could have more than one src-package.
         bool isSrcPackage = Utils::In(srcPackages,
             [&pkgName2PkgInfo](Ptr<Package> pkg) { return pkg->fullPackageName == pkgName2PkgInfo.first; });
-        if (isSrcPackage && globalOptions.commonPartCjos.size() == 0) {
+        if (isSrcPackage && globalOptions.commonCjoFiles.size() == 0) {
             continue;
         }
         auto& pkgInfo = pkgName2PkgInfo.second;
@@ -453,10 +453,10 @@ std::vector<OwnedPtr<ASTLoader>>& CjoManagerImpl::GetCommonPartCjos(
     std::string packageName, const CjoManager& cjoManager)
 {
     if (commonPartLoaders.empty()) {
-        if (globalOptions.commonPartCjos.empty()) {
+        if (globalOptions.commonCjoFiles.empty()) {
             diag.DiagnoseRefactor(DiagKindRefactor::module_common_part_path_is_required, DEFAULT_POSITION);
         }
-        for (auto commonPartCjo : globalOptions.commonPartCjos) {
+        for (auto commonPartCjo : globalOptions.commonCjoFiles) {
             commonPartLoaders.emplace_back(ReadCjo(packageName, commonPartCjo, cjoManager));
         }
     }
