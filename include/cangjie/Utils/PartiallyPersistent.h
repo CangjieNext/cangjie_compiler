@@ -147,12 +147,27 @@ public:
         return data;
     }
 
+    // WARNING: This is a destructive operation that resets checkpoint depth to 1.
+    // If other PSet members in the same constraint have different checkpoint depths,
+    // this will cause checkpoint depth inconsistency, leading to out-of-bounds access
+    // when CommitScope destructor calls apply() on stashes.
+    // Use softClear() instead if you need to preserve checkpoint depth consistency.
     void clear()
     {
         data.clear();
         log.clear();
         stashes.clear();
         commit();
+    }
+
+    // Soft clear: removes all elements while preserving checkpoint depth.
+    // This is safe to use when other PSet members in the same constraint
+    // may have different checkpoint depths, as it maintains consistency.
+    void softClear()
+    {
+        while (!data.empty()) {
+            erase(data.begin());
+        }
     }
 
     std::pair<typename std::set<T>::iterator, bool> insert(const T& value)
