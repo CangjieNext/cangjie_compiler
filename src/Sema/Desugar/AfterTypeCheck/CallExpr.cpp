@@ -19,7 +19,7 @@ using namespace Sema::Desugar::AfterTypeCheck;
 
 void TypeChecker::TypeCheckerImpl::DesugarTokenCallExpr(ASTContext& ctx, CallExpr& ce)
 {
-    if (!Ty::IsTyCorrect(ce.ty) || ce.desugarExpr != nullptr ||
+    if (!Ty::IsTyCorrect(ce.GetTy()) || ce.desugarExpr != nullptr ||
         ce.sugarKind == Expr::SugarKind::TOKEN_CALL) {
         return;
     }
@@ -39,7 +39,7 @@ void TypeChecker::TypeCheckerImpl::DesugarTokenCallExpr(ASTContext& ctx, CallExp
     // the `sugarKind` is also cloned, to prevent infinite loop in Walker
     // COMPILE_ADD attribute is not sufficent in this scenario
     auto newCe =
-        CreateCallExpr(std::move(ce.baseFunc), std::move(ce.args), std::move(ce.resolvedFunction), ce.ty, ce.callKind);
+        CreateCallExpr(std::move(ce.baseFunc), std::move(ce.args), std::move(ce.resolvedFunction), ce.GetTy(), ce.callKind);
     newCe->sugarKind = Expr::SugarKind::TOKEN_CALL;
     args.emplace_back(CreateFuncArg(std::move(newCe)));
     args.emplace_back(CreateFuncArg(std::move(fileID)));
@@ -63,7 +63,7 @@ void DesugarComparableIntrinsic(AST::CallExpr& expr, TokenKind op)
 {
     CJC_ASSERT(expr.desugarExpr == nullptr && expr.args.size() == 2); // compare intrinsic has exactly 2 args
     auto binExpr = CreateBinaryExpr(std::move(expr.args[0]->expr), std::move(expr.args[1]->expr), op);
-    binExpr->ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
+    binExpr->SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN));
     CopyBasicInfo(&expr, binExpr);
     expr.desugarExpr = std::move(binExpr);
 }

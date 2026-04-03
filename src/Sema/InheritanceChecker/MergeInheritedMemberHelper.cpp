@@ -71,10 +71,10 @@ void SetPossibleInconsistentType(
     const MemberSignature& target, const MemberSignature& src, std::vector<Ptr<const Ty>>& inconsistentTypes)
 {
     auto getTy = [](auto member) {
-        if (auto ty = DynamicCast<FuncTy*>(member.ty)) {
+        if (auto ty = DynamicCast<FuncTy*>(member.GetTy())) {
             return ty->retTy;
         } else {
-            return member.ty;
+            return member.GetTy();
         }
     };
     inconsistentTypes.emplace_back(getTy(target));
@@ -91,8 +91,8 @@ void SetPossibleInconsistentType(
 bool StructInheritanceChecker::ComputeInconsistentTypes(const MemberSignature& child, const MemberSignature& parent,
     MemberSignature& updated, const std::pair<bool, bool>& status, std::vector<Ptr<const Ty>>& inconsistentTypes) const
 {
-    auto parentTy = DynamicCast<FuncTy*>(parent.ty);
-    auto childTy = DynamicCast<FuncTy*>(child.ty);
+    auto parentTy = DynamicCast<FuncTy*>(parent.GetTy());
+    auto childTy = DynamicCast<FuncTy*>(child.GetTy());
     if (!Ty::IsTyCorrect(parentTy) || !Ty::IsTyCorrect(childTy)) {
         return true;
     }
@@ -109,7 +109,7 @@ bool StructInheritanceChecker::ComputeInconsistentTypes(const MemberSignature& c
         bool needUpdateTy = bothInterfaceMember && AreReturnTypesCompatible(*childTy, *parentTy);
         hasConsistentReturnTy = hasConsistentReturnTy || needUpdateTy;
         if (needUpdateTy) {
-            updated.ty = parentTy;
+            updated.SetTy(parentTy);
         }
     }
 
@@ -149,15 +149,15 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
             continue;
         }
         bool shouldUpdate = true;
-        bool inconsistentType = needImplement && parent.ty != child.ty;
+        bool inconsistentType = needImplement && parent.GetTy() != child.GetTy();
         if (parent.decl->IsFunc()) {
             if (child.decl->TestAttr(Attribute::GENERIC) && parent.decl->TestAttr(Attribute::GENERIC)) {
                 TypeSubst typeMapping = typeManager.GenerateGenericMappingFromGeneric(
                     *RawStaticCast<FuncDecl*>(parent.decl), *RawStaticCast<FuncDecl*>(child.decl));
-                parent.ty = typeManager.GetInstantiatedTy(parent.ty, typeMapping);
+                parent.SetTy(typeManager.GetInstantiatedTy(parent.GetTy(), typeMapping));
             }
-            auto parentFuncTy = DynamicCast<FuncTy*>(parent.ty);
-            auto childFuncTy = DynamicCast<FuncTy*>(child.ty);
+            auto parentFuncTy = DynamicCast<FuncTy*>(parent.GetTy());
+            auto childFuncTy = DynamicCast<FuncTy*>(child.GetTy());
             bool sameStatus = parent.decl->TestAttr(Attribute::STATIC) == child.decl->TestAttr(Attribute::STATIC) &&
                 child.decl->TestAttr(Attribute::GENERIC) == parent.decl->TestAttr(Attribute::GENERIC);
             shouldUpdate = sameStatus && parentFuncTy && childFuncTy &&
@@ -225,7 +225,7 @@ void StructInheritanceChecker::MergeInheritedMembers(
         if (inheritedInterfaces) {
             memberSig.isInheritedInterface = true;
         }
-        memberSig.ty = typeManager.GetInstantiatedTy(memberSig.ty, typeMapping);
+        memberSig.SetTy(typeManager.GetInstantiatedTy(memberSig.GetTy(), typeMapping));
         memberSig.structTy = typeManager.GetInstantiatedTy(memberSig.structTy, typeMapping);
         memberSig.upperBounds = UpdateUpperBoundsSet(typeManager, memberSig.upperBounds, typeMapping);
         UpdateInheritedMemberIfNeeded(members, memberSig, inheritedInterfaces);

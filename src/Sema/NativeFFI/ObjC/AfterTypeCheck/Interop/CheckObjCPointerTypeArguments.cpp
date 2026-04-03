@@ -29,8 +29,8 @@ void CheckObjCPointerTypeArguments::HandleImpl(InteropContext& ctx)
             Ptr<Type> typeUsage = As<ASTKind::TYPE>(node);
             if (typeUsage
                 && typeUsage->GetTypeArgs().size() == 1
-                && ctx.typeMapper.IsObjCPointer(*typeUsage->ty)
-                && !ctx.typeMapper.IsObjCCompatible(*typeUsage->ty->typeArgs[0])) {
+                && ctx.typeMapper.IsObjCPointer(*typeUsage->GetTy())
+                && !ctx.typeMapper.IsObjCCompatible(*typeUsage->GetTy()->typeArgs[0])) {
                 ctx.diag.DiagnoseRefactor(
                     DiagKindRefactor::sema_objc_pointer_argument_must_be_objc_compatible, 
                     *typeUsage);

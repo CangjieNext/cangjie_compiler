@@ -87,7 +87,7 @@ void CopyNodeField(Ptr<Node> ret, const Node& e)
 {
     ret->begin = e.begin;
     ret->end = e.end;
-    ret->ty = e.ty;
+    ret->SetTy(e.GetTy());
     ret->curMacroCall = e.curMacroCall;
     ret->isInMacroCall = e.isInMacroCall;
     ret->comments = e.comments;

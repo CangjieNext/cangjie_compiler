@@ -1405,7 +1405,7 @@ bool ImportManager::IsExtendAllUpperBoundsImported(
             CJC_NULLPTR_CHECK(ub);
             if (!IsTypeAccessible(file, *ub)) {
                 areAllUpperBoundsImported = false;
-                upperboundsNotImported.emplace(ub->ty->String());
+                upperboundsNotImported.emplace(ub->GetTy()->String());
                 break;
             }
         }
@@ -1431,7 +1431,7 @@ bool ImportManager::IsExtendAccessible(
     bool areAllUpperBoundsImported = IsExtendAllUpperBoundsImported(ed, file, builder);
     bool hasAnyInterfacesImported = false;
     bool isExtendedTypeAccessible = false;
-    auto extendedDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(ed.ty);
+    auto extendedDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(ed.GetTy());
     bool isInSamePkg =
         extendedDecl ? ed.fullPackageName == extendedDecl->fullPackageName : ed.fullPackageName == "std.core";
     if (!isInSamePkg) {
@@ -1459,7 +1459,7 @@ bool ImportManager::IsExtendAccessible(
     // For direct extension, all upperbound (if any) need to be imported.
     // For interface extension, all upperbound (if any) and at lest one interface need to be imported.
     if (!isExtendedTypeAccessible) {
-        AddNoteForExtendExportDiag(builder, MakeRange(ed.begin, ed.end), ed.extendedType->ty->String());
+        AddNoteForExtendExportDiag(builder, MakeRange(ed.begin, ed.end), ed.extendedType->GetTy()->String());
     }
     bool isExtendImported = areAllUpperBoundsImported && hasAnyInterfacesImported && isExtendedTypeAccessible;
     return ed.IsExportedDecl() && isExtendImported;
@@ -1467,7 +1467,7 @@ bool ImportManager::IsExtendAccessible(
 
 const Ptr<Type> ImportManager::FindImplmentInterface(const File& file, const Decl& member, const Ptr<Type>& it) const
 {
-    auto targetDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(it->ty);
+    auto targetDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(it->GetTy());
     if (targetDecl == nullptr) {
         return nullptr;
     }
@@ -1491,12 +1491,12 @@ bool ImportManager::IsExtendMemberImported(
     if (extend->inheritedTypes.empty()) {
         return true;
     }
-    auto extendedDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(extend->ty);
+    auto extendedDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(extend->GetTy());
     bool isInSamePkg =
         extendedDecl ? extend->fullPackageName == extendedDecl->fullPackageName : extend->fullPackageName == "std.core";
     if (isInSamePkg) {
         if (!IsTypeAccessible(file, *extend->extendedType)) {
-            AddNoteForExtendExportDiag(builder, MakeRange(extend->begin, extend->end), extend->ty->String());
+            AddNoteForExtendExportDiag(builder, MakeRange(extend->begin, extend->end), extend->GetTy()->String());
             return false;
         }
         return true;
@@ -1505,7 +1505,7 @@ bool ImportManager::IsExtendMemberImported(
     for (auto& super : extend->inheritedTypes) {
         if (auto implInterface = FindImplmentInterface(file, member, super)) {
             if (!IsTypeAccessible(file, *implInterface)) {
-                AddNoteForExtendExportDiag(builder, MakeRange(extend->begin, extend->end), implInterface->ty->String());
+                AddNoteForExtendExportDiag(builder, MakeRange(extend->begin, extend->end), implInterface->GetTy()->String());
                 return false;
             }
             return true;

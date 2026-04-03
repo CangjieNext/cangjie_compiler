@@ -14,7 +14,7 @@ using namespace AST;
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynSyncExpr(ASTContext& ctx, SynchronizedExpr& se)
 {
     ChkSyncExpr(ctx, nullptr, se);
-    return se.ty;
+    return se.GetTy();
 }
 
 bool TypeChecker::TypeCheckerImpl::ChkSyncExpr(ASTContext& ctx, Ptr<Ty> tgtTy, SynchronizedExpr& se)
@@ -22,7 +22,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSyncExpr(ASTContext& ctx, Ptr<Ty> tgtTy, S
     bool isWellTyped = true;
     auto lockDecl = importManager.GetSyncDecl("Lock");
     if (lockDecl) {
-        isWellTyped = Check(ctx, lockDecl->ty, se.mutex.get()) && isWellTyped;
+        isWellTyped = Check(ctx, lockDecl->GetTy(), se.mutex.get()) && isWellTyped;
     } else {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_use_expr_without_import, *se.mutex, "sync", "synchronized");
         // Do not return false immediately so that more (and independent) error messages could be reported.
@@ -47,11 +47,11 @@ bool TypeChecker::TypeCheckerImpl::ChkSyncExpr(ASTContext& ctx, Ptr<Ty> tgtTy, S
         // The child at 2 is a try expression.
         auto te = RawStaticCast<TryExpr*>(b.at(2).get());
         isWellTyped = (tgtTy ? ChkTryExpr(ctx, *tgtTy, *te) : Ty::IsTyCorrect(SynTryExpr(ctx, *te))) && isWellTyped;
-        se.desugarExpr->ty = isWellTyped ? te->ty : TypeManager::GetInvalidTy();
-        se.ty = se.desugarExpr->ty;
+        se.desugarExpr->SetTy(isWellTyped ? te->GetTy() : TypeManager::GetInvalidTy());
+        se.SetTy(se.desugarExpr->GetTy());
     } else {
         isWellTyped = false;
-        se.ty = TypeManager::GetInvalidTy();
+        se.SetTy(TypeManager::GetInvalidTy());
     }
     return isWellTyped;
 }

@@ -40,7 +40,7 @@ GlobalVar* Translator::TranslateCustomAnnoInstanceSig(const Expr& expr, const Fu
     name += MangleUtils::DecimalToManglingNumber(std::to_string(i));
     auto varName = name + MANGLE_SUFFIX;
     auto gv = builder.CreateGlobalVar(
-        builder.GetType<RefType>(TranslateType(*expr.ty)), varName, varName, "", func.GetPackageName());
+        builder.GetType<RefType>(TranslateType(*expr.GetTy())), varName, varName, "", func.GetPackageName());
     gv->EnableAttr(Attribute::COMPILER_ADD);
     gv->EnableAttr(Attribute::CONST);
     gv->Set<LinkTypeInfo>(Linkage::INTERNAL);
@@ -192,7 +192,7 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
     }
     Type* returnTy = nullptr;
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    returnTy = TranslateType(*annosArray->ty);
+    returnTy = TranslateType(*annosArray->GetTy());
 #endif
     auto funcType = builder.GetType<FuncType>(std::vector<Type*>{}, returnTy);
     const auto& loc = TranslateLocation(*decl.annotationsArray->children[0]);
