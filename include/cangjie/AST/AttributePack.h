@@ -312,7 +312,7 @@ enum class Attribute {
      * W: MacroExpansion.
      * R: None.
      */
-    MACRO_EXPANDED_NODE,
+    MACRO_EXPANDED_NODE[[deprecated("Redundant with Node->curMacroCall; will be removed in the future.")]],
 
     /**
      * Mark whether a function definition is a macro definition.
@@ -716,7 +716,6 @@ static const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::IS_CAPTURE, "IS_CAPTURE"},
     {AST::Attribute::IN_CORE, "IN_CORE"},
     {AST::Attribute::NEED_AUTO_BOX, "NEED_AUTO_BOX"},
-    {AST::Attribute::MACRO_EXPANDED_NODE, "MACRO_EXPANDED_NODE"},
     {AST::Attribute::MACRO_FUNC, "MACRO_FUNC"},
     {AST::Attribute::MACRO_INVOKE_FUNC, "MACRO_INVOKE_FUNC"},
     {AST::Attribute::MACRO_INVOKE_BODY, "MACRO_INVOKE_BODY"},
