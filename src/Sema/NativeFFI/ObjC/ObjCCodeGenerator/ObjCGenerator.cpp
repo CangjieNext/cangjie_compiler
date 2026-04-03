@@ -485,7 +485,7 @@ void ObjCGenerator::GenerateForwardDeclarations()
         }
     };
     for (auto&& member : decl->GetMemberDecls()) {
-        walker(member->ty, walker);
+        walker(member->GetTy(), walker);
     }
     // remove our own declaration from the set
     dependencies.erase(decl);
@@ -523,14 +523,14 @@ void ObjCGenerator::GenerateStaticReferences()
 
         if (declPtr->astKind == ASTKind::FUNC_DECL) {
             const auto& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(declPtr.get());
-            CJC_ASSERT(funcDecl.ty->IsFunc());
-            auto& retTy = *StaticCast<const FuncTy*>(funcDecl.ty)->retTy;
+            CJC_ASSERT(funcDecl.GetTy()->IsFunc());
+            auto& retTy = *StaticCast<const FuncTy*>(funcDecl.GetTy())->retTy;
             const auto retType = ctx.typeMapper.IsObjCObjectType(retTy) || ctx.typeMapper.IsObjCBlock(retTy)
                 ? VOID_POINTER_TYPE
                 : MapCJTypeToObjCType(retTy);
             std::string argTypes = "";
             for (auto& arg : funcDecl.funcBody->paramLists[0]->params) {
-                argTypes += MapCJTypeToObjCType(*arg->ty) + ",";
+                argTypes += MapCJTypeToObjCType(*arg->GetTy()) + ",";
             }
             // trim unnecessary ","
             argTypes.erase(std::find_if(argTypes.rbegin(), argTypes.rend(), [](auto c) { return c != ','; }).base(),
@@ -738,7 +738,7 @@ std::string ObjCGenerator::GenerateFuncParamLists(const std::vector<OwnedPtr<Fun
                 genParams += ")";
                 break;
             case FunctionListFormat::CANGJIE_DECL:
-                genParams += cur->identifier.Val() + ": " + Ty::ToString(cur->type->ty);
+                genParams += cur->identifier.Val() + ": " + Ty::ToString(cur->type->GetTy());
                 if (i != paramLists[0]->params.size() - 1) {
                     genParams += ", ";
                 }
@@ -764,7 +764,7 @@ std::string ObjCGenerator::GenerateSetterParamLists(const std::string& type) con
 
 bool ObjCGenerator::SkipSetterForValueTypeDecl(Decl& declArg) const
 {
-    return interopType == InteropType::CJ_Mapping && DynamicCast<StructTy*>(declArg.ty.get()) != nullptr;
+    return interopType == InteropType::CJ_Mapping && DynamicCast<StructTy*>(declArg.GetTy().get()) != nullptr;
 }
 
 /*
@@ -798,12 +798,12 @@ void ObjCGenerator::AddProperties()
         const auto& staticType =
             varDecl.TestAttr(Attribute::STATIC) ? ObjCFunctionType::STATIC : ObjCFunctionType::INSTANCE;
         std::string type;
-        if (isGenericGlueCode && varDecl.ty->IsGeneric()) {
+        if (isGenericGlueCode && varDecl.GetTy()->IsGeneric()) {
             auto genericActualTy =
-                TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, varDecl.ty->name)));
+                TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, varDecl.GetTy()->name)));
             type = MapCJTypeToObjCType(*genericActualTy);
         } else {
-            type = MapCJTypeToObjCType(*varDecl.ty);
+            type = MapCJTypeToObjCType(*varDecl.GetTy());
         }
         bool genSetter = varDecl.isVar && !SkipSetterForValueTypeDecl(*decl);
         const auto modeModifier = genSetter ? READWRITE_MODIFIER : READONLY_MODIFIER;
@@ -823,13 +823,13 @@ void ObjCGenerator::AddProperties()
             AddCallCangjieBeforeInitGuard();
         }
         bool isInnerGenericProp = false;
-        if (genericConfig && !varDecl.ty->HasGeneric()) {
+        if (genericConfig && !varDecl.GetTy()->HasGeneric()) {
             isInnerGenericProp = genericConfig->funcNames.find(name) != genericConfig->funcNames.end();
         }
         auto implementationName = genericConfig ? ctx.nameGenerator.GetFieldGetterWrapperName(varDecl, &genericConfig->declInstName,
             isInnerGenericProp) : ctx.nameGenerator.GetFieldGetterWrapperName(varDecl);
         AddWithIndent(
-            GenerateDefaultFunctionImplementation(implementationName, *varDecl.ty, argList, staticType),
+            GenerateDefaultFunctionImplementation(implementationName, *varDecl.GetTy(), argList, staticType),
             GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
 
         if (!genSetter) {
@@ -841,7 +841,7 @@ void ObjCGenerator::AddProperties()
             setterArgsList.emplace_back(
                 std::pair<std::string, std::string>(INT64_T, string(SELF_NAME) + "." + SELF_WEAKLINK_NAME));
         }
-        const auto setterArg = GenerateArgumentCast(*varDecl.ty, SETTER_PARAM_NAME);
+        const auto setterArg = GenerateArgumentCast(*varDecl.GetTy(), SETTER_PARAM_NAME);
         setterArgsList.emplace_back(std::pair<std::string, std::string>(type, setterArg));
 
         std::string setterResult = "";
@@ -884,7 +884,7 @@ void ObjCGenerator::AddCtorsForCjMappingEnum(AST::EnumDecl& enumDecl)
             GenerateAssignment(string(INT64_T) + " " + string(TMP_REG_ID), GenerateCCall(nativeFuncName, argList)) +
                 ";",
             GenerationTarget::SOURCE);
-        AddWithIndent(GenerateReturn(WrapperCallByInitForCJMappingReturn(*enumDecl.ty, string(TMP_REG_ID))),
+        AddWithIndent(GenerateReturn(WrapperCallByInitForCJMappingReturn(*enumDecl.GetTy(), string(TMP_REG_ID))),
             GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
     }
 }
@@ -1006,7 +1006,7 @@ void ObjCGenerator::AddConstructors()
             AddWithIndent(
                 GenerateAssignment(std::string(SELF_NAME) + "." + SELF_WEAKLINK_NAME, REGISTRY_ID_UNINIT_VALUE) + ";",
                 GenerationTarget::SOURCE, OptionalBlockOp::NONE);
-            auto rhs = "(__bridge_transfer " + MapCJTypeToObjCType(*decl->ty) + ")";
+            auto rhs = "(__bridge_transfer " + MapCJTypeToObjCType(*decl->GetTy()) + ")";
             rhs += GenerateCCall(
                 cjWrapperName, ConvertParamsListToCallableParamsString(funcDecl.funcBody->paramLists, true));
             AddWithIndent(
@@ -1116,7 +1116,7 @@ void ObjCGenerator::AddMethods()
             if (funcDecl.funcBody && funcDecl.funcBody->retType) {
                 auto staticType =
                     funcDecl.TestAttr(Attribute::STATIC) ? ObjCFunctionType::STATIC : ObjCFunctionType::INSTANCE;
-                auto retTy = funcDecl.funcBody->retType->ty;
+                auto retTy = funcDecl.funcBody->retType->GetTy();
                 const std::string& retType = MapCJTypeToObjCType(funcDecl.funcBody->retType);
                 const auto selectorComponents = ctx.nameGenerator.GetObjCDeclSelectorComponents(funcDecl);
 
@@ -1156,7 +1156,7 @@ ArgsList ObjCGenerator::ConvertParamsListToArgsList(
         for (size_t i = 0; i < paramLists[0]->params.size(); i++) {
             OwnedPtr<FuncParam>& cur = paramLists[0]->params[i];
             auto name = cur->identifier.Val();
-            name = GenerateArgumentCast(*cur->ty, std::move(name));
+            name = GenerateArgumentCast(*cur->GetTy(), std::move(name));
             result.push_back(std::pair<std::string, std::string>(MapCJTypeToObjCType(cur), name));
         }
     }
@@ -1175,7 +1175,7 @@ std::vector<std::string> ObjCGenerator::ConvertParamsListToCallableParamsString(
     if (!paramLists.empty() && paramLists[0]) {
         for (size_t i = 0; i < paramLists[0]->params.size(); i++) {
             OwnedPtr<FuncParam>& cur = paramLists[0]->params[i];
-            std::string name = GenerateArgumentCast(*cur->ty, cur->identifier.Val());
+            std::string name = GenerateArgumentCast(*cur->GetTy(), cur->identifier.Val());
             result.push_back(std::move(name));
         }
     }
@@ -1231,13 +1231,13 @@ std::string ObjCGenerator::MapCJTypeToObjCType(const OwnedPtr<Type>& type)
         return UNSUPPORTED_TYPE;
     }
 
-    if (IsGenericParam(type->ty, *decl, genericConfig)) {
+    if (IsGenericParam(type->GetTy(), *decl, genericConfig)) {
         // Current generic only support primitive type.
         auto genericActualTy =
-            TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, type->ty->name)));
+            TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, type->GetTy()->name)));
         return MapCJTypeToObjCType(*genericActualTy);
     }
-    return MapCJTypeToObjCType(*type->ty);
+    return MapCJTypeToObjCType(*type->GetTy());
 }
 
 std::string ObjCGenerator::MapCJTypeToObjCType(const OwnedPtr<FuncParam>& param)
@@ -1246,14 +1246,14 @@ std::string ObjCGenerator::MapCJTypeToObjCType(const OwnedPtr<FuncParam>& param)
         return UNSUPPORTED_TYPE;
     }
 
-    auto paraTy = param->type->ty;
+    auto paraTy = param->type->GetTy();
     if (IsGenericParam(paraTy, *decl, genericConfig)) {
         // Current generic only support primitive type.
         auto genericActualTy =
             TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, paraTy->name)));
         return MapCJTypeToObjCType(*genericActualTy);
     }
-    return MapCJTypeToObjCType(*param->type->ty);
+    return MapCJTypeToObjCType(*param->type->GetTy());
 }
 
 std::string ObjCGenerator::GenerateArgumentCast(const Ty& retTy, std::string value) const
@@ -1377,7 +1377,7 @@ void ObjCGenerator::GenerateMethods4CJMapping()
  */
 void ObjCGenerator::GenerateMethod4CJMapping(AST::FuncDecl& fn)
 {
-    auto fnTy = DynamicCast<FuncTy>(fn.ty);
+    auto fnTy = DynamicCast<FuncTy>(fn.GetTy());
     CJC_ASSERT(fnTy);
     auto originalOpenFn = ctx.fwdOverrideTable.at(&fn);
     CJC_ASSERT(originalOpenFn);
@@ -1388,7 +1388,7 @@ void ObjCGenerator::GenerateMethod4CJMapping(AST::FuncDecl& fn)
     auto transAndCollectArgs = [this, &callArgs](const Ptr<FuncParam>& p) {
         auto pname = p->identifier.Val();
         callArgs.emplace_back(pname);
-        return ":(" + MapCJTypeToObjCType(*p->ty) + ")" + pname;
+        return ":(" + MapCJTypeToObjCType(*p->GetTy()) + ")" + pname;
     };
     auto sig = Join("-(", MapCJTypeToObjCType(*fnTy->retTy), ")", fn.identifier.Val(),
         JoinVec<Ptr<FuncParam>>(params, transAndCollectArgs, " ", "", "", false));
@@ -1426,7 +1426,7 @@ void ObjCGenerator::AddConstructor4CJMapping(AST::FuncDecl& ctor)
     auto transAndCollectArgs = [this, &callArgs](const Ptr<FuncParam>& p) {
         auto pname = p->identifier.Val();
         callArgs.emplace_back(pname);
-        return ":(" + MapCJTypeToObjCType(*p->ty) + ")" + pname;
+        return ":(" + MapCJTypeToObjCType(*p->GetTy()) + ")" + pname;
     };
     const auto initSig = Join("-(id)init", JoinVec<Ptr<FuncParam>>(params, transAndCollectArgs, " ", "", "", false));
     // Write into header

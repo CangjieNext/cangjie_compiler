@@ -163,5 +163,5 @@ void GenerateWrappers::GenerateSetterWrapper(InteropContext& ctx, VarDecl& field
 
 bool GenerateWrappers::SkipSetterForValueTypeDecl(Decl& decl) const
 {
-    return interopType == InteropType::CJ_Mapping && DynamicCast<StructTy*>(decl.ty.get()) != nullptr;
+    return interopType == InteropType::CJ_Mapping && DynamicCast<StructTy*>(decl.GetTy().get()) != nullptr;
 }

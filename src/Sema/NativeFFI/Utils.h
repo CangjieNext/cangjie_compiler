@@ -110,7 +110,7 @@ template <typename... Args> OwnedPtr<CallExpr> CreateCall(Ptr<FuncDecl> fd, Ptr<
 
     (details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
 
-    auto funcTy = StaticCast<FuncTy*>(fd->ty);
+    auto funcTy = StaticCast<FuncTy*>(fd->GetTy());
 
     return CreateCallExpr(WithinFile(CreateRefExpr(*fd), curFile), std::move(funcArgs), fd, funcTy->retTy,
         CallKind::CALL_DECLARED_FUNCTION);
@@ -125,7 +125,7 @@ OwnedPtr<CallExpr> CreateMemberCall(OwnedPtr<Expr> receiver, Ptr<FuncDecl> fd, O
 
     (details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
 
-    auto funcTy = StaticCast<FuncTy*>(fd->ty);
+    auto funcTy = StaticCast<FuncTy*>(fd->GetTy());
     auto ma = CreateMemberAccess(std::move(receiver), *fd);
     CopyBasicInfo(ma->baseExpr, ma);
     return CreateCallExpr(std::move(ma), std::move(funcArgs), fd, funcTy->retTy, CallKind::CALL_DECLARED_FUNCTION);

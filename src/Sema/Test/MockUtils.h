@@ -48,7 +48,7 @@ public:
     template <typename T> static OwnedPtr<T> CreateType(const Ptr<AST::Ty> ty)
     {
         auto type = MakeOwned<T>();
-        type->ty = ty;
+        type->SetTy(ty);
         return type;
     }
 
