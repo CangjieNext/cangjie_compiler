@@ -474,7 +474,9 @@ public:
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     std::vector<std::string> pluginPaths; /**< meta-transform plugins */
 #endif
-    std::vector<std::string> commonPartCjos; /**< .cjo path for parent source sets (common to currently compiled) */
+    std::vector<std::string> commonCjoFiles; /**< .cjo path for parent source sets (common to currently compiled) */
+
+    std::vector<std::string> commonChirFiles; /**< .chir files for parent source sets */
 
     // enable incremental compilation
     bool enIncrementalCompilation = false;
@@ -508,8 +510,6 @@ public:
     std::vector<std::string> inputObjs; /**< .o files to link. */
 
     std::string inputCjoFile; /**< .cjo files to scan */
-
-    std::vector<std::string> inputChirFiles; /**< .chir files to complete compilation */
 
     std::vector<std::string> inputPdbaFiles; /**< cbc import libraries, which used to import cbclib */
 
@@ -1153,7 +1153,7 @@ public:
 
     bool IsCompilingCJMPSpecific() const
     {
-        return inputChirFiles.size() > 0;
+        return commonChirFiles.size() > 0;
     }
 
     bool IsCompilingCJMP() const
@@ -1186,15 +1186,17 @@ private:
     bool CheckCompileAsExeOptions() const;
     bool CheckPgoOptions() const;
     bool CheckCompileMacro() const;
+    bool CheckCJMPOptions() const;
     void RefactJobs();
     void RefactAggressiveParallelCompileOption();
     void DisableStaticStdForOhos();
+    bool VerifyFileExtension(const std::string& file, const std::string& fullPath, const std::string& extension,
+        DiagnosticEngine& diag) const;
 
     bool ProcessInputs(const std::vector<std::string>& inputs);
     bool HandleArchiveExtension(DiagnosticEngine& diag, const std::string& value);
     bool HandleCJOExtension(DiagnosticEngine& diag, const std::string& value);
     bool HandleCJExtension(DiagnosticEngine& diag, const std::string& value);
-    bool HandleCHIRExtension(DiagnosticEngine& diag, const std::string& value);
     bool HandleCJDExtension(DiagnosticEngine& diag, const std::string& value);
     bool HandleBCExtension(DiagnosticEngine& diag, const std::string& value);
     bool HandleNoExtension(DiagnosticEngine& diag, const std::string& value);

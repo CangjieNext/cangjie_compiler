@@ -307,7 +307,7 @@ bool MPParserImpl::CompileCommon() const
 bool MPParserImpl::CompilePlatform() const
 {
     if (opts) {
-        return opts->commonPartCjos.size() > 0;
+        return opts->commonCjoFiles.size() > 0;
     }
 
     return false;

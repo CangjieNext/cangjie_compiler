@@ -485,7 +485,7 @@ void ParseAndMergeCjd(Ptr<CompilerInstance> ci, std::pair<const std::string, std
     {
         std::lock_guard<std::mutex> guardOfSm(g_sourceManageLock);
         bool isCjmpFile = ci->invocation.globalOptions.IsCompilingCJMP() ||
-            !ci->invocation.globalOptions.commonPartCjos.empty();
+            !ci->invocation.globalOptions.commonCjoFiles.empty();
         fileId = sm.AddSource(cjoPath, sourceCode.value(), cjdInfo.first, isCjmpFile);
     }
     auto fileAst =

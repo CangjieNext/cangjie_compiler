@@ -665,11 +665,23 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
          return false;
      }},
 #endif
-    { Options::ID::COMMON_PART_PATH, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+    { Options::ID::COMMON_PART_CJO, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         auto commonPartCjo = GlobalOptions::ValidateInputFilePath(
             arg.value, DiagKindRefactor::driver_invalid_binary_file);
         if (commonPartCjo.has_value()) {
-            opts.commonPartCjos.emplace_back(commonPartCjo.value());
+            opts.commonCjoFiles.emplace_back(commonPartCjo.value());
+        } else {
+            DiagnosticEngine diag;
+            diag.DiagnoseRefactor(DiagKindRefactor::no_such_file_or_directory, DEFAULT_POSITION, arg.value);
+        }
+
+        return true;
+    }},
+    { Options::ID::COMMON_PART_CHIR, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        auto commonChirFile = GlobalOptions::ValidateInputFilePath(
+            arg.value, DiagKindRefactor::no_such_file_or_directory);
+        if (commonChirFile.has_value()) {
+            opts.commonChirFiles.push_back(commonChirFile.value());
         } else {
             DiagnosticEngine diag;
             diag.DiagnoseRefactor(DiagKindRefactor::no_such_file_or_directory, DEFAULT_POSITION, arg.value);
