@@ -40,31 +40,33 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIfExpr(const CheckerContext& ctx, IfExp
     if (IsIfExprWithoutElse(ie)) {
         // For the case that if-elseif without ending 'else' branch.
         isWellTyped = (!ie.elseBody || Ty::IsTyCorrect(Synthesize(ctx.With(SynPos::EXPR_ARG), ie.elseBody.get()))) && isWellTyped;
-        ie.ty = isWellTyped ? RawStaticCast<Ty*>(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT))
-                            : TypeManager::GetInvalidTy();
-        return ie.ty;
+        ie.SetTy(isWellTyped ? RawStaticCast<Ty*>(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT))
+                             : TypeManager::GetInvalidTy());
+        return ie.GetTy();
     }
 
     isWellTyped = ie.elseBody && Ty::IsTyCorrect(Synthesize(ctx.With(SynPos::EXPR_ARG), ie.elseBody.get())) && isWellTyped;
     if (!isWellTyped) {
-        ie.ty = TypeManager::GetInvalidTy();
+        ie.SetTy(TypeManager::GetInvalidTy());
         return TypeManager::GetInvalidTy();
     }
 
     ReplaceIdealTy(*ie.thenBody);
     ReplaceIdealTy(*ie.elseBody);
-    ie.thenBody->ty = typeManager.GetThisRealTy(ie.thenBody->ty);
-    ie.elseBody->ty = typeManager.GetThisRealTy(ie.elseBody->ty);
+    ie.thenBody->SetTy(typeManager.GetThisRealTy(ie.thenBody->GetTy()));
+    ie.elseBody->SetTy(typeManager.GetThisRealTy(ie.elseBody->GetTy()));
     // when an if expr is unused, its type is set to unit if possible
     if (pos == SynPos::UNUSED) {
-        ie.ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-        return ie.ty;
+        ie.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+        return ie.GetTy();
     }
-    auto thenTy = ie.thenBody->ty;
-    auto elseTy = ie.elseBody->ty;
+    auto thenTy = ie.thenBody->GetTy();
+    auto elseTy = ie.elseBody->GetTy();
     if (Ty::IsTyCorrect(thenTy) && Ty::IsTyCorrect(elseTy)) {
         auto joinRes = JoinAndMeet(typeManager, {thenTy, elseTy}, {}, &importManager, ie.curFile).JoinAsVisibleTy();
-        if (auto optErrs = JoinAndMeet::SetJoinedType(ie.ty, joinRes)) {
+        auto [optErrs, joinedIfTy] = JoinAndMeet::SetJoinedType(ie.GetTy(), joinRes);
+        ie.SetTy(joinedIfTy);
+        if (optErrs) {
             std::string errMsg = "types " + Ty::ToString(thenTy) + " and " + Ty::ToString(elseTy);
             errMsg = ie.sourceExpr && ie.sourceExpr->astKind == ASTKind::IF_AVAILABLE_EXPR
                 ? errMsg + " of the two lambda of this '@IfAvailable' expression mismatch"
@@ -72,7 +74,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIfExpr(const CheckerContext& ctx, IfExp
             diag.Diagnose(ie, DiagKind::sema_diag_report_error_message, errMsg).AddNote(*optErrs);
         }
     }
-    return ie.ty;
+    return ie.GetTy();
 }
 
 bool TypeChecker::TypeCheckerImpl::ChkIfExpr(ASTContext& ctx, Ty& tgtTy, IfExpr& ie)
@@ -89,7 +91,7 @@ bool TypeChecker::TypeCheckerImpl::ChkIfExpr(ASTContext& ctx, Ty& tgtTy, IfExpr&
     }
 
     if (!isWellTyped) {
-        ie.ty = TypeManager::GetInvalidTy();
+        ie.SetTy(TypeManager::GetInvalidTy());
     }
     return isWellTyped;
 }
@@ -139,11 +141,11 @@ bool TypeChecker::TypeCheckerImpl::SynLetPatternDestructor(
     }
     Synthesize({ctx, SynPos::EXPR_ARG}, lpd.initializer.get());
     ReplaceIdealTy(*lpd.initializer);
-    auto selectorTy = lpd.initializer->ty;
+    auto selectorTy = lpd.initializer->GetTy();
     // cannot have multiple pattern in one let with different astKind, e.g. let A|_ <- xxx
     // in this case, no need to check further
     if (!ChkPatternsSameASTKind(ctx, lpd.patterns)) {
-        lpd.ty = TypeManager::GetInvalidTy();
+        lpd.SetTy(TypeManager::GetInvalidTy());
         return false;
     }
     // intended shortcut &&: no need to check var pattern if it has already been reported by parent AST
@@ -153,10 +155,10 @@ bool TypeChecker::TypeCheckerImpl::SynLetPatternDestructor(
         subpatternsGood = ChkPattern(ctx, *selectorTy, *p) && subpatternsGood;
     }
     if (Ty::IsTyCorrect(selectorTy) && subpatternsGood) {
-        lpd.ty = boolTy;
+        lpd.SetTy(boolTy);
         return good;
     } else {
-        lpd.ty = TypeManager::GetInvalidTy();
+        lpd.SetTy(TypeManager::GetInvalidTy());
         return false;
     }
 }
@@ -171,7 +173,7 @@ bool TypeChecker::TypeCheckerImpl::CheckCondition(ASTContext& ctx, Expr& e, bool
     }
     if (auto paren = DynamicCast<ParenExpr>(&e)) {
         bool res = CheckCondition(ctx, *paren->expr, suppressIntroducingVariableError);
-        paren->ty = paren->expr->ty;
+        paren->SetTy(paren->expr->GetTy());
         return res;
     }
 
@@ -211,12 +213,12 @@ bool TypeChecker::TypeCheckerImpl::CheckBinaryCondition(
 
     auto res = leftGood && rightGood;
     if (res) {
-        e.ty = boolTy;
+        e.SetTy(boolTy);
     } else {
         if (e.ShouldDiagnose() && !CanSkipDiag(e)) {
             DiagMismatchedTypes(diag, e, *boolTy);
         }
-        e.ty = TypeManager::GetInvalidTy();
+        e.SetTy(TypeManager::GetInvalidTy());
     }
     res = res && !suppressIntroducingVariableError;
     return res;
@@ -225,11 +227,11 @@ bool TypeChecker::TypeCheckerImpl::CheckBinaryCondition(
 bool TypeChecker::TypeCheckerImpl::ChkIfExprNoElse(ASTContext& ctx, Ty& target, IfExpr& ie)
 {
     Ptr<Ty> unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-    ie.ty = unitTy;
+    ie.SetTy(unitTy);
     Synthesize({ctx, SynPos::EXPR_ARG}, ie.thenBody.get());
     Synthesize({ctx, SynPos::EXPR_ARG}, ie.elseBody.get());
     // The ifExpr may only have 'then' branch or as the case that if-elseif without ending 'else' branch.
-    bool isWellTyped = Ty::IsTyCorrect(ie.thenBody->ty) && (!ie.elseBody || Ty::IsTyCorrect(ie.elseBody->ty));
+    bool isWellTyped = Ty::IsTyCorrect(ie.thenBody->GetTy()) && (!ie.elseBody || Ty::IsTyCorrect(ie.elseBody->GetTy()));
     bool isTargetMatched = typeManager.IsSubtype(unitTy, &target);
     if (isWellTyped && !isTargetMatched) {
         DiagMismatchedTypesWithFoundTy(
@@ -242,18 +244,20 @@ bool TypeChecker::TypeCheckerImpl::ChkIfExprTwoBranches(ASTContext& ctx, Ty& tar
 {
     // Now both thenBody and elseBody are guaranteed to be non-nullable.
     if (!Check(ctx, &target, ie.thenBody.get())) {
-        if (ie.ShouldDiagnose() && !CanSkipDiag(*ie.thenBody) && !typeManager.IsSubtype(ie.thenBody->ty, &target)) {
+        if (ie.ShouldDiagnose() && !CanSkipDiag(*ie.thenBody) &&
+            !typeManager.IsSubtype(ie.thenBody->GetTy(), &target)) {
             DiagMismatchedTypes(diag, *ie.thenBody, target);
         }
     }
     if (!Check(ctx, &target, ie.elseBody.get())) {
-        if (ie.ShouldDiagnose() && !CanSkipDiag(*ie.elseBody) && !typeManager.IsSubtype(ie.elseBody->ty, &target)) {
+        if (ie.ShouldDiagnose() && !CanSkipDiag(*ie.elseBody) &&
+            !typeManager.IsSubtype(ie.elseBody->GetTy(), &target)) {
             DiagMismatchedTypes(diag, *ie.elseBody, target);
         }
     }
-    if (!Ty::IsTyCorrect(ie.thenBody->ty) || !Ty::IsTyCorrect(ie.elseBody->ty)) {
+    if (!Ty::IsTyCorrect(ie.thenBody->GetTy()) || !Ty::IsTyCorrect(ie.elseBody->GetTy())) {
         return false;
     }
-    ie.ty = &target;
+    ie.SetTy(&target);
     return true;
 }

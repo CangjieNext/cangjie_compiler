@@ -15,18 +15,18 @@ using namespace Cangjie;
  */
 static inline bool HasTypeOfNothing(const AST::TryExpr& tryExpr)
 {
-    if (!tryExpr.tryBlock->ty->IsNothing()) {
+    if (!tryExpr.tryBlock->GetTy()->IsNothing()) {
         return false;
     }
     return std::all_of(
-        tryExpr.catchBlocks.cbegin(), tryExpr.catchBlocks.cend(), [](auto& it) { return it->ty->IsNothing(); });
+        tryExpr.catchBlocks.cbegin(), tryExpr.catchBlocks.cend(), [](auto& it) { return it->GetTy()->IsNothing(); });
 }
 
 Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
 {
     // Try must have at least one catch block or finally block.
     CJC_ASSERT(!tryExpr.catchBlocks.empty() || tryExpr.finallyBlock != nullptr);
-    auto tryTy = TranslateType(*tryExpr.ty);
+    auto tryTy = TranslateType(*tryExpr.GetTy());
     auto loc = TranslateLocation(tryExpr.begin, tryExpr.end);
     auto retVal = tryTy->IsUnit() || tryTy->IsNothing() ? nullptr :
         CreateAndAppendExpression<Allocate>(loc, builder.GetType<RefType>(tryTy), tryTy, currentBlock)->GetResult();
@@ -234,12 +234,12 @@ std::vector<ClassType*> Translator::GetExceptionsForTry(const AST::TryExpr& tryE
         auto currentTry = *it;
         for (auto& pattern : currentTry->catchPatterns) {
             if (pattern->astKind == AST::ASTKind::WILDCARD_PATTERN) {
-                collectTys(pattern->ty);
+                collectTys(pattern->GetTy());
                 continue;
             }
             auto& exceptPattern = StaticCast<AST::ExceptTypePattern>(*pattern);
             for (auto& eType : exceptPattern.types) {
-                collectTys(eType->ty);
+                collectTys(eType->GetTy());
             }
         }
     }
@@ -297,7 +297,7 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateExceptionPattern(const AS
     auto trueBlock = CreateBlock();
     const auto& loc = TranslateLocation(pattern);
     if (pattern.astKind == AST::ASTKind::WILDCARD_PATTERN) {
-        auto typeTy = TranslateType(*pattern.ty);
+        auto typeTy = TranslateType(*pattern.GetTy());
         auto falseBlock = CreateBlock();
         auto cond =
             CreateAndAppendExpression<InstanceOf>(loc, builder.GetBoolTy(), eVal, typeTy, currentBlock)->GetResult();
@@ -311,7 +311,7 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateExceptionPattern(const AS
     }
     for (auto& eType : exceptPattern.types) {
         auto falseBlock = CreateBlock();
-        auto ty = TranslateType(*eType->ty);
+        auto ty = TranslateType(*eType->GetTy());
         auto cond =
             CreateAndAppendExpression<InstanceOf>(loc, builder.GetBoolTy(), eVal, ty, currentBlock)->GetResult();
         CreateAndAppendTerminator<Branch>(cond, trueBlock, falseBlock, currentBlock);

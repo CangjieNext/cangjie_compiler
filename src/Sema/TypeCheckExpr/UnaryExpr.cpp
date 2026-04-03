@@ -77,28 +77,28 @@ void TypeChecker::TypeCheckerImpl::DiagnoseForUnaryExpr(ASTContext& ctx, UnaryEx
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
 {
     if (ue.desugarExpr) {
-        return ue.desugarExpr->ty;
+        return ue.desugarExpr->GetTy();
     }
     if (!Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ue.expr.get()))) {
-        ue.ty = TypeManager::GetInvalidTy();
-        return ue.ty;
+        ue.SetTy(TypeManager::GetInvalidTy());
+        return ue.GetTy();
     }
     if (Ty::IsTyCorrect(SynBuiltinUnaryExpr(ctx, ue))) {
         ReplaceIdealTy(*ue.expr);
-        ue.ty = ue.expr->ty;
-        return ue.ty;
+        ue.SetTy(ue.expr->GetTy());
+        return ue.GetTy();
     }
 
     DesugarOperatorOverloadExpr(ctx, ue);
     if (Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ue.desugarExpr.get()))) {
-        ue.ty = ue.desugarExpr->ty;
+        ue.SetTy(ue.desugarExpr->GetTy());
         ReplaceTarget(&ue, StaticCast<CallExpr*>(ue.desugarExpr.get())->resolvedFunction);
     } else {
         RecoverToUnaryExpr(ue);
         DiagnoseForUnaryExpr(ctx, ue);
-        ue.ty = TypeManager::GetInvalidTy();
+        ue.SetTy(TypeManager::GetInvalidTy());
     }
-    return ue.ty;
+    return ue.GetTy();
 }
 
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBuiltinUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
@@ -115,8 +115,8 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBuiltinUnaryExpr(ASTContext& ctx, Unary
     if (auto tv = DynamicCast<TyVar*>(ty); tv && tv->isPlaceholder) {
         switch (PickConstaintFromTys(*tv, TypeMapToTys(typeCandidate, true), true)) {
             case MatchResult::UNIQUE:
-                ue.ty = typeManager.TryGreedySubst(tv);
-                return ue.ty;
+                ue.SetTy(typeManager.TryGreedySubst(tv));
+                return ue.GetTy();
             case MatchResult::AMBIGUOUS:
             case MatchResult::NONE:
                 return TypeManager::GetInvalidTy();
@@ -127,7 +127,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBuiltinUnaryExpr(ASTContext& ctx, Unary
     for (auto& type : typeCandidate) {
         auto primitiveTy = TypeManager::GetPrimitiveTy(type.second);
         if (typeManager.IsSubtype(ty, primitiveTy)) {
-            ue.ty = ty;
+            ue.SetTy(ty);
             return ty;
         }
     }
@@ -137,7 +137,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBuiltinUnaryExpr(ASTContext& ctx, Unary
 bool TypeChecker::TypeCheckerImpl::ChkUnaryExpr(ASTContext& ctx, Ty& target, UnaryExpr& ue)
 {
     if (ue.desugarExpr) {
-        return typeManager.IsSubtype(ue.desugarExpr->ty, &target);
+        return typeManager.IsSubtype(ue.desugarExpr->GetTy(), &target);
     }
     bool isWellTyped = true;
     // If the 'target' is correct type, 'unboxedTy' must also be correct;
@@ -148,7 +148,7 @@ bool TypeChecker::TypeCheckerImpl::ChkUnaryExpr(ASTContext& ctx, Ty& target, Una
     if (unboxedTy->IsBuiltin()) {
         DiagSuppressor ds(diag); // report error later
         isWellTyped = Check(ctx, unboxedTy, ue.expr.get());
-        ue.expr->ty = typeManager.TryGreedySubst(ue.expr->ty);
+        ue.expr->SetTy(typeManager.TryGreedySubst(ue.expr->GetTy()));
         retTy = SynBuiltinUnaryExpr(ctx, ue);
         isWellTyped = isWellTyped && Ty::IsTyCorrect(retTy) && Ty::IsTyCorrect(&target);
     } else {
@@ -158,13 +158,13 @@ bool TypeChecker::TypeCheckerImpl::ChkUnaryExpr(ASTContext& ctx, Ty& target, Una
 
     if (isWellTyped) { // If this is a built-in unary expr.
         ReplaceIdealTy(*ue.expr);
-        ue.ty = ue.expr->ty;
+        ue.SetTy(ue.expr->GetTy());
         return true;
     }
     // Try operator overload.
     DesugarOperatorOverloadExpr(ctx, ue);
     if (Check(ctx, &target, ue.desugarExpr.get())) {
-        ue.ty = ue.desugarExpr->ty;
+        ue.SetTy(ue.desugarExpr->GetTy());
         ReplaceTarget(&ue, StaticCast<CallExpr*>(ue.desugarExpr.get())->resolvedFunction);
         return true;
     }
@@ -181,6 +181,6 @@ bool TypeChecker::TypeCheckerImpl::ChkUnaryExpr(ASTContext& ctx, Ty& target, Una
     } else {
         DiagnoseForUnaryExpr(ctx, ue);
     }
-    ue.ty = TypeManager::GetInvalidTy();
+    ue.SetTy(TypeManager::GetInvalidTy());
     return false;
 }

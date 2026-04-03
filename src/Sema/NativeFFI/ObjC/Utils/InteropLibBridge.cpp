@@ -98,7 +98,7 @@ Ptr<TypeAliasDecl> InteropLibBridge::GetForwarderMutexDecl()
  */
 Ptr<Ty> InteropLibBridge::GetForwarderMutexTy()
 {
-    return GetForwarderMutexDecl()->type->ty;
+    return GetForwarderMutexDecl()->type->GetTy();
 }
 
 /**
@@ -169,7 +169,7 @@ Ptr<InterfaceDecl> InteropLibBridge::GetObjCIdDecl()
 
 Ptr<Ty> InteropLibBridge::GetNativeObjCIdTy()
 {
-    return GetNativeObjCIdDecl()->type->ty;
+    return GetNativeObjCIdDecl()->type->GetTy();
 }
 
 Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCSelDecl()
@@ -186,7 +186,7 @@ Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCClassDecl()
 
 Ptr<Ty> InteropLibBridge::GetNativeObjCClassTy()
 {
-    return GetNativeObjCClassDecl()->type->ty;
+    return GetNativeObjCClassDecl()->type->GetTy();
 }
 
 Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCSuperPtrDecl()
@@ -197,7 +197,7 @@ Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCSuperPtrDecl()
 
 Ptr<Ty> InteropLibBridge::GetNativeObjCSuperPtrTy()
 {
-    return GetNativeObjCSuperPtrDecl()->type->ty;
+    return GetNativeObjCSuperPtrDecl()->type->GetTy();
 }
 
 Ptr<TypeAliasDecl> InteropLibBridge::GetRegistryIdDecl()
@@ -208,7 +208,7 @@ Ptr<TypeAliasDecl> InteropLibBridge::GetRegistryIdDecl()
 
 Ptr<Ty> InteropLibBridge::GetRegistryIdTy()
 {
-    return GetRegistryIdDecl()->type->ty;
+    return GetRegistryIdDecl()->type->GetTy();
 }
 
 Ptr<ClassDecl> InteropLibBridge::GetObjCUnreachableCodeExceptionDecl()
@@ -445,7 +445,7 @@ Ptr<VarDecl> InteropLibBridge::GetObjCPointerPointerField()
     auto outer = GetObjCPointerDecl();
     for (auto& member : outer->body->decls) {
         if (auto fieldDecl = DynamicCast<VarDecl*>(member.get())) {
-            if (fieldDecl->ty->IsPointer()) {
+            if (fieldDecl->GetTy()->IsPointer()) {
                 result = fieldDecl;
                 break;
             }
@@ -508,7 +508,7 @@ Ptr<FuncDecl> GetObjCBlockConstructorByABIName(InteropLibBridge& bridge, const s
                 || funcDecl->funcBody->paramLists[0]->params.size() != 1) {
                 continue;
             }
-            Ptr<Ty> paramTy = funcDecl->funcBody->paramLists[0]->params[0]->ty;
+            Ptr<Ty> paramTy = funcDecl->funcBody->paramLists[0]->params[0]->GetTy();
             if (!paramTy->IsPointer()) {
                 continue;
             }

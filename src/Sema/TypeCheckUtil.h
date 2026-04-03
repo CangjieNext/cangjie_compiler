@@ -109,7 +109,7 @@ inline bool NeedSynOnUsed(const AST::Decl& target)
     // because the ty is already set at PreCheck stage.
     // Source imported function will not been checked from toplevel, so we must synthesize it when used.
     return !target.IsTypeDecl() && target.astKind != AST::ASTKind::FUNC_PARAM &&
-        (!AST::Ty::IsTyCorrect(target.ty) || target.ty->HasQuestTy());
+        (!AST::Ty::IsTyCorrect(target.GetTy()) || target.GetTy()->HasQuestTy());
 }
 
 std::string GetFullInheritedTy(AST::ExtendDecl& extend);
@@ -313,7 +313,7 @@ template <typename T> T* GetMemberDecl(
         }
         bool isSuitableDecl = true;
         if (auto funcMember = DynamicCast<AST::FuncDecl>(member.get()); funcMember) {
-            auto originalParamTys = RawStaticCast<const AST::FuncTy*>(funcMember->ty)->paramTys;
+            auto originalParamTys = RawStaticCast<const AST::FuncTy*>(funcMember->GetTy())->paramTys;
             if (originalParamTys.size() != paramTys.size()) {
                 continue;
             }

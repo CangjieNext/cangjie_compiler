@@ -294,41 +294,41 @@ void DiagMismatchedTypesWithFoundTy(
 
 void DiagMismatchedTypes(DiagnosticEngine& diag, const Node& node, const Ty& type, const std::string& note)
 {
-    if (!Ty::IsTyCorrect(node.ty)) {
+    if (!Ty::IsTyCorrect(node.GetTy())) {
         return; // Should have been diagnosed before.
     }
-    DiagMismatchedTypesWithFoundTy(diag, node, type, *node.ty, note);
+    DiagMismatchedTypesWithFoundTy(diag, node, type, *node.GetTy(), note);
 }
 
 void DiagMismatchedTypes(DiagnosticEngine& diag, const Node& node, const Node& type, const std::string& because)
 {
-    if (!Ty::IsTyCorrect(node.ty)) {
+    if (!Ty::IsTyCorrect(node.GetTy())) {
         return; // Should have been diagnosed before.
     }
-    CJC_ASSERT(Ty::IsTyCorrect(type.ty));
+    CJC_ASSERT(Ty::IsTyCorrect(type.GetTy()));
     if (type.ShouldDiagnose() && !because.empty()) {
         auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types_because, node);
-        auto tyStr = node.ty->String();
-        if (auto thisTy = DynamicCast<ClassThisTy*>(node.ty); thisTy) {
+        auto tyStr = node.GetTy()->String();
+        if (auto thisTy = DynamicCast<ClassThisTy*>(node.GetTy()); thisTy) {
             tyStr = ClassTy(thisTy->name, *thisTy->declPtr, thisTy->typeArgs).String();
         }
-        builder.AddMainHintArguments(type.ty->String(), tyStr);
-        builder.AddHint(type, type.ty->String(), because);
+        builder.AddMainHintArguments(type.GetTy()->String(), tyStr);
+        builder.AddHint(type, type.GetTy()->String(), because);
     } else {
-        DiagMismatchedTypesWithFoundTy(diag, node, *type.ty, *node.ty);
+        DiagMismatchedTypesWithFoundTy(diag, node, *type.GetTy(), *node.GetTy());
     }
 }
 
 void DiagUnableToInferReturnType(DiagnosticEngine& diag, const FuncDecl& fd)
 {
-    if (Ty::IsTyCorrect(fd.ty)) {
+    if (Ty::IsTyCorrect(fd.GetTy())) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_unable_to_infer_return_type, fd, MakeRange(fd.identifier));
     }
 }
 
 void DiagUnableToInferReturnType(DiagnosticEngine& diag, const FuncDecl& fd, const Expr& expr)
 {
-    if (Ty::IsTyCorrect(fd.ty)) {
+    if (Ty::IsTyCorrect(fd.GetTy())) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_unable_to_infer_return_type, fd, MakeRange(fd.identifier))
             .AddNote(expr, MakeRange(expr.begin, expr.end), "with recursive usage from");
     }
@@ -362,7 +362,7 @@ void DiagWrongNumberOfArguments(DiagnosticEngine& diag, const CallExpr& ce, cons
     auto& params = fd.funcBody->paramLists.front()->params;
     std::vector<Ptr<Ty>> paramTys;
     std::transform(params.cbegin(), params.cend(), std::back_inserter(paramTys),
-        [](auto& param) { return param->type == nullptr ? param->ty : param->type->ty; });
+        [](auto& param) { return param->type == nullptr ? param->GetTy() : param->type->GetTy(); });
     DiagWrongNumberOfArgumentsCommon(diag, ce, paramTys, &fd);
 }
 
@@ -531,7 +531,7 @@ std::string GetNoteMessageForMemberDecl(const Decl& target)
     if (target.outerDecl->astKind == ASTKind::EXTEND_DECL) {
         ret += "extended ";
     }
-    ret += DeclKindToString(target) + " member of '" + target.outerDecl->ty->String() + "'";
+    ret += DeclKindToString(target) + " member of '" + target.outerDecl->GetTy()->String() + "'";
     return ret;
 }
 } // namespace
@@ -588,15 +588,16 @@ void DiagLowerAccessLevelTypesUse(DiagnosticEngine& diag, const Decl& outDecl,
         : GetAccessLevelStr(limitedDecls.empty() ? *hintDecls.front().get() : limitedDecls.front().second, "'");
     auto builder = diag.DiagnoseRefactor(kind, outDecl, range, GetAccessLevelStr(outDecl), lowerLevelStr);
 
-    if (!noHint && Ty::IsTyCorrect(outDecl.ty)) {
+    if (!noHint && Ty::IsTyCorrect(outDecl.GetTy())) {
         builder.AddMainHintArguments("inferred type",
-            outDecl.ty->IsFunc() ? Ty::ToString(StaticCast<FuncTy*>(outDecl.ty)->retTy) : Ty::ToString(outDecl.ty),
+            outDecl.GetTy()->IsFunc() ? Ty::ToString(StaticCast<FuncTy*>(outDecl.GetTy())->retTy)
+                                      : Ty::ToString(outDecl.GetTy()),
             lowerLevelStr);
         for (const auto& hintDecl : hintDecls) {
             CJC_ASSERT(hintDecl);
             auto inDeclRange = MakeRangeForDeclIdentifier(*hintDecl);
             builder.AddNote(*hintDecl, inDeclRange,
-                "the " + GetAccessLevelStr(*hintDecl, "'") + " type is '" + Ty::ToString(hintDecl->ty) + "'");
+                "the " + GetAccessLevelStr(*hintDecl, "'") + " type is '" + Ty::ToString(hintDecl->GetTy()) + "'");
         }
     }
     for (const auto& [node, decl] : limitedDecls) {
@@ -604,10 +605,10 @@ void DiagLowerAccessLevelTypesUse(DiagnosticEngine& diag, const Decl& outDecl,
         if (!node.begin.IsZero() && !node.end.IsZero()) {
             auto typeRange = MakeRange(node.begin, node.end);
             builder.AddNote(
-                node, typeRange, "type '" + Ty::ToString(node.ty) + "' contains " + usedVisibility + " type");
+                node, typeRange, "type '" + Ty::ToString(node.GetTy()) + "' contains " + usedVisibility + " type");
         }
         auto inDeclRange = MakeRangeForDeclIdentifier(decl);
-        builder.AddNote(decl, inDeclRange, "the " + usedVisibility + " type is '" + Ty::ToString(decl.ty) + "'");
+        builder.AddNote(decl, inDeclRange, "the " + usedVisibility + " type is '" + Ty::ToString(decl.GetTy()) + "'");
     }
 }
 
@@ -621,9 +622,10 @@ void DiagPatternInternalTypesUse(DiagnosticEngine& diag, const std::vector<std::
             auto range = MakeRange(node.begin, node.end);
             auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_accessibility_with_main_hint, node, range,
                 GetAccessLevelStr(node), usedVisibility);
-            builder.AddMainHintArguments("inferred type", Ty::ToString(node.ty), usedVisibility);
+            builder.AddMainHintArguments("inferred type", Ty::ToString(node.GetTy()), usedVisibility);
             auto inDeclRange = MakeRangeForDeclIdentifier(used);
-            builder.AddNote(used, inDeclRange, "the " + usedVisibility + " type is '" + Ty::ToString(used.ty) + "'");
+            builder.AddNote(
+                used, inDeclRange, "the " + usedVisibility + " type is '" + Ty::ToString(used.GetTy()) + "'");
         }
     }
 }
@@ -721,17 +723,17 @@ void DiagForStaticVariableDependsGeneric(DiagnosticEngine& diag, const Node& nod
 void RecommendImportForMemberAccess(TypeManager& typeManager, const ImportManager& importManager,
     const MemberAccess& ma, const Ptr<DiagnosticBuilder> builder)
 {
-    if (ma.baseExpr == nullptr || !Ty::IsTyCorrect(ma.baseExpr->ty)) {
+    if (ma.baseExpr == nullptr || !Ty::IsTyCorrect(ma.baseExpr->GetTy())) {
         return;
     }
 
     CJC_ASSERT(ma.curFile && ma.curFile->curPackage);
     std::vector<std::pair<Ptr<Decl>, Ptr<InterfaceDecl>>> recommendations;
-    auto extends = typeManager.GetAllExtendsByTy(*ma.baseExpr->ty);
+    auto extends = typeManager.GetAllExtendsByTy(*ma.baseExpr->GetTy());
     for (auto& ed : extends) {
         for (auto& decl : ed->members) {
             if (decl->identifier == ma.field && ma.curFile) {
-                importManager.IsExtendMemberAccessible(*ma.curFile, *decl, *ma.baseExpr->ty, builder);
+                importManager.IsExtendMemberAccessible(*ma.curFile, *decl, *ma.baseExpr->GetTy(), builder);
             }
         }
     }

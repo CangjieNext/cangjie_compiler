@@ -21,9 +21,9 @@ using namespace TypeCheckUtil;
 bool TypeChecker::TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se)
 {
     if (se.desugarExpr) {
-        return typeManager.IsSubtype(se.desugarExpr->ty, target);
+        return typeManager.IsSubtype(se.desugarExpr->GetTy(), target);
     }
-    se.ty = TypeManager::GetInvalidTy(); // Set invalid ty at first, will be updated later.
+    se.SetTy(TypeManager::GetInvalidTy()); // Set invalid ty at first, will be updated later.
     bool invalid = !se.baseExpr || se.indexExprs.empty();
     if (invalid) {
         return false;
@@ -53,7 +53,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> tar
         : Check(ctx, target, se.desugarExpr.get());
     if (isWellTyped) {
         ds.ReportDiag();
-        se.ty = se.desugarExpr->ty;
+        se.SetTy(se.desugarExpr->GetTy());
         CJC_ASSERT(se.desugarExpr->astKind == ASTKind::CALL_EXPR);
         auto desugaredCE = StaticAs<ASTKind::CALL_EXPR>(se.desugarExpr.get());
         CJC_ASSERT(desugaredCE->resolvedFunction != nullptr);
@@ -65,10 +65,10 @@ bool TypeChecker::TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> tar
     RecoverToSubscriptExpr(se);
     // Also recover base and index's type.
     typeManager.ReplaceIdealTy(&baseTy);
-    se.baseExpr->ty = se.baseExpr->ty ? se.baseExpr->ty : baseTy;
+    se.baseExpr->SetTy(se.baseExpr->GetTy() ? se.baseExpr->GetTy() : baseTy);
     for (size_t i = 0; i < se.indexExprs.size(); ++i) {
         typeManager.ReplaceIdealTy(&indexTys[i]);
-        se.indexExprs[i]->ty = Ty::IsTyCorrect(se.indexExprs[i]->ty) ? se.indexExprs[i]->ty : indexTys[i];
+        se.indexExprs[i]->SetTy(Ty::IsTyCorrect(se.indexExprs[i]->GetTy()) ? se.indexExprs[i]->GetTy() : indexTys[i]);
     }
     if (!ds.HasError() && se.ShouldDiagnose(true)) { // Only report subscript diagnoses if no error has beed reported.
         ds.ReportDiag(); // Report warnings.
@@ -105,7 +105,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTupleAccess(ASTContext& ctx, Ptr<Ty> targe
         return false;
     }
     if (target == nullptr) { // Type inferring.
-        se.ty = tupleTy.typeArgs[index];
+        se.SetTy(tupleTy.typeArgs[index]);
         return true;
     }
     if (auto tl = AST::As<ASTKind::TUPLE_LIT>(se.baseExpr.get()); tl) {
@@ -115,25 +115,25 @@ bool TypeChecker::TypeCheckerImpl::ChkTupleAccess(ASTContext& ctx, Ptr<Ty> targe
         // may changing ideal ty to exact ty or changing valid ty to invalid ty.
         if (!Check(ctx, target, tl->children[index].get())) {
             // Reset the ty of tuple lit to allow re-synthesize of the tuple lit.
-            tl->ty = TypeManager::GetInvalidTy();
+            tl->SetTy(TypeManager::GetInvalidTy());
             return false;
         }
         std::vector<Ptr<Ty>> elemTy;
         for (auto& it : tl->children) {
             if (it != nullptr && ReplaceIdealTy(*it)) {
-                elemTy.emplace_back(it->ty);
+                elemTy.emplace_back(it->GetTy());
             } else {
                 elemTy.emplace_back(TypeManager::GetInvalidTy());
             }
         }
-        tl->ty = typeManager.GetTupleTy(elemTy);
-        se.ty = elemTy[index];
+        tl->SetTy(typeManager.GetTupleTy(elemTy));
+        se.SetTy(elemTy[index]);
     } else {
         if (!typeManager.IsSubtype(tupleTy.typeArgs[index], target)) {
             DiagMismatchedTypesWithFoundTy(diag, se, target->String(), tupleTy.typeArgs[index]->String());
             return false;
         }
-        se.ty = tupleTy.typeArgs[index];
+        se.SetTy(tupleTy.typeArgs[index]);
     }
     return true;
 }
@@ -150,7 +150,7 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayAccess(ASTContext& ctx, Ptr<Ty> targ
         auto idxExpr = se.indexExprs[0].get();
         if (!Check(ctx, i64, idxExpr)) {
             if (!ds.HasError()) {
-                DiagMismatchedTypesWithFoundTy(diag, *idxExpr, i64->String(), idxExpr->ty->String());
+                DiagMismatchedTypesWithFoundTy(diag, *idxExpr, i64->String(), idxExpr->GetTy()->String());
             }
             ds.ReportDiag();
             return false;
@@ -159,7 +159,7 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayAccess(ASTContext& ctx, Ptr<Ty> targ
     }
     CJC_ASSERT(!varrTy.typeArgs.empty() && varrTy.typeArgs[0]);
     if (target == nullptr) { // Type inferring.
-        se.ty = varrTy.typeArgs[0];
+        se.SetTy(varrTy.typeArgs[0]);
         return true;
     }
     // check subvalue type.
@@ -167,12 +167,12 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayAccess(ASTContext& ctx, Ptr<Ty> targ
         DiagMismatchedTypesWithFoundTy(diag, se, target->String(), varrTy.typeArgs[0]->String());
         return false;
     }
-    se.ty = varrTy.typeArgs[0];
+    se.SetTy(varrTy.typeArgs[0]);
     return true;
 }
 
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynSubscriptExpr(ASTContext& ctx, SubscriptExpr& se)
 {
     ChkSubscriptExpr(ctx, nullptr, se);
-    return se.ty;
+    return se.GetTy();
 }
