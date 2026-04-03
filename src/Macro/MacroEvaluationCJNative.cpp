@@ -98,7 +98,7 @@ void MacroEvaluation::CollectMacroLibs()
         // The following code will be deleted.
         auto dynFiles = GetMacroDefDynamicFiles();
         for (auto& dyfile : dynFiles) {
-            auto handle = InvokeRuntime::OpenSymbolTable(dyfile);
+            auto handle = InvokeRuntime::OpenSymbolTable(dyfile, RTLD_LAZY | RTLD_LOCAL);
             if (handle == nullptr) {
                 (void)ci->diag.Diagnose(DiagKind::can_not_open_macro_library, dyfile);
                 return;

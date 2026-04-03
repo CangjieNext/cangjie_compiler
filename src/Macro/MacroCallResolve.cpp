@@ -196,7 +196,7 @@ bool MacroCall::FindMacroDefMethod(CompilerInstance* instance)
         return false;
     }
     // Without macrolib option.
-    auto handle = InvokeRuntime::OpenSymbolTable(libPath);
+    auto handle = InvokeRuntime::OpenSymbolTable(libPath, RTLD_LAZY | RTLD_LOCAL);
     if (handle == nullptr) {
         status = MacroEvalStatus::FAIL;
         (void)instance->diag.Diagnose(DiagKind::can_not_open_macro_library, libPath);
