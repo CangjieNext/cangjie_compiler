@@ -24,8 +24,6 @@ constexpr auto INTERFACE_KEYWORD = "@interface";
 constexpr auto IMPORT_KEYWORD = "#import";
 constexpr auto PROPERTY_KEYWORD = "@property";
 constexpr auto END_KEYWORD = "@end";
-constexpr auto STRUCT_KEYWORD = "struct";
-constexpr auto RTIME_PARAM_KEYWORD = "RuntimeParam";
 constexpr auto IMPL_KEYWORD = "@implementation";
 constexpr auto RETURN_KEYWORD = "return";
 constexpr auto SUPER_KEYWORD = "super";
@@ -37,19 +35,18 @@ constexpr auto GETTER_KEYWORD = "getter=";
 
 constexpr auto FOUNDATION_IMPORT = "<Foundation/Foundation.h>";
 constexpr auto STDDEF_IMPORT = "<stddef.h>";
-constexpr auto CJ_IMPORT = "\"Cangjie.h\"";
-constexpr auto DLFCN_IMPORT = "<dlfcn.h>";
 constexpr auto STDLIB_IMPORT = "<stdlib.h>";
 
 constexpr auto READWRITE_MODIFIER = "readwrite";
 constexpr auto READONLY_MODIFIER = "readonly";
 constexpr auto STATIC_FUNC_MODIFIER = "+";
 constexpr auto INSTANCE_MODIFIER = "-";
-constexpr auto STATIC_MODIFIER = "static";
+constexpr auto EXTERN_MODIFIER = "extern";
 constexpr auto FINAL_MODIFIER = "__attribute__((objc_subclassing_restricted))";
 
 constexpr auto VOID_TYPE = "void";
 constexpr auto BOOL_TYPE = "bool";
+constexpr auto CONST_CHAR_POINTER_TYPE = "const char*";
 constexpr auto VOID_POINTER_TYPE = "void*";
 constexpr auto ID_TYPE = "id";
 constexpr auto UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE";
@@ -67,44 +64,25 @@ constexpr auto INIT_FUNC_NAME = "init";
 constexpr auto RETAIN_FUNC_NAME = "retain";
 constexpr auto DELETE_FUNC_NAME = "deleteCJObject";
 constexpr auto DEALLOC_FUNC_NAME = "dealloc";
-constexpr auto INIT_CJ_RUNTIME_NAME = "InitCJRuntime";
+constexpr auto INIT_CJ_RUNTIME_NAME = "initCJRuntime";
 constexpr auto INIT_WITH_REGISTRY_ID_NAME = "initWithRegistryId";
 constexpr auto INIT_WITH_REGISTRY_ID_SIGNATURE = "- (id)initWithRegistryId:(int64_t)registryId";
 constexpr auto REINIT_WITH_REGISTRY_ID_SIGNATURE = "- (id)reinitWithRegistryId:(int64_t)registryId";
 constexpr auto RELEASE_SIGNATURE = "- (oneway void)release";
-constexpr auto NSLOG_FUNC_NAME = "NSLog";
 constexpr auto EXIT_FUNC_NAME = "exit";
-constexpr auto DLOPEN_FUNC_NAME = "dlopen";
-constexpr auto DLERROR_FUNC_NAME = "dlerror";
-constexpr auto DLSYM_FUNC_NAME = "dlsym";
-constexpr auto LOAD_LIB_FUNC_NAME = "LoadCJLibraryWithInit";
 constexpr auto CAST_TO_VOID_PTR = "(__bridge void*)";
 constexpr auto CAST_TO_VOID_PTR_RETAINED = "(__bridge_retained void*)";
 constexpr auto CAST_TO_VOID_PTR_UNSAFE = "(void*)";
 
-constexpr auto CJ_DLL_HANLDE = "CJWorldDLHandle";
-constexpr auto CJ_RTIME_PARAMS = "defaultCJRuntimeParams";
-constexpr auto CJ_RTIME_PARAMS_LOG_LEVEL = "defaultCJRuntimeParams.logParam.logLevel";
-constexpr auto RTLOG_ERROR = "RTLOG_ERROR";
-
 constexpr auto EQ_OP = "=";
 constexpr auto EQ_CHECK_OP = "==";
-constexpr auto NOT_EQ_OP = "!=";
 
-constexpr auto E_OK = "E_OK";
-constexpr auto RTLD_LAZY = "RTLD_LAZY";
-constexpr auto NULL_KW = "NULL";
-constexpr auto FAIL_INIT_CJ_RT_MSG = "@\"ERROR: Failed to initialize Cangjie runtime\"";
-constexpr auto FAIL_INIT_CJ_LIB = "@\"ERROR: Failed to init cjworld library \"";
-constexpr auto FAIL_OPEN_CJ_LIB = "@\"ERROR: Failed to open cjworld library \"";
-constexpr auto FAIL_FIND_SYM_1 = "@\"ERROR: Failed to find ";
-constexpr auto FAIL_FIND_SYM_2 = " symbol in cjworld\"";
+constexpr auto FALSE_KW = "false";
 constexpr auto FAIL_CALL_UNINIT_CTOR = "[self doesNotRecognizeSelector:_cmd];";
 constexpr auto FAIL_CALL_CANGJIE_BEFORE_INIT =
     "[NSException raise: @\"Use before Cangjie counterpart is initialized\" format: @\"selector `%@` is overriden in "
     "Cangjie and cannot be used "
     "before Cangjie counterpart is initialized\", NSStringFromSelector(_cmd)];";
-constexpr auto STRING_FORMAT = "@\"%s\"";
 
 constexpr auto REGISTRY_ID_UNINIT_VALUE = "-1";
 
@@ -235,7 +213,7 @@ void ObjCGenerator::Generate()
 
     GenerateForwardDeclarations();
     GenerateExternalDeclarations4CJMapping();
-    GenerateStaticReferences();
+    GenerateExternalDeclarations();
 
     GenerateInterfaceDecl();
 
@@ -461,8 +439,6 @@ void ObjCGenerator::GenerateImports(const std::string& objCDeclName)
     AddToPreamble(GenerateImport(STDDEF_IMPORT));
 
     AddWithIndent(GenerateImport("\"" + objCDeclName + ".h\""), GenerationTarget::SOURCE);
-    AddWithIndent(GenerateImport(CJ_IMPORT), GenerationTarget::SOURCE);
-    AddWithIndent(GenerateImport(DLFCN_IMPORT), GenerationTarget::SOURCE);
     AddWithIndent(GenerateImport(STDLIB_IMPORT), GenerationTarget::SOURCE);
 }
 
@@ -508,8 +484,12 @@ void ObjCGenerator::GenerateForwardDeclarations()
     }
 }
 
-void ObjCGenerator::GenerateStaticReferences()
+void ObjCGenerator::GenerateExternalDeclarations()
 {
+    AddWithIndent(
+        GenerateExternalFunctionDeclaration(INIT_CJ_RUNTIME_NAME, BOOL_TYPE, CONST_CHAR_POINTER_TYPE),
+        GenerationTarget::SOURCE);
+
     for (auto& declPtr : ctx.genDecls) {
         // Filter out different specialization type definitions.
         if (IsNotThisActualTyFunc(declPtr)) {
@@ -536,22 +516,18 @@ void ObjCGenerator::GenerateStaticReferences()
             argTypes.erase(std::find_if(argTypes.rbegin(), argTypes.rend(), [](auto c) { return c != ','; }).base(),
                 argTypes.end());
             AddWithIndent(
-                GenerateStaticFunctionReference(funcDecl.identifier, retType, argTypes), GenerationTarget::SOURCE);
+                GenerateExternalFunctionDeclaration(funcDecl.identifier, retType, argTypes), GenerationTarget::SOURCE);
         }
     }
-    // static variable
-    AddWithIndent(GenerateStaticReference(CJ_DLL_HANLDE, string(VOID_TYPE) + "*", NULL_KW), GenerationTarget::SOURCE);
-    AddWithIndent(GenerateStaticReference(CJ_RTIME_PARAMS, string(STRUCT_KEYWORD) + " " + RTIME_PARAM_KEYWORD, "{0}"),
-        GenerationTarget::SOURCE);
 }
 
 /*
- *  static type (*CJImpl_ObjC_A_funcName)(arg1Type, ... argNType) = NULL;
+ *  extern type CJImpl_ObjC_A_funcName(arg1Type, ... argNType);
  */
-std::string ObjCGenerator::GenerateStaticFunctionReference(
+std::string ObjCGenerator::GenerateExternalFunctionDeclaration(
     const std::string& funcName, const std::string& retType, const std::string& argTypes) const
 {
-    std::string result = STATIC_MODIFIER;
+    std::string result = EXTERN_MODIFIER;
     std::string objCDeclName = funcName;
     if (genericConfig) {
         objCDeclName.erase(std::remove_if(objCDeclName.begin(), objCDeclName.end(),
@@ -559,77 +535,10 @@ std::string ObjCGenerator::GenerateStaticFunctionReference(
             objCDeclName.end());
     }
     result += " ";
-    result += retType + " (*";
-    result += objCDeclName + ")";
-    result += "(" + argTypes + ")";
-    result += " = " + string(NULL_KW) + ";";
+    result += retType + " ";
+    result += objCDeclName;
+    result += "(" + argTypes + ");";
     return result;
-}
-
-/*
- *  static type name = defaultValue;
- */
-std::string ObjCGenerator::GenerateStaticReference(
-    const std::string& name, const std::string& type, const std::string& defaultValue) const
-{
-    std::string result = STATIC_MODIFIER;
-    result += " ";
-    result += type + " ";
-    result += name;
-    if (defaultValue != "") {
-        result += " = " + defaultValue + ";";
-    }
-    return result;
-}
-
-/*
- * Generate code to load baked and dynamic functions from dylib
- */
-void ObjCGenerator::GenerateFunctionSymbolsInitialization()
-{
-    for (OwnedPtr<Decl>& declPtr : ctx.genDecls) {
-        // Must be filtered out earlier
-        if (declPtr->curFile != decl->curFile || !declPtr->TestAttr(Attribute::C) ||
-            declPtr->TestAttr(Attribute::FOREIGN)) {
-            continue;
-        }
-        if (declPtr->astKind == ASTKind::FUNC_DECL) {
-            if (IsNotThisActualTyFunc(declPtr)) {
-                continue;
-            }
-            const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(declPtr.get());
-            std::string objCDeclName = funcDecl.identifier;
-            if (genericConfig) {
-                objCDeclName.erase(std::remove_if(objCDeclName.begin(), objCDeclName.end(),
-                    [](char c) { return c == '$'; }),
-                    objCDeclName.end());
-            }
-            GenerateFunctionSymInit(objCDeclName);
-        }
-    }
-}
-
-/*
- *  if ((CJImpl_ObjC_A_name = dlsym(CJWorldDLHandle, "CJImpl_ObjC_A_name")) == NULL) {
- *      NSLog(@"ERROR: Failed to find CJImpl_ObjC_A_name symbol in cjworld");
- *      exit(1);
- *  }
- */
-void ObjCGenerator::GenerateFunctionSymInit(const std::string& fName)
-{
-    AddWithIndent(
-        GenerateIfStatement("(" +
-                GenerateAssignment(fName,
-                    GenerateCCall(DLSYM_FUNC_NAME, std::vector<std::string>{CJ_DLL_HANLDE, "\"" + fName + "\""})) +
-                ")",
-            NULL_KW, EQ_CHECK_OP),
-        GenerationTarget::SOURCE, OptionalBlockOp::OPEN);
-    AddWithIndent(
-        GenerateCCall(NSLOG_FUNC_NAME, std::vector<std::string>{FAIL_FIND_SYM_1 + fName + FAIL_FIND_SYM_2}) + ";",
-        GenerationTarget::SOURCE);
-    AddWithIndent(GenerateCCall(EXIT_FUNC_NAME, std::vector<std::string>{"1"}) + ";", GenerationTarget::SOURCE);
-
-    CloseBlock(false, true);
 }
 
 /*
@@ -898,16 +807,6 @@ void ObjCGenerator::GenerateInitializer(const string& objCDeclName)
         GenerationTarget::BOTH, OptionalBlockOp::OPEN);
     AddWithIndent(GenerateIfStatement(SELF_NAME, GenerateObjCCall(objCDeclName, CLASS_KEYWORD), EQ_CHECK_OP),
         GenerationTarget::SOURCE, OptionalBlockOp::OPEN);
-    AddWithIndent(GenerateAssignment(CJ_RTIME_PARAMS_LOG_LEVEL, RTLOG_ERROR) + ";", GenerationTarget::SOURCE);
-    AddWithIndent(GenerateIfStatement(
-                      GenerateCCall(INIT_CJ_RUNTIME_NAME, std::vector<std::string>{"&" + string(CJ_RTIME_PARAMS)}),
-                      E_OK, NOT_EQ_OP),
-        GenerationTarget::SOURCE, OptionalBlockOp::OPEN);
-    AddWithIndent(
-        GenerateCCall(NSLOG_FUNC_NAME, std::vector<std::string>{FAIL_INIT_CJ_RT_MSG}) + ";", GenerationTarget::SOURCE);
-    AddWithIndent(GenerateCCall(EXIT_FUNC_NAME, std::vector<std::string>{"1"}) + ";", GenerationTarget::SOURCE);
-
-    CloseBlock(false, true);
 
     auto cjLibName = Native::FFI::GetCangjieLibName(cjLibOutputPath, decl->fullPackageName, false);
     // Crutch that solves issue when cjLibOutputPath is dir or not provided.
@@ -921,31 +820,13 @@ void ObjCGenerator::GenerateInitializer(const string& objCDeclName)
     }
 
     cjLibName = "\"" + cjLibName + "\"";
+
     AddWithIndent(
-        GenerateIfStatement(GenerateCCall(LOAD_LIB_FUNC_NAME, std::vector<std::string>{cjLibName}), E_OK, NOT_EQ_OP),
+        GenerateIfStatement(GenerateCCall(INIT_CJ_RUNTIME_NAME, std::vector<std::string>{cjLibName}), FALSE_KW, EQ_CHECK_OP),
         GenerationTarget::SOURCE, OptionalBlockOp::OPEN);
-    AddWithIndent(
-        GenerateCCall(NSLOG_FUNC_NAME, std::vector<std::string>{FAIL_INIT_CJ_LIB}) + ";", GenerationTarget::SOURCE);
     AddWithIndent(GenerateCCall(EXIT_FUNC_NAME, std::vector<std::string>{"1"}) + ";", GenerationTarget::SOURCE);
 
     CloseBlock(false, true);
-
-    AddWithIndent(GenerateIfStatement("(" +
-                          GenerateAssignment(CJ_DLL_HANLDE,
-                              GenerateCCall(DLOPEN_FUNC_NAME, std::vector<std::string>{cjLibName, RTLD_LAZY})) +
-                          ")",
-                      NULL_KW, EQ_CHECK_OP),
-        GenerationTarget::SOURCE, OptionalBlockOp::OPEN);
-    AddWithIndent(
-        GenerateCCall(NSLOG_FUNC_NAME, std::vector<std::string>{FAIL_OPEN_CJ_LIB}) + ";", GenerationTarget::SOURCE);
-    AddWithIndent(
-        GenerateCCall(NSLOG_FUNC_NAME, std::vector<std::string>{STRING_FORMAT, GenerateCCall(DLERROR_FUNC_NAME)}) + ";",
-        GenerationTarget::SOURCE);
-    AddWithIndent(GenerateCCall(EXIT_FUNC_NAME, std::vector<std::string>{"1"}) + ";", GenerationTarget::SOURCE);
-
-    CloseBlock(false, true);
-
-    GenerateFunctionSymbolsInitialization();
 
     CloseBlock(false, true);
     CloseBlock(false, true);
