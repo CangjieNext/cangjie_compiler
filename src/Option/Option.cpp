@@ -12,11 +12,11 @@
 
 #include "cangjie/Option/Option.h"
 
+#include <cctype>
 #include <numeric>
 #include <regex>
 #include <string>
 #include <unordered_map>
-#include <cctype>
 
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Print.h"
@@ -24,8 +24,8 @@
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/Utils/Semaphore.h"
 #include "cangjie/Utils/SipHash.h"
-#include "cangjie/Utils/Utils.h"
 #include "cangjie/Utils/Unicode.h"
+#include "cangjie/Utils/Utils.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -66,13 +66,9 @@ std::string BoolToSerializedString(bool val)
     return val ? "t" : "f";
 }
 
-const std::unordered_map<ArchType, std::string> ARCH_STRING_MAP = {
-    {ArchType::X86_64, "x86_64"},
-    {ArchType::AARCH64, "aarch64"},
-    {ArchType::ARM64, "arm64"},
-    {ArchType::ARM32, "arm"},
-    {ArchType::UNKNOWN, "unknown"}
-};
+const std::unordered_map<ArchType, std::string> ARCH_STRING_MAP = {{ArchType::X86_64, "x86_64"},
+    {ArchType::AARCH64, "aarch64"}, {ArchType::ARM64, "arm64"}, {ArchType::ARM32, "arm"},
+    {ArchType::UNKNOWN, "unknown"}};
 
 const std::unordered_map<OSType, std::string> OS_STRING_MAP = {
     {OSType::WINDOWS, "windows"},
@@ -261,6 +257,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
     success = success && ReprocessObfuseOption();
+    success = success && CheckCJMPOptions();
     RefactJobs();
     RefactAggressiveParallelCompileOption();
     DisableStaticStdForOhos();
@@ -628,6 +625,36 @@ bool GlobalOptions::CheckPgoOptions() const
     return true;
 }
 
+bool GlobalOptions::VerifyFileExtension(
+    const std::string& file, const std::string& fullPath, const std::string& extension, DiagnosticEngine& diag) const
+{
+    if (GetFileExtension(file) != extension) {
+        RaiseArgumentUnusedMessage(
+            diag, DiagKindRefactor::driver_warning_unexpected_file_extension, extension, file, fullPath);
+        return false;
+    }
+
+    return true;
+}
+
+bool GlobalOptions::CheckCJMPOptions() const
+{
+    DiagnosticEngine diag;
+    bool ok = true;
+    for (const auto& cjoFile : commonCjoFiles) {
+        ok &= VerifyFileExtension(cjoFile, cjoFile, CJO_EXTENSION, diag);
+    }
+    for (const auto& chirFile : commonChirFiles) {
+        ok &= VerifyFileExtension(chirFile, chirFile, CHIR_EXTENSION, diag);
+    }
+    if (commonCjoFiles.size() != commonChirFiles.size()) {
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_require_common_chir_for_each_common_cjo, DEFAULT_POSITION);
+        ok = false;
+    }
+
+    return ok;
+}
+
 void GlobalOptions::RefactJobs()
 {
     if (jobs.has_value()) {
@@ -674,7 +701,7 @@ void GlobalOptions::DisableStaticStdForOhos()
     if (target.env == Triple::Environment::OHOS) {
         if (linkStaticStd.has_value() && linkStaticStd.value()) {
             DiagnosticEngine diag;
-            (void) diag.DiagnoseRefactor(DiagKindRefactor::driver_static_std_for_ohos, DEFAULT_POSITION);
+            (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_static_std_for_ohos, DEFAULT_POSITION);
         }
         linkStaticStd = false;
     }
@@ -686,22 +713,14 @@ bool GlobalOptions::HandleArchiveExtension(DiagnosticEngine& diag, const std::st
     if (!maybePath.has_value()) {
         return false;
     }
+    auto fullPath = maybePath.value();
     auto ext = GetFileExtension(value);
-    if (ext == ARCHIVE_EXTENSION && GetFileExtension(maybePath.value()) != ARCHIVE_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_archive_file, value, maybePath.value());
+    if (ext == ARCHIVE_EXTENSION && !VerifyFileExtension(value, fullPath, ext, diag)) {
         return true;
     }
-    if (ext == OBJECT_EXTENSION && GetFileExtension(maybePath.value()) != OBJECT_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_object_file, value, maybePath.value());
-        return true;
-    }
-    if (ext == COFF_OBJECT_EXTENSION && GetFileExtension(maybePath.value()) != COFF_OBJECT_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_object_file, value, maybePath.value());
-        return true;
-    }
-    inputObjs.emplace_back(maybePath.value());
+    inputObjs.emplace_back(fullPath);
     // The .o and .a file is replaced with the absolute path
-    ReplaceInputFileName(value, maybePath.value());
+    ReplaceInputFileName(value, fullPath);
     return true;
 }
 
@@ -711,8 +730,7 @@ bool GlobalOptions::HandleCJOExtension(DiagnosticEngine& diag, const std::string
     if (!maybePath.has_value()) {
         return false;
     }
-    if (GetFileExtension(maybePath.value()) != CJO_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_cjo_file, value, maybePath.value());
+    if (!VerifyFileExtension(value, maybePath.value(), CJO_EXTENSION, diag)) {
         return true;
     }
     if (!inputCjoFile.empty()) {
@@ -721,20 +739,6 @@ bool GlobalOptions::HandleCJOExtension(DiagnosticEngine& diag, const std::string
         return false;
     }
     inputCjoFile = value;
-    return true;
-}
-
-bool GlobalOptions::HandleCHIRExtension(DiagnosticEngine& diag, const std::string& value)
-{
-    auto maybePath = ValidateInputFilePath(value, DiagKindRefactor::no_such_file_or_directory);
-    if (!maybePath.has_value()) {
-        return false;
-    }
-    if (GetFileExtension(maybePath.value()) != CHIR_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_chir_file, value, maybePath.value());
-        return true;
-    }
-    inputChirFiles.push_back(maybePath.value());
     return true;
 }
 
@@ -749,8 +753,7 @@ bool GlobalOptions::HandleCJExtension(DiagnosticEngine& diag, const std::string&
     if (!maybePath.has_value()) {
         return false;
     }
-    if (GetFileExtension(maybePath.value()) != CJ_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_cj_file, value, maybePath.value());
+    if (!VerifyFileExtension(value, maybePath.value(), CJ_EXTENSION, diag)) {
         return true;
     }
     srcFiles.push_back(value);
@@ -778,13 +781,13 @@ bool GlobalOptions::HandleBCExtension(DiagnosticEngine& diag, const std::string&
     if (!maybePath.has_value()) {
         return false;
     }
-    if (GetFileExtension(maybePath.value()) != BC_EXTENSION) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_bc_file, value, maybePath.value());
+    auto fullPath = maybePath.value();
+    if (!VerifyFileExtension(value, fullPath, BC_EXTENSION, diag)) {
         return true;
     }
-    bcInputFiles.push_back(maybePath.value());
+    bcInputFiles.push_back(fullPath);
     // The .bc file is replaced with the absolute path
-    ReplaceInputFileName(value, maybePath.value());
+    ReplaceInputFileName(value, fullPath);
     return true;
 }
 
@@ -819,8 +822,7 @@ bool GlobalOptions::ProcessInputs(const std::vector<std::string>& inputs)
 {
     DiagnosticEngine diag;
     bool ret = true;
-    bool needChir = commonPartCjos.size() > 0;
-    std::for_each(inputs.begin(), inputs.end(), [this, &ret, &diag, &needChir](const std::string& value) {
+    std::for_each(inputs.begin(), inputs.end(), [this, &ret, &diag](const std::string& value) {
         if (!ret) {
             return;
         }
@@ -831,9 +833,6 @@ bool GlobalOptions::ProcessInputs(const std::vector<std::string>& inputs)
             ret = HandleCJExtension(diag, value);
         } else if (ext == BC_EXTENSION) {
             ret = HandleBCExtension(diag, value);
-        } else if (ext == CHIR_EXTENSION) {
-            needChir = false;
-            ret = HandleCHIRExtension(diag, value);
         } else if (ext == CJO_EXTENSION) {
             ret = HandleCJOExtension(diag, value);
         } else if (HasCJDExtension(value) && compileCjd) {
@@ -845,10 +844,6 @@ bool GlobalOptions::ProcessInputs(const std::vector<std::string>& inputs)
     // Check inputs.
     if (compilePackage && packagePaths.empty()) {
         (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_require_package_directory, DEFAULT_POSITION);
-        return false;
-    }
-    if (needChir) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_require_chir_directory, DEFAULT_POSITION);
         return false;
     }
     if (compilePackage && packagePaths.size() > 1) {
@@ -1224,7 +1219,6 @@ std::string GlobalOptions::GetCangjieLibTargetPathName() const
     }
     name += "_" + target.ArchToString() + "_" + BackendToString(backend);
     return name;
-
 }
 
 void GlobalOptions::SetCompilationCachedPath()

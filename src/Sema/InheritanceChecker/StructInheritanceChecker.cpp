@@ -585,7 +585,7 @@ std::optional<bool> StructInheritanceChecker::DeterminingSkipExtendByInheritance
             curDeclSuperInsTy = typeManager.GetInstantiatedTy(curDeclSuperInsTy, mappingOfCurExtend2Extend);
         }
         Cangjie::MPTypeCheckerImpl::GetInheritedTypesWithSpecificImpl(
-            ed.inheritedTypes, ed.specificImplementation != nullptr, !opts.commonPartCjos.empty());
+            ed.inheritedTypes, ed.specificImplementation != nullptr, !opts.commonCjoFiles.empty());
         for (auto& edSuper : ed.inheritedTypes) {
             if (edSuper->ty == curDeclSuperInsTy) {
                 continue;
