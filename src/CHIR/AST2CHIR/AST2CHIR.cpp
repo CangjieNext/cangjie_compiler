@@ -478,7 +478,7 @@ void AST2CHIR::AST2CHIRCheck()
 bool AST2CHIR::TryToDeserializeCHIR()
 {
     Utils::ProfileRecorder recorder("AST to CHIR Translation", "TryToDeserializeCHIR");
-    auto& chirFiles = opts.inputChirFiles;
+    auto& chirFiles = opts.commonChirFiles;
     CJC_ASSERT(chirFiles.size() != 0);
     ToCHIR::Phase phase;
     bool success = true;
