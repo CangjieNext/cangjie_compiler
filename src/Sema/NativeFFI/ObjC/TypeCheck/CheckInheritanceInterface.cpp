@@ -20,7 +20,7 @@ void CheckInheritanceInterface::HandleImpl(TypeCheckContext& ctx)
 {
     auto& inheritableDecl = dynamic_cast<InheritableDecl&>(ctx.target);
     for (auto& parent : inheritableDecl.inheritedTypes) {
-        if (parent->ty && parent->ty->IsInterface()) {
+        if (parent->GetTy() && parent->GetTy()->IsInterface()) {
             ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_cjmapping_inheritance_interface_not_supported, *parent);
             inheritableDecl.EnableAttr(Attribute::IS_BROKEN);
             return;

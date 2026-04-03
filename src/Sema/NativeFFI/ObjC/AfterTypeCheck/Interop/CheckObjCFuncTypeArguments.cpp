@@ -29,21 +29,19 @@ void ReportObjCIncompatibleType(const InteropContext& ctx, Ptr<Type> typeUsage) 
         auto tyArg = typeUsage->GetTypeArgs()[0];
         errorRef = tyArg;
         if (auto fTy = As<ASTKind::FUNC_TYPE>(tyArg)) {
-            if (!ctx.typeMapper.IsObjCCompatible(*fTy->retType->ty)) {
+            if (!ctx.typeMapper.IsObjCCompatible(*fTy->retType->GetTy())) {
                 errorRef = fTy->retType;
             }
             for (Ptr<Type> arg : fTy->paramTypes) {
-                if (!ctx.typeMapper.IsObjCCompatible(*arg->ty)) {
+                if (!ctx.typeMapper.IsObjCCompatible(*arg->GetTy())) {
                     errorRef = arg;
                     break;
                 }
             }
         }
     }
-    ctx.diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_objc_func_argument_must_be_objc_compatible,
-        *errorRef,
-        Ty::GetDeclOfTy(typeUsage->ty)->identifier.Val());
+    ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_func_argument_must_be_objc_compatible, *errorRef,
+        Ty::GetDeclOfTy(typeUsage->GetTy())->identifier.Val());
     typeUsage->EnableAttr(Attribute::IS_BROKEN);
 }
 
@@ -64,11 +62,9 @@ void CheckObjCFuncTypeArguments::HandleImpl(InteropContext& ctx)
             if (typeUsage && typeUsage->TestAttr(Attribute::COMPILER_ADD)) {
                 return VisitAction::SKIP_CHILDREN;
             }
-            if (typeUsage
-             && typeUsage->ty
-             && typeUsage->ty->typeArgs.size() == 1
-             && ctx.typeMapper.IsObjCFuncOrBlock(*typeUsage->ty)) {
-                auto tyArg = typeUsage->ty->typeArgs[0];
+            if (typeUsage && typeUsage->GetTy() && typeUsage->GetTy()->typeArgs.size() == 1 &&
+                ctx.typeMapper.IsObjCFuncOrBlock(*typeUsage->GetTy())) {
+                auto tyArg = typeUsage->GetTy()->typeArgs[0];
                 auto valid = tyArg->IsFunc();
                 valid &= !tyArg->IsCFunc();
                 for (auto subTy : tyArg->typeArgs) {
