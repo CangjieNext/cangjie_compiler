@@ -533,7 +533,7 @@ static void DesugarTry(const OwnedPtr<TryExpr>& expr)
         auto teWithoutHandle = ASTCloner::Clone(expr.get(), SetIsClonedSourceCode);
         teWithoutHandle->handlers.clear();
         teWithoutHandle->finallyBlock = nullptr;
-        teWithoutHandle->ty = expr->ty;
+        teWithoutHandle->SetTy(expr->GetTy());
         std::vector<OwnedPtr<Node>> lambdaBodyExprs;
         lambdaBodyExprs.emplace_back(std::move(teWithoutHandle));
         lambdaBlock = CreateBlock(std::move(lambdaBodyExprs));
@@ -552,7 +552,7 @@ static void DesugarTry(const OwnedPtr<TryExpr>& expr)
         auto paramList = MakeOwned<FuncParamList>();
 
         auto originalCommandPatternType = cmdPat->types[0].get();
-        auto commandTy = originalCommandPatternType->ty;
+        auto commandTy = originalCommandPatternType->GetTy();
         auto commandPattern = ASTCloner::Clone(originalCommandPatternType);
         OwnedPtr<FuncParam> command;
         if (auto varPattern = DynamicCast<VarPattern*>(cmdPat->pattern.get()); varPattern) {

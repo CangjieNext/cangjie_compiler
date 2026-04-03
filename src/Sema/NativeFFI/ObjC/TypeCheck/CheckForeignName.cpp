@@ -51,7 +51,7 @@ void CheckForeignName::HandleImpl(TypeCheckContext& ctx)
             continue;
         }
 
-        if (ctx.typeMapper.IsObjCImpl(*ctx.target.ty) && !memberDecl->TestAttr(Attribute::PUBLIC)) {
+        if (ctx.typeMapper.IsObjCImpl(*ctx.target.GetTy()) && !memberDecl->TestAttr(Attribute::PUBLIC)) {
             continue;
         }
 

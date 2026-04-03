@@ -24,7 +24,7 @@ void ASTWriter::ASTWriterImpl::SaveBasicNodeInfo(PackageFormat::ExprBuilder& dbu
 {
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
-    dbuilder.add_type(info.ty);
+    dbuilder.add_type(info.serializedTypeIdx);
     FormattedIndex mapIndx = info.mapExpr ? GetExprIndex(*info.mapExpr) : INVALID_FORMAT_INDEX;
     dbuilder.add_mapExpr(mapIndx);
     dbuilder.add_overflowPolicy(STRATEGY_MAP.at(info.ov));
@@ -37,7 +37,7 @@ NodeInfo ASTWriter::ASTWriterImpl::PackNodeInfo(const Node& node)
     auto [pkgIndex, fileIndex] = GetFileIndex(begin.fileID);
     TPosition posBegin(fileIndex, pkgIndex, begin.line, begin.column, begin.GetStatus() == PositionStatus::IGNORE);
     TPosition posEnd(fileIndex, pkgIndex, end.line, end.column, end.GetStatus() == PositionStatus::IGNORE);
-    auto ty = SaveType(node.ty);
+    auto ty = SaveType(node.GetTy());
 
     return {posBegin, posEnd, ty};
 }
@@ -726,7 +726,7 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveConstPattern(const ConstPattern& cp
         exprs.emplace_back(SaveExpr(*cp.operatorCallExpr));
     }
     auto info = PackNodeInfo(cp);
-    auto tyIdx = builder.CreateVector<FormattedIndex>({info.ty});
+    auto tyIdx = builder.CreateVector<FormattedIndex>({info.serializedTypeIdx});
     auto exprsIdx = builder.CreateVector<FormattedIndex>(exprs);
     PackageFormat::PatternBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::PatternKind_ConstPattern);
@@ -740,7 +740,7 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveConstPattern(const ConstPattern& cp
 TPatternOffset ASTWriter::ASTWriterImpl::SaveWildcardPattern(const WildcardPattern& wp)
 {
     auto info = PackNodeInfo(wp);
-    auto tyIdx = builder.CreateVector<FormattedIndex>({info.ty});
+    auto tyIdx = builder.CreateVector<FormattedIndex>({info.serializedTypeIdx});
     PackageFormat::PatternBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::PatternKind_WildcardPattern);
     dbuilder.add_begin(&info.begin);
@@ -754,7 +754,7 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveVarPattern(const VarPattern& vp)
     CJC_NULLPTR_CHECK(vp.varDecl);
     auto declIdx = SaveDecl(*vp.varDecl);
     auto info = PackNodeInfo(vp);
-    auto tyIdx = builder.CreateVector<FormattedIndex>({info.ty});
+    auto tyIdx = builder.CreateVector<FormattedIndex>({info.serializedTypeIdx});
     auto exprsIdx = builder.CreateVector<FormattedIndex>({declIdx});
     PackageFormat::PatternBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::PatternKind_VarPattern);
@@ -772,7 +772,7 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveTuplePattern(const TuplePattern& tp
         patterns[i] = SavePattern(*tp.patterns[i]);
     }
     auto info = PackNodeInfo(tp);
-    auto tyIdx = builder.CreateVector<FormattedIndex>({info.ty});
+    auto tyIdx = builder.CreateVector<FormattedIndex>({info.serializedTypeIdx});
     auto patternsIdx = builder.CreateVector<TPatternOffset>(patterns);
     PackageFormat::PatternBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::PatternKind_TuplePattern);
@@ -788,7 +788,7 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveTypePattern(const TypePattern& tp)
     CJC_NULLPTR_CHECK(tp.pattern);
     auto pIdx = SavePattern(*tp.pattern);
     auto info = PackNodeInfo(tp);
-    auto tyIdx = builder.CreateVector<FormattedIndex>({info.ty});
+    auto tyIdx = builder.CreateVector<FormattedIndex>({info.serializedTypeIdx});
     auto patternsIdx = builder.CreateVector<TPatternOffset>({pIdx});
     PackageFormat::PatternBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::PatternKind_TypePattern);
@@ -810,7 +810,7 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveEnumPattern(const EnumPattern& ep)
         patterns[i] = SavePattern(*ep.patterns[i]);
     }
     auto info = PackNodeInfo(ep);
-    auto tyIdx = builder.CreateVector<FormattedIndex>({info.ty});
+    auto tyIdx = builder.CreateVector<FormattedIndex>({info.serializedTypeIdx});
     auto exprsIdx = builder.CreateVector<FormattedIndex>({ctor});
     auto patternsIdx = builder.CreateVector<TPatternOffset>(patterns);
     PackageFormat::PatternBuilder dbuilder(builder);
@@ -827,7 +827,7 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveExceptTypePattern(const ExceptTypeP
 {
     auto pIdx = SavePattern(*etp.pattern);
     auto info = PackNodeInfo(etp);
-    std::vector<FormattedIndex> types{info.ty};
+    std::vector<FormattedIndex> types{info.serializedTypeIdx};
     for (auto& type : etp.types) {
         CJC_NULLPTR_CHECK(type);
         types.emplace_back(SaveType(typeManager.ObtainsAliasType(type.get())));
@@ -847,7 +847,7 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveCommandTypePattern(const CommandTyp
 {
     auto pIdx = SavePattern(*ctp.pattern);
     auto info = PackNodeInfo(ctp);
-    std::vector<FormattedIndex> types{info.ty};
+    std::vector<FormattedIndex> types{info.serializedTypeIdx};
     for (auto& type : ctp.types) {
         CJC_NULLPTR_CHECK(type);
         types.emplace_back(SaveType(typeManager.ObtainsAliasType(type.get())));

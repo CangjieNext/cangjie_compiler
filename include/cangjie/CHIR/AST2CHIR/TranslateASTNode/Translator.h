@@ -898,7 +898,7 @@ private:
     Ptr<Value> TranslateForInIter(const AST::ForInExpr& forInExpr);
     /// Make a Option::None value of option type \param optionType.
     Ptr<Value> MakeNone(Type& optionType, const DebugLocation& loc);
-    Ptr<Value> TranslateForInIterCondition(Ptr<Value>& iterNextLocation, Ptr<AST::Ty>& astTy);
+    Ptr<Value> TranslateForInIterCondition(Ptr<Value>& iterNextLocation, Ptr<AST::Ty> astTy);
     void TranslateForInIterPattern(const AST::ForInExpr& forInExpr, Ptr<Value>& iterNextLocation);
     void TranslateForInIterLatchBlockGroup(const AST::MatchExpr& matchExpr, Ptr<Value>& iterNextLocation);
     // ========End methods used for translating ForInExpr=========

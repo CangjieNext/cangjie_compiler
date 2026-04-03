@@ -44,7 +44,7 @@ OwnedPtr<Expr> CreateReceiverExpr(Ptr<Expr> expr)
         referencedExpr = ASTCloner::Clone(ma->baseExpr.get());
     } else if (Ptr<RefExpr> ref = As<ASTKind::REF_EXPR>(expr)) {
         auto owningDecl = ref->ref.target->outerDecl;
-        referencedExpr = CreateThisRef(owningDecl, owningDecl->ty, expr->curFile);
+        referencedExpr = CreateThisRef(owningDecl, owningDecl->GetTy(), expr->curFile);
     }
     return referencedExpr;
 }
@@ -133,11 +133,11 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
                 CreateMemberCall(
                     WithinFile(CreateRefExpr(*tmpVar), node->curFile),
                     fptrAccessor),
-                ctx.typeMapper.Cj2CType(callExpr->ty),
+                ctx.typeMapper.Cj2CType(callExpr->GetTy()),
                 std::move(unwrappedArguments));
             std::vector<OwnedPtr<Node>> block;
             block.emplace_back(std::move(tmpVar));
-            block.emplace_back(ctx.factory.WrapEntity(std::move(call), *callExpr->ty));
+            block.emplace_back(ctx.factory.WrapEntity(std::move(call), *callExpr->GetTy()));
             ctx.factory.SetDesugarExpr(
                 callExpr,
                 WrapReturningLambdaCall(
