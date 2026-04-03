@@ -32,7 +32,7 @@ inline bool IsCPointerFrozenMember(const Decl& decl)
         return false;
     }
 
-    return StaticCast<ExtendDecl>(decl.outerDecl)->extendedType->ty->IsPointer();
+    return StaticCast<ExtendDecl>(decl.outerDecl)->extendedType->GetTy()->IsPointer();
 }
 } // namespace
 
@@ -158,7 +158,7 @@ void CopyNodeField(Ptr<Node> ret, const Node& e)
 {
     ret->begin = e.begin;
     ret->end = e.end;
-    ret->ty = e.ty;
+    ret->SetTy(e.GetTy());
     ret->curMacroCall = e.curMacroCall;
     ret->isInMacroCall = e.isInMacroCall;
     CopyNodeScopeInfo(ret, &e);

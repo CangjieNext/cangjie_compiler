@@ -76,7 +76,7 @@ void SetParentDecl(Decl& structDecl, const FuncDecl& fd)
     }
     auto outerDecl = &structDecl;
     if (auto ed = DynamicCast<ExtendDecl*>(outerDecl); ed && ed->extendedType) {
-        auto extendedDecl = Ty::GetDeclPtrOfTy(ed->extendedType->ty);
+        auto extendedDecl = Ty::GetDeclPtrOfTy(ed->extendedType->GetTy());
         if (!extendedDecl) {
             return;
         }
@@ -234,7 +234,7 @@ void DeclAttributeChecker::CheckExtendAttribute(ExtendDecl& ed) const
     SetCommonAttributes(ed);
     for (auto& member : ed.members) {
         CJC_ASSERT(member);
-        const auto& extendedDecl = Ty::GetDeclPtrOfTy(ed.ty);
+        const auto& extendedDecl = Ty::GetDeclPtrOfTy(ed.GetTy());
         Ptr<const Node> mutDecl = nullptr;
         for (auto& modifier : member->modifiers) {
             if (modifier.modifier == TokenKind::MUT) {
@@ -246,13 +246,13 @@ void DeclAttributeChecker::CheckExtendAttribute(ExtendDecl& ed) const
                 member->astKind != ASTKind::PROP_DECL) {
                 diag.DiagnoseRefactor(
                     DiagKindRefactor::sema_invalid_mut_modifier_extend_of_struct, *mutDecl, extendedDecl->identifier);
-            } else if (ed.ty->IsPrimitive()) {
+            } else if (ed.GetTy()->IsPrimitive()) {
                 diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_invalid_mut_modifier_extend_of_struct, *mutDecl, ed.ty->String());
+                    DiagKindRefactor::sema_invalid_mut_modifier_extend_of_struct, *mutDecl, ed.GetTy()->String());
             }
         }
         if (auto pd = DynamicCast<PropDecl*>(member.get()); pd) {
-            bool needMut = !pd->TestAttr(Attribute::STATIC) && ed.ty && ed.ty->IsStruct();
+            bool needMut = !pd->TestAttr(Attribute::STATIC) && ed.GetTy() && ed.GetTy()->IsStruct();
             auto setMut = [needMut](auto& it) {
                 if (it && needMut) {
                     it->EnableAttr(Attribute::MUT);

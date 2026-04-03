@@ -122,7 +122,7 @@ bool Translator::IsVirtualFuncCall(
 Ptr<CHIR::Type> Translator::GetTypeOfInvokeStatic(const AST::Decl& funcDecl)
 {
     CJC_NULLPTR_CHECK(funcDecl.outerDecl);
-    auto calledClassType = TranslateType(*funcDecl.outerDecl->ty);
+    auto calledClassType = TranslateType(*funcDecl.outerDecl->GetTy());
     if (calledClassType->IsRef()) {
         calledClassType = StaticCast<CHIR::RefType*>(calledClassType)->GetBaseType();
         return calledClassType;
@@ -133,7 +133,7 @@ Ptr<CHIR::Type> Translator::GetTypeOfInvokeStatic(const AST::Decl& funcDecl)
 std::pair<CHIR::Type*, FuncCallType> Translator::GetExactParentTypeAndFuncType(
     const AST::NameReferenceExpr& expr, Type& thisType, const AST::FuncDecl& funcDecl, bool& isVirtualFuncCall)
 {
-    auto funcType = StaticCast<FuncType*>(TranslateType(*expr.ty));
+    auto funcType = StaticCast<FuncType*>(TranslateType(*expr.GetTy()));
     auto paramTys = funcType->GetParamTypes();
     if (!funcDecl.TestAttr(AST::Attribute::STATIC)) {
         paramTys.insert(paramTys.begin(), &thisType);
@@ -199,7 +199,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromVarInit(const AST::R
      *  maybe we are translating `foo` in static member var `x`'s initializer, its initializer is a global func
      *  which added by CHIR, and this `foo` can't be from class A's sub type, must be from class A or its parent type
      */
-    auto funcType = StaticCast<FuncType*>(TranslateType(*expr.ty));
+    auto funcType = StaticCast<FuncType*>(TranslateType(*expr.GetTy()));
     auto paramTys = funcType->GetParamTypes();
     auto funcDecl = StaticCast<AST::FuncDecl*>(expr.ref.target);
     CJC_NULLPTR_CHECK(funcDecl->outerDecl);
@@ -269,7 +269,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
 Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const AST::MemberAccess& expr)
 {
     // 1. calculate `thisType`
-    auto thisType = TranslateType(*expr.baseExpr->ty);
+    auto thisType = TranslateType(*expr.baseExpr->GetTy());
     auto funcDecl = StaticCast<AST::FuncDecl*>(expr.target);
     thisType = AddRefIfFuncIsMutOrClass(*thisType, *funcDecl, builder);
 
@@ -354,8 +354,8 @@ Ptr<Value> Translator::TranslateStaticTargetOrPackageMemberAccess(const AST::Mem
     auto targetNode = GetSymbolTable(*member.target);
     if (member.target->astKind == AST::ASTKind::VAR_DECL) {
         // 2. classA.x, pkgA.x, pkgA.classB.x
-        auto targetTy = TranslateType(*member.target->ty);
-        auto resTy = TranslateType(*member.ty);
+        auto targetTy = TranslateType(*member.target->GetTy());
+        auto resTy = TranslateType(*member.GetTy());
         auto loc = TranslateLocation(member);
         auto targetVal = CreateAndAppendExpression<Load>(loc, targetTy, targetNode, currentBlock)->GetResult();
         return TypeCastOrBoxIfNeeded(*targetVal, *resTy, loc);
@@ -465,7 +465,7 @@ Ptr<Value> Translator::TranslateEnumMemberAccess(const AST::MemberAccess& member
     // C|D(Int64)
     // }
     // var a = A.c // varDecl
-    auto enumTy = StaticCast<AST::EnumTy*>(member.baseExpr->ty);
+    auto enumTy = StaticCast<AST::EnumTy*>(member.baseExpr->GetTy());
     auto enumDecl = enumTy->decl;
     auto& constructors = enumDecl->constructors;
     auto fieldIt = std::find_if(constructors.begin(), constructors.end(), [&member](auto const& decl) -> bool {
@@ -540,7 +540,7 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
         for (;;) {
             base = base->desugarExpr ? base->desugarExpr.get().get() : base;
             if (auto ma = DynamicCast<AST::MemberAccess*>(base)) {
-                bool isTargetClassOrClassUpper = ma->ty->IsClassLike() || ma->ty->IsGeneric();
+                bool isTargetClassOrClassUpper = ma->GetTy()->IsClassLike() || ma->GetTy()->IsGeneric();
                 if ((!isTargetClassOrClassUpper || path.empty()) && !ma->target->TestAttr(AST::Attribute::STATIC) &&
                     ma->target->astKind != ASTKind::PROP_DECL && !IsPackageMemberAccess(*ma)) {
                     auto name = ma->target->identifier.Val();
@@ -548,7 +548,7 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
                     path.insert(path.begin(), name);
                     readOnly = readOnly || !StaticCast<AST::VarDecl*>(ma->target)->isVar;
 
-                    targetBaseASTTy = ma->target->outerDecl->ty;
+                    targetBaseASTTy = ma->target->outerDecl->GetTy();
                     CJC_ASSERT(targetBaseASTTy->IsStruct() || targetBaseASTTy->IsClass());
 
                     base = ma->baseExpr.get();
@@ -556,7 +556,7 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
                 }
                 break;
             } else if (auto ref = DynamicCast<AST::RefExpr*>(base)) {
-                if (!ref->isThis && !ref->isSuper && !ref->ty->IsClassLike() && !ref->ty->IsGeneric()) {
+                if (!ref->isThis && !ref->isSuper && !ref->GetTy()->IsClassLike() && !ref->GetTy()->IsGeneric()) {
                     auto refTarget = ref->ref.target;
                     if (refTarget->outerDecl &&
                         (refTarget->outerDecl->astKind == AST::ASTKind::STRUCT_DECL ||
@@ -567,7 +567,7 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
                         path.insert(path.begin(), name);
                         readOnly = readOnly || !StaticCast<AST::VarDecl*>(refTarget)->isVar;
 
-                        targetBaseASTTy = refTarget->outerDecl->ty;
+                        targetBaseASTTy = refTarget->outerDecl->GetTy();
                         CJC_ASSERT(targetBaseASTTy->IsStruct() || targetBaseASTTy->IsClass());
 
                         // this is a hack

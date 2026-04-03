@@ -34,7 +34,7 @@ Ptr<Value> Translator::TranslateStructArray(const AST::ArrayLit& array)
     auto loc = TranslateLocation(array);
 
     std::vector<Value*> elements;
-    auto arrayTy = StaticCast<StructType*>(chirTy.TranslateType(*array.ty));
+    auto arrayTy = StaticCast<StructType*>(chirTy.TranslateType(*array.GetTy()));
     CJC_ASSERT(arrayTy->IsStructArray());
     auto eleTy = arrayTy->GetGenericArgs()[0];
     auto elementSize =
@@ -97,7 +97,7 @@ Ptr<Value> Translator::TranslateVArray(const AST::ArrayLit& array)
 {
     auto loc = TranslateLocation(array);
     std::vector<Value*> elements;
-    auto arrayTy = chirTy.TranslateType(*array.ty);
+    auto arrayTy = chirTy.TranslateType(*array.GetTy());
     CJC_ASSERT(arrayTy->IsVArray());
     auto eleTy = StaticCast<VArrayType*>(arrayTy)->GetElementType();
     for (auto& child : array.children) {
@@ -108,7 +108,7 @@ Ptr<Value> Translator::TranslateVArray(const AST::ArrayLit& array)
 
 Ptr<Value> Translator::Visit(const AST::ArrayLit& array)
 {
-    auto ty = array.ty;
+    auto ty = array.GetTy();
     // VArray
     if (ty->kind == AST::TypeKind::TYPE_VARRAY) {
         return TranslateVArray(array);

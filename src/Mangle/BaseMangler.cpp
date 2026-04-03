@@ -301,13 +301,13 @@ std::string BaseMangler::MangleGenericArgumentsHelper(const Decl& decl, std::vec
     std::string mangled;
     std::vector<Ptr<Ty>> args;
 
-    if (decl.ty && !decl.ty->IsFunc()) {
-        args = decl.ty->typeArgs;
+    if (decl.GetTy() && !decl.GetTy()->IsFunc()) {
+        args = decl.GetTy()->typeArgs;
     } else if (decl.astKind == ASTKind::FUNC_DECL) {
         auto& fd = StaticCast<const FuncDecl&>(decl);
         if (fd.funcBody->generic) {
             for (auto& arg : fd.funcBody->generic->typeParameters) {
-                args.push_back(arg->ty);
+                args.push_back(arg->GetTy());
             }
         }
     }
@@ -614,7 +614,7 @@ std::string BaseMangler::MangleDecl(const Decl& decl, const std::vector<Ptr<Node
             if (decl.astKind == ASTKind::GENERIC_PARAM_DECL && decl.outerDecl &&
                 decl.outerDecl->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC) &&
                 decl.outerDecl->TestAttr(Attribute::GENERIC)) {
-                auto genericsTy = StaticCast<const GenericsTy*>(decl.ty);
+                auto genericsTy = StaticCast<const GenericsTy*>(decl.GetTy());
                 auto result = std::find_if(genericsTypeStack.rbegin(), genericsTypeStack.rend(),
                     [&genericsTy](const std::string& name) { return name == genericsTy->name; });
                 auto index = static_cast<size_t>(std::distance(result, genericsTypeStack.rend())) - MANGLE_CHAR_LEN;
@@ -645,9 +645,9 @@ std::string BaseMangler::MangleExtendEntity(const AST::ExtendDecl& extendDecl,
     std::vector<std::string>& genericsTypeStack, bool declare) const
 {
     CJC_NULLPTR_CHECK(extendDecl.extendedType);
-    CJC_NULLPTR_CHECK(extendDecl.extendedType->ty);
+    CJC_NULLPTR_CHECK(extendDecl.extendedType->GetTy());
     std::string mangled;
-    mangled += MANGLE_EXTEND_PREFIX + MangleType(*extendDecl.extendedType->ty, genericsTypeStack, declare);
+    mangled += MANGLE_EXTEND_PREFIX + MangleType(*extendDecl.extendedType->GetTy(), genericsTypeStack, declare);
     auto ctx = manglerCtxTable.find(ManglerContext::ReduceUnitTestPackageName(extendDecl.fullPackageName));
     CJC_ASSERT(ctx != manglerCtxTable.end());
     std::string fileName = extendDecl.curFile->fileName;
@@ -704,7 +704,7 @@ std::string BaseMangler::ManglePrefix(const Node& node, const std::vector<Ptr<No
                 if (isExtend) {
                     mangled += MangleExtendEntity(decl, genericsTypeStack, declare);
                 } else {
-                    mangled += MANGLE_EXTEND_PREFIX + MangleType(*decl.extendedType->ty, genericsTypeStack, true);
+                    mangled += MANGLE_EXTEND_PREFIX + MangleType(*decl.extendedType->GetTy(), genericsTypeStack, true);
                 }
                 break;
             }
@@ -973,7 +973,7 @@ void BaseMangler::MangleExportId(Package& pkg)
     exportIdMode = true;
     Walker(&pkg, [this](auto node) {
         if (auto decl = DynamicCast<Decl*>(node);
-            decl && Ty::IsTyCorrect(decl->ty) && decl->TestAttr(Attribute::GLOBAL)) {
+            decl && Ty::IsTyCorrect(decl->GetTy()) && decl->TestAttr(Attribute::GLOBAL)) {
             // Only global decl and member decls that may be referenced from other package need exportId!
             // NOTE: For cjo's compatibility of different version, the exportId must be decl's signature.
             //       ExtendDecl itself does not need exportId, but it's member needs.
@@ -1025,8 +1025,8 @@ void BaseMangler::MangleExportIdForGenericParamDecl(const Decl& decl) const
         for (auto& gpd : generic->typeParameters) {
             CJC_NULLPTR_CHECK(gpd->outerDecl);
             std::vector<std::string> genericsTypeStack;
-            gpd->exportId = gpd->outerDecl->exportId + MANGLE_WILDCARD_PREFIX +
-                gpd->identifier + MangleType(*gpd->ty, genericsTypeStack, false, false);
+            gpd->exportId = gpd->outerDecl->exportId + MANGLE_WILDCARD_PREFIX + gpd->identifier +
+                MangleType(*gpd->GetTy(), genericsTypeStack, false, false);
         }
     }
 }
@@ -1138,11 +1138,11 @@ std::string BaseMangler::MangleFuncParams(const AST::FuncDecl& funcDecl, std::ve
     }
     std::string mangled = "";
     for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-        CJC_NULLPTR_CHECK(param->ty);
-        if (Ty::IsInitialTy(param->ty)) {
+        CJC_NULLPTR_CHECK(param->GetTy());
+        if (Ty::IsInitialTy(param->GetTy())) {
             continue;
         }
-        mangled += MangleType(*param->ty, genericsTypeStack, declare, isCollectGTy);
+        mangled += MangleType(*param->GetTy(), genericsTypeStack, declare, isCollectGTy);
     }
     return mangled;
 }
@@ -1418,7 +1418,7 @@ void ManglerContext::SaveLambda2CurDecl(const Ptr<Node> node)
 
 void ManglerContext::SaveExtend2CurFile(const Ptr<const AST::File> file, const Ptr<AST::ExtendDecl> node)
 {
-    file2ExtendDecl[file][node->extendedType->ty->String()].emplace_back(node);
+    file2ExtendDecl[file][node->extendedType->GetTy()->String()].emplace_back(node);
 }
 
 std::optional<size_t> ManglerContext::GetIndexOfGlobalWildcardVar(
@@ -1446,7 +1446,7 @@ std::optional<size_t> ManglerContext::GetIndexOfExtend(
     }
     auto fileMap = file2ExtendDecl.find(file);
     CJC_ASSERT(fileMap != file2ExtendDecl.end());
-    auto elementsVector = fileMap->second.find(target->extendedType->ty->String());
+    auto elementsVector = fileMap->second.find(target->extendedType->GetTy()->String());
     CJC_ASSERT(elementsVector != fileMap->second.end());
     auto found = std::find(elementsVector->second.begin(), elementsVector->second.end(), target);
     if (found != elementsVector->second.end()) {

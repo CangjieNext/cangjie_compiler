@@ -575,8 +575,8 @@ inline bool IsAutoBoxedBaseDecl(const AST::Decl& decl)
 inline std::string MangleEnumElement(const std::string& enumDeclMangledName, const AST::Decl& decl)
 {
     auto elementClassName = enumDeclMangledName + MANGLE_DOLLAR_PREFIX + decl.identifier;
-    if (decl.ty && decl.ty->kind == AST::TypeKind::TYPE_FUNC) {
-        auto funcTy = static_cast<AST::FuncTy*>(decl.ty.get());
+    if (decl.GetTy() && decl.TyKind() == AST::TypeKind::TYPE_FUNC) {
+        auto funcTy = static_cast<AST::FuncTy*>(decl.GetTy().get());
         // Do temp mangle of enum element to ensure not duplicate.
         elementClassName += MANGLE_DOLLAR_PREFIX + std::to_string(funcTy->paramTys.size());
     }

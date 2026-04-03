@@ -115,26 +115,26 @@ void ClearInstTysIsNeeded(Node& node)
     if (Utils::NotIn(node.astKind, {ASTKind::REF_EXPR, ASTKind::MEMBER_ACCESS, ASTKind::CALL_EXPR})) {
         return;
     }
-    if (auto ce = DynamicCast<CallExpr*>(&node);
-        ce && ce->desugarExpr && !ce->desugarExpr->ty->HasGeneric() && Is<NameReferenceExpr*>(ce->baseFunc.get())) {
+    if (auto ce = DynamicCast<CallExpr*>(&node); ce && ce->desugarExpr && !ce->desugarExpr->GetTy()->HasGeneric() &&
+        Is<NameReferenceExpr*>(ce->baseFunc.get())) {
         StaticCast<NameReferenceExpr*>(ce->baseFunc.get())->instTys.clear();
         return;
     }
     if (auto re = DynamicCast<RefExpr*>(&node)) {
-        if (auto target = re->ref.target;
-            target && !target->ty->HasGeneric() && !target->TestAnyAttr(Attribute::INTRINSIC, Attribute::GENERIC)) {
+        if (auto target = re->ref.target; target && !target->GetTy()->HasGeneric() &&
+            !target->TestAnyAttr(Attribute::INTRINSIC, Attribute::GENERIC)) {
             re->instTys.clear();
             if (target->astKind != ASTKind::TYPE_ALIAS_DECL) {
-                re->ty = target->ty;
+                re->SetTy(target->GetTy());
             }
         }
         return;
     }
-    if (auto ma = DynamicCast<MemberAccess*>(&node); ma && ma->target && !ma->target->ty->HasGeneric() &&
+    if (auto ma = DynamicCast<MemberAccess*>(&node); ma && ma->target && !ma->target->GetTy()->HasGeneric() &&
         !ma->target->TestAnyAttr(Attribute::INTRINSIC, Attribute::GENERIC)) {
         ma->instTys.clear();
         if (ma->target->astKind != ASTKind::TYPE_ALIAS_DECL && !HasJavaAttr(*ma->target)) {
-            ma->ty = ma->target->ty;
+            ma->SetTy(ma->target->GetTy());
         }
     }
 }
@@ -219,8 +219,8 @@ void BuildGenericsTyMap(const FuncDecl& fd, TypeSubst& g2gMap)
             CJC_ASSERT(ddGeneric && ddGeneric->typeParameters.size() == typeParams.size());
             const auto& ddTypeParams = ddGeneric->typeParameters;
             for (size_t i = 0; i < ddTypeParams.size(); ++i) {
-                CJC_ASSERT(Ty::IsTyCorrect(ddTypeParams[i]->ty) && Ty::IsTyCorrect(typeParams[i]->ty));
-                g2gMap.emplace(StaticCast<TyVar>(ddTypeParams[i]->ty), typeParams[i]->ty);
+                CJC_ASSERT(Ty::IsTyCorrect(ddTypeParams[i]->GetTy()) && Ty::IsTyCorrect(typeParams[i]->GetTy()));
+                g2gMap.emplace(StaticCast<TyVar>(ddTypeParams[i]->GetTy()), typeParams[i]->GetTy());
             }
         }
     }
@@ -394,9 +394,9 @@ void GIM::GenericInstantiationManagerImpl::UpdateInstantiatedExtendMap()
         if (it->astKind != ASTKind::EXTEND_DECL) {
             continue;
         }
-        if (it->ty->IsBuiltin()) {
-            typeManager.UpdateBuiltInTyExtendDecl(*it->ty, static_cast<ExtendDecl&>(*it));
-        } else if (auto extendedDecl = DynamicCast<InheritableDecl*>(Ty::GetDeclOfTy(it->ty)); extendedDecl) {
+        if (it->GetTy()->IsBuiltin()) {
+            typeManager.UpdateBuiltInTyExtendDecl(*it->GetTy(), static_cast<ExtendDecl&>(*it));
+        } else if (auto extendedDecl = DynamicCast<InheritableDecl*>(Ty::GetDeclOfTy(it->GetTy())); extendedDecl) {
             typeManager.declToExtendMap[extendedDecl].emplace(RawStaticCast<ExtendDecl*>(it.get()));
         }
     }
@@ -411,12 +411,12 @@ void GIM::GenericInstantiationManagerImpl::ClearImportedUnusedInstantiatedDecls(
         if (decl->IsNominalDecl()) {
             // Update ty's instantiated decl to make current package's decl as the first choice of type.
             RestoreInstantiatedDeclTy(*decl);
-            instantiatedTys.emplace(decl->ty);
+            instantiatedTys.emplace(decl->GetTy());
         }
     }
     // Record erasable decls which have same ty with instantiated decl in current package.
     auto recordEraseNominal = [&removedDecls, &instantiatedTys](auto& it) {
-        if (instantiatedTys.find(it->ty) != instantiatedTys.end()) {
+        if (instantiatedTys.find(it->GetTy()) != instantiatedTys.end()) {
             removedDecls.emplace(it.get());
         }
     };
@@ -481,9 +481,9 @@ void GIM::GenericInstantiationManagerImpl::PerformTyInstantiationDuringClone(
     const Node& genericNode, Node& clonedNode, const GenericInfo& info, const TypeSubst& g2gTyMap)
 {
     // Instantiate the generic ty to instantiated type.
-    if (Ty::IsTyCorrect(genericNode.ty)) {
-        clonedNode.ty =
-            typeManager.GetInstantiatedTy(GetOriginalTy(*genericNode.ty, g2gTyMap, typeManager), info.gTyToTyMap);
+    if (Ty::IsTyCorrect(genericNode.GetTy())) {
+        clonedNode.SetTy(
+            typeManager.GetInstantiatedTy(GetOriginalTy(*genericNode.GetTy(), g2gTyMap, typeManager), info.gTyToTyMap));
     }
     if (auto ref = DynamicCast<NameReferenceExpr*>(&clonedNode); ref) {
         if (ref->matchedParentTy) {
@@ -516,7 +516,7 @@ void GIM::GenericInstantiationManagerImpl::PerformUpdateAttrDuringClone(Node& ge
     }
     bool result = false;
     for (auto& typeParameter : declGeneric->typeParameters) {
-        result = result || typeParameter->ty->IsGeneric();
+        result = result || typeParameter->GetTy()->IsGeneric();
     }
     if (result && clonedNode.TestAttr(Attribute::GENERIC)) {
         if (clonedDecl->outerDecl && clonedDecl->outerDecl->IsFunc()) {
@@ -771,14 +771,14 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::SelectTypeMatchedImplMember(
             member = implMember;
             break;
         }
-        auto iFuncTy = StaticCast<FuncTy*>(interfaceFunc.ty);
+        auto iFuncTy = StaticCast<FuncTy*>(interfaceFunc.GetTy());
         if (interfaceFunc.TestAttr(Attribute::GENERIC)) {
             TypeSubst typeMapping = typeManager.GenerateGenericMappingFromGeneric(interfaceFunc, *implMember);
             iFuncTy = StaticCast<FuncTy*>(typeManager.GetInstantiatedTy(iFuncTy, typeMapping));
         } else if (interfaceFunc.outerDecl && interfaceFunc.outerDecl->TestAttr(Attribute::GENERIC)) {
-            TypeSubst typeMapping = GenerateTypeMappingByTy(interfaceFunc.outerDecl->ty, &targetBaseTy);
+            TypeSubst typeMapping = GenerateTypeMappingByTy(interfaceFunc.outerDecl->GetTy(), &targetBaseTy);
             if (auto outerDecl = implMember->outerDecl; outerDecl && outerDecl->TestAttr(Attribute::GENERIC)) {
-                auto tmpMapping = GenerateTypeMappingByTy(implMember->outerDecl->ty, &ty);
+                auto tmpMapping = GenerateTypeMappingByTy(implMember->outerDecl->GetTy(), &ty);
                 auto rts = GetReversedTypeSubst(tmpMapping);
                 TyGeneralizer tg(typeManager, rts);
                 for (auto it = typeMapping.begin(); it != typeMapping.end(); ++it) {
@@ -793,7 +793,7 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::SelectTypeMatchedImplMember(
             usableDecls.emplace(implMember);
         }
         auto found = std::find_if(usableDecls.begin(), usableDecls.end(), [this, iFuncTy](auto it) {
-            auto fty = DynamicCast<FuncTy*>(it->ty);
+            auto fty = DynamicCast<FuncTy*>(it->GetTy());
             return fty && iFuncTy && typeManager.IsFuncParameterTypesIdentical(*fty, *iFuncTy);
         });
         if (found != usableDecls.end()) {
@@ -812,7 +812,7 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
     // 3. member function accessed by class type which function belongs to.
     auto baseTyDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(&ty);
     bool shouldIgnore = !fd.outerDecl || (ty.IsInterface() && !fd.TestAttr(Attribute::STATIC)) ||
-        (ty.IsClass() && baseTyDecl == Ty::GetDeclPtrOfTy<InheritableDecl>(fd.outerDecl->ty));
+        (ty.IsClass() && baseTyDecl == Ty::GetDeclPtrOfTy<InheritableDecl>(fd.outerDecl->GetTy()));
     if (shouldIgnore) {
         return &fd;
     }
@@ -927,7 +927,7 @@ void GIM::GenericInstantiationManagerImpl::GenericMemberAccessInstantiate(Member
     }
     Walker walkBase(ma.baseExpr.get(), instantiationWalkerID, instantiator, contextReset);
     walkBase.Walk();
-    auto invalid = !ma.target || !ma.baseExpr || !Ty::IsTyCorrect(ma.ty);
+    auto invalid = !ma.target || !ma.baseExpr || !Ty::IsTyCorrect(ma.GetTy());
     if (invalid || ma.target->astKind == ASTKind::PACKAGE_DECL || TestManager::IsMockAccessor(*ma.target)) {
         return;
     }
@@ -940,29 +940,31 @@ void GIM::GenericInstantiationManagerImpl::GenericMemberAccessInstantiate(Member
     if (IsClassOrEnumConstructor(*target)) {
         target = target->outerDecl;
         CJC_ASSERT(target != nullptr);
-        auto baseTy = ma.ty->IsFunc() ? RawStaticCast<FuncTy*>(ma.ty)->retTy : ma.ty;
+        auto baseTy = ma.GetTy()->IsFunc() ? RawStaticCast<FuncTy*>(ma.GetTy())->retTy : ma.GetTy();
         instTys = typeManager.GetTypeArgs(*baseTy);
     }
     // For following conditions, we need to instantiate parent decl first.
     // 1. For function in generic structure declaration. Found partially instantiated decl.
     // 2. For member call of generic decl's member.
-    bool needInstantiateParent = target->outerDecl && target->outerDecl->IsNominalDecl() && ma.baseExpr->ty &&
+    bool needInstantiateParent = target->outerDecl && target->outerDecl->IsNominalDecl() && ma.baseExpr->GetTy() &&
         (IsGenericInGenericStruct(*target) || target->outerDecl->TestAttr(Attribute::GENERIC));
     if (needInstantiateParent) {
-        auto baseTy = Ty::IsTyCorrect(ma.matchedParentTy) ? ma.matchedParentTy : ma.baseExpr->ty;
+        auto baseTy = Ty::IsTyCorrect(ma.matchedParentTy) ? ma.matchedParentTy : ma.baseExpr->GetTy();
         target = GetInstantiatedMemberTarget(*baseTy, *target);
     }
     InstantiateGenericDeclWithInstTys(*target, instTys);
-    if (!Ty::IsTyCorrect(ma.baseExpr->ty)) {
+    if (!Ty::IsTyCorrect(ma.baseExpr->GetTy())) {
         return;
     }
     if (target->IsFunc() && target->TestAttr(Attribute::GENERIC)) {
         // Also try to instantiate implementation function of generic interface function.
-        target = FindImplFuncForAbstractFunc(*ma.baseExpr->ty, *StaticCast<FuncDecl*>(target), *ma.baseExpr->ty);
+        target =
+            FindImplFuncForAbstractFunc(*ma.baseExpr->GetTy(), *StaticCast<FuncDecl*>(target), *ma.baseExpr->GetTy());
         InstantiateGenericDeclWithInstTys(*target, instTys);
     } else if (!IsInDeclWithAttribute(*target, Attribute::GENERIC) && ma.isExposedAccess && target->IsFunc()) {
         // Searching for upper bound call of non-generic access to collect used inline functions earlier.
-        target = FindImplFuncForAbstractFunc(*ma.baseExpr->ty, *StaticCast<FuncDecl*>(target), *ma.baseExpr->ty);
+        target =
+            FindImplFuncForAbstractFunc(*ma.baseExpr->GetTy(), *StaticCast<FuncDecl*>(target), *ma.baseExpr->GetTy());
         InstantiateGenericDeclWithInstTys(*target, instTys);
     }
 }
@@ -974,7 +976,7 @@ void GIM::GenericInstantiationManagerImpl::GenericRefExprInstantiate(RefExpr& re
         walkArg.Walk();
     }
     // Generic type decleration do not need to be instantiated.
-    if (!re.ref.target || re.ref.target->astKind == ASTKind::PACKAGE_DECL || !Ty::IsTyCorrect(re.ty) ||
+    if (!re.ref.target || re.ref.target->astKind == ASTKind::PACKAGE_DECL || !Ty::IsTyCorrect(re.GetTy()) ||
         re.ref.target->astKind == ASTKind::GENERIC_PARAM_DECL) {
         return;
     }
@@ -987,7 +989,7 @@ void GIM::GenericInstantiationManagerImpl::GenericRefExprInstantiate(RefExpr& re
     if (IsClassOrEnumConstructor(*target)) {
         target = re.ref.target->outerDecl;
         CJC_ASSERT(target != nullptr);
-        auto baseTy = re.ty->IsFunc() ? RawStaticCast<FuncTy*>(re.ty)->retTy : re.ty;
+        auto baseTy = re.GetTy()->IsFunc() ? RawStaticCast<FuncTy*>(re.GetTy())->retTy : re.GetTy();
         instTys = typeManager.GetTypeArgs(*baseTy);
     }
     // For function in generic structure declaration,
@@ -1062,7 +1064,7 @@ void GIM::GenericInstantiationManagerImpl::GenericTypeInstantiate(const Type& ty
 {
     // Ignore invalid type node & partially typealias node.
     // If the type contains generic ty, current type node may be typealias substituted node.
-    if (!Ty::IsTyCorrect(type.ty) || HasIntersectionTy(*type.ty) || type.ty->HasGeneric()) {
+    if (!Ty::IsTyCorrect(type.GetTy()) || HasIntersectionTy(*type.GetTy()) || type.GetTy()->HasGeneric()) {
         return;
     }
     // Instantiated type only by sema type (also for typeAlias substituted cases).
@@ -1076,16 +1078,16 @@ void GIM::GenericInstantiationManagerImpl::GenericTypeInstantiate(const Type& ty
         }
         InstantiateGenericDeclWithInstTys(*target, ty->typeArgs);
     };
-    instantiateType(type.ty);
+    instantiateType(type.GetTy());
 }
 
 void GIM::GenericInstantiationManagerImpl::GenericArrayExprInstantiate(const ArrayExpr& ae)
 {
     // VArray does not have initFunc and does not need to be instantiated.
-    if (Ty::IsTyCorrect(ae.ty) && ae.ty->kind != TypeKind::TYPE_ARRAY) {
+    if (Ty::IsTyCorrect(ae.GetTy()) && ae.TyKind() != TypeKind::TYPE_ARRAY) {
         return;
     }
-    auto arrayTy = RawStaticCast<ArrayTy*>(ae.ty);
+    auto arrayTy = RawStaticCast<ArrayTy*>(ae.GetTy());
     if (ae.initFunc != nullptr) {
         auto typeArgs = typeManager.GetTypeArgs(*arrayTy);
         InstantiateGenericDeclWithInstTys(*ae.initFunc, typeArgs);
@@ -1098,12 +1100,12 @@ void GIM::GenericInstantiationManagerImpl::GenericArrayLitInstantiate(ArrayLit& 
         Walker walkElement(it.get(), instantiationWalkerID, instantiator, contextReset);
         walkElement.Walk();
     }
-    auto target = Ty::GetDeclPtrOfTy(al.ty);
+    auto target = Ty::GetDeclPtrOfTy(al.GetTy());
     if (!target) {
         return;
     }
 
-    InstantiateGenericDeclWithInstTys(*target, al.ty->typeArgs);
+    InstantiateGenericDeclWithInstTys(*target, al.GetTy()->typeArgs);
 }
 
 VisitAction GIM::GenericInstantiationManagerImpl::CheckVisitedNode(Ptr<Node> node, bool checkGeneric)
@@ -1166,11 +1168,11 @@ VisitAction GIM::GenericInstantiationManagerImpl::CheckNodeInstantiation(Node& n
     }
 
     curTriggerNode = &node;
-    if (Ty::IsTyCorrect(node.ty) && !HasIntersectionTy(*node.ty)) {
+    if (Ty::IsTyCorrect(node.GetTy()) && !HasIntersectionTy(*node.GetTy())) {
         // For memory layout, instantiated all used generics in node's ty.
-        InstantiateGenericTysForMemoryLayout(*node.ty);
+        InstantiateGenericTysForMemoryLayout(*node.GetTy());
         // Extends of type should be instantied by usage.
-        GenericTyExtendInstantiate(*node.ty);
+        GenericTyExtendInstantiate(*node.GetTy());
     }
     switch (node.astKind) {
         case ASTKind::REF_EXPR: {
@@ -1258,16 +1260,16 @@ void GIM::GenericInstantiationManagerImpl::RearrangeCallExprReference(CallExpr& 
     // Sema guarantees: base's target not null when 'resolvedFunction' is not null and they are pointing to same decl.
     CJC_NULLPTR_CHECK(target);
     ce.resolvedFunction = StaticCast<FuncDecl*>(target);
-    if (target->ty->HasGeneric() || target->ty->IsGeneric()) {
+    if (target->GetTy()->HasGeneric() || target->GetTy()->IsGeneric()) {
         return;
     }
     if (!HasJavaAttr(*target)) {
-        ce.ty = StaticCast<FuncTy*>(target->ty)->retTy;
+        ce.SetTy(StaticCast<FuncTy*>(target->GetTy())->retTy);
     }
     // Deal for dynamic 'This' binding call.
     // eg: tests/LLT/Sema/class/ThisType/class_generic_dynamic_binding_thistype_ok_2.cj
-    if (auto thisTy = DynamicCast<ClassThisTy*>(ce.ty); thisTy && ce.baseFunc->astKind == ASTKind::MEMBER_ACCESS) {
-        ce.ty = StaticAs<ASTKind::MEMBER_ACCESS>(ce.baseFunc.get())->baseExpr->ty;
+    if (auto thisTy = DynamicCast<ClassThisTy*>(ce.GetTy()); thisTy && ce.baseFunc->astKind == ASTKind::MEMBER_ACCESS) {
+        ce.SetTy(StaticAs<ASTKind::MEMBER_ACCESS>(ce.baseFunc.get())->baseExpr->GetTy());
     }
 }
 
@@ -1314,12 +1316,12 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedTarget(
 void GIM::GenericInstantiationManagerImpl::RearrangeRefExprReference(RefExpr& re)
 {
     // Generic type decleration do not need to be instantiated.
-    if (!Ty::IsTyCorrect(re.ty) || !re.ref.target || re.ref.target->IsBuiltIn() ||
+    if (!Ty::IsTyCorrect(re.GetTy()) || !re.ref.target || re.ref.target->IsBuiltIn() ||
         re.ref.target->astKind == ASTKind::GENERIC_PARAM_DECL || !RequireInstantiation(*re.ref.target)) {
         return;
     }
-    auto baseTy = re.ty;
-    auto instTys = (re.isThis || re.isSuper) ? typeManager.GetTypeArgs(*re.ty) : re.instTys;
+    auto baseTy = re.GetTy();
+    auto instTys = (re.isThis || re.isSuper) ? typeManager.GetTypeArgs(*re.GetTy()) : re.instTys;
     if (IsClassOrEnumConstructor(*re.ref.target)) {
         baseTy = baseTy->IsFunc() ? RawStaticCast<FuncTy*>(baseTy)->retTy : baseTy;
         instTys = typeManager.GetTypeArgs(*baseTy);
@@ -1337,11 +1339,11 @@ void GIM::GenericInstantiationManagerImpl::RearrangeMemberAccessReference(Member
 {
     Walker(ma.baseExpr.get(), rearrangeWalkerID, rearranger, contextReset).Walk();
     // BaseExpr of member access may be package decl which does no have sema type.
-    if (!ma.target || !ma.baseExpr || Ty::IsInitialTy(ma.ty) || ma.target->IsBuiltIn()) {
+    if (!ma.target || !ma.baseExpr || Ty::IsInitialTy(ma.GetTy()) || ma.target->IsBuiltIn()) {
         return;
     }
     // MemberAccess's base may be package decl which does not have sema type.
-    auto baseTy = Ty::IsTyCorrect(ma.baseExpr->ty) ? ma.baseExpr->ty : ma.ty;
+    auto baseTy = Ty::IsTyCorrect(ma.baseExpr->GetTy()) ? ma.baseExpr->GetTy() : ma.GetTy();
     auto instTys = ma.instTys;
     if (IsClassOrEnumConstructor(*ma.target)) {
         baseTy = baseTy->IsFunc() ? RawStaticCast<FuncTy*>(baseTy)->retTy : baseTy;
@@ -1377,14 +1379,14 @@ void GIM::GenericInstantiationManagerImpl::RearrangeTypeReference(Type& type)
 {
     // Ignore invalid type node & partially typealias node.
     // If the type contains generic ty, current type node may be typealias substituted node.
-    if (!Ty::IsTyCorrect(type.ty) || HasIntersectionTy(*type.ty) || type.ty->HasGeneric()) {
+    if (!Ty::IsTyCorrect(type.GetTy()) || HasIntersectionTy(*type.GetTy()) || type.GetTy()->HasGeneric()) {
         return;
     }
-    auto target = Ty::GetDeclPtrOfTy(type.ty);
+    auto target = Ty::GetDeclPtrOfTy(type.GetTy());
     if (!target) {
         return;
     }
-    auto instantiatedDecl = GetInstantiatedTarget(*type.ty, *target, type.ty->typeArgs);
+    auto instantiatedDecl = GetInstantiatedTarget(*type.GetTy(), *target, type.GetTy()->typeArgs);
     // Type only will be RefType or QualifiedType, guaranteed by caller.
     if (type.astKind == ASTKind::REF_TYPE) {
         auto& rt = static_cast<RefType&>(type);
@@ -1397,10 +1399,10 @@ void GIM::GenericInstantiationManagerImpl::RearrangeTypeReference(Type& type)
 
 void GIM::GenericInstantiationManagerImpl::RearrangeArrayExprReference(ArrayExpr& ae)
 {
-    if (!ae.initFunc || !Ty::IsTyCorrect(ae.ty)) {
+    if (!ae.initFunc || !Ty::IsTyCorrect(ae.GetTy())) {
         return;
     }
-    auto decl = FindInCache(ConstructGenericInfo(*ae.initFunc, typeManager.GetTypeArgs(*ae.ty)));
+    auto decl = FindInCache(ConstructGenericInfo(*ae.initFunc, typeManager.GetTypeArgs(*ae.GetTy())));
     if (!decl) {
         return;
     }
@@ -1409,8 +1411,8 @@ void GIM::GenericInstantiationManagerImpl::RearrangeArrayExprReference(ArrayExpr
 
 void GIM::GenericInstantiationManagerImpl::RearrangeArrayLitReference(ArrayLit& al)
 {
-    if (al.initFunc && Ty::IsTyCorrect(al.ty)) {
-        al.initFunc = RawStaticCast<FuncDecl*>(GetInstantiatedTarget(*al.ty, *al.initFunc, al.ty->typeArgs));
+    if (al.initFunc && Ty::IsTyCorrect(al.GetTy())) {
+        al.initFunc = RawStaticCast<FuncDecl*>(GetInstantiatedTarget(*al.GetTy(), *al.initFunc, al.GetTy()->typeArgs));
     }
 }
 
@@ -1435,7 +1437,7 @@ void GIM::GenericInstantiationManagerImpl::RearrangeFuncBodyReference(FuncBody& 
 
 void GIM::GenericInstantiationManagerImpl::UpdateTypePatternMatchResult(Pattern& pattern)
 {
-    if (!Ty::IsTyCorrect(pattern.ty)) {
+    if (!Ty::IsTyCorrect(pattern.GetTy())) {
         return;
     }
     // Define the process of updating match result of typePattern.
@@ -1444,10 +1446,10 @@ void GIM::GenericInstantiationManagerImpl::UpdateTypePatternMatchResult(Pattern&
         if (!tp || tp->matchBeforeRuntime) {
             return;
         }
-        tp->matchBeforeRuntime = typeManager.IsSubtype(targetTy, tp->type->ty, true, false);
+        tp->matchBeforeRuntime = typeManager.IsSubtype(targetTy, tp->type->GetTy(), true, false);
         // Only set 'needRuntimeTypeCheck' true if both selector type and pattern type are classlike type.
-        tp->needRuntimeTypeCheck =
-            !tp->matchBeforeRuntime && tp->type->ty && IsNeedRuntimeCheck(typeManager, *targetTy, *tp->type->ty);
+        tp->needRuntimeTypeCheck = !tp->matchBeforeRuntime && tp->type->GetTy() &&
+            IsNeedRuntimeCheck(typeManager, *targetTy, *tp->type->GetTy());
     };
     // Define the process of checking child patterns of current pattern level.
     auto checkChildren = [&update](auto tys, auto& patterns) {
@@ -1458,18 +1460,18 @@ void GIM::GenericInstantiationManagerImpl::UpdateTypePatternMatchResult(Pattern&
     };
     // Perform updating for current pattern level. More nesting pattern will be checked during rearrange process later.
     if (auto tuplePattern = DynamicCast<TuplePattern*>(&pattern); tuplePattern) {
-        auto tupleTy = DynamicCast<TupleTy*>(tuplePattern->ty);
+        auto tupleTy = DynamicCast<TupleTy*>(tuplePattern->GetTy());
         if (tupleTy) {
             checkChildren(tupleTy->typeArgs, tuplePattern->patterns);
         }
     } else if (auto enumPattern = DynamicCast<EnumPattern*>(&pattern); enumPattern) {
         CJC_NULLPTR_CHECK(enumPattern->constructor);
-        auto funcTy = DynamicCast<FuncTy*>(enumPattern->constructor->ty);
+        auto funcTy = DynamicCast<FuncTy*>(enumPattern->constructor->GetTy());
         if (funcTy) {
             checkChildren(funcTy->paramTys, enumPattern->patterns);
         }
     } else if (pattern.ctxExpr) {
-        update(pattern.ctxExpr->ty, &pattern);
+        update(pattern.ctxExpr->GetTy(), &pattern);
     }
 }
 
@@ -1493,12 +1495,12 @@ void GIM::GenericInstantiationManagerImpl::RecoverDesugarForBuiltIn() const
                 return VisitAction::WALK_CHILDREN;
             }
             auto fd = ce->resolvedFunction;
-            Ty* thisTy = fd->outerDecl->ty;
-            FuncTy* funcTy = DynamicCast<FuncTy*>(fd->ty);
+            Ty* thisTy = fd->outerDecl->GetTy();
+            FuncTy* funcTy = DynamicCast<FuncTy*>(fd->GetTy());
             if (ce->baseFunc && ce->baseFunc->astKind == ASTKind::MEMBER_ACCESS) {
-                thisTy = StaticCast<MemberAccess*>(ce->baseFunc.get())->baseExpr->ty;
-                CJC_ASSERT(ce->baseFunc->ty->IsFunc());
-                funcTy = StaticCast<FuncTy*>(ce->baseFunc->ty);
+                thisTy = StaticCast<MemberAccess*>(ce->baseFunc.get())->baseExpr->GetTy();
+                CJC_ASSERT(ce->baseFunc->GetTy()->IsFunc());
+                funcTy = StaticCast<FuncTy*>(ce->baseFunc->GetTy());
             }
             if (!funcTy || !thisTy) {
                 return VisitAction::WALK_CHILDREN;
@@ -1518,7 +1520,7 @@ void GIM::GenericInstantiationManagerImpl::RecoverDesugarForBuiltIn() const
                     be->leftExpr = std::move(StaticCast<MemberAccess*>(ce->baseFunc.get())->baseExpr);
                     be->rightExpr = std::move(ce->args[0]->expr);
                     be->op = fd->op;
-                    be->ty = ce->ty;
+                    be->SetTy(ce->GetTy());
                     CopyBasicInfo(ce, be.get());
                     AddCurFile(*be, ce->curFile);
                     ce->desugarExpr = std::move(be);
@@ -1532,7 +1534,7 @@ void GIM::GenericInstantiationManagerImpl::RecoverDesugarForBuiltIn() const
                     auto ue = MakeOwnedNode<UnaryExpr>();
                     ue->expr = std::move(StaticCast<MemberAccess*>(ce->baseFunc.get())->baseExpr);
                     ue->op = fd->op;
-                    ue->ty = ce->ty;
+                    ue->SetTy(ce->GetTy());
                     CopyBasicInfo(ce, ue.get());
                     AddCurFile(*ue, ce->curFile);
                     ce->desugarExpr = std::move(ue);

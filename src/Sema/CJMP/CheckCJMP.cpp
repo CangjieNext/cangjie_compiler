@@ -112,11 +112,11 @@ std::string CalculatedGenericConstraintsStr(const std::vector<OwnedPtr<GenericCo
         }
         std::set<std::string> ubStrs;
         for (auto& upperBound : genericConstraint->upperBounds) {
-            ubStrs.emplace(GetTypeNameFromTy(upperBound->ty, true, genericIdx));
+            ubStrs.emplace(GetTypeNameFromTy(upperBound->GetTy(), true, genericIdx));
         }
         CJC_ASSERT(!ubStrs.empty());
 
-        auto gcStr = "[" + GetTypeNameFromTy(genericConstraint->type->ty, true, genericIdx) + "<:";
+        auto gcStr = "[" + GetTypeNameFromTy(genericConstraint->type->GetTy(), true, genericIdx) + "<:";
         std::for_each(ubStrs.begin(), ubStrs.end(), [&gcStr](const std::string& s) { gcStr += s + ","; });
         gcStr += "]";
         gcStrs.emplace(gcStr);
@@ -144,8 +144,8 @@ void DiagNotMatchedDecl(DiagnosticEngine &diag, const AST::Decl& decl, const std
         } else if (decl.astKind == ASTKind::EXTEND_DECL) {
             auto& ed = StaticCast<const ExtendDecl&>(decl);
             info = DeclKindToString(decl) + " '" +
-                (Ty::IsTyCorrect(ed.ty.get()) ? GetTypeNameFromTy(ed.extendedType->ty.get(), false, {})
-                                              : decl.identifier.GetRawText()) +
+                (Ty::IsTyCorrect(ed.GetTy().get()) ? GetTypeNameFromTy(ed.extendedType->GetTy().get(), false, {})
+                                                   : decl.identifier.GetRawText()) +
                 "'";
         } else {
             info = DeclKindToString(decl) + " '" + decl.identifier.GetRawText() + "'";
@@ -389,24 +389,24 @@ void MPTypeCheckerImpl::MergeCJMPExtensions(CompilerInstance& ci, ScopeManager& 
     std::unordered_map<std::string, Ptr<ExtendDecl>> specificExtendDecls;
     std::unordered_map<std::string, std::set<Ptr<ExtendDecl>>> commonExtendDecls;
     for (auto ed : extends) {
-        if (!Ty::IsTyCorrect(ed->ty.get()) || !ed->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC)) {
+        if (!Ty::IsTyCorrect(ed->GetTy().get()) || !ed->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC)) {
             continue;
         }
 
         std::unordered_map<Ptr<Ty>, unsigned> genericIdx;
         if (ed->generic) {
             for (unsigned idx = 0; idx < ed->generic->typeParameters.size(); ++idx) {
-                genericIdx.emplace(ed->generic->typeParameters[idx]->ty, idx);
+                genericIdx.emplace(ed->generic->typeParameters[idx]->GetTy(), idx);
             }
         }
 
         std::string key;
         // serialize the extended type.
-        key += GetTypeNameFromTy(ed->extendedType->ty, true, genericIdx);
+        key += GetTypeNameFromTy(ed->extendedType->GetTy(), true, genericIdx);
         // serialize the inherited types.
         std::set<std::string> inheritedTysStr;
         for (auto& inheritedType : ed->inheritedTypes) {
-            inheritedTysStr.emplace(GetTypeNameFromTy(inheritedType->ty, true, genericIdx));
+            inheritedTysStr.emplace(GetTypeNameFromTy(inheritedType->GetTy(), true, genericIdx));
         }
         if (!inheritedTysStr.empty()) {
             key += "<:";
@@ -545,8 +545,8 @@ static Ptr<Ty> CheckFuncReturnType(Ptr<Ty> ty)
 
 void MPTypeCheckerImpl::CheckMatchedFunctionReturnTypes(FuncDecl& specificFunc, FuncDecl& commonFunc)
 {
-    auto commonType = commonFunc.funcBody->ty;
-    auto specificType = specificFunc.funcBody->ty;
+    auto commonType = commonFunc.funcBody->GetTy();
+    auto specificType = specificFunc.funcBody->GetTy();
 
     auto commonRetTy = CheckFuncReturnType(commonType);
     auto specificRetTy = CheckFuncReturnType(specificType);
@@ -571,17 +571,19 @@ void MPTypeCheckerImpl::CheckMatchedFunctionReturnTypes(FuncDecl& specificFunc, 
 
 void MPTypeCheckerImpl::CheckMatchedVariableTypes(AST::VarDecl& specificVar, AST::VarDecl& commonVar)
 {
-    CJC_ASSERT_WITH_MSG(commonVar.ty && !Ty::IsInitialTy(commonVar.ty),
-        "Common variable type must be already resolved");
+    CJC_ASSERT_WITH_MSG(
+        commonVar.GetTy() && !Ty::IsInitialTy(commonVar.GetTy()), "Common variable type must be already resolved");
 
-    if (!specificVar.ty || Ty::IsInitialTy(specificVar.ty)) {
+    if (!specificVar.GetTy() || Ty::IsInitialTy(specificVar.GetTy())) {
         // this should already be reported as parse_expected_one_of_type_or_initializer
         // here we skip it
         return;
     }
 
-    if (commonVar.ty == specificVar.ty) return;
-    if (typeManager.IsTyEqual(specificVar.ty, commonVar.ty)) return;
+    if (commonVar.GetTy() == specificVar.GetTy())
+        return;
+    if (typeManager.IsTyEqual(specificVar.GetTy(), commonVar.GetTy()))
+        return;
 
     // the type equality check will handle most of the cases except for the generics case when types 
     // need to be substituted in order to compare them that is handled in MatchCJMPVar
@@ -855,7 +857,7 @@ bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(const InheritableDecl
     if (commonDecl.astKind == ASTKind::CLASS_DECL) {
         auto comSupClass = StaticCast<ClassDecl>(&commonDecl)->GetSuperClassDecl();
         auto platSupIClass = StaticCast<ClassDecl>(specificDecl)->GetSuperClassDecl();
-        if (!typeManager.IsTyEqual(comSupClass->ty, platSupIClass->ty)) {
+        if (!typeManager.IsTyEqual(comSupClass->GetTy(), platSupIClass->GetTy())) {
             DiagNotMatchedSuperType(diag, *specificDecl);
             return false;
         }
@@ -956,7 +958,7 @@ bool MPTypeCheckerImpl::MatchCJMPProp(PropDecl& specificProp, PropDecl& commonPr
     if (!IsCJMPDeclMatchable(specificProp, commonProp)) {
         return false;
     }
-    if (!typeManager.IsTyEqual(specificProp.ty, commonProp.ty)) {
+    if (!typeManager.IsTyEqual(specificProp.GetTy(), commonProp.GetTy())) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_has_different_type, specificProp, "property");
     }
     bool ret = TrySetSpecificImpl(specificProp, commonProp, "property " + specificProp.identifier);
@@ -985,8 +987,8 @@ bool MPTypeCheckerImpl::MatchEnumFuncTypes(const FuncDecl& specific, const FuncD
         return false;
     }
 
-    auto mappedCommonType = typeManager.GetInstantiatedTy(common.ty, genericTyMap);
-    return typeManager.IsTyEqual(mappedCommonType, specific.ty);
+    auto mappedCommonType = typeManager.GetInstantiatedTy(common.GetTy(), genericTyMap);
+    return typeManager.IsTyEqual(mappedCommonType, specific.GetTy());
 }
 
 bool MPTypeCheckerImpl::MatchCJMPEnumConstructor(Decl& specificDecl, Decl& commonDecl)
@@ -1013,7 +1015,7 @@ bool MPTypeCheckerImpl::MatchCJMPVar(VarDecl& specificVar, VarDecl& commonVar)
     if (!IsCJMPDeclMatchable(specificVar, commonVar)) {
         return false;
     }
-    auto cType = commonVar.ty;
+    auto cType = commonVar.GetTy();
     if (specificVar.IsMemberDecl()) {
         TypeSubst genericTyMapForNominals;
         MapCJMPGenericTypeArgs(genericTyMapForNominals, *commonVar.outerDecl, *specificVar.outerDecl);
@@ -1021,7 +1023,7 @@ bool MPTypeCheckerImpl::MatchCJMPVar(VarDecl& specificVar, VarDecl& commonVar)
             cType = typeManager.GetInstantiatedTy(cType, genericTyMapForNominals);
         }
     }
-    auto pType = specificVar.ty;
+    auto pType = specificVar.GetTy();
     if (!typeManager.IsTyEqual(cType, pType) && !Ty::IsInitialTy(pType)) {
         // if the specific type is initial then the check will be restarted after the type get resolved
         // so we can suppress the check for now
@@ -1132,7 +1134,7 @@ void MPTypeCheckerImpl::CheckCommonExtensions(std::vector<Ptr<Decl>>& commonDecl
             continue;
         }
 
-        auto& privateFunctions = privateFunctionsOfExtensions[extendDecl->extendedType->ty];
+        auto& privateFunctions = privateFunctionsOfExtensions[extendDecl->extendedType->GetTy()];
         for (auto& memberDecl : extendDecl->GetMemberDecls()) {
             if (!memberDecl->IsFuncOrProp() || !memberDecl->TestAttr(Attribute::PRIVATE)) {
                 continue;
@@ -1268,13 +1270,12 @@ void MPTypeCheckerImpl::MapCJMPGenericTypeArgs(
         return;
     }
     // 1. Handle nominalDecl type parameters
-    if (commonDecl.IsNominalDecl() && commonDecl.ty && !commonDecl.ty->typeArgs.empty()) {
-        for (size_t i = 0; i < commonDecl.ty->typeArgs.size(); i++) {
-            auto commonType = commonDecl.ty->typeArgs[i];
-
+    if (commonDecl.IsNominalDecl() && commonDecl.GetTy() && !commonDecl.GetTy()->typeArgs.empty()) {
+        for (size_t i = 0; i < commonDecl.GetTy()->typeArgs.size(); i++) {
+            auto commonType = commonDecl.GetTy()->typeArgs[i];
             if (commonType->IsGeneric()) {
                 Ptr<TyVar> commonGeneric = RawStaticCast<TyVar*>(commonType);
-                genericTyMap[commonGeneric] = specificDecl.ty->typeArgs[i];
+                genericTyMap[commonGeneric] = specificDecl.GetTy()->typeArgs[i];
             }
         }
     }
@@ -1290,8 +1291,8 @@ void MPTypeCheckerImpl::MapCJMPGenericTypeArgs(
 void MPTypeCheckerImpl::UpdateGenericTyInMemberFromCommon(TypeSubst& genericTyMap, Ptr<AST::Decl>& member)
 {
     Walker walker(member, [this, &genericTyMap](Ptr<Node> node) -> VisitAction {
-        if (node->ty) {
-            node->ty = typeManager.GetInstantiatedTy(node->ty, genericTyMap);
+        if (node->GetTy()) {
+            node->SetTy(typeManager.GetInstantiatedTy(node->GetTy(), genericTyMap));
         }
         if (auto ref = DynamicCast<NameReferenceExpr*>(node); ref) {
             for (auto& instTy : ref->instTys) {
@@ -1346,9 +1347,9 @@ void MPTypeCheckerImpl::GetInheritedTypesWithSpecificImpl(
     }
 
     for (auto& inhType : inheritedTypes) {
-        auto decl = Ty::GetDeclOfTy(inhType->ty);
+        auto decl = Ty::GetDeclOfTy(inhType->GetTy());
         if (decl && decl->specificImplementation) {
-            inhType->ty = decl->specificImplementation->ty;
+            inhType->SetTy(decl->specificImplementation->GetTy());
         }
     }
 }

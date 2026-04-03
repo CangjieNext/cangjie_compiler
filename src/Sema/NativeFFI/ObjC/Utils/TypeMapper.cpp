@@ -302,7 +302,7 @@ bool TypeMapper::IsSyntheticWrapper(const Decl& decl)
 
 bool TypeMapper::IsObjCMirrorSubtype(const Decl& decl)
 {
-    return IsValidObjCMirrorSubtype(*decl.ty);
+    return IsValidObjCMirrorSubtype(*decl.GetTy());
 }
 
 bool TypeMapper::IsObjCImpl(const Decl& decl)
@@ -590,7 +590,7 @@ bool IsOpenClassTy(const Ty& ty)
 
 inline bool SupportMemberFunc(const AST::Decl& decl, std::function<bool(Ptr<Ty>)> validTy)
 {
-    auto fnTy = Cangjie::DynamicCast<FuncTy>(decl.ty);
+    auto fnTy = Cangjie::DynamicCast<FuncTy>(decl.GetTy());
     // Constructor do not check return type.
     CJC_ASSERT(fnTy && fnTy->retTy);
     bool isValid = decl.TestAttr(Attribute::CONSTRUCTOR) ? true : validTy(fnTy->retTy);
@@ -629,7 +629,7 @@ bool TypeMapper::IsObjCCJMappingMember(const AST::Decl& decl)
         }
         return SupportMemberFunc(decl, validTy);
     } else if (decl.astKind == ASTKind::PROP_DECL || decl.astKind == ASTKind::VAR_DECL) {
-        return IsValidCJMapping(*decl.ty);
+        return IsValidCJMapping(*decl.GetTy());
     }
     return false;
 }
