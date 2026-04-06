@@ -14,6 +14,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
+#include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
 
@@ -1073,6 +1074,9 @@ OwnedPtr<MatchExpr> InteropLibBridge::CreateMatchByTypeArgument(
 
     std::vector<OwnedPtr<MatchCase>> cases;
 
+    auto jstringDecl = utils.GetJStringDecl(); // utils.GetStringDecl();
+    typeToCaseMap["java.lang:JString"] = SelectJSigByTypeKind(TypeKind::TYPE_STRUCT, jstringDecl->ty);
+
     for (auto& [typeDesc, expr] : typeToCaseMap) {
         auto isOption =
             typeDesc.rfind(std::string(CORE_PACKAGE_NAME) + ":" + OPTION_NAME, 0) == 0; // starts_with actually
@@ -1099,7 +1103,39 @@ OwnedPtr<MatchExpr> InteropLibBridge::CreateMatchByTypeArgument(
         cases.emplace_back(CreateMatchCase(std::move(patternForType), std::move(expr)));
     }
 
-    cases.emplace_back(CreateMatchCase(MakeOwned<WildcardPattern>(), std::move(defaultCase)));
+    auto varPat = CreateVarPattern(V_COMPILER, strTy);
+    auto varDecl = Ptr(varPat->varDecl.get());
+    auto varOrEnumPat = MakeOwned<VarOrEnumPattern>(SrcIdentifier(V_COMPILER));
+    varOrEnumPat->pattern = std::move(varPat);
+    varOrEnumPat->ty = strTy;
+    auto allPrintlns = importManager.GetImportedDeclsByName(*file, "println");
+    Ptr<FuncDecl> printlnDecl;
+    for (auto& d : allPrintlns) {
+        if (auto fd = As<ASTKind::FUNC_DECL>(d)) {
+            if (auto funcTy = DynamicCast<FuncTy*>(fd->ty); funcTy && funcTy->paramTys.size() == 1 &&
+                funcTy->paramTys[0] == strTy) {
+                auto fty1 = DynamicCast<FuncTy*>(fd->ty);
+                auto paramTys1 = fty1->paramTys;
+                printlnDecl = fd;
+                break;
+            }
+        }
+    }
+    CJC_NULLPTR_CHECK(printlnDecl);
+    std::cout << "PRINTLN param size: " << printlnDecl->funcBody->paramLists[0]->params.size() << std::endl;
+    auto varRef = WithinFile(CreateRefExpr(*varDecl), file);
+    auto printlnCall = CreateCall(printlnDecl, file, std::move(varRef));
+    auto defaultBlock = MakeOwned<Block>();
+    defaultBlock->EnableAttr(Attribute::COMPILER_ADD);
+    defaultBlock->body.emplace_back(std::move(printlnCall));
+    defaultBlock->body.emplace_back(std::move(defaultCase));
+    defaultBlock->ty = retTy;
+    auto defaultMatchCase = MakeOwned<MatchCase>();
+    defaultMatchCase->EnableAttr(Attribute::COMPILER_ADD);
+    defaultMatchCase->patterns.emplace_back(std::move(varOrEnumPat));
+    defaultMatchCase->ty = retTy;
+    defaultMatchCase->exprOrDecls = std::move(defaultBlock);
+    cases.emplace_back(std::move(defaultMatchCase));
 
     auto matchExpr = CreateMatchExpr(std::move(cStrToStringCall), std::move(cases), retTy);
     matchExpr->curFile = genericParam->curFile;
