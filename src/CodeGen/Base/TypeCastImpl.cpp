@@ -12,8 +12,6 @@
 
 #include "Base/TypeCastImpl.h"
 
-#include <optional>
-
 #include "Base/CGTypes/CGEnumType.h"
 #include "CGModule.h"
 #include "IRBuilder.h"
@@ -48,33 +46,33 @@ std::string StringIntX(Triple::ArchType archType, const CHIR::IntType& intTy)
 
 // Key: AST::sourceTyString() + targetTy.String()
 // Value: [lowerBound, upperBound]
-const std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> G_FLOAT2INT_BOUND_MAP = {
-    {"Float16Int8", {0xC060200000000000, 0x4060000000000000}},
-    {"Float16Int16", {0xC0E0040000000000, 0x40E0000000000000}},
-    {"Float16Int32", {0x0000000000000000, 0x0000000000000000}}, // There must be no overflow
-    {"Float16Int64", {0x0000000000000000, 0x0000000000000000}}, // There must be no overflow
-    {"Float16UInt8", {0xBFF0000000000000, 0x4070000000000000}},
-    {"Float16UInt16", {0xBFF0000000000000, 0x40F0000000000000}},
-    {"Float16UInt32", {0xBFF0000000000000, 0x0000000000000000}}, // There must be no upper bound overflow.
-    {"Float16UInt64", {0xBFF0000000000000, 0x0000000000000000}}, // There must be no upper bound overflow.
+const std::unordered_map<std::string, std::pair<double, double>> G_FLOAT2INT_BOUND_MAP = {
+    {"Float16Int8", {-0x1.0200000000000p+7, 0x1.0000000000000p+7}},
+    {"Float16Int16", {-0x1.0040000000000p+15, 0x1.0000000000000p+15}},
+    {"Float16Int32", {0.0, 0.0}}, // There must be no overflow
+    {"Float16Int64", {0.0, 0.0}}, // There must be no overflow
+    {"Float16UInt8", {-0x1.0000000000000p+0, 0x1.0000000000000p+8}},
+    {"Float16UInt16", {-0x1.0000000000000p+0, 0x1.0000000000000p+16}},
+    {"Float16UInt32", {-0x1.0000000000000p+0, 0.0}}, // There must be no upper bound overflow.
+    {"Float16UInt64", {-0x1.0000000000000p+0, 0.0}}, // There must be no upper bound overflow.
 
-    {"Float32Int8", {0xC060200000000000, 0x4060000000000000}},
-    {"Float32Int16", {0xC0E0002000000000, 0x40E0000000000000}},
-    {"Float32Int32", {0xC1E0000020000000, 0x41E0000000000000}},
-    {"Float32Int64", {0xC3E0000020000000, 0x43E0000000000000}},
-    {"Float32UInt8", {0xBFF0000000000000, 0x4070000000000000}},
-    {"Float32UInt16", {0xBFF0000000000000, 0x40F0000000000000}},
-    {"Float32UInt32", {0xBFF0000000000000, 0x41F0000000000000}},
-    {"Float32UInt64", {0xBFF0000000000000, 0x43F0000000000000}},
+    {"Float32Int8", {-0x1.0200000000000p+7, 0x1.0000000000000p+7}},
+    {"Float32Int16", {-0x1.0002000000000p+15, 0x1.0000000000000p+15}},
+    {"Float32Int32", {-0x1.0000020000000p+31, 0x1.0000000000000p+31}},
+    {"Float32Int64", {-0x1.0000020000000p+63, 0x1.0000000000000p+63}},
+    {"Float32UInt8", {-0x1.0000000000000p+0, 0x1.0000000000000p+8}},
+    {"Float32UInt16", {-0x1.0000000000000p+0, 0x1.0000000000000p+16}},
+    {"Float32UInt32", {-0x1.0000000000000p+0, 0x1.0000000000000p+32}},
+    {"Float32UInt64", {-0x1.0000000000000p+0, 0x1.0000000000000p+64}},
 
-    {"Float64Int8", {0xC060200000000000, 0x4060000000000000}},
-    {"Float64Int16", {0xC0E0002000000000, 0x40E0000000000000}},
-    {"Float64Int32", {0xC1E0000000200000, 0x41E0000000000000}},
-    {"Float64Int64", {0xC3E0000000000001, 0x43E0000000000000}},
-    {"Float64UInt8", {0xBFF0000000000000, 0x4070000000000000}},
-    {"Float64UInt16", {0xBFF0000000000000, 0x40F0000000000000}},
-    {"Float64UInt32", {0xBFF0000000000000, 0x41F0000000000000}},
-    {"Float64UInt64", {0xBFF0000000000000, 0x43F0000000000000}},
+    {"Float64Int8", {-0x1.0200000000000p+7, 0x1.0000000000000p+7}},
+    {"Float64Int16", {-0x1.0002000000000p+15, 0x1.0000000000000p+15}},
+    {"Float64Int32", {-0x1.0000000200000p+31, 0x1.0000000000000p+31}},
+    {"Float64Int64", {-0x1.0000000000001p+63, 0x1.0000000000000p+63}},
+    {"Float64UInt8", {-0x1.0000000000000p+0, 0x1.0000000000000p+8}},
+    {"Float64UInt16", {-0x1.0000000000000p+0, 0x1.0000000000000p+16}},
+    {"Float64UInt32", {-0x1.0000000000000p+0, 0x1.0000000000000p+32}},
+    {"Float64UInt64", {-0x1.0000000000000p+0, 0x1.0000000000000p+64}},
 };
 
 bool NeedsIntToUIntConversion(IRBuilder2& irBuilder, const CHIR::IntType& srcTy, const CHIR::Type::TypeKind typeKind)
@@ -241,10 +239,10 @@ llvm::Value* GenerateCondCheckLowerBound(
          */
         auto archType = irBuilder.GetCGContext().GetCompileOptions().target.GetArchType();
         auto lowerBound = G_FLOAT2INT_BOUND_MAP.at(srcTy.ToString() + StringIntX(archType, targetTy)).first;
-        if (lowerBound == 0) {
+        if (lowerBound == 0.0) {
             return irBuilder.getTrue();
         }
-        auto lowerBoundValue = llvm::ConstantFP::get(srcValue.getType(), *reinterpret_cast<double*>(&lowerBound));
+        auto lowerBoundValue = llvm::ConstantFP::get(srcValue.getType(), lowerBound);
         return irBuilder.CreateFCmpOLT(lowerBoundValue, &srcValue, "f2i.lt.min");
     }
 }
@@ -294,10 +292,10 @@ llvm::Value* GenerateCondCheckUpperBound(
          */
         auto archType = irBuilder.GetCGContext().GetCompileOptions().target.GetArchType();
         auto upperBound = G_FLOAT2INT_BOUND_MAP.at(srcTy.ToString() + StringIntX(archType, targetTy)).second;
-        if (upperBound == 0) {
+        if (upperBound == 0.0) {
             return irBuilder.getTrue();
         }
-        auto upperBoundValue = llvm::ConstantFP::get(srcValue.getType(), *reinterpret_cast<double*>(&upperBound));
+        auto upperBoundValue = llvm::ConstantFP::get(srcValue.getType(), upperBound);
         return irBuilder.CreateFCmpOLT(&srcValue, upperBoundValue, "f2i.gt.max");
     }
 }
