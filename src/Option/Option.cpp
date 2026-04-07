@@ -542,6 +542,20 @@ bool GlobalOptions::CheckSanitizerOptions() const
 
 bool GlobalOptions::CheckLtoOptions() const
 {
+    if (emitObjectLibInLTO) {
+        if (outputMode != OutputMode::STATIC_LIB) {
+            Errorln("Option '--emit-staticlib-in-lto' requires '--output-type=staticlib'.");
+            return false;
+        }
+        if (!IsFullLTOEnabled()) {
+            Errorln("Option '--emit-staticlib-in-lto' requires '--lto=full'.");
+            return false;
+        }
+        if (target.os != OSType::DARWIN) {
+            Errorln("Option '--emit-staticlib-in-lto' is only supported on macOS.");
+            return false;
+        }
+    }
     if (!IsLTOEnabled()) {
         return true;
     }
@@ -1601,6 +1615,7 @@ std::vector<std::string> GlobalOptions::ToSerialized() const
     result.emplace_back(BoolToSerializedString(enableCoverage));
     result.emplace_back(SanitizerTypeToSerializedString());
     result.emplace_back(BoolToSerializedString(experimentalMode));
+    result.emplace_back(BoolToSerializedString(emitObjectLibInLTO));
     result.emplace_back(OverflowStrategyToSerializedString());
     (void)result.emplace_back(BoolToSerializedString(interpreter));
     (void)result.emplace_back(VectorStrToSerializedString(interpreterSearchPaths, ":"));

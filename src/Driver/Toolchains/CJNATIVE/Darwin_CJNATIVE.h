@@ -38,9 +38,13 @@ protected:
     // Gather library paths from LIBRARY_PATH and compiler guesses.
     void AddSystemLibraryPaths() override;
     void GenerateLinkOptionsForLTO(Tool& tool) const;
+    void GenerateArchiveTool(const std::vector<TempFileInfo>& objFiles) override;
     TempFileInfo GenerateLinkingTool(
         const std::vector<TempFileInfo>& objFiles, const std::string& darwinSDKVersion) override;
     void GenerateLinkOptions(Tool& tool) override;
+
+private:
+    TempFileInfo GenerateLTOObjectFile(const std::vector<TempFileInfo>& objFiles);
 };
 } // namespace Cangjie
 #endif // CANGJIE_DRIVER_TOOLCHAIN_Darwin_CJNATIVE_H
