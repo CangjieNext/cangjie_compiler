@@ -12,7 +12,7 @@
 
 #include "Base/TypeCastImpl.h"
 
-#include <optional>
+#include <securec.h>
 
 #include "Base/CGTypes/CGEnumType.h"
 #include "CGModule.h"
@@ -76,6 +76,14 @@ const std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> G_FLOAT2INT
     {"Float64UInt32", {0xBFF0000000000000, 0x41F0000000000000}},
     {"Float64UInt64", {0xBFF0000000000000, 0x43F0000000000000}},
 };
+
+double ConvertUint64ToDouble(uint64_t value)
+{
+    double result = 0.0;
+    auto ret = memcpy_s(&result, sizeof(result), &value, sizeof(value));
+    CJC_ASSERT(ret == EOK);
+    return result;
+}
 
 bool NeedsIntToUIntConversion(IRBuilder2& irBuilder, const CHIR::IntType& srcTy, const CHIR::Type::TypeKind typeKind)
 {
@@ -244,7 +252,7 @@ llvm::Value* GenerateCondCheckLowerBound(
         if (lowerBound == 0) {
             return irBuilder.getTrue();
         }
-        auto lowerBoundValue = llvm::ConstantFP::get(srcValue.getType(), *reinterpret_cast<double*>(&lowerBound));
+        auto lowerBoundValue = llvm::ConstantFP::get(srcValue.getType(), ConvertUint64ToDouble(lowerBound));
         return irBuilder.CreateFCmpOLT(lowerBoundValue, &srcValue, "f2i.lt.min");
     }
 }
@@ -297,7 +305,7 @@ llvm::Value* GenerateCondCheckUpperBound(
         if (upperBound == 0) {
             return irBuilder.getTrue();
         }
-        auto upperBoundValue = llvm::ConstantFP::get(srcValue.getType(), *reinterpret_cast<double*>(&upperBound));
+        auto upperBoundValue = llvm::ConstantFP::get(srcValue.getType(), ConvertUint64ToDouble(upperBound));
         return irBuilder.CreateFCmpOLT(&srcValue, upperBoundValue, "f2i.gt.max");
     }
 }
