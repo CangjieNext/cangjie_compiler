@@ -25415,7 +25415,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..d274abcad 100644
+index b391fe1ea..0568aec98 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -25471,7 +25471,7 @@ index b391fe1ea..d274abcad 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.1.0";
++    g_version_str += "\n  cangjie 1.2.0-alpha.06";
    }
  
    return g_version_str.c_str();
@@ -28765,7 +28765,7 @@ index 4ff48c366..fd01aa3bd 100644
  class AssumeInst : public IntrinsicInst {
  public:
 diff --git a/llvm/include/llvm/IR/Intrinsics.td b/llvm/include/llvm/IR/Intrinsics.td
-index d46fa4fbf..c8e95cc88 100644
+index d46fa4fbf..3e7419cb6 100644
 --- a/llvm/include/llvm/IR/Intrinsics.td
 +++ b/llvm/include/llvm/IR/Intrinsics.td
 @@ -180,6 +180,9 @@ class LLVMQualPointerType<LLVMType elty, int addrspace>
@@ -28837,7 +28837,7 @@ index d46fa4fbf..c8e95cc88 100644
  
  def llvm_x86mmx_ty     : LLVMType<x86mmx>;
  def llvm_ptrx86mmx_ty  : LLVMPointerType<llvm_x86mmx_ty>;         // <1 x i64>*
-@@ -417,6 +432,201 @@ def int_gcwrite : Intrinsic<[],
+@@ -417,6 +432,203 @@ def int_gcwrite : Intrinsic<[],
                              [IntrArgMemOnly, NoCapture<ArgIndex<1>>,
                               NoCapture<ArgIndex<2>>]>;
  
@@ -28886,6 +28886,8 @@ index d46fa4fbf..c8e95cc88 100644
 +                                                [llvm_i64_ty]>;
 +def int_cj_remove_exported_ref     : Intrinsic<[], [llvm_i64_ty]>;
 +def int_cj_create_export_handle         : Intrinsic<[llvm_i64_ty],
++                                                [llvm_gcptr_ty]>;
++def int_cj_get_lambda_addr          : Intrinsic<[llvm_ptr_ty],
 +                                                [llvm_gcptr_ty]>;
 +
 +//===------------------- Cangjie runtime Intrinsics ------------------------===//
@@ -29039,7 +29041,7 @@ index d46fa4fbf..c8e95cc88 100644
  //===------------------- ObjC ARC runtime Intrinsics --------------------===//
  //
  // Note these are to support the Objective-C ARC optimizer which wants to
-@@ -1257,6 +1467,25 @@ def int_experimental_gc_get_pointer_offset : Intrinsic<[llvm_i64_ty],
+@@ -1257,6 +1469,25 @@ def int_experimental_gc_get_pointer_offset : Intrinsic<[llvm_i64_ty],
                   [llvm_anyptr_ty], [IntrNoMem, IntrWillReturn,
                   ReadNone<ArgIndex<0>>, NoCapture<ArgIndex<0>>]>;
  
@@ -55133,7 +55135,7 @@ index 99fa4baf3..c3695524b 100644
  
  /// Marks the liveness of RA depending on L. If L is MaybeLive, it also takes
 diff --git a/llvm/lib/Transforms/IPO/FunctionAttrs.cpp b/llvm/lib/Transforms/IPO/FunctionAttrs.cpp
-index 50710eaa1..b9065ec1a 100644
+index 50710eaa1..50250d7c2 100644
 --- a/llvm/lib/Transforms/IPO/FunctionAttrs.cpp
 +++ b/llvm/lib/Transforms/IPO/FunctionAttrs.cpp
 @@ -46,6 +46,7 @@
@@ -55144,23 +55146,34 @@ index 50710eaa1..b9065ec1a 100644
  #include "llvm/IR/Type.h"
  #include "llvm/IR/Use.h"
  #include "llvm/IR/User.h"
-@@ -67,6 +68,10 @@
+@@ -67,6 +68,11 @@
  
  using namespace llvm;
  
 +namespace llvm {
 +extern cl::opt<bool> CJPipeline;
++extern cl::opt<bool> EnableCJGCInstrTransform;
 +} // namespace llvm
 +
  #define DEBUG_TYPE "function-attrs"
  
  STATISTIC(NumArgMemOnly, "Number of functions marked argmemonly");
-@@ -791,8 +796,11 @@ determinePointerAccessAttrs(Argument *A,
+@@ -789,10 +795,20 @@ determinePointerAccessAttrs(Argument *A,
+     return Attribute::None;
+   else if (IsRead)
      return Attribute::ReadOnly;
-   else if (IsWrite)
+-  else if (IsWrite)
++  else if (IsWrite) {
++    // In the Cangjie pipeline, CJGCInstrReplace can lower gcwrite barriers into
++    // raw stores before function-attrs runs. Suppress writeonly inference for
++    // managed i8 addrspace(1)* parameters so later GC liveness does not treat
++    // them as dead-at-call purely based on this transient lowering.
++    if (CJPipeline && EnableCJGCInstrTransform &&
++        A->getType() == Type::getInt8PtrTy(A->getContext(), 1))
++      return Attribute::None;
      return Attribute::WriteOnly;
 -  else
-+  else {
++  } else {
 +    if (CJPipeline && isGCPointerType(A->getType()))
 +      return Attribute::None;
      return Attribute::ReadNone;
@@ -65550,10 +65563,10 @@ index 000000000..51e8f13b3
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJGenericIntrinsicOpt.cpp b/llvm/lib/Transforms/Scalar/CJGenericIntrinsicOpt.cpp
 new file mode 100644
-index 000000000..d72186c0a
+index 000000000..5af2b9047
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJGenericIntrinsicOpt.cpp
-@@ -0,0 +1,856 @@
+@@ -0,0 +1,876 @@
 +//===- CJInstanceOfOpt.cpp --------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -66196,7 +66209,7 @@ index 000000000..d72186c0a
 +        else {
 +          SmallVector<std::pair<Value *, bool>, 4> TmpOffsets;
 +          auto *BV = getDerivedOffset(getDest(II), TmpOffsets);
-+          if (BV && BV != BP) {
++          if ((BV && BV != BP) || TmpOffsets.empty()) {
 +            Stop = true;
 +            break;
 +          }
@@ -66264,6 +66277,24 @@ index 000000000..d72186c0a
 +    }
 +  }
 +
++  MemoryAccess *findPreviousMemoryPhiOrDef(MemoryUseOrDef *MUD) {
++    if (!isa<MemoryUse>(MUD))
++      return MUD;
++    auto *BB = MUD->getMemoryInst()->getParent();
++    auto *DefLists = MSSA.getBlockDefs(BB);
++    while (!DefLists) {
++      if (auto *Pred = BB->getUniquePredecessor()) {
++        DefLists = MSSA.getBlockDefs(Pred);
++        BB = Pred;
++      }
++      return nullptr;
++    }
++    for (auto I = DefLists->rbegin(), E = DefLists->rend(); I != E; ++I)
++      if (MSSA.dominates(&*I, MUD))
++        return &const_cast<MemoryAccess &>(*I);
++    return nullptr;
++  }
++
 +  bool processGenericCopy(CallInst *CI) {
 +    // Base: It is valid at gcread/gcwrite.
 +    // Size: Also valid at gcread/gcwrite.
@@ -66274,10 +66305,12 @@ index 000000000..d72186c0a
 +      return false;
 +    MemoryLocation Loc = MemoryLocation::getAfter(FPtr);
 +    bool Changed = false;
-+    MemoryAccess *MA = IID == Intrinsic::cj_gcread_ref
-+                           ? cast<MemoryUseOrDef>(MSSA.getMemoryAccess(CI))
-+                                 ->getDefiningAccess()
-+                           : MSSA.getMemoryAccess(CI);
++    MemoryAccess *MA =
++        IID == Intrinsic::cj_gcread_ref
++            ? findPreviousMemoryPhiOrDef(MSSA.getMemoryAccess(CI))
++            : MSSA.getMemoryAccess(CI);
++    if (!MA)
++      return false;
 +    // 0: base ptr, 1: derived ptr, 2: size
 +    auto [RB, RP, RS] =
 +        findPotentialEqualMem(CI, MA, MA, Loc, Base, TI, Size, Changed);
@@ -72328,10 +72361,10 @@ index 000000000..2b87826d1
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
 new file mode 100644
-index 000000000..03797260f
+index 000000000..3f9331ff3
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
-@@ -0,0 +1,1152 @@
+@@ -0,0 +1,1154 @@
 +//===- CJRuntimeLowering.cpp - CJ Runtime Lowering --------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -72439,7 +72472,8 @@ index 000000000..03797260f
 +    {Intrinsic::cj_get_exported_ref, "CJ_MCC_GetExportedRef"},
 +    {Intrinsic::cj_remove_exported_ref, "CJ_MCC_RemoveExportedRef"},
 +    {Intrinsic::cj_create_export_handle, "CJ_MCC_CreateExportHandle"},
-+    {Intrinsic::cj_blackhole, "CJ_LLVM_BlackHole"}};
++    {Intrinsic::cj_blackhole, "CJ_LLVM_BlackHole"},
++    {Intrinsic::cj_get_lambda_addr, "CJ_MCC_GetJSLambdaAddr"}};
 +
 +struct LowerGetFieldOffset {
 +  CallBase *CI;
@@ -73329,6 +73363,7 @@ index 000000000..03797260f
 +    case Intrinsic::cj_post_throw_exception:
 +    case Intrinsic::cj_register_implicit_exception_raisers:
 +    case Intrinsic::cj_blackhole:
++    case Intrinsic::cj_get_lambda_addr:
 +      Lowering.replaceWithRuntimeFunc(CI, true, false);
 +      Changed = true;
 +      break;
