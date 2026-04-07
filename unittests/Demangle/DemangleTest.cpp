@@ -14,7 +14,7 @@
 using namespace Cangjie;
 
 TEST(DemangleTest, PackageNameColonDelimiter)
-{   
+{
     Demangler<StdString> demangler_1("4abc:");
     auto result_1 = demangler_1.DemanglePackageName();
     EXPECT_STREQ("abc:", result_1.pkgName.Str());
