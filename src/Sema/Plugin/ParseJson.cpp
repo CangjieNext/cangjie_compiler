@@ -18,9 +18,27 @@
 namespace Cangjie {
 namespace PluginCheck {
 
+inline size_t CountBackslashesBefore(size_t pos, const std::vector<uint8_t>& in)
+{
+    size_t count = 0;
+    while (pos > 0 && in[pos - 1] == '\\') {
+        ++count;
+        --pos;
+    }
+    return count;
+}
+
+inline bool IsNonEscapedChar(size_t pos, const std::vector<uint8_t>& in, char target)
+{
+    if (pos >= in.size() || in[pos] != target) {
+        return false;
+    }
+    return (CountBackslashesBefore(pos, in) % 2) == 0;
+}
+
 std::string ParseJsonString(size_t& pos, const std::vector<uint8_t>& in)
 {
-    if (pos >= in.size() || in[pos] != '"') {
+    if (pos >= in.size() || !IsNonEscapedChar(pos, in, '"')) {
         return "";
     }
     ++pos;
@@ -51,7 +69,7 @@ uint64_t ParseJsonNumber(size_t& pos, const std::vector<uint8_t>& in)
 
 void ParseJsonArray(size_t& pos, const std::vector<uint8_t>& in, Ptr<JsonPair> value)
 {
-    if (pos >= in.size() || in[pos] != '[' || value == nullptr) {
+    if (pos >= in.size() || !IsNonEscapedChar(pos, in, '"') || value == nullptr) {
         return;
     }
     ++pos;
@@ -60,13 +78,13 @@ void ParseJsonArray(size_t& pos, const std::vector<uint8_t>& in, Ptr<JsonPair> v
             ++pos;
             continue;
         }
-        if (in[pos] == '"') {
+        if (IsNonEscapedChar(pos, in, '"')) {
             value->valueStr.emplace_back(ParseJsonString(pos, in));
         }
-        if (in[pos] == '{') {
+        if (IsNonEscapedChar(pos, in, '{')) {
             value->valueObj.emplace_back(ParseJsonObject(pos, in));
         }
-        if (in[pos] == ']') {
+        if (IsNonEscapedChar(pos, in, ']')) {
             return;
         }
         ++pos;
@@ -75,7 +93,7 @@ void ParseJsonArray(size_t& pos, const std::vector<uint8_t>& in, Ptr<JsonPair> v
 
 OwnedPtr<JsonObject> ParseJsonObject(size_t& pos, const std::vector<uint8_t>& in)
 {
-    if (pos >= in.size() || in[pos] != '{') {
+    if (pos >= in.size() || !IsNonEscapedChar(pos, in, '{')) {
         return MakeOwned<JsonObject>();
     }
     ++pos;
@@ -86,21 +104,19 @@ OwnedPtr<JsonObject> ParseJsonObject(size_t& pos, const std::vector<uint8_t>& in
             ++pos;
             continue;
         }
-        if (in[pos] == '}') {
+        if (IsNonEscapedChar(pos, in, '}')) {
             return ret;
         }
-        if (in[pos] == ':') {
+        if (IsNonEscapedChar(pos, in, ':')) {
             mod = StringMod::VALUE;
             if (ret->pairs.empty()) {
-                auto newData = MakeOwned<JsonPair>();
-                newData->key = "";
-                ret->pairs.emplace_back(std::move(newData));
+                ret->pairs.emplace_back(MakeOwned<JsonPair>());
             }
         }
-        if (in[pos] == ',') {
+        if (IsNonEscapedChar(pos, in, ',')) {
             mod = StringMod::KEY;
         }
-        if (in[pos] == '"') {
+        if (IsNonEscapedChar(pos, in, '"')) {
             if (mod == StringMod::KEY) {
                 auto newData = MakeOwned<JsonPair>();
                 newData->key = ParseJsonString(pos, in);
@@ -110,16 +126,22 @@ OwnedPtr<JsonObject> ParseJsonObject(size_t& pos, const std::vector<uint8_t>& in
             }
         }
         if (in[pos] >= '0' && in[pos] <= '9' && mod == StringMod::VALUE) {
-            CJC_ASSERT(!ret->pairs.empty());
+            if (ret->pairs.empty()) {
+                ret->pairs.emplace_back(MakeOwned<JsonPair>());
+            }
             ret->pairs.back()->valueNum.emplace_back(ParseJsonNumber(pos, in));
         }
-        if (in[pos] == '{' && mod == StringMod::VALUE) {
-            CJC_ASSERT(!ret->pairs.empty());
+        if (IsNonEscapedChar(pos, in, '{') && mod == StringMod::VALUE) {
+            if (ret->pairs.empty()) {
+                ret->pairs.emplace_back(MakeOwned<JsonPair>());
+            }
             // The pos will be updated to the pos of matched '}'.
             ret->pairs.back()->valueObj.emplace_back(ParseJsonObject(pos, in));
         }
-        if (in[pos] == '[' && mod == StringMod::VALUE) {
-            CJC_ASSERT(!ret->pairs.empty());
+        if (IsNonEscapedChar(pos, in, '[') && mod == StringMod::VALUE) {
+            if (ret->pairs.empty()) {
+                ret->pairs.emplace_back(MakeOwned<JsonPair>());
+            }
             // The pos will be updated to the pos of matched ']'.
             ParseJsonArray(pos, in, ret->pairs.back().get());
         }
