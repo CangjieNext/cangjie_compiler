@@ -13,6 +13,7 @@
 #include "cangjie/Utils/FloatFormat.h"
 
 #include <cmath>
+#include <cstring>
 #include <sstream>
 
 namespace {
@@ -34,7 +35,8 @@ uint16_t Float32ToFloat16(float value)
 {
     uint16_t result = 0;
     // We need the original bit field of float, thus we can not use `static_cast` here.
-    uint32_t bit32 = *reinterpret_cast<uint32_t*>(&value);
+    uint32_t bit32 = 0;
+    std::memcpy(&bit32, &value, sizeof(bit32));
     int32_t exp = static_cast<int32_t>(((bit32 & FLOAT32_EXP_MASK) >> FLOAT32_TAIL_WIDTH) -
         FLOAT32_EXP_BASE + FLOAT16_EXP_BASE); // exponent
     if (exp > FLOAT16_EXP_MAX) { // inf

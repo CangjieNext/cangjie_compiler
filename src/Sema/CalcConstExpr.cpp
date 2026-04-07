@@ -13,6 +13,7 @@
 #include "TypeCheckerImpl.h"
 
 #include <algorithm>
+#include <cstring>
 #include <functional>
 
 #include "Diags.h"
@@ -54,13 +55,17 @@ bool TypeChecker::TypeCheckerImpl::ChkFloatTypeOverflow(const LitConstExpr& lce)
         case TypeKind::TYPE_FLOAT32: {
             float f32 = static_cast<float>(lce.constNumValue.asFloat.value);
             // We need the original bit field of float, thus we can not use `static_cast` here.
-            value = (*reinterpret_cast<uint32_t*>(&f32)) << 1; // 1: remove the sign bit
+            uint32_t bit32 = 0;
+            std::memcpy(&bit32, &f32, sizeof(bit32));
+            value = static_cast<uint64_t>(bit32) << 1; // 1: remove the sign bit
             break;
         }
         case TypeKind::TYPE_FLOAT64: {
             double f64 = static_cast<double>(lce.constNumValue.asFloat.value);
             // We need the original bit field of double, thus we can not use `static_cast` here.
-            value = (*reinterpret_cast<uint64_t*>(&f64)) << 1; // 1: remove the sign bit
+            uint64_t bit64 = 0;
+            std::memcpy(&bit64, &f64, sizeof(bit64));
+            value = bit64 << 1; // 1: remove the sign bit
             break;
         }
         // If the idea float value overflows, an error will be reported before this stage.
