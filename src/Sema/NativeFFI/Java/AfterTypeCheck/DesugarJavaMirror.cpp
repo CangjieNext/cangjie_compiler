@@ -144,12 +144,9 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
             WithinFile(CreateRefExpr(*param), curFile),
             false);
 
-        std::vector<OwnedPtr<Node>> lambdaNodes;
-        lambdaNodes.push_back(std::move(rhs));
-        auto lambdaCall = WrapReturningLambdaCall(typeManager, std::move(lambdaNodes));
         std::vector<OwnedPtr<Node>> exclusiveNodes;
-        exclusiveNodes.push_back(std::move(lambdaCall));
-        auto exclusiveCall = WrapWithExclusiveScope(std::move(exclusiveNodes), decl.ty);
+        exclusiveNodes.push_back(std::move(rhs));
+        auto exclusiveCall = WrapWithExclusiveScope(std::move(exclusiveNodes), javaEntityDecl.ty);
         auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
         auto refAssignment = CreateAssignExpr(std::move(lhsRef), std::move(exclusiveCall), unitTy);
         ctorNodes.push_back(lib.CreateEnsureNotNullCall(WithinFile(CreateRefExpr(*param), curFile)));
@@ -351,21 +348,17 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     if (!newObjectCall) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         return;
-    } else {
-        std::vector<OwnedPtr<Node>> lambdaNodes;
-        lambdaNodes.push_back(std::move(jniEnvVar));
-        lambdaNodes.push_back(std::move(newObjectCall));
-
-        auto lambdaCall = WrapReturningLambdaCall(typeManager, std::move(lambdaNodes));
-
-        std::vector<OwnedPtr<Node>> exclusiveNodes;
-        exclusiveNodes.push_back(std::move(lambdaCall));
-        auto exclusiveCall = WrapWithExclusiveScope(std::move(exclusiveNodes), ctor.funcBody->retType->ty);
-        auto thisCall = CreateThisCall(*ctor.outerDecl, generatedCtor, generatedCtor.ty, curFile);
-        thisCall->args.push_back(CreateFuncArg(std::move(exclusiveCall)));
-        ctor.funcBody->body->body.clear();
-        ctor.funcBody->body->body.push_back(std::move(thisCall));
     }
+
+    std::vector<OwnedPtr<Node>> exclusiveNodes;
+    exclusiveNodes.push_back(std::move(jniEnvVar));
+    exclusiveNodes.push_back(std::move(newObjectCall));
+
+    auto exclusiveCall = WrapWithExclusiveScope(std::move(exclusiveNodes), ctor.funcBody->retType->ty);
+    auto thisCall = CreateThisCall(*ctor.outerDecl, generatedCtor, generatedCtor.ty, curFile);
+    thisCall->args.push_back(CreateFuncArg(std::move(exclusiveCall)));
+    ctor.funcBody->body->body.clear();
+    ctor.funcBody->body->body.push_back(std::move(thisCall));
 }
 
 OwnedPtr<Expr> JavaDesugarManager::WrapWithExclusiveScope(std::vector<OwnedPtr<Node>>&& bodyNodes, Ptr<Ty> retTy)
@@ -574,15 +567,10 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
             std::move(paramRef));
     }
 
-    auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-    auto unitLit = CreateLitConstExpr(LitConstKind::UNIT, "()", TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
-    auto lambdaReturnUnit = CreateReturnExpr(std::move(unitLit));
-    lambdaReturnUnit->ty = TypeManager::GetNothingTy();
-
     std::vector<OwnedPtr<Node>> lambdaNodes;
     lambdaNodes.push_back(std::move(jniSetterCall));
-    lambdaNodes.push_back(std::move(lambdaReturnUnit));
 
+    auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     auto exclusiveCall = WrapWithExclusiveScope(std::move(lambdaNodes), unitTy);
 
     auto ret = CreateReturnExpr(std::move(exclusiveCall), setterBody);
