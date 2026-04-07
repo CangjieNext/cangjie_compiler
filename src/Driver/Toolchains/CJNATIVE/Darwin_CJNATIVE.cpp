@@ -81,6 +81,47 @@ void Darwin_CJNATIVE::GenerateLinkOptionsForLTO(Tool& tool) const
     SetOptions(setCompositeOption, driverOptions, setCompositeOptionsPass);
 }
 
+void Darwin_CJNATIVE::GenerateArchiveTool(const std::vector<TempFileInfo>& objFiles)
+{
+    if (!driverOptions.ShouldEmitStaticLibInLTO()) {
+        MachO::GenerateArchiveTool(objFiles);
+        return;
+    }
+    auto ltoObject = GenerateLTOObjectFile(objFiles);
+    MachO::GenerateArchiveTool({ltoObject});
+}
+
+TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>& objFiles)
+{
+    std::optional<std::string> darwinSDKVersion = GetDarwinSDKVersion(driverOptions.sysroot);
+    if (driverOptions.enableVerbose) {
+        Infoln("selected Darwin SDK path: " + driverOptions.sysroot +
+            " (SDK Version: " + darwinSDKVersion.value_or("N/A") + ")");
+    }
+    auto tool = std::make_unique<Tool>(ldPath, ToolType::BACKEND, driverOptions.environment.allVariables);
+    tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
+    auto tempBinaryInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::T_DYLIB_MAC);
+    auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::T_OBJ);
+    tool->AppendArg("-o", tempBinaryInfo.filePath);
+    GenerateLinkOptionsForLTO(*tool);
+    tool->AppendArg("-object_path_lto", outputFileInfo.filePath);
+    tool->AppendArg("-dylib");
+    tool->AppendArg("-arch", GetTargetArchString());
+
+    tool->AppendArg("-platform_version");
+    tool->AppendArg("macos");
+    tool->AppendArg("12.0.0");
+    tool->AppendArg(darwinSDKVersion.value_or("12"));
+
+    tool->AppendArg("-syslibroot");
+    tool->AppendArg(driverOptions.sysroot.empty() ? "/" : driverOptions.sysroot);
+    HandleLLVMLinkOptions(objFiles, *tool);
+    GenerateRuntimePath(*tool);
+
+    backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
+    return outputFileInfo;
+}
+
 TempFileInfo Darwin_CJNATIVE::GenerateLinkingTool(const std::vector<TempFileInfo>& objFiles,
     const std::string& darwinSDKVersion)
 {

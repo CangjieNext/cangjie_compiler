@@ -655,6 +655,7 @@ public:
     enum class LTOMode : uint8_t { FULL_LTO, THIN_LTO, NO_LTO };
     LTOMode ltoMod = LTOMode::NO_LTO;
     bool enableCompileAsExe = false;
+    bool emitStaticLibInLTO = false;
 
     /**
      * @brief Checks whether LTO is enabled.
@@ -669,6 +670,11 @@ public:
     bool IsCompileAsExeEnabled() const 
     {
         return enableCompileAsExe;
+    }
+
+    bool ShouldEmitStaticLibInLTO() const
+    {
+        return emitStaticLibInLTO && outputMode == OutputMode::STATIC_LIB && IsFullLTOEnabled();
     }
 
     /**
