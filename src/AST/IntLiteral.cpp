@@ -417,7 +417,7 @@ IntLiteral IntLiteral::operator*(const IntLiteral& rhs) const
 
 IntLiteral IntLiteral::operator/(const IntLiteral& rhs) const
 {
-    if (sign + rhs.sign > 0) {
+    if (sign + rhs.sign > 0 && rhs.uint64Val != 0) {
         return IntLiteral(uint64Val / rhs.uint64Val, type, false);
     }
     int64_t minVal = INTEGER_TO_MIN_VALUE.at(type);
@@ -441,7 +441,7 @@ IntLiteral IntLiteral::operator/(const IntLiteral& rhs) const
 
 IntLiteral IntLiteral::operator%(const IntLiteral& rhs) const
 {
-    if (sign + rhs.sign > 0) {
+    if (sign + rhs.sign > 0 && rhs.uint64Val != 0) {
         return IntLiteral(uint64Val % rhs.uint64Val, type, false);
     }
     if (rhs.int64Val != 0) {
