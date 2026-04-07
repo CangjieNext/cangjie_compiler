@@ -357,7 +357,7 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     auto exclusiveCall = WrapWithExclusiveScope(std::move(exclusiveNodes), ctor.funcBody->retType->ty);
     auto thisCall = CreateThisCall(*ctor.outerDecl, generatedCtor, generatedCtor.ty, curFile);
     thisCall->args.push_back(CreateFuncArg(std::move(exclusiveCall)));
-    ctor.funcBody->body->body.clear();
+    CJC_ASSERT(ctor.funcBody->body->body.empty());
     ctor.funcBody->body->body.push_back(std::move(thisCall));
 }
 
@@ -554,7 +554,6 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
     CJC_ASSERT_WITH_MSG(!prop.setters[0]->funcBody->paramLists.empty(), "setter paramLists cannot be empty");
     CJC_ASSERT_WITH_MSG(!prop.setters[0]->funcBody->paramLists[0]->params.empty(), "setter params cannot be empty");
     auto paramRef = WithinFile(CreateRefExpr(*prop.setters[0]->funcBody->paramLists[0]->params[0]), curFile);
-    Ptr<FuncBody> setterBody = prop.setters[0]->funcBody.get();
 
     if (prop.TestAttr(Attribute::STATIC)) {
         jniSetterCall = lib.CreateSetStaticFieldCall(
@@ -569,13 +568,11 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
 
     std::vector<OwnedPtr<Node>> lambdaNodes;
     lambdaNodes.push_back(std::move(jniSetterCall));
-
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     auto exclusiveCall = WrapWithExclusiveScope(std::move(lambdaNodes), unitTy);
-
+    Ptr<FuncBody> setterBody = prop.setters[0]->funcBody.get();
     auto ret = CreateReturnExpr(std::move(exclusiveCall), setterBody);
     ret->ty = TypeManager::GetNothingTy();
-
     std::vector<OwnedPtr<Node>> blockNodes;
     blockNodes.push_back(std::move(ret));
     setterBody->body = CreateBlock(std::move(blockNodes), unitTy);
