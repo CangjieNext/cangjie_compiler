@@ -8,6 +8,35 @@
 #include "cangjie/CHIR/Utils/Utils.h"
 
 namespace Cangjie::CHIR {
+bool LambdaIsUnused(const Lambda& lambda)
+{
+    auto users = lambda.GetResult()->GetUsers();
+    bool isUnused = true;
+    auto isInLambdaBody = [&lambda](const Expression& expr) {
+        auto group = expr.GetParentBlockGroup();
+        while (true) {
+            if (group == lambda.GetBody()) {
+                return true;
+            }
+            if (auto owner = group->GetOwnerExpression()) {
+                group = expr.GetParentBlockGroup();
+            } else {
+                // meet a func body, quit
+                break;
+            }
+        }
+        return false;
+    };
+    for (auto user : users) {
+        if (user->GetExprKind() == ExprKind::DEBUGEXPR || isInLambdaBody(*user)) {
+            continue;
+        }
+        isUnused = false;
+        break;
+    }
+    return isUnused;
+}
+
 bool CheckLambdaUsingForMultiThread(const Lambda& lambda)
 {
     auto returnTy = lambda.GetReturnType();
@@ -93,7 +122,7 @@ bool LambdaInline::IsLambdaPassToEasyFunc(const Lambda& lambda) const
 void LambdaInline::RunOnLambda(Lambda& lambda)
 {
     auto users = lambda.GetResult()->GetUsers();
-    if (GetNonDebugUsers(*lambda.GetResult()).empty() && !opts.enableCompileDebug) {
+    if (LambdaIsUnused(lambda) && !opts.enableCompileDebug) {
         for (auto user : users) {
             user->RemoveSelfFromBlock();
         }
