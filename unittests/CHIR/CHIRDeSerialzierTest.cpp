@@ -1739,6 +1739,9 @@ IntrinsicKind DeSerialize(const PackageFormat::IntrinsicKind& kind)
         case IntrinsicKind_GET_JSLAMBDA_ADDR:
             ret = GET_JSLAMBDA_ADDR;
             break;
+        case IntrinsicKind_RAW_ARRAY_ALLOCATE:
+            ret = RAW_ARRAY_ALLOCATE;
+            break;
     }
     return ret;
 }

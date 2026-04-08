@@ -1025,6 +1025,8 @@ enum IntrinsicKind: uint16 {
 
   // cjnative only
   EXCLUSIVE_SCOPE,
+
+  RAW_ARRAY_ALLOCATE,
 }
 
 table Expression {
