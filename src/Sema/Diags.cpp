@@ -71,7 +71,15 @@ void DiagWrongNumberOfArgumentsCommon(
         DiagKindRefactor::sema_wrong_number_of_arguments, ce, MakeRange(beginPos, endPos), symptom, lst);
     builder.AddMainHintArguments(expected, std::to_string(foundNum));
     if (fd != nullptr && fd->ShouldDiagnose()) {
-        builder.AddNote(*fd, MakeRange(fd->identifier), "found candidate");
+        if (fd->outerDecl != nullptr && fd->outerDecl->IsBuiltIn()) {
+            if (beginPos.IsZero()) {
+                builder.AddNote(std::string("found candidate: ") + fd->GetTy()->String());
+            } else {
+                builder.AddNote(beginPos, std::string("found candidate: ") + fd->GetTy()->String());
+            }
+        } else {
+            builder.AddNote(*fd, MakeRange(fd->identifier), "found candidate");
+        }
     } else if (fd == nullptr) {
         Ptr<const Decl> target = ce.baseFunc->GetTarget();
         if (target == nullptr) {

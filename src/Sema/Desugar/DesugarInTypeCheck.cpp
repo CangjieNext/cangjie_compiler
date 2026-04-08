@@ -620,17 +620,7 @@ void TypeChecker::TypeCheckerImpl::DesugarArrayCall(ASTContext& ctx, CallExpr& c
         arrayExpr->type->SetTy(typeManager.GetVArrayTy(*argTy, varrTy->size));
         arrayExpr->isValueArray = true;
     } else {
-        // Eg: type A<T> = Array<T>; A(size, v), type args of this A is not useful.
-        bool usefulTypeArg = !typeArgs.empty() && (!typeArgs[0]->IsGeneric() || !baseArgs.empty());
-        if (usefulTypeArg) {
-            arrayExpr->type->SetTy(typeManager.GetArrayTy(typeArgs[0], 1));
-        } else {
-            Ptr<Ty> argTy = TypeManager::GetInvalidTy();
-            if (!baseArgs.empty()) {
-                argTy = baseArgs[0]->GetTy();
-            }
-            arrayExpr->type->SetTy(typeManager.GetArrayTy(argTy, 1));
-        }
+        return;
     }
     for (auto& it : ce.args) {
         (void)arrayExpr->args.emplace_back(std::move(it));
