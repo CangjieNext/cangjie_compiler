@@ -1708,9 +1708,18 @@ Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr
         return nullptr;
     }
 
-    accessorCall->args.emplace_back(CreateFuncArg(ASTCloner::Clone(assignExpr.rightExpr.get())));
+    auto tmpVar = CreateTmpVarDecl(MockUtils::CreateType<Type>(assignExpr.rightExpr->ty), assignExpr.rightExpr.get());
+    auto tmpVarRef = CreateRefExpr(*tmpVar);
+
+    accessorCall->args.emplace_back(CreateFuncArg(ASTCloner::Clone(tmpVarRef.get())));
     accessorCall->sourceExpr = Ptr(&assignExpr);
-    assignExpr.desugarExpr = std::move(accessorCall);
+    
+    std::vector<OwnedPtr<Node>> blockNodes;
+    blockNodes.emplace_back(std::move(tmpVar));
+    blockNodes.emplace_back(std::move(accessorCall));
+
+    auto block = CreateBlock(std::move(blockNodes), assignExpr.ty);
+    assignExpr.desugarExpr = std::move(block);
     return assignExpr.desugarExpr;
 }
 
