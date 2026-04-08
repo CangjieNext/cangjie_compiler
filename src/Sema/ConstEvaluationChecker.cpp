@@ -912,7 +912,7 @@ private:
     bool inInit = false;                                      // inside a constructor
 };
 
-void TypeChecker::TypeCheckerImpl::CheckConstEvaluation(Package& pkg)
+void TypeCheckerImpl::CheckConstEvaluation(Package& pkg)
 {
     Utils::ProfileRecorder recorder("Post TypeCheck", "CheckConstEvaluation");
     ConstEvaluationChecker(diag, pkg).Check();

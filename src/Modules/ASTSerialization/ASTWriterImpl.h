@@ -13,6 +13,7 @@
 #ifndef CANGJIE_MODULES_ASTSERIALIZATION_ASTWRITER_IMPL_H
 #define CANGJIE_MODULES_ASTSERIALIZATION_ASTWRITER_IMPL_H
 
+#include "cangjie/AST/Symbol.h"
 #include "flatbuffers/ModuleFormat_generated.h"
 
 #include <optional>

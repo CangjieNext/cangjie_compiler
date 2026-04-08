@@ -459,7 +459,7 @@ std::string GetJavaFQNameFromExtendDecl(const ExtendDecl& extendDecl)
 {
     auto rt = DynamicCast<const RefType *>(extendDecl.extendedType.get());
     CJC_ASSERT(rt);
-    return GetJavaFQName(*rt->ref.target);
+    return GetJavaFQName(*rt->GetTarget());
 }
 
 std::string GetJavaFQName(const Decl& decl, const std::string* genericActualName)
@@ -1060,7 +1060,7 @@ OwnedPtr<MatchExpr> InteropLibBridge::CreateMatchByTypeArgument(
     auto cStrToStringCall = MakeOwned<CallExpr>();
     auto cStrToStringMa = CreateMemberAccess(CreateGetTypeForTypeParameterCall(genericParam), "toString");
     cStrToStringMa->SetTy(cStrToStringDecl->GetTy());
-    cStrToStringMa->target = cStrToStringDecl;
+    cStrToStringMa->SetTarget(cStrToStringDecl);
     cStrToStringMa->callOrPattern = cStrToStringCall;
 
     std::vector<OwnedPtr<FuncArg>> cStrToStringCallArgs;
@@ -1079,7 +1079,7 @@ OwnedPtr<MatchExpr> InteropLibBridge::CreateMatchByTypeArgument(
         auto caseCall = MakeOwned<CallExpr>();
         auto caseMa = CreateMemberAccess(ASTCloner::Clone(cStrToStringCall.get()), isOption ? "startsWith" : "==");
         caseMa->SetTy(isOption ? strStartsWithDecl->GetTy() : strEqualsDecl->GetTy());
-        caseMa->target = isOption ? strStartsWithDecl : strEqualsDecl;
+        caseMa->SetTarget(isOption ? strStartsWithDecl : strEqualsDecl);
         caseMa->callOrPattern = caseCall;
 
         std::vector<OwnedPtr<FuncArg>> caseCallArgs;

@@ -139,7 +139,7 @@ TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const MemberAccess& ma, con
     auto baseIdx = SaveExpr(*ma.baseExpr);
     auto operands = builder.CreateVector<FormattedIndex>({baseIdx});
     auto fieldIdx = builder.CreateString(ma.field.Val());
-    auto target = GetFullDeclIndex(ma.target);
+    auto target = GetFullDeclIndex(ma.GetTarget());
     std::vector<FormattedIndex> types(ma.instTys.size());
     for (size_t i = 0; i < ma.instTys.size(); ++i) {
         types[i] = SaveType(ma.instTys[i]);
@@ -159,7 +159,7 @@ TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const MemberAccess& ma, con
 TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const RefExpr& re, const NodeInfo& info)
 {
     auto name = builder.CreateString(re.ref.identifier.Val());
-    auto refTarget = re.ref.target && re.ref.target->genericDecl ? re.ref.target->genericDecl : re.ref.target;
+    auto refTarget = re.GetTarget() && re.GetTarget()->genericDecl ? re.GetTarget()->genericDecl : re.GetTarget();
     auto target = GetFullDeclIndex(refTarget);
     std::vector<FormattedIndex> types(re.instTys.size());
     for (size_t i = 0; i < re.instTys.size(); ++i) {
@@ -306,8 +306,7 @@ TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const ArrayExpr& ae, const 
         operands.emplace_back(SaveFuncArg(*arg));
     }
     auto operandsIdx = builder.CreateVector<FormattedIndex>(operands);
-    auto initFunc = GetFullDeclIndex(ae.initFunc);
-    auto eInfo = PackageFormat::CreateArrayInfo(builder, initFunc, ae.isValueArray);
+    auto eInfo = PackageFormat::CreateArrayInfo(builder, GetFullDeclIndex(nullptr), ae.isValueArray);
     PackageFormat::ExprBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::ExprKind_ArrayExpr);
     SaveBasicNodeInfo(dbuilder, info);

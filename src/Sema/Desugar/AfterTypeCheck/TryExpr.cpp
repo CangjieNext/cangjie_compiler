@@ -29,7 +29,7 @@ OwnedPtr<RefExpr> CreateRefSome(FuncTy& funcTy)
     auto decl = LookupEnumMember(enumTy.declPtr, OPTION_VALUE_CTOR);
     CJC_NULLPTR_CHECK(decl);
     auto refExpr = CreateRefExpr(*decl);
-    (void)refExpr->ref.targets.emplace_back(decl); // for `GetFuncTargets`
+    refExpr->AddTarget(decl); // for `GetFuncTargets`
     refExpr->SetTy(&funcTy);
     refExpr->instTys = enumTy.typeArgs;
     return refExpr;
@@ -85,8 +85,8 @@ OwnedPtr<MatchExpr> CreateMatchExpr(FuncTy& someTy, VarDecl& freshExc, OwnedPtr<
 OwnedPtr<CallExpr> CreateCallExpr(VarDecl& vd, Decl& func)
 {
     auto baseFunc = CreateMemberAccess(CreateRefExpr(vd), func);
-    if (baseFunc->target != nullptr && baseFunc->target->astKind == ASTKind::FUNC_DECL) {
-        (void)baseFunc->targets.emplace_back(StaticCast<FuncDecl*>(baseFunc->target)); // for `GetFuncTargets`
+    if (baseFunc->GetTarget() != nullptr && baseFunc->GetTarget()->astKind == ASTKind::FUNC_DECL) {
+        baseFunc->AddTarget(StaticCast<FuncDecl*>(baseFunc->GetTarget())); // for `GetFuncTargets`
     }
     CopyBasicInfo(vd.initializer.get(), baseFunc->baseExpr.get());
     CopyBasicInfo(vd.initializer.get(), baseFunc.get());
@@ -109,7 +109,7 @@ OwnedPtr<CallExpr> CreateCallExpr(VarDecl& vd, Decl& func)
  *          }
  *      }
  */
-OwnedPtr<TryExpr> TypeChecker::TypeCheckerImpl::CreateTryInFinally(
+OwnedPtr<TryExpr> TypeCheckerImpl::CreateTryInFinally(
     ASTContext& ctx, ClassDecl& exceptionDecl, FuncTy& someTy, VarDecl& x, VarDecl& freshExc)
 {
     CJC_ASSERT(Ty::IsTyCorrect(freshExc.GetTy()) && freshExc.GetTy()->typeArgs.size() == 1);
@@ -177,7 +177,7 @@ OwnedPtr<TryExpr> TypeChecker::TypeCheckerImpl::CreateTryInFinally(
  *           }
  *       }
  */
-OwnedPtr<TryExpr> TypeChecker::TypeCheckerImpl::CreateTryCatchFinally(
+OwnedPtr<TryExpr> TypeCheckerImpl::CreateTryCatchFinally(
     ASTContext& ctx, ClassDecl& exceptionDecl, FuncTy& someTy, VarDecl& x, VarDecl& freshExc, OwnedPtr<Block> tryBlock)
 {
     CJC_ASSERT(Ty::IsTyCorrect(freshExc.GetTy()) && freshExc.GetTy()->IsEnum() && freshExc.GetTy()->typeArgs.size() == 1);
@@ -204,8 +204,8 @@ OwnedPtr<TryExpr> TypeChecker::TypeCheckerImpl::CreateTryCatchFinally(
 }
 
 // Create the outermost try-block.
-OwnedPtr<Block> TypeChecker::TypeCheckerImpl::CreateOuterTryBlock(ASTContext& ctx, ClassDecl& exceptionDecl,
-    FuncTy& someTy, EnumTy& noneTy, std::vector<OwnedPtr<VarDecl>>& resourceSpec, OwnedPtr<Block> block)
+OwnedPtr<Block> TypeCheckerImpl::CreateOuterTryBlock(ASTContext& ctx, ClassDecl& exceptionDecl, FuncTy& someTy,
+    EnumTy& noneTy, std::vector<OwnedPtr<VarDecl>>& resourceSpec, OwnedPtr<Block> block)
 {
     auto tryBlock = std::move(block);
     for (auto iter = resourceSpec.rbegin(); iter != resourceSpec.rend(); ++iter) {
@@ -263,7 +263,7 @@ OwnedPtr<Block> TypeChecker::TypeCheckerImpl::CreateOuterTryBlock(ASTContext& ct
  *     println("finally")
  * }
  */
-void TypeChecker::TypeCheckerImpl::DesugarTryWithResourcesExpr(ASTContext& ctx, TryExpr& te)
+void TypeCheckerImpl::DesugarTryWithResourcesExpr(ASTContext& ctx, TryExpr& te)
 {
     if (te.resourceSpec.empty() || !Ty::IsTyCorrect(te.GetTy())) {
         return;

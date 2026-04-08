@@ -39,7 +39,7 @@ private:
 // scope of type instantiation context
 class InstCtxScope {
 public:
-    explicit InstCtxScope(TypeChecker::TypeCheckerImpl& typeChecker);
+    explicit InstCtxScope(TypeCheckerImpl& typeChecker);
     ~InstCtxScope();
 
     /**
@@ -65,7 +65,7 @@ private:
 
     TypeManager& tyMgr;
     DiagnosticEngine& diag;
-    TypeChecker::TypeCheckerImpl& typeChecker;
+    TypeCheckerImpl& typeChecker;
 
     bool GenerateExtendGenericTypeMapping(
         const ASTContext& ctx, const AST::FuncDecl& fd, const AST::CallExpr& ce, SubstPack& typeMapping);

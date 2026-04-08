@@ -1185,12 +1185,12 @@ void LocalTypeArgumentSynthesis::MaybeSetErrMsg(const SolvingErrInfo& s)
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::Unify(Constraint& cst, AST::Ty& argTy, AST::Ty& paramTy)
+bool TypeCheckerImpl::Unify(Constraint& cst, AST::Ty& argTy, AST::Ty& paramTy)
 {
     return LocalTypeArgumentSynthesis::Unify(typeManager, cst, argTy, paramTy);
 }
 
-std::optional<TypeSubst> TypeChecker::TypeCheckerImpl::SolveConstraints(const Constraint& cst)
+std::optional<TypeSubst> TypeCheckerImpl::SolveConstraints(const Constraint& cst)
 {
     return LocalTypeArgumentSynthesis::SolveConstraints(typeManager, cst);
 }

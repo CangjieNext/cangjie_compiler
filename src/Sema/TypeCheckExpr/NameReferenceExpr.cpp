@@ -292,13 +292,13 @@ void DiagForGenericParamMemberNotFound(DiagnosticEngine& diag, const MemberAcces
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::DiagMemberAccessNotFound(const MemberAccess& ma)
+void TypeCheckerImpl::DiagMemberAccessNotFound(const MemberAccess& ma)
 {
     if (IsFieldOperator(ma.field)) {
         return; // Do not report error for operator overload access.
     }
     if (ci->invocation.globalOptions.compileTestsOnly &&
-        TestEntryConstructor::IsTestRegistrationFunction(ma.target)
+        TestEntryConstructor::IsTestRegistrationFunction(ma.GetTarget())
     ) {
         /*
          * Allow loading not accessible test registration functions,
@@ -328,7 +328,7 @@ void TypeChecker::TypeCheckerImpl::DiagMemberAccessNotFound(const MemberAccess& 
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, Ty& target, NameReferenceExpr& refNode)
+bool TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, Ty& target, NameReferenceExpr& refNode)
 {
     Synthesize({ctx, SynPos::EXPR_ARG}, &refNode);
     auto targets = GetFuncTargets(refNode);
@@ -394,7 +394,7 @@ bool TypeChecker::TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, Ty& target, NameR
     return matched != 0;
 }
 
-bool TypeChecker::TypeCheckerImpl::SynTargetOnUsed(ASTContext& ctx, const NameReferenceExpr& nre, Decl& target)
+bool TypeCheckerImpl::SynTargetOnUsed(ASTContext& ctx, const NameReferenceExpr& nre, Decl& target)
 {
     // Type decls are no need to be checked again recursively, because the ty is already set at PreCheck stage.
     if (NeedSynOnUsed(target)) {
@@ -412,9 +412,9 @@ bool TypeChecker::TypeCheckerImpl::SynTargetOnUsed(ASTContext& ctx, const NameRe
     return true;
 }
 
-void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
+void TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
 {
-    if (re.ref.target && Ty::IsTyCorrect(re.GetTy()) && !re.ref.target->GetTy()->IsPlaceholder()) {
+    if (re.GetTarget() && Ty::IsTyCorrect(re.GetTy()) && !re.GetTarget()->GetTy()->IsPlaceholder()) {
         return; // If the target is already existed and type is valid, we can exit early.
     }
     bool isWellTyped = true;
@@ -458,9 +458,9 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
     }
     ModifyTargetOfRef(re, decl, targets);
     // Legality of using refExpr will be checked after typecheck in 'CheckLegalityOfReference'.
-    CJC_ASSERT(re.ref.target); // 're.ref.target' should be set in 'ModifyTargetOfRef'.
+    CJC_ASSERT(re.GetTarget()); // 're.GetTarget()' should be set in 'ModifyTargetOfRef'.
 
-    if (auto target = re.ref.target; target->IsBuiltIn()) {
+    if (auto target = re.GetTarget(); target->IsBuiltIn()) {
         if (auto cfunc = StaticCast<BuiltInDecl>(target); cfunc->type == BuiltInType::CFUNC) {
             return InferCFuncExpr(ctx, re);
         }
@@ -471,11 +471,11 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
         re.SetTy(TypeManager::GetQuestTy());
         return;
     }
-    if (!SynTargetOnUsed(ctx, re, *re.ref.target)) {
+    if (!SynTargetOnUsed(ctx, re, *re.GetTarget())) {
         re.SetTy(TypeManager::GetInvalidTy());
         return;
     }
-    re.SetTy(typeManager.SubstituteTypeAliasInTy(*re.ref.target->GetTy()));
+    re.SetTy(typeManager.SubstituteTypeAliasInTy(*re.GetTarget()->GetTy()));
     if (!decl->IsFunc() || re.isAlone) {
         // Only check non-function or non-call target. Functions will be check after function overload resolution.
         InstantiateReferenceType(ctx, re);
@@ -485,7 +485,7 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::InferCFuncExpr(ASTContext& ctx, RefExpr& re)
+void TypeCheckerImpl::InferCFuncExpr(ASTContext& ctx, RefExpr& re)
 {
     // check type arguments
     // infer type arguments of CFunc is currently disallowed
@@ -515,7 +515,7 @@ void TypeChecker::TypeCheckerImpl::InferCFuncExpr(ASTContext& ctx, RefExpr& re)
     re.SetTy(resTy);
 }
 
-void TypeChecker::TypeCheckerImpl::TryInitializeBaseSum(ASTContext& ctx, MemberAccess& ma)
+void TypeCheckerImpl::TryInitializeBaseSum(ASTContext& ctx, MemberAccess& ma)
 {
     if (!ma.baseExpr->GetTy()->IsPlaceholder()) {
         return;
@@ -534,9 +534,9 @@ void TypeChecker::TypeCheckerImpl::TryInitializeBaseSum(ASTContext& ctx, MemberA
     TryEnforceCandidate(*tv, ctx.Mem2Decls(sig), typeManager);
 }
 
-void TypeChecker::TypeCheckerImpl::InferMemberAccess(ASTContext& ctx, MemberAccess& ma)
+void TypeCheckerImpl::InferMemberAccess(ASTContext& ctx, MemberAccess& ma)
 {
-    if (ma.target && Ty::IsTyCorrect(ma.GetTy())) {
+    if (ma.GetTarget() && Ty::IsTyCorrect(ma.GetTy())) {
         return; // If the target is already existed and type is valid, we can exit early.
     }
     bool isWellTyped = true;
@@ -573,30 +573,31 @@ void TypeChecker::TypeCheckerImpl::InferMemberAccess(ASTContext& ctx, MemberAcce
     } else {
         InferInstanceAccess(ctx, ma);
     }
-    if (!ma.target) {
+    if (!ma.GetTarget()) {
         return;
     }
     // Legality of using memberAccess will be checked after typecheck in 'CheckLegalityOfReference'.
     // If memberAccess is base of call, decide real target & type in function call checking.
     // If memberAccess is overloaded function reference with target type, decide real target & type in 'ChkRefExpr'.
+    auto maOverloadDecls = ma.GetTargets();
     bool checkedLater =
-        IsAllFuncDecl(ma.targets) && ma.targets.size() > 1 && (ma.callOrPattern || ctx.HasTargetTy(&ma));
+        IsAllFuncDecl(maOverloadDecls) && maOverloadDecls.size() > 1 && (ma.callOrPattern || ctx.HasTargetTy(&ma));
     if (checkedLater) {
         ma.SetTy(TypeManager::GetQuestTy());
         return;
     }
-    if (!SynTargetOnUsed(ctx, ma, *ma.target)) {
+    if (!SynTargetOnUsed(ctx, ma, *ma.GetTarget())) {
         ma.SetTy(TypeManager::GetInvalidTy());
         return;
     }
-    ma.SetTy(typeManager.SubstituteTypeAliasInTy(*ma.target->GetTy()));
+    ma.SetTy(typeManager.SubstituteTypeAliasInTy(*ma.GetTarget()->GetTy()));
     // Only instantiate ty for non-function or non-call. Function's will be done after overload resolution.
-    if (!ma.target->IsFunc() || ma.isAlone) {
+    if (!ma.GetTarget()->IsFunc() || ma.isAlone) {
         InstantiateReferenceType(ctx, ma);
     }
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::GetBaseDeclInMemberAccess(ASTContext& ctx, const MemberAccess& ma)
+Ptr<Decl> TypeCheckerImpl::GetBaseDeclInMemberAccess(ASTContext& ctx, const MemberAccess& ma)
 {
     if (ma.baseExpr == nullptr) {
         return nullptr;
@@ -608,7 +609,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetBaseDeclInMemberAccess(ASTContext& ct
     return GetRealTarget(baseExpr, baseExpr->GetTarget());
 }
 
-void TypeChecker::TypeCheckerImpl::InferBuiltInStaticAccess(
+void TypeCheckerImpl::InferBuiltInStaticAccess(
     const ASTContext& ctx, MemberAccess& ma, const BuiltInDecl& bid)
 {
     if (bid.IsType(BuiltInType::ARRAY)) {
@@ -619,7 +620,7 @@ void TypeChecker::TypeCheckerImpl::InferBuiltInStaticAccess(
     // Leave for other builtin composite type.
 }
 
-void TypeChecker::TypeCheckerImpl::InferArrayStaticAccess(const ASTContext& ctx, MemberAccess& ma)
+void TypeCheckerImpl::InferArrayStaticAccess(const ASTContext& ctx, MemberAccess& ma)
 {
     CJC_ASSERT(ma.baseExpr);
     CJC_NULLPTR_CHECK(ma.curFile);
@@ -639,7 +640,7 @@ void TypeChecker::TypeCheckerImpl::InferArrayStaticAccess(const ASTContext& ctx,
     AddFuncTargetsForMemberAccess(ma, targets);
 }
 
-void TypeChecker::TypeCheckerImpl::InferStaticAccess(const ASTContext& ctx, MemberAccess& ma, Decl& targetOfBaseExpr)
+void TypeCheckerImpl::InferStaticAccess(const ASTContext& ctx, MemberAccess& ma, Decl& targetOfBaseExpr)
 {
     ma.SetTy(TypeManager::GetInvalidTy()); // Ty will be set to valid if non-error happens.
     // Caller guarantees current is access member by real/generic type or package name.
@@ -692,14 +693,14 @@ void TypeChecker::TypeCheckerImpl::InferStaticAccess(const ASTContext& ctx, Memb
         if (!genericTy) {
             return; // When the target of base is generic param and 'ty' is not 'GenericsTy', errors happened before.
         }
-        // 'GetMemberAccessExposedTarget' will put found targets into 'ma.targets' and report error if not found.
+        // 'GetMemberAccessExposedTarget' will put found targets into 'ma.GetTargets()' and report error if not found.
         auto target = GetMemberAccessExposedTarget(ctx, ma, *genericTy, true);
         if (!target) {
             return;
         }
         ReplaceTarget(&ma, target);
         if (target && target->astKind == ASTKind::FUNC_DECL) {
-            targets = std::vector<Ptr<Decl>>(ma.targets.begin(), ma.targets.end());
+            targets = ma.GetTargets();
         }
         if (target && (target->astKind == ASTKind::VAR_DECL || target->astKind == ASTKind::PROP_DECL)) {
             targets = {target};
@@ -707,7 +708,7 @@ void TypeChecker::TypeCheckerImpl::InferStaticAccess(const ASTContext& ctx, Memb
     }
 }
 
-void TypeChecker::TypeCheckerImpl::InferInstanceAccess(const ASTContext& ctx, MemberAccess& ma)
+void TypeCheckerImpl::InferInstanceAccess(const ASTContext& ctx, MemberAccess& ma)
 {
     // In this case, targetOfBaseExpr is an object.
     Ptr<Expr> baseExpr = ma.baseExpr.get();
@@ -722,10 +723,10 @@ void TypeChecker::TypeCheckerImpl::InferInstanceAccess(const ASTContext& ctx, Me
     ReplaceTarget(&ma, target);
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::CheckUpperBoundTargetsCaseFuncCall(
+Ptr<Decl> TypeCheckerImpl::CheckUpperBoundTargetsCaseFuncCall(
     const ASTContext& ctx, MemberAccess& ma, const std::unordered_map<Ptr<Ty>, std::vector<Ptr<Decl>>>& allTargets)
 {
-    ma.targets.clear(); // Need clear before insertion.
+    ma.SetTargets({}); // Need clear before insertion.
     ma.foundUpperBoundMap = GetUpperBoundTargetsWithGivenKind(allTargets, {ASTKind::FUNC_DECL});
     std::vector<Ptr<Decl>> fdTargets = ma.baseExpr->GetTy()->IsPlaceholder()
         ? MergeFuncTargetsInSum(typeManager, ma)
@@ -740,7 +741,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::CheckUpperBoundTargetsCaseFuncCall(
     // The final target will be determined in match function period.
     if (!fdTargets.empty()) {
         std::for_each(fdTargets.begin(), fdTargets.end(),
-            [&ma](auto it) { ma.targets.emplace_back(RawStaticCast<FuncDecl*>(it)); });
+            [&ma](auto it) { ma.AddTarget(RawStaticCast<FuncDecl*>(it)); });
         ma.matchedParentTy = *ma.foundUpperBoundMap[fdTargets[0]].begin();
         return fdTargets[0];
     } else {
@@ -748,7 +749,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::CheckUpperBoundTargetsCaseFuncCall(
     }
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::CheckUpperBoundTargetsCaseOthers(const ASTContext& ctx,
+Ptr<Decl> TypeCheckerImpl::CheckUpperBoundTargetsCaseOthers(const ASTContext& ctx,
     MemberAccess& ma, const std::unordered_map<Ptr<Ty>, std::vector<Ptr<Decl>>>& allTargets)
 {
     ma.foundUpperBoundMap = GetUpperBoundTargetsWithGivenKind(allTargets, {ASTKind::VAR_DECL, ASTKind::PROP_DECL});
@@ -786,7 +787,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::CheckUpperBoundTargetsCaseOthers(const A
     }
 }
 
-void TypeChecker::TypeCheckerImpl::FilterSumUpperbound(const ASTContext& ctx, AST::MemberAccess& ma,
+void TypeCheckerImpl::FilterSumUpperbound(const ASTContext& ctx, AST::MemberAccess& ma,
     AST::GenericsTy& tv, std::vector<Ptr<AST::Decl>>& targets,
     const std::unordered_map<Ptr<Ty>, std::vector<Ptr<Decl>>>& allTargets)
 {
@@ -830,7 +831,7 @@ void TypeChecker::TypeCheckerImpl::FilterSumUpperbound(const ASTContext& ctx, AS
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::FilterSumUpperbound(AST::MemberAccess& ma, AST::GenericsTy& tv, const AST::Decl& d)
+bool TypeCheckerImpl::FilterSumUpperbound(AST::MemberAccess& ma, AST::GenericsTy& tv, const AST::Decl& d)
 {
     CJC_ASSERT(tv.isPlaceholder);
     auto hasMemOfTargetSig = [this, &ma, &d](Ptr<Ty> ty)->bool {
@@ -862,7 +863,7 @@ bool TypeChecker::TypeCheckerImpl::FilterSumUpperbound(AST::MemberAccess& ma, AS
     return true;
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::GetIdealTypeFuncTargetFromExtend(
+Ptr<Decl> TypeCheckerImpl::GetIdealTypeFuncTargetFromExtend(
     const ASTContext& ctx, MemberAccess& ma, const Ty& baseExprTy)
 {
     CJC_NULLPTR_CHECK(ma.curFile);
@@ -895,18 +896,18 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetIdealTypeFuncTargetFromExtend(
         return target;
     } else if (candidates.size() == 1) {
         ma.baseExpr->SetTy(targetTys.back());
-        ma.target = *candidates.begin();
-        if (ma.target->astKind == ASTKind::FUNC_DECL) {
-            ma.targets.push_back(StaticAs<ASTKind::FUNC_DECL>(ma.target));
+        ma.SetTarget(*candidates.begin());
+        if (ma.GetTarget()->astKind == ASTKind::FUNC_DECL) {
+            ma.AddTarget(StaticAs<ASTKind::FUNC_DECL>(ma.GetTarget()));
         }
-        return ma.target;
+        return ma.GetTarget();
     } else {
         DiagMemberAccessNotFound(ma);
         return nullptr;
     }
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::GetMemberAccessExposedTarget(
+Ptr<Decl> TypeCheckerImpl::GetMemberAccessExposedTarget(
     const ASTContext& ctx, MemberAccess& ma, const GenericsTy& genericsTy, bool isStaticAccess)
 {
     ma.isExposedAccess = true;
@@ -948,7 +949,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetMemberAccessExposedTarget(
     }
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::GetObjMemberAccessTarget(
+Ptr<Decl> TypeCheckerImpl::GetObjMemberAccessTarget(
     const ASTContext& ctx, MemberAccess& ma, Ty& baseExprTy)
 {
     // If the member access is 'this.xxx' and in original type decl, the members in extend should be ignored.
@@ -1020,7 +1021,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetObjMemberAccessTarget(
         });
 }
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::GetUpperBoundTargets(
+std::vector<Ptr<Decl>> TypeCheckerImpl::GetUpperBoundTargets(
     const ASTContext& ctx, const MemberAccess& ma, Ty& baseExprTy, const bool isStaticAccess)
 {
     CJC_NULLPTR_CHECK(ma.curFile);
@@ -1069,7 +1070,7 @@ std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::GetUpperBoundTargets(
         []() { return std::vector<Ptr<Decl>>(); });
 }
 
-void TypeChecker::TypeCheckerImpl::CheckForbiddenMemberAccess(
+void TypeCheckerImpl::CheckForbiddenMemberAccess(
     const ASTContext& ctx, const MemberAccess& ma, const Decl& target) const
 {
     auto funcSrc = ScopeManager::GetOutMostSymbol(ctx, SymbolKind::FUNC, ma.scopeName);

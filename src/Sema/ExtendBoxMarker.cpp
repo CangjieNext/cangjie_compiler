@@ -95,8 +95,8 @@ void ExtendBoxMarker::CheckBlockNeedBox(const Block& block, Ty& ty, Node& nodeTo
 VisitAction ExtendBoxMarker::MarkBoxPointHandleArrayExpr(ArrayExpr& ae)
 {
     CJC_ASSERT(typeManager);
-    bool ignored = !Ty::IsTyCorrect(ae.GetTy()) || ae.args.empty() ||
-        (ae.initFunc && ae.initFunc->identifier != "arrayInitByCollection");
+    bool secondIsFunc = ae.args.size() == 2 && Ty::IsTyCorrect(ae.args[1]->GetTy()) && ae.args[1]->GetTy()->IsFunc();
+    bool ignored = !Ty::IsTyCorrect(ae.GetTy()) || ae.args.empty() || secondIsFunc;
     if (ignored) {
         return VisitAction::WALK_CHILDREN;
     }
@@ -108,25 +108,25 @@ VisitAction ExtendBoxMarker::MarkBoxPointHandleArrayExpr(ArrayExpr& ae)
         return VisitAction::WALK_CHILDREN;
     }
     // For 'RawArray(size, item: T)' constructor may need auto box.
-    if (!ae.initFunc) {
+    if (ae.args.size() > 1) {
         if (NeedAutoBox(ae.args[1]->GetTy(), typeManager->GetTypeArgs(*ae.GetTy())[0])) {
             ae.EnableAttr(Attribute::NEED_AUTO_BOX);
         }
         return VisitAction::WALK_CHILDREN;
     }
     // For 'RawArray(Collection)' constructor may need auto box.
-    // 'initFunc' may be generic, we need to instantiated it's type before boxing check.
-    auto initFuncTy = DynamicCast<FuncTy*>(ae.initFunc->GetTy());
-    auto generic = ae.initFunc->GetGeneric();
-    auto instTys = typeManager->GetTypeArgs(*ae.GetTy());
-    bool invalid = !initFuncTy || initFuncTy->paramTys.size() != 2 || // 'arrayInitByCollection' has 2 parameters.
-        !generic || generic->typeParameters.size() != instTys.size();
-    if (invalid) {
+    Ptr<Ty> argTy = ae.args[0]->GetTy();
+    if (!Ty::IsTyCorrect(argTy)) {
         return VisitAction::WALK_CHILDREN;
     }
-    TypeSubst typeMapping = TypeCheckUtil::GenerateTypeMapping(*ae.initFunc, instTys);
-    initFuncTy = RawStaticCast<FuncTy*>(typeManager->GetInstantiatedTy(initFuncTy, typeMapping));
-    if (NeedAutoBox(ae.args[0]->GetTy(), initFuncTy->paramTys[1])) {
+    auto iface = DynamicCast<InterfaceTy*>(argTy.get());
+    if (!iface || !iface->decl || iface->decl->identifier != "Collection") {
+        return VisitAction::WALK_CHILDREN;
+    }
+    Ptr<InterfaceDecl> collDecl = iface->GetGenericTy() ? iface->GetGenericTy()->decl : iface->decl;
+    auto eleTy = typeManager->GetTypeArgs(*ae.GetTy())[0];
+    Ptr<Ty> expectedColl = typeManager->GetInterfaceTy(*collDecl, {eleTy});
+    if (NeedAutoBox(argTy, expectedColl)) {
         ae.EnableAttr(Attribute::NEED_AUTO_BOX);
     }
     return VisitAction::WALK_CHILDREN;

@@ -11,7 +11,7 @@
 using namespace Cangjie;
 using namespace Sema;
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynSpawnExpr(ASTContext& ctx, SpawnExpr& se)
+Ptr<Ty> TypeCheckerImpl::SynSpawnExpr(ASTContext& ctx, SpawnExpr& se)
 {
     bool isWellTyped = !se.arg ||
         (Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, se.arg.get())) &&
@@ -36,7 +36,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynSpawnExpr(ASTContext& ctx, SpawnExpr& s
     return se.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckSpawnArgValid(const ASTContext& ctx, const Expr& arg)
+bool TypeCheckerImpl::CheckSpawnArgValid(const ASTContext& ctx, const Expr& arg)
 {
     CJC_ASSERT(arg.GetTy() != nullptr);
     CJC_ASSERT(Ty::IsTyCorrect(arg.GetTy()));
@@ -66,7 +66,7 @@ bool TypeChecker::TypeCheckerImpl::CheckSpawnArgValid(const ASTContext& ctx, con
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkSpawnExprSimple(ASTContext& ctx, Ty& tgtTy, SpawnExpr& se)
+bool TypeCheckerImpl::ChkSpawnExprSimple(ASTContext& ctx, Ty& tgtTy, SpawnExpr& se)
 {
     if (Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, &se))) {
         if (typeManager.IsSubtype(se.GetTy(), &tgtTy)) {
@@ -80,7 +80,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSpawnExprSimple(ASTContext& ctx, Ty& tgtTy
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkSpawnExpr(ASTContext& ctx, Ty& tgtTy, SpawnExpr& se)
+bool TypeCheckerImpl::ChkSpawnExpr(ASTContext& ctx, Ty& tgtTy, SpawnExpr& se)
 {
     Ptr<Ty> fuTy;
     if (TypeManager::IsCoreFutureType(tgtTy)) {

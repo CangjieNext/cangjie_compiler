@@ -27,7 +27,7 @@ using namespace Cangjie;
 using namespace AST;
 using namespace Sema;
 
-bool TypeChecker::TypeCheckerImpl::ChkFloatTypeOverflow(const LitConstExpr& lce)
+bool TypeCheckerImpl::ChkFloatTypeOverflow(const LitConstExpr& lce)
 {
     auto info = GetFloatTypeInfoByKind(lce.TyKind());
     switch (lce.constNumValue.asFloat.flowStatus) {
@@ -85,7 +85,7 @@ bool TypeChecker::TypeCheckerImpl::ChkFloatTypeOverflow(const LitConstExpr& lce)
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkLitConstExprRange(LitConstExpr& lce)
+bool TypeCheckerImpl::ChkLitConstExprRange(LitConstExpr& lce)
 {
     if (!Ty::IsTyCorrect(lce.GetTy())) {
         return false;
@@ -111,7 +111,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprRange(LitConstExpr& lce)
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ReplaceIdealTy(Node& node)
+bool TypeCheckerImpl::ReplaceIdealTy(Node& node)
 {
     if (!Ty::IsTyCorrect(node.GetTy())) {
         return false;

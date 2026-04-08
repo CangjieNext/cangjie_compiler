@@ -581,7 +581,7 @@ void ParenExpr::Clear() noexcept
 
 bool RefType::IsGenericThisType() const
 {
-    if (auto cd = DynamicCast<ClassDecl*>(ref.target);
+    if (auto cd = DynamicCast<ClassDecl*>(ref.GetTarget());
         cd && cd->generic && !cd->generic->typeParameters.empty() && ref.identifier == "This") {
         return true;
     }
@@ -670,92 +670,192 @@ std::vector<Ptr<Decl>> Decl::GetMemberDeclPtrs() const
         for (auto& decl : exd->members) {
             results.push_back(decl.get());
         }
+    } else if (auto bid = DynamicCast<const BuiltInDecl*>(this); bid) {
+        for (auto& decl : bid->memberDecls) {
+            results.push_back(decl.get());
+        }
     }
     return results;
 }
 
+std::vector<OwnedPtr<Decl>>& BuiltInDecl::GetMemberDecls()
+{
+    return memberDecls;
+}
+
+Ptr<Decl> Reference::GetTarget() const noexcept
+{
+    return target;
+}
+
+void Reference::SetTarget(Ptr<Decl> newTarget) noexcept
+{
+    target = std::move(newTarget);
+}
+
+std::vector<Ptr<Decl>> Reference::GetTargets() const
+{
+    return targets;
+}
+
+void Reference::SetTargets(std::vector<Ptr<Decl>> newTargets)
+{
+    targets = std::move(newTargets);
+}
+
+void Reference::AddTarget(Ptr<Decl> decl)
+{
+    targets.push_back(std::move(decl));
+}
+
+Ptr<Decl> MacroInvocation::GetTarget() const noexcept
+{
+    return target;
+}
+
+void MacroInvocation::SetTarget(Ptr<Decl> newTarget) noexcept
+{
+    target = std::move(newTarget);
+}
+
 void Node::SetTarget(Ptr<Decl> target)
 {
-    switch (astKind) {
-        case ASTKind::REF_TYPE: {
-            RawStaticCast<RefType*>(this)->ref.target = target;
-            break;
-        }
-        case ASTKind::REF_EXPR: {
-            RawStaticCast<RefExpr*>(this)->ref.target = target;
-            break;
-        }
-        case ASTKind::QUALIFIED_TYPE: {
-            RawStaticCast<QualifiedType*>(this)->target = target;
-            break;
-        }
-        case ASTKind::MEMBER_ACCESS: {
-            RawStaticCast<MemberAccess*>(this)->target = target;
-            break;
-        }
-        case ASTKind::MACRO_EXPAND_DECL: {
-            RawStaticCast<MacroExpandDecl*>(this)->invocation.target = target;
-            break;
-        }
-        case ASTKind::MACRO_EXPAND_EXPR: {
-            RawStaticCast<MacroExpandExpr*>(this)->invocation.target = target;
-            break;
-        }
-        case ASTKind::MACRO_EXPAND_PARAM: {
-            RawStaticCast<MacroExpandParam*>(this)->invocation.target = target;
-            break;
-        }
-        default:
-            return;
-    }
+    (void)target;
 }
 
 Ptr<Decl> Node::GetTarget() const
 {
-    switch (astKind) {
-        case ASTKind::REF_TYPE: {
-            return RawStaticCast<const RefType*>(this)->ref.target;
-        }
-        case ASTKind::REF_EXPR: {
-            return RawStaticCast<const RefExpr*>(this)->ref.target;
-        }
-        case ASTKind::QUALIFIED_TYPE: {
-            return RawStaticCast<const QualifiedType*>(this)->target;
-        }
-        case ASTKind::MEMBER_ACCESS: {
-            return RawStaticCast<const MemberAccess*>(this)->target;
-        }
-        case ASTKind::MACRO_EXPAND_DECL: {
-            return RawStaticCast<const MacroExpandDecl*>(this)->invocation.target;
-        }
-        case ASTKind::MACRO_EXPAND_EXPR: {
-            return RawStaticCast<const MacroExpandExpr*>(this)->invocation.target;
-        }
-        case ASTKind::MACRO_EXPAND_PARAM: {
-            return RawStaticCast<const MacroExpandParam*>(this)->invocation.target;
-        }
-        default:
-            return nullptr;
-    }
+    return nullptr;
 }
 
 std::vector<Ptr<Decl>> Node::GetTargets() const
 {
-    switch (astKind) {
-        case ASTKind::REF_TYPE: {
-            return RawStaticCast<const RefType*>(this)->ref.targets;
-        }
-        case ASTKind::REF_EXPR: {
-            return RawStaticCast<const RefExpr*>(this)->ref.targets;
-        }
-        case ASTKind::MEMBER_ACCESS: {
-            auto targetDecls = RawStaticCast<const MemberAccess*>(this)->targets;
-            std::vector<Ptr<Decl>> decls(targetDecls.begin(), targetDecls.end());
-            return decls;
-        }
-        default:
-            return {};
-    }
+    return {};
+}
+
+void Node::SetTargets(std::vector<Ptr<Decl>> targets)
+{
+    (void)targets;
+}
+
+void Node::AddTarget(Ptr<Decl> decl)
+{
+    (void)decl;
+}
+
+Ptr<Decl> RefType::GetTarget() const
+{
+    return ref.GetTarget();
+}
+
+void RefType::SetTarget(Ptr<Decl> newTarget)
+{
+    ref.SetTarget(std::move(newTarget));
+}
+
+std::vector<Ptr<Decl>> RefType::GetTargets() const
+{
+    return ref.GetTargets();
+}
+
+void RefType::SetTargets(std::vector<Ptr<Decl>> decls)
+{
+    ref.SetTargets(std::move(decls));
+}
+
+void RefType::AddTarget(Ptr<Decl> decl)
+{
+    ref.AddTarget(std::move(decl));
+}
+
+Ptr<Decl> QualifiedType::GetTarget() const
+{
+    return target;
+}
+
+void QualifiedType::SetTarget(Ptr<Decl> newTarget)
+{
+    target = std::move(newTarget);
+}
+
+Ptr<Decl> MacroExpandExpr::GetTarget() const
+{
+    return invocation.GetTarget();
+}
+
+void MacroExpandExpr::SetTarget(Ptr<Decl> newTarget)
+{
+    invocation.SetTarget(std::move(newTarget));
+}
+
+Ptr<Decl> MacroExpandDecl::GetTarget() const
+{
+    return invocation.GetTarget();
+}
+
+void MacroExpandDecl::SetTarget(Ptr<Decl> newTarget)
+{
+    invocation.SetTarget(std::move(newTarget));
+}
+
+Ptr<Decl> MacroExpandParam::GetTarget() const
+{
+    return invocation.GetTarget();
+}
+
+void MacroExpandParam::SetTarget(Ptr<Decl> newTarget)
+{
+    invocation.SetTarget(std::move(newTarget));
+}
+
+Ptr<Decl> MemberAccess::GetTarget() const
+{
+    return target;
+}
+
+void MemberAccess::SetTarget(Ptr<Decl> newTarget)
+{
+    target = std::move(newTarget);
+}
+
+std::vector<Ptr<Decl>> MemberAccess::GetTargets() const
+{
+    return targets;
+}
+
+void MemberAccess::SetTargets(std::vector<Ptr<Decl>> decls)
+{
+    targets = std::move(decls);
+}
+
+void MemberAccess::AddTarget(Ptr<Decl> decl)
+{
+    targets.push_back(std::move(decl));
+}
+
+Ptr<Decl> RefExpr::GetTarget() const
+{
+    return ref.GetTarget();
+}
+
+void RefExpr::SetTarget(Ptr<Decl> newTarget)
+{
+    ref.SetTarget(std::move(newTarget));
+}
+
+std::vector<Ptr<Decl>> RefExpr::GetTargets() const
+{
+    return ref.GetTargets();
+}
+
+void RefExpr::SetTargets(std::vector<Ptr<Decl>> decls)
+{
+    ref.SetTargets(std::move(decls));
+}
+
+void RefExpr::AddTarget(Ptr<Decl> decl)
+{
+    ref.AddTarget(std::move(decl));
 }
 
 /**

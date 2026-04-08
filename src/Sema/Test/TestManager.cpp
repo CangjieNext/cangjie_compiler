@@ -539,7 +539,7 @@ void TestManager::ReplaceCallsToForeignFunctions(Package& pkg)
             return VisitAction::WALK_CHILDREN;
         }
 
-        auto target = refNode->ref.target;
+        auto target = refNode->GetTarget();
         Ptr<FuncDecl> funcDecl = As<ASTKind::FUNC_DECL>(target);
         if (!funcDecl || !funcDecl->TestAttr(Attribute::FOREIGN)) {
             return VisitAction::SKIP_CHILDREN;
@@ -552,7 +552,7 @@ void TestManager::ReplaceCallsToForeignFunctions(Package& pkg)
         CJC_ASSERT(Is<FuncDecl>(accessorDecl));
 
         refNode->ref = Reference(accessorDecl->identifier);
-        refNode->ref.target = accessorDecl;
+        refNode->SetTarget(accessorDecl);
 
         if (Ptr<CallExpr> callNode = As<ASTKind::CALL_EXPR>(refNode->callOrPattern)) {
             callNode->resolvedFunction = StaticCast<FuncDecl>(accessorDecl);
@@ -747,10 +747,10 @@ void TestManager::CollectInternalDeclUsages(Package& pkg)
     Walker(&pkg, Walker::GetNextWalkerID(), [&pkg, this](auto node) {
         Ptr<Decl> target;
         if (auto ma = As<ASTKind::MEMBER_ACCESS>(node); ma) {
-            target = ma->target;
+            target = ma->GetTarget();
         }
         if (auto re = As<ASTKind::REF_EXPR>(node); re) {
-            target = re->ref.target;
+            target = re->GetTarget();
         }
         if (!target) {
             return VisitAction::WALK_CHILDREN;

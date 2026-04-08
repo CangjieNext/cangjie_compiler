@@ -111,7 +111,7 @@ void IterateTyWithArgs(Ptr<Ty> ty, const std::function<void(Ptr<Ty>)>& func)
 }
 } // namespace
 
-VisitAction TypeChecker::TypeCheckerImpl::MarkUsedDecl(Ptr<Decl> decl, unsigned walkerId)
+VisitAction TypeCheckerImpl::MarkUsedDecl(Ptr<Decl> decl, unsigned walkerId)
 {
     // Used generic instantiated declarations and it's original generic declaration should be marked as used.
     if (decl->TestAttr(Attribute::GENERIC_INSTANTIATED) && decl->genericDecl &&
@@ -149,7 +149,7 @@ VisitAction TypeChecker::TypeCheckerImpl::MarkUsedDecl(Ptr<Decl> decl, unsigned 
     return VisitAction::WALK_CHILDREN;
 }
 
-void TypeChecker::TypeCheckerImpl::MarkUsedNode(Ptr<Node> node, unsigned walkerId)
+void TypeCheckerImpl::MarkUsedNode(Ptr<Node> node, unsigned walkerId)
 {
     std::function<VisitAction(Ptr<Node>)> collectUsed = [this, &walkerId, &collectUsed](Ptr<Node> node) -> VisitAction {
         auto procTy = [&walkerId, &collectUsed](Ptr<Ty> ty) {
@@ -188,7 +188,7 @@ void TypeChecker::TypeCheckerImpl::MarkUsedNode(Ptr<Node> node, unsigned walkerI
  *
  * All imported declarations without 'Attribute::USED_IMPORTS' will be ignored on mangling and chir.
  */
-void TypeChecker::TypeCheckerImpl::MarkUsedPackageInFile(Ptr<Package> pkg)
+void TypeCheckerImpl::MarkUsedPackageInFile(Ptr<Package> pkg)
 {
     const std::unordered_set<std::string_view> implicitUsedDecls = {"CJ_CORE_ExecAtexitCallbacks", "getCommandLineArgs",
         "eprintln", "handleException", "NegativeArraySizeException", "createOverflowExceptionMsg",
@@ -219,7 +219,7 @@ void TypeChecker::TypeCheckerImpl::MarkUsedPackageInFile(Ptr<Package> pkg)
     Utils::EraseIf(pkg->inlineFuncDecls, isUnusedDecls);
 }
 
-void TypeChecker::TypeCheckerImpl::PerformDesugarAfterInstantiation([[maybe_unused]] ASTContext& ctx, Package& pkg)
+void TypeCheckerImpl::PerformDesugarAfterInstantiation([[maybe_unused]] ASTContext& ctx, Package& pkg)
 {
     if (pkg.files.empty()) {
         return;
@@ -274,7 +274,7 @@ void AutoBoxing::TryOptionBox(EnumTy& target, Expr& expr)
 
     auto baseFunc = CreateRefExpr(OPTION_VALUE_CTOR);
     baseFunc->EnableAttr(Attribute::IMPLICIT_ADD);
-    baseFunc->ref.target = optionDecl;
+    baseFunc->SetTarget(optionDecl);
     baseFunc->SetTy(typeManager.GetInstantiatedTy(optionDecl->GetTy(), GenerateTypeMapping(*ed, target.typeArgs)));
 
     std::vector<OwnedPtr<FuncArg>> arg;

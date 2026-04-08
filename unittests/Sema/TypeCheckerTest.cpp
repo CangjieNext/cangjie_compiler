@@ -127,8 +127,8 @@ TEST_F(TypeCheckerTest, DISABLED_MacroCallInLSPTest)
     auto visitPre = [&](Ptr<Node> curNode) -> VisitAction {
         if (curNode->astKind == ASTKind::MEMBER_ACCESS) {
             auto ma = StaticAs<ASTKind::MEMBER_ACCESS>(curNode);
-            EXPECT_TRUE(ma->target);
-            if (ma->target) {
+            EXPECT_TRUE(ma->GetTarget());
+            if (ma->GetTarget()) {
                 std::cout << "MemberAccess field " << ma->field.Val() << " has target." << std::endl;
             } else {
                 std::cout << "MemberAccess field " << ma->field.Val() << " has no target." << std::endl;
@@ -139,8 +139,8 @@ TEST_F(TypeCheckerTest, DISABLED_MacroCallInLSPTest)
             if (re->ref.identifier == "M1" || re->ref.identifier == "M2" || re->ref.identifier == "M3") {
                 return VisitAction::SKIP_CHILDREN;
             }
-            EXPECT_TRUE(re->ref.target);
-            if (re->ref.target) {
+            EXPECT_TRUE(re->GetTarget());
+            if (re->GetTarget()) {
                 std::cout << re->ref.identifier.Val() << " has target." << std::endl;
             } else {
                 std::cout << re->ref.identifier.Val() << " has no target." << std::endl;

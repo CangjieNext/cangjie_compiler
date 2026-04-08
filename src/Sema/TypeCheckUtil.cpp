@@ -82,21 +82,21 @@ void ModifyTargetOfRef(RefExpr& re, Ptr<Decl> decl, const std::vector<Ptr<Decl>>
     ReplaceTarget(&re, decl);
     // If the target of refExpr is FuncDecl, it should not be the real target of RefExpr.
     // The real target will be determined by resolvedFunction in the typecheck of CallExpr.
-    re.ref.targets.clear();
+    re.SetTargets({});
     for (auto& it : targets) {
-        re.ref.targets.push_back(it);
+        re.AddTarget(it);
     }
 }
 
 void AddFuncTargetsForMemberAccess(MemberAccess& ma, const std::vector<Ptr<Decl>>& targets)
 {
-    ma.targets.clear();
+    ma.SetTargets({});
     for (auto& decl : targets) {
         if (!decl || (!ma.isPattern && decl->astKind != ASTKind::FUNC_DECL)) {
             continue;
         }
         auto funcDecl = RawStaticCast<FuncDecl*>(decl);
-        ma.targets.push_back(funcDecl);
+        ma.AddTarget(funcDecl);
     }
 }
 
@@ -109,7 +109,7 @@ void ReplaceTarget(Ptr<Node> node, Ptr<Decl> target, bool insertTarget)
     switch (node->astKind) {
         case ASTKind::REF_EXPR: {
             auto re = StaticAs<ASTKind::REF_EXPR>(node);
-            re->ref.target = target;
+            re->SetTarget(target);
             // Update type alias decl or clear the target.
             if (aliasDecl || !target) {
                 re->aliasTarget = aliasDecl;
@@ -118,7 +118,7 @@ void ReplaceTarget(Ptr<Node> node, Ptr<Decl> target, bool insertTarget)
         }
         case ASTKind::MEMBER_ACCESS: {
             auto ma = StaticAs<ASTKind::MEMBER_ACCESS>(node);
-            ma->target = target;
+            ma->SetTarget(target);
             // Update type alias decl or clear the target.
             if (aliasDecl || !target) {
                 ma->aliasTarget = aliasDecl;
@@ -126,28 +126,23 @@ void ReplaceTarget(Ptr<Node> node, Ptr<Decl> target, bool insertTarget)
             break;
         }
         case ASTKind::REF_TYPE: {
-            auto rt = StaticAs<ASTKind::REF_TYPE>(node);
-            rt->ref.target = target;
+            StaticAs<ASTKind::REF_TYPE>(node)->SetTarget(target);
             break;
         }
         case ASTKind::QUALIFIED_TYPE: {
-            auto qt = StaticAs<ASTKind::QUALIFIED_TYPE>(node);
-            qt->target = target;
+            StaticAs<ASTKind::QUALIFIED_TYPE>(node)->SetTarget(target);
             break;
         }
         case ASTKind::MACRO_EXPAND_EXPR: {
-            auto mee = RawStaticCast<MacroExpandExpr*>(node);
-            mee->invocation.target = target;
+            RawStaticCast<MacroExpandExpr*>(node)->SetTarget(target);
             break;
         }
         case ASTKind::MACRO_EXPAND_DECL: {
-            auto med = RawStaticCast<MacroExpandDecl*>(node);
-            med->invocation.target = target;
+            RawStaticCast<MacroExpandDecl*>(node)->SetTarget(target);
             break;
         }
         case ASTKind::MACRO_EXPAND_PARAM: {
-            auto mep = RawStaticCast<MacroExpandParam*>(node);
-            mep->invocation.target = target;
+            RawStaticCast<MacroExpandParam*>(node)->SetTarget(target);
             break;
         }
         default:
@@ -595,8 +590,7 @@ std::vector<Ptr<FuncDecl>> GetFuncTargets(const Node& node)
     switch (node.astKind) {
         case ASTKind::REF_EXPR: {
             std::vector<Ptr<FuncDecl>> funcTargets;
-            auto refTargets = StaticCast<const RefExpr&>(node).ref.targets;
-            for (auto& it : refTargets) {
+            for (auto& it : node.GetTargets()) {
                 if (auto fd = DynamicCast<FuncDecl*>(it)) {
                     funcTargets.push_back(fd);
                 }
@@ -604,7 +598,13 @@ std::vector<Ptr<FuncDecl>> GetFuncTargets(const Node& node)
             return funcTargets;
         }
         case ASTKind::MEMBER_ACCESS: {
-            return StaticCast<const MemberAccess&>(node).targets;
+            std::vector<Ptr<FuncDecl>> funcTargets;
+            for (auto& it : node.GetTargets()) {
+                if (auto fd = DynamicCast<FuncDecl*>(it)) {
+                    funcTargets.push_back(fd);
+                }
+            }
+            return funcTargets;
         }
         default:
             return {};
@@ -1032,15 +1032,15 @@ std::set<Ptr<AST::Ty>> GetGenericParamsForCall(const AST::CallExpr& ce, const AS
             ret.merge(GetGenericParamsForTy(*base->GetTy()));
         }
         if (auto ma = DynamicCast<MemberAccess*>(base)) {
-            if (ma->target) {
-                ret.merge(GetGenericParamsForDecl(*ma->target));
+            if (ma->GetTarget()) {
+                ret.merge(GetGenericParamsForDecl(*ma->GetTarget()));
             }
             base = ma->baseExpr;
         } else if (auto ce0 = DynamicCast<CallExpr*>(base)) {
             base = ce0->baseFunc;
         } else if (auto re = DynamicCast<RefExpr*>(base)) {
-            if (re->ref.target) {
-                ret.merge(GetGenericParamsForDecl(*re->ref.target));
+            if (re->GetTarget()) {
+                ret.merge(GetGenericParamsForDecl(*re->GetTarget()));
             }
             base = nullptr;
         } else {

@@ -25,7 +25,7 @@ using namespace Cangjie::Sema::Desugar::AfterTypeCheck;
 OwnedPtr<RefExpr> CreateThisRef(ClassLikeDecl& targetClass)
 {
     auto thisRef = CreateRefExpr(SrcIdentifier{"this"}, targetClass.GetTy());
-    thisRef->ref.target = &targetClass;
+    thisRef->SetTarget(&targetClass);
     return thisRef;
 }
 
@@ -607,7 +607,7 @@ void MockSupportManager::GenerateSpyCallHandler(FuncDecl& funcDecl, Decl& spiedO
     }
     auto callMockedMember = MakeOwned<CallExpr>();
     callMockedMember->SetTy(RawStaticCast<const FuncTy*>(memberAccessFuncBaseExpr->GetTy())->retTy);
-    callMockedMember->resolvedFunction = RawStaticCast<FuncDecl*>(memberAccessFuncBaseExpr->target);
+    callMockedMember->resolvedFunction = RawStaticCast<FuncDecl*>(memberAccessFuncBaseExpr->GetTarget());
     callMockedMember->baseFunc = std::move(memberAccessFuncBaseExpr);
     callMockedMember->args = std::move(callBaseArgs);
     callMockedMember->callKind = CallKind::CALL_DECLARED_FUNCTION;
@@ -1364,12 +1364,12 @@ Ptr<Expr> MockSupportManager::ReplaceExprWithAccessor(Expr& originalExpr, bool i
 Ptr<Expr> MockSupportManager::ReplaceMemberAccess(
     MemberAccess& member, bool isInConstructor, bool isSubMemberAccess)
 {
-    if (!member.target) {
+    if (!member.GetTarget()) {
         return nullptr;
     }
 
     // Left values of an assignment are handled below, by `ReplaceFieldSetWithAccessor`
-    const bool isField = member.target->astKind == ASTKind::VAR_DECL && member.target->astKind != ASTKind::PROP_DECL;
+    const bool isField = member.GetTarget()->astKind == ASTKind::VAR_DECL && member.GetTarget()->astKind != ASTKind::PROP_DECL;
     if (isField) {
         const bool isLeftValue = member.TestAttr(Attribute::LEFT_VALUE) || (!member.isAlone && !isSubMemberAccess);
         if (isLeftValue) {
@@ -1573,20 +1573,20 @@ Ptr<Expr> MockSupportManager::ReplaceMemberAccessWithAccessor(MemberAccess& memb
         return nullptr;
     }
 
-    if (auto funcDecl = As<ASTKind::FUNC_DECL>(memberAccess.target); funcDecl && funcDecl->propDecl) {
+    if (auto funcDecl = As<ASTKind::FUNC_DECL>(memberAccess.GetTarget()); funcDecl && funcDecl->propDecl) {
         auto propDeclToMock = As<ASTKind::PROP_DECL>(mockUtils->FindAccessorForMemberAccess(
             memberAccess.baseExpr->GetTy(), funcDecl->propDecl, AccessorKind::METHOD));
         if (!propDeclToMock) {
             return nullptr;
         }
         if (funcDecl->isGetter) {
-            memberAccess.target = GetUsableGetterForProperty(*propDeclToMock);
+            memberAccess.SetTarget(GetUsableGetterForProperty(*propDeclToMock));
         } else if (funcDecl->isSetter) {
-            memberAccess.target = GetUsableSetterForProperty(*propDeclToMock);
+            memberAccess.SetTarget(GetUsableSetterForProperty(*propDeclToMock));
         }
     } else if (auto funcDeclToMock = mockUtils->FindAccessorForMemberAccess(
-                   memberAccess.baseExpr->GetTy(), memberAccess.target, AccessorKind::METHOD)) {
-        memberAccess.target = funcDeclToMock;
+                   memberAccess.baseExpr->GetTy(), memberAccess.GetTarget(), AccessorKind::METHOD)) {
+        memberAccess.SetTarget(funcDeclToMock);
         if (auto callExpr = DynamicCast<CallExpr>(memberAccess.callOrPattern)) {
             callExpr->resolvedFunction = StaticCast<FuncDecl>(funcDeclToMock);
         }
@@ -1599,7 +1599,7 @@ Ptr<Expr> MockSupportManager::ReplaceMemberAccessWithAccessor(MemberAccess& memb
 Ptr<Expr> MockSupportManager::ReplaceFieldGetWithAccessor(MemberAccess& memberAccess, bool isInConstructor)
 {
     ReplaceSubMemberAccessWithAccessor(memberAccess, isInConstructor);
-    if (!memberAccess.target || (isInConstructor && IsMemberAccessOnThis(memberAccess))) {
+    if (!memberAccess.GetTarget() || (isInConstructor && IsMemberAccessOnThis(memberAccess))) {
         return nullptr;
     }
 
@@ -1662,7 +1662,7 @@ OwnedPtr<CallExpr> MockSupportManager::ReplaceRefExprFieldSetWithAccessorImpl(Re
 OwnedPtr<CallExpr> MockSupportManager::ReplaceMemberAccessFieldSetWithAccessor(
     MemberAccess& memberAccess, bool isInConstructor)
 {
-    if (!memberAccess.target || (isInConstructor && IsMemberAccessOnThis(memberAccess))) {
+    if (!memberAccess.GetTarget() || (isInConstructor && IsMemberAccessOnThis(memberAccess))) {
         return nullptr;
     }
 
@@ -1680,7 +1680,7 @@ Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr
         accessorCall = ReplaceMemberAccessFieldSetWithAccessor(*memberAccess, isInConstructor);
         if (!accessorCall) {
             ReplaceSubMemberAccessWithAccessor(*memberAccess, isInConstructor, 
-                Is<StructDecl>(memberAccess->target->outerDecl) ? &assignExpr : nullptr);
+                Is<StructDecl>(memberAccess->GetTarget()->outerDecl) ? &assignExpr : nullptr);
             return &assignExpr;
         }
     } else if (leftValue->astKind == ASTKind::WILDCARD_EXPR) {

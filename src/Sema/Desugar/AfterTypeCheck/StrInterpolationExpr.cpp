@@ -49,7 +49,7 @@ Ptr<Decl> MatchAppendFuncByParamTy(std::vector<Ptr<Decl>> candidate, const Ty& p
 }
 } // namespace
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::MatchToStringImpl(const ASTContext& ctx, const File& file, Ty& ty)
+std::vector<Ptr<Decl>> TypeCheckerImpl::MatchToStringImpl(const ASTContext& ctx, const File& file, Ty& ty)
 {
     std::vector<Ptr<Decl>> found;
     if (ty.IsBuiltin()) {
@@ -73,7 +73,7 @@ std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::MatchToStringImpl(const AST
     return found;
 }
 
-OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::DesugarStrPartExpr(
+OwnedPtr<CallExpr> TypeCheckerImpl::DesugarStrPartExpr(
     const ASTContext& ctx, Expr& expr, const std::vector<Ptr<Decl>> appendDecls, VarDecl& sbItem)
 {
     // Create append's argument, must be a primitive type or a subclass of ToString.
@@ -146,7 +146,7 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::DesugarStrPartExpr(
  *     $tmpN.toString()
  * }
  * */
-void TypeChecker::TypeCheckerImpl::DesugarStrInterpolationExpr(ASTContext& ctx, LitConstExpr& litConstExpr)
+void TypeCheckerImpl::DesugarStrInterpolationExpr(ASTContext& ctx, LitConstExpr& litConstExpr)
 {
     CJC_NULLPTR_CHECK(litConstExpr.curFile);
     auto siexpr = litConstExpr.siExpr.get();

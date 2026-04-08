@@ -52,7 +52,7 @@ bool CanCountedRefExprOrMemberExpr(const Expr& expr)
         // NOTE: instance member variable can always be accessed from object no matter is public or private.
         if (target->TestAttr(Attribute::GLOBAL) && !target->IsExportedDecl()) {
             return false;
-        } else if (target->TestAttr(Attribute::STATIC) && target->outerDecl && target->outerDecl->IsNominalDecl() &&
+        } else if (target->TestAttr(Attribute::STATIC) && target->outerDecl && (target->outerDecl->IsNominalDecl() || target->outerDecl->IsBuiltIn()) &&
             (!target->outerDecl->IsExportedDecl() || !target->IsExportedDecl())) {
             return false;
         }
@@ -225,7 +225,7 @@ void CheckFuncDeclIsInline(Package& pkg)
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::CheckInlineFunctions(const std::vector<Ptr<Package>>& pkgs) const
+void TypeCheckerImpl::CheckInlineFunctions(const std::vector<Ptr<Package>>& pkgs) const
 {
     std::vector<Ptr<FuncDecl>> allImportInlineFunctions;
     for (auto& pkg : pkgs) {

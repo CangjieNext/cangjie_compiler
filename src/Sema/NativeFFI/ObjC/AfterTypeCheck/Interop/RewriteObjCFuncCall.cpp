@@ -30,9 +30,9 @@ Ptr<Decl> GetDirectlyReferencedMemberDecl(Ptr<Expr> expr)
 {
     Ptr<Decl> referencedDecl;
     if (Ptr<MemberAccess> ma = As<ASTKind::MEMBER_ACCESS>(expr)) {
-        referencedDecl = ma->target;
+        referencedDecl = ma->GetTarget();
     } else if (Ptr<RefExpr> ref = As<ASTKind::REF_EXPR>(expr)) {
-        referencedDecl = ref->ref.target;
+        referencedDecl = ref->GetTarget();
     }
     return referencedDecl;
 }
@@ -43,7 +43,7 @@ OwnedPtr<Expr> CreateReceiverExpr(Ptr<Expr> expr)
     if (Ptr<MemberAccess> ma = As<ASTKind::MEMBER_ACCESS>(expr)) {
         referencedExpr = ASTCloner::Clone(ma->baseExpr.get());
     } else if (Ptr<RefExpr> ref = As<ASTKind::REF_EXPR>(expr)) {
-        auto owningDecl = ref->ref.target->outerDecl;
+        auto owningDecl = ref->GetTarget()->outerDecl;
         referencedExpr = CreateThisRef(owningDecl, owningDecl->GetTy(), expr->curFile);
     }
     return referencedExpr;

@@ -357,7 +357,7 @@ OwnedPtr<QualifiedType> ASTCloner::CloneQualifiedType(const QualifiedType& node,
     auto ret = MakeOwned<QualifiedType>();
     ret->baseType = CloneType(node.baseType.get(), visitor);
     ret->field = node.field;
-    ret->target = node.target;
+    ret->SetTarget(node.GetTarget());
     for (auto& it : node.typeArguments) {
         ret->typeArguments.push_back(CloneType(it.get(), visitor));
     }
@@ -694,8 +694,8 @@ OwnedPtr<MemberAccess> ASTCloner::CloneMemberAccess(const MemberAccess& ma, cons
     expr->baseExpr = CloneExpr(ma.baseExpr.get(), visitor);
     expr->dotPos = ma.dotPos;
     expr->field = ma.field;
-    expr->target = ma.target;
-    expr->targets = ma.targets;
+    expr->SetTarget(ma.GetTarget());
+    expr->SetTargets(ma.GetTargets());
     expr->isPattern = ma.isPattern;
     expr->isAlone = ma.isAlone;
     expr->instTys = ma.instTys;
@@ -851,8 +851,8 @@ OwnedPtr<RefExpr> ASTCloner::CloneRefExpr(const RefExpr& re, const VisitFunc& vi
 {
     auto expr = CreateRefExpr(re.ref.identifier);
     expr->leftAnglePos = re.leftAnglePos;
-    expr->ref.target = re.ref.target;
-    expr->ref.targets = re.ref.targets;
+    expr->SetTarget(re.GetTarget());
+    expr->SetTargets(re.GetTargets());
     for (auto& it : re.typeArguments) {
         expr->typeArguments.push_back(CloneType(it.get(), visitor));
     }

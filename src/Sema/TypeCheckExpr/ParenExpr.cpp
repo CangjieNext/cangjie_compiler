@@ -9,7 +9,7 @@
 using namespace Cangjie;
 using namespace AST;
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynParenExpr(const CheckerContext& ctx, ParenExpr& pe)
+Ptr<Ty> TypeCheckerImpl::SynParenExpr(const CheckerContext& ctx, ParenExpr& pe)
 {
     Synthesize(ctx, pe.expr.get());
     if (!pe.expr || !Ty::IsTyCorrect(pe.expr->GetTy())) {
@@ -28,7 +28,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynParenExpr(const CheckerContext& ctx, Pa
     return pe.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkParenExpr(ASTContext& ctx, Ty& target, ParenExpr& pe)
+bool TypeCheckerImpl::ChkParenExpr(ASTContext& ctx, Ty& target, ParenExpr& pe)
 {
     if (Check(ctx, &target, pe.expr.get())) {
         CJC_NULLPTR_CHECK(pe.expr); // When the Check's result is true, pe.expr must not be nullptr.

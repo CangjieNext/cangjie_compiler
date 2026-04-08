@@ -20,7 +20,7 @@ Ptr<Expr> FindLoopExpr(const ASTContext& ctx, const JumpExpr& jumpExpr)
 }
 } // namespace
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLoopControlExpr(const ASTContext& ctx, JumpExpr& je) const
+Ptr<Ty> TypeCheckerImpl::SynLoopControlExpr(const ASTContext& ctx, JumpExpr& je) const
 {
     je.refLoop = FindLoopExpr(ctx, je);
     // je.refLoop may be a null pointer, but the errors are already reported by CheckReturnAndJump in PreCheck
@@ -28,7 +28,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLoopControlExpr(const ASTContext& ctx, 
     return je.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkLoopControlExpr(const ASTContext& ctx, JumpExpr& je) const
+bool TypeCheckerImpl::ChkLoopControlExpr(const ASTContext& ctx, JumpExpr& je) const
 {
     SynLoopControlExpr(ctx, je);
     return je.refLoop != nullptr;

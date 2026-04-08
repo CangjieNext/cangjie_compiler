@@ -439,7 +439,7 @@ OwnedPtr<QualifiedType> PartialInstantiation::InstantiateQualifiedType(
     auto ret = MakeOwned<QualifiedType>();
     ret->baseType = InstantiateType(node.baseType.get(), visitor);
     ret->field = node.field;
-    ret->target = node.target;
+    ret->SetTarget(node.GetTarget());
     for (auto& it : node.typeArguments) {
         ret->typeArguments.push_back(InstantiateType(it.get(), visitor));
     }
@@ -739,8 +739,8 @@ OwnedPtr<MemberAccess> PartialInstantiation::InstantiateMemberAccess(const Membe
     expr->baseExpr = InstantiateExpr(ma.baseExpr.get(), visitor);
     expr->dotPos = ma.dotPos;
     expr->field = ma.field;
-    expr->target = ma.target;
-    expr->targets = ma.targets;
+    expr->SetTarget(ma.GetTarget());
+    expr->SetTargets(ma.GetTargets());
     expr->isPattern = ma.isPattern;
     expr->isAlone = ma.isAlone;
     expr->instTys = ma.instTys;
@@ -896,8 +896,8 @@ OwnedPtr<RefExpr> PartialInstantiation::InstantiateRefExpr(const RefExpr& re, co
 {
     auto expr = CreateRefExpr(re.ref.identifier);
     expr->leftAnglePos = re.leftAnglePos;
-    expr->ref.target = re.ref.target;
-    expr->ref.targets = re.ref.targets;
+    expr->SetTarget(re.GetTarget());
+    expr->SetTargets(re.GetTargets());
     for (auto& it : re.typeArguments) {
         expr->typeArguments.push_back(InstantiateType(it.get(), visitor));
     }
@@ -1596,9 +1596,8 @@ OwnedPtr<NodeT> PartialInstantiation::InstantiateNode(Ptr<NodeT> node, const Vis
     return OwnedPtr<NodeT>(result);
 }
 
-OwnedPtr<Node> PartialInstantiation::InstantiateWithRearrange(Ptr<Node> node, const VisitFunc& visitor)
+void PartialInstantiation::CollectTargetAddrForRearrange(Node& from, Node& target, const VisitFunc& visitor)
 {
-    VisitFunc collectMap = [this, visitor](Node& from, Node& target) {
         // Collect decl to decl map.
         if (auto decl = DynamicCast<Decl*>(&from); decl) {
             source2cloned[decl] = &target;
@@ -1656,9 +1655,10 @@ OwnedPtr<Node> PartialInstantiation::InstantiateWithRearrange(Ptr<Node> node, co
                  *   `A<Int64>.foo()` will pointer to `foo` in `A<Int64>`.
                  *   But if `A<T>` is modified by `open`, `foo` will point to function in `A<T>`.
                  */
-                bool isCallStaticMemberByVirtual = reFrom.ref.target && reFrom.ref.target->IsFunc() &&
-                    reFrom.ref.target->TestAttr(Attribute::STATIC) && reFrom.ref.target->outerDecl &&
-                    IsOpenDecl(*reFrom.ref.target->outerDecl);
+                Ptr<Decl> reFromTarget = reFrom.GetTarget();
+                bool isCallStaticMemberByVirtual = reFromTarget && reFromTarget->IsFunc() &&
+                    reFromTarget->TestAttr(Attribute::STATIC) && reFromTarget->outerDecl &&
+                    IsOpenDecl(*reFromTarget->outerDecl);
                 if (!isCallStaticMemberByVirtual) {
                     TargetAddrMapInsert(reFrom.ref.target, reTarget.ref.target);
                 }
@@ -1752,6 +1752,12 @@ OwnedPtr<Node> PartialInstantiation::InstantiateWithRearrange(Ptr<Node> node, co
                 break;
         }
         visitor(from, target);
+}
+
+OwnedPtr<Node> PartialInstantiation::InstantiateWithRearrange(Ptr<Node> node, const VisitFunc& visitor)
+{
+    VisitFunc collectMap = [this, visitor](Node& from, Node& target) {
+        CollectTargetAddrForRearrange(from, target, visitor);
     };
     OwnedPtr<Node> targetNode = InstantiateNode(node, collectMap);
     // Rearrange pointer to node pointer's target from source node pointer to cloned node pointer.

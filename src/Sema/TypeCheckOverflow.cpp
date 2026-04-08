@@ -220,7 +220,7 @@ void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, co
 } // namespace
 
 // Set integer overflow strategy before sema typechecking.
-void TypeChecker::TypeCheckerImpl::SetIntegerOverflowStrategy() const
+void TypeCheckerImpl::SetIntegerOverflowStrategy() const
 {
     CJC_NULLPTR_CHECK(ci);
     if (ci->invocation.globalOptions.overflowStrategy == OverflowStrategy::NA) {

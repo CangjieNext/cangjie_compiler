@@ -31,7 +31,7 @@ Translator::LeftValueInfo Translator::TranslateThisOrSuperRefAsLeftValue(const A
 
 Translator::LeftValueInfo Translator::TranslateStructMemberVarRefAsLeftValue(const AST::RefExpr& refExpr) const
 {
-    auto target = refExpr.ref.target;
+    auto target = refExpr.GetTarget();
     CJC_ASSERT(target->astKind == ASTKind::VAR_DECL);
     CJC_ASSERT(target->outerDecl->astKind == ASTKind::STRUCT_DECL);
 
@@ -43,7 +43,7 @@ Translator::LeftValueInfo Translator::TranslateStructMemberVarRefAsLeftValue(con
 
 Translator::LeftValueInfo Translator::TranslateClassMemberVarRefAsLeftValue(const AST::RefExpr& refExpr) const
 {
-    auto target = refExpr.ref.target;
+    auto target = refExpr.GetTarget();
     CJC_ASSERT(target->astKind == ASTKind::VAR_DECL);
     CJC_ASSERT(target->outerDecl->astKind == ASTKind::CLASS_DECL);
 
@@ -56,7 +56,7 @@ Translator::LeftValueInfo Translator::TranslateClassMemberVarRefAsLeftValue(cons
 
 Translator::LeftValueInfo Translator::TranslateEnumMemberVarRef(const AST::RefExpr& refExpr)
 {
-    auto target = refExpr.ref.target;
+    auto target = refExpr.GetTarget();
     CJC_ASSERT(target->astKind == ASTKind::VAR_DECL);
     CJC_ASSERT(target->outerDecl->astKind == ASTKind::ENUM_DECL);
     CJC_ASSERT(target->TestAttr(AST::Attribute::ENUM_CONSTRUCTOR));
@@ -88,7 +88,7 @@ Translator::LeftValueInfo Translator::TranslateEnumMemberVarRef(const AST::RefEx
 
 Translator::LeftValueInfo Translator::TranslateVarRefAsLeftValue(const AST::RefExpr& refExpr)
 {
-    auto target = refExpr.ref.target;
+    auto target = refExpr.GetTarget();
     CJC_ASSERT(target);
     CJC_ASSERT(target->astKind == AST::ASTKind::VAR_DECL || target->astKind == AST::ASTKind::FUNC_PARAM);
 
@@ -120,7 +120,7 @@ Translator::LeftValueInfo Translator::TranslateRefExprAsLeftValue(const AST::Ref
         return TranslateThisOrSuperRefAsLeftValue(refExpr);
     }
     // Case 2: variable
-    auto target = refExpr.ref.target;
+    auto target = refExpr.GetTarget();
     CJC_ASSERT(target);
     if (target->astKind == AST::ASTKind::VAR_DECL || target->astKind == AST::ASTKind::FUNC_PARAM) {
         return TranslateVarRefAsLeftValue(refExpr);
@@ -148,7 +148,7 @@ Value* Translator::TranslateThisOrSuperRef(const AST::RefExpr& refExpr)
 
 Value* Translator::TranslateVarRef(const AST::RefExpr& refExpr)
 {
-    auto target = refExpr.ref.target;
+    auto target = refExpr.GetTarget();
     CJC_ASSERT(target);
     CJC_ASSERT(target->astKind == AST::ASTKind::VAR_DECL || target->astKind == AST::ASTKind::FUNC_PARAM);
     auto loc = TranslateLocation(refExpr);
@@ -331,7 +331,7 @@ Value* Translator::WrapMemberMethodByLambda(
 
 Value* Translator::TranslateMemberFuncRef(const AST::RefExpr& refExpr)
 {
-    auto target = refExpr.ref.target;
+    auto target = refExpr.GetTarget();
     CJC_ASSERT(target->astKind == ASTKind::FUNC_DECL);
     Value* thisObj = nullptr;
     if (!target->TestAttr(AST::Attribute::STATIC)) {
@@ -422,7 +422,7 @@ Value* Translator::TranslateGlobalOrLocalFuncRef(const AST::RefExpr& refExpr, Va
 
 Value* Translator::TranslateFuncRef(const AST::RefExpr& refExpr)
 {
-    auto target = refExpr.ref.target;
+    auto target = refExpr.GetTarget();
     CJC_ASSERT(target);
     CJC_ASSERT(target->astKind == AST::ASTKind::FUNC_DECL);
     auto loc = TranslateLocation(refExpr);
@@ -445,7 +445,7 @@ Ptr<Value> Translator::Visit(const AST::RefExpr& refExpr)
     }
 
     // Case 2: variable
-    auto target = refExpr.ref.target;
+    auto target = refExpr.GetTarget();
     CJC_ASSERT(target);
     if (target->astKind == AST::ASTKind::VAR_DECL || target->astKind == AST::ASTKind::FUNC_PARAM) {
         return TranslateVarRef(refExpr);

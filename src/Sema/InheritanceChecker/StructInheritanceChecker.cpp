@@ -277,7 +277,7 @@ std::vector<std::unordered_set<Ptr<Ty>>> GetAllGenericUpperBounds(TypeManager& t
 
 } // namespace Cangjie
 
-void TypeChecker::TypeCheckerImpl::CheckInheritance(Package& pkg)
+void TypeCheckerImpl::CheckInheritance(Package& pkg)
 {
     StructInheritanceChecker checker(diag, typeManager, pkg, importManager, ci->invocation.globalOptions);
     checker.Check();

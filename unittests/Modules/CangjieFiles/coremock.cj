@@ -23,7 +23,7 @@ public enum Option<T> {
 public interface Equatable<T> {}
 
 public interface Hashable {}
-
+public interface Collection<T> {}
 public struct String {
     public const init() {}
 

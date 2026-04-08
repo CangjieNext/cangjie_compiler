@@ -73,7 +73,7 @@ OwnedPtr<ArrayLit> MockUtils::WrapCallArgsIntoArray(const FuncDecl& mockedFunc)
     for (auto const& param : mockedFunc.funcBody->paramLists[0]->params) {
         auto paramRef = MakeOwned<RefExpr>();
         paramRef->ref = Reference(param->identifier);
-        paramRef->ref.target = param.get();
+        paramRef->SetTarget(param.get());
         paramRef->SetTy(param->GetTy());
         paramRef->curFile = mockedFunc.curFile;
         mockedMethodArgRefs.emplace_back(std::move(paramRef));
@@ -592,7 +592,7 @@ void MockUtils::UpdateRefTypesTarget(Ptr<Type> type, Ptr<Generic> oldGeneric, Pt
     if (auto genericTy = DynamicCast<GenericsTy*>(refType->GetTy()); genericTy) {
         auto typeParamIndex = GetIndexOfGenericTypeParam(genericTy, oldGeneric);
         if (typeParamIndex != -1) {
-            refType->ref.target = newGeneric->typeParameters[static_cast<size_t>(typeParamIndex)].get();
+            refType->SetTarget(newGeneric->typeParameters[static_cast<size_t>(typeParamIndex)].get());
         }
     }
 

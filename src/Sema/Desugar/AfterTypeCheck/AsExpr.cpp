@@ -26,7 +26,7 @@ OwnedPtr<CallExpr> CreateAsExprSomeCall(
     auto optionTy = someCtorTy.retTy;
     someRef->typeArguments.emplace_back(ASTCloner::Clone(Ptr(&theAsType)));
     someRef->instTys.emplace_back(theAsTy);
-    someRef->ref.targets.emplace_back(&someDecl);
+    someRef->AddTarget(&someDecl);
     someRef->isAlone = false;
     someRef->SetTy(&someCtorTy);
     someRef->callOrPattern = some.get();

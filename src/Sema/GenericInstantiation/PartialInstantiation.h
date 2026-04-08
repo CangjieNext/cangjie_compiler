@@ -80,6 +80,8 @@ private:
         }
         targetAddr2targetAddr[reinterpret_cast<Ptr<AST::Node>*>(&from)] = reinterpret_cast<Ptr<AST::Node>*>(&target);
     }
+    /** Must be a member (not a lambda): befriended AST nodes only grant access to @c PartialInstantiation members. */
+    void CollectTargetAddrForRearrange(AST::Node& from, AST::Node& target, const VisitFunc& visitor);
     OwnedPtr<AST::Node> InstantiateWithRearrange(Ptr<AST::Node> node, const VisitFunc& visitor);
     template <typename NodeT> static OwnedPtr<NodeT> InstantiateNode(Ptr<NodeT> node, const VisitFunc& visitor);
     static OwnedPtr<AST::Type> InstantiateType(Ptr<AST::Type> type, const VisitFunc& visitor);

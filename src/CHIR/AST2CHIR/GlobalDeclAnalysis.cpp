@@ -58,7 +58,7 @@ AST::VisitAction GlobalDeclAnalysis::CollectDepInLitConstExpr(
     if (litConstExpr.kind == AST::LitConstKind::JSTRING || !litConstExpr.ref) {
         return AST::VisitAction::WALK_CHILDREN;
     }
-    auto structDecl = StaticCast<AST::StructDecl*>(litConstExpr.ref->ref.target);
+    auto structDecl = StaticCast<AST::StructDecl*>(litConstExpr.ref->GetTarget());
     if (!litConstExpr.stringValue.empty()) {
         return AST::VisitAction::WALK_CHILDREN;
     }
@@ -78,27 +78,27 @@ AST::VisitAction GlobalDeclAnalysis::VisitExprAction(const AST::Expr& expr,
     std::vector<Ptr<const AST::Decl>>& dependencies, std::vector<Ptr<const AST::Decl>>& localConstVarDeps)
 {
     if (auto ma = DynamicCast<const AST::MemberAccess*>(&expr); ma) {
-        if (!ma->target) {
+        if (!ma->GetTarget()) {
             return AST::VisitAction::WALK_CHILDREN;
         }
-        if (ma->target->astKind == AST::ASTKind::FUNC_DECL) {
-            AddDependency(*ma->target, dependencies);
+        if (ma->GetTarget()->astKind == AST::ASTKind::FUNC_DECL) {
+            AddDependency(*ma->GetTarget(), dependencies);
         }
-        if (ma->target->astKind == AST::ASTKind::VAR_DECL && ma->target->TestAttr(AST::Attribute::STATIC)) {
-            AddDependency(*ma->target, dependencies);
+        if (ma->GetTarget()->astKind == AST::ASTKind::VAR_DECL && ma->GetTarget()->TestAttr(AST::Attribute::STATIC)) {
+            AddDependency(*ma->GetTarget(), dependencies);
         }
-        if (AST::IsPackageMemberAccess(*ma) && ma->target->astKind == AST::ASTKind::VAR_DECL) {
-            AddDependency(*ma->target, dependencies);
+        if (AST::IsPackageMemberAccess(*ma) && ma->GetTarget()->astKind == AST::ASTKind::VAR_DECL) {
+            AddDependency(*ma->GetTarget(), dependencies);
         }
         return AST::VisitAction::WALK_CHILDREN;
     } else if (auto re = DynamicCast<const AST::RefExpr*>(&expr); re) {
-        bool hasRefTarget = re->ref.target &&
-            (re->ref.target->astKind == AST::ASTKind::FUNC_DECL || re->ref.target->astKind == AST::ASTKind::VAR_DECL);
+        bool hasRefTarget = re->GetTarget() &&
+            (re->GetTarget()->astKind == AST::ASTKind::FUNC_DECL || re->GetTarget()->astKind == AST::ASTKind::VAR_DECL);
         if (hasRefTarget &&
-            (re->ref.target->TestAttr(AST::Attribute::GLOBAL) || re->ref.target->TestAttr(AST::Attribute::STATIC))) {
-            AddDependency(*re->ref.target, dependencies);
-        } else if (hasRefTarget && re->ref.target->IsConst()) {
-            AddDependency(*re->ref.target, localConstVarDeps);
+            (re->GetTarget()->TestAttr(AST::Attribute::GLOBAL) || re->GetTarget()->TestAttr(AST::Attribute::STATIC))) {
+            AddDependency(*re->GetTarget(), dependencies);
+        } else if (hasRefTarget && re->GetTarget()->IsConst()) {
+            AddDependency(*re->GetTarget(), localConstVarDeps);
         }
 
         return AST::VisitAction::SKIP_CHILDREN;

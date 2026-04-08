@@ -167,7 +167,7 @@ std::pair<std::string, std::set<Ptr<Decl>>> FindCandidatesFromAccess(
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::ResetLambdaForReinfer(ASTContext& ctx, const AST::LambdaExpr& le)
+void TypeCheckerImpl::ResetLambdaForReinfer(ASTContext& ctx, const AST::LambdaExpr& le)
 {
     le.funcBody->retType.reset(nullptr);
     AddRetTypeNode(*le.funcBody);
@@ -181,7 +181,7 @@ void TypeChecker::TypeCheckerImpl::ResetLambdaForReinfer(ASTContext& ctx, const 
     ctx.ClearTypeCheckCache(*le.funcBody);
 }
 
-bool TypeChecker::TypeCheckerImpl::SolveLamExprParamTys(ASTContext& ctx, AST::LambdaExpr& le)
+bool TypeCheckerImpl::SolveLamExprParamTys(ASTContext& ctx, AST::LambdaExpr& le)
 {
     auto tyVars = typeManager.GetInnermostUnsolvedTyVars();
     auto sol = SolveConstraints(typeManager.constraints);
@@ -203,7 +203,7 @@ bool TypeChecker::TypeCheckerImpl::SolveLamExprParamTys(ASTContext& ctx, AST::La
     return true;
 }
 
-void TypeChecker::TypeCheckerImpl::TryInferFromSyntaxInfo(ASTContext& ctx, const AST::LambdaExpr& le)
+void TypeCheckerImpl::TryInferFromSyntaxInfo(ASTContext& ctx, const AST::LambdaExpr& le)
 {
     if (typeManager.GetInnermostUnsolvedTyVars().empty()) {
         return;
@@ -252,7 +252,7 @@ void TypeChecker::TypeCheckerImpl::TryInferFromSyntaxInfo(ASTContext& ctx, const
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le)
+Ptr<Ty> TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le)
 {
     if (le.funcBody == nullptr || le.funcBody->paramLists.empty()) {
         return TypeManager::GetInvalidTy();
@@ -312,7 +312,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le
     return le.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, Ty& target, LambdaExpr& le)
+bool TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, Ty& target, LambdaExpr& le)
 {
     CJC_ASSERT(le.funcBody != nullptr && !le.funcBody->paramLists.empty());
     ClearInvalidTypeCheckCache(ctx, le, target);
@@ -378,7 +378,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, Ty& target, Lambd
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkLamParamTys(
+bool TypeCheckerImpl::ChkLamParamTys(
     ASTContext& ctx, LambdaExpr& le, const std::vector<Ptr<AST::Ty>>& tgtParamTys, std::vector<Ptr<Ty>>& lamParamTys)
 {
     CJC_ASSERT(le.funcBody && !le.funcBody->paramLists.empty());
@@ -408,7 +408,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLamParamTys(
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkLamBody(ASTContext& ctx, FuncBody& lamFb)
+bool TypeCheckerImpl::ChkLamBody(ASTContext& ctx, FuncBody& lamFb)
 {
     if (CheckFuncBody(ctx, lamFb) && Ty::IsTyCorrect(lamFb.GetTy()) && Ty::IsTyCorrect(lamFb.body->GetTy())) {
         return true;

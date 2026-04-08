@@ -623,7 +623,7 @@ void ExternalLinkageAnalyzer::SetVarTargetLinkage(VarDecl& vd, bool byTy, bool i
  * The former means whether a function can be imported and used (from the CangjieLang level);
  * while the latter means whether a function can be linked (from the binary level).
  */
-void TypeChecker::TypeCheckerImpl::AnalyzeFunctionLinkage(Package& pkg) const
+void TypeCheckerImpl::AnalyzeFunctionLinkage(Package& pkg) const
 {
     AnalyzeLinkageBasedOnModifier(pkg, ci->invocation.globalOptions);
     ExternalLinkageAnalyzer(pkg).Run();
@@ -643,7 +643,7 @@ void TypeChecker::TypeCheckerImpl::AnalyzeFunctionLinkage(Package& pkg) const
     //       The above modifications are incompatible, and the action is postponed.
     std::unordered_map<std::string, Ptr<Decl>> privateDeclMap;
     IterateToplevelDecls(pkg, [this, &privateDeclMap](OwnedPtr<Decl>& decl) {
-        if (decl->IsNominalDecl() && decl->TestAttr(Attribute::PRIVATE) && decl->linkage != Linkage::INTERNAL) {
+        if ((decl->IsNominalDecl() || decl->IsBuiltIn()) && decl->TestAttr(Attribute::PRIVATE) && decl->linkage != Linkage::INTERNAL) {
             auto ret = privateDeclMap.emplace(decl->identifier.Val(), decl.get());
             if (!ret.second) {
                 auto builder = diag.DiagnoseRefactor(

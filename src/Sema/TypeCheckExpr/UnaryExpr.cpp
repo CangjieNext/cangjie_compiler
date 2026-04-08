@@ -56,7 +56,7 @@ UnaryExpr& GetLeafUnaryExpr(UnaryExpr& ue)
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::DiagnoseForUnaryExprWithTarget(ASTContext& ctx, UnaryExpr& ue, Ty& target)
+void TypeCheckerImpl::DiagnoseForUnaryExprWithTarget(ASTContext& ctx, UnaryExpr& ue, Ty& target)
 {
     // `leaf` is responsible for the invalid type.
     UnaryExpr& leaf = GetLeafUnaryExpr(ue);
@@ -65,7 +65,7 @@ void TypeChecker::TypeCheckerImpl::DiagnoseForUnaryExprWithTarget(ASTContext& ct
     }
 }
 
-void TypeChecker::TypeCheckerImpl::DiagnoseForUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
+void TypeCheckerImpl::DiagnoseForUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
 {
     // `leaf` is responsible for the invalid type.
     UnaryExpr& leaf = GetLeafUnaryExpr(ue);
@@ -74,7 +74,7 @@ void TypeChecker::TypeCheckerImpl::DiagnoseForUnaryExpr(ASTContext& ctx, UnaryEx
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
+Ptr<Ty> TypeCheckerImpl::SynUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
 {
     if (ue.desugarExpr) {
         return ue.desugarExpr->GetTy();
@@ -101,7 +101,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynUnaryExpr(ASTContext& ctx, UnaryExpr& u
     return ue.GetTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBuiltinUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
+Ptr<Ty> TypeCheckerImpl::SynBuiltinUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
 {
     auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, ue.expr.get());
     if (!Ty::IsTyCorrect(ty)) {
@@ -132,7 +132,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBuiltinUnaryExpr(ASTContext& ctx, Unary
     return TypeManager::GetInvalidTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkUnaryExpr(ASTContext& ctx, Ty& target, UnaryExpr& ue)
+bool TypeCheckerImpl::ChkUnaryExpr(ASTContext& ctx, Ty& target, UnaryExpr& ue)
 {
     if (ue.desugarExpr) {
         return typeManager.IsSubtype(ue.desugarExpr->GetTy(), &target);

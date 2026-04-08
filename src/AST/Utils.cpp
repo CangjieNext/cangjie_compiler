@@ -534,7 +534,7 @@ bool IsValidCFuncConstructorCall(const CallExpr& ce)
     // ce.GetTy() is correct only when the whole CFunc constructor call is correct
     if (Ty::IsTyCorrect(ce.GetTy()) && ce.baseFunc && Is<RefExpr>(ce.baseFunc)) {
         // if this is a builtin CFunc constructor call, do not check the arguments
-        if (auto callee = DynamicCast<BuiltInDecl>(StaticCast<RefExpr>(ce.baseFunc.get())->ref.target);
+        if (auto callee = DynamicCast<BuiltInDecl>(StaticCast<RefExpr>(ce.baseFunc.get())->GetTarget());
             callee && callee->type == BuiltInType::CFUNC) {
             return true;
         }

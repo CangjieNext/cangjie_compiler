@@ -1204,7 +1204,8 @@ bool BaseMangler::IsLocalVariable(const AST::Decl& decl) const
 
 bool BaseMangler::IsLocalFunc(const AST::FuncDecl& funcDecl) const
 {
-    return !funcDecl.TestAttr(AST::Attribute::GLOBAL) && funcDecl.outerDecl && !funcDecl.outerDecl->IsNominalDecl();
+    return !funcDecl.TestAttr(AST::Attribute::GLOBAL) && funcDecl.outerDecl && !funcDecl.outerDecl->IsNominalDecl()
+        && !funcDecl.outerDecl->IsBuiltIn();
 }
 
 std::string BaseMangler::HashToBase62(const std::string& input)

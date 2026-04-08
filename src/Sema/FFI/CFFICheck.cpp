@@ -153,7 +153,7 @@ inline Range GetFuncBodyRange(const FuncBody& fb, const Type& type)
 }
 } // namespace
 
-Attribute TypeChecker::TypeCheckerImpl::GetDefaultABI()
+Attribute TypeCheckerImpl::GetDefaultABI()
 {
     // This should be consistent with BackendType. All BackendType should have a default ABI.
     static std::unordered_map<Triple::BackendType, Attribute> defaultABI = {
@@ -165,7 +165,7 @@ Attribute TypeChecker::TypeCheckerImpl::GetDefaultABI()
     return Attribute::C;
 }
 
-void TypeChecker::TypeCheckerImpl::SetForeignABIAttr(Decl& decl)
+void TypeCheckerImpl::SetForeignABIAttr(Decl& decl)
 {
     // Will unify the judgment of foreign, foreign, C, and backend.
     // Update W/R in class Attribute.
@@ -180,7 +180,7 @@ void TypeChecker::TypeCheckerImpl::SetForeignABIAttr(Decl& decl)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckInvalidRefInCFunc(
+void TypeCheckerImpl::CheckInvalidRefInCFunc(
     const ASTContext& ctx, const AST::RefExpr& re, const AST::Decl& target) const
 {
     if (!IsInCFunc(ctx, re) || target.TestAnyAttr(Attribute::CONSTRUCTOR, Attribute::ENUM_CONSTRUCTOR)) {
@@ -193,7 +193,7 @@ void TypeChecker::TypeCheckerImpl::CheckInvalidRefInCFunc(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckInvalidRefInCFunc(const ASTContext& ctx, const AST::RefExpr& re) const
+void TypeCheckerImpl::CheckInvalidRefInCFunc(const ASTContext& ctx, const AST::RefExpr& re) const
 {
     if (!IsInCFunc(ctx, re)) {
         return;
@@ -205,7 +205,7 @@ void TypeChecker::TypeCheckerImpl::CheckInvalidRefInCFunc(const ASTContext& ctx,
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::IsInCFunc(const ASTContext& ctx, const AST::RefExpr& re) const
+bool TypeCheckerImpl::IsInCFunc(const ASTContext& ctx, const AST::RefExpr& re) const
 {
     Symbol* curFuncSym = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, re.scopeName);
     while (curFuncSym && curFuncSym->scopeName.length() > 0) {
@@ -218,7 +218,7 @@ bool TypeChecker::TypeCheckerImpl::IsInCFunc(const ASTContext& ctx, const AST::R
     return false;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckCTypeMember(const Decl& decl)
+void TypeCheckerImpl::CheckCTypeMember(const Decl& decl)
 {
     if (decl.astKind != ASTKind::VAR_DECL || Ty::IsInitialTy(decl.GetTy()) || decl.outerDecl == nullptr ||
         !Ty::IsTyCorrect(decl.outerDecl->GetTy())) {
@@ -239,7 +239,7 @@ void TypeChecker::TypeCheckerImpl::CheckCTypeMember(const Decl& decl)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckUnsafeInvoke(const CallExpr& ce)
+void TypeCheckerImpl::CheckUnsafeInvoke(const CallExpr& ce)
 {
     if (ce.resolvedFunction == nullptr || !Ty::IsTyCorrect(ce.resolvedFunction->GetTy()) || !IsUnsafeBackend(backendType)) {
         return;
@@ -255,7 +255,7 @@ void TypeChecker::TypeCheckerImpl::CheckUnsafeInvoke(const CallExpr& ce)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckLegalityOfUnsafeAndInout(Node& root)
+void TypeCheckerImpl::CheckLegalityOfUnsafeAndInout(Node& root)
 {
     Walker(&root, [this](auto node) {
         CJC_ASSERT(node);
@@ -275,7 +275,7 @@ void TypeChecker::TypeCheckerImpl::CheckLegalityOfUnsafeAndInout(Node& root)
     }).Walk();
 }
 
-void TypeChecker::TypeCheckerImpl::UnsafeCheck(const FuncBody& fb)
+void TypeCheckerImpl::UnsafeCheck(const FuncBody& fb)
 {
     if (fb.funcDecl && (fb.funcDecl->TestAttr(Attribute::FOREIGN) || fb.funcDecl->TestAttr(Attribute::C))) {
         CJC_ASSERT(!fb.paramLists.empty() && "function body's param list cannot be empty!");
@@ -298,7 +298,7 @@ void TypeChecker::TypeCheckerImpl::UnsafeCheck(const FuncBody& fb)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckCFuncParam(const AST::FuncParam& fp)
+void TypeCheckerImpl::CheckCFuncParam(const AST::FuncParam& fp)
 {
     if (!Ty::IsTyCorrect(fp.GetTy())) {
         return;
@@ -313,7 +313,7 @@ void TypeChecker::TypeCheckerImpl::CheckCFuncParam(const AST::FuncParam& fp)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckCFuncParamType(const AST::Type& type)
+void TypeCheckerImpl::CheckCFuncParamType(const AST::Type& type)
 {
     if (type.GetTy()->IsUnit()) {
         diag.Diagnose(type.begin, type.end, DiagKind::sema_cfunc_cannot_have_unit_args);
@@ -322,7 +322,7 @@ void TypeChecker::TypeCheckerImpl::CheckCFuncParamType(const AST::Type& type)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PreCheckAnnoForCFFI(Decl& decl)
+void TypeCheckerImpl::PreCheckAnnoForCFFI(Decl& decl)
 {
     if (HasModifier(decl.modifiers, TokenKind::FOREIGN) && !decl.HasAnno(AnnotationKind::C)) {
         // Check node.

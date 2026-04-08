@@ -76,10 +76,10 @@ bool HasInvalidChild(BinaryExpr& be)
 
 bool RefExprTargetIsFuncDeclAndHasNamedParam(const RefExpr& re)
 {
-    if (!re.ref.target || re.ref.target->astKind != ASTKind::FUNC_DECL) {
+    if (!re.GetTarget() || re.GetTarget()->astKind != ASTKind::FUNC_DECL) {
         return false;
     }
-    const FuncDecl& funcDecl = *StaticCast<FuncDecl*>(re.ref.target);
+    const FuncDecl& funcDecl = *StaticCast<FuncDecl*>(re.GetTarget());
     CJC_NULLPTR_CHECK(funcDecl.funcBody);
     auto& params = funcDecl.funcBody->paramLists[0]->params;
     return std::any_of(params.cbegin(), params.cend(),
@@ -180,7 +180,7 @@ std::pair<std::string, std::string> GetDesugaredBinaryExprArgTys(const BinaryExp
 
 // Helper function to check return type inference errors in operator functions
 // Returns the operator function declaration if it has return type inference error, nullptr otherwise
-bool TypeChecker::TypeCheckerImpl::ChkOperatorFuncIfTyCannotBeInferred(ASTContext& ctx, BinaryExpr& be)
+bool TypeCheckerImpl::ChkOperatorFuncIfTyCannotBeInferred(ASTContext& ctx, BinaryExpr& be)
 {
     auto callExpr = StaticCast<CallExpr*>(be.desugarExpr.get());
     auto operatorFuncDecl = As<ASTKind::FUNC_DECL>(callExpr->resolvedFunction ? callExpr->resolvedFunction
@@ -201,7 +201,7 @@ bool TypeChecker::TypeCheckerImpl::ChkOperatorFuncIfTyCannotBeInferred(ASTContex
 
 // Helper function to handle operator overload checking and return type inference errors
 // Returns true if operator overload succeeded, false otherwise
-bool TypeChecker::TypeCheckerImpl::TryCheckOperatorOverload(ASTContext& ctx, Ty* target, BinaryExpr& be)
+bool TypeCheckerImpl::TryCheckOperatorOverload(ASTContext& ctx, Ty* target, BinaryExpr& be)
 {
     DesugarOperatorOverloadExpr(ctx, be);
     {
@@ -224,7 +224,7 @@ bool TypeChecker::TypeCheckerImpl::TryCheckOperatorOverload(ASTContext& ctx, Ty*
 
 // Helper function to handle operator overload synthesis and return type inference errors
 // Returns true if operator overload succeeded, false otherwise
-bool TypeChecker::TypeCheckerImpl::TrySynthesizeOperatorOverload(ASTContext& ctx, BinaryExpr& be)
+bool TypeCheckerImpl::TrySynthesizeOperatorOverload(ASTContext& ctx, BinaryExpr& be)
 {
     DesugarOperatorOverloadExpr(ctx, be);
     {
@@ -243,12 +243,12 @@ bool TypeChecker::TypeCheckerImpl::TrySynthesizeOperatorOverload(ASTContext& ctx
     return false;
 }
 
-void TypeChecker::TypeCheckerImpl::MarkOutermostBinaryExpressions(Package& pkg) const
+void TypeCheckerImpl::MarkOutermostBinaryExpressions(Package& pkg) const
 {
     MarkOutermostBinaryExpr(true, pkg);
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkBinaryExpr(ASTContext& ctx, Ty& target, BinaryExpr& be)
+bool TypeCheckerImpl::ChkBinaryExpr(ASTContext& ctx, Ty& target, BinaryExpr& be)
 {
     auto cs = PData::CommitScope(typeManager.constraints);
     if (be.desugarExpr) {
@@ -289,7 +289,7 @@ bool TypeChecker::TypeCheckerImpl::ChkBinaryExpr(ASTContext& ctx, Ty& target, Bi
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkArithmeticExpr(ASTContext& ctx, Ty& target, BinaryExpr& be)
+bool TypeCheckerImpl::ChkArithmeticExpr(ASTContext& ctx, Ty& target, BinaryExpr& be)
 {
     if (!IsBinaryOperator(be.op)) {
         return false;
@@ -329,7 +329,7 @@ bool TypeChecker::TypeCheckerImpl::ChkArithmeticExpr(ASTContext& ctx, Ty& target
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkExpoExpr(ASTContext& ctx, Ty& tgtTy, BinaryExpr& be)
+bool TypeCheckerImpl::ChkExpoExpr(ASTContext& ctx, Ty& tgtTy, BinaryExpr& be)
 {
     Ptr<Ty> i64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
     Ptr<Ty> f64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_FLOAT64);
@@ -371,7 +371,7 @@ bool TypeChecker::TypeCheckerImpl::ChkExpoExpr(ASTContext& ctx, Ty& tgtTy, Binar
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkExpoExprBase(ASTContext& ctx, const BinaryExpr& be, Ty& baseTy)
+bool TypeCheckerImpl::ChkExpoExprBase(ASTContext& ctx, const BinaryExpr& be, Ty& baseTy)
 {
     const std::string noteMsg = "the context requires this exponentiation expression to be of type '" +
         baseTy.String() + "'; the type of the left operand must also be '" + baseTy.String() + "' in this case";
@@ -385,7 +385,7 @@ bool TypeChecker::TypeCheckerImpl::ChkExpoExprBase(ASTContext& ctx, const Binary
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkExpoExprExponent(ASTContext& ctx, Expr& exponent, std::vector<Ptr<Ty>> exTys)
+bool TypeCheckerImpl::ChkExpoExprExponent(ASTContext& ctx, Expr& exponent, std::vector<Ptr<Ty>> exTys)
 {
     bool isWellTyped = true;
     std::vector<short> pass;
@@ -433,7 +433,7 @@ bool TypeChecker::TypeCheckerImpl::ChkExpoExprExponent(ASTContext& ctx, Expr& ex
     return isWellTyped;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynExpoExpr(ASTContext& ctx, BinaryExpr& be)
+Ptr<Ty> TypeCheckerImpl::SynExpoExpr(ASTContext& ctx, BinaryExpr& be)
 {
     SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, be.leftExpr.get());
     ReplaceIdealTy(*be.leftExpr);
@@ -447,7 +447,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynExpoExpr(ASTContext& ctx, BinaryExpr& b
     return be.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckExponentByBaseTy(ASTContext& ctx, Ty& baseTy, const Expr& base, Expr& exponent)
+bool TypeCheckerImpl::CheckExponentByBaseTy(ASTContext& ctx, Ty& baseTy, const Expr& base, Expr& exponent)
 {
     Ptr<Ty> i64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
     Ptr<Ty> u64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT64);
@@ -488,7 +488,7 @@ bool TypeChecker::TypeCheckerImpl::CheckExponentByBaseTy(ASTContext& ctx, Ty& ba
     return isExponentWellTyped;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkRelationalExpr(ASTContext& ctx, Ty& target, BinaryExpr& be)
+bool TypeCheckerImpl::ChkRelationalExpr(ASTContext& ctx, Ty& target, BinaryExpr& be)
 {
     // Check target type is bool type.
     if (!target.IsBoolean()) {
@@ -514,7 +514,7 @@ bool TypeChecker::TypeCheckerImpl::ChkRelationalExpr(ASTContext& ctx, Ty& target
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkLogicalExpr(ASTContext& ctx, Ty& target, BinaryExpr& be)
+bool TypeCheckerImpl::ChkLogicalExpr(ASTContext& ctx, Ty& target, BinaryExpr& be)
 {
     Ptr<Ty> boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
     // Check T is bool type.
@@ -541,7 +541,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLogicalExpr(ASTContext& ctx, Ty& target, B
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckTupleCanEqual(ASTContext& ctx, BinaryExpr& be)
+bool TypeCheckerImpl::CheckTupleCanEqual(ASTContext& ctx, BinaryExpr& be)
 {
     CJC_ASSERT(be.leftExpr != nullptr && Ty::IsTyCorrect(be.leftExpr->GetTy()) && be.leftExpr->GetTy()->IsTuple());
     CJC_ASSERT(be.rightExpr != nullptr && Ty::IsTyCorrect(be.rightExpr->GetTy()) && be.rightExpr->GetTy()->IsTuple());
@@ -598,8 +598,7 @@ bool TypeChecker::TypeCheckerImpl::CheckTupleCanEqual(ASTContext& ctx, BinaryExp
     return true;
 }
 
-std::optional<bool> TypeChecker::TypeCheckerImpl::CheckBinaryExprCaseBuiltIn(
-    ASTContext& ctx, BinaryExpr& be, Ptr<Ty> target)
+std::optional<bool> TypeCheckerImpl::CheckBinaryExprCaseBuiltIn(ASTContext& ctx, BinaryExpr& be, Ptr<Ty> target)
 {
     CJC_ASSERT(target);
     bool checkRet = false;
@@ -652,7 +651,7 @@ std::optional<bool> TypeChecker::TypeCheckerImpl::CheckBinaryExprCaseBuiltIn(
     return {};
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLiteralInBinaryExpr(ASTContext& ctx, BinaryExpr& be)
+Ptr<Ty> TypeCheckerImpl::SynLiteralInBinaryExpr(ASTContext& ctx, BinaryExpr& be)
 {
     CJC_NULLPTR_CHECK(be.leftExpr);
     CJC_NULLPTR_CHECK(be.rightExpr);
@@ -664,7 +663,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLiteralInBinaryExpr(ASTContext& ctx, Bi
     return SynLiteralInBinaryExprFromLeft(ctx, be);
 }
 
-std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::SynLiteralInBinaryExprFromRight(ASTContext& ctx, BinaryExpr& be)
+std::optional<Ptr<Ty>> TypeCheckerImpl::SynLiteralInBinaryExprFromRight(ASTContext& ctx, BinaryExpr& be)
 {
     CJC_NULLPTR_CHECK(be.rightExpr);
     CJC_NULLPTR_CHECK(be.leftExpr);
@@ -706,7 +705,7 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::SynLiteralInBinaryExprFromR
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLiteralInBinaryExprFromLeft(ASTContext& ctx, BinaryExpr& be)
+Ptr<Ty> TypeCheckerImpl::SynLiteralInBinaryExprFromLeft(ASTContext& ctx, BinaryExpr& be)
 {
     bool isWellTyped =
         SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, be.leftExpr.get()) && ReplaceIdealTy(*be.leftExpr);
@@ -733,7 +732,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLiteralInBinaryExprFromLeft(ASTContext&
     }
 }
 
-std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::SynArithmeticOrRelationalExpr(
+std::optional<Ptr<Ty>> TypeCheckerImpl::SynArithmeticOrRelationalExpr(
     ASTContext& ctx, BinaryExpr& be, bool isArithmetic)
 {
     // Exponentiation expressions have special rules and thus be handled differently.
@@ -769,7 +768,7 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::SynArithmeticOrRelationalEx
     return {be.GetTy()};
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLogicalExpr(ASTContext& ctx, BinaryExpr& be)
+Ptr<Ty> TypeCheckerImpl::SynLogicalExpr(ASTContext& ctx, BinaryExpr& be)
 {
     CJC_NULLPTR_CHECK(be.leftExpr);
     CJC_NULLPTR_CHECK(be.rightExpr);
@@ -787,7 +786,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLogicalExpr(ASTContext& ctx, BinaryExpr
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkShiftExpr(ASTContext& ctx, Ty& target, BinaryExpr& be)
+bool TypeCheckerImpl::ChkShiftExpr(ASTContext& ctx, Ty& target, BinaryExpr& be)
 {
     be.SetTy(TypeManager::GetInvalidTy());
     if (!be.leftExpr || !be.rightExpr) {
@@ -815,7 +814,7 @@ bool TypeChecker::TypeCheckerImpl::ChkShiftExpr(ASTContext& ctx, Ty& target, Bin
     return isWellTyped;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynShiftExpr(ASTContext& ctx, BinaryExpr& be)
+Ptr<Ty> TypeCheckerImpl::SynShiftExpr(ASTContext& ctx, BinaryExpr& be)
 {
     CJC_NULLPTR_CHECK(be.leftExpr);
     CJC_NULLPTR_CHECK(be.rightExpr);
@@ -844,7 +843,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynShiftExpr(ASTContext& ctx, BinaryExpr& 
     return be.GetTy();
 }
 
-void TypeChecker::TypeCheckerImpl::DiagnoseForBinaryExpr(ASTContext& ctx, BinaryExpr& be)
+void TypeCheckerImpl::DiagnoseForBinaryExpr(ASTContext& ctx, BinaryExpr& be)
 {
     // `pivot` is responsible for the invalid type.
     std::vector<Ptr<BinaryExpr>> pivotStack = {&be};
@@ -905,7 +904,7 @@ void TypeChecker::TypeCheckerImpl::DiagnoseForBinaryExpr(ASTContext& ctx, Binary
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBinaryExpr(ASTContext& ctx, BinaryExpr& be)
+Ptr<Ty> TypeCheckerImpl::SynBinaryExpr(ASTContext& ctx, BinaryExpr& be)
 {
     if (be.desugarExpr) {
         return be.desugarExpr->GetTy();
@@ -949,7 +948,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBinaryExpr(ASTContext& ctx, BinaryExpr&
 /**
  * Synthesize all reference leaf nodes when BinaryExpr is checked as invalid.
  */
-void TypeChecker::TypeCheckerImpl::SynBinaryLeafs(ASTContext& ctx, BinaryExpr& be)
+void TypeCheckerImpl::SynBinaryLeafs(ASTContext& ctx, BinaryExpr& be)
 {
     auto id = Walker::GetNextWalkerID();
     std::function<VisitAction(Ptr<Node>)> synLeafs = [this, id, &ctx, &synLeafs](auto node) {
@@ -978,8 +977,7 @@ void TypeChecker::TypeCheckerImpl::SynBinaryLeafs(ASTContext& ctx, BinaryExpr& b
     Walker(&be, id, synLeafs).Walk();
 }
 
-std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::InferBinaryExprCaseBuiltIn(
-    ASTContext& ctx, BinaryExpr& be, Ptr<Ty>& inferRet)
+std::optional<Ptr<Ty>> TypeCheckerImpl::InferBinaryExprCaseBuiltIn(ASTContext& ctx, BinaryExpr& be, Ptr<Ty>& inferRet)
 {
     bool failNow = false;
     if (Utils::In(be.op, ARITHMETIC_OPERATOR)) {
@@ -1046,7 +1044,7 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::InferBinaryExprCaseBuiltIn(
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckFlowOperandsHaveNamedParam(const CallExpr& ce)
+bool TypeCheckerImpl::CheckFlowOperandsHaveNamedParam(const CallExpr& ce)
 {
     return std::any_of(ce.args.cbegin(), ce.args.cend(), [this](const OwnedPtr<FuncArg>& arg) {
         CJC_NULLPTR_CHECK(arg);
@@ -1059,7 +1057,7 @@ bool TypeChecker::TypeCheckerImpl::CheckFlowOperandsHaveNamedParam(const CallExp
     });
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, Ptr<Ty> target, BinaryExpr& be)
+bool TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, Ptr<Ty> target, BinaryExpr& be)
 {
     if (Ty::IsTyCorrect(be.GetTy())) {
         return !(target && typeManager.CheckTypeCompatibility(be.GetTy(), target) == TypeCompatibility::INCOMPATIBLE);
@@ -1128,7 +1126,7 @@ bool TypeChecker::TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, Ptr<Ty> target, 
     return true;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynFlowExpr(ASTContext& ctx, BinaryExpr& be)
+Ptr<Ty> TypeCheckerImpl::SynFlowExpr(ASTContext& ctx, BinaryExpr& be)
 {
     if (!ChkFlowExpr(ctx, nullptr, be)) {
         be.SetTy(TypeManager::GetInvalidTy());
@@ -1136,7 +1134,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynFlowExpr(ASTContext& ctx, BinaryExpr& b
     return be.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::IsCoalescingLeftTyValid(Ty& ty) const
+bool TypeCheckerImpl::IsCoalescingLeftTyValid(Ty& ty) const
 {
     Ptr<Ty> realTy = &ty;
     if (ty.IsPlaceholder()) {
@@ -1159,7 +1157,7 @@ bool TypeChecker::TypeCheckerImpl::IsCoalescingLeftTyValid(Ty& ty) const
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkCoalescingExpr(ASTContext& ctx, Ptr<Ty> tgtTy, BinaryExpr& be)
+bool TypeCheckerImpl::ChkCoalescingExpr(ASTContext& ctx, Ptr<Ty> tgtTy, BinaryExpr& be)
 {
     auto leftTy = SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, be.leftExpr.get());
     bool isLeftTyInvalid = !leftTy || !IsCoalescingLeftTyValid(*leftTy);
@@ -1196,7 +1194,7 @@ bool TypeChecker::TypeCheckerImpl::ChkCoalescingExpr(ASTContext& ctx, Ptr<Ty> tg
     return true;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynCoalescingExpr(ASTContext& ctx, BinaryExpr& be)
+Ptr<Ty> TypeCheckerImpl::SynCoalescingExpr(ASTContext& ctx, BinaryExpr& be)
 {
     if (!ChkCoalescingExpr(ctx, nullptr, be)) {
         be.SetTy(TypeManager::GetInvalidTy());
@@ -1204,7 +1202,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynCoalescingExpr(ASTContext& ctx, BinaryE
     return be.GetTy();
 }
 
-MatchResult TypeChecker::TypeCheckerImpl::PickConstaintFromTys(TyVar& tv, std::set<Ptr<AST::Ty>> tys, bool isUB)
+MatchResult TypeCheckerImpl::PickConstaintFromTys(TyVar& tv, std::set<Ptr<AST::Ty>> tys, bool isUB)
 {
     PData::CommitScope cs(typeManager.constraints);
     size_t cnt = 0;
@@ -1226,7 +1224,7 @@ MatchResult TypeChecker::TypeCheckerImpl::PickConstaintFromTys(TyVar& tv, std::s
     }
 }
 
-MatchResult TypeChecker::TypeCheckerImpl::PickConstaintFromTys(
+MatchResult TypeCheckerImpl::PickConstaintFromTys(
     Ty& tv1, Ty& tv2, std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Ty>>> tys, bool isUB)
 {
     PData::CommitScope cs(typeManager.constraints);

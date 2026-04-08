@@ -9,7 +9,7 @@
 using namespace Cangjie;
 using namespace AST;
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynResumeExpr(ASTContext& ctx, ResumeExpr& re)
+Ptr<Ty> TypeCheckerImpl::SynResumeExpr(ASTContext& ctx, ResumeExpr& re)
 {
     Ty* resumptionParamTy = typeManager.GetAnyTy();
 

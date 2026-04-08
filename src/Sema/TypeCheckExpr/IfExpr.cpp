@@ -30,7 +30,7 @@ bool IsIfExprWithoutElse(const IfExpr& ie)
 } // namespace
 
 // Syntax : if t1 then t2 else t3.
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIfExpr(const CheckerContext& ctx, IfExpr& ie)
+Ptr<Ty> TypeCheckerImpl::SynIfExpr(const CheckerContext& ctx, IfExpr& ie)
 {
     SynPos pos = ctx.SynthPos();
     CJC_NULLPTR_CHECK(ie.condExpr);
@@ -77,7 +77,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIfExpr(const CheckerContext& ctx, IfExp
     return ie.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkIfExpr(ASTContext& ctx, Ty& tgtTy, IfExpr& ie)
+bool TypeCheckerImpl::ChkIfExpr(ASTContext& ctx, Ty& tgtTy, IfExpr& ie)
 {
     CJC_NULLPTR_CHECK(ie.condExpr);
     CJC_NULLPTR_CHECK(ie.thenBody);
@@ -130,7 +130,7 @@ void PropagateCtxExpr(Pattern& pat, Expr& initializer)
 }
 }
 
-bool TypeChecker::TypeCheckerImpl::SynLetPatternDestructor(
+bool TypeCheckerImpl::SynLetPatternDestructor(
     ASTContext& ctx, LetPatternDestructor& lpd, bool suppressIntroducingVariableError)
 {
     CJC_NULLPTR_CHECK(lpd.initializer);
@@ -163,7 +163,7 @@ bool TypeChecker::TypeCheckerImpl::SynLetPatternDestructor(
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckCondition(ASTContext& ctx, Expr& e, bool suppressIntroducingVariableError)
+bool TypeCheckerImpl::CheckCondition(ASTContext& ctx, Expr& e, bool suppressIntroducingVariableError)
 {
     if (e.astKind == ASTKind::LET_PATTERN_DESTRUCTOR) {
         return SynLetPatternDestructor(ctx, StaticCast<LetPatternDestructor&>(e), suppressIntroducingVariableError);
@@ -189,8 +189,7 @@ bool TypeChecker::TypeCheckerImpl::CheckCondition(ASTContext& ctx, Expr& e, bool
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckBinaryCondition(
-    ASTContext& ctx, BinaryExpr& e, bool suppressIntroducingVariableError)
+bool TypeCheckerImpl::CheckBinaryCondition(ASTContext& ctx, BinaryExpr& e, bool suppressIntroducingVariableError)
 {
     Ptr<Ty> boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
     if (!IsCondition(e)) {
@@ -224,7 +223,7 @@ bool TypeChecker::TypeCheckerImpl::CheckBinaryCondition(
     return res;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkIfExprNoElse(ASTContext& ctx, Ty& target, IfExpr& ie)
+bool TypeCheckerImpl::ChkIfExprNoElse(ASTContext& ctx, Ty& target, IfExpr& ie)
 {
     Ptr<Ty> unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     ie.SetTy(unitTy);
@@ -240,7 +239,7 @@ bool TypeChecker::TypeCheckerImpl::ChkIfExprNoElse(ASTContext& ctx, Ty& target, 
     return isWellTyped && isTargetMatched;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkIfExprTwoBranches(ASTContext& ctx, Ty& target, IfExpr& ie)
+bool TypeCheckerImpl::ChkIfExprTwoBranches(ASTContext& ctx, Ty& target, IfExpr& ie)
 {
     // Now both thenBody and elseBody are guaranteed to be non-nullable.
     if (!Check(ctx, &target, ie.thenBody.get())) {

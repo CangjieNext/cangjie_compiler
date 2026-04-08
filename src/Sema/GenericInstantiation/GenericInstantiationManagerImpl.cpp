@@ -16,7 +16,7 @@
  *     eg: func test<T>(a: T) { // xxx}
  *         var a = test<Int64>
  *         After typecheck, the RefExpr ('test<Int64>')'s member ref.target was pointer to generic version of 'test'.
- *         the rearrange is to update 'refExpr.ref.target' from generic version to instantiated decl created in step 1.
+ *         the rearrange is to update 'refExpr.GetTarget()' from generic version to instantiated decl created in step 1.
  *    - Update 'typePattern''s compile-time matching status with instantiated types.
  * 3. Some 'Ty' has 'decl' and 'declPtr' members.
  *    We need to update type's corresponding 'decl' memebr to newly instantiated decl.
@@ -121,7 +121,7 @@ void ClearInstTysIsNeeded(Node& node)
         return;
     }
     if (auto re = DynamicCast<RefExpr*>(&node)) {
-        if (auto target = re->ref.target;
+        if (auto target = re->GetTarget();
             target && !target->GetTy()->HasGeneric() && !target->TestAnyAttr(Attribute::INTRINSIC, Attribute::GENERIC)) {
             re->instTys.clear();
             if (target->astKind != ASTKind::TYPE_ALIAS_DECL) {
@@ -130,11 +130,11 @@ void ClearInstTysIsNeeded(Node& node)
         }
         return;
     }
-    if (auto ma = DynamicCast<MemberAccess*>(&node); ma && ma->target && !ma->target->GetTy()->HasGeneric() &&
-        !ma->target->TestAnyAttr(Attribute::INTRINSIC, Attribute::GENERIC)) {
+    if (auto ma = DynamicCast<MemberAccess*>(&node); ma && ma->GetTarget() && !ma->GetTarget()->GetTy()->HasGeneric() &&
+        !ma->GetTarget()->TestAnyAttr(Attribute::INTRINSIC, Attribute::GENERIC)) {
         ma->instTys.clear();
-        if (ma->target->astKind != ASTKind::TYPE_ALIAS_DECL && !HasJavaAttr(*ma->target)) {
-            ma->SetTy(ma->target->GetTy());
+        if (ma->GetTarget()->astKind != ASTKind::TYPE_ALIAS_DECL && !HasJavaAttr(*ma->GetTarget())) {
+            ma->SetTy(ma->GetTarget()->GetTy());
         }
     }
 }
@@ -926,11 +926,11 @@ void GIM::GenericInstantiationManagerImpl::GenericMemberAccessInstantiate(Member
     }
     Walker walkBase(ma.baseExpr.get(), instantiationWalkerID, instantiator, contextReset);
     walkBase.Walk();
-    auto invalid = !ma.target || !ma.baseExpr || !Ty::IsTyCorrect(ma.GetTy());
-    if (invalid || ma.target->astKind == ASTKind::PACKAGE_DECL || TestManager::IsMockAccessor(*ma.target)) {
+    auto invalid = !ma.GetTarget() || !ma.baseExpr || !Ty::IsTyCorrect(ma.GetTy());
+    if (invalid || ma.GetTarget()->astKind == ASTKind::PACKAGE_DECL || TestManager::IsMockAccessor(*ma.GetTarget())) {
         return;
     }
-    auto target = GetRealTarget(ma.target);
+    auto target = GetRealTarget(ma.GetTarget());
     if (target->IsBuiltIn() || !RequireInstantiation(*target)) {
         return;
     }
@@ -973,18 +973,18 @@ void GIM::GenericInstantiationManagerImpl::GenericRefExprInstantiate(RefExpr& re
         walkArg.Walk();
     }
     // Generic type decleration do not need to be instantiated.
-    if (!re.ref.target || re.ref.target->astKind == ASTKind::PACKAGE_DECL || !Ty::IsTyCorrect(re.GetTy()) ||
-        re.ref.target->astKind == ASTKind::GENERIC_PARAM_DECL) {
+    if (!re.GetTarget() || re.GetTarget()->astKind == ASTKind::PACKAGE_DECL || !Ty::IsTyCorrect(re.GetTy()) ||
+        re.GetTarget()->astKind == ASTKind::GENERIC_PARAM_DECL) {
         return;
     }
-    auto target = GetRealTarget(re.ref.target);
+    auto target = GetRealTarget(re.GetTarget());
     if (target->IsBuiltIn() || !RequireInstantiation(*target)) {
         return;
     }
     auto instTys = re.instTys;
     // If target is constructor, instantiate outer structure declaration.
     if (IsClassOrEnumConstructor(*target)) {
-        target = re.ref.target->outerDecl;
+        target = re.GetTarget()->outerDecl;
         CJC_ASSERT(target != nullptr);
         auto baseTy = re.GetTy()->IsFunc() ? RawStaticCast<FuncTy*>(re.GetTy())->retTy : re.GetTy();
         instTys = typeManager.GetTypeArgs(*baseTy);
@@ -1313,13 +1313,13 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedTarget(
 void GIM::GenericInstantiationManagerImpl::RearrangeRefExprReference(RefExpr& re)
 {
     // Generic type decleration do not need to be instantiated.
-    if (!Ty::IsTyCorrect(re.GetTy()) || !re.ref.target || re.ref.target->IsBuiltIn() ||
-        re.ref.target->astKind == ASTKind::GENERIC_PARAM_DECL || !RequireInstantiation(*re.ref.target)) {
+    if (!Ty::IsTyCorrect(re.GetTy()) || !re.GetTarget() || re.GetTarget()->IsBuiltIn() ||
+        re.GetTarget()->astKind == ASTKind::GENERIC_PARAM_DECL || !RequireInstantiation(*re.GetTarget())) {
         return;
     }
     auto baseTy = re.GetTy();
     auto instTys = (re.isThis || re.isSuper) ? typeManager.GetTypeArgs(*re.GetTy()) : re.instTys;
-    if (IsClassOrEnumConstructor(*re.ref.target)) {
+    if (IsClassOrEnumConstructor(*re.GetTarget())) {
         baseTy = baseTy->IsFunc() ? RawStaticCast<FuncTy*>(baseTy)->retTy : baseTy;
         instTys = typeManager.GetTypeArgs(*baseTy);
     } else if (!structContext.empty()) {
@@ -1327,7 +1327,7 @@ void GIM::GenericInstantiationManagerImpl::RearrangeRefExprReference(RefExpr& re
         // For member used inside owner decl, the base type is type of current structure declaration.
         baseTy = GetDeclTy(*structDecl);
     }
-    re.ref.target = GetInstantiatedTarget(*baseTy, *re.ref.target, instTys, re.matchedParentTy);
+    re.SetTarget(GetInstantiatedTarget(*baseTy, *re.GetTarget(), instTys, re.matchedParentTy));
     // If the target of RefExpr has been instantiated, we should clear the field instTys of the latter.
     ClearInstTysIsNeeded(re);
 }
@@ -1336,17 +1336,17 @@ void GIM::GenericInstantiationManagerImpl::RearrangeMemberAccessReference(Member
 {
     Walker(ma.baseExpr.get(), rearrangeWalkerID, rearranger, contextReset).Walk();
     // BaseExpr of member access may be package decl which does no have sema type.
-    if (!ma.target || !ma.baseExpr || Ty::IsInitialTy(ma.GetTy()) || ma.target->IsBuiltIn()) {
+    if (!ma.GetTarget() || !ma.baseExpr || Ty::IsInitialTy(ma.GetTy()) || ma.GetTarget()->IsBuiltIn()) {
         return;
     }
     // MemberAccess's base may be package decl which does not have sema type.
     auto baseTy = Ty::IsTyCorrect(ma.baseExpr->GetTy()) ? ma.baseExpr->GetTy() : ma.GetTy();
     auto instTys = ma.instTys;
-    if (IsClassOrEnumConstructor(*ma.target)) {
+    if (IsClassOrEnumConstructor(*ma.GetTarget())) {
         baseTy = baseTy->IsFunc() ? RawStaticCast<FuncTy*>(baseTy)->retTy : baseTy;
         instTys = typeManager.GetTypeArgs(*baseTy);
     }
-    ma.target = GetInstantiatedTarget(*baseTy, *ma.target, instTys, ma.matchedParentTy);
+    ma.SetTarget(GetInstantiatedTarget(*baseTy, *ma.GetTarget(), instTys, ma.matchedParentTy));
     /**
      * For such case:
      * @Java
@@ -1387,10 +1387,10 @@ void GIM::GenericInstantiationManagerImpl::RearrangeTypeReference(Type& type)
     // Type only will be RefType or QualifiedType, guaranteed by caller.
     if (type.astKind == ASTKind::REF_TYPE) {
         auto& rt = static_cast<RefType&>(type);
-        rt.ref.target = instantiatedDecl;
+        rt.SetTarget(instantiatedDecl);
     } else {
         auto& qt = static_cast<QualifiedType&>(type);
-        qt.target = instantiatedDecl;
+        qt.SetTarget(instantiatedDecl);
     }
 }
 

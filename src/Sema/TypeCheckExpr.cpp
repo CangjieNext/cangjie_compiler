@@ -30,7 +30,7 @@ bool IsLocalDeclOutOfFuncBody(const Decl& decl, const FuncBody& curFuncBody)
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::UpdateAnyTy()
+void TypeCheckerImpl::UpdateAnyTy()
 {
     auto anyDecl = importManager.GetCoreDecl<InterfaceDecl>("Any");
     if (anyDecl && Ty::IsTyCorrect(anyDecl->GetTy())) {
@@ -38,7 +38,7 @@ void TypeChecker::TypeCheckerImpl::UpdateAnyTy()
     }
 }
 
-void TypeChecker::TypeCheckerImpl::UpdateCTypeTy()
+void TypeCheckerImpl::UpdateCTypeTy()
 {
     if (!ci->invocation.globalOptions.implicitPrelude) {
         return;
@@ -49,8 +49,7 @@ void TypeChecker::TypeCheckerImpl::UpdateCTypeTy()
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::IsLegalAccessFromStaticFunc(
-    const ASTContext& ctx, const RefExpr& re, const Decl& decl)
+bool TypeCheckerImpl::IsLegalAccessFromStaticFunc(const ASTContext& ctx, const RefExpr& re, const Decl& decl)
 {
     auto curFuncBody = GetCurFuncBody(ctx, re.scopeName);
     // First make sure we are in a static function, and target is not constructor function.
@@ -95,8 +94,7 @@ bool TypeChecker::TypeCheckerImpl::IsLegalAccessFromStaticFunc(
     return true;
 }
 
-void TypeChecker::TypeCheckerImpl::SetCaptureKind(
-    const ASTContext& ctx, const NameReferenceExpr& nre, FuncBody& curFuncBody) const
+void TypeCheckerImpl::SetCaptureKind(const ASTContext& ctx, const NameReferenceExpr& nre, FuncBody& curFuncBody) const
 {
     auto decl = nre.GetTarget();
     CJC_NULLPTR_CHECK(decl);
@@ -133,14 +131,14 @@ void TypeChecker::TypeCheckerImpl::SetCaptureKind(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CanTargetOfRefBeCaptured(
+void TypeCheckerImpl::CanTargetOfRefBeCaptured(
     const ASTContext& ctx, const NameReferenceExpr& nre, const Decl& decl, const FuncBody& curFuncBody) const
 {
     CanTargetOfRefBeCapturedCaseNominalDecl(ctx, nre, decl, curFuncBody);
     CanTargetOfRefBeCapturedCaseMutFunc(ctx, nre, decl, curFuncBody);
 }
 
-void TypeChecker::TypeCheckerImpl::CanTargetOfRefBeCapturedCaseNominalDecl(
+void TypeCheckerImpl::CanTargetOfRefBeCapturedCaseNominalDecl(
     const ASTContext& ctx, const NameReferenceExpr& nre, const Decl& decl, const FuncBody& curFuncBody) const
 {
     auto funcSrc = ScopeManager::GetOutMostSymbol(ctx, SymbolKind::FUNC, nre.scopeName);
@@ -167,7 +165,7 @@ void TypeChecker::TypeCheckerImpl::CanTargetOfRefBeCapturedCaseNominalDecl(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CanTargetOfRefBeCapturedCaseMutFunc(
+void TypeCheckerImpl::CanTargetOfRefBeCapturedCaseMutFunc(
     const ASTContext& ctx, const NameReferenceExpr& nre, const Decl& decl, const FuncBody& curFuncBody) const
 {
     auto funcSrc = ScopeManager::GetOutMostSymbol(ctx, SymbolKind::FUNC, nre.scopeName);
@@ -191,7 +189,7 @@ void TypeChecker::TypeCheckerImpl::CanTargetOfRefBeCapturedCaseMutFunc(
 }
 
 // Immutable function cannot access mutable function.
-void TypeChecker::TypeCheckerImpl::CheckImmutableFuncAccessMutableFunc(
+void TypeCheckerImpl::CheckImmutableFuncAccessMutableFunc(
     const Position& pos, const Node& srcNode, const Decl& destNode, bool isLeftStructValue) const
 {
     // Only need to check mutable accessing for struct 's var property.
@@ -207,8 +205,7 @@ void TypeChecker::TypeCheckerImpl::CheckImmutableFuncAccessMutableFunc(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckForbiddenFuncReferenceAccess(
-    const Position& pos, const FuncDecl& fd, const Decl& decl) const
+void TypeCheckerImpl::CheckForbiddenFuncReferenceAccess(const Position& pos, const FuncDecl& fd, const Decl& decl) const
 {
     if (!fd.outerDecl || !decl.outerDecl || !decl.IsFuncOrProp() ||
         decl.TestAnyAttr(Attribute::CONSTRUCTOR, Attribute::STATIC)) {
@@ -230,8 +227,7 @@ void TypeChecker::TypeCheckerImpl::CheckForbiddenFuncReferenceAccess(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::MarkAndCheckRefExprVarCaptureStatus(
-    const ASTContext& ctx, const NameReferenceExpr& nre) const
+void TypeCheckerImpl::MarkAndCheckRefExprVarCaptureStatus(const ASTContext& ctx, const NameReferenceExpr& nre) const
 {
     auto target = nre.GetTarget();
     if (!target || target->IsTypeDecl()) {
@@ -252,14 +248,14 @@ void TypeChecker::TypeCheckerImpl::MarkAndCheckRefExprVarCaptureStatus(
     }
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::GetRealTarget(Ptr<Expr> const node, Ptr<Decl> const target)
+Ptr<Decl> TypeCheckerImpl::GetRealTarget(Ptr<Expr> const node, Ptr<Decl> const target)
 {
     std::vector<Ptr<Decl>> targets = {target};
     HandleAlias(node, targets);
     return targets[0];
 }
 
-void TypeChecker::TypeCheckerImpl::SubstituteTypeForTypeAliasTypeMapping(
+void TypeCheckerImpl::SubstituteTypeForTypeAliasTypeMapping(
     const TypeAliasDecl& tad, const std::vector<Ptr<AST::Ty>>& typeArgs, TypeSubst& typeMapping) const
 {
     if (!tad.generic || tad.generic->typeParameters.size() != typeArgs.size()) {
@@ -290,13 +286,13 @@ void TypeChecker::TypeCheckerImpl::SubstituteTypeForTypeAliasTypeMapping(
  *   type C = B<Int64>
  * Generate T0->Rune for B and C.
  */
-TypeSubst TypeChecker::TypeCheckerImpl::GenerateTypeMappingForTypeAliasDecl(const TypeAliasDecl& tad) const
+TypeSubst TypeCheckerImpl::GenerateTypeMappingForTypeAliasDecl(const TypeAliasDecl& tad) const
 {
     std::unordered_set<Ptr<const TypeAliasDecl>> visited;
     return GenerateTypeMappingForTypeAliasDeclVisit(tad, visited);
 }
 
-TypeSubst TypeChecker::TypeCheckerImpl::GenerateTypeMappingForTypeAliasDeclVisit(
+TypeSubst TypeCheckerImpl::GenerateTypeMappingForTypeAliasDeclVisit(
     const TypeAliasDecl& tad, std::unordered_set<Ptr<const TypeAliasDecl>>& visited) const
 {
     TypeSubst typeMapping;
@@ -337,7 +333,7 @@ TypeSubst TypeChecker::TypeCheckerImpl::GenerateTypeMappingForTypeAliasDeclVisit
     return typeMapping;
 }
 
-void TypeChecker::TypeCheckerImpl::HandleAlias(Ptr<Expr> expr, std::vector<Ptr<Decl>>& targets)
+void TypeCheckerImpl::HandleAlias(Ptr<Expr> expr, std::vector<Ptr<Decl>>& targets)
 {
     for (auto& target : targets) {
         if (!target || target->astKind != ASTKind::TYPE_ALIAS_DECL) {
@@ -364,7 +360,7 @@ void TypeChecker::TypeCheckerImpl::HandleAlias(Ptr<Expr> expr, std::vector<Ptr<D
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckWarningOfCaptureVariable(const ASTContext& ctx, const RefExpr& re) const
+void TypeCheckerImpl::CheckWarningOfCaptureVariable(const ASTContext& ctx, const RefExpr& re) const
 {
     auto target = re.GetTarget();
     if (!Is<VarDecl>(target) || Is<FuncParam>(target)) {
@@ -387,7 +383,7 @@ void TypeChecker::TypeCheckerImpl::CheckWarningOfCaptureVariable(const ASTContex
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckOptionBox(Ty& target, Ty& ty)
+bool TypeCheckerImpl::CheckOptionBox(Ty& target, Ty& ty)
 {
     if (typeManager.IsSubtype(&ty, &target)) {
         return true;

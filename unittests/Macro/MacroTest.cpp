@@ -245,8 +245,8 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP)
         if (curNode->astKind == ASTKind::MACRO_EXPAND_EXPR) {
             // Targets can be found for both failed and successful macrocalls.
             auto mee = StaticAs<ASTKind::MACRO_EXPAND_EXPR>(curNode);
-            EXPECT_TRUE(mee->invocation.target);
-            auto fileID = mee->invocation.target->begin.fileID;
+            EXPECT_TRUE(mee->invocation.GetTarget());
+            auto fileID = mee->invocation.GetTarget()->begin.fileID;
             auto path = instance->GetSourceManager().GetSource(fileID).path;
             if (mee->invocation.identifier == "B1") {
 #ifdef _WIN32
@@ -330,8 +330,8 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP_Paralle)
         if (curNode->astKind == ASTKind::MACRO_EXPAND_EXPR) {
             // Targets can be found for both failed and successful macrocalls.
             auto mee = StaticAs<ASTKind::MACRO_EXPAND_EXPR>(curNode);
-            EXPECT_TRUE(mee->invocation.target);
-            auto fileID = mee->invocation.target->begin.fileID;
+            EXPECT_TRUE(mee->invocation.GetTarget());
+            auto fileID = mee->invocation.GetTarget()->begin.fileID;
             auto path = instance->GetSourceManager().GetSource(fileID).path;
             if (mee->invocation.identifier == "B1") {
 #ifdef _WIN32

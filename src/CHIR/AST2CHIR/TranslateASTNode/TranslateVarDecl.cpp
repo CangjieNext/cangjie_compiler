@@ -28,13 +28,13 @@ bool ShouldCreateAlloc(const AST::VarDecl& decl, const Cangjie::GlobalOptions& o
     // `allocate` and `store` will affect the performance.
     if (decl.initializer && decl.initializer->astKind == AST::ASTKind::REF_EXPR) {
         auto& refExpr = StaticCast<AST::RefExpr>(*decl.initializer);
-        if (refExpr.ref.target && refExpr.ref.target->astKind == AST::ASTKind::FUNC_DECL &&
-            refExpr.ref.target->TestAnyAttr(AST::Attribute::GLOBAL, AST::Attribute::STATIC)) {
+        if (refExpr.GetTarget() && refExpr.GetTarget()->astKind == AST::ASTKind::FUNC_DECL &&
+            refExpr.GetTarget()->TestAnyAttr(AST::Attribute::GLOBAL, AST::Attribute::STATIC)) {
             return true;
         }
     }
     if (decl.initializer && decl.initializer->astKind == AST::ASTKind::MEMBER_ACCESS) {
-        auto target = StaticCast<AST::MemberAccess>(*decl.initializer).target;
+        auto target = StaticCast<AST::MemberAccess>(*decl.initializer).GetTarget();
         if (target && target->astKind == AST::ASTKind::FUNC_DECL && target->TestAttr(AST::Attribute::STATIC)) {
             return true;
         }

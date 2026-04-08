@@ -383,7 +383,7 @@ void JavaDesugarManager::GenerateForCJExtendMapping(AST::ExtendDecl& extendDecl)
     CJC_ASSERT(IsCJMapping(extendDecl));
 
     if (auto rt = DynamicCast<const RefType*>(extendDecl.extendedType.get())) {
-        if (IsImpl(*rt->ref.target)) {
+        if (IsImpl(*rt->GetTarget())) {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_extend_ref_target_cannot_be_java_impl, extendDecl);
             return;
         }
@@ -1253,7 +1253,7 @@ void JavaDesugarManager::DesugarInCJMapping(File& file)
         }
         if (auto extendDecl = As<ASTKind::EXTEND_DECL>(decl.get())) {
             if (auto rt = DynamicCast<const RefType*>(extendDecl->extendedType.get())) {
-                ref2extend[rt->ref.target].emplace_back(extendDecl);
+                ref2extend[rt->GetTarget()].emplace_back(extendDecl);
             }
         } else {
             genDecls.emplace_back(decl.get());

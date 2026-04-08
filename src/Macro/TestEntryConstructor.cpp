@@ -26,8 +26,8 @@ OwnedPtr<CallExpr> CreateMethodCall(
     auto method = MakeOwnedNode<MemberAccess>();
     method->baseExpr = CreateRefExpr(refName);
     method->field = decl->identifier;
-    method->target = decl;
-    method->targets.emplace_back(decl);
+    method->SetTarget(decl);
+    method->AddTarget(decl);
     return CreateCallExpr(std::move(method), std::move(args), decl);
 }
 

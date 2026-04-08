@@ -93,7 +93,7 @@ OwnedPtr<RefType> Wrap2RefType(Ptr<Ty> ty)
     refType->SetTy(ty);
     refType->ref.identifier = ty->name;
     if (auto decl = Ty::GetDeclPtrOfTy(ty)) {
-        refType->ref.target = decl;
+        refType->SetTarget(decl);
         refType->ref.identifier = Is<ClassThisTy>(refType->GetTy()) ? "This" : decl->identifier.Val();
     }
     if (hasTypeAlias) {
@@ -162,9 +162,9 @@ void UpdateType(OwnedPtr<Type>& astType, OwnedPtr<Type> loadedType)
         astType->SetTy(loadedType->GetTy());
         astType->EnableAttr(Attribute::IS_CHECK_VISITED);
         if (auto rt = DynamicCast<RefType*>(astType.get())) {
-            rt->ref.target = loadedType->GetTarget();
+            rt->SetTarget(loadedType->GetTarget());
         } else if (auto qt = DynamicCast<QualifiedType*>(astType.get())) {
-            qt->target = loadedType->GetTarget();
+            qt->SetTarget(loadedType->GetTarget());
         }
     }
 }
@@ -458,7 +458,7 @@ void ASTLoader::ASTLoaderImpl::LoadAnnotationBaseExpr(const PackageFormat::Anno&
     auto targetCtr = GetDeclFromIndex(rawAnno.target());
     if (targetCtr) {
         auto re = MakeOwned<RefExpr>();
-        re->ref.target = targetCtr;
+        re->SetTarget(targetCtr);
         re->ref.identifier = targetCtr->identifier;
         re->SetTy(targetCtr->GetTy());
         anno.baseExpr = std::move(re);
@@ -592,7 +592,7 @@ void ASTLoader::ASTLoaderImpl::LoadExprRefs(const PackageFormat::Expr& exprObj, 
         case PackageFormat::ExprKind_MemberAccess: {
             auto info = exprObj.info_as_ReferenceInfo();
             CJC_ASSERT(info && info->instTys());
-            StaticCast<MemberAccess&>(expr).target = GetDeclFromIndex(info->target());
+            StaticCast<MemberAccess&>(expr).SetTarget(GetDeclFromIndex(info->target()));
             for (uoffset_t i = 0; i < info->instTys()->size(); ++i) {
                 StaticCast<MemberAccess&>(expr).instTys.emplace_back(LoadType(info->instTys()->Get(i)));
             }
@@ -602,7 +602,7 @@ void ASTLoader::ASTLoaderImpl::LoadExprRefs(const PackageFormat::Expr& exprObj, 
         case PackageFormat::ExprKind_RefExpr: {
             auto info = exprObj.info_as_ReferenceInfo();
             CJC_ASSERT(info && info->instTys());
-            StaticCast<RefExpr&>(expr).ref.target = GetDeclFromIndex(info->target());
+            StaticCast<RefExpr&>(expr).SetTarget(GetDeclFromIndex(info->target()));
             for (uoffset_t i = 0; i < info->instTys()->size(); ++i) {
                 StaticCast<RefExpr&>(expr).instTys.emplace_back(LoadType(info->instTys()->Get(i)));
             }

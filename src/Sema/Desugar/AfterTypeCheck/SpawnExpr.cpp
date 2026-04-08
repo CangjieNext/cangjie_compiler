@@ -13,7 +13,7 @@ using namespace Cangjie;
 using namespace AST;
 
 // The desugar of a `SpawnArg` is the form `arg.getSchedulerHandle()`
-void TypeChecker::TypeCheckerImpl::DesugarSpawnArgExpr(const ASTContext& ctx, const AST::SpawnExpr& se)
+void TypeCheckerImpl::DesugarSpawnArgExpr(const ASTContext& ctx, const AST::SpawnExpr& se)
 {
     if (!Ty::IsTyCorrect(se.GetTy()) || se.arg->desugarExpr) {
         return;
@@ -42,7 +42,7 @@ void TypeChecker::TypeCheckerImpl::DesugarSpawnArgExpr(const ASTContext& ctx, co
 
 // The `futureObj` of a `SpawnExpr` is `VarDecl` of the form `let futureObj = Future(task)`
 // NOTE: This syntax sugar is stored in `futureObj` rather than `desugarExpr`.
-void TypeChecker::TypeCheckerImpl::DesugarSpawnExpr(const ASTContext& ctx, AST::SpawnExpr& se)
+void TypeCheckerImpl::DesugarSpawnExpr(const ASTContext& ctx, AST::SpawnExpr& se)
 {
     if (!Ty::IsTyCorrect(se.GetTy()) || se.futureObj) {
         return;
@@ -66,7 +66,7 @@ void TypeChecker::TypeCheckerImpl::DesugarSpawnExpr(const ASTContext& ctx, AST::
     // Prepare the `baseFunc` of the `Future` function call.
     auto re = CreateRefExprInCore("Future");
     re->isAlone = false;
-    re->ref.target = initDecl;
+    re->SetTarget(initDecl);
     re->instTys.emplace_back(taskTy->retTy);
     re->SetTy(typeManager.GetInstantiatedTy(
         initDecl->GetTy(), {{StaticCast<GenericsTy*>(futureClass->GetTy()->typeArgs.front()), taskTy->retTy}}));

@@ -201,7 +201,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromVarInit(const AST::R
      */
     auto funcType = StaticCast<FuncType*>(TranslateType(*expr.GetTy()));
     auto paramTys = funcType->GetParamTypes();
-    auto funcDecl = StaticCast<AST::FuncDecl*>(expr.ref.target);
+    auto funcDecl = StaticCast<AST::FuncDecl*>(expr.GetTarget());
     CJC_NULLPTR_CHECK(funcDecl->outerDecl);
     CJC_ASSERT(funcDecl->TestAttr(AST::Attribute::STATIC));
     auto parentType = GetNominalSymbolTable(*funcDecl->outerDecl)->GetType();
@@ -226,7 +226,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
     auto thisType = currentFunc->GetParentCustomTypeOrExtendedType();
     CJC_NULLPTR_CHECK(thisType);
     auto thisDerefTy = thisType;
-    auto funcDecl = StaticCast<AST::FuncDecl*>(expr.ref.target);
+    auto funcDecl = StaticCast<AST::FuncDecl*>(expr.GetTarget());
     thisType = AddRefIfFuncIsMutOrClass(*thisType, *funcDecl, builder);
 
     // 2. calculate if is virtual func call
@@ -270,7 +270,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
 {
     // 1. calculate `thisType`
     auto thisType = TranslateType(*expr.baseExpr->GetTy());
-    auto funcDecl = StaticCast<AST::FuncDecl*>(expr.target);
+    auto funcDecl = StaticCast<AST::FuncDecl*>(expr.GetTarget());
     thisType = AddRefIfFuncIsMutOrClass(*thisType, *funcDecl, builder);
 
     // 2. calculate if is virtual func call
@@ -347,19 +347,19 @@ Value* Translator::GetWrapperFuncFromMemberAccess(Type& thisType, const std::str
 Ptr<Value> Translator::TranslateStaticTargetOrPackageMemberAccess(const AST::MemberAccess& member)
 {
     // 1. classA.foo, pkgA.classB.foo
-    if (member.target->astKind == AST::ASTKind::FUNC_DECL && member.target->outerDecl != nullptr) {
+    if (member.GetTarget()->astKind == AST::ASTKind::FUNC_DECL && member.GetTarget()->outerDecl != nullptr) {
         auto instFuncType = GetInstCalleeInfoFromMemberAccess(member);
-        return WrapMemberMethodByLambda(*StaticCast<FuncDecl*>(member.target), instFuncType, nullptr);
+        return WrapMemberMethodByLambda(*StaticCast<FuncDecl*>(member.GetTarget()), instFuncType, nullptr);
     }
-    auto targetNode = GetSymbolTable(*member.target);
-    if (member.target->astKind == AST::ASTKind::VAR_DECL) {
+    auto targetNode = GetSymbolTable(*member.GetTarget());
+    if (member.GetTarget()->astKind == AST::ASTKind::VAR_DECL) {
         // 2. classA.x, pkgA.x, pkgA.classB.x
-        auto targetTy = TranslateType(*member.target->GetTy());
+        auto targetTy = TranslateType(*member.GetTarget()->GetTy());
         auto resTy = TranslateType(*member.GetTy());
         auto loc = TranslateLocation(member);
         auto targetVal = CreateAndAppendExpression<Load>(loc, targetTy, targetNode, currentBlock)->GetResult();
         return TypeCastOrBoxIfNeeded(*targetVal, *resTy, loc);
-    } else if (member.target->astKind == AST::ASTKind::FUNC_DECL) {
+    } else if (member.GetTarget()->astKind == AST::ASTKind::FUNC_DECL) {
         // 3. pkgA.foo
         return targetNode;
     } else {
@@ -371,7 +371,7 @@ Ptr<Value> Translator::TranslateStaticTargetOrPackageMemberAccess(const AST::Mem
 Ptr<Value> Translator::TranslateFuncMemberAccess(const AST::MemberAccess& member)
 {
     auto instFuncType = GetInstCalleeInfoFromMemberAccess(member);
-    auto funcDecl = StaticCast<AST::FuncDecl*>(member.target);
+    auto funcDecl = StaticCast<AST::FuncDecl*>(member.GetTarget());
     CJC_NULLPTR_CHECK(funcDecl->outerDecl);
     auto thisVal = GetCurrentThisObjectByMemberAccess(member, *funcDecl, TranslateLocation(*member.baseExpr));
     return WrapMemberMethodByLambda(*funcDecl, instFuncType, thisVal);
@@ -497,7 +497,7 @@ Ptr<Value> Translator::TranslateEnumMemberAccess(const AST::MemberAccess& member
 Ptr<Value> Translator::TranslateInstanceMemberMemberAccess(const AST::MemberAccess& member)
 {
     Ptr<Value> res = nullptr;
-    switch (member.target->astKind) {
+    switch (member.GetTarget()->astKind) {
         case ASTKind::VAR_DECL: {
             res = TranslateVarMemberAccess(member);
             break;
@@ -514,7 +514,7 @@ Ptr<Value> Translator::TranslateInstanceMemberMemberAccess(const AST::MemberAcce
 
 Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST::MemberAccess& member)
 {
-    auto target = member.target;
+    auto target = member.GetTarget();
     CJC_ASSERT(target->astKind == AST::ASTKind::VAR_DECL);
     const auto& loc = TranslateLocation(member);
 
@@ -541,14 +541,14 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
             base = base->desugarExpr ? base->desugarExpr.get().get() : base;
             if (auto ma = DynamicCast<AST::MemberAccess*>(base)) {
                 bool isTargetClassOrClassUpper = ma->GetTy()->IsClassLike() || ma->GetTy()->IsGeneric();
-                if ((!isTargetClassOrClassUpper || path.empty()) && !ma->target->TestAttr(AST::Attribute::STATIC) &&
-                    ma->target->astKind != ASTKind::PROP_DECL && !IsPackageMemberAccess(*ma)) {
-                    auto name = ma->target->identifier.Val();
+                if ((!isTargetClassOrClassUpper || path.empty()) && !ma->GetTarget()->TestAttr(AST::Attribute::STATIC) &&
+                    ma->GetTarget()->astKind != ASTKind::PROP_DECL && !IsPackageMemberAccess(*ma)) {
+                    auto name = ma->GetTarget()->identifier.Val();
                     CJC_ASSERT(!name.empty());
                     path.insert(path.begin(), name);
-                    readOnly = readOnly || !StaticCast<AST::VarDecl*>(ma->target)->isVar;
+                    readOnly = readOnly || !StaticCast<AST::VarDecl*>(ma->GetTarget())->isVar;
 
-                    targetBaseASTTy = ma->target->outerDecl->GetTy();
+                    targetBaseASTTy = ma->GetTarget()->outerDecl->GetTy();
                     CJC_ASSERT(targetBaseASTTy->IsStruct() || targetBaseASTTy->IsClass());
 
                     base = ma->baseExpr.get();
@@ -557,7 +557,7 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
                 break;
             } else if (auto ref = DynamicCast<AST::RefExpr*>(base)) {
                 if (!ref->isThis && !ref->isSuper && !ref->GetTy()->IsClassLike() && !ref->GetTy()->IsGeneric()) {
-                    auto refTarget = ref->ref.target;
+                    auto refTarget = ref->GetTarget();
                     if (refTarget->outerDecl &&
                         (refTarget->outerDecl->astKind == AST::ASTKind::STRUCT_DECL ||
                             refTarget->outerDecl->astKind == AST::ASTKind::CLASS_DECL) &&
@@ -650,12 +650,12 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
 Ptr<Value> Translator::Visit(const AST::MemberAccess& member)
 {
     CJC_NULLPTR_CHECK(member.baseExpr);
-    CJC_NULLPTR_CHECK(member.target);
-    if (member.target && (member.target->TestAttr(AST::Attribute::STATIC) || IsPackageMemberAccess(member))) {
+    CJC_NULLPTR_CHECK(member.GetTarget());
+    if (member.GetTarget() && (member.GetTarget()->TestAttr(AST::Attribute::STATIC) || IsPackageMemberAccess(member))) {
         return TranslateStaticTargetOrPackageMemberAccess(member);
-    } else if (member.target->TestAttr(AST::Attribute::ENUM_CONSTRUCTOR)) {
+    } else if (member.GetTarget()->TestAttr(AST::Attribute::ENUM_CONSTRUCTOR)) {
         return TranslateEnumMemberAccess(member);
-    } else if (IsInstanceMember(*member.target)) {
+    } else if (IsInstanceMember(*member.GetTarget())) {
         return TranslateInstanceMemberMemberAccess(member);
     }
     InternalError("translating unsupported MemberAccess");

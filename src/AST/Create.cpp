@@ -384,7 +384,7 @@ OwnedPtr<RefExpr> CreateRefExpr(Decl& vd)
 {
     auto ret = MakeOwned<RefExpr>();
     ret->ref.identifier = vd.identifier;
-    ret->ref.target = &vd;
+    ret->SetTarget(&vd);
     ret->SetTy(vd.GetTy());
     ret->EnableAttr(Attribute::COMPILER_ADD);
     return ret;
@@ -393,7 +393,7 @@ OwnedPtr<RefExpr> CreateRefExpr(Decl& vd, const Node& pos)
 {
     auto ret = MakeOwned<RefExpr>();
     ret->ref.identifier = {vd.identifier.Val(), pos.GetBegin(), pos.GetEnd()};
-    ret->ref.target = &vd;
+    ret->SetTarget(&vd);
     ret->SetTy(vd.GetTy());
     ret->begin = pos.GetBegin();
     ret->end = pos.GetEnd();
@@ -416,7 +416,7 @@ OwnedPtr<RefType> CreateRefType(InheritableDecl& typeDecl, Ptr<Ty> instantTy)
 {
     auto ret = MakeOwned<RefType>();
     ret->ref.identifier = typeDecl.identifier;
-    ret->ref.target = &typeDecl;
+    ret->SetTarget(&typeDecl);
     ret->SetTy(instantTy ? instantTy : typeDecl.GetTy());
     ret->EnableAttr(Attribute::COMPILER_ADD);
     return ret;
@@ -456,7 +456,7 @@ OwnedPtr<MemberAccess> CreateMemberAccess(OwnedPtr<Expr> expr, const std::string
         for (auto fieldDecl : decl.GetMemberDeclPtrs()) {
             if (fieldDecl->identifier == field) {
                 memberAccess->SetTy(fieldDecl->GetTy());
-                memberAccess->target = fieldDecl;
+                memberAccess->SetTarget(fieldDecl);
                 return true;
             }
         }
@@ -498,7 +498,7 @@ OwnedPtr<AST::MemberAccess> CreateMemberAccess(OwnedPtr<AST::Expr> expr, Decl& f
     }
     ret->field = field.identifier.Val();
     ret->field.SetRaw(field.identifier.IsRaw());
-    ret->target = &field;
+    ret->SetTarget(&field);
     ret->SetTy(field.GetTy());
     ret->isExposedAccess = field.GetTy() && field.GetTy()->IsGeneric();
     ret->EnableAttr(Attribute::COMPILER_ADD);
@@ -689,7 +689,7 @@ OwnedPtr<ThrowExpr> CreateThrowExpr(Decl& var)
 {
     auto refExpr = MakeOwned<RefExpr>();
     refExpr->ref.identifier = var.identifier;
-    refExpr->ref.target = &var;
+    refExpr->SetTarget(&var);
     auto ret = MakeOwned<ThrowExpr>();
     ret->expr = std::move(refExpr);
     return ret;
@@ -699,7 +699,7 @@ OwnedPtr<PerformExpr> CreatePerformExpr(Decl& var)
 {
     auto refExpr = MakeOwned<RefExpr>();
     refExpr->ref.identifier = var.identifier;
-    refExpr->ref.target = &var;
+    refExpr->SetTarget(&var);
     auto ret = MakeOwned<PerformExpr>();
     ret->expr = std::move(refExpr);
     return ret;

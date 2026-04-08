@@ -22,7 +22,7 @@
 #include "cangjie/AST/Node.h"
 
 namespace Cangjie {
-class TypeChecker::EnumSugarChecker {
+class EnumSugarChecker {
 public:
     EnumSugarChecker(TypeCheckerImpl& typeChecker, ASTContext& ctx, AST::RefExpr& re)
         : typeChecker(typeChecker),

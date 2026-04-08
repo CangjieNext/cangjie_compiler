@@ -55,7 +55,7 @@ bool ChkIfImportBase(DiagnosticEngine& diag, const ImportManager& im, const IfAv
 }
 } // namespace
 
-bool TypeChecker::TypeCheckerImpl::ChkIfAvailableExpr(ASTContext& ctx, Ty& ty, IfAvailableExpr& ie)
+bool TypeCheckerImpl::ChkIfAvailableExpr(ASTContext& ctx, Ty& ty, IfAvailableExpr& ie)
 {
     auto exprTy = SynIfAvailableExpr(ctx, ie);
     if (!Ty::IsTyCorrect(exprTy)) {
@@ -68,7 +68,7 @@ bool TypeChecker::TypeCheckerImpl::ChkIfAvailableExpr(ASTContext& ctx, Ty& ty, I
     return true;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIfAvailableExpr(ASTContext& ctx, IfAvailableExpr& iae)
+Ptr<Ty> TypeCheckerImpl::SynIfAvailableExpr(ASTContext& ctx, IfAvailableExpr& iae)
 {
     // Desugar before type checker.
     auto ie = DynamicCast<IfExpr>(iae.desugarExpr.get());

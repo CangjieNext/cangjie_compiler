@@ -282,7 +282,7 @@ private:
 using SynResult = RetValue<Candidate>;
 class TypeChecker::Synthesizer : public RefNodeWalker<SynResult> {
 public:
-    Synthesizer(TypeChecker::TypeCheckerImpl& typeChecker, ASTContext& ctx, Expr& expr, const Position& pos)
+    Synthesizer(TypeCheckerImpl& typeChecker, ASTContext& ctx, Expr& expr, const Position& pos)
         : RefNodeWalker(expr), checker(typeChecker), ctx(ctx), pos(pos)
     {
     }
@@ -307,21 +307,21 @@ protected:
             re.isAlone = false;
             re.callOrPattern = DynamicCast<CallExpr*>(parentExpr);
             if (parentExpr->IsReferenceExpr()) {
-                return SynResult(re.ref.targets);
+                return SynResult(re.GetTargets());
             }
             checker.InferRefExpr(ctx, re);
-            if (!instTys.empty() && !re.ref.targets.empty()) {
+            if (!instTys.empty() && !re.GetTargets().empty()) {
                 std::unordered_set<Ptr<Ty>> tys;
-                for (auto decl : re.ref.targets) {
+                for (auto decl : re.GetTargets()) {
                     auto typeMapping = TypeCheckUtil::GenerateTypeMapping(*decl, instTys);
                     tys.emplace(checker.typeManager.GetInstantiatedTy(decl->GetTy(), typeMapping));
                 }
                 // Update current decl status for parent expr when return type result.
-                wasTypeCall = re.callOrPattern && re.ref.target && re.ref.target->IsTypeDecl();
+                wasTypeCall = re.callOrPattern && re.GetTarget() && re.GetTarget()->IsTypeDecl();
                 return SynResult(tys);
             }
         }
-        return SynResult(re.ref.targets);
+        return SynResult(re.GetTargets());
     }
 
     // Convert decls to tys with type instantiation.
@@ -355,12 +355,16 @@ protected:
         for (auto ty : tys) {
             std::vector<Ptr<Decl>> curTargets;
             ma->baseExpr->SetTy(ty);
-            ma->targets.clear();
+            ma->SetTargets({});
             // Set dummy target type to skip inference checking.
             ctx.targetTypeMap[ma.get()] = ty;
             auto target = checker.GetObjMemberAccessTarget(ctx, *ma, *ty);
-            target && ma->targets.empty() ? curTargets.insert(curTargets.end(), target)
-                                          : curTargets.insert(curTargets.end(), ma->targets.begin(), ma->targets.end());
+            if (target && ma->GetTargets().empty()) {
+                curTargets.insert(curTargets.end(), target);
+            } else {
+                auto ts = ma->GetTargets();
+                curTargets.insert(curTargets.end(), ts.begin(), ts.end());
+            }
             // Convert decls to tys for further non-reference synthesizing.
             auto foundTys = GetCandidateTysForMemberAccess(*ty, {}, curTargets);
             resultTys.merge(foundTys);
@@ -388,14 +392,17 @@ protected:
             if (parentExpr == nullptr || !parentExpr->IsReferenceExpr()) {
                 checker.InferMemberAccess(ctx, ma);
             }
-            (ma.target && ma.targets.empty())
-                ? candidates.insert(candidates.end(), ma.target)
-                : candidates.insert(candidates.end(), ma.targets.begin(), ma.targets.end());
+            if (ma.GetTarget() && ma.GetTargets().empty()) {
+                candidates.insert(candidates.end(), ma.GetTarget());
+            } else {
+                const auto ts = ma.GetTargets();
+                candidates.insert(candidates.end(), ts.begin(), ts.end());
+            }
             CJC_NULLPTR_CHECK(ma.baseExpr);
             // If the 'parentExpr' existed and the 'candidates' is not empty, convert result to tys.
             if (parentExpr != nullptr && !candidates.empty() && ma.baseExpr->GetTy()) {
                 // Update current decl status for parent expr when return type result.
-                wasTypeCall = ma.callOrPattern && ma.target && ma.target->IsTypeDecl();
+                wasTypeCall = ma.callOrPattern && ma.GetTarget() && ma.GetTarget()->IsTypeDecl();
                 auto tys = GetCandidateTysForMemberAccess(*ma.baseExpr->GetTy(), instTys, candidates);
                 return SynResult(tys);
             }
@@ -680,7 +687,7 @@ protected:
     };
 
 private:
-    TypeChecker::TypeCheckerImpl& checker;
+    TypeCheckerImpl& checker;
     ASTContext& ctx;
     Position pos;
     std::stack<Ptr<Expr>> ctxExprs;
@@ -754,7 +761,7 @@ void TypeChecker::RemoveTargetNotMeetExtendConstraint(const Ptr<AST::Ty> baseTy,
     return impl->RemoveTargetNotMeetExtendConstraint(baseTy, targets);
 }
 
-Candidate TypeChecker::TypeCheckerImpl::SynReferenceSeparately(
+Candidate TypeCheckerImpl::SynReferenceSeparately(
     ASTContext& ctx, const std::string& scopeName, Expr& expr, bool hasLocalDecl)
 {
     if (ctx.curPackage->files.empty()) {
@@ -772,6 +779,6 @@ Candidate TypeChecker::TypeCheckerImpl::SynReferenceSeparately(
     auto ds = DiagSuppressor(diag);
     Position pos = GetRelativePos(ctx, scope, baseName, hasLocalDecl);
     // Previous checking guarantees the expresion only combined with name reference accessing/calling/subscripting.
-    auto results = Synthesizer(*this, ctx, *cloned, pos)();
+    auto results = TypeChecker::Synthesizer(*this, ctx, *cloned, pos)();
     return results;
 }

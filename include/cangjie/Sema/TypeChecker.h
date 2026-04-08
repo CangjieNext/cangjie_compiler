@@ -15,13 +15,12 @@
 
 #include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Node.h"
-#include "cangjie/Frontend/CompilerInstance.h"
 
 namespace Cangjie {
 class InstCtxScope;
 class TypeChecker {
 public:
-    explicit TypeChecker(CompilerInstance* ci);
+    explicit TypeChecker(class CompilerInstance* ci);
     ~TypeChecker();
 
     /**
@@ -65,8 +64,8 @@ private:
     class Synthesizer;
     /** The class for checking enum sugar. */
     class EnumSugarChecker;
-    class TypeCheckerImpl;
-    std::unique_ptr<TypeCheckerImpl> impl;
+    friend class TypeCheckerImpl;
+    std::unique_ptr<class TypeCheckerImpl> impl;
 }; // class TypeChecker
 } // namespace Cangjie
 #endif

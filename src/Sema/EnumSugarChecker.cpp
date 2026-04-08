@@ -20,7 +20,7 @@ using namespace TypeCheckUtil;
 using namespace AST;
 using namespace Sema;
 
-bool TypeChecker::EnumSugarChecker::CheckVarDeclTargets()
+bool EnumSugarChecker::CheckVarDeclTargets()
 {
     // Type for FuncDecls are inferred and decided later.
     // Enum member without parameter is not supported to do type inference.
@@ -44,7 +44,7 @@ bool TypeChecker::EnumSugarChecker::CheckVarDeclTargets()
     return true;
 }
 
-void TypeChecker::EnumSugarChecker::CheckGenericEnumSugarWithTypeArgs(Ptr<EnumDecl> ed)
+void EnumSugarChecker::CheckGenericEnumSugarWithTypeArgs(Ptr<EnumDecl> ed)
 {
     if (!ed) {
         enumSugarTargets.clear();
@@ -68,7 +68,7 @@ void TypeChecker::EnumSugarChecker::CheckGenericEnumSugarWithTypeArgs(Ptr<EnumDe
     refExpr.SetTy(typeChecker.typeManager.GetInstantiatedTy(refExpr.GetTy(), typeMapping));
 }
 
-void TypeChecker::EnumSugarChecker::CheckGenericEnumSugarWithoutTypeArgs(Ptr<const EnumDecl> ed)
+void EnumSugarChecker::CheckGenericEnumSugarWithoutTypeArgs(Ptr<const EnumDecl> ed)
 {
     auto argSize = refExpr.OuterArgSize();
     auto foundTargetType = ctx.targetTypeMap.find(&refExpr);
@@ -80,7 +80,7 @@ void TypeChecker::EnumSugarChecker::CheckGenericEnumSugarWithoutTypeArgs(Ptr<con
     }
 }
 
-Ptr<Decl> TypeChecker::EnumSugarChecker::CheckEnumSugarTargets()
+Ptr<Decl> EnumSugarChecker::CheckEnumSugarTargets()
 {
     auto it = std::find_if(enumSugarTargets.cbegin(), enumSugarTargets.cend(),
         [](Ptr<const Decl> decl) { return decl->astKind == ASTKind::VAR_DECL; });
@@ -96,7 +96,7 @@ Ptr<Decl> TypeChecker::EnumSugarChecker::CheckEnumSugarTargets()
     return target;
 }
 
-std::pair<bool, std::vector<Ptr<Decl>>> TypeChecker::EnumSugarChecker::Resolve()
+std::pair<bool, std::vector<Ptr<Decl>>> EnumSugarChecker::Resolve()
 {
     enumSugarTargets = enumSugarTargetsFinder.FindEnumSugarTargets();
     if (enumSugarTargets.empty()) {

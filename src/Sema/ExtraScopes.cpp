@@ -77,8 +77,8 @@ void TyVarScope::AddTyVar(Ptr<GenericsTy> tyVar)
     tyVars.push_back(tyVar);
 }
 
-InstCtxScope::InstCtxScope(TypeChecker::TypeCheckerImpl& typeChecker)
-    :tyMgr(typeChecker.typeManager), diag(typeChecker.diag), typeChecker(typeChecker)
+InstCtxScope::InstCtxScope(TypeCheckerImpl& typeChecker)
+    : tyMgr(typeChecker.typeManager), diag(typeChecker.diag), typeChecker(typeChecker)
 {
     tyMgr.instCtxScopes.push_back(this);
 }
@@ -235,7 +235,7 @@ void InstCtxScope::GenerateSubstPackByTyArgs(
 
 // When the baseExpr of other expr is a memberAccess,
 // we could build the type mapping by the memberAccess's baseExpr's type.
-void TypeChecker::TypeCheckerImpl::GenerateTypeMappingForBaseExpr(const Expr& baseExpr, SubstPack& typeMapping)
+void TypeCheckerImpl::GenerateTypeMappingForBaseExpr(const Expr& baseExpr, SubstPack& typeMapping)
 {
     if (baseExpr.astKind != ASTKind::MEMBER_ACCESS) {
         return;

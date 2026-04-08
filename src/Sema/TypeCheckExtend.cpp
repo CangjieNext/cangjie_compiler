@@ -24,7 +24,7 @@ using namespace Cangjie;
 using namespace TypeCheckUtil;
 using namespace AST;
 
-void TypeChecker::TypeCheckerImpl::CheckExtendGenerics(const ExtendDecl& ed)
+void TypeCheckerImpl::CheckExtendGenerics(const ExtendDecl& ed)
 {
     bool isMovedCommonED = !ed.TestAttr(Attribute::IMPORTED) && ed.TestAttr(Attribute::FROM_COMMON_PART) &&
         ed.TestAttr(Attribute::COMMON);
@@ -47,7 +47,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendGenerics(const ExtendDecl& ed)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckExtendedTypeValidity(const Type& extendedType)
+void TypeCheckerImpl::CheckExtendedTypeValidity(const Type& extendedType)
 {
     if (!Ty::IsTyCorrect(extendedType.GetTy()) || extendedType.GetTy()->IsExtendable()) {
         return;
@@ -72,7 +72,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendedTypeValidity(const Type& extende
  *     // func foo(): Unit {} // same signature, should be diag.
  * }
  */
-void TypeChecker::TypeCheckerImpl::CheckExtendDupDefImplByDiffTypArgs(
+void TypeCheckerImpl::CheckExtendDupDefImplByDiffTypArgs(
     const std::set<Ptr<ExtendDecl>, CmpNodeByPos>& extendDecls, const ExtendDecl& extend)
 {
     std::set<Ptr<Decl>> directlyImplementedInterfaces;
@@ -94,7 +94,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendDupDefImplByDiffTypArgs(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckDefImplWithoutOutsideGeneric(Decl& inhertDecl, const ExtendDecl& extend)
+void TypeCheckerImpl::CheckDefImplWithoutOutsideGeneric(Decl& inhertDecl, const ExtendDecl& extend)
 {
     auto id = DynamicCast<InterfaceDecl>(&inhertDecl);
     if (!id || !id->generic || id->generic->typeParameters.empty()) {
@@ -124,8 +124,7 @@ void TypeChecker::TypeCheckerImpl::CheckDefImplWithoutOutsideGeneric(Decl& inher
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckExtendInterfaces(
-    Ty& ty, const std::set<Ptr<ExtendDecl>, CmpNodeByPos>& extendDecls)
+void TypeCheckerImpl::CheckExtendInterfaces(Ty& ty, const std::set<Ptr<ExtendDecl>, CmpNodeByPos>& extendDecls)
 {
     std::unordered_set<Ptr<InterfaceTy>> inheritInterfaces;
     if (auto extendedDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(&ty); extendedDecl) {
@@ -190,8 +189,8 @@ void TypeChecker::TypeCheckerImpl::CheckExtendInterfaces(
 //     Line 3: extend A<String> <: I<String> {}
 //     Line 4: extend<T> A<T> <: I<T> {}
 //     They might get the same instantiation version: 'A<String> <: I<String>', this is illeage in spec.
-void TypeChecker::TypeCheckerImpl::CheckSpecializationExtend(const InheritableDecl& extendedDecl,
-    const ExtendDecl& extendDecl, const std::set<Ptr<ExtendDecl>, CmpNodeByPos> otherExtendDecls)
+void TypeCheckerImpl::CheckSpecializationExtend(const InheritableDecl& extendedDecl, const ExtendDecl& extendDecl,
+    const std::set<Ptr<ExtendDecl>, CmpNodeByPos> otherExtendDecls)
 {
     // Only check specialized versions of generic types. Only Line 3 will be checked.
     if (extendedDecl.GetTy() && !extendedDecl.GetTy()->HasGeneric()) {
@@ -232,7 +231,7 @@ void TypeChecker::TypeCheckerImpl::CheckSpecializationExtend(const InheritableDe
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckSpecializationExtendDupImstantation(const Ty& extendedDeclTy,
+void TypeCheckerImpl::CheckSpecializationExtendDupImstantation(const Ty& extendedDeclTy,
     const ExtendDecl& compareExtend, const InheritableDecl& beComparedDecl, const TypeSubst& instantMapping,
     const bool checkParent)
 {
@@ -270,7 +269,7 @@ void TypeChecker::TypeCheckerImpl::CheckSpecializationExtendDupImstantation(cons
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PreCheckAllExtendInterface()
+void TypeCheckerImpl::PreCheckAllExtendInterface()
 {
     Utils::ProfileRecorder recorder("PreCheck", "PreCheckAllExtendInterface");
     // Check extend decls of primitive types in stable order.
@@ -309,7 +308,7 @@ void TypeChecker::TypeCheckerImpl::PreCheckAllExtendInterface()
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PreCheckExtend(ASTContext& ctx, ExtendDecl& ed)
+void TypeCheckerImpl::PreCheckExtend(ASTContext& ctx, ExtendDecl& ed)
 {
     // Need put after TypeAlias circle check.
     if (ed.extendedType) {
@@ -394,7 +393,7 @@ void UpdateExtendMap(TypeManager& typeManager, const std::unordered_set<Ptr<AST:
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::BuildExtendMap(ASTContext& ctx)
+void TypeCheckerImpl::BuildExtendMap(ASTContext& ctx)
 {
     std::unordered_set<Ptr<ExtendDecl>> allExtends;
     // Collect current package's source extends.
@@ -411,7 +410,7 @@ void TypeChecker::TypeCheckerImpl::BuildExtendMap(ASTContext& ctx)
     UpdateExtendMap(typeManager, allExtends);
 }
 
-void TypeChecker::TypeCheckerImpl::BuildImportedExtendMap()
+void TypeCheckerImpl::BuildImportedExtendMap()
 {
     Utils::ProfileRecorder recorder("PreCheck", "BuildImportedExtendMap");
     std::unordered_set<Ptr<ExtendDecl>> allExtends;
@@ -431,7 +430,7 @@ void TypeChecker::TypeCheckerImpl::BuildImportedExtendMap()
     UpdateExtendMap(typeManager, allExtends);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckExtendRules(const ASTContext& ctx)
+void TypeCheckerImpl::CheckExtendRules(const ASTContext& ctx)
 {
     if (ctx.curPackage->TestAttr(Attribute::IMPORTED)) {
         return; // OrphanRule and generic consistency check can be ignored for imported package.
@@ -449,7 +448,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendRules(const ASTContext& ctx)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckImmutExtendInhertMutSuper(const Type& inheritedType, const ExtendDecl& ed)
+void TypeCheckerImpl::CheckImmutExtendInhertMutSuper(const Type& inheritedType, const ExtendDecl& ed)
 {
     if (!Ty::IsTyCorrect(ed.GetTy()) || !ed.GetTy()->IsImmutableType()) {
         return;
@@ -472,7 +471,7 @@ void TypeChecker::TypeCheckerImpl::CheckImmutExtendInhertMutSuper(const Type& in
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckExtendDecl(ASTContext& ctx, ExtendDecl& ed)
+void TypeCheckerImpl::CheckExtendDecl(ASTContext& ctx, ExtendDecl& ed)
 {
     if (ed.TestAttr(Attribute::IS_CHECK_VISITED)) {
         return;
@@ -522,7 +521,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendDecl(ASTContext& ctx, ExtendDecl& 
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckExtendOrphanRule(const ASTContext& ctx, ExtendDecl& ed)
+void TypeCheckerImpl::CheckExtendOrphanRule(const ASTContext& ctx, ExtendDecl& ed)
 {
     CJC_ASSERT(ed.extendedType && ed.extendedType->GetTy());
     // Collect interfaces which has already been extended in other packages.
@@ -578,7 +577,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendOrphanRule(const ASTContext& ctx, 
     }
 }
 
-void TypeChecker::TypeCheckerImpl::SetExtendExternalAttr(const ASTContext& ctx, ExtendDecl& ed)
+void TypeCheckerImpl::SetExtendExternalAttr(const ASTContext& ctx, ExtendDecl& ed)
 {
     // Check import and export.
     Ptr<Decl> extendedTypeTarget = Ty::GetDeclPtrOfTy(ed.extendedType->GetTy());
@@ -631,7 +630,7 @@ void TypeChecker::TypeCheckerImpl::SetExtendExternalAttr(const ASTContext& ctx, 
     ed.EnableAttr(GetAttrByAccessLevel(accessLevel));
 }
 
-void TypeChecker::TypeCheckerImpl::CheckExtendField(const ASTContext& ctx, MemberAccess& ma)
+void TypeCheckerImpl::CheckExtendField(const ASTContext& ctx, MemberAccess& ma)
 {
     ma.SetTy(TypeManager::GetInvalidTy()); // Ty will be set to valid if non-error happens.
     CJC_NULLPTR_CHECK(ma.curFile);

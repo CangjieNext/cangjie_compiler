@@ -1163,6 +1163,11 @@ VisitAction WalkerT<NodeT>::Walk(Ptr<NodeT> curNode) const
                 if (Walk(bid->generic.get()) == VisitAction::STOP_NOW) {
                     return VisitAction::STOP_NOW;
                 }
+                for (auto& it : bid->memberDecls) {
+                    if (Walk(it.get()) == VisitAction::STOP_NOW) {
+                        return VisitAction::STOP_NOW;
+                    }
+                }
                 action = VisitAction::WALK_CHILDREN;
                 break;
             }

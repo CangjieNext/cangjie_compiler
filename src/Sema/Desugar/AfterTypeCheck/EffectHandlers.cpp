@@ -26,7 +26,7 @@ OwnedPtr<RefExpr> CreateRefValue(FuncTy& funcTy)
     auto decl = LookupEnumMember(enumTy.declPtr, "Result");
     CJC_NULLPTR_CHECK(decl);
     auto refExpr = CreateRefExpr(*decl);
-    (void)refExpr->ref.targets.emplace_back(decl); // for `GetFuncTargets`
+    refExpr->AddTarget(decl); // for `GetFuncTargets`
     refExpr->SetTy(&funcTy);
     refExpr->instTys = enumTy.typeArgs;
     return refExpr;
@@ -41,7 +41,7 @@ OwnedPtr<RefExpr> CreateRefExc(FuncTy& funcTy)
     auto decl = LookupEnumMember(enumTy.declPtr, "Exc");
     CJC_NULLPTR_CHECK(decl);
     auto refExpr = CreateRefExpr(*decl);
-    (void)refExpr->ref.targets.emplace_back(decl); // for `GetFuncTargets`
+    refExpr->AddTarget(decl); // for `GetFuncTargets`
     refExpr->SetTy(&funcTy);
     refExpr->instTys = enumTy.typeArgs;
     return refExpr;
@@ -56,7 +56,7 @@ OwnedPtr<RefExpr> CreateRefErr(FuncTy& funcTy)
     auto decl = LookupEnumMember(enumTy.declPtr, "Err");
     CJC_NULLPTR_CHECK(decl);
     auto refExpr = CreateRefExpr(*decl);
-    (void)refExpr->ref.targets.emplace_back(decl); // for `GetFuncTargets`
+    refExpr->AddTarget(decl); // for `GetFuncTargets`
     refExpr->SetTy(&funcTy);
     refExpr->instTys = enumTy.typeArgs;
     return refExpr;
@@ -121,7 +121,7 @@ Ptr<FuncDecl> GetDefaultInitDecl(ClassDecl& classDecl)
  *      }
  * }
  */
-void TypeChecker::TypeCheckerImpl::EncloseTryLambda(ASTContext& ctx, OwnedPtr<AST::LambdaExpr>& tryLambda)
+void TypeCheckerImpl::EncloseTryLambda(ASTContext& ctx, OwnedPtr<AST::LambdaExpr>& tryLambda)
 {
     OwnedPtr<AST::Block> innerBlock = std::move(tryLambda->funcBody->body);
 
@@ -378,7 +378,7 @@ void TypeChecker::TypeCheckerImpl::EncloseTryLambda(ASTContext& ctx, OwnedPtr<AS
         OwnedPtr<RefExpr> re23 = CreateRefExpr("Exception");
         CopyBasicInfo(innerBlock, re23.get());
         re23->isAlone = false;
-        re23->ref.target = excInitDecl;
+        re23->SetTarget(excInitDecl);
         re23->SetTy(excInitDecl->GetTy());
 
         auto earlyCreation =
@@ -481,7 +481,7 @@ void TypeChecker::TypeCheckerImpl::EncloseTryLambda(ASTContext& ctx, OwnedPtr<AS
     `    }
     `})
 */
-VarDecl& TypeChecker::TypeCheckerImpl::CreateFrame(ASTContext& ctx, TryExpr& te, std::vector<OwnedPtr<Node>>& block)
+VarDecl& TypeCheckerImpl::CreateFrame(ASTContext& ctx, TryExpr& te, std::vector<OwnedPtr<Node>>& block)
 {
     auto frameClassName = CLASS_IMMEDIATE_FRAME;
     // To: Frame({=> try{...} catch{...}})
@@ -512,8 +512,8 @@ VarDecl& TypeChecker::TypeCheckerImpl::CreateFrame(ASTContext& ctx, TryExpr& te,
     AST::CopyNodeScopeInfo(lambdaVar, re);
 
     auto frameInit = CreateMemberAccess(std::move(re), "init");
-    CJC_ASSERT(frameInit->target);
-    frameInit->targets.emplace_back(StaticCast<FuncDecl*>(frameInit->target));
+    CJC_ASSERT(frameInit->GetTarget());
+    frameInit->AddTarget(StaticCast<FuncDecl*>(frameInit->GetTarget()));
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateFuncArg(std::move(lambdaVar)));
@@ -532,8 +532,7 @@ VarDecl& TypeChecker::TypeCheckerImpl::CreateFrame(ASTContext& ctx, TryExpr& te,
     return frameRef;
 }
 
-void TypeChecker::TypeCheckerImpl::CreateSetFinally(
-    ASTContext& ctx, TryExpr& te, VarDecl& frame, std::vector<OwnedPtr<Node>>& block)
+void TypeCheckerImpl::CreateSetFinally(ASTContext& ctx, TryExpr& te, VarDecl& frame, std::vector<OwnedPtr<Node>>& block)
 {
     auto target = CreateRefExpr(frame);
     AST::CopyNodeScopeInfo(target, &te);
@@ -555,8 +554,7 @@ void TypeChecker::TypeCheckerImpl::CreateSetFinally(
         resumption.proceed(Foo())
     })
 */
-void TypeChecker::TypeCheckerImpl::CreateSetHandler(
-    ASTContext& ctx, TryExpr& te, VarDecl& frame, std::vector<OwnedPtr<Node>>& block)
+void TypeCheckerImpl::CreateSetHandler(ASTContext& ctx, TryExpr& te, VarDecl& frame, std::vector<OwnedPtr<Node>>& block)
 {
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     // each effect will have its handler, so there will be multipl setHandler call
@@ -569,7 +567,7 @@ void TypeChecker::TypeCheckerImpl::CreateSetHandler(
             OwnedPtr<MemberAccess> ma;
             ma = CreateMemberAccess(std::move(re), "setImmediateHandler");
 
-            // Function `CreateMemberAccess` will not initialise `ma.targets`,
+            // Function `CreateMemberAccess` will not initialise `ma.GetTargets()`,
             // so we need to assign `targets` by calling `ChkCallExpr` later
             OwnedPtr<Type> effectTypeArgument = ASTCloner::Clone(commandPattern->types[j].get());
             ma->typeArguments.emplace_back(std::move(effectTypeArgument));
@@ -590,8 +588,8 @@ void TypeChecker::TypeCheckerImpl::CreateSetHandler(
 
             // We need to set the targets by hand, because the call to ChkCallExpr
             // below expects targets to be nonempty
-            CJC_ASSERT(ma->target);
-            ma->targets.emplace_back(StaticCast<FuncDecl*>(ma->target));
+            CJC_ASSERT(ma->GetTarget());
+            ma->AddTarget(StaticCast<FuncDecl*>(ma->GetTarget()));
 
             OwnedPtr<AST::LambdaExpr> handlerLambda = std::move(handler.desugaredLambda);
             /**
@@ -678,7 +676,7 @@ void TypeChecker::TypeCheckerImpl::CreateSetHandler(
 
                 OwnedPtr<RefExpr> re2 = CreateRefExpr(CLASS_FRAME_EXCEPTION_WRAPPER);
                 re2->isAlone = false;
-                re2->ref.target = initDecl;
+                re2->SetTarget(initDecl);
                 re2->SetTy(initDecl->GetTy());
                 CopyBasicInfo(innerBlock, re2.get());
 
@@ -746,7 +744,7 @@ void TypeChecker::TypeCheckerImpl::CreateSetHandler(
 
                 OwnedPtr<RefExpr> re2 = CreateRefExpr(CLASS_FRAME_ERROR_WRAPPER);
                 re2->isAlone = false;
-                re2->ref.target = initDecl;
+                re2->SetTarget(initDecl);
                 re2->SetTy(initDecl->GetTy());
                 CopyBasicInfo(innerBlock, re2.get());
 
@@ -828,7 +826,7 @@ void TypeChecker::TypeCheckerImpl::CreateSetHandler(
                 // ImmediateEarlyReturn(...)
                 OwnedPtr<RefExpr> re2 = CreateRefExpr(CLASS_EARLY_RETURN);
                 re2->isAlone = false;
-                re2->ref.target = initDecl;
+                re2->SetTarget(initDecl);
                 re2->SetTy(initDecl->GetTy());
                 CopyBasicInfo(tryResult, re2.get());
 
@@ -895,7 +893,7 @@ void TypeChecker::TypeCheckerImpl::CreateSetHandler(
 /*
     let result = frame.start()
 */
-void TypeChecker::TypeCheckerImpl::CreateResult(
+void TypeCheckerImpl::CreateResult(
     ASTContext& ctx, const TryExpr& te, VarDecl& frame, std::vector<OwnedPtr<Node>>& block)
 {
     // To: create memberAccess
@@ -904,8 +902,8 @@ void TypeChecker::TypeCheckerImpl::CreateResult(
     re->end = te.end;
     AST::CopyNodeScopeInfo(re, &frame);
     OwnedPtr<MemberAccess> ma = CreateMemberAccess(std::move(re), "start");
-    CJC_ASSERT(ma->target);
-    ma->targets.emplace_back(StaticCast<FuncDecl*>(ma->target));
+    CJC_ASSERT(ma->GetTarget());
+    ma->AddTarget(StaticCast<FuncDecl*>(ma->GetTarget()));
     // To: frame.start()
     auto startCall = AST::CreateCallExpr(std::move(ma), {});
     auto typecheckOk = ChkCallExpr(ctx, te.GetTy(), *startCall);
@@ -957,7 +955,7 @@ void TypeChecker::TypeCheckerImpl::CreateResult(
     })
     let result = frame.start()
 */
-void TypeChecker::TypeCheckerImpl::DesugarTryToFrame(ASTContext& ctx, TryExpr& te)
+void TypeCheckerImpl::DesugarTryToFrame(ASTContext& ctx, TryExpr& te)
 {
     if (te.handlers.empty() || !Ty::IsTyCorrect(te.GetTy())) {
         return;
@@ -977,21 +975,21 @@ void TypeChecker::TypeCheckerImpl::DesugarTryToFrame(ASTContext& ctx, TryExpr& t
     te.desugarExpr = std::move(dummyBlock);
 }
 
-OwnedPtr<Expr> TypeChecker::TypeCheckerImpl::GetHelperFrameMethod(
+OwnedPtr<Expr> TypeCheckerImpl::GetHelperFrameMethod(
     AST::Node& base, const std::string& methodName, std::vector<Ptr<Ty>> typeArgs)
 {
     auto frameDecl = importManager.GetImportedDecl<ClassDecl>(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_HANDLER_FRAME);
     CJC_NULLPTR_CHECK(frameDecl);
     auto frameClassTy = typeManager.GetClassTy(*frameDecl, {});
     auto re = CreateRefExpr(CLASS_HANDLER_FRAME);
-    re->ref.target = frameDecl;
+    re->SetTarget(frameDecl);
     AST::CopyNodeScopeInfo(re, &base);
     re->SetTy(frameClassTy);
 
     auto memberFunc = CreateMemberAccess(std::move(re), methodName);
     memberFunc->instTys = std::move(typeArgs);
-    CJC_ASSERT(memberFunc->target);
-    memberFunc->targets.emplace_back(StaticCast<FuncDecl*>(memberFunc->target));
+    CJC_ASSERT(memberFunc->GetTarget());
+    memberFunc->AddTarget(StaticCast<FuncDecl*>(memberFunc->GetTarget()));
 
     return memberFunc;
 }
@@ -1000,7 +998,7 @@ OwnedPtr<Expr> TypeChecker::TypeCheckerImpl::GetHelperFrameMethod(
     From: perform Comm("foo")
     To: Frame.perf(Comm("foo"))
 */
-void TypeChecker::TypeCheckerImpl::DesugarPerform(ASTContext& ctx, AST::PerformExpr& pe)
+void TypeCheckerImpl::DesugarPerform(ASTContext& ctx, AST::PerformExpr& pe)
 {
     if (!Ty::IsTyCorrect(pe.GetTy())) {
         // Sometimes the Desugar function is called on "junk" code that has not been
@@ -1026,7 +1024,7 @@ void TypeChecker::TypeCheckerImpl::DesugarPerform(ASTContext& ctx, AST::PerformE
     pe.desugarExpr = std::move(perfCall);
 }
 
-void TypeChecker::TypeCheckerImpl::DesugarResume(ASTContext& ctx, AST::ResumeExpr& re)
+void TypeCheckerImpl::DesugarResume(ASTContext& ctx, AST::ResumeExpr& re)
 {
     if (!Ty::IsTyCorrect(re.GetTy())) {
         // Sometimes the Desugar function is called on "junk" code that has not been
@@ -1047,7 +1045,7 @@ void TypeChecker::TypeCheckerImpl::DesugarResume(ASTContext& ctx, AST::ResumeExp
  * From: resume throwing exc
  * To: ImmediateHandlerReturn<T>.Exc(exc)
  */
-void TypeChecker::TypeCheckerImpl::DesugarImmediateResume(ASTContext& ctx, AST::ResumeExpr& re)
+void TypeCheckerImpl::DesugarImmediateResume(ASTContext& ctx, AST::ResumeExpr& re)
 {
     OwnedPtr<Expr> desugared;
 

@@ -61,7 +61,7 @@ inline void DiagUnableToInferDecl(DiagnosticEngine& diag, const Decl& decl)
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::CheckFuncDecl(ASTContext& ctx, FuncDecl& fd)
+void TypeCheckerImpl::CheckFuncDecl(ASTContext& ctx, FuncDecl& fd)
 {
     CJC_NULLPTR_CHECK(fd.funcBody);
     if (fd.TestAttr(Attribute::IS_CHECK_VISITED)) {
@@ -92,7 +92,7 @@ void TypeChecker::TypeCheckerImpl::CheckFuncDecl(ASTContext& ctx, FuncDecl& fd)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckStaticVarAccessNonStatic(const VarDecl& vd)
+void TypeCheckerImpl::CheckStaticVarAccessNonStatic(const VarDecl& vd)
 {
     // Only check for static variable.
     if (!vd.TestAttr(Attribute::STATIC)) {
@@ -122,7 +122,7 @@ void TypeChecker::TypeCheckerImpl::CheckStaticVarAccessNonStatic(const VarDecl& 
     walkDecl.Walk();
 }
 
-void TypeChecker::TypeCheckerImpl::CheckEntryFunc(FuncDecl& fd)
+void TypeCheckerImpl::CheckEntryFunc(FuncDecl& fd)
 {
     bool invalid = !fd.curFile || !fd.curFile->curPackage;
     if (invalid || !fd.TestAttr(Attribute::GLOBAL)) {
@@ -161,7 +161,7 @@ void TypeChecker::TypeCheckerImpl::CheckEntryFunc(FuncDecl& fd)
     (void)mainFunctionMap[fd.curFile].emplace(&fd);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckOperatorOverloadFunc(const FuncDecl& fd)
+void TypeCheckerImpl::CheckOperatorOverloadFunc(const FuncDecl& fd)
 {
     auto funcTy = DynamicCast<FuncTy*>(fd.GetTy());
     if (!Ty::IsTyCorrect(funcTy) || fd.op == TokenKind::ILLEGAL || fd.op == TokenKind::LPAREN) {
@@ -203,7 +203,7 @@ void TypeChecker::TypeCheckerImpl::CheckOperatorOverloadFunc(const FuncDecl& fd)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::HandIndexOperatorOverload(const FuncDecl& fd, const FuncTy& funcTy)
+void TypeCheckerImpl::HandIndexOperatorOverload(const FuncDecl& fd, const FuncTy& funcTy)
 {
     CJC_ASSERT(!fd.funcBody->paramLists.empty());
     const auto& params = fd.funcBody->paramLists[0]->params;
@@ -244,7 +244,7 @@ void TypeChecker::TypeCheckerImpl::HandIndexOperatorOverload(const FuncDecl& fd,
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckVarDecl(ASTContext& ctx, VarDecl& vd)
+void TypeCheckerImpl::CheckVarDecl(ASTContext& ctx, VarDecl& vd)
 {
     if (vd.TestAttr(Attribute::IS_CHECK_VISITED)) {
         // Unable to infer mutually recursive variables.
@@ -265,7 +265,7 @@ void TypeChecker::TypeCheckerImpl::CheckVarDecl(ASTContext& ctx, VarDecl& vd)
     CheckStaticVarAccessNonStatic(vd);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckVarWithPatternDecl(ASTContext& ctx, VarWithPatternDecl& vpd)
+void TypeCheckerImpl::CheckVarWithPatternDecl(ASTContext& ctx, VarWithPatternDecl& vpd)
 {
     if (vpd.TestAttr(Attribute::IS_CHECK_VISITED)) {
         // Unable to infer mutually recursive top level variables.
@@ -303,8 +303,7 @@ void TypeChecker::TypeCheckerImpl::CheckVarWithPatternDecl(ASTContext& ctx, VarW
     }
 }
 
-template <typename T>
-void TypeChecker::TypeCheckerImpl::SynchronizeTypeAndInitializer(const CheckerContext& ctx, T& vd)
+template <typename T> void TypeCheckerImpl::SynchronizeTypeAndInitializer(const CheckerContext& ctx, T& vd)
 {
     if (vd.type != nullptr && vd.initializer == nullptr) {
         Synthesize(ctx, vd.type.get());
@@ -357,7 +356,7 @@ void TypeChecker::TypeCheckerImpl::SynchronizeTypeAndInitializer(const CheckerCo
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckPropDecl(ASTContext& ctx, PropDecl& pd)
+void TypeCheckerImpl::CheckPropDecl(ASTContext& ctx, PropDecl& pd)
 {
     if (pd.TestAttr(Attribute::IS_CHECK_VISITED)) {
         return;
@@ -392,7 +391,7 @@ void TypeChecker::TypeCheckerImpl::CheckPropDecl(ASTContext& ctx, PropDecl& pd)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::BuildImportedEnumConstructorMap(ASTContext& ctx)
+void TypeCheckerImpl::BuildImportedEnumConstructorMap(ASTContext& ctx)
 {
     CJC_NULLPTR_CHECK(ctx.curPackage);
     std::unordered_set<const EnumDecl*> visited;
@@ -409,7 +408,7 @@ void TypeChecker::TypeCheckerImpl::BuildImportedEnumConstructorMap(ASTContext& c
     }
 }
 
-void TypeChecker::TypeCheckerImpl::BuildEnumConstructorMap(ASTContext& ctx) const
+void TypeCheckerImpl::BuildEnumConstructorMap(ASTContext& ctx) const
 {
     auto syms = GetSymsByASTKind(ctx, ASTKind::ENUM_DECL);
     for (auto sym : syms) {
@@ -419,7 +418,7 @@ void TypeChecker::TypeCheckerImpl::BuildEnumConstructorMap(ASTContext& ctx) cons
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckEnumDecl(ASTContext& ctx, EnumDecl& ed)
+void TypeCheckerImpl::CheckEnumDecl(ASTContext& ctx, EnumDecl& ed)
 {
     if (ed.TestAttr(Attribute::IS_CHECK_VISITED)) {
         return;
@@ -470,7 +469,7 @@ void TypeChecker::TypeCheckerImpl::CheckEnumDecl(ASTContext& ctx, EnumDecl& ed)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::SetEnumEleTy(Decl& constructor)
+void TypeCheckerImpl::SetEnumEleTy(Decl& constructor)
 {
     // Imported enum decl's constructor may have valid type.
     if (!constructor.TestAttr(Attribute::ENUM_CONSTRUCTOR) || Ty::IsTyCorrect(constructor.GetTy())) {
@@ -488,7 +487,7 @@ void TypeChecker::TypeCheckerImpl::SetEnumEleTy(Decl& constructor)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckEnumFuncDeclIsCStructParam(const FuncDecl& funcDecl)
+void TypeCheckerImpl::CheckEnumFuncDeclIsCStructParam(const FuncDecl& funcDecl)
 {
     bool invalid = !funcDecl.funcBody || funcDecl.funcBody->paramLists.empty();
     if (invalid) {
@@ -507,7 +506,7 @@ void TypeChecker::TypeCheckerImpl::CheckEnumFuncDeclIsCStructParam(const FuncDec
     }
 }
 
-void TypeChecker::TypeCheckerImpl::SetEnumEleTyHandleFuncDecl(FuncDecl& funcDecl)
+void TypeCheckerImpl::SetEnumEleTyHandleFuncDecl(FuncDecl& funcDecl)
 {
     bool invalid = !funcDecl.outerDecl || !funcDecl.funcBody || funcDecl.funcBody->paramLists.empty();
     if (invalid) {
@@ -542,7 +541,7 @@ void TypeChecker::TypeCheckerImpl::SetEnumEleTyHandleFuncDecl(FuncDecl& funcDecl
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckStructDecl(ASTContext& ctx, StructDecl& sd)
+void TypeCheckerImpl::CheckStructDecl(ASTContext& ctx, StructDecl& sd)
 {
     if (sd.TestAttr(Attribute::IS_CHECK_VISITED)) {
         return;
@@ -582,7 +581,7 @@ void TypeChecker::TypeCheckerImpl::CheckStructDecl(ASTContext& ctx, StructDecl& 
     }
 }
 
-void TypeChecker::TypeCheckerImpl::GetRevTypeMapping(
+void TypeCheckerImpl::GetRevTypeMapping(
     std::vector<Ptr<Ty>>& params, std::vector<Ptr<Ty>>& args, MultiTypeSubst& revTyMap)
 {
     if (args.size() != params.size()) {
@@ -599,7 +598,7 @@ void TypeChecker::TypeCheckerImpl::GetRevTypeMapping(
     }
 }
 
-TypeSubst TypeChecker::TypeCheckerImpl::GetGenericTysToInstTysMapping(Ty& genericTy, Ty& instTy) const
+TypeSubst TypeCheckerImpl::GetGenericTysToInstTysMapping(Ty& genericTy, Ty& instTy) const
 {
     TypeSubst map;
     if (genericTy.typeArgs.size() > instTy.typeArgs.size()) {
@@ -611,7 +610,7 @@ TypeSubst TypeChecker::TypeCheckerImpl::GetGenericTysToInstTysMapping(Ty& generi
     return map;
 }
 
-void TypeChecker::TypeCheckerImpl::GetAllAssumptions(TyVarUB& source, TyVarUB& newMap)
+void TypeCheckerImpl::GetAllAssumptions(TyVarUB& source, TyVarUB& newMap)
 {
     for (const auto& kv : std::as_const(source)) {
         if (newMap.find(kv.first) != newMap.cend()) {
@@ -634,7 +633,7 @@ void TypeChecker::TypeCheckerImpl::GetAllAssumptions(TyVarUB& source, TyVarUB& n
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckTypeAliasAccess(const TypeAliasDecl& tad)
+void TypeCheckerImpl::CheckTypeAliasAccess(const TypeAliasDecl& tad)
 {
     if (tad.TestAttr(Attribute::PRIVATE)) {
         return;
@@ -649,7 +648,7 @@ void TypeChecker::TypeCheckerImpl::CheckTypeAliasAccess(const TypeAliasDecl& tad
             continue;
         }
         auto rt = StaticAs<ASTKind::REF_TYPE>(type);
-        Ptr<Decl> decl = rt->ref.target;
+        Ptr<Decl> decl = rt->GetTarget();
         if (!decl) {
             continue;
         }
@@ -675,7 +674,7 @@ std::unordered_set<Ptr<Ty>> GetTyArgsRecursive(Ty& ty)
 }
 } // namespace
 
-std::vector<Ptr<Ty>> TypeChecker::TypeCheckerImpl::GetUnusedTysInTypeAlias(const TypeAliasDecl& tad) const
+std::vector<Ptr<Ty>> TypeCheckerImpl::GetUnusedTysInTypeAlias(const TypeAliasDecl& tad) const
 {
     std::vector<Ptr<Ty>> diffs;
     if (!tad.generic || !tad.type || Ty::IsInitialTy(tad.type->GetTy())) {
@@ -694,7 +693,7 @@ std::vector<Ptr<Ty>> TypeChecker::TypeCheckerImpl::GetUnusedTysInTypeAlias(const
     return diffs;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckTypeAlias(ASTContext& ctx, TypeAliasDecl& tad)
+void TypeCheckerImpl::CheckTypeAlias(ASTContext& ctx, TypeAliasDecl& tad)
 {
     if (tad.TestAttr(Attribute::IS_CHECK_VISITED)) {
         return;
@@ -718,7 +717,7 @@ void TypeChecker::TypeCheckerImpl::CheckTypeAlias(ASTContext& ctx, TypeAliasDecl
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynFuncParam(ASTContext& ctx, FuncParam& fp)
+Ptr<Ty> TypeCheckerImpl::SynFuncParam(ASTContext& ctx, FuncParam& fp)
 {
     if (!fp.type && !Ty::IsTyCorrect(fp.GetTy())) {
         return TypeManager::GetInvalidTy();
@@ -740,7 +739,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynFuncParam(ASTContext& ctx, FuncParam& f
     return fp.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkFuncParam(ASTContext& ctx, Ty& target, FuncParam& fp)
+bool TypeCheckerImpl::ChkFuncParam(ASTContext& ctx, Ty& target, FuncParam& fp)
 {
     if (fp.GetTy() && fp.GetTy() == &target) {
         return true;

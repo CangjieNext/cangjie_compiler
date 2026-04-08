@@ -913,7 +913,7 @@ private:
     // ====================call expr===============
     // ==================== global func or instance member func call===============
     Ptr<Value> TranslateIntrinsicCall(const AST::CallExpr& expr);
-    Ptr<Value> TranslateCStringCtorCall(const AST::CallExpr& expr);
+    Value* TranslateCStringCtorCall(const AST::CallExpr& expr);
     Ptr<Value> TranslateForeignFuncCall(const AST::CallExpr& expr);
 
     Value* GenerateLoadIfNeccessary(Value& arg, bool isThis, bool isMut, bool isInOut, const DebugLocation& loc);
@@ -942,6 +942,9 @@ private:
     /// \returns translate this arg.
     std::pair<Value*, Type*> TranslateStructOrClassCtorCallCommon(const AST::CallExpr& expr);
     Value* TranslateStructOrClassCtorCall(const AST::CallExpr& expr);
+    Value* TranslateVArrayBuiltinCtorCall(const AST::CallExpr& expr);
+    Value* TranslateCPointerBuiltinCtorCall(const AST::CallExpr& expr);
+    Value* TranslateCFuncBuiltinCtorCall(const AST::CallExpr& expr);
     // ==================== func args===============
     static bool IsOptimizableTy(Ptr<AST::Ty> ty);
     static bool IsOptimizableEnumTy(Ptr<AST::Ty> ty);
@@ -1123,9 +1126,9 @@ private:
     // => VArrayBuilder ( size, null, initFunc )
     Ptr<Value> InitVArrayByLambda(const AST::ArrayExpr& vArray);
 
-    Ptr<Value> InitArrayByCollection(const AST::ArrayExpr& array);
-    Ptr<Value> InitArrayByItem(const AST::ArrayExpr& array);
-    Ptr<Value> InitArrayByLambda(const AST::ArrayExpr& array);
+    Ptr<Value> InitArrayByCollection(const AST::CallExpr& callExpr);
+    Ptr<Value> InitArrayByItem(const AST::CallExpr& callExpr);
+    Ptr<Value> InitArrayByLambda(const AST::CallExpr& callExpr);
 
     // ArrayLit - StructArray
     Ptr<Value> TranslateStructArray(const AST::ArrayLit& array);
@@ -1169,22 +1172,6 @@ static const std::unordered_map<Cangjie::TokenKind, ExprKind> op2ExprKind = {
     {Cangjie::TokenKind::EQUAL, ExprKind::EQUAL},
 };
 
-const static std::unordered_map<std::string, const std::unordered_map<std::string, IntrinsicKind>> packageMap = {
-    {CORE_PACKAGE_NAME, coreIntrinsicMap},
-    {SYNC_PACKAGE_NAME, cjnativeSyncIntrinsicMap},
-    {OVERFLOW_PACKAGE_NAME, overflowIntrinsicMap},
-    {RUNTIME_PACKAGE_NAME, runtimeIntrinsicMap},
-    {REFLECT_PACKAGE_NAME, reflectIntrinsicMap},
-    {MATH_PACKAGE_NAME, mathIntrinsicMap},
-    {INTEROP_PACKAGE_NAME, interOpIntrinsicMap},
-    {"ohos.ark_interop", ohosArkInteropIntrinsicMap}
-};
-
-// Below are instrinsics without a source-level declaration, their delcaration should be dinamically generated
-const static std::unordered_map<std::string, IntrinsicKind> headlessIntrinsics = {
-    {GET_TYPE_FOR_TYPE_PARAMETER_NAME, IntrinsicKind::GET_TYPE_FOR_TYPE_PARAMETER},
-    {IS_SUBTYPE_TYPES_NAME, IntrinsicKind::IS_SUBTYPE_TYPES},
-};
 } // namespace Cangjie::CHIR
 
 #endif

@@ -161,7 +161,7 @@ void MockManager::AddObjectSuperTypeIfNeeded(
     }
     auto objectRef = MakeOwned<RefType>();
     objectRef->ref.identifier = OBJECT_NAME;
-    objectRef->ref.target = mockUtils->objectDecl;
+    objectRef->SetTarget(mockUtils->objectDecl);
     objectRef->SetTy(mockUtils->objectDecl->GetTy());
     mockedDecl.inheritedTypes.insert(mockedDecl.inheritedTypes.begin(), std::move(objectRef));
 }
@@ -467,7 +467,7 @@ OwnedPtr<AssignExpr> MockManager::CreateMemberAssignment(
     auto thisExpr = CreateRefExpr(
         {"this", DEFAULT_POSITION, DEFAULT_POSITION, false},
         typeManager.GetClassThisTy(*decl, decl->GetTy()->typeArgs));
-    thisExpr->ref.target = decl;
+    thisExpr->SetTarget(decl);
     return CreateAssignExpr(CreateMemberAccess(std::move(thisExpr), member), std::move(rhsExpr), UNIT_TY);
 }
 
@@ -585,7 +585,7 @@ OwnedPtr<MatchCase> MockManager::CreateOnCallCallBaseMatchCase(
 
     auto thisRef = CreateRefExpr(
         SrcIdentifier{"this"}, typeManager.GetClassThisTy(*mockedClass, mockedClass->GetTy()->typeArgs));
-    thisRef->ref.target = mockedClass;
+    thisRef->SetTarget(mockedClass);
 
     auto someOuterDecl = Sema::Desugar::AfterTypeCheck::LookupEnumMember(mockUtils->optionDecl, OPTION_VALUE_CTOR);
     auto someOuterDeclRef = CreateRefExpr(*someOuterDecl);
@@ -674,14 +674,14 @@ OwnedPtr<MatchCase> MockManager::CreateOnCallReturnDefaultMatchCase(
         defaultForTypePresence[&originalMethod] = true;
         auto defaultValueProviderRef = MakeOwned<RefExpr>();
         defaultValueProviderRef->ref = Reference(Ty::ToString(retTy));
-        defaultValueProviderRef->ref.target = Ty::GetDeclOfTy(retTy);
+        defaultValueProviderRef->SetTarget(Ty::GetDeclOfTy(retTy));
         defaultValueProviderRef->instTys = retTy->typeArgs;
         defaultValueProviderRef->SetTy(retTy);
 
         auto defaultValueProviderMemberAccess =
             CreateMemberAccess(std::move(defaultValueProviderRef), DEFAULT_VALUE_FOR_STUB_METHOD_NAME);
         defaultValueProviderMemberAccess->SetTy(typeManager.GetFunctionTy({}, retTy));
-        defaultValueProviderMemberAccess->target = defaultValueProviderDecl;
+        defaultValueProviderMemberAccess->SetTarget(defaultValueProviderDecl);
 
         auto defaultValueProviderCall = MakeOwned<CallExpr>();
         defaultValueProviderCall->SetTy(retTy);
@@ -820,7 +820,7 @@ void MockManager::AddAssignmentsForSuperFields(const FuncDecl& constructorOfMock
 
             auto objToSpyOnRef = MakeOwned<RefExpr>();
             objToSpyOnRef->ref = Reference(FIELD_NAME_TO_STORE_OBJ_TO_SPY);
-            objToSpyOnRef->ref.target = objToSpyOnDecl;
+            objToSpyOnRef->SetTarget(objToSpyOnDecl);
             objToSpyOnRef->SetTy(objToSpyOnDecl->GetTy());
 
             auto rhsExpr = CreateMemberAccess(std::move(objToSpyOnRef), fieldDecl->identifier);
@@ -1023,13 +1023,13 @@ OwnedPtr<CallExpr> MockManager::CreateDeclKind(const FuncDecl& decl) const
         auto entryRetType = RawStaticCast<const FuncTy*>(enumEntry->GetTy())->retTy;
         auto enumEntryRef = MakeOwned<RefExpr>();
         enumEntryRef->ref = Reference(libAccessorKind);
-        enumEntryRef->ref.target = enumEntry;
+        enumEntryRef->SetTarget(enumEntry);
         enumEntryRef->SetTy(entryRetType);
 
         auto enumEntryBase = CreateMemberAccess(std::move(enumEntryRef), libAccessorKind);
         auto enumEntryCallExpr = MakeOwned<CallExpr>();
         enumEntryCallExpr->SetTy(entryRetType);
-        enumEntryCallExpr->resolvedFunction = RawStaticCast<FuncDecl*>(enumEntryBase->target);
+        enumEntryCallExpr->resolvedFunction = RawStaticCast<FuncDecl*>(enumEntryBase->GetTarget());
         enumEntryCallExpr->baseFunc = std::move(enumEntryBase);
         enumEntryCallExpr->args = std::move(declKindArgs);
         enumEntryCallExpr->callKind = CallKind::CALL_DECLARED_FUNCTION;
@@ -1087,7 +1087,7 @@ OwnedPtr<RefExpr> MockManager::GetHandlerRefFromClass(const Ptr<ClassDecl> decl)
 
     auto callHandlerRef = MakeOwned<RefExpr>();
     callHandlerRef->ref = Reference(FIELD_NAME_TO_STORE_HANDLER);
-    callHandlerRef->ref.target = callHandler;
+    callHandlerRef->SetTarget(callHandler);
     callHandlerRef->SetTy(callHandler->GetTy());
     callHandlerRef->curFile = decl->curFile;
 
@@ -1109,7 +1109,7 @@ OwnedPtr<CallExpr> MockManager::CreateOnCallInvocation(
     auto onCallBaseFunc = CreateMemberAccess(std::move(handler), ON_CALL_METHOD_NAME);
     auto onCallFunc = MakeOwned<CallExpr>();
     onCallFunc->SetTy(RawStaticCast<const FuncTy*>(onCallBaseFunc->GetTy())->retTy);
-    onCallFunc->resolvedFunction = RawStaticCast<FuncDecl*>(onCallBaseFunc->target);
+    onCallFunc->resolvedFunction = RawStaticCast<FuncDecl*>(onCallBaseFunc->GetTarget());
     onCallFunc->baseFunc = std::move(onCallBaseFunc);
     onCallFunc->args = std::move(onCallArgs);
     onCallFunc->callKind = CallKind::CALL_DECLARED_FUNCTION;
@@ -1147,7 +1147,7 @@ OwnedPtr<FuncDecl> MockManager::CreateMockedMethod(
 
     auto thisRef = CreateRefExpr(
         SrcIdentifier{"this"}, typeManager.GetClassThisTy(mockedDecl, mockedDecl.GetTy()->typeArgs));
-    thisRef->ref.target = &mockedDecl;
+    thisRef->SetTarget(&mockedDecl);
 
     std::vector<OwnedPtr<MatchCase>> matchCasesForOnCallReturnedValue;
     for (auto& constructor : onCallEnumDecl->constructors) {
@@ -1350,7 +1350,7 @@ OwnedPtr<Expr> MockManager::GetMockedObjectHandler(OwnedPtr<RefExpr> objRef, con
     auto getHandlerMa = CreateMemberAccess(ASTCloner::Clone(mockedObjRef.get()), *getHandlerMethodDecl);
     auto getHandlerCall = MakeOwned<CallExpr>();
     getHandlerCall->SetTy(callHandlerDecl->GetTy());
-    getHandlerCall->resolvedFunction = RawStaticCast<FuncDecl*>(getHandlerMa->target);
+    getHandlerCall->resolvedFunction = RawStaticCast<FuncDecl*>(getHandlerMa->GetTarget());
     CJC_NULLPTR_CHECK(getHandlerCall->resolvedFunction);
     getHandlerCall->baseFunc = std::move(getHandlerMa);
     getHandlerCall->args = std::vector<OwnedPtr<FuncArg>>{};
@@ -1376,7 +1376,7 @@ OwnedPtr<Expr> MockManager::GetCurrentStaticHandler(const Ptr<File> curFile)
 {
     auto currentStaticMa = CreateMemberAccess(CreateRefExpr(*callHandlerDecl), CURRENT_STATIC_FUNC_NAME);
     currentStaticMa->SetTy(typeManager.GetFunctionTy({}, callHandlerDecl->GetTy()));
-    auto target = currentStaticMa->target;
+    auto target = currentStaticMa->GetTarget();
     auto currentStaticCall = CreateCallExpr(std::move(currentStaticMa), {});
     currentStaticCall->resolvedFunction = As<ASTKind::FUNC_DECL>(target);
     currentStaticCall->callKind = CallKind::CALL_DECLARED_FUNCTION;
@@ -1408,21 +1408,21 @@ OwnedPtr<LambdaExpr> MockManager::GenerateCallHandlerLambda(
     auto funcParamObj = CreateFuncParam(OBJECT_PARAM_NAME_FOR_HANDLER_LAMBDA, nullptr, nullptr, objectTy);
     auto funcParamObjRef = MakeOwned<RefExpr>();
     funcParamObjRef->ref = Reference(OBJECT_PARAM_NAME_FOR_HANDLER_LAMBDA);
-    funcParamObjRef->ref.target = funcParamObj.get();
+    funcParamObjRef->SetTarget(funcParamObj.get());
     funcParamObjRef->SetTy(funcParamObj->GetTy());
     funcParamObjRef->curFile = injectTo.curFile;
 
     auto funcParam = CreateFuncParam(PARAMS_PARAM_NAME_FOR_HANDLER_LAMBDA, nullptr, nullptr, arrayTy);
     auto funcParamRef = MakeOwned<RefExpr>();
     funcParamRef->ref = Reference(PARAMS_PARAM_NAME_FOR_HANDLER_LAMBDA);
-    funcParamRef->ref.target = funcParam.get();
+    funcParamRef->SetTarget(funcParam.get());
     funcParamRef->SetTy(funcParam->GetTy());
     funcParamRef->curFile = injectTo.curFile;
 
     auto funcTypeParam = CreateFuncParam(TYPE_PARAMS_PARAM_NAME_FOR_HANDLER_LAMBDA, nullptr, nullptr, toStrArrayTy);
     auto funcTypeParamRef = MakeOwned<RefExpr>();
     funcTypeParamRef->ref = Reference(TYPE_PARAMS_PARAM_NAME_FOR_HANDLER_LAMBDA);
-    funcTypeParamRef->ref.target = funcTypeParam.get();
+    funcTypeParamRef->SetTarget(funcTypeParam.get());
     funcTypeParamRef->SetTy(funcTypeParam->GetTy());
     funcTypeParamRef->curFile = injectTo.curFile;
 
@@ -1621,7 +1621,7 @@ void MockManager::HandleMockAnnotatedLambdaWithMemberAccess(MemberAccess& ma, Ex
 {
     Ptr<FuncDecl> getterDecl;
 
-    auto target = StaticCast<VarDeclAbstract>(ma.target);
+    auto target = StaticCast<VarDeclAbstract>(ma.GetTarget());
     CJC_ASSERT(target->IsStaticOrGlobal());
 
     if (auto propDecl = As<ASTKind::PROP_DECL>(target); propDecl) {
@@ -1634,10 +1634,10 @@ void MockManager::HandleMockAnnotatedLambdaWithMemberAccess(MemberAccess& ma, Ex
 
     if (target->isVar) {
         Ptr<FuncDecl> setter;
-        if (auto propDecl = As<ASTKind::PROP_DECL>(ma.target); propDecl) {
-            setter = GetUsableSetterForProperty(*As<ASTKind::PROP_DECL>(ma.target));
+        if (auto propDecl = As<ASTKind::PROP_DECL>(ma.GetTarget()); propDecl) {
+            setter = GetUsableSetterForProperty(*As<ASTKind::PROP_DECL>(ma.GetTarget()));
         } else {
-            setter = mockUtils->FindAccessor(&ma, ma.target, GetVarDeclSetterAccessorKind(target));
+            setter = mockUtils->FindAccessor(&ma, ma.GetTarget(), GetVarDeclSetterAccessorKind(target));
         }
         GenerateCallHandlerForStaticDecl(*setter, injectTo);
     }

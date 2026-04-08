@@ -488,8 +488,8 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest000)
     auto res = searcher.Search(ctx, "_ = (" + std::to_string(fileID) + ", 60, 13)");
     EXPECT_EQ(res[0]->name, "String");
     Ptr<RefType> rt = As<ASTKind::REF_TYPE>(res[0]->node);
-    EXPECT_EQ(rt->ref.target->identifier, "String");
-    EXPECT_TRUE(rt->ref.target->identifier.Begin() != INVALID_POSITION);
+    EXPECT_EQ(rt->GetTarget()->identifier, "String");
+    EXPECT_TRUE(rt->GetTarget()->identifier.Begin() != INVALID_POSITION);
 }
 
 TEST_F(SearchTest, DISABLED_SelectedhighlightTest001)
@@ -508,11 +508,11 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest001)
     res = searcher.Search(ctx, "_ = (1, 27, 12)");
     EXPECT_EQ(res[0]->name, "value");
     Ptr<RefExpr> re = As<ASTKind::REF_EXPR>(res[0]->node);
-    EXPECT_EQ(re->ref.target->identifier, "value");
-    EXPECT_EQ(re->ref.target->identifier.Begin().line, 26);
-    EXPECT_EQ(re->ref.target->identifier.Begin().column, 9);
-    EXPECT_EQ(re->ref.target->keywordPos.line, 26);
-    EXPECT_EQ(re->ref.target->keywordPos.column, 5);
+    EXPECT_EQ(re->GetTarget()->identifier, "value");
+    EXPECT_EQ(re->GetTarget()->identifier.Begin().line, 26);
+    EXPECT_EQ(re->GetTarget()->identifier.Begin().column, 9);
+    EXPECT_EQ(re->GetTarget()->keywordPos.line, 26);
+    EXPECT_EQ(re->GetTarget()->keywordPos.column, 5);
 }
 
 TEST_F(SearchTest, DISABLED_SelectedhighlightTest002)
@@ -531,9 +531,9 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest002)
     res = searcher.Search(ctx, "_ = (1, 26, 19)");
     EXPECT_EQ(res[0]->name, "Data");
     Ptr<RefType> rt = As<ASTKind::REF_TYPE>(res[0]->node);
-    EXPECT_EQ(rt->ref.target->identifier, "Data");
-    EXPECT_EQ(rt->ref.target->identifier.Begin().line, 14);
-    EXPECT_EQ(rt->ref.target->identifier.Begin().column, 16);
+    EXPECT_EQ(rt->GetTarget()->identifier, "Data");
+    EXPECT_EQ(rt->GetTarget()->identifier.Begin().line, 14);
+    EXPECT_EQ(rt->GetTarget()->identifier.Begin().column, 16);
 }
 
 TEST_F(SearchTest, DISABLED_SelectedhighlightTest003)
@@ -552,9 +552,9 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest003)
     res = searcher.Search(ctx, "_ = (1, 30, 20)");
 
     Ptr<MemberAccess> ma = As<ASTKind::MEMBER_ACCESS>(res[0]->node);
-    EXPECT_EQ(ma->target->identifier, "add2");
-    EXPECT_EQ(As<ASTKind::MEMBER_ACCESS>(res[0]->node)->target->identifier.Begin().line, 20);
-    EXPECT_EQ(ma->target->identifier.Begin().column, 19);
+    EXPECT_EQ(ma->GetTarget()->identifier, "add2");
+    EXPECT_EQ(As<ASTKind::MEMBER_ACCESS>(res[0]->node)->GetTarget()->identifier.Begin().line, 20);
+    EXPECT_EQ(ma->GetTarget()->identifier.Begin().column, 19);
 }
 
 TEST_F(SearchTest, DISABLED_SelectedhighlightTest004)
@@ -573,9 +573,9 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest004)
     res = searcher.Search(ctx, "_ = (1, 27, 17)");
 
     Ptr<MemberAccess> ma = As<ASTKind::MEMBER_ACCESS>(res[0]->node);
-    EXPECT_EQ(ma->target->identifier, "res");
-    EXPECT_EQ(ma->target->identifier.Begin().line, 15);
-    EXPECT_EQ(ma->target->identifier.Begin().column, 9);
+    EXPECT_EQ(ma->GetTarget()->identifier, "res");
+    EXPECT_EQ(ma->GetTarget()->identifier.Begin().line, 15);
+    EXPECT_EQ(ma->GetTarget()->identifier.Begin().column, 9);
     EXPECT_EQ(ma->field.Begin().line, 27);
     EXPECT_EQ(ma->field.Begin().column, 15);
 }
@@ -596,9 +596,9 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest005)
     res = searcher.Search(ctx, "_ = (1, 27, 17)");
 
     Ptr<MemberAccess> ma = As<ASTKind::MEMBER_ACCESS>(res[0]->node);
-    EXPECT_EQ(ma->target->identifier, "res");
-    EXPECT_EQ(ma->target->identifier.Begin().line, 15);
-    EXPECT_EQ(ma->target->identifier.Begin().column, 9);
+    EXPECT_EQ(ma->GetTarget()->identifier, "res");
+    EXPECT_EQ(ma->GetTarget()->identifier.Begin().line, 15);
+    EXPECT_EQ(ma->GetTarget()->identifier.Begin().column, 9);
     EXPECT_EQ(ma->field.Begin().line, 27);
     EXPECT_EQ(ma->field.Begin().column, 15);
 }
@@ -1292,9 +1292,9 @@ main() {
             continue;
         }
         auto ref = As<ASTKind::REF_EXPR>(sym->node);
-        if (ref && ref->ref.target != nullptr && ref->ref.identifier == "bbb" &&
-            !(ref->ref.target->TestAttr(Attribute::COMPILER_ADD) &&
-                !ref->ref.target->TestAttr(Attribute::IS_CLONED_SOURCE_CODE))) {
+        if (ref && ref->GetTarget() != nullptr && ref->ref.identifier == "bbb" &&
+            !(ref->GetTarget()->TestAttr(Attribute::COMPILER_ADD) &&
+                !ref->GetTarget()->TestAttr(Attribute::IS_CLONED_SOURCE_CODE))) {
             flag = true;
             break;
         }
@@ -1324,9 +1324,9 @@ TEST_F(SearchTest, DISABLED_PrimaryCtorHighlightTest)
             continue;
         }
         auto ref = As<ASTKind::REF_EXPR>(sym->node);
-        if (ref && ref->ref.target != nullptr &&
-            !(ref->ref.target->TestAttr(Attribute::COMPILER_ADD) &&
-                !ref->ref.target->TestAttr(Attribute::IS_CLONED_SOURCE_CODE))) {
+        if (ref && ref->GetTarget() != nullptr &&
+            !(ref->GetTarget()->TestAttr(Attribute::COMPILER_ADD) &&
+                !ref->GetTarget()->TestAttr(Attribute::IS_CLONED_SOURCE_CODE))) {
             flag = true;
             break;
         }
@@ -1342,9 +1342,9 @@ TEST_F(SearchTest, DISABLED_PrimaryCtorHighlightTest)
             continue;
         }
         auto ref = As<ASTKind::REF_EXPR>(sym->node);
-        if (ref && ref->ref.target != nullptr &&
-            !(ref->ref.target->TestAttr(Attribute::COMPILER_ADD) &&
-                !ref->ref.target->TestAttr(Attribute::IS_CLONED_SOURCE_CODE))) {
+        if (ref && ref->GetTarget() != nullptr &&
+            !(ref->GetTarget()->TestAttr(Attribute::COMPILER_ADD) &&
+                !ref->GetTarget()->TestAttr(Attribute::IS_CLONED_SOURCE_CODE))) {
             flag = true;
             break;
         }
@@ -1394,10 +1394,10 @@ TEST_F(SearchTest, DISABLED_PrimaryCtorHighlightTest)
             continue;
         }
         auto ma = As<ASTKind::MEMBER_ACCESS>(sym->node);
-        if (ma && ma->target &&
+        if (ma && ma->GetTarget() &&
             !(ma->TestAttr(Attribute::COMPILER_ADD) && !ma->TestAttr(Attribute::IS_CLONED_SOURCE_CODE)) &&
-            !(ma->target->TestAttr(Attribute::COMPILER_ADD) &&
-                !ma->target->TestAttr(Attribute::IS_CLONED_SOURCE_CODE))) {
+            !(ma->GetTarget()->TestAttr(Attribute::COMPILER_ADD) &&
+                !ma->GetTarget()->TestAttr(Attribute::IS_CLONED_SOURCE_CODE))) {
             flag = true;
             break;
         }

@@ -23,7 +23,7 @@ using namespace Cangjie;
 using namespace TypeCheckUtil;
 using namespace AST;
 
-void TypeChecker::TypeCheckerImpl::CheckReferenceTypeLegality(ASTContext& ctx, Type& t)
+void TypeCheckerImpl::CheckReferenceTypeLegality(ASTContext& ctx, Type& t)
 {
     if (t.TestAttr(Attribute::TOOL_ADD)) {
         return;
@@ -65,15 +65,14 @@ void TypeChecker::TypeCheckerImpl::CheckReferenceTypeLegality(ASTContext& ctx, T
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckOptionType(ASTContext& ctx, const OptionType& ot)
+void TypeCheckerImpl::CheckOptionType(ASTContext& ctx, const OptionType& ot)
 {
     if (ot.desugarType) {
         CheckReferenceTypeLegality(ctx, *ot.desugarType);
     }
 }
 
-std::tuple<bool, std::string> TypeChecker::TypeCheckerImpl::CheckVArrayWithRefType(
-    Ty& ty, std::unordered_set<Ptr<Ty>>& traversedTy)
+std::tuple<bool, std::string> TypeCheckerImpl::CheckVArrayWithRefType(Ty& ty, std::unordered_set<Ptr<Ty>>& traversedTy)
 {
     if (ty.IsStructArray() || ty.IsClassLike() || ty.IsArray() || ty.IsEnum() || ty.IsGeneric() ||
         (ty.IsFunc() && !ty.IsCFunc())) {
@@ -107,7 +106,7 @@ std::tuple<bool, std::string> TypeChecker::TypeCheckerImpl::CheckVArrayWithRefTy
     return {false, ""};
 }
 
-void TypeChecker::TypeCheckerImpl::CheckVArrayType(ASTContext& ctx, const VArrayType& vt)
+void TypeCheckerImpl::CheckVArrayType(ASTContext& ctx, const VArrayType& vt)
 {
     Synthesize({ctx, SynPos::NONE}, vt.typeArgument.get());
     if (auto ct = DynamicCast<ConstantType*>(vt.constantType.get()); ct) {
@@ -128,7 +127,7 @@ void TypeChecker::TypeCheckerImpl::CheckVArrayType(ASTContext& ctx, const VArray
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::IsGenericTypeWithTypeArgs(AST::Type& type) const
+bool TypeCheckerImpl::IsGenericTypeWithTypeArgs(AST::Type& type) const
 {
     if (auto rt = DynamicCast<RefType*>(&type); rt && rt->IsGenericThisType()) {
         return true;
@@ -142,7 +141,7 @@ bool TypeChecker::TypeCheckerImpl::IsGenericTypeWithTypeArgs(AST::Type& type) co
     return !(type.GetTypeArgs().empty() && generic != nullptr);
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckTypeParametersForAliasRef(AST::RefType& rt, const AST::TypeAliasDecl& aliasDecl)
+bool TypeCheckerImpl::CheckTypeParametersForAliasRef(AST::RefType& rt, const AST::TypeAliasDecl& aliasDecl)
 {
     auto aliasDeclGenericTypeParametersNum = aliasDecl.generic ? aliasDecl.generic->typeParameters.size() : 0;
     if (rt.typeArguments.size() != aliasDeclGenericTypeParametersNum) {
@@ -153,7 +152,7 @@ bool TypeChecker::TypeCheckerImpl::CheckTypeParametersForAliasRef(AST::RefType& 
     return true;
 }
 
-void TypeChecker::TypeCheckerImpl::HandleAliasForRefType(RefType& rt, Ptr<Decl>& target)
+void TypeCheckerImpl::HandleAliasForRefType(RefType& rt, Ptr<Decl>& target)
 {
     if (!target || target->astKind != ASTKind::TYPE_ALIAS_DECL) {
         return;
@@ -197,11 +196,11 @@ void RestoreTypes(std::vector<OwnedPtr<Type>>& src, std::vector<OwnedPtr<Type>>&
 }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckRefTypeWithRealTarget(RefType& rt)
+void TypeCheckerImpl::CheckRefTypeWithRealTarget(RefType& rt)
 {
     std::vector<OwnedPtr<Type>> backup;
     BackupTypes(rt.typeArguments, backup);
-    auto target = rt.ref.target;
+    auto target = rt.GetTarget();
     auto realTarget = target;
     HandleAliasForRefType(rt, realTarget);
     auto typeArgs = rt.GetTypeArgs();
@@ -221,9 +220,9 @@ void TypeChecker::TypeCheckerImpl::CheckRefTypeWithRealTarget(RefType& rt)
     RestoreTypes(rt.typeArguments, backup);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckRefType(ASTContext& ctx, RefType& rt)
+void TypeCheckerImpl::CheckRefType(ASTContext& ctx, RefType& rt)
 {
-    auto target = rt.ref.target;
+    auto target = rt.GetTarget();
     // If no target found in name resolution stage, return directly.
     if (!target) {
         return; // 'PreCheck' will not set non typeDecl to target, eg: refType may be name of package for pkg.Type.
@@ -250,7 +249,7 @@ void TypeChecker::TypeCheckerImpl::CheckRefType(ASTContext& ctx, RefType& rt)
     CheckRefTypeWithRealTarget(rt);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckCFuncType(ASTContext& ctx, const RefType& rt)
+void TypeCheckerImpl::CheckCFuncType(ASTContext& ctx, const RefType& rt)
 {
     (void)ctx;
     auto args = rt.GetTypeArgs();
@@ -271,7 +270,7 @@ void TypeChecker::TypeCheckerImpl::CheckCFuncType(ASTContext& ctx, const RefType
     CheckCFuncReturnType(*arg->retType);
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckRefExprCheckTyArgs(const RefType& rt, const Decl& target)
+bool TypeCheckerImpl::CheckRefExprCheckTyArgs(const RefType& rt, const Decl& target)
 {
     bool skipFurther = false;
     if (rt.typeArguments.empty()) {
@@ -281,13 +280,13 @@ bool TypeChecker::TypeCheckerImpl::CheckRefExprCheckTyArgs(const RefType& rt, co
         if (!HasJavaAttr(target)) {
             continue;
         }
-        if (auto prt = DynamicCast<RefType*>(type.get()); prt && prt->ref.target) {
-            auto tg = TypeCheckUtil::GetRealTarget(prt->ref.target);
+        if (auto prt = DynamicCast<RefType*>(type.get()); prt && prt->GetTarget()) {
+            auto tg = TypeCheckUtil::GetRealTarget(prt->GetTarget());
             if (tg && (HasJavaAttr(*tg) || tg->astKind == ASTKind::GENERIC_PARAM_DECL)) {
                 continue;
             }
-        } else if (auto qt = DynamicCast<QualifiedType*>(type.get()); qt && qt->target) {
-            auto tgt = TypeCheckUtil::GetRealTarget(qt->target);
+        } else if (auto qt = DynamicCast<QualifiedType*>(type.get()); qt && qt->GetTarget()) {
+            auto tgt = TypeCheckUtil::GetRealTarget(qt->GetTarget());
             if (tgt && HasJavaAttr(*tgt)) {
                 continue;
             }
@@ -298,8 +297,7 @@ bool TypeChecker::TypeCheckerImpl::CheckRefExprCheckTyArgs(const RefType& rt, co
     return skipFurther;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckRefTypeCheckAccessLegality(
-    const ASTContext& ctx, RefType& rt, const Decl& target)
+bool TypeCheckerImpl::CheckRefTypeCheckAccessLegality(const ASTContext& ctx, RefType& rt, const Decl& target)
 {
     auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, rt.scopeName);
     if (!IsLegalAccess(sym, target, rt, importManager, typeManager)) {
@@ -312,7 +310,7 @@ bool TypeChecker::TypeCheckerImpl::CheckRefTypeCheckAccessLegality(
     return true;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckTupleType(ASTContext& ctx, TupleType& tt)
+void TypeCheckerImpl::CheckTupleType(ASTContext& ctx, TupleType& tt)
 {
     for (auto& it : tt.fieldTypes) {
         CJC_NULLPTR_CHECK(it);
@@ -324,7 +322,7 @@ void TypeChecker::TypeCheckerImpl::CheckTupleType(ASTContext& ctx, TupleType& tt
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckFuncType(ASTContext& ctx, FuncType& ft)
+void TypeCheckerImpl::CheckFuncType(ASTContext& ctx, FuncType& ft)
 {
     for (auto& it : ft.paramTypes) {
         CheckReferenceTypeLegality(ctx, *it);
@@ -343,7 +341,7 @@ void TypeChecker::TypeCheckerImpl::CheckFuncType(ASTContext& ctx, FuncType& ft)
     CheckCFuncReturnType(*ft.retType);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckCFuncReturnType(const Type& type)
+void TypeCheckerImpl::CheckCFuncReturnType(const Type& type)
 {
     if (!Ty::IsMetCType(*type.GetTy())) {
         auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_cfunc_return_type, type);
@@ -353,9 +351,9 @@ void TypeChecker::TypeCheckerImpl::CheckCFuncReturnType(const Type& type)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckQualifiedType(const ASTContext& ctx, QualifiedType& qt)
+void TypeCheckerImpl::CheckQualifiedType(const ASTContext& ctx, QualifiedType& qt)
 {
-    auto target = qt.target;
+    auto target = qt.GetTarget();
     // If no target found in name resolution stage, return directly.
     if (target == nullptr) {
         // 'PreCheck' will not set non typeDecl to target

@@ -448,6 +448,14 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(Ptr<Decl> decl, const std::string
         // Lookup package decl.
         return FieldLookup(*pd, fieldName);
     }
+    if (auto bid = DynamicCast<BuiltInDecl*>(decl)) {
+        for (auto& m : bid->GetMemberDecls()) {
+            if (m && m->identifier == fieldName) {
+                results.push_back(m.get());
+            }
+        }
+        return results;
+    }
     return results;
 }
 
@@ -710,28 +718,28 @@ std::vector<Ptr<Decl>> LookUpImpl::Lookup(
     return results;
 }
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::FieldLookup(
+std::vector<Ptr<Decl>> TypeCheckerImpl::FieldLookup(
     const ASTContext& ctx, Ptr<Decl> decl, const std::string& fieldName, const LookupInfo& info)
 {
     LookUpImpl lookUpImpl(ctx, diag, typeManager, importManager);
     return lookUpImpl.FieldLookup(decl, fieldName, info);
 }
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::Lookup(
+std::vector<Ptr<Decl>> TypeCheckerImpl::Lookup(
     const ASTContext& ctx, const std::string& name, const std::string& scopeName, const Node& node, bool isSetter)
 {
     LookUpImpl lookUpImpl(ctx, diag, typeManager, importManager);
     return lookUpImpl.Lookup(name, scopeName, node, false, isSetter);
 }
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::LookupTopLevel(
+std::vector<Ptr<Decl>> TypeCheckerImpl::LookupTopLevel(
     const ASTContext& ctx, const std::string& name, const std::string& scopeName, const Node& node, bool isSetter)
 {
     LookUpImpl lookUpImpl(ctx, diag, typeManager, importManager);
     return lookUpImpl.Lookup(name, scopeName, node, true, isSetter);
 }
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::ExtendFieldLookup(
+std::vector<Ptr<Decl>> TypeCheckerImpl::ExtendFieldLookup(
     const ASTContext& ctx, const File& file, Ptr<Ty> ty, const std::string& fieldName)
 {
     LookUpImpl lookUpImpl(ctx, diag, typeManager, importManager);

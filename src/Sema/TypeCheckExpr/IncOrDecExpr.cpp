@@ -14,7 +14,7 @@ using namespace Cangjie;
 using namespace AST;
 using namespace Sema;
 
-bool TypeChecker::TypeCheckerImpl::ChkIncOrDecExpr(ASTContext& ctx, Ty& target, IncOrDecExpr& ide)
+bool TypeCheckerImpl::ChkIncOrDecExpr(ASTContext& ctx, Ty& target, IncOrDecExpr& ide)
 {
     if (!Ty::IsTyCorrect(SynIncOrDecExpr(ctx, ide))) {
         return false;
@@ -27,7 +27,7 @@ bool TypeChecker::TypeCheckerImpl::ChkIncOrDecExpr(ASTContext& ctx, Ty& target, 
     return false;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIncOrDecExpr(ASTContext& ctx, IncOrDecExpr& ide)
+Ptr<Ty> TypeCheckerImpl::SynIncOrDecExpr(ASTContext& ctx, IncOrDecExpr& ide)
 {
     if (ide.desugarExpr == nullptr) { // `ide` or parent of `ide` is broken.
         return TypeManager::GetInvalidTy();
