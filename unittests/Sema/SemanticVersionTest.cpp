@@ -31,6 +31,11 @@ std::optional<unsigned long long> Stoull(const std::string& s) {
 
 SemanticVersion ParseSemanticVersion(const std::string& s)
 {
+    constexpr size_t VERSION_IDX_MINOR = 1;
+    constexpr size_t VERSION_IDX_PATCH = 2;
+    constexpr size_t VERSION_MIN_PARTS_MINOR = 2;
+    constexpr size_t VERSION_MIN_PARTS_PATCH = 3;
+
     SemanticVersion version;
 
     // Split the string by dots
@@ -49,11 +54,11 @@ SemanticVersion ParseSemanticVersion(const std::string& s)
     if (parts.size() >= 1 && !parts[0].empty()) {
         version.major = static_cast<uint32_t>(Stoull(parts[0]).value_or(0));
     }
-    if (parts.size() >= 2 && !parts[1].empty()) {
-        version.minor = static_cast<uint32_t>(Stoull(parts[1]).value_or(0));
+    if (parts.size() >= VERSION_MIN_PARTS_MINOR && !parts[VERSION_IDX_MINOR].empty()) {
+        version.minor = static_cast<uint32_t>(Stoull(parts[VERSION_IDX_MINOR]).value_or(0));
     }
-    if (parts.size() >= 3 && !parts[2].empty()) {
-        version.patch = static_cast<uint32_t>(Stoull(parts[2]).value_or(0));
+    if (parts.size() >= VERSION_MIN_PARTS_PATCH && !parts[VERSION_IDX_PATCH].empty()) {
+        version.patch = static_cast<uint32_t>(Stoull(parts[VERSION_IDX_PATCH]).value_or(0));
     }
 
     return version;
@@ -356,7 +361,7 @@ TEST(SemanticVersionTest, PluginCustomAnnoInfoIntegration)
 // Test real-world version scenarios
 TEST(SemanticVersionTest, RealWorldScenarios)
 {
-    // Android API level style
+    // Integer API level style (major version only)
     auto api19 = ParseSemanticVersion("19");
     auto api20 = ParseSemanticVersion("20");
     auto api21 = ParseSemanticVersion("21");
@@ -364,7 +369,7 @@ TEST(SemanticVersionTest, RealWorldScenarios)
     EXPECT_TRUE(api19 < api20);
     EXPECT_TRUE(api20 < api21);
 
-    // HarmonyOS style versioning
+    // x.y.z style versioning
     auto harmony4_0_0 = ParseSemanticVersion("4.0.0");
     auto harmony4_1_0 = ParseSemanticVersion("4.1.0");
     auto harmony5_0_0 = ParseSemanticVersion("5.0.0");
