@@ -353,3 +353,38 @@ TEST_F(TypeCheckerTest, DISABLED_SpawnTest)
     EXPECT_TRUE(ty1->typeArgs.size() == 1);
     EXPECT_TRUE(ty1->typeArgs[0]->kind == TypeKind::TYPE_INT64);
 }
+
+TEST_F(TypeCheckerTest, DISABLED_DiagnosticNodeTest)
+{
+    std::string code = R"(
+interface I {
+    func foo(): Unit
+}
+
+class C1 <: I {}
+struct S1 <: I {}
+    )";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->Compile(CompileStage::SEMA);
+
+    auto diags = diag.GetCategoryDiagnostic(DiagCategory::SEMA);
+    bool foundDiag = false;
+    for (const auto& d : diags) {
+        if (d.rKind == DiagKindRefactor::sema_class_need_abstract_modifier_or_func_need_impl) {
+            foundDiag = true;
+            EXPECT_TRUE(d.node != nullptr);
+            if (d.node) {
+                EXPECT_EQ(d.node->astKind, ASTKind::CLASS_DECL);
+                auto classDecl = StaticAs<ASTKind::CLASS_DECL>(d.node);
+                EXPECT_TRUE(classDecl != nullptr);
+                if (classDecl) {
+                    EXPECT_EQ(classDecl->identifier.Val(), "C1");
+                }
+            }
+            break;
+        }
+    }
+    EXPECT_TRUE(foundDiag);
+}

@@ -330,6 +330,15 @@ public:
         // Refactor kind is set by default.
         rKind = DiagKindRefactor::parse_diag_begin;
     };
+    template <typename... Args>
+    Diagnostic(const AST::Node& n, const DiagKind kind, const Args... args)
+        : start(n.GetBegin()), end(n.GetEnd()), node(&n), kind(kind), args{args...}
+    {
+        diagSeverity = DiagSeveritys[static_cast<size_t>(kind)];
+        diagCategory = GetDiagnoseCategory(kind);
+        warnGroup = warnGroups[static_cast<unsigned>(kind)];
+        rKind = DiagKindRefactor::parse_diag_begin;
+    }
     // This is new diagKind for refactoring, will replace previous DiagKind if all diag have been modified.
     template <typename... Args>
     Diagnostic(bool refactor, const Range range, const DiagKindRefactor kind, const Args... args)
@@ -369,6 +378,28 @@ public:
         diagCategory = GetDiagnoseCategory(kind);
     }
 
+    template <typename... Args>
+    Diagnostic(bool refactor, const AST::Node& n, const DiagKindRefactor kind, const Args... args)
+        : node(&n), isRefactor(refactor), rKind(kind)
+    {
+        static_assert(IsAllString<Args...>, "the diagnostic only support string type argument");
+
+        Range range = MakeRange(n.GetBegin(), n.GetEnd());
+        std::vector<std::string> arguments{args...};
+        auto errData = errorData[static_cast<unsigned>(kind)];
+        diagSeverity = rDiagSeveritys[static_cast<unsigned>(kind)];
+        warnGroup = rWarnGroups[static_cast<unsigned>(kind)];
+
+        errorMessage = InsertArguments(errData.message, arguments);
+        if (SEVE_TO_COLOR.find(diagSeverity) != SEVE_TO_COLOR.end()) {
+            mainHint = IntegratedString(range, errData.mainHint, SEVE_TO_COLOR.at(diagSeverity));
+        } else {
+            mainHint = IntegratedString(range, errData.mainHint, DiagColor::RED);
+        }
+
+        diagCategory = GetDiagnoseCategory(kind);
+    }
+
     Diagnostic()
     {
         diagSeverity = DiagSeveritys[static_cast<size_t>(kind)];
@@ -378,6 +409,7 @@ public:
 
     Position start;                            /**< Diagnostic start position */
     Position end;                              /**< Diagnostic end position */
+    Ptr<const AST::Node> node{nullptr};        /**< Diagnostic node */
     DiagKind kind{DEFAULT_KIND}; /**< Diagnostic kind */
     bool printSourceCode{true};                /**< Whether to print the related source code. */
     /// Whether this Diagnostic is created from \ref DiagnoseRefactor
@@ -621,12 +653,17 @@ public:
         auto begin = node.GetMacroCallPos(pos);
         auto end = begin == DEFAULT_POSITION ? begin : begin + 1;
         Diagnostic myDiag(begin, end, kind, args...);
+        myDiag.node = &node;
         diagnostic.notes.push_back(myDiag);
     }
 
     template <typename... Args> void AddNote(const AST::Node& node, DiagKind kind, Args... args)
     {
-        AddNote(node.GetBegin(), kind, args...);
+        auto pos = node.GetBegin();
+        auto end = pos == DEFAULT_POSITION ? pos : pos + 1;
+        Diagnostic myDiag(pos, end, kind, args...);
+        myDiag.node = &node;
+        diagnostic.notes.push_back(myDiag);
     }
 
     template <typename... Args> void AddHint(const Position& pos, Args... args)
@@ -838,11 +875,11 @@ public:
         }
         // Refactor the Diagnose of the node after the macro expansion.
         if (node.curMacroCall) {
-            Diagnostic diagnostic(node.GetBegin(), node.GetEnd(), kind, args...);
+            Diagnostic diagnostic(node, kind, args...);
             AddMacroCallNote(diagnostic, node, node.begin);
             return DiagnosticBuilder(*this, diagnostic);
         }
-        return Diagnose(node.GetBegin(), kind, args...);
+        return DiagnosticBuilder(*this, Diagnostic(node, kind, args...));
     }
 
     DiagnosticBuilder Diagnose(const Diagnostic& diagnostic)
@@ -905,8 +942,7 @@ public:
     DiagnosticBuilder DiagnoseRefactor(DiagKindRefactor kind, const AST::Node& node, Args... args)
     {
         static_assert(IsAllString<Args...>, "the diagnose only support string type argument");
-        auto range = MakeRange(node.GetBegin(), node.GetEnd());
-        Diagnostic diagnostic(true, range, kind, args...);
+        Diagnostic diagnostic(true, node, kind, args...);
         diagnostic.isInMacroCall = node.isInMacroCall;
         AddMacroCallNote(diagnostic, node, node.begin);
         return DiagnosticBuilder(*this, diagnostic);
@@ -920,6 +956,7 @@ public:
         auto begin = node.GetMacroCallPos(pos, true);
         Range range = MakeRange(begin, begin + 1);
         Diagnostic diagnostic(true, range, kind, args...);
+        diagnostic.node = &node;
         diagnostic.isInMacroCall = node.isInMacroCall;
         AddMacroCallNote(diagnostic, node, pos);
         return DiagnosticBuilder(*this, diagnostic);
@@ -932,6 +969,7 @@ public:
         CheckRange(Diagnostic::GetDiagnoseCategory(kind), range);
         auto newRange = MakeRealRange(node, range.begin, range.end);
         Diagnostic diagnostic(true, newRange, kind, args...);
+        diagnostic.node = &node;
         diagnostic.isInMacroCall = node.isInMacroCall;
         AddMacroCallNote(diagnostic, node, range.begin);
         return DiagnosticBuilder(*this, diagnostic);
@@ -943,6 +981,7 @@ public:
         static_assert(IsAllString<Args...>, "the diagnose only support string type argument");
         auto range = MakeRealRange(node, token.Begin(), token.End(), token.kind == TokenKind::END);
         Diagnostic diagnostic(true, range, kind, args...);
+        diagnostic.node = &node;
         diagnostic.isInMacroCall = node.isInMacroCall;
         AddMacroCallNote(diagnostic, node, token.Begin());
         return DiagnosticBuilder(*this, diagnostic);
