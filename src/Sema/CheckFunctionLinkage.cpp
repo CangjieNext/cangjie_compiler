@@ -643,7 +643,8 @@ void TypeChecker::TypeCheckerImpl::AnalyzeFunctionLinkage(Package& pkg) const
     //       The above modifications are incompatible, and the action is postponed.
     std::unordered_map<std::string, Ptr<Decl>> privateDeclMap;
     IterateToplevelDecls(pkg, [this, &privateDeclMap](OwnedPtr<Decl>& decl) {
-        if (decl->IsNominalDecl() && decl->TestAttr(Attribute::PRIVATE) && decl->linkage != Linkage::INTERNAL) {
+        if ((decl->IsNominalDecl() || decl->IsBuiltIn()) && decl->TestAttr(Attribute::PRIVATE) &&
+            decl->linkage != Linkage::INTERNAL) {
             auto ret = privateDeclMap.emplace(decl->identifier.Val(), decl.get());
             if (!ret.second) {
                 auto builder = diag.DiagnoseRefactor(

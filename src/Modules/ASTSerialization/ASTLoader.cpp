@@ -945,6 +945,21 @@ OwnedPtr<Decl> ASTLoader::ASTLoaderImpl::LoadBuiltInDecl(const PackageFormat::De
     LoadDeclBasicInfo(decl, *bid);
     AddDeclToImportedPackage(*bid);
     bid->generic = LoadGeneric(*bid, decl.generic());
+    Ptr<File> fileForBid = nullptr;
+    if (auto found = idToFileMap.find(bid->begin.fileID); found != idToFileMap.end()) {
+        fileForBid = found->second;
+    }
+    CJC_NULLPTR_CHECK(fileForBid);
+    bid->curFile = fileForBid;
+    auto& members = bid->GetMemberDecls();
+    const auto* memberBody = info->body();
+    if (memberBody != nullptr && memberBody->size() != 0) {
+        for (uoffset_t i = 0; i < memberBody->size(); i++) {
+            auto index = memberBody->Get(i);
+            members.emplace_back(LoadDecl(index));
+            SetOuterDeclForMemberDecl(*members[i], *bid);
+        }
+    }
     return bid;
 }
 
