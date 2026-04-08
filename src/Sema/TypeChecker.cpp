@@ -912,7 +912,11 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<
         }
         case ASTKind::ARRAY_EXPR: {
             auto ae = StaticAs<ASTKind::ARRAY_EXPR>(node);
-            node->SetTy(ae->isValueArray ? SynVArrayExpr(*curCtx, *ae) : SynArrayExpr(*curCtx, *ae));
+            if (ae->isValueArray) {
+                node->SetTy(SynVArrayExpr(*curCtx, *ae));
+            } else {
+                CJC_ABORT();
+            }
             break;
         }
         case ASTKind::POINTER_EXPR: {
@@ -1136,7 +1140,7 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
             case ASTKind::ARRAY_EXPR: {
                 auto ae = StaticAs<ASTKind::ARRAY_EXPR>(node);
                 chkRet = ae->isValueArray ? ChkVArrayExpr(*curCtx, *realTarget, *ae)
-                                          : ChkArrayExpr(*curCtx, *realTarget, *ae);
+                                          : ChkRawArrayExpr(*curCtx, *realTarget, *ae);
                 break;
             }
             case ASTKind::POINTER_EXPR: {
@@ -1786,78 +1790,6 @@ void MarkOverflow(Node& node)
     checkOverflowWalker.Walk();
 }
 
-void AddBuiltInArrayDecl(Package& pkg)
-{
-    auto bid = MakeOwned<BuiltInDecl>(BuiltInType::ARRAY);
-    bid->identifier = RAW_ARRAY_NAME;
-    bid->generic = MakeOwned<Generic>();
-    auto gpd = MakeOwnedNode<GenericParamDecl>();
-    gpd->identifier = "T";
-    gpd->outerDecl = bid.get();
-    bid->generic->typeParameters.emplace_back(std::move(gpd));
-    bid->EnableAttr(Attribute::GLOBAL, Attribute::GENERIC);
-    CopyFileID(bid.get(), pkg.files[0].get());
-    pkg.files[0]->decls.emplace_back(std::move(bid)); // Caller guarantees file not empty.
-}
-
-void AddBuiltInPointerDecl(Package& pkg)
-{
-    auto bid = MakeOwned<BuiltInDecl>(BuiltInType::POINTER);
-    bid->identifier = CPOINTER_NAME;
-    bid->generic = MakeOwned<Generic>();
-    auto gpd = MakeOwnedNode<GenericParamDecl>();
-    gpd->identifier = "T";
-    gpd->outerDecl = bid.get();
-    bid->generic->typeParameters.emplace_back(std::move(gpd));
-    bid->generic->genericConstraints.emplace_back(CreateConstraintForFFI(CTYPE_NAME));
-
-    bid->EnableAttr(Attribute::PUBLIC, Attribute::GLOBAL, Attribute::GENERIC);
-    CopyFileID(bid.get(), pkg.files[0].get());
-    pkg.files[0]->decls.emplace_back(std::move(bid)); // Caller guarantees file not empty.
-}
-
-void AddBuiltInCStringDecl(Package& pkg)
-{
-    auto bid = MakeOwned<BuiltInDecl>(BuiltInType::CSTRING);
-    bid->identifier = CSTRING_NAME;
-    bid->generic = nullptr;
-    bid->EnableAttr(Attribute::PUBLIC, Attribute::GLOBAL);
-    CopyFileID(bid.get(), pkg.files[0].get());
-    pkg.files[0]->decls.emplace_back(std::move(bid)); // Caller guarantees file not empty.
-}
-
-void AddBuiltInVArrayDecl(Package& pkg)
-{
-    auto bid = MakeOwned<BuiltInDecl>(BuiltInType::VARRAY);
-    bid->identifier = VARRAY_NAME;
-    bid->generic = MakeOwned<Generic>();
-    auto gpd = MakeOwnedNode<GenericParamDecl>();
-    gpd->identifier = "T";
-    gpd->outerDecl = bid.get();
-    bid->generic->typeParameters.emplace_back(std::move(gpd));
-    bid->EnableAttr(Attribute::GLOBAL);
-    bid->EnableAttr(Attribute::PUBLIC);
-    bid->EnableAttr(Attribute::GENERIC);
-    CopyFileID(bid.get(), pkg.files[0].get());
-    pkg.files[0]->decls.emplace_back(std::move(bid)); // Caller guarantees file not empty.
-}
-
-void AddBuiltinCFuncDecl(Package& pkg)
-{
-    auto bid = MakeOwned<BuiltInDecl>(BuiltInType::CFUNC);
-    bid->identifier = CFUNC_NAME;
-    bid->generic = MakeOwned<Generic>();
-    auto gpd = MakeOwnedNode<GenericParamDecl>();
-    gpd->identifier = "T";
-    gpd->outerDecl = &*bid;
-    bid->generic->typeParameters.push_back(std::move(gpd));
-    bid->EnableAttr(Attribute::GLOBAL);
-    bid->EnableAttr(Attribute::PUBLIC);
-    bid->EnableAttr(Attribute::GENERIC);
-    CopyFileID(&*bid, &*pkg.files[0]);
-    pkg.files[0]->decls.push_back(std::move(bid));
-}
-
 void AddAttrForDefaultFuncParam(Package& pkg)
 {
     Utils::ProfileRecorder recorder("Post TypeCheck", "AddAttrForDefaultFuncParam");
@@ -2095,11 +2027,7 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
     AddDefaultFunction(pkg);
     // Add built-in decls to core package.
     if (pkg.fullPackageName == CORE_PACKAGE_NAME && !pkg.files.empty() && !pkg.TestAttr(Attribute::IMPORTED)) {
-        AddBuiltInArrayDecl(pkg);
-        AddBuiltInVArrayDecl(pkg);
-        AddBuiltInPointerDecl(pkg);
-        AddBuiltinCFuncDecl(pkg);
-        AddBuiltInCStringDecl(pkg);
+        CreateBuiltinDecls(pkg);
     }
     Utils::ProfileRecorder::Stop("PrepareTypeCheck", "AddDefaultFuncAndBuiltinDecl");
     // Phase: build symbol table.

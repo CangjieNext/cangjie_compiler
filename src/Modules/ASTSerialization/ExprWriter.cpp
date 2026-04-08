@@ -306,8 +306,7 @@ TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const ArrayExpr& ae, const 
         operands.emplace_back(SaveFuncArg(*arg));
     }
     auto operandsIdx = builder.CreateVector<FormattedIndex>(operands);
-    auto initFunc = GetFullDeclIndex(ae.initFunc);
-    auto eInfo = PackageFormat::CreateArrayInfo(builder, initFunc, ae.isValueArray);
+    auto eInfo = PackageFormat::CreateArrayInfo(builder, GetFullDeclIndex(nullptr), ae.isValueArray);
     PackageFormat::ExprBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::ExprKind_ArrayExpr);
     SaveBasicNodeInfo(dbuilder, info);
