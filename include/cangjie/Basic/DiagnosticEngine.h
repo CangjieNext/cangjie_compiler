@@ -378,6 +378,9 @@ public:
 
     Position start;                            /**< Diagnostic start position */
     Position end;                              /**< Diagnostic end position */
+    /// The node where the diagnostic is located.
+    /// For LSP, enhance automatic error correction functionality.
+    Ptr<const AST::Node> node{nullptr};
     DiagKind kind{DEFAULT_KIND}; /**< Diagnostic kind */
     bool printSourceCode{true};                /**< Whether to print the related source code. */
     /// Whether this Diagnostic is created from \ref DiagnoseRefactor
@@ -609,25 +612,9 @@ public:
     DiagnosticEngine& diag;
     DiagnosticBuilder(const DiagnosticBuilder& p) = delete;
     DiagnosticBuilder& operator=(const DiagnosticBuilder& p) = delete;
-    template <typename... Args> void AddNote(const Position& pos, DiagKind kind, Args... args)
-    {
-        auto end = pos == DEFAULT_POSITION ? pos : pos + 1;
-        Diagnostic myDiag(pos, end, kind, args...);
-        diagnostic.notes.push_back(myDiag);
-    }
-
-    template <typename... Args> void AddNote(const AST::Node& node, const Position& pos, DiagKind kind, Args... args)
-    {
-        auto begin = node.GetMacroCallPos(pos);
-        auto end = begin == DEFAULT_POSITION ? begin : begin + 1;
-        Diagnostic myDiag(begin, end, kind, args...);
-        diagnostic.notes.push_back(myDiag);
-    }
-
-    template <typename... Args> void AddNote(const AST::Node& node, DiagKind kind, Args... args)
-    {
-        AddNote(node.GetBegin(), kind, args...);
-    }
+    template <typename... Args> void AddNote(const Position& pos, DiagKind kind, Args... args);
+    template <typename... Args> void AddNote(const AST::Node& node, const Position& pos, DiagKind kind, Args... args);
+    template <typename... Args> void AddNote(const AST::Node& node, DiagKind kind, Args... args);
 
     template <typename... Args> void AddHint(const Position& pos, Args... args)
     {
@@ -839,10 +826,13 @@ public:
         // Refactor the Diagnose of the node after the macro expansion.
         if (node.curMacroCall) {
             Diagnostic diagnostic(node.GetBegin(), node.GetEnd(), kind, args...);
+            diagnostic.node = &node;
             AddMacroCallNote(diagnostic, node, node.begin);
             return DiagnosticBuilder(*this, diagnostic);
         }
-        return Diagnose(node.GetBegin(), kind, args...);
+        auto diagnostic = Diagnostic(node.GetBegin(), node.GetEnd(), kind, args...);
+        diagnostic.node = &node;
+        return DiagnosticBuilder(*this, diagnostic);
     }
 
     DiagnosticBuilder Diagnose(const Diagnostic& diagnostic)
@@ -907,6 +897,7 @@ public:
         static_assert(IsAllString<Args...>, "the diagnose only support string type argument");
         auto range = MakeRange(node.GetBegin(), node.GetEnd());
         Diagnostic diagnostic(true, range, kind, args...);
+        diagnostic.node = &node;
         diagnostic.isInMacroCall = node.isInMacroCall;
         AddMacroCallNote(diagnostic, node, node.begin);
         return DiagnosticBuilder(*this, diagnostic);
@@ -920,6 +911,7 @@ public:
         auto begin = node.GetMacroCallPos(pos, true);
         Range range = MakeRange(begin, begin + 1);
         Diagnostic diagnostic(true, range, kind, args...);
+        diagnostic.node = &node;
         diagnostic.isInMacroCall = node.isInMacroCall;
         AddMacroCallNote(diagnostic, node, pos);
         return DiagnosticBuilder(*this, diagnostic);
@@ -932,6 +924,7 @@ public:
         CheckRange(Diagnostic::GetDiagnoseCategory(kind), range);
         auto newRange = MakeRealRange(node, range.begin, range.end);
         Diagnostic diagnostic(true, newRange, kind, args...);
+        diagnostic.node = &node;
         diagnostic.isInMacroCall = node.isInMacroCall;
         AddMacroCallNote(diagnostic, node, range.begin);
         return DiagnosticBuilder(*this, diagnostic);
@@ -943,6 +936,7 @@ public:
         static_assert(IsAllString<Args...>, "the diagnose only support string type argument");
         auto range = MakeRealRange(node, token.Begin(), token.End(), token.kind == TokenKind::END);
         Diagnostic diagnostic(true, range, kind, args...);
+        diagnostic.node = &node;
         diagnostic.isInMacroCall = node.isInMacroCall;
         AddMacroCallNote(diagnostic, node, token.Begin());
         return DiagnosticBuilder(*this, diagnostic);
@@ -1045,6 +1039,39 @@ private:
     std::vector<Diagnostic> DisableDiagnose();
     void EnableDiagnose();
 };
+
+template <typename... Args> void DiagnosticBuilder::AddNote(const Position& pos, DiagKind kind, Args... args)
+{
+    auto end = pos == DEFAULT_POSITION ? pos : pos + 1;
+    Diagnostic myDiag(pos, end, kind, args...);
+    diagnostic.notes.push_back(myDiag);
+    diag.ConvertArgsToDiagMessage(myDiag);
+    AddNote(MakeRange(pos, end), myDiag.diagMessage);
+}
+
+template <typename... Args>
+void DiagnosticBuilder::AddNote(const AST::Node& node, const Position& pos, DiagKind kind, Args... args)
+{
+    auto begin = node.GetMacroCallPos(pos);
+    auto end = begin == DEFAULT_POSITION ? begin : begin + 1;
+    Diagnostic myDiag(begin, end, kind, args...);
+    myDiag.node = &node;
+    diagnostic.notes.push_back(myDiag);
+    diag.ConvertArgsToDiagMessage(myDiag);
+    AddNote(MakeRange(begin, end), myDiag.diagMessage);
+}
+
+template <typename... Args> void DiagnosticBuilder::AddNote(const AST::Node& node, DiagKind kind, Args... args)
+{
+    auto pos = node.GetBegin();
+    auto end = pos == DEFAULT_POSITION ? pos : pos + 1;
+    Diagnostic myDiag(pos, end, kind, args...);
+    myDiag.node = &node;
+    diagnostic.notes.push_back(myDiag);
+    diag.ConvertArgsToDiagMessage(myDiag);
+    AddNote(MakeRange(pos, end), myDiag.diagMessage);
+}
+
 } // namespace Cangjie
 
 #endif // CANGJIE_BASIC_DIAGNOSTICENGINE_H
