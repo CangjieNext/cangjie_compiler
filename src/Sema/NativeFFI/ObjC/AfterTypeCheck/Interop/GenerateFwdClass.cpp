@@ -17,6 +17,7 @@
 #include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Create.h"
 #include "NativeFFI/ObjC/Utils/ASTFactory.h"
+#include "cangjie/AST/Node.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -275,6 +276,10 @@ void GenerateFwdClass::GenerateCtors(ClassDecl& decl)
     for (auto& member : decl.GetMemberDecls()) {
         // if need mapping
         if (!member->TestAttr(Attribute::CONSTRUCTOR)) {
+            continue;
+        }
+        if (member->astKind != ASTKind::FUNC_DECL) {
+            // skip primaryctor
             continue;
         }
         auto fn = DynamicCast<FuncDecl*>(member.get());
