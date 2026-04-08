@@ -50,10 +50,10 @@ constexpr std::string_view HIDE_ARG_NAME = "isChecked";
 // Returns SemanticVersion with major.minor.patch components
 SemanticVersion ParseSemanticVersion(const std::string& s)
 {
-    constexpr size_t VERSION_IDX_MINOR = 1;
-    constexpr size_t VERSION_IDX_PATCH = 2;
-    constexpr size_t VERSION_MIN_PARTS_MINOR = 2;
-    constexpr size_t VERSION_MIN_PARTS_PATCH = 3;
+    constexpr size_t versionIdxMinor = 1;
+    constexpr size_t versionIdxPatch = 2;
+    constexpr size_t versionMinPartsMinor = 2;
+    constexpr size_t versionMinPartsPatch = 3;
 
     SemanticVersion version;
 
@@ -73,11 +73,11 @@ SemanticVersion ParseSemanticVersion(const std::string& s)
     if (parts.size() >= 1 && !parts[0].empty()) {
         version.major = static_cast<uint32_t>(Stoull(parts[0]).value_or(0));
     }
-    if (parts.size() >= VERSION_MIN_PARTS_MINOR && !parts[VERSION_IDX_MINOR].empty()) {
-        version.minor = static_cast<uint32_t>(Stoull(parts[VERSION_IDX_MINOR]).value_or(0));
+    if (parts.size() >= versionMinPartsMinor && !parts[versionIdxMinor].empty()) {
+        version.minor = static_cast<uint32_t>(Stoull(parts[versionIdxMinor]).value_or(0));
     }
-    if (parts.size() >= VERSION_MIN_PARTS_PATCH && !parts[VERSION_IDX_PATCH].empty()) {
-        version.patch = static_cast<uint32_t>(Stoull(parts[VERSION_IDX_PATCH]).value_or(0));
+    if (parts.size() >= versionMinPartsPatch && !parts[versionIdxPatch].empty()) {
+        version.patch = static_cast<uint32_t>(Stoull(parts[versionIdxPatch]).value_or(0));
     }
 
     return version;
