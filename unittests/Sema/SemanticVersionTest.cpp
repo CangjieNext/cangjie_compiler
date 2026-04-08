@@ -380,3 +380,158 @@ TEST(SemanticVersionTest, RealWorldScenarios)
     EXPECT_TRUE(v1_0_0 < v1_0_1);
     EXPECT_TRUE(v1_0_1 < v1_0_10);
 }
+
+// ============================================================
+// Tests for --cfg APILevel scenario
+//
+// Simulates the CheckLevel logic triggered by --cfg APILevel_level=X.Y.Z:
+//   - globalLevel  : parsed from --cfg APILevel_level (i.e., scopeLevel when no IfAvailable)
+//   - targetSince  : from the @APILevel(since: "X.Y.Z") annotation on the referenced API
+//   - Rule: if targetSince > scopeLevel → inaccessible (should report error)
+//           if targetSince <= scopeLevel → accessible (no error)
+// ============================================================
+
+namespace {
+// Helper: simulate CheckLevel return value.
+// Returns true when the API is accessible (no error should be reported),
+// false when the API level is too high (error should be reported).
+bool IsAccessible(const SemanticVersion& targetSince, const SemanticVersion& scopeLevel)
+{
+    // Mirrors PluginCustomAnnoChecker::CheckLevel: error when targetSince > scopeLevel
+    return !(targetSince > scopeLevel);
+}
+} // namespace
+
+// --cfg APILevel_level=20 (integer style)
+TEST(CfgAPILevelTest, IntegerStyleCfg_Accessible)
+{
+    auto globalLevel = ParseSemanticVersion("20");   // --cfg APILevel_level=20
+    auto targetSince = ParseSemanticVersion("20");   // @APILevel(since: "20")
+    EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
+}
+
+TEST(CfgAPILevelTest, IntegerStyleCfg_Inaccessible)
+{
+    auto globalLevel = ParseSemanticVersion("19");   // --cfg APILevel_level=19
+    auto targetSince = ParseSemanticVersion("20");   // @APILevel(since: "20")
+    EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
+}
+
+// --cfg APILevel_level=20.0.0 (full x.y.z style)
+TEST(CfgAPILevelTest, FullVersionCfg_ExactMatch_Accessible)
+{
+    auto globalLevel = ParseSemanticVersion("20.0.0");
+    auto targetSince = ParseSemanticVersion("20.0.0");
+    EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
+}
+
+TEST(CfgAPILevelTest, FullVersionCfg_HigherTarget_Inaccessible)
+{
+    auto globalLevel = ParseSemanticVersion("20.0.0");  // --cfg APILevel_level=20.0.0
+    auto targetSince = ParseSemanticVersion("20.1.0");  // @APILevel(since: "20.1.0")
+    EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
+}
+
+TEST(CfgAPILevelTest, FullVersionCfg_LowerTarget_Accessible)
+{
+    auto globalLevel = ParseSemanticVersion("20.1.0");  // --cfg APILevel_level=20.1.0
+    auto targetSince = ParseSemanticVersion("20.0.0");  // @APILevel(since: "20.0.0")
+    EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
+}
+
+// Patch-level boundary
+TEST(CfgAPILevelTest, PatchBoundary_ExactMatch_Accessible)
+{
+    auto globalLevel = ParseSemanticVersion("20.1.5");
+    auto targetSince = ParseSemanticVersion("20.1.5");
+    EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
+}
+
+TEST(CfgAPILevelTest, PatchBoundary_OneHigher_Inaccessible)
+{
+    auto globalLevel = ParseSemanticVersion("20.1.5");  // --cfg APILevel_level=20.1.5
+    auto targetSince = ParseSemanticVersion("20.1.6");  // @APILevel(since: "20.1.6")
+    EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
+}
+
+TEST(CfgAPILevelTest, PatchBoundary_OneLower_Accessible)
+{
+    auto globalLevel = ParseSemanticVersion("20.1.5");  // --cfg APILevel_level=20.1.5
+    auto targetSince = ParseSemanticVersion("20.1.4");  // @APILevel(since: "20.1.4")
+    EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
+}
+
+// Integer --cfg is equivalent to x.0.0
+TEST(CfgAPILevelTest, IntegerEquivalentToMajorZeroZero)
+{
+    auto cfgInt = ParseSemanticVersion("20");      // --cfg APILevel_level=20
+    auto cfgFull = ParseSemanticVersion("20.0.0"); // --cfg APILevel_level=20.0.0
+
+    // Both forms must yield the same accessibility decisions
+    auto targetBelow = ParseSemanticVersion("19.9.9");
+    auto targetEqual = ParseSemanticVersion("20.0.0");
+    auto targetAbove = ParseSemanticVersion("20.0.1");
+
+    EXPECT_EQ(IsAccessible(targetBelow, cfgInt), IsAccessible(targetBelow, cfgFull));
+    EXPECT_EQ(IsAccessible(targetEqual, cfgInt), IsAccessible(targetEqual, cfgFull));
+    EXPECT_EQ(IsAccessible(targetAbove, cfgInt), IsAccessible(targetAbove, cfgFull));
+}
+
+// Two-part --cfg (e.g., --cfg APILevel_level=20.1)
+TEST(CfgAPILevelTest, TwoPartCfg_Accessible)
+{
+    auto globalLevel = ParseSemanticVersion("20.1");    // --cfg APILevel_level=20.1
+    auto targetSince = ParseSemanticVersion("20.1.0");  // @APILevel(since: "20.1.0")
+    EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
+}
+
+TEST(CfgAPILevelTest, TwoPartCfg_Inaccessible)
+{
+    auto globalLevel = ParseSemanticVersion("20.1");    // --cfg APILevel_level=20.1
+    auto targetSince = ParseSemanticVersion("20.2.0");  // @APILevel(since: "20.2.0")
+    EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
+}
+
+// Cross-major boundary
+TEST(CfgAPILevelTest, CrossMajor_OlderCfg_Inaccessible)
+{
+    auto globalLevel = ParseSemanticVersion("20.9.9");  // --cfg APILevel_level=20.9.9
+    auto targetSince = ParseSemanticVersion("21.0.0");  // @APILevel(since: "21.0.0")
+    EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
+}
+
+TEST(CfgAPILevelTest, CrossMajor_NewerCfg_Accessible)
+{
+    auto globalLevel = ParseSemanticVersion("21.0.0");  // --cfg APILevel_level=21.0.0
+    auto targetSince = ParseSemanticVersion("20.9.9");  // @APILevel(since: "20.9.9")
+    EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
+}
+
+// No --cfg provided: globalLevel is zero, optionWithLevel==false (CheckLevel returns true immediately).
+// Modeled here as: zero globalLevel should never block access via the IsZero guard.
+TEST(CfgAPILevelTest, NoCfgProvided_GlobalLevelIsZero)
+{
+    SemanticVersion globalLevel;  // default-constructed = 0.0.0 (IsZero)
+    EXPECT_TRUE(globalLevel.IsZero());
+    // When optionWithLevel is false, CheckLevel returns true regardless; ensure zero is detectable.
+    auto targetSince = ParseSemanticVersion("21.0.0");
+    // The real CheckLevel would skip the check; here we verify the zero sentinel.
+    EXPECT_FALSE(targetSince.IsZero());
+}
+
+// Batch accessibility: multiple APIs at different levels with a fixed --cfg
+TEST(CfgAPILevelTest, BatchAccessibility_FixedCfg)
+{
+    auto globalLevel = ParseSemanticVersion("20.1.5");  // --cfg APILevel_level=20.1.5
+
+    // accessible APIs (since <= 20.1.5)
+    EXPECT_TRUE(IsAccessible(ParseSemanticVersion("19.0.0"), globalLevel));
+    EXPECT_TRUE(IsAccessible(ParseSemanticVersion("20.0.0"), globalLevel));
+    EXPECT_TRUE(IsAccessible(ParseSemanticVersion("20.1.0"), globalLevel));
+    EXPECT_TRUE(IsAccessible(ParseSemanticVersion("20.1.5"), globalLevel));
+
+    // inaccessible APIs (since > 20.1.5)
+    EXPECT_FALSE(IsAccessible(ParseSemanticVersion("20.1.6"), globalLevel));
+    EXPECT_FALSE(IsAccessible(ParseSemanticVersion("20.2.0"), globalLevel));
+    EXPECT_FALSE(IsAccessible(ParseSemanticVersion("21.0.0"), globalLevel));
+}
