@@ -54,6 +54,7 @@ void Darwin_CJNATIVE::GenerateLinkOptionsForLTO(Tool& tool) const
     }
     if (driverOptions.saveTemps) {
         tool.AppendArg("-save-temps");
+        
     }
     if (GetEffectiveOptimizationLevel(driverOptions) == GlobalOptions::OptimizationLevel::O2) {
         tool.AppendArg("-mllvm");
@@ -90,10 +91,8 @@ void Darwin_CJNATIVE::GenerateArchiveTool(const std::vector<TempFileInfo>& objFi
     auto ltoObject = GenerateLTOObjectFile(objFiles);
     if (driverOptions.enableVerbose) {
         Infoln("preserved Darwin LTO object at: " + ltoObject.filePath);
-        Infoln("skip archiving preserved LTO object for now");
     }
-    // TODO: package the captured LTO object after the archive flow is fully
-    // aligned with the intended macOS static library behavior.
+    MachO::GenerateArchiveTool({ltoObject});
 }
 
 TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>& objFiles)
@@ -105,11 +104,13 @@ TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileIn
     }
     auto tool = std::make_unique<Tool>(ldPath, ToolType::BACKEND, driverOptions.environment.allVariables);
     tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
-    auto tempBinaryInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::T_DYLIB_MAC);
-    auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::T_OBJ);
+    auto tempBinaryInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_DYLIB);
+    auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_OBJ);
+    auto ltoObjectDir = outputFileInfo.filePath + ".lto";
+    auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, GetTargetArchString() + ".lto.o");
     tool->AppendArg("-o", tempBinaryInfo.filePath);
     GenerateLinkOptionsForLTO(*tool);
-    tool->AppendArg("-object_path_lto", outputFileInfo.filePath);
+    tool->AppendArg("-object_path_lto", ltoObjectDir);
     tool->AppendArg("-dylib");
     tool->AppendArg("-arch", GetTargetArchString());
 
@@ -124,6 +125,8 @@ TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileIn
     GenerateRuntimePath(*tool);
 
     backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
+    outputFileInfo.filePath = ltoObjectPath;
+    outputFileInfo.rawPath = ltoObjectDir;
     return outputFileInfo;
 }
 
