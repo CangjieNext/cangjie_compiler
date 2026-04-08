@@ -105,11 +105,13 @@ TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileIn
     }
     auto tool = std::make_unique<Tool>(ldPath, ToolType::BACKEND, driverOptions.environment.allVariables);
     tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
-    auto tempBinaryInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::T_DYLIB_MAC);
-    auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::T_OBJ);
+    auto tempBinaryInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_DYLIB);
+    auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_OBJ);
+    auto ltoObjectDir = outputFileInfo.filePath + ".lto";
+    auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, GetTargetArchString() + ".lto.o");
     tool->AppendArg("-o", tempBinaryInfo.filePath);
     GenerateLinkOptionsForLTO(*tool);
-    tool->AppendArg("-object_path_lto", outputFileInfo.filePath);
+    tool->AppendArg("-object_path_lto", ltoObjectDir);
     tool->AppendArg("-dylib");
     tool->AppendArg("-arch", GetTargetArchString());
 
@@ -124,6 +126,8 @@ TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileIn
     GenerateRuntimePath(*tool);
 
     backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
+    outputFileInfo.filePath = ltoObjectPath;
+    outputFileInfo.rawPath = ltoObjectDir;
     return outputFileInfo;
 }
 
