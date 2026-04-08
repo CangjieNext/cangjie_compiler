@@ -474,6 +474,38 @@ const std::string CANIUSE_IDENTIFIER = "canIUse";
 // Also supports: `@IfAvailable(level: "20.0.0", {=>...}, {=>...})`
 // Desugar as: `if (DeviceInfo.sdkApiVersion >= 20000000) {...} else {...}`
 // Semantic version encoding: major * 1000000 + minor * 1000 + patch
+static uint64_t ParseVersionStrToEncoded(const std::string& versionStr)
+{
+    constexpr size_t versionIdxMinor = 1;
+    constexpr size_t versionIdxPatch = 2;
+    constexpr size_t versionMinPartsMinor = 2;
+    constexpr size_t versionMinPartsPatch = 3;
+    uint32_t major = 0;
+    uint32_t minor = 0;
+    uint32_t patch = 0;
+    std::vector<std::string> parts;
+    size_t start = 0;
+    size_t end = versionStr.find('.');
+    while (end != std::string::npos) {
+        parts.push_back(versionStr.substr(start, end - start));
+        start = end + 1;
+        end = versionStr.find('.', start);
+    }
+    parts.push_back(versionStr.substr(start));
+    if (parts.size() >= 1 && !parts[0].empty()) {
+        major = std::stoul(parts[0]);
+    }
+    if (parts.size() >= versionMinPartsMinor && !parts[versionIdxMinor].empty()) {
+        minor = std::stoul(parts[versionIdxMinor]);
+    }
+    if (parts.size() >= versionMinPartsPatch && !parts[versionIdxPatch].empty()) {
+        patch = std::stoul(parts[versionIdxPatch]);
+    }
+    return static_cast<uint64_t>(major) * 1000000ULL +
+           static_cast<uint64_t>(minor) * 1000ULL +
+           static_cast<uint64_t>(patch);
+}
+
 OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae)
 {
     auto me = CreateMemberAccess(CreateRefExpr(SrcIdentifier(DEVICE_INFO)), SDK_API_VERSION);
@@ -484,51 +516,12 @@ OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae)
         auto lce = StaticCast<LitConstExpr>(iae.GetArg()->expr.get());
         if (lce->kind == LitConstKind::STRING) {
             // Parse semantic version string (e.g., "20.0.0") to encoded integer
-            std::string versionStr = lce->stringValue;
-
-            // Parse major.minor.patch components
-            constexpr size_t VERSION_IDX_MINOR = 1;
-            constexpr size_t VERSION_IDX_PATCH = 2;
-            constexpr size_t VERSION_MIN_PARTS_MINOR = 2;
-            constexpr size_t VERSION_MIN_PARTS_PATCH = 3;
-            uint32_t major = 0;
-            uint32_t minor = 0;
-            uint32_t patch = 0;
-            std::vector<std::string> parts;
-            size_t start = 0;
-            size_t end = versionStr.find('.');
-
-            while (end != std::string::npos) {
-                parts.push_back(versionStr.substr(start, end - start));
-                start = end + 1;
-                end = versionStr.find('.', start);
-            }
-            parts.push_back(versionStr.substr(start));
-
-            // Parse each component
-            if (parts.size() >= 1 && !parts[0].empty()) {
-                major = std::stoul(parts[0]);
-            }
-            if (parts.size() >= VERSION_MIN_PARTS_MINOR && !parts[VERSION_IDX_MINOR].empty()) {
-                minor = std::stoul(parts[VERSION_IDX_MINOR]);
-            }
-            if (parts.size() >= VERSION_MIN_PARTS_PATCH && !parts[VERSION_IDX_PATCH].empty()) {
-                patch = std::stoul(parts[VERSION_IDX_PATCH]);
-            }
-
-            // Encode as: major * 1000000 + minor * 1000 + patch
-            // This allows proper version comparison: 20.0.0 < 20.1.0 < 21.0.0
-            uint64_t encodedVersion = static_cast<uint64_t>(major) * 1000000ULL +
-                                      static_cast<uint64_t>(minor) * 1000ULL +
-                                      static_cast<uint64_t>(patch);
-
-            // Create an integer literal with the encoded version
+            uint64_t encodedVersion = ParseVersionStrToEncoded(lce->stringValue);
             levelExpr = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(encodedVersion), lce->ty);
             CopyBasicInfo(lce, levelExpr.get());
         } else {
             // Integer literal: treat as major version only (20 -> 20000000)
-            std::string versionStr = lce->stringValue;
-            uint64_t major = std::stoull(versionStr);
+            uint64_t major = std::stoull(lce->stringValue);
             uint64_t encodedVersion = major * 1000000ULL;
             levelExpr = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(encodedVersion), lce->ty);
             CopyBasicInfo(lce, levelExpr.get());

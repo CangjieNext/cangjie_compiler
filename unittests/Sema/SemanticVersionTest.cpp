@@ -31,10 +31,10 @@ std::optional<unsigned long long> Stoull(const std::string& s) {
 
 SemanticVersion ParseSemanticVersion(const std::string& s)
 {
-    constexpr size_t VERSION_IDX_MINOR = 1;
-    constexpr size_t VERSION_IDX_PATCH = 2;
-    constexpr size_t VERSION_MIN_PARTS_MINOR = 2;
-    constexpr size_t VERSION_MIN_PARTS_PATCH = 3;
+    constexpr size_t versionIdxMinor = 1;
+    constexpr size_t versionIdxPatch = 2;
+    constexpr size_t versionMinPartsMinor = 2;
+    constexpr size_t versionMinPartsPatch = 3;
 
     SemanticVersion version;
 
@@ -54,11 +54,11 @@ SemanticVersion ParseSemanticVersion(const std::string& s)
     if (parts.size() >= 1 && !parts[0].empty()) {
         version.major = static_cast<uint32_t>(Stoull(parts[0]).value_or(0));
     }
-    if (parts.size() >= VERSION_MIN_PARTS_MINOR && !parts[VERSION_IDX_MINOR].empty()) {
-        version.minor = static_cast<uint32_t>(Stoull(parts[VERSION_IDX_MINOR]).value_or(0));
+    if (parts.size() >= versionMinPartsMinor && !parts[versionIdxMinor].empty()) {
+        version.minor = static_cast<uint32_t>(Stoull(parts[versionIdxMinor]).value_or(0));
     }
-    if (parts.size() >= VERSION_MIN_PARTS_PATCH && !parts[VERSION_IDX_PATCH].empty()) {
-        version.patch = static_cast<uint32_t>(Stoull(parts[VERSION_IDX_PATCH]).value_or(0));
+    if (parts.size() >= versionMinPartsPatch && !parts[versionIdxPatch].empty()) {
+        version.patch = static_cast<uint32_t>(Stoull(parts[versionIdxPatch]).value_or(0));
     }
 
     return version;
@@ -472,7 +472,7 @@ TEST(CfgAPILevelTest, IntegerEquivalentToMajorZeroZero)
     auto cfgInt = ParseSemanticVersion("20");      // --cfg APILevel_level=20
     auto cfgFull = ParseSemanticVersion("20.0.0"); // --cfg APILevel_level=20.0.0
 
-    // Both forms must yield the same accessibility decisions
+    // Both forms must yield the same API availability decisions
     auto targetBelow = ParseSemanticVersion("19.9.9");
     auto targetEqual = ParseSemanticVersion("20.0.0");
     auto targetAbove = ParseSemanticVersion("20.0.1");
@@ -524,7 +524,7 @@ TEST(CfgAPILevelTest, NoCfgProvided_GlobalLevelIsZero)
     EXPECT_FALSE(targetSince.IsZero());
 }
 
-// Batch accessibility: multiple APIs at different levels with a fixed --cfg
+// Batch API availability: multiple APIs at different levels with a fixed --cfg
 TEST(CfgAPILevelTest, BatchAccessibility_FixedCfg)
 {
     auto globalLevel = ParseSemanticVersion("20.1.5");  // --cfg APILevel_level=20.1.5
