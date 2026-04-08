@@ -285,6 +285,7 @@ WARNING(sema_ignore_open, UNUSED, "the current member should not have 'open' mod
 
 NOTE(sema_found_candidate_decl, "found candidate")
 NOTE(sema_found_possible_candidate_decl, "found possible candidate")
+NOTE(sema_unimplemented_member, "unimplemented %s %s %s")
 
 // Do not add diagnostic information below this information.
 ERROR(sema_diag_end, "")
