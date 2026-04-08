@@ -487,7 +487,13 @@ OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae)
             std::string versionStr = lce->stringValue;
 
             // Parse major.minor.patch components
-            uint32_t major = 0, minor = 0, patch = 0;
+            constexpr size_t VERSION_IDX_MINOR = 1;
+            constexpr size_t VERSION_IDX_PATCH = 2;
+            constexpr size_t VERSION_MIN_PARTS_MINOR = 2;
+            constexpr size_t VERSION_MIN_PARTS_PATCH = 3;
+            uint32_t major = 0;
+            uint32_t minor = 0;
+            uint32_t patch = 0;
             std::vector<std::string> parts;
             size_t start = 0;
             size_t end = versionStr.find('.');
@@ -503,11 +509,11 @@ OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae)
             if (parts.size() >= 1 && !parts[0].empty()) {
                 major = std::stoul(parts[0]);
             }
-            if (parts.size() >= 2 && !parts[1].empty()) {
-                minor = std::stoul(parts[1]);
+            if (parts.size() >= VERSION_MIN_PARTS_MINOR && !parts[VERSION_IDX_MINOR].empty()) {
+                minor = std::stoul(parts[VERSION_IDX_MINOR]);
             }
-            if (parts.size() >= 3 && !parts[2].empty()) {
-                patch = std::stoul(parts[2]);
+            if (parts.size() >= VERSION_MIN_PARTS_PATCH && !parts[VERSION_IDX_PATCH].empty()) {
+                patch = std::stoul(parts[VERSION_IDX_PATCH]);
             }
 
             // Encode as: major * 1000000 + minor * 1000 + patch

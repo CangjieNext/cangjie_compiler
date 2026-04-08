@@ -74,7 +74,7 @@ struct SemanticVersion {
     uint32_t patch{0};
 
     SemanticVersion() = default;
-    SemanticVersion(uint32_t maj, uint32_t min = 0, uint32_t pat = 0)
+    explicit SemanticVersion(uint32_t maj, uint32_t min = 0, uint32_t pat = 0)
         : major(maj), minor(min), patch(pat) {}
 
     // Construct from LevelType (backward compatibility: 20 -> 20.0.0)
@@ -84,34 +84,45 @@ struct SemanticVersion {
     bool IsZero() const { return major == 0 && minor == 0 && patch == 0; }
 
     // Convert to string representation
-    std::string ToString() const {
+    std::string ToString() const
+    {
         return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
     }
 
     // Comparison operators for semantic version comparison
-    bool operator<(const SemanticVersion& other) const {
-        if (major != other.major) return major < other.major;
-        if (minor != other.minor) return minor < other.minor;
+    bool operator<(const SemanticVersion& other) const
+    {
+        if (major != other.major) {
+            return major < other.major;
+        }
+        if (minor != other.minor) {
+            return minor < other.minor;
+        }
         return patch < other.patch;
     }
 
-    bool operator<=(const SemanticVersion& other) const {
+    bool operator<=(const SemanticVersion& other) const
+    {
         return *this < other || *this == other;
     }
 
-    bool operator>(const SemanticVersion& other) const {
+    bool operator>(const SemanticVersion& other) const
+    {
         return other < *this;
     }
 
-    bool operator>=(const SemanticVersion& other) const {
+    bool operator>=(const SemanticVersion& other) const
+    {
         return !(*this < other);
     }
 
-    bool operator==(const SemanticVersion& other) const {
+    bool operator==(const SemanticVersion& other) const
+    {
         return major == other.major && minor == other.minor && patch == other.patch;
     }
 
-    bool operator!=(const SemanticVersion& other) const {
+    bool operator!=(const SemanticVersion& other) const
+    {
         return !(*this == other);
     }
 };
