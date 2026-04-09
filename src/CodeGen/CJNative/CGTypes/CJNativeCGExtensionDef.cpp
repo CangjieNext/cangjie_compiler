@@ -323,7 +323,7 @@ llvm::Constant* CGExtensionDef::GenerateWhereConditionFn()
 llvm::Constant* CGExtensionDef::GenerateOuterTi(const CHIR::VirtualMethodInfo& funcInfo)
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
-    if (funcInfo.GetVirtualMethod() == nullptr) {
+    if (funcInfo.GetVirtualMethod()->IsPureAbstract()) {
         return llvm::ConstantExpr::getIntToPtr(
             llvm::ConstantInt::get(llvm::Type::getInt64Ty(llvmCtx), 0x1), llvm::Type::getInt8PtrTy(llvmCtx));
     }
@@ -342,7 +342,7 @@ llvm::Constant* CGExtensionDef::GenerateOuterTi(const CHIR::VirtualMethodInfo& f
 llvm::Constant* CGExtensionDef::GenerateOuterTiFn(const CHIR::VirtualMethodInfo& funcInfo)
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
-    if (funcInfo.GetVirtualMethod() == nullptr) {
+    if (funcInfo.GetVirtualMethod()->IsPureAbstract()) {
         return llvm::ConstantExpr::getIntToPtr(
             llvm::ConstantInt::get(llvm::Type::getInt64Ty(llvmCtx), 0x1), llvm::Type::getInt8PtrTy(llvmCtx));
     }
@@ -391,7 +391,8 @@ llvm::Constant* CGExtensionDef::GenerateFuncTableForType(
     std::vector<llvm::Constant*> funcTable(2 * funcTableSize);
     for (size_t i = 0; i < funcTableSize; ++i) {
         const auto& funcInfo = vtableInType.GetVirtualMethods()[i];
-        if (auto method = funcInfo.GetVirtualMethod()) {
+        auto method = funcInfo.GetVirtualMethod();
+        if (!method->IsPureAbstract()) {
             auto function = cgMod.GetOrInsertCGFunction(method)->GetRawFunction();
             funcTable[i] = llvm::ConstantExpr::getBitCast(function, i8PtrType);
         } else {

@@ -427,7 +427,7 @@ Function* FindFunctionInVtable(const ClassType* parentTy, const std::vector<Virt
         if (!isSigSame) {
             continue;
         }
-        return info.GetVirtualMethod();
+        return info.GetVirtualMethod()->IsPureAbstract() ? nullptr : info.GetVirtualMethod();
     }
     return nullptr;
 }
@@ -513,7 +513,7 @@ std::pair<Function*, Type*> Devirtualization::FindRealCallee(
             auto funcType = builder.GetType<FuncType>(paramTypes, builder.GetUnitTy());
             FuncCallType funcCallType{method.name, funcType, method.typeArgs};
             auto res = def->GetFuncIndexInVTable(funcCallType, replaceTable, builder);
-            if (!res.empty() && res[0].instance != nullptr) {
+            if (!res.empty() && !res[0].instance->IsPureAbstract()) {
                 target = res[0].instance;
                 break;
             }
