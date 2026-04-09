@@ -112,7 +112,8 @@ void GenerateVTable::SetSrcFuncType() const
         for (const auto& it : vtable) {
             for (size_t i = 0; i < it.GetMethodNum(); ++i) {
                 auto& funcInfo = it.GetVirtualMethods()[i];
-                if (auto instance = funcInfo.GetVirtualMethod()) {
+                auto instance = funcInfo.GetVirtualMethod();
+                if (!instance->IsPureAbstract()) {
                     instance->Set<OverrideSrcFuncType>(getSrcFuncType(*it.GetSrcParentType()->GetClassDef(), i));
                 }
             }
