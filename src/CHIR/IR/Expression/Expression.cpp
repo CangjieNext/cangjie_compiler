@@ -2259,3 +2259,11 @@ Type* GetRTTIStatic::GetRTTIType() const
 {
     return ty;
 }
+
+#ifdef __linux__
+
+__asm__(".globl _ZN7Cangjie4CHIR10ExpressionC1ENS0_8ExprKindERKSt6vectorIPNS0_5ValueESaIS5_EERKS3_IPNS0_10BlockGroupESaISB_EEPNS0_5BlockE");
+
+__asm__(".set _ZN7Cangjie4CHIR10ExpressionC1ENS0_8ExprKindERKSt6vectorIPNS0_5ValueESaIS5_EERKS3_IPNS0_10BlockGroupESaISB_EEPNS0_5BlockE, _ZN7Cangjie4CHIR10ExpressionC2ENS0_8ExprKindERKSt6vectorIPNS0_5ValueESaIS5_EERKS3_IPNS0_10BlockGroupESaISB_EEPNS0_5BlockE");
+
+#endif
