@@ -13,6 +13,7 @@
 #ifndef CANGJIE_MODULES_ASTSERIALIZATION_ASTLOADER_IMPL_H
 #define CANGJIE_MODULES_ASTSERIALIZATION_ASTLOADER_IMPL_H
 
+#include "cangjie/Option/Option.h"
 #include "flatbuffers/ModuleFormat_generated.h"
 
 #include "cangjie/AST/ASTCasting.h"
@@ -45,6 +46,7 @@ public:
     void LoadPackageDecls();
     // Add for CJMP
     bool PreloadCommonPartOfPackage(AST::Package& pkg);
+    bool ValidateOptions();
     std::vector<OwnedPtr<AST::ImportSpec>> LoadImportSpecs(const PackageFormat::Imports* imports);
     std::vector<std::string> ReadFileNames() const;
     std::unordered_set<std::string> LoadCachedTypeForPackage(
@@ -138,6 +140,7 @@ private:
     void LoadEnumDeclAdvancedInfo(const PackageFormat::Decl& decl, AST::EnumDecl& enumDecl);
     void LoadInheritableDeclAdvancedInfo(const PackageFormat::Decl& decl, AST::InheritableDecl& id);
     void AddDeclToImportedPackage(AST::Decl& decl);
+    GlobalOptions::OptimizationLevel LoadOptimizationLevel(const PackageFormat::CompilationOptions& options);
 
     // Get decl pointer according to DeclId obtained from flatbuffers.
     Ptr<AST::Decl> GetDeclFromIndex(const PackageFormat::FullId* fullId);

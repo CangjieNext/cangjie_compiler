@@ -14,16 +14,16 @@
 #include <queue>
 
 #include "cangjie/AST/AttributePack.h"
+#include "cangjie/Option/Option.h"
+#include "cangjie/Utils/ICEUtil.h"
 #include "flatbuffers/ModuleFormat_generated.h"
 
 #include "cangjie/AST/Create.h"
-#include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Version.h"
 #include "cangjie/Mangle/ASTMangler.h"
 #include "cangjie/Mangle/BaseMangler.h"
-#include "cangjie/Mangle/CHIRMangler.h"
 #include "cangjie/Modules/CjoManager.h"
 #include "cangjie/Utils/CheckUtils.h"
 
@@ -508,6 +508,50 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
 }
 
 /**
+ * @brief Save compilation options to the cjo file
+ * @param debug Whether debug mode is enabled
+ * @param level The optimization level
+ */
+void ASTWriter::SaveOptions(bool debug, GlobalOptions::OptimizationLevel level)
+{
+    pImpl->SaveOptions(debug, level);
+}
+
+/**
+ * @brief Save compilation options to the cjo file
+ * @param debug Whether debug mode is enabled
+ * @param level The optimization level
+ */
+void ASTWriter::ASTWriterImpl::SaveOptions(bool debug, GlobalOptions::OptimizationLevel level)
+{
+    PackageFormat::OptimizationLevel saveLevel;
+    switch (level) {
+        case GlobalOptions::OptimizationLevel::O0:
+            saveLevel = PackageFormat::OptimizationLevel::OptimizationLevel_O0;
+            break;
+        case GlobalOptions::OptimizationLevel::O1:
+            saveLevel = PackageFormat::OptimizationLevel::OptimizationLevel_O1;
+            break;
+        case GlobalOptions::OptimizationLevel::O2:
+            saveLevel = PackageFormat::OptimizationLevel::OptimizationLevel_O2;
+            break;
+        case GlobalOptions::OptimizationLevel::O3:
+            saveLevel = PackageFormat::OptimizationLevel::OptimizationLevel_O3;
+            break;
+        case GlobalOptions::OptimizationLevel::Os:
+            saveLevel = PackageFormat::OptimizationLevel::OptimizationLevel_Os;
+            break;
+        case GlobalOptions::OptimizationLevel::Oz:
+            saveLevel = PackageFormat::OptimizationLevel::OptimizationLevel_Oz;
+            break;
+        default:
+            return InternalError("Unsupported optimization level");
+    }
+
+    this->options = PackageFormat::CompilationOptions(saveLevel, debug);
+}
+
+/**
  * Pre-save full exporting decls after sema's desugar before generic instantiation.
  * NOTE: avoid export boxed decl creation.
  */
@@ -759,7 +803,7 @@ void ASTWriter::ASTWriterImpl::AST2FB(std::vector<uint8_t>& data, const PackageD
     PackageFormat::CjoVersion cjoVersion(CJO_MAJOR_VERSION, CJO_MINOR_VERSION, CJO_PATCH_VERSION);
     auto root = PackageFormat::CreatePackage(builder, cjcVersion, &cjoVersion, packageName, dependencyInfo, vimports,
         vfiles, vfileImports, vtypes, vdecls, vexprs, INVALID_FORMAT_INDEX, kind, access, moduleName, vfileInfo,
-        vdependentStdPkgs);
+        vdependentStdPkgs, options.has_value() ? &options.value() : nullptr);
     FinishPackageBuffer(builder, root);
     auto size = static_cast<size_t>(builder.GetSize());
     data.resize(size);

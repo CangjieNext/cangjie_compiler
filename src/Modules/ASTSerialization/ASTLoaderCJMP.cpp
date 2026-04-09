@@ -16,6 +16,10 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 
 #include "ASTLoaderImpl.h"
+#include "cangjie/Basic/Position.h"
+#include "cangjie/Modules/ASTSerialization.h"
+#include "cangjie/Option/Option.h"
+#include "flatbuffers/ModuleFormat_generated.h"
 
 namespace Cangjie {
 
@@ -93,6 +97,31 @@ void ValidateCommonSpecificFeatureSetsRelations(
     }
 }
 
+/**
+ * @brief Convert optimization level enum to string for diagnostics
+ * @param level The optimization level to convert
+ * @return String representation of the optimization level
+ */
+std::string OptimizationLevelToString(GlobalOptions::OptimizationLevel level)
+{
+    switch (level) {
+        case GlobalOptions::OptimizationLevel::O0:
+            return "O0";
+        case GlobalOptions::OptimizationLevel::O1:
+            return "O1";
+        case GlobalOptions::OptimizationLevel::O2:
+            return "O2";
+        case GlobalOptions::OptimizationLevel::O3:
+            return "O3";
+        case GlobalOptions::OptimizationLevel::Os:
+            return "Os";
+        case GlobalOptions::OptimizationLevel::Oz:
+            return "Oz";
+        default:
+            return "(unsupported)";
+    }
+}
+
 } // namespace ASTLoaderCJMP
 
 OwnedPtr<AST::File> ASTLoader::ASTLoaderImpl::PreloadCommonFile(uoffset_t indexOfFile)
@@ -120,6 +149,37 @@ OwnedPtr<AST::File> ASTLoader::ASTLoaderImpl::PreloadCommonFile(uoffset_t indexO
     file->begin = LoadPos(fileInfo->begin());
     file->end = LoadPos(fileInfo->end());
     return file;
+}
+
+/**
+ * @brief Validate that compilation options match between common cjo and current compile
+ * @return true if options match or are compatible, false if there is a mismatch
+ */
+bool ASTLoader::ASTLoaderImpl::ValidateOptions()
+{
+    auto options = package->options();
+    if (options == nullptr) {
+        diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_no_options, DEFAULT_POSITION);
+        return true;
+    }
+
+    bool failed = false;
+    if (options->debug() != this->opts.enableCompileDebug) {
+        std::string before = options->debug() ? "enabled" : "disabled";
+        std::string after = opts.enableCompileDebug ? "enabled" : "disabled";
+        diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_debug_mismatch, DEFAULT_POSITION, before, after);
+        failed = true;
+    }
+
+    auto cjoOptLevel = LoadOptimizationLevel(*options);
+    if (opts.optimizationLevel != cjoOptLevel) {
+        std::string before = ASTLoaderCJMP::OptimizationLevelToString(cjoOptLevel);
+        std::string after = ASTLoaderCJMP::OptimizationLevelToString(opts.optimizationLevel);
+        diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_opt_mismatch, DEFAULT_POSITION, before, after);
+        failed = true;
+    }
+
+    return !failed;
 }
 
 bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
@@ -151,6 +211,13 @@ bool ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         ASTLoaderCJMP::ValidateCommonSpecificFeatureSetsRelations(*file, specificFeatures, diag, pkg);
 
         pkg.files.emplace_back(std::move(file));
+    }
+
+    if (!ValidateOptions()) {
+        // options mismatch must abort compilation
+        // otherwise the difference in desugaring/chir generation
+        // may lead to a crash in subsequent compilation stages
+        return false;
     }
 
     AddCurFile(pkg);

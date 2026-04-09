@@ -9,12 +9,14 @@
  * This file implements the AST Loader related classes.
  */
 
-#include "ASTLoaderImpl.h"
 #include "ASTLoaderCJMP.h"
+#include "ASTLoaderImpl.h"
 
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
+#include "cangjie/Option/Option.h"
+#include "cangjie/Utils/ICEUtil.h"
 #include "flatbuffers/ModuleFormat_generated.h"
 
 #include "cangjie/AST/ASTCasting.h"
@@ -505,6 +507,33 @@ void ASTLoader::ASTLoaderImpl::AddDeclToImportedPackage(Decl& decl)
     if (needAdd) {
         exportIdDeclMap->emplace(exportId, &decl);
     }
+}
+
+/**
+ * @brief Convert fb optimization level enum to the GlobalOptions' enum
+ */
+GlobalOptions::OptimizationLevel ASTLoader::ASTLoaderImpl::LoadOptimizationLevel(
+    const PackageFormat::CompilationOptions& options)
+{
+    using L = GlobalOptions::OptimizationLevel;
+    using CJO = PackageFormat::OptimizationLevel;
+    switch (options.optimization_level()) {
+        case CJO::OptimizationLevel_O0:
+            return L::O0;
+        case CJO::OptimizationLevel_O1:
+            return L::O1;
+        case CJO::OptimizationLevel_O2:
+            return L::O2;
+        case CJO::OptimizationLevel_O3:
+            return L::O3;
+        case CJO::OptimizationLevel_Os:
+            return L::Os;
+        case CJO::OptimizationLevel_Oz:
+            return L::Oz;
+        default:
+            InternalError("Unexpected optimization level");
+    }
+    return L::O0;
 }
 
 /**

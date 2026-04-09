@@ -674,6 +674,15 @@ table FileInfo {
   feature: FeaturesDirective;
 }
 
+enum OptimizationLevel : uint8 {
+  O0, O1, O2, O3, Os, Oz
+}
+
+struct CompilationOptions {
+  optimization_level: OptimizationLevel;
+  debug: bool;
+}
+
 // all SemaTys, decls are saved here, and indexed by other nodes.
 table Package {
   version:string;            // cjc version.
@@ -694,6 +703,7 @@ table Package {
   allFileInfo: [FileInfo];
   // record all std full package name dependencies.
   allDependentStdPkgs:[string];
+  options: CompilationOptions;
 }
 
 root_type Package;
