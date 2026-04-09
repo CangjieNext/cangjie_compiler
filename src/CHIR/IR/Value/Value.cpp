@@ -1329,11 +1329,6 @@ size_t Function::GetExpressionsNum() const
     return body->GetExpressionsNum();
 }
 
-std::string AbstractMethodParam::ToString()
-{
-    return paramName + ": " + type->ToString();
-}
-
 GlobalValue::GlobalValue(ValueKind kind, Type* ty, const std::string& identifier,
     const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName)
     : Value(ty, identifier, kind),

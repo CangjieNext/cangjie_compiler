@@ -872,9 +872,9 @@ std::vector<Type*> GetOutDefDeclaredTypes(const Value& innerDef)
 
 std::pair<std::string, FuncType*> GetFuncTypeFromAutoEnvBaseDef(const ClassDef& autoEnvBaseDef)
 {
-    auto abstractMethods = autoEnvBaseDef.GetAbstractMethods();
-    CJC_ASSERT(abstractMethods.size() == 1);
-    return {abstractMethods[0].methodName, StaticCast<FuncType*>(abstractMethods[0].methodTy)};
+    auto methods = autoEnvBaseDef.GetMethods();
+    CJC_ASSERT(methods.size() == 1);
+    return {methods[0]->GetSrcCodeIdentifier(), methods[0]->GetFuncType()};
 }
 
 std::pair<std::vector<Type*>, Type*> GetFuncTypeWithoutThisPtrFromAutoEnvBaseType(const ClassType& autoEnvBaseType)

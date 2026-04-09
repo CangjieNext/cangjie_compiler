@@ -342,18 +342,6 @@ inline bool Translator::IsOpenSpecificReplaceAbstractCommon(ClassDef& classDef, 
     return false;
 }
 
-inline void Translator::RemoveAbstractMethod(ClassDef& classDef, const AST::FuncDecl& decl) const
-{
-    const std::string expectedMangledName = decl.mangledName;
-    const std::vector<AbstractMethodInfo>& abstractMethods = classDef.GetAbstractMethods();
-    std::vector<AbstractMethodInfo> updatedAbstractMethods;
-    std::remove_copy_if(std::begin(abstractMethods), std::end(abstractMethods),
-                        std::back_inserter(updatedAbstractMethods), [expectedMangledName](auto& abstractMethod) {
-        return abstractMethod.GetASTMangledName() == expectedMangledName;
-    });
-    classDef.SetAbstractMethods(updatedAbstractMethods);
-}
-
 void Translator::TranslateClassLikeMemberFuncDecl(ClassDef& classDef, const AST::FuncDecl& decl)
 {
     // Handle member function during specific merging with deserialized classes
@@ -361,19 +349,7 @@ void Translator::TranslateClassLikeMemberFuncDecl(ClassDef& classDef, const AST:
         return;
     }
 
-    // Handle abstract and regular member functions
-    // 1. if func is ABSTRACT, it should be put into `abstractMethods`, not `methods`
-    // 2. virtual func need to put into vtable
-    // 3. a func, not ABSTRACT, should be found in global symbol table
-    if (decl.TestAttr(AST::Attribute::ABSTRACT)) {
-        TranslateAbstractMethod(classDef, decl, false);
-    } else {
-        AddMemberMethodToCustomTypeDef(decl, classDef);
-        if (classDef.IsInterface()) {
-            // Member of interface should be recorded in abstract method.
-            TranslateAbstractMethod(classDef, decl, true);
-        }
-    }
+    AddMemberMethodToCustomTypeDef(decl, classDef);
 }
 
 bool Translator::SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::FuncDecl& decl)
@@ -392,18 +368,6 @@ bool Translator::SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::
                 AddMemberFunctionGenericInstantiations(classDef, it->second, decl);
             }
             return true; // Member function already exists, skip processing
-        }
-    }
-
-    // Handle specific member function replacing abstract common method
-    if (IsOpenSpecificReplaceAbstractCommon(classDef, decl)) {
-        RemoveAbstractMethod(classDef, decl);
-    }
-
-    // Check if member function exists in abstract methods
-    for (auto abstractMethod : classDef.GetAbstractMethods()) {
-        if (abstractMethod.GetASTMangledName() == decl.mangledName) {
-            return true;
         }
     }
 
@@ -453,37 +417,5 @@ void Translator::AddMemberPropDecl(CustomTypeDef& def, const AST::PropDecl& decl
             CreateAnnoFactoryFuncsForFuncDecl(StaticCast<AST::FuncDecl>(*setter), &def);
         }
     }
-}
-
-void Translator::TranslateAbstractMethod(ClassDef& classDef, const AST::FuncDecl& decl, bool hasBody)
-{
-    std::vector<AbstractMethodParam> params;
-    auto& args = decl.funcBody->paramLists[0]->params;
-    auto funcType = StaticCast<FuncType*>(TranslateType(*decl.ty));
-    if (IsInstanceMember(decl)) {
-        // Add info of this to the instance method, needed by reflection.
-        auto paramTypes = funcType->GetParamTypes();
-        auto thisTy = builder.GetType<RefType>(classDef.GetType());
-        paramTypes.insert(paramTypes.begin(), thisTy);
-        funcType = builder.GetType<FuncType>(paramTypes, funcType->GetReturnType());
-        params.emplace_back(AbstractMethodParam{"this", thisTy});
-    }
-    for (auto& arg : args) {
-        params.emplace_back(
-            AbstractMethodParam{arg->identifier, TranslateType(*arg->ty), CreateAnnoFactoryFuncSig(*arg, &classDef)});
-    }
-    std::vector<GenericType*> funcGenericTypeParams;
-    if (decl.funcBody->generic != nullptr) {
-        for (auto& genericDecl : decl.funcBody->generic->typeParameters) {
-            funcGenericTypeParams.emplace_back(StaticCast<GenericType*>(TranslateType(*genericDecl->ty)));
-        }
-    }
-
-    const AST::Decl& annotationDecl = decl.propDecl ? *decl.propDecl : StaticCast<AST::Decl>(decl);
-    auto attr = BuildAttr(decl.GetAttrs());
-    attr.SetAttr(Attribute::ABSTRACT, true);
-    auto abstractMethod = AbstractMethodInfo{decl.identifier, decl.mangledName, funcType, params, attr,
-        CreateAnnoFactoryFuncSig(annotationDecl, &classDef), funcGenericTypeParams, hasBody, &classDef};
-    classDef.AddAbstractMethod(abstractMethod);
 }
 } // namespace Cangjie::CHIR

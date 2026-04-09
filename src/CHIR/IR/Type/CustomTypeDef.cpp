@@ -26,7 +26,7 @@
 
 using namespace Cangjie::CHIR;
 
-void CustomTypeDef::AddMethod(Function* method, [[maybe_unused]] bool recordOrder)
+void CustomTypeDef::AddMethod(Function* method)
 {
     CJC_NULLPTR_CHECK(method);
     method->declaredParent = this;
@@ -206,7 +206,7 @@ void CustomTypeDef::PrintVTable(std::stringstream& ss) const
             PrintIndent(ss, indent);
             ss << "@" << funcInfo.GetMethodName();
             ss << ": " << funcInfo.GetOriginalFuncType()->ToString();
-            ss << "=> " << (funcInfo.GetVirtualMethod() ? funcInfo.GetVirtualMethod()->GetIdentifier() : "[abstract]");
+            ss << "=> " << funcInfo.GetVirtualMethod()->GetIdentifier();
             ss << "\n";
         }
         PrintIndent(ss, --indent);
@@ -216,7 +216,7 @@ void CustomTypeDef::PrintVTable(std::stringstream& ss) const
     ss << "}\n";
 }
 
-std::pair<Function*, bool> CustomTypeDef::GetExpectedFunc(
+Function* CustomTypeDef::GetExpectedFunc(
     const std::string& funcName, FuncType& funcType, bool isStatic,
     std::unordered_map<const GenericType*, Type*> replaceTable,
     std::vector<Type*>& funcInstTypeArgs, CHIRBuilder& builder, bool checkAbstractMethod) const
@@ -228,6 +228,7 @@ std::pair<Function*, bool> CustomTypeDef::GetExpectedFunc(
         CJC_ASSERT(!instParamTys.empty());
         instParamTys.erase(instParamTys.begin());
     }
+    Function* foundFunc = nullptr;
     for (auto method : methods) {
         if (isStatic != method->TestAttr(Attribute::STATIC)) {
             continue;
@@ -264,54 +265,20 @@ std::pair<Function*, bool> CustomTypeDef::GetExpectedFunc(
         }
         if (matched) {
             if (auto rawFunc = method->Get<WrappedRawMethod>(); rawFunc && rawFunc->GetParentCustomTypeDef() == this) {
-                return {rawFunc, true};
+                foundFunc = rawFunc;
+            } else {
+                foundFunc = method;
             }
-            return {method, true};
+            break;
         }
     }
-    auto failed = std::pair<Function*, bool>{nullptr, false};
-    if (!checkAbstractMethod) {
-        return failed;
+    if (foundFunc == nullptr) {
+        return nullptr;
     }
-    auto classDef = DynamicCast<ClassDef*>(this);
-    if (classDef == nullptr) {
-        return failed;
+    if (!checkAbstractMethod && foundFunc->TestAttr(Attribute::ABSTRACT)) {
+        return nullptr;
     }
-    for (auto method : classDef->GetAbstractMethods()) {
-        if (isStatic != method.attributeInfo.TestAttr(Attribute::STATIC)) {
-            continue;
-        }
-        if (method.methodName != funcName) {
-            continue;
-        }
-        auto originalFuncParamTys = StaticCast<FuncType*>(method.methodTy)->GetParamTypes();
-        if (!method.attributeInfo.TestAttr(Attribute::STATIC)) {
-            originalFuncParamTys.erase(originalFuncParamTys.begin());
-        }
-        if (originalFuncParamTys.size() != instParamTys.size()) {
-            continue;
-        }
-        auto& genericTypeParams = method.methodGenericTypeParams;
-        if (genericTypeParams.size() != funcInstTypeArgs.size()) {
-            continue;
-        }
-        for (size_t i = 0; i < genericTypeParams.size(); ++i) {
-            replaceTable.emplace(genericTypeParams[i], funcInstTypeArgs[i]);
-        }
-        bool matched = true;
-        for (size_t i = 0; i < originalFuncParamTys.size(); ++i) {
-            auto instType = ReplaceRawGenericArgType(*originalFuncParamTys[i], replaceTable, builder);
-            if (!instParamTys[i]->IsGeneric() && instType != instParamTys[i]) {
-                matched = false;
-                break;
-            }
-        }
-        if (matched) {
-            return {nullptr, true};
-        }
-    }
-    
-    return failed;
+    return foundFunc;
 }
 
 std::vector<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallType& funcCallType,

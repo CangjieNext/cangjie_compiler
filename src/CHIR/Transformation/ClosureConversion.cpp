@@ -333,7 +333,7 @@ void LiftCustomDefType(CustomTypeDef& def, TypeConverterForCC& converter)
         return VisitResult::CONTINUE;
     };
     for (auto method : def.GetMethods()) {
-        Visitor::Visit(*StaticCast<Function*>(method), preVisit);
+        Visitor::Visit(*method, preVisit);
         converter.VisitValue(*method);
     }
     converter.VisitDef(def);
@@ -342,36 +342,36 @@ void LiftCustomDefType(CustomTypeDef& def, TypeConverterForCC& converter)
 void CreateVirtualFuncInAutoEnvBaseDef(ClassDef& autoEnvBaseDef,
     const std::string& funcName, const std::vector<Type*>& paramsAndRetType, CHIRBuilder& builder)
 {
-    std::vector<AbstractMethodParam> params;
     std::vector<Type*> paramTypes{builder.GetType<RefType>(autoEnvBaseDef.GetType())};
     CJC_ASSERT(!paramsAndRetType.empty());
     for (size_t i = 0; i < paramsAndRetType.size() - 1; ++i) {
-        params.emplace_back(AbstractMethodParam{"p" + std::to_string(i), paramsAndRetType[i]});
         paramTypes.emplace_back(paramsAndRetType[i]);
     }
     auto methodTy = builder.GetType<FuncType>(paramTypes, paramsAndRetType.back());
-    AttributeInfo attr;
-    attr.SetAttr(Attribute::ABSTRACT, true);
-    attr.SetAttr(Attribute::PUBLIC, true);
-    attr.SetAttr(Attribute::NO_DEBUG_INFO, true);
-
     std::string mangleName;
     if (funcName == GENERIC_VIRTUAL_FUNC) {
         mangleName = CHIRMangling::ClosureConversion::GenerateGenericAbstractFuncMangleName(autoEnvBaseDef);
     } else if (funcName == INST_VIRTUAL_FUNC) {
         mangleName = CHIRMangling::ClosureConversion::GenerateInstantiatedAbstractFuncMangleName(autoEnvBaseDef);
     }
-    autoEnvBaseDef.AddAbstractMethod(
-        AbstractMethodInfo{funcName, autoEnvBaseDef.GetIdentifier() + funcName,
-        methodTy, params, attr, AnnoInfo{}, std::vector<GenericType*>{}, false, &autoEnvBaseDef});
+    auto abstractMethod = builder.CreateFunction(methodTy, mangleName, funcName, "", autoEnvBaseDef.GetPackageName());
+    abstractMethod->EnableAttr(Attribute::ABSTRACT);
+    abstractMethod->EnableAttr(Attribute::PUBLIC);
+    abstractMethod->EnableAttr(Attribute::NO_DEBUG_INFO);
+
+    for (size_t i = 0; i < paramsAndRetType.size() - 1; ++i) {
+        builder.CreateParameter(paramTypes[i], INVALID_LOCATION, *abstractMethod);
+    }
+
+    autoEnvBaseDef.AddMethod(abstractMethod);
 }
 
 FuncType* GetMethodTypeInAutoEnvGenericDef(const ClassDef& def)
 {
     if (def.GetType()->IsAutoEnvGenericBase()) {
-        auto abstractMethods = def.GetAbstractMethods();
-        CJC_ASSERT(abstractMethods.size() == 1);
-        return Cangjie::StaticCast<FuncType*>(abstractMethods[0].methodTy);
+        auto methods = def.GetMethods();
+        CJC_ASSERT(methods.size() == 1);
+        return methods[0]->GetFuncType();
     }
     auto superDef = def.GetSuperClassDef();
     CJC_NULLPTR_CHECK(superDef);
@@ -700,7 +700,27 @@ bool IsAutoEnvGenericType(const Type& type)
     if (type.IsAutoEnvGenericBase()) {
         return true;
     }
-    return StaticCast<const ClassType&>(type).GetClassDef()->GetMethods().size() == 1;
+    /**
+     *  if `type` is sub type of Auto_Env_GenericBase, and `type` is not Auto_Env_InstBase,
+     *  it must only have one method with suffix `$g`, such as:
+     *  func foo<T>(a: T): Unit {
+     *      println("foo")
+     *  }
+     *  func goo(a: Int32): Unit {
+     *      println("goo")
+     *  }
+     *  var x = goo
+     *  x = foo<Int32>  // there is a TypeCast, from `AutoEnvFoo` to `AutoEnvInstBase`
+     *  the `AutoEnvFoo` is like the following class:
+     *  class AutoEnvFoo<T> <: AutoEnvGenericBase<T, Unit> {
+     *      public func foo_$g(a: T): Unit {
+     *          return foo(a)
+     *      }
+     *  }
+     *  only have one method with suffix `$g`, so we need to use AutoEnvWrapper to wrap the `AutoEnvFoo`
+     */
+    auto parentType = StaticCast<const ClassType&>(type).GetClassDef()->GetSuperClassTy();
+    return parentType && parentType->IsAutoEnvGenericBase() && !type.IsAutoEnvInstBase();
 }
 
 std::pair<bool, std::vector<size_t>> EnumConstructorNeedTypeCast(const Expression& e)
@@ -1137,7 +1157,6 @@ void ClosureConversion::DoFunctionInlineForLambda()
     }
     auto funcInline = FunctionInline(builder, GlobalOptions::OptimizationLevel::O2, opts.chirDebugOptimizer);
     for (auto& it : autoEnvImplDefs) {
-        auto methods = it.second->GetMethods();
         for (auto lambda : it.second->GetMethods()) {
             // after inlining generic virtual func, we should remvoe Box and Unbox expr, we will do it later
             if (lambda->GetSrcCodeIdentifier() == GENERIC_VIRTUAL_FUNC) {
@@ -2326,9 +2345,9 @@ void ClosureConversion::CreateInstMethodInAutoEnvWrapper(ClassDef& autoEnvWrappe
     // 1. create function type
     auto superDef = autoEnvWrapperDef.GetSuperClassDef();
     CJC_ASSERT(superDef->GetType()->IsAutoEnvInstBase());
-    auto abstractMethods = superDef->GetAbstractMethods();
-    CJC_ASSERT(abstractMethods.size() == 1);
-    auto parentFuncType = StaticCast<FuncType*>(abstractMethods[0].methodTy);
+    auto methods = superDef->GetMethods();
+    CJC_ASSERT(methods.size() == 1);
+    auto parentFuncType = methods[0]->GetFuncType();
     auto paramTypes = parentFuncType->GetParamTypes();
     CJC_ASSERT(!paramTypes.empty());
     auto autoEnvWrapperRefType = builder.GetType<RefType>(autoEnvWrapperDef.GetType());

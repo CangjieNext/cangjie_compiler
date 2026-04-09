@@ -319,34 +319,6 @@ flatbuffers::Offset<PackageFormat::EnumCtorInfo> CHIRSerializer::CHIRSerializerI
         builder, obj.name.data(), obj.mangledName.data(), GetId<Type>(obj.funcType));
 }
 
-template <>
-flatbuffers::Offset<PackageFormat::AbstractMethodParam> CHIRSerializer::CHIRSerializerImpl::Serialize(
-    const AbstractMethodParam& obj)
-{
-    auto paramName = obj.paramName;
-    auto paramType = GetId<Type>(obj.type);
-    auto annoInfo = Serialize<PackageFormat::AnnoInfo>(obj.annoInfo);
-    return PackageFormat::CreateAbstractMethodParamDirect(builder, paramName.data(), paramType, annoInfo);
-}
-
-template <>
-flatbuffers::Offset<PackageFormat::AbstractMethodInfo> CHIRSerializer::CHIRSerializerImpl::Serialize(
-    const AbstractMethodInfo& obj)
-{
-    auto methodName = obj.methodName;
-    auto mangledName = obj.GetASTMangledName();
-    auto methodType = GetId<Type>(obj.methodTy);
-    auto paramsInfo = SerializeVec<PackageFormat::AbstractMethodParam>(obj.paramInfos);
-    auto attributes = obj.attributeInfo.GetRawAttrs().to_ulong();
-    auto annoInfo = Serialize<PackageFormat::AnnoInfo>(obj.annoInfo);
-    auto methodGenericTypeParams = GetId<Type>(obj.methodGenericTypeParams);
-    auto hasBody = obj.hasBody;
-    auto parent = GetId<CustomTypeDef>(obj.parent);
-    return PackageFormat::CreateAbstractMethodInfoDirect(builder, methodName.data(), mangledName.data(), methodType,
-        &paramsInfo, attributes, annoInfo, methodGenericTypeParams.empty() ? nullptr : &methodGenericTypeParams,
-        hasBody, parent);
-}
-
 // ========================== Type Serializers =================================
 
 template <> flatbuffers::Offset<PackageFormat::Type> CHIRSerializer::CHIRSerializerImpl::Serialize(const Type& obj)
@@ -1324,13 +1296,7 @@ flatbuffers::Offset<PackageFormat::ClassDef> CHIRSerializer::CHIRSerializerImpl:
                                   : PackageFormat::ClassDefKind::ClassDefKind_CLASS;
     auto isAnnotation = obj.IsAnnotation();
     auto superClass = GetId<Type>(obj.GetSuperClassTy());
-    auto abstractMethods = SerializeVec<PackageFormat::AbstractMethodInfo>(obj.GetAbstractMethods());
-    std::vector<flatbuffers::Offset<flatbuffers::String>> namesVec;
-    for (const auto& name : obj.GetAllMethodMangledNames()) {
-        namesVec.push_back(builder.CreateSharedString(name));
-    }
-    return PackageFormat::CreateClassDefDirect(builder, base, kind, isAnnotation,
-        superClass, &abstractMethods, &namesVec);
+    return PackageFormat::CreateClassDef(builder, base, kind, isAnnotation, superClass);
 }
 
 template <>

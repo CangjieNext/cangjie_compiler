@@ -749,13 +749,11 @@ private:
     Ptr<FuncType> CreateVirtualFuncType(const AST::FuncDecl& decl);
     void AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl);
     inline bool IsOpenSpecificReplaceAbstractCommon(ClassDef& classDef, const AST::FuncDecl& decl) const;
-    inline void RemoveAbstractMethod(ClassDef& classDef, const AST::FuncDecl& decl) const;
     void TranslateClassLikeMemberFuncDecl(ClassDef& classDef, const AST::FuncDecl& decl);
     bool SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::FuncDecl& decl);
     void AddMemberFunctionGenericInstantiations(
         ClassDef& classDef, const std::vector<AST::FuncDecl*>& instFuncs, const AST::FuncDecl& originalDecl);
     void AddMemberPropDecl(CustomTypeDef& def, const AST::PropDecl& decl);
-    void TranslateAbstractMethod(ClassDef& classDef, const AST::FuncDecl& decl, bool hasBody);
 
     /* Add methods for CJMP. */
     // Micro refactoring for CJMP.

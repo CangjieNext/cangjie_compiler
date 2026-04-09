@@ -1074,12 +1074,12 @@ llvm::Value* IRBuilder2::VArrayInitedByLambda(
     // Get InitFunc.
     auto autoEnvCGType = autoEnv.GetCGType();
     auto autoEnvClsDef = StaticCast<const CHIR::ClassType*>(DeRef(autoEnvCGType->GetOriginal()))->GetClassDef();
-    auto abstractMethods = autoEnvClsDef->GetAbstractMethods();
-    CJC_ASSERT(abstractMethods.size() == 1);
-    auto abstractMethod = abstractMethods.back();
-    auto abstractMethodIdx = CHIR::GetMethodIdxInAutoEnvObject(abstractMethod.methodName);
+    auto methods = autoEnvClsDef->GetMethods();
+    CJC_ASSERT(methods.size() == 1);
+    auto abstractMethod = methods.back();
+    auto abstractMethodIdx = CHIR::GetMethodIdxInAutoEnvObject(abstractMethod->GetSrcCodeIdentifier());
     auto initFuncCGType = static_cast<CGFunctionType*>(
-        CGType::GetOrCreate(cgMod, abstractMethod.methodTy, CGType::TypeExtraInfo{0, true, false, true, {}}));
+        CGType::GetOrCreate(cgMod, abstractMethod->GetType(), CGType::TypeExtraInfo{0, true, false, true, {}}));
     auto autoEnvPayload = GetPayloadFromObject(*autoEnv);
     auto initFuncPtr =
         CreateConstGEP1_32(getInt8PtrTy(), autoEnvPayload, static_cast<unsigned>(abstractMethodIdx), "virtualFPtr");

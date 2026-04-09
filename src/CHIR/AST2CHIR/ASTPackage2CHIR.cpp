@@ -666,20 +666,11 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
         CreatePseudoImportedFuncSignatureAndSetGlobalCache(funcDecl);
         return;
     }
-
-    // when the callee of callExpr is abstract func, will create a `Invoke` node, so we don't need to put abstract
-    // func into the `globalCache`,
-    if (funcDecl.TestAttr(AST::Attribute::ABSTRACT)) {
-        return;
-    }
     // Try get deserialized func.
     Function* fn = TryGetDeserialized<Function>(funcDecl);
-    bool isSpecific = funcDecl.TestAttr(AST::Attribute::SPECIFIC);
     if (fn) {
-        if (isSpecific) {
+        if (funcDecl.TestAttr(AST::Attribute::SPECIFIC)) {
             ResetSpecificFunc(funcDecl, *fn);
-            const auto& loc = GetDeclLoc(builder.GetChirContext(), funcDecl);
-            fn->SetDebugLocation(loc);
         }
         globalCache.Set(funcDecl, *fn);
         if (implicitDecls.count(&funcDecl) != 0) {
@@ -720,8 +711,9 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
             fn->EnableAttr(Attribute::SKIP_ANALYSIS);
         }
     }
-    BlockGroup* body = builder.CreateBlockGroup(*fn);
-    fn->InitBody(*body);
+    if (!funcDecl.TestAttr(AST::Attribute::ABSTRACT)) {
+        fn->InitBody(*builder.CreateBlockGroup(*fn));
+    }
 
     CJC_ASSERT(fn);
     SetFuncAttributeAndLinkageType(funcDecl, *fn);
@@ -747,11 +739,6 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
 
 void AST2CHIR::CreatePseudoImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDecl)
 {
-    // when the callee of callExpr is abstract func, will create a `Invoke` node, so we don't need to put abstract
-    // func into the `globalCache`,
-    if (funcDecl.TestAttr(AST::Attribute::ABSTRACT)) {
-        return;
-    }
     auto fnTy = chirType.TranslateType(*funcDecl.ty);
     fnTy = AdjustFuncType(*StaticCast<FuncType*>(fnTy), funcDecl, builder, chirType);
     FuncType* funcTy = StaticCast<FuncType*>(fnTy);
@@ -1588,25 +1575,22 @@ void AST2CHIR::BuildDeserializedTable()
 {
     CJC_NULLPTR_CHECK(package);
     // build for CustomTypeDef
-    std::vector<CustomTypeDef*> defs;
-    auto customDefs = package->GetAllCustomTypeDef();
-    auto importedCustomDefs = package->GetAllImportedCustomTypeDef();
-    BuildDeserializedVec(deserializedDefs, customDefs, importedCustomDefs);
+    BuildDeserializedVec(deserializedDefs, package->GetAllCustomTypeDef());
     // build for Value
-    BuildDeserializedVec(deserializedVals, package->GetGlobalFuncsWithoutBody());
-    BuildDeserializedVec(deserializedVals, package->GetGlobalVarsWithoutInit());
-    BuildDeserializedVec(deserializedVals, package->GetGlobalVarsWithInit());
-    BuildDeserializedVec(deserializedVals, package->GetGlobalFuncsWithBody());
-    BuildDeserializedVec(deserializedVals,
-        std::vector<Function*>{package->GetPackageInitFunc(), package->GetPackageLiteralInitFunc()});
+    BuildDeserializedVec(deserializedVals, package->GetGlobalVars());
+    BuildDeserializedVec(deserializedVals, package->GetGlobalFunctions(true));
 }
 
 // Reset specific func for CJMP.
 void AST2CHIR::ResetSpecificFunc(const AST::FuncDecl& funcDecl, Function& func)
 {
     // Reset body
-    auto body = builder.CreateBlockGroup(func);
-    func.ReplaceBody(*body);
+    func.DestroyFuncBody();
+    if (!funcDecl.TestAttr(AST::Attribute::ABSTRACT)) {
+        auto body = builder.CreateBlockGroup(func);
+        func.InitBody(*body);
+        func.DisableAttr(Attribute::ABSTRACT);
+    }
     // Reset location
     const auto& loc =
         DebugLocation(TranslateLocationWithoutScope(builder.GetChirContext(), funcDecl.begin, funcDecl.end));

@@ -1081,7 +1081,7 @@ void CHIRChecker::CheckVTable(const CustomTypeDef& def)
         // 3. only interface or abstract class can have unimplemented virtual method
         bool canHaveAbstractMethod = isAllowedToHaveAbstractMethod(def);
         for (size_t i = 0; i < it.GetMethodNum(); ++i) {
-            if (it.GetVirtualMethods()[i].GetVirtualMethod() == nullptr && !canHaveAbstractMethod) {
+            if (it.GetVirtualMethods()[i].GetVirtualMethod()->IsPureAbstract() && !canHaveAbstractMethod) {
                 Errorln("in vtable of " + def.GetIdentifier() + ", parent type " + parentInstType->ToString() +
                     ", the " + IndexToString(i) +
                     " virtual method is unimplemented, but only interface or abstract class can have this kind of "
@@ -1147,40 +1147,6 @@ void CHIRChecker::CheckStructDef(const StructDef& def)
     CheckCStruct(def);
 }
 
-void CHIRChecker::CheckAbstractMethod(const ClassDef& def)
-{
-    for (const auto& method : def.GetAbstractMethods()) {
-        // 1. must have method name
-        if (method.methodName.empty()) {
-            Errorln("abstract method in " + def.GetIdentifier() + " doesn't have name.");
-            continue;
-        }
-        // 2. must have Attribute::ABSTRACT
-        if (!method.TestAttr(Attribute::ABSTRACT)) {
-            Errorln("abstract method " + method.methodName + " of " + def.GetIdentifier() +
-                " doesn't have Attribute `ABSTRACT`.");
-        }
-        // 3. must have method type
-        if (method.methodTy == nullptr || !method.methodTy->IsFunc()) {
-            Errorln("abstract method " + method.methodName + " of " + def.GetIdentifier() +
-                " doesn't have func type.");
-        }
-        // 4. parent custom type def can't be null
-        if (method.parent == nullptr) {
-            Errorln("abstract method " + method.methodName + " doesn't set parent CustomTypeDef.");
-        } else if (method.parent != &def) {
-            // 5. parent custom type def must be current def
-            Errorln("parent CustomTypeDef of abstract method " + method.methodName + " is " +
-                method.parent->GetIdentifier() + ", but it should be " + def.GetIdentifier() + ".");
-        }
-        // 6. abstract method must be public or protected
-        if (!method.TestAttr(Attribute::PUBLIC) && !method.TestAttr(Attribute::PROTECTED)) {
-            Errorln("abstract method " + method.methodName + " of " + def.GetIdentifier() +
-                " must be public or protected.");
-        }
-    }
-}
-
 void CHIRChecker::CheckEnumDef(const EnumDef& def)
 {
     // 1. check custom type def
@@ -1208,10 +1174,7 @@ void CHIRChecker::CheckClassDef(const ClassDef& def)
     // 1. check custom type def
     CheckCustomTypeDef(def);
 
-    // 2. check abstract method
-    CheckAbstractMethod(def);
-
-    // 3. check super class
+    // 2. check super class
     if (auto parent = def.GetSuperClassDef(); parent &&
         !parent->TestAttr(Attribute::VIRTUAL) && !parent->TestAttr(Attribute::ABSTRACT)) {
         Errorln("the super class " + parent->GetIdentifier() + " of class " + def.GetIdentifier() +
@@ -3671,7 +3634,8 @@ void CHIRChecker::CheckInstanceOf(const InstanceOf& expr, const Function& topLev
     // 3. source type and target type can't be both primitive type, otherwise it should be calculated in compile time.
     auto objectType = expr.GetObject()->GetType()->StripAllRefs();
     if (objectType->IsPrimitive() && expr.GetType()->StripAllRefs()->IsPrimitive()) {
-        auto errMsg = "source type is " + objectType->ToString() + ", target type is " + expr.GetType()->ToString() +
+        auto errMsg = "invalid InstanceOf `" + result->ToString() + "`, source type is " + objectType->ToString() +
+            ", target type is " + expr.GetType()->ToString() +
             ", they are both exact type, doesn't need to use `InstanceOf` to check in runtime.";
         ErrorInFunc(topLevelFunc, errMsg);
     }
