@@ -28,8 +28,6 @@ private:
     void CollectCurDefMethodsMayBeInVtable(const CustomTypeDef& def, std::vector<Function*>& publicFuncs);
     std::vector<Function*> GetAllMethods(const CustomTypeDef& def);
     std::vector<Function*> GetAllMethods(const Type& ty);
-    VirtualMethodInfo CreateVirtualFuncInfo(const AbstractMethodInfo& method,
-        Type& originalParentType, const std::unordered_map<const GenericType*, Type*>& replaceTable);
     VirtualMethodInfo CreateVirtualFuncInfo(
         Function& method, Type& originalParentType, const std::unordered_map<const GenericType*, Type*>& replaceTable);
     bool UpdateVtable(VirtualMethodInfo& curFuncInfo, VTableInDef& vtable);
@@ -38,7 +36,7 @@ private:
     void UpdateAbstractMethodInVtable(VTableInDef& vtable);
     void UpdateAbstractMethodWithImplementedMethod(
         VTableInDef& vtable, const ClassType& curParentTy, VirtualMethodInfo& abstractFuncInfo);
-    std::unordered_map<std::string, VirtualMethodInfo> CollectAllPublicAndProtectedMethods(const CustomTypeDef& curDef);
+    std::vector<VirtualMethodInfo> CollectAllPublicAndProtectedMethods(const CustomTypeDef& curDef);
     std::unordered_map<const GenericType*, Type*> GetInstMapFromDefIncludeParents(
         const CustomTypeDef& def, const Type& curType);
     std::vector<Function*> CollectMethodsIncludeParentsMayBeInVtable(const CustomTypeDef& curDef);
