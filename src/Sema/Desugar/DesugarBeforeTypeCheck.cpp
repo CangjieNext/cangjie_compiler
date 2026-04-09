@@ -493,13 +493,13 @@ static uint64_t ParseVersionStrToEncoded(const std::string& versionStr)
     }
     parts.push_back(versionStr.substr(start));
     if (parts.size() >= 1 && !parts[0].empty()) {
-        major = std::stoul(parts[0]);
+        major = static_cast<uint32_t>(std::stoul(parts[0]));
     }
     if (parts.size() >= versionMinPartsMinor && !parts[versionIdxMinor].empty()) {
-        minor = std::stoul(parts[versionIdxMinor]);
+        minor = static_cast<uint32_t>(std::stoul(parts[versionIdxMinor]));
     }
     if (parts.size() >= versionMinPartsPatch && !parts[versionIdxPatch].empty()) {
-        patch = std::stoul(parts[versionIdxPatch]);
+        patch = static_cast<uint32_t>(std::stoul(parts[versionIdxPatch]));
     }
     return static_cast<uint64_t>(major) * 1000000ULL +
            static_cast<uint64_t>(minor) * 1000ULL +

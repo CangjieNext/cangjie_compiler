@@ -416,7 +416,7 @@ void PluginCustomAnnoChecker::ParseAPILevelArgs(
     }
     // In the APILevel definition, only "since" does not provide a default value. Here, the warning that
     // there is an issue with the APILevel annotation, which may originnate from the cj.d file.
-    if (annoInfo.since == 0) {
+    if (annoInfo.since.IsZero()) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_apilevel_missing_arg, anno.begin, "since!: String");
     }
 }
@@ -516,7 +516,7 @@ void PluginCustomAnnoChecker::CheckHideOfOverrideFunction(const Decl& decl, cons
 void PluginCustomAnnoChecker::Parse(const Decl& decl, PluginCustomAnnoInfo& annoInfo)
 {
     if (auto found = levelCache.find(&decl); found != levelCache.end()) {
-        annoInfo.since = annoInfo.since == 0 ? found->second.since : std::min(found->second.since, annoInfo.since);
+        annoInfo.since = annoInfo.since.IsZero() ? found->second.since : std::min(found->second.since, annoInfo.since);
         annoInfo.syscap = found->second.syscap;
         if (found->second.hasHideAnno.has_value()) {
             annoInfo.hasHideAnno = found->second.hasHideAnno;
@@ -764,7 +764,7 @@ void PluginCustomAnnoChecker::Check(Package& pkg)
             Parse(**it, scopeAnnoInfo);
         }
         if (auto iae = DynamicCast<IfAvailableExpr>(node)) {
-            scopeAnnoInfo.since = scopeAnnoInfo.since == 0 ? globalLevel : scopeAnnoInfo.since;
+            scopeAnnoInfo.since = scopeAnnoInfo.since.IsZero() ? globalLevel : scopeAnnoInfo.since;
             CheckIfAvailableExpr(*iae, scopeAnnoInfo);
             return VisitAction::SKIP_CHILDREN;
         }

@@ -77,9 +77,6 @@ struct SemanticVersion {
     explicit SemanticVersion(uint32_t maj, uint32_t min = 0, uint32_t pat = 0)
         : major(maj), minor(min), patch(pat) {}
 
-    // Construct from LevelType (backward compatibility: 20 -> 20.0.0)
-    explicit SemanticVersion(LevelType level) : major(level), minor(0), patch(0) {}
-
     // Check if this version is unset (0.0.0)
     bool IsZero() const { return major == 0 && minor == 0 && patch == 0; }
 
