@@ -1696,10 +1696,29 @@ Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr
         return nullptr;
     }
 
-    accessorCall->args.emplace_back(CreateFuncArg(ASTCloner::Clone(assignExpr.rightExpr.get())));
-    accessorCall->sourceExpr = Ptr(&assignExpr);
-    assignExpr.desugarExpr = std::move(accessorCall);
+    assignExpr.desugarExpr = GenerateBlockForAssignExpr(assignExpr, std::move(accessorCall));
     return assignExpr.desugarExpr;
+}
+
+OwnedPtr<Block> MockSupportManager::GenerateBlockForAssignExpr(AssignExpr& assignExpr,
+    OwnedPtr<CallExpr> accessorCall)
+{
+    auto tmpVar = CreateTmpVarDecl(MockUtils::CreateType<Type>(assignExpr.rightExpr->ty),
+        assignExpr.rightExpr.get());
+    auto tmpVarRef = CreateRefExpr(*tmpVar);
+    tmpVarRef->curFile = tmpVar->curFile;
+
+    accessorCall->args.emplace_back(CreateFuncArg(ASTCloner::Clone(tmpVarRef.get())));
+    accessorCall->sourceExpr = Ptr(&assignExpr);
+
+    std::vector<OwnedPtr<Node>> blockNodes;
+    blockNodes.emplace_back(std::move(tmpVar));
+    blockNodes.emplace_back(std::move(accessorCall));
+
+    auto block = CreateBlock(std::move(blockNodes),TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    block->EnableAttr(Attribute::GENERATED_TO_MOCK);
+    block->EnableAttr(Attribute::COMPILER_ADD);
+    return block;
 }
 
 OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForTopLevelVariable(

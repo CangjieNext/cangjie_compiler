@@ -89,6 +89,8 @@ private:
     OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(OwnedPtr<AST::Expr> baseExpr, Ptr<AST::Decl> memberDecl,
         Ptr<AST::Ty> memberRefTy, AccessorKind kind, Ptr<AST::File> curFile);
     Ptr<AST::Expr> ReplaceFieldGetWithAccessor(AST::MemberAccess& memberAccess, bool isInConstructor);
+    OwnedPtr<AST::Block> GenerateBlockForAssignExpr(AST::AssignExpr& assignExpr,
+        OwnedPtr<AST::CallExpr> accessorCall);
     Ptr<AST::Expr> ReplaceFieldSetWithAccessor(AST::AssignExpr& assignExpr, bool isInConstructor);
     Ptr<AST::Expr> ReplaceVarRefExprWithGetAccessor(AST::RefExpr& refExpr);
     OwnedPtr<AST::CallExpr> ReplaceRefExprFieldSetWithAccessor(AST::RefExpr& refExpr, bool isInConstructor);

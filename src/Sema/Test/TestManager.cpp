@@ -213,22 +213,48 @@ bool ShouldHandleMockAnnotatedLambdaValue(Ptr<Decl> target)
 } // namespace
 
 
-void TestManager::WrapWithRequireMockObjectIfNeeded(Ptr<AST::Expr> expr, Ptr<AST::Decl> target)
+void TestManager::WrapWithRequireMockObjectIfNeeded(Ptr<Expr> expr, Ptr<Decl> target)
 {
     // For non-static/non-global decls, generate an assertion that their receiver is a real mock object
-    if (!target->IsStaticOrGlobal()) {
-        auto callExpr = As<ASTKind::CALL_EXPR>(expr->desugarExpr ? expr->desugarExpr : expr);
+    if (target->IsStaticOrGlobal()) {
+        return;
+    }
+
+    auto memberAccess = ExtractMemberAccessFromExpr(expr);
+    CJC_ASSERT(memberAccess);
+    mockManager->WrapWithRequireMockObject(*memberAccess->baseExpr.get());
+}
+
+Ptr<MemberAccess> TestManager::ExtractMemberAccessFromExpr(Ptr<AST::Expr> expr)
+{
+    if (auto callExpr = As<ASTKind::CALL_EXPR>(expr->desugarExpr ? expr->desugarExpr : expr)) {
         // After preparing decls and calls in MockSupportManager,
         // all exprs inside @EnsurePreparedToMock-marked lambda
         // should be represented as a call expr (either direct calling or through func accessor)
-        CJC_ASSERT(callExpr);
-
-        auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
-        // After desugaring, baseFunc for member decls should be always member access expression
-        CJC_ASSERT(ma);
-
-        mockManager->WrapWithRequireMockObject(*ma->baseExpr.get());
+        return As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
     }
+
+    if (auto block = As<ASTKind::BLOCK>(expr->desugarExpr)) {
+        // AssignExpr may contain a block in desugarExpr with two nodes,
+        // because the mock transformation reorders some operations.
+        //
+        // Example:
+        //   B().b = C().c
+        // is transformed into:
+        //   B().b$set$ToMock_B(C().c$get$ToMock_C())
+        //
+        // To preserve correct evaluation order, we rewrite it as:
+        //   var tmp = C().c$get$ToMock_C();
+        //   B().b$set$ToMock_B(tmp);
+        //
+        // See issue: https://gitcode.com/Cangjie/cangjie_compiler/issues/787
+        CJC_ASSERT(block->body.size() == 2);
+        auto callExpr = As<ASTKind::CALL_EXPR>(block->body[1]);
+        CJC_ASSERT(callExpr);
+        return As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
+    }
+
+    return nullptr;
 }
 
 VisitAction TestManager::HandleMockAnnotatedLambda(const LambdaExpr& lambda)
