@@ -62,7 +62,7 @@ static void CollectMethods(const CustomTypeDef& chirClass, Bchir::SClassInfo& cl
                 continue;
             }
             auto methodName = MangleMethodName(funcInfo.GetMethodName(), *funcInfo.GetMethodSigType());
-            if (funcInfo.GetVirtualMethod() != nullptr) {
+            if (!funcInfo.GetVirtualMethod()->IsPureAbstract()) {
                 classInfo.vtable.emplace(methodName, funcInfo.GetVirtualMethod()->GetIdentifierWithoutPrefix());
             } // else, this class/interface does not implement the method
         }
