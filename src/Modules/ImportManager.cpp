@@ -307,6 +307,7 @@ void ImportManager::ExportAST(bool saveFileWithAbsPath, std::vector<uint8_t>& as
         writer.PreSaveFullExportDecls(*packageDecl->srcPackage);
     }
     realWriter->ExportAST(*packageDecl);
+    realWriter->SaveOptions(opts.enableCompileDebug, opts.optimizationLevel);
 
     additionalSerializations(*realWriter);
 
@@ -326,6 +327,7 @@ std::vector<uint8_t> ImportManager::ExportASTSignature(const Package& pkg)
     CJC_NULLPTR_CHECK(packageDecl);
     writer.PreSaveFullExportDecls(*packageDecl->srcPackage);
     writer.ExportAST(*packageDecl);
+    writer.SaveOptions(opts.enableCompileDebug, opts.optimizationLevel);
 
     std::vector<uint8_t> astData;
     writer.AST2FB(astData, *packageDecl);
@@ -348,6 +350,7 @@ void ImportManager::ExportDeclsWithContent(bool saveFileWithAbsPath, Package& pa
         writer->SetSerializingCommon();
     }
     writer->PreSaveFullExportDecls(package);
+    writer->SaveOptions(opts.enableCompileDebug, opts.optimizationLevel);
     if (auto [it, success] = astWriters.emplace(&package, writer); !success) {
         delete it->second;
         astWriters[&package] = writer;

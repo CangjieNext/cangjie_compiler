@@ -11,6 +11,11 @@
 
 #include "ASTLoaderImpl.h"
 
+#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Walker.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
+#include "cangjie/Option/Option.h"
+#include "cangjie/Utils/ICEUtil.h"
 #include "flatbuffers/ModuleFormat_generated.h"
 
 #include "cangjie/AST/ASTCasting.h"
@@ -146,6 +151,32 @@ void SetOuterDeclForMemberDecl(Decl& member, Decl& parentDecl)
         SetOuterDeclForParamDecl(*func, parentDecl);
     }
 }
+
+/**
+ * @brief Convert optimization level enum to string for diagnostics
+ * @param level The optimization level to convert
+ * @return String representation of the optimization level
+ */
+std::string OptimizationLevelToString(GlobalOptions::OptimizationLevel level)
+{
+    switch (level) {
+        case GlobalOptions::OptimizationLevel::O0:
+            return "O0";
+        case GlobalOptions::OptimizationLevel::O1:
+            return "O1";
+        case GlobalOptions::OptimizationLevel::O2:
+            return "O2";
+        case GlobalOptions::OptimizationLevel::O3:
+            return "O3";
+        case GlobalOptions::OptimizationLevel::Os:
+            return "Os";
+        case GlobalOptions::OptimizationLevel::Oz:
+            return "Oz";
+        default:
+            return "(unsupported)";
+    }
+}
+
 } // namespace
 
 ASTLoader::ASTLoader(std::vector<uint8_t>&& data, const std::string& fullPackageName, TypeManager& typeManager,
@@ -324,6 +355,14 @@ void ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         file->end = LoadPos(fileInfo->end());
         pkg.files.emplace_back(std::move(file));
     }
+
+    if (!ValidateOptions()) {
+        // options mismatch must abort compilation
+        // otherwise the difference in desugaring/chir generation
+        // may lead to a crash in subsequent compilation stages
+        return;
+    }
+
     AddCurFile(pkg);
     auto imports = package->imports();
     CJC_NULLPTR_CHECK(imports);
@@ -332,6 +371,37 @@ void ASTLoader::ASTLoaderImpl::PreloadCommonPartOfPackage(AST::Package& pkg)
         std::string importItem = imports->Get(i)->str();
         importedFullPackageNames.emplace_back(importItem);
     }
+}
+
+/**
+ * @brief Validate that compilation options match between common cjo and current compile
+ * @return true if options match or are compatible, false if there is a mismatch
+ */
+bool ASTLoader::ASTLoaderImpl::ValidateOptions()
+{
+    auto options = package->options();
+    if (options == nullptr) {
+        diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_no_options, DEFAULT_POSITION);
+        return true;
+    }
+
+    bool failed = false;
+    if (options->debug() != this->opts.enableCompileDebug) {
+        std::string before = options->debug() ? "enabled" : "disabled";
+        std::string after = opts.enableCompileDebug ? "enabled" : "disabled";
+        diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_debug_mismatch, DEFAULT_POSITION, before, after);
+        failed = true;
+    }
+
+    auto cjoOptLevel = LoadOptimizationLevel(*options);
+    if (opts.optimizationLevel != cjoOptLevel) {
+        std::string before = OptimizationLevelToString(cjoOptLevel);
+        std::string after = OptimizationLevelToString(opts.optimizationLevel);
+        diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_opt_mismatch, DEFAULT_POSITION, before, after);
+        failed = true;
+    }
+
+    return !failed;
 }
 
 void ASTLoader::LoadPackageDecls() const
@@ -527,6 +597,33 @@ void ASTLoader::ASTLoaderImpl::AddDeclToImportedPackage(Decl& decl)
             }
         }
     }
+}
+
+/**
+ * @brief Convert fb optimization level enum to the GlobalOptions' enum
+ */
+GlobalOptions::OptimizationLevel ASTLoader::ASTLoaderImpl::LoadOptimizationLevel(
+    const PackageFormat::CompilationOptions& options)
+{
+    using L = GlobalOptions::OptimizationLevel;
+    using CJO = PackageFormat::OptimizationLevel;
+    switch (options.optimization_level()) {
+        case CJO::OptimizationLevel_O0:
+            return L::O0;
+        case CJO::OptimizationLevel_O1:
+            return L::O1;
+        case CJO::OptimizationLevel_O2:
+            return L::O2;
+        case CJO::OptimizationLevel_O3:
+            return L::O3;
+        case CJO::OptimizationLevel_Os:
+            return L::Os;
+        case CJO::OptimizationLevel_Oz:
+            return L::Oz;
+        default:
+            InternalError("Unexpected optimization level");
+    }
+    return L::O0;
 }
 
 /**
