@@ -291,58 +291,6 @@ const std::unordered_map<FuncKind, std::string> FUNCKIND_TO_STRING{{FuncKind::DE
     {FuncKind::ANNOFACTORY_FUNC, "annoFactory"}, {FuncKind::MACRO_FUNC, "macro"},
     {FuncKind::DEFAULT_PARAMETER_FUNC, "defaultParameter"}, {FuncKind::INSTANCEVAR_INIT, "memberVariablesInit"}};
 
-struct AbstractMethodParam {
-    std::string paramName;
-    Type* type = nullptr;
-    AnnoInfo annoInfo;
-
-    std::string ToString();
-};
-
-struct AbstractMethodInfo {
-    std::string methodName;                      // abstract method name
-    Type* methodTy = nullptr;                    // abstract method type
-    std::vector<AbstractMethodParam> paramInfos; // abstract method parameters
-    AttributeInfo attributeInfo;                 // abstract method attribute
-    AnnoInfo annoInfo;                           // abstract method annoInfo
-    std::vector<GenericType*> methodGenericTypeParams; // store `T` of `func foo<T>()`
-    bool hasBody;                                // abstract method in interface may have func body
-    ClassDef* parent = nullptr;
-    AbstractMethodInfo(const std::string& methodName, const std::string& mangledName, Type* methodTy,
-        const std::vector<AbstractMethodParam>& paramInfos, const AttributeInfo& attrInfo, const AnnoInfo& annoInfo,
-        const std::vector<GenericType*>& methodGenericTypeParams, bool hasBody, ClassDef* parent)
-        : methodName(methodName),
-          methodTy(methodTy),
-          paramInfos(paramInfos),
-          attributeInfo(attrInfo),
-          annoInfo(annoInfo),
-          methodGenericTypeParams(methodGenericTypeParams),
-          hasBody(hasBody),
-          parent(parent),
-          mangledName(mangledName)
-          
-    {
-    }
-    bool TestAttr(Attribute attr) const
-    {
-        return attributeInfo.TestAttr(attr);
-    }
-
-    // This function will append ".0" to the original mangledName from AST to avoid backend issues.
-    std::string GetMangledName() const
-    {
-        return mangledName + ".0";
-    }
-
-    std::string GetASTMangledName() const
-    {
-        return mangledName;
-    }
-
-private:
-    std::string mangledName;            // abstract method mangled name
-};
-
 class Block : public Value {
     friend class CHIRContext;
     friend class CHIRBuilder;

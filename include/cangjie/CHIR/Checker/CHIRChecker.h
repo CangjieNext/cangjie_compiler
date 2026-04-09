@@ -138,7 +138,6 @@ private:
     void CheckVTable(const CustomTypeDef& def);
     void CheckCStruct(const StructDef& def);
     void CheckClassDef(const ClassDef& def);
-    void CheckAbstractMethod(const ClassDef& def);
     void CheckEnumDef(const EnumDef& def);
     void CheckExtendDef(const ExtendDef& def);
 
