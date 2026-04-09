@@ -1417,7 +1417,7 @@ Ptr<Expr> MockSupportManager::ReplaceRefExpr(RefExpr& refExpr)
     }
 
     if (target->TestAttr(Attribute::STATIC)) {
-        return ReplaceStaticRefExprWithGetAccessor(refExpr);
+        return ReplaceRefExprWithGetAccessor(refExpr);
     }
 
     return ReplaceVarRefExprWithGetAccessor(refExpr);
@@ -1438,9 +1438,9 @@ Ptr<Expr> MockSupportManager::ReplaceCallExpr(CallExpr& callExpr)
     return nullptr;
 }
 
-Ptr<Expr> MockSupportManager::ReplaceRefExprWithGetAccessor(RefExpr& refExpr, AccessorKind kind)
+Ptr<Expr> MockSupportManager::ReplaceRefExprWithGetAccessor(RefExpr& refExpr)
 {
-    auto accessorCall = GenerateAccessorCallForField(refExpr, kind);
+    auto accessorCall = GenerateGetterCall(refExpr);
     if (!accessorCall) {
         return nullptr;
     }
@@ -1457,12 +1457,7 @@ Ptr<Expr> MockSupportManager::ReplaceVarRefExprWithGetAccessor(RefExpr& refExpr)
         return nullptr;
     }
 
-    return ReplaceRefExprWithGetAccessor(refExpr, AccessorKind::FIELD_GETTER);
-}
-
-Ptr<Expr> MockSupportManager::ReplaceStaticRefExprWithGetAccessor(RefExpr& refExpr)
-{
-    return ReplaceRefExprWithGetAccessor(refExpr, AccessorKind::STATIC_FIELD_GETTER);
+    return ReplaceRefExprWithGetAccessor(refExpr);
 }
 
 Ptr<FuncArg> MockSupportManager::GenerateDesugarFuncArg(Ptr<FuncArg> funcArg, Ptr<VarDecl> varDecl)
@@ -1506,25 +1501,21 @@ Ptr<Expr> MockSupportManager::ReplaceInoutFuncArgWithAccessor(CallExpr& callExpr
 
         if (auto memberAccess = DynamicCast<MemberAccess>(arg->expr.get());
             memberAccess && IsStaticClassMember(memberAccess->GetTarget())) {
-            accessorGet = GenerateAccessorCallForField(*memberAccess, AccessorKind::STATIC_FIELD_GETTER);
-            accessorSet = GenerateAccessorCallForField(*memberAccess, AccessorKind::STATIC_FIELD_SETTER);
+            accessorGet = GenerateGetterCall(*memberAccess);
+            accessorSet = GenerateSetterCall(*memberAccess);
+            CJC_ASSERT(accessorGet && accessorSet);
         } else if (auto refExpr = DynamicCast<RefExpr>(arg->expr.get())) {
             auto target = refExpr->GetTarget();
-            if (IsStaticClassMember(target)) {
-                accessorGet = GenerateAccessorCallForField(*refExpr, AccessorKind::STATIC_FIELD_GETTER);
-                accessorSet = GenerateAccessorCallForField(*refExpr, AccessorKind::STATIC_FIELD_SETTER);
-            } else if (target && target->TestAttr(Attribute::GLOBAL)) {
-                accessorGet =
-                    GenerateAccessorCallForTopLevelVariable(*refExpr, AccessorKind::TOP_LEVEL_VARIABLE_GETTER);
-                accessorSet =
-                    GenerateAccessorCallForTopLevelVariable(*refExpr, AccessorKind::TOP_LEVEL_VARIABLE_SETTER);
-            } else {
-                continue;
+            if (target && (IsStaticClassMember(target) || target->TestAttr(Attribute::GLOBAL))) {
+                accessorGet = GenerateGetterCall(*refExpr);
+                accessorSet = GenerateSetterCall(*refExpr);
+                CJC_ASSERT(accessorGet && accessorSet);
             }
-        } else {
+        }
+
+        if (!accessorGet || !accessorSet) {
             continue;
         }
-        CJC_ASSERT(accessorGet && accessorSet);
 
         auto tmpVarDecl = CreateTmpVarDecl(MockUtils::CreateType<Type>(arg->ty), std::move(accessorGet));
         tmpVarDecl->isVar = true;
@@ -1612,15 +1603,7 @@ Ptr<Expr> MockSupportManager::ReplaceFieldGetWithAccessor(MemberAccess& memberAc
         return nullptr;
     }
 
-    auto kind = GetVarDeclGetterAccessorKind(memberAccess.target);
-    auto accessorCall = [&]() {
-        if (kind == AccessorKind::TOP_LEVEL_VARIABLE_GETTER) {
-            return GenerateAccessorCallForTopLevelVariable(memberAccess, kind);
-        }
-        return GenerateAccessorCallForField(memberAccess, kind);
-    }();
-
-    if (accessorCall) {
+    if (auto accessorCall = GenerateGetterCall(memberAccess)) {
         accessorCall->sourceExpr = Ptr(&memberAccess);
         memberAccess.desugarExpr = std::move(accessorCall);
         return memberAccess.desugarExpr;
@@ -1635,8 +1618,7 @@ Ptr<Expr> MockSupportManager::ReplaceTopLevelVariableGetWithAccessor(RefExpr& re
         return nullptr;
     }
 
-    if (auto accessorCall = GenerateAccessorCallForTopLevelVariable(refExpr, AccessorKind::TOP_LEVEL_VARIABLE_GETTER);
-        accessorCall) {
+    if (auto accessorCall = GenerateGetterCall(refExpr); accessorCall) {
         accessorCall->sourceExpr = Ptr(&refExpr);
         refExpr.desugarExpr = std::move(accessorCall);
         return refExpr.desugarExpr;
@@ -1653,28 +1635,28 @@ OwnedPtr<CallExpr> MockSupportManager::ReplaceRefExprFieldSetWithAccessor(RefExp
     }
 
     if (target->TestAttr(Attribute::GLOBAL)) {
-        return GenerateAccessorCallForTopLevelVariable(refExpr, AccessorKind::TOP_LEVEL_VARIABLE_SETTER);
+        return GenerateSetterCall(refExpr);
     }
 
     if (target->TestAttr(Attribute::STATIC)) {
-        return ReplaceRefExprFieldSetWithAccessorImpl(refExpr, AccessorKind::STATIC_FIELD_SETTER);
+        return ReplaceRefExprFieldSetWithAccessorImpl(refExpr);
     }
 
     // Expressions may appear in body of extend methods
     if (!isInConstructor) {
-        return ReplaceRefExprFieldSetWithAccessorImpl(refExpr, AccessorKind::FIELD_SETTER);
+        return ReplaceRefExprFieldSetWithAccessorImpl(refExpr);
     }
 
     return nullptr;
 }
 
-OwnedPtr<CallExpr> MockSupportManager::ReplaceRefExprFieldSetWithAccessorImpl(RefExpr& refExpr, AccessorKind kind)
+OwnedPtr<CallExpr> MockSupportManager::ReplaceRefExprFieldSetWithAccessorImpl(RefExpr& refExpr)
 {
     auto target = refExpr.GetTarget();
     if (target->TestAttr(Attribute::COMPILER_ADD) || !target->outerDecl) {
         return nullptr;
     }
-    return GenerateAccessorCallForField(refExpr, kind);
+    return GenerateSetterCall(refExpr);
 }
 
 OwnedPtr<CallExpr> MockSupportManager::ReplaceMemberAccessFieldSetWithAccessor(
@@ -1684,11 +1666,7 @@ OwnedPtr<CallExpr> MockSupportManager::ReplaceMemberAccessFieldSetWithAccessor(
         return nullptr;
     }
 
-    auto kind = GetVarDeclSetterAccessorKind(memberAccess.target);
-    if (kind == AccessorKind::TOP_LEVEL_VARIABLE_SETTER) {
-        return GenerateAccessorCallForTopLevelVariable(memberAccess, kind);
-    }
-    return GenerateAccessorCallForField(memberAccess, kind);
+    return GenerateSetterCall(memberAccess);
 }
 
 Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr, bool isInConstructor)
@@ -1725,15 +1703,9 @@ Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr
 }
 
 OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForTopLevelVariable(
-    const RefExpr& refExpr, AccessorKind kind)
+    const NameReferenceExpr& nameRefExpr, AccessorKind kind)
 {
-    return GenerateAccessorCallForTopLevelVariable(refExpr.GetTarget(), kind, refExpr.curFile);
-}
-
-OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForTopLevelVariable(
-    const MemberAccess& memberAccess, AccessorKind kind)
-{
-    return GenerateAccessorCallForTopLevelVariable(memberAccess.GetTarget(), kind, memberAccess.curFile);
+    return GenerateAccessorCallForTopLevelVariable(nameRefExpr.GetTarget(), kind, nameRefExpr.curFile);
 }
 
 OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForTopLevelVariable(
@@ -1756,27 +1728,40 @@ OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForTopLevelVariable(
     return accessorCall;
 }
 
-OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(const MemberAccess& memberAccess, AccessorKind kind)
+OwnedPtr<AST::CallExpr> MockSupportManager::GenerateGetterCall(const AST::NameReferenceExpr& nameRefExpr)
 {
-    return GenerateAccessorCallForField(ASTCloner::Clone(memberAccess.baseExpr.get()), memberAccess.GetTarget(),
-        memberAccess.ty, kind, memberAccess.curFile);
+    auto kind = GetVarDeclGetterAccessorKind(nameRefExpr.GetTarget());
+    if (kind == AccessorKind::TOP_LEVEL_VARIABLE_GETTER) {
+        return GenerateAccessorCallForTopLevelVariable(nameRefExpr, kind);
+    }
+    return GenerateAccessorCallForField(nameRefExpr, kind);
 }
 
-OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(const RefExpr& refExpr, AccessorKind kind)
+OwnedPtr<AST::CallExpr> MockSupportManager::GenerateSetterCall(const AST::NameReferenceExpr& nameRefExpr)
 {
-    return GenerateAccessorCallForField(nullptr, refExpr.GetTarget(), refExpr.ty, kind, refExpr.curFile);
+    auto kind = GetVarDeclSetterAccessorKind(nameRefExpr.GetTarget());
+    if (kind == AccessorKind::TOP_LEVEL_VARIABLE_SETTER) {
+        return GenerateAccessorCallForTopLevelVariable(nameRefExpr, kind);
+    }
+    return GenerateAccessorCallForField(nameRefExpr, kind);
+}
+
+OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(
+    const NameReferenceExpr& nameRefExpr, AccessorKind kind)
+{
+    OwnedPtr<Expr> baseExpr = nullptr;
+    if (auto memberAccess = DynamicCast<MemberAccess>(&nameRefExpr)) {
+        baseExpr = ASTCloner::Clone(memberAccess->baseExpr.get());
+    }
+    return GenerateAccessorCallForField(
+        std::move(baseExpr), nameRefExpr.GetTarget(), nameRefExpr.ty, kind, nameRefExpr.curFile);
 }
 
 OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(OwnedPtr<Expr> baseExpr,
     Ptr<Decl> memberDecl, Ptr<Ty> memberRefTy, AccessorKind kind, Ptr<File> curFile)
 {
-    Ptr<FuncDecl> accessorDecl = [&]() -> Ptr<FuncDecl> {
-        if (kind == AccessorKind::TOP_LEVEL_VARIABLE_GETTER || kind == AccessorKind::TOP_LEVEL_VARIABLE_SETTER) {
-            return mockUtils->FindTopLevelAccessor(memberDecl, kind);
-        }
-        return As<ASTKind::FUNC_DECL>(
-            mockUtils->FindAccessorForMemberAccess(memberDecl->outerDecl->ty, memberDecl, kind));
-    }();
+    Ptr<FuncDecl> accessorDecl =
+        As<ASTKind::FUNC_DECL>(mockUtils->FindAccessorForMemberAccess(memberDecl->outerDecl->ty, memberDecl, kind));
 
     if (!accessorDecl) {
         return nullptr;
