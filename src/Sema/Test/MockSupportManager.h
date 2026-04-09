@@ -85,7 +85,7 @@ private:
     OwnedPtr<AST::FuncDecl> GenerateVarDeclAccessor(AST::VarDecl& fieldDecl, AccessorKind kind);
     OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(const AST::MemberAccess& memberAccess, AccessorKind kind);
     OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(OwnedPtr<AST::Expr> baseExpr, Ptr<AST::Decl> memberDecl,
-        Ptr<AST::Ty> memberTy, AccessorKind kind, Ptr<AST::File> curFile);
+        Ptr<AST::Ty> memberRefTy, AccessorKind kind, Ptr<AST::File> curFile);
     Ptr<AST::Expr> ReplaceFieldGetWithAccessor(AST::MemberAccess& memberAccess, bool isInConstructor);
     OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(const AST::RefExpr& refExpr, AccessorKind kind);
     Ptr<AST::Expr> ReplaceFieldSetWithAccessor(AST::AssignExpr& assignExpr, bool isInConstructor);
@@ -129,6 +129,10 @@ private:
         const AST::MemberAccess& memberAccess, bool isInConstructor, const Ptr<AST::Expr> topLevelMutExpr = nullptr);
     Ptr<AST::Expr> ReplaceTopLevelVariableGetWithAccessor(AST::RefExpr& refExpr);
     OwnedPtr<AST::CallExpr> GenerateAccessorCallForTopLevelVariable(const AST::RefExpr& refExpr, AccessorKind kind);
+    OwnedPtr<AST::CallExpr> GenerateAccessorCallForTopLevelVariable(
+        const AST::MemberAccess& memberAccess, AccessorKind kind);
+    OwnedPtr<AST::CallExpr> GenerateAccessorCallForTopLevelVariable(
+        Ptr<AST::Decl> globalDecl, AccessorKind kind, Ptr<AST::File> curFile);
     void GenerateVarDeclAccessors(AST::VarDecl& fieldDecl, AccessorKind getterKind, AccessorKind setterKind);
     void PrepareStaticDecl(AST::Decl& decl);
     std::vector<OwnedPtr<AST::MatchCase>> GenerateHandlerMatchCases(const AST::FuncDecl& funcDecl,

@@ -172,7 +172,8 @@ Ptr<FuncDecl> MockUtils::FindTopLevelAccessor(Ptr<Decl> member, AccessorKind kin
 Ptr<FuncDecl> MockUtils::FindAccessor(Ptr<MemberAccess> ma, Ptr<Decl> target, AccessorKind kind) const
 {
     Ptr<Decl> accessor;
-    if (kind == AccessorKind::FIELD_GETTER || kind == AccessorKind::FIELD_SETTER) {
+    if (kind == AccessorKind::FIELD_GETTER || kind == AccessorKind::FIELD_SETTER ||
+        kind == AccessorKind::STATIC_FIELD_SETTER || kind == AccessorKind::STATIC_FIELD_GETTER) {
         CJC_ASSERT(ma);
         accessor = FindAccessorForMemberAccess(ma->baseExpr->ty, target, kind);
     } else if (kind == AccessorKind::TOP_LEVEL_VARIABLE_GETTER || kind == AccessorKind::TOP_LEVEL_VARIABLE_SETTER) {
@@ -808,6 +809,32 @@ struct InternalTypesChecker {
 bool MockUtils::MayContainInternalTypes(Ptr<Ty> ty) const
 {
     return InternalTypesChecker{}.Check(ty);
+}
+
+namespace {
+
+std::tuple<AccessorKind, AccessorKind> GetVarDeclAccessorKinds(Ptr<Decl> varDecl)
+{
+    CJC_ASSERT(varDecl->astKind == ASTKind::VAR_DECL);
+    if (varDecl->TestAttr(Attribute::STATIC)) {
+        return {AccessorKind::STATIC_FIELD_GETTER, AccessorKind::STATIC_FIELD_SETTER};
+    } else if (varDecl->TestAttr(Attribute::GLOBAL)) {
+        return {AccessorKind::TOP_LEVEL_VARIABLE_GETTER, AccessorKind::TOP_LEVEL_VARIABLE_SETTER};
+    } else {
+        return {AccessorKind::FIELD_GETTER, AccessorKind::FIELD_SETTER};
+    }
+}
+
+} // namespace
+
+AccessorKind GetVarDeclSetterAccessorKind(Ptr<Decl> varDecl)
+{
+    return std::get<1>(GetVarDeclAccessorKinds(varDecl));
+}
+
+AccessorKind GetVarDeclGetterAccessorKind(Ptr<Decl> varDecl)
+{
+    return std::get<0>(GetVarDeclAccessorKinds(varDecl));
 }
 
 } // namespace Cangjie
