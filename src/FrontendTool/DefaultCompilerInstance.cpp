@@ -213,6 +213,7 @@ bool DefaultCIImpl::SaveCjo(const AST::Package& pkg)
         if (file.is_open()) {
             file.close();
         }
+        FileUtil::Remove(astFlagFileInfo.filePath);
     }
     return res;
 }
