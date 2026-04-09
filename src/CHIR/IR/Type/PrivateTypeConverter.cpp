@@ -239,12 +239,6 @@ void CustomDefTypeConverter::VisitSubDef(ClassDef& o)
     if (o.superClassTy != nullptr) {
         o.superClassTy = StaticCast<ClassType*>(ConvertType(*o.superClassTy));
     }
-    for (auto& method : o.abstractMethods) {
-        method.methodTy = ConvertFuncParamsAndRetType(*StaticCast<FuncType*>(method.methodTy));
-        for (auto& param : method.paramInfos) {
-            param.type = ConvertType(*param.type);
-        }
-    }
 }
 
 void CustomDefTypeConverter::VisitSubDef(ExtendDef& o)
