@@ -1627,7 +1627,7 @@ void MockManager::HandleMockAnnotatedLambdaWithMemberAccess(MemberAccess& ma, Ex
     if (auto propDecl = As<ASTKind::PROP_DECL>(target); propDecl) {
         getterDecl = GetUsableGetterForProperty(*propDecl);
     } else {
-        getterDecl = mockUtils->FindAccessor(&ma, target, AccessorKind::FIELD_GETTER);
+        getterDecl = mockUtils->FindAccessor(&ma, target, GetVarDeclGetterAccessorKind(target));
     }
 
     GenerateCallHandlerForStaticDecl(*getterDecl, injectTo);
@@ -1637,7 +1637,7 @@ void MockManager::HandleMockAnnotatedLambdaWithMemberAccess(MemberAccess& ma, Ex
         if (auto propDecl = As<ASTKind::PROP_DECL>(ma.target); propDecl) {
             setter = GetUsableSetterForProperty(*As<ASTKind::PROP_DECL>(ma.target));
         } else {
-            setter = mockUtils->FindAccessor(&ma, ma.target, AccessorKind::FIELD_SETTER);
+            setter = mockUtils->FindAccessor(&ma, ma.target, GetVarDeclSetterAccessorKind(target));
         }
         GenerateCallHandlerForStaticDecl(*setter, injectTo);
     }

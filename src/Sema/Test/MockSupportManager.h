@@ -129,6 +129,10 @@ private:
         const AST::MemberAccess& memberAccess, bool isInConstructor, const Ptr<AST::Expr> topLevelMutExpr = nullptr);
     Ptr<AST::Expr> ReplaceTopLevelVariableGetWithAccessor(AST::RefExpr& refExpr);
     OwnedPtr<AST::CallExpr> GenerateAccessorCallForTopLevelVariable(const AST::RefExpr& refExpr, AccessorKind kind);
+    OwnedPtr<AST::CallExpr> GenerateAccessorCallForTopLevelVariable(
+        const AST::MemberAccess& memberAccess, AccessorKind kind);
+    OwnedPtr<AST::CallExpr> GenerateAccessorCallForTopLevelVariable(
+        Ptr<AST::Decl> globalDecl, AccessorKind kind, Ptr<AST::File> curFile);
     void GenerateVarDeclAccessors(AST::VarDecl& fieldDecl, AccessorKind getterKind, AccessorKind setterKind);
     void PrepareStaticDecl(AST::Decl& decl);
     std::vector<OwnedPtr<AST::MatchCase>> GenerateHandlerMatchCases(const AST::FuncDecl& funcDecl,

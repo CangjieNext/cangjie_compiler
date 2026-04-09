@@ -1612,9 +1612,15 @@ Ptr<Expr> MockSupportManager::ReplaceFieldGetWithAccessor(MemberAccess& memberAc
         return nullptr;
     }
 
-    AccessorKind kind = memberAccess.target->TestAttr(Attribute::STATIC) ? AccessorKind::STATIC_FIELD_GETTER
-                                                                         : AccessorKind::FIELD_GETTER;
-    if (auto accessorCall = GenerateAccessorCallForField(memberAccess, kind)) {
+    auto kind = GetVarDeclGetterAccessorKind(memberAccess.target);
+    auto accessorCall = [&]() {
+        if (kind == AccessorKind::TOP_LEVEL_VARIABLE_GETTER) {
+            return GenerateAccessorCallForTopLevelVariable(memberAccess, kind);
+        }
+        return GenerateAccessorCallForField(memberAccess, kind);
+    }();
+
+    if (accessorCall) {
         accessorCall->sourceExpr = Ptr(&memberAccess);
         memberAccess.desugarExpr = std::move(accessorCall);
         return memberAccess.desugarExpr;
@@ -1678,7 +1684,11 @@ OwnedPtr<CallExpr> MockSupportManager::ReplaceMemberAccessFieldSetWithAccessor(
         return nullptr;
     }
 
-    return GenerateAccessorCallForField(memberAccess, AccessorKind::FIELD_SETTER);
+    auto kind = GetVarDeclSetterAccessorKind(memberAccess.target);
+    if (kind == AccessorKind::TOP_LEVEL_VARIABLE_SETTER) {
+        return GenerateAccessorCallForTopLevelVariable(memberAccess, kind);
+    }
+    return GenerateAccessorCallForField(memberAccess, kind);
 }
 
 Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr, bool isInConstructor)
@@ -1717,7 +1727,19 @@ Ptr<Expr> MockSupportManager::ReplaceFieldSetWithAccessor(AssignExpr& assignExpr
 OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForTopLevelVariable(
     const RefExpr& refExpr, AccessorKind kind)
 {
-    auto accessorDecl = mockUtils->FindTopLevelAccessor(refExpr.GetTarget(), kind);
+    return GenerateAccessorCallForTopLevelVariable(refExpr.GetTarget(), kind, refExpr.curFile);
+}
+
+OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForTopLevelVariable(
+    const MemberAccess& memberAccess, AccessorKind kind)
+{
+    return GenerateAccessorCallForTopLevelVariable(memberAccess.GetTarget(), kind, memberAccess.curFile);
+}
+
+OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForTopLevelVariable(
+    Ptr<Decl> globalDecl, AccessorKind kind, Ptr<File> curFile)
+{
+    auto accessorDecl = mockUtils->FindTopLevelAccessor(globalDecl, kind);
     if (!accessorDecl) {
         return nullptr;
     }
@@ -1730,7 +1752,7 @@ OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForTopLevelVariable(
     std::vector<OwnedPtr<FuncArg>> mockedMethodArgRefs {};
     accessorCall->args = std::move(mockedMethodArgRefs);
     accessorCall->callKind = CallKind::CALL_DECLARED_FUNCTION;
-    accessorCall->curFile = refExpr.curFile;
+    accessorCall->curFile = curFile;
     return accessorCall;
 }
 
@@ -1748,8 +1770,13 @@ OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(const RefExp
 OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(OwnedPtr<Expr> baseExpr,
     Ptr<Decl> memberDecl, Ptr<Ty> memberTy, AccessorKind kind, Ptr<File> curFile)
 {
-    Ptr<FuncDecl> accessorDecl =
-        As<ASTKind::FUNC_DECL>(mockUtils->FindAccessorForMemberAccess(memberDecl->outerDecl->ty, memberDecl, kind));
+    Ptr<FuncDecl> accessorDecl = [&]() -> Ptr<FuncDecl> {
+        if (kind == AccessorKind::TOP_LEVEL_VARIABLE_GETTER || kind == AccessorKind::TOP_LEVEL_VARIABLE_SETTER) {
+            return mockUtils->FindTopLevelAccessor(memberDecl, kind);
+        }
+        return As<ASTKind::FUNC_DECL>(
+            mockUtils->FindAccessorForMemberAccess(memberDecl->outerDecl->ty, memberDecl, kind));
+    }();
 
     if (!accessorDecl) {
         return nullptr;

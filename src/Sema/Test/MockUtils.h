@@ -218,6 +218,10 @@ private:
     friend class MockManager;
     friend class MockSupportManager;
 };
-}
+
+AccessorKind GetVarDeclSetterAccessorKind(Ptr<AST::Decl> varDecl);
+AccessorKind GetVarDeclGetterAccessorKind(Ptr<AST::Decl> varDecl);
+
+} // namespace Cangjie
 
 #endif // CANGJIE_SEMA_MOCK_UTILS_H
