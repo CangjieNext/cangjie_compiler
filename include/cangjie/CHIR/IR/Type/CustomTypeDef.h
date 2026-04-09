@@ -133,7 +133,7 @@ public:
     // ===--------------------------------------------------------------------===//
     // Member Function
     // ===--------------------------------------------------------------------===//
-    virtual void AddMethod(class Function* method, bool recordOrder = true);
+    void AddMethod(class Function* method);
     std::vector<Function*> GetMethods() const;
     // you need to update vtable by yourself, after setting methods
     void SetMethods(const std::vector<Function*>& items);
@@ -148,9 +148,9 @@ public:
      * @param funcInstTypeArgs A vector to store the function instance type arguments.
      * @param builder The CHIR builder used for building the function.
      * @param checkAbstractMethod Indicates whether to check for an abstract method.
-     * @return A pair containing the expected function and a boolean flag.
+     * @return The expected function.
      */
-    std::pair<Function*, bool> GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
+    Function* GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
         std::unordered_map<const GenericType*, Type*> replaceTable,
         std::vector<Type*>& funcInstTypeArgs, CHIRBuilder& builder, bool checkAbstractMethod) const;
 
