@@ -667,17 +667,10 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
         return;
     }
     auto features = funcDecl.curFile->GetFeatures();
-
-    // when the callee of callExpr is abstract func, will create a `Invoke` node, so we don't need to put abstract
-    // func into the `globalCache`,
-    if (funcDecl.TestAttr(AST::Attribute::ABSTRACT)) {
-        return;
-    }
     // Try get deserialized func.
     Function* fn = TryGetDeserialized<Function>(funcDecl);
-    bool isSpecific = funcDecl.TestAttr(AST::Attribute::SPECIFIC);
     if (fn) {
-        if (isSpecific) {
+        if (funcDecl.TestAttr(AST::Attribute::SPECIFIC)) {
             ResetSpecificFunc(funcDecl, *fn);
             const auto& loc = GetDeclLoc(builder.GetChirContext(), funcDecl);
             fn->SetDebugLocation(loc);
@@ -732,8 +725,9 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
             fn->EnableAttr(Attribute::SKIP_ANALYSIS);
         }
     }
-    BlockGroup* body = builder.CreateBlockGroup(*fn);
-    fn->InitBody(*body);
+    if (!funcDecl.TestAttr(AST::Attribute::ABSTRACT)) {
+        fn->InitBody(*builder.CreateBlockGroup(*fn));
+    }
 
     CJC_ASSERT(fn);
     SetFuncAttributeAndLinkageType(funcDecl, *fn);
@@ -759,11 +753,6 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
 
 void AST2CHIR::CreatePseudoImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDecl)
 {
-    // when the callee of callExpr is abstract func, will create a `Invoke` node, so we don't need to put abstract
-    // func into the `globalCache`,
-    if (funcDecl.TestAttr(AST::Attribute::ABSTRACT)) {
-        return;
-    }
     auto fnTy = chirType.TranslateType(*funcDecl.ty);
     fnTy = AdjustFuncType(*StaticCast<FuncType*>(fnTy), funcDecl, builder, chirType);
     FuncType* funcTy = StaticCast<FuncType*>(fnTy);

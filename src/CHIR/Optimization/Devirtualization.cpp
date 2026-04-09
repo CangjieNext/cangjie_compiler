@@ -427,7 +427,7 @@ Function* FindFunctionInVtable(const ClassType* parentTy, const std::vector<Virt
         if (!isSigSame) {
             continue;
         }
-        return info.GetVirtualMethod();
+        return info.GetVirtualMethod()->IsPureAbstract() ? nullptr : info.GetVirtualMethod();
     }
     return nullptr;
 }

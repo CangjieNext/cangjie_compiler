@@ -568,32 +568,11 @@ enum ClassDefKind: int16 {
   INTERFACE
 }
 
-table AbstractMethodParam {
-  paramName: string(shared);
-  paramType: uint32; // use types id
-  annoInfo : AnnoInfo;
-}
-
-
-table AbstractMethodInfo {
-  methodName: string(shared);
-  mangledName: string(shared);
-  methodType: uint32; // use types id
-  paramsInfo: [AbstractMethodParam];
-  attributes: uint64;
-  annoInfo : AnnoInfo;
-  methodGenericTypeParams : [uint32]; // use types id
-  hasBody : bool;
-  parent: uint32; // class def, use def id
-}
-
 table ClassDef {
   base: CustomTypeDef;
   kind: ClassDefKind;
   isAnnotation: bool = false;
   superClass: uint32; // use types id
-  abstractMethods: [AbstractMethodInfo];
-  allMethodMangledNames: [string];
 }
 
 enum CHIRExprKind: uint8 {

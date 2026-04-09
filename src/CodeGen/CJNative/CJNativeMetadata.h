@@ -159,8 +159,6 @@ protected:
         const std::string& enumKind = "", bool isUnknownSize = false) const;
     llvm::MDTuple* GenerateParametersMetadata(
         const std::vector<CHIR::Parameter*>& argsInfo, bool hasThis = false) const;
-    llvm::MDTuple* GenerateParametersMetadata(
-        const std::vector<CHIR::AbstractMethodParam>& paramInfos, bool hasThis = false) const;
     llvm::MDTuple* GenerateParametersMetadata(const std::vector<CHIR::GenericType*>& genericParamInfos) const;
     std::string GetTiName(const CHIR::Type& ty) const;
     CGModule& module;
@@ -208,7 +206,6 @@ private:
     void GenerateClassLikeMethodMetadata(const CHIR::ClassDef& cd, std::vector<llvm::Metadata*>& methodsVec,
         std::vector<llvm::Metadata*>& staticMethodsVec);
     llvm::MDTuple* GenerateClassLikeTypeAttrsMetadata(const CHIR::ClassDef& cd) const;
-    llvm::MDNode* GenerateClassAbsMethodMetadata(const CHIR::AbstractMethodInfo& absMethod);
 };
 
 class EnumMetadataInfo : public MetadataInfo {
