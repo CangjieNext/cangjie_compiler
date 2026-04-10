@@ -3601,6 +3601,114 @@ index ad80d4344..84f875406 100644
      fixSectionAlignments();
  
    // This is used to:
+diff --git a/lld/MachO/Config.h b/lld/MachO/Config.h
+index c7e4b4f96..91e7faf2e 100644
+--- a/lld/MachO/Config.h
++++ b/lld/MachO/Config.h
+@@ -131,6 +131,7 @@ struct Configuration {
+   bool omitDebugInfo = false;
+   bool warnDylibInstallName = false;
+   bool ignoreOptimizationHints = false;
++  bool forceExactCpuSubtypeMatch = false;
+   uint32_t headerPad;
+   uint32_t dylibCompatibilityVersion = 0;
+   uint32_t dylibCurrentVersion = 0;
+diff --git a/lld/MachO/Driver.cpp b/lld/MachO/Driver.cpp
+index ce2d55bef..8f383c521 100644
+--- a/lld/MachO/Driver.cpp
++++ b/lld/MachO/Driver.cpp
+@@ -1350,6 +1350,8 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
+   config->callGraphProfileSort = args.hasFlag(
+       OPT_call_graph_profile_sort, OPT_no_call_graph_profile_sort, true);
+   config->printSymbolOrder = args.getLastArgValue(OPT_print_symbol_order);
++  config->forceExactCpuSubtypeMatch =
++      getenv("LD_DYLIB_CPU_SUBTYPES_MUST_MATCH");
+ 
+   for (const Arg *arg : args.filtered(OPT_alias)) {
+     config->aliasedSymbols.push_back(
+diff --git a/lld/MachO/InputFiles.cpp b/lld/MachO/InputFiles.cpp
+index 87034d41e..65aaf2e71 100644
+--- a/lld/MachO/InputFiles.cpp
++++ b/lld/MachO/InputFiles.cpp
+@@ -1067,8 +1067,11 @@ template <class LP> void ObjFile::parse() {
+   auto *buf = reinterpret_cast<const uint8_t *>(mb.getBufferStart());
+   auto *hdr = reinterpret_cast<const Header *>(mb.getBufferStart());
+ 
+-  Architecture arch = getArchitectureFromCpuType(hdr->cputype, hdr->cpusubtype);
+-  if (arch != config->arch()) {
++  uint32_t cpuType;
++  std::tie(cpuType, std::ignore) = getCPUTypeFromArchitecture(config->arch());
++  if (hdr->cputype != cpuType) {
++    Architecture arch =
++        getArchitectureFromCpuType(hdr->cputype, hdr->cpusubtype);
+     auto msg = config->errorForArchMismatch
+                    ? static_cast<void (*)(const Twine &)>(error)
+                    : warn;
+@@ -1888,6 +1891,36 @@ static bool skipPlatformCheckForCatalyst(const InterfaceFile &interface,
+                       MachO::Target(config->arch(), PLATFORM_MACOS));
+ }
+ 
++static bool isArchABICompatible(ArchitectureSet archSet,
++                                Architecture targetArch) {
++  uint32_t cpuType;
++  uint32_t targetCpuType;
++  std::tie(targetCpuType, std::ignore) = getCPUTypeFromArchitecture(targetArch);
++
++  return llvm::any_of(archSet, [&](const auto &p) {
++    std::tie(cpuType, std::ignore) = getCPUTypeFromArchitecture(p);
++    return cpuType == targetCpuType;
++  });
++}
++
++static bool isTargetPlatformArchCompatible(
++    InterfaceFile::const_target_range interfaceTargets, Target target) {
++  if (is_contained(interfaceTargets, target))
++    return true;
++
++  if (config->forceExactCpuSubtypeMatch)
++    return false;
++
++  ArchitectureSet archSet;
++  for (const auto &p : interfaceTargets)
++    if (p.Platform == target.Platform)
++      archSet.set(p.Arch);
++  if (archSet.empty())
++    return false;
++
++  return isArchABICompatible(archSet, target.Arch);
++}
++
+ DylibFile::DylibFile(const InterfaceFile &interface, DylibFile *umbrella,
+                      bool isBundleLoader, bool explicitlyLinked)
+     : InputFile(DylibKind, interface), refState(RefState::Unreferenced),
+@@ -1907,7 +1940,8 @@ DylibFile::DylibFile(const InterfaceFile &interface, DylibFile *umbrella,
+   inputFiles.insert(this);
+ 
+   if (!is_contained(skipPlatformChecks, installName) &&
+-      !is_contained(interface.targets(), config->platformInfo.target) &&
++      !isTargetPlatformArchCompatible(interface.targets(),
++                                      config->platformInfo.target) &&
+       !skipPlatformCheckForCatalyst(interface, explicitlyLinked)) {
+     error(toString(this) + " is incompatible with " +
+           std::string(config->platformInfo.target));
+@@ -1930,7 +1964,7 @@ DylibFile::DylibFile(const InterfaceFile &interface, DylibFile *umbrella,
+   std::vector<const llvm::MachO::Symbol *> normalSymbols;
+   normalSymbols.reserve(interface.symbolsCount());
+   for (const auto *symbol : interface.symbols()) {
+-    if (!symbol->getArchitectures().has(config->arch()))
++    if (!isArchABICompatible(symbol->getArchitectures(), config->arch()))
+       continue;
+     if (handleLDSymbol(symbol->getName()))
+       continue;
+@@ -1981,7 +2015,7 @@ void DylibFile::parseReexports(const InterfaceFile &interface) {
+   for (const InterfaceFileRef &intfRef : interface.reexportedLibraries()) {
+     InterfaceFile::const_target_range targets = intfRef.targets();
+     if (is_contained(skipPlatformChecks, intfRef.getInstallName()) ||
+-        is_contained(targets, config->platformInfo.target))
++        isTargetPlatformArchCompatible(targets, config->platformInfo.target))
+       loadReexport(intfRef.getInstallName(), exportingFile, topLevel);
+   }
+ }
 diff --git a/lld/MachO/OutputSegment.cpp b/lld/MachO/OutputSegment.cpp
 index da1394c08..f2949e7f3 100644
 --- a/lld/MachO/OutputSegment.cpp
@@ -3678,6 +3786,29 @@ index dc9b7f8f7..22b2479c0 100644
  ## LLD doesn't support defining symbols in synthetic sections, so we test them
  ## via this slightly more awkward route.
  # RUN: llvm-readobj --section-headers %t/ydata | \
+diff --git a/lld/test/MachO/tapi-link.s b/lld/test/MachO/tapi-link.s
+index 2a09eee17..a47be95f9 100644
+--- a/lld/test/MachO/tapi-link.s
++++ b/lld/test/MachO/tapi-link.s
+@@ -7,6 +7,18 @@
+ # RUN: %lld -o %t/test -lSystem -lc++ -framework CoreFoundation %t/libNested.tbd %t/test.o
+ # RUN: llvm-objdump --bind --no-show-raw-insn -d -r %t/test | FileCheck %s
+ 
++## Targeting an arch not listed in the tbd should fallback to an ABI compatible arch
++# RUN: %lld -arch x86_64h -o %t/test-compat -lSystem -lc++ -framework CoreFoundation %t/libNested.tbd %t/test.o
++# RUN: llvm-objdump --bind --no-show-raw-insn -d -r %t/test-compat | FileCheck %s
++
++## Setting LD_DYLIB_CPU_SUBTYPES_MUST_MATCH forces exact target arch match.
++# RUN: env LD_DYLIB_CPU_SUBTYPES_MUST_MATCH=1 not %lld -arch x86_64h -o /dev/null -lSystem -lc++ -framework \
++# RUN:   CoreFoundation %t/libNested.tbd %t/test.o 2>&1 | FileCheck %s -check-prefix=INCOMPATIBLE
++
++# INCOMPATIBLE:      error: {{.*}}libSystem.tbd(/usr/lib/libSystem.dylib) is incompatible with x86_64h (macOS)
++# INCOMPATIBLE-NEXT: error: {{.*}}libc++.tbd(/usr/lib/libc++.dylib) is incompatible with x86_64h (macOS)
++# INCOMPATIBLE-NEXT: error: {{.*}}CoreFoundation.tbd(/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation) is incompatible with x86_64h (macOS)
++
+ ## libReexportSystem.tbd tests that we can reference symbols from a 2nd-level
+ ## tapi document, re-exported by a top-level tapi document, which itself is
+ ## re-exported by another top-level tapi document.
 diff --git a/lld/tools/lld/lld.cpp b/lld/tools/lld/lld.cpp
 index 3ac59877a..7852f16b4 100644
 --- a/lld/tools/lld/lld.cpp
@@ -8273,10 +8404,10 @@ index 494249b44..0a5d3b716 100644
      lldbBreakpoint
 diff --git a/lldb/source/Commands/CommandObjCJThreadCommon.cpp b/lldb/source/Commands/CommandObjCJThreadCommon.cpp
 new file mode 100644
-index 000000000..222c5837e
+index 000000000..12fa4ea51
 --- /dev/null
 +++ b/lldb/source/Commands/CommandObjCJThreadCommon.cpp
-@@ -0,0 +1,355 @@
+@@ -0,0 +1,356 @@
 +//===-- CommandObjCJThreadCommon.cpp --------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -8567,12 +8698,13 @@ index 000000000..222c5837e
 +  Status error;
 +  Stream &stream = result.GetOutputStream();
 +  if (!cjthread_context) {
-+     result.AppendErrorWithFormat("invalid cjthread context");
++    result.AppendErrorWithFormat("invalid cjthread context");
++    return false;
 +  }
 +  GetDescription(stream, error, cjthread_context);
 +  if (error.Fail()) {
 +    result.AppendErrorWithFormat("%s", error.AsCString());
-+     return false;
++    return false;
 +  }
 +  HandOneCJThread(thread, cjthread_context, error);
 +  if (error.Fail()) {
@@ -13075,10 +13207,10 @@ index 000000000..6595dcf91
 +#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CANGJIE_CANGJIECOMPILERINSTANCE_H
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp
 new file mode 100644
-index 000000000..b775b90b7
+index 000000000..957becf23
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp
-@@ -0,0 +1,2285 @@
+@@ -0,0 +1,2294 @@
 +//===-- CangjieDeclMap.cpp ------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -13803,6 +13935,9 @@ index 000000000..b775b90b7
 +    name = DeletePrefixOfType(name);
 +  }
 +  auto idLen = refType->ref.identifier.Val().size();
++  if (name.size() < idLen + 2) {  // 2 is size of string "<>"
++    return;
++  }
 +  auto args = name.substr(idLen + 1, name.size() - idLen - 2);
 +  auto elements = builder.SplitTypeName(args);
 +  // The generic type parameter of the superclass comes from the subclass or instancetiated.
@@ -13926,7 +14061,11 @@ index 000000000..b775b90b7
 +  auto gc = MakeOwned<GenericConstraint>();
 +  OwnedPtr<RefType> t = MakeOwned<RefType>();
 +  std::string gn = type.GetTypeName().AsCString();
-+  t->ref.identifier = gn.substr(GENERIC_TYPE_PREFIX_NAME.size(), gn.size());
++  if (GENERIC_TYPE_PREFIX_NAME.size() > gn.size()) {
++    t->ref.identifier = gn;
++  } else {
++    t->ref.identifier = gn.substr(GENERIC_TYPE_PREFIX_NAME.size(), gn.size());
++  }
 +  for (auto& gen:decl->generic->typeParameters) {
 +    if (gen->identifier.Val() == t->ref.identifier.Val()) {
 +      t->ref.target = gen;
@@ -15110,10 +15249,12 @@ index 000000000..b775b90b7
 +    return enum_type;
 +  }
 +  // case: enum with args , compilerType is struct type with ctor.
-+  auto pos = typeName.find(PACKAGE_SUFFIX) + PACKAGE_SUFFIX.size();
-+  CJC_ASSERT(pos != std::string::npos);
-+  auto enumPrefix = GetEnumPrefix(genericName);
-+  typeName = typeName.substr(0, pos) + enumPrefix + typeName.substr(pos);
++  auto pos = typeName.find(PACKAGE_SUFFIX);
++  if (pos != std::string::npos) {
++    pos = pos + PACKAGE_SUFFIX.size();
++    auto enumPrefix = GetEnumPrefix(genericName);
++    typeName = typeName.substr(0, pos) + enumPrefix + typeName.substr(pos);
++  }
 +
 +  TypeSystemClang* ast = this->GetTypeSystem();
 +  CompilerType dynamic_type = ast->CreateRecordType(nullptr, OptionalClangModuleID(), lldb::eAccessPublic,
@@ -17414,10 +17555,10 @@ index 53a01cfc4..646750708 100644
  
 diff --git a/lldb/source/Plugins/Language/CPlusPlus/CjTypes.cpp b/lldb/source/Plugins/Language/CPlusPlus/CjTypes.cpp
 new file mode 100644
-index 000000000..7d2296864
+index 000000000..ced31249d
 --- /dev/null
 +++ b/lldb/source/Plugins/Language/CPlusPlus/CjTypes.cpp
-@@ -0,0 +1,966 @@
+@@ -0,0 +1,975 @@
 +//===-- CjTypes.cpp ---------------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -17747,6 +17888,9 @@ index 000000000..7d2296864
 +    }
 +
 +    auto id = type->GetValueAsUnsigned(0);
++    if (id >= valueSP->GetNumChildren()) {
++      continue;
++    }
 +    auto real_ctor = valueSP->GetChildAtIndex(id, true);
 +    if (!real_ctor) {
 +      continue;
@@ -17940,6 +18084,9 @@ index 000000000..7d2296864
 +          stringArrBound++;
 +          rem = stringArr[stringArrBound - 1] / anyBase;
 +          stringArr[stringArrBound - 1] %= anyBase;
++          if (stringArrBound >= stringArr.size()) {
++            break;
++          }
 +      }
 +      return stringArrBound;
 +    }
@@ -18047,6 +18194,9 @@ index 000000000..7d2296864
 +      decimalStrArr = _bigInt + decimalStrArr;
 +      return decimalStrArr;
 +    }
++    if (_scale > INT32_MAX) {
++      return "";
++    }
 +    std::string unscaleValStrArr = _bigInt;
 +    // scale value bigger than 0, need insert decimal point to corresponding position.
 +    // precision is bigger than 0 and scale range [0, Int32.Max]
@@ -18069,7 +18219,7 @@ index 000000000..7d2296864
 +    } else {
 +      // decimalPointIndex less than 0, decimal point in the left of bigint value.
 +      // when decimalPointIndex less than 0, it's range [-Int32.Max, 0], abs will nerver overflow.
-+      std::string temp(unscaleValStrArr.size() + abs(decimalPointIndex) + 2, '0');
++      std::string temp(unscaleValStrArr.size() + abs(decimalPointIndex) + 3, '0');
 +      decimalStrArr = temp;
 +      if (unscaleValStrArr[0] == '-') {
 +        decimalStrArr[0] = '-';
@@ -18431,10 +18581,10 @@ index 000000000..86fb31227
 +#endif // liblldb_CjTypes_h_
 diff --git a/lldb/source/Plugins/Language/CPlusPlus/LibCj.cpp b/lldb/source/Plugins/Language/CPlusPlus/LibCj.cpp
 new file mode 100644
-index 000000000..2fb82df81
+index 000000000..b28d7c8f7
 --- /dev/null
 +++ b/lldb/source/Plugins/Language/CPlusPlus/LibCj.cpp
-@@ -0,0 +1,842 @@
+@@ -0,0 +1,843 @@
 +//===-- LibCj.cpp ---------------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -18655,6 +18805,7 @@ index 000000000..2fb82df81
 +  ValueObjectSP non_synth_valobj = m_backend.GetNonSyntheticValue();
 +  if (!non_synth_valobj) {
 +    m_some = nullptr;
++    return false;
 +  }
 +
 +  if (non_synth_valobj->IsPointerType()) {
@@ -18678,13 +18829,13 @@ index 000000000..2fb82df81
 +    Status err;
 +    value = value->Dereference(err);
 +  }
-+
-+  if (value != nullptr) {
-+    auto dynamic = value->GetDynamicValue(eDynamicDontRunTarget);
-+    if (dynamic != nullptr) {
-+      m_dynamic = true;
-+      value = dynamic;
-+    }
++  if (!value) {
++    return false;
++  }
++  auto dynamic = value->GetDynamicValue(eDynamicDontRunTarget);
++  if (dynamic != nullptr) {
++    m_dynamic = true;
++    value = dynamic;
 +  }
 +
 +  if (value->HasSyntheticValue()) {
@@ -22497,10 +22648,10 @@ index 000000000..38530e2f6
 +target_link_directories(lldbPluginPlatformOHOS PUBLIC ${CMAKE_SOURCE_DIR}/../utils/boundscheck/lib/${ARCH_NAME})
 diff --git a/lldb/source/Plugins/Platform/OHOS/HdcClient.cpp b/lldb/source/Plugins/Platform/OHOS/HdcClient.cpp
 new file mode 100644
-index 000000000..997c52259
+index 000000000..2e24c8008
 --- /dev/null
 +++ b/lldb/source/Plugins/Platform/OHOS/HdcClient.cpp
-@@ -0,0 +1,879 @@
+@@ -0,0 +1,896 @@
 +//===-- HdcClient.cpp -----------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -22561,6 +22712,8 @@ index 000000000..997c52259
 +const seconds kReadTimeout(20);
 +const char *kSocketNamespaceAbstract = "localabstract";
 +const char *kSocketNamespaceFileSystem = "localfilesystem";
++
++#define MAX_PACKET_SIZE   67108864U  // 64MB
 +
 +Status ReadAllBytes(Connection &conn, void *buffer, size_t size) {
 +  Status error;
@@ -23044,6 +23197,9 @@ index 000000000..997c52259
 +    return Status("Compression is not supported");
 +
 +  uint32_t read_bytes = std::get<3>(*transfer_payload);
++  if (read_bytes >= MAX_PACKET_SIZE) {
++    return Status("Read transfer payload too large: %u", read_bytes);
++  }
 +  buffer.resize(read_bytes, 0);
 +  error = ReadAllBytes(buffer.data(), buffer.size());
 +  if (error.Fail())
@@ -23084,6 +23240,9 @@ index 000000000..997c52259
 +    error = PullFileChunk(buf);
 +    if (error.Fail())
 +      return error;
++    if (buf.empty()) {
++      break;
++    }
 +    dst_file.write(buf.data(), buf.size());
 +    cur_size += buf.size();
 +  }
@@ -23234,6 +23393,9 @@ index 000000000..997c52259
 +      return error;
 +    }
 +  }
++  if (packet.size() >= MAX_PACKET_SIZE) {
++    return Status("Send message packet too large: %lu", packet.size());
++  }
 +
 +  unsigned msg_len = packet.size() + 1;
 +  const unsigned vector_size = 128;
@@ -23268,6 +23430,9 @@ index 000000000..997c52259
 +  }
 +
 +  packet_len = htonl(packet_len);
++  if (packet_len >= MAX_PACKET_SIZE) {
++    return Status("Read message packet too large: %u", packet_len);
++  }
 +  message.resize(packet_len, 0);
 +  error = ReadAllBytes(&message[0], packet_len);
 +  if (error.Fail()) {
@@ -23343,6 +23508,9 @@ index 000000000..997c52259
 +    return error;
 +  }
 +  len = htonl(len);
++  if (len >= MAX_PACKET_SIZE) {
++    return Status("Read response packet too large: %u", len);
++  }
 +  const unsigned vector_size = 128;
 +  llvm::SmallVector<char, vector_size> message(len + 1);
 +  error = ReadAllBytes(message.data(), len);
@@ -25415,7 +25583,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..d274abcad 100644
+index b391fe1ea..0568aec98 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -25471,7 +25639,7 @@ index b391fe1ea..d274abcad 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.1.0";
++    g_version_str += "\n  cangjie 1.2.0-alpha.06";
    }
  
    return g_version_str.c_str();
@@ -28765,7 +28933,7 @@ index 4ff48c366..fd01aa3bd 100644
  class AssumeInst : public IntrinsicInst {
  public:
 diff --git a/llvm/include/llvm/IR/Intrinsics.td b/llvm/include/llvm/IR/Intrinsics.td
-index d46fa4fbf..c8e95cc88 100644
+index d46fa4fbf..3e7419cb6 100644
 --- a/llvm/include/llvm/IR/Intrinsics.td
 +++ b/llvm/include/llvm/IR/Intrinsics.td
 @@ -180,6 +180,9 @@ class LLVMQualPointerType<LLVMType elty, int addrspace>
@@ -28837,7 +29005,7 @@ index d46fa4fbf..c8e95cc88 100644
  
  def llvm_x86mmx_ty     : LLVMType<x86mmx>;
  def llvm_ptrx86mmx_ty  : LLVMPointerType<llvm_x86mmx_ty>;         // <1 x i64>*
-@@ -417,6 +432,201 @@ def int_gcwrite : Intrinsic<[],
+@@ -417,6 +432,203 @@ def int_gcwrite : Intrinsic<[],
                              [IntrArgMemOnly, NoCapture<ArgIndex<1>>,
                               NoCapture<ArgIndex<2>>]>;
  
@@ -28886,6 +29054,8 @@ index d46fa4fbf..c8e95cc88 100644
 +                                                [llvm_i64_ty]>;
 +def int_cj_remove_exported_ref     : Intrinsic<[], [llvm_i64_ty]>;
 +def int_cj_create_export_handle         : Intrinsic<[llvm_i64_ty],
++                                                [llvm_gcptr_ty]>;
++def int_cj_get_lambda_addr          : Intrinsic<[llvm_ptr_ty],
 +                                                [llvm_gcptr_ty]>;
 +
 +//===------------------- Cangjie runtime Intrinsics ------------------------===//
@@ -29039,7 +29209,7 @@ index d46fa4fbf..c8e95cc88 100644
  //===------------------- ObjC ARC runtime Intrinsics --------------------===//
  //
  // Note these are to support the Objective-C ARC optimizer which wants to
-@@ -1257,6 +1467,25 @@ def int_experimental_gc_get_pointer_offset : Intrinsic<[llvm_i64_ty],
+@@ -1257,6 +1469,25 @@ def int_experimental_gc_get_pointer_offset : Intrinsic<[llvm_i64_ty],
                   [llvm_anyptr_ty], [IntrNoMem, IntrWillReturn,
                   ReadNone<ArgIndex<0>>, NoCapture<ArgIndex<0>>]>;
  
@@ -55133,7 +55303,7 @@ index 99fa4baf3..c3695524b 100644
  
  /// Marks the liveness of RA depending on L. If L is MaybeLive, it also takes
 diff --git a/llvm/lib/Transforms/IPO/FunctionAttrs.cpp b/llvm/lib/Transforms/IPO/FunctionAttrs.cpp
-index 50710eaa1..b9065ec1a 100644
+index 50710eaa1..50250d7c2 100644
 --- a/llvm/lib/Transforms/IPO/FunctionAttrs.cpp
 +++ b/llvm/lib/Transforms/IPO/FunctionAttrs.cpp
 @@ -46,6 +46,7 @@
@@ -55144,23 +55314,34 @@ index 50710eaa1..b9065ec1a 100644
  #include "llvm/IR/Type.h"
  #include "llvm/IR/Use.h"
  #include "llvm/IR/User.h"
-@@ -67,6 +68,10 @@
+@@ -67,6 +68,11 @@
  
  using namespace llvm;
  
 +namespace llvm {
 +extern cl::opt<bool> CJPipeline;
++extern cl::opt<bool> EnableCJGCInstrTransform;
 +} // namespace llvm
 +
  #define DEBUG_TYPE "function-attrs"
  
  STATISTIC(NumArgMemOnly, "Number of functions marked argmemonly");
-@@ -791,8 +796,11 @@ determinePointerAccessAttrs(Argument *A,
+@@ -789,10 +795,20 @@ determinePointerAccessAttrs(Argument *A,
+     return Attribute::None;
+   else if (IsRead)
      return Attribute::ReadOnly;
-   else if (IsWrite)
+-  else if (IsWrite)
++  else if (IsWrite) {
++    // In the Cangjie pipeline, CJGCInstrReplace can lower gcwrite barriers into
++    // raw stores before function-attrs runs. Suppress writeonly inference for
++    // managed i8 addrspace(1)* parameters so later GC liveness does not treat
++    // them as dead-at-call purely based on this transient lowering.
++    if (CJPipeline && EnableCJGCInstrTransform &&
++        A->getType() == Type::getInt8PtrTy(A->getContext(), 1))
++      return Attribute::None;
      return Attribute::WriteOnly;
 -  else
-+  else {
++  } else {
 +    if (CJPipeline && isGCPointerType(A->getType()))
 +      return Attribute::None;
      return Attribute::ReadNone;
@@ -65550,10 +65731,10 @@ index 000000000..51e8f13b3
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJGenericIntrinsicOpt.cpp b/llvm/lib/Transforms/Scalar/CJGenericIntrinsicOpt.cpp
 new file mode 100644
-index 000000000..d72186c0a
+index 000000000..5af2b9047
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJGenericIntrinsicOpt.cpp
-@@ -0,0 +1,856 @@
+@@ -0,0 +1,876 @@
 +//===- CJInstanceOfOpt.cpp --------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -66196,7 +66377,7 @@ index 000000000..d72186c0a
 +        else {
 +          SmallVector<std::pair<Value *, bool>, 4> TmpOffsets;
 +          auto *BV = getDerivedOffset(getDest(II), TmpOffsets);
-+          if (BV && BV != BP) {
++          if ((BV && BV != BP) || TmpOffsets.empty()) {
 +            Stop = true;
 +            break;
 +          }
@@ -66264,6 +66445,24 @@ index 000000000..d72186c0a
 +    }
 +  }
 +
++  MemoryAccess *findPreviousMemoryPhiOrDef(MemoryUseOrDef *MUD) {
++    if (!isa<MemoryUse>(MUD))
++      return MUD;
++    auto *BB = MUD->getMemoryInst()->getParent();
++    auto *DefLists = MSSA.getBlockDefs(BB);
++    while (!DefLists) {
++      if (auto *Pred = BB->getUniquePredecessor()) {
++        DefLists = MSSA.getBlockDefs(Pred);
++        BB = Pred;
++      }
++      return nullptr;
++    }
++    for (auto I = DefLists->rbegin(), E = DefLists->rend(); I != E; ++I)
++      if (MSSA.dominates(&*I, MUD))
++        return &const_cast<MemoryAccess &>(*I);
++    return nullptr;
++  }
++
 +  bool processGenericCopy(CallInst *CI) {
 +    // Base: It is valid at gcread/gcwrite.
 +    // Size: Also valid at gcread/gcwrite.
@@ -66274,10 +66473,12 @@ index 000000000..d72186c0a
 +      return false;
 +    MemoryLocation Loc = MemoryLocation::getAfter(FPtr);
 +    bool Changed = false;
-+    MemoryAccess *MA = IID == Intrinsic::cj_gcread_ref
-+                           ? cast<MemoryUseOrDef>(MSSA.getMemoryAccess(CI))
-+                                 ->getDefiningAccess()
-+                           : MSSA.getMemoryAccess(CI);
++    MemoryAccess *MA =
++        IID == Intrinsic::cj_gcread_ref
++            ? findPreviousMemoryPhiOrDef(MSSA.getMemoryAccess(CI))
++            : MSSA.getMemoryAccess(CI);
++    if (!MA)
++      return false;
 +    // 0: base ptr, 1: derived ptr, 2: size
 +    auto [RB, RP, RS] =
 +        findPotentialEqualMem(CI, MA, MA, Loc, Base, TI, Size, Changed);
@@ -72328,10 +72529,10 @@ index 000000000..2b87826d1
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
 new file mode 100644
-index 000000000..03797260f
+index 000000000..3f9331ff3
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
-@@ -0,0 +1,1152 @@
+@@ -0,0 +1,1154 @@
 +//===- CJRuntimeLowering.cpp - CJ Runtime Lowering --------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -72439,7 +72640,8 @@ index 000000000..03797260f
 +    {Intrinsic::cj_get_exported_ref, "CJ_MCC_GetExportedRef"},
 +    {Intrinsic::cj_remove_exported_ref, "CJ_MCC_RemoveExportedRef"},
 +    {Intrinsic::cj_create_export_handle, "CJ_MCC_CreateExportHandle"},
-+    {Intrinsic::cj_blackhole, "CJ_LLVM_BlackHole"}};
++    {Intrinsic::cj_blackhole, "CJ_LLVM_BlackHole"},
++    {Intrinsic::cj_get_lambda_addr, "CJ_MCC_GetJSLambdaAddr"}};
 +
 +struct LowerGetFieldOffset {
 +  CallBase *CI;
@@ -73329,6 +73531,7 @@ index 000000000..03797260f
 +    case Intrinsic::cj_post_throw_exception:
 +    case Intrinsic::cj_register_implicit_exception_raisers:
 +    case Intrinsic::cj_blackhole:
++    case Intrinsic::cj_get_lambda_addr:
 +      Lowering.replaceWithRuntimeFunc(CI, true, false);
 +      Changed = true;
 +      break;
