@@ -292,7 +292,7 @@ std::vector<GlobalVar*> Package::GetGlobalVarsWithoutInit() const
 {
     std::vector<GlobalVar*> importedGlobalVars;
     for (auto var : globalVars) {
-        if (var->TestAttr(Attribute::IMPORTED) && !var->IsSrcCodeImported()) {
+        if (var->GetInitializerValue() == nullptr) {
             importedGlobalVars.emplace_back(var);
         }
     }

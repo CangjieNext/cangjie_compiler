@@ -11,6 +11,7 @@
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
+#include "cangjie/CHIR/IR/AttributeInfo.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/ConstantUtils.h"
 #include "cangjie/CHIR/IR/Type/CustomTypeDef.h"
@@ -875,6 +876,7 @@ void AST2CHIR::CreateImportedValueSignatureAndSetGlobalCache(const AST::VarDecl&
     if (varDecl.IsConst()) {
         var->EnableAttr(Attribute::CONST);
     }
+    var->EnableAttr(Attribute::IMPORTED);
 
     globalCache.Set(varDecl, *var);
 }
