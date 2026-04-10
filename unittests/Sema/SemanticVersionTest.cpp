@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 #include "gtest/gtest.h"
-#include "cangjie/Sema/Plugin/PluginCustomAnnoChecker.h"
+#include "../../src/Sema/Plugin/PluginCustomAnnoChecker.h"
 #include "cangjie/Basic/StringConvertor.h"
 
 using namespace Cangjie;
