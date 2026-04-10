@@ -277,6 +277,18 @@ private:
     static std::mutex dynamicAllocatedTysMtx;
 
     size_t threadsNum;
+
+    template <typename T> static void SafeDelete(T* p) noexcept
+    {
+        if (p == nullptr) {
+            return;
+        }
+        try {
+            delete p;
+        } catch (...) {
+            // Destructors should not throw; continue releasing other resources.
+        }
+    }
 };
 } // namespace Cangjie::CHIR
 #endif // CANGJIE_CHIR_CHIRCONTEXT_H

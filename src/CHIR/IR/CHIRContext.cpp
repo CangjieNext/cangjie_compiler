@@ -53,46 +53,46 @@ void CHIRContext::DeleteAllocatedInstance(std::vector<size_t>& idxs)
 {
     // Delete the allocated instances.
     for (size_t i = idxs[ALLOCATED_VALUES_START_IDX]; i < idxs[ALLOCATED_VALUES_END_IDX]; i++) {
-        delete allocatedValues[i];
+        SafeDelete(allocatedValues[i]);
     }
     for (size_t i = idxs[ALLOCATED_STRUCTS_START_IDX]; i < idxs[ALLOCATED_STRUCTS_END_IDX]; i++) {
-        delete allocatedStructs[i];
+        SafeDelete(allocatedStructs[i]);
     }
     for (size_t i = idxs[ALLOCATED_CLASSES_START_IDX]; i < idxs[ALLOCATED_CLASSES_END_IDX]; i++) {
-        delete allocatedClasses[i];
+        SafeDelete(allocatedClasses[i]);
     }
     for (size_t i = idxs[ALLOCATED_ENUMS_START_IDX]; i < idxs[ALLOCATED_ENUMS_END_IDX]; i++) {
-        delete allocatedEnums[i];
+        SafeDelete(allocatedEnums[i]);
     }
 }
 
 void CHIRContext::DeleteAllocatedTys()
 {
     for (auto inst : std::as_const(this->dynamicAllocatedTys)) {
-        delete inst;
+        SafeDelete(inst);
     }
     this->dynamicAllocatedTys.clear();
 
     for (auto inst : std::as_const(this->constAllocatedTys)) {
-        delete inst;
+        SafeDelete(inst);
     }
     this->constAllocatedTys.clear();
 
     for (auto inst : std::as_const(this->allocatedExtends)) {
-        delete inst;
+        SafeDelete(inst);
     }
     this->allocatedExtends.clear();
 
     for (auto [bg, ptrs] : std::as_const(this->allocatedPtrInFuncOrLambda)) {
         for (auto ptr : ptrs) {
-            delete ptr;
+            SafeDelete(ptr);
         }
-        delete bg;
+        SafeDelete(bg);
     }
     this->allocatedPtrInFuncOrLambda.clear();
 
     if (this->curPackage != nullptr) {
-        delete this->curPackage;
+        SafeDelete(this->curPackage);
         this->curPackage = nullptr;
     }
 }
@@ -153,7 +153,12 @@ CHIRContext::CHIRContext(std::unordered_map<unsigned int, std::string>* fnMap, s
  
 CHIRContext::~CHIRContext()
 {
-    FreeWholePackage();
+    try {
+        FreeWholePackage();
+    } catch (...) {
+        // Never propagate from destructor (would call std::terminate). Per-pointer cleanup uses SafeDelete to limit
+        // leaks when a member destructor throws; this catches any other failure (e.g. resource exhaustion).
+    }
 }
 
 // FileName API
@@ -239,7 +244,7 @@ void CHIRContext::FreeMemoryInFunc(BlockGroup& funcBody)
     auto it = allocatedPtrInFuncOrLambda.find(&funcBody);
     if (it != allocatedPtrInFuncOrLambda.end()) {
         for (auto ptr : it->second) {
-            delete ptr;
+            SafeDelete(ptr);
         }
         it->second.clear();
     }
@@ -262,10 +267,21 @@ void CHIRContext::FreeWholePackage()
         DivideArray(allocatedClasses.size(), threadsNum - 1, indexs);
         DivideArray(allocatedEnums.size(), threadsNum - 1, indexs);
         for (size_t i = 0; i < threadsNum - 1; i++) {
-            std::vector<size_t>& idxs = indexs[i];
-            threads.emplace_back([&idxs, this]() { DeleteAllocatedInstance(idxs); });
+            threads.emplace_back([i, &indexs, this]() {
+                try {
+                    DeleteAllocatedInstance(indexs[i]);
+                } catch (...) {
+                    // Avoid std::terminate if an unexpected exception escapes the worker.
+                }
+            });
         }
-        threads.emplace_back([this]() { DeleteAllocatedTys(); });
+        threads.emplace_back([this]() {
+            try {
+                DeleteAllocatedTys();
+            } catch (...) {
+                // Avoid std::terminate if an unexpected exception escapes the worker.
+            }
+        });
         for (auto& thread : threads) {
             if (thread.joinable()) {
                 thread.join();
