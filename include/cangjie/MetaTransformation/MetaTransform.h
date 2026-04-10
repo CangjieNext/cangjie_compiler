@@ -17,13 +17,11 @@
 #include <memory>
 #include <vector>
 
-namespace Cangjie {
-namespace CHIR {
-class CHIRBuilder;
-class Function;
-class Package;
-} // namespace CHIR
+#include "cangjie/CHIR/IR/CHIRBuilder.h"
+#include "cangjie/CHIR/IR/Package.h"
+#include "cangjie/CHIR/IR/Value/Value.h"
 
+namespace Cangjie {
 enum class MetaTransformKind {
     UNKNOWN,
     FOR_CHIR_FUNC,

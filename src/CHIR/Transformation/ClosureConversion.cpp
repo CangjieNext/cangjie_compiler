@@ -691,17 +691,6 @@ bool FieldRetValNeedWrapper(const Field& e, CHIRBuilder& builder)
     return !declaredType->IsAutoEnvInstBase();
 }
 
-bool IsAutoEnvGenericType(const Type& type)
-{
-    if (!type.IsAutoEnv()) {
-        return false;
-    }
-    if (type.IsAutoEnvGenericBase()) {
-        return true;
-    }
-    return StaticCast<const ClassType&>(type).GetClassDef()->GetMethods().size() == 1;
-}
-
 std::pair<bool, std::vector<size_t>> EnumConstructorNeedTypeCast(const Expression& e)
 {
     std::vector<size_t> index;
@@ -2877,7 +2866,7 @@ void ClosureConversion::CastTypeCastArgIfNeed(TypeCast& e)
      */
     auto srcType = e.GetSourceTy()->StripAllRefs();
     auto targetType = e.GetTargetTy()->StripAllRefs();
-    if (IsAutoEnvGenericType(*srcType) && targetType->IsAutoEnvInstBase()) {
+    if (srcType->IsAutoEnvGenericBase() && targetType->IsAutoEnvInstBase()) {
         WrapTypeCastSrcVal(e);
     }
 }

@@ -209,12 +209,6 @@ const std::unordered_map<CHIR::Package::AccessLevel, std::string> PACKAGE_ACCESS
     {CHIR::Package::AccessLevel::PUBLIC, "public"},
 };
 
-class BlockGroup;
-class Block;
-class Function;
-class Lambda;
-class ClassType;
-
 /**
  * @brief Prints indentation to the specified stream.
  *
