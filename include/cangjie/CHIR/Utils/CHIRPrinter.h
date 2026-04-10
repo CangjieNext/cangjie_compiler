@@ -14,21 +14,12 @@
 #define CANGJIE_CHIR_CHIRPRINTER_H
 
 #include "cangjie/CHIR/CHIR.h"
+#include "cangjie/CHIR/IR/Package.h"
+#include "cangjie/CHIR/IR/Value/Value.h"
 
 #include <iostream>
 
 namespace Cangjie::CHIR {
-class Type;
-class Expression;
-class Function;
-class If;
-class Loop;
-class ForIn;
-class Value;
-class Block;
-class BlockGroup;
-class Package;
-
 class CHIRPrinter {
 public:
     static void PrintCFG(const Function& func, const std::string& path);

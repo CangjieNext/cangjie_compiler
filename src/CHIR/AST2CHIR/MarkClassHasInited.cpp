@@ -57,7 +57,8 @@ void MarkClassHasInited::AddHasInitedFlagToClassDef(ClassDef& classDef)
 
 void MarkClassHasInited::AddGuardToFinalizer(ClassDef& classDef)
 {
-    if (auto finalizer = classDef.GetFinalizer(); !finalizer->IsFuncWithBody()) {
+    auto finalizer = classDef.GetFinalizer();
+    if (!finalizer || !finalizer->IsFuncWithBody()) {
         // the finalizer may be an imported function when:
         // 1. incremental compilation
         // 2. class is imported
@@ -74,7 +75,6 @@ void MarkClassHasInited::AddGuardToFinalizer(ClassDef& classDef)
             }
         }
     */
-    auto finalizer = StaticCast<Function*>(classDef.GetFinalizer());
     auto block = builder.CreateBlock(finalizer->GetBody());
     auto thisArg = finalizer->GetParam(0);
     CJC_NULLPTR_CHECK(thisArg);
