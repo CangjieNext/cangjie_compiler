@@ -1784,30 +1784,6 @@ void TypeManager::RecordUsedExtend(Ty& child, Ty& interfaceTy)
     auto extendedTy = GetRealExtendedTy(child, interfaceTy);
     (void)boxedTys.emplace(extendedTy);
     RecordUsedGenericExtend(*extendedTy);
-    std::set<Ptr<ExtendDecl>> extends;
-    auto decl = Ty::GetDeclOfTy<InheritableDecl>(extendedTy);
-    if (decl) {
-        // Collect non-generic decl.
-        if (!decl->GetGeneric()) {
-            boxedNonGenericDecls.emplace(decl);
-        }
-        extends = CollectAllRelatedExtends(*this, *decl);
-    } else if (extendedTy->IsArray() || extendedTy->IsPointer()) {
-        auto found = instantiateBuiltInTyToExtendMap.find(extendedTy);
-        if (found == instantiateBuiltInTyToExtendMap.end()) {
-            return;
-        }
-        extends = found->second;
-    } else {
-        auto found = builtinTyToExtendMap.find(extendedTy);
-        if (found == builtinTyToExtendMap.end()) {
-            return;
-        }
-        extends = found->second;
-    }
-    // For the generation of boxed decl, all member functions of related extends should be collected,
-    // So we need to mark all related extends as used when boxing is happened.
-    boxUsedExtends.insert(extends.begin(), extends.end());
 }
 
 void TypeManager::RecordUsedGenericExtend(Ty& boxedTy, Ptr<ExtendDecl> extend)

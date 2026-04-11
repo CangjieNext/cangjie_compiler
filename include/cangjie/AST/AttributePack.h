@@ -306,14 +306,14 @@ enum class Attribute {
      * W: Desugar.
      * R: Desugar.
      */
-    NEED_AUTO_BOX,
+    NEED_AUTO_BOX [[deprecated("Useless attribute, will be removed in the future.")]],
 
     /**
      * Mark whether a node is expanded from macros.
      * W: MacroExpansion.
      * R: None.
      */
-    MACRO_EXPANDED_NODE[[deprecated("Redundant with Node->curMacroCall; will be removed in the future.")]],
+    MACRO_EXPANDED_NODE [[deprecated("Redundant with Node->curMacroCall; will be removed in the future.")]],
 
     /**
      * Mark whether a function definition is a macro definition.
@@ -582,7 +582,7 @@ enum class Attribute {
      * R: Sema.
      */
     JAVA_HAS_DEFAULT,
-    
+
     /**
      * Mark whether a class is a wrapper synthetic class generated for every mirror interface and abstract class.
      * W: Parser, Sema.

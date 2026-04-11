@@ -65,9 +65,12 @@ private:
     static AST::VisitAction MarkBoxPointHandleMatchExpr(AST::MatchExpr& me);
     static AST::VisitAction MarkBoxPointHandleArrayExpr(AST::ArrayExpr& ae);
     static AST::VisitAction MarkBoxPointHandleTupleLit(AST::TupleLit& tl);
-    static bool IsTypePatternNeedBox(Ptr<AST::Pattern> pattern, AST::Ty& selectorTy);
-    static bool NeedAutoBox(Ptr<AST::Ty> child, Ptr<AST::Ty> interface, bool isUpcast = true);
-    static void CheckBlockNeedBox(const AST::Block& block, AST::Ty& ty, AST::Node& nodeToCheck);
+    static void IsTypePatternNeedBox(Ptr<AST::Pattern> pattern, AST::Ty& selectorTy);
+    static void CheckBlockNeedBox(const AST::Block& block, AST::Ty& ty);
+    /**
+     * Check if there's an extension relation between child and interface, and record it if needed.
+     */
+    static void CheckAndRecordExtendRelation(Ptr<AST::Ty> child, Ptr<AST::Ty> interface);
 
     static TypeManager* typeManager;
 };

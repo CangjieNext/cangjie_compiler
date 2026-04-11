@@ -239,16 +239,6 @@ public:
         subtypeCache.clear();
     }
 
-    std::unordered_set<Ptr<AST::ExtendDecl>> GetBoxUsedExtends() const
-    {
-        return boxUsedExtends;
-    }
-
-    std::unordered_set<Ptr<AST::InheritableDecl>> GetBoxedNonGenericDecls() const
-    {
-        return boxedNonGenericDecls;
-    }
-
     std::unordered_set<Ptr<AST::ExtendDecl>> GetTyUsedExtends(Ptr<AST::Ty> ty) const
     {
         auto found = tyUsedExtends.find(ty);
@@ -257,7 +247,6 @@ public:
 
     void ClearRecordUsedExtends()
     {
-        boxUsedExtends.clear();
         tyUsedExtends.clear();
         checkedTyExtendRelation.clear();
         boxedTys.clear();

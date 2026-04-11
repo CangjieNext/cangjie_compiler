@@ -57,7 +57,7 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::IS_CLONED_SOURCE_CODE, "IS_CLONED_SOURCE_CODE"},
     {AST::Attribute::IS_CAPTURE, "IS_CAPTURE"},
     {AST::Attribute::IN_CORE, "IN_CORE"},
-    {AST::Attribute::NEED_AUTO_BOX, "NEED_AUTO_BOX"},
+    {AST::Attribute::NEED_AUTO_BOX, "NEED_AUTO_BOX(deprecated)"},
 
     // deprecated: Redundant with Node->curMacroCall; will be removed in the future.
     {AST::Attribute::MACRO_EXPANDED_NODE, "MACRO_EXPANDED_NODE(deprecated)"},

@@ -88,14 +88,6 @@ void UpdateInstantiatedDeclsLinkage(const Package& pkg)
     }
 }
 
-inline void UnsetBoxStatus(Package& pkg)
-{
-    Walker(&pkg, [](auto node) {
-        node->DisableAttr(Attribute::NEED_AUTO_BOX);
-        return VisitAction::WALK_CHILDREN;
-    }).Walk();
-}
-
 void ClearUnusedSrcImportedDecls(Package& pkg, const std::function<bool(const Ptr<Decl>&)>& checkUnvisited)
 {
     for (auto it = pkg.srcImportedNonGenericDecls.begin(); it != pkg.srcImportedNonGenericDecls.end();) {
@@ -329,9 +321,6 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "ValidateUsedNodes");
     ValidateUsedNodes(diag, pkg);
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "ValidateUsedNodes");
-    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "UnsetBoxStatus");
-    UnsetBoxStatus(pkg);
-    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "UnsetBoxStatus");
 }
 
 void GIM::GenericInstantiationManagerImpl::RecordExtend(AST::Node& node)
@@ -621,30 +610,6 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::FindInCache(const GenericInfo& i
         return instantiatedDecl;
     }
     return nullptr;
-}
-
-void GIM::GenericInstantiationManagerImpl::WalkNonGenericExtendedType()
-{
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    auto extends = typeManager.GetBoxUsedExtends();
-    for (auto extend : extends) {
-        // Should have same ignore condition with 'CollectExtendedInterfaceHelper'.
-        // UG fix here do not box decls any more.
-        bool ignore = extend->TestAttr(Attribute::GENERIC) || extend->fullPackageName != curPkg->fullPackageName;
-        if (ignore) {
-            continue;
-        }
-        for (auto& type : extend->inheritedTypes) {
-            Walker(type.get(), instantiationWalkerID, instantiator, contextReset).Walk();
-        }
-    }
-    auto decls = typeManager.GetBoxedNonGenericDecls();
-    for (auto id : decls) {
-        for (auto& type : id->inheritedTypes) {
-            Walker(type.get(), instantiationWalkerID, instantiator, contextReset).Walk();
-        }
-    }
-#endif
 }
 
 void GIM::GenericInstantiationManagerImpl::InstantiateGenericDeclWithInstTys(
