@@ -66,7 +66,6 @@ private:
     void UpdateImportsInit(const AST::Package& curPackage, Function& importsInitFunc, const std::string& suffix = "");
     void AddGenericInstantiatedInit();
     Ptr<Function> GeneratePackageInitBase(const AST::Package& curPackage, const std::string& suffix = "");
-    void InsertAnnotationVarInitInto(Function& packageInit);
     bool NeedVarLiteralInitFunc(const AST::Decl& decl);
     Function* TranslateVarInit(const AST::Decl& var);
 
