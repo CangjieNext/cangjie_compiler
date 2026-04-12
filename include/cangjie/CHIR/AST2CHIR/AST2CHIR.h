@@ -290,8 +290,8 @@ private:
     void TranslateNominalDecls(const AST::Package& pkg);
     void SetFuncAttributeAndLinkageType(const AST::FuncDecl& astFunc, Function& chirFunc);
 
-    void FlatternPattern(const AST::Pattern& pattern, bool isLocalConst);
-    void CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalConst);
+    void FlatternPattern(const AST::Pattern& pattern, bool isLocalConst, std::vector<AST::VarDecl*>& varDecls);
+    GlobalVar* CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalConst);
     void CreateGlobalVarSignature(const std::vector<Ptr<const AST::Decl>>& decls, bool isLocalConst = false);
 
     void CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDecl);
@@ -302,6 +302,10 @@ private:
     void TranslateAllDecls(const AST::Package& pkg, const InitOrder& initOrder);
     void TranslateTopLevelDeclsInParallel();
     void TranslateInParallel(const std::vector<Ptr<const AST::Decl>>& decls);
+    void SetAnnotationTargets(CustomTypeDef& customTypeDef, const AST::Decl& decl);
+    GlobalVar* CreateAnnotationTargetVar(const AST::ClassDecl& decl, const AST::Expr& expr, size_t index);
+    Function* CreateInitFuncForAnnotationTargetVar(GlobalVar& var);
+    void TranslateAnnotationRelatedDecls();
 
     /** @brief Returns true if the AST2Chir process is unsuccessfull **/
     bool HasFailed() const;
@@ -466,6 +470,9 @@ private:
 
     std::unordered_set<Function*> srcCodeImportedFuncs;
     std::unordered_set<GlobalVar*> srcCodeImportedVars;
+
+    std::unordered_map<GlobalVar*, AST::Expr*> annotationTargets;
+    std::vector<std::pair<const AST::ClassDecl*, ClassDef*>> classDeclWithAnnotation;
 
     bool creatingLocalConstVarSignature{false};
 };

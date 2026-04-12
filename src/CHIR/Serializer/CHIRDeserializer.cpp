@@ -1762,7 +1762,10 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFor
         return;
     }
     ConfigCustomTypeDef(buffer->base(), obj);
-    obj.SetAnnotation(buffer->isAnnotation());
+    if (buffer->annotationTargets() != nullptr) {
+        auto targets = GetValue<GlobalVar>(buffer->annotationTargets());
+        obj.SetAnnotationTargets(std::move(targets));
+    }
     auto superClass = GetType<ClassType>(buffer->superClass());
     if (superClass) {
         obj.SetSuperClassTy(*superClass);

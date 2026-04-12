@@ -11,6 +11,7 @@
 #include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Analysis/DevirtualizationInfo.h"
 #include "cangjie/CHIR/Checker/CHIRChecker.h"
+#include "cangjie/CHIR/Checker/AnnotationChecker.h"
 #include "cangjie/CHIR/Checker/UnreachableBranchCheck.h"
 #include "cangjie/CHIR/Checker/VarInitCheck.h"
 #include "cangjie/CHIR/Interpreter/ConstEval.h"
@@ -1198,7 +1199,7 @@ bool ToCHIR::Run()
         srcCodeImportedFuncs, srcCodeImportedVars, uselessClasses, uselessLambda);
 
     // 10. annotation check depends on const eval
-    if (!RunAnnotationChecks()) {
+    if (!AnnotationChecker(*chirPkg, diag.diag).Run()) {
         return false;
     }
     // It should move to the end of TranslateToCHIR, Waiting for diag to remove its dependency on AST and for CHIR to

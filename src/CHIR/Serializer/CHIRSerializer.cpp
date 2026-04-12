@@ -1294,9 +1294,14 @@ flatbuffers::Offset<PackageFormat::ClassDef> CHIRSerializer::CHIRSerializerImpl:
     auto base = Serialize<PackageFormat::CustomTypeDef>(static_cast<const CustomTypeDef&>(obj));
     auto kind = obj.IsInterface() ? PackageFormat::ClassDefKind::ClassDefKind_INTERFACE
                                   : PackageFormat::ClassDefKind::ClassDefKind_CLASS;
-    auto isAnnotation = obj.IsAnnotation();
+    std::vector<uint32_t> annotationTargetIds;
+    const std::vector<uint32_t>* annotationTargetsVec = nullptr;
+    if (obj.IsAnnotation()) {
+        annotationTargetIds = GetId<Value>(obj.GetAnnotationTargets());
+        annotationTargetsVec = &annotationTargetIds;
+    }
     auto superClass = GetId<Type>(obj.GetSuperClassTy());
-    return PackageFormat::CreateClassDef(builder, base, kind, isAnnotation, superClass);
+    return PackageFormat::CreateClassDefDirect(builder, base, kind, annotationTargetsVec, superClass);
 }
 
 template <>

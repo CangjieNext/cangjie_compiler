@@ -516,9 +516,6 @@ public:
     /// 2. translating the initialiser of a discarded pattern
     void TranslateSubExprToDiscarded(const AST::Node& node);
 
-    void CollectValueAnnotation(const AST::Decl& decl);
-    void CollectTypeAnnotation(const AST::InheritableDecl& decl, const CustomTypeDef& cl);
-
     /**
      * @brief Creates var init func for class/struct decls, because of cjmp.
      *

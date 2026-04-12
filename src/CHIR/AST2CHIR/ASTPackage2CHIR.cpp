@@ -733,7 +733,6 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
     if (funcDecl.TestAttr(AST::Attribute::GLOBAL) && !funcDecl.TestAttr(AST::Attribute::GENERIC_INSTANTIATED)) {
         auto tr = CreateTranslator();
         tr.CreateAnnoFactoryFuncsForFuncDecl(funcDecl, nullptr);
-        tr.CollectValueAnnotation(funcDecl);
     }
 }
 
@@ -854,7 +853,7 @@ void AST2CHIR::CreateImportedValueSignatureAndSetGlobalCache(const AST::VarDecl&
     globalCache.Set(varDecl, *var);
 }
 
-void AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalConst)
+GlobalVar* AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalConst)
 {
     if (auto gv = TryGetDeserialized<Value>(decl); gv) {
         globalCache.Set(decl, *gv);
@@ -864,7 +863,7 @@ void AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalCon
         }
         const auto& loc = GetDeclLoc(builder.GetChirContext(), decl);
         gv->SetDebugLocation(loc);
-        return;
+        return StaticCast<GlobalVar*>(gv);
     }
     auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), decl.begin, decl.end);
     auto mangledName = decl.mangledName;
@@ -873,7 +872,7 @@ void AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalCon
     auto packageName = decl.fullPackageName;
     auto ty = builder.GetType<RefType>(chirType.TranslateType(*decl.ty));
     auto warnPos = GetDeclLoc(builder.GetChirContext(), decl);
-    Value* gv = nullptr;
+    GlobalVar* gv = nullptr;
     if (kind == IncreKind::INCR && !decl.toBeCompiled && !IsSrcCodeImportedGlobalDecl(decl, opts)) {
         gv = builder.CreateGlobalVar(ty, mangledName, srcCodeName, rawMangledName, packageName);
         gv->EnableAttr(Attribute::IMPORTED);
@@ -901,6 +900,7 @@ void AST2CHIR::CreateAndCacheGlobalVar(const AST::VarDecl& decl, bool isLocalCon
         gv->EnableAttr(Attribute::COMMON);
     }
     globalCache.Set(decl, *gv);
+    return gv;
 }
 
 void AST2CHIR::CacheTopLevelDeclToGlobalSymbolTable()
@@ -927,19 +927,6 @@ void AST2CHIR::CacheTopLevelDeclToGlobalSymbolTable()
 
     CreateGlobalVarSignature(globalAndStaticVars);
     creatingLocalConstVarSignature = true;
-
-    // collect Annotation of global vars
-    auto tr = CreateTranslator();
-    for (auto var : globalAndStaticVars) {
-        if (!var->TestAttr(AST::Attribute::STATIC)) {
-            auto fn = tr.CreateAnnoFactoryFuncSig(*var, nullptr);
-            if (fn.mangledName != "none" && Is<AST::VarDecl>(var)) {
-                globalCache.Get(*var)->SetAnnoInfo(std::move(fn));
-            }
-            tr.CollectValueAnnotation(*var);
-        }
-    }
-
     CreateGlobalVarSignature(localConstVars.stableOrderValue, true);
     creatingLocalConstVarSignature = false;
     for (auto decl : std::as_const(localConstFuncs.stableOrderValue)) {
@@ -1023,11 +1010,7 @@ void AST2CHIR::CreateAnnoOnlyDeclSig(const AST::Decl& decl)
 static void SetCustomTypeDefAttr(CustomTypeDef& def, const AST::Decl& decl)
 {
     def.AppendAttributeInfo(BuildAttr(decl.GetAttrs()));
-    if (auto classDef = DynamicCast<ClassDef*>(&def)) {
-        if (decl.TestAttr(AST::Attribute::IS_ANNOTATION)) {
-            classDef->SetAnnotation(true);
-        }
-    } else if (auto structDef = DynamicCast<StructDef*>(&def)) {
+    if (auto structDef = DynamicCast<StructDef*>(&def)) {
         if (decl.TestAttr(AST::Attribute::C)) {
             structDef->SetCStruct(true);
         }
@@ -1037,6 +1020,99 @@ static void SetCustomTypeDefAttr(CustomTypeDef& def, const AST::Decl& decl)
         def.EnableAttr(Attribute::JAVA_IMPL);
     } else if (Interop::Java::IsMirror(decl)) {
         def.EnableAttr(Attribute::JAVA_MIRROR);
+    }
+}
+
+GlobalVar* AST2CHIR::CreateAnnotationTargetVar(const AST::ClassDecl& decl, const AST::Expr& expr, size_t index)
+{
+    auto varMangledName = decl.mangledName + ANNOTATION_VAR_POSTFIX + std::to_string(index);
+    auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), expr.begin, expr.end);
+    auto annotationTargetType = chirType.TranslateType(*expr.ty);
+    auto varType = builder.GetType<RefType>(annotationTargetType);
+    auto srcCodeIdentifier = decl.identifier.Val() + ANNOTATION_VAR_POSTFIX + std::to_string(index);
+    auto var = builder.CreateGlobalVar(
+        varType, varMangledName, std::move(srcCodeIdentifier), varMangledName, decl.fullPackageName);
+    var->SetDebugLocation(loc);
+    var->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+    var->EnableAttr(Attribute::COMPILER_ADD);
+    var->EnableAttr(Attribute::NO_DEBUG_INFO);
+    var->EnableAttr(Attribute::CONST);
+    var->EnableAttr(Attribute::NO_REFLECT_INFO);
+    var->Set<LinkTypeInfo>(Linkage::INTERNAL);
+    return var;
+}
+
+Function* AST2CHIR::CreateInitFuncForAnnotationTargetVar(GlobalVar& var)
+{
+    auto mangledName = MANGLE_CANGJIE_PREFIX + MANGLE_GLOBAL_VARIABLE_INIT_PREFIX +
+        MangleUtils::MangleName(var.GetPackageName()) + MangleUtils::MangleName(var.GetSrcCodeIdentifier()) +
+        MANGLE_FUNC_PARAM_TYPE_PREFIX + MANGLE_VOID_TY_SUFFIX;
+    auto it = deserializedVals.find(GLOBAL_VALUE_PREFIX + mangledName);
+    if (it != deserializedVals.end()) {
+        return StaticCast<Function*>(it->second);
+    }
+
+    auto funcTy = builder.GetType<FuncType>(std::vector<Type*>{}, builder.GetUnitTy());
+    auto func = builder.CreateFunction(funcTy, mangledName, "", mangledName, var.GetPackageName());
+    func->SetDebugLocation(var.GetDebugLocation());
+    func->SetFuncKind(FuncKind::GLOBALVAR_INIT);
+    func->EnableAttr(Attribute::NO_REFLECT_INFO);
+    func->EnableAttr(Attribute::NO_INLINE);
+    func->EnableAttr(Attribute::COMPILER_ADD);
+    func->EnableAttr(Attribute::INITIALIZER);
+    func->EnableAttr(Attribute::NO_DEBUG_INFO);
+    func->EnableAttr(Attribute::CONST);
+    auto blockGroup = builder.CreateBlockGroup(*func);
+    func->InitBody(*blockGroup);
+
+    func->template Set<LinkTypeInfo>(Linkage::INTERNAL);
+
+    auto entry = builder.CreateBlock(blockGroup);
+    blockGroup->SetEntryBlock(entry);
+    auto unitTyRef = builder.GetType<RefType>(builder.GetUnitTy());
+    auto retVal = builder.CreateExpression<Allocate>(unitTyRef, builder.GetUnitTy(), entry);
+    entry->AppendExpression(retVal);
+    func->SetReturnValue(*retVal->GetResult());
+
+    return func;
+}
+
+void AST2CHIR::SetAnnotationTargets(CustomTypeDef& customTypeDef, const AST::Decl& decl)
+{
+    if (!decl.TestAttr(AST::Attribute::IS_ANNOTATION)) {
+        return;
+    }
+    auto classDef = StaticCast<ClassDef*>(&customTypeDef);
+    AST::Annotation* anno = nullptr;
+    /**
+     *  a class decl can have many different annotations, we need to find the @Annotation.
+     *  @Deprecated["Do not use it.", since: "1997"]
+     *  @Annotation
+     *  public class CustomAnnotation {
+     *      public const init() {}
+     *  }
+     */
+    for (auto& tempAnno : decl.annotations) {
+        if (tempAnno->kind == AST::AnnotationKind::ANNOTATION) {
+            anno = tempAnno.get();
+            break;
+        }
+    }
+    CJC_NULLPTR_CHECK(anno);
+    if (anno->args.empty()) {
+        classDef->SetAnnotationTargets(std::vector<GlobalVar*>{});
+    } else {
+        const auto& children = StaticCast<AST::ArrayLit&>(*anno->args[0]->expr).children;
+        std::vector<GlobalVar*> vars;
+        for (size_t i = 0; i < children.size(); ++i) {
+            auto var = CreateAnnotationTargetVar(StaticCast<const AST::ClassDecl&>(decl), *children[i], i);
+            vars.emplace_back(var);
+            auto initFunc = CreateInitFuncForAnnotationTargetVar(*var);
+            var->SetInitFunc(*initFunc);
+            initFuncsForConstVar.emplace_back(initFunc);
+            annotationTargets[var] = children[i].get();
+        }
+        classDef->SetAnnotationTargets(std::move(vars));
     }
 }
 
@@ -1092,6 +1168,10 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
     }
     if (!customTypeDef->TestAttr(Attribute::DESERIALIZED)) {
         SetCustomTypeDefAttr(*customTypeDef, decl);
+        if (decl.TestAttr(AST::Attribute::IS_ANNOTATION)) {
+            classDeclWithAnnotation.emplace_back(
+                std::make_pair(StaticCast<const AST::ClassDecl*>(&decl), StaticCast<ClassDef*>(customTypeDef)));
+        }
     }
     chirType.SetGlobalNominalCache(decl, *customTypeDef);
     if (uniqueDecl != nullptr && uniqueDecl != &decl) {

@@ -87,9 +87,6 @@ void Translator::TranslateClassLikeDecl(ClassDef& classDef, const AST::ClassLike
             CJC_ABORT();
         }
     }
-
-    // collect annotation info of the type and members for annotation target check
-    CollectTypeAnnotation(decl, classDef);
 }
 
 void Translator::AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl)

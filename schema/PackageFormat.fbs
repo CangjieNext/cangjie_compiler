@@ -571,7 +571,7 @@ enum ClassDefKind: int16 {
 table ClassDef {
   base: CustomTypeDef;
   kind: ClassDefKind;
-  isAnnotation: bool = false;
+  annotationTargets: [uint32]; // use values id (GlobalVar), absent when not an @Annotation class
   superClass: uint32; // use types id
 }
 

@@ -845,8 +845,6 @@ void GlobalVarInitializer::CreatePackageInit(const AST::Package& curPackage, con
         }
     }
 
-    InsertAnnotationVarInitInto(*packageInit);
-
     trans.CreateAndAppendTerminator<Exit>(curBlock);
 }
 
