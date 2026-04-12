@@ -1761,7 +1761,7 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFor
 template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFormat::ClassDef* buffer, ClassDef& obj)
 {
     ConfigCustomTypeDef(buffer->base(), obj);
-    obj.SetAnnotation(buffer->isAnnotation());
+    // obj.SetAnnotation(buffer->isAnnotation());
     auto superClass = GetType<ClassType>(buffer->superClass());
     if (superClass) {
         obj.SetSuperClassTy(*superClass);

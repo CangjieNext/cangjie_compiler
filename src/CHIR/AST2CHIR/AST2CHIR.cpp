@@ -349,6 +349,32 @@ void AST2CHIR::SetGenericDecls() const
     }
 }
 
+void AST2CHIR::TranslateAnnotationRelatedDecls()
+{
+    for (auto& it : annotationTargets) {
+        auto var = it.first;
+        auto expr = it.second;
+        auto initFunc = var->GetInitFunc();
+        auto entry = initFunc->GetBody()->GetEntryBlock();
+        auto trans = CreateTranslator();
+        trans.SetCurrentBlock(*entry);
+        auto value = Translator::TranslateASTNode(*expr, trans);
+        auto loc = var->GetDebugLocation();
+        auto parentBlock = trans.GetCurrentBlock();
+        parentBlock->AppendExpression(
+            builder.CreateExpression<Store>(std::move(loc), builder.GetUnitTy(), value, var, parentBlock));
+        CJC_ASSERT(parentBlock->GetTerminator() == nullptr);
+        parentBlock->AppendExpression(builder.CreateTerminator<Exit>(parentBlock));
+    }
+
+    // the parallel helper does not accept this type, use serialised translation
+    for (auto decl : annoFactoryFuncs) {
+        auto trans = CreateTranslator();
+        trans.SetTopLevel(*decl.first);
+        trans.TranslateAnnoFactoryFuncBody(*decl.first, *decl.second);
+    }
+}
+
 void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initOrder)
 {
     Utils::ProfileRecorder recorder("AST to CHIR Translation", "TranslateAllDecls");
@@ -376,9 +402,6 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
             auto trans = CreateTranslator();
             trans.SetTopLevel(*decl);
             Translator::TranslateASTNode(*decl, trans);
-            if (decl->TestAttr(AST::Attribute::GLOBAL)) {
-                trans.CollectValueAnnotation(*decl);
-            }
         }
         for (auto decl : std::as_const(localConstFuncs.stableOrderValue)) {
             auto trans = CreateTranslator();
@@ -386,12 +409,8 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
             Translator::TranslateASTNode(*decl, trans);
         }
     }
-    // the parallel helper does not accept this type, use serialised translation
-    for (auto decl : annoFactoryFuncs) {
-        auto trans = CreateTranslator();
-        trans.SetTopLevel(*decl.first);
-        trans.TranslateAnnoFactoryFuncBody(*decl.first, *decl.second);
-    }
+
+    TranslateAnnotationRelatedDecls();
     Utils::ProfileRecorder::Stop("TranslateAllDecls", "TranslateOtherTopLevelDecls");
 
     // step 4: set `CompileTimeValue` for lambda

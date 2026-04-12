@@ -168,8 +168,6 @@ private:
     void RecordCHIRExprNum(const std::string& suffix);
     bool RunAnalysisForCJLint();
     void RunConstantAnalysis();
-    // run semantic checks that have to be performed on CHIR
-    bool RunAnnotationChecks();
     void EraseDebugExpr();
     void CFFIFuncWrapper();
     void ReplaceSrcCodeImportedValueWithSymbol();
