@@ -1317,14 +1317,19 @@ flatbuffers::Offset<PackageFormat::ClassDef> CHIRSerializer::CHIRSerializerImpl:
     auto base = Serialize<PackageFormat::CustomTypeDef>(static_cast<const CustomTypeDef&>(obj));
     auto kind = obj.IsInterface() ? PackageFormat::ClassDefKind::ClassDefKind_INTERFACE
                                   : PackageFormat::ClassDefKind::ClassDefKind_CLASS;
-    auto isAnnotation = obj.IsAnnotation();
+    std::vector<uint32_t> annotationTargetIds;
+    const std::vector<uint32_t>* annotationTargetsVec = nullptr;
+    if (obj.IsAnnotation()) {
+        annotationTargetIds = GetId<Value>(obj.GetAnnotationTargets());
+        annotationTargetsVec = &annotationTargetIds;
+    }
     auto superClass = GetId<Type>(obj.GetSuperClassTy());
     auto abstractMethods = SerializeVec<PackageFormat::AbstractMethodInfo>(obj.GetAbstractMethods());
     std::vector<flatbuffers::Offset<flatbuffers::String>> namesVec;
     for (const auto& name : obj.GetAllMethodMangledNames()) {
         namesVec.push_back(builder.CreateSharedString(name));
     }
-    return PackageFormat::CreateClassDefDirect(builder, base, kind, isAnnotation,
+    return PackageFormat::CreateClassDefDirect(builder, base, kind, annotationTargetsVec,
         superClass, &abstractMethods, &namesVec);
 }
 
