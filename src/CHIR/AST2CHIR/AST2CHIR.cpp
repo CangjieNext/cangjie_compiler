@@ -203,36 +203,53 @@ std::pair<InitOrder, bool> AST2CHIR::SortGlobalVarDecl(const AST::Package& pkg)
 
 void AST2CHIR::CreateGlobalVarSignature(const std::vector<Ptr<const AST::Decl>>& decls, bool isLocalConst)
 {
+    auto tr = CreateTranslator();
     for (auto& decl : decls) {
         CJC_ASSERT(decl->astKind == AST::ASTKind::VAR_DECL || decl->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL);
         if (decl->astKind == AST::ASTKind::VAR_DECL) {
-            CreateAndCacheGlobalVar(*StaticCast<const AST::VarDecl*>(decl), isLocalConst);
+            auto gv = CreateAndCacheGlobalVar(*StaticCast<const AST::VarDecl*>(decl), isLocalConst);
+            auto annoInfo = tr.CreateAnnoFactoryFuncSig(*decl, nullptr);
+            if (annoInfo.mangledName != "none") {
+                CJC_ASSERT(!gv->TestAttr(Attribute::STATIC));
+                gv->SetAnnoInfo(std::move(annoInfo));
+            }
         } else if (decl->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL) {
-            FlatternPattern(*(StaticCast<const AST::VarWithPatternDecl*>(decl)->irrefutablePattern), isLocalConst);
+            std::vector<AST::VarDecl*> varDecls;
+            FlatternPattern(
+                *(StaticCast<const AST::VarWithPatternDecl*>(decl)->irrefutablePattern), isLocalConst, varDecls);
+            for (auto varDecl : varDecls) {
+                auto gv = CreateAndCacheGlobalVar(*varDecl, isLocalConst);
+                // we have to use VarWithPatternDecl, not VarDecl, because it's difficult for SEMA to pass
+                // the annotatioin info and initializer to the sub var decls，maybe we can improve SEMA later.
+                auto annoInfo = tr.CreateAnnoFactoryFuncSig(*decl, nullptr);
+                if (annoInfo.mangledName != "none") {
+                    CJC_ASSERT(!gv->TestAttr(Attribute::STATIC));
+                    gv->SetAnnoInfo(std::move(annoInfo));
+                }
+            }
         }
     }
 }
 
-void AST2CHIR::FlatternPattern(const AST::Pattern& pattern, bool isLocalConst)
+void AST2CHIR::FlatternPattern(const AST::Pattern& pattern, bool isLocalConst, std::vector<AST::VarDecl*>& varDecls)
 {
     switch (pattern.astKind) {
         case AST::ASTKind::VAR_PATTERN: {
             auto varPattern = StaticCast<const AST::VarPattern*>(&pattern);
-            auto varDecl = varPattern->varDecl.get();
-            CreateAndCacheGlobalVar(*varDecl, isLocalConst);
+            varDecls.emplace_back(varPattern->varDecl.get());
             break;
         }
         case AST::ASTKind::TUPLE_PATTERN: {
             auto tuplePattern = StaticCast<const AST::TuplePattern*>(&pattern);
             for (auto& subPattern : tuplePattern->patterns) {
-                FlatternPattern(*subPattern, isLocalConst);
+                FlatternPattern(*subPattern, isLocalConst, varDecls);
             }
             break;
         }
         case AST::ASTKind::ENUM_PATTERN: {
             auto enumPattern = StaticCast<const AST::EnumPattern*>(&pattern);
             for (auto& subPattern : enumPattern->patterns) {
-                FlatternPattern(*subPattern, isLocalConst);
+                FlatternPattern(*subPattern, isLocalConst, varDecls);
             }
             break;
         }
@@ -349,6 +366,32 @@ void AST2CHIR::SetGenericDecls() const
     }
 }
 
+void AST2CHIR::TranslateAnnotationRelatedDecls()
+{
+    for (auto& it : annotationTargets) {
+        auto var = it.first;
+        auto expr = it.second;
+        auto initFunc = var->GetInitFunc();
+        auto entry = initFunc->GetBody()->GetEntryBlock();
+        auto trans = CreateTranslator();
+        trans.SetCurrentBlock(*entry);
+        auto value = Translator::TranslateASTNode(*expr, trans);
+        auto loc = var->GetDebugLocation();
+        auto parentBlock = trans.GetCurrentBlock();
+        parentBlock->AppendExpression(
+            builder.CreateExpression<Store>(std::move(loc), builder.GetUnitTy(), value, var, parentBlock));
+        CJC_ASSERT(parentBlock->GetTerminator() == nullptr);
+        parentBlock->AppendExpression(builder.CreateTerminator<Exit>(parentBlock));
+    }
+
+    // the parallel helper does not accept this type, use serialised translation
+    for (auto decl : annoFactoryFuncs) {
+        auto trans = CreateTranslator();
+        trans.SetTopLevel(*decl.first);
+        trans.TranslateAnnoFactoryFuncBody(*decl.first, *decl.second);
+    }
+}
+
 void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initOrder)
 {
     Utils::ProfileRecorder recorder("AST to CHIR Translation", "TranslateAllDecls");
@@ -376,9 +419,6 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
             auto trans = CreateTranslator();
             trans.SetTopLevel(*decl);
             Translator::TranslateASTNode(*decl, trans);
-            if (decl->TestAttr(AST::Attribute::GLOBAL)) {
-                trans.CollectValueAnnotation(*decl);
-            }
         }
         for (auto decl : std::as_const(localConstFuncs.stableOrderValue)) {
             auto trans = CreateTranslator();
@@ -386,12 +426,8 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
             Translator::TranslateASTNode(*decl, trans);
         }
     }
-    // the parallel helper does not accept this type, use serialised translation
-    for (auto decl : annoFactoryFuncs) {
-        auto trans = CreateTranslator();
-        trans.SetTopLevel(*decl.first);
-        trans.TranslateAnnoFactoryFuncBody(*decl.first, *decl.second);
-    }
+
+    TranslateAnnotationRelatedDecls();
     Utils::ProfileRecorder::Stop("TranslateAllDecls", "TranslateOtherTopLevelDecls");
 
     // step 4: set `CompileTimeValue` for lambda

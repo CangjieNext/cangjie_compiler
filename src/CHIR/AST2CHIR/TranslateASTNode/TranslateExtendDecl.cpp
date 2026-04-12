@@ -104,8 +104,5 @@ Ptr<Value> Translator::Visit(const AST::ExtendDecl& decl)
             chirTy.FillGenericArgType(*StaticCast<AST::GenericsTy*>(genericTy->ty));
         }
     }
-
-    // step 6: collect annotation info of the type and members for annotation target check
-    CollectTypeAnnotation(decl, *extendDef);
     return nullptr;
 }
