@@ -237,7 +237,8 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
                 return {mangledName, {}};
             }
         }
-        annoPairs.emplace_back(annoClassDeclName, paramValues);
+        auto annoLoc = TranslateLocation(*elem);
+        annoPairs.emplace_back(annoClassDeclName, paramValues, annoLoc);
     }
     return {mangledName, annoPairs};
 #endif

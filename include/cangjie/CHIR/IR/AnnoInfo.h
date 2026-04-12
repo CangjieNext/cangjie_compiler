@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "cangjie/CHIR/IR/DebugLocation.h"
 #include "cangjie/Utils/SafePointer.h"
 
 namespace Cangjie::CHIR {
@@ -55,8 +56,10 @@ struct AnnoInfo {
     struct AnnoPair {
         std::string annoClassName;
         std::vector<std::string> paramValues;
-        AnnoPair(const std::string& annoClassName, const std::vector<std::string>& paramValues)
-            : annoClassName(annoClassName), paramValues(paramValues)
+        DebugLocation loc;
+        AnnoPair(
+            const std::string& annoClassName, const std::vector<std::string>& paramValues, const DebugLocation& loc)
+            : annoClassName(annoClassName), paramValues(paramValues), loc(loc)
         {
         }
     };
