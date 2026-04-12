@@ -61,9 +61,6 @@ public:
                 [translator = tran.get(), decl, &funcForTranlateASTNode]() {
                     return funcForTranlateASTNode(*decl, *translator);
                 });
-            if (decl->TestAttr(AST::Attribute::GLOBAL) && !Is<AST::InheritableDecl>(decl)) {
-                tran->CollectValueAnnotation(*decl);
-            }
             trans.emplace_back(std::move(tran));
             chirTypes.emplace_back(std::move(subChirType));
         }

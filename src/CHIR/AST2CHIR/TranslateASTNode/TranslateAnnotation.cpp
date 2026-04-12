@@ -237,7 +237,8 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
                 return {mangledName, {}};
             }
         }
-        annoPairs.emplace_back(annoClassDeclName, paramValues);
+        auto annoLoc = TranslateLocation(*elem);
+        annoPairs.emplace_back(annoClassDeclName, paramValues, annoLoc);
     }
     return {mangledName, annoPairs};
 #endif
@@ -252,23 +253,16 @@ void Translator::CreateParamAnnotationInfo(const AST::FuncParam& astParam, Param
 
 void Translator::CreateAnnoFactoryFuncsForFuncDecl(const AST::FuncDecl& funcDecl, CustomTypeDef* parent)
 {
+    if (funcDecl.TestAttr(AST::Attribute::IMPORTED)) {
+        return;
+    }
     auto& params = funcDecl.funcBody->paramLists[0]->params;
     auto funcValue = GetSymbolTable(funcDecl);
     const AST::Decl& annotatedDecl = funcDecl.propDecl ? *funcDecl.propDecl : StaticCast<AST::Decl>(funcDecl);
-    if (funcValue->IsFuncWithBody()) {
-        auto func = StaticCast<Function*>(funcValue);
-        CreateAnnotationInfo<Function>(annotatedDecl, *func, parent);
-        size_t offset = params.size() == func->GetNumOfParams() ? 0 : 1;
-        for (size_t i = 0; i < params.size(); ++i) {
-            CreateParamAnnotationInfo(*params[i], *func->GetParam(i + offset), *parent);
-        }
-    } else if (!funcDecl.TestAttr(AST::Attribute::IMPORTED) && funcValue->TestAttr(Attribute::NON_RECOMPILE)) {
-        // Update annotation info for incremental created 'Function';
-        auto importedFunc = StaticCast<Function*>(funcValue);
-        CreateAnnotationInfo<Function>(annotatedDecl, *importedFunc, parent);
-        const auto& paramInfo = importedFunc->GetParams();
-        for (size_t i = 0; i < params.size(); ++i) {
-            paramInfo[i]->SetAnnoInfo(CreateAnnoFactoryFuncSig(*params[i], parent));
-        }
+    auto func = StaticCast<Function*>(funcValue);
+    CreateAnnotationInfo<Function>(annotatedDecl, *func, parent);
+    size_t offset = params.size() == func->GetNumOfParams() ? 0 : 1;
+    for (size_t i = 0; i < params.size(); ++i) {
+        CreateParamAnnotationInfo(*params[i], *func->GetParam(i + offset), *parent);
     }
 }
