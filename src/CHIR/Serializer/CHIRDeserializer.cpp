@@ -1810,7 +1810,7 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFor
         return;
     }
     ConfigCustomTypeDef(buffer->base(), obj);
-    obj.SetAnnotation(buffer->isAnnotation());
+    // obj.SetAnnotation(buffer->isAnnotation());
     auto superClass = GetType<ClassType>(buffer->superClass());
     if (superClass) {
         obj.SetSuperClassTy(*superClass);
