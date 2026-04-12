@@ -41,7 +41,9 @@ public:
      * @return return true for classes that are marked with the @Annotation annotation.
      */
     bool IsAnnotation() const;
-    void SetAnnotation(bool value);
+    void SetAnnotationTargets(std::vector<GlobalVar*>&& targets);
+    std::vector<GlobalVar*> GetAnnotationTargets() const;
+
     // ===--------------------------------------------------------------------===//
     // Super Parent
     // ===--------------------------------------------------------------------===//
@@ -67,7 +69,10 @@ private:
     void PrintAbstractMethod(std::stringstream& ss) const;
 
     bool isClass = false;           // class or interface
-    bool isAnnotation = false;      // whether the class is modified by @Annotation
+    // @Annotation[target: [Type, Parameter ...]]
+    // class A {}
+    // we will create global var for every target
+    std::optional<std::vector<GlobalVar*>> annotationTargets;
     ClassType* superClassTy = nullptr;
 };
 } // namespace Cangjie::CHIR
