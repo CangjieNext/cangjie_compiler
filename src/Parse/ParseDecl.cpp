@@ -492,7 +492,7 @@ void ParserImpl::CheckOverflowAnno(PtrVector<Annotation>& annos, ScopeKind scope
 void ParserImpl::CheckPropDeclJavaMirror(PropDecl& decl)
 {
     if (decl.outerDecl && decl.outerDecl->TestAttr(Attribute::JAVA_MIRROR)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_prop_is_forbidden, decl);
+        ParseDiagnoseRefactor("parse_java_mirror_prop_is_forbidden", decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
         decl.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
     }
@@ -503,7 +503,7 @@ void ParserImpl::CheckPrimaryCtorDeclJavaMirror(PrimaryCtorDecl& ctor)
     if (ctor.outerDecl && ctor.outerDecl->TestAttr(Attribute::JAVA_MIRROR)) {
         ctor.EnableAttr(Attribute::JAVA_MIRROR);
         ctor.EnableAttr(Attribute::IS_BROKEN);
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_decl_cannot_have_primary_ctor, ctor);
+        ParseDiagnoseRefactor("parse_java_mirror_decl_cannot_have_primary_ctor", ctor);
     }
 }
 
@@ -638,9 +638,8 @@ void ParserImpl::CheckMemberFuncJavaMirror(FuncDecl& decl)
         decl.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
     }
 
-    FFICheckClassLikeFuncBody(decl,
-        DiagKindRefactor::parse_java_mirror_function_must_have_return_type,
-        DiagKindRefactor::parse_java_mirror_function_cannot_have_body);
+    FFICheckClassLikeFuncBody(
+        decl, "parse_java_mirror_function_must_have_return_type", "parse_java_mirror_function_cannot_have_body");
 
     if (decl.outerDecl->astKind == ASTKind::INTERFACE_DECL &&
         HasAnnotation(decl.annotations, AnnotationKind::JAVA_HAS_DEFAULT)) {
@@ -668,9 +667,8 @@ void ParserImpl::CheckMemberFuncObjCMirror(FuncDecl& func)
         func.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
     }
 
-    FFICheckClassLikeFuncBody(func,
-        DiagKindRefactor::parse_objc_mirror_method_must_have_return_type,
-        DiagKindRefactor::parse_objc_mirror_method_cannot_have_body);
+    FFICheckClassLikeFuncBody(
+        func, "parse_objc_mirror_method_must_have_return_type", "parse_objc_mirror_method_cannot_have_body");
 }
 
 void ParserImpl::CheckInitCtorDeclJavaMirror(FuncDecl& ctor)
@@ -702,8 +700,7 @@ void ParserImpl::CheckInitCtorDeclJavaMirror(FuncDecl& ctor)
 
     if (ctor.funcBody && ctor.funcBody->body) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
-        ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_java_mirror_constructor_cannot_have_body, ctor.funcBody->body->begin);
+        ParseDiagnoseRefactor("parse_java_mirror_constructor_cannot_have_body", ctor.funcBody->body->begin);
     } else if (ctor.funcBody) {
         auto body = MakeOwned<Block>();
         body->EnableAttr(Attribute::COMPILER_ADD, Attribute::IMPLICIT_ADD);
@@ -743,8 +740,7 @@ void ParserImpl::CheckInitCtorDeclObjCMirror(FuncDecl& ctor)
 
     if (ctor.funcBody && ctor.funcBody->body) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
-        ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_objc_mirror_ctor_cannot_have_body, ctor.funcBody->body->begin);
+        ParseDiagnoseRefactor("parse_objc_mirror_ctor_cannot_have_body", ctor.funcBody->body->begin);
     } else if (ctor.funcBody) {
         auto body = MakeOwned<Block>();
         body->EnableAttr(Attribute::COMPILER_ADD, Attribute::IMPLICIT_ADD);
@@ -801,14 +797,14 @@ void ParserImpl::CheckPropDeclObjCMirror(PropDecl& prop)
     }
 
     if (!prop.getters.empty()) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_prop_cannot_have_getter, prop, prop.identifier);
+        ParseDiagnoseRefactor("parse_objc_mirror_prop_cannot_have_getter", prop, prop.identifier);
         prop.EnableAttr(Attribute::IS_BROKEN);
     } else {
         InsertPropGetterSignature(prop, Attribute::OBJ_C_MIRROR);
     }
 
     if (!prop.setters.empty()) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_prop_cannot_have_setter, prop, prop.identifier);
+        ParseDiagnoseRefactor("parse_objc_mirror_prop_cannot_have_setter", prop, prop.identifier);
         prop.EnableAttr(Attribute::IS_BROKEN);
     } else if (prop.isVar) {
         InsertPropSetterSignature(prop, Attribute::OBJ_C_MIRROR);
@@ -823,7 +819,7 @@ void ParserImpl::CheckPrimaryCtorDeclObjCMirror(PrimaryCtorDecl& ctor)
 
     ctor.EnableAttr(Attribute::OBJ_C_MIRROR);
     ctor.EnableAttr(Attribute::IS_BROKEN);
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_cannot_have_primary_ctor, ctor);
+    ParseDiagnoseRefactor("parse_objc_mirror_cannot_have_primary_ctor", ctor);
 }
 
 void ParserImpl::CheckCJMappingAttr(Decl& decl) const
@@ -958,8 +954,7 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFinalizer(
         funcDecl->EnableAttr(it);
     }
     if (!funcDecl->funcBody->paramLists.empty() && !funcDecl->funcBody->paramLists[0]->params.empty()) {
-        ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_finalizer_can_not_accept_any_parameter, *funcDecl->funcBody->paramLists[0]);
+        ParseDiagnoseRefactor("parse_finalizer_can_not_accept_any_parameter", *funcDecl->funcBody->paramLists[0]);
     }
     funcDecl->modifiers.insert(modifiers.begin(), modifiers.end());
     if (funcDecl->funcBody) {
@@ -974,8 +969,7 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFinalizer(
         }
     }
     if (funcDecl->funcBody && funcDecl->funcBody->retType) {
-        ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_invalid_return_type, *funcDecl->funcBody->retType, "finalizer");
+        ParseDiagnoseRefactor("parse_invalid_return_type", *funcDecl->funcBody->retType, "finalizer");
         funcDecl->EnableAttr(Attribute::HAS_BROKEN);
     }
     return funcDecl;
@@ -1011,8 +1005,7 @@ OwnedPtr<FuncDecl> ParserImpl::ParseConstructor(
         // Static init is always 'private'.
         funcDecl->EnableAttr(Attribute::PRIVATE);
         if (!funcDecl->funcBody->paramLists.empty() && !funcDecl->funcBody->paramLists[0]->params.empty()) {
-            ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_static_init_can_not_accept_any_parameter, *funcDecl->funcBody->paramLists[0]);
+            ParseDiagnoseRefactor("parse_static_init_can_not_accept_any_parameter", *funcDecl->funcBody->paramLists[0]);
         }
     }
     if (funcDecl->funcBody) {
@@ -1080,8 +1073,7 @@ OwnedPtr<PrimaryCtorDecl> ParserImpl::ParsePrimaryConstructor(
     }
     mpImpl->CheckCJMPDecl(*primaryCtorDecl);
     if (primaryCtorDecl->funcBody && primaryCtorDecl->funcBody->retType) {
-        ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_invalid_return_type, *primaryCtorDecl->funcBody->retType, "primary constructor");
+        ParseDiagnoseRefactor("parse_invalid_return_type", *primaryCtorDecl->funcBody->retType, "primary constructor");
     }
     return primaryCtorDecl;
 }
@@ -1104,7 +1096,7 @@ OwnedPtr<ClassBody> ParserImpl::ParseClassBody(ClassDecl& cd)
 {
     OwnedPtr<ClassBody> ret = MakeOwned<ClassBody>();
     if (!Skip(TokenKind::LCURL)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_brace, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_left_brace", lookahead, ConvertToken(lookahead));
         ConsumeUntilDecl(TokenKind::LCURL);
         Skip(TokenKind::LCURL);
         ret->EnableAttr(Attribute::HAS_BROKEN);
@@ -1160,7 +1152,7 @@ OwnedPtr<ClassBody> ParserImpl::ParseClassBody(ClassDecl& cd)
 OwnedPtr<InterfaceBody> ParserImpl::ParseInterfaceBody(InterfaceDecl& id)
 {
     if (!Skip(TokenKind::LCURL)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_brace, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_left_brace", lookahead, ConvertToken(lookahead));
         return MakeInvalid<InterfaceBody>(lastToken.End());
     }
     OwnedPtr<InterfaceBody> ret = MakeOwned<InterfaceBody>();
@@ -1318,7 +1310,7 @@ void ParserImpl::ParseInterfaceDeclOrClassDeclGeneric(InheritableDecl& ret)
         ret.generic = ParseGeneric();
     }
     if (SeeingAny({TokenKind::IDENTIFIER, TokenKind::COLON}) || SeeingContextualKeyword()) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_lt_brace, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_lt_brace", lookahead, ConvertToken(lookahead));
         ConsumeUntilDecl(TokenKind::LCURL);
     }
     if (Skip(TokenKind::UPPERBOUND)) {
@@ -1463,7 +1455,7 @@ void ParserImpl::ParseCaseBody(EnumDecl& enumDecl)
         enumDecl.hasArguments = true;
     }
     if (!caseBody->TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_unknown_enum_constructor, *caseBody);
+        ParseDiagnoseRefactor("parse_unknown_enum_constructor", *caseBody);
     }
     SetMemberParentInheritableDecl(enumDecl, caseBody);
     // common/specific enum attributes propagate to it's constructors to be used in further resolve
@@ -1527,7 +1519,7 @@ void ParserImpl::ParseEnumBody(EnumDecl& enumDecl)
             continue;
         }
         if (decl->TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_decl, MakeRange(decl->identifier), decl->identifier);
+            ParseDiagnoseRefactor("parse_expected_decl", MakeRange(decl->identifier), decl->identifier);
         }
         SetMemberParentInheritableDecl(enumDecl, decl);
         enumDecl.members.emplace_back(std::move(decl));
@@ -1561,7 +1553,7 @@ OwnedPtr<EnumDecl> ParserImpl::ParseEnumDecl(
         ParseConstraints(*ret);
     }
     if (!Skip(TokenKind::LCURL)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_brace, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_left_brace", lookahead, ConvertToken(lookahead));
         ConsumeUntilDeclOrNL(TokenKind::LCURL);
         if (!Skip(TokenKind::LCURL)) {
             ret->EnableAttr(Attribute::IS_BROKEN);
@@ -1583,7 +1575,7 @@ OwnedPtr<EnumDecl> ParserImpl::ParseEnumDecl(
 OwnedPtr<StructBody> ParserImpl::ParseStructBody(StructDecl& sd)
 {
     if (!Skip(TokenKind::LCURL)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_brace, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_left_brace", lookahead, ConvertToken(lookahead));
         return MakeInvalid<StructBody>(lastToken.End());
     }
     OwnedPtr<StructBody> ret = MakeOwned<StructBody>();
@@ -1703,7 +1695,7 @@ OwnedPtr<TypeAliasDecl> ParserImpl::ParseTypeAlias(
     if (Skip(TokenKind::ASSIGN)) {
         ret->assignPos = lookahead.Begin();
     } else {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_assignment, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_assignment", lookahead, ConvertToken(lookahead));
         ConsumeUntilDecl();
     }
     // Subtype or trait constraints are not allowed in typealias decl. If the type of RHS of = is a type that has
@@ -1967,8 +1959,7 @@ OwnedPtr<MainDecl> ParserImpl::ParseMainDecl(
         ret->end = ret->funcBody->end;
         // The Curring function is not supported in spec 0.22.
         if (ret->funcBody->paramLists.size() > 1) {
-            ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_expected_left_brace, ret->funcBody->paramLists[1]->begin, std::string("("));
+            ParseDiagnoseRefactor("parse_expected_left_brace", ret->funcBody->paramLists[1]->begin, std::string("("));
         }
     }
     const std::set<AnnotationKind> annoOnMain = {
@@ -2023,10 +2014,10 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFuncDecl(
     bool hasNoBody = !ret->funcBody->body;
     bool hasNoReturnType = !ret->funcBody->retType;
     if (ret->TestAttr(Attribute::COMMON) && hasNoReturnType && hasNoBody) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_common_function_must_have_return_type, *ret);
+        ParseDiagnoseRefactor("parse_common_function_must_have_return_type", *ret);
     }
     if (ret->TestAttr(Attribute::SPECIFIC) && hasNoReturnType && hasNoBody) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_specific_function_must_have_return_type, *ret);
+        ParseDiagnoseRefactor("parse_specific_function_must_have_return_type", *ret);
     }
     if (HasModifier(modifiers, TokenKind::UNSAFE) || HasModifier(modifiers, TokenKind::FOREIGN)) {
         SetUnsafe(ret.get(), modifiers);
@@ -2038,8 +2029,7 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFuncDecl(
         ret->end = ret->funcBody->end;
         // The Curring function is not supported in spec 0.22.
         if (ret->funcBody->paramLists.size() > 1) {
-            ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_expected_left_brace, ret->funcBody->paramLists[1]->begin, std::string("("));
+            ParseDiagnoseRefactor("parse_expected_left_brace", ret->funcBody->paramLists[1]->begin, std::string("("));
         }
         if (ret->identifier == "main" && !ret->identifier.IsRaw()) {
             DiagIllegalFunc(ret);
@@ -2063,11 +2053,10 @@ void ParserImpl::CheckFuncBody(ScopeKind scopeKind, FuncDecl& decl)
     }
     if (decl.TestAttr(Attribute::INTRINSIC)) {
         if (scopeKind != ScopeKind::TOPLEVEL && scopeKind != ScopeKind::UNKNOWN_SCOPE) {
-            ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_intrinsic_function_must_be_toplevel, MakeRange(decl.begin, lastToken.End()));
+            ParseDiagnoseRefactor("parse_intrinsic_function_must_be_toplevel", MakeRange(decl.begin, lastToken.End()));
         }
         if (fb && fb->body) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_intrinsic_function_cannot_have_body, *fb->body);
+            ParseDiagnoseRefactor("parse_intrinsic_function_cannot_have_body", *fb->body);
         }
     }
 
@@ -2089,19 +2078,19 @@ void ParserImpl::CheckFuncBody(ScopeKind scopeKind, FuncDecl& decl)
 
     if (decl.TestAnyAttr(Attribute::FOREIGN)) {
         if (decl.TestAttr(Attribute::GENERIC)) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_foreign_func_should_not_be_generic, *fb->generic);
+            ParseDiagnoseRefactor("parse_foreign_func_should_not_be_generic", *fb->generic);
             decl.EnableAttr(Attribute::IS_BROKEN);
         }
         if (!fb->retType) {
             auto foreignPos = std::find_if(decl.modifiers.begin(), decl.modifiers.end(),
                 [](const Modifier& it) { return it.modifier == TokenKind::FOREIGN; });
             CJC_ASSERT(foreignPos != decl.modifiers.end());
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_foreign_func_must_declare_return_type,
+            ParseDiagnoseRefactor("parse_foreign_func_must_declare_return_type",
                 MakeRange(foreignPos->begin, decl.keywordPos + 4)); // Keyword func's length is 4.
             decl.EnableAttr(Attribute::IS_BROKEN);
         }
         if (fb->body) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_foreign_function_with_body, *fb->body);
+            ParseDiagnoseRefactor("parse_foreign_function_with_body", *fb->body);
             decl.EnableAttr(Attribute::IS_BROKEN);
         }
     }
@@ -2109,19 +2098,17 @@ void ParserImpl::CheckFuncBody(ScopeKind scopeKind, FuncDecl& decl)
 }
 
 void ParserImpl::FFICheckClassLikeFuncBody(
-    FuncDecl& decl,
-    DiagKindRefactor functionMustHaveReturnType,
-    DiagKindRefactor functionCanNotHaveBody)
+    FuncDecl& decl, std::string_view functionMustHaveReturnTypeKind, std::string_view functionCanNotHaveBodyKind)
 {
     if (!decl.funcBody) {
         return;
     }
     if (!decl.funcBody->retType && !decl.funcBody->TestAttr(Attribute::HAS_BROKEN)) {
-        ParseDiagnoseRefactor(functionMustHaveReturnType, decl);
+        ParseDiagnoseRefactor(functionMustHaveReturnTypeKind, decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
     if (decl.funcBody->body) {
-        ParseDiagnoseRefactor(functionCanNotHaveBody, decl, decl.identifier);
+        ParseDiagnoseRefactor(functionCanNotHaveBodyKind, decl, decl.identifier);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
 }
@@ -2140,8 +2127,7 @@ void ParserImpl::CheckClassLikeFuncBodyAbstractness(FuncDecl& decl)
     // explicit ABSTRACT modifier allowed only in COMMON ABSTRACT class or in JFFI
     if (HasModifier(decl.modifiers, TokenKind::ABSTRACT) && !isCommon && !inAbstractCJMP &&
         !isJavaMirrorOrJavaMirrorSubtype) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_explicitly_abstract_only_for_cjmp_abstract_class,
-            decl, "function");
+        ParseDiagnoseRefactor("parse_explicitly_abstract_only_for_cjmp_abstract_class", decl, "function");
     }
 
     if (decl.funcBody && decl.funcBody->body) {
@@ -2212,7 +2198,7 @@ void ParserImpl::CheckClassLikeFuncBodyAbstractness(FuncDecl& decl)
     }
     if (decl.TestAttr(Attribute::ABSTRACT) || (!decl.funcBody->body && !decl.TestAttr(Attribute::FINALIZER))) {
         if (!decl.funcBody->retType) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_abstract_func_must_have_return_type, lastToken.End());
+            ParseDiagnoseRefactor("parse_abstract_func_must_have_return_type", lastToken.End());
         }
     } else if (!isCommon) {
         decl.DisableAttr(Attribute::ABSTRACT);
@@ -2236,19 +2222,17 @@ void ParserImpl::CheckVariableParams(AST::FuncDecl& decl)
             decl.funcBody->paramLists[0]->variadicArgIndex = index;
 
             if (!decl.TestAttr(Attribute::FOREIGN)) {
-                ParseDiagnoseRefactor(DiagKindRefactor::parse_variable_length_parameter_only_in_the_foreign_function,
+                ParseDiagnoseRefactor("parse_variable_length_parameter_only_in_the_foreign_function",
                     MakeRange(decl.keywordPos, decl.identifier.End()));
                 decl.EnableAttr(Attribute::IS_BROKEN);
                 break;
             }
 
             if (index == 0) {
-                ParseDiagnoseRefactor(
-                    DiagKindRefactor::parse_variable_length_parameter_can_not_be_first, *params[index]);
+                ParseDiagnoseRefactor("parse_variable_length_parameter_can_not_be_first", *params[index]);
                 decl.EnableAttr(Attribute::IS_BROKEN);
             } else if (index != params.size() - 1) {
-                ParseDiagnoseRefactor(
-                    DiagKindRefactor::parse_variable_length_parameter_must_in_the_end, *params[index]);
+                ParseDiagnoseRefactor("parse_variable_length_parameter_must_in_the_end", *params[index]);
                 decl.EnableAttr(Attribute::IS_BROKEN);
             } else {
                 varargIdx = {index};
@@ -2275,7 +2259,7 @@ void ParserImpl::CheckVariableParams(AST::PrimaryCtorDecl& decl)
             decl.funcBody->paramLists[0]->variadicArgIndex = index;
 
             // Primary constructor is certainly not a foreign function.
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_variable_length_parameter_only_in_the_foreign_function,
+            ParseDiagnoseRefactor("parse_variable_length_parameter_only_in_the_foreign_function",
                 MakeRange(decl.keywordPos, decl.identifier.End()));
             decl.EnableAttr(Attribute::IS_BROKEN);
             break;
@@ -2294,7 +2278,7 @@ void ParserImpl::ParsePropMemberBody(const ScopeKind& scopeKind, FuncBody& fb)
         }
     }
     if (!Seeing(TokenKind::LCURL)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_brace, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_left_brace", lookahead, ConvertToken(lookahead));
         ConsumeUntilDecl(TokenKind::LCURL);
         if (!Seeing(TokenKind::LCURL)) {
             return;
@@ -2367,8 +2351,9 @@ void ParserImpl::ParseFuncParameters(const ScopeKind& scopeKind, FuncBody& fb)
         } while (Seeing(TokenKind::LPAREN));
     } else {
         (void)fb.paramLists.emplace_back(MakeInvalid<FuncParamList>(lookahead.Begin()));
-        ParseDiagnoseRefactor(scopeKind == ScopeKind::MAIN_BODY ? DiagKindRefactor::parse_expected_left_paren :
-            DiagKindRefactor::parse_expected_lt_paren, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor(
+            scopeKind == ScopeKind::MAIN_BODY ? "parse_expected_left_paren" : "parse_expected_lt_paren", lookahead,
+            ConvertToken(lookahead));
         fb.EnableAttr(Attribute::HAS_BROKEN);
     }
 }
@@ -2382,7 +2367,7 @@ void ParserImpl::ParseFuncGenericConstraints(const FuncBody& fb)
             fb.generic->genericConstraints = ParseGenericConstraints();
         }
     } else if (fb.generic && (Seeing(TokenKind::IDENTIFIER))) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_where_brace, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_where_brace", lookahead, ConvertToken(lookahead));
     }
 }
 
@@ -2407,7 +2392,7 @@ void ParserImpl::ParseParameter(ScopeKind scopeKind, FuncParam& fp)
     }
     // process of '_'. And wildcard is not allowed in primary constructor let/var
     if (Skip(TokenKind::WILDCARD) && fp.hasLetOrVar) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_wildcard_can_not_be_used_as_member_name, lastToken);
+        ParseDiagnoseRefactor("parse_wildcard_can_not_be_used_as_member_name", lastToken);
     }
     if (lastToken.kind == TokenKind::WILDCARD) {
         fp.identifier = lastToken.Value();
@@ -2430,8 +2415,7 @@ void ParserImpl::ParseParameter(ScopeKind scopeKind, FuncParam& fp)
         if (Skip(TokenKind::NOT)) {
             if (fp.identifier == "_") {
                 // add diagnose of '_!'
-                auto builder = ParseDiagnoseRefactor(
-                    DiagKindRefactor::parse_expected_character, lastToken, "\':\'", lastToken.Value());
+                auto builder = ParseDiagnoseRefactor("parse_expected_character", lastToken, "\':\'", lastToken.Value());
                 builder.AddMainHintArguments("\':\'");
             }
             fp.notMarkPos = lastToken.Begin();
@@ -2457,7 +2441,7 @@ void ParserImpl::ParseAssignInParam(FuncParam& fp)
 {
     if (Skip(TokenKind::ASSIGN)) {
         if (!fp.isNamedParam) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_dot_lparen, lastToken, ConvertToken(lastToken));
+            ParseDiagnoseRefactor("parse_expected_dot_lparen", lastToken, ConvertToken(lastToken));
         }
         fp.assignPos = lastToken.Begin();
         fp.assignment = ParseExpr();
@@ -2468,7 +2452,7 @@ void ParserImpl::ParseAssignInParam(FuncParam& fp)
 OwnedPtr<FuncParamList> ParserImpl::ParseParameterList(ScopeKind scopeKind)
 {
     if (!Skip(TokenKind::LPAREN)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_paren, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_left_paren", lookahead, ConvertToken(lookahead));
         return MakeInvalid<FuncParamList>(lookahead.Begin());
     }
     OwnedPtr<FuncParamList> ret = MakeOwned<FuncParamList>();
@@ -2491,11 +2475,9 @@ OwnedPtr<FuncParamList> ParserImpl::ParseParameterList(ScopeKind scopeKind)
     }
     if (scopeKind == ScopeKind::PROP_MEMBER_SETTER_BODY) {
         if (ret->params.empty()) {
-            ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_setter_must_contain_one_parameter, MakeRange(ret->begin, lastToken.End()));
+            ParseDiagnoseRefactor("parse_setter_must_contain_one_parameter", MakeRange(ret->begin, lastToken.End()));
         } else if (ret->params.size() > 1) {
-            ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_setter_can_only_accept_one_parameter, MakeRange(ret->begin, lastToken.End()));
+            ParseDiagnoseRefactor("parse_setter_can_only_accept_one_parameter", MakeRange(ret->begin, lastToken.End()));
         }
     }
     ret->rightParenPos = lastToken.Begin();
@@ -2550,7 +2532,7 @@ void ParserImpl::ParseLetOrVarInParamList(const ScopeKind& scopeKind, FuncParam&
         fp.hasLetOrVar = true;
         fp.keywordPos = lastToken.Begin();
         if (!isPrimaryConstr) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_parameter_rp, lastToken, ConvertToken(lastToken));
+            ParseDiagnoseRefactor("parse_expected_parameter_rp", lastToken, ConvertToken(lastToken));
         } else {
             // Member variable parameter for class/struct main constructor.
             fp.isMemberParam = true;
@@ -2560,7 +2542,7 @@ void ParserImpl::ParseLetOrVarInParamList(const ScopeKind& scopeKind, FuncParam&
     } else if (HasModifier(fp.modifiers, TokenKind::CONST) && lastToken == "const") {
         std::string scope = isPrimaryConstr ? "primary constructor paramlist" : "paramlist";
         std::string decl = isPrimaryConstr ? "const member variable declaration" : "const variable declaration";
-        auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_unexpected_declaration_in_scope,
+        auto builder = ParseDiagnoseRefactor("parse_unexpected_declaration_in_scope",
             MakeRange(lastToken.Begin(), lastToken.Begin() + std::string("const").size()), decl, scope);
         builder.AddMainHintArguments(decl);
     }

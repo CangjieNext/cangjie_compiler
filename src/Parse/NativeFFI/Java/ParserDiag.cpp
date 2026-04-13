@@ -18,45 +18,45 @@ using namespace AST;
 
 void JFFIParserImpl::DiagJavaMirrorCannotHaveFinalizer(const AST::Node& node) const
 {
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_cannot_have_finalizer, node);
+    p.ParseDiagnoseRefactor("parse_java_mirror_cannot_have_finalizer", node);
 }
 
 void JFFIParserImpl::DiagJavaMirrorCannotHavePrivateMember(const AST::Node& node) const
 {
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_cannot_have_private_member, node);
+    p.ParseDiagnoseRefactor("parse_java_mirror_cannot_have_private_member", node);
 }
 
 void JFFIParserImpl::DiagJavaMirrorCannotHaveStaticInit(const AST::Node& node) const
 {
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_cannot_have_static_init, node);
+    p.ParseDiagnoseRefactor("parse_java_mirror_cannot_have_static_init", node);
 }
 
 void JFFIParserImpl::DiagJavaMirrorCannotHaveConstMember(const AST::Node& node) const
 {
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_cannot_have_const_member, node);
+    p.ParseDiagnoseRefactor("parse_java_mirror_cannot_have_const_member", node);
 }
 
 void JFFIParserImpl::DiagJavaImplCannotBeGeneric(const AST::Node& node) const
 {
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_impl_cannot_be_generic, node);
+    p.ParseDiagnoseRefactor("parse_java_impl_cannot_be_generic", node);
 }
 
 void JFFIParserImpl::DiagJavaImplCannotBeAbstract(const AST::Node& node) const
 {
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_impl_cannot_be_abstract, node);
+    p.ParseDiagnoseRefactor("parse_java_impl_cannot_be_abstract", node);
 }
 
 void JFFIParserImpl::DiagJavaImplCannotBeSealed(const AST::Node& node) const
 {
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_impl_cannot_be_sealed, node);
+    p.ParseDiagnoseRefactor("parse_java_impl_cannot_be_sealed", node);
 }
 
 void JFFIParserImpl::DiagJavaMirrorCannotBeSealed(const AST::Node& node) const
 {
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_cannot_be_sealed, node);
+    p.ParseDiagnoseRefactor("parse_java_mirror_cannot_be_sealed", node);
 }
 
 void JFFIParserImpl::DiagJavaImplCannotHaveStaticInit(const AST::Node& node) const
 {
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_java_impl_cannot_have_static_init, node);
+    p.ParseDiagnoseRefactor("parse_java_impl_cannot_have_static_init", node);
 }

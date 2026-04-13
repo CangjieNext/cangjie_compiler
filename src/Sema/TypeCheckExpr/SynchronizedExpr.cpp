@@ -24,7 +24,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSyncExpr(ASTContext& ctx, Ptr<Ty> tgtTy, S
     if (lockDecl) {
         isWellTyped = Check(ctx, lockDecl->GetTy(), se.mutex.get()) && isWellTyped;
     } else {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_use_expr_without_import, *se.mutex, "sync", "synchronized");
+        diag.DiagnoseRefactor("sema_use_expr_without_import", *se.mutex, "sync", "synchronized");
         // Do not return false immediately so that more (and independent) error messages could be reported.
     }
 
