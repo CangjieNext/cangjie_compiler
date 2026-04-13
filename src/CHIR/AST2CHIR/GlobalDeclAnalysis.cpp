@@ -464,7 +464,7 @@ void GlobalDeclAnalysis::CheckUseBeforeInit(const std::vector<Ptr<const AST::Dec
             auto& deps = pos->second;
             for (auto& dep : deps) {
                 if (alreadyInited.find(dep) == alreadyInited.end()) {
-                    diag.Diagnose(DiagKind::chir_used_before_initialization, dep->identifier.Val());
+                    diag.Diagnose("chir_used_before_initialization", dep->identifier.Val());
                 }
             }
         }
@@ -891,7 +891,7 @@ void VarCirDepsChecker::DetectCircularDep()
             diagStr = diagStr + " and " + temp;
         }
     }
-    diag.Diagnose(DiagKind::chir_var_might_circular_dependency, diagStr);
+    diag.Diagnose("chir_var_might_circular_dependency", diagStr);
 }
 
 FileCirDepsChecker::FileCirDepsChecker(DiagnosticEngine& ciDiag, const std::vector<std::string>& vardiagLog)
@@ -922,7 +922,7 @@ void FileCirDepsChecker::DetectCircularDep()
             diagStr = diagStr + " and " + fileName;
         }
     }
-    diag.Diagnose(DiagKind::chir_file_might_circular_dependency, diagStr);
+    diag.Diagnose("chir_file_might_circular_dependency", diagStr);
 #if DEBUG0
     for (auto strlog : diagLog) {
         std::cout << strlog << std::endl;

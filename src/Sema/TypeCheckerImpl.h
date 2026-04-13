@@ -13,8 +13,11 @@
 #ifndef CANGJIE_SEMA_TYPECHECKER_IMPL_H
 #define CANGJIE_SEMA_TYPECHECKER_IMPL_H
 
+#include <string_view>
 #include <unordered_set>
 
+#include "CJMP/MPTypeCheckerImpl.h"
+#include "InheritanceChecker/MemberSignature.h"
 #include "Promotion.h"
 #include "ScopeManager.h"
 #include "TypeCheckUtil.h"
@@ -23,13 +26,12 @@
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/Basic/DiagIdOld.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeChecker.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/ProfileRecorder.h"
-#include "CJMP/MPTypeCheckerImpl.h"
-#include "InheritanceChecker/MemberSignature.h"
 
 namespace Cangjie {
 class Synthesizer;
@@ -1100,7 +1102,7 @@ private:
     void PostProcessForLSP(AST::CallExpr& ce, const std::vector<Ptr<AST::FuncDecl>>& result) const;
     void CheckUnsafeInvoke(const AST::CallExpr& ce);
     void CheckToTokensImpCallExpr(const AST::CallExpr& ce);
-    DiagKind GetErrorKindForCall(const std::vector<Ptr<AST::FuncDecl>>& candidatesBeforeCheck,
+    std::string_view GetErrorKindForCall(const std::vector<Ptr<AST::FuncDecl>>& candidatesBeforeCheck,
         const std::vector<Ptr<AST::FuncDecl>>& candidatesAfterCheck, const AST::CallExpr& ce) const;
     void DiagnoseForCall(const std::vector<Ptr<AST::FuncDecl>>& candidatesBeforeCheck,
         const std::vector<Ptr<AST::FuncDecl>>& candidatesAfterCheck, AST::CallExpr& ce, const AST::Decl& decl);
@@ -1333,7 +1335,7 @@ private:
      * @param pkg The package node which contains structure decls.
      */
     void CheckInheritance(AST::Package& pkg);
-    void CheckLegalUseOfClosure(AST::Expr& e, DiagKind kind, LambdaSource lambdaSource) const;
+    void CheckLegalUseOfClosure(AST::Expr& e, std::string_view kind, LambdaSource lambdaSource) const;
     void CheckLegalUseOfClosure(const ASTContext& ctx, AST::Node& node, LambdaSource lambdaSource) const;
     bool IsCapturedInCFuncLambda(const ASTContext& ctx, const AST::RefExpr& re) const;
     bool IsCapturedCStructOfClosure(const AST::VarDecl& decl) const;

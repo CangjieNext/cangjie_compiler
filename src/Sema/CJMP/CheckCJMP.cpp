@@ -151,7 +151,7 @@ void DiagNotMatchedDecl(DiagnosticEngine &diag, const AST::Decl& decl, const std
             info = DeclKindToString(decl) + " '" + decl.identifier.GetRawText() + "'";
         }
     }
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_not_matched, decl, p0, info, p2);
+    diag.DiagnoseRefactor("sema_not_matched", decl, p0, info, p2);
 }
 
 inline void DiagNotMatchedCommonDecl(DiagnosticEngine &diag, const AST::Decl& decl)
@@ -166,15 +166,15 @@ inline void DiagNotMatchedSpecificDecl(DiagnosticEngine &diag, const AST::Decl& 
 
 inline void DiagNotMatchedSuperType(DiagnosticEngine &diag, const AST::Decl& decl)
 {
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_has_different_super_type, decl, DeclKindToString(decl));
+    diag.DiagnoseRefactor("sema_specific_has_different_super_type", decl, DeclKindToString(decl));
 }
 
 // Match nominative decl.
 bool MatchNominativeDecl(DiagnosticEngine &diag, Decl &commonDecl, Decl& specificDecl)
 {
     if (commonDecl.astKind != specificDecl.astKind) {
-        diag.DiagnoseRefactor(DiagKindRefactor::specific_has_different_kind,
-            specificDecl, DeclKindToString(specificDecl), DeclKindToString(commonDecl));
+        diag.DiagnoseRefactor(
+            "specific_has_different_kind", specificDecl, DeclKindToString(specificDecl), DeclKindToString(commonDecl));
         return false;
     }
 
@@ -184,8 +184,8 @@ bool MatchNominativeDecl(DiagnosticEngine &diag, Decl &commonDecl, Decl& specifi
         if (commonEnumDecl->hasEllipsis) {
             specificDecl.EnableAttr(Attribute::COMMON_NON_EXHAUSTIVE);
         } else if (specificEnumDecl->hasEllipsis) {
-            diag.DiagnoseRefactor(DiagKindRefactor::common_non_exaustive_platfrom_exaustive_mismatch,
-                specificDecl, DeclKindToString(commonDecl), DeclKindToString(specificDecl));
+            diag.DiagnoseRefactor("common_non_exaustive_platfrom_exaustive_mismatch", specificDecl,
+                DeclKindToString(commonDecl), DeclKindToString(specificDecl));
         }
     }
     return true;
@@ -434,8 +434,7 @@ void MPTypeCheckerImpl::MergeCJMPExtensions(CompilerInstance& ci, ScopeManager& 
             if (specificExtendDecls.find(key) != specificExtendDecls.end()) {
                 // A common declaration may have one or more matching specific declarations
                 // in descending source sets (at most one specific per source set)
-                diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_specific_has_duplicate_extensions, *ed, ed->extendedType->ToString());
+                diag.DiagnoseRefactor("sema_specific_has_duplicate_extensions", *ed, ed->extendedType->ToString());
                 continue;
             } else if (auto it = commonExtendDecls.find(key); it != commonExtendDecls.end()) {
                 for (auto ced : it->second) {
@@ -491,7 +490,7 @@ void MPTypeCheckerImpl::PreCheckCJMPClass(const ClassDecl& cls)
         });
         if (!hasInit && HasGeneralSubClass(cls)) {
             // report error: please implement the constructor explicitly for common open class 'xxx'
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_common_open_class_no_init, cls, cls.identifier.Val());
+            diag.DiagnoseRefactor("sema_common_open_class_no_init", cls, cls.identifier.Val());
         }
     }
 }
@@ -561,10 +560,7 @@ void MPTypeCheckerImpl::CheckMatchedFunctionReturnTypes(FuncDecl& specificFunc, 
     // we need to erase the pointer temporarily to avoid the multiple implementations error
     commonFunc.specificImplementation = nullptr;
     if (!MatchCJMPFunction(specificFunc, commonFunc)) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_return_type_incompatible,
-            specificFunc,
-            specificFunc.identifier);
+        diag.DiagnoseRefactor("sema_return_type_incompatible", specificFunc, specificFunc.identifier);
     }
     commonFunc.specificImplementation = &specificFunc;
 }
@@ -760,8 +756,8 @@ bool MPTypeCheckerImpl::MatchCJMPDeclAttrs(
                 if (specific.TestAttr(Attribute::ABSTRACT) && common.TestAttr(Attribute::OPEN) &&
                     common.IsFuncOrProp()) {
                     auto kindStr = common.astKind == ASTKind::FUNC_DECL ? "function" : "property";
-                    diag.DiagnoseRefactor(DiagKindRefactor::sema_open_abstract_specific_can_not_replace_open_common,
-                        specific, kindStr, kindStr);
+                    diag.DiagnoseRefactor(
+                        "sema_open_abstract_specific_can_not_replace_open_common", specific, kindStr, kindStr);
                 }
                 // ABSTRACT member can be replaced with OPEN
                 bool funcOrProp = common.astKind == ASTKind::FUNC_DECL || common.astKind == ASTKind::PROP_DECL;
@@ -776,11 +772,11 @@ bool MPTypeCheckerImpl::MatchCJMPDeclAttrs(
             }
             if (common.astKind == ASTKind::PROP_DECL && attr == Attribute::MUT) {
                 if (common.TestAttr(attr)) {
-                    diag.DiagnoseRefactor(DiagKindRefactor::sema_property_have_same_declaration_in_inherit_mut,
-                        specific, specific.identifier.Val());
+                    diag.DiagnoseRefactor(
+                        "sema_property_have_same_declaration_in_inherit_mut", specific, specific.identifier.Val());
                 } else {
-                    diag.DiagnoseRefactor(DiagKindRefactor::sema_property_have_same_declaration_in_inherit_immut,
-                        common, common.identifier.Val());
+                    diag.DiagnoseRefactor(
+                        "sema_property_have_same_declaration_in_inherit_immut", common, common.identifier.Val());
                 }
             } else if (common.astKind == ASTKind::CLASS_DECL && (attr == Attribute::SEALED || attr == Attribute::OPEN) &&
                 // Keep silent due to overloaded common funcs.
@@ -788,8 +784,7 @@ bool MPTypeCheckerImpl::MatchCJMPDeclAttrs(
                 specific.TestAttr(Attribute::SEALED) && common.TestAttr(Attribute::ABSTRACT)) {
                 continue;
             } else {
-                diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_specific_has_different_modifier, specific, DeclKindToString(specific));
+                diag.DiagnoseRefactor("sema_specific_has_different_modifier", specific, DeclKindToString(specific));
             }
             return false;
         }
@@ -915,13 +910,13 @@ bool MPTypeCheckerImpl::IsCJMPDeclMatchable(Decl& lhsDecl, Decl& rhsDecl) const
 bool MPTypeCheckerImpl::TrySetSpecificImpl(Decl& specificDecl, Decl& commonDecl, const std::string& kind)
 {
     if (commonDecl.specificImplementation) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_multiple_common_implementations, commonDecl, kind);
+        diag.DiagnoseRefactor("sema_multiple_common_implementations", commonDecl, kind);
         return false;
     }
     // common with default but specific without default
     if (NeedToReportMissingBody(commonDecl, specificDecl)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_member_must_have_implementation,
-            specificDecl, specificDecl.identifier.Val(), commonDecl.outerDecl->identifier.Val());
+        diag.DiagnoseRefactor("sema_specific_member_must_have_implementation", specificDecl,
+            specificDecl.identifier.Val(), commonDecl.outerDecl->identifier.Val());
         return false;
     }
     commonDecl.specificImplementation = &specificDecl;
@@ -942,7 +937,7 @@ bool MPTypeCheckerImpl::MatchCJMPFunction(FuncDecl& specificFunc, FuncDecl& comm
     // For init or primary constructor
     if (IsConstructor(specificFunc) || IsConstructor(commonFunc)) {
         if (!IsPrimaryConstructor(specificFunc) && IsPrimaryConstructor(commonFunc)) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_init_common_primary_constructor, commonFunc);
+            diag.DiagnoseRefactor("sema_specific_init_common_primary_constructor", commonFunc);
             return false;
         }
     }
@@ -959,7 +954,7 @@ bool MPTypeCheckerImpl::MatchCJMPProp(PropDecl& specificProp, PropDecl& commonPr
         return false;
     }
     if (!typeManager.IsTyEqual(specificProp.GetTy(), commonProp.GetTy())) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_has_different_type, specificProp, "property");
+        diag.DiagnoseRefactor("sema_specific_has_different_type", specificProp, "property");
     }
     bool ret = TrySetSpecificImpl(specificProp, commonProp, "property " + specificProp.identifier);
     if (ret && !specificProp.getters.empty() && !commonProp.getters.empty()) {
@@ -1028,12 +1023,12 @@ bool MPTypeCheckerImpl::MatchCJMPVar(VarDecl& specificVar, VarDecl& commonVar)
         // if the specific type is initial then the check will be restarted after the type get resolved
         // so we can suppress the check for now
         auto specificKind = specificVar.isVar ? "var" : "let";
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_has_different_type, specificVar, specificKind);
+        diag.DiagnoseRefactor("sema_specific_has_different_type", specificVar, specificKind);
     }
     if (specificVar.isVar != commonVar.isVar) {
         auto specificKind = specificVar.isVar ? "var" : "let";
         auto commonKind = commonVar.isVar ? "var" : "let";
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_var_not_match_let, specificVar, specificKind, commonKind);
+        diag.DiagnoseRefactor("sema_specific_var_not_match_let", specificVar, specificKind, commonKind);
     }
     if (specificVar.IsStaticOrGlobal()) {
         commonVar.specificImplementation = &specificVar;
@@ -1140,13 +1135,12 @@ void MPTypeCheckerImpl::CheckCommonExtensions(std::vector<Ptr<Decl>>& commonDecl
                 continue;
             }
             if (privateFunctions.find(memberDecl->rawMangleName) != privateFunctions.end()) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_common_direct_extension_has_duplicate_private_members,
-                    *memberDecl, extendDecl->extendedType->ToString(), memberDecl->IsFunc() ? "function" : "property",
+                diag.DiagnoseRefactor("sema_common_direct_extension_has_duplicate_private_members", *memberDecl,
+                    extendDecl->extendedType->ToString(), memberDecl->IsFunc() ? "function" : "property",
                     memberDecl->identifier.GetRawText());
             } else if (memberDecl->TestAttr(Attribute::COMMON)) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_common_direct_extension_has_common_private_members,
-                    *memberDecl, memberDecl->IsFunc() ? "function" : "property",
-                    memberDecl->identifier.GetRawText());
+                diag.DiagnoseRefactor("sema_common_direct_extension_has_common_private_members", *memberDecl,
+                    memberDecl->IsFunc() ? "function" : "property", memberDecl->identifier.GetRawText());
             } else {
                 privateFunctions.emplace(memberDecl->rawMangleName);
             }
@@ -1225,8 +1219,8 @@ void MPTypeCheckerImpl::CheckAbstractClassMembers(const InheritableDecl& specifi
 
             // Report error: cannot add abstract members to specific abstract class
             auto memberKind = memberDecl->astKind == ASTKind::FUNC_DECL ? "function" : "property";
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_non_specific_abstract_member_in_specific_class,
-                *memberDecl, specificDecl.identifier.Val(), memberKind);
+            diag.DiagnoseRefactor("sema_cjmp_non_specific_abstract_member_in_specific_class", *memberDecl,
+                specificDecl.identifier.Val(), memberKind);
         }
     }
 }

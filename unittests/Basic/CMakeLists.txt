@@ -26,6 +26,7 @@ target_link_libraries(
 add_test(NAME SourceManagerTest COMMAND SourceManagerTest)
 
 add_executable(EngineTest EngineTest.cpp ${PROJECT_SOURCE_DIR}/src/IncrementalCompilation/Utils.cpp)
+target_include_directories(EngineTest PRIVATE ${CMAKE_SOURCE_DIR}/src/Basic)
 target_link_libraries(
     EngineTest
     ${CMAKE_DL_LIBS}

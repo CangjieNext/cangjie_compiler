@@ -70,7 +70,7 @@ void CheckMutationInStructNonMut(DiagnosticEngine& diag, const StructDecl& sd, c
         auto target = baseExpr->GetTarget();
         if (Is<const RefExpr*>(baseExpr)) {
             if (varDecls.find(target) != varDecls.cend()) {
-                diag.Diagnose(expr, DiagKind::sema_cannot_modify_var, target->identifier.Val());
+                diag.Diagnose(expr, "sema_cannot_modify_var", target->identifier.Val());
             }
             break;
         } else if (auto ma = DynamicCast<const MemberAccess*>(baseExpr); ma) {
@@ -83,7 +83,7 @@ void CheckMutationInStructNonMut(DiagnosticEngine& diag, const StructDecl& sd, c
             }
             if (auto re = DynamicCast<RefExpr*>(ma->baseExpr.get());
                 re && re->isThis && varDecls.find(target) != varDecls.cend()) {
-                diag.Diagnose(expr, DiagKind::sema_cannot_modify_var, target->identifier.Val());
+                diag.Diagnose(expr, "sema_cannot_modify_var", target->identifier.Val());
                 break;
             }
             baseExpr = ma->baseExpr.get();
@@ -125,7 +125,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::CheckFuncAccessControl(
     bool invalidFuncAccess =
         accessibleDecl == nullptr && !targets.empty() && targets[0] && targets[0]->astKind == ASTKind::FUNC_DECL;
     if (invalidFuncAccess) {
-        diag.Diagnose(e, DiagKind::sema_invalid_access_function, targets[0]->identifier.Val());
+        diag.Diagnose(e, "sema_invalid_access_function", targets[0]->identifier.Val());
     }
     return accessibleDecl;
 }
@@ -136,7 +136,7 @@ bool TypeChecker::TypeCheckerImpl::CheckNonFuncAccessControl(
     Symbol* sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, e.scopeName);
     bool ret = TypeCheckUtil::IsLegalAccess(sym, target, e, importManager, typeManager);
     if (!ret) {
-        ctx.diag.Diagnose(e, DiagKind::sema_invalid_access_control, target.identifier.Val());
+        ctx.diag.Diagnose(e, "sema_invalid_access_control", target.identifier.Val());
     }
     return ret;
 }
@@ -172,7 +172,7 @@ void TypeChecker::TypeCheckerImpl::CheckIllegalMemberWalker(
     Walker walker(node, [this, &ctx, reportThis, errorStr](Ptr<Node> node) -> VisitAction {
         if (auto re = DynamicCast<RefExpr*>(node); re) {
             if (reportThis && re->isThis && re->isAlone) {
-                diag.Diagnose(*re, DiagKind::sema_assignment_of_member_variable_cannot_use_this_or_super,
+                diag.Diagnose(*re, "sema_assignment_of_member_variable_cannot_use_this_or_super",
                     re->ref.identifier.Val(), errorStr);
             }
             CheckIllegalMemberHelper(ctx, reportThis, errorStr, *re);
@@ -181,7 +181,7 @@ void TypeChecker::TypeCheckerImpl::CheckIllegalMemberWalker(
             auto refExpr = As<ASTKind::REF_EXPR>(ma->baseExpr.get());
             // call member this.xx/super.xx in struct or class constructor
             if (refExpr && ((refExpr->isThis && reportThis) || refExpr->isSuper)) {
-                diag.Diagnose(*ma, DiagKind::sema_assignment_of_member_variable_cannot_use_this_or_super,
+                diag.Diagnose(*ma, "sema_assignment_of_member_variable_cannot_use_this_or_super",
                     refExpr->ref.identifier.Val(), errorStr);
                 return VisitAction::SKIP_CHILDREN;
             }
@@ -219,13 +219,11 @@ void TypeChecker::TypeCheckerImpl::CheckIllegalMemberHelper(
             nre.astKind == ASTKind::REF_EXPR ? nre.GetBegin() : StaticCast<MemberAccess>(&nre)->field.Begin();
         if (inSameDecl && reportThis) {
             // Report error when this reference and declaration are in same decl.
-            diag.Diagnose(
-                pos, DiagKind::sema_assignment_of_member_variable_cannot_use_this_or_super, identifier, errorStr);
+            diag.Diagnose(pos, "sema_assignment_of_member_variable_cannot_use_this_or_super", identifier, errorStr);
         } else if (!inSameDecl &&
             typeManager.IsSubtype(symOfExprStruct->node->GetTy(), symOfExprStruct->node->GetTy())) {
             // Report error when this reference and declaration are in decls which have inheritance relation.
-            diag.Diagnose(
-                pos, DiagKind::sema_assignment_of_member_variable_cannot_use_this_or_super, identifier, errorStr);
+            diag.Diagnose(pos, "sema_assignment_of_member_variable_cannot_use_this_or_super", identifier, errorStr);
         }
     }
 }
@@ -312,7 +310,7 @@ void TypeChecker::TypeCheckerImpl::CheckLetInstanceAccessMutableFunc(
         }
         bool inoutHeapAddr = useInout && baseExpr->GetTy()->IsClassLike();
         if (inoutHeapAddr) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_modify_heap_variable, *baseExpr);
+            diag.DiagnoseRefactor("sema_inout_modify_heap_variable", *baseExpr);
         }
         // If the target of the `baseExpr` is a property or a `VarDecl` introduced by `let`, and it is of value type,
         // it cannot access mutable function.
@@ -328,7 +326,7 @@ void TypeChecker::TypeCheckerImpl::CheckLetInstanceAccessMutableFunc(
         } else if (baseExpr->astKind == ASTKind::REF_EXPR) {
             inoutHeapAddr = useInout && vd && vd->outerDecl && vd->outerDecl->GetTy()->IsClassLike();
             if (inoutHeapAddr) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_modify_heap_variable, *baseExpr);
+                diag.DiagnoseRefactor("sema_inout_modify_heap_variable", *baseExpr);
             }
             break;
         } else if (Ty::IsTyCorrect(baseExpr->GetTy()) && !baseExpr->GetTy()->IsClassLike()) {
@@ -340,7 +338,7 @@ void TypeChecker::TypeCheckerImpl::CheckLetInstanceAccessMutableFunc(
     }
     if (ma.callOrPattern == nullptr) {
         auto range = ma.field.ZeroPos() ? MakeRange(ma.begin, ma.end) : MakeRange(ma.field);
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_use_mutable_func_alone, ma, range, ma.field.Val());
+        auto builder = diag.DiagnoseRefactor("sema_use_mutable_func_alone", ma, range, ma.field.Val());
         builder.AddNote(
             target, MakeRangeForDeclIdentifier(target), "'" + target.identifier + "' is a mutable funciton");
     } else {
