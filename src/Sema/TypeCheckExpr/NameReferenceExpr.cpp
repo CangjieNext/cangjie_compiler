@@ -42,7 +42,7 @@ bool CheckInferrableEnumReference(DiagnosticEngine& diag, TypeManager& tyMgr, Ex
 {
     auto res = EnumSugarTargetsFinder::RefineTargetTy(tyMgr, &target, expr.GetTarget());
     if (!res.has_value()) {
-        diag.Diagnose(expr, DiagKind::sema_generic_type_without_type_argument);
+        diag.Diagnose(expr, "sema_generic_type_without_type_argument");
         return false;
     }
     auto targetTy = *res;
@@ -287,8 +287,8 @@ void DiagForGenericParamMemberNotFound(DiagnosticEngine& diag, const MemberAcces
 {
     if (Ty::IsTyCorrect(gpd.GetTy()) && gpd.GetTy()->IsGeneric() &&
         RawStaticCast<GenericsTy*>(gpd.GetTy())->isUpperBoundLegal) {
-        diag.Diagnose(*ma.baseExpr, DiagKind::sema_invalid_field_expose_access, ma.field.Val(),
-            "exposed generic parameter", gpd.identifier.Val());
+        diag.Diagnose(*ma.baseExpr, "sema_invalid_field_expose_access", ma.field.Val(), "exposed generic parameter",
+            gpd.identifier.Val());
     }
 }
 } // namespace
@@ -314,17 +314,16 @@ void TypeChecker::TypeCheckerImpl::DiagMemberAccessNotFound(const MemberAccess& 
     }
     auto getMemberRange = [&ma]() { return ma.field.ZeroPos() ? MakeRange(ma.begin, ma.end) : MakeRange(ma.field); };
     if (ma.isExposedAccess) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_not_found_from_generic_upper_bounds, ma, getMemberRange(),
-            ma.field.Val(), baseExpr->GetTy()->name);
+        (void)diag.DiagnoseRefactor(
+            "sema_not_found_from_generic_upper_bounds", ma, getMemberRange(), ma.field.Val(), baseExpr->GetTy()->name);
     } else if (baseExpr->GetTy()->IsNominal()) {
         std::string kind = baseExpr->GetTy()->Ty::String();
         kind[0] = static_cast<char>(std::tolower(kind[0]));
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_not_member_of, ma, getMemberRange(), ma.field, kind,
+        auto builder = diag.DiagnoseRefactor("sema_not_member_of", ma, getMemberRange(), ma.field, kind,
             baseExpr->GetTy()->name + baseExpr->GetTy()->PrintTypeArgs());
         RecommendImportForMemberAccess(typeManager, importManager, ma, &builder);
     } else if (ma.ShouldDiagnose(true)) {
-        auto builder =
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_undeclared_identifier, ma, getMemberRange(), ma.field);
+        auto builder = diag.DiagnoseRefactor("sema_undeclared_identifier", ma, getMemberRange(), ma.field);
         RecommendImportForMemberAccess(typeManager, importManager, ma, &builder);
     }
 }
@@ -369,17 +368,17 @@ bool TypeChecker::TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, Ty& target, NameR
         refNode.SetTy(TypeManager::GetInvalidTy());
     }
     if (matched > 1) {
-        diag.Diagnose(refNode, DiagKind::sema_ambiguous_func_ref, targets[0]->identifier.Val());
+        diag.Diagnose(refNode, "sema_ambiguous_func_ref", targets[0]->identifier.Val());
     } else if (matched == 0) {
         if (Ty::IsTyCorrect(refNode.GetTy()) && refNode.GetTy()->HasQuestTy()) {
             CJC_ASSERT(refNode.GetTarget());
             DiagUnableToInferReturnType(diag, *targets[0], refNode);
         } else if (genericIgnored) {
-            diag.Diagnose(refNode, DiagKind::sema_generic_type_without_type_argument);
+            diag.Diagnose(refNode, "sema_generic_type_without_type_argument");
         } else if (validCandidateTy) {
             DiagMismatchedTypesWithFoundTy(diag, refNode, target, *validCandidateTy);
         } else {
-            diag.Diagnose(refNode, DiagKind::sema_no_match_function_declaration_for_ref, targets[0]->identifier.Val());
+            diag.Diagnose(refNode, "sema_no_match_function_declaration_for_ref", targets[0]->identifier.Val());
         }
         if (targets.size() > 1) {
             ReplaceTarget(&refNode, nullptr); // Only clear target when there are more than one candidate.
@@ -491,14 +490,13 @@ void TypeChecker::TypeCheckerImpl::InferCFuncExpr(ASTContext& ctx, RefExpr& re)
     // check type arguments
     // infer type arguments of CFunc is currently disallowed
     if (re.typeArguments.size() != 1) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_generic_argument_no_match, re, MakeRange(re.GetBegin(), re.GetEnd()));
+        diag.DiagnoseRefactor("sema_generic_argument_no_match", re, MakeRange(re.GetBegin(), re.GetEnd()));
         re.SetTy(TypeManager::GetInvalidTy());
         return;
     }
     auto funcType = DynamicCast<FuncType>(&*re.typeArguments[0]);
     if (!funcType) {
-        diag.Diagnose(re.typeArguments[0]->GetBegin(), re.typeArguments[0]->GetEnd(), DiagKind::sema_cfunc_type);
+        diag.Diagnose(re.typeArguments[0]->GetBegin(), re.typeArguments[0]->GetEnd(), "sema_cfunc_type");
         re.SetTy(TypeManager::GetInvalidTy());
         return;
     }
@@ -571,7 +569,7 @@ void TypeChecker::TypeCheckerImpl::InferMemberAccess(ASTContext& ctx, MemberAcce
         InferStaticAccess(ctx, ma, *targetOfBase);
     } else if (isPartialPackagePath) {
         auto range = ma.field.ZeroPos() ? MakeRange(ma.begin, ma.end) : MakeRange(ma.field);
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_undeclared_identifier, ma, range, ma.field);
+        (void)diag.DiagnoseRefactor("sema_undeclared_identifier", ma, range, ma.field);
     } else {
         InferInstanceAccess(ctx, ma);
     }
@@ -627,7 +625,7 @@ void TypeChecker::TypeCheckerImpl::InferArrayStaticAccess(const ASTContext& ctx,
     CJC_NULLPTR_CHECK(ma.curFile);
     auto typeArgs = ma.baseExpr->GetTypeArgs();
     if (typeArgs.empty()) {
-        diag.Diagnose(ma, DiagKind::sema_generic_type_without_type_argument);
+        diag.Diagnose(ma, "sema_generic_type_without_type_argument");
         ma.SetTy(TypeManager::GetInvalidTy());
         return;
     }
@@ -672,8 +670,8 @@ void TypeChecker::TypeCheckerImpl::InferStaticAccess(const ASTContext& ctx, Memb
         if (targets.empty()) {
             if (targetOfBaseExpr.astKind == ASTKind::PACKAGE_DECL) {
                 if (hasRemovedMacros) {
-                    diag.DiagnoseRefactor(DiagKindRefactor::sema_undeclared_identifier, MakeRange(ma.field.Begin(),
-                        ma.field.End()), ma.field.Val());
+                    diag.DiagnoseRefactor(
+                        "sema_undeclared_identifier", MakeRange(ma.field.Begin(), ma.field.End()), ma.field.Val());
                 } else {
                     DiagPackageMemberNotFound(diag, importManager, ma, StaticCast<PackageDecl&>(targetOfBaseExpr));
                 }
@@ -775,7 +773,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::CheckUpperBoundTargetsCaseOthers(const A
         FilterSumUpperbound(ctx, ma, *genTy, tempTargets, allTargets);
     }
     if (tempTargets.empty()) {
-        diag.Diagnose(ma, ma.field.Begin(), DiagKind::sema_generic_no_member_match_in_upper_bounds);
+        diag.Diagnose(ma, ma.field.Begin(), "sema_generic_no_member_match_in_upper_bounds");
         return nullptr;
     } else if (tempTargets.size() == 1 && ma.foundUpperBoundMap.find(tempTargets[0]) != ma.foundUpperBoundMap.end()) {
         // For non-function target, all types must be same, so just chose first one.
@@ -892,7 +890,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetIdealTypeFuncTargetFromExtend(
         }
         if (Ty::IsTyCorrect(ma.baseExpr->GetTy()) && target == nullptr) {
             std::string tyStr = Ty::GetTypesToStr(targetTys, " ");
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_ambiguous_match_primitive_extend, ma, ma.field, tyStr);
+            diag.DiagnoseRefactor("sema_ambiguous_match_primitive_extend", ma, ma.field, tyStr);
         }
         return target;
     } else if (candidates.size() == 1) {
@@ -1089,10 +1087,10 @@ void TypeChecker::TypeCheckerImpl::CheckForbiddenMemberAccess(
     }
     // NOT allowed to call enum constructor by object instance.
     if (target.TestAttr(AST::Attribute::ENUM_CONSTRUCTOR)) {
-        ctx.diag.Diagnose(ma, DiagKind::sema_invalid_enum_member_access);
+        ctx.diag.Diagnose(ma, "sema_invalid_enum_member_access");
     }
     // Object member access does not allow type arguments appeared after var decl field.
     if (target.astKind == ASTKind::VAR_DECL && !ma.typeArguments.empty() && ma.isAlone) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_argument_no_match, ma);
+        diag.DiagnoseRefactor("sema_generic_argument_no_match", ma);
     }
 }

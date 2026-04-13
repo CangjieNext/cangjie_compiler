@@ -100,10 +100,10 @@ void JFFIParserImpl::CheckImplSignature(AST::ClassLikeDecl& decl, const PtrVecto
     }
 
     if (decl.astKind == ASTKind::CLASS_DECL && decl.TestAttr(Attribute::OPEN)) {
-        p.diag.DiagnoseRefactor(DiagKindRefactor::parse_java_impl_cannot_be_open, decl);
+        p.diag.DiagnoseRefactor("parse_java_impl_cannot_be_open", decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     } else if (decl.astKind == ASTKind::INTERFACE_DECL) {
-        p.diag.DiagnoseRefactor(DiagKindRefactor::parse_java_impl_cannot_be_interface, decl);
+        p.diag.DiagnoseRefactor("parse_java_impl_cannot_be_interface", decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
 }

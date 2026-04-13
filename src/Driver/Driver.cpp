@@ -137,7 +137,7 @@ bool Driver::ExtractBCPackageNames()
     for (const auto& bcPath : driverOptions->bcInputFiles) {
         auto mbOrErr = llvm::MemoryBuffer::getFile(bcPath, false, false);
         if (auto ec = mbOrErr.getError()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::bc_file_open_failed, DEFAULT_POSITION, bcPath, ec.message());
+            diag.DiagnoseRefactor("bc_file_open_failed", DEFAULT_POSITION, bcPath, ec.message());
             return false;
         }
         
@@ -145,7 +145,7 @@ bool Driver::ExtractBCPackageNames()
         llvm::LLVMContext context;
         auto moduleOrErr = llvm::getLazyBitcodeModule(mbref, context, false);
         if (!moduleOrErr) {
-            diag.DiagnoseRefactor(DiagKindRefactor::bc_parse_failed, DEFAULT_POSITION, bcPath);
+            diag.DiagnoseRefactor("bc_parse_failed", DEFAULT_POSITION, bcPath);
             return false;
         }
 
@@ -155,8 +155,8 @@ bool Driver::ExtractBCPackageNames()
         unsigned Radix = 10;
         if (pkgName.consumeInteger(Radix, subCHIRPackageIdx) ||
             !pkgName.consume_front("-") || pkgName.empty()) {
-                diag.DiagnoseRefactor(DiagKindRefactor::bc_invalid_package_name, DEFAULT_POSITION, bcPath);
-                return false;
+            diag.DiagnoseRefactor("bc_invalid_package_name", DEFAULT_POSITION, bcPath);
+            return false;
         }
         driverOptions->bcPackageNames.push_back(std::string(pkgName));
     }

@@ -646,8 +646,8 @@ void TypeChecker::TypeCheckerImpl::AnalyzeFunctionLinkage(Package& pkg) const
         if (decl->IsNominalDecl() && decl->TestAttr(Attribute::PRIVATE) && decl->linkage != Linkage::INTERNAL) {
             auto ret = privateDeclMap.emplace(decl->identifier.Val(), decl.get());
             if (!ret.second) {
-                auto builder = diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_export_same_private_decl, MakeRange(ret.first->second->identifier));
+                auto builder =
+                    diag.DiagnoseRefactor("sema_export_same_private_decl", MakeRange(ret.first->second->identifier));
                 builder.AddNote(MakeRange(decl->identifier), "same with private declaration");
             }
         }

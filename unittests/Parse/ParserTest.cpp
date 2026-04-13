@@ -2777,7 +2777,7 @@ TEST(ParserTest2, NamedInoutArg)
     auto expr = parser.ParseDecl(ScopeKind::TOPLEVEL);
     auto diags = diag.GetCategoryDiagnostic(Cangjie::DiagCategory::PARSE);
     ASSERT_EQ(diags.size(), 1);
-    EXPECT_EQ(diags[0].rKind, DiagKindRefactor::parse_expected_expression);
+    EXPECT_EQ(diags[0].rKind, LookupDiagKindRefactor("parse_expected_expression"));
 }
 
 TEST(PositionTest, doWhileExpr)

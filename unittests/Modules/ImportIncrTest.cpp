@@ -84,8 +84,7 @@ protected:
         std::string failedReason;
         auto content = FileUtil::ReadFileContent(coreFile, failedReason);
         if (!content.has_value()) {
-            diag.DiagnoseRefactor(
-                DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, coreFile, failedReason);
+            diag.DiagnoseRefactor("module_read_file_to_buffer_failed", DEFAULT_POSITION, coreFile, failedReason);
         }
         instance = std::make_unique<TestCompilerInstance>(invocation, diag);
         CreateModulesDirectory();
@@ -121,8 +120,7 @@ protected:
         std::string failedReason;
         auto content = FileUtil::ReadFileContent(srcFile, failedReason);
         if (!content.has_value()) {
-            diag.DiagnoseRefactor(
-                DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, srcFile, failedReason);
+            diag.DiagnoseRefactor("module_read_file_to_buffer_failed", DEFAULT_POSITION, srcFile, failedReason);
         }
         instance = std::make_unique<TestCompilerInstance>(invocation, diag);
         instance->importManager->SetPackageCjoCache("std.core", allAstData["std.core"]);

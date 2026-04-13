@@ -24,7 +24,7 @@ using namespace AST;
 
 OwnedPtr<Expr> ASTLoader::ASTLoaderImpl::LoadInvalidExpr(const PackageFormat::Expr& expr)
 {
-    (void)diag.DiagnoseRefactor(DiagKindRefactor::package_unsupported_load, DEFAULT_POSITION, "expression");
+    (void)diag.DiagnoseRefactor("package_unsupported_load", DEFAULT_POSITION, "expression");
     auto invalidExpr = MakeOwned<InvalidExpr>(INVALID_POSITION);
     LoadNodePos(expr, *invalidExpr);
     return invalidExpr;

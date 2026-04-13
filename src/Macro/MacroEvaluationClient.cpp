@@ -314,7 +314,7 @@ void MacroEvaluation::DeserializeMacroCallsResult(
             mc->isDataReady = true;
             for (auto& parentName : mc->assertParents) {
                 (void)ci->diag.Diagnose(
-                    mc->GetBeginPos(), DiagKind::macro_assert_parent_context_failed, mc->GetFullName(), parentName);
+                    mc->GetBeginPos(), "macro_assert_parent_context_failed", mc->GetFullName(), parentName);
             }
             break;
         }
@@ -353,7 +353,7 @@ void MacroEvaluation::WaitMacroDefResult() const
     auto dyfile = msgStr.substr(msgHeadlen, msgSize - msgHeadlen);
     if (!dyfile.empty()) {
         // Open macrodef lib failed in child process.
-        (void)ci->diag.Diagnose(DiagKind::can_not_open_macro_library, dyfile);
+        (void)ci->diag.Diagnose("can_not_open_macro_library", dyfile);
     }
     return;
 }
@@ -415,8 +415,8 @@ void MacroEvaluation::WaitMacroCallEvalResult(MacroCall& call) const
     call.isDataReady = true;
     // Check assertParentContext failed or not in child process.
     for (auto& parentName : call.assertParents) {
-        (void)ci->diag.Diagnose(call.GetBeginPos(),
-            DiagKind::macro_assert_parent_context_failed, call.GetFullName(), parentName);
+        (void)ci->diag.Diagnose(
+            call.GetBeginPos(), "macro_assert_parent_context_failed", call.GetFullName(), parentName);
     }
     return;
 }
