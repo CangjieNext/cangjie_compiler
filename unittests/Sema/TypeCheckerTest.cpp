@@ -321,8 +321,7 @@ TEST_F(TypeCheckerTest, DISABLED_SpawnTest)
     std::string failedReason;
     auto content = FileUtil::ReadFileContent(srcFile, failedReason);
     if (!content.has_value()) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, srcFile, failedReason);
+        diag.DiagnoseRefactor("module_read_file_to_buffer_failed", DEFAULT_POSITION, srcFile, failedReason);
     }
     instance->code = std::move(content.value());
     instance->invocation.globalOptions.implicitPrelude = true;

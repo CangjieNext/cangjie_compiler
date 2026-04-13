@@ -86,8 +86,7 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveExpr(const Expr& expr)
 
 TExprOffset ASTWriter::ASTWriterImpl::SaveUnsupportExpr(const Expr& expr, const NodeInfo& info)
 {
-    (void)diag.DiagnoseRefactor(
-        DiagKindRefactor::package_unsupport_save, expr, "expression", std::string(typeid(expr).name()));
+    (void)diag.DiagnoseRefactor("package_unsupport_save", expr, "expression", std::string(typeid(expr).name()));
 
     PackageFormat::ExprBuilder dbuilder(builder);
     SaveBasicNodeInfo(dbuilder, info);

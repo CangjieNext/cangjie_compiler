@@ -99,17 +99,17 @@ bool MPTypeCheckerImpl::MatchCJMPFunctionParameters(FuncParamList& specificParam
         auto& specificParam = specificParams.params[i];
 
         if (commonParam->isNamedParam != specificParam->isNamedParam) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_has_different_parameter, *specificParam);
+            diag.DiagnoseRefactor("sema_specific_has_different_parameter", *specificParam);
             return false;
         }
         if (commonParam->isNamedParam && specificParam->isNamedParam) {
             if (commonParam->identifier.GetRawText() != specificParam->identifier.GetRawText()) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_has_different_parameter, *specificParam);
+                diag.DiagnoseRefactor("sema_specific_has_different_parameter", *specificParam);
                 return false;
             }
         }
         if (commonParam->isMemberParam != specificParam->isMemberParam) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_primary_unmatched_var_decl, *specificParam);
+            diag.DiagnoseRefactor("sema_specific_primary_unmatched_var_decl", *specificParam);
             return false;
         }
     }
@@ -131,8 +131,7 @@ bool MPTypeCheckerImpl::MatchCJMPFunctionParameters(AST::FuncDecl& specificFunc,
     auto specificGenericsCount = specificFunc.GetGenericsCount();
 
     if (commonGenericsCount != specificGenericsCount) {
-        diag.Diagnose(
-            specificFunc, DiagKind::sema_generic_member_type_argument_different, specificFunc.identifier.Val());
+        diag.Diagnose(specificFunc, "sema_generic_member_type_argument_different", specificFunc.identifier.Val());
         return false;
     } else if (commonGenericsCount > 0) {
         if (!MatchCJMPFunctionGenerics(specificFunc, commonFunc)) {
@@ -213,8 +212,8 @@ void MPTypeCheckerImpl::PropagateDefaultArguments(const AST::FuncParamList& comm
         auto& commonParam = commonParams.params[i];
         if (HasDefaultArgument(commonParam)) {
             if (HasDefaultArgument(specificParam)) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_parameter_default_value_both_sides,
-                    MakeRange(specificParam->identifier));
+                diag.DiagnoseRefactor(
+                    "sema_cjmp_parameter_default_value_both_sides", MakeRange(specificParam->identifier));
                 continue;
             }
 

@@ -67,8 +67,8 @@ void DiagWrongNumberOfArgumentsCommon(
     // For trailing lambda, the last argument is after 'rightParenPos', using the end of lambda as the range end.
     bool lastArgAfterParen = !ce.args.empty() && ce.args.back() && ce.args.back()->end > ce.rightParenPos;
     auto endPos = parenPosExist ? (lastArgAfterParen ? ce.args.back()->end : ce.rightParenPos + 1) : ce.end;
-    auto builder = diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_wrong_number_of_arguments, ce, MakeRange(beginPos, endPos), symptom, lst);
+    auto builder =
+        diag.DiagnoseRefactor("sema_wrong_number_of_arguments", ce, MakeRange(beginPos, endPos), symptom, lst);
     builder.AddMainHintArguments(expected, std::to_string(foundNum));
     if (fd != nullptr && fd->ShouldDiagnose()) {
         builder.AddNote(*fd, MakeRange(fd->identifier), "found candidate");
@@ -209,8 +209,7 @@ void DiagRedefinitionWithFoundNode(DiagnosticEngine& diag, const Decl& current, 
     if (IgnoreCJMPFalsePositiveRedefinition(current, previous)) {
         return;
     }
-    auto builder =
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_redefinition, *declDown, rangeDown, declDown->identifier);
+    auto builder = diag.DiagnoseRefactor("sema_redefinition", *declDown, rangeDown, declDown->identifier);
     builder.AddNote(*declUp, rangeUp, "'" + declDown->identifier + "' is previously declared here");
 }
 
@@ -232,8 +231,8 @@ void DiagOverloadConflict(DiagnosticEngine& diag, const std::vector<Ptr<FuncDecl
     } else if (IsStaticInitializer(*baseFd)) {
         kind = "static constructor";
     }
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_overload_conflicts, *baseFd,
-        MakeRange(baseFd->identifier.Begin(), identifier), kind, identifier);
+    auto builder = diag.DiagnoseRefactor(
+        "sema_overload_conflicts", *baseFd, MakeRange(baseFd->identifier.Begin(), identifier), kind, identifier);
     auto hasConstraints = [](auto fd) {
         auto generic = fd->GetGeneric();
         return generic && !generic->genericConstraints.empty();
@@ -254,7 +253,7 @@ void DiagMismatchedTypesWithFoundTy(DiagnosticEngine& diag, const Node& node, co
         return;
     }
     CJC_ASSERT(expected != found);
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, node);
+    auto builder = diag.DiagnoseRefactor("sema_mismatched_types", node);
     builder.AddMainHintArguments(expected, found);
     if (!note.empty()) {
         builder.AddNote(note);
@@ -272,7 +271,7 @@ void DiagMismatchedTypesWithFoundTy(
     std::string expectedStr = expected.String();
     std::string foundStr = found.String();
     if (expectedStr == foundStr) {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, node);
+        auto builder = diag.DiagnoseRefactor("sema_mismatched_types", node);
         Ptr<Decl> expectedDecl = Ty::GetDeclPtrOfTy(&expected);
         if (expectedDecl) {
             expectedStr += "' in '" + expectedDecl->fullPackageName;
@@ -307,7 +306,7 @@ void DiagMismatchedTypes(DiagnosticEngine& diag, const Node& node, const Node& t
     }
     CJC_ASSERT(Ty::IsTyCorrect(type.GetTy()));
     if (type.ShouldDiagnose() && !because.empty()) {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types_because, node);
+        auto builder = diag.DiagnoseRefactor("sema_mismatched_types_because", node);
         auto tyStr = node.GetTy()->String();
         if (auto thisTy = DynamicCast<ClassThisTy*>(node.GetTy()); thisTy) {
             tyStr = ClassTy(thisTy->name, *thisTy->declPtr, thisTy->typeArgs).String();
@@ -322,14 +321,14 @@ void DiagMismatchedTypes(DiagnosticEngine& diag, const Node& node, const Node& t
 void DiagUnableToInferReturnType(DiagnosticEngine& diag, const FuncDecl& fd)
 {
     if (Ty::IsTyCorrect(fd.GetTy())) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_unable_to_infer_return_type, fd, MakeRange(fd.identifier));
+        diag.DiagnoseRefactor("sema_unable_to_infer_return_type", fd, MakeRange(fd.identifier));
     }
 }
 
 void DiagUnableToInferReturnType(DiagnosticEngine& diag, const FuncDecl& fd, const Expr& expr)
 {
     if (Ty::IsTyCorrect(fd.GetTy())) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_unable_to_infer_return_type, fd, MakeRange(fd.identifier))
+        diag.DiagnoseRefactor("sema_unable_to_infer_return_type", fd, MakeRange(fd.identifier))
             .AddNote(expr, MakeRange(expr.begin, expr.end), "with recursive usage from");
     }
 }
@@ -337,7 +336,7 @@ void DiagUnableToInferReturnType(DiagnosticEngine& diag, const FuncDecl& fd, con
 void DiagUnableToInferReturnType(DiagnosticEngine& diag, const FuncBody& fb)
 {
     if (fb.funcDecl == nullptr) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_unable_to_infer_return_type, fb);
+        diag.DiagnoseRefactor("sema_unable_to_infer_return_type", fb);
     } else {
         DiagUnableToInferReturnType(diag, *fb.funcDecl);
     }
@@ -376,7 +375,7 @@ void DiagGenericFuncWithoutTypeArg(DiagnosticEngine& diag, const Expr& expr)
         range = MakeRange(ma->field);
     }
     auto name = expr.symbol == nullptr ? "" : " '" + expr.symbol->name + "'";
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_func_without_type_arg, expr, range, name);
+    diag.DiagnoseRefactor("sema_generic_func_without_type_arg", expr, range, name);
 }
 
 void DiagStaticAndNonStaticOverload(DiagnosticEngine& diag, const FuncDecl& fd, const FuncDecl& firstNonStatic)
@@ -384,15 +383,15 @@ void DiagStaticAndNonStaticOverload(DiagnosticEngine& diag, const FuncDecl& fd, 
     if (!fd.ShouldDiagnose()) {
         return;
     }
-    auto builder = diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_static_function_overload_conflicts, fd, MakeRange(fd.identifier), fd.identifier);
+    auto builder =
+        diag.DiagnoseRefactor("sema_static_function_overload_conflicts", fd, MakeRange(fd.identifier), fd.identifier);
     builder.AddNote(firstNonStatic, MakeRange(firstNonStatic.identifier), "non-static function is here");
 }
 
 void DiagImmutableAccessMutableFunc(DiagnosticEngine& diag, const MemberAccess& outerMa, const MemberAccess& ma)
 {
     CJC_NULLPTR_CHECK(ma.baseExpr);
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_immutable_access_mutable_func, *ma.baseExpr);
+    auto builder = diag.DiagnoseRefactor("sema_immutable_access_mutable_func", *ma.baseExpr);
     auto mutFuncPos = outerMa.GetFieldPos();
     if (!mutFuncPos.IsZero() && !IsFieldOperator(ma.field)) {
         builder.AddHint(MakeRange(mutFuncPos, outerMa.field), "is a mutable function");
@@ -413,7 +412,7 @@ void DiagImmutableAccessMutableFunc(DiagnosticEngine& diag, const MemberAccess& 
 // `ae` can be `AssignExpr` or `IncOrDecExpr`.
 void DiagCannotAssignToImmutable(DiagnosticEngine& diag, const Expr& ae, const Expr& perpetrator)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_assign_to_immutable, ae);
+    auto builder = diag.DiagnoseRefactor("sema_cannot_assign_to_immutable", ae);
     auto target = perpetrator.GetTarget();
     if (target != nullptr && !target->identifier.ZeroPos()) {
         builder.AddNote(*target, MakeRange(target->identifier),
@@ -428,8 +427,7 @@ void DiagCJMPCannotAssignToImmutableCommonInCtor(DiagnosticEngine& diag, const E
 {
     auto target = perpetrator.GetTarget();
     if (target != nullptr && !target->identifier.ZeroPos()) {
-        auto builder = diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_common_assign_to_common_immutable_in_ctor, ae, target->identifier);
+        auto builder = diag.DiagnoseRefactor("sema_common_assign_to_common_immutable_in_ctor", ae, target->identifier);
         auto mod = std::find_if(target->modifiers.begin(), target->modifiers.end(),
             [&](const auto& m) { return m.modifier == TokenKind::COMMON; });
         builder.AddNote(*target, MakeRange((*mod).begin, (*mod).end),
@@ -446,7 +444,7 @@ void DiagCannotOverride(DiagnosticEngine& diag, const Decl& child, const Decl& p
     auto childRange = child.identifier.ZeroPos() ? MakeRange(child.begin, child.end) : MakeRange(child.identifier);
     auto parentRange =
         parent.identifier.ZeroPos() ? MakeRange(parent.begin, parent.end) : MakeRange(parent.identifier.Begin(), name);
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_override, child, childRange, kind, name);
+    auto builder = diag.DiagnoseRefactor("sema_cannot_override", child, childRange, kind, name);
     builder.AddNote(parent, parentRange, "the parent " + kind + " is not modified by 'open'");
 }
 
@@ -463,7 +461,7 @@ void DiagCannotHaveDefaultParam(DiagnosticEngine& diag, const FuncDecl& fd, cons
     } else {
         funcType = "abstract";
     }
-    (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_have_default_param, fp, funcType);
+    (void)diag.DiagnoseRefactor("sema_cannot_have_default_param", fp, funcType);
 }
 
 void DiagCannotInheritSealed(DiagnosticEngine& diag, const Decl& child, const Type& sealed, const bool& isCommon)
@@ -485,8 +483,8 @@ void DiagCannotInheritSealed(DiagnosticEngine& diag, const Decl& child, const Ty
     const std::string inheritOrImplement = isImplement ? "implement" : "inherit";
     const std::string importedOrCommon = isCommon ? "common-defined" : "imported";
     const std::string classOrInterface = target->astKind == ASTKind::CLASS_DECL ? "class" : "interface";
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_inherit_sealed, range, inheritOrImplement,
-        importedOrCommon, classOrInterface, target->identifier);
+    auto builder = diag.DiagnoseRefactor("sema_cannot_inherit_sealed", range, inheritOrImplement, importedOrCommon,
+        classOrInterface, target->identifier);
     const std::string declaredPos = isCommon ? "common package part" : ("package '" + target->fullPackageName + "'");
     builder.AddHint(sealed, "sealed " + classOrInterface + " declared in " + declaredPos);
 }
@@ -497,16 +495,16 @@ void DiagPackageMemberNotFound(
     auto range = ma.field.ZeroPos() ? MakeRange(ma.begin, ma.end) : MakeRange(ma.field);
     auto decls = importManager.GetPackageMembersByName(*pd.srcPackage, ma.field);
     if (decls.empty()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_not_member_of, ma, range, ma.field, "package", pd.identifier);
+        diag.DiagnoseRefactor("sema_not_member_of", ma, range, ma.field, "package", pd.identifier);
     } else {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_member_not_imported, ma, range, pd.identifier + "." + ma.field);
+        diag.DiagnoseRefactor("sema_member_not_imported", ma, range, pd.identifier + "." + ma.field);
     }
 }
 
 void DiagAmbiguousUse(DiagnosticEngine& diag, const Node& node, const std::string& name,
     std::vector<Ptr<Decl>>& targets, const ImportManager& importManager)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_ambiguous_use, node, name);
+    auto builder = diag.DiagnoseRefactor("sema_ambiguous_use", node, name);
     std::sort(targets.begin(), targets.end(), CompNodeByPos);
     CJC_ASSERT(targets.size() > 1);
     std::vector<Ptr<Decl>> importedTargets;
@@ -571,7 +569,7 @@ void AddDiagNotesForImportedDecls(DiagnosticBuilder& builder, const ImportManage
 void DiagInvalidAssign(DiagnosticEngine& diag, const Node& node, const std::string& name)
 {
     auto range = MakeRange(node.begin, node.end);
-    (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_unqualified_left_value_assigned, node, range, name);
+    (void)diag.DiagnoseRefactor("sema_unqualified_left_value_assigned", node, range, name);
 }
 
 void DiagLowerAccessLevelTypesUse(DiagnosticEngine& diag, const Decl& outDecl,
@@ -581,7 +579,7 @@ void DiagLowerAccessLevelTypesUse(DiagnosticEngine& diag, const Decl& outDecl,
     if (limitedDecls.empty() && noHint) {
         return;
     }
-    auto kind = noHint ? DiagKindRefactor::sema_accessibility : DiagKindRefactor::sema_accessibility_with_main_hint;
+    auto kind = noHint ? "sema_accessibility" : "sema_accessibility_with_main_hint";
     auto range = MakeRangeForDeclIdentifier(outDecl);
     std::string lowerLevelStr = limitedDecls.size() + hintDecls.size() != 1
         ? "lower access level"
@@ -620,8 +618,8 @@ void DiagPatternInternalTypesUse(DiagnosticEngine& diag, const std::vector<std::
         if (!node.begin.IsZero() && !node.end.IsZero()) {
             auto usedVisibility = GetAccessLevelStr(used, "'");
             auto range = MakeRange(node.begin, node.end);
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_accessibility_with_main_hint, node, range,
-                GetAccessLevelStr(node), usedVisibility);
+            auto builder = diag.DiagnoseRefactor(
+                "sema_accessibility_with_main_hint", node, range, GetAccessLevelStr(node), usedVisibility);
             builder.AddMainHintArguments("inferred type", Ty::ToString(node.GetTy()), usedVisibility);
             auto inDeclRange = MakeRangeForDeclIdentifier(used);
             builder.AddNote(
@@ -632,7 +630,7 @@ void DiagPatternInternalTypesUse(DiagnosticEngine& diag, const std::vector<std::
 
 void DiagAmbiguousUpperBoundTargets(DiagnosticEngine& diag, const MemberAccess& ma, const OrderedDeclSet& targets)
 {
-    auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::sema_ambiguous_use, ma, ma.field);
+    auto diagBuilder = diag.DiagnoseRefactor("sema_ambiguous_use", ma, ma.field);
     for (auto it : targets) {
         CJC_NULLPTR_CHECK(it);
         CJC_ASSERT(Is<InheritableDecl>(it->outerDecl));
@@ -647,17 +645,17 @@ void DiagUseClosureCaptureVarAlone(DiagnosticEngine& diag, const Expr& expr, Lam
         if (expr.astKind == ASTKind::LAMBDA_EXPR) {
             switch (lambdaSource) {
                 case LambdaSource::SPAWN:
-                    return diag.DiagnoseRefactor(DiagKindRefactor::sema_spawn_capture_var, expr);
+                    return diag.DiagnoseRefactor("sema_spawn_capture_var", expr);
                 case LambdaSource::TRY_HANDLE:
-                    return diag.DiagnoseRefactor(DiagKindRefactor::sema_try_handle_capture_var, expr);
+                    return diag.DiagnoseRefactor("sema_try_handle_capture_var", expr);
                 case LambdaSource::USER:
-                    return diag.DiagnoseRefactor(DiagKindRefactor::sema_use_func_capture_var_alone, expr, "lambda");
+                    return diag.DiagnoseRefactor("sema_use_func_capture_var_alone", expr, "lambda");
                 default:
                     CJC_ABORT();
                     break;
             }
         } else {
-            return diag.DiagnoseRefactor(DiagKindRefactor::sema_use_func_capture_var_alone, expr, "function");
+            return diag.DiagnoseRefactor("sema_use_func_capture_var_alone", expr, "function");
         }
     };
     auto builder = getBuilder();
@@ -700,7 +698,7 @@ void DiagNeedNamedArgument(
             (first ? "'" : " or '") + fd.funcBody->paramLists[0]->params[n]->identifier.GetRawText() + ":'";
         first = false;
     }
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_need_named_argument, *ce.args[argPos], expectedPrefix);
+    diag.DiagnoseRefactor("sema_need_named_argument", *ce.args[argPos], expectedPrefix);
 }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 void DiagForStaticVariableDependsGeneric(DiagnosticEngine& diag, const Node& node, const std::set<Ptr<Ty>>& targetTys)
@@ -712,8 +710,7 @@ void DiagForStaticVariableDependsGeneric(DiagnosticEngine& diag, const Node& nod
         if (!id) {
             continue;
         }
-        auto builder =
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_static_variable_use_generic_parameter, node, id->String());
+        auto builder = diag.DiagnoseRefactor("sema_static_variable_use_generic_parameter", node, id->String());
         if (auto gt = DynamicCast<GenericsTy>(id); gt && gt->decl && !gt->decl->begin.IsZero()) {
             builder.AddNote(*gt->decl, "generic argument declaration here");
         }

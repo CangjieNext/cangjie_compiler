@@ -48,7 +48,7 @@ OwnedPtr<Pattern> ParserImpl::ParsePattern(const std::set<Attribute>& attributes
     if (Seeing(TokenKind::IDENTIFIER) || SeeingContextualKeyword()) {
         return ParseTypePatternOrVarOrEnumPattern(attributes, isVar, inDecl);
     }
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_pattern, lookahead, ConvertToken(lookahead));
+    ParseDiagnoseRefactor("parse_expected_pattern", lookahead, ConvertToken(lookahead));
     return MakeInvalid<InvalidPattern>(lookahead.Begin());
 }
 
@@ -158,7 +158,7 @@ void ParserImpl::CheckTypeArgumentsInEnumPattern(Ptr<const EnumPattern> enumPatt
         Ptr<RefExpr> refExpr = StaticAs<ASTKind::REF_EXPR>(enumPattern->constructor.get());
         if (!refExpr->typeArguments.empty()) {
             auto builder = ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_unexpected_declaration_in_scope, refExpr->leftAnglePos, "'<'", "enum pattern");
+                "parse_unexpected_declaration_in_scope", refExpr->leftAnglePos, "'<'", "enum pattern");
             builder.AddMainHintArguments("'<'");
         }
     } else {
@@ -168,8 +168,8 @@ void ParserImpl::CheckTypeArgumentsInEnumPattern(Ptr<const EnumPattern> enumPatt
             Ptr<MemberAccess> memberAccess = StaticAs<ASTKind::MEMBER_ACCESS>(expr);
             if (!memberAccess->typeArguments.empty() &&
                 expr != StaticAs<ASTKind::MEMBER_ACCESS>(enumPattern->constructor.get())->baseExpr.get()) {
-                auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_unexpected_declaration_in_scope,
-                    memberAccess->leftAnglePos, "'<'", "enum pattern");
+                auto builder = ParseDiagnoseRefactor(
+                    "parse_unexpected_declaration_in_scope", memberAccess->leftAnglePos, "'<'", "enum pattern");
                 builder.AddMainHintArguments("'<'");
             }
         }
@@ -177,8 +177,8 @@ void ParserImpl::CheckTypeArgumentsInEnumPattern(Ptr<const EnumPattern> enumPatt
         if (expr != StaticAs<ASTKind::MEMBER_ACCESS>(enumPattern->constructor.get())->baseExpr.get()) {
             Ptr<RefExpr> refExpr = StaticAs<ASTKind::REF_EXPR>(expr);
             if (!refExpr->typeArguments.empty()) {
-                auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_unexpected_declaration_in_scope,
-                    refExpr->leftAnglePos, "'<'", "enum pattern");
+                auto builder = ParseDiagnoseRefactor(
+                    "parse_unexpected_declaration_in_scope", refExpr->leftAnglePos, "'<'", "enum pattern");
                 builder.AddMainHintArguments("'<'");
             }
         }

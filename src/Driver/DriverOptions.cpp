@@ -120,7 +120,7 @@ std::unordered_map<Options::ID, std::function<bool(DriverOptions&, OptionArgInst
     }},
     { Options::ID::OBF_MAP_FILE, [](DriverOptions& opts, const OptionArgInstance& arg) {
         opts.layoutObfUserMappingFile = opts.ValidateInputFilePath(
-            arg.value, DiagKindRefactor::no_such_file_or_directory);
+            arg.value, "no_such_file_or_directory");
         return opts.layoutObfUserMappingFile.has_value();
     }},
     { Options::ID::OBF_SYM_PREFIX, [](DriverOptions& opts, const OptionArgInstance& arg) {
@@ -128,7 +128,7 @@ std::unordered_map<Options::ID, std::function<bool(DriverOptions&, OptionArgInst
         return true;
     }},
     { Options::ID::OBF_CONFIG, [](DriverOptions& opts, const OptionArgInstance& arg) {
-        opts.obfuscationConfigFile = opts.ValidateInputFilePath(arg.value, DiagKindRefactor::no_such_file_or_directory);
+        opts.obfuscationConfigFile = opts.ValidateInputFilePath(arg.value, "no_such_file_or_directory");
         return opts.obfuscationConfigFile.has_value();
     }},
     { Options::ID::OBF_LEVEL, [](DriverOptions& opts, const OptionArgInstance& arg) {
@@ -259,7 +259,7 @@ bool DriverOptions::CheckTargetCPUOption()
         return true;
     }
     DiagnosticEngine diag;
-    (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_unsupported_target_cpu, DEFAULT_POSITION, targetCPU.value());
+    (void)diag.DiagnoseRefactor("driver_unsupported_target_cpu", DEFAULT_POSITION, targetCPU.value());
     return false;
 }
 
@@ -318,11 +318,11 @@ bool DriverOptions::CheckStaticOption()
         if (linkStatic && (outputMode != OutputMode::EXECUTABLE)) {
             linkStatic = false;
             DiagnosticEngine diag;
-            diag.DiagnoseRefactor(DiagKindRefactor::driver_warning_unusable_static, DEFAULT_POSITION);
+            diag.DiagnoseRefactor("driver_warning_unusable_static", DEFAULT_POSITION);
         }
         if (linkStaticStd.has_value() && !linkStaticStd.value() && linkStatic) {
             DiagnosticEngine diag;
-            diag.DiagnoseRefactor(DiagKindRefactor::driver_static_dystd_conflict, DEFAULT_POSITION);
+            diag.DiagnoseRefactor("driver_static_dystd_conflict", DEFAULT_POSITION);
             return false;
         }
         return true;
@@ -331,7 +331,7 @@ bool DriverOptions::CheckStaticOption()
         linkStatic = false;
         std::string tripleString = target.ToFullTripleString();
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_warning_no_support_static, DEFAULT_POSITION, tripleString);
+        diag.DiagnoseRefactor("driver_warning_no_support_static", DEFAULT_POSITION, tripleString);
     }
     
     return true;

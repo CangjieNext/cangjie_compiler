@@ -381,7 +381,7 @@ void SetMacroCallEvalResult(MacroCall& macCall, DiagnosticEngine& diag)
     auto pInvocation = macCall.GetInvocation();
     if (MacroExpandFailed(pInvocation->newTokens) || macCall.status == MacroEvalStatus::FAIL) {
         macCall.status = MacroEvalStatus::FAIL;
-        (void)diag.Diagnose(macCall.GetBeginPos(), DiagKind::macro_evaluate_failed, macCall.GetFullName());
+        (void)diag.Diagnose(macCall.GetBeginPos(), "macro_evaluate_failed", macCall.GetFullName());
     } else {
         macCall.status = MacroEvalStatus::SUCCESS;
     }
@@ -393,10 +393,10 @@ bool HandleBeforeMacroCallEval(MacroCall& macCall, DiagnosticEngine& diag)
     // If use build-in macros, the macro is converted to token information.
     if (Utils::In(macCallFullName, BUILD_IN_MACROS)) {
         if (macCall.GetInvocation()->HasAttr()) {
-            (void)diag.Diagnose(macCall.GetBeginPos(), DiagKind::macro_build_in_unexpect_params_attrs, macCallFullName);
+            (void)diag.Diagnose(macCall.GetBeginPos(), "macro_build_in_unexpect_params_attrs", macCallFullName);
         }
         if (!macCall.GetInvocation()->args.empty()) {
-            (void)diag.Diagnose(macCall.GetBeginPos(), DiagKind::macro_build_in_unexpect_params, macCallFullName);
+            (void)diag.Diagnose(macCall.GetBeginPos(), "macro_build_in_unexpect_params", macCallFullName);
         }
         auto macroNode = macCall.GetNode();
         TokenVector newTokens;
@@ -519,14 +519,14 @@ bool MacroEvaluation::CheckAttrTokens(TokenVector& attrTokens, MacroCall& macCal
     ExpandBuildInMacro(attrTokens, macCall);
     // Make sure @ is used as escape.
     if (!PreprocessTokens(attrTokens, escapePosVec)) {
-        (void)ci->diag.Diagnose(attrTokens[0].Begin(), DiagKind::macro_expand_invalid_escape);
+        (void)ci->diag.Diagnose(attrTokens[0].Begin(), "macro_expand_invalid_escape");
         return false;
     }
     for (size_t i = 0; i < attrTokens.size(); i++) {
         auto posTmp = attrTokens[i].Begin();
         if (attrTokens[i].kind == TokenKind::AT &&
             std::find(escapePosVec.begin(), escapePosVec.end(), posTmp) == escapePosVec.end()) {
-            (void)ci->diag.Diagnose(posTmp, DiagKind::macro_expand_invalid_attr_tokens, attrTokens[i].Value());
+            (void)ci->diag.Diagnose(posTmp, "macro_expand_invalid_attr_tokens", attrTokens[i].Value());
             return false;
         }
     }
@@ -727,7 +727,7 @@ void MacroEvaluation::CheckDeprecatedMacrosUsage(MacroCall& macCall) const
 
             AST::ExtractArgumentsOfDeprecatedAnno(deprecated, message, since, strict);
 
-            auto diagnoseKind = strict ? DiagKind::macro_is_deprecated_error : DiagKind::macro_is_deprecated_warning;
+            auto diagnoseKind = strict ? "macro_is_deprecated_error" : "macro_is_deprecated_warning";
 
             ci->diag.Diagnose(macCall.GetBeginPos(), diagnoseKind, macCall.GetFullName(), since, message);
         }
@@ -799,7 +799,7 @@ bool MacroEvaluation::NeedCreateMacroCallTreeForFirstEval(MacroCall& macCall, AS
         }
         if (pInvocation->isCompileTimeVisible) {
             // issue a non-fatal error when evaluating macro call with @!
-            ci->diag.Diagnose(macCall.GetBeginPos(), DiagKind::macro_expand_atexcl);
+            ci->diag.Diagnose(macCall.GetBeginPos(), "macro_expand_atexcl");
         }
         return true;
     }
@@ -835,7 +835,7 @@ void MacroEvaluation::CreateMacroCallTree(MacroCall& macCall, bool reEval)
         SkipAnnotationTokens(inputTokens) : 0;
 
     if (!PreprocessTokens(inputTokens, escapePosVec)) {
-        (void)ci->diag.Diagnose(inputTokens[0].Begin(), DiagKind::macro_expand_invalid_escape);
+        (void)ci->diag.Diagnose(inputTokens[0].Begin(), "macro_expand_invalid_escape");
         return;
     }
 
@@ -852,7 +852,7 @@ void MacroEvaluation::CreateMacroCallTree(MacroCall& macCall, bool reEval)
         if (inputTokens[curIndex].kind == TokenKind::AT &&
             std::find(escapePosVec.begin(), escapePosVec.end(), posTmp) == escapePosVec.end() &&
             (curIndex == tokenSize - 1 || !IsIdentifierOrContextualKeyword(inputTokens[curIndex + 1].kind))) {
-            (void)ci->diag.Diagnose(posTmp, DiagKind::macro_expand_invalid_input_tokens);
+            (void)ci->diag.Diagnose(posTmp, "macro_expand_invalid_input_tokens");
         }
         // Check if the current token is 'quote' and the next token is '('.
         // If so, process Tokens in QuoteExpr (like quote()).

@@ -287,8 +287,7 @@ void ParserImpl::CheckConstructorBody(AST::FuncDecl& ctor, ScopeKind scopeKind, 
 {
     CJC_ASSERT(ctor.TestAttr(Attribute::CONSTRUCTOR));
     if (ctor.funcBody && ctor.funcBody->retType) {
-        ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_invalid_return_type, *ctor.funcBody->retType, "constructor");
+        ParseDiagnoseRefactor("parse_invalid_return_type", *ctor.funcBody->retType, "constructor");
         ctor.EnableAttr(Attribute::HAS_BROKEN);
     }
     /*

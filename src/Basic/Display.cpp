@@ -17,7 +17,7 @@ namespace Cangjie {
 static const int UNICODE_OUTPUT_WIDTH = 8;
 static const std::vector<std::pair<uint32_t, uint32_t>> combining = {
 #define BIND(left, right) {left, right},
-#include "cangjie/Basic/DisplayColumn.def"
+#include "Diagnostics/DK/DisplayColumn.def"
 #undef BIND
 };
 static int WideCharWidth(char32_t ucs)

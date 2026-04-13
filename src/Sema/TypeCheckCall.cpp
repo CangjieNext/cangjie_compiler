@@ -64,18 +64,18 @@ std::optional<size_t> CheckNameArgInParams(DiagnosticEngine& diag, const FuncArg
         }
         // Named argument must passed to named parameter.
         if (!list.params[j]->isNamedParam) {
-            diag.Diagnose(arg, DiagKind::sema_invalid_named_arguments, argName);
+            diag.Diagnose(arg, "sema_invalid_named_arguments", argName);
             return {};
         }
         if (marks[j]) {
             // When mark[j] is true, current arg's type has been added to argsTy already. A parameter
             // cannot be assigned two values. So return false.
-            diag.Diagnose(arg, DiagKind::sema_multiple_named_argument, argName);
+            diag.Diagnose(arg, "sema_multiple_named_argument", argName);
             return {};
         }
         return {j};
     }
-    diag.Diagnose(arg, DiagKind::sema_unknown_named_argument, argName);
+    diag.Diagnose(arg, "sema_unknown_named_argument", argName);
     return {};
 }
 
@@ -317,11 +317,11 @@ void DiagnoseForMultiMapping(DiagnosticEngine& diag, const CallExpr& ce, const F
         return;
     }
     if (resMappings.empty()) {
-        diag.Diagnose(ce, DiagKind::sema_parameters_and_arguments_mismatch);
+        diag.Diagnose(ce, "sema_parameters_and_arguments_mismatch");
     } else if (resMappings.size() > typeMappings.size()) {
-        diag.Diagnose(ce, DiagKind::sema_generic_ambiguous_method_match_in_upper_bounds, fd.identifier.Val());
+        diag.Diagnose(ce, "sema_generic_ambiguous_method_match_in_upper_bounds", fd.identifier.Val());
     } else {
-        diag.Diagnose(ce, DiagKind::sema_ambiguous_arg_type);
+        diag.Diagnose(ce, "sema_ambiguous_arg_type");
     }
 }
 
@@ -517,7 +517,7 @@ bool ChkArgsOrder(DiagnosticEngine& diag, const CallExpr& ce)
     for (auto& arg : ce.args) {
         if (foundNamedArg) {
             if (arg->name.Empty()) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_unordered_arguments, *arg);
+                diag.DiagnoseRefactor("sema_unordered_arguments", *arg);
                 return false;
             }
         } else if (!arg->name.Empty()) {
@@ -614,8 +614,7 @@ bool CheckUseTrailingClosureWithFunctionType(
     arg.expr->SetTy(TypeManager::GetInvalidTy());
     std::string message =
         originalTy.IsGeneric() ? "generic type without upper bound of function type" : "non-function type";
-    auto diagBuilder = diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_trailing_lambda_cannot_used_for_non_function, arg, message);
+    auto diagBuilder = diag.DiagnoseRefactor("sema_trailing_lambda_cannot_used_for_non_function", arg, message);
     diagBuilder.AddMainHintArguments(originalTy.String());
     diagBuilder.AddNote(candidate, MakeRangeForDeclIdentifier(candidate), "found candidate");
     return false;
@@ -685,7 +684,7 @@ bool TypeChecker::TypeCheckerImpl::CheckArgsWithParamName(const CallExpr& ce, co
         if (argName.empty()) {
             // Positional argument can not appear after named argument.
             if (namedArgFound) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_unordered_arguments, *ce.args[i]);
+                diag.DiagnoseRefactor("sema_unordered_arguments", *ce.args[i]);
                 return false;
             }
             // Named parameter must be passed with named argument.
@@ -1153,7 +1152,7 @@ bool TypeChecker::TypeCheckerImpl::CheckAndGetMappingForTypeDecl(
         }
     }
     if (!valid) {
-        auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_type_inconsistent, baseExpr,
+        auto diagBuilder = diag.DiagnoseRefactor("sema_generic_type_inconsistent", baseExpr,
             MakeRange(baseExpr.begin, baseExpr.end), typeDecl.GetTy()->String());
         diagBuilder.AddNote(diagMessage);
     }
@@ -1233,7 +1232,7 @@ bool TypeChecker::TypeCheckerImpl::CheckCallCompatible(ASTContext& ctx, Function
             return false;
         }
         if (fd.TestAttr(Attribute::C) && ce.args[i]->GetTy() && ce.args[i]->GetTy()->IsUnit()) {
-            diag.Diagnose(*ce.args[i], DiagKind::sema_unit_cannot_as_cfunc_arg);
+            diag.Diagnose(*ce.args[i], "sema_unit_cannot_as_cfunc_arg");
             return false;
         }
         candidate.stat.matchedArgs++;
@@ -1242,7 +1241,7 @@ bool TypeChecker::TypeCheckerImpl::CheckCallCompatible(ASTContext& ctx, Function
         }
         if (auto st = DynamicCast<StructTy*>(ce.args[i]->GetTy());
             st && st->decl->TestAttr(Attribute::C) && st != paramTysInArgsOrder[i]) {
-            diag.Diagnose(*ce.args[i], DiagKind::sema_cstruct_cannot_autobox, paramTysInArgsOrder[i]->String());
+            diag.Diagnose(*ce.args[i], "sema_cstruct_cannot_autobox", paramTysInArgsOrder[i]->String());
             return false;
         }
     }
@@ -1680,7 +1679,7 @@ std::vector<std::set<Ptr<Ty>>> TypeChecker::TypeCheckerImpl::GetArgTyPossibiliti
         }
         if (argCandidates.empty()) {
             if (genericIgnored) {
-                diag.Diagnose(*arg, DiagKind::sema_generic_type_without_type_argument);
+                diag.Diagnose(*arg, "sema_generic_type_without_type_argument");
                 return {};
             }
             argCandidates.emplace_back(arg->GetTy());
@@ -2212,7 +2211,7 @@ static std::optional<std::vector<Ptr<Ty>>> CheckCallArgs(
     }
     for (auto& arg : ce.args) {
         if (!arg->name.Empty()) {
-            diag.Diagnose(*arg, DiagKind::sema_unsupport_named_argument);
+            diag.Diagnose(*arg, "sema_unsupport_named_argument");
         }
     }
     return paramTys;
@@ -2227,7 +2226,7 @@ bool TypeChecker::TypeCheckerImpl::CheckFuncPtrCall(ASTContext& ctx, Ptr<Ty> tar
     CJC_NULLPTR_CHECK(ce.baseFunc);
     auto baseTarget = ce.baseFunc->GetTarget();
     if (baseTarget && baseTarget->astKind == ASTKind::TYPE_ALIAS_DECL) {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_called_object, *ce.baseFunc);
+        auto builder = diag.DiagnoseRefactor("sema_invalid_called_object", *ce.baseFunc);
         builder.AddNote("cannot call a type alias for a function type");
         return false;
     }
@@ -2260,7 +2259,7 @@ bool TypeChecker::TypeCheckerImpl::CheckFuncPtrCall(ASTContext& ctx, Ptr<Ty> tar
         (void)Check(ctx, param, ce.args[i]->expr.get());
         if (ce.args[i]->expr->GetTy()->HasIdealTy()) {
             if (ce.ShouldDiagnose()) {
-                diag.Diagnose(ce, DiagKind::sema_parameters_and_arguments_mismatch);
+                diag.Diagnose(ce, "sema_parameters_and_arguments_mismatch");
             }
             return false;
         }
@@ -2347,7 +2346,7 @@ bool TypeChecker::TypeCheckerImpl::GetCallBaseCandidates(
     auto ds = DiagSuppressor(diag);
     candidates = FilterCandidatesWithReExport(ctx, candidates, ce);
     if (expr.astKind == ASTKind::REF_EXPR && candidates.empty() && target->astKind == ASTKind::PACKAGE_DECL) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_ref_to_pkg_name, expr);
+        diag.DiagnoseRefactor("sema_cannot_ref_to_pkg_name", expr);
     }
     if (ds.HasError()) {
         ds.ReportDiag();
@@ -2370,7 +2369,7 @@ bool TypeChecker::TypeCheckerImpl::CheckRefConstructor(const ASTContext& ctx, co
             insideCtor = true;
         }
         if (!insideCtor) {
-            diag.Diagnose(ce, DiagKind::sema_invalid_this_call_outside_ctor, re.ref.identifier.Val());
+            diag.Diagnose(ce, "sema_invalid_this_call_outside_ctor", re.ref.identifier.Val());
             return false;
         }
     }
@@ -2412,7 +2411,7 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
     } else if (!ma->target && ma->targets.empty()) {
         // 'varr' is VArray type, 'varr.size()' is illegitimate, 'size' of VArray is a property.
         if (Is<VArrayTy>(ma->baseExpr->GetTy()) && ma->field == "size") {
-            diag.Diagnose(ce, DiagKind::sema_no_match_operator_function_call);
+            diag.Diagnose(ce, "sema_no_match_operator_function_call");
             ma->SetTy(TypeManager::GetInvalidTy());
         }
         return false;
@@ -2592,7 +2591,7 @@ bool TypeChecker::TypeCheckerImpl::CheckCallKind(const CallExpr& ce, Ptr<Decl> d
     }
     switch (decl->astKind) {
         case ASTKind::INTERFACE_DECL:
-            diag.Diagnose(ce, DiagKind::sema_interface_can_not_be_instantiated, decl->identifier.Val());
+            diag.Diagnose(ce, "sema_interface_can_not_be_instantiated", decl->identifier.Val());
             break;
         case ASTKind::CLASS_DECL: // Fall-through.
         case ASTKind::STRUCT_DECL: {
@@ -2603,7 +2602,7 @@ bool TypeChecker::TypeCheckerImpl::CheckCallKind(const CallExpr& ce, Ptr<Decl> d
             bool isThis = re && re->isThis;
             auto cd = As<ASTKind::CLASS_DECL>(decl);
             if (cd && cd->TestAttr(Attribute::ABSTRACT) && !isSuper && !isThis) {
-                diag.Diagnose(ce, DiagKind::sema_abstract_class_can_not_be_instantiated, cd->identifier.Val());
+                diag.Diagnose(ce, "sema_abstract_class_can_not_be_instantiated", cd->identifier.Val());
                 break;
             }
             if (isThis) {
@@ -2632,30 +2631,31 @@ bool TypeChecker::TypeCheckerImpl::CheckCallKind(const CallExpr& ce, Ptr<Decl> d
     return true;
 }
 
-DiagKind TypeChecker::TypeCheckerImpl::GetErrorKindForCall(const std::vector<Ptr<FuncDecl>>& candidatesBeforeCheck,
-    const std::vector<Ptr<FuncDecl>>& candidatesAfterCheck, const CallExpr& ce) const
+std::string_view TypeChecker::TypeCheckerImpl::GetErrorKindForCall(
+    const std::vector<Ptr<FuncDecl>>& candidatesBeforeCheck, const std::vector<Ptr<FuncDecl>>& candidatesAfterCheck,
+    const CallExpr& ce) const
 {
     bool hasEmpty = candidatesBeforeCheck.empty() || candidatesAfterCheck.empty();
     auto target = ce.baseFunc ? ce.baseFunc->GetTarget() : nullptr;
     if (hasEmpty) {
         if (IsSearchTargetInMemberAccessUpperBound(ce)) {
-            return DiagKind::sema_generic_no_method_match_in_upper_bounds;
+            return "sema_generic_no_method_match_in_upper_bounds";
         } else if (target && target->TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
-            return DiagKind::sema_enum_constructor_type_not_match;
+            return "sema_enum_constructor_type_not_match";
         } else if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
-            return DiagKind::sema_no_match_constructor;
+            return "sema_no_match_constructor";
         } else {
-            return DiagKind::sema_no_match_function_declaration_for_call;
+            return "sema_no_match_function_declaration_for_call";
         }
     } else {
         if (IsSearchTargetInMemberAccessUpperBound(ce)) {
-            return DiagKind::sema_generic_ambiguous_method_match_in_upper_bounds;
+            return "sema_generic_ambiguous_method_match_in_upper_bounds";
         } else if (target && target->TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
-            return DiagKind::sema_multiple_constructor_in_enum;
+            return "sema_multiple_constructor_in_enum";
         } else if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
-            return DiagKind::sema_ambiguous_constructor_match;
+            return "sema_ambiguous_constructor_match";
         } else {
-            return DiagKind::sema_ambiguous_match;
+            return "sema_ambiguous_match";
         }
     }
 }
@@ -2683,7 +2683,7 @@ void TypeChecker::TypeCheckerImpl::DiagnoseForCall(const std::vector<Ptr<FuncDec
                memberAccess && !memberAccess->field.ZeroPos()) {
         identifierPos = memberAccess->field.Begin();
     }
-    DiagKind errorKind = GetErrorKindForCall(candidatesBeforeCheck, candidatesAfterCheck, ce);
+    auto errorKind = GetErrorKindForCall(candidatesBeforeCheck, candidatesAfterCheck, ce);
     if (candidatesBeforeCheck.empty()) {
         ce.callKind = CallKind::CALL_INVALID; // When 'candidatesBeforeCheck' is empty, reset call kind.
         auto builder = diag.Diagnose(ce, identifierPos, errorKind, identifier);
@@ -2697,7 +2697,7 @@ void TypeChecker::TypeCheckerImpl::DiagnoseForCall(const std::vector<Ptr<FuncDec
     }
     bool hasEmpty = candidatesBeforeCheck.empty() || candidatesAfterCheck.empty();
     std::vector<Ptr<FuncDecl>> candidates = hasEmpty ? candidatesBeforeCheck : candidatesAfterCheck;
-    DiagKind noteKind = hasEmpty ? DiagKind::sema_found_possible_candidate_decl : DiagKind::sema_found_candidate_decl;
+    std::string_view noteKind = hasEmpty ? "sema_found_possible_candidate_decl" : "sema_found_candidate_decl";
     // Print error.
     std::vector<Ptr<Decl>> importedTargets;
     DiagnosticBuilder diagInfo = diag.Diagnose(ce, identifierPos, errorKind, identifier);
@@ -2790,7 +2790,7 @@ FunctionMatchingUnit* TypeChecker::TypeCheckerImpl::FindFuncWithMaxChildRetTy(
         auto [optErrs, metTy] = JoinAndMeet::SetMetType(maxChildRetTy, meteRes);
         maxChildRetTy = metTy;
         if (optErrs) {
-            (void)diag.Diagnose(ce, DiagKind::sema_diag_report_note_message, *optErrs);
+            (void)diag.Diagnose(ce, "sema_diag_report_note_message", *optErrs);
         };
         if (maxChildRetTy->IsInvalid()) {
             return nullptr;
@@ -2832,7 +2832,7 @@ bool TypeChecker::TypeCheckerImpl::PostCheckCallExpr(
         bool valid = true;
         for (auto& fa : ce.args) {
             if (fa->withInout) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_can_only_used_in_cfunc_calling, *fa);
+                diag.DiagnoseRefactor("sema_inout_can_only_used_in_cfunc_calling", *fa);
                 valid = false;
             }
         }
@@ -2844,7 +2844,7 @@ bool TypeChecker::TypeCheckerImpl::PostCheckCallExpr(
         auto fa = std::find_if(
             ce.args.begin(), ce.args.end(), [](auto& fa) { return Is<VArrayTy>(fa->GetTy()) && !fa->withInout; });
         if (fa != ce.args.end()) {
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_mismatch, *fa->get(), VARRAY_NAME);
+            (void)diag.DiagnoseRefactor("sema_inout_mismatch", *fa->get(), VARRAY_NAME);
             return false;
         }
     }
@@ -2931,12 +2931,12 @@ bool TypeChecker::TypeCheckerImpl::CheckNonNormalCall(ASTContext& ctx, Ptr<Ty> t
             auto fa = std::find_if(
                 ce.args.begin(), ce.args.end(), [](auto& fa) { return Is<VArrayTy>(fa->GetTy()) && !fa->withInout; });
             if (fa != ce.args.end()) {
-                (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_mismatch, *fa->get(), VARRAY_NAME);
+                (void)diag.DiagnoseRefactor("sema_inout_mismatch", *fa->get(), VARRAY_NAME);
                 res = false;
             }
         }
         if (funcTy->isC && !ce.TestAttr(Attribute::UNSAFE) && !IsValidCFuncConstructorCall(ce)) {
-            diag.Diagnose(ce, DiagKind::sema_unsafe_function_invoke_failed);
+            diag.Diagnose(ce, "sema_unsafe_function_invoke_failed");
             res = false;
         }
     } else if (ChkFunctionCallExpr(ctx, target, ce)) {
@@ -3089,7 +3089,7 @@ bool TypeChecker::TypeCheckerImpl::ChkFunctionCallExpr(ASTContext& ctx, Ptr<Ty> 
     auto desugarCallExpr = StaticAs<ASTKind::CALL_EXPR>(ce.desugarExpr.get());
     if (!ChkCallExpr(ctx, target, *desugarCallExpr)) {
         RecoverToCallExpr(ce);
-        diag.Diagnose(ce, DiagKind::sema_no_match_operator_function_call);
+        diag.Diagnose(ce, "sema_no_match_operator_function_call");
         ce.SetTy(TypeManager::GetInvalidTy());
         return false;
     }
@@ -3167,7 +3167,7 @@ void TypeChecker::TypeCheckerImpl::CheckToTokensImpCallExpr(const CallExpr& ce)
         auto prTys = promotion.Promote(*be->GetTy(), *toTokensDecl->GetTy());
         auto ty = prTys.empty() ? TypeManager::GetInvalidTy() : *prTys.begin();
         if (ty != toTokensDecl->GetTy()) {
-            diag.Diagnose(ce, DiagKind::sema_invalid_tokens_implementation, be->GetTy()->String());
+            diag.Diagnose(ce, "sema_invalid_tokens_implementation", be->GetTy()->String());
         }
     }
 }

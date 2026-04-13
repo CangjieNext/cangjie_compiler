@@ -265,7 +265,7 @@ bool TypeChecker::TypeCheckerImpl::ChkConstPattern(ASTContext& ctx, Ty& target, 
     }
     // 3. String interpolations are not allowed in constant patterns.
     if (auto lce = DynamicCast<LitConstExpr*>(p.literal.get()); lce && lce->siExpr) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_interpolation_in_const_pattern, p);
+        diag.DiagnoseRefactor("sema_interpolation_in_const_pattern", p);
         p.SetTy(TypeManager::GetInvalidTy());
         return false;
     }
@@ -307,7 +307,7 @@ bool TypeChecker::TypeCheckerImpl::ChkOpOverloadForConstPattern(ASTContext& ctx,
         }
     }
     p.SetTy(TypeManager::GetNonNullTy(p.GetTy()));
-    diag.Diagnose(p, DiagKind::sema_not_overload_in_match);
+    diag.Diagnose(p, "sema_not_overload_in_match");
     return false;
 }
 
@@ -322,7 +322,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTypePattern(ASTContext& ctx, Ty& target, T
         p.matchBeforeRuntime = true;
     } else {
         if (IsSubtypeBoxed(typeManager, target, *p.type->GetTy())) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_unreachable_pattern, p)
+            diag.DiagnoseRefactor("sema_unreachable_pattern", p)
                 .AddNote("the selector is of type '" + target.String() + "', which is not a subtype of '" +
                     p.type->GetTy()->String());
         }
@@ -402,7 +402,7 @@ bool TypeChecker::TypeCheckerImpl::ChkEnumPattern(ASTContext& ctx, Ty& target, E
             return true;
         }
     }
-    diag.Diagnose(p, DiagKind::sema_pattern_not_match, "enum");
+    diag.Diagnose(p, "sema_pattern_not_match", "enum");
     p.SetTy(TypeManager::GetInvalidTy());
     return false;
 }
@@ -411,7 +411,7 @@ bool TypeChecker::TypeCheckerImpl::IsFuncTyEnumPatternMatched(
     ASTContext& ctx, Ty& target, const FuncTy& funcTy, const EnumPattern& p)
 {
     if (funcTy.paramTys.size() != p.patterns.size()) {
-        (void)diag.Diagnose(p, DiagKind::sema_pattern_not_match, "enum");
+        (void)diag.Diagnose(p, "sema_pattern_not_match", "enum");
         return false;
     }
     for (size_t i = 0; i < p.patterns.size(); i++) {
@@ -421,7 +421,7 @@ bool TypeChecker::TypeCheckerImpl::IsFuncTyEnumPatternMatched(
         }
     }
     if (!typeManager.IsTyEqual(funcTy.retTy, &target)) {
-        (void)diag.Diagnose(p, DiagKind::sema_pattern_not_match, "enum");
+        (void)diag.Diagnose(p, "sema_pattern_not_match", "enum");
         return false;
     }
     return true;
@@ -468,7 +468,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTuplePattern(ASTContext& ctx, Ty& target, 
 {
     if (auto tupleTy = DynamicCast<TupleTy*>(&target); tupleTy) {
         if (tupleTy->typeArgs.size() != p.patterns.size()) {
-            diag.Diagnose(p, DiagKind::sema_tuple_pattern_with_correct_size_expected);
+            diag.Diagnose(p, "sema_tuple_pattern_with_correct_size_expected");
             p.SetTy(TypeManager::GetInvalidTy());
             return false;
         }
@@ -482,7 +482,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTuplePattern(ASTContext& ctx, Ty& target, 
         if (isPatternInMatch) {
             DiagMismatchedTypesWithFoundTy(diag, p, target.String(), "Tuple");
         } else {
-            diag.Diagnose(p, DiagKind::sema_tuple_pattern_not_match, "initializer");
+            diag.Diagnose(p, "sema_tuple_pattern_not_match", "initializer");
         }
         p.SetTy(TypeManager::GetInvalidTy());
         return false;
@@ -525,7 +525,7 @@ void TypeChecker::TypeCheckerImpl::FindEnumPatternTarget(ASTContext& ctx, Ptr<En
     // Search the enum element in enumDecl.
     std::vector<Ptr<Decl>> result = FindEnumPatternTargets(ctx, ed, ep);
     if (result.empty()) {
-        diag.Diagnose(ep, DiagKind::sema_undeclared_identifier, ep.GetIdentifier());
+        diag.Diagnose(ep, "sema_undeclared_identifier", ep.GetIdentifier());
         ep.constructor->SetTy(TypeManager::GetInvalidTy());
         return;
     }
@@ -552,7 +552,7 @@ void TypeChecker::TypeCheckerImpl::FindEnumPatternTarget(ASTContext& ctx, Ptr<En
     }
     auto target = ep.constructor->GetTarget();
     if (!target || !Ty::IsTyCorrect(target->GetTy())) {
-        diag.Diagnose(ep, DiagKind::sema_enum_pattern_param_size_error);
+        diag.Diagnose(ep, "sema_enum_pattern_param_size_error");
         ep.constructor->SetTy(TypeManager::GetInvalidTy());
         return;
     }
@@ -581,7 +581,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTryWildcardPattern(
     p.SetTy(target);
     if (auto classTy = DynamicCast<ClassTy*>(target); classTy) {
         if (std::find(included.begin(), included.end(), classTy) != included.end()) {
-            diag.Diagnose(p, DiagKind::sema_useless_exception_type);
+            diag.Diagnose(p, "sema_useless_exception_type");
         }
     }
     return true;
@@ -602,12 +602,12 @@ bool TypeChecker::TypeCheckerImpl::ChkExceptTypePattern(
         if (!foundClass || type->GetTy()->IsNothing() ||
             (!typeManager.IsSubtype(type->GetTy(), exception->GetTy()) &&
                 !typeManager.IsSubtype(type->GetTy(), error->GetTy()))) {
-            diag.Diagnose(*type, DiagKind::sema_except_catch_type_error);
+            diag.Diagnose(*type, "sema_except_catch_type_error");
             result = false;
             continue;
         }
         if (Utils::In(included, [this, &type](Ptr<Ty> ty) { return typeManager.IsSubtype(type->GetTy(), ty); })) {
-            diag.Diagnose(*type, DiagKind::sema_useless_exception_type);
+            diag.Diagnose(*type, "sema_useless_exception_type");
         } else {
             included.emplace_back(type->GetTy());
         }
@@ -622,7 +622,7 @@ bool TypeChecker::TypeCheckerImpl::ChkExceptTypePattern(
     etp.SetTy(joinedTy);
     CJC_NULLPTR_CHECK(etp.GetTy());
     if (optErrs.has_value()) {
-        diag.Diagnose(etp, DiagKind::sema_type_incompatible, "pattern").AddNote(*optErrs);
+        diag.Diagnose(etp, "sema_type_incompatible", "pattern").AddNote(*optErrs);
         return false;
     }
     return Check(ctx, etp.GetTy(), etp.pattern.get());
@@ -651,7 +651,7 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::ChkCommandTypePattern(
     std::set<Ptr<Ty>> typeTys;
     auto command = importManager.GetImportedDecl(EFFECT_PACKAGE_NAME, CLASS_COMMAND);
     if (!command) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_command_handle_type_error, *ctp.types[0]);
+        diag.DiagnoseRefactor("sema_command_handle_type_error", *ctp.types[0]);
         return {};
     }
     std::optional<Ptr<Ty>> cmdTypeAsCommand;
@@ -662,14 +662,14 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::ChkCommandTypePattern(
     CJC_NULLPTR_CHECK(cmdTypePat->GetTy());
     auto prCTys = promotion.Promote(*cmdTypePat->GetTy(), *command->GetTy());
     if (cmdTypePat->GetTy()->IsNothing() || prCTys.empty()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_command_handle_type_error, *cmdTypePat);
+        diag.DiagnoseRefactor("sema_command_handle_type_error", *cmdTypePat);
         result = false;
         ctp.SetTy(TypeManager::GetInvalidTy());
         return {};
     }
     CJC_ASSERT(prCTys.size() == 1);
     if (Utils::In(included, [this, &cmdTypePat](Ty* ty) { return typeManager.IsSubtype(cmdTypePat->GetTy(), ty); })) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_useless_command_type, *cmdTypePat);
+        diag.DiagnoseRefactor("sema_useless_command_type", *cmdTypePat);
     } else {
         included.emplace_back(cmdTypePat->GetTy());
     }
@@ -685,7 +685,7 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::ChkCommandTypePattern(
     ctp.SetTy(joinedTy);
     CJC_NULLPTR_CHECK(ctp.GetTy());
     if (optErrs.has_value()) {
-        diag.Diagnose(ctp, DiagKind::sema_type_incompatible, "pattern").AddNote(*optErrs);
+        diag.Diagnose(ctp, "sema_type_incompatible", "pattern").AddNote(*optErrs);
         return {};
     }
     return cmdTypeAsCommand;

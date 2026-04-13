@@ -21,7 +21,7 @@ void CheckForeignSetterNameAnnotation(DiagnosticEngine& diag, const Annotation& 
     if (decl.astKind == AST::ASTKind::PROP_DECL) {
         auto propDecl = StaticAs<ASTKind::PROP_DECL>(&decl);
         if (!propDecl->isVar) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_setter_name_on_immutable_prop, ann);
+            diag.DiagnoseRefactor("sema_objc_setter_name_on_immutable_prop", ann);
             return;
         }
     }

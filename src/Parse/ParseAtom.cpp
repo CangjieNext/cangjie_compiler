@@ -29,7 +29,6 @@ ParserImpl::ExprHandler ParserImpl::LookupExprHandler(TokenKind kind)
     static constexpr int LAST_KIND = static_cast<int>(TokenKind::RESUME);
     static constexpr int ARRAY_SIZE = LAST_KIND - FIRST_KIND + 1;
 
-    SUPPRESS_WARNING("-Wcast-function-type-mismatch")
     // clang-format off
 SUPPRESS_WARNING("-Wcast-function-type-mismatch")
     static const ExprHandler HANDLERS[ARRAY_SIZE] = {
@@ -305,7 +304,7 @@ OwnedPtr<Expr> ParserImpl::ParseInterpolationExpr(const std::string& value, cons
         lastNoneNLToken = curlastNoneNLToken;
         lastToken = curLastToken;
         lookahead = curLookahead;
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_empty_string_interpolation, MakeRange(pos, ret->end));
+        ParseDiagnoseRefactor("parse_empty_string_interpolation", MakeRange(pos, ret->end));
         return MakeInvalid<InvalidExpr>(pos);
     }
     lexer = std::move(curlexer);
@@ -394,8 +393,8 @@ bool ParserImpl::CheckCondition(Expr* e)
         hasSubCondition = CheckCondition(bin->rightExpr.get()) || hasSubCondition;
         if (hasSubCondition) {
             if (bin->op != TokenKind::AND && bin->op != TokenKind::OR) {
-                diag.DiagnoseRefactor(DiagKindRefactor::parse_query_expected_logic_symbol, bin->operatorPos,
-                    TOKENS[static_cast<int>(bin->op)]);
+                diag.DiagnoseRefactor(
+                    "parse_query_expected_logic_symbol", bin->operatorPos, TOKENS[static_cast<int>(bin->op)]);
                 bin->EnableAttr(Attribute::HAS_BROKEN);
             }
         }
@@ -430,7 +429,7 @@ OwnedPtr<Expr> ParserImpl::ParseIfExpr()
 
     if (!Skip(TokenKind::RPAREN)) {
         if (Is<LetPatternDestructor>(ret->condExpr) && Skip(TokenKind::WHERE)) {
-            diag.DiagnoseRefactor(DiagKindRefactor::parse_expected_if_let_andand, lastToken);
+            diag.DiagnoseRefactor("parse_expected_if_let_andand", lastToken);
         } else {
             DiagExpectedRightDelimiter("(", ret->leftParenPos);
         }
@@ -693,8 +692,7 @@ OwnedPtr<Pattern> ParserImpl::ParseExceptTypePattern()
         exceptTypePattern->patternPos = lookahead.Begin();
         Next();
         if (!Skip(TokenKind::COLON)) {
-            ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_expected_colon_in_catch_pattern, lookahead, ConvertToken(lookahead));
+            ParseDiagnoseRefactor("parse_expected_colon_in_catch_pattern", lookahead, ConvertToken(lookahead));
         }
         exceptTypePattern->colonPos = lastToken.Begin();
         parsePatterns(*exceptTypePattern);
@@ -703,8 +701,7 @@ OwnedPtr<Pattern> ParserImpl::ParseExceptTypePattern()
         }
         return exceptTypePattern;
     } else {
-        ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_expected_wildcard_or_exception_pattern, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_wildcard_or_exception_pattern", lookahead, ConvertToken(lookahead));
         return MakeInvalid<InvalidPattern>(lookahead.Begin());
     }
 }
@@ -733,8 +730,7 @@ OwnedPtr<Pattern> ParserImpl::ParseCommandTypePattern()
             }
             return commandPattern;
         } else {
-            ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_expected_colon_in_effect_pattern, lookahead, ConvertToken(lookahead));
+            ParseDiagnoseRefactor("parse_expected_colon_in_effect_pattern", lookahead, ConvertToken(lookahead));
             return MakeInvalid<InvalidPattern>(lookahead.Begin());
         }
     } else if (Seeing(TokenKind::IDENTIFIER) || SeeingContextualKeyword()) {
@@ -746,8 +742,7 @@ OwnedPtr<Pattern> ParserImpl::ParseCommandTypePattern()
         commandPattern->patternPos = lookahead.Begin();
         Next();
         if (!Skip(TokenKind::COLON)) {
-            ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_expected_colon_in_effect_pattern, lookahead, ConvertToken(lookahead));
+            ParseDiagnoseRefactor("parse_expected_colon_in_effect_pattern", lookahead, ConvertToken(lookahead));
         }
         commandPattern->colonPos = lastToken.Begin();
         parsePatterns(*commandPattern);
@@ -756,8 +751,7 @@ OwnedPtr<Pattern> ParserImpl::ParseCommandTypePattern()
         }
         return commandPattern;
     } else {
-        ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_expected_wildcard_or_effect_pattern, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_wildcard_or_effect_pattern", lookahead, ConvertToken(lookahead));
         return MakeInvalid<InvalidPattern>(lookahead.Begin());
     }
 }
@@ -793,8 +787,8 @@ void ParserImpl::ParseMatchCases(AST::MatchExpr& matchExpr)
             matchCase->patternGuard = OwnedPtr<Expr>();
         }
         if (!Skip(TokenKind::DOUBLE_ARROW) && !SkipCombinedDoubleArrow()) {
-            auto builder = ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_expected_double_arrow_in_case, lookahead, ConvertToken(lookahead));
+            auto builder =
+                ParseDiagnoseRefactor("parse_expected_double_arrow_in_case", lookahead, ConvertToken(lookahead));
             builder.AddHint(MakeRange(matchCase->begin, "case"));
             ConsumeUntilAny(consumeTarget, false);
             matchCase->exprOrDecls = MakeInvalid<Block>(lookahead.Begin());
@@ -836,8 +830,8 @@ void ParserImpl::ParseMatchNoSelector(AST::MatchExpr& matchExpr)
             matchCaseOther->matchExpr = ParseExpr();
         }
         if (!Skip(TokenKind::DOUBLE_ARROW) && !SkipCombinedDoubleArrow()) {
-            auto builder = ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_expected_double_arrow_in_case, lookahead, ConvertToken(lookahead));
+            auto builder =
+                ParseDiagnoseRefactor("parse_expected_double_arrow_in_case", lookahead, ConvertToken(lookahead));
             builder.AddHint(MakeRange(matchCaseOther->begin, "case"));
             ConsumeUntilAny(consumeTarget, false);
             matchCaseOther->exprOrDecls = MakeInvalid<Block>(lookahead.Begin());
@@ -884,7 +878,7 @@ OwnedPtr<MatchExpr> ParserImpl::ParseMatchExpr()
         }
         if (!Skip(TokenKind::LCURL)) {
             if (!matchExpr->TestAttr(Attribute::HAS_BROKEN)) {
-                ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_brace, lookahead, ConvertToken(lookahead));
+                ParseDiagnoseRefactor("parse_expected_left_brace", lookahead, ConvertToken(lookahead));
                 matchExpr->EnableAttr(Attribute::HAS_BROKEN);
             }
         } else {
@@ -896,14 +890,13 @@ OwnedPtr<MatchExpr> ParserImpl::ParseMatchExpr()
         }
         ParseMatchCases(*matchExpr);
         if (matchExpr->matchCases.empty()) {
-            auto builder =
-                ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_case, lookahead, ConvertToken(lookahead));
+            auto builder = ParseDiagnoseRefactor("parse_expected_case", lookahead, ConvertToken(lookahead));
             builder.AddHint(MakeRange(matchExpr->begin, "match"));
         }
     } else { // If this match expression does not have a selector.
         ParseMatchNoSelector(*matchExpr);
         if (matchExpr->matchCaseOthers.empty()) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_case, lookahead, ConvertToken(lookahead));
+            ParseDiagnoseRefactor("parse_expected_case", lookahead, ConvertToken(lookahead));
         }
     }
     if (!Skip(TokenKind::RCURL) && !matchExpr->leftCurlPos.IsZero()) {
@@ -937,7 +930,7 @@ OwnedPtr<ReturnExpr> ParserImpl::ParseReturnExpr()
         ret->expr->EnableAttr(Attribute::COMPILER_ADD);
     } else {
         if (newlineSkipped) {
-            auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_nl_warning, firstNLPosition);
+            auto builder = ParseDiagnoseRefactor("parse_nl_warning", firstNLPosition);
             auto* combInfo = LookupSeenCombinator();
             std::string tkValue = combInfo ? std::string(combInfo->value) : lookahead.Value();
             builder.AddHint(
@@ -1190,7 +1183,7 @@ void ParserImpl::ParseTryWithResource(const ScopeKind& scopeKind, TryExpr& tryEx
             decl->type = ParseRefType();
         }
         if (!Skip(TokenKind::ASSIGN)) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_assignment, lookahead, ConvertToken(lookahead));
+            ParseDiagnoseRefactor("parse_expected_assignment", lookahead, ConvertToken(lookahead));
         } else {
             decl->assignPos = lastToken.Begin();
         }
@@ -1213,7 +1206,7 @@ OwnedPtr<WhileExpr> ParserImpl::ParseWhileExpr()
     ret->begin = lookahead.Begin();
     ret->whilePos = lookahead.Begin();
     if (!Skip(TokenKind::LPAREN)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_paren, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_left_paren", lookahead, ConvertToken(lookahead));
     } else {
         ret->leftParenPos = lastToken.Begin();
     }
@@ -1224,7 +1217,7 @@ OwnedPtr<WhileExpr> ParserImpl::ParseWhileExpr()
 
     if (!Skip(TokenKind::RPAREN) && !ret->leftParenPos.IsZero()) {
         if (Is<LetPatternDestructor>(ret->condExpr) && Skip(TokenKind::WHERE)) {
-            diag.DiagnoseRefactor(DiagKindRefactor::parse_expected_if_let_andand, lastToken);
+            diag.DiagnoseRefactor("parse_expected_if_let_andand", lastToken);
         } else {
             DiagExpectedRightDelimiter("(", ret->leftParenPos);
         }
@@ -1246,7 +1239,7 @@ OwnedPtr<AST::ForInExpr> ParserImpl::ParseForInExpr()
 {
     Position begin = lookahead.Begin();
     if (!Skip(TokenKind::LPAREN)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_paren, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_left_paren", lookahead, ConvertToken(lookahead));
         ConsumeUntilIfExprEnd();
         return MakeInvalid<ForInExpr>(lastToken.End());
     }
@@ -1257,7 +1250,7 @@ OwnedPtr<AST::ForInExpr> ParserImpl::ParseForInExpr()
     ret->pattern = ParsePattern({}, false, true);
     ret->pattern->ctxExpr = ret->inExpression.get();
     if (!Skip(TokenKind::IN)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_in_forin_expression, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_in_forin_expression", lookahead, ConvertToken(lookahead));
         ConsumeUntilIfExprEnd();
         ret->EnableAttr(Attribute::IS_BROKEN);
         ret->end = lastToken.End();
@@ -1290,7 +1283,7 @@ OwnedPtr<DoWhileExpr> ParserImpl::ParseDoWhileExpr()
     doWhileExpr->doPos = lookahead.Begin();
     doWhileExpr->body = ParseBlock(ScopeKind::FUNC_BODY);
     if (!Skip(TokenKind::WHILE)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_while_in_do_while, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_while_in_do_while", lookahead, ConvertToken(lookahead));
         ConsumeUntilAny({TokenKind::NL, TokenKind::WHILE});
         if (!Skip(TokenKind::WHILE)) {
             doWhileExpr->EnableAttr(Attribute::IS_BROKEN);
@@ -1300,7 +1293,7 @@ OwnedPtr<DoWhileExpr> ParserImpl::ParseDoWhileExpr()
     }
     doWhileExpr->whilePos = lookahead.Begin();
     if (!Skip(TokenKind::LPAREN)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_paren, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_left_paren", lookahead, ConvertToken(lookahead));
     } else {
         doWhileExpr->leftParenPos = lastToken.Begin();
     }
@@ -1367,8 +1360,7 @@ OwnedPtr<SpawnExpr> ParserImpl::ParseSpawnExpr()
     auto tok = lookahead;
     if (Seeing(TokenKind::LPAREN)) {
         if (newlineSkipped) {
-            (void)ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_newline_not_allowed_between_spawn_and_argument, firstNLPosition);
+            (void)ParseDiagnoseRefactor("parse_newline_not_allowed_between_spawn_and_argument", firstNLPosition);
         }
         if (Skip(TokenKind::LPAREN)) {
             ret->leftParenPos = lastToken.Begin();
@@ -1389,7 +1381,7 @@ OwnedPtr<SpawnExpr> ParserImpl::ParseSpawnExpr()
         ret->task = MakeInvalid<InvalidExpr>(lookahead.Begin());
     }
     if (!ret->task || ret->task->astKind != ASTKind::LAMBDA_EXPR) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_brace, tok, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_left_brace", tok, ConvertToken(lookahead));
         ret->EnableAttr(Attribute::IS_BROKEN);
     }
     if (ret->task && ret->task->astKind == ASTKind::LAMBDA_EXPR) {
@@ -1410,7 +1402,7 @@ OwnedPtr<SynchronizedExpr> ParserImpl::ParseSynchronizedExpr()
     ret->syncPos = lastToken.Begin();
     ret->begin = lookahead.Begin();
     if (!Skip(TokenKind::LPAREN)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_paren, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_left_paren", lookahead, ConvertToken(lookahead));
         ret->EnableAttr(Attribute::HAS_BROKEN);
     }
     ret->leftParenPos = lastToken.Begin();
@@ -1528,8 +1520,7 @@ OwnedPtr<FuncBody> ParserImpl::ParseFuncBodyInLambdaExpr(bool isTailClosure)
     }
     if (!paramList->params.empty() && !Skip(TokenKind::DOUBLE_ARROW) && !SkipCombinedDoubleArrow()) {
         if (!chainedAST.back()->TestAttr(Attribute::HAS_BROKEN)) {
-            ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_expected_double_arrow_in_lambda, lookahead, ConvertToken(lookahead));
+            ParseDiagnoseRefactor("parse_expected_double_arrow_in_lambda", lookahead, ConvertToken(lookahead));
         }
         ConsumeUntilAny(
             [this]() {
@@ -1549,8 +1540,7 @@ OwnedPtr<FuncBody> ParserImpl::ParseFuncBodyInLambdaExpr(bool isTailClosure)
                 Seeing({TokenKind::WILDCARD, TokenKind::COMMA}) ||
                 SeeingTokenAndCombinator(TokenKind::WILDCARD, combinedDoubleArrow);
             if (!hasDoubleArrow && !hasWildard) {
-                ParseDiagnoseRefactor(
-                    DiagKindRefactor::parse_expected_double_arrow_in_lambda, lookahead, ConvertToken(lookahead));
+                ParseDiagnoseRefactor("parse_expected_double_arrow_in_lambda", lookahead, ConvertToken(lookahead));
             }
         }
         if (lastToken.kind == TokenKind::DOUBLE_ARROW || Skip(TokenKind::DOUBLE_ARROW) || SkipCombinedDoubleArrow()) {
@@ -1580,7 +1570,7 @@ OwnedPtr<AST::Expr> ParserImpl::ParseVArrayExpr()
     ChainScope cs(*this, ret.get());
     ret->begin = lookahead.Begin();
     if (!Seeing(TokenKind::LT)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_varray_type_parameter, lastToken.End());
+        ParseDiagnoseRefactor("parse_varray_type_parameter", lastToken.End());
         return MakeOwned<InvalidExpr>(lookahead.Begin());
     }
     ret->type = ParseVarrayType();
@@ -1588,7 +1578,7 @@ OwnedPtr<AST::Expr> ParserImpl::ParseVArrayExpr()
     if (!Skip(TokenKind::LPAREN)) {
         // Only 'VArray <type, $n>(expr)' or 'VArray <type, $n>{ i => expr }' is valid grammar.
         if (!ret->type->TestAttr(Attribute::IS_BROKEN) && !Seeing(TokenKind::LCURL)) {
-            (void)ParseDiagnoseRefactor(DiagKindRefactor::parse_varray_with_paren, ret->type->end);
+            (void)ParseDiagnoseRefactor("parse_varray_with_paren", ret->type->end);
             ret->EnableAttr(Attribute::IS_BROKEN);
         }
         ret->end = ret->type->end;
@@ -1629,7 +1619,7 @@ OwnedPtr<LambdaExpr> ParserImpl::ParseBaseLambdaExpr()
         Skip(TokenKind::IDENTIFIER);
         SkipKeyWordIdentifier();
         Peek();
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_ccd_in_lambda, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_ccd_in_lambda", lookahead, ConvertToken(lookahead));
         ConsumeUntilAny(
             [this]() {
                 return SeeingAny({TokenKind::NL, TokenKind::SEMI, TokenKind::DOUBLE_ARROW, TokenKind::RCURL}) ||
