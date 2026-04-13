@@ -100,7 +100,7 @@ private:
     std::vector<TTypeOffset> allTypes;
     std::vector<TDeclOffset> allDecls;
     std::vector<TExprOffset> allExprs;
-    std::optional<PackageFormat::CompilationOptions> options;
+    std::optional<TCompilationOptions> options;
 
     // Saved packages with indexes, which is used for indexing imported decl.
     std::unordered_map<std::string, FormattedIndex> savedPackageMap;

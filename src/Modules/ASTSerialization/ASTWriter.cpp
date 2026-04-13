@@ -11,6 +11,7 @@
 
 #include "ASTWriterImpl.h"
 
+#include <optional>
 #include <queue>
 
 #include "cangjie/AST/AttributePack.h"
@@ -548,7 +549,7 @@ void ASTWriter::ASTWriterImpl::SaveOptions(bool debug, GlobalOptions::Optimizati
             return InternalError("Unsupported optimization level");
     }
 
-    this->options = PackageFormat::CompilationOptions(saveLevel, debug);
+    options = PackageFormat::CreateCompilationOptions(builder, saveLevel, debug);
 }
 
 /**
@@ -802,7 +803,7 @@ void ASTWriter::ASTWriterImpl::AST2FB(std::vector<uint8_t>& data, const PackageD
     PackageFormat::CjoVersion cjoVersion(CJO_MAJOR_VERSION, CJO_MINOR_VERSION, CJO_PATCH_VERSION);
     auto root = PackageFormat::CreatePackage(builder, cjcVersion, &cjoVersion, packageName, dependencyInfo, vimports,
         vfiles, vfileImports, vtypes, vdecls, vexprs, INVALID_FORMAT_INDEX, kind, access, moduleName, vfileInfo,
-        vdependentStdPkgs, options.has_value() ? &options.value() : nullptr);
+        vdependentStdPkgs, options.has_value() ? options.value() : INVALID_FORMAT_INDEX);
     FinishPackageBuffer(builder, root);
     auto size = static_cast<size_t>(builder.GetSize());
     data.resize(size);

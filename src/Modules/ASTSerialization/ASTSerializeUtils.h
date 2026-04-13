@@ -31,6 +31,7 @@ using TImportSpecOffset = flatbuffers::Offset<PackageFormat::ImportSpec>;
 using TFuncBodyOffset = flatbuffers::Offset<PackageFormat::FuncBody>;
 template <typename T> using TVectorOffset = flatbuffers::Offset<flatbuffers::Vector<T>>;
 using TPosition = PackageFormat::Position;
+using TCompilationOptions = flatbuffers::Offset<PackageFormat::CompilationOptions>;
 using TDeclHash = PackageFormat::DeclHash;
 using PackageIndex = int32_t;
 

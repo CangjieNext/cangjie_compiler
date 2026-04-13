@@ -664,7 +664,7 @@ enum OptimizationLevel : uint8 {
   O0, O1, O2, O3, Os, Oz
 }
 
-struct CompilationOptions {
+table CompilationOptions {
   optimization_level: OptimizationLevel;
   debug: bool;
 }
