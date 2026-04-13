@@ -8,14 +8,81 @@
 
 namespace Cangjie::CodeGen {
 namespace CGTypeInfo {
+namespace {
+llvm::Function* CreateTypeInfoFn(llvm::FunctionType* typeInfoFnType, CGModule& cgMod, const std::string& funcName)
+{
+    if (auto* existing = cgMod.GetLLVMModule()->getFunction(funcName); existing != nullptr) {
+        CJC_ASSERT(existing->getFunctionType() == typeInfoFnType);
+        return existing;
+    }
+
+    llvm::Function* getTiFn =
+        llvm::Function::Create(typeInfoFnType, llvm::Function::PrivateLinkage, funcName, cgMod.GetLLVMModule());
+    getTiFn->addFnAttr("native-interface-fn");
+    getTiFn->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+    return getTiFn;
+}
+
+llvm::Function* GetOrCreateSharedGenericFieldTiFn(
+    llvm::FunctionType* fieldFnType, CGModule& cgMod, size_t genericIndex)
+{
+    auto funcName = "__cj.shared.fieldTiFn.arg." + std::to_string(genericIndex);
+    auto* getTiFn = CreateTypeInfoFn(fieldFnType, cgMod, funcName);
+    if (!getTiFn->empty()) {
+        return getTiFn;
+    }
+
+    CodeGen::IRBuilder2 irBuilder(cgMod);
+    auto entryBB = irBuilder.CreateEntryBasicBlock(getTiFn, "entry");
+    irBuilder.SetInsertPoint(entryBB);
+    auto ti = irBuilder.GetTypeInfoFromTiArray(getTiFn->getArg(1), genericIndex, "ti.shared");
+    auto bitcastedValue = irBuilder.CreateBitCast(ti, llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    irBuilder.CreateRet(bitcastedValue);
+    return getTiFn;
+}
+
+llvm::Function* GetOrCreateSharedConstTypeInfoFn(
+    llvm::FunctionType* typeInfoFnType, CGModule& cgMod, const CHIR::Type& memberType)
+{
+    auto* derefType = DeRef(memberType);
+    CJC_NULLPTR_CHECK(derefType);
+    auto funcName = "__cj.shared.ti.const." + CGType::GetNameOfTypeInfoGV(*derefType);
+    auto* getTiFn = CreateTypeInfoFn(typeInfoFnType, cgMod, funcName);
+    if (!getTiFn->empty()) {
+        return getTiFn;
+    }
+
+    CodeGen::IRBuilder2 irBuilder(cgMod);
+    auto entryBB = irBuilder.CreateEntryBasicBlock(getTiFn, "entry");
+    irBuilder.SetInsertPoint(entryBB);
+    std::unordered_map<const CHIR::Type*, std::function<llvm::Value*(IRBuilder2&)>> genericParamsMap;
+    auto ti = irBuilder.CreateTypeInfo(memberType, genericParamsMap);
+    auto bitcastedValue = irBuilder.CreateBitCast(ti, llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    irBuilder.CreateRet(bitcastedValue);
+    return getTiFn;
+}
+
+llvm::Function* GetOrCreateSharedConstFieldTiFn(
+    llvm::FunctionType* fieldFnType, CGModule& cgMod, const CHIR::Type& fieldType)
+{
+    return GetOrCreateSharedConstTypeInfoFn(fieldFnType, cgMod, fieldType);
+}
+
+llvm::Function* GetOrCreateSharedConstSuperTiFn(
+    llvm::FunctionType* superFnType, CGModule& cgMod, const CHIR::Type& superType)
+{
+    return GetOrCreateSharedConstTypeInfoFn(superFnType, cgMod, superType);
+}
+} // namespace
+
 llvm::Function* GenTypeInfoFns(llvm::FunctionType* fieldFnType, CGModule& cgMod, const std::string& funcName,
     const std::unordered_map<const CHIR::GenericType*, size_t>& outerGTIdxMap, const CHIR::Type& memberType,
     const std::string& memberName)
 {
-    llvm::Function* getTiFn =
-        llvm::Function::Create(fieldFnType, llvm::Function::PrivateLinkage, funcName, cgMod.GetLLVMModule());
-    getTiFn->addFnAttr("native-interface-fn");
-    getTiFn->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+    llvm::Function* getTiFn = CreateTypeInfoFn(fieldFnType, cgMod, funcName);
+    if (!getTiFn->empty()) {
+        return getTiFn;
+    }
     auto cgType = CGType::GetOrCreate(cgMod, DeRef(memberType));
     CodeGen::IRBuilder2 irBuilder(cgMod);
     auto entryBB = irBuilder.CreateEntryBasicBlock(getTiFn, "entry");
@@ -52,6 +119,11 @@ llvm::Constant* GenSuperFnOfTypeTemplate(CGModule& cgMod, const std::string& fun
         CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext())->getPointerTo()};
     llvm::FunctionType* superFnType =
         llvm::FunctionType::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()), argTypes, false);
+
+    if (auto* cgType = CGType::GetOrCreate(cgMod, DeRef(superType)); cgType->IsConcrete() || cgType->IsStaticGI()) {
+        auto* sharedSuperFn = GetOrCreateSharedConstSuperTiFn(superFnType, cgMod, superType);
+        return llvm::ConstantExpr::getBitCast(sharedSuperFn, llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    }
 
     std::unordered_map<const CHIR::GenericType*, size_t> localGenericParamIndicesMap;
     size_t idx = 0;
@@ -103,10 +175,24 @@ llvm::Constant* GenFieldsFnsOfTypeTemplate(CGModule& cgMod,
     // Step3:build Generic Param map for current customType eg:CA<T,U>
     size_t idx = 0;
     for (auto fieldType : fieldTypes) {
-        auto fieldName = std::to_string(idx);
-        auto funcName = funcPrefixName + ".fieldTiFn." + fieldName;
-        llvm::Function* fieldFnGlobal =
-            CGTypeInfo::GenTypeInfoFns(fieldFn, cgMod, funcName, genericParamIndicesMap, *fieldType, fieldName);
+        llvm::Function* fieldFnGlobal = nullptr;
+        if (fieldType->IsGeneric()) {
+            auto* gt = StaticCast<const CHIR::GenericType*>(fieldType);
+            auto it = genericParamIndicesMap.find(gt);
+            if (it != genericParamIndicesMap.end()) {
+                fieldFnGlobal = GetOrCreateSharedGenericFieldTiFn(fieldFn, cgMod, it->second);
+            }
+        } else if (auto* cgType = CGType::GetOrCreate(cgMod, DeRef(*fieldType));
+                   cgType->IsConcrete() || cgType->IsStaticGI()) {
+            fieldFnGlobal = GetOrCreateSharedConstFieldTiFn(fieldFn, cgMod, *fieldType);
+        }
+
+        if (fieldFnGlobal == nullptr) {
+            auto fieldName = std::to_string(idx);
+            auto funcName = funcPrefixName + ".fieldTiFn." + fieldName;
+            fieldFnGlobal =
+                CGTypeInfo::GenTypeInfoFns(fieldFn, cgMod, funcName, genericParamIndicesMap, *fieldType, fieldName);
+        }
         initializers.emplace_back(fieldFnGlobal);
         ++idx;
     }
