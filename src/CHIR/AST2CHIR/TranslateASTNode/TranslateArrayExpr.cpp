@@ -205,9 +205,10 @@ CHIR::Type* Translator::GetExactParentType(
                     replaceTable.emplace(genericTy1, classInstArgs[i]);
                 }
             }
-            auto func = ex->GetExpectedFunc(
+            auto [func, done] = ex->GetExpectedFunc(
                 funcName, funcType, isStatic, replaceTable, funcInstTypeArgs, builder, checkAbstractMethod);
-            if (func != nullptr && func->Get<WrappedRawMethod>() == nullptr) {
+            // when it's done, don't need to check `func` is nullptr, it can't be
+            if (done && func->Get<WrappedRawMethod>() == nullptr) {
                 return ReplaceRawGenericArgType(*ex->GetExtendedType(), replaceTable, builder);
             }
         }

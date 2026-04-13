@@ -223,6 +223,31 @@ template <> EnumCtorInfo CHIRDeserializer::CHIRDeserializerImpl::Create(const Pa
 }
 
 template <>
+AbstractMethodParam CHIRDeserializer::CHIRDeserializerImpl::Create(const PackageFormat::AbstractMethodParam* obj)
+{
+    auto paramName = obj->paramName()->str();
+    auto paramType = GetType<Type>(obj->paramType());
+    auto annoInfo = Create<AnnoInfo>(obj->annoInfo());
+    return AbstractMethodParam{paramName, paramType, annoInfo};
+}
+
+template <>
+AbstractMethodInfo CHIRDeserializer::CHIRDeserializerImpl::Create(const PackageFormat::AbstractMethodInfo* obj)
+{
+    auto name = obj->methodName()->str();
+    auto mangledName = obj->mangledName()->str();
+    auto methodTy = GetType<Type>(obj->methodType());
+    auto paramInfos = Create<AbstractMethodParam>(obj->paramsInfo());
+    auto attributeInfo = CreateAttr(obj->attributes());
+    auto annoInfo = Create<AnnoInfo>(obj->annoInfo());
+    auto methodGenericTypeParams = GetType<GenericType>(obj->methodGenericTypeParams());
+    auto hasBody = obj->hasBody();
+    auto parent = GetCustomTypeDef<ClassDef>(obj->parent());
+    return AbstractMethodInfo{
+        name, mangledName, methodTy, paramInfos, attributeInfo, annoInfo, methodGenericTypeParams, hasBody, parent};
+}
+
+template <>
 VirtualMethodInfo CHIRDeserializer::CHIRDeserializerImpl::Create(const PackageFormat::VirtualMethodInfo* obj)
 {
     auto condition = FuncSigInfo {
@@ -1561,7 +1586,7 @@ void CHIRDeserializer::CHIRDeserializerImpl::ConfigCustomTypeDef(
     auto declaredMethods = GetValue<Function>(buffer->methods());
     for (auto declaredMethod : declaredMethods) {
         CJC_NULLPTR_CHECK(declaredMethod);
-        obj.AddMethod(declaredMethod);
+        obj.AddMethod(declaredMethod, false);
     }
     auto implementedInterfaces = GetType<ClassType>(buffer->implementedInterfaces());
     for (auto implementedInterface : implementedInterfaces) {
@@ -1790,6 +1815,17 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFor
     if (superClass) {
         obj.SetSuperClassTy(*superClass);
     }
+    if (buffer->abstractMethods()) {
+        for (auto info : Create<AbstractMethodInfo>(buffer->abstractMethods())) {
+            obj.AddAbstractMethod(info, false);
+        }
+    }
+    std::vector<std::string> names;
+    names.reserve(buffer->allMethodMangledNames()->size());
+    for (const auto& name : *buffer->allMethodMangledNames()) {
+        names.emplace_back(name->str());
+    }
+    obj.SetAllMethodMangledNames(names);
 }
 
 template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFormat::ExtendDef* buffer, ExtendDef& obj)

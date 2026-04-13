@@ -319,7 +319,7 @@ Value* Translator::GetWrapperFuncFromMemberAccess(Type& thisType, const std::str
             return GetWrapperFuncFromMemberAccess(*upperClassType, funcName, instFuncType, isStatic, funcInstTypeArgs);
         }
     } else if (auto customTy = DynamicCast<CustomType*>(&thisType)) {
-        result = customTy->GetExpectedFunc(funcName, instFuncType, true, funcInstTypeArgs, builder, false);
+        result = customTy->GetExpectedFunc(funcName, instFuncType, true, funcInstTypeArgs, builder, false).first;
     } else {
         std::unordered_map<const GenericType*, Type*> replaceTable;
         auto classInstArgs = thisType.GetTypeArgs();
@@ -332,9 +332,9 @@ Value* Translator::GetWrapperFuncFromMemberAccess(Type& thisType, const std::str
                     replaceTable.emplace(genericTy, classInstArgs[i]);
                 }
             }
-            auto func =
+            auto [func, done] =
                 ex->GetExpectedFunc(funcName, instFuncType, true, replaceTable, funcInstTypeArgs, builder, false);
-            if (func != nullptr) {
+            if (done) {
                 result = func;
                 break;
             }

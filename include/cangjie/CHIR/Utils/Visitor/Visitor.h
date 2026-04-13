@@ -333,9 +333,7 @@ public:
         typename = std::enable_if_t<!std::is_same<ArgT, Function&>::value>>
     static void Visit(const Function& root, PreActionFuncTy pre)
     {
-        if (auto body = root.GetBody()) {
-            Visit(*body, pre);
-        }
+        Visit(*root.GetBody(), pre);
     }
     /*
      * @brief Visit all of blocksGroups, blocks and expressions under (and including)
@@ -353,9 +351,7 @@ public:
             std::is_same<ArgTOf<PostActionFuncTy>, ArgT>::value>>
     static void Visit(const Function& root, PreActionFuncTy pre, PostActionFuncTy post)
     {
-        if (auto body = root.GetBody()) {
-            Visit(*body, pre, post);
-        }
+        Visit(*root.GetBody(), pre, post);
     }
 };
 

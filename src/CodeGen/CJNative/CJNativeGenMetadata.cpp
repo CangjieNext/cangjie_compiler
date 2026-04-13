@@ -80,7 +80,7 @@ llvm::MDTuple* MetadataInfo::GenerateParametersMetadata(
     for (auto arg : argsInfo) {
         auto argId = arg->GetSrcCodeIdentifier();
         // If this is non-static member function, the first parameter is "this" added by the compiler.
-        // And we don't generate metadata for "this" since it is unknown by runtime.
+        // And we don't generate metadata for "this" since it is known by runtime.
         if (arg == argsInfo.front() && hasThis) {
             continue;
         }
@@ -89,6 +89,27 @@ llvm::MDTuple* MetadataInfo::GenerateParametersMetadata(
                            .Concat(argId)
                            .Concat(GetTiName(*arg->GetType()))
                            .Concat(GenerateAttrsMetadata(CHIR::AttributeInfo(), {}, arg->GetAnnoInfo().mangledName)));
+    }
+    return res.CreateMDTuple();
+}
+
+llvm::MDTuple* MetadataInfo::GenerateParametersMetadata(
+    const std::vector<CHIR::AbstractMethodParam>& paramInfos, bool hasThis) const
+{
+    llvm::LLVMContext& llvmCtx = module.GetLLVMContext();
+    MetadataVector res(llvmCtx);
+    for (auto& param : paramInfos) {
+        auto paramId = param.paramName;
+        // If this is non-static member function, the first parameter is "this" added by the compiler.
+        // And we don't generate metadata for "this" since it is known by runtime.
+        if (&param == &paramInfos.front() && hasThis) {
+            continue;
+        }
+        // {!param name, !type name, !attributes}
+        res.AddSubItem(MetadataVector(llvmCtx)
+                           .Concat(paramId)
+                           .Concat(GetTiName(*param.type))
+                           .Concat(GenerateAttrsMetadata(CHIR::AttributeInfo(), {}, param.annoInfo.mangledName)));
     }
     return res.CreateMDTuple();
 }
@@ -464,13 +485,19 @@ void ClassMetadataInfo::GenerateClassLikeMethodMetadata(
         if (method->TestAttr(CHIR::Attribute::NO_REFLECT_INFO)) {
             continue;
         }
-        llvm::MDNode* methodMD = nullptr;
-        if (method->IsPureAbstract()) {
-            methodMD = GenerateClassAbsMethodMetadata(*method);
-        } else {
-            methodMD = GenerateMethodMetadata(*method, cd.IsInterface());
-        }
+        auto methodMD = GenerateMethodMetadata(*method, cd.IsInterface());
         if (method->TestAttr(CHIR::Attribute::STATIC)) {
+            staticMethodsVec.push_back(methodMD);
+        } else {
+            methodsVec.push_back(methodMD);
+        }
+    }
+    for (auto& absMethod : cd.GetAbstractMethods()) {
+        if (absMethod.TestAttr(CHIR::Attribute::NO_REFLECT_INFO) || absMethod.hasBody) {
+            continue;
+        }
+        auto methodMD = GenerateClassAbsMethodMetadata(absMethod);
+        if (absMethod.TestAttr(CHIR::Attribute::STATIC)) {
             staticMethodsVec.push_back(methodMD);
         } else {
             methodsVec.push_back(methodMD);
@@ -478,29 +505,35 @@ void ClassMetadataInfo::GenerateClassLikeMethodMetadata(
     }
 }
 
-llvm::MDNode* ClassMetadataInfo::GenerateClassAbsMethodMetadata(const CHIR::Function& absMethod)
+llvm::MDNode* ClassMetadataInfo::GenerateClassAbsMethodMetadata(const CHIR::AbstractMethodInfo& absMethod)
 {
     auto& llvmCtx = module.GetLLVMContext();
-    auto funcTy = absMethod.GetFuncType();
+    auto methodType = absMethod.methodTy;
+    CJC_ASSERT(methodType->IsFunc());
+    auto funcTy = StaticCast<CHIR::FuncType*>(methodType);
     // Since the metadata corresponding to the type is collected in the process
     // of `GetCodeGenType`, and the abstract method does not need to generate
     // the corresponding ir, naturally, `GetCodeGenType` won't be invoked for the
     // formal parameter. To collect the metadata corresponding to the parameter
     // type, we need to explicitly call `GetCodeGenType`.
-    auto attr = absMethod.GetAttributeInfo();
+    // Handle params.
+    std::vector<CHIR::AbstractMethodParam> params = absMethod.paramInfos;
+    if (!absMethod.TestAttr(CHIR::Attribute::STATIC) && !params.empty()) {
+        // The first parameter name of a non-static function should be `this`.
+        params[0].paramName = "this";
+    }
+    auto attr = absMethod.attributeInfo;
     if (!absMethod.TestAttr(CHIR::Attribute::STATIC)) {
         attr.SetAttr(CHIR::Attribute::VIRTUAL, true);
     }
     auto retTypeInfo = GetTiName(*funcTy->GetReturnType());
     auto mdTuple = MetadataVector(llvmCtx)
-                       .Concat(absMethod.GetSrcCodeIdentifier())
+                       .Concat(absMethod.methodName)
                        .Concat(retTypeInfo)
                        .Concat("")
-                       .Concat(GenerateParametersMetadata(
-                            absMethod.GetParams(), !absMethod.TestAttr(CHIR::Attribute::STATIC)))
-                       .Concat(GenerateParametersMetadata(absMethod.GetGenericTypeParams()))
-                       .Concat(GenerateAttrsMetadata(
-                            attr, ExtraAttribute::METHOD, absMethod.GetAnnoInfo().mangledName))
+                       .Concat(GenerateParametersMetadata(params, !absMethod.TestAttr(CHIR::Attribute::STATIC)))
+                       .Concat(GenerateParametersMetadata(absMethod.methodGenericTypeParams))
+                       .Concat(GenerateAttrsMetadata(attr, ExtraAttribute::METHOD, absMethod.annoInfo.mangledName))
                        .CreateMDTuple();
     return mdTuple;
 }

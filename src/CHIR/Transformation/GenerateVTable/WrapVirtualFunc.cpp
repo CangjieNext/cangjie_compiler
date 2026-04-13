@@ -80,7 +80,8 @@ void TryDeleteVirtuallWrapperFunc(CustomTypeDef& customTypeDef, Function& finalF
     if (!finalFunc.TestAttr(Attribute::FINAL)) {
         return;
     }
-    for (auto method : customTypeDef.GetMethods()) {
+    auto allMethods = customTypeDef.GetMethods();
+    for (auto method : allMethods) {
         if (!method->TestAttr(Attribute::DESERIALIZED) || !method->TestAttr(Attribute::VIRTUAL)) {
             continue;
         }
@@ -116,7 +117,7 @@ void WrapVirtualFunc::CheckAndWrap(CustomTypeDef& customTypeDef)
         CJC_ASSERT(parentVTable.GetMethodNum() == vtableIt.GetMethodNum());
         for (size_t i = 0; i < vtableIt.GetMethodNum(); ++i) {
             auto& curVirMethodInfo = vtableIt.GetVirtualMethods()[i];
-            if (curVirMethodInfo.GetVirtualMethod()->IsPureAbstract()) {
+            if (curVirMethodInfo.GetVirtualMethod() == nullptr) {
                 continue;
             }
             auto& parentVirMethodInfo = parentVTable.GetVirtualMethods()[i];

@@ -490,6 +490,24 @@ std::vector<Type*> CustomType::GetInstantiatedMemberTys(CHIRBuilder& builder)
     }
 }
 
+std::vector<FuncType*> CustomType::GetInstMethodTypes(CHIRBuilder& builder) const
+{
+    std::vector<FuncType*> instFuncTypes;
+    auto typeArgs = GetGenericArgs();
+    auto paramArgs = def->GetGenericTypeParams();
+    std::unordered_map<const GenericType*, Type*> instMap;
+    CJC_ASSERT(typeArgs.size() == paramArgs.size());
+    for (size_t i = 0; i < typeArgs.size(); ++i) {
+        instMap.emplace(paramArgs[i], typeArgs[i]);
+    }
+    auto methods = def->GetMethods();
+    for (auto method : methods) {
+        instFuncTypes.emplace_back(
+            StaticCast<FuncType*>(ReplaceRawGenericArgType(*method->GetType(), instMap, builder)));
+    }
+    return instFuncTypes;
+}
+
 std::vector<Function*> CustomType::GetDeclareAndExtendMethods(CHIRBuilder& builder) const
 {
     auto allMethods = def->GetMethods();
@@ -574,6 +592,26 @@ ClassType* ClassType::GetSuperClassTy(CHIRBuilder* builder)
         hasSetSuperClass = true;
         return superClassTy;
     }
+}
+
+std::vector<AbstractMethodInfo> ClassType::GetInstAbstractMethodTypes(CHIRBuilder& builder) const
+{
+    std::vector<AbstractMethodInfo> instMethodInfos;
+    auto typeArgs = GetGenericArgs();
+    auto paramArgs = def->GetGenericTypeParams();
+    std::unordered_map<const GenericType*, Type*> instMap;
+    CJC_ASSERT(typeArgs.size() == paramArgs.size());
+    for (size_t i = 0; i < typeArgs.size(); ++i) {
+        instMap.emplace(paramArgs[i], typeArgs[i]);
+    }
+    auto methods = StaticCast<const ClassDef*>(def)->GetAbstractMethods();
+    for (auto& method : methods) {
+        method.methodTy = ReplaceRawGenericArgType(*method.methodTy, instMap, builder);
+        for (auto& paramInfo : method.paramInfos) {
+            paramInfo.type = ReplaceRawGenericArgType(*paramInfo.type, instMap, builder);
+        }
+    }
+    return methods;
 }
 
 bool ClassType::IsDirectSuperTypeOf(Type& subType, CHIRBuilder& builder) const
@@ -669,7 +707,7 @@ static bool CollectReplaceTableForExtendedType(Type& extendedType, Type& instCus
     return true;
 }
 
-Function* CustomType::GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
+std::pair<Function*, bool> CustomType::GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
     std::vector<Type*>& funcInstTypeArgs, CHIR::CHIRBuilder& builder, bool checkAbstractMethod)
 {
     std::unordered_map<const GenericType*, Type*> replaceTable;
@@ -689,9 +727,9 @@ Function* CustomType::GetExpectedFunc(const std::string& funcName, FuncType& fun
 
     // current def
     
-    if (auto func = GetCustomTypeDef()->GetExpectedFunc(
-        funcName, funcType, isStatic, replaceTable, funcInstTypeArgs, builder, checkAbstractMethod)) {
-        return func;
+    if (auto [func, done] = GetCustomTypeDef()->GetExpectedFunc(
+        funcName, funcType, isStatic, replaceTable, funcInstTypeArgs, builder, checkAbstractMethod); done) {
+        return {func, done};
     }
 
     // extend def
@@ -700,10 +738,10 @@ Function* CustomType::GetExpectedFunc(const std::string& funcName, FuncType& fun
         if (!match) {
             continue;
         }
-        auto func = ex->GetExpectedFunc(
+        auto [func, done] = ex->GetExpectedFunc(
             funcName, funcType, isStatic, replaceTable, funcInstTypeArgs, builder, checkAbstractMethod);
-        if (func != nullptr) {
-            return func;
+        if (done) {
+            return {func, done};
         }
     }
 
@@ -711,19 +749,19 @@ Function* CustomType::GetExpectedFunc(const std::string& funcName, FuncType& fun
     if (auto classTy = DynamicCast<ClassType*>(this); classTy &&
         classTy->GetClassDef()->GetSuperClassDef() != nullptr) {
         auto superClassTy = classTy->GetSuperClassTy(&builder);
-        auto func = superClassTy->GetExpectedFunc(
+        auto [func, done] = superClassTy->GetExpectedFunc(
             funcName, funcType, isStatic, funcInstTypeArgs, builder, checkAbstractMethod);
-        if (func != nullptr) {
-            return func;
+        if (done) {
+            return {func, done};
         }
     }
 
     // super interface
     for (auto superInterfaceTy : this->GetImplementedInterfaceTys(&builder)) {
-        auto func = superInterfaceTy->GetExpectedFunc(
+        auto [func, done] = superInterfaceTy->GetExpectedFunc(
             funcName, funcType, isStatic, funcInstTypeArgs, builder, checkAbstractMethod);
-        if (func != nullptr) {
-            return func;
+        if (done) {
+            return {func, done};
         }
     }
 
@@ -731,14 +769,14 @@ Function* CustomType::GetExpectedFunc(const std::string& funcName, FuncType& fun
     for (auto ex : GetCustomTypeDef()->GetExtends()) {
         for (auto ty : ex->GetImplementedInterfaceTys()) {
             auto superInterfaceTy = ReplaceRawGenericArgType(*ty, replaceTable, builder);
-            auto func = StaticCast<ClassType*>(superInterfaceTy)->GetExpectedFunc(
+            auto [func, done] = StaticCast<ClassType*>(superInterfaceTy)->GetExpectedFunc(
                 funcName, funcType, isStatic, funcInstTypeArgs, builder, checkAbstractMethod);
-            if (func != nullptr) {
-                return func;
+            if (done) {
+                return {func, done};
             }
         }
     }
-    return nullptr;
+    return {nullptr, false};
 }
 
 Type* CustomType::GetExactParentType(
@@ -761,8 +799,10 @@ Type* CustomType::GetExactParentType(
     // 3. func declared in super interface, including extend def's super interface
     
     // current def
-    if (auto func = GetCustomTypeDef()->GetExpectedFunc(
-        funcName, funcType, isStatic, replaceTable, funcInstTypeArgs, builder, checkAbstractMethod)) {
+    // when it's an abstract method, `func` is nullptr
+    if (auto [func, done] = GetCustomTypeDef()->GetExpectedFunc(
+        funcName, funcType, isStatic, replaceTable, funcInstTypeArgs, builder, checkAbstractMethod);
+        done && (func == nullptr || func->Get<WrappedRawMethod>() == nullptr)) {
         return this;
     }
 
@@ -772,8 +812,10 @@ Type* CustomType::GetExactParentType(
         if (!match) {
             continue;
         }
-        if (auto func = ex->GetExpectedFunc(
-            funcName, funcType, isStatic, replaceTable, funcInstTypeArgs, builder, checkAbstractMethod)) {
+        auto [func, done] = ex->GetExpectedFunc(
+            funcName, funcType, isStatic, replaceTable, funcInstTypeArgs, builder, checkAbstractMethod);
+        // when it's an abstract method, `func` is nullptr
+        if (done && (func == nullptr || func->Get<WrappedRawMethod>() == nullptr)) {
             return ReplaceRawGenericArgType(*ex->GetExtendedType(), replaceTable, builder);
         }
     }

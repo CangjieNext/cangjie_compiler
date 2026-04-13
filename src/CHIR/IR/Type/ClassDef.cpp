@@ -34,6 +34,15 @@ bool ClassDef::HasSuperClass() const
     return GetSuperClassDef() != nullptr;
 }
 
+void ClassDef::PrintAbstractMethod(std::stringstream& ss) const
+{
+    for (auto& method : abstractMethods) {
+        PrintIndent(ss);
+        ss << method.attributeInfo.ToString();
+        ss << "func " << method.methodName << ": " << method.methodTy->ToString() << "\n";
+    }
+}
+
 void ClassDef::SetSuperClassTy(ClassType& ty)
 {
     superClassTy = &ty;
@@ -50,6 +59,7 @@ std::string ClassDef::ToString() const
     PrintLocalVar(ss);
     PrintStaticVar(ss);
     PrintMethod(ss);
+    PrintAbstractMethod(ss);
     PrintVTable(ss);
     ss << "}";
     return ss.str();
@@ -95,6 +105,29 @@ Function* ClassDef::GetFinalizer() const
     return nullptr;
 }
 
+void ClassDef::AddAbstractMethod(AbstractMethodInfo methodInfo, bool recordOrder)
+{
+    auto mangledName = methodInfo.GetASTMangledName();
+    CJC_ASSERT(!mangledName.empty());
+    if (recordOrder) {
+        if (std::find(allMethodMangledNames.begin(), allMethodMangledNames.end(), mangledName) ==
+            allMethodMangledNames.end()) {
+            allMethodMangledNames.emplace_back(mangledName);
+        }
+    }
+    abstractMethods.emplace_back(std::move(methodInfo));
+}
+
+std::vector<AbstractMethodInfo> ClassDef::GetAbstractMethods() const
+{
+    return abstractMethods;
+}
+
+void ClassDef::SetAbstractMethods(const std::vector<AbstractMethodInfo>& methods)
+{
+    abstractMethods = methods;
+}
+
 void ClassDef::SetType(CustomType& ty)
 {
     CJC_ASSERT(ty.GetTypeKind() == Type::TypeKind::TYPE_CLASS);
@@ -114,4 +147,27 @@ void ClassDef::PrintComment(std::stringstream& ss) const
         ss << " // ";
     }
     ss << "isAnnotation: " << BoolToString(isAnnotation);
+}
+
+void ClassDef::AddMethod(Function* method, bool recordOrder)
+{
+    CustomTypeDef::AddMethod(method);
+    auto mangledName = method->GetIdentifierWithoutPrefix();
+    CJC_ASSERT(!mangledName.empty());
+    if (recordOrder) {
+        if (std::find(allMethodMangledNames.begin(), allMethodMangledNames.end(), mangledName) ==
+            allMethodMangledNames.end()) {
+            allMethodMangledNames.emplace_back(mangledName);
+        }
+    }
+}
+
+const std::vector<std::string>& ClassDef::GetAllMethodMangledNames() const
+{
+    return allMethodMangledNames;
+}
+
+void ClassDef::SetAllMethodMangledNames(const std::vector<std::string>& names)
+{
+    allMethodMangledNames = names;
 }

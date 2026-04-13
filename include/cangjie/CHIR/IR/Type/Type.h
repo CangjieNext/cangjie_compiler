@@ -39,6 +39,8 @@ class Function;
 class ClassType;
 class CHIRBuilder;
 class GenericType;
+struct AbstractMethodInfo;
+struct AbstractMethodParam;
 
 /** HashCombine is a function used to create hash with fewer collisions. */
 template <typename T> inline void HashCombine(size_t& hashVal, const T& val)
@@ -646,6 +648,14 @@ public:
     }
 
     /**
+     * @brief Retrieves the instantiated method types.
+     *
+     * @param builder The CHIR builder used for building the types.
+     * @return A vector of instantiated method types.
+     */
+    std::vector<FuncType*> GetInstMethodTypes(CHIRBuilder& builder) const;
+
+    /**
      * @brief Retrieves the instantiated member type by a given path, checking for read-only.
      *
      * @param path The path to the member type.
@@ -703,9 +713,9 @@ public:
      * @param funcInstTypeArgs A vector to store the function instance type arguments.
      * @param builder The CHIR builder used for building the function.
      * @param checkAbstractMethod Indicates whether to check for an abstract method.
-     * @return The expected function.
+     * @return A pair containing the expected function and a boolean flag.
      */
-    Function* GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
+    std::pair<Function*, bool> GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
         std::vector<Type*>& funcInstTypeArgs, CHIR::CHIRBuilder& builder, bool checkAbstractMethod);
 
     /**
@@ -782,6 +792,8 @@ public:
     }
 
     bool IsDirectSuperTypeOf(Type& subType, CHIRBuilder& builder) const;
+
+    std::vector<AbstractMethodInfo> GetInstAbstractMethodTypes(CHIRBuilder& builder) const;
 private:
     explicit ClassType(ClassDef* classDef, const std::vector<Type*>& genericArgs = {});
     ~ClassType() override = default;

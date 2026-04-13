@@ -202,7 +202,7 @@ void WrapMutFunc::Run(CustomTypeDef& customTypeDef)
     }
     for (auto& vtableIt : customTypeDef.GetDefVTable().GetTypeVTables()) {
         for (auto& methodInfo : vtableIt.GetVirtualMethods()) {
-            if (methodInfo.GetVirtualMethod()->IsPureAbstract()) {
+            if (methodInfo.GetVirtualMethod() == nullptr) {
                 continue;
             }
             auto rawFunc = methodInfo.GetVirtualMethod();
