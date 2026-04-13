@@ -545,15 +545,11 @@ bool GlobalOptions::CheckLtoOptions() const
 {
     if (emitObjectLibInLTO) {
         if (outputMode != OutputMode::STATIC_LIB) {
-            Errorln("Option '--emit-staticlib-in-lto' requires '--output-type=staticlib'.");
+            Errorln("Option '--emit-object-in-lto' requires '--output-type=staticlib'.");
             return false;
         }
-        if (!IsFullLTOEnabled()) {
-            Errorln("Option '--emit-staticlib-in-lto' requires '--lto=full'.");
-            return false;
-        }
-        if (target.os != OSType::DARWIN) {
-            Errorln("Option '--emit-staticlib-in-lto' is only supported on macOS.");
+        if (target.os != OSType::DARWIN && target.os != OSType::IOS) {
+            Errorln("Option '--emit-object-in-lto' is only supported on Apple platforms.");
             return false;
         }
     }
