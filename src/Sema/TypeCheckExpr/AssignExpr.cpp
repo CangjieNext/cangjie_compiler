@@ -14,6 +14,8 @@
 
 #include "cangjie/AST/RecoverDesugar.h"
 
+#include <string_view>
+
 using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
@@ -45,7 +47,7 @@ const std::map<TokenKind, std::vector<TypeKind>> COMPOUND_ASSIGN_TYPE_MAP = {
 
 void DiagCannotAssignToSubscript(DiagnosticEngine& diag, const SubscriptExpr& se, const Expr& rightValue)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_assign_to_subscript, se);
+    auto builder = diag.DiagnoseRefactor("sema_cannot_assign_to_subscript", se);
     CJC_ASSERT(se.baseExpr && Ty::IsTyCorrect(se.baseExpr->GetTy()));
     if (se.baseExpr->GetTy()->IsExtendable()) {
         std::string indexParams;
@@ -79,7 +81,7 @@ bool IsAssignableSubScriptExpr(
     }
     CJC_ASSERT(se.baseExpr && !se.indexExprs.empty());
     DiagKind diagKind =
-        isCompound ? DiagKind::sema_subscript_get_set_not_supported : DiagKind::sema_subscript_set_not_supported;
+        isCompound ? "sema_subscript_get_set_not_supported" : "sema_subscript_set_not_supported";
     auto indexTy = TypeManager::GetNonNullTy(se.indexExprs[0]->GetTy());
     auto baseTy = TypeManager::GetNonNullTy(se.baseExpr->GetTy());
     if ((!baseTy->IsArray() && !Is<VArrayTy>(baseTy)) || (isOperatorOverload && !indexTy->IsInteger())) {
@@ -188,7 +190,7 @@ bool TypeCheckerImpl::IsAssignable(Expr& e, bool isCompound, const std::vector<D
         }
         if (leftRef.isThis && leftRef.isAlone) {
             (void)std::for_each(diags.begin(), diags.end(), [this](auto info) { (void)diag.Diagnose(info); });
-            (void)diag.Diagnose(e, DiagKind::sema_invalid_assignment_to_this_expr);
+            (void)diag.Diagnose(e, "sema_invalid_assignment_to_this_expr");
             return false;
         }
     } else if (e.astKind == ASTKind::MEMBER_ACCESS) {
@@ -379,7 +381,7 @@ Ptr<Ty> TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr& ae)
         // Quick fix. Rules for **= are different from all other compound assignment expressions.
         if (!CheckExponentByBaseTy(ctx, *lTy, *ae.leftValue, *ae.rightExpr)) {
             if (ae.ShouldDiagnose()) {
-                (void)diag.Diagnose(ae, DiagKind::sema_type_incompatible, "assignment");
+                (void)diag.Diagnose(ae, "sema_type_incompatible", "assignment");
             }
             ae.SetTy(TypeManager::GetInvalidTy());
         }
@@ -394,7 +396,7 @@ Ptr<Ty> TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr& ae)
         ChkLitConstExprRange(StaticCast<LitConstExpr&>(*ae.rightExpr));
     } else if (!Check(ctx, lTy, ae.rightExpr.get())) {
         if (ae.ShouldDiagnose() && !CanSkipDiag(*ae.rightExpr)) {
-            (void)diag.Diagnose(ae, DiagKind::sema_type_incompatible, "assignment");
+            (void)diag.Diagnose(ae, "sema_type_incompatible", "assignment");
         }
         return TypeManager::GetInvalidTy();
     }
@@ -410,12 +412,12 @@ bool TypeCheckerImpl::IsShiftAssignValid(const AssignExpr& ae)
 {
     if (Utils::In(ae.op, SHIFT_ASSIGN_OPERATOR) && ae.rightExpr->astKind == ASTKind::LIT_CONST_EXPR) {
         if (ae.rightExpr->constNumValue.asInt.IsNegativeNum()) {
-            (void)diag.Diagnose(*ae.rightExpr, DiagKind::sema_negative_shift_count);
+            (void)diag.Diagnose(*ae.rightExpr, "sema_negative_shift_count");
             return false;
         }
         if (Ty::IsTyCorrect(ae.leftValue->GetTy()) && ae.leftValue->GetTy()->IsInteger()) {
             if (ae.rightExpr->constNumValue.asInt.GreaterThanOrEqualBitLen(ae.leftValue->TyKind())) {
-                (void)diag.Diagnose(*ae.rightExpr, DiagKind::sema_shift_count_overflow);
+                (void)diag.Diagnose(*ae.rightExpr, "sema_shift_count_overflow");
                 return false;
             }
         }
@@ -432,7 +434,7 @@ bool TypeCheckerImpl::PreCheckCompoundAssign(
             Synthesize({ctx, SynPos::EXPR_ARG}, ae.rightExpr.get());
             if (ae.ShouldDiagnose()) {
                 (void)std::for_each(diags.begin(), diags.end(), [this](auto info) { (void)diag.Diagnose(info); });
-                (void)diag.Diagnose(ae, DiagKind::sema_type_incompatible, "compound assignment expression");
+                (void)diag.Diagnose(ae, "sema_type_incompatible", "compound assignment expression");
             }
             return false;
         }

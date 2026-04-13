@@ -131,7 +131,7 @@ Ptr<ClassLikeDecl> Utils::GetJavaLangDecl(const std::string& identifier)
     auto decl = DynamicCast<ClassLikeDecl>(importManager.GetImportedDecl(INTEROP_JAVA_LANG_PACKAGE, identifier));
     if (decl == nullptr) {
         importManager.GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::sema_member_not_imported, DEFAULT_POSITION, INTEROP_JAVA_LANG_PACKAGE + "." + identifier);
+            "sema_member_not_imported", DEFAULT_POSITION, INTEROP_JAVA_LANG_PACKAGE + "." + identifier);
         return Ptr<ClassLikeDecl>(nullptr);
     }
     return decl;

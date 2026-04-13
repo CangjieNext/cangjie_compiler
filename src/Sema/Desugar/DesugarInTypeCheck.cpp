@@ -586,7 +586,7 @@ void TypeCheckerImpl::DesugarPointerCall(ASTContext& ctx, CallExpr& ce)
         pointerExpr->arg = std::move(ce.args[0]);
     }
     if (ce.args.size() > 1) {
-        diag.Diagnose(ce, DiagKind::sema_pointer_too_much_argument);
+        diag.Diagnose(ce, "sema_pointer_too_much_argument");
     }
     ce.args.clear();
     pointerExpr->scopeName = ce.scopeName;

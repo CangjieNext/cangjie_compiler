@@ -353,7 +353,7 @@ void CheckUnusedImportImpl::ReportUnusedImports()
         if (IsImportContentUsed(*importSpec)) {
             continue;
         }
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_unused_import, MakeRange(importSpec->begin, importSpec->end),
+        diag.DiagnoseRefactor("sema_unused_import", MakeRange(importSpec->begin, importSpec->end),
             importSpec->content.ToString());
     }
 }

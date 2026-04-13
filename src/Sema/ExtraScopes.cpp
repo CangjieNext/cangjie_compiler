@@ -154,7 +154,7 @@ bool InstCtxScope::GenerateExtendGenericTypeMapping(
     }
     if (!IsCurrentGeneric(fd, ce) && extend->TestAttr(Attribute::GENERIC) &&
         !ce.baseFunc->GetTypeArgs().empty()) {
-        diag.Diagnose(ce, DiagKind::sema_non_generic_function_with_type_argument);
+        diag.Diagnose(ce, "sema_non_generic_function_with_type_argument");
         return false;
     }
     if (ce.baseFunc->astKind == ASTKind::REF_EXPR) {
@@ -315,7 +315,7 @@ bool InstCtxScope::SetRefDecl(ASTContext& ctx, AST::FuncDecl& fd, CallExpr& ce)
         }
     } else {
         if (!IsCurrentGeneric(fd, ce) && !typeArgs.empty()) {
-            diag.Diagnose(ce, DiagKind::sema_non_generic_function_with_type_argument);
+            diag.Diagnose(ce, "sema_non_generic_function_with_type_argument");
             return false;
         }
         // Base expr is RefExpr, and the context of reference may be generic.

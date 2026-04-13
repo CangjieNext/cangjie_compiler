@@ -685,7 +685,7 @@ std::vector<Ptr<Decl>> LookUpImpl::Lookup(
         return results;
     }
     if (scopeName.empty()) {
-        diag.Diagnose(node, DiagKind::sema_symbol_not_collected, name);
+        diag.Diagnose(node, "sema_symbol_not_collected", name);
         return results;
     }
     if (LookupImpl(name, scopeName, node, onlyLookUpTopLevel, isSetter, results)) {

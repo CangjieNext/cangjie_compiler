@@ -41,7 +41,7 @@ void DiagJavaImplRedefinitionInJava(DiagnosticEngine& diag, const ClassLikeDecl&
     auto rangeNext = MakeJavaImplJavaNameRange(decl);
 
     auto builder =
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_impl_redefinition, prevDecl, rangeNext, prevDeclFqName);
+        diag.DiagnoseRefactor("sema_java_impl_redefinition", prevDecl, rangeNext, prevDeclFqName);
     builder.AddNote(decl, rangePrev, "'" + prevDeclFqName + "' is previously declared here");
 }
 
@@ -61,15 +61,15 @@ void DiagJavaMirrorChildMustBeAnnotated(DiagnosticEngine& diag, const ClassLikeD
         }
     }
 
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_subtype_must_be_annotated, decl, parentDecl->identifier);
+    diag.DiagnoseRefactor("sema_java_mirror_subtype_must_be_annotated", decl, parentDecl->identifier);
 }
 
 void DiagJavaDeclCannotInheritPureCangjieType(DiagnosticEngine& diag, ClassLikeDecl& decl)
 {
     CJC_ASSERT(IsMirror(decl) || IsImpl(decl));
 
-    auto kind = IsMirror(decl) ? DiagKindRefactor::sema_java_mirror_cannot_inherit_pure_cangjie_type
-                               : DiagKindRefactor::sema_java_impl_cannot_inherit_pure_cangjie_type;
+    auto kind = IsMirror(decl) ? "sema_java_mirror_cannot_inherit_pure_cangjie_type"
+                               : "sema_java_impl_cannot_inherit_pure_cangjie_type";
 
     auto builder = diag.DiagnoseRefactor(kind, decl);
 
@@ -87,8 +87,8 @@ void DiagJavaDeclCannotBeExtendedWithInterface(DiagnosticEngine& diag, ExtendDec
     auto& ty = *decl.extendedType->GetTy();
     CJC_ASSERT(IsMirror(ty) || IsImpl(ty));
     CJC_ASSERT(!decl.inheritedTypes.empty());
-    auto kind = IsMirror(ty) ? DiagKindRefactor::sema_java_mirror_cannot_be_extended_with_interface
-                             : DiagKindRefactor::sema_java_impl_cannot_be_extended_with_interface;
+    auto kind = IsMirror(ty) ? "sema_java_mirror_cannot_be_extended_with_interface"
+                             : "sema_java_impl_cannot_be_extended_with_interface";
 
     diag.DiagnoseRefactor(kind, decl);
 }
@@ -142,7 +142,7 @@ void DiagUsageOfJavaTypes(
     auto primaryDiagJavaDecl = javaDecls.back();
     javaDecls.pop_back();
 
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_variable_of_java_type, varDecl, GetVarKindName(varDecl),
+    auto builder = diag.DiagnoseRefactor("sema_variable_of_java_type", varDecl, GetVarKindName(varDecl),
         primaryDiagJavaDecl->identifier);
 
     for (auto javaDecl : javaDecls) {
@@ -168,7 +168,7 @@ void DiagJavaTypesAsGenericParam(DiagnosticEngine& diag, const Node& expr, std::
     auto genericDecl = expr.GetTarget();
     CJC_ASSERT(genericDecl);
 
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_parameter_of_java_type, expr,
+    auto builder = diag.DiagnoseRefactor("sema_generic_parameter_of_java_type", expr,
         genericDecl->identifier, primaryDiagJavaDecl->identifier);
 
     for (auto javaDecl : javaDecls) {

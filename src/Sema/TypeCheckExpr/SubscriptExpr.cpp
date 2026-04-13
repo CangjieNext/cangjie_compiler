@@ -89,18 +89,18 @@ bool TypeCheckerImpl::ChkTupleAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptE
         return false;
     }
     if (se.indexExprs[0]->astKind != ASTKind::LIT_CONST_EXPR) {
-        diag.Diagnose(*se.indexExprs[0], DiagKind::sema_builtin_invalid_index, "tuple");
+        diag.Diagnose(*se.indexExprs[0], "sema_builtin_invalid_index", "tuple");
         return false;
     }
     if (!Check(ctx, TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64), se.indexExprs[0].get())) {
-        diag.Diagnose(*se.indexExprs[0], DiagKind::sema_builtin_invalid_index, "tuple");
+        diag.Diagnose(*se.indexExprs[0], "sema_builtin_invalid_index", "tuple");
         return false;
     }
     auto idxExpr = StaticAs<ASTKind::LIT_CONST_EXPR>(se.indexExprs[0].get());
     uint64_t index = idxExpr->constNumValue.asInt.Uint64();
     if (index >= tupleTy.typeArgs.size()) {
         if (se.ShouldDiagnose(true)) {
-            diag.Diagnose(*se.indexExprs[0], DiagKind::sema_builtin_index_in_bound, "tuple");
+            diag.Diagnose(*se.indexExprs[0], "sema_builtin_index_in_bound", "tuple");
         }
         return false;
     }
@@ -141,7 +141,7 @@ bool TypeCheckerImpl::ChkTupleAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptE
 bool TypeCheckerImpl::ChkVArrayAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se, VArrayTy& varrTy)
 {
     if (se.indexExprs.size() != 1) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_varray_subscript_num, se);
+        diag.DiagnoseRefactor("sema_varray_subscript_num", se);
         return false;
     }
     {

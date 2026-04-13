@@ -16,6 +16,8 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Utils/Utils.h"
 
+#include <string_view>
+
 using namespace Cangjie;
 using namespace TypeCheckUtil;
 using namespace AST;
@@ -158,7 +160,7 @@ struct JavaInteropTypeChecker {
         return false;
     }
 
-    inline void CheckJavaCompatibleParamTypes(FuncDecl& fdecl, DiagKindRefactor errkind)
+    inline void CheckJavaCompatibleParamTypes(FuncDecl& fdecl, std::string_view errkind)
     {
         if (!fdecl.funcBody) {
             return;
@@ -187,23 +189,23 @@ struct JavaInteropTypeChecker {
                 // Type wasn't explicitly written, so report on whole declaration
                 node = &fd;
             }
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_method_ret_unsupported, *node,
+            diag.DiagnoseRefactor("sema_java_mirror_method_ret_unsupported", *node,
                 Ty::ToString(fd.funcBody->retType->GetTy()), GetJavaClassKind());
             fd.EnableAttr(Attribute::IS_BROKEN);
         }
 
-        CheckJavaCompatibleParamTypes(fd, DiagKindRefactor::sema_java_mirror_method_arg_must_be_java_mirror);
+        CheckJavaCompatibleParamTypes(fd, "sema_java_mirror_method_arg_must_be_java_mirror");
     }
 
     inline void CheckJavaMirrorConstructorTypes(FuncDecl& ctor)
     {
-        CheckJavaCompatibleParamTypes(ctor, DiagKindRefactor::sema_java_mirror_ctor_arg_must_be_java_mirror);
+        CheckJavaCompatibleParamTypes(ctor, "sema_java_mirror_ctor_arg_must_be_java_mirror");
     }
 
     inline void CheckJavaMirrorPropType(PropDecl& prop)
     {
         if (!IsJavaCompatible(*prop.GetTy())) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_prop_must_be_java_mirror, *prop.type);
+            diag.DiagnoseRefactor("sema_java_mirror_prop_must_be_java_mirror", *prop.type);
             prop.EnableAttr(Attribute::IS_BROKEN);
         }
     }
@@ -243,7 +245,7 @@ struct JavaInteropTypeChecker {
                 node = &fd;
             }
             if (!fd.funcBody->retType->GetTy()->IsGeneric()) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmapping_method_ret_unsupported, *node,
+                diag.DiagnoseRefactor("sema_cjmapping_method_ret_unsupported", *node,
                     Ty::ToString(fd.funcBody->retType->GetTy()), GetJavaClassKind());
                 fd.EnableAttr(Attribute::IS_BROKEN);
             }
@@ -264,7 +266,7 @@ struct JavaInteropTypeChecker {
                     continue;
                 }
                 if (isOptionArg || !IsJavaCompatible(*param->GetTy())) {
-                    diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmapping_method_arg_not_supported, *param);
+                    diag.DiagnoseRefactor("sema_cjmapping_method_arg_not_supported", *param);
                     fdecl.EnableAttr(Attribute::IS_BROKEN);
                     fdecl.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
                     fdecl.outerDecl->EnableAttr(Attribute::IS_BROKEN);
@@ -301,7 +303,7 @@ void JavaInteropManager::CheckNonJavaSuperType(ClassLikeDecl& decl) const
     }
 
     if (decl.HasAnno(AnnotationKind::JAVA_IMPL) && !IsJavaMirrorSubtype(*decl.GetTy())) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_subtype_anno_must_inherit_mirror, decl);
+        diag.DiagnoseRefactor("sema_java_mirror_subtype_anno_must_inherit_mirror", decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
 }
@@ -399,13 +401,13 @@ void JavaInteropManager::CheckTypes(ClassLikeDecl& classLikeDecl)
 
     if (auto id = As<ASTKind::INTERFACE_DECL>(&classLikeDecl);
         id && id->TestAttr(Attribute::JAVA_MIRROR_SUBTYPE) && !id->TestAttr(Attribute::JAVA_MIRROR)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *id, "@JavaImpl interface");
+        diag.DiagnoseRefactor("sema_java_interop_not_supported", *id, "@JavaImpl interface");
         classLikeDecl.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
 
     if (auto cd = As<ASTKind::CLASS_DECL>(&classLikeDecl); cd && cd->TestAttr(Attribute::ABSTRACT) && IsImpl(*cd)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *cd, "@JavaImpl abstract");
+        diag.DiagnoseRefactor("sema_java_interop_not_supported", *cd, "@JavaImpl abstract");
         classLikeDecl.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
@@ -427,7 +429,7 @@ void JavaInteropManager::CheckCJMappingDeclSupportRange(Decl& decl)
         case ASTKind::EXTEND_DECL:
             break;
         default:
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmapping_decl_not_supported, MakeRange(decl.identifier),
+            diag.DiagnoseRefactor("sema_cjmapping_decl_not_supported", MakeRange(decl.identifier),
                 std::string{decl.identifier});
             decl.EnableAttr(Attribute::IS_BROKEN);
     }

@@ -6,6 +6,7 @@
 
 #include "TypeCheckerImpl.h"
 
+
 using namespace Cangjie;
 using namespace AST;
 
@@ -17,7 +18,7 @@ Ptr<Ty> TypeCheckerImpl::SynResumeExpr(ASTContext& ctx, ResumeExpr& re)
         resumptionParamTy = (*re.enclosing)->commandResultTy;
         re.SetTy(TypeManager::GetNothingTy());
     } else {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_implicit_resume_outside_handler, re);
+        diag.DiagnoseRefactor("sema_implicit_resume_outside_handler", re);
         re.SetTy(TypeManager::GetInvalidTy());
     }
 
@@ -29,7 +30,7 @@ Ptr<Ty> TypeCheckerImpl::SynResumeExpr(ASTContext& ctx, ResumeExpr& re)
 
         if (!typeManager.IsSubtype(re.throwingExpr->GetTy(), exception->GetTy()) &&
             !typeManager.IsSubtype(re.throwingExpr->GetTy(), error->GetTy())) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_resume_throwing_mismatch_type, re);
+            diag.DiagnoseRefactor("sema_resume_throwing_mismatch_type", re);
             re.SetTy(TypeManager::GetInvalidTy());
         }
     } else if (re.withExpr) {
@@ -40,7 +41,7 @@ Ptr<Ty> TypeCheckerImpl::SynResumeExpr(ASTContext& ctx, ResumeExpr& re)
     } else {
         auto unitTy = typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT);
         if (!typeManager.IsSubtype(resumptionParamTy, unitTy)) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_resume_no_with, re, Ty::ToString(resumptionParamTy));
+            diag.DiagnoseRefactor("sema_resume_no_with", re, Ty::ToString(resumptionParamTy));
             re.SetTy(TypeManager::GetInvalidTy());
         }
     }

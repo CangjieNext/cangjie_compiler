@@ -126,7 +126,7 @@ bool DiagInferParamTyFail(DiagnosticEngine& diag, LambdaExpr& le)
 {
     for (auto& node : le.funcBody->paramLists[0]->params) {
         if (!node->type) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_lambdaExpr_must_have_type_annotation, *node);
+            diag.DiagnoseRefactor("sema_lambdaExpr_must_have_type_annotation", *node);
             le.SetTy(TypeManager::GetInvalidTy());
             return true;
         }
@@ -272,7 +272,7 @@ Ptr<Ty> TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le)
         } else if (ctx.funcArgReachable.count(&le) == 0 && !node->type) {
             node->SetTy(typeManager.AllocTyVar("T-Lam", true));
         } else {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_lambdaExpr_must_have_type_annotation, *node);
+            diag.DiagnoseRefactor("sema_lambdaExpr_must_have_type_annotation", *node);
             le.SetTy(TypeManager::GetInvalidTy());
             return le.GetTy();
         }
@@ -384,7 +384,7 @@ bool TypeCheckerImpl::ChkLamParamTys(
     CJC_ASSERT(le.funcBody && !le.funcBody->paramLists.empty());
     if (le.funcBody->paramLists[0]->params.size() != tgtParamTys.size()) {
         auto& paramList = le.funcBody->paramLists[0];
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_param_miss_match, *paramList);
+        auto builder = diag.DiagnoseRefactor("sema_param_miss_match", *paramList);
         builder.AddMainHintArguments(std::to_string(tgtParamTys.size()), std::to_string(paramList->params.size()));
         return false;
     }

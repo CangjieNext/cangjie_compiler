@@ -271,7 +271,7 @@ void ParserImpl::DiagExpectedIdentifierImportSpec(Ptr<Node> node)
 
 void ParserImpl::DiagRawIdentifierNotAllowed(std::string& str)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_not_allowed_raw_identifier, lastToken, str);
+    auto builder = ParseDiagnoseRefactor("parse_not_allowed_raw_identifier", lastToken, str);
 }
 
 void ParserImpl::DiagExpectedIdentifierGenericConstraint(Ptr<Node> node)
@@ -307,7 +307,7 @@ void ParserImpl::DiagExpectedIdentifierEnumDecl(Ptr<Node> node)
             MakeRange(ed->begin, ed->begin + std::string("enum").size()), "a enum name", "after keyword 'enum'");
     } else if (ed->constructors.empty()) {
         if (lastToken.kind == TokenKind::ELLIPSIS) {
-            auto db = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_name, lastToken, "an enum name",
+            auto db = ParseDiagnoseRefactor("parse_expected_name", lastToken, "an enum name",
                 "at beginning of enum body", ConvertToken(lastToken));
             db.AddMainHintArguments("an enum constructor name");
             db.AddNote("ellipse cannot be the only constructor of an enum decl");
@@ -344,7 +344,7 @@ void ParserImpl::DiagExpectedIdentifier(
         }
     }
     auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_name, lookahead, expectedMsg, afterName, foundName);
+        ParseDiagnoseRefactor("parse_expected_name", lookahead, expectedMsg, afterName, foundName);
     builder.AddMainHintArguments(expectedMsg);
     builder.AddHint(otherHintRange, otherHintMsg);
 
@@ -358,7 +358,7 @@ void ParserImpl::DiagExpectedIdentifier(
 
 void ParserImpl::DiagNameLengthOverflow(const Range& r, const std::string& tar, size_t maxLength, size_t realLength)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_package_name_length_overflow, r, tar);
+    auto builder = ParseDiagnoseRefactor("parse_package_name_length_overflow", r, tar);
 
     auto note = SubDiagnostic(
         "the maximum length is " + std::to_string(maxLength) + ", the real length is " + std::to_string(realLength));
@@ -544,7 +544,7 @@ void ParserImpl::DiagIllegalModifierInScope(const AST::Modifier& mod)
     auto modStr = TOKENS[static_cast<int>(mod.modifier)];
     auto secondAgr = needSecondHint ? " in " + scopeInfo.second.second : "";
     auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_illegal_modifier_in_scope, mod, modStr, hintMes, secondAgr);
+        ParseDiagnoseRefactor("parse_illegal_modifier_in_scope", mod, modStr, hintMes, secondAgr);
 
     if (scopeInfo.first.IsDefault() && needSecondHint) {
         hintMes += " in " + scopeInfo.second.first;
@@ -586,7 +586,7 @@ void ParserImpl::DiagConflictedModifier(const Modifier& resMod, const Modifier& 
         CJC_ABORT(); // Unexpect
     }
 
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_conflict_modifier, tarRange, tarStr, resStr, hintN2);
+    auto builder = ParseDiagnoseRefactor("parse_conflict_modifier", tarRange, tarStr, resStr, hintN2);
 
     builder.AddHint(resRange);
     if (node->IsDecl()) {
@@ -618,7 +618,7 @@ void ParserImpl::DiagExpectNoModifierBefore(const Modifier& mod, const std::stri
 {
     std::string modStr = TOKEN_KIND_VALUES[static_cast<int>(mod.modifier)];
     auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_no_modifier, MakeRange(mod.begin, mod.end), str, modStr);
+        ParseDiagnoseRefactor("parse_expected_no_modifier", MakeRange(mod.begin, mod.end), str, modStr);
 
     auto tokens = lexer->LookAheadSkipNL(1);
     builder.AddHint(MakeRange(lookahead.Begin(), tokens.begin()->End()), str);
@@ -627,7 +627,7 @@ void ParserImpl::DiagExpectNoModifierBefore(const Modifier& mod, const std::stri
 void ParserImpl::DiagUnexpectedAnnoOn(
     const Annotation& anno, const Position& onPos, const std::string& annoStr, const std::string& onStr)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_unexpected_anno_on, anno, "@" + annoStr, onStr);
+    auto builder = ParseDiagnoseRefactor("parse_unexpected_anno_on", anno, "@" + annoStr, onStr);
     builder.AddHint(MakeRange(onPos, onStr), onStr);
 }
 
@@ -700,7 +700,7 @@ void ParserImpl::DiagExpectNoModifier(const Modifier& mod)
     PrepareExpectNoModifierArg(*node, arg1, range);
     auto modStr = mod.ToString();
     auto modRange = MakeRange(mod.begin, mod.begin + modStr.size());
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_no_modifier, modRange, arg1, modStr);
+    auto builder = ParseDiagnoseRefactor("parse_expected_no_modifier", modRange, arg1, modStr);
     builder.AddHint(range, arg1);
     if (Is<FuncParam>(node)) {
         auto content = GetSingleLineContent(node->begin, node->end);
@@ -733,7 +733,7 @@ void ParserImpl::DiagUnexpectedDeclInScope(ScopeKind sk)
     }
 
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_unexpected_declaration_in_scope, tar.first, tar.second, arg.second);
+        "parse_unexpected_declaration_in_scope", tar.first, tar.second, arg.second);
 
     if (!res.first.IsDefault()) {
         builder.AddHint(res.first, arg.first);
@@ -753,7 +753,7 @@ void ParserImpl::DiagExpectedMoreFieldInTuplePattern()
     }
     auto tp = StaticAs<ASTKind::TUPLE_PATTERN>(chainedAST.back());
     ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_tuple_pattern_expected_more_field, MakeRange(tp->leftBracePos, tp->rightBracePos + 1));
+        "parse_tuple_pattern_expected_more_field", MakeRange(tp->leftBracePos, tp->rightBracePos + 1));
 }
 
 void ParserImpl::DiagExpectedTypeNameAfterAs(const Token& tok)
@@ -762,14 +762,14 @@ void ParserImpl::DiagExpectedTypeNameAfterAs(const Token& tok)
         return;
     }
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_expected_type, lookahead, ConvertToken(tok), ConvertToken(lookahead));
+        "parse_expected_type", lookahead, ConvertToken(tok), ConvertToken(lookahead));
     builder.AddHint(tok, ConvertToken(tok));
 }
 
 void ParserImpl::DiagExpectedTypeName()
 {
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_expected_type, lookahead, ConvertToken(lastToken), ConvertToken(lookahead));
+        "parse_expected_type", lookahead, ConvertToken(lastToken), ConvertToken(lookahead));
     builder.AddHint(lastToken, ConvertToken(lastToken));
 }
 
@@ -778,7 +778,7 @@ void ParserImpl::DiagInvalidLeftHandExpr(const Expr& expr, const Token& tok)
     if (expr.TestAttr(Attribute::IS_BROKEN)) {
         return;
     }
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_invalid_left_hand_expr, tok, tok.Value());
+    auto builder = ParseDiagnoseRefactor("parse_invalid_left_hand_expr", tok, tok.Value());
     builder.AddHint(expr);
 }
 
@@ -812,7 +812,7 @@ void ParserImpl::DiagNoneAssociativeOp(const Token& preT, const Token& tok)
     for (const auto& op : NONE_ASSO_OPS) {
         if (Precedence(op.kind) == prec) {
             auto builder =
-                ParseDiagnoseRefactor(DiagKindRefactor::parse_chained_none_associative, tok, std::string{op.name});
+                ParseDiagnoseRefactor("parse_chained_none_associative", tok, std::string{op.name});
             builder.AddHint(preT);
             return;
         }
@@ -823,7 +823,7 @@ void ParserImpl::DiagNoneAssociativeOp(const Token& preT, const Token& tok)
 void ParserImpl::DiagInvalidInheritType(const Type& type)
 {
     auto typeName = sourceManager.GetContentBetween(type.begin.fileID, type.begin, type.end);
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_invalid_super_declaration, type, typeName);
+    auto builder = ParseDiagnoseRefactor("parse_invalid_super_declaration", type, typeName);
 
     builder.AddNote("only class types and interface types can be subtyped");
 }
@@ -831,15 +831,15 @@ void ParserImpl::DiagInvalidInheritType(const Type& type)
 void ParserImpl::DiagExpectedExpression()
 {
     ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_expected_expression, lookahead, ConvertToken(lastToken), ConvertToken(lookahead));
+        "parse_expected_expression", lookahead, ConvertToken(lastToken), ConvertToken(lookahead));
 }
 
 void ParserImpl::DiagExpectedRightDelimiter(const std::string& del, const Position& pos)
 {
     static std::map<std::string, std::string> delMap = {{"{", "}"}, {"(", ")"}, {"[", "]"}, {"<", ">"}};
     auto builder = lookahead.kind == TokenKind::NL
-        ? ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_right_delimiter, lastToken, del)
-        : ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_right_delimiter, lastToken.End(), del);
+        ? ParseDiagnoseRefactor("parse_expected_right_delimiter", lastToken, del)
+        : ParseDiagnoseRefactor("parse_expected_right_delimiter", lastToken.End(), del);
 
     builder.AddMainHintArguments(delMap[del]);
     builder.AddHint(pos, del);
@@ -848,13 +848,13 @@ void ParserImpl::DiagExpectedRightDelimiter(const std::string& del, const Positi
 void ParserImpl::DiagInvalidIncreExpr(const Expr& expr)
 {
     auto name = lookahead.kind == TokenKind::INCR ? "increment" : "decrement";
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_invalid_incre_expr, lookahead, name);
+    auto builder = ParseDiagnoseRefactor("parse_invalid_incre_expr", lookahead, name);
     builder.AddHint(expr);
 }
 
 void ParserImpl::DiagInvalidMacroExpandExpr(const Token& tok, const MacroExpandExpr& expr)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_expression, *expr.invocation.decl,
+    auto builder = ParseDiagnoseRefactor("parse_expected_expression", *expr.invocation.decl,
         ConvertToken(tok), std::string{"a declaration"});
     builder.AddHint(tok);
 }
@@ -862,7 +862,7 @@ void ParserImpl::DiagInvalidMacroExpandExpr(const Token& tok, const MacroExpandE
 void ParserImpl::DiagUnrecognizedNodeAfterMacro(const Token& tok, const MacroExpandExpr& expr)
 {
     auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_unrecognized_token_after_macro_node, tok, ConvertToken(tok));
+        ParseDiagnoseRefactor("parse_unrecognized_token_after_macro_node", tok, ConvertToken(tok));
     builder.AddHint(*expr.invocation.decl);
 }
 
@@ -878,13 +878,13 @@ void ParserImpl::DiagChainedAsExpr(Expr& expr, const Token& tok)
         pos = isE->isPos;
     }
     auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_chained_none_associative, tok, std::string{"`is` and `as`"});
+        ParseDiagnoseRefactor("parse_chained_none_associative", tok, std::string{"`is` and `as`"});
     builder.AddHint(MakeRange(pos, pos + std::string("is").size()));
 }
 
 void ParserImpl::DiagExpecetedOpeOrEnd()
 {
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_operator_or_end, lookahead, ConvertToken(lookahead));
+    ParseDiagnoseRefactor("parse_expected_operator_or_end", lookahead, ConvertToken(lookahead));
 }
 
 void ParserImpl::DiagExpectedNoNewLine()
@@ -894,19 +894,19 @@ void ParserImpl::DiagExpectedNoNewLine()
     Next(); // Skip '-'/'!' operator.
     auto newline = Peek();
     auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_no_newline_after, newline, ConvertToken(lastToken));
+        ParseDiagnoseRefactor("parse_expected_no_newline_after", newline, ConvertToken(lastToken));
     builder.AddHint(lastToken, ConvertToken(lastToken));
     skipNL = old;
 }
 
 void ParserImpl::DiagCannotHaveAssignmentInInit(const Expr& expr)
 {
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_cannot_have_assi_in_init, expr);
+    ParseDiagnoseRefactor("parse_cannot_have_assi_in_init", expr);
 }
 
 void ParserImpl::DiagOrPattern()
 {
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_illegal_or_pattern, lookahead.Begin());
+    ParseDiagnoseRefactor("parse_illegal_or_pattern", lookahead.Begin());
 }
 
 void ParserImpl::DiagDeclarationInMacroPackage(const OwnedPtr<Decl>& decl)
@@ -916,7 +916,7 @@ void ParserImpl::DiagDeclarationInMacroPackage(const OwnedPtr<Decl>& decl)
     auto publicModifier = std::find_if(decl->modifiers.begin(), decl->modifiers.end(),
         [](const auto& mod) { return mod.modifier == TokenKind::PUBLIC; });
     CJC_ASSERT(publicModifier != decl->modifiers.end());
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_macro_decl_in_macro_package,
+    auto builder = ParseDiagnoseRefactor("parse_expected_macro_decl_in_macro_package",
         MakeRange(publicModifier->begin, publicModifier->begin + std::string("public").size()), typeKeyword);
     builder.AddHint(
         MakeRange(currentFile->package->macroPos, currentFile->package->packagePos + std::string("package").size()));
@@ -927,33 +927,33 @@ void ParserImpl::DiagDeclarationInMacroPackage(const OwnedPtr<Decl>& decl)
 
 void ParserImpl::DiagExpectPublicBeforeMacroCall(const OwnedPtr<MacroDecl>& md)
 {
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_public_before_macro_decl,
+    ParseDiagnoseRefactor("parse_expected_public_before_macro_decl",
         MakeRange(md->keywordPos, md->keywordPos + std::string("macro").size()));
 }
 
 void ParserImpl::DiagExpectMacroParamType(const Type& type)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_macro_illegal_ret_type, type);
+    auto builder = ParseDiagnoseRefactor("parse_macro_illegal_ret_type", type);
     builder.AddMainHintArguments(ConvertToken(lastToken));
 }
 
 void ParserImpl::DiagMacroUnexpectNamedParam(const OwnedPtr<FuncParam>& param)
 {
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_macro_illegal_named_param, MakeRange(param->notMarkPos, param->notMarkPos + 1));
+        "parse_macro_illegal_named_param", MakeRange(param->notMarkPos, param->notMarkPos + 1));
     builder.AddHint(MakeRange(param->begin, param->identifier), param->identifier.Val());
 }
 
 void ParserImpl::DiagIllegalFunc(const OwnedPtr<FuncDecl>& funcDecl)
 {
     auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_illegal_function_name, MakeRange(funcDecl->identifier));
+        ParseDiagnoseRefactor("parse_illegal_function_name", MakeRange(funcDecl->identifier));
     builder.AddHint(MakeRange(funcDecl->keywordPos, funcDecl->keywordPos + std::string("func").size()));
 }
 
 void ParserImpl::DiagParseExpectedParenthis(const OwnedPtr<Type>& postType)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_parentheses, lastToken);
+    auto builder = ParseDiagnoseRefactor("parse_expected_parentheses", lastToken);
     auto help = DiagHelp("should be surrounded by '(' and ')'");
     std::string content = "(" + lastToken.Value() + ")";
     help.AddSubstitution(*postType, content);
@@ -971,7 +971,7 @@ void ParserImpl::DiagParseIllegalDeclarationPattern(const OwnedPtr<VarWithPatter
         patternTypeStr = "wildcard";
     }
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_illegal_declaration_pattern, *(decl->irrefutablePattern), patternTypeStr);
+        "parse_illegal_declaration_pattern", *(decl->irrefutablePattern), patternTypeStr);
     auto pNode = TraceBackNode(chainedAST, {ASTKind::CLASS_DECL, ASTKind::STRUCT_DECL});
     if (!pNode) {
         return;
@@ -986,7 +986,7 @@ void ParserImpl::DiagParseIllegalDeclarationPattern(const OwnedPtr<VarWithPatter
 
 void ParserImpl::DiagThisTypeNotAllow()
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_this_type_not_allow, lookahead);
+    auto builder = ParseDiagnoseRefactor("parse_this_type_not_allow", lookahead);
     SubDiagnostic note =
         SubDiagnostic("'This' type can only be used as the return type of an instance member function in class");
     builder.AddNote(note);
@@ -998,7 +998,7 @@ void ParserImpl::DiagInvalidUnicodeScalar(const Position& startPos, const std::s
     auto pos = startPos + prefixSize + 1;
     auto endPos = startPos + str.size();
     auto args = "0x" + str.substr(prefixSize, (str.size() - prefixSize) - 1);
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_invalid_unicode_scalar, MakeRange(pos, endPos), args);
+    auto builder = ParseDiagnoseRefactor("parse_invalid_unicode_scalar", MakeRange(pos, endPos), args);
 
     builder.AddHint(MakeRange(startPos + 1, startPos + prefixSize + 1));
     builder.AddHint(MakeRange(startPos + str.size(), startPos + str.size() + 1));
@@ -1009,14 +1009,14 @@ void ParserImpl::DiagInvalidUnicodeScalar(const Position& startPos, const std::s
 
 void ParserImpl::DiagExpectedLiteral(const Position& subPos)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_literal, lookahead, ConvertToken(lookahead));
+    auto builder = ParseDiagnoseRefactor("parse_expected_literal", lookahead, ConvertToken(lookahead));
     builder.AddHint(subPos);
 }
 
 void ParserImpl::DiagTypePatternInLetCondExpr(const Pattern& pat, ExprKind ek)
 {
     std::string exprName = ek == ExprKind::WHILE_COND_EXPR ? "while-let" : "if-let";
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_type_pattern_in_let_cond, pat, exprName);
+    auto builder = ParseDiagnoseRefactor("parse_type_pattern_in_let_cond", pat, exprName);
     auto note =
         SubDiagnostic{exprName + " expression can only accept constant, wildcard, binding, tuple and enum pattern"};
     builder.AddNote(note);
@@ -1025,20 +1025,20 @@ void ParserImpl::DiagTypePatternInLetCondExpr(const Pattern& pat, ExprKind ek)
 void ParserImpl::DiagExpectedLeftParenAfter(const Position& pos, const std::string& str)
 {
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_expected_left_paren_after, lookahead, str, ConvertToken(lookahead));
+        "parse_expected_left_paren_after", lookahead, str, ConvertToken(lookahead));
     builder.AddHint(MakeRange(pos, str));
 }
 
 void ParserImpl::DiagMatchCaseExpectedExprOrDecl()
 {
     auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_expr_or_decl_in, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_expr_or_decl_in", lookahead, ConvertToken(lookahead));
     DiagMatchCase(builder);
 }
 
 void ParserImpl::DiagMatchCaseBodyCannotBeEmpty(const Position& pos)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_case_body_cannot_be_empty, pos);
+    auto builder = ParseDiagnoseRefactor("parse_case_body_cannot_be_empty", pos);
     DiagMatchCase(builder);
 }
 
@@ -1061,8 +1061,8 @@ void ParserImpl::DiagMatchCase(DiagnosticBuilder& builder)
 
 void ParserImpl::DiagExpectedCatchOrHandleOrFinallyAfterTry(const TryExpr& te)
 {
-    auto diagKind = this->enableEH ? DiagKindRefactor::parse_expected_catch_or_handle_or_finally_in_try
-                                        : DiagKindRefactor::parse_expected_catch_or_finally_in_try;
+    auto diagKind = this->enableEH ? "parse_expected_catch_or_handle_or_finally_in_try"
+                                        : "parse_expected_catch_or_finally_in_try";
     auto builder = ParseDiagnoseRefactor(diagKind, lookahead, ConvertToken(lookahead));
     builder.AddHint(MakeRange(te.begin, te.tryBlock->end));
 }
@@ -1070,7 +1070,7 @@ void ParserImpl::DiagExpectedCatchOrHandleOrFinallyAfterTry(const TryExpr& te)
 void ParserImpl::DiagExpectedSelectorOrMatchExprBody(const Position& pos)
 {
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_selector_or_match_expression_body, lookahead, ConvertToken(lookahead));
+        "parse_selector_or_match_expression_body", lookahead, ConvertToken(lookahead));
     builder.AddHint(MakeRange(pos, "match"));
 }
 
@@ -1078,7 +1078,7 @@ void ParserImpl::DiagRedefinedResourceName(
     const std::pair<std::string, Position>& cur, const std::pair<std::string, Position>& pre)
 {
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_redefined_resource_name, MakeRange(cur.second, cur.first), cur.first);
+        "parse_redefined_resource_name", MakeRange(cur.second, cur.first), cur.first);
     builder.AddHint(MakeRange(pre.second, pre.first));
 }
 
@@ -1086,7 +1086,7 @@ void ParserImpl::DiagExpectedNoArgumentsInSpawn(
     const std::vector<OwnedPtr<AST::FuncParam>>& params, const Position& pos)
 {
     std::string arg = params.size() == 1 ? "argument" : "arguments";
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_no_arguments_in_spawn,
+    auto builder = ParseDiagnoseRefactor("parse_expected_no_arguments_in_spawn",
         MakeRange(params.front()->begin, params.back()->end), arg);
     builder.AddMainHintArguments(arg);
     builder.AddHint(MakeRange(pos, "spawn"));
@@ -1095,7 +1095,7 @@ void ParserImpl::DiagExpectedNoArgumentsInSpawn(
 void ParserImpl::DiagExpectCharacter(const std::string& expectStr, const std::string& noteStr)
 {
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_expected_character, lookahead, expectStr, ConvertToken(lookahead));
+        "parse_expected_character", lookahead, expectStr, ConvertToken(lookahead));
     builder.AddMainHintArguments(expectStr);
     if (!noteStr.empty()) {
         builder.AddNote(noteStr);
@@ -1105,7 +1105,7 @@ void ParserImpl::DiagExpectCharacter(const std::string& expectStr, const std::st
 void ParserImpl::DiagExpectCharacter(const Position& pos, const std::string& expectStr, const std::string& noteStr)
 {
     auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_character, pos, expectStr, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_character", pos, expectStr, ConvertToken(lookahead));
     builder.AddMainHintArguments(expectStr);
     if (!noteStr.empty()) {
         builder.AddNote(noteStr);
@@ -1119,21 +1119,21 @@ void ParserImpl::DiagExpectSemiOrNewline()
 
 void ParserImpl::DiagRedundantArrowAfterFunc(const Type& type)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_redundant_arrow_after_func_type, lookahead);
+    auto builder = ParseDiagnoseRefactor("parse_redundant_arrow_after_func_type", lookahead);
     builder.AddHint(type, "function type");
 }
 
 void ParserImpl::DiagInvalidOverloadedOperator()
 {
     auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_invalid_overloaded_operator, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_invalid_overloaded_operator", lookahead, ConvertToken(lookahead));
     auto note = SubDiagnostic("only operator '+', '-', ... can be overloaded");
     builder.AddNote(note);
 }
 
 void ParserImpl::DiagExpectedDeclaration(ScopeKind scopeKind)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_decl, lookahead, ConvertToken(lookahead));
+    auto builder = ParseDiagnoseRefactor("parse_expected_decl", lookahead, ConvertToken(lookahead));
     if (scopeKind == ScopeKind::TOPLEVEL) {
         auto note = SubDiagnostic("only declarations or macro expressions can be used in the top-level");
         builder.AddNote(note);
@@ -1142,13 +1142,13 @@ void ParserImpl::DiagExpectedDeclaration(ScopeKind scopeKind)
 
 void ParserImpl::DiagExpectedDeclaration(const Position& pos, const std::string& str)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_decl, pos, str);
+    auto builder = ParseDiagnoseRefactor("parse_expected_decl", pos, str);
 }
 
 void ParserImpl::DiagAndSuggestKeywordForExpectedDeclaration(
     const std::vector<std::string>& keywords, size_t minLevDis, ScopeKind scopeKind)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_decl, lookahead, ConvertToken(lookahead));
+    auto builder = ParseDiagnoseRefactor("parse_expected_decl", lookahead, ConvertToken(lookahead));
     if (scopeKind == ScopeKind::TOPLEVEL) {
         auto note = SubDiagnostic("only declarations or macro expressions can be used in the top-level");
         builder.AddNote(note);
@@ -1170,7 +1170,7 @@ void ParserImpl::DiagUnExpectedModifierOnDeclaration(const Decl& vd)
         vd.modifiers.begin(), vd.modifiers.end(), [](const auto& mod) { return mod.modifier == TokenKind::CONST; });
     CJC_ASSERT(constModifier != vd.modifiers.end());
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_unexpected_const_modifier_on_variable, MakeRange(constModifier->begin, "const"));
+        "parse_unexpected_const_modifier_on_variable", MakeRange(constModifier->begin, "const"));
     builder.AddHint(MakeRange(vd.keywordPos, "var"));
 }
 
@@ -1179,25 +1179,25 @@ void ParserImpl::DiagConstVariableExpectedInitializer(Decl& vd)
     if (parseDeclFile) {
         return;
     }
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_const_expected_initializer, vd.end);
+    auto builder = ParseDiagnoseRefactor("parse_const_expected_initializer", vd.end);
     builder.AddHint(vd);
 }
 
 void ParserImpl::DiagConstVariableExpectedStatic(const Token& key)
 {
-    (void)ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_static_for_const_member_var, key);
+    (void)ParseDiagnoseRefactor("parse_expected_static_for_const_member_var", key);
 }
 
 void ParserImpl::DiagExpectedOneOfTypeOrInitializer(const Decl& vd, const std::string& str)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_one_of_type_or_initializer, vd.end, str);
+    auto builder = ParseDiagnoseRefactor("parse_expected_one_of_type_or_initializer", vd.end, str);
 
     builder.AddHint(vd);
 }
 
 void ParserImpl::DiagExpectedTypeOrInitializerInPattern(const Decl& vd)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_type_or_init_in_pattern, vd.end);
+    auto builder = ParseDiagnoseRefactor("parse_expected_type_or_init_in_pattern", vd.end);
     builder.AddHint(vd);
 }
 
@@ -1206,7 +1206,7 @@ void ParserImpl::DiagExpectedInitializerForToplevelVar(const Decl& vd)
     if (parseDeclFile) {
         return;
     }
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_var_must_be_initialized, vd.end);
+    auto builder = ParseDiagnoseRefactor("parse_var_must_be_initialized", vd.end);
     builder.AddHint(vd);
 }
 
@@ -1214,13 +1214,13 @@ void ParserImpl::DiagExpectedIdentifierOrPattern(bool isVar, const Position& pos
 {
     if (isConst) {
         auto builder = ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_expected_one_of_identifier_or_pattern, lookahead, "const", ConvertToken(lookahead));
+            "parse_expected_one_of_identifier_or_pattern", lookahead, "const", ConvertToken(lookahead));
         builder.AddHint(MakeRange(pos, "const"));
         return;
     }
     auto s = isVar ? "var" : "let";
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_expected_one_of_identifier_or_pattern, lookahead, s, ConvertToken(lookahead));
+        "parse_expected_one_of_identifier_or_pattern", lookahead, s, ConvertToken(lookahead));
 
     builder.AddHint(MakeRange(pos, s));
     if (IsKeyWord(lookahead)) {
@@ -1234,14 +1234,14 @@ void ParserImpl::DiagExpectedIdentifierOrPattern(bool isVar, const Position& pos
 void ParserImpl::DiagExpectedGetOrSetInProp(const Position& pos)
 {
     auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_get_or_set_in_prop, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_get_or_set_in_prop", lookahead, ConvertToken(lookahead));
 
     builder.AddHint(MakeRange(pos, "prop"));
 }
 
 void ParserImpl::DiagDuplicatedGetOrSet(const Node& node, const PropDecl& pd)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_duplicated_get_or_set, lookahead, lookahead.Value());
+    auto builder = ParseDiagnoseRefactor("parse_duplicated_get_or_set", lookahead, lookahead.Value());
     builder.AddMainHintArguments(lookahead.Value());
     builder.AddHint(node);
 
@@ -1250,21 +1250,21 @@ void ParserImpl::DiagDuplicatedGetOrSet(const Node& node, const PropDecl& pd)
 
 void ParserImpl::DiagUnknownPrimaryConstructor(const std::string& str)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_decl, lookahead, ConvertToken(lookahead));
+    auto builder = ParseDiagnoseRefactor("parse_expected_decl", lookahead, ConvertToken(lookahead));
     builder.AddHelp({"probably you want a primary constructor name: '" + str + "'"});
 }
 
 void ParserImpl::DiagExpectedName(const std::string& str, const std::string& afterName)
 {
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_expected_name, lookahead, str + " name", afterName, ConvertToken(lookahead));
+        "parse_expected_name", lookahead, str + " name", afterName, ConvertToken(lookahead));
 
     builder.AddMainHintArguments(str + " name");
 }
 
 void ParserImpl::DiagGetOrSetCannotBeGeneric(const std::string& str, const Generic& ge)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_getter_setter_cannot_be_generic, ge, str);
+    auto builder = ParseDiagnoseRefactor("parse_getter_setter_cannot_be_generic", ge, str);
 
     auto isGetOrSet = [](Ptr<Node> node) {
         if (node->astKind != ASTKind::FUNC_DECL) {
@@ -1284,7 +1284,7 @@ void ParserImpl::DiagGetOrSetCannotBeGeneric(const std::string& str, const Gener
 
 void ParserImpl::DiagUnexpectedWhere(const Token& token)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_unexpected_where, token);
+    auto builder = ParseDiagnoseRefactor("parse_unexpected_where", token);
 
     auto iter = std::find_if(chainedAST.rbegin(), chainedAST.rend(), [](auto node) {
         return node->astKind == ASTKind::FUNC_DECL || node->astKind == ASTKind::CLASS_DECL ||
@@ -1301,7 +1301,7 @@ void ParserImpl::DiagUnexpectedWhere(const Token& token)
 
 void ParserImpl::DiagDuplicatedIntrinsicFunc(const Decl& decl, const Decl& prev)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_duplicated_intrinsic_function, decl, decl.identifier);
+    auto builder = ParseDiagnoseRefactor("parse_duplicated_intrinsic_function", decl, decl.identifier);
 
     builder.AddHint(prev);
 }
@@ -1311,7 +1311,7 @@ void ParserImpl::DiagMissingBody(const std::string& str, const std::string& name
     if (parseDeclFile) {
         return;
     }
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_missing_body, pos,
+    auto builder = ParseDiagnoseRefactor("parse_missing_body", pos,
         name.empty() ? str : str + name);
 
     builder.AddMainHintArguments(str);
@@ -1319,7 +1319,7 @@ void ParserImpl::DiagMissingBody(const std::string& str, const std::string& name
 
 void ParserImpl::DiagDeclCannotInheritTheirSelf(const InheritableDecl& decl, const RefType& rt)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_decl_cannot_inherit_their_self, rt, rt.ref.identifier);
+    auto builder = ParseDiagnoseRefactor("parse_decl_cannot_inherit_their_self", rt, rt.ref.identifier);
 
     builder.AddHint(MakeRange(decl.identifier), rt.ref.identifier);
 }
@@ -1327,7 +1327,7 @@ void ParserImpl::DiagDeclCannotInheritTheirSelf(const InheritableDecl& decl, con
 void ParserImpl::DiagUnsafeWillBeIgnored(const Modifier& mod)
 {
     auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_unsafe_will_be_ignored, mod, Triple::BackendToString(backend));
+        ParseDiagnoseRefactor("parse_unsafe_will_be_ignored", mod, Triple::BackendToString(backend));
 
     builder.AddMainHintArguments(Triple::BackendToString(backend));
 }
@@ -1335,28 +1335,28 @@ void ParserImpl::DiagUnsafeWillBeIgnored(const Modifier& mod)
 void ParserImpl::DiagDuplicatedModifier(const Modifier& mod, const Modifier& pre)
 {
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_duplicate_modifier, mod, TOKEN_KIND_VALUES[static_cast<int>(mod.modifier)]);
+        "parse_duplicate_modifier", mod, TOKEN_KIND_VALUES[static_cast<int>(mod.modifier)]);
 
     builder.AddHint(pre);
 }
 
 void ParserImpl::DiagNamedParameterAfterUnnamed(const FuncParam& param, const FuncParam& pre)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_named_parameter_after_unnamed, param);
+    auto builder = ParseDiagnoseRefactor("parse_named_parameter_after_unnamed", param);
 
     builder.AddHint(pre);
 }
 
 void ParserImpl::DiagMemberParameterAfterRegular(const FuncParam& param, const FuncParam& pre)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_member_parameter_after_regular, param);
+    auto builder = ParseDiagnoseRefactor("parse_member_parameter_after_regular", param);
 
     builder.AddHint(pre);
 }
 
 void ParserImpl::DiagUnexpectedColonInRange(const RangeExpr& re)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_unexpected_colon_in_range, lookahead);
+    auto builder = ParseDiagnoseRefactor("parse_unexpected_colon_in_range", lookahead);
     builder.AddHint(re);
 
     builder.AddNote("range expression in index access cannot have step if it is without start or end");
@@ -1364,7 +1364,7 @@ void ParserImpl::DiagUnexpectedColonInRange(const RangeExpr& re)
 
 void ParserImpl::DiagDuplicatedAttiValue(const std::string& attr, const Position& pos, const Position& pre)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_duplicated_attr_value, MakeRange(pos, attr), attr);
+    auto builder = ParseDiagnoseRefactor("parse_duplicated_attr_value", MakeRange(pos, attr), attr);
     builder.AddHint(MakeRange(pre, attr));
 }
 
@@ -1372,7 +1372,7 @@ void ParserImpl::DiagDuplicatedItem(const std::string& name, const std::string& 
     const Position& prePos, const std::string& attachment)
 {
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_duplicated_item, MakeRange(errPos, sourceName), name, sourceName, attachment);
+        "parse_duplicated_item", MakeRange(errPos, sourceName), name, sourceName, attachment);
     builder.AddMainHintArguments(name);
     builder.AddHint(MakeRange(prePos, sourceName));
 }
@@ -1392,21 +1392,21 @@ void ParserImpl::DiagUnrecognizedAttrInAnno(
         str += "'" + *i + "'";
     }
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_unrecognized_attr_in_anno, MakeRange(pos, attrName), attrName, anno.identifier);
+        "parse_unrecognized_attr_in_anno", MakeRange(pos, attrName), attrName, anno.identifier);
     builder.AddHint(anno);
     builder.AddNote("annotation '@" + anno.identifier + "' only accept " + str + " as attribute");
 }
 
 void ParserImpl::DiagDuplicatedAnno(const Annotation& anno, const Annotation& pre)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_duplicated_annotation, anno, "@" + anno.identifier);
+    auto builder = ParseDiagnoseRefactor("parse_duplicated_annotation", anno, "@" + anno.identifier);
     builder.AddHint(pre);
 }
 
 void ParserImpl::DiagExpectedLsquareAfter(const Node& node, const std::string& aName, const std::string& note)
 {
     auto builder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_expected_lsquare_after, lookahead, aName, ConvertToken(lookahead));
+        "parse_expected_lsquare_after", lookahead, aName, ConvertToken(lookahead));
     builder.AddNote(note);
     builder.AddHint(node);
 }
@@ -1414,14 +1414,14 @@ void ParserImpl::DiagExpectedLsquareAfter(const Node& node, const std::string& a
 void ParserImpl::DiagUnrecognizedExprInWhen(const Expr& expr, const Annotation& when)
 {
     auto str = sourceManager.GetContentBetween(expr.begin.fileID, expr.begin, expr.end);
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_unrecognized_expression_in_when, expr, str);
+    auto builder = ParseDiagnoseRefactor("parse_unrecognized_expression_in_when", expr, str);
     builder.AddHint(when);
     builder.AddNote("annotation '@When' can only support unary, binary and ref expression");
 }
 
 void ParserImpl::DiagDeprecatedArgumentNotLitConst(const Node& node)
 {
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_deprecated_arguments_must_be_lit_const_expr, node);
+    ParseDiagnoseRefactor("parse_deprecated_arguments_must_be_lit_const_expr", node);
 }
 
 void ParserImpl::DiagDeprecatedArgumentDuplicated(
@@ -1429,7 +1429,7 @@ void ParserImpl::DiagDeprecatedArgumentDuplicated(
     const std::string& parameterName
 )
 {
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_deprecated_argument_duplication, node, parameterName);
+    ParseDiagnoseRefactor("parse_deprecated_argument_duplication", node, parameterName);
 }
 
 void ParserImpl::DiagDeprecatedWrongArgumentType(
@@ -1438,7 +1438,7 @@ void ParserImpl::DiagDeprecatedWrongArgumentType(
     const std::string& expectedType
 )
 {
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_deprecated_wrong_argument, node, paramName, expectedType);
+    ParseDiagnoseRefactor("parse_deprecated_wrong_argument", node, paramName, expectedType);
 }
 
 void ParserImpl::DiagDeprecatedUnknownArgument(
@@ -1446,7 +1446,7 @@ void ParserImpl::DiagDeprecatedUnknownArgument(
     const std::string& name
 )
 {
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_deprecated_unknown_argument, arg, name);
+    ParseDiagnoseRefactor("parse_deprecated_unknown_argument", arg, name);
 }
 
 void ParserImpl::DiagDeprecatedEmptyStringArgument(
@@ -1454,7 +1454,7 @@ void ParserImpl::DiagDeprecatedEmptyStringArgument(
     const std::string& paramName
 )
 {
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_deprecated_empty_string_argument, node, paramName);
+    ParseDiagnoseRefactor("parse_deprecated_empty_string_argument", node, paramName);
 }
 
 void ParserImpl::DiagDeprecatedInvalidTarget(
@@ -1462,13 +1462,13 @@ void ParserImpl::DiagDeprecatedInvalidTarget(
     const std::string& invalidTarget
 )
 {
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_deprecated_invalid_target, node, invalidTarget);
+    ParseDiagnoseRefactor("parse_deprecated_invalid_target", node, invalidTarget);
 }
 
 void ParserImpl::DiagAnnotationExpectsOneArgument(const AST::Annotation& node, const std::string& annotationName)
 {
     ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_annotation_one_argument,
+        "parse_annotation_one_argument",
         node, annotationName, "");
 }
 
@@ -1476,7 +1476,7 @@ void ParserImpl::DiagAnnotationExpectsOneArgument(const Annotation& node, const 
                                                   const std::string& argInfo)
 {
     const Node* diagNode = node.args.size() == 1 ? StaticCast<Node*>(node.args[0].get().get()) : &node;
-    auto dbuilder = ParseDiagnoseRefactor(DiagKindRefactor::parse_annotation_one_argument, *diagNode,
+    auto dbuilder = ParseDiagnoseRefactor("parse_annotation_one_argument", *diagNode,
         annotationName, " " + argInfo);
 
     switch (node.args.size()) {
@@ -1493,7 +1493,7 @@ void ParserImpl::DiagAnnotationMoreThanOneArgs(const Annotation& node, const std
 {
     CJC_ASSERT(node.args.size() > 1);
     auto dbuilder = ParseDiagnoseRefactor(
-        DiagKindRefactor::parse_annotation_max_one_argument,
+        "parse_annotation_max_one_argument",
         node, annotationName, "");
     dbuilder.AddMainHintArguments("single argument for " + annotationName);
 }
@@ -1502,7 +1502,7 @@ void ParserImpl::DiagAnnotationMoreThanOneArgs(const Annotation& node, const std
                                                const std::string& argInfo)
 {
     const Node* diagNode = node.args.size() == 1 ? StaticCast<Node*>(node.args[0].get().get()) : &node;
-    auto dbuilder = ParseDiagnoseRefactor(DiagKindRefactor::parse_annotation_max_one_argument,
+    auto dbuilder = ParseDiagnoseRefactor("parse_annotation_max_one_argument",
         *diagNode, annotationName, " " + argInfo);
     if (node.args.size() == 1) {
         dbuilder.AddMainHintArguments(argInfo);
@@ -1515,14 +1515,14 @@ void ParserImpl::DiagAnnotationShouldNotHaveArgs(const Annotation& node, const s
 {
     CJC_ASSERT(!node.args.empty());
     const Node* diagNode = StaticCast<Node*>(node.args[0].get().get());
-    auto dbuilder = ParseDiagnoseRefactor(DiagKindRefactor::parse_annotation_no_arguments,
+    auto dbuilder = ParseDiagnoseRefactor("parse_annotation_no_arguments",
         *diagNode, annotationName);
 }
 
 void ParserImpl::DiagUnexpectedTypeIn(
     const Type& type, const Position& inPos, const std::string& inStr, const std::string& noteStr)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_unexpected_type_in, type, inStr);
+    auto builder = ParseDiagnoseRefactor("parse_unexpected_type_in", type, inStr);
     builder.AddHint(MakeRange(inPos, inStr), inStr);
     builder.AddNote(noteStr);
 }
@@ -1540,13 +1540,13 @@ void ParserImpl::DiagExpectedIdentifierWithNode(Ptr<AST::Node> node)
 
 void ParserImpl::DiagImportingByPackageNameIsNotSupported(const Position& expectPos)
 {
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_importing_by_package_name_is_not_supported, expectPos);
+    auto builder = ParseDiagnoseRefactor("parse_importing_by_package_name_is_not_supported", expectPos);
     builder.AddNote("importing by package name is not supported.");
 }
 
 void ParserImpl::DiagVArrayTypeArgMismatch(const Range& range, const std::string& note)
 {
-    (void)ParseDiagnoseRefactor(DiagKindRefactor::parse_varray_type_args_mismatch, range, note);
+    (void)ParseDiagnoseRefactor("parse_varray_type_args_mismatch", range, note);
     ConsumeUntil(TokenKind::NL);
 }
 
@@ -1566,7 +1566,7 @@ void ParserImpl::DiagRedundantModifiers(const Modifier& modifier)
 
     auto modStr = std::string(TOKENS[static_cast<int>(modifier.modifier)]);
     auto modRange = MakeRange(modifier.begin, modifier.begin + modStr.size());
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_redundant_modifier, modRange, modStr);
+    auto builder = ParseDiagnoseRefactor("parse_redundant_modifier", modRange, modStr);
     builder.AddMainHintArguments("interface member", modStr);
     builder.AddHint(scopeRange);
 }
@@ -1579,7 +1579,7 @@ void ParserImpl::DiagRedundantModifiers(const Modifier& lowerModifier, const Mod
     auto resRange = MakeRange(lowerModifier.begin, lowerModifier.begin + resStr.size());
     auto tarRange = MakeRange(higherModifier.begin, higherModifier.begin + tarStr.size());
 
-    auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_redundant_modifier, resRange, resStr);
+    auto builder = ParseDiagnoseRefactor("parse_redundant_modifier", resRange, resStr);
     builder.AddMainHintArguments("'" + tarStr + "'", resStr);
     builder.AddHint(tarRange);
 }

@@ -7,6 +7,7 @@
 set(OPTION_SRC OptionAction.cpp Option.cpp OptionTable.cpp)
 
 add_library(CangjieOption OBJECT ${OPTION_SRC})
+target_include_directories(CangjieOption PRIVATE ${CMAKE_SOURCE_DIR}/src/Basic)
 target_compile_options(CangjieOption PRIVATE ${CJC_EXTRA_WARNINGS})
 if(CANGJIE_VISIBLE_OPTIONS_ONLY)
     target_compile_definitions(CangjieOption PUBLIC CANGJIE_VISIBLE_OPTIONS_ONLY)

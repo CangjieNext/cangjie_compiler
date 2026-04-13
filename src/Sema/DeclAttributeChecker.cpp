@@ -245,10 +245,10 @@ void DeclAttributeChecker::CheckExtendAttribute(ExtendDecl& ed) const
             if (extendedDecl && extendedDecl->astKind != ASTKind::STRUCT_DECL &&
                 member->astKind != ASTKind::PROP_DECL) {
                 diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_invalid_mut_modifier_extend_of_struct, *mutDecl, extendedDecl->identifier);
+                    "sema_invalid_mut_modifier_extend_of_struct", *mutDecl, extendedDecl->identifier);
             } else if (ed.GetTy()->IsPrimitive()) {
                 diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_invalid_mut_modifier_extend_of_struct, *mutDecl, ed.GetTy()->String());
+                    "sema_invalid_mut_modifier_extend_of_struct", *mutDecl, ed.GetTy()->String());
             }
         }
         if (auto pd = DynamicCast<PropDecl*>(member.get()); pd) {
@@ -270,7 +270,7 @@ void DeclAttributeChecker::CheckClassAttribute(ClassDecl& cd) const
         cd.EnableAttr(Attribute::OPEN, Attribute::PUBLIC);
         if (!cd.TestAttr(Attribute::ABSTRACT)) {
             diag.DiagnoseRefactor(
-                DiagKindRefactor::sema_non_abstract_class_cannot_be_sealed, cd, MakeRange(cd.identifier));
+                "sema_non_abstract_class_cannot_be_sealed", cd, MakeRange(cd.identifier));
         }
     }
     SetCommonAttributes(cd);
@@ -311,14 +311,14 @@ void DeclAttributeChecker::CheckCJMPAttributesForPropAndFuncDeclInClass(const Cl
 
     // It can be checked only at parsed, because now no deffirence between modifier and attriubute
     if (hasBody && inCJMP && isAbstract) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_explicitly_abstract_can_not_have_body, member, memberKind);
+        diag.DiagnoseRefactor("sema_explicitly_abstract_can_not_have_body", member, memberKind);
     }
 
     bool checkedBefore = member.TestAttr(Attribute::FROM_COMMON_PART);
     // member of `common abstract` must be explicitly marked with common or abstract or have body
     if (inAbstractCJMP && !isCJMP && !isAbstract && !compilerAddedOrConstructor && !hasBody && !checkedBefore) {
         auto cjmpKind = cd.TestAttr(Attribute::COMMON) ? "common" : "specific";
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_abstract_class_member_has_no_explicit_modifier, member,
+        diag.DiagnoseRefactor("sema_cjmp_abstract_class_member_has_no_explicit_modifier", member,
             MakeRange(member.identifier), cjmpKind, memberKind, cjmpKind);
     }
 }
@@ -342,11 +342,11 @@ void DeclAttributeChecker::CheckAttributesForPropAndFuncDeclInClass(const ClassD
             (!cd.TestAttr(Attribute::ABSTRACT) && !cd.TestAttr(Attribute::FOREIGN)))
             && !cd.TestAttr(Attribute::OBJ_C_MIRROR);
     if (invalidAbstract && !member.TestAttr(Attribute::COMMON_WITH_DEFAULT)) {
-        diag.Diagnose(member, DiagKind::sema_missing_func_body, type, member.identifier.Val());
+        diag.Diagnose(member, "sema_missing_func_body", type, member.identifier.Val());
     }
     if (member.TestAttr(Attribute::ABSTRACT) && cd.TestAttr(Attribute::ABSTRACT)) {
         if (!member.TestAttr(Attribute::PUBLIC) && !member.TestAttr(Attribute::PROTECTED)) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_member_visibility_in_class, member,
+            diag.DiagnoseRefactor("sema_invalid_member_visibility_in_class", member,
                 MakeRange(member.identifier), "abstract", type);
         }
     }
@@ -356,9 +356,9 @@ void DeclAttributeChecker::CheckAttributesForPropAndFuncDeclInClass(const ClassD
     bool isInheritableClass = cd.TestAttr(Attribute::OPEN) || cd.TestAttr(Attribute::ABSTRACT);
     if (member.TestAttr(Attribute::OPEN)) {
         if (!isInheritableClass) {
-            diag.Diagnose(member, DiagKind::sema_ignore_open);
+            diag.Diagnose(member, "sema_ignore_open");
         } else if (!member.TestAttr(Attribute::PUBLIC) && !member.TestAttr(Attribute::PROTECTED)) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_member_visibility_in_class, member,
+            diag.DiagnoseRefactor("sema_invalid_member_visibility_in_class", member,
                 MakeRange(member.identifier), "open", type);
         } else if (auto pd = DynamicCast<PropDecl*>(&member)) {
             // Inheriting open attribute to getter/setter to guarantee the virtual call of propDecl.
@@ -371,7 +371,7 @@ void DeclAttributeChecker::CheckAttributesForPropAndFuncDeclInClass(const ClassD
         }
     }
     if (auto fd = DynamicCast<FuncDecl*>(&member); fd && fd->IsFinalizer() && isInheritableClass) {
-        diag.Diagnose(*fd, DiagKind::sema_finalizer_forbidden_in_class, cd.identifier.Val(),
+        diag.Diagnose(*fd, "sema_finalizer_forbidden_in_class", cd.identifier.Val(),
             cd.TestAttr(Attribute::OPEN) ? "open" : "abstract");
     }
 }
@@ -393,14 +393,14 @@ void DeclAttributeChecker::CheckPropDeclAttributes(const PropDecl& pd) const
             (pd.TestAttr(Attribute::STATIC) && !pd.TestAttr(Attribute::REDEF))) &&
             (pd.setters.empty() || pd.getters.empty())) ||
             (!pd.TestAttr(Attribute::ABSTRACT) && pd.setters.empty() && pd.getters.empty())) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_property_must_have_accessors, pd);
+            diag.DiagnoseRefactor("sema_property_must_have_accessors", pd);
         }
     } else {
         if (!pd.setters.empty()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_immutable_property_with_setter, pd);
+            diag.DiagnoseRefactor("sema_immutable_property_with_setter", pd);
         }
         if (pd.getters.empty()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_property_must_have_accessors, pd);
+            diag.DiagnoseRefactor("sema_property_must_have_accessors", pd);
         }
     }
 }
@@ -419,7 +419,7 @@ void DeclAttributeChecker::CheckGenericFuncDeclAttributes(const FuncDecl& fd) co
         return;
     }
     if (fd.TestAttr(Attribute::OPERATOR)) {
-        diag.Diagnose(fd, DiagKind::sema_generic_in_operator_overload);
+        diag.Diagnose(fd, "sema_generic_in_operator_overload");
     }
 }
 #endif

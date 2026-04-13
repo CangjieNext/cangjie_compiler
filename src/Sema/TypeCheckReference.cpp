@@ -61,7 +61,7 @@ void TypeCheckerImpl::CheckThisOrSuper(const ASTContext& ctx, RefExpr& re)
     re.SetTy(TypeManager::GetInvalidTy());
     auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, re.scopeName);
     if (!sym || !Is<InheritableDecl>(sym->node)) {
-        diag.Diagnose(re, DiagKind::sema_this_super_use_error_outside_class, re.ref.identifier.Val());
+        diag.Diagnose(re, "sema_this_super_use_error_outside_class", re.ref.identifier.Val());
         return;
     }
     auto decl = RawStaticCast<InheritableDecl*>(sym->node);
@@ -158,11 +158,11 @@ void TypeCheckerImpl::CheckUsageOfThis(const ASTContext& ctx, const RefExpr& re)
     // 'curFuncBody' can belong to FuncDecl, LambdaExpr, MacroDecl.
     auto curFuncBody = GetCurFuncBody(ctx, re.scopeName);
     if (curFuncBody && curFuncBody->TestAttr(Attribute::STATIC)) {
-        diag.Diagnose(re, DiagKind::sema_static_members_cannot_call_members, re.ref.identifier.Val());
+        diag.Diagnose(re, "sema_static_members_cannot_call_members", re.ref.identifier.Val());
     }
     // Any use of 'this()' call in interface is invalid.
     if (Is<InterfaceDecl>(outerDecl) && re.callOrPattern) {
-        diag.Diagnose(re, DiagKind::sema_illegal_this_in_interface);
+        diag.Diagnose(re, "sema_illegal_this_in_interface");
     }
     auto outMostFuncSymbol = ScopeManager::GetOutMostSymbol(ctx, SymbolKind::FUNC_LIKE, re.scopeName);
     Ptr<FuncDecl> outMostFunc = outMostFuncSymbol ? DynamicCast<FuncDecl*>(outMostFuncSymbol->node) : nullptr;
@@ -173,7 +173,7 @@ void TypeCheckerImpl::CheckUsageOfThis(const ASTContext& ctx, const RefExpr& re)
         bool lambdaOrNestedFuncInMutFunc =
             outMostFunc->TestAttr(Attribute::MUT) && curFuncBody && (curFuncBody->funcDecl != outMostFunc);
         if (lambdaOrNestedFuncInMutFunc) {
-            diag.Diagnose(re, DiagKind::sema_capture_this_or_instance_field_in_func, re.ref.identifier.Val(),
+            diag.Diagnose(re, "sema_capture_this_or_instance_field_in_func", re.ref.identifier.Val(),
                 "mutable function '" + outMostFunc->identifier + "'");
         }
         // 'this' cannot be used as an expression in a mut function, constructor of inheritable class or finalizer.
@@ -186,7 +186,7 @@ void TypeCheckerImpl::CheckUsageOfThis(const ASTContext& ctx, const RefExpr& re)
                 : (outMostFunc->IsFinalizer() ? "finalizer"
                                               : std::string("constructor of ") +
                               (outerDecl->TestAttr(Attribute::OPEN) ? "open" : "abstract") + " class");
-            diag.Diagnose(re, DiagKind::sema_use_this_as_an_expression_in_func, info);
+            diag.Diagnose(re, "sema_use_this_as_an_expression_in_func", info);
         }
     }
     // Check usage of this in 'struct' decl except call like 'this()'.
@@ -196,11 +196,11 @@ void TypeCheckerImpl::CheckUsageOfThis(const ASTContext& ctx, const RefExpr& re)
         bool notInConstructor =
             curFuncBody && (!curFuncBody->funcDecl || !curFuncBody->funcDecl->TestAttr(Attribute::CONSTRUCTOR));
         if (notInConstructor && insideConstructor) {
-            diag.Diagnose(re, DiagKind::sema_illegal_capture_this, "struct");
+            diag.Diagnose(re, "sema_illegal_capture_this", "struct");
         }
         bool inInvalidCtx = !curFuncBody || (outMostFuncSymbol && outMostFuncSymbol->astKind == ASTKind::LAMBDA_EXPR);
         if (inInvalidCtx) {
-            diag.Diagnose(re, DiagKind::sema_illegal_this_outside_struct_constructor);
+            diag.Diagnose(re, "sema_illegal_this_outside_struct_constructor");
         }
     }
     bool referenceInInitializer = !curFuncBody && !ctx.currentCheckingNodes.empty();
@@ -218,21 +218,21 @@ void TypeCheckerImpl::CheckUsageOfSuper(const ASTContext& ctx, const RefExpr& re
     }
     auto curFuncBody = GetCurFuncBody(ctx, re.scopeName);
     if (curFuncBody && curFuncBody->TestAttr(Attribute::STATIC)) {
-        diag.Diagnose(re, DiagKind::sema_static_members_cannot_call_members, re.ref.identifier.Val());
+        diag.Diagnose(re, "sema_static_members_cannot_call_members", re.ref.identifier.Val());
     }
     // Any use of 'super' call in interface is invalid.
     if (Is<InterfaceDecl>(outerDecl)) {
-        diag.Diagnose(re, DiagKind::sema_use_super_in_interface);
+        diag.Diagnose(re, "sema_use_super_in_interface");
     }
     // 'super' is not allowed in extend decl or other non-class decl.
     if (outerDecl->astKind == ASTKind::EXTEND_DECL) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_extend_use_super, re);
+        diag.DiagnoseRefactor("sema_extend_use_super", re);
     } else if (outerDecl->astKind != ASTKind::CLASS_DECL) {
-        diag.Diagnose(re, DiagKind::sema_super_use_error_inside_non_class);
+        diag.Diagnose(re, "sema_super_use_error_inside_non_class");
     } else {
         // It's illegal to use 'super' individually, e.g: var a = super
         if (re.isAlone) {
-            diag.Diagnose(re, DiagKind::sema_illegal_super_alone);
+            diag.Diagnose(re, "sema_illegal_super_alone");
         }
     }
     bool referenceInInitializer = !curFuncBody && !ctx.currentCheckingNodes.empty();
@@ -247,10 +247,10 @@ void TypeCheckerImpl::CheckThisOrSuperInInitializer(const Node& node, const RefE
     if (node.astKind == ASTKind::VAR_DECL) {
         if (node.TestAttr(Attribute::STATIC)) {
             diag.Diagnose(
-                re, DiagKind::sema_this_or_super_not_allowed_to_initialize_static_member, re.ref.identifier.Val());
+                re, "sema_this_or_super_not_allowed_to_initialize_static_member", re.ref.identifier.Val());
         } else if (re.isSuper || (re.isThis && re.isAlone)) {
             diag.Diagnose(
-                re, DiagKind::sema_this_or_super_not_allowed_to_initialize_non_static_member, re.ref.identifier.Val());
+                re, "sema_this_or_super_not_allowed_to_initialize_non_static_member", re.ref.identifier.Val());
         }
     }
 }
@@ -277,7 +277,7 @@ bool TypeCheckerImpl::IsRefTypeArgSizeValid(const Expr& expr, std::vector<Ptr<De
     }
 
     if (!isValid) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_argument_no_match, expr);
+        diag.DiagnoseRefactor("sema_generic_argument_no_match", expr);
     }
     return isValid;
 }
@@ -322,7 +322,7 @@ bool TypeCheckerImpl::FilterInvalidEnumTargets(const NameReferenceExpr& nre, std
     });
     if (targets.empty()) {
         auto diagBuilder = diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_enum_constructor_with_param_must_have_args, nre, candidates[0]->identifier);
+            "sema_enum_constructor_with_param_must_have_args", nre, candidates[0]->identifier);
         for (auto& it : candidates) {
             diagBuilder.AddNote(*it, MakeRangeForDeclIdentifier(*it), "found candidate");
         }
@@ -337,11 +337,11 @@ bool TypeCheckerImpl::FilterAndCheckTargetsOfRef(const ASTContext& ctx, RefExpr&
     FilterCandidatesForRef(ctx, re, targets);
 
     if (targets.empty()) {
-        diag.Diagnose(re, DiagKind::sema_undeclared_identifier, re.ref.identifier.Val());
+        diag.Diagnose(re, "sema_undeclared_identifier", re.ref.identifier.Val());
         return false;
     }
     if (targets.size() == 1 && targets[0]->astKind == ASTKind::PACKAGE_DECL && re.isAlone) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_ref_to_pkg_name, re);
+        diag.DiagnoseRefactor("sema_cannot_ref_to_pkg_name", re);
         targets.clear();
         return false;
     }
@@ -459,7 +459,7 @@ bool TypeCheckerImpl::FilterAndCheckTargetsOfNameAccess(
             !target->TestAttr(Attribute::GLOBAL);
     });
     if (targets.empty()) {
-        diag.Diagnose(ma, DiagKind::sema_illegal_access_non_static_member, ma.field.Val());
+        diag.Diagnose(ma, "sema_illegal_access_non_static_member", ma.field.Val());
         return false;
     }
     RemoveDuplicateElements(targets);
@@ -488,7 +488,7 @@ bool TypeCheckerImpl::FilterAndCheckTargetsOfNameAccess(
         bool genericBaseWithoutTypeArg =
             targetOfBase && targetOfBase->IsTypeDecl() && targetOfBase->GetGeneric() && noTypeArgs;
         if (genericBaseWithoutTypeArg) {
-            diag.Diagnose(*ma.baseExpr, DiagKind::sema_generic_type_without_type_argument);
+            diag.Diagnose(*ma.baseExpr, "sema_generic_type_without_type_argument");
             return false;
         }
         return FilterTargetsForFuncReference(ma, targets);
@@ -522,7 +522,7 @@ Ptr<Decl> TypeCheckerImpl::FilterAndGetTargetsOfObjAccess(
         }
     }
     if (targets.empty()) {
-        diag.Diagnose(ma, DiagKind::sema_object_cannot_access_static_member, ma.field.Val());
+        diag.Diagnose(ma, "sema_object_cannot_access_static_member", ma.field.Val());
     }
     bool hasTarget = ctx.HasTargetTy(&ma) || ma.isInFlowExpr;
     bool referenceNeedTypeInfer = !hasTarget && (ma.isAlone || !ma.callOrPattern);
@@ -568,7 +568,7 @@ void TypeCheckerImpl::InstantiateReferenceType(
         auto tys = typeManager.ApplySubstPackNonUniq(expr.GetTy(), typeMapping, true);
         bool cannotInfer = tys.size() != 1 && Is<FuncDecl*>(target) && !ctx.HasTargetTy(&expr);
         if (cannotInfer) {
-            diag.Diagnose(expr, DiagKind::sema_ambiguous_func_ref, target->identifier.Val());
+            diag.Diagnose(expr, "sema_ambiguous_func_ref", target->identifier.Val());
         }
         expr.SetTy(*tys.begin());
     } else {
@@ -607,7 +607,7 @@ void TypeCheckerImpl::CheckAccessLegalityOfRefExpr(const ASTContext& ctx, RefExp
             (void)CheckFuncAccessControl(ctx, re, re.GetTargets());
             // The unsafe function can only be called rather than as name reference
             if (decl->TestAttr(Attribute::UNSAFE) && !re.isInFlowExpr) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_unsafe_func_can_only_be_called, re);
+                diag.DiagnoseRefactor("sema_unsafe_func_can_only_be_called", re);
             }
         }
     } else {
@@ -626,8 +626,8 @@ void TypeCheckerImpl::CheckAccessLegalityOfRefExpr(const ASTContext& ctx, RefExp
     // it needs to be checked when isAlone is true. For example:  let a = A is wrong when A is a class. The flag
     // isAlone is true in this case;
     if (re.isAlone && decl->IsTypeDecl()) {
-        diag.Diagnose(re, DiagKind::sema_ref_not_be_type, re.ref.identifier.Val())
-            .AddNote(*decl, DiagKind::sema_found_candidate_decl);
+        diag.Diagnose(re, "sema_ref_not_be_type", re.ref.identifier.Val())
+            .AddNote(*decl, "sema_found_candidate_decl");
     }
     CheckInvalidRefInCFunc(ctx, re, *decl);
 }
@@ -648,7 +648,7 @@ void TypeCheckerImpl::CheckAccessLegalityOfMemberAccess(const ASTContext& ctx, M
             (void)CheckFuncAccessControl(ctx, ma, targets);
             // The unsafe function can only be called rather than as name reference
             if (decl->TestAttr(Attribute::UNSAFE) && !ma.isInFlowExpr) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_unsafe_func_can_only_be_called, ma);
+                diag.DiagnoseRefactor("sema_unsafe_func_can_only_be_called", ma);
             }
         }
     } else {
@@ -676,8 +676,8 @@ void TypeCheckerImpl::CheckStaticMemberAccessLegality(const MemberAccess& ma, co
     // it needs to be checked when isAlone is true. For example:  let a = A is wrong when A is a class. The flag
     // isAlone is true in this case;
     if (ma.isAlone && target.IsTypeDecl()) {
-        diag.Diagnose(ma, DiagKind::sema_ref_not_be_type, ma.field.Val())
-            .AddNote(target, DiagKind::sema_found_candidate_decl);
+        diag.Diagnose(ma, "sema_ref_not_be_type", ma.field.Val())
+            .AddNote(target, "sema_found_candidate_decl");
     }
 }
 
@@ -692,7 +692,7 @@ void TypeCheckerImpl::IsNamespaceMemberAccessLegal(
         std::string targetPackage = target.fullPackageName;
         auto relation = Modules::GetPackageRelation(packageName, targetPackage);
         if (!Modules::IsVisible(target, relation)) {
-            diag.Diagnose(ma, DiagKind::sema_package_internal_decl_obtain_illegal, GetAccessLevelStr(target),
+            diag.Diagnose(ma, "sema_package_internal_decl_obtain_illegal", GetAccessLevelStr(target),
                 ma.field.Val(), targetPackage);
         }
     } else if (realTarget->IsNominalDecl() && !realTarget->TestAttr(Attribute::FOREIGN) &&
@@ -700,12 +700,12 @@ void TypeCheckerImpl::IsNamespaceMemberAccessLegal(
         auto fieldRange = MakeRange(ma.field);
         std::string strType = target.astKind == ASTKind::FUNC_DECL ? "function" : "property";
         diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_interface_call_with_unimplemented_call, ma, fieldRange, strType, ma.field.Val());
+            "sema_interface_call_with_unimplemented_call", ma, fieldRange, strType, ma.field.Val());
     }
     // Handle generic enum var field like: TimeUnit<Int32>.century.
     if (target.TestAttr(Attribute::ENUM_CONSTRUCTOR) && !ma.typeArguments.empty()) {
         // TimeUnit.century<Int32> is not allowed.
-        diag.Diagnose(ma, DiagKind::sema_invalid_type_param_of_enum_member_access, ma.field.Val(),
+        diag.Diagnose(ma, "sema_invalid_type_param_of_enum_member_access", ma.field.Val(),
             targetOfBaseDecl.identifier.Val());
     }
 }
@@ -720,7 +720,7 @@ void TypeCheckerImpl::CheckInstanceMemberAccessLegality(
     auto refExpr = As<ASTKind::REF_EXPR>(ma.baseExpr.get());
     bool isTargetAbstract = refExpr && refExpr->isSuper && target.TestAttr(Attribute::ABSTRACT);
     if (isTargetAbstract) {
-        diag.Diagnose(ma, DiagKind::sema_abstract_method_cannot_be_accessed_directly, target.identifier.Val());
+        diag.Diagnose(ma, "sema_abstract_method_cannot_be_accessed_directly", target.identifier.Val());
     }
 }
 
@@ -981,8 +981,8 @@ void TypeCheckerImpl::DiagnoseDeprecatedUsage(
     }
 
     auto diagnoseKind = strict
-        ? DiagKindRefactor::sema_deprecated_error
-        : DiagKindRefactor::sema_deprecated_warning;
+        ? "sema_deprecated_error"
+        : "sema_deprecated_warning";
 
     if (kind.value() == "") {
         InternalError("Kind of deprecated declaration diagnostic must be defined.");
@@ -1088,21 +1088,21 @@ void TypeCheckerImpl::CheckOverridingOrRedefiningOfDeprecated(
     auto isOverridenStrict = IsDeprecatedStrict(overridden);
     if (overriding->HasAnno(AnnotationKind::DEPRECATED)) {
         if (isOverridenStrict && !IsDeprecatedStrict(overriding)) {
-            auto diagnoseKind = DiagKindRefactor::sema_deprecation_weakening;
+            auto diagnoseKind = "sema_deprecation_weakening";
 
             diag.DiagnoseRefactor(diagnoseKind, *overriding);
         }
     } else {
         bool isRedefined = overridden->TestAnyAttr(Attribute::STATIC);
-        DiagKindRefactor diagnoseKind;
+        std::string_view diagnoseKind;
         if (isRedefined) {
             diagnoseKind = isOverridenStrict
-                ? DiagKindRefactor::sema_deprecation_redef_error
-                : DiagKindRefactor::sema_deprecation_redef_warning;
+                ? "sema_deprecation_redef_error"
+                : "sema_deprecation_redef_warning";
         } else {
             diagnoseKind = isOverridenStrict
-                ? DiagKindRefactor::sema_deprecation_override_error
-                : DiagKindRefactor::sema_deprecation_override_warning;
+                ? "sema_deprecation_override_error"
+                : "sema_deprecation_override_warning";
         }
 
         auto name = declType == "setter"
@@ -1235,14 +1235,14 @@ void TypeCheckerImpl::CheckDeprecationLevelOnInheritors(const Ptr<ClassLikeDecl>
     for (auto sub : orderedSubDecl) {
         if (sub->HasAnno(AnnotationKind::DEPRECATED)) {
             if (isParentStrict && !IsDeprecatedStrict(sub)) {
-                auto diagnoseKind = DiagKindRefactor::sema_deprecation_weakening;
+                auto diagnoseKind = "sema_deprecation_weakening";
 
                 diag.DiagnoseRefactor(diagnoseKind, *sub);
             }
         } else {
             auto diagnoseKind = isParentStrict
-                ? DiagKindRefactor::sema_deprecation_override_error
-                : DiagKindRefactor::sema_deprecation_override_warning;
+                ? "sema_deprecation_override_error"
+                : "sema_deprecation_override_warning";
 
             diag.DiagnoseRefactor(
                 diagnoseKind,

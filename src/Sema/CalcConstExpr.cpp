@@ -33,12 +33,12 @@ bool TypeCheckerImpl::ChkFloatTypeOverflow(const LitConstExpr& lce)
     switch (lce.constNumValue.asFloat.flowStatus) {
         case Expr::FlowStatus::OVER: {
             (void)diag.DiagnoseRefactor(
-                DiagKindRefactor::sema_float_literal_too_large, lce, lce.GetTy()->String(), info.max);
+                "sema_float_literal_too_large", lce, lce.GetTy()->String(), info.max);
             return false;
         }
         case Expr::FlowStatus::UNDER: {
             (void)diag.DiagnoseRefactor(
-                DiagKindRefactor::sema_float_literal_too_small, lce, lce.GetTy()->String(), info.min);
+                "sema_float_literal_too_small", lce, lce.GetTy()->String(), info.min);
             return false;
         }
         default:
@@ -76,10 +76,10 @@ bool TypeCheckerImpl::ChkFloatTypeOverflow(const LitConstExpr& lce)
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_float_literal_too_small, lce, lce.GetTy()->String(), info.min);
+        (void)diag.DiagnoseRefactor("sema_float_literal_too_small", lce, lce.GetTy()->String(), info.min);
         return false;
     } else if (value == info.inf) { // match the infinity bits
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_float_literal_too_large, lce, lce.GetTy()->String(), info.max);
+        (void)diag.DiagnoseRefactor("sema_float_literal_too_large", lce, lce.GetTy()->String(), info.max);
         return false;
     }
     return true;
@@ -99,7 +99,7 @@ bool TypeCheckerImpl::ChkLitConstExprRange(LitConstExpr& lce)
             if (lce.GetTy()->IsIdeal()) {
                 typeName += "64";
             }
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_exceed_num_value_range,
+            (void)diag.DiagnoseRefactor("sema_exceed_num_value_range",
                 lce, lce.stringValue, typeName);
             lce.SetTy(TypeManager::GetInvalidTy());
             return false;

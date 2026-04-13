@@ -32,10 +32,10 @@ void DiagConflictingForeignName(
     auto builder = [&diag, &anno, &declWithAnno]() {
         if (!anno->TestAttr(Attribute::COMPILER_ADD)) {
             auto declWithAnnoRange = MakeRange(anno->GetBegin(), declWithAnno.identifier.End());
-            return diag.DiagnoseRefactor(DiagKindRefactor::sema_foreign_name_conflicting_annotation, declWithAnno,
+            return diag.DiagnoseRefactor("sema_foreign_name_conflicting_annotation", declWithAnno,
                 declWithAnnoRange, declWithAnno.identifier, anno->identifier, anno->identifier);
         } else {
-            return diag.DiagnoseRefactor(DiagKindRefactor::sema_foreign_name_conflicting_derived_annotation,
+            return diag.DiagnoseRefactor("sema_foreign_name_conflicting_derived_annotation",
                 declWithAnno, MakeRange(declWithAnno.identifier), declWithAnno.identifier, anno->identifier, GetAnnoValue(anno));
         }
     }();
@@ -111,7 +111,7 @@ void CheckForeignName(DiagnosticEngine& diag, TypeManager& typeManager, const Me
 
     if (childAnno && !childAnno->TestAttr(Attribute::COMPILER_ADD)) {
         auto range = MakeRange(childAnno->GetBegin(), child.decl->identifier.End());
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_foreign_name_appeared_in_child, *child.decl, range, childAnno->identifier);
+        diag.DiagnoseRefactor("sema_foreign_name_appeared_in_child", *child.decl, range, childAnno->identifier);
     } else if (childAnno && !parentAnno) {
         DiagConflictingForeignName(diag, *child.decl, *parent.decl, checkingDecl);
     } else if (!childAnno && parentAnno && child.replaceOther) {

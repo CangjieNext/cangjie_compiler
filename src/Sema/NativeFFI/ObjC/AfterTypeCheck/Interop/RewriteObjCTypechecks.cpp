@@ -10,14 +10,13 @@
  * This file implements desugaring of typechecks/typecasts involving ObjC-compatible types
  */
 
-
-#include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
-#include "cangjie/AST/Create.h"
-#include "cangjie/AST/Walker.h"
-#include "cangjie/AST/Match.h"
-#include "cangjie/AST/Clone.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/Utils.h"
+#include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Create.h"
+#include "cangjie/AST/Match.h"
+#include "cangjie/AST/Walker.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -229,7 +228,7 @@ std::vector<Ptr<TypePattern>> CollectTypePatternWithObjCClass(InteropContext& ct
     for (auto& pat : patterns) {
         if (auto tpat = As<ASTKind::TYPE_PATTERN>(pat.get())) {
             if (multipleTypePatterns) {
-                ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_interop_not_supported, *tpat,
+                ctx.diag.DiagnoseRefactor("sema_objc_interop_not_supported", *tpat,
                     "multiple type patterns inside match case (_: A | _: B)");
                 return {};
             } else {

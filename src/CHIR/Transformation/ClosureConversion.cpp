@@ -1386,7 +1386,7 @@ void ClosureConversion::LiftType()
         return VisitResult::CONTINUE;
     };
     for (auto func : package.GetGlobalFunctions(true)) {
-        if (auto body = func->GetBody()) {
+        if (func->GetBody()) {
             Visitor::Visit(*func, preVisit);
         }
         converter.VisitValue(*func);

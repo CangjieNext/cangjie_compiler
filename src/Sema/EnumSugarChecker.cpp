@@ -32,11 +32,11 @@ bool EnumSugarChecker::CheckVarDeclTargets()
     }
     if (varDeclTargets.size() > 1) {
         DiagnosticBuilder diagBuilder = ctx.diag.Diagnose(
-            refExpr, DiagKind::sema_multiple_constructor_in_enum, varDeclTargets[0]->identifier.Val());
+            refExpr, "sema_multiple_constructor_in_enum", varDeclTargets[0]->identifier.Val());
         std::sort(varDeclTargets.begin(), varDeclTargets.end(),
             [](Ptr<const Decl> a, Ptr<const Decl> b) { return a->begin < b->begin; });
         for (auto& it : varDeclTargets) {
-            diagBuilder.AddNote(*it, DiagKind::sema_found_candidate_decl);
+            diagBuilder.AddNote(*it, "sema_found_candidate_decl");
         }
         refExpr.SetTy(TypeManager::GetInvalidTy());
         return false;
@@ -75,7 +75,7 @@ void EnumSugarChecker::CheckGenericEnumSugarWithoutTypeArgs(Ptr<const EnumDecl> 
     bool referenceNeedTypeInfer = (foundTargetType == ctx.targetTypeMap.end() || foundTargetType->second == nullptr) &&
         !refExpr.isInFlowExpr;
     if (ed && ed->generic && Is<VarDecl>(enumSugarTargets[0]) && referenceNeedTypeInfer && argSize == 0) {
-        ctx.diag.Diagnose(refExpr, DiagKind::sema_generic_type_without_type_argument);
+        ctx.diag.Diagnose(refExpr, "sema_generic_type_without_type_argument");
         enumSugarTargets.clear();
     }
 }

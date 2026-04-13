@@ -55,7 +55,7 @@ void ReportPackageMismatch(
     }
 
     diag.DiagnoseRefactor(
-        DiagKindRefactor::module_common_cjo_wrong_package, range, actualPackageName, expectedPackageName);
+        "module_common_cjo_wrong_package", range, actualPackageName, expectedPackageName);
 }
 
 std::set<std::string> CollectFeaturesFromPackage(AST::Package& pkg)
@@ -86,7 +86,7 @@ void ValidateCommonSpecificFeatureSetsRelations(
             ss << "'" << feature << "' ";
         }
         auto diagBuilder = diag.DiagnoseRefactor(
-            DiagKindRefactor::feature_is_not_subset_of_child_set,
+            "feature_is_not_subset_of_child_set",
             commonFile.GetBegin(), commonFile.GetFullPackageName(), commonFile.filePath
         );
         diagBuilder.AddNote(ss.str());
@@ -159,7 +159,7 @@ bool ASTLoader::ASTLoaderImpl::ValidateOptions()
 {
     auto options = package->options();
     if (options == nullptr) {
-        diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_no_options, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("module_common_cjo_no_options", DEFAULT_POSITION);
         return true;
     }
 
@@ -167,7 +167,7 @@ bool ASTLoader::ASTLoaderImpl::ValidateOptions()
     if (options->debug() != this->opts.enableCompileDebug) {
         std::string before = options->debug() ? "enabled" : "disabled";
         std::string after = opts.enableCompileDebug ? "enabled" : "disabled";
-        diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_debug_mismatch, DEFAULT_POSITION, before, after);
+        diag.DiagnoseRefactor("module_common_cjo_debug_mismatch", DEFAULT_POSITION, before, after);
         failed = true;
     }
 
@@ -175,7 +175,7 @@ bool ASTLoader::ASTLoaderImpl::ValidateOptions()
     if (opts.optimizationLevel != cjoOptLevel) {
         std::string before = ASTLoaderCJMP::OptimizationLevelToString(cjoOptLevel);
         std::string after = ASTLoaderCJMP::OptimizationLevelToString(opts.optimizationLevel);
-        diag.DiagnoseRefactor(DiagKindRefactor::module_common_cjo_opt_mismatch, DEFAULT_POSITION, before, after);
+        diag.DiagnoseRefactor("module_common_cjo_opt_mismatch", DEFAULT_POSITION, before, after);
         failed = true;
     }
 
