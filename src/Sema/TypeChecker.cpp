@@ -205,7 +205,7 @@ bool TypeChecker::TypeCheckerImpl::CheckFuncBody(ASTContext& ctx, FuncBody& fb)
     }
 
     if (!CheckThisTypeOfFuncBody(fb)) {
-        diag.Diagnose(*fb.retType, DiagKind::sema_invalid_position_of_this_type);
+        diag.Diagnose(*fb.retType, "sema_invalid_position_of_this_type");
     }
     std::vector<Ptr<Ty>> paramTys;
     if (!CheckNormalFuncBody(ctx, fb, paramTys)) {
@@ -563,12 +563,12 @@ bool TypeChecker::TypeCheckerImpl::ChkInoutFuncArg(const FuncArg& fa)
         case ASTKind::MEMBER_ACCESS:
             return ChkInoutMemberAccess(*StaticCast<MemberAccess*>(fa.expr.get()));
         case ASTKind::LIT_CONST_EXPR: {
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_must_be_var_variable, *fa.expr);
+            auto builder = diag.DiagnoseRefactor("sema_inout_must_be_var_variable", *fa.expr);
             builder.AddMainHintArguments("literal");
             return false;
         }
         default: {
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_must_be_var_variable, *fa.expr);
+            auto builder = diag.DiagnoseRefactor("sema_inout_must_be_var_variable", *fa.expr);
             builder.AddMainHintArguments(std::string(INOUT_TEMP_VALUE));
             return false;
         }
@@ -583,19 +583,19 @@ bool TypeChecker::TypeCheckerImpl::ChkInoutRefExpr(RefExpr& re, bool isBase)
         return true;
     }
     if (thisOrSuper || !target || !Utils::In(target->astKind, {ASTKind::VAR_DECL, ASTKind::FUNC_PARAM})) {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_must_be_var_variable, re);
+        auto builder = diag.DiagnoseRefactor("sema_inout_must_be_var_variable", re);
         builder.AddMainHintArguments("not a variable");
         return false;
     }
     auto vd = StaticAs<ASTKind::VAR_DECL>(target);
     if (!vd->isVar) {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_must_be_var_variable, re);
+        auto builder = diag.DiagnoseRefactor("sema_inout_must_be_var_variable", re);
         builder.AddMainHintArguments(std::string(INOUT_IMMUTABLE));
         return false;
     }
     if (vd->outerDecl && vd->outerDecl->IsNominalDecl()) {
         if (vd->outerDecl->astKind != ASTKind::STRUCT_DECL && !vd->TestAttr(Attribute::STATIC)) {
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_modify_heap_variable, re);
+            (void)diag.DiagnoseRefactor("sema_inout_modify_heap_variable", re);
             return false;
         }
     }
@@ -612,7 +612,7 @@ bool TypeChecker::TypeCheckerImpl::ChkInoutMemberAccess(const MemberAccess& ma)
 {
     // Currently, `ma.desugarExpr` can only be `VArray.size`.
     if (ma.desugarExpr && ma.desugarExpr->astKind == ASTKind::LIT_CONST_EXPR) {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_must_be_var_variable, ma);
+        auto builder = diag.DiagnoseRefactor("sema_inout_must_be_var_variable", ma);
         builder.AddMainHintArguments(std::string(INOUT_IMMUTABLE));
         return false;
     }
@@ -623,7 +623,7 @@ bool TypeChecker::TypeCheckerImpl::ChkInoutMemberAccess(const MemberAccess& ma)
     if (ma.target->astKind == ASTKind::VAR_DECL) {
         auto vd = StaticAs<ASTKind::VAR_DECL>(ma.target);
         if (!vd->isVar) {
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_must_be_var_variable, ma.field.Begin());
+            auto builder = diag.DiagnoseRefactor("sema_inout_must_be_var_variable", ma.field.Begin());
             builder.AddMainHintArguments(std::string(INOUT_IMMUTABLE));
             meetContraints = false;
         }
@@ -631,8 +631,8 @@ bool TypeChecker::TypeCheckerImpl::ChkInoutMemberAccess(const MemberAccess& ma)
             return meetContraints;
         }
     } else {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_must_be_var_variable, ma);
-        if (ma.target->astKind == ASTKind::FUNC_DECL) {
+        auto builder = diag.DiagnoseRefactor("sema_inout_must_be_var_variable", ma);
+        if (ma.GetTarget()->astKind == ASTKind::FUNC_DECL) {
             builder.AddMainHintArguments("function declaration");
         } else {
             builder.AddMainHintArguments(std::string(INOUT_TEMP_VALUE));
@@ -641,7 +641,7 @@ bool TypeChecker::TypeCheckerImpl::ChkInoutMemberAccess(const MemberAccess& ma)
     }
     auto& be = ma.baseExpr;
     if (Ty::IsTyCorrect(be->GetTy()) && be->GetTy()->IsClassLike()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_modify_heap_variable, *be);
+        diag.DiagnoseRefactor("sema_inout_modify_heap_variable", *be);
         return false;
     }
     if (be->astKind == ASTKind::REF_EXPR) {
@@ -654,7 +654,7 @@ bool TypeChecker::TypeCheckerImpl::ChkInoutMemberAccess(const MemberAccess& ma)
         }
         return false;
     }
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_must_be_var_variable, *be);
+    auto builder = diag.DiagnoseRefactor("sema_inout_must_be_var_variable", *be);
     builder.AddMainHintArguments(std::string(INOUT_TEMP_VALUE));
     return false;
 }
@@ -667,10 +667,10 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynFuncArg(ASTContext& ctx, FuncArg& fa)
             if (!Ty::IsTyCorrect(fa.expr->GetTy()) || !ChkInoutFuncArg(fa)) {
                 fa.SetTy(TypeManager::GetInvalidTy());
             } else if (!Ty::IsMetCType(*fa.expr->GetTy())) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_modify_non_ctype, fa);
+                diag.DiagnoseRefactor("sema_inout_modify_non_ctype", fa);
                 fa.SetTy(TypeManager::GetInvalidTy());
             } else if (fa.expr->GetTy()->IsCString()) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_modify_cstring_or_zerosized, fa, "type 'CString'");
+                diag.DiagnoseRefactor("sema_inout_modify_cstring_or_zerosized", fa, "type 'CString'");
                 fa.SetTy(TypeManager::GetInvalidTy());
             } else if (Is<VArrayTy>(fa.expr->GetTy())) {
                 fa.SetTy(typeManager.GetPointerTy(fa.expr->GetTy()->typeArgs[0]));
@@ -1304,10 +1304,10 @@ void TypeChecker::TypeCheckerImpl::CheckConstructor(ASTContext& ctx, const Decl&
     }
     bool hasBrokenBody = fd.funcBody->generic && !fd.TestAttr(Attribute::STATIC) && !HasJavaAttr(decl);
     if (hasBrokenBody) {
-        diag.Diagnose(fd, DiagKind::sema_forbid_generic_constructor, fd.identifier.Val());
+        diag.Diagnose(fd, "sema_forbid_generic_constructor", fd.identifier.Val());
     }
     if (fd.funcBody->paramLists.size() > 1) {
-        diag.Diagnose(*fd.funcBody->paramLists[0], DiagKind::sema_cannot_currying, "constructor");
+        diag.Diagnose(*fd.funcBody->paramLists[0], "sema_cannot_currying", "constructor");
         hasBrokenBody = true;
     }
     if (hasBrokenBody) {
@@ -1349,7 +1349,7 @@ void TypeChecker::TypeCheckerImpl::CheckCallsInConstructor(
             continue;
         }
         if (re->isThis && fd.TestAttr(Attribute::PRIMARY_CONSTRUCTOR)) {
-            diag.Diagnose(*ce, DiagKind::sema_illegal_place_of_calling_this_primary_constructor);
+            diag.Diagnose(*ce, "sema_illegal_place_of_calling_this_primary_constructor");
         } else if (ce != firstExprOrDeclPtr) {
             Ptr<TrailingClosureExpr> tce = nullptr;
             if (firstExprOrDeclPtr && firstExprOrDeclPtr->astKind == ASTKind::TRAIL_CLOSURE_EXPR) {
@@ -1357,7 +1357,7 @@ void TypeChecker::TypeCheckerImpl::CheckCallsInConstructor(
             }
             auto notIllegalPlace = !tce || (ce->TestAttr(Attribute::COMPILER_ADD) && ce != tce->desugarExpr.get());
             if (notIllegalPlace) {
-                diag.Diagnose(*ce, DiagKind::sema_illegal_place_of_calling_this_or_super, re->ref.identifier.Val(),
+                diag.Diagnose(*ce, "sema_illegal_place_of_calling_this_or_super", re->ref.identifier.Val(),
                     decl.astKind == ASTKind::CLASS_DECL ? "class" : "struct", decl.identifier.Val());
             }
         }
@@ -1571,7 +1571,7 @@ void TypeChecker::TypeCheckerImpl::CheckConstructorSuper(
     auto& fdName = fd.TestAttr(Attribute::PRIMARY_CONSTRUCTOR) ? fd.identifierForLsp : fd.identifier.Val();
     auto range =
         fd.TestAttr(Attribute::IMPLICIT_ADD) ? MakeRange(decl.identifier) : MakeRange(fd.identifier.Begin(), fdName);
-    (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_no_non_param_constructor_in_super_class, fd, range);
+    (void)diag.DiagnoseRefactor("sema_no_non_param_constructor_in_super_class", fd, range);
     fd.constructorCall = ConstructorCall::NONE;
 }
 
@@ -1583,14 +1583,14 @@ void TypeChecker::TypeCheckerImpl::CheckFinalizer(const FuncDecl& fd)
     bool invalidGeneric =
         fd.funcBody->generic && !fd.TestAttr(Attribute::STATIC) && fd.outerDecl && !HasJavaAttr(*fd.outerDecl);
     if (invalidGeneric) {
-        diag.Diagnose(fd, DiagKind::sema_forbid_generic_finalizer, fd.identifier.Val());
+        diag.Diagnose(fd, "sema_forbid_generic_finalizer", fd.identifier.Val());
     }
     if (!fd.funcBody->paramLists.empty()) {
         if (fd.funcBody->paramLists.size() > 1) {
-            diag.Diagnose(*fd.funcBody->paramLists[0], DiagKind::sema_cannot_currying, "finalizer");
+            diag.Diagnose(*fd.funcBody->paramLists[0], "sema_cannot_currying", "finalizer");
         }
         if (!fd.funcBody->paramLists[0]->params.empty()) {
-            diag.Diagnose(fd, DiagKind::sema_cannot_have_parameter, "finalizer");
+            diag.Diagnose(fd, "sema_cannot_have_parameter", "finalizer");
         }
     }
 }
@@ -1607,16 +1607,16 @@ void TypeChecker::TypeCheckerImpl::CheckPrimaryCtorForClassOrStruct(InheritableD
         if (auto fd = DynamicCast<PrimaryCtorDecl*>(decl.get()); fd) {
             if (primaryCtor) {
                 auto typeName = id.astKind == ASTKind::CLASS_DECL ? "class" : "struct";
-                diag.Diagnose(*fd, DiagKind::sema_multiple_primary_constructors, typeName, id.identifier.Val());
+                diag.Diagnose(*fd, "sema_multiple_primary_constructors", typeName, id.identifier.Val());
             } else {
                 primaryCtor = true;
                 target = fd;
             }
             if (fd->funcBody && fd->funcBody->generic) {
-                diag.Diagnose(*decl, DiagKind::sema_forbid_generic_constructor, decl->identifier.Val());
+                diag.Diagnose(*decl, "sema_forbid_generic_constructor", decl->identifier.Val());
             }
             if (fd->funcBody && fd->funcBody->paramLists.size() > 1) {
-                diag.Diagnose(*fd->funcBody->paramLists[0], DiagKind::sema_cannot_currying, "constructor");
+                diag.Diagnose(*fd->funcBody->paramLists[0], "sema_cannot_currying", "constructor");
             }
         }
         if (decl->TestAttr(Attribute::PRIMARY_CONSTRUCTOR) && decl->astKind == ASTKind::FUNC_DECL) {
@@ -1650,7 +1650,7 @@ void TypeChecker::TypeCheckerImpl::TypeCheckCompositeBody(
 void TypeChecker::TypeCheckerImpl::CheckJavaInteropLibImport(Decl& decl)
 {
     if (!Interop::Java::InteropLibBridge::IsInteropLibAccessible(importManager)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_interoplib_must_be_imported, decl);
+        diag.DiagnoseRefactor("sema_java_mirror_interoplib_must_be_imported", decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
 }
@@ -1658,7 +1658,7 @@ void TypeChecker::TypeCheckerImpl::CheckJavaInteropLibImport(Decl& decl)
 void TypeChecker::TypeCheckerImpl::CheckObjCInteropLibImport(Decl& decl)
 {
     if (!Interop::ObjC::InteropLibBridge::IsInteropLibAccessible(importManager)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_mirror_interoplib_must_be_imported, decl);
+        diag.DiagnoseRefactor("sema_objc_mirror_interoplib_must_be_imported", decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
 }
@@ -1695,7 +1695,7 @@ bool TypeChecker::TypeCheckerImpl::IsCapturedInCFuncLambda(const ASTContext& ctx
     return false;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(Expr& e, DiagKind kind) const
+void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(Expr& e, std::string_view kind) const
 {
     if (e.TestAttr(Attribute::IS_BROKEN)) {
         return;
@@ -1722,33 +1722,33 @@ void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(const ASTContext& ctx,
 {
     if (auto vd = DynamicCast<VarDecl*>(&node); vd) {
         if (vd->initializer) {
-            CheckLegalUseOfClosure(*vd->initializer, DiagKind::sema_func_capture_var_cannot_assign);
+            CheckLegalUseOfClosure(*vd->initializer, "sema_func_capture_var_cannot_assign");
         }
     } else if (auto re = DynamicCast<ReturnExpr*>(&node); re) {
         if (re->expr) {
-            CheckLegalUseOfClosure(*re->expr, DiagKind::sema_func_capture_var_cannot_return);
+            CheckLegalUseOfClosure(*re->expr, "sema_func_capture_var_cannot_return");
         }
     } else if (auto ce = DynamicCast<CallExpr*>(&node); ce) {
         if (auto baseRe = DynamicCast<RefExpr*>(ce->baseFunc.get()); baseRe && IsCapturedInCFuncLambda(ctx, *baseRe)) {
-            diag.Diagnose(*baseRe, DiagKind::sema_cfunc_cannot_capture_var, baseRe->ref.identifier.Val());
+            diag.Diagnose(*baseRe, "sema_cfunc_cannot_capture_var", baseRe->ref.identifier.Val());
         }
         for (auto& arg : ce->args) {
             if (arg && arg->expr) {
-                CheckLegalUseOfClosure(*arg->expr, DiagKind::sema_func_capture_var_cannot_param);
+                CheckLegalUseOfClosure(*arg->expr, "sema_func_capture_var_cannot_param");
             }
         }
     } else if (auto ref = DynamicCast<RefExpr*>(&node); ref && !ref->isBaseFunc) {
-        CheckLegalUseOfClosure(*ref, DiagKind::sema_func_capture_var_cannot_expr);
-        if (auto refVd = DynamicCast<VarDecl*>(ref->ref.target); refVd) {
+        CheckLegalUseOfClosure(*ref, "sema_func_capture_var_cannot_expr");
+        if (auto refVd = DynamicCast<VarDecl*>(ref->GetTarget()); refVd) {
             if (IsCapturedCStructOfClosure(*refVd)) {
-                diag.Diagnose(*ref, DiagKind::sema_func_capture_var_not_ctype);
+                diag.Diagnose(*ref, "sema_func_capture_var_not_ctype");
             }
         }
         if (IsCapturedInCFuncLambda(ctx, *ref)) {
-            diag.Diagnose(*ref, DiagKind::sema_cfunc_cannot_capture_var, ref->ref.identifier.Val());
+            diag.Diagnose(*ref, "sema_cfunc_cannot_capture_var", ref->ref.identifier.Val());
         }
     } else if (auto lambda = DynamicCast<LambdaExpr*>(&node); lambda && !lambda->isBaseFunc) {
-        CheckLegalUseOfClosure(*lambda, DiagKind::sema_func_capture_var_cannot_expr);
+        CheckLegalUseOfClosure(*lambda, "sema_func_capture_var_cannot_expr");
     }
 }
 
@@ -1761,7 +1761,7 @@ void TypeChecker::TypeCheckerImpl::CheckCHIRClassDependencies()
 {
     auto objectDecl = importManager.GetImportedDecl(CORE_PACKAGE_NAME, "Object");
     if (objectDecl == nullptr) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_core_object_not_found_when_no_prelude, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("sema_core_object_not_found_when_no_prelude", DEFAULT_POSITION);
     }
 }
 
@@ -2199,7 +2199,7 @@ void TypeChecker::TypeCheckerImpl::CheckWhetherHasProgramEntry()
     }
     auto& file = ci->srcPkgs[0]->files[0];
     if (file != nullptr) {
-        diag.Diagnose(*file, DiagKind::sema_missing_entry);
+        diag.Diagnose(*file, "sema_missing_entry");
     }
 }
 
@@ -2644,7 +2644,7 @@ void TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfaces(
     auto baseDecl = Ty::GetDeclPtrOfTy(decl.GetTy());
     std::string name = baseDecl ? baseDecl->identifier.Val() : Ty::ToString(decl.GetTy());
     if (interfaceDecl) {
-        diag.Diagnose(triggerNode, DiagKind::sema_inherit_duplicate_interface, DeclKindToString(decl), name,
+        diag.Diagnose(triggerNode, "sema_inherit_duplicate_interface", DeclKindToString(decl), name,
             interfaceDecl->identifier.Val());
     }
 }
@@ -2783,7 +2783,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::CalcFuncRetTyFromBody(const FuncBody& fb)
         auto [optErrs, joinedRet] = JoinAndMeet::SetJoinedType(retTy, joinRes);
         retTy = joinedRet;
         if (optErrs) {
-            auto builder = diag.Diagnose(*lastNode, DiagKind::sema_incompatible_func_body_and_return_type);
+            auto builder = diag.Diagnose(*lastNode, "sema_incompatible_func_body_and_return_type");
             builder.AddNote(*optErrs);
         }
         return retTy;

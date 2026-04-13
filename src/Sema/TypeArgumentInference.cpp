@@ -155,7 +155,7 @@ void DiagnoseForCallInference(DiagnosticEngine& diag, const CallExpr& ce, const 
     CJC_ASSERT(fd.GetTy());
     CJC_NULLPTR_CHECK(ce.baseFunc);
     auto tyVars = GetUnivTyVarsToSolve(maps);
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_unable_to_infer_generic_func, *ce.baseFunc);
+    auto builder = diag.DiagnoseRefactor("sema_unable_to_infer_generic_func", *ce.baseFunc);
     std::string typeStr = "'" + fd.GetTy()->String() + "'";
     if (auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get());
         ma && ma->baseExpr && Ty::IsTyCorrect(ma->baseExpr->GetTy())) {
@@ -517,7 +517,7 @@ ErrOrSubst TypeChecker::TypeCheckerImpl::PrepareTyArgsSynthesis(
     if (!stat.solution || stat.unsolvedCount > 0) {
         stat.solution = {}; // clear partially solved solution
         for (auto idx : stat.ignoredEnumCtor) {
-            diag.Diagnose(*ce.args[idx]->expr, DiagKind::sema_generic_type_without_type_argument);
+            diag.Diagnose(*ce.args[idx]->expr, "sema_generic_type_without_type_argument");
         }
         // inference failure will be reported later
         ds.ReportDiag();

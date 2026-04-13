@@ -52,7 +52,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynNumTypeConvExpr(TypeConvExpr& tce)
     }
     // Otherwise, return false.
     if (!CanSkipDiag(*tce.expr)) {
-        diag.Diagnose(*tce.expr, DiagKind::sema_numeric_convert_must_be_numeric);
+        diag.Diagnose(*tce.expr, "sema_numeric_convert_must_be_numeric");
     }
     tce.SetTy(TypeManager::GetInvalidTy());
     return tce.GetTy();

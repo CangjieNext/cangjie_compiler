@@ -26,7 +26,7 @@ using namespace Sema;
 namespace {
 void DiagAnnotationArgTarget(DiagnosticEngine& diag, const Node& node)
 {
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_annotation_arg_target, node);
+    diag.DiagnoseRefactor("sema_annotation_arg_target", node);
 }
 
 OwnedPtr<CallExpr> DesugarCustomAnnotation(Annotation& ann)
@@ -85,7 +85,7 @@ bool CheckCustomAnnotationPlace(DiagnosticEngine& diag, const Decl& decl, const 
         (decl.TestAttr(Attribute::GLOBAL) && (Is<VarDeclAbstract>(decl) || Is<FuncDecl>(decl)));
     if (!validCustomAnnotaionPlace) {
         auto builder =
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_annotation_custom_place, MakeRangeForDeclIdentifier(decl));
+            diag.DiagnoseRefactor("sema_annotation_custom_place", MakeRangeForDeclIdentifier(decl));
         builder.AddHint(ann);
         builder.AddNote("custom annotations can only be used on non-local declarations");
     }
@@ -114,7 +114,7 @@ void TypeChecker::TypeCheckerImpl::CheckAnnotationDecl(ASTContext& ctx, Annotati
     }
     CJC_NULLPTR_CHECK(arg.expr);
     if (arg.expr->astKind != ASTKind::ARRAY_LIT) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_annotation_arg_target_array_lit, *arg.expr);
+        diag.DiagnoseRefactor("sema_annotation_arg_target_array_lit", *arg.expr);
         return;
     }
     // Check arg.GetTy() <: Array<AnnotationKind>

@@ -39,7 +39,7 @@ void CheckAnnotationHasConstInit(DiagnosticEngine& diag, const ClassDecl& cd)
             CJC_NULLPTR_CHECK(decl);
             return IsInstanceConstructor(*decl) && decl->IsConst();
         })) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_annotation_no_const_init, MakeRangeForDeclIdentifier(cd));
+        (void)diag.DiagnoseRefactor("sema_annotation_no_const_init", MakeRangeForDeclIdentifier(cd));
     }
 }
 } // namespace
@@ -89,14 +89,14 @@ void TypeChecker::TypeCheckerImpl::CheckThreadContextInheritance(const Decl& dec
     }
     // Decls cannot be modified with 'open' when inherit 'ThreadContext'
     if (decl.TestAttr(Attribute::OPEN)) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_inherit_thread_context_not_open, decl, decl.identifier);
+        (void)diag.DiagnoseRefactor("sema_inherit_thread_context_not_open", decl, decl.identifier);
         return;
     }
     auto found = whitelist.find(decl.identifier);
     if (found != whitelist.end() && found->second == decl.curFile->curPackage->fullPackageName) {
         return;
     }
-    (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_inherit_thread_context_invalid, decl, decl.identifier);
+    (void)diag.DiagnoseRefactor("sema_inherit_thread_context_invalid", decl, decl.identifier);
 }
 
 void TypeChecker::TypeCheckerImpl::CheckClassDecl(ASTContext& ctx, ClassDecl& cd)
@@ -111,7 +111,7 @@ void TypeChecker::TypeCheckerImpl::CheckClassDecl(ASTContext& ctx, ClassDecl& cd
             CJC_NULLPTR_CHECK(ann);
             if (ann->kind == AnnotationKind::ANNOTATION) {
                 (void)diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_annotation_non_public, MakeRangeForDeclIdentifier(cd));
+                    "sema_annotation_non_public", MakeRangeForDeclIdentifier(cd));
                 break;
             }
         }
@@ -146,10 +146,10 @@ void TypeChecker::TypeCheckerImpl::CheckAndAddSubDecls(
         id->subDecls.insert(&cd);
     } else if (auto superClass = AST::As<ASTKind::CLASS_DECL>(target); superClass) {
         if (hasSuperClass) {
-            diag.Diagnose(type, DiagKind::sema_illegal_multi_inheritance, cd.identifier.Val());
+            diag.Diagnose(type, "sema_illegal_multi_inheritance", cd.identifier.Val());
         } else {
             if (superClassLikeNum != 0) {
-                diag.Diagnose(type, DiagKind::sema_superclass_must_be_placed_at_first, superClass->identifier.Val());
+                diag.Diagnose(type, "sema_superclass_must_be_placed_at_first", superClass->identifier.Val());
             }
         }
         // Check at the first.
@@ -157,14 +157,14 @@ void TypeChecker::TypeCheckerImpl::CheckAndAddSubDecls(
         if ((!superClass->TestAttr(Attribute::ABSTRACT) && !superClass->TestAttr(Attribute::OPEN)) ||
             TestManager::IsDeclOpenToMock(*superClass)
         ) {
-            diag.Diagnose(type, DiagKind::sema_non_inheritable_super_class, superClass->identifier.Val());
+            diag.Diagnose(type, "sema_non_inheritable_super_class", superClass->identifier.Val());
         }
         hasSuperClass = true;
     } else if (auto tad = AST::As<ASTKind::TYPE_ALIAS_DECL>(target); tad) {
         CheckAndAddSubDecls(*tad->type, cd, hasSuperClass, superClassLikeNum);
     } else {
         // Can only implement class or interface.
-        diag.Diagnose(type, DiagKind::sema_class_inherit_non_class_nor_interface, cd.identifier.Val());
+        diag.Diagnose(type, "sema_class_inherit_non_class_nor_interface", cd.identifier.Val());
         return;
     }
     superClassLikeNum++;
@@ -193,7 +193,7 @@ void TypeChecker::TypeCheckerImpl::AddObjectSuperClass(ASTContext& ctx, ClassDec
         tmp->SetTy(tmp->ref.target->GetTy());
         cd.inheritedTypes.insert(cd.inheritedTypes.begin(), std::move(tmp));
     } else {
-        ctx.diag.Diagnose(cd, DiagKind::sema_no_core_object);
+        ctx.diag.Diagnose(cd, "sema_no_core_object");
     }
 }
 
@@ -215,7 +215,7 @@ bool TypeChecker::TypeCheckerImpl::AddJObjectSuperClassJavaInterop(ASTContext& c
         cd.inheritedTypes.insert(cd.inheritedTypes.begin(), std::move(tmp));
         cd.EnableAttr(Attribute::JAVA_MIRROR_SUBTYPE);
     } else {
-        ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_member_not_imported, cd.identifier.Begin(),
+        ctx.diag.DiagnoseRefactor("sema_member_not_imported", cd.identifier.Begin(),
                                   INTEROP_JAVA_LANG_PACKAGE + "." + INTEROP_JOBJECT_NAME);
     }
     return true;
@@ -237,7 +237,7 @@ void TypeChecker::TypeCheckerImpl::AddObjCIdSuperInterfaceObjCInterop(ASTContext
         tmp->SetTy(tmp->ref.target->GetTy());
         classLikeDecl.inheritedTypes.emplace_back(std::move(tmp));
     } else {
-        ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_member_not_imported, classLikeDecl.identifier.Begin(),
+        ctx.diag.DiagnoseRefactor("sema_member_not_imported", classLikeDecl.identifier.Begin(),
             OBJ_C_LANG_PACKAGE_IDENT + "." + OBJ_C_ID_IDENT);
     }
 }
@@ -258,7 +258,7 @@ void TypeChecker::TypeCheckerImpl::CheckInterfaceDecl(ASTContext& ctx, Interface
             CheckThreadContextInheritance(id, *interfaceType);
         } else {
             // Can only implement interface.
-            diag.Diagnose(id, DiagKind::sema_interface_inherit_non_interface, id.identifier.Val());
+            diag.Diagnose(id, "sema_interface_inherit_non_interface", id.identifier.Val());
         }
     }
     TypeCheckCompositeBody(ctx, id, id.body->decls);

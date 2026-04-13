@@ -7,8 +7,8 @@
 #include "cangjie/CHIR/Checker/TypeCastCheck.h"
 
 #include "cangjie/CHIR/Analysis/Utils.h"
-#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Expression/Expression.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/Utils/TaskQueue.h"
 
@@ -103,7 +103,7 @@ void TypeCastCheck::RunOnFunc(const Function& func)
             }
 
             CJC_ASSERT(sourceTy->GetTypeKind());
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::chir_native_ffi_java_illegal_type_cast, debugPos,
+            auto builder = diag.DiagnoseRefactor("chir_native_ffi_java_illegal_type_cast", debugPos,
                 GetClassName(*sourceTy), GetClassName(*targetTy));
         }
 

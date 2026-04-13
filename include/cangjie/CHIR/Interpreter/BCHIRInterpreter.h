@@ -31,6 +31,7 @@
 #include "cangjie/CHIR/Checker/OverflowChecking.h"
 #include <cmath>
 #include <cstring>
+#include <string_view>
 #include <fstream>
 #ifdef _WIN32
 #include <windows.h>
@@ -291,7 +292,7 @@ private:
      */
     DiagnosticEngine& diag;
     template <typename... Args>
-    void FailWith(Bchir::ByteCodeIndex opIdx, std::string excErrorMsg, DiagKind kind, Args... args)
+    void FailWith(Bchir::ByteCodeIndex opIdx, std::string excErrorMsg, std::string_view kindName, Args... args)
     {
         auto& sm = diag.GetSourceManager();
         auto pos = bchir.GetLinkedByteCode().GetCodePositionAnnotation(opIdx);
@@ -304,9 +305,9 @@ private:
         Cangjie::Position cjPos{
             *fileId, static_cast<int>(pos.line), static_cast<int>(pos.column)};
         if (cjPos.IsZero()) {
-            diag.Diagnose(kind, args...);
+            diag.Diagnose(kindName, args...);
         } else {
-            diag.Diagnose(cjPos, kind, args...);
+            diag.Diagnose(cjPos, kindName, args...);
         }
         RaiseError(opIdx, excErrorMsg);
     }

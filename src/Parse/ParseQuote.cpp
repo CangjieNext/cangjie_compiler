@@ -33,7 +33,7 @@ void ParserImpl::ParseQuoteDollarInterpolationWithParen(AST::QuoteExpr& qe)
     CheckMacroExprRules(dol, Token{TokenKind::DOT}, *expr);
     skipNL = false;
     if (Utils::In(expr->astKind, INVALID_AST_KIND)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_invalid_quote_dollar_expr, dol);
+        ParseDiagnoseRefactor("parse_invalid_quote_dollar_expr", dol);
     }
     // add a level of ParenExpr to store the location of '$()', to be used by std.syntax
     // cjc/fmt/lsp does not need it
@@ -87,7 +87,7 @@ void ParserImpl::ParseQuoteEscapeToken(std::vector<Token>& tokens)
         tokens.emplace_back(token.kind, token.Value(), begin, token.End());
     } else if (SeeingAny(ESCAPE_FOR_MACRO_NOT_FOR_QUOTE)) {
         auto builder = diag.DiagnoseRefactor(
-            DiagKindRefactor::lex_unknown_start_of_token, lastToken.Begin(), lastToken.Value());
+            "lex_unknown_start_of_token", lastToken.Begin(), lastToken.Value());
         builder.AddMainHintArguments(lastToken.Value());
         tokens.emplace_back(lastToken);
     } else {
@@ -124,7 +124,7 @@ void ParserImpl::ParseQuoteTokens(QuoteExpr& qe)
             if (Seeing(TokenKind::LPAREN)) {
                 lparenCnt++;
             } else if (Seeing(TokenKind::DOLLAR)) {
-                ParseDiagnoseRefactor(DiagKindRefactor::parse_expect_escape_dollar_token, lookahead.Begin());
+                ParseDiagnoseRefactor("parse_expect_escape_dollar_token", lookahead.Begin());
             }
             if (SkipAmbiguousToken() || SkipCombinedDoubleArrow()) {
                 tokens.emplace_back(lastToken);
@@ -181,7 +181,7 @@ OwnedPtr<QuoteExpr> ParserImpl::ParseQuoteExpr()
     ret->quotePos = lookahead.Begin();
     skipNL = false;
     if (Skip(TokenKind::NL) || newlineSkipped) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_unexpected_line_break, lastToken);
+        ParseDiagnoseRefactor("parse_unexpected_line_break", lastToken);
         ret->EnableAttr(Attribute::HAS_BROKEN);
     }
     SkipBlank(TokenKind::NL);
@@ -194,7 +194,7 @@ OwnedPtr<QuoteExpr> ParserImpl::ParseQuoteExpr()
         ret->rightParenPos = lastToken.Begin();
     } else {
         if (!ret->TestAttr(Attribute::HAS_BROKEN)) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_paren, lookahead, ConvertToken(lookahead));
+            ParseDiagnoseRefactor("parse_expected_left_paren", lookahead, ConvertToken(lookahead));
         }
     }
     skipNL = true;

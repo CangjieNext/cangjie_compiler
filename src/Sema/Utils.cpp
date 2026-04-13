@@ -196,7 +196,7 @@ void DiagRecursiveConstructorCall(DiagnosticEngine& diag, const std::vector<Ptr<
     // The head of the cycle is the same as the last one in path.
     const Node& head = *path.back();
     auto builder = diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_recursive_constructor_call, head, MakeRangeForRecursiveConstructorCall(head));
+        "sema_recursive_constructor_call", head, MakeRangeForRecursiveConstructorCall(head));
     auto iter = std::find(path.cbegin(), path.cend(), path.back());
     // Skip the head of the cycle, which is the same as the error message.
     ++iter;
@@ -483,7 +483,7 @@ void TypeChecker::TypeCheckerImpl::CheckValueTypeRecursiveDFS(Ptr<Decl> root, st
                 str += node->identifier + "->";
             }
             str += root->identifier;
-            diag.Diagnose(*root, DiagKind::sema_value_type_recursive, str.c_str());
+            diag.Diagnose(*root, "sema_value_type_recursive", str.c_str());
         }
         return;
     }

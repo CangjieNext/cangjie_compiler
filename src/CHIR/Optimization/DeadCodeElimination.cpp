@@ -261,7 +261,7 @@ void DeadCodeElimination::ReportUnusedFunc(const Function& func, const GlobalOpt
             }
             auto [res, nodeRange] = GetDebugPos(*expr);
             if (res && !IsCrossPackage(nodeRange.begin, curPkg.GetName(), diag)) {
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_function, nodeRange);
+                diag.DiagnoseRefactor("chir_dce_unreachable_function", nodeRange);
             }
             continue;
         }
@@ -276,9 +276,9 @@ void DeadCodeElimination::ReportUnusedFunc(const Function& func, const GlobalOpt
         auto ident = GetFuncIdent(func);
         auto debugPos = GetDebugPos(func);
         if (ident == "main") {
-            DiagUnusedCode(debugPos, DiagKindRefactor::chir_dce_unused_function_main);
+            DiagUnusedCode(debugPos, "chir_dce_unused_function_main");
         } else {
-            DiagUnusedCode(debugPos, DiagKindRefactor::chir_dce_unused_function, ident);
+            DiagUnusedCode(debugPos, "chir_dce_unused_function", ident);
         }
     }
 }
@@ -314,12 +314,12 @@ void DeadCodeElimination::ReportUnusedGlobalVar(const GlobalVar& globalVar)
     if (globalVar.TestAttr(Attribute::CONST) || globalVar.TestAttr(Attribute::READONLY)) {
         if (gvUsers.empty()) {
             DiagUnusedCode(
-                GetDebugPos(globalVar), DiagKindRefactor::chir_dce_unused_variable, globalVar.GetSrcCodeIdentifier());
+                GetDebugPos(globalVar), "chir_dce_unused_variable", globalVar.GetSrcCodeIdentifier());
         }
     }
     if (gvUsers.size() == 1 && gvUsers[0]->GetExprKind() == ExprKind::STORE) {
         DiagUnusedCode(
-            GetDebugPos(globalVar), DiagKindRefactor::chir_dce_unused_variable, globalVar.GetSrcCodeIdentifier());
+            GetDebugPos(globalVar), "chir_dce_unused_variable", globalVar.GetSrcCodeIdentifier());
         return;
     }
 }
@@ -389,7 +389,7 @@ void DeadCodeElimination::DiagUnusedVariable(const Debug& expr)
     auto nodeRange = GetDebugPos(expr);
     if (nodeRange.first && !IsCrossPackage(nodeRange.second.begin, curPkg.GetName(), diag)) {
         diag.DiagnoseRefactor(
-            DiagKindRefactor::chir_dce_unused_variable, nodeRange.second, expr.GetSrcCodeIdentifier());
+            "chir_dce_unused_variable", nodeRange.second, expr.GetSrcCodeIdentifier());
     }
 }
 
@@ -480,15 +480,15 @@ void DeadCodeElimination::ReportUnusedExpression(Expression& expr)
                 return;
             }
             if (expr.GetExprKind() == ExprKind::LAMBDA) {
-                DiagUnusedCode(res, DiagKindRefactor::chir_dce_unused_function,
+                DiagUnusedCode(res, "chir_dce_unused_function",
                     StaticCast<const Lambda&>(expr).GetSrcCodeIdentifier());
             } else if (expr.IsUnaryExpr() || expr.IsBinaryExpr() || expr.IsIntOpWithException()) {
                 auto kind = expr.GetExprKind() == ExprKind::INT_OP_WITH_EXCEPTION
                     ? GetLiteralFromExprKind(StaticCast<IntOpWithException*>(&expr)->GetOpKind())
                     : GetLiteralFromExprKind(expr.GetExprKind());
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unused_operator, res.second, kind);
+                diag.DiagnoseRefactor("chir_dce_unused_operator", res.second, kind);
             } else {
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unused_expression, res.second);
+                diag.DiagnoseRefactor("chir_dce_unused_expression", res.second);
             }
         }
     }
@@ -1040,16 +1040,16 @@ void DeadCodeElimination::PrintUnreachableBlockWarning(
                 }
             }
             if (!isNormal && (unreableExpr->IsBinaryExpr() || unreableExpr->IsUnaryExpr())) {
-                auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable, range, "operator");
+                auto diagBuilder = diag.DiagnoseRefactor("chir_dce_unreachable", range, "operator");
                 diagBuilder.AddMainHintArguments("operator");
                 diagBuilder.AddHint(terminalNodeRange);
             } else if (!isNormal && unreableExpr->GetExprKind() == ExprKind::APPLY) {
-                auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable, range, "call");
+                auto diagBuilder = diag.DiagnoseRefactor("chir_dce_unreachable", range, "call");
                 diagBuilder.AddMainHintArguments("call");
                 diagBuilder.AddHint(terminalNodeRange);
             } else {
                 auto diagBuilder =
-                    diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression_hint, range);
+                    diag.DiagnoseRefactor("chir_dce_unreachable_expression_hint", range);
                 diagBuilder.AddHint(terminalNodeRange);
             }
             isPrinted = true;
@@ -1111,7 +1111,7 @@ bool DeadCodeElimination::CheckUselessExpr(const Expression& expr, bool isReport
 
 template <typename... Args>
 void DeadCodeElimination::DiagUnusedCode(
-    const std::pair<bool, Cangjie::Range>& nodeRange, DiagKindRefactor diagKind, Args&&... args)
+    const std::pair<bool, Cangjie::Range>& nodeRange, std::string_view diagKind, Args&&... args)
 {
     if (nodeRange.first && !IsCrossPackage(nodeRange.second.begin, curPkg.GetName(), diag)) {
         diag.DiagnoseRefactor(diagKind, nodeRange.second, args...);

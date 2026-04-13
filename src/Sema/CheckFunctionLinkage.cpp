@@ -647,7 +647,7 @@ void TypeChecker::TypeCheckerImpl::AnalyzeFunctionLinkage(Package& pkg) const
             auto ret = privateDeclMap.emplace(decl->identifier.Val(), decl.get());
             if (!ret.second) {
                 auto builder = diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_export_same_private_decl, MakeRange(ret.first->second->identifier));
+                    "sema_export_same_private_decl", MakeRange(ret.first->second->identifier));
                 builder.AddNote(MakeRange(decl->identifier), "same with private declaration");
             }
         }

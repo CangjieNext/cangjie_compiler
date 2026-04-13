@@ -30,11 +30,29 @@ struct DummyExpr : Cangjie::AST::OverloadableExpr {
 
 using namespace Cangjie;
 
-template <typename T> constexpr bool IgnoredType()
+/** Kinds that cannot be built with MakeOwned<T>() alone (manual construction below in SetUpTestCase). */
+constexpr bool UseAutoMakeOwnedForKind(AST::ASTKind k)
 {
-    return ShouldInstantiate<T, AST::Decl, AST::Expr, AST::Node, AST::Modifier, AST::ClassLikeDecl, AST::BuiltInDecl,
-        AST::PackageDecl, AST::InvalidDecl, AST::Pattern, AST::VarOrEnumPattern, AST::ThisType, AST::InvalidType,
-        AST::PrimitiveTypeExpr, AST::IfAvailableExpr>::value;
+    switch (k) {
+    case AST::ASTKind::DECL:
+    case AST::ASTKind::EXPR:
+    case AST::ASTKind::NODE:
+    case AST::ASTKind::TYPE:
+    case AST::ASTKind::MODIFIER:
+    case AST::ASTKind::CLASS_LIKE_DECL:
+    case AST::ASTKind::BUILTIN_DECL:
+    case AST::ASTKind::PACKAGE_DECL:
+    case AST::ASTKind::INVALID_DECL:
+    case AST::ASTKind::PATTERN:
+    case AST::ASTKind::VAR_OR_ENUM_PATTERN:
+    case AST::ASTKind::THIS_TYPE:
+    case AST::ASTKind::INVALID_TYPE:
+    case AST::ASTKind::PRIMITIVE_TYPE_EXPR:
+    case AST::ASTKind::IF_AVAILABLE_EXPR:
+        return false;
+    default:
+        return true;
+    }
 }
 
 static const std::vector<AST::ASTKind> ignoredKind = {
@@ -49,17 +67,29 @@ static const std::vector<AST::ASTKind> ignoredKind = {
 
 class CastASTTests : public testing::Test {
 protected:
-    static void SetUpTestCase()
+    static std::map<AST::ASTKind, Ptr<AST::Node>> astMap;
+    static std::vector<OwnedPtr<AST::Node>> astPool;
+
+    /** Must be a template so `if constexpr` discards invalid MakeOwned<T>() instantiations. */
+    template <typename = void>
+    static void RegisterAutoBuiltAstNodes()
     {
 #ifndef CANGJIE_ENABLE_GCOV
 #define ASTKIND(KIND, VALUE, TYPE, SIZE)                                                                               \
-    if constexpr (IgnoredType<AST::TYPE>()) {                                                                          \
+    if constexpr (UseAutoMakeOwnedForKind(AST::ASTKind::KIND)) {                                                       \
         auto nodePtr = MakeOwned<AST::TYPE>();                                                                         \
         astMap.emplace(AST::ASTKind::KIND, nodePtr.get());                                                             \
         astPool.emplace_back(std::move(nodePtr));                                                                      \
     }
 #include "cangjie/AST/ASTKind.inc"
 #undef ASTKIND
+#endif
+    }
+
+    static void SetUpTestCase()
+    {
+#ifndef CANGJIE_ENABLE_GCOV
+        RegisterAutoBuiltAstNodes();
 #endif
         astPool.emplace_back(MakeOwned<AST::Modifier>(TokenKind::OPEN, DEFAULT_POSITION));
         astMap.emplace(AST::ASTKind::MODIFIER, astPool.back().get());
@@ -87,9 +117,6 @@ protected:
             std::move(arg), MakeOwned<AST::LambdaExpr>(), MakeOwned<AST::LambdaExpr>()));
         astMap.emplace(AST::ASTKind::IF_AVAILABLE_EXPR, astPool.back().get());
     }
-
-    static std::map<AST::ASTKind, Ptr<AST::Node>> astMap;
-    static std::vector<OwnedPtr<AST::Node>> astPool;
 };
 
 std::map<AST::ASTKind, Ptr<AST::Node>> CastASTTests::astMap = {};
@@ -98,7 +125,7 @@ std::vector<OwnedPtr<AST::Node>> CastASTTests::astPool = {};
 TEST_F(CastASTTests, VerifyCastingCount)
 {
     // Expect casting size is hardcode, should be changed manually when any new AST node is added.
-    // If the new added type is an intermediate type, it may should be added into 'IgnoredType()'.
+    // If the new added type is an intermediate type, add it to UseAutoMakeOwnedForKind (return false).
     // NOTE: 'NODE' is the lase enum value in 'ASTKind'.
     size_t totalCount = static_cast<uint8_t>(AST::ASTKind::NODE) + 1;
     EXPECT_TRUE(totalCount > ignoredKind.size());

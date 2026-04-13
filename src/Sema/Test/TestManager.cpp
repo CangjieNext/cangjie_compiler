@@ -15,13 +15,13 @@
 #include <memory>
 
 #include "Desugar/AfterTypeCheck.h"
-#include "TypeCheckUtil.h"
-#include "cangjie/AST/Match.h"
-#include "cangjie/Sema/GenericInstantiationManager.h"
 #include "GenericInstantiation/GenericInstantiationManagerImpl.h"
 #include "GenericInstantiation/PartialInstantiation.h"
+#include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Match.h"
 #include "cangjie/Driver/DriverOptions.h"
+#include "cangjie/Sema/GenericInstantiationManager.h"
 
 #include "MockManager.h"
 #include "MockSupportManager.h"
@@ -87,7 +87,7 @@ void TestManager::ReportDoesntSupportMocking(
     const Expr& reportOn, const std::string& name, const std::string& package)
 {
     diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_mock_doesnt_support_mocking,
+        "sema_mock_doesnt_support_mocking",
         reportOn,
         name,
         package,
@@ -96,29 +96,29 @@ void TestManager::ReportDoesntSupportMocking(
 
 void TestManager::ReportDoesntSupportFrozen(const Expr& reportOn)
 {
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_mock_frozen_unsupported, reportOn);
+    diag.DiagnoseRefactor("sema_mock_frozen_unsupported", reportOn);
 }
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 void TestManager::ReportFrozenRequired(const FuncDecl& reportOn)
 {
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_mock_frozen_required, reportOn, reportOn.identifier);
+    diag.DiagnoseRefactor("sema_mock_frozen_required", reportOn, reportOn.identifier);
 }
 #endif
 
 void TestManager::ReportUnsupportedType(const Expr& reportOn)
 {
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_mock_unsupported_type, reportOn);
+    diag.DiagnoseRefactor("sema_mock_unsupported_type", reportOn);
 }
 
 void TestManager::ReportNotInTestMode(const Expr& reportOn)
 {
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_mock_not_in_test_mode, reportOn, TEST_COMPILATION_OPTION);
+    diag.DiagnoseRefactor("sema_mock_not_in_test_mode", reportOn, TEST_COMPILATION_OPTION);
 }
 
 void TestManager::ReportMockDisabled(const Expr& reportOn)
 {
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_mock_disabled, reportOn, MOCK_ON_COMPILATION_OPTION);
+    diag.DiagnoseRefactor("sema_mock_disabled", reportOn, MOCK_ON_COMPILATION_OPTION);
 }
 
 void TestManager::ReportWrongStaticDecl(const Expr& reportOn)
@@ -126,11 +126,11 @@ void TestManager::ReportWrongStaticDecl(const Expr& reportOn)
     if (auto lambda = DynamicCast<LambdaExpr>(&reportOn)) {
         // excluding @EnsurePreparedToMock itself from error position
         diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_mock_wrong_static_decl, MakeRange(lambda->funcBody->body->leftCurlPos, lambda->end));
+            "sema_mock_wrong_static_decl", MakeRange(lambda->funcBody->body->leftCurlPos, lambda->end));
         return;
     }
     diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_mock_wrong_static_decl, reportOn);
+        "sema_mock_wrong_static_decl", reportOn);
 }
 
 bool TestManager::IsDeclOpenToMock(const Decl& decl)
@@ -368,7 +368,7 @@ Ptr<ClassDecl> TestManager::GenerateMockClassIfNeededAndGet(const CallExpr& call
 {
     auto typeArgument = callExpr.baseFunc->GetTy()->typeArgs[1];
     if (!typeArgument->IsClass() && !typeArgument->IsInterface()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_mock_unsupported_type, callExpr);
+        diag.DiagnoseRefactor("sema_mock_unsupported_type", callExpr);
         return nullptr;
     }
 
@@ -654,7 +654,7 @@ void TestManager::CheckIfNoMockSupportDependencies(const Package& curPkg)
     for (auto pkg: importManager.GetAllImportedPackages(true)) {
         if (&curPkg != pkg->srcPackage && !ArePackagesMockSupportConsistent(curPkg, *(pkg->srcPackage))) {
             diag.DiagnoseRefactor(
-                DiagKindRefactor::package_mocking_support_inconsistency,
+                "package_mocking_support_inconsistency",
                 DEFAULT_POSITION,
                 pkg->srcPackage->fullPackageName,
                 MOCK_ON_COMPILATION_OPTION);

@@ -152,7 +152,7 @@ bool StructInheritanceChecker::WillCauseInfiniteInstantiation(
     TypeSubst typeMapping = institutionMaps.empty() ? TypeSubst{} : institutionMaps.top();
     if (HaveCyclicSubstitution(typeManager, GenerateTypeMapping(decl, instTys)) ||
         HaveCyclicSubstitution(typeManager, typeMapping)) {
-        diag.Diagnose(triggerNode, DiagKind::sema_generic_infinite_instantiation);
+        diag.Diagnose(triggerNode, "sema_generic_infinite_instantiation");
         infiniteInstantiationOccured = true;
         return true;
     }
@@ -194,7 +194,7 @@ bool StructInheritanceChecker::WillCauseInfiniteInstantiation(
         }
     }
     if (hasSelfRecursion) {
-        diag.Diagnose(triggerNode, DiagKind::sema_generic_infinite_instantiation);
+        diag.Diagnose(triggerNode, "sema_generic_infinite_instantiation");
         infiniteInstantiationOccured = true;
     }
     return hasSelfRecursion;
@@ -353,7 +353,7 @@ void StructInheritanceChecker::CheckCStructArguments(const Node& node, const AST
         return;
     }
     if (Ty::IsCStructType(ty)) {
-        (void)diag.Diagnose(node, leftAnglePos, DiagKind::sema_cffi_cannot_have_type_param, "struct with @C");
+        (void)diag.Diagnose(node, leftAnglePos, "sema_cffi_cannot_have_type_param", "struct with @C");
     }
     for (auto& type : typeArgs) {
         CheckCStructArgument(ty, *type);
@@ -371,7 +371,7 @@ void StructInheritanceChecker::CheckCStructArgument(const Ty& ty, const Type& ty
         // 1. CPointer<T>, defined in core/CPointer.cj
         // 2. CPointer<`CType`>
         if (!typeArg.GetTy()->IsGeneric() && !Ty::IsMetCType(*typeArg.GetTy())) {
-            diag.Diagnose(typeArg, DiagKind::sema_illegal_cpointer_generic_type);
+            diag.Diagnose(typeArg, "sema_illegal_cpointer_generic_type");
         }
         return;
     }
@@ -394,7 +394,7 @@ void StructInheritanceChecker::CheckCStruct(const Ty& ty, const Type& typeArg)
         // 2. CPointer<`CType`>
         if (!ty.typeArgs.empty() && ty.typeArgs[0] && !ty.typeArgs[0]->IsGeneric() &&
             !Ty::IsMetCType(*ty.typeArgs[0])) {
-            diag.Diagnose(typeArg, DiagKind::sema_illegal_cpointer_generic_type);
+            diag.Diagnose(typeArg, "sema_illegal_cpointer_generic_type");
         }
         return;
     }
@@ -429,7 +429,7 @@ void StructInheritanceChecker::DiagnoseForInstantiatedMember(
         OrderedDeclSet candidates = {parent.decl, child.decl};
         auto [triggerNode, triggerDecl, instTys] = instTriggerInfos.back();
         std::string triggeredDeclType = triggerDecl->identifier.Val() + '<' + Ty::GetTypesToStr(instTys, ", ") + ">";
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_instantiation_causes_ambiguous_functions,
+        auto builder = diag.DiagnoseRefactor("sema_generic_instantiation_causes_ambiguous_functions",
             *triggerNode, triggeredDeclType, functionName);
         for (auto& candidate : candidates) {
             builder.AddNote(*candidate, MakeRangeForDeclIdentifier(*candidate), "found candidate");

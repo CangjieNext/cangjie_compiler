@@ -21,7 +21,7 @@ void LexerImpl::DiagUnexpectedDecimalPoint(const char* reasonPoint)
 {
     auto baseChar = std::tolower(*reasonPoint);
     auto prefix = PrefixName(static_cast<char>(baseChar));
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::lex_unexpected_decimal_point, GetPos(pCurrent), prefix);
+    auto builder = diag.DiagnoseRefactor("lex_unexpected_decimal_point", GetPos(pCurrent), prefix);
     auto r = MakeRange(GetPos(reasonPoint - 1), GetPos(reasonPoint + 1));
     builder.AddHint(r, prefix);
 
@@ -42,7 +42,7 @@ void LexerImpl::DiagExpectedDigit(const char base)
     auto name = PrefixName(base);
     auto begin = GetPos(pCurrent);
     auto range = MakeRange(begin, begin + Position{0, 0, static_cast<int>(pNext - pCurrent)});
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::lex_expected_digit, range, name, ConvertCurrentChar());
+    auto builder = diag.DiagnoseRefactor("lex_expected_digit", range, name, ConvertCurrentChar());
     builder.AddMainHintArguments(name);
 }
 
@@ -54,7 +54,7 @@ void LexerImpl::DiagUnexpectedDigit(const int& base, const char* reasonPoint)
     };
     auto name = PrefixName(baseChar);
     auto builder =
-        diag.DiagnoseRefactor(DiagKindRefactor::lex_unexpected_digit, GetPos(pCurrent), std::string{*pCurrent}, name);
+        diag.DiagnoseRefactor("lex_unexpected_digit", GetPos(pCurrent), std::string{*pCurrent}, name);
     char c;
     if (base != DEC_BASE) {
         auto r = MakeRange(GetPos(reasonPoint - std::string("0").size()), GetPos(reasonPoint) + Position{0, 0, 1});
@@ -82,7 +82,7 @@ void LexerImpl::DiagUnexpectedExponentPart(const char exp, const char prefix, co
         auto reaRange =
             MakeRange(GetPos(reasonPoint - std::string("0").size()), GetPos(reasonPoint) + Position{0, 0, 1});
         auto builder = diag.DiagnoseRefactor(
-            DiagKindRefactor::lex_unexpected_exponent_part, GetPos(pCurrent), std::string{*pCurrent}, preName);
+            "lex_unexpected_exponent_part", GetPos(pCurrent), std::string{*pCurrent}, preName);
         builder.AddHint(reaRange, "of this " + std::string{preName} + " prefix");
 
         auto note = SubDiagnostic("only decimal or hexadecimal number can support exponent part");
@@ -93,7 +93,7 @@ void LexerImpl::DiagUnexpectedExponentPart(const char exp, const char prefix, co
         auto reaRange =
             MakeRange(GetPos(reasonPoint - std::string("0").size()), GetPos(reasonPoint) + Position{0, 0, 1});
         auto builder = diag.DiagnoseRefactor(
-            DiagKindRefactor::lex_unexpected_exponent_part, GetPos(pCurrent), std::string{*pCurrent}, preName);
+            "lex_unexpected_exponent_part", GetPos(pCurrent), std::string{*pCurrent}, preName);
         builder.AddHint(reaRange, "of this " + std::string{preName} + " prefix");
 
         auto help = DiagHelp("could try to modify it to hexadecimal exponent type");
@@ -104,7 +104,7 @@ void LexerImpl::DiagUnexpectedExponentPart(const char exp, const char prefix, co
     if (exp == 'p' && prefix == 'd') {
         auto reaRange = MakeRange(GetPos(reasonPoint), GetPos(pCurrent));
         auto builder = diag.DiagnoseRefactor(
-            DiagKindRefactor::lex_unexpected_exponent_part, GetPos(pCurrent), std::string{*pCurrent}, preName);
+            "lex_unexpected_exponent_part", GetPos(pCurrent), std::string{*pCurrent}, preName);
         builder.AddHint(reaRange, "the default base is decimal");
 
         auto help = DiagHelp("could try to modify it to " + std::string{preName} + " exponent type");
@@ -118,7 +118,7 @@ void LexerImpl::DiagExpectedExponentPart(const char* reasonPoint)
     auto start = reasonPoint - std::string("0").size();
     Range r = MakeRange(GetPos(start), GetPos(pCurrent));
     auto builder = diag.DiagnoseRefactor(
-        DiagKindRefactor::lex_expected_exponent_part, GetPos(pCurrent), std::string{start, pCurrent});
+        "lex_expected_exponent_part", GetPos(pCurrent), std::string{start, pCurrent});
     builder.AddHint(r);
 }
 
@@ -126,7 +126,7 @@ void LexerImpl::DiagUnexpectedDollarIdentifier(const Token& t)
 {
     bool foundWildcard = t.kind == TokenKind::WILDCARD;
     std::string foundMsg = (foundWildcard ? "symbol '" : "keyword '") + t.Value() + "'";
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::lex_expected_identifier_after_dollar, t, foundMsg);
+    auto builder = diag.DiagnoseRefactor("lex_expected_identifier_after_dollar", t, foundMsg);
     if (foundWildcard) {
         builder.diagnostic.mainHint.str = "expected a Unicode XID_Continue after underscore";
         return;
@@ -143,12 +143,12 @@ void LexerImpl::DiagIllegalSymbol(const char* pStart)
         ReadUTF8Char();
     } while (currentChar > ASCII_BASE);
     Range r = MakeRange(GetPos(pStart), GetPos(pCurrent));
-    diag.DiagnoseRefactor(DiagKindRefactor::lex_unrecognized_symbol, r, std::string{pStart, pCurrent});
+    diag.DiagnoseRefactor("lex_unrecognized_symbol", r, std::string{pStart, pCurrent});
 }
 
 void LexerImpl::DiagUnterminatedSingleLineString(const char* pStart, bool isMatchEnd, bool isJString)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::lex_unterminated_single_line_string,
+    auto builder = diag.DiagnoseRefactor("lex_unterminated_single_line_string",
         MakeRange(GetPos(pStart), GetPos(pCurrent) + Position{0, 0, 1}));
 
     if (!interpolations.empty() && interpolations.back() < pStart && !stringStarts.back().second) {
@@ -165,7 +165,7 @@ void LexerImpl::DiagUnterminatedSingleLineString(const char* pStart, bool isMatc
 void LexerImpl::DiagUnterminatedMultiLineString(const char* pStart)
 {
     auto builder = diag.DiagnoseRefactor(
-        DiagKindRefactor::lex_unterminated_multi_line_string, MakeRange(GetPos(pStart), GetPos(pCurrent)));
+        "lex_unterminated_multi_line_string", MakeRange(GetPos(pStart), GetPos(pCurrent)));
 
     if (!interpolations.empty() && interpolations.back() < pStart && stringStarts.back().second) {
         auto p = interpolations.back();
@@ -176,7 +176,7 @@ void LexerImpl::DiagUnterminatedMultiLineString(const char* pStart)
 void LexerImpl::DiagUnterminatedRawString(const char* pStart)
 {
     auto builder = diag.DiagnoseRefactor(
-        DiagKindRefactor::lex_unterminated_raw_string, MakeRange(GetPos(pStart), GetPos(pCurrent)));
+        "lex_unterminated_raw_string", MakeRange(GetPos(pStart), GetPos(pCurrent)));
 
     if (!interpolations.empty() && interpolations.back() < pStart && !stringStarts.back().second) {
         auto p = interpolations.back();
@@ -194,7 +194,7 @@ void LexerImpl::DiagUnrecognizedEscape(const char* pStart, bool isInString, bool
         target = "byte array";
     }
     auto c = ConvertCurrentChar();
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::lex_unrecognized_escape,
+    auto builder = diag.DiagnoseRefactor("lex_unrecognized_escape",
         MakeRange(GetPos(pCurrent - 1), GetPos(pCurrent) + c.size()), "\\" + c, target);
 
     if (*pStart == '"' && *(pStart + 1) == '"') {
@@ -228,7 +228,7 @@ void LexerImpl::DiagUnrecognizedEscape(const char* pStart, bool isInString, bool
 void LexerImpl::DiagUnexpectedIntegerLiteralTypeSuffix(
     const char* pSuffixStart, const std::string& signednessType, const std::string& suffix)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::lex_illegal_integer_suffix,
+    auto builder = diag.DiagnoseRefactor("lex_illegal_integer_suffix",
         MakeRange(GetPos(pSuffixStart), GetPos(pSuffixStart + suffix.size() + 1)), signednessType + suffix);
     auto note = SubDiagnostic(
         "integer literal type suffix can only be 'u8', 'u16', 'u32', 'u64', 'i8', 'i16', 'i32', 'i64'");
@@ -238,7 +238,7 @@ void LexerImpl::DiagUnexpectedIntegerLiteralTypeSuffix(
 
 void LexerImpl::DiagUnexpectedFloatLiteralTypeSuffix(const char* pSuffixStart, const std::string& suffix)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::lex_illegal_float_suffix,
+    auto builder = diag.DiagnoseRefactor("lex_illegal_float_suffix",
         MakeRange(GetPos(pSuffixStart), GetPos(pSuffixStart + suffix.size() + 1)), "f" + suffix);
     auto note = SubDiagnostic("float literal type suffix can only be 'f16', 'f32', 'f64'");
     builder.AddNote(note);
@@ -248,7 +248,7 @@ void LexerImpl::DiagExpectedRightBracket(const char* pStart)
 {
     const size_t escapeLens = 2;
     auto builder =
-        diag.DiagnoseRefactor(DiagKindRefactor::lex_expected_right_bracket, GetPos(pCurrent), ConvertCurrentChar());
+        diag.DiagnoseRefactor("lex_expected_right_bracket", GetPos(pCurrent), ConvertCurrentChar());
     builder.AddHint(GetPos(pStart + escapeLens));
 
     auto note = SubDiagnostic("unicode escape may contain 8 hexadecimal digits at most");
@@ -259,7 +259,7 @@ void LexerImpl::DiagExpectedRightBracketOrHexadecimal(const char* pStart)
 {
     const size_t escapeLens = 2;
     auto builder = diag.DiagnoseRefactor(
-        DiagKindRefactor::lex_expected_right_bracket_or_hexadecimal, GetPos(pCurrent), ConvertCurrentChar());
+        "lex_expected_right_bracket_or_hexadecimal", GetPos(pCurrent), ConvertCurrentChar());
     builder.AddHint(MakeRange(GetPos(pStart), GetPos(pStart + escapeLens)));
 
     auto note = SubDiagnostic("unicode escape may only contain hexadecimal digits");
@@ -269,7 +269,7 @@ void LexerImpl::DiagExpectedRightBracketOrHexadecimal(const char* pStart)
 void LexerImpl::DiagCharactersOverflow(const char* pStart)
 {
     auto builder = diag.DiagnoseRefactor(
-        DiagKindRefactor::lex_characters_overflow, MakeRange(GetPos(pStart), GetPos(pCurrent + 1)));
+        "lex_characters_overflow", MakeRange(GetPos(pStart), GetPos(pCurrent + 1)));
 
     auto help = DiagHelp("if you intended to write a string literal, use '\"'");
     help.AddSubstitution(MakeRange(GetPos(pStart), GetPos(pCurrent + 1)),
@@ -324,7 +324,7 @@ void LexerImpl::CheckUnsecureUnicodeValue(const int32_t& ch)
 {
     if (!CheckUnicodeSecurity(ch)) {
         auto args = ConvertUnicode(ch);
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::lex_unsecure_unicode, GetPos(pCurrent), args);
+        auto builder = diag.DiagnoseRefactor("lex_unsecure_unicode", GetPos(pCurrent), args);
         builder.AddMainHintArguments(args);
         success = false;
     }
@@ -332,7 +332,7 @@ void LexerImpl::CheckUnsecureUnicodeValue(const int32_t& ch)
 
 void LexerImpl::DiagUnterminatedInterpolation()
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::lex_unterminated_interpolation,
+    auto builder = diag.DiagnoseRefactor("lex_unterminated_interpolation",
         MakeRange(GetPos(interpolations.back()), GetPos(pCurrent) + Position{0, 0, 1}));
 
     builder.AddHint(GetPos(stringStarts.back().first));
@@ -341,7 +341,7 @@ void LexerImpl::DiagUnterminatedInterpolation()
 void LexerImpl::DiagUnknownStartOfToken(const Position curPos)
 {
     auto agr = ConvertCurrentChar();
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::lex_unknown_start_of_token, curPos, agr);
+    auto builder = diag.DiagnoseRefactor("lex_unknown_start_of_token", curPos, agr);
     builder.AddMainHintArguments(agr);
 }
 
@@ -349,7 +349,7 @@ void LexerImpl::DiagUnrecognizedCharInByte(const int32_t& c, const std::string& 
     const std::pair<Position, Position>& range)
 {
     CJC_ASSERT(c > ASCII_BASE);
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::lex_unrecognized_char_in_binary_string,
+    auto builder = diag.DiagnoseRefactor("lex_unrecognized_char_in_binary_string",
                                          MakeRange(range.first, range.second), ConvertChar(c), str);
 
     auto hintPos = GetPos(pStart);

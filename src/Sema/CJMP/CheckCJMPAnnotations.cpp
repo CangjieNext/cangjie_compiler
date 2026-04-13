@@ -57,7 +57,7 @@ bool PostCheckDeprecatedAnnotation(const AST::Decl& specific, DiagnosticEngine& 
 {
     auto specificDeprecation = FindFirstAnnotation(specific, AnnotationKind::DEPRECATED);
     if (specificDeprecation && !specificDeprecation->TestAttr(Attribute::COMPILER_ADD)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_has_deprecated_annotation, *specificDeprecation,
+        diag.DiagnoseRefactor("sema_specific_has_deprecated_annotation", *specificDeprecation,
                 "Deprecated", DeclKindToString(specific), specific.identifier.Val()).
                 AddNote("specific declarations implicitly inherit deprecation from the common declarations");
         return false;
@@ -158,12 +158,12 @@ void ReportAnnotationMismatch(const AST::Annotation& anno, const AST::Decl& decl
         // explaining which annotation is mismatched.
         auto note = FormatAnnotationMismatchNote(anno);
         // note: decl is specific decl
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_has_different_annotation, decl, DeclKindToString(decl))
+        diag.DiagnoseRefactor("sema_specific_has_different_annotation", decl, DeclKindToString(decl))
             .AddNote(note);
     } else {
         // note: decl is common here
         auto msg = diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_specific_has_different_annotation, anno, DeclKindToString(decl));
+            "sema_specific_has_different_annotation", anno, DeclKindToString(decl));
         msg.AddHint(decl, "The corresponding common declaration");
         msg.AddNote("Either remove the specific annotation or add it to the common declaration");
     }
@@ -186,7 +186,7 @@ bool PostCheckNonSerializedAnnotations(const AST::Decl& common, const AST::Decl&
                 // for non-serialized annotations from common we don't have an instance
                 // so we cannot use ReportAnnotationMismatch function
                 diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_specific_has_different_annotation, specific, DeclKindToString(specific)).
+                    "sema_specific_has_different_annotation", specific, DeclKindToString(specific)).
                     AddNote(FormatAnnotationMismatchNote(annoKind));
             }
             result = false;
@@ -305,7 +305,7 @@ void MPTypeCheckerImpl::CheckNotAllowedAnnotations(AST::Package& pkg)
         if (node->IsDecl() && IsCommonOrSpecific(*node) && !node->TestAttr(Attribute::FROM_COMMON_PART)) {
             for (auto& anno : StaticCast<Decl>(node)->annotations) {
                 if (IsUnsupported(*anno)) {
-                    diag.DiagnoseRefactor(DiagKindRefactor::sema_common_specific_annotation_not_allowed, *anno,
+                    diag.DiagnoseRefactor("sema_common_specific_annotation_not_allowed", *anno,
                             AnnotationKindToString(anno->kind))
                         .AddNote("This annotation kind is not supported on common/specific");
                 }

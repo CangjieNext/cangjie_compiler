@@ -19,21 +19,22 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "cangjie/Basic/WarnGroupEnum.h"
 #include "cangjie/Driver/TempFileInfo.h"
 #include "cangjie/Option/OptionTable.h"
 #include "cangjie/Utils/FileUtil.h"
+#include "cangjie/Utils/Semaphore.h"
 #include "cangjie/Utils/Utils.h"
-#include  "cangjie/Utils/Semaphore.h"
 
 namespace Cangjie {
 
 bool SetupConditionalCompilationCfgFromFile(const std::string& filePath,
     std::unordered_map<std::string, std::string>& passedWhenKeyValue, DiagnosticEngine& diag);
-enum class DiagKindRefactor : unsigned;
 /**
  * A help structure for storing paths. GlobalOptions checks whether a path is a directory
  * or a file, we may use the structure to represent directory path and file path.
@@ -43,14 +44,6 @@ struct Path {
     enum class Type { FILE, DIRECTORY };
     Type type;
     std::string path;
-};
-
-enum class WarnGroup : uint8_t {
-#define WARN_GROUP(DESCR, KIND) KIND,
-#include "cangjie/Basic/DiagRefactor/DiagnosticWarnGroupKind.def"
-#undef WARN_GROUP
-    UNGROUPED,
-    NONE,
 };
 
 /*
@@ -1097,8 +1090,7 @@ public:
      * @param notFoundError A reference to the diagnostic kind used to generate the error message.
      * @return std::optional<std::string> The optional valid file path.
      */
-    static std::optional<std::string> ValidateInputFilePath(
-        const std::string& path, const DiagKindRefactor notFoundError);
+    static std::optional<std::string> ValidateInputFilePath(const std::string& path, std::string_view notFoundErrorKind);
     /**
      * @brief Validates the input file path.
      *
@@ -1106,7 +1098,7 @@ public:
      * Used by checkcjd.
      */
     static std::optional<std::string> ValidateInputFilePath(
-        const std::string& path, const DiagKindRefactor notFoundError, DiagnosticEngine& diag);
+        const std::string& path, std::string_view notFoundErrorKind, DiagnosticEngine& diag);
 
     /**
      * @brief Sets the frontend mode.

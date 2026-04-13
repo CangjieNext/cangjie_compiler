@@ -113,7 +113,7 @@ bool TypeChecker::TypeCheckerImpl::ChkArrayLit(ASTContext& ctx, Ty& target, Arra
     bool matched = true;
     auto vt = DynamicCast<VArrayTy*>(targetTy);
     if (vt && vt->size != static_cast<int64_t>(al.children.size())) {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_varray_size_match, al);
+        auto builder = diag.DiagnoseRefactor("sema_varray_size_match", al);
         builder.AddMainHintArguments(std::to_string(vt->size), std::to_string(al.children.size()));
         matched = false;
     }
@@ -134,7 +134,7 @@ bool TypeChecker::TypeCheckerImpl::ChkArrayLit(ASTContext& ctx, Ty& target, Arra
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
 {
     if (al.children.empty()) {
-        diag.Diagnose(al, DiagKind::sema_empty_arrayLit_type_undefined);
+        diag.Diagnose(al, "sema_empty_arrayLit_type_undefined");
         al.SetTy(TypeManager::GetInvalidTy());
         return al.GetTy();
     }
@@ -161,7 +161,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
     } else {
         al.SetTy(TypeManager::GetInvalidTy());
         auto errMsg = JoinAndMeet::CombineErrMsg(std::get<std::stack<std::string>>(joinRes));
-        diag.Diagnose(al, DiagKind::sema_inconsistency_elemType, "array").AddNote(errMsg);
+        diag.Diagnose(al, "sema_inconsistency_elemType", "array").AddNote(errMsg);
     }
     return al.GetTy();
 }
@@ -372,7 +372,7 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayArg(ASTContext& ctx, ArrayExpr& ve)
     // check arg.
     if (ve.args.size() != 1) {
         diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_varray_args_number_mismatch, ve, MakeRange(ve.leftParenPos, ve.rightParenPos + 1));
+            "sema_varray_args_number_mismatch", ve, MakeRange(ve.leftParenPos, ve.rightParenPos + 1));
         return false;
     }
     bool ret = false;
@@ -383,7 +383,7 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayArg(ASTContext& ctx, ArrayExpr& ve)
         ret = Check(ctx, expectedExprTy, ve.args[0].get());
     } else {
         if (ve.args[0]->name != "repeat") {
-            auto builder = diag.Diagnose(*ve.args[0], DiagKind::sema_unknown_named_argument, ve.args[0]->name.Val());
+            auto builder = diag.Diagnose(*ve.args[0], "sema_unknown_named_argument", ve.args[0]->name.Val());
             builder.AddNote("expect the name of the named parameter is 'item'");
             return false;
         }
@@ -489,7 +489,7 @@ bool TypeChecker::TypeCheckerImpl::ChkPointerExpr(ASTContext& ctx, Ty& target, P
     cpe.SetTy(cpe.type->GetTy());
     // 'var a = CPointer()': Generic type cannot be derived.
     if (!Ty::IsTyCorrect(cpe.GetTy())) {
-        diag.Diagnose(cpe, DiagKind::sema_pointer_unknow_generic_type);
+        diag.Diagnose(cpe, "sema_pointer_unknow_generic_type");
         return false;
     } else if (!ret) {
         DiagMismatchedTypesWithFoundTy(diag, *cpe.sourceExpr, *targetTy, *cpe.GetTy());
@@ -500,19 +500,19 @@ bool TypeChecker::TypeCheckerImpl::ChkPointerExpr(ASTContext& ctx, Ty& target, P
         auto argTy = Synthesize({ctx, SynPos::EXPR_ARG}, cpe.arg.get());
         if (!Ty::IsTyCorrect(argTy) || !(argTy->IsPointer() || argTy->IsCFunc())) {
             if (!TypeCheckUtil::CanSkipDiag(*cpe.arg)) {
-                diag.Diagnose(cpe, DiagKind::sema_pointer_single_element_type_error);
+                diag.Diagnose(cpe, "sema_pointer_single_element_type_error");
             }
             return false;
         }
         if (!cpe.arg->name.Empty()) {
             diag.Diagnose(cpe.arg->name.Begin(), cpe.arg->name.End(),
-                DiagKind::sema_unknown_named_argument, cpe.arg->name.Val());
+                "sema_unknown_named_argument", cpe.arg->name.Val());
             return false;
         }
     }
 
     if (Ty::IsTyCorrect(targetTy) && !typeManager.IsSubtype(cpe.GetTy(), targetTy)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, cpe)
+        diag.DiagnoseRefactor("sema_mismatched_types", cpe)
             .AddMainHintArguments(target.String(), Ty::ToString(cpe.GetTy()));
         return false;
     }

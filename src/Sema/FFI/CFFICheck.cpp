@@ -22,33 +22,33 @@ namespace {
 void CheckAnnoC(const Decl& decl, const Annotation& anno, DiagnosticEngine& diag)
 {
     if (!anno.args.empty()) {
-        diag.Diagnose(*anno.args[0], DiagKind::sema_annotation_error_arg_num, "@C", "no");
+        diag.Diagnose(*anno.args[0], "sema_annotation_error_arg_num", "@C", "no");
     }
     auto generic = decl.GetGeneric();
     if (decl.astKind == ASTKind::FUNC_DECL && generic) {
-        diag.Diagnose(*generic, generic->leftAnglePos, DiagKind::sema_cffi_cannot_have_type_param,
+        diag.Diagnose(*generic, generic->leftAnglePos, "sema_cffi_cannot_have_type_param",
             std::string{CFUNC_NAME});
     }
     if (Utils::NotIn(decl.astKind, {ASTKind::FUNC_DECL, ASTKind::STRUCT_DECL})) {
-        diag.Diagnose(anno, DiagKind::sema_illegal_use_of_annotation, DeclKindToString(decl), "@C");
+        diag.Diagnose(anno, "sema_illegal_use_of_annotation", DeclKindToString(decl), "@C");
     } else if (decl.outerDecl != nullptr || decl.scopeLevel > 0) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_illegal_scope_use_of_annotation, anno, "@C");
+        diag.DiagnoseRefactor("sema_illegal_scope_use_of_annotation", anno, "@C");
     }
 }
 
 void CheckAnnoCallingConv(Decl& decl, const Annotation& anno, DiagnosticEngine& diag)
 {
     if (decl.outerDecl != nullptr || decl.scopeLevel > 0) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_illegal_scope_use_of_annotation, anno, "@CallingConv");
+        diag.DiagnoseRefactor("sema_illegal_scope_use_of_annotation", anno, "@CallingConv");
         return;
     }
     if (decl.astKind != ASTKind::FUNC_DECL || (!decl.TestAttr(Attribute::FOREIGN) && !decl.TestAttr(Attribute::C))) {
         // Will be replaced with anno->identifier.
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_only_cfunc_can_use_annotation, anno, "@CallingConv");
+        diag.DiagnoseRefactor("sema_only_cfunc_can_use_annotation", anno, "@CallingConv");
         return;
     }
     if (anno.args.size() != 1) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_annotation_error_arg_num, anno, "@CallingConv", "one");
+        diag.DiagnoseRefactor("sema_annotation_error_arg_num", anno, "@CallingConv", "one");
         return;
     }
     if (auto refExpr = DynamicCast<RefExpr*>(anno.args.front()->expr.get()); refExpr) {
@@ -56,43 +56,43 @@ void CheckAnnoCallingConv(Decl& decl, const Annotation& anno, DiagnosticEngine& 
             {"CDECL", Attribute::C},
         };
         if (callingConvMap.find(refExpr->ref.identifier) == callingConvMap.end()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_annotation_calling_conv_not_support, anno, refExpr->ref.identifier.Val());
+            diag.DiagnoseRefactor("sema_annotation_calling_conv_not_support", anno, refExpr->ref.identifier.Val());
             return;
         }
         decl.EnableAttr(callingConvMap[refExpr->ref.identifier]);
     } else {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_annotation_invalid_args_type, anno, "@CallingConv");
+        diag.DiagnoseRefactor("sema_annotation_invalid_args_type", anno, "@CallingConv");
     }
 }
 
 void CheckAnnoFastNative(const Decl& decl, const Annotation& anno, DiagnosticEngine& diag)
 {
     if (!anno.args.empty()) {
-        diag.Diagnose(*anno.args[0], DiagKind::sema_annotation_error_arg_num, "@FastNative", "no");
+        diag.Diagnose(*anno.args[0], "sema_annotation_error_arg_num", "@FastNative", "no");
     }
     if (decl.astKind != ASTKind::FUNC_DECL || !decl.TestAttr(Attribute::FOREIGN)) {
         // Will be merged with sema_illegal_scope_use_of_annotation.
         std::string prefix = decl.astKind == ASTKind::FUNC_DECL ? "non-foreign " : "";
-        diag.Diagnose(anno, DiagKind::sema_illegal_use_of_annotation, prefix + DeclKindToString(decl), "@FastNative");
+        diag.Diagnose(anno, "sema_illegal_use_of_annotation", prefix + DeclKindToString(decl), "@FastNative");
         return;
     }
     if (decl.outerDecl != nullptr || decl.scopeLevel > 0) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_illegal_scope_use_of_annotation, anno, "@FastNative");
+        diag.DiagnoseRefactor("sema_illegal_scope_use_of_annotation", anno, "@FastNative");
     }
 }
 
 void CheckAnnoFrozen(const Decl& decl, const Annotation& anno, DiagnosticEngine& diag)
 {
     if (!anno.args.empty()) {
-        diag.Diagnose(*anno.args[0], DiagKind::sema_annotation_error_arg_num, "@Frozen", "no");
+        diag.Diagnose(*anno.args[0], "sema_annotation_error_arg_num", "@Frozen", "no");
     }
     if (decl.astKind != ASTKind::FUNC_DECL && decl.astKind != ASTKind::PROP_DECL) {
         // Will be merged with sema_illegal_scope_use_of_annotation.
-        diag.Diagnose(anno, DiagKind::sema_illegal_use_of_annotation, DeclKindToString(decl), "@Frozen");
+        diag.Diagnose(anno, "sema_illegal_use_of_annotation", DeclKindToString(decl), "@Frozen");
         return;
     }
     if (decl.outerDecl != nullptr && decl.outerDecl->astKind == ASTKind::FUNC_DECL) {
-        diag.Diagnose(anno, DiagKind::sema_illegal_use_of_annotation, "local function", "@Frozen");
+        diag.Diagnose(anno, "sema_illegal_use_of_annotation", "local function", "@Frozen");
     }
 }
 
@@ -189,7 +189,7 @@ void TypeChecker::TypeCheckerImpl::CheckInvalidRefInCFunc(
     bool isNonStaticMember = !target.TestAttr(Attribute::STATIC) &&
         target.TestAnyAttr(Attribute::IN_CLASSLIKE, Attribute::IN_STRUCT, Attribute::IN_ENUM, Attribute::IN_EXTEND);
     if (isNonStaticMember) {
-        diag.Diagnose(re, DiagKind::sema_cfunc_cannot_capture_this, "this");
+        diag.Diagnose(re, "sema_cfunc_cannot_capture_this", "this");
     }
 }
 
@@ -199,9 +199,9 @@ void TypeChecker::TypeCheckerImpl::CheckInvalidRefInCFunc(const ASTContext& ctx,
         return;
     }
     if (re.isThis) {
-        diag.Diagnose(re, DiagKind::sema_cfunc_cannot_capture_this, "this");
+        diag.Diagnose(re, "sema_cfunc_cannot_capture_this", "this");
     } else if (re.isSuper) {
-        diag.Diagnose(re, DiagKind::sema_cfunc_cannot_capture_this, "super");
+        diag.Diagnose(re, "sema_cfunc_cannot_capture_this", "super");
     }
 }
 
@@ -228,14 +228,14 @@ void TypeChecker::TypeCheckerImpl::CheckCTypeMember(const Decl& decl)
         const auto& vd = StaticCast<const VarDecl&>(decl);
         if (vd.GetTy()->IsUnit()) {
             diag.Diagnose(vd.identifier.Begin(), vd.type ? vd.type->end : vd.identifier.End(),
-                DiagKind::sema_cstruct_cannot_have_unit_fields, vd.identifier.Val());
+                "sema_cstruct_cannot_have_unit_fields", vd.identifier.Val());
             return;
         }
         if (Ty::IsMetCType(*vd.GetTy())) {
             return;
         }
         diag.Diagnose(vd.identifier.Begin(), vd.type ? vd.type->end : vd.identifier.End(),
-            DiagKind::sema_illegal_member_of_cstruct, vd.identifier.Val(), vd.outerDecl->identifier.Val());
+            "sema_illegal_member_of_cstruct", vd.identifier.Val(), vd.outerDecl->identifier.Val());
     }
 }
 
@@ -251,7 +251,7 @@ void TypeChecker::TypeCheckerImpl::CheckUnsafeInvoke(const CallExpr& ce)
         return;
     }
     if (!ce.TestAttr(Attribute::UNSAFE)) {
-        diag.Diagnose(ce, DiagKind::sema_unsafe_function_invoke_failed);
+        diag.Diagnose(ce, "sema_unsafe_function_invoke_failed");
     }
 }
 
@@ -268,7 +268,7 @@ void TypeChecker::TypeCheckerImpl::CheckLegalityOfUnsafeAndInout(Node& root)
             if (fa.withInout && Ty::IsTyCorrect(fa.expr->GetTy()) &&
                 Utils::In(fa.expr->astKind, {ASTKind::REF_EXPR, ASTKind::MEMBER_ACCESS}) &&
                 Ty::IsMetCType(*fa.expr->GetTy()) && IsZeroSizedTy(*fa.expr->GetTy())) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_modify_cstring_or_zerosized, fa, "zero-sized type");
+                diag.DiagnoseRefactor("sema_inout_modify_cstring_or_zerosized", fa, "zero-sized type");
             }
         }
         return VisitAction::WALK_CHILDREN;
@@ -287,13 +287,13 @@ void TypeChecker::TypeCheckerImpl::UnsafeCheck(const FuncBody& fb)
             return;
         }
         if (!Ty::IsMetCType(*fb.retType->GetTy())) {
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_cfunc_return_type, *fb.retType,
+            auto builder = diag.DiagnoseRefactor("sema_invalid_cfunc_return_type", *fb.retType,
                 GetFuncBodyRange(fb, *fb.retType));
             builder.AddNote("return type is " + fb.retType->GetTy()->String());
         } else if (Is<VArrayTy>(fb.retType->GetTy())) {
             // VArray not allowed as CFunc return type.
             diag.DiagnoseRefactor(
-                DiagKindRefactor::sema_varray_in_cfunc, *fb.retType, GetFuncBodyRange(fb, *fb.retType));
+                "sema_varray_in_cfunc", *fb.retType, GetFuncBodyRange(fb, *fb.retType));
         }
     }
 }
@@ -304,21 +304,21 @@ void TypeChecker::TypeCheckerImpl::CheckCFuncParam(const AST::FuncParam& fp)
         return;
     }
     if (fp.isNamedParam) {
-        diag.Diagnose(fp, DiagKind::sema_cfunc_cannot_have_named_args);
+        diag.Diagnose(fp, "sema_cfunc_cannot_have_named_args");
     }
     if (fp.GetTy()->IsUnit()) {
-        diag.Diagnose(fp.identifier.Begin(), fp.type->end, DiagKind::sema_cfunc_cannot_have_unit_args);
+        diag.Diagnose(fp.identifier.Begin(), fp.type->end, "sema_cfunc_cannot_have_unit_args");
     } else if (!Ty::IsMetCType(*fp.GetTy())) {
-        diag.Diagnose(fp.identifier.Begin(), fp.type->end, DiagKind::sema_invalid_cfunc_arg_type);
+        diag.Diagnose(fp.identifier.Begin(), fp.type->end, "sema_invalid_cfunc_arg_type");
     }
 }
 
 void TypeChecker::TypeCheckerImpl::CheckCFuncParamType(const AST::Type& type)
 {
     if (type.GetTy()->IsUnit()) {
-        diag.Diagnose(type.begin, type.end, DiagKind::sema_cfunc_cannot_have_unit_args);
+        diag.Diagnose(type.begin, type.end, "sema_cfunc_cannot_have_unit_args");
     } else if (!Ty::IsMetCType(*type.GetTy())) {
-        diag.Diagnose(type.begin, type.end, DiagKind::sema_invalid_cfunc_arg_type);
+        diag.Diagnose(type.begin, type.end, "sema_invalid_cfunc_arg_type");
     }
 }
 
@@ -328,14 +328,14 @@ void TypeChecker::TypeCheckerImpl::PreCheckAnnoForCFFI(Decl& decl)
         // Check node.
         auto modifier = decl.modifiers.crbegin();
         if (decl.astKind == ASTKind::CLASS_DECL) {
-            diag.Diagnose(*modifier, DiagKind::sema_unexpected_wrapper, "class declaration");
+            diag.Diagnose(*modifier, "sema_unexpected_wrapper", "class declaration");
         }
         if (decl.astKind == ASTKind::INTERFACE_DECL) {
-            diag.Diagnose(*modifier, DiagKind::sema_unexpected_wrapper, "interface declaration");
+            diag.Diagnose(*modifier, "sema_unexpected_wrapper", "interface declaration");
         }
         // Will be merged with sema_unexpected_wrapper.
         if (decl.astKind == ASTKind::VAR_DECL) {
-            diag.Diagnose(decl, DiagKind::sema_native_var_error);
+            diag.Diagnose(decl, "sema_native_var_error");
         }
     }
     auto isAnnoC = [](const OwnedPtr<Annotation>& anno) { return anno->kind == AnnotationKind::C; };

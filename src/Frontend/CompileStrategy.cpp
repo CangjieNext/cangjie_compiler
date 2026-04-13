@@ -50,7 +50,7 @@ void CompileStrategy::InteropConfigTomlCheck() {
     if (ci->invocation.globalOptions.enableInteropCJMapping &&
         ci->invocation.globalOptions.interopCJPackageConfigPath != "./" &&
         !packagesFullConfig.Parse(ci->invocation.globalOptions.interopCJPackageConfigPath)) {
-        ci->diag.DiagnoseRefactor(DiagKindRefactor::sema_cj_mapping_generic_method_not_get_instance_config, DEFAULT_POSITION, ci->invocation.globalOptions.interopCJPackageConfigPath);
+        ci->diag.DiagnoseRefactor("sema_cj_mapping_generic_method_not_get_instance_config", DEFAULT_POSITION, ci->invocation.globalOptions.interopCJPackageConfigPath);
     }
 }
 
@@ -205,7 +205,7 @@ public:
         }
         for (const auto& file : package.files) {
             if (file->package && package.files[0]->package->hasMacro != file->package->hasMacro) {
-                (void)s.ci->diag.DiagnoseRefactor(DiagKindRefactor::package_name_inconsistent_with_macro, file->begin);
+                (void)s.ci->diag.DiagnoseRefactor("package_name_inconsistent_with_macro", file->begin);
                 return;
             }
         }
@@ -372,7 +372,7 @@ public:
                     std::nullopt, isCjmpFile);
                 if (s.fileIds.count(fileID) > 0) {
                     s.ci->diag.DiagnoseRefactor(
-                        DiagKindRefactor::module_read_file_conflicted, DEFAULT_POSITION, it.first);
+                        "module_read_file_conflicted", DEFAULT_POSITION, it.first);
                 }
                 s.fileIds.insert(fileID);
                 fileInfoQueue.emplace(it.second.code, fileID);
@@ -387,7 +387,7 @@ public:
                 auto content = ReadFileContent(file, failedReason);
                 if (!content.has_value()) {
                     s.ci->diag.DiagnoseRefactor(
-                        DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, file, failedReason);
+                        "module_read_file_to_buffer_failed", DEFAULT_POSITION, file, failedReason);
                     success = false;
                     return;
                 }
@@ -396,7 +396,7 @@ public:
                     content.value(), std::nullopt, isCjmpFile);
                 if (s.fileIds.count(fileID) > 0) {
                     (void)s.ci->diag.DiagnoseRefactor(
-                        DiagKindRefactor::module_read_file_conflicted, DEFAULT_POSITION, file);
+                        "module_read_file_conflicted", DEFAULT_POSITION, file);
                     return;
                 }
 

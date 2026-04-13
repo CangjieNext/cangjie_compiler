@@ -8,6 +8,7 @@
 #define CANGJIE_CHIR_DIAG_WRAPPER_H
 
 #include <map>
+#include <string_view>
 
 #include "cangjie/AST/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
@@ -18,32 +19,32 @@ public:
     DiagAdapter(DiagnosticEngine& diag) : diag(diag){};
 
     template <typename... Args>
-    DiagnosticBuilder DiagnoseRefactor(DiagKindRefactor kind, const Range& range, Args&&... args)
+    DiagnosticBuilder DiagnoseRefactor(std::string_view kindName, const Range& range, Args&&... args)
     {
         auto key = static_cast<uint64_t>(range.begin.Hash64());
         auto it = posRange2MacroCallMap.lower_bound(key);
         if (it == posRange2MacroCallMap.end() || !it->second) {
             // means the range's begin is not from macro expanded node
-            return diag.DiagnoseRefactor(kind, range, std::forward<Args>(args)...);
+            return diag.DiagnoseRefactor(kindName, range, std::forward<Args>(args)...);
         }
         AST::Node node;
         node.curMacroCall = it->second;
-        return diag.DiagnoseRefactor(kind, node, range, std::forward<Args>(args)...);
+        return diag.DiagnoseRefactor(kindName, node, range, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    DiagnosticBuilder DiagnoseRefactor(DiagKindRefactor kind, const Cangjie::Position& pos, Args&&... args)
+    DiagnosticBuilder DiagnoseRefactor(std::string_view kindName, const Cangjie::Position& pos, Args&&... args)
     {
         auto key = static_cast<uint64_t>(pos.Hash64());
         auto it = posRange2MacroCallMap.lower_bound(key);
         CJC_ASSERT(it == posRange2MacroCallMap.end() || !it->second);
         // means the range's begin is not from macro expanded node
-        return diag.DiagnoseRefactor(kind, pos, std::forward<Args>(args)...);
+        return diag.DiagnoseRefactor(kindName, pos, std::forward<Args>(args)...);
     }
 
-    template <typename... Args> DiagnosticBuilder Diagnose(DiagKind kind, Args&&... args)
+    template <typename... Args> DiagnosticBuilder Diagnose(std::string_view kindName, Args&&... args)
     {
-        return diag.Diagnose(kind, std::forward<Args>(args)...);
+        return diag.Diagnose(kindName, std::forward<Args>(args)...);
     }
 
     uint64_t GetErrorCount()

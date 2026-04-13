@@ -20,7 +20,7 @@ using namespace Cangjie::Interop::ObjC;
 void CheckGeneric::HandleImpl(TypeCheckContext& ctx)
 {
     if (ctx.target.generic) {
-        ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_cjmapping_generic_not_supported,
+        ctx.diag.DiagnoseRefactor("sema_objc_cjmapping_generic_not_supported",
             MakeRange(ctx.target.generic->leftAnglePos, ctx.target.generic->rightAnglePos),
             std::string{ctx.target.identifier});
     }

@@ -43,12 +43,12 @@ void ReportMappingFailedDiag(
         }
         if (oldTokens[i].kind != newTokens[i].kind || oldTokens[i].Value() != newTokens[i].Value()) {
             if (oldTokens[i].Value().empty()) {
-                (void)ci.diag.Diagnose(mcPos, DiagKind::macro_call_map_to_empty_value_token,
+                (void)ci.diag.Diagnose(mcPos, "macro_call_map_to_empty_value_token",
                     TOKEN_KIND_VALUES[static_cast<int>(oldTokens[i].kind)]);
                 break;
             }
             (void)ci.diag.Diagnose(
-                mcPos, DiagKind::macro_call_map_info_failed, oldTokens[i].Value(), newTokens[i].Value());
+                mcPos, "macro_call_map_info_failed", oldTokens[i].Value(), newTokens[i].Value());
             break;
         }
     }
@@ -323,7 +323,7 @@ void GenerateMacroCallFile(const std::vector<Ptr<File>>& fileSucVec,
         if (ci.invocation.globalOptions.enableMacroInLSP || ci.invocation.globalOptions.enableMacroDebug) {
             auto& source = sm.GetSource(fileID).buffer;
             if (!WriteStringToFile(file->macroCallFilePath, source)) {
-                (void)ci.diag.Diagnose(file->begin, DiagKind::macro_call_save_file_failed);
+                (void)ci.diag.Diagnose(file->begin, "macro_call_save_file_failed");
             }
         } else {
             // Need to remove *.macrocall.

@@ -43,7 +43,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendGenerics(const ExtendDecl& ed)
         if (unusedTypes.size() > 1) {
             typeStr = "s" + typeStr; // add suffix 's' for plural.
         }
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_extend_generic_must_be_used, *ed.extendedType, typeStr);
+        diag.DiagnoseRefactor("sema_extend_generic_must_be_used", *ed.extendedType, typeStr);
     }
 }
 
@@ -53,7 +53,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendedTypeValidity(const Type& extende
         return;
     }
     // All other types are not allowed to be extended.
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_illegal_extended_type, extendedType, extendedType.GetTy()->String());
+    diag.DiagnoseRefactor("sema_illegal_extended_type", extendedType, extendedType.GetTy()->String());
 }
 
 /**
@@ -118,7 +118,7 @@ void TypeChecker::TypeCheckerImpl::CheckDefImplWithoutOutsideGeneric(Decl& inher
         }
         if (!usedOutersideGeneric) {
             std::string typeName = "extend " + extend.GetTy()->String();
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_extend_member_cannot_shadow,
+            auto builder = diag.DiagnoseRefactor("sema_extend_member_cannot_shadow",
                 MakeRange(member->identifier), member->identifier.Val(), typeName);
         }
     }
@@ -162,7 +162,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendInterfaces(
             if (interfaceTy->decl && Utils::In(interfaceTy->decl->identifier.Val(), {std::string("Any"), CTYPE_NAME}) &&
                 interfaceTy->decl->fullPackageName == CORE_PACKAGE_NAME) {
                 diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_interface_is_not_extendable, *interface, interfaceTy->decl->identifier);
+                    "sema_interface_is_not_extendable", *interface, interfaceTy->decl->identifier);
             }
         }
     }
@@ -178,7 +178,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendInterfaces(
             const auto type = *typeSet.crbegin();
             if (!type->TestAttr(Attribute::IMPORTED)) {
                 diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_extend_duplicate_interface, *type, interfaceTy->String(), ty.String());
+                    "sema_extend_duplicate_interface", *type, interfaceTy->String(), ty.String());
             }
         }
     }
@@ -262,7 +262,7 @@ void TypeChecker::TypeCheckerImpl::CheckSpecializationExtendDupImstantation(cons
             if (instantTy != compareSuperInterface->GetTy()) {
                 continue;
             }
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_extend_duplicate_interface,
+            auto builder = diag.DiagnoseRefactor("sema_extend_duplicate_interface",
                 *compareSuperInterface, compareSuperInterface->GetTy()->String(), extendedDeclTy.String());
             builder.AddNote(MakeRange(beComparedDecl.begin, beComparedDecl.end),
                 "it may be an instantiated version of the following declaration");
@@ -316,14 +316,14 @@ void TypeChecker::TypeCheckerImpl::PreCheckExtend(ASTContext& ctx, ExtendDecl& e
         auto decl = Ty::GetDeclOfTy(ed.extendedType->GetTy());
         if (decl && decl->TestAttr(Attribute::C)) {
             diag.DiagnoseRefactor(
-                DiagKindRefactor::sema_c_type_cannot_extend_interface, *ed.extendedType.get(), decl->identifier);
+                "sema_c_type_cannot_extend_interface", *ed.extendedType.get(), decl->identifier);
         }
         ed.SetTy(ed.extendedType->GetTy());
     }
     // Check implemented interfaces.
     for (auto it = ed.inheritedTypes.begin(); it != ed.inheritedTypes.end();) {
         if (!Ty::IsTyCorrect((*it)->GetTy()) || (*it)->TyKind() != TypeKind::TYPE_INTERFACE) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_extend_not_interface, *(*it));
+            diag.DiagnoseRefactor("sema_extend_not_interface", *(*it));
             ctx.DeleteInvertedIndexes(it->get());
             it->reset();
             it = ed.inheritedTypes.erase(it);
@@ -462,7 +462,7 @@ void TypeChecker::TypeCheckerImpl::CheckImmutExtendInhertMutSuper(const Type& in
     for (auto& member : id->GetMemberDecls()) {
         if (member->astKind == ASTKind::PROP_DECL && member->TestAttr(Attribute::MUT)) {
             auto builder =
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_interface_is_not_extendable, ed, id->identifier);
+                diag.DiagnoseRefactor("sema_interface_is_not_extendable", ed, id->identifier);
             builder.AddNote("interface '" + id->identifier + "' contains mutable member '" + member->identifier + "'");
             return;
         }
@@ -504,13 +504,13 @@ void TypeChecker::TypeCheckerImpl::CheckExtendDecl(ASTContext& ctx, ExtendDecl& 
             if (auto fd = DynamicCast<FuncDecl*>(m.get()); fd && !ed.GetTy()->IsEnum() && IsIndexAssignmentOperator(*fd)) {
                 auto fdIdRange = MakeRange(fd->identifier);
                 diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_immutable_type_extend_assignment_index_operator, *fd, fdIdRange);
+                    "sema_immutable_type_extend_assignment_index_operator", *fd, fdIdRange);
             }
             if (auto pd = DynamicCast<PropDecl*>(m.get()); pd && pd->isVar) {
                 auto mutDecl = TypeCheckUtil::FindModifier(*pd, TokenKind::MUT);
                 CJC_ASSERT(mutDecl);
                 if (mutDecl) {
-                    (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_immutable_type_illegal_property, *mutDecl);
+                    (void)diag.DiagnoseRefactor("sema_immutable_type_illegal_property", *mutDecl);
                 }
             }
         }
@@ -572,7 +572,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendOrphanRule(const ASTContext& ctx, 
     if (isImportedExtendedType && !externalDecls.empty()) {
         std::string extendedType =
             extendedTypeTarget ? extendedTypeTarget->identifier.Val() : ed.extendedType->GetTy()->String();
-        DiagnosticBuilder diagnose = diag.DiagnoseRefactor(DiagKindRefactor::sema_type_cannot_extend_imported_interface,
+        DiagnosticBuilder diagnose = diag.DiagnoseRefactor("sema_type_cannot_extend_imported_interface",
             *ed.extendedType, extendedTypeTarget ? "imported" : "primitive", extendedType);
         diagnose.AddNote("used external interface: " + Ty::GetTypesToStr(externalDecls, " "));
     }

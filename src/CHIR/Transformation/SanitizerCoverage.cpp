@@ -7,11 +7,11 @@
 #include "cangjie/CHIR/Transformation/SanitizerCoverage.h"
 
 #include "cangjie/CHIR/Analysis/Utils.h"
-#include "cangjie/CHIR/Utils/ConstantUtils.h"
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
 #include "cangjie/CHIR/IR/IntrinsicKind.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
+#include "cangjie/CHIR/Utils/ConstantUtils.h"
+#include "cangjie/CHIR/Utils/DiagAdapter.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/Mangle/BaseMangler.h"
@@ -273,15 +273,15 @@ bool SanitizerCoverage::CheckSancovOption(DiagAdapter& diag) const
     // Rule: if pc-table option is available, one of inline8bitCounters, inlineBoolFlag, or tracePCGuard must also be
     // used.
     if (!isSancov && sanCovOption.pcTable) {
-        diag.Diagnose(DiagKind::chir_sancov_illegal_usage_of_pc_table);
+        diag.Diagnose("chir_sancov_illegal_usage_of_pc_table");
         return false;
     }
     if (isSancov && sanCovOption.coverageType == GlobalOptions::SanitizerCoverageOptions::Type::SCK_NONE) {
-        diag.Diagnose(DiagKind::chir_sancov_illegal_usage_of_level);
+        diag.Diagnose("chir_sancov_illegal_usage_of_level");
         return false;
     }
     if (!isSancov && isSancovLevelVaild) {
-        diag.Diagnose(DiagKind::chir_sancov_illegal_usage_of_level);
+        diag.Diagnose("chir_sancov_illegal_usage_of_level");
         return false;
     }
     return true;

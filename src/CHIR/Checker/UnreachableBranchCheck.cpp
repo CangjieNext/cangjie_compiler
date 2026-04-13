@@ -96,18 +96,18 @@ void UnreachableBranchCheck::PrintWarning(
         auto branch = StaticCast<const Branch*>(&node);
         if (branch->GetSourceExpr() == SourceExpr::QUEST || branch->GetSourceExpr() == SourceExpr::BINARY) {
             if (!isRecursive) {
-                (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression, range);
+                (void)diag.DiagnoseRefactor("chir_dce_unreachable_expression", range);
             }
         } else if (branch->GetSourceExpr() == SourceExpr::MATCH_EXPR) {
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_unreachable_pattern, range);
+            (void)diag.DiagnoseRefactor("chir_unreachable_pattern", range);
         } else {
             auto keyWord = GetKeyWordBySourceExpr(*branch);
             auto builder =
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_block_in_expression, range, keyWord);
+                diag.DiagnoseRefactor("chir_dce_unreachable_block_in_expression", range, keyWord);
             builder.AddMainHintArguments(keyWord);
         }
     } else {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_unreachable_pattern, range);
+        (void)diag.DiagnoseRefactor("chir_unreachable_pattern", range);
     }
 }
 

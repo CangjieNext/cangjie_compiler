@@ -6,6 +6,7 @@
 
 #include "TypeCheckerImpl.h"
 
+
 using namespace Cangjie;
 using namespace AST;
 
@@ -32,6 +33,6 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynThrowExpr(ASTContext& ctx, ThrowExpr& t
             return TypeManager::GetNothingTy();
         }
     }
-    diag.Diagnose(te, DiagKind::sema_throw_expr_with_wrong_type);
+    diag.Diagnose(te, "sema_throw_expr_with_wrong_type");
     return TypeManager::GetInvalidTy();
 }

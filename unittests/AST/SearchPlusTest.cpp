@@ -65,7 +65,7 @@ TEST_F(SearchPlusTest, IllegalParametersTest)
     auto content = FileUtil::ReadFileContent(srcFile, failedReason);
     if (!content.has_value()) {
         diag.DiagnoseRefactor(
-            DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, srcFile, failedReason);
+            "module_read_file_to_buffer_failed", DEFAULT_POSITION, srcFile, failedReason);
     }
 
     std::unique_ptr<CompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
@@ -175,7 +175,7 @@ TEST_F(SearchPlusTest, FileIDTest)
     auto content = FileUtil::ReadFileContent(srcFile, failedReason);
     if (!content.has_value()) {
         diag.DiagnoseRefactor(
-            DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, srcFile, failedReason);
+            "module_read_file_to_buffer_failed", DEFAULT_POSITION, srcFile, failedReason);
     }
 
     std::string fileID = Utils::FillZero(~0u, 0);
@@ -286,7 +286,7 @@ TEST_F(SearchPlusTest, ScopeTest)
     auto content = FileUtil::ReadFileContent(srcFile, failedReason);
     if (!content.has_value()) {
         diag.DiagnoseRefactor(
-            DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, srcFile, failedReason);
+            "module_read_file_to_buffer_failed", DEFAULT_POSITION, srcFile, failedReason);
     }
 
     std::unique_ptr<CompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);

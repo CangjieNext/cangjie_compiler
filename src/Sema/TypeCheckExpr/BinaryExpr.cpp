@@ -359,7 +359,7 @@ bool TypeChecker::TypeCheckerImpl::ChkExpoExpr(ASTContext& ctx, Ty& tgtTy, Binar
         isExponentWellTyped = ChkExpoExprExponent(ctx, *be.rightExpr, exponentTys);
     }
     if (!i64Compatible && !f64Compatible) {
-        (void)diag.Diagnose(be, DiagKind::sema_incompatible_expo_target_type, tgtTy.String());
+        (void)diag.Diagnose(be, "sema_incompatible_expo_target_type", tgtTy.String());
     }
 
     if (isBaseWellTyped && isExponentWellTyped) {
@@ -399,7 +399,7 @@ bool TypeChecker::TypeCheckerImpl::ChkExpoExprExponent(ASTContext& ctx, Expr& ex
 
     auto answers = std::accumulate(pass.begin(), pass.end(), decltype(pass)::value_type(0));
     if (answers > 1) {
-        (void)diag.Diagnose(exponent, DiagKind::sema_ambiguous_expo_right_operand_type);
+        (void)diag.Diagnose(exponent, "sema_ambiguous_expo_right_operand_type");
         isWellTyped = false;
     } else if (answers == 1) {
         // Get the correct answer's position
@@ -548,7 +548,7 @@ bool TypeChecker::TypeCheckerImpl::CheckTupleCanEqual(ASTContext& ctx, BinaryExp
     TupleTy& leftTupleTy = *RawStaticCast<TupleTy*>(be.leftExpr->GetTy());
     TupleTy& rightTupleTy = *RawStaticCast<TupleTy*>(be.rightExpr->GetTy());
     if (leftTupleTy.typeArgs.size() != rightTupleTy.typeArgs.size()) {
-        (void)diag.Diagnose(be, DiagKind::sema_tuple_cmp_not_supported, TOKENS[static_cast<int>(be.op)],
+        (void)diag.Diagnose(be, "sema_tuple_cmp_not_supported", TOKENS[static_cast<int>(be.op)],
             leftTupleTy.String(), rightTupleTy.String());
         be.SetTy(TypeManager::GetInvalidTy());
         return false;
@@ -575,14 +575,14 @@ bool TypeChecker::TypeCheckerImpl::CheckTupleCanEqual(ASTContext& ctx, BinaryExp
             returnTy = SynBinaryExpr(ctx, *elementCmpExpr);
         }
         if (!Ty::IsTyCorrect(returnTy)) { // These two elements do not support == (or !=).
-            (void)diag.Diagnose(be, DiagKind::sema_tuple_cmp_not_supported, TOKENS[static_cast<int>(be.op)],
+            (void)diag.Diagnose(be, "sema_tuple_cmp_not_supported", TOKENS[static_cast<int>(be.op)],
                 leftTupleTy.String(), rightTupleTy.String());
             be.SetTy(TypeManager::GetInvalidTy());
             return false;
         }
         if (!returnTy->IsBoolean()) {
             auto argTys = GetDesugaredBinaryExprArgTys(*elementCmpExpr);
-            (void)diag.Diagnose(be, DiagKind::sema_tuple_element_cmp_not_bool, TOKENS[static_cast<int>(be.op)],
+            (void)diag.Diagnose(be, "sema_tuple_element_cmp_not_bool", TOKENS[static_cast<int>(be.op)],
                 argTys.first, argTys.second);
             be.SetTy(TypeManager::GetInvalidTy());
             return false;
@@ -1052,7 +1052,7 @@ bool TypeChecker::TypeCheckerImpl::CheckFlowOperandsHaveNamedParam(const CallExp
         CJC_NULLPTR_CHECK(arg);
         if (auto re = DynamicCast<const RefExpr*>(arg->expr.get());
             re && RefExprTargetIsFuncDeclAndHasNamedParam(*re)) {
-            diag.Diagnose(*arg->expr, DiagKind::sema_fail_flow_expr_operand_has_named_param);
+            diag.Diagnose(*arg->expr, "sema_fail_flow_expr_operand_has_named_param");
             return true;
         }
         return false;
@@ -1088,7 +1088,7 @@ bool TypeChecker::TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, Ptr<Ty> target, 
     // 'super' is not allowed to be used alone and is checked in 'InferSuperExpr'.
     auto isThisExpr = [this](Expr& exp) {
         if (auto re = DynamicCast<RefExpr*>(&exp); re && re->isAlone && re->isThis) {
-            diag.Diagnose(*re, DiagKind::sema_flow_expressions_use_this_or_super, re->ref.identifier.Val());
+            diag.Diagnose(*re, "sema_flow_expressions_use_this_or_super", re->ref.identifier.Val());
             return false;
         }
         return true;
@@ -1169,7 +1169,7 @@ bool TypeChecker::TypeCheckerImpl::ChkCoalescingExpr(ASTContext& ctx, Ptr<Ty> tg
     if (isLeftTyInvalid) {
         be.SetTy(TypeManager::GetInvalidTy());
         if (!CanSkipDiag(*be.leftExpr)) {
-            (void)diag.Diagnose(*be.leftExpr, DiagKind::sema_invalid_coalescing);
+            (void)diag.Diagnose(*be.leftExpr, "sema_invalid_coalescing");
         }
         // Do not set (children of) be.rightExpr to InvalidTy due to the bugs of the type check process.
         // For example, Check(String, B??"") succeeds and Check(Int64, B??"") fails. Then the re-inference

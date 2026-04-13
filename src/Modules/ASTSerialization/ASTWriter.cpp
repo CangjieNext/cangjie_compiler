@@ -1562,7 +1562,7 @@ TDeclOffset ASTWriter::ASTWriterImpl::SaveGenericParamDecl(const GenericParamDec
 TDeclOffset ASTWriter::ASTWriterImpl::SaveUnsupportDecl(const DeclInfo& declInfo, const Decl& decl)
 {
     (void)diag.DiagnoseRefactor(
-        DiagKindRefactor::package_unsupport_save, decl, "declaration", std::string(typeid(decl).name()));
+        "package_unsupport_save", decl, "declaration", std::string(typeid(decl).name()));
     PackageFormat::DeclBuilder dbuilder(builder);
     SaveDeclBasicInfo(declInfo, dbuilder);
     dbuilder.add_kind(PackageFormat::DeclKind_InvalidDecl);

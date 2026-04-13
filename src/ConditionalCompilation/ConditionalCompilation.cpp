@@ -18,10 +18,10 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Utils.h"
 #include "cangjie/Basic/Version.h"
+#include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Option/Option.h"
 #include "cangjie/Utils/FileUtil.h"
-#include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
 
 using namespace Cangjie::FileUtil;
 using namespace Cangjie::Triple;
@@ -167,11 +167,11 @@ ConditionalCompilationImpl::ConditionalCompilationImpl(CompilerInstance* c)
         if (!passedCondition.empty()) {
             for (auto it : passedCondition) {
                 if (TARGET_CONDITION.count(it.first) != 0) {
-                    ci->diag.DiagnoseRefactor(DiagKindRefactor::dirver_cfg_same_with_builtin, DEFAULT_POSITION);
+                    ci->diag.DiagnoseRefactor("dirver_cfg_same_with_builtin", DEFAULT_POSITION);
                 }
             }
             if (!ci->invocation.globalOptions.passedWhenCfgPaths.empty()) {
-                ci->diag.DiagnoseRefactor(DiagKindRefactor::driver_cfg_path_ignored, DEFAULT_POSITION);
+                ci->diag.DiagnoseRefactor("driver_cfg_path_ignored", DEFAULT_POSITION);
             }
         } else {
             const std::string cfgFileName("cfg.toml");
@@ -179,7 +179,7 @@ ConditionalCompilationImpl::ConditionalCompilationImpl(CompilerInstance* c)
                 std::string filePath = JoinPath(path, cfgFileName);
                 if (!FileExist(filePath)) {
                     ci->diag.DiagnoseRefactor(
-                        DiagKindRefactor::driver_warning_no_such_file, DEFAULT_POSITION, filePath);
+                        "driver_warning_no_such_file", DEFAULT_POSITION, filePath);
                     continue;
                 }
                 (void)SetupConditionalCompilationCfgFromFile(filePath, passedCondition, ci->diag);
@@ -256,7 +256,7 @@ bool ConditionalCompilationImpl::ConditionCheck(
     auto isUserDefined = !isBuiltin && passedCondition.count(conditionStr) == 1;
     if (!isBuiltin && !isUserDefined) {
         (void)ci->diag.DiagnoseRefactor(
-            DiagKindRefactor::conditional_compilation_not_support_this_condition, begin, conditionStr);
+            "conditional_compilation_not_support_this_condition", begin, conditionStr);
         return false;
     }
     // Check `arch`, `env`, `backend` and `os` condition value.
@@ -266,7 +266,7 @@ bool ConditionalCompilationImpl::ConditionCheck(
             supportedValues += it + " ";
         }
         supportedValues.pop_back();
-        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_not_support_builtin_value, begin,
+        (void)ci->diag.DiagnoseRefactor("conditional_compilation_not_support_builtin_value", begin,
             conditionStr, right, supportedValues);
         return false;
     }
@@ -275,7 +275,7 @@ bool ConditionalCompilationImpl::ConditionCheck(
         std::regex cjcVersionRegex("[0-9]{1,2}[.][0-9]{1,2}[.][0-9]{1,2}");
         if (!std::regex_match(right, cjcVersionRegex)) {
             (void)ci->diag.DiagnoseRefactor(
-                DiagKindRefactor::conditional_compilation_not_support_cjc_version_format, begin);
+                "conditional_compilation_not_support_cjc_version_format", begin);
             return false;
         }
     }
@@ -307,22 +307,22 @@ bool ConditionalCompilationImpl::Eval(const BinaryExpr& expr, const std::string&
 bool ConditionalCompilationImpl::EvalJudgeBinaryExpr(const BinaryExpr& be)
 {
     if (be.leftExpr == nullptr || be.rightExpr == nullptr) {
-        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, be.begin);
+        (void)ci->diag.DiagnoseRefactor("conditional_compilation_invalid_condition_expr", be.begin);
         return false;
     }
     if (be.leftExpr->astKind != ASTKind::REF_EXPR) {
-        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, be.begin);
+        (void)ci->diag.DiagnoseRefactor("conditional_compilation_invalid_condition_expr", be.begin);
         return false;
     }
     if (be.rightExpr->astKind != ASTKind::LIT_CONST_EXPR) {
         (void)ci->diag.DiagnoseRefactor(
-            DiagKindRefactor::conditional_compilation_invalid_condition_value, be.rightExpr->begin);
+            "conditional_compilation_invalid_condition_value", be.rightExpr->begin);
         return false;
     }
     auto right = RawStaticCast<LitConstExpr*>(be.rightExpr.get());
     if (right->kind != LitConstKind::STRING || right->siExpr) {
         (void)ci->diag.DiagnoseRefactor(
-            DiagKindRefactor::conditional_compilation_invalid_condition_value, be.rightExpr->begin);
+            "conditional_compilation_invalid_condition_value", be.rightExpr->begin);
         return false;
     }
     auto left = RawStaticCast<RefExpr*>(be.leftExpr.get());
@@ -336,7 +336,7 @@ bool ConditionalCompilationImpl::EvalJudgeBinaryExpr(const BinaryExpr& be)
     }
     // Filter not support op.
     if (CONDITION_OP.count(conditionStr) > 0 && Utils::NotIn(be.op, CONDITION_OP.at(conditionStr))) {
-        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_not_support_op, be.begin,
+        (void)ci->diag.DiagnoseRefactor("conditional_compilation_not_support_op", be.begin,
             conditionStr.Val(), TOKENS[static_cast<int>(be.op)]);
         return false;
     }
@@ -357,7 +357,7 @@ bool ConditionalCompilationImpl::EvalBinaryExpr(const BinaryExpr& be)
     if (IsJudgeBinaryExpr(be) || IsRangeBinaryExpr(be)) {
         return EvalJudgeBinaryExpr(be);
     }
-    (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, be.begin);
+    (void)ci->diag.DiagnoseRefactor("conditional_compilation_invalid_condition_expr", be.begin);
     return false;
 }
 
@@ -372,17 +372,17 @@ bool ConditionalCompilationImpl::EvalParenExpr(const ParenExpr& pe)
 bool ConditionalCompilationImpl::EvalUnaryExpr(const UnaryExpr& ue) const
 {
     if (ue.expr == nullptr || ue.expr->astKind != ASTKind::REF_EXPR) {
-        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, ue.begin);
+        (void)ci->diag.DiagnoseRefactor("conditional_compilation_invalid_condition_expr", ue.begin);
         return false;
     }
     auto conditionExpr = RawStaticCast<RefExpr*>(ue.expr.get());
     if (conditionExpr == nullptr || (conditionExpr->ref.identifier != DEBUG_STR &&
         conditionExpr->ref.identifier != TEST_STR)) {
-        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, ue.begin);
+        (void)ci->diag.DiagnoseRefactor("conditional_compilation_invalid_condition_expr", ue.begin);
         return false;
     }
     if (ue.op != TokenKind::NOT) { // -debug or -test should compile error
-        auto builder = ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, ue.begin);
+        auto builder = ci->diag.DiagnoseRefactor("conditional_compilation_invalid_condition_expr", ue.begin);
         builder.AddNote("debug and test builtin conditions only support the logic ! operator");
         return false;
     }
@@ -396,7 +396,7 @@ bool ConditionalCompilationImpl::EvalUnaryExpr(const UnaryExpr& ue) const
 bool ConditionalCompilationImpl::EvalRefExpr(const RefExpr& re) const
 {
     if (re.ref.identifier != DEBUG_STR && re.ref.identifier != TEST_STR) {
-        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, re.begin);
+        (void)ci->diag.DiagnoseRefactor("conditional_compilation_invalid_condition_expr", re.begin);
         return false;
     }
     auto relatedInfo = GetRelatedInfo(re.ref.identifier);
@@ -419,7 +419,7 @@ bool ConditionalCompilationImpl::EvalConditionExpr(const Expr& condition)
             return EvalParenExpr(static_cast<const ParenExpr&>(condition));
         default: {
             (void)ci->diag.DiagnoseRefactor(
-                DiagKindRefactor::conditional_compilation_invalid_condition_expr, condition.begin);
+                "conditional_compilation_invalid_condition_expr", condition.begin);
             return false;
         }
     }
@@ -456,7 +456,7 @@ template <typename T> bool ConditionalCompilationImpl::EvalNodeCondition(Ptr<T> 
         }
         if (anno->condExpr == nullptr) {
             (void)ci->diag.DiagnoseRefactor(
-                DiagKindRefactor::conditional_compilation_not_have_condition_expr, anno->begin);
+                "conditional_compilation_not_have_condition_expr", anno->begin);
             return true;
         }
         evalResult = EvalConditionExpr(anno->condExpr.operator*());
