@@ -13,73 +13,73 @@
 #include <string>
 #include <vector>
 #include "gtest/gtest.h"
-#include "cangjie/Basic/SemanticVersion.h"
+#include "cangjie/Basic/APILevelVersion.h"
 #include "../../src/Sema/Plugin/PluginCustomAnnoChecker.h"
 #include "cangjie/Basic/StringConvertor.h"
 
 using namespace Cangjie;
 using namespace Cangjie::PluginCheck;
 
-// Test SemanticVersion construction
-TEST(SemanticVersionTest, ConstructorTest)
+// Test APILevelVersion construction
+TEST(APILevelVersionTest, ConstructorTest)
 {
-    SemanticVersion v1;
+    APILevelVersion v1;
     EXPECT_EQ(v1.major, 0);
     EXPECT_EQ(v1.minor, 0);
     EXPECT_EQ(v1.patch, 0);
     EXPECT_TRUE(v1.IsZero());
 
-    SemanticVersion v2(20);
+    APILevelVersion v2(20);
     EXPECT_EQ(v2.major, 20);
     EXPECT_EQ(v2.minor, 0);
     EXPECT_EQ(v2.patch, 0);
     EXPECT_FALSE(v2.IsZero());
 
-    SemanticVersion v3(20, 1);
+    APILevelVersion v3(20, 1);
     EXPECT_EQ(v3.major, 20);
     EXPECT_EQ(v3.minor, 1);
     EXPECT_EQ(v3.patch, 0);
 
-    SemanticVersion v4(20, 1, 5);
+    APILevelVersion v4(20, 1, 5);
     EXPECT_EQ(v4.major, 20);
     EXPECT_EQ(v4.minor, 1);
     EXPECT_EQ(v4.patch, 5);
 }
 
 // Test parsing from string
-TEST(SemanticVersionTest, ParseSimpleVersion)
+TEST(APILevelVersionTest, ParseSimpleVersion)
 {
-    auto v = SemanticVersion::Parse("20");
+    auto v = APILevelVersion::Parse("20");
     EXPECT_EQ(v.major, 20);
     EXPECT_EQ(v.minor, 0);
     EXPECT_EQ(v.patch, 0);
     EXPECT_EQ(v.ToString(), "20.0.0");
 }
 
-TEST(SemanticVersionTest, ParseTwoPartVersion)
+TEST(APILevelVersionTest, ParseTwoPartVersion)
 {
-    auto v = SemanticVersion::Parse("20.1");
+    auto v = APILevelVersion::Parse("20.1");
     EXPECT_EQ(v.major, 20);
     EXPECT_EQ(v.minor, 1);
     EXPECT_EQ(v.patch, 0);
     EXPECT_EQ(v.ToString(), "20.1.0");
 }
 
-TEST(SemanticVersionTest, ParseFullVersion)
+TEST(APILevelVersionTest, ParseFullVersion)
 {
-    auto v1 = SemanticVersion::Parse("20.0.0");
+    auto v1 = APILevelVersion::Parse("20.0.0");
     EXPECT_EQ(v1.major, 20);
     EXPECT_EQ(v1.minor, 0);
     EXPECT_EQ(v1.patch, 0);
     EXPECT_EQ(v1.ToString(), "20.0.0");
 
-    auto v2 = SemanticVersion::Parse("20.1.5");
+    auto v2 = APILevelVersion::Parse("20.1.5");
     EXPECT_EQ(v2.major, 20);
     EXPECT_EQ(v2.minor, 1);
     EXPECT_EQ(v2.patch, 5);
     EXPECT_EQ(v2.ToString(), "20.1.5");
 
-    auto v3 = SemanticVersion::Parse("21.10.999");
+    auto v3 = APILevelVersion::Parse("21.10.999");
     EXPECT_EQ(v3.major, 21);
     EXPECT_EQ(v3.minor, 10);
     EXPECT_EQ(v3.patch, 999);
@@ -87,11 +87,11 @@ TEST(SemanticVersionTest, ParseFullVersion)
 }
 
 // Test equality comparison
-TEST(SemanticVersionTest, EqualityComparison)
+TEST(APILevelVersionTest, EqualityComparison)
 {
-    SemanticVersion v1(20, 0, 0);
-    SemanticVersion v2(20, 0, 0);
-    SemanticVersion v3(20, 1, 0);
+    APILevelVersion v1(20, 0, 0);
+    APILevelVersion v2(20, 0, 0);
+    APILevelVersion v3(20, 1, 0);
 
     EXPECT_TRUE(v1 == v2);
     EXPECT_FALSE(v1 == v3);
@@ -99,19 +99,19 @@ TEST(SemanticVersionTest, EqualityComparison)
     EXPECT_FALSE(v1 != v2);
 
     // Test that "20" parsed equals "20.0.0" parsed
-    auto vSimple = SemanticVersion::Parse("20");
-    auto vFull = SemanticVersion::Parse("20.0.0");
+    auto vSimple = APILevelVersion::Parse("20");
+    auto vFull = APILevelVersion::Parse("20.0.0");
     EXPECT_TRUE(vSimple == vFull);
 }
 
 // Test less than comparison
-TEST(SemanticVersionTest, LessThanComparison)
+TEST(APILevelVersionTest, LessThanComparison)
 {
-    SemanticVersion v1(19, 0, 0);
-    SemanticVersion v2(20, 0, 0);
-    SemanticVersion v3(20, 1, 0);
-    SemanticVersion v4(20, 1, 5);
-    SemanticVersion v5(21, 0, 0);
+    APILevelVersion v1(19, 0, 0);
+    APILevelVersion v2(20, 0, 0);
+    APILevelVersion v3(20, 1, 0);
+    APILevelVersion v4(20, 1, 5);
+    APILevelVersion v5(21, 0, 0);
 
     // Major version comparison
     EXPECT_TRUE(v1 < v2);
@@ -134,11 +134,11 @@ TEST(SemanticVersionTest, LessThanComparison)
 }
 
 // Test greater than comparison
-TEST(SemanticVersionTest, GreaterThanComparison)
+TEST(APILevelVersionTest, GreaterThanComparison)
 {
-    SemanticVersion v1(20, 0, 0);
-    SemanticVersion v2(20, 1, 0);
-    SemanticVersion v3(21, 0, 0);
+    APILevelVersion v1(20, 0, 0);
+    APILevelVersion v2(20, 1, 0);
+    APILevelVersion v3(21, 0, 0);
 
     EXPECT_TRUE(v2 > v1);
     EXPECT_TRUE(v3 > v2);
@@ -149,11 +149,11 @@ TEST(SemanticVersionTest, GreaterThanComparison)
 }
 
 // Test less than or equal comparison
-TEST(SemanticVersionTest, LessThanOrEqualComparison)
+TEST(APILevelVersionTest, LessThanOrEqualComparison)
 {
-    SemanticVersion v1(20, 0, 0);
-    SemanticVersion v2(20, 0, 0);
-    SemanticVersion v3(20, 1, 0);
+    APILevelVersion v1(20, 0, 0);
+    APILevelVersion v2(20, 0, 0);
+    APILevelVersion v3(20, 1, 0);
 
     EXPECT_TRUE(v1 <= v2);  // Equal
     EXPECT_TRUE(v1 <= v3);  // Less than
@@ -161,11 +161,11 @@ TEST(SemanticVersionTest, LessThanOrEqualComparison)
 }
 
 // Test greater than or equal comparison
-TEST(SemanticVersionTest, GreaterThanOrEqualComparison)
+TEST(APILevelVersionTest, GreaterThanOrEqualComparison)
 {
-    SemanticVersion v1(20, 0, 0);
-    SemanticVersion v2(20, 0, 0);
-    SemanticVersion v3(20, 1, 0);
+    APILevelVersion v1(20, 0, 0);
+    APILevelVersion v2(20, 0, 0);
+    APILevelVersion v3(20, 1, 0);
 
     EXPECT_TRUE(v1 >= v2);  // Equal
     EXPECT_TRUE(v3 >= v1);  // Greater than
@@ -173,14 +173,14 @@ TEST(SemanticVersionTest, GreaterThanOrEqualComparison)
 }
 
 // Test version ordering
-TEST(SemanticVersionTest, VersionOrdering)
+TEST(APILevelVersionTest, VersionOrdering)
 {
-    std::vector<SemanticVersion> versions = {
-        SemanticVersion::Parse("19.0.0"),
-        SemanticVersion::Parse("20.0.0"),
-        SemanticVersion::Parse("20.1.0"),
-        SemanticVersion::Parse("20.1.5"),
-        SemanticVersion::Parse("21.0.0"),
+    std::vector<APILevelVersion> versions = {
+        APILevelVersion::Parse("19.0.0"),
+        APILevelVersion::Parse("20.0.0"),
+        APILevelVersion::Parse("20.1.0"),
+        APILevelVersion::Parse("20.1.5"),
+        APILevelVersion::Parse("21.0.0"),
     };
 
     // Verify ordering
@@ -193,19 +193,19 @@ TEST(SemanticVersionTest, VersionOrdering)
 }
 
 // Test runtime encoding scheme
-TEST(SemanticVersionTest, RuntimeEncoding)
+TEST(APILevelVersionTest, RuntimeEncoding)
 {
-    EXPECT_EQ(SemanticVersion::Parse("19.0.0").ToEncoded(), 19000000ULL);
-    EXPECT_EQ(SemanticVersion::Parse("20.0.0").ToEncoded(), 20000000ULL);
-    EXPECT_EQ(SemanticVersion::Parse("20.1.0").ToEncoded(), 20001000ULL);
-    EXPECT_EQ(SemanticVersion::Parse("20.1.5").ToEncoded(), 20001005ULL);
-    EXPECT_EQ(SemanticVersion::Parse("21.0.0").ToEncoded(), 21000000ULL);
+    EXPECT_EQ(APILevelVersion::Parse("19.0.0").ToEncoded(), 19000000ULL);
+    EXPECT_EQ(APILevelVersion::Parse("20.0.0").ToEncoded(), 20000000ULL);
+    EXPECT_EQ(APILevelVersion::Parse("20.1.0").ToEncoded(), 20001000ULL);
+    EXPECT_EQ(APILevelVersion::Parse("20.1.5").ToEncoded(), 20001005ULL);
+    EXPECT_EQ(APILevelVersion::Parse("21.0.0").ToEncoded(), 21000000ULL);
 
     // Verify encoding maintains ordering
-    uint64_t e1 = SemanticVersion::Parse("20.0.0").ToEncoded();
-    uint64_t e2 = SemanticVersion::Parse("20.1.0").ToEncoded();
-    uint64_t e3 = SemanticVersion::Parse("20.1.5").ToEncoded();
-    uint64_t e4 = SemanticVersion::Parse("21.0.0").ToEncoded();
+    uint64_t e1 = APILevelVersion::Parse("20.0.0").ToEncoded();
+    uint64_t e2 = APILevelVersion::Parse("20.1.0").ToEncoded();
+    uint64_t e3 = APILevelVersion::Parse("20.1.5").ToEncoded();
+    uint64_t e4 = APILevelVersion::Parse("21.0.0").ToEncoded();
 
     EXPECT_LT(e1, e2);
     EXPECT_LT(e2, e3);
@@ -213,12 +213,12 @@ TEST(SemanticVersionTest, RuntimeEncoding)
 }
 
 // Test backward compatibility
-TEST(SemanticVersionTest, BackwardCompatibility)
+TEST(APILevelVersionTest, BackwardCompatibility)
 {
     // Integer literal treated as major version
-    SemanticVersion vInt(20);
-    auto vParsed = SemanticVersion::Parse("20");
-    auto vFull = SemanticVersion::Parse("20.0.0");
+    APILevelVersion vInt(20);
+    auto vParsed = APILevelVersion::Parse("20");
+    auto vFull = APILevelVersion::Parse("20.0.0");
 
     EXPECT_EQ(vInt, vParsed);
     EXPECT_EQ(vInt, vFull);
@@ -231,119 +231,119 @@ TEST(SemanticVersionTest, BackwardCompatibility)
 }
 
 // Test IsZero method
-TEST(SemanticVersionTest, IsZeroMethod)
+TEST(APILevelVersionTest, IsZeroMethod)
 {
-    SemanticVersion v1;
+    APILevelVersion v1;
     EXPECT_TRUE(v1.IsZero());
 
-    SemanticVersion v2(0, 0, 0);
+    APILevelVersion v2(0, 0, 0);
     EXPECT_TRUE(v2.IsZero());
 
-    SemanticVersion v3(1, 0, 0);
+    APILevelVersion v3(1, 0, 0);
     EXPECT_FALSE(v3.IsZero());
 
-    SemanticVersion v4(0, 1, 0);
+    APILevelVersion v4(0, 1, 0);
     EXPECT_FALSE(v4.IsZero());
 
-    SemanticVersion v5(0, 0, 1);
+    APILevelVersion v5(0, 0, 1);
     EXPECT_FALSE(v5.IsZero());
 }
 
 // Test ToString method
-TEST(SemanticVersionTest, ToStringMethod)
+TEST(APILevelVersionTest, ToStringMethod)
 {
-    EXPECT_EQ(SemanticVersion(20, 0, 0).ToString(), "20.0.0");
-    EXPECT_EQ(SemanticVersion(20, 1, 0).ToString(), "20.1.0");
-    EXPECT_EQ(SemanticVersion(20, 1, 5).ToString(), "20.1.5");
-    EXPECT_EQ(SemanticVersion(21, 10, 999).ToString(), "21.10.999");
+    EXPECT_EQ(APILevelVersion(20, 0, 0).ToString(), "20.0.0");
+    EXPECT_EQ(APILevelVersion(20, 1, 0).ToString(), "20.1.0");
+    EXPECT_EQ(APILevelVersion(20, 1, 5).ToString(), "20.1.5");
+    EXPECT_EQ(APILevelVersion(21, 10, 999).ToString(), "21.10.999");
 }
 
 // Test edge cases
-TEST(SemanticVersionTest, EdgeCases)
+TEST(APILevelVersionTest, EdgeCases)
 {
     // Empty string
-    auto v1 = SemanticVersion::Parse("");
+    auto v1 = APILevelVersion::Parse("");
     EXPECT_TRUE(v1.IsZero());
 
     // Single zero
-    auto v2 = SemanticVersion::Parse("0");
+    auto v2 = APILevelVersion::Parse("0");
     EXPECT_EQ(v2.major, 0);
     EXPECT_EQ(v2.minor, 0);
     EXPECT_EQ(v2.patch, 0);
 
     // Large numbers
-    auto v3 = SemanticVersion::Parse("999.999.999");
+    auto v3 = APILevelVersion::Parse("999.999.999");
     EXPECT_EQ(v3.major, 999);
     EXPECT_EQ(v3.minor, 999);
     EXPECT_EQ(v3.patch, 999);
 
     // Trailing dots (should be handled gracefully)
-    auto v4 = SemanticVersion::Parse("20.");
+    auto v4 = APILevelVersion::Parse("20.");
     EXPECT_EQ(v4.major, 20);
     EXPECT_EQ(v4.minor, 0);
     EXPECT_EQ(v4.patch, 0);
 }
 
 // Test IsValidFormat method
-TEST(SemanticVersionTest, IsValidFormat)
+TEST(APILevelVersionTest, IsValidFormat)
 {
     // Valid formats
-    EXPECT_TRUE(SemanticVersion::IsValidFormat("20"));
-    EXPECT_TRUE(SemanticVersion::IsValidFormat("20.1"));
-    EXPECT_TRUE(SemanticVersion::IsValidFormat("20.1.5"));
-    EXPECT_TRUE(SemanticVersion::IsValidFormat("0.0.0"));
-    EXPECT_TRUE(SemanticVersion::IsValidFormat("999.999.999"));
+    EXPECT_TRUE(APILevelVersion::IsValidFormat("20"));
+    EXPECT_TRUE(APILevelVersion::IsValidFormat("20.1"));
+    EXPECT_TRUE(APILevelVersion::IsValidFormat("20.1.5"));
+    EXPECT_TRUE(APILevelVersion::IsValidFormat("0.0.0"));
+    EXPECT_TRUE(APILevelVersion::IsValidFormat("999.999.999"));
 
     // Invalid formats
-    EXPECT_FALSE(SemanticVersion::IsValidFormat(""));           // empty
-    EXPECT_FALSE(SemanticVersion::IsValidFormat("20."));        // trailing dot
-    EXPECT_FALSE(SemanticVersion::IsValidFormat(".20"));        // leading dot
-    EXPECT_FALSE(SemanticVersion::IsValidFormat("20..1"));      // consecutive dots
-    EXPECT_FALSE(SemanticVersion::IsValidFormat("20.abc.1"));   // non-numeric component
-    EXPECT_FALSE(SemanticVersion::IsValidFormat("20.1.2.3"));   // too many components
-    EXPECT_FALSE(SemanticVersion::IsValidFormat("20.1.2a"));    // alphanumeric
+    EXPECT_FALSE(APILevelVersion::IsValidFormat(""));           // empty
+    EXPECT_FALSE(APILevelVersion::IsValidFormat("20."));        // trailing dot
+    EXPECT_FALSE(APILevelVersion::IsValidFormat(".20"));        // leading dot
+    EXPECT_FALSE(APILevelVersion::IsValidFormat("20..1"));      // consecutive dots
+    EXPECT_FALSE(APILevelVersion::IsValidFormat("20.abc.1"));   // non-numeric component
+    EXPECT_FALSE(APILevelVersion::IsValidFormat("20.1.2.3"));   // too many components
+    EXPECT_FALSE(APILevelVersion::IsValidFormat("20.1.2a"));    // alphanumeric
 }
 
 // Test PluginCustomAnnoInfo structure
-TEST(SemanticVersionTest, PluginCustomAnnoInfoIntegration)
+TEST(APILevelVersionTest, PluginCustomAnnoInfoIntegration)
 {
     PluginCustomAnnoInfo info1;
     EXPECT_TRUE(info1.since.IsZero());
 
     PluginCustomAnnoInfo info2;
-    info2.since = SemanticVersion(20, 1, 5);
+    info2.since = APILevelVersion(20, 1, 5);
     EXPECT_FALSE(info2.since.IsZero());
     EXPECT_EQ(info2.since.ToString(), "20.1.5");
 
     // Test comparison
     PluginCustomAnnoInfo info3;
-    info3.since = SemanticVersion(21, 0, 0);
+    info3.since = APILevelVersion(21, 0, 0);
     EXPECT_TRUE(info2.since < info3.since);
 }
 
 // Test real-world version scenarios
-TEST(SemanticVersionTest, RealWorldScenarios)
+TEST(APILevelVersionTest, RealWorldScenarios)
 {
     // Integer API level style (major version only)
-    auto api19 = SemanticVersion::Parse("19");
-    auto api20 = SemanticVersion::Parse("20");
-    auto api21 = SemanticVersion::Parse("21");
+    auto api19 = APILevelVersion::Parse("19");
+    auto api20 = APILevelVersion::Parse("20");
+    auto api21 = APILevelVersion::Parse("21");
 
     EXPECT_TRUE(api19 < api20);
     EXPECT_TRUE(api20 < api21);
 
     // x.y.z style versioning
-    auto harmony4_0_0 = SemanticVersion::Parse("4.0.0");
-    auto harmony4_1_0 = SemanticVersion::Parse("4.1.0");
-    auto harmony5_0_0 = SemanticVersion::Parse("5.0.0");
+    auto harmony4_0_0 = APILevelVersion::Parse("4.0.0");
+    auto harmony4_1_0 = APILevelVersion::Parse("4.1.0");
+    auto harmony5_0_0 = APILevelVersion::Parse("5.0.0");
 
     EXPECT_TRUE(harmony4_0_0 < harmony4_1_0);
     EXPECT_TRUE(harmony4_1_0 < harmony5_0_0);
 
     // Patch version updates
-    auto v1_0_0 = SemanticVersion::Parse("1.0.0");
-    auto v1_0_1 = SemanticVersion::Parse("1.0.1");
-    auto v1_0_10 = SemanticVersion::Parse("1.0.10");
+    auto v1_0_0 = APILevelVersion::Parse("1.0.0");
+    auto v1_0_1 = APILevelVersion::Parse("1.0.1");
+    auto v1_0_10 = APILevelVersion::Parse("1.0.10");
 
     EXPECT_TRUE(v1_0_0 < v1_0_1);
     EXPECT_TRUE(v1_0_1 < v1_0_10);
@@ -363,7 +363,7 @@ namespace {
 // Helper: simulate CheckLevel return value.
 // Returns true when the API is accessible (no error should be reported),
 // false when the API level is too high (error should be reported).
-bool IsAccessible(const SemanticVersion& targetSince, const SemanticVersion& scopeLevel)
+bool IsAccessible(const APILevelVersion& targetSince, const APILevelVersion& scopeLevel)
 {
     // Mirrors PluginCustomAnnoChecker::CheckLevel: error when targetSince > scopeLevel
     return !(targetSince > scopeLevel);
@@ -373,72 +373,72 @@ bool IsAccessible(const SemanticVersion& targetSince, const SemanticVersion& sco
 // --cfg APILevel_level=20 (integer style)
 TEST(CfgAPILevelTest, IntegerStyleCfg_Accessible)
 {
-    auto globalLevel = SemanticVersion::Parse("20");   // --cfg APILevel_level=20
-    auto targetSince = SemanticVersion::Parse("20");   // @APILevel(since: "20")
+    auto globalLevel = APILevelVersion::Parse("20");   // --cfg APILevel_level=20
+    auto targetSince = APILevelVersion::Parse("20");   // @APILevel(since: "20")
     EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
 }
 
 TEST(CfgAPILevelTest, IntegerStyleCfg_Inaccessible)
 {
-    auto globalLevel = SemanticVersion::Parse("19");   // --cfg APILevel_level=19
-    auto targetSince = SemanticVersion::Parse("20");   // @APILevel(since: "20")
+    auto globalLevel = APILevelVersion::Parse("19");   // --cfg APILevel_level=19
+    auto targetSince = APILevelVersion::Parse("20");   // @APILevel(since: "20")
     EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
 }
 
 // --cfg APILevel_level=20.0.0 (full x.y.z style)
 TEST(CfgAPILevelTest, FullVersionCfg_ExactMatch_Accessible)
 {
-    auto globalLevel = SemanticVersion::Parse("20.0.0");
-    auto targetSince = SemanticVersion::Parse("20.0.0");
+    auto globalLevel = APILevelVersion::Parse("20.0.0");
+    auto targetSince = APILevelVersion::Parse("20.0.0");
     EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
 }
 
 TEST(CfgAPILevelTest, FullVersionCfg_HigherTarget_Inaccessible)
 {
-    auto globalLevel = SemanticVersion::Parse("20.0.0");  // --cfg APILevel_level=20.0.0
-    auto targetSince = SemanticVersion::Parse("20.1.0");  // @APILevel(since: "20.1.0")
+    auto globalLevel = APILevelVersion::Parse("20.0.0");  // --cfg APILevel_level=20.0.0
+    auto targetSince = APILevelVersion::Parse("20.1.0");  // @APILevel(since: "20.1.0")
     EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
 }
 
 TEST(CfgAPILevelTest, FullVersionCfg_LowerTarget_Accessible)
 {
-    auto globalLevel = SemanticVersion::Parse("20.1.0");  // --cfg APILevel_level=20.1.0
-    auto targetSince = SemanticVersion::Parse("20.0.0");  // @APILevel(since: "20.0.0")
+    auto globalLevel = APILevelVersion::Parse("20.1.0");  // --cfg APILevel_level=20.1.0
+    auto targetSince = APILevelVersion::Parse("20.0.0");  // @APILevel(since: "20.0.0")
     EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
 }
 
 // Patch-level boundary
 TEST(CfgAPILevelTest, PatchBoundary_ExactMatch_Accessible)
 {
-    auto globalLevel = SemanticVersion::Parse("20.1.5");
-    auto targetSince = SemanticVersion::Parse("20.1.5");
+    auto globalLevel = APILevelVersion::Parse("20.1.5");
+    auto targetSince = APILevelVersion::Parse("20.1.5");
     EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
 }
 
 TEST(CfgAPILevelTest, PatchBoundary_OneHigher_Inaccessible)
 {
-    auto globalLevel = SemanticVersion::Parse("20.1.5");  // --cfg APILevel_level=20.1.5
-    auto targetSince = SemanticVersion::Parse("20.1.6");  // @APILevel(since: "20.1.6")
+    auto globalLevel = APILevelVersion::Parse("20.1.5");  // --cfg APILevel_level=20.1.5
+    auto targetSince = APILevelVersion::Parse("20.1.6");  // @APILevel(since: "20.1.6")
     EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
 }
 
 TEST(CfgAPILevelTest, PatchBoundary_OneLower_Accessible)
 {
-    auto globalLevel = SemanticVersion::Parse("20.1.5");  // --cfg APILevel_level=20.1.5
-    auto targetSince = SemanticVersion::Parse("20.1.4");  // @APILevel(since: "20.1.4")
+    auto globalLevel = APILevelVersion::Parse("20.1.5");  // --cfg APILevel_level=20.1.5
+    auto targetSince = APILevelVersion::Parse("20.1.4");  // @APILevel(since: "20.1.4")
     EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
 }
 
 // Integer --cfg is equivalent to x.0.0
 TEST(CfgAPILevelTest, IntegerEquivalentToMajorZeroZero)
 {
-    auto cfgInt = SemanticVersion::Parse("20");      // --cfg APILevel_level=20
-    auto cfgFull = SemanticVersion::Parse("20.0.0"); // --cfg APILevel_level=20.0.0
+    auto cfgInt = APILevelVersion::Parse("20");      // --cfg APILevel_level=20
+    auto cfgFull = APILevelVersion::Parse("20.0.0"); // --cfg APILevel_level=20.0.0
 
     // Both forms must yield the same API availability decisions
-    auto targetBelow = SemanticVersion::Parse("19.9.9");
-    auto targetEqual = SemanticVersion::Parse("20.0.0");
-    auto targetAbove = SemanticVersion::Parse("20.0.1");
+    auto targetBelow = APILevelVersion::Parse("19.9.9");
+    auto targetEqual = APILevelVersion::Parse("20.0.0");
+    auto targetAbove = APILevelVersion::Parse("20.0.1");
 
     EXPECT_EQ(IsAccessible(targetBelow, cfgInt), IsAccessible(targetBelow, cfgFull));
     EXPECT_EQ(IsAccessible(targetEqual, cfgInt), IsAccessible(targetEqual, cfgFull));
@@ -448,30 +448,30 @@ TEST(CfgAPILevelTest, IntegerEquivalentToMajorZeroZero)
 // Two-part --cfg (e.g., --cfg APILevel_level=20.1)
 TEST(CfgAPILevelTest, TwoPartCfg_Accessible)
 {
-    auto globalLevel = SemanticVersion::Parse("20.1");    // --cfg APILevel_level=20.1
-    auto targetSince = SemanticVersion::Parse("20.1.0");  // @APILevel(since: "20.1.0")
+    auto globalLevel = APILevelVersion::Parse("20.1");    // --cfg APILevel_level=20.1
+    auto targetSince = APILevelVersion::Parse("20.1.0");  // @APILevel(since: "20.1.0")
     EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
 }
 
 TEST(CfgAPILevelTest, TwoPartCfg_Inaccessible)
 {
-    auto globalLevel = SemanticVersion::Parse("20.1");    // --cfg APILevel_level=20.1
-    auto targetSince = SemanticVersion::Parse("20.2.0");  // @APILevel(since: "20.2.0")
+    auto globalLevel = APILevelVersion::Parse("20.1");    // --cfg APILevel_level=20.1
+    auto targetSince = APILevelVersion::Parse("20.2.0");  // @APILevel(since: "20.2.0")
     EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
 }
 
 // Cross-major boundary
 TEST(CfgAPILevelTest, CrossMajor_OlderCfg_Inaccessible)
 {
-    auto globalLevel = SemanticVersion::Parse("20.9.9");  // --cfg APILevel_level=20.9.9
-    auto targetSince = SemanticVersion::Parse("21.0.0");  // @APILevel(since: "21.0.0")
+    auto globalLevel = APILevelVersion::Parse("20.9.9");  // --cfg APILevel_level=20.9.9
+    auto targetSince = APILevelVersion::Parse("21.0.0");  // @APILevel(since: "21.0.0")
     EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
 }
 
 TEST(CfgAPILevelTest, CrossMajor_NewerCfg_Accessible)
 {
-    auto globalLevel = SemanticVersion::Parse("21.0.0");  // --cfg APILevel_level=21.0.0
-    auto targetSince = SemanticVersion::Parse("20.9.9");  // @APILevel(since: "20.9.9")
+    auto globalLevel = APILevelVersion::Parse("21.0.0");  // --cfg APILevel_level=21.0.0
+    auto targetSince = APILevelVersion::Parse("20.9.9");  // @APILevel(since: "20.9.9")
     EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
 }
 
@@ -479,10 +479,10 @@ TEST(CfgAPILevelTest, CrossMajor_NewerCfg_Accessible)
 // Modeled here as: zero globalLevel should never block access via the IsZero guard.
 TEST(CfgAPILevelTest, NoCfgProvided_GlobalLevelIsZero)
 {
-    SemanticVersion globalLevel;  // default-constructed = 0.0.0 (IsZero)
+    APILevelVersion globalLevel;  // default-constructed = 0.0.0 (IsZero)
     EXPECT_TRUE(globalLevel.IsZero());
     // When optionWithLevel is false, CheckLevel returns true regardless; ensure zero is detectable.
-    auto targetSince = SemanticVersion::Parse("21.0.0");
+    auto targetSince = APILevelVersion::Parse("21.0.0");
     // The real CheckLevel would skip the check; here we verify the zero sentinel.
     EXPECT_FALSE(targetSince.IsZero());
 }
@@ -490,16 +490,16 @@ TEST(CfgAPILevelTest, NoCfgProvided_GlobalLevelIsZero)
 // Batch API availability: multiple APIs at different levels with a fixed --cfg
 TEST(CfgAPILevelTest, BatchAccessibility_FixedCfg)
 {
-    auto globalLevel = SemanticVersion::Parse("20.1.5");  // --cfg APILevel_level=20.1.5
+    auto globalLevel = APILevelVersion::Parse("20.1.5");  // --cfg APILevel_level=20.1.5
 
     // accessible APIs (since <= 20.1.5)
-    EXPECT_TRUE(IsAccessible(SemanticVersion::Parse("19.0.0"), globalLevel));
-    EXPECT_TRUE(IsAccessible(SemanticVersion::Parse("20.0.0"), globalLevel));
-    EXPECT_TRUE(IsAccessible(SemanticVersion::Parse("20.1.0"), globalLevel));
-    EXPECT_TRUE(IsAccessible(SemanticVersion::Parse("20.1.5"), globalLevel));
+    EXPECT_TRUE(IsAccessible(APILevelVersion::Parse("19.0.0"), globalLevel));
+    EXPECT_TRUE(IsAccessible(APILevelVersion::Parse("20.0.0"), globalLevel));
+    EXPECT_TRUE(IsAccessible(APILevelVersion::Parse("20.1.0"), globalLevel));
+    EXPECT_TRUE(IsAccessible(APILevelVersion::Parse("20.1.5"), globalLevel));
 
     // inaccessible APIs (since > 20.1.5)
-    EXPECT_FALSE(IsAccessible(SemanticVersion::Parse("20.1.6"), globalLevel));
-    EXPECT_FALSE(IsAccessible(SemanticVersion::Parse("20.2.0"), globalLevel));
-    EXPECT_FALSE(IsAccessible(SemanticVersion::Parse("21.0.0"), globalLevel));
+    EXPECT_FALSE(IsAccessible(APILevelVersion::Parse("20.1.6"), globalLevel));
+    EXPECT_FALSE(IsAccessible(APILevelVersion::Parse("20.2.0"), globalLevel));
+    EXPECT_FALSE(IsAccessible(APILevelVersion::Parse("21.0.0"), globalLevel));
 }

@@ -23,7 +23,7 @@
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
-#include "cangjie/Basic/SemanticVersion.h"
+#include "cangjie/Basic/APILevelVersion.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/Utils.h"
 
@@ -484,10 +484,10 @@ OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae)
         auto lce = StaticCast<LitConstExpr>(iae.GetArg()->expr.get());
         uint64_t encodedVersion;
         if (lce->kind == LitConstKind::STRING) {
-            encodedVersion = Cangjie::SemanticVersion::Parse(lce->stringValue).ToEncoded();
+            encodedVersion = Cangjie::APILevelVersion::Parse(lce->stringValue).ToEncoded();
         } else {
             // Integer literal: treat as major version only (20 -> 20000000)
-            encodedVersion = Cangjie::SemanticVersion(
+            encodedVersion = Cangjie::APILevelVersion(
                 static_cast<uint32_t>(std::stoull(lce->stringValue))).ToEncoded();
         }
         levelExpr = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(encodedVersion), lce->ty);

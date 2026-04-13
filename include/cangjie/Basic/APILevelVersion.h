@@ -7,9 +7,9 @@
 /**
  * @file
  *
- * This file declares the SemanticVersion type used for APILevel and @IfAvailable checks.
+ * This file declares the APILevelVersion type used for @!APILevel and @IfAvailable checks.
  *
- * Semantic version encoding for runtime comparison:
+ * API level version encoding for runtime comparison:
  *   encoded = major * 1_000_000 + minor * 1_000 + patch
  *
  * Range constraints (matching the encoding scheme):
@@ -19,8 +19,8 @@
  * Values outside these ranges produce incorrect encoded comparisons.
  */
 
-#ifndef CANGJIE_BASIC_SEMANTICVERSION_H
-#define CANGJIE_BASIC_SEMANTICVERSION_H
+#ifndef CANGJIE_BASIC_APILEVELVERSION_H
+#define CANGJIE_BASIC_APILEVELVERSION_H
 
 #include <cstdint>
 #include <optional>
@@ -32,18 +32,18 @@
 namespace Cangjie {
 
 /**
- * @brief Semantic version triple (major.minor.patch).
+ * @brief API level version triple (major.minor.patch).
  *
  * Used for @!APILevel since values and --cfg APILevel_level option.
  * The sentinel value 0.0.0 means "not set" (check IsZero()).
  */
-struct SemanticVersion {
+struct APILevelVersion {
     uint32_t major{0};
     uint32_t minor{0};
     uint32_t patch{0};
 
-    SemanticVersion() = default;
-    explicit SemanticVersion(uint32_t maj, uint32_t min = 0, uint32_t pat = 0)
+    APILevelVersion() = default;
+    explicit APILevelVersion(uint32_t maj, uint32_t min = 0, uint32_t pat = 0)
         : major(maj), minor(min), patch(pat)
     {}
 
@@ -74,17 +74,17 @@ struct SemanticVersion {
      * @brief Parses a version string of the form "major[.minor[.patch]]".
      *
      * Accepts "20", "20.1", "20.1.5". Non-numeric components default to 0.
-     * Returns the zero version SemanticVersion{0,0,0} for empty or entirely
+     * Returns the zero version APILevelVersion{0,0,0} for empty or entirely
      * invalid input.
      */
-    static SemanticVersion Parse(const std::string& s)
+    static APILevelVersion Parse(const std::string& s)
     {
         constexpr size_t versionIdxMinor = 1;
         constexpr size_t versionIdxPatch = 2;
         constexpr size_t versionMinPartsMinor = 2;
         constexpr size_t versionMinPartsPatch = 3;
 
-        SemanticVersion version;
+        APILevelVersion version;
         if (s.empty()) {
             return version;
         }
@@ -120,36 +120,41 @@ struct SemanticVersion {
      */
     static bool IsValidFormat(const std::string& s)
     {
+        constexpr size_t MAX_VERSION_PARTS = 3;
         if (s.empty()) {
             return false;
         }
         size_t partCount = 0;
-        size_t start = 0;
-        while (true) {
-            size_t end = s.find('.', start);
-            bool lastPart = (end == std::string::npos);
-            std::string part = s.substr(start, lastPart ? std::string::npos : end - start);
-            if (part.empty()) {
-                return false; // consecutive dots or trailing dot
+        size_t pos = 0;
+        const size_t len = s.size();
+        while (pos < len) {
+            size_t dotPos = s.find('.', pos);
+            size_t partEnd = (dotPos == std::string::npos) ? len : dotPos;
+            if (partEnd == pos) {
+                return false; // empty component (leading or consecutive dot)
             }
-            for (char c : part) {
-                if (c < '0' || c > '9') {
+            for (size_t i = pos; i < partEnd; ++i) {
+                if (s[i] < '0' || s[i] > '9') {
                     return false;
                 }
             }
             ++partCount;
-            if (partCount > 3) {
+            if (partCount > MAX_VERSION_PARTS) {
                 return false;
             }
-            if (lastPart) {
-                break;
+            if (dotPos == std::string::npos) {
+                pos = len; // last part processed, exit loop
+            } else {
+                pos = dotPos + 1;
+                if (pos == len) {
+                    return false; // trailing dot (e.g., "1.2.")
+                }
             }
-            start = end + 1;
         }
-        return true;
+        return partCount > 0;
     }
 
-    bool operator<(const SemanticVersion& other) const
+    bool operator<(const APILevelVersion& other) const
     {
         if (major != other.major) {
             return major < other.major;
@@ -160,20 +165,20 @@ struct SemanticVersion {
         return patch < other.patch;
     }
 
-    bool operator<=(const SemanticVersion& other) const { return *this < other || *this == other; }
+    bool operator<=(const APILevelVersion& other) const { return *this < other || *this == other; }
 
-    bool operator>(const SemanticVersion& other) const { return other < *this; }
+    bool operator>(const APILevelVersion& other) const { return other < *this; }
 
-    bool operator>=(const SemanticVersion& other) const { return !(*this < other); }
+    bool operator>=(const APILevelVersion& other) const { return !(*this < other); }
 
-    bool operator==(const SemanticVersion& other) const
+    bool operator==(const APILevelVersion& other) const
     {
         return major == other.major && minor == other.minor && patch == other.patch;
     }
 
-    bool operator!=(const SemanticVersion& other) const { return !(*this == other); }
+    bool operator!=(const APILevelVersion& other) const { return !(*this == other); }
 };
 
 } // namespace Cangjie
 
-#endif // CANGJIE_BASIC_SEMANTICVERSION_H
+#endif // CANGJIE_BASIC_APILEVELVERSION_H
