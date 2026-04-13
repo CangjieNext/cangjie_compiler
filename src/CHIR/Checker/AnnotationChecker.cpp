@@ -525,7 +525,7 @@ private:
                 targets = checkMap.at(annotation.def);
             }
             if (!targets.Matches(target)) {
-                (void)diag.diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_not_applicable, *annotation.src,
+                (void)diag.diag.DiagnoseRefactor("chir_annotation_not_applicable", *annotation.src,
                     annotation.src->identifier, std::string{ANNOTATION_TARGET_2_STRING[targetid]});
                 res = false;
             }
@@ -554,7 +554,7 @@ private:
                 targets = checkMap.at(annotation.def);
             }
             if (!targets.Matches(target)) {
-                (void)diag.diag.DiagnoseRefactor(DiagKindRefactor::chir_annotation_not_applicable, *annotation.src,
+                (void)diag.diag.DiagnoseRefactor("chir_annotation_not_applicable", *annotation.src,
                     annotation.src->identifier, std::string{ANNOTATION_TARGET_2_STRING[targetid]});
                 res = false;
             }

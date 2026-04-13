@@ -16,6 +16,7 @@
 #include <iterator>
 #include <iostream>
 #include <stack>
+#include <string_view>
 #include <unordered_map>
 
 #include "ParseJson.h"
@@ -62,7 +63,7 @@ void ParseLevel(const Expr& e, PluginCustomAnnoInfo& apilevel, DiagnosticEngine&
         lce = StaticCast<LitConstExpr>(&e);
     }
     if (!lce || lce->kind != LitConstKind::INTEGER) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_only_literal_support, e, "integer");
+        diag.DiagnoseRefactor("sema_only_literal_support", e, "integer");
         return;
     }
     auto newLevel = Str2LevelType(lce->stringValue);
@@ -80,7 +81,7 @@ void ParseSince(const Expr& e, PluginCustomAnnoInfo& apilevel, DiagnosticEngine&
         lce = StaticCast<LitConstExpr>(&e);
     }
     if (!lce || lce->kind != LitConstKind::STRING) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_only_literal_support, e, "string");
+        diag.DiagnoseRefactor("sema_only_literal_support", e, "string");
         return;
     }
     auto newLevel = Str2LevelType(lce->stringValue);
@@ -98,7 +99,7 @@ void ParseSysCap(const Expr& e, PluginCustomAnnoInfo& apilevel, DiagnosticEngine
         lce = StaticCast<LitConstExpr>(&e);
     }
     if (!lce || lce->kind != LitConstKind::STRING) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_only_literal_support, e, "string");
+        diag.DiagnoseRefactor("sema_only_literal_support", e, "string");
         return;
     }
     apilevel.syscap = lce->stringValue;
@@ -111,7 +112,7 @@ void ParseCheckingHide(const Expr& e, PluginCustomAnnoInfo& apilevel, Diagnostic
         lce = StaticCast<LitConstExpr>(&e);
     }
     if (!lce || lce->kind != LitConstKind::BOOL) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_only_literal_support, e, "Bool");
+        diag.DiagnoseRefactor("sema_only_literal_support", e, "Bool");
         return;
     }
     apilevel.hasHideAnno =
@@ -242,7 +243,7 @@ bool PluginCustomAnnoChecker::ParseJsonFile(const std::vector<uint8_t>& in) noex
             FileUtil::ReadBinaryFileToBuffer(path, buffer, failedReason);
             if (!failedReason.empty()) {
                 diag.DiagnoseRefactor(
-                    DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, path, failedReason);
+                    "module_read_file_to_buffer_failed", DEFAULT_POSITION, path, failedReason);
                 return false;
             }
             startPos = static_cast<size_t>(std::find(buffer.begin(), buffer.end(), '{') - buffer.begin());
@@ -291,7 +292,7 @@ void PluginCustomAnnoChecker::ParseOption() noexcept
         FileUtil::ReadBinaryFileToBuffer(syscapsCfgPath, jsonContent, failedReason);
         if (!failedReason.empty()) {
             diag.DiagnoseRefactor(
-                DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, syscapsCfgPath, failedReason);
+                "module_read_file_to_buffer_failed", DEFAULT_POSITION, syscapsCfgPath, failedReason);
             return;
         }
         optionWithSyscap = ParseJsonFile(jsonContent);
@@ -363,13 +364,13 @@ void PluginCustomAnnoChecker::ParseAPILevelArgs(
         std::string preSyscap = annoInfo.syscap;
         parseNameParam[argName](*anno.args[i]->expr.get(), annoInfo, diag);
         if (!preSyscap.empty() && preSyscap != annoInfo.syscap) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_apilevel_multi_diff_syscap, decl);
+            diag.DiagnoseRefactor("sema_apilevel_multi_diff_syscap", decl);
         }
     }
     // In the APILevel definition, only "since" does not provide a default value. Here, the warning that
     // there is an issue with the APILevel annotation, which may originnate from the cj.d file.
     if (annoInfo.since == 0) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_apilevel_missing_arg, anno.begin, "since!: String");
+        diag.DiagnoseRefactor("sema_apilevel_missing_arg", anno.begin, "since!: String");
     }
 }
 
@@ -388,7 +389,7 @@ void PluginCustomAnnoChecker::CheckHideOfExtendDecl(const Decl& decl, const Plug
     if (extendedAnnoInfo.hasHideAnno.has_value() && !annoInfo.hasHideAnno.has_value()) {
         // @!Hide class A{}; extend A {} -> error
         // class A{}; @!Hide extend A {} -> ok
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_hide_missing_hide, decl);
+        auto builder = diag.DiagnoseRefactor("sema_hide_missing_hide", decl);
         builder.AddNote(*extendedDecl, "the extended declaration is marked with '@!Hide'");
     } else if (extendedAnnoInfo.hasHideAnno.has_value() && annoInfo.hasHideAnno.has_value() &&
         extendedAnnoInfo.hasHideAnno.value() && !annoInfo.hasHideAnno.value()) {
@@ -397,7 +398,7 @@ void PluginCustomAnnoChecker::CheckHideOfExtendDecl(const Decl& decl, const Plug
         // @!Hide[isChecked: false] class A {}; @!Hide[isChecked: false] extend A {} -> ok
         // @!Hide[isChecked: true] class A {}; @!Hide[isChecked: true] extend A {} -> ok
         auto builder = diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_hide_diff_param, decl, annoInfo.hasHideAnno.value() ? "true" : "false");
+            "sema_hide_diff_param", decl, annoInfo.hasHideAnno.value() ? "true" : "false");
         builder.AddNote(*extendedDecl, "should be same with");
     }
 
@@ -410,7 +411,7 @@ void PluginCustomAnnoChecker::CheckHideOfExtendDecl(const Decl& decl, const Plug
         if (memberAnnoInfo.hasHideAnno.has_value() &&
             memberAnnoInfo.hasHideAnno.value() != annoInfo.hasHideAnno.value()) {
             auto builder = diag.DiagnoseRefactor(
-                DiagKindRefactor::sema_hide_diff_param, *member, memberAnnoInfo.hasHideAnno.value() ? "true" : "false");
+                "sema_hide_diff_param", *member, memberAnnoInfo.hasHideAnno.value() ? "true" : "false");
             builder.AddNote(decl, "should be same with");
         }
     }
@@ -450,7 +451,7 @@ void PluginCustomAnnoChecker::CheckHideOfOverrideFunction(const Decl& decl, cons
 
     if (functionWithHide.has_value() && !overriddenFdWithHide.has_value()) {
         // func f(): Unit {}; @!Hide override func f(): Unit {} -> error
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_hide_missing_hide, *overriddenFd);
+        auto builder = diag.DiagnoseRefactor("sema_hide_missing_hide", *overriddenFd);
         builder.AddNote(*fd, "the override function is marked with '@!Hide'");
     } else if (!functionWithHide.has_value() && overriddenFdWithHide.has_value()) {
         // @!Hide func f(): Unit {}; override func f(): Unit {} -> ok for now
@@ -460,7 +461,7 @@ void PluginCustomAnnoChecker::CheckHideOfOverrideFunction(const Decl& decl, cons
         // @!Hide[isChecked: true] func f(): Unit {}; @!Hide[isChecked: true] override func f(): Unit {} -> ok
         // @!Hide[isChecked: false] func f(): Unit {}; @!Hide[isChecked: false] override func f(): Unit {} -> ok
         auto builder = diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_hide_diff_param, decl, functionWithHide.value() ? "true" : "false");
+            "sema_hide_diff_param", decl, functionWithHide.value() ? "true" : "false");
         builder.AddNote(*overriddenFd, "should be same with");
     }
 }
@@ -486,16 +487,16 @@ void PluginCustomAnnoChecker::Parse(const Decl& decl, PluginCustomAnnoInfo& anno
         }
         if (IsAnnoHide(anno)) {
             if (hideExist) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_hide_multi_annotation, decl);
+                diag.DiagnoseRefactor("sema_hide_multi_annotation", decl);
                 continue;
             }
             hideExist = true;
             if (auto param = DynamicCast<FuncParam>(&decl); param && !param->isMemberParam) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_hide_at_func_param, decl);
+                diag.DiagnoseRefactor("sema_hide_at_func_param", decl);
                 continue;
             }
             if (!anno->isCompileTimeVisible) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_hide_compile_time_invisible, *anno);
+                diag.DiagnoseRefactor("sema_hide_compile_time_invisible", *anno);
             }
             ParseHideArg(*anno, annoInfo);
         } else if (IsAnnoAPILevel(anno.get(), decl)) {
@@ -518,7 +519,7 @@ bool PluginCustomAnnoChecker::CheckLevel(
     Parse(target, targetAPILevel);
     if (targetAPILevel.since > scopeLevel && !diagCfg.node->begin.IsZero()) {
         if (diagCfg.reportDiag && !diagCfg.message.empty()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_apilevel_ref_higher, *diagCfg.node, diagCfg.message[0],
+            diag.DiagnoseRefactor("sema_apilevel_ref_higher", *diagCfg.node, diagCfg.message[0],
                 std::to_string(targetAPILevel.since), std::to_string(scopeLevel));
         }
         return false;
@@ -540,7 +541,7 @@ bool PluginCustomAnnoChecker::CheckSyscap(
     }
     // Create a lambda for diagnostic purposes that only creates a temporary collection when needed.
     auto diagForSyscap = [this, &diagCfg, &targetLevel](
-                             const std::string& scopeSyscap, const SysCapSet& syscapSet, DiagKindRefactor kind) {
+                             const std::string& scopeSyscap, const SysCapSet& syscapSet, std::string_view kind) {
         auto builder = diag.DiagnoseRefactor(kind, *diagCfg.node, targetLevel);
         std::string formattedSyscaps = FormatSyscapsString(scopeSyscap, syscapSet);
         builder.AddNote("the following syscaps are supported: " + formattedSyscaps);
@@ -552,7 +553,7 @@ bool PluginCustomAnnoChecker::CheckSyscap(
         (!scopeAnnoInfo.syscap.empty() && scopeAnnoInfo.syscap == targetLevel);
     if (!inUnionSet && !diagCfg.node->begin.IsZero()) {
         if (diagCfg.reportDiag) {
-            diagForSyscap(scopeAnnoInfo.syscap, unionSet, DiagKindRefactor::sema_apilevel_syscap_error);
+            diagForSyscap(scopeAnnoInfo.syscap, unionSet, "sema_apilevel_syscap_error");
         }
         return false;
     }
@@ -563,7 +564,7 @@ bool PluginCustomAnnoChecker::CheckSyscap(
         (!scopeAnnoInfo.syscap.empty() && scopeAnnoInfo.syscap == targetLevel);
     if (!inIntersectionSet && !diagCfg.node->begin.IsZero()) {
         if (diagCfg.reportDiag) {
-            diagForSyscap(scopeAnnoInfo.syscap, intersectionSet, DiagKindRefactor::sema_apilevel_syscap_warning);
+            diagForSyscap(scopeAnnoInfo.syscap, intersectionSet, "sema_apilevel_syscap_warning");
         }
         return false;
     }
@@ -577,7 +578,7 @@ bool PluginCustomAnnoChecker::CheckCheckingHide(const Decl& target, DiagConfig d
     if (targetPluginAnnoInfo.hasHideAnno.has_value() && targetPluginAnnoInfo.hasHideAnno.value() &&
         curModuleName != GetModuleName(target.GetFullPackageName())) {
         if (diagCfg.reportDiag && !diagCfg.message.empty()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_undeclared_identifier, *diagCfg.node, diagCfg.message[0]);
+            diag.DiagnoseRefactor("sema_undeclared_identifier", *diagCfg.node, diagCfg.message[0]);
         }
         return false;
     }
@@ -633,7 +634,7 @@ void PluginCustomAnnoChecker::CheckIfAvailableExpr(IfAvailableExpr& iae, PluginC
     auto ifscopeAnnoInfo = PluginCustomAnnoInfo();
     parseNameParam[arg->name.Val()](*ifExpr->condExpr, ifscopeAnnoInfo, diag);
     if (ifscopeAnnoInfo.since != 0 && ifscopeAnnoInfo.since < IFAVAILABLE_LOWER_LIMITLEVEL) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_level_limit, *arg);
+        diag.DiagnoseRefactor("sema_ifavailable_level_limit", *arg);
         return;
     }
     // if branch.
@@ -685,7 +686,7 @@ void PluginCustomAnnoChecker::CheckAnnoBeforeMacro(Package& pkg)
         }
         auto subMed = StaticCast<MacroExpandDecl>(subDecl);
         if (!Utils::In(subMed->identifier.Val(), annoName)) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_hide_must_at_end, med->begin, med->identifier);
+            diag.DiagnoseRefactor("sema_hide_must_at_end", med->begin, med->identifier);
             return VisitAction::SKIP_CHILDREN;
         }
         return VisitAction::WALK_CHILDREN;

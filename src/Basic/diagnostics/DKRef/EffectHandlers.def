@@ -1,0 +1,19 @@
+// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// This source file is part of the Cangjie project, licensed under Apache-2.0
+// with Runtime Library Exception.
+//
+// See https://cangjie-lang.cn/pages/LICENSE for license information.
+
+// effects
+ERROR(sema_command_handle_type_error, "the command handle type must implement 'effect.Command<T>'")
+ERROR(sema_resumption_handle_type_error, "the type of the resumption must extend 'effect.Resumption'")
+ERROR(sema_resumption_incorrect_return_type, "the return type of the resumption ('%s') does not match the type of the try block ('%s')")
+ERROR(sema_command_resumption_mismatch, "the parameter type of the resumption ('%s') does not match the result type of the command ('%s')")
+ERROR(sema_implicit_resume_outside_handler, "'resume' outside of an immediate handler must have a resumption argument")
+ERROR(sema_resume_no_with, "a resumption of non-Unit type '%s' must have a 'with' or 'throwing' clause")
+ERROR(sema_resume_wrong_resumption_type, "resumptions must be of type 'core.Resumption<T>', but actual type is '%s'")
+ERROR(sema_mismatching_handle_block, "The type of this handle block is '%s', which mismatches the smallest common supertype '%s' of previous branches.")
+ERROR(sema_return_in_try_handle_block, "Return statements are not allowed within try/handle blocks")
+ERROR(sema_command_incompatible_type, "type '%s' does not implement compatible instantiations of 'Command<T>'")
+ERROR(sema_resume_throwing_mismatch_type, "the type of the `resume throwing` must be a subtype of core.Exception or core.Error")
+WARNING(sema_useless_command_type, UNUSED, "useless command type")

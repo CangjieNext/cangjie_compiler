@@ -10,10 +10,10 @@
 #include <cmath>
 
 #include "cangjie/CHIR/Analysis/ValueAnalysis.h"
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
 #include "cangjie/CHIR/Checker/OverflowChecking.h"
-#include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/CHIR/Utils/Utils.h"
 
 namespace Cangjie::CHIR {
 
@@ -519,7 +519,7 @@ private:
         if (isOverflow && os == OverflowStrategy::THROWING) {
             if (this->isStable) {
                 auto builder = diag->DiagnoseRefactor(
-                    DiagKindRefactor::chir_arithmetic_operator_overflow, ToRange(expr->GetDebugLocation()), "-");
+                    "chir_arithmetic_operator_overflow", ToRange(expr->GetDebugLocation()), "-");
                 std::string hint = "-" + dest->GetType()->ToString() + "(" + absVal->ToString() + ")";
                 builder.AddMainHintArguments(hint);
                 builder.AddNote(GenerateTypeRangePrompt(expr->GetResult()->GetType()));
@@ -966,7 +966,7 @@ private:
         if (this->isStable) {
             auto& loc = binary->GetDebugLocation();
             auto prompt = kind == ExprKind::DIV ? "divide" : "modulo";
-            auto builder = diag->DiagnoseRefactor(DiagKindRefactor::chir_divisor_is_zero, ToRange(loc), prompt);
+            auto builder = diag->DiagnoseRefactor("chir_divisor_is_zero", ToRange(loc), prompt);
             builder.AddMainHintArguments(prompt);
         }
     }
@@ -988,7 +988,7 @@ private:
             auto token = ops.find(kind);
             CJC_ASSERT(token != ops.end());
             auto builder = diag->DiagnoseRefactor(
-                DiagKindRefactor::chir_arithmetic_operator_overflow, ToRange(loc), token->second);
+                "chir_arithmetic_operator_overflow", ToRange(loc), token->second);
             std::string hint = ty->ToString() + "(" + leftVal->ToString() + ") " + token->second + " " +
                 expr->GetRHSOperand()->GetType()->ToString() + "(" + rightVal->ToString() + ")";
             builder.AddMainHintArguments(hint);
@@ -1000,7 +1000,7 @@ private:
     {
         if (this->isStable) {
             auto& loc = expr->GetDebugLocation();
-            auto builder = diag->DiagnoseRefactor(DiagKindRefactor::chir_shift_length_overflow, ToRange(loc));
+            auto builder = diag->DiagnoseRefactor("chir_shift_length_overflow", ToRange(loc));
             builder.AddMainHintArguments(std::to_string(rightVal), expr->GetLHSOperand()->GetType()->ToString());
             builder.AddNote("right operand can not be negative");
         }
@@ -1012,7 +1012,7 @@ private:
         if (this->isStable) {
             auto& loc = expr->GetDebugLocation();
             auto lhsTyString = expr->GetLHSOperand()->GetType()->ToString();
-            auto builder = diag->DiagnoseRefactor(DiagKindRefactor::chir_shift_length_overflow, ToRange(loc));
+            auto builder = diag->DiagnoseRefactor("chir_shift_length_overflow", ToRange(loc));
             builder.AddMainHintArguments(std::to_string(rightVal), lhsTyString);
             builder.AddNote("the type of left operand is " + lhsTyString +
                 ", the most bits that expected to shift are " + std::to_string(leftValBit - 1));
@@ -1163,7 +1163,7 @@ private:
     {
         if (this->isStable) {
             auto& loc = cast->GetDebugLocation();
-            auto builder = diag->DiagnoseRefactor(DiagKindRefactor::chir_typecast_overflow, ToRange(loc));
+            auto builder = diag->DiagnoseRefactor("chir_typecast_overflow", ToRange(loc));
             std::string srcValStr = cast->GetSourceTy()->ToString() + "(" + std::to_string(srcVal) + ")";
             builder.AddMainHintArguments(srcValStr, cast->GetTargetTy()->ToString());
             builder.AddNote(GenerateTypeRangePrompt(cast->GetTargetTy()));
@@ -1366,7 +1366,7 @@ private:
         }
         if (this->isStable) {
             auto builder =
-                diag->DiagnoseRefactor(DiagKindRefactor::chir_step_non_zero_range, ToRange(apply->GetDebugLocation()));
+                diag->DiagnoseRefactor("chir_step_non_zero_range", ToRange(apply->GetDebugLocation()));
             return ExceptionKind::FAIL;
         }
         return ExceptionKind::NA;
@@ -1440,14 +1440,14 @@ private:
         if (index < 0) {
             if (this->isStable) {
                 auto builder =
-                    diag->DiagnoseRefactor(DiagKindRefactor::chir_idx_out_of_bounds, ToRange(expr->GetDebugLocation()));
+                    diag->DiagnoseRefactor("chir_idx_out_of_bounds", ToRange(expr->GetDebugLocation()));
                 builder.AddMainHintArguments("array index can not be negative");
             }
             return ExceptionKind::FAIL;
         } else if (static_cast<size_t>(index) >= len) {
             if (this->isStable) {
                 auto builder =
-                    diag->DiagnoseRefactor(DiagKindRefactor::chir_idx_out_of_bounds, ToRange(expr->GetDebugLocation()));
+                    diag->DiagnoseRefactor("chir_idx_out_of_bounds", ToRange(expr->GetDebugLocation()));
                 auto hint = "array index " + std::to_string(index) + " is past the end of array (which contains " +
                     std::to_string(len) + " elements)";
                 builder.AddMainHintArguments(hint);

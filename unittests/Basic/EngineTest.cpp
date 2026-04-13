@@ -102,9 +102,9 @@ TEST(EngineTest, HandlerFilter)
     DiagnosticEngine diag;
     auto handler = std::make_unique<LSPDiagnosticHandlerTest>(diag);
     diag.RegisterHandler(std::move(handler));
-    diag.DiagnoseRefactor(DiagKindRefactor::parse_expected_name, Position{0, 1, 1}, std::string{"test name"},
+    diag.DiagnoseRefactor("parse_expected_name", Position{0, 1, 1}, std::string{"test name"},
         std::string{"test02"}, std::string{"test03"});
-    diag.DiagnoseRefactor(DiagKindRefactor::parse_expected_name, Position{0, 1, 1}, std::string{"test name"},
+    diag.DiagnoseRefactor("parse_expected_name", Position{0, 1, 1}, std::string{"test name"},
         std::string{"test02"}, std::string{"test03"});
     EXPECT_EQ(2, diag.GetErrorCount());
 }
@@ -161,7 +161,7 @@ note: this is a note test
     SourceManager sm;
     sm.AddSource(file | FileUtil::IdenticalFunc, code);
 
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::parse_expected_name, Position{1, 7, 13},
+    auto builder = diag.DiagnoseRefactor("parse_expected_name", Position{1, 7, 13},
         std::string{"test name"}, std::string{"test1"}, std::string{"test2"});
 
     builder.AddMainHintArguments(std::string{"test3 name"});
@@ -214,7 +214,7 @@ note: this is a note test
     SourceManager sm;
     sm.AddSource(file | FileUtil::IdenticalFunc, code);
 
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::parse_expected_name, Position{1, 2, 10},
+    auto builder = diag.DiagnoseRefactor("parse_expected_name", Position{1, 2, 10},
         std::string{"test name"}, std::string{"test1"}, std::string{"test2"});
 
     builder.AddMainHintArguments(std::string{"test3 name"});
@@ -246,23 +246,23 @@ main(){
     node.begin = Position{1, 1, 1};
     node.end = Position{1, 1, 5};
 
-    diag.Diagnose(node, DiagKind::sema_ambiguous_arg_type, Position{1, 1, 1});
+    diag.Diagnose(node, "sema_ambiguous_arg_type", Position{1, 1, 1});
     EXPECT_EQ(diag.GetErrorCount(), 0);
 
-    diag.Diagnose(node, DiagKind::sema_mismatched_type_for_pattern_in_vardecl);
+    diag.Diagnose(node, "sema_mismatched_type_for_pattern_in_vardecl");
     EXPECT_EQ(diag.GetErrorCount(), 0);
 
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_node_after_check, node);
+    diag.DiagnoseRefactor("sema_invalid_node_after_check", node);
     EXPECT_EQ(diag.GetErrorCount(), 0);
 
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_core_object_not_found_when_no_prelude, node, Position{1, 1, 1});
+    diag.DiagnoseRefactor("sema_core_object_not_found_when_no_prelude", node, Position{1, 1, 1});
     EXPECT_EQ(diag.GetErrorCount(), 0);
 
     diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_unable_to_infer_return_type, node, MakeRange(Position{1, 1, 1}, Position{1, 1, 2}));
+        "sema_unable_to_infer_return_type", node, MakeRange(Position{1, 1, 1}, Position{1, 1, 2}));
     EXPECT_EQ(diag.GetErrorCount(), 0);
 
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_called_object, node,
+    diag.DiagnoseRefactor("sema_invalid_called_object", node,
         Token(TokenKind::STATIC, "static", Position{1, 1, 6}, {1, 1, 12}));
     EXPECT_EQ(diag.GetErrorCount(), 0);
 }
@@ -277,7 +277,7 @@ TEST(EngineTest, ShowColorTest)
     sm.AddSource(file | FileUtil::IdenticalFunc, code);
     diag.SetSourceManager(&sm);
 
-    auto builder2 = diag.DiagnoseRefactor(DiagKindRefactor::parse_unmatched_right_delimiter, Position{1, 1, 1}, "");
+    auto builder2 = diag.DiagnoseRefactor("parse_unmatched_right_delimiter", Position{1, 1, 1}, "");
     std::ostringstream enableColorOut2;
     DiagnosticEmitter(builder2.diagnostic, false, true, enableColorOut2, sm).Emit();
     // red
@@ -300,7 +300,7 @@ TEST(EngineTest, ShowColorTest)
 
     auto osVersion = Utils::GetOSVersion();
     if (osVersion.dwMajorVersion >= 10 && osVersion.dwBuildNumber >= 10586) {
-        auto builder2 = diag.DiagnoseRefactor(DiagKindRefactor::parse_unmatched_right_delimiter, Position{1, 1, 1}, "");
+        auto builder2 = diag.DiagnoseRefactor("parse_unmatched_right_delimiter", Position{1, 1, 1}, "");
         std::ostringstream enableColorOut2;
         DiagnosticEmitter(builder2.diagnostic, false, true, enableColorOut2, sm).Emit();
         // red
@@ -316,24 +316,28 @@ TEST(EngineTest, ShowColorTest)
 TEST(EngineTest, OldDiagKindDefGuard)
 {
     // Note: The diagnostic engine has been refactored. This case is mainly used to ensure that no new
-    // kind is added to the old diagnostic engine def file (cangjie/Basic/DiagnosticsAll.def). If you need to
+    // kind is added to any legacy DK/*.def fragment (CHIR / interp / macro / sema). If you need to
     // modify, ensure that you only delete existing kinds, and do not add new ones.
 
     constexpr const char* const diagKindStr[]{
 #define ERROR(Kind, ...) #Kind,
 #define WARNING(Kind, ...) #Kind,
 #define NOTE(Kind, Info) Info,
-#include "cangjie/Basic/DiagnosticsAll.def"
+#include "diagnostics/DK/Chir.def"
+#include "diagnostics/DK/InterpConstEval.def"
+#include "diagnostics/DK/Macro.def"
+#include "diagnostics/DK/Sema.def"
 #undef WARNING
 #undef ERROR
 #undef NOTE
     };
-    constexpr const size_t diagEnds[]{
-        static_cast<size_t>(DiagKind::chir_diag_end),
-        static_cast<size_t>(DiagKind::macro_expand_diag_end),
-        static_cast<size_t>(DiagKind::sema_diag_end),
+    const size_t diagEnds[]{
+        static_cast<size_t>(LookupDiagKind("chir_diag_end").Val()),
+        static_cast<size_t>(LookupDiagKind("macro_expand_diag_end").Val()),
+        static_cast<size_t>(LookupDiagKind("sema_diag_end").Val()),
     };
-    // current number of each ending kind, need be modified when modify the def in cangjie/Basic/DiagnosticsAll.def
+    // current number of each ending kind, need be modified when modify the def in
+    // legacy DK fragment list (same order as DiagnosticOrdinalDefinitions.cpp)
     const std::vector<size_t> endNumber = {
         15,  // 0
         57,  // 1
@@ -349,7 +353,7 @@ TEST(EngineTest, OldDiagKindDefGuard)
             std::cerr << "The number of diagnostic kind: " + std::string(diagKindStr[diagEnds[i]]) + "(" +
                     std::to_string(diagEnds[i]) +
                     ") must not increase! Please add new diagnostic kind in .def files under the "
-                    "include/cangjie/Basic/DiagRefactor."
+                    "src/Basic/diagnostics/DKRef/."
                       << std::endl;
             break;
         } else {

@@ -15,6 +15,7 @@
 #include "TypeCheckUtil.h"
 #include "TypeCheckerImpl.h"
 
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -320,7 +321,7 @@ void TypeChecker::TypeCheckerImpl::CheckConflictDeclWithSubPackage(const Package
     for (auto decl : toplevelDecls) {
         if (subPkgNames.count(decl->identifier) != 0) {
             auto fullSubName = pkg.fullPackageName + "." + decl->identifier;
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_conflict_with_sub_package, *decl,
+            diag.DiagnoseRefactor("sema_conflict_with_sub_package", *decl,
                 MakeRange(decl->identifier), decl->identifier.Val(), fullSubName);
         }
     }
@@ -427,9 +428,9 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, RefType&
             return TypeManager::GetInvalidTy();
         }
         if (allTargets.empty()) {
-            diag.Diagnose(rt, DiagKind::sema_undeclared_type_name, rt.ref.identifier.Val());
+            diag.Diagnose(rt, "sema_undeclared_type_name", rt.ref.identifier.Val());
         } else {
-            diag.Diagnose(rt, DiagKind::sema_not_a_type, rt.ref.identifier.Val());
+            diag.Diagnose(rt, "sema_not_a_type", rt.ref.identifier.Val());
         }
         return TypeManager::GetInvalidTy();
     }
@@ -462,12 +463,12 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTCFuncType(ASTContext& ctx, Ref
 {
     if (rt.typeArguments.size() != 1) {
         diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_generic_argument_no_match, rt, MakeRange(rt.GetBegin(), rt.GetEnd()));
+            "sema_generic_argument_no_match", rt, MakeRange(rt.GetBegin(), rt.GetEnd()));
         return TypeManager::GetInvalidTy();
     }
     auto funcType = DynamicCast<FuncType>(&*rt.typeArguments[0]);
     if (!funcType) {
-        diag.Diagnose(rt.typeArguments[0]->GetBegin(), rt.typeArguments[0]->GetEnd(), DiagKind::sema_cfunc_type);
+        diag.Diagnose(rt.typeArguments[0]->GetBegin(), rt.typeArguments[0]->GetEnd(), "sema_cfunc_type");
         return TypeManager::GetInvalidTy();
     }
     std::vector<Ptr<Ty>> paramTys;
@@ -497,7 +498,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, Qualifie
     std::string packageName = ASTContext::GetPackageName(baseType);
     auto [packageDecl, isConflicted] = importManager.GetImportedPackageDecl(&qt, packageName);
     if (isConflicted) {
-        diag.Diagnose(qt, DiagKind::sema_package_name_conflict, packageName);
+        diag.Diagnose(qt, "sema_package_name_conflict", packageName);
         return TypeManager::GetInvalidTy();
     } else if (packageDecl) {
         ReplaceTarget(baseType, packageDecl);
@@ -519,13 +520,13 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, Qualifie
         targetsOfField = FieldLookup(ctx, targetOfBaseType, qt.field, {.lookupInherit = false, .lookupExtend = false});
     }
     if (targetsOfField.empty()) {
-        diag.Diagnose(qt, qt.field.Begin(), DiagKind::sema_undeclared_type_name, qt.field.Val());
+        diag.Diagnose(qt, qt.field.Begin(), "sema_undeclared_type_name", qt.field.Val());
         return TypeManager::GetInvalidTy();
     }
     auto target = targetsOfField.front();
     CJC_NULLPTR_CHECK(target);
     if (!target->IsTypeDecl()) {
-        diag.Diagnose(qt, qt.field.Begin(), DiagKind::sema_not_a_type, qt.field.Val());
+        diag.Diagnose(qt, qt.field.Begin(), "sema_not_a_type", qt.field.Val());
         return TypeManager::GetInvalidTy();
     }
     // Bind target-user relationship.
@@ -548,7 +549,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, VArrayTy
     le->constNumValue.asInt.InitIntLiteral(le->stringValue, lengthLimitKind);
     le->constNumValue.asInt.SetOutOfRange(Cangjie::TypeManager::GetPrimitiveTy(lengthLimitKind));
     if (le->constNumValue.asInt.IsOutOfRange()) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_exceed_num_value_range, *le, le->stringValue,
+        (void)diag.DiagnoseRefactor("sema_exceed_num_value_range", *le, le->stringValue,
 #if CANGJIE_CODEGEN_CJNATIVE_BACKEND
             "Int64");
 #endif
@@ -759,7 +760,7 @@ void TypeChecker::TypeCheckerImpl::SetTypeAliasDeclTy(ASTContext& ctx, TypeAlias
         } else {
             name = "Unknown type";
         }
-        diag.Diagnose(*tad.type, DiagKind::sema_not_a_type, name);
+        diag.Diagnose(*tad.type, "sema_not_a_type", name);
     }
 }
 
@@ -777,7 +778,7 @@ void TypeChecker::TypeCheckerImpl::ResolveOneDecl(ASTContext& ctx, Decl& decl)
             auto id = RawStaticCast<InheritableDecl*>(&decl);
             SetDeclTy(*id);
             if (decl.TestAttr(Attribute::C) && !id->inheritedTypes.empty()) {
-                diag.Diagnose(decl, DiagKind::sema_c_type_cannot_implement_interface, decl.identifier.Val());
+                diag.Diagnose(decl, "sema_c_type_cannot_implement_interface", decl.identifier.Val());
             }
             for (auto& superType : id->inheritedTypes) {
                 superType->ty = GetTyFromASTType(ctx, superType.get());
@@ -974,7 +975,7 @@ bool TypeChecker::TypeCheckerImpl::ValidRecursiveConstraintCheck(const Generic& 
                 CJC_NULLPTR_CHECK(upperGenericTy);
                 upperGenericTy->isUpperBoundLegal = false;
                 CJC_NULLPTR_CHECK(genericTy->decl);
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_param_directly_recursive, *genericTy->decl,
+                diag.DiagnoseRefactor("sema_generic_param_directly_recursive", *genericTy->decl,
                     genericTy->decl->identifier, upperGenericTy->String());
                 return false;
             }
@@ -982,7 +983,7 @@ bool TypeChecker::TypeCheckerImpl::ValidRecursiveConstraintCheck(const Generic& 
                 genericTy->isUpperBoundLegal = false;
                 CJC_NULLPTR_CHECK(genericTy->decl);
                 diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_generic_param_exist_in_class_irrelevant_upperbound_recursively,
+                    "sema_generic_param_exist_in_class_irrelevant_upperbound_recursively",
                     *genericTy->decl, genericTy->decl->identifier, upper->String());
                 return false;
             }
@@ -1034,7 +1035,7 @@ void TypeChecker::TypeCheckerImpl::SanityCheckForClassUpperBounds(
         auto diagInfo = Ty::GetTypesToStableStr(classUpperBounds, ", ");
         CJC_NULLPTR_CHECK(genericTy.decl);
         diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_multiple_class_upperbounds, *genericTy.decl, genericTy.decl->identifier, diagInfo);
+            "sema_multiple_class_upperbounds", *genericTy.decl, genericTy.decl->identifier, diagInfo);
         // NOTE: Use 'IN_REFERENCE_CYCLE' attribute to mark invalid upperbounds for genericParamDecl.
         genericTy.decl->EnableAttr(Attribute::IN_REFERENCE_CYCLE);
     }
@@ -1055,7 +1056,7 @@ void TypeChecker::TypeCheckerImpl::SanityCheckForOneGenericTy(GenericsTy& generi
             classUpperBounds.emplace(upper);
         } else if (upper->kind != TypeKind::TYPE_INTERFACE) {
             // Rule 1: There can only be interface or class bounds.
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_upper_bound_must_be_class_or_interface, *genericTy.decl,
+            diag.DiagnoseRefactor("sema_upper_bound_must_be_class_or_interface", *genericTy.decl,
                 upper->String(), genericTy.String());
             invalidUpperbound = true;
             continue;
@@ -1154,7 +1155,7 @@ void TypeChecker::TypeCheckerImpl::CheckAssumption(ASTContext& ctx, const Decl& 
     }
     CheckGenericConstraints(ctx, *generic);
     if (!CheckUpperBoundsLegality(*generic)) {
-        diag.Diagnose(decl, DiagKind::sema_generic_type_argument_not_match_constraint, decl.ty->String());
+        diag.Diagnose(decl, "sema_generic_type_argument_not_match_constraint", decl.ty->String());
     }
     ExposeGenericUpperBounds(ctx, *generic);
     AssumptionSanityCheck(*generic);
@@ -1265,7 +1266,7 @@ void TypeChecker::TypeCheckerImpl::CheckTypeAliasCycleForOneDecl(TypeAliasDecl& 
     if (tad.checkFlag == InheritanceVisitStatus::VISITING) {
         // Found a cycle; mark every decl in this cycle.
         auto diagInfo = ConstructDiagInfoForCycle(tad, path);
-        diag.Diagnose(tad, DiagKind::sema_typealias_cycle, diagInfo.c_str());
+        diag.Diagnose(tad, "sema_typealias_cycle", diagInfo.c_str());
         return;
     }
     tad.checkFlag = InheritanceVisitStatus::VISITING;
@@ -1341,7 +1342,7 @@ void TypeChecker::TypeCheckerImpl::CheckInheritanceCycleHelper(
             CheckInheritanceCycleDFS(ctx, *target, path, extendDecl);
         }
     } else {
-        diag.Diagnose(decl, DiagKind::sema_inheritance_non_ref_type, decl.identifier.Val());
+        diag.Diagnose(decl, "sema_inheritance_non_ref_type", decl.identifier.Val());
     }
 }
 
@@ -1394,7 +1395,7 @@ void TypeChecker::TypeCheckerImpl::CheckInheritanceCycleDFSHandleVisiting(
 {
     // Found a cycle; mark every decl in this cycle.
     auto str = ConstructDiagInfoForCycle(decl, path);
-    diag.Diagnose((extendDecl == nullptr) ? decl : *extendDecl, DiagKind::sema_inheritance_cycle, str);
+    diag.Diagnose((extendDecl == nullptr) ? decl : *extendDecl, "sema_inheritance_cycle", str);
 }
 
 void TypeChecker::TypeCheckerImpl::IgnoreAssumptionForTypeAliasDecls(const ASTContext& ctx) const
@@ -1504,7 +1505,7 @@ void TypeChecker::TypeCheckerImpl::PreCheckMacroRedefinition(const std::vector<P
     // 2 means a threshold
     if ((macroVec.size() == 2 && cnt0 == cnt1) || macroVec.size() > 2) {
         for (auto md : macroVec) {
-            (void)ci->diag.Diagnose(*md, DiagKind::sema_expand_macro_redefinition, md->identifier.Val().c_str());
+            (void)ci->diag.Diagnose(*md, "sema_expand_macro_redefinition", md->identifier.Val().c_str());
         }
     }
 }
@@ -1534,7 +1535,7 @@ void TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionForEnum(const std::ve
         auto funcTy = DynamicCast<FuncTy*>(func->ty);
         auto paramTys = funcTy ? funcTy->paramTys : GetParamTys(*func);
         if (paramNum.find(paramTys.size()) != paramNum.end()) {
-            diag.Diagnose(*func, DiagKind::sema_duplicated_item_in_enum,
+            diag.Diagnose(*func, "sema_duplicated_item_in_enum",
                 func->identifier.Val().c_str(), ed->identifier.Val().c_str());
         } else {
             paramNum.insert(paramTys.size());
@@ -1716,13 +1717,13 @@ void TypeChecker::TypeCheckerImpl::CheckReturnAndJump(const ASTContext& ctx)
         if (refFuncBody) {
             if (refFuncBody->funcDecl && IsStaticInitializer(*refFuncBody->funcDecl)) {
                 re->ty = TypeManager::GetInvalidTy();
-                (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_return_in_static_init, *sym->node);
+                (void)diag.DiagnoseRefactor("sema_invalid_return_in_static_init", *sym->node);
             } else {
                 re->refFuncBody = refFuncBody;
             }
         } else {
             re->ty = TypeManager::GetInvalidTy();
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_return, *sym->node);
+            diag.DiagnoseRefactor("sema_invalid_return", *sym->node);
         }
     }
     auto paramSyms = GetSymsByASTKind(ctx, ASTKind::FUNC_PARAM);
@@ -1733,7 +1734,7 @@ void TypeChecker::TypeCheckerImpl::CheckReturnAndJump(const ASTContext& ctx)
         if (re != nullptr) {
             re->refFuncBody = nullptr;
             re->ty = TypeManager::GetInvalidTy();
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_return, *re);
+            diag.DiagnoseRefactor("sema_invalid_return", *re);
         }
     }
 
@@ -1741,7 +1742,7 @@ void TypeChecker::TypeCheckerImpl::CheckReturnAndJump(const ASTContext& ctx)
     for (auto sym : syms) {
         CJC_ASSERT(sym && sym->node);
         if (!ScopeManager::GetRefLoopSymbol(ctx, *sym->node)) {
-            diag.Diagnose(*sym->node, DiagKind::sema_invalid_loop_control);
+            diag.Diagnose(*sym->node, "sema_invalid_loop_control");
             sym->node->ty = TypeManager::GetInvalidTy();
         }
     }
@@ -1881,8 +1882,8 @@ void TypeChecker::TypeCheckerImpl::PreCheckInvalidInherit(const ASTContext& ctx,
         if (id->astKind == ASTKind::EXTEND_DECL) {
             continue;
         }
-        DiagKind kind = id->astKind == ASTKind::INTERFACE_DECL ? DiagKind::sema_interface_is_not_inheritable
-                                                               : DiagKind::sema_interface_is_not_implementable;
+        std::string_view kind = id->astKind == ASTKind::INTERFACE_DECL ? "sema_interface_is_not_inheritable"
+                                                                       : "sema_interface_is_not_implementable";
         for (auto& it : id->inheritedTypes) {
             if (it->ty->IsCType()) {
                 diag.Diagnose(*it, kind, CTYPE_NAME);

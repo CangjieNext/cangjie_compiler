@@ -47,7 +47,7 @@ bool HasDefAndCallInSamePkg(const MacroCollector& macroCollector, DiagnosticEngi
     for (auto call : macroCollector.macCalls) {
         if (s1.find(call.GetFullName()) != s1.end()) {
             ret = true;
-            (void)diag.Diagnose(call.GetBeginPos(), DiagKind::macro_unexpect_def_and_call_in_same_pkg);
+            (void)diag.Diagnose(call.GetBeginPos(), "macro_unexpect_def_and_call_in_same_pkg");
         }
     }
     return ret;
@@ -60,7 +60,7 @@ bool HasMacroCallInNode(const OwnedPtr<Node>& node, DiagnosticEngine& diag)
         if (curNode->IsMacroCallNode()) {
             hasMacroCall = true;
             (void)diag.Diagnose(*node, curNode->GetConstInvocation()->identifierPos,
-                DiagKind::macro_undeclared_identifier, curNode->GetConstInvocation()->identifier);
+                "macro_undeclared_identifier", curNode->GetConstInvocation()->identifier);
             return VisitAction::SKIP_CHILDREN;
         }
         return VisitAction::WALK_CHILDREN;
@@ -105,7 +105,7 @@ void CheckUnhandledMacroCall(Package& package, DiagnosticEngine& diag)
             }
             if (curNode->IsMacroCallNode()) {
                 (void)diag.Diagnose(*curNode, curNode->GetConstInvocation()->identifierPos,
-                    DiagKind::macro_undeclared_identifier, curNode->GetConstInvocation()->identifier);
+                    "macro_undeclared_identifier", curNode->GetConstInvocation()->identifier);
                 return VisitAction::SKIP_CHILDREN;
             }
             return VisitAction::WALK_CHILDREN;
@@ -123,7 +123,7 @@ void CheckWhenAfterMacroExpand(Ptr<const Node> curNode, DiagnosticEngine& diag)
             auto annotation = std::find_if(decl->annotations.begin(), decl->annotations.end(),
                 [](auto& anno) { return anno->kind == AST::AnnotationKind::WHEN; });
             if (annotation != decl->annotations.end()) {
-                diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_unexpected_after_macro, **annotation);
+                diag.DiagnoseRefactor("conditional_compilation_unexpected_after_macro", **annotation);
             }
         }
         return VisitAction::WALK_CHILDREN;
@@ -195,10 +195,10 @@ void MacroExpansion::CheckReplacedEnumCaseMember(MacroCall& macroNode, PtrVector
     auto ed = StaticAs<ASTKind::ENUM_DECL>(invocation->parent);
     if (macroNode.GetNode()->TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
         if (!newNodes[0].get()->TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
-            (void)ci->diag.Diagnose(*newNodes[0].get(), DiagKind::macro_expect_enum_constructor);
+            (void)ci->diag.Diagnose(*newNodes[0].get(), "macro_expect_enum_constructor");
         }
         if (newNodes.size() > 1) {
-            (void)ci->diag.Diagnose(*newNodes[1].get(), DiagKind::macro_expect_one_enum_constructor);
+            (void)ci->diag.Diagnose(*newNodes[1].get(), "macro_expect_one_enum_constructor");
         }
         if (newNodes[0]->astKind == ASTKind::FUNC_DECL) {
             ed->hasArguments = true;
@@ -207,7 +207,7 @@ void MacroExpansion::CheckReplacedEnumCaseMember(MacroCall& macroNode, PtrVector
         (void)std::for_each(newNodes.begin(), newNodes.end(), [&, this](auto& decl) {
             if (decl.get()->TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
                 (void)ci->diag.Diagnose(
-                    *decl, DiagKind::macro_expect_decl_not_enum_constructor, decl->identifier.Val());
+                    *decl, "macro_expect_decl_not_enum_constructor", decl->identifier.Val());
             }
         });
     }
@@ -220,7 +220,7 @@ void MacroExpansion::CheckNodesConsistency(
     (void)std::for_each(newNodes.begin(), newNodes.end(), [&, this](auto& node) {
         auto targetNode = dynamic_cast<T*>(node.get().get());
         if (!targetNode) {
-            (void)ci->diag.Diagnose(*node, DiagKind::macro_expect_declaration);
+            (void)ci->diag.Diagnose(*node, "macro_expect_declaration");
             return;
         }
         // Assign the outer decl.
@@ -267,7 +267,7 @@ void MacroExpansion::CheckReplacedFuncParamList(
         if (!meetNamedParameter && (*it)->isNamedParam) {
             meetNamedParameter = true;
         } else if (meetNamedParameter && !(*it)->isNamedParam) {
-            (void)ci->diag.Diagnose(**it, DiagKind::macro_named_parameter_after_unnamed);
+            (void)ci->diag.Diagnose(**it, "macro_named_parameter_after_unnamed");
         }
     }
 }
@@ -276,7 +276,7 @@ void MacroExpansion::ReplaceParams(
     MacroCall& macroNode, PtrVector<Node>& newNodes, VectorTarget<OwnedPtr<FuncParam>>& target) const
 {
     if (newNodes.empty()) {
-        (void)ci->diag.Diagnose(macroNode.GetBeginPos(), DiagKind::macro_unexpected_empty_parameter);
+        (void)ci->diag.Diagnose(macroNode.GetBeginPos(), "macro_unexpected_empty_parameter");
         return;
     }
     PtrVector<FuncParam> decls;
@@ -299,7 +299,7 @@ void MacroExpansion::ReplaceEachMacroHelper(MacroCall& macroNode, PtrVector<Node
     }
     if (auto expr = std::get_if<OwnedPtr<Expr>*>(&macroNode.replaceLoc); expr) { // For all expr.
         if (newNodes.empty()) {
-            (void)ci->diag.Diagnose(macroNode.GetBeginPos(), DiagKind::macro_unexpect_no_expr);
+            (void)ci->diag.Diagnose(macroNode.GetBeginPos(), "macro_unexpect_no_expr");
             return;
         }
         if (newNodes.size() == 1 && DynamicCast<Expr*>(newNodes[0].get())) {
@@ -307,7 +307,7 @@ void MacroExpansion::ReplaceEachMacroHelper(MacroCall& macroNode, PtrVector<Node
             (*expr)->reset(RawStaticCast<Expr*>(newNodes[0].release()));
             return;
         }
-        (void)ci->diag.Diagnose(*newNodes.back(), DiagKind::macro_expect_one_expr);
+        (void)ci->diag.Diagnose(*newNodes.back(), "macro_expect_one_expr");
     } else if (auto nodes = std::get_if<VectorTarget<OwnedPtr<Node>>>(&macroNode.replaceLoc); nodes) {
         if (newNodes.empty()) {
             (void)file->originalMacroCallNodes.emplace_back((*nodes).pointer->at((*nodes).loc).release());
@@ -322,7 +322,7 @@ void MacroExpansion::ReplaceEachMacroHelper(MacroCall& macroNode, PtrVector<Node
             std::make_move_iterator(newNodes.begin()), std::make_move_iterator(newNodes.end()));
     } else if (auto exprs = std::get_if<VectorTarget<OwnedPtr<Expr>>>(&macroNode.replaceLoc); exprs) {
         if (newNodes.empty()) {
-            (void)ci->diag.Diagnose(macroNode.GetBeginPos(), DiagKind::macro_unexpect_no_expr);
+            (void)ci->diag.Diagnose(macroNode.GetBeginPos(), "macro_unexpect_no_expr");
             return;
         }
         if (newNodes.size() == 1 && DynamicCast<Expr*>(newNodes[0].get())) {
@@ -333,13 +333,13 @@ void MacroExpansion::ReplaceEachMacroHelper(MacroCall& macroNode, PtrVector<Node
                 OwnedPtr<Expr>(RawStaticCast<Expr*>(newNodes.front().release())));
             return;
         }
-        (void)ci->diag.Diagnose(*newNodes.back(), DiagKind::macro_expect_one_expr);
+        (void)ci->diag.Diagnose(*newNodes.back(), "macro_expect_one_expr");
     } else if (auto decls = std::get_if<VectorTarget<OwnedPtr<Decl>>>(&macroNode.replaceLoc); decls) {
         ReplaceDecls(macroNode, newNodes, *decls);
     } else if (auto params = std::get_if<VectorTarget<OwnedPtr<FuncParam>>>(&macroNode.replaceLoc); params) {
         ReplaceParams(macroNode, newNodes, *params);
     } else {
-        (void)ci->diag.Diagnose(macroNode.GetBeginPos(), DiagKind::macro_expand_invalid_node_replace);
+        (void)ci->diag.Diagnose(macroNode.GetBeginPos(), "macro_expand_invalid_node_replace");
     }
 }
 

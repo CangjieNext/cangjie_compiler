@@ -24,7 +24,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynSpawnExpr(ASTContext& ctx, SpawnExpr& s
     }
     auto futureClass = importManager.GetCoreDecl<ClassDecl>("Future");
     if (futureClass == nullptr) {
-        diag.Diagnose(se, DiagKind::sema_no_core_object);
+        diag.Diagnose(se, "sema_no_core_object");
         se.ty = TypeManager::GetInvalidTy();
         return se.ty;
     }
@@ -43,7 +43,7 @@ bool TypeChecker::TypeCheckerImpl::CheckSpawnArgValid(const ASTContext& ctx, con
     // Check the ty of spawn argument is `ThreadContext` which from package `core`.
     auto threadContextInterface = importManager.GetCoreDecl<InterfaceDecl>("ThreadContext");
     if (threadContextInterface == nullptr) {
-        (void)diag.Diagnose(arg, DiagKind::sema_no_core_object);
+        (void)diag.Diagnose(arg, "sema_no_core_object");
         return false;
     }
     if (arg.ty->IsNothing() || !arg.ty->IsClassLike() ||
@@ -60,7 +60,7 @@ bool TypeChecker::TypeCheckerImpl::CheckSpawnArgValid(const ASTContext& ctx, con
     auto decls = FieldLookup(ctx, classLikeTy->commonDecl, "getSchedulerHandle", {.file = arg.curFile});
     if (decls.size() != 1 || decls[0]->astKind != ASTKind::FUNC_DECL ||
         !typeManager.IsSubtype(decls[0]->ty, funcTy)) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_spawn_arg_invalid, arg);
+        (void)diag.DiagnoseRefactor("sema_spawn_arg_invalid", arg);
         return false;
     }
     return true;
@@ -88,7 +88,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSpawnExpr(ASTContext& ctx, Ty& tgtTy, Spaw
     } else {
         auto futureClass = importManager.GetCoreDecl<ClassDecl>("Future");
         if (futureClass == nullptr) {
-            diag.Diagnose(se, DiagKind::sema_no_core_object);
+            diag.Diagnose(se, "sema_no_core_object");
             return false;
         }
         auto fuTys = promotion.Downgrade(*futureClass->ty, tgtTy);

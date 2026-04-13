@@ -110,7 +110,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynForInExpr(ASTContext& ctx, ForInExpr& f
         isWellTyped = false;
         if (!CanSkipDiag(*fie.inExpression)) {
             diag.Diagnose(
-                *fie.inExpression, DiagKind::sema_expr_in_forin_must_has_iterator, Ty::ToString(fie.inExpression->ty));
+                *fie.inExpression, "sema_expr_in_forin_must_has_iterator", Ty::ToString(fie.inExpression->ty));
         }
     }
 
@@ -120,7 +120,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynForInExpr(ASTContext& ctx, ForInExpr& f
         if (!Check(ctx, TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN), fie.patternGuard.get())) {
             isWellTyped = false;
             if (!CanSkipDiag(*fie.patternGuard)) {
-                diag.Diagnose(*fie.patternGuard, DiagKind::sema_wrong_forin_guard);
+                diag.Diagnose(*fie.patternGuard, "sema_wrong_forin_guard");
             }
         }
     }
@@ -128,7 +128,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynForInExpr(ASTContext& ctx, ForInExpr& f
     isWellTyped = Ty::IsTyCorrect(Synthesize({ctx, SynPos::UNUSED}, fie.body.get())) && isWellTyped;
     if (!IsIrrefutablePattern(*fie.pattern)) {
         isWellTyped = false;
-        diag.Diagnose(fie, DiagKind::sema_forin_pattern_must_be_irrefutable);
+        diag.Diagnose(fie, "sema_forin_pattern_must_be_irrefutable");
     }
 
     fie.ty =

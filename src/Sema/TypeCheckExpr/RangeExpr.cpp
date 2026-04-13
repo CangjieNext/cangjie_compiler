@@ -22,7 +22,7 @@ bool TypeChecker::TypeCheckerImpl::CheckRangeElements(ASTContext& ctx, Ptr<Ty> e
     bool inconsistent = !ctx.HasTargetTy(&re) && re.startExpr && re.stopExpr && !isWellTyped;
     if (inconsistent) {
         if (!CanSkipDiag(*re.startExpr) && !CanSkipDiag(*re.stopExpr)) {
-            diag.Diagnose(re, DiagKind::sema_inconsistency_range_elemType);
+            diag.Diagnose(re, "sema_inconsistency_range_elemType");
         }
     }
     if (isWellTyped && !CheckGenericDeclInstantiation(re.decl, std::vector<Ptr<Ty>>{elemTy}, re)) {
@@ -31,13 +31,13 @@ bool TypeChecker::TypeCheckerImpl::CheckRangeElements(ASTContext& ctx, Ptr<Ty> e
     if (re.stepExpr) {
         if (!Check(ctx, TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64), re.stepExpr.get())) {
             if (!CanSkipDiag(*re.stepExpr)) {
-                diag.Diagnose(re, DiagKind::sema_range_step_not_int64);
+                diag.Diagnose(re, "sema_range_step_not_int64");
             }
             isWellTyped = false;
         } else if (re.stepExpr->isConst) {
             // Step expr cannot be zero.
             if (re.stepExpr->constNumValue.asInt.Uint64() == 0) {
-                diag.Diagnose(*re.stepExpr, DiagKind::sema_step_non_zero_range);
+                diag.Diagnose(*re.stepExpr, "sema_step_non_zero_range");
             }
         }
     }
@@ -49,7 +49,7 @@ bool TypeChecker::TypeCheckerImpl::ChkRangeExpr(ASTContext& ctx, Ty& target, Ran
     re.ty = TypeManager::GetInvalidTy(); // Set type invalid first, will be updated if check passed.
     re.decl = importManager.GetCoreDecl<StructDecl>("Range");
     if (!re.decl) {
-        diag.Diagnose(re, DiagKind::sema_no_core_object);
+        diag.Diagnose(re, "sema_no_core_object");
         return false;
     }
     if (!Ty::IsTyCorrect(&target)) {

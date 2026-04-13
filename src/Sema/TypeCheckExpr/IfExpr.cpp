@@ -69,7 +69,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIfExpr(const CheckerContext& ctx, IfExp
             errMsg = ie.sourceExpr && ie.sourceExpr->astKind == ASTKind::IF_AVAILABLE_EXPR
                 ? errMsg + " of the two lambda of this '@IfAvailable' expression mismatch"
                 : errMsg + " of the two branches of this 'if' expression mismatch";
-            diag.Diagnose(ie, DiagKind::sema_diag_report_error_message, errMsg).AddNote(*optErrs);
+            diag.Diagnose(ie, "sema_diag_report_error_message", errMsg).AddNote(*optErrs);
         }
     }
     return ie.ty;
@@ -198,7 +198,7 @@ bool TypeChecker::TypeCheckerImpl::CheckBinaryCondition(
     if (!suppressIntroducingVariableError && e.op == TokenKind::OR) {
         auto vars = CollectVariables(ctx, e);
         if (!vars.empty()) {
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_var_in_or_condition, *vars.front());
+            auto builder = diag.DiagnoseRefactor("sema_var_in_or_condition", *vars.front());
             auto iter = vars.cbegin() + 1; // Skip the first var as it has been reported in main hint.
             while (iter != vars.cend()) {
                 builder.AddHint(**iter++);

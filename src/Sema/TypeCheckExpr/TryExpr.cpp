@@ -107,11 +107,11 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::SynTryExprCatchesAndHandles
         if (auto optErrs = JoinAndMeet::SetJoinedType(tmpJTy, joinRes)) {
             isWellTyped = false;
             if (te.ShouldDiagnose()) {
-                diag.Diagnose(*catchBlock, DiagKind::sema_diag_report_error_message,
+                diag.Diagnose(*catchBlock, "sema_diag_report_error_message",
                               "The type of this catch block is '" + Ty::ToString(catchBlock->ty) +
                               "', which mismatches the smallest common supertype '" + jTy->String() +
                               "' of previous branches.")
-                    .AddNote(te, DiagKind::sema_diag_report_note_message, *optErrs);
+                    .AddNote(te, "sema_diag_report_note_message", *optErrs);
             }
         } else {
             // Only overwrite jTy if the join operation succeeds.
@@ -142,7 +142,7 @@ std::optional<Ptr<ClassTy>> TypeChecker::TypeCheckerImpl::PromoteToCommandTy(con
     }
     auto promotedTys = promotion.Promote(cmdTy, *cmdClassDecl->ty);
     if (promotedTys.size() != 1) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_command_incompatible_type, cause, Ty::ToString(&cmdTy));
+        diag.DiagnoseRefactor("sema_command_incompatible_type", cause, Ty::ToString(&cmdTy));
         return std::nullopt;
     }
     return StaticCast<ClassTy*>(*promotedTys.begin());
@@ -166,9 +166,9 @@ bool TypeChecker::TypeCheckerImpl::SynHandler(ASTContext& ctx, Handler& handler,
     Ptr<Ty> tmpJTy{};
     if (auto optErrs = JoinAndMeet::SetJoinedType(tmpJTy, joinRes)) {
         if (te.ShouldDiagnose()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatching_handle_block, *handler.block,
+            diag.DiagnoseRefactor("sema_mismatching_handle_block", *handler.block,
                 Ty::ToString(handler.block->ty), tgtTy->String())
-                .AddNote(te, DiagKind::sema_diag_report_note_message, *optErrs);
+                .AddNote(te, "sema_diag_report_note_message", *optErrs);
         }
         return false;
     } else {
@@ -373,7 +373,7 @@ bool TypeChecker::TypeCheckerImpl::ValidateBlockInTryHandle(Block& block)
                     return VisitAction::SKIP_CHILDREN;
                 }
             case ASTKind::RETURN_EXPR:
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_return_in_try_handle_block, *node);
+                diag.DiagnoseRefactor("sema_return_in_try_handle_block", *node);
                 hasReturns = true;
                 return VisitAction::STOP_NOW;
             default:

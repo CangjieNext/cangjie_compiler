@@ -115,7 +115,7 @@ bool JavaDesugarManager::FillMethodParamsByArg(std::vector<OwnedPtr<FuncParam>>&
                 WithinFile(CreateRefExpr(jniEnvPtrParam), funcDecl.curFile), std::move(paramRef), actualArgTy);
             methodArg = CreateFuncArg(WithinFile(std::move(entity), funcDecl.curFile));
         } else {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmapping_method_arg_not_supported, *arg);
+            diag.DiagnoseRefactor("sema_cjmapping_method_arg_not_supported", *arg);
             funcDecl.EnableAttr(Attribute::IS_BROKEN);
             funcDecl.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
             funcDecl.outerDecl->EnableAttr(Attribute::IS_BROKEN);
@@ -231,7 +231,7 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(
             std::string clazzName = decl.fullPackageName + "." + GetCjMappingTupleName(*retActualTy);
             createCJMappingCall(clazzName, true);
         } else {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmapping_method_ret_unsupported, sampleMethod,
+            diag.DiagnoseRefactor("sema_cjmapping_method_ret_unsupported", sampleMethod,
                 retActualTy->String(), "cangjie mirror decl");
             sampleMethod.EnableAttr(Attribute::IS_BROKEN);
             sampleMethod.outerDecl->EnableAttr(Attribute::HAS_BROKEN);

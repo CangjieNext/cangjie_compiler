@@ -18,14 +18,14 @@ namespace Cangjie {
 namespace {
 void DiagExpectConstFunc(DiagnosticEngine& diag, const FuncDecl& fd)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_expect_const, fd, MakeRange(fd.identifier), "function");
+    auto builder = diag.DiagnoseRefactor("sema_expect_const", fd, MakeRange(fd.identifier), "function");
     builder.AddMainHintArguments("");
 }
 
 void DiagExpectConstExpr(DiagnosticEngine& diag, const Expr& expr, bool isWeak)
 {
     std::string constKind = isWeak ? "expression" : "expression guaranteed to be evaluated at compile time";
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_expect_const, expr, constKind);
+    auto builder = diag.DiagnoseRefactor("sema_expect_const", expr, constKind);
     std::string mainHint = "";
     if (expr.astKind == ASTKind::RETURN_EXPR) {
         builder.AddNote("cannot jump to non-constant context from a constant context");
@@ -47,13 +47,13 @@ void DiagExpectConstExpr(DiagnosticEngine& diag, const Expr& expr, bool isWeak)
 void DiagDefineVarInConstFunction(DiagnosticEngine& diag, const VarDeclAbstract& vda)
 {
     auto range = MakeRange(vda.identifier);
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_define_var_in_const_funciton, vda, range);
+    diag.DiagnoseRefactor("sema_cannot_define_var_in_const_funciton", vda, range);
 }
 
 void DiagNoConstInit(DiagnosticEngine& diag, const FuncDecl& fd)
 {
     auto range = MakeRange(fd.identifier);
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_no_const_init, fd, range);
+    auto builder = diag.DiagnoseRefactor("sema_no_const_init", fd, range);
     Ptr<const Decl> outerDecl = fd.outerDecl;
     if (outerDecl == nullptr) {
         return;
@@ -78,7 +78,7 @@ void DiagCannotDefineConstInit(
     auto iter = constInits.cbegin();
     CJC_NULLPTR_CHECK(*iter);
     auto range = MakeRange((*iter)->identifier);
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_class_const_init_with_var, **iter, range);
+    auto builder = diag.DiagnoseRefactor("sema_class_const_init_with_var", **iter, range);
     ++iter;
     while (iter != constInits.cend()) {
         CJC_NULLPTR_CHECK(*iter);

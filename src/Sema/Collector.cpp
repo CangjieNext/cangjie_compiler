@@ -14,14 +14,13 @@
 
 #include <memory>
 
+#include "TypeCheckUtil.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/FileUtil.h"
-
-#include "TypeCheckUtil.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -118,7 +117,7 @@ void Collector::CollectClassDecl(ASTContext& ctx, ClassDecl& cd, bool buildTrie)
 {
     CJC_NULLPTR_CHECK(cd.body);
     if ((!cd.outerDecl || !cd.outerDecl->TestAttr(Attribute::TOOL_ADD)) && ctx.currentScopeLevel != 0) {
-        ctx.diag.Diagnose(cd, DiagKind::sema_type_must_toplevel, "class");
+        ctx.diag.Diagnose(cd, "sema_type_must_toplevel", "class");
     }
     CollectAnnotations(ctx, cd.annotations, buildTrie);
     auto nodeInfo = NodeInfo(cd, cd.identifier, ctx.currentScopeLevel, scopeManager.CalcScopeGateName(ctx));
@@ -150,7 +149,7 @@ void Collector::CollectInterfaceDecl(ASTContext& ctx, InterfaceDecl& id, bool bu
 {
     CJC_NULLPTR_CHECK(id.body);
     if ((!id.outerDecl || !id.outerDecl->TestAttr(Attribute::TOOL_ADD)) && ctx.currentScopeLevel != 0) {
-        ctx.diag.Diagnose(id, DiagKind::sema_type_must_toplevel, "interface");
+        ctx.diag.Diagnose(id, "sema_type_must_toplevel", "interface");
     }
     CollectAnnotations(ctx, id.annotations, buildTrie);
     auto nodeInfo = NodeInfo(id, id.identifier, ctx.currentScopeLevel, scopeManager.CalcScopeGateName(ctx));
@@ -180,7 +179,7 @@ void Collector::CollectInterfaceBody(ASTContext& ctx, const InterfaceBody& ib, b
 void Collector::CollectEnumDecl(ASTContext& ctx, EnumDecl& ed, bool buildTrie)
 {
     if (ctx.currentScopeLevel != 0) {
-        ctx.diag.Diagnose(ed, DiagKind::sema_type_must_toplevel, "enum");
+        ctx.diag.Diagnose(ed, "sema_type_must_toplevel", "enum");
     }
     CollectAnnotations(ctx, ed.annotations, buildTrie);
     auto nodeInfo = NodeInfo(ed, ed.identifier, ctx.currentScopeLevel, scopeManager.CalcScopeGateName(ctx));
@@ -218,7 +217,7 @@ void Collector::CollectStructDecl(ASTContext& ctx, StructDecl& sd, bool buildTri
 {
     CJC_NULLPTR_CHECK(sd.body);
     if (ctx.currentScopeLevel != 0) {
-        ctx.diag.Diagnose(sd, DiagKind::sema_type_must_toplevel, "struct");
+        ctx.diag.Diagnose(sd, "sema_type_must_toplevel", "struct");
     }
     CollectAnnotations(ctx, sd.annotations, buildTrie);
     auto nodeInfo = NodeInfo(sd, sd.identifier, ctx.currentScopeLevel, scopeManager.CalcScopeGateName(ctx));
@@ -252,7 +251,7 @@ void Collector::CollectStructBody(ASTContext& ctx, const StructBody& rb, bool bu
 void Collector::CollectExtendDecl(ASTContext& ctx, ExtendDecl& ed, bool buildTrie)
 {
     if (ctx.currentScopeLevel != 0) {
-        ctx.diag.Diagnose(ed, DiagKind::sema_type_must_toplevel, "extend");
+        ctx.diag.Diagnose(ed, "sema_type_must_toplevel", "extend");
     }
     CollectAnnotations(ctx, ed.annotations, buildTrie);
     auto nodeInfo = NodeInfo(ed, ed.identifier, ctx.currentScopeLevel, scopeManager.CalcScopeGateName(ctx));
@@ -316,7 +315,7 @@ void Collector::CollectFuncDecl(ASTContext& ctx, FuncDecl& fd, bool buildTrie)
         return;
     }
     if (fd.TestAttr(Attribute::INTRINSIC) && pkg != nullptr && !Utils::In(pkg->fullPackageName, intrinsicPkgs)) {
-        ctx.diag.Diagnose(fd, DiagKind::sema_invalid_intrinsic_decl, fd.identifier.Val(), pkg->fullPackageName);
+        ctx.diag.Diagnose(fd, "sema_invalid_intrinsic_decl", fd.identifier.Val(), pkg->fullPackageName);
     }
 }
 

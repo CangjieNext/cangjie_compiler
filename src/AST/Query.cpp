@@ -50,7 +50,7 @@ std::unique_ptr<Query> QueryParser::ParseBooleanClause()
         left = ParseTerm();
     } else {
         GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::parse_query_expected_query_symbol, LookAhead().Begin());
+            "parse_query_expected_query_symbol", LookAhead().Begin());
         return nullptr;
     }
     if (!left) {
@@ -61,7 +61,7 @@ std::unique_ptr<Query> QueryParser::ParseBooleanClause()
     if (unexpectedEnd) {
         Next();
         GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::parse_query_expected_logic_symbol, LookAhead().Begin(), LookAhead().Value());
+            "parse_query_expected_logic_symbol", LookAhead().Begin(), LookAhead().Value());
         return nullptr;
     }
     while (SeeingAny({TokenKind::AND, TokenKind::OR, TokenKind::NOT})) {
@@ -83,7 +83,7 @@ std::unique_ptr<Query> QueryParser::ParseBooleanClause()
             right = ParseTerm();
         } else {
             GetDiagnosticEngine().DiagnoseRefactor(
-                DiagKindRefactor::parse_query_expected_query_symbol, LookAhead().Begin());
+                "parse_query_expected_query_symbol", LookAhead().Begin());
             return nullptr;
         }
 
@@ -105,7 +105,7 @@ std::unique_ptr<Query> QueryParser::ParseParenClause()
     parsingParenClause = false;
     if (!Skip(TokenKind::RPAREN)) {
         GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::parse_expected_character, LookAhead().Begin(), ")", LookAhead().Value());
+            "parse_expected_character", LookAhead().Begin(), ")", LookAhead().Value());
         return nullptr;
     }
     return curNode;
@@ -140,46 +140,46 @@ std::unique_ptr<Query> QueryParser::ParsePositionTerm()
     auto sign = ParseComparator();
     if (!sign.has_value()) {
         GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::parse_query_expected_position_compare_operator, LookAhead().Begin());
+            "parse_query_expected_position_compare_operator", LookAhead().Begin());
         return nullptr;
     }
     pos->sign = *sign;
     if (!Skip(TokenKind::LPAREN)) {
         GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::parse_expected_character, LookAhead().Begin(), "(", LookAhead().Value());
+            "parse_expected_character", LookAhead().Begin(), "(", LookAhead().Value());
         return nullptr;
     }
     if (!Skip(TokenKind::INTEGER_LITERAL)) {
         GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::parse_query_position_illegal_file_id, LookAhead().Begin());
+            "parse_query_position_illegal_file_id", LookAhead().Begin());
         return nullptr;
     }
     pos->pos.fileID = Stoui(LookAhead().Value()).value_or(0);
     if (!Skip(TokenKind::COMMA)) {
         GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::parse_query_position_comma_required, LookAhead().Begin());
+            "parse_query_position_comma_required", LookAhead().Begin());
         return nullptr;
     }
     if (!Skip(TokenKind::INTEGER_LITERAL)) {
         GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::parse_query_position_illegal_line_num, LookAhead().Begin());
+            "parse_query_position_illegal_line_num", LookAhead().Begin());
         return nullptr;
     }
     pos->pos.line = getNumber(LookAhead().Value());
     if (!Skip(TokenKind::COMMA)) {
         GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::parse_query_position_comma_required, LookAhead().Begin());
+            "parse_query_position_comma_required", LookAhead().Begin());
         return nullptr;
     }
     if (!Skip(TokenKind::INTEGER_LITERAL)) {
         GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::parse_query_position_illegal_column_num, LookAhead().Begin());
+            "parse_query_position_illegal_column_num", LookAhead().Begin());
         return nullptr;
     }
     pos->pos.column = getNumber(LookAhead().Value());
     if (!Skip(TokenKind::RPAREN)) {
         GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::parse_expected_character, LookAhead().Begin(), ")", LookAhead().Value());
+            "parse_expected_character", LookAhead().Begin(), ")", LookAhead().Value());
         return nullptr;
     }
     return pos;
@@ -193,7 +193,7 @@ std::unique_ptr<Query> QueryParser::ParseNormalTerm()
     }
     if (!Skip(TokenKind::COLON)) {
         GetDiagnosticEngine().DiagnoseRefactor(
-            DiagKindRefactor::parse_expected_character, LookAhead().Begin(), ":", LookAhead().Value());
+            "parse_expected_character", LookAhead().Begin(), ":", LookAhead().Value());
         return nullptr;
     }
     term->sign = "=";
@@ -210,7 +210,7 @@ std::unique_ptr<Query> QueryParser::ParseNormalTerm()
             Next();
         } else {
             GetDiagnosticEngine().DiagnoseRefactor(
-                DiagKindRefactor::parse_query_invalid_query_value, LookAhead().Begin());
+                "parse_query_invalid_query_value", LookAhead().Begin());
             return nullptr;
         }
     } else if (Seeing(TokenKind::INT8, TokenKind::RUNE_LITERAL) && !Seeing(TokenKind::DOLLAR)) {
@@ -223,9 +223,9 @@ std::unique_ptr<Query> QueryParser::ParseNormalTerm()
         }
     } else {
         if (Seeing(TokenKind::DOLLAR_IDENTIFIER) || Seeing(TokenKind::DOLLAR)) {
-            GetDiagnosticEngine().DiagnoseRefactor(DiagKindRefactor::lex_unrecognized_symbol, LookAhead(), "$");
+            GetDiagnosticEngine().DiagnoseRefactor("lex_unrecognized_symbol", LookAhead(), "$");
         }
-        GetDiagnosticEngine().DiagnoseRefactor(DiagKindRefactor::parse_query_invalid_query_value, LookAhead().Begin());
+        GetDiagnosticEngine().DiagnoseRefactor("parse_query_invalid_query_value", LookAhead().Begin());
         return nullptr;
     }
     return term;
@@ -239,7 +239,7 @@ std::unique_ptr<Query> QueryParser::ParseTerm()
     if (Skip(TokenKind::WILDCARD)) {
         return ParsePositionTerm();
     }
-    GetDiagnosticEngine().DiagnoseRefactor(DiagKindRefactor::parse_query_expected_query_symbol, LookAhead().Begin());
+    GetDiagnosticEngine().DiagnoseRefactor("parse_query_expected_query_symbol", LookAhead().Begin());
     return nullptr;
 }
 

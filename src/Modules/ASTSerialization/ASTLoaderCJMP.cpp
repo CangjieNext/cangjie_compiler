@@ -51,7 +51,7 @@ void ReportPackageMismatch(
     }
 
     diag.DiagnoseRefactor(
-        DiagKindRefactor::module_common_cjo_wrong_package, range, actualPackageName, expectedPackageName);
+        "module_common_cjo_wrong_package", range, actualPackageName, expectedPackageName);
 }
 
 std::set<std::string> CollectFeaturesFromPackage(AST::Package& pkg)
@@ -82,7 +82,7 @@ void ValidateCommonSpecificFeatureSetsRelations(
             ss << "'" << feature << "' ";
         }
         auto diagBuilder = diag.DiagnoseRefactor(
-            DiagKindRefactor::feature_is_not_subset_of_child_set,
+            "feature_is_not_subset_of_child_set",
             commonFile.GetBegin(), commonFile.GetFullPackageName(), commonFile.filePath
         );
         diagBuilder.AddNote(ss.str());

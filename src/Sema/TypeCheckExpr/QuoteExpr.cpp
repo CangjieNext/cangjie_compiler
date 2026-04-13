@@ -23,7 +23,7 @@ void ChkIfImportLibAST(DiagnosticEngine& diag, const ImportManager& im, const Qu
             return;
         }
     }
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_use_expr_without_import, qe, "std.ast", "quote");
+    diag.DiagnoseRefactor("sema_use_expr_without_import", qe, "std.ast", "quote");
 }
 } // namespace
 

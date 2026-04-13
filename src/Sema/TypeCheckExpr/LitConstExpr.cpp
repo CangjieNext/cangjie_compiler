@@ -39,7 +39,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeBool(Ty& target, LitCons
         lce.ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
         return true;
     } else {
-        diag.Diagnose(lce, DiagKind::sema_cannot_convert_literal, "a boolean", target.String());
+        diag.Diagnose(lce, "sema_cannot_convert_literal", "a boolean", target.String());
         lce.ty = TypeManager::GetNonNullTy(lce.ty);
         return false;
     }
@@ -68,7 +68,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeInteger(Ty& target, LitC
             lce.ty = &target;
             return true;
         } else {
-            diag.Diagnose(lce, DiagKind::sema_cannot_convert_literal, lce.stringValue, target.String());
+            diag.Diagnose(lce, "sema_cannot_convert_literal", lce.stringValue, target.String());
             return false;
         }
     } else if (typeManager.IsLitBoxableType(TypeManager::GetPrimitiveTy(defaultIntTokenKind), &target)) {
@@ -79,7 +79,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeInteger(Ty& target, LitC
         lce.ty = GetInnerNumericType(target, *TypeManager::GetPrimitiveTy(defaultIntTokenKind));
         return true;
     } else if (!target.IsInvalid()) {
-        diag.Diagnose(lce, DiagKind::sema_cannot_convert_literal, "an integer", target.String());
+        diag.Diagnose(lce, "sema_cannot_convert_literal", "an integer", target.String());
         lce.ty = TypeManager::GetInvalidTy();
         return false;
     }
@@ -97,7 +97,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeFloat(Ty& targetTy, LitC
             lce.ty = &targetTy;
             return true;
         } else {
-            diag.Diagnose(lce, DiagKind::sema_cannot_convert_literal, lce.stringValue, targetTy.String());
+            diag.Diagnose(lce, "sema_cannot_convert_literal", lce.stringValue, targetTy.String());
             return false;
         }
     } else if (typeManager.IsLitBoxableType(TypeManager::GetPrimitiveTy(defaultFloat64TokenKind), &targetTy)) {
@@ -108,7 +108,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeFloat(Ty& targetTy, LitC
         lce.ty = GetInnerNumericType(targetTy, *TypeManager::GetPrimitiveTy(defaultFloat64TokenKind));
         return true;
     } else {
-        diag.Diagnose(lce, DiagKind::sema_cannot_convert_literal, "a floating-point", targetTy.String());
+        diag.Diagnose(lce, "sema_cannot_convert_literal", "a floating-point", targetTy.String());
         lce.ty = TypeManager::GetNonNullTy(lce.ty);
         return false;
     }
@@ -126,7 +126,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeChar(Ty& targetTy, LitCo
         lce.ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_RUNE);
         return true;
     } else {
-        diag.Diagnose(lce, DiagKind::sema_cannot_convert_literal, "a character", targetTy.String());
+        diag.Diagnose(lce, "sema_cannot_convert_literal", "a character", targetTy.String());
         lce.ty = TypeManager::GetNonNullTy(lce.ty);
         return false;
     }
@@ -160,12 +160,12 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLitConstStringExpr(ASTContext& ctx, Lit
         ie->block->ty = Synthesize({ctx, SynPos::EXPR_ARG}, ie->block.get());
         if (!typeManager.IsSubtype(ie->block->ty, toStringInterface->ty)) {
             if (Ty::IsTyCorrect(ie->block->ty)) {
-                diag.Diagnose(*ie->block, DiagKind::sema_invalid_string_implementation, ie->block->ty->String());
+                diag.Diagnose(*ie->block, "sema_invalid_string_implementation", ie->block->ty->String());
             }
             isWellTyped = false;
         } else if (ie->block->ty->IsNothing()) {
             // After typechecker, it will desugar as 'expr.toString()', and Nothing type can't access member.
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_undeclared_identifier, *ie->block, "toString");
+            diag.DiagnoseRefactor("sema_undeclared_identifier", *ie->block, "toString");
             isWellTyped = false;
         }
         if (!isWellTyped) {

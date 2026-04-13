@@ -49,7 +49,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAsExpr(ASTContext& ctx, AsExpr& ae)
         if (optionDecl) {
             ae.ty = typeManager.GetEnumTy(*optionDecl, {ae.asType->ty});
         } else {
-            diag.Diagnose(ae, DiagKind::sema_no_core_object);
+            diag.Diagnose(ae, "sema_no_core_object");
             ae.ty = TypeManager::GetInvalidTy();
         }
     } else {

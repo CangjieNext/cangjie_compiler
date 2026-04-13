@@ -6,6 +6,7 @@
 
 #include "cangjie/CHIR/Analysis/ValueRangeAnalysis.h"
 
+
 #include <climits>
 #include "cangjie/CHIR/Checker/OverflowChecking.h"
 #include "cangjie/CHIR/Analysis/Arithmetic.h"
@@ -303,7 +304,7 @@ void RaiseArithmeticOverflowError(const TBinary* expr, ExprKind kind, T leftVal,
     auto token = OPS.find(kind);
     CJC_ASSERT(token != OPS.end());
     auto builder =
-        diag.DiagnoseRefactor(DiagKindRefactor::chir_arithmetic_operator_overflow, ToRange(loc), token->second);
+        diag.DiagnoseRefactor("chir_arithmetic_operator_overflow", ToRange(loc), token->second);
     std::string hint = ty->ToString() + "(" + std::to_string(leftVal) + ") " + token->second + " " +
         expr->GetRHSOperand()->GetType()->ToString() + "(" + std::to_string(rightVal) + ")";
     builder.AddMainHintArguments(hint);
@@ -316,7 +317,7 @@ bool CheckDivZero(ExprKind exprKind, const Ptr<const BinaryExpression>& binary, 
     if (rVal == 0 && (exprKind == ExprKind::DIV || exprKind == ExprKind::MOD)) {
         auto& loc = binary->GetDebugLocation();
         auto prompt = exprKind == ExprKind::DIV ? "divide" : "modulo";
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::chir_divisor_is_zero, ToRange(loc), prompt);
+        auto builder = diag.DiagnoseRefactor("chir_divisor_is_zero", ToRange(loc), prompt);
         builder.AddMainHintArguments(prompt);
         return true;
     }

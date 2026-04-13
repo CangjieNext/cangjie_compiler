@@ -33,7 +33,7 @@ void CheckImplInheritMirror::HandleImpl(TypeCheckContext& ctx)
         }
 
         if (hasOnlyMirrorSuperInterfaces && (!classTy->GetSuperClassTy() || classTy->GetSuperClassTy()->IsObject())) {
-            ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_impl_must_have_objc_mirror_super_class, ctx.target);
+            ctx.diag.DiagnoseRefactor("sema_objc_impl_must_have_objc_mirror_super_class", ctx.target);
             ctx.target.EnableAttr(Attribute::IS_BROKEN);
         }
     }
@@ -42,6 +42,6 @@ void CheckImplInheritMirror::HandleImpl(TypeCheckContext& ctx)
         return;
     }
 
-    ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_mirror_subtype_must_inherit_mirror, ctx.target);
+    ctx.diag.DiagnoseRefactor("sema_objc_mirror_subtype_must_inherit_mirror", ctx.target);
     ctx.target.EnableAttr(Attribute::IS_BROKEN);
 }

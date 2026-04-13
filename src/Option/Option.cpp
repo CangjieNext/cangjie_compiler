@@ -16,6 +16,7 @@
 #include <numeric>
 #include <regex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include "cangjie/Basic/DiagnosticEngine.h"
@@ -85,7 +86,7 @@ const std::unordered_map<Vendor, std::string> VENDOR_STRING_MAP = {
 };
 
 template <typename... Args>
-inline void RaiseArgumentUnusedMessage(DiagnosticEngine& diag, DiagKindRefactor diagKind, const Args... args)
+inline void RaiseArgumentUnusedMessage(DiagnosticEngine& diag, std::string_view diagKind, const Args... args)
 {
     (void)diag.DiagnoseRefactor(diagKind, DEFAULT_POSITION, args..., " The argument is ignored.");
 }
@@ -327,7 +328,7 @@ bool GlobalOptions::ReprocessOutputs()
         if (auto maybePath = FileUtil::GetAbsPath(outputDir.value()); maybePath.has_value()) {
             outputDir = maybePath;
         } else {
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::invalid_path, DEFAULT_POSITION, outputDir.value());
+            (void)diag.DiagnoseRefactor("invalid_path", DEFAULT_POSITION, outputDir.value());
             return false;
         }
     }
@@ -340,13 +341,13 @@ bool GlobalOptions::ReprocessOutputs()
         return false;
     }
     if (!outputIsDir && !IsDir(saveDir)) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::not_a_directory, DEFAULT_POSITION, saveDir);
+        (void)diag.DiagnoseRefactor("not_a_directory", DEFAULT_POSITION, saveDir);
         return false;
     }
     if (auto maybePath = FileUtil::GetAbsPath(saveDir); maybePath.has_value()) {
         output = outputIsDir ? maybePath.value() : JoinPath(maybePath.value(), FileUtil::GetFileName(output));
     } else {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::invalid_path, DEFAULT_POSITION, output);
+        (void)diag.DiagnoseRefactor("invalid_path", DEFAULT_POSITION, output);
         return false;
     }
     if (!CheckOutputPathLength()) {
@@ -372,7 +373,7 @@ bool GlobalOptions::CheckOutputPathLength() const
 #endif
     auto fullLength = IsDir(output) ? output.size() + defaultOutputNameLen : output.size();
     if (fullLength > FILE_PATH_MAX_LENGTH) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_path_exceeds_length_limit, DEFAULT_POSITION,
+        (void)diag.DiagnoseRefactor("driver_path_exceeds_length_limit", DEFAULT_POSITION,
             "the output file", std::to_string(FILE_PATH_MAX_LENGTH));
         return false;
         // If the path length of the output is close to the upper limit, the compilation still has a possibility to
@@ -380,7 +381,7 @@ bool GlobalOptions::CheckOutputPathLength() const
         // the resultant path exceed the limit. Therefore, a warning is generated when the output path is longer than
         // FILE_PATH_MAX_LENGTH - 15.
     } else if (fullLength > FILE_PATH_MAX_LENGTH - 15) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_warning_path_close_to_length_limit, DEFAULT_POSITION,
+        (void)diag.DiagnoseRefactor("driver_warning_path_close_to_length_limit", DEFAULT_POSITION,
             "the output file", std::to_string(FILE_PATH_MAX_LENGTH));
     }
     return true;
@@ -411,12 +412,12 @@ bool GlobalOptions::ReprocessInputs()
     for (auto& inputFile : inputs) {
         auto absInputFile = FileUtil::GetAbsPath(inputFile);
         if (!absInputFile.has_value()) {
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::no_such_file_or_directory, DEFAULT_POSITION, inputFile);
+            (void)diag.DiagnoseRefactor("no_such_file_or_directory", DEFAULT_POSITION, inputFile);
             return false;
         }
         if (absInputFile.value() == output) {
             (void)diag.DiagnoseRefactor(
-                DiagKindRefactor::input_file_overwritten_by_generated_output, DEFAULT_POSITION, inputFile);
+                "input_file_overwritten_by_generated_output", DEFAULT_POSITION, inputFile);
             return false;
         }
     }
@@ -464,19 +465,19 @@ bool GlobalOptions::CheckScanDependencyOptions() const
         // inputs are not accepted.
         if (!inputCjoFile.empty()) {
             (void)diag.DiagnoseRefactor(
-                DiagKindRefactor::driver_not_accept_cjo_inputs_when, DEFAULT_POSITION, "'-p' or '--package'");
+                "driver_not_accept_cjo_inputs_when", DEFAULT_POSITION, "'-p' or '--package'");
             return false;
         }
         // Report error for `cjc --scan-dependency -p`. A path input is required.
         if (packagePaths.empty()) {
             (void)diag.DiagnoseRefactor(
-                DiagKindRefactor::driver_require_package_directory_scan_dependency, DEFAULT_POSITION);
+                "driver_require_package_directory_scan_dependency", DEFAULT_POSITION);
             return false;
         }
     } else {
         // Report error for `cjc --scan-dependency`. A .cjo file input is required.
         if (inputCjoFile.empty()) {
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_source_cjo_empty, DEFAULT_POSITION);
+            (void)diag.DiagnoseRefactor("driver_source_cjo_empty", DEFAULT_POSITION);
             return false;
         }
     }
@@ -554,7 +555,7 @@ bool GlobalOptions::CheckLtoOptions() const
     }
     if (osType == OSType::DARWIN || osType == OSType::IOS || osType == OSType::WINDOWS) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_target_lto_unsupported, DEFAULT_POSITION, osName);
+        diag.DiagnoseRefactor("driver_target_lto_unsupported", DEFAULT_POSITION, osName);
         return false;
     }
     if (outputMode == OutputMode::OBJ) {
@@ -577,16 +578,16 @@ bool GlobalOptions::CheckOutputModeOptions()
     if (outputMode != OutputMode::OBJ && compileTarget != CompileTarget::DEFAULT) {
         compileTarget = CompileTarget::DEFAULT;
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_compile_target, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("driver_invalid_compile_target", DEFAULT_POSITION);
     }
     if (srcFiles.empty() && (outputMode == OutputMode::OBJ || outputMode == OutputMode::CHIR) && !compilePackage) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_source_file_empty, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("driver_source_file_empty", DEFAULT_POSITION);
         return false;
     }
     if (!compilePackage && srcFiles.empty() && !inputObjs.empty() && !experimentalMode) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_require_experimental, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("driver_require_experimental", DEFAULT_POSITION);
         return false;
     }
 
@@ -600,13 +601,13 @@ bool GlobalOptions::CheckCompileAsExeOptions() const
     }
     if (IsCompileAsExeEnabled() && !IsLTOEnabled()) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_compile_as_exe, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("driver_invalid_compile_as_exe", DEFAULT_POSITION);
         return false;
     }
     auto osType = target.GetOSFamily();
     if (osType == OSType::WINDOWS || osType == OSType::DARWIN || osType == OSType::IOS) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_compile_as_exe_platform, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("driver_invalid_compile_as_exe_platform", DEFAULT_POSITION);
         return false;
     }
     return true;
@@ -617,24 +618,24 @@ bool GlobalOptions::CheckPgoOptions() const
     DiagnosticEngine diag;
     // Using both '--pgo-instr-gen' and '--pgo-instr-use' is not allowed.
     if (enablePgoInstrGen && enablePgoInstrUse) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_pgo_both_gen_and_use, DEFAULT_POSITION);
+        (void)diag.DiagnoseRefactor("driver_pgo_both_gen_and_use", DEFAULT_POSITION);
         return false;
     }
     // Check if the pgo-profile-gen-file is set
     if (enablePgoInstrGen && target.env == Triple::Environment::OHOS && pgoProfileFile == "") {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_ohos_pgo_gen_without_file, DEFAULT_POSITION);
+        (void)diag.DiagnoseRefactor("driver_ohos_pgo_gen_without_file", DEFAULT_POSITION);
         return false;
     }
     // Check if the pgo-profile-file is valid.
     if (enablePgoInstrUse) {
         if (!FileExist(pgoProfileFile)) {
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::no_such_file_or_directory, DEFAULT_POSITION, pgoProfileFile);
+            (void)diag.DiagnoseRefactor("no_such_file_or_directory", DEFAULT_POSITION, pgoProfileFile);
             return false;
         } else {
             const std::string PROFILE_EXT = "profdata";
             if (FileUtil::GetFileExtension(pgoProfileFile) != PROFILE_EXT) {
                 (void)diag.DiagnoseRefactor(
-                    DiagKindRefactor::driver_pgo_invalid_profile_extension, DEFAULT_POSITION, pgoProfileFile);
+                    "driver_pgo_invalid_profile_extension", DEFAULT_POSITION, pgoProfileFile);
                 return false;
             }
         }
@@ -647,7 +648,7 @@ bool GlobalOptions::VerifyFileExtension(
 {
     if (GetFileExtension(fullPath) != extension) {
         RaiseArgumentUnusedMessage(
-            diag, DiagKindRefactor::driver_warning_unexpected_file_extension, extension, file, fullPath);
+            diag, "driver_warning_unexpected_file_extension", extension, file, fullPath);
         return false;
     }
 
@@ -665,7 +666,7 @@ bool GlobalOptions::CheckCJMPOptions() const
         ok &= VerifyFileExtension(chirFile, chirFile, CHIR_EXTENSION, diag);
     }
     if (commonPartCjos.size() != commonPartChirs.size()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_require_common_chir_for_each_common_cjo, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("driver_require_common_chir_for_each_common_cjo", DEFAULT_POSITION);
         ok = false;
     }
 
@@ -718,7 +719,7 @@ void GlobalOptions::DisableStaticStdForOhos()
     if (target.env == Triple::Environment::OHOS) {
         if (linkStaticStd.has_value() && linkStaticStd.value()) {
             DiagnosticEngine diag;
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_static_std_for_ohos, DEFAULT_POSITION);
+            (void)diag.DiagnoseRefactor("driver_static_std_for_ohos", DEFAULT_POSITION);
         }
         linkStaticStd = false;
     }
@@ -726,7 +727,7 @@ void GlobalOptions::DisableStaticStdForOhos()
 
 bool GlobalOptions::HandleArchiveExtension(DiagnosticEngine& diag, const std::string& value)
 {
-    auto maybePath = ValidateInputFilePath(value, DiagKindRefactor::driver_invalid_binary_file);
+    auto maybePath = ValidateInputFilePath(value, "driver_invalid_binary_file");
     if (!maybePath.has_value()) {
         return false;
     }
@@ -743,7 +744,7 @@ bool GlobalOptions::HandleArchiveExtension(DiagnosticEngine& diag, const std::st
 
 bool GlobalOptions::HandleCJOExtension(DiagnosticEngine& diag, const std::string& value)
 {
-    auto maybePath = ValidateInputFilePath(value, DiagKindRefactor::driver_invalid_binary_file);
+    auto maybePath = ValidateInputFilePath(value, "driver_invalid_binary_file");
     if (!maybePath.has_value()) {
         return false;
     }
@@ -751,7 +752,7 @@ bool GlobalOptions::HandleCJOExtension(DiagnosticEngine& diag, const std::string
         return true;
     }
     if (!inputCjoFile.empty()) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_require_one_package_directory_scan_dependency,
+        (void)diag.DiagnoseRefactor("driver_require_one_package_directory_scan_dependency",
             DEFAULT_POSITION, "--scan-dependency");
         return false;
     }
@@ -763,10 +764,10 @@ bool GlobalOptions::HandleCJExtension(DiagnosticEngine& diag, const std::string&
 {
     if (compilePackage) {
         (void)diag.DiagnoseRefactor(
-            DiagKindRefactor::driver_unsupport_compile_package_with_source_file, DEFAULT_POSITION, value);
+            "driver_unsupport_compile_package_with_source_file", DEFAULT_POSITION, value);
         return false;
     }
-    auto maybePath = ValidateInputFilePath(value, DiagKindRefactor::driver_invalid_source_file);
+    auto maybePath = ValidateInputFilePath(value, "driver_invalid_source_file");
     if (!maybePath.has_value()) {
         return false;
     }
@@ -781,10 +782,10 @@ bool GlobalOptions::HandleCJDExtension(DiagnosticEngine& diag, const std::string
 {
     if (compilePackage) {
         (void)diag.DiagnoseRefactor(
-            DiagKindRefactor::driver_unsupport_compile_package_with_source_file, DEFAULT_POSITION, value);
+            "driver_unsupport_compile_package_with_source_file", DEFAULT_POSITION, value);
         return false;
     }
-    auto maybePath = ValidateInputFilePath(value, DiagKindRefactor::driver_invalid_source_file);
+    auto maybePath = ValidateInputFilePath(value, "driver_invalid_source_file");
     if (!maybePath.has_value()) {
         return false;
     }
@@ -794,7 +795,7 @@ bool GlobalOptions::HandleCJDExtension(DiagnosticEngine& diag, const std::string
 
 bool GlobalOptions::HandleBCExtension(DiagnosticEngine& diag, const std::string& value)
 {
-    auto maybePath = ValidateInputFilePath(value, DiagKindRefactor::driver_invalid_source_file);
+    auto maybePath = ValidateInputFilePath(value, "driver_invalid_source_file");
     if (!maybePath.has_value()) {
         return false;
     }
@@ -811,26 +812,26 @@ bool GlobalOptions::HandleBCExtension(DiagnosticEngine& diag, const std::string&
 bool GlobalOptions::HandleNoExtension(DiagnosticEngine& diag, const std::string& value)
 {
     if (IsAbsolutePathAboveLengthLimit(value)) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_path_exceeds_length_limit, DEFAULT_POSITION, value,
+        (void)diag.DiagnoseRefactor("driver_path_exceeds_length_limit", DEFAULT_POSITION, value,
             std::to_string(FILE_PATH_MAX_LENGTH));
         return false;
     }
     if (!FileExist(value)) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_file_or_directory, DEFAULT_POSITION, value);
+        (void)diag.DiagnoseRefactor("driver_invalid_file_or_directory", DEFAULT_POSITION, value);
         return false;
     }
 
     if (IsDir(value)) {
         if (!compilePackage) {
             (void)diag.DiagnoseRefactor(
-                DiagKindRefactor::driver_unsupport_compile_source_file_with_path, DEFAULT_POSITION, value);
+                "driver_unsupport_compile_source_file_with_path", DEFAULT_POSITION, value);
         }
         if (!ValidateDirectoryPath(value, FileUtil::FileMode::FM_EXIST).has_value()) {
             return false;
         }
         packagePaths.emplace_back(value);
     } else {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_warning_argument_unused, DEFAULT_POSITION, value);
+        (void)diag.DiagnoseRefactor("driver_warning_argument_unused", DEFAULT_POSITION, value);
     }
     return true;
 }
@@ -860,11 +861,11 @@ bool GlobalOptions::ProcessInputs(const std::vector<std::string>& inputs)
     });
     // Check inputs.
     if (compilePackage && packagePaths.empty()) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_require_package_directory, DEFAULT_POSITION);
+        (void)diag.DiagnoseRefactor("driver_require_package_directory", DEFAULT_POSITION);
         return false;
     }
     if (compilePackage && packagePaths.size() > 1) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_require_one_package_directory, DEFAULT_POSITION);
+        (void)diag.DiagnoseRefactor("driver_require_one_package_directory", DEFAULT_POSITION);
         return false;
     }
     return ret;
@@ -991,7 +992,7 @@ void GlobalOptions::DeprecatedOptionCheck(const OptionArgInstance& arg) const
     if (deprecatedOptions.find(id) != deprecatedOptions.end()) {
         std::string substitutableOption = "";
         (void)diag.DiagnoseRefactor(
-            DiagKindRefactor::driver_deprecated_option, DEFAULT_POSITION, arg.str, substitutableOption);
+            "driver_deprecated_option", DEFAULT_POSITION, arg.str, substitutableOption);
     }
 }
 
@@ -1054,16 +1055,16 @@ std::optional<std::string> GlobalOptions::CheckDirectoryPath(const std::string& 
 {
     DiagnosticEngine diag;
     if (!FileUtil::FileExist(path)) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_no_such_directory, path);
+        RaiseArgumentUnusedMessage(diag, "driver_warning_no_such_directory", path);
         return std::nullopt;
     }
     if (!FileUtil::IsDir(path)) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_a_directory, path);
+        RaiseArgumentUnusedMessage(diag, "driver_warning_not_a_directory", path);
         return std::nullopt;
     }
     auto maybePath = FileUtil::GetAbsPath(path);
     if (!maybePath.has_value()) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_invalid_path, path);
+        RaiseArgumentUnusedMessage(diag, "driver_warning_invalid_path", path);
     }
     return maybePath;
 }
@@ -1073,9 +1074,9 @@ std::optional<std::string> GlobalOptions::ValidateDirectoryPath(const std::strin
     DiagnosticEngine diag;
     auto printErrorMessage = [&path, &diag](AccessResultType resultType) {
         if (resultType == AccessResultType::NO_PERMISSION) {
-            diag.DiagnoseRefactor(DiagKindRefactor::permission_denied, DEFAULT_POSITION, path);
+            diag.DiagnoseRefactor("permission_denied", DEFAULT_POSITION, path);
         } else {
-            diag.DiagnoseRefactor(DiagKindRefactor::no_such_directory, DEFAULT_POSITION, path);
+            diag.DiagnoseRefactor("no_such_directory", DEFAULT_POSITION, path);
         }
     };
     auto res = FileUtil::AccessWithResult(path, mode);
@@ -1084,7 +1085,7 @@ std::optional<std::string> GlobalOptions::ValidateDirectoryPath(const std::strin
         return std::nullopt;
     }
     if (!FileUtil::IsDir(path)) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::not_a_directory, DEFAULT_POSITION, path);
+        (void)diag.DiagnoseRefactor("not_a_directory", DEFAULT_POSITION, path);
         return std::nullopt;
     }
     if (mode == FileUtil::FileMode::FM_WRITE) {
@@ -1097,7 +1098,7 @@ std::optional<std::string> GlobalOptions::ValidateDirectoryPath(const std::strin
     }
     auto maybePath = FileUtil::GetAbsPath(path);
     if (!maybePath.has_value()) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::invalid_path, DEFAULT_POSITION, path);
+        (void)diag.DiagnoseRefactor("invalid_path", DEFAULT_POSITION, path);
     }
     return maybePath;
 }
@@ -1107,55 +1108,54 @@ std::optional<std::string> GlobalOptions::CheckInputFilePath(const std::string& 
 {
     DiagnosticEngine diag;
     if (!FileUtil::FileExist(path)) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_no_such_file_or_directory, path);
+        RaiseArgumentUnusedMessage(diag, "driver_warning_no_such_file_or_directory", path);
         return std::nullopt;
     }
     if (!FileUtil::Access(path, FileUtil::FileMode::FM_READ)) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_permission_denied, path);
+        RaiseArgumentUnusedMessage(diag, "driver_warning_permission_denied", path);
         return std::nullopt;
     }
     if (FileUtil::IsDir(path)) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_not_a_file, path);
+        RaiseArgumentUnusedMessage(diag, "driver_warning_not_a_file", path);
         return std::nullopt;
     }
     auto maybePath = FileUtil::GetAbsPath(path);
     if (!maybePath.has_value()) {
-        RaiseArgumentUnusedMessage(diag, DiagKindRefactor::driver_warning_invalid_path, path);
+        RaiseArgumentUnusedMessage(diag, "driver_warning_invalid_path", path);
     }
     return maybePath;
 }
 #endif
 
-std::optional<std::string> GlobalOptions::ValidateInputFilePath(
-    const std::string& path, const DiagKindRefactor notFoundError)
+std::optional<std::string> GlobalOptions::ValidateInputFilePath(const std::string& path, std::string_view notFoundErrorKind)
 {
     DiagnosticEngine diag;
-    return ValidateInputFilePath(path, notFoundError, diag);
+    return ValidateInputFilePath(path, notFoundErrorKind, diag);
 }
 
 std::optional<std::string> GlobalOptions::ValidateInputFilePath(
-    const std::string& path, const DiagKindRefactor notFoundError, DiagnosticEngine& diag)
+    const std::string& path, std::string_view notFoundErrorKind, DiagnosticEngine& diag)
 {
     if (IsAbsolutePathAboveLengthLimit(path)) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_path_exceeds_length_limit, DEFAULT_POSITION, path,
+        (void)diag.DiagnoseRefactor("driver_path_exceeds_length_limit", DEFAULT_POSITION, path,
             std::to_string(FILE_PATH_MAX_LENGTH));
         return std::nullopt;
     }
     if (!FileExist(path)) {
-        (void)diag.DiagnoseRefactor(notFoundError, DEFAULT_POSITION, path);
+        (void)diag.DiagnoseRefactor(notFoundErrorKind, DEFAULT_POSITION, path);
         return std::nullopt;
     }
     if (!FileUtil::Access(path, FileUtil::FileMode::FM_READ)) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::permission_denied, DEFAULT_POSITION, path);
+        (void)diag.DiagnoseRefactor("permission_denied", DEFAULT_POSITION, path);
         return std::nullopt;
     }
     if (FileUtil::IsDir(path)) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::not_a_file, DEFAULT_POSITION, path);
+        (void)diag.DiagnoseRefactor("not_a_file", DEFAULT_POSITION, path);
         return std::nullopt;
     }
     auto maybePath = FileUtil::GetAbsPath(path);
     if (!maybePath.has_value()) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::invalid_path, DEFAULT_POSITION, path);
+        (void)diag.DiagnoseRefactor("invalid_path", DEFAULT_POSITION, path);
     }
     return maybePath;
 }

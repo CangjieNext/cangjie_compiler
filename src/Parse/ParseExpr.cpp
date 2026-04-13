@@ -219,7 +219,7 @@ void ParserImpl::CheckWildcardInExpr(const OwnedPtr<Expr>& root)
                 ConsumeUntilAny({TokenKind::NL, TokenKind::RPAREN, TokenKind::COMMA, TokenKind::RCURL}, false);
             }
             auto builder =
-                ParseDiagnoseRefactor(DiagKindRefactor::parse_unexpected_expected_found, *node, "_ wildcard");
+                ParseDiagnoseRefactor("parse_unexpected_expected_found", *node, "_ wildcard");
             builder.AddMainHintArguments("expression", "wildcard");
         }
         return VisitAction::WALK_CHILDREN;
@@ -288,7 +288,7 @@ OwnedPtr<LetPatternDestructor> ParserImpl::ParseLetPattern(ExprKind ek)
 
     bool foundBackarrow{true};
     if (!Skip(TokenKind::BACKARROW) && !SeeingCombinator(combinedBackarrow)) {
-        auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_backarrow_in_let_cond, lookahead,
+        auto builder = ParseDiagnoseRefactor("parse_expected_backarrow_in_let_cond", lookahead,
             ek == ExprKind::WHILE_COND_EXPR ? "while-let" : "if-let", ConvertToken(lookahead));
         ConsumeUntilAny(consumeTarget, false);
         foundBackarrow = false;
@@ -319,7 +319,7 @@ OwnedPtr<AST::Expr> ParserImpl::ParseIndexAccess()
     if (IsCompoundAssign(Peek().kind) || Peek().kind == TokenKind::ASSIGN) {
         // an error is reported for illeal index access, e.g: a[+=1], a[=1]
         ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_expected_expression, lastToken.End(), lastToken.Value(), lookahead.Value());
+            "parse_expected_expression", lastToken.End(), lastToken.Value(), lookahead.Value());
         ConsumeUntilAny({TokenKind::NL, TokenKind::SEMI, TokenKind::RSQUARE}, false);
         return MakeInvalid<InvalidExpr>(lookahead.Begin());
     }
@@ -353,7 +353,7 @@ OwnedPtr<AST::Expr> ParserImpl::ParseIndexAccess()
     if (ret->isClosed && ret->stopExpr == nullptr) {
         // an error is reported for illeal index access,e.g: a[1..=]、a[..=]
         ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_expected_expression, lastToken.End(), lastToken.Value(), lookahead.Value());
+            "parse_expected_expression", lastToken.End(), lastToken.Value(), lookahead.Value());
     }
     if (Seeing(TokenKind::COLON)) {
         if (!ret->startExpr || !ret->stopExpr) {
@@ -423,7 +423,7 @@ OwnedPtr<IfAvailableExpr> ParserImpl::ParseIfAvailable()
 
     auto fail = [this, &begin, &arg, &lambda1, &lambda2]() {
         Next();
-        auto diagBag = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_character,
+        auto diagBag = ParseDiagnoseRefactor("parse_expected_character",
             lastToken.Begin(), "','", "'" + lastToken.Value() + "'");
         diagBag.AddMainHintArguments("','");
         auto ret = MakeOwned<IfAvailableExpr>(std::move(arg), std::move(lambda1), std::move(lambda2));
@@ -440,12 +440,12 @@ OwnedPtr<IfAvailableExpr> ParserImpl::ParseIfAvailable()
         lparenPos = lastToken.Begin();
         lparenSkipped = true;
     } else {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_character, lookahead.Begin(), "(", lookahead.Value());
+        ParseDiagnoseRefactor("parse_expected_character", lookahead.Begin(), "(", lookahead.Value());
         bad = true;
     }
     arg = ParseFuncArg();
     if (arg->name.Empty()) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_ifavailable_arg_no_name, lookahead);
+        ParseDiagnoseRefactor("parse_ifavailable_arg_no_name", lookahead);
         bad = true;
     }
     if (!Skip(TokenKind::COMMA)) {
@@ -459,7 +459,7 @@ OwnedPtr<IfAvailableExpr> ParserImpl::ParseIfAvailable()
         if (Is<LambdaExpr>(expr1)) {
             return OwnedPtr{StaticCast<LambdaExpr>(expr1.release())};
         } else {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_ifavailable_not_lambda, *expr1);
+            ParseDiagnoseRefactor("parse_ifavailable_not_lambda", *expr1);
             bad = true;
         }
         return {};
@@ -476,7 +476,7 @@ OwnedPtr<IfAvailableExpr> ParserImpl::ParseIfAvailable()
     ret->begin = std::move(begin);
     if (!Skip(TokenKind::RPAREN)) {
         if (lparenSkipped) {
-            auto db = ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_right_delimiter, lookahead.Begin(), "(");
+            auto db = ParseDiagnoseRefactor("parse_expected_right_delimiter", lookahead.Begin(), "(");
             db.AddMainHintArguments(")");
             db.AddHint(lparenPos, "(");
         }
@@ -512,7 +512,7 @@ OwnedPtr<Expr> ParserImpl::ParseExpr(const Token& preT, OwnedPtr<Expr> expr, Exp
     while (SeeingExprOperator()) {
         auto tok = GetExprOperator();
         if (newlineSkipped) {
-            auto builder = ParseDiagnoseRefactor(DiagKindRefactor::parse_nl_warning, firstNLPosition);
+            auto builder = ParseDiagnoseRefactor("parse_nl_warning", firstNLPosition);
             builder.AddHint(MakeRange(
                 lastNoneNLToken.Begin(), lookahead.Begin() + 1), lastNoneNLToken.Value(), tok.Value());
         }
@@ -559,7 +559,7 @@ void ParserImpl::CheckLeftExpression(const Token& preT, const OwnedPtr<Expr>& ba
             base->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
         }
         if (base->astKind == ASTKind::TUPLE_LIT && tok.kind != TokenKind::ASSIGN) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_cannot_operator_a_tuple, tok, tok.Value());
+            ParseDiagnoseRefactor("parse_cannot_operator_a_tuple", tok, tok.Value());
         }
     } else if (IsNoneAssociative(tok) && !base->TestAttr(Attribute::HAS_BROKEN)) {
         DiagNoneAssociativeOp(preT, tok);
@@ -827,7 +827,7 @@ void ParserImpl::CheckBaseOfTrailingClosureExpr(const OwnedPtr<Expr>& baseExpr)
     if (Utils::NotIn(baseExpr->astKind,
                      {ASTKind::MACRO_EXPAND_EXPR, ASTKind::ARRAY_EXPR, ASTKind::OPTIONAL_EXPR, ASTKind::CALL_EXPR,
                      ASTKind::REF_EXPR, ASTKind::MEMBER_ACCESS})) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_trailing_closure_only_follow_name, *baseExpr);
+        ParseDiagnoseRefactor("parse_trailing_closure_only_follow_name", *baseExpr);
     }
     if (baseExpr->astKind == ASTKind::CALL_EXPR) {
         auto callExpr = StaticAs<ASTKind::CALL_EXPR>(baseExpr.get());
@@ -836,7 +836,7 @@ void ParserImpl::CheckBaseOfTrailingClosureExpr(const OwnedPtr<Expr>& baseExpr)
         }
         if (Utils::NotIn(
             callExpr->baseFunc->astKind, {ASTKind::MEMBER_ACCESS, ASTKind::REF_EXPR, ASTKind::OPTIONAL_EXPR})) {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_trailing_closure_only_follow_name, *baseExpr);
+            ParseDiagnoseRefactor("parse_trailing_closure_only_follow_name", *baseExpr);
         }
     }
 }
@@ -954,14 +954,14 @@ AST::SuffixKind ParserImpl::ParseSuffix(OwnedPtr<Expr>& baseExpr)
         Seeing({TokenKind::QUEST, TokenKind::LPAREN}, false) || Seeing({TokenKind::QUEST, TokenKind::LCURL}, false)) {
         if (baseExpr->astKind == ASTKind::WILDCARD_EXPR) {
             auto builder =
-                ParseDiagnoseRefactor(DiagKindRefactor::parse_unexpected_expected_found, *baseExpr.get(), "_ wildcard");
+                ParseDiagnoseRefactor("parse_unexpected_expected_found", *baseExpr.get(), "_ wildcard");
             builder.AddMainHintArguments("expression", "wildcard");
         }
         ParseQuestSuffixExpr(baseExpr);
         return SuffixKind::QUEST;
     } else if (Seeing(TokenKind::QUEST) && !SeeingCombinator({TokenKind::QUEST, TokenKind::QUEST})) {
         // a single QUEST as operator is grammatically incorrect. e.g. a?b
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_character_after, lookahead.Begin(),
+        ParseDiagnoseRefactor("parse_expected_character_after", lookahead.Begin(),
             "'.', '(', '[', '{' or '?'", lookahead.Value());
     }
     return SuffixKind::NONE;

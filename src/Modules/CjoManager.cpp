@@ -454,7 +454,7 @@ std::vector<OwnedPtr<ASTLoader>>& CjoManagerImpl::GetCommonPartCjos(
 {
     if (commonPartLoaders.empty()) {
         if (globalOptions.commonPartCjos.empty()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::module_common_part_path_is_required, DEFAULT_POSITION);
+            diag.DiagnoseRefactor("module_common_part_path_is_required", DEFAULT_POSITION);
         }
         for (auto commonPartCjo : globalOptions.commonPartCjos) {
             commonPartLoaders.emplace_back(ReadCjo(packageName, commonPartCjo, cjoManager));
@@ -475,7 +475,7 @@ OwnedPtr<ASTLoader> CjoManagerImpl::ReadCjo(
         FileUtil::ReadBinaryFileToBuffer(cjoPath, buffer, failedReason);
         if (printErr && !failedReason.empty()) {
             diag.DiagnoseRefactor(
-                DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, cjoPath, failedReason);
+                "module_read_file_to_buffer_failed", DEFAULT_POSITION, cjoPath, failedReason);
             return nullptr;
         }
     }

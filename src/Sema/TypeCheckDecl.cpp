@@ -57,7 +57,7 @@ void InsertEnumConstructors(ASTContext& ctx, const EnumDecl& ed, bool enableMacr
 
 inline void DiagUnableToInferDecl(DiagnosticEngine& diag, const Decl& decl)
 {
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_unable_to_infer_decl, MakeRangeForDeclIdentifier(decl));
+    diag.DiagnoseRefactor("sema_unable_to_infer_decl", MakeRangeForDeclIdentifier(decl));
 }
 } // namespace
 
@@ -72,7 +72,7 @@ void TypeChecker::TypeCheckerImpl::CheckFuncDecl(ASTContext& ctx, FuncDecl& fd)
     auto redefModifier = TypeCheckUtil::FindModifier(fd, TokenKind::REDEF);
     auto staticModifier = TypeCheckUtil::FindModifier(fd, TokenKind::STATIC);
     if (redefModifier && staticModifier == nullptr && fd.propDecl == nullptr) {
-        diag.Diagnose(*redefModifier, DiagKind::sema_redef_modify_static_func, "function");
+        diag.Diagnose(*redefModifier, "sema_redef_modify_static_func", "function");
     }
 
     fd.funcBody->funcDecl = &fd;
@@ -110,7 +110,7 @@ void TypeChecker::TypeCheckerImpl::CheckStaticVarAccessNonStatic(const VarDecl& 
                 !target->TestAttr(Attribute::ENUM_CONSTRUCTOR) && target->outerDecl;
             if (invalidAccess) {
                 diag.Diagnose(
-                    vd, DiagKind::sema_static_variable_cannot_access_non_static_member, re->ref.identifier.Val());
+                    vd, "sema_static_variable_cannot_access_non_static_member", re->ref.identifier.Val());
             }
             return VisitAction::WALK_CHILDREN;
         } else if (node->astKind == ASTKind::MEMBER_ACCESS || node->astKind == ASTKind::FUNC_BODY) {
@@ -129,17 +129,17 @@ void TypeChecker::TypeCheckerImpl::CheckEntryFunc(FuncDecl& fd)
         return; // Do not need diagnose.
     }
     if (fd.curFile->isCommon) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_common_package_has_main, fd);
+        diag.DiagnoseRefactor("sema_common_package_has_main", fd);
     }
     if (!mainFunctionMap.empty() &&
         (mainFunctionMap.find(fd.curFile) == mainFunctionMap.end() ||
             mainFunctionMap[fd.curFile].find(&fd) == mainFunctionMap[fd.curFile].end())) {
-        (void)diag.Diagnose(fd, DiagKind::sema_redefinition_entry);
+        (void)diag.Diagnose(fd, "sema_redefinition_entry");
     }
     if (fd.funcBody->retType && fd.funcBody->retType->ty) {
         auto retTy = fd.funcBody->retType->ty;
         if (Ty::IsTyCorrect(retTy) && !(retTy->IsInteger() || retTy->IsUnit())) {
-            (void)diag.Diagnose(fd, DiagKind::sema_unexpected_return_type_for_entry);
+            (void)diag.Diagnose(fd, "sema_unexpected_return_type_for_entry");
         }
     }
     bool noParamList = !fd.funcBody || fd.funcBody->paramLists.empty();
@@ -156,7 +156,7 @@ void TypeChecker::TypeCheckerImpl::CheckEntryFunc(FuncDecl& fd)
             return true;
         });
     if (invalidParamTy || fd.funcBody->paramLists[0]->params.size() > 1) {
-        (void)diag.Diagnose(fd, DiagKind::sema_unexpected_param_for_entry);
+        (void)diag.Diagnose(fd, "sema_unexpected_param_for_entry");
     }
     (void)mainFunctionMap[fd.curFile].emplace(&fd);
 }
@@ -177,12 +177,12 @@ void TypeChecker::TypeCheckerImpl::CheckOperatorOverloadFunc(const FuncDecl& fd)
             // Unary operators.
             if (IsUnaryOperator(fd.op)) {
                 if (baseTy && IsBuiltinUnaryExpr(fd.op, *baseTy)) {
-                    (void)diag.Diagnose(fd, DiagKind::sema_operator_overload_built_in_unary_operator,
+                    (void)diag.Diagnose(fd, "sema_operator_overload_built_in_unary_operator",
                         fd.identifier.Val(), baseTy->String());
                 }
             } else {
                 // If fd.op is not a unary operator.
-                diag.Diagnose(fd, DiagKind::sema_operator_overload_invalid_num_parameter, fd.identifier.Val());
+                diag.Diagnose(fd, "sema_operator_overload_invalid_num_parameter", fd.identifier.Val());
             }
             break;
         }
@@ -190,16 +190,16 @@ void TypeChecker::TypeCheckerImpl::CheckOperatorOverloadFunc(const FuncDecl& fd)
             // Binary operators.
             // Allow 'Intrinsic' function to overload.
             if (!IsBinaryOperator(fd.op)) { // If fd.op is not a binary operator.
-                (void)diag.Diagnose(fd, DiagKind::sema_operator_overload_invalid_num_parameter, fd.identifier.Val());
+                (void)diag.Diagnose(fd, "sema_operator_overload_invalid_num_parameter", fd.identifier.Val());
             } else if (fd.fullPackageName != CORE_PACKAGE_NAME && baseTy && paramTys[0] &&
                 IsBuiltinBinaryExpr(fd.op, *baseTy, *paramTys[0])) {
-                (void)diag.Diagnose(fd, DiagKind::sema_operator_overload_built_in_binary_operator, fd.identifier.Val(),
+                (void)diag.Diagnose(fd, "sema_operator_overload_built_in_binary_operator", fd.identifier.Val(),
                     baseTy->String(), paramTys[0]->String());
             }
             break;
         }
         default:
-            (void)diag.Diagnose(fd, DiagKind::sema_operator_overload_invalid_num_parameter, fd.identifier.Val());
+            (void)diag.Diagnose(fd, "sema_operator_overload_invalid_num_parameter", fd.identifier.Val());
     }
 }
 
@@ -208,7 +208,7 @@ void TypeChecker::TypeCheckerImpl::HandIndexOperatorOverload(const FuncDecl& fd,
     CJC_ASSERT(!fd.funcBody->paramLists.empty());
     const auto& params = fd.funcBody->paramLists[0]->params;
     if (params.empty()) {
-        (void)diag.Diagnose(fd, DiagKind::sema_operator_overload_invalid_num_parameter, fd.identifier.Val());
+        (void)diag.Diagnose(fd, "sema_operator_overload_invalid_num_parameter", fd.identifier.Val());
         return;
     }
     // Index operator overload function can have many parameters but at most one named parameter.
@@ -224,7 +224,7 @@ void TypeChecker::TypeCheckerImpl::HandIndexOperatorOverload(const FuncDecl& fd,
     }
     if (!invalidNamedParams.empty()) {
         auto& firstParam = invalidNamedParams.front();
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_subscript_assign_parameter, firstParam,
+        auto builder = diag.DiagnoseRefactor("sema_invalid_subscript_assign_parameter", firstParam,
             MakeRange(firstParam.get().identifier));
         for (auto iter = invalidNamedParams.cbegin() + 1; iter != invalidNamedParams.cend(); ++iter) {
             builder.AddHint(MakeRange(iter->get().identifier));
@@ -232,7 +232,7 @@ void TypeChecker::TypeCheckerImpl::HandIndexOperatorOverload(const FuncDecl& fd,
     }
     if (params.size() <= 1) {
         (void)diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_invalid_subscript_assign_parameter_num, fd, MakeRange(fd.identifier));
+            "sema_invalid_subscript_assign_parameter_num", fd, MakeRange(fd.identifier));
         return;
     }
     if (invalidNamedParams.empty() && funcTy.retTy != TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)) {
@@ -240,7 +240,7 @@ void TypeChecker::TypeCheckerImpl::HandIndexOperatorOverload(const FuncDecl& fd,
         if (fd.funcBody && fd.funcBody->retType && !fd.funcBody->retType->begin.IsZero()) {
             range = MakeRange(fd.funcBody->retType->begin, fd.funcBody->retType->end);
         }
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_subscript_assign_return, fd, range);
+        (void)diag.DiagnoseRefactor("sema_invalid_subscript_assign_return", fd, range);
     }
 }
 
@@ -283,10 +283,10 @@ void TypeChecker::TypeCheckerImpl::CheckVarWithPatternDecl(ASTContext& ctx, VarW
         return;
     }
     if (Ty::IsTyCorrect(vpd.ty) && !ChkPattern(ctx, *vpd.ty, *vpd.irrefutablePattern, false)) {
-        diag.Diagnose(*vpd.irrefutablePattern, DiagKind::sema_mismatched_type_for_pattern_in_vardecl);
+        diag.Diagnose(*vpd.irrefutablePattern, "sema_mismatched_type_for_pattern_in_vardecl");
     }
     if (!IsIrrefutablePattern(*vpd.irrefutablePattern)) {
-        diag.Diagnose(*vpd.irrefutablePattern, DiagKind::sema_pattern_can_not_be_assigned);
+        diag.Diagnose(*vpd.irrefutablePattern, "sema_pattern_can_not_be_assigned");
     }
     // Set VarDecl's initializer of VarPattern in TuplePattern by VarWithPatternDecl's initializer.
     auto tp = DynamicCast<TuplePattern>(vpd.irrefutablePattern.get());
@@ -349,7 +349,7 @@ void TypeChecker::TypeCheckerImpl::SynchronizeTypeAndInitializer(const CheckerCo
             vd.ty = TypeManager::GetInvalidTy();
             bool shouldDiag = vd.ShouldDiagnose() && !CanSkipDiag(*vd.initializer);
             if (shouldDiag) {
-                diag.Diagnose(*vd.initializer, DiagKind::sema_cfunc_var_cannot_have_var_param);
+                diag.Diagnose(*vd.initializer, "sema_cfunc_var_cannot_have_var_param");
             }
         } else {
             vd.ty = vd.initializer->ty;
@@ -367,7 +367,7 @@ void TypeChecker::TypeCheckerImpl::CheckPropDecl(ASTContext& ctx, PropDecl& pd)
     auto redefModifier = TypeCheckUtil::FindModifier(pd, TokenKind::REDEF);
     auto staticModifier = TypeCheckUtil::FindModifier(pd, TokenKind::STATIC);
     if (redefModifier && staticModifier == nullptr) {
-        (void)diag.Diagnose(*redefModifier, DiagKind::sema_redef_modify_static_func, "property");
+        (void)diag.Diagnose(*redefModifier, "sema_redef_modify_static_func", "property");
         pd.ty = TypeManager::GetInvalidTy();
     }
     CJC_NULLPTR_CHECK(pd.type);
@@ -376,17 +376,17 @@ void TypeChecker::TypeCheckerImpl::CheckPropDecl(ASTContext& ctx, PropDecl& pd)
     for (auto& pmd : pd.getters) {
         if (pmd->funcBody && !pmd->funcBody->paramLists.empty()) {
             if (!pmd->funcBody->paramLists[0]->params.empty()) {
-                (void)diag.Diagnose(*pmd, DiagKind::sema_cannot_have_parameter, "getter");
+                (void)diag.Diagnose(*pmd, "sema_cannot_have_parameter", "getter");
             }
             if (pmd->funcBody->paramLists.size() > 1) {
-                (void)diag.Diagnose(*pmd, DiagKind::sema_cannot_currying, "getter");
+                (void)diag.Diagnose(*pmd, "sema_cannot_currying", "getter");
             }
         }
         Synthesize({ctx, SynPos::NONE}, pmd.get());
     }
     for (auto& pmd : pd.setters) {
         if (pmd->funcBody && pmd->funcBody->paramLists.size() > 1) {
-            (void)diag.Diagnose(*pmd, DiagKind::sema_cannot_currying, "setter");
+            (void)diag.Diagnose(*pmd, "sema_cannot_currying", "setter");
         }
         Synthesize({ctx, SynPos::NONE}, pmd.get());
     }
@@ -436,7 +436,7 @@ void TypeChecker::TypeCheckerImpl::CheckEnumDecl(ASTContext& ctx, EnumDecl& ed)
         } else {
             // Can only implement interface. Set type to invalid (avoid invalid reference).
             interfaceType->ty = TypeManager::GetInvalidTy();
-            (void)diag.Diagnose(ed, DiagKind::sema_type_implement_non_interface, "enum", ed.identifier.Val());
+            (void)diag.Diagnose(ed, "sema_type_implement_non_interface", "enum", ed.identifier.Val());
         }
     }
     // Check constructors.
@@ -463,7 +463,7 @@ void TypeChecker::TypeCheckerImpl::CheckEnumDecl(ASTContext& ctx, EnumDecl& ed)
                 auto mutDecl = TypeCheckUtil::FindModifier(*pd, TokenKind::MUT);
                 CJC_ASSERT(mutDecl);
                 if (mutDecl) {
-                    (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_immutable_type_illegal_property, *mutDecl);
+                    (void)diag.DiagnoseRefactor("sema_immutable_type_illegal_property", *mutDecl);
                 }
             }
         }
@@ -483,7 +483,7 @@ void TypeChecker::TypeCheckerImpl::SetEnumEleTy(Decl& constructor)
     } else if (constructor.astKind == ASTKind::FUNC_DECL) {
         SetEnumEleTyHandleFuncDecl(*StaticAs<ASTKind::FUNC_DECL>(&constructor));
     } else {
-        (void)diag.Diagnose(constructor, DiagKind::sema_invalid_constructor_in_enum);
+        (void)diag.Diagnose(constructor, "sema_invalid_constructor_in_enum");
         constructor.ty = TypeManager::GetInvalidTy();
     }
 }
@@ -500,7 +500,7 @@ void TypeChecker::TypeCheckerImpl::CheckEnumFuncDeclIsCStructParam(const FuncDec
             auto structTy = RawStaticCast<StructTy*>(it->ty);
             CJC_ASSERT(structTy && structTy->declPtr);
             if (structTy->declPtr->identifier != "String" && funcDecl.outerDecl) {
-                (void)diag.Diagnose(funcDecl, DiagKind::sema_enum_pattern_func_param_cty_error,
+                (void)diag.Diagnose(funcDecl, "sema_enum_pattern_func_param_cty_error",
                     funcDecl.identifier.Val(), funcDecl.outerDecl->identifier.Val());
             }
         }
@@ -535,7 +535,7 @@ void TypeChecker::TypeCheckerImpl::SetEnumEleTyHandleFuncDecl(FuncDecl& funcDecl
     funcDecl.funcBody->retType->EnableAttr(Attribute::COMPILER_ADD);
     // Check c ffi type usage.
     if (funcDecl.outerDecl->TestAttr(Attribute::C)) {
-        diag.Diagnose(funcDecl, DiagKind::sema_enum_pattern_func_cty_error, funcDecl.identifier.Val(),
+        diag.Diagnose(funcDecl, "sema_enum_pattern_func_cty_error", funcDecl.identifier.Val(),
             funcDecl.outerDecl->identifier.Val());
     } else {
         CheckEnumFuncDeclIsCStructParam(funcDecl);
@@ -558,16 +558,16 @@ void TypeChecker::TypeCheckerImpl::CheckStructDecl(ASTContext& ctx, StructDecl& 
         } else {
             // Can only implement interface. Set type to invalid (avoid invalid reference).
             interfaceType->ty = TypeManager::GetInvalidTy();
-            (void)diag.Diagnose(sd, DiagKind::sema_type_implement_non_interface, "struct", sd.identifier.Val());
+            (void)diag.Diagnose(sd, "sema_type_implement_non_interface", "struct", sd.identifier.Val());
         }
     }
     if (sd.ty && Ty::IsCStructType(*sd.ty)) {
         if (sd.generic) {
             (void)diag.Diagnose(
-                *sd.generic, sd.generic->leftAnglePos, DiagKind::sema_cffi_cannot_have_type_param, "struct with @C");
+                *sd.generic, sd.generic->leftAnglePos, "sema_cffi_cannot_have_type_param", "struct with @C");
         }
         if (!sd.inheritedTypes.empty()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_cstruct_cannot_impl_interfaces, MakeRange(sd.identifier));
+            diag.DiagnoseRefactor("sema_cstruct_cannot_impl_interfaces", MakeRange(sd.identifier));
         }
     }
     CJC_NULLPTR_CHECK(sd.body);
@@ -577,7 +577,7 @@ void TypeChecker::TypeCheckerImpl::CheckStructDecl(ASTContext& ctx, StructDecl& 
         CheckJavaInteropLibImport(sd);
         if (!sd.inheritedTypes.empty()) {
             diag.DiagnoseRefactor(
-                DiagKindRefactor::sema_cjmapping_struct_inheritance_interface_not_supported, MakeRange(sd.identifier));
+                "sema_cjmapping_struct_inheritance_interface_not_supported", MakeRange(sd.identifier));
         }
     }
 }
@@ -654,7 +654,7 @@ void TypeChecker::TypeCheckerImpl::CheckTypeAliasAccess(const TypeAliasDecl& tad
             continue;
         }
         if (decl->astKind != ASTKind::GENERIC_PARAM_DECL && !IsCompatibleAccessLevel(tadLevel, GetAccessLevel(*decl))) {
-            (void)diag.Diagnose(tad, DiagKind::sema_typealias_external_refer_internal, tadLevelStr,
+            (void)diag.Diagnose(tad, "sema_typealias_external_refer_internal", tadLevelStr,
                 tad.identifier.Val(), GetAccessLevelStr(*decl), decl->identifier.Val());
         }
     }
@@ -709,7 +709,7 @@ void TypeChecker::TypeCheckerImpl::CheckTypeAlias(ASTContext& ctx, TypeAliasDecl
     if (tad.generic) {
         std::vector<Ptr<Ty>> diffs = GetUnusedTysInTypeAlias(tad);
         if (!diffs.empty()) {
-            diag.Diagnose(tad, DiagKind::typealias_unused_type_parameters, Ty::GetTypesToStr(diffs, ","));
+            diag.Diagnose(tad, "typealias_unused_type_parameters", Ty::GetTypesToStr(diffs, ","));
         }
     }
     // NOTE: for incremental compile, the type may be marked as 'IS_CHECK_VISITED'.

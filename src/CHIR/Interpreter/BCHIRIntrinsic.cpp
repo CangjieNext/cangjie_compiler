@@ -13,9 +13,9 @@
 #include <securec.h>
 #include <thread>
 
-#include "cangjie/CHIR/Utils/CHIRCasting.h"
-#include "cangjie/CHIR/Interpreter/BCHIRInterpreter.h"
 #include "cangjie/CHIR/IR/IntrinsicKind.h"
+#include "cangjie/CHIR/Interpreter/BCHIRInterpreter.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
 using namespace Cangjie;
@@ -45,7 +45,7 @@ bool BCHIRInterpreter::InterpretIntrinsic0()
                 intrinsicKind >= GET_THREAD_OBJECT && intrinsicKind <= SET_THREAD_OBJECT ? "concurrency " : "";
             std::string errorMSg = "interpreter does not support " + concurrencyKeyword + "intrinsic function " +
                 std::to_string(intrinsic);
-            FailWith(opIdx, errorMSg, DiagKind::interp_unsupported, "InterpretIntrinsic",
+            FailWith(opIdx, errorMSg, "interp_unsupported", "InterpretIntrinsic",
                 GetOpCodeLabel(OpCode::INTRINSIC0));
             return true;
         }
@@ -83,7 +83,7 @@ bool BCHIRInterpreter::InterpretIntrinsic1()
                 intrinsicKind >= GET_THREAD_OBJECT && intrinsicKind <= SET_THREAD_OBJECT ? "concurrency " : "";
             std::string errorMSg = "interpreter does not support " + concurrencyKeyword + "intrinsic function " +
                 std::to_string(intrinsic);
-            FailWith(opIdx, errorMSg, DiagKind::interp_unsupported, "InterpretIntrinsic",
+            FailWith(opIdx, errorMSg, "interp_unsupported", "InterpretIntrinsic",
                 GetOpCodeLabel(OpCode::INTRINSIC1));
             return true;
         }

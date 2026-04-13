@@ -89,7 +89,7 @@ bool TypeChecker::TypeCheckerImpl::ChkArrayLit(ASTContext& ctx, Ty& target, Arra
             // 1. array lit is empty, type is unable to be inferred.
             // 2. array lit is not empty, synthesize arrayLit 's type and check with target.
             if (al.children.empty()) {
-                diag.Diagnose(al, DiagKind::sema_empty_arrayLit_type_undefined);
+                diag.Diagnose(al, "sema_empty_arrayLit_type_undefined");
                 return false;
             }
             auto arrayLitTy = SynArrayLit(ctx, al);
@@ -113,7 +113,7 @@ bool TypeChecker::TypeCheckerImpl::ChkArrayLit(ASTContext& ctx, Ty& target, Arra
     bool matched = true;
     auto vt = DynamicCast<VArrayTy*>(targetTy);
     if (vt && vt->size != static_cast<int64_t>(al.children.size())) {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_varray_size_match, al);
+        auto builder = diag.DiagnoseRefactor("sema_varray_size_match", al);
         builder.AddMainHintArguments(std::to_string(vt->size), std::to_string(al.children.size()));
         matched = false;
     }
@@ -134,7 +134,7 @@ bool TypeChecker::TypeCheckerImpl::ChkArrayLit(ASTContext& ctx, Ty& target, Arra
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
 {
     if (al.children.empty()) {
-        diag.Diagnose(al, DiagKind::sema_empty_arrayLit_type_undefined);
+        diag.Diagnose(al, "sema_empty_arrayLit_type_undefined");
         al.ty = TypeManager::GetInvalidTy();
         return al.ty;
     }
@@ -161,7 +161,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
     } else {
         al.ty = TypeManager::GetInvalidTy();
         auto errMsg = JoinAndMeet::CombineErrMsg(std::get<std::stack<std::string>>(joinRes));
-        diag.Diagnose(al, DiagKind::sema_inconsistency_elemType, "array").AddNote(errMsg);
+        diag.Diagnose(al, "sema_inconsistency_elemType", "array").AddNote(errMsg);
     }
     return al.ty;
 }
@@ -186,7 +186,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSizedArrayElement(ASTContext& ctx, Ty& ele
     if (Check(ctx, expectedExprTy, ae.args[1].get())) {
         return true;
     }
-    diag.Diagnose(*ae.args[1], DiagKind::sema_array_expression_type_error);
+    diag.Diagnose(*ae.args[1], "sema_array_expression_type_error");
     return false;
 }
 
@@ -213,7 +213,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSizedArrayWithoutElemTy(ASTContext& ctx, T
         ReplaceIdealTy(*ae.args[1]->expr);
         auto exprTy = ae.args[1]->ty;
         if (!Ty::IsTyCorrect(exprTy) || (isArgLambda && exprTy->kind != TypeKind::TYPE_FUNC)) {
-            diag.Diagnose(*ae.args[0], DiagKind::sema_array_expression_type_error);
+            diag.Diagnose(*ae.args[0], "sema_array_expression_type_error");
             return false;
         }
         auto elementTy = exprTy;
@@ -221,7 +221,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSizedArrayWithoutElemTy(ASTContext& ctx, T
             // Constructor is RawArray<T>(Int64, (Int64)->T), so array type can be inferred by funcTy.
             auto funcTy = RawStaticCast<FuncTy*>(exprTy);
             if (funcTy->paramTys.size() != 1 || !typeManager.IsSubtype(funcTy->paramTys[0], sizeType)) {
-                diag.Diagnose(*ae.args[0], DiagKind::sema_array_expression_param_type_error);
+                diag.Diagnose(*ae.args[0], "sema_array_expression_param_type_error");
                 return false;
             }
             elementTy = funcTy->retTy;
@@ -233,7 +233,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSizedArrayWithoutElemTy(ASTContext& ctx, T
     auto elementTy = GetArrayElementTy(typeManager, static_cast<ArrayTy&>(target));
     auto expectedExprTy = isArgLambda ? typeManager.GetFunctionTy({sizeType}, elementTy) : elementTy;
     if (!Check(ctx, expectedExprTy, ae.args[1].get())) {
-        diag.Diagnose(*ae.args[1], DiagKind::sema_array_element_type_error);
+        diag.Diagnose(*ae.args[1], "sema_array_element_type_error");
         return false;
     }
     ae.ty = &target;
@@ -246,7 +246,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSizedArrayExpr(ASTContext& ctx, Ty& target
     auto arrayTy = RawStaticCast<ArrayTy*>(ae.type->ty);
     auto sizeType = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
     if (!Check(ctx, sizeType, ae.args[0].get())) {
-        diag.Diagnose(*ae.args[0], DiagKind::sema_array_size_type_error);
+        diag.Diagnose(*ae.args[0], "sema_array_size_type_error");
         return false;
     }
     if (ae.args[1] == nullptr) {
@@ -282,7 +282,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSingeArgArrayWithoutElemTy(ASTContext& ctx
     CJC_ASSERT(!ae.args.empty());
     auto exprTy = Synthesize({ctx, SynPos::EXPR_ARG}, ae.args[0].get());
     if (!Ty::IsTyCorrect(exprTy)) {
-        diag.Diagnose(*ae.args[0], DiagKind::sema_array_single_element_type_error);
+        diag.Diagnose(*ae.args[0], "sema_array_single_element_type_error");
         return false;
     }
     auto superTys = typeManager.GetAllSuperTys(*exprTy);
@@ -295,7 +295,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSingeArgArrayWithoutElemTy(ASTContext& ctx
         CJC_NULLPTR_CHECK(ae.initFunc);
         Synthesize({ctx, SynPos::EXPR_ARG}, ae.initFunc); // Non-public decl should synthesize manually.
     } else {
-        diag.Diagnose(*ae.args[0], DiagKind::sema_array_single_element_type_error);
+        diag.Diagnose(*ae.args[0], "sema_array_single_element_type_error");
         return false;
     }
     return target.IsInvalid() || typeManager.IsSubtype(ae.ty, &target);
@@ -323,7 +323,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSingeArgArrayExpr(ASTContext& ctx, Ty& tar
         Synthesize({ctx, SynPos::EXPR_ARG}, ae.initFunc); // Non-public decl should synthesize manually.
         return target.IsInvalid() || typeManager.IsSubtype(ae.ty, &target);
     }
-    diag.Diagnose(*ae.args[0], DiagKind::sema_array_single_element_type_error);
+    diag.Diagnose(*ae.args[0], "sema_array_single_element_type_error");
     return false;
 }
 
@@ -334,7 +334,7 @@ bool TypeChecker::TypeCheckerImpl::ChkArrayExpr(ASTContext& ctx, Ty& target, Arr
     // Target type must be array/interface type or option boxed array/interface type.
     bool isWellTyped = Ty::IsTyCorrect(targetTy) && (targetTy->IsArray() || targetTy->IsInterface());
     if (!isWellTyped) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, ae)
+        diag.DiagnoseRefactor("sema_mismatched_types", ae)
             .AddMainHintArguments(targetTy->String(), "Array");
         ae.ty = TypeManager::GetNonNullTy(ae.ty);
         return false;
@@ -357,7 +357,7 @@ bool TypeChecker::TypeCheckerImpl::ChkArrayExpr(ASTContext& ctx, Ty& target, Arr
     } else if (ae.args.size() == 2) { // Array init with 2 elements, size & initExpr.
         ret = ChkSizedArrayExpr(ctx, *targetTy, ae);
     } else {
-        diag.Diagnose(ae, DiagKind::sema_array_too_much_argument);
+        diag.Diagnose(ae, "sema_array_too_much_argument");
         ret = false;
     }
     if (Ty::IsTyCorrect(ae.ty) && !Ty::IsTyCorrect(ae.type->ty)) {
@@ -372,7 +372,7 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayArg(ASTContext& ctx, ArrayExpr& ve)
     // check arg.
     if (ve.args.size() != 1) {
         diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_varray_args_number_mismatch, ve, MakeRange(ve.leftParenPos, ve.rightParenPos + 1));
+            "sema_varray_args_number_mismatch", ve, MakeRange(ve.leftParenPos, ve.rightParenPos + 1));
         return false;
     }
     bool ret = false;
@@ -383,7 +383,7 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayArg(ASTContext& ctx, ArrayExpr& ve)
         ret = Check(ctx, expectedExprTy, ve.args[0].get());
     } else {
         if (ve.args[0]->name != "repeat") {
-            auto builder = diag.Diagnose(*ve.args[0], DiagKind::sema_unknown_named_argument, ve.args[0]->name.Val());
+            auto builder = diag.Diagnose(*ve.args[0], "sema_unknown_named_argument", ve.args[0]->name.Val());
             builder.AddNote("expect the name of the named parameter is 'item'");
             return false;
         }
@@ -434,7 +434,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynArrayExpr(ASTContext& ctx, ArrayExpr& a
     bool checkRet = true;
     if (ae.args.empty()) {
         if (arrayTy->typeArgs[0]->IsInvalid()) {
-            diag.Diagnose(ae, DiagKind::sema_empty_arrayLit_type_undefined);
+            diag.Diagnose(ae, "sema_empty_arrayLit_type_undefined");
             checkRet = false;
         }
     } else if (ae.args.size() == 1) {
@@ -442,7 +442,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynArrayExpr(ASTContext& ctx, ArrayExpr& a
     } else if (ae.args.size() == 2) { // Array init with 2 elements, size & initExpr.
         checkRet = ChkSizedArrayExpr(ctx, *TypeManager::GetInvalidTy(), ae);
     } else {
-        diag.Diagnose(ae, DiagKind::sema_array_too_much_argument);
+        diag.Diagnose(ae, "sema_array_too_much_argument");
         checkRet = false;
     }
     if (!checkRet || !ChkArrayArgs(ae)) {
@@ -489,7 +489,7 @@ bool TypeChecker::TypeCheckerImpl::ChkPointerExpr(ASTContext& ctx, Ty& target, P
     cpe.ty = cpe.type->ty;
     // 'var a = CPointer()': Generic type cannot be derived.
     if (!Ty::IsTyCorrect(cpe.ty)) {
-        diag.Diagnose(cpe, DiagKind::sema_pointer_unknow_generic_type);
+        diag.Diagnose(cpe, "sema_pointer_unknow_generic_type");
         return false;
     } else if (!ret) {
         DiagMismatchedTypesWithFoundTy(diag, *cpe.sourceExpr, *targetTy, *cpe.ty);
@@ -500,19 +500,19 @@ bool TypeChecker::TypeCheckerImpl::ChkPointerExpr(ASTContext& ctx, Ty& target, P
         auto argTy = Synthesize({ctx, SynPos::EXPR_ARG}, cpe.arg.get());
         if (!Ty::IsTyCorrect(argTy) || !(argTy->IsPointer() || argTy->IsCFunc())) {
             if (!TypeCheckUtil::CanSkipDiag(*cpe.arg)) {
-                diag.Diagnose(cpe, DiagKind::sema_pointer_single_element_type_error);
+                diag.Diagnose(cpe, "sema_pointer_single_element_type_error");
             }
             return false;
         }
         if (!cpe.arg->name.Empty()) {
             diag.Diagnose(cpe.arg->name.Begin(), cpe.arg->name.End(),
-                DiagKind::sema_unknown_named_argument, cpe.arg->name.Val());
+                "sema_unknown_named_argument", cpe.arg->name.Val());
             return false;
         }
     }
 
     if (Ty::IsTyCorrect(targetTy) && !typeManager.IsSubtype(cpe.ty, targetTy)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, cpe)
+        diag.DiagnoseRefactor("sema_mismatched_types", cpe)
             .AddMainHintArguments(target.String(), Ty::ToString(cpe.ty));
         return false;
     }
@@ -542,7 +542,7 @@ bool TypeChecker::TypeCheckerImpl::SynCFuncCall(ASTContext& ctx, CallExpr& ce)
     }
     if (ce.ty->IsCFunc()) {
         if (ce.args.size() != 1) {
-            diag.Diagnose(*ce.baseFunc, DiagKind::sema_cfunc_too_many_arguments);
+            diag.Diagnose(*ce.baseFunc, "sema_cfunc_too_many_arguments");
             ce.ty = TypeManager::GetInvalidTy();
             return false;
         }
@@ -553,7 +553,7 @@ bool TypeChecker::TypeCheckerImpl::SynCFuncCall(ASTContext& ctx, CallExpr& ce)
         }
         bool res{true};
         if (!ce.args[0]->name.Empty()) {
-            diag.Diagnose(ce.args[0]->name.Begin(), ce.args[0]->name.End(), DiagKind::sema_unknown_named_argument,
+            diag.Diagnose(ce.args[0]->name.Begin(), ce.args[0]->name.End(), "sema_unknown_named_argument",
                 ce.args[0]->name.Val());
             // the program is invalid, yet the type check can still pass if all other checks hold, do not goto INVALID
             // here
@@ -566,7 +566,7 @@ bool TypeChecker::TypeCheckerImpl::SynCFuncCall(ASTContext& ctx, CallExpr& ce)
         }
     }
     // Otherwise, report error and return a invalid ty.
-    diag.Diagnose(*ce.args[0], DiagKind::sema_cfunc_ctor_must_be_cpointer);
+    diag.Diagnose(*ce.args[0], "sema_cfunc_ctor_must_be_cpointer");
     ce.ty = TypeManager::GetInvalidTy();
     return false;
 }
@@ -776,7 +776,7 @@ bool TypeChecker::TypeCheckerImpl::ChkArrayArgs(ArrayExpr& ae)
         return true;
     }
     if (ae.args[0] && !ae.args[0]->name.Empty()) {
-        diag.Diagnose(*ae.args[0], DiagKind::sema_array_first_arg_cannot_be_named);
+        diag.Diagnose(*ae.args[0], "sema_array_first_arg_cannot_be_named");
         return false;
     }
     // Other valid array constructors must have 2 arguments.
@@ -785,12 +785,12 @@ bool TypeChecker::TypeCheckerImpl::ChkArrayArgs(ArrayExpr& ae)
     }
     if (ae.initFunc) {
         if (!ae.args[1]->name.Empty()) {
-            diag.Diagnose(*ae.args[1], DiagKind::sema_array_second_arg_cannot_be_named);
+            diag.Diagnose(*ae.args[1], "sema_array_second_arg_cannot_be_named");
             return false;
         }
     } else {
         if (ae.args[1]->name != "repeat") {
-            diag.Diagnose(*ae.args[1], DiagKind::sema_array_second_wrong_named_arg);
+            diag.Diagnose(*ae.args[1], "sema_array_second_wrong_named_arg");
             return false;
         }
     }

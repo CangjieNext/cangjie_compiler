@@ -80,9 +80,9 @@ bool TypeChecker::TypeCheckerImpl::IsLegalAccessFromStaticFunc(
                 identifier = curFuncBody.funcDecl->identifier.Val().substr(identifier.size() - propDeclName.size());
             }
             diag.Diagnose(
-                re, DiagKind::sema_static_function_cannot_access_non_static_member, decl.identifier.Val(), identifier);
+                re, "sema_static_function_cannot_access_non_static_member", decl.identifier.Val(), identifier);
         } else {
-            diag.Diagnose(re, DiagKind::sema_static_lambdaExpr_cannot_access_non_static, decl.identifier.Val());
+            diag.Diagnose(re, "sema_static_lambdaExpr_cannot_access_non_static", decl.identifier.Val());
         }
     };
     for (auto it : decls) {
@@ -161,7 +161,7 @@ void TypeChecker::TypeCheckerImpl::CanTargetOfRefBeCapturedCaseNominalDecl(
         bool needCheck = decl.TestAttr(Attribute::IN_STRUCT) || (fd->outerDecl->astKind == ASTKind::CLASS_DECL &&
             (fd->outerDecl->TestAnyAttr(Attribute::ABSTRACT, Attribute::OPEN)));
         if (needCheck && fd->outerDecl == decl.outerDecl) {
-            diag.Diagnose(nre, DiagKind::sema_illegal_capture_this,
+            diag.Diagnose(nre, "sema_illegal_capture_this",
                 decl.TestAttr(Attribute::IN_STRUCT) ? "struct" : "inheritable class");
         }
     }
@@ -176,7 +176,7 @@ void TypeChecker::TypeCheckerImpl::CanTargetOfRefBeCapturedCaseMutFunc(
         // the fields of the instance cannot be captured by lambda or internal function in a mut function.
         if (fd->TestAttr(AST::Attribute::MUT) && curFuncBody.funcDecl != fd &&
             decl.TestAttr(AST::Attribute::IN_STRUCT) && decl.astKind == ASTKind::VAR_DECL) {
-            diag.Diagnose(nre, DiagKind::sema_capture_this_or_instance_field_in_func, decl.identifier.Val(),
+            diag.Diagnose(nre, "sema_capture_this_or_instance_field_in_func", decl.identifier.Val(),
                 "mutable function '" + fd->identifier + "'");
         }
         if (fd->IsFinalizer() &&
@@ -185,7 +185,7 @@ void TypeChecker::TypeCheckerImpl::CanTargetOfRefBeCapturedCaseMutFunc(
             (decl.astKind == ASTKind::FUNC_DECL || decl.astKind == ASTKind::PROP_DECL) &&
             !decl.TestAttr(AST::Attribute::STATIC)) {
             diag.Diagnose(
-                nre, DiagKind::sema_capture_this_or_instance_field_in_func, decl.identifier.Val(), "finalizer");
+                nre, "sema_capture_this_or_instance_field_in_func", decl.identifier.Val(), "finalizer");
         }
     }
 }
@@ -203,7 +203,7 @@ void TypeChecker::TypeCheckerImpl::CheckImmutableFuncAccessMutableFunc(
         !fdSrc->TestAttr(AST::Attribute::PRIMARY_CONSTRUCTOR) && accessMutableTarget) {
         std::string srcName = fdSrc->isGetter ? "get" : fdSrc->identifier.Val();
         std::string dstName = destNode.astKind == ASTKind::PROP_DECL ? "set" : destNode.identifier.Val();
-        diag.Diagnose(srcNode, pos, DiagKind::sema_immutable_function_cannot_access_mutable_function, srcName, dstName);
+        diag.Diagnose(srcNode, pos, "sema_immutable_function_cannot_access_mutable_function", srcName, dstName);
     }
 }
 
@@ -219,14 +219,14 @@ void TypeChecker::TypeCheckerImpl::CheckForbiddenFuncReferenceAccess(
         fd.outerDecl->TestAnyAttr(AST::Attribute::OPEN, AST::Attribute::ABSTRACT);
     bool useMemberInCtor = inOpenClassCtor && decl.TestAnyAttr(AST::Attribute::IN_CLASSLIKE, AST::Attribute::IN_EXTEND);
     if (useMemberInCtor) {
-        diag.Diagnose(fd, pos, DiagKind::sema_illegal_member_used_in_open_constructor, DeclKindToString(decl),
+        diag.Diagnose(fd, pos, "sema_illegal_member_used_in_open_constructor", DeclKindToString(decl),
             decl.identifier.Val(), fd.outerDecl->identifier.Val());
     }
     // Finalizer is only allowed in class.
     // spec rule: this.xx, super.xx or current member (function or property) is forbidden in class finalizer.
     if (fd.IsFinalizer() && typeManager.IsSubtype(fd.outerDecl->ty, decl.outerDecl->ty)) {
         std::string type = decl.astKind == ASTKind::PROP_DECL ? "property" : "function";
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_instance_func_cannot_be_used_in_finalizer, pos, type);
+        diag.DiagnoseRefactor("sema_instance_func_cannot_be_used_in_finalizer", pos, type);
     }
 }
 
@@ -380,7 +380,7 @@ void TypeChecker::TypeCheckerImpl::CheckWarningOfCaptureVariable(const ASTContex
                 continue;
             }
             diag.Diagnose(
-                re, DiagKind::sema_capture_has_shadow_variable, target->identifier.Val(), target->begin, decl->begin);
+                re, "sema_capture_has_shadow_variable", target->identifier.Val(), target->begin, decl->begin);
             return;
         }
         funcSym = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, funcSym->scopeName);

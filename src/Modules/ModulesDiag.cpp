@@ -26,25 +26,25 @@ bool IsSamePosition(const Position& pos1, const Position& pos2)
 void WarnUselessImport(DiagnosticEngine& diag, const Range& importRange, const Decl& decl)
 {
     auto& name = decl.identifier;
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::package_shadowed_import, importRange, name);
+    auto builder = diag.DiagnoseRefactor("package_shadowed_import", importRange, name);
     builder.AddNote(MakeRange(decl.identifier.Begin(), name), "'" + name + "' is declared here");
 }
 
 void WarnConflictImport(DiagnosticEngine& diag, const std::string& name, const Range& current, const Range& previous)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::package_conflict_import, current, name);
+    auto builder = diag.DiagnoseRefactor("package_conflict_import", current, name);
     builder.AddNote(previous, "The previous was imported here");
 }
 
 void WarnRepeatedFeatureName(DiagnosticEngine& diag, std::string& name, const Range& current, const Range& previous)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::feature_already_seen_name, current);
+    auto builder = diag.DiagnoseRefactor("feature_already_seen_name", current);
     builder.AddNote(previous, "feature '" + name + "' previously used here");
 }
 
 void DiagForNullPackageFeature(DiagnosticEngine& diag, const Range& current, const Ptr<FeaturesDirective> refFeature)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::feature_null_declaration, current);
+    auto builder = diag.DiagnoseRefactor("feature_null_declaration", current);
     builder.AddNote(
         MakeRange(refFeature->featuresSet->begin, refFeature->featuresSet->end),
         "perhaps you meant these features");
@@ -54,10 +54,10 @@ void DiagForDifferentPackageFeatureConsistency(DiagnosticEngine& diag, const Ptr
     const Ptr<FeaturesDirective> refFeature, bool hasAnno)
 {
     if (feature->annotations.empty() && hasAnno) {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::parse_fail_expected_annotation,
+        auto builder = diag.DiagnoseRefactor("parse_fail_expected_annotation",
             MakeRange(feature->featuresPos, feature->featuresPos + std::string("features").size()), "@NonProduct");
     } else {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::feature_different_consistency,
+        auto builder = diag.DiagnoseRefactor("feature_different_consistency",
             MakeRange(feature->featuresSet->begin, feature->featuresSet->end));
         builder.AddNote(
             MakeRange(refFeature->featuresSet->begin, refFeature->featuresSet->end),
@@ -78,7 +78,7 @@ void DiagForDifferentPackageNames(DiagnosticEngine& diag,
         }
     }
     auto builder = diag.DiagnoseRefactor(
-        DiagKindRefactor::package_multiple_package_declarations, MakeRange(diagPosition, diagPackageDecl.first));
+        "package_multiple_package_declarations", MakeRange(diagPosition, diagPackageDecl.first));
     uint8_t counter = 0;
     for (auto [pkgPair, pair] : packageNamePosMap) {
         // 2 is maximum number of diagnostic prints.
@@ -101,7 +101,7 @@ void DiagForDifferentPackageNames(DiagnosticEngine& diag,
 
 void DiagRootPackageModifier(DiagnosticEngine& diag, const PackageSpec& packageSpec)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::package_root_package_should_be_public, packageSpec,
+    auto builder = diag.DiagnoseRefactor("package_root_package_should_be_public", packageSpec,
         MakeRange(packageSpec.packageName));
     auto packageMsg = "package " + packageSpec.packageName;
     builder.AddNote("default modifier of 'package' is 'public', you can use '" + packageMsg + "' instead");

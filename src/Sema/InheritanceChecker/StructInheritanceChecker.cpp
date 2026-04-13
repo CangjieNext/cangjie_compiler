@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <map>
 #include <numeric>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -98,7 +99,7 @@ void DiagnoseParameterName(DiagnosticEngine& diag, const FuncDecl& parent, const
 {
     // The caller should guarantee the pointers are non-null and valid!
     auto diagBuilder =
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_param_named_mismatched, child, MakeRange(child.identifier));
+        diag.DiagnoseRefactor("sema_param_named_mismatched", child, MakeRange(child.identifier));
     auto& parentParams = parent.funcBody->paramLists[0]->params;
     auto& childParams = child.funcBody->paramLists[0]->params;
     CJC_ASSERT(parentParams.size() == childParams.size());
@@ -164,7 +165,7 @@ void DiagWeakVisibility(DiagnosticEngine& diag, const Decl& parent, const Decl& 
     auto childRange = MakeRangeForDeclIdentifier(child);
     std::string childHint =
         "the visibility of the deriving '" + child.identifier + "' is '" + visibilityToString(child) + "'";
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_weak_visibility, MakeRangeForDeclIdentifier(diagNode));
+    auto builder = diag.DiagnoseRefactor("sema_weak_visibility", MakeRangeForDeclIdentifier(diagNode));
     if (&child == &diagNode) {
         builder.AddMainHintArguments(childHint);
     } else { // child is inherited from other parent
@@ -602,7 +603,7 @@ std::optional<bool> StructInheritanceChecker::DeterminingSkipExtendByInheritance
         // Another extension implement sub-interface and super-interface of current extension interface at same
         // time, unable to decide which extension happens first.
         if (hasSubImpl && hasSuperImpl) {
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_extend_check_sequence_cannot_decide, curDecl);
+            auto builder = diag.DiagnoseRefactor("sema_extend_check_sequence_cannot_decide", curDecl);
             std::string inherChainStr =
                 hasSubImpl->String() + " <: " + curDeclSuperInsTy->String() + " <: " + hasSuperImpl->String();
             builder.AddNote(
@@ -613,7 +614,7 @@ std::optional<bool> StructInheritanceChecker::DeterminingSkipExtendByInheritance
         }
         bool shouldDiag = skipExtend.has_value() && skipExtend.value() != (hasSubImpl != nullptr);
         if (shouldDiag) {
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_extend_check_sequence_cannot_decide, curDecl);
+            auto builder = diag.DiagnoseRefactor("sema_extend_check_sequence_cannot_decide", curDecl);
             std::string lastInherStr = lastInherTy.first->String() + " <: " + lastInherTy.second->String();
             std::string curInherStr = hasSubImpl ? hasSubImpl->String() + " <: " + curDeclSuperInsTy->String()
                                                  : curDeclSuperInsTy->String() + " <: " + hasSuperImpl->String();
@@ -650,7 +651,7 @@ void StructInheritanceChecker::CheckExtendExportDependence(
         CJC_NULLPTR_CHECK(parentOuter);
         if (isImplFuncOrProp && parentOuter->IsExportedDecl() && !childOuter->IsExportedDecl()) {
             auto builder = diag.DiagnoseRefactor(
-                DiagKindRefactor::sema_export_extend_depend_non_export_extend, curDecl, interface.decl->identifier);
+                "sema_export_extend_depend_non_export_extend", curDecl, interface.decl->identifier);
             builder.AddNote(MakeRange(child.decl->outerDecl->begin, child.decl->outerDecl->end),
                 "following extension cannot be exported");
         }
@@ -747,7 +748,7 @@ void StructInheritanceChecker::DiagnoseInheritedInsconsistType(const MemberSigna
     if (auto decl = DynamicCast<const Decl*>(&node)) {
         range = MakeRange(decl->identifier);
     }
-    auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::sema_inherit_member_type_inconsistent, node, range,
+    auto diagBuilder = diag.DiagnoseRefactor("sema_inherit_member_type_inconsistent", node, range,
         typeName, DeclKindToString(*member.decl), member.decl->identifier.Val());
     std::string message = StringifyInconsistentTypes(member.inconsistentTypes, TypeManager::GetInvalidTy());
     diagBuilder.AddNote("conflict types are " + message);
@@ -768,7 +769,7 @@ void StructInheritanceChecker::DiagnoseForConflictInheritance(
         // Only function allows overloading.
         bool allFunc = std::all_of(found.first, found.second, [](auto& it) { return it.second.decl->IsFunc(); });
         if (count > 1 && !allFunc) {
-            auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::sema_inherit_super_member_kind_inconsistent,
+            auto diagBuilder = diag.DiagnoseRefactor("sema_inherit_super_member_kind_inconsistent",
                 decl, MakeRange(decl.identifier), identifier);
             OrderedDeclSet sorted;
             for (auto mIt = found.first; mIt != found.second; ++mIt) {
@@ -854,7 +855,7 @@ void StructInheritanceChecker::CheckIncompleteOverrideOrImplOfExtend(
         std::string interfaceBeOverrided = "interface '" + interface.decl->outerDecl->identifier + "'";
         if (interface.decl->TestAttr(Attribute::DEFAULT)) {
             auto builder = diag.DiagnoseRefactor(
-                DiagKindRefactor::sema_cannot_override, *checkingDecls[0], funcOrProp, child.decl->identifier);
+                "sema_cannot_override", *checkingDecls[0], funcOrProp, child.decl->identifier);
             builder.AddNote(MakeRange(child.decl->identifier),
                 "member " + memberStr + " conflict with that in " + interfaceBeOverrided);
         } else {
@@ -862,7 +863,7 @@ void StructInheritanceChecker::CheckIncompleteOverrideOrImplOfExtend(
             std::string classNameOverride = prefix +
                 (checkingDecls[0]->ty->IsNominal() ? checkingDecls[0]->ty->name : checkingDecls[0]->ty->String());
             auto builder =
-                diag.Diagnose(*checkingDecls[0], DiagKind::sema_interface_member_must_be_implemented_in_struct,
+                diag.Diagnose(*checkingDecls[0], "sema_interface_member_must_be_implemented_in_struct",
                     funcOrProp, child.decl->identifier.Val(), classNameOverride);
             builder.AddNote(MakeRange(child.decl->identifier),
                 "member " + memberStr + " may not be visible to '" + classNameOverride + "'");
@@ -983,11 +984,11 @@ void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMa
             unImplementedMembers.emplace_back(&member);
         } else if (member.shouldBeImplemented) {
             diag.Diagnose(
-                structDecl, DiagKind::sema_interface_member_must_be_implemented, type, identifier, structName);
+                structDecl, "sema_interface_member_must_be_implemented", type, identifier, structName);
         } else if (member.decl->outerDecl != &structDecl) {
             if (isStaticAbsMember && isAbstractClass) {
                 auto structNameRange = MakeRange(structDecl.identifier);
-                (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_inherit_abstract_class_static_unimplement_func,
+                (void)diag.DiagnoseRefactor("sema_inherit_abstract_class_static_unimplement_func",
                     structDecl, structNameRange, structName, type, identifier);
             } else if (!member.inconsistentTypes.empty()) {
                 // When inherit functions from interfaces which has inconsistent types, we need report error here.
@@ -996,11 +997,11 @@ void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMa
         }
     }
     if (!unImplementedMembers.empty()) {
-        DiagKindRefactor kind;
+        std::string_view kind;
         if (structDecl.IsClassLikeDecl()) {
-            kind = DiagKindRefactor::sema_class_need_abstract_modifier_or_func_need_impl;
+            kind = "sema_class_need_abstract_modifier_or_func_need_impl";
         } else {
-            kind = DiagKindRefactor::sema_need_member_implementation;
+            kind = "sema_need_member_implementation";
         }
         DiagnosticBuilder builder = diag.DiagnoseRefactor(kind, structDecl.begin, structName);
         std::stable_sort(unImplementedMembers.begin(), unImplementedMembers.end(), CompMemberSignatureByPosAndTy);
@@ -1052,12 +1053,12 @@ bool StructInheritanceChecker::CheckExtendMemberValid(const MemberSignature& par
         auto structTy = child.outerDecl->ty;
         std::string typeName = "extend " + (structTy->IsNominal() ? structTy->name : structTy->String());
         diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_extend_member_cannot_shadow, child, childRange, child.identifier, typeName);
+            "sema_extend_member_cannot_shadow", child, childRange, child.identifier, typeName);
     } else if (auto isExtended = IsExtendedDefaultImpl(parent, child);
         isExtended || parent.decl->outerDecl->astKind == ASTKind::EXTEND_DECL) {
         std::string type = DeclKindToString(*parent.decl);
         auto diagnose = diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_extend_function_cannot_overridden, child, childRange, type, child.identifier);
+            "sema_extend_function_cannot_overridden", child, childRange, type, child.identifier);
         if (!isExtended) {
             auto parentRange = parent.decl->identifier.Empty() ? MakeRange(parent.decl->begin, parent.decl->end)
                                                                : MakeRange(parent.decl->identifier);
@@ -1068,7 +1069,7 @@ bool StructInheritanceChecker::CheckExtendMemberValid(const MemberSignature& par
                                                            : MakeRange(parent.decl->identifier);
         auto ed = RawStaticCast<ExtendDecl*>(child.outerDecl);
         auto diagnose = diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_extend_member_cannot_shadow, child, childRange, child.identifier, ed->ty->String());
+            "sema_extend_member_cannot_shadow", child, childRange, child.identifier, ed->ty->String());
         diagnose.AddNote(*parent.decl, parentRange, "shadowed definition of '" + child.identifier + "' is here");
     } else {
         return true;
@@ -1092,18 +1093,18 @@ void StructInheritanceChecker::CheckSameNameInheritanceInfo(const MemberSignatur
     std::string inheritance =
         checkingDecls[0]->astKind == ASTKind::EXTEND_DECL ? "extended type" : "parent class or interfaces";
     if (child.TestAttr(Attribute::STATIC) != parentDecl->TestAttr(Attribute::STATIC)) {
-        diag.Diagnose(child, DiagKind::sema_static_and_non_static_member_cannot_have_same_name, childStatic, name,
+        diag.Diagnose(child, "sema_static_and_non_static_member_cannot_have_same_name", childStatic, name,
             parentStatic, inheritance);
         return;
     }
     if (child.astKind != parentDecl->astKind) {
         if (parent.extendDecl || parent.isInheritedInterface || CheckExtendMemberValid(parent, child)) {
-            auto build = diag.DiagnoseRefactor(DiagKindRefactor::sema_inherit_member_kind_inconsistent, child,
+            auto build = diag.DiagnoseRefactor("sema_inherit_member_kind_inconsistent", child,
                 MakeRange(child.identifier), DeclKindToString(child), name, DeclKindToString(*parentDecl), inheritance);
             build.AddNote(*parentDecl, MakeRange(parentDecl->identifier), "found conflict here");
         }
     } else if (parentDecl->astKind == ASTKind::VAR_DECL) {
-        diag.Diagnose(child, DiagKind::sema_member_variable_can_not_shadow, name);
+        diag.Diagnose(child, "sema_member_variable_can_not_shadow", name);
     }
 }
 
@@ -1119,7 +1120,7 @@ void StructInheritanceChecker::CheckInheritanceAttributes(const MemberSignature&
         return;
     }
     if (!parentDecl->TestAttr(Attribute::STATIC) && child.TestAttr(Attribute::REDEF)) {
-        diag.Diagnose(child, DiagKind::sema_func_no_override_or_redefine_modifier, "redef", type, name);
+        diag.Diagnose(child, "sema_func_no_override_or_redefine_modifier", "redef", type, name);
     } else if (!parentDecl->TestAttr(Attribute::ABSTRACT) && !parentDecl->TestAttr(Attribute::STATIC)) {
         bool notInInterface = parentDecl->outerDecl->astKind != ASTKind::INTERFACE_DECL;
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
@@ -1127,7 +1128,7 @@ void StructInheritanceChecker::CheckInheritanceAttributes(const MemberSignature&
             DiagCannotOverride(diag, child, *parentDecl);
 #endif
         } else if (child.TestAttr(Attribute::ABSTRACT) && notInInterface) {
-            diag.Diagnose(child, DiagKind::sema_invalid_override_member_in_class, type, child.identifier.Val(), type);
+            diag.Diagnose(child, "sema_invalid_override_member_in_class", type, child.identifier.Val(), type);
         }
     }
 }
@@ -1143,7 +1144,7 @@ void StructInheritanceChecker::CheckInheritanceForInterface(
     }
     std::string type = DeclKindToString(*interfaceMember);
     if (childDecl->TestAttr(Attribute::ABSTRACT) && !interfaceMember->TestAttr(Attribute::ABSTRACT)) {
-        diag.Diagnose(*childDecl, DiagKind::sema_invalid_override_or_redefine_member_in_interface, type,
+        diag.Diagnose(*childDecl, "sema_invalid_override_or_redefine_member_in_interface", type,
             childDecl->identifier.Val(), type);
     }
     // Mark child member implment abstract function of inherted interface. Used to determine whether child needs to
@@ -1169,9 +1170,9 @@ void StructInheritanceChecker::DiagnoseForOverriddenMember(const MemberSignature
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (childDecl->TestAttr(Attribute::OVERRIDE)) {
 #endif
-        diag.Diagnose(*childDecl, DiagKind::sema_missing_overridden_func, type, childDecl->identifier.Val(), type);
+        diag.Diagnose(*childDecl, "sema_missing_overridden_func", type, childDecl->identifier.Val(), type);
     } else if (childDecl->TestAttr(Attribute::REDEF) && childDecl->TestAttr(Attribute::STATIC)) {
-        diag.Diagnose(*childDecl, DiagKind::sema_missing_redefined_func, type, childDecl->identifier.Val(), type);
+        diag.Diagnose(*childDecl, "sema_missing_redefined_func", type, childDecl->identifier.Val(), type);
     }
 }
 
@@ -1211,7 +1212,7 @@ void CheckGenericTypeBoundsMapped(const Decl& parent, const Decl& child,
     DiagnosticEngine& diag, TypeManager& typeManager)
 {
     if (parent.GetGenericsCount() != child.GetGenericsCount()) {
-        diag.Diagnose(child, DiagKind::sema_generic_member_type_argument_different, child.identifier.Val());
+        diag.Diagnose(child, "sema_generic_member_type_argument_different", child.identifier.Val());
         return;
     }
     auto childGeneric = child.GetGeneric();
@@ -1256,7 +1257,7 @@ void CheckGenericTypeBoundsMapped(const Decl& parent, const Decl& child,
             auto parentConstraints =
                 instUppers.empty() ? std::string("empty") : "'" + Ty::GetTypesToStableStr(instUppers, "', '") + "'";
             auto gc = GetConstraintNodeByIndex(i, *childGeneric);
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_constraint_not_looser, *gc);
+            auto builder = diag.DiagnoseRefactor("sema_generic_constraint_not_looser", *gc);
             builder.AddNote("parent constraint is " + parentConstraints);
         }
     }
@@ -1269,7 +1270,7 @@ void StructInheritanceChecker::CheckGenericTypeArgInfo(const Decl& parent, const
     auto childGeneric = child.GetGeneric();
 
     if (parentGeneric->typeParameters.size() != childGeneric->typeParameters.size()) {
-        diag.Diagnose(child, DiagKind::sema_generic_member_type_argument_different, child.identifier.Val());
+        diag.Diagnose(child, "sema_generic_member_type_argument_different", child.identifier.Val());
         return;
     }
 
@@ -1302,23 +1303,23 @@ void StructInheritanceChecker::CheckPropertyInheritance(const MemberSignature& p
     }
 
     if (parent.ty != child.ty || !parent.inconsistentTypes.empty()) {
-        diag.Diagnose(child, DiagKind::sema_property_override_implement_type_diff);
+        diag.Diagnose(child, "sema_property_override_implement_type_diff");
     }
     auto parentProp = RawStaticCast<PropDecl*>(parentDecl);
     auto childProp = RawStaticCast<const PropDecl*>(&child);
     if (childProp->isVar != parentProp->isVar) {
         if (parentProp->isVar) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_property_have_same_declaration_in_inherit_mut, *childProp,
+            diag.DiagnoseRefactor("sema_property_have_same_declaration_in_inherit_mut", *childProp,
                 childProp->identifier.Val());
         } else {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_property_have_same_declaration_in_inherit_immut, *childProp,
+            diag.DiagnoseRefactor("sema_property_have_same_declaration_in_inherit_immut", *childProp,
                 childProp->identifier.Val());
         }
     } else if (childProp->isVar && (childProp->getters.empty() || childProp->setters.empty()) &&
         parentProp->TestAnyAttr(Attribute::DEFAULT, Attribute::ABSTRACT)) {
         // Currently, implemenation of default interface property must implement both getter/setter.
         diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_property_must_implement_both, *childProp, childProp->identifier.Val());
+            "sema_property_must_implement_both", *childProp, childProp->identifier.Val());
     }
     CheckAccessVisibility(*parentDecl, child, child);
 }
@@ -1373,7 +1374,7 @@ bool StructInheritanceChecker::CheckImplementationRelation(
             DiagnoseParameterName(diag, *parentFunc, *childFunc);
         } else if (!CheckThisTypeCompatibility(*parentFunc, *childFunc)) {
             auto diagBuilder =
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_inherit_not_return_this, MakeRange(childFunc->identifier));
+                diag.DiagnoseRefactor("sema_inherit_not_return_this", MakeRange(childFunc->identifier));
             diagBuilder.AddNote(MakeRange(parentFunc->identifier), "the overriden function");
         } else if (AreReturnTypesCompatible(*parentFuncTy, *childFuncTy, parent.inconsistentTypes)) {
             const Decl& diagNode = childFunc->outerDecl == checkingDecls.front() ? *childFunc : *checkingDecls.front();
@@ -1382,7 +1383,7 @@ bool StructInheritanceChecker::CheckImplementationRelation(
         } else if (inheritedByExtension || !CheckReturnOverrideByGeneric(*parentFuncTy, *childFuncTy)) {
             // A type that does not meet the type variance relationship cannot be used as the basis for subtypes when
             // override occurs.
-            auto builder = diag.Diagnose(*childFunc, DiagKind::sema_return_type_invariance, childFunc->identifier.Val(),
+            auto builder = diag.Diagnose(*childFunc, "sema_return_type_invariance", childFunc->identifier.Val(),
                 Ty::ToString(parentFuncTy->retTy));
             builder.AddNote(*parentFunc, "cannot override/implement the following function");
             // If `diagDecl == nullptr`, both child and parent are imported which is orphan extension.
@@ -1396,7 +1397,7 @@ bool StructInheritanceChecker::CheckImplementationRelation(
             } else {
                 inconsistentTypesForDiag = "'" + parentFuncTy->retTy->String() + "'";
             }
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_return_type_incompatible,
+            auto builder = diag.DiagnoseRefactor("sema_return_type_incompatible",
                 MakeRangeForDeclIdentifier(*childFunc), childFunc->identifier.Val());
             builder.AddNote(MakeRangeForDeclIdentifier(*targetFuncDecl),
                 "'" + childFuncTy->retTy->String() + "' is not a subtype of " + inconsistentTypesForDiag);
@@ -1404,7 +1405,7 @@ bool StructInheritanceChecker::CheckImplementationRelation(
         if (!childFunc->IsConst() && parentDecl->IsConst()) {
             std::string inheritance =
                 checkingDecls[0]->astKind == ASTKind::EXTEND_DECL ? "extended type" : "parent class or interfaces";
-            auto build = diag.DiagnoseRefactor(DiagKindRefactor::sema_inherit_member_kind_inconsistent, *childFunc,
+            auto build = diag.DiagnoseRefactor("sema_inherit_member_kind_inconsistent", *childFunc,
                 MakeRange(childFunc->identifier), "non-constant function", childFunc->identifier.Val(),
                 "'const' function", inheritance);
             build.AddNote(*parentDecl, MakeRange(parentDecl->identifier), "found 'const' function here");
@@ -1435,7 +1436,7 @@ void StructInheritanceChecker::CheckMutModifierCompatible(const MemberSignature&
 
     if (parentDecl->TestAttr(Attribute::MUT) != child.TestAttr(Attribute::MUT)) {
         auto& decl = child.outerDecl == checkingDecls[0] ? child : *checkingDecls[0];
-        diag.Diagnose(decl, DiagKind::sema_incompatible_mut_modifier_between_struct_and_interface,
+        diag.Diagnose(decl, "sema_incompatible_mut_modifier_between_struct_and_interface",
             child.identifier.Val(), parentDecl->outerDecl->identifier.Val());
     }
 }

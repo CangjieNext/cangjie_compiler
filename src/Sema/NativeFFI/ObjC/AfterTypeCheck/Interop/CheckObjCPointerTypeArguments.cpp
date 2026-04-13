@@ -10,11 +10,10 @@
  * This file implements checks of types used with ObjCPointer
  */
 
-
-#include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
-#include "cangjie/AST/Walker.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/Utils.h"
+#include "cangjie/AST/Walker.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -32,7 +31,7 @@ void CheckObjCPointerTypeArguments::HandleImpl(InteropContext& ctx)
                 && ctx.typeMapper.IsObjCPointer(*typeUsage->ty)
                 && !ctx.typeMapper.IsObjCCompatible(*typeUsage->ty->typeArgs[0])) {
                 ctx.diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_objc_pointer_argument_must_be_objc_compatible, 
+                    "sema_objc_pointer_argument_must_be_objc_compatible", 
                     *typeUsage);
                 typeUsage->EnableAttr(Attribute::IS_BROKEN);
             }
