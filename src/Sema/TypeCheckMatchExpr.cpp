@@ -130,12 +130,12 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynNormalMatchCaseBody(ASTContext& ctx, Ma
     me.SetTy(joinedMeTy);
     if (optErrs) {
         if (me.sugarKind == Expr::SugarKind::IF_LET) {
-            auto builder = diag.Diagnose(me, DiagKind::sema_diag_report_error_message,
+            auto builder = diag.Diagnose(me, "sema_diag_report_error_message",
                 "types " + Ty::ToString(me.matchCases[0]->GetTy()) + " and " + Ty::ToString(me.matchCases[1]->GetTy()) +
                     " of the two branches of this 'if' expression mismatch");
             builder.AddNote(*optErrs);
         } else {
-            auto builder = diag.Diagnose(me, DiagKind::sema_type_incompatible, "MatchCase");
+            auto builder = diag.Diagnose(me, "sema_type_incompatible", "MatchCase");
             builder.AddNote(*optErrs);
         }
     }
@@ -157,7 +157,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynQuestSugarMatchCaseBody(ASTContext& ctx
         me.SetTy(TypeManager::GetInvalidTy());
         return me.GetTy();
     } else if (!selectorTy->IsCoreOptionType()) {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_optional_chain_non_optional, me);
+        auto builder = diag.DiagnoseRefactor("sema_optional_chain_non_optional", me);
         builder.AddMainHintArguments(selectorTy->String());
         me.SetTy(TypeManager::GetInvalidTy());
         return me.GetTy();
@@ -209,7 +209,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynMatchExprNoSelector(ASTContext& ctx, Ma
     auto [optErrs, joinedMeTy] = JoinAndMeet::SetJoinedType(me.GetTy(), joinRes);
     me.SetTy(joinedMeTy);
     if (optErrs) {
-        auto builder = diag.Diagnose(me, DiagKind::sema_type_incompatible, "MatchCase");
+        auto builder = diag.Diagnose(me, "sema_type_incompatible", "MatchCase");
         builder.AddNote(*optErrs);
     }
 
@@ -352,7 +352,7 @@ bool TypeChecker::TypeCheckerImpl::ChkNoVarPatternInOrPattern(
     if (varPatterns.empty()) {
         return true;
     }
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_var_in_or_pattern, *varPatterns.front());
+    auto builder = diag.DiagnoseRefactor("sema_var_in_or_pattern", *varPatterns.front());
     auto iter = varPatterns.cbegin() + 1; // Skip the first `Var` as it has been reported in main hint.
     while (iter != varPatterns.cend()) {
         builder.AddHint(**iter);
@@ -392,7 +392,7 @@ bool TypeChecker::TypeCheckerImpl::ChkPatternsSameASTKind(const ASTContext& ctx,
     for (auto iter = patterns.cbegin() + 1; iter != patterns.cend(); ++iter) {
         CJC_NULLPTR_CHECK(*iter);
         if ((*iter)->astKind != front->astKind) {
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_different_or_pattern, *front);
+            auto builder = diag.DiagnoseRefactor("sema_different_or_pattern", *front);
             builder.AddMainHintArguments(patternToString(*front));
             builder.AddHint(**iter, patternToString(**iter));
             return false;
@@ -455,13 +455,13 @@ bool TypeChecker::TypeCheckerImpl::CheckMatchExprNoSelectorExhaustiveness(MatchE
         }
         if (Ty::IsInitialTy(matchCaseOther->GetTy())) {
             ret = false;
-            diag.Diagnose(*matchCaseOther, DiagKind::sema_match_case_has_no_type);
+            diag.Diagnose(*matchCaseOther, "sema_match_case_has_no_type");
             continue;
         }
     }
     if (!hasDefault) {
         ret = false;
-        diag.Diagnose(me, DiagKind::sema_match_case_must_have_default);
+        diag.Diagnose(me, "sema_match_case_must_have_default");
     }
     // The cases after default should be set UNREACHABLE.
     for (size_t i = defaultCase + 1; i < me.matchCaseOthers.size(); i++) {

@@ -333,8 +333,8 @@ void GlobalVarChecker::CollectForStaticInit(const FuncDecl& staticInit, const st
                 bool isCommon = target->TestAttr(AST::Attribute::COMMON);
                 bool isStatic = target->TestAttr(AST::Attribute::STATIC);
                 if (isLet && isCommon && isStatic) {
-                    diag.DiagnoseRefactor(DiagKindRefactor::sema_common_static_let_cant_be_initialized_in_static_init,
-                        *node, target->identifier.Val());
+                    diag.DiagnoseRefactor(
+                        "sema_common_static_let_cant_be_initialized_in_static_init", *node, target->identifier.Val());
                 }
                 currentNode = &graph.GetOrBuildNode(*target);
                 // Update visitOrder when initializing static members inside static init.
@@ -569,8 +569,8 @@ bool GlobalVarChecker::CheckVarUsageForDefNode(const DefNode& defNode) const
             std::string identifier = (defNode.var.astKind != ASTKind::VAR_WITH_PATTERN_DECL)
                 ? (identifierPrefix + defNode.var.identifier.Val())
                 : usage.refNode.GetTarget()->identifier.Val();
-            diag.Diagnose(usage.refNode, usage.refPos, DiagKind::sema_global_var_used_before_initialization,
-                usage.refName, identifier);
+            diag.Diagnose(
+                usage.refNode, usage.refPos, "sema_global_var_used_before_initialization", usage.refName, identifier);
             return false;
         }
     }
@@ -646,7 +646,7 @@ bool GlobalVarChecker::ToposortDFS(DefNode& node)
     for (auto& usage : node.usage) {
         if (!ToposortDFS(usage.node)) {
             if (usage.node.color == Color::GRAY) {
-                diag.Diagnose(usage.refNode, usage.refPos, DiagKind::sema_used_before_initialization, usage.refName);
+                diag.Diagnose(usage.refNode, usage.refPos, "sema_used_before_initialization", usage.refName);
             }
             // Also set black for early quit. Used to distinguish the situation from detecting cycle.
             node.color = Color::BLACK;

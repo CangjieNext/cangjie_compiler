@@ -1234,7 +1234,7 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
     }
 #endif
     if (!succeed) {
-        diag.DiagnoseRefactor(DiagKindRefactor::plugin_throws_exception, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("plugin_throws_exception", DEFAULT_POSITION);
     } else if (hasPluginForCHIR && builder.IsEnableIRCheckerAfterPlugin()) {
         DumpCHIRToFile("PLUGIN");
     }

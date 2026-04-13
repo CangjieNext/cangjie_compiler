@@ -54,7 +54,7 @@ void TypeChecker::TypeCheckerImpl::CheckGenericConstraints(ASTContext& ctx, cons
             }
         }
         if (!found) {
-            diag.Diagnose(*genericConstraint->type, DiagKind::sema_generics_type_variable_not_defined,
+            diag.Diagnose(*genericConstraint->type, "sema_generics_type_variable_not_defined",
                 genericConstraint->type->ref.identifier.Val().c_str());
         }
     }
@@ -160,7 +160,7 @@ bool TypeChecker::TypeCheckerImpl::CheckInstTyWithUpperbound(
             std::string typeString =
                 isInstByNothing ? "'Nothing'" : "interface or abstract class '" + it.second->String() + "'";
             auto builder = diag.Diagnose(typeArgs.empty() ? StaticCast<Node>(expr) : *typeArgs[indexMap[it.second]],
-                DiagKind::sema_cannot_instantiated_by_incomplete_type, gTy->String(), typeString);
+                "sema_cannot_instantiated_by_incomplete_type", gTy->String(), typeString);
             if (isInstByNothing) {
                 builder.AddNote("'Nothing' type has no members");
             }
@@ -209,7 +209,7 @@ bool TypeChecker::TypeCheckerImpl::CheckCallGenericDeclInstantiation(
     typeArgTys = TypeCheckUtil::GetInstanationTys(checkNode);
     auto genericDecl = d->GetGeneric();
     if (!genericDecl || genericDecl->typeParameters.size() != typeArgTys.size()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_argument_no_match, checkNode, diagPos);
+        diag.DiagnoseRefactor("sema_generic_argument_no_match", checkNode, diagPos);
         return false;
     }
     return true;
@@ -236,7 +236,7 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericDeclInstantiation(Ptr<const Decl>
     bool invalid = typeArgs.empty() || genericParams.size() != typeArgs.size();
     if (invalid) {
         auto range = MakeRange(checkNode.begin, checkNode.end.IsZero() ? checkNode.begin + 1 : checkNode.end);
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_argument_no_match, checkNode, range);
+        diag.DiagnoseRefactor("sema_generic_argument_no_match", checkNode, range);
         return false;
     }
     TypeSubst  instantiateMap;
@@ -273,8 +273,8 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericDeclInstantiation(Ptr<const Decl>
                 auto& node = isTypeNode && !typeNodes[indexMap[instTy]]->TestAttr(Attribute::COMPILER_ADD)
                     ? *typeNodes[indexMap[instTy]]
                     : checkNode;
-                diag.Diagnose(node, DiagKind::sema_generic_type_argument_not_match_constraint, d->GetTy()->String())
-                    .AddNote(*gc, DiagKind::sema_which_constraint_not_match, instTy->String(),
+                diag.Diagnose(node, "sema_generic_type_argument_not_match_constraint", d->GetTy()->String())
+                    .AddNote(*gc, "sema_which_constraint_not_match", instTy->String(),
                         "'" + upperBoundTy->String() + "'");
                 return false;
             }
@@ -288,7 +288,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetGenericType(Decl& d, const std::vector<
     // For GenericParam check typeArgs
     if (auto gp = DynamicCast<GenericParamDecl*>(&d); gp) {
         if (!typeArgs.empty()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_argument_no_match, *typeArgs[0]);
+            diag.DiagnoseRefactor("sema_generic_argument_no_match", *typeArgs[0]);
             return d.GetTy();
         }
     }
@@ -298,7 +298,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetGenericType(Decl& d, const std::vector<
         return d.GetTy();
     }
     if (typeArgs.size() != generic->typeParameters.size()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_argument_no_match, *typeArgs[0]);
+        diag.DiagnoseRefactor("sema_generic_argument_no_match", *typeArgs[0]);
         return d.GetTy();
     }
     // Build generic type mapping.

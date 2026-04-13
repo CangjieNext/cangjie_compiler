@@ -9,6 +9,7 @@
 
 // DO NOT remove this include. Required for builds for Windows and newer clang
 #include <limits>
+#include <type_traits>
 
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
@@ -201,8 +202,8 @@ public:
     {
         CJC_NULLPTR_CHECK(res);
         bool isOverflow = false;
-        if (std::is_signed<T>::value) {
-            isOverflow = x == std::numeric_limits<T>::min() && y == -1;
+        if constexpr (std::is_signed_v<T>) {
+            isOverflow = x == std::numeric_limits<T>::min() && y == static_cast<T>(-1);
             if (isOverflow && strategy == OverflowStrategy::WRAPPING) {
                 *res = std::numeric_limits<T>::min();
                 return isOverflow;
@@ -230,8 +231,8 @@ public:
     template <typename T> static bool IsOverflowAfterMod(T x, T y, T* res)
     {
         CJC_NULLPTR_CHECK(res);
-        if (std::is_signed<T>::value) {
-            if (x == std::numeric_limits<T>::min() && y == -1) {
+        if constexpr (std::is_signed_v<T>) {
+            if (x == std::numeric_limits<T>::min() && y == static_cast<T>(-1)) {
                 *res = 0;
                 // CJ decided that this does not cause overflow
                 return true;

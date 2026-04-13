@@ -16,8 +16,8 @@
 #include <unordered_map>
 
 #include "cangjie/Basic/DiagnosticEngine.h"
-#include "cangjie/Utils/Utils.h"
 #include "cangjie/Utils/Unicode.h"
+#include "cangjie/Utils/Utils.h"
 
 #define OPTION_TRUE_ACTION(EXPR)                                                                                       \
     [](GlobalOptions& opts, OptionArgInstance&) {                                                                      \
@@ -48,7 +48,7 @@ const std::unordered_map<std::string, GlobalOptions::InteropLanguage> INTEROP_LA
 
 const std::unordered_map<std::string, uint8_t> WARN_GROUP_MAP = {
 #define WARN_GROUP(DESCR, KIND) {DESCR, uint8_t(WarnGroup::KIND)},
-#include "cangjie/Basic/DiagRefactor/DiagnosticWarnGroupKind.def"
+#include "cangjie/Basic/DKRef/WarnGroupKind.def"
 #undef WARN_GROUP
 };
 
@@ -336,7 +336,7 @@ void RemoveEscapedSymbol(std::string &input, const std::string& from, const std:
 bool CheckPassWhenKey(const std::string key, DiagnosticEngine& diag)
 {
     if (!IsIdentifier(key, true)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::dirver_cfg_invaild_identifier, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("dirver_cfg_invaild_identifier", DEFAULT_POSITION);
         return false;
     }
     return true;
@@ -353,11 +353,11 @@ bool ParseAndCheckConditionVar(
     }
     Unicode::NFC(id);
     if (BUILTIN_CONDITION.find(id) != BUILTIN_CONDITION.end()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::dirver_cfg_same_with_builtin, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("dirver_cfg_same_with_builtin", DEFAULT_POSITION);
         return false;
     }
     if (res.find(id) != res.end()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::dirver_cfg_key_repeat, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("dirver_cfg_key_repeat", DEFAULT_POSITION);
         return false;
     }
     return true;
@@ -372,7 +372,7 @@ bool ParsePassedWhen(
         std::string cfgDir = input;
         RemoveEscapedSymbol(cfgDir, "\\=", "=");
         if (!IsDir(cfgDir)) {
-            diag.DiagnoseRefactor(DiagKindRefactor::dirver_cfg_not_a_dir, DEFAULT_POSITION, cfgDir);
+            diag.DiagnoseRefactor("dirver_cfg_not_a_dir", DEFAULT_POSITION, cfgDir);
             return false;
         }
         paths.emplace_back(cfgDir);
@@ -382,13 +382,13 @@ bool ParsePassedWhen(
     for (const auto& it : keyValuePairs) {
         auto kv = Utils::SplitString(it, "=");
         if (kv.size() != ELEMENT_NUM_OF_KV_PAIR) {
-            diag.DiagnoseRefactor(DiagKindRefactor::driver_cfg_value_err, DEFAULT_POSITION);
+            diag.DiagnoseRefactor("driver_cfg_value_err", DEFAULT_POSITION);
             return false;
         }
         Utils::TrimStringVector(kv);
         std::string id = kv[0];
         if (id.empty() || kv[1].empty()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::driver_cfg_value_err, DEFAULT_POSITION);
+            diag.DiagnoseRefactor("driver_cfg_value_err", DEFAULT_POSITION);
             return false;
         }
         if (!CheckPassWhenKey(id, diag)) {
@@ -534,14 +534,14 @@ bool ParseConditionKeyValueLine(
     }
     auto kv = Utils::SplitString(processedInput, "=");
     if (kv.size() != ELEMENT_NUM_OF_KV_PAIR) {
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_cfg_toml_content_err, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("driver_cfg_toml_content_err", DEFAULT_POSITION);
         return false;
     }
     Utils::TrimStringVector(kv);
     constexpr size_t quotesSizeOfValue = 2; // for ""
     std::string id = kv[0];
     if (id.empty() || kv[1].size() <= quotesSizeOfValue || kv[1][0] != '"' || kv[1].back() != '"') {
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_cfg_toml_content_err, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("driver_cfg_toml_content_err", DEFAULT_POSITION);
         return false;
     }
     if (!CheckPassWhenKey(id, diag)) {
@@ -603,7 +603,7 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     // ---------- GENERAL COMPILE OPTIONS ----------
     { Options::ID::MODULE_NAME, []([[maybe_unused]] GlobalOptions& opts, const OptionArgInstance& arg) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_useless_option, DEFAULT_POSITION, arg.name);
+        diag.DiagnoseRefactor("driver_useless_option", DEFAULT_POSITION, arg.name);
         return true;
     }},
     { Options::ID::PACKAGE_COMPILE, OPTION_TRUE_ACTION(opts.compilePackage = true) },
@@ -683,24 +683,24 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
 #endif
     { Options::ID::COMMON_PART_CJO, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         auto commonPartCjo = GlobalOptions::ValidateInputFilePath(
-            arg.value, DiagKindRefactor::driver_invalid_binary_file);
+            arg.value, "driver_invalid_binary_file");
         if (commonPartCjo.has_value()) {
             opts.commonPartCjos.emplace_back(commonPartCjo.value());
         } else {
             DiagnosticEngine diag;
-            diag.DiagnoseRefactor(DiagKindRefactor::no_such_file_or_directory, DEFAULT_POSITION, arg.value);
+            diag.DiagnoseRefactor("no_such_file_or_directory", DEFAULT_POSITION, arg.value);
         }
 
         return true;
     }},
     { Options::ID::COMMON_PART_CHIR, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         auto commonChirFile = GlobalOptions::ValidateInputFilePath(
-            arg.value, DiagKindRefactor::no_such_file_or_directory);
+            arg.value, "no_such_file_or_directory");
         if (commonChirFile.has_value()) {
             opts.commonPartChirs.push_back(commonChirFile.value());
         } else {
             DiagnosticEngine diag;
-            diag.DiagnoseRefactor(DiagKindRefactor::no_such_file_or_directory, DEFAULT_POSITION, arg.value);
+            diag.DiagnoseRefactor("no_such_file_or_directory", DEFAULT_POSITION, arg.value);
         }
 
         return true;
@@ -917,7 +917,7 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     { Options::ID::OUTPUT_DIR, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         DiagnosticEngine diag;
         if (!IsDir(arg.value)) {
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::no_such_directory, DEFAULT_POSITION, arg.value);
+            (void)diag.DiagnoseRefactor("no_such_directory", DEFAULT_POSITION, arg.value);
             return false;
         }
         opts.outputDir = {arg.value};
@@ -934,7 +934,7 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     { Options::ID::SAVE_TEMPS, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         if (!IsDir(arg.value)) {
             DiagnosticEngine diag;
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::no_such_directory, DEFAULT_POSITION, arg.value);
+            (void)diag.DiagnoseRefactor("no_such_directory", DEFAULT_POSITION, arg.value);
             return false;
         }
         opts.saveTemps = true;
@@ -946,7 +946,7 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     { Options::ID::CONDITIONAL_COMPILATION_CONFIG, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         if (arg.value.empty()) {
             DiagnosticEngine diag;
-            (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_cfg_value_err, DEFAULT_POSITION);
+            (void)diag.DiagnoseRefactor("driver_cfg_value_err", DEFAULT_POSITION);
             return false;
         }
         return ParsePassedWhen(arg.value, opts.passedWhenKeyValue, opts.passedWhenCfgPaths);
@@ -1143,7 +1143,7 @@ bool SetupConditionalCompilationCfgFromFile(const std::string& filePath,
         }
         return true;
     }
-    diag.DiagnoseRefactor(DiagKindRefactor::driver_cfg_file_read_failed, DEFAULT_POSITION, filePath, failReason);
+    diag.DiagnoseRefactor("driver_cfg_file_read_failed", DEFAULT_POSITION, filePath, failReason);
     return false;
 }
 
@@ -1173,7 +1173,7 @@ bool GlobalOptions::SetupConditionalCompilationCfg()
     DiagnosticEngine diag;
     if (!passedWhenKeyValue.empty()) {
         if (!passedWhenCfgPaths.empty()) {
-            diag.DiagnoseRefactor(DiagKindRefactor::driver_cfg_path_ignored, DEFAULT_POSITION);
+            diag.DiagnoseRefactor("driver_cfg_path_ignored", DEFAULT_POSITION);
         }
         return true;
     }
@@ -1181,7 +1181,7 @@ bool GlobalOptions::SetupConditionalCompilationCfg()
     for (auto& path : passedWhenCfgPaths) {
         std::string filePath = JoinPath(path, cfgFileName);
         if (!FileExist(filePath)) {
-            diag.DiagnoseRefactor(DiagKindRefactor::driver_warning_no_such_file, DEFAULT_POSITION, filePath);
+            diag.DiagnoseRefactor("driver_warning_no_such_file", DEFAULT_POSITION, filePath);
             continue;
         }
         return SetupConditionalCompilationCfgFromFile(filePath, passedWhenKeyValue, diag);
