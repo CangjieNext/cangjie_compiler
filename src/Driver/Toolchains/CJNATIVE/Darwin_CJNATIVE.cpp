@@ -54,7 +54,7 @@ void Darwin_CJNATIVE::GenerateLinkOptionsForLTO(Tool& tool) const
     }
     if (driverOptions.saveTemps) {
         tool.AppendArg("-save-temps");
-        
+
     }
     if (GetEffectiveOptimizationLevel(driverOptions) == GlobalOptions::OptimizationLevel::O2) {
         tool.AppendArg("-mllvm");
@@ -107,7 +107,7 @@ TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileIn
     auto tempBinaryInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_DYLIB);
     auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_OBJ);
     auto ltoObjectDir = outputFileInfo.filePath + ".lto";
-    auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, GetTargetArchString() + ".lto.o");
+    auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, "0." + GetTargetArchString() + ".lto.o");
     tool->AppendArg("-o", tempBinaryInfo.filePath);
     GenerateLinkOptionsForLTO(*tool);
     tool->AppendArg("-object_path_lto", ltoObjectDir);
