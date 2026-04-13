@@ -23,6 +23,6 @@ void CheckMirrorInheritMirror::HandleImpl(TypeCheckContext& ctx)
         return;
     }
 
-    ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_mirror_must_inherit_mirror, ctx.target);
+    ctx.diag.DiagnoseRefactor("sema_objc_mirror_must_inherit_mirror", ctx.target);
     ctx.target.EnableAttr(Attribute::IS_BROKEN);
 }

@@ -122,8 +122,8 @@ void TypeChecker::TypeCheckerImpl::CheckVArrayType(ASTContext& ctx, const VArray
     std::unordered_set<Ptr<Ty>> traversedTy = {};
     auto [isReferenceType, type] = CheckVArrayWithRefType(*typeArgTy, traversedTy);
     if (isReferenceType) {
-        auto builder = diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_varray_arg_type_with_reftype, *vt.typeArgument, Ty::ToString(typeArgTy));
+        auto builder =
+            diag.DiagnoseRefactor("sema_varray_arg_type_with_reftype", *vt.typeArgument, Ty::ToString(typeArgTy));
         builder.AddMainHintArguments(type);
     }
 }
@@ -147,7 +147,7 @@ bool TypeChecker::TypeCheckerImpl::CheckTypeParametersForAliasRef(AST::RefType& 
     auto aliasDeclGenericTypeParametersNum = aliasDecl.generic ? aliasDecl.generic->typeParameters.size() : 0;
     if (rt.typeArguments.size() != aliasDeclGenericTypeParametersNum) {
         auto range = MakeRange(rt.begin, rt.end.IsZero() ? rt.begin + 1 : rt.end);
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_argument_no_match, rt, range);
+        diag.DiagnoseRefactor("sema_generic_argument_no_match", rt, range);
         return false;
     }
     return true;
@@ -238,7 +238,7 @@ void TypeChecker::TypeCheckerImpl::CheckRefType(ASTContext& ctx, RefType& rt)
     }
     // Type must have typeArguments when its target is a generic type declaration.
     if (!IsGenericTypeWithTypeArgs(rt)) {
-        diag.Diagnose(rt, DiagKind::sema_generic_type_without_type_argument);
+        diag.Diagnose(rt, "sema_generic_type_without_type_argument");
         // Unbind target-user relationship when setting type to invalid.
         rt.SetTy(TypeManager::GetInvalidTy());
         return;
@@ -303,7 +303,7 @@ bool TypeChecker::TypeCheckerImpl::CheckRefTypeCheckAccessLegality(
 {
     auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, rt.scopeName);
     if (!IsLegalAccess(sym, target, rt, importManager, typeManager)) {
-        diag.Diagnose(rt, DiagKind::sema_invalid_access_control, target.identifier.Val());
+        diag.Diagnose(rt, "sema_invalid_access_control", target.identifier.Val());
         // Unbind target-user relationship when error happens.
         ReplaceTarget(&rt, nullptr);
         rt.SetTy(TypeManager::GetInvalidTy());
@@ -318,7 +318,7 @@ void TypeChecker::TypeCheckerImpl::CheckTupleType(ASTContext& ctx, TupleType& tt
         CJC_NULLPTR_CHECK(it);
         Synthesize({ctx, SynPos::NONE}, it.get());
         if (it->GetTy() && Ty::IsCTypeConstraint(*it->GetTy())) {
-            diag.Diagnose(*it, DiagKind::sema_invalid_tuple_field_ctype);
+            diag.Diagnose(*it, "sema_invalid_tuple_field_ctype");
             return;
         }
     }
@@ -346,10 +346,10 @@ void TypeChecker::TypeCheckerImpl::CheckFuncType(ASTContext& ctx, FuncType& ft)
 void TypeChecker::TypeCheckerImpl::CheckCFuncReturnType(const Type& type)
 {
     if (!Ty::IsMetCType(*type.GetTy())) {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_cfunc_return_type, type);
+        auto builder = diag.DiagnoseRefactor("sema_invalid_cfunc_return_type", type);
         builder.AddNote("return type is " + type.GetTy()->String());
     } else if (Is<VArrayTy>(type.GetTy())) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_varray_in_cfunc, type);
+        diag.DiagnoseRefactor("sema_varray_in_cfunc", type);
     }
 }
 
@@ -365,11 +365,11 @@ void TypeChecker::TypeCheckerImpl::CheckQualifiedType(const ASTContext& ctx, Qua
     // Get field target and check access legality.
     auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, qt.scopeName);
     if (!IsLegalAccess(sym, *target, qt, importManager, typeManager)) {
-        diag.Diagnose(qt, DiagKind::sema_invalid_access_control, target->identifier.Val());
+        diag.Diagnose(qt, "sema_invalid_access_control", target->identifier.Val());
     }
     // Type must have typeArguments when its target is a generic type declaration.
     if (!IsGenericTypeWithTypeArgs(qt)) {
-        diag.Diagnose(qt, DiagKind::sema_generic_type_without_type_argument);
+        diag.Diagnose(qt, "sema_generic_type_without_type_argument");
         // Unbind target-user relationship when setting type to invalid.
         ReplaceTarget(&qt, nullptr);
         qt.SetTy(TypeManager::GetInvalidTy());

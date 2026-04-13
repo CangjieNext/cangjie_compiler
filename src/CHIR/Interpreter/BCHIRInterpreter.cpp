@@ -597,7 +597,7 @@ void BCHIRInterpreter::Interpret()
             case OpCode::CAPPLY:
             case OpCode::ABORT: {
                 if (!isConstEval) {
-                    FailWith(pc, "operation not currently supported in const eval", DiagKind::const_eval_unsupported);
+                    FailWith(pc, "operation not currently supported in const eval", "const_eval_unsupported");
                 }
                 interpreterError = true;
                 return;
@@ -606,8 +606,8 @@ void BCHIRInterpreter::Interpret()
             case OpCode::NOT_SUPPORTED:
             case OpCode::INVALID:
             default: {
-                FailWith(pc, "operation not currently supported in interpreter", DiagKind::interp_unsupported,
-                    "Interpret", GetOpCodeLabel(current));
+                FailWith(pc, "operation not currently supported in interpreter", "interp_unsupported", "Interpret",
+                    GetOpCodeLabel(current));
                 CJC_ABORT();
             }
         }
@@ -783,7 +783,7 @@ void BCHIRInterpreter::ReportConstEvalException(Bchir::ByteCodeIndex opIdx, std:
         errorPosition = Cangjie::Position(*fileId, static_cast<int>(applyPosition.line),
             static_cast<int>(applyPosition.column));
     }
-    auto error = diag.Diagnose(errorPosition, DiagKind::const_eval_exception);
+    auto error = diag.Diagnose(errorPosition, "const_eval_exception");
     error.AddNote(exceptionName);
 }
 
@@ -895,7 +895,7 @@ bool BCHIRInterpreter::InterpretTypeCastForInt(
             interpStack.ArgsPush(IValUtils::PrimitiveValue<IFloat64>(static_cast<double>(val)));
             return false;
         default: {
-            FailWith(opIdx, "interpreter cannot perform integer typecast", DiagKind::interp_cannot_interp_node,
+            FailWith(opIdx, "interpreter cannot perform integer typecast", "interp_cannot_interp_node",
                 "InterpretTypeCastForInt");
             return true;
         }
@@ -942,7 +942,7 @@ bool BCHIRInterpreter::InterpretTypeCastForFloat(
             interpStack.ArgsPush(IValUtils::PrimitiveValue<IFloat64>(static_cast<double>(floatVal)));
             return false;
         default: {
-            FailWith(opIdx, "interpreter cannot perform float typecast", DiagKind::interp_cannot_interp_node,
+            FailWith(opIdx, "interpreter cannot perform float typecast", "interp_cannot_interp_node",
                 "InterpretTypeCastForFloat");
             return true;
         }
