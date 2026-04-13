@@ -47,9 +47,7 @@ void DiagConflictingAnnos(DiagnosticEngine &diag, Annotation &first, Annotation 
     auto maxPos = first.end > second.end ? first.end : second.end;
 
     diag.DiagnoseRefactor(
-        DiagKindRefactor::parse_conflict_annotation,
-        MakeRange(minPos, maxPos),
-        first.identifier, second.identifier, onStr);
+        "parse_conflict_annotation", MakeRange(minPos, maxPos), first.identifier, second.identifier, onStr);
 }
 
 void FFIParserImpl::CheckAnnotationsConflict(const PtrVector<Annotation>& annos) const
@@ -168,9 +166,9 @@ void FFIParserImpl::CheckForeignNameAnnotation(Decl& decl) const
         }
         if (!decl.outerDecl || !decl.outerDecl->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE,
             Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
-                p.diag.DiagnoseRefactor(DiagKindRefactor::parse_foreign_name_on_ffi_decl_member, decl);
-                decl.EnableAttr(Attribute::IS_BROKEN);
-                return;
+            p.diag.DiagnoseRefactor("parse_foreign_name_on_ffi_decl_member", decl);
+            decl.EnableAttr(Attribute::IS_BROKEN);
+            return;
         }
     }
 }

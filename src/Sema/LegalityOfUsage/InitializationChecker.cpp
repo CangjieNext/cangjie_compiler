@@ -384,7 +384,7 @@ void InitializationChecker::CheckNonCommonVariablesInitInCommonDecl(const Inheri
     for (auto decl : info.nonFuncDecls) {
         if (auto vd = DynamicCast<VarDecl*>(decl); vd) {
             if (!vd->TestAttr(Attribute::COMMON) && vd->initializer == nullptr) {
-                diag.Diagnose(*decl, DiagKind::sema_class_uninitialized_field, decl->identifier.Val());
+                diag.Diagnose(*decl, "sema_class_uninitialized_field", decl->identifier.Val());
             }
         }
     }
@@ -550,8 +550,7 @@ void InitializationChecker::CheckStaticInitForTypeDecl(const InheritableDecl& id
         if (decl->TestAnyAttr(Attribute::INITIALIZED, Attribute::TOOL_ADD, Attribute::COMMON) || opts.compileCjd) {
             continue;
         }
-        auto builder =
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_type_uninitialized_static_field, *decl, decl->identifier);
+        auto builder = diag.DiagnoseRefactor("sema_type_uninitialized_static_field", *decl, decl->identifier);
         std::string note = "you may add an initializer inline or ";
         if (staticInit) {
             builder.AddNote(note + "initialize the variable in the 'static init'");
@@ -761,7 +760,7 @@ bool InitializationChecker::CheckInitInRefExpr(const RefExpr& re)
     }
     bool invalidUseOfThis = re.isThis && re.isAlone && target->IsStructOrClassDecl() && !IsAllInitialized(*target);
     if (invalidUseOfThis) {
-        diag.Diagnose(re, DiagKind::sema_illegal_usage_of_member, "this");
+        diag.Diagnose(re, "sema_illegal_usage_of_member", "this");
         return false;
     }
     RecordInstanceVariableUsage(*target);
@@ -799,17 +798,16 @@ bool InitializationChecker::CheckInitInRefExpr(const RefExpr& re)
     if (re.ShouldDiagnose(true)) {
         if (target->TestAttr(Attribute::GLOBAL) && target->begin.fileID == re.begin.fileID &&
             re.begin < target->begin) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_undefined_variable, re, re.ref.identifier.Val());
+            diag.DiagnoseRefactor("sema_undefined_variable", re, re.ref.identifier.Val());
             return false;
         } else if (!target->TestAttr(Attribute::INITIALIZED)) {
             if (initVarsAfterTerminator.count(ScopeManagerApi::GetScopeGateName(re.scopeName)) != 0) {
                 return true;
             } else if (IsInDifferentFunction(ctx, re, *target)) {
                 // Definition and usage is not in same declaration (usage is not in constructor/member decl).
-                diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_capture_before_initialization, re, target->identifier.Val());
+                diag.DiagnoseRefactor("sema_capture_before_initialization", re, target->identifier.Val());
             } else if (!re.TestAttr(Attribute::LEFT_VALUE)) {
-                diag.Diagnose(re, DiagKind::sema_used_before_initialization, re.ref.identifier.Val());
+                diag.Diagnose(re, "sema_used_before_initialization", re.ref.identifier.Val());
             }
             return false;
         }
@@ -851,13 +849,13 @@ bool InitializationChecker::CheckInitInMemberAccess(MemberAccess& ma)
     bool isUndefinedVar = ma.target->TestAttr(Attribute::GLOBAL) && ma.target->begin.fileID == ma.begin.fileID &&
         ma.begin < ma.target->begin;
     if (isUndefinedVar) {
-        (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_undefined_variable, ma, ma.target->identifier.Val());
+        (void)diag.DiagnoseRefactor("sema_undefined_variable", ma, ma.GetTarget()->identifier.Val());
         return false;
     }
     auto curStructOfTarget = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, ma.target->scopeName);
     bool isInSameDecl = curStructOfMemberAccess && curStructOfMemberAccess == curStructOfTarget;
     if (isInSameDecl && !IsInitialized(ma)) {
-        (void)diag.Diagnose(ma, DiagKind::sema_used_before_initialization, ma.target->identifier.Val());
+        (void)diag.Diagnose(ma, "sema_used_before_initialization", ma.GetTarget()->identifier.Val());
         return false;
     }
     return true;
@@ -1492,7 +1490,7 @@ bool InitializationChecker::CheckIllegalMemberAccess(const Expr& expr, const Dec
     if (curFuncBody == nullptr) {
         if (IsFuncOrProp(target)) {
             // Member function or property is not allowed to be used inside other member variable's initializer.
-            diag.Diagnose(expr, DiagKind::sema_illegal_usage_of_member, target.identifier.Val());
+            diag.Diagnose(expr, "sema_illegal_usage_of_member", target.identifier.Val());
             return false;
         }
         return true;
@@ -1502,7 +1500,7 @@ bool InitializationChecker::CheckIllegalMemberAccess(const Expr& expr, const Dec
     bool notInMemberFunc = !outerMostFunc || !outerMostFunc->outerDecl || !outerMostFunc->outerDecl->IsNominalDecl();
     if (notInMemberFunc) {
         // Member is captured by lambda or function which defined inside other member variable's initializer.
-        diag.Diagnose(expr, DiagKind::sema_illegal_usage_of_member, target.identifier.Val());
+        diag.Diagnose(expr, "sema_illegal_usage_of_member", target.identifier.Val());
         return false;
     }
 
@@ -1520,7 +1518,7 @@ bool InitializationChecker::CheckIllegalMemberAccess(const Expr& expr, const Dec
     // 1. member function or property is not allowed to be used.
     // 2. when current function is not the outer most function, it indicates 'this' has been captured.
     if (IsFuncOrProp(target) || curFuncBody->funcDecl != outerMostFunc) {
-        diag.Diagnose(expr, DiagKind::sema_illegal_usage_of_member, target.identifier.Val());
+        diag.Diagnose(expr, "sema_illegal_usage_of_member", target.identifier.Val());
         return false;
     }
     return true;
@@ -1542,7 +1540,7 @@ bool InitializationChecker::CheckIllegalRefExprAccess(
         if (symOfExprFunc == nullptr || symOfExprFunc->astKind != AST::ASTKind::FUNC_DECL ||
             (symOfExprFunc->astKind == AST::ASTKind::FUNC_DECL &&
                 !Is<InheritableDecl>(StaticAs<ASTKind::FUNC_DECL>(symOfExprFunc->node)->outerDecl))) {
-            diag.Diagnose(re, DiagKind::sema_illegal_usage_of_super_member, re.ref.identifier.Val());
+            diag.Diagnose(re, "sema_illegal_usage_of_super_member", re.ref.identifier.Val());
             return false;
         }
     } else if (re.ref.target && IsFuncOrProp(*re.ref.target) &&
@@ -1653,9 +1651,9 @@ void InitializationChecker::CheckInitInConstructors(FuncDecl& fd, const std::vec
             continue;
         }
         if (fd.TestAttr(Attribute::COMPILER_ADD, Attribute::PRIMARY_CONSTRUCTOR)) {
-            diag.Diagnose(fd, DiagKind::sema_class_uninitialized_field, decl->identifier.Val());
+            diag.Diagnose(fd, "sema_class_uninitialized_field", decl->identifier.Val());
         } else {
-            diag.Diagnose(fd.TestAttr(Attribute::COMPILER_ADD) ? *decl : fd, DiagKind::sema_class_uninitialized_field,
+            diag.Diagnose(fd.TestAttr(Attribute::COMPILER_ADD) ? *decl : fd, "sema_class_uninitialized_field",
                 decl->identifier.Val());
         }
     }

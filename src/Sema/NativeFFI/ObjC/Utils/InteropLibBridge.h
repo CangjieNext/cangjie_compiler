@@ -202,8 +202,8 @@ private:
     {
         auto decl = importManager.GetImportedDecl(INTEROPLIB_PACKAGE_NAME, ident);
         if (!decl) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_member_not_imported, DEFAULT_POSITION,
-                INTEROPLIB_PACKAGE_NAME + std::string(".") + ident);
+            diag.DiagnoseRefactor(
+                "sema_member_not_imported", DEFAULT_POSITION, INTEROPLIB_PACKAGE_NAME + std::string(".") + ident);
             return Ptr(AST::As<K>(nullptr));
         }
 
@@ -215,7 +215,7 @@ private:
     {
         auto decl = importManager.GetImportedDecl(OBJ_C_LANG_PACKAGE_IDENT, ident);
         if (!decl) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_member_not_imported, DEFAULT_POSITION, ident);
+            diag.DiagnoseRefactor("sema_member_not_imported", DEFAULT_POSITION, ident);
             return Ptr(AST::As<K>(nullptr));
         }
 

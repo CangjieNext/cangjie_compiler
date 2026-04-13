@@ -92,11 +92,11 @@ static bool HandleEmptyInputFileSituation(const DefaultCompilerInstance& instanc
     auto& globalOptions = instance.invocation.globalOptions;
     if (!globalOptions.scanDepPkg && globalOptions.srcFiles.empty() && globalOptions.commonPartChirs.empty() &&
         globalOptions.inputObjs.empty()) {
-        instance.diag.DiagnoseRefactor(DiagKindRefactor::driver_source_file_empty, DEFAULT_POSITION);
+        instance.diag.DiagnoseRefactor("driver_source_file_empty", DEFAULT_POSITION);
         return false;
     }
     if (globalOptions.scanDepPkg && globalOptions.inputCjoFile.empty()) {
-        instance.diag.DiagnoseRefactor(DiagKindRefactor::driver_source_cjo_empty, DEFAULT_POSITION);
+        instance.diag.DiagnoseRefactor("driver_source_cjo_empty", DEFAULT_POSITION);
         return false;
     }
     return true;

@@ -38,7 +38,7 @@ void CheckInitMethod::HandleImpl(TypeCheckContext& ctx)
             continue;
         }
 
-        ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, *method.funcBody->retType)
+        ctx.diag.DiagnoseRefactor("sema_mismatched_types", *method.funcBody->retType)
             .AddMainHintArguments(Ty::ToString(mirrorTy), Ty::ToString(retTy));
         ctx.target.EnableAttr(Attribute::IS_BROKEN);
     }

@@ -511,8 +511,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateJavaEntityCall(Ptr<File> file)
     }
 
     if (!suitableCtor) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_member_not_imported, DEFAULT_POSITION, INTEROPLIB_CFFI_JAVA_ENTITY);
+        diag.DiagnoseRefactor("sema_member_not_imported", DEFAULT_POSITION, INTEROPLIB_CFFI_JAVA_ENTITY);
     }
 
     auto call = CreateCall(suitableCtor, file);
@@ -612,8 +611,7 @@ OwnedPtr<Expr> InteropLibBridge::CreateJavaEntityCall(OwnedPtr<Expr> arg)
     }
 
     if (!suitableCtor) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_java_interop_not_supported, arg->begin, "Type " + arg->GetTy()->name);
+        diag.DiagnoseRefactor("sema_java_interop_not_supported", arg->begin, "Type " + arg->GetTy()->name);
         return nullptr;
     }
 
@@ -1602,14 +1600,13 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
 
     auto classLikeTy = DynamicCast<ClassLikeTy*>(ty.get());
     if (!classLikeTy) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, DEFAULT_POSITION, "type " + ty->name);
+        diag.DiagnoseRefactor("sema_java_interop_not_supported", DEFAULT_POSITION, "type " + ty->name);
         return nullptr;
     }
 
     auto decl = classLikeTy->commonDecl;
     if (!decl) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_java_interop_not_supported, DEFAULT_POSITION, "unknown decl " + ty->name);
+        diag.DiagnoseRefactor("sema_java_interop_not_supported", DEFAULT_POSITION, "unknown decl " + ty->name);
         return nullptr;
     }
 
@@ -1635,22 +1632,22 @@ void InteropLibBridge::CheckInteropLibVersion()
     auto versionDecl = GetInteropLibVersionVarDecl();
 
     if (!versionDecl && !IsInteropLibAccessible()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_interoplib_must_be_imported, DEFAULT_POSITION);
+        diag.DiagnoseRefactor("sema_java_mirror_interoplib_must_be_imported", DEFAULT_POSITION);
         return;
     }
 
     if (!versionDecl || !versionDecl->initializer || versionDecl->initializer->astKind != ASTKind::LIT_CONST_EXPR ||
         versionDecl->initializer->TyKind() != TypeKind::TYPE_INT64) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interoplib_version_too_old, DEFAULT_POSITION,
-            std::to_string(INTEROPLIB_VERSION));
+        diag.DiagnoseRefactor(
+            "sema_java_interoplib_version_too_old", DEFAULT_POSITION, std::to_string(INTEROPLIB_VERSION));
         return;
     }
 
     auto libVersionLit = StaticAs<ASTKind::LIT_CONST_EXPR>(versionDecl->initializer.get());
     auto libVersion = std::stoi(libVersionLit->stringValue);
     if (libVersion != INTEROPLIB_VERSION) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interoplib_version_mismatch, DEFAULT_POSITION,
-            libVersionLit->stringValue, std::to_string(INTEROPLIB_VERSION));
+        diag.DiagnoseRefactor("sema_java_interoplib_version_mismatch", DEFAULT_POSITION, libVersionLit->stringValue,
+            std::to_string(INTEROPLIB_VERSION));
     }
 }
 
