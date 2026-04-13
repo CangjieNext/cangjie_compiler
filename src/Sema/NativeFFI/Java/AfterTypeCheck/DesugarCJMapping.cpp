@@ -383,8 +383,8 @@ void JavaDesugarManager::GenerateForCJExtendMapping(AST::ExtendDecl& extendDecl)
     CJC_ASSERT(IsCJMapping(extendDecl));
 
     if (auto rt = DynamicCast<const RefType*>(extendDecl.extendedType.get())) {
-        if (IsImpl(*rt->ref.target)) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_extend_ref_target_cannot_be_java_impl, extendDecl);
+        if (IsImpl(*rt->GetTarget())) {
+            diag.DiagnoseRefactor("sema_extend_ref_target_cannot_be_java_impl", extendDecl);
             return;
         }
     }
@@ -551,7 +551,7 @@ void JavaDesugarManager::GenerateInterfaceFwdclassBody(
         } else if (auto prop = As<ASTKind::PROP_DECL>(decl.get())) {
             // not support yet
             auto message = "property in interface";
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *prop, message);
+            diag.DiagnoseRefactor("sema_java_interop_not_supported", *prop, message);
         }
     }
 }

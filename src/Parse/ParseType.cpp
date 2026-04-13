@@ -62,7 +62,7 @@ OwnedPtr<AST::Type> ParserImpl::ParseVarrayType()
     ret->begin = lastToken.Begin();
     ChainScope cs(*this, ret.get());
     if (!Skip(TokenKind::LT)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_varray_type_parameter, lastToken.End());
+        ParseDiagnoseRefactor("parse_varray_type_parameter", lastToken.End());
         return MakeOwned<InvalidType>(lookahead.Begin());
     }
     ret->leftAnglePos = lastToken.Begin();
@@ -93,7 +93,7 @@ OwnedPtr<AST::Type> ParserImpl::ParseVarrayType()
     // <T, $N>
     //      ^ Parse the constant value.
     if (!Seeing(TokenKind::INTEGER_LITERAL)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expect_integer_literal_varray, constType->dollarPos);
+        ParseDiagnoseRefactor("parse_expect_integer_literal_varray", constType->dollarPos);
         ConsumeUntil(TokenKind::NL);
         return MakeOwned<InvalidType>(lookahead.Begin());
     }
@@ -164,7 +164,7 @@ OwnedPtr<Type> ParserImpl::ParseTypeParameterInTupleType(
         auto it = typeNameMap.find(typeParameterName);
         if (it != typeNameMap.end()) {
             auto builder = diag.DiagnoseRefactor(
-                DiagKindRefactor::parse_duplicate_type_parameter_name, MakeRange(typeParameterName), typeParameterName);
+                "parse_duplicate_type_parameter_name", MakeRange(typeParameterName), typeParameterName);
             builder.AddHint(MakeRange(it->second, typeParameterName));
         } else {
             typeNameMap.emplace(typeParameterName, typeParameterName.Begin());
@@ -200,8 +200,7 @@ OwnedPtr<AST::Type> ParserImpl::ParseTypeWithParen()
         [](const OwnedPtr<Type>& type) { return type->typeParameterName.empty(); }) &&
         std::any_of(types.begin(), types.end(),
         [](const OwnedPtr<Type>& type) { return !type->typeParameterName.empty(); })) {
-        ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_all_parameters_must_be_named, MakeRange(types.front()->begin, types.back()->end));
+        ParseDiagnoseRefactor("parse_all_parameters_must_be_named", MakeRange(types.front()->begin, types.back()->end));
     }
     if (!Skip(TokenKind::RPAREN)) {
         DiagExpectedRightDelimiter("(", lParenPos);
@@ -220,7 +219,7 @@ OwnedPtr<AST::Type> ParserImpl::ParseTypeWithParen()
         return ParseTupleType(std::move(types), lParenPos, rParenPos);
     }
     // This is treated as a broken function, which has empty types and no arrow.
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_arrow_in_func_type, lookahead.Begin());
+    ParseDiagnoseRefactor("parse_expected_arrow_in_func_type", lookahead.Begin());
     return ParseFuncType(std::move(types), lParenPos, rParenPos);
 }
 
@@ -228,9 +227,8 @@ OwnedPtr<ParenType> ParserImpl::ParseParenType(
     const Position& lParenPos, const Position& rParenPos, OwnedPtr<Type> type)
 {
     if (!type->typeParameterName.empty()) {
-        auto builder =
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_only_tuple_and_func_type_allow_type_parameter_name,
-                MakeRange(type->begin, type->begin + type->typeParameterName.size()), type->typeParameterName);
+        auto builder = ParseDiagnoseRefactor("parse_only_tuple_and_func_type_allow_type_parameter_name",
+            MakeRange(type->begin, type->begin + type->typeParameterName.size()), type->typeParameterName);
         builder.AddNote("only tuple type and function type support type parameter name");
     }
     OwnedPtr<ParenType> pt = MakeOwned<ParenType>();
@@ -274,8 +272,7 @@ OwnedPtr<AST::Type> ParserImpl::ParsePrefixType()
             }
             optionType->end = lastToken.End();
             if (Seeing(TokenKind::NL)) {
-                ParseDiagnoseRefactor(
-                    DiagKindRefactor::parse_newline_not_allowed_between_quest_and_type, lookahead.End());
+                ParseDiagnoseRefactor("parse_newline_not_allowed_between_quest_and_type", lookahead.End());
                 SkipBlank(TokenKind::NL);
             }
         }
@@ -333,7 +330,7 @@ std::pair<bool, std::vector<OwnedPtr<AST::Type>>> ParserImpl::ParseTypeArguments
     Position leftAnglePos = lastToken.Begin();
     std::vector<OwnedPtr<AST::Type>> ret;
     if (Skip(TokenKind::GT)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_type_argument, lastToken.Begin());
+        ParseDiagnoseRefactor("parse_expected_type_argument", lastToken.Begin());
         return {true, std::move(ret)};
     }
     ParseOneOrMoreSepTrailing(

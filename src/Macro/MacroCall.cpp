@@ -9,9 +9,11 @@
  *
  * This file implements the MacroCall.
  */
-#include "cangjie/Utils/ConstantsUtils.h"
-#include "cangjie/Macro/TokenSerialization.h"
+#include <string_view>
+
 #include "cangjie/Basic/DiagnosticEmitter.h"
+#include "cangjie/Macro/TokenSerialization.h"
+#include "cangjie/Utils/ConstantsUtils.h"
 
 #include "cangjie/Macro/MacroCall.h"
 
@@ -97,7 +99,7 @@ bool MacroCall::CheckParentContext(const char* parentStr, bool report)
     if (!success && report) {
         if (this->ci) {
             (void)this->ci->diag.Diagnose(
-                this->GetBeginPos(), DiagKind::macro_assert_parent_context_failed, this->GetFullName(), parentName);
+                this->GetBeginPos(), "macro_assert_parent_context_failed", this->GetFullName(), parentName);
         } else {
             // Save parent name if assert failed, and nodify macrocall result with parent name to main process.
             this->assertParents.emplace_back(parentName);
@@ -109,16 +111,16 @@ bool MacroCall::CheckParentContext(const char* parentStr, bool report)
 
 void MacroCall::DiagReport(const int level, const Range range, const char *message, const char* hint) const
 {
-    DiagKindRefactor diagKind;
+    std::string_view diagKindName;
     if (level == static_cast<int>(DiagSeverity::DS_ERROR)) {
-        diagKind = DiagKindRefactor::parse_diag_error;
+        diagKindName = "parse_diag_error";
     } else if (level == static_cast<int>(DiagSeverity::DS_WARNING)) {
-        diagKind = DiagKindRefactor::parse_diag_warning;
+        diagKindName = "parse_diag_warning";
     } else {
         return;
     }
 
-    auto builder = this->ci->diag.DiagnoseRefactor(diagKind, range, message);
+    auto builder = this->ci->diag.DiagnoseRefactor(diagKindName, range, message);
     builder.AddMainHintArguments(hint);
 }
 

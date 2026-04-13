@@ -10,8 +10,8 @@
  * This file implements validating the used nodes.
  */
 
-#include <stack>
 #include "cangjie/AST/ASTTypeValidator.h"
+#include <stack>
 
 namespace Cangjie::AST {
 class ASTTypeValidator {
@@ -77,7 +77,7 @@ public:
         }
         auto [preNode, range] = validRanges.top(); // Since 'validRanges' has default value, it must not be empty.
         if (!valid) {
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_node_after_check, node, range);
+            auto builder = diag.DiagnoseRefactor("sema_invalid_node_after_check", node, range);
             builder.AddNote("please report this to Cangjie team and include the project");
             return VisitAction::STOP_NOW;
         }

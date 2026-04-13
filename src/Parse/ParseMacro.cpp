@@ -177,8 +177,8 @@ OwnedPtr<MacroDecl> ParserImpl::ParseMacroDecl(
     if (IsBuiltinAnnotation(moduleName, ret->identifier) ||
         IsBuiltinMacro(ret->identifier)) {
         auto builtinKind = IsBuiltinMacro(ret->identifier) ? "macro" : "annotation";
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_macro_define_conflicted_with_builtin, MakeRange(ret->identifier),
-            ret->identifier, builtinKind);
+        ParseDiagnoseRefactor(
+            "parse_macro_define_conflicted_with_builtin", MakeRange(ret->identifier), ret->identifier, builtinKind);
         chainedAST.back()->EnableAttr(Attribute::HAS_BROKEN);
     }
     ret->modifiers.insert(modifiers.begin(), modifiers.end());
@@ -193,11 +193,9 @@ OwnedPtr<MacroDecl> ParserImpl::ParseMacroDecl(
     if (currentFile != nullptr && (currentFile->package == nullptr || !currentFile->package->hasMacro)) {
         if (ret->identifier.Begin().IsZero()) {
             ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_expected_macro_decl_define_in_macro_package,
-                MakeRange(ret->begin, lastToken.End()));
+                "parse_expected_macro_decl_define_in_macro_package", MakeRange(ret->begin, lastToken.End()));
         } else {
-            ParseDiagnoseRefactor(
-                DiagKindRefactor::parse_expected_macro_decl_define_in_macro_package, MakeRange(ret->identifier));
+            ParseDiagnoseRefactor("parse_expected_macro_decl_define_in_macro_package", MakeRange(ret->identifier));
         }
     }
     return ret;
@@ -212,7 +210,7 @@ void ParserImpl::CheckMacroParamType(AST::Type& type, bool isReturnTy)
     if (isReturnTy) {
         DiagExpectMacroParamType(type);
     } else {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_macro_illegal_param_type, type);
+        ParseDiagnoseRefactor("parse_macro_illegal_param_type", type);
     }
     chainedAST.back()->EnableAttr(Attribute::HAS_BROKEN);
 }
@@ -260,13 +258,13 @@ OwnedPtr<AST::FuncParamList> ParserImpl::ParseMacroParameterList()
     if ((paramList->params.empty() || paramList->params.size() > G_LIMITED_PARAM_NUM) &&
         !paramList->TestAttr(Attribute::IS_BROKEN)) {
         auto pos = paramList->params.empty() ? lookahead.Begin() : paramList->params[0].get()->begin;
-        auto diagKind = paramList->params.empty() ? DiagKindRefactor::parse_macro_unexpected_empty_parameter
-                                                  : DiagKindRefactor::parse_macro_expected_right_parameter_nums;
+        auto diagKind = paramList->params.empty() ? "parse_macro_unexpected_empty_parameter"
+                                                  : "parse_macro_expected_right_parameter_nums";
         ParseDiagnoseRefactor(diagKind, pos);
     } else {
         for (auto& param : paramList->params) {
             if (param->type == nullptr) {
-                ParseDiagnoseRefactor(DiagKindRefactor::parse_macro_illegal_param_type, lookahead);
+                ParseDiagnoseRefactor("parse_macro_illegal_param_type", lookahead);
                 chainedAST.back()->EnableAttr(Attribute::HAS_BROKEN);
             } else {
                 CheckMacroParamType(*param->type);
@@ -301,8 +299,7 @@ bool ParserImpl::ParseMacroCallEscapeTokens(const TokenKind& left, std::vector<T
         while (SeeingAny({TokenKind::LSQUARE, TokenKind::LPAREN, TokenKind::DOT})) {
             Next();
         }
-        auto diagKind = isAttr ? DiagKindRefactor::parse_illegal_macro_expand_attr_args
-                               : DiagKindRefactor::parse_illegal_macro_expand_input_args;
+        auto diagKind = isAttr ? "parse_illegal_macro_expand_attr_args" : "parse_illegal_macro_expand_input_args";
         ParseDiagnoseRefactor(diagKind, tokenPos);
         return false;
     }
@@ -429,7 +426,7 @@ void ParserImpl::ParseMacroCallDeclInput(
     if (Utils::In(decl->astKind, G_VALID_DECL_LIST) && decl->astKind != ASTKind::MACRO_DECL) {
         ParseNodeToTokens(*decl, nodeBegin, invocation.args);
     } else {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_illegal_macro_expand_input_args_without_paren, decl->begin);
+        ParseDiagnoseRefactor("parse_illegal_macro_expand_input_args_without_paren", decl->begin);
     }
 
     invocation.decl = std::move(decl);
@@ -508,8 +505,8 @@ void ParserImpl::ParseMacroInvocation(
     if (Skip(TokenKind::LSQUARE)) { // Skip func always lets lastToken = lookAhead
         // macro call: @macroCall[xxx] Decl
         if (IsBuiltinMacro(invocation.macroCallDiagInfo.identifier)) {
-            (void)ParseDiagnoseRefactor(DiagKindRefactor::parse_macro_call_illegal_with_builtin, lookahead,
-                invocation.macroCallDiagInfo.identifier);
+            (void)ParseDiagnoseRefactor(
+                "parse_macro_call_illegal_with_builtin", lookahead, invocation.macroCallDiagInfo.identifier);
         }
         invocation.hasAttr = true;
         ParseMacroCallAttr(invocation);
@@ -549,8 +546,7 @@ bool ParserImpl::ParseMacroCallIdentifier(MacroInvocation& invocation, Node& nod
         // We forbid this form of macro call:
         // @
         // M class A{}
-        ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_unexpected_newline_between_at_and_mc, tokAt.Begin(), lookahead.Value());
+        ParseDiagnoseRefactor("parse_unexpected_newline_between_at_and_mc", tokAt.Begin(), lookahead.Value());
     }
     auto item = ParseIdentifierFromName(invocation.macroCallDiagInfo.fullName, lookahead.Begin(), lookahead.End(),
         invocation.macroCallDiagInfo.fullName.size());
