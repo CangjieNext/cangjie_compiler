@@ -14,6 +14,8 @@
 
 #include "Diags.h"
 #include "InitializationChecker.h"
+#include "cangjie/AST/Node.h"
+#include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
 namespace Cangjie {
@@ -187,11 +189,31 @@ void TypeChecker::TypeCheckerImpl::CheckClosures(const ASTContext& ctx, Node& no
         }
         return VisitAction::WALK_CHILDREN;
     }).Walk();
+
     // 3. diagnose for invalid capture.
-    Walker(&node, [&ctx, this](Ptr<Node> n) {
-        CheckLegalUseOfClosure(ctx, *n);
+    auto asLambdaSource = [](Ptr<Node> n) { 
+        if (auto te = DynamicCast<TryExpr>(n)) {
+            return te->handlers.empty() ? LambdaSource::USER : LambdaSource::TRY_HANDLE;
+        } else if (n->astKind == ASTKind::SPAWN_EXPR) {
+            return LambdaSource::SPAWN;
+        } else {
+            return LambdaSource::USER;
+        }
+    };
+    std::vector<LambdaSource> lambdaSourceStack;
+    lambdaSourceStack.push_back(asLambdaSource(&node));
+
+    auto preAction = [&ctx, &lambdaSourceStack, &asLambdaSource, this](Ptr<Node> n) {
+        CheckLegalUseOfClosure(ctx, *n, lambdaSourceStack.back());
+        lambdaSourceStack.push_back(asLambdaSource(n));
         return VisitAction::WALK_CHILDREN;
-    }).Walk();
+    };
+    auto postAction = [&lambdaSourceStack](Ptr<Node>) {
+        lambdaSourceStack.pop_back();
+        return VisitAction::WALK_CHILDREN;
+    };
+
+    Walker(&node, preAction, postAction).Walk();
 }
 
 void TypeChecker::TypeCheckerImpl::CheckSubscriptLegality(Node& node)
