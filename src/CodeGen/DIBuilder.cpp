@@ -1318,19 +1318,30 @@ llvm::DICompositeType* DIBuilder::CreateEnumWithNonRefArgsType(
             ++fieldIdx;
             continue;
         }
-        std::vector<uint64_t> sizeOfCtors = std::vector<uint64_t>(ctor.funcType->GetParamTypes().size() + 1, 0);
-        // The size of constructor is 32-bits.
+        auto& target = cgMod.GetCGContext().GetCompileOptions().target;
+        bool useAndroidArm32Layout =
+            target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID;
         size_t totalSize = 32u;
+        std::vector<uint64_t> sizeOfCtors(ctor.funcType->GetParamTypes().size() + 1, 0);
         sizeOfCtors[0] = totalSize;
-        for (uint32_t argIndex = 0; argIndex < ctor.funcType->GetParamTypes().size(); ++argIndex) {
-            auto arg = ctor.funcType->GetParamTypes()[argIndex];
-            auto argTy = GetOrCreateType(*arg);
-            if (IsReferenceType(*arg, cgMod) || arg->IsRawArray()) {
-                argTy = CreatePointerType(argTy, CreateRefType()->getSizeInBits());
+        std::vector<CHIR::Type*> fields;
+        CGEnumType::AssociatedNonRefLayout layout;
+        if (useAndroidArm32Layout) {
+            fields.emplace_back(cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty());
+            fields.insert(fields.end(), ctor.funcType->GetParamTypes().begin(), ctor.funcType->GetParamTypes().end());
+            layout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fields);
+            totalSize = static_cast<size_t>(layout.size) * 8U;
+        } else {
+            for (uint32_t argIndex = 0; argIndex < ctor.funcType->GetParamTypes().size(); ++argIndex) {
+                auto arg = ctor.funcType->GetParamTypes()[argIndex];
+                auto argTy = GetOrCreateType(*arg);
+                if (IsReferenceType(*arg, cgMod) || arg->IsRawArray()) {
+                    argTy = CreatePointerType(argTy, CreateRefType()->getSizeInBits());
+                }
+                auto argSize = GetSizeInBits(argTy);
+                sizeOfCtors[argIndex + 1] = argSize;
+                totalSize += argSize;
             }
-            auto argSize = GetSizeInBits(argTy);
-            sizeOfCtors[argIndex + 1] = argSize;
-            totalSize += argSize;
         }
         auto subEnumType =
             createStructType(defPackage, ctorName, diFile, 0u, totalSize, 0u, llvm::DINode::FlagZero, nullptr, {});
@@ -1345,10 +1356,16 @@ llvm::DICompositeType* DIBuilder::CreateEnumWithNonRefArgsType(
             if (IsReferenceType(*arg, cgMod)) {
                 argTy = CreatePointerType(argTy, CreateRefType()->getSizeInBits());
             }
-            offset += sizeOfCtors[argIndex];
             auto align = 0u;
+            uint64_t memberOffset = 0;
+            if (useAndroidArm32Layout) {
+                memberOffset = static_cast<uint64_t>(layout.offsets[argIndex + 1]) * 8U;
+            } else {
+                offset += sizeOfCtors[argIndex];
+                memberOffset = offset;
+            }
             auto argType = createMemberType(subEnumType, "arg_" + std::to_string(offsetIndex), diFile, 0u,
-                GetSizeInBits(argTy), static_cast<uint32_t>(align), offset, llvm::DINode::FlagZero, argTy);
+                GetSizeInBits(argTy), static_cast<uint32_t>(align), memberOffset, llvm::DINode::FlagZero, argTy);
             enumLayer.push_back(argType);
             ++offsetIndex;
         }
