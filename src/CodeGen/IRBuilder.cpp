@@ -13,7 +13,7 @@
 
 namespace Cangjie {
 namespace CodeGen {
-
+static constexpr uint64_t MIN_ANDROID_ARM32_ENUM_ALIGN = 4;
 IRBuilder2::IRBuilder2(CGModule& cgMod) : LLVMIRBuilder2(cgMod.GetLLVMContext()), cgMod(cgMod)
 {
     if (cgMod.GetCGContext().GetCompileOptions().fastMathMode) {
@@ -120,6 +120,11 @@ llvm::Instruction* IRBuilder2::CreateEntryAlloca(const CGType& cgType, const llv
         options.optimizationLevel == GlobalOptions::OptimizationLevel::O0) ||
         (options.cjdbMode && isOptionLikeNonRef)) {
             (void)CreateMemsetStructWith0(allocaInst);
+        }
+        auto& target = GetCGContext().GetCompileOptions().target;
+        if (target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID &&
+            isOptionLikeNonRef) {
+            allocaInst->setAlignment(llvm::Align(MIN_ANDROID_ARM32_ENUM_ALIGN));
         }
         return allocaInst;
     }
