@@ -19,6 +19,7 @@
 
 #include "TypeCheckUtil.h"
 
+#include "TypeCheckerImpl.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
@@ -637,10 +638,15 @@ void DiagAmbiguousUpperBoundTargets(DiagnosticEngine& diag, const MemberAccess& 
     }
 }
 
-void DiagUseClosureCaptureVarAlone(DiagnosticEngine& diag, const Expr& expr)
+void DiagUseClosureCaptureVarAlone(DiagnosticEngine& diag, const Expr& expr, LambdaSource lambdaSource)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_use_func_capture_var_alone, expr,
-        expr.astKind == ASTKind::LAMBDA_EXPR ? "lambda" : "function");
+    auto builder = expr.astKind == ASTKind::LAMBDA_EXPR
+        ? (lambdaSource == LambdaSource::SPAWN
+            ? diag.DiagnoseRefactor(DiagKindRefactor::sema_spawn_capture_var, expr)
+            : lambdaSource == LambdaSource::TRY_HANDLE
+            ? diag.DiagnoseRefactor(DiagKindRefactor::sema_try_handle_capture_var, expr)
+            : diag.DiagnoseRefactor(DiagKindRefactor::sema_use_func_capture_var_alone, expr, "lambda"))
+        : diag.DiagnoseRefactor(DiagKindRefactor::sema_use_func_capture_var_alone, expr, "function");
     Ptr<FuncBody> fb = nullptr;
     if (auto le = DynamicCast<const LambdaExpr*>(&expr)) {
         fb = le->funcBody.get();

@@ -14,6 +14,8 @@
 
 #include "Diags.h"
 #include "InitializationChecker.h"
+#include "cangjie/AST/Node.h"
+#include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
 namespace Cangjie {
@@ -188,11 +190,44 @@ void TypeChecker::TypeCheckerImpl::CheckClosures(const ASTContext& ctx, Node& no
         }
         return VisitAction::WALK_CHILDREN;
     }).Walk();
+
     // 3. diagnose for invalid capture.
-    Walker(&node, [&ctx, this](Ptr<Node> n) {
-        CheckLegalUseOfClosure(ctx, *n);
+
+    // We produce different error messages for lambdas written by the user and lambdas introduced by the parser for
+    // spawn- and try-handle-expressions.
+    // To distinguish these, we maintain `lambdaSourceStack` so as to remember what kind of expression the parent of the
+    // lambda expression is.
+    auto asLambdaSource = [](Ptr<Node> n) {
+        switch (n->astKind) {
+            case ASTKind::SPAWN_EXPR:
+                return LambdaSource::SPAWN;
+                break;
+            case ASTKind::TRY_EXPR:
+                // NB: The special try-handle error message only applies to try-, handle-, and finally-blocks in
+                // try-expressions with at least one handle-block.
+                // Luckily, however, when there is no handle-block, the parent of any potential lambda is a block node
+                // instead of a TryExpr.
+                return LambdaSource::TRY_HANDLE;
+                break;
+            default:
+                return LambdaSource::USER;
+                break;
+        }
+    };
+    std::vector<LambdaSource> lambdaSourceStack;
+    lambdaSourceStack.push_back(asLambdaSource(&node));
+
+    auto preAction = [&ctx, &lambdaSourceStack, &asLambdaSource, this](Ptr<Node> n) {
+        CheckLegalUseOfClosure(ctx, *n, lambdaSourceStack.back());
+        lambdaSourceStack.push_back(asLambdaSource(n));
         return VisitAction::WALK_CHILDREN;
-    }).Walk();
+    };
+    auto postAction = [&lambdaSourceStack](Ptr<Node>) {
+        lambdaSourceStack.pop_back();
+        return VisitAction::WALK_CHILDREN;
+    };
+
+    Walker(&node, preAction, postAction).Walk();
 }
 
 void TypeChecker::TypeCheckerImpl::CheckSubscriptLegality(Node& node)

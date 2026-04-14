@@ -125,6 +125,7 @@ ERROR(sema_return_type_incompatible,
 // Spawn
 ERROR(sema_spawn_arg_invalid, "invalid argument of spawn expr, user-defined `ThreadContext` types are prohibited now")
 WARNING(sema_spawn_arg_no_effect, UNGROUPED, "argument of spawn expr does not take effect at current backend")
+ERROR(sema_spawn_capture_var, "'spawn' expressions cannot capture mutable variables; consider using 'let' or boxing")
 
 // Interface
 ERROR(sema_interface_call_with_unimplemented_call, "static invocation contains unimplemented static %s '%s'")
@@ -276,6 +277,7 @@ ERROR(sema_resume_no_with, "a resumption of non-Unit type '%s' must have a 'with
 ERROR(sema_resume_wrong_resumption_type, "resumptions must be of type 'core.Resumption<T>', but actual type is '%s'")
 ERROR(sema_mismatching_handle_block, "The type of this handle block is '%s', which mismatches the smallest common supertype '%s' of previous branches.")
 ERROR(sema_return_in_try_handle_block, "Return statements are not allowed within try/handle blocks")
+ERROR(sema_try_handle_capture_var, "'try'-'handle' expressions cannot capture mutable variables; consider using 'let' or boxing")
 ERROR(sema_command_incompatible_type, "type '%s' does not implement compatible instantiations of 'Command<T>'")
 ERROR(sema_resume_throwing_mismatch_type, "the type of the `resume throwing` must be a subtype of core.Exception or core.Error")
 WARNING(sema_useless_command_type, UNUSED, "useless command type")

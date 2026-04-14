@@ -1695,14 +1695,14 @@ bool TypeChecker::TypeCheckerImpl::IsCapturedInCFuncLambda(const ASTContext& ctx
     return false;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(Expr& e, DiagKind kind) const
+void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(Expr& e, DiagKind kind, LambdaSource ls) const
 {
     if (e.TestAttr(Attribute::IS_BROKEN)) {
         return;
     }
     if (auto target = DynamicCast<LambdaExpr*>(&e); target && target->funcBody) {
         if (target->funcBody->captureKind == CaptureKind::CAPTURE_VAR) {
-            DiagUseClosureCaptureVarAlone(diag, e);
+            DiagUseClosureCaptureVarAlone(diag, e, ls);
         } else if (target->funcBody->captureKind == CaptureKind::TRANSITIVE_CAPTURE) {
             diag.Diagnose(e, kind, "lambda", "transitively", "lambda");
         }
@@ -1710,7 +1710,7 @@ void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(Expr& e, DiagKind kind
     if (auto ref = DynamicCast<RefExpr*>(&e); ref) {
         if (auto target = DynamicCast<FuncDecl*>(ref->ref.target); target) {
             if (target->funcBody->captureKind == CaptureKind::CAPTURE_VAR) {
-                DiagUseClosureCaptureVarAlone(diag, e);
+                DiagUseClosureCaptureVarAlone(diag, e, ls);
             } else if (target->funcBody->captureKind == CaptureKind::TRANSITIVE_CAPTURE) {
                 diag.Diagnose(e, kind, target->identifier.Val(), "transitively", target->identifier.Val());
             }
@@ -1718,15 +1718,15 @@ void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(Expr& e, DiagKind kind
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(const ASTContext& ctx, Node& node) const
+void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(const ASTContext& ctx, Node& node, LambdaSource ls) const
 {
     if (auto vd = DynamicCast<VarDecl*>(&node); vd) {
         if (vd->initializer) {
-            CheckLegalUseOfClosure(*vd->initializer, DiagKind::sema_func_capture_var_cannot_assign);
+            CheckLegalUseOfClosure(*vd->initializer, DiagKind::sema_func_capture_var_cannot_assign, ls);
         }
     } else if (auto re = DynamicCast<ReturnExpr*>(&node); re) {
         if (re->expr) {
-            CheckLegalUseOfClosure(*re->expr, DiagKind::sema_func_capture_var_cannot_return);
+            CheckLegalUseOfClosure(*re->expr, DiagKind::sema_func_capture_var_cannot_return, ls);
         }
     } else if (auto ce = DynamicCast<CallExpr*>(&node); ce) {
         if (auto baseRe = DynamicCast<RefExpr*>(ce->baseFunc.get()); baseRe && IsCapturedInCFuncLambda(ctx, *baseRe)) {
@@ -1734,11 +1734,11 @@ void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(const ASTContext& ctx,
         }
         for (auto& arg : ce->args) {
             if (arg && arg->expr) {
-                CheckLegalUseOfClosure(*arg->expr, DiagKind::sema_func_capture_var_cannot_param);
+                CheckLegalUseOfClosure(*arg->expr, DiagKind::sema_func_capture_var_cannot_param, ls);
             }
         }
     } else if (auto ref = DynamicCast<RefExpr*>(&node); ref && !ref->isBaseFunc) {
-        CheckLegalUseOfClosure(*ref, DiagKind::sema_func_capture_var_cannot_expr);
+        CheckLegalUseOfClosure(*ref, DiagKind::sema_func_capture_var_cannot_expr, ls);
         if (auto refVd = DynamicCast<VarDecl*>(ref->ref.target); refVd) {
             if (IsCapturedCStructOfClosure(*refVd)) {
                 diag.Diagnose(*ref, DiagKind::sema_func_capture_var_not_ctype);
@@ -1748,7 +1748,7 @@ void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(const ASTContext& ctx,
             diag.Diagnose(*ref, DiagKind::sema_cfunc_cannot_capture_var, ref->ref.identifier.Val());
         }
     } else if (auto lambda = DynamicCast<LambdaExpr*>(&node); lambda && !lambda->isBaseFunc) {
-        CheckLegalUseOfClosure(*lambda, DiagKind::sema_func_capture_var_cannot_expr);
+        CheckLegalUseOfClosure(*lambda, DiagKind::sema_func_capture_var_cannot_expr, ls);
     }
 }
 
