@@ -192,15 +192,33 @@ llvm::Value* GenerateAssociatedNonRefEnum(IRBuilder2& irBuilder, const CHIR::Tup
     auto cgEnumType = StaticCast<CGEnumType*>(CGType::GetOrCreate(cgMod, chirEnumType));
     auto enumVal = irBuilder.CreateEntryAlloca(*cgEnumType, "enum.val");
     // 2. store the tag and associated values into the memory.
-    auto offset = 0U;
     auto casted = irBuilder.CreateBitCast(enumVal, i8Ty->getPointerTo());
+    std::vector<CHIR::Type*> fieldTypes;
+    fieldTypes.reserve(tuple.GetNumOfOperands());
+    for (unsigned idx = 0U; idx < tuple.GetNumOfOperands(); ++idx) {
+        fieldTypes.emplace_back(tuple.GetOperand(idx)->GetType());
+    }
+    auto& target = irBuilder.GetCGContext().GetCompileOptions().target;
+    auto useStructGEP = target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID;
+    llvm::StructType* layoutType = nullptr;
+    llvm::Value* castedStruct = nullptr;
+    if (useStructGEP) {
+        layoutType = CGEnumType::GetAssociatedNonRefLayoutType(cgMod, fieldTypes);
+        castedStruct = irBuilder.CreateBitCast(enumVal, layoutType->getPointerTo());
+    }
+    auto layout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fieldTypes);
     for (unsigned idx = 0U; idx < tuple.GetNumOfOperands(); ++idx) {
         auto field = tuple.GetOperand(idx);
         auto fieldCGType = CGType::GetOrCreate(cgMod, field->GetType());
-        auto destPtr = irBuilder.CreateConstGEP1_32(i8Ty, casted, offset);
-        auto castedDestPtr = irBuilder.CreateBitCast(destPtr, fieldCGType->GetLLVMType()->getPointerTo());
-        (void)irBuilder.CreateStore(**(cgMod | field), castedDestPtr, field->GetType());
-        offset += fieldCGType->GetSize().value();
+        if (useStructGEP) {
+            auto destPtr = irBuilder.CreateStructGEP(layoutType, castedStruct, idx);
+            auto castedDestPtr = irBuilder.CreateBitCast(destPtr, fieldCGType->GetLLVMType()->getPointerTo());
+            (void)irBuilder.CreateStore(**(cgMod | field), castedDestPtr, field->GetType());
+        } else {
+            auto destPtr = irBuilder.CreateConstGEP1_32(i8Ty, casted, layout.offsets[idx]);
+            auto castedDestPtr = irBuilder.CreateBitCast(destPtr, fieldCGType->GetLLVMType()->getPointerTo());
+            (void)irBuilder.CreateStore(**(cgMod | field), castedDestPtr, field->GetType());
+        }
     }
     return enumVal;
 }

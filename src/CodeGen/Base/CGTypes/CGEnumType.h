@@ -7,6 +7,9 @@
 #ifndef CANGJIE_CGENUMTYPE_H
 #define CANGJIE_CGENUMTYPE_H
 
+#include <cstdint>
+#include <vector>
+
 #include "Base/CGTypes/CGCustomType.h"
 
 namespace Cangjie {
@@ -18,6 +21,12 @@ class CGEnumType : public CGCustomType {
     friend class IRBuilder2;
 
 public:
+    struct AssociatedNonRefLayout {
+        std::vector<uint32_t> offsets;
+        uint32_t size{0};
+        uint32_t align{1};
+    };
+
     enum class CGEnumTypeKind {
         UNKNOWN,        /**< Not a valid kind */
 
@@ -114,6 +123,12 @@ public:
     }
 
     std::string GetEnumTypeName() const;
+
+    static llvm::StructType* GetAssociatedNonRefLayoutType(
+        CGModule& cgMod, const std::vector<CHIR::Type*>& fieldTypes);
+
+    static AssociatedNonRefLayout ComputeAssociatedNonRefLayout(
+        CGModule& cgMod, const std::vector<CHIR::Type*>& fieldTypes);
 
     llvm::Constant* GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& cgMod, const std::string& funcPrefixName);
 
