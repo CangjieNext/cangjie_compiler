@@ -17,6 +17,11 @@
 
 namespace Cangjie::CodeGen {
 namespace {
+bool NeedAndroidArm32AlignedEnumLayout(const Triple::Info& target)
+{
+    return target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID;
+}
+
 bool ContainsRefType(const llvm::Type& llvmType)
 {
     if (llvmType.isPointerTy() && llvmType.getPointerAddressSpace() == 1U) {
@@ -42,18 +47,32 @@ std::tuple<bool, std::optional<std::size_t>> ObtainingAuxiliaryInformation(
     CJC_ASSERT_WITH_MSG(!ctors.empty(), "The enum type has at least one constructor.");
     for (auto ctor : ctors) {
         const auto& paramTypes = ctor.funcType->GetParamTypes();
-        std::optional<std::size_t> sizeOfConstructorUnionTemp =
-            paramTypes.empty() ? std::optional<std::size_t>(0U) : std::nullopt;
+        std::optional<std::size_t> sizeOfConstructorUnionTemp;
+        std::size_t accumulatedSize = 0U;
+        bool allSized = true;
         for (auto associatedValueCHIRType : paramTypes) {
             auto associatedValueCGType = CGType::GetOrCreate(cgMod, associatedValueCHIRType);
             hasRefTypeAssociatedValue |= ContainsRefType(*associatedValueCGType->GetLLVMType());
             auto associatedValueSize = associatedValueCGType->GetSize();
-            if (associatedValueSize.has_value()) {
-                sizeOfConstructorUnionTemp = sizeOfConstructorUnionTemp.value_or(0U) + associatedValueSize.value();
-            } else {
-                sizeOfConstructorUnionTemp = std::nullopt;
+            if (!associatedValueSize.has_value()) {
+                allSized = false;
                 break;
             }
+            if (!NeedAndroidArm32AlignedEnumLayout(cgMod.GetCGContext().GetCompileOptions().target)) {
+                accumulatedSize += associatedValueSize.value();
+            }
+        }
+        if (!allSized) {
+            sizeOfConstructorUnionTemp = std::nullopt;
+        } else if (NeedAndroidArm32AlignedEnumLayout(cgMod.GetCGContext().GetCompileOptions().target)) {
+            std::vector<CHIR::Type*> fullFieldTypes;
+            fullFieldTypes.reserve(paramTypes.size() + 1U);
+            fullFieldTypes.emplace_back(cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty());
+            fullFieldTypes.insert(fullFieldTypes.end(), paramTypes.begin(), paramTypes.end());
+            auto fullLayout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fullFieldTypes);
+            sizeOfConstructorUnionTemp = fullLayout.size - sizeof(uint32_t);
+        } else {
+            sizeOfConstructorUnionTemp = accumulatedSize;
         }
         if (sizeOfConstructorUnionTemp.has_value()) {
             sizeOfConstructorUnion = sizeOfConstructorUnion.value_or(0U) < sizeOfConstructorUnionTemp.value()
@@ -64,9 +83,49 @@ std::tuple<bool, std::optional<std::size_t>> ObtainingAuxiliaryInformation(
             break;
         }
     }
-
     return std::make_tuple(hasRefTypeAssociatedValue, sizeOfConstructorUnion);
 }
+}
+
+llvm::StructType* CGEnumType::GetAssociatedNonRefLayoutType(
+    CGModule& cgMod, const std::vector<CHIR::Type*>& fieldTypes)
+{
+    std::vector<llvm::Type*> llvmFieldTypes;
+    llvmFieldTypes.reserve(fieldTypes.size());
+    for (auto fieldType : fieldTypes) {
+        llvmFieldTypes.emplace_back(CGType::GetOrCreate(cgMod, DeRef(*fieldType))->GetLLVMType());
+    }
+    return llvm::StructType::get(cgMod.GetLLVMContext(), llvmFieldTypes, false);
+}
+
+CGEnumType::AssociatedNonRefLayout CGEnumType::ComputeAssociatedNonRefLayout(
+    CGModule& cgMod, const std::vector<CHIR::Type*>& fieldTypes)
+{
+    AssociatedNonRefLayout layout;
+    layout.offsets.reserve(fieldTypes.size());
+    if (NeedAndroidArm32AlignedEnumLayout(cgMod.GetCGContext().GetCompileOptions().target)) {
+        auto layoutType = GetAssociatedNonRefLayoutType(cgMod, fieldTypes);
+        auto& dataLayout = cgMod.GetLLVMModule()->getDataLayout();
+        auto structLayout = dataLayout.getStructLayout(layoutType);
+        layout.size = static_cast<uint32_t>(structLayout->getSizeInBytes());
+        layout.align = static_cast<uint32_t>(dataLayout.getABITypeAlignment(layoutType));
+        for (size_t idx = 0; idx < fieldTypes.size(); ++idx) {
+            layout.offsets.emplace_back(static_cast<uint32_t>(structLayout->getElementOffset(idx)));
+        }
+        return layout;
+    }
+
+    uint32_t currentOffset = 0U;
+    for (auto fieldType : fieldTypes) {
+        layout.offsets.emplace_back(currentOffset);
+        auto cgFieldType = CGType::GetOrCreate(cgMod, DeRef(*fieldType));
+        auto fieldSize = cgFieldType->GetSize();
+        CJC_ASSERT(fieldSize.has_value());
+        currentOffset += static_cast<uint32_t>(fieldSize.value());
+    }
+    layout.size = currentOffset;
+    layout.align = 1U;
+    return layout;
 }
 
 CGEnumType::CGEnumType(CGModule& cgMod, CGContext& cgCtx, const CHIR::Type& chirType)
@@ -275,8 +334,8 @@ llvm::Type* CGEnumType::GenAssociatedNonRefEnumLLVMType()
 {
     auto& llvmCtx = cgCtx.GetLLVMContext();
     CJC_ASSERT(sizeOfConstructorUnion.has_value());
-    llvmType =
-        llvm::ArrayType::get(llvm::Type::getInt8Ty(llvmCtx), 4U + sizeOfConstructorUnion.value()); // 4U: size of int32
+    auto layoutSize = 4U + sizeOfConstructorUnion.value(); // 4U: size of int32
+    llvmType = llvm::ArrayType::get(llvm::Type::getInt8Ty(llvmCtx), layoutSize);
 
     const auto& enumTypeName = GetEnumTypeName();
     layoutType = llvm::StructType::getTypeByName(llvmCtx, enumTypeName);
@@ -343,7 +402,7 @@ void CGEnumType::CalculateSizeAndAlign()
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_NONREF: {
             CJC_ASSERT(sizeOfConstructorUnion.has_value());
             size = 4U + sizeOfConstructorUnion.value(); // 4U: size of int32
-            align = 1U;
+            align = NeedAndroidArm32AlignedEnumLayout(cgCtx.GetCompileOptions().target) ? 4U : 1U;
             return;
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_NONREF: {
