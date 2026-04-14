@@ -99,6 +99,11 @@ llvm::AllocaInst* IRBuilder2::CreateEntryAlloca(llvm::Type* type, llvm::Value* a
     auto currentLoc = getCurrentDebugLocation();
     SetInsertPointToAllocas(curFunc);
     auto allocaInst = LLVMIRBuilder2::CreateAlloca(type, arraySize, name);
+    auto& target = GetCGContext().GetCompileOptions().target;
+    if (target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID &&
+        allocaInst->getAlignment().value() < 4) {
+        allocaInst->setAlignment(llvm::Align(4));
+    }
     LLVMIRBuilder2::SetInsertPoint(curBB, curPt);
     SetCurrentDebugLocation(currentLoc);
     return allocaInst;
