@@ -99,6 +99,10 @@ enum class MatchResult {
     NONE, UNIQUE, AMBIGUOUS
 };
 
+enum class LambdaSource {
+    USER, SPAWN, TRY_HANDLE
+};
+
 /// Mark the position of the synthesized expr/decl. It currently has not effect on decl.
 enum class SynPos {
     NONE,            // when the context is not considered, e.g. for Decl, type, pattern, and import.
@@ -1329,8 +1333,8 @@ private:
      * @param pkg The package node which contains structure decls.
      */
     void CheckInheritance(AST::Package& pkg);
-    void CheckLegalUseOfClosure(AST::Expr& e, DiagKind kind) const;
-    void CheckLegalUseOfClosure(const ASTContext& ctx, AST::Node& node) const;
+    void CheckLegalUseOfClosure(AST::Expr& e, DiagKind kind, LambdaSource lambdaSource) const;
+    void CheckLegalUseOfClosure(const ASTContext& ctx, AST::Node& node, LambdaSource lambdaSource) const;
     bool IsCapturedInCFuncLambda(const ASTContext& ctx, const AST::RefExpr& re) const;
     bool IsCapturedCStructOfClosure(const AST::VarDecl& decl) const;
 
