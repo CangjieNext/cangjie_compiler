@@ -374,6 +374,7 @@ void AST2CHIR::TranslateAnnotationRelatedDecls()
         auto var = it.first;
         auto expr = it.second;
         auto initFunc = var->GetInitFunc();
+        CJC_NULLPTR_CHECK(initFunc);
         auto entry = initFunc->GetBody()->GetEntryBlock();
         auto trans = CreateTranslator();
         trans.SetCurrentBlock(*entry);

@@ -153,12 +153,16 @@ CHIRContext::CHIRContext(std::unordered_map<unsigned int, std::string>* fnMap, s
  
 CHIRContext::~CHIRContext()
 {
+#ifndef CANGJIE_ENABLE_GCOV
     try {
+#endif
         FreeWholePackage();
+#ifndef CANGJIE_ENABLE_GCOV
     } catch (...) {
         // Never propagate from destructor (would call std::terminate). Per-pointer cleanup uses SafeDelete to limit
         // leaks when a member destructor throws; this catches any other failure (e.g. resource exhaustion).
     }
+#endif
 }
 
 // FileName API

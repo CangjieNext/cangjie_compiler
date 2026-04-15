@@ -12,6 +12,7 @@
 
 using namespace Cangjie::CHIR;
 
+namespace {
 // the following strings are from `enum AnnotationKind` in std.core package
 const std::string TYPE_TARGET = "Type";
 const std::string PARAMETER_TARGET = "Parameter";
@@ -23,6 +24,7 @@ const std::string ENUM_CONSTRUCTOR_TARGET = "EnumConstructor";
 const std::string GLOBAL_FUNCTION_TARGET = "GlobalFunction";
 const std::string GLOBAL_VARIABLE_TARGET = "GlobalVariable";
 const std::string EXTENSION_TARGET = "Extension";
+}
 
 AnnotationChecker::AnnotationChecker(const Package& pkg, DiagnosticEngine& diag)
     : pkg(pkg), diag(diag)
