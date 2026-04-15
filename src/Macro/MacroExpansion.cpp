@@ -181,6 +181,13 @@ void MacroExpansion::CollectMacros(Package& package)
         return std::tie(pos1.fileID, pos1) < std::tie(pos2.fileID, pos2);
     });
     macroCollector.importedMacroPkgs = ci->importManager->GetImportedPkgsForMacro();
+    // Update macro call node position.isCurFile
+    for (auto& mc : macroCollector.macCalls) {
+        if (auto node = mc.GetNode(); node != nullptr) {
+            node->begin.isCurFile = true;
+            node->end.isCurFile = true;
+        }
+    }
 }
 
 void MacroExpansion::CheckReplacedEnumCaseMember(MacroCall& macroNode, PtrVector<Decl>& newNodes) const

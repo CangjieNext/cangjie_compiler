@@ -660,10 +660,13 @@ public:
     template <typename... Args> void AddMainHintArguments(Args... args)
     {
         static_assert(IsAllString<Args...>, "args of AddHint in diagnostic builder should all be string.");
+        auto& mainHint = GetMainHint();
         std::vector<std::string> arguments{args...};
-        auto insertedStr = Diagnostic::InsertArguments(diagnostic.mainHint.str, arguments);
-        diagnostic.mainHint.str = insertedStr;
+        auto insertedStr = Diagnostic::InsertArguments(mainHint.str, arguments);
+        mainHint.str = insertedStr;
     }
+
+    IntegratedString& GetMainHint();
 
     void AddNote(const SubDiagnostic& sub);
 

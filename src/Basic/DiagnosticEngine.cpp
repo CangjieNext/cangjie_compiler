@@ -348,6 +348,16 @@ void DiagnosticBuilder::AddHint(const Range& range, std::vector<std::string>& ar
     diagnostic.otherHints.push_back(styledString);
 }
 
+IntegratedString& DiagnosticBuilder::GetMainHint()
+{
+    // if in macro call and can not map into original source code
+    if (diagnostic.curMacroCall && !diagnostic.subDiags.empty() &&
+        !diagnostic.subDiags[0].mainHint.range.begin.isCurFile) {
+        return diagnostic.subDiags[0].mainHint;
+    }
+    return diagnostic.mainHint;
+}
+
 void DiagnosticBuilder::AddNote(const SubDiagnostic& sub)
 {
     diag.CheckRange(diagnostic.GetDiagCategory(), sub.mainHint.range);
@@ -607,6 +617,9 @@ std::string DiagnosticEngineImpl::GetArgStr(
 
 void DiagnosticEngineImpl::ConvertArgsToDiagMessage(Diagnostic& diagnostic) noexcept
 {
+    if (!diagnostic.diagMessage.empty()) {
+        return;
+    }
     std::string formatStr = std::string(DiagMessages[static_cast<size_t>(diagnostic.kind)]);
     // C string format length, like length of '%f', '%d'.
     const static size_t formatLens = 2;
@@ -785,6 +798,31 @@ void DiagnosticEngineImpl::ReportErrorAndWarningCount()
     }
 }
 
+namespace {
+void ChangeMessageWithNote(Diagnostic& diagnostic, const Range& range, const std::string& message)
+{
+    auto mainHint = diagnostic.mainHint;
+    if (diagnostic.isRefactor) {
+        auto subDiag = SubDiagnostic(diagnostic.errorMessage);
+        subDiag.AddMainHint(mainHint.range, mainHint.str);
+        subDiag.otherHints = diagnostic.otherHints;
+        (void)diagnostic.subDiags.insert(diagnostic.subDiags.begin(), subDiag);
+        // Replace error message with note in macro call.
+        diagnostic.errorMessage = message;
+        diagnostic.mainHint = IntegratedString(range, "", mainHint.color);
+        diagnostic.otherHints.clear();
+    } else {
+        auto subDiag = SubDiagnostic(diagnostic.diagMessage);
+        subDiag.AddMainHint(MakeRange(diagnostic.start, diagnostic.end), "");
+        (void)diagnostic.subDiags.insert(diagnostic.subDiags.begin(), subDiag);
+        // Replace error message with note in macro call.
+        diagnostic.diagMessage = message;
+        diagnostic.start = range.begin;
+        diagnostic.end = range.end;
+    }
+}
+}
+
 void DiagnosticEngineImpl::AddMacroCallNote(Diagnostic& diagnostic, const AST::Node& node, const Position& pos)
 {
     if (!node.curMacroCall) {
@@ -797,42 +835,50 @@ void DiagnosticEngineImpl::AddMacroCallNote(Diagnostic& diagnostic, const AST::N
         return;
     }
 
+    auto mcBegin = node.curMacroCall->begin;
+    std::string sevInfo = (diagnostic.diagSeverity == DiagSeverity::DS_ERROR) ? "the error" : "the warning";
+    // For lsp, the error range includes only identifier.
+    if (pInvocation->isForLSP) {
+        auto idPosEnd = pInvocation->identifierPos + pInvocation->identifier.size();
+        auto message = sevInfo + " occurs after the macro is expanded";
+        (void)diagnostic.subDiags.emplace_back(MakeRange(mcBegin, idPosEnd), message);
+        return;
+    }
+
     // For cjc, display a hint message on the source code if the corresponding source code exists.
-    if (!pInvocation->isForLSP) {
-        Position originPos;
-        auto key = pInvocation->isCurFile ? pos.Hash32() : static_cast<const uint32_t>(pos.column);
-        if (pInvocation->isCurFile && pInvocation->originPosMap.find(key) != pInvocation->originPosMap.end()) {
-            originPos = pInvocation->originPosMap.at(key);
-        } else if (pInvocation->new2originPosMap.find(pos.Hash32()) != pInvocation->new2originPosMap.end()) {
-            originPos = pInvocation->new2originPosMap.at(pos.Hash32());
-            if (!originPos.isCurFile) {
-                originPos = INVALID_POSITION;
-            }
-        }
-        if (originPos != INVALID_POSITION && originPos != diagnostic.start &&
-            originPos != diagnostic.mainHint.range.begin) {
-            if (diagnostic.errorMessage.empty()) {
-                ConvertArgsToDiagMessage(diagnostic);
-                auto range = MakeRange(diagnostic.start, diagnostic.end);
-                (void)diagnostic.subDiags.emplace_back(range, "which is expanded as follows");
-                diagnostic.start = originPos;
-                diagnostic.end = originPos + 1;
-            } else {
-                (void)diagnostic.subDiags.emplace_back(diagnostic.mainHint.range, "which is expanded as follows");
-            }
-            diagnostic.mainHint.range = MakeRange(originPos, originPos + 1);
+    Position originPos;
+    auto key = pInvocation->isCurFile ? pos.Hash32() : static_cast<const uint32_t>(pos.column);
+    if (pInvocation->isCurFile && pInvocation->originPosMap.find(key) != pInvocation->originPosMap.end()) {
+        originPos = pInvocation->originPosMap.at(key);
+    } else if (pInvocation->new2originPosMap.find(pos.Hash32()) != pInvocation->new2originPosMap.end()) {
+        originPos = pInvocation->new2originPosMap.at(pos.Hash32());
+        if (!originPos.isCurFile) {
+            originPos = INVALID_POSITION;
         }
     }
-    auto mcBegin = node.curMacroCall->begin;
-    auto idPosEnd = pInvocation->identifierPos + pInvocation->identifier.size();
-    // For lsp, the error range includes only identifier.
-    // Otherwise, the error range includes the entire macrocall node.
-    auto mcEnd = pInvocation->isForLSP ? idPosEnd : node.curMacroCall->end;
-    std::string sevInfo = (diagnostic.diagSeverity == DiagSeverity::DS_ERROR) ? "the error" : "the warning";
-    (void)diagnostic.subDiags.emplace_back(MakeRange(mcBegin, mcEnd), sevInfo + " occurs after the macro is expanded");
-    if (!pInvocation->isForLSP) {
-        auto codeRange = MakeRange(pInvocation->mcBegin, pInvocation->mcEnd);
-        (void)diagnostic.subDiags.emplace_back(codeRange, MACROCALL_CODE);
+    if (originPos != INVALID_POSITION && originPos != diagnostic.start &&
+        originPos != diagnostic.mainHint.range.begin) {
+        if (diagnostic.errorMessage.empty()) {
+            diagnostic.start = originPos;
+            diagnostic.end = originPos + 1;
+        }
+        diagnostic.mainHint.range = MakeRange(originPos, originPos + 1);
+    }
+    // Assign diagMessage if not refactor.
+    if (!diagnostic.isRefactor && diagnostic.errorMessage.empty()) {
+        ConvertArgsToDiagMessage(diagnostic);
+    }
+    // Add macro note.
+    auto message = sevInfo +
+        " originates in the macro `" + pInvocation->fullName + "` (consider using `--debug-macro` for more info)";
+    auto range = MakeRange(mcBegin, node.curMacroCall->end);
+    auto mainHint = diagnostic.mainHint;
+    if (pInvocation->isCurFile || mainHint.range.begin.isCurFile) {
+        // Case 1: originPos is in current file, add note in macro call.
+        (void)diagnostic.subDiags.emplace_back(range, message);
+    } else {
+        // Case 2: originPos is not in current file, put error message into first position of subDiags.
+        ChangeMessageWithNote(diagnostic, range, message);
     }
 }
 
