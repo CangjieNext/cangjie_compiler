@@ -282,7 +282,6 @@ void MachO::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
     std::set<std::string> dynamicLibraries;
     std::set<std::string> staticLibraries;
     std::set<std::string> ltoBuiltInDependencies;
-    std::unordered_set<std::string> dyDependencies;
 
     const std::function<void(std::string)> appendStaticLibsToTool =
         [this, &dynamicLibraries, &staticLibraries, &ltoBuiltInDependencies](const std::string& cjoFileName) {
@@ -308,41 +307,24 @@ void MachO::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
                     }
                     staticLibraries.emplace(LINK_PREFIX + ffiLibName);
                 }
+                ltoBuiltInDependencies.emplace(FileUtil::ConvertFilenameToLtoLibCangjieFormat(cjoFileName));
             }
-        };
-    getDyDependencies(driverOptions.directBuiltinDependencies);
-    getDyDependencies(driverOptions.indirectBuiltinDependencies);
-
-    const std::function<void(std::string)> appendStaticLibsToTool = [this, &dynamicLibraries, &staticLibraries,
-                                                                        &ltoBuiltInDependencies, &dyDependencies](
-                                                                        const std::string& cjoFileName) {
-        auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION);
-        if (dyDependencies.find(staticLib) != dyDependencies.end() && !driverOptions.linkStatic) {
-            dynamicLibraries.emplace(LINK_PREFIX + FileUtil::ConvertFilenameToLibCangjieBaseFormat(cjoFileName));
-            return;
-        }
-        auto cangjieLibPath = FileUtil::JoinPath(
-            FileUtil::JoinPath(driver.cangjieHome, "lib"), driverOptions.GetCangjieLibTargetPathName());
-        // Search sanitizer path
-        if (driverOptions.sanitizerType != GlobalOptions::SanitizerType::NONE) {
-            cangjieLibPath = FileUtil::JoinPath(cangjieLibPath, driverOptions.SanitizerTypeToShortString());
-        }
-        if (driverOptions.IsLTOEnabled()) {
-            auto found = LLVM_LTO_CSTD_FFI_OPTION_MAP.find(staticLib);
-            if (found != LLVM_LTO_CSTD_FFI_OPTION_MAP.end()) {
-                staticLibraries.emplace(FileUtil::JoinPath(cangjieLibPath, found->second));
-            }
-            ltoBuiltInDependencies.emplace(FileUtil::ConvertFilenameToLtoLibCangjieFormat(cjoFileName));
-        } else {
+            else {
+                auto cangjieLibPath = FileUtil::JoinPath(FileUtil::JoinPath(driver.cangjieHome, "lib"),
+                    driverOptions.GetCangjieLibTargetPathName());
+                // Search sanitizer path
+                if (driverOptions.sanitizerType != GlobalOptions::SanitizerType::NONE) {
+                    cangjieLibPath = FileUtil::JoinPath(cangjieLibPath, driverOptions.SanitizerTypeToShortString());
+                }
             // In the case of static linkage, we pass full path of static library to the linker, otherwise
             // we use -l<libname> passing style.
-            std::string libLinkOpt = driverOptions.linkStaticStd.value_or(true)
-                ? FileUtil::JoinPath(cangjieLibPath, staticLib)
-                : LINK_PREFIX + FileUtil::ConvertFilenameToLibCangjieBaseFormat(cjoFileName);
-            staticLibraries.emplace(libLinkOpt);
-        }
-        CheckOtherDependeniesOfStaticLib(staticLib, dynamicLibraries, staticLibraries);
-    };
+                std::string libLinkOpt = driverOptions.linkStaticStd.value_or(true)
+                    ? FileUtil::JoinPath(cangjieLibPath, staticLib)
+                    : LINK_PREFIX + FileUtil::ConvertFilenameToLibCangjieBaseFormat(cjoFileName);
+                staticLibraries.emplace(libLinkOpt);
+            }
+            CheckOtherDependeniesOfStaticLib(staticLib, dynamicLibraries, staticLibraries);
+        };
 
     ForEachBuiltinDependencies(driverOptions.directBuiltinDependencies, appendStaticLibsToTool);
     ForEachBuiltinDependencies(driverOptions.indirectBuiltinDependencies, appendStaticLibsToTool);

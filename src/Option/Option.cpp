@@ -267,6 +267,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckScanDependencyOptions();
     success = success && CheckSanitizerOptions();
     success = success && CheckLtoOptions();
+    success = success && CheckLTOFinalOutputOptions();
     success = success && CheckCompileAsExeOptions();
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
@@ -561,12 +562,44 @@ bool GlobalOptions::CheckLtoOptions() const
         Errorln("--output-type=obj is not allowed in LTO mode");
         return false;
     }
-    if (outputMode == OutputMode::STATIC_LIB && !bcInputFiles.empty()) {
+    if (outputMode == OutputMode::STATIC_LIB && !bcInputFiles.empty() && !HasLTOFinalOutput()) {
         Errorln("The input file cannot be bc files When generating a static library in LTO mode.");
         return false;
     }
     if (optimizationLevel == OptimizationLevel::Os || optimizationLevel == OptimizationLevel::Oz) {
         Errorln("-Os and -Oz optimize options are not supported in LTO mode.");
+        return false;
+    }
+    return true;
+}
+
+bool GlobalOptions::CheckLTOFinalOutputOptions() const
+{
+    if (!ltoExportListFile.empty() && !HasLTOFinalOutput()) {
+        Errorln("--lto-export-list only takes effect when --lto-final-output is enabled.");
+        return false;
+    }
+    if (!ltoRootBcListFile.empty() && !HasLTOFinalOutput()) {
+        Errorln("--lto-root-bc-list only takes effect when --lto-final-output is enabled.");
+        return false;
+    }
+    if (enableLTORootCJMetadataPrune && !HasLTOFinalOutput()) {
+        Errorln("--lto-root-cjmetadata-prune only takes effect when --lto-final-output is enabled.");
+        return false;
+    }
+    if (enableLTORootCJMetadataPrune && ltoRootBcListFile.empty()) {
+        Errorln("--lto-root-cjmetadata-prune requires --lto-root-bc-list.");
+        return false;
+    }
+    if (!HasLTOFinalOutput()) {
+        return true;
+    }
+    if (!IsLTOEnabled()) {
+        Errorln("--lto-final-output only takes effect when lto mode is enabled.");
+        return false;
+    }
+    if (outputMode != OutputMode::STATIC_LIB) {
+        Errorln("--lto-final-output only supports --output-type=staticlib.");
         return false;
     }
     return true;
@@ -1572,7 +1605,7 @@ std::string GlobalOptions::SanitizerTypeToShortString() const
 std::vector<std::string> GlobalOptions::ToSerialized() const
 {
     std::vector<std::string> result;
-    constexpr decltype(result.size()) estimatedOptionNum = 70;
+    constexpr decltype(result.size()) estimatedOptionNum = 74;
     result.reserve(estimatedOptionNum);
     result.emplace_back(BoolToSerializedString(enableCompileDebug));
     result.emplace_back(target.ToFullTripleString());
@@ -1583,6 +1616,10 @@ std::vector<std::string> GlobalOptions::ToSerialized() const
     result.emplace_back(BoolToSerializedString(displayLineInfo));
     result.emplace_back(moduleName);
     result.emplace_back(std::to_string(static_cast<uint8_t>(ltoMod)));
+    result.emplace_back(std::to_string(static_cast<uint8_t>(ltoFinalOutputMode)));
+    result.emplace_back(ltoExportListFile);
+    result.emplace_back(ltoRootBcListFile);
+    result.emplace_back(BoolToSerializedString(enableLTORootCJMetadataPrune));
     result.emplace_back(VectorStrToSerializedString(removedPathPrefix, ":"));
     result.emplace_back(BackendTypeToSerializedString());
     result.emplace_back(BoolToSerializedString(enableMacroInLSP));

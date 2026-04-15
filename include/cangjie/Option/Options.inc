@@ -178,6 +178,9 @@ PREDEFVALUE(compile_target_list, {
 PREDEFVALUE(lto_mode, {
     VALUE("full", "", { BACKEND(CJNATIVE) }, { GROUP(STABLE) COMMA GROUP(VISIBLE) }) COMMA
     VALUE("thin", "", { BACKEND(CJNATIVE) }, { GROUP(STABLE) COMMA GROUP(VISIBLE) }) });
+PREDEFVALUE(lto_final_output_mode, {
+    VALUE("archive", "", { BACKEND(CJNATIVE) }, { GROUP(STABLE) COMMA GROUP(VISIBLE) }) COMMA
+    VALUE("object", "", { BACKEND(CJNATIVE) }, { GROUP(STABLE) COMMA GROUP(VISIBLE) }) });
 PREDEFVALUE(bchir_print_mode, {
     VALUE("deserialized", "after deserialisation", { BACKEND(CJNATIVE) }, { GROUP(STABLE) }) COMMA
     VALUE("linked", "after linkage", { BACKEND(CJNATIVE) }, { GROUP(STABLE) }) COMMA
@@ -324,6 +327,18 @@ OPTION("--dy-libs", DY_LIBS, FLAG, { BACKEND(CJNATIVE) },
 OPTION("--lto", LTO, SEPARATED, {BACKEND(CJNATIVE)},
     {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, lto_mode, SINGLE_OCCURRENCE,
     "Enable LTO to either 'full' or 'thin' (Not available for Windows target)")
+OPTION("--lto-final-output", LTO_FINAL_OUTPUT, SEPARATED, {BACKEND(CJNATIVE)},
+    {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, lto_final_output_mode, SINGLE_OCCURRENCE,
+    "Emit final static LTO artifact as 'archive' or 'object' instead of the intermediate bitcode file")
+OPTION("--lto-export-list", LTO_EXPORT_LIST, SEPARATED, {BACKEND(CJNATIVE)},
+    {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, {}, SINGLE_OCCURRENCE,
+    "Preserve the listed symbols when emitting final static LTO artifacts")
+OPTION("--lto-root-bc-list", LTO_ROOT_BC_LIST, SEPARATED, {BACKEND(CJNATIVE)},
+    {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, {}, SINGLE_OCCURRENCE,
+    "Use the listed bitcode files as root set when generating final static LTO keep symbols")
+OPTION("--lto-root-cjmetadata-prune", LTO_ROOT_CJMETADATA_PRUNE, FLAG, {BACKEND(CJNATIVE)},
+    {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Prune CJMetadata using the root-bc keep set when emitting final static LTO artifacts")
 OPTION("--compile-as-exe", COMPILE_AS_EXE, FLAG, {BACKEND(CJNATIVE)},
     {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Hide symbols from bitcode files in LTO mode, and only the package init symbols remain visible")

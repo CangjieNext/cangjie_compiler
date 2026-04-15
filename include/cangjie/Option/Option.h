@@ -658,8 +658,13 @@ public:
 
     // LTO optimization options
     enum class LTOMode : uint8_t { FULL_LTO, THIN_LTO, NO_LTO };
+    enum class LTOFinalOutputMode : uint8_t { NONE, ARCHIVE, OBJECT };
     LTOMode ltoMod = LTOMode::NO_LTO;
+    LTOFinalOutputMode ltoFinalOutputMode = LTOFinalOutputMode::NONE;
     bool enableCompileAsExe = false;
+    std::string ltoExportListFile = "";
+    std::string ltoRootBcListFile = "";
+    bool enableLTORootCJMetadataPrune = false;
 
     /**
      * @brief Checks whether LTO is enabled.
@@ -674,6 +679,21 @@ public:
     bool IsCompileAsExeEnabled() const 
     {
         return enableCompileAsExe;
+    }
+
+    bool HasLTOFinalOutput() const
+    {
+        return ltoFinalOutputMode != LTOFinalOutputMode::NONE;
+    }
+
+    bool EmitLTOFinalArchive() const
+    {
+        return ltoFinalOutputMode == LTOFinalOutputMode::ARCHIVE;
+    }
+
+    bool EmitLTOFinalObject() const
+    {
+        return ltoFinalOutputMode == LTOFinalOutputMode::OBJECT;
     }
 
     /**
@@ -1187,6 +1207,7 @@ private:
     bool CheckScanDependencyOptions() const;
     bool CheckSanitizerOptions() const;
     bool CheckLtoOptions() const;
+    bool CheckLTOFinalOutputOptions() const;
     bool CheckOutputModeOptions();
     bool CheckCompileAsExeOptions() const;
     bool CheckPgoOptions() const;

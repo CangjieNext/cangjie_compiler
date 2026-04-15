@@ -17,6 +17,9 @@
 #include "cangjie/Driver/DriverOptions.h"
 #include "cangjie/Option/Option.h"
 
+#include <optional>
+#include <set>
+
 namespace Cangjie {
 /**
  * CJNATIVEBackend generates three different kind of tools representing three different compiling stages.
@@ -58,7 +61,9 @@ private:
     static const std::string tempFolder;
 
     std::string optPath;
+    std::string llvmLinkPath;
     std::string llcPath;
+    std::string llvmArPath;
 
     /**
      * @brief Create an instance of a cjnative base tool.
@@ -68,6 +73,11 @@ private:
     std::vector<TempFileInfo> GetFrontendOutputs();
 
     void GenerateCacheCopyTool(const std::vector<TempFileInfo>& files, const std::string& extension);
+    bool AppendBuiltinLTOBitcodes(std::vector<TempFileInfo>& bitCodeFiles) const;
+    bool BuildLTOExportList(
+        const std::vector<TempFileInfo>& bitCodeFiles, std::optional<std::string>& exportListPath);
+    std::string BuildFinalLTOPassPipeline(bool enableInternalize, bool enableRootCJMetadataPrune) const;
+    bool ProcessGenerationOfFinalStaticLTO(const std::vector<TempFileInfo>& bitCodeFiles);
 
     /**
      * @brief This function generates 'opt' tools. For each .bc input file, an 'opt' tool is generated.

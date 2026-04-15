@@ -42,6 +42,11 @@ const std::unordered_map<std::string, uint8_t> LTO_MODE_MAP = {
     {"thin", uint8_t(GlobalOptions::LTOMode::THIN_LTO)},
 };
 
+const std::unordered_map<std::string, uint8_t> LTO_FINAL_OUTPUT_MODE_MAP = {
+    {"archive", uint8_t(GlobalOptions::LTOFinalOutputMode::ARCHIVE)},
+    {"object", uint8_t(GlobalOptions::LTOFinalOutputMode::OBJECT)},
+};
+
 const std::unordered_map<std::string, GlobalOptions::InteropLanguage> INTEROP_LANGUAGE_MAP = {
     {"Java", GlobalOptions::InteropLanguage::Java}, {"ObjC", GlobalOptions::InteropLanguage::ObjC},
 };
@@ -634,6 +639,33 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
         opts.ltoMod = GlobalOptions::LTOMode(LTO_MODE_MAP.at(arg.value));
         return true;
     }},
+    { Options::ID::LTO_FINAL_OUTPUT, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        if (LTO_FINAL_OUTPUT_MODE_MAP.count(arg.value) == 0) {
+            return false;
+        }
+        opts.ltoFinalOutputMode =
+            GlobalOptions::LTOFinalOutputMode(LTO_FINAL_OUTPUT_MODE_MAP.at(arg.value));
+        return true;
+    }},
+    { Options::ID::LTO_EXPORT_LIST, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        auto maybePath = opts.CheckInputFilePath(arg.value);
+        if (!maybePath.has_value()) {
+            Errorf("'%s' only accepts an existing file path.\n", arg.name.c_str());
+            return false;
+        }
+        opts.ltoExportListFile = maybePath.value();
+        return true;
+    }},
+    { Options::ID::LTO_ROOT_BC_LIST, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        auto maybePath = opts.CheckInputFilePath(arg.value);
+        if (!maybePath.has_value()) {
+            Errorf("'%s' only accepts an existing file path.\n", arg.name.c_str());
+            return false;
+        }
+        opts.ltoRootBcListFile = maybePath.value();
+        return true;
+    }},
+    { Options::ID::LTO_ROOT_CJMETADATA_PRUNE, OPTION_TRUE_ACTION(opts.enableLTORootCJMetadataPrune = true) },
     { Options::ID::COMPILE_AS_EXE, OPTION_TRUE_ACTION(opts.enableCompileAsExe = true) },
     { Options::ID::TARGET, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         return ParseTargetTriple(opts, arg.value);
