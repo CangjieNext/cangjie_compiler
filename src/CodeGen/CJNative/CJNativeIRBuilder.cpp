@@ -102,11 +102,27 @@ std::vector<llvm::Value*> IRBuilder2::FixFuncArgs(const CGFunctionType& calleeTy
     const auto& structParamNeedsBasePtr = calleeType.GetStructParamNeedsBasePtrIndices();
     const auto& realArgIndices = calleeType.GetRealArgIndices();
     std::vector<llvm::Value*> argsVal;
+    // Keep AArch64 global-struct member calls compatible with the existing
+    // callee/runtime convention: encode the compatibility marker on `this`
+    // and leave the synthetic `basePtr` as null.
+    auto isGlobalStructThisOnAArch64 = [this, applyWrapper](size_t idx) {
+        return applyWrapper && idx == 0 && applyWrapper->IsCalleeStructInstanceMethod() &&
+            applyWrapper->GetArgs()[idx]->IsGlobalVar() &&
+            cgMod.GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::AARCH64;
+    };
+    auto tagGlobalStructAddrForAArch64 = [this](llvm::Value* llvmVal) {
+        auto taggedPtr = CreatePtrToInt(llvmVal, getInt64Ty());
+        taggedPtr = CreateOr(taggedPtr, getInt64(1ULL << 63));
+        return CreateIntToPtr(taggedPtr, llvmVal->getType());
+    };
     size_t idx = 0;
     for (auto arg : args) {
         bool isThis = idx == 0 && applyWrapper && applyWrapper->IsCalleeStructInstanceMethod();
         auto& paramType = *calleeType.GetParamType(idx);
         auto llvmVal = isThis ? DoSimpleCast(*this, *arg, paramType) : FixFuncArg(*arg, paramType);
+        if (isGlobalStructThisOnAArch64(idx)) {
+            llvmVal = tagGlobalStructAddrForAArch64(llvmVal);
+        }
         (void)argsVal.emplace_back(llvmVal); // Insert the fixed argument, may do some casting meanwhile.
         auto cgType = arg->GetCGType();
         CJC_ASSERT(!cgType->IsStructType());
@@ -118,7 +134,7 @@ std::vector<llvm::Value*> IRBuilder2::FixFuncArgs(const CGFunctionType& calleeTy
                 auto addrspace = paramType.GetAddrspace();
                 auto i8PtrTy = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext(), addrspace);
                 auto basePtrVal = llvm::Constant::getNullValue(i8PtrTy);
-                if (!applyWrapper->GetArgs()[idx]->IsLocalVar()) {
+                if (!isGlobalStructThisOnAArch64(idx) && !applyWrapper->GetArgs()[idx]->IsLocalVar()) {
                     basePtrVal = llvm::ConstantExpr::getIntToPtr(
                         llvm::ConstantInt::get(llvm::Type::getInt64Ty(cgMod.GetLLVMContext()), 0x1), i8PtrTy);
                 }
