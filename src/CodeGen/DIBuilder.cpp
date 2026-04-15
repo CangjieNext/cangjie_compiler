@@ -1318,37 +1318,27 @@ llvm::DICompositeType* DIBuilder::CreateEnumWithNonRefArgsType(
             ++fieldIdx;
             continue;
         }
-        std::vector<uint64_t> sizeOfCtors = std::vector<uint64_t>(ctor.funcType->GetParamTypes().size() + 1, 0);
-        // The size of constructor is 32-bits.
-        size_t totalSize = 32u;
-        sizeOfCtors[0] = totalSize;
-        for (uint32_t argIndex = 0; argIndex < ctor.funcType->GetParamTypes().size(); ++argIndex) {
-            auto arg = ctor.funcType->GetParamTypes()[argIndex];
-            auto argTy = GetOrCreateType(*arg);
-            if (IsReferenceType(*arg, cgMod) || arg->IsRawArray()) {
-                argTy = CreatePointerType(argTy, CreateRefType()->getSizeInBits());
-            }
-            auto argSize = GetSizeInBits(argTy);
-            sizeOfCtors[argIndex + 1] = argSize;
-            totalSize += argSize;
-        }
+        std::vector<CHIR::Type*> fields;
+        fields.emplace_back(cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty());
+        fields.insert(fields.end(), ctor.funcType->GetParamTypes().begin(), ctor.funcType->GetParamTypes().end());
+        auto layout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fields);
+        size_t totalSize = static_cast<size_t>(layout.size) * 8U;
         auto subEnumType =
             createStructType(defPackage, ctorName, diFile, 0u, totalSize, 0u, llvm::DINode::FlagZero, nullptr, {});
         auto enumId = createMemberType(
             subEnumType, "constructor", diFile, 0u, size, 0u, 0u, llvm::DINode::FlagZero, constructorType);
         enumLayer.push_back(enumId);
         size_t offsetIndex = 1;
-        size_t offset = 0;
         for (uint32_t argIndex = 0; argIndex < ctor.funcType->GetParamTypes().size(); ++argIndex) {
             auto arg = ctor.funcType->GetParamTypes()[argIndex];
             auto argTy = GetOrCreateType(*arg);
             if (IsReferenceType(*arg, cgMod)) {
                 argTy = CreatePointerType(argTy, CreateRefType()->getSizeInBits());
             }
-            offset += sizeOfCtors[argIndex];
             auto align = 0u;
             auto argType = createMemberType(subEnumType, "arg_" + std::to_string(offsetIndex), diFile, 0u,
-                GetSizeInBits(argTy), static_cast<uint32_t>(align), offset, llvm::DINode::FlagZero, argTy);
+                GetSizeInBits(argTy), static_cast<uint32_t>(align),
+                static_cast<uint64_t>(layout.offsets[argIndex + 1]) * 8U, llvm::DINode::FlagZero, argTy);
             enumLayer.push_back(argType);
             ++offsetIndex;
         }

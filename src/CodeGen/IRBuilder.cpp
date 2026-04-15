@@ -99,11 +99,6 @@ llvm::AllocaInst* IRBuilder2::CreateEntryAlloca(llvm::Type* type, llvm::Value* a
     auto currentLoc = getCurrentDebugLocation();
     SetInsertPointToAllocas(curFunc);
     auto allocaInst = LLVMIRBuilder2::CreateAlloca(type, arraySize, name);
-    auto& target = GetCGContext().GetCompileOptions().target;
-    if (target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID &&
-        allocaInst->getAlign().value() < 4) {
-        allocaInst->setAlignment(llvm::Align(4));
-    }
     LLVMIRBuilder2::SetInsertPoint(curBB, curPt);
     SetCurrentDebugLocation(currentLoc);
     return allocaInst;
@@ -125,6 +120,10 @@ llvm::Instruction* IRBuilder2::CreateEntryAlloca(const CGType& cgType, const llv
         options.optimizationLevel == GlobalOptions::OptimizationLevel::O0) ||
         (options.cjdbMode && isOptionLikeNonRef)) {
             (void)CreateMemsetStructWith0(allocaInst);
+        }
+        auto& target = GetCGContext().GetCompileOptions().target;
+        if (target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID && isOptionLikeNonRef) {
+            allocaInst->setAlignment(llvm::Align(4));
         }
         return allocaInst;
     }

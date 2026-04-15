@@ -142,15 +142,12 @@ EnumCtorLayout EnumCtorTIOrTTGenerator::GenLayoutForStructure(const CGEnumType* 
         return ComputeLLVMLayout(fields, tiName, className);
     } else { // EXHAUSTIVE_ASSOCIATED_NONREF
         layout.fieldTypes = fields;
-        layout.align = 1;
+        auto nonRefLayout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, layout.fieldTypes);
+        layout.size = nonRefLayout.size;
+        layout.align = nonRefLayout.align;
         std::vector<llvm::Constant*> offSets(layout.fieldTypes.size());
-        uint32_t totalSize = 0;
         for (size_t i = 0; i < layout.fieldTypes.size(); ++i) {
-            auto fieldType = layout.fieldTypes[i];
-            offSets[i] = llvm::ConstantInt::get(i32Ty, totalSize);
-            auto cgField = CGType::GetOrCreate(cgMod, DeRef(*fieldType));
-            auto fieldSize = cgField->GetSize().value_or(0);
-            totalSize += fieldSize;
+            offSets[i] = llvm::ConstantInt::get(i32Ty, nonRefLayout.offsets[i]);
         }
         auto layoutType = GetLLVMStructType(cgMod, layout.fieldTypes, GetClassObjLayoutName(className));
         if (layoutType->elements().empty()) {
