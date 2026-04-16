@@ -9,6 +9,7 @@
 #include "cangjie/CHIR/IR/Annotation.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
+#include "cangjie/Utils/CheckUtils.h"
 
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
@@ -178,27 +179,22 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
     auto annosArray = decl.annotationsArray.get();
     if (decl.TestAttr(AST::Attribute::IMPORTED) || !annosArray || annosArray->children.empty() ||
         decl.TestAttr(AST::Attribute::SPECIFIC) || opts.disableReflection) {
-        return {"none"};
+        return {};
     }
 
     // In OHOS environment, disable annotations for enum types
     if (opts.target.env == Triple::Environment::OHOS && parent &&
         parent->GetCustomKind() == CustomDefKind::TYPE_ENUM) {
-        return {"none"};
+        return {};
     }
     auto found = annotationFuncMap.find(&decl);
     if (found != annotationFuncMap.end()) {
-        return {found->second}; // Property's getters and setters share the same annotation function.
+        return found->second; // Property's getters and setters share the same annotation function.
     }
-    Type* returnTy = nullptr;
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    returnTy = TranslateType(*annosArray->ty);
-#endif
+    Type* returnTy = TranslateType(*annosArray->ty);
     auto funcType = builder.GetType<FuncType>(std::vector<Type*>{}, returnTy);
     const auto& loc = TranslateLocation(*decl.annotationsArray->children[0]);
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     std::string mangledName = CHIRMangling::GenerateAnnotationFuncMangleName(decl.mangledName);
-#endif
     if (opts.chirDebugOptimizer) {
         std::string ms = "The annotation factory function of " + GetIdentifierToPrint(decl) + " in the line " +
             std::to_string(decl.begin.line) + " is " + mangledName + '\n';
@@ -209,19 +205,15 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
     func->SetFuncKind(FuncKind::ANNOFACTORY_FUNC);
     func->EnableAttr(Attribute::CONST);
     annoFactoryFuncs.emplace_back(&decl, func);
-    annotationFuncMap.emplace(&decl, mangledName);
     if (parent) {
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
         parent->AddMethod(func);
-#endif
         func->EnableAttr(Attribute::STATIC);
     }
 
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     auto gvs = TranslateAnnotationsArraySig(*annosArray, *func);
     func->Set<AnnoFactoryInfo>(std::move(gvs));
     // Collect annotations whose parameter values are literal constants.
-    std::vector<AnnoInfo::AnnoPair> annoPairs;
+    std::vector<CustomAnnoInstance> annoInstances;
     for (auto& elem : annosArray->children) {
         auto callExpr = StaticCast<AST::CallExpr*>(elem.get().get());
         auto& callee = callExpr->resolvedFunction->funcBody;
@@ -238,10 +230,11 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
             }
         }
         auto annoLoc = TranslateLocation(*elem);
-        annoPairs.emplace_back(annoClassDeclName, paramValues, annoLoc);
+        annoInstances.emplace_back(annoClassDeclName, paramValues, annoLoc);
     }
-    return {mangledName, annoPairs};
-#endif
+    auto annoInfo = AnnoInfo(mangledName, std::move(annoInstances));
+    annotationFuncMap.emplace(&decl, annoInfo);
+    return annoInfo;
 }
 
 std::unordered_map<std::string, Ptr<Function>> Translator::jAnnoFuncMap;

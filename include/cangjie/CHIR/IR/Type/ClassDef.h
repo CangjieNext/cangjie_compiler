@@ -33,8 +33,6 @@ public:
     bool IsClass() const;
     bool IsInterface() const;
 
-    std::string ToString() const override;
-
     /**
      * @brief Whether this class is user defined annotation.
      *
@@ -58,7 +56,7 @@ public:
     Function* GetFinalizer() const;
 
 protected:
-    void PrintComment(std::stringstream& ss) const override;
+    std::string AddExtraComment() const override;
     
 private:
     explicit ClassDef(std::string srcCodeIdentifier, std::string identifier,
