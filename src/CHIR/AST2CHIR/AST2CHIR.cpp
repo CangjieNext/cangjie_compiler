@@ -212,7 +212,7 @@ void AST2CHIR::CreateGlobalVarSignature(const std::vector<Ptr<const AST::Decl>>&
                 continue;
             }
             auto annoInfo = tr.CreateAnnoFactoryFuncSig(*decl, nullptr);
-            if (annoInfo.mangledName != "none") {
+            if (annoInfo.IsAvailable()) {
                 gv->SetAnnoInfo(std::move(annoInfo));
             }
         } else if (decl->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL) {
@@ -224,7 +224,7 @@ void AST2CHIR::CreateGlobalVarSignature(const std::vector<Ptr<const AST::Decl>>&
                 // we have to use VarWithPatternDecl, not VarDecl, because it's difficult for SEMA to pass
                 // the annotation info and initializer to the sub var decls，maybe we can improve SEMA later.
                 auto annoInfo = tr.CreateAnnoFactoryFuncSig(*decl, nullptr);
-                if (annoInfo.mangledName != "none") {
+                if (annoInfo.IsAvailable()) {
                     CJC_ASSERT(!gv->TestAttr(Attribute::STATIC));
                     gv->SetAnnoInfo(std::move(annoInfo));
                 }

@@ -544,7 +544,7 @@ private:
     /** Used for store side effect expressions and other expression which does not have associated valid ast. */
     AST2CHIRNodeMap<Value> exprValueTable;
     // Since property's getter and setter will share same annotation function, we need to cache the function name.
-    std::unordered_map<Ptr<const AST::Decl>, std::string> annotationFuncMap;
+    std::unordered_map<Ptr<const AST::Decl>, AnnoInfo> annotationFuncMap;
     static std::unordered_map<std::string, Ptr<Function>> jAnnoFuncMap;
     std::vector<Ptr<BlockGroup>> blockGroupStack;
     Ptr<Block> currentBlock;

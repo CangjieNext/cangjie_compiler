@@ -7,11 +7,24 @@
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
+#include "cangjie/CHIR/Utils/ToStringUtils.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include <pthread.h>
+#include <sstream>
 
 using namespace Cangjie::CHIR;
+
+std::string FuncSigInfo::ToString() const
+{
+    std::stringstream ss;
+    ss << funcName;
+    CJC_NULLPTR_CHECK(funcType);
+    ss << TypeVecToString("<", genericTypeParams, ">");
+    ss << "(" << TypeVecToString("", funcType->GetParamTypes(), "") << ")";
+    ss << " -> " << funcType->GetReturnType()->ToString();
+    return ss.str();
+}
 
 VirtualMethodInfo::VirtualMethodInfo(
     FuncSigInfo&& c, Function* func, const AttributeInfo& a, FuncType& o, Type& p, Type& r)

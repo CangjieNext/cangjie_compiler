@@ -625,8 +625,6 @@ enum CHIRExprKind: uint8 {
   STORE_ELEMENT_REF,
   STORE_ELEMENT_BY_NAME,
   // Complext
-  IF,
-  LOOP,
   FORIN_RANGE,
   FORIN_ITER,
   FORIN_CLOSED_RANGE,
@@ -1331,14 +1329,6 @@ table Intrinsic {
   instantiatedTypeArgs: [uint32]; // use types id
 }
 
-table If {
-  base: Expression;
-}
-
-table Loop {
-  base: Expression;
-}
-
 table ForInRange {
   base: Expression;
 }
@@ -1493,8 +1483,6 @@ union ExpressionElem {
   VArrayBd,
   GetException,
   Intrinsic,
-  If,
-  Loop,
   ForInRange,
   ForInIter,
   ForInClosedRange,
