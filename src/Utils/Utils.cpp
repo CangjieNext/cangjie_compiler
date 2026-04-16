@@ -26,7 +26,7 @@
 #include <map>
 #include <queue>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Parse/Parser.h"
 #include "cangjie/Utils/StdUtils.h"
 

@@ -8,6 +8,7 @@
 
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/CHIR/AST2CHIR/AST2CHIRChecker.h"
 #include "cangjie/CHIR/AST2CHIR/CollectLocalConstDecl/CollectLocalConstDecl.h"
@@ -17,6 +18,7 @@
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
+#include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Utils/ParallelUtil.h"

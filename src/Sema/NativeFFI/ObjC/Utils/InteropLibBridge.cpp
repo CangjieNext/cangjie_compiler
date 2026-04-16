@@ -12,7 +12,7 @@
 
 #include "InteropLibBridge.h"
 #include "cangjie/AST/Create.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 using namespace Cangjie;
 using namespace Cangjie::AST;

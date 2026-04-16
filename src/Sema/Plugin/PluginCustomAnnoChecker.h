@@ -17,8 +17,6 @@
 #include <string>
 #include <set>
 
-#include "cangjie/AST/Node.h"
-#include "cangjie/AST/NodeX.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Modules/ImportManager.h"

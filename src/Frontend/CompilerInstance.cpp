@@ -19,15 +19,20 @@
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Basic/Version.h"
+#include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/CHIR.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
 #include "cangjie/CHIR/Utils/CHIRPrinter.h"
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/Driver/TempFileManager.h"
+#include "cangjie/Frontend/CHIRData.h"
 #include "cangjie/Frontend/CompileStrategy.h"
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
+#include "cangjie/IncrementalCompilation/CompilationCache.h"
 #include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
+#include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 #include "cangjie/Mangle/BaseMangler.h"
+#include "cangjie/MetaTransformation/MetaTransform.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Modules/PackageManager.h"
 #include "cangjie/Parse/ASTHasher.h"
@@ -53,7 +58,13 @@ using namespace Cangjie;
 using namespace AST;
 
 CompilerInstance::CompilerInstance(CompilerInvocation& invocation, DiagnosticEngine& diag)
-    : invocation(invocation), diag(diag), mangler(std::make_unique<BaseMangler>())
+    : cachedInfo{std::make_unique<CompilationCache>()},
+      chirInfo{std::make_unique<CHIRInfo>()},
+      metaTransformPluginBuilder{std::make_unique<MetaTransformPluginBuilder>()},
+      invocation(invocation),
+      diag(diag),
+      mangler(std::make_unique<BaseMangler>()),
+      kind{IncreKind::INVALID}
 {
     // allocate managers in safe order
     typeManager = new TypeManager();
@@ -341,7 +352,7 @@ bool CompilerInstance::PerformPluginLoad()
                 diag.DiagnoseRefactor("not_a_valid_plugin", DEFAULT_POSITION, pluginPath);
             }
             AddPluginHandle(metaTransformPlugin.GetHandle());
-            metaTransformPlugin.RegisterCallbackTo(metaTransformPluginBuilder); // register MetaTransform into builder
+            metaTransformPlugin.RegisterCallbackTo(*metaTransformPluginBuilder); // register MetaTransform into builder
 #ifndef CANGJIE_ENABLE_GCOV
         } catch (...) {
             diag.DiagnoseRefactor("not_a_valid_plugin", DEFAULT_POSITION, pluginPath);
@@ -410,13 +421,13 @@ bool CompilerInstance::PerformMacroExpand()
 
 void CompilerInstance::CacheCompileArgs()
 {
-    cachedInfo.compileArgs = invocation.globalOptions.ToSerialized();
+    cachedInfo->compileArgs = invocation.globalOptions.ToSerialized();
 }
 
 void CompilerInstance::CacheSemaUsage(SemanticInfo&& info)
 {
     // Move previous unchanged sema usage info to current info.
-    for (auto& [decl, usage] : cachedInfo.semaInfo.usages) {
+    for (auto& [decl, usage] : cachedInfo->semaInfo.usages) {
         if (decl->toBeCompiled) {
             continue;
         }
@@ -432,7 +443,7 @@ void CompilerInstance::CacheSemaUsage(SemanticInfo&& info)
         }
     }
     // Update cached info.
-    cachedInfo.semaInfo = std::move(info);
+    cachedInfo->semaInfo = std::move(info);
 }
 
 bool CompilerInstance::ShouldWriteCacheFile() const
@@ -498,11 +509,11 @@ void UpdateTopLevelDeclMangleNameForCachedInfo(
 
 void CompilerInstance::UpdateMangleNameForCachedInfo()
 {
-    for (auto &it : cachedInfo.curPkgASTCache) {
+    for (auto& it : cachedInfo->curPkgASTCache) {
         auto rawMangle = it.first;
         UpdateTopLevelDeclMangleNameForCachedInfo(rawMangleName2DeclMap, rawMangle, it.second);
     }
-    for (auto &it : cachedInfo.importedASTCache) {
+    for (auto& it : cachedInfo->importedASTCache) {
         auto rawMangle = it.first;
         UpdateTopLevelDeclMangleNameForCachedInfo(rawMangleName2DeclMap, rawMangle, it.second);
     }
@@ -520,7 +531,7 @@ bool CompilerInstance::WriteCachedInfo()
     auto& pkg{*srcPkgs[0]};
     std::string path{
         invocation.globalOptions.GenerateCachedPathName(pkg.fullPackageName, std::string(CACHED_AST_EXTENSION))};
-    WriteCache(pkg, std::move(cachedInfo), std::move(order), path);
+    WriteCache(pkg, std::move(*cachedInfo.release()), std::move(order), path);
 #endif
     return true;
 }
@@ -565,7 +576,7 @@ bool CompilerInstance::CalculateASTCache()
     IncrementalCompilation::ASTCacheCalculator pc{*package, needCodePosInfo};
     pc.Walk();
     rawMangleName2DeclMap = std::move(pc.mangled2Decl);
-    astCacheInfo = std::move(pc.ret);
+    astCacheInfo = std::make_unique<ASTCache>(std::move(pc.ret));
     declsWithDuplicatedRawMangleName = std::move(pc.duplicatedMangleNames);
     directExtends = std::move(pc.directExtends);
     fileMap = std::move(pc.fileMap);
@@ -854,9 +865,9 @@ bool CompilerInstance::PerformMangling()
         mangler->CollectLocalDecls(*mangler->manglerCtxTable.at(pkgName), *package->srcPackage);
     }
 #endif
-    mangler->lambdaCounter = cachedInfo.lambdaCounter;
+    mangler->lambdaCounter = cachedInfo->lambdaCounter;
     ManglingHelpFunction(*mangler);
-    cachedInfo.lambdaCounter = mangler->lambdaCounter;
+    cachedInfo->lambdaCounter = mangler->lambdaCounter;
     // when dump to screen, only dump once and dump the ast immediately after mangling
     if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpAST()) {
         DumpAST(GetSourcePackages(), invocation.globalOptions.output, "mangle", invocation.globalOptions.dumpToScreen);
@@ -887,15 +898,15 @@ bool CompilerInstance::GenerateCHIRForPkg(AST::Package& pkg)
     }
     CJC_NULLPTR_CHECK(chirPkg);
     astPkg2chirPkgMap.emplace(&pkg, chirPkg);
-    chirInfo.optEffectMap = convertor.GetOptEffectMap();
+    chirInfo->optEffectMap = convertor.GetOptEffectMap();
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     chirData->AppendNewPackage(chirPkg);
     chirData->SetImplicitFuncs(convertor.GetImplicitFuncs());
     chirData->SetConstVarInitFuncs(convertor.GetConstVarInitFuncs());
-    chirInfo.curVirtFuncWrapDep = convertor.GetCurVirtualFuncWrapperDepForIncr();
-    chirInfo.delVirtFuncWrapForIncr = convertor.GetDeleteVirtualFuncWrapperForIncr();
-    chirInfo.ccOutFuncsRawMangle = convertor.GetCCOutFuncsRawMangle();
-    chirInfo.varInitDepMap = convertor.GetVarInitDepMap();
+    chirInfo->curVirtFuncWrapDep = convertor.GetCurVirtualFuncWrapperDepForIncr();
+    chirInfo->delVirtFuncWrapForIncr = convertor.GetDeleteVirtualFuncWrapperForIncr();
+    chirInfo->ccOutFuncsRawMangle = convertor.GetCCOutFuncsRawMangle();
+    chirInfo->varInitDepMap = convertor.GetVarInitDepMap();
 #endif
 #ifdef SIGNAL_TEST
     // The interrupt signal triggers the function. In normal cases, this function does not take effect.
@@ -1128,6 +1139,26 @@ Candidate CompilerInstance::GetGivenReferenceTarget(
     return typeChecker->SynReferenceSeparately(ctx, scopeName, expr, hasLocalDecl);
 }
 
+bool CompilerInstance::UnloadPluginHandle()
+{
+    metaTransformPluginBuilder = std::make_unique<MetaTransformPluginBuilder>();
+    // plugins should be unloaded after metaTransformPluginBuilder deconstruction.
+    for (auto& handle : pluginHandles) {
+        if (InvokeRuntime::CloseSymbolTable(handle) != 0) {
+            Errorln("close plugin dynamic library failed.");
+            return false;
+        }
+    }
+    pluginHandles.clear();
+    return true;
+}
+
+void CompilerInstance::SetCompileStrategy(CompileStrategy* newCompileStrategy)
+{
+    delete compileStrategy;
+    compileStrategy = newCompileStrategy;
+}
+
 bool CompilerInstance::DetectCangjieHome()
 {
     if (invocation.globalOptions.environment.cangjieHome.has_value()) {
@@ -1223,16 +1254,23 @@ void CompilerInstance::FreeCHIRData()
     }
 }
 
+CHIRData::CHIRData()
+    : cctx{std::make_unique<CHIR::CHIRContext>()}, builder{std::make_unique<CHIR::CHIRBuilder>(*cctx, 0)}
+{
+}
+
+CHIRData::~CHIRData() = default;
+
 void CHIRData::InitData(std::unordered_map<unsigned int, std::string>* fileNameMap, size_t threadNum)
 {
-    cctx.SetFileNameMap(fileNameMap);
-    cctx.SetThreadNum(threadNum);
-    constAnalysisWrapper = std::make_unique<CHIR::ConstAnalysisWrapper>(builder);
+    cctx->SetFileNameMap(fileNameMap);
+    cctx->SetThreadNum(threadNum);
+    constAnalysisWrapper = std::make_unique<CHIR::ConstAnalysisWrapper>(*builder);
 }
 
 CHIR::CHIRContext& CHIRData::GetCHIRContext()
 {
-    return cctx;
+    return *cctx;
 }
 
 void CHIRData::AppendNewPackage(CHIR::Package* package)

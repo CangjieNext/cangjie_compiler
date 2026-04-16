@@ -12,7 +12,10 @@
 #define CANGJIE_SEMA_MPTYPECHECKER_IMPL_H
 
 #include "ScopeManager.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/FuncParamList.h"
+#include "cangjie/AST/Nodes/Node.h"
+#include "cangjie/AST/Nodes/PropDecl.h"
+#include "cangjie/AST/Nodes/Type.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Sema/CommonTypeAlias.h"

@@ -2630,7 +2630,7 @@ bool TypeCheckerImpl::CheckCallKind(const CallExpr& ce, Ptr<Decl> decl, CallKind
     return true;
 }
 
-DiagKind TypeCheckerImpl::GetErrorKindForCall(const std::vector<Ptr<FuncDecl>>& candidatesBeforeCheck,
+std::string_view TypeCheckerImpl::GetErrorKindForCall(const std::vector<Ptr<FuncDecl>>& candidatesBeforeCheck,
     const std::vector<Ptr<FuncDecl>>& candidatesAfterCheck, const CallExpr& ce) const
 {
     bool hasEmpty = candidatesBeforeCheck.empty() || candidatesAfterCheck.empty();

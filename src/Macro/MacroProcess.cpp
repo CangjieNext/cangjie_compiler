@@ -7,11 +7,15 @@
 #include <fstream>
 #include <algorithm>
 
+#include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Nodes/Package.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Macro/MacroEvaluation.h"
 #include "cangjie/Macro/MacroExpansion.h"
 #include "cangjie/Lex/Lexer.h"
+#include "cangjie/Utils/TaskQueue.h"
 
 using namespace Cangjie;
 using namespace AST;

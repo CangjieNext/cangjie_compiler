@@ -17,7 +17,7 @@
 #include "AbstractSourceCodeGenerator.h"
 #include "NativeFFI/Java/AfterTypeCheck/JavaDesugarManager.h"
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/Mangle/BaseMangler.h"
 

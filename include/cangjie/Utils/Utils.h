@@ -29,11 +29,12 @@
 #include <unordered_set>
 #include <vector>
 
-#include "cangjie/Utils/SafePointer.h"
+#include "cangjie/AST/Nodes/OverflowStrategy.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
-#include "cangjie/Utils/SipHash.h"
 #include "cangjie/Utils/PartiallyPersistent.h"
+#include "cangjie/Utils/SafePointer.h"
+#include "cangjie/Utils/SipHash.h"
 
 namespace Cangjie {
 namespace AST {

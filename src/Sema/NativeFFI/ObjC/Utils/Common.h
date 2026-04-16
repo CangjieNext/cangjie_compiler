@@ -15,7 +15,7 @@
 #define CANGJIE_SEMA_OBJ_C_UTILS_COMMON_H
 
 #include "InheritanceChecker/MemberSignature.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Utils/SafePointer.h"
 

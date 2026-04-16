@@ -12,7 +12,7 @@
 #ifndef CANGJIE_SEMA_DESUGAR_H
 #define CANGJIE_SEMA_DESUGAR_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 namespace Cangjie {
 using namespace AST;

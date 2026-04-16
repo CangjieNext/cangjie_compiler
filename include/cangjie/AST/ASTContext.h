@@ -20,14 +20,23 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Cache.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/ScopeManagerApi.h"
 #include "cangjie/AST/Searcher.h"
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
-#include "cangjie/AST/Cache.h"
 
 namespace Cangjie {
+namespace AST {
+struct Expr;
+struct LambdaExpr;
+struct Package;
+struct PackageDecl;
+struct VarDecl;
+struct VarDeclAbstract;
+struct VarWithPatternDecl;
+} // namespace AST
 /** Lucene like inverted index. */
 struct InvertedIndex {
     /** Inverted index of Symbol's name. */
@@ -200,23 +209,6 @@ private:
      */
     std::unordered_map<std::pair<std::string, std::string>, std::vector<Ptr<AST::Decl>>, HashPair> declMap;
     bool IsNodeInOriginalMacroCallNodes(AST::Decl& decl) const;
-};
-
-/**
- * This structure is used for lsp dot completion.
- * Since std::variant cannot perform correctly in windows, we chose to use this custom type.
- */
-struct Candidate {
-    std::vector<Ptr<AST::Decl>> decls;
-    std::unordered_set<Ptr<AST::Ty>> tys;
-    bool hasDecl;
-    explicit Candidate(const std::vector<Ptr<AST::Decl>>& decls) : decls(decls), hasDecl(true)
-    {
-    }
-    explicit Candidate(const std::unordered_set<Ptr<AST::Ty>>& tys) : tys(tys), hasDecl(false)
-    {
-    }
-    Candidate() = default;
 };
 } // namespace Cangjie
 

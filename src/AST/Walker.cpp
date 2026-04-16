@@ -15,6 +15,7 @@
 #include <string>
 
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Nodes/FuncArg.h"
 #include "cangjie/Basic/Match.h"
 
 using namespace Cangjie;

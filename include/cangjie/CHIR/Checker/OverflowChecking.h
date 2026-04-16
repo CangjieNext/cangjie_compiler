@@ -11,6 +11,7 @@
 #include <limits>
 #include <type_traits>
 
+#include "cangjie/AST/Nodes/OverflowStrategy.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
 

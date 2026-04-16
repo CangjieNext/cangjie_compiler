@@ -14,7 +14,7 @@
 #define CANGJIE_SEMA_TYPECHECKUTIL_H
 
 #include "ScopeManager.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"

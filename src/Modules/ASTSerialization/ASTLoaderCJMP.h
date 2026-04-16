@@ -14,7 +14,7 @@
 
 #include "ASTLoaderImpl.h"
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 
 #include "ASTSerializeUtils.h"

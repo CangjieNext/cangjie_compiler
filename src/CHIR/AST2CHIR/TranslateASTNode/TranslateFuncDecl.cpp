@@ -4,12 +4,13 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/IR/AttributeInfo.h"
 #include "cangjie/CHIR/Utils/Utils.h"
+#include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 
 #include <mutex>
 static std::mutex g_memberVarMutex;

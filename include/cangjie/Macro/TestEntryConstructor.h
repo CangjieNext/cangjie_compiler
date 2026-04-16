@@ -14,7 +14,7 @@
 #define CANGJIE_FRONTEND_TESTCONSTRUCTION_H
 
 #include "cangjie/AST/ASTContext.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 namespace Cangjie {
 template <typename T> inline std::unique_ptr<T> MakeUniquePtr()

@@ -467,9 +467,9 @@ void ParserImpl::ParseElse(IfExpr& ret)
     ret.end = lastToken.End();
 }
 
-OwnedPtr<Block> ParserImpl::ParseExprOrDeclsInMatchCase()
+OwnedPtr<AST::Block> ParserImpl::ParseExprOrDeclsInMatchCase()
 {
-    OwnedPtr<Block> exprOrDecls = MakeOwned<Block>();
+    OwnedPtr<AST::Block> exprOrDecls = MakeOwned<AST::Block>();
     exprOrDecls->begin = lookahead.Begin();
     auto flag = false;
     auto hasSemi = false;
@@ -502,7 +502,7 @@ OwnedPtr<Block> ParserImpl::ParseExprOrDeclsInMatchCase()
 }
 
 static OwnedPtr<LambdaExpr> CreateLambdaFromBlock(
-    OwnedPtr<Block> block, const Expr& expr, OwnedPtr<FuncParamList> paramList)
+    OwnedPtr<AST::Block> block, const Expr& expr, OwnedPtr<FuncParamList> paramList)
 {
     std::vector<OwnedPtr<FuncParamList>> paramLists;
     paramList->begin = expr.begin;
@@ -526,7 +526,7 @@ static void DesugarTry(const OwnedPtr<TryExpr>& expr)
 
     // To: {=> try{...} catch{...}}
     // create block for function body
-    OwnedPtr<Block> lambdaBlock;
+    OwnedPtr<AST::Block> lambdaBlock;
     if (expr->catchBlocks.empty()) {
         // Careful: CHIR2 cannot compile a Try block without catch or finally.
         // Even if the catch block has a finally clause, we will remove it and turn

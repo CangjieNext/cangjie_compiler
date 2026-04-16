@@ -15,21 +15,12 @@
 
 #include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
-#include "cangjie/AST/ASTContext.h"
-#include "cangjie/AST/Node.h"
-#include "cangjie/Basic/DiagnosticEngine.h"
-#include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
-#include "cangjie/CHIR/Analysis/TypeAnalysis.h"
-#include "cangjie/CHIR/IR/CHIRBuilder.h"
-#include "cangjie/Frontend/CompileStrategy.h"
+#include "cangjie/AST/Candidate.h"
+#include "cangjie/Basic/SourceManager.h"
 #include "cangjie/Frontend/CompilerInvocation.h"
-#include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-#include "cangjie/MetaTransformation/MetaTransform.h"
-#endif
-#include "cangjie/Modules/ImportManager.h"
 
 namespace Cangjie {
 using HANDLE = void*;
@@ -39,6 +30,30 @@ class TypeChecker;
 class PackageManager;
 class BaseMangler;
 class TestManager;
+class CHIRData;
+struct CompilationCache;
+class TypeManager;
+class ImportManager;
+using ASTCache = std::unordered_map<std::string, struct TopLevelDeclCache>;
+using RawMangled2DeclMap = std::unordered_map<std::string, Ptr<const AST::Decl>>;
+using FileMap = std::unordered_map<std::string, std::vector<const AST::Decl*>>;
+enum class IncreKind;
+struct SemanticInfo;
+class DiagnosticEngine;
+class ASTContext;
+class CompileStrategy;
+
+namespace AST {
+struct ExtendDecl;
+struct Package;
+struct Expr;
+} // namespace AST
+namespace CHIR {
+class Package;
+class ConstAnalysisWrapper;
+class CHIRContext;
+} // namespace CHIR
+
 /**
  * Compile util to some stage.
  */
@@ -63,45 +78,6 @@ enum class CompileStage {
 
     COMPILE_STAGE_NUMBER /**< The number of compile stage  */
 };
-
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-class CHIRData {
-public:
-    void InitData(std::unordered_map<unsigned int, std::string>* fileNameMap, size_t threadNum);
-
-    CHIR::CHIRContext& GetCHIRContext();
-
-    void AppendNewPackage(CHIR::Package* package);
-    std::vector<CHIR::Package*> GetAllCHIRPackages() const;
-    CHIR::Package* GetCurrentCHIRPackage() const;
-
-    void SetImplicitFuncs(const std::unordered_map<std::string, CHIR::Function*>& funcs);
-    std::unordered_map<std::string, CHIR::Function*> GetImplicitFuncs() const;
-
-    void SetConstVarInitFuncs(const std::vector<CHIR::Function*>& funcs);
-    std::vector<CHIR::Function*> GetConstVarInitFuncs() const;
-
-    CHIR::ConstAnalysisWrapper& GetConstAnalysisResultRef();
-    const CHIR::ConstAnalysisWrapper& GetConstAnalysisResult() const;
-
-    /**
-     * @brief Manually destruct constAnalysisWrapper
-     */
-    void FreeConstAnalysisWrapper();
-
-private:
-    CHIR::CHIRContext cctx;
-    std::vector<CHIR::Package*> chirPkgs;
-    // used by codegen
-    std::unordered_map<std::string, CHIR::Function*> implicitFuncs;
-    // used by interpreter
-    std::vector<CHIR::Function*> initFuncsForConstVar;
-    // only for AnalysisWrapper
-    CHIR::CHIRBuilder builder{cctx, 0};
-    // provide the capability and results of constant analysis, used by cjlint
-    std::unique_ptr<CHIR::ConstAnalysisWrapper> constAnalysisWrapper;
-};
-#endif
 
 /**
  *  The base compiler instance, holds the data which has full compile lifetime.
@@ -130,11 +106,7 @@ public:
     /**
      * Set different CompileStrategy to do the real compile jobs.
      */
-    void SetCompileStrategy(CompileStrategy* newCompileStrategy)
-    {
-        delete this->compileStrategy;
-        this->compileStrategy = newCompileStrategy;
-    }
+    void SetCompileStrategy(CompileStrategy* newCompileStrategy);
     /**
      * Initialize the compilation flow by
      * 1) check pre-conditions
@@ -341,40 +313,17 @@ public:
     /**
      * Unload the handles for all compiler plugins
      */
-    bool UnloadPluginHandle()
-    {
-        metaTransformPluginBuilder = {};
-        // plugins should be unloaded after metaTransformPluginBuilder deconstruction.
-        for (auto& handle : pluginHandles) {
-            if (InvokeRuntime::CloseSymbolTable(handle) != 0) {
-                Errorln("close plugin dynamic library failed.");
-                return false;
-            }
-        }
-        pluginHandles.clear();
-        return true;
-    }
+    bool UnloadPluginHandle();
 #endif
 
     /**
      * Infomation written to cached file and needed by incremental compiling
      */
-    CompilationCache cachedInfo;
+    std::unique_ptr<CompilationCache> cachedInfo;
 
-    /**
-     * Infomation generated in CHIR stage
-     */
-    struct CHIRInfo {
-        OptEffectStrMap optEffectMap;
-        std::unordered_set<Ptr<const AST::StructTy>> ccTys;
-        VirtualWrapperDepMap curVirtFuncWrapDep;
-        VirtualWrapperDepMap delVirtFuncWrapForIncr;
-        std::set<std::string> ccOutFuncsRawMangle;
-        VarInitDepMap varInitDepMap;
-    };
-    CHIRInfo chirInfo;
+    std::unique_ptr<struct CHIRInfo> chirInfo;
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    MetaTransformPluginBuilder metaTransformPluginBuilder;
+    std::unique_ptr<class MetaTransformPluginBuilder> metaTransformPluginBuilder;
 #endif
     /**
      * CompilerInvocation, storing anything external the Instance needs.
@@ -513,7 +462,7 @@ public:
     SourceManager sm;
 
     /// Incremental compilation state.
-    IncreKind kind{IncreKind::INVALID};
+    IncreKind kind;
 
     ///@{
     /// Overriden by CJLint
@@ -525,9 +474,9 @@ public:
 
     /************** Used by Incremental Compilation Start **************/
     RawMangled2DeclMap rawMangleName2DeclMap;
-    ASTCache astCacheInfo;
+    std::unique_ptr<ASTCache> astCacheInfo;
     std::unordered_set<Ptr<const AST::Decl>> declsWithDuplicatedRawMangleName;
-    std::unordered_map<RawMangledName, std::list<std::pair<Ptr<AST::ExtendDecl>, int>>> directExtends;
+    std::unordered_map<std::string, std::list<std::pair<Ptr<AST::ExtendDecl>, int>>> directExtends;
     FileMap fileMap;
     std::vector<const AST::Decl*> order;
 

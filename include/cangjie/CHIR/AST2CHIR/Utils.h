@@ -7,7 +7,6 @@
 #ifndef CANGJIE_CHIR_AST2CHIR_UTILS_H
 #define CANGJIE_CHIR_AST2CHIR_UTILS_H
 
-#include "cangjie/AST/Node.h"
 #include "cangjie/Basic/Position.h"
 #include "cangjie/CHIR/IR/CHIRContext.h"
 #include "cangjie/CHIR/IR/Type/CHIRType.h"

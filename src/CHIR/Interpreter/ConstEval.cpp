@@ -21,6 +21,8 @@
 #include <cangjie/CHIR/IR/Value/LiteralValue.h>
 #include <cangjie/CHIR/IR/Type/ClassDef.h>
 #include <cangjie/CHIR/IR/Type/EnumDef.h>
+#include <cangjie/CHIR/Utils/Utils.h>
+#include <cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h>
 #include <cangjie/Utils/ProfileRecorder.h>
 
 using Cangjie::CHIR::Interpreter::ConstEvalPass;

@@ -16,7 +16,7 @@
 #include "cangjie/AST/PrintNode.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
-#include "cangjie/Utils/Casting.h"
+#include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/ICEUtil.h"
 #include "cangjie/Utils/SafePointer.h"
 

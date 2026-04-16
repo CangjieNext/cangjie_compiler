@@ -6,11 +6,11 @@
 
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 
-#include "cangjie/AST/Node.h"
+#include "CompilationCacheSerialization.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
-#include "CompilationCacheSerialization.h"
 #include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
 #include "cangjie/IncrementalCompilation/Utils.h"
 #include "cangjie/Parse/ASTHasher.h"

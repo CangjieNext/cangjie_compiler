@@ -13,6 +13,7 @@
 #include "ParserImpl.h"
 
 #include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Nodes/FeatureId.h"
 #include "cangjie/Utils/Utils.h"
 
 using namespace Cangjie;

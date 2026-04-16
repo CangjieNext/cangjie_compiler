@@ -17,15 +17,14 @@
 #include <map>
 
 #include "cangjie/AST/ASTCasting.h"
-#include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
-#include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/CHIRContext.h"
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
 #include "cangjie/CHIR/IR/Type/CHIRType.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/Utils/CastingTemplate.h"
 
 namespace Cangjie::CHIR {

@@ -20,6 +20,7 @@
 #include <unordered_map>
 
 #include "ParseJson.h"
+#include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"

@@ -12,8 +12,8 @@
 #ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_TYPE_CHECK_INHERITANCE_CHECKER_H
 #define CANGJIE_SEMA_NATIVE_FFI_JAVA_TYPE_CHECK_INHERITANCE_CHECKER_H
 
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
-#include "cangjie/AST/Node.h"
 #include "cangjie/Sema/TypeManager.h"
 
 #include "InheritanceChecker/StructInheritanceChecker.h"

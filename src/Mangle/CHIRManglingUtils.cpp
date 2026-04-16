@@ -14,14 +14,15 @@
 
 #include <sstream>
 
-#include "cangjie/CHIR/Utils/CHIRCasting.h"
+#include "cangjie/AST/Nodes/OverflowStrategy.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Type/CustomTypeDef.h"
 #include "cangjie/CHIR/IR/Type/EnumDef.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
-#include "cangjie/Utils/CastingTemplate.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Mangle/CHIRTypeManglingUtils.h"
+#include "cangjie/Utils/CastingTemplate.h"
 
 using namespace Cangjie::CHIR;
 using namespace Cangjie::MangleUtils;

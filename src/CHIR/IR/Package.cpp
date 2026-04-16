@@ -13,6 +13,7 @@
 #include "cangjie/CHIR/IR/Type/StructDef.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 #include <string>
+#include <sstream>
 
 using namespace Cangjie::CHIR;
 

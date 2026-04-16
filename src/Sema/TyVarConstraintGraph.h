@@ -14,9 +14,9 @@
 #ifndef CANGJIE_SEMA_TYVARCONSTRAINTGRAPH_H
 #define CANGJIE_SEMA_TYVARCONSTRAINTGRAPH_H
 
-#include "cangjie/Utils/Casting.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/Sema/TypeManager.h"
+#include "cangjie/Utils/CastingTemplate.h"
 
 namespace Cangjie {
 /*

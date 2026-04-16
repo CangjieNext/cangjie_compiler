@@ -15,7 +15,7 @@
 
 #include "flatbuffers/ModuleFormat_generated.h"
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 namespace Cangjie {
 using TTypeOffset = flatbuffers::Offset<PackageFormat::SemaTy>;

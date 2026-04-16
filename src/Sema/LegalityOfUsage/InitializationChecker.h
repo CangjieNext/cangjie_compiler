@@ -19,7 +19,7 @@
 #include <unordered_set>
 
 #include "cangjie/AST/ASTContext.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 
 namespace Cangjie {

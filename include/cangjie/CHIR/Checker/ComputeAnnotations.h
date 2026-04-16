@@ -9,7 +9,6 @@
 #ifndef CANGJIE_CHIR_CHECKER_COMPUTEANNOTATIONS_H
 #define CANGJIE_CHIR_CHECKER_COMPUTEANNOTATIONS_H
 
-#include "cangjie/AST/Node.h"
 #include "cangjie/CHIR/CHIR.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 

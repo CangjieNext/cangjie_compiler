@@ -17,12 +17,18 @@
 #include <stack>
 #include <unordered_map>
 
-#include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/Sema/CommonTypeAlias.h"
 #include "cangjie/Utils/Utils.h"
 
 namespace Cangjie {
+namespace AST {
+struct Block;
+struct ExtendDecl;
+struct MemberAccess;
+struct RefType;
+} // namespace AST
+
 enum class TypeCompatibility { INCOMPATIBLE, SUBTYPE, IDENTICAL };
 const std::string FUTURE_TYPE_NAME = "Future";
 

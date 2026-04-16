@@ -10,11 +10,11 @@
  * This file implements factory class for names of different Objective-C interop entities.
  */
 
-#include "ASTFactory.h"
 #include "NameGenerator.h"
-#include "cangjie/AST/Match.h"
+#include "ASTFactory.h"
 #include "NativeFFI/Utils.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Match.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Utils/CheckUtils.h"
 
 using namespace Cangjie::AST;

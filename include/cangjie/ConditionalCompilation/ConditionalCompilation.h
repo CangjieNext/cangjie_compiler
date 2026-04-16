@@ -12,7 +12,7 @@
 #ifndef CANGJIE_CONDITIONAL_COMPILATION_H
 #define CANGJIE_CONDITIONAL_COMPILATION_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 
 namespace Cangjie {

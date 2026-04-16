@@ -7,7 +7,11 @@
 #ifndef CANGJIE_SEMA_NATIVE_FFI_OBJ_C_BEFORE_TYPECHECK_DESUGAR
 #define CANGJIE_SEMA_NATIVE_FFI_OBJ_C_BEFORE_TYPECHECK_DESUGAR
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
+
+namespace Cangjie::AST {
+struct Package;
+}
 
 namespace Cangjie::Interop::ObjC {
 

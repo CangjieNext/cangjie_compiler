@@ -7,11 +7,11 @@
 #ifndef CANGJIE_CACHE_DATA_ASTDIFF_IMPL_H
 #define CANGJIE_CACHE_DATA_ASTDIFF_IMPL_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
+#include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 #include "cangjie/IncrementalCompilation/Utils.h"
-#include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
 #include "cangjie/Modules/ImportManager.h"
 
 namespace Cangjie::IncrementalCompilation {

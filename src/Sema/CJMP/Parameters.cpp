@@ -13,9 +13,10 @@
  *
  */
 #include "MPTypeCheckerImpl.h"
+#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Clone.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Position.h"
 #include "cangjie/Utils/CheckUtils.h"

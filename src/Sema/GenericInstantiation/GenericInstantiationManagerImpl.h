@@ -14,7 +14,7 @@
 #define CANGJIE_SEMA_GENERIC_INSTANTIATION_MANAGER_IMPL_H
 
 #include "Promotion.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"

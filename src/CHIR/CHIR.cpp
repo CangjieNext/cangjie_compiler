@@ -29,6 +29,7 @@
 #include "cangjie/CHIR/Optimization/RedundantGetOrThrowElimination.h"
 #include "cangjie/CHIR/Optimization/RedundantLoadElimination.h"
 #include "cangjie/CHIR/Optimization/UnitUnify.h"
+#include "cangjie/Frontend/CHIRData.h"
 #include "cangjie/CHIR/Optimization/UselessAllocateElimination.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
 #include "cangjie/CHIR/Serializer/CHIRSerializer.h"
@@ -1238,7 +1239,7 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
     try {
 #endif
         Utils::ProfileRecorder recorder("CHIR", "Plugin Execution");
-        CHIRPluginManager chirPluginManager = ci.metaTransformPluginBuilder.BuildCHIRPluginManager(builder);
+        CHIRPluginManager chirPluginManager = ci.metaTransformPluginBuilder->BuildCHIRPluginManager(builder);
         chirPluginManager.ForEachMetaTransformConcept([&package, &hasPluginForCHIR](MetaTransformConcept& mtc) {
             if (!mtc.IsForCHIR()) {
                 return;

@@ -7,10 +7,10 @@
 #ifndef CANGJIE_INCREMENTAL_COMPILATION_CACHED_MANGLE_MAP
 #define CANGJIE_INCREMENTAL_COMPILATION_CACHED_MANGLE_MAP
 
+#include "cangjie/AST/Nodes/Decl.h"
+#include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
 #include <string>
 #include <unordered_set>
-#include "cangjie/AST/Node.h"
-#include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
 
 /// Describes which decls are new or removed compared to last compilation. The decls are recorded by their mangled
 /// names.

@@ -12,7 +12,7 @@
 #ifndef CANGJIE_SEMA_COMMONTYPEALIAS_H
 #define CANGJIE_SEMA_COMMONTYPEALIAS_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/Utils/PartiallyPersistent.h"
 

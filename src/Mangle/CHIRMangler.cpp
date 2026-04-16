@@ -12,7 +12,8 @@
 
 #include "cangjie/Mangle/CHIRMangler.h"
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/FuncDecl.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 using namespace Cangjie;
 using namespace CHIR;

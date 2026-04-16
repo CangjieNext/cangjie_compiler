@@ -9,14 +9,14 @@
  *
  * This file implements how to merge inherited parent member to child member.
  */
+#include "InheritanceChecker/MemberSignature.h"
+#include "NativeFFI/Java/TypeCheck/InheritanceChecker.h"
+#include "TypeCheckUtil.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Sema/TypeManager.h"
-#include "TypeCheckUtil.h"
-#include "NativeFFI/Java/TypeCheck/InheritanceChecker.h"
-#include "InheritanceChecker/MemberSignature.h"
 
 using namespace Cangjie;
 using namespace AST;

@@ -13,7 +13,7 @@
 #ifndef CANGJIE_MACROUPDATEINFO_H
 #define CANGJIE_MACROUPDATEINFO_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 namespace {
     

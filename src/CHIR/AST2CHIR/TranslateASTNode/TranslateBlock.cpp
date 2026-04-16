@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
+#include "cangjie/Sema/GenericInstantiationManager.h"
 
 using namespace Cangjie::CHIR;
 using namespace Cangjie;

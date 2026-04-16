@@ -17,7 +17,6 @@
 #include <tuple>
 
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
 #include "cangjie/AST/PrintNode.h"
 #include "cangjie/AST/Walker.h"
 

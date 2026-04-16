@@ -19,8 +19,45 @@
 
 #include "flatbuffers/NodeFormat_generated.h"
 
-#include "cangjie/AST/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
+
+namespace Cangjie::AST {
+struct Node;
+struct Expr;
+struct CallExpr;
+struct LambdaExpr;
+struct Type;
+struct RefType;
+struct RefExpr;
+struct PrimitiveType;
+struct Annotation;
+struct Decl;
+struct VarDecl;
+struct MainDecl;
+struct MacroDecl;
+struct Modifier;
+struct MacroExpandDecl;
+struct FuncArg;
+struct FuncBody;
+struct FuncParam;
+struct MacroExpandParam;
+struct Block;
+struct StructBody;
+struct InterfaceBody;
+struct ClassBody;
+struct Generic;
+struct GenericConstraint;
+struct Pattern;
+struct EnumPattern;
+struct MatchCase;
+struct MatchCaseOther;
+struct FeaturesDirective;
+struct PackageSpec;
+struct ImportSpec;
+struct FeaturesSet;
+struct ImportContent;
+struct FeatureId;
+}
 
 using AstNode = Ptr<const Cangjie::AST::Node>;
 using AstExpr = Ptr<const Cangjie::AST::Expr>;

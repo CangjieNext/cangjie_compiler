@@ -10,7 +10,6 @@
 #include <map>
 #include <string_view>
 
-#include "cangjie/AST/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 
 namespace Cangjie::CHIR {

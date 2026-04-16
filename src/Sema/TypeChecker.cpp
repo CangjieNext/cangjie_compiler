@@ -32,14 +32,14 @@
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Utils/CheckUtils.h"
-#include "cangjie/Utils/Utils.h"
 #include "cangjie/Utils/ProfileRecorder.h"
+#include "cangjie/Utils/Utils.h"
 
 namespace Cangjie {
 using namespace Sema;
@@ -1699,7 +1699,7 @@ bool TypeCheckerImpl::IsCapturedInCFuncLambda(const ASTContext& ctx, const AST::
     return false;
 }
 
-void TypeCheckerImpl::CheckLegalUseOfClosure(Expr& e, DiagKind kind) const
+void TypeCheckerImpl::CheckLegalUseOfClosure(Expr& e, std::string_view kind) const
 {
     if (e.TestAttr(Attribute::IS_BROKEN)) {
         return;

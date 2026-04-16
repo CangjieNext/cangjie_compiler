@@ -13,10 +13,14 @@
 #ifndef CANGJIE_MERGE_ANNO_FROM_CJD_H
 #define CANGJIE_MERGE_ANNO_FROM_CJD_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 
 namespace Cangjie {
+namespace AST {
+struct Package;
+}
+
 void MergeCusAnno(Ptr<AST::Package> target, Ptr<AST::Package> source);
 }
 

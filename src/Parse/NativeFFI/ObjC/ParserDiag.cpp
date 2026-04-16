@@ -12,7 +12,8 @@
 
 #include "../../ParserImpl.h"
 #include "OCFFIParserImpl.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/FuncDecl.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 
 using namespace Cangjie;
