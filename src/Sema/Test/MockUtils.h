@@ -15,8 +15,8 @@
 
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Sema/TypeManager.h"
-#include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
+#include "cangjie/Sema/GenericInstantiationManager.h"
 
 namespace Cangjie {
 
@@ -40,11 +40,10 @@ enum class AccessorKind : uint8_t {
 class MockUtils {
 public:
     explicit MockUtils(
-        ImportManager& importManager, TypeManager& typeManager,
-        std::function<void(AST::Node& node)> instantiate,
-        std::function<Ptr<AST::Decl>(AST::Decl&, const std::vector<Ptr<AST::Ty>>&, Ptr<AST::Ty>)> getInstantiatedDecl,
-        std::function<std::unordered_set<Ptr<AST::Decl>>(AST::Decl& decl)> getInstantiatedDecls);
+        ImportManager& importManager, TypeManager& typeManager, BaseMangler& mangler);
     static bool IsMockAccessor(const AST::Decl& decl);
+
+    void LoadStdDecls();
 
     template <typename T> static OwnedPtr<T> CreateType(const Ptr<AST::Ty> ty)
     {
@@ -53,17 +52,33 @@ public:
         return type;
     }
 
+    Ptr<Cangjie::AST::PointerTy> WrapTy2CPointer(const Ptr<AST::Ty> ty)
+    {
+        CJC_NULLPTR_CHECK(ty);
+        auto pointerTy = typeManager.GetPointerTy(ty);
+        return pointerTy;
+    }
+
     static std::string mockAccessorSuffix;
     static std::string spyObjVarName;
     static std::string spyCallMarkerVarName;
     static std::string defaultAccessorSuffix;
 
-    template <typename T>
-    static Ptr<T> FindGlobalDecl(Ptr<AST::File> file, const std::string& identifier)
+    template <typename T> static Ptr<T> FindGlobalDecl(Ptr<AST::File> file, const std::string& identifier)
     {
         for (auto& decl : file->decls) {
             if (decl->identifier == identifier) {
                 return DynamicCast<T>(decl.get());
+            }
+        }
+        return nullptr;
+    }
+
+    template <typename T> static Ptr<T> FindGlobalDecl(Ptr<AST::Package> package, const std::string& identifier)
+    {
+        for (auto& file : package->files) {
+            if (auto decl = FindGlobalDecl<T>(file, identifier)) {
+                return decl;
             }
         }
         return nullptr;
@@ -129,25 +144,19 @@ public:
 private:
     ImportManager& importManager;
     TypeManager& typeManager;
-    BaseMangler mangler;
-    
-    std::function<void(AST::Node& node)> instantiate;
-    std::function<Ptr<AST::Decl>(
-        AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& instTys, Ptr<AST::Ty> baseTy)> getInstantiatedDecl;
-    std::function<std::unordered_set<Ptr<AST::Decl>>(AST::Decl& decl)> getInstantiatedDecls;
+    BaseMangler& mangler;
 
     Ptr<AST::FuncDecl> getTypeForTypeParamDecl = nullptr;
     Ptr<AST::FuncDecl> isSubtypeTypesDecl = nullptr;
-    Ptr<AST::StructDecl> arrayDecl;
-    Ptr<AST::StructDecl> stringDecl;
-    Ptr<AST::EnumDecl> optionDecl;
-    Ptr<AST::InheritableDecl> toStringDecl;
-    Ptr<AST::ClassDecl> objectDecl;
-    Ptr<AST::FuncDecl> zeroValueDecl;
-    Ptr<AST::ClassDecl> exceptionClassDecl;
+    Ptr<AST::StructDecl> arrayDecl = nullptr;
+    Ptr<AST::StructDecl> stringDecl = nullptr;
+    Ptr<AST::EnumDecl> optionDecl = nullptr;
+    Ptr<AST::InheritableDecl> toStringDecl = nullptr;
+    Ptr<AST::ClassDecl> objectDecl = nullptr;
+    Ptr<AST::FuncDecl> zeroValueDecl = nullptr;
+    Ptr<AST::ClassDecl> exceptionClassDecl = nullptr;
 
     static bool IsMockAccessorRequired(const AST::Decl& decl);
-    static std::string BuildTypeArgumentList(const AST::Decl& decl);
     static AccessorKind ComputeAccessorKind(const AST::FuncDecl& accessorDecl);
     static bool IsGetterForMutField(const AST::FuncDecl& accessorDecl);
 
@@ -159,10 +168,9 @@ private:
     static std::vector<TypeSubst> BuildGenericSubsts(const Ptr<AST::InheritableDecl> decl);
     static std::string GetForeignAccessorName(const AST::FuncDecl& decl);
 
-    Ptr<AST::Decl> FindAccessor(AST::ClassDecl& outerClass, const Ptr<AST::Decl> member,
-        const std::vector<Ptr<AST::Ty>>& instTys, AccessorKind kind) const;
-    Ptr<AST::Decl> FindAccessorForMemberAccess(const AST::MemberAccess& memberAccess,
-        const Ptr<AST::Decl> resolvedMember, const std::vector<Ptr<AST::Ty>>& instTys, AccessorKind kind) const;
+    Ptr<AST::Decl> FindAccessor(AST::ClassDecl& outerClass, const Ptr<AST::Decl> member, AccessorKind kind) const;
+    Ptr<AST::Decl> FindAccessorForMemberAccess(
+        const Ptr<AST::Ty> ty, const Ptr<AST::Decl> resolvedMember, AccessorKind kind) const;
     Ptr<AST::FuncDecl> FindTopLevelAccessor(Ptr<AST::Decl> member, AccessorKind kind) const;
     OwnedPtr<AST::Expr> WrapCallTypeArgsIntoArray(const AST::Decl& decl);
     bool IsGeneratedGetter(AccessorKind kind);
@@ -176,8 +184,7 @@ private:
     OwnedPtr<AST::Expr> CreateIsSubtypeTypesCall(Ptr<AST::Ty> tyToCheck, Ptr<AST::Ty> ty);
     std::string Mangle(const AST::Decl& decl) const;
 
-    std::optional<std::unordered_set<Ptr<AST::Decl>>> TryGetInstantiatedDecls(AST::Decl& decl) const;
-        OwnedPtr<AST::RefExpr> CreateRefExprWithInstTys(
+    OwnedPtr<AST::RefExpr> CreateRefExprWithInstTys(
         AST::Decl& target, const std::vector<Ptr<AST::Ty>>& instTys,
         const std::string& refName, AST::File& curFile) const;
     OwnedPtr<AST::RefExpr> CreateDeclBasedReferenceExpr(
@@ -197,19 +204,24 @@ private:
         return decl;
     }
 
-    OwnedPtr<AST::GenericParamDecl> CreateGenericParamDecl(AST::Decl& decl, const std::string& name);
-    OwnedPtr<AST::GenericParamDecl> CreateGenericParamDecl(AST::Decl& decl);
-
+    /**
+     * Extracts outer decl if it's class/interfacr/struct decl
+     * If outer decl is extend, extracts extended type
+     */
+    Ptr<AST::Decl> GetOuterDecl(AST::Decl& decl) const;
+    Ptr<AST::Decl> GetExtendedTypeDecl(AST::FuncDecl& decl) const;
     void UpdateRefTypesTarget(
         Ptr<AST::Type> type, Ptr<AST::Generic> oldGeneric, Ptr<AST::Generic> newGeneric) const;
     int GetIndexOfGenericTypeParam(Ptr<AST::Ty> ty, Ptr<AST::Generic> generic) const;
-
-    Ptr<AST::ClassDecl> GetExtendedClassDecl(AST::FuncDecl& decl) const;
 
     friend class TestManager;
     friend class MockManager;
     friend class MockSupportManager;
 };
-}
+
+AccessorKind GetVarDeclSetterAccessorKind(Ptr<AST::Decl> varDecl);
+AccessorKind GetVarDeclGetterAccessorKind(Ptr<AST::Decl> varDecl);
+
+} // namespace Cangjie
 
 #endif // CANGJIE_SEMA_MOCK_UTILS_H
