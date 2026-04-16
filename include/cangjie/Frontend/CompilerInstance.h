@@ -26,6 +26,7 @@
 #include "cangjie/Frontend/CompileStrategy.h"
 #include "cangjie/Frontend/CompilerInvocation.h"
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
+#include <iostream>
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 #include "cangjie/MetaTransformation/MetaTransform.h"
 #endif
@@ -606,7 +607,60 @@ private:
 
     // Guard for ensuring AST resources are destroyed only once.
     bool astResourcesDestroyed = false;
-    std::future<void> destroyFut;
+
+    // Debug wrapper for std::future to track destruction
+    class DebugFuture {
+    public:
+        DebugFuture() : future_()
+        {
+            std::cout << "[DEBUG] DebugFuture default constructed" << std::endl;
+        }
+
+        DebugFuture(std::future<void>&& f) : future_(std::move(f))
+        {
+            std::cout << "[DEBUG] DebugFuture constructed with future" << std::endl;
+        }
+
+        DebugFuture(DebugFuture&& other) noexcept : future_(std::move(other.future_))
+        {
+            std::cout << "[DEBUG] DebugFuture move constructed" << std::endl;
+        }
+
+        DebugFuture& operator=(DebugFuture&& other) noexcept
+        {
+            if (this != &other) {
+                future_ = std::move(other.future_);
+                std::cout << "[DEBUG] DebugFuture move assigned" << std::endl;
+            }
+            return *this;
+        }
+
+        ~DebugFuture()
+        {
+            std::cout << "[DEBUG] DebugFuture destructing" << std::endl;
+            // Check if future is valid before destruction
+            if (future_.valid()) {
+                std::cout << "[DEBUG] DebugFuture: future is still valid during destruction" << std::endl;
+            }
+        }
+
+        // Forward methods to underlying future
+        void get()
+        {
+            std::cout << "[DEBUG] DebugFuture::get() called" << std::endl;
+            future_.get();
+        }
+
+        bool valid() const
+        {
+            return future_.valid();
+        }
+
+    private:
+        std::future<void> future_;
+    };
+
+    DebugFuture destroyFut;
 
     virtual void UpdateCachedInfo();
     bool WriteCachedInfo();
