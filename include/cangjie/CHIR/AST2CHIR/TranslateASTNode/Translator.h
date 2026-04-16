@@ -947,6 +947,7 @@ private:
     static bool IsOptimizableEnumTy(Ptr<AST::Ty> ty);
     static uint64_t GetJumpablePatternVal(const AST::Pattern& pattern);
     bool CanOptimizeMatchToSwitch(const AST::MatchExpr& matchExpr);
+    Ptr<Value> TryTranslateDerivedTrivialEnumEqMatch(const AST::MatchExpr& matchExpr);
 
     std::vector<Type*> TranslateASTTypes(const std::vector<Ptr<AST::Ty>>& genericInfos);
     bool HasNothingTypeArg(std::vector<Value*>& args) const;
