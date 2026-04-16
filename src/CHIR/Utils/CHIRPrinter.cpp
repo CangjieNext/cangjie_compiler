@@ -60,7 +60,7 @@ void CHIRPrinter::PrintCFG(const Function& func, const std::string& path)
             if (LocalVar* res = expr->GetResult(); res != nullptr) {
                 info += res->GetIdentifier() + ": " + res->GetType()->ToString() + " = ";
             }
-            info += expr->ToString();
+            info += expr->ToString(0);
             ReplaceAll(info, "&", "&amp;");
             ReplaceAll(info, "<", "&lt;");
             ReplaceAll(info, ">", "&gt;");

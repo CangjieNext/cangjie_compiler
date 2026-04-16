@@ -18,6 +18,7 @@
 #include "cangjie/CHIR/IR/Type/Type.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/Utils/Utils.h"
+#include <cstddef>
 
 namespace Cangjie::CHIR {
 void PrintIndent(std::ostream& stream, size_t indent)
@@ -77,7 +78,7 @@ std::string GetBlockStr(const Block& block, size_t indent)
         }
         ss << "#" << predecessors[i]->GetIdentifierWithoutPrefix();
     }
-    if (auto annostr = block.ToStringAnnotationMap(); !annostr.empty()) {
+    if (auto annostr = block.BaseCommentToString(); !annostr.empty()) {
         ss << " // " << annostr;
     }
     if (block.IsLandingPadBlock()) {
@@ -249,7 +250,7 @@ std::string FuncSymbolStr(const Function& func)
         }
         attrss << "kind: " << FUNCKIND_TO_STRING.at(kind);
     }
-    auto annostr = func.ToStringAnnotationMap();
+    auto annostr = func.BaseCommentToString();
     if (attrss.str() != "" && annostr != "") {
         attrss << ", ";
     }
@@ -314,7 +315,7 @@ std::string GetImportedVarStr(const GlobalVar& value)
     ss << "import " << value.GetAttributeInfo().ToString() << value.GetIdentifier() << ": "
        << value.GetType()->ToString();
     std::stringstream attrss;
-    auto annostr = value.ToStringAnnotationMap();
+    auto annostr = value.BaseCommentToString();
     if (attrss.str() != "" && annostr != "") {
         attrss << ", ";
     }
@@ -341,7 +342,7 @@ std::string GetImportedFuncStr(const Function& value)
     const auto& params = value.GetParams();
     ss << "(";
     for (size_t i = 0; i < params.size(); ++i) {
-        ss << params[i]->ToString();
+        ss << params[i]->ToString(0);
         if (i != params.size() - 1) {
             ss << ", ";
         }
@@ -361,7 +362,7 @@ std::string GetImportedFuncStr(const Function& value)
         }
         attrss << "kind: " << FUNCKIND_TO_STRING.at(kind);
     }
-    auto annostr = value.ToStringAnnotationMap();
+    auto annostr = value.BaseCommentToString();
     if (attrss.str() != "" && annostr != "") {
         attrss << ", ";
     }
@@ -532,5 +533,23 @@ std::string OverflowToString(Cangjie::OverflowStrategy ofStrategy)
         {Cangjie::OverflowStrategy::SATURATING, "SATURATING"},
     };
     return "Overflow: " + OVERFLOW_STR_MAP.at(ofStrategy);
+}
+
+std::string StringJoin(const std::vector<std::string>& candidates, const std::string& delimiter)
+{
+    std::string result;
+    for (const auto& temp : candidates) {
+        if (temp.empty()) {
+            continue;
+        }
+        result += temp + delimiter;
+    }
+    if (!result.empty()) {
+        for (size_t i = 0; i < delimiter.size(); ++i) {
+            result.pop_back();
+        }
+    }
+    
+    return result;
 }
 } // namespace Cangjie::CHIR
