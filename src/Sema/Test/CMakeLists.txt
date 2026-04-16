@@ -4,5 +4,5 @@
 #
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-file(GLOB TEST_SRC *.cpp)
+file(GLOB TEST_SRC *.cpp MockContext.cpp)
 set(SEMA_SRC ${SEMA_SRC} ${TEST_SRC} PARENT_SCOPE)

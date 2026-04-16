@@ -15,7 +15,6 @@
 
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Sema/TypeManager.h"
-#include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/GenericInstantiationManager.h"
 
@@ -40,14 +39,24 @@ enum class AccessorKind : uint8_t {
 
 class MockUtils {
 public:
-    explicit MockUtils(ImportManager& importManager, TypeManager& typeManager, GenericInstantiationManager* gim);
+    explicit MockUtils(
+        ImportManager& importManager, TypeManager& typeManager, BaseMangler& mangler);
     static bool IsMockAccessor(const AST::Decl& decl);
+
+    void LoadStdDecls();
 
     template <typename T> static OwnedPtr<T> CreateType(const Ptr<AST::Ty> ty)
     {
         auto type = MakeOwned<T>();
         type->ty = ty;
         return type;
+    }
+
+    Ptr<Cangjie::AST::PointerTy> WrapTy2CPointer(const Ptr<AST::Ty> ty)
+    {
+        CJC_NULLPTR_CHECK(ty);
+        auto pointerTy = typeManager.GetPointerTy(ty);
+        return pointerTy;
     }
 
     static std::string mockAccessorSuffix;
@@ -135,21 +144,19 @@ public:
 private:
     ImportManager& importManager;
     TypeManager& typeManager;
-    GenericInstantiationManager* gim {nullptr};
-    BaseMangler mangler;
+    BaseMangler& mangler;
 
     Ptr<AST::FuncDecl> getTypeForTypeParamDecl = nullptr;
     Ptr<AST::FuncDecl> isSubtypeTypesDecl = nullptr;
-    Ptr<AST::StructDecl> arrayDecl;
-    Ptr<AST::StructDecl> stringDecl;
-    Ptr<AST::EnumDecl> optionDecl;
-    Ptr<AST::InheritableDecl> toStringDecl;
-    Ptr<AST::ClassDecl> objectDecl;
-    Ptr<AST::FuncDecl> zeroValueDecl;
-    Ptr<AST::ClassDecl> exceptionClassDecl;
+    Ptr<AST::StructDecl> arrayDecl = nullptr;
+    Ptr<AST::StructDecl> stringDecl = nullptr;
+    Ptr<AST::EnumDecl> optionDecl = nullptr;
+    Ptr<AST::InheritableDecl> toStringDecl = nullptr;
+    Ptr<AST::ClassDecl> objectDecl = nullptr;
+    Ptr<AST::FuncDecl> zeroValueDecl = nullptr;
+    Ptr<AST::ClassDecl> exceptionClassDecl = nullptr;
 
     static bool IsMockAccessorRequired(const AST::Decl& decl);
-    static std::string BuildTypeArgumentList(const AST::Decl& decl);
     static AccessorKind ComputeAccessorKind(const AST::FuncDecl& accessorDecl);
     static bool IsGetterForMutField(const AST::FuncDecl& accessorDecl);
 
@@ -161,10 +168,9 @@ private:
     static std::vector<TypeSubst> BuildGenericSubsts(const Ptr<AST::InheritableDecl> decl);
     static std::string GetForeignAccessorName(const AST::FuncDecl& decl);
 
-    Ptr<AST::Decl> FindAccessor(AST::ClassDecl& outerClass, const Ptr<AST::Decl> member,
-        const std::vector<Ptr<AST::Ty>>& instTys, AccessorKind kind) const;
-    Ptr<AST::Decl> FindAccessorForMemberAccess(const AST::MemberAccess& memberAccess,
-        const Ptr<AST::Decl> resolvedMember, const std::vector<Ptr<AST::Ty>>& instTys, AccessorKind kind) const;
+    Ptr<AST::Decl> FindAccessor(AST::ClassDecl& outerClass, const Ptr<AST::Decl> member, AccessorKind kind) const;
+    Ptr<AST::Decl> FindAccessorForMemberAccess(
+        const Ptr<AST::Ty> ty, const Ptr<AST::Decl> resolvedMember, AccessorKind kind) const;
     Ptr<AST::FuncDecl> FindTopLevelAccessor(Ptr<AST::Decl> member, AccessorKind kind) const;
     OwnedPtr<AST::Expr> WrapCallTypeArgsIntoArray(const AST::Decl& decl);
     bool IsGeneratedGetter(AccessorKind kind);
@@ -198,26 +204,6 @@ private:
         return decl;
     }
 
-    // Type instantiation helpers
-    void Instantiate(AST::Node& node) const;
-    Ptr<AST::ClassLikeDecl> GetInstantiatedDeclInCurrentPackage(const Ptr<const AST::ClassLikeTy> classLikeToMockTy);
-    std::optional<std::unordered_set<Ptr<AST::Decl>>> TryGetInstantiatedDecls(AST::Decl& decl) const;
-    Ptr<AST::Decl> GetInstantiatedMemberTarget(AST::Ty& baseTy, AST::Decl& target) const;
-    Ptr<AST::Decl> GetInstantiatedDeclWithGenericInfo(AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& instTys) const;
-    template <typename T> Ptr<T> GetInstantiatedDecl(
-        Ptr<T> decl, const std::vector<Ptr<AST::Ty>>& instTys, bool isInstEnabled, Ptr<AST::Ty> baseTy = nullptr) const
-    {
-        if (!isInstEnabled || (!decl->ty->HasGeneric() && !decl->TestAttr(AST::Attribute::GENERIC))) {
-            return decl;
-        }
-        auto memberDeclInInstantiatedClass = baseTy ? GetInstantiatedMemberTarget(*baseTy, *decl) : decl;
-        if (!memberDeclInInstantiatedClass->TestAttr(AST::Attribute::GENERIC)) {
-            return Ptr(RawStaticCast<T*>(memberDeclInInstantiatedClass));
-        }
-
-        return Ptr(RawStaticCast<T*>(GetInstantiatedDeclWithGenericInfo(*memberDeclInInstantiatedClass, instTys)));
-    }
-
     /**
      * Extracts outer decl if it's class/interfacr/struct decl
      * If outer decl is extend, extracts extended type
@@ -232,6 +218,10 @@ private:
     friend class MockManager;
     friend class MockSupportManager;
 };
-}
+
+AccessorKind GetVarDeclSetterAccessorKind(Ptr<AST::Decl> varDecl);
+AccessorKind GetVarDeclGetterAccessorKind(Ptr<AST::Decl> varDecl);
+
+} // namespace Cangjie
 
 #endif // CANGJIE_SEMA_MOCK_UTILS_H
