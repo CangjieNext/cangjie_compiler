@@ -149,7 +149,7 @@ flatbuffers::Offset<PackageFormat::DebugLocation> CHIRSerializer::CHIRSerializer
 template <>
 flatbuffers::Offset<PackageFormat::AnnoInfo> CHIRSerializer::CHIRSerializerImpl::Serialize(const AnnoInfo& obj)
 {
-    return PackageFormat::CreateAnnoInfoDirect(builder, obj.mangledName.data());
+    return PackageFormat::CreateAnnoInfoDirect(builder, obj.GetAnnoFactoryFuncMangledName().data());
 }
 
 [[maybe_unused]] static void Empty(Annotation*)
@@ -619,14 +619,7 @@ template <> flatbuffers::Offset<PackageFormat::Function> CHIRSerializer::CHIRSer
         oriLambdaGenericTypeParams = GetId<Type>(obj.GetOriginalGenericTypeParams());
     }
     auto genericTypeParams = GetId<Type>(obj.GetGenericTypeParams());
-    Func* paramDftValHostFuncDecl = nullptr;
-    // the host func of desugaring func for named parameter may be removed body when doing uselessFuncElimination,
-    // do not serializer it
-    if (auto paramDftValHostFunc = DynamicCast<Func*>(obj.GetParamDftValHostFunc());
-        paramDftValHostFunc && paramDftValHostFunc->GetBody()) {
-        paramDftValHostFuncDecl = paramDftValHostFunc;
-    }
-    auto paramDftValHostFunc = GetId<Value>(paramDftValHostFuncDecl);
+    auto paramDftValHostFunc = GetId<Value>(obj.GetParamDftValHostFunc());
 
     uint32_t body = 0;
     std::vector<uint32_t> params = GetId<Value>(obj.GetParams());
@@ -1141,18 +1134,6 @@ flatbuffers::Offset<PackageFormat::Intrinsic> CHIRSerializer::CHIRSerializerImpl
         builder, base, intrinsicKind, instantiatedTypeArgs.empty() ? nullptr : &instantiatedTypeArgs);
 }
 
-template <> flatbuffers::Offset<PackageFormat::If> CHIRSerializer::CHIRSerializerImpl::Serialize(const If& obj)
-{
-    auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    return PackageFormat::CreateIf(builder, base);
-}
-
-template <> flatbuffers::Offset<PackageFormat::Loop> CHIRSerializer::CHIRSerializerImpl::Serialize(const Loop& obj)
-{
-    auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    return PackageFormat::CreateLoop(builder, base);
-}
-
 template <>
 flatbuffers::Offset<PackageFormat::ForInRange> CHIRSerializer::CHIRSerializerImpl::Serialize(const ForInRange& obj)
 {
@@ -1560,12 +1541,6 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
         case ExprKind::STORE_ELEMENT_BY_NAME:
             exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_StoreElementByName;
             return Serialize<PackageFormat::StoreElementByName>(static_cast<const StoreElementByName&>(obj)).Union();
-        case ExprKind::IF:
-            exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_If;
-            return Serialize<PackageFormat::If>(static_cast<const If&>(obj)).Union();
-        case ExprKind::LOOP:
-            exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_Loop;
-            return Serialize<PackageFormat::Loop>(static_cast<const Loop&>(obj)).Union();
         case ExprKind::FORIN_RANGE:
             exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_ForInRange;
             return Serialize<PackageFormat::ForInRange>(static_cast<const ForInRange&>(obj)).Union();

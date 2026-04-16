@@ -89,7 +89,7 @@ llvm::MDTuple* MetadataInfo::GenerateParametersMetadata(
         res.AddSubItem(MetadataVector(llvmCtx)
                            .Concat(argId)
                            .Concat(GetTiName(*arg->GetType()))
-                           .Concat(GenerateAttrsMetadata(CHIR::AttributeInfo(), {}, arg->GetAnnoInfo().mangledName)));
+                           .Concat(GenerateAttrsMetadata(CHIR::AttributeInfo(), {}, arg->GetAnnoInfo())));
     }
     return res.CreateMDTuple();
 }
@@ -106,7 +106,7 @@ llvm::MDTuple* MetadataInfo::GenerateParametersMetadata(const std::vector<CHIR::
 }
 
 llvm::MDTuple* MetadataInfo::GenerateAttrsMetadata(const CHIR::AttributeInfo& attrs, ExtraAttribute extraAttr,
-    const std::string& gettingAnnotationMethod, uint8_t hasSRetMode, const std::string& enumKind,
+    const CHIR::AnnoInfo& annoInfo, uint8_t hasSRetMode, const std::string& enumKind,
     bool isUnknownSize) const
 {
     static const std::map<CHIR::Attribute, std::string> TEST_ATTRS{
@@ -167,9 +167,10 @@ llvm::MDTuple* MetadataInfo::GenerateAttrsMetadata(const CHIR::AttributeInfo& at
         (void)ops.Concat(str);
     }
 
-    (void)ops.Concat(gettingAnnotationMethod);
-    if (gettingAnnotationMethod != "none") {
-        auto chirFunc = module.GetCGContext().GetCGPkgContext().FindCHIRGlobalValue(gettingAnnotationMethod);
+    auto annoFactoryFuncName = annoInfo.GetAnnoFactoryFuncMangledName();
+    (void)ops.Concat(annoFactoryFuncName);
+    if (annoInfo.IsAvailable()) {
+        auto chirFunc = module.GetCGContext().GetCGPkgContext().FindCHIRGlobalValue(annoFactoryFuncName);
         (void)module.GetOrInsertCGFunction(chirFunc);
     }
 
@@ -214,7 +215,7 @@ llvm::MDTuple* MetadataInfo::GenerateInstanceFieldMetadata(const CHIR::MemberVar
         .Concat(GenerateAttrsMetadata(field.attributeInfo,
             field.TestAttr(CHIR::Attribute::READONLY) ? ExtraAttribute::IMMUTABLE_FIELD
                                                        : ExtraAttribute::MUTABLE_FIELD,
-            field.annoInfo.mangledName))
+            field.annoInfo))
         .CreateMDTuple();
 }
 
@@ -228,7 +229,7 @@ llvm::MDTuple* MetadataInfo::GenerateStaticFieldMetadata(const CHIR::GlobalVar& 
         .Concat(GenerateAttrsMetadata(staticField.GetAttributeInfo(),
             staticField.TestAttr(CHIR::Attribute::READONLY) ? ExtraAttribute::IMMUTABLE_FIELD
                                                              : ExtraAttribute::MUTABLE_FIELD,
-            staticField.GetAnnoInfo().mangledName))
+            staticField.GetAnnoInfo()))
         .CreateMDTuple();
 }
 
@@ -250,7 +251,7 @@ llvm::MDTuple* MetadataInfo::GenerateMethodMetadata(const CHIR::Function& method
                 : GenerateParametersMetadata(method.GetParams(), true))
         .Concat(GenerateParametersMetadata(method.GetGenericTypeParams()))
         .Concat(GenerateAttrsMetadata(
-            method.GetAttributeInfo(), extraAttr, method.GetAnnoInfo().mangledName, hasSRetMode));
+            method.GetAttributeInfo(), extraAttr, method.GetAnnoInfo(), hasSRetMode));
     (void)module.GetOrInsertCGFunction(&method);
     return methodMD.CreateMDTuple();
 }
@@ -356,7 +357,7 @@ void StructMetadataInfo::GenerateStructMetadata(const CHIR::StructDef& sd, std::
     MetadataTypeItem item(llvm::MDString::get(llvmCtx, tiOrTTName), llvm::MDString::get(llvmCtx, declaredGenericTi),
         GenerateStructFieldMetadata(sd), GenerateStructStaticFieldMetadata(sd), llvm::MDTuple::get(llvmCtx, methodsVec),
         llvm::MDTuple::get(llvmCtx, staticMethodsVec),
-        GenerateAttrsMetadata(sd.GetAttributeInfo(), ExtraAttribute::STRUCT, sd.GetAnnoInfo().mangledName,
+        GenerateAttrsMetadata(sd.GetAttributeInfo(), ExtraAttribute::STRUCT, sd.GetAnnoInfo(),
             SRetMode::NO_SRET, "", isUnknownSize));
 
     auto mdTuple = item.CreateMDTuple(llvmCtx);
@@ -500,8 +501,7 @@ llvm::MDNode* ClassMetadataInfo::GenerateClassAbsMethodMetadata(const CHIR::Func
                        .Concat(GenerateParametersMetadata(
                             absMethod.GetParams(), !absMethod.TestAttr(CHIR::Attribute::STATIC)))
                        .Concat(GenerateParametersMetadata(absMethod.GetGenericTypeParams()))
-                       .Concat(GenerateAttrsMetadata(
-                            attr, ExtraAttribute::METHOD, absMethod.GetAnnoInfo().mangledName))
+                       .Concat(GenerateAttrsMetadata(attr, ExtraAttribute::METHOD, absMethod.GetAnnoInfo()))
                        .CreateMDTuple();
     return mdTuple;
 }
@@ -544,7 +544,7 @@ llvm::MDTuple* ClassMetadataInfo::GenerateClassLikeTypeAttrsMetadata(const CHIR:
     if (IsClassForBoxType(cd.GetSrcCodeIdentifier())) {
         metadataType = ExtraAttribute::BOX_CLASS;
     }
-    return GenerateAttrsMetadata(cd.GetAttributeInfo(), metadataType, cd.GetAnnoInfo().mangledName);
+    return GenerateAttrsMetadata(cd.GetAttributeInfo(), metadataType, cd.GetAnnoInfo());
 }
 
 void EnumMetadataInfo::GenerateAllEnumsMetadata()
@@ -579,7 +579,7 @@ void EnumMetadataInfo::GenerateEnumMetadata(const CHIR::EnumDef& ed)
                            .Concat(tiOrTTName)
                            .Concat(GenerateEnumConstructorMetadata(ed))
                            .Concat(GenerateAttrsMetadata(ed.GetAttributeInfo(), ExtraAttribute::ENUM,
-                               ed.GetAnnoInfo().mangledName, SRetMode::NO_SRET, GetEnumKindName(module, ed)))
+                               ed.GetAnnoInfo(), SRetMode::NO_SRET, GetEnumKindName(module, ed)))
                            .CreateMDTuple();
         typesMD->addOperand(mdTuple);
         reflectTIOrTT->addMetadata("Reflection", *mdTuple);
@@ -594,7 +594,7 @@ void EnumMetadataInfo::GenerateEnumMetadata(const CHIR::EnumDef& ed)
     MetadataTypeItem item(llvm::MDString::get(llvmCtx, tiOrTTName), llvm::MDString::get(llvmCtx, declaredGenericTi),
         GenerateEnumConstructorMetadata(ed), llvm::MDTuple::get(llvmCtx, {}), llvm::MDTuple::get(llvmCtx, methodsVec),
         llvm::MDTuple::get(llvmCtx, staticMethodsVec),
-        GenerateAttrsMetadata(ed.GetAttributeInfo(), ExtraAttribute::ENUM, ed.GetAnnoInfo().mangledName,
+        GenerateAttrsMetadata(ed.GetAttributeInfo(), ExtraAttribute::ENUM, ed.GetAnnoInfo(),
             SRetMode::NO_SRET, GetEnumKindName(module, ed)));
     auto mdTuple = item.CreateMDTuple(llvmCtx, true);
     typesMD->addOperand(mdTuple);
@@ -637,7 +637,6 @@ std::string EnumMetadataInfo::GenerateCtorFn(
         irBuilder.SetInsertPoint(entryBB);
         llvm::Value* ti{nullptr};
         auto ctorInfo = enumDef.GetCtor(index);
-        std::string mangledName = ctorInfo.annoInfo.mangledName;
         auto chirEnumType = StaticCast<CHIR::EnumType*>(enumDef.GetType());
         if (CGType::GetOrCreate(module, chirEnumType)->IsDynamicGI()) {
             auto tt = module.GetOrCreateEnumCtorTIOrTT(*chirEnumType, index);
@@ -697,7 +696,7 @@ void GFMetadataInfo::GenerateAllFunctionsMetadata()
                     .Concat(GenerateParametersMetadata(gf->GetParams()))
                     .Concat(GenerateParametersMetadata(gf->GetGenericTypeParams()))
                     .Concat(GenerateAttrsMetadata(gf->GetAttributeInfo(), ExtraAttribute::METHOD,
-                        gf->GetAnnoInfo().mangledName, hasSRetMode))
+                        gf->GetAnnoInfo(), hasSRetMode))
                     .CreateMDTuple();
             functionsMdNode->addOperand(funcMD);
             func->addMetadata("ReflectionFunc", *funcMD);
@@ -750,6 +749,6 @@ llvm::MDNode* GVMetadataInfo::GenerateVariableMetadata(const CHIR::GlobalVar& va
         .Concat(GenerateAttrsMetadata(variable.GetAttributeInfo(),
             variable.TestAttr(CHIR::Attribute::READONLY) ? ExtraAttribute::IMMUTABLE_FIELD
                                                           : ExtraAttribute::MUTABLE_FIELD,
-            variable.GetAnnoInfo().mangledName))
+            variable.GetAnnoInfo()))
         .CreateMDTuple();
 }

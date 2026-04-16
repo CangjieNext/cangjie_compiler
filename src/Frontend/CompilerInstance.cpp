@@ -13,6 +13,7 @@
 #include "cangjie/Frontend/CompilerInstance.h"
 
 #include <fstream>
+#include <iterator>
 
 #include "PrintSymbolTable.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
@@ -844,7 +845,9 @@ void CompilerInstance::ManglingHelpFunction(const BaseMangler& baseMangler)
             return;
         }
         if (decl->isUsedImports) {
-            topDeclsSet.insert(std::make_pair(decl, pkgName));
+            if (std::find(topDecls.begin(), topDecls.end(), std::make_pair(decl, pkgName)) == topDecls.end()) {
+                topDecls.emplace_back(std::make_pair(decl, pkgName));
+            }
         }
     };
 

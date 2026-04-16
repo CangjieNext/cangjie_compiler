@@ -8,7 +8,9 @@
 
 #include <iostream>
 #include <sstream>
+#include <string>
 
+#include "cangjie/CHIR/IR/Expression/Expression.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/Utils/ToStringUtils.h"
@@ -200,23 +202,17 @@ std::vector<Block*> MultiBranch::GetNormalBlocks() const
     return {succs.begin() + 1, succs.end()};
 }
 
-std::string MultiBranch::ToString([[maybe_unused]] size_t indent) const
+std::string MultiBranch::OperandsToString() const
 {
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << GetCondition()->GetIdentifier();
-    ss << ", ";
-    ss << GetSuccessor(0)->GetIdentifier();
-    for (size_t i = 1; i < GetNumOfSuccessor(); i++) {
-        ss << ", [";
-        ss << GetCaseValByIndex(i - 1) << ", ";
-        ss << GetSuccessor(i)->GetIdentifier() << "]";
+    std::vector<std::string> res;
+    res.emplace_back(GetCondition()->GetIdentifier());
+    res.emplace_back(GetDefaultBlock()->GetIdentifier());
+    for (size_t i = 1; i < GetNumOfSuccessor(); ++i) {
+        auto caseValue = std::to_string(GetCaseValByIndex(i - 1));
+        auto caseId = GetSuccessor(i)->GetIdentifier();
+        res.emplace_back("[" + caseValue + ", " + caseId + "]");
     }
-    ss << ")";
-    ss << CommentToString();
-
-    return ss.str();
+    return StringJoin(res, ", ");
 }
 
 ExpressionWithException::ExpressionWithException(ExprKind kind, Block* parent)
@@ -301,18 +297,19 @@ Type* ApplyWithException::GetInstParentCustomTyOfCallee(CHIRBuilder& builder) co
     return GetInstParentCustomTypeForAweCallee(*this, builder);
 }
 
-std::string ApplyWithException::ToString([[maybe_unused]] size_t indent) const
+std::string ApplyWithException::OperandsToString() const
 {
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << ThisTypeToString(thisType).AddDelimiterOrNot(", ").Str();
-    ss << GetCallee()->GetIdentifier();
-    ss << InstTypeArgsToString(instantiatedTypeArgs);
-    ss << StringWrapper(", ").AppendOrClear(ExprWithExceptionOperandsToString(GetArgs(), GetSuccessors())).Str();
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
+    std::vector<std::string> res;
+    std::string func;
+    if (thisType != nullptr) {
+        func += thisType->ToString() + "->";
+    }
+    func += GetCallee()->GetIdentifier();
+    func += TypeVecToString("<", instantiatedTypeArgs, ">");
+    res.emplace_back(func);
+    auto ops = std::vector<Value*>(operands.begin() + 1, operands.end());
+    res.emplace_back(ValueIdVecToString("", ops, "", true));
+    return StringJoin(res, ", ");
 }
 
 inline static void CheckVirFuncInvokeInfo(const InvokeCallContext& callContext)
@@ -436,18 +433,12 @@ std::vector<Value*> InvokeWithException::GetArgs() const
     return {operands.begin(), firstSuccessor};
 }
 
-std::string InvokeWithException::ToString([[maybe_unused]] size_t indent) const
+std::string DynamicDispatchWithException::OperandsToString() const
 {
     std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << ThisTypeToString(thisType).AddDelimiterOrNot(", ").Str();
-    ss << GetMethodName();
-    ss << InstTypeArgsToString(instantiatedTypeArgs) << ": ";
-    ss << GetMethodType()->ToString() << ", ";
-    ss << ExprWithExceptionOperandsToString(GetArgs(), GetSuccessors());
-    ss << ")";
-    ss << CommentToString();
+    CJC_NULLPTR_CHECK(thisType);
+    ss << thisType->ToString() << "->" << GetMethodName() << TypeVecToString("<", instantiatedTypeArgs, ">");
+    ss << ", " << GetMethodType()->ToString() << ", " << ValueIdVecToString("", operands, "", true);
     return ss.str();
 }
 
@@ -467,22 +458,6 @@ std::vector<Value*> InvokeStaticWithException::GetArgs() const
     auto firstSuccessor =
         operands.begin() + static_cast<std::vector<Value*>::difference_type>(GetFirstSuccessorIndex());
     return {operands.begin() + 1, firstSuccessor};
-}
-
-std::string InvokeStaticWithException::ToString([[maybe_unused]] size_t indent) const
-{
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << ThisTypeToString(thisType).AddDelimiterOrNot(", ").Str();
-    ss << GetMethodName();
-    ss << InstTypeArgsToString(instantiatedTypeArgs) << ": ";
-    ss << GetMethodType()->ToString() << ", ";
-    ss << GetRTTIValue()->GetIdentifier();
-    ss << StringWrapper(", ").AppendOrClear(ExprWithExceptionOperandsToString(GetArgs(), GetSuccessors())).Str();
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
 }
 
 // IntOpWithException
@@ -528,17 +503,6 @@ Cangjie::OverflowStrategy IntOpWithException::GetOverflowStrategy() const
     return Cangjie::OverflowStrategy::THROWING;
 }
 
-std::string IntOpWithException::ToString([[maybe_unused]] size_t indent) const
-{
-    std::stringstream ss;
-    ss << GetOpKindName();
-    ss << "(";
-    ss << ExprWithExceptionOperandsToString(GetOperands(), GetSuccessors());
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
-}
-
 // TypeCastWithException
 TypeCastWithException::TypeCastWithException(Value* operand, Block* normal, Block* exception, Block* parent)
     : ExpressionWithException(ExprKind::TYPECAST_WITH_EXCEPTION, {operand}, {normal, exception}, parent)
@@ -566,18 +530,6 @@ Type* TypeCastWithException::GetTargetTy() const
     return result->GetType();
 }
 
-std::string TypeCastWithException::ToString([[maybe_unused]] size_t indent) const
-{
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    auto args = std::vector<Value*>{GetSourceValue()};
-    ss << ExprWithExceptionOperandsToString(args, GetSuccessors()) << ", ";
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
-}
-
 // IntrinsicWithException
 IntrinsicWithException::IntrinsicWithException(
     const IntrisicCallContext& callContext, Block* normal, Block* exception, Block* parent)
@@ -602,15 +554,12 @@ const std::vector<Value*> IntrinsicWithException::GetArgs() const
     return GetOperands();
 }
 
-std::string IntrinsicWithException::ToString([[maybe_unused]] size_t indent) const
+std::string IntrinsicWithException::OperandsToString() const
 {
     std::stringstream ss;
-    ss << GetExprKindName() << "/" << INTRINSIC_KIND_TO_STRING_MAP.at(intrinsicKind);
-    ss << InstTypeArgsToString(instantiatedTypeArgs);
-    ss << "(";
-    ss << ExprWithExceptionOperandsToString(GetOperands(), GetSuccessors());
-    ss << ")";
-    ss << CommentToString();
+    ss << IntrinsicKindToString(intrinsicKind);
+    ss << TypeVecToString("<", instantiatedTypeArgs, ">");
+    ss << ", " << ValueIdVecToString("", operands, "");
     return ss.str();
 }
 
@@ -625,16 +574,9 @@ Type* AllocateWithException::GetType() const
     return ty;
 }
 
-std::string AllocateWithException::ToString([[maybe_unused]] size_t indent) const
+std::string AllocateWithException::OperandsToString() const
 {
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << ty->ToString() << ", ";
-    ss << ExprWithExceptionOperandsToString(std::vector<Value*>{}, GetSuccessors());
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
+    return ty->ToString();
 }
 
 // RawArrayAllocateWithException
@@ -655,17 +597,9 @@ Type* RawArrayAllocateWithException::GetElementType() const
     return elementType;
 }
 
-std::string RawArrayAllocateWithException::ToString([[maybe_unused]] size_t indent) const
+std::string RawArrayAllocateWithException::OperandsToString() const
 {
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << elementType->ToString() << ", ";
-    auto args = std::vector<Value*>{GetSize()};
-    ss << ExprWithExceptionOperandsToString(args, GetSuccessors());
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
+    return elementType->ToString() + ", " + GetSize()->GetIdentifier();
 }
 
 SpawnWithException::SpawnWithException(
@@ -715,22 +649,12 @@ bool SpawnWithException::IsExecuteClosure() const
     return executeClosure != nullptr;
 }
 
-std::string SpawnWithException::ToString([[maybe_unused]] size_t indent) const
+std::string SpawnWithException::AddExtraComment() const
 {
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    auto args = std::vector<Value*>{GetFuture()};
-    if (auto arg = GetSpawnArg()) {
-        args.emplace_back(arg);
-    }
-    ss << ExprWithExceptionOperandsToString(args, GetSuccessors());
-    ss << ")";
-    ss << CommentToString();
     if (IsExecuteClosure()) {
-        ss << AddExtraComment("executeClosure: " + GetExecuteClosure()->GetIdentifier());
+        return "executeClosure: " + GetExecuteClosure()->GetIdentifier();
     }
-    return ss.str();
+    return "";
 }
 
 SpawnWithException* SpawnWithException::Clone(CHIRBuilder& builder, Block& parent) const
@@ -790,7 +714,7 @@ SourceExpr Branch::GetSourceExpr() const
     return sourceExpr;
 }
 
-std::string Branch::ToString([[maybe_unused]] size_t indent) const
+std::string Branch::AddExtraComment() const
 {
     const static std::unordered_map<SourceExpr, std::string> SOURCE_EXPR_MAP = {
         {SourceExpr::IF_EXPR, "IF_EXPR"},
@@ -803,11 +727,7 @@ std::string Branch::ToString([[maybe_unused]] size_t indent) const
         {SourceExpr::FOR_IN_EXPR, "FOR_IN_EXPR"},
         {SourceExpr::OTHER, "OTHER"},
     };
-    std::stringstream ss;
-    ss << Expression::ToString(indent);
-    ss << CommentToString();
-    ss << AddExtraComment("sourceExpr: " + SOURCE_EXPR_MAP.at(sourceExpr));
-    return ss.str();
+    return "sourceExpr: " + SOURCE_EXPR_MAP.at(sourceExpr);
 }
 
 Exit::Exit(Block* parent) : Terminator(ExprKind::EXIT, {}, {}, parent)
