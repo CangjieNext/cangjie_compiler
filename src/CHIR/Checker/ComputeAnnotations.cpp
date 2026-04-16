@@ -90,7 +90,7 @@ AnnoInstanceValue CreateValueOfCustomTypeDef(const Value& v)
             auto nothingExprCheck = StaticCast<LocalVar>(store->GetValue())->GetExpr();
             if (auto constant = DynamicCast<Constant>(nothingExprCheck)) {
                 if (constant->GetValue()->IsNullLiteral()) {
-                    std::cerr << nothingExprCheck->GetResult()->ToString() << '\n';
+                    std::cerr << nothingExprCheck->GetResult()->ToString(0) << '\n';
                     CJC_ASSERT(false && "Invalid node from interpreter.");
                 }
             }
