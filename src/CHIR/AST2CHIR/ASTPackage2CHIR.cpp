@@ -1062,7 +1062,6 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
     auto& identifier = decl.identifier.Val();
     auto& mangledName = decl.mangledName;
     auto& pkgName = decl.genericDecl ? decl.genericDecl->fullPackageName : decl.fullPackageName;
-    AST::Decl* uniqueDecl = nullptr;
     CustomTypeDef* customTypeDef = TryGetDeserialized<CustomTypeDef>(decl);
     if (customTypeDef != nullptr) {
         customTypeDef->SetDebugLocation(loc);
@@ -1074,20 +1073,17 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
                 customTypeDef = builder.CreateClass(
                     loc, identifier, mangledName, pkgName, decl.astKind == AST::ASTKind::CLASS_DECL, isImported);
             }
-            uniqueDecl = StaticCast<AST::ClassLikeTy*>(decl.ty)->commonDecl;
             break;
         case AST::ASTKind::STRUCT_DECL:
             if (customTypeDef == nullptr) {
                 customTypeDef = builder.CreateStruct(loc, identifier, mangledName, pkgName, isImported);
             }
-            uniqueDecl = StaticCast<AST::StructTy*>(decl.ty)->decl;
             break;
         case AST::ASTKind::ENUM_DECL:
             if (customTypeDef == nullptr) {
                 customTypeDef = builder.CreateEnum(
                     loc, identifier, mangledName, pkgName, isImported, StaticCast<AST::EnumDecl>(decl).hasEllipsis);
             }
-            uniqueDecl = StaticCast<AST::EnumTy*>(decl.ty)->decl;
             break;
         case AST::ASTKind::EXTEND_DECL: {
             if (customTypeDef == nullptr) {
@@ -1109,9 +1105,6 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
         SetCustomTypeDefAttr(*customTypeDef, decl);
     }
     chirType.SetGlobalNominalCache(decl, *customTypeDef);
-    if (uniqueDecl != nullptr && uniqueDecl != &decl) {
-        chirType.SetGlobalNominalCache(*uniqueDecl, *customTypeDef);
-    }
     if (decl.TestAttr(AST::Attribute::COMMON) && !decl.TestAttr(AST::Attribute::FROM_COMMON_PART)) {
         customTypeDef->EnableAttr(Attribute::COMMON);
     }

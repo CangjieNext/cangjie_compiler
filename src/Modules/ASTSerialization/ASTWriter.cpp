@@ -14,6 +14,7 @@
 #include <queue>
 
 #include "cangjie/AST/AttributePack.h"
+#include "cangjie/Utils/SafePointer.h"
 #include "flatbuffers/ModuleFormat_generated.h"
 
 #include "cangjie/AST/Create.h"
@@ -1048,7 +1049,8 @@ TTypeOffset ASTWriter::ASTWriterImpl::SaveGenericsTy(const GenericsTy& gty)
         uppers.push_back(SaveType(it));
     }
     auto vUppers = builder.CreateVector<FormattedIndex>(uppers);
-    auto decl = GetFullDeclIndex(gty.decl);
+    auto gpd = gty.decl->specificImplementation ? gty.decl->specificImplementation : gty.decl;
+    auto decl = GetFullDeclIndex(gpd);
     auto info = PackageFormat::CreateGenericTyInfo(builder, decl, vUppers);
     PackageFormat::SemaTyBuilder tbuilder(builder);
     tbuilder.add_kind(GetFormatTypeKind(gty.kind));
