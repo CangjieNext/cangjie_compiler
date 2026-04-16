@@ -170,7 +170,7 @@ void Value::RemoveUserOnly(Expression* expr)
 
 void Value::Dump() const
 {
-    std::cout << ToString() << std::endl;
+    std::cout << ToString(0) << std::endl;
 }
 
 void Value::ReplaceWith(Value& newValue, const BlockGroup* scope)
@@ -291,11 +291,20 @@ Debug* Parameter::GetDebugExpr() const
     return nullptr;
 }
 
-std::string Parameter::ToString() const
+std::string Parameter::ToString(size_t indent) const
 {
+    /** @CustomAnnotation
+     *  [attr1] [attr2] [...] %x[name]: type // comment
+     */
     std::stringstream ss;
+    ss << AddNewLineOrNot(annoInfo.ToString(indent));
+    ss << IndentToString(indent) << attributes.ToString();
     ss << identifier;
+    if (!srcCodeIdentifier.empty()) {
+        ss << "[" << srcCodeIdentifier << "]";
+    }
     ss << ": " << ty->ToString();
+    ss << CommentToString(BaseCommentToString());
     return ss.str();
 }
 
@@ -360,15 +369,10 @@ void LocalVar::SetRetValue(bool flag)
     this->isRetValue = flag;
 }
 
-std::string LocalVar::ToString() const
+std::string LocalVar::ToString(size_t indent) const
 {
-    std::stringstream ss;
-    ss << identifier;
-    ss << ": " << ty->ToString();
-    if (expr) {
-        ss << " = " << expr->ToString();
-    }
-    return ss.str();
+    CJC_NULLPTR_CHECK(expr);
+    return expr->ToString(indent);
 }
 
 // GlobalVar
@@ -408,30 +412,20 @@ void GlobalVar::DestroyInitializer()
     initializer = nullptr;
 }
 
-std::string GlobalVar::ToString() const
+std::string GlobalVar::ToString(size_t indent) const
 {
+    /** @CustomAnnotation
+     *  [attr1] [attr2] [...] @mangledName: type = literal init value(or init function)
+     */
     std::stringstream ss;
-    ss << attributes.ToString() << identifier << ": " << ty->ToString();
+    ss << AddNewLineOrNot(annoInfo.ToString(indent));
+    ss << IndentToString(indent) << attributes.ToString() << identifier << ": " << ty->ToString();
     if (auto initVal = GetInitializer()) {
-        ss << " = " << initVal->ToString();
+        ss << " = " << initVal->ToString(0);
+    } else if (auto initFunc = GetInitFunc()) {
+        ss << " = " << initFunc->GetIdentifier() << "()";
     }
-    std::stringstream comment;
-    comment << ToStringAnnotationMap();
-    if (annoInfo.IsAvailable()) {
-        AddCommaOrNot(comment);
-        comment << "annoInfo: " + annoInfo.mangledName;
-    }
-    if (!srcCodeIdentifier.empty()) {
-        AddCommaOrNot(comment);
-        comment << "srcCodeIdentifier: " + srcCodeIdentifier;
-    }
-    if (!rawMangledName.empty()) {
-        AddCommaOrNot(comment);
-        comment << "rawMangledName: " << rawMangledName;
-    }
-    if (comment.str() != "") {
-        ss << " // " << comment.str();
-    }
+    ss << CommentToString(GlobalValueCommentToString());
     return ss.str();
 }
 
@@ -662,9 +656,32 @@ std::vector<ClassType*> Block::GetExceptions() const
     return exceptions.value();
 }
 
-std::string Block::ToString() const
+std::string Block::ToString(size_t indent) const
 {
-    return GetBlockStr(*this);
+    std::stringstream ss;
+    ss << AddNewLineOrNot(annoInfo.ToString(indent));
+    ss << IndentToString(indent) << attributes.ToString();
+    ss << "Block " << identifier << ": ";
+    std::vector<std::string> comments;
+    if (!predecessors.empty()) {
+        comments.emplace_back("predecessors: " + ValueIdVecToString("[", predecessors, "]"));
+    }
+    if (auto baseComment = BaseCommentToString(); !baseComment.empty()) {
+        comments.emplace_back(baseComment);
+    }
+    if (IsLandingPadBlock()) {
+        auto exceptionStr = TypeVecToString("[", GetExceptions(), "]");
+        if (exceptionStr.empty()) {
+            comments.emplace_back("exceptions: [All]");
+        } else {
+            comments.emplace_back(exceptionStr);
+        }
+    }
+    ss << CommentToString(comments);
+    for (auto expr : exprs) {
+        ss << std::endl << expr->ToString(indent + 1);
+    }
+    return ss.str();
 }
 
 void Block::RemovePredecessorOnly(Block& block)
@@ -698,7 +715,7 @@ Block* Block::Clone(CHIRBuilder& builder, BlockGroup& newGroup) const
     }
     for (auto expr : exprs) {
         auto newExpr = expr->Clone(builder, *newBlock);
-        newExpr->CopyAnnotationMapFrom(*expr);
+        newExpr->CopyBaseInfoFrom(*expr);
     }
     return newBlock;
 }
@@ -849,9 +866,32 @@ void BlockGroup::AddBlocks(const std::vector<Block*>& newBlocks)
     }
 }
 
-std::string BlockGroup::ToString() const
+std::string BlockGroup::ToString(size_t indent) const
 {
-    return GetBlockGroupStr(*this);
+    std::stringstream ss;
+    ss << AddNewLineOrNot(annoInfo.ToString(indent));
+    ss << IndentToString(indent) << "{ Block Group: " << identifier;
+    ss << CommentToString(BaseCommentToString());
+    ss << std::endl;
+    if (!blocks.empty()) {
+        auto cmp = [](const Ptr<const Block> b1, const Ptr<const Block> b2) {
+            return b1->GetIdentifier() < b2->GetIdentifier();
+        };
+        auto blockSet = Utils::VecToSortedSet<decltype(cmp)>(blocks, cmp);
+        CJC_NULLPTR_CHECK(entryBlock);
+        auto sortedBlock = TopologicalSort(entryBlock);
+        for (auto block : sortedBlock) {
+            ss << block->ToString(indent) << std::endl;
+            blockSet.erase(block);
+        }
+
+        // print orphan block
+        for (auto block : blockSet) {
+            ss << block->ToString(indent) << std::endl;
+        }
+    }
+    ss << IndentToString(indent) << "}";
+    return ss.str();
 }
 
 void BlockGroup::CloneBlocks(CHIRBuilder& builder, BlockGroup& parent) const
@@ -1306,9 +1346,53 @@ Block* Function::GetEntryBlock() const
     return body->GetEntryBlock();
 }
 
-std::string Function::ToString() const
+std::string Function::ToString(size_t indent) const
 {
-    return GetFuncStr(*this);
+    std::stringstream ss;
+    ss << AddNewLineOrNot(annoInfo.ToString(indent));
+    ss << IndentToString(indent) << attributes.ToString();
+    if (isFastNative) {
+        ss << "[fastNative] ";
+    }
+    if (isCFFIWrapper) {
+        ss << "[CFFIWrapper] ";
+    }
+    ss << "Func " << identifier << TypeVecToString("<", genericTypeParams, ">") << "(";
+    for (auto param : parameters) {
+        ss << std::endl << param->ToString(indent + 1);
+    }
+    if (!parameters.empty()) {
+        ss << std::endl;
+        ss << IndentToString(indent);
+    }
+    ss << "): " << GetReturnType()->ToString();
+    std::vector<std::string> comments;
+    if (auto globalValComment = GlobalValueCommentToString(); !globalValComment.empty()) {
+        comments.emplace_back(globalValComment);
+    }
+    if (auto gStr = GetGenericTypeConstaintsStr(genericTypeParams); !gStr.empty()) {
+        comments.emplace_back(gStr);
+    }
+    if (funcKind != FuncKind::DEFAULT) {
+        comments.emplace_back("kind: " + FUNCKIND_TO_STRING.at(funcKind));
+    }
+    if (genericDecl != nullptr) {
+        comments.emplace_back(genericDecl->GetIdentifier());
+    }
+    if (paramDftValHostFunc != nullptr) {
+        comments.emplace_back(paramDftValHostFunc->GetIdentifier());
+    }
+    if (funcKind == FuncKind::LAMBDA) {
+        comments.emplace_back(originalLambdaInfo.ToString());
+    }
+    if (!propLoc.IsInvalidPos()) {
+        comments.emplace_back(propLoc.ToString());
+    }
+    ss << CommentToString(comments);
+    if (body != nullptr) {
+        ss << std::endl << body->ToString(indent);
+    }
+    return ss.str();
 }
 
 const DebugLocation& Function::GetPropLocation() const
@@ -1369,4 +1453,27 @@ void GlobalValue::SetFeatures(const std::set<std::string>& newFeatures)
 CustomTypeDef* GlobalValue::GetParentCustomTypeDef() const
 {
     return declaredParent;
+}
+
+std::string GlobalValue::GlobalValueCommentToString() const
+{
+    std::vector<std::string> result;
+    result.emplace_back(BaseCommentToString());
+    if (!srcCodeIdentifier.empty()) {
+        result.emplace_back("srcCodeIdentifier: " + srcCodeIdentifier);
+    }
+    if (!rawMangledName.empty()) {
+        result.emplace_back("rawMangledName: " + rawMangledName);
+    }
+    if (!packageName.empty()) {
+        result.emplace_back("packageName: " + packageName);
+    }
+    if (declaredParent != nullptr) {
+        result.emplace_back("declaredParent: " + declaredParent->GetIdentifier());
+    }
+    if (!features.empty()) {
+        std::vector<std::string> vec(features.begin(), features.end());
+        result.emplace_back("features: {" + StringJoin(vec, ", ") + "}");
+    }
+    return StringJoin(result, ", ");
 }

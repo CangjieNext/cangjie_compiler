@@ -4,13 +4,13 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include "cangjie/CHIR/IR/Expression/Expression.h"
 #include <iostream>
 #include <sstream>
 
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
-#include "cangjie/CHIR/Utils/StringWrapper.h"
 #include "cangjie/CHIR/Utils/ToStringUtils.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
@@ -442,20 +442,59 @@ void Expression::EraseOperands()
     operands.clear();
 }
 
-std::string Expression::ToString([[maybe_unused]] size_t indent) const
+std::string Expression::ToString(size_t indent) const
 {
+    // [ret] %x[name]: type = expression(xxx) // comment
     std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << ExprOperandsToString(operands);
-    ss << ")";
+    ss << IndentToString(indent);
+    if (result != nullptr) {
+        if (result->IsRetValue()) {
+            ss << "[ret] ";
+        }
+        ss << result->GetIdentifier();
+        if (auto srcName = result->GetSrcCodeIdentifier(); !srcName.empty()) {
+            ss << "[" << srcName << "]";
+        }
+        ss << ": " << result->GetType()->ToString() << " = ";
+    }
+    if (kind == ExprKind::INT_OP_WITH_EXCEPTION) {
+        ss << StaticCast<const IntOpWithException*>(this)->GetOpKindName();
+    } else {
+        ss << GetExprKindName();
+    }
+    if (kind == ExprKind::LAMBDA) {
+        ss << StaticCast<const Lambda*>(this)->LambdaOperandsToString(indent);
+    } else {
+        ss << "(" << OperandsToString() << ")";
+    }
     ss << CommentToString();
+    for (auto subGroup : blockGroups) {
+        ss << std::endl << subGroup->ToString(indent);
+    }
     return ss.str();
+}
+
+bool Expression::HasExceptionBranch() const
+{
+    return kind == ExprKind::APPLY_WITH_EXCEPTION ||
+        kind == ExprKind::INVOKE_WITH_EXCEPTION ||
+        kind == ExprKind::INVOKESTATIC_WITH_EXCEPTION ||
+        kind == ExprKind::INT_OP_WITH_EXCEPTION ||
+        kind == ExprKind::SPAWN_WITH_EXCEPTION ||
+        kind == ExprKind::TYPECAST_WITH_EXCEPTION ||
+        kind == ExprKind::INTRINSIC_WITH_EXCEPTION ||
+        kind == ExprKind::ALLOCATE_WITH_EXCEPTION ||
+        kind == ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION;
+}
+
+std::string Expression::OperandsToString() const
+{
+    return ValueIdVecToString("", operands, "", HasExceptionBranch());
 }
 
 void Expression::Dump() const
 {
-    std::cout << ToString() << std::endl;
+    std::cout << ToString(0) << std::endl;
 }
 
 void Expression::AppendOperand(Value& op)
@@ -466,24 +505,19 @@ void Expression::AppendOperand(Value& op)
 
 std::string Expression::CommentToString() const
 {
-    auto comment = StringWrapper(this->ToStringAnnotationMap());
-    if (result != nullptr) {
-        comment.Append(result->ToStringAnnotationMap(), ",");
+    std::vector<std::string> resultStr;
+    if (auto baseComment = BaseCommentToString(); !baseComment.empty()) {
+        resultStr.emplace_back(baseComment);
     }
-    if (comment.Str().empty()) {
-        return "";
+    if (auto extraStr = AddExtraComment(); !extraStr.empty()) {
+        resultStr.emplace_back(extraStr);
     }
-    return " // " + comment.Str();
+    return ::CommentToString(resultStr);
 }
 
-std::string Expression::AddExtraComment(const std::string& comment) const
+std::string Expression::AddExtraComment() const
 {
-    CJC_ASSERT(!comment.empty());
-    if ((result && result->ToStringAnnotationMap().empty()) || this->ToStringAnnotationMap().empty()) {
-        return " // " + comment;
-    } else {
-        return ", " + comment;
-    }
+    return "";
 }
 
 Value* UnaryExpression::GetOperand() const
@@ -496,12 +530,12 @@ Cangjie::OverflowStrategy UnaryExpression::GetOverflowStrategy() const
     return overflowStrategy;
 }
 
-std::string UnaryExpression::ToString(size_t indent) const
+std::string UnaryExpression::AddExtraComment() const
 {
-    std::stringstream ss;
-    ss << Expression::ToString(indent);
-    ss << AddExtraComment(OverflowToString(overflowStrategy));
-    return ss.str();
+    if (overflowStrategy != Cangjie::OverflowStrategy::NA) {
+        return OverflowToString(overflowStrategy);
+    }
+    return "";
 }
 
 BinaryExpression::BinaryExpression(ExprKind kind, Value* lhs, Value* rhs, OverflowStrategy ofs, Block* parent)
@@ -530,23 +564,12 @@ Cangjie::OverflowStrategy BinaryExpression::GetOverflowStrategy() const
     return overflowStrategy;
 }
 
-std::string BinaryExpression::ToString([[maybe_unused]] size_t indent) const
+std::string BinaryExpression::AddExtraComment() const
 {
-    std::stringstream ss;
-    ss << Expression::ToString(indent);
-    ss << AddExtraComment(OverflowToString(overflowStrategy));
-    return ss.str();
-}
-
-std::string Constant::ToString([[maybe_unused]] size_t indent) const
-{
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << GetValue()->ToString();
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
+    if (overflowStrategy != Cangjie::OverflowStrategy::NA) {
+        return OverflowToString(overflowStrategy);
+    }
+    return "";
 }
 
 LiteralValue* Constant::GetValue() const
@@ -654,13 +677,9 @@ Type* Allocate::GetType() const
     return ty;
 }
 
-std::string Allocate::ToString([[maybe_unused]] size_t indent) const
+std::string Allocate::OperandsToString() const
 {
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(" << ty->ToString() << ")";
-    ss << CommentToString();
-    return ss.str();
+    return ty->ToString();
 }
 
 Value* Load::GetLocation() const
@@ -688,17 +707,13 @@ const std::vector<uint64_t>& GetElementRef::GetPath() const
     return path;
 }
 
-std::string GetElementRef::ToString([[maybe_unused]] size_t indent) const
+std::string GetElementRef::OperandsToString() const
 {
     std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
     ss << GetLocation()->GetIdentifier();
     for (auto p : GetPath()) {
         ss << ", " << p;
     }
-    ss << ")";
-    ss << CommentToString();
     return ss.str();
 }
 
@@ -713,17 +728,13 @@ const std::vector<std::string>& GetElementByName::GetNames() const
     return names;
 }
 
-std::string GetElementByName::ToString([[maybe_unused]] size_t indent) const
+std::string GetElementByName::OperandsToString() const
 {
     std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
     ss << GetLocation()->GetIdentifier();
     for (const auto& p : GetNames()) {
         ss << ", " << p;
     }
-    ss << ")";
-    ss << CommentToString();
     return ss.str();
 }
 
@@ -767,18 +778,14 @@ const std::vector<std::string>& StoreElementByName::GetNames() const
     return names;
 }
 
-std::string StoreElementByName::ToString([[maybe_unused]] size_t indent) const
+std::string StoreElementByName::OperandsToString() const
 {
     std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
     ss << GetValue()->GetIdentifier() << ", ";
     ss << GetLocation()->GetIdentifier();
     for (const auto& p : GetNames()) {
         ss << ", " << p;
     }
-    ss << ")";
-    ss << CommentToString();
     return ss.str();
 }
 
@@ -853,22 +860,26 @@ std::vector<Value*> Apply::GetArgs() const
     return args;
 }
 
-std::string Apply::ToString([[maybe_unused]] size_t indent) const
+std::string Apply::OperandsToString() const
 {
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << ThisTypeToString(thisType).AddDelimiterOrNot(", ").Str();
-    ss << GetCallee()->GetIdentifier();
-    ss << InstTypeArgsToString(instantiatedTypeArgs);
-    ss << StringWrapper(", ").AppendOrClear(ExprOperandsToString(GetArgs())).Str();
-    ss << ")";
-    ss << CommentToString();
-    if (IsSuperCall()) {
-        ss << AddExtraComment("isSuperCall");
+    std::vector<std::string> res;
+    std::string func;
+    if (thisType != nullptr) {
+        func += thisType->ToString() + "->";
     }
+    func += GetCallee()->GetIdentifier();
+    func += TypeVecToString("<", instantiatedTypeArgs, ">");
+    res.emplace_back(func);
+    res.emplace_back(ValueIdVecToString("", GetArgs(), ""));
+    return StringJoin(res, ", ");
+}
 
-    return ss.str();
+std::string Apply::AddExtraComment() const
+{
+    if (IsSuperCall()) {
+        return "isSuperCall";
+    }
+    return "";
 }
 
 DynamicDispatch::DynamicDispatch(ExprKind kind, const InvokeCallContext& callContext, Block* parent)
@@ -955,6 +966,15 @@ AttributeInfo DynamicDispatch::GetVirtualMethodAttr(CHIRBuilder& builder) const
     return AttributeInfo{};
 }
 
+std::string DynamicDispatch::OperandsToString() const
+{
+    std::stringstream ss;
+    CJC_NULLPTR_CHECK(thisType);
+    ss << thisType->ToString() << "->" << GetMethodName() << TypeVecToString("<", instantiatedTypeArgs, ">");
+    ss << ", " << GetMethodType()->ToString() << ", " << ValueIdVecToString("", operands, "");
+    return ss.str();
+}
+
 // Invoke
 Invoke::Invoke(const InvokeCallContext& callContext, Block* parent)
     : DynamicDispatch(ExprKind::INVOKE, callContext, parent)
@@ -1012,21 +1032,6 @@ void Invoke::ReplaceOperand(size_t idx, Value* newOperand)
     }
 }
 
-std::string Invoke::ToString([[maybe_unused]] size_t indent) const
-{
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << ThisTypeToString(thisType).AddDelimiterOrNot(", ").Str();
-    ss << GetMethodName();
-    ss << InstTypeArgsToString(instantiatedTypeArgs) << ": ";
-    ss << GetMethodType()->ToString() << ", ";
-    ss << ExprOperandsToString(GetArgs());
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
-}
-
 std::vector<Value*> Invoke::GetArgs() const
 {
     return operands;
@@ -1045,22 +1050,6 @@ InvokeStatic::InvokeStatic(const InvokeCallContext& callContext, Block* parent)
 Value* InvokeStatic::GetRTTIValue() const
 {
     return operands[0];
-}
-
-std::string InvokeStatic::ToString([[maybe_unused]] size_t indent) const
-{
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << ThisTypeToString(thisType).AddDelimiterOrNot(", ").Str();
-    ss << GetMethodName();
-    ss << InstTypeArgsToString(instantiatedTypeArgs) << ": ";
-    ss << GetMethodType()->ToString() << ", ";
-    ss << GetRTTIValue()->GetIdentifier();
-    ss << StringWrapper(", ").AppendOrClear(ExprOperandsToString(GetArgs())).Str();
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
 }
 
 std::vector<Value*> InvokeStatic::GetArgs() const
@@ -1115,12 +1104,12 @@ Cangjie::OverflowStrategy TypeCast::GetOverflowStrategy() const
     return overflowStrategy;
 }
 
-std::string TypeCast::ToString(size_t indent) const
+std::string TypeCast::AddExtraComment() const
 {
-    std::stringstream ss;
-    ss << Expression::ToString(indent);
-    ss << AddExtraComment(OverflowToString(overflowStrategy));
-    return ss.str();
+    if (overflowStrategy != Cangjie::OverflowStrategy::NA) {
+        return OverflowToString(overflowStrategy);
+    }
+    return "";
 }
 
 // InstanceOf
@@ -1139,13 +1128,9 @@ Type* InstanceOf::GetType() const
     return ty;
 }
 
-std::string InstanceOf::ToString([[maybe_unused]] size_t indent) const
+std::string InstanceOf::OperandsToString() const
 {
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(" << GetObject()->GetIdentifier() << ", " << GetType()->ToString() << ")";
-    ss << CommentToString();
-    return ss.str();
+    return GetObject()->GetIdentifier() + ", " + GetType()->ToString();
 }
 
 // Box
@@ -1329,17 +1314,13 @@ std::vector<uint64_t> Field::GetPath() const
     return path;
 }
 
-std::string Field::ToString([[maybe_unused]] size_t indent) const
+std::string Field::OperandsToString() const
 {
     std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
     ss << GetBase()->GetIdentifier();
     for (auto p : GetPath()) {
         ss << ", " << p;
     }
-    ss << ")";
-    ss << CommentToString();
     return ss.str();
 }
 
@@ -1359,17 +1340,13 @@ const std::vector<std::string>& FieldByName::GetNames() const
     return names;
 }
 
-std::string FieldByName::ToString([[maybe_unused]] size_t indent) const
+std::string FieldByName::OperandsToString() const
 {
     std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
     ss << GetBase()->GetIdentifier();
     for (const auto& p : GetNames()) {
         ss << ", " << p;
     }
-    ss << ")";
-    ss << CommentToString();
     return ss.str();
 }
 
@@ -1398,16 +1375,9 @@ Type* RawArrayAllocate::GetElementType() const
     return elementType;
 }
 
-std::string RawArrayAllocate::ToString([[maybe_unused]] size_t indent) const
+std::string RawArrayAllocate::OperandsToString() const
 {
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << elementType->ToString() << ", ";
-    ss << GetSize()->GetIdentifier();
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
+    return elementType->ToString() + ", " + GetSize()->GetIdentifier();
 }
 
 // RawArrayLiteralInit
@@ -1461,69 +1431,12 @@ const std::vector<Value*>& Intrinsic::GetArgs() const
     return operands;
 }
 
-std::string Intrinsic::ToString([[maybe_unused]] size_t indent) const
+std::string Intrinsic::OperandsToString() const
 {
     std::stringstream ss;
-    ss << GetExprKindName() << "/" << INTRINSIC_KIND_TO_STRING_MAP.at(intrinsicKind);
-    ss << InstTypeArgsToString(instantiatedTypeArgs);
-    ss << "(";
-    ss << ExprOperandsToString(operands);
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
-}
-
-// If
-If::If(Value* cond, BlockGroup* thenBody, BlockGroup* elseBody, Block* parent)
-    : Expression(ExprKind::IF, {cond}, {thenBody, elseBody}, parent)
-{
-}
-
-Value* If::GetCondition() const
-{
-    return operands[0];
-}
-
-BlockGroup* If::GetTrueBranch() const
-{
-    return blockGroups[0];
-}
-
-BlockGroup* If::GetFalseBranch() const
-{
-    return blockGroups[1];
-}
-
-std::string If::ToString([[maybe_unused]] size_t indent) const
-{
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(" << operands[0]->GetIdentifier() << ", " << std::endl;
-    ss << GetBlockGroupStr(*blockGroups[0], indent + 1);
-    ss << "," << std::endl;
-    ss << GetBlockGroupStr(*blockGroups[1], indent + 1);
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
-}
-
-// Loop
-Loop::Loop(BlockGroup* loopBody, Block* parent) : Expression(ExprKind::LOOP, {}, {loopBody}, parent)
-{
-}
-
-BlockGroup* Loop::GetLoopBody() const
-{
-    return blockGroups[0];
-}
-
-std::string Loop::ToString([[maybe_unused]] size_t indent) const
-{
-    std::stringstream ss;
-    ss << GetExprKindName() << "(" << std::endl;
-    ss << GetBlockGroupStr(*blockGroups[0], indent + 1);
-    ss << ")";
-    ss << CommentToString();
+    ss << IntrinsicKindToString(intrinsicKind);
+    ss << TypeVecToString("<", instantiatedTypeArgs, ">");
+    ss << ", " << ValueIdVecToString("", operands, "");
     return ss.str();
 }
 
@@ -1571,23 +1484,6 @@ void ForIn::InitBlockGroups(BlockGroup& body, BlockGroup& latch, BlockGroup& con
     blockGroups.emplace_back(&cond);
 }
 
-std::string ForIn::ToString([[maybe_unused]] size_t indent) const
-{
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << GetInductionVar()->GetIdentifier();
-    ss << ", " << GetLoopCondVar()->GetIdentifier() << "," << std::endl;
-    ss << GetBlockGroupStr(*GetBody(), indent + 1);
-    ss << "," << std::endl;
-    ss << GetBlockGroupStr(*GetLatch(), indent + 1);
-    ss << "," << std::endl;
-    ss << GetBlockGroupStr(*GetCond(), indent + 1);
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
-}
-
 // Lambda
 Lambda::Lambda(FuncType* ty, Block* parent, bool isLocalFunc, const std::string& identifier,
     const std::string& srcCodeIdentifier, const std::vector<GenericType*>& genericTypeParams)
@@ -1617,9 +1513,43 @@ Type* Lambda::GetReturnType() const
     return funcTy->GetReturnType();
 }
 
-std::string Lambda::ToString([[maybe_unused]] size_t indent) const
+std::string Lambda::LambdaOperandsToString(size_t indent) const
 {
-    return GetLambdaStr(*this, indent);
+    std::stringstream ss;
+    ss << "[" << identifier << "]" << TypeVecToString("<", genericTypeParams, ">") << "(";
+    for (auto param : params) {
+        ss << std::endl << param->ToString(indent + 1);
+    }
+    if (!params.empty()) {
+        ss << std::endl;
+        ss << IndentToString(indent);
+    }
+    ss << "): " << GetReturnType()->ToString();
+    return ss.str();
+}
+
+std::string Lambda::AddExtraComment() const
+{
+    std::vector<std::string> res;
+    if (isCompileTimeValue) {
+        res.emplace_back("compileTimeVal");
+    }
+    if (isLocalFunc) {
+        res.emplace_back("localFunc");
+    }
+    if (!srcCodeIdentifier.empty()) {
+        res.emplace_back("srcCodeIdentifier: " + srcCodeIdentifier);
+    }
+    if (paramDftValHostFunc != nullptr) {
+        res.emplace_back("paramDftValHostFunc: " + paramDftValHostFunc->GetIdentifier());
+    }
+    if (auto gStr =  GetGenericTypeConstaintsStr(genericTypeParams); !gStr.empty()) {
+        res.emplace_back(gStr);
+    }
+    if (!res.empty()) {
+        return StringJoin(res, ", ");
+    }
+    return "";
 }
 
 std::vector<Value*> Lambda::GetCapturedVariables() const
@@ -1659,16 +1589,9 @@ Debug::Debug(Value* local, std::string srcCodeIdentifier, Block* parent)
     CJC_NULLPTR_CHECK(parent);
 }
 
-std::string Debug::ToString([[maybe_unused]] size_t indent) const
+std::string Debug::OperandsToString() const
 {
-    std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
-    ss << GetValue()->GetIdentifier() << ", ";
-    ss << GetSrcCodeIdentifier();
-    ss << ")";
-    ss << CommentToString();
-    return ss.str();
+    return GetValue()->GetIdentifier() + ", " + GetSrcCodeIdentifier();
 }
 
 Spawn::Spawn(Value* val, Block* parent)
@@ -1716,14 +1639,12 @@ void Spawn::SetExecuteClosure(Function& func)
     executeClosure = &func;
 }
 
-std::string Spawn::ToString([[maybe_unused]] size_t indent) const
+std::string Spawn::AddExtraComment() const
 {
-    std::stringstream ss;
-    ss << Expression::ToString(indent);
     if (IsExecuteClosure()) {
-        ss << AddExtraComment("executeClosure: " + GetExecuteClosure()->GetIdentifier());
+        return "executeClosure: " + GetExecuteClosure()->GetIdentifier();
     }
-    return ss.str();
+    return "";
 }
 
 UnaryExpression* UnaryExpression::Clone(CHIRBuilder& builder, Block& parent) const
@@ -1789,18 +1710,14 @@ GetElementRef* GetElementRef::Clone(CHIRBuilder& builder, Block& parent) const
     return newNode;
 }
 
-std::string StoreElementRef::ToString([[maybe_unused]] size_t indent) const
+std::string StoreElementRef::OperandsToString() const
 {
     std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
     ss << GetValue()->GetIdentifier() << ", ";
     ss << GetLocation()->GetIdentifier();
     for (auto p : GetPath()) {
         ss << ", " << p;
     }
-    ss << ")";
-    ss << CommentToString();
     return ss.str();
 }
 
@@ -2033,30 +1950,6 @@ Intrinsic* Intrinsic::Clone(CHIRBuilder& builder, Block& parent) const
     return newNode;
 }
 
-If* If::Clone(CHIRBuilder& builder, Block& parent) const
-{
-    auto newNode =
-        builder.CreateExpression<If>(result->GetType(), GetCondition(), GetTrueBranch(), GetFalseBranch(), &parent);
-    parent.AppendExpression(newNode);
-    newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
-    return newNode;
-}
-
-Loop* Loop::Clone(CHIRBuilder& builder, Block& parent) const
-{
-    BlockGroup* newBody = nullptr;
-    if (parent.GetParentBlockGroup()->GetOwnerFunc()) {
-        newBody = GetLoopBody()->Clone(builder, *parent.GetParentBlockGroup()->GetOwnerFunc());
-    } else {
-        auto parentLambda = StaticCast<Lambda*>(parent.GetParentBlockGroup()->GetOwnerExpression());
-        newBody = GetLoopBody()->Clone(builder, *parentLambda);
-    }
-    auto newNode = builder.CreateExpression<Loop>(result->GetType(), newBody, &parent);
-    parent.AppendExpression(newNode);
-    newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
-    return newNode;
-}
-
 template <class T> T* ForIn::CloneBase(CHIRBuilder& builder, Block& parent) const
 {
     static_assert(std::is_base_of_v<ForIn, T>);
@@ -2189,17 +2082,13 @@ Value* GetInstantiateValue::GetGenericResult() const
     return operands[0];
 }
 
-std::string GetInstantiateValue::ToString([[maybe_unused]] size_t indent) const
+std::string GetInstantiateValue::OperandsToString() const
 {
     std::stringstream ss;
-    ss << GetExprKindName();
-    ss << "(";
     ss << GetGenericResult()->GetIdentifier();
     for (auto ty : GetInstantiateTypes()) {
         ss << ", " << ty->ToString();
     }
-    ss << ")";
-    ss << CommentToString();
     return ss.str();
 }
 
@@ -2328,13 +2217,6 @@ Value* Debug::GetValue() const
     return operands[0];
 }
 
-std::string GetRTTI::ToString([[maybe_unused]] size_t indent) const
-{
-    std::stringstream ss;
-    ss << Expression::ToString();
-    return ss.str();
-}
-
 GetRTTI::GetRTTI(Value* val, Block* parent) : Expression{ExprKind::GET_RTTI, {val}, {}, parent}
 {
     CJC_ASSERT(Is<RefType>(val->GetType()) &&
@@ -2355,12 +2237,9 @@ GetRTTI* GetRTTI::Clone(CHIRBuilder& builder, Block& parent) const
     return newNode;
 }
 
-std::string GetRTTIStatic::ToString([[maybe_unused]] size_t indent) const
+std::string GetRTTIStatic::OperandsToString() const
 {
-    std::stringstream ss;
-    ss << GetExprKindName() << "(" << GetRTTIType()->ToString() << ")";
-    ss << CommentToString();
-    return ss.str();
+    return GetRTTIType()->ToString();
 }
 
 GetRTTIStatic* GetRTTIStatic::Clone(CHIRBuilder& builder, Block& parent) const
