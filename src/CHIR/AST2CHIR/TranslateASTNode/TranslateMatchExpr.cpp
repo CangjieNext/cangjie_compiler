@@ -102,10 +102,81 @@ inline SourceExpr GetSourceExprByMatchExpr(const AST::MatchExpr& matchExpr)
     }
     return SourceExpr::MATCH_EXPR;
 }
+
+bool IsBoolLiteralExpr(const AST::Expr& expr, bool value)
+{
+    auto lit = DynamicCast<const AST::LitConstExpr>(&expr);
+    return lit && lit->kind == AST::LitConstKind::BOOL && lit->constNumValue.asBoolean == value;
+}
+
+bool IsBoolLiteralNode(const AST::Node& node, bool value)
+{
+    if (auto ret = DynamicCast<const AST::ReturnExpr>(&node); ret && ret->expr) {
+        return IsBoolLiteralExpr(*ret->expr, value);
+    }
+    if (auto expr = DynamicCast<const AST::Expr>(&node)) {
+        return IsBoolLiteralExpr(*expr, value);
+    }
+    return false;
+}
+
+bool IsSingleBoolResultCase(const AST::Block& block, bool value)
+{
+    return block.body.size() == 1 && IsBoolLiteralNode(*block.body.front(), value);
+}
+
+const AST::EnumPattern* GetLeafEnumPattern(const AST::Pattern& pattern)
+{
+    if (auto vep = DynamicCast<const AST::VarOrEnumPattern>(&pattern)) {
+        return DynamicCast<const AST::EnumPattern>(vep->pattern.get());
+    }
+    return DynamicCast<const AST::EnumPattern>(&pattern);
+}
+
+bool GetDerivedTrivialEnumEqCaseID(const AST::MatchCase& matchCase, const AST::EnumDecl*& enumDecl, uint64_t& caseID)
+{
+    if (matchCase.patternGuard || matchCase.patterns.size() != 1 ||
+        !IsSingleBoolResultCase(*matchCase.exprOrDecls, true)) {
+        return false;
+    }
+    auto tuplePattern = DynamicCast<const AST::TuplePattern>(matchCase.patterns[0].get());
+    if (!tuplePattern || tuplePattern->patterns.size() != 2) {
+        return false;
+    }
+    auto leftPattern = GetLeafEnumPattern(*tuplePattern->patterns[0]);
+    auto rightPattern = GetLeafEnumPattern(*tuplePattern->patterns[1]);
+    if (!leftPattern || !rightPattern || !leftPattern->patterns.empty() || !rightPattern->patterns.empty()) {
+        return false;
+    }
+    auto leftCtor = leftPattern->constructor->GetTarget();
+    auto rightCtor = rightPattern->constructor->GetTarget();
+    if (!leftCtor || leftCtor != rightCtor || !leftCtor->outerDecl ||
+        leftCtor->outerDecl->astKind != AST::ASTKind::ENUM_DECL) {
+        return false;
+    }
+    auto curEnumDecl = StaticCast<const AST::EnumDecl*>(leftCtor->outerDecl);
+    if (enumDecl == nullptr) {
+        enumDecl = curEnumDecl;
+    } else if (enumDecl != curEnumDecl) {
+        return false;
+    }
+    caseID = Translator::GetEnumCtorId(*leftCtor);
+    return true;
+}
+
+bool IsDerivedTrivialEnumEqDefaultCase(const AST::MatchCase& matchCase)
+{
+    return !matchCase.patternGuard && matchCase.patterns.size() == 1 &&
+        matchCase.patterns[0]->astKind == AST::ASTKind::WILDCARD_PATTERN &&
+        IsSingleBoolResultCase(*matchCase.exprOrDecls, false);
+}
 } // namespace
 
 Ptr<Value> Translator::Visit(const AST::MatchExpr& matchExpr)
 {
+    if (auto optimized = TryTranslateDerivedTrivialEnumEqMatch(matchExpr)) {
+        return optimized;
+    }
     auto matchTy = TranslateType(*matchExpr.GetTy());
     Ptr<Value> retVal = HasTypeOfNothing(matchExpr) || matchTy->IsUnit() || matchTy->IsNothing() ? nullptr :
         CreateAndAppendExpression<Allocate>(builder.GetType<RefType>(matchTy), matchTy, currentBlock)->GetResult();
@@ -126,6 +197,74 @@ Ptr<Value> Translator::Visit(const AST::MatchExpr& matchExpr)
     } else {
         return CreateAndAppendExpression<Load>(matchTy, retVal, currentBlock)->GetResult();
     }
+}
+
+Ptr<Value> Translator::TryTranslateDerivedTrivialEnumEqMatch(const AST::MatchExpr& matchExpr)
+{
+    if (!matchExpr.matchMode || !matchExpr.GetTy()->IsBoolean()) {
+        return nullptr;
+    }
+    auto tupleSelector = DynamicCast<const AST::TupleLit>(matchExpr.selector.get());
+    if (!tupleSelector || tupleSelector->children.size() != 2) {
+        return nullptr;
+    }
+    auto lhsTy = tupleSelector->children[0]->GetTy();
+    auto rhsTy = tupleSelector->children[1]->GetTy();
+    if (!lhsTy || !rhsTy || !lhsTy->IsEnum() || !rhsTy->IsEnum()) {
+        return nullptr;
+    }
+    auto enumDecl = DynamicCast<AST::EnumDecl>(AST::Ty::GetDeclOfTy(lhsTy));
+    if (!enumDecl || enumDecl != DynamicCast<AST::EnumDecl>(AST::Ty::GetDeclOfTy(rhsTy)) || enumDecl->hasArguments ||
+        enumDecl->hasEllipsis || enumDecl->constructors.size() < 2) {
+        return nullptr;
+    }
+    auto selectorTy = GetSelectorType(StaticCast<AST::EnumTy>(*lhsTy));
+    if (selectorTy->IsBoolean() || matchExpr.matchCases.size() != enumDecl->constructors.size() + 1 ||
+        !IsDerivedTrivialEnumEqDefaultCase(*matchExpr.matchCases.back())) {
+        return nullptr;
+    }
+    const AST::EnumDecl* patternEnumDecl = nullptr;
+    std::set<uint64_t> seenCaseIDs;
+    for (size_t i = 0; i + 1 < matchExpr.matchCases.size(); ++i) {
+        uint64_t caseID = 0;
+        if (!GetDerivedTrivialEnumEqCaseID(*matchExpr.matchCases[i], patternEnumDecl, caseID) ||
+            !seenCaseIDs.emplace(caseID).second) {
+            return nullptr;
+        }
+    }
+    if (patternEnumDecl != enumDecl || seenCaseIDs.size() != enumDecl->constructors.size()) {
+        return nullptr;
+    }
+
+    auto lhsVal = TranslateExprArg(*tupleSelector->children[0]);
+    auto rhsVal = TranslateExprArg(*tupleSelector->children[1]);
+    SetSkipPrintWarning(*lhsVal);
+    SetSkipPrintWarning(*rhsVal);
+    auto lhsID = GetEnumIDValue(lhsTy, lhsVal);
+    auto rhsID = GetEnumIDValue(rhsTy, rhsVal);
+    auto block = GetCurrentBlock();
+    CJC_NULLPTR_CHECK(block);
+    auto boolTy = TranslateType(*matchExpr.GetTy());
+    auto rangeBound = CreateAndAppendConstantExpression<IntLiteral>(
+        lhsID->GetType(), *block, static_cast<uint64_t>(enumDecl->constructors.size()))
+                          ->GetResult();
+    const auto& loc = TranslateLocation(matchExpr);
+    auto same = CreateAndAppendExpression<BinaryExpression>(
+        loc, boolTy, CHIR::ExprKind::EQUAL, lhsID, rhsID, block)
+                    ->GetResult();
+    auto inRange = CreateAndAppendExpression<BinaryExpression>(
+        loc, boolTy, CHIR::ExprKind::LT, lhsID, rangeBound, block)
+                       ->GetResult();
+    auto sameAsInt = CreateWrappedTypeCast(loc, lhsID->GetType(), same, block)->GetResult();
+    auto inRangeAsInt = CreateWrappedTypeCast(loc, lhsID->GetType(), inRange, block)->GetResult();
+    auto both = CreateAndAppendExpression<BinaryExpression>(
+        loc, lhsID->GetType(), CHIR::ExprKind::BITAND, sameAsInt, inRangeAsInt, block)
+                    ->GetResult();
+    auto zero = CreateAndAppendConstantExpression<IntLiteral>(lhsID->GetType(), *block, static_cast<uint64_t>(0))
+                    ->GetResult();
+    return CreateAndAppendExpression<BinaryExpression>(
+        loc, boolTy, CHIR::ExprKind::NOTEQUAL, both, zero, block)
+        ->GetResult();
 }
 
 void Translator::TranslateMatchWithSelector(const AST::MatchExpr& matchExpr, Ptr<Value> retVal)
@@ -917,7 +1056,7 @@ std::unordered_map<size_t, std::vector<Ptr<Block>>> Translator::TranslateSecondL
         auto enumValueTuple = CastEnumValueToConstructorTupleType(enumVal, enumPattern);
         auto secondSelectVar =
             CreateAndAppendExpression<Field>(selectorTy, enumValueTuple, std::vector<uint64_t>{1}, currentBlock)
-                ->GetResult();                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+                ->GetResult();
         std::vector<uint64_t> indexes;
         std::vector<Block*> blocks;
         for (auto& [index, infos] : secondMap) {
