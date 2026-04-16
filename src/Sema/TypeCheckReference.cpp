@@ -19,7 +19,7 @@
 #include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/CmpNodeByPos.h"
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"

@@ -19,6 +19,29 @@
 #include "cangjie/AST/ASTContext.h"
 
 namespace Cangjie {
+namespace AST {
+struct Annotation;
+struct ClassBody;
+struct ExtendDecl;
+struct FuncBody;
+struct Generic;
+struct IfExpr;
+struct InterfaceBody;
+struct InterpolationExpr;
+struct LitConstExpr;
+struct MacroExpandDecl;
+struct MacroExpandExpr;
+struct MacroExpandParam;
+struct MainDecl;
+struct PropDecl;
+struct QuoteExpr;
+struct SpawnExpr;
+struct StrInterpolationExpr;
+struct StructBody;
+struct TryExpr;
+struct WhileExpr;
+} // namespace AST
+
 struct NodeInfo {
     AST::Node& node;
     std::string name;

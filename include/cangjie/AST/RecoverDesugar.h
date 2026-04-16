@@ -13,9 +13,14 @@
 #ifndef CANGJIE_RECOVERDESUGAR_H
 #define CANGJIE_RECOVERDESUGAR_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 namespace Cangjie::AST {
+struct AssignExpr;
+struct BinaryExpr;
+struct CallExpr;
+struct SubscriptExpr;
+struct UnaryExpr;
 void RecoverToBinaryExpr(BinaryExpr& be);
 void RecoverToUnaryExpr(UnaryExpr& ue);
 void RecoverToSubscriptExpr(SubscriptExpr& se);

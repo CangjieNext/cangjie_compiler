@@ -12,7 +12,7 @@
 #define CANGJIE_ASTCHECKER_H
 #include <unordered_map>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Lex/Lexer.h"
 
 #define AST_NULLPTR_CHECK(node, f)                                                                                     \
@@ -84,6 +84,7 @@
     } while (0)
 
 namespace Cangjie::AST {
+struct Package;
 class ASTChecker {
 
 public:

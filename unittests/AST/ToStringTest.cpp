@@ -6,7 +6,7 @@
 
 #include <gtest/gtest.h>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 #include "cangjie/AST/Match.h"
 

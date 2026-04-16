@@ -151,8 +151,7 @@ OwnedPtr<AST::Type> ParserImpl::ParseTupleType(
     return tupleType;
 }
 
-OwnedPtr<Type> ParserImpl::ParseTypeParameterInTupleType(
-    std::unordered_map<std::string, Position>& typeNameMap)
+OwnedPtr<AST::Type> ParserImpl::ParseTypeParameterInTupleType(std::unordered_map<std::string, Position>& typeNameMap)
 {
     while (Skip(TokenKind::NL)) {
     }

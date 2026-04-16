@@ -15,7 +15,12 @@
 #include <vector>
 #include <variant>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Annotation.h"
+#include "cangjie/AST/Nodes/File.h"
+#include "cangjie/AST/Nodes/MacroInvocation.h"
+#include "cangjie/AST/Nodes/Modifier.h"
+#include "cangjie/AST/Nodes/VarDecl.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 
 namespace Cangjie {

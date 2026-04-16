@@ -12,8 +12,10 @@
 
 #include "PrintSymbolTable.h"
 
+#include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Symbol.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/Print.h"
 
 using namespace Cangjie;

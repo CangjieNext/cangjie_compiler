@@ -25,6 +25,10 @@
 #include <unordered_map>
 #include <vector>
 
+namespace Cangjie {
+enum class OverflowStrategy : uint8_t;
+}
+
 namespace Cangjie::CHIR {
 class CHIRBuilder;
 class ExprTypeConverter;
@@ -411,7 +415,7 @@ private:
 
     BinaryExpression* Clone(CHIRBuilder& builder, Block& parent) const override;
 
-    Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
+    Cangjie::OverflowStrategy overflowStrategy;
 };
 
 /**
@@ -1208,7 +1212,7 @@ private:
 
     TypeCast* Clone(CHIRBuilder& builder, Block& parent) const override;
 
-    Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
+    Cangjie::OverflowStrategy overflowStrategy;
 };
 
 /**

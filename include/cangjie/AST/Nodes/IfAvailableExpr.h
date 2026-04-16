@@ -7,23 +7,22 @@
 /**
  * @file
  *
- * AST nodes mainly includes eXtra AST nodes. These nodes are not available to Parser and libast, but visible to
- * semantic checkings. In other words, these nodes are pure semantic nodes.
+ * `IfAvailableExpr` — semantic-only AST node (not produced by the parser / libast).
  */
 
-#ifndef CANGJIE_AST_NODEX_H
-#define CANGJIE_AST_NODEX_H
+#ifndef CANGJIE_AST_IFAVAILABLEEXPR_H
+#define CANGJIE_AST_IFAVAILABLEEXPR_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Annotation.h"
+#include "cangjie/AST/Nodes/Expr.h"
+#include "cangjie/AST/Nodes/LambdaExpr.h"
+#include "cangjie/AST/Nodes/Modifier.h"
 
 namespace Cangjie::AST {
 /// @IfAvailable(name: arg, lambda1, lambda2) after macro expansion (before it is a MacroExpandExpr).
 struct IfAvailableExpr : public Expr {
-    IfAvailableExpr(OwnedPtr<FuncArg> namedArg, OwnedPtr<LambdaExpr> lambdaArg1, OwnedPtr<LambdaExpr> lambdaArg2)
-        : Expr{ASTKind::IF_AVAILABLE_EXPR}, arg{std::move(namedArg)}, lambda1{std::move(lambdaArg1)},
-        lambda2{std::move(lambdaArg2)}
-    {
-    }
+    IfAvailableExpr(OwnedPtr<FuncArg> namedArg, OwnedPtr<LambdaExpr> lambdaArg1, OwnedPtr<LambdaExpr> lambdaArg2);
+    ~IfAvailableExpr() override;
 
     Ptr<FuncArg> GetArg() const
     {
@@ -45,4 +44,4 @@ private:
 };
 
 } // namespace Cangjie::AST
-#endif
+#endif // CANGJIE_AST_IFAVAILABLEEXPR_H

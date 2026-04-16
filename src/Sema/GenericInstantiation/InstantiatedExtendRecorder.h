@@ -17,7 +17,7 @@
 #include "GenericInstantiationManagerImpl.h"
 
 #include "Promotion.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie {

@@ -12,6 +12,7 @@
 
 #include "cangjie/Macro/MacroEvaluation.h"
 #include "cangjie/Macro/TokenSerialization.h"
+#include "cangjie/Mangle/BaseMangler.h"
 
 using namespace Cangjie;
 using namespace AST;

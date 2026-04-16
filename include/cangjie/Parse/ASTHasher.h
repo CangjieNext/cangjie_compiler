@@ -12,10 +12,11 @@
 #define CANGJIE_ASTHASHER_H
 #include <unordered_map>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Lex/Lexer.h"
 
 namespace Cangjie::AST {
+struct Package;
 class ASTHasher {
 public:
     // pass global options to ASTHasher before creating any instance of ASTHasher

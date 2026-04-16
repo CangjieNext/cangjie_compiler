@@ -13,7 +13,7 @@
 #include "cangjie/AST/ASTContext.h"
 
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/Utils.h"
 
@@ -83,7 +83,7 @@ std::string ASTContext::GetPackageName(Ptr<Node> node)
                 return VisitAction::WALK_CHILDREN;
             }
             case AST::ASTKind::REF_TYPE: {
-                auto rt = RawStaticCast<RefType*>(node);
+                auto rt = RawStaticCast<AST::RefType*>(node);
                 name = rt->ref.identifier + name;
                 return VisitAction::STOP_NOW;
             }

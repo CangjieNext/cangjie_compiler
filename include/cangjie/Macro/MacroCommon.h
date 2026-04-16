@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cangjie/AST/Nodes/FuncDecl.h"
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Macro/MacroCall.h"
 

@@ -12,10 +12,12 @@
 #ifndef CANGJIE_SEMA_DESUGAR_MACRO_H
 #define CANGJIE_SEMA_DESUGAR_MACRO_H
 
-#include "cangjie/AST/Node.h"
-
 namespace Cangjie {
-using namespace AST;
+namespace AST {
+struct File;
+struct FuncBody;
+struct QuoteExpr;
+} // namespace AST
 /**
  * Create a wrapper func decl like this
  *
@@ -68,7 +70,7 @@ using namespace AST;
  * @param ident : Macro decl's ident.
  * @param isAttr : True if is a attr macro.
  */
-void DesugarMacroDecl(File& file);
+void DesugarMacroDecl(AST::File& file);
 
 /**
  * Desugar quote expression.
@@ -79,8 +81,8 @@ void DesugarMacroDecl(File& file);
  *
  * @param qe : QuoteExpr desugared.
  */
-void DesugarQuoteExpr(QuoteExpr& qe);
+void DesugarQuoteExpr(AST::QuoteExpr& qe);
 
-void AddMacroContextInfo(FuncBody& funcBody);
+void AddMacroContextInfo(AST::FuncBody& funcBody);
 } // namespace Cangjie
 #endif

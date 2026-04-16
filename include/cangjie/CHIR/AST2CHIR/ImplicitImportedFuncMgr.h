@@ -7,7 +7,7 @@
 #ifndef CANGJIE_CHIR_IMPLICIT_IMPORTED_FUNC_MGR_H
 #define CANGJIE_CHIR_IMPLICIT_IMPORTED_FUNC_MGR_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/ASTKind.h"
 
 namespace Cangjie::CHIR {
 /**

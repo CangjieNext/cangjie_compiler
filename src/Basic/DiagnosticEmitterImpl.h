@@ -12,6 +12,7 @@
 #ifndef CANGJIE_BASIC_DIAGNOSTICEMITTERIMPL_H
 #define CANGJIE_BASIC_DIAGNOSTICEMITTERIMPL_H
 
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagnosticEmitter.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 

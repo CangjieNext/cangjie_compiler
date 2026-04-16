@@ -14,6 +14,7 @@
 #include <sstream>
 
 #include "cangjie/AST/Utils.h"
+#include "cangjie/Frontend/CHIRData.h"
 #include "cangjie/Basic/StringConvertor.h"
 #include "cangjie/Basic/Version.h"
 #include "cangjie/Driver/TempFileManager.h"
@@ -57,7 +58,7 @@ void IncrementalCompilerInstance::SaveCompilationResult(Cangjie::IncreResult&& r
             declsToBeReCompiled.clear();
             [[fallthrough]];
         case IncreKind::INCR:
-            cachedInfo = std::move(result.cacheInfo);
+            *cachedInfo = std::move(result.cacheInfo);
             CacheCompileArgs();
             declsToBeReCompiled = std::move(result.declsToRecompile);
             rawIncrRemovedDecls = std::move(result.deleted);
@@ -71,21 +72,21 @@ void IncrementalCompilerInstance::SaveCompilationResult(Cangjie::IncreResult&& r
                 if (changed->TestAttr(Attribute::IMPORTED) && (changed->IsFunc() || IsGlobalOrStaticVar(*changed))) {
                     cacheMangles.EmplaceImportedInlineDeclPtr(*changed);
                 } else {
-                    Sema::CollectRemovedManglesForReCompile(*changed, cachedInfo.semaInfo,
+                    Sema::CollectRemovedManglesForReCompile(*changed, cachedInfo->semaInfo,
                         cacheMangles.incrRemovedDecls);
                 }
             }
             for (auto removed : rawIncrRemovedDecls) {
-                Sema::CollectRemovedMangles(removed, cachedInfo.semaInfo, cacheMangles.incrRemovedDecls);
+                Sema::CollectRemovedMangles(removed, cachedInfo->semaInfo, cacheMangles.incrRemovedDecls);
             }
             // NOTE: since 'declsToBeReCompiled' and 'rawIncrRemovedDecls' have been process,
             // this loop will only remove the re-boxed built-in types' related decls.
             for (auto typeMangle : result.reBoxedTypes) {
-                Sema::CollectRemovedMangles(typeMangle, cachedInfo.semaInfo, cacheMangles.incrRemovedDecls);
+                Sema::CollectRemovedMangles(typeMangle, cachedInfo->semaInfo, cacheMangles.incrRemovedDecls);
             }
             break;
         case IncreKind::NO_CHANGE:
-            cachedInfo.bitcodeFilesName = std::move(result.cacheInfo.bitcodeFilesName);
+            cachedInfo->bitcodeFilesName = std::move(result.cacheInfo.bitcodeFilesName);
             break;
         case IncreKind::EMPTY_PKG:
             break;
@@ -218,8 +219,8 @@ bool IncrementalCompilerInstance::PerformIncrementalScopeAnalysis()
         return true;
     }
 
-    auto increRes = IncrementalScopeAnalysis({rawMangleName2DeclMap, std::move(astCacheInfo), *package, options,
-        *importManager, cachedInfo, fileMap, std::move(directExtends)});
+    auto increRes = IncrementalScopeAnalysis({rawMangleName2DeclMap, std::move(*astCacheInfo), *package, options,
+        *importManager, *cachedInfo, fileMap, std::move(directExtends)});
     if (increRes.kind == IncreKind::INCR) {
         // check cached bitcode infos
         const std::string& packageName = package->fullPackageName;
@@ -282,7 +283,7 @@ bool IncrementalCompilerInstance::PerformSema()
     // Load cached types. Should only exist exactly one source package.
     for (auto srcPkg : GetSourcePackages()) {
         srcPkg->EnableAttr(Attribute::INCRE_COMPILE);
-        Sema::HandleCtorForIncr(*srcPkg, mangledName2DeclMap, cachedInfo.semaInfo);
+        Sema::HandleCtorForIncr(*srcPkg, mangledName2DeclMap, cachedInfo->semaInfo);
         cacheMangles.incrRemovedDecls.merge(importManager->LoadCachedTypeForPackage(*srcPkg, mangledName2DeclMap));
     }
     Sema::MarkIncrementalCheckForCtor(declsToBeReCompiled);
@@ -377,27 +378,27 @@ void IncrementalCompilerInstance::UpdateCachedInfo()
     UpdateMangleNameForCachedInfo();
     UpdateCHIROptEffectMap();
     if (kind == IncreKind::ROLLBACK) {
-        cachedInfo.virtualFuncDep = std::move(chirInfo.curVirtFuncWrapDep);
-        cachedInfo.ccOutFuncs = std::move(chirInfo.ccOutFuncsRawMangle);
-        cachedInfo.varInitDepMap = std::move(chirInfo.varInitDepMap);
+        cachedInfo->virtualFuncDep = std::move(chirInfo->curVirtFuncWrapDep);
+        cachedInfo->ccOutFuncs = std::move(chirInfo->ccOutFuncsRawMangle);
+        cachedInfo->varInitDepMap = std::move(chirInfo->varInitDepMap);
     } else if (kind == IncreKind::INCR) {
-        for (auto& [raw, _] : chirInfo.delVirtFuncWrapForIncr) {
-            cachedInfo.virtualFuncDep.erase(raw);
+        for (auto& [raw, _] : chirInfo->delVirtFuncWrapForIncr) {
+            cachedInfo->virtualFuncDep.erase(raw);
         }
-        for (auto& [raw, warp] : chirInfo.curVirtFuncWrapDep) {
-            cachedInfo.virtualFuncDep[raw] = warp;
+        for (auto& [raw, warp] : chirInfo->curVirtFuncWrapDep) {
+            cachedInfo->virtualFuncDep[raw] = warp;
         }
         for (auto& rm : std::as_const(rawIncrRemovedDecls)) {
-            cachedInfo.varInitDepMap.erase(rm);
+            cachedInfo->varInitDepMap.erase(rm);
         }
-        for (auto& [raw, warp] : chirInfo.varInitDepMap) {
-            cachedInfo.varInitDepMap[raw] = warp;
+        for (auto& [raw, warp] : chirInfo->varInitDepMap) {
+            cachedInfo->varInitDepMap[raw] = warp;
         }
-        cachedInfo.ccOutFuncs.merge(std::move(chirInfo.ccOutFuncsRawMangle));
+        cachedInfo->ccOutFuncs.merge(std::move(chirInfo->ccOutFuncsRawMangle));
     }
     // Update usage of compiler added.
     for (auto pkg : GetSourcePackages()) {
-        Sema::CollectCompilerAddedDeclUsage(*pkg, cachedInfo.semaInfo);
+        Sema::CollectCompilerAddedDeclUsage(*pkg, cachedInfo->semaInfo);
     }
 }
 
@@ -412,10 +413,10 @@ void DeleteRecompiledNodesInCHIROptEffectMap(
 
 void IncrementalCompilerInstance::UpdateCHIROptEffectMap()
 {
-    DeleteRemovedNodesInCHIROptEffectMap(rawIncrRemovedDecls, cachedInfo.chirOptInfo);
-    DeleteRecompiledNodesInCHIROptEffectMap(declsToBeReCompiled, cachedInfo.chirOptInfo);
+    DeleteRemovedNodesInCHIROptEffectMap(rawIncrRemovedDecls, cachedInfo->chirOptInfo);
+    DeleteRecompiledNodesInCHIROptEffectMap(declsToBeReCompiled, cachedInfo->chirOptInfo);
 
-    MergeCHIROptEffectMap(chirInfo.optEffectMap, cachedInfo.chirOptInfo, rawMangleName2DeclMap);
+    MergeCHIROptEffectMap(chirInfo->optEffectMap, cachedInfo->chirOptInfo, rawMangleName2DeclMap);
 }
 
 namespace {
@@ -454,20 +455,20 @@ bool IncrementalCompilerInstance::PerformCHIRCompilation()
         return true;
     }
     auto ret = CompilerInstance::PerformCHIRCompilation();
-    for (auto ty : chirInfo.ccTys) {
+    for (auto ty : chirInfo->ccTys) {
         changedTypes.insert(ty);
     }
     if (kind == IncreKind::INCR) {
-        UpdateIncrRemovedDeclsForVirtualFuncDep(cacheMangles, rawIncrRemovedDecls, cachedInfo.virtualFuncDep,
-            chirInfo.delVirtFuncWrapForIncr);
-        UpdateIncrRemovedDeclsForVarInitDep(cacheMangles, rawIncrRemovedDecls, cachedInfo.varInitDepMap);
+        UpdateIncrRemovedDeclsForVirtualFuncDep(cacheMangles, rawIncrRemovedDecls, cachedInfo->virtualFuncDep,
+            chirInfo->delVirtFuncWrapForIncr);
+        UpdateIncrRemovedDeclsForVarInitDep(cacheMangles, rawIncrRemovedDecls, cachedInfo->varInitDepMap);
     }
     return ret;
 }
 
 void IncrementalCompilerInstance::LoadCachedCodegenResult() const
 {
-    for (auto fileName : cachedInfo.bitcodeFilesName) {
+    for (auto fileName : cachedInfo->bitcodeFilesName) {
         auto cachePath = invocation.globalOptions.GenerateCachedPathNameForCodeGen(fileName, ".bc");
         TempFileInfo bcFileInfo = TempFileInfo{fileName, cachePath, "", true};
         invocation.globalOptions.frontendOutputFiles.emplace_back(bcFileInfo);

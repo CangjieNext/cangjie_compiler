@@ -13,7 +13,7 @@
 #ifndef CANGJIE_MACROEVALUATION_H
 #define CANGJIE_MACROEVALUATION_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #ifdef _WIN32
 #include <windows.h>
 // we need to undefine THIS, INTERFACE, and FASTCALL which are defined by MinGW

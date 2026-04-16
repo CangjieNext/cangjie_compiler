@@ -16,7 +16,7 @@
 #include <atomic>
 #include <string>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 namespace Cangjie {
 class Collector;

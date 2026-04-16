@@ -16,11 +16,11 @@
 #include <csignal>
 #endif
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Nodes/Node.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/IncrementalCompilation/Utils.h"
-#include "cangjie/AST/ASTCasting.h"
-#include "cangjie/AST/Utils.h"
 #include "cangjie/Utils/SipHash.h"
 
 static constexpr int ALL = 0;

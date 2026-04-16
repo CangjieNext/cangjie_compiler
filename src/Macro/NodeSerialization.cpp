@@ -13,7 +13,6 @@
 #include "cangjie/Macro/NodeSerialization.h"
 
 #include "cangjie/AST/ASTCasting.h"
-#include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"
@@ -342,8 +341,8 @@ flatbuffers::Offset<NodeFormat::Pattern> NodeWriter::SerializeExceptTypePattern(
     auto fbPattern = SerializePattern(exceptTypePattern->pattern.get());
     auto patternPos = FlatPosCreateHelper(exceptTypePattern->patternPos);
     auto colonPos = FlatPosCreateHelper(exceptTypePattern->colonPos);
-    auto fbTypes =
-        FlatVectorCreateHelper<NodeFormat::Type, Type, AstType>(exceptTypePattern->types, &NodeWriter::SerializeType);
+    auto fbTypes = FlatVectorCreateHelper<NodeFormat::Type, AST::Type, AstType>(
+        exceptTypePattern->types, &NodeWriter::SerializeType);
     auto bitOrPosVector = CreatePositionVector(exceptTypePattern->bitOrPosVector);
     auto fbExceptTypePattern = NodeFormat::CreateExceptTypePattern(
         builder, fbNodeBase, fbPattern, &patternPos, &colonPos, fbTypes, bitOrPosVector);
@@ -358,8 +357,8 @@ flatbuffers::Offset<NodeFormat::Pattern> NodeWriter::SerializeCommandTypePattern
     auto fbPattern = SerializePattern(effectTypePattern->pattern.get());
     auto patternPos = FlatPosCreateHelper(effectTypePattern->patternPos);
     auto colonPos = FlatPosCreateHelper(effectTypePattern->colonPos);
-    auto fbTypes =
-        FlatVectorCreateHelper<NodeFormat::Type, Type, AstType>(effectTypePattern->types, &NodeWriter::SerializeType);
+    auto fbTypes = FlatVectorCreateHelper<NodeFormat::Type, AST::Type, AstType>(
+        effectTypePattern->types, &NodeWriter::SerializeType);
     auto bitOrPosVector = CreatePositionVector(effectTypePattern->bitOrPosVector);
     auto fbCommandTypePattern = NodeFormat::CreateCommandTypePattern(
         builder, fbNodeBase, fbPattern, &patternPos, &colonPos, fbTypes, bitOrPosVector);

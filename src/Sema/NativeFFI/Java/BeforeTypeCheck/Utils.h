@@ -12,7 +12,7 @@
 #ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_BEFORE_TYPE_CHECK_UTILS
 #define CANGJIE_SEMA_NATIVE_FFI_JAVA_BEFORE_TYPE_CHECK_UTILS
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
 

@@ -11,10 +11,13 @@
 #include <queue>
 #include <stack>
 
-#include "cangjie/AST/Node.h"
-#include "cangjie/AST/Walker.h"
-#include "cangjie/Sema/GenericInstantiationManager.h"
+#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/CHIR/Utils/Utils.h"
+#include "cangjie/Frontend/CompilerInstance.h"
 
+namespace Cangjie::AST {
+enum class VisitAction : uint8_t;
+}
 namespace Cangjie::CHIR {
 class GlobalDeclAnalysis {
 public:

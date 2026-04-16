@@ -13,10 +13,9 @@
 #ifndef CANGJIE_MACROEXPAND_H
 #define CANGJIE_MACROEXPAND_H
 
-#include <cangjie/AST/Node.h>
+#include "cangjie/AST/Nodes/Node.h"
 #include <list>
 
-#include "cangjie/AST/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Macro/InvokeUtil.h"

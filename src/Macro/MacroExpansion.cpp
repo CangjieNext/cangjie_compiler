@@ -7,6 +7,7 @@
 #include "cangjie/Macro/MacroExpansion.h"
 
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Print.h"
@@ -14,6 +15,7 @@
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Macro/MacroEvaluation.h"
 #include "cangjie/Macro/TestEntryConstructor.h"
+#include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Parse/Parser.h"
 
 #include <cstdio>

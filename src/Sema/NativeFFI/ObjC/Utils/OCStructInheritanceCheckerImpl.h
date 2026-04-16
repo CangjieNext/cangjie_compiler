@@ -15,7 +15,7 @@
 
 #include "Common.h"
 #include "InheritanceChecker/StructInheritanceChecker.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Sema/TypeManager.h"
 

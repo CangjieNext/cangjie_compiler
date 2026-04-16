@@ -14,12 +14,13 @@
 #define CANGJIE_CHIR_CHIR_H
 
 #include "cangjie/CHIR/AST2CHIR/AST2CHIR.h"
-#include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
-#include "cangjie/CHIR/Analysis/ValueRangeAnalysis.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/Utils/TaskQueue.h"
 
 namespace Cangjie::CHIR {
+class DevirtualizationInfo;
+
 class ToCHIR {
 public:
     ToCHIR(CompilerInstance& ci, AST::Package& pkg, ConstAnalysisWrapper& constAnalysisWrapper, CHIRBuilder& builder)
@@ -34,7 +35,7 @@ public:
           pkg(&pkg),
           outputPath(ci.invocation.globalOptions.output),
           kind(ci.kind),
-          cachedInfo(ci.cachedInfo),
+          cachedInfo(*ci.cachedInfo),
           releaseCHIRMemory(ci.releaseCHIRMemory),
           needToOptString(ci.needToOptString),
           needToOptGenericDecl(ci.needToOptGenericDecl),

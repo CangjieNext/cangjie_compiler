@@ -17,6 +17,7 @@
 #include "cangjie/CHIR/IR/Type/ExtendDef.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
+#include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"

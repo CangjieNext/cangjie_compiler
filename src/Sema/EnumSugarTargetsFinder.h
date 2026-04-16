@@ -17,7 +17,6 @@
 
 #include "TypeCheckerImpl.h"
 #include "cangjie/AST/ASTContext.h"
-#include "cangjie/AST/Node.h"
 #include "cangjie/Modules/ImportManager.h"
 
 namespace Cangjie {

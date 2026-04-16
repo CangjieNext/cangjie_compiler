@@ -15,7 +15,7 @@
 
 #include <functional>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Sema/TestManager.h"
 namespace Cangjie {
 /** Get @p decl 's sema type. If decl is extend decl, get it's extended sema type. */

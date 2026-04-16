@@ -14,7 +14,7 @@
 #define CANGJIE_SEMA_OBJ_C_TYPECHECK_CONTEXT
 
 #include "NativeFFI/ObjC/Utils/TypeMapper.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 
 namespace Cangjie::Interop::ObjC {

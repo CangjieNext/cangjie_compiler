@@ -1490,6 +1490,9 @@ bool Translator::HasNothingTypeArg(std::vector<Value*>& args) const
 
 Ptr<Value> Translator::ProcessCallExpr(const AST::CallExpr& expr)
 {
+    if (expr.begin.line==39&&expr.begin.column==71) {
+        printf("here\n");
+    }
     if (auto res = TranslateIntrinsicCall(expr); res) {
         return res;
     }

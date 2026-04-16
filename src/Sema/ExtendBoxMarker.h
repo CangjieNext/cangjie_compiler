@@ -16,11 +16,27 @@
 #include <functional>
 #include <mutex>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie {
+namespace AST {
+struct ArrayExpr;
+struct ArrayLit;
+struct AssignExpr;
+struct CallExpr;
+struct Expr;
+struct IfExpr;
+struct MatchExpr;
+struct Pattern;
+struct ReturnExpr;
+struct TryExpr;
+struct TupleLit;
+struct VarDecl;
+struct WhileExpr;
+} // namespace AST
+
 class ExtendBoxMarker {
 public:
     static std::function<AST::VisitAction(Ptr<AST::Node>)> GetMarkExtendBoxFunc(TypeManager& typeMgr);

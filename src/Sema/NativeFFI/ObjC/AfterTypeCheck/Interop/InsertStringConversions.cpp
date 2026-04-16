@@ -12,12 +12,12 @@
  *  - `toString(): String` for NSObject class.
  */
 
-#include "NativeFFI/ObjC/Utils/Common.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/Common.h"
 #include "NativeFFI/Utils.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Create.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include <string>
 #include <string_view>

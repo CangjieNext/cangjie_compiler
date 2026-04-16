@@ -13,6 +13,7 @@
 
 #include "cangjie/Basic/DiagnosticEmitter.h"
 #include "cangjie/Macro/TokenSerialization.h"
+#include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
 #include "cangjie/Macro/MacroCall.h"

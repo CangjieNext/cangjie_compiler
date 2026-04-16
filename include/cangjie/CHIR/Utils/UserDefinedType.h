@@ -7,13 +7,17 @@
 #ifndef CANGJIE_CHIR_USER_DEFINED_TYPE_H
 #define CANGJIE_CHIR_USER_DEFINED_TYPE_H
 
-#include "cangjie/AST/Node.h"
 #include "cangjie/CHIR/IR/AttributeInfo.h"
+#include "cangjie/Utils/SafePointer.h"
 #include <functional>
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+namespace Cangjie::AST {
+struct Decl;
+}
 
 namespace Cangjie::CHIR {
 

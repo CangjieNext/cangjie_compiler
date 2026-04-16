@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "MockContext.h"
+#include "cangjie/AST/Nodes/Package.h"
 
 namespace Cangjie {
 

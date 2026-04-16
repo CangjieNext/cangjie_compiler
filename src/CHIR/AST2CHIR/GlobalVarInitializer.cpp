@@ -6,12 +6,13 @@
 
 #include "cangjie/CHIR/AST2CHIR/GlobalVarInitializer.h"
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/IR/Annotation.h"
-#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Package.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/Utils.h"
+#include "cangjie/Modules/ImportManager.h"
 
 using namespace Cangjie;
 using namespace CHIR;

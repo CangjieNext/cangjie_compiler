@@ -13,11 +13,11 @@
 #ifndef CANGJIE_SEMA_OBJ_C_UTILS_TYPE_MAPPER_H
 #define CANGJIE_SEMA_OBJ_C_UTILS_TYPE_MAPPER_H
 
-#include "cangjie/AST/Node.h"
+#include "InteropLibBridge.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/SafePointer.h"
-#include "InteropLibBridge.h"
 
 namespace Cangjie::Interop::ObjC {
 

@@ -12,7 +12,8 @@
 #ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_TYPE_CHECK_ANNOTATION_H
 #define CANGJIE_SEMA_NATIVE_FFI_JAVA_TYPE_CHECK_ANNOTATION_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Annotation.h"
+#include "cangjie/AST/Nodes/Decl.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 
 namespace Cangjie::Interop::Java {

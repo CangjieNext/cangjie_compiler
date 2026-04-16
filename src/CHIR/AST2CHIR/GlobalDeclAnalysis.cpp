@@ -7,8 +7,12 @@
 #include "cangjie/CHIR/AST2CHIR/GlobalDeclAnalysis.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/CHIR/Utils/Utils.h"
+#include "cangjie/IncrementalCompilation/CompilationCache.h"
+#include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
+#include "cangjie/Sema/GenericInstantiationManager.h"
 
 #include <stack>
 

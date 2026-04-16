@@ -9,6 +9,7 @@
 #include "CGModule.h"
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/CHIR/Utils/Utils.h"
+#include "cangjie/Frontend/CHIRData.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
 namespace Cangjie::CodeGen {

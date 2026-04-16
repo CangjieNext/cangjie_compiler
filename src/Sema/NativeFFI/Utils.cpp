@@ -10,7 +10,7 @@
 #include "Desugar/AfterTypeCheck.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Utils/CastingTemplate.h"

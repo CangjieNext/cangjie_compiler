@@ -16,6 +16,9 @@
 #include "cangjie/CHIR/IR/Type/Type.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 
+namespace Cangjie {
+enum class OverflowStrategy : uint8_t;
+}
 namespace Cangjie::CHIRMangling {
 inline const std::string MANGLE_VIRTUAL_PREFIX = "_CV";
 inline const std::string MANGLE_MUTABLE_PREFIX = "_CM";

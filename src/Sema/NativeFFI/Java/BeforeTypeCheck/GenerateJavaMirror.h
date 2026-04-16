@@ -7,7 +7,7 @@
 #ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_BEFORE_TYPECHECK_GENERATE_JAVA_MIRROR
 #define CANGJIE_SEMA_NATIVE_FFI_JAVA_BEFORE_TYPECHECK_GENERATE_JAVA_MIRROR
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Modules/ImportManager.h"
 
 
