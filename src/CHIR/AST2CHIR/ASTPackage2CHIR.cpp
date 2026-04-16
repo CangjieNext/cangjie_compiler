@@ -1019,7 +1019,7 @@ void AST2CHIR::CreateAnnoOnlyDeclSig(const AST::Decl& decl)
         tr.CreateAnnoFactoryFuncsForFuncDecl(*funcDecl, nullptr);
     } else {
         auto fn = tr.CreateAnnoFactoryFuncSig(decl, nullptr);
-        if (fn.mangledName != "none") {
+        if (fn.IsAvailable()) {
             if (auto var = DynamicCast<AST::VarDecl>(&decl)) {
                 globalCache.Get(*var)->SetAnnoInfo(std::move(fn));
             }

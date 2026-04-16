@@ -15,7 +15,6 @@ namespace Cangjie::CHIR {
 std::string AnnotationMap::ToString() const
 {
     std::stringstream ss;
-    ss << loc.ToString();
     for (auto& pair : annotations) {
         auto str = pair.second->ToString();
         if (str.empty()) {

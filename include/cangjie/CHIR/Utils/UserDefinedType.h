@@ -35,6 +35,8 @@ struct FuncSigInfo {
     FuncType* funcType{nullptr};  // declared type, including `this` type and return type
                                   // there may be generic type in it
     std::vector<GenericType*> genericTypeParams;
+
+    std::string ToString() const;
 };
 
 struct FuncCallType {

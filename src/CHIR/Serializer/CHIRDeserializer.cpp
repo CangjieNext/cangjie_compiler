@@ -193,7 +193,7 @@ template <> DebugLocation CHIRDeserializer::CHIRDeserializerImpl::Create(const P
 template <> AnnoInfo CHIRDeserializer::CHIRDeserializerImpl::Create(const PackageFormat::AnnoInfo* obj)
 {
     auto mangledName = obj->mangledName()->str();
-    return AnnoInfo{mangledName};
+    return AnnoInfo(mangledName, std::vector<CustomAnnoInstance>{});
 }
 
 template <> Tuple* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFormat::Tuple* obj);
@@ -1126,24 +1126,6 @@ template <> Intrinsic* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const
         .instTypeArgs = GetType<Type>(obj->instantiatedTypeArgs())
     };
     return builder.CreateExpression<Intrinsic>(resultTy, callContext, parentBlock);
-}
-
-template <> If* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFormat::If* obj)
-{
-    auto cond = GetValue<Value>(obj->base()->operands()->Get(0));
-    auto thenBody = GetValue<BlockGroup>(obj->base()->blockGroups()->Get(0));
-    auto elseBody = GetValue<BlockGroup>(obj->base()->blockGroups()->Get(1));
-    auto parentBlock = GetValue<Block>(obj->base()->parentBlock());
-    auto resultTy = GetType<Type>(obj->base()->resultTy());
-    return builder.CreateExpression<If>(resultTy, cond, thenBody, elseBody, parentBlock);
-}
-
-template <> Loop* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFormat::Loop* obj)
-{
-    auto loopBody = GetValue<BlockGroup>(obj->base()->blockGroups()->Get(0));
-    auto parentBlock = GetValue<Block>(obj->base()->parentBlock());
-    auto resultTy = GetType<Type>(obj->base()->resultTy());
-    return builder.CreateExpression<Loop>(resultTy, loopBody, parentBlock);
 }
 
 template <> ForInRange* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFormat::ForInRange* obj)
@@ -2291,17 +2273,6 @@ Expression* CHIRDeserializer::CHIRDeserializerImpl::GetExpression(uint32_t id)
                 id2Expression[id] =
                     Deserialize<Intrinsic>(static_cast<const PackageFormat::Intrinsic*>(pool->exprs()->Get(id - 1)));
                 ConfigExpression(static_cast<const PackageFormat::Intrinsic*>(pool->exprs()->Get(id - 1))->base(),
-                    *id2Expression[id]);
-                break;
-            case PackageFormat::ExpressionElem_If:
-                id2Expression[id] = Deserialize<If>(static_cast<const PackageFormat::If*>(pool->exprs()->Get(id - 1)));
-                ConfigExpression(static_cast<const PackageFormat::If*>(pool->exprs()->Get(id - 1))->base(),
-                    *id2Expression[id]);
-                break;
-            case PackageFormat::ExpressionElem_Loop:
-                id2Expression[id] =
-                    Deserialize<Loop>(static_cast<const PackageFormat::Loop*>(pool->exprs()->Get(id - 1)));
-                ConfigExpression(static_cast<const PackageFormat::Loop*>(pool->exprs()->Get(id - 1))->base(),
                     *id2Expression[id]);
                 break;
             case PackageFormat::ExpressionElem_ForInRange:

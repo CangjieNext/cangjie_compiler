@@ -134,8 +134,8 @@ void AnnotationChecker::CheckTargetsOnGlobalFunc(const Function& func)
 
 void AnnotationChecker::CheckTargets(const AnnoInfo& annoInfo, const std::string& target)
 {
-    for (const auto& annoPair : annoInfo.annoPairs) {
-        auto annoClassName = annoPair.annoClassName;
+    for (const auto& annoPair : annoInfo.GetCustomAnnoInstances()) {
+        auto annoClassName = annoPair.GetAnnoClassName();
         auto it = annotationTargets.find(annoClassName);
         CJC_ASSERT(it != annotationTargets.end());
         if (it->second.empty()) {
@@ -144,7 +144,7 @@ void AnnotationChecker::CheckTargets(const AnnoInfo& annoInfo, const std::string
         if (it->second.find(target) != it->second.end()) {
             continue;
         }
-        auto [_, loc] = ToRangeIfNotZero(annoPair.loc);
+        auto [_, loc] = ToRangeIfNotZero(annoPair.GetDebugLocation());
         diag.DiagnoseRefactor(
             DiagKindRefactor::chir_annotation_not_applicable, loc, annoClassName, targetToErrMsg.at(target));
     }
