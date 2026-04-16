@@ -181,7 +181,8 @@ void CompilerInstance::DestroyASTResources()
         info.pkgCtxMap.clear();
         Utils::FreeIdleMemoryToOS();
     };
-    destroyFut = std::async(std::launch::async, destroyFunc, std::move(info));
+    destroyFut =
+        DebugFuture(std::async(std::launch::async, destroyFunc, std::move(info)), invocation.globalOptions.scanDepPkg);
 }
 
 bool CompilerInstance::InitCompilerInstance()
