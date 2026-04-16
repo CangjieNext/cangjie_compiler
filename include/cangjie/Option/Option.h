@@ -68,7 +68,7 @@ enum class DiagFormat : uint8_t { JSON, NO_COLOR, DEFAULT };
  *               but throw an exception at runtime when trying to create mock.
  * default: compile with no passed explicit mock option
  * */
-enum class MockSupportKind : uint8_t { ON, OFF, RUNTIME_ERROR, DEFAULT };
+enum class MockMode : uint8_t { ON, OFF, RUNTIME_ERROR, DEFAULT };
 
 class Option {
 public:
@@ -556,7 +556,7 @@ public:
 
     bool exportForTest = false; /** Export some additional kinds of declaration specifically for using them in tests */
 
-    MockSupportKind mock = MockSupportKind::DEFAULT; /**< Whether enable mocking. */
+    MockMode mock = MockMode::DEFAULT; /**< Whether enable mocking. */
 
     DiagFormat diagFormat = DiagFormat::DEFAULT; /** Whether output diagnostic with color*/
 

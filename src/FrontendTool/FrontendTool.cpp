@@ -219,11 +219,11 @@ bool Cangjie::NeedCreateIncrementalCompilerInstance(const GlobalOptions& opts)
     auto& logger = IncrementalCompilationLogger::GetInstance();
     logger.SetDebugPrint(opts.printIncrementalInfo);
     if (opts.enIncrementalCompilation) {
-        if (opts.mock == MockSupportKind::ON) {
+        if (opts.mock == MockMode::ON) {
             logger.LogLn("enable mock, roll back to full compilation");
         } else if (opts.enableCoverage) {
             logger.LogLn("enable coverage, roll back to full compilation");
         }
     }
-    return opts.enIncrementalCompilation && opts.mock != MockSupportKind::ON && !opts.enableCoverage;
+    return opts.enIncrementalCompilation && opts.mock != MockMode::ON && !opts.enableCoverage;
 }

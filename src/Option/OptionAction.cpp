@@ -662,11 +662,11 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     // ---------- MOCKING OPTIONS ----------
     { Options::ID::MOCK, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         if (arg.value == "on") {
-            opts.mock = MockSupportKind::ON;
+            opts.mock = MockMode::ON;
         } else if (arg.value == "runtime-error") {
-            opts.mock = MockSupportKind::RUNTIME_ERROR;
+            opts.mock = MockMode::RUNTIME_ERROR;
         } else if (arg.value == "off") {
-            opts.mock = MockSupportKind::OFF;
+            opts.mock = MockMode::OFF;
         }
         return true;
     }},

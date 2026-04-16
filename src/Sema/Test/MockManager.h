@@ -14,10 +14,10 @@
 #ifndef CANGJIE_SEMA_MOCK_MANAGER_H
 #define CANGJIE_SEMA_MOCK_MANAGER_H
 
-#include "cangjie/Sema/MockUtils.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Modules/ImportManager.h"
-#include "cangjie/Mangle/BaseMangler.h"
+
+#include "MockUtils.h"
 
 namespace Cangjie {
 
@@ -26,6 +26,7 @@ enum class MockKind : uint8_t;
 class MockManager {
 public:
     explicit MockManager(ImportManager& importManager, TypeManager& typeManager, const Ptr<MockUtils> mockUtils);
+    void LoadMockLibDecls();
 
     struct GeneratedClassResult {
         Ptr<AST::ClassDecl> classDecl;
@@ -52,19 +53,6 @@ private:
     static OwnedPtr<AST::VarDecl> CreateFieldDecl(
         AST::ClassLikeDecl& decl, const std::string& identifier, const Ptr<AST::Ty> ty, const AST::Package& curPkg
     );
-    static std::optional<std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>>> FindInitDecl(
-        AST::InheritableDecl& decl, TypeManager& typeManager,
-        std::vector<OwnedPtr<AST::Expr>>& args, const std::vector<Ptr<AST::Ty>> instTys = {});
-    static std::optional<std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>>> FindInitDecl(
-        AST::InheritableDecl& decl, TypeManager& typeManager,
-        const std::vector<Ptr<AST::Ty>> valueParamTys, const std::vector<Ptr<AST::Ty>> instTys = {});
-    static OwnedPtr<AST::CallExpr> CreateInitCall(
-        const std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>> initDeclInfo,
-        std::vector<OwnedPtr<AST::Expr>>& valueArgs,
-        AST::File& curFile, const std::vector<Ptr<AST::Ty>> instTys = {});
-    static OwnedPtr<AST::ThrowExpr> CreateThrowException(
-        AST::ClassDecl& exceptionDecl, std::vector<OwnedPtr<AST::Expr>> args,
-        AST::File& curFile, TypeManager& typeManager);
 
     TypeManager& typeManager;
     ImportManager& importManager;
@@ -73,8 +61,6 @@ private:
     std::map<std::string, OwnedPtr<AST::ClassDecl>> mockedClassDecls;
     std::map<Ptr<AST::ClassLikeDecl>, int> instantiationCounters;
     std::map<Ptr<const AST::FuncDecl>, bool> defaultForTypePresence;
-
-    Ptr<AST::ClassDecl> objectDecl;
 
     Ptr<AST::InterfaceDecl> callHandlerDecl;
     Ptr<AST::InterfaceDecl> mockedInterfaceDecl;
@@ -133,6 +119,7 @@ private:
     OwnedPtr<AST::ArrayLit> CreateParamsInfo(const AST::FuncDecl& decl, AST::File& curFile) const;
     OwnedPtr<AST::ArrayLit> CreateTypeParamsInfo(const AST::FuncDecl& decl, AST::File& curFile) const;
     OwnedPtr<AST::CallExpr> CreateFuncInfo(AST::FuncDecl& funcDecl, AST::File& curFile);
+    OwnedPtr<AST::Expr> CreateOuterDeclInfo(AST::FuncDecl& funcDecl, AST::File& curFile) const;
     OwnedPtr<AST::CallExpr> CreateDeclKind(const AST::FuncDecl& decl) const;
     OwnedPtr<AST::CallExpr> CreateCallInfo(
         AST::FuncDecl& originalFunction, OwnedPtr<AST::Expr> mockedArgsArray, OwnedPtr<AST::Expr> typeArgsArray,

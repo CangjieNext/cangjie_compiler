@@ -284,6 +284,13 @@ Ptr<Decl> GetMemberByOffset(const Decl& decl, size_t offset)
 void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pkg)
 {
     this->curPkg = &pkg;
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "RecordExtend");
+    // Collect extend decls by usage.
+    RecordExtend(*curPkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "RecordExtend");
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "testManager::PrepareToMock");
+    testManager->PrepareToMock(*curPkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "testManager::PrepareToMock");
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "instantiate");
     // Collect extend decls by usage.
     RecordExtend(*curPkg);
@@ -296,10 +303,9 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
         Walker(curPkg, instantiationWalkerID, instantiator, contextReset).Walk();
     }
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "instantiate");
-    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "testManager");
-    testManager->PreparePackageForTestIfNeeded(*curPkg);
-    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "testManager");
-
+    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "testManager::HandleCreateMock");
+    testManager->HandleCreateMock(*curPkg);
+    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "testManager::HandleCreateMock");
     // Do not perform rearrange, validation and deletion if errors generated.
     if (diag.GetErrorCount() != 0) {
         return;
@@ -920,7 +926,7 @@ void GIM::GenericInstantiationManagerImpl::GenericMemberAccessInstantiate(Member
     Walker walkBase(ma.baseExpr.get(), instantiationWalkerID, instantiator, contextReset);
     walkBase.Walk();
     auto invalid = !ma.target || !ma.baseExpr || !Ty::IsTyCorrect(ma.ty);
-    if (invalid || ma.target->astKind == ASTKind::PACKAGE_DECL || MockUtils::IsMockAccessor(*ma.target)) {
+    if (invalid || ma.target->astKind == ASTKind::PACKAGE_DECL || TestManager::IsMockAccessor(*ma.target)) {
         return;
     }
     auto target = GetRealTarget(ma.target);
