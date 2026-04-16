@@ -537,13 +537,7 @@ ExprKind DeSerialize(const PackageFormat::CHIRExprKind& kind)
         case CHIRExprKind_STORE_ELEMENT_BY_NAME:
             ret = ExprKind::STORE_ELEMENT_BY_NAME;
             break;
-            // Complext
-        case CHIRExprKind_IF:
-            ret = ExprKind::IF;
-            break;
-        case CHIRExprKind_LOOP:
-            ret = ExprKind::LOOP;
-            break;
+        // Complext
         case CHIRExprKind_FORIN_RANGE:
             ret = ExprKind::FORIN_RANGE;
             break;

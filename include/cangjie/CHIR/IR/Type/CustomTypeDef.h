@@ -9,6 +9,7 @@
 
 #include "cangjie/CHIR/IR/Value/Value.h"
 
+#include <cstddef>
 #include <optional>
 #include <memory>
 #include <string>
@@ -72,7 +73,7 @@ public:
     bool IsGenericDef() const;
 
     void Dump() const;
-    virtual std::string ToString() const;
+    std::string ToString() const;
 
     bool IsClass() const;
     /** @brief is class or interface */
@@ -90,6 +91,7 @@ public:
     void EnableAttr(Attribute attr);
     bool TestAttr(Attribute attr) const;
     void DisableAttr(Attribute attr);
+
     // ===--------------------------------------------------------------------===//
     // Super Parent
     // ===--------------------------------------------------------------------===//
@@ -199,6 +201,7 @@ public:
 
     Function* GetVarInitializationFunc() const;
     void SetVarInitializationFunc(Function* func);
+
     // ===--------------------------------------------------------------------===//
     // Annotation
     // ===--------------------------------------------------------------------===//
@@ -266,15 +269,15 @@ protected:
     {
     }
     virtual ~CustomTypeDef() = default;
-    virtual void PrintAttrAndTitle(std::stringstream& ss) const;
+    virtual std::string CustomTypeDefTitleToString() const;
     std::string GenericInsArgsToString(const CustomType& ty) const;
-    std::string GenericDefArgsToString() const;
-    void PrintParent(std::stringstream& ss) const;
-    virtual void PrintComment(std::stringstream& ss) const;
-    void PrintLocalVar(std::stringstream& ss) const;
-    void PrintStaticVar(std::stringstream& ss) const;
-    void PrintMethod(std::stringstream& ss) const;
-    void PrintVTable(std::stringstream& ss) const;
+    std::string ParentToString() const;
+    std::string CommentToString() const;
+    virtual std::string AddExtraComment() const;
+    virtual std::string LocalVarToString() const;
+    std::string StaticVarToString() const;
+    std::string MethodToString() const;
+    std::string VTableToString() const;
 
 protected:
     CustomDefKind kind : 8;

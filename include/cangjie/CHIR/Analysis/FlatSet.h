@@ -95,7 +95,7 @@ public:
         } else if (flatSetKind == FlatSetKind::Bottom) {
             return "bottom";
         } else {
-            return elem->ToString();
+            return elem->ToString(0);
         }
     }
 

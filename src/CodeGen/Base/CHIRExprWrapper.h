@@ -149,7 +149,7 @@ public:
     {
         if (GetInstantiatedTypeArgs().size() != GetCalleeTypeArgsNum()) {
 #ifndef NDEBUG
-            Errorln(chirExpr.ToString() + "\n");
+            Errorln(chirExpr.ToString(0) + "\n");
 #endif
             CJC_ASSERT_WITH_MSG(false, "Incorrect ApplyExpr from CHIR, type arguments are missing.");
         }
@@ -159,7 +159,7 @@ public:
     {
         if (GetInstantiatedTypeArgs().size() != GetCalleeTypeArgsNum()) {
 #ifndef NDEBUG
-            Errorln(chirExpr.ToString());
+            Errorln(chirExpr.ToString(0));
 #endif
             CJC_ASSERT_WITH_MSG(false, "Incorrect ApplyExpr from CHIR, type arguments are missing.");
         }
@@ -244,7 +244,7 @@ public:
         }
         if (!res) {
 #ifndef NDEBUG
-            Errorln("Should not get a nullptr:\n", chirExpr.ToString());
+            Errorln("Should not get a nullptr:\n", chirExpr.ToString(0));
 #endif
             CJC_ASSERT(false);
         }
@@ -383,7 +383,7 @@ public:
         }
         if (!res) {
 #ifndef NDEBUG
-            Errorln("Should not get a nullptr:\n", chirExpr.ToString());
+            Errorln("Should not get a nullptr:\n", chirExpr.ToString(0));
 #endif
             CJC_ASSERT(false);
         }
@@ -510,7 +510,7 @@ public:
         }
         if (!res) {
 #ifndef NDEBUG
-            Errorln("Should not get a nullptr:\n", chirExpr.ToString());
+            Errorln("Should not get a nullptr:\n", chirExpr.ToString(0));
 #endif
             CJC_ASSERT(false);
         }

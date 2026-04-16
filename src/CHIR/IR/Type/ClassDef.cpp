@@ -39,22 +39,6 @@ void ClassDef::SetSuperClassTy(ClassType& ty)
     superClassTy = &ty;
 }
 
-std::string ClassDef::ToString() const
-{
-    std::stringstream ss;
-    PrintAttrAndTitle(ss);
-    ss << " {";
-    PrintComment(ss);
-    ss << "\n";
-
-    PrintLocalVar(ss);
-    PrintStaticVar(ss);
-    PrintMethod(ss);
-    PrintVTable(ss);
-    ss << "}";
-    return ss.str();
-}
-
 bool ClassDef::IsAbstract() const
 {
     return TestAttr(CHIR::Attribute::ABSTRACT);
@@ -111,29 +95,17 @@ ClassType* ClassDef::GetType() const
     return StaticCast<ClassType>(type);
 }
 
-void ClassDef::PrintComment(std::stringstream& ss) const
+std::string ClassDef::AddExtraComment() const
 {
-    CustomTypeDef::PrintComment(ss);
     if (!IsAnnotation()) {
-        return;
-    }
-    AddCommaOrNot(ss);
-    if (ss.str().empty()) {
-        ss << " // ";
+        return "";
     }
     std::string targetStr;
     const auto& targets = annotationTargets.value();
     if (targets.empty()) {
-        targetStr = "ALL";
+        targetStr = "[ALL]";
     } else {
-        targetStr = "[";
-        for (size_t i = 0; i < targets.size(); ++i) {
-            targetStr += targets[i]->GetIdentifier();
-            if (i != targets.size() - 1) {
-                targetStr += ", ";
-            }
-        }
-        targetStr += "]";
+        targetStr = ValueIdVecToString("[", targets, "]");
     }
-    ss << "Annotation: " << targetStr;
+    return "AnnoTargets: " + targetStr;
 }
