@@ -11,8 +11,10 @@
  */
 #include "cangjie/CHIR/IR/Type/CustomTypeDef.h"
 
+#include <cstddef>
 #include <iostream>
 #include <optional>
+#include <sstream>
 #include <utility>
 
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
@@ -74,30 +76,21 @@ std::vector<ClassType*> CustomTypeDef::GetSuperTypesInCurDef() const
     return res;
 }
 
-std::string CustomTypeDef::GenericDefArgsToString() const
+std::string CustomTypeDef::CustomTypeDefTitleToString() const
 {
-    auto genericTypeParams = GetGenericTypeParams();
-    if (genericTypeParams.empty()) {
-        return "";
+    std::string kindStr;
+    if (IsInterface()) {
+        kindStr = "interface";
+    } else if (IsClass()) {
+        kindStr = "class";
+    } else if (IsStruct()) {
+        kindStr = "struct";
+    } else if (IsEnum()) {
+        kindStr = "enum";
+    } else if (IsExtend()) {
+        kindStr = "extend";
     }
-    std::string res;
-    res += "<";
-    for (size_t i = 0; i < genericTypeParams.size(); ++i) {
-        res += genericTypeParams[i]->ToString();
-        // not the last one
-        if (i != genericTypeParams.size() - 1) {
-            res += ", ";
-        }
-    }
-    res += ">";
-    return res;
-}
-
-void CustomTypeDef::PrintAttrAndTitle(std::stringstream& ss) const
-{
-    ss << attributeInfo.ToString();
-    ss << CustomTypeKindToString(*this) << " " << GetIdentifier() << GenericDefArgsToString();
-    PrintParent(ss);
+    return kindStr + " " + identifier + TypeVecToString("<", GetGenericTypeParams(), ">");
 }
 
 std::string CustomTypeDef::GenericInsArgsToString(const CustomType& ty) const
@@ -119,101 +112,113 @@ std::string CustomTypeDef::GenericInsArgsToString(const CustomType& ty) const
     return res;
 }
 
-void CustomTypeDef::PrintParent(std::stringstream& ss) const
+std::string CustomTypeDef::ParentToString() const
 {
     auto parentTys = GetSuperTypesInCurDef();
     if (parentTys.empty()) {
-        return;
+        return "";
     }
-    ss << " <: ";
-    for (size_t i = 0; i < parentTys.size(); ++i) {
-        ss << parentTys[i]->GetCustomTypeDef()->GetIdentifier() << GenericInsArgsToString(*parentTys[i]);
-        // not the last one
-        if (i != parentTys.size() - 1) {
-            ss << " & ";
-        }
-    }
+    return " <: " + TypeVecToString("", parentTys, "",  " & ");
 }
 
-void CustomTypeDef::PrintComment(std::stringstream& ss) const
+std::string CustomTypeDef::AddExtraComment() const
 {
-    std::stringstream comment;
-    if (!srcCodeIdentifier.empty()) {
-        comment << "srcCodeIdentifier: " << srcCodeIdentifier;
+    return "";
+}
+
+std::string CustomTypeDef::CommentToString() const
+{
+    std::vector<std::string> result;
+    if (auto baseComment = BaseCommentToString(); !baseComment.empty()) {
+        result.emplace_back(baseComment);
     }
-    AddCommaOrNot(comment);
+    if (!srcCodeIdentifier.empty()) {
+        result.emplace_back("srcCodeIdentifier: " + srcCodeIdentifier);
+    }
     auto genericTypeParams = GetGenericTypeParams();
     if (!genericTypeParams.empty()) {
-        auto constraintsStr = GetGenericConstaintsStr(genericTypeParams);
+        auto constraintsStr = GetGenericTypeConstaintsStr(genericTypeParams);
         if (!constraintsStr.empty()) {
-            comment << "genericConstrains: " << constraintsStr;
+            result.emplace_back("genericConstrains: " + constraintsStr);
         }
     }
-    AddCommaOrNot(comment);
-    comment << ToStringAnnotationMap();
-    AddCommaOrNot(comment);
     if (genericDecl != nullptr) {
-        comment << "genericDecl: " << genericDecl->GetIdentifierWithoutPrefix();
-        AddCommaOrNot(comment);
+        result.emplace_back("genericDecl: " + genericDecl->GetIdentifier());
     }
-    comment << "packageName: " << packageName;
-    if (comment.str() != "") {
-        ss << " // " << comment.str();
+    if (auto extra = AddExtraComment(); !extra.empty()) {
+        result.emplace_back(extra);
     }
+    return ::CommentToString(result);
 }
 
-void CustomTypeDef::PrintLocalVar(std::stringstream& ss) const
+std::string CustomTypeDef::LocalVarToString() const
 {
+    std::stringstream ss;
     for (auto& localVar : instanceVars) {
-        PrintIndent(ss);
+        ss << AddNewLineOrNot(localVar.annoInfo.ToString(1));
+        ss << IndentToString(1) << localVar.attributeInfo.ToString();
         localVar.TestAttr(Attribute::READONLY) ? ss << "let " : ss << "var ";
-        ss << localVar.name << ": " << localVar.type->ToString() << " // " << localVar.loc.ToString() << "\n";
+        ss << localVar.name << ": " << localVar.type->ToString();
+        std::vector<std::string> comments;
+        if (!localVar.loc.IsInvalidPos()) {
+            comments.emplace_back("loc: " + localVar.loc.ToString());
+        }
+        if (localVar.initializerFunc != nullptr) {
+            comments.emplace_back("initFunc: " + localVar.initializerFunc->GetIdentifier());
+        }
+        if (!localVar.rawMangledName.empty()) {
+            comments.emplace_back("rawMangledName: " + localVar.rawMangledName);
+        }
+        ss << ::CommentToString(comments);
+        ss << std::endl;
     }
+    return ss.str();
 }
 
-void CustomTypeDef::PrintStaticVar(std::stringstream& ss) const
+std::string CustomTypeDef::StaticVarToString() const
 {
-    for (auto& staticVar : staticVars) {
-        PrintIndent(ss);
-        ss << "[static] ";
-        staticVar->TestAttr(Attribute::READONLY) ? ss << "let " : ss << "var ";
-        ss << staticVar->GetIdentifier() << ": " << staticVar->GetType()->ToString() << "\n";
+    std::stringstream ss;
+    for (auto staticVar : staticVars) {
+        ss << IndentToString(1) << staticVar->GetAttributeInfo().ToString();
+        staticVar->TestAttr(Attribute::READONLY) ? ss << " let " : ss << " var ";
+        ss << staticVar->GetIdentifier() << ": " << staticVar->GetType()->ToString() << std::endl;
     }
+    return ss.str();
 }
 
-void CustomTypeDef::PrintMethod(std::stringstream& ss) const
+std::string CustomTypeDef::MethodToString() const
 {
-    for (auto& method : methods) {
-        PrintIndent(ss);
-        ss << method->GetAttributeInfo().ToString();
-        ss << "func " << method->GetIdentifier() << ": " << method->GetType()->ToString() << "\n";
+    std::stringstream ss;
+    for (auto method : methods) {
+        ss << IndentToString(1) << method->GetAttributeInfo().ToString();
+        ss << " func " << method->GetIdentifier() << ": " << method->GetType()->ToString() << std::endl;
     }
+    return ss.str();
 }
 
-void CustomTypeDef::PrintVTable(std::stringstream& ss) const
+std::string CustomTypeDef::VTableToString() const
 {
-    unsigned indent = 1;
+    std::stringstream ss;
+    size_t indent = 1;
     const auto& vtables = vtable.GetTypeVTables();
     if (vtables.empty()) {
-        return;
+        return "";
     }
-    PrintIndent(ss, indent++);
-    ss << "vtable {\n";
+    ss << IndentToString(indent++);
+    ss << "vtable {" << std::endl;
     for (const auto& vtableInType : vtables) {
-        PrintIndent(ss, indent++);
-        ss << vtableInType.GetSrcParentType()->ToString() << " {\n";
+        ss << IndentToString(indent++);
+        ss << vtableInType.GetSrcParentType()->ToString() << " {" << std::endl;
         for (const auto& funcInfo : vtableInType.GetVirtualMethods()) {
-            PrintIndent(ss, indent);
+            ss << IndentToString(indent);
             ss << "@" << funcInfo.GetMethodName();
             ss << ": " << funcInfo.GetOriginalFuncType()->ToString();
-            ss << "=> " << funcInfo.GetVirtualMethod()->GetIdentifier();
-            ss << "\n";
+            ss << "=> " << funcInfo.GetVirtualMethod()->GetIdentifier() << std::endl;
         }
-        PrintIndent(ss, --indent);
-        ss << "}\n";
+        ss << IndentToString(--indent) << "}" << std::endl;
     }
-    PrintIndent(ss, --indent);
-    ss << "}\n";
+    ss << IndentToString(--indent) << "}" << std::endl;
+    return ss.str();
 }
 
 Function* CustomTypeDef::GetExpectedFunc(
@@ -310,23 +315,26 @@ std::vector<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallT
 
 std::string CustomTypeDef::ToString() const
 {
-    /* [public][generic][...] class XXX {      // loc: xxx, genericDecl: xxx
-       ^^^^^^^^^^^^^^ attr    ^^^^^^^^^ title  ^^^^^^^^^^^^^^^^^^ comment
-           local var
+    /* @Anno1[arg1, arg2, ...]
+       [public][generic][...] class XXX<T1, T2> <: parent1 & parent2 { // loc: xxx, genericDecl: xxx
+         ^^^^^^^^^^^^^^ attr    ^^^^^^^^^^^^^^ title   ^^^^^^^^^^^^ parent   ^^^^^^^^^^^^^^^^^^ comment
+           local var (or enum constructor)
            static var
            method
            vtable
        }
     */
     std::stringstream ss;
-    PrintAttrAndTitle(ss);
+    ss << AddNewLineOrNot(annoInfo.ToString(0));
+    ss << attributeInfo.ToString();
+    ss << CustomTypeDefTitleToString();
+    ss << ParentToString();
     ss << " {";
-    PrintComment(ss);
-    ss << "\n";
-    PrintLocalVar(ss);   // has a \n in the end
-    PrintStaticVar(ss);  // has a \n in the end
-    PrintMethod(ss);     // has a \n in the end
-    PrintVTable(ss);     // has a \n in the end
+    ss << AddNewLineOrNot(CommentToString());
+    ss << LocalVarToString();   // has a \n in the end
+    ss << StaticVarToString();  // has a \n in the end
+    ss << MethodToString();     // has a \n in the end
+    ss << VTableToString();     // has a \n in the end
     ss << "}";
     return ss.str();
 }
@@ -336,10 +344,7 @@ std::vector<GenericType*> CustomTypeDef::GetGenericTypeParams() const
     std::vector<GenericType*> genericTypes;
     if (this->TestAttr(Attribute::GENERIC)) {
         for (auto ty : type->GetGenericArgs()) {
-            // why can `ty` can be RefType?
-            if (auto gt = DynamicCast<GenericType*>(ty); gt) {
-                genericTypes.emplace_back(gt);
-            }
+            genericTypes.emplace_back(StaticCast<GenericType*>(ty));
         }
     }
     return genericTypes;

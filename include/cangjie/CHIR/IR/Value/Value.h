@@ -15,6 +15,7 @@
 #include "cangjie/Utils/SafePointer.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -125,7 +126,7 @@ public:
     // we replace `this` with `newValue` in `scope`, when `scope` is nullptr, we replace nodes in package scope
     void ReplaceWith(Value& newValue, const BlockGroup* scope = nullptr);
 
-    virtual std::string ToString() const = 0;
+    virtual std::string ToString(size_t indent) const = 0;
     void Dump() const;
 
     bool IsCompileTimeValue() const;
@@ -186,7 +187,7 @@ public:
     std::string GetSrcCodeIdentifier() const override;
     void SetSrcCodeIdentifier(const std::string& newName);
 
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
     // ===--------------------------------------------------------------------===//
     // Parent
@@ -232,7 +233,7 @@ public:
     std::string GetSrcCodeIdentifier() const override;
     void SetSrcCodeIdentifier(const std::string& newName);
 
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
     const DebugLocation& GetDebugLocation() const override;
 
@@ -303,7 +304,7 @@ public:
     // ===--------------------------------------------------------------------===//
     // Base Information
     // ===--------------------------------------------------------------------===//
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
     std::vector<Block*> GetSuccessors() const;
     std::vector<Block*> GetPredecessors() const;
@@ -400,7 +401,7 @@ public:
     // Base Information
     // ===--------------------------------------------------------------------===//
     size_t GetExpressionsNum() const;
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
     // ===--------------------------------------------------------------------===//
     // Block
@@ -491,6 +492,11 @@ public:
     // ===--------------------------------------------------------------------===//
     virtual void DestroySelf() = 0;
 
+    // ===--------------------------------------------------------------------===//
+    // Others
+    // ===--------------------------------------------------------------------===//
+    std::string GlobalValueCommentToString() const;
+
 protected:
     explicit GlobalValue(ValueKind kind, Type* ty, const std::string& identifier,
         const std::string& srcCodeIdentifier, const std::string& rawMangledName, const std::string& packageName);
@@ -520,7 +526,7 @@ public:
     // ===--------------------------------------------------------------------===//
     // Base Information
     // ===--------------------------------------------------------------------===//
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
     bool IsConstructor() const;
     bool IsFinalizer() const;
@@ -717,7 +723,7 @@ public:
     Function* GetInitFunc() const;
     void SetInitFunc(Function& func);
 
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
     // ===--------------------------------------------------------------------===//
     // Attribute

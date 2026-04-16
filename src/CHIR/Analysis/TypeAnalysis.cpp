@@ -164,7 +164,7 @@ bool TypeAnalysis::Filter(const Function& method)
 
 void TypeAnalysis::PrintDebugMessage(const Expression* expr, const TypeValue* absVal) const
 {
-    std::string message = "The value of " + expr->GetResult()->GetIdentifier() + " = " + expr->ToString() +
+    std::string message = "The value of " + expr->GetResult()->GetIdentifier() + " = " + expr->ToString(0) +
         " has been set to " + absVal->ToString();
     std::cout << message << std::endl;
 }
