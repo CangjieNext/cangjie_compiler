@@ -13,7 +13,6 @@
 #ifndef CANGJIE_SEMA_MOCK_SUPPORT_MANAGER_H
 #define CANGJIE_SEMA_MOCK_SUPPORT_MANAGER_H
 
-#include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
 
@@ -66,14 +65,7 @@ private:
     TypeManager& typeManager;
     Ptr<MockUtils> mockUtils;
     std::vector<OwnedPtr<AST::Decl>> generatedMockDecls;
-    std::unordered_map<Ptr<AST::Decl>, Ptr<AST::VarDecl>> genericMockVarsDecls;
     std::unordered_set<Ptr<AST::Decl>> usedInternalDecls;
-
-    // NOTE: To check whether the class implements accessor interface for interface with defaults.
-    // Because TypeManager caches super types and extends (?)
-    std::unordered_map<Ptr<AST::Ty>, std::unordered_set<Ptr<AST::Ty>>> defaultInterfaceAccessorExtends;
-
-    bool HasDefaultInterfaceAccessor(Ptr<AST::Ty> declTy, Ptr<AST::Ty> accessorInterfaceDeclTy);
 
     static void MakeOpenToMockIfNeeded(AST::Decl& decl);
     static void MarkMockAccessorWithAttributes(AST::Decl& decl, AST::AccessLevel accessLevel);
@@ -91,10 +83,44 @@ private:
     OwnedPtr<AST::FuncBody> CreateForeignFunctionAccessorBody(
         AST::FuncDecl& funcDecl, std::vector<OwnedPtr<AST::FuncParamList>> accessorFuncParamLists) const;
     OwnedPtr<AST::FuncDecl> GenerateVarDeclAccessor(AST::VarDecl& fieldDecl, AccessorKind kind);
-    OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(const AST::MemberAccess& memberAccess, AccessorKind kind);
+    OwnedPtr<AST::CallExpr> GenerateGetterCall(const AST::NameReferenceExpr& nameRefExpr);
+    OwnedPtr<AST::CallExpr> GenerateSetterCall(const AST::NameReferenceExpr& nameRefExpr);
+    OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(const AST::NameReferenceExpr& nameRefExpr, AccessorKind kind);
+    OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(OwnedPtr<AST::Expr> baseExpr, Ptr<AST::Decl> memberDecl,
+        Ptr<AST::Ty> memberRefTy, AccessorKind kind, Ptr<AST::File> curFile);
     Ptr<AST::Expr> ReplaceFieldGetWithAccessor(AST::MemberAccess& memberAccess, bool isInConstructor);
+    OwnedPtr<AST::Block> GenerateBlockForAssignExpr(AST::AssignExpr& assignExpr,
+        OwnedPtr<AST::CallExpr> accessorCall);
     Ptr<AST::Expr> ReplaceFieldSetWithAccessor(AST::AssignExpr& assignExpr, bool isInConstructor);
+    Ptr<AST::Expr> ReplaceVarRefExprWithGetAccessor(AST::RefExpr& refExpr);
+    OwnedPtr<AST::CallExpr> ReplaceRefExprFieldSetWithAccessor(AST::RefExpr& refExpr, bool isInConstructor);
+    OwnedPtr<AST::CallExpr> ReplaceMemberAccessFieldSetWithAccessor(AST::MemberAccess& memAccess, bool isInConstructor);
+    Ptr<AST::Expr> ReplaceRefExprWithGetAccessor(AST::RefExpr& refExpr);
+    OwnedPtr<AST::CallExpr> ReplaceRefExprFieldSetWithAccessorImpl(AST::RefExpr& refExpr);
     Ptr<AST::Expr> ReplaceMemberAccessWithAccessor(AST::MemberAccess& memberAccess, bool isInConstructor);
+    Ptr<AST::Expr> ReplaceMemberAccess(
+        AST::MemberAccess& member, bool isInConstructor, bool isSubMemberAccess);
+    Ptr<AST::Expr> ReplaceAssignment(AST::AssignExpr& assignment, bool isInConstructor);
+    Ptr<AST::Expr> ReplaceRefExpr(AST::RefExpr& refExpr);
+    Ptr<AST::Expr> ReplaceCallExpr(AST::CallExpr& callExpr);
+
+    /**
+     * 
+     * Example of desugaring:
+     * foreign func times2(x: CPointer<Int64>): Unit
+     * 
+     * public var x: Int64 = 10
+     * unsafe {
+     *     times2(inout x)
+     * } |->
+     * 
+     * var $tmp1: Int64 = x$get()
+     * times2(inout tmp1)
+     * x = x$set($tmp1)
+     * 
+     */
+    Ptr<AST::Expr> ReplaceInoutFuncArgWithAccessor(AST::CallExpr& callExpr);
+    Ptr<AST::FuncArg> GenerateDesugarFuncArg(Ptr<AST::FuncArg> funcArg, Ptr<AST::VarDecl> varDecl);
     template <typename T> Ptr<T> FindGeneratedGlobalDecl(Ptr<AST::File> file, const std::string& identifier);
     std::tuple<Ptr<AST::InterfaceDecl>, Ptr<AST::FuncDecl>> FindDefaultAccessorInterfaceAndFunction(
         Ptr<AST::FuncDecl> original);
@@ -104,7 +130,10 @@ private:
     void ReplaceSubMemberAccessWithAccessor(
         const AST::MemberAccess& memberAccess, bool isInConstructor, const Ptr<AST::Expr> topLevelMutExpr = nullptr);
     Ptr<AST::Expr> ReplaceTopLevelVariableGetWithAccessor(AST::RefExpr& refExpr);
-    OwnedPtr<AST::CallExpr> GenerateAccessorCallForTopLevelVariable(const AST::RefExpr& refExpr, AccessorKind kind);
+    OwnedPtr<AST::CallExpr> GenerateAccessorCallForTopLevelVariable(
+        const AST::NameReferenceExpr& nameRefExpr, AccessorKind kind);
+    OwnedPtr<AST::CallExpr> GenerateAccessorCallForTopLevelVariable(
+        Ptr<AST::Decl> globalDecl, AccessorKind kind, Ptr<AST::File> curFile);
     void GenerateVarDeclAccessors(AST::VarDecl& fieldDecl, AccessorKind getterKind, AccessorKind setterKind);
     void PrepareStaticDecl(AST::Decl& decl);
     std::vector<OwnedPtr<AST::MatchCase>> GenerateHandlerMatchCases(const AST::FuncDecl& funcDecl,
