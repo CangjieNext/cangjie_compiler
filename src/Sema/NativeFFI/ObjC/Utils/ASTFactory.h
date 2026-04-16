@@ -15,11 +15,11 @@
 
 #include "InteropLibBridge.h"
 #include "NameGenerator.h"
+#include "NativeFFI/Utils.h"
 #include "TypeMapper.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/Utils/SafePointer.h"
-#include "NativeFFI/Utils.h"
 
 namespace Cangjie::Interop::ObjC {
 

@@ -8,14 +8,21 @@
 #define CANGJIE_COMPILATION_CACHE_H
 
 #include <list>
+#include <map>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/Utils/SafePointer.h"
 
 namespace Cangjie {
+namespace AST {
+struct Package;
+struct Decl;
+} // namespace AST
+
 using RawMangledName = std::string;
 using RawMangled2DeclMap = std::unordered_map<RawMangledName, Ptr<const AST::Decl>>;
 // A map to record the CHIR optimizations effects on incremental compilation, where the key

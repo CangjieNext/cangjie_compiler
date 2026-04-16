@@ -337,8 +337,8 @@ void ParserImpl::CheckSetterAnnotations(std::vector<OwnedPtr<Annotation>>& annos
 void ParserImpl::ParsePropBody(const std::set<Modifier>& modifiers, PropDecl& propDecl)
 {
     propDecl.leftCurlPos = lastToken.Begin();
-    std::vector<OwnedPtr<FuncDecl>> getPropMemberDecls;
-    std::vector<OwnedPtr<FuncDecl>> setPropMemberDecls;
+    std::vector<OwnedPtr<AST::FuncDecl>> getPropMemberDecls;
+    std::vector<OwnedPtr<AST::FuncDecl>> setPropMemberDecls;
     Ptr<Node> setter{nullptr};
     Ptr<Node> getter{nullptr};
     while (true) {
@@ -392,9 +392,9 @@ void ParserImpl::ParsePropBody(const std::set<Modifier>& modifiers, PropDecl& pr
     propDecl.end = lookahead.End();
 }
 
-OwnedPtr<FuncDecl> ParserImpl::ParsePropMemberDecl(const std::set<AST::Modifier>& modifiers)
+OwnedPtr<AST::FuncDecl> ParserImpl::ParsePropMemberDecl(const std::set<AST::Modifier>& modifiers)
 {
-    OwnedPtr<FuncDecl> ret = MakeOwned<FuncDecl>();
+    OwnedPtr<AST::FuncDecl> ret = MakeOwned<AST::FuncDecl>();
     ChainScope cs(*this, ret.get());
     ret->identifier.SetPos(lookahead.Begin(), lookahead.End());
     ret->keywordPos = lookahead.Begin();
@@ -939,12 +939,12 @@ std::string ParserImpl::ExpectOperatorIdentifier(FuncDecl& fd)
     return operatorTok.Value();
 }
 
-OwnedPtr<FuncDecl> ParserImpl::ParseFinalizer(
+OwnedPtr<AST::FuncDecl> ParserImpl::ParseFinalizer(
     ScopeKind scopeKind, const std::set<Modifier> modifiers, PtrVector<Annotation> annos)
 {
     Next(); // skip ~
     auto tildeBegin{lastToken.Begin()};
-    OwnedPtr<FuncDecl> funcDecl = MakeOwned<FuncDecl>();
+    OwnedPtr<AST::FuncDecl> funcDecl = MakeOwned<AST::FuncDecl>();
     [[maybe_unused]]ChainScope cs(*this, funcDecl.get());
     funcDecl->begin = tildeBegin;
     Skip(TokenKind::INIT); // skip init
@@ -981,10 +981,10 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFinalizer(
     return funcDecl;
 }
 
-OwnedPtr<FuncDecl> ParserImpl::ParseConstructor(
+OwnedPtr<AST::FuncDecl> ParserImpl::ParseConstructor(
     ScopeKind scopeKind, const std::set<Modifier>& modifiers, PtrVector<Annotation> annos)
 {
-    OwnedPtr<FuncDecl> funcDecl = MakeOwned<FuncDecl>();
+    OwnedPtr<AST::FuncDecl> funcDecl = MakeOwned<AST::FuncDecl>();
     ChainScope cs(*this, funcDecl.get());
     funcDecl->begin = lookahead.Begin();
     funcDecl->identifier = "init";
@@ -1257,7 +1257,7 @@ OwnedPtr<Decl> ParserImpl::ParseEnumConstructorWithArgs(const Token& id, PtrVect
     funcBody->paramLists.emplace_back(std::move(funcParamList));
     funcBody->end = lastToken.End();
 
-    OwnedPtr<FuncDecl> ret = MakeOwned<FuncDecl>();
+    OwnedPtr<AST::FuncDecl> ret = MakeOwned<AST::FuncDecl>();
     ret->identifier = ParseIdentifierFromName(id.Value(), id.Begin(), id.End(), id.Length());
     ret->funcBody = std::move(funcBody);
     ret->begin = id.Begin();
@@ -1993,10 +1993,10 @@ OwnedPtr<MainDecl> ParserImpl::ParseMainDecl(
     return ret;
 }
 
-OwnedPtr<FuncDecl> ParserImpl::ParseFuncDecl(
+OwnedPtr<AST::FuncDecl> ParserImpl::ParseFuncDecl(
     ScopeKind scopeKind, const std::set<Modifier>& modifiers, PtrVector<Annotation> annos)
 {
-    OwnedPtr<FuncDecl> ret = MakeOwned<FuncDecl>();
+    OwnedPtr<AST::FuncDecl> ret = MakeOwned<AST::FuncDecl>();
     ChainScope cs(*this, ret.get());
 
     ret->keywordPos = lookahead.Begin();

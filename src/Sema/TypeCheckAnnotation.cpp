@@ -15,6 +15,7 @@
 #include "Diags.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
+#include "cangjie/AST/Match.h"
 #include "cangjie/AST/RecoverDesugar.h"
 #include "NativeFFI/Java/TypeCheck/TypeCheckAnnotation.h"
 #include "NativeFFI/ObjC/TypeCheck/TypeCheckAnnotation.h"

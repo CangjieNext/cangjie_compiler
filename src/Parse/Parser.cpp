@@ -15,7 +15,7 @@
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Lex/Token.h"
@@ -26,6 +26,22 @@ using namespace Cangjie;
 using namespace Cangjie::AST;
 
 namespace Cangjie {
+const std::unordered_map<std::string, AST::AnnotationKind> NAME_TO_ANNO_KIND = {
+    {"JavaMirror", AST::AnnotationKind::JAVA_MIRROR}, {"JavaImpl", AST::AnnotationKind::JAVA_IMPL},
+    {"JavaHasDefault", AST::AnnotationKind::JAVA_HAS_DEFAULT}, {"ObjCMirror", AST::AnnotationKind::OBJ_C_MIRROR},
+    {"ObjCImpl", AST::AnnotationKind::OBJ_C_IMPL}, {"ForeignGetterName", AST::AnnotationKind::FOREIGN_GETTER_NAME},
+    {"ForeignSetterName", AST::AnnotationKind::FOREIGN_SETTER_NAME}, {"ObjCInit", AST::AnnotationKind::OBJ_C_INIT},
+    {"ObjCOptional", AST::AnnotationKind::OBJ_C_OPTIONAL}, {"ForeignName", AST::AnnotationKind::FOREIGN_NAME},
+    {"CallingConv", AST::AnnotationKind::CALLING_CONV}, {"C", AST::AnnotationKind::C},
+    {"Attribute", AST::AnnotationKind::ATTRIBUTE}, {"Intrinsic", AST::AnnotationKind::INTRINSIC},
+    {"OverflowThrowing", AST::AnnotationKind::NUMERIC_OVERFLOW},
+    {"OverflowWrapping", AST::AnnotationKind::NUMERIC_OVERFLOW},
+    {"OverflowSaturating", AST::AnnotationKind::NUMERIC_OVERFLOW}, {"When", AST::AnnotationKind::WHEN},
+    {"FastNative", AST::AnnotationKind::FASTNATIVE}, {"Annotation", AST::AnnotationKind::ANNOTATION},
+    {"ConstSafe", AST::AnnotationKind::CONSTSAFE}, {"Deprecated", AST::AnnotationKind::DEPRECATED},
+    {"Frozen", AST::AnnotationKind::FROZEN}, {"EnsurePreparedToMock", AST::AnnotationKind::ENSURE_PREPARED_TO_MOCK},
+    {"NonProduct", AST::AnnotationKind::NON_PRODUCT}};
+
 const std::unordered_map<AST::AnnotationKind, std::string> ANNO_KIND_TO_NAME = [] {
     std::unordered_map<AST::AnnotationKind, std::string> result;
     for (const auto& [name, kind] : NAME_TO_ANNO_KIND) {
@@ -578,9 +594,9 @@ OwnedPtr<Node> ParserImpl::ParseExprOrDecl(ScopeKind sk)
  *     : end* (expressionOrDeclaration (end+ expressionOrDeclaration?)*)?
  *     ;
  * */
-OwnedPtr<Block> ParserImpl::ParseExpressionOrDeclarations(ScopeKind sk)
+OwnedPtr<AST::Block> ParserImpl::ParseExpressionOrDeclarations(ScopeKind sk)
 {
-    OwnedPtr<Block> result = MakeOwned<Block>();
+    OwnedPtr<AST::Block> result = MakeOwned<AST::Block>();
     result->begin = lastToken.Begin();
     result->leftCurlPos = lastToken.Begin();
     ChainScope cs(*this, result.get());
@@ -642,7 +658,7 @@ bool ParserImpl::DiagForBlock(const Block& block)
     return false;
 }
 
-OwnedPtr<Block> ParserImpl::ParseBlock(ScopeKind scopeKind)
+OwnedPtr<AST::Block> ParserImpl::ParseBlock(ScopeKind scopeKind)
 {
     if (!Skip(TokenKind::LCURL)) {
         ParseDiagnoseRefactor("parse_expected_left_brace", lookahead, ConvertToken(lookahead));

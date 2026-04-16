@@ -13,7 +13,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/IncrementalCompilation/CompilationCache.h"
 #include "cangjie/Modules/ImportManager.h"
 

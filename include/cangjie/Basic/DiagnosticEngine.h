@@ -20,7 +20,8 @@
 #include <utility>
 #include <vector>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Identifier.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagId.h"
 #include "cangjie/Basic/DiagIdOld.h"
 #include "cangjie/Basic/Position.h"

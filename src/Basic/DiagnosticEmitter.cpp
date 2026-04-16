@@ -11,11 +11,12 @@
  */
 
 #include "DiagnosticEmitterImpl.h"
-#include "DiagnosticEngineConstants.h"
 
 #include <map>
 #include <regex>
 
+#include "DiagnosticEngineConstants.h"
+#include "cangjie/AST/Nodes/MacroInvocation.h"
 #include "cangjie/Basic/Display.h"
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Utils/Unicode.h"

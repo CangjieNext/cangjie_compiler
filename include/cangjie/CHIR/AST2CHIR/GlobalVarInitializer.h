@@ -11,8 +11,11 @@
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 
+namespace Cangjie {
+class ImportManager;
+}
 namespace Cangjie::CHIR {
-//                           ordered file                 ordered var decl
+//                            ordered file                 ordered var decl
 using OrderedDecl = std::pair<std::vector<Ptr<AST::File>>, std::vector<Ptr<AST::Decl>>>;
 
 class GlobalVarInitializer {

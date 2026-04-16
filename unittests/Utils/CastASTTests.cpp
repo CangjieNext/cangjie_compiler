@@ -11,7 +11,7 @@
 #include "gtest/gtest.h"
 
 #define private public
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 
 #ifdef _WIN32

@@ -7,13 +7,13 @@
 
 #include <type_traits>
 
-#include "cangjie/AST/Node.h"
-#include "cangjie/AST/Utils.h"
-#include "cangjie/Parse/ASTHasher.h"
 #include "cangjie/AST/ASTCasting.h"
-#include "cangjie/Utils/Utils.h"
+#include "cangjie/AST/Nodes/Node.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Mangle/MangleUtils.h"
+#include "cangjie/Parse/ASTHasher.h"
+#include "cangjie/Utils/Utils.h"
 
 using namespace Cangjie;
 using namespace AST;

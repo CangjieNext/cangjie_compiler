@@ -13,11 +13,87 @@
 #ifndef CANGJIE_PARSE_PARSERIMPL_H
 #define CANGJIE_PARSE_PARSERIMPL_H
 
-#include "cangjie/Parse/Parser.h"
 #include "MPParserImpl.h"
 #include "NativeFFI/FFIParserImpl.h"
+#include "cangjie/AST/Nodes/IfAvailableExpr.h"
+#include "cangjie/Parse/Parser.h"
 
 namespace Cangjie {
+namespace AST {
+struct Annotation;
+struct Block;
+struct ClassBody;
+struct ClassDecl;
+struct ConstPattern;
+struct Decl;
+struct DoWhileExpr;
+struct EnumDecl;
+struct EnumPattern;
+struct Expr;
+struct ExtendDecl;
+struct FeaturesDirective;
+struct FeaturesSet;
+struct File;
+struct ForInExpr;
+struct FuncBody;
+struct FuncDecl;
+struct FuncParam;
+struct FuncParamList;
+struct FuncType;
+struct Generic;
+struct GenericConstraint;
+struct GenericParamDecl;
+struct IfExpr;
+struct ImportContent;
+struct ImportSpec;
+struct InheritableDecl;
+struct InterfaceBody;
+struct InterfaceDecl;
+struct LetPatternDestructor;
+struct LitConstExpr;
+struct MacroDecl;
+struct MacroExpandDecl;
+struct MacroExpandExpr;
+struct MacroExpandParam;
+struct MacroInvocation;
+struct MainDecl;
+struct MatchCase;
+struct MatchExpr;
+struct MemberAccess;
+struct Modifier;
+struct Node;
+struct PackageSpec;
+struct ParenType;
+struct Pattern;
+struct PerformExpr;
+struct PrimaryCtorDecl;
+struct PropDecl;
+struct QuoteExpr;
+struct RefExpr;
+struct RefType;
+struct ResumeExpr;
+struct ReturnExpr;
+struct SpawnExpr;
+struct StructBody;
+struct StructDecl;
+struct SynchronizedExpr;
+struct ThrowExpr;
+struct TrailingClosureExpr;
+struct TryExpr;
+struct TupleLit;
+struct TuplePattern;
+struct Type;
+struct TypePattern;
+struct RangeExpr;
+struct VarDecl;
+struct VarDeclAbstract;
+struct VarOrEnumPattern;
+struct VarPattern;
+struct VarWithPatternDecl;
+struct WhileExpr;
+struct IfAvailableExpr;
+enum class LitConstKind : uint8_t;
+} // namespace AST
 using namespace AST;
 
 const size_t PACKAGE_NAME_LEN_LIMIT = 200U;

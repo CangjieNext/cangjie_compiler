@@ -24,7 +24,7 @@ using namespace Cangjie;
 using namespace AST;
 
 namespace {
-bool IsSpecialFunction(const FuncDecl& fd)
+bool IsSpecialFunction(const AST::FuncDecl& fd)
 {
     if (fd.TestAnyAttr(Attribute::IMPORTED, Attribute::FOREIGN)) {
         return true;
@@ -37,7 +37,7 @@ bool IsSpecialFunction(const FuncDecl& fd)
     return isGetCommandLineArgsFunc || isImplictUsed || isToAny || isMainInvoke;
 }
 
-void MarkFunctionLinkage(FuncDecl& fd, const Linkage linkage)
+void MarkFunctionLinkage(AST::FuncDecl& fd, const Linkage linkage)
 {
     fd.linkage = linkage;
     // Set linkage for the funcDecl obtained by desugaring parameters with default values
@@ -54,7 +54,7 @@ void MarkFunctionLinkage(FuncDecl& fd, const Linkage linkage)
     }
 }
 
-void MarkFunctionAsInternalLinkage(FuncDecl& fd)
+void MarkFunctionAsInternalLinkage(AST::FuncDecl& fd)
 {
     MarkFunctionLinkage(fd, Linkage::INTERNAL);
 }

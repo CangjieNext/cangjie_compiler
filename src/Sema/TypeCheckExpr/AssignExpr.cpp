@@ -80,7 +80,7 @@ bool IsAssignableSubScriptExpr(
         return false;
     }
     CJC_ASSERT(se.baseExpr && !se.indexExprs.empty());
-    DiagKind diagKind =
+    std::string_view diagKind =
         isCompound ? "sema_subscript_get_set_not_supported" : "sema_subscript_set_not_supported";
     auto indexTy = TypeManager::GetNonNullTy(se.indexExprs[0]->GetTy());
     auto baseTy = TypeManager::GetNonNullTy(se.baseExpr->GetTy());

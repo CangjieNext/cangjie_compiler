@@ -23,7 +23,7 @@
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/CmpNodeByPos.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
@@ -31,7 +31,6 @@
 #include "cangjie/Modules/ModulesUtils.h"
 #include "cangjie/Sema/TestManager.h"
 #include "cangjie/Sema/TypeManager.h"
-#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 
 #include "Diags.h"
 #include "TypeCheckUtil.h"

@@ -17,7 +17,7 @@
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/FileUtil.h"

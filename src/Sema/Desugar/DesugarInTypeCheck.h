@@ -12,19 +12,26 @@
 #ifndef CANGJIE_SEMA_DESUGAR_IN_TYPECHECK_H
 #define CANGJIE_SEMA_DESUGAR_IN_TYPECHECK_H
 
-#include "cangjie/AST/Node.h"
 #include "cangjie/AST/ASTContext.h"
 
 namespace Cangjie {
-using namespace AST;
-void DesugarOperatorOverloadExpr(ASTContext& ctx, BinaryExpr& be);
-void DesugarOperatorOverloadExpr(ASTContext& ctx, UnaryExpr& ue);
-void DesugarOperatorOverloadExpr(ASTContext& ctx, SubscriptExpr& se);
-void DesugarOperatorOverloadExpr(ASTContext& ctx, AssignExpr& ae);
-void DesugarSubscriptOverloadExpr(ASTContext& ctx, AssignExpr& ae);
+namespace AST {
+struct AssignExpr;
+struct BinaryExpr;
+struct CallExpr;
+struct PrimaryCtorDecl;
+struct SubscriptExpr;
+struct UnaryExpr;
+} // namespace AST
 
-void DesugarFlowExpr(ASTContext& ctx, BinaryExpr& fe);
-void DesugarCallExpr(ASTContext& ctx, CallExpr& ce);
+void DesugarOperatorOverloadExpr(ASTContext& ctx, AST::BinaryExpr& be);
+void DesugarOperatorOverloadExpr(ASTContext& ctx, AST::UnaryExpr& ue);
+void DesugarOperatorOverloadExpr(ASTContext& ctx, AST::SubscriptExpr& se);
+void DesugarOperatorOverloadExpr(ASTContext& ctx, AST::AssignExpr& ae);
+void DesugarSubscriptOverloadExpr(ASTContext& ctx, AST::AssignExpr& ae);
+
+void DesugarFlowExpr(ASTContext& ctx, AST::BinaryExpr& fe);
+void DesugarCallExpr(ASTContext& ctx, AST::CallExpr& ce);
 
 /**
  * Desugar variable-length arguments to array literal. For example:
@@ -33,7 +40,7 @@ void DesugarCallExpr(ASTContext& ctx, CallExpr& ce);
  * *************** after desugar ****************
  * f(true, [1, 2, 3]) // Suppose the `fixedPositionalArity` is 1.
  * */
-void DesugarVariadicCallExpr(ASTContext& ctx, CallExpr& ce, size_t fixedPositionalArity);
+void DesugarVariadicCallExpr(ASTContext& ctx, AST::CallExpr& ce, size_t fixedPositionalArity);
 
 /** Add primary constructor for class or struct. */
 void DesugarPrimaryCtor(AST::Decl& decl, AST::PrimaryCtorDecl& fd);

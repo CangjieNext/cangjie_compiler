@@ -13,8 +13,17 @@
 #ifndef CANGJIE_SEMA_OBJ_C_UTILS_NAME_GENERATOR_H
 #define CANGJIE_SEMA_OBJ_C_UTILS_NAME_GENERATOR_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Mangle/BaseMangler.h"
+
+namespace Cangjie {
+class TypeManager;
+}
+
+namespace Cangjie::AST {
+struct PropDecl;
+struct VarDecl;
+} // namespace Cangjie::AST
 
 namespace Cangjie::Interop::ObjC {
 class NameGenerator {

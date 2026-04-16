@@ -22,7 +22,6 @@
 #include "cangjie/Option/Option.h"
 #include "flatbuffers/ModuleFormat_generated.h"
 
-#include "cangjie/AST/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Modules/ASTSerializationTypeDef.h"
 #include "cangjie/Sema/TypeManager.h"
@@ -33,6 +32,10 @@ constexpr size_t INITIAL_FILE_SIZE = 65536;
 constexpr int FB_MAX_DEPTH = 128;
 constexpr int FB_MAX_TABLES = 2000000;
 class CjoManager;
+namespace AST {
+struct Package;
+struct PackageDecl;
+} // namespace AST
 
 // There are two kinds of decls to be saved based on where the decl is from, we
 // use fullId which is defined ad [pkgId, declId] to index decl:

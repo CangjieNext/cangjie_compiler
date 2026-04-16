@@ -12,7 +12,7 @@
 #ifndef CANGJIE_SEMA_DESUGAR_AFTER_TYPECHECK_H
 #define CANGJIE_SEMA_DESUGAR_AFTER_TYPECHECK_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 #include "cangjie/Sema/TypeManager.h"
 

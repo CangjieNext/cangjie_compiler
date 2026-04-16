@@ -11,7 +11,7 @@
 
 #include "ASTLoaderCJMP.h"
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 

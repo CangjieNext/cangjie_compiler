@@ -14,7 +14,7 @@
 #include <algorithm>
 
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/CmpNodeByPos.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"

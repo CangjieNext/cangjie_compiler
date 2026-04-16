@@ -13,7 +13,7 @@
 #ifndef CANGJIE_SEMA_GENERIC_INSTANTIATION_MANAGER_H
 #define CANGJIE_SEMA_GENERIC_INSTANTIATION_MANAGER_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Sema/CommonTypeAlias.h"
 

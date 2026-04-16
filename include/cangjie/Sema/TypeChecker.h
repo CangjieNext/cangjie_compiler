@@ -14,14 +14,12 @@
 #define CANGJIE_SEMA_TYPECHECKER_H
 
 #include "cangjie/AST/ASTContext.h"
-#include "cangjie/AST/Node.h"
-#include "cangjie/Frontend/CompilerInstance.h"
 
 namespace Cangjie {
 class InstCtxScope;
 class TypeChecker {
 public:
-    explicit TypeChecker(CompilerInstance* ci);
+    explicit TypeChecker(class CompilerInstance* ci);
     ~TypeChecker();
 
     /**

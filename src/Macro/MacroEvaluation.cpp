@@ -12,6 +12,7 @@
 
 #include "cangjie/Macro/MacroEvaluation.h"
 
+#include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"

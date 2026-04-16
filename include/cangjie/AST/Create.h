@@ -17,12 +17,52 @@
 #include <string>
 
 #include "cangjie/AST/Clone.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Identifier.h"
+#include "cangjie/AST/Nodes/CallExpr.h"
+#include "cangjie/AST/Nodes/Expr.h"
 
 namespace Cangjie::AST {
 void CopyNodeScopeInfo(Ptr<Node> ret, Ptr<const Node> e);
 void CopyFileID(Ptr<Node> ret, Ptr<const Node> e);
 void CopyNodeWithFileID(Ptr<Node> ret, Ptr<const Node> e);
+
+struct ArrayLit;
+struct AssignExpr;
+struct BinaryExpr;
+struct Block;
+struct CallExpr;
+struct Expr;
+struct ForInExpr;
+struct FuncArg;
+struct FuncBody;
+struct FuncDecl;
+struct FuncParam;
+struct FuncParamList;
+struct GenericConstraint;
+struct IfExpr;
+struct ImportSpec;
+struct InheritableDecl;
+struct JumpExpr;
+struct LambdaExpr;
+struct LitConstExpr;
+enum class LitConstKind : uint8_t;
+struct MatchCase;
+struct MatchExpr;
+struct MemberAccess;
+struct Pattern;
+struct PerformExpr;
+struct RefExpr;
+struct RefType;
+struct ResumeExpr;
+struct ReturnExpr;
+struct SubscriptExpr;
+struct ThrowExpr;
+struct TupleLit;
+struct Type;
+struct TypePattern;
+struct UnaryExpr;
+struct VarDecl;
+struct VarPattern;
 /** Create an expression node of type Unit. */
 OwnedPtr<Expr> CreateUnitExpr(Ptr<Ty> ty = nullptr);
 OwnedPtr<LitConstExpr> CreateBoolLit(bool isTrue);

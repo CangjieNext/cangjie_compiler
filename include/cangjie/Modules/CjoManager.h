@@ -13,7 +13,7 @@
 #ifndef CANGJIE_MODULES_CJO_MANAGER_H
 #define CANGJIE_MODULES_CJO_MANAGER_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/CmpNodeByPos.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Sema/TypeManager.h"
 
@@ -26,6 +26,11 @@ const uint8_t CJO_MINOR_VERSION = 1;
 const uint8_t CJO_PATCH_VERSION = 0;
 #endif
 
+namespace AST {
+struct Package;
+struct PackageDecl;
+struct ImportSpec;
+} // namespace AST
 class CjoManager {
 public:
     struct Config {

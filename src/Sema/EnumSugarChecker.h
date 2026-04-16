@@ -19,7 +19,6 @@
 
 #include "TypeCheckerImpl.h"
 #include "cangjie/AST/ASTContext.h"
-#include "cangjie/AST/Node.h"
 
 namespace Cangjie {
 class TypeChecker::EnumSugarChecker {

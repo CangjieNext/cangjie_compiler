@@ -18,7 +18,7 @@
 #include "Utils/CGCommonDef.h"
 #include "Utils/CGUtils.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
-#include "cangjie/Utils/Casting.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 
 using namespace Cangjie;
 using namespace CodeGen;

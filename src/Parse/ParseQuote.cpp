@@ -11,9 +11,12 @@
 
 #include "ParserImpl.h"
 
+#include "cangjie/AST/Create.h"
+#include "cangjie/AST/Nodes/ParenExpr.h"
+#include "cangjie/AST/Nodes/RefExpr.h"
+#include "cangjie/AST/Nodes/TokenPart.h"
 #include "cangjie/Basic/SourceManager.h"
 #include "cangjie/Basic/StringConvertor.h"
-#include "cangjie/AST/Create.h"
 
 using namespace Cangjie;
 using namespace Cangjie::AST;

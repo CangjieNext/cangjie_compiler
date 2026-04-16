@@ -15,7 +15,10 @@
 #include <functional>
 #include <memory>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Generic.h"
+#include "cangjie/AST/Nodes/Node.h"
+#include "cangjie/AST/Nodes/Pattern.h"
+#include "cangjie/AST/Nodes/Type.h"
 #include "cangjie/Option/Option.h"
 #include "cangjie/Sema/CommonTypeAlias.h"
 #include "cangjie/Utils/SafePointer.h"
@@ -33,6 +36,78 @@ using VisitFunc = std::function<void(AST::Node&, AST::Node&)>;
 void DefaultVisitFunc(const AST::Node& source, const AST::Node& target);
 AST::MacroInvocation InstantiateMacroInvocation(const AST::MacroInvocation& me);
 OwnedPtr<AST::Generic> InstantiateGeneric(const AST::Generic& generic, const VisitFunc& visitor);
+
+namespace AST {
+struct MacroExpandExpr;
+struct TokenPart;
+struct QuoteExpr;
+struct IfExpr;
+struct TryExpr;
+struct ThrowExpr;
+struct ReturnExpr;
+struct WhileExpr;
+struct DoWhileExpr;
+struct AssignExpr;
+struct IncOrDecExpr;
+struct UnaryExpr;
+struct BinaryExpr;
+struct RangeExpr;
+struct SubscriptExpr;
+struct MemberAccess;
+struct CallExpr;
+struct ParenExpr;
+struct LambdaExpr;
+struct LitConstExpr;
+struct ArrayLit;
+struct ArrayExpr;
+struct PointerExpr;
+struct TupleLit;
+struct RefExpr;
+struct ForInExpr;
+struct MatchExpr;
+struct JumpExpr;
+struct TypeConvExpr;
+struct SpawnExpr;
+struct SynchronizedExpr;
+struct InvalidExpr;
+struct InterpolationExpr;
+struct StrInterpolationExpr;
+struct TrailingClosureExpr;
+struct IsExpr;
+struct AsExpr;
+struct OptionalExpr;
+struct OptionalChainExpr;
+struct LetPatternDestructor;
+struct ConstPattern;
+struct VarPattern;
+struct TuplePattern;
+struct TypePattern;
+struct EnumPattern;
+struct ExceptTypePattern;
+struct VarOrEnumPattern;
+struct Block;
+struct ClassBody;
+struct StructBody;
+struct InterfaceBody;
+struct GenericConstraint;
+struct FuncBody;
+struct FuncParam;
+struct FuncParamList;
+struct FuncArg;
+struct Annotation;
+struct ImportSpec;
+struct MatchCase;
+struct MatchCaseOther;
+struct GenericParamDecl;
+struct VarWithPatternDecl;
+struct VarDecl;
+struct FuncDecl;
+struct PrimaryCtorDecl;
+struct PropDecl;
+struct ExtendDecl;
+struct MacroExpandDecl;
+} // namespace AST
+
 class PartialInstantiation {
 public:
     template <typename T> static OwnedPtr<T> Instantiate(Ptr<T> node, const VisitFunc& visitFunc)

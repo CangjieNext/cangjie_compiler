@@ -19,13 +19,22 @@
 #include <string>
 #include <vector>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Decl.h"
 #include "cangjie/Driver/StdlibMap.h"
 #include "cangjie/Mangle/MangleUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Utils/FileUtil.h"
 
 namespace Cangjie {
+namespace AST {
+struct ExtendDecl;
+struct LambdaExpr;
+struct Package;
+struct Pattern;
+struct VarDeclAbstract;
+struct VarWithPatternDecl;
+} // namespace AST
+
 class ManglerContext {
 public:
     /**

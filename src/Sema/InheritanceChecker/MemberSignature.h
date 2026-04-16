@@ -13,9 +13,12 @@
 #ifndef CANGJIE_SEMA_MEMBER_SIGNATURE_H
 #define CANGJIE_SEMA_MEMBER_SIGNATURE_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 namespace Cangjie {
+namespace AST {
+struct ExtendDecl;
+}
 
 struct MemberSignature {
     Ptr<AST::Decl> decl = nullptr;

@@ -7,9 +7,14 @@
 #ifndef CANGJIE_CHIR_COLLECT_LOCAL_CONST_DECL_H
 #define CANGJIE_CHIR_COLLECT_LOCAL_CONST_DECL_H
 
+#include "cangjie/Utils/SafePointer.h"
 #include <vector>
 
-#include "cangjie/AST/Node.h"
+namespace Cangjie::AST {
+struct Decl;
+struct VarDecl;
+struct FuncDecl;
+} // namespace Cangjie::AST
 
 namespace Cangjie::CHIR {
 class CollectLocalConstDecl {

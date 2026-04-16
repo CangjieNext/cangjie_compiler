@@ -7,15 +7,16 @@
 #include <iostream>
 #include <sstream>
 
-#include "cangjie/CHIR/Utils/CHIRCasting.h"
+#include "cangjie/AST/Nodes/OverflowStrategy.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
-#include "cangjie/CHIR/Utils/StringWrapper.h"
-#include "cangjie/CHIR/Utils/ToStringUtils.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
-#include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
+#include "cangjie/CHIR/Utils/StringWrapper.h"
+#include "cangjie/CHIR/Utils/ToStringUtils.h"
+#include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/Utils/CheckUtils.h"
 
@@ -510,7 +511,7 @@ BinaryExpression::BinaryExpression(ExprKind kind, Value* lhs, Value* rhs, Overfl
 }
 
 BinaryExpression::BinaryExpression(ExprKind kind, Value* lhs, Value* rhs, Block* parent)
-    : Expression(kind, {lhs, rhs}, {}, parent)
+    : Expression(kind, {lhs, rhs}, {}, parent), overflowStrategy(OverflowStrategy::NA)
 {
     CJC_ASSERT(kind >= ExprKind::BITAND);
 }
@@ -1086,7 +1087,8 @@ InvokeStatic* InvokeStatic::Clone(CHIRBuilder& builder, Block& parent) const
 }
 
 // TypeCast
-TypeCast::TypeCast(Value* operand, Block* parent) : Expression(ExprKind::TYPECAST, {operand}, {}, parent)
+TypeCast::TypeCast(Value* operand, Block* parent)
+    : Expression(ExprKind::TYPECAST, {operand}, {}, parent), overflowStrategy(OverflowStrategy::NA)
 {
 }
 

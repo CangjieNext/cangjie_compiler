@@ -15,11 +15,20 @@
 
 #include <functional>
 
+#include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Nodes/Decl.h"
+#include "cangjie/AST/Nodes/Expr.h"
+#include "cangjie/AST/Nodes/Modifier.h"
+#include "cangjie/AST/Nodes/Package.h"
 #include "cangjie/Utils/ConstantsUtils.h"
-#include "cangjie/AST/Node.h"
-#include "cangjie/Utils/CastingTemplate.h"
 
 namespace Cangjie::AST {
+struct MacroInvocation;
+struct LitConstExpr;
+struct Package;
+struct Pattern;
+struct MemberAccess;
+
 /**
  * Add Attribute and curfile in macro expanded node.
  */

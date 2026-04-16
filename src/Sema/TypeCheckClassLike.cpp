@@ -21,10 +21,10 @@
 
 #include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
-#include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Sema/TestManager.h"
+#include "cangjie/Sema/TypeManager.h"
 
 using namespace Cangjie;
 using namespace AST;

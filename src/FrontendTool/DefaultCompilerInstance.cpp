@@ -20,9 +20,11 @@
 #include "cangjie/CodeGen/EmitPackageIR.h"
 #include "cangjie/Driver/StdlibMap.h"
 #include "cangjie/Driver/TempFileManager.h"
+#include "cangjie/Frontend/CHIRData.h"
 #include "cangjie/Modules/PackageManager.h"
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/Utils/ProfileRecorder.h"
+#include "cangjie/Utils/TaskQueue.h"
 
 #if (defined RELEASE)
 #include "cangjie/Utils/Signal.h"
@@ -293,7 +295,7 @@ bool DefaultCIImpl::EmitLLVMSimilarBytecode(bool enableIncrement)
 
     if (ci.invocation.globalOptions.enIncrementalCompilation) {
         auto fileName = GenerateFileName(fullPackageName, "");
-        ci.cachedInfo.bitcodeFilesName = std::vector<std::string>{fileName};
+        ci.cachedInfo->bitcodeFilesName = std::vector<std::string>{fileName};
     }
     return true;
 }

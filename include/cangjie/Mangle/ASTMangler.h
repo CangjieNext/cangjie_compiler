@@ -7,9 +7,9 @@
 #ifndef CANGJIE_MANGLE_ASTMANGLER_H
 #define CANGJIE_MANGLE_ASTMANGLER_H
 
-#include <string>
+#include "cangjie/AST/Nodes/ASTKind.h"
 #include <optional>
-#include "cangjie/AST/Node.h"
+#include <string>
 
 namespace Cangjie {
 inline const std::string MANGLE_PAREN_PREFIX = "P";
@@ -29,6 +29,10 @@ inline const std::string MANGLE_LET_PREFIX = "L";
 inline const std::string MANGLE_INOUT_PREFIX = "$IO";
 inline const std::string MANGLE_GEXTEND_PREFIX = "W";
 
+namespace AST {
+struct Type;
+struct Decl;
+}
 /**
  * @brief Name mangle class
  * Class ASTMangler is designed to manage mangling rules during Parser.

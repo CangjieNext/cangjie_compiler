@@ -7,7 +7,6 @@
 #ifndef CANGJIE_CHIR_AST2CHIR_CHECKER_H
 #define CANGJIE_CHIR_AST2CHIR_CHECKER_H
 
-#include "cangjie/AST/Node.h"
 #include "cangjie/CHIR/AST2CHIR/AST2CHIRNodeMap.h"
 #include "cangjie/CHIR/IR/Type/CHIRType.h"
 #include "cangjie/CHIR/IR/Value/Value.h"

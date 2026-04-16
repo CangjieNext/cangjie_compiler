@@ -12,7 +12,7 @@
 
 #include "Handlers.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;

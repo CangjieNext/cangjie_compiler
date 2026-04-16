@@ -13,20 +13,25 @@
 #ifndef CANGJIE_CHIR_TRANSLATOR_H
 #define CANGJIE_CHIR_TRANSLATOR_H
 
-#include "cangjie/AST/NodeX.h"
 #include "cangjie/CHIR/AST2CHIR/AST2CHIRNodeMap.h"
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/ExceptionTypeMapping.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Type/CHIRType.h"
-#include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
+#include "cangjie/CHIR/Utils/Utils.h"
+#include "cangjie/Frontend/FrontendOptions.h"
 #include "cangjie/Option/Option.h"
-#include "cangjie/Sema/GenericInstantiationManager.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/SafePointer.h"
 #include "cangjie/Utils/Utils.h"
+#include <queue>
 
+namespace Cangjie {
+class GenericInstantiationManager;
+enum class IncreKind;
+} // namespace Cangjie
 namespace Cangjie::CHIR {
 
 class Translator {

@@ -14,9 +14,13 @@
 #ifndef CANGJIE_SEMA_USEFULNESS_H
 #define CANGJIE_SEMA_USEFULNESS_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Sema/TypeManager.h"
+
+namespace Cangjie::AST {
+struct MatchExpr;
+}
 
 namespace Cangjie::PatternUsefulness {
 bool CheckMatchExprHasSelectorExhaustivenessAndReachability(

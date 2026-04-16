@@ -13,11 +13,14 @@
 #include "cangjie/Frontend/CompileStrategy.h"
 
 #include "MergeAnnoFromCjd.h"
+#include "cangjie/AST/Nodes/Package.h"
+#include "cangjie/AST/Nodes/PackageSpec.h"
 #include "cangjie/AST/PrintNode.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Macro/MacroExpansion.h"
+#include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Parse/Parser.h"
 #if defined(CMAKE_ENABLE_ASSERT) || !defined(NDEBUG)
 #include "cangjie/Parse/ASTChecker.h"

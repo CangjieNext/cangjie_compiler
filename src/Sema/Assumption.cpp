@@ -14,7 +14,7 @@
 #include "TypeCheckerImpl.h"
 
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 using namespace Cangjie;
 using namespace AST;

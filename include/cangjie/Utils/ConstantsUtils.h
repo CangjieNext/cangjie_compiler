@@ -20,8 +20,6 @@
 #include <cstdint>
 
 namespace Cangjie {
-enum class OverflowStrategy : uint8_t { NA, CHECKED, WRAPPING, THROWING, SATURATING, OVERFLOW_STRATEGY_END };
-
 constexpr std::string_view MAIN_INVOKE{"$mainInvoke"};
 constexpr std::string_view TEST_ENTRY_NAME{"$test.entry"};
 constexpr std::string_view BOX_DECL_PREFIX{"$BOX_"};

@@ -16,7 +16,7 @@
 #include <string>
 #include <iostream>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 namespace Cangjie {
 void PrintNode(

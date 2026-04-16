@@ -10,8 +10,7 @@
  * This file implements the ToString method for nodes.
  */
 
-#include "cangjie/AST/Node.h"
-#include "cangjie/AST/Types.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -20,21 +19,30 @@
 #include <memory>
 #include <numeric>
 #include <queue>
+#include <set>
 #include <sstream>
 #include <vector>
 
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Nodes/BuiltInDecl.h"
+#include "cangjie/AST/Nodes/ClassDecl.h"
+#include "cangjie/AST/Nodes/FeatureId.h"
+#include "cangjie/AST/Nodes/File.h"
+#include "cangjie/AST/Nodes/FuncArg.h"
+#include "cangjie/AST/Nodes/MacroInvocation.h"
+#include "cangjie/AST/Nodes/MatchExpr.h"
+#include "cangjie/AST/Nodes/MemberAccess.h"
+#include "cangjie/AST/Nodes/Pattern.h"
 #include "cangjie/AST/RecoverDesugar.h"
 #include "cangjie/AST/Symbol.h"
+#include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Position.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/StdUtils.h"
 
-namespace Cangjie {
-using namespace AST;
-
+namespace Cangjie::AST {
 namespace {
 const std::string EMPTY_PACKAGE_NAME = "";
 
@@ -163,6 +171,175 @@ Position GetMacroSourcePos(const MacroInvocation& invocation, const Position& po
     return pos;
 }
 } // namespace
+
+Pattern::Pattern(ASTKind kind) : Node(kind)
+{
+}
+
+InvalidPattern::InvalidPattern() : Pattern(ASTKind::INVALID_PATTERN)
+{
+    EnableAttr(Attribute::IS_BROKEN);
+}
+
+InvalidPattern::InvalidPattern(const Position& pos) : Pattern(ASTKind::INVALID_PATTERN)
+{
+    EnableAttr(Attribute::IS_BROKEN);
+    begin = pos;
+    end = pos;
+}
+
+ConstPattern::ConstPattern() : Pattern(ASTKind::CONST_PATTERN)
+{
+}
+
+WildcardPattern::WildcardPattern() : Pattern(ASTKind::WILDCARD_PATTERN)
+{
+}
+
+WildcardPattern::WildcardPattern(const Position& begin) : Pattern(ASTKind::WILDCARD_PATTERN)
+{
+    this->begin = begin;
+    this->end = begin + static_cast<size_t>(Len(TokenKind::WILDCARD));
+}
+
+VarPattern::VarPattern() : Pattern(ASTKind::VAR_PATTERN)
+{
+}
+
+TuplePattern::TuplePattern() : Pattern(ASTKind::TUPLE_PATTERN)
+{
+}
+
+TypePattern::TypePattern() : Pattern(ASTKind::TYPE_PATTERN)
+{
+}
+
+EnumPattern::EnumPattern() : Pattern(ASTKind::ENUM_PATTERN)
+{
+}
+
+VarOrEnumPattern::VarOrEnumPattern(const SrcIdentifier& id) : Pattern(ASTKind::VAR_OR_ENUM_PATTERN), identifier{id}
+{
+}
+
+ExceptTypePattern::ExceptTypePattern() : Pattern(ASTKind::EXCEPT_TYPE_PATTERN)
+{
+}
+
+CommandTypePattern::CommandTypePattern() : Pattern(ASTKind::COMMAND_TYPE_PATTERN)
+{
+}
+
+Decl::Decl() : Node(ASTKind::DECL)
+{
+}
+
+Decl::~Decl() = default;
+
+Decl::Decl(ASTKind kind) : Node(kind)
+{
+}
+
+VarDeclAbstract::VarDeclAbstract(ASTKind astKind) : Decl(astKind)
+{
+}
+
+VarDeclAbstract::~VarDeclAbstract() = default;
+
+VarDecl::VarDecl() : VarDeclAbstract(ASTKind::VAR_DECL)
+{
+}
+
+VarDecl::VarDecl(ASTKind kind) : VarDeclAbstract(kind)
+{
+}
+
+VarDecl::~VarDecl() = default;
+
+VarWithPatternDecl::VarWithPatternDecl() : VarDeclAbstract(ASTKind::VAR_WITH_PATTERN_DECL)
+{
+}
+
+VarWithPatternDecl::~VarWithPatternDecl() = default;
+
+FuncParam::FuncParam() : VarDecl(ASTKind::FUNC_PARAM)
+{
+}
+
+FuncParam::FuncParam(ASTKind astKind) : VarDecl(astKind)
+{
+}
+
+FuncParam::~FuncParam() = default;
+
+Annotation::Annotation(const std::string& name, AnnotationKind annoKind, const Position& pos)
+    : Node(ASTKind::ANNOTATION), kind(annoKind), identifier{name, INVALID_POSITION, INVALID_POSITION}
+{
+    begin = pos;
+}
+
+Annotation::Annotation() : Node(ASTKind::ANNOTATION)
+{
+}
+
+Annotation::~Annotation() = default;
+
+File::File() : Node(ASTKind::FILE)
+{
+}
+
+File::~File() = default;
+
+ArrayLit::ArrayLit() : Expr(ASTKind::ARRAY_LIT)
+{
+}
+
+ArrayLit::~ArrayLit() = default;
+
+ArrayExpr::ArrayExpr() : Expr(ASTKind::ARRAY_EXPR)
+{
+}
+
+ArrayExpr::~ArrayExpr() = default;
+
+PointerExpr::PointerExpr() : Expr(ASTKind::POINTER_EXPR)
+{
+}
+
+PointerExpr::~PointerExpr() = default;
+
+CallExpr::CallExpr() : Expr(ASTKind::CALL_EXPR)
+{
+}
+
+CallExpr::~CallExpr() = default;
+
+IfAvailableExpr::IfAvailableExpr(
+    OwnedPtr<FuncArg> namedArg, OwnedPtr<LambdaExpr> lambdaArg1, OwnedPtr<LambdaExpr> lambdaArg2)
+    : Expr{ASTKind::IF_AVAILABLE_EXPR},
+      arg{std::move(namedArg)},
+      lambda1{std::move(lambdaArg1)},
+      lambda2{std::move(lambdaArg2)}
+{
+}
+
+IfAvailableExpr::~IfAvailableExpr() = default;
+
+NameReferenceExpr::NameReferenceExpr(ASTKind astKind) : Expr(astKind)
+{
+}
+
+NameReferenceExpr::~NameReferenceExpr() = default;
+
+LambdaExpr::LambdaExpr() : Expr(ASTKind::LAMBDA_EXPR)
+{
+}
+
+LambdaExpr::LambdaExpr(OwnedPtr<FuncBody> body) : Expr(ASTKind::LAMBDA_EXPR), funcBody(std::move(body))
+{
+}
+
+LambdaExpr::~LambdaExpr() = default;
 
 std::string Modifier::ToString() const
 {
@@ -962,6 +1139,59 @@ bool Decl::IsBuiltIn() const
     return astKind == ASTKind::BUILTIN_DECL;
 }
 
+bool Decl::HasAnno(AnnotationKind anno) const
+{
+    for (auto& it : annotations) {
+        if (it->kind == anno) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Ptr<ClassDecl> ClassDecl::GetSuperClassDecl() const
+{
+    Ptr<ClassDecl> ret = nullptr;
+    for (auto& it : inheritedTypes) {
+        if (it->ty && it->ty->kind == TypeKind::TYPE_CLASS) {
+            ret = static_cast<ClassTy*>(it->ty.get())->decl;
+            break;
+        }
+    }
+    return ret;
+}
+
+void MatchCase::SetCtxExprForPatterns(Ptr<Expr> ctxExpr)
+{
+    for (auto& pattern : patterns) {
+        if (pattern) {
+            pattern->ctxExpr = ctxExpr;
+        }
+    }
+}
+
+std::set<std::string> File::GetFeatures() const
+{
+    if (!feature) {
+        return {};
+    }
+    std::set<std::string> features = {};
+    auto rawFeatures = feature->featuresSet->content;
+    const std::string FEATURE_SEPARATOR = ".";
+    for (auto rawFeature : rawFeatures) {
+        std::string featureStr = "";
+        for (size_t i = 0; i < rawFeature.identifiers.size(); i++) {
+            featureStr += rawFeature.identifiers[i].Val();
+            if (i + 1 != rawFeature.identifiers.size()) {
+                featureStr += FEATURE_SEPARATOR;
+            }
+        }
+        features.insert(featureStr);
+    }
+
+    return features;
+}
+
 /**
  * Get the identifier Position of the Decl.
  * @return identifier Position in macrocall file if the Decl is expanded from macrocall,
@@ -1528,4 +1758,19 @@ std::string PrimitiveTypeExpr::ToString() const
     return Ty::KindName(typeKind);
 }
 
-} // namespace Cangjie
+bool CompNodeByPos(Ptr<const Node> n1, Ptr<const Node> n2)
+{
+    if (!n1 || !n2) {
+        return n1 < n2;
+    }
+    // 'n1' is less than 'n2' if 'n1' and 'n2' are not null and n1's position is less than n2's position.
+    // Compare pointers if the node positions are same.
+    // NOTE: comparison of Postion will ignore 'fileID', so compare fileID separately.
+    return n1->begin.fileID < n2->begin.fileID || (n1->begin.fileID == n2->begin.fileID && n1->begin < n2->begin) ||
+        (n1->begin.fileID == n2->begin.fileID && n1->begin == n2->begin && n1 < n2);
+}
+
+MacroExpandExpr::MacroExpandExpr() : Expr(ASTKind::MACRO_EXPAND_EXPR)
+{
+}
+} // namespace Cangjie::AST

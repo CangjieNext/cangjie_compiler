@@ -10,16 +10,16 @@
  * Comments related unit tests.
  */
 
+#include "TestCompilerInstance.h"
+#include "cangjie/AST/Match.h"
+#include "cangjie/AST/Nodes/Node.h"
+#include "cangjie/AST/Walker.h"
+#include "cangjie/Basic/Match.h"
+#include "gtest/gtest.h"
 #include <cstddef>
 #include <cstdlib>
 #include <string>
 #include <vector>
-#include "gtest/gtest.h"
-#include "TestCompilerInstance.h"
-#include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
-#include "cangjie/AST/Walker.h"
-#include "cangjie/Basic/Match.h"
 
 using namespace Cangjie;
 using namespace AST;

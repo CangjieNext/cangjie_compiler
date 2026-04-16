@@ -4,10 +4,10 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/CmpNodeByPos.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
-#include "cangjie/AST/Walker.h"
 #include "cangjie/CHIR/IR/Package.h"
 
 using namespace Cangjie::CHIR;

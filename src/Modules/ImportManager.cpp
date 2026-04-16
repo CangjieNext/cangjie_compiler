@@ -27,6 +27,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/SourceManager.h"
+#include "cangjie/Driver/StdlibMap.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Modules/ASTSerialization.h"
 #include "cangjie/Modules/ModulesUtils.h"

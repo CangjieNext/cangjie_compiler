@@ -23,12 +23,12 @@
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/Basic/StringConvertor.h"
 #include "cangjie/Macro/TokenSerialization.h"
 #include "cangjie/Utils/Utils.h"
-#include "cangjie/Basic/StringConvertor.h"
 
 namespace Cangjie {
 using namespace AST;

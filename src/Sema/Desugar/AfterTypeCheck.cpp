@@ -32,6 +32,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Driver/StdlibMap.h"
+#include "cangjie/Frontend/CompileStrategy.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"

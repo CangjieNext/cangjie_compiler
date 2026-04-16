@@ -13,12 +13,12 @@
 #ifndef CANGJIE_SEMA_INHERITANCE_CHECKER_H
 #define CANGJIE_SEMA_INHERITANCE_CHECKER_H
 
-#include "cangjie/AST/Node.h"
+#include "MemberSignature.h"
+#include "cangjie/AST/Nodes/CmpNodeByPos.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
-#include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Modules/ImportManager.h"
-#include "MemberSignature.h"
+#include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie {
 using namespace AST;

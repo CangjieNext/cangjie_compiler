@@ -7,7 +7,12 @@
 #ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_DIAGS
 #define CANGJIE_SEMA_NATIVE_FFI_JAVA_DIAGS
 
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
+
+namespace Cangjie::AST {
+struct ExtendDecl;
+}
 
 namespace Cangjie::Interop::Java {
 using namespace Cangjie;

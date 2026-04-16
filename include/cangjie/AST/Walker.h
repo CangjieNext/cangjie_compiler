@@ -18,7 +18,7 @@
 #include <utility>
 #include <atomic>
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 
 namespace Cangjie::AST {
 /**

@@ -22,14 +22,14 @@
 #include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Utils/CheckUtils.h"
-#include "cangjie/Utils/Utils.h"
 #include "cangjie/Utils/ProfileRecorder.h"
+#include "cangjie/Utils/Utils.h"
 
 using namespace Cangjie;
 using namespace TypeCheckUtil;

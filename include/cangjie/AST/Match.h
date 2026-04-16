@@ -13,7 +13,6 @@
 #ifndef CANGJIE_AST_MATCH_H
 #define CANGJIE_AST_MATCH_H
 
-#include "cangjie/AST/NodeX.h"
 #include "cangjie/AST/ASTCasting.h"
 
 namespace Cangjie::AST {

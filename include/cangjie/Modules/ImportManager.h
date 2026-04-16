@@ -20,7 +20,7 @@
 #include <unordered_map>
 
 #include "cangjie/AST/ASTCasting.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/CmpNodeByPos.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/Interpreter/BCHIR.h"
 #include "cangjie/Modules/CjoManager.h"

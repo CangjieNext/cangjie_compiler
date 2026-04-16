@@ -13,6 +13,7 @@
 #include "ExtraScopes.h"
 #include "TypeCheckUtil.h"
 #include "Promotion.h"
+#include "cangjie/AST/Match.h"
 #include <algorithm>
 
 namespace Cangjie {

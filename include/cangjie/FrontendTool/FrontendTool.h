@@ -20,6 +20,7 @@
 
 namespace Cangjie {
 class Driver;
+class DefaultCompilerInstance;
 /**
  * Execute frontend.
  */

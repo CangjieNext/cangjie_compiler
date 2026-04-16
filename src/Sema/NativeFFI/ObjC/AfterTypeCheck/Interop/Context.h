@@ -13,17 +13,17 @@
 #ifndef CANGJIE_SEMA_DESUGAR_OBJ_C_INTEROP_INTEROP_CONTEXT
 #define CANGJIE_SEMA_DESUGAR_OBJ_C_INTEROP_INTEROP_CONTEXT
 
-#include "cangjie/AST/Node.h"
+#include "InheritanceChecker/MemberSignature.h"
+#include "NativeFFI/ObjC/Utils/ASTFactory.h"
+#include "NativeFFI/ObjC/Utils/InteropLibBridge.h"
+#include "NativeFFI/ObjC/Utils/NameGenerator.h"
+#include "NativeFFI/ObjC/Utils/TypeMapper.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Option/Option.h"
 #include "cangjie/Sema/TypeManager.h"
-#include "NativeFFI/ObjC/Utils/ASTFactory.h"
-#include "NativeFFI/ObjC/Utils/InteropLibBridge.h"
-#include "NativeFFI/ObjC/Utils/NameGenerator.h"
-#include "NativeFFI/ObjC/Utils/TypeMapper.h"
-#include "InheritanceChecker/MemberSignature.h"
 
 namespace Cangjie::Interop::ObjC {
 

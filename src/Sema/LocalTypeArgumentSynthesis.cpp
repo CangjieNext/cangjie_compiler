@@ -21,9 +21,9 @@
 #include "TyVarConstraintGraph.h"
 #include "TypeCheckUtil.h"
 
-#include "cangjie/AST/Node.h"
-#include "cangjie/Sema/TypeManager.h"
 #include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Nodes/Node.h"
+#include "cangjie/Sema/TypeManager.h"
 
 using namespace Cangjie;
 using namespace AST;

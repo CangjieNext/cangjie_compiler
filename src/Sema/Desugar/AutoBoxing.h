@@ -13,7 +13,7 @@
 #define CANGJIE_SEMA_AUTO_BOX_H
 
 #include "cangjie/AST/ASTContext.h"
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"

@@ -19,6 +19,7 @@
 
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Nodes/FuncArg.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Position.h"
 #include "cangjie/Basic/Print.h"

@@ -13,9 +13,11 @@
 #include "PartialInstantiation.h"
 
 #include "ImplUtils.h"
+#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Create.h"
+#include "cangjie/AST/Match.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/Match.h"
-#include "cangjie/Utils/Casting.h"
 
 namespace Cangjie {
 using namespace Cangjie::AST;

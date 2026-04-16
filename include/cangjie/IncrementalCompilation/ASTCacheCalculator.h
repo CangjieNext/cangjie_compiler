@@ -7,11 +7,14 @@
 #ifndef CANGJIE_AST_CACHE_CALCULATOR_H
 #define CANGJIE_AST_CACHE_CALCULATOR_H
 
-#include "cangjie/AST/Node.h"
+#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/IncrementalCompilation/CompilationCache.h"
 
-namespace Cangjie::IncrementalCompilation {
+namespace Cangjie::AST {
+struct ExtendDecl;
+}
 
+namespace Cangjie::IncrementalCompilation {
 /// a class that computes the information necessary to be kept for further incremental compilation, and also
 /// data that may later be used to analyse changed decls since last compilation.
 class ASTCacheCalculator {
