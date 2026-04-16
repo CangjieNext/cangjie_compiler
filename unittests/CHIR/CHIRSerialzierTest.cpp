@@ -543,12 +543,6 @@ PackageFormat::CHIRExprKind Serialize(const ExprKind& kind)
         case ExprKind::STORE_ELEMENT_BY_NAME:
             ret = CHIRExprKind_STORE_ELEMENT_BY_NAME;
             break;
-        case ExprKind::IF:
-            ret = CHIRExprKind_IF;
-            break;
-        case ExprKind::LOOP:
-            ret = CHIRExprKind_LOOP;
-            break;
         case ExprKind::FORIN_RANGE:
             ret = CHIRExprKind_FORIN_RANGE;
             break;

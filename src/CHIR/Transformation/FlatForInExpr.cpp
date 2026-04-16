@@ -49,10 +49,9 @@ void ReplaceExitWithGoto(CHIRBuilder& builder, const BlockGroup& src, Block& tar
         auto term = bl->GetTerminator();
         CJC_NULLPTR_CHECK(term);
         if (term->GetExprKind() == CHIR::ExprKind::EXIT) {
-            auto oldAnnotations = term->MoveAnnotation();
-            term->RemoveSelfFromBlock();
             auto gotoCond = builder.CreateTerminator<GoTo>(&target, bl);
-            gotoCond->SetAnnotation(std::move(oldAnnotations));
+            gotoCond->CopyBaseInfoFrom(*term);
+            term->RemoveSelfFromBlock();
             bl->AppendExpression(gotoCond);
         }
     }
