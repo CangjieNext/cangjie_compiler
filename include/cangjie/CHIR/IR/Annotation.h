@@ -400,19 +400,6 @@ public: // Set annotation T for this node, updating its value if it already exis
         }
     }
 
-    inline const DebugLocation& GetDebugLocation() const
-    {
-        return loc;
-    }
-    inline void SetDebugLocation(const DebugLocation& newLoc)
-    {
-        loc = newLoc;
-    }
-    inline void SetDebugLocation(DebugLocation&& newLoc)
-    {
-        loc = std::move(newLoc);
-    }
-
     std::string ToString() const;
 
     AnnotationMap() = default;
@@ -422,7 +409,6 @@ public: // Set annotation T for this node, updating its value if it already exis
         for (auto& anno : other.annotations) {
             annotations[anno.first] = anno.second->Clone();
         }
-        loc = other.loc;
     }
     AnnotationMap(AnnotationMap&& other) = default;
 
@@ -435,13 +421,11 @@ public: // Set annotation T for this node, updating its value if it already exis
         for (auto& anno : other.annotations) {
             annotations[anno.first] = anno.second->Clone();
         }
-        loc = other.loc;
         return *this;
     }
     AnnotationMap& operator=(AnnotationMap&& other)
     {
         swap(annotations, other.annotations);
-        loc = other.loc;
         return *this;
     }
 
@@ -452,8 +436,6 @@ public: // Set annotation T for this node, updating its value if it already exis
 
 private:
     std::unordered_map<std::type_index, std::unique_ptr<Annotation>> annotations;
-    // DebugLocation is a specialised field for better performance, since most expression/value/decl/type has one.
-    DebugLocation loc{};
 };
 
 /// Each annotation object is translated to a global var for consteval requirements.

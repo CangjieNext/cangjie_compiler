@@ -178,13 +178,13 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
     auto annosArray = decl.annotationsArray.get();
     if (decl.TestAttr(AST::Attribute::IMPORTED) || !annosArray || annosArray->children.empty() ||
         decl.TestAttr(AST::Attribute::SPECIFIC) || opts.disableReflection) {
-        return {"none"};
+        return {};
     }
 
     // In OHOS environment, disable annotations for enum types
     if (opts.target.env == Triple::Environment::OHOS && parent &&
         parent->GetCustomKind() == CustomDefKind::TYPE_ENUM) {
-        return {"none"};
+        return {};
     }
     auto found = annotationFuncMap.find(&decl);
     if (found != annotationFuncMap.end()) {
@@ -221,7 +221,7 @@ AnnoInfo Translator::CreateAnnoFactoryFuncSig(const AST::Decl& decl, CustomTypeD
     auto gvs = TranslateAnnotationsArraySig(*annosArray, *func);
     func->Set<AnnoFactoryInfo>(std::move(gvs));
     // Collect annotations whose parameter values are literal constants.
-    std::vector<AnnoInfo::AnnoPair> annoPairs;
+    std::vector<AnnoPair> annoPairs;
     for (auto& elem : annosArray->children) {
         auto callExpr = StaticCast<AST::CallExpr*>(elem.get().get());
         auto& callee = callExpr->resolvedFunction->funcBody;

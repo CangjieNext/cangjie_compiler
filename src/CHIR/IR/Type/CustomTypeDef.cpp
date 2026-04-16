@@ -150,7 +150,7 @@ void CustomTypeDef::PrintComment(std::stringstream& ss) const
         }
     }
     AddCommaOrNot(comment);
-    comment << ToStringAnnotationMap();
+    comment << BaseCommentToString();
     AddCommaOrNot(comment);
     if (genericDecl != nullptr) {
         comment << "genericDecl: " << genericDecl->GetIdentifierWithoutPrefix();

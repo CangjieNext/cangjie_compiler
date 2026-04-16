@@ -7,12 +7,27 @@
 #ifndef CANGJIE_CHIR_ANNOINFO_H
 #define CANGJIE_CHIR_ANNOINFO_H
 
+#include <cstddef>
 #include <string>
 
 #include "cangjie/CHIR/IR/DebugLocation.h"
-#include "cangjie/Utils/SafePointer.h"
 
 namespace Cangjie::CHIR {
+// `AnnoPair` is a structure used to save the information of the annotation whose parameter values are
+// literal constants:
+//      - `annoClassName` is the name of that annotation class
+//      - `paramValues` is used to save each parameter value as a string
+// note: annotation that has no parameters is also included
+struct AnnoPair {
+    std::string annoClassName;
+    std::vector<std::string> paramValues;
+    DebugLocation loc;
+
+    AnnoPair(const std::string& className, const std::vector<std::string>& pValues, const DebugLocation& loc);
+    std::string ToString(size_t indent) const;
+    void Dump() const;
+};
+
 // Need refactor: temporary solution of custom defined annotation
 /**
  * generate an instance of user defined annotation class,
@@ -46,30 +61,13 @@ namespace Cangjie::CHIR {
  *
  */
 struct AnnoInfo {
-    // If it's not cangjie custom annotation, mangledName should be "none". Required for generating metadata.
-    std::string mangledName{"none"}; // mangledName of annotation generated func
-    // `AnnoPair` is a structure used to save the information of the annotation whose parameter values are
-    // literal constants:
-    //      - `annoClassName` is the name of that annotation class
-    //      - `paramValues` is used to save each parameter value as a string
-    // note: annotation that has no parameters is also included
-    struct AnnoPair {
-        std::string annoClassName;
-        std::vector<std::string> paramValues;
-        DebugLocation loc;
-        AnnoPair(
-            const std::string& annoClassName, const std::vector<std::string>& paramValues, const DebugLocation& loc)
-            : annoClassName(annoClassName), paramValues(paramValues), loc(loc)
-        {
-        }
-    };
+    std::string mangledName; // mangledName of annotation generated func
     // `annoPairs` is used to collect all annotations whose parameter values are literal constants.
     // Annotations without parameters are also included in the collection.
     std::vector<AnnoPair> annoPairs;
-    bool IsAvailable() const
-    {
-        return mangledName != "none";
-    }
+    bool IsAvailable() const;
+    std::string ToString(size_t indent) const;
+    void Dump() const;
 };
 } // namespace Cangjie::CHIR
 

@@ -243,14 +243,16 @@ std::string Package::ToString() const
     ss << "package: " << name << "\n";
     ss << "packageAccessLevel: " << PackageAccessLevelToString(pkgAccessLevel) << "\n";
     ss << "packageInitFunc: " << GetPackageInitFunc()->GetIdentifier() << "\n";
-    ss << "\n==========================imports===============================\n";
-    for (auto& it : GetGlobalVarsWithoutInit()) {
-        ss << GetImportedVarStr(*it) << "\n";
+    ss << "\n==========================vars===============================\n";
+    for (auto it : GetGlobalVars()) {
+        ss << it->ToString(0);
     }
-    for (auto& it : GetGlobalFuncsWithoutBody()) {
-        ss << GetImportedFuncStr(*it) << "\n";
+    ss << "\n==========================funcs===============================\n";
+    for (auto it : GetGlobalFunctions(true)) {
+        ss << it->ToString(0);
     }
     ss << "\n\n";
+    ss << "\n==========================types=================================\n";
     for (auto& it : importedStructs) {
         ss << it->ToString() << "\n\n";
     }
@@ -263,11 +265,6 @@ std::string Package::ToString() const
     for (auto& it : importedExtends) {
         ss << it->ToString() << "\n\n";
     }
-    ss << "\n===========================vars=================================\n";
-    for (auto& it : globalVars) {
-        ss << it->ToString() << "\n";
-    }
-    ss << "\n==========================types=================================\n";
     for (auto& it : structs) {
         ss << it->ToString() << "\n\n";
     }
@@ -279,11 +276,6 @@ std::string Package::ToString() const
     }
     for (auto& it : extends) {
         ss << it->ToString() << "\n\n";
-    }
-    ss << "\n==========================funcs=================================\n";
-    for (auto& it : GetGlobalFuncsWithBody()) {
-        ss << GetFuncStr(*it);
-        ss << "\n\n";
     }
     return ss.str();
 }
