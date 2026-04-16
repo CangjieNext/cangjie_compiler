@@ -12,6 +12,7 @@
 #include "cangjie/CHIR/IR/Type/ExtendDef.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include <iostream>
 
 using namespace Cangjie::CHIR;
 
@@ -217,17 +218,19 @@ std::vector<GlobalVar*> Package::GetGlobalVarsWithInit(bool includeSrcCodeImport
 std::string Package::ToString() const
 {
     std::stringstream ss;
-    ss << "package: " << name << "\n";
-    ss << "packageAccessLevel: " << PackageAccessLevelToString(pkgAccessLevel) << "\n";
-    ss << "packageInitFunc: " << GetPackageInitFunc()->GetIdentifier() << "\n";
-    ss << "\n==========================imports===============================\n";
-    for (auto& it : GetGlobalVarsWithoutInit()) {
-        ss << GetImportedVarStr(*it) << "\n";
+    ss << "package: " << name << std::endl;
+    ss << "packageAccessLevel: " << PackageAccessLevelToString(pkgAccessLevel) << std::endl;
+    ss << "packageInitFunc: " << GetPackageInitFunc()->GetIdentifier() << std::endl;
+    ss << "\n==========================vars===============================\n";
+    for (auto it : GetGlobalVars()) {
+        ss << it->ToString(0) << "\n\n";
     }
-    for (auto& it : GetGlobalFuncsWithoutBody()) {
-        ss << GetImportedFuncStr(*it) << "\n";
+    ss << "\n==========================funcs===============================\n";
+    for (auto it : GetGlobalFunctions(true)) {
+        ss << it->ToString(0) << "\n\n";
     }
     ss << "\n\n";
+    ss << "\n==========================types=================================\n";
     for (auto& it : importedStructs) {
         ss << it->ToString() << "\n\n";
     }
@@ -240,11 +243,6 @@ std::string Package::ToString() const
     for (auto& it : importedExtends) {
         ss << it->ToString() << "\n\n";
     }
-    ss << "\n===========================vars=================================\n";
-    for (auto& it : globalVars) {
-        ss << it->ToString() << "\n";
-    }
-    ss << "\n==========================types=================================\n";
     for (auto& it : structs) {
         ss << it->ToString() << "\n\n";
     }
@@ -256,11 +254,6 @@ std::string Package::ToString() const
     }
     for (auto& it : extends) {
         ss << it->ToString() << "\n\n";
-    }
-    ss << "\n==========================funcs=================================\n";
-    for (auto& it : GetGlobalFuncsWithBody()) {
-        ss << GetFuncStr(*it);
-        ss << "\n\n";
     }
     return ss.str();
 }

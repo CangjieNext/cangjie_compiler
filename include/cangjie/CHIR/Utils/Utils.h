@@ -803,6 +803,6 @@ bool IsSTDFunction(const Function& func);
  * @param val The value to retrieve the non-debug users from.
  * @return The non-debug users of the value.
  */
- std::vector<Expression*> GetNonDebugUsers(const Value& val);
+std::vector<Expression*> GetNonDebugUsers(const Value& val);
 } // namespace Cangjie::CHIR
 #endif

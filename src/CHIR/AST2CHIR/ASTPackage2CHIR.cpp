@@ -79,21 +79,6 @@ void SetGlobalVarLinkageType(Value& var, const AST::VarDecl& decl, bool isLifted
     }
     var.Set<LinkTypeInfo>(decl.linkage);
 }
-
-void TryUpdateExistingValue(GlobalValue& existing, const std::set<std::string>& newFeatures)
-{
-    auto oldFeatures = existing.GetFeatures();
-    bool newIsSuperSet = std::includes(newFeatures.begin(), newFeatures.end(),
-        oldFeatures.begin(), oldFeatures.end()) && newFeatures.size() > oldFeatures.size();
-    if (!newIsSuperSet) {
-        // already existed value more specific, so no need to update
-        existing.EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
-    } else {
-        // will be updated as it is loaded first time
-        existing.DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
-        existing.SetFeatures(newFeatures);
-    }
-}
 } // namespace
 
 void AST2CHIR::AddToImplicitFuncs(AST::FuncDecl& funcDecl,
@@ -706,8 +691,8 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
     }
     auto srcCodeName = funcDecl.identifier;
     auto rawMangledName = funcDecl.rawMangleName;
-    fn = builder.CreateFunction(
-        loc, funcTy, mangledName, srcCodeName, rawMangledName, pkgName, genericParamTy);
+    fn = builder.CreateFunction(funcTy, mangledName, srcCodeName, rawMangledName, pkgName, genericParamTy);
+    fn->SetDebugLocation(loc);
     // This is the logic that applied when compiling common part of package
     // Ideally such logic should be be visually discernible
     if (funcDecl.TestAttr(AST::Attribute::COMMON)) {
@@ -1004,7 +989,7 @@ void AST2CHIR::CreateAnnoOnlyDeclSig(const AST::Decl& decl)
         tr.CreateAnnoFactoryFuncsForFuncDecl(*funcDecl, nullptr);
     } else {
         auto fn = tr.CreateAnnoFactoryFuncSig(decl, nullptr);
-        if (fn.mangledName != "none") {
+        if (fn.IsAvailable()) {
             if (auto var = DynamicCast<AST::VarDecl>(&decl)) {
                 globalCache.Get(*var)->SetAnnoInfo(std::move(fn));
             }

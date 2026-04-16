@@ -149,7 +149,7 @@ public:
     {
         bool hasInputCHIR = s.ci->invocation.globalOptions.IsCompilingCJMPSpecific();
         if (hasInputCHIR || s.ci->invocation.globalOptions.commonPartCjo.has_value()) {
-            auto mbFilesFromCommonPart = s.ci->importManager.GetCjoManager()->PreReadCommonPartCjoFiles();
+            auto mbFilesFromCommonPart = s.ci->importManager->GetCjoManager()->PreReadCommonPartCjoFiles();
             if (!mbFilesFromCommonPart) {
                 return false;
             }

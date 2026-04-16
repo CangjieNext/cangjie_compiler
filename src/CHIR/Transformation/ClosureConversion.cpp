@@ -2997,7 +2997,7 @@ void ClosureConversion::ModifyTypeMismatchInExpr()
     }
 }
 
-void ClosureConversion::ModifyTypeMismatchInFunc(Func& func, size_t paramIndex)
+void ClosureConversion::ModifyTypeMismatchInFunc(Function& func, size_t paramIndex)
 {
     // 1. create $Auto_Env_wrapper def
     auto param = func.GetParam(paramIndex);

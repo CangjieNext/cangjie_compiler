@@ -844,7 +844,7 @@ void CompilerInstance::ManglingHelpFunction(const BaseMangler& baseMangler)
             return;
         }
         if (decl->isUsedImports) {
-            topDeclsSet.insert(std::make_pair(decl, pkgName));
+            topDecls.emplace_back(std::make_pair(decl, pkgName));
         }
     };
 

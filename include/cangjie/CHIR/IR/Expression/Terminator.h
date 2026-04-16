@@ -150,10 +150,8 @@ public:
     /** @brief Get the source expr */
     SourceExpr GetSourceExpr() const;
 
-    // ===--------------------------------------------------------------------===//
-    // Others
-    // ===--------------------------------------------------------------------===//
-    std::string ToString(size_t indent = 0) const override;
+protected:
+    std::string AddExtraComment() const override;
 
 private:
     explicit Branch(Value* cond, Block* trueBlock, Block* falseBlock, Block* parent);
@@ -191,12 +189,13 @@ public:
 
     std::vector<Block*> GetNormalBlocks() const;
 
+protected:
+    std::string OperandsToString() const override;
+
 private:
     explicit MultiBranch(Value* cond, Block* defaultBlock, const std::vector<uint64_t>& vals,
         const std::vector<Block*>& succs, Block* parent);
     ~MultiBranch() override = default;
-
-    std::string ToString(size_t indent = 0) const override;
 
     MultiBranch* Clone(CHIRBuilder& builder, Block& parent) const override;
 
@@ -374,10 +373,8 @@ public:
      */
     Type* GetInstParentCustomTyOfCallee(CHIRBuilder& builder) const;
 
-    // ===--------------------------------------------------------------------===//
-    // Others
-    // ===--------------------------------------------------------------------===//
-    std::string ToString(size_t indent = 0) const override;
+protected:
+    std::string OperandsToString() const override;
 
 private:
     explicit ApplyWithException(
@@ -441,6 +438,8 @@ public:
     AttributeInfo GetVirtualMethodAttr(CHIRBuilder& builder) const;
 
 protected:
+    std::string OperandsToString() const override;
+
     explicit DynamicDispatchWithException(
         ExprKind kind, const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent);
 
@@ -478,11 +477,6 @@ public:
      */
     std::vector<Value*> GetArgs() const override;
 
-    // ===--------------------------------------------------------------------===//
-    // Others
-    // ===--------------------------------------------------------------------===//
-    std::string ToString(size_t indent = 0) const override;
-
 private:
     explicit InvokeWithException(
         const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent);
@@ -519,11 +513,6 @@ public:
      * @return A vector of pointers to the call arguments.
      */
     std::vector<Value*> GetArgs() const override;
-
-    // ===--------------------------------------------------------------------===//
-    // Others
-    // ===--------------------------------------------------------------------===//
-    std::string ToString(size_t indent = 0) const override;
 
 private:
     explicit InvokeStaticWithException(
@@ -580,11 +569,6 @@ public:
      */
     OverflowStrategy GetOverflowStrategy() const;
 
-    // ===--------------------------------------------------------------------===//
-    // Others
-    // ===--------------------------------------------------------------------===//
-    std::string ToString(size_t indent = 0) const override;
-
 private:
     explicit IntOpWithException(
         ExprKind unaryKind, Value* operand, OverflowStrategy ofs, Block* normal, Block* exception, Block* parent);
@@ -636,11 +620,6 @@ public:
      */
     Type* GetTargetTy() const;
 
-    // ===--------------------------------------------------------------------===//
-    // Others
-    // ===--------------------------------------------------------------------===//
-    std::string ToString(size_t indent = 0) const override;
-
 private:
     explicit TypeCastWithException(Value* operand, Block* normal, Block* exception, Block* parent);
     ~TypeCastWithException() override = default;
@@ -681,10 +660,8 @@ public:
      */
     const std::vector<Value*> GetArgs() const;
 
-    // ===--------------------------------------------------------------------===//
-    // Others
-    // ===--------------------------------------------------------------------===//
-    std::string ToString(size_t indent = 0) const override;
+protected:
+    std::string OperandsToString() const override;
 
 private:
     explicit IntrinsicWithException(
@@ -710,10 +687,8 @@ public:
     // ===--------------------------------------------------------------------===//
     Type* GetType() const;
 
-    // ===--------------------------------------------------------------------===//
-    // Others
-    // ===--------------------------------------------------------------------===//
-    std::string ToString(size_t indent = 0) const override;
+protected:
+    std::string OperandsToString() const override;
 
 private:
     explicit AllocateWithException(Type* ty, Block* normal, Block* exception, Block* parent);
@@ -742,10 +717,8 @@ public:
 
     Type* GetElementType() const;
 
-    // ===--------------------------------------------------------------------===//
-    // Others
-    // ===--------------------------------------------------------------------===//
-    std::string ToString(size_t indent = 0) const override;
+protected:
+    std::string OperandsToString() const override;
 
 private:
     explicit RawArrayAllocateWithException(Type* eleTy, Value* size, Block* normal, Block* exception, Block* parent);
@@ -795,10 +768,8 @@ public:
      */
     Function* GetExecuteClosure() const;
 
-    // ===--------------------------------------------------------------------===//
-    // Others
-    // ===--------------------------------------------------------------------===//
-    std::string ToString(size_t indent = 0) const override;
+protected:
+    std::string AddExtraComment() const override;
 
 private:
     explicit SpawnWithException(

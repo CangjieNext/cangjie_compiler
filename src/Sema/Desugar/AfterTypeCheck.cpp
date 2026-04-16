@@ -282,7 +282,7 @@ void DesugarSetForPropDecl(TypeManager& tyMgr, Expr& expr)
 void UpdatePosForMacroExpandedNodes(const std::vector<Ptr<AST::Package>>& pkgs)
 {
     auto visit = [](Ptr<AST::Node> curNode) -> AST::VisitAction {
-        if (!curNode->IsExpr() || !curNode->TestAttr(AST::Attribute::MACRO_EXPANDED_NODE) || !curNode->curMacroCall) {
+        if (!curNode->IsExpr() || !curNode->curMacroCall) {
             return AST::VisitAction::WALK_CHILDREN;
         }
         curNode->begin = curNode->GetDebugPos(curNode->begin);

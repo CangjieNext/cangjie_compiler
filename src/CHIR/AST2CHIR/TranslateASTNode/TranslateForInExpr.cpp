@@ -212,7 +212,7 @@ Ptr<Value> Translator::GetOuterMostExpr()
             (currentBlock->GetTopLevelFunc() && bg == currentBlock->GetTopLevelFunc()->GetBody())) {
             return finalValidExpr != nullptr ? finalValidExpr : nullptr;
         }
-        if (ownedExpr && (Is<ForIn>(ownedExpr) || ownedExpr->GetExprKind() == ExprKind::IF)) {
+        if (ownedExpr && Is<ForIn>(ownedExpr)) {
             finalValidExpr = ownedExpr->GetResult();
         }
     }
