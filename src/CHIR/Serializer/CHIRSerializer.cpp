@@ -1136,18 +1136,6 @@ flatbuffers::Offset<PackageFormat::Intrinsic> CHIRSerializer::CHIRSerializerImpl
         builder, base, intrinsicKind, instantiatedTypeArgs.empty() ? nullptr : &instantiatedTypeArgs);
 }
 
-template <> flatbuffers::Offset<PackageFormat::If> CHIRSerializer::CHIRSerializerImpl::Serialize(const If& obj)
-{
-    auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    return PackageFormat::CreateIf(builder, base);
-}
-
-template <> flatbuffers::Offset<PackageFormat::Loop> CHIRSerializer::CHIRSerializerImpl::Serialize(const Loop& obj)
-{
-    auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    return PackageFormat::CreateLoop(builder, base);
-}
-
 template <>
 flatbuffers::Offset<PackageFormat::ForInRange> CHIRSerializer::CHIRSerializerImpl::Serialize(const ForInRange& obj)
 {
@@ -1546,12 +1534,6 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
         case ExprKind::STORE_ELEMENT_BY_NAME:
             exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_StoreElementByName;
             return Serialize<PackageFormat::StoreElementByName>(static_cast<const StoreElementByName&>(obj)).Union();
-        case ExprKind::IF:
-            exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_If;
-            return Serialize<PackageFormat::If>(static_cast<const If&>(obj)).Union();
-        case ExprKind::LOOP:
-            exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_Loop;
-            return Serialize<PackageFormat::Loop>(static_cast<const Loop&>(obj)).Union();
         case ExprKind::FORIN_RANGE:
             exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_ForInRange;
             return Serialize<PackageFormat::ForInRange>(static_cast<const ForInRange&>(obj)).Union();

@@ -265,7 +265,7 @@ std::string Package::ToString() const
     }
     ss << "\n===========================vars=================================\n";
     for (auto& it : globalVars) {
-        ss << it->ToString() << "\n";
+        ss << it->ToString(0) << "\n";
     }
     ss << "\n==========================types=================================\n";
     for (auto& it : structs) {

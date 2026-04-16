@@ -8,6 +8,7 @@
 #define CANGJIE_CHIR_LITERAL_VALUE_H
 
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include <cstddef>
 
 namespace Cangjie::CHIR {
 enum ConstantValueKind : uint8_t {
@@ -56,7 +57,7 @@ class BoolLiteral : public LiteralValue {
 
 public:
     bool GetVal() const;
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
 private:
     BoolLiteral(Type* ty, bool val);
@@ -75,7 +76,7 @@ class RuneLiteral : public LiteralValue {
 
 public:
     char32_t GetVal() const;
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
 private:
     explicit RuneLiteral(Type* ty, char32_t val);
@@ -96,7 +97,7 @@ public:
     std::string GetVal() const&;
     std::string GetVal() &&;
 
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
 private:
     explicit StringLiteral(Type* ty, std::string val);
@@ -122,7 +123,7 @@ public:
 
     bool IsSigned() const;
 
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
 private:
     explicit IntLiteral(Type* ty, uint64_t val);
@@ -148,7 +149,7 @@ class FloatLiteral : public LiteralValue {
 public:
     double GetVal() const;
 
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
 private:
     explicit FloatLiteral(Type* ty, double val);
@@ -171,7 +172,7 @@ class UnitLiteral : public LiteralValue {
     friend class CHIRBuilder;
 
 public:
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
 private:
     explicit UnitLiteral(Type* ty);
@@ -185,7 +186,7 @@ private:
 class NullLiteral : public LiteralValue {
     friend class CHIRBuilder;
 public:
-    std::string ToString() const override;
+    std::string ToString(size_t indent) const override;
 
 private:
     explicit NullLiteral(Type* ty);

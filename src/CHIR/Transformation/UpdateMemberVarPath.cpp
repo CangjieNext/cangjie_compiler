@@ -80,8 +80,8 @@ void UpdateMemberVarPath::UpdateToGetElementRef(GetElementByName& rawExpr)
     auto retType = rawExpr.GetResult()->GetType();
     auto parentBlock = rawExpr.GetParentBlock();
     auto newExpr = builder.CreateExpression<GetElementRef>(loc, retType, locationVal, path, parentBlock);
-    newExpr->SetAnnotation(rawExpr.MoveAnnotation());
-    newExpr->GetResult()->SetAnnotation(rawExpr.GetResult()->MoveAnnotation());
+    newExpr->CopyAnnotationMapFrom(rawExpr);
+    newExpr->GetResult()->CopyAnnotationMapFrom(*rawExpr.GetResult());
     newExpr->GetResult()->AppendAttributeInfo(rawExpr.GetResult()->GetAttributeInfo());
     rawExpr.ReplaceWith(*newExpr);
 }
@@ -96,8 +96,8 @@ void UpdateMemberVarPath::UpdateToStoreElementRef(StoreElementByName& rawExpr)
     auto retType = rawExpr.GetResult()->GetType();
     auto parentBlock = rawExpr.GetParentBlock();
     auto newExpr = builder.CreateExpression<StoreElementRef>(loc, retType, value, locationVal, path, parentBlock);
-    newExpr->SetAnnotation(rawExpr.MoveAnnotation());
-    newExpr->GetResult()->SetAnnotation(rawExpr.GetResult()->MoveAnnotation());
+    newExpr->CopyAnnotationMapFrom(rawExpr);
+    newExpr->GetResult()->CopyAnnotationMapFrom(*rawExpr.GetResult());
     newExpr->GetResult()->AppendAttributeInfo(rawExpr.GetResult()->GetAttributeInfo());
     rawExpr.ReplaceWith(*newExpr);
 }
@@ -111,8 +111,8 @@ void UpdateMemberVarPath::UpdateToField(FieldByName& rawExpr)
     auto retType = rawExpr.GetResult()->GetType();
     auto parentBlock = rawExpr.GetParentBlock();
     auto newExpr = builder.CreateExpression<Field>(loc, retType, locationVal, path, parentBlock);
-    newExpr->SetAnnotation(rawExpr.MoveAnnotation());
-    newExpr->GetResult()->SetAnnotation(rawExpr.GetResult()->MoveAnnotation());
+    newExpr->CopyAnnotationMapFrom(rawExpr);
+    newExpr->GetResult()->CopyAnnotationMapFrom(*rawExpr.GetResult());
     newExpr->GetResult()->AppendAttributeInfo(rawExpr.GetResult()->GetAttributeInfo());
     rawExpr.ReplaceWith(*newExpr);
 }

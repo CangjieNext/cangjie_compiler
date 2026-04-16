@@ -339,6 +339,44 @@ std::string InstTypeArgsToString(const std::vector<Type*>& instTypeArgs);
 std::string ExprOperandsToString(const std::vector<Value*>& args);
 std::string ExprWithExceptionOperandsToString(const std::vector<Value*>& args, const std::vector<Block*>& successors);
 std::string OverflowToString(Cangjie::OverflowStrategy ofStrategy);
+
+std::string StringJoin(const std::vector<std::string>& candidates, const std::string& delimiter);
+
+template <typename T>
+std::string ValueIdVecToString(const std::string& prefix,
+    const std::vector<T*>& values, const std::string& suffix, bool hasExceptionBranch = false)
+{
+    if (values.empty()) {
+        return "";
+    }
+    std::vector<std::string> ids;
+    for (auto v : values) {
+        if (v->IsLiteral()) {
+            ids.emplace_back(v->ToString(0));
+        } else {
+            ids.emplace_back(v->GetIdentifier());
+        }
+    }
+    if (hasExceptionBranch) {
+        CJC_ASSERT(ids.size() > 2);
+        ids[ids.size() - 2] = "normal: " + ids[ids.size() - 2];
+        ids[ids.size() - 1] = "exception: " + ids[ids.size() - 1];
+    }
+    return prefix + StringJoin(ids, ", ") + suffix;
+}
+
+template <typename T>
+std::string TypeVecToString(const std::string& prefix, const std::vector<T*>& types, const std::string& suffix)
+{
+    if (types.empty()) {
+        return "";
+    }
+    std::vector<std::string> ids;
+    for (auto v : types) {
+        ids.emplace_back(v->ToString());
+    }
+    return prefix + StringJoin(ids, ", ") + suffix;
+}
 } // namespace Cangjie::CHIR
 
 #endif // CANGJIE_CHIR_TOSTRING_UTILS_H
