@@ -342,31 +342,48 @@ void MacroExpansion::ReplaceEachMacroHelper(MacroCall& macroNode, PtrVector<Node
     }
 }
 
-void MacroExpansion::ReplaceEachMacro(MacroCall& macCall)
+MacroReplaceResult MacroExpansion::ReplaceEachMacro(
+    MacroCall& macCall, size_t* replacedNodeCount, bool skipInvalidNodes)
 {
     auto pInvocation = macCall.GetInvocation();
-    // macro expand failed will get ILLEGAL token.
     if (MacroExpandFailed(pInvocation->newTokens) || macCall.status == MacroEvalStatus::FAIL) {
-        return;
+        return MacroReplaceResult::FAIL;
     }
     Parser parser{pInvocation->newTokens, ci->diag, ci->diag.GetSourceManager(),
         ci->invocation.globalOptions.enableAddCommentToAst, ci->invocation.globalOptions.compileCjd};
     parser.SetCompileOptions(ci->invocation.globalOptions);
     (void)parser.SetPrimaryDecl(pInvocation->outerDeclIdent).EnableCustomAnno();
-    // Reparsing newTokens to get macro-generate ASTs.
     auto nodes = parser.ParseNodes(
         pInvocation->scope, *macCall.GetNode(), macCall.GetModifiers(), macCall.GetAnnotations());
+
+    bool hasNestedMacro = false;
+    bool hasValidNode = false;
     for (auto& node : nodes) {
         if (!node || node->IsInvalid()) {
-            return;
+            if (skipInvalidNodes) {
+                continue;
+            }
+            return MacroReplaceResult::FAIL;
         }
-        // Make sure no macro calls exist after macro expansion.
         if (HasMacroCallInNode(node, ci->diag)) {
-            return;
+            if (skipInvalidNodes) {
+                hasNestedMacro = true;
+            } else {
+                return MacroReplaceResult::FAIL;
+            }
         }
         CheckWhenAfterMacroExpand(node, ci->diag);
+        hasValidNode = true;
     }
+
     ReplaceEachMacroHelper(macCall, nodes);
+    if (replacedNodeCount != nullptr) {
+        *replacedNodeCount = nodes.size();
+    }
+    if (!hasValidNode) {
+        return MacroReplaceResult::SUCCESS;
+    }
+    return hasNestedMacro ? MacroReplaceResult::HAS_NESTED_MACRO : MacroReplaceResult::SUCCESS;
 }
 
 void MacroExpansion::ReplaceAST(Package& package)
@@ -445,3 +462,114 @@ void MacroExpansion::Execute(std::vector<OwnedPtr<AST::Package>>& packages)
         CheckUnhandledMacroCall(*package, ci->diag);
     }
 }
+
+bool MacroExpansion::CollectMacroCallsInDecls(
+    std::vector<OwnedPtr<AST::Decl>>& currentDecls, MacroCollector& collector)
+{
+    bool hasMacroCall = false;
+    for (size_t i = 0; i < currentDecls.size(); ++i) {
+        auto& currentDecl = currentDecls[i];
+        if (currentDecl->IsMacroCallNode()) {
+            auto macroNode = currentDecl.get();
+            (void)collector.macCalls.emplace_back(macroNode);
+            collector.macCalls.back().replaceLoc = VectorTarget<OwnedPtr<AST::Decl>>{&currentDecls, i};
+            collector.macCalls.back().isOuterMost = true;
+            hasMacroCall = true;
+        } else {
+            UpdateMacroInfo(currentDecl, collector);
+        }
+    }
+    return hasMacroCall;
+}
+
+bool MacroExpansion::ResolveMacroCalls(std::vector<MacroCall>& macCalls)
+{
+    for (auto& macCall : macCalls) {
+        macCall.ci = ci;
+    }
+    for (auto& macCall : macCalls) {
+        if (!macCall.ResolveMacroCall(ci)) {
+            return false;
+        }
+        if (!macCall.FindMacroDefMethod(ci)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool MacroExpansion::ReplaceMacroCallsInDecls(std::vector<MacroCall>& macroCalls)
+{
+    bool hasMacroCall = false;
+    std::reverse(macroCalls.begin(), macroCalls.end());
+    size_t indexOffset = 0;
+    for (auto& macCall : macroCalls) {
+        if (auto decls = std::get_if<VectorTarget<OwnedPtr<AST::Decl>>>(&macCall.replaceLoc); decls) {
+            (*decls).loc += indexOffset;
+        }
+        size_t replacedNodeCount = 0;
+        auto result = ReplaceEachMacro(macCall, &replacedNodeCount, true);
+        if (result == MacroReplaceResult::FAIL) {
+            return false;
+        }
+        if (result == MacroReplaceResult::HAS_NESTED_MACRO) {
+            hasMacroCall = true;
+        }
+        if (replacedNodeCount > 0) {
+            indexOffset += replacedNodeCount - 1;
+        }
+    }
+    return hasMacroCall;
+}
+
+std::vector<OwnedPtr<AST::Decl>> MacroExpansion::ExpandDecl(OwnedPtr<AST::Decl> decl)
+{
+    std::lock_guard<std::mutex> guard(globalMacroExpandLock);
+    std::vector<OwnedPtr<AST::Decl>> result;
+
+    if (!decl) {
+        return result;
+    }
+
+    AST::File* file = decl->curFile;
+
+    MacroCollector localCollector;
+    localCollector.curPkg = curPackage;
+    localCollector.importedMacroPkgs = ci->importManager.GetImportedPkgsForMacro();
+
+    std::vector<OwnedPtr<AST::Decl>> currentDecls;
+    currentDecls.emplace_back(std::move(decl));
+
+    bool hasMacroCall = true;
+    while (hasMacroCall) {
+        hasMacroCall = false;
+        localCollector.macCalls.clear();
+
+        hasMacroCall = CollectMacroCallsInDecls(currentDecls, localCollector);
+
+        if (localCollector.macCalls.empty()) {
+            break;
+        }
+
+        if (!ResolveMacroCalls(localCollector.macCalls)) {
+            break;
+        }
+
+        bool useChildProcess = ci->invocation.globalOptions.enableMacroInLSP;
+        MacroEvaluation evaluator(ci, &localCollector, useChildProcess);
+        evaluator.Evaluate();
+
+        auto macroCalls = localCollector.macCalls;
+        hasMacroCall = ReplaceMacroCallsInDecls(macroCalls);
+    }
+
+    for (auto& currentDecl : currentDecls) {
+        if (currentDecl) {
+            currentDecl->curFile = file;
+            result.emplace_back(std::move(currentDecl));
+        }
+    }
+
+    return result;
+}
+
