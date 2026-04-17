@@ -479,3 +479,149 @@ TEST_F(MacroTest, DISABLED_MacroCall_HighLight_LSP)
     }
 }
 #endif
+
+TEST_F(MacroTest, ExpandDecl_WithMacroCall_ExpandsSuccessfully)
+{
+    auto src = srcPath + "func.cj";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    for (auto& decl : file->decls) {
+        if (auto med = AST::As<ASTKind::MACRO_EXPAND_DECL>(decl.get()); med) {
+            med->invocation.newTokens = med->invocation.args;
+            med->invocation.newTokensStr = "func test():Unit\n {\n    return }";
+        }
+    }
+
+    for (auto& decl : file->decls) {
+        if (auto fd = AST::As<ASTKind::FUNC_DECL>(decl.get()); fd && fd->identifier == "test") {
+            auto result = instance->ExpandDecl(std::move(decl));
+            EXPECT_FALSE(result.empty());
+            break;
+        }
+    }
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+TEST_F(MacroTest, ExpandDecl_WithNoMacroCall_ReturnsEmpty)
+{
+    auto src = srcPath + "func.cj";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    for (auto& decl : file->decls) {
+        if (auto fd = AST::As<ASTKind::FUNC_DECL>(decl.get()); fd && fd->identifier == "main") {
+            auto result = instance->ExpandDecl(std::move(decl));
+            EXPECT_TRUE(result.empty());
+            break;
+        }
+    }
+}
+
+TEST_F(MacroTest, ExpandDecl_WithNullDecl_ReturnsEmpty)
+{
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    auto result = instance->ExpandDecl(nullptr);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST_F(MacroTest, ExpandDecl_WithMemberDecl_ReturnsEmpty)
+{
+    auto src = srcPath + "class.cj";
+    invocation.globalOptions.enableMacroInLSP = true;
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+
+    for (auto& decl : file->decls) {
+        if (auto cd = AST::As<ASTKind::CLASS_DECL>(decl.get()); cd) {
+            for (auto& member : cd->body->decls) {
+                if (auto fd = AST::As<ASTKind::FUNC_DECL>(member.get()); fd) {
+                    auto result = instance->ExpandDecl(std::move(member));
+                    EXPECT_TRUE(result.empty());
+                    break;
+                }
+            }
+            break;
+        }
+    }
+}
+
+TEST_F(MacroTest, ExpandDecl_WithVarMacroCall_ExpandsSuccessfully)
+{
+    auto src = srcPath + "var.cj";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+    instance->Compile(CompileStage::PARSE);
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+
+    for (auto& decl : file->decls) {
+        if (auto med = AST::As<ASTKind::MACRO_EXPAND_DECL>(decl.get()); med) {
+            med->invocation.newTokens = med->invocation.args;
+            med->invocation.newTokensStr = "var a = 1";
+        }
+    }
+
+    for (auto& decl : file->decls) {
+        if (auto vd = AST::As<ASTKind::VAR_DECL>(decl.get()); vd) {
+            auto result = instance->ExpandDecl(std::move(decl));
+            EXPECT_FALSE(result.empty());
+            break;
+        }
+    }
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+TEST_F(MacroTest, ExpandDecl_WithFailedMacroCall_HandlesError)
+{
+    auto defInstance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    defInstance->compileOnePackageFromSrcFiles = true;
+    defInstance->srcFilePaths = {definePath + "define.cj", definePath + "define2.cj"};
+    defInstance->Compile();
+
+    diag.Reset();
+
+    std::vector<uint8_t> astData;
+    defInstance->importManager->ExportAST(false, astData, *defInstance->GetSourcePackages()[0]);
+    std::string astFile = definePath + "define.cjo";
+    ASSERT_TRUE(FileUtil::WriteBufferToASTFile(astFile, astData));
+
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {srcPath + "func_arg.cj"};
+    instance->Compile(CompileStage::PARSE);
+
+    auto file = instance->GetSourcePackages()[0]->files[0].get();
+    instance->PerformImportPackage();
+    instance->PerformMacroExpand();
+
+    bool foundFailedMacro = false;
+    for (auto& decl : file->decls) {
+        if (auto mee = AST::As<ASTKind::MACRO_EXPAND_EXPR>(decl.get()); mee) {
+            if (mee->invocation.identifier == "B2") {
+                foundFailedMacro = true;
+                auto result = instance->ExpandDecl(std::move(decl));
+                EXPECT_TRUE(result.empty());
+                break;
+            }
+        }
+    }
+    EXPECT_TRUE(foundFailedMacro);
+    EXPECT_EQ(diag.GetErrorCount(), 1);
+}
