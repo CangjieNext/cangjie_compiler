@@ -366,7 +366,7 @@ bool Demangler<T>::IsDecl() const
 }
 
 template<typename T>
-void Demangler<T>::ErrorLog(const char* msg) const
+void Demangler<T>::ErrorLog([[maybe_unused]] const char* msg) const
 {
 #if defined(MRT_DEBUG) && (MRT_DEBUG == 1) && !defined(BUILD_LIB_CANGJIE_DEMANGLE)
     PRINT_ERROR("'%s' is not a valid mangling name.\n ", mangledName.Str());
@@ -382,7 +382,7 @@ template<typename T>
 bool Demangler<T>::MatchForward(const char pattern[], uint32_t len) const
 {
     auto maxLen = mangledName.Length() - currentIndex;
-    len = len > maxLen ? maxLen : len;
+    len = len > maxLen ? static_cast<uint32_t>(maxLen) : len;
     auto prefix = mangledName.SubStr(currentIndex, len);
     return prefix == T{ pattern };
 }
@@ -1143,7 +1143,7 @@ DemangleInfo<T> Demangler<T>::DemangleVArray()
 {
     DemangleInfo<T> di{ MANGLE_VARRAY_STR, TypeKind::TUPLE };
     SkipChar(MANGLE_VARRAY_PREFIX);
-    uint32_t num = DemangleManglingNumber();
+    uint32_t num = static_cast<uint32_t>(DemangleManglingNumber());
     di.genericTypes = DemangleGenericTypes().GetFullName(scopeResolution, num);
     return di;
 }
