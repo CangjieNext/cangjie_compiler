@@ -12,6 +12,7 @@ target_include_directories(CangjieAstSerialization PRIVATE ${FLATBUFFERS_INCLUDE
 if(CANGJIE_ENABLE_GCOV)
     target_compile_options(CangjieAstSerialization PUBLIC "-fno-exceptions")
 endif()
+target_compile_options(CangjieAstSerialization PRIVATE ${CJC_EXTRA_WARNINGS})
 
 if(CANGJIE_BUILD_CJC)
     set(MACRO_SRC

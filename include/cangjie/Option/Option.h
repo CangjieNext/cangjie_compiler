@@ -341,7 +341,7 @@ public:
 #endif
 #ifdef __APPLE__
         Triple::Environment::NOT_AVAILABLE,
-#elif __ohos__
+#elif defined(__ohos__)
         Triple::Environment::OHOS,
 #else
         Triple::Environment::GNU,
