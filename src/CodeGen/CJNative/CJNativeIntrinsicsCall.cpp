@@ -238,6 +238,17 @@ llvm::Value* IRBuilder2::GetArrayElementAddr(
         CallArrayIntrinsicIndexCheck(array, index);
     }
 
+    auto rawArrayCGType = CGType::GetOrCreate(cgMod, &arrTy);
+    if (!rawArrayCGType->GetSize()) {
+        auto elemType = CGType::GetOrCreate(cgMod, arrTy.GetElementType())->GetLLVMType();
+        llvm::Value* offset = CreateMul(GetSize_64(*arrTy.GetElementType()), index);
+        offset = CreateAdd(offset, getInt64(GetPayloadOffset() + 8U)); // 8U: size of rawArray's len field
+        auto elePtr = CreateInBoundsGEP(getInt8Ty(), array, offset);
+        elePtr = CreateBitCast(elePtr, elemType->getPointerTo(array->getType()->getPointerAddressSpace()));
+        GetCGContext().SetBasePtr(elePtr, array);
+        return elePtr;
+    }
+
     auto arrayType = CGArrayType::GenerateArrayLayoutType(GetCGModule(), arrTy);
     auto arrPtr = CreateBitCast(GetPayloadFromObject(array), arrayType->getPointerTo(1u));
     auto int32Type = llvm::Type::getInt32Ty(cgMod.GetLLVMContext());
@@ -252,20 +263,15 @@ void IRBuilder2::CallArrayIntrinsicSet(
     auto elemCGType = CGType::GetOrCreate(cgMod, arrTy.GetElementType());
     auto elemType = elemCGType->GetLLVMType();
     auto rawArrayCGType = CGType::GetOrCreate(cgMod, &arrTy);
+    auto elePtr = GetArrayElementAddr(arrTy, array, index, isChecked);
     if (!rawArrayCGType->GetSize()) {
-        llvm::Value* offset = CreateMul(GetSize_64(*arrTy.GetElementType()), index);
-        offset = CreateAdd(offset, getInt64(GetPayloadOffset() + 8U)); // 8U: size of rawArray's len field
-        auto fieldAddr = CreateInBoundsGEP(getInt8Ty(), array, offset);
-        fieldAddr = CreateBitCast(fieldAddr, elemType->getPointerTo(array->getType()->getPointerAddressSpace()));
-        GetCGContext().SetBasePtr(fieldAddr, array);
         auto fieldAddrCGType =
             CGType::GetOrCreate(cgMod, CGType::GetRefTypeOf(GetCGContext().GetCHIRBuilder(), *arrTy.GetElementType()));
-        CreateStore(cgVal, CGValue(fieldAddr, fieldAddrCGType));
+        CreateStore(cgVal, CGValue(elePtr, fieldAddrCGType));
         return;
     }
 
     auto value = cgVal.GetRawValue();
-    auto elePtr = GetArrayElementAddr(arrTy, array, index, isChecked);
     if (elemType->isStructTy()) {
         if (IsTypeContainsRef(elemType)) {
             auto structType = llvm::cast<llvm::StructType>(elemType);
@@ -293,19 +299,9 @@ void IRBuilder2::CallArrayIntrinsicSet(
 llvm::Value* IRBuilder2::CallArrayIntrinsicGet(
     const CHIR::RawArrayType& arrTy, llvm::Value* array, llvm::Value* index, bool isChecked)
 {
-    llvm::Value* elePtr = nullptr;
     auto elemCHIRTy = arrTy.GetElementType();
     auto elemType = CGType::GetOrCreate(cgMod, elemCHIRTy)->GetLLVMType();
-    auto rawArrayCGType = CGType::GetOrCreate(cgMod, &arrTy);
-    if (!rawArrayCGType->GetSize()) {
-        llvm::Value* offset = CreateMul(GetSize_64(*arrTy.GetElementType()), index);
-        offset = CreateAdd(offset, getInt64(GetPayloadOffset() + 8U)); // 8U: size of rawArray's len field
-        elePtr = CreateInBoundsGEP(getInt8Ty(), array, offset);
-        elePtr = CreateBitCast(elePtr, elemType->getPointerTo(array->getType()->getPointerAddressSpace()));
-        GetCGContext().SetBasePtr(elePtr, array);
-    } else {
-        elePtr = GetArrayElementAddr(arrTy, array, index, isChecked);
-    }
+    auto elePtr = GetArrayElementAddr(arrTy, array, index, isChecked);
     auto loadInst = CreateLoad(elemType, elePtr);
     if (elemCHIRTy->IsEnum()) {
         llvm::cast<llvm::Instruction>(loadInst)->setMetadata("untrusted_ref", llvm::MDNode::get(GetLLVMContext(), {}));
