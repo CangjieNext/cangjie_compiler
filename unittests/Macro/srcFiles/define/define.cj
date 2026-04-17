@@ -19,3 +19,26 @@ public macro M1(attr: Tokens, input: Tokens) {
 public macro B1(input: Tokens): Tokens {
     quote(1;2)
 }
+
+public macro GenClass(input: Tokens): Tokens {
+    quote(class A {})
+}
+
+public macro GenVar(input: Tokens): Tokens {
+    quote(var a_gen_var = 1)
+}
+
+public macro GenLet(input: Tokens): Tokens {
+    quote(let a_gen_let = 1)
+}
+
+public macro GenConstructor(input: Tokens): Tokens {
+    quote(M)
+}
+
+public macro GenMacro(input: Tokens): Tokens {
+    quote(
+        @GenLet
+        let a = 12
+    )
+}
