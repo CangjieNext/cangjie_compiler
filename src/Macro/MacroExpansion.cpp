@@ -445,3 +445,121 @@ void MacroExpansion::Execute(std::vector<OwnedPtr<AST::Package>>& packages)
         CheckUnhandledMacroCall(*package, ci->diag);
     }
 }
+
+/**
+ * @brief Scan a vector of declaration nodes for macro calls and populate the collector.
+ *
+ * Iterates through currentDecls, checking each node:
+ * - If a node is itself a MacroCallNode, it is recorded as a top-level macro call
+ *   with its replacement location set to the position in currentDecls.
+ * - Otherwise, UpdateMacroInfo is called to recursively scan the node's children
+ *   for nested macro calls.
+ *
+ * @param currentDecls The declaration nodes to scan for macro calls.
+ * @param collector The MacroCollector to populate with discovered macro call information.
+ */
+void MacroExpansion::CollectMacroCallsInDecls(
+    std::vector<OwnedPtr<AST::Decl>>& currentDecls, MacroCollector& collector)
+{
+    for (size_t i = 0; i < currentDecls.size(); ++i) {
+        auto& currentDecl = currentDecls[i];
+        if (currentDecl->IsMacroCallNode()) {
+            auto macroNode = currentDecl.get();
+            (void)collector.macCalls.emplace_back(macroNode);
+            collector.macCalls.back().replaceLoc = VectorTarget<OwnedPtr<AST::Decl>>{&currentDecls, i};
+            collector.macCalls.back().isOuterMost = true;
+        } else {
+            UpdateMacroInfo(currentDecl, collector);
+        }
+    }
+    // The macroCall is not collected by order strictly, need sort.
+    std::sort(collector.macCalls.begin(), collector.macCalls.end(), [](auto& m1, auto& m2) -> bool {
+        auto pos1 = m1.GetBeginPos();
+        auto pos2 = m2.GetBeginPos();
+        return std::tie(pos1.fileID, pos1) < std::tie(pos2.fileID, pos2);
+    });
+}
+
+/**
+ * @brief Resolve all macro calls by binding their definitions and invocation methods.
+ *
+ * For each macro call, performs two resolution steps:
+ * 1. ResolveMacroCall: Resolves the macro call's identifier to a valid macro declaration.
+ * 2. FindMacroDefMethod: Locates the macro's implementation method in the dynamic library.
+ *
+ * Also assigns the CompilerInstance to each macro call for diagnostic reporting.
+ *
+ * @param macCalls The macro calls to resolve.
+ */
+void MacroExpansion::ResolveMacroCalls(std::vector<MacroCall>& macCalls)
+{
+    for (auto& macCall : macCalls) {
+        macCall.ci = ci;
+    }
+    for (auto& macCall : macCalls) {
+        if (!macCall.ResolveMacroCall(ci)) {
+            macCall.status = MacroEvalStatus::FAIL;
+        }
+        if (!macCall.FindMacroDefMethod(ci)) {
+            macCall.status = MacroEvalStatus::FAIL;
+        }
+    }
+}
+
+
+void MacroExpansion::ReplaceMacroCallsInDecls(std::vector<MacroCall>& macroCalls)
+{
+    std::reverse(macroCalls.begin(), macroCalls.end());
+    size_t indexOffset = 0;
+    for (auto& macCall : macroCalls) {
+        if (auto decls = std::get_if<VectorTarget<OwnedPtr<AST::Decl>>>(&macCall.replaceLoc); decls) {
+            (*decls).loc += indexOffset;
+        }
+        ReplaceEachMacro(macCall);
+    }
+}
+
+
+std::vector<OwnedPtr<AST::Decl>> MacroExpansion::ExpandDecl(OwnedPtr<AST::Decl> decl)
+{
+    std::lock_guard<std::mutex> guard(globalMacroExpandLock);
+    std::vector<OwnedPtr<AST::Decl>> result;
+
+    if (!decl) {
+        return result;
+    }
+
+    AST::File* file = decl->curFile;
+
+    MacroCollector localCollector;
+    localCollector.importedMacroPkgs = ci->importManager.GetImportedPkgsForMacro();
+
+    std::vector<OwnedPtr<AST::Decl>> currentDecls;
+    currentDecls.emplace_back(std::move(decl));
+
+    localCollector.macCalls.clear();
+
+    CollectMacroCallsInDecls(currentDecls, localCollector);
+
+    if (localCollector.macCalls.empty()) {
+        return result;
+    }
+
+    bool useChildProcess = ci->invocation.globalOptions.enableMacroInLSP;
+    MacroEvaluation evaluator(ci, &localCollector, useChildProcess);
+    evaluator.Evaluate();
+
+    ProcessMacros(localCollector.macCalls);
+
+    ReplaceMacroCallsInDecls(localCollector.macCalls);
+
+    for (auto& currentDecl : currentDecls) {
+        if (currentDecl) {
+            currentDecl->curFile = file;
+            result.emplace_back(std::move(currentDecl));
+        }
+    }
+
+    return result;
+}
+
