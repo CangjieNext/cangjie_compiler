@@ -361,7 +361,7 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP_Paralle)
 }
 
 #ifndef _WIN32
-TEST_F(MacroTest, DISABLED_IfAvailable_In_LSP)
+TEST_F(MacroTest, IfAvailable_In_LSP)
 {
     auto src = srcPath + "test_IfAvailable_LSP.cj";
     invocation.globalOptions.enableMacroInLSP = true;
@@ -375,7 +375,7 @@ TEST_F(MacroTest, DISABLED_IfAvailable_In_LSP)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP_context)
+TEST_F(MacroTest, MacroCall_Check_For_LSP_context)
 {
     std::string command = "cd " + definePath + " && cjc define_childMessage.cj --compile-macro";
     int err = system(command.c_str());
@@ -392,7 +392,7 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP_context)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(MacroTest, DISABLED_MacroDiagReportForLsp)
+TEST_F(MacroTest, MacroDiagReportForLsp)
 {
     std::string command = "cd " + definePath + " && cjc define_report.cj --compile-macro";
     int err = system(command.c_str());
@@ -414,7 +414,7 @@ TEST_F(MacroTest, DISABLED_MacroDiagReportForLsp)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(MacroTest, DISABLED_NoErrorInLSPMacro)
+TEST_F(MacroTest, NoErrorInLSPMacro)
 {
     std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
     int err = system(command.c_str());
@@ -432,7 +432,7 @@ TEST_F(MacroTest, DISABLED_NoErrorInLSPMacro)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(MacroTest, DISABLED_NoErrorInDeriveEnum)
+TEST_F(MacroTest, NoErrorInDeriveEnum)
 {
     auto src = srcPath + "derive_enum2.cj";
     invocation.globalOptions.enableMacroInLSP = true;
@@ -446,7 +446,7 @@ TEST_F(MacroTest, DISABLED_NoErrorInDeriveEnum)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(MacroTest, DISABLED_MacroCall_HighLight_LSP)
+TEST_F(MacroTest, MacroCall_HighLight_LSP)
 {
     std::string command = "cd " + definePath + " && cjc define3.cj --compile-macro";
     int err = system(command.c_str());
