@@ -22,6 +22,13 @@
 #include "cangjie/Macro/MacroCommon.h"
 
 namespace Cangjie {
+
+enum class MacroReplaceResult {
+    SUCCESS,
+    HAS_NESTED_MACRO,
+    FAIL,
+};
+
 class MacroExpansion {
 public:
     MacroExpansion(CompilerInstance* ci) : ci(ci)
@@ -29,6 +36,16 @@ public:
     }
     void Execute(AST::Package& package);
     void Execute(std::vector<OwnedPtr<AST::Package>>& packages);
+
+    /**
+     * Expand macros for a top-level decl node.
+     * @param decl The top-level decl node to expand. Can be any type of top-level declaration.
+     *             If the decl contains macro calls, those macros will be expanded.
+     * @return A vector of expanded top-level decl nodes after macro expansion.
+     *         The returned nodes replace the original AST nodes with expanded versions.
+     */
+    std::vector<OwnedPtr<AST::Decl>> ExpandDecl(OwnedPtr<AST::Decl> decl);
+    
     // String format of macro generated Tokens, for pretty print.
     std::vector<std::string> tokensEvalInMacro;
 
@@ -43,6 +60,28 @@ private:
     void CollectMacros(AST::Package& package);
 
     /**
+     * Scan decl nodes for macro calls and populate the collector.
+     * @param currentDecls The decl nodes to scan.
+     * @param collector The collector to populate with macro call information.
+     * @return True if any macro call nodes were found.
+     */
+    bool CollectMacroCallsInDecls(std::vector<OwnedPtr<AST::Decl>>& currentDecls, MacroCollector& collector);
+
+    /**
+     * Resolve macro definitions and find invocation methods for each macro call.
+     * @param macCalls The macro calls to resolve.
+     * @return True if all macro calls resolved successfully.
+     */
+    bool ResolveMacroCalls(std::vector<MacroCall>& macCalls);
+
+    /**
+     * Replace macro call nodes with expanded AST nodes after evaluation.
+     * @param macroCalls The evaluated macro calls to replace (reversed in-place).
+     * @return True if expanded nodes still contain macro calls needing further expansion.
+     */
+    bool ReplaceMacroCallsInDecls(std::vector<MacroCall>& macroCalls);
+
+    /**
      * Evaluate macro.
      */
     void EvaluateMacros();
@@ -51,15 +90,27 @@ private:
      * Process macro information after macro expansion.
      */
     void ProcessMacros(AST::Package& package);
+
+    /**
+     * Process macro information after macro expansion for a list of macro calls.
+     * This is used by ExpandDecl to create position mappings without generating .macrocall files.
+     * @param macCalls The macro calls to process.
+     */
+    void ProcessMacros(std::vector<MacroCall>& macCalls);
     /**
      * Replace AST after macro expansion.
      */
     void ReplaceAST(AST::Package& package);
 
     /**
-     * Replace AST helper.
+     * Replace a single macro call node with expanded AST.
+     * @param macCall The macro call to replace.
+     * @param replacedNodeCount If non-null, receives the number of nodes inserted by replacement.
+     * @param skipInvalidNodes If true, skip invalid nodes and continue; otherwise, fail on invalid nodes.
+     * @return The result of the replacement operation.
      */
-    void ReplaceEachMacro(MacroCall& macCall);
+    MacroReplaceResult ReplaceEachMacro(
+        MacroCall& macCall, size_t* replacedNodeCount = nullptr, bool skipInvalidNodes = false);
 
     /**
      * Check attribute if replaced node is enum case member.
