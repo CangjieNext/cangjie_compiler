@@ -47,27 +47,28 @@ std::tuple<bool, std::optional<std::size_t>> ObtainingAuxiliaryInformation(
     CJC_ASSERT_WITH_MSG(!ctors.empty(), "The enum type has at least one constructor.");
     for (auto ctor : ctors) {
         const auto& paramTypes = ctor.funcType->GetParamTypes();
-        std::optional<std::size_t> sizeOfConstructorUnionTemp{0U};
+        std::optional<std::size_t> sizeOfConstructorUnionTemp =
+            paramTypes.empty() ? std::optional<std::size_t>(0U) : std::nullopt;
         for (auto associatedValueCHIRType : paramTypes) {
             auto associatedValueCGType = CGType::GetOrCreate(cgMod, associatedValueCHIRType);
             hasRefTypeAssociatedValue |= ContainsRefType(*associatedValueCGType->GetLLVMType());
-            if (!associatedValueCGType->GetSize().has_value()) {
+            auto associatedValueSize = associatedValueCGType->GetSize();
+            if (!associatedValueSize.has_value()) {
                 sizeOfConstructorUnionTemp = std::nullopt;
                 break;
             }
-        }
-        if (sizeOfConstructorUnionTemp.has_value()) {
-            if (NeedAndroidArm32AlignedEnumLayout(cgMod.GetCGContext().GetCompileOptions().target)) {
-                std::vector<CHIR::Type*> fullFieldTypes;
-                fullFieldTypes.reserve(paramTypes.size() + 1U);
-                fullFieldTypes.emplace_back(cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty());
-                fullFieldTypes.insert(fullFieldTypes.end(), paramTypes.begin(), paramTypes.end());
-                auto fullLayout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fullFieldTypes);
-                sizeOfConstructorUnionTemp = fullLayout.size - sizeof(uint32_t);
-            } else {
-                std::vector<CHIR::Type*> fieldTypes(paramTypes.begin(), paramTypes.end());
-                sizeOfConstructorUnionTemp = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fieldTypes).size;
+            if (!NeedAndroidArm32AlignedEnumLayout(cgMod.GetCGContext().GetCompileOptions().target)) {
+                sizeOfConstructorUnionTemp = sizeOfConstructorUnionTemp.value_or(0U) + associatedValueSize.value();
             }
+        }
+        if (sizeOfConstructorUnionTemp.has_value() &&
+            NeedAndroidArm32AlignedEnumLayout(cgMod.GetCGContext().GetCompileOptions().target)) {
+            std::vector<CHIR::Type*> fullFieldTypes;
+            fullFieldTypes.reserve(paramTypes.size() + 1U);
+            fullFieldTypes.emplace_back(cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty());
+            fullFieldTypes.insert(fullFieldTypes.end(), paramTypes.begin(), paramTypes.end());
+            auto fullLayout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fullFieldTypes);
+            sizeOfConstructorUnionTemp = fullLayout.size - sizeof(uint32_t);
         }
         if (sizeOfConstructorUnionTemp.has_value()) {
             sizeOfConstructorUnion = sizeOfConstructorUnion.value_or(0U) < sizeOfConstructorUnionTemp.value()
