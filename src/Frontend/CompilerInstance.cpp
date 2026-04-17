@@ -362,6 +362,12 @@ bool CompilerInstance::PerformMacroExpand()
     return ret;
 }
 
+std::vector<OwnedPtr<AST::Decl>> CompilerInstance::ExpandDecl(OwnedPtr<AST::Decl> decl)
+{
+    MacroExpansion me(this);
+    return me.ExpandDecl(std::move(decl));
+}
+
 void CompilerInstance::CacheCompileArgs()
 {
     cachedInfo.compileArgs = invocation.globalOptions.ToSerialized();
