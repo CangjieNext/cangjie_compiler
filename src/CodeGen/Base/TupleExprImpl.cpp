@@ -212,7 +212,8 @@ llvm::Value* GenerateAssociatedNonRefEnum(IRBuilder2& irBuilder, const CHIR::Tup
         auto fieldCGType = CGType::GetOrCreate(cgMod, field->GetType());
         if (useStructGEP) {
             auto destPtr = irBuilder.CreateStructGEP(layoutType, castedStruct, idx);
-            (void)irBuilder.CreateStore(**(cgMod | field), destPtr, field->GetType());
+            auto castedDestPtr = irBuilder.CreateBitCast(destPtr, fieldCGType->GetLLVMType()->getPointerTo());
+            (void)irBuilder.CreateStore(**(cgMod | field), castedDestPtr, field->GetType());
         } else {
             auto destPtr = irBuilder.CreateConstGEP1_32(i8Ty, casted, layout.offsets[idx]);
             auto castedDestPtr = irBuilder.CreateBitCast(destPtr, fieldCGType->GetLLVMType()->getPointerTo());
