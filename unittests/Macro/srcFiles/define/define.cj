@@ -19,3 +19,7 @@ public macro M1(attr: Tokens, input: Tokens) {
 public macro B1(input: Tokens): Tokens {
     quote(1;2)
 }
+
+public macro Gen(input: Tokens): Tokens {
+    quote(class A {})
+}
