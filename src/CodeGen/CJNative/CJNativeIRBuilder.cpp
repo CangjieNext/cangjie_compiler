@@ -1689,7 +1689,7 @@ llvm::Value* GetAssociatedNonRefEnumAssociatedValue(
         fieldPtr = irBuilder.CreateConstGEP1_32(i8Ty, casted, layout.offsets[associatedValIdx], "enum.field.ptr");
     }
     auto retLLVMType = CGType::GetOrCreate(cgMod, field.GetResult()->GetType())->GetLLVMType();
-    return irBuilder.CreateLoad(retLLVMType, fieldPtr);
+    return irBuilder.CreateLoad(retLLVMType, irBuilder.CreateBitCast(fieldPtr, retLLVMType->getPointerTo()));
 }
 } // namespace
 
