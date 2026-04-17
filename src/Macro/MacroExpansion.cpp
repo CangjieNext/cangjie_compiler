@@ -445,3 +445,108 @@ void MacroExpansion::Execute(std::vector<OwnedPtr<AST::Package>>& packages)
         CheckUnhandledMacroCall(*package, ci->diag);
     }
 }
+
+std::vector<OwnedPtr<AST::Decl>> MacroExpansion::ExpandDecl(OwnedPtr<AST::Decl> decl)
+{
+    std::vector<OwnedPtr<AST::Decl>> result;
+
+    if (!decl) {
+        return result;
+    }
+
+    AST::File* file = decl->curFile;
+
+    MacroCollector localCollector;
+    localCollector.curPkg = curPackage;
+    localCollector.importedMacroPkgs = ci->importManager->GetImportedPkgsForMacro();
+
+    std::vector<OwnedPtr<AST::Decl>> currentDecls;
+    currentDecls.emplace_back(std::move(decl));
+
+    bool hasMacroCall = true;
+    while (hasMacroCall) {
+        hasMacroCall = false;
+        localCollector.macCalls.clear();
+
+        for (size_t i = 0; i < currentDecls.size(); ++i) {
+            auto& currentDecl = currentDecls[i];
+            if (currentDecl->IsMacroCallNode()) {
+                auto macroNode = currentDecl.get();
+                (void)localCollector.macCalls.emplace_back(macroNode);
+                localCollector.macCalls.back().replaceLoc = VectorTarget<OwnedPtr<AST::Decl>>{&currentDecls, i};
+                localCollector.macCalls.back().isOuterMost = true;
+                hasMacroCall = true;
+            } else {
+                UpdateMacroInfo(currentDecl, localCollector);
+            }
+        }
+
+        if (localCollector.macCalls.empty()) {
+            break;
+        }
+
+        for (auto& macCall : localCollector.macCalls) {
+            macCall.ci = ci;
+        }
+
+        for (auto& macCall : localCollector.macCalls) {
+            if (!macCall.ResolveMacroCall(ci)) {
+                continue;
+            }
+            if (!macCall.FindMacroDefMethod(ci)) {
+                continue;
+            }
+        }
+
+        bool useChildProcess = ci->invocation.globalOptions.enableMacroInLSP;
+        MacroEvaluation evaluator(ci, &localCollector, useChildProcess);
+        evaluator.Evaluate();
+
+        auto macroCalls = localCollector.macCalls;
+        std::reverse(macroCalls.begin(), macroCalls.end());
+        size_t indexOffset = 0;
+        for (auto& macCall : macroCalls) {
+            auto pInvocation = macCall.GetInvocation();
+            if (MacroExpandFailed(pInvocation->newTokens) || macCall.status == MacroEvalStatus::FAIL) {
+                continue;
+            }
+
+            Parser parser{pInvocation->newTokens, ci->diag, ci->diag.GetSourceManager(),
+                ci->invocation.globalOptions.enableAddCommentToAst, ci->invocation.globalOptions.compileCjd};
+            parser.SetCompileOptions(ci->invocation.globalOptions);
+            (void)parser.SetPrimaryDecl(pInvocation->outerDeclIdent).EnableCustomAnno();
+
+            auto nodes = parser.ParseNodes(
+                pInvocation->scope, *macCall.GetNode(), macCall.GetModifiers(), macCall.GetAnnotations());
+
+            bool hasValidNode = false;
+            for (auto& node : nodes) {
+                if (!node || node->IsInvalid()) {
+                    continue;
+                }
+                if (HasMacroCallInNode(node, ci->diag)) {
+                    hasMacroCall = true;
+                }
+                CheckWhenAfterMacroExpand(node, ci->diag);
+                hasValidNode = true;
+            }
+
+            if (hasValidNode) {
+                if (auto decls = std::get_if<VectorTarget<OwnedPtr<AST::Decl>>>(&macCall.replaceLoc); decls) {
+                    (*decls).loc += indexOffset;
+                }
+                ReplaceEachMacroHelper(macCall, nodes);
+                indexOffset += nodes.size() - 1;
+            }
+        }
+    }
+
+    for (auto& currentDecl : currentDecls) {
+        if (currentDecl) {
+            currentDecl->curFile = file;
+            result.emplace_back(std::move(currentDecl));
+        }
+    }
+
+    return result;
+}
