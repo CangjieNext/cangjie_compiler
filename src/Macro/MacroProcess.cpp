@@ -6,6 +6,7 @@
 
 #include <fstream>
 #include <algorithm>
+#include <thread>
 
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
@@ -515,4 +516,87 @@ void MacroExpansion::ProcessMacros(Package& package)
     // Generate *.macrocall file.
     GenerateMacroCallFile(fileSucVec, foundSucMacroMap, *ci);
     return;
+}
+
+void MacroExpansion::ProcessMacros(std::vector<MacroCall>& macCalls)
+{
+    for (auto& macCall : macCalls) {
+        auto pInvocation = macCall.GetInvocation();
+        if (!pInvocation || MacroExpandFailed(pInvocation->newTokens) ||
+            macCall.status == MacroEvalStatus::FAIL) {
+            continue;
+        }
+        auto node = macCall.GetNode();
+        if (!node || !node->curFile) {
+            continue;
+        }
+        if (pInvocation->isCurFile) {
+            continue;
+        }
+        pInvocation->mcBegin = node->begin;
+        pInvocation->mcEnd = node->end;
+        auto mcPos = node->begin;
+        pInvocation->origin2newPosMap[mcPos.Hash64()] = mcPos;
+        if (pInvocation->newTokens.empty()) {
+            continue;
+        }
+        auto lastColumn = static_cast<unsigned int>(ci->GetSourceManager().GetLineEnd(mcPos) + 1);
+        auto prevTokenKind = TokenKind::END;
+        pInvocation->macroAtPosition.emplace_back(mcPos);
+        size_t threadNum = std::thread::hardware_concurrency();
+        Cangjie::Utils::TaskQueue taskQueue(threadNum);
+        for (auto& token : pInvocation->newTokens) {
+            taskQueue.AddTask<void>([&token, &pInvocation, &mcPos]() {
+                if (token.kind == TokenKind::NL || token.kind == TokenKind::COMMENT) {
+                    return token.SetCurFile(true);
+                }
+                if (mcPos.fileID != token.Begin().fileID) {
+                    return token.SetCurFile(false);
+                }
+                bool notCurFile =
+                    std::any_of(pInvocation->macroAtPosition.begin(), pInvocation->macroAtPosition.end(),
+                        [&token](auto& atPos) { return token.Begin() == atPos || token.Begin() == atPos + 1; });
+                return token.SetCurFile(!notCurFile);
+            });
+        }
+        taskQueue.RunAndWaitForAllTasksCompleted();
+        for (auto& token : pInvocation->newTokens) {
+            if (!IsSpecialToken(prevTokenKind, token.kind)) {
+                lastColumn += 1;
+            }
+            if (ci->invocation.globalOptions.enableCompileDebug || ci->invocation.globalOptions.displayLineInfo) {
+                CollectMacroDebugPosition(*pInvocation, token, lastColumn);
+            }
+            Position keyPos(mcPos.line, static_cast<int>(lastColumn));
+            if (token.kind == TokenKind::STRING_LITERAL || token.kind == TokenKind::MULTILINE_STRING) {
+                pInvocation->new2originPosMap[keyPos.Hash32()] = token.Begin();
+                HandleInterplationStringPosMap(token,
+                    Position(mcPos.fileID, mcPos.line, static_cast<int>(lastColumn)),
+                    pInvocation, *ci);
+            } else if (token.kind != TokenKind::NL && token.kind != TokenKind::COMMENT) {
+                pInvocation->new2originPosMap[keyPos.Hash32()] = token.Begin();
+            }
+            auto key = token.Begin().Hash64();
+            Position begin = token.Begin();
+            begin.fileID = mcPos.fileID;
+            begin.line = mcPos.line;
+            begin.column = static_cast<int>(lastColumn);
+            lastColumn += static_cast<unsigned int>(GetTokenLenth(token));
+
+            Position end = token.End();
+            end.fileID = mcPos.fileID;
+            end.line = mcPos.line;
+            end.column = static_cast<int>(lastColumn);
+            token.SetValuePos(token.Value(), begin, end);
+
+            if (token.kind != TokenKind::NL && token.kind != TokenKind::COMMENT &&
+                pInvocation->origin2newPosMap.find(key) == pInvocation->origin2newPosMap.end()) {
+                pInvocation->origin2newPosMap[key] = token.Begin();
+            }
+            prevTokenKind = token.kind;
+        }
+        if (ci->invocation.globalOptions.enableCompileDebug || ci->invocation.globalOptions.displayLineInfo) {
+            pInvocation->macroDebugMap[lastColumn] = node->end;
+        }
+    }
 }
