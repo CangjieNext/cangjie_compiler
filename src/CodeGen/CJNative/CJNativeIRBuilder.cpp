@@ -1712,12 +1712,12 @@ llvm::Value* GetAssociatedNonRefEnumAssociatedValue(
     llvm::Value* fieldPtr = nullptr;
     if (useStructGEP) {
         std::vector<CHIR::Type*> fieldTypes;
-        fieldTypes.reserve(args.size() + 1U);
-        fieldTypes.emplace_back(cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty());
+        fieldTypes.reserve(args.size());
+        //fieldTypes.emplace_back(cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty());
         fieldTypes.insert(fieldTypes.end(), args.begin(), args.end());
         auto layoutType = CGEnumType::GetAssociatedNonRefLayoutType(cgMod, fieldTypes);
         auto casted = irBuilder.CreateBitCast(cgEnum.GetRawValue(), layoutType->getPointerTo());
-        fieldPtr = irBuilder.CreateStructGEP(layoutType, casted, associatedValIdx + 1U, "enum.field.ptr");
+        fieldPtr = irBuilder.CreateStructGEP(layoutType, casted, associatedValIdx, "enum.field.ptr");
     } else {
         std::vector<CHIR::Type*> fieldTypes(args.begin(), args.end());
         auto layout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fieldTypes);
