@@ -155,6 +155,9 @@ bool HasChildMacroCall(MacroCall& macCall)
         if (pInvocation && !pInvocation->isCustom) {
             return true;
         }
+        if (mc->status == MacroEvalStatus::ANNOTATION && HasChildMacroCall(*mc)) {
+            return true;
+        }
     }
     return false;
 }
@@ -705,7 +708,29 @@ bool MacroEvaluation::NeedCreateMacroCallTree(MacroCall& macCall, bool reEval)
     auto pInvocation = macCall.GetInvocation();
     if (reEval) {
         if (pInvocation->isCustom) {
-            // No need to reEvaluate Annotation.
+            // For custom annotations during re-evaluation, we need to check if
+            // the newTokens contain macro calls that need to be processed.
+            // Scan the newTokens for '@' followed by an identifier that is not
+            // a builtin annotation and not the current annotation itself.
+            auto& newTokens = pInvocation->newTokens;
+            bool hasMacroCallInNewTokens = false;
+            auto node = macCall.GetNode();
+            if (node && node->curFile && node->curFile->curPackage) {
+                auto names = Utils::SplitQualifiedName(node->curFile->curPackage->fullPackageName);
+                auto moduleName = names.size() > 1 ? names.front() : "";
+                for (size_t i = 0; i + 1 < newTokens.size(); i++) {
+                    if (newTokens[i].Value() == "@" &&
+                        IsIdentifierOrContextualKeyword(newTokens[i + 1].kind) &&
+                        !IsBuiltinAnnotation(moduleName, newTokens[i + 1].Value()) &&
+                        newTokens[i + 1].Value() != pInvocation->identifier) {
+                        hasMacroCallInNewTokens = true;
+                        break;
+                    }
+                }
+            }
+            if (hasMacroCallInNewTokens) {
+                return true;
+            }
             macCall.status = MacroEvalStatus::FINISH;
             return false;
         }
@@ -751,6 +776,49 @@ void MacroEvaluation::CreateMacroCallTree(MacroCall& macCall, bool reEval)
     auto pInvocation = macCall.GetInvocation();
     pInvocation->nodes.clear();
     auto& inputTokens = reEval ? pInvocation->newTokens : pInvocation->args;
+
+    // For custom annotations during re-evaluation, we need to skip the annotation
+    // tokens themselves (e.g., @BeanMeta[...]) and only process the tokens after
+    // the annotation, which may contain macro calls produced by child macro expansion.
+    size_t tokenStartOffset = 0;
+    if (reEval && pInvocation->isCustom) {
+        // Find the end of the annotation tokens: skip @Identifier[...] or @Identifier(...)
+        // The annotation starts with @Identifier, optionally followed by [...] or (...)
+        size_t idx = 0;
+        // Skip @Identifier
+        if (idx < inputTokens.size() && inputTokens[idx].Value() == "@") {
+            idx++;
+        }
+        if (idx < inputTokens.size() && IsIdentifierOrContextualKeyword(inputTokens[idx].kind)) {
+            idx++;
+        }
+        // Skip [...] if present
+        if (idx < inputTokens.size() && inputTokens[idx].kind == TokenKind::LSQUARE) {
+            int depth = 1;
+            idx++;
+            while (idx < inputTokens.size() && depth > 0) {
+                if (inputTokens[idx].kind == TokenKind::LSQUARE) depth++;
+                if (inputTokens[idx].kind == TokenKind::RSQUARE) depth--;
+                idx++;
+            }
+        }
+        // Skip (...) if present
+        if (idx < inputTokens.size() && inputTokens[idx].kind == TokenKind::LPAREN) {
+            int depth = 1;
+            idx++;
+            while (idx < inputTokens.size() && depth > 0) {
+                if (inputTokens[idx].kind == TokenKind::LPAREN) depth++;
+                if (inputTokens[idx].kind == TokenKind::RPAREN) depth--;
+                idx++;
+            }
+        }
+        // Skip newlines after the annotation
+        while (idx < inputTokens.size() && inputTokens[idx].kind == TokenKind::NL) {
+            idx++;
+        }
+        tokenStartOffset = idx;
+    }
+
     if (!PreprocessTokens(inputTokens, escapePosVec)) {
         (void)ci->diag.Diagnose(inputTokens[0].Begin(), DiagKind::macro_expand_invalid_escape);
         return;
@@ -760,8 +828,8 @@ void MacroEvaluation::CreateMacroCallTree(MacroCall& macCall, bool reEval)
     CJC_ASSERT(node->curFile && node->curFile->curPackage);
     auto names = Utils::SplitQualifiedName(node->curFile->curPackage->fullPackageName);
     auto moduleName = names.size() > 1 ? names.front() : "";
-    size_t startIndex = 0;
-    size_t curIndex = 0;
+    size_t startIndex = tokenStartOffset;
+    size_t curIndex = tokenStartOffset;
     auto tokenSize = inputTokens.size();
     while (curIndex < tokenSize) {
         auto posTmp = inputTokens[curIndex].Begin();
