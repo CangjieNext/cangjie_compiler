@@ -130,6 +130,9 @@ void CHIRPrinter::PrintCHIRSerializeInfo(ToCHIR::Phase phase, const std::string&
             phaseStr = "analysis for cjlint";
             break;
 #endif
+        default:
+            CJC_ABORT();
+            break;
     }
     fout << "ToCHIRPhase: " << phaseStr << std::endl;
     fout.close();

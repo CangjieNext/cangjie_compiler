@@ -127,6 +127,8 @@ Ptr<LiteralValue> RangePropagation::GenerateConstExpr(const Ptr<Type>& type, con
                 return builder.CreateLiteralValue<IntLiteral>(type, intValue.value().UVal());
             }
             break;
+        default:
+            CJC_ABORT();
     }
     return nullptr;
 }

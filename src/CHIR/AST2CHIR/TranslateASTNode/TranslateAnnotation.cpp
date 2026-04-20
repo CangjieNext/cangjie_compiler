@@ -85,7 +85,7 @@ void Translator::TranslateAnnotationsArrayBody(const Decl& decl, Func& func)
         CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, annoInsts.size())
             ->GetResult();
     auto objectTy = builder.GetType<RefType>(builder.GetObjectTy());
-    auto rawArrayTy = builder.GetType<RawArrayType>(objectTy, 1);
+    auto rawArrayTy = builder.GetType<RawArrayType>(objectTy, 1u);
     auto rawArray = CreateAndAppendExpression<RawArrayAllocate>(
         builder.GetType<RefType>(rawArrayTy), objectTy, annoArrSize, currentBlock);
     auto arrayGeneric = builder.GetStructType("std.core", "Array");
@@ -97,7 +97,7 @@ void Translator::TranslateAnnotationsArrayBody(const Decl& decl, Func& func)
     auto arrayInit = std::find_if(arrayMethods.begin(), arrayMethods.end(),
         [](auto method) { return method->IsConstructor() && method->GetNumOfParams() == 4UL; });
     CJC_ASSERT(arrayInit != arrayMethods.end());
-    auto zero = CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, 0);
+    auto zero = CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, 0UL);
     // call array init with RawArrayAllocate
     auto callContext = FuncCallContext {
         .args = std::vector<Value*>{array->GetResult(), rawArray->GetResult(), zero->GetResult(), annoArrSize},
