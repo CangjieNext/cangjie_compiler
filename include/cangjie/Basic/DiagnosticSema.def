@@ -4,6 +4,7 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+
 ERROR(sema_diag_begin, "")
 ERROR(sema_diag_report_error_message, "%s")
 NOTE(sema_diag_report_note_message, "%s")

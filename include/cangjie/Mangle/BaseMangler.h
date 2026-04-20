@@ -279,7 +279,7 @@ public:
      * @param prefix Path of the node.
      * @return std::string The mangled index.
      */
-    std::string GetMangledLocalFuncIndex(const AST::FuncDecl& decl, const std::vector<Ptr<AST::Node>>& prefix) const;
+    std::string GetMangledLocalFuncIndex(const AST::FuncDecl& decl) const;
 
     /**
      * @brief Find outer container of lambda.

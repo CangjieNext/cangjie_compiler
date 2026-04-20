@@ -246,7 +246,7 @@ TEST_F(SearchPlusTest, DISABLED_MultiFileTest)
 {
 #ifdef _WIN32
     srcPath = srcPath + "\\pkgs";
-#elif __unix__
+#elif defined(__unix__)
     srcPath = srcPath + "/pkgs";
 #endif
 
@@ -262,7 +262,7 @@ TEST_F(SearchPlusTest, DISABLED_MultiFileTest)
 #endif
 #ifdef _WIN32
     instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::WINDOWS;
-#elif __unix__
+#elif defined(__unix__)
     instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::LINUX;
 #endif
     instance->Compile(CompileStage::SEMA);

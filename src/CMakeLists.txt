@@ -19,8 +19,7 @@ if(IOS)
     add_compile_options(--target=${CXX_COMPATIABLE_TRIPLE})
 endif()
 
-set(CJC_EXTRA_WARNINGS -Woverloaded-virtual -Wvla -Wconversion -Wfloat-equal -Wunused -Wdelete-non-virtual-dtor -Wswitch-default -Wcast-qual -Wextra -Wformat=2 -Wno-missing-field-initializers -Wno-format-nonliteral -Wno-sign-conversion)
-# -Wno-sign-conversion here to be removed by next MR
+set(CJC_EXTRA_WARNINGS -Woverloaded-virtual -Wvla -Wconversion -Wfloat-equal -Wunused -Wdelete-non-virtual-dtor -Wswitch-default -Wcast-qual -Wextra -Wformat=2 -Wno-missing-field-initializers -Wno-format-nonliteral)
 if(${CMAKE_SYSTEM_NAME} EQUAL Darwin)
     # mac uses llvm headers for std, and llvm headers have the following warning(s)
     list(APPEND CJC_EXTRA_WARNINGS -Wno-float-equal)
@@ -37,7 +36,7 @@ if(CMAKE_BUILD_TYPE
 endif()
 
 # when including llvm header files, the following warnings have to be excluded
-set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wno-sign-conversion -Wno-unused-parameter -Wno-float-conversion -Wno-shadow)
+set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wno-sign-conversion -Wno-unused-parameter -Wno-float-conversion -Wno-shadow -Wno-switch-default)
 include(CheckCXXCompilerFlag)
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" OR ${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang")
     # gcc does not recognise these options
@@ -51,7 +50,7 @@ set(CJC_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS} -Wnon-virtual-dtor -Wcast-align)
 
 # when including llvm header files, the following warnings have to be excluded
 set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_EXTRA_WARNINGS})
-set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_WITH_LLVM_EXTRA_WARNINGS} -Wno-sign-conversion -Wno-unused-parameter -Wno-float-conversion)
+set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_WITH_LLVM_EXTRA_WARNINGS} -Wno-sign-conversion -Wno-unused-parameter -Wno-float-conversion -Wno-switch-default)
 # gcc on some platform does not recognise these options
 set(CJC_WITH_LLVM_EXTRA_WARNINGS ${CJC_WITH_LLVM_EXTRA_WARNINGS} -Wno-implicit-int-conversion -Wno-shorten-64-to-32 -Wno-implicit-int-float-conversion)
 

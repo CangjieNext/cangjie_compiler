@@ -629,8 +629,7 @@ std::string BaseMangler::MangleDecl(const Decl& decl, const std::vector<Ptr<Node
             newMangled += MangleUtils::MangleName(name);
             if (decl.IsFunc()) {
                 auto& funcDecl = static_cast<const AST::FuncDecl&>(decl);
-                newMangled +=
-                    IsLocalFunc(funcDecl) ? GetMangledLocalFuncIndex(static_cast<const FuncDecl&>(decl), prefix) : "";
+                newMangled += IsLocalFunc(funcDecl) ? GetMangledLocalFuncIndex(static_cast<const FuncDecl&>(decl)) : "";
             }
         }
         newMangled += MangleGenericArguments(decl, genericsTypeStack, true);
@@ -689,7 +688,7 @@ std::string BaseMangler::ManglePrefix(const Node& node, const std::vector<Ptr<No
                 auto& decl = static_cast<const FuncDecl&>(*curPrefix);
                 mangled += MangleUtils::MangleName(decl.identifier);
                 if (IsLocalFunc(decl)) {
-                    mangled += GetMangledLocalFuncIndex(decl, prefix);
+                    mangled += GetMangledLocalFuncIndex(decl);
                 }
                 mangled += MangleGenericArgumentsHelper(decl, genericsTypeStack, true) + MANGLE_FUNC_PARAM_TYPE_PREFIX +
                     MangleFuncParams(decl, genericsTypeStack, false) + MANGLE_SUFFIX;
@@ -890,7 +889,7 @@ Ptr<AST::Node> BaseMangler::FindOuterNodeOfLambda(
     return Ptr<AST::Node>();
 }
 
-std::string BaseMangler::GetMangledLocalFuncIndex(const AST::FuncDecl& decl, const std::vector<Ptr<AST::Node>>& prefix) const
+std::string BaseMangler::GetMangledLocalFuncIndex(const AST::FuncDecl& decl) const
 {
     auto outerNode = GetOuterDecl(decl);
     std::string pkgName = decl.fullPackageName;

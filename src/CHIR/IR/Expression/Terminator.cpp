@@ -84,7 +84,9 @@ size_t Terminator::GetNumOfOperands() const
 std::vector<Value*> Terminator::GetOperands() const
 {
     CJC_ASSERT(operands.size() >= GetFirstSuccessorIndex());
-    return {operands.begin(), operands.begin() + GetFirstSuccessorIndex()};
+    auto firstSuccessor =
+        operands.begin() + static_cast<std::vector<Value*>::difference_type>(GetFirstSuccessorIndex());
+    return {operands.begin(), firstSuccessor};
 }
 
 Value* Terminator::GetOperand(size_t idx) const
@@ -288,7 +290,9 @@ std::vector<Value*> ApplyWithException::GetArgs() const
     if (GetFirstSuccessorIndex() <= 1) {
         return {};
     } else {
-        return {operands.begin() + 1, operands.begin() + GetFirstSuccessorIndex()};
+        auto firstSuccessor =
+            operands.begin() + static_cast<std::vector<Value*>::difference_type>(GetFirstSuccessorIndex());
+        return {operands.begin() + 1, firstSuccessor};
     }
 }
 
@@ -427,7 +431,9 @@ Value* InvokeWithException::GetObject() const
 /** @brief Get the call args of this InvokeWithException operation */
 std::vector<Value*> InvokeWithException::GetArgs() const
 {
-    return {operands.begin(), operands.begin() + GetFirstSuccessorIndex()};
+    auto firstSuccessor =
+        operands.begin() + static_cast<std::vector<Value*>::difference_type>(GetFirstSuccessorIndex());
+    return {operands.begin(), firstSuccessor};
 }
 
 std::string InvokeWithException::ToString([[maybe_unused]] size_t indent) const
@@ -458,7 +464,9 @@ Value* InvokeStaticWithException::GetRTTIValue() const
 
 std::vector<Value*> InvokeStaticWithException::GetArgs() const
 {
-    return {operands.begin() + 1, operands.begin() + GetFirstSuccessorIndex()};
+    auto firstSuccessor =
+        operands.begin() + static_cast<std::vector<Value*>::difference_type>(GetFirstSuccessorIndex());
+    return {operands.begin() + 1, firstSuccessor};
 }
 
 std::string InvokeStaticWithException::ToString([[maybe_unused]] size_t indent) const

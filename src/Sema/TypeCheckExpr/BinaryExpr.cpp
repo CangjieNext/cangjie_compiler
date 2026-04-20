@@ -467,6 +467,9 @@ bool TypeChecker::TypeCheckerImpl::CheckExponentByBaseTy(ASTContext& ctx, Ty& ba
                 case MatchResult::NONE:
                     isExponentWellTyped = false;
                     break;
+                default:
+                    CJC_ABORT();
+                    break;
             }
         }
     }
@@ -754,6 +757,9 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::SynArithmeticOrRelationalEx
             case MatchResult::AMBIGUOUS:
                 return {};
             case MatchResult::NONE:
+                break;
+            default:
+                CJC_ABORT();
                 break;
         }
     }
