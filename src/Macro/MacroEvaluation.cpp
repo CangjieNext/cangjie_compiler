@@ -155,8 +155,65 @@ bool HasChildMacroCall(MacroCall& macCall)
         if (pInvocation && !pInvocation->isCustom) {
             return true;
         }
+        if (mc->status == MacroEvalStatus::ANNOTATION && HasChildMacroCall(*mc)) {
+            return true;
+        }
     }
     return false;
+}
+
+// Check if there are any macro calls in the given tokens.
+// Used to determine if a custom annotation's newTokens contains macro calls that need re-evaluation.
+static bool HasMacroCallInTokens(const TokenVector& tokens, const std::string& moduleName,
+                                 const std::string& currentIdentifier)
+{
+    for (size_t i = 0; i + 1 < tokens.size(); i++) {
+        if (tokens[i].Value() == "@" &&
+            IsIdentifierOrContextualKeyword(tokens[i + 1].kind) &&
+            !IsBuiltinAnnotation(moduleName, tokens[i + 1].Value()) &&
+            tokens[i + 1].Value() != currentIdentifier) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Skip tokens inside matching brackets (e.g., [...], (...)).
+static size_t SkipBracketedTokens(const TokenVector& tokens, size_t idx,
+                                  TokenKind openKind, TokenKind closeKind)
+{
+    if (idx >= tokens.size() || tokens[idx].kind != openKind) {
+        return idx;
+    }
+    int depth = 1;
+    idx++;
+    while (idx < tokens.size() && depth > 0) {
+        if (tokens[idx].kind == openKind) depth++;
+        if (tokens[idx].kind == closeKind) depth--;
+        idx++;
+    }
+    return idx;
+}
+
+// Skip the annotation's own tokens: @AnnotationName[args] and trailing newlines.
+// This is needed when re-evaluating a custom annotation to avoid scanning the
+// annotation itself (which would cause duplicate tokens in RefreshMacroCallArgs).
+//
+// Example: For "@BeanMeta[args]\n@Bean@Pointcut", returns index pointing to "@Bean"
+static size_t SkipAnnotationTokens(const TokenVector& tokens)
+{
+    size_t idx = 0;
+    if (idx < tokens.size() && tokens[idx].Value() == "@") {
+        idx++;
+    }
+    if (idx < tokens.size() && IsIdentifierOrContextualKeyword(tokens[idx].kind)) {
+        idx++;
+    }
+    idx = SkipBracketedTokens(tokens, idx, TokenKind::LSQUARE, TokenKind::RSQUARE);
+    while (idx < tokens.size() && tokens[idx].kind == TokenKind::NL) {
+        idx++;
+    }
+    return idx;
 }
 
 size_t CalculateEndIdx(const TokenVector& tks, const Position& targetPos)
@@ -704,16 +761,35 @@ bool MacroEvaluation::NeedCreateMacroCallTree(MacroCall& macCall, bool reEval)
     }
     auto pInvocation = macCall.GetInvocation();
     if (reEval) {
-        if (pInvocation->isCustom) {
-            // No need to reEvaluate Annotation.
-            macCall.status = MacroEvalStatus::FINISH;
-            return false;
-        }
-        if (macCall.status == MacroEvalStatus::REEVALFAILED) {
-            return false;
-        }
-        return true;
+        return NeedCreateMacroCallTreeForReEval(macCall, pInvocation);
     }
+    return NeedCreateMacroCallTreeForFirstEval(macCall, pInvocation);
+}
+
+bool MacroEvaluation::NeedCreateMacroCallTreeForReEval(MacroCall& macCall, AST::MacroInvocation* pInvocation)
+{
+    // For custom annotations (isCustom=true), we need to check if newTokens contains
+    // any macro calls produced by child macro expansion.
+    if (pInvocation->isCustom) {
+        auto node = macCall.GetNode();
+        if (node && node->curFile && node->curFile->curPackage) {
+            auto names = Utils::SplitQualifiedName(node->curFile->curPackage->fullPackageName);
+            auto moduleName = names.size() > 1 ? names.front() : "";
+            if (HasMacroCallInTokens(pInvocation->newTokens, moduleName, pInvocation->identifier)) {
+                return true;
+            }
+        }
+        macCall.status = MacroEvalStatus::FINISH;
+        return false;
+    }
+    if (macCall.status == MacroEvalStatus::REEVALFAILED) {
+        return false;
+    }
+    return true;
+}
+
+bool MacroEvaluation::NeedCreateMacroCallTreeForFirstEval(MacroCall& macCall, AST::MacroInvocation* pInvocation)
+{
     if (macCall.ResolveMacroCall(ci)) {
         SaveUsedMacros(macCall);
         CheckDeprecatedMacrosUsage(macCall);
@@ -751,6 +827,14 @@ void MacroEvaluation::CreateMacroCallTree(MacroCall& macCall, bool reEval)
     auto pInvocation = macCall.GetInvocation();
     pInvocation->nodes.clear();
     auto& inputTokens = reEval ? pInvocation->newTokens : pInvocation->args;
+
+    // For custom annotations during re-evaluation, skip the annotation's own tokens
+    // (@AnnotationName[args]) to avoid duplicate tokens in RefreshMacroCallArgs.
+    // RefreshMacroCallArgs manually rebuilds the annotation header, so nodes should
+    // only contain content from child macro expansions (e.g., @Bean, @Pointcut).
+    size_t tokenStartOffset = (reEval && pInvocation->isCustom) ?
+        SkipAnnotationTokens(inputTokens) : 0;
+
     if (!PreprocessTokens(inputTokens, escapePosVec)) {
         (void)ci->diag.Diagnose(inputTokens[0].Begin(), DiagKind::macro_expand_invalid_escape);
         return;
@@ -760,8 +844,8 @@ void MacroEvaluation::CreateMacroCallTree(MacroCall& macCall, bool reEval)
     CJC_ASSERT(node->curFile && node->curFile->curPackage);
     auto names = Utils::SplitQualifiedName(node->curFile->curPackage->fullPackageName);
     auto moduleName = names.size() > 1 ? names.front() : "";
-    size_t startIndex = 0;
-    size_t curIndex = 0;
+    size_t startIndex = tokenStartOffset;
+    size_t curIndex = tokenStartOffset;
     auto tokenSize = inputTokens.size();
     while (curIndex < tokenSize) {
         auto posTmp = inputTokens[curIndex].Begin();
