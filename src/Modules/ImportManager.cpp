@@ -232,6 +232,11 @@ void CollectStdDependency(std::map<std::string, std::set<std::string>>& stdDepen
     }
     std::string cjoPath = FileUtil::FindSerializationFile(
         FileUtil::ToPackageName(stdpkg), SERIALIZED_FILE_EXTENSION, importMgr.GetSearchPath());
+    if (cjoPath.empty()) {
+        importMgr.GetDiagnosticEngine().DiagnoseRefactor(DiagKindRefactor::package_search_error, DEFAULT_POSITION,
+            stdpkg);
+        return;
+    }
     if (!cjoManager.LoadPackageHeader(stdpkg, cjoPath)) {
         return;
     }

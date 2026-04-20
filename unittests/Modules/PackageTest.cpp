@@ -798,6 +798,31 @@ TEST_F(PackageTest, CheckCjoPathLegality)
     EXPECT_TRUE(diag.GetErrorCount() == 1);
 }
 
+TEST_F(PackageTest, CollectStdDependency_PackageSearchError)
+{
+    diag.ClearError();
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->invocation.globalOptions.scanDepPkg = true;
+    instance->code = R"(
+        import std.reflect.*
+        main() { 0 }
+    )";
+    bool ret = instance->Compile(CompileStage::IMPORT_PACKAGE);
+    EXPECT_TRUE(ret);
+    EXPECT_EQ(diag.GetErrorCount(), 1);
+    auto diags = diag.GetCategoryDiagnostic(DiagCategory::IMPORT_PACKAGE);
+    EXPECT_EQ(diags.size(), 1);
+    bool foundPackageSearchError = false;
+    for (const auto& d : diags) {
+        if (static_cast<int>(d.rKind) == static_cast<int>(DiagKindRefactor::package_search_error) &&
+            d.errorMessage == "can not find package 'std.reflect'") {
+            foundPackageSearchError = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(foundPackageSearchError);
+}
+
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 TEST_F(PackageTest, SemanticUsage)
 {
