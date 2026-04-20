@@ -16,6 +16,7 @@
 #include "DesugarMacro.h"
 #include "TypeCheckUtil.h"
 
+#include "../Plugin/APILevelVersion.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
@@ -23,7 +24,6 @@
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
-#include "cangjie/Basic/APILevelVersion.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/Utils.h"
 
@@ -282,8 +282,7 @@ Ptr<OptionalChainExpr> GetOptionalChainExprForLeftVale(Expr& leftValue)
     return nullptr;
 }
 
-OwnedPtr<AssignExpr> CreateCompoundAssignExpr(
-    OwnedPtr<Expr> left, OwnedPtr<Expr> right, TokenKind op)
+OwnedPtr<AssignExpr> CreateCompoundAssignExpr(OwnedPtr<Expr> left, OwnedPtr<Expr> right, TokenKind op)
 {
     auto ae = CreateAssignExpr(std::move(left), std::move(right));
     ae->op = op;
@@ -311,8 +310,7 @@ void DesugarIncOrDecExpr(IncOrDecExpr& ide)
     ide.desugarExpr = std::move(ae);
 }
 
-void DesugarAssignExprRecursively(
-    const TupleLit& leftValues, Expr& rightExprs, std::vector<OwnedPtr<Node>>& nodes)
+void DesugarAssignExprRecursively(const TupleLit& leftValues, Expr& rightExprs, std::vector<OwnedPtr<Node>>& nodes)
 {
     uint64_t indexOfRightExpr = 0;
     auto varDecl = CreateTmpVarDecl(nullptr, &rightExprs);
@@ -463,6 +461,7 @@ void DesugarTrailingClosureExpr(TrailingClosureExpr& trailingClosure)
 }
 
 const std::string LEVEL_IDENTGIFIER = "level";
+const std::string SINCE_IDENTGIFIER = "since";
 const std::string SYSCAP_IDENTGIFIER = "syscap";
 // For level check:
 const std::string DEVICE_INFO = "DeviceInfo";
@@ -470,11 +469,11 @@ const std::string SDK_API_VERSION = "sdkApiVersion";
 // For syscap check:
 const std::string CANIUSE_IDENTIFIER = "canIUse";
 
-// Before desugar: `@IfAvaliable(level: 11, {=>...}, {=>...})`
-// Desugar as: `if (DeviceInfo.sdkApiVersion >= 11) {...} else {...}`
-// Also supports: `@IfAvailable(level: "20.1.0", {=>...}, {=>...})`
+// Before desugar: `@IfAvailable(since: "20.1.0", {=>...}, {=>...})`
 // Desugar as: `if (DeviceInfo.sdkApiVersion >= 20001000) {...} else {...}`
 // For string-form, encoding: major * 1_000_000 + minor * 1_000 + patch
+// Also supports legacy integer form: `@IfAvailable(level: 11, {=>...}, {=>...})`
+// Desugar as: `if (DeviceInfo.sdkApiVersion >= 11) {...} else {...}`
 OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae)
 {
     auto me = CreateMemberAccess(CreateRefExpr(SrcIdentifier(DEVICE_INFO)), SDK_API_VERSION);
@@ -516,7 +515,7 @@ OwnedPtr<Expr> DesugarIfAvailableSyscapCondition(IfAvailableExpr& iae)
 
 OwnedPtr<Expr> DesugarIfAvailableCondition(IfAvailableExpr& iae)
 {
-    if (iae.GetArg()->name == LEVEL_IDENTGIFIER) {
+    if (iae.GetArg()->name == SINCE_IDENTGIFIER || iae.GetArg()->name == LEVEL_IDENTGIFIER) {
         return DesugarIfAvailableLevelCondition(iae);
     } else if (iae.GetArg()->name == SYSCAP_IDENTGIFIER) {
         return DesugarIfAvailableSyscapCondition(iae);
@@ -607,14 +606,13 @@ struct DiscardedHelper {
         };
 
         auto isNothingExpr = [](const Node& n) -> bool {
-            return std::set<ASTKind>{ASTKind::JUMP_EXPR,
-                ASTKind::THROW_EXPR, ASTKind::RETURN_EXPR}.count(n.astKind) > 0;
+            return std::set<ASTKind>{ASTKind::JUMP_EXPR, ASTKind::THROW_EXPR, ASTKind::RETURN_EXPR}.count(n.astKind) >
+                0;
         };
 
         auto unitifyBlock = [&isUnitExpr, &isNothingExpr](Block& b) -> void {
-            if (b.body.empty() || (b.body.back() &&
-                (!isUnitExpr(*b.body.back())) &&
-                (!isNothingExpr(*b.body.back())))) {
+            if (b.body.empty() ||
+                (b.body.back() && (!isUnitExpr(*b.body.back())) && (!isNothingExpr(*b.body.back())))) {
                 b.body.push_back(CreateUnitExpr());
             }
         };
@@ -677,7 +675,7 @@ private:
         static const std::set<ASTKind> caseKinds = {ASTKind::MATCH_CASE, ASTKind::MATCH_CASE_OTHER};
         // if expr to then blk and else blk
         bool ifBody = parent.astKind == ASTKind::IF_EXPR &&
-                (&node == StaticAs<ASTKind::IF_EXPR>(&parent)->thenBody.get() ||
+            (&node == StaticAs<ASTKind::IF_EXPR>(&parent)->thenBody.get() ||
                 &node == StaticAs<ASTKind::IF_EXPR>(&parent)->elseBody.get());
         // try expr to try blk and catch blk
         bool tryBody = parent.astKind == ASTKind::TRY_EXPR && node.astKind == ASTKind::BLOCK;
@@ -691,7 +689,7 @@ private:
         bool parentheses = parent.astKind == ASTKind::PAREN_EXPR;
         // info of FuncDecl has to pass down through FuncBody node
         bool funcBody = parent.astKind == ASTKind::FUNC_BODY;
-        return ifBody || tryBody || matchCase || matchCaseBody || syncBody || parentheses || funcBody ;
+        return ifBody || tryBody || matchCase || matchCaseBody || syncBody || parentheses || funcBody;
     };
 
     /* Some expressions will ignore a child block's return value. */
@@ -741,8 +739,8 @@ void PerformDesugarBeforeTypeCheck(Node& root, bool desugarMacrocall)
         dHelper.PopCtxt(node);
         return VisitAction::KEEP_DECISION;
     };
-    std::function<VisitAction(Ptr<Node>)> visitor =
-        [&visitor, &visitorPost, &dHelper, &desugarMacrocall](Ptr<Node> node) -> VisitAction {
+    std::function<VisitAction(Ptr<Node>)> visitor = [&visitor, &visitorPost, &dHelper, &desugarMacrocall](
+                                                        Ptr<Node> node) -> VisitAction {
         if (node->TestAttr(Attribute::IS_BROKEN)) {
             // must push before return to pair with visitorPost
             dHelper.PushCtxt(false, node);

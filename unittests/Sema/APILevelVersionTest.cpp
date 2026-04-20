@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -10,12 +10,12 @@
  * Semantic version related unit tests for APILevel and IfAvailable annotations.
  */
 
-#include <string>
-#include <vector>
-#include "gtest/gtest.h"
-#include "cangjie/Basic/APILevelVersion.h"
+#include "../../src/Sema/Plugin/APILevelVersion.h"
 #include "../../src/Sema/Plugin/PluginCustomAnnoChecker.h"
 #include "cangjie/Basic/StringConvertor.h"
+#include "gtest/gtest.h"
+#include <string>
+#include <vector>
 
 using namespace Cangjie;
 using namespace Cangjie::PluginCheck;
@@ -155,8 +155,8 @@ TEST(APILevelVersionTest, LessThanOrEqualComparison)
     APILevelVersion v2(20, 0, 0);
     APILevelVersion v3(20, 1, 0);
 
-    EXPECT_TRUE(v1 <= v2);  // Equal
-    EXPECT_TRUE(v1 <= v3);  // Less than
+    EXPECT_TRUE(v1 <= v2); // Equal
+    EXPECT_TRUE(v1 <= v3); // Less than
     EXPECT_FALSE(v3 <= v1);
 }
 
@@ -167,8 +167,8 @@ TEST(APILevelVersionTest, GreaterThanOrEqualComparison)
     APILevelVersion v2(20, 0, 0);
     APILevelVersion v3(20, 1, 0);
 
-    EXPECT_TRUE(v1 >= v2);  // Equal
-    EXPECT_TRUE(v3 >= v1);  // Greater than
+    EXPECT_TRUE(v1 >= v2); // Equal
+    EXPECT_TRUE(v3 >= v1); // Greater than
     EXPECT_FALSE(v1 >= v3);
 }
 
@@ -312,13 +312,13 @@ TEST(APILevelVersionTest, IsValidFormat)
     EXPECT_TRUE(APILevelVersion::IsValidFormat("999.999.999"));
 
     // Invalid formats
-    EXPECT_FALSE(APILevelVersion::IsValidFormat(""));           // empty
-    EXPECT_FALSE(APILevelVersion::IsValidFormat("20."));        // trailing dot
-    EXPECT_FALSE(APILevelVersion::IsValidFormat(".20"));        // leading dot
-    EXPECT_FALSE(APILevelVersion::IsValidFormat("20..1"));      // consecutive dots
-    EXPECT_FALSE(APILevelVersion::IsValidFormat("20.abc.1"));   // non-numeric component
-    EXPECT_FALSE(APILevelVersion::IsValidFormat("20.1.2.3"));   // too many components
-    EXPECT_FALSE(APILevelVersion::IsValidFormat("20.1.2a"));    // alphanumeric
+    EXPECT_FALSE(APILevelVersion::IsValidFormat(""));         // empty
+    EXPECT_FALSE(APILevelVersion::IsValidFormat("20."));      // trailing dot
+    EXPECT_FALSE(APILevelVersion::IsValidFormat(".20"));      // leading dot
+    EXPECT_FALSE(APILevelVersion::IsValidFormat("20..1"));    // consecutive dots
+    EXPECT_FALSE(APILevelVersion::IsValidFormat("20.abc.1")); // non-numeric component
+    EXPECT_FALSE(APILevelVersion::IsValidFormat("20.1.2.3")); // too many components
+    EXPECT_FALSE(APILevelVersion::IsValidFormat("20.1.2a"));  // alphanumeric
 }
 
 // Test PluginCustomAnnoInfo structure
@@ -390,15 +390,15 @@ bool IsAccessible(const APILevelVersion& targetSince, const APILevelVersion& sco
 // --cfg APILevel_level=20 (integer style)
 TEST(CfgAPILevelTest, IntegerStyleCfg_Accessible)
 {
-    auto globalLevel = APILevelVersion::Parse("20");   // --cfg APILevel_level=20
-    auto targetSince = APILevelVersion::Parse("20");   // @APILevel(since: "20")
+    auto globalLevel = APILevelVersion::Parse("20"); // --cfg APILevel_level=20
+    auto targetSince = APILevelVersion::Parse("20"); // @APILevel(since: "20")
     EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
 }
 
 TEST(CfgAPILevelTest, IntegerStyleCfg_Inaccessible)
 {
-    auto globalLevel = APILevelVersion::Parse("19");   // --cfg APILevel_level=19
-    auto targetSince = APILevelVersion::Parse("20");   // @APILevel(since: "20")
+    auto globalLevel = APILevelVersion::Parse("19"); // --cfg APILevel_level=19
+    auto targetSince = APILevelVersion::Parse("20"); // @APILevel(since: "20")
     EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
 }
 
@@ -412,15 +412,15 @@ TEST(CfgAPILevelTest, FullVersionCfg_ExactMatch_Accessible)
 
 TEST(CfgAPILevelTest, FullVersionCfg_HigherTarget_Inaccessible)
 {
-    auto globalLevel = APILevelVersion::Parse("20.0.0");  // --cfg APILevel_level=20.0.0
-    auto targetSince = APILevelVersion::Parse("20.1.0");  // @APILevel(since: "20.1.0")
+    auto globalLevel = APILevelVersion::Parse("20.0.0"); // --cfg APILevel_level=20.0.0
+    auto targetSince = APILevelVersion::Parse("20.1.0"); // @APILevel(since: "20.1.0")
     EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
 }
 
 TEST(CfgAPILevelTest, FullVersionCfg_LowerTarget_Accessible)
 {
-    auto globalLevel = APILevelVersion::Parse("20.1.0");  // --cfg APILevel_level=20.1.0
-    auto targetSince = APILevelVersion::Parse("20.0.0");  // @APILevel(since: "20.0.0")
+    auto globalLevel = APILevelVersion::Parse("20.1.0"); // --cfg APILevel_level=20.1.0
+    auto targetSince = APILevelVersion::Parse("20.0.0"); // @APILevel(since: "20.0.0")
     EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
 }
 
@@ -434,15 +434,15 @@ TEST(CfgAPILevelTest, PatchBoundary_ExactMatch_Accessible)
 
 TEST(CfgAPILevelTest, PatchBoundary_OneHigher_Inaccessible)
 {
-    auto globalLevel = APILevelVersion::Parse("20.1.5");  // --cfg APILevel_level=20.1.5
-    auto targetSince = APILevelVersion::Parse("20.1.6");  // @APILevel(since: "20.1.6")
+    auto globalLevel = APILevelVersion::Parse("20.1.5"); // --cfg APILevel_level=20.1.5
+    auto targetSince = APILevelVersion::Parse("20.1.6"); // @APILevel(since: "20.1.6")
     EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
 }
 
 TEST(CfgAPILevelTest, PatchBoundary_OneLower_Accessible)
 {
-    auto globalLevel = APILevelVersion::Parse("20.1.5");  // --cfg APILevel_level=20.1.5
-    auto targetSince = APILevelVersion::Parse("20.1.4");  // @APILevel(since: "20.1.4")
+    auto globalLevel = APILevelVersion::Parse("20.1.5"); // --cfg APILevel_level=20.1.5
+    auto targetSince = APILevelVersion::Parse("20.1.4"); // @APILevel(since: "20.1.4")
     EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
 }
 
@@ -465,30 +465,30 @@ TEST(CfgAPILevelTest, IntegerEquivalentToMajorZeroZero)
 // Two-part --cfg (e.g., --cfg APILevel_level=20.1)
 TEST(CfgAPILevelTest, TwoPartCfg_Accessible)
 {
-    auto globalLevel = APILevelVersion::Parse("20.1");    // --cfg APILevel_level=20.1
-    auto targetSince = APILevelVersion::Parse("20.1.0");  // @APILevel(since: "20.1.0")
+    auto globalLevel = APILevelVersion::Parse("20.1");   // --cfg APILevel_level=20.1
+    auto targetSince = APILevelVersion::Parse("20.1.0"); // @APILevel(since: "20.1.0")
     EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
 }
 
 TEST(CfgAPILevelTest, TwoPartCfg_Inaccessible)
 {
-    auto globalLevel = APILevelVersion::Parse("20.1");    // --cfg APILevel_level=20.1
-    auto targetSince = APILevelVersion::Parse("20.2.0");  // @APILevel(since: "20.2.0")
+    auto globalLevel = APILevelVersion::Parse("20.1");   // --cfg APILevel_level=20.1
+    auto targetSince = APILevelVersion::Parse("20.2.0"); // @APILevel(since: "20.2.0")
     EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
 }
 
 // Cross-major boundary
 TEST(CfgAPILevelTest, CrossMajor_OlderCfg_Inaccessible)
 {
-    auto globalLevel = APILevelVersion::Parse("20.9.9");  // --cfg APILevel_level=20.9.9
-    auto targetSince = APILevelVersion::Parse("21.0.0");  // @APILevel(since: "21.0.0")
+    auto globalLevel = APILevelVersion::Parse("20.9.9"); // --cfg APILevel_level=20.9.9
+    auto targetSince = APILevelVersion::Parse("21.0.0"); // @APILevel(since: "21.0.0")
     EXPECT_FALSE(IsAccessible(targetSince, globalLevel));
 }
 
 TEST(CfgAPILevelTest, CrossMajor_NewerCfg_Accessible)
 {
-    auto globalLevel = APILevelVersion::Parse("21.0.0");  // --cfg APILevel_level=21.0.0
-    auto targetSince = APILevelVersion::Parse("20.9.9");  // @APILevel(since: "20.9.9")
+    auto globalLevel = APILevelVersion::Parse("21.0.0"); // --cfg APILevel_level=21.0.0
+    auto targetSince = APILevelVersion::Parse("20.9.9"); // @APILevel(since: "20.9.9")
     EXPECT_TRUE(IsAccessible(targetSince, globalLevel));
 }
 
@@ -496,7 +496,7 @@ TEST(CfgAPILevelTest, CrossMajor_NewerCfg_Accessible)
 // Modeled here as: zero globalLevel should never block access via the IsZero guard.
 TEST(CfgAPILevelTest, NoCfgProvided_GlobalLevelIsZero)
 {
-    APILevelVersion globalLevel;  // default-constructed = 0.0.0 (IsZero)
+    APILevelVersion globalLevel; // default-constructed = 0.0.0 (IsZero)
     EXPECT_TRUE(globalLevel.IsZero());
     // When optionWithLevel is false, CheckLevel returns true regardless; ensure zero is detectable.
     auto targetSince = APILevelVersion::Parse("21.0.0");
@@ -507,7 +507,7 @@ TEST(CfgAPILevelTest, NoCfgProvided_GlobalLevelIsZero)
 // Batch API availability: multiple APIs at different levels with a fixed --cfg
 TEST(CfgAPILevelTest, BatchAccessibility_FixedCfg)
 {
-    auto globalLevel = APILevelVersion::Parse("20.1.5");  // --cfg APILevel_level=20.1.5
+    auto globalLevel = APILevelVersion::Parse("20.1.5"); // --cfg APILevel_level=20.1.5
 
     // accessible APIs (since <= 20.1.5)
     EXPECT_TRUE(IsAccessible(APILevelVersion::Parse("19.0.0"), globalLevel));

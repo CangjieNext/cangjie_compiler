@@ -13,8 +13,8 @@
 #include "PluginCustomAnnoChecker.h"
 
 #include <functional>
-#include <iterator>
 #include <iostream>
+#include <iterator>
 #include <stack>
 #include <unordered_map>
 
@@ -84,8 +84,7 @@ void ParseSince(const Expr& e, PluginCustomAnnoInfo& apilevel, DiagnosticEngine&
         return;
     }
     if (!APILevelVersion::IsValidFormat(lce->stringValue)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_apilevel_invalid_version_format, e,
-            lce->stringValue.c_str());
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_apilevel_invalid_version_format, e, lce->stringValue.c_str());
         return;
     }
     // Parse full semantic version from string

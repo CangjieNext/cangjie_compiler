@@ -17,10 +17,10 @@
 #include <set>
 #include <string>
 
+#include "APILevelVersion.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/NodeX.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
-#include "cangjie/Basic/APILevelVersion.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Option/Option.h"
