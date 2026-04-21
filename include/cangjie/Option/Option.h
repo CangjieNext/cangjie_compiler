@@ -660,7 +660,6 @@ public:
     LTOMode ltoMod = LTOMode::NO_LTO;
     bool enableCompileAsExe = false;
     bool ltoHideAllPkgs = false;
-
     /**
      * @brief Checks whether LTO is enabled.
      *
