@@ -47,7 +47,7 @@ public:
         ImportManager* import;
         SourceManager* sourceManager;
         TypeManager* types;
-        DiagAdapter* diag;
+        DiagnosticEngine* diag;
         IncreKind kind;
         CompilationCache* cachedInfo;
         CHIRBuilder* builder;
@@ -124,7 +124,7 @@ public:
             sourceManager = &manager;
             return this;
         }
-        AST2CHIRBuilder* SetDiag(DiagAdapter& ciDiag)
+        AST2CHIRBuilder* SetDiag(DiagnosticEngine& ciDiag)
         {
             diag = &ciDiag;
             return this;
@@ -384,7 +384,7 @@ private:
     ImportManager& importManager;
     SourceManager& sourceManager;
     TypeManager& types;
-    DiagAdapter& diag;
+    DiagnosticEngine& diag;
     CompilationCache& cachedInfo;
     IncreKind kind;
     VirtualWrapperDepMap curVirtFuncWrapDep;

@@ -8,7 +8,7 @@
 
 #include "cangjie/CHIR/Analysis/Utils.h"
 #include "cangjie/CHIR/Utils/ConstantUtils.h"
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/IR/IntrinsicKind.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
@@ -195,7 +195,7 @@ void SanitizerCoverage::InitFuncBag(const Package& package)
     }
 }
 
-bool SanitizerCoverage::RunOnPackage(const Ptr<const Package>& package, DiagAdapter& diag, bool isDebug)
+bool SanitizerCoverage::RunOnPackage(const Ptr<const Package>& package, DiagnosticEngine& diag, bool isDebug)
 {
     if (!CheckSancovOption(diag)) {
         return false;
@@ -264,7 +264,7 @@ void SanitizerCoverage::RunOnFunc(const Ptr<Function>& func, bool isDebug)
     }
 }
 
-bool SanitizerCoverage::CheckSancovOption(DiagAdapter& diag) const
+bool SanitizerCoverage::CheckSancovOption(DiagnosticEngine& diag) const
 {
     bool isSancov = sanCovOption.inline8bitCounters || sanCovOption.inlineBoolFlag || sanCovOption.tracePCGuard;
     bool isSancovLevelVaild =

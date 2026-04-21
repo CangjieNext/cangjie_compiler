@@ -122,18 +122,17 @@ Position GetMacroCallEndPosforLsp(uint32_t newPos, uint32_t first, const Positio
  */
 Position GetMacroSourcePos(const MacroInvocation& invocation, const Position& pos, bool isLowerBound = false)
 {
-    auto key = invocation.isCurFile ? pos.Hash32() : static_cast<uint32_t>(pos.column);
+    auto key = invocation.macroCallDiagInfo.isCurFile ? pos.Hash32() : static_cast<uint32_t>(pos.column);
     if (isLowerBound) {
-        // Get end position.
-        if (invocation.isForLSP) { // For lsp.
-            auto posIt = invocation.new2originPosMap.find(pos.Hash32());
-            if (posIt != invocation.new2originPosMap.end()) {
+        if (invocation.macroCallDiagInfo.isForLSP) {
+            auto posIt = invocation.macroCallDiagInfo.new2originPosMap.find(pos.Hash32());
+            if (posIt != invocation.macroCallDiagInfo.new2originPosMap.end()) {
                 ++posIt;
             }
-            if (posIt == invocation.new2originPosMap.end()) {
-                posIt = invocation.new2originPosMap.lower_bound(pos.Hash32());
+            if (posIt == invocation.macroCallDiagInfo.new2originPosMap.end()) {
+                posIt = invocation.macroCallDiagInfo.new2originPosMap.lower_bound(pos.Hash32());
             }
-            if (posIt == invocation.new2originPosMap.end()) {
+            if (posIt == invocation.macroCallDiagInfo.new2originPosMap.end()) {
                 return pos;
             }
             auto sourcePos = GetMacroCallEndPosforLsp(pos.Hash32(), posIt->first, posIt->second);
@@ -141,24 +140,23 @@ Position GetMacroSourcePos(const MacroInvocation& invocation, const Position& po
                 return sourcePos;
             }
         }
-        auto posIt = invocation.new2macroCallPosMap.lower_bound(key);
-        if (posIt != invocation.new2macroCallPosMap.end()) {
-            return GetMacroCallEndPos(invocation.isCurFile, key, posIt->first, posIt->second);
+        auto posIt = invocation.macroCallDiagInfo.new2macroCallPosMap.lower_bound(key);
+        if (posIt != invocation.macroCallDiagInfo.new2macroCallPosMap.end()) {
+            return GetMacroCallEndPos(invocation.macroCallDiagInfo.isCurFile, key, posIt->first, posIt->second);
         }
         return pos;
     }
-    // Get begin/identifier/field position.
-    if (invocation.isForLSP) { // For lsp.
-        if (invocation.new2originPosMap.find(pos.Hash32()) == invocation.new2originPosMap.end()) {
+    if (invocation.macroCallDiagInfo.isForLSP) {
+        if (invocation.macroCallDiagInfo.new2originPosMap.find(pos.Hash32()) == invocation.macroCallDiagInfo.new2originPosMap.end()) {
             return pos;
         }
-        auto sourcePos = invocation.new2originPosMap.at(pos.Hash32());
+        auto sourcePos = invocation.macroCallDiagInfo.new2originPosMap.at(pos.Hash32());
         if (sourcePos.isCurFile) {
             return sourcePos;
         }
     }
-    if (invocation.new2macroCallPosMap.find(key) != invocation.new2macroCallPosMap.end()) {
-        return invocation.new2macroCallPosMap.at(key);
+    if (invocation.macroCallDiagInfo.new2macroCallPosMap.find(key) != invocation.macroCallDiagInfo.new2macroCallPosMap.end()) {
+        return invocation.macroCallDiagInfo.new2macroCallPosMap.at(key);
     }
     return pos;
 }
@@ -781,7 +779,7 @@ Ptr<const MacroInvocation> Node::GetConstInvocation() const
 
 bool MacroInvocation::IsIfAvailable() const
 {
-    return fullName == IF_AVAILABLE;
+    return macroCallDiagInfo.fullName == IF_AVAILABLE;
 }
 
 Ptr<FuncArg> MacroExpandExpr::GetNamedArg() const
@@ -851,14 +849,14 @@ Position Node::GetMacroCallNewPos(const Position& originPos)
         }
         pInvocation = tempNode->GetInvocation();
     }
-    if (!pInvocation || pInvocation->originPosMap.empty() || pInvocation->origin2newPosMap.empty()) {
+    if (!pInvocation || pInvocation->macroCallDiagInfo.originPosMap.empty() || pInvocation->origin2newPosMap.empty()) {
         return INVALID_POSITION;
     }
     auto key = static_cast<unsigned int>(originPos.Hash32());
-    if (pInvocation->originPosMap.lower_bound(key) == pInvocation->originPosMap.end()) {
+    if (pInvocation->macroCallDiagInfo.originPosMap.lower_bound(key) == pInvocation->macroCallDiagInfo.originPosMap.end()) {
         return INVALID_POSITION;
     }
-    auto newkey = pInvocation->originPosMap.lower_bound(key)->second.Hash64();
+    auto newkey = pInvocation->macroCallDiagInfo.originPosMap.lower_bound(key)->second.Hash64();
     if (pInvocation->origin2newPosMap.find(newkey) != pInvocation->origin2newPosMap.cend()) {
         return pInvocation->origin2newPosMap.at(newkey);
     }

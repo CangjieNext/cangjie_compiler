@@ -340,7 +340,7 @@ std::vector<Ptr<AST::VarDecl>> GetNonStaticSuperMemberVars(const AST::ClassLikeD
     return std::vector<Ptr<AST::VarDecl>>{};
 }
 
-bool IsCrossPackage(const Cangjie::Position& pos, const std::string& currentPackage, DiagAdapter& diag)
+bool IsCrossPackage(const Cangjie::Position& pos, const std::string& currentPackage, DiagnosticEngine& diag)
 {
     if (diag.GetSourceManager().GetSource(pos.fileID).packageName.has_value()) {
         if (currentPackage != diag.GetSourceManager().GetSource(pos.fileID).packageName.value()) {
