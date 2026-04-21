@@ -22523,6 +22523,11 @@ index 000000000..4a8f3a25f
 +  PreservedAnalyses run(Module &M, ModuleAnalysisManager &) const;
 +};
 +
++struct CJDisableImportLibReflection
++    : public PassInfoMixin<CJDisableImportLibReflection> {
++  PreservedAnalyses run(Module &M, ModuleAnalysisManager &) const;
++};
++
 +constexpr uint32_t ArrayHeadSize = 16;
 +constexpr uint32_t ObjectHeadSize = 8;
 +constexpr uint32_t SyncSize = 168;
@@ -24840,6 +24845,10 @@ index 8192ed56c..f2f7050a4 100644
 +                                cl::init(false));
 +cl::opt<bool> EnableCJIRCEPass("enable-cj-irce-pass", cl::Hidden,
 +                               cl::init(true));
++cl::opt<bool> DisableCJLTOReflection("cj-disable-lto-reflection", cl::Hidden,
++                                     cl::init(false),
++                                     cl::desc("Disable reflection metadata in"
++                                              " cangjie LTO pipelines"));
 +
  Optional<int> getStringFnAttrAsInt(CallBase &CB, StringRef AttrKind) {
    Attribute Attr = CB.getFnAttr(AttrKind);
@@ -37689,6 +37698,11 @@ index 945ef5123..943a2b6d0 100644
 +  else if (LTOPreLink)
 +    LTOPhase = ThinOrFullLTOPhase::FullLTOPreLink;
 +
++  if (CJPipeline && CangjieLTOPreOpt && DisableCJLTOReflection) {
++    MPM.addPass(CJDisableImportLibReflection());
++    MPM.addPass(GlobalDCEPass());
++  }
++
    // Add the core simplification pipeline.
    MPM.addPass(buildModuleSimplificationPipeline(Level, LTOPhase));
  
@@ -37753,6 +37767,11 @@ index 945ef5123..943a2b6d0 100644
 +                      /* IsCS */ false, PGOOpt->ProfileFile,
 +                      PGOOpt->ProfileRemappingFile,
 +                      ThinOrFullLTOPhase::FullLTOPostLink);
++  }
++
++  if (CJPipeline && DisableCJLTOReflection) {
++    MPM.addPass(CJDisableImportLibReflection());
++    MPM.addPass(GlobalDCEPass());
 +  }
 +
    if (PGOOpt && PGOOpt->Action == PGOOptions::SampleUse) {
@@ -37883,6 +37902,7 @@ index 7c29bffbc..7854c507c 100644
 +MODULE_PASS("place-safepoints", PlaceSafepoints())
 +MODULE_PASS("cj-ir-verifier", CJIRVerifier())
 +MODULE_PASS("cj-fill-metadata", CJFillMetadata())
++MODULE_PASS("cj-disable-import-lib-reflection", CJDisableImportLibReflection())
 +MODULE_PASS("cj-barrier-opt", CJBarrierOpt())
 +MODULE_PASS("cj-runtime-lowering", CJRuntimeLowering())
 +MODULE_PASS("cj-specific-opt", CJSpecificOpt())
@@ -53278,6 +53298,78 @@ index 000000000..7a0ebceff
 +    return PreservedAnalyses::all();
 +  }
 +  if (fillGV(M)) {
++    return PreservedAnalyses::none();
++  }
++  return PreservedAnalyses::all();
++}
++
++namespace {
++bool rewriteReflectionOperand(GlobalVariable &GV, unsigned FlagIdx,
++                              unsigned ReflectionIdx) {
++  if (!GV.hasInitializer())
++    return false;
++
++  auto *Init = dyn_cast<ConstantStruct>(GV.getInitializer());
++  if (Init == nullptr || Init->getNumOperands() <= ReflectionIdx)
++    return false;
++
++  auto *Flag = dyn_cast<ConstantInt>(Init->getOperand(FlagIdx));
++  if (Flag == nullptr)
++    return false;
++
++  uint64_t NewFlag = Flag->getZExtValue() & ~TF_REFLECTION;
++  auto *ReflectionTy = dyn_cast<PointerType>(Init->getOperand(ReflectionIdx)->getType());
++  if (ReflectionTy == nullptr)
++    return false;
++
++  if (NewFlag == Flag->getZExtValue() &&
++      Init->getOperand(ReflectionIdx)->isNullValue()) {
++    return false;
++  }
++
++  SmallVector<Constant *, 0> Ops;
++  Ops.reserve(Init->getNumOperands());
++  for (unsigned I = 0; I < Init->getNumOperands(); ++I) {
++    Ops.push_back(cast<Constant>(Init->getOperand(I)));
++  }
++  Ops[FlagIdx] = ConstantInt::get(Flag->getType(), NewFlag);
++  Ops[ReflectionIdx] = ConstantPointerNull::get(ReflectionTy);
++  GV.setInitializer(ConstantStruct::get(Init->getType(), Ops));
++  return true;
++}
++
++bool makeReflectGlobalDiscardable(GlobalVariable &GV) {
++  if (!GV.hasAttribute("CFileReflect"))
++    return false;
++
++  bool Changed = false;
++  auto NewAttrs =
++      GV.getAttributes().removeAttribute(GV.getContext(), "CFileReflect");
++  if (NewAttrs != GV.getAttributes()) {
++    GV.setAttributes(NewAttrs);
++    Changed = true;
++  }
++  if (!GV.hasLocalLinkage()) {
++    GV.setLinkage(GlobalValue::InternalLinkage);
++    Changed = true;
++  }
++  return Changed;
++}
++} // namespace
++
++PreservedAnalyses
++CJDisableImportLibReflection::run(Module &M, ModuleAnalysisManager &) const {
++  bool Changed = false;
++  for (auto &GV : M.globals()) {
++    if (GV.hasAttribute(CFileKlassStr)) {
++      Changed |= rewriteReflectionOperand(GV, CIT_FLAG, CIT_REFLECTION);
++    } else if (GV.hasAttribute("cj_tt")) {
++      Changed |= rewriteReflectionOperand(GV, TT_FLAG, TT_REFLECTION);
++    }
++    Changed |= makeReflectGlobalDiscardable(GV);
++  }
++
++  if (Changed) {
 +    return PreservedAnalyses::none();
 +  }
 +  return PreservedAnalyses::all();
@@ -84781,6 +84873,47 @@ index 000000000..b61eee475
 +!8 = !{!9}
 +!9 = !{!"SeqCst", !""}
 +!10 = !{!"enumKind0", !"none"}
+diff --git a/llvm/test/Transforms/CJFillMetadata/disable_import_lib_reflection.ll b/llvm/test/Transforms/CJFillMetadata/disable_import_lib_reflection.ll
+new file mode 100644
+index 000000000..111111111
+--- /dev/null
++++ b/llvm/test/Transforms/CJFillMetadata/disable_import_lib_reflection.ll
+@@ -0,0 +1,30 @@
++; RUN: opt '-passes=cj-disable-import-lib-reflection,globaldce' -S < %s | FileCheck %s
++
++%BitMap = type { i32, [0 x i8] }
++%ExtensionDef = type { i32, i8, i8*, i8*, i8*, i8* }
++%TypeTemplate = type { i8*, i8, i8, i16, i16, i8*, i8*, i8*, i8*, %ExtensionDef**, i16 }
++%TypeInfo = type { i8*, i8, i8, i16, i32, %BitMap*, i32, i8, i8, i16, i32*, i8*, i8*, i8*, %TypeInfo*, %ExtensionDef**, i8*, i8* }
++%DefaultHasher.ti.reflectType = type { i8* }
++%"std.core:CPointerHandle.tt.reflectType" = type { i8* }
++%test.pkgInfoType = type { i8*, i32, i32, i32, i32, i64, i8*, i8*, i8*, i8*, i8*, i8*, i8* }
++
++@"DefaultHasher.ti.reflect" = internal global %DefaultHasher.ti.reflectType { i8* null }, align 8 #1
++@"std.core:CPointerHandle.tt.reflect" = internal global %"std.core:CPointerHandle.tt.reflectType" { i8* null }, align 8 #1
++@"DefaultHasher.ti" = global %TypeInfo { i8* null, i8 22, i8 64, i16 1, i32 8, %BitMap* null, i32 0, i8 8, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo* null, %ExtensionDef** null, i8* null, i8* bitcast (%DefaultHasher.ti.reflectType* @"DefaultHasher.ti.reflect" to i8*) }, !RelatedType !0 #0
++@"std.core:CPointerHandle.tt" = global %TypeTemplate { i8* null, i8 22, i8 64, i16 0, i16 0, i8* null, i8* null, i8* null, i8* bitcast (%"std.core:CPointerHandle.tt.reflectType"* @"std.core:CPointerHandle.tt.reflect" to i8*), %ExtensionDef** null, i16 0 } #2
++@test_test.packageInfo = global %test.pkgInfoType { i8* null, i32 1, i32 1, i32 0, i32 0, i64 1, i8* null, i8* null, i8* null, i8* null, i8* null, i8* bitcast (%TypeInfo* @"DefaultHasher.ti" to i8*), i8* bitcast (%TypeTemplate* @"std.core:CPointerHandle.tt" to i8*) }, no_sanitize_address #1
++
++define i8* @keep_ti() {
++  ret i8* bitcast (%TypeInfo* @"DefaultHasher.ti" to i8*)
++}
++
++define i8* @keep_tt() {
++  ret i8* bitcast (%TypeTemplate* @"std.core:CPointerHandle.tt" to i8*)
++}
++
++; CHECK: @"DefaultHasher.ti" = global %TypeInfo { i8* null, i8 22, i8 0, i16 1, i32 8, %BitMap* null, i32 0, i8 8, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo* null, %ExtensionDef** null, i8* null, i8* null }, !RelatedType !0
++; CHECK: @"std.core:CPointerHandle.tt" = global %TypeTemplate { i8* null, i8 22, i8 0, i16 0, i16 0, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** null, i16 0 }
++; CHECK-NOT: @test_test.packageInfo
++; CHECK-NOT: @"DefaultHasher.ti.reflect"
++; CHECK-NOT: @"std.core:CPointerHandle.tt.reflect"
++
++attributes #0 = { "CFileKlass" }
++attributes #1 = { "CFileReflect" }
++attributes #2 = { "cj_tt" }
++
++!0 = !{!"record.DefaultHasher"}
 diff --git a/llvm/test/Transforms/CJGenericIntrinsicOpt/copy_generic_opt_non_phi.ll b/llvm/test/Transforms/CJGenericIntrinsicOpt/copy_generic_opt_non_phi.ll
 new file mode 100644
 index 000000000..e25779d12
