@@ -85,6 +85,12 @@ public:
     
     void AddMacroCallNote(Diagnostic& diagnostic, const AST::Node& node, const Position& pos);
 
+    void AddMacroCallNote(Diagnostic& diagnostic, const MacroCallDiagInfo& info, const Position& pos);
+
+    MacroCallDiagInfo* FindMacroCallInfo(Position pos) const;
+
+    void RegisterMacroCallDiagInfo(std::unique_ptr<MacroCallDiagInfo> info);
+
     // ability of transaction
     void Prepare();
     void Commit();
@@ -302,6 +308,8 @@ private:
     DiagEngineErrorCode diagEngineErrorCode{DiagEngineErrorCode::NO_ERRORS};
     std::mutex firstErrorCategoryMtx;
     std::optional<DiagCategory> firstErrorCategory = std::nullopt;
+    std::map<uint64_t, std::unique_ptr<MacroCallDiagInfo>, std::greater<>> pos2MacroCallDiagInfoMap;
+
     friend class DiagnosticEngine::StashDisableDiagnoseStatus;
 };
 }

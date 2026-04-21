@@ -35,7 +35,7 @@ void AddCurFile(AST::Node& root, Ptr<AST::File> file = nullptr);
  */
 inline bool IsPureAnnotation(const AST::MacroInvocation& invocation)
 {
-    return invocation.isCustom && invocation.isCurFile;
+    return invocation.macroCallDiagInfo.isCustom && invocation.macroCallDiagInfo.isCurFile;
 }
 
 std::vector<Ptr<const AST::Modifier>> SortModifierByPos(const std::set<AST::Modifier>& modifiers);

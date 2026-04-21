@@ -413,7 +413,7 @@ void ToCHIR::FlatForInExpr()
 bool ToCHIR::RunVarInitChecking()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "VarInitCheck");
-    auto vic = CHIR::VarInitCheck(&diag);
+    auto vic = CHIR::VarInitCheck(diag);
     vic.RunOnPackage(chirPkg, opts.GetJobs());
     return diag.GetErrorCount() == 0;
 }
@@ -489,7 +489,7 @@ void ToCHIR::RunMergingBlocks(const std::string& firstName, const std::string& s
 void ToCHIR::RunConstantAnalysis()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "Constant Analysis");
-    constAnalysisWrapper.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), &diag);
+    constAnalysisWrapper.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), diag);
 }
 
 void ToCHIR::RunConstantPropagation()
@@ -538,11 +538,11 @@ void ToCHIR::RunRangePropagation()
     }
     Utils::ProfileRecorder::Start("CHIR Opt", "Range Propagation");
     AnalysisWrapper<RangeAnalysis, RangeDomain> vra(builder);
-    vra.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), &diag);
+    vra.RunOnPackage(chirPkg, opts.chirDebugOptimizer, opts.GetJobs(), diag);
     size_t threadNum = opts.GetJobs();
     DeadCodeElimination dce(builder, diag, *chirPkg);
     if (threadNum == 1) {
-        auto cp = CHIR::RangePropagation(builder, &vra, &diag, opts.enIncrementalCompilation);
+        auto cp = CHIR::RangePropagation(builder, &vra, diag, opts.enIncrementalCompilation);
         cp.RunOnPackage(chirPkg, opts.chirDebugOptimizer);
         MergeEffectMap(cp.GetEffectMap(), effectMap);
         dce.UnreachableBlockElimination(cp.GetFuncsNeedRemoveBlocks(), opts.chirDebugOptimizer);
@@ -557,7 +557,7 @@ void ToCHIR::RunRangePropagation()
         for (size_t idx = 0; idx < funcNum; ++idx) {
             auto func = globalFuncs.at(idx);
             auto cp = std::make_unique<CHIR::RangePropagation>(
-                *builderList[idx], &vra, &diag, opts.enIncrementalCompilation);
+                *builderList[idx], &vra, diag, opts.enIncrementalCompilation);
             taskQueue.AddTask<void>(
                 [rangePropagation = cp.get(), func, isDebug]() { return rangePropagation->RunOnFunc(func, isDebug); });
             cpList.emplace_back(std::move(cp));
@@ -1202,7 +1202,7 @@ bool ToCHIR::Run()
         srcCodeImportedFuncs, srcCodeImportedVars, uselessClasses, uselessLambda);
 
     // 10. annotation check depends on const eval
-    if (!AnnotationChecker(*chirPkg, diag.diag).Run()) {
+    if (!AnnotationChecker(*chirPkg, diag).Run()) {
         return false;
     }
     // It should move to the end of TranslateToCHIR, Waiting for diag to remove its dependency on AST and for CHIR to
@@ -1343,15 +1343,6 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
     if (isComputingAnnos) {
         annoFactoryFuncs = ast2CHIR.GetAnnoFactoryFuncs();
         globalNominalCache = std::move(chirTypeCache.globalNominalCache);
-    }
-
-    for (auto& file : pkg->files) {
-        for (auto& macrocall : file->originalMacroCallNodes) {
-            auto key = static_cast<uint64_t>(macrocall->begin.Hash64());
-            diag.posRange2MacroCallMap[key] = macrocall.get();
-            key = static_cast<uint64_t>(macrocall->end.Hash64());
-            diag.posRange2MacroCallMap[key] = nullptr;
-        }
     }
     return true;
 }

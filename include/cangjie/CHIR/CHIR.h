@@ -17,7 +17,7 @@
 #include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Analysis/ValueRangeAnalysis.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 
 namespace Cangjie::CHIR {
 class ToCHIR {
@@ -208,7 +208,7 @@ private:
     // Raw mangled name of top or mem funcs had closure convert. If there is
     // any change in incremental compilation, rollback is required.
     std::set<std::string> ccOutFuncsRawMangle;
-    class DiagAdapter diag;
+    DiagnosticEngine& diag;
     std::unordered_set<Function*> srcCodeImportedFuncs;
     std::unordered_set<GlobalVar*> srcCodeImportedVars;
     std::unordered_set<ClassDef*> uselessClasses;
