@@ -1202,7 +1202,7 @@ bool ToCHIR::Run()
         srcCodeImportedFuncs, srcCodeImportedVars, uselessClasses, uselessLambda);
 
     // 10. annotation check depends on const eval
-    if (!AnnotationChecker(*chirPkg, diag.diag).Run()) {
+    if (!AnnotationChecker(*chirPkg, diag).Run()) {
         return false;
     }
     // It should move to the end of TranslateToCHIR, Waiting for diag to remove its dependency on AST and for CHIR to
@@ -1347,10 +1347,12 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
 
     for (auto& file : pkg->files) {
         for (auto& macrocall : file->originalMacroCallNodes) {
-            auto key = static_cast<uint64_t>(macrocall->begin.Hash64());
-            diag.posRange2MacroCallMap[key] = macrocall.get();
-            key = static_cast<uint64_t>(macrocall->end.Hash64());
-            diag.posRange2MacroCallMap[key] = nullptr;
+            auto pInvocation = macrocall->GetInvocation();
+            if (!pInvocation) {
+                continue;
+            }
+            auto uniqueInfo = std::make_unique<MacroCallDiagInfo>(pInvocation->macroCallDiagInfo);
+            diag.RegisterMacroCallDiagInfo(std::move(uniqueInfo));
         }
     }
     return true;

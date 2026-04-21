@@ -7,14 +7,14 @@
 #ifndef CANGJIE_CHIR_NATIVE_FFI_TYPE_CAST_CHECK_H
 #define CANGJIE_CHIR_NATIVE_FFI_TYPE_CAST_CHECK_H
 
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/IR/Package.h"
 
 namespace Cangjie::CHIR::NativeFFI {
 
 class TypeCastCheck final {
 public:
-    explicit TypeCastCheck(DiagAdapter& diag);
+    explicit TypeCastCheck(DiagnosticEngine& diag);
 
     void RunOnPackage(const Package& package, size_t threadNum);
 
@@ -22,7 +22,7 @@ private:
     void RunOnFunc(const Function& func);
 
 private:
-    DiagAdapter& diag;
+    DiagnosticEngine& diag;
 };
 
 } // namespace Cangjie::CHIR::NativeFFI
