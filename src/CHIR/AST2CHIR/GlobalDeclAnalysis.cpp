@@ -850,7 +850,7 @@ template <class T> void TarjanSort<T>::TarjanSortImpl(DepsUnit<T>& unit, int& in
     diagUnits.clear();
 }
 
-VarCirDepsChecker::VarCirDepsChecker(DiagAdapter& ciDiag) : diag(&ciDiag)
+VarCirDepsChecker::VarCirDepsChecker(DiagnosticEngine& ciDiag) : diag(&ciDiag)
 {
 }
 
@@ -894,7 +894,7 @@ void VarCirDepsChecker::DetectCircularDep()
     diag->Diagnose(DiagKind::chir_var_might_circular_dependency, diagStr);
 }
 
-FileCirDepsChecker::FileCirDepsChecker(DiagAdapter& ciDiag, const std::vector<std::string>& vardiagLog)
+FileCirDepsChecker::FileCirDepsChecker(DiagnosticEngine& ciDiag, const std::vector<std::string>& vardiagLog)
     : diag(&ciDiag), diagLog(vardiagLog)
 {
 }

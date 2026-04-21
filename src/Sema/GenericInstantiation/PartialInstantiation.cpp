@@ -135,10 +135,10 @@ OwnedPtr<Generic> InstantiateGeneric(const Generic& generic, const VisitFunc& vi
 MacroInvocation InstantiateMacroInvocation(const MacroInvocation& me)
 {
     MacroInvocation mi;
-    mi.fullName = me.fullName;
+    mi.macroCallDiagInfo.fullName = me.macroCallDiagInfo.fullName;
     mi.fullNameDotPos = me.fullNameDotPos;
-    mi.identifier = me.identifier;
-    mi.identifierPos = me.identifierPos;
+    mi.macroCallDiagInfo.identifier = me.macroCallDiagInfo.identifier;
+    mi.macroCallDiagInfo.identifierPos = me.macroCallDiagInfo.identifierPos;
     mi.leftSquarePos = me.leftSquarePos;
     mi.attrs = me.attrs;
     mi.rightSquarePos = me.rightSquarePos;

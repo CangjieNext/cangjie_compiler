@@ -85,10 +85,10 @@ bool MacroCall::GetAllDeclsForMacroName(const std::string &macroName, std::vecto
             (void)ci->diag.Diagnose(begin, DiagKind::sema_package_name_conflict, pkgNameMaybeAlias);
             return false;
         }
-        auto foundDecls = ci->importManager->GetPackageMembersByName(*packageDecl->srcPackage, invocation->identifier);
+        auto foundDecls = ci->importManager->GetPackageMembersByName(*packageDecl->srcPackage, invocation->macroCallDiagInfo.identifier);
         decls.insert(decls.end(), foundDecls.begin(), foundDecls.end());
     } else {
-        decls = ci->importManager->GetImportedDeclsByName(*file, invocation->identifier);
+        decls = ci->importManager->GetImportedDeclsByName(*file, invocation->macroCallDiagInfo.identifier);
     }
     return true;
 }
@@ -99,7 +99,7 @@ bool MacroCall::GetValidFuncDecl(std::vector<Ptr<Decl>>& decls)
     for (auto& dl : decls) {
         if (!(dl->TestAttr(Attribute::MACRO_FUNC)) || dl->astKind != ASTKind::FUNC_DECL) {
             if (invocation->hasParenthesis) {
-                (void)ci->diag.Diagnose(begin, DiagKind::macro_expect_macro_definition, invocation->identifier);
+                (void)ci->diag.Diagnose(begin, DiagKind::macro_expect_macro_definition, invocation->macroCallDiagInfo.identifier);
                 return false;
             }
         }
@@ -113,9 +113,9 @@ bool MacroCall::GetValidFuncDecl(std::vector<Ptr<Decl>>& decls)
     if (fds.empty()) {
         if (invocation->hasParenthesis && !invocation->IsIfAvailable()) {
             auto pos = invocation->macroNamePos;
-            auto content = ci->diag.GetSourceManager().GetContentBetween(pos, pos + invocation->identifier.length());
-            if (content == invocation->identifier) {
-                (void)ci->diag.Diagnose(begin, DiagKind::macro_undeclared_identifier, invocation->identifier);
+            auto content = ci->diag.GetSourceManager().GetContentBetween(pos, pos + invocation->macroCallDiagInfo.identifier.length());
+            if (content == invocation->macroCallDiagInfo.identifier) {
+                (void)ci->diag.Diagnose(begin, DiagKind::macro_undeclared_identifier, invocation->macroCallDiagInfo.identifier);
             }
         }
         return false;
@@ -126,12 +126,12 @@ bool MacroCall::GetValidFuncDecl(std::vector<Ptr<Decl>>& decls)
         if (HasAttribute()) {
             // Make sure fd has two input arguments: macro M(attr: Tokens, input: Tokens)
             if (argsSize != MACRO_ATTR_ARGS) {
-                (void)ci->diag.Diagnose(begin, DiagKind::macro_expect_attributed_macro, invocation->identifier);
+                (void)ci->diag.Diagnose(begin, DiagKind::macro_expect_attributed_macro, invocation->macroCallDiagInfo.identifier);
                 return false;
             }
         } else {
             if (argsSize != MACRO_COMMON_ARGS) {
-                (void)ci->diag.Diagnose(begin, DiagKind::macro_expect_plain_macro, invocation->identifier);
+                (void)ci->diag.Diagnose(begin, DiagKind::macro_expect_plain_macro, invocation->macroCallDiagInfo.identifier);
                 return false;
             }
         }
@@ -143,7 +143,7 @@ bool MacroCall::GetValidFuncDecl(std::vector<Ptr<Decl>>& decls)
         auto argsSize1 = fds[0]->funcBody->paramLists[0]->params.size();
         auto argsSize2 = fds[1]->funcBody->paramLists[0]->params.size();
         if (argsSize1 == argsSize2) { // args should have the size of {1, 2}
-            (void)ci->diag.Diagnose(begin, DiagKind::macro_ambiguous_match, invocation->identifier);
+            (void)ci->diag.Diagnose(begin, DiagKind::macro_ambiguous_match, invocation->macroCallDiagInfo.identifier);
             return false;
         }
         if (HasAttribute()) {
@@ -177,7 +177,7 @@ bool MacroCall::BindDefinition(const std::string &macroName)
     if (definition) {
         return true;
     }
-    (void)ci->diag.Diagnose(begin, DiagKind::macro_ambiguous_match, invocation->identifier);
+    (void)ci->diag.Diagnose(begin, DiagKind::macro_ambiguous_match, invocation->macroCallDiagInfo.identifier);
     return false;
 }
 
@@ -228,7 +228,7 @@ bool MacroCall::ResolveMacroCall(CompilerInstance* instance)
     CJC_NULLPTR_CHECK(instance);
     this->ci = instance;
 
-    std::string macCallFullName = invocation->fullName;
+    std::string macCallFullName = invocation->macroCallDiagInfo.fullName;
     if (Utils::In(macCallFullName, BUILD_IN_MACROS)) {
         return true;
     }

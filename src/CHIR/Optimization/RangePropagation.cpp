@@ -35,7 +35,7 @@ std::optional<SInt> CheckSingleSInt(const ValueRange& vr)
 }
 
 RangePropagation::RangePropagation(
-    CHIRBuilder& builder, RangeAnalysisWrapper* rangeAnalysisWrapper, DiagAdapter* diag, bool enIncre)
+    CHIRBuilder& builder, RangeAnalysisWrapper* rangeAnalysisWrapper, DiagnosticEngine* diag, bool enIncre)
     : builder(builder), analysisWrapper(rangeAnalysisWrapper), diag(diag), enIncre(enIncre)
 {
 }

@@ -90,6 +90,21 @@ void DiagnosticEngine::AddMacroCallNote(Diagnostic& diagnostic, const AST::Node&
     return impl->AddMacroCallNote(diagnostic, node, pos);
 }
 
+void DiagnosticEngine::AddMacroCallNote(Diagnostic& diagnostic, const MacroCallDiagInfo& info, const Position& pos)
+{
+    return impl->AddMacroCallNote(diagnostic, info, pos);
+}
+
+MacroCallDiagInfo* DiagnosticEngine::FindMacroCallInfo(Position pos) const
+{
+    return impl->FindMacroCallInfo(pos);
+}
+
+void DiagnosticEngine::RegisterMacroCallDiagInfo(std::unique_ptr<MacroCallDiagInfo> info)
+{
+    return impl->RegisterMacroCallDiagInfo(std::move(info));
+}
+
 void DiagnosticEngine::Prepare()
 {
     impl->Prepare();
