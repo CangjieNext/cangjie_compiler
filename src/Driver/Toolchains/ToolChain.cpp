@@ -13,6 +13,7 @@
 #include "cangjie/Driver/Toolchains/ToolChain.h"
 #include "cangjie/Driver/Utils.h"
 #include "cangjie/Driver/TempFileManager.h"
+#include "cangjie/Driver/ToolOptions.h"
 
 namespace {
 const std::string LINK_PREFIX = "-l:";

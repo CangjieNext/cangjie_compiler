@@ -681,7 +681,7 @@ public:
      *
      * @return bool Returns true if LTO is enabled, otherwise returns false.
      */
-    bool IsCompileAsExeEnabled() const 
+    bool IsCompileAsExeEnabled() const
     {
         return enableCompileAsExe;
     }
@@ -849,7 +849,7 @@ public:
     enum class CHIRMode : uint8_t { NA, STANDARD, WITH_ID, ALL };
 
     bool codegenDebugMode = false;
-    bool dumpAST = false; 
+    bool dumpAST = false;
     bool dumpCHIR = false;
     bool dumpIR = false;
     bool dumpAll = false; // dump all of AST, CHIR, IR
