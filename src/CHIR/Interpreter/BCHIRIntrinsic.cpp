@@ -97,7 +97,16 @@ void BCHIRInterpreter::InterpretCJCodeCanUseSIMD()
     interpStack.ArgsRemove(1);
     static int8_t simdSUPPORT = -1;
     if (simdSUPPORT < 0) {
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__)
+#if defined(__x86_64__)
+        __builtin_cpu_init();
+        simdSUPPORT = __builtin_cpu_supports("avx") && __builtin_cpu_supports("avx2");
+#elif defined(__aarch64__)
+        simdSUPPORT = 1;
+#else
+        simdSUPPORT = 0;
+#endif
+#elif defined(__APPLE__)
 #if defined(__x86_64__)
         __builtin_cpu_init();
         simdSUPPORT = __builtin_cpu_supports("avx") && __builtin_cpu_supports("avx2");

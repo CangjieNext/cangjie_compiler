@@ -39,11 +39,6 @@ list(APPEND CJC_WITH_LLVM_EXTRA_WARNINGS -Wno-implicit-int-conversion -Wno-short
 
 list(APPEND CJC_EXTRA_WARNINGS -Wshadow) # do not add shadow to LLVM headers
 
-# Stack/frame size warnings for release builds only
-if(CMAKE_BUILD_TYPE MATCHES Release)
-    list(APPEND CJC_EXTRA_WARNINGS -Wframe-larger-than=2048)
-endif()
-
 if(NOT CANGJIE_BUILD_CJC AND CANGJIE_BUILD_STD_SUPPORT)
     add_subdirectory(AST)
     add_subdirectory(Driver)

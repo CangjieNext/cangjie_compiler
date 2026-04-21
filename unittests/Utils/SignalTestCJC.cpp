@@ -63,7 +63,7 @@ const std::unordered_map<std::string, Cangjie::SignalTest::SignalTestCallbackFun
     {"SIGABRT", SIGABRTCallback}, {"SIGFPE", SIGFPECallback}, {"SIGSEGV", SIGSEGVCallback}, {"SIGILL", SIGILLCallback},
     {"SIGTRAP", SIGTRAPCallback}, {"SIGBUS", SIGBUSCallback}, {"StackOverflow", StackOverflowCallback},
     {"SIGINT", SIGINTCallback}};
-#elif _WIN32
+#elif defined(_WIN32)
 const std::unordered_map<std::string, Cangjie::SignalTest::SignalTestCallbackFuncType> signalStringCallbackFuncMap = {
     {"SIGABRT", SIGABRTCallback}, {"SIGFPE", SIGFPECallback}, {"SIGSEGV", SIGSEGVCallback}, {"SIGILL", SIGILLCallback},
     {"StackOverflow", StackOverflowCallback}, {"SIGINT", SIGINTCallback}};

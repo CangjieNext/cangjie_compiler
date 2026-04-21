@@ -14,7 +14,9 @@
 #ifdef _WIN32
 #include <windows.h>
 #endif
-#if (defined(__linux__) || defined(__APPLE__))
+#if defined(__linux__)
+#include <stdlib.h>
+#elif defined(__APPLE__)
 #include <stdlib.h>
 #endif
 
@@ -38,13 +40,20 @@ std::string CanonicalizeFileName(const std::string& name)
     if (retval == 0) {
         success = false;
     }
-#elif (defined(__linux__) || defined(__APPLE__))
+#else
+#if defined(__linux__)
+    auto realpathRes = realpath(name.c_str(), nullptr);
+    if (!realpathRes) {
+        success = false;
+    }
+#elif defined(__APPLE__)
     auto realpathRes = realpath(name.c_str(), nullptr);
     if (!realpathRes) {
         success = false;
     }
 #else
     auto realpathRes = name;
+#endif
 #endif
     if (!success) {
         return "";

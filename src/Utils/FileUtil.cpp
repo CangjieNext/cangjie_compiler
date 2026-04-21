@@ -1161,7 +1161,7 @@ bool Access(const std::string& path, FileMode mode)
 
 bool FileExist(const std::string& path, [[maybe_unused]] bool caseSensitive)
 {
-#if defined(_WIN32)
+#ifdef _WIN32
     if (!Access(path, FM_EXIST)) {
         return false;
     }

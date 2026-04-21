@@ -12,9 +12,11 @@
 #include <vector>
 #include <sstream>
 
-#if defined(_WIN32) && defined(__MINGW64__)
+#ifdef _WIN32
+#ifdef __MINGW64__
 #include <windows.h>
 #include <psapi.h>
+#endif
 #endif
 #ifdef __APPLE__
 #include <mach/task.h>
@@ -23,8 +25,14 @@
 #include "cangjie/Basic/Color.h"
 #include "cangjie/Utils/CheckUtils.h"
 
-#if defined(__linux__) || (defined(_WIN32) && defined(__MINGW64__))
+#if defined(__linux__)
 static const int PAGE_SIZE = 4;
+#else
+#ifdef _WIN32
+#ifdef __MINGW64__
+static const int PAGE_SIZE = 4;
+#endif
+#endif
 #endif
 
 static const int DISPLAY_PRECISION = 2;
@@ -100,7 +108,18 @@ float UserMemoryUsage::Sampling()
     mem >> totalProgramSize >> residentSetSize;
     // `residentSetSize` means page size (usually 4 KB one page on x86 and x86_64 systems)
     return static_cast<float>(residentSetSize) * PAGE_SIZE / KILOBYTE;
-#elif defined(_WIN32) && defined(__MINGW64__)
+#elif defined(__APPLE__)
+    task_basic_info_data_t info;
+    mach_msg_type_number_t count = TASK_BASIC_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info), &count) == KERN_SUCCESS) {
+        return float(info.resident_size) / KILOBYTE / KILOBYTE;
+    } else {
+        CJC_ASSERT(false && "Get process memory info failed.");
+    }
+    return 0.0f;
+#else
+#ifdef _WIN32
+#ifdef __MINGW64__
     HANDLE hProcess;
     PROCESS_MEMORY_COUNTERS pmc;
     auto curPid = GetCurrentProcessId();
@@ -114,16 +133,8 @@ float UserMemoryUsage::Sampling()
     }
     CloseHandle(hProcess);
     return 0.0f;
-#elif defined(__APPLE__)
-    task_basic_info_data_t info;
-    mach_msg_type_number_t count = TASK_BASIC_INFO_COUNT;
-    if (task_info(mach_task_self(), TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info), &count) == KERN_SUCCESS) {
-        return float(info.resident_size) / KILOBYTE / KILOBYTE;
-    } else {
-        CJC_ASSERT(false && "Get process memory info failed.");
-    }
-    return 0.0f;
-#else
+#endif
+#endif
     // Other platforms need to be adapted.
     CJC_ASSERT(false && "Not support for current platform.");
     return 0.0f;

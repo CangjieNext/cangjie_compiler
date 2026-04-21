@@ -24,7 +24,11 @@ using namespace Cangjie;
 
 namespace {
 
-#if defined(__linux__) || defined(__APPLE__)
+#ifdef __linux__
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+const size_t ARGS_NUM = 6;
+#endif
+#elif defined(__APPLE__)
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 const size_t ARGS_NUM = 6;
 #endif
@@ -37,7 +41,22 @@ const size_t IDX_OF_WRITE_HANDLE = 2;
 const size_t IDX_OF_ENABLE_PARA = 3;
 const size_t IDX_OF_CJC_FOLDER = 4;
 const size_t IDX_OF_PPID = 5;
-#if defined(__linux__) || defined(__APPLE__)
+#ifdef __linux__
+const unsigned int CHECK_INTERVAL = 2;
+static void MonitoringParentProcess(pid_t pid)
+{
+    while (true) {
+        sleep(CHECK_INTERVAL);
+        if (kill(pid, 0) != 0) {
+            perror("parent process not exits");
+            [[maybe_unused]] std::lock_guard lg(MacroProcMsger::GetInstance().mutex);
+            MacroProcMsger::GetInstance().CloseClientResource();
+            RuntimeInit::GetInstance().CloseRuntime();
+            exit(1);
+        }
+    }
+}
+#elif defined(__APPLE__)
 const unsigned int CHECK_INTERVAL = 2;
 static void MonitoringParentProcess(pid_t pid)
 {
