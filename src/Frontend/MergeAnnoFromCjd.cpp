@@ -282,7 +282,7 @@ bool IsSameFuncByIdentifier(Ptr<FuncBody> lb, Ptr<FuncBody> rb)
     for (size_t i = 0; i < lb->paramLists[0]->params.size(); ++i) {
         Ptr<FuncParam> expandedParam = lb->paramLists[0]->params[i].get();
         if (auto mep = DynamicCast<MacroExpandParam>(lb->paramLists[0]->params[i].get());
-            mep && mep->invocation.identifier == "APILevel") {
+            mep && mep->invocation.macroCallDiagInfo.identifier == "APILevel") {
             ExpandToAPILevel(mep->invocation);
             CopyBasicInfo(mep, mep->invocation.decl->annotations.back().get());
             expandedParam = StaticCast<FuncParam>(mep->invocation.decl.get());
@@ -391,8 +391,8 @@ bool IsSameDeclByIdentifier(Ptr<Decl> l, Ptr<Decl> r)
         case ASTKind::MACRO_EXPAND_DECL: {
             auto lmed = StaticCast<MacroExpandDecl>(l);
             auto rmed = StaticCast<MacroExpandDecl>(r);
-            if (lmed->invocation.fullName != rmed->invocation.fullName ||
-                lmed->invocation.identifier != rmed->invocation.identifier) {
+            if (lmed->invocation.macroCallDiagInfo.fullName != rmed->invocation.macroCallDiagInfo.fullName ||
+                lmed->invocation.macroCallDiagInfo.identifier != rmed->invocation.macroCallDiagInfo.identifier) {
                 return false;
             }
             break;
@@ -424,7 +424,7 @@ void MergeTopLevelDecl(
     auto topDeclMapInsert = [&topDeclMapping](OwnedPtr<Decl>& toplevelDecl) {
         Ptr<Decl> expandedDecl = toplevelDecl.get();
         if (auto med = DynamicCast<MacroExpandDecl>(toplevelDecl.get());
-            med && med->invocation.identifier == "APILevel") {
+            med && med->invocation.macroCallDiagInfo.identifier == "APILevel") {
             ExpandToAPILevel(med->invocation);
             CopyBasicInfo(med, med->invocation.decl->annotations.back().get());
             expandedDecl = med->invocation.decl.get();
@@ -477,7 +477,8 @@ void MergeMemberDecl(std::pair<const Ptr<Decl>, Ptr<Decl>>& declPair)
     std::unordered_map<Ptr<Decl>, Ptr<Decl>> memberMapping;
     for (auto& member : declPair.first->GetMemberDeclPtrs()) {
         Ptr<Decl> extendedDecl = member;
-        if (auto med = DynamicCast<MacroExpandDecl>(member); med && med->invocation.identifier == "APILevel") {
+        if (auto med = DynamicCast<MacroExpandDecl>(member);
+            med && med->invocation.macroCallDiagInfo.identifier == "APILevel") {
             ExpandToAPILevel(med->invocation);
             CopyBasicInfo(med, med->invocation.decl->annotations.back().get());
             extendedDecl = med->invocation.decl.get();
@@ -512,7 +513,7 @@ void MergeMemberDecl(std::pair<const Ptr<Decl>, Ptr<Decl>>& declPair)
         for (size_t i = 0; i < s->funcBody->paramLists[0]->params.size(); ++i) {
             Ptr<FuncParam> expandedParam = s->funcBody->paramLists[0]->params[i].get();
             if (auto mep = DynamicCast<MacroExpandParam>(s->funcBody->paramLists[0]->params[i].get());
-                mep && mep->invocation.identifier == "APILevel") {
+                mep && mep->invocation.macroCallDiagInfo.identifier == "APILevel") {
                 ExpandToAPILevel(mep->invocation);
                 CopyBasicInfo(mep, mep->invocation.decl->annotations.back().get());
                 expandedParam = StaticCast<FuncParam>(mep->invocation.decl.get());

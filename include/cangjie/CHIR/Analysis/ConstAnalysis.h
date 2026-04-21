@@ -10,7 +10,7 @@
 #include <cmath>
 
 #include "cangjie/CHIR/Analysis/ValueAnalysis.h"
-#include "cangjie/CHIR/Utils/DiagAdapter.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/Checker/OverflowChecking.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
@@ -222,7 +222,7 @@ public:
      * @param isDebug flag whether print debug log.
      * @param diag reporter to report warning or error.
      */
-    ConstAnalysis(const Function* func, CHIRBuilder& builder, bool isDebug, DiagAdapter* diag)
+    ConstAnalysis(const Function* func, CHIRBuilder& builder, bool isDebug, DiagnosticEngine* diag)
         : ValueAnalysis<ConstValueDomain, ValueStatePool>(func, builder, isDebug), diag(diag)
     {
     }
@@ -1458,7 +1458,7 @@ private:
         return ExceptionKind::SUCCESS;
     }
 
-    DiagAdapter* diag;
+    DiagnosticEngine* diag;
 };
 
 } // namespace Cangjie::CHIR
