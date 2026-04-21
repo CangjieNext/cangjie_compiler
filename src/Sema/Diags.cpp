@@ -650,6 +650,9 @@ void DiagUseClosureCaptureVarAlone(DiagnosticEngine& diag, const Expr& expr, Lam
                     return diag.DiagnoseRefactor(DiagKindRefactor::sema_try_handle_capture_var, expr);
                 case LambdaSource::USER:
                     return diag.DiagnoseRefactor(DiagKindRefactor::sema_use_func_capture_var_alone, expr, "lambda");
+                default:
+                    CJC_ABORT();
+                    break;
             }
         } else {
             return diag.DiagnoseRefactor(DiagKindRefactor::sema_use_func_capture_var_alone, expr, "function");

@@ -160,7 +160,7 @@ TEST_F(MacroTest, MacroCall_Complementatcion_For_LSP)
     std::function<VisitAction(Ptr<Node>)> visitPre1 = [&](Ptr<Node> curNode) -> VisitAction {
         if (curNode->astKind == ASTKind::MACRO_EXPAND_DECL) {
             auto med = StaticAs<ASTKind::MACRO_EXPAND_DECL>(curNode);
-            if (med->invocation.identifier == "M1") {
+            if (med->invocation.macroCallDiagInfo.identifier == "M1") {
                 med->invocation.newTokens = med->invocation.attrs;
                 med->invocation.newTokens.emplace_back(Token(TokenKind::SEMI, ";"));
                 med->invocation.newTokens.insert(
@@ -220,7 +220,7 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP)
     std::function<VisitAction(Ptr<Node>)> visitPre1 = [&](Ptr<Node> curNode) -> VisitAction {
         if (curNode->astKind == ASTKind::MACRO_EXPAND_EXPR) {
             auto mee = StaticAs<ASTKind::MACRO_EXPAND_EXPR>(curNode);
-            if (mee->invocation.identifier == "B1") {
+            if (mee->invocation.macroCallDiagInfo.identifier == "B1") {
                 mee->invocation.newTokens = mee->invocation.args;
                 mee->invocation.newTokensStr = "6";
             }
@@ -248,14 +248,14 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP)
             EXPECT_TRUE(mee->invocation.target);
             auto fileID = mee->invocation.target->begin.fileID;
             auto path = instance->GetSourceManager().GetSource(fileID).path;
-            if (mee->invocation.identifier == "B1") {
+            if (mee->invocation.macroCallDiagInfo.identifier == "B1") {
 #ifdef _WIN32
                 EXPECT_EQ(path, "define\\define.cj");
 #else
                 EXPECT_EQ(path, "define/define.cj");
 #endif
             }
-            if (mee->invocation.identifier == "B2") {
+            if (mee->invocation.macroCallDiagInfo.identifier == "B2") {
 #ifdef _WIN32
                 EXPECT_EQ(path, "define\\define2.cj");
 #else
@@ -305,7 +305,7 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP_Paralle)
     std::function<VisitAction(Ptr<Node>)> visitPre1 = [&](Ptr<Node> curNode) -> VisitAction {
         if (curNode->astKind == ASTKind::MACRO_EXPAND_EXPR) {
             auto mee = StaticAs<ASTKind::MACRO_EXPAND_EXPR>(curNode);
-            if (mee->invocation.identifier == "B1") {
+            if (mee->invocation.macroCallDiagInfo.identifier == "B1") {
                 mee->invocation.newTokens = mee->invocation.args;
                 mee->invocation.newTokensStr = "6";
             }
@@ -333,14 +333,14 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP_Paralle)
             EXPECT_TRUE(mee->invocation.target);
             auto fileID = mee->invocation.target->begin.fileID;
             auto path = instance->GetSourceManager().GetSource(fileID).path;
-            if (mee->invocation.identifier == "B1") {
+            if (mee->invocation.macroCallDiagInfo.identifier == "B1") {
 #ifdef _WIN32
                 EXPECT_EQ(path, "define\\define.cj");
 #else
                 EXPECT_EQ(path, "define/define.cj");
 #endif
             }
-            if (mee->invocation.identifier == "B2") {
+            if (mee->invocation.macroCallDiagInfo.identifier == "B2") {
 #ifdef _WIN32
                 EXPECT_EQ(path, "define\\define2.cj");
 #else

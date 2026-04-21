@@ -777,12 +777,11 @@ void DiagnosticEmitterImpl::EmitNote()
     });
 
     std::for_each(diag.subDiags.begin(), diag.subDiags.end(), [this](auto& subDiag) {
-        if (diag.curMacroCall && subDiag.subDiagMessage == MACROCALL_CODE) {
-            auto pInvocation = diag.curMacroCall->GetInvocation();
-            if (!pInvocation || pInvocation->hasShownCode) {
+        if (diag.macroDiagInfo && subDiag.subDiagMessage == MACROCALL_CODE) {
+            if (diag.macroDiagInfo->hasShownCode) {
                 return;
             }
-            pInvocation->hasShownCode = true;
+            diag.macroDiagInfo->hasShownCode = true;
         }
         subDiag.IsShowSource() ? EmitSingleNoteWithSource(subDiag) :
                                EmitSingleMessageWithoutSource(subDiag.subDiagMessage, "note");
@@ -905,13 +904,20 @@ bool IsTextOnlyWarning(const WarnGroup& warnGroup)
 void SwapErrorMessageWithNote(Diagnostic& diagnostic)
 {
     // Check if the diagnostic is a macro call and has sub-diagnostics.
-    if (!diagnostic.curMacroCall || diagnostic.subDiags.empty()) {
+    if (!diagnostic.macroDiagInfo || diagnostic.subDiags.empty()) {
         return;
     }
     // Check if the diagnostic is in the current file.
-    auto pInvocation = diagnostic.curMacroCall->GetInvocation();
+    auto macroDiagInfo = diagnostic.macroDiagInfo;
     auto mainHint = diagnostic.mainHint;
-    if ((pInvocation && pInvocation->isCurFile) || mainHint.range.begin.isCurFile || diagnostic.start.isCurFile) {
+    // If any branch below is true, the diagnostic already points to user source, so no message-note swap is needed:
+    // 1) macroDiagInfo && macroDiagInfo->isCurFile:
+    //    tokens are not changed after macro expansion.
+    // 2) mainHint.range.begin.isCurFile:
+    //    refactor-style diagnostic main hint is already in original source file.
+    // 3) diagnostic.start.isCurFile:
+    //    legacy diagnostic start position is already in original source file.
+    if ((macroDiagInfo && macroDiagInfo->isCurFile) || mainHint.range.begin.isCurFile || diagnostic.start.isCurFile) {
         return;
     }
     // Swap error message with note.
