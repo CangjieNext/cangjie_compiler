@@ -187,6 +187,10 @@ Ptr<Ty> TypeManager::GetBlockRealTy(const Block& block) const
 
 Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedGenericTy(GenericsTy& ty)
 {
+    if (directSubstitute) {
+        auto it = typeMapping.find(&ty);
+        return it == typeMapping.cend() ? Ptr<Ty>(&ty) : it->second;
+    }
     Ptr<Ty> curTy = &ty;
     auto mapping = typeMapping;
     TypeSubst::const_iterator it = mapping.find(&ty);
@@ -393,6 +397,12 @@ std::set<Ptr<Ty>> TypeManager::GetInstantiatedTys(Ptr<Ty> ty, const MultiTypeSub
 Ptr<Ty> TypeManager::GetInstantiatedTy(Ptr<Ty> ty, const TypeSubst& typeMapping)
 {
     auto instantiator = TyInstantiator(*this, typeMapping);
+    return instantiator.Instantiate(ty);
+}
+
+Ptr<Ty> TypeManager::GetDirectInstantiatedTy(Ptr<Ty> ty, const TypeSubst& typeMapping)
+{
+    auto instantiator = TyInstantiator(*this, typeMapping, true);
     return instantiator.Instantiate(ty);
 }
 
@@ -1348,7 +1358,7 @@ bool TypeManager::HasExtendedInterfaceTy(Ty& ty, Ty& superTy, const TypeSubst& t
             CJC_ASSERT(inheritedType);
             // Get inherited types recursively. BUT do not collect inherited type which has cyclic inheritance.
             if (inheritedType->ty->IsClass() && IsInheritableType(inheritedType->ty)) {
-                return HasExtendedInterfaceTy(*inheritedType->ty, superTy, substituteMapping);
+                return HasExtendedInterfaceTy(*GetDirectInstantiatedTy(inheritedType->ty, substituteMapping), superTy, {});
             }
         }
     }
@@ -1403,7 +1413,7 @@ void TypeManager::GetNominalSuperTy(
         CJC_ASSERT(inheritedType);
         // Get inherited types recursively. BUT do not collect inherited type which has cyclic inheritance.
         if (IsInheritableType(inheritedType->ty)) {
-            auto inheritedTys = GetAllSuperTys(*inheritedType->ty, substituteMapping);
+            auto inheritedTys = GetAllSuperTys(*GetDirectInstantiatedTy(inheritedType->ty, substituteMapping));
             tyList.merge(inheritedTys);
         }
     }
@@ -1420,7 +1430,8 @@ bool TypeManager::HasNominalSuperTy(Ty& nominalTy, Ty& superTy, const TypeSubst&
     for (auto& inheritedType : declPtr->inheritedTypes) {
         CJC_ASSERT(inheritedType);
         // search inherited types recursively. BUT do not search inherited type which has cyclic inheritance.
-        if (IsInheritableType(inheritedType->ty) && HasSuperTy(*inheritedType->ty, superTy, substituteMapping)) {
+        if (IsInheritableType(inheritedType->ty) &&
+            HasSuperTy(*GetDirectInstantiatedTy(inheritedType->ty, substituteMapping), superTy, {})) {
             return true;
         }
     }
@@ -1552,9 +1563,8 @@ TypeSubst TypeManager::GetSubstituteMapping(const Ty& nominalTy, const TypeSubst
         return {};
     }
     TypeSubst substituteMapping = GenerateTypeMapping(*declPtr, nominalTy.typeArgs);
-    // Update 'substituteMapping' with input 'typeMapping'.
     for (auto& it : substituteMapping) {
-        it.second = GetInstantiatedTy(it.second, typeMapping);
+        it.second = GetDirectInstantiatedTy(it.second, typeMapping);
     }
     return substituteMapping;
 }

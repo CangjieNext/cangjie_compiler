@@ -571,7 +571,8 @@ private:
     class TyInstantiator {
     private:
         friend class TypeManager;
-        TyInstantiator(TypeManager& tyMgr, const TypeSubst& mapping) : tyMgr(tyMgr), typeMapping(mapping)
+        TyInstantiator(TypeManager& tyMgr, const TypeSubst& mapping, bool directSubstitute = false)
+            : tyMgr(tyMgr), typeMapping(mapping), directSubstitute(directSubstitute)
         {
         }
         ~TyInstantiator() = default;
@@ -593,7 +594,10 @@ private:
 
         TypeManager& tyMgr;
         const TypeSubst& typeMapping;
+        bool directSubstitute;
     };
+
+    Ptr<AST::Ty> GetDirectInstantiatedTy(Ptr<AST::Ty> ty, const TypeSubst& typeMapping);
 
     void GetNominalSuperTy(
         const AST::Ty& nominalTy, const TypeSubst& typeMapping, std::unordered_set<Ptr<AST::Ty>>& tyList);
