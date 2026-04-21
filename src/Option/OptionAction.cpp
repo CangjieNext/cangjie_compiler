@@ -641,7 +641,6 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     }
     return true;
     }},
-
     { Options::ID::TARGET, [](GlobalOptions& opts, const OptionArgInstance& arg) {
         return ParseTargetTriple(opts, arg.value);
     }},
