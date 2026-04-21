@@ -17,6 +17,8 @@ using namespace Cangjie;
 using namespace AST;
 
 namespace {
+void SyncMacroCallDiagInfo(const Node& node, MacroInvocation& invocation);
+
 bool IsSpecialToken(TokenKind prevTokenKind, TokenKind curTokenKind)
 {
     // For case: A() A[] A<> A?? >> >= ~init.
@@ -316,6 +318,7 @@ void GenerateMacroCallFile(const std::vector<Ptr<File>>& fileSucVec,
             // Map macro information.
             RefreshTokensPosMap(*node, sm, ci);
             pMacroInvocation->isForLSP = ci.invocation.globalOptions.enableMacroInLSP;
+            SyncMacroCallDiagInfo(*node, *pMacroInvocation);
         }
         content = sm.GetContentBetween(curFilePosBase.fileID, curFilePosBase, file->end);
         (void)sm.AppendSource(file->macroCallFilePath, content, isCjmpFile);
@@ -330,6 +333,24 @@ void GenerateMacroCallFile(const std::vector<Ptr<File>>& fileSucVec,
             RemoveMacroCallFile(*file);
         }
     }
+}
+
+void SyncMacroCallDiagInfo(const Node& node, MacroInvocation& invocation)
+{
+    auto& info = invocation.macroCallDiagInfo;
+    info.macroCallBegin = node.begin;
+    info.macroCallEnd = node.end;
+    info.identifierPos = invocation.identifierPos;
+    info.identifier = invocation.identifier;
+    info.fullName = invocation.fullName;
+    info.mcBegin = invocation.mcBegin;
+    info.mcEnd = invocation.mcEnd;
+    info.isForLSP = invocation.isForLSP;
+    info.isCurFile = invocation.isCurFile;
+    info.isCustom = invocation.isCustom;
+    info.new2macroCallPosMap = invocation.new2macroCallPosMap;
+    info.new2originPosMap = invocation.new2originPosMap;
+    info.originPosMap = invocation.originPosMap;
 }
 
 bool IsPureCustomAnnotation(MacroInvocation& invocation, CompilerInstance& ci)

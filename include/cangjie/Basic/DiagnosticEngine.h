@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "cangjie/AST/Node.h"
+#include "cangjie/Basic/MacroCallDiagInfo.h"
 #include "cangjie/Basic/Position.h"
 #include "cangjie/Basic/SourceManager.h"
 #include "cangjie/Option/Option.h"
@@ -388,7 +389,7 @@ public:
     /// 6 |     public open func foo(): This {
     ///   |                      ^^^
     std::vector<Diagnostic> notes;
-    Ptr<AST::Node> curMacroCall{nullptr};
+    MacroCallDiagInfo* macroDiagInfo{nullptr};
     bool isInMacroCall{false};
 
     // This is API supported to lsp. Will delete after refactoring.
@@ -583,6 +584,7 @@ private:
 class DiagnosticBuilder {
 public:
     DiagnosticBuilder(DiagnosticEngine& diag, Diagnostic diagnostic);
+    DiagnosticBuilder(DiagnosticEngine& diag, Diagnostic diagnostic, std::shared_ptr<MacroCallDiagInfo> info);
     Diagnostic diagnostic;
     DiagnosticEngine& diag;
     DiagnosticBuilder(const DiagnosticBuilder& p) = delete;
@@ -612,8 +614,8 @@ public:
         static_assert(IsAllString<Args...>, "args of AddHint in diagnostic builder should all be string.");
         std::vector<std::string> arguments{args...};
         auto finalPos = pos;
-        if (diagnostic.curMacroCall) {
-            finalPos = diagnostic.curMacroCall->GetMacroCallPos(pos, true);
+        if (diagnostic.macroDiagInfo) {
+            finalPos = diagnostic.macroDiagInfo->MapPos(pos, true);
         }
         Range range = MakeRange(finalPos, finalPos + 1);
         AddHint(range, arguments);
@@ -623,9 +625,9 @@ public:
     {
         static_assert(IsAllString<Args...>, "args of AddHint in diagnostic builder should all be string.");
         std::vector<std::string> arguments{args...};
-        if (diagnostic.curMacroCall) {
-            return AddHint(MakeRange(diagnostic.curMacroCall->GetMacroCallPos(range.begin),
-                                     diagnostic.curMacroCall->GetMacroCallPos(range.end, true)),
+        if (diagnostic.macroDiagInfo) {
+            return AddHint(MakeRange(diagnostic.macroDiagInfo->MapPos(range.begin),
+                                     diagnostic.macroDiagInfo->MapPos(range.end, true)),
                 arguments);
         }
         AddHint(range, arguments);
@@ -741,6 +743,12 @@ public:
     bool DiagFilter(Diagnostic& diagnostic) noexcept;
     
     void AddMacroCallNote(Diagnostic& diagnostic, const AST::Node& node, const Position& pos);
+
+    void AddMacroCallNote(Diagnostic& diagnostic, const MacroCallDiagInfo& info, const Position& pos);
+
+    std::shared_ptr<MacroCallDiagInfo> FindMacroCallInfo(Position pos) const;
+
+    void RegisterMacroCallDiagInfo(std::shared_ptr<MacroCallDiagInfo> info);
 
     // ability of transaction
     void Prepare();
@@ -908,7 +916,30 @@ public:
         Diagnostic diagnostic(true, range, kind, args...);
         diagnostic.isInMacroCall = node.isInMacroCall;
         AddMacroCallNote(diagnostic, node, token.Begin());
-        diagnostic.curMacroCall = node.curMacroCall;
+        return DiagnosticBuilder(*this, diagnostic);
+    }
+
+    template <typename... Args>
+    DiagnosticBuilder DiagnoseRefactor(DiagKindRefactor kind, const MacroCallDiagInfo& info, const Range range,
+        Args... args)
+    {
+        static_assert(IsAllString<Args...>, "the diagnose only support string type argument");
+        CheckRange(Diagnostic::GetDiagnoseCategory(kind), range);
+        auto newRange = MakeRange(info.MapPos(range.begin), info.MapPos(range.end, true));
+        Diagnostic diagnostic(true, newRange, kind, args...);
+        AddMacroCallNote(diagnostic, info, range.begin);
+        return DiagnosticBuilder(*this, diagnostic);
+    }
+
+    template <typename... Args>
+    DiagnosticBuilder DiagnoseRefactor(
+        DiagKindRefactor kind, const MacroCallDiagInfo& info, const Position pos, Args... args)
+    {
+        static_assert(IsAllString<Args...>, "the diagnose only support string type argument");
+        auto begin = info.MapPos(pos, true);
+        Range range = MakeRange(begin, begin + 1);
+        Diagnostic diagnostic(true, range, kind, args...);
+        AddMacroCallNote(diagnostic, info, pos);
         return DiagnosticBuilder(*this, diagnostic);
     }
     ///@}

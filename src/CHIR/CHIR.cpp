@@ -1345,10 +1345,14 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
 
     for (auto& file : pkg->files) {
         for (auto& macrocall : file->originalMacroCallNodes) {
+            auto pInvocation = macrocall->GetInvocation();
+            if (!pInvocation) {
+                continue;
+            }
             auto key = static_cast<uint64_t>(macrocall->begin.Hash64());
-            diag.posRange2MacroCallMap[key] = macrocall.get();
+            diag.pos2MacroCallDiagInfoMap[key] = &pInvocation->macroCallDiagInfo;
             key = static_cast<uint64_t>(macrocall->end.Hash64());
-            diag.posRange2MacroCallMap[key] = nullptr;
+            diag.pos2MacroCallDiagInfoMap[key] = nullptr;
         }
     }
     return true;

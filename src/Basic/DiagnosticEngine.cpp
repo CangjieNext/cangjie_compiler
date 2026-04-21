@@ -299,6 +299,14 @@ DiagnosticBuilder::DiagnosticBuilder(DiagnosticEngine& diag, Diagnostic diagnost
 {
 }
 
+DiagnosticBuilder::DiagnosticBuilder(DiagnosticEngine& diag, Diagnostic diagnostic, std::shared_ptr<MacroCallDiagInfo> info)
+    : diagnostic(std::move(diagnostic)), diag(diag)
+{
+    if (info && !info->IsPureAnnotation()) {
+        diagnostic.macroDiagInfo = info.get();
+    }
+}
+
 DiagnosticBuilder::~DiagnosticBuilder()
 {
 #ifndef CANGJIE_ENABLE_GCOV
@@ -790,50 +798,43 @@ void DiagnosticEngineImpl::AddMacroCallNote(Diagnostic& diagnostic, const AST::N
     if (!node.curMacroCall) {
         return;
     }
-    diagnostic.curMacroCall = node.curMacroCall;
-    // Refactor the Diagnose of the node after the macro expansion.
     auto pInvocation = node.curMacroCall->GetInvocation();
-    if (!pInvocation || IsPureAnnotation(*pInvocation)) {
+    if (!pInvocation) {
         return;
     }
+    AddMacroCallNote(diagnostic, pInvocation->macroCallDiagInfo, pos);
+}
 
-    // For cjc, display a hint message on the source code if the corresponding source code exists.
-    if (!pInvocation->isForLSP) {
-        Position originPos;
-        auto key = pInvocation->isCurFile ? pos.Hash32() : static_cast<const uint32_t>(pos.column);
-        if (pInvocation->isCurFile && pInvocation->originPosMap.find(key) != pInvocation->originPosMap.end()) {
-            originPos = pInvocation->originPosMap.at(key);
-        } else if (pInvocation->new2originPosMap.find(pos.Hash32()) != pInvocation->new2originPosMap.end()) {
-            originPos = pInvocation->new2originPosMap.at(pos.Hash32());
-            if (!originPos.isCurFile) {
-                originPos = INVALID_POSITION;
-            }
-        }
-        if (originPos != INVALID_POSITION && originPos != diagnostic.start &&
-            originPos != diagnostic.mainHint.range.begin) {
-            if (diagnostic.errorMessage.empty()) {
-                ConvertArgsToDiagMessage(diagnostic);
-                auto range = MakeRange(diagnostic.start, diagnostic.end);
-                (void)diagnostic.subDiags.emplace_back(range, "which is expanded as follows");
-                diagnostic.start = originPos;
-                diagnostic.end = originPos + 1;
-            } else {
-                (void)diagnostic.subDiags.emplace_back(diagnostic.mainHint.range, "which is expanded as follows");
-            }
-            diagnostic.mainHint.range = MakeRange(originPos, originPos + 1);
-        }
+void DiagnosticEngineImpl::AddMacroCallNote(Diagnostic& diagnostic, const MacroCallDiagInfo& info, const Position& pos)
+{
+    if (info.IsPureAnnotation()) {
+        return;
     }
-    auto mcBegin = node.curMacroCall->begin;
-    auto idPosEnd = pInvocation->identifierPos + pInvocation->identifier.size();
-    // For lsp, the error range includes only identifier.
-    // Otherwise, the error range includes the entire macrocall node.
-    auto mcEnd = pInvocation->isForLSP ? idPosEnd : node.curMacroCall->end;
-    std::string sevInfo = (diagnostic.diagSeverity == DiagSeverity::DS_ERROR) ? "the error" : "the warning";
-    (void)diagnostic.subDiags.emplace_back(MakeRange(mcBegin, mcEnd), sevInfo + " occurs after the macro is expanded");
-    if (!pInvocation->isForLSP) {
-        auto codeRange = MakeRange(pInvocation->mcBegin, pInvocation->mcEnd);
-        (void)diagnostic.subDiags.emplace_back(codeRange, MACROCALL_CODE);
+    diagnostic.macroDiagInfo = const_cast<MacroCallDiagInfo*>(&info);
+    if (diagnostic.errorMessage.empty()) {
+        ConvertArgsToDiagMessage(diagnostic);
     }
+    ApplyMacroCallDiagInfo(info, diagnostic, pos);
+}
+
+std::shared_ptr<MacroCallDiagInfo> DiagnosticEngineImpl::FindMacroCallInfo(Position pos) const
+{
+    auto key = static_cast<uint64_t>(pos.Hash64());
+    auto it = pos2MacroCallDiagInfoMap.lower_bound(key);
+    if (it == pos2MacroCallDiagInfoMap.end() || !it->second) {
+        return nullptr;
+    }
+    return it->second;
+}
+
+void DiagnosticEngineImpl::RegisterMacroCallDiagInfo(std::shared_ptr<MacroCallDiagInfo> info)
+{
+    if (!info) {
+        return;
+    }
+    auto key = static_cast<uint64_t>(info->macroCallBegin.Hash64());
+    pos2MacroCallDiagInfoMap[key] = info;
+    macroCallDiagInfos.push_back(info);
 }
 
 void DiagnosticHandler::SetPrevDiag(Position pos, std::string str)
