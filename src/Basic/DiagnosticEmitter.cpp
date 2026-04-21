@@ -777,12 +777,11 @@ void DiagnosticEmitterImpl::EmitNote()
     });
 
     std::for_each(diag.subDiags.begin(), diag.subDiags.end(), [this](auto& subDiag) {
-        if (diag.curMacroCall && subDiag.subDiagMessage == MACROCALL_CODE) {
-            auto pInvocation = diag.curMacroCall->GetInvocation();
-            if (!pInvocation || pInvocation->hasShownCode) {
+        if (diag.macroDiagInfo && subDiag.subDiagMessage == MACROCALL_CODE) {
+            if (diag.macroDiagInfo->hasShownCode) {
                 return;
             }
-            pInvocation->hasShownCode = true;
+            diag.macroDiagInfo->hasShownCode = true;
         }
         subDiag.IsShowSource() ? EmitSingleNoteWithSource(subDiag) :
                                EmitSingleMessageWithoutSource(subDiag.subDiagMessage, "note");

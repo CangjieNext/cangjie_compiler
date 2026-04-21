@@ -56,13 +56,13 @@ void SetExitSignal(void)
 
 inline bool IsResultForMacCall(const std::string& id, const Position& pos, const MacroInvocation& mi)
 {
-    if (id != mi.identifier) {
+    if (id != mi.macroCallDiagInfo.identifier) {
         return false;
     }
-    if (pos != mi.identifierPos) {
+    if (pos != mi.macroCallDiagInfo.identifierPos) {
         return false;
     }
-    if (pos.fileID != mi.identifierPos.fileID) {
+    if (pos.fileID != mi.macroCallDiagInfo.identifierPos.fileID) {
         return false;
     }
     return true;

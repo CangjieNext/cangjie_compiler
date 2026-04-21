@@ -94,9 +94,9 @@ static auto CreateDiagVec(FlatBufferBuilder& builder, const std::vector<Cangjie:
 static auto CreateMacroCall(FlatBufferBuilder& builder, const Cangjie::MacroCall& macCall)
 {
     auto& inv = *(macCall.GetInvocation());
-    auto& idPos = inv.identifierPos;
+    auto& idPos = inv.macroCallDiagInfo.identifierPos;
     auto pos = MacroMsgFormat::Position(idPos.fileID, idPos.line, idPos.column);
-    auto id = CreateIdInfo(builder, builder.CreateString(inv.identifier), &pos);
+    auto id = CreateIdInfo(builder, builder.CreateString(inv.macroCallDiagInfo.identifier), &pos);
 
     auto args = builder.CreateVector(CreateTokenVec(builder, inv.args));
     auto attrs = builder.CreateVector(CreateTokenVec(builder, inv.attrs));
@@ -324,9 +324,9 @@ bool MacroEvalMsgSerializer::SerializeMacroCallResultMsg(const MacroCall& macCal
     }
     builder.Clear();
     auto& inv = *(macCall.GetInvocation());
-    auto& idPos = inv.identifierPos;
+    auto& idPos = inv.macroCallDiagInfo.identifierPos;
     auto pos = MacroMsgFormat::Position(idPos.fileID, idPos.line, idPos.column);
-    auto id = CreateIdInfo(builder, builder.CreateString(inv.identifier), &pos);
+    auto id = CreateIdInfo(builder, builder.CreateString(inv.macroCallDiagInfo.identifier), &pos);
 
     auto tks = builder.CreateVector(CreateTokenVec(builder, inv.newTokens));
 
