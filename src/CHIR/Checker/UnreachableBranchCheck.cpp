@@ -9,7 +9,7 @@
 using namespace Cangjie::CHIR;
 
 UnreachableBranchCheck::UnreachableBranchCheck(
-    ConstAnalysisWrapper* constAnalysisWrapper, DiagAdapter& diag, const std::string& packageName)
+    ConstAnalysisWrapper* constAnalysisWrapper, DiagnosticEngine& diag, const std::string& packageName)
     : diag(diag), analysisWrapper(constAnalysisWrapper), currentPackageName(packageName)
 {
 }

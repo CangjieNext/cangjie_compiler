@@ -186,10 +186,10 @@ void ASTChecker::CheckFuncParamList(Ptr<Node> node)
 void ASTChecker::CheckMacroExpandParam(Ptr<Node> node)
 {
     auto mp = StaticAs<ASTKind::MACRO_EXPAND_PARAM>(node);
-    EMPTY_STRING_CHECK(node, mp->invocation.fullName);
+    EMPTY_STRING_CHECK(node, mp->invocation.macroCallDiagInfo.fullName);
     VEC_ZERO_POS_CHECK(node, mp->invocation.fullNameDotPos);
-    EMPTY_STRING_CHECK(node, mp->invocation.identifier);
-    ZERO_POSITION_CHECK(node, mp->invocation.identifierPos);
+    EMPTY_STRING_CHECK(node, mp->invocation.macroCallDiagInfo.identifier);
+    ZERO_POSITION_CHECK(node, mp->invocation.macroCallDiagInfo.identifierPos);
 }
 void ASTChecker::CheckGeneric(Ptr<Node> node)
 {
@@ -326,10 +326,10 @@ void ASTChecker::CheckMacroDecl(Ptr<Node> node)
 void ASTChecker::CheckMacroExpandDecl(Ptr<Node> node)
 {
     auto me = StaticAs<ASTKind::MACRO_EXPAND_DECL>(node);
-    EMPTY_STRING_CHECK(node, me->invocation.fullName);
+    EMPTY_STRING_CHECK(node, me->invocation.macroCallDiagInfo.fullName);
     VEC_ZERO_POS_CHECK(node, me->invocation.fullNameDotPos);
-    EMPTY_STRING_CHECK(node, me->invocation.identifier);
-    ZERO_POSITION_CHECK(node, me->invocation.identifierPos);
+    EMPTY_STRING_CHECK(node, me->invocation.macroCallDiagInfo.identifier);
+    ZERO_POSITION_CHECK(node, me->invocation.macroCallDiagInfo.identifierPos);
 }
 void ASTChecker::CheckMainDecl(Ptr<Node> node)
 {
@@ -510,11 +510,11 @@ void ASTChecker::CheckLitConstExpr(Ptr<Node> node)
 void ASTChecker::CheckMacroExpandExpr(Ptr<Node> node)
 {
     auto me = StaticAs<ASTKind::MACRO_EXPAND_EXPR>(node);
-    EMPTY_STRING_CHECK(node, me->invocation.fullName);
+    EMPTY_STRING_CHECK(node, me->invocation.macroCallDiagInfo.fullName);
     VEC_ZERO_POS_CHECK(node, me->invocation.fullNameDotPos);
 
-    EMPTY_STRING_CHECK(node, me->invocation.identifier);
-    ZERO_POSITION_CHECK(node, me->invocation.identifierPos);
+    EMPTY_STRING_CHECK(node, me->invocation.macroCallDiagInfo.identifier);
+    ZERO_POSITION_CHECK(node, me->invocation.macroCallDiagInfo.identifierPos);
     VEC_AST_NULLPTR_CHECK(node, me->annotations);
 }
 void ASTChecker::CheckMatchExpr(Ptr<Node> node)
