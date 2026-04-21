@@ -45,7 +45,7 @@ protected:
 #ifdef _WIN32
         instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::WINDOWS;
         invocation.globalOptions.executablePath = projectPath + "\\output\\bin\\";
-#elif __unix__
+#elif defined(__unix__)
         instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::LINUX;
         invocation.globalOptions.executablePath = projectPath + "/output/bin/";
 #endif

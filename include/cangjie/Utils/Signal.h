@@ -13,7 +13,6 @@
 #ifndef CANGJIE_UTILS_SIGNAL_H
 #define CANGJIE_UTILS_SIGNAL_H
 
-#if (defined RELEASE)
 #include "cangjie/Utils/ICEUtil.h"
 #include "cangjie/Utils/FileUtil.h"
 
@@ -21,9 +20,9 @@
 #ifdef __unix__
 #include <csignal>
 #include <functional>
-#elif __APPLE__
+#elif defined(__APPLE__)
 #include <signal.h>
-#elif _WIN32
+#elif defined(_WIN32)
 #include <signal.h>
 #include <windows.h>
 #endif
@@ -35,7 +34,7 @@ const std::string SIGNAL_MSG_PART_ONE = "Interrupt signal (";
 /* Create alternate signal stack. */
 void CreateAltSignalStack();
 
-#elif _WIN32
+#elif defined(_WIN32)
 const std::string SIGNAL_MSG_PART_ONE = "Windows unexpected exception code (";
 void RegisterCrashExceptionHandler();
 #endif
@@ -64,7 +63,6 @@ void ExecuteSignalTestCallbackFunc(TriggerPointer executionPoint);
 #endif
 
 } // namespace Cangjie
-#endif
 namespace Cangjie {
 /* Register signal handler for Crtl C signal. */
 void RegisterCrtlCSignalHandler();

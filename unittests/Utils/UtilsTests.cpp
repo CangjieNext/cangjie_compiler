@@ -68,7 +68,7 @@ std::string MakeTempPath(const std::string& prefix)
     return FileUtil::JoinPath(GetSystemTempDir(), oss.str());
 }
 
-bool CreateSymlinkCrossPlatform(const std::string& target, const std::string& linkPath, bool isDir)
+bool CreateSymlinkCrossPlatform(const std::string& target, const std::string& linkPath, [[maybe_unused]] bool isDir)
 {
 #ifdef _WIN32
 #ifndef SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE
