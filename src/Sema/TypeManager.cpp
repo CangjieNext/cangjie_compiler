@@ -211,6 +211,12 @@ Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedGenericTy(GenericsTy& ty)
     return curTy;
 }
 
+Ptr<Ty> TypeManager::TyInstantiator::GetDirectSubstitutedGenericTy(GenericsTy& ty)
+{
+    auto it = typeMapping.find(&ty);
+    return it == typeMapping.cend() ? Ptr<Ty>(&ty) : it->second;
+}
+
 Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedStructTy(StructTy& structTy)
 {
     // If is a struct without generic parameter, no need do instantiation.
@@ -358,6 +364,124 @@ Ptr<Ty> TypeManager::TyInstantiator::Instantiate(Ty& ty)
     return &ty;
 }
 
+Ptr<Ty> TypeManager::TyInstantiator::InstantiateDirectly(Ty& ty)
+{
+    if (typeMapping.empty()) {
+        return &ty;
+    }
+    switch (ty.kind) {
+        case TypeKind::TYPE_GENERICS:
+            return GetDirectSubstitutedGenericTy(StaticCast<GenericsTy>(ty));
+        case TypeKind::TYPE_FUNC: {
+            std::vector<Ptr<Ty>> paramTys;
+            auto& funcTy = static_cast<FuncTy&>(ty);
+            for (auto& it : funcTy.paramTys) {
+                paramTys.push_back(InstantiateDirectly(it));
+            }
+            auto retType = InstantiateDirectly(funcTy.retTy);
+            return tyMgr.GetFunctionTy(
+                paramTys, retType, {funcTy.IsCFunc(), funcTy.isClosureTy, funcTy.hasVariableLenArg});
+        }
+        case TypeKind::TYPE_TUPLE: {
+            std::vector<Ptr<Ty>> typeArgs;
+            std::transform(ty.typeArgs.begin(), ty.typeArgs.end(), std::back_inserter(typeArgs),
+                [this](auto it) { return InstantiateDirectly(it); });
+            return tyMgr.GetTupleTy(typeArgs, static_cast<TupleTy&>(ty).isClosureTy);
+        }
+        case TypeKind::TYPE_ARRAY: {
+            auto& arrayTy = static_cast<ArrayTy&>(ty);
+            if (arrayTy.typeArgs.empty()) {
+                return &arrayTy;
+            }
+            auto elemTy = InstantiateDirectly(arrayTy.typeArgs[0]);
+            return tyMgr.GetArrayTy(elemTy, arrayTy.dims);
+        }
+        case TypeKind::TYPE_POINTER: {
+            auto& pointerTy = static_cast<PointerTy&>(ty);
+            if (pointerTy.typeArgs.empty()) {
+                return &pointerTy;
+            }
+            auto elemTy = InstantiateDirectly(pointerTy.typeArgs[0]);
+            return tyMgr.GetPointerTy(elemTy);
+        }
+        case TypeKind::TYPE_STRUCT: {
+            auto& structTy = static_cast<StructTy&>(ty);
+            if (!structTy.declPtr || !structTy.declPtr->generic) {
+                return &structTy;
+            }
+            std::vector<Ptr<Ty>> typeArgs;
+            for (auto& it : structTy.typeArgs) {
+                typeArgs.push_back(InstantiateDirectly(it));
+            }
+            return tyMgr.GetStructTy(*structTy.declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_CLASS: {
+            auto& classTy = static_cast<ClassTy&>(ty);
+            if (!classTy.declPtr || !classTy.declPtr->generic) {
+                return &classTy;
+            }
+            std::vector<Ptr<Ty>> typeArgs;
+            for (auto& it : classTy.typeArgs) {
+                typeArgs.push_back(InstantiateDirectly(it));
+            }
+            if (Is<ClassThisTy>(classTy)) {
+                return tyMgr.GetClassThisTy(*classTy.declPtr, typeArgs);
+            }
+            return tyMgr.GetClassTy(*classTy.declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_INTERFACE: {
+            auto& interfaceTy = static_cast<InterfaceTy&>(ty);
+            if (!interfaceTy.declPtr || !interfaceTy.declPtr->generic) {
+                return &interfaceTy;
+            }
+            std::vector<Ptr<Ty>> typeArgs;
+            for (auto& it : interfaceTy.typeArgs) {
+                typeArgs.push_back(InstantiateDirectly(it));
+            }
+            return tyMgr.GetInterfaceTy(*interfaceTy.declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_ENUM: {
+            auto& enumTy = static_cast<EnumTy&>(ty);
+            if (!enumTy.declPtr || !enumTy.declPtr->generic) {
+                return &enumTy;
+            }
+            std::vector<Ptr<Ty>> typeArgs;
+            for (auto& it : enumTy.typeArgs) {
+                typeArgs.push_back(InstantiateDirectly(it));
+            }
+            if (Is<RefEnumTy>(enumTy)) {
+                return tyMgr.GetRefEnumTy(*enumTy.declPtr, typeArgs);
+            }
+            auto instantiatedTy = tyMgr.GetEnumTy(*enumTy.declPtr, typeArgs);
+            instantiatedTy->hasCorrespondRefEnumTy = enumTy.hasCorrespondRefEnumTy;
+            return instantiatedTy;
+        }
+        case TypeKind::TYPE: {
+            std::vector<Ptr<Ty>> typeArgs;
+            for (auto& it : ty.typeArgs) {
+                typeArgs.push_back(InstantiateDirectly(it));
+            }
+            return tyMgr.GetTypeAliasTy(*static_cast<TypeAliasTy&>(ty).declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_INTERSECTION: {
+            std::set<Ptr<Ty>> tys;
+            for (auto it : static_cast<IntersectionTy&>(ty).tys) {
+                tys.emplace(InstantiateDirectly(it));
+            }
+            return tyMgr.GetTypeTy<IntersectionTy>(tys);
+        }
+        case TypeKind::TYPE_UNION: {
+            std::set<Ptr<Ty>> tys;
+            for (auto it : static_cast<UnionTy&>(ty).tys) {
+                tys.emplace(InstantiateDirectly(it));
+            }
+            return tyMgr.GetTypeTy<UnionTy>(tys);
+        }
+        default:
+            return &ty;
+    }
+}
+
 // Temporarily for backward compatibility.
 Ptr<Ty> TypeManager::GetBestInstantiatedTy(Ptr<Ty> ty, const MultiTypeSubst& mts)
 {
@@ -394,6 +518,12 @@ Ptr<Ty> TypeManager::GetInstantiatedTy(Ptr<Ty> ty, const TypeSubst& typeMapping)
 {
     auto instantiator = TyInstantiator(*this, typeMapping);
     return instantiator.Instantiate(ty);
+}
+
+Ptr<Ty> TypeManager::GetDirectInstantiatedTy(Ptr<Ty> ty, const TypeSubst& typeMapping)
+{
+    auto instantiator = TyInstantiator(*this, typeMapping);
+    return instantiator.InstantiateDirectly(ty);
 }
 
 std::set<Ptr<Ty>> TypeManager::ApplyTypeSubstForTys(const TypeSubst& subst, const std::set<Ptr<TyVar>>& tys)
@@ -1348,7 +1478,8 @@ bool TypeManager::HasExtendedInterfaceTy(Ty& ty, Ty& superTy, const TypeSubst& t
             CJC_ASSERT(inheritedType);
             // Get inherited types recursively. BUT do not collect inherited type which has cyclic inheritance.
             if (inheritedType->ty->IsClass() && IsInheritableType(inheritedType->ty)) {
-                return HasExtendedInterfaceTy(*inheritedType->ty, superTy, substituteMapping);
+                auto directInheritedTy = GetDirectInstantiatedTy(inheritedType->ty, substituteMapping);
+                return HasExtendedInterfaceTy(*directInheritedTy, superTy, {});
             }
         }
     }
@@ -1403,7 +1534,7 @@ void TypeManager::GetNominalSuperTy(
         CJC_ASSERT(inheritedType);
         // Get inherited types recursively. BUT do not collect inherited type which has cyclic inheritance.
         if (IsInheritableType(inheritedType->ty)) {
-            auto inheritedTys = GetAllSuperTys(*inheritedType->ty, substituteMapping);
+            auto inheritedTys = GetAllSuperTys(*GetDirectInstantiatedTy(inheritedType->ty, substituteMapping));
             tyList.merge(inheritedTys);
         }
     }
@@ -1420,7 +1551,8 @@ bool TypeManager::HasNominalSuperTy(Ty& nominalTy, Ty& superTy, const TypeSubst&
     for (auto& inheritedType : declPtr->inheritedTypes) {
         CJC_ASSERT(inheritedType);
         // search inherited types recursively. BUT do not search inherited type which has cyclic inheritance.
-        if (IsInheritableType(inheritedType->ty) && HasSuperTy(*inheritedType->ty, superTy, substituteMapping)) {
+        if (IsInheritableType(inheritedType->ty) &&
+            HasSuperTy(*GetDirectInstantiatedTy(inheritedType->ty, substituteMapping), superTy, {})) {
             return true;
         }
     }
@@ -1552,9 +1684,8 @@ TypeSubst TypeManager::GetSubstituteMapping(const Ty& nominalTy, const TypeSubst
         return {};
     }
     TypeSubst substituteMapping = GenerateTypeMapping(*declPtr, nominalTy.typeArgs);
-    // Update 'substituteMapping' with input 'typeMapping'.
     for (auto& it : substituteMapping) {
-        it.second = GetInstantiatedTy(it.second, typeMapping);
+        it.second = GetDirectInstantiatedTy(it.second, typeMapping);
     }
     return substituteMapping;
 }

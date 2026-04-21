@@ -580,7 +580,12 @@ private:
         {
             return AST::Ty::IsTyCorrect(ty) ? Instantiate(*ty) : ty;
         }
+        inline Ptr<AST::Ty> InstantiateDirectly(Ptr<AST::Ty> ty)
+        {
+            return AST::Ty::IsTyCorrect(ty) ? InstantiateDirectly(*ty) : ty;
+        }
         Ptr<AST::Ty> Instantiate(AST::Ty& ty);
+        Ptr<AST::Ty> InstantiateDirectly(AST::Ty& ty);
         Ptr<AST::Ty> GetInstantiatedStructTy(AST::StructTy& structTy);
         Ptr<AST::Ty> GetInstantiatedClassTy(AST::ClassTy& classTy);
         Ptr<AST::Ty> GetInstantiatedInterfaceTy(AST::InterfaceTy& interfaceTy);
@@ -590,10 +595,13 @@ private:
         // Get instantiated ty of set type 'IntersectionTy' and 'UnionTy'.
         template <typename SetTy> Ptr<AST::Ty> GetInstantiatedSetTy(SetTy& ty);
         Ptr<AST::Ty> GetInstantiatedGenericTy(AST::GenericsTy& ty);
+        Ptr<AST::Ty> GetDirectSubstitutedGenericTy(AST::GenericsTy& ty);
 
         TypeManager& tyMgr;
         const TypeSubst& typeMapping;
     };
+
+    Ptr<AST::Ty> GetDirectInstantiatedTy(Ptr<AST::Ty> ty, const TypeSubst& typeMapping);
 
     void GetNominalSuperTy(
         const AST::Ty& nominalTy, const TypeSubst& typeMapping, std::unordered_set<Ptr<AST::Ty>>& tyList);
