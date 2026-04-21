@@ -235,6 +235,14 @@ llvm::Value* HandleMemoryExpression(IRBuilder2& irBuilder, const CHIR::Expressio
                 if (llvmFunc->hasStructRetAttr()) {
                     return llvmFunc->getArg(0);
                 }
+                if (auto overrideSrcFuncType = parentFunc->Get<CHIR::OverrideSrcFuncType>();
+                    overrideSrcFuncType && DeRef(*alloca.GetType())->IsBox()) {
+                    auto overrideSrcRetCGType =
+                        CGType::GetOrCreate(irBuilder.GetCGModule(), overrideSrcFuncType->GetReturnType());
+                    if (overrideSrcRetCGType->GetSize()) {
+                        return irBuilder.CreateEntryAlloca(*overrideSrcRetCGType);
+                    }
+                }
             }
             irBuilder.EmitLocation(CHIRExprWrapper(alloca));
             return GenerateAllocate(irBuilder, CHIRAllocateWrapper(alloca));

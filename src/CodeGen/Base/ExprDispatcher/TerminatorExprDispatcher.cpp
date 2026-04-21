@@ -72,6 +72,9 @@ llvm::Value* HandleExitExpression(IRBuilder2& irBuilder, const CHIR::Exit& exitE
         retVal = cgMod.GetCGCFFI().ProcessRetValue(*llvmRetType, *retVal, irBuilder);
         return irBuilder.CreateRet(retVal);
     }
+    if (parentFunc->Get<CHIR::OverrideSrcFuncType>() && !curLLVMFunc->hasStructRetAttr()) {
+        retType = llvmRetType;
+    }
 #endif
     return irBuilder.CreateRet(irBuilder.CreateLoad(retType, retVal));
 }
