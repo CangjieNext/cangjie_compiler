@@ -13,7 +13,7 @@
 #include "cangjie/Utils/TaskQueue.h"
 
 namespace Cangjie::CHIR::NativeFFI {
-TypeCastCheck::TypeCastCheck(DiagAdapter& diag) : diag(diag)
+TypeCastCheck::TypeCastCheck(DiagnosticEngine& diag) : diag(diag)
 {
 }
 
