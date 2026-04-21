@@ -59,8 +59,8 @@ bool HasMacroCallInNode(const OwnedPtr<Node>& node, DiagnosticEngine& diag)
     auto checkMacroCall = [&hasMacroCall, &node, &diag](Ptr<const Node> curNode) -> VisitAction {
         if (curNode->IsMacroCallNode()) {
             hasMacroCall = true;
-            (void)diag.Diagnose(*node, curNode->GetConstInvocation()->identifierPos,
-                DiagKind::macro_undeclared_identifier, curNode->GetConstInvocation()->identifier);
+            (void)diag.Diagnose(*node, curNode->GetConstInvocation()->macroCallDiagInfo.identifierPos,
+                DiagKind::macro_undeclared_identifier, curNode->GetConstInvocation()->macroCallDiagInfo.identifier);
             return VisitAction::SKIP_CHILDREN;
         }
         return VisitAction::WALK_CHILDREN;
@@ -104,8 +104,8 @@ void CheckUnhandledMacroCall(Package& package, DiagnosticEngine& diag)
                 return VisitAction::WALK_CHILDREN;
             }
             if (curNode->IsMacroCallNode()) {
-                (void)diag.Diagnose(*curNode, curNode->GetConstInvocation()->identifierPos,
-                    DiagKind::macro_undeclared_identifier, curNode->GetConstInvocation()->identifier);
+                (void)diag.Diagnose(*curNode, curNode->GetConstInvocation()->macroCallDiagInfo.identifierPos,
+                    DiagKind::macro_undeclared_identifier, curNode->GetConstInvocation()->macroCallDiagInfo.identifier);
                 return VisitAction::SKIP_CHILDREN;
             }
             return VisitAction::WALK_CHILDREN;
