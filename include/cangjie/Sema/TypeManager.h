@@ -571,7 +571,8 @@ private:
     class TyInstantiator {
     private:
         friend class TypeManager;
-        TyInstantiator(TypeManager& tyMgr, const TypeSubst& mapping) : tyMgr(tyMgr), typeMapping(mapping)
+        TyInstantiator(TypeManager& tyMgr, const TypeSubst& mapping, bool stopAtMappedGeneric = false)
+            : tyMgr(tyMgr), typeMapping(mapping), stopAtMappedGeneric(stopAtMappedGeneric)
         {
         }
         ~TyInstantiator() = default;
@@ -581,6 +582,7 @@ private:
             return AST::Ty::IsTyCorrect(ty) ? Instantiate(*ty) : ty;
         }
         Ptr<AST::Ty> Instantiate(AST::Ty& ty);
+        std::vector<Ptr<AST::Ty>> InstantiateTypeArgs(const std::vector<Ptr<AST::Ty>>& typeArgs);
         Ptr<AST::Ty> GetInstantiatedStructTy(AST::StructTy& structTy);
         Ptr<AST::Ty> GetInstantiatedClassTy(AST::ClassTy& classTy);
         Ptr<AST::Ty> GetInstantiatedInterfaceTy(AST::InterfaceTy& interfaceTy);
@@ -593,6 +595,7 @@ private:
 
         TypeManager& tyMgr;
         const TypeSubst& typeMapping;
+        bool stopAtMappedGeneric;
     };
 
     void GetNominalSuperTy(

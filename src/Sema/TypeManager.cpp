@@ -187,6 +187,10 @@ Ptr<Ty> TypeManager::GetBlockRealTy(const Block& block) const
 
 Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedGenericTy(GenericsTy& ty)
 {
+    if (stopAtMappedGeneric) {
+        auto it = typeMapping.find(&ty);
+        return it == typeMapping.cend() ? Ptr<Ty>(&ty) : it->second;
+    }
     Ptr<Ty> curTy = &ty;
     auto mapping = typeMapping;
     TypeSubst::const_iterator it = mapping.find(&ty);
@@ -211,17 +215,23 @@ Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedGenericTy(GenericsTy& ty)
     return curTy;
 }
 
+std::vector<Ptr<Ty>> TypeManager::TyInstantiator::InstantiateTypeArgs(const std::vector<Ptr<Ty>>& typeArgs)
+{
+    std::vector<Ptr<Ty>> instantiatedTypeArgs;
+    instantiatedTypeArgs.reserve(typeArgs.size());
+    for (auto typeArg : typeArgs) {
+        instantiatedTypeArgs.push_back(Instantiate(typeArg));
+    }
+    return instantiatedTypeArgs;
+}
+
 Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedStructTy(StructTy& structTy)
 {
     // If is a struct without generic parameter, no need do instantiation.
     if (!structTy.declPtr || !structTy.declPtr->generic) {
         return &structTy;
     }
-    std::vector<Ptr<Ty>> typeArgs;
-    // Build type arguments.
-    for (auto& it : structTy.typeArgs) {
-        typeArgs.push_back(Instantiate(it));
-    }
+    auto typeArgs = InstantiateTypeArgs(structTy.typeArgs);
     auto recTy = tyMgr.GetStructTy(*structTy.declPtr, typeArgs);
     return recTy;
 }
@@ -231,10 +241,7 @@ Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedClassTy(ClassTy& classTy)
     if (!classTy.declPtr || !classTy.declPtr->generic) {
         return &classTy;
     }
-    std::vector<Ptr<Ty>> typeArgs;
-    for (auto& it : classTy.typeArgs) {
-        typeArgs.push_back(Instantiate(it));
-    }
+    auto typeArgs = InstantiateTypeArgs(classTy.typeArgs);
     Ptr<ClassTy> insTy = nullptr;
     if (Is<ClassThisTy>(classTy)) {
         insTy = tyMgr.GetClassThisTy(*classTy.declPtr, typeArgs);
@@ -249,10 +256,7 @@ Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedInterfaceTy(InterfaceTy& int
     if (!interfaceTy.declPtr || !interfaceTy.declPtr->generic) {
         return &interfaceTy;
     }
-    std::vector<Ptr<Ty>> typeArgs;
-    for (auto& it : interfaceTy.typeArgs) {
-        typeArgs.push_back(Instantiate(it));
-    }
+    auto typeArgs = InstantiateTypeArgs(interfaceTy.typeArgs);
     auto insTy = tyMgr.GetInterfaceTy(*interfaceTy.declPtr, typeArgs);
     return insTy;
 }
@@ -263,11 +267,7 @@ Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedEnumTy(EnumTy& enumTy)
     if (!enumTy.declPtr || !enumTy.declPtr->generic) {
         return &enumTy;
     }
-    std::vector<Ptr<Ty>> typeArgs;
-    // Build type arguments.
-    for (auto& it : enumTy.typeArgs) {
-        typeArgs.push_back(Instantiate(it));
-    }
+    auto typeArgs = InstantiateTypeArgs(enumTy.typeArgs);
     if (Is<RefEnumTy>(enumTy)) {
         return tyMgr.GetRefEnumTy(*enumTy.declPtr, typeArgs);
     }
@@ -314,20 +314,15 @@ Ptr<Ty> TypeManager::TyInstantiator::Instantiate(Ty& ty)
         case TypeKind::TYPE_GENERICS:
             return GetInstantiatedGenericTy(StaticCast<GenericsTy>(ty));
         case TypeKind::TYPE_FUNC: {
-            std::vector<Ptr<Ty>> paramTys;
             auto& funcTy = static_cast<FuncTy&>(ty);
-            for (auto& it : funcTy.paramTys) {
-                paramTys.push_back(Instantiate(it));
-            }
+            auto paramTys = InstantiateTypeArgs(funcTy.paramTys);
             auto retType = Instantiate(funcTy.retTy);
             Ptr<Ty> ret = tyMgr.GetFunctionTy(
                 paramTys, retType, {funcTy.IsCFunc(), funcTy.isClosureTy, funcTy.hasVariableLenArg});
             return ret;
         }
         case TypeKind::TYPE_TUPLE: {
-            std::vector<Ptr<Ty>> typeArgs;
-            std::transform(ty.typeArgs.begin(), ty.typeArgs.end(), std::back_inserter(typeArgs),
-                [this](auto it) { return Instantiate(it); });
+            auto typeArgs = InstantiateTypeArgs(ty.typeArgs);
             return tyMgr.GetTupleTy(typeArgs, static_cast<TupleTy&>(ty).isClosureTy);
         }
         case TypeKind::TYPE_ARRAY:
@@ -343,10 +338,7 @@ Ptr<Ty> TypeManager::TyInstantiator::Instantiate(Ty& ty)
         case TypeKind::TYPE_ENUM:
             return GetInstantiatedEnumTy(static_cast<EnumTy&>(ty));
         case TypeKind::TYPE: {
-            std::vector<Ptr<Ty>> typeArgs;
-            for (auto& it : ty.typeArgs) {
-                typeArgs.push_back(Instantiate(it));
-            }
+            auto typeArgs = InstantiateTypeArgs(ty.typeArgs);
             return tyMgr.GetTypeAliasTy(*static_cast<TypeAliasTy&>(ty).declPtr, typeArgs);
         }
         case TypeKind::TYPE_INTERSECTION:
@@ -418,6 +410,16 @@ void TypeManager::GenerateExtendGenericMappingVisit(
 }
 
 namespace {
+Ptr<Ty> InstantiateInheritedType(TypeManager& tyMgr, Ptr<Ty> ty, const TypeSubst& typeMapping)
+{
+    if (!Ty::IsTyCorrect(ty) || typeMapping.empty()) {
+        return ty;
+    }
+    SubstPack maps;
+    tyMgr.PackMapping(maps, typeMapping);
+    return tyMgr.ApplySubstPack(ty, maps);
+}
+
 bool IsInheritableType(Ptr<const Ty> ty)
 {
     // Non-classlike type cannot be treated as inherited type.
@@ -1348,7 +1350,8 @@ bool TypeManager::HasExtendedInterfaceTy(Ty& ty, Ty& superTy, const TypeSubst& t
             CJC_ASSERT(inheritedType);
             // Get inherited types recursively. BUT do not collect inherited type which has cyclic inheritance.
             if (inheritedType->ty->IsClass() && IsInheritableType(inheritedType->ty)) {
-                return HasExtendedInterfaceTy(*inheritedType->ty, superTy, substituteMapping);
+                auto inheritedTy = InstantiateInheritedType(*this, inheritedType->ty, substituteMapping);
+                return HasExtendedInterfaceTy(*inheritedTy, superTy, {});
             }
         }
     }
@@ -1403,7 +1406,8 @@ void TypeManager::GetNominalSuperTy(
         CJC_ASSERT(inheritedType);
         // Get inherited types recursively. BUT do not collect inherited type which has cyclic inheritance.
         if (IsInheritableType(inheritedType->ty)) {
-            auto inheritedTys = GetAllSuperTys(*inheritedType->ty, substituteMapping);
+            auto inheritedTy = InstantiateInheritedType(*this, inheritedType->ty, substituteMapping);
+            auto inheritedTys = GetAllSuperTys(*inheritedTy);
             tyList.merge(inheritedTys);
         }
     }
@@ -1420,7 +1424,8 @@ bool TypeManager::HasNominalSuperTy(Ty& nominalTy, Ty& superTy, const TypeSubst&
     for (auto& inheritedType : declPtr->inheritedTypes) {
         CJC_ASSERT(inheritedType);
         // search inherited types recursively. BUT do not search inherited type which has cyclic inheritance.
-        if (IsInheritableType(inheritedType->ty) && HasSuperTy(*inheritedType->ty, superTy, substituteMapping)) {
+        auto inheritedTy = InstantiateInheritedType(*this, inheritedType->ty, substituteMapping);
+        if (IsInheritableType(inheritedType->ty) && HasSuperTy(*inheritedTy, superTy, {})) {
             return true;
         }
     }
@@ -1552,9 +1557,9 @@ TypeSubst TypeManager::GetSubstituteMapping(const Ty& nominalTy, const TypeSubst
         return {};
     }
     TypeSubst substituteMapping = GenerateTypeMapping(*declPtr, nominalTy.typeArgs);
-    // Update 'substituteMapping' with input 'typeMapping'.
+    auto instantiator = TyInstantiator(*this, typeMapping, true);
     for (auto& it : substituteMapping) {
-        it.second = GetInstantiatedTy(it.second, typeMapping);
+        it.second = instantiator.Instantiate(it.second);
     }
     return substituteMapping;
 }
