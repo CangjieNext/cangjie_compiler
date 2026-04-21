@@ -418,6 +418,117 @@ void TypeManager::GenerateExtendGenericMappingVisit(
 }
 
 namespace {
+std::vector<Ptr<Ty>> ApplyMappingValueOnePassToTypeArgs(
+    TypeManager& tyMgr, const std::vector<Ptr<Ty>>& typeArgs, const TypeSubst& typeMapping);
+Ptr<Ty> ApplyInheritedTypeMapping(TypeManager& tyMgr, Ptr<Ty> ty, const TypeSubst& typeMapping)
+{
+    if (!Ty::IsTyCorrect(ty) || typeMapping.empty()) {
+        return ty;
+    }
+    SubstPack maps;
+    tyMgr.PackMapping(maps, typeMapping);
+    return tyMgr.ApplySubstPack(ty, maps);
+}
+
+Ptr<Ty> ApplyMappingValueOnePass(TypeManager& tyMgr, Ptr<Ty> ty, const TypeSubst& typeMapping)
+{
+    if (!Ty::IsTyCorrect(ty) || typeMapping.empty()) {
+        return ty;
+    }
+    if (auto genTy = DynamicCast<GenericsTy*>(ty)) {
+        if (auto it = typeMapping.find(genTy); it != typeMapping.cend()) {
+            return it->second;
+        }
+    }
+    switch (ty->kind) {
+        case TypeKind::TYPE_FUNC: {
+            auto& funcTy = static_cast<FuncTy&>(*ty);
+            auto paramTys = ApplyMappingValueOnePassToTypeArgs(tyMgr, funcTy.paramTys, typeMapping);
+            auto retTy = ApplyMappingValueOnePass(tyMgr, funcTy.retTy, typeMapping);
+            return tyMgr.GetFunctionTy(paramTys, retTy,
+                {funcTy.IsCFunc(), funcTy.isClosureTy, funcTy.hasVariableLenArg});
+        }
+        case TypeKind::TYPE_TUPLE:
+            return tyMgr.GetTupleTy(
+                ApplyMappingValueOnePassToTypeArgs(tyMgr, ty->typeArgs, typeMapping),
+                static_cast<TupleTy&>(*ty).isClosureTy);
+        case TypeKind::TYPE_ARRAY: {
+            auto& arrayTy = static_cast<ArrayTy&>(*ty);
+            return arrayTy.typeArgs.empty() ? ty :
+                tyMgr.GetArrayTy(ApplyMappingValueOnePass(tyMgr, arrayTy.typeArgs[0], typeMapping), arrayTy.dims);
+        }
+        case TypeKind::TYPE_POINTER: {
+            auto& pointerTy = static_cast<PointerTy&>(*ty);
+            return pointerTy.typeArgs.empty() ? ty :
+                tyMgr.GetPointerTy(ApplyMappingValueOnePass(tyMgr, pointerTy.typeArgs[0], typeMapping));
+        }
+        case TypeKind::TYPE_STRUCT: {
+            auto& structTy = static_cast<StructTy&>(*ty);
+            return !structTy.declPtr || !structTy.declPtr->generic ? ty :
+                tyMgr.GetStructTy(*structTy.declPtr,
+                    ApplyMappingValueOnePassToTypeArgs(tyMgr, structTy.typeArgs, typeMapping));
+        }
+        case TypeKind::TYPE_CLASS: {
+            auto& classTy = static_cast<ClassTy&>(*ty);
+            if (!classTy.declPtr || !classTy.declPtr->generic) {
+                return ty;
+            }
+            auto typeArgs = ApplyMappingValueOnePassToTypeArgs(tyMgr, classTy.typeArgs, typeMapping);
+            return Is<ClassThisTy>(classTy) ? tyMgr.GetClassThisTy(*classTy.declPtr, typeArgs) :
+                tyMgr.GetClassTy(*classTy.declPtr, typeArgs);
+        }
+        case TypeKind::TYPE_INTERFACE: {
+            auto& interfaceTy = static_cast<InterfaceTy&>(*ty);
+            return !interfaceTy.declPtr || !interfaceTy.declPtr->generic ? ty :
+                tyMgr.GetInterfaceTy(*interfaceTy.declPtr,
+                    ApplyMappingValueOnePassToTypeArgs(tyMgr, interfaceTy.typeArgs, typeMapping));
+        }
+        case TypeKind::TYPE_ENUM: {
+            auto& enumTy = static_cast<EnumTy&>(*ty);
+            if (!enumTy.declPtr || !enumTy.declPtr->generic) {
+                return ty;
+            }
+            auto typeArgs = ApplyMappingValueOnePassToTypeArgs(tyMgr, enumTy.typeArgs, typeMapping);
+            if (Is<RefEnumTy>(enumTy)) {
+                return tyMgr.GetRefEnumTy(*enumTy.declPtr, typeArgs);
+            }
+            auto instantiatedTy = tyMgr.GetEnumTy(*enumTy.declPtr, typeArgs);
+            instantiatedTy->hasCorrespondRefEnumTy = enumTy.hasCorrespondRefEnumTy;
+            return instantiatedTy;
+        }
+        case TypeKind::TYPE:
+            return tyMgr.GetTypeAliasTy(*static_cast<TypeAliasTy&>(*ty).declPtr,
+                ApplyMappingValueOnePassToTypeArgs(tyMgr, ty->typeArgs, typeMapping));
+        case TypeKind::TYPE_INTERSECTION: {
+            std::set<Ptr<Ty>> tys;
+            for (auto item : static_cast<IntersectionTy&>(*ty).tys) {
+                tys.emplace(ApplyMappingValueOnePass(tyMgr, item, typeMapping));
+            }
+            return tyMgr.GetIntersectionTy(tys);
+        }
+        case TypeKind::TYPE_UNION: {
+            std::set<Ptr<Ty>> tys;
+            for (auto item : static_cast<UnionTy&>(*ty).tys) {
+                tys.emplace(ApplyMappingValueOnePass(tyMgr, item, typeMapping));
+            }
+            return tyMgr.GetUnionTy(tys);
+        }
+        default:
+            return ty;
+    }
+}
+
+std::vector<Ptr<Ty>> ApplyMappingValueOnePassToTypeArgs(
+    TypeManager& tyMgr, const std::vector<Ptr<Ty>>& typeArgs, const TypeSubst& typeMapping)
+{
+    std::vector<Ptr<Ty>> instantiatedTypeArgs;
+    instantiatedTypeArgs.reserve(typeArgs.size());
+    for (auto typeArg : typeArgs) {
+        instantiatedTypeArgs.push_back(ApplyMappingValueOnePass(tyMgr, typeArg, typeMapping));
+    }
+    return instantiatedTypeArgs;
+}
+
 bool IsInheritableType(Ptr<const Ty> ty)
 {
     // Non-classlike type cannot be treated as inherited type.
@@ -1348,7 +1459,8 @@ bool TypeManager::HasExtendedInterfaceTy(Ty& ty, Ty& superTy, const TypeSubst& t
             CJC_ASSERT(inheritedType);
             // Get inherited types recursively. BUT do not collect inherited type which has cyclic inheritance.
             if (inheritedType->ty->IsClass() && IsInheritableType(inheritedType->ty)) {
-                return HasExtendedInterfaceTy(*inheritedType->ty, superTy, substituteMapping);
+                auto inheritedTy = ApplyInheritedTypeMapping(*this, inheritedType->ty, substituteMapping);
+                return HasExtendedInterfaceTy(*inheritedTy, superTy, {});
             }
         }
     }
@@ -1403,7 +1515,8 @@ void TypeManager::GetNominalSuperTy(
         CJC_ASSERT(inheritedType);
         // Get inherited types recursively. BUT do not collect inherited type which has cyclic inheritance.
         if (IsInheritableType(inheritedType->ty)) {
-            auto inheritedTys = GetAllSuperTys(*inheritedType->ty, substituteMapping);
+            auto inheritedTy = ApplyInheritedTypeMapping(*this, inheritedType->ty, substituteMapping);
+            auto inheritedTys = GetAllSuperTys(*inheritedTy);
             tyList.merge(inheritedTys);
         }
     }
@@ -1420,7 +1533,8 @@ bool TypeManager::HasNominalSuperTy(Ty& nominalTy, Ty& superTy, const TypeSubst&
     for (auto& inheritedType : declPtr->inheritedTypes) {
         CJC_ASSERT(inheritedType);
         // search inherited types recursively. BUT do not search inherited type which has cyclic inheritance.
-        if (IsInheritableType(inheritedType->ty) && HasSuperTy(*inheritedType->ty, superTy, substituteMapping)) {
+        auto inheritedTy = ApplyInheritedTypeMapping(*this, inheritedType->ty, substituteMapping);
+        if (IsInheritableType(inheritedType->ty) && HasSuperTy(*inheritedTy, superTy, {})) {
             return true;
         }
     }
@@ -1552,9 +1666,8 @@ TypeSubst TypeManager::GetSubstituteMapping(const Ty& nominalTy, const TypeSubst
         return {};
     }
     TypeSubst substituteMapping = GenerateTypeMapping(*declPtr, nominalTy.typeArgs);
-    // Update 'substituteMapping' with input 'typeMapping'.
     for (auto& it : substituteMapping) {
-        it.second = GetInstantiatedTy(it.second, typeMapping);
+        it.second = ApplyMappingValueOnePass(*this, it.second, typeMapping);
     }
     return substituteMapping;
 }
