@@ -22,12 +22,12 @@ ASTKIND(PRIMARY_CTOR_DECL, "primary_ctor_decl", PrimaryCtorDecl, 744)
 ASTKIND(BUILTIN_DECL, "builtin_decl", BuiltInDecl, 736)
 ASTKIND(VAR_DECL, "var_decl", VarDecl, 808) // begin of subtypes of VarDecl and VarDeclAbstract.
 ASTKIND(PROP_DECL, "prop_decl", PropDecl, 896)
-ASTKIND(MACRO_EXPAND_PARAM, "macro_expand_param", MacroExpandParam, 1608)
+ASTKIND(MACRO_EXPAND_PARAM, "macro_expand_param", MacroExpandParam, 1648)
 ASTKIND(FUNC_PARAM, "func_param", FuncParam, 872)                                // end of subtypes of VarDecl.
 ASTKIND(VAR_WITH_PATTERN_DECL, "var_with_pattern_decl", VarWithPatternDecl, 800) // end of subtypes of VarDeclAbstract.
 ASTKIND(GENERIC_PARAM_DECL, "generic_param_decl", GenericParamDecl, 752)
 ASTKIND(PACKAGE_DECL, "package_decl", PackageDecl, 736)
-ASTKIND(MACRO_EXPAND_DECL, "macro_expand_decl", MacroExpandDecl, 1464)
+ASTKIND(MACRO_EXPAND_DECL, "macro_expand_decl", MacroExpandDecl, 1504)
 ASTKIND(INVALID_DECL, "invalid_decl", InvalidDecl, 728) // end of subtypes of Decl.
 ASTKIND(PATTERN, "*pattern", Pattern, 264)              // begin of subTypes of Pattern.
 ASTKIND(VAR_PATTERN, "var_pattern", VarPattern, 280)
@@ -96,7 +96,7 @@ ASTKIND(PERFORM_EXPR, "perform_expr", PerformExpr, 464)
 ASTKIND(RESUME_EXPR, "resume_expr", ResumeExpr, 528)
 ASTKIND(SPAWN_EXPR, "spawn_expr", SpawnExpr, 512)
 ASTKIND(SYNCHRONIZED_EXPR, "synchronized_expr", SynchronizedExpr, 512)
-ASTKIND(MACRO_EXPAND_EXPR, "macro_expand_expr", MacroExpandExpr, 1312)
+ASTKIND(MACRO_EXPAND_EXPR, "macro_expand_expr", MacroExpandExpr, 1344)
 ASTKIND(IF_AVAILABLE_EXPR, "if_available_expr", IfAvailableExpr, 448)
 ASTKIND(INVALID_EXPR, "invalid_expr", InvalidExpr, 464) // end of subtypes of Expr.
 ASTKIND(GENERIC, "generic", Generic, 400)

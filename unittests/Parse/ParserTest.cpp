@@ -1675,7 +1675,7 @@ TEST(ParserTest1, MacroExpandInterStr)
     Walker walker(file.get(), [&](Ptr<Node> node) -> VisitAction {
         return match(*node)(
             [&](const MacroExpandDecl& macroExpand) {
-                for (auto& it : macroExpand.invocation.originPosMap) {
+                for (auto& it : macroExpand.invocation.macroCallDiagInfo.originPosMap) {
                     originTokens.emplace_back(it.second.ToString());
                 }
                 return VisitAction::WALK_CHILDREN;

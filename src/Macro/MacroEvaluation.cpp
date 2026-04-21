@@ -152,7 +152,7 @@ bool HasChildMacroCall(MacroCall& macCall)
 {
     for (auto mc : macCall.children) {
         auto pInvocation = mc->GetInvocation();
-        if (pInvocation && !pInvocation->isCustom) {
+        if (pInvocation && !pInvocation->macroCallDiagInfo.isCustom) {
             return true;
         }
         if (mc->status == MacroEvalStatus::ANNOTATION && HasChildMacroCall(*mc)) {
@@ -297,7 +297,7 @@ void RefreshMacroCallArgs(MacroCall& macCall, DiagnosticEngine& diag)
         } else {
             tokensAfterEval.emplace_back(Token(TokenKind::AT, "@", pInvocation->atPos, pInvocation->atPos + 1));
         }
-        auto tks = GetTokensFromString(pInvocation->fullName, diag, pInvocation->atPos + atTokenSize);
+        auto tks = GetTokensFromString(pInvocation->macroCallDiagInfo.fullName, diag, pInvocation->atPos + atTokenSize);
         (void)tokensAfterEval.insert(tokensAfterEval.end(), tks.begin(), tks.end());
         if (!pInvocation->attrs.empty()) {
             (void)tokensAfterEval.emplace_back(
@@ -813,7 +813,7 @@ bool MacroEvaluation::NeedCreateMacroCallTreeForFirstEval(MacroCall& macCall, AS
     }
     // For annotation case, should change Macro to Annotation.
     macCall.status = MacroEvalStatus::ANNOTATION;
-    pInvocation->isCustom = true;
+    pInvocation->macroCallDiagInfo.isCustom = true;
     return true;
 }
 
@@ -891,7 +891,7 @@ void MacroEvaluation::CreateMacroCallTree(MacroCall& macCall, bool reEval)
     } else {
         // Has no child macrocall.
         if (macCall.status == MacroEvalStatus::ANNOTATION) {
-            pInvocation->isCurFile = true;
+            pInvocation->macroCallDiagInfo.isCurFile = true;
             (void)pMacroCalls.emplace_back(&macCall); // For evaluate.
             return;
         }

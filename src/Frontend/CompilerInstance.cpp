@@ -904,12 +904,29 @@ bool CompilerInstance::PerformMangling()
     return true;
 }
 
+namespace {
+void RegisterMacroCallDiagInfos(DiagnosticEngine& diag, AST::Package& pkg)
+{
+    for (auto& file : pkg.files) {
+        for (auto& macrocall : file->originalMacroCallNodes) {
+            auto pInvocation = macrocall->GetInvocation();
+            if (!pInvocation) {
+                continue;
+            }
+            auto uniqueInfo = std::make_unique<MacroCallDiagInfo>(pInvocation->macroCallDiagInfo);
+            diag.RegisterMacroCallDiagInfo(std::move(uniqueInfo));
+        }
+    }
+}
+} // namespace
+
 bool CompilerInstance::GenerateCHIRForPkg(AST::Package& pkg)
 {
     if (pkg.files.empty()) {
         return true;
     }
 
+    RegisterMacroCallDiagInfos(diag, pkg);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     // use this result when APILevel check supports arbitrary const expressions
     (void)CHIR::ComputeAnnotations(pkg, *this);
