@@ -1894,6 +1894,8 @@ Value* CHIRDeserializer::CHIRDeserializerImpl::GetValue(uint32_t id)
             case PackageFormat::ValueElem_NONE:
                 InternalError("Unsupported value type.");
                 break;
+            default:
+                CJC_ABORT();
         }
     }
     return id2Value[id];
@@ -1998,6 +2000,8 @@ Type* CHIRDeserializer::CHIRDeserializerImpl::GetType(uint32_t id)
             case PackageFormat::TypeElem_NONE:
                 id2Type[id] = nullptr;
                 break;
+            default:
+                CJC_ABORT();
         }
     }
     return id2Type[id];
@@ -2382,6 +2386,8 @@ Expression* CHIRDeserializer::CHIRDeserializerImpl::GetExpression(uint32_t id)
             case PackageFormat::ExpressionElem_NONE:
                 InternalError("unsupported expression type in chir deserialization.");
                 break;
+            default:
+                CJC_ABORT();
         }
     }
     return id2Expression[id];
@@ -2416,6 +2422,10 @@ CustomTypeDef* CHIRDeserializer::CHIRDeserializerImpl::GetCustomTypeDef(uint32_t
                     Deserialize<ExtendDef>(static_cast<const PackageFormat::ExtendDef*>(pool->defs()->Get(id - 1)));
                 break;
             case PackageFormat::CustomTypeDefElem_NONE:
+                CJC_ABORT();
+                id2CustomTypeDef[id] = nullptr;
+                break;
+            default:
                 CJC_ABORT();
                 id2CustomTypeDef[id] = nullptr;
                 break;

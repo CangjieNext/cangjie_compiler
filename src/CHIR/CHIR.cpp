@@ -696,6 +696,8 @@ bool ToCHIR::RunIRChecker(const Phase& phase)
         case Phase::ANALYSIS_FOR_CJLINT:
             suffix = "after analysis for cjlint";
             break;
+        default:
+            CJC_ABORT();
     }
     Utils::ProfileRecorder recorder("CHIR", "IRCheck " + suffix);
     CJC_NULLPTR_CHECK(chirPkg);
@@ -1384,19 +1386,19 @@ std::string PhaseToString(const ToCHIR::Phase phase)
     switch (phase) {
         case ToCHIR::Phase::RAW:
             return "raw";
-            break;
         case ToCHIR::Phase::OPT:
             return "opt";
-            break;
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
         case ToCHIR::Phase::PLUGIN:
             return "plugin";
-            break;
         case ToCHIR::Phase::ANALYSIS_FOR_CJLINT:
             return  "analysis for cjlint";
-            break;
 #endif
+        default:
+            CJC_ABORT();
     }
+    CJC_ABORT();
+    return "";
 }
 
 } // namespace Cangjie::CHIR

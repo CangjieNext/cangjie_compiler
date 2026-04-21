@@ -1147,6 +1147,7 @@ private:
             case ASTKind::DUMMY_BODY:
             case ASTKind::PACKAGE:
             case ASTKind::NODE:
+            default:
                 break;
         }
     }
@@ -1402,6 +1403,9 @@ void AddComment(Node& node, CommentGroup& cg, CommentPlace place)
             break;
         case CommentPlace::INNER:
             node.comments.innerComments.push_back(std::move(cg));
+            break;
+        default:
+            CJC_ABORT();
             break;
     }
 }

@@ -231,7 +231,7 @@ CT(SIGABRT, main)
 CT(SIGFPE, main)
 CT(SIGSEGV, main)
 CT(SIGILL, main)
-#if __unix__
+#ifdef __unix__
 CT(SIGTRAP, main)
 CT(SIGBUS, main)
 #endif
@@ -241,7 +241,7 @@ CT(SIGABRT, parser)
 CT(SIGFPE, parser)
 CT(SIGSEGV, parser)
 CT(SIGILL, parser)
-#if __unix__
+#ifdef __unix__
 CT(SIGTRAP, parser)
 CT(SIGBUS, parser)
 #endif

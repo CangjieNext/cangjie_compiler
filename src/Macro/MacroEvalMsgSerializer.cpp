@@ -68,6 +68,9 @@ static auto CreatItemInfoVec(FlatBufferBuilder& builder, const std::vector<Cangj
                 itemsVec.push_back(CreateItemInfo(builder, key, OptionValue_tValue, t.Union()));
                 break;
             }
+            default:
+                CJC_ABORT();
+                break;
         }
     }
     return itemsVec;

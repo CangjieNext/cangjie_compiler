@@ -21,7 +21,7 @@
 #ifdef __unix__
 #include <csignal>
 #include <functional>
-#elif __APPLE__
+#elif defined(__APPLE__)
 #include <signal.h>
 #elif defined(_WIN32)
 #include <signal.h>

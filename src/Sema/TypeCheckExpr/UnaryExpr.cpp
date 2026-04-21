@@ -120,6 +120,8 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBuiltinUnaryExpr(ASTContext& ctx, Unary
             case MatchResult::AMBIGUOUS:
             case MatchResult::NONE:
                 return TypeManager::GetInvalidTy();
+            default:
+                CJC_ABORT();
         }
     }
     for (auto& type : typeCandidate) {
