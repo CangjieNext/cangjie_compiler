@@ -21,3 +21,4 @@ endif()
 # IsEnumTrans2Class method in CodeGenUtils.h could be separated with llvm util methods.
 target_include_directories(CangjieMangle PRIVATE ${LLVM_INCLUDE_DIRS})
 target_compile_options(CangjieMangle PRIVATE ${CJC_EXTRA_WARNINGS})
+target_compile_options(CangjieUnittestsMangle PRIVATE ${CJC_EXTRA_WARNINGS})

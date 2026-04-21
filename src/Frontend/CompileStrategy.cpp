@@ -250,7 +250,7 @@ public:
                 // Since alternate signal stack is per thread, we have to create an alternate signal stack for each
                 // thread.
                 Cangjie::CreateAltSignalStack();
-#elif _WIN32
+#elif defined(_WIN32)
                 // When the SIGABRT, SIGFPE, SIGSEGV and SIGILL signals are triggered in a subthread,
                 // the signals cannot be captured and the process exits directly. Therefore,
                 // the signal processing function must be set for each thread.

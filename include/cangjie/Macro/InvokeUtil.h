@@ -22,7 +22,9 @@
 #include <unordered_set>
 #include <vector>
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__)
+#include <dlfcn.h>
+#elif defined(__APPLE__)
 #include <dlfcn.h>
 #endif
 
@@ -69,7 +71,8 @@ namespace InvokeRuntime {
      * @return HANDLE Handle for the dynamic library.
      */
     HANDLE OpenSymbolTable(const std::string& libPath);
-#elif defined(__linux__) || defined(__APPLE__)
+#else
+#if defined(__linux__)
     /**
      * @brief Open dynamic lib, save it to singleton variable.
      *
@@ -78,6 +81,16 @@ namespace InvokeRuntime {
      * @return
      */
     HANDLE OpenSymbolTable(const std::string& libPath, int dlopenMode = RTLD_LAZY | RTLD_GLOBAL);
+#elif defined(__APPLE__)
+    /**
+     * @brief Open dynamic lib, save it to singleton variable.
+     *
+     * @param libPath Dynamic library path.
+     * @param dlopenMode The MODE argument to `dlopen'
+     * @return
+     */
+    HANDLE OpenSymbolTable(const std::string& libPath, int dlopenMode = RTLD_LAZY | RTLD_GLOBAL);
+#endif
 #endif
 
     /**

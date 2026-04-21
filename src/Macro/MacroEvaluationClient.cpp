@@ -12,7 +12,11 @@
 
 #include "cangjie/Macro/MacroEvaluation.h"
 #include "cangjie/Utils/ProfileRecorder.h"
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__)
+#include <sys/select.h>
+#include <sys/signal.h>
+#include <sys/wait.h>
+#elif defined(__APPLE__)
 #include <sys/select.h>
 #include <sys/signal.h>
 #include <sys/wait.h>
@@ -20,8 +24,14 @@
 #include <windows.h>
 #endif
 
-#ifdef __linux__
+#if defined(__linux__)
 #include <sys/prctl.h>
+#endif
+
+#if defined(__linux__)
+#define CANGJIE_POSIX_MACRO_SRV 1
+#elif defined(__APPLE__)
+#define CANGJIE_POSIX_MACRO_SRV 1
 #endif
 
 #include <cstdlib>
@@ -462,7 +472,7 @@ bool MacroEvaluation::WaitMacroCallsEvalResult(std::list<MacroCall*>& calls) con
     return true;
 }
 
-#if defined(__linux__) || defined(__APPLE__)
+#ifdef CANGJIE_POSIX_MACRO_SRV
 namespace {
 static void WaitProcessExit(pid_t pid)
 {

@@ -11,14 +11,25 @@
  */
 
 #include "cangjie/Macro/MacroEvaluation.h"
-#if defined (__linux__) || defined(__APPLE__)
+#if defined(__linux__)
+#include <sys/wait.h>
+#include <thread>
+#include <unistd.h>
+#include <pthread.h>
+#elif defined(__APPLE__)
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
 #include <pthread.h>
 #endif
-#ifdef __linux__
+#if defined(__linux__)
 #include <sys/prctl.h>
+#endif
+
+#if defined(__linux__)
+#define CANGJIE_POSIX_MACRO_SRV 1
+#elif defined(__APPLE__)
+#define CANGJIE_POSIX_MACRO_SRV 1
 #endif
 
 using namespace Cangjie;
@@ -153,7 +164,7 @@ inline void RenameSrvProcess()
 } // namespace
 #endif
 
-#if defined(__linux__) || defined(__APPLE__)
+#ifdef CANGJIE_POSIX_MACRO_SRV
 void MacroEvaluation::RunMacroSrv()
 {
     useChildProcess = false; // macro srv is child

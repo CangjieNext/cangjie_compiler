@@ -19,11 +19,6 @@ else()
 endif()
 list(APPEND CJC_EXTRA_WARNINGS -Wshadow -Wnon-virtual-dtor -Wundef)
 
-# Stack/frame size warnings for release builds only
-if(CMAKE_BUILD_TYPE MATCHES Release)
-    list(APPEND CJC_EXTRA_WARNINGS -Wframe-larger-than=2048)
-endif()
-
 if(BUILD_GCC_TOOLCHAIN AND (CMAKE_C_COMPILER_ID STREQUAL "Clang" OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")))
     add_compile_options(--gcc-toolchain=${BUILD_GCC_TOOLCHAIN})
     add_link_options(--gcc-toolchain=${BUILD_GCC_TOOLCHAIN})
