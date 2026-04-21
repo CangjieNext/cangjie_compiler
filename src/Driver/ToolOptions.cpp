@@ -147,6 +147,9 @@ void SetVerifyOptions(SetFuncType setOptionHandler, [[maybe_unused]] const Drive
 void SetOptions(SetFuncType setOptionHandler, const DriverOptions& driverOptions)
 {
     setOptionHandler("--cangjie-pipeline");
+    SetOptionIf(setOptionHandler,
+        driverOptions.IsLTOEnabled() && driverOptions.disableReflection,
+        "--cj-disable-lto-reflection");
     SetOptionIf(setOptionHandler, driverOptions.EnableAsan(), "-cj-asan=true");
     SetOptionIf(setOptionHandler, driverOptions.EnableTsan(), "-cj-tsan=true");
     SetOptionIf(setOptionHandler, driverOptions.EnableTsan(), "-tsan-instrument-atomics=false");

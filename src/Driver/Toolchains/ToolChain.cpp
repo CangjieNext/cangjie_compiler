@@ -13,6 +13,7 @@
 #include "cangjie/Driver/Toolchains/ToolChain.h"
 #include "cangjie/Driver/Utils.h"
 #include "cangjie/Driver/TempFileManager.h"
+#include "cangjie/Driver/ToolOptions.h"
 
 namespace {
 const std::string LINK_PREFIX = "-l:";
@@ -61,6 +62,7 @@ void ToolChain::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
     std::set<std::string> dynamicLibraries;
     std::set<std::string> staticLibraries;
     std::set<std::string> ltoBuiltInDependencies;
+    std::vector<std::string> processedLTOBuiltInDependencies;
     std::unordered_set<std::string> dyDependencies;
     const std::function<void(const std::unordered_set<std::string>&)> getDyDependencies =
         [this, &dyDependencies](const std::unordered_set<std::string>& dependencies) {
@@ -110,7 +112,8 @@ void ToolChain::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
     ForEachBuiltinDependencies(driverOptions.directBuiltinDependencies, appendStaticLibsToTool);
     ForEachBuiltinDependencies(driverOptions.indirectBuiltinDependencies, appendStaticLibsToTool);
     if (driverOptions.IsLTOEnabled()) {
-        for (const auto& bcFile : ltoBuiltInDependencies) {
+        processedLTOBuiltInDependencies.assign(ltoBuiltInDependencies.begin(), ltoBuiltInDependencies.end());
+        for (const auto& bcFile : processedLTOBuiltInDependencies) {
             tool.AppendArg(bcFile);
         }
     }

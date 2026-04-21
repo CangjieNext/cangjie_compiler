@@ -147,17 +147,7 @@ bool CJNATIVEBackend::ProcessGenerationOfNormalCompile(const std::vector<TempFil
     }
 
     if (driverOptions.IsLTOEnabled()) {
-        std::vector<TempFileInfo> frontendOutputFiles;
-        std::vector<TempFileInfo> preprocessedFiles;
-        for (auto& fileInfo : bitCodeFiles) {
-            if (fileInfo.isFrontendOutput) {
-                frontendOutputFiles.emplace_back(fileInfo);
-            } else {
-                preprocessedFiles.emplace_back(fileInfo);
-            }
-        }
-        auto processedFrontendFiles = GeneratePreprocessTools(frontendOutputFiles);
-        preprocessedFiles.insert(preprocessedFiles.end(), processedFrontendFiles.begin(), processedFrontendFiles.end());
+        auto preprocessedFiles = GeneratePreprocessTools(bitCodeFiles);
         // When compiling a static library in LTO mode, the compilation process stops at the opt stage.
         if (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB) {
             return true;
