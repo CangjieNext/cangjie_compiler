@@ -31,8 +31,9 @@
 #include "BuiltInOperatorUtil.h"
 #include "ImplUtils.h"
 #include "InstantiatedExtendRecorder.h"
-#include "TypeCheckUtil.h"
+#include "OverrideFunctionResolver.h"
 #include "PartialInstantiation.h"
+#include "TypeCheckUtil.h"
 
 #include "cangjie/AST/ASTTypeValidator.h"
 #include "cangjie/AST/Clone.h"
@@ -817,8 +818,8 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
         return &fd;
     }
 
-    MemberFuncsWithInstTys funcs;
-    GetInstMemberFuncWithInstTy(ty, funcs, fd.identifier);
+    OverrideFunctionResolver resolver(typeManager);
+    MemberFuncsWithInstTys funcs = resolver.GetInstMemberFuncWithInstTy(ty, fd.identifier);
     TypeSubst typeMapping = GenerateTypeMappingByTy(fd.outerDecl->ty, &targetBaseTy);
     auto instFuncTy = typeManager.GetInstantiatedTy(fd.ty, typeMapping);
     for (auto& [implFunc, instTys] : funcs) {
