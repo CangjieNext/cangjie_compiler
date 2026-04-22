@@ -123,7 +123,7 @@ llvm::Instruction* IRBuilder2::CreateEntryAlloca(const CGType& cgType, const llv
         }
         auto& target = GetCGContext().GetCompileOptions().target;
         if (target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID &&
-            isOptionLikeNonRef) {
+            IsAllAssociatedValuesAreNonRef()) {
             allocaInst->setAlignment(llvm::Align(MIN_ANDROID_ARM32_ENUM_ALIGN));
         }
         return allocaInst;
