@@ -31,8 +31,9 @@
 #include "BuiltInOperatorUtil.h"
 #include "ImplUtils.h"
 #include "InstantiatedExtendRecorder.h"
-#include "TypeCheckUtil.h"
+#include "OverrideFunctionResolver.h"
 #include "PartialInstantiation.h"
+#include "TypeCheckUtil.h"
 
 #include "cangjie/AST/ASTTypeValidator.h"
 #include "cangjie/AST/Clone.h"
@@ -817,16 +818,46 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
         return &fd;
     }
 
-    MemberFuncsWithInstTys funcs;
-    GetInstMemberFuncWithInstTy(ty, funcs, fd.identifier);
-    TypeSubst typeMapping = GenerateTypeMappingByTy(fd.outerDecl->ty, &targetBaseTy);
-    auto instFuncTy = typeManager.GetInstantiatedTy(fd.ty, typeMapping);
-    for (auto& [implFunc, instTys] : funcs) {
+    OverrideFunctionResolver resolver(typeManager);
+    MemberFuncsWithInstTys funcs = resolver.GetInstMemberFuncWithInstTy(ty, fd.identifier);
+    // Handle code: class B<T> { func a(a: T): Unit {} }; class A <: B<B1> {}, given 'targetBaseTy' is 'Class-A',
+    // we need get mapping if [T |-> B1], and substitute function type '(T)->Unit' to '(B1)->T'.
+    MultiTypeSubst typeMappings = promotion.GetPromoteTypeMapping(targetBaseTy, *fd.outerDecl->GetTy());
+    auto instFuncTys = typeManager.GetInstantiatedTys(fd.GetTy(), typeMappings);
+    for (MemberFuncWithInstTys func : funcs) {
+        auto implFunc = func.first;
         bool isInDiffDecl = implFunc->outerDecl != GetGeneralDecl(*fd.outerDecl, true);
-        auto withSameTy = instTys.find(instFuncTy);
-        if (isInDiffDecl && withSameTy != instTys.end()) {
-            return implFunc;
+        auto matchInfo = resolver.GetMatchedFuncInstTyByGivenTarget(func, fd, &targetBaseTy);
+        if (!isInDiffDecl || !matchInfo.first) {
+            continue;
         }
+
+        Ptr<FuncDecl> matchedFunc = implFunc;
+        // Get instantiated function or function local on of current impl func.
+        auto genericInstOuters = GetInstantiatedDecls(*implFunc->outerDecl);
+        for (auto instOuter : genericInstOuters) {
+            if (!typeManager.IsSubtype(&ty, instOuter->GetTy())) {
+                continue;
+            }
+            for (auto& member : instOuter->GetMemberDecls()) {
+                if (member->TestAttr(Attribute::GENERIC)) {
+                    continue;
+                }
+                WorkForMembers(*member, [&fd, &matchInfo, &matchedFunc](Decl& d) {
+                    if (fd.identifier == d.identifier && d.GetTy() == matchInfo.second) {
+                        matchedFunc = StaticCast<FuncDecl>(&d);
+                    }
+                });
+            }
+        }
+        auto genericInstFuncs = GetInstantiatedDecls(*func.first);
+        for (auto genInstFunc : genericInstFuncs) {
+            if (genInstFunc->GetTy() == matchInfo.second) {
+                matchedFunc = StaticCast<FuncDecl>(genInstFunc);
+                break;
+            }
+        }
+        return matchedFunc;
     }
     return &fd;
 }
@@ -1280,7 +1311,8 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedTarget(
     auto targetBase = Ty::IsTyCorrect(upperTy) && !upperTy->HasGeneric() ? upperTy : Ptr(&baseTy);
     auto decl = GetInstantiatedMemberTarget(*targetBase, *genericDecl, true);
     if (decl && decl->TestAttr(Attribute::GENERIC)) {
-        decl = FindInCache(ConstructGenericInfo(*decl, instTys));
+        auto instDecl = FindInCache(ConstructGenericInfo(*decl, instTys));
+        decl = instDecl ? instDecl : decl;
     }
     // Decl may be an interface function which should be rearranged to implementation decl.
     if (decl && decl->IsFunc()) {
@@ -1288,7 +1320,8 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedTarget(
         CJC_NULLPTR_CHECK(decl);
         // Get instantiated version if decl has been updated to implented generic function.
         if (decl->TestAttr(Attribute::GENERIC)) {
-            decl = FindInCache(ConstructGenericInfo(*decl, instTys));
+            auto instDecl = FindInCache(ConstructGenericInfo(*decl, instTys));
+            decl = instDecl ? instDecl : decl;
         }
     }
     if (!decl) {
