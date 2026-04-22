@@ -14,8 +14,8 @@
 #include "InstantiatedExtendRecorder.h"
 
 #include "ExtendBoxMarker.h"
-#include "GenericInstantiation/GenericInstantiationManagerImpl.h"
 #include "ImplUtils.h"
+#include "OverrideFunctionResolver.h"
 #include "TypeCheckUtil.h"
 
 #include "cangjie/AST/Match.h"
@@ -138,12 +138,17 @@ void GenericInstantiationManager::InstantiatedExtendRecorder::RecordExtendForMem
 void GenericInstantiationManager::InstantiatedExtendRecorder::RecordImplExtendDecl(
     Ty& ty, FuncDecl& fd, Ptr<Ty> upperTy)
 {
-    MemberFuncsWithInstTys funcs;
-    gim.GetInstMemberFuncWithInstTy(ty, funcs, fd.identifier);
+    OverrideFunctionResolver resolver(typeManager);
+    MemberFuncsWithInstTys funcs = resolver.GetInstMemberFuncWithInstTy(ty, fd.identifier);
     Ptr<Decl> extend = nullptr;
     // All candidates have satisfied functions, choose most matched decl.
-    for (auto [func, _] : funcs) {
-        auto baseDecl = func->outerDecl;
+    auto baseTy = Ty::IsTyCorrect(upperTy) ? upperTy : Ptr(&ty);
+    for (MemberFuncWithInstTys func : funcs) {
+        auto matchedInstTy = resolver.GetMatchedFuncInstTyByGivenTarget(func, fd, baseTy);
+        if (!Ty::IsTyCorrect(matchedInstTy)) {
+            continue;
+        }
+        auto baseDecl = func.first->outerDecl;
         CJC_ASSERT(baseDecl);
         if (baseDecl->astKind != ASTKind::EXTEND_DECL) {
             continue; // Function implemented in origin decl, ignored.
