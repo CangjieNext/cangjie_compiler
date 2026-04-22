@@ -1149,6 +1149,7 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
 
 bool ToCHIR::Run()
 {
+    printf("yikang ---------------------- get in CHIR -----------\n");
     CJC_NULLPTR_CHECK(typeManager);
     CJC_NULLPTR_CHECK(gim);
     CJC_NULLPTR_CHECK(&needToOptGenericDecl);
