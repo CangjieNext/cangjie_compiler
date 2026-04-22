@@ -31,11 +31,7 @@
 #include "cangjie/IncrementalCompilation/CompilationCache.h"
 #include "cangjie/Mangle/CHIRMangler.h"
 #include "cangjie/Modules/ImportManager.h"
-#include "cangjie/Sema/GenericInstantiationManager.h"
 #include "cangjie/Utils/ProfileRecorder.h"
-
-#include "cangjie/AST/Types.h"
-#include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie::CHIR {
 class AST2CHIR {

@@ -55,7 +55,7 @@ bool TypeChecker::TypeCheckerImpl::CheckSpawnArgValid(const ASTContext& ctx, con
     // Check The spawn argument whether have `getSchedulerHandle` method,
     // whose signature is `()->CPointer<Unit>`. If not, just prompts that the type is invalid.
     auto classLikeTy = StaticCast<ClassLikeTy*>(arg.GetTy());
-    auto retTy = typeManager.GetPointerTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    auto retTy = typeManager.GetPointerTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT), {});
     auto funcTy = typeManager.GetFunctionTy({}, retTy);
     CJC_NULLPTR_CHECK(arg.curFile);
     auto decls = FieldLookup(ctx, classLikeTy->commonDecl, "getSchedulerHandle", {.file = arg.curFile});

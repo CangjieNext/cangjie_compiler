@@ -54,6 +54,26 @@ inline bool CheckForQuestFuncRetType(DiagnosticEngine& diag, Decl& target, const
     }
     return true;
 }
+
+Ptr<FuncDecl> FindCompatibleOverrideAccessor(const std::vector<OwnedPtr<FuncDecl>>& overrideAccessors,
+    const std::vector<OwnedPtr<FuncDecl>>& baseAccessors, TypeManager& typeManager, Ptr<FuncDecl>& baseMatched)
+{
+    for (auto& overrideAccessor : overrideAccessors) {
+        if (!Is<FuncTy*>(overrideAccessor->GetTy())) {
+            continue;
+        }
+        for (auto& baseAccessor : baseAccessors) {
+            if (!Is<FuncTy*>(baseAccessor->GetTy())) {
+                continue;
+            }
+            if (typeManager.IsFuncDeclSubType(*overrideAccessor, *baseAccessor)) {
+                baseMatched = baseAccessor.get();
+                return overrideAccessor.get();
+            }
+        }
+    }
+    return nullptr;
+}
 } // namespace
 
 void TypeChecker::TypeCheckerImpl::CheckThisOrSuper(const ASTContext& ctx, RefExpr& re)
@@ -67,14 +87,14 @@ void TypeChecker::TypeCheckerImpl::CheckThisOrSuper(const ASTContext& ctx, RefEx
     auto decl = RawStaticCast<InheritableDecl*>(sym->node);
     // Set this/super's type and target first. Will not diagnose.
     if (re.isThis) {
-        re.SetTy(InferTypeOfThis(re, *decl));
+        re.SetTy(InferTypeOfThis(ctx, re, *decl));
     } else {
-        re.SetTy(InferTypeOfSuper(re, *decl));
+        re.SetTy(InferTypeOfSuper(ctx, re, *decl));
     }
     // Legality of using this/super will be checked after typecheck in 'CheckLegalityOfReference'.
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::InferTypeOfThis(RefExpr& re, InheritableDecl& objDecl)
+Ptr<Ty> TypeChecker::TypeCheckerImpl::InferTypeOfThis(const ASTContext& ctx, RefExpr& re, InheritableDecl& objDecl)
 {
     Ptr<InheritableDecl> outerDecl = &objDecl;
     auto typeDecl = outerDecl;
@@ -91,16 +111,31 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::InferTypeOfThis(RefExpr& re, InheritableDe
         typeDecl = RawStaticCast<InheritableDecl*>(realTypeDecl);
     }
     ReplaceTarget(&re, typeDecl);
+    // Use the enclosing function's this param modal when present; otherwise use the ref expr's modal.
+    ModalInfo modalToUse = re.modal.ToModalInfo();
+    if (auto funcNode = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, re.scopeName, [](AST::Symbol& sym) {
+            if (auto funcDecl = DynamicCast<FuncDecl*>(sym.node)) {
+                return Is<InheritableDecl>(funcDecl->outerDecl) && !funcDecl->TestAttr(Attribute::STATIC);
+            }
+            return false;
+        })) {
+        if (auto func = StaticCast<FuncDecl>(funcNode->node); TypeManager::HasThisParam(*func)) {
+            modalToUse = GetThisParamModal(*func);
+        }
+    }
 
     // all this reference are checked as This type if possible (i.e. it is instance of class decl).
     auto ret = ReplaceWithGenericTyInInheritableDecl(outerDecl->GetTy(), *outerDecl, *typeDecl);
     if (auto cd = DynamicCast<ClassTy>(ret)) {
-        ret = typeManager.GetClassThisTy(*cd->decl, cd->typeArgs);
+        ret = typeManager.GetClassThisTy(*cd->decl, cd->typeArgs, modalToUse);
+    } else {
+        ret = typeManager.SubstituteModal(ret, modalToUse);
     }
     return ret;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::InferTypeOfSuper(RefExpr& re, const InheritableDecl& objDecl)
+Ptr<Ty> TypeChecker::TypeCheckerImpl::InferTypeOfSuper(
+    const ASTContext& ctx, RefExpr& re, const InheritableDecl& objDecl)
 {
     // Super can only used in classDecl, if not in class decl, super's ty is invalid.
     if (objDecl.astKind != ASTKind::CLASS_DECL) {
@@ -112,8 +147,11 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::InferTypeOfSuper(RefExpr& re, const Inheri
         if (superClassTy) {
             CJC_NULLPTR_CHECK(superClassTy->declPtr);
             ReplaceTarget(&re, superClassTy->declPtr);
-            return ReplaceWithGenericTyInInheritableDecl(
-                superClassTy->declPtr->GetTy(), objDecl, *superClassTy->declPtr);
+            Ptr<Ty> ret =
+                ReplaceWithGenericTyInInheritableDecl(superClassTy->declPtr->GetTy(), objDecl, *superClassTy->declPtr);
+            ModalInfo modal = GetCurThisModal(ctx, re.scopeName);
+            ret = typeManager.SubstituteModal(ret, modal);
+            return ret;
         }
     }
     return TypeManager::GetInvalidTy();
@@ -584,6 +622,9 @@ void TypeChecker::TypeCheckerImpl::InstantiateReferenceType(
         expr.SetTy(TypeManager::GetInvalidTy());
     } else if (auto fd = DynamicCast<FuncDecl*>(target); fd) {
         DynamicBindingThisType(expr, *fd, typeMapping);
+    } else if (auto ma = DynamicCast<MemberAccess>(&expr);
+        ma && ma->baseExpr && Ty::IsTyCorrect(ma->baseExpr->GetTy()) && Is<VarDecl>(ma->GetTarget())) {
+        expr.SetTy(typeManager.SubstituteModal(expr.GetTy(), ma->baseExpr->GetTy()->Modal()));
     }
 }
 
@@ -1176,9 +1217,7 @@ void TypeChecker::TypeCheckerImpl::CheckOverridingOrRedefinitionOfDeprecatedProp
         return;
     }
 
-    // Checking overriding/redefinition of deprecated property
-    auto getterOverride = GetUsableGetterForProperty(*propOverride);
-    auto setterOverride = propOverride->isVar ? GetUsableSetterForProperty(*propOverride) : nullptr;
+    // Checking overriding/redefinition of deprecated property.
     for (auto& inheritedType : cd->inheritedTypes) {
         auto inheritedDecl = Ty::GetDeclPtrOfTy(inheritedType->GetTy());
         if (!inheritedDecl) {
@@ -1190,21 +1229,23 @@ void TypeChecker::TypeCheckerImpl::CheckOverridingOrRedefinitionOfDeprecatedProp
                 if (basePropDecl->TestAttr(Attribute::GENERIC)) {
                     return;
                 }
-                auto propGetter = GetUsableGetterForProperty(*basePropDecl);
-                if (propGetter && getterOverride && Is<FuncTy*>(getterOverride->GetTy()) &&
-                    Is<FuncTy*>(propGetter->GetTy()) && typeManager.IsFuncDeclSubType(*getterOverride, *propGetter)) {
+                Ptr<FuncDecl> baseMatchedGetter = nullptr;
+                auto getterOverride = FindCompatibleOverrideAccessor(
+                    propOverride->getters, basePropDecl->getters, typeManager, baseMatchedGetter);
+                if (getterOverride) {
                     CheckOverridingOrRedefiningOfDeprecated(
                         basePropDecl,
                         propOverride,
                         "property");
                 }
-                auto propSetter = basePropDecl->isVar ? GetUsableSetterForProperty(*basePropDecl) : nullptr;
-                if (propSetter && setterOverride && Is<FuncTy*>(setterOverride->GetTy()) &&
-                    Is<FuncTy*>(propSetter->GetTy()) && typeManager.IsFuncDeclSubType(*setterOverride, *propSetter)) {
-                    CheckOverridingOrRedefiningOfDeprecated(
-                        propSetter,
-                        setterOverride,
-                        "setter");
+                if (!propOverride->isVar || !basePropDecl->isVar) {
+                    continue;
+                }
+                Ptr<FuncDecl> baseMatchedSetter = nullptr;
+                auto setterOverride = FindCompatibleOverrideAccessor(
+                    propOverride->setters, basePropDecl->setters, typeManager, baseMatchedSetter);
+                if (setterOverride && baseMatchedSetter) {
+                    CheckOverridingOrRedefiningOfDeprecated(baseMatchedSetter, setterOverride, "setter");
                 }
             }
         }
@@ -1240,13 +1281,12 @@ void TypeChecker::TypeCheckerImpl::CheckUsageOfDeprecatedSetter(
             return;
         }
 
-        auto setter = GetUsableSetterForProperty(*pd);
-        if (setter && setter->HasAnno(AnnotationKind::DEPRECATED)) {
-            DiagnoseDeprecatedUsage(
-                ae->leftValue,
-                setter,
-                pd->identifier.GetRawText()
-            );
+        for (auto& setter : pd->setters) {
+            if (!setter || !setter->HasAnno(AnnotationKind::DEPRECATED)) {
+                continue;
+            }
+            DiagnoseDeprecatedUsage(ae->leftValue, setter.get(), pd->identifier.GetRawText());
+            return;
         }
     }
 }

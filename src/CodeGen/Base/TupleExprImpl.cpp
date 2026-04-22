@@ -110,7 +110,8 @@ llvm::Value* GenerateOptionLikeT(IRBuilder2& irBuilder, const CHIR::Tuple& tuple
     auto p1i8 = irBuilder.getInt8PtrTy(1U);
     auto chirEnumType = StaticCast<CHIR::EnumType*>(tuple.GetResult()->GetType());
     auto enumTi = irBuilder.CreateTypeInfo(chirEnumType);
-    auto enumVal = irBuilder.CallIntrinsicAllocaGeneric({enumTi, irBuilder.GetSizeFromTypeInfo(enumTi)});
+    auto enumVal = irBuilder.CallIntrinsicAllocaGeneric(
+        {enumTi, irBuilder.GetSizeFromTypeInfo(enumTi)}, IsLocalRegion(*chirEnumType));
     auto payload = irBuilder.GetPayloadFromObject(enumVal);
     auto castedPayload = irBuilder.CreateBitCast(payload, p1i8);
     auto associatedType = chirEnumType->GetTypeArgs()[0];
@@ -174,7 +175,8 @@ llvm::Value* GenerateOptionLikeNonRef(IRBuilder2& irBuilder, const CHIR::Tuple& 
         return enumVal;
     } else {
         auto enumTi = irBuilder.CreateTypeInfo(chirEnumType);
-        auto enumVal = irBuilder.CallIntrinsicAllocaGeneric({enumTi, irBuilder.GetSizeFromTypeInfo(enumTi)});
+        auto enumVal = irBuilder.CallIntrinsicAllocaGeneric(
+            {enumTi, irBuilder.GetSizeFromTypeInfo(enumTi)}, IsLocalRegion(*chirEnumType));
         auto payload = irBuilder.GetPayloadFromObject(enumVal);
         (void)irBuilder.CreateStore(**(cgMod | tuple.GetOperand(0)),
             irBuilder.CreateBitCast(payload, irBuilder.getInt1Ty()->getPointerTo(1U)));

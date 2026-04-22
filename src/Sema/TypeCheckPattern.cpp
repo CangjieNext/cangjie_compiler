@@ -311,11 +311,42 @@ bool TypeChecker::TypeCheckerImpl::ChkOpOverloadForConstPattern(ASTContext& ctx,
     return false;
 }
 
+static Ptr<Expr> GetSelector(ASTContext& ctx, AST::TypePattern& p)
+{
+    auto sym = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, p.scopeName, [](Symbol& symbol) {
+        auto k = symbol.node->astKind;
+        return k == ASTKind::MATCH_EXPR || k == ASTKind::IF_EXPR || k == ASTKind::WHILE_EXPR;
+    });
+    if (!sym || !sym->node) {
+        return nullptr;
+    }
+    auto node = sym->node;
+    if (node->astKind == ASTKind::MATCH_EXPR) {
+        return DynamicCast<MatchExpr>(node)->selector.get();
+    } else if (node->astKind == ASTKind::IF_EXPR) {
+        return DynamicCast<IfExpr>(node)->condExpr.get();
+    } else if (node->astKind == ASTKind::WHILE_EXPR) {
+        return DynamicCast<WhileExpr>(node)->condExpr.get();
+    }
+    return nullptr;
+}
+
 bool TypeChecker::TypeCheckerImpl::ChkTypePattern(ASTContext& ctx, Ty& target, TypePattern& p)
 {
     CJC_NULLPTR_CHECK(p.pattern);
     CJC_NULLPTR_CHECK(p.type);
     p.type->SetTy(Synthesize({ctx, SynPos::NONE}, p.type.get()));
+    bool checked = typeManager.IsSubtype(&target, p.type->GetTy(), true, false);
+    if (checked) {
+        if (auto selector = GetSelector(ctx, p)) {
+            if (selector->GetTy()->Modal().local == LocalModal::FULL && IsExternalLocal(ctx, *selector)) {
+                // cannot match external local! type with local! local variable, it only matches local?
+                if (p.type->GetTy()->Modal().local == LocalModal::FULL) {
+                    checked = false;
+                }
+            }
+        }
+    }
     CJC_NULLPTR_CHECK(p.type->GetTy());
     if (typeManager.IsSubtype(&target, p.type->GetTy(), true, false)) {
         p.needRuntimeTypeCheck = false;
@@ -390,15 +421,15 @@ bool TypeChecker::TypeCheckerImpl::ChkEnumPattern(ASTContext& ctx, Ty& target, E
     }
     if (mayMatch) {
         if (auto enumTy = DynamicCast<EnumTy*>(p.constructor->GetTy());
-            enumTy && typeManager.IsTyEqual(p.constructor->GetTy(), &target)) {
-            p.SetTy(p.constructor->GetTy());
+            enumTy && typeManager.IsSameDataType(p.constructor->GetTy(), &target)) {
+            p.SetTy(&target);
             return true;
         } else if (auto funcTy = DynamicCast<FuncTy*>(p.constructor->GetTy()); funcTy) {
             if (!IsFuncTyEnumPatternMatched(ctx, target, *funcTy, p)) {
                 p.SetTy(TypeManager::GetInvalidTy());
                 return false;
             }
-            p.SetTy(funcTy->retTy);
+            p.SetTy(&target);
             return true;
         }
     }
@@ -416,12 +447,17 @@ bool TypeChecker::TypeCheckerImpl::IsFuncTyEnumPatternMatched(
     }
     for (size_t i = 0; i < p.patterns.size(); i++) {
         CJC_NULLPTR_CHECK(p.patterns[i]);
-        if (funcTy.paramTys[i] == nullptr || !ChkPattern(ctx, *funcTy.paramTys[i], *p.patterns[i])) {
+        if (funcTy.paramTys[i] == nullptr) {
+            return false;
+        }
+        // Substitute modal from target enum to the parameter type
+        auto paramTyWithModal = typeManager.SubstituteModal(funcTy.paramTys[i], target.Modal());
+        if (!ChkPattern(ctx, *paramTyWithModal, *p.patterns[i])) {
             return false;
         }
     }
-    if (!typeManager.IsTyEqual(funcTy.retTy, &target)) {
-        (void)diag.Diagnose(p, DiagKind::sema_pattern_not_match, "enum");
+    if (!typeManager.IsSameDataType(funcTy.retTy, &target)) {
+        diag.Diagnose(p, DiagKind::sema_pattern_not_match, "enum");
         return false;
     }
     return true;
@@ -473,7 +509,9 @@ bool TypeChecker::TypeCheckerImpl::ChkTuplePattern(ASTContext& ctx, Ty& target, 
             return false;
         }
         for (size_t i = 0; i < p.patterns.size(); i++) {
-            if (!Check(ctx, tupleTy->typeArgs[i], p.patterns[i].get())) {
+            // Substitute modal from target tuple to the type argument
+            auto typeArgWithModal = typeManager.SubstituteModal(tupleTy->typeArgs[i], target.Modal());
+            if (!Check(ctx, typeArgWithModal, p.patterns[i].get())) {
                 p.SetTy(TypeManager::GetInvalidTy());
                 return false;
             }

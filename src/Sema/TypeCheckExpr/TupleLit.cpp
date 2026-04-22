@@ -38,9 +38,11 @@ bool TypeChecker::TypeCheckerImpl::ChkTupleLit(ASTContext& ctx, Ty& target, Tupl
     std::vector<Ptr<Ty>> realElemTys;
     for (size_t i = 0; i < typeArgs.size(); ++i) {
         CJC_NULLPTR_CHECK(tl.children[i]);
-        if (!Check(ctx, typeArgs[i], tl.children[i].get())) {
-            if (Ty::IsTyCorrect(typeArgs[i]) && Ty::IsTyCorrect(tl.children[i]->GetTy())) {
-                DiagMismatchedTypes(diag, *tl.children[i], *typeArgs[i]);
+        // apply modal to each element type
+        auto itarget = typeManager.SubstituteModal(typeArgs[i], target.Modal());
+        if (!Check(ctx, itarget, tl.children[i].get())) {
+            if (Ty::IsTyCorrect(itarget) && Ty::IsTyCorrect(tl.children[i]->GetTy())) {
+                DiagMismatchedTypes(diag, *tl.children[i], *itarget);
             }
             tl.SetTy(Synthesize({ctx, SynPos::EXPR_ARG}, &tl));
             ReplaceIdealTy(tl);
@@ -59,6 +61,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTupleLit(ASTContext& ctx, Ty& target, Tupl
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTupleLit(ASTContext& ctx, TupleLit& tl)
 {
     std::vector<Ptr<Ty>> elemTy;
+    ModalInfo modal{static_cast<LocalModal>(0)};
     // Synthesize the type of each element.
     for (auto& it : tl.children) {
         if (!it) {
@@ -69,8 +72,12 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTupleLit(ASTContext& ctx, TupleLit& tl)
             Synthesize({ctx, SynPos::EXPR_ARG}, it.get());
         }
         ReplaceIdealTy(*it);
-        elemTy.push_back(it->GetTy());
+        elemTy.push_back(typeManager.SubstituteModal(it->GetTy(), {}));
+        modal = modal | it->GetTy()->Modal();
     }
-    tl.SetTy(typeManager.GetTupleTy(elemTy));
+    if (modal == ModalInfo{static_cast<LocalModal>(0)}) {
+        modal = {};
+    }
+    tl.SetTy(typeManager.GetTupleTy(elemTy, false, modal));
     return tl.GetTy();
 }

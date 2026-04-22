@@ -83,7 +83,7 @@ bool ExtendBoxMarker::NeedAutoBox(Ptr<Ty> child, Ptr<Ty> interface, bool isUpcas
 void ExtendBoxMarker::CheckBlockNeedBox(const Block& block, Ty& ty, Node& nodeToCheck)
 {
     auto lastExpr = block.GetLastExprOrDecl();
-    Ptr<Ty> lastTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    Ptr<Ty> lastTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT, {});
     if (auto expr = DynamicCast<Expr*>(lastExpr); expr) {
         lastTy = expr->GetTy();
     }
@@ -125,7 +125,7 @@ VisitAction ExtendBoxMarker::MarkBoxPointHandleArrayExpr(ArrayExpr& ae)
     }
     Ptr<InterfaceDecl> collDecl = iface->GetGenericTy() ? iface->GetGenericTy()->decl : iface->decl;
     auto eleTy = typeManager->GetTypeArgs(*ae.GetTy())[0];
-    Ptr<Ty> expectedColl = typeManager->GetInterfaceTy(*collDecl, {eleTy});
+    Ptr<Ty> expectedColl = typeManager->GetInterfaceTy(*collDecl, {eleTy}, {});
     if (NeedAutoBox(argTy, expectedColl)) {
         ae.EnableAttr(Attribute::NEED_AUTO_BOX);
     }

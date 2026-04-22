@@ -9,6 +9,7 @@
  *
  * This file implements extend type check.
  */
+#include "CJMP/MPTypeCheckerImpl.h"
 #include "TypeCheckUtil.h"
 #include "TypeCheckerImpl.h"
 
@@ -32,7 +33,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendGenerics(const ExtendDecl& ed)
         isMovedCommonED) {
         return;
     }
-    auto usedGenericTys = GetAllGenericTys(ed.extendedType->GetTy());
+    auto usedGenericTys = GetAllGenericTys(typeManager, ed.extendedType->GetTy());
     std::vector<std::string> unusedTypes;
     for (auto& it : ed.generic->typeParameters) {
         if (usedGenericTys.count(it->GetTy()) == 0) {

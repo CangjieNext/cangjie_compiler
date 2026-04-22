@@ -19,6 +19,11 @@
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 
+namespace Cangjie {
+class CompilerInstance;
+using VirtualWrapperDepMap = std::unordered_map<std::string, std::string>;
+} // namespace Cangjie
+
 namespace Cangjie::CHIR {
 class ToCHIR {
 public:

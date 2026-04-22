@@ -63,8 +63,10 @@ Ptr<Value> Translator::TranslateTupleAccess(const AST::SubscriptExpr& subscriptE
         base = CreateAndAppendExpression<Load>(
             loc, StaticCast<RefType*>(base->GetType())->GetBaseType(), base, currentBlock)->GetResult();
     }
-    auto res = CreateAndAppendExpression<Field>(loc, chirTy.TranslateType(*subscriptExpr.GetTy()), base,
-        std::vector<uint64_t>(indexs.cbegin(), indexs.cend()), currentBlock);
+    Type* resultTy = chirTy.TranslateType(*subscriptExpr.GetTy());
+    resultTy = builder.SubstituteModal(resultTy, base->GetType()->Modal());
+    auto res = CreateAndAppendExpression<Field>(
+        loc, resultTy, base, std::vector<uint64_t>(indexs.cbegin(), indexs.cend()), currentBlock);
     /*
         If the SubscriptExpr is added by compiler, DCE will skip it.
         for example code:
@@ -112,7 +114,9 @@ Ptr<Value> Translator::TranslateVArrayAccess(const AST::SubscriptExpr& subscript
         .kind = IntrinsicKind::VARRAY_GET,
         .args = indexs
     };
-    return CreateAndAppendExpression<Intrinsic>(
-        loc, chirTy.TranslateType(*subscriptExpr.GetTy()), callContext, currentBlock)
-        ->GetResult();
+    Type* baseValueTy =
+        base->GetType()->IsRef() ? StaticCast<RefType*>(base->GetType())->GetBaseType() : base->GetType();
+    Type* resultTy = chirTy.TranslateType(*subscriptExpr.GetTy());
+    resultTy = builder.SubstituteModal(resultTy, baseValueTy->Modal());
+    return CreateAndAppendExpression<Intrinsic>(loc, resultTy, callContext, currentBlock)->GetResult();
 }

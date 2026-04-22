@@ -528,7 +528,8 @@ void TypeChecker::TypeCheckerImpl::ReArrangeForInStringExpr(ASTContext& ctx, For
     auto end = CreateTmpVarDecl();
     auto sizeDecl = FieldLookup(ctx, Ty::GetDeclPtrOfTy(tmp->GetTy()), "size", {.lookupExtend = false});
     CJC_ASSERT(!sizeDecl.empty());
-    auto getter = StaticCast<FuncDecl*>(GetUsedMemberDecl(*sizeDecl[0], true));
+    // TODO: design for in modal syntax
+    auto getter = StaticCast<FuncDecl*>(GetUsedMemberDecl(typeManager, diag, *sizeDecl[0], true, {}));
     CJC_NULLPTR_CHECK(getter);
     end->initializer =
         CreateCallExpr(CreateMemberAccess(CreateRefExpr(*tmp), *getter), {}, getter, sizeDecl[0]->GetTy());
@@ -762,7 +763,7 @@ void TypeChecker::TypeCheckerImpl::DesugarForInString(ASTContext& ctx, AST::ForI
     auto end = CreateTmpVarDecl();
     auto sizeDecl = FieldLookup(ctx, Ty::GetDeclPtrOfTy(tmp->GetTy()), "size", {.lookupExtend = false});
     CJC_ASSERT(!sizeDecl.empty());
-    auto getter = StaticCast<FuncDecl*>(GetUsedMemberDecl(*sizeDecl[0], true));
+    auto getter = StaticCast<FuncDecl*>(GetUsedMemberDecl(typeManager, diag, *sizeDecl[0], true, {}));
     CJC_NULLPTR_CHECK(getter);
     end->initializer =
         CreateCallExpr(CreateMemberAccess(CreateRefExpr(*tmp), *getter), {}, getter, sizeDecl[0]->GetTy());

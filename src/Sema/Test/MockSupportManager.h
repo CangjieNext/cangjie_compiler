@@ -22,7 +22,7 @@ namespace Cangjie {
 
 class MockSupportManager {
 public:
-    explicit MockSupportManager(TypeManager& typeManager, const Ptr<MockUtils> mockUtils);
+    explicit MockSupportManager(TypeManager& typeManager, DiagnosticEngine& d, Ptr<MockUtils> mockUtils);
     static bool IsDeclOpenToMock(const AST::Decl& decl);
     static bool DoesClassLikeSupportMocking(AST::ClassLikeDecl& classLikeToCheck);
     static bool NeedToSearchCallsToReplaceWithAccessors(AST::Node& node);
@@ -32,7 +32,8 @@ public:
         AST::Expr& originalExpr, bool isInConstructor, bool isSubMemberAccess = false);
     void ReplaceInterfaceDefaultFunc(AST::Expr& originalExpr, Ptr<AST::Ty> outerTy, bool isInMockAnnotatedLambda);
     void ReplaceInterfaceDefaultFuncInCall(AST::Node& node, Ptr<AST::Ty> outerty, bool isInMockAnnotatedLambda);
-    static void MarkNodeMockSupportedIfNeeded(AST::Node& node);
+    void MarkNodeMockSupportedIfNeeded(AST::Node& node);
+    void WriteGeneratedMockDecls();
     void PrepareToSpy(AST::Decl& decl);
 
     struct DeclsToPrepare {
@@ -62,6 +63,7 @@ public:
 
 private:
     TypeManager& typeManager;
+    DiagnosticEngine& diag;
     Ptr<MockUtils> mockUtils;
     std::unordered_set<Ptr<AST::Decl>> usedInternalDecls;
 

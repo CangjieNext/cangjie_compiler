@@ -643,7 +643,7 @@ protected:
         auto joinRes =
             JoinAndMeet(checker.typeManager, arrayElemTys, {}, &checker.importManager, al.curFile).JoinAsVisibleTy();
         if (auto ty = std::get_if<Ptr<Ty>>(&joinRes)) {
-            al.SetTy(checker.typeManager.GetStructTy(*arrayStruct, {*ty}));
+            al.SetTy(checker.typeManager.GetStructTy(*arrayStruct, {*ty}, (*ty)->Modal()));
         } else {
             tys.emplace(TypeManager::GetInvalidTy());
             return SynResult(tys);

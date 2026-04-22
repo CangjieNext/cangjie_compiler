@@ -419,10 +419,35 @@ void TypeChecker::TypeCheckerImpl::AddDefaultSuperCall(const FuncBody& funcBody)
     CopyBasicInfo(&funcBody, superCall->baseFunc.get());
     superCall->EnableAttr(Attribute::COMPILER_ADD);
     if (funcBody.body) {
-        if (funcBody.body->body.empty()) {
-            superCall->begin = funcBody.begin;
+        // Check if init has this @local! or this @local? and whole body is exclave
+        bool shouldInsertIntoExclave = false;
+        if (!funcBody.body->body.empty() && funcBody.body->body[0]->astKind == ASTKind::EXCLAVE_EXPR) {
+            // cannot use thisParam ty, Ty has not been deduced yet
+            auto& thisParam = funcBody.paramLists[0]->thisParam;
+            if (thisParam && thisParam->modal.ToModalInfo() != LocalModal::NOT) {
+                shouldInsertIntoExclave = true;
+            }
         }
-        funcBody.body->body.insert(funcBody.body->body.begin(), std::move(superCall));
+
+        if (shouldInsertIntoExclave) {
+            // skip invalid init body
+            if (!Is<ExclaveExpr>(funcBody.body->body[0])) {
+                return;
+            }
+            // Insert into the first line of the exclave body
+            auto exclave = StaticCast<ExclaveExpr*>(funcBody.body->body[0].get());
+            if (exclave->body) {
+                superCall->begin = exclave->body->leftCurlPos;
+                superCall->end = exclave->body->rightCurlPos;
+            }
+            exclave->body->body.insert(exclave->body->body.begin(), std::move(superCall));
+        } else {
+            // Original behavior: insert at beginning of function body
+            if (funcBody.body->body.empty()) {
+                superCall->begin = funcBody.begin;
+            }
+            funcBody.body->body.insert(funcBody.body->body.begin(), std::move(superCall));
+        }
     }
 }
 
@@ -565,14 +590,7 @@ void TypeChecker::TypeCheckerImpl::CheckRecursiveConstructorCall(const std::vect
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::HasModifier(const std::set<Modifier>& modifiers, TokenKind kind) const
-{
-    return std::any_of(modifiers.begin(), modifiers.end(), [kind](const auto& it) { return it.modifier == kind; });
-}
-
-bool TypeChecker::TypeCheckerImpl::IsDeprecatedStrict(
-    const Ptr<Decl> decl
-) const
+bool TypeChecker::TypeCheckerImpl::IsDeprecatedStrict(const Ptr<Decl> decl) const
 {
     for (auto& anno: decl->annotations) {
         if (anno->kind == AnnotationKind::DEPRECATED) {
