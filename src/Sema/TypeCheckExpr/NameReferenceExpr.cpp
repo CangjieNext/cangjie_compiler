@@ -6,19 +6,21 @@
 
 #include "TypeCheckerImpl.h"
 
+#include "CJMP/MPTypeCheckerImpl.h"
 #include "DiagSuppressor.h"
 #include "Diags.h"
 #include "EnumSugarChecker.h"
 #include "EnumSugarTargetsFinder.h"
+#include "ExtraScopes.h"
 #include "LocalTypeArgumentSynthesis.h"
 #include "TypeCheckUtil.h"
-#include "ExtraScopes.h"
 
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/Basic/Match.h"
-#include "cangjie/Modules/ModulesUtils.h"
+#include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Macro/TestEntryConstructor.h"
+#include "cangjie/Modules/ModulesUtils.h"
 
 using namespace Cangjie;
 using namespace Sema;
@@ -36,6 +38,23 @@ bool IsEnumNeedSynthesis(Expr& expr, const Decl& target)
         ref = ma->baseExpr.get();
     }
     return ref && NeedFurtherInstantiation(ref->GetTypeArgs());
+}
+
+bool CheckEnumCtorModal(TypeManager& tyMgr, Ty& target, Expr& expr)
+{
+    // refNode is enum ctor, target ty is the enum with any local, it is good if
+    // 1) either refNode's modal is subtype of target's modal (which is checked later)
+    // 2) or refNode does not specify modal. in this case, convert refNode's modal to target's modal
+    // the following to if's are both of 2)
+    if (Is<RefExpr>(&expr)) {
+        expr.SetTy(tyMgr.SubstituteModal(expr.GetTy(), target.Modal()));
+        return true;
+    } else if (auto ma = DynamicCast<MemberAccess>(&expr);
+        ma && ma->baseExpr && Ty::IsTyCorrect(ma->baseExpr->GetTy())) {
+        expr.SetTy(tyMgr.SubstituteModal(expr.GetTy(), ma->baseExpr->GetTy()->Modal()));
+        return true;
+    }
+    return false;
 }
 
 bool CheckInferrableEnumReference(DiagnosticEngine& diag, TypeManager& tyMgr, Expr& expr, Ty& target)
@@ -78,7 +97,14 @@ bool CheckNonFunctionReference(DiagnosticEngine& diag, TypeManager& tyMgr, Ty& t
         return CheckInferrableEnumReference(diag, tyMgr, refNode, target);
     }
 
-    bool isWellTyped = tyMgr.IsSubtype(refNode.GetTy(), &target);
+    bool isWellTyped = true;
+    if (checkEnumCtor) {
+        auto targetTy = tyMgr.SubstituteModal(&target, {});
+        auto foundTy = tyMgr.SubstituteModal(refNode.GetTy(), {});
+        isWellTyped = tyMgr.IsSubtype(foundTy, targetTy) && CheckEnumCtorModal(tyMgr, target, refNode);
+    } else {
+        isWellTyped = tyMgr.IsSubtype(refNode.GetTy(), &target);
+    }
     if (!isWellTyped) {
         DiagMismatchedTypes(diag, refNode, target);
         refNode.SetTy(TypeManager::GetInvalidTy());
@@ -459,7 +485,12 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
     }
     ModifyTargetOfRef(re, decl, targets);
     // Legality of using refExpr will be checked after typecheck in 'CheckLegalityOfReference'.
-    CJC_ASSERT(re.ref.target); // 're.ref.target' should be set in 'ModifyTargetOfRef'.
+    CJC_ASSERT(re.GetTarget()); // 're.GetTarget()' should be set in 'ModifyTargetOfRef'.
+    if (!Is<InheritableDecl>(decl) && !Is<BuiltInDecl>(decl) && !Is<TypeAliasDecl>(decl) && re.modal) {
+        DiagExpectedDataType(re);
+        re.SetTy(TypeManager::GetInvalidTy());
+        return;
+    }
 
     if (auto target = re.ref.target; target->IsBuiltIn()) {
         if (auto cfunc = StaticCast<BuiltInDecl>(target); cfunc->type == BuiltInType::CFUNC) {
@@ -477,13 +508,64 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
         re.SetTy(TypeManager::GetInvalidTy());
         return;
     }
-    re.SetTy(typeManager.SubstituteTypeAliasInTy(*re.ref.target->GetTy()));
+    if (re.GetTarget()->astKind != ASTKind::PROP_DECL) {
+        re.SetTy(typeManager.SubstituteTypeAliasInTy(*re.GetTarget()->GetTy()));
+    } else {
+        auto funNode = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, re.scopeName, [](Symbol& sym) {
+            if (auto funcDecl = DynamicCast<FuncDecl*>(sym.node)) {
+                return Is<InheritableDecl>(funcDecl->outerDecl) && !funcDecl->TestAttr(Attribute::STATIC);
+            }
+            return false;
+        });
+        if (funNode) {
+            auto foundTy = typeManager.GetThisParamTy(*StaticCast<FuncDecl>(funNode->node));
+            auto& pd = *StaticCast<PropDecl>(re.GetTarget());
+            CheckAssignToImmutProp(re);
+            auto valid = GetUsableAccessorForProperty(
+                typeManager, diag, pd, foundTy->Modal(), &re, !re.TestAttr(Attribute::LEFT_VALUE));
+            if (!valid) {
+                re.SetTy(TypeManager::GetInvalidTy());
+                return;
+            }
+            // set here to avoid call GetUsableAccessorForProperty again
+            if (valid->isGetter) {
+                re.SetTy(StaticCast<FuncTy>(valid->GetTy())->retTy);
+            } else {
+                re.SetTy(StaticCast<FuncTy>(valid->GetTy())->paramTys[0]);
+            }
+        } else {
+            // static prop, use old logic
+            re.SetTy(typeManager.SubstituteTypeAliasInTy(*re.GetTarget()->GetTy()));
+        }
+    }
     if (!decl->IsFunc() || re.isAlone) {
         // Only check non-function or non-call target. Functions will be check after function overload resolution.
         InstantiateReferenceType(ctx, re);
+        // Member var (implicit this access): use current this modal.
+        if (decl->astKind == ASTKind::VAR_DECL && decl->IsMemberDecl() &&
+            !decl->TestAnyAttr(Attribute::STATIC, Attribute::ENUM_CONSTRUCTOR)) {
+            re.SetTy(typeManager.SubstituteModal(re.GetTy(), GetCurThisModal(ctx, re.scopeName)));
+        }
+    }
+    if (re.modal) { // valid when ref is a type name followed by '.'
+        re.SetTy(typeManager.SubstituteModal(re.GetTy(), re.modal.ToModalInfo()));
     }
     if (Ty::IsInitialTy(re.GetTy())) {
         re.SetTy(TypeManager::GetInvalidTy());
+    }
+}
+
+void TypeChecker::TypeCheckerImpl::CheckAssignToImmutProp(NameReferenceExpr& re)
+{
+    auto pd = DynamicCast<PropDecl>(re.GetTarget());
+    if (pd && re.TestAttr(Attribute::LEFT_VALUE) && !pd->isVar) {
+        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_assign_to_immutable, re);
+        if (!pd->identifier.ZeroPos()) {
+            builder.AddNote(
+                *pd, MakeRange(pd->identifier), DeclKindToString(*pd) + " '" + pd->identifier + "' is immutable");
+            re.SetTy(TypeManager::GetInvalidTy());
+            return;
+        }
     }
 }
 
@@ -595,7 +677,15 @@ void TypeChecker::TypeCheckerImpl::InferMemberAccess(ASTContext& ctx, MemberAcce
         ma.SetTy(TypeManager::GetInvalidTy());
         return;
     }
-    ma.SetTy(typeManager.SubstituteTypeAliasInTy(*ma.target->GetTy()));
+    if (Is<VarDecl>(ma.GetTarget())) {
+        // unless there is modality on the member.
+        ma.SetTy(typeManager.SubstituteTypeAliasInTy(*ma.GetTarget()->GetTy()));
+        ma.SetTy(typeManager.SubstituteModal(ma.GetTy(), ma.baseExpr->GetTy()->Modal()));
+    } else if (Is<PropDecl>(ma.GetTarget())) {
+        ma.SetTy(typeManager.SubstituteTypeAliasInTy(*ma.GetTy()));
+    } else {
+        ma.SetTy(typeManager.SubstituteTypeAliasInTy(*ma.GetTarget()->GetTy()));
+    }
     // Only instantiate ty for non-function or non-call. Function's will be done after overload resolution.
     if (!ma.target->IsFunc() || ma.isAlone) {
         InstantiateReferenceType(ctx, ma);
@@ -635,7 +725,7 @@ void TypeChecker::TypeCheckerImpl::InferArrayStaticAccess(const ASTContext& ctx,
         ma.SetTy(TypeManager::GetInvalidTy());
         return;
     }
-    ma.baseExpr->SetTy(typeManager.GetArrayTy(typeArgs[0]->GetTy(), 1));
+    ma.baseExpr->SetTy(typeManager.GetArrayTy(typeArgs[0]->GetTy(), 1, typeArgs[0]->GetTy()->Modal()));
     auto targets = ExtendFieldLookup(ctx, *ma.curFile, ma.baseExpr->GetTy(), ma.field);
     if (!FilterAndCheckTargetsOfNameAccess(ctx, ma, targets)) {
         return;
@@ -711,6 +801,7 @@ void TypeChecker::TypeCheckerImpl::InferStaticAccess(const ASTContext& ctx, Memb
             targets = {target};
         }
     }
+    CheckAssignToImmutProp(ma);
 }
 
 void TypeChecker::TypeCheckerImpl::InferInstanceAccess(const ASTContext& ctx, MemberAccess& ma)
@@ -724,6 +815,19 @@ void TypeChecker::TypeCheckerImpl::InferInstanceAccess(const ASTContext& ctx, Me
     Ptr<Decl> target = GetObjMemberAccessTarget(ctx, ma, *baseExpr->GetTy());
     if (!target) {
         return;
+    }
+    if (target->astKind == ASTKind::PROP_DECL) {
+        ma.SetTarget(target);
+        auto& pd = *StaticCast<PropDecl>(target);
+        CheckAssignToImmutProp(ma);
+        auto expectModal = baseExpr->GetTy()->Modal();
+        Ptr<FuncDecl> acc =
+            GetUsableAccessorForProperty(typeManager, diag, pd, expectModal, &ma, !ma.TestAttr(Attribute::LEFT_VALUE));
+        if (!acc) {
+            ma.SetTy(TypeManager::GetInvalidTy());
+            return;
+        }
+        ma.SetTy(typeManager.GetAccessorTargetTy(*acc));
     }
     ReplaceTarget(&ma, target);
 }
@@ -962,7 +1066,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetObjMemberAccessTarget(
     auto outerDecl = GetCurInheritableDecl(ctx, ma.scopeName);
     bool searchExtend = !re || !re->isThis || !outerDecl || outerDecl->astKind == ASTKind::EXTEND_DECL;
     CJC_NULLPTR_CHECK(ma.curFile);
-    return match(baseExprTy)(
+    return match(*typeManager.SubstituteModal(&baseExprTy, {}))(
         [this, &ctx, &ma, searchExtend](ClassTy& classTy) {
             LookupInfo info{&classTy, ma.curFile, true, searchExtend, ma.TestAttr(AST::Attribute::LEFT_VALUE)};
             auto targets = FieldLookup(ctx, classTy.declPtr, ma.field, info);

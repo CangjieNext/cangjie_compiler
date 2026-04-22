@@ -13,11 +13,12 @@
 #include "TypeCheckerImpl.h"
 
 #include "Diags.h"
-#include "cangjie/AST/Clone.h"
-#include "cangjie/AST/Create.h"
-#include "cangjie/AST/RecoverDesugar.h"
 #include "NativeFFI/Java/TypeCheck/TypeCheckAnnotation.h"
 #include "NativeFFI/ObjC/TypeCheck/TypeCheckAnnotation.h"
+#include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Create.h"
+#include "cangjie/AST/Match.h"
+#include "cangjie/AST/RecoverDesugar.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -62,7 +63,7 @@ void DesugarAnnotationsArray(ImportManager& importManager, TypeManager& typeMana
         auto objectClass = importManager.GetCoreDecl<ClassDecl>(OBJECT_NAME);
         auto arrayStruct = importManager.GetCoreDecl<StructDecl>(STD_LIB_ARRAY);
         if (objectClass != nullptr && arrayStruct != nullptr) {
-            auto arrayTy = typeManager.GetStructTy(*arrayStruct, {objectClass->GetTy()});
+            auto arrayTy = typeManager.GetStructTy(*arrayStruct, {objectClass->GetTy()}, {});
             decl.annotationsArray = CreateArrayLit(std::move(annotationsArray), arrayTy);
             decl.annotationsArray->EnableAttr(Attribute::IS_ANNOTATION);
         } else {
@@ -124,7 +125,7 @@ void TypeChecker::TypeCheckerImpl::CheckAnnotationDecl(ASTContext& ctx, Annotati
         // Errors should have been reported if core package is not imported correctly.
         return;
     }
-    auto targetTy = typeManager.GetStructTy(*arrayStruct, {typeManager.GetEnumTy(*annotationKindEnum)});
+    auto targetTy = typeManager.GetStructTy(*arrayStruct, {typeManager.GetEnumTy(*annotationKindEnum, {}, {})}, {});
     (void)Check(ctx, targetTy, ann.args.front().get());
 }
 

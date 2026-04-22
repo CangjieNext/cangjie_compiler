@@ -142,13 +142,13 @@ ComparisonRes CompareIntAndFloat(const AST::Ty& left, const AST::Ty& right);
 /**
  * Util functions for manipulating 'MultiTypeSubst'.
  */
-std::set<TypeSubst> ExpandMultiTypeSubst(const MultiTypeSubst& mts, const std::set<Ptr<AST::Ty>>& usefulTys);
+std::set<TypeSubst> ExpandMultiTypeSubst(
+    TypeManager& tm, const MultiTypeSubst& mts, const std::set<Ptr<AST::Ty>>& usefulTys);
 std::vector<SubstPack> ExpandMultiTypeSubst(const SubstPack& maps, const std::set<Ptr<AST::Ty>>& usefulTys);
 /**
  * Reduce type mapping to only contains direct mapping from given generic ty vars to instantiated tys.
  */
-MultiTypeSubst ReduceMultiTypeSubst(TypeManager& tyMgr, const TyVars& tyVars,
-    const MultiTypeSubst& mts);
+MultiTypeSubst ReduceMultiTypeSubst(TypeManager& tyMgr, const TyVars& tyVars, const MultiTypeSubst& mts);
 TypeSubst MultiTypeSubstToTypeSubst(const MultiTypeSubst& mts);
 TypeSubst GenerateTypeMappingByTy(const Ptr<AST::Ty> genericTy, const Ptr<AST::Ty> instantTy);
 TypeSubst GenerateTypeMapping(const AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& typeArgs);
@@ -161,7 +161,7 @@ void MergeMultiTypeSubsts(MultiTypeSubst& target, const MultiTypeSubst& src);
 /* u2i map can't have conflict between the two */
 void MergeSubstPack(SubstPack& target, const SubstPack& src);
 /** Get set of generic sema tys used in given @p ty */
-std::unordered_set<Ptr<AST::Ty>> GetAllGenericTys(Ptr<AST::Ty> const ty);
+std::unordered_set<Ptr<AST::Ty>> GetAllGenericTys(TypeManager& tm, Ptr<AST::Ty> ty);
 std::vector<Ptr<AST::Ty>> GetDeclTypeParams(const AST::Decl& decl);
 /** Get mapped type of given @p tyVar . If the tyVar is not mapped in TypeSubst/MultiTypeSubst, return itself. */
 Ptr<AST::Ty> GetMappedTy(const MultiTypeSubst& mts, TyVar* tyVar);
@@ -199,15 +199,21 @@ std::pair<bool, Ptr<AST::Decl>> GetRealMemberDecl(AST::Decl& decl);
  * Return the real used decl as a referenced target.
  * Return 'decl' it self for non-propDecl, return getter/setter function for propDecl.
  */
-Ptr<AST::Decl> GetUsedMemberDecl(AST::Decl& decl, bool isGetter);
+Ptr<AST::Decl> GetUsedMemberDecl(
+    TypeManager& tym, DiagnosticEngine& d, AST::Decl& decl, bool isGetter, AST::ModalInfo expectModal);
 std::string DeclKindToString(const AST::Decl& decl);
 /**
  * Get string of given decls' ast type.
  */
 std::string GetTypesStr(std::vector<Ptr<AST::Decl>>& decls);
-std::pair<Ptr<AST::FuncDecl>, Ptr<AST::FuncDecl>> GetUsableGetterSetterForProperty(AST::PropDecl& pd);
-Ptr<AST::FuncDecl> GetUsableGetterForProperty(AST::PropDecl& pd);
-Ptr<AST::FuncDecl> GetUsableSetterForProperty(AST::PropDecl& pd);
+std::pair<Ptr<AST::FuncDecl>, Ptr<AST::FuncDecl>> GetUsableGetterSetterForProperty(
+    TypeManager& tm, DiagnosticEngine& diag, AST::PropDecl& pd);
+
+/// @param pos the position to report an error
+Ptr<AST::FuncDecl> GetUsableAccessorForProperty(TypeManager& tm, DiagnosticEngine& diag, AST::PropDecl& pd,
+    AST::ModalInfo thisModal, AST::Expr* pos, bool isGetter);
+Ptr<AST::FuncDecl> GetUsableGetterForProperty(TypeManager& tm, DiagnosticEngine& diag, AST::PropDecl& pd);
+Ptr<AST::FuncDecl> GetUsableSetterForProperty(TypeManager& tm, DiagnosticEngine& diag, AST::PropDecl& pd);
 /** Collect all related extends of 'decl' and it's super classes' extends if exist. */
 std::set<Ptr<AST::ExtendDecl>> CollectAllRelatedExtends(TypeManager& tyMgr, AST::InheritableDecl& boxedDecl);
 std::unordered_set<Ptr<AST::Ty>> GetContextGenericTys(const ASTContext& ctx, const AST::Expr& expr);
@@ -222,6 +228,8 @@ inline Ptr<AST::InheritableDecl> GetCurInheritableDecl(const ASTContext& ctx, co
 
 /* Utils for TypeCheckCall and TypeArgumentInference */
 bool IsCStringConstructor(const AST::FuncDecl& fd);
+/// Get a ctor call modal written by the user, e.g. Foo @local!() or Option<Int> @local.Some(1). Returns empty if none.
+std::optional<AST::ModalInfo> GetCallBaseModal(const AST::CallExpr& ce);
 bool IsEnumCtorWithoutTypeArgs(const AST::Expr& expr, Ptr<const AST::Decl> target);
 TyVars GetTyVars(const AST::FuncDecl& fd, const AST::CallExpr& ce, bool ignoreContext = false);
 TyVars GetTyVarsToSolve(const SubstPack& maps);
@@ -253,6 +261,16 @@ Ptr<const AST::Modifier> FindModifier(const AST::Decl& d, TokenKind kind);
  */
 Ptr<AST::Annotation> FindFirstAnnotation(const AST::Decl& decl, AST::AnnotationKind kind);
 
+AST::ModalInfo GetThisParamModal(const AST::FuncDecl& fd);
+
+/**
+ * From @p scopeName's current scope, walk outward to the first non-static FuncDecl
+ * Returns that function's `this` parameter modal.
+ */
+AST::ModalInfo GetCurThisModal(const ASTContext& ctx, const std::string& scopeName);
+
+bool HasModifier(const std::set<AST::Modifier>& modifiers, TokenKind kind);
+
 inline bool HasCFuncAttr(const AST::Decl& decl)
 {
     return decl.TestAnyAttr(AST::Attribute::C, AST::Attribute::FOREIGN);
@@ -270,7 +288,8 @@ Ptr<AST::Ty> FindSmallestTy(
 bool LessThanAll(Ptr<AST::Ty> ty, const std::set<Ptr<AST::Ty>>& tys,
     const std::function<bool(Ptr<AST::Ty>, Ptr<AST::Ty>)>& lessThan);
 void TryEnforceCandidate(TyVar& tv, const std::set<Ptr<AST::Decl>>& candidates, TypeManager& tyMgr);
-std::set<Ptr<AST::Ty>> TypeMapToTys(const std::map<AST::TypeKind, AST::TypeKind>& m, bool fromKey);
+std::set<Ptr<AST::Ty>> TypeMapToTys(
+    const std::map<AST::TypeKind, AST::TypeKind>& m, bool fromKey, AST::ModalInfo modalInfo);
 // get generic params for the decl and outer decl(if there is) and extended decl(if there is)
 std::set<Ptr<AST::Ty>> GetGenericParamsForDecl(const AST::Decl& decl);
 // get generic params for the decl of the type
@@ -278,19 +297,16 @@ std::set<Ptr<AST::Ty>> GetGenericParamsForTy(const AST::Ty& ty);
 // get generic params for all decls used in the call
 std::set<Ptr<AST::Ty>> GetGenericParamsForCall(const AST::CallExpr& ce, const AST::FuncDecl& fd);
 
-OwnedPtr<AST::ThrowExpr> CreateThrowException(
-    const AST::ClassDecl& exceptionDecl, std::vector<OwnedPtr<AST::Expr>> args,
-    AST::File& curFile, TypeManager& typeManager);
-std::optional<std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>>> FindInitDecl(
-    const AST::InheritableDecl& decl, TypeManager& typeManager,
-    std::vector<OwnedPtr<AST::Expr>>& valueArgs, const std::vector<Ptr<AST::Ty>> instTys = {});
-std::optional<std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>>> FindInitDecl(
-    const AST::InheritableDecl& decl, TypeManager& typeManager,
-    const std::vector<Ptr<AST::Ty>> valueParamTys, const std::vector<Ptr<AST::Ty>> instTys = {});
-OwnedPtr<AST::CallExpr> CreateInitCall(
-    const std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>> initDeclInfo,
-    std::vector<OwnedPtr<AST::Expr>>& valueArgs,
-    AST::File& curFile, const std::vector<Ptr<AST::Ty>> instTys = {});
+OwnedPtr<AST::ThrowExpr> CreateThrowException(const AST::ClassDecl& exceptionDecl,
+    std::vector<OwnedPtr<AST::Expr>> args, AST::File& curFile, TypeManager& typeManager);
+std::optional<std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>>> FindInitDecl(const AST::InheritableDecl& decl,
+    TypeManager& typeManager, std::vector<OwnedPtr<AST::Expr>>& valueArgs,
+    const std::vector<Ptr<AST::Ty>> instTys = {});
+std::optional<std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>>> FindInitDecl(const AST::InheritableDecl& decl,
+    TypeManager& typeManager, const std::vector<Ptr<AST::Ty>> valueParamTys,
+    const std::vector<Ptr<AST::Ty>> instTys = {});
+OwnedPtr<AST::CallExpr> CreateInitCall(const std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>> initDeclInfo,
+    std::vector<OwnedPtr<AST::Expr>>& valueArgs, AST::File& curFile, const std::vector<Ptr<AST::Ty>> instTys = {});
 
 Ptr<AST::FuncDecl> GenerateGetTypeForTypeParamIntrinsic(AST::Package& pkg, TypeManager& typeManager);
 

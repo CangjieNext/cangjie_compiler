@@ -358,6 +358,9 @@ void SaveDeclBasicInfo(const DeclInfo& declInfo, PackageFormat::DeclBuilder& dbu
     dbuilder.add_identifierPos(&declInfo.identifierPos);
     dbuilder.add_attributes(declInfo.attributes);
     dbuilder.add_type(declInfo.ty);
+    if (declInfo.tyMode.o != 0) {
+        dbuilder.add_tyMode(declInfo.tyMode);
+    }
     dbuilder.add_isTopLevel(declInfo.isTopLevel);
     // For incremental compilation.
     dbuilder.add_mangledBeforeSema(declInfo.mangledBeforeSema);
@@ -997,6 +1000,9 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveType(Ptr<const Ty> pType)
     if (Ty::IsInitialTy(pType)) {
         return INVALID_FORMAT_INDEX;
     }
+    // SemaTy in the package format has no modal; modal is carried only where FBS has a parallel Mode
+    // (e.g. FuncTyInfo, Expr.tyMode, Decl.tyMode). Types stored as plain indices must be the {} shape.
+    CJC_ASSERT(pType->Modal() == ModalInfo{});
     // if ty already saved, just return its index.
     auto found = savedTypeMap.find(pType);
     if (found != savedTypeMap.end()) {
@@ -1071,7 +1077,7 @@ TTypeOffset ASTWriter::ASTWriterImpl::SaveNominalTy(const Ty& type)
     auto fullIdDeclPtr = GetFullDeclIndex(declPtr);
     std::vector<FormattedIndex> typeArgs;
     for (auto& it : type.typeArgs) {
-        typeArgs.push_back(SaveType(it));
+        typeArgs.push_back(SaveType(typeManager.SubstituteModal(it.get(), {})));
     }
     auto vtypeArgs = builder.CreateVector<FormattedIndex>(typeArgs);
     auto info = PackageFormat::CreateCompositeTyInfo(builder, fullIdDeclPtr, Is<ClassThisTy, Ty>(type));
@@ -1090,7 +1096,7 @@ TTypeOffset ASTWriter::ASTWriterImpl::SaveGenericsTy(const GenericsTy& gty)
     std::set<Ptr<Ty>, CmpTyByName> sortedUppers; // Sort for bep.
     sortedUppers.insert(gty.upperBounds.begin(), gty.upperBounds.end());
     for (auto& it : sortedUppers) {
-        uppers.push_back(SaveType(it));
+        uppers.push_back(SaveType(typeManager.SubstituteModal(it.get(), {})));
     }
     auto vUppers = builder.CreateVector<FormattedIndex>(uppers);
     auto decl = GetFullDeclIndex(gty.decl);
@@ -1106,13 +1112,23 @@ TTypeOffset ASTWriter::ASTWriterImpl::SaveFuncTy(const FuncTy& type)
 {
     std::vector<FormattedIndex> paramTypes;
     for (auto& it : type.paramTys) {
-        paramTypes.push_back(SaveType(it));
+        paramTypes.push_back(SaveType(typeManager.SubstituteModal(it.get(), {})));
     }
     auto vParamTypes = builder.CreateVector<FormattedIndex>(paramTypes);
     // SaveType has side effect (it allocates an offset for the type)
     // DO NOT put it in another expression
-    FormattedIndex retType = SaveType(type.retTy);
-    auto info = PackageFormat::CreateFuncTyInfo(builder, retType, type.isC, type.hasVariableLenArg);
+    FormattedIndex retType =
+        type.retTy ? SaveType(typeManager.SubstituteModal(type.retTy.get(), {})) : INVALID_FORMAT_INDEX;
+    std::vector<ModalInfo> paramModals;
+    paramModals.reserve(type.paramTys.size());
+    for (auto p : type.paramTys) {
+        paramModals.push_back(p->Modal());
+    }
+    auto vTypeArgsMode = SaveModalVector(builder, paramModals);
+    const ModalInfo retMi = type.retTy ? type.retTy->Modal() : ModalInfo{};
+    auto retTyMode = SaveModal(builder, retMi);
+    auto info =
+        PackageFormat::CreateFuncTyInfo(builder, retType, type.isC, type.hasVariableLenArg, vTypeArgsMode, retTyMode);
     PackageFormat::SemaTyBuilder tbuilder(builder);
     tbuilder.add_kind(GetFormatTypeKind(type.kind));
     tbuilder.add_typeArgs(vParamTypes);
@@ -1185,11 +1201,29 @@ flatbuffers::Offset<PackageFormat::FuncParamList> ASTWriter::ASTWriterImpl::Save
         params.push_back(GetDeclIndex(it.get()));
         desugars.push_back(GetDeclIndex(it->desugarDecl.get()));
     }
+    // Do not save thisParam for @~local
+    FormattedIndex thisParam = INVALID_FORMAT_INDEX;
+    if (paramList.thisParam && !paramList.thisParam->GetTy()->IsDataType()) {
+        thisParam = GetDeclIndex(paramList.thisParam.get());
+    }
     auto vParamList = builder.CreateVector<FormattedIndex>(params);
     auto vDesugarList = builder.CreateVector<FormattedIndex>(desugars);
     PackageFormat::FuncParamListBuilder dbuilder(builder);
     dbuilder.add_params(vParamList);
     dbuilder.add_desugars(vDesugarList);
+    if (thisParam != INVALID_FORMAT_INDEX) {
+        dbuilder.add_thisParam(thisParam);
+    }
+    return dbuilder.Finish();
+}
+
+TDeclOffset ASTWriter::ASTWriterImpl::SaveThisParam(const ThisParam& tp, const DeclInfo& declInfo)
+{
+    CJC_ASSERT(!tp.GetTy()->IsDataType());
+    (void)tp;
+    PackageFormat::DeclBuilder dbuilder(builder);
+    SaveDeclBasicInfo(declInfo, dbuilder);
+    dbuilder.add_kind(PackageFormat::DeclKind_ThisParam);
     return dbuilder.Finish();
 }
 
@@ -1334,11 +1368,14 @@ TFuncBodyOffset ASTWriter::ASTWriterImpl::SaveFuncBody(const FuncBody& funcBody)
     if (fd && fd->TestAttr(Attribute::GENERIC_INSTANTIATED, Attribute::GENERIC)) {
         std::vector<flatbuffers::Offset<PackageFormat::FuncParamList>> paramLists;
         auto dummyList = builder.CreateVector<flatbuffers::Offset<PackageFormat::FuncParamList>>(paramLists);
-        return PackageFormat::CreateFuncBody(builder, dummyList, INVALID_FORMAT_INDEX, INVALID_FORMAT_INDEX, false, 0);
+        auto dummyRetTyMode = SaveModal(builder, {});
+        return PackageFormat::CreateFuncBody(
+            builder, dummyList, INVALID_FORMAT_INDEX, INVALID_FORMAT_INDEX, false, 0, dummyRetTyMode);
     }
     auto vparamLists = GetVirtualParamLists(funcBody);
-    FormattedIndex retType =
-        funcBody.retType ? SaveType(typeManager.ObtainsAliasType(funcBody.retType)) : INVALID_FORMAT_INDEX;
+    FormattedIndex retType = funcBody.retType
+        ? SaveType(typeManager.SubstituteModal(typeManager.ObtainsAliasType(funcBody.retType).get(), {}))
+        : INVALID_FORMAT_INDEX;
     // The frozen attribute is passed to a nested function.
     if (fd && fd->outerDecl && fd->outerDecl->astKind == ASTKind::FUNC_DECL) {
         auto outerFunc = StaticCast<FuncDecl>(fd->outerDecl);
@@ -1360,7 +1397,12 @@ TFuncBodyOffset ASTWriter::ASTWriterImpl::SaveFuncBody(const FuncBody& funcBody)
     auto bodyIdx = validBody ? SaveExpr(*funcBody.body) : INVALID_FORMAT_INDEX;
     // CaptureKind is need if the 'funcBody' is exported.
     uint8_t kind = validBody ? static_cast<uint8_t>(funcBody.captureKind) : 0;
-    return PackageFormat::CreateFuncBody(builder, vparamLists, retType, bodyIdx, false, kind);
+    ModalInfo retMi{};
+    if (funcBody.retType) {
+        retMi = funcBody.retType->GetTy()->Modal();
+    }
+    auto retTyMode = SaveModal(builder, retMi);
+    return PackageFormat::CreateFuncBody(builder, vparamLists, retType, bodyIdx, false, kind, retTyMode);
 }
 
 TDeclOffset ASTWriter::ASTWriterImpl::SaveFuncDecl(const FuncDecl& funcDecl, const DeclInfo& declInfo)
@@ -1676,8 +1718,9 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveDecl(const Decl& decl, bool isTopLe
             attrs.SetAttr(Attribute::SPECIFIC, false);
         }
     }
-    auto type =
-        attrs.TestAttr(Attribute::UNREACHABLE) ? INVALID_FORMAT_INDEX : SaveType(typeManager.ObtainsAliasType(&decl));
+    auto type = attrs.TestAttr(Attribute::UNREACHABLE)
+        ? INVALID_FORMAT_INDEX
+        : SaveType(typeManager.SubstituteModal(typeManager.ObtainsAliasType(&decl).get(), {}));
     auto begin = decl.GetBegin();
     auto end = decl.GetEnd();
     auto [pkgIndex, fileIndex] = GetFileIndex(begin.fileID);
@@ -1705,8 +1748,9 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveDecl(const Decl& decl, bool isTopLe
     if (serializingCommon) {
         dependencies = builder.CreateVector<TFullIdOffset>(CollectInitializationDependencies(decl, {}));
     }
+    auto declTyMode = SaveModal(builder, decl.GetTy()->Modal());
     DeclInfo declInfo{name, exportId, mangledName, rawMangleName, declHash, fullPackageName, posBegin, posEnd,
-        identifierPos, attributes, isConst, type, isTopLevel, annotations, dependencies};
+        identifierPos, attributes, isConst, type, isTopLevel, annotations, dependencies, declTyMode};
     TDeclOffset offset;
     auto foundWriter = declWriterMap.find(decl.astKind);
     if (foundWriter != declWriterMap.end()) {

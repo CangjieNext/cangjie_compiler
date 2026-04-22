@@ -28,6 +28,7 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Sema/Desugar.h"
+#include "cangjie/AST/ModalInfo.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
@@ -124,10 +125,48 @@ private:
         return decl.funcBody->paramLists.back()->params.back();
     }
 
+    static LocalModalAST ToLocalModalAST(ModalInfo modal)
+    {
+        switch (modal.local) {
+            case LocalModal::NOT:
+                return LocalModalAST::NOT;
+            case LocalModal::HALF:
+                return LocalModalAST::HALF;
+            case LocalModal::FULL:
+                return LocalModalAST::FULL;
+            default:
+                return LocalModalAST::NOT;
+        }
+    }
+
+    Ptr<Ty> RawArrayInstTy(BuiltInDecl& bid, ModalInfo modal)
+    {
+        auto elemTy = tm.GetGenericsTy(*bid.generic->typeParameters[0], {});
+        return c.GetBuiltInArrayType({elemTy}, modal);
+    }
+
+    void AddCtorThisParam(FuncDecl& fd, BuiltInDecl& bid, ModalInfo modal)
+    {
+        if (modal == ModalInfo{}) {
+            return;
+        }
+        CJC_ASSERT(!fd.funcBody->paramLists.empty());
+        auto& pl = *fd.funcBody->paramLists.back();
+        auto thisParam = MakeOwnedNode<ThisParam>();
+        CopyFileID(thisParam.get(), fd.curFile);
+        thisParam->curFile = fd.curFile;
+        thisParam->begin = {SYN_LINE, column++};
+        thisParam->modal.SetLocal(ToLocalModalAST(modal), {SYN_LINE, column++});
+        thisParam->outerDecl = &bid;
+        thisParam->end = {SYN_LINE, column++};
+        thisParam->SetTy(RawArrayInstTy(bid, modal));
+        pl.thisParam = std::move(thisParam);
+    }
+
     void CreateCStringMembers(BuiltInDecl& decl)
     {
         /// public init(cString: CPointer<UInt8>)
-        auto cptrUInt8 = tm.GetPointerTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8));
+        auto cptrUInt8 = tm.GetPointerTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8), {});
         auto fd = MakeCtor(decl);
         AddParamList(*fd);
         MakeFuncParam(*fd, "cString", cptrUInt8);
@@ -353,7 +392,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
 
     auto joinRes = JoinAndMeet(typeManager, arrayElemTys, {}, &importManager, al.curFile).JoinAsVisibleTy();
     if (auto ty = std::get_if<Ptr<Ty>>(&joinRes)) {
-        al.SetTy(typeManager.GetStructTy(*arrayStruct, {*ty}));
+        al.SetTy(typeManager.GetStructTy(*arrayStruct, {*ty}, (*ty)->Modal()));
     } else {
         al.SetTy(TypeManager::GetInvalidTy());
         auto errMsg = JoinAndMeet::CombineErrMsg(std::get<std::stack<std::string>>(joinRes));

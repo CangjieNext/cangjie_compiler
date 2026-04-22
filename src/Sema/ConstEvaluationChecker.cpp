@@ -697,6 +697,12 @@ private:
         return res;
     }
 
+    bool ChkExclaveExpr(const ExclaveExpr& ee, bool isWeak)
+    {
+        CJC_NULLPTR_CHECK(ee.body);
+        return ChkBlock(*ee.body, isWeak);
+    }
+
     bool ChkIfExpr(const IfExpr& ie, bool isWeak)
     {
         CJC_NULLPTR_CHECK(ie.condExpr);
@@ -899,6 +905,7 @@ private:
         {ASTKind::BLOCK, Proxy(&ConstEvaluationChecker::ChkBlock)},
         {ASTKind::ASSIGN_EXPR, Proxy(&ConstEvaluationChecker::ChkAssignExpr)},
         {ASTKind::INC_OR_DEC_EXPR, Proxy(&ConstEvaluationChecker::ChkIncOrDecExpr)},
+        {ASTKind::EXCLAVE_EXPR, Proxy(&ConstEvaluationChecker::ChkExclaveExpr)},
     };
 
     DiagnosticEngine& diag;

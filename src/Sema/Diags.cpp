@@ -247,6 +247,14 @@ void DiagOverloadConflict(DiagnosticEngine& diag, const std::vector<Ptr<FuncDecl
     }
 }
 
+DiagnosticBuilder DiagSemaMismatchedTypes(
+    DiagnosticEngine& diag, const Node& node, const std::string& expected, const std::string& found)
+{
+    auto db = diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, node);
+    db.AddMainHintArguments(expected, found);
+    return db;
+}
+
 void DiagMismatchedTypesWithFoundTy(DiagnosticEngine& diag, const Node& node, const std::string& expected,
     const std::string& found, const std::string& note)
 {
@@ -254,8 +262,7 @@ void DiagMismatchedTypesWithFoundTy(DiagnosticEngine& diag, const Node& node, co
         return;
     }
     CJC_ASSERT(expected != found);
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, node);
-    builder.AddMainHintArguments(expected, found);
+    auto builder = DiagSemaMismatchedTypes(diag, node, expected, found);
     if (!note.empty()) {
         builder.AddNote(note);
     }
@@ -267,23 +274,27 @@ void DiagMismatchedTypesWithFoundTy(
     if (!node.ShouldDiagnose(true)) {
         return;
     }
+    CJC_ASSERT(&expected != &found);
     CJC_ASSERT(Ty::IsTyCorrect(&expected));
     CJC_ASSERT(Ty::IsTyCorrect(&found));
     std::string expectedStr = expected.String();
     std::string foundStr = found.String();
     if (expectedStr == foundStr) {
-        auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, node);
         Ptr<Decl> expectedDecl = Ty::GetDeclPtrOfTy(&expected);
         if (expectedDecl) {
             expectedStr += "' in '" + expectedDecl->fullPackageName;
-            builder.AddNote(*expectedDecl, MakeRangeForDeclIdentifier(*expectedDecl), "'" + expectedStr + "'");
         }
         Ptr<Decl> foundDecl = Ty::GetDeclPtrOfTy(&found);
         if (foundDecl) {
             foundStr += "' in '" + foundDecl->fullPackageName;
+        }
+        auto builder = DiagSemaMismatchedTypes(diag, node, expectedStr, foundStr);
+        if (expectedDecl) {
+            builder.AddNote(*expectedDecl, MakeRangeForDeclIdentifier(*expectedDecl), "'" + expectedStr + "'");
+        }
+        if (foundDecl) {
             builder.AddNote(*foundDecl, MakeRangeForDeclIdentifier(*foundDecl), "'" + foundStr + "'");
         }
-        builder.AddMainHintArguments(expectedStr, foundStr);
         if (!note.empty()) {
             builder.AddNote(note);
         }
@@ -310,7 +321,7 @@ void DiagMismatchedTypes(DiagnosticEngine& diag, const Node& node, const Node& t
         auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types_because, node);
         auto tyStr = node.GetTy()->String();
         if (auto thisTy = DynamicCast<ClassThisTy*>(node.GetTy()); thisTy) {
-            tyStr = ClassTy(thisTy->name, *thisTy->declPtr, thisTy->typeArgs).String();
+            tyStr = ClassTy(thisTy->name, *thisTy->declPtr, thisTy->typeArgs, thisTy->Modal()).String();
         }
         builder.AddMainHintArguments(type.GetTy()->String(), tyStr);
         builder.AddHint(type, type.GetTy()->String(), because);
@@ -413,8 +424,13 @@ void DiagImmutableAccessMutableFunc(DiagnosticEngine& diag, const MemberAccess& 
 // `ae` can be `AssignExpr` or `IncOrDecExpr`.
 void DiagCannotAssignToImmutable(DiagnosticEngine& diag, const Expr& ae, const Expr& perpetrator)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_assign_to_immutable, ae);
     auto target = perpetrator.GetTarget();
+    // fix later: immut prop set would diag twice
+    // if disable immut prop set here, set of immut prop call result would not diag
+    // if disable immut prop set at the other place, the results would be strange because that place is in TypeCheck,
+    // but it is PostCheck here. old logic assume prop is always mutable and check later here, but with modal type
+    // prop undergoes overload resolution and must be done in TypeCheck.
+    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_assign_to_immutable, ae);
     if (target != nullptr && !target->identifier.ZeroPos()) {
         builder.AddNote(*target, MakeRange(target->identifier),
             DeclKindToString(*target) + " '" + target->identifier + "' is immutable");
@@ -423,6 +439,7 @@ void DiagCannotAssignToImmutable(DiagnosticEngine& diag, const Expr& ae, const E
             perpetrator, MakeRange(perpetrator.begin, perpetrator.end), "function call returns immutable value");
     }
 }
+
 // Common 'let' feild can not be assigned in constructor in common CLASS or STRUCT
 void DiagCJMPCannotAssignToImmutableCommonInCtor(DiagnosticEngine& diag, const Expr& ae, const Expr& perpetrator)
 {

@@ -55,8 +55,7 @@ bool TypeChecker::TypeCheckerImpl::ChkBlock(ASTContext& ctx, Ty& target, Block& 
         // Only unsafe block is allowed to exist on its own, and needs to diagnose here.
         auto ret = typeManager.IsSubtype(b.GetTy(), &target);
         if (!ret && b.TestAttr(Attribute::UNSAFE)) {
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, b);
-            builder.AddMainHintArguments(target.String(), b.GetTy()->String());
+            DiagSemaMismatchedTypes(diag, b, target.String(), b.GetTy()->String());
         }
         return ret;
     }

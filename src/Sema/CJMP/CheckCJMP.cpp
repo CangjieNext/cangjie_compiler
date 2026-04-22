@@ -747,7 +747,7 @@ bool NeedToReportMissingBody(const Decl& common, const Decl& specific)
 
 // PostTypeCheck for CJMP
 bool MPTypeCheckerImpl::MatchCJMPDeclAttrs(
-    const std::vector<Attribute>& attrs, const Decl& common, const Decl& specific) const
+    const std::vector<Attribute>& attrs, Decl& common, Decl& specific) const
 {
     for (auto attr : attrs) {
         if (common.TestAttr(attr) != specific.TestAttr(attr)) {
@@ -778,9 +778,11 @@ bool MPTypeCheckerImpl::MatchCJMPDeclAttrs(
                 if (common.TestAttr(attr)) {
                     diag.DiagnoseRefactor(DiagKindRefactor::sema_property_have_same_declaration_in_inherit_mut,
                         specific, specific.identifier.Val());
+                    specific.EnableAttr(Attribute::HAS_BROKEN);
                 } else {
                     diag.DiagnoseRefactor(DiagKindRefactor::sema_property_have_same_declaration_in_inherit_immut,
                         common, common.identifier.Val());
+                    common.EnableAttr(Attribute::HAS_BROKEN);
                 }
             } else if (common.astKind == ASTKind::CLASS_DECL && (attr == Attribute::SEALED || attr == Attribute::OPEN) &&
                 // Keep silent due to overloaded common funcs.
@@ -808,7 +810,7 @@ void MPTypeCheckerImpl::CheckCommonSpecificGenericMatch(const AST::Decl& specifi
     CheckGenericTypeBoundsMapped(commonDecl, specificDecl, parentBounds, childBounds, diag, typeManager);
 }
 
-bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(const InheritableDecl& commonDecl)
+bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(InheritableDecl& commonDecl)
 {
     auto specificDecl = commonDecl.specificImplementation;
     if (!specificDecl) {

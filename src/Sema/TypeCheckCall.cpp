@@ -15,13 +15,14 @@
 #include <algorithm>
 #include <tuple>
 
+#include "CJMP/MPTypeCheckerImpl.h"
 #include "Desugar/DesugarInTypeCheck.h"
 #include "DiagSuppressor.h"
 #include "Diags.h"
+#include "ExtraScopes.h"
 #include "JoinAndMeet.h"
 #include "LocalTypeArgumentSynthesis.h"
 #include "TypeCheckUtil.h"
-#include "ExtraScopes.h"
 
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
@@ -276,6 +277,33 @@ bool CompareParamTys(TypeManager& tyMgr, const std::vector<Ptr<AST::Ty>>& iTys, 
         }
     }
     return true;
+}
+
+// Check whether arg of i can be passed as arg of j (T_i <: T_j), or if i is better than j for ctor call.
+// Always return true if either does not have this param.
+bool CompareThisParamTy(
+    TypeManager& tyMgr, const FuncDecl& i, const FuncDecl& j, const CallExpr& ce, Ptr<AST::Ty> target)
+{
+    if (!tyMgr.HasThisParam(i) || !tyMgr.HasThisParam(j)) {
+        return true;
+    }
+    auto iThis = tyMgr.GetThisParamTy(i);
+    auto jThis = tyMgr.GetThisParamTy(j);
+    // ctor call has special rules for modal, because the modal can be deduced.
+    // in case let c: C@local? = C(), @local? is better, if no @local? is found, the other modals are equally good.
+    // in case let c: C = C(), only @~local is accepted.
+    // in case let c = C(), this means let c: C@~local = C(), so only @~local is accepted.
+    if ((ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) && target &&
+        !tyMgr.ImplementsCopyInterface(target)) {
+        // if target present in ctor call, exact modal prevails
+        if (iThis->Modal() == target->Modal() && jThis->Modal() != target->Modal()) {
+            return true;
+        }
+        // if modal equally good, neither overload is better, returns true
+        return iThis->Modal() == jThis->Modal();
+    }
+    auto r = iThis->Modal().IsSubModal(jThis->Modal());
+    return r;
 }
 
 std::vector<SubstPack> ResolveTypeMappings(
@@ -788,9 +816,8 @@ bool TypeChecker::TypeCheckerImpl::IsGenericCall(const ASTContext& ctx, const Ca
     return false;
 }
 
-// Pass parameters of candidate i to candidate j as arguments. Compare two candidates.
 bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
-    FunctionMatchingUnit& i, FunctionMatchingUnit& j, const CallExpr& ce)
+    FunctionMatchingUnit& i, FunctionMatchingUnit& j, const CallExpr& ce, Ptr<AST::Ty> target)
 {
     size_t argSize = i.tysInArgOrder.size();
     // Only resolve for generic when candidate is generic related and its parameter's types contains generic type.
@@ -808,6 +835,10 @@ bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
             return false;
         }
         for (size_t t = 0; t < argSize; ++t) { // Int64 has priority than float and other int.
+            if (!i.tysInArgOrder[t]->Modal().IsSubModal(j.tysInArgOrder[t]->Modal()) &&
+                !typeManager.ImplementsCopyInterface(i.tysInArgOrder[t])) {
+                return false;
+            }
             if (!i.tysInArgOrder[t]->IsNumeric() || !j.tysInArgOrder[t]->IsNumeric()) {
                 continue;
             }
@@ -816,14 +847,19 @@ bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
                 return false;
             }
         }
-        return true;
+        return CompareThisParamTy(typeManager, i.fd, j.fd, ce, target);
     }
     if (i.fd.outerDecl && j.fd.outerDecl) {
         // Since interface allows multiple inheritance, and have default functions, we need to resolve shadow case.
         // When both candidates are member functions and they have the same size of parameters and function signatures,
         // resolve them by deciding whether one is implementing the other.
         bool sameNumberOfParams = j.fd.GetTy()->typeArgs.size() == i.fd.GetTy()->typeArgs.size();
-        if (sameNumberOfParams && typeManager.IsFuncParameterTypesIdentical(i.tysInArgOrder, j.tysInArgOrder)) {
+        bool sameThisParam{true};
+        if (typeManager.HasThisParam(i.fd) && typeManager.HasThisParam(j.fd)) {
+            sameThisParam = GetThisParamModal(i.fd) == GetThisParamModal(j.fd);
+        }
+        if (sameNumberOfParams && sameThisParam &&
+            typeManager.IsFuncParameterTypesIdentical(i.tysInArgOrder, j.tysInArgOrder)) {
             bool isJImplementable =
                 j.fd.outerDecl->astKind == ASTKind::INTERFACE_DECL || j.fd.TestAttr(Attribute::ABSTRACT);
             bool isITheImplementation =
@@ -832,11 +868,12 @@ bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
         }
     }
     // Check whether T_i <: T_j
-    return CompareParamTys(typeManager, i.tysInArgOrder, j.tysInArgOrder);
+    return CompareParamTys(typeManager, i.tysInArgOrder, j.tysInArgOrder) &&
+        CompareThisParamTy(typeManager, i.fd, j.fd, ce, target);
 }
 
 std::vector<size_t> TypeChecker::TypeCheckerImpl::ResolveOverload(
-    std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, const CallExpr& ce)
+    std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, const CallExpr& ce, Ptr<AST::Ty> target)
 {
     auto targetNum = candidates.size();
     std::vector<bool> targetMark(targetNum, true); // When get false, the target is excluded.
@@ -849,8 +886,8 @@ std::vector<size_t> TypeChecker::TypeCheckerImpl::ResolveOverload(
             if (!targetMark[j]) {
                 continue;
             }
-            auto iToJ = CompareFuncCandidates(*candidates[i], *candidates[j], ce);
-            auto jToI = CompareFuncCandidates(*candidates[j], *candidates[i], ce);
+            auto iToJ = CompareFuncCandidates(*candidates[i], *candidates[j], ce, target);
+            auto jToI = CompareFuncCandidates(*candidates[j], *candidates[i], ce, target);
             if (iToJ && !jToI) {
                 targetMark[j] = false;
             } else if (!iToJ && jToI) {
@@ -938,7 +975,7 @@ void TypeChecker::TypeCheckerImpl::GenerateTypeMappingForBaseExpr(const Expr& ba
         std::unordered_set<Ptr<Ty>> definedTys;
         std::for_each(
             baseTypeArgs.begin(), baseTypeArgs.end(), [&definedTys](auto type) { definedTys.emplace(type->GetTy()); });
-        auto genericTys = GetAllGenericTys(baseDecl->GetTy());
+        auto genericTys = GetAllGenericTys(typeManager, baseDecl->GetTy());
         for (auto it = promoteMapping.begin(); it != promoteMapping.end(); ++it) {
             // If mapped 'ty' is existed in 'baseDecl' generic types
             // and is not found in user defined type args, remove it from mapping.
@@ -1028,7 +1065,7 @@ void TypeChecker::TypeCheckerImpl::FilterTypeMappings(
         }
     }
     // Reduce type mapping to direct mapping for used generic sema types.
-    auto tyVars = ::GetAllGenericTys(fd.GetTy());
+    auto tyVars = ::GetAllGenericTys(typeManager, fd.GetTy());
     CJC_ASSERT(fd.funcBody);
     if (fd.funcBody->generic) {
         // Since 'func test<T>(a: Int64):Unit' function type can be used without type parameters' sema ty,
@@ -1041,19 +1078,19 @@ void TypeChecker::TypeCheckerImpl::FilterTypeMappings(
     if (IsFuncReturnThisType(fd)) {
         auto declOfThisType = GetDeclOfThisType(expr);
         if (declOfThisType) {
-            tyVars.merge(::GetAllGenericTys(declOfThisType->GetTy()));
+            tyVars.merge(::GetAllGenericTys(typeManager, declOfThisType->GetTy()));
         }
     } else if (auto ma = DynamicCast<const MemberAccess*>(&expr); ma && ma->baseExpr) {
         // 1. Store upperBounds' parent generic ty, if current is generic upper bound function call.
         // 2. If function contains quest ty, also collect typeMapping of outerDecl for possible generic ty.
         if (fd.outerDecl && (IsGenericUpperBoundCall(*ma, fd) || fd.GetTy()->HasQuestTy())) {
-            tyVars.merge(::GetAllGenericTys(fd.outerDecl->GetTy()));
+            tyVars.merge(::GetAllGenericTys(typeManager, fd.outerDecl->GetTy()));
         }
         auto baseTarget = TypeCheckUtil::GetRealTarget(ma->baseExpr->GetTarget());
         // When type of baseExpr should be inferred, we need to keep tyVars. Such as A.add() or pkg.A.add().
         bool isNameAccessNeedInfer = baseTarget && baseTarget->IsTypeDecl() && ma->baseExpr->GetTypeArgs().empty();
         if (isNameAccessNeedInfer) {
-            tyVars.merge(::GetAllGenericTys(baseTarget->GetTy()));
+            tyVars.merge(::GetAllGenericTys(typeManager, baseTarget->GetTy()));
         }
     }
     // Erase context type vars from the type mapping, the context tyVar should be substituted.
@@ -1065,6 +1102,74 @@ void TypeChecker::TypeCheckerImpl::FilterTypeMappings(
         // Should always leave at least one empty element in the 'typeMappings'.
         typeMappings.emplace_back(MultiTypeSubst{});
     }
+}
+
+bool TypeChecker::TypeCheckerImpl::CheckThisParamCompatible(
+    ASTContext& ctx, const FuncDecl& fd, const CallExpr& ce, Ptr<Ty> target)
+{
+    if (fd.TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
+        return true;
+    }
+    if (TypeManager::HasThisParam(fd)) {
+        auto callArgTy = GetThisArgTy(ctx, ce);
+        auto fdParamTy = typeManager.GetThisParamTy(fd);
+        if (typeManager.ImplementsCopyInterface(callArgTy)) {
+            return true;
+        }
+        bool good;
+        Ptr<Ty> expect;
+        Ptr<Ty> found;
+        if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
+            expect = target ? target : fdParamTy;
+            found = fdParamTy;
+            if (auto ceModal = GetCallBaseModal(ce)) {
+                // object creation with explicit modal, must use exact modal
+                good = found->Modal() == expect->Modal();
+            } else if (target) {
+                // modal not specified, sub modal is enough
+                good = found->Modal().IsSubModal(expect->Modal());
+            } else {
+                // object creation without target type, any modal is ok
+                good = true;
+            }
+        } else if (auto ref = DynamicCast<RefExpr>(&*ce.baseFunc); ref && (ref->isThis || ref->isSuper)) {
+            // must call init or super with the same modal
+            expect = callArgTy;
+            found = fdParamTy;
+            good = expect->Modal() == found->Modal();
+        } else {
+            // normal function call, sub modal is ok
+            expect = fdParamTy;
+            found = callArgTy;
+            good = found->Modal().IsSubModal(expect->Modal());
+        }
+        if (!good) {
+            if (ce.baseFunc->ShouldDiagnose() && !CanSkipDiag(*ce.baseFunc)) {
+                DiagMismatchedTypesWithFoundTy(diag, *ce.baseFunc, *expect, *found);
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TypeChecker::TypeCheckerImpl::IsThisParamIdentical(const FuncDecl& fd1, const FuncDecl& fd2)
+{
+    bool hasThisParam1 = TypeManager::HasThisParam(fd1);
+    bool hasThisParam2 = TypeManager::HasThisParam(fd2);
+    if (hasThisParam1 != hasThisParam2) {
+        return false;
+    }
+    if (!hasThisParam1) {
+        return true;
+    }
+    auto thisParamTy1 = typeManager.GetThisParamTy(fd1);
+    auto thisParamTy2 = typeManager.GetThisParamTy(fd2);
+    if (typeManager.ImplementsCopyInterface(thisParamTy1) && typeManager.ImplementsCopyInterface(thisParamTy2)) {
+        return true;
+    }
+    return thisParamTy1->Modal().IsSubModal(thisParamTy2->Modal()) &&
+        thisParamTy2->Modal().IsSubModal(thisParamTy1->Modal());
 }
 
 bool TypeChecker::TypeCheckerImpl::CheckGenericCallCompatible(
@@ -1086,6 +1191,11 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericCallCompatible(
     if (paramTysInArgOrder.size() != ce.args.size()) {
         return false;
     }
+    if (targetRet && targetRet->IsEnum() && fd.TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
+        for (size_t i{0}; i < paramTysInArgOrder.size(); ++i) {
+            paramTysInArgOrder[i] = typeManager.SubstituteModal(paramTysInArgOrder[i], targetRet->Modal());
+        }
+    }
     std::vector<SubstPack> resMappings;
     for (const auto& mts : typeMappings) {
         std::set<Ptr<Ty>> usedTys = {fd.GetTy()};
@@ -1097,6 +1207,10 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericCallCompatible(
     for (auto mapping = resMappings.begin(); mapping != resMappings.end();) {
         auto ds = DiagSuppressor(diag);
         bool matched = true;
+        if (!CheckThisParamCompatible(ctx, fd, ce, targetRet)) {
+            ce.SetTy(TypeManager::GetInvalidTy());
+            matched = false;
+        }
         size_t currentCnt = 0;
         for (size_t i = 0; i < paramTysInArgOrder.size(); ++i) {
             auto paramTy = paramTysInArgOrder[i];
@@ -1230,12 +1344,49 @@ bool TypeChecker::TypeCheckerImpl::CheckCandidateConstrains(
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckCallCompatible(ASTContext& ctx, FunctionCandidate& candidate)
+Ptr<Ty> TypeChecker::TypeCheckerImpl::GetThisArgTy(const ASTContext& ctx, const CallExpr& ce)
+{
+    if (auto ma = DynamicCast<MemberAccess>(&*ce.baseFunc)) {
+        return ma->baseExpr->GetTy();
+    }
+    if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
+        if (auto funcTy = DynamicCast<FuncTy>(TypeCheckUtil::GetRealTarget(ce.baseFunc->GetTarget())->GetTy())) {
+            return funcTy->retTy;
+        }
+        // baseFunc is constructor, its ty would be the created object's type
+        return TypeCheckUtil::GetRealTarget(ce.baseFunc->GetTarget())->GetTy();
+    }
+    if (auto ref = DynamicCast<RefExpr>(&*ce.baseFunc)) {
+        // get outer func ty (must be instance method so GetThisParamTy is valid)
+        if (auto fn = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, ref->scopeName, [](const Symbol& sym) {
+            auto node = sym.node;
+            if (auto func = DynamicCast<FuncDecl>(node)) {
+                return Is<InheritableDecl>(func->outerDecl) && !func->TestAttr(Attribute::STATIC);
+            }
+            return false;
+        })) {
+            auto fd = StaticCast<FuncDecl>(fn->node);
+            return typeManager.GetThisParamTy(*fd);
+        }
+        // not inside func, then inside member var init, use type @~local
+        if (auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, ref->scopeName)) {
+            return sym->node->GetTy();
+        }
+    }
+    CJC_ABORT_WITH_MSG("call not a member access or ref expr");
+    return nullptr;
+}
+
+bool TypeChecker::TypeCheckerImpl::CheckCallCompatible(ASTContext& ctx, FunctionCandidate& candidate, Ptr<Ty> target)
 {
     auto& ce = candidate.ce;
     auto& fd = candidate.fd;
     std::vector<Ptr<Ty>> paramTysInArgsOrder = GetParamTysInArgsOrder(typeManager, ce, fd);
     if (paramTysInArgsOrder.size() != ce.args.size()) {
+        return false;
+    }
+    if (!CheckThisParamCompatible(ctx, fd, ce, target)) {
+        ce.SetTy(TypeManager::GetInvalidTy());
         return false;
     }
     for (size_t i = 0; i < paramTysInArgsOrder.size(); ++i) {
@@ -1289,6 +1440,9 @@ void TypeChecker::TypeCheckerImpl::FillEnumTypeArgumentsTy(
     bool enumCallNoTyArgs = ma.typeArguments.empty() && baseTypeArgs.empty();
     if (enumCallNoTyArgs) {
         ma.SetTy(typeManager.ApplySubstPack(ma.GetTy(), typeMapping));
+        if (Ty::IsTyCorrect(ma.baseExpr->GetTy())) {
+            ma.SetTy(typeManager.SubstituteModal(ma.GetTy(), ma.baseExpr->GetTy()->Modal()));
+        }
     }
 }
 
@@ -1450,7 +1604,7 @@ OwnedPtr<FunctionMatchingUnit> TypeChecker::TypeCheckerImpl::CheckCandidate(
         if (!CheckGenericCallCompatible(ctx, candidate, typeMapping, targetRet)) {
             return nullptr;
         }
-    } else if (!CheckCallCompatible(ctx, candidate)) {
+    } else if (!CheckCallCompatible(ctx, candidate, targetRet)) {
         return nullptr;
     }
     if (NeedSynOnUsed(fd)) {
@@ -1459,16 +1613,53 @@ OwnedPtr<FunctionMatchingUnit> TypeChecker::TypeCheckerImpl::CheckCandidate(
     if (!Ty::IsTyCorrect(fd.GetTy()) || !fd.GetTy()->IsFunc()) {
         return nullptr;
     }
+    if (ce.callKind == CallKind::CALL_SUPER_FUNCTION) {
+        auto thisModal = GetThisArgTy(ctx, ce)->Modal();
+        auto superModal = GetThisParamModal(fd);
+        // can only call super() with same @local
+        if (Is<RefExpr>(ce.baseFunc) && thisModal != superModal) {
+            return nullptr;
+        }
+        // call to super.foo() can use any compatible modal
+        if (Is<MemberAccess>(ce.baseFunc) && !thisModal.IsSubModal(superModal)) {
+            return nullptr;
+        }
+    }
     if (targetRet) {
         // Check if the function's return type is the subtype of the target type that the callExpr should be.
         auto retTy = GetCallTy(ctx, candidate.ce, fd);
         DynamicBindingThisType(*ce.baseFunc, fd, typeMapping);
         auto instRet = typeManager.ApplySubstPack(retTy, typeMapping);
+        if (fd.TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
+            if (auto modal = GetCallBaseModal(candidate.ce)) {
+                instRet = typeManager.SubstituteModal(instRet, *modal);
+            } else {
+                instRet = typeManager.SubstituteModal(instRet, targetRet->Modal());
+            }
+        }
+        // a created object can be converted to any modal
+        ModalMatchMode modalMode;
+        if (typeManager.ImplementsCopyInterface(instRet)) { // copy type can always use any mode
+            modalMode = ModalMatchMode::IGNORE;
+        } else if (GetCallBaseModal(candidate.ce)) { // let c: C @local! = C @local!(), use exact mode in this case
+            modalMode = ModalMatchMode::EXACT;
+        } else {
+            modalMode = ModalMatchMode::SUBTYPE;
+        }
         // Should delete ideal type in the future.
-        if (!instRet->HasIdealTy() && !typeManager.IsSubtype(instRet, targetRet)) {
+        if (!instRet->HasIdealTy() && !typeManager.IsSubtype(instRet, targetRet, true, true, modalMode)) {
             if (!ce.sourceExpr) {
                 DiagMismatchedTypesWithFoundTy(diag, ce, *targetRet, *instRet);
             }
+            return nullptr;
+        }
+    } else if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
+        // ctor call without target, use the modal used in CallExpr
+        auto modal = GetCallBaseModal(candidate.ce).value_or(ModalInfo{});
+        auto thisParamTy = typeManager.GetThisParamTy(fd);
+        if (thisParamTy->Modal() != modal && !typeManager.ImplementsCopyInterface(thisParamTy)) {
+            DiagSemaMismatchedTypes(
+                diag, ce, thisParamTy->String(), typeManager.SubstituteModal(thisParamTy, modal)->String());
             return nullptr;
         }
     }
@@ -1546,7 +1737,7 @@ Ty* TypeChecker::TypeCheckerImpl::GetCallTy(ASTContext& ctx, const CallExpr& ce,
         CJC_ASSERT(sym->node);
         // return ThisTy if symbol target is ClassTy/ClassThisTy
         if (auto classTy = DynamicCast<ClassTy>(sym->node->GetTy())) {
-            return typeManager.GetClassThisTy(*classTy->decl, classTy->typeArgs);
+            return typeManager.GetClassThisTy(*classTy->decl, classTy->typeArgs, classTy->Modal());
         }
         return sym->node->GetTy();
     }
@@ -1594,7 +1785,7 @@ TypeChecker::TypeCheckerImpl::FuncTyPair TypeChecker::TypeCheckerImpl::CollectVa
 
         std::set<Ptr<Ty>> usedTys = {fd->GetTy()};
         usedTys.merge(GetGenericParamsForDecl(*fd));
-        std::set<TypeSubst> resMappings = ExpandMultiTypeSubst(typeMappings[0], usedTys);
+        std::set<TypeSubst> resMappings = ExpandMultiTypeSubst(typeManager, typeMappings[0], usedTys);
 
         auto thisCd = DynamicCast<ClassDecl*>(GetDeclOfThisType(expr));
         bool hasThisRet = thisCd && Ty::IsTyCorrect(thisCd->GetTy()) && IsFuncReturnThisType(*fd);
@@ -1746,7 +1937,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckFunctionMatch(
         }
     }
     // Infer the arguments' type again, to update ideal type and reference's targets which may overload.
-    ReInferCallArgs(ctx, candidate.ce, *matched);
+    ReInferCallArgs(ctx, candidate.ce, *matched, target);
     return ReorderCallArgument(ctx, *matched, candidate.ce);
 }
 
@@ -1756,15 +1947,18 @@ void TypeChecker::TypeCheckerImpl::RemoveShadowedFunc(
     if (targetLevel >= currentLevel) {
         return;
     }
-    auto funcTy = DynamicCast<FuncTy*>(fd.GetTy());
-    auto paramTys = funcTy ? funcTy->paramTys : GetParamTys(fd);
+    auto paramTys = GetParamTys(fd);
     auto isFuncSignatureSame = [this, &fd, &paramTys](auto& target) -> bool {
         if (fd.TestAttr(Attribute::GENERIC) != target->TestAttr(Attribute::GENERIC)) {
             return false;
         }
-        auto targetTy = DynamicCast<FuncTy*>(target->GetTy());
-        auto targetParamTys = targetTy ? targetTy->paramTys : GetParamTys(*target);
-        return typeManager.IsFuncParameterTypesIdentical(targetParamTys, paramTys);
+        auto targetParamTys = GetParamTys(*target);
+        bool thisParamMatch{true};
+        if (TypeManager::HasThisParam(*target) && TypeManager::HasThisParam(fd)) {
+            thisParamMatch = typeManager.CheckTypeCompatibility(typeManager.GetThisParamTy(*target),
+                typeManager.GetThisParamTy(fd), false) == TypeCompatibility::IDENTICAL;
+        }
+        return typeManager.IsFuncParameterTypesIdentical(targetParamTys, paramTys) && thisParamMatch;
     };
     funcs.erase(std::remove_if(funcs.begin(), funcs.end(), isFuncSignatureSame), funcs.end());
 }
@@ -1829,10 +2023,13 @@ void TypeChecker::TypeCheckerImpl::FilterExtendImplAbstractFunc(std::vector<Ptr<
             if (!flag) {
                 continue;
             }
-            auto funcTy1 = StaticCast<FuncTy*>(typeManager.GetInstantiatedTy(fd1->GetTy(), typeMapping));
-            auto funcTy2 = StaticCast<FuncTy*>(fd2->GetTy());
-            if (typeManager.IsFuncParameterTypesIdentical(funcTy1->paramTys, funcTy2->paramTys) &&
-                typeManager.IsSubtype(funcTy2->retTy, funcTy1->retTy)) {
+            auto params1 = StaticCast<FuncTy*>(typeManager.GetInstantiatedTy(fd1->GetTy(), typeMapping))->paramTys;
+            if (TypeManager::HasThisParam(*fd1)) {
+                params1.insert(params1.begin(), typeManager.GetThisParamTy(*fd1));
+            }
+            auto params2 = GetParamTys(*fd2);
+            if (typeManager.IsFuncParameterTypesIdentical(params1, params2) &&
+                typeManager.IsSubtype(fd2->GetTy(), fd1->GetTy())) {
                 implementedOrOverridenFuncs.insert(fd1);
             }
         }
@@ -2030,11 +2227,15 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::MatchFunctionForCall(
     if (!ce.args.empty() && argCombinations.empty()) {
         return {};
     }
-    auto filterSum = [this, &ce](std::vector<Ptr<FuncDecl>> ret) {
+    auto filterSum = [this, &ce, target](std::vector<Ptr<FuncDecl>> ret) {
         if (auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get())) {
             if (ma->baseExpr->GetTy()->IsPlaceholder() && ret.size() == 1) {
                 FilterSumUpperbound(*ma, *RawStaticCast<GenericsTy*>(ma->baseExpr->GetTy()), *ret[0]);
             }
+        }
+        // for constructor call, convert ce.ty to target modal
+        if (Ty::IsTyCorrect(ce.GetTy()) && Ty::IsTyCorrect(target) && ce.callKind == CallKind::CALL_OBJECT_CREATION) {
+            ce.SetTy(typeManager.SubstituteModal(ce.GetTy(), target->Modal()));
         }
         return ret;
     };
@@ -2076,14 +2277,21 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::MatchFunctionForCall(
         preScopeLevel = curScopeLevel;
         legals.emplace_back(std::move(ret));
     }
-    return filterSum(CheckMatchResult(ctx, ce, legals, illegals));
+    return filterSum(CheckMatchResult(ctx, ce, legals, illegals, target));
 }
 
 void TypeChecker::TypeCheckerImpl::ReInferCallArgs(
-    ASTContext& ctx, const CallExpr& ce, const FunctionMatchingUnit& legal)
+    ASTContext& ctx, const CallExpr& ce, const FunctionMatchingUnit& legal, Ptr<AST::Ty> target)
 {
     for (size_t i = 0; i < legal.tysInArgOrder.size(); ++i) {
         auto instTy = typeManager.ApplySubstPack(legal.tysInArgOrder[i], legal.typeMapping);
+        if (legal.fd.TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
+            if (auto modal = GetCallBaseModal(ce)) {
+                instTy = typeManager.SubstituteModal(instTy, *modal);
+            } else if (target) {
+                instTy = typeManager.SubstituteModal(instTy, target->Modal());
+            }
+        }
         // Since the call has been checked, return value can be ignored.
         (void)CheckWithEffectiveCache(ctx, instTy, ce.args[i].get(), false);
     }
@@ -2162,7 +2370,7 @@ void CheckEmptyMatchResult(DiagnosticEngine& diag, CallExpr& ce,
 } // namespace
 
 std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckMatchResult(ASTContext& ctx, CallExpr& ce,
-    std::vector<OwnedPtr<FunctionMatchingUnit>>& legals, std::vector<FunctionMatchingUnit>& illegals)
+    std::vector<OwnedPtr<FunctionMatchingUnit>>& legals, std::vector<FunctionMatchingUnit>& illegals, Ptr<Ty> target)
 {
     // No matching function.
     if (legals.empty()) {
@@ -2182,7 +2390,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckMatchResult(ASTCon
             return result; // Find at least one enum candidates in all.
         }
         InstantiatePartOfTheGenericParameters(legals);
-        auto indexRes = ResolveOverload(legals, ce);
+        auto indexRes = ResolveOverload(legals, ce, target);
         if (indexRes.size() == 1) {
             id = indexRes[0];
         } else {
@@ -2207,7 +2415,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckMatchResult(ASTCon
         }
     }
     // Infer the arguments' type again, to update ideal type and reference's targets which may overload.
-    ReInferCallArgs(ctx, ce, *legals[id]);
+    ReInferCallArgs(ctx, ce, *legals[id], target);
     auto ret = ReorderCallArgument(ctx, *legals[id], ce);
     return ret;
 }
@@ -2667,6 +2875,8 @@ DiagKind TypeChecker::TypeCheckerImpl::GetErrorKindForCall(const std::vector<Ptr
             return DiagKind::sema_enum_constructor_type_not_match;
         } else if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
             return DiagKind::sema_no_match_constructor;
+        } else if (Is<PropDecl>(target)) {
+            return DiagKind::sema_no_match_prop_accessor_for_call;
         } else {
             return DiagKind::sema_no_match_function_declaration_for_call;
         }
@@ -2702,8 +2912,8 @@ void TypeChecker::TypeCheckerImpl::DiagnoseForCall(const std::vector<Ptr<FuncDec
     Position identifierPos{ce.begin};
     if (auto re = DynamicCast<RefExpr*>(ce.baseFunc.get()); re) {
         identifier = re->ref.identifier; // We should diagnose with alias rather than real name.
-    } else if (auto memberAccess = DynamicCast<MemberAccess*>(ce.baseFunc.get());
-               memberAccess && !memberAccess->field.ZeroPos()) {
+    } else if (auto memberAccess = DynamicCast<MemberAccess>(ce.baseFunc.get());
+        memberAccess && !memberAccess->field.ZeroPos()) {
         identifierPos = memberAccess->field.Begin();
     }
     DiagKind errorKind = GetErrorKindForCall(candidatesBeforeCheck, candidatesAfterCheck, ce);
@@ -2781,7 +2991,8 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::DynamicBindingThisType(
     }
     auto declOfThisType = GetDeclOfThisType(baseExpr);
     if (auto cd = DynamicCast<ClassDecl*>(declOfThisType); cd && Ty::IsTyCorrect(cd->GetTy())) {
-        auto instTy = typeManager.ApplySubstPack(typeManager.GetClassThisTy(*cd, cd->GetTy()->typeArgs), typeMapping);
+        auto instTy = typeManager.ApplySubstPack(
+            typeManager.GetClassThisTy(*cd, cd->GetTy()->typeArgs, cd->GetTy()->Modal()), typeMapping);
         baseExpr.SetTy(typeManager.GetFunctionTy(funcTy->paramTys, instTy));
         return instTy;
     } else if (auto ma = DynamicCast<MemberAccess*>(&baseExpr); ma && ma->baseExpr) {
@@ -3214,9 +3425,13 @@ void TypeChecker::TypeCheckerImpl::SpreadInstantiationTy(Node& node, const Subst
     if (typeMapping.u2i.empty() || !Ty::IsTyCorrect(node.GetTy())) {
         return;
     }
-    Walker walkerExpr(&node, [this, &typeMapping](Ptr<Node> node) -> VisitAction {
-        if (Ty::IsTyCorrect(node->GetTy())) {
-            node->SetTy(typeManager.ApplySubstPack(node->GetTy(), typeMapping));
+    Walker walkerExpr(&node, [this, &typeMapping](Ptr<Node> n) -> VisitAction {
+        if (Ty::IsTyCorrect(n->GetTy())) {
+            n->SetTy(typeManager.ApplySubstPack(n->GetTy(), typeMapping));
+            if (auto* ma = DynamicCast<MemberAccess>(n.get());
+                ma && ma->baseExpr && Ty::IsTyCorrect(ma->baseExpr->GetTy())) {
+                n->SetTy(typeManager.SubstituteModal(n->GetTy(), ma->baseExpr->GetTy()->Modal()));
+            }
             return VisitAction::WALK_CHILDREN;
         }
         return VisitAction::WALK_CHILDREN;

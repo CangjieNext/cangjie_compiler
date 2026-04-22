@@ -1037,6 +1037,9 @@ bool StructInheritanceChecker::IsExtendedDefaultImpl(const MemberSignature& pare
         child.outerDecl->astKind == ASTKind::EXTEND_DECL) {
         return false;
     }
+    if (child.outerDecl->GetTy()->Modal() != parent.decl->outerDecl->GetTy()->Modal()) {
+        return false;
+    }
     return typeManager.HasExtensionRelation(*child.outerDecl->GetTy(), *parent.decl->outerDecl->GetTy());
 }
 
@@ -1300,7 +1303,7 @@ void StructInheritanceChecker::CheckGenericTypeArgInfo(
         *parent.decl, *child.decl, parent.upperBounds, child.upperBounds, diag, typeManager);
 }
 
-void StructInheritanceChecker::CheckPropertyInheritance(const MemberSignature& parent, const Decl& child) const
+void StructInheritanceChecker::CheckPropertyInheritance(const MemberSignature& parent, Decl& child) const
 {
     auto parentDecl = parent.decl;
     // Caller guarantees parent and child have same astKind.
@@ -1312,7 +1315,7 @@ void StructInheritanceChecker::CheckPropertyInheritance(const MemberSignature& p
         diag.Diagnose(child, DiagKind::sema_property_override_implement_type_diff);
     }
     auto parentProp = RawStaticCast<PropDecl*>(parentDecl);
-    auto childProp = RawStaticCast<const PropDecl*>(&child);
+    auto childProp = RawStaticCast<PropDecl*>(&child);
     if (childProp->isVar != parentProp->isVar) {
         if (parentProp->isVar) {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_property_have_same_declaration_in_inherit_mut, *childProp,
@@ -1326,6 +1329,7 @@ void StructInheritanceChecker::CheckPropertyInheritance(const MemberSignature& p
         // Currently, implemenation of default interface property must implement both getter/setter.
         diag.DiagnoseRefactor(
             DiagKindRefactor::sema_property_must_implement_both, *childProp, childProp->identifier.Val());
+        childProp->EnableAttr(Attribute::HAS_BROKEN);
     }
     CheckAccessVisibility(*parentDecl, child, child);
 }
@@ -1371,6 +1375,13 @@ bool StructInheritanceChecker::CheckImplementationRelation(
     auto childFuncTy = DynamicCast<FuncTy*>(child.ty);
     bool sameSignature =
         parentFuncTy && childFuncTy && typeManager.IsFuncParameterTypesIdentical(*parentFuncTy, *childFuncTy);
+    auto pf = StaticCast<FuncDecl>(parentDecl);
+    auto cf = StaticCast<FuncDecl>(child.decl);
+    auto pmodal = GetThisParamModal(*pf);
+    auto cmodal = GetThisParamModal(*cf);
+    if (pmodal != cmodal) {
+        sameSignature = false;
+    }
     if (sameSignature) {
         CJC_ASSERT(parentFunc->funcBody && childFunc->funcBody);
         bool isParamListCorrect = !parentFunc->funcBody->paramLists.empty() && !childFunc->funcBody->paramLists.empty();

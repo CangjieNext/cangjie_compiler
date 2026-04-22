@@ -15,7 +15,7 @@ ERROR(sema_ambiguous_expo_right_operand_type,
     "both 'Int64' and 'Float64' is compatible with the right operand's type of this exponentiation (assignment) "
     "expression; please give an explicit one")
 ERROR(sema_not_a_type, "'%s' is not a type")
-ERROR(sema_incompatible_func_body_and_return_type, "the return type of this function cannot be calculated from the function body and all the return expressions")
+ERROR(sema_incompatible_func_body_and_return_type, "the return type of this function cannot be calculated from the function body and all the return and exclave expressions")
 ERROR(sema_type_must_toplevel, "%s type must be toplevel")
 ERROR(sema_undeclared_type_name, "undeclared type name '%s'")
 ERROR(sema_undeclared_identifier, "undeclared identifier '%s'")
@@ -77,6 +77,7 @@ ERROR(sema_inconsistency_range_elemType, "start and stop must be of the same typ
 ERROR(sema_range_step_not_int64, "step must be Int64 in range expression")
 ERROR(sema_no_match_function_declaration_for_call, "no matching function declaration for function call '%s'")
 ERROR(sema_no_match_function_declaration_for_ref, "no matching function declaration for function reference '%s'")
+ERROR(sema_no_match_prop_accessor_for_call, "no matching prop accessor for call '%s'")
 ERROR(sema_no_match_constructor, "no matching constructor for call '%s'")
 ERROR(sema_ambiguous_arg_type, "ambiguous arguments type in call expression")
 ERROR(sema_ambiguous_match, "ambiguous match for function call '%s'")

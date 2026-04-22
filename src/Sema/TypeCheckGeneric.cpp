@@ -73,11 +73,13 @@ bool TypeChecker::TypeCheckerImpl::HasIncompleteStaticFuncOrProp(
             bool isImpl = false;
             if (auto srcFunc = DynamicCast<FuncDecl*>(candidate); srcFunc && decl->IsFunc()) {
                 auto fd = RawStaticCast<FuncDecl*>(decl);
-                isImpl = IsOverrideOrShadow(typeManager, *srcFunc, *fd) && !srcFunc->TestAttr(Attribute::ABSTRACT);
+                isImpl = TypeCheckUtil::IsOverrideOrShadow(typeManager, *srcFunc, *fd) &&
+                    !srcFunc->TestAttr(Attribute::ABSTRACT);
             } else if (auto srcProp = DynamicCast<PropDecl*>(candidate);
                        srcProp && decl->astKind == ASTKind::PROP_DECL) {
                 auto pd = RawStaticCast<PropDecl*>(decl);
-                isImpl = IsOverrideOrShadow(typeManager, *srcProp, *pd) && !srcProp->TestAttr(Attribute::ABSTRACT);
+                isImpl = TypeCheckUtil::IsOverrideOrShadow(typeManager, *srcProp, *pd) &&
+                    !srcProp->TestAttr(Attribute::ABSTRACT);
             }
             return isImpl;
         });
@@ -239,7 +241,7 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericDeclInstantiation(Ptr<const Decl>
         diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_argument_no_match, checkNode, range);
         return false;
     }
-    TypeSubst  instantiateMap;
+    TypeSubst instantiateMap;
     if (auto ma = DynamicCast<const MemberAccess*>(&checkNode); ma && ma->baseExpr) {
         MultiTypeSubst instMap;
         // Collect typeMapping of baseExpr of member access, eg: A<T0>.foo<T1>.
