@@ -1032,6 +1032,9 @@ bool StructInheritanceChecker::IsExtendedDefaultImpl(const MemberSignature& pare
         child.outerDecl->astKind == ASTKind::EXTEND_DECL) {
         return false;
     }
+    if (child.outerDecl->GetTy()->Modal() != parent.decl->outerDecl->GetTy()->Modal()) {
+        return false;
+    }
     return typeManager.HasExtensionRelation(*child.outerDecl->GetTy(), *parent.decl->outerDecl->GetTy());
 }
 
@@ -1366,6 +1369,13 @@ bool StructInheritanceChecker::CheckImplementationRelation(
     auto childFuncTy = DynamicCast<FuncTy*>(child.GetTy());
     bool sameSignature =
         parentFuncTy && childFuncTy && typeManager.IsFuncParameterTypesIdentical(*parentFuncTy, *childFuncTy);
+    auto pf = StaticCast<FuncDecl>(parentDecl);
+    auto cf = StaticCast<FuncDecl>(child.decl);
+    auto pmodal = GetThisParamModal(*pf);
+    auto cmodal = GetThisParamModal(*cf);
+    if (pmodal != cmodal) {
+        sameSignature = false;
+    }
     if (sameSignature) {
         CJC_ASSERT(parentFunc->funcBody && childFunc->funcBody);
         bool isParamListCorrect = !parentFunc->funcBody->paramLists.empty() && !childFunc->funcBody->paramLists.empty();

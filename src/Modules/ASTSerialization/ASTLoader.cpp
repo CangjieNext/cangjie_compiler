@@ -783,6 +783,9 @@ OwnedPtr<FuncParamList> ASTLoader::ASTLoaderImpl::LoadFuncParamList(const Packag
         }
         ret->params.emplace_back(std::move(param));
     }
+    if (funcParamList->thisParam() != INVALID_FORMAT_INDEX) {
+        ret->thisParam = LoadDecl<ThisParam>(funcParamList->thisParam());
+    }
     return ret;
 };
 
@@ -796,6 +799,13 @@ OwnedPtr<Decl> ASTLoader::ASTLoaderImpl::LoadFuncParam(const PackageFormat::Decl
     funcParam->isMemberParam = info->isMemberParam();
     funcParam->assignment = LoadExpr(info->defaultVal());
     return funcParam;
+}
+
+OwnedPtr<AST::Decl> ASTLoader::ASTLoaderImpl::LoadThisParam(const PackageFormat::Decl& decl, int64_t declIndex)
+{
+    auto tp = CreateAndLoadBasicInfo<ThisParam>(decl, declIndex);
+    LoadDeclBasicInfo(decl, *tp);
+    return tp;
 }
 
 void ASTLoader::ASTLoaderImpl::LoadFuncDeclAdvancedInfo(const PackageFormat::Decl& decl, FuncDecl& funcDecl)

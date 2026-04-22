@@ -491,6 +491,8 @@ public:
     DiagnosticEngine& diag;
     DiagnosticBuilder(const DiagnosticBuilder& p) = delete;
     DiagnosticBuilder& operator=(const DiagnosticBuilder& p) = delete;
+    DiagnosticBuilder(DiagnosticBuilder&& p);
+    DiagnosticBuilder& operator=(DiagnosticBuilder&& p);
     template <typename... Args> void AddNote(const Position& pos, std::string_view kindName, Args... args)
     {
         DiagIdOld kind = LookupDiagKind(kindName);

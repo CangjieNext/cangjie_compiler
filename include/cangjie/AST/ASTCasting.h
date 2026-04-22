@@ -30,6 +30,7 @@
 #include "cangjie/AST/Nodes/ClassLikeDecl.h"
 #include "cangjie/AST/Nodes/Decl.h"
 #include "cangjie/AST/Nodes/EnumDecl.h"
+#include "cangjie/AST/Nodes/ExclaveExpr.h"
 #include "cangjie/AST/Nodes/Expr.h"
 #include "cangjie/AST/Nodes/ExtendDecl.h"
 #include "cangjie/AST/Nodes/FeatureId.h"

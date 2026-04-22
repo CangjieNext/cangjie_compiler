@@ -390,15 +390,15 @@ bool TypeCheckerImpl::ChkEnumPattern(ASTContext& ctx, Ty& target, EnumPattern& p
     }
     if (mayMatch) {
         if (auto enumTy = DynamicCast<EnumTy*>(p.constructor->GetTy());
-            enumTy && typeManager.IsTyEqual(p.constructor->GetTy(), &target)) {
-            p.SetTy(p.constructor->GetTy());
+            enumTy && typeManager.IsSameDataType(p.constructor->GetTy(), &target)) {
+            p.SetTy(&target);
             return true;
         } else if (auto funcTy = DynamicCast<FuncTy*>(p.constructor->GetTy()); funcTy) {
             if (!IsFuncTyEnumPatternMatched(ctx, target, *funcTy, p)) {
                 p.SetTy(TypeManager::GetInvalidTy());
                 return false;
             }
-            p.SetTy(funcTy->retTy);
+            p.SetTy(&target);
             return true;
         }
     }
@@ -416,12 +416,17 @@ bool TypeCheckerImpl::IsFuncTyEnumPatternMatched(
     }
     for (size_t i = 0; i < p.patterns.size(); i++) {
         CJC_NULLPTR_CHECK(p.patterns[i]);
-        if (funcTy.paramTys[i] == nullptr || !ChkPattern(ctx, *funcTy.paramTys[i], *p.patterns[i])) {
+        if (funcTy.paramTys[i] == nullptr) {
+            return false;
+        }
+        // Substitute modal from target enum to the parameter type
+        auto paramTyWithModal = typeManager.SubstituteModal(funcTy.paramTys[i], target.Modal());
+        if (!ChkPattern(ctx, *paramTyWithModal, *p.patterns[i])) {
             return false;
         }
     }
-    if (!typeManager.IsTyEqual(funcTy.retTy, &target)) {
-        (void)diag.Diagnose(p, "sema_pattern_not_match", "enum");
+    if (!typeManager.IsSameDataType(funcTy.retTy, &target)) {
+        diag.Diagnose(p, "sema_pattern_not_match", "enum");
         return false;
     }
     return true;

@@ -8,8 +8,10 @@
 #define CANGJIE_AST_NODES_FEATUREID_H
 
 #include "cangjie/AST/Nodes/Node.h"
+#include "cangjie/AST/Identifier.h"
 
 namespace Cangjie::AST {
+struct Annotation;
 /**
  * featureId
  *     : (Ident | ContextIdent) (DOT (Ident | ContextIdent))*
@@ -18,9 +20,7 @@ namespace Cangjie::AST {
 struct FeatureId : Node {
     std::vector<Identifier> identifiers;
     std::vector<Position> dotPoses;
-    FeatureId() : Node(ASTKind::FEATURE_ID)
-    {
-    }
+    FeatureId();
     std::string ToString() const override;
 };
 
@@ -36,9 +36,7 @@ struct FeaturesSet : Node {
     std::vector<FeatureId> content;
     std::vector<Position> commaPoses;
     Position rCurlPos;
-    FeaturesSet() : Node(ASTKind::FEATURES_SET)
-    {
-    }
+    FeaturesSet();
 };
 
 /**
@@ -52,9 +50,8 @@ struct FeaturesDirective : Node {
     std::vector<OwnedPtr<Annotation>> annotations;
     OwnedPtr<FeaturesSet> featuresSet;
     Position featuresPos;
-    FeaturesDirective() : Node(ASTKind::FEATURES_DIRECTIVE)
-    {
-    }
+    FeaturesDirective();
+    ~FeaturesDirective();
 };
 } // namespace Cangjie::AST
 

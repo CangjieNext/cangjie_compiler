@@ -113,7 +113,7 @@ void GIM::GenericInstantiationManagerImpl::RestoreInstantiatedDeclTy(Decl& decl)
             auto ty = RawStaticCast<ClassTy*>(decl.GetTy());
             ty->decl = StaticAs<ASTKind::CLASS_DECL>(&decl);
             ty->commonDecl = StaticAs<ASTKind::CLASS_DECL>(&decl);
-            auto thisTy = typeManager.GetClassThisTy(*ty->declPtr, ty->typeArgs);
+            auto thisTy = typeManager.GetClassThisTy(*ty->declPtr, ty->typeArgs, ty->Modal());
             thisTy->decl = StaticAs<ASTKind::CLASS_DECL>(&decl);
             thisTy->commonDecl = StaticAs<ASTKind::CLASS_DECL>(&decl);
             break;

@@ -11,6 +11,7 @@
  */
 
 #include "Handlers.h"
+#include "Diags.h"
 #include "NativeFFI/ObjC/Utils/Common.h"
 #include "cangjie/AST/Match.h"
 
@@ -39,8 +40,8 @@ void CheckInitMethod::HandleImpl(TypeCheckContext& ctx)
             continue;
         }
 
-        ctx.diag.DiagnoseRefactor("sema_mismatched_types", *method.funcBody->retType)
-            .AddMainHintArguments(Ty::ToString(mirrorTy), Ty::ToString(retTy));
+        Sema::DiagSemaMismatchedTypes(
+            ctx.diag, *method.funcBody->retType, Ty::ToString(mirrorTy), Ty::ToString(retTy));
         ctx.target.EnableAttr(Attribute::IS_BROKEN);
     }
 }

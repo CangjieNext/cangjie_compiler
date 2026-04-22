@@ -40,7 +40,8 @@ Ptr<Value> Translator::TranslateStructArray(const AST::ArrayLit& array)
     auto elementSize =
         CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, array.children.size())
             ->GetResult();
-    auto rawArrayType = builder.GetType<RefType>(builder.GetType<RawArrayType>(eleTy, 1u));
+    Type* rawArrayType = builder.GetType<RefType>(builder.GetType<RawArrayType>(eleTy, 1u));
+    rawArrayType = builder.SubstituteModal(rawArrayType, array.GetTy()->Modal());
     auto rawArrayRef = TryCreate<RawArrayAllocate>(currentBlock, loc, rawArrayType, eleTy, elementSize)->GetResult();
     // in cjdb, if the arrayLit is nested,e.g. [[1,2]]
     // the outer RawArrayAllocate must be generated earlier than inner RawArrayAllocate,

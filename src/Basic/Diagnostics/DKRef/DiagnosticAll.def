@@ -1,0 +1,24 @@
+// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// This source file is part of the Cangjie project, licensed under Apache-2.0
+// with Runtime Library Exception.
+//
+// See https://cangjie-lang.cn/pages/LICENSE for license information.
+
+#include "Diagnostics/DKRef/Chir.def"
+#include "Diagnostics/DKRef/ConditionalCompilation.def"
+#include "Diagnostics/DKRef/Driver.def"
+#include "Diagnostics/DKRef/Frontend.def"
+#include "Diagnostics/DKRef/IncrementalCompilation.def"
+#include "Diagnostics/DKRef/Lexer.def"
+#include "Diagnostics/DKRef/Module.def"
+#include "Diagnostics/DKRef/Package.def"
+#include "Diagnostics/DKRef/Parser.def"
+#include "Diagnostics/DKRef/ParserQuery.def"
+// the following include order is by design
+#include "Diagnostics/DKRef/Sema.def"
+#include "Diagnostics/DKRef/Test.def"
+#include "Diagnostics/DKRef/EffectHandlers.def"
+#include "Diagnostics/DKRef/Deprecation.def"
+#include "Diagnostics/DKRef/Cjmp.def"
+#include "Diagnostics/DKRef/APILevel.def"
+#include "Diagnostics/DKRef/Modal.def"

@@ -11,6 +11,7 @@
  */
 #include "TypeCheckUtil.h"
 #include "TypeCheckerImpl.h"
+#include "CJMP/MPTypeCheckerImpl.h"
 
 #include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Match.h"
@@ -31,7 +32,7 @@ void TypeCheckerImpl::CheckExtendGenerics(const ExtendDecl& ed)
     if (!ed.generic || !Ty::IsTyCorrect(ed.extendedType->GetTy()) || !ed.extendedType->GetTy()->IsExtendable() || isMovedCommonED) {
         return;
     }
-    auto usedGenericTys = GetAllGenericTys(ed.extendedType->GetTy());
+    auto usedGenericTys = GetAllGenericTys(typeManager, ed.extendedType->GetTy());
     std::vector<std::string> unusedTypes;
     for (auto& it : ed.generic->typeParameters) {
         if (usedGenericTys.count(it->GetTy()) == 0) {

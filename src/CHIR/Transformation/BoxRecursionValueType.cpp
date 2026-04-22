@@ -210,7 +210,7 @@ void CastEnumTypeToTupleWithBoxArg(TypeCast& typecast, const std::vector<size_t>
         CJC_ASSERT(i < eleTypes.size());
         eleTypes[i] = boxType;
     }
-    auto newTargetType = builder.GetType<TupleType>(eleTypes);
+    auto newTargetType = builder.GetType<TupleType>(eleTypes, targetType->Modal());
     typecastRes->SetType(*newTargetType);
 }
 

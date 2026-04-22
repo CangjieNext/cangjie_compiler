@@ -75,11 +75,11 @@ TestManager::TestManager(
         return;
     }
 
-    mockUtils = new MockUtils(importManager, typeManager, ctx->mangler);
-    mockSupportManager = MakeOwned<MockSupportManager>(typeManager, mockUtils);
+    mockUtils = new MockUtils(importManager, typeManager, diag, ctx->mangler);
+    mockSupportManager = MakeOwned<MockSupportManager>(typeManager, diag, mockUtils);
 
     if (mockCompatible && testEnabled) {
-        mockManager = MakeOwned<MockManager>(importManager, typeManager, mockUtils);
+        mockManager = MakeOwned<MockManager>(importManager, typeManager, diag, mockUtils);
     }
 }
 
@@ -796,8 +796,8 @@ void TestManager::MarkDeclsForTestIfNeeded(std::vector<Ptr<Package>> pkgs) const
             continue;
         }
 
-        Walker(pkg, Walker::GetNextWalkerID(), [](auto node) {
-            MockSupportManager::MarkNodeMockSupportedIfNeeded(*node);
+        Walker(pkg, Walker::GetNextWalkerID(), [this](auto node) {
+            mockSupportManager->MarkNodeMockSupportedIfNeeded(*node);
             return VisitAction::WALK_CHILDREN;
         }).Walk();
     }

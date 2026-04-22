@@ -17,6 +17,7 @@
 #include <unordered_set>
 
 #include "Collector.h"
+#include "CJMP/MPTypeCheckerImpl.h"
 #include "Desugar/DesugarInTypeCheck.h"
 #include "DiagSuppressor.h"
 #include "Diags.h"
@@ -62,7 +63,8 @@ TypeCheckerImpl::TypeCheckerImpl(CompilerInstance* ci)
       diag(ci->diag),
       importManager(*ci->importManager),
       backendType(ci->invocation.globalOptions.backend),
-      mpImpl(new MPTypeCheckerImpl(*ci))
+      mpImpl(new MPTypeCheckerImpl(*ci)),
+      modalTypeChecker(NewModalTypeChecker())
 {
 }
 
@@ -72,6 +74,7 @@ TypeCheckerImpl::~TypeCheckerImpl()
         delete mpImpl;
         mpImpl = nullptr;
     }
+    DeleteModalTypeChecker();
 }
 
 bool TypeCheckerImpl::CheckThisTypeOfFuncBody(const FuncBody& fb) const
@@ -177,7 +180,7 @@ void TypeCheckerImpl::ReplaceFuncRetTyWithThis(FuncBody& fb, Ptr<Ty> ty)
         rt->curFile = fb.curFile;
         rt->SetTarget(ct->decl);
         rt->ref.identifier = "This";
-        rt->SetTy(typeManager.GetClassThisTy(*ct->declPtr, ct->typeArgs));
+        rt->SetTy(typeManager.GetClassThisTy(*ct->declPtr, ct->typeArgs, ct->Modal()));
         rt->EnableAttr(Attribute::COMPILER_ADD);
         if (fb.retType) {
             CJC_ASSERT(fb.curFile);
@@ -454,6 +457,9 @@ void TypeCheckerImpl::CheckCtorFuncBody(ASTContext& ctx, FuncBody& fb)
         if (fb.parentClassLike) {
             ctorTy = fb.parentClassLike->GetTy();
         }
+        if (fb.paramLists[0]->thisParam) {
+            ctorTy = typeManager.SubstituteModal(ctorTy, fb.paramLists[0]->thisParam->modal.ToModalInfo());
+        }
     }
     if (!Ty::IsTyCorrect(ctorTy) || fb.paramLists.empty()) {
         return;
@@ -470,6 +476,10 @@ void TypeCheckerImpl::CheckFuncParamList(ASTContext& ctx, FuncParamList& fpl)
 {
     // We use the tupleType to handle the type of FuncParamList.
     std::vector<Ptr<Ty>> paramTys;
+    // Synthesize thisParam first (before early return for empty params)
+    if (fpl.thisParam) {
+        Synthesize({ctx, SynPos::NONE}, fpl.thisParam.get());
+    }
     if (fpl.params.empty()) {
         fpl.SetTy(typeManager.GetTupleTy(paramTys));
         return;
@@ -533,7 +543,7 @@ bool TypeCheckerImpl::ChkFuncArgWithInout(ASTContext& ctx, Ty& target, FuncArg& 
     // Case 2: 'argTy' is VArray<T...>, target is VArray<R...>. 'realTarget' is VArray<R...>.
     // Other case: 'argTy' is T, target is CPointer<T>. 'realTarget' trans to T.
     if (argTy && ptrParamTy) {
-        realTarget = typeManager.GetVArrayTy(*ptrParamTy->typeArgs[0], argTy->size);
+        realTarget = typeManager.GetVArrayTy(*ptrParamTy->typeArgs[0], argTy->size, ptrParamTy->Modal());
     } else if (argTy && varrParamTy) {
         realTarget = &target;
     } else if (ptrParamTy) {
@@ -551,7 +561,8 @@ bool TypeCheckerImpl::ChkFuncArgWithInout(ASTContext& ctx, Ty& target, FuncArg& 
         fa.SetTy(TypeManager::GetInvalidTy());
         return false;
     }
-    fa.SetTy(typeManager.GetPointerTy(Is<VArrayTy>(realTarget) ? realTarget->typeArgs[0].get() : realTarget));
+    fa.SetTy(typeManager.GetPointerTy(
+        Is<VArrayTy>(realTarget) ? realTarget->typeArgs[0].get() : realTarget, realTarget->Modal()));
     return true;
 }
 
@@ -673,9 +684,9 @@ Ptr<Ty> TypeCheckerImpl::SynFuncArg(ASTContext& ctx, FuncArg& fa)
                 diag.DiagnoseRefactor("sema_inout_modify_cstring_or_zerosized", fa, "type 'CString'");
                 fa.SetTy(TypeManager::GetInvalidTy());
             } else if (Is<VArrayTy>(fa.expr->GetTy())) {
-                fa.SetTy(typeManager.GetPointerTy(fa.expr->GetTy()->typeArgs[0]));
+                fa.SetTy(typeManager.GetPointerTy(fa.expr->GetTy()->typeArgs[0], fa.expr->GetTy()->Modal()));
             } else {
-                fa.SetTy(typeManager.GetPointerTy(fa.expr->GetTy()));
+                fa.SetTy(typeManager.GetPointerTy(fa.expr->GetTy(), fa.expr->GetTy()->Modal()));
             }
         } else {
             fa.SetTy(fa.expr->GetTy());
@@ -814,6 +825,10 @@ Ptr<Ty> TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<Node> node)
         }
         case ASTKind::FUNC_PARAM: {
             node->SetTy(SynFuncParam(*curCtx, *StaticAs<ASTKind::FUNC_PARAM>(node)));
+            break;
+        }
+        case ASTKind::THIS_PARAM: {
+            node->SetTy(SynThisParam(*curCtx, *StaticAs<ASTKind::THIS_PARAM>(node)));
             break;
         }
         case ASTKind::FUNC_ARG: {
@@ -1050,6 +1065,10 @@ Ptr<Ty> TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<Node> node)
             node->SetTy(TypeManager::GetInvalidTy());
             break;
         }
+        case ASTKind::EXCLAVE_EXPR: {
+            node->SetTy(SynExclaveExpr(*curCtx, *StaticAs<ASTKind::EXCLAVE_EXPR>(node)));
+            break;
+        }
         default: {
             break;
         }
@@ -1252,6 +1271,10 @@ bool TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
                 chkRet = ChkFuncParam(*curCtx, *realTarget, *StaticAs<ASTKind::FUNC_PARAM>(node));
                 break;
             }
+            case ASTKind::THIS_PARAM: {
+                chkRet = SynThisParam(*curCtx, *StaticAs<ASTKind::THIS_PARAM>(node));
+                break;
+            }
             case ASTKind::FUNC_ARG: {
                 chkRet = ChkFuncArg(*curCtx, *realTarget, *StaticAs<ASTKind::FUNC_ARG>(node));
                 break;
@@ -1280,6 +1303,10 @@ bool TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
             case ASTKind::MACRO_EXPAND_PARAM:
             case ASTKind::MACRO_EXPAND_DECL: {
                 CheckMacroCall(*curCtx, *node);
+                break;
+            }
+            case ASTKind::EXCLAVE_EXPR: {
+                chkRet = ChkExclaveExpr(*curCtx, *realTarget, *StaticAs<ASTKind::EXCLAVE_EXPR>(node));
                 break;
             }
             default: {
@@ -1324,6 +1351,12 @@ void TypeCheckerImpl::CheckConstructor(ASTContext& ctx, const Decl& decl, FuncDe
     Ptr<Node> firstExprOrDecl = fd.funcBody->body->body.front().get();
     if (firstExprOrDecl == nullptr) {
         return;
+    }
+    if (auto exclave = DynamicCast<ExclaveExpr>(firstExprOrDecl)) {
+        if (!exclave->body || exclave->body->body.empty()) {
+            return;
+        }
+        firstExprOrDecl = exclave->body->body.front().get();
     }
     bool needEraseSuper{false};
     if (auto ce = AST::As<ASTKind::CALL_EXPR>(firstExprOrDecl); ce) {
@@ -1516,7 +1549,7 @@ bool TypeCheckerImpl::CheckAndCache(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> n
 
 namespace {
 /**  Check if a class has a non-parameter constructor. */
-bool HasNonParamCtorForClass(const ClassDecl& classDecl)
+bool HasNonParamCtorForClass(const ClassDecl& classDecl, ModalInfo requiredModal)
 {
     for (auto& decl : classDecl.body->decls) {
         auto fd = DynamicCast<FuncDecl*>(decl.get());
@@ -1527,6 +1560,10 @@ bool HasNonParamCtorForClass(const ClassDecl& classDecl)
             return false;
         }
         auto& params = fd->funcBody->paramLists[0]->params;
+        auto thisParamTy = StaticCast<FuncTy>(fd->GetTy())->retTy;
+        if (thisParamTy->Modal() != requiredModal) {
+            continue;
+        }
         if (params.empty()) {
             if (fd->TestAttr(Attribute::PRIVATE)) {
                 return false;
@@ -1568,14 +1605,15 @@ void TypeCheckerImpl::CheckConstructorSuper(
     auto cd = RawStaticCast<const ClassDecl*>(&decl);
     // remove compiler added super() when there is no non-parameter constructor in super class
     Ptr<ClassDecl> superCD = cd->GetSuperClassDecl();
-    needEraseSuper = superCD && !HasNonParamCtorForClass(*superCD);
+    auto requiredModal = GetThisParamModal(fd);
+    needEraseSuper = superCD && !HasNonParamCtorForClass(*superCD, requiredModal);
     if (!needEraseSuper) {
         return;
     }
     auto& fdName = fd.TestAttr(Attribute::PRIMARY_CONSTRUCTOR) ? fd.identifierForLsp : fd.identifier.Val();
     auto range =
         fd.TestAttr(Attribute::IMPLICIT_ADD) ? MakeRange(decl.identifier) : MakeRange(fd.identifier.Begin(), fdName);
-    (void)diag.DiagnoseRefactor("sema_no_non_param_constructor_in_super_class", fd, range);
+    (void)diag.DiagnoseRefactor("sema_no_non_param_constructor_in_super_class", fd, range, requiredModal.ToString());
     fd.constructorCall = ConstructorCall::NONE;
 }
 
@@ -1873,9 +1911,16 @@ Ptr<Decl> TypeCheckerImpl::GetImplementedTargetIfExist(
             for (auto& it : targetParamTys) {
                 it = typeManager.GetBestInstantiatedTy(it, mts);
             }
-            isSameSignature = typeManager.IsFuncParameterTypesIdentical(memberParamTys, targetParamTys);
+            bool thisParamMatch{true};
+            if (typeManager.HasThisParam(*memberFuncDecl)) {
+                thisParamMatch = typeManager.CheckTypeCompatibility(typeManager.GetThisParamTy(*memberFuncDecl),
+                    typeManager.GetThisParamTy(*targetFuncDecl), false) == TypeCompatibility::IDENTICAL;
+            }
+            isSameSignature =
+                typeManager.IsFuncParameterTypesIdentical(memberParamTys, targetParamTys) && thisParamMatch;
         } else if (member->astKind == ASTKind::PROP_DECL && target.astKind == ASTKind::PROP_DECL) {
-            if (!IsOverrideOrShadow(typeManager, *RawStaticCast<PropDecl*>(member), static_cast<PropDecl&>(target))) {
+            if (!TypeCheckUtil::IsOverrideOrShadow(
+                    typeManager, *RawStaticCast<PropDecl*>(member), static_cast<PropDecl&>(target))) {
                 continue;
             }
             isSameSignature = member->GetTy() == targetInstanceTy;
@@ -1990,7 +2035,8 @@ void TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& contexts)
         Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckCJMPRules");
         AddAttrForDefaultFuncParam(*ctx->curPackage);
         // Because of the cjlint checking policy, desugar of propDecl should be done in sema stage for now.
-        DesugarForPropDecl(*ctx->curPackage);
+        DesugarForPropDecl(*ctx, *ctx->curPackage);
+        CheckModalType(*ctx, *ctx->curPackage);
         CheckConstEvaluation(*ctx->curPackage);
         MarkImplicitUsedFunctions(*ctx->curPackage);
         // Collect program entry separately.
@@ -2208,6 +2254,13 @@ void TypeCheckerImpl::SetFuncDeclConstructorCall(FuncDecl& fd) const
         return;
     }
     Ptr<RefExpr> refExpr = nullptr;
+    auto first = &*fd.funcBody->body->body.front();
+    if (auto exclave = DynamicCast<ExclaveExpr*>(first)) {
+        if (exclave->body && exclave->body->body.empty()) {
+            return;
+        }
+        first = &*exclave->body->body.front();
+    }
     if (auto ce = DynamicCast<CallExpr*>(fd.funcBody->body->body.begin()->get()); ce) {
         if (auto re = DynamicCast<RefExpr*>(ce->baseFunc.get()); re) {
             refExpr = re;
@@ -2401,6 +2454,16 @@ OwnedPtr<FuncDecl> MakeDefaultParamFunction(
         params.emplace_back(CreateFuncParamForOptional(*param));
     }
     funcBody->paramLists[0]->params = std::move(params);
+    if (funcDecl.funcBody->paramLists[0]->thisParam) {
+        auto clonedThis = MakeOwnedNode<ThisParam>();
+        clonedThis->thisPos = funcDecl.funcBody->paramLists[0]->thisParam->thisPos;
+        clonedThis->modal = funcDecl.funcBody->paramLists[0]->thisParam->modal;
+        clonedThis->outerDecl = &*ret;
+        for (auto& anno: funcDecl.funcBody->paramLists[0]->thisParam->annotations) {
+            clonedThis->annotations.emplace_back(ASTCloner::Clone(anno.get(), SetIsClonedSourceCode));
+        }
+        funcBody->paramLists[0]->thisParam = std::move(clonedThis);
+    }
     ret->funcBody = std::move(funcBody);
     // Set return expr.
     auto returnExpr = MakeOwnedNode<ReturnExpr>();
@@ -2690,6 +2753,10 @@ Ptr<Ty> TypeCheckerImpl::CalcFuncRetTyFromBody(const FuncBody& fb)
         } else if (auto re = DynamicCast<ReturnExpr*>(node); re && re->expr) {
             if (Ty::IsTyCorrect(re->expr->GetTy())) {
                 retTys.emplace(re->expr->GetTy());
+            }
+        } else if (auto exclave = DynamicCast<ExclaveExpr>(node)) {
+            if (auto exclaveBodyTy = DynamicCast<FuncTy>(exclave->body->GetTy())) {
+                retTys.emplace(exclaveBodyTy->retTy);
             }
         }
         return VisitAction::WALK_CHILDREN;

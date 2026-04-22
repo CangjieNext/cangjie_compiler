@@ -63,7 +63,7 @@ void DesugarAnnotationsArray(ImportManager& importManager, TypeManager& typeMana
         auto objectClass = importManager.GetCoreDecl<ClassDecl>(OBJECT_NAME);
         auto arrayStruct = importManager.GetCoreDecl<StructDecl>(STD_LIB_ARRAY);
         if (objectClass != nullptr && arrayStruct != nullptr) {
-            auto arrayTy = typeManager.GetStructTy(*arrayStruct, {objectClass->GetTy()});
+            auto arrayTy = typeManager.GetStructTy(*arrayStruct, {objectClass->GetTy()}, {});
             decl.annotationsArray = CreateArrayLit(std::move(annotationsArray), arrayTy);
             decl.annotationsArray->EnableAttr(Attribute::IS_ANNOTATION);
         } else {
@@ -125,7 +125,7 @@ void TypeCheckerImpl::CheckAnnotationDecl(ASTContext& ctx, Annotation& ann)
         // Errors should have been reported if core package is not imported correctly.
         return;
     }
-    auto targetTy = typeManager.GetStructTy(*arrayStruct, {typeManager.GetEnumTy(*annotationKindEnum)});
+    auto targetTy = typeManager.GetStructTy(*arrayStruct, {typeManager.GetEnumTy(*annotationKindEnum, {}, {})}, {});
     (void)Check(ctx, targetTy, ann.args.front().get());
 }
 

@@ -435,6 +435,11 @@ inline bool IsExternalDefinedType(const CHIR::Type& type)
     return dynamic_cast<const CHIR::CustomType&>(type).GetCustomTypeDef()->TestAttr(CHIR::Attribute::IMPORTED);
 }
 
+inline bool IsLocalRegion(const CHIR::Type& chirTy)
+{
+    return chirTy.Modal().local != AST::LocalModal::NOT;
+}
+
 bool IsModifiableClass(const CHIR::Type& chirTy);
 bool IsSizeTrustedInCompileUnit(CGModule& cgMod, const CHIR::Type& chirTy);
 void ReplaceDelimiterAfterOrgName(std::string& packageName);

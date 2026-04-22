@@ -28,7 +28,7 @@ OwnedPtr<AST::Type> ParserImpl::ParseBaseType()
     if (Skip(TokenKind::LPAREN)) {
         return ParseTypeWithParen();
     }
-    if (SeeingPrimTypes()) {
+    if (SeeingPrimitiveType()) {
         OwnedPtr<PrimitiveType> primType = MakeOwned<PrimitiveType>();
         primType->begin = lookahead.Begin();
         primType->end = lookahead.End();
@@ -70,6 +70,12 @@ OwnedPtr<AST::Type> ParserImpl::ParseVarrayType()
     //  ^ Parse the type argument of VArray.
     ret->typeArgument = ParseType();
     if (ret->typeArgument->IsInvalid()) {
+        return MakeOwned<InvalidType>(lookahead.Begin());
+    }
+    if (ret->typeArgument->modal.HasLocal()) {
+        DiagUnexpectedModal(MakeRange(ret->typeArgument->modal.LocalBegin(), ret->typeArgument->modal.LocalEnd()));
+        ret->EnableAttr(Attribute::IS_BROKEN);
+        ConsumeUntilAny({TokenKind::NL, TokenKind::GT});
         return MakeOwned<InvalidType>(lookahead.Begin());
     }
     // <T, $N>
@@ -136,15 +142,24 @@ OwnedPtr<AST::Type> ParserImpl::ParseQualifiedType()
 }
 
 OwnedPtr<AST::Type> ParserImpl::ParseTupleType(
-    std::vector<OwnedPtr<Type>> types, const Position lParenPos, const Position rParenPos) const
+    std::vector<OwnedPtr<Type>> types, const Position& lParenPos, const Position& rParenPos)
 {
     OwnedPtr<TupleType> tupleType = MakeOwned<TupleType>();
     tupleType->begin = lParenPos;
     tupleType->leftParenPos = lParenPos;
     tupleType->rightParenPos = rParenPos;
+    bool broken{false};
     for (auto& type : types) {
+        if (type->modal.HasLocal()) {
+            DiagUnexpectedModal(MakeRange(type->modal.LocalBegin(), type->modal.LocalEnd()));
+            type->EnableAttr(Attribute::IS_BROKEN);
+            broken = true;
+        }
         tupleType->commaPosVector.emplace_back(type->commaPos);
         tupleType->fieldTypes.emplace_back(std::move(type));
+    }
+    if (broken) {
+        return MakeOwned<InvalidType>(lParenPos);
     }
     tupleType->end = rParenPos;
     tupleType->end.column += 1;
@@ -285,6 +300,11 @@ OwnedPtr<AST::Type> ParserImpl::ParsePrefixType()
         while (prevSkipNL && Skip(TokenKind::NL)) {
         }
         optionType->end = baseType->end;
+        if (baseType->modal.HasLocal()) {
+            DiagUnexpectedModal(MakeRange(baseType->modal.LocalBegin(), baseType->modal.LocalEnd()));
+            baseType->EnableAttr(Attribute::IS_BROKEN);
+            return MakeOwned<InvalidType>(optionType->begin);
+        }
         optionType->componentType = std::move(baseType);
         return optionType;
     } else {
@@ -297,14 +317,37 @@ OwnedPtr<AST::Type> ParserImpl::ParseType()
 {
     auto postType = ParsePrefixType();
     if (Seeing(TokenKind::ARROW)) {
-            if (postType->astKind == ASTKind::FUNC_TYPE) {
-                DiagRedundantArrowAfterFunc(*postType);
-                ConsumeUntilAny({TokenKind::RCURL, TokenKind::NL}, false);
-            } else {
-                DiagParseExpectedParenthis(postType);
-            }
+        if (postType->astKind == ASTKind::FUNC_TYPE) {
+            DiagRedundantArrowAfterFunc(*postType);
+            ConsumeUntilAny({TokenKind::RCURL, TokenKind::NL}, false);
+        } else {
+            DiagParseExpectedParenthesis(postType);
+        }
+    }
+    postType->modal = ParseModalInfo();
+    if (postType->modal) {
+        postType->end = postType->modal.End();
     }
     return postType;
+}
+
+ModalASTInfo ParserImpl::ParseModalInfo()
+{
+    bool hasLocal{false};
+    ModalASTInfo modalInfo{};
+    if (!hasLocal) {
+        if (Skip(TokenKind::LOCAL_NOT)) {
+            hasLocal = true;
+            modalInfo.SetLocal(LocalModalAST::NOT, lastToken.Begin());
+        } else if (Skip(TokenKind::LOCAL_QUES)) {
+            hasLocal = true;
+            modalInfo.SetLocal(LocalModalAST::HALF, lastToken.Begin());
+        } else if (Skip(TokenKind::LOCAL_EXCL)) {
+            hasLocal = true;
+            modalInfo.SetLocal(LocalModalAST::FULL, lastToken.Begin());
+        }
+    }
+    return modalInfo;
 }
 
 OwnedPtr<AST::RefType> ParserImpl::ParseRefType(bool onlyRef)
@@ -346,6 +389,10 @@ std::pair<bool, std::vector<OwnedPtr<AST::Type>>> ParserImpl::ParseTypeArguments
             }
             auto type = ParseType();
             if (type && !type->TestAttr(Attribute::IS_BROKEN)) {
+                if (type->modal.HasLocal()) {
+                    DiagUnexpectedModal(MakeRange(type->modal.LocalBegin(), type->modal.LocalEnd()));
+                    type->EnableAttr(Attribute::IS_BROKEN);
+                }
                 ret.emplace_back(std::move(type));
             }
         }, TokenKind::GT);

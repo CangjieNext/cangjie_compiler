@@ -15,6 +15,7 @@
 
 #include "cangjie/CHIR/AST2CHIR/AST2CHIRNodeMap.h"
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/ExceptionTypeMapping.h"
+#include "cangjie/CHIR/AST2CHIR/TranslateASTNode/TranslatorContext.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Type/CHIRType.h"
@@ -638,6 +639,9 @@ private:
         std::vector<int>& scopeInfo;
     };
 
+    TranslatorContext funcContext;
+    bool inExclave{false};
+
 private:
     void SetSymbolTable(const AST::Node& node, Value& val, bool isLocal = true);
     Ptr<Value> GetSymbolTable(const AST::Node& node) const;
@@ -804,6 +808,7 @@ private:
     Ptr<Value> Visit(const AST::VarDecl& decl);
     Ptr<Value> Visit(const AST::VarWithPatternDecl& patternDecl);
     Ptr<Value> Visit(const AST::WhileExpr& whileExpr);
+    Ptr<Value> Visit(const AST::ExclaveExpr& exclaveExpr);
     Ptr<Value> Visit(const AST::Node& node) const
     {
         if (isComputingAnnos && Is<AST::IfAvailableExpr>(node)) {
@@ -871,6 +876,10 @@ private:
     Ptr<Value> TranslateLambdaBody(Ptr<Lambda> lambda, const AST::FuncBody& funcBody, const BindingConfig& config);
     friend class TranslateCondCtrlExpr;
     friend class TranslateWhileExpr;
+
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    std::vector<Ptr<AST::Node>> CollectBlockBodyNodes(const AST::Block& block);
+#endif
 
     // ========Methods used for translating ForInExpr=========
     Ptr<Value> GetOuterMostExpr();
@@ -1157,26 +1166,8 @@ private:
     void AddMemberMethodToCustomTypeDef(const AST::FuncDecl& decl, CustomTypeDef& def);
 };
 
-static const std::unordered_map<Cangjie::TokenKind, ExprKind> op2ExprKind = {
-    {Cangjie::TokenKind::ADD, ExprKind::ADD},
-    {Cangjie::TokenKind::SUB, ExprKind::SUB},
-    {Cangjie::TokenKind::MUL, ExprKind::MUL},
-    {Cangjie::TokenKind::DIV, ExprKind::DIV},
-    {Cangjie::TokenKind::MOD, ExprKind::MOD},
-    {Cangjie::TokenKind::EXP, ExprKind::EXP},
-    {Cangjie::TokenKind::BITAND, ExprKind::BITAND},
-    {Cangjie::TokenKind::BITOR, ExprKind::BITOR},
-    {Cangjie::TokenKind::BITXOR, ExprKind::BITXOR},
-    {Cangjie::TokenKind::LSHIFT, ExprKind::LSHIFT},
-    {Cangjie::TokenKind::RSHIFT, ExprKind::RSHIFT},
-    {Cangjie::TokenKind::LT, ExprKind::LT},
-    {Cangjie::TokenKind::GT, ExprKind::GT},
-    {Cangjie::TokenKind::LE, ExprKind::LE},
-    {Cangjie::TokenKind::GE, ExprKind::GE},
-    {Cangjie::TokenKind::NOTEQ, ExprKind::NOTEQUAL},
-    {Cangjie::TokenKind::EQUAL, ExprKind::EQUAL},
-};
-
+extern const std::unordered_map<std::string, IntrinsicKind> headlessIntrinsics;
+extern const std::unordered_map<std::string, const std::unordered_map<std::string, IntrinsicKind>> packageMap;
 } // namespace Cangjie::CHIR
 
 #endif

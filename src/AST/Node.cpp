@@ -262,15 +262,29 @@ VarWithPatternDecl::VarWithPatternDecl() : VarDeclAbstract(ASTKind::VAR_WITH_PAT
 
 VarWithPatternDecl::~VarWithPatternDecl() = default;
 
-FuncParam::FuncParam() : VarDecl(ASTKind::FUNC_PARAM)
+FuncParam::FuncParam() : FuncParamBase(ASTKind::FUNC_PARAM)
 {
 }
 
-FuncParam::FuncParam(ASTKind astKind) : VarDecl(astKind)
+FuncParam::FuncParam(ASTKind astKind) : FuncParamBase(astKind)
 {
 }
 
 FuncParam::~FuncParam() = default;
+
+FeatureId::FeatureId() : Node(ASTKind::FEATURE_ID)
+{
+}
+
+FeaturesSet::FeaturesSet() : Node(ASTKind::FEATURES_SET)
+{
+}
+
+FeaturesDirective::FeaturesDirective() : Node(ASTKind::FEATURES_DIRECTIVE)
+{
+}
+
+FeaturesDirective::~FeaturesDirective() = default;
 
 Annotation::Annotation(const std::string& name, AnnotationKind annoKind, const Position& pos)
     : Node(ASTKind::ANNOTATION), kind(annoKind), identifier{name, INVALID_POSITION, INVALID_POSITION}
@@ -1253,8 +1267,8 @@ Ptr<ClassDecl> ClassDecl::GetSuperClassDecl() const
 {
     Ptr<ClassDecl> ret = nullptr;
     for (auto& it : inheritedTypes) {
-        if (it->ty && it->ty->kind == TypeKind::TYPE_CLASS) {
-            ret = static_cast<ClassTy*>(it->ty.get())->decl;
+        if (it->GetTy() && it->TyKind() == TypeKind::TYPE_CLASS) {
+            ret = static_cast<ClassTy*>(it->GetTy().get())->decl;
             break;
         }
     }

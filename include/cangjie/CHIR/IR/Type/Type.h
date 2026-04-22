@@ -13,6 +13,7 @@
 #ifndef CANGJIE_CHIR_TYPE_H
 #define CANGJIE_CHIR_TYPE_H
 
+#include "cangjie/AST/ModalInfo.h"
 #include "cangjie/CHIR/IR/AttributeInfo.h"
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/Utils/CheckUtils.h"
@@ -40,6 +41,8 @@ class ClassType;
 class CHIRBuilder;
 class GenericType;
 
+using ModalInfo = AST::ModalInfo;
+
 /** HashCombine is a function used to create hash with fewer collisions. */
 template <typename T> inline void HashCombine(size_t& hashVal, const T& val)
 {
@@ -48,14 +51,13 @@ template <typename T> inline void HashCombine(size_t& hashVal, const T& val)
 }
 
 // The base case.
-template <typename T> inline void HashValue(std::size_t& hashVal, const T& val)
+template <typename T> inline void HashValue(size_t& hashVal, const T& val)
 {
     HashCombine(hashVal, val);
 }
 
 // Iterate for any args.
-template <typename T, typename... Types>
-inline void HashValue(std::size_t& hashVal, const T& val, const Types&... others)
+template <typename T, typename... Types> inline void HashValue(size_t& hashVal, const T& val, const Types&... others)
 {
     HashCombine(hashVal, val);
     HashValue(hashVal, others...);
@@ -63,7 +65,7 @@ inline void HashValue(std::size_t& hashVal, const T& val, const Types&... others
 
 template <typename... Types> inline size_t HashValue(const Types&... values)
 {
-    std::size_t hashVal = 0;
+    size_t hashVal = 0;
     HashValue(hashVal, values...);
     return hashVal;
 }
@@ -124,7 +126,7 @@ public:
     };
 
 protected:
-    explicit Type(TypeKind kind);
+    explicit Type(TypeKind kind, ModalInfo modal);
 
 public:
     virtual ~Type() = default;
@@ -409,6 +411,11 @@ public:
 
     bool IsBoxRefTypeOf(const Type& baseType) const;
 
+    virtual ModalInfo Modal() const
+    {
+        return modal;
+    }
+
 protected:
     /**
      * funcType: argTys = { paramTypes, returnType }
@@ -421,12 +428,15 @@ protected:
      */
     std::vector<Type*> argTys;
     TypeKind kind : 8;  // The current base type of this type.
+    ModalInfo modal;
 };
 
 class BuiltinType : public Type {
     friend class CHIRSerializer;
 public:
-    explicit BuiltinType(TypeKind kind) : Type{kind} {}
+    explicit BuiltinType(TypeKind kind, ModalInfo modal) : Type{kind, modal}
+    {
+    }
     ~BuiltinType() override = default;
 
     /** @brief visit all extend defs which meet the condition, and get their super interfaces recursively
@@ -486,7 +496,7 @@ class NumericType : public BuiltinType {
     };
 
 protected:
-    explicit NumericType(TypeKind kind) : BuiltinType(kind)
+    explicit NumericType(TypeKind kind, ModalInfo modal) : BuiltinType(kind, modal)
     {
     }
     ~NumericType() override = default;
@@ -503,7 +513,7 @@ public:
 
 class FloatType : public NumericType {
 private:
-    explicit FloatType(TypeKind kind);
+    explicit FloatType(TypeKind kind, ModalInfo modal);
     ~FloatType() override = default;
     friend class CHIRContext;
 };
@@ -526,7 +536,7 @@ public:
     }
 
 private:
-    explicit IntType(TypeKind kind);
+    explicit IntType(TypeKind kind, ModalInfo modal);
     ~IntType() override = default;
     friend class CHIRContext;
 };
@@ -578,9 +588,9 @@ public:
     bool operator==(const Type& other) const override;
 
 private:
-    explicit FuncType(
-        const std::vector<Type*>& paramTys, Type* retTy, bool hasVarLenParam = false, bool isCFunc = false)
-        : Type(TypeKind::TYPE_FUNC), hasVarArg(hasVarLenParam), isCFunc(isCFunc)
+    explicit FuncType(const std::vector<Type*>& paramTys, Type* retTy, bool hasVarLenParam = false,
+        bool isCFunc = false, ModalInfo modal = {})
+        : Type(TypeKind::TYPE_FUNC, modal), hasVarArg(hasVarLenParam), isCFunc(isCFunc)
     {
         this->argTys = paramTys;
         this->argTys.emplace_back(retTy);
@@ -743,7 +753,7 @@ public:
     bool operator==(const Type& other) const override;
 
 protected:
-    explicit CustomType(TypeKind kind, CustomTypeDef* def, const std::vector<Type*>& typeArgs);
+    explicit CustomType(TypeKind kind, CustomTypeDef* def, const std::vector<Type*>& typeArgs, ModalInfo modal);
     ~CustomType() override = default;
     friend class CHIRContext;
 
@@ -783,7 +793,7 @@ public:
 
     bool IsDirectSuperTypeOf(Type& subType, CHIRBuilder& builder) const;
 private:
-    explicit ClassType(ClassDef* classDef, const std::vector<Type*>& genericArgs = {});
+    explicit ClassType(ClassDef* classDef, const std::vector<Type*>& genericArgs, ModalInfo modal);
     ~ClassType() override = default;
     friend class CHIRContext;
 
@@ -802,7 +812,7 @@ public:
     std::string ToString() const override;
 
 private:
-    explicit StructType(StructDef* structDef, const std::vector<Type*>& genericArgs = {});
+    explicit StructType(StructDef* structDef, const std::vector<Type*>& genericArgs, ModalInfo modal);
     ~StructType() override = default;
     friend class CHIRContext;
 };
@@ -835,7 +845,7 @@ public:
     bool IsBoxed(CHIRBuilder& builder);
 
 private:
-    explicit EnumType(EnumDef* enumDef, const std::vector<Type*>& genericArgs = {});
+    explicit EnumType(EnumDef* enumDef, const std::vector<Type*>& genericArgs, ModalInfo modal);
     ~EnumType() override = default;
     friend class CHIRContext;
 
@@ -859,7 +869,7 @@ public:
     std::string ToSrcCodeString() const override;
 
 private:
-    explicit TupleType(const std::vector<Type*>& argTys) : Type(TypeKind::TYPE_TUPLE)
+    explicit TupleType(const std::vector<Type*>& argTys, ModalInfo modal) : Type(TypeKind::TYPE_TUPLE, modal)
     {
         this->argTys = argTys;
     }
@@ -877,6 +887,8 @@ public:
         return argTys[0];
     }
 
+    ModalInfo Modal() const override;
+
     /**
      * @brief recursively get base type
      */
@@ -890,7 +902,8 @@ public:
     }
 
 private:
-    explicit RefType(Type* baseType) : Type(TypeKind::TYPE_REFTYPE)
+    /// RefType does not have modal.
+    explicit RefType(Type* baseType) : Type(TypeKind::TYPE_REFTYPE, {})
     {
         this->argTys.emplace_back(baseType);
     }
@@ -909,7 +922,7 @@ public:
     }
 
 private:
-    explicit BoxType(Type* baseType) : Type(TypeKind::TYPE_BOXTYPE)
+    explicit BoxType(Type* baseType) : Type(TypeKind::TYPE_BOXTYPE, {})
     {
         this->argTys.emplace_back(baseType);
     }
@@ -923,7 +936,8 @@ public:
     std::string ToSrcCodeString() const override;
 
 private:
-    explicit ThisType() : Type(TypeKind::TYPE_THIS)
+    /// ThisType does not have modal.
+    explicit ThisType() : Type(TypeKind::TYPE_THIS, {})
     {
     }
     ~ThisType() override = default;
@@ -950,7 +964,8 @@ public:
     }
 
 private:
-    explicit RawArrayType(Type* elemTy, unsigned int dims) : BuiltinType(TypeKind::TYPE_RAWARRAY), dims(dims)
+    explicit RawArrayType(Type* elemTy, unsigned int dims, ModalInfo modal = {})
+        : BuiltinType(TypeKind::TYPE_RAWARRAY, modal), dims(dims)
     {
         argTys.emplace_back(elemTy);
     }
@@ -980,7 +995,8 @@ public:
     }
 
 private:
-    explicit VArrayType(Type* elemTy, int64_t size) : BuiltinType(TypeKind::TYPE_VARRAY), size(size)
+    explicit VArrayType(Type* elemTy, int64_t size, ModalInfo modal)
+        : BuiltinType(TypeKind::TYPE_VARRAY, modal), size(size)
     {
         argTys.emplace_back(elemTy);
     }
@@ -992,7 +1008,7 @@ private:
 
 class RuneType : public BuiltinType {
 private:
-    explicit RuneType() : BuiltinType(TypeKind::TYPE_RUNE)
+    explicit RuneType(ModalInfo modal) : BuiltinType(TypeKind::TYPE_RUNE, modal)
     {
     }
     ~RuneType() override = default;
@@ -1001,7 +1017,7 @@ private:
 
 class BooleanType : public BuiltinType {
 private:
-    explicit BooleanType() : BuiltinType(TypeKind::TYPE_BOOLEAN)
+    explicit BooleanType(ModalInfo modal) : BuiltinType(TypeKind::TYPE_BOOLEAN, modal)
     {
     }
     ~BooleanType() override = default;
@@ -1010,7 +1026,7 @@ private:
 
 class UnitType : public BuiltinType {
 private:
-    explicit UnitType() : BuiltinType(TypeKind::TYPE_UNIT)
+    explicit UnitType(ModalInfo modal) : BuiltinType(TypeKind::TYPE_UNIT, modal)
     {
     }
     ~UnitType() override = default;
@@ -1019,7 +1035,7 @@ private:
 
 class NothingType : public BuiltinType {
 private:
-    explicit NothingType() : BuiltinType(TypeKind::TYPE_NOTHING)
+    explicit NothingType(ModalInfo modal) : BuiltinType(TypeKind::TYPE_NOTHING, modal)
     {
     }
     ~NothingType() override = default;
@@ -1028,7 +1044,7 @@ private:
 
 class CStringType : public BuiltinType {
 private:
-    explicit CStringType() : BuiltinType(TypeKind::TYPE_CSTRING)
+    explicit CStringType(ModalInfo modal) : BuiltinType(TypeKind::TYPE_CSTRING, modal)
     {
     }
     ~CStringType() override = default;
@@ -1048,7 +1064,7 @@ public:
     const std::vector<ExtendDef*>& GetExtends(CHIRBuilder* builder = nullptr) const override;
 
 private:
-    explicit CPointerType(Type* elemTy) : BuiltinType(TypeKind::TYPE_CPOINTER)
+    explicit CPointerType(Type* elemTy, ModalInfo modal) : BuiltinType(TypeKind::TYPE_CPOINTER, modal)
     {
         this->argTys.emplace_back(elemTy);
     }
@@ -1109,8 +1125,8 @@ public:
     }
 
 private:
-    explicit GenericType(const std::string& identifier, const std::string& srcName)
-        : Type(TypeKind::TYPE_GENERIC), identifier(identifier), srcCodeIdentifier(srcName)
+    explicit GenericType(const std::string& identifier, const std::string& srcName, ModalInfo modal = {})
+        : Type(TypeKind::TYPE_GENERIC, modal), identifier(identifier), srcCodeIdentifier(srcName)
     {
     }
     ~GenericType() override = default;
@@ -1125,7 +1141,7 @@ private:
 
 class VoidType : public BuiltinType {
 private:
-    explicit VoidType() : BuiltinType(TypeKind::TYPE_VOID)
+    explicit VoidType(ModalInfo modal) : BuiltinType(TypeKind::TYPE_VOID, modal)
     {
     }
     ~VoidType() override = default;
@@ -1150,5 +1166,15 @@ const static std::unordered_map<Type::TypeKind, std::string> TYPEKIND_TO_STRING{
     {Type::TypeKind::TYPE_REFTYPE, "RefType"}};
 
 Type* GetFieldOfType(Type& baseTy, uint64_t index, CHIRBuilder& builder);
+
+/**
+ * @brief Returns true if the struct type implements Copy (all member types implement Copy).
+ * Mimics TypeManager::ImplementsCopyInterface for struct; does not add any field to CHIR types.
+ */
+bool ImplementsCopyInterface(const StructType* ty, CHIRContext& context);
+/**
+ * @brief Returns true if the type implements Copy (e.g. struct with @MakeCopy, tuple of copy types, builtin).
+ */
+bool ImplementsCopyInterface(const Type* ty, CHIRContext& context);
 } // namespace Cangjie::CHIR
 #endif // CANGJIE_CHIR_TYPE_H

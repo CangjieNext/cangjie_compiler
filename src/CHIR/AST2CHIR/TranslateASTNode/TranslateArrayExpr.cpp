@@ -121,13 +121,13 @@ CHIR::Type* Translator::GetExactParentType(Type& fuzzyParentType, const FuncDecl
         } else {
             parentTy = TranslateType(*outerDecl->GetTy());
         }
-        return parentTy->StripAllRefs();
+        return builder.SubstituteModal(parentTy->StripAllRefs(), fuzzyParentType.Modal());
     }
-    
+    auto dataTy = builder.SubstituteModal(&fuzzyParentType, {});
     auto funcName = resolvedFunction.identifier.Val();
     auto isStatic = resolvedFunction.TestAttr(AST::Attribute::STATIC);
     CHIR::Type* result = nullptr;
-    if (auto genericTy = DynamicCast<GenericType*>(&fuzzyParentType)) {
+    if (auto genericTy = DynamicCast<GenericType*>(dataTy)) {
         auto& upperBounds = genericTy->GetUpperBounds();
         CJC_ASSERT(!upperBounds.empty());
         for (auto upperBound : upperBounds) {
@@ -138,7 +138,7 @@ CHIR::Type* Translator::GetExactParentType(Type& fuzzyParentType, const FuncDecl
                 break;
             }
         }
-    } else if (auto classTy = DynamicCast<CustomType*>(&fuzzyParentType)) {
+    } else if (auto classTy = DynamicCast<CustomType*>(dataTy)) {
         result =
             classTy->GetExactParentType(funcName, funcType, isStatic, funcInstTypeArgs, builder, checkAbstractMethod);
     } else {
@@ -158,7 +158,8 @@ CHIR::Type* Translator::GetExactParentType(Type& fuzzyParentType, const FuncDecl
             auto func = ex->GetExpectedFunc(
                 funcName, funcType, isStatic, replaceTable, funcInstTypeArgs, builder, checkAbstractMethod);
             if (func != nullptr && func->Get<WrappedRawMethod>() == nullptr) {
-                return ReplaceRawGenericArgType(*ex->GetExtendedType(), replaceTable, builder);
+                auto ty = ReplaceRawGenericArgType(*ex->GetExtendedType(), replaceTable, builder);
+                return builder.SubstituteModal(ty, fuzzyParentType.Modal());
             }
         }
         // extend def's super interface
@@ -167,10 +168,13 @@ CHIR::Type* Translator::GetExactParentType(Type& fuzzyParentType, const FuncDecl
                 result = ty->GetExactParentType(
                     funcName, funcType, isStatic, funcInstTypeArgs, builder, checkAbstractMethod);
                 if (result != nullptr) {
-                    return result;
+                    return builder.SubstituteModal(result, fuzzyParentType.Modal());
                 }
             }
         }
+    }
+    if (result) {
+        result = builder.SubstituteModal(result, fuzzyParentType.Modal());
     }
     return result;
 }

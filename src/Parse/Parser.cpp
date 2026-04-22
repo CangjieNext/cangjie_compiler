@@ -13,7 +13,6 @@
 #include "ParserImpl.h"
 
 #include "cangjie/AST/Clone.h"
-#include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
@@ -40,7 +39,7 @@ const std::unordered_map<std::string, AST::AnnotationKind> NAME_TO_ANNO_KIND = {
     {"FastNative", AST::AnnotationKind::FASTNATIVE}, {"Annotation", AST::AnnotationKind::ANNOTATION},
     {"ConstSafe", AST::AnnotationKind::CONSTSAFE}, {"Deprecated", AST::AnnotationKind::DEPRECATED},
     {"Frozen", AST::AnnotationKind::FROZEN}, {"EnsurePreparedToMock", AST::AnnotationKind::ENSURE_PREPARED_TO_MOCK},
-    {"NonProduct", AST::AnnotationKind::NON_PRODUCT}};
+    {"NonProduct", AST::AnnotationKind::NON_PRODUCT}, {"MakeCopy", AST::AnnotationKind::MAKE_COPY}};
 
 const std::unordered_map<AST::AnnotationKind, std::string> ANNO_KIND_TO_NAME = [] {
     std::unordered_map<AST::AnnotationKind, std::string> result;

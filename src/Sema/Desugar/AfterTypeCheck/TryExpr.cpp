@@ -272,7 +272,7 @@ void TypeCheckerImpl::DesugarTryWithResourcesExpr(ASTContext& ctx, TryExpr& te)
     CJC_NULLPTR_CHECK(exceptionDecl);
     auto optionDecl = StaticCast<EnumDecl*>(importManager.GetCoreDecl("Option"));
     CJC_NULLPTR_CHECK(optionDecl);
-    auto noneTy = typeManager.GetEnumTy(*optionDecl, {exceptionDecl->GetTy()});
+    auto noneTy = typeManager.GetEnumTy(*optionDecl, {exceptionDecl->GetTy()}, exceptionDecl->GetTy()->Modal());
     CJC_NULLPTR_CHECK(noneTy);
     auto someTy = typeManager.GetFunctionTy({exceptionDecl->GetTy()}, noneTy);
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);

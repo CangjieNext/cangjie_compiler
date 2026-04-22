@@ -10,8 +10,19 @@
  * This file implements utils API for CHIR
  */
 
+#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 
+#include "cangjie/AST/Nodes/FuncDecl.h"
+#include "cangjie/AST/Nodes/VarDecl.h"
+#include "cangjie/AST/Nodes/Decl.h"
+#include "cangjie/AST/Nodes/File.h"
+#include "cangjie/AST/Nodes/InheritableDecl.h"
+#include "cangjie/AST/Nodes/ClassLikeDecl.h"
+#include "cangjie/AST/Nodes/ClassDecl.h"
+#include "cangjie/AST/Nodes/EnumDecl.h"
+#include "cangjie/AST/Nodes/RefExpr.h"
+#include "cangjie/AST/Nodes/CallExpr.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Package.h"
@@ -244,6 +255,13 @@ bool IsInterfaceStaticMethod(const Function& func)
     return func.TestAttr(Attribute::STATIC);
 }
 
+bool IsSemanticAbstractInstance(const AST::FuncDecl& func)
+{
+    return !func.TestAttr(AST::Attribute::STATIC) &&
+        (func.TestAttr(AST::Attribute::ABSTRACT) ||
+            (func.outerDecl && func.outerDecl->astKind == AST::ASTKind::INTERFACE_DECL));
+}
+
 struct VisitStackElem {
     Block* bb;
     std::vector<Block*> successors;
@@ -340,6 +358,11 @@ std::vector<Ptr<AST::VarDecl>> GetNonStaticSuperMemberVars(const AST::ClassLikeD
     return std::vector<Ptr<AST::VarDecl>>{};
 }
 
+bool IsEnumOption(const AST::EnumDecl& enumDecl)
+{
+    return enumDecl.identifier == STD_LIB_OPTION && enumDecl.fullPackageName == CORE_PACKAGE_NAME;
+}
+
 bool IsCrossPackage(const Cangjie::Position& pos, const std::string& currentPackage, DiagAdapter& diag)
 {
     if (diag.GetSourceManager().GetSource(pos.fileID).packageName.has_value()) {
@@ -371,25 +394,27 @@ Type* CreateNewTypeWithArgs(Type& oldType, const std::vector<Type*>& newArgs, CH
     Type* newType = nullptr;
     switch (oldType.GetTypeKind()) {
         case Type::TypeKind::TYPE_TUPLE:
-            newType = builder.GetType<TupleType>(newArgs);
+            newType = builder.GetType<TupleType>(newArgs, oldType.Modal());
             break;
         case Type::TypeKind::TYPE_STRUCT:
-            newType = builder.GetType<StructType>(StaticCast<const StructType&>(oldType).GetStructDef(), newArgs);
+            newType = builder.GetType<StructType>(
+                StaticCast<const StructType&>(oldType).GetStructDef(), newArgs, oldType.Modal());
             break;
         case Type::TypeKind::TYPE_ENUM: {
             auto& enumType = StaticCast<const EnumType&>(oldType);
-            newType = builder.GetType<EnumType>(enumType.GetEnumDef(), newArgs);
+            newType = builder.GetType<EnumType>(enumType.GetEnumDef(), newArgs, oldType.Modal());
             break;
         }
         case Type::TypeKind::TYPE_FUNC: {
             std::vector<Type*> paramTys{newArgs.begin(), newArgs.end() - 1};
             Type* retTy = newArgs.back();
             auto hasVarArg = StaticCast<const FuncType&>(oldType).HasVarArg();
-            newType = builder.GetType<FuncType>(paramTys, retTy, hasVarArg, oldType.IsCFunc());
+            newType = builder.GetType<FuncType>(paramTys, retTy, hasVarArg, oldType.IsCFunc(), oldType.Modal());
             break;
         }
         case Type::TypeKind::TYPE_CLASS:
-            newType = builder.GetType<ClassType>(StaticCast<const ClassType&>(oldType).GetClassDef(), newArgs);
+            newType = builder.GetType<ClassType>(
+                StaticCast<const ClassType&>(oldType).GetClassDef(), newArgs, oldType.Modal());
             break;
         case Type::TypeKind::TYPE_REFTYPE:
             CJC_ASSERT(newArgs.size() == 1);
@@ -397,15 +422,17 @@ Type* CreateNewTypeWithArgs(Type& oldType, const std::vector<Type*>& newArgs, CH
             break;
         case Type::TypeKind::TYPE_CPOINTER:
             CJC_ASSERT(newArgs.size() == 1);
-            newType = builder.GetType<CPointerType>(newArgs[0]);
+            newType = builder.GetType<CPointerType>(newArgs[0], oldType.Modal());
             break;
         case Type::TypeKind::TYPE_RAWARRAY:
             CJC_ASSERT(newArgs.size() == 1);
-            newType = builder.GetType<RawArrayType>(newArgs[0], StaticCast<const RawArrayType&>(oldType).GetDims());
+            newType = builder.GetType<RawArrayType>(
+                newArgs[0], StaticCast<const RawArrayType&>(oldType).GetDims(), oldType.Modal());
             break;
         case Type::TypeKind::TYPE_VARRAY:
             CJC_ASSERT(newArgs.size() == 1);
-            newType = builder.GetType<VArrayType>(newArgs[0], StaticCast<const VArrayType&>(oldType).GetSize());
+            newType = builder.GetType<VArrayType>(
+                newArgs[0], StaticCast<const VArrayType&>(oldType).GetSize(), oldType.Modal());
             break;
         case Type::TypeKind::TYPE_BOXTYPE:
             CJC_ASSERT(newArgs.size() == 1);
@@ -429,11 +456,13 @@ Type* ReplaceRawGenericArgType(
     // e.g. class A<T> { func foo<T, U>() {} }
     // if `type` is `foo::T`, return instantiated type
     // if `type` is `foo::U`, return `U`
-    auto genericTy = DynamicCast<const GenericType*>(&type);
+    auto genericTy = DynamicCast<GenericType>(&type);
     if (genericTy != nullptr) {
-        auto it = replaceTable.find(genericTy);
+        auto modal = genericTy->Modal();
+        auto dataTy = StaticCast<GenericType>(builder.SubstituteModal(genericTy, {}));
+        auto it = replaceTable.find(dataTy);
         if (it != replaceTable.end()) {
-            return it->second;
+            return builder.SubstituteModal(it->second, modal);
         } else {
             return &type;
         }
@@ -464,7 +493,7 @@ FuncType* ConvertRealFuncTypeToVirtualFuncType(const FuncType& type, CHIRBuilder
     auto realParams = type.GetParamTypes();
     CJC_ASSERT(!realParams.empty());
     auto paramInVtable = std::vector<Type*>{realParams.begin() + 1, realParams.end()};
-    return builder.GetType<FuncType>(paramInVtable, builder.GetType<UnitType>());
+    return builder.GetType<FuncType>(paramInVtable, builder.GetUnitTy());
 }
 
 Value* TypeCastIfNeeded(
@@ -474,6 +503,8 @@ Value* TypeCastIfNeeded(
     if (val.GetType()->IsNothing()) {
         return &val;
     }
+    // TODO: this assert is correct, but cur impl is not correct, we should fix it later
+    // CJC_ASSERT(val.GetType()->Modal().IsSubModal(expectedTy.Modal()));
     if (val.GetType() != &expectedTy) {
         Value* tmpValue = &val;
         if (val.GetType()->StripAllRefs()->IsGeneric() && val.GetType()->IsRef()) {
@@ -1318,7 +1349,7 @@ Type* GetInstParentCustomTyOfCallee(
     if (!calleeParentDef->GetType()->IsBuiltinType() && calleeParentDef->IsExtend()) {
         calleeParentDef = StaticCast<CustomType*>(calleeParentDef->GetType())->GetCustomTypeDef();
     }
-    auto derefThisType = thisType->StripAllRefs();
+    auto derefThisType = builder.SubstituteModal(thisType->StripAllRefs(), {}); // remove modal for parent type check
     // `thisType` is sub class, `calleeParentDef` is parent class, a CustomType can't inherit BuiltinType
     CJC_ASSERT(!(derefThisType->IsCustomType() && calleeParentDef->GetType()->IsBuiltinType()));
     auto typeAndDefIsEquivalent = [](const CustomType& type, const CustomTypeDef& def) {
@@ -1404,10 +1435,11 @@ std::vector<VTableSearchRes> GetFuncIndexInVTable(Type& root, const FuncCallType
 {
     std::vector<VTableSearchRes> result;
     if (auto genericTy = DynamicCast<GenericType*>(&root)) {
-        auto& upperBounds = genericTy->GetUpperBounds();
+        auto dataTy = StaticCast<GenericType>(builder.SubstituteModal(genericTy, {}));
+        auto& upperBounds = dataTy->GetUpperBounds();
         CJC_ASSERT(!upperBounds.empty());
         for (auto upperBound : upperBounds) {
-            ClassType* upperClassType = StaticCast<ClassType*>(StaticCast<RefType*>(upperBound)->GetBaseType());
+            ClassType* upperClassType = StaticCast<ClassType>(StaticCast<RefType*>(upperBound)->GetBaseType());
             result = GetFuncIndexInVTable(*upperClassType, funcCallType, builder);
             if (!result.empty()) {
                 break;
@@ -1432,7 +1464,7 @@ std::vector<VTableSearchRes> GetFuncIndexInVTable(Type& root, const FuncCallType
 BuiltinType* GetBuiltinTypeWithVTable(BuiltinType& type, CHIRBuilder& builder)
 {
     if (type.IsCPointer()) {
-        return builder.GetType<CPointerType>(builder.GetUnitTy());
+        return builder.GetType<CPointerType>(builder.GetUnitTy(), ModalInfo{});
     }
     return &type;
 }

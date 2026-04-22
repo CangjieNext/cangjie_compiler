@@ -49,13 +49,16 @@ llvm::Value* HandleExitExpression(IRBuilder2& irBuilder, const CHIR::Exit& exitE
     auto retTy = parentFunc->GetReturnType();
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (retTy->IsUnit() || retTy->IsNothing() || retTy->IsVoid()) {
+        // irBuilder.CallIntrinsicFunction(llvm::Type::getVoidTy(irBuilder.GetLLVMContext()), "MCC_EndLocalRegion", {});
         return irBuilder.CreateRetVoid();
     }
 #endif
     auto ret = parentFunc->GetReturnValue();
     if (retTy->IsRawArray()) {
         CJC_ASSERT(ret && ret->GetExpr()->GetExprKind() == CHIR::ExprKind::RAW_ARRAY_ALLOCATE);
-        return irBuilder.CreateRet(**(cgMod | ret));
+        auto retVal = **(cgMod | ret);
+        // irBuilder.CallIntrinsicFunction(llvm::Type::getVoidTy(irBuilder.GetLLVMContext()), "MCC_EndLocalRegion", {});
+        return irBuilder.CreateRet(retVal);
     }
     CJC_ASSERT_WITH_MSG(ret, "An unexpected nullptr is passed by CHIR.");
     CJC_ASSERT(ret->GetExpr()->GetExprKind() == CHIR::ExprKind::ALLOCATE);
@@ -64,16 +67,20 @@ llvm::Value* HandleExitExpression(IRBuilder2& irBuilder, const CHIR::Exit& exitE
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     auto llvmRetType = irBuilder.getCurrentFunctionReturnType();
     if (llvmRetType->isVoidTy()) {
+        // irBuilder.CallIntrinsicFunction(llvm::Type::getVoidTy(irBuilder.GetLLVMContext()), "MCC_EndLocalRegion", {});
         return irBuilder.CreateRetVoid();
     }
     auto curLLVMFunc = irBuilder.GetInsertFunction();
     CJC_NULLPTR_CHECK(curLLVMFunc);
     if (curLLVMFunc->hasFnAttribute(CodeGen::CFUNC_ATTR)) {
         retVal = cgMod.GetCGCFFI().ProcessRetValue(*llvmRetType, *retVal, irBuilder);
+        // irBuilder.CallIntrinsicFunction(llvm::Type::getVoidTy(irBuilder.GetLLVMContext()), "MCC_EndLocalRegion", {});
         return irBuilder.CreateRet(retVal);
     }
 #endif
-    return irBuilder.CreateRet(irBuilder.CreateLoad(retType, retVal));
+    retVal = irBuilder.CreateLoad(retType, retVal);
+    // irBuilder.CallIntrinsicFunction(llvm::Type::getVoidTy(irBuilder.GetLLVMContext()), "MCC_EndLocalRegion", {});
+    return irBuilder.CreateRet(retVal);
 }
 
 llvm::Value* HandleTerminatorExpression(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)

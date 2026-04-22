@@ -11,6 +11,8 @@
 #include "TypeCheckUtil.h"
 #include "ExtraScopes.h"
 
+#include "cangjie/Frontend/CompilerInstance.h"
+
 using namespace Cangjie;
 using namespace AST;
 using namespace Sema;

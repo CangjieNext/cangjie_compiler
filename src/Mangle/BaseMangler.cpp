@@ -171,6 +171,18 @@ std::string DecimalToManglingNumber(const std::string& decimal)
     }
     return base62 + MANGLE_WILDCARD_PREFIX;
 }
+
+std::string MangleLocalModifier(AST::ModalInfo modal)
+{
+    switch (modal.local) {
+        case AST::LocalModal::NOT:
+            return "";
+        case AST::LocalModal::HALF:
+            return "?";
+        case AST::LocalModal::FULL:
+            return "!";
+    }
+}
 } // namespace MangleUtils
 
 std::string BaseMangler::MangleFullPackageName(const std::string& packageName) const
@@ -252,7 +264,7 @@ std::string BaseMangler::MangleUserDefinedType(const AST::Ty& ty, std::vector<st
         mangledName += MangleType(*arg, genericsTypeStack, declare, isCollectGTy);
     }
     mangledName += MANGLE_SUFFIX;
-    return mangledName;
+    return mangledName + MangleUtils::MangleLocalModifier(ty.Modal());
 }
 
 std::string BaseMangler::MangleType(const AST::Ty& ty) const
@@ -265,7 +277,7 @@ std::string BaseMangler::MangleType(const AST::Ty& ty, std::vector<std::string>&
     bool declare, bool isCollectGTy) const
 {
     if (MangleUtils::PRIMITIVE_TYPE_MANGLE.count(ty.kind) != 0) {
-        return MangleUtils::PRIMITIVE_TYPE_MANGLE.at(ty.kind);
+        return MangleUtils::PRIMITIVE_TYPE_MANGLE.at(ty.kind) + MangleUtils::MangleLocalModifier(ty.Modal());
     }
 
     if (ty.kind == TypeKind::TYPE_GENERICS) {
@@ -290,7 +302,7 @@ std::string BaseMangler::MangleType(const AST::Ty& ty, std::vector<std::string>&
         ty.kind == TypeKind::TYPE_CLASS) {
         return MangleUserDefinedType(ty, genericsTypeStack, declare, isCollectGTy);
     } else if (ty.kind == TypeKind::TYPE_CSTRING) {
-        return MangleCStringType();
+        return MangleCStringType(ty);
     }
     return "";
 }
@@ -561,8 +573,17 @@ std::string BaseMangler::MangleFunctionDecl(const FuncDecl& funcDecl, const std:
         mangled += MANGLE_FUNC_PARAM_TYPE_PREFIX;
     } else {
         mangled = MangleDecl(funcDecl, prefix, genericsTypeStack, true, false);
-        mangled += MANGLE_FUNC_PARAM_TYPE_PREFIX;
     }
+    // Add local modal mangling for instance member functions with local thisParam
+    // Check if it's an instance member function (has thisParam and not static)
+    if (!funcDecl.TestAttr(Attribute::STATIC) && funcDecl.funcBody) {
+        auto& paramList = funcDecl.funcBody->paramLists[0];
+        if (paramList->thisParam) {
+            auto modalInfo = paramList->thisParam->modal.ToModalInfo();
+            mangled += MangleUtils::MangleLocalModifier(modalInfo);
+        }
+    }
+    mangled += MANGLE_FUNC_PARAM_TYPE_PREFIX;
 
     // Mangle function parameters.
     mangled += MangleFuncParams(funcDecl, genericsTypeStack, false);
@@ -1045,7 +1066,8 @@ std::string BaseMangler::MangleEnumType(const AST::Ty& ty, std::vector<std::stri
 {
     CJC_ASSERT(ty.kind == TypeKind::TYPE_ENUM);
     auto enumTy = StaticCast<const EnumTy&>(ty);
-    return MangleUserDefinedType(enumTy, genericsTypeStack, declare, isCollectGTy);
+    return MangleUserDefinedType(enumTy, genericsTypeStack, declare, isCollectGTy) +
+        MangleUtils::MangleLocalModifier(ty.Modal());
 }
 
 std::string BaseMangler::MangleRawArrayType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack,
@@ -1054,7 +1076,8 @@ std::string BaseMangler::MangleRawArrayType(const AST::Ty& ty, std::vector<std::
     CJC_ASSERT(ty.kind == TypeKind::TYPE_ARRAY);
     auto arrayTy = StaticCast<const ArrayTy&>(ty);
     return MANGLE_TYPE_ARRAY_PREFIX + MangleUtils::DecimalToManglingNumber(std::to_string(arrayTy.dims)) +
-        MangleType(*arrayTy.typeArgs[0], genericsTypeStack, declare, isCollectGTy);
+        MangleType(*arrayTy.typeArgs[0], genericsTypeStack, declare, isCollectGTy) +
+        MangleUtils::MangleLocalModifier(ty.Modal());
 }
 
 std::string BaseMangler::MangleVArrayType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack,
@@ -1067,7 +1090,7 @@ std::string BaseMangler::MangleVArrayType(const AST::Ty& ty, std::vector<std::st
     for (const auto it : varrayTy.typeArgs) {
         mangled += MangleType(*it, genericsTypeStack, declare, isCollectGTy);
     }
-    return mangled;
+    return mangled + MangleUtils::MangleLocalModifier(ty.Modal());
 }
 
 std::string BaseMangler::MangleTupleType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack, bool declare,
@@ -1081,7 +1104,7 @@ std::string BaseMangler::MangleTupleType(const AST::Ty& ty, std::vector<std::str
         mangled += MangleType(*it, genericsTypeStack, declare, isCollectGTy);
     }
     mangled += MANGLE_SUFFIX;
-    return mangled;
+    return mangled + MangleUtils::MangleLocalModifier(ty.Modal());
 }
 
 std::string BaseMangler::MangleFuncType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack, bool declare,
@@ -1099,7 +1122,7 @@ std::string BaseMangler::MangleFuncType(const AST::Ty& ty, std::vector<std::stri
         params += MangleType(*it, genericsTypeStack, declare, isCollectGTy);
     }
     mangled += retTy + params + MANGLE_SUFFIX;
-    return mangled;
+    return mangled + MangleUtils::MangleLocalModifier(ty.Modal());
 }
 
 std::string BaseMangler::MangleGenericType(const AST::Ty& ty) const
@@ -1107,7 +1130,7 @@ std::string BaseMangler::MangleGenericType(const AST::Ty& ty) const
     CJC_ASSERT(ty.kind == TypeKind::TYPE_GENERICS);
     auto genericsTy = StaticCast<const GenericsTy&>(ty);
     std::string mangled = MANGLE_GENERIC_TYPE_PREFIX + MangleUtils::MangleName(genericsTy.name);
-    return mangled;
+    return mangled + MangleUtils::MangleLocalModifier(ty.Modal());
 }
 
 std::string BaseMangler::MangleGenericType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack,
@@ -1126,17 +1149,19 @@ std::string BaseMangler::MangleGenericType(const AST::Ty& ty, std::vector<std::s
         CJC_ASSERT(result != genericsTypeStack.rend() && "Using undeclared generic type!");
     }
     auto number = MangleUtils::DecimalToManglingNumber(std::to_string(index));
-    return MANGLE_GENERIC_TYPE_PREFIX + number;
+    return MANGLE_GENERIC_TYPE_PREFIX + number + MangleUtils::MangleLocalModifier(ty.Modal());
 }
 
 std::string BaseMangler::MangleFuncParams(const AST::FuncDecl& funcDecl, std::vector<std::string>& genericsTypeStack,
     bool declare, bool isCollectGTy) const
 {
-    if (!funcDecl.funcBody || funcDecl.funcBody->paramLists.empty() ||
-        funcDecl.funcBody->paramLists[0]->params.empty()) {
+    if (!funcDecl.funcBody || funcDecl.funcBody->paramLists.empty()) {
         return MANGLE_VOID_TY_SUFFIX;
     }
     std::string mangled = "";
+    if (funcDecl.funcBody->paramLists[0]->params.empty()) {
+        return mangled + MANGLE_VOID_TY_SUFFIX;
+    }
     for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
         CJC_NULLPTR_CHECK(param->GetTy());
         if (Ty::IsInitialTy(param->GetTy())) {
@@ -1153,8 +1178,16 @@ std::string BaseMangler::MangleCPointerType(const AST::Ty& ty, std::vector<std::
     CJC_ASSERT(ty.kind == TypeKind::TYPE_POINTER);
     auto pointerTy = StaticCast<const PointerTy&>(ty);
     CJC_ASSERT(!pointerTy.typeArgs.empty() && pointerTy.typeArgs[0]);
-    return !pointerTy.typeArgs.empty() && pointerTy.typeArgs[0] ? MANGLE_POINTER_PREFIX +
-        MangleType(*pointerTy.typeArgs[0], genericsTypeStack, declare, isCollectGTy) : "";
+    if (!pointerTy.typeArgs.empty() && pointerTy.typeArgs[0]) {
+        return MANGLE_POINTER_PREFIX + MangleType(*pointerTy.typeArgs[0], genericsTypeStack, declare, isCollectGTy) +
+            MangleUtils::MangleLocalModifier(ty.Modal());
+    }
+    return "";
+}
+
+std::string BaseMangler::MangleCStringType(const AST::Ty& ty) const
+{
+    return "k" + MangleUtils::MangleLocalModifier(ty.Modal());
 }
 
 std::string BaseMangler::ManglePackageNameForGeneric(const AST::Decl& decl) const

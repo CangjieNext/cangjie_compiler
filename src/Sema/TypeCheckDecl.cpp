@@ -84,6 +84,9 @@ void TypeCheckerImpl::CheckFuncDecl(ASTContext& ctx, FuncDecl& fd)
         // Update return type to invalid, keep 'fd''s type in funcTy format.
         fd.SetTy(typeManager.GetFunctionTy(RawStaticCast<FuncTy*>(fd.GetTy())->paramTys, TypeManager::GetInvalidTy()));
     }
+    if (fd.propDecl) {
+        CheckPropMethodTargetType(fd);
+    }
     // NOTE: 'fd''s type should only be updated inside 'CheckFuncBody' not here.
     if (fd.TestAttr(AST::Attribute::MAIN_ENTRY)) {
         CheckEntryFunc(fd);
@@ -342,7 +345,7 @@ template <typename T> void TypeCheckerImpl::SynchronizeTypeAndInitializer(const 
         // when the initializer is 'this', the vd's ty will be inferred to the corresponding ClassTy (NOT
         // ClassThisTy)
         if (auto ctt = DynamicCast<AST::ClassThisTy*>(vd.initializer->GetTy()); ctt && ctt->decl) {
-            vd.SetTy(typeManager.GetClassTy(*ctt->decl, ctt->typeArgs));
+            vd.SetTy(typeManager.GetClassTy(*ctt->decl, ctt->typeArgs, ctt->Modal()));
         } else if (auto fty = DynamicCast<AST::FuncTy*>(vd.initializer->GetTy());
                    fty && fty->isC && fty->hasVariableLenArg) {
             vd.SetTy(TypeManager::GetInvalidTy());
@@ -389,6 +392,32 @@ void TypeCheckerImpl::CheckPropDecl(ASTContext& ctx, PropDecl& pd)
         }
         Synthesize({ctx, SynPos::NONE}, pmd.get());
     }
+}
+
+bool TypeCheckerImpl::CheckPropMethodTargetType(const FuncDecl& fd)
+{
+    auto prop = fd.propDecl;
+    if (fd.isSetter) {
+        auto& params = fd.funcBody->paramLists[0];
+        if (params->params.empty() || !Ty::IsTyCorrect(params->params[0]->GetTy())) {
+            return true;
+        }
+        if (!typeManager.IsSameDataType(params->params[0]->GetTy(), prop->GetTy())) {
+            diag.DiagnoseRefactor("sema_prop_method_target_type_mismatch", fd, prop->GetTy()->String(),
+                params->params[0]->GetTy()->String());
+            return false;
+        }
+        return true;
+    }
+    if (!fd.funcBody->retType || !Ty::IsTyCorrect(fd.funcBody->retType->GetTy())) {
+        return true;
+    }
+    if (!typeManager.IsSameDataType(fd.funcBody->retType->GetTy(), prop->GetTy())) {
+        diag.DiagnoseRefactor("sema_prop_method_target_type_mismatch", fd, prop->GetTy()->String(),
+            fd.funcBody->retType->GetTy()->String());
+        return false;
+    }
+    return true;
 }
 
 void TypeCheckerImpl::BuildImportedEnumConstructorMap(ASTContext& ctx)
@@ -737,6 +766,42 @@ Ptr<Ty> TypeCheckerImpl::SynFuncParam(ASTContext& ctx, FuncParam& fp)
         Synthesize({ctx, SynPos::EXPR_ARG}, fp.desugarDecl.get());
     }
     return fp.GetTy();
+}
+
+Ptr<Ty> TypeCheckerImpl::SynThisParam(ASTContext& ctx, ThisParam& tp)
+{
+    auto cl = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, tp.scopeName);
+    if (!cl || !cl->node->GetTy()) {
+        tp.SetTy(TypeManager::GetInvalidTy());
+        return tp.GetTy();
+    }
+    auto modalInfo = tp.modal.ToModalInfo();
+    Ptr<Ty> ty = cl->node->GetTy();
+    switch (ty->kind) {
+        case TypeKind::TYPE_CLASS: {
+            auto* classTy = StaticCast<ClassTy>(ty.get());
+            tp.SetTy(typeManager.GetClassThisTy(*classTy->decl, classTy->typeArgs, modalInfo));
+            return tp.GetTy();
+        }
+        case TypeKind::TYPE_STRUCT: {
+            auto* structTy = StaticCast<StructTy>(ty.get());
+            tp.SetTy(typeManager.GetStructTy(*structTy->declPtr, structTy->typeArgs, modalInfo));
+            return tp.GetTy();
+        }
+        case TypeKind::TYPE_ENUM: {
+            auto* enumTy = StaticCast<EnumTy>(ty.get());
+            tp.SetTy(typeManager.GetEnumTy(*enumTy->declPtr, enumTy->typeArgs, modalInfo));
+            return tp.GetTy();
+        }
+        case TypeKind::TYPE_INTERFACE: {
+            auto* interfTy = StaticCast<InterfaceTy>(ty.get());
+            tp.SetTy(typeManager.GetInterfaceTy(*interfTy->declPtr, interfTy->typeArgs, modalInfo));
+            return tp.GetTy();
+        }
+        default:
+            tp.SetTy(typeManager.SubstituteModal(ty, modalInfo));
+            return tp.GetTy();
+    }
 }
 
 bool TypeCheckerImpl::ChkFuncParam(ASTContext& ctx, Ty& target, FuncParam& fp)

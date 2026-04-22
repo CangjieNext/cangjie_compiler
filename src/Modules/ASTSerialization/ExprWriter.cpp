@@ -616,6 +616,19 @@ TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const ForInExpr& fie, const
     return dbuilder.Finish();
 }
 
+TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const ExclaveExpr& ee, const NodeInfo& info)
+{
+    auto bodyIdx = SaveExpr(*ee.body);
+    std::vector<FormattedIndex> operands;
+    operands.emplace_back(bodyIdx);
+    auto operandsIdx = builder.CreateVector<FormattedIndex>(operands);
+    PackageFormat::ExprBuilder dbuilder(builder);
+    SaveBasicNodeInfo(dbuilder, info);
+    dbuilder.add_kind(PackageFormat::ExprKind_ExclaveExpr);
+    dbuilder.add_operands(operandsIdx);
+    return dbuilder.Finish();
+}
+
 FormattedIndex ASTWriter::ASTWriterImpl::SaveMatchCase(const MatchCase& mc)
 {
     FormattedIndex index = static_cast<FormattedIndex>(allExprs.size()) + 1;

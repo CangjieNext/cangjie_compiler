@@ -18,6 +18,7 @@ enum class BuiltInType : uint8_t {
     CSTRING,
     CFUNC,
     VARRAY,
+    COPY,
     // Will have other builtin types.
 };
 

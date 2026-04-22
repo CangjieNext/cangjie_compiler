@@ -1101,6 +1101,8 @@ bool InitializationChecker::CheckInitInExpr(Ptr<Node> node)
             return CheckInitInExpr(StaticCast<IsExpr>(node)->leftExpr.get());
         case ASTKind::AS_EXPR:
             return CheckInitInExpr(StaticCast<AsExpr>(node)->leftExpr.get());
+        case ASTKind::EXCLAVE_EXPR:
+            return CheckInitInExpr(StaticCast<ExclaveExpr>(node)->body.get());
         default:
             return true;
     }

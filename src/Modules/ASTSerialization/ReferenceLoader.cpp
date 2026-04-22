@@ -296,7 +296,8 @@ bool ASTLoader::ASTLoaderImpl::GetPrimitiveTy(FormattedIndex type, const Package
         typeObj->kind() <= PackageFormat::TypeKind_Bool) {
         auto astKind = GetASTTypeKind(typeObj->kind());
         CJC_ASSERT(astKind != TypeKind::TYPE_INVALID);
-        auto t = TypeManager::GetPrimitiveTy(astKind);
+        auto modalInfo = ModalInfo(FromFormatLocalModal(typeObj->local()));
+        auto t = TypeManager::GetPrimitiveTy(astKind, modalInfo);
         allTypes[type] = t;
         return true;
     }
@@ -312,8 +313,9 @@ void ASTLoader::ASTLoaderImpl::SetGenericTy(FormattedIndex type, const PackageFo
         return; // For invalid indirect importing, this may be true.
     }
     auto gpd = StaticCast<GenericParamDecl*>(decl);
-    auto t = typeManager.GetGenericsTy(*gpd);
-    allTypes[type] = t;
+    auto t = typeManager.GetGenericsTy(*gpd, ModalInfo(FromFormatLocalModal(typeObj.local())));
+    auto substitutedTy = typeManager.SubstituteModal(t, ModalInfo(FromFormatLocalModal(typeObj.local())));
+    allTypes[type] = Ptr<Ty>(substitutedTy);
 
     if (isLoadCache) {
         return; // Do not load upper bounds cache for generic type.
@@ -345,30 +347,33 @@ std::vector<Ptr<Ty>> ASTLoader::ASTLoaderImpl::LoadTypeArgs(const PackageFormat:
 template <typename TypeT, typename TypeDecl>
 void ASTLoader::ASTLoaderImpl::SetTypeTy(FormattedIndex type, const PackageFormat::SemaTy& typeObj)
 {
+    // Get the modal from the serialized data first
+    auto modalInfo = ModalInfo(FromFormatLocalModal(typeObj.local()));
+
     Ptr<Ty> ty = TypeManager::GetInvalidTy();
     if constexpr (std::is_same_v<TypeT, CStringTy>) {
-        ty = TypeManager::GetCStringTy();
+        ty = TypeManager::GetCStringTy(modalInfo);
     } else if constexpr (std::is_same_v<TypeT, PointerTy>) {
         CJC_ASSERT(typeObj.typeArgs() && typeObj.typeArgs()->size() == 1u);
-        ty = typeManager.GetPointerTy(LoadType(typeObj.typeArgs()->Get(0)));
+        ty = typeManager.GetPointerTy(LoadType(typeObj.typeArgs()->Get(0)), modalInfo);
     } else if constexpr (std::is_same_v<TypeT, ArrayTy>) {
         auto info = typeObj.info_as_ArrayTyInfo();
         CJC_NULLPTR_CHECK(info);
         unsigned int dims = static_cast<unsigned int>(info->dimsOrSize());
         CJC_ASSERT(typeObj.typeArgs() && typeObj.typeArgs()->size() == 1u);
-        ty = typeManager.GetArrayTy(LoadType(typeObj.typeArgs()->Get(0)), dims);
+        ty = typeManager.GetArrayTy(LoadType(typeObj.typeArgs()->Get(0)), dims, modalInfo);
     } else if constexpr (std::is_same_v<TypeT, VArrayTy>) {
         auto info = typeObj.info_as_ArrayTyInfo();
         CJC_NULLPTR_CHECK(info);
         CJC_ASSERT(typeObj.typeArgs() && typeObj.typeArgs()->size() == 1u);
-        ty = typeManager.GetVArrayTy(*LoadType(typeObj.typeArgs()->Get(0)), info->dimsOrSize());
+        ty = typeManager.GetVArrayTy(*LoadType(typeObj.typeArgs()->Get(0)), info->dimsOrSize(), modalInfo);
     } else if constexpr (std::is_same_v<TypeT, TupleTy>) {
-        ty = typeManager.GetTupleTy(LoadTypeArgs(typeObj));
+        ty = typeManager.GetTupleTy(LoadTypeArgs(typeObj), false, modalInfo);
     } else if constexpr (std::is_same_v<TypeT, FuncTy>) {
         auto info = typeObj.info_as_FuncTyInfo();
         CJC_NULLPTR_CHECK(info);
-        ty = typeManager.GetFunctionTy(
-            LoadTypeArgs(typeObj), LoadType(info->retType()), {info->isC(), false, info->hasVariableLenArg()});
+        ty = typeManager.GetFunctionTy(LoadTypeArgs(typeObj), LoadType(info->retType()),
+            {info->isC(), false, info->hasVariableLenArg()}, modalInfo);
     } else {
         auto info = typeObj.info_as_CompositeTyInfo();
         CJC_NULLPTR_CHECK(info);
@@ -379,17 +384,16 @@ void ASTLoader::ASTLoaderImpl::SetTypeTy(FormattedIndex type, const PackageForma
         }
         auto typeArgs = LoadTypeArgs(typeObj);
         if constexpr (std::is_same_v<TypeT, TypeAliasTy>) {
-            ty = typeManager.GetTypeAliasTy(*typeDecl, typeArgs);
+            ty = typeManager.GetTypeAliasTy(*typeDecl, typeArgs, modalInfo);
         } else if constexpr (std::is_same_v<TypeT, ClassTy>) {
-            ty = info->isThisTy()
-                ? typeManager.GetClassThisTy(*typeDecl, typeArgs)
-                : typeManager.GetClassTy(*typeDecl, typeArgs);
+            ty = info->isThisTy() ? typeManager.GetClassThisTy(*typeDecl, typeArgs, modalInfo)
+                                  : typeManager.GetClassTy(*typeDecl, typeArgs, modalInfo);
         } else if constexpr (std::is_same_v<TypeT, InterfaceTy>) {
-            ty = typeManager.GetInterfaceTy(*typeDecl, typeArgs);
+            ty = typeManager.GetInterfaceTy(*typeDecl, typeArgs, modalInfo);
         } else if constexpr (std::is_same_v<TypeT, StructTy>) {
-            ty = typeManager.GetStructTy(*typeDecl, typeArgs);
+            ty = typeManager.GetStructTy(*typeDecl, typeArgs, modalInfo);
         } else if constexpr (std::is_same_v<TypeT, EnumTy>) {
-            ty = typeManager.GetEnumTy(*typeDecl, typeArgs);
+            ty = typeManager.GetEnumTy(*typeDecl, typeArgs, modalInfo);
         } else {
             static_assert(std::is_same_v<TypeT, Ty>);
         }
@@ -576,6 +580,28 @@ void ASTLoader::ASTLoaderImpl::LoadDeclRefs(const PackageFormat::Decl& declObj, 
             if (!vda->type && (decl.GetTy()->HasAliasTy() || decl.GetTy()->IsFunc())) {
                 vda->type = WrapType(decl.GetTy());
             }
+            break;
+        }
+        case PackageFormat::DeclKind_ThisParam: {
+            auto tp = StaticCast<ThisParam*>(&decl);
+            // Set the modal based on the loaded type's modal
+            LocalModalAST astModal;
+            switch (tp->GetTy()->Modal().local) {
+                case LocalModal::NOT:
+                    CJC_ABORT_WITH_MSG("do not save modal for @~local this param");
+                    astModal = LocalModalAST::NOT;
+                    break;
+                case LocalModal::HALF:
+                    astModal = LocalModalAST::HALF;
+                    break;
+                case LocalModal::FULL:
+                    astModal = LocalModalAST::FULL;
+                    break;
+                default:
+                    CJC_ABORT_WITH_MSG("Unhandled local modal.");
+                    break;
+            }
+            tp->modal.SetLocal(astModal, DEFAULT_POSITION);
             break;
         }
         default:

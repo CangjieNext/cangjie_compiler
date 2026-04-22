@@ -28,6 +28,26 @@ bool Translator::OverloadableExprMayThrowException(const AST::OverloadableExpr& 
     return (mayOverflow || mayDivZero || mayOverShift) && !noException;
 }
 
+static const std::unordered_map<Cangjie::TokenKind, Cangjie::CHIR::ExprKind> op2ExprKind = {
+    {Cangjie::TokenKind::ADD, Cangjie::CHIR::ExprKind::ADD},
+    {Cangjie::TokenKind::SUB, Cangjie::CHIR::ExprKind::SUB},
+    {Cangjie::TokenKind::MUL, Cangjie::CHIR::ExprKind::MUL},
+    {Cangjie::TokenKind::DIV, Cangjie::CHIR::ExprKind::DIV},
+    {Cangjie::TokenKind::MOD, Cangjie::CHIR::ExprKind::MOD},
+    {Cangjie::TokenKind::EXP, Cangjie::CHIR::ExprKind::EXP},
+    {Cangjie::TokenKind::BITAND, Cangjie::CHIR::ExprKind::BITAND},
+    {Cangjie::TokenKind::BITOR, Cangjie::CHIR::ExprKind::BITOR},
+    {Cangjie::TokenKind::BITXOR, Cangjie::CHIR::ExprKind::BITXOR},
+    {Cangjie::TokenKind::LSHIFT, Cangjie::CHIR::ExprKind::LSHIFT},
+    {Cangjie::TokenKind::RSHIFT, Cangjie::CHIR::ExprKind::RSHIFT},
+    {Cangjie::TokenKind::LT, Cangjie::CHIR::ExprKind::LT},
+    {Cangjie::TokenKind::GT, Cangjie::CHIR::ExprKind::GT},
+    {Cangjie::TokenKind::LE, Cangjie::CHIR::ExprKind::LE},
+    {Cangjie::TokenKind::GE, Cangjie::CHIR::ExprKind::GE},
+    {Cangjie::TokenKind::NOTEQ, Cangjie::CHIR::ExprKind::NOTEQUAL},
+    {Cangjie::TokenKind::EQUAL, Cangjie::CHIR::ExprKind::EQUAL},
+};
+
 Value* Translator::TranslateVArrayAssign(const AssignExpr& assign)
 {
     // note:

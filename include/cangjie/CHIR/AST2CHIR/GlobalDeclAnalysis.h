@@ -13,10 +13,25 @@
 
 #include "cangjie/CHIR/Utils/DiagAdapter.h"
 #include "cangjie/CHIR/Utils/Utils.h"
-#include "cangjie/Frontend/CompilerInstance.h"
+
+namespace Cangjie {
+class GenericInstantiationManager;
+enum class IncreKind;
+struct CompilationCache;
+} // namespace Cangjie
 
 namespace Cangjie::AST {
 enum class VisitAction : uint8_t;
+struct Node;
+struct Expr;
+struct Decl;
+struct File;
+struct LitConstExpr;
+struct Pattern;
+struct VarDecl;
+struct VarWithPatternDecl;
+struct CallExpr;
+struct FuncDecl;
 }
 namespace Cangjie::CHIR {
 class GlobalDeclAnalysis {
@@ -173,10 +188,7 @@ class VarCirDepsChecker : public TarjanSort<Ptr<const AST::Decl>> {
 public:
     explicit VarCirDepsChecker(DiagAdapter& ciDiag);
     void DetectCircularDep() override;
-    std::string GetEleStr(Ptr<const AST::Decl> decl) const override
-    {
-        return decl->identifier;
-    }
+    std::string GetEleStr(Ptr<const AST::Decl> decl) const override;
     bool IsVar(const AST::Decl& decl) const;
     DiagAdapter* diag;
     std::vector<std::string> diagLog;
@@ -187,10 +199,7 @@ public:
     FileCirDepsChecker(DiagAdapter& ciDiag, const std::vector<std::string>& vardiagLog);
     void InitFileDep(const FileDepMap& depMap);
     void DetectCircularDep() override;
-    std::string GetEleStr(Ptr<const AST::File> node) const override
-    {
-        return node->fileName;
-    }
+    std::string GetEleStr(Ptr<const AST::File> node) const override;
     DiagAdapter* diag;
     std::vector<std::string> diagLog;
 };

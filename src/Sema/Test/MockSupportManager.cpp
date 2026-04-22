@@ -46,9 +46,8 @@ bool IsTopLevelField(AccessorKind kind)
     return kind == AccessorKind::TOP_LEVEL_VARIABLE_GETTER || kind == AccessorKind::TOP_LEVEL_VARIABLE_SETTER;
 }
 
-MockSupportManager::MockSupportManager(TypeManager& typeManager, const Ptr<MockUtils> mockUtils)
-    : typeManager(typeManager),
-      mockUtils(mockUtils)
+MockSupportManager::MockSupportManager(TypeManager& typeManager, DiagnosticEngine& d, Ptr<MockUtils> mockUtils)
+    : typeManager(typeManager), diag(d), mockUtils(mockUtils)
 {}
 
 Ptr<Expr> ExtractLastDesugaredExpr(Expr& expr)
@@ -153,10 +152,10 @@ void MockSupportManager::MarkNodeMockSupportedIfNeeded(Node& node)
         MakeOpenToMockIfNeeded(*decl);
         if (auto propMember = As<ASTKind::PROP_DECL>(decl); propMember) {
             decl->EnableAttr(Attribute::MOCK_SUPPORTED);
-            MakeOpenToMockIfNeeded(*GetUsableGetterForProperty(*propMember));
+            MakeOpenToMockIfNeeded(*GetUsableGetterForProperty(typeManager, diag, *propMember));
             if (propMember->isVar) {
                 decl->EnableAttr(Attribute::MOCK_SUPPORTED);
-                MakeOpenToMockIfNeeded(*GetUsableSetterForProperty(*propMember));
+                MakeOpenToMockIfNeeded(*GetUsableSetterForProperty(typeManager, diag, *propMember));
             }
         }
     } else if (auto funcDecl = As<ASTKind::FUNC_DECL>(decl)) {
@@ -187,13 +186,13 @@ void MockSupportManager::PrepareDecls(DeclsToPrepare&& decls)
     }
 
     for (auto decl : decls.properties) {
-        auto& getter = *GetUsableGetterForProperty(*decl);
+        auto& getter = *GetUsableGetterForProperty(typeManager, diag, *decl);
         if (getter.outerDecl != decl->outerDecl) {
             continue;
         }
         PrepareStaticDecl(getter);
         if (decl->isVar) {
-            auto& setter = *GetUsableSetterForProperty(*decl);
+            auto& setter = *GetUsableSetterForProperty(typeManager, diag, *decl);
             if (setter.outerDecl != decl->outerDecl) {
                 continue;
             }
@@ -342,7 +341,7 @@ std::vector<OwnedPtr<MatchCase>> MockSupportManager::GenerateHandlerMatchCases(
 
     auto arrayLitOfGetTypeCalls = mockUtils->WrapCallTypeArgsIntoArray(funcDecl);
     auto handlerRetTy = typeManager.GetAnyTy();
-    auto optionFuncRetTy = typeManager.GetEnumTy(*mockUtils->optionDecl, { handlerRetTy });
+    auto optionFuncRetTy = typeManager.GetEnumTy(*mockUtils->optionDecl, {handlerRetTy}, {});
 
     std::vector<OwnedPtr<MatchCase>> handlerResultCases;
     auto handlerResultPattern = MakeOwned<EnumPattern>();
@@ -417,14 +416,14 @@ void MockSupportManager::PrepareStaticDecl(Decl& decl)
     auto isMethod = !decl.IsStaticOrGlobal();
 
     auto handlerRetTy = typeManager.GetAnyTy();
-    auto optionFuncRetTy = typeManager.GetEnumTy(*mockUtils->optionDecl, { handlerRetTy });
-    auto arrayTy = typeManager.GetStructTy(*mockUtils->arrayDecl, { typeManager.GetAnyTy() });
-    auto toStrArrayTy = typeManager.GetStructTy(*mockUtils->arrayDecl, { mockUtils->toStringDecl->GetTy() });
-    auto objectTy = typeManager.GetClassTy(*mockUtils->objectDecl, {});
+    auto optionFuncRetTy = typeManager.GetEnumTy(*mockUtils->optionDecl, {handlerRetTy}, {});
+    auto arrayTy = typeManager.GetStructTy(*mockUtils->arrayDecl, {typeManager.GetAnyTy()}, {});
+    auto toStrArrayTy = typeManager.GetStructTy(*mockUtils->arrayDecl, {mockUtils->toStringDecl->GetTy()}, {});
+    auto objectTy = typeManager.GetClassTy(*mockUtils->objectDecl, {}, {});
     auto funcTy = isMethod
         ? typeManager.GetFunctionTy({objectTy, arrayTy, toStrArrayTy}, optionFuncRetTy)
         : typeManager.GetFunctionTy({arrayTy, toStrArrayTy}, optionFuncRetTy);
-    auto optionFuncTy = typeManager.GetEnumTy(*mockUtils->optionDecl, { funcTy });
+    auto optionFuncTy = typeManager.GetEnumTy(*mockUtils->optionDecl, {funcTy}, {});
     auto noneCtor = CreateRefExpr(*LookupEnumMember(optionFuncTy->decl, OPTION_NONE_CTOR));
     noneCtor->curFile = decl.curFile;
     noneCtor->SetTy(optionFuncTy);
@@ -523,7 +522,7 @@ Ptr<Decl> MockSupportManager::GenerateSpiedObjectVar(const Decl& decl)
 {
     auto declTy = typeManager.GetAnyTy();
     auto mangledName = mockUtils->Mangle(decl);
-    auto optionDeclTy = typeManager.GetEnumTy(*mockUtils->optionDecl, { declTy });
+    auto optionDeclTy = typeManager.GetEnumTy(*mockUtils->optionDecl, {declTy}, {});
     auto noneRef = CreateRefExpr(*LookupEnumMember(optionDeclTy->decl, OPTION_NONE_CTOR));
     noneRef->SetTy(optionDeclTy);
 
@@ -740,7 +739,7 @@ void MockSupportManager::GenerateAccessors(Decl& decl)
             continue;
         }
         if (auto propDecl = As<ASTKind::PROP_DECL>(member)) {
-            auto getter = GetUsableGetterForProperty(*propDecl);
+            auto getter = GetUsableGetterForProperty(typeManager, diag, *propDecl);
             if (getter && getter->isFrozen) {
                 continue;
             }
@@ -953,11 +952,11 @@ OwnedPtr<PropDecl> MockSupportManager::GeneratePropAccessor(PropDecl& propDecl)
     std::vector<OwnedPtr<FuncDecl>> accessorForGetters;
     std::vector<OwnedPtr<FuncDecl>> accessorForSetters;
 
-    auto propGetter = GenerateFuncAccessor(*GetUsableGetterForProperty(propDecl));
+    auto propGetter = GenerateFuncAccessor(*GetUsableGetterForProperty(typeManager, diag, propDecl));
     propGetter->propDecl = propAccessor.get();
     accessorForGetters.emplace_back(std::move(propGetter));
     if (propDecl.isVar) {
-        auto propSetter = GenerateFuncAccessor(*GetUsableSetterForProperty(propDecl));
+        auto propSetter = GenerateFuncAccessor(*GetUsableSetterForProperty(typeManager, diag, propDecl));
         propSetter->propDecl = propAccessor.get();
         accessorForSetters.emplace_back(std::move(propSetter));
     }
@@ -1117,7 +1116,7 @@ OwnedPtr<FuncBody> MockSupportManager::CreateForeignFunctionAccessorBody(
             auto funcArg = CreateFuncArg(CreateRefExpr(*param));
             if (auto varray = DynamicCast<VArrayTy>(funcArg->GetTy())) {
                 funcArg->withInout = true;
-                funcArg->SetTy(typeManager.GetPointerTy(varray->typeArgs[0]));
+                funcArg->SetTy(typeManager.GetPointerTy(varray->typeArgs[0], {}));
             }
             args.emplace_back(std::move(funcArg));
         }
@@ -1580,9 +1579,9 @@ Ptr<Expr> MockSupportManager::ReplaceMemberAccessWithAccessor(MemberAccess& memb
             return nullptr;
         }
         if (funcDecl->isGetter) {
-            memberAccess.SetTarget(GetUsableGetterForProperty(*propDeclToMock));
+            memberAccess.SetTarget(GetUsableGetterForProperty(typeManager, diag, *propDeclToMock));
         } else if (funcDecl->isSetter) {
-            memberAccess.SetTarget(GetUsableSetterForProperty(*propDeclToMock));
+            memberAccess.SetTarget(GetUsableSetterForProperty(typeManager, diag, *propDeclToMock));
         }
     } else if (auto funcDeclToMock = mockUtils->FindAccessorForMemberAccess(
                    memberAccess.baseExpr->GetTy(), memberAccess.GetTarget(), AccessorKind::METHOD)) {
@@ -1903,7 +1902,7 @@ void MockSupportManager::PrepareInterfaceDecl(InterfaceDecl& interfaceDecl)
     CopyBasicInfo(&interfaceDecl, accessorInterface);
     accessorInterface->CloneAttrs(interfaceDecl);
     accessorInterface->identifier = interfaceDecl.identifier + MockUtils::defaultAccessorSuffix;
-    accessorInterface->SetTy(typeManager.GetInterfaceTy(*accessorInterface, {}));
+    accessorInterface->SetTy(typeManager.GetInterfaceTy(*accessorInterface, {}, {}));
     accessorInterface->fullPackageName = interfaceDecl.fullPackageName;
     accessorInterface->linkage = interfaceDecl.linkage;
 

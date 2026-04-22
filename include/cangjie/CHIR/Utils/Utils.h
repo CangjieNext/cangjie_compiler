@@ -16,16 +16,24 @@
 #include <deque>
 #include <map>
 
-#include "cangjie/AST/ASTCasting.h"
-#include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/CHIRContext.h"
-#include "cangjie/CHIR/IR/Type/CHIRType.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 #include "cangjie/CHIR/Utils/DiagAdapter.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/Utils/CastingTemplate.h"
+
+namespace Cangjie::AST {
+struct FuncDecl;
+struct VarDecl;
+struct Decl;
+struct File;
+struct InheritableDecl;
+struct ClassLikeDecl;
+struct EnumDecl;
+struct CallExpr;
+} // namespace Cangjie::AST
 
 namespace Cangjie::CHIR {
 
@@ -189,12 +197,7 @@ bool IsInterfaceStaticMethod(const Function& func);
  * @param func The AST function declaration to check.
  * @return True if the function is semantically abstract and an instance, false otherwise.
  */
-inline bool IsSemanticAbstractInstance(const AST::FuncDecl& func)
-{
-    return !func.TestAttr(AST::Attribute::STATIC) &&
-        (func.TestAttr(AST::Attribute::ABSTRACT) ||
-            (func.outerDecl && func.outerDecl->astKind == AST::ASTKind::INTERFACE_DECL));
-}
+bool IsSemanticAbstractInstance(const AST::FuncDecl& func);
 
 /**
  * @brief Performs a topological sort on a set of blocks starting from the entry block.
@@ -242,10 +245,7 @@ std::vector<Ptr<AST::VarDecl>> GetNonStaticSuperMemberVars(const AST::ClassLikeD
  * @param enumDecl The enum declaration to check.
  * @return True if the enum declaration is an enum option, false otherwise.
  */
-inline bool IsEnumOption(const AST::EnumDecl& enumDecl)
-{
-    return enumDecl.identifier == STD_LIB_OPTION && enumDecl.fullPackageName == CORE_PACKAGE_NAME;
-}
+bool IsEnumOption(const AST::EnumDecl& enumDecl);
 
 /**
  * @brief Constructs the output path based on the output directory and package name.

@@ -160,6 +160,7 @@ private:
     TDeclOffset SaveTypeAliasDecl(const AST::TypeAliasDecl& typeAliasDecl, const DeclInfo& declInfo);
     TDeclOffset SaveBuiltInDecl(const AST::BuiltInDecl& builtInDecl, const DeclInfo& declInfo);
     TDeclOffset SaveGenericParamDecl(const AST::GenericParamDecl& gpd, const DeclInfo& declInfo);
+    TDeclOffset SaveThisParam(const AST::ThisParam& tp, const DeclInfo& declInfo);
     TDeclOffset SaveUnsupportDecl(const DeclInfo& declInfo, const AST::Decl& decl);
     using DeclWriterT = std::function<TDeclOffset(const AST::Decl&, const DeclInfo&)>;
     template <typename DeclT, typename = std::enable_if_t<std::is_base_of_v<AST::Decl, DeclT>, void>>
@@ -169,7 +170,7 @@ private:
             return (this->*saveFunc)(StaticCast<const DeclT&>(decl), declInfo);
         };
     }
-    std::unordered_map<AST::ASTKind, DeclWriterT> declWriterMap {
+    std::unordered_map<AST::ASTKind, DeclWriterT> declWriterMap{
         {AST::ASTKind::VAR_DECL, Proxy<AST::VarDecl>(&ASTWriterImpl::SaveVarDecl)},
         {AST::ASTKind::VAR_WITH_PATTERN_DECL, Proxy<AST::VarWithPatternDecl>(&ASTWriterImpl::SaveVarWithPatternDecl)},
         {AST::ASTKind::PROP_DECL, Proxy<AST::PropDecl>(&ASTWriterImpl::SavePropDecl)},
@@ -183,6 +184,7 @@ private:
         {AST::ASTKind::TYPE_ALIAS_DECL, Proxy<AST::TypeAliasDecl>(&ASTWriterImpl::SaveTypeAliasDecl)},
         {AST::ASTKind::BUILTIN_DECL, Proxy<AST::BuiltInDecl>(&ASTWriterImpl::SaveBuiltInDecl)},
         {AST::ASTKind::GENERIC_PARAM_DECL, Proxy<AST::GenericParamDecl>(&ASTWriterImpl::SaveGenericParamDecl)},
+        {AST::ASTKind::THIS_PARAM, Proxy<AST::ThisParam>(&ASTWriterImpl::SaveThisParam)},
     };
 
     bool PlannedToBeSerialized(Ptr<const AST::Decl> decl);
@@ -259,6 +261,7 @@ private:
     TExprOffset SaveExpression(const AST::LetPatternDestructor& e, const NodeInfo& info);
     TExprOffset SaveUnsupportExpr(const AST::Expr& expr, const NodeInfo& info);
     TExprOffset SaveExpression(const AST::ForInExpr& fie, const NodeInfo& info);
+    TExprOffset SaveExpression(const AST::ExclaveExpr& ee, const NodeInfo& info);
 
     using ExprWriterT = std::function<TExprOffset(const AST::Expr&, const NodeInfo&)>;
     template <typename ExprT, typename = std::enable_if_t<std::is_base_of_v<AST::Expr, ExprT>, void>>
@@ -299,6 +302,7 @@ private:
         {AST::ASTKind::MATCH_EXPR, Proxy<AST::MatchExpr>(&ASTWriterImpl::SaveExpression)},
         {AST::ASTKind::LET_PATTERN_DESTRUCTOR, Proxy<AST::LetPatternDestructor>(&ASTWriterImpl::SaveExpression)},
         {AST::ASTKind::FOR_IN_EXPR, Proxy<AST::ForInExpr>(&ASTWriterImpl::SaveExpression)},
+        {AST::ASTKind::EXCLAVE_EXPR, Proxy<AST::ExclaveExpr>(&ASTWriterImpl::SaveExpression)},
     };
 
     // Following types of ast also saved with 'PackageFormat::Expr'.

@@ -192,6 +192,7 @@ Ptr<Value> Translator::Visit(const AST::FuncDecl& func)
     CJC_ASSERT(!isLifted || IsTopLevel(func));
     // translateTopLevel
     Function* curFunc = StaticCast<Function*>(globalSymbolTable.Get(func));
+    funcContext.PushFunc(func, *curFunc);
     if (IsCopiedSrcFuncFromInterface(&func)) {
         curFunc->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
     }
@@ -205,6 +206,9 @@ Ptr<Value> Translator::Visit(const AST::FuncDecl& func)
     auto body = curFunc->GetBody();
     blockGroupStack.emplace_back(body);
     auto entry = builder.CreateBlock(body);
+    if (func.needsRegion) {
+        CreateAndAppendExpression<StartRegion>(TranslateLocation(*func.funcBody->body), builder.GetUnitTy(), entry);
+    }
     body->SetEntryBlock(entry);
     if (NeedCreateDebugForFirstParam(*curFunc)) {
         auto thisVar = curFunc->GetParam(0);
@@ -224,6 +228,7 @@ Ptr<Value> Translator::Visit(const AST::FuncDecl& func)
     auto block = Visit(*func.funcBody.get());
     CreateAndAppendTerminator<GoTo>(StaticCast<Block*>(block.get()), entry);
     blockGroupStack.pop_back();
+    funcContext.Pop();
     return curFunc;
 }
 
@@ -453,7 +458,7 @@ Ptr<Value> Translator::TranslateConstructorFuncInline(const AST::Decl& parent, c
             ++fieldOffset;
         }
     }
-    // After generated the initializers, the 'currentBlock' may change.
+    // After generating the initializers, the 'currentBlock' may change.
     auto lastBlock = currentBlock;
     auto bodyBlock = TranslateFuncBody(funcBody);
     CreateAndAppendTerminator<GoTo>(bodyBlock, lastBlock);
@@ -483,6 +488,11 @@ Ptr<Value> Translator::TranslateNestedFunc(const AST::FuncDecl& func)
     Lambda* lambda = CreateAndAppendExpression<Lambda>(
         loc, funcTy, funcTy, currentBlock, true, lambdaMangleName, func.identifier, genericTys);
     CJC_ASSERT(lambda);
+    funcContext.PushFunc(func, *lambda);
+    if (func.needsRegion) {
+        CreateAndAppendExpression<StartRegion>(
+            TranslateLocation(*func.funcBody->body), builder.GetUnitTy(), lambda->GetEntryBlock());
+    }
     lambda->InitBody(*body);
     if (func.isConst) {
         lambda->SetCompileTimeValue();
@@ -516,7 +526,10 @@ Ptr<Value> Translator::TranslateNestedFunc(const AST::FuncDecl& func)
     }
     // Local function allows to call itself inside funcBody.
     lambdaTrans.SetSymbolTable(func, *lambda->GetResult());
-    return lambdaTrans.TranslateLambdaBody(
+    lambdaTrans.funcContext.PushFunc(func, *lambda);
+    auto ret = lambdaTrans.TranslateLambdaBody(
         lambda, *func.funcBody, {.hasInitial = func.TestAttr(AST::Attribute::HAS_INITIAL)});
+    lambdaTrans.funcContext.Pop();
+    return ret;
 }
 } // namespace Cangjie::CHIR

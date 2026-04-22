@@ -26,6 +26,9 @@ public:
     bool IsCStruct() const;
     void SetCStruct(bool value);
 
+    bool IsCopyType() const;
+    void SetCopyType(bool value);
+
 protected:
     void PrintComment(std::stringstream& ss) const override;
     
@@ -38,6 +41,7 @@ private:
     friend class CHIRBuilder;
 
     bool isC = false;
+    bool isCopy = false;
 };
 } // namespace Cangjie::CHIR
 

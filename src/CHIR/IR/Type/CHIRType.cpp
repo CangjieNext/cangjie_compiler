@@ -26,7 +26,7 @@ Type* CHIRType::TranslateTupleType(AST::TupleTy& tupleTy)
     for (auto argTy : tupleTy.typeArgs) {
         argTys.emplace_back(TranslateType(*argTy));
     }
-    return builder.GetType<TupleType>(argTys);
+    return builder.GetType<TupleType>(argTys, tupleTy.Modal());
 }
 
 Type* CHIRType::TranslateFuncType(const AST::FuncTy& fnTy)
@@ -40,7 +40,7 @@ Type* CHIRType::TranslateFuncType(const AST::FuncTy& fnTy)
         }
         paramTys.emplace_back(pType);
     }
-    auto funcTy = builder.GetType<FuncType>(paramTys, retTy, fnTy.hasVariableLenArg, fnTy.IsCFunc());
+    auto funcTy = builder.GetType<FuncType>(paramTys, retTy, fnTy.hasVariableLenArg, fnTy.IsCFunc(), fnTy.Modal());
     return funcTy;
 }
 
@@ -51,7 +51,7 @@ Type* CHIRType::TranslateStructType(AST::StructTy& structTy)
         typeArgs.emplace_back(TranslateType(*arg));
     }
     auto def = chirTypeCache.globalNominalCache.Get(*structTy.declPtr);
-    auto type = builder.GetType<StructType>(StaticCast<StructDef*>(def), typeArgs);
+    auto type = builder.GetType<StructType>(StaticCast<StructDef*>(def), typeArgs, structTy.Modal());
     chirTypeCache.typeMap[&structTy] = type;
 
     return type;
@@ -64,7 +64,7 @@ Type* CHIRType::TranslateClassType(AST::ClassTy& classTy)
         typeArgs.emplace_back(TranslateType(*arg));
     }
     auto def = chirTypeCache.globalNominalCache.Get(*classTy.declPtr);
-    auto type = builder.GetType<ClassType>(StaticCast<ClassDef*>(def), typeArgs);
+    auto type = builder.GetType<ClassType>(StaticCast<ClassDef*>(def), typeArgs, classTy.Modal());
     chirTypeCache.typeMap[&classTy] = type;
 
     return type;
@@ -77,7 +77,7 @@ Type* CHIRType::TranslateInterfaceType(AST::InterfaceTy& interfaceTy)
         typeArgs.emplace_back(TranslateType(*arg));
     }
     auto def = chirTypeCache.globalNominalCache.Get(*interfaceTy.declPtr);
-    auto type = builder.GetType<ClassType>(StaticCast<ClassDef*>(def), typeArgs);
+    auto type = builder.GetType<ClassType>(StaticCast<ClassDef*>(def), typeArgs, interfaceTy.Modal());
     chirTypeCache.typeMap[&interfaceTy] = type;
 
     return type;
@@ -90,7 +90,7 @@ Type* CHIRType::TranslateEnumType(AST::EnumTy& enumTy)
         typeArgs.emplace_back(TranslateType(*arg));
     }
     auto def = chirTypeCache.globalNominalCache.Get(*enumTy.declPtr);
-    auto type = builder.GetType<EnumType>(StaticCast<EnumDef*>(def), typeArgs);
+    auto type = builder.GetType<EnumType>(StaticCast<EnumDef*>(def), typeArgs, enumTy.Modal());
     chirTypeCache.typeMap[&enumTy] = type;
     return type;
 }
@@ -99,20 +99,20 @@ Type* CHIRType::TranslateArrayType(AST::ArrayTy& arrayTy)
 {
     // RawArrayType [elementTy, dims]
     auto elementTy = TranslateType(*arrayTy.typeArgs[0]);
-    return builder.GetType<RawArrayType>(elementTy, arrayTy.dims);
+    return builder.GetType<RawArrayType>(elementTy, arrayTy.dims, arrayTy.Modal());
 }
 
 Type* CHIRType::TranslateVArrayType(AST::VArrayTy& varrayTy)
 {
     // VArrayType size, [elementTy]
     auto elementTy = TranslateType(*varrayTy.typeArgs[0]);
-    return builder.GetType<VArrayType>(elementTy, varrayTy.size);
+    return builder.GetType<VArrayType>(elementTy, varrayTy.size, varrayTy.Modal());
 }
 
 Type* CHIRType::TranslateCPointerType(AST::PointerTy& pointerTy)
 {
     auto elementTy = TranslateType(*pointerTy.typeArgs[0]);
-    return builder.GetType<CPointerType>(elementTy);
+    return builder.GetType<CPointerType>(elementTy, pointerTy.Modal());
 }
 
 void CHIRType::FillGenericArgType(AST::GenericsTy& ty)
@@ -234,7 +234,7 @@ Type* CHIRType::TranslateType(AST::Ty& ty)
             break;
         }
         case AST::TypeKind::TYPE_NOTHING: {
-            type = builder.GetType<NothingType>();
+            type = builder.GetNothingType();
             break;
         }
         case AST::TypeKind::TYPE_POINTER: {
@@ -242,12 +242,12 @@ Type* CHIRType::TranslateType(AST::Ty& ty)
             break;
         }
         case AST::TypeKind::TYPE_CSTRING: {
-            type = builder.GetType<CStringType>();
+            type = builder.GetType<CStringType>(ty.Modal());
             break;
         }
         case AST::TypeKind::TYPE_GENERICS: {
             auto identifier = GetIdentifierOfGenericTy(StaticCast<AST::GenericsTy&>(ty));
-            type = builder.GetType<GenericType>(identifier, ty.name);
+            type = builder.GetType<GenericType>(identifier, ty.name, ty.Modal());
             break;
         }
         default: {

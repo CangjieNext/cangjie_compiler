@@ -29,7 +29,7 @@ struct SubscriptExpr : OverloadableExpr {
     bool isTupleAccess{false};
     bool IsVArrayAccess() const
     {
-        return baseExpr && baseExpr->ty->kind == TypeKind::TYPE_VARRAY;
+        return baseExpr && baseExpr->TyKind() == TypeKind::TYPE_VARRAY;
     }
     SubscriptExpr() : OverloadableExpr(ASTKind::SUBSCRIPT_EXPR)
     {

@@ -15,7 +15,6 @@
 
 #include "MPParserImpl.h"
 #include "NativeFFI/FFIParserImpl.h"
-#include "cangjie/AST/Nodes/IfAvailableExpr.h"
 #include "cangjie/Parse/Parser.h"
 
 namespace Cangjie {
@@ -35,6 +34,7 @@ struct FeaturesDirective;
 struct FeaturesSet;
 struct File;
 struct ForInExpr;
+struct FuncArg;
 struct FuncBody;
 struct FuncDecl;
 struct FuncParam;
@@ -49,8 +49,12 @@ struct ImportSpec;
 struct InheritableDecl;
 struct InterfaceBody;
 struct InterfaceDecl;
+struct IfAvailableExpr;
+struct LambdaExpr;
 struct LetPatternDestructor;
 struct LitConstExpr;
+struct ModalASTInfo;
+enum class SuffixKind;
 struct MacroDecl;
 struct MacroExpandDecl;
 struct MacroExpandExpr;
@@ -77,6 +81,7 @@ struct SpawnExpr;
 struct StructBody;
 struct StructDecl;
 struct SynchronizedExpr;
+struct ThisParam;
 struct ThrowExpr;
 struct TrailingClosureExpr;
 struct TryExpr;
@@ -227,18 +232,7 @@ private:
     bool forImport{false};
     std::string moduleName;
 
-    inline bool SeeingTrailingClosure(OwnedPtr<AST::Expr>& baseExpr)
-    {
-        if (Seeing(TokenKind::LCURL)) {
-            return true;
-        }
-        if (baseExpr->astKind != AST::ASTKind::CALL_EXPR && baseExpr->astKind != AST::ASTKind::REF_EXPR &&
-            baseExpr->astKind != AST::ASTKind::ARRAY_EXPR) {
-            return false;
-        }
-        // SeeingAnnotationTrailClosure.
-        return SeeingAnnotationLambdaExpr() || SeeingAnnotationTrailingClosure({TokenKind::LSQUARE});
-    }
+    bool SeeingTrailingClosure(OwnedPtr<AST::Expr>& baseExpr);
 
     bool SkipAmbiguousToken();
 
@@ -470,7 +464,8 @@ private:
         if (SeeingIfAvailable()) {
             return false;
         }
-        return (SeeingModifier() && !Seeing({TokenKind::UNSAFE, TokenKind::LCURL})) ||
+        return (SeeingModifier() && !Seeing({TokenKind::UNSAFE, TokenKind::LCURL}) &&
+            !Seeing({TokenKind::EXCLAVE, TokenKind::LCURL})) ||
             SeeingAny(
                 {TokenKind::FUNC, TokenKind::MACRO, TokenKind::LET, TokenKind::VAR, TokenKind::ENUM, TokenKind::TYPE,
                     TokenKind::STRUCT, TokenKind::CLASS, TokenKind::INTERFACE, TokenKind::MAIN, TokenKind::EXTEND}) ||
@@ -606,6 +601,9 @@ private:
     void ParseFuncGenericConstraints(const AST::FuncBody& fb);
     void ParsePropMemberBody(const ScopeKind& scopeKind, AST::FuncBody& fb);
     void ParseFuncParameters(const ScopeKind& scopeKind, AST::FuncBody& fb);
+    void DiagThisParamNotAllowed(const AST::ThisParam& thisParam);
+    void DiagLocalFuncNotLocal(const FuncDecl& funcDecl);
+    void CheckMakeCopy(Decl& decl);
     OwnedPtr<AST::MacroDecl> ParseMacroDecl(ScopeKind scopeKind, const std::set<AST::Modifier>& modifiers,
         std::vector<OwnedPtr<AST::Annotation>> annos = {});
     bool ParseMacroCallTokens(TokenKind left, std::vector<Token>& tokens);
@@ -631,17 +629,18 @@ private:
     OwnedPtr<AST::FuncBody> ParseMacroBody(AST::MacroDecl& macro);
     OwnedPtr<AST::FuncParamList> ParseMacroParameterList();
     void ParseEllipsisParameter(AST::FuncParam& funcParam);
-    void ParseParameter(ScopeKind scopeKind, AST::FuncParam& fp);
+    void ParseParameter(ScopeKind scopeKind, AST::FuncParam& fp, bool allowSetterValueType = false);
     void ParseAssignInParam(AST::FuncParam& fp);
     OwnedPtr<AST::FuncParamList> ParseParameterList(ScopeKind scopeKind = ScopeKind::UNKNOWN_SCOPE);
+    OwnedPtr<AST::ThisParam> ParseThisParam();
     void CheckSetterAnnotations(std::vector<OwnedPtr<AST::Annotation>>& annos, const Ptr<AST::Node> setter);
     void CheckGetterAnnotations(std::vector<OwnedPtr<AST::Annotation>>& annos, const Ptr<AST::Node> getter);
     void CheckModifierInParamList(
         const ScopeKind& scopeKind, const std::set<AST::Modifier>& modifiers, bool isMember, AST::FuncParam& fp);
     void ParseLetOrVarInParamList(const ScopeKind& scopeKind, AST::FuncParam& fp, Position& memberStartPos);
     template <typename T> void CheckIntrinsicFunc(T& fd);
-    OwnedPtr<AST::FuncParam> ParseParamInParamList(
-        const ScopeKind& scopeKind, Ptr<AST::FuncParam>& meetNamedParameter, Ptr<AST::FuncParam>& meetMemberParams);
+    OwnedPtr<AST::FuncParam> ParseParamInParamList(const ScopeKind& scopeKind, Ptr<AST::FuncParam>& meetNamedParameter,
+        Ptr<AST::FuncParam>& meetMemberParams, bool allowSetterValueType = false);
     void ParseInterfaceDeclOrClassDeclGeneric(AST::InheritableDecl& ret);
     void SetDefaultFunc(ScopeKind scopeKind, AST::Decl& decl) const;
     void ParseCaseBody(AST::EnumDecl& enumDecl);
@@ -659,7 +658,7 @@ private:
     // Processes paren-related types, such as ParentType, TupleType, FuncType, and CFuncType.
     OwnedPtr<AST::Type> ParseTypeWithParen();
     OwnedPtr<AST::Type> ParseTupleType(
-        std::vector<OwnedPtr<AST::Type>> types, const Position lParenPos, const Position rParenPos) const;
+        std::vector<OwnedPtr<AST::Type>> types, const Position& lParenPos, const Position& rParenPos);
     OwnedPtr<AST::ParenType> ParseParenType(
         const Position& lParenPos, const Position& rParenPos, OwnedPtr<AST::Type> type);
     OwnedPtr<AST::FuncType> ParseFuncType(
@@ -726,9 +725,11 @@ private:
      */
     OwnedPtr<AST::Expr> ParseArrayLitExpr();
     OwnedPtr<AST::Expr> ParseTypeConvExpr();
+    OwnedPtr<AST::Expr> ParseTypeConvExprWith(Token&& tok, AST::ModalASTInfo&& modal);
     OwnedPtr<AST::Expr> ParseBreakJumpExpr();
     OwnedPtr<AST::Expr> ParseContinueJumpExpr();
     OwnedPtr<AST::Expr> ParseLitConst();
+    OwnedPtr<AST::Expr> ParsePrimitiveTypeExpr();
     OwnedPtr<AST::Expr> ParseNegativeLiteral();
     OwnedPtr<AST::Expr> ParseInterpolationExpr(const std::string& value, const Position& pos);
     OwnedPtr<AST::LitConstExpr> GetLitConstExprFromStr(
@@ -809,6 +810,7 @@ private:
     OwnedPtr<AST::ForInExpr> ParseForInExpr();
     OwnedPtr<AST::RefExpr> ParseRefExpr(ExprKind ek = ExprKind::ALL);
     OwnedPtr<AST::Expr> ParseWildcardExpr();
+    OwnedPtr<AST::Expr> ParseExclaveExpr();
     OwnedPtr<AST::WhileExpr> ParseWhileExpr();
     OwnedPtr<AST::DoWhileExpr> ParseDoWhileExpr();
     OwnedPtr<AST::Node> ParseExprOrDecl(ScopeKind sk);
@@ -921,6 +923,7 @@ private:
     void DiagExpectedMoreFieldInTuplePattern();
     void DiagExpectedTypeNameAfterAs(const Token& tok);
     void DiagExpectedTypeName();
+    void DiagUnexpectedModal(const Range& range);
     void DiagInvalidLeftHandExpr(const AST::Expr& expr, const Token& tok);
     void DiagNoneAssociativeOp(const Token& preT, const Token& tok);
     void DiagInvalidInheritType(const AST::Type& type);
@@ -942,7 +945,7 @@ private:
     void DiagOrPattern();
     void DiagDeclarationInMacroPackage(const OwnedPtr<AST::Decl>& decl);
     void DiagIllegalFunc(const OwnedPtr<AST::FuncDecl>& funcDecl);
-    void DiagParseExpectedParenthis(const OwnedPtr<AST::Type>& postType);
+    void DiagParseExpectedParenthesis(const OwnedPtr<AST::Type>& postType);
     void DiagParseIllegalDeclarationPattern(const OwnedPtr<AST::VarWithPatternDecl>& decl, ScopeKind scopeKind);
     void DiagThisTypeNotAllow();
     void DiagInvalidUnicodeScalar(const Position& startPos, const std::string& str);
@@ -1100,6 +1103,8 @@ private:
     void DiagAnnotationMoreThanOneArgs(const AST::Annotation& node, const std::string& annotationName,
         const std::string& argInfo);
     void DiagAnnotationShouldNotHaveArgs(const Annotation& node, const std::string& annotationName);
+    AST::ModalASTInfo ParseModalInfo();
+    bool SeeingPrimitiveType();
 
     // Cangjie Native & Java/ObjC FFI
     void CheckObjCMirrorAnnotation(const AST::Annotation& anno) const;

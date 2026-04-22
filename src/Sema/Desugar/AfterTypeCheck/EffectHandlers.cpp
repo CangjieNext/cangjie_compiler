@@ -136,16 +136,16 @@ void TypeCheckerImpl::EncloseTryLambda(ASTContext& ctx, OwnedPtr<AST::LambdaExpr
     auto exceptionWrapperDecl =
         importManager.GetImportedDecl<ClassDecl>(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_FRAME_EXCEPTION_WRAPPER);
     CJC_NULLPTR_CHECK(exceptionWrapperDecl);
-    auto exceptionWrapperTy = typeManager.GetClassTy(*exceptionWrapperDecl, {});
+    auto exceptionWrapperTy = typeManager.GetClassTy(*exceptionWrapperDecl, {}, {});
     // stdx.effect.ImmediateFrameErrorWrapper
     auto errorWrapperDecl =
         importManager.GetImportedDecl<ClassDecl>(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_FRAME_ERROR_WRAPPER);
     CJC_NULLPTR_CHECK(errorWrapperDecl);
-    auto errorWrapperTy = typeManager.GetClassTy(*errorWrapperDecl, {});
+    auto errorWrapperTy = typeManager.GetClassTy(*errorWrapperDecl, {}, {});
     // stdx.effect.ImmediateEarlyReturn
     auto earlyReturnDecl = importManager.GetImportedDecl<ClassDecl>(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_EARLY_RETURN);
     CJC_NULLPTR_CHECK(earlyReturnDecl);
-    auto earlyReturnTy = typeManager.GetClassTy(*earlyReturnDecl, {});
+    auto earlyReturnTy = typeManager.GetClassTy(*earlyReturnDecl, {}, {});
 
     {
         // (v: ImmediateFrameExceptionWrapper)
@@ -497,7 +497,7 @@ VarDecl& TypeCheckerImpl::CreateFrame(ASTContext& ctx, TryExpr& te, std::vector<
     re->SetTarget(frameDecl);
 
     auto tryExprTy = lambdaTy->retTy;
-    auto frameClassTy = typeManager.GetClassTy(*frameDecl, {tryExprTy});
+    auto frameClassTy = typeManager.GetClassTy(*frameDecl, {tryExprTy}, tryExprTy->Modal());
     re->SetTy(frameClassTy);
     re->instTys.push_back(tryExprTy);
 
@@ -640,17 +640,17 @@ void TypeCheckerImpl::CreateSetHandler(ASTContext& ctx, TryExpr& te, VarDecl& fr
             auto exceptionWrapperDecl = importManager.GetImportedDecl<ClassDecl>(
                 EFFECT_INTERNALS_PACKAGE_NAME, CLASS_FRAME_EXCEPTION_WRAPPER);
             CJC_NULLPTR_CHECK(exceptionWrapperDecl);
-            auto exceptionWrapperTy = typeManager.GetClassTy(*exceptionWrapperDecl, {});
+            auto exceptionWrapperTy = typeManager.GetClassTy(*exceptionWrapperDecl, {}, {});
             // stdx.effect.ImmediateFrameErrorWrapper
             auto errorWrapperDecl =
                 importManager.GetImportedDecl<ClassDecl>(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_FRAME_ERROR_WRAPPER);
             CJC_NULLPTR_CHECK(errorWrapperDecl);
-            auto errorWrapperTy = typeManager.GetClassTy(*errorWrapperDecl, {});
+            auto errorWrapperTy = typeManager.GetClassTy(*errorWrapperDecl, {}, {});
             // stdx.effect.ImmediateEarlyReturn
             auto earlyReturnDecl =
                 importManager.GetImportedDecl<ClassDecl>(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_EARLY_RETURN);
             CJC_NULLPTR_CHECK(earlyReturnDecl);
-            auto earlyReturnTy = typeManager.GetClassTy(*earlyReturnDecl, {});
+            auto earlyReturnTy = typeManager.GetClassTy(*earlyReturnDecl, {}, {});
 
             // `try { ... }
             auto tryExpr = MakeOwnedNode<TryExpr>();
@@ -865,7 +865,8 @@ void TypeCheckerImpl::CreateSetHandler(ASTContext& ctx, TryExpr& te, VarDecl& fr
             auto resultDecl =
                 importManager.GetImportedDecl<EnumDecl>(EFFECT_INTERNALS_PACKAGE_NAME, "ImmediateHandlerReturn");
             CJC_NULLPTR_CHECK(resultDecl);
-            auto resultDeclTy = typeManager.GetEnumTy(*resultDecl, {handler.commandResultTy});
+            auto resultDeclTy =
+                typeManager.GetEnumTy(*resultDecl, {handler.commandResultTy}, handler.commandResultTy->Modal());
 
             handlerLambda->SetTy(typeManager.GetFunctionTy(DynamicCast<FuncTy*>(handlerLambda->GetTy())->paramTys, resultDeclTy));
             handlerLambda->funcBody->SetTy(typeManager.GetFunctionTy(DynamicCast<FuncTy*>(handlerLambda->GetTy())->paramTys, resultDeclTy));
@@ -980,7 +981,7 @@ OwnedPtr<Expr> TypeCheckerImpl::GetHelperFrameMethod(
 {
     auto frameDecl = importManager.GetImportedDecl<ClassDecl>(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_HANDLER_FRAME);
     CJC_NULLPTR_CHECK(frameDecl);
-    auto frameClassTy = typeManager.GetClassTy(*frameDecl, {});
+    auto frameClassTy = typeManager.GetClassTy(*frameDecl, {}, {});
     auto re = CreateRefExpr(CLASS_HANDLER_FRAME);
     re->SetTarget(frameDecl);
     AST::CopyNodeScopeInfo(re, &base);
@@ -1019,7 +1020,7 @@ void TypeCheckerImpl::DesugarPerform(ASTContext& ctx, AST::PerformExpr& pe)
     auto typecheckOk = ChkCallExpr(ctx, pe.GetTy(), *perfCall);
     CJC_ASSERT(typecheckOk);
     // Checking for a call expr may get rid of some desugarings
-    DesugarForPropDecl(*perfCall);
+    DesugarForPropDecl(ctx, *perfCall);
 
     pe.desugarExpr = std::move(perfCall);
 }
@@ -1052,7 +1053,8 @@ void TypeCheckerImpl::DesugarImmediateResume(ASTContext& ctx, AST::ResumeExpr& r
     auto resultDecl = importManager.GetImportedDecl<EnumDecl>(EFFECT_INTERNALS_PACKAGE_NAME, "ImmediateHandlerReturn");
     CJC_NULLPTR_CHECK(resultDecl);
     CJC_ASSERT(re.enclosing.has_value());
-    auto resultDeclTy = typeManager.GetEnumTy(*resultDecl, {re.enclosing.value()->commandResultTy});
+    auto resultDeclTy = typeManager.GetEnumTy(
+        *resultDecl, {re.enclosing.value()->commandResultTy}, re.enclosing.value()->commandResultTy->Modal());
     CJC_NULLPTR_CHECK(resultDeclTy);
 
     if (re.throwingExpr) {
@@ -1077,7 +1079,7 @@ void TypeCheckerImpl::DesugarImmediateResume(ASTContext& ctx, AST::ResumeExpr& r
 
         ChkCallExpr(ctx, resultDeclTy, *wrappedExc);
         // Checking for a call expr may get rid of some desugarings
-        DesugarForPropDecl(*wrappedExc);
+        DesugarForPropDecl(ctx, *wrappedExc);
         auto returnExpr = MakeOwnedNode<ReturnExpr>();
         returnExpr->expr = std::move(wrappedExc);
         desugared = std::move(returnExpr);
@@ -1095,7 +1097,7 @@ void TypeCheckerImpl::DesugarImmediateResume(ASTContext& ctx, AST::ResumeExpr& r
         auto wrappedValue = CreateCallExpr(CreateRefValue(*valTy), std::move(args));
         ChkCallExpr(ctx, resultDeclTy, *wrappedValue);
         // Checking for a call expr may get rid of some desugarings
-        DesugarForPropDecl(*wrappedValue);
+        DesugarForPropDecl(ctx, *wrappedValue);
 
         auto returnExpr = MakeOwnedNode<ReturnExpr>();
         returnExpr->expr = std::move(wrappedValue);

@@ -858,6 +858,11 @@ VarCirDepsChecker::VarCirDepsChecker(DiagAdapter& ciDiag) : diag(&ciDiag)
 {
 }
 
+std::string VarCirDepsChecker::GetEleStr(Ptr<const AST::Decl> decl) const
+{
+    return decl->identifier;
+}
+
 bool VarCirDepsChecker::IsVar(const AST::Decl& decl) const
 {
     if (decl.astKind == AST::ASTKind::VAR_DECL || decl.astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL) {
@@ -901,6 +906,11 @@ void VarCirDepsChecker::DetectCircularDep()
 FileCirDepsChecker::FileCirDepsChecker(DiagAdapter& ciDiag, const std::vector<std::string>& vardiagLog)
     : diag(&ciDiag), diagLog(vardiagLog)
 {
+}
+
+std::string FileCirDepsChecker::GetEleStr(Ptr<const AST::File> node) const
+{
+    return node->fileName;
 }
 
 void FileCirDepsChecker::InitFileDep(const FileDepMap& depMap)

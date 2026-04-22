@@ -129,7 +129,7 @@ OwnedPtr<ClassDecl> GenerateFwdClass::GenerateFwdClassDecl(ClassDecl& decl)
     fwd->moduleName = decl.moduleName;
     fwd->curFile = decl.curFile;
     fwd->inheritedTypes.emplace_back(CreateRefType(decl));
-    fwd->SetTy(pctx->typeManager.GetClassTy(*fwd, {}));
+    fwd->SetTy(pctx->typeManager.GetClassTy(*fwd, {}, {}));
     auto classTy = DynamicCast<ClassTy*>(decl.GetTy());
     CJC_ASSERT(classTy);
     classTy->directSubtypes.insert(fwd->GetTy());

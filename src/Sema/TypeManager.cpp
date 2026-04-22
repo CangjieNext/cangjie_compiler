@@ -40,14 +40,15 @@ TypeManager::~TypeManager()
     Clear();
 }
 
-Ptr<PrimitiveTy> TypeManager::GetPrimitiveTy(TypeKind kind)
+Ptr<PrimitiveTy> TypeManager::GetPrimitiveTy(TypeKind kind, ModalInfo modalInfo)
 {
     bool validParam = static_cast<int32_t>(kind) >= static_cast<int32_t>(TYPE_PRIMITIVE_MIN) &&
         static_cast<int32_t>(kind) <= static_cast<int32_t>(TYPE_PRIMITIVE_MAX);
     CJC_ASSERT(validParam);
     size_t index = validParam ? static_cast<uint32_t>(kind) - static_cast<uint32_t>(TYPE_PRIMITIVE_MIN) : 0;
-    CJC_ASSERT(index < primitiveTys.size());
-    return &primitiveTys[index];
+    auto modalIdx = ToIndex(modalInfo);
+    CJC_ASSERT(index < primitiveTys[modalIdx].size());
+    return &primitiveTys[modalIdx][index];
 }
 
 template <typename TypeT, typename... Args> TypeT* TypeManager::GetTypeTy(Args&&... args)
@@ -63,9 +64,9 @@ template <typename TypeT, typename... Args> TypeT* TypeManager::GetTypeTy(Args&&
     }
 }
 
-Ptr<GenericsTy> TypeManager::GetGenericsTy(GenericParamDecl& gpd)
+Ptr<GenericsTy> TypeManager::GetGenericsTy(GenericParamDecl& gpd, ModalInfo modalInfo)
 {
-    auto ty = new GenericsTy(gpd.identifier, gpd);
+    auto ty = new GenericsTy(gpd.identifier, gpd, modalInfo);
     auto it = allocatedTys.find(TypePointer(ty));
     if (it != allocatedTys.end()) {
         delete ty;
@@ -75,42 +76,81 @@ Ptr<GenericsTy> TypeManager::GetGenericsTy(GenericParamDecl& gpd)
     return ty;
 }
 
-Ptr<EnumTy> TypeManager::GetEnumTy(EnumDecl& ed, const std::vector<Ptr<Ty>>& typeArgs)
+QuestTy TypeManager::theQuestTy[MODAL_INFO_COUNT]{
+    QuestTy{ModalInfo{LocalModal::NOT}}, QuestTy{ModalInfo{LocalModal::FULL}}, QuestTy{ModalInfo{LocalModal::HALF}}};
+CStringTy TypeManager::theCStringTy[MODAL_INFO_COUNT]{CStringTy{ModalInfo{LocalModal::NOT}},
+    CStringTy{ModalInfo{LocalModal::FULL}}, CStringTy{ModalInfo{LocalModal::HALF}}};
+
+Ptr<Ty> TypeManager::GetCopyTy() const
 {
-    return GetTypeTy<EnumTy>(ed.identifier, ed, typeArgs);
+    return copyTy;
 }
 
-Ptr<RefEnumTy> TypeManager::GetRefEnumTy(EnumDecl& ed, const std::vector<Ptr<Ty>>& typeArgs)
+bool TypeManager::IsCopyInterfaceTy(Ptr<Ty> ty) const
 {
-    return GetTypeTy<RefEnumTy>(ed.identifier, ed, typeArgs);
+    if (auto interf = DynamicCast<InterfaceTy>(ty)) {
+        if (interf->declPtr->fullPackageName == CORE_PACKAGE_NAME && interf->declPtr->identifier == COPY_NAME) {
+            return true;
+        }
+    }
+    return false;
 }
 
-Ptr<ClassTy> TypeManager::GetClassTy(ClassDecl& cd, const std::vector<Ptr<Ty>>& typeArgs)
+static std::vector<PrimitiveTy> GeneratePrimitiveTys(ModalInfo mod)
 {
-    return GetTypeTy<ClassTy>(cd.identifier, cd, typeArgs);
+    std::vector<PrimitiveTy> tys;
+    for (auto i = static_cast<int32_t>(TYPE_PRIMITIVE_MIN); i <= static_cast<int32_t>(TYPE_PRIMITIVE_MAX); i++) {
+        if (i == static_cast<int32_t>(TypeKind::TYPE_NOTHING)) {
+            tys.emplace_back(NothingTy());
+        } else {
+            tys.emplace_back(PrimitiveTy(static_cast<TypeKind>(i), mod));
+        }
+    }
+    return tys;
 }
 
-Ptr<ClassThisTy> TypeManager::GetClassThisTy(ClassDecl& cd, const std::vector<Ptr<Ty>>& typeArgs)
+std::vector<PrimitiveTy> TypeManager::primitiveTys[MODAL_INFO_COUNT]{
+    GeneratePrimitiveTys(ModalInfo{LocalModal::NOT}),
+    GeneratePrimitiveTys(ModalInfo{LocalModal::FULL}),
+    GeneratePrimitiveTys(ModalInfo{LocalModal::HALF}),
+};
+
+Ptr<EnumTy> TypeManager::GetEnumTy(EnumDecl& ed, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modalInfo)
 {
-    return GetTypeTy<ClassThisTy>(cd.identifier, cd, typeArgs);
+    return GetTypeTy<EnumTy>(ed.identifier, ed, typeArgs, modalInfo);
 }
 
-Ptr<InterfaceTy> TypeManager::GetInterfaceTy(InterfaceDecl& id, const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<RefEnumTy> TypeManager::GetRefEnumTy(EnumDecl& ed, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modalInfo)
 {
-    return GetTypeTy<InterfaceTy>(id.identifier, id, typeArgs);
+    return GetTypeTy<RefEnumTy>(ed.identifier, ed, typeArgs, modalInfo);
 }
 
-Ptr<StructTy> TypeManager::GetStructTy(StructDecl& sd, const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<ClassTy> TypeManager::GetClassTy(ClassDecl& cd, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modalInfo)
 {
-    return GetTypeTy<StructTy>(sd.identifier, sd, typeArgs);
+    return GetTypeTy<ClassTy>(cd.identifier, cd, typeArgs, modalInfo);
 }
 
-Ptr<TypeAliasTy> TypeManager::GetTypeAliasTy(TypeAliasDecl& tad, const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<ClassThisTy> TypeManager::GetClassThisTy(ClassDecl& cd, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modalInfo)
 {
-    return GetTypeTy<TypeAliasTy>(tad.identifier, tad, typeArgs);
+    return GetTypeTy<ClassThisTy>(cd.identifier, cd, typeArgs, modalInfo);
 }
 
-Ptr<ArrayTy> TypeManager::GetArrayTy(Ptr<Ty> elemTy, unsigned int dims)
+Ptr<InterfaceTy> TypeManager::GetInterfaceTy(InterfaceDecl& id, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modalInfo)
+{
+    return GetTypeTy<InterfaceTy>(id.identifier, id, typeArgs, modalInfo);
+}
+
+Ptr<StructTy> TypeManager::GetStructTy(StructDecl& sd, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modalInfo)
+{
+    return GetTypeTy<StructTy>(sd.identifier, sd, typeArgs, modalInfo);
+}
+
+Ptr<TypeAliasTy> TypeManager::GetTypeAliasTy(TypeAliasDecl& tad, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modalInfo)
+{
+    return GetTypeTy<TypeAliasTy>(tad.identifier, tad, typeArgs, modalInfo);
+}
+
+Ptr<ArrayTy> TypeManager::GetArrayTy(Ptr<Ty> elemTy, unsigned int dims, ModalInfo modalInfo)
 {
     Ptr<Ty> tmpElemTy = elemTy;
     unsigned int tmpDims = dims;
@@ -123,47 +163,162 @@ Ptr<ArrayTy> TypeManager::GetArrayTy(Ptr<Ty> elemTy, unsigned int dims)
     } else {
         tmpElemTy = GetInvalidTy();
     }
-    return GetTypeTy<ArrayTy>(tmpElemTy, tmpDims);
+    return GetTypeTy<ArrayTy>(tmpElemTy, tmpDims, modalInfo);
 }
 
-Ptr<VArrayTy> TypeManager::GetVArrayTy(Ty& elemTy, int64_t size)
+Ptr<VArrayTy> TypeManager::GetVArrayTy(Ty& elemTy, int64_t size, ModalInfo modalInfo)
 {
-    return GetTypeTy<VArrayTy>(&elemTy, size);
+    return GetTypeTy<VArrayTy>(&elemTy, size, modalInfo);
 }
 
-Ptr<PointerTy> TypeManager::GetPointerTy(Ptr<Ty> elemTy)
+Ptr<PointerTy> TypeManager::GetPointerTy(Ptr<Ty> elemTy, ModalInfo modalInfo)
 {
     Ptr<Ty> tmpElemTy = elemTy;
     if (!Ty::IsTyCorrect(elemTy)) {
         tmpElemTy = GetInvalidTy();
     }
-    return GetTypeTy<PointerTy>(tmpElemTy);
+    return GetTypeTy<PointerTy>(tmpElemTy, modalInfo);
 }
 
-Ptr<ArrayTy> TypeManager::GetArrayTy()
+Ptr<ArrayTy> TypeManager::GetArrayTy(ModalInfo modalInfo)
 {
     // Use 'Array<Invalid>' to present unique array type for extend lookup.
-    return GetArrayTy(GetInvalidTy(), 1);
+    return GetArrayTy(GetInvalidTy(), 1, modalInfo);
 }
 
-Ptr<TupleTy> TypeManager::GetTupleTy(const std::vector<Ptr<Ty>>& typeArgs, bool isClosureTy)
+Ptr<TupleTy> TypeManager::GetTupleTy(const std::vector<Ptr<Ty>>& typeArgs, bool isClosureTy, ModalInfo modal)
 {
-    return GetTypeTy<TupleTy>(typeArgs, isClosureTy);
+    return GetTypeTy<TupleTy>(typeArgs, isClosureTy, modal);
 }
 
-Ptr<FuncTy> TypeManager::GetFunctionTy(const std::vector<Ptr<Ty>>& paramTys, Ptr<Ty> retTy, FuncTy::Config cfg)
+Ptr<FuncTy> TypeManager::GetFunctionTy(
+    const std::vector<Ptr<Ty>>& paramTys, Ptr<Ty> retTy, FuncTy::Config cfg, ModalInfo modal)
 {
-    return GetTypeTy<FuncTy>(paramTys, retTy, cfg);
+    return GetTypeTy<FuncTy>(paramTys, retTy, cfg, modal);
 }
 
 Ptr<Ty> TypeManager::GetIntersectionTy(const std::set<Ptr<Ty>>& tys)
 {
-    return GetTypeTy<IntersectionTy>(tys);
+    ModalInfo modal = {};
+    for (auto ty : tys) {
+        modal = modal | ty->Modal();
+    }
+    return GetTypeTy<IntersectionTy>(tys, modal);
 }
 
-Ptr<Ty> TypeManager::GetUnionTy(const std::set<Ptr<Ty>>& tys)
+Ptr<Ty> TypeManager::GetUnionTy(const std::set<Ptr<Ty>>& tys, ModalInfo modalInfo)
 {
-    return GetTypeTy<UnionTy>(tys);
+    return GetTypeTy<UnionTy>(tys, modalInfo);
+}
+
+Ty* TypeManager::RemoveModalRec(Ty* ty)
+{
+    if (auto func = DynamicCast<FuncTy>(ty)) {
+        auto paramTys = func->paramTys;
+        for (size_t i{0}; i < paramTys.size(); ++i) {
+            paramTys[i] = RemoveModalRec(paramTys[i]);
+        }
+        auto retTy = RemoveModalRec(func->retTy);
+        return GetFunctionTy(
+            paramTys, retTy, {func->IsCFunc(), func->isClosureTy, func->hasVariableLenArg, func->noCast}, {});
+    }
+    return SubstituteModal(ty, {});
+}
+
+Ty* TypeManager::SubstituteModal(Ty* ty, ModalInfo modalInfo)
+{
+    if (!Ty::IsTyCorrect(ty) || ty->Modal() == modalInfo) {
+        return ty;
+    }
+    switch (ty->kind) {
+        case TypeKind::TYPE_UNIT:
+        case TypeKind::TYPE_INT8:
+        case TypeKind::TYPE_INT16:
+        case TypeKind::TYPE_INT32:
+        case TypeKind::TYPE_INT64:
+        case TypeKind::TYPE_INT_NATIVE:
+        case TypeKind::TYPE_IDEAL_INT:
+        case TypeKind::TYPE_UINT8:
+        case TypeKind::TYPE_UINT16:
+        case TypeKind::TYPE_UINT32:
+        case TypeKind::TYPE_UINT64:
+        case TypeKind::TYPE_UINT_NATIVE:
+        case TypeKind::TYPE_FLOAT16:
+        case TypeKind::TYPE_FLOAT32:
+        case TypeKind::TYPE_FLOAT64:
+        case TypeKind::TYPE_IDEAL_FLOAT:
+        case TypeKind::TYPE_RUNE:
+        case TypeKind::TYPE_NOTHING:
+        case TypeKind::TYPE_BOOLEAN:
+            return GetPrimitiveTy(ty->kind, modalInfo);
+        case TypeKind::TYPE_QUEST:
+            return GetQuestTy(modalInfo);
+        case TypeKind::TYPE_CSTRING:
+            return GetCStringTy(modalInfo);
+        case TypeKind::TYPE_TUPLE: {
+            auto& tupleTy = static_cast<TupleTy&>(*ty);
+            return GetTupleTy(tupleTy.typeArgs, tupleTy.isClosureTy, modalInfo);
+        }
+        case TypeKind::TYPE_FUNC: {
+            auto& funcTy = static_cast<FuncTy&>(*ty);
+            return GetFunctionTy(funcTy.paramTys, funcTy.retTy,
+                {funcTy.IsCFunc(), funcTy.isClosureTy, funcTy.hasVariableLenArg, funcTy.noCast}, modalInfo);
+        }
+        case TypeKind::TYPE_ARRAY: {
+            auto& arrayTy = static_cast<ArrayTy&>(*ty);
+            return GetArrayTy(arrayTy.typeArgs.empty() ? GetInvalidTy() : arrayTy.typeArgs[0], arrayTy.dims, modalInfo);
+        }
+        case TypeKind::TYPE_VARRAY: {
+            auto& varrayTy = static_cast<VArrayTy&>(*ty);
+            return GetVArrayTy(*varrayTy.typeArgs[0], varrayTy.size, modalInfo);
+        }
+        case TypeKind::TYPE_POINTER: {
+            auto& ptrTy = static_cast<PointerTy&>(*ty);
+            return GetPointerTy(ptrTy.typeArgs.empty() ? GetInvalidTy() : ptrTy.typeArgs[0], modalInfo);
+        }
+        case TypeKind::TYPE_STRUCT: {
+            auto& structTy = static_cast<StructTy&>(*ty);
+            return GetStructTy(*structTy.declPtr, structTy.typeArgs, modalInfo);
+        }
+        case TypeKind::TYPE_CLASS: {
+            auto& classTy = static_cast<ClassTy&>(*ty);
+            if (Is<ClassThisTy>(ty)) {
+                return GetClassThisTy(*classTy.declPtr, classTy.typeArgs, modalInfo);
+            }
+            return GetClassTy(*classTy.declPtr, classTy.typeArgs, modalInfo);
+        }
+        case TypeKind::TYPE_INTERFACE: {
+            auto& interfaceTy = static_cast<InterfaceTy&>(*ty);
+            return GetInterfaceTy(*interfaceTy.declPtr, interfaceTy.typeArgs, modalInfo);
+        }
+        case TypeKind::TYPE_ENUM: {
+            auto& enumTy = static_cast<EnumTy&>(*ty);
+            if (Is<RefEnumTy>(ty)) {
+                return GetRefEnumTy(*enumTy.declPtr, enumTy.typeArgs, modalInfo);
+            }
+            return GetEnumTy(*enumTy.declPtr, enumTy.typeArgs, modalInfo);
+        }
+        case TypeKind::TYPE: {
+            auto& typeAliasTy = static_cast<TypeAliasTy&>(*ty);
+            return GetTypeAliasTy(*typeAliasTy.declPtr, typeAliasTy.typeArgs, modalInfo);
+        }
+        case TypeKind::TYPE_UNION: {
+            auto& unionTy = static_cast<UnionTy&>(*ty);
+            return GetUnionTy(unionTy.tys, modalInfo);
+        }
+        case TypeKind::TYPE_INTERSECTION: {
+            auto& intersectionTy = static_cast<IntersectionTy&>(*ty);
+            return GetIntersectionTy(intersectionTy.tys);
+        }
+        case TypeKind::TYPE_GENERICS:
+            return GetGenericsTy(*StaticCast<GenericsTy>(ty)->decl, modalInfo);
+        case TypeKind::TYPE_INVALID:
+        case TypeKind::TYPE_ANY:
+        case TypeKind::TYPE_INITIAL:
+        default:
+            // These types don't support modal change or should keep the original
+            return ty;
+    }
 }
 
 Ptr<Ty> TypeManager::GetBlockRealTy(const Block& block) const
@@ -188,8 +343,9 @@ Ptr<Ty> TypeManager::GetBlockRealTy(const Block& block) const
 Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedGenericTy(GenericsTy& ty)
 {
     Ptr<Ty> curTy = &ty;
-    auto mapping = typeMapping;
-    TypeSubst::const_iterator it = mapping.find(&ty);
+    auto mapping = typeMapping;auto originalModal = ty.Modal();
+    auto tyToFind = StaticCast<GenericsTy>(tyMgr.SubstituteModal(&ty, {}));
+    auto it = mapping.find(tyToFind);
     // Direct mapping from genericsTy to genericsTy.
     while (it != mapping.cend()) {
         curTy = it->second;
@@ -208,7 +364,7 @@ Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedGenericTy(GenericsTy& ty)
         auto instantiator = TyInstantiator(tyMgr, mapping);
         curTy = instantiator.Instantiate(curTy);
     }
-    return curTy;
+    return tyMgr.SubstituteModal(curTy, originalModal);
 }
 
 Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedStructTy(StructTy& structTy)
@@ -222,7 +378,7 @@ Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedStructTy(StructTy& structTy)
     for (auto& it : structTy.typeArgs) {
         typeArgs.push_back(Instantiate(it));
     }
-    auto recTy = tyMgr.GetStructTy(*structTy.declPtr, typeArgs);
+    auto recTy = tyMgr.GetStructTy(*structTy.declPtr, typeArgs, structTy.Modal());
     return recTy;
 }
 
@@ -237,9 +393,9 @@ Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedClassTy(ClassTy& classTy)
     }
     Ptr<ClassTy> insTy = nullptr;
     if (Is<ClassThisTy>(classTy)) {
-        insTy = tyMgr.GetClassThisTy(*classTy.declPtr, typeArgs);
+        insTy = tyMgr.GetClassThisTy(*classTy.declPtr, typeArgs, classTy.Modal());
     } else {
-        insTy = tyMgr.GetClassTy(*classTy.declPtr, typeArgs);
+        insTy = tyMgr.GetClassTy(*classTy.declPtr, typeArgs, classTy.Modal());
     }
     return insTy;
 }
@@ -253,7 +409,7 @@ Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedInterfaceTy(InterfaceTy& int
     for (auto& it : interfaceTy.typeArgs) {
         typeArgs.push_back(Instantiate(it));
     }
-    auto insTy = tyMgr.GetInterfaceTy(*interfaceTy.declPtr, typeArgs);
+    auto insTy = tyMgr.GetInterfaceTy(*interfaceTy.declPtr, typeArgs, interfaceTy.Modal());
     return insTy;
 }
 
@@ -269,9 +425,9 @@ Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedEnumTy(EnumTy& enumTy)
         typeArgs.push_back(Instantiate(it));
     }
     if (Is<RefEnumTy>(enumTy)) {
-        return tyMgr.GetRefEnumTy(*enumTy.declPtr, typeArgs);
+        return tyMgr.GetRefEnumTy(*enumTy.declPtr, typeArgs, enumTy.Modal());
     }
-    auto tmp = tyMgr.GetEnumTy(*enumTy.declPtr, typeArgs);
+    auto tmp = tyMgr.GetEnumTy(*enumTy.declPtr, typeArgs, enumTy.Modal());
     tmp->hasCorrespondRefEnumTy = enumTy.hasCorrespondRefEnumTy;
     return tmp;
 }
@@ -283,7 +439,7 @@ Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedArrayTy(ArrayTy& arrayTy)
     }
     auto elemTy = Instantiate(arrayTy.typeArgs[0]);
     auto dims = arrayTy.dims;
-    return tyMgr.GetArrayTy(elemTy, dims);
+    return tyMgr.GetArrayTy(elemTy, dims, arrayTy.Modal());
 }
 
 Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedPointerTy(PointerTy& cptrTy)
@@ -292,7 +448,7 @@ Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedPointerTy(PointerTy& cptrTy)
         return &cptrTy;
     }
     auto elemTy = Instantiate(cptrTy.typeArgs[0]);
-    return tyMgr.GetPointerTy(elemTy);
+    return tyMgr.GetPointerTy(elemTy, cptrTy.Modal());
 }
 
 template <typename SetTy> Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedSetTy(SetTy& ty)
@@ -301,7 +457,7 @@ template <typename SetTy> Ptr<Ty> TypeManager::TyInstantiator::GetInstantiatedSe
     for (auto it : ty.tys) {
         tys.emplace(Instantiate(it));
     }
-    return tyMgr.GetTypeTy<SetTy>(tys);
+    return tyMgr.GetTypeTy<SetTy>(tys, ty.Modal());
 }
 
 Ptr<Ty> TypeManager::TyInstantiator::Instantiate(Ty& ty)
@@ -328,7 +484,7 @@ Ptr<Ty> TypeManager::TyInstantiator::Instantiate(Ty& ty)
             std::vector<Ptr<Ty>> typeArgs;
             std::transform(ty.typeArgs.begin(), ty.typeArgs.end(), std::back_inserter(typeArgs),
                 [this](auto it) { return Instantiate(it); });
-            return tyMgr.GetTupleTy(typeArgs, static_cast<TupleTy&>(ty).isClosureTy);
+            return tyMgr.GetTupleTy(typeArgs, static_cast<TupleTy&>(ty).isClosureTy, ty.Modal());
         }
         case TypeKind::TYPE_ARRAY:
             return GetInstantiatedArrayTy(static_cast<ArrayTy&>(ty));
@@ -347,7 +503,7 @@ Ptr<Ty> TypeManager::TyInstantiator::Instantiate(Ty& ty)
             for (auto& it : ty.typeArgs) {
                 typeArgs.push_back(Instantiate(it));
             }
-            return tyMgr.GetTypeAliasTy(*static_cast<TypeAliasTy&>(ty).declPtr, typeArgs);
+            return tyMgr.GetTypeAliasTy(*static_cast<TypeAliasTy&>(ty).declPtr, typeArgs, ty.Modal());
         }
         case TypeKind::TYPE_INTERSECTION:
             return GetInstantiatedSetTy(static_cast<IntersectionTy&>(ty));
@@ -376,8 +532,10 @@ std::set<Ptr<Ty>> TypeManager::GetInstantiatedTys(Ptr<Ty> ty, const MultiTypeSub
     if (mts.empty()) {
         return {ty};
     }
-    std::set<TypeSubst> ms =
-        ExpandMultiTypeSubst(ReduceMultiTypeSubst(*this, StaticToTyVars(GetAllGenericTys(ty)), mts), {ty});
+    auto allGenericTys = GetAllGenericTys(*this, ty);
+    TyVars tyVarsForInst = StaticToTyVars(allGenericTys);
+    MultiTypeSubst reducedMs = ReduceMultiTypeSubst(*this, tyVarsForInst, mts);
+    std::set<TypeSubst> ms = ExpandMultiTypeSubst(*this, reducedMs, {ty});
     std::set<Ptr<Ty>> res;
     std::for_each(ms.cbegin(), ms.cend(), [this, &ty, &res](const TypeSubst& m) {
         if (auto instTy = GetInstantiatedTy(ty, m)) {
@@ -757,10 +915,10 @@ bool IsCommonAndSpecificRelation(const Ty& leafTy, const Ty& rootTy)
 bool TypeManager::IsClassLikeSubtype(Ty& leaf, Ty& root, bool implicitBoxed, bool allowOptionBox)
 {
     if (auto thisTyOfLeaf = DynamicCast<ClassThisTy*>(&leaf); thisTyOfLeaf && thisTyOfLeaf->declPtr) {
-        auto leafClassTy = GetClassTy(*thisTyOfLeaf->declPtr, thisTyOfLeaf->typeArgs);
+        auto leafClassTy = GetClassTy(*thisTyOfLeaf->declPtr, thisTyOfLeaf->typeArgs, thisTyOfLeaf->Modal());
         if (auto thisTyOfRoot = DynamicCast<ClassThisTy*>(&root); thisTyOfRoot && thisTyOfRoot->declPtr) {
             // 'root' is class type, must not exist boxing relation.
-            return IsSubtype(leafClassTy, GetClassTy(*thisTyOfRoot->declPtr, thisTyOfRoot->typeArgs));
+            return IsSubtype(leafClassTy, GetClassTy(*thisTyOfRoot->declPtr, thisTyOfRoot->typeArgs, thisTyOfRoot->Modal()), implicitBoxed, allowOptionBox);
         }
         return IsSubtype(leafClassTy, &root, implicitBoxed, allowOptionBox);
     }
@@ -993,7 +1151,8 @@ bool TypeManager::IsPrimitiveSubtype(const Ty& leaf, Ty& root)
 // Note: By default, @implicitBoxed is true. For function type and tuple type,
 // covariant & contravariant are both not allowed for elements' value types (implementing interfaces)
 // and class type (when implementing interfaces by extend). For this situation, implicitBoxed is false.
-bool TypeManager::IsSubtype(Ptr<Ty> leaf, Ptr<Ty> root, bool implicitBoxed, bool allowOptionBox)
+bool TypeManager::IsSubtype(
+    Ptr<Ty> leaf, Ptr<Ty> root, bool implicitBoxed, bool allowOptionBox, ModalMatchMode modalMatchMode)
 {
     if (!Ty::IsTyCorrect(leaf) || !Ty::IsTyCorrect(root)) {
         return false;
@@ -1009,10 +1168,17 @@ bool TypeManager::IsSubtype(Ptr<Ty> leaf, Ptr<Ty> root, bool implicitBoxed, bool
     //        b) the 'leaf' is one of cffi types and the 'root' is 'CType', OR
     // 4. currently disallowing implicit boxing but the 'leaf' is classLike type and the 'root' is the 'Any' type.
     // NOTE: all cffi types are not classLike type, so using conditions as below.
+    bool modalSubtyping = modalMatchMode == ModalMatchMode::SUBTYPE ? IsModalSubtype(leaf, root)
+        : modalMatchMode == ModalMatchMode::EXACT                   ? leaf->Modal() == root->Modal()
+                                                                    : true;
+    // remove modal info as we already checked that
+    leaf = SubstituteModal(leaf, {});
+    root = SubstituteModal(root, {});
     bool ffiFastCheck = (Ty::IsMetCType(*leaf) && root->IsCType());
-    bool fastCheck = ffiFastCheck || leaf == root || (leaf->IsNothing() && !root->IsPlaceholder()) ||
+    bool copyFastCheck = (IsCopyInterfaceTy(root) && ImplementsCopyInterface(leaf));
+    bool fastCheck = ffiFastCheck || copyFastCheck || leaf == root || (leaf->IsNothing() && !root->IsPlaceholder()) ||
         ((implicitBoxed || leaf->IsClassLike()) && root->IsAny() && !leaf->IsPlaceholder());
-    if (fastCheck) {
+    if (fastCheck && modalSubtyping) {
         return true;
     }
     if (root->IsNothing()) {
@@ -1066,6 +1232,143 @@ bool TypeManager::IsSubtype(Ptr<Ty> leaf, Ptr<Ty> root, bool implicitBoxed, bool
         subtypeCache.erase(cacheKey);
     }
     return ret;
+}
+bool TypeManager::IsModalSubtype(Ptr<Ty> leaf, Ptr<Ty> root)
+{
+    // if T <: Copy, then it is possible to cast a T @local? to a T @local! or T@~local
+    // also @local! and @~local are subtype of @local?, so all of them can be cast to one another
+    if (ImplementsCopyInterface(leaf)) {
+        return true;
+    }
+    return IsModalSubtype(leaf->Modal(), root->Modal());
+}
+
+bool TypeManager::IsModalSubtype(ModalInfo leaf, ModalInfo root)
+{
+    auto l = static_cast<int>(leaf.local);
+    auto r = static_cast<int>(root.local);
+    return (l & r) == l;
+}
+
+bool TypeManager::ImplementsCopyInterface(Ptr<Ty> ty)
+{
+    if (auto d = DynamicCast<PrimitiveTy>(ty)) {
+        switch (d->kind) {
+            case TypeKind::TYPE_INT64:
+            case TypeKind::TYPE_UINT64:
+            case TypeKind::TYPE_INT32:
+            case TypeKind::TYPE_UINT32:
+            case TypeKind::TYPE_INT16:
+            case TypeKind::TYPE_UINT16:
+            case TypeKind::TYPE_INT8:
+            case TypeKind::TYPE_UINT8:
+            case TypeKind::TYPE_FLOAT64:
+            case TypeKind::TYPE_FLOAT32:
+            case TypeKind::TYPE_FLOAT16:
+            case TypeKind::TYPE_BOOLEAN:
+            case TypeKind::TYPE_RUNE:
+            case TypeKind::TYPE_UNIT:
+            case TypeKind::TYPE_NOTHING:
+            case TypeKind::TYPE_IDEAL_FLOAT:
+            case TypeKind::TYPE_IDEAL_INT:
+            case TypeKind::TYPE_INT_NATIVE:
+            case TypeKind::TYPE_UINT_NATIVE:
+            case TypeKind::TYPE_CSTRING:
+            case TypeKind::TYPE_INVALID:
+                return true;
+            default:
+                return false;
+        }
+    }
+    if (Is<PointerTy>(ty)) {
+        return true;
+    }
+    if (auto tuple = DynamicCast<TupleTy>(ty)) {
+        return std::all_of(
+            tuple->typeArgs.begin(), tuple->typeArgs.end(), [this](auto& ty) { return ImplementsCopyInterface(ty); });
+    }
+    if (auto g = DynamicCast<GenericsTy>(ty)) {
+        if (!g->isUpperBoundLegal) {
+            return false;
+        }
+        for (auto upper : g->upperBounds) {
+            if (ImplementsCopyInterface(upper)) {
+                return true;
+            }
+            // class cannot implement copy interface
+            if (Is<ClassTy>(upper)) {
+                return false;
+            }
+        }
+        return false;
+    }
+    if (auto array = DynamicCast<VArrayTy>(ty)) {
+        return ImplementsCopyInterface(array->typeArgs[0]);
+    }
+    auto decl = Ty::GetDeclOfTy(ty);
+    if (auto structDecl = DynamicCast<StructDecl>(decl)) {
+        return structDecl->IsCopyType();
+    }
+    return false;
+}
+
+bool TypeManager::NeverImplementsCopyInterface(Ptr<Ty> ty)
+{
+    if (auto d = DynamicCast<PrimitiveTy>(ty)) {
+        switch (d->kind) {
+            case TypeKind::TYPE_INT64:
+            case TypeKind::TYPE_UINT64:
+            case TypeKind::TYPE_INT32:
+            case TypeKind::TYPE_UINT32:
+            case TypeKind::TYPE_INT16:
+            case TypeKind::TYPE_UINT16:
+            case TypeKind::TYPE_INT8:
+            case TypeKind::TYPE_UINT8:
+            case TypeKind::TYPE_FLOAT64:
+            case TypeKind::TYPE_FLOAT32:
+            case TypeKind::TYPE_FLOAT16:
+            case TypeKind::TYPE_BOOLEAN:
+            case TypeKind::TYPE_RUNE:
+            case TypeKind::TYPE_UNIT:
+            case TypeKind::TYPE_NOTHING:
+            case TypeKind::TYPE_IDEAL_FLOAT:
+            case TypeKind::TYPE_IDEAL_INT:
+            case TypeKind::TYPE_INT_NATIVE:
+            case TypeKind::TYPE_UINT_NATIVE:
+            case TypeKind::TYPE_INVALID:
+                return false; // These implement Copy
+            default:
+                return true; // Other primitives never implement Copy
+        }
+    }
+    if (auto tuple = DynamicCast<TupleTy>(ty)) {
+        return std::any_of(tuple->typeArgs.begin(), tuple->typeArgs.end(),
+            [this](auto& ty) { return NeverImplementsCopyInterface(ty); });
+    }
+    if (auto g = DynamicCast<GenericsTy>(ty)) {
+        if (!g->isUpperBoundLegal) {
+            return false;
+        }
+        for (auto upper : g->upperBounds) {
+            // class upper bound means it can never implement Copy
+            if (Is<ClassTy>(upper)) {
+                return true;
+            }
+            // non-class upper bound means it might implement Copy
+            return false;
+        }
+        // no upper bounds - might be anything
+        return false;
+    }
+    if (auto array = DynamicCast<VArrayTy>(ty)) {
+        return NeverImplementsCopyInterface(array->typeArgs[0]);
+    }
+    auto decl = Ty::GetDeclOfTy(ty);
+    if (auto structDecl = DynamicCast<StructDecl>(decl)) {
+        return !structDecl->IsCopyType();
+    }
+    // Classes and other types never implement Copy
+    return true;
 }
 
 bool TypeManager::IsTyEqual(Ptr<Ty> subTy, Ptr<Ty> baseTy)
@@ -1127,6 +1430,55 @@ bool TypeManager::IsFuncParameterTypesIdentical(
         }
     }
     return result;
+}
+
+bool TypeManager::HasThisParam(const AST::FuncDecl& fd)
+{
+    if (!fd.funcBody || fd.funcBody->paramLists.empty()) {
+        return false;
+    }
+    return (Is<InheritableDecl>(fd.outerDecl) || (fd.outerDecl && fd.outerDecl->IsBuiltIn()))
+        && !fd.TestAnyAttr(Attribute::STATIC, Attribute::ENUM_CONSTRUCTOR);
+}
+
+Ptr<AST::Ty> TypeManager::GetThisParamTy(const AST::FuncDecl& fd)
+{
+    CJC_ASSERT(HasThisParam(fd));
+    ModalInfo modal{}; // ~local by default
+    if (fd.funcBody->paramLists[0]->thisParam) {
+        modal = fd.funcBody->paramLists[0]->thisParam->modal;
+    }
+    auto outer = fd.outerDecl;
+    CJC_ASSERT(outer);
+    return SubstituteModal(outer->GetTy(), modal);
+}
+
+ModalInfo TypeManager::GetAccessorThisModal(const AST::FuncDecl& fd)
+{
+    if (fd.funcBody->paramLists[0]->thisParam) {
+        return fd.funcBody->paramLists[0]->thisParam->GetTy()->Modal();
+    }
+    return {};
+}
+
+Ptr<Ty> TypeManager::GetAccessorTargetTy(const AST::FuncDecl& fd)
+{
+    if (fd.isGetter) {
+        if (fd.funcBody->retType) {
+            return fd.funcBody->retType->GetTy();
+        }
+        return fd.propDecl->GetTy();
+    }
+    CJC_ASSERT(fd.isSetter);
+    if (fd.funcBody->paramLists[0]->params[0]->type) {
+        return fd.funcBody->paramLists[0]->params[0]->GetTy();
+    }
+    return fd.propDecl->GetTy();
+}
+
+bool TypeManager::IsSameDataType(Ptr<Ty> l, Ptr<Ty> r)
+{
+    return l == SubstituteModal(r, l->Modal());
 }
 
 bool TypeManager::CheckGenericType(Ptr<Ty> lvalue, Ptr<Ty> rvalue, bool implicitBoxed)
@@ -1192,10 +1544,15 @@ TypeCompatibility TypeManager::CheckTypeCompatibility(
         }
         return flag;
     };
-    return lvalue->IsEnum() && rvalue->IsEnum() &&
-            isEnumCompatible(*RawStaticCast<EnumTy*>(lvalue), *RawStaticCast<EnumTy*>(rvalue))
-        ? TypeCompatibility::IDENTICAL
-        : TypeCompatibility::INCOMPATIBLE;
+    if (lvalue->IsEnum() && rvalue->IsEnum() &&
+        isEnumCompatible(*RawStaticCast<EnumTy*>(lvalue), *RawStaticCast<EnumTy*>(rvalue))) {
+        if (lvalue->Modal() == rvalue->Modal()) {
+            return TypeCompatibility::IDENTICAL;
+        }
+        return lvalue->Modal().IsSubModal(rvalue->Modal())
+            ? TypeCompatibility::SUBTYPE : TypeCompatibility::INCOMPATIBLE;
+    }
+    return TypeCompatibility::INCOMPATIBLE;
 }
 
 void TypeManager::ReplaceIdealTy(Ptr<Ty>* ty)
@@ -1205,10 +1562,10 @@ void TypeManager::ReplaceIdealTy(Ptr<Ty>* ty)
     }
     switch ((*ty)->kind) {
         case TypeKind::TYPE_IDEAL_INT:
-            *ty = GetPrimitiveTy(TypeKind::TYPE_INT64);
+            *ty = GetPrimitiveTy(TypeKind::TYPE_INT64, (*ty)->Modal());
             break;
         case TypeKind::TYPE_IDEAL_FLOAT:
-            *ty = GetPrimitiveTy(TypeKind::TYPE_FLOAT64);
+            *ty = GetPrimitiveTy(TypeKind::TYPE_FLOAT64, (*ty)->Modal());
             break;
         case TypeKind::TYPE_CLASS:
         case TypeKind::TYPE_INTERFACE:
@@ -1616,6 +1973,11 @@ bool TypeManager::CheckGenericDeclInstantiation(Ptr<const Decl> d, const std::ve
         return false;
     }
     for (size_t i = 0; i < typeArgs.size(); ++i) {
+        if (typeArgs[i] && typeArgs[i]->IsLocalType()) {
+            return false;
+        }
+    }
+    for (size_t i = 0; i < typeArgs.size(); ++i) {
         if (!genericParams[i]->HasGeneric() && genericParams[i] != typeArgs[i]) {
             return false;
         }
@@ -1700,6 +2062,7 @@ std::optional<bool> TypeManager::GetOverrideCache(
     return {};
 }
 
+// TODO: add hasThisParam
 void TypeManager::AddOverrideCache(
     const AST::FuncDecl& src, const AST::FuncDecl& target, Ty* baseTy, Ty* expectInstParent, bool val)
 {
@@ -1722,16 +2085,17 @@ std::set<Ptr<ExtendDecl>> TypeManager::GetDeclExtends(const InheritableDecl& dec
 // Find the original extend decl.
 std::set<Ptr<ExtendDecl>> TypeManager::GetAllExtendsByTy(Ty& ty)
 {
-    auto decl = Ty::GetDeclPtrOfTy<InheritableDecl>(&ty);
+    Ty* stripped = SubstituteModal(&ty, {});
+    auto decl = Ty::GetDeclPtrOfTy<InheritableDecl>(stripped);
     if (decl) {
         return GetDeclExtends(*decl);
     }
-    auto builtInTy = GetTyForExtendMap(ty);
+    auto builtInTy = GetTyForExtendMap(*stripped);
     if (builtInTy->IsIdeal()) {
         std::set<Ptr<ExtendDecl>> extends;
         auto kinds = GetIdealTypesByKind(builtInTy->kind);
         for (auto kind : kinds) {
-            auto primitivety = GetPrimitiveTy(kind);
+            auto primitivety = GetPrimitiveTy(kind, stripped->Modal());
             auto found = builtinTyToExtendMap.find(primitivety);
             if (found != builtinTyToExtendMap.end()) {
                 extends.insert(found->second.begin(), found->second.end());
@@ -1883,7 +2247,7 @@ std::vector<Ptr<Ty>> TypeManager::GetTypeArgs(const Ty& ty)
         return arrayTy.typeArgs;
     }
     // Since Array<T> is a generic type, it's type argument should be array type dimension - 1 when dimension > 1.
-    return {GetArrayTy(arrayTy.typeArgs[0], arrayTy.dims - 1)};
+    return {GetArrayTy(arrayTy.typeArgs[0], arrayTy.dims - 1, arrayTy.Modal())};
 }
 
 Ptr<Ty> TypeManager::GetNonNullTy(Ptr<Ty> ty)
@@ -1919,9 +2283,9 @@ Ptr<Ty> TypeManager::GetTyForExtendMap(Ty& ty)
     auto genericTy = Ty::GetGenericTyOfInsTy(ty);
     auto baseTy = &ty;
     if (ty.IsArray()) {
-        baseTy = GetArrayTy();
+        baseTy = GetArrayTy({});
     } else if (ty.IsPointer()) {
-        baseTy = GetPointerTy(GetInvalidTy());
+        baseTy = GetPointerTy(GetInvalidTy(), {});
     } else if (genericTy != nullptr) {
         baseTy = genericTy;
     }
@@ -2071,7 +2435,7 @@ Ptr<AST::GenericsTy> TypeManager::AllocTyVar(const std::string& srcId, bool need
     // allocate
     if (tyVarPool.empty()) {
         auto dummyDecl = MakeOwned<GenericParamDecl>();
-        auto newVar = GetGenericsTy(*dummyDecl);
+        auto newVar = GetGenericsTy(*dummyDecl, {});
         dummyGenDecls.emplace_back(std::move(dummyDecl));
         newVar->isPlaceholder = true;
         ret = newVar;
@@ -2260,7 +2624,7 @@ Ptr<AST::Ty> TypeManager::ConstrainByCtor(GenericsTy& tv, Ty& tyCtor)
     TypeSubst mapping;
     for (auto ub : constraints[&tv].ubs) {
         if (OfSameCtor(ub, &tyCtor)) {
-            return ub;
+            return SubstituteModal(ub, tyCtor.Modal());
         }
     }
     for (auto tyArg : tyCtor.typeArgs) {
@@ -2268,7 +2632,7 @@ Ptr<AST::Ty> TypeManager::ConstrainByCtor(GenericsTy& tv, Ty& tyCtor)
     }
     auto placeholderTy = GetInstantiatedTy(&tyCtor, mapping);
     if (IsSubtype(&tv, placeholderTy, true, false)) {
-        return placeholderTy;
+        return SubstituteModal(placeholderTy, tyCtor.Modal());
     } else {
         return nullptr;
     }
@@ -2331,7 +2695,7 @@ Ptr<Ty> TypeManager::GetThisRealTy(Ptr<Ty> now)
         return now;
     }
     if (auto thisTy = DynamicCast<ClassThisTy>(now)) {
-        return GetClassTy(*thisTy->decl, thisTy->typeArgs);
+        return GetClassTy(*thisTy->decl, thisTy->typeArgs, thisTy->Modal());
     }
     return now;
 }
@@ -2343,7 +2707,7 @@ Ptr<Ty> TypeManager::ReplaceThisTy(Ptr<Ty> now)
         for (auto& arg : thisTy->typeArgs) {
             newArgs.emplace_back(ReplaceThisTy(arg));
         }
-        return GetClassTy(*thisTy->decl, newArgs);
+        return GetClassTy(*thisTy->decl, newArgs, thisTy->Modal());
     }
     // If no type args, return as-is
     if (now->typeArgs.empty()) {
@@ -2371,24 +2735,25 @@ Ptr<Ty> TypeManager::ReplaceThisTy(Ptr<Ty> now)
                 paramTys.push_back(ReplaceThisTy(p));
             }
             auto retTy = ReplaceThisTy(funcTy.retTy);
-            return GetFunctionTy(paramTys, retTy, {funcTy.IsCFunc(), funcTy.isClosureTy, funcTy.hasVariableLenArg});
+            return GetFunctionTy(
+                paramTys, retTy, {funcTy.IsCFunc(), funcTy.isClosureTy, funcTy.hasVariableLenArg}, funcTy.Modal());
         }
         case TypeKind::TYPE_TUPLE:
-            return GetTupleTy(newArgs, static_cast<TupleTy&>(*now).isClosureTy);
+            return GetTupleTy(newArgs, static_cast<TupleTy&>(*now).isClosureTy, now->Modal());
         case TypeKind::TYPE_ARRAY:
-            return GetArrayTy(newArgs[0], static_cast<ArrayTy&>(*now).dims);
+            return GetArrayTy(newArgs[0], static_cast<ArrayTy&>(*now).dims, now->Modal());
         case TypeKind::TYPE_POINTER:
-            return GetPointerTy(newArgs[0]);
+            return GetPointerTy(newArgs[0], now->Modal());
         case TypeKind::TYPE_STRUCT:
-            return GetStructTy(*static_cast<StructTy&>(*now).decl, newArgs);
+            return GetStructTy(*static_cast<StructTy&>(*now).decl, newArgs, now->Modal());
         case TypeKind::TYPE_CLASS:
-            return GetClassTy(*static_cast<ClassTy&>(*now).decl, newArgs);
+            return GetClassTy(*static_cast<ClassTy&>(*now).decl, newArgs, now->Modal());
         case TypeKind::TYPE_INTERFACE:
-            return GetInterfaceTy(*static_cast<InterfaceTy&>(*now).decl, newArgs);
+            return GetInterfaceTy(*static_cast<InterfaceTy&>(*now).decl, newArgs, now->Modal());
         case TypeKind::TYPE_ENUM:
-            return GetEnumTy(*static_cast<EnumTy&>(*now).decl, newArgs);
+            return GetEnumTy(*static_cast<EnumTy&>(*now).decl, newArgs, now->Modal());
         case TypeKind::TYPE:
-            return GetTypeAliasTy(*static_cast<TypeAliasTy&>(*now).declPtr, newArgs);
+            return GetTypeAliasTy(*static_cast<TypeAliasTy&>(*now).declPtr, newArgs, now->Modal());
         default:
             return now;
     }
@@ -2403,41 +2768,42 @@ Ptr<Ty> TypeManager::SubstituteTypeArgs(Ptr<Ty> baseTy, std::vector<Ptr<Ty>>& ty
     switch (baseTy->kind) {
         case TypeKind::TYPE_CLASS: {
             if (auto ctt = DynamicCast<ClassThisTy>(baseTy)) {
-                return GetClassThisTy(*ctt->declPtr, typeArgs);
+                return GetClassThisTy(*ctt->declPtr, typeArgs, ctt->Modal());
             }
-            return GetClassTy(*StaticCast<ClassTy>(baseTy)->declPtr, typeArgs);
+            return GetClassTy(*StaticCast<ClassTy>(baseTy)->declPtr, typeArgs, baseTy->Modal());
         }
         case TypeKind::TYPE_STRUCT: {
-            return GetStructTy(*StaticCast<StructTy>(baseTy)->declPtr, typeArgs);
+            return GetStructTy(*StaticCast<StructTy>(baseTy)->declPtr, typeArgs, baseTy->Modal());
         }
         case TypeKind::TYPE_INTERFACE: {
-            return GetInterfaceTy(*StaticCast<InterfaceTy>(baseTy)->declPtr, typeArgs);
+            return GetInterfaceTy(*StaticCast<InterfaceTy>(baseTy)->declPtr, typeArgs, baseTy->Modal());
         }
         case TypeKind::TYPE_ENUM: {
-            return GetEnumTy(*StaticCast<EnumTy>(baseTy)->declPtr, typeArgs);
+            return GetEnumTy(*StaticCast<EnumTy>(baseTy)->declPtr, typeArgs, baseTy->Modal());
         }
         case TypeKind::TYPE_FUNC: {
             auto returnTy = typeArgs.back();
             typeArgs.pop_back();
             auto funcTy = StaticCast<FuncTy>(baseTy);
-            return GetFunctionTy(typeArgs, returnTy, {funcTy->isC, false, funcTy->hasVariableLenArg});
+            return GetFunctionTy(
+                typeArgs, returnTy, {funcTy->isC, false, funcTy->hasVariableLenArg}, baseTy->Modal());
         }
         case TypeKind::TYPE: {
             return baseTy;
         }
         case TypeKind::TYPE_TUPLE: {
-            return GetTupleTy(typeArgs);
+            return GetTupleTy(typeArgs, false, baseTy->Modal());
         }
         case TypeKind::TYPE_ARRAY: {
             auto arrayTy = StaticCast<ArrayTy>(baseTy);
-            return GetArrayTy(typeArgs[0], arrayTy->dims);
+            return GetArrayTy(typeArgs[0], arrayTy->dims, baseTy->Modal());
         }
         case TypeKind::TYPE_VARRAY: {
             auto varrayTy = StaticCast<VArrayTy>(baseTy);
-            return GetVArrayTy(*typeArgs[0], varrayTy->size);
+            return GetVArrayTy(*typeArgs[0], varrayTy->size, baseTy->Modal());
         }
         case TypeKind::TYPE_POINTER: {
-            return GetPointerTy(typeArgs[0]);
+            return GetPointerTy(typeArgs[0], baseTy->Modal());
         }
         default:
             return baseTy;
@@ -2608,43 +2974,43 @@ Ptr<AST::Ty> TypeManager::SubstituteTypeAliasInTy(AST::Ty& ty, bool needSubstitu
     switch (ty.kind) {
         case TypeKind::TYPE_CLASS: {
             if (auto ctt = DynamicCast<ClassThisTy*>(&ty); ctt) {
-                return GetClassThisTy(*ctt->declPtr, typeArgs);
+                return GetClassThisTy(*ctt->declPtr, typeArgs, ctt->Modal());
             }
-            return GetClassTy(*static_cast<ClassTy&>(ty).declPtr, typeArgs);
+            return GetClassTy(*static_cast<ClassTy&>(ty).declPtr, typeArgs, ty.Modal());
         }
         case TypeKind::TYPE_STRUCT: {
-            return GetStructTy(*static_cast<StructTy&>(ty).declPtr, typeArgs);
+            return GetStructTy(*static_cast<StructTy&>(ty).declPtr, typeArgs, ty.Modal());
         }
         case TypeKind::TYPE_INTERFACE: {
-            return GetInterfaceTy(*static_cast<InterfaceTy&>(ty).declPtr, typeArgs);
+            return GetInterfaceTy(*static_cast<InterfaceTy&>(ty).declPtr, typeArgs, ty.Modal());
         }
         case TypeKind::TYPE_ENUM: {
-            return GetEnumTy(*static_cast<EnumTy&>(ty).declPtr, typeArgs);
+            return GetEnumTy(*static_cast<EnumTy&>(ty).declPtr, typeArgs, ty.Modal());
         }
         case TypeKind::TYPE_FUNC: {
             auto returnTy = typeArgs.back();
             typeArgs.pop_back();
             auto& funcTy = static_cast<FuncTy&>(ty);
-            return GetFunctionTy(typeArgs, returnTy, {funcTy.isC, false, funcTy.hasVariableLenArg});
+            return GetFunctionTy(typeArgs, returnTy, {funcTy.isC, false, funcTy.hasVariableLenArg}, ty.Modal());
         }
         case TypeKind::TYPE: {
             return GetUnaliasedTypeFromTypeAlias(
                 static_cast<TypeAliasTy&>(ty), typeArgs, needSubstituteGeneric, typeMapping);
         }
         case TypeKind::TYPE_TUPLE: {
-            return GetTupleTy(typeArgs);
+            return GetTupleTy(typeArgs, false, ty.Modal());
         }
         case TypeKind::TYPE_ARRAY: {
             auto& arrayTy = static_cast<ArrayTy&>(ty);
-            return GetArrayTy(typeArgs[0], arrayTy.dims);
+            return GetArrayTy(typeArgs[0], arrayTy.dims, ty.Modal());
         }
         case TypeKind::TYPE_VARRAY: {
             auto& varrayTy = static_cast<VArrayTy&>(ty);
             CJC_ASSERT(!typeArgs.empty() && typeArgs[0] != nullptr);
-            return GetVArrayTy(*typeArgs[0], varrayTy.size);
+            return GetVArrayTy(*typeArgs[0], varrayTy.size, ty.Modal());
         }
         case TypeKind::TYPE_POINTER: {
-            return GetPointerTy(typeArgs[0]);
+            return GetPointerTy(typeArgs[0], ty.Modal());
         }
         case TypeKind::TYPE_GENERICS: {
             if (!needSubstituteGeneric) {

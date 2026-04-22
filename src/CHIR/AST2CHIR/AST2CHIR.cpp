@@ -19,6 +19,7 @@
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
+#include "cangjie/Sema/GenericInstantiationManager.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Utils/ParallelUtil.h"

@@ -10,6 +10,7 @@
  * This file implements the TypeChecker related classes.
  */
 
+#include "CJMP/MPTypeCheckerImpl.h"
 #include "Diags.h"
 #include "JoinAndMeet.h"
 #include "TypeCheckUtil.h"
@@ -339,7 +340,7 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, Ptr<Node> type)
     switch (type->astKind) {
         case ASTKind::PRIMITIVE_TYPE: {
             auto primitiveType = StaticAs<ASTKind::PRIMITIVE_TYPE>(type);
-            primitiveType->SetTy(TypeManager::GetPrimitiveTy(primitiveType->kind));
+            primitiveType->SetTy(TypeManager::GetPrimitiveTy(primitiveType->kind, primitiveType->modal.ToModalInfo()));
             return primitiveType->GetTy();
         }
         case ASTKind::REF_TYPE: {
@@ -451,7 +452,7 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, RefType& rt)
         ReplaceTarget(&rt, target);
         // Get semaTy only by name, no need to check inside.
         auto typeArgs = GetTyFromASTType(ctx, rt.typeArguments);
-        rt.SetTy(GetTyFromASTType(*target, typeArgs));
+        rt.SetTy(GetTyFromASTType(*target, typeArgs, rt.modal.ToModalInfo()));
         return rt.GetTy();
     }
     // If there are more than one targets and the scope are the same then report ambiguous error.
@@ -480,7 +481,7 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTCFuncType(ASTContext& ctx, RefType& rt)
     funcType->retType->SetTy(GetTyFromASTType(ctx, funcType->retType.get()));
     Ptr<Ty> retTy = funcType->retType->GetTy();
     funcType->SetTy(GetTyFromASTType(ctx, funcType));
-    return typeManager.GetFunctionTy(std::move(paramTys), retTy, {.isC = true});
+    return typeManager.GetFunctionTy(std::move(paramTys), retTy, {.isC = true}, rt.modal.ToModalInfo());
 }
 
 Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, QualifiedType& qt)
@@ -534,7 +535,7 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, QualifiedType& qt)
     ReplaceTarget(&qt, target);
     // Get semaTy only by name, no need to check inside.
     auto typeArgs = GetTyFromASTType(ctx, qt.typeArguments);
-    qt.SetTy(GetTyFromASTType(*target, typeArgs));
+    qt.SetTy(GetTyFromASTType(*target, typeArgs, qt.modal.ToModalInfo()));
     return qt.GetTy();
 }
 
@@ -556,7 +557,8 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, VArrayType& varrayTyp
 #endif
         return TypeManager::GetInvalidTy();
     }
-    varrayType.SetTy(typeManager.GetVArrayTy(*varrayType.typeArgument->GetTy(), le->constNumValue.asInt.Int64()));
+    varrayType.SetTy(typeManager.GetVArrayTy(
+        *varrayType.typeArgument->GetTy(), le->constNumValue.asInt.Int64(), varrayType.modal.ToModalInfo()));
     return varrayType.GetTy();
 }
 
@@ -620,93 +622,94 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, OptionType& optionTyp
     return optionType.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(Decl& decl, const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(Decl& decl, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modal)
 {
     switch (decl.astKind) {
         case ASTKind::CLASS_DECL: {
             auto cd = StaticAs<ASTKind::CLASS_DECL>(&decl);
-            return typeManager.GetClassTy(*cd, typeArgs);
+            return typeManager.GetClassTy(*cd, typeArgs, modal);
         }
         case ASTKind::INTERFACE_DECL: {
             auto id = StaticAs<ASTKind::INTERFACE_DECL>(&decl);
-            return typeManager.GetInterfaceTy(*id, typeArgs);
+            return typeManager.GetInterfaceTy(*id, typeArgs, modal);
         }
         case ASTKind::STRUCT_DECL: {
             auto sd = StaticAs<ASTKind::STRUCT_DECL>(&decl);
-            return typeManager.GetStructTy(*sd, typeArgs);
+            return typeManager.GetStructTy(*sd, typeArgs, modal);
         }
         case ASTKind::ENUM_DECL: {
             auto ed = StaticAs<ASTKind::ENUM_DECL>(&decl);
-            return typeManager.GetEnumTy(*ed, typeArgs);
+            return typeManager.GetEnumTy(*ed, typeArgs, modal);
         }
         case ASTKind::TYPE_ALIAS_DECL: {
             auto tad = StaticAs<ASTKind::TYPE_ALIAS_DECL>(&decl);
-            return typeManager.GetTypeAliasTy(*tad, typeArgs);
+            return typeManager.GetTypeAliasTy(*tad, typeArgs, modal);
         }
         case ASTKind::GENERIC_PARAM_DECL: {
             auto gpd = StaticAs<ASTKind::GENERIC_PARAM_DECL>(&decl);
-            return typeManager.GetGenericsTy(*gpd);
+            return typeManager.GetGenericsTy(*gpd, modal);
         }
         case ASTKind::BUILTIN_DECL: {
             auto bid = StaticAs<ASTKind::BUILTIN_DECL>(&decl);
-            return GetTyFromBuiltinDecl(*bid, typeArgs);
+            return GetTyFromBuiltinDecl(*bid, typeArgs, modal);
         }
         default:
             return decl.GetTy();
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::GetTyFromBuiltinDecl(const BuiltInDecl& bid, const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<Ty> TypeCheckerImpl::GetTyFromBuiltinDecl(
+    const BuiltInDecl& bid, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modal)
 {
     switch (bid.type) {
         case BuiltInType::ARRAY: {
-            return GetBuiltInArrayType(typeArgs);
+            return GetBuiltInArrayType(typeArgs, modal);
         }
         case BuiltInType::POINTER: {
-            return GetBuiltInPointerType(typeArgs);
+            return GetBuiltInPointerType(typeArgs, modal);
         }
         case BuiltInType::CSTRING: {
-            return TypeManager::GetCStringTy();
+            return TypeManager::GetCStringTy(modal);
         }
         case BuiltInType::VARRAY: {
-            return GetBuiltInVArrayType(typeArgs);
+            return GetBuiltInVArrayType(typeArgs, modal);
         }
         case BuiltInType::CFUNC: {
-            return GetBuiltinCFuncType(typeArgs);
+            return GetBuiltinCFuncType(typeArgs, modal);
         }
         default:
             return TypeManager::GetInvalidTy();
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::GetBuiltInPointerType(const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<Ty> TypeCheckerImpl::GetBuiltInPointerType(const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modal)
 {
     auto elemTy = typeArgs.empty() ? TypeManager::GetInvalidTy() : typeArgs[0];
-    return typeManager.GetPointerTy(elemTy);
+    return typeManager.GetPointerTy(elemTy, modal);
 }
 
-Ptr<Ty> TypeCheckerImpl::GetBuiltInArrayType(const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<Ty> TypeCheckerImpl::GetBuiltInArrayType(const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modal)
 {
     if (typeArgs.size() > 1) {
         return TypeManager::GetInvalidTy();
     }
     auto elemTy = typeArgs.empty() ? TypeManager::GetInvalidTy() : typeArgs[0];
-    return typeManager.GetArrayTy(elemTy, 1);
+    return typeManager.GetArrayTy(elemTy, 1, modal);
 }
 
-Ptr<Ty> TypeCheckerImpl::GetBuiltInVArrayType(const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<Ty> TypeCheckerImpl::GetBuiltInVArrayType(const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modal)
 {
     CJC_ASSERT(typeArgs.size() == 1);
     auto elemTy = typeArgs.empty() ? TypeManager::GetInvalidTy() : typeArgs[0];
-    return typeManager.GetVArrayTy(*elemTy, 0);
+    return typeManager.GetVArrayTy(*elemTy, 0, modal);
 }
 
-Ptr<AST::Ty> TypeCheckerImpl::GetBuiltinCFuncType(const std::vector<Ptr<AST::Ty>>& typeArgs)
+Ptr<AST::Ty> TypeCheckerImpl::GetBuiltinCFuncType(const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modal)
 {
     // the return type is CFunc<T>
     CJC_ASSERT(typeArgs.size() == 1 && Ty::IsTyCorrect(typeArgs[0]));
     return typeManager.GetFunctionTy(
-        typeArgs, typeArgs[0], {.isC = true, .isClosureTy = false, .hasVariableLenArg = false, .noCast = false});
+        typeArgs, typeArgs[0], {.isC = true, .isClosureTy = false, .hasVariableLenArg = false, .noCast = false}, modal);
 }
 
 std::vector<Ptr<Ty>> TypeCheckerImpl::GetTyFromASTType(
@@ -715,7 +718,7 @@ std::vector<Ptr<Ty>> TypeCheckerImpl::GetTyFromASTType(
     std::vector<Ptr<Ty>> typeArgs;
     for (auto& gpd : typeParameters) {
         if (Ty::IsInitialTy(gpd->GetTy())) {
-            gpd->SetTy(GetTyFromASTType(*gpd, {}));
+            gpd->SetTy(GetTyFromASTType(*gpd, {}, {}));
         }
         typeArgs.push_back(gpd->GetTy());
     }
@@ -742,7 +745,7 @@ void TypeCheckerImpl::SetDeclTy(Decl& decl)
     if (generic) {
         typeArgs = GetTyFromASTType(generic->typeParameters);
     }
-    decl.SetTy(GetTyFromASTType(decl, typeArgs));
+    decl.SetTy(GetTyFromASTType(decl, typeArgs, {}));
 }
 
 void TypeCheckerImpl::SetTypeAliasDeclTy(ASTContext& ctx, TypeAliasDecl& tad)
@@ -912,6 +915,7 @@ void TypeCheckerImpl::SetTypeTy(ASTContext& ctx, Type& type)
         type.aliasTy = instAliasedTy;
     }
     type.SetTy(typeManager.SubstituteTypeAliasInTy(*type.GetTy()));
+    type.SetTy(typeManager.SubstituteModal(type.GetTy(), type.modal.ToModalInfo()));
 }
 
 void TypeCheckerImpl::SubstituteTypeAliasForAlias(TypeAliasDecl& tad)
@@ -1580,8 +1584,7 @@ void TypeCheckerImpl::PreCheckFuncRedefinitionForEnum(const std::vector<Ptr<Func
         }
         // Function redefinition check is moved to precheck when the ty of function is not set, because the
         // return type need to be inferred in type check stage.
-        auto funcTy = DynamicCast<FuncTy*>(func->GetTy());
-        auto paramTys = funcTy ? funcTy->paramTys : GetParamTys(*func);
+        auto paramTys = GetParamTys(*func);
         if (paramNum.find(paramTys.size()) != paramNum.end()) {
             diag.Diagnose(*func, "sema_duplicated_item_in_enum",
                 func->identifier.Val().c_str(), ed->identifier.Val().c_str());
@@ -1651,10 +1654,8 @@ bool TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
         auto it1 = std::partition(it, funcs.end(), [&it, this](Ptr<FuncDecl> fd) {
             // Function redefinition check is moved to PreCheck when the ty of function is not set, because the
             // return type need to be inferred in type check stage.
-            auto funcTy1 = DynamicCast<FuncTy*>((*it)->GetTy());
-            auto funcTy2 = DynamicCast<FuncTy*>(fd->GetTy());
-            auto paramTys1 = funcTy1 ? funcTy1->paramTys : GetParamTys(**it);
-            auto paramTys2 = funcTy2 ? funcTy2->paramTys : GetParamTys(*fd);
+            auto paramTys1 = GetParamTys(**it);
+            auto paramTys2 = GetParamTys(*fd);
             // Get substituteMap S = [X11 -> X21, ..., X1n -> X2m]. from '*it' to 'fd' if exists.
             TypeSubst substituteMap = GetSubstituteMap(typeManager, **it, *fd);
             bool visibilityMatch = true;
@@ -1666,6 +1667,15 @@ bool TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
                 CJC_NULLPTR_CHECK((*it)->curFile);
                 if (*(fd->curFile) != *((*it)->curFile)) {
                     visibilityMatch = false;
+                }
+            }
+            // 'this' parameter modal participates in signature identity.
+            // Otherwise, overloads that only differ by `this @local...` will be treated as conflicting.
+            if (TypeManager::HasThisParam(*fd) && TypeManager::HasThisParam(**it)) {
+                auto this1 = typeManager.GetThisParamTy(**it);
+                auto this2 = typeManager.GetThisParamTy(*fd);
+                if (typeManager.CheckTypeCompatibility(this1, this2, false) != TypeCompatibility::IDENTICAL) {
+                    return false;
                 }
             }
             return visibilityMatch && typeManager.IsFuncParameterTypesIdentical(paramTys1, paramTys2, substituteMap) &&
@@ -1811,8 +1821,50 @@ void TypeCheckerImpl::ReplaceThisTypeInFunc(const AST::FuncDecl& funcDecl)
         rt->ref.identifier = "This";
         rt->ref.identifier.SetPos(thisType->begin, thisType->begin + std::string_view{"This"}.size());
         CopyBasicInfo(thisType, rt.get());
-        rt->SetTy(typeManager.GetClassThisTy(*cd, cd->GetTy()->typeArgs));
+        rt->SetTy(typeManager.GetClassThisTy(*cd, cd->GetTy()->typeArgs, funcDecl.funcBody->retType->modal.ToModalInfo()));
         funcDecl.funcBody->retType = std::move(rt);
+    }
+}
+
+void TypeCheckerImpl::SetThisParamType(AST::FuncDecl& fd)
+{
+    if (!fd.funcBody || fd.funcBody->paramLists.empty()) {
+        return;
+    }
+    auto& thisParam = fd.funcBody->paramLists[0]->thisParam;
+    if (!thisParam) {
+        return;
+    }
+    auto outer = fd.outerDecl;
+    if (auto extendDecl = DynamicCast<ExtendDecl*>(outer)) {
+        // alias is replace beforehand
+        CJC_ASSERT(!Is<TypeAliasTy>(extendDecl->extendedType->GetTy()));
+        outer = Ty::GetDeclPtrOfTy(extendDecl->extendedType->GetTy());
+    }
+    if (!outer) {
+        // invalid this param pos, return
+        return;
+    }
+    switch (outer->astKind) {
+        case ASTKind::CLASS_DECL:
+            thisParam->SetTy(
+                typeManager.GetClassThisTy(*StaticCast<ClassDecl*>(outer), {}, thisParam->modal.ToModalInfo()));
+            break;
+        case ASTKind::STRUCT_DECL:
+            thisParam->SetTy(
+                typeManager.GetStructTy(*StaticCast<StructDecl*>(outer), {}, thisParam->modal.ToModalInfo()));
+            break;
+        case ASTKind::INTERFACE_DECL:
+            thisParam->SetTy(
+                typeManager.GetInterfaceTy(*StaticCast<InterfaceDecl*>(outer), {}, thisParam->modal.ToModalInfo()));
+            break;
+        case ASTKind::ENUM_DECL:
+            thisParam->SetTy(
+                typeManager.GetEnumTy(*StaticCast<EnumDecl*>(outer), {}, thisParam->modal.ToModalInfo()));
+            break;
+        default:
+            // outer is func, this is also invalid
+            return;
     }
 }
 
@@ -1848,20 +1900,22 @@ void TypeCheckerImpl::PreSetDeclType(const ASTContext& ctx)
         if (Ty::IsTyCorrect(fd->GetTy())) {
             continue; // Do not replace valid ty.
         }
+        SetThisParamType(*fd);
         auto paramTys = GetFuncBodyParamTys(*fd->funcBody);
         Ptr<Ty> retTy = TypeManager::GetQuestTy();
         if (fd->TestAttr(Attribute::CONSTRUCTOR)) {
             // Static init has return type of unit. Instance init has return type of current typeDecl.
             retTy = fd->TestAttr(Attribute::STATIC)
-                ? TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)
+                ? TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT, {})
                 : (fd->outerDecl && fd->outerDecl->IsNominalDecl() ? fd->outerDecl->GetTy() : TypeManager::GetInvalidTy());
+            retTy = typeManager.SubstituteModal(retTy, GetThisParamModal(*fd));
             fd->SetTy(typeManager.GetFunctionTy(paramTys, retTy));
             continue;
         }
         if (fd->funcBody->retType) {
             retTy = fd->funcBody->retType->GetTy();
         } else if (fd->funcBody->body && fd->funcBody->body->body.empty()) {
-            retTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+            retTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT, {});
         }
         bool isCFunc =
             fd->funcBody->TestAttr(Attribute::C) || (fd->TestAttr(Attribute::FOREIGN) && IsUnsafeBackend(backendType));
@@ -1870,6 +1924,9 @@ void TypeCheckerImpl::PreSetDeclType(const ASTContext& ctx)
         fd->SetTy(typeManager.GetFunctionTy(paramTys, retTy, {isCFunc, false, hasVariableLenArg}));
         if (fd->TestAttr(Attribute::IS_CHECK_VISITED)) {
             fd->funcBody->SetTy(fd->GetTy());
+        }
+        if (fd->modal.HasLocal()) {
+            fd->SetTy(typeManager.SubstituteModal(fd->GetTy(), fd->modal.ToModalInfo()));
         }
     }
 }
@@ -2086,4 +2143,5 @@ void TypeCheckerImpl::PreCheck(const std::vector<Ptr<ASTContext>>& contexts)
     // Hotfix. Update 'anyTy' in typeManger to real interface 'Any' type.
     UpdateAnyTy();
     UpdateCTypeTy();
+    UpdateCopyTy();
 }

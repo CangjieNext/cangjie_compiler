@@ -39,6 +39,7 @@ enum class AnnotationKind {
     FROZEN,
     ENSURE_PREPARED_TO_MOCK,
     NON_PRODUCT,
+    MAKE_COPY,
     UNKNOWN
 };
 } // namespace Cangjie::AST

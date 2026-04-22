@@ -22,6 +22,16 @@ bool StructDef::IsCStruct() const
     return isC;
 }
 
+void StructDef::SetCopyType(bool value)
+{
+    isCopy = value;
+}
+
+bool StructDef::IsCopyType() const
+{
+    return isCopy;
+}
+
 void StructDef::SetType(CustomType& ty)
 {
     CJC_ASSERT(ty.GetTypeKind() == Type::TypeKind::TYPE_STRUCT);

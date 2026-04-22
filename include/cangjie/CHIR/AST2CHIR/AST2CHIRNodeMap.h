@@ -14,10 +14,13 @@
 #define CANGJIE_CHIR_SYMBOLTABLE_H
 
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 #include "cangjie/Mangle/CHIRMangler.h"
 #include "cangjie/Sema/TypeManager.h"
+
+namespace Cangjie::AST {
+struct Node;
+}
 
 namespace Cangjie::CHIR {
 template <typename T> class AST2CHIRNodeMap {

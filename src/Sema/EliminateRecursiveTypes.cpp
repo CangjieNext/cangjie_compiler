@@ -266,7 +266,7 @@ void CheckAndUpdateDeclTyWithNewTy(Decl& decl, const EnumTy& specifiedTy, TypeMa
         for (auto elemTy : tupleTy->typeArgs) {
             if (elemTy == &specifiedTy) {
                 auto enumTy = RawStaticCast<EnumTy*>(elemTy);
-                auto newTy = typeManager.GetRefEnumTy(*enumTy->declPtr, enumTy->typeArgs);
+                auto newTy = typeManager.GetRefEnumTy(*enumTy->declPtr, enumTy->typeArgs, enumTy->Modal());
                 enumTy->hasCorrespondRefEnumTy = true;
                 newTy->decl = enumTy->decl;
                 vec.emplace_back(newTy);
@@ -277,7 +277,7 @@ void CheckAndUpdateDeclTyWithNewTy(Decl& decl, const EnumTy& specifiedTy, TypeMa
         decl.SetTy(typeManager.GetTupleTy(vec));
     } else if (decl.GetTy() == &specifiedTy) {
         auto enumTy = RawStaticCast<EnumTy*>(decl.GetTy());
-        auto newTy = typeManager.GetRefEnumTy(*enumTy->declPtr, enumTy->typeArgs);
+        auto newTy = typeManager.GetRefEnumTy(*enumTy->declPtr, enumTy->typeArgs, enumTy->Modal());
         enumTy->hasCorrespondRefEnumTy = true;
         newTy->decl = enumTy->decl;
         decl.SetTy(newTy);

@@ -6,6 +6,7 @@
 
 #include "cangjie/CHIR/CHIR.h"
 
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/Analysis/CallGraphAnalysis.h"
 #include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
@@ -56,6 +57,29 @@
 #include "cangjie/CHIR/Checker/TypeCastCheck.h"
 
 namespace Cangjie::CHIR {
+ToCHIR::ToCHIR(
+    CompilerInstance& ci, AST::Package& pkg, ConstAnalysisWrapper& constAnalysisWrapper, CHIRBuilder& builder)
+    : ci(ci),
+      opts(ci.invocation.globalOptions),
+      typeManager(ci.typeManager),
+      sourceManager(ci.GetSourceManager()),
+      importManager(*ci.importManager),
+      gim(ci.gim),
+      diagEngine(ci.diag),
+      cangjieHome(ci.cangjieHome),
+      pkg(&pkg),
+      outputPath(ci.invocation.globalOptions.output),
+      kind(ci.kind),
+      cachedInfo(*ci.cachedInfo),
+      releaseCHIRMemory(ci.releaseCHIRMemory),
+      needToOptString(ci.needToOptString),
+      needToOptGenericDecl(ci.needToOptGenericDecl),
+      builder(builder),
+      constAnalysisWrapper(constAnalysisWrapper),
+      diag(diagEngine)
+{
+}
+
 static void FlattenEffectMap(OptEffectCHIRMap& effectMap)
 {
     auto mergeToEffectedNodes = [](std::unordered_set<Ptr<Value>>& src, std::unordered_set<Ptr<Value>>& patch) {
@@ -718,6 +742,7 @@ bool ToCHIR::RunIRChecker(const Phase& phase)
     } else {
         rules.emplace(CHIRChecker::Rule::IMPORTED_CONST_VAR_SHOULD_HAVE_INITIALIZER);
     }
+    rules.emplace(CHIRChecker::Rule::REGION_CHECK); // modal type enabled by default
     // there may be something wrong, we will check this rule after CJMP's scheme done
     if (opts.commonPartCjos.size() <= 0) {
         rules.emplace(CHIRChecker::Rule::CHECK_FUNC_BODY);
@@ -1025,8 +1050,8 @@ std::pair<Value*, Apply*> ToCHIR::DoCFFIFuncWrapper(T& curFunc, bool isForeign, 
     wrapperFunc->SetReturnValue(*retAlloc->GetResult());
 
     // create exit
-    entry->AppendExpression(builder.CreateExpression<Store>(
-        builder.GetType<UnitType>(), res->GetResult(), retAlloc->GetResult(), entry));
+    entry->AppendExpression(
+        builder.CreateExpression<Store>(builder.GetUnitTy(), res->GetResult(), retAlloc->GetResult(), entry));
     entry->AppendExpression(builder.CreateTerminator<Exit>(entry));
     return std::make_pair(wrapperFunc, res);
 }

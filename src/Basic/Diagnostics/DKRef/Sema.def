@@ -133,7 +133,7 @@ ERROR(sema_interface_call_with_unimplemented_call, "static invocation contains u
 ERROR(sema_type_uninitialized_static_field, "the static member variable '%s' is not initialized")
 ERROR(sema_instance_func_cannot_be_used_in_finalizer, "instance %s cannot be used in the finalizer")
 ERROR(sema_no_non_param_constructor_in_super_class,
-    "there is no non-parameter constructor in super class, please invoke super call explicitly")
+    "there is no non-parameter constructor with this %s in super class, please invoke super call explicitly")
 ERROR(sema_non_abstract_class_cannot_be_sealed, "non-abstract class cannot be modified by 'sealed'")
 ERROR(sema_static_variable_use_generic_parameter, "static member cannot depend on generic parameter '%s'")
 ERROR(sema_cstruct_cannot_impl_interfaces, "struct with @C cannot implement interfaces")
@@ -209,5 +209,3 @@ ERROR(sema_illegal_scope_use_of_annotation, "'%s' can only be used in top-level 
 
 // CFFI
 ERROR(sema_invalid_cfunc_return_type, "return type of CFunc must be instantiated with CType")
-
-ERROR(sema_unpexected_modal_type, "expected data type, got '%s'")

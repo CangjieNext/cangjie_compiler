@@ -7,6 +7,7 @@
 // This files declares the entry of ComputeAnnotationsBeforeCheck stage.
 
 #include "cangjie/CHIR/Checker/ComputeAnnotations.h"
+#include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"

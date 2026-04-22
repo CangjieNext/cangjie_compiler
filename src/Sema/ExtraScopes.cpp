@@ -275,14 +275,14 @@ void TypeCheckerImpl::GenerateTypeMappingForBaseExpr(const Expr& baseExpr, Subst
         std::unordered_set<Ptr<Ty>> baseTyArgs;
         std::for_each(
             baseTypeArgs.begin(), baseTypeArgs.end(), [&baseTyArgs](auto type) { baseTyArgs.emplace(type->GetTy()); });
-        auto genericTys = GetAllGenericTys(realBase->GetTy());
+        auto genericTys = GetAllGenericTys(typeManager, realBase->GetTy());
         for (auto it = promoteMapping.begin(); it != promoteMapping.end(); ++it) {
             // If mapped 'ty' exists in 'realBase' generic types
             // and is not found in user defined type args, remove it from mapping.
             Utils::EraseIf(it->second,
                 [&genericTys, &baseTyArgs](auto ty) { return genericTys.count(ty) != 0 && baseTyArgs.count(ty) == 0; });
         }
-        auto genericTysInst = GetAllGenericTys(ma.baseExpr->GetTy());
+        auto genericTysInst = GetAllGenericTys(typeManager, ma.baseExpr->GetTy());
         /* in case the used type is alias, the ty vars to be solved are type parameters of the alias decl
          * but in case the type args are already given by users, they don't need to be solved */
         Utils::EraseIf(directMapping.u2i, [&genericTysInst](auto it) { return genericTysInst.count(it.first) == 0; });

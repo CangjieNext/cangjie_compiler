@@ -115,7 +115,7 @@ Ptr<Ty> TypeCheckerImpl::SynRangeExpr(ASTContext& ctx, RangeExpr& re)
     if (!CheckRangeElements(ctx, elemTy, re)) {
         return re.GetTy();
     }
-    re.SetTy(typeManager.GetStructTy(*re.decl, {elemTy}));
+    re.SetTy(typeManager.GetStructTy(*re.decl, {elemTy}, {}));
     return re.GetTy();
 }
 

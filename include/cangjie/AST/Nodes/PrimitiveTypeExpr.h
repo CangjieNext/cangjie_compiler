@@ -8,6 +8,7 @@
 #define CANGJIE_AST_NODES_PRIMITIVETYPEEXPR_H
 
 #include "cangjie/AST/Nodes/Expr.h"
+#include "cangjie/AST/Nodes/ModalASTInfo.h"
 
 namespace Cangjie::AST {
 /**
@@ -17,6 +18,7 @@ namespace Cangjie::AST {
  */
 struct PrimitiveTypeExpr : Expr {
     TypeKind typeKind;
+    ModalASTInfo modal;
     explicit PrimitiveTypeExpr(TypeKind typeKind) : Expr(ASTKind::PRIMITIVE_TYPE_EXPR), typeKind(typeKind)
     {
     }

@@ -12,6 +12,7 @@
 #include "ParserImpl.h"
 
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Parse/ParseModifiersRules.h"
@@ -201,6 +202,7 @@ OwnedPtr<Decl> ParserImpl::ParseVarWithPatternDecl(
     if (!ret->isConst && HasModifier(modifiers, TokenKind::CONST)) {
         // diag modifier
         DiagUnExpectedModifierOnDeclaration(*ret);
+        CheckMakeCopy(*ret);
         return ret;
     }
     if (ret->initializer == nullptr) {
@@ -212,6 +214,7 @@ OwnedPtr<Decl> ParserImpl::ParseVarWithPatternDecl(
             DiagExpectedInitializerForToplevelVar(*ret);
         }
     }
+    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -296,6 +299,8 @@ OwnedPtr<Decl> ParserImpl::ParseVarDecl(
     }
     ret->modifiers.insert(modifiers.begin(), modifiers.end());
     CheckVarDeclModifiers(modifiers, ret.get(), scopeKind, keyToken);
+
+    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -355,12 +360,7 @@ void ParserImpl::ParsePropBody(const std::set<Modifier>& modifiers, PropDecl& pr
         std::set<Modifier> modis;
         ParseModifiers(modis);
         if (SeeingPropMember()) {
-            if (lookahead == "get" && getter) {
-                DiagDuplicatedGetOrSet(*getter, propDecl);
-            }
-            if (lookahead == "set" && setter) {
-                DiagDuplicatedGetOrSet(*setter, propDecl);
-            }
+            // Multiple get/set allowed (different modals); sema checks duplicate modal per property.
             if (lookahead == "get") {
                 auto res = ParsePropMemberDecl(modis);
                 CheckGetterAnnotations(annos, res);
@@ -978,6 +978,7 @@ OwnedPtr<AST::FuncDecl> ParserImpl::ParseFinalizer(
             "parse_invalid_return_type", *funcDecl->funcBody->retType, "finalizer");
         funcDecl->EnableAttr(Attribute::HAS_BROKEN);
     }
+    CheckMakeCopy(*funcDecl);
     return funcDecl;
 }
 
@@ -1000,6 +1001,11 @@ OwnedPtr<AST::FuncDecl> ParserImpl::ParseConstructor(
     Next();
     CheckDeclarationInScope(scopeKind, DefKind::CONSTRUCTOR);
     funcDecl->funcBody = ParseFuncBody(scopeKind);
+    if (HasModifier(modifiers, TokenKind::STATIC) && funcDecl->funcBody &&
+        funcDecl->funcBody->paramLists[0]->thisParam) {
+        DiagThisParamNotAllowed(*funcDecl->funcBody->paramLists[0]->thisParam);
+        funcDecl->EnableAttr(Attribute::IS_BROKEN);
+    }
 
     auto initAttrs = CheckDeclModifiers(modifiers, scopeKind, DefKind::CONSTRUCTOR);
     for (auto& it : initAttrs) {
@@ -1021,6 +1027,7 @@ OwnedPtr<AST::FuncDecl> ParserImpl::ParseConstructor(
     ParseFuncDeclAnnos(annos, *funcDecl);
     CheckConstructorBody(*funcDecl, scopeKind);
 
+    CheckMakeCopy(*funcDecl);
     return funcDecl;
 }
 
@@ -1083,6 +1090,7 @@ OwnedPtr<PrimaryCtorDecl> ParserImpl::ParsePrimaryConstructor(
         ParseDiagnoseRefactor(
             "parse_invalid_return_type", *primaryCtorDecl->funcBody->retType, "primary constructor");
     }
+    CheckMakeCopy(*primaryCtorDecl);
     return primaryCtorDecl;
 }
 
@@ -1256,6 +1264,11 @@ OwnedPtr<Decl> ParserImpl::ParseEnumConstructorWithArgs(const Token& id, PtrVect
     funcBody->begin = funcParamList->begin;
     funcBody->paramLists.emplace_back(std::move(funcParamList));
     funcBody->end = lastToken.End();
+    for (auto& param : funcBody->paramLists[0]->params) {
+        if (param->type->modal.HasLocal()) {
+            DiagUnexpectedModal(MakeRange(param->type->modal.LocalBegin(), param->type->modal.LocalEnd()));
+        }
+    }
 
     OwnedPtr<AST::FuncDecl> ret = MakeOwned<AST::FuncDecl>();
     ret->identifier = ParseIdentifierFromName(id.Value(), id.Begin(), id.End(), id.Length());
@@ -1264,6 +1277,7 @@ OwnedPtr<Decl> ParserImpl::ParseEnumConstructorWithArgs(const Token& id, PtrVect
     ret->end = lastToken.End();
     ret->EnableAttr(Attribute::ENUM_CONSTRUCTOR);
     ret->annotations = std::move(annos);
+    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1276,6 +1290,7 @@ OwnedPtr<Decl> ParserImpl::ParseNoArgsEnumConstructor(const Token& id, PtrVector
     ret->isVar = false;
     ret->EnableAttr(Attribute::ENUM_CONSTRUCTOR);
     ret->annotations = std::move(annos);
+    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1420,6 +1435,7 @@ OwnedPtr<ClassDecl> ParserImpl::ParseClassDecl(
 
     CheckCJMappingAttr(*ret);
 
+    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1453,6 +1469,7 @@ OwnedPtr<InterfaceDecl> ParserImpl::ParseInterfaceDecl(
         Interop::ObjC::InsertSyntheticClassDecl(*ret, *currentFile);
     }
 
+    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1567,6 +1584,7 @@ OwnedPtr<EnumDecl> ParserImpl::ParseEnumDecl(
             ret->EnableAttr(Attribute::IS_BROKEN);
             ret->bodyScope = MakeOwned<DummyBody>(); // The 'bodyScope' must exist.
             ret->end = lastToken.End();
+            CheckMakeCopy(*ret);
             return ret;
         }
     }
@@ -1577,6 +1595,7 @@ OwnedPtr<EnumDecl> ParserImpl::ParseEnumDecl(
 
     CheckCJMappingAttr(*ret);
 
+    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1653,6 +1672,7 @@ OwnedPtr<StructDecl> ParserImpl::ParseStructDecl(
 
     CheckCJMappingAttr(*ret);
 
+    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1712,6 +1732,7 @@ OwnedPtr<TypeAliasDecl> ParserImpl::ParseTypeAlias(
     // added to T for type A in a later compiler phase.
     ret->type = ParseType();
     ret->end = lastToken.End();
+    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1752,6 +1773,7 @@ OwnedPtr<ExtendDecl> ParserImpl::ParseExtendDecl(
     ParseExtendBody(*ret);
     ret->end = lastToken.End();
     ret->bodyScope->end = ret->end;
+    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1787,6 +1809,7 @@ OwnedPtr<GenericParamDecl> ParserImpl::ParseGenericParamDecl()
     ret->begin = lookahead.Begin();
     ret->end = lookahead.End();
     Next();
+    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1990,7 +2013,14 @@ OwnedPtr<MainDecl> ParserImpl::ParseMainDecl(
         ret->EnableAttr(Attribute::UNSAFE);
         SetUnsafe(ret.get(), modifiers);
     }
+    CheckMakeCopy(*ret);
     return ret;
+}
+
+void ParserImpl::DiagLocalFuncNotLocal(const FuncDecl& funcDecl)
+{
+    ParseDiagnoseRefactor("parse_local_func_not_local",
+        MakeRange(funcDecl.identifier.Begin(), funcDecl.identifier.End()), funcDecl.identifier.Val());
 }
 
 OwnedPtr<AST::FuncDecl> ParserImpl::ParseFuncDecl(
@@ -2010,10 +2040,17 @@ OwnedPtr<AST::FuncDecl> ParserImpl::ParseFuncDecl(
     for (auto& it : attrs) {
         ret->EnableAttr(it);
     }
+    if (scopeKind == ScopeKind::FUNC_BODY) {
+        ret->modal = ParseModalInfo();
+    }
     if (ret->TestAttr(Attribute::OPERATOR)) {
         ret->identifier = ExpectOperatorIdentifier(*ret);
     } else {
         ret->identifier = ExpectIdentifierWithPos(*ret);
+    }
+    if (ret->modal.Local() == LocalModalAST::NOT && ret->identifier.Valid()) {
+        DiagLocalFuncNotLocal(*ret);
+        ret->EnableAttr(Attribute::IS_BROKEN);
     }
     if (ret->identifier.Begin() == INVALID_POSITION) {
         ret->identifier.SetPos(lookahead.Begin(), lookahead.End());
@@ -2030,6 +2067,10 @@ OwnedPtr<AST::FuncDecl> ParserImpl::ParseFuncDecl(
     }
     if (HasModifier(modifiers, TokenKind::UNSAFE) || HasModifier(modifiers, TokenKind::FOREIGN)) {
         SetUnsafe(ret.get(), modifiers);
+    }
+    if (HasModifier(modifiers, TokenKind::STATIC) && ret->funcBody && ret->funcBody->paramLists[0]->thisParam) {
+        DiagThisParamNotAllowed(*ret->funcBody->paramLists[0]->thisParam);
+        ret->EnableAttr(Attribute::IS_BROKEN);
     }
     ffiParser->CheckFuncSignature(*ret, annos);
     ParseFuncDeclAnnos(annos, *ret);
@@ -2052,6 +2093,7 @@ OwnedPtr<AST::FuncDecl> ParserImpl::ParseFuncDecl(
     if (scopeKind != ScopeKind::CLASS_BODY) {
         ffiParser->ObjC().CheckInitAnnotation(*ret);
     }
+    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -2317,6 +2359,9 @@ OwnedPtr<FuncBody> ParserImpl::ParseFuncBody(ScopeKind scopeKind)
     // The end pos of the FuncDecl above should be next to ).
     auto paramsEndToken = lastToken;
     if (scopeKind == ScopeKind::PROP_MEMBER_SETTER_BODY || scopeKind == ScopeKind::PROP_MEMBER_GETTER_BODY) {
+        if (scopeKind == ScopeKind::PROP_MEMBER_GETTER_BODY && Skip(TokenKind::COLON)) {
+            ret->retType = ParseType();
+        }
         ParsePropMemberBody(scopeKind, *ret);
         return ret;
     }
@@ -2351,6 +2396,29 @@ OwnedPtr<FuncBody> ParserImpl::ParseFuncBody(ScopeKind scopeKind)
     return ret;
 }
 
+OwnedPtr<ThisParam> ParserImpl::ParseThisParam()
+{
+    Skip(TokenKind::THIS);
+    OwnedPtr<ThisParam> ret = MakeOwned<ThisParam>();
+    ret->begin = lastToken.Begin();
+    ret->thisPos = lastToken.Begin();
+    ret->modal = ParseModalInfo();
+    ret->end = lastToken.End();
+    return ret;
+}
+
+static bool CanUseThisParam(ScopeKind scopeKind)
+{
+    return scopeKind != ScopeKind::TOPLEVEL && scopeKind != ScopeKind::MAIN_BODY &&
+        scopeKind != ScopeKind::ENUM_CONSTRUCTOR && scopeKind != ScopeKind::FUNC_BODY &&
+        scopeKind != ScopeKind::PRIMARY_CONSTRUCTOR_FUNC_PARAM && scopeKind != ScopeKind::MACRO_BODY;
+}
+
+void ParserImpl::DiagThisParamNotAllowed(const ThisParam& thisParam)
+{
+    ParseDiagnoseRefactor("parse_unexpected_this_param", thisParam);
+}
+
 void ParserImpl::ParseFuncParameters(const ScopeKind& scopeKind, FuncBody& fb)
 {
     if (Seeing(TokenKind::LPAREN)) {
@@ -2361,6 +2429,10 @@ void ParserImpl::ParseFuncParameters(const ScopeKind& scopeKind, FuncBody& fb)
                 (void)fb.paramLists.emplace_back(ParseParameterList(scopeKind));
             } else {
                 (void)fb.paramLists.emplace_back(ParseParameterList());
+            }
+            if (!CanUseThisParam(scopeKind) && fb.paramLists.back()->thisParam) {
+                DiagThisParamNotAllowed(*fb.paramLists.back()->thisParam);
+                fb.paramLists.back()->thisParam->EnableAttr(Attribute::IS_BROKEN);
             }
         } while (Seeing(TokenKind::LPAREN));
     } else {
@@ -2395,7 +2467,7 @@ void ParserImpl::ParseEllipsisParameter(FuncParam& funcParam)
     funcParam.end = lookahead.End();
 }
 
-void ParserImpl::ParseParameter(ScopeKind scopeKind, FuncParam& fp)
+void ParserImpl::ParseParameter(ScopeKind scopeKind, FuncParam& fp, bool allowSetterValueType)
 {
     Position memberStartPos;
     ParseLetOrVarInParamList(scopeKind, fp, memberStartPos);
@@ -2422,8 +2494,17 @@ void ParserImpl::ParseParameter(ScopeKind scopeKind, FuncParam& fp)
         fp.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
-    if (scopeKind == ScopeKind::PROP_MEMBER_SETTER_BODY || scopeKind == ScopeKind::PROP_MEMBER_GETTER_BODY) {
+    if (scopeKind == ScopeKind::PROP_MEMBER_GETTER_BODY ||
+        (scopeKind == ScopeKind::PROP_MEMBER_SETTER_BODY && !allowSetterValueType)) {
         fp.end = lastToken.End();
+    } else if (scopeKind == ScopeKind::PROP_MEMBER_SETTER_BODY && allowSetterValueType) {
+        if (Skip(TokenKind::COLON)) {
+            fp.colonPos = lastToken.Begin();
+            fp.type = ParseType();
+            fp.end = fp.type->end;
+        } else {
+            fp.end = lastToken.End();
+        }
     } else {
         if (Skip(TokenKind::NOT)) {
             if (fp.identifier == "_") {
@@ -2471,14 +2552,26 @@ OwnedPtr<FuncParamList> ParserImpl::ParseParameterList(ScopeKind scopeKind)
     }
     OwnedPtr<FuncParamList> ret = MakeOwned<FuncParamList>();
     ChainScope cs(*this, ret.get());
+    ret->begin = lastToken.Begin();
+    ret->leftParenPos = lastToken.Begin();
+    if (Seeing(TokenKind::THIS)) {
+        ret->thisParam = ParseThisParam();
+        if (Skip(TokenKind::COMMA)) {
+            ret->thisParam->commaPos = lastToken.Begin();
+        } else if (!Seeing(TokenKind::RPAREN)) {
+            DiagExpectedRightDelimiter("(", ret->leftParenPos);
+            ret->end = lastToken.End();
+            ret->EnableAttr(Attribute::IS_BROKEN);
+            return ret;
+        }
+    }
+    bool allowSetterValueType = scopeKind == ScopeKind::PROP_MEMBER_SETTER_BODY && ret->thisParam;
     // Parameter with value, i.e. optional parameter must list behind all non-optional parameters.
     Ptr<FuncParam> namedParameter{nullptr};
     Ptr<FuncParam> memberParam{nullptr};
-    ret->begin = lookahead.Begin();
-    ret->leftParenPos = lookahead.Begin();
     ParseZeroOrMoreSepTrailing([&ret](const Position& pos) { ret->params.back()->commaPos = pos; },
-        [&ret, this, scopeKind, &namedParameter, &memberParam]() {
-            ret->params.push_back(ParseParamInParamList(scopeKind, namedParameter, memberParam));
+        [&ret, this, scopeKind, &namedParameter, &memberParam, allowSetterValueType]() {
+            ret->params.push_back(ParseParamInParamList(scopeKind, namedParameter, memberParam, allowSetterValueType));
         },
         TokenKind::RPAREN);
     if (!Skip(TokenKind::RPAREN)) {
@@ -2501,8 +2594,8 @@ OwnedPtr<FuncParamList> ParserImpl::ParseParameterList(ScopeKind scopeKind)
     return ret;
 }
 
-OwnedPtr<FuncParam> ParserImpl::ParseParamInParamList(
-    const ScopeKind& scopeKind, Ptr<AST::FuncParam>& meetNamedParameter, Ptr<AST::FuncParam>& meetMemberParams)
+OwnedPtr<FuncParam> ParserImpl::ParseParamInParamList(const ScopeKind& scopeKind,
+    Ptr<AST::FuncParam>& meetNamedParameter, Ptr<AST::FuncParam>& meetMemberParams, bool allowSetterValueType)
 {
     // For the situation: func f(a: Int64, @M(), @M(), ...)
     // or func f(a: Int64, @!M() b: Int32, ...)
@@ -2514,7 +2607,7 @@ OwnedPtr<FuncParam> ParserImpl::ParseParamInParamList(
     ParseAnnotations(param->annotations);
     SetBeginToAnnotationsBegin(*param, param->annotations);
     ParseModifiers(param->modifiers);
-    ParseParameter(scopeKind, *param);
+    ParseParameter(scopeKind, *param, allowSetterValueType);
     // Check named parameter rule.
     if (meetNamedParameter && !param->isNamedParam) {
         DiagNamedParameterAfterUnnamed(*param, *meetNamedParameter);
@@ -2585,10 +2678,34 @@ void ParserImpl::CheckModifierInParamList(
 template <typename T> void ParserImpl::CheckIntrinsicFunc(T& fd)
 {
     auto iter = std::find_if(
-        intrinsics.begin(), intrinsics.end(), [&fd](auto fd1) { return fd.identifier == fd1->identifier; });
+        intrinsics.begin(), intrinsics.end(), [&fd](auto fd1) { return fd1 && fd.identifier == fd1->identifier; });
     if (iter != intrinsics.end()) {
         DiagDuplicatedIntrinsicFunc(fd, **iter);
     } else {
         intrinsics.emplace(&fd);
+    }
+}
+
+void ParserImpl::CheckMakeCopy(Decl& decl)
+{
+    if (auto st = DynamicCast<StructDecl>(&decl)) {
+        Annotation* first{};
+        for (auto& anno : decl.annotations) {
+            if (anno->kind != AnnotationKind::MAKE_COPY) {
+                continue;
+            }
+            if (first) {
+                DiagDuplicatedAnno(*anno, *first);
+            } else {
+                first = anno.get();
+                st->SetIsCopyType();
+            }
+        }
+    } else {
+        for (auto& anno : decl.annotations) {
+            if (anno->kind == AnnotationKind::MAKE_COPY) {
+                DiagUnexpectedAnnoOnKind(*anno, decl.identifier.Begin(), anno->identifier, decl.astKind);
+            }
+        }
     }
 }

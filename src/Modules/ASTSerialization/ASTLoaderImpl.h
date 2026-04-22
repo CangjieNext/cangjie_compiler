@@ -130,6 +130,7 @@ private:
     OwnedPtr<AST::Decl> LoadNominalDecl(const PackageFormat::Decl& decl, int64_t declIndex);
     OwnedPtr<AST::Decl> LoadTypeAliasDecl(const PackageFormat::Decl& decl, int64_t declIndex);
     OwnedPtr<AST::Decl> LoadBuiltInDecl(const PackageFormat::Decl& decl, int64_t declIndex);
+    OwnedPtr<AST::Decl> LoadThisParam(const PackageFormat::Decl& decl, int64_t declIndex);
     OwnedPtr<AST::Decl> LoadGenericParamDecl(const PackageFormat::Decl& decl, int64_t declIndex);
     OwnedPtr<AST::Decl> LoadInvalidDecl(const PackageFormat::Decl& decl);
     OwnedPtr<AST::Generic> LoadGeneric(AST::Decl& decl, const PackageFormat::Generic* generic);
@@ -253,6 +254,7 @@ private:
         {PackageFormat::DeclKind_GenericParamDecl, &ASTLoaderImpl::LoadGenericParamDecl},
         {PackageFormat::DeclKind_TypeAliasDecl, &ASTLoaderImpl::LoadTypeAliasDecl},
         {PackageFormat::DeclKind_BuiltInDecl, &ASTLoaderImpl::LoadBuiltInDecl},
+        {PackageFormat::DeclKind_ThisParam, &ASTLoaderImpl::LoadThisParam},
     };
 
     using TyLoaderT = std::function<void(ASTLoaderImpl*, const FormattedIndex, const PackageFormat::SemaTy&)>;
@@ -303,6 +305,7 @@ private:
     OwnedPtr<AST::Expr> LoadMatchExpr(const PackageFormat::Expr& expr, int64_t exprIndex);
     OwnedPtr<AST::Expr> LoadLetPatternDestructor(const PackageFormat::Expr& expr, int64_t exprIndex);
     OwnedPtr<AST::Expr> LoadForInExpr(const PackageFormat::Expr& expr, int64_t exprIndex);
+    OwnedPtr<AST::Expr> LoadExclaveExpr(const PackageFormat::Expr& expr, int64_t exprIndex);
     OwnedPtr<AST::FuncArg> LoadFuncArg(FormattedIndex index);
     OwnedPtr<AST::MatchCase> LoadMatchCase(FormattedIndex index);
     OwnedPtr<AST::MatchCaseOther> LoadMatchCaseOther(FormattedIndex index);
@@ -341,6 +344,7 @@ private:
         {PackageFormat::ExprKind_MatchExpr, &ASTLoaderImpl::LoadMatchExpr},
         {PackageFormat::ExprKind_LetPatternDestructor, &ASTLoaderImpl::LoadLetPatternDestructor},
         {PackageFormat::ExprKind_ForInExpr, &ASTLoaderImpl::LoadForInExpr},
+        {PackageFormat::ExprKind_ExclaveExpr, &ASTLoaderImpl::LoadExclaveExpr},
     };
 
     /** Only can be used after all exprs has been loaded. */

@@ -565,7 +565,7 @@ void TypeCheckerImpl::CheckRecursiveConstructorCall(const std::vector<OwnedPtr<D
     }
 }
 
-bool TypeCheckerImpl::HasModifier(const std::set<Modifier>& modifiers, TokenKind kind) const
+bool TypeCheckerImpl::HasModifier(const std::set<Modifier>& modifiers, TokenKind kind)
 {
     return std::any_of(modifiers.begin(), modifiers.end(), [kind](const auto& it) { return it.modifier == kind; });
 }

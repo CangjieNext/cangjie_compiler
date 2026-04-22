@@ -31,6 +31,7 @@ enum DeclKind : uint16 {
   TypeAliasDecl,
   GenericParamDecl,
   BuiltInDecl,
+  ThisParam,
 }
 
 // Position member's max length same as 'struct Position''s definition.
@@ -64,6 +65,7 @@ table Generic{
 table FuncParamList {
   params:[uint32];
   desugars:[uint32];
+  thisParam:uint32;
 }
 
 table FuncBody {
@@ -252,6 +254,7 @@ enum BuiltInType : uint8 {
   CPointer,
   CString,
   CFunc,
+  Copy,
 }
 table BuiltInInfo {
   builtInType:BuiltInType;
@@ -371,6 +374,7 @@ enum ExprKind : uint16 {
   IfAvailableExpr,
   PerformExpr,
   ResumeExpr,
+  ExclaveExpr,
 }
 
 enum CallKind : uint8 {
@@ -606,11 +610,18 @@ table ArrayTyInfo {
   dimsOrSize:int64;
 }
 
+enum LocalModal: uint8 {
+  NOT,
+  FULL,
+  HALF,
+}
+
 table SemaTy {
   kind:TypeKind=Unit;
   // TypeArguments, also for funcTy's paramTypes
   typeArgs:[uint32];
   info:SemaTyInfo;
+  local:LocalModal;
 }
 
 enum AccessModifier : uint8 {

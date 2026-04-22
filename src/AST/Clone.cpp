@@ -17,7 +17,6 @@
 
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
-#include "cangjie/AST/Nodes/FuncArg.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"
 
@@ -128,11 +127,13 @@ struct ASTCloner::Impl {
     OwnedPtr<TokenPart> CloneTokenPart(const TokenPart& tp);
     OwnedPtr<QuoteExpr> CloneQuoteExpr(const QuoteExpr& qe);
     OwnedPtr<IfExpr> CloneIfExpr(const IfExpr& ie);
+    OwnedPtr<PrimitiveTypeExpr> ClonePrimitiveTypeExpr(const PrimitiveTypeExpr& ie);
     OwnedPtr<TryExpr> CloneTryExpr(const TryExpr& te);
     OwnedPtr<ThrowExpr> CloneThrowExpr(const ThrowExpr& te);
     OwnedPtr<PerformExpr> ClonePerformExpr(const PerformExpr& pe);
     OwnedPtr<ResumeExpr> CloneResumeExpr(const ResumeExpr& re);
     OwnedPtr<ReturnExpr> CloneReturnExpr(const ReturnExpr& re);
+    OwnedPtr<ExclaveExpr> CloneExclaveExpr(const ExclaveExpr& ee);
     OwnedPtr<WhileExpr> CloneWhileExpr(const WhileExpr& we);
     OwnedPtr<DoWhileExpr> CloneDoWhileExpr(const DoWhileExpr& dwe);
     OwnedPtr<AssignExpr> CloneAssignExpr(const AssignExpr& ae);
@@ -183,6 +184,7 @@ struct ASTCloner::Impl {
     OwnedPtr<FuncBody> CloneFuncBody(const FuncBody& fb);
     OwnedPtr<VarDecl> CloneFuncParam(const FuncParam& fp);
     OwnedPtr<FuncParamList> CloneFuncParamList(const FuncParamList& fpl);
+    OwnedPtr<ThisParam> CloneThisParam(const ThisParam& tp);
     OwnedPtr<FuncArg> CloneFuncArg(const FuncArg& fa);
     OwnedPtr<Annotation> CloneAnnotation(const Annotation& annotation);
     OwnedPtr<ImportSpec> CloneImportSpec(const ImportSpec& is);
@@ -266,6 +268,7 @@ OwnedPtr<Decl> ASTCloner::Impl::CloneFuncDecl(const FuncDecl& fd)
     auto ret = MakeOwned<FuncDecl>();
     ret->leftParenPos = fd.leftParenPos;
     ret->rightParenPos = fd.rightParenPos;
+    ret->modal = fd.modal;
     CJC_NULLPTR_CHECK(fd.funcBody);
     ret->funcBody = CloneNode(fd.funcBody.get());
     ret->funcBody->funcDecl = ret.get(); // Reset funcDecl of funcBody to new function.
@@ -336,6 +339,7 @@ OwnedPtr<RefType> ASTCloner::Impl::CloneRefType(const RefType& type)
     for (auto& it : type.typeArguments) {
         ret->typeArguments.push_back(CloneType(it.get()));
     }
+    ret->modal = type.modal;
     ret->rightAnglePos = type.rightAnglePos;
     ret->commaPos = type.commaPos;
     ret->bitAndPos = type.bitAndPos;
@@ -468,6 +472,7 @@ OwnedPtr<QualifiedType> ASTCloner::Impl::CloneQualifiedType(const QualifiedType&
     for (auto& it : node.typeArguments) {
         ret->typeArguments.push_back(CloneType(it.get()));
     }
+    ret->modal = node.modal;
     return ret;
 }
 
@@ -477,6 +482,7 @@ OwnedPtr<ParenType> ASTCloner::Impl::CloneParenType(const ParenType& node)
     ret->type = CloneType(node.type.get());
     ret->leftParenPos = node.leftParenPos;
     ret->rightParenPos = node.rightParenPos;
+    ret->modal = node.modal;
     return ret;
 }
 
@@ -489,6 +495,7 @@ OwnedPtr<OptionType> ASTCloner::Impl::CloneOptionType(const OptionType& node)
     if (node.desugarType != nullptr) {
         ret->desugarType = ASTCloner::Clone(node.desugarType.get(), visitCallback);
     }
+    ret->modal = node.modal;
     return ret;
 }
 
@@ -503,6 +510,7 @@ OwnedPtr<FuncType> ASTCloner::Impl::CloneFuncType(const FuncType& node)
     ret->leftParenPos = node.leftParenPos;
     ret->rightParenPos = node.rightParenPos;
     ret->arrowPos = node.arrowPos;
+    ret->modal = node.modal;
     return ret;
 }
 
@@ -515,6 +523,7 @@ OwnedPtr<TupleType> ASTCloner::Impl::CloneTupleType(const TupleType& node)
     ret->leftParenPos = node.leftParenPos;
     ret->rightParenPos = node.rightParenPos;
     ret->commaPosVector = node.commaPosVector;
+    ret->modal = node.modal;
     return ret;
 }
 
@@ -523,6 +532,7 @@ OwnedPtr<ConstantType> ASTCloner::Impl::CloneConstantType(const ConstantType& no
     auto ret = MakeOwned<ConstantType>();
     ret->constantExpr = CloneExpr(node.constantExpr.get());
     ret->dollarPos = node.dollarPos;
+    ret->modal = node.modal;
     return ret;
 }
 
@@ -533,6 +543,7 @@ OwnedPtr<VArrayType> ASTCloner::Impl::CloneVArrayType(const VArrayType& node)
     ret->typeArgument = CloneType(node.typeArgument.get());
     ret->constantType = CloneType(node.constantType.get());
     ret->rightAnglePos = node.rightAnglePos;
+    ret->modal = node.modal;
     return ret;
 }
 
@@ -620,6 +631,13 @@ OwnedPtr<IfExpr> ASTCloner::Impl::CloneIfExpr(const IfExpr& ie)
     return expr;
 }
 
+OwnedPtr<PrimitiveTypeExpr> ASTCloner::Impl::ClonePrimitiveTypeExpr(const PrimitiveTypeExpr& ie)
+{
+    auto expr = MakeOwned<PrimitiveTypeExpr>(ie.typeKind);
+    expr->modal = ie.modal;
+    return expr;
+}
+
 OwnedPtr<TryExpr> ASTCloner::Impl::CloneTryExpr(const TryExpr& te)
 {
     auto expr = MakeOwned<TryExpr>();
@@ -702,6 +720,18 @@ OwnedPtr<ReturnExpr> ASTCloner::Impl::CloneReturnExpr(const ReturnExpr& re)
     expr->returnPos = re.returnPos;
     expr->expr = CloneExpr(re.expr.get());
     expr->refFuncBody = re.refFuncBody;
+    return expr;
+}
+
+OwnedPtr<ExclaveExpr> ASTCloner::Impl::CloneExclaveExpr(const ExclaveExpr& ee)
+{
+    auto expr = MakeOwned<ExclaveExpr>();
+    CopyNodeField(expr.get(), ee);
+    expr->exclavePos = ee.exclavePos;
+    if (ee.body) {
+        auto body = CloneExpr(ee.body.get());
+        expr->body.reset(As<ASTKind::BLOCK>(body.release()));
+    }
     return expr;
 }
 
@@ -967,6 +997,7 @@ OwnedPtr<RefExpr> ASTCloner::Impl::CloneRefExpr(const RefExpr& re)
     expr->instTys = re.instTys;
     expr->matchedParentTy = re.matchedParentTy;
     expr->callOrPattern = re.callOrPattern;
+    expr->modal = re.modal;
     return expr;
 }
 
@@ -1135,7 +1166,7 @@ template <typename ExprT> OwnedPtr<ExprT> ASTCloner::Impl::CloneExpr(Ptr<ExprT> 
     auto clonedExpr = match(*expr)(
         // PrimitiveExpr, AdjointExpr are ignored.
         [this](const IfExpr& ie) { return OwnedPtr<Expr>(CloneIfExpr(ie)); },
-        [](const PrimitiveTypeExpr& pte) { return OwnedPtr<Expr>(MakeOwned<PrimitiveTypeExpr>(pte.typeKind)); },
+        [this](const PrimitiveTypeExpr& pte) { return OwnedPtr<Expr>(ClonePrimitiveTypeExpr(pte)); },
         [this](const MacroExpandExpr& mee) { return OwnedPtr<Expr>(CloneMacroExpandExpr(mee)); },
         [this](const TokenPart& tp) { return OwnedPtr<Expr>(CloneTokenPart(tp)); },
         [this](const QuoteExpr& qe) { return OwnedPtr<Expr>(CloneQuoteExpr(qe)); },
@@ -1144,6 +1175,7 @@ template <typename ExprT> OwnedPtr<ExprT> ASTCloner::Impl::CloneExpr(Ptr<ExprT> 
         [this](const PerformExpr& te) { return OwnedPtr<Expr>(ClonePerformExpr(te)); },
         [this](const ResumeExpr& re) { return OwnedPtr<Expr>(CloneResumeExpr(re)); },
         [this](const ReturnExpr& re) { return OwnedPtr<Expr>(CloneReturnExpr(re)); },
+        [this](const ExclaveExpr& ee) { return OwnedPtr<Expr>(CloneExclaveExpr(ee)); },
         [this](const WhileExpr& we) { return OwnedPtr<Expr>(CloneWhileExpr(we)); },
         [this](const DoWhileExpr& dwe) { return OwnedPtr<Expr>(CloneDoWhileExpr(dwe)); },
         [this](const AssignExpr& ae) { return OwnedPtr<Expr>(CloneAssignExpr(ae)); },
@@ -1495,6 +1527,9 @@ OwnedPtr<FuncParamList> ASTCloner::Impl::CloneFuncParamList(const FuncParamList&
     CopyNodeField(ret.get(), fpl);
     // Clone field in FuncParamList.
     ret->leftParenPos = fpl.leftParenPos;
+    if (fpl.thisParam) {
+        ret->thisParam = CloneThisParam(*fpl.thisParam);
+    }
     for (auto& it : fpl.params) {
         auto funcParam = MakeOwned<FuncParam>();
         auto d = CloneDecl(it.get());
@@ -1505,6 +1540,15 @@ OwnedPtr<FuncParamList> ASTCloner::Impl::CloneFuncParamList(const FuncParamList&
     ret->hasVariableLenArg = fpl.hasVariableLenArg;
     ret->rightParenPos = fpl.rightParenPos;
     ret->EnableAttr(Attribute::COMPILER_ADD);
+    return ret;
+}
+
+OwnedPtr<ThisParam> ASTCloner::Impl::CloneThisParam(const ThisParam& tp)
+{
+    auto ret = MakeOwned<ThisParam>();
+    ret->thisPos = tp.thisPos;
+    ret->modal = tp.modal;
+    ret->commaPos = tp.commaPos;
     return ret;
 }
 

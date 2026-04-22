@@ -13,6 +13,7 @@
 #include "TypeCheckerImpl.h"
 
 #include "TypeCheckUtil.h"
+#include "cangjie/Frontend/CompilerInstance.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -46,6 +47,17 @@ void TypeCheckerImpl::UpdateCTypeTy()
     auto ctypeDecl = importManager.GetCoreDecl<InterfaceDecl>(CTYPE_NAME);
     if (ctypeDecl && Ty::IsTyCorrect(ctypeDecl->GetTy())) {
         typeManager.SetSemaCTypeTy(ctypeDecl->GetTy());
+    }
+}
+
+void TypeCheckerImpl::UpdateCopyTy()
+{
+    if (!ci->invocation.globalOptions.implicitPrelude) {
+        return;
+    }
+    auto copyDecl = importManager.GetCoreDecl<InterfaceDecl>(std::string{COPY_NAME});
+    if (copyDecl && Ty::IsTyCorrect(copyDecl->GetTy())) {
+        typeManager.SetSemaCopyTy(copyDecl->GetTy());
     }
 }
 

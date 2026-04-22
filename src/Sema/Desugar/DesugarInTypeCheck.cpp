@@ -581,7 +581,7 @@ void TypeCheckerImpl::DesugarPointerCall(ASTContext& ctx, CallExpr& ce)
     } else if (!baseArgs.empty()) {
         argTy = baseArgs[0]->GetTy();
     }
-    pointerExpr->type->SetTy(typeManager.GetPointerTy(argTy));
+    pointerExpr->type->SetTy(typeManager.GetPointerTy(argTy, argTy ? argTy->Modal() : AST::ModalInfo{}));
     if (!ce.args.empty()) {
         pointerExpr->arg = std::move(ce.args[0]);
     }
@@ -617,7 +617,7 @@ void TypeCheckerImpl::DesugarArrayCall(ASTContext& ctx, CallExpr& ce)
         if (typeArgs[0]->IsGeneric() && !baseArgs.empty()) {
             argTy = baseArgs[0]->GetTy();
         }
-        arrayExpr->type->SetTy(typeManager.GetVArrayTy(*argTy, varrTy->size));
+        arrayExpr->type->SetTy(typeManager.GetVArrayTy(*argTy, varrTy->size, argTy->Modal()));
         arrayExpr->isValueArray = true;
     } else {
         return;

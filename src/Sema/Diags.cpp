@@ -253,6 +253,14 @@ void DiagOverloadConflict(DiagnosticEngine& diag, const std::vector<Ptr<FuncDecl
     }
 }
 
+DiagnosticBuilder DiagSemaMismatchedTypes(
+    DiagnosticEngine& diag, const Node& node, const std::string& expected, const std::string& found)
+{
+    auto builder = diag.DiagnoseRefactor("sema_mismatched_types", node);
+    builder.AddMainHintArguments(expected, found);
+    return builder;
+}
+
 void DiagMismatchedTypesWithFoundTy(DiagnosticEngine& diag, const Node& node, const std::string& expected,
     const std::string& found, const std::string& note)
 {
@@ -260,8 +268,7 @@ void DiagMismatchedTypesWithFoundTy(DiagnosticEngine& diag, const Node& node, co
         return;
     }
     CJC_ASSERT(expected != found);
-    auto builder = diag.DiagnoseRefactor("sema_mismatched_types", node);
-    builder.AddMainHintArguments(expected, found);
+    auto builder = DiagSemaMismatchedTypes(diag, node, expected, found);
     if (!note.empty()) {
         builder.AddNote(note);
     }
@@ -273,23 +280,27 @@ void DiagMismatchedTypesWithFoundTy(
     if (!node.ShouldDiagnose(true)) {
         return;
     }
+    CJC_ASSERT(&expected != &found);
     CJC_ASSERT(Ty::IsTyCorrect(&expected));
     CJC_ASSERT(Ty::IsTyCorrect(&found));
     std::string expectedStr = expected.String();
     std::string foundStr = found.String();
     if (expectedStr == foundStr) {
-        auto builder = diag.DiagnoseRefactor("sema_mismatched_types", node);
         Ptr<Decl> expectedDecl = Ty::GetDeclPtrOfTy(&expected);
         if (expectedDecl) {
             expectedStr += "' in '" + expectedDecl->fullPackageName;
-            builder.AddNote(*expectedDecl, MakeRangeForDeclIdentifier(*expectedDecl), "'" + expectedStr + "'");
         }
         Ptr<Decl> foundDecl = Ty::GetDeclPtrOfTy(&found);
         if (foundDecl) {
             foundStr += "' in '" + foundDecl->fullPackageName;
+        }
+        auto builder = DiagSemaMismatchedTypes(diag, node, expectedStr, foundStr);
+        if (expectedDecl) {
+            builder.AddNote(*expectedDecl, MakeRangeForDeclIdentifier(*expectedDecl), "'" + expectedStr + "'");
+        }
+        if (foundDecl) {
             builder.AddNote(*foundDecl, MakeRangeForDeclIdentifier(*foundDecl), "'" + foundStr + "'");
         }
-        builder.AddMainHintArguments(expectedStr, foundStr);
         if (!note.empty()) {
             builder.AddNote(note);
         }
@@ -316,7 +327,7 @@ void DiagMismatchedTypes(DiagnosticEngine& diag, const Node& node, const Node& t
         auto builder = diag.DiagnoseRefactor("sema_mismatched_types_because", node);
         auto tyStr = node.GetTy()->String();
         if (auto thisTy = DynamicCast<ClassThisTy*>(node.GetTy()); thisTy) {
-            tyStr = ClassTy(thisTy->name, *thisTy->declPtr, thisTy->typeArgs).String();
+            tyStr = ClassTy(thisTy->name, *thisTy->declPtr, thisTy->typeArgs, thisTy->Modal()).String();
         }
         builder.AddMainHintArguments(type.GetTy()->String(), tyStr);
         builder.AddHint(type, type.GetTy()->String(), because);

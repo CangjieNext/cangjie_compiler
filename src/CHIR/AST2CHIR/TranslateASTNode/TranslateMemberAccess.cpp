@@ -6,6 +6,7 @@
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 
+#include "cangjie/AST/Utils.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/Utils/ConstantUtils.h"
 #include "cangjie/CHIR/IR/Package.h"
@@ -224,6 +225,11 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
     
     // 1. calculate `thisType`
     auto thisType = currentFunc->GetParentCustomTypeOrExtendedType();
+    ModalInfo modal{};
+    if (!currentFunc->TestAttr(Attribute::STATIC)) {
+        modal = currentFunc->GetFuncType()->GetParamType(0)->Modal();
+    }
+    thisType = builder.SubstituteModal(thisType, modal);
     CJC_NULLPTR_CHECK(thisType);
     auto thisDerefTy = thisType;
     auto funcDecl = StaticCast<AST::FuncDecl*>(expr.GetTarget());
@@ -548,7 +554,8 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
                     path.insert(path.begin(), name);
                     readOnly = readOnly || !StaticCast<AST::VarDecl*>(ma->GetTarget())->isVar;
 
-                    targetBaseASTTy = ma->GetTarget()->outerDecl->GetTy();
+                    targetBaseASTTy = const_cast<TypeManager&>(typeManager)
+                        .SubstituteModal(ma->GetTarget()->outerDecl->GetTy(), ma->baseExpr->GetTy()->Modal());
                     CJC_ASSERT(targetBaseASTTy->IsStruct() || targetBaseASTTy->IsClass());
 
                     base = ma->baseExpr.get();
@@ -567,7 +574,11 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
                         path.insert(path.begin(), name);
                         readOnly = readOnly || !StaticCast<AST::VarDecl*>(refTarget)->isVar;
 
-                        targetBaseASTTy = refTarget->outerDecl->GetTy();
+                        const AST::FuncDecl* curMemberFunc = funcContext.GetCurrentFuncDecl();
+                        CJC_ASSERT(curMemberFunc && TypeManager::HasThisParam(*curMemberFunc));
+                        auto& tm = const_cast<TypeManager&>(typeManager);
+                        targetBaseASTTy = tm.SubstituteModal(
+                            refTarget->outerDecl->GetTy(), tm.GetThisParamTy(*curMemberFunc)->Modal());
                         CJC_ASSERT(targetBaseASTTy->IsStruct() || targetBaseASTTy->IsClass());
 
                         // this is a hack

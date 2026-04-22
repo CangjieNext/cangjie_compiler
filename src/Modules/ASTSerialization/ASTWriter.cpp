@@ -1056,6 +1056,7 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveType(Ptr<const Ty> pType)
             // PrimitiveTy, ThisTy and CStringTy only need store type kind.
             PackageFormat::SemaTyBuilder tbuilder(builder);
             tbuilder.add_kind(GetFormatTypeKind(pType->kind));
+            tbuilder.add_local(ToFormatLocalModal(pType->Modal().local));
             typeObject = tbuilder.Finish();
             break;
     }
@@ -1081,6 +1082,7 @@ TTypeOffset ASTWriter::ASTWriterImpl::SaveNominalTy(const Ty& type)
     tbuilder.add_typeArgs(vtypeArgs);
     tbuilder.add_info_type(PackageFormat::SemaTyInfo_CompositeTyInfo);
     tbuilder.add_info(info.Union());
+    tbuilder.add_local(ToFormatLocalModal(type.Modal().local));
     return tbuilder.Finish();
 }
 
@@ -1099,6 +1101,7 @@ TTypeOffset ASTWriter::ASTWriterImpl::SaveGenericsTy(const GenericsTy& gty)
     tbuilder.add_kind(GetFormatTypeKind(gty.kind));
     tbuilder.add_info_type(PackageFormat::SemaTyInfo_GenericTyInfo);
     tbuilder.add_info(info.Union());
+    tbuilder.add_local(ToFormatLocalModal(gty.Modal().local));
     return tbuilder.Finish();
 }
 
@@ -1118,6 +1121,7 @@ TTypeOffset ASTWriter::ASTWriterImpl::SaveFuncTy(const FuncTy& type)
     tbuilder.add_typeArgs(vParamTypes);
     tbuilder.add_info_type(PackageFormat::SemaTyInfo_FuncTyInfo);
     tbuilder.add_info(info.Union());
+    tbuilder.add_local(ToFormatLocalModal(type.Modal().local));
     // AST node's ty will never be closureTy.
     return tbuilder.Finish();
 }
@@ -1132,6 +1136,7 @@ TTypeOffset ASTWriter::ASTWriterImpl::SaveTupleTy(const TupleTy& type)
     PackageFormat::SemaTyBuilder tbuilder(builder);
     tbuilder.add_kind(GetFormatTypeKind(type.kind));
     tbuilder.add_typeArgs(vTypeArgs);
+    tbuilder.add_local(ToFormatLocalModal(type.Modal().local));
     // AST node's ty will never be closureTy.
     return tbuilder.Finish();
 }
@@ -1147,6 +1152,7 @@ TTypeOffset ASTWriter::ASTWriterImpl::SaveArrayTy(const ArrayTy& type)
     tbuilder.add_typeArgs(vTypeArgs);
     tbuilder.add_info_type(PackageFormat::SemaTyInfo_ArrayTyInfo);
     tbuilder.add_info(info.Union());
+    tbuilder.add_local(ToFormatLocalModal(type.Modal().local));
     return tbuilder.Finish();
 }
 
@@ -1161,6 +1167,7 @@ TTypeOffset ASTWriter::ASTWriterImpl::SaveVArrayTy(const VArrayTy& type)
     tbuilder.add_typeArgs(vTypeArgs);
     tbuilder.add_info_type(PackageFormat::SemaTyInfo_ArrayTyInfo);
     tbuilder.add_info(info.Union());
+    tbuilder.add_local(ToFormatLocalModal(type.Modal().local));
     return tbuilder.Finish();
 }
 
@@ -1172,6 +1179,7 @@ TTypeOffset ASTWriter::ASTWriterImpl::SavePointerTy(const PointerTy& type)
     PackageFormat::SemaTyBuilder tbuilder(builder);
     tbuilder.add_kind(GetFormatTypeKind(type.kind));
     tbuilder.add_typeArgs(vTypeArgs);
+    tbuilder.add_local(ToFormatLocalModal(type.Modal().local));
     return tbuilder.Finish();
 }
 
@@ -1185,11 +1193,28 @@ flatbuffers::Offset<PackageFormat::FuncParamList> ASTWriter::ASTWriterImpl::Save
         params.push_back(GetDeclIndex(it.get()));
         desugars.push_back(GetDeclIndex(it->desugarDecl.get()));
     }
+    // Do not save thisParam for @~local
+    FormattedIndex thisParam = INVALID_FORMAT_INDEX;
+    if (paramList.thisParam && paramList.thisParam->GetTy()->Modal().local != LocalModal::NOT) {
+        thisParam = GetDeclIndex(paramList.thisParam.get());
+    }
     auto vParamList = builder.CreateVector<FormattedIndex>(params);
     auto vDesugarList = builder.CreateVector<FormattedIndex>(desugars);
     PackageFormat::FuncParamListBuilder dbuilder(builder);
     dbuilder.add_params(vParamList);
     dbuilder.add_desugars(vDesugarList);
+    if (thisParam != INVALID_FORMAT_INDEX) {
+        dbuilder.add_thisParam(thisParam);
+    }
+    return dbuilder.Finish();
+}
+
+TDeclOffset ASTWriter::ASTWriterImpl::SaveThisParam(const ThisParam& tp, const DeclInfo& declInfo)
+{
+    (void)tp;
+    PackageFormat::DeclBuilder dbuilder(builder);
+    SaveDeclBasicInfo(declInfo, dbuilder);
+    dbuilder.add_kind(PackageFormat::DeclKind_ThisParam);
     return dbuilder.Finish();
 }
 

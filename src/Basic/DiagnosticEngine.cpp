@@ -42,22 +42,7 @@ const std::map<DiagSeverity, DiagColor> SEVE_TO_COLOR{{DiagSeverity::DS_ERROR, D
 const ErrorData errorData[] = {
 #define ERROR(Kind, ...) {__VA_ARGS__},
 #define WARNING(Kind, Group, ...) {__VA_ARGS__},
-#include "diagnostics/DKRef/Chir.def"
-#include "diagnostics/DKRef/ConditionalCompilation.def"
-#include "diagnostics/DKRef/Driver.def"
-#include "diagnostics/DKRef/Frontend.def"
-#include "diagnostics/DKRef/IncrementalCompilation.def"
-#include "diagnostics/DKRef/Lexer.def"
-#include "diagnostics/DKRef/Module.def"
-#include "diagnostics/DKRef/Package.def"
-#include "diagnostics/DKRef/Parser.def"
-#include "diagnostics/DKRef/ParserQuery.def"
-#include "diagnostics/DKRef/Sema.def"
-#include "diagnostics/DKRef/Cjmp.def"
-#include "diagnostics/DKRef/EffectHandlers.def"
-#include "diagnostics/DKRef/Deprecation.def"
-#include "diagnostics/DKRef/Test.def"
-#include "diagnostics/DKRef/APILevel.def"
+#include "Diagnostics/DKRef/DiagnosticAll.def"
 #undef WARNING
 #undef ERROR
 };
@@ -67,10 +52,7 @@ const std::string_view DIAG_KIND_STR[] = {
 #define NOTE(Kind, Info) #Kind,
 #define ERROR(Kind, Info) #Kind,
 #define WARNING(Kind, Group, Info) #Kind,
-#include "diagnostics/DK/Chir.def"
-#include "diagnostics/DK/InterpConstEval.def"
-#include "diagnostics/DK/Macro.def"
-#include "diagnostics/DK/Sema.def"
+#include "Diagnostics/DK/DiagnosticAll.def"
 #undef ERROR
 #undef WARNING
 #undef NOTE
@@ -82,10 +64,7 @@ const DiagSeverity DiagSeveritys[] = {
 #define ERROR(Kind, Info) DiagSeverity::DS_ERROR,
 #define NOTE(Kind, Info) DiagSeverity::DS_NOTE,
 #define WARNING(Kind, Group, Info) DiagSeverity::DS_WARNING,
-#include "diagnostics/DK/Chir.def"
-#include "diagnostics/DK/InterpConstEval.def"
-#include "diagnostics/DK/Macro.def"
-#include "diagnostics/DK/Sema.def"
+#include "Diagnostics/DK/DiagnosticAll.def"
 #undef ERROR
 #undef WARNING
 #undef NOTE
@@ -96,10 +75,7 @@ const std::string_view DiagMessages[] = {
 #define ERROR(Kind, Info) Info,
 #define WARNING(Kind, Group, Info) Info,
 #define NOTE(Kind, Info) Info,
-#include "diagnostics/DK/Chir.def"
-#include "diagnostics/DK/InterpConstEval.def"
-#include "diagnostics/DK/Macro.def"
-#include "diagnostics/DK/Sema.def"
+#include "Diagnostics/DK/DiagnosticAll.def"
 #undef ERROR
 #undef WARNING
 #undef NOTE
@@ -110,10 +86,7 @@ const WarnGroup warnGroups[] = {
 #define ERROR(Kind, ...) WarnGroup::NONE,
 #define WARNING(Kind, Group, ...) WarnGroup::Group,
 #define NOTE(Kind, Info) WarnGroup::NONE,
-#include "diagnostics/DK/Chir.def"
-#include "diagnostics/DK/InterpConstEval.def"
-#include "diagnostics/DK/Macro.def"
-#include "diagnostics/DK/Sema.def"
+#include "Diagnostics/DK/DiagnosticAll.def"
 #undef WARNING
 #undef ERROR
 #undef NOTE
@@ -124,22 +97,7 @@ const int WARN_GROUP_DESCRS_SIZE = sizeof(warnGroups) / sizeof(warnGroups[0]);
 const DiagSeverity rDiagSeveritys[] = {
 #define ERROR(Kind, ...) DiagSeverity::DS_ERROR,
 #define WARNING(Kind, ...) DiagSeverity::DS_WARNING,
-#include "diagnostics/DKRef/Chir.def"
-#include "diagnostics/DKRef/ConditionalCompilation.def"
-#include "diagnostics/DKRef/Driver.def"
-#include "diagnostics/DKRef/Frontend.def"
-#include "diagnostics/DKRef/IncrementalCompilation.def"
-#include "diagnostics/DKRef/Lexer.def"
-#include "diagnostics/DKRef/Module.def"
-#include "diagnostics/DKRef/Package.def"
-#include "diagnostics/DKRef/Parser.def"
-#include "diagnostics/DKRef/ParserQuery.def"
-#include "diagnostics/DKRef/Sema.def"
-#include "diagnostics/DKRef/Cjmp.def"
-#include "diagnostics/DKRef/EffectHandlers.def"
-#include "diagnostics/DKRef/Deprecation.def"
-#include "diagnostics/DKRef/Test.def"
-#include "diagnostics/DKRef/APILevel.def"
+#include "Diagnostics/DKRef/DiagnosticAll.def"
 #undef WARNING
 #undef ERROR
 };
@@ -148,22 +106,7 @@ const DiagSeverity rDiagSeveritys[] = {
 const WarnGroup rWarnGroups[] = {
 #define ERROR(Kind, ...) WarnGroup::NONE,
 #define WARNING(Kind, Group, ...) WarnGroup::Group,
-#include "diagnostics/DKRef/Chir.def"
-#include "diagnostics/DKRef/ConditionalCompilation.def"
-#include "diagnostics/DKRef/Driver.def"
-#include "diagnostics/DKRef/Frontend.def"
-#include "diagnostics/DKRef/IncrementalCompilation.def"
-#include "diagnostics/DKRef/Lexer.def"
-#include "diagnostics/DKRef/Module.def"
-#include "diagnostics/DKRef/Package.def"
-#include "diagnostics/DKRef/Parser.def"
-#include "diagnostics/DKRef/ParserQuery.def"
-#include "diagnostics/DKRef/Sema.def"
-#include "diagnostics/DKRef/Cjmp.def"
-#include "diagnostics/DKRef/EffectHandlers.def"
-#include "diagnostics/DKRef/Deprecation.def"
-#include "diagnostics/DKRef/Test.def"
-#include "diagnostics/DKRef/APILevel.def"
+#include "Diagnostics/DKRef/DiagnosticAll.def"
 #undef WARNING
 #undef ERROR
 };
@@ -171,7 +114,7 @@ const WarnGroup rWarnGroups[] = {
 // Define warnGroupDescrs table (declaration is in DiagnosticEngineConstants.h)
 const std::string_view warnGroupDescrs[] = {
 #define WARN_GROUP(DESCR, KIND) DESCR,
-#include "diagnostics/DKRef/WarnGroupKind.def"
+#include "Diagnostics/DKRef/WarnGroupKind.def"
 #undef WARN_GROUP
 };
 
@@ -179,22 +122,7 @@ const std::string_view warnGroupDescrs[] = {
 const std::string_view RE_DIAG_KIND_STR[] = {
 #define ERROR(Kind, ...) #Kind,
 #define WARNING(Kind, ...) #Kind,
-#include "diagnostics/DKRef/Chir.def"
-#include "diagnostics/DKRef/ConditionalCompilation.def"
-#include "diagnostics/DKRef/Driver.def"
-#include "diagnostics/DKRef/Frontend.def"
-#include "diagnostics/DKRef/IncrementalCompilation.def"
-#include "diagnostics/DKRef/Lexer.def"
-#include "diagnostics/DKRef/Module.def"
-#include "diagnostics/DKRef/Package.def"
-#include "diagnostics/DKRef/Parser.def"
-#include "diagnostics/DKRef/ParserQuery.def"
-#include "diagnostics/DKRef/Sema.def"
-#include "diagnostics/DKRef/Cjmp.def"
-#include "diagnostics/DKRef/EffectHandlers.def"
-#include "diagnostics/DKRef/Deprecation.def"
-#include "diagnostics/DKRef/Test.def"
-#include "diagnostics/DKRef/APILevel.def"
+#include "Diagnostics/DKRef/DiagnosticAll.def"
 #undef WARNING
 #undef ERROR
 };
@@ -432,6 +360,14 @@ void Diagnostic::HandleBadOtherHints()
 DiagnosticBuilder::DiagnosticBuilder(DiagnosticEngine& diag, Diagnostic diagnostic)
     : diagnostic(std::move(diagnostic)), diag(diag)
 {
+}
+
+DiagnosticBuilder::DiagnosticBuilder(DiagnosticBuilder&& p) = default;
+
+DiagnosticBuilder& DiagnosticBuilder::operator=(DiagnosticBuilder&& p)
+{
+    diagnostic = std::move(p.diagnostic);
+    return *this;
 }
 
 DiagnosticBuilder::~DiagnosticBuilder()

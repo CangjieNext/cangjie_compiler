@@ -8,7 +8,9 @@
 #define CANGJIE_AST_NODES_REFEXPR_H
 
 #include "cangjie/AST/Nodes/NameReferenceExpr.h"
+#include "cangjie/AST/Nodes/ModalASTInfo.h"
 #include "cangjie/AST/Nodes/Reference.h"
+#include "cangjie/AST/Types.h"
 
 namespace Cangjie::AST {
 /**
@@ -16,6 +18,7 @@ namespace Cangjie::AST {
  */
 struct RefExpr : NameReferenceExpr {
     Reference ref; /**< Reference of the expr. */
+    ModalASTInfo modal; /**< Modal type info for constructor call or type conversion. */
     bool isThis{false};
     bool isSuper{false};
     bool isQuoteDollar{false};

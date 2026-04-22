@@ -54,6 +54,7 @@ union AnyExpr {
   ARRAY_EXPR: ArrayExpr,
   PERFORM_EXPR: PerformExpr,
   RESUME_EXPR: ResumeExpr,
+  //EXCLAVE_EXPR: ExclaveExpr,
 }
 
 table MatchCase {
@@ -416,6 +417,11 @@ table ResumeExpr {
   throwing_pos: Position;
   throwing_expr: Expr;
 }
+
+//table ExclaveExpr {
+  //base: NodeBase;
+  //expr: Expr;
+//}
 
 table Handler {
   handler_pos: Position;

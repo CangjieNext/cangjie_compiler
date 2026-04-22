@@ -65,7 +65,7 @@ private:
         if (!id || !Ty::IsTyCorrect(id->GetTy())) {
             return TypeManager::GetInvalidTy();
         }
-        return tm.GetInterfaceTy(*id, {});
+        return tm.GetInterfaceTy(*id, {}, {});
     }
 
     void AssignColumnsGenericConstraint(GenericConstraint& gc, File* file)
@@ -173,7 +173,7 @@ private:
     void AddCStringMembers(BuiltInDecl& decl)
     {
         /// public init(cString: CPointer<UInt8>)
-        auto cptrUInt8 = tm.GetPointerTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8));
+        auto cptrUInt8 = tm.GetPointerTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8), {});
         auto fd = MakeCtor(decl);
         AddParamList(*fd);
         MakeFuncParam(*fd, "cString", cptrUInt8);
@@ -408,7 +408,7 @@ Ptr<Ty> TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
 
     auto joinRes = JoinAndMeet(typeManager, arrayElemTys, {}, &importManager, al.curFile).JoinAsVisibleTy();
     if (auto ty = std::get_if<Ptr<Ty>>(&joinRes)) {
-        al.SetTy(typeManager.GetStructTy(*arrayStruct, {*ty}));
+        al.SetTy(typeManager.GetStructTy(*arrayStruct, {*ty}, (*ty)->Modal()));
     } else {
         al.SetTy(TypeManager::GetInvalidTy());
         auto errMsg = JoinAndMeet::CombineErrMsg(std::get<std::stack<std::string>>(joinRes));
@@ -720,8 +720,7 @@ bool TypeCheckerImpl::ChkPointerExpr(ASTContext& ctx, Ty& target, PointerExpr& c
     }
 
     if (Ty::IsTyCorrect(targetTy) && !typeManager.IsSubtype(cpe.GetTy(), targetTy)) {
-        diag.DiagnoseRefactor("sema_mismatched_types", cpe)
-            .AddMainHintArguments(target.String(), Ty::ToString(cpe.GetTy()));
+        DiagSemaMismatchedTypes(diag, cpe, target.String(), Ty::ToString(cpe.GetTy()));
         return false;
     }
     return ret;

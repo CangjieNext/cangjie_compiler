@@ -40,6 +40,15 @@ struct StructDecl : InheritableDecl {
         return *hasConstOrFrozenInit;
     }
 
+    void SetIsCopyType()
+    {
+        makeCopy = true;
+    }
+    bool IsCopyType() const
+    {
+        return makeCopy;
+    }
+
     StructDecl() : InheritableDecl(ASTKind::STRUCT_DECL)
     {
     }
@@ -50,6 +59,7 @@ struct StructDecl : InheritableDecl {
 
 private:
     std::optional<bool> hasConstOrFrozenInit{std::nullopt};
+    bool makeCopy{false};
 };
 } // namespace Cangjie::AST
 

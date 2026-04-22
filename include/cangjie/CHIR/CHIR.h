@@ -18,32 +18,17 @@
 #include "cangjie/CHIR/Utils/DiagAdapter.h"
 #include "cangjie/Utils/TaskQueue.h"
 
+namespace Cangjie {
+class CompilerInstance;
+using VirtualWrapperDepMap = std::unordered_map<std::string, std::string>;
+}
 namespace Cangjie::CHIR {
 class DevirtualizationInfo;
+class ConstAnalysisWrapper;
 
 class ToCHIR {
 public:
-    ToCHIR(CompilerInstance& ci, AST::Package& pkg, ConstAnalysisWrapper& constAnalysisWrapper, CHIRBuilder& builder)
-        : ci(ci),
-          opts(ci.invocation.globalOptions),
-          typeManager(ci.typeManager),
-          sourceManager(ci.GetSourceManager()),
-          importManager(*ci.importManager),
-          gim(ci.gim),
-          diagEngine(ci.diag),
-          cangjieHome(ci.cangjieHome),
-          pkg(&pkg),
-          outputPath(ci.invocation.globalOptions.output),
-          kind(ci.kind),
-          cachedInfo(*ci.cachedInfo),
-          releaseCHIRMemory(ci.releaseCHIRMemory),
-          needToOptString(ci.needToOptString),
-          needToOptGenericDecl(ci.needToOptGenericDecl),
-          builder(builder),
-          constAnalysisWrapper(constAnalysisWrapper),
-          diag(diagEngine)
-    {
-    }
+    ToCHIR(CompilerInstance& ci, AST::Package& pkg, ConstAnalysisWrapper& constAnalysisWrapper, CHIRBuilder& builder);
     ~ToCHIR() = default;
 
     bool Run();

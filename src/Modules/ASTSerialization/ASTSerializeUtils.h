@@ -89,6 +89,26 @@ inline bool IsExportedMemberFunc(const AST::FuncDecl& fd)
 {
     return fd.linkage != Linkage::INTERNAL;
 }
+
+/**
+ * Convert AST::LocalModal to PackageFormat::LocalModal.
+ * AST::LocalModal values: NOT=1, FULL=2, HALF=3
+ * PackageFormat::LocalModal values: NOT=0, FULL=1, HALF=2
+ */
+inline PackageFormat::LocalModal ToFormatLocalModal(AST::LocalModal astModal)
+{
+    return static_cast<PackageFormat::LocalModal>(static_cast<int>(astModal) - 1);
+}
+
+/**
+ * Convert PackageFormat::LocalModal to AST::LocalModal.
+ * PackageFormat::LocalModal values: NOT=0, FULL=1, HALF=2
+ * AST::LocalModal values: NOT=1, FULL=2, HALF=3
+ */
+inline AST::LocalModal FromFormatLocalModal(PackageFormat::LocalModal formatModal)
+{
+    return static_cast<AST::LocalModal>(static_cast<int>(formatModal) + 1);
+}
 } // namespace Cangjie
 
 #endif

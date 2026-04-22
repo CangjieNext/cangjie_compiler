@@ -63,6 +63,8 @@ bool IsOpenDecl(const Decl& decl)
 
 bool RequireInstantiation(const Decl& decl)
 {
+    // TODO: until inst is fixed
+    return false;
     // Skip instantiations in common code compilation because:
     // 1. Common code may be incomplete at this stage
     // 2. Specific source sets can modify the implementation
@@ -199,6 +201,17 @@ OwnedPtr<VarDecl> PartialInstantiation::InstantiateFuncParam(const FuncParam& fp
     return ret;
 }
 
+OwnedPtr<VarDecl> PartialInstantiation::InstantiateThisParam(
+    const ThisParam& tp, [[maybe_unused]] const VisitFunc& visitor)
+{
+    auto ret = MakeOwned<ThisParam>();
+    ret->thisPos = tp.thisPos;
+    ret->modal = tp.modal;
+    ret->commaPos = tp.commaPos;
+    ret->EnableAttr(Attribute::COMPILER_ADD);
+    return OwnedPtr<VarDecl>(ret.release());
+}
+
 OwnedPtr<Decl> PartialInstantiation::InstantiateVarWithPatternDecl(
     const VarWithPatternDecl& vwpd, const VisitFunc& visitor)
 {
@@ -216,6 +229,7 @@ OwnedPtr<Decl> PartialInstantiation::InstantiateVarWithPatternDecl(
 OwnedPtr<Decl> PartialInstantiation::InstantiateVarDecl(const VarDecl& vd, const VisitFunc& visitor)
 {
     auto ret = match(vd)([&visitor](const FuncParam& e) { return InstantiateFuncParam(e, visitor); },
+        [&visitor](const ThisParam& e) { return InstantiateThisParam(e, visitor); },
         []() { return MakeOwned<VarDecl>(); });
     // Instantiate field in VarDecl.
     ret->type = InstantiateType(vd.type.get(), visitor);
@@ -445,6 +459,7 @@ OwnedPtr<QualifiedType> PartialInstantiation::InstantiateQualifiedType(
     for (auto& it : node.typeArguments) {
         ret->typeArguments.push_back(InstantiateType(it.get(), visitor));
     }
+    ret->modal = node.modal;
     return ret;
 }
 
@@ -454,6 +469,7 @@ OwnedPtr<ParenType> PartialInstantiation::InstantiateParenType(const ParenType& 
     ret->type = InstantiateType(node.type.get(), visitor);
     ret->leftParenPos = node.leftParenPos;
     ret->rightParenPos = node.rightParenPos;
+    ret->modal = node.modal;
     return ret;
 }
 
@@ -466,6 +482,7 @@ OwnedPtr<OptionType> PartialInstantiation::InstantiateOptionType(const OptionTyp
     if (node.desugarType != nullptr) {
         ret->desugarType = Instantiate(node.desugarType.get(), visitor);
     }
+    ret->modal = node.modal;
     return ret;
 }
 
@@ -480,6 +497,7 @@ OwnedPtr<FuncType> PartialInstantiation::InstantiateFuncType(const FuncType& nod
     ret->leftParenPos = node.leftParenPos;
     ret->rightParenPos = node.rightParenPos;
     ret->arrowPos = node.arrowPos;
+    ret->modal = node.modal;
     return ret;
 }
 
@@ -510,6 +528,7 @@ OwnedPtr<VArrayType> PartialInstantiation::InstantiateVArrayType(const VArrayTyp
     ret->typeArgument = InstantiateType(node.typeArgument.get(), visitor);
     ret->constantType = InstantiateType(node.constantType.get(), visitor);
     ret->rightAnglePos = node.rightAnglePos;
+    ret->modal = node.modal;
     return ret;
 }
 
@@ -595,6 +614,13 @@ OwnedPtr<IfExpr> PartialInstantiation::InstantiateIfExpr(const IfExpr& ie, const
     expr->isElseIf = ie.isElseIf;
     expr->elsePos = ie.elsePos;
     expr->elseBody = InstantiateExpr(ie.elseBody.get(), visitor);
+    return expr;
+}
+
+OwnedPtr<PrimitiveTypeExpr> PartialInstantiation::InstantiatePrimitiveTypeExpr(const PrimitiveTypeExpr& pte)
+{
+    auto expr = MakeOwned<PrimitiveTypeExpr>(pte.typeKind);
+    expr->modal = pte.modal;
     return expr;
 }
 
@@ -910,6 +936,7 @@ OwnedPtr<RefExpr> PartialInstantiation::InstantiateRefExpr(const RefExpr& re, co
     expr->instTys = re.instTys;
     expr->matchedParentTy = re.matchedParentTy;
     expr->callOrPattern = re.callOrPattern;
+    expr->modal = re.modal;
     return expr;
 }
 
@@ -990,6 +1017,14 @@ OwnedPtr<SynchronizedExpr> PartialInstantiation::InstantiateSynchronizedExpr(
     expr->syncPos = se.syncPos;
     expr->leftParenPos = se.leftParenPos;
     expr->rightParenPos = se.rightParenPos;
+    return expr;
+}
+
+OwnedPtr<ExclaveExpr> PartialInstantiation::InstantiateExclaveExpr(const ExclaveExpr& ee, const VisitFunc& visitor)
+{
+    auto expr = MakeOwned<ExclaveExpr>();
+    expr->exclavePos = ee.exclavePos;
+    expr->body = InstantiateExpr(ee.body.get(), visitor);
     return expr;
 }
 
@@ -1074,7 +1109,7 @@ OwnedPtr<ExprT> PartialInstantiation::InstantiateExpr(Ptr<ExprT> expr, const Vis
     auto clonedExpr = match(*expr)(
         // PrimitiveExpr, AdjointExpr are ignored.
         [&visitor](const IfExpr& ie) { return OwnedPtr<Expr>(InstantiateIfExpr(ie, visitor)); },
-        [](const PrimitiveTypeExpr& pte) { return OwnedPtr<Expr>(MakeOwned<PrimitiveTypeExpr>(pte.typeKind)); },
+        [](const PrimitiveTypeExpr& pte) { return OwnedPtr<Expr>(InstantiatePrimitiveTypeExpr(pte)); },
         [&visitor](const MacroExpandExpr& mee) { return OwnedPtr<Expr>(InstantiateMacroExpandExpr(mee, visitor)); },
         [&visitor](const TokenPart& tp) { return OwnedPtr<Expr>(InstantiateTokenPart(tp, visitor)); },
         [&visitor](const QuoteExpr& qe) { return OwnedPtr<Expr>(InstantiateQuoteExpr(qe, visitor)); },
@@ -1119,6 +1154,7 @@ OwnedPtr<ExprT> PartialInstantiation::InstantiateExpr(Ptr<ExprT> expr, const Vis
         [](const WildcardExpr& /* we */) { return OwnedPtr<Expr>(MakeOwned<WildcardExpr>()); },
         [&visitor](
             const LetPatternDestructor& ld) { return OwnedPtr<Expr>(InstantiateLetPatternDestructor(ld, visitor)); },
+        [&visitor](const ExclaveExpr& ee) { return OwnedPtr<Expr>(InstantiateExclaveExpr(ee, visitor)); },
         [&expr]() {
             // Invalid and ignored cases.
             auto invalidExpr = MakeOwned<InvalidExpr>(expr->begin);
@@ -1447,6 +1483,9 @@ OwnedPtr<FuncParamList> PartialInstantiation::InstantiateFuncParamList(
     CopyNodeField(ret.get(), fpl);
     // Instantiate field in FuncParamList.
     ret->leftParenPos = fpl.leftParenPos;
+    if (fpl.thisParam) {
+        ret->thisParam = OwnedPtr(StaticCast<ThisParam>(InstantiateDecl(fpl.thisParam, visitor).release()));
+    }
     for (auto& it : fpl.params) {
         auto funcParam = MakeOwned<FuncParam>();
         auto d = InstantiateDecl(it.get(), visitor);
@@ -1504,8 +1543,8 @@ OwnedPtr<ImportSpec> PartialInstantiation::InstantiateImportSpec(const ImportSpe
         CopyNodeField(ret->modifier.get(), *is.modifier);
         ret->modifier->isExplicit = is.modifier->isExplicit;
     }
-    std::function<void(const ImportContent&, ImportContent&)> cloneContent
-        = [&cloneContent](const ImportContent& src, ImportContent& dst) {
+    std::function<void(const ImportContent&, ImportContent&)> cloneContent = [&cloneContent](const ImportContent& src,
+                                                                                 ImportContent& dst) {
         CopyNodeField(&dst, src);
         dst.kind = src.kind;
         dst.prefixPaths = src.prefixPaths;
@@ -1814,7 +1853,7 @@ Ptr<Ty> TyGeneralizer::Generalize(Ty& ty)
             for (auto& it : ty.typeArgs) {
                 typeArgs.push_back(Generalize(it));
             }
-            return tyMgr.GetTypeAliasTy(*static_cast<TypeAliasTy&>(ty).declPtr, typeArgs);
+            return tyMgr.GetTypeAliasTy(*static_cast<TypeAliasTy&>(ty).declPtr, typeArgs, ty.Modal());
         }
         case TypeKind::TYPE_INTERSECTION:
             return GetGeneralizedSetTy(static_cast<IntersectionTy&>(ty));
@@ -1836,7 +1875,7 @@ Ptr<Ty> TyGeneralizer::GetGeneralizedStructTy(StructTy& structTy)
     for (auto& it : structTy.typeArgs) {
         typeArgs.push_back(Generalize(it));
     }
-    auto recTy = tyMgr.GetStructTy(*structTy.declPtr, typeArgs);
+    auto recTy = tyMgr.GetStructTy(*structTy.declPtr, typeArgs, structTy.Modal());
     return recTy;
 }
 
@@ -1851,9 +1890,9 @@ Ptr<Ty> TyGeneralizer::GetGeneralizedClassTy(ClassTy& classTy)
     }
     Ptr<ClassTy> insTy = nullptr;
     if (Is<ClassThisTy>(classTy)) {
-        insTy = tyMgr.GetClassThisTy(*classTy.declPtr, typeArgs);
+        insTy = tyMgr.GetClassThisTy(*classTy.declPtr, typeArgs, classTy.Modal());
     } else {
-        insTy = tyMgr.GetClassTy(*classTy.declPtr, typeArgs);
+        insTy = tyMgr.GetClassTy(*classTy.declPtr, typeArgs, classTy.Modal());
     }
     return insTy;
 }
@@ -1867,7 +1906,7 @@ Ptr<Ty> TyGeneralizer::GetGeneralizedInterfaceTy(InterfaceTy& interfaceTy)
     for (auto& it : interfaceTy.typeArgs) {
         typeArgs.push_back(Generalize(it));
     }
-    auto insTy = tyMgr.GetInterfaceTy(*interfaceTy.declPtr, typeArgs);
+    auto insTy = tyMgr.GetInterfaceTy(*interfaceTy.declPtr, typeArgs, interfaceTy.Modal());
     return insTy;
 }
 
@@ -1883,9 +1922,9 @@ Ptr<Ty> TyGeneralizer::GetGeneralizedEnumTy(EnumTy& enumTy)
         typeArgs.push_back(Generalize(it));
     }
     if (Is<RefEnumTy>(enumTy)) {
-        return tyMgr.GetRefEnumTy(*enumTy.declPtr, typeArgs);
+        return tyMgr.GetRefEnumTy(*enumTy.declPtr, typeArgs, enumTy.Modal());
     }
-    auto tmp = tyMgr.GetEnumTy(*enumTy.declPtr, typeArgs);
+    auto tmp = tyMgr.GetEnumTy(*enumTy.declPtr, typeArgs, enumTy.Modal());
     tmp->hasCorrespondRefEnumTy = enumTy.hasCorrespondRefEnumTy;
     return tmp;
 }
@@ -1897,7 +1936,7 @@ Ptr<Ty> TyGeneralizer::GetGeneralizedArrayTy(ArrayTy& arrayTy)
     }
     auto elemTy = Generalize(arrayTy.typeArgs[0]);
     auto dims = arrayTy.dims;
-    return tyMgr.GetArrayTy(elemTy, dims);
+    return tyMgr.GetArrayTy(elemTy, dims, arrayTy.Modal());
 }
 
 Ptr<Ty> TyGeneralizer::GetGeneralizedPointerTy(PointerTy& cptrTy)
@@ -1906,7 +1945,7 @@ Ptr<Ty> TyGeneralizer::GetGeneralizedPointerTy(PointerTy& cptrTy)
         return &cptrTy;
     }
     auto elemTy = Generalize(cptrTy.typeArgs[0]);
-    return tyMgr.GetPointerTy(elemTy);
+    return tyMgr.GetPointerTy(elemTy, cptrTy.Modal());
 }
 
 // Get instantiated ty of set type 'IntersectionTy' and 'UnionTy'.
@@ -1916,6 +1955,6 @@ template <typename SetTy> Ptr<Ty> TyGeneralizer::GetGeneralizedSetTy(SetTy& ty)
     for (auto it : ty.tys) {
         tys.emplace(Generalize(it));
     }
-    return tyMgr.GetTypeTy<SetTy>(tys);
+    return tyMgr.GetTypeTy<SetTy>(tys, ty.Modal());
 }
 } // namespace Cangjie

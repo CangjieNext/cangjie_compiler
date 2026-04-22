@@ -19,6 +19,7 @@ struct LambdaExpr : Expr {
     ~LambdaExpr() override;
     OwnedPtr<FuncBody> funcBody; /**< Funcbody of lambda. */
     std::string mangledName;     /**< The name after mangling. */
+    bool needsRegion{false};     /**< Whether the func needs region. Set by sema, used by CHIR. */
     explicit LambdaExpr(OwnedPtr<FuncBody> body);
 };
 } // namespace Cangjie::AST

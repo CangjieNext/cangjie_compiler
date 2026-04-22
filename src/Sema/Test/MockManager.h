@@ -14,8 +14,9 @@
 #ifndef CANGJIE_SEMA_MOCK_MANAGER_H
 #define CANGJIE_SEMA_MOCK_MANAGER_H
 
-#include "cangjie/Sema/TypeManager.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Modules/ImportManager.h"
+#include "cangjie/Sema/TypeManager.h"
 
 #include "MockUtils.h"
 
@@ -25,7 +26,8 @@ enum class MockKind : uint8_t;
 
 class MockManager {
 public:
-    explicit MockManager(ImportManager& importManager, TypeManager& typeManager, const Ptr<MockUtils> mockUtils);
+    explicit MockManager(
+        ImportManager& importManager, TypeManager& typeManager, DiagnosticEngine& d, Ptr<MockUtils> mockUtils);
     void LoadMockLibDecls();
 
     struct GeneratedClassResult {
@@ -56,6 +58,7 @@ private:
 
     TypeManager& typeManager;
     ImportManager& importManager;
+    DiagnosticEngine& diag;
     Ptr<MockUtils> mockUtils;
 
     std::map<std::string, OwnedPtr<AST::ClassDecl>> mockedClassDecls;
@@ -91,8 +94,7 @@ private:
         OwnedPtr<AST::Expr> exprToCast, const Ptr<AST::Ty> castTy
     ) const;
     OwnedPtr<AST::AssignExpr> CreateMemberAssignment(
-        AST::VarDecl& member, OwnedPtr<AST::Expr> rhsExpr
-    ) const;
+        AST::VarDecl& member, OwnedPtr<AST::Expr> rhsExpr, AST::ModalInfo modal) const;
 
     OwnedPtr<AST::MatchCase> CreateOnCallReturnZeroMatchCase(
         const AST::FuncDecl& originalFunc, const Ptr<AST::Ty> zeroValueTy, AST::Decl& enumConstructor) const;

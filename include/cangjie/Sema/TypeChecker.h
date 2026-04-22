@@ -14,6 +14,7 @@
 #define CANGJIE_SEMA_TYPECHECKER_H
 
 #include "cangjie/AST/ASTContext.h"
+#include "cangjie/AST/Candidate.h"
 
 namespace Cangjie {
 class InstCtxScope;
