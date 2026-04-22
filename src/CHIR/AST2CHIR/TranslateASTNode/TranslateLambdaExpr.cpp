@@ -30,6 +30,7 @@ Ptr<Value> Translator::Visit(const AST::LambdaExpr& lambdaExpr)
     // cjdb need src code name to show the stack, or core dump will occurred in some case
     auto lambda = CreateAndAppendExpression<Lambda>(loc, funcTy, funcTy, currentBlock, true, mangledName, "$lambda");
     lambda->InitBody(*body);
+    funcContext.PushFunc(lambdaExpr, *lambda);
 
     std::vector<DebugLocation> paramLoc;
     std::vector<std::string> paramNames;
@@ -48,15 +49,20 @@ Ptr<Value> Translator::Visit(const AST::LambdaExpr& lambdaExpr)
     if (auto lambdaBody = lambda->GetBody(); lambdaBody && lambdaExpr.TestAttr(AST::Attribute::MOCK_SUPPORTED)) {
         lambdaBody->EnableAttr(CHIR::Attribute::NO_INLINE);
     }
+    lambdaTrans.funcContext.PushFunc(lambdaExpr, *lambda);
 
     // lambda never has default parameter value
-    return lambdaTrans.TranslateLambdaBody(lambda, *lambdaExpr.funcBody, {});
+    auto ret = lambdaTrans.TranslateLambdaBody(lambda, *lambdaExpr.funcBody, {});
+    lambdaTrans.funcContext.Pop();
+    return ret;
 }
 
 Translator Translator::Copy() const
 {
-    return {builder, chirTy, opts, gim, globalSymbolTable, localConstVars, localConstFuncs, increKind,
+    Translator ret{builder, chirTy, opts, gim, globalSymbolTable, localConstVars, localConstFuncs, increKind,
         deserializedVals, annoFactoryFuncs, maybeUnreachable, isComputingAnnos, initFuncsForAnnoFactory, typeManager};
+    ret.funcContext = funcContext;
+    return ret;
 }
 
 Translator Translator::SetupContextForLambda(const AST::Block& body)
@@ -110,6 +116,10 @@ Ptr<Value> Translator::TranslateLambdaBody(
     blockGroupStack.emplace_back(blockGroup);
     auto entry = builder.CreateBlock(blockGroup);
     blockGroup->SetEntryBlock(entry);
+
+    if (funcContext.NeedsRegion()) {
+        CreateAndAppendExpression<StartRegion>(TranslateLocation(*funcBody.body), builder.GetUnitTy(), entry);
+    }
     BindingFuncParam(*funcBody.paramLists[0], *lambda->GetBody(), config);
     // Set return value.
     auto retType = lambda->GetReturnType();
@@ -119,6 +129,7 @@ Ptr<Value> Translator::TranslateLambdaBody(
     lambda->SetReturnValue(*retVal);
     // Translate body.
     auto block = Visit(funcBody);
+    // EndRegion translated in its body
     CreateAndAppendTerminator<GoTo>(StaticCast<Block*>(block.get()), entry);
     blockGroupStack.pop_back();
     return lambda->GetResult();

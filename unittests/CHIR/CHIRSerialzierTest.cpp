@@ -633,6 +633,12 @@ PackageFormat::CHIRExprKind Serialize(const ExprKind& kind)
         case ExprKind::GET_RTTI_STATIC:
             ret = CHIRExprKind_GetRttiStatic;
             break;
+        case ExprKind::START_REGION:
+            ret = CHIRExprKind_StartRegion;
+            break;
+        case ExprKind::END_REGION:
+            ret = CHIRExprKind_EndRegion;
+            break;
         case ExprKind::MAX_EXPR_KINDS:
             CJC_ABORT();
             break;

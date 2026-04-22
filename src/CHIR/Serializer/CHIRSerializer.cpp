@@ -334,7 +334,8 @@ template <> flatbuffers::Offset<PackageFormat::Type> CHIRSerializer::CHIRSeriali
 {
     auto kind = PackageFormat::CHIRTypeKind(obj.GetTypeKind());
     auto argTys = GetId<Type>(obj.GetTypeArgs());
-    return PackageFormat::CreateTypeDirect(builder, kind, argTys.empty() ? nullptr : &argTys);
+    auto modal = static_cast<uint32_t>(ToIndex(obj.Modal()));
+    return PackageFormat::CreateTypeDirect(builder, kind, argTys.empty() ? nullptr : &argTys, modal);
 }
 
 template <>
@@ -954,6 +955,20 @@ flatbuffers::Offset<PackageFormat::MultiBranch> CHIRSerializer::CHIRSerializerIm
 }
 
 template <>
+flatbuffers::Offset<PackageFormat::StartRegion> CHIRSerializer::CHIRSerializerImpl::Serialize(const StartRegion& obj)
+{
+    auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
+    return PackageFormat::CreateStartRegion(builder, base);
+}
+
+template <>
+flatbuffers::Offset<PackageFormat::EndRegion> CHIRSerializer::CHIRSerializerImpl::Serialize(const EndRegion& obj)
+{
+    auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
+    return PackageFormat::CreateEndRegion(builder, base);
+}
+
+template <>
 flatbuffers::Offset<PackageFormat::GetInstantiateValue> CHIRSerializer::CHIRSerializerImpl::Serialize(
     const GetInstantiateValue& obj)
 {
@@ -1160,7 +1175,8 @@ flatbuffers::Offset<PackageFormat::StructDef> CHIRSerializer::CHIRSerializerImpl
 {
     auto base = Serialize<PackageFormat::CustomTypeDef>(static_cast<const CustomTypeDef&>(obj));
     auto isCStruct = obj.IsCStruct();
-    return PackageFormat::CreateStructDef(builder, base, isCStruct);
+    auto isCopy = obj.IsCopyType();
+    return PackageFormat::CreateStructDef(builder, base, isCStruct, isCopy);
 }
 
 template <>
@@ -1318,6 +1334,12 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
         case ExprKind::APPLY_WITH_EXCEPTION:
             exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_ApplyBase;
             return Serialize<PackageFormat::ApplyBase>(static_cast<const ApplyWithException&>(obj)).Union();
+        case ExprKind::START_REGION:
+            exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_StartRegion;
+            return Serialize<PackageFormat::StartRegion>(static_cast<const StartRegion&>(obj)).Union();
+        case ExprKind::END_REGION:
+            exprKind[GetId<Expression>(&obj) - 1] = PackageFormat::ExpressionElem_EndRegion;
+            return Serialize<PackageFormat::EndRegion>(static_cast<const EndRegion&>(obj)).Union();
         case ExprKind::ADD:
         case ExprKind::SUB:
         case ExprKind::MUL:

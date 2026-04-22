@@ -9,10 +9,14 @@
 
 #include <vector>
 
-#include "cangjie/IncrementalCompilation/CompilationCache.h"
-#include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/CHIR/IR/Type/CustomTypeDef.h"
+
+namespace Cangjie {
+struct CompilationCache;
+enum class IncreKind;
+using VirtualWrapperDepMap = std::unordered_map<std::string, std::string>;
+} // namespace Cangjie
 
 namespace Cangjie::CHIR {
 class WrapVirtualFunc {

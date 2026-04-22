@@ -11,6 +11,7 @@
  */
 
 #include "TypeCheckUtil.h"
+#include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie::TypeCheckUtil {
 using namespace AST;
@@ -93,14 +94,21 @@ SubstPack FilterUnusedMapping(const SubstPack& mapping, const std::set<Ptr<Ty>>&
     return ret;
 }
 
-MultiTypeSubst FilterUnusedMapping(const MultiTypeSubst& mapping, const std::set<Ptr<Ty>>& tys)
+MultiTypeSubst FilterUnusedMapping(TypeManager& tm, const MultiTypeSubst& mapping, const std::set<Ptr<Ty>>& tys)
 {
     std::set<Ptr<TyVar>> all = Utils::GetKeys(mapping);
     std::set<Ptr<TyVar>> reachable;
     std::queue<Ptr<TyVar>> worklist;
     // collect tyvars directly used
+    std::vector<Ptr<Ty>> dataTys;
     for (auto ty : tys) {
-        reachable.merge(ty->GetGenericTyArgs(all));
+        dataTys.emplace_back(tm.RemoveModalRec(ty));
+    }
+    for (auto ty : dataTys) {
+        auto a = ty->GetGenericTyArgs(all);
+        for (auto b : a) {
+            reachable.insert(StaticCast<TyVar>(tm.SubstituteModal(b, {})));
+        }
     }
     for (auto tv : reachable) {
         worklist.push(tv);
@@ -111,7 +119,10 @@ MultiTypeSubst FilterUnusedMapping(const MultiTypeSubst& mapping, const std::set
         worklist.pop();
         if (mapping.count(tv) > 0) {
             for (auto instTy : mapping.at(tv)) {
-                reachable.merge(instTy->GetGenericTyArgs(all));
+                auto a = instTy->GetGenericTyArgs(all);
+                for (auto b : a) {
+                    reachable.insert(StaticCast<TyVar>(tm.SubstituteModal(b, {})));
+                }
             }
         }
     }
@@ -186,7 +197,7 @@ std::vector<Ptr<Ty>> GetDeclTypeParams(const Decl& decl)
     return ret;
 }
 
-std::unordered_set<Ptr<Ty>> GetAllGenericTys(Ptr<Ty> const ty)
+std::unordered_set<Ptr<Ty>> GetAllGenericTys(TypeManager& tm, Ptr<Ty> ty)
 {
     std::unordered_set<Ptr<Ty>> res;
     std::unordered_set<Ptr<Ty>> visited;
@@ -199,11 +210,11 @@ std::unordered_set<Ptr<Ty>> GetAllGenericTys(Ptr<Ty> const ty)
             continue;
         }
         if (curTy->IsGeneric()) {
-            res.emplace(curTy);
+            res.emplace(tm.SubstituteModal(curTy, {}));
             continue;
         }
         for (auto it : curTy->typeArgs) {
-            q.emplace(it);
+            q.emplace(tm.SubstituteModal(it, {}));
         }
     }
     return res;
@@ -223,7 +234,7 @@ MultiTypeSubst ReduceMultiTypeSubst(TypeManager& tyMgr, const TyVars& tyVars,
             if (auto [_, succ] = visited.emplace(ty); !succ) {
                 continue;
             }
-            auto gtys = GetAllGenericTys(ty);
+            auto gtys = GetAllGenericTys(tyMgr, ty);
             if (gtys.find(p.first) != gtys.cend()) {
                 mapping.erase(p.first);
             }
@@ -260,9 +271,9 @@ std::vector<SubstPack> ExpandMultiTypeSubst(const SubstPack& maps, const std::se
     return ret;
 }
 
-std::set<TypeSubst> ExpandMultiTypeSubst(const MultiTypeSubst& mts, const std::set<Ptr<Ty>>& usefulTys)
+std::set<TypeSubst> ExpandMultiTypeSubst(TypeManager& tm, const MultiTypeSubst& mts, const std::set<Ptr<Ty>>& usefulTys)
 {
-    auto filtered = FilterUnusedMapping(mts, usefulTys);
+    auto filtered = FilterUnusedMapping(tm, mts, usefulTys);
     return ExpandFilteredMultiTypeSubst(filtered);
 }
 

@@ -10,6 +10,7 @@
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
+#include "cangjie/Mangle/MangleUtils.h"
 
 #include <future>
 #include <queue>

@@ -65,7 +65,7 @@ std::string MangleType(const CHIR::TupleType& t, const std::vector<std::string>&
     for (auto i : items) {
         ss << MangleType(*i, genericsTypeStack, useGenericName);
     }
-    ss << MANGLE_SUFFIX;
+    ss << MANGLE_SUFFIX << MangleUtils::MangleLocalModifier(t.Modal());
     return ss.str();
 }
 
@@ -81,6 +81,7 @@ std::string MangleType(const CHIR::StructType& t, const std::vector<std::string>
     for (auto argTy : t.GetGenericArgs()) {
         ss << MangleType(*argTy, genericsTypeStack, useGenericName);
     }
+    ss << MangleUtils::MangleLocalModifier(t.Modal());
     return ss.str();
 }
 
@@ -96,6 +97,7 @@ std::string MangleType(const CHIR::EnumType& t, const std::vector<std::string>& 
     for (auto argTy : t.GetGenericArgs()) {
         ss << MangleType(*argTy, genericsTypeStack, useGenericName);
     }
+    ss << MangleUtils::MangleLocalModifier(t.Modal());
     return ss.str();
 }
 
@@ -117,13 +119,14 @@ std::string MangleType(const CHIR::FuncType& t, const std::vector<std::string>& 
     }
     ss << retTy;
     if (t.GetParamTypes().empty()) {
-        return ss.str() + MANGLE_VOID_TY_SUFFIX + MANGLE_SUFFIX;
+        ss << MANGLE_VOID_TY_SUFFIX << MANGLE_SUFFIX << MangleUtils::MangleLocalModifier(t.Modal());
+        return ss.str();
     }
     for (auto p : t.GetParamTypes()) {
         std::string mangled = MangleType(*p, genericsTypeStack, useGenericName);
         ss << mangled;
     }
-    ss << MANGLE_SUFFIX;
+    ss << MANGLE_SUFFIX << MangleUtils::MangleLocalModifier(t.Modal());
     return ss.str();
 }
 // Type mangling for CHIR::ClassTpe
@@ -138,6 +141,7 @@ std::string MangleType(const CHIR::ClassType& t, const std::vector<std::string>&
     for (auto argTy : t.GetGenericArgs()) {
         ss << MangleType(*argTy, genericsTypeStack, useGenericName);
     }
+    ss << MangleUtils::MangleLocalModifier(t.Modal());
     return ss.str();
 }
 
@@ -148,7 +152,8 @@ std::string MangleType(const CHIR::RawArrayType& t, const std::vector<std::strin
     std::stringstream ss;
     ss << MANGLE_TYPE_ARRAY_PREFIX;
     ss << MangleUtils::DecimalToManglingNumber(std::to_string(t.GetDims()));
-    ss << MangleType(*t.GetElementType(), genericsTypeStack, useGenericName);
+    ss << MangleType(*t.GetElementType(), genericsTypeStack, useGenericName)
+       << MangleUtils::MangleLocalModifier(t.Modal());
     return ss.str();
 }
 
@@ -156,7 +161,10 @@ std::string MangleType(const CHIR::RawArrayType& t, const std::vector<std::strin
 std::string MangleType(const CHIR::RefType& t, const std::vector<std::string>& genericsTypeStack,
     bool useGenericName)
 {
-    return MangleType(*t.GetBaseType(), genericsTypeStack, useGenericName);
+    std::stringstream ss;
+    ss << MangleType(*t.GetBaseType(), genericsTypeStack, useGenericName)
+       << MangleUtils::MangleLocalModifier(t.Modal());
+    return ss.str();
 }
 
 std::string MangleType(const CHIR::VArrayType& t, const std::vector<std::string>& genericsTypeStack,
@@ -165,7 +173,8 @@ std::string MangleType(const CHIR::VArrayType& t, const std::vector<std::string>
     std::stringstream ss;
     ss << MANGLE_VARRAY_PREFIX;
     ss << MangleUtils::DecimalToManglingNumber(std::to_string(t.GetSize()));
-    ss << MangleType(*t.GetElementType(), genericsTypeStack, useGenericName);
+    ss << MangleType(*t.GetElementType(), genericsTypeStack, useGenericName)
+       << MangleUtils::MangleLocalModifier(t.Modal());
     return ss.str();
 }
 
@@ -174,7 +183,8 @@ std::string MangleType(const CHIR::CPointerType& t, const std::vector<std::strin
 {
     std::stringstream ss;
     ss << MANGLE_POINTER_PREFIX;
-    ss << MangleType(*t.GetElementType(), genericsTypeStack, useGenericName);
+    ss << MangleType(*t.GetElementType(), genericsTypeStack, useGenericName)
+       << MangleUtils::MangleLocalModifier(t.Modal());
     return ss.str();
 }
 
@@ -183,14 +193,16 @@ std::string MangleType(const CHIR::GenericType& t, const std::vector<std::string
 {
     std::stringstream ss;
     if (useGenericName) {
-        ss << MANGLE_GENERIC_PREFIX << t.GetSrcCodeIdentifier() << std::endl;
+        ss << MANGLE_GENERIC_PREFIX << t.GetSrcCodeIdentifier() << std::endl
+           << MangleUtils::MangleLocalModifier(t.Modal());
         return ss.str();
     }
     auto result = std::find_if(genericsTypeStack.rbegin(), genericsTypeStack.rend(),
         [&t](const std::string& name) { return name == t.GetSrcCodeIdentifier(); });
     CJC_ASSERT(result != genericsTypeStack.rend() && "Using undeclared generic type!");
     size_t index = static_cast<size_t>(std::distance(result, genericsTypeStack.rend())) - 1;
-    ss << MANGLE_GENERIC_PREFIX << MangleUtils::DecimalToManglingNumber(std::to_string(index));
+    ss << MANGLE_GENERIC_PREFIX << MangleUtils::DecimalToManglingNumber(std::to_string(index))
+       << MangleUtils::MangleLocalModifier(t.Modal());
     return ss.str();
 }
 
@@ -208,7 +220,7 @@ std::string MangleArraySliceType(const CHIR::Type& t, const std::vector<std::str
     std::stringstream ss;
     ss << MANGLE_ARRAY_SLICE_PREFIX;
     ss << MangleType(*t.GetTypeArgs()[0], genericsTypeStack, useGenericName);
-    ss << MANGLE_SUFFIX;
+    ss << MANGLE_SUFFIX << MangleUtils::MangleLocalModifier(t.Modal());
     return ss.str();
 }
 
@@ -224,7 +236,7 @@ std::string MangleType(const CHIR::Type& t, const std::vector<std::string>& gene
 {
     auto k = t.GetTypeKind();
     if (auto prim = ManglePrimitive(k); !prim.empty()) {
-        return prim;
+        return prim + MangleUtils::MangleLocalModifier(t.Modal());
     }
     CJC_ASSERT(k != ChirTypeKind::TYPE_INVALID);
     switch (k) {

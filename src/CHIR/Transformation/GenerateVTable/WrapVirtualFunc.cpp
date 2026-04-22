@@ -6,9 +6,11 @@
 
 #include "cangjie/CHIR/Transformation/GenerateVTable/WrapVirtualFunc.h"
 
+#include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/Utils/Utils.h"
-#include "cangjie/CHIR/AST2CHIR/Utils.h"
+#include "cangjie/IncrementalCompilation/CompilationCache.h"
+#include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 
 using namespace Cangjie;
@@ -179,7 +181,7 @@ WrapVirtualFunc::WrapperFuncGenericTable WrapVirtualFunc::GetReplaceTableForVirt
     for (auto& parentMethodGenericTy : parentMethodGenericTys) {
         auto srcIdentifier = "fT" + std::to_string(newGenericIdx++);
         auto tyIdentifier = funcIdentifier + '_' + srcIdentifier;
-        auto funcGenericParam = builder.GetType<GenericType>(tyIdentifier, srcIdentifier);
+        auto funcGenericParam = builder.GetType<GenericType>(tyIdentifier, srcIdentifier, ModalInfo{});
         resultTable.funcGenericTypeParams.emplace_back(funcGenericParam);
         resultTable.replaceTable.emplace(parentMethodGenericTy, funcGenericParam);
     }

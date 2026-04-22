@@ -16,11 +16,12 @@
 #include "cangjie/AST/NodeX.h"
 #include "cangjie/CHIR/AST2CHIR/AST2CHIRNodeMap.h"
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/ExceptionTypeMapping.h"
+#include "cangjie/CHIR/AST2CHIR/TranslateASTNode/TranslatorContext.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Type/CHIRType.h"
-#include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/Option/Option.h"
 #include "cangjie/Sema/GenericInstantiationManager.h"
 #include "cangjie/Utils/CheckUtils.h"
@@ -631,6 +632,9 @@ private:
         std::vector<int>& scopeInfo;
     };
 
+    TranslatorContext funcContext;
+    bool inExclave{false};
+
 private:
     void SetSymbolTable(const AST::Node& node, Value& val, bool isLocal = true);
     Ptr<Value> GetSymbolTable(const AST::Node& node) const;
@@ -797,6 +801,7 @@ private:
     Ptr<Value> Visit(const AST::VarDecl& decl);
     Ptr<Value> Visit(const AST::VarWithPatternDecl& patternDecl);
     Ptr<Value> Visit(const AST::WhileExpr& whileExpr);
+    Ptr<Value> Visit(const AST::ExclaveExpr& exclaveExpr);
     Ptr<Value> Visit(const AST::Node& node) const
     {
         if (isComputingAnnos && Is<AST::IfAvailableExpr>(node)) {
@@ -864,6 +869,10 @@ private:
     Ptr<Value> TranslateLambdaBody(Ptr<Lambda> lambda, const AST::FuncBody& funcBody, const BindingConfig& config);
     friend class TranslateCondCtrlExpr;
     friend class TranslateWhileExpr;
+
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    std::vector<Ptr<AST::Node>> CollectBlockBodyNodes(const AST::Block& block);
+#endif
 
     // ========Methods used for translating ForInExpr=========
     Ptr<Value> GetOuterMostExpr();

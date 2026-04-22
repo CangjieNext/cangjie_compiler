@@ -19,6 +19,7 @@
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Driver/StdlibMap.h"
+#include "cangjie/Frontend/CompilerInstance.h"
 
 using namespace Cangjie;
 using namespace AST;

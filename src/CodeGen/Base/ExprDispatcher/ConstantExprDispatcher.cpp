@@ -49,7 +49,8 @@ llvm::Value* HandleLiteralValue(IRBuilder2& irBuilder, const CHIR::LiteralValue&
             StaticCast<CHIR::FloatLiteral&>(chirLiteral).GetVal());
     } else if (chirLiteral.IsStringLiteral()) {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-        literalValue = irBuilder.CreateStringLiteral(StaticCast<CHIR::StringLiteral&>(chirLiteral).GetVal());
+        literalValue = irBuilder.CreateStringLiteral(
+            StaticCast<CHIR::StringLiteral&>(chirLiteral).GetVal(), chirLiteral.GetType());
 #endif
     } else {
         CJC_ABORT();

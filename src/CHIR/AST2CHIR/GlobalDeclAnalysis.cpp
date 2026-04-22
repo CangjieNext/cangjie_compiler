@@ -854,6 +854,11 @@ VarCirDepsChecker::VarCirDepsChecker(DiagnosticEngine& ciDiag) : diag(ciDiag)
 {
 }
 
+std::string VarCirDepsChecker::GetEleStr(Ptr<const AST::Decl> decl) const
+{
+    return decl->identifier;
+}
+
 bool VarCirDepsChecker::IsVar(const AST::Decl& decl) const
 {
     if (decl.astKind == AST::ASTKind::VAR_DECL || decl.astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL) {

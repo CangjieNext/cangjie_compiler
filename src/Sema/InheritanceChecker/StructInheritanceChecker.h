@@ -71,7 +71,7 @@ private:
     void DiagnoseInheritedInsconsistType(const MemberSignature& member, const Node& node) const;
     void CheckSameNameInheritanceInfo(const MemberSignature& parent, const Decl& child) const;
     void CheckInheritanceAttributes(const MemberSignature& parent, const Decl& child) const;
-    void CheckPropertyInheritance(const MemberSignature& parent, const Decl& child) const;
+    void CheckPropertyInheritance(const MemberSignature& parent, Decl& child) const;
     void CheckGenericTypeArgInfo(const Decl& parent, const Decl& child);
     void CheckGenericTypeArgInfo(const MemberSignature& parent, const MemberSignature& child) const;
     void CheckInheritanceForInterface(const MemberSignature& interface, const MemberSignature& child) const;
