@@ -31,8 +31,9 @@
 #include "BuiltInOperatorUtil.h"
 #include "ImplUtils.h"
 #include "InstantiatedExtendRecorder.h"
-#include "TypeCheckUtil.h"
+#include "OverrideFunctionResolver.h"
 #include "PartialInstantiation.h"
+#include "TypeCheckUtil.h"
 
 #include "cangjie/AST/ASTTypeValidator.h"
 #include "cangjie/AST/Clone.h"
@@ -806,27 +807,55 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::SelectTypeMatchedImplMember(
 
 Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(Ty& ty, FuncDecl& fd, Ty& targetBaseTy)
 {
-    // Rearrange for interface or open class call. Ignore function with following conditions:
-    // 1. non-member function;
-    // 2. non-static function which is accessed with interface type.
-    // 3. member function accessed by class type which function belongs to.
-    auto baseTyDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(&ty);
-    bool shouldIgnore = !fd.outerDecl || (ty.IsInterface() && !fd.TestAttr(Attribute::STATIC)) ||
-        (ty.IsClass() && baseTyDecl == Ty::GetDeclPtrOfTy<InheritableDecl>(fd.outerDecl->GetTy()));
+    // Only virtual functions require the search for the actual calling target. If the class where the function's
+    // calling target is located is within baseTy itself, the target does not need to be re-assigned.
+    bool shouldIgnore = !fd.outerDecl || !IsVirtualMember(fd) ||
+        (ty.IsInterface() && !fd.TestAttr(Attribute::STATIC)) ||
+        (ty.IsClass() && Ty::GetDeclPtrOfTy(fd.outerDecl->GetTy()) == Ty::GetDeclPtrOfTy(&ty));
     if (shouldIgnore) {
         return &fd;
     }
 
-    MemberFuncsWithInstTys funcs;
-    GetInstMemberFuncWithInstTy(ty, funcs, fd.identifier);
-    TypeSubst typeMapping = GenerateTypeMappingByTy(fd.outerDecl->ty, &targetBaseTy);
-    auto instFuncTy = typeManager.GetInstantiatedTy(fd.ty, typeMapping);
-    for (auto& [implFunc, instTys] : funcs) {
+    OverrideFunctionResolver resolver(typeManager);
+    MemberFuncsWithInstTys funcs = resolver.GetInstMemberFuncWithInstTy(ty, fd.identifier);
+    // Handle code: class B<T> { func a(a: T): Unit {} }; class A <: B<B1> {}, given 'targetBaseTy' is 'Class-A',
+    // we need get mapping if [T |-> B1], and substitute function type '(T)->Unit' to '(B1)->T'.
+    MultiTypeSubst typeMappings = promotion.GetPromoteTypeMapping(targetBaseTy, *fd.outerDecl->GetTy());
+    auto instFuncTys = typeManager.GetInstantiatedTys(fd.GetTy(), typeMappings);
+    for (MemberFuncWithInstTys func : funcs) {
+        auto implFunc = func.first;
         bool isInDiffDecl = implFunc->outerDecl != GetGeneralDecl(*fd.outerDecl, true);
-        auto withSameTy = instTys.find(instFuncTy);
-        if (isInDiffDecl && withSameTy != instTys.end()) {
-            return implFunc;
+        auto matchedInstTy = resolver.GetMatchedFuncInstTyByGivenTarget(func, fd, &targetBaseTy);
+        if (!isInDiffDecl || !Ty::IsTyCorrect(matchedInstTy)) {
+            continue;
         }
+
+        Ptr<FuncDecl> matchedFunc = implFunc;
+        // Get instantiated function or function local on of current impl func.
+        auto genericInstOuters = GetInstantiatedDecls(*implFunc->outerDecl);
+        for (auto instOuter : genericInstOuters) {
+            if (!typeManager.IsSubtype(&ty, instOuter->GetTy())) {
+                continue;
+            }
+            for (auto& member : instOuter->GetMemberDecls()) {
+                if (member->TestAttr(Attribute::GENERIC)) {
+                    continue;
+                }
+                WorkForMembers(*member, [&fd, &matchedInstTy, &matchedFunc](Decl& d) {
+                    if (fd.identifier == d.identifier && d.GetTy() == matchedInstTy) {
+                        matchedFunc = StaticCast<FuncDecl>(&d);
+                    }
+                });
+            }
+        }
+        auto genericInstFuncs = GetInstantiatedDecls(*func.first);
+        for (auto genInstFunc : genericInstFuncs) {
+            if (genInstFunc->GetTy() == matchedInstTy) {
+                matchedFunc = StaticCast<FuncDecl>(genInstFunc);
+                break;
+            }
+        }
+        return matchedFunc;
     }
     return &fd;
 }
@@ -1280,7 +1309,8 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedTarget(
     auto targetBase = Ty::IsTyCorrect(upperTy) && !upperTy->HasGeneric() ? upperTy : Ptr(&baseTy);
     auto decl = GetInstantiatedMemberTarget(*targetBase, *genericDecl, true);
     if (decl && decl->TestAttr(Attribute::GENERIC)) {
-        decl = FindInCache(ConstructGenericInfo(*decl, instTys));
+        auto instDecl = FindInCache(ConstructGenericInfo(*decl, instTys));
+        decl = instDecl ? instDecl : decl;
     }
     // Decl may be an interface function which should be rearranged to implementation decl.
     if (decl && decl->IsFunc()) {
@@ -1288,7 +1318,8 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedTarget(
         CJC_NULLPTR_CHECK(decl);
         // Get instantiated version if decl has been updated to implented generic function.
         if (decl->TestAttr(Attribute::GENERIC)) {
-            decl = FindInCache(ConstructGenericInfo(*decl, instTys));
+            auto instDecl = FindInCache(ConstructGenericInfo(*decl, instTys));
+            decl = instDecl ? instDecl : decl;
         }
     }
     if (!decl) {

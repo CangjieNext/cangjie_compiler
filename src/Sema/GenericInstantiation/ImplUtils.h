@@ -61,17 +61,6 @@ inline std::vector<Ptr<AST::Decl>> GetRealIndexingMembers(
     return ret;
 }
 
-inline void WorkForMembers(AST::Decl& decl, const std::function<void(AST::Decl&)>& worker)
-{
-    if (decl.astKind == AST::ASTKind::PROP_DECL) {
-        auto& pd = static_cast<AST::PropDecl&>(decl);
-        std::for_each(pd.getters.begin(), pd.getters.end(), [&worker](auto& fd) { worker(*fd); });
-        std::for_each(pd.setters.begin(), pd.setters.end(), [&worker](auto& fd) { worker(*fd); });
-    } else {
-        worker(decl);
-    }
-}
-
 inline bool NeedSwitchContext(const AST::Decl& decl)
 {
     auto outerDecl = GetOuterStructDecl(decl);
