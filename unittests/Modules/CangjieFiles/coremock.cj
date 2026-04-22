@@ -12,6 +12,8 @@ public open class Object {
 
 public interface CType {}
 
+public interface Copy {}
+
 public interface Any {}
 
 public interface ToString {}
@@ -40,3 +42,5 @@ func composition<T1, T2, T3>(f: (T1)->T2, g: (T2)->T3): (T1)->T3 {
 }
 
 public struct Array<T> {}
+
+public interface Collection<T> {}

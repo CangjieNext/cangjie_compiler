@@ -209,6 +209,30 @@ void DesugarPrimaryCtorHandleParamSetEachParam(
     }
 }
 
+void DesugarPrimaryCtorHandleThisParam(
+    Decl& decl, const PrimaryCtorDecl& fd, const OwnedPtr<FuncParamList>& funcParamList)
+{
+    if (fd.funcBody->paramLists.empty()) {
+        return;
+    }
+    auto& thisParam = fd.funcBody->paramLists[0]->thisParam;
+    if (!thisParam) {
+        return;
+    }
+    auto ret = MakeOwned<ThisParam>();
+    ret->thisPos = thisParam->thisPos;
+    ret->modal = thisParam->modal;
+    ret->EnableAttr(Attribute::COMPILER_ADD);
+    ret->outerDecl = &decl;
+    for (auto& anno : thisParam->annotations) {
+        ret->annotations.emplace_back(ASTCloner::Clone(anno.get(), SetIsClonedSourceCode));
+    }
+    CopyBasicInfo(thisParam.get(), ret.get());
+    ret->begin = thisParam->begin;
+    ret->end = thisParam->end;
+    funcParamList->thisParam = std::move(ret);
+}
+
 void DesugarPrimaryCtorHandleParam(Decl& decl, const PrimaryCtorDecl& fd, const OwnedPtr<FuncBody>& funcBody,
     const OwnedPtr<FuncParamList>& funcParamList)
 {
@@ -235,6 +259,7 @@ void DesugarPrimaryCtorHandleParam(Decl& decl, const PrimaryCtorDecl& fd, const 
         }
         funcParamList->params.push_back(std::move(param));
     }
+    DesugarPrimaryCtorHandleThisParam(decl, fd, funcParamList);
     // Member variable param.
     DesugarPrimaryCtorHandleParamSetEachParam(decl, fd, funcBody);
 }
@@ -581,7 +606,7 @@ void TypeChecker::TypeCheckerImpl::DesugarPointerCall(ASTContext& ctx, CallExpr&
     } else if (!baseArgs.empty()) {
         argTy = baseArgs[0]->GetTy();
     }
-    pointerExpr->type->SetTy(typeManager.GetPointerTy(argTy));
+    pointerExpr->type->SetTy(typeManager.GetPointerTy(argTy, argTy ? argTy->Modal() : AST::ModalInfo{}));
     if (!ce.args.empty()) {
         pointerExpr->arg = std::move(ce.args[0]);
     }
@@ -618,7 +643,7 @@ void TypeChecker::TypeCheckerImpl::DesugarArrayCall(ASTContext& ctx, CallExpr& c
     if (typeArgs[0]->IsGeneric() && !baseArgs.empty()) {
         argTy = baseArgs[0]->GetTy();
     }
-    arrayExpr->type->SetTy(typeManager.GetVArrayTy(*argTy, varrTy->size));
+    arrayExpr->type->SetTy(typeManager.GetVArrayTy(*argTy, varrTy->size, varrTy->Modal()));
     arrayExpr->isValueArray = true;
     arrayExpr->args = std::move(ce.args);
     ce.args.clear();

@@ -102,6 +102,7 @@ enum SourceExpr: uint8 {
 table Type {
   kind: CHIRTypeKind;
   argTys: [uint32]; // use types id
+  modal: uint32 = 0;
 }
 
 table RawArrayType {
@@ -477,6 +478,7 @@ table EnumDef {
 table StructDef {
   base: CustomTypeDef;
   isCStruct: bool = false;
+  isCopy: bool = false;
 }
 
 table ExtendDef {
@@ -585,7 +587,9 @@ enum CHIRExprKind: uint8 {
   Invoke,
   Intrinsic,
   GetRtti,
-  GetRttiStatic
+  GetRttiStatic,
+  StartRegion,
+  EndRegion,
 }
 
 enum IntrinsicKind: uint16 {
@@ -1156,6 +1160,14 @@ table GetInstantiateValue {
   instantiateTypes: [uint32]; // use types id
 }
 
+table StartRegion {
+  base: Expression;
+}
+
+table EndRegion {
+  base: Expression;
+}
+
 table GetRTTIStatic {
   base: Expression;
   rttiType: uint32; // use type id
@@ -1201,6 +1213,8 @@ union ExpressionElem {
   StoreElementByName,
   StoreElementRef,
   UnaryExpressionBase,
+  StartRegion,
+  EndRegion,
 }
 
 union ValueElem {

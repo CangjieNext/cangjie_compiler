@@ -24,6 +24,9 @@ using namespace AST;
 Range MakeRangeForDeclIdentifier(const AST::Decl& decl);
 void DiagRedefinitionWithFoundNode(DiagnosticEngine& diag, const Decl& current, const Decl& previous);
 void DiagOverloadConflict(DiagnosticEngine& diag, const std::vector<Ptr<FuncDecl>>& sameSigFuncs);
+/// Create the diagnostic object directly, for breakpoint debugging.
+DiagnosticBuilder DiagSemaMismatchedTypes(
+    DiagnosticEngine& diag, const Node& node, const std::string& expected, const std::string& found);
 void DiagMismatchedTypesWithFoundTy(DiagnosticEngine& diag, const Node& node, const std::string& expected,
     const std::string& found, const std::string& note = "");
 void DiagMismatchedTypesWithFoundTy(

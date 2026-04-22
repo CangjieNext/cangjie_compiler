@@ -11,6 +11,8 @@
 #include "TypeCheckUtil.h"
 #include "ExtraScopes.h"
 
+#include "cangjie/Frontend/CompilerInstance.h"
+
 using namespace Cangjie;
 using namespace AST;
 using namespace Sema;
@@ -353,7 +355,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, Ty& target, Lambd
             ds.ReportDiag();
             // The call to GetFunctionTy is necessary to create (cached) CPointer types if necessary.
             le.funcBody->SetTy(typeManager.GetFunctionTy(lamParamTys, StaticCast<FuncTy*>(le.funcBody->GetTy())->retTy,
-                {tgtTy->isC, tgtTy->isClosureTy, tgtTy->hasVariableLenArg}));
+                {tgtTy->isC, tgtTy->isClosureTy, tgtTy->hasVariableLenArg}, target.Modal()));
             le.SetTy(le.funcBody->GetTy());
             return true;
         } else if (IsLambdaIncompatible(le, !paramsMatched)) {

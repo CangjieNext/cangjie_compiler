@@ -6,6 +6,8 @@
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 
+#include "cangjie/AST/Utils.h"
+
 using namespace Cangjie::AST;
 
 namespace Cangjie::CHIR {
