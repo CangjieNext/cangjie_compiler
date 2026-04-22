@@ -330,7 +330,8 @@ llvm::Value* HandleTransformToConcreteExpr(IRBuilder2& irBuilder, const CHIR::Ex
             irBuilder.SetInsertPoint(handleNonRefBB);
             auto sizeOfSrc = irBuilder.GetSizeFromTypeInfo(srcTi);
             // 1. Allocate memory for boxing srcValue.
-            llvm::Value* temp = irBuilder.CallIntrinsicAllocaGeneric({srcTi, sizeOfSrc});
+            llvm::Value* temp =
+                irBuilder.CallIntrinsicAllocaGeneric({srcTi, sizeOfSrc}, IsLocalRegion(*targetCHIRType));
             // 2. store srcValue to temp
             auto basePtrOfSrc = cgMod.GetCGContext().GetBasePtrOf(cgVal.GetRawValue());
             std::vector<llvm::Value*> copyGenericParams{temp, basePtrOfSrc, cgVal.GetRawValue(), sizeOfSrc};
@@ -394,6 +395,18 @@ llvm::Value* HandleGetRTTIStatic(IRBuilder2& irBuilder, const CHIR::Expression& 
     auto value = irBuilder.CreateTypeInfo(*expr.GetRTTIType());
     return irBuilder.CreateBitCast(value, CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext()));
 }
+
+llvm::Value* HandleStartRegion(IRBuilder2& irBuilder, [[maybe_unused]] const CHIR::Expression& chirExpr)
+{
+    return irBuilder.CallIntrinsicFunction(
+        llvm::Type::getInt1Ty(irBuilder.GetLLVMContext()), "MCC_StartLocalRegion", {});
+}
+
+llvm::Value* HandleEndRegion(IRBuilder2& irBuilder, [[maybe_unused]] const CHIR::Expression& chirExpr)
+{
+    irBuilder.CallIntrinsicFunction(llvm::Type::getVoidTy(irBuilder.GetLLVMContext()), "MCC_EndLocalRegion", {});
+    return nullptr;
+}
 } // namespace
 
 namespace Cangjie::CodeGen {
@@ -402,24 +415,32 @@ llvm::Value* HandleOthersExpression(IRBuilder2& irBuilder, const CHIR::Expressio
     CJC_ASSERT(chirExpr.GetExprMajorKind() == CHIR::ExprMajorKind::OTHERS);
     static const std::unordered_map<CHIR::ExprKind, std::function<llvm::Value*(IRBuilder2&, const CHIR::Expression&)>>
         handleExprMap = {
-            {CHIR::ExprKind::APPLY, HandleApplyExpr}, {CHIR::ExprKind::INVOKE, HandleInvokeExpr},
-            {CHIR::ExprKind::INVOKESTATIC, HandleInvokeStaticExpr}, {CHIR::ExprKind::DEBUGEXPR, HandleDebugExpr},
-            {CHIR::ExprKind::FIELD, HandleFieldExpr}, {CHIR::ExprKind::TYPECAST, HandleTypecastExpr},
-            {CHIR::ExprKind::TUPLE, HandleTupleExpr}, {CHIR::ExprKind::VARRAY, HandleVArrayExpr},
+            {CHIR::ExprKind::APPLY, HandleApplyExpr},
+            {CHIR::ExprKind::INVOKE, HandleInvokeExpr},
+            {CHIR::ExprKind::INVOKESTATIC, HandleInvokeStaticExpr},
+            {CHIR::ExprKind::DEBUGEXPR, HandleDebugExpr},
+            {CHIR::ExprKind::FIELD, HandleFieldExpr},
+            {CHIR::ExprKind::TYPECAST, HandleTypecastExpr},
+            {CHIR::ExprKind::TUPLE, HandleTupleExpr},
+            {CHIR::ExprKind::VARRAY, HandleVArrayExpr},
             {CHIR::ExprKind::VARRAY_BUILDER, HandleVArrayBuilderExpr},
             {CHIR::ExprKind::INTRINSIC, HandleIntrinsicExpr},
             {CHIR::ExprKind::RAW_ARRAY_LITERAL_INIT, HandleRawArrayLiteralInitExpr},
             {CHIR::ExprKind::RAW_ARRAY_ALLOCATE, HandleRawArrayAllocateExpr},
             {CHIR::ExprKind::RAW_ARRAY_INIT_BY_VALUE, HandleRawArrayInitByValueExpr},
-            {CHIR::ExprKind::INSTANCEOF, HandleInstanceOfExpr}, {CHIR::ExprKind::SPAWN, HandleSpawnExpr},
-            {CHIR::ExprKind::GET_EXCEPTION, HandleGetExceptionExpr}, {CHIR::ExprKind::BOX, HandleBoxExpr},
+            {CHIR::ExprKind::INSTANCEOF, HandleInstanceOfExpr},
+            {CHIR::ExprKind::SPAWN, HandleSpawnExpr},
+            {CHIR::ExprKind::GET_EXCEPTION, HandleGetExceptionExpr},
+            {CHIR::ExprKind::BOX, HandleBoxExpr},
             {CHIR::ExprKind::UNBOX, HandleUnBoxExpr},
             {CHIR::ExprKind::TRANSFORM_TO_GENERIC, HandleTransformToGenericExpr},
             {CHIR::ExprKind::TRANSFORM_TO_CONCRETE, HandleTransformToConcreteExpr},
             {CHIR::ExprKind::UNBOX_TO_REF, HandleUnBoxToRefExpr},
             {CHIR::ExprKind::GET_RTTI, HandleGetRTTI},
             {CHIR::ExprKind::GET_RTTI_STATIC, HandleGetRTTIStatic},
-    };
+            {CHIR::ExprKind::START_REGION, HandleStartRegion},
+            {CHIR::ExprKind::END_REGION, HandleEndRegion},
+        };
     if (auto found = handleExprMap.find(chirExpr.GetExprKind()); found != handleExprMap.end()) {
         irBuilder.EmitLocation(CHIRExprWrapper(chirExpr));
         return found->second(irBuilder, chirExpr);

@@ -27,6 +27,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Sema/Desugar.h"
+#include "cangjie/AST/ModalInfo.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
@@ -64,7 +65,7 @@ private:
         if (!id || !Ty::IsTyCorrect(id->GetTy())) {
             return TypeManager::GetInvalidTy();
         }
-        return tm.GetInterfaceTy(*id, {});
+        return tm.GetInterfaceTy(*id, {}, {});
     }
 
     void AssignColumnsGenericConstraint(GenericConstraint& gc, File* file)
@@ -169,10 +170,48 @@ private:
         return decl.funcBody->paramLists.back()->params.back();
     }
 
+    static LocalModalAST ToLocalModalAST(ModalInfo modal)
+    {
+        switch (modal.local) {
+            case LocalModal::NOT:
+                return LocalModalAST::NOT;
+            case LocalModal::HALF:
+                return LocalModalAST::HALF;
+            case LocalModal::FULL:
+                return LocalModalAST::FULL;
+            default:
+                return LocalModalAST::NOT;
+        }
+    }
+
+    Ptr<Ty> RawArrayInstTy(BuiltInDecl& bid, ModalInfo modal)
+    {
+        auto elemTy = tm.GetGenericsTy(*bid.generic->typeParameters[0], {});
+        return c.GetBuiltInArrayType({elemTy}, modal);
+    }
+
+    void AddCtorThisParam(FuncDecl& fd, BuiltInDecl& bid, ModalInfo modal)
+    {
+        if (modal == ModalInfo{}) {
+            return;
+        }
+        CJC_ASSERT(!fd.funcBody->paramLists.empty());
+        auto& pl = *fd.funcBody->paramLists.back();
+        auto thisParam = MakeOwnedNode<ThisParam>();
+        CopyFileID(thisParam.get(), fd.curFile);
+        thisParam->curFile = fd.curFile;
+        thisParam->begin = {SYN_LINE, column++};
+        thisParam->modal.SetLocal(ToLocalModalAST(modal), {SYN_LINE, column++});
+        thisParam->outerDecl = &bid;
+        thisParam->end = {SYN_LINE, column++};
+        thisParam->SetTy(RawArrayInstTy(bid, modal));
+        pl.thisParam = std::move(thisParam);
+    }
+
     void AddCStringMembers(BuiltInDecl& decl)
     {
         /// public init(cString: CPointer<UInt8>)
-        auto cptrUInt8 = tm.GetPointerTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8));
+        auto cptrUInt8 = tm.GetPointerTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8), {});
         auto fd = MakeCtor(decl);
         AddParamList(*fd);
         MakeFuncParam(*fd, "cString", cptrUInt8);
@@ -214,61 +253,67 @@ private:
         bid->end.line = SYN_LINE;
         bid->end.column = column++;
         FinalizeBuiltInDeclTy(*bid);
-        CreateRawArrayMembers(*bid);
+        for (int i = 0; i < MODAL_INFO_COUNT; ++i) {
+            CreateRawArrayMembers(*bid, ToModalInfo(i));
+        }
         pkg.files[0]->decls.emplace_back(std::move(bid));
     }
 
-    void CreateRawArrayMembers(BuiltInDecl& bid)
+    void CreateRawArrayMembers(BuiltInDecl& bid, ModalInfo modal)
     {
-        CreateRawArrayCtor0(bid);
-        CreateRawArrayCtorRepeat(bid);
-        CreateRawArrayCtorLambda(bid);
-        CreateRawArrayCtorCollection(bid);
+        CreateRawArrayCtor0(bid, modal);
+        CreateRawArrayCtorRepeat(bid, modal);
+        CreateRawArrayCtorLambda(bid, modal);
+        CreateRawArrayCtorCollection(bid, modal);
     }
 
-    void CreateRawArrayCtorLambda(BuiltInDecl& bid)
+    void CreateRawArrayCtorLambda(BuiltInDecl& bid, ModalInfo modal)
     {
-        // RawArray<T>(size: Int64, initElement: (Int64) -> T)
+        // init(size: Int64, initElement: (Int64) -> T @mode): RawArray<T> @mode
         auto fd = MakeCtor(bid);
         AddParamList(*fd);
+        AddCtorThisParam(*fd, bid, modal);
         MakeFuncParam(*fd, "size", TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64));
-        auto tty = tm.GetGenericsTy(*bid.generic->typeParameters[0]);
-        auto lamTy = tm.GetFunctionTy({TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64)}, tty);
+        auto elemTy = tm.GetGenericsTy(*bid.generic->typeParameters[0], modal);
+        auto lamTy = tm.GetFunctionTy({TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64)}, elemTy);
         MakeFuncParam(*fd, "initElement", lamTy);
         fd->DisableAttr(Attribute::PUBLIC);
         CloseCtor(*fd);
     }
 
-    void CreateRawArrayCtorCollection(BuiltInDecl& bid)
+    void CreateRawArrayCtorCollection(BuiltInDecl& bid, ModalInfo modal)
     {
-        // RawArray<T>(collection: Collection<T>)
+        // init(collection: Collection<T> @mode): RawArray<T> @mode
         auto fd = MakeCtor(bid);
         AddParamList(*fd);
+        AddCtorThisParam(*fd, bid, modal);
         auto colTy = c.importManager.GetCoreDecl<InterfaceDecl>("Collection");
-        auto tty = tm.GetGenericsTy(*bid.generic->typeParameters[0]);
-        MakeFuncParam(*fd, "collection", tm.GetInterfaceTy(*colTy, {tty}));
+        auto elemTy = tm.GetGenericsTy(*bid.generic->typeParameters[0], {});
+        MakeFuncParam(*fd, "collection", tm.GetInterfaceTy(*colTy, {elemTy}, modal));
         fd->DisableAttr(Attribute::PUBLIC);
         CloseCtor(*fd);
     }
 
-    void CreateRawArrayCtorRepeat(BuiltInDecl& bid)
+    void CreateRawArrayCtorRepeat(BuiltInDecl& bid, ModalInfo modal)
     {
-        // RawArray<T>(size: Int64, repeat!: T)
+        // init(size: Int64, repeat!: T @mode): RawArray<T> @mode
         auto fd = MakeCtor(bid);
         AddParamList(*fd);
+        AddCtorThisParam(*fd, bid, modal);
         MakeFuncParam(*fd, "size", TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64));
-        auto tty = tm.GetGenericsTy(*bid.generic->typeParameters[0]);
-        auto repeat = MakeFuncParam(*fd, "repeat", tty);
+        auto elemTy = tm.GetGenericsTy(*bid.generic->typeParameters[0], modal);
+        auto repeat = MakeFuncParam(*fd, "repeat", elemTy);
         repeat->isNamedParam = true;
         fd->DisableAttr(Attribute::PUBLIC);
         CloseCtor(*fd);
     }
 
-    void CreateRawArrayCtor0(BuiltInDecl& bid)
+    void CreateRawArrayCtor0(BuiltInDecl& bid, ModalInfo modal)
     {
-        // RawArray<T>(), parameterless
+        // init(): RawArray<T> @mode
         auto fd = MakeCtor(bid);
         AddParamList(*fd);
+        AddCtorThisParam(*fd, bid, modal);
         fd->DisableAttr(Attribute::PUBLIC);
         CloseCtor(*fd);
     }
@@ -463,7 +508,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
 
     auto joinRes = JoinAndMeet(typeManager, arrayElemTys, {}, &importManager, al.curFile).JoinAsVisibleTy();
     if (auto ty = std::get_if<Ptr<Ty>>(&joinRes)) {
-        al.SetTy(typeManager.GetStructTy(*arrayStruct, {*ty}));
+        al.SetTy(typeManager.GetStructTy(*arrayStruct, {*ty}, (*ty)->Modal()));
     } else {
         al.SetTy(TypeManager::GetInvalidTy());
         auto errMsg = JoinAndMeet::CombineErrMsg(std::get<std::stack<std::string>>(joinRes));

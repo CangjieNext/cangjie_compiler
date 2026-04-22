@@ -51,6 +51,19 @@ bool ParserImpl::SeeingExprOperator()
     return IsCompoundAssign(token.kind) || token.kind == TokenKind::ASSIGN;
 }
 
+bool ParserImpl::SeeingTrailingClosure(OwnedPtr<AST::Expr>& baseExpr)
+{
+    if (Seeing(TokenKind::LCURL)) {
+        return true;
+    }
+    if (baseExpr->astKind != AST::ASTKind::CALL_EXPR && baseExpr->astKind != AST::ASTKind::REF_EXPR &&
+        baseExpr->astKind != AST::ASTKind::ARRAY_EXPR) {
+        return false;
+    }
+    // SeeingAnnotationTrailClosure.
+    return SeeingAnnotationLambdaExpr() || SeeingAnnotationTrailingClosure({TokenKind::LSQUARE});
+}
+
 bool ParserImpl::TypeArgsMaybeConfusedWithExprWithComma(const std::vector<OwnedPtr<AST::Type>>& typeArgs) const
 {
     if (typeArgs.size() <= 1) {
@@ -111,6 +124,9 @@ bool ParserImpl::IsLegFollowForGenArgInExprWithComma(ExprKind ek)
     }
     auto token = Peek();
     if (Precedence(token.kind) != INVALID_PRECEDENCE) {
+        return true;
+    }
+    if (SeeingAny({TokenKind::LOCAL_NOT, TokenKind::LOCAL_QUES, TokenKind::LOCAL_EXCL})) {
         return true;
     }
     return false;
@@ -1012,4 +1028,15 @@ void ParserImpl::ParseBaseExprPostfix(OwnedPtr<AST::Expr>& baseExpr, ExprKind ek
     if (hasQuestSuffix) {
         baseExpr->hasQuestSuffix = true;
     }
+}
+
+OwnedPtr<Expr> ParserImpl::ParseExclaveExpr()
+{
+    OwnedPtr<ExclaveExpr> ret = MakeOwned<ExclaveExpr>();
+    ChainScope cs(*this, ret.get());
+    ret->begin = lastToken.Begin();
+    ret->exclavePos = lastToken.Begin();
+    ret->body = ParseBlock();
+    ret->end = lastToken.End();
+    return ret;
 }

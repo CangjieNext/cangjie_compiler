@@ -14,6 +14,7 @@
  */
 #include "ParserImpl.h"
 
+#include "cangjie/AST/Node.h"
 #include "cangjie/Parse/ParseModifiersRules.h"
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
@@ -147,10 +148,11 @@ const ConflictRule TOPLEVEL_FUNCDECL_MODIFIERS[] = {
     CR(TokenKind::INTERNAL, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::PROTECTED, TokenKind::FOREIGN),
     CR(TokenKind::PROTECTED, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::FOREIGN),
     CR(TokenKind::FOREIGN, TokenKind::CONST, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL,
-        TokenKind::PROTECTED, TokenKind::UNSAFE, TokenKind::COMMON),
+        TokenKind::PROTECTED, TokenKind::UNSAFE, TokenKind::COMMON, TokenKind::EXCLAVE),
     CR(TokenKind::UNSAFE, TokenKind::FOREIGN),
     CR(TokenKind::COMMON, TokenKind::CONST, TokenKind::PRIVATE, TokenKind::FOREIGN, TokenKind::SPECIFIC),
     CR(TokenKind::SPECIFIC, TokenKind::CONST, TokenKind::PRIVATE, TokenKind::COMMON),
+    CR(TokenKind::EXCLAVE, TokenKind::FOREIGN, TokenKind::ABSTRACT),
 };
 
 const ConflictRule TOPLEVEL_MACRODECL_MODIFIERS[] = {
@@ -173,12 +175,13 @@ const ConflictRule CLASS_BODY_FUNCDECL_MODIFIERS[] = {
     CR_ARR(TokenKind::PROTECTED, ACCESS_PROTECTED),
     CR_ARR(TokenKind::OVERRIDE, OVERRIDE_STATIC_REDEF),
     CR_ARR(TokenKind::REDEF, REDEF_OVERRIDE_OPEN_OPERATOR),
-    CR_EMPTY(TokenKind::ABSTRACT),
+    CR(TokenKind::ABSTRACT, TokenKind::EXCLAVE),
     CR(TokenKind::OPEN, TokenKind::CONST, TokenKind::STATIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::REDEF),
     CR_EMPTY(TokenKind::UNSAFE),
     CR_ARR(TokenKind::OPERATOR, OVERRIDE_STATIC_REDEF),
     CR_ARR(TokenKind::COMMON, COMMON_CONST_SPECIFIC),
     CR_ARR(TokenKind::SPECIFIC, SPECIFIC_CONST_COMMON),
+    CR(TokenKind::EXCLAVE, TokenKind::ABSTRACT, TokenKind::FOREIGN),
 };
 
 const ConflictRule INTERFACE_BODY_FUNCDECL_MODIFIERS[] = {
@@ -193,6 +196,7 @@ const ConflictRule INTERFACE_BODY_FUNCDECL_MODIFIERS[] = {
     CR_ARR(TokenKind::OPERATOR, OPERATOR_STATIC),
     CR_ARR(TokenKind::COMMON, COMMON_CONST_SPECIFIC),
     CR_ARR(TokenKind::SPECIFIC, SPECIFIC_CONST_COMMON),
+    CR(TokenKind::EXCLAVE, TokenKind::ABSTRACT),
 };
 
 const ConflictRule STRUCT_BODY_FUNCDECL_MODIFIERS[] = {
@@ -209,6 +213,7 @@ const ConflictRule STRUCT_BODY_FUNCDECL_MODIFIERS[] = {
     CR_ARR(TokenKind::OPERATOR, OPERATOR_STATIC),
     CR_ARR(TokenKind::COMMON, COMMON_CONST_SPECIFIC),
     CR_ARR(TokenKind::SPECIFIC, SPECIFIC_CONST_COMMON),
+    CR_EMPTY(TokenKind::EXCLAVE),
 };
 
 const ConflictRule ENUM_BODY_FUNCDECL_MODIFIERS[] = {
@@ -229,6 +234,7 @@ const ConflictRule ENUM_BODY_FUNCDECL_MODIFIERS[] = {
 const ConflictRule FUNC_BODY_FUNCDECL_MODIFIERS[] = {
     CR_EMPTY(TokenKind::CONST),
     CR_EMPTY(TokenKind::UNSAFE),
+    CR_EMPTY(TokenKind::EXCLAVE),
 };
 
 const ConflictRule STRUCT_BODY_VARIABLE_MODIFIERS[] = {
@@ -254,6 +260,7 @@ const ConflictRule EXTEND_BODY_FUNCDECL_MODIFIERS[] = {
     CR_ARR(TokenKind::OPERATOR, OPERATOR_STATIC),
     CR_ARR(TokenKind::COMMON, COMMON_SPECIFIC),
     CR_ARR(TokenKind::SPECIFIC, SPECIFIC_COMMON),
+    CR_EMPTY(TokenKind::EXCLAVE),
 };
 
 const ConflictRule CLASS_BODY_PROP_MODIFIERS[] = {
@@ -326,6 +333,7 @@ const TokenKind AGG_PROTECTED[] = {TokenKind::STATIC, TokenKind::PUBLIC, TokenKi
 
 const ConflictRule AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS[] = {
     CR_EMPTY(TokenKind::CONST),
+    CR_EMPTY(TokenKind::EXCLAVE),
     CR_ARR(TokenKind::PUBLIC, AGG_PUBLIC),
     CR_ARR(TokenKind::PRIVATE, AGG_PRIVATE),
     CR_ARR(TokenKind::INTERNAL, AGG_INTERNAL),
@@ -334,6 +342,7 @@ const ConflictRule AGGREGATE_BODY_INSTANCE_INIT_MODIFIERS[] = {
 
 const ConflictRule AGGREGATE_BODY_INIT_MODIFIERS[] = {
     CR_EMPTY(TokenKind::CONST),
+    CR_EMPTY(TokenKind::EXCLAVE),
     CR(TokenKind::STATIC, TokenKind::PUBLIC, TokenKind::PRIVATE, TokenKind::INTERNAL, TokenKind::PROTECTED),
     CR_ARR(TokenKind::PUBLIC, AGG_PUBLIC),
     CR_ARR(TokenKind::PRIVATE, AGG_PRIVATE),

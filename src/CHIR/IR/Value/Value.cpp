@@ -17,6 +17,7 @@
 #include "cangjie/Utils/Utils.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 using namespace Cangjie::CHIR;
 
@@ -608,8 +609,12 @@ void Block::InsertExprIntoHead(Expression& expr)
         expr.GetParentBlock()->RemoveExprOnly(expr);
     }
 
-    // 2. insert expr to head of current block
-    exprs.insert(exprs.begin(), &expr);
+    // 2. insert expr to head of current block, but after StartRegion if that's the first expr
+    if (!exprs.empty() && exprs.front()->GetExprKind() == ExprKind::START_REGION) {
+        exprs.insert(exprs.begin() + 1, &expr);
+    } else {
+        exprs.insert(exprs.begin(), &expr);
+    }
 
     // 3. change expr's parent to current block
     expr.SetParent(this);
@@ -1201,6 +1206,15 @@ std::vector<GenericType*> Function::GetOriginalGenericTypeParams() const
 
 uint64_t Function::GenerateLocalId()
 {
+    const char* lidName = std::getenv("LNAME");
+    const char* lidStr = std::getenv("LID");
+    if (lidName != nullptr && lidStr != nullptr && identifier == lidName) {
+        char* end = nullptr;
+        uint64_t lidVal = static_cast<uint64_t>(std::strtoull(lidStr, &end, 10));
+        if (end != lidStr && *end == '\0' && localId == lidVal) {
+            printf("here\n");
+        }
+    }
     return localId++;
 }
 

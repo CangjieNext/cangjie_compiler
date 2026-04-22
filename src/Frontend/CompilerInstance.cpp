@@ -15,6 +15,7 @@
 #include <fstream>
 
 #include "PrintSymbolTable.h"
+#include "cangjie/AST/PrintNode.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"

@@ -40,8 +40,8 @@ static constexpr std::string_view ZERO_VALUE_INTRINSIC_NAME = "zeroValue";
 
 } // namespace
 
-MockUtils::MockUtils(ImportManager& importManager, TypeManager& typeManager, BaseMangler& mangler)
-    : importManager(importManager), typeManager(typeManager), mangler(mangler)
+MockUtils::MockUtils(ImportManager& importManager, TypeManager& typeManager, DiagnosticEngine& d, BaseMangler& mangler)
+    : importManager(importManager), typeManager(typeManager), diag(d), mangler(mangler)
 {
 }
 
@@ -79,7 +79,7 @@ OwnedPtr<ArrayLit> MockUtils::WrapCallArgsIntoArray(const FuncDecl& mockedFunc)
         mockedMethodArgRefs.emplace_back(std::move(paramRef));
     }
 
-    auto baseTy = typeManager.GetStructTy(*arrayDecl, { typeManager.GetAnyTy() });
+    auto baseTy = typeManager.GetStructTy(*arrayDecl, {typeManager.GetAnyTy()}, {});
     auto argRefsArray = CreateArrayLit(std::move(mockedMethodArgRefs), baseTy);
     AddArrayLitConstructor(*argRefsArray);
     argRefsArray->curFile = mockedFunc.curFile;
@@ -350,14 +350,13 @@ Ptr<Decl> MockUtils::FindAccessor(
 AccessorKind MockUtils::ComputeAccessorKind(const FuncDecl& accessorDecl)
 {
     if (accessorDecl.propDecl) {
-        if (&accessorDecl == GetUsableGetterForProperty(*(accessorDecl.propDecl))) {
+        if (&accessorDecl == GetUsableGetterForProperty(typeManager, diag, *(accessorDecl.propDecl))) {
             if (accessorDecl.TestAttr(Attribute::STATIC)) {
                 return AccessorKind::STATIC_PROP_GETTER;
             }
             return AccessorKind::PROP_GETTER;
         } else if (accessorDecl.propDecl->isVar &&
-            &accessorDecl == GetUsableSetterForProperty(*(accessorDecl.propDecl))
-        ) {
+            &accessorDecl == GetUsableSetterForProperty(typeManager, diag, *(accessorDecl.propDecl))) {
             if (accessorDecl.TestAttr(Attribute::STATIC)) {
                 return AccessorKind::STATIC_PROP_SETTER;
             }
@@ -563,7 +562,7 @@ OwnedPtr<Expr> MockUtils::WrapCallTypeArgsIntoArray(const Decl& decl)
         }
     }
 
-    auto baseTy = typeManager.GetStructTy(*arrayDecl, {toStringDecl->GetTy()});
+    auto baseTy = typeManager.GetStructTy(*arrayDecl, {toStringDecl->GetTy()}, {});
     auto arrayLitOfGetTypeCalls = CreateArrayLit(std::move(getTypeCalls), baseTy);
     AddArrayLitConstructor(*arrayLitOfGetTypeCalls);
     arrayLitOfGetTypeCalls->curFile = decl.curFile;
@@ -708,7 +707,7 @@ std::vector<Ptr<Ty>> MockUtils::AddGenericIfNeeded(Decl& originalDecl, Decl& moc
     auto newGeneric = CloneGeneric(*generic);
     for (auto& typeParam : newGeneric->typeParameters) {
         typeParam->outerDecl = &mockedDecl;
-        typeParam->SetTy(typeManager.GetGenericsTy(*typeParam));
+        typeParam->SetTy(typeManager.GetGenericsTy(*typeParam, {}));
         typeParam->fullPackageName = mockedDecl.fullPackageName;
         typeParam->curFile = mockedDecl.curFile;
         typeParam->DisableAttr(Attribute::IMPORTED);
@@ -723,9 +722,9 @@ std::vector<Ptr<Ty>> MockUtils::AddGenericIfNeeded(Decl& originalDecl, Decl& moc
     } else {
         mockedDecl.generic = std::move(newGeneric);
         if (auto classDecl = As<ASTKind::CLASS_DECL>(&mockedDecl); classDecl) {
-            mockedDecl.SetTy(typeManager.GetClassTy(*classDecl, std::move(typeParamTys)));
+            mockedDecl.SetTy(typeManager.GetClassTy(*classDecl, std::move(typeParamTys), {}));
         } else if (auto interfaceDecl = As<ASTKind::INTERFACE_DECL>(&mockedDecl); interfaceDecl) {
-            mockedDecl.SetTy(typeManager.GetInterfaceTy(*interfaceDecl, std::move(typeParamTys)));
+            mockedDecl.SetTy(typeManager.GetInterfaceTy(*interfaceDecl, std::move(typeParamTys), {}));
         }
     }
 
@@ -776,7 +775,7 @@ OwnedPtr<RefExpr> MockUtils::CreateDeclBasedReferenceExpr(
             break;
         }
         case ASTKind::CLASS_DECL: {
-            ty = typeManager.GetClassTy(*StaticAs<ASTKind::CLASS_DECL>(&target), instTys);
+            ty = typeManager.GetClassTy(*StaticAs<ASTKind::CLASS_DECL>(&target), instTys, {});
             break;
         }
         default:

@@ -9,18 +9,20 @@
 
 #include <fstream>
 
+#include "cangjie/AST/Walker.h"
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
-#include "cangjie/CHIR/Utils/CHIRCasting.h"
-#include "cangjie/CHIR/Utils/ConstantUtils.h"
 #include "cangjie/CHIR/IR/Type/CustomTypeDef.h"
 #include "cangjie/CHIR/IR/Type/ExtendDef.h"
+#include "cangjie/CHIR/IR/Type/PrivateTypeConverter.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
+#include "cangjie/CHIR/Utils/ConstantUtils.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
+#include "cangjie/Sema/GenericInstantiationManager.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
-#include "cangjie/CHIR/IR/Type/PrivateTypeConverter.h"
 
 namespace Cangjie::CHIR {
 namespace {
@@ -1033,6 +1035,9 @@ static void SetCustomTypeDefAttr(CustomTypeDef& def, const AST::Decl& decl)
     if (auto structDef = DynamicCast<StructDef*>(&def)) {
         if (decl.TestAttr(AST::Attribute::C)) {
             structDef->SetCStruct(true);
+        }
+        if (StaticCast<AST::StructDecl>(decl).IsCopyType()) {
+            structDef->SetCopyType(true);
         }
     }
 

@@ -167,7 +167,9 @@ void LookUpImpl::FieldLookupExtend(
     CJC_NULLPTR_CHECK(info.file);
     // NOTE: decl which has 'IN_REFERENCE_CYCLE' should only be intercepted during checking 'inheritedTypes'.
     OrderedDeclSet extendFuncs; // Ordered set for diagnostic consistency.
-    auto extends = typeManager.GetAllExtendsByTy(ty);
+    // always use data type for lookup
+    auto dataTy = typeManager.SubstituteModal(&ty, {});
+    auto extends = typeManager.GetAllExtendsByTy(*dataTy);
     std::set<Ptr<ExtendDecl>, CmpNodeByPos> orderExtends(extends.begin(), extends.end());
     for (auto& extend : orderExtends) {
         CJC_NULLPTR_CHECK(extend);
@@ -315,7 +317,8 @@ void LookUpImpl::FieldLookup(
 void LookUpImpl::FieldLookup(
     InterfaceTy& idTy, const std::string& fieldName, std::vector<Ptr<Decl>>& results, const LookupInfo& info)
 {
-    auto id = GetSpecificDecl<InterfaceDecl>(idTy.declPtr);
+    auto dataTy = StaticCast<InterfaceTy>(typeManager.SubstituteModal(&idTy, {}));
+    auto id = GetSpecificDecl<InterfaceDecl>(dataTy->decl);
     // NOTE: decl which has 'IN_REFERENCE_CYCLE' should only be intercepted during checking 'inheritedTypes'.
     if (!id->body) {
         return;

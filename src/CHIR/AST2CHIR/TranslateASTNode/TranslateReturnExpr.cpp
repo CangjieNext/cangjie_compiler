@@ -78,6 +78,9 @@ Ptr<Value> Translator::Visit(const AST::ReturnExpr& expr)
     }
     Ptr<Terminator> terminator = nullptr;
     if (finallyContext.empty()) {
+        if (funcContext.NeedsRegion() && !inExclave) {
+            CreateAndAppendExpression<EndRegion>(loc, builder.GetUnitTy(), currentBlock);
+        }
         terminator = CreateAndAppendTerminator<Exit>(loc, currentBlock);
         /* compile add return expr should not print warning.
             public open func foo(): Int64 {
@@ -96,6 +99,9 @@ Ptr<Value> Translator::Visit(const AST::ReturnExpr& expr)
         auto prevBlock = currentBlock;
         // Create return in separate block, and control flow will be redirected to this block at the end of finally.
         currentBlock = CreateBlock();
+        if (funcContext.NeedsRegion() && !inExclave) {
+            CreateAndAppendExpression<EndRegion>(loc, builder.GetUnitTy(), currentBlock);
+        }
         terminator = CreateAndAppendTerminator<Exit>(loc, currentBlock);
         // the pair of blocks is {the block before control flow, control flow's target block}.
         controlBlocks[index].emplace_back(prevBlock, currentBlock);
@@ -103,5 +109,43 @@ Ptr<Value> Translator::Visit(const AST::ReturnExpr& expr)
     // For following unreachable expressions, and return also has value of type 'Nothing'.
     currentBlock = CreateBlock();
     maybeUnreachable.emplace(currentBlock, terminator);
+    return nullptr;
+}
+
+Ptr<Value> Translator::Visit(const AST::ExclaveExpr& exclaveExpr)
+{
+    inExclave = true;
+    CJC_ASSERT(!blockGroupStack.empty());
+    auto loc = TranslateLocation(exclaveExpr);
+    // End region so we can use caller region
+    if (funcContext.NeedsRegion()) {
+        CreateAndAppendExpression<EndRegion>(loc, builder.GetUnitTy(), currentBlock);
+    }
+    // Translate body and get the last expression as return value
+    auto& b = *exclaveExpr.body;
+    auto nodes = CollectBlockBodyNodes(b);
+    for (size_t i = 0; i + 1 < nodes.size(); ++i) {
+        TranslateSubExprToDiscarded(*nodes[i]);
+    }
+    if (nodes.empty()) {
+        return nullptr;
+    }
+    auto retVal = TranslateSubExprAsValue(*nodes.back());
+
+    Ptr<Value> ret = GetOuterBlockGroupReturnValLocation();
+    if (ret != nullptr) {
+        if (!retVal && ret->GetType()->StripAllRefs()->IsUnit()) {
+            retVal = CreateAndAppendConstantExpression<UnitLiteral>(builder.GetUnitTy(), *currentBlock)->GetResult();
+        }
+        if (retVal) {
+            CreateAndAppendWrappedStore(*retVal, *ret, *currentBlock, loc);
+        }
+    }
+
+    CJC_ASSERT(finallyContext.empty());
+    Ptr<Terminator> terminator = CreateAndAppendTerminator<Exit>(loc, currentBlock);
+    currentBlock = CreateBlock();
+    maybeUnreachable.emplace(currentBlock, terminator);
+    inExclave = false;
     return nullptr;
 }
