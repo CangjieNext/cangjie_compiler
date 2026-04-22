@@ -31,8 +31,9 @@
 #include "BuiltInOperatorUtil.h"
 #include "ImplUtils.h"
 #include "InstantiatedExtendRecorder.h"
-#include "TypeCheckUtil.h"
+#include "OverrideFunctionResolver.h"
 #include "PartialInstantiation.h"
+#include "TypeCheckUtil.h"
 
 #include "cangjie/AST/ASTTypeValidator.h"
 #include "cangjie/AST/Clone.h"
@@ -817,14 +818,25 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
         return &fd;
     }
 
-    MemberFuncsWithInstTys funcs;
-    GetInstMemberFuncWithInstTy(ty, funcs, fd.identifier);
+    OverrideFunctionResolver resolver(typeManager);
+    MemberFuncsWithInstTys funcs = resolver.GetInstMemberFuncWithInstTy(ty, fd.identifier);
     TypeSubst typeMapping = GenerateTypeMappingByTy(fd.outerDecl->ty, &targetBaseTy);
     auto instFuncTy = typeManager.GetInstantiatedTy(fd.ty, typeMapping);
     for (auto& [implFunc, instTys] : funcs) {
         bool isInDiffDecl = implFunc->outerDecl != GetGeneralDecl(*fd.outerDecl, true);
-        auto withSameTy = instTys.find(instFuncTy);
-        if (isInDiffDecl && withSameTy != instTys.end()) {
+        bool withSameTy = false;
+        for (auto instTy : instTys) {
+            auto substImplFuncTy = instTy;
+            if (implFunc->TestAttr(Attribute::GENERIC) && fd.TestAttr(Attribute::GENERIC)) {
+                TypeSubst mappingBetweenFuncs = typeManager.GenerateGenericMappingFromGeneric(*implFunc, fd);
+                substImplFuncTy = typeManager.GetInstantiatedTy(instTy, mappingBetweenFuncs);
+            }
+            if (typeManager.IsSubtype(substImplFuncTy, instFuncTy)) {
+                withSameTy = true;
+                break;
+            }
+        }
+        if (isInDiffDecl && withSameTy) {
             return implFunc;
         }
     }
@@ -1278,7 +1290,8 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedTarget(
     auto targetBase = Ty::IsTyCorrect(upperTy) && !upperTy->HasGeneric() ? upperTy : Ptr(&baseTy);
     auto decl = GetInstantiatedMemberTarget(*targetBase, *genericDecl, true);
     if (decl && decl->TestAttr(Attribute::GENERIC)) {
-        decl = FindInCache(ConstructGenericInfo(*decl, instTys));
+        auto instDecl = FindInCache(ConstructGenericInfo(*decl, instTys));
+        decl = instDecl ? instDecl : decl;
     }
     // Decl may be an interface function which should be rearranged to implementation decl.
     if (decl && decl->IsFunc()) {
@@ -1286,7 +1299,8 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedTarget(
         CJC_NULLPTR_CHECK(decl);
         // Get instantiated version if decl has been updated to implented generic function.
         if (decl->TestAttr(Attribute::GENERIC)) {
-            decl = FindInCache(ConstructGenericInfo(*decl, instTys));
+            auto instDecl = FindInCache(ConstructGenericInfo(*decl, instTys));
+            decl = instDecl ? instDecl : decl;
         }
     }
     if (!decl) {
