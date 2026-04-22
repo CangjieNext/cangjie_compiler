@@ -40,7 +40,9 @@ const size_t IDX_OF_READ_HANDLE = 1;
 const size_t IDX_OF_WRITE_HANDLE = 2;
 const size_t IDX_OF_ENABLE_PARA = 3;
 const size_t IDX_OF_CJC_FOLDER = 4;
+#ifndef _WIN32
 const size_t IDX_OF_PPID = 5;
+#endif
 #ifdef __linux__
 const unsigned int CHECK_INTERVAL = 2;
 static void MonitoringParentProcess(pid_t pid)
