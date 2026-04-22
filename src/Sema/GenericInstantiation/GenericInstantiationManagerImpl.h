@@ -66,7 +66,6 @@ struct GenericInfoEqual {
  * maintains cache of generic and instantiated decls' information.
  */
 using Generic2InsMap = std::unordered_map<Ptr<const AST::Decl>, std::unordered_set<Ptr<AST::Decl>>>;
-using MemberFuncsWithInstTys = std::unordered_map<Ptr<AST::FuncDecl>, std::unordered_set<Ptr<AST::Ty>>>;
 
 class GenericInstantiationManager::GenericInstantiationManagerImpl {
 public:
@@ -107,8 +106,6 @@ public:
     }
 
     Generic2InsMap GetAllGenericToInsDecls() const;
-
-    void GetInstMemberFuncWithInstTy(AST::Ty& instBaseTy, MemberFuncsWithInstTys& funcs, const std::string& identifier);
 
     friend class InstantiatedExtendRecorder;
     friend class MockUtils;
@@ -155,7 +152,6 @@ private:
     std::unordered_set<Ptr<const AST::Decl>> usedSrcImportedDecls;
     /** Used for incremental compilation, decide whether new created instantiation need to be compiled. */
     bool needCompile = true;
-    std::unordered_map<std::pair<Ptr<AST::Ty>, std::string>, MemberFuncsWithInstTys, HashPair> instTy2Members;
 
     /** Implement working flow for incremental compiling package. */
     void InstantiateForIncrementalPackage();
@@ -209,9 +205,14 @@ private:
     void PerformUpdateAttrDuringClone(AST::Node& genericNode, AST::Node& clonedNode) const;
     /** Find implemented version function of abstract function @p interfaceFunc in the decl of Ty @p ty. */
     Ptr<AST::FuncDecl> FindImplFuncForAbstractFunc(AST::Ty& ty, AST::FuncDecl& fd, AST::Ty& targetBaseTy);
-    /** Find matched implementation function of abstract function @p fd from candidates */
-    Ptr<AST::Decl> SelectTypeMatchedImplMember(AST::Ty& ty, const AST::FuncDecl& interfaceFunc,
-        std::vector<std::pair<Ptr<AST::Decl>, size_t>>& candidates, AST::Ty& targetBaseTy);
+    /** Whether the abstract-function resolution can be skipped for @p fd under @p ty. */
+    bool ShouldSkipAbstractFuncResolution(AST::Ty& ty, const AST::FuncDecl& fd) const;
+    /**
+     * Resolve the concrete instantiated FuncDecl among the instantiated decls of @p implFunc's outer decl
+     * (and its generic instantiations) whose type matches @p matchedInstTy, falling back to @p implFunc.
+     */
+    Ptr<AST::FuncDecl> FindFuncInGenericInstantiatedDecl(
+        AST::Ty& ty, const AST::FuncDecl& fd, Ptr<AST::FuncDecl> implFunc, const Ptr<AST::Ty>& matchedInstTy) const;
     /** Walker function for node instantiation. */
     AST::VisitAction CheckNodeInstantiation(AST::Node& node);
     /** Walker function for reference pointer rearrangement. */
@@ -250,30 +251,6 @@ private:
 
     /** Build interface function to implemented function map for all type decls */
     void BuildAbstractFuncMap();
-    bool IsImplementationFunc(AST::Ty& ty, const AST::FuncDecl& interfaceFunc, const AST::FuncDecl& fd);
-
-    bool IsImplementationFunc(const AST::FuncDecl& srcFunc, const AST::FuncDecl& superFunc,
-        const Ptr<AST::Ty> srcInstFuncTy, const Ptr<AST::Ty> superInstFuncTy);
-    void MergeIntoFuncs(MemberFuncsWithInstTys& funcs, MemberFuncsWithInstTys& newFuncs);
-    /** Check if there's already an implementation for the given function with subtype check */
-    bool HasImplementationWithSubTypeCheck(AST::Ty& instBaseTy, const MemberFuncsWithInstTys& funcs,
-        Ptr<AST::Ty> newFuncInstTy, const std::set<Ptr<AST::Ty>>& newFuncOuterDeclInstTys);
-
-    void MergeExtendSuperMember(AST::Ty& instBaseTy, MemberFuncsWithInstTys& funcs, MemberFuncsWithInstTys& newFuncs);
-
-    void GetInstMemberFromSuper(AST::Ty& instBaseTy, Ptr<AST::InheritableDecl> interfaceDecl,
-        MemberFuncsWithInstTys& funcs, const std::string& identifier, bool isCheckingInterface);
-    void CollectDeclMemberFunc(
-        AST::Decl& decl, AST::Ty& instBaseTy, MemberFuncsWithInstTys& funcs, const std::string& identifier);
-
-    MultiTypeSubst GetTypeMapping(Ptr<AST::Ty>& baseTy, AST::Ty& interfaceTy);
-    void CollectDeclMemberFuncs(AST::Decl& decl, std::unordered_set<Ptr<AST::FuncDecl>>& funcs) const;
-    /** Collect inherited members for imported decls which is not check during sema stage. */
-    std::unordered_set<Ptr<AST::FuncDecl>> MergeMemberFuncs(
-        AST::Ty& ty, AST::Decl& decl, const std::unordered_set<Ptr<AST::FuncDecl>>& inheritedMembers);
-    std::unordered_set<Ptr<AST::FuncDecl>> CollectInheritedMembers(AST::Ty& ty, AST::Decl& decl);
-    std::unordered_set<Ptr<AST::FuncDecl>> CollectInheritedMembersVisit(
-        AST::Ty& ty, AST::Decl& decl, std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Decl>>>& visited);
 
     /**
      * Get general version of given @p decl. If getOriginal is on:
@@ -313,19 +290,6 @@ private:
         }
         intersectionTyStatus.emplace(&ty, false);
         return false;
-    }
-    void RemoveFromCache(AST::Decl& decl)
-    {
-        auto genericDecl = decl.genericDecl;
-        instantiatedDeclsMap[genericDecl].erase(&decl);
-        GenericInfo genericInfo(genericDecl, BuildTypeMapping(decl));
-        auto decls = declInstantiationByTypeMap.equal_range(genericInfo);
-        for (auto it = decls.first; it != decls.second; ++it) {
-            if (it->second == &decl) {
-                declInstantiationByTypeMap.erase(it);
-                break;
-            }
-        }
     }
     size_t CountSkippedMembersBefore(const AST::Decl& decl, size_t offset);
     Ptr<AST::Decl> GetMemberByOffset(const AST::Decl& decl, size_t offset);
