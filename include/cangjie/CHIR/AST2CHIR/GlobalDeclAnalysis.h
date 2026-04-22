@@ -171,10 +171,7 @@ class VarCirDepsChecker : public TarjanSort<Ptr<const AST::Decl>> {
 public:
     explicit VarCirDepsChecker(DiagnosticEngine& ciDiag);
     void DetectCircularDep() override;
-    std::string GetEleStr(Ptr<const AST::Decl> decl) const override
-    {
-        return decl->identifier;
-    }
+    std::string GetEleStr(Ptr<const AST::Decl> decl) const override;
     bool IsVar(const AST::Decl& decl) const;
     DiagnosticEngine& diag;
     std::vector<std::string> diagLog;

@@ -19,12 +19,14 @@ namespace Cangjie::CHIR {
 class CHIRChecker {
 public:
     enum class Rule {
-        EMPTY_BLOCK,                        // there must be expressions in block, one block can't be empty
-        CHECK_FUNC_BODY,                    // check all expressions in func body, including their types
-        GET_INSTANTIATE_VALUE_SHOULD_GONE,  // `GetInstantiateValue` shouldn't be in IR
-        CHIR_GET_RTTI_STATIC_TYPE,          // type in GetRTTIStatic should be This or Generic type
-        RETURN_TYPE_NEED_BE_VOID,           // global func's return type need to be `Void`
-        IMPORTED_CONST_VAR_SHOULD_HAVE_INITIALIZER // imported const var should have initializer
+        EMPTY_BLOCK,                                // there must be expressions in block, one block can't be empty
+        CHECK_FUNC_BODY,                            // check all expressions in func body, including their types
+        GET_INSTANTIATE_VALUE_SHOULD_GONE,          // `GetInstantiateValue` shouldn't be in IR
+        CHIR_GET_RTTI_STATIC_TYPE,                  // type in GetRTTIStatic should be This or Generic type
+        RETURN_TYPE_NEED_BE_VOID,                   // global func's return type need to be `Void`
+        IMPORTED_CONST_VAR_SHOULD_HAVE_INITIALIZER, // imported const var should have initializer
+        REGION_CHECK,                               // StartRegion/EndRegion balance + @local! / @local? (non-Copy)
+                                                    // creation inside region; on when modal type enabled (default)
     };
     CHIRChecker(const Package& package, const Cangjie::GlobalOptions& opts, CHIRBuilder& builder);
 
@@ -63,7 +65,7 @@ private:
      * 3. get element ref from declared type(`srcType`) to user point type(`dstType`)
      * 4. store element ref from user point type(`srcType`) to declared type(`dstType`)
      */
-    bool TypeIsExpected(const Type& srcType, const Type& dstType);
+    bool TypeIsExpected(Type& srcType, Type& dstType);
     bool InstTypeArgsSatisfyGenericConstraints(
         const std::vector<Type*>& instTypeArgs, const std::vector<Type*>& genericTypeArgs);
     bool InstTypeCanSetToGenericRelatedType(Type& instType, const Type& genericRelatedType);
@@ -78,6 +80,8 @@ private:
     void ErrorInFunc(const Value& func, const std::string& info);
     void ErrorInLambdaOrFunc(const Function& func, const Lambda* lambda, const std::string& info);
     void ErrorInExpr(const Value& func, const Expression& expr, const std::string& info);
+    void ErrorRegionBalance(const Function& func, const std::string& detail);
+    void ErrorRegionBalance(const Function& func, const Expression& expr, const std::string& detail);
     void TypeCheckError(
         const Expression& expr, const Value& value, const std::string& expectedType, const Function& topLevelFunc);
     void ErrorInGlobalVar(const GlobalVar& var, const std::string& info);
@@ -113,6 +117,7 @@ private:
     void CheckPredecessors(const Block& block, const Function& topLevelFunc);
     void CheckLocalId(BlockGroup& blockGroup, const Function& topLevelFunc);
     void CheckUnreachableOpAndGenericTyInFuncBody(const BlockGroup& blockGroup);
+    bool GenericTypeIsInContainer(Type& type, const std::vector<GenericType*>& container);
     void CheckUnreachableOpAndGenericTyInBG(const BlockGroup& blockGroup,
         std::vector<Value*>& reachableValues, std::vector<GenericType*>& reachableGenericTypes);
     void CheckUnreachableOpAndGenericTyInBlock(const Block& block, std::vector<Value*>& reachableValues,
@@ -168,6 +173,10 @@ private:
     void CheckAllocateBase(const AllocateBase& expr, const Function& topLevelFunc);
     void CheckRawArrayAllocateWithException(const RawArrayAllocateWithException& expr, const Function& topLevelFunc);
     void CheckRawArrayAllocateBase(const RawArrayAllocateBase& expr, const Function& topLevelFunc);
+    void CheckStartRegion(const StartRegion& expr, const Function& topLevelFunc);
+    void CheckEndRegion(const EndRegion& expr, const Function& topLevelFunc);
+    void CheckRegion(const Function& func);
+    void CheckRegionInBlockGroup(const BlockGroup& bg, const Function& func);
     // ===--------------------------------------------------------------------===//
     // Check Unary Expression
     // ===--------------------------------------------------------------------===//
@@ -224,7 +233,7 @@ private:
         const std::vector<GenericType*>& genericTypeParams, const Expression& expr, const Function& topLevelFunc);
     bool CheckApplyThisType(
         const Value& callee, const Type* thisType, const Expression& expr, const Function& topLevelFunc);
-    void CheckApplyFuncRetValue(const Type& instRetType, const Expression& expr, const Function& topLevelFunc);
+    void CheckApplyFuncRetValue(Type& instRetType, const Expression& expr, const Function& topLevelFunc);
     void CheckInvoke(const Invoke& expr, const Function& topLevelFunc);
     bool CheckInvokeThisType(
         Type& objType, const Type* thisType, const Expression& expr, const Function& topLevelFunc);

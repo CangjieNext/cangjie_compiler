@@ -15,9 +15,9 @@
 
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Mangle/BaseMangler.h"
-#include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/GenericInstantiationManager.h"
+#include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie {
 
@@ -40,8 +40,7 @@ enum class AccessorKind : uint8_t {
 
 class MockUtils {
 public:
-    explicit MockUtils(
-        ImportManager& importManager, TypeManager& typeManager, BaseMangler& mangler);
+    MockUtils(ImportManager& im, TypeManager& tm, DiagnosticEngine& d, BaseMangler& mang);
     static bool CanMock(AST::Node& node);
     static bool IsMockAccessor(const AST::Decl& decl);
     static std::vector<AST::Decl*> ListExistingMembers(Ptr<AST::Decl> decl);
@@ -61,7 +60,7 @@ public:
     Ptr<Cangjie::AST::PointerTy> WrapTy2CPointer(const Ptr<AST::Ty> ty)
     {
         CJC_NULLPTR_CHECK(ty);
-        auto pointerTy = typeManager.GetPointerTy(ty);
+        auto pointerTy = typeManager.GetPointerTy(ty, {});
         return pointerTy;
     }
 
@@ -162,6 +161,7 @@ public:
 private:
     ImportManager& importManager;
     TypeManager& typeManager;
+    DiagnosticEngine& diag;
     BaseMangler& mangler;
 
     Ptr<AST::FuncDecl> getTypeForTypeParamDecl = nullptr;
@@ -175,7 +175,7 @@ private:
     Ptr<AST::ClassDecl> exceptionClassDecl = nullptr;
 
     static bool IsMockAccessorRequired(const AST::Decl& decl);
-    static AccessorKind ComputeAccessorKind(const AST::FuncDecl& accessorDecl);
+    AccessorKind ComputeAccessorKind(const AST::FuncDecl& accessorDecl);
     bool IsGetterForMutField(const AST::FuncDecl& accessorDecl);
 
     Ptr<AST::Decl> FindMockGlobalDecl(const AST::Decl& decl, const std::string& name);

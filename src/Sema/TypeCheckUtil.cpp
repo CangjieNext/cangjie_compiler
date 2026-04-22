@@ -16,13 +16,17 @@
 #include <map>
 #include <set>
 
+#include "Diags.h"
+#include "TypeCheckerImpl.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/ScopeManagerApi.h"
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Modules/ModulesUtils.h"
+#include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie::TypeCheckUtil {
 using namespace AST;
@@ -290,6 +294,12 @@ bool IsOverrideOrShadow(TypeManager& typeManager, const FuncDecl& src, const Fun
         // return false directly.
         return false;
     }
+    // override this param must use the same modal. data type always equals.
+    if (typeManager.HasThisParam(src) && typeManager.HasThisParam(target)) {
+        if (typeManager.GetThisParamTy(src)->Modal() != typeManager.GetThisParamTy(target)->Modal()) {
+            return false;
+        }
+    }
     auto srcFt = DynamicCast<FuncTy*>(src.GetTy());
     auto targetFt = DynamicCast<FuncTy*>(target.GetTy());
     MultiTypeSubst mts;
@@ -306,7 +316,7 @@ bool IsOverrideOrShadow(TypeManager& typeManager, const FuncDecl& src, const Fun
     } else {
         mts = GenerateTypeMappingBetweenFuncs(typeManager, src, target);
     }
-    std::set<TypeSubst> typeMappings = ExpandMultiTypeSubst(mts, {srcFt, targetFt});
+    std::set<TypeSubst> typeMappings = ExpandMultiTypeSubst(typeManager, mts, {srcFt, targetFt});
     for (auto typeMapping : typeMappings) {
         auto srcParamTys = srcFt ? srcFt->paramTys : GetParamTys(src);
         auto targetParamTys = targetFt ? targetFt->paramTys : GetParamTys(target);
@@ -420,16 +430,121 @@ std::pair<bool, Ptr<Decl>> GetRealMemberDecl(Decl& decl)
     return {false, &decl};
 }
 
-Ptr<Decl> GetUsedMemberDecl(Decl& decl, bool isGetter)
+/**
+ * Since spec support 'var' propDecl to inherit parent's getter/setter separately that
+ * child can only override one of getter/setter.
+ * We need to find getter/setter from current class or parent class.
+ * return (getter, setter)
+ */
+std::pair<Ptr<FuncDecl>, Ptr<FuncDecl>> GetUsableGetterSetterForProperty(
+    TypeManager& tm, DiagnosticEngine& diag, PropDecl& pd)
 {
-    if (auto pd = DynamicCast<PropDecl*>(&decl); pd) {
-        // If target is prop decl, return getter/setter func.
-        auto& funcs = isGetter ? pd->getters : pd->setters;
-        // Spec allows only implement prop's getter or setter
-        // for the interface property which have default implementation.
-        return funcs.empty() ? RawStaticCast<Decl*>(pd) : funcs[0].get();
+    return std::make_pair(GetUsableAccessorForProperty(tm, diag, pd, {}, {}, true),
+        GetUsableAccessorForProperty(tm, diag, pd, {}, {}, false));
+}
+
+/// get accessor in one prop, parent class member lookup is not done here
+static Ptr<FuncDecl> GetUsableAccessorInOneProp(
+    TypeManager& tm, DiagnosticEngine& diag, PropDecl& pd, ModalInfo expectModal, Expr* pos, bool isGetter)
+{
+    std::vector<Ptr<FuncDecl>> candidates;
+    for (auto& g : isGetter ? pd.getters : pd.setters) {
+        if (auto thisMod = tm.GetAccessorThisModal(*g); !expectModal.IsSubModal(thisMod)) {
+            continue;
+        }
+        candidates.push_back(g);
+    }
+    if (candidates.size() == 1) {
+        return candidates[0];
+    }
+    std::vector<bool> choose(candidates.size(), true);
+    // >1 candidates, use overload resolution.
+    for (size_t i{0}; i < candidates.size(); ++i) {
+        for (size_t j{i + 1}; j < candidates.size(); ++j) {
+            auto iModal = tm.GetAccessorThisModal(*candidates[i]);
+            auto jModal = tm.GetAccessorThisModal(*candidates[j]);
+            if (iModal.IsSubModal(jModal) && !jModal.IsSubModal(iModal)) {
+                choose[j] = false;
+            }
+        }
+    }
+    std::vector<Ptr<FuncDecl>> chosen;
+    for (size_t i{0}; i < candidates.size(); ++i) {
+        if (choose[i]) {
+            chosen.push_back(candidates[i]);
+        }
+    }
+    if (!pos) {
+        CJC_ASSERT(chosen.size() == 1);
+    }
+    if (chosen.size() == 1) {
+        return chosen[0];
+    }
+    // when no prop accessor found, do not report immediately because parent class may have correct accessor
+    if (!chosen.empty()) {
+        auto db = diag.Diagnose(*pos, DiagKind::sema_no_match_prop_accessor_for_call, pd.identifier.Val());
+        for (auto g : chosen) {
+            db.AddNote(*g, DiagKind::sema_found_candidate_decl);
+        }
+    }
+    return {};
+}
+
+Ptr<FuncDecl> GetUsableAccessorForProperty(
+    TypeManager& tm, DiagnosticEngine& diag, PropDecl& pd, ModalInfo expectModal, Expr* pos, bool isGetter)
+{
+    if (pd.TestAttr(Attribute::HAS_BROKEN)) {
+        return {};
+    }
+    // the error should be reported elsewhere to mutate non-mutable prop
+    if (!isGetter && !pd.isVar) {
+        return {};
+    }
+    if (auto curClass = DynamicCast<ClassDecl>(pd.outerDecl)) {
+        while (curClass) {
+            for (auto& it : curClass->GetMemberDeclPtrs()) {
+                if (it->identifier != pd.identifier) {
+                    continue;
+                }
+                auto prop = DynamicCast<PropDecl>(it);
+                if (!prop) {
+                    continue;
+                }
+                if (prop->TestAttr(Attribute::HAS_BROKEN)) {
+                    return {};
+                }
+                if (auto func = GetUsableAccessorInOneProp(tm, diag, *prop, expectModal, pos, isGetter)) {
+                    return func;
+                }
+            }
+            curClass = curClass->GetSuperClassDecl();
+        }
+    } else if (auto func = GetUsableAccessorInOneProp(tm, diag, pd, expectModal, pos, isGetter)) {
+        return func;
+    }
+
+    diag.Diagnose(*pos, DiagKind::sema_no_match_prop_accessor_for_call, pd.identifier.Val());
+    return {};
+}
+
+Ptr<Decl> GetUsedMemberDecl(TypeManager& tym, DiagnosticEngine& d, Decl& decl, bool isGetter, ModalInfo expectModal)
+{
+    if (auto prop = DynamicCast<PropDecl>(&decl)) {
+        return GetUsableAccessorForProperty(tym, d, *prop, expectModal, nullptr, isGetter);
     }
     return &decl;
+}
+
+// Returns getter for property (with default @~local when expectModal not specified)
+Ptr<FuncDecl> GetUsableGetterForProperty(TypeManager& tm, DiagnosticEngine& diag, PropDecl& pd)
+{
+    return GetUsableAccessorForProperty(tm, diag, pd, {}, {}, true);
+}
+
+// Returns setter for mutable property
+Ptr<FuncDecl> GetUsableSetterForProperty(TypeManager& tm, DiagnosticEngine& diag, PropDecl& pd)
+{
+    return GetUsableAccessorForProperty(tm, diag, pd, {}, {}, false);
 }
 
 static const std::unordered_map<ASTKind, std::string> DECL2STRMAP = {
@@ -475,70 +590,6 @@ std::string GetTypesStr(std::vector<Ptr<AST::Decl>>& decls)
         res += str + " ";
     }
     return res;
-}
-
-namespace {
-Ptr<FuncDecl> FindValidPropAccessor(ClassDecl& cd, bool isGetter, const std::string& name)
-{
-    auto curClass = &cd;
-    while (curClass != nullptr) {
-        for (auto& it : curClass->GetMemberDecls()) {
-            CJC_ASSERT(it);
-            if (it->identifier != name) {
-                continue;
-            }
-            auto found = GetUsedMemberDecl(*it, isGetter);
-            CJC_ASSERT(found);
-            if (found->astKind == ASTKind::FUNC_DECL) {
-                return RawStaticCast<FuncDecl*>(found);
-            }
-        }
-        curClass = curClass->GetSuperClassDecl();
-    };
-    return nullptr;
-}
-} // namespace
-
-/**
- * Since spec support 'var' propDecl to inherit parent's getter/setter separately that
- * child can only override one of getter/setter.
- * We need to find getter/setter from current class or parent class.
- * return (getter, setter)
- */
-std::pair<Ptr<FuncDecl>, Ptr<FuncDecl>> GetUsableGetterSetterForProperty(PropDecl& pd)
-{
-    return std::make_pair(GetUsableGetterForProperty(pd), GetUsableSetterForProperty(pd));
-}
-
-// Returns getter for property
-Ptr<FuncDecl> GetUsableGetterForProperty(PropDecl& pd)
-{
-    Ptr<FuncDecl> getter = nullptr;
-    auto cd = DynamicCast<ClassDecl*>(pd.outerDecl);
-    if (pd.getters.empty()) {
-        if (cd) {
-            getter = FindValidPropAccessor(*cd, true, pd.identifier);
-        }
-    } else {
-        getter = pd.getters[0].get();
-    }
-    return getter;
-}
-
-// Returns setter for mutable property
-Ptr<FuncDecl> GetUsableSetterForProperty(PropDecl& pd)
-{
-    CJC_ASSERT(pd.isVar);
-    Ptr<FuncDecl> setter = nullptr;
-    auto cd = DynamicCast<ClassDecl*>(pd.outerDecl);
-    if (pd.setters.empty()) {
-        if (cd) {
-            setter = FindValidPropAccessor(*cd, false, pd.identifier);
-        }
-    } else {
-        setter = pd.setters[0].get();
-    }
-    return setter;
 }
 
 std::set<Ptr<ExtendDecl>> CollectAllRelatedExtends(TypeManager& tyMgr, InheritableDecl& boxedDecl)
@@ -631,6 +682,42 @@ Ptr<Annotation> FindFirstAnnotation(const Decl& decl, AnnotationKind kind)
     return nullptr;
 }
 
+ModalInfo GetThisParamModal(const FuncDecl& fd)
+{
+    if (fd.funcBody->paramLists[0]->thisParam) {
+        return fd.funcBody->paramLists[0]->thisParam->modal;
+    }
+    return {};
+}
+
+ModalInfo GetCurThisModal(const ASTContext& ctx, const std::string& scopeName)
+{
+    auto pred = [](Symbol& sym) -> bool {
+        auto funcDecl = DynamicCast<FuncDecl*>(sym.node);
+        if (!funcDecl) {
+            return false;
+        }
+        if (!Is<InheritableDecl>(funcDecl->outerDecl) || funcDecl->TestAttr(Attribute::STATIC)) {
+            return false;
+        }
+        return true;
+    };
+    auto funcNode = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, scopeName, pred);
+    if (!funcNode) {
+        return {};
+    }
+    auto func = StaticCast<FuncDecl>(funcNode->node);
+    if (!TypeManager::HasThisParam(*func)) {
+        return {};
+    }
+    return GetThisParamModal(*func);
+}
+
+bool HasModifier(const std::set<Modifier>& modifiers, TokenKind kind)
+{
+    return std::any_of(modifiers.begin(), modifiers.end(), [kind](const auto& it) { return it.modifier == kind; });
+}
+
 void AddArrayLitConstructor(ArrayLit& al)
 {
     auto decl = Ty::GetDeclPtrOfTy(al.GetTy());
@@ -641,6 +728,9 @@ void AddArrayLitConstructor(ArrayLit& al)
         if (auto fd = DynamicCast<FuncDecl*>(it); fd && IsInstanceConstructor(*fd) && fd->funcBody) {
             // Constructor used for 'ArrayLit' has 3 params.
             if (fd->funcBody->paramLists.empty() || fd->funcBody->paramLists[0]->params.size() != 3) {
+                continue;
+            }
+            if (GetThisParamModal(*fd) != al.GetTy()->Modal()) {
                 continue;
             }
             auto firstParamTy = fd->funcBody->paramLists[0]->params[0]->GetTy();
@@ -813,6 +903,24 @@ std::vector<Ptr<Ty>> GetParamTysInArgsOrder(TypeManager& tyMgr, const CallExpr& 
     return tyInArgOrder;
 }
 
+std::optional<ModalInfo> GetCallBaseModal(const CallExpr& ce)
+{
+    for (auto check = ce.baseFunc.get(); check;) {
+        if (auto re = DynamicCast<RefExpr>(check)) {
+            if (re->modal.HasLocal()) {
+                return {re->modal.ToModalInfo()};
+            }
+            return {};
+        }
+        if (auto ma = DynamicCast<MemberAccess>(check)) {
+            check = ma->baseExpr.get();
+            continue;
+        }
+        break;
+    }
+    return {};
+}
+
 bool IsEnumCtorWithoutTypeArgs(const Expr& expr, Ptr<const Decl> target)
 {
     if (!target || !target->TestAttr(Attribute::ENUM_CONSTRUCTOR) || !target->GetGeneric()) {
@@ -981,11 +1089,11 @@ void TryEnforceCandidate(TyVar& tv, const std::set<Ptr<Decl>>& candidates, TypeM
     }
 }
 
-std::set<Ptr<Ty>> TypeMapToTys(const std::map<TypeKind, TypeKind>& m, bool fromKey)
+std::set<Ptr<Ty>> TypeMapToTys(const std::map<TypeKind, TypeKind>& m, bool fromKey, ModalInfo modalInfo)
 {
     std::set<Ptr<Ty>> result;
     for (auto& [operandKind, retKind] : m) {
-        result.insert(TypeManager::GetPrimitiveTy(fromKey ? operandKind : retKind));
+        result.insert(TypeManager::GetPrimitiveTy(fromKey ? operandKind : retKind, modalInfo));
     }
     return result;
 }
@@ -1109,7 +1217,7 @@ OwnedPtr<GenericParamDecl> CreateGenericParamDecl(Decl& decl, const std::string&
 {
     auto typeParam = MakeOwned<GenericParamDecl>();
     typeParam->identifier = name;
-    typeParam->SetTy(typeManager.GetGenericsTy(*typeParam));
+    typeParam->SetTy(typeManager.GetGenericsTy(*typeParam, {}));
     typeParam->outerDecl = &decl;
     typeParam->fullPackageName = decl.fullPackageName;
     return typeParam;

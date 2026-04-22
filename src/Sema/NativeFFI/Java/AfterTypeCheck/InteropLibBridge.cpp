@@ -405,7 +405,7 @@ Ptr<Ty> InteropLibBridge::GetJavaEntityTy()
 
 Ptr<Ty> InteropLibBridge::GetJobjectTy()
 {
-    return typeManager.GetPointerTy(typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    return typeManager.GetPointerTy(typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT), {});
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreateGetJavaLambdaObjectCall(
@@ -734,7 +734,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateNewJavaObjectCall(OwnedPtr<Expr> env,
     }
     std::vector<Ptr<Ty>> arrParamsTy;
     arrParamsTy.push_back(GetJavaEntityTy());
-    auto arrayTy = typeManager.GetStructTy(*arrayStruct, arrParamsTy);
+    auto arrayTy = typeManager.GetStructTy(*arrayStruct, arrParamsTy, {});
     auto argsSize = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(args.size()), intTy);
     auto argsAsArray = WithinFile(CreateArrayLit(std::move(args), arrayTy), curFile);
     auto callNest = CreateCall(callNestFuncDecl, curFile, std::move(argsSize));
@@ -889,7 +889,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateCFFINewJavaObjectCall(
         // in java, the constructor with additional fake null argument
         // of special marker types is created.
         cffiCtorFuncArgs.push_back(CreateJavaEntityNullCall(&curFile));
-        paramTys.push_back(typeManager.GetClassTy(*markerClassDecl, {}));
+        paramTys.push_back(typeManager.GetClassTy(*markerClassDecl, {}, {}));
     }
 
     return CreateNewJavaObjectCall(std::move(jniEnv), classTypeSignature,
@@ -959,7 +959,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateCallMethodCall(OwnedPtr<Expr> env, Ow
 
     std::vector<Ptr<Ty>> arrParamsTy;
     arrParamsTy.push_back(entityTy);
-    auto arrayTy = typeManager.GetStructTy(*arrayStruct, arrParamsTy);
+    auto arrayTy = typeManager.GetStructTy(*arrayStruct, arrParamsTy, {});
     auto argsSize = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(args.size()), intTy);
     auto callNest = CreateCall(callNestFuncDecl, pcurFile, std::move(argsSize));
 
@@ -1012,7 +1012,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateCallStaticMethodCall(
 
     std::vector<Ptr<Ty>> arrParamsTy;
     arrParamsTy.push_back(entityTy);
-    auto arrayTy = typeManager.GetStructTy(*arrayStruct, arrParamsTy);
+    auto arrayTy = typeManager.GetStructTy(*arrayStruct, arrParamsTy, {});
     auto argsSize = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(args.size()), intTy);
     auto callNest = CreateCall(callNestFuncDecl, pcurFile, std::move(argsSize));
 
@@ -1412,7 +1412,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateJavaObjectControllerCall(
 
     auto curFile = classDecl.curFile;
     auto instantiationRefType = CreateRefType(classDecl);
-    auto instantiationTy = typeManager.GetClassTy(classDecl, classDecl.GetTy()->typeArgs);
+    auto instantiationTy = typeManager.GetClassTy(classDecl, classDecl.GetTy()->typeArgs, {});
 
     std::vector<OwnedPtr<FuncArg>> callArgs;
     callArgs.push_back(CreateFuncArg(std::move(javaEntity)));
@@ -1423,7 +1423,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateJavaObjectControllerCall(
     fdRefexpr->typeArguments.emplace_back(std::move(instantiationRefType));
     auto fdRef = WithinFile(std::move(fdRefexpr), curFile);
 
-    auto callTy = typeManager.GetClassTy(*javaObjectCtroDecl, {std::move(instantiationTy)});
+    auto callTy = typeManager.GetClassTy(*javaObjectCtroDecl, {std::move(instantiationTy)}, {});
     return CreateCallExpr(std::move(fdRef), std::move(callArgs), funcDecl, callTy, CallKind::CALL_OBJECT_CREATION);
 }
 
@@ -1541,7 +1541,7 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaPrimitiveEntity(OwnedPtr<Expr> entity
     }
     auto isPrimitive = ty->IsPrimitive();
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-    auto actualEntityTy = isPrimitive ? ty : typeManager.GetPointerTy(unitTy);
+    auto actualEntityTy = isPrimitive ? ty : typeManager.GetPointerTy(unitTy, {});
     auto curFile = entity->curFile;
     std::vector<OwnedPtr<FuncArg>> callArgs;
     callArgs.emplace_back(CreateFuncArg(std::move(entity)));

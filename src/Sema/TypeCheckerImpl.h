@@ -252,13 +252,14 @@ private:
     Ptr<AST::Ty> GetTyFromASTType(ASTContext& ctx, AST::FuncType& funcType);
     Ptr<AST::Ty> GetTyFromASTType(ASTContext& ctx, AST::OptionType& optionType);
     std::vector<Ptr<AST::Ty>> GetTyFromASTType(ASTContext& ctx, std::vector<OwnedPtr<AST::Type>>& typeArguments);
-    Ptr<AST::Ty> GetTyFromASTType(AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& typeArgs);
+    Ptr<AST::Ty> GetTyFromASTType(AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modal);
     std::vector<Ptr<AST::Ty>> GetTyFromASTType(const std::vector<OwnedPtr<AST::GenericParamDecl>>& typeParameters);
-    Ptr<AST::Ty> GetTyFromBuiltinDecl(const AST::BuiltInDecl& bid, const std::vector<Ptr<AST::Ty>>& typeArgs);
-    Ptr<AST::Ty> GetBuiltInArrayType(const std::vector<Ptr<AST::Ty>>& typeArgs);
-    Ptr<AST::Ty> GetBuiltInVArrayType(const std::vector<Ptr<AST::Ty>>& typeArgs);
-    Ptr<AST::Ty> GetBuiltinCFuncType(const std::vector<Ptr<AST::Ty>>& typeArgs);
-    Ptr<AST::Ty> GetBuiltInPointerType(const std::vector<Ptr<AST::Ty>>& typeArgs);
+    Ptr<AST::Ty> GetTyFromBuiltinDecl(
+        const AST::BuiltInDecl& bid, const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modal);
+    Ptr<AST::Ty> GetBuiltInArrayType(const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modal);
+    Ptr<AST::Ty> GetBuiltInVArrayType(const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modal);
+    Ptr<AST::Ty> GetBuiltinCFuncType(const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modal);
+    Ptr<AST::Ty> GetBuiltInPointerType(const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modal);
 
     /** Check legality of attributes for all decls. */
     void CheckAllDeclAttributes(const ASTContext& ctx);
@@ -571,7 +572,9 @@ private:
      */
     void DesugarPointerCall(ASTContext& ctx, AST::CallExpr& ce);
     /** Desugar 'propDecl' after typecheck but still inside 'Sema' stage. Keep this order for cjLint usage. */
-    void DesugarForPropDecl(AST::Node& pkg);
+    void DesugarForPropDecl(const ASTContext& ctx, AST::Node& pkg);
+    void DesugarSetForPropDecl(const ASTContext& ctx, AST::Expr& expr);
+    void DesugarGetForPropDecl(const ASTContext& ctx, AST::Expr& expr);
     /** Desugar for string interpolation expr. */
     std::vector<Ptr<AST::Decl>> MatchToStringImpl(const ASTContext& ctx, const AST::File& file, AST::Ty& ty);
     OwnedPtr<AST::CallExpr> DesugarStrPartExpr(
@@ -683,6 +686,7 @@ private:
 
     void CheckVarDecl(ASTContext& ctx, AST::VarDecl& vd);
     void CheckPropDecl(ASTContext& ctx, AST::PropDecl& pd);
+    bool CheckPropMethodTargetType(const AST::FuncDecl& fd);
     void UpdateMemberVariableTy(const AST::Decl& decl, const AST::EnumTy& eTy);
 
     Ptr<AST::Ty> SynBlock(const CheckerContext& ctx, AST::Block& b);
@@ -812,6 +816,7 @@ private:
     bool ChkInoutRefExpr(AST::RefExpr& re, bool isBase = false);
     bool ChkInoutMemberAccess(const AST::MemberAccess& ma);
     Ptr<AST::Ty> SynFuncParam(ASTContext& ctx, AST::FuncParam& fp);
+    Ptr<AST::Ty> SynThisParam(ASTContext& ctx, AST::ThisParam& tp);
     bool ChkFuncParam(ASTContext& ctx, AST::Ty& target, AST::FuncParam& fp);
     Ptr<AST::Ty> SynIsExpr(ASTContext& ctx, AST::IsExpr& ie);
     bool ChkIsExpr(ASTContext& ctx, AST::Ty& target, AST::IsExpr& ie);
@@ -974,7 +979,13 @@ private:
      * Check whether the parameters type is compatible with arguments type.
      * The arguments can be parameters subtype.
      */
-    bool CheckCallCompatible(ASTContext& ctx, FunctionCandidate& candidate);
+    bool CheckCallCompatible(ASTContext& ctx, FunctionCandidate& candidate, Ptr<AST::Ty> target);
+    /**
+     * Get the type of the this argument of call expression.
+     * If ce is a RefExpr call, return the type decl in current scope.
+     * DO NOT CALL this function for object creation without target type, it yields @~local modal, but any modal is ok.
+     */
+    Ptr<AST::Ty> GetThisArgTy(const ASTContext& ctx, const AST::CallExpr& ce);
     /**
      * When the candidate is a generic function, or function is a member of generic class/interface/struct...,
      * we should use this function to do compatibility check. First we will build a unordered map to represent
@@ -982,6 +993,18 @@ private:
      */
     bool CheckGenericCallCompatible(
         ASTContext& ctx, FunctionCandidate& candidate, SubstPack& typeMapping, Ptr<AST::Ty> targetRet);
+    /**
+     * Check if the this parameter is compatible with the call expression. That is, the this param has the correct
+     * modal. Returns true if no this param, false if checking failed.
+     * @param target target type when it is a ctor call. Unused when it is normal func call.
+     */
+    bool CheckThisParamCompatible(
+        ASTContext& ctx, const AST::FuncDecl& fd, const AST::CallExpr& ce, Ptr<AST::Ty> target);
+    /**
+     * Check if the this parameters of two functions are identical.
+     * Typically used to do overload check and overload resolution.
+     */
+    bool IsThisParamIdentical(const AST::FuncDecl& fd1, const AST::FuncDecl& fd2);
     void FilterTypeMappings(
         const AST::Expr& expr, AST::FuncDecl& fd, std::vector<MultiTypeSubst>& typeMappings);
     bool CheckCandidateConstrains(const AST::CallExpr& ce, const AST::FuncDecl& fd, const SubstPack& typeMapping);
@@ -1050,7 +1073,7 @@ private:
      * @return The most matching functions index.
      */
     std::vector<size_t> ResolveOverload(
-        std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, const AST::CallExpr& ce);
+        std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, const AST::CallExpr& ce, Ptr<AST::Ty> target);
     FunctionMatchingUnit* FindFuncWithMaxChildRetTy(
         const AST::CallExpr& ce, std::vector<std::unique_ptr<FunctionMatchingUnit>>& candidates);
     /**
@@ -1062,8 +1085,10 @@ private:
      * @return The vector of matched function decls.
      */
     std::vector<Ptr<AST::FuncDecl>> CheckMatchResult(ASTContext& ctx, AST::CallExpr& ce,
-        std::vector<OwnedPtr<FunctionMatchingUnit>>& legals, std::vector<FunctionMatchingUnit>& illegals);
-    void ReInferCallArgs(ASTContext& ctx, const AST::CallExpr& ce, const FunctionMatchingUnit& legal);
+        std::vector<OwnedPtr<FunctionMatchingUnit>>& legals, std::vector<FunctionMatchingUnit>& illegals,
+        Ptr<AST::Ty> target);
+    void ReInferCallArgs(
+        ASTContext& ctx, const AST::CallExpr& ce, const FunctionMatchingUnit& legal, Ptr<AST::Ty> target);
     void RecoverCallArgs(ASTContext& ctx, const AST::CallExpr& ce, const std::vector<Ptr<AST::Ty>>& argsTys);
     void FillEnumTypeArgumentsTy(const AST::Decl& ctorDecl, const SubstPack& typeMapping, AST::MemberAccess& ma);
     void FillTypeArgumentsTy(const AST::FuncDecl& fd, const AST::CallExpr& ce, SubstPack& typeMapping);
@@ -1074,9 +1099,10 @@ private:
     /**
      * Compare arguments and parameters. Choose the most consistent one.
      * Each parameter of the result must be the best match.
-     * @return Returns the comparison result of column i and column j in vectors of argMapping.
+     * @return Returns true if i is better than j.
      */
-    bool CompareFuncCandidates(FunctionMatchingUnit& i, FunctionMatchingUnit& j, const AST::CallExpr& ce);
+    bool CompareFuncCandidates(
+        FunctionMatchingUnit& i, FunctionMatchingUnit& j, const AST::CallExpr& ce, Ptr<AST::Ty> target);
     /**
      * Check non-static calling in static method.
      * @return If callExpr is in static method and target is non-static, returns false. Else returns true.
@@ -1118,6 +1144,7 @@ private:
 
     void UpdateAnyTy();
     void UpdateCTypeTy();
+    void UpdateCopyTy();
     bool IsIrrefutablePattern(const AST::Pattern& pattern);
     Ptr<AST::Ty> SynForInExpr(ASTContext& ctx, AST::ForInExpr& fie);
     bool ChkForInExpr(ASTContext& ctx, AST::Ty& target, AST::ForInExpr& fie);
@@ -1135,11 +1162,12 @@ private:
      * in targets.
      */
     void InferRefExpr(ASTContext& ctx, AST::RefExpr& re);
+    void CheckAssignToImmutProp(AST::NameReferenceExpr& re);
     void InferCFuncExpr(ASTContext& ctx, AST::RefExpr& re);
     bool SynTargetOnUsed(ASTContext& ctx, const AST::NameReferenceExpr& nre, AST::Decl& target);
     void CheckThisOrSuper(const ASTContext& ctx, AST::RefExpr& re);
-    Ptr<AST::Ty> InferTypeOfThis(AST::RefExpr& re, AST::InheritableDecl& objDecl);
-    Ptr<AST::Ty> InferTypeOfSuper(AST::RefExpr& re, const AST::InheritableDecl& objDecl);
+    Ptr<AST::Ty> InferTypeOfThis(const ASTContext& ctx, AST::RefExpr& re, AST::InheritableDecl& objDecl);
+    Ptr<AST::Ty> InferTypeOfSuper(const ASTContext& ctx, AST::RefExpr& re, const AST::InheritableDecl& objDecl);
     Ptr<AST::Ty> ReplaceWithGenericTyInInheritableDecl(
         Ptr<AST::Ty> ty, const AST::Decl& outerDecl, const AST::InheritableDecl& id);
     void CheckUsageOfThis(const ASTContext& ctx, const AST::RefExpr& re) const;
@@ -1311,7 +1339,6 @@ private:
     void CheckAnnotationDecl(ASTContext& ctx, AST::Annotation& ann);
     void CheckJavaHasDefaultAnnotation(AST::Annotation& ann, const AST::Decl& decl) const;
     OwnedPtr<AST::CallExpr> CheckCustomAnnotation(ASTContext& ctx, const AST::Decl& decl, AST::Annotation& ann);
-    bool HasModifier(const std::set<AST::Modifier>& modifiers, TokenKind kind) const;
 
     void CheckLegalityOfUsage(ASTContext &ctx, AST::Package &pkg);
     void CheckClosures(const ASTContext &ctx, AST::Node &node) const;
@@ -1729,6 +1756,22 @@ private:
     bool ChkIfAvailableExpr(ASTContext& ctx, AST::Ty& ty, AST::IfAvailableExpr& ie);
     Ptr<AST::Ty> SynIfAvailableExpr(ASTContext& ctx, AST::IfAvailableExpr& iae);
 
+    void CheckModalType(const ASTContext& ctx, AST::Package& pkg);
+    bool ChkExclaveExpr(ASTContext& ctx, AST::Ty& target, AST::ExclaveExpr& expr);
+    Ptr<AST::Ty> SynExclaveExpr(ASTContext& ctx, AST::ExclaveExpr& expr);
+    void DiagNestedExclave(const AST::ExclaveExpr& expr, const AST::Node& outerNode);
+    /// Report an error if \ref expect is not a subtype (possibly via modaling) to \ref actual.
+    void ExpectSubtypeOf(Ptr<AST::Node> node, Ptr<AST::Ty> expect, Ptr<AST::Ty> actual, ModalMatchMode modal);
+    bool IsExternalLocal(const ASTContext& ctx, const AST::Expr& expr);
+    struct ModalTypeChecker* NewModalTypeChecker();
+    void DeleteModalTypeChecker();
+    void CheckHasLocalMod(const AST::Expr& node, AST::LocalModal local);
+    void DiagLocalModNotSatisfied(const AST::Expr& node, AST::LocalModal local);
+    void DiagExpectedDataType(const AST::Node& node);
+    DiagnosticBuilder DiagUndeclaredIdentifier(Range range, const std::string& identifier);
+    bool CheckTyArgsLocal(AST::RefType& rt);
+    void SetThisParamType(AST::FuncDecl& fd);
+
     /**
      * @brief mark imported declarations depended by the current package as used.
      * @param pkg the source package to analyze the dependencies.
@@ -1764,6 +1807,8 @@ private:
     Ptr<AST::Node> strictDeprecatedContext = nullptr;
     // cjmp typechecker implementation class
     class MPTypeCheckerImpl* mpImpl;
+    // checker impl of Modal type
+    struct ModalTypeChecker* modalTypeChecker;
     /**
      * Will be passed as a reference in TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck
      * at Perform desugar after typecheck before generic instantiation stage.
@@ -1771,6 +1816,9 @@ private:
      * Needed for Java, Objective C interop Synthetic class wrappers generation.
      */
     std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap> structMemberMap;
+    // top level (global/static) var that is begin checked
+    // set in TypeChecker::TypeCheckerImpl::CheckVarDecl, used in TypeChecker::TypeCheckerImpl::SynExclaveExpr
+    Ptr<AST::VarDecl> topLevelVar{};
 };
 } // namespace Cangjie
 #endif

@@ -84,7 +84,7 @@ OwnedPtr<ClassDecl> InsertFwdClasses::GenerateGenericInterfaceFwdclassMethod(Int
         interfaceRefType->typeArguments.emplace_back(std::move(priType));
     }
     fwdclassDecl->inheritedTypes.emplace_back(std::move(interfaceRefType));
-    fwdclassDecl->SetTy(ctx.typeManager.GetClassTy(*fwdclassDecl, {}));
+    fwdclassDecl->SetTy(ctx.typeManager.GetClassTy(*fwdclassDecl, {}, {}));
 
     auto classLikeTy = DynamicCast<ClassLikeTy*>(instantTy);
     CJC_ASSERT(classLikeTy);
@@ -106,7 +106,7 @@ void InsertFwdClasses::HandleImpl(InteropContext& ctx)
         } else {
             auto fwdclassDecl = InitInterfaceFwdClassDecl(interfaceDecl);
             fwdclassDecl->inheritedTypes.emplace_back(CreateRefType(*interfaceDecl));
-            fwdclassDecl->SetTy(ctx.typeManager.GetClassTy(*fwdclassDecl, interfaceDecl->GetTy()->typeArgs));
+            fwdclassDecl->SetTy(ctx.typeManager.GetClassTy(*fwdclassDecl, interfaceDecl->GetTy()->typeArgs, {}));
             auto classLikeTy = DynamicCast<ClassLikeTy*>(interfaceDecl->GetTy());
             CJC_ASSERT(classLikeTy);
             classLikeTy->directSubtypes.insert(fwdclassDecl->GetTy());

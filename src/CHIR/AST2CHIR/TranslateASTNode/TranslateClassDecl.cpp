@@ -204,6 +204,7 @@ Function* Translator::TranslateVarInit(const AST::VarDecl& varDecl)
         return nullptr;
     }
 
+    funcContext.PushGlobalVar(varDecl, *funcDef);
     auto loc = DebugLocation(TranslateLocationWithoutScope(builder.GetChirContext(), varDecl.begin, varDecl.end));
 
     auto entry = funcDef->GetEntryBlock();

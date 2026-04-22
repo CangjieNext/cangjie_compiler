@@ -110,7 +110,7 @@ void ClearUnusedSrcImportedDecls(Package& pkg, const std::function<bool(const Pt
     Utils::EraseIf(pkg.inlineFuncDecls, checkUnvisited);
 }
 
-void ClearInstTysIsNeeded(Node& node)
+void ClearInstTysIsNeeded(TypeManager& mgr, Node& node)
 {
     if (Utils::NotIn(node.astKind, {ASTKind::REF_EXPR, ASTKind::MEMBER_ACCESS, ASTKind::CALL_EXPR})) {
         return;
@@ -125,7 +125,7 @@ void ClearInstTysIsNeeded(Node& node)
             !target->TestAnyAttr(Attribute::INTRINSIC, Attribute::GENERIC)) {
             re->instTys.clear();
             if (target->astKind != ASTKind::TYPE_ALIAS_DECL) {
-                re->SetTy(target->GetTy());
+                re->SetTy(mgr.SubstituteModal(target->GetTy(), re->GetTy()->Modal()));
             }
         }
         return;
@@ -133,8 +133,8 @@ void ClearInstTysIsNeeded(Node& node)
     if (auto ma = DynamicCast<MemberAccess*>(&node); ma && ma->target && !ma->target->GetTy()->HasGeneric() &&
         !ma->target->TestAnyAttr(Attribute::INTRINSIC, Attribute::GENERIC)) {
         ma->instTys.clear();
-        if (ma->target->astKind != ASTKind::TYPE_ALIAS_DECL && !HasJavaAttr(*ma->target)) {
-            ma->SetTy(ma->target->GetTy());
+        if (ma->GetTarget()->astKind != ASTKind::TYPE_ALIAS_DECL && !HasJavaAttr(*ma->GetTarget())) {
+            ma->SetTy(mgr.SubstituteModal(ma->GetTarget()->GetTy(), ma->GetTy()->Modal()));
         }
     }
 }
@@ -163,17 +163,17 @@ Ptr<Ty> GetOriginalTy(Ty& ty, const TypeSubst& g2gTyMap, TypeManager& typeManage
             return &ty;
         }
         if (ty.IsClass()) {
-            return Is<ClassThisTy>(ty) ? typeManager.GetClassThisTy(*StaticCast<ClassDecl>(decl), tyArgs)
-                                       : typeManager.GetClassTy(*StaticCast<ClassDecl>(decl), tyArgs);
+            return Is<ClassThisTy>(ty) ? typeManager.GetClassThisTy(*StaticCast<ClassDecl>(decl), tyArgs, ty.Modal())
+                                       : typeManager.GetClassTy(*StaticCast<ClassDecl>(decl), tyArgs, ty.Modal());
         }
         if (ty.IsInterface()) {
-            return typeManager.GetInterfaceTy(*StaticCast<InterfaceDecl>(decl), tyArgs);
+            return typeManager.GetInterfaceTy(*StaticCast<InterfaceDecl>(decl), tyArgs, ty.Modal());
         }
         if (ty.IsEnum()) {
-            return typeManager.GetEnumTy(*StaticCast<EnumDecl>(decl), tyArgs);
+            return typeManager.GetEnumTy(*StaticCast<EnumDecl>(decl), tyArgs, ty.Modal());
         }
         if (ty.IsStruct()) {
-            return typeManager.GetStructTy(*StaticCast<StructDecl>(decl), tyArgs);
+            return typeManager.GetStructTy(*StaticCast<StructDecl>(decl), tyArgs, ty.Modal());
         }
         return &ty;
     }
@@ -844,7 +844,7 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
     if (!member) {
         return &fd;
     }
-    return As<ASTKind::FUNC_DECL>(GetUsedMemberDecl(*member, fd.isGetter));
+    return As<ASTKind::FUNC_DECL>(GetUsedMemberDecl(typeManager, diag, *member, fd.isGetter, {}));
 }
 
 Ptr<AST::Decl> GIM::GenericInstantiationManagerImpl::ReinstantiatedPartialMemberDecl(
@@ -915,7 +915,7 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedMemberTarget(Ty& 
     if (resultDecl->TestAttr(Attribute::GENERIC, Attribute::GENERIC_INSTANTIATED, Attribute::UNREACHABLE)) {
         resultDecl = ReinstantiatedPartialMemberDecl(genericInfo, *structDecl, *targetToFind, foundIndex->second);
     }
-    resultDecl = GetUsedMemberDecl(*resultDecl, isGetter);
+    resultDecl = GetUsedMemberDecl(typeManager, diag, *resultDecl, isGetter, {});
     return resultDecl;
 }
 
@@ -1210,7 +1210,7 @@ VisitAction GIM::GenericInstantiationManagerImpl::RearrangeReferencePtr(Node& no
 
     if (auto expr = DynamicCast<Expr*>(&node); expr && expr->desugarExpr) {
         Walker(expr->desugarExpr.get(), rearrangeWalkerID, rearranger, contextReset).Walk();
-        ClearInstTysIsNeeded(node);
+        ClearInstTysIsNeeded(typeManager, node);
         return VisitAction::SKIP_CHILDREN;
     }
 
@@ -1264,12 +1264,13 @@ void GIM::GenericInstantiationManagerImpl::RearrangeCallExprReference(CallExpr& 
         return;
     }
     if (!HasJavaAttr(*target)) {
-        ce.SetTy(StaticCast<FuncTy*>(target->GetTy())->retTy);
+        ce.SetTy(typeManager.SubstituteModal(StaticCast<FuncTy*>(target->GetTy())->retTy, ce.GetTy()->Modal()));
     }
     // Deal for dynamic 'This' binding call.
     // eg: tests/LLT/Sema/class/ThisType/class_generic_dynamic_binding_thistype_ok_2.cj
     if (auto thisTy = DynamicCast<ClassThisTy*>(ce.GetTy()); thisTy && ce.baseFunc->astKind == ASTKind::MEMBER_ACCESS) {
-        ce.SetTy(StaticAs<ASTKind::MEMBER_ACCESS>(ce.baseFunc.get())->baseExpr->GetTy());
+        ce.SetTy(typeManager.SubstituteModal(
+            StaticAs<ASTKind::MEMBER_ACCESS>(ce.baseFunc.get())->baseExpr->GetTy(), ce.GetTy()->Modal()));
     }
 }
 
@@ -1332,7 +1333,7 @@ void GIM::GenericInstantiationManagerImpl::RearrangeRefExprReference(RefExpr& re
     }
     re.ref.target = GetInstantiatedTarget(*baseTy, *re.ref.target, instTys, re.matchedParentTy);
     // If the target of RefExpr has been instantiated, we should clear the field instTys of the latter.
-    ClearInstTysIsNeeded(re);
+    ClearInstTysIsNeeded(typeManager, re);
 }
 
 void GIM::GenericInstantiationManagerImpl::RearrangeMemberAccessReference(MemberAccess& ma)
@@ -1372,7 +1373,7 @@ void GIM::GenericInstantiationManagerImpl::RearrangeMemberAccessReference(Member
      * Because `Sample<T>` has been generic erase to `Sample_JObject`, the target of `s.t` is type of `JObject`,
      * but actually it should be `A` here, so we don't update its `ty` to keep it `A`.
      */
-    ClearInstTysIsNeeded(ma);
+    ClearInstTysIsNeeded(typeManager, ma);
 }
 
 void GIM::GenericInstantiationManagerImpl::RearrangeTypeReference(Type& type)

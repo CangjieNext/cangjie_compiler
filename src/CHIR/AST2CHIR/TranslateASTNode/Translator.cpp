@@ -6,6 +6,7 @@
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
+#include "cangjie/CHIR/IR/IntrinsicKind.h"
 
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
@@ -205,6 +206,7 @@ Ptr<LocalVar> Translator::CreateGetElementRefWithPath(const DebugLocation& loc, 
     const std::vector<std::string>& path, Ptr<Block> block, const CustomType& customType)
 {
     auto [memberType, isReadOnly] = GetInstMemberTypeByNameCheckingReadOnly(customType, path, builder);
+    memberType = builder.SubstituteModal(memberType, customType.Modal());
     auto memberRefType = builder.GetType<RefType>(memberType);
     auto getMemberRef =
         CreateAndAppendExpression<GetElementByName>(loc, memberRefType, lhsBase, path, block)->GetResult();
