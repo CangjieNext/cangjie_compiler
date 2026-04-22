@@ -60,7 +60,7 @@ void Devirtualization::RunOnFunc(const Func* func, CHIRBuilder& builder)
             paramTys.emplace_back(param->GetType());
         }
         // Grab the function from the classMap.
-        auto [realCallee, thisType] = FindRealCallee(builder, resVal,
+        auto [realCallee, thisType] = FindRealCallee(*invoke, builder, resVal,
             {invoke->GetMethodName(), std::move(paramTys), invoke->GetInstantiatedTypeArgs()});
         if (!realCallee) {
             return;
@@ -473,7 +473,7 @@ bool Devirtualization::IsValidSubType(CHIRBuilder& builder, const Type* expected
 }
 
 std::pair<FuncBase*, Type*> Devirtualization::FindRealCallee(
-    CHIRBuilder& builder, const TypeValue* typeState, const FuncSig& method) const
+    const Invoke& invoke, CHIRBuilder& builder, const TypeValue* typeState, const FuncSig& method) const
 {
     auto typeStateKind = typeState->GetTypeKind();
     auto specificType = typeState->GetSpecificType();
@@ -495,6 +495,25 @@ std::pair<FuncBase*, Type*> Devirtualization::FindRealCallee(
             FuncCallType funcCallType{method.name, funcType, method.typeArgs};
             auto res = def->GetFuncIndexInVTable(funcCallType, false, replaceTable, builder);
             if (!res.empty() && res[0].instance != nullptr) {
+                if (res.size() > 1) {
+                    auto loc = invoke.GetDebugLocation();
+                    const auto& filePath = loc.GetAbsPath();
+                    const auto line = loc.GetBeginPos().line;
+                    auto topLevelFuncName = invoke.GetTopLevelFunc()->GetSrcCodeIdentifier();
+                    auto calleeName = invoke.GetMethodName();
+                    std::string subClassName;
+                    if (auto ct = DynamicCast<const CustomType*>(specificType)) {
+                        subClassName = ct->GetCustomTypeDef()->GetSrcCodeIdentifier();
+                    } else {
+                        subClassName = specificType->ToString();
+                    }
+                    printf("kangyi: in function: %s, file: %s, line: %d, call virtual func %s, real object type is %s ------\n",
+                        topLevelFuncName.c_str(), filePath.c_str(), line, calleeName.c_str(), subClassName.c_str());
+                    for (auto& r : res) {
+                        auto className = r.originalDef->GetSrcCodeIdentifier();
+                        printf("    original class def: %s\n", className.c_str());
+                    }
+                }
                 target = res[0].instance;
                 break;
             }

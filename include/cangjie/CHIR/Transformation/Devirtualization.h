@@ -75,7 +75,7 @@ private:
     void RunOnFunc(const Func* func, CHIRBuilder& builder);
 
     std::pair<FuncBase*, Type*> FindRealCallee(
-        CHIRBuilder& builder, const TypeValue* typeState, const FuncSig& method) const;
+        const Invoke& invoke, CHIRBuilder& builder, const TypeValue* typeState, const FuncSig& method) const;
 
     bool IsValidSubType(CHIRBuilder& builder, const Type* expected, Type* specific,
         std::unordered_map<const GenericType*, Type*>& replaceTable) const;
