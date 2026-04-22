@@ -17,6 +17,7 @@
 #include "GenericInstantiation/GenericInstantiationManagerImpl.h"
 #include "ImplUtils.h"
 #include "TypeCheckUtil.h"
+#include "cangjie/Sema/OverrideFunctionResolver.h"
 
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
@@ -138,8 +139,8 @@ void GenericInstantiationManager::InstantiatedExtendRecorder::RecordExtendForMem
 void GenericInstantiationManager::InstantiatedExtendRecorder::RecordImplExtendDecl(
     Ty& ty, FuncDecl& fd, Ptr<Ty> upperTy)
 {
-    MemberFuncsWithInstTys funcs;
-    gim.GetInstMemberFuncWithInstTy(ty, funcs, fd.identifier);
+    OverrideFunctionResolver resolver(typeManager, promotion);
+    MemberFuncsWithInstTys funcs = resolver.GetInstMemberFuncWithInstTy(ty, fd.identifier);
     Ptr<Decl> extend = nullptr;
     // All candidates have satisfied functions, choose most matched decl.
     for (auto [func, _] : funcs) {
