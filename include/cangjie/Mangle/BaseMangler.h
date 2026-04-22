@@ -474,6 +474,7 @@ private:
     {
         return "k";
     }
+    std::string MangleCStringType(const AST::Ty& ty) const;
     void MangleExportIdForGenericParamDecl(const AST::Decl& decl) const;
 };
 
@@ -646,6 +647,8 @@ std::string MangleFilePrivate(const AST::Decl& decl);
  * @return std::string The mangled number string.
  */
 std::string DecimalToManglingNumber(const std::string& decimal);
+
+std::string MangleLocalModifier(AST::ModalInfo modal);
 } // namespace MangleUtils
 } // namespace Cangjie
 #endif // CANGJIE_MANGLE_BASEMANGLER_H

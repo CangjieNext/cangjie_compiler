@@ -17,6 +17,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Match.h"
+#include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Utils/CheckUtils.h"
 
 using namespace Cangjie;

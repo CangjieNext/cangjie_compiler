@@ -5,26 +5,38 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "cangjie/AST/AttributePack.h"
+#include "cangjie/AST/Utils.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
-#include "cangjie/AST/Walker.h"
-#include "cangjie/CHIR/Utils/ConstantUtils.h"
+#include "cangjie/CHIR/IR/Expression/Expression.h"
 #include "cangjie/CHIR/IR/IntrinsicKind.h"
+#include "cangjie/CHIR/Utils/ConstantUtils.h"
 
 namespace Cangjie::CHIR {
 static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {SIZE_OF_NAME, SIZE_OF},
     {ALIGN_OF_NAME, ALIGN_OF},
     {ARRAY_ACQUIRE_RAW_DATA_NAME, ARRAY_ACQUIRE_RAW_DATA},
+    {"acquireRawData2", ARRAY_ACQUIRE_RAW_DATA},
     {ARRAY_RELEASE_RAW_DATA_NAME, ARRAY_RELEASE_RAW_DATA},
+    {"releaseRawData2", ARRAY_RELEASE_RAW_DATA},
     {ARRAY_BUILT_IN_COPY_TO_NAME, ARRAY_BUILT_IN_COPY_TO},
+    {"intrinsicBuiltInCopyTo2", ARRAY_BUILT_IN_COPY_TO},
+    {"intrinsicBuiltInCopyTo3", ARRAY_BUILT_IN_COPY_TO},
     {ARRAY_GET_NAME, ARRAY_GET},
     {ARRAY_SET_NAME, ARRAY_SET},
+    {"arraySet2", ARRAY_SET},
+    {"arraySet3", ARRAY_SET},
     {ARRAY_GET_UNCHECKED_NAME, ARRAY_GET_UNCHECKED},
+    {"arrayGetUnchecked2", ARRAY_GET_UNCHECKED},
+    {"arrayGetUnchecked3", ARRAY_GET_UNCHECKED},
 
     {ARRAY_GET_REF_UNCHECKED_NAME, ARRAY_GET_REF_UNCHECKED},
 
     {ARRAY_SET_UNCHECKED_NAME, ARRAY_SET_UNCHECKED},
+    {"arraySetUnchecked2", ARRAY_SET_UNCHECKED},
+    {"arraySetUnchecked3", ARRAY_SET_UNCHECKED},
     {ARRAY_SIZE_NAME, ARRAY_SIZE},
     {ARRAY_CLONE_NAME, ARRAY_CLONE},
     {ARRAY_SLICE_INIT_NAME, ARRAY_SLICE_INIT},
@@ -49,6 +61,7 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {CPOINTER_READ_NAME, CPOINTER_READ},
     {CPOINTER_WRITE_NAME, CPOINTER_WRITE},
     {CPOINTER_ADD_NAME, CPOINTER_ADD},
+    {"addPointer2", CPOINTER_ADD},
 
     {CSTRING_CONVERT_CSTR_TO_PTR_NAME, CSTRING_CONVERT_CSTR_TO_PTR},
     {BIT_CAST_NAME, BIT_CAST},
@@ -68,6 +81,7 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {RAW_ARRAY_REFEQ_NAME, RAW_ARRAY_REFEQ},
 
     {OBJECT_ZERO_VALUE_NAME, OBJECT_ZERO_VALUE},
+    {"zeroValue2", OBJECT_ZERO_VALUE},
 
     {SOURCE_FILE_NAME, SOURCE_FILE},
     {SOURCE_LINE_NAME, SOURCE_LINE},
@@ -739,7 +753,7 @@ void Translator::BlackBoxModifyArgTypeToRef(std::vector<Value*>& args)
         arg = newArg;
     }
 }
- 
+
 Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
 {
     // Conditions to check if this is a call to intrinsic

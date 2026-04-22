@@ -19,6 +19,10 @@
 #include "cangjie/Mangle/CHIRMangler.h"
 #include "cangjie/Sema/TypeManager.h"
 
+namespace Cangjie::AST {
+struct Node;
+}
+
 namespace Cangjie::CHIR {
 template <typename T> class AST2CHIRNodeMap {
 public:

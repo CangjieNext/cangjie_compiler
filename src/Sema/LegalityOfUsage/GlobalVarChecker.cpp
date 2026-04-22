@@ -75,14 +75,14 @@ bool IsRefGlobalOrStaticVar(const RefExpr& re)
     return IsGlobalOrStaticOrConstVar(*re.ref.target);
 }
 
-Ptr<Decl> GetTargetIfShouldCollect(const Expr& expr)
+Ptr<Decl> GetTargetIfShouldCollect(TypeManager& tym, DiagnosticEngine& d, const Expr& expr)
 {
     auto target = expr.GetTarget();
     if (target == nullptr) {
         return target;
     }
     // Get real used target. eg: if target is property, get real used getter or setter which is decided by expr.
-    target = GetUsedMemberDecl(*target, !expr.TestAttr(Attribute::LEFT_VALUE));
+    target = GetUsedMemberDecl(tym, d, *target, !expr.TestAttr(Attribute::LEFT_VALUE), {});
     // The target only need be collected when it is funcDecl.
     return target->astKind == ASTKind::FUNC_DECL ? target : nullptr;
 }
@@ -242,7 +242,7 @@ struct DefUseGraph {
 
 class GlobalVarChecker {
 public:
-    explicit GlobalVarChecker(DiagnosticEngine& d) : diag(d)
+    explicit GlobalVarChecker(TypeManager& tym, DiagnosticEngine& d) : typeManager{tym}, diag(d)
     {
     }
     void DoCollect(const Package& package);
@@ -270,6 +270,7 @@ private:
     void CheckByToposort();
     bool ToposortDFS(DefNode& node);
 
+    TypeManager& typeManager;
     DiagnosticEngine& diag;
     DefUseGraph graph;
     Ptr<DefNode> currentNode{nullptr};
@@ -471,14 +472,14 @@ void GlobalVarChecker::CollectVarUsageBFSImpl(const Node& node, std::queue<Ptr<c
                     worklist.push(ae.rightExpr.get());
                 }
                 // Left value of assignExpr may be property which should be collected.
-                if (auto target = ae.leftValue ? GetTargetIfShouldCollect(*ae.leftValue) : nullptr) {
+                if (auto target = ae.leftValue ? GetTargetIfShouldCollect(typeManager, diag, *ae.leftValue) : nullptr) {
                     worklist.push(target);
                 }
                 return VisitAction::SKIP_CHILDREN;
             }
             case ASTKind::MEMBER_ACCESS: {
                 const auto& ma = StaticCast<const MemberAccess&>(*n);
-                if (auto target = GetTargetIfShouldCollect(ma)) {
+                if (auto target = GetTargetIfShouldCollect(typeManager, diag, ma)) {
                     worklist.push(target);
                 }
                 CollectInMemberAccessExpr(ma);
@@ -488,7 +489,7 @@ void GlobalVarChecker::CollectVarUsageBFSImpl(const Node& node, std::queue<Ptr<c
                 const auto& re = StaticCast<const RefExpr&>(*n);
                 CollectInRefExpr(re);
                 // If referring a function or property, collect recursively.
-                if (auto target = GetTargetIfShouldCollect(re)) {
+                if (auto target = GetTargetIfShouldCollect(typeManager, diag, re)) {
                     worklist.push(target);
                 }
                 return VisitAction::SKIP_CHILDREN;
@@ -670,7 +671,7 @@ void GlobalVarChecker::DoCheck(const Package& package)
 
 void TypeChecker::TypeCheckerImpl::CheckGlobalVarInitialization([[maybe_unused]]ASTContext& ctx, const Package& package)
 {
-    GlobalVarChecker checker(diag);
+    GlobalVarChecker checker(typeManager, diag);
     checker.DoCollect(package);
     checker.DoCheck(package);
 }

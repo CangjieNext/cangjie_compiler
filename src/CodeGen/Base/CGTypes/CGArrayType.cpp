@@ -13,6 +13,7 @@
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Type/EnumDef.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
+#include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Mangle/CHIRTypeManglingUtils.h"
 
 namespace Cangjie::CodeGen {

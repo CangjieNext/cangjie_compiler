@@ -25,6 +25,9 @@ void ASTWriter::ASTWriterImpl::SaveBasicNodeInfo(PackageFormat::ExprBuilder& dbu
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
     dbuilder.add_type(info.ty);
+    if (info.tyMode.o != 0) {
+        dbuilder.add_tyMode(info.tyMode);
+    }
     FormattedIndex mapIndx = info.mapExpr ? GetExprIndex(*info.mapExpr) : INVALID_FORMAT_INDEX;
     dbuilder.add_mapExpr(mapIndx);
     dbuilder.add_overflowPolicy(STRATEGY_MAP.at(info.ov));
@@ -37,9 +40,11 @@ NodeInfo ASTWriter::ASTWriterImpl::PackNodeInfo(const Node& node)
     auto [pkgIndex, fileIndex] = GetFileIndex(begin.fileID);
     TPosition posBegin(fileIndex, pkgIndex, begin.line, begin.column, begin.GetStatus() == PositionStatus::IGNORE);
     TPosition posEnd(fileIndex, pkgIndex, end.line, end.column, end.GetStatus() == PositionStatus::IGNORE);
-    auto ty = SaveType(node.GetTy());
+    auto dataTy = typeManager.SubstituteModal(const_cast<Ty*>(node.GetTy().get()), {});
+    auto ty = SaveType(dataTy);
+    auto mode = SaveModal(builder, node.GetTy()->Modal());
 
-    return {posBegin, posEnd, ty};
+    return {posBegin, posEnd, ty, mode};
 }
 
 // Only get desugared expression. 'ParenExpr' is just a wrapper which can be ignore.
@@ -142,11 +147,16 @@ TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const MemberAccess& ma, con
     auto target = GetFullDeclIndex(ma.target);
     std::vector<FormattedIndex> types(ma.instTys.size());
     for (size_t i = 0; i < ma.instTys.size(); ++i) {
-        types[i] = SaveType(ma.instTys[i]);
+        types[i] = SaveType(typeManager.SubstituteModal(ma.instTys[i].get(), {}));
     }
     auto tyIdx = builder.CreateVector<FormattedIndex>(types);
-    auto parentTy = SaveType(ma.matchedParentTy);
-    auto eInfo = PackageFormat::CreateReferenceInfo(builder, fieldIdx, target, tyIdx, parentTy);
+    FormattedIndex parentTy = INVALID_FORMAT_INDEX;
+    TModeOffset parentTyMode{};
+    if (ma.matchedParentTy) {
+        parentTy = SaveType(typeManager.SubstituteModal(ma.matchedParentTy.get(), {}));
+        parentTyMode = SaveModal(builder, ma.matchedParentTy->Modal());
+    }
+    auto eInfo = PackageFormat::CreateReferenceInfo(builder, fieldIdx, target, tyIdx, parentTy, parentTyMode);
     PackageFormat::ExprBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::ExprKind_MemberAccess);
     SaveBasicNodeInfo(dbuilder, info);
@@ -166,8 +176,13 @@ TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const RefExpr& re, const No
         types[i] = SaveType(re.instTys[i]);
     }
     auto tyIdx = builder.CreateVector<FormattedIndex>(types);
-    auto parentTy = SaveType(re.matchedParentTy);
-    auto eInfo = PackageFormat::CreateReferenceInfo(builder, name, target, tyIdx, parentTy);
+    FormattedIndex parentTy = INVALID_FORMAT_INDEX;
+    TModeOffset parentTyMode{};
+    if (re.matchedParentTy) {
+        parentTy = SaveType(typeManager.SubstituteModal(re.matchedParentTy.get(), {}));
+        parentTyMode = SaveModal(builder, re.matchedParentTy->Modal());
+    }
+    auto eInfo = PackageFormat::CreateReferenceInfo(builder, name, target, tyIdx, parentTy, parentTyMode);
     PackageFormat::ExprBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::ExprKind_RefExpr);
     SaveBasicNodeInfo(dbuilder, info);
@@ -617,6 +632,19 @@ TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const ForInExpr& fie, const
     return dbuilder.Finish();
 }
 
+TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const ExclaveExpr& ee, const NodeInfo& info)
+{
+    auto bodyIdx = SaveExpr(*ee.body);
+    std::vector<FormattedIndex> operands;
+    operands.emplace_back(bodyIdx);
+    auto operandsIdx = builder.CreateVector<FormattedIndex>(operands);
+    PackageFormat::ExprBuilder dbuilder(builder);
+    SaveBasicNodeInfo(dbuilder, info);
+    dbuilder.add_kind(PackageFormat::ExprKind_ExclaveExpr);
+    dbuilder.add_operands(operandsIdx);
+    return dbuilder.Finish();
+}
+
 FormattedIndex ASTWriter::ASTWriterImpl::SaveMatchCase(const MatchCase& mc)
 {
     FormattedIndex index = static_cast<FormattedIndex>(allExprs.size()) + 1;
@@ -734,6 +762,9 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveConstPattern(const ConstPattern& cp
     dbuilder.add_end(&info.end);
     dbuilder.add_exprs(exprsIdx);
     dbuilder.add_types(tyIdx);
+    if (info.tyMode.o != 0) {
+        dbuilder.add_tyModes(CreateTyModesVector(builder, {info.tyMode}));
+    }
     return dbuilder.Finish();
 }
 
@@ -746,6 +777,9 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveWildcardPattern(const WildcardPatte
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
     dbuilder.add_types(tyIdx);
+    if (info.tyMode.o != 0) {
+        dbuilder.add_tyModes(CreateTyModesVector(builder, {info.tyMode}));
+    }
     return dbuilder.Finish();
 }
 
@@ -761,6 +795,9 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveVarPattern(const VarPattern& vp)
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
     dbuilder.add_types(tyIdx);
+    if (info.tyMode.o != 0) {
+        dbuilder.add_tyModes(CreateTyModesVector(builder, {info.tyMode}));
+    }
     dbuilder.add_exprs(exprsIdx);
     return dbuilder.Finish();
 }
@@ -779,6 +816,9 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveTuplePattern(const TuplePattern& tp
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
     dbuilder.add_types(tyIdx);
+    if (info.tyMode.o != 0) {
+        dbuilder.add_tyModes(CreateTyModesVector(builder, {info.tyMode}));
+    }
     dbuilder.add_patterns(patternsIdx);
     return dbuilder.Finish();
 }
@@ -795,6 +835,9 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveTypePattern(const TypePattern& tp)
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
     dbuilder.add_types(tyIdx);
+    if (info.tyMode.o != 0) {
+        dbuilder.add_tyModes(CreateTyModesVector(builder, {info.tyMode}));
+    }
     dbuilder.add_patterns(patternsIdx);
     dbuilder.add_matchBeforeRuntime(tp.matchBeforeRuntime);
     dbuilder.add_needRuntimeTypeCheck(tp.needRuntimeTypeCheck);
@@ -818,6 +861,9 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveEnumPattern(const EnumPattern& ep)
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
     dbuilder.add_types(tyIdx);
+    if (info.tyMode.o != 0) {
+        dbuilder.add_tyModes(CreateTyModesVector(builder, {info.tyMode}));
+    }
     dbuilder.add_exprs(exprsIdx);
     dbuilder.add_patterns(patternsIdx);
     return dbuilder.Finish();

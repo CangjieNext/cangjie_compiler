@@ -6,10 +6,15 @@
 
 // This files declares the entry of ComputeAnnotationsBeforeCheck stage.
 
-#include <variant>
+#include "cangjie/CHIR/Checker/ComputeAnnotations.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Checker/ComputeAnnotations.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
+#include "cangjie/Frontend/CompilerInstance.h"
+#include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
+#include <variant>
 
 namespace Cangjie::CHIR {
 using namespace AST;

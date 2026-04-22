@@ -157,13 +157,13 @@ CHIR::Type* Translator::GetExactParentType(
         } else {
             parentTy = TranslateType(*outerDecl->GetTy());
         }
-        return parentTy->StripAllRefs();
+        return builder.SubstituteModal(parentTy->StripAllRefs(), fuzzyParentType.Modal());
     }
-
+    auto dataTy = builder.SubstituteModal(&fuzzyParentType, {});
     auto funcName = resolvedFunction.identifier.Val();
     auto isStatic = resolvedFunction.TestAttr(AST::Attribute::STATIC);
     CHIR::Type* result = nullptr;
-    if (auto genericTy = DynamicCast<GenericType*>(&fuzzyParentType)) {
+    if (auto genericTy = DynamicCast<GenericType*>(dataTy)) {
         auto& upperBounds = genericTy->GetUpperBounds();
         CJC_ASSERT(!upperBounds.empty());
         for (auto upperBound : upperBounds) {
@@ -174,7 +174,7 @@ CHIR::Type* Translator::GetExactParentType(
                 break;
             }
         }
-    } else if (auto classTy = DynamicCast<CustomType*>(&fuzzyParentType)) {
+    } else if (auto classTy = DynamicCast<CustomType*>(dataTy)) {
         result =
             classTy->GetExactParentType(funcName, funcType, isStatic, funcInstTypeArgs, builder, checkAbstractMethod);
     } else {
@@ -193,7 +193,8 @@ CHIR::Type* Translator::GetExactParentType(
             auto func = ex->GetExpectedFunc(
                 funcName, funcType, isStatic, replaceTable, funcInstTypeArgs, builder, checkAbstractMethod);
             if (func != nullptr && func->Get<WrappedRawMethod>() == nullptr) {
-                return ReplaceRawGenericArgType(*ex->GetExtendedType(), replaceTable, builder);
+                auto ty = ReplaceRawGenericArgType(*ex->GetExtendedType(), replaceTable, builder);
+                return builder.SubstituteModal(ty, fuzzyParentType.Modal());
             }
         }
         for (auto ex : extendDefs) {
@@ -201,10 +202,13 @@ CHIR::Type* Translator::GetExactParentType(
                 result = ty->GetExactParentType(
                     funcName, funcType, isStatic, funcInstTypeArgs, builder, checkAbstractMethod);
                 if (result != nullptr) {
-                    return result;
+                    return builder.SubstituteModal(result, fuzzyParentType.Modal());
                 }
             }
         }
+    }
+    if (result) {
+        result = builder.SubstituteModal(result, fuzzyParentType.Modal());
     }
     return result;
 }

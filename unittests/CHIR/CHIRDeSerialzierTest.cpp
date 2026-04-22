@@ -624,6 +624,12 @@ ExprKind DeSerialize(const PackageFormat::CHIRExprKind& kind)
         case CHIRExprKind_GetRttiStatic:
             ret = ExprKind::GET_RTTI_STATIC;
             break;
+        case CHIRExprKind_StartRegion:
+            ret = ExprKind::START_REGION;
+            break;
+        case CHIRExprKind_EndRegion:
+            ret = ExprKind::END_REGION;
+            break;
     }
     return ret;
 }

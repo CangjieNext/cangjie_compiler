@@ -104,7 +104,7 @@ llvm::AllocaInst* IRBuilder2::CreateEntryAlloca(llvm::Type* type, llvm::Value* a
     return allocaInst;
 }
 
-llvm::Instruction* IRBuilder2::CreateEntryAlloca(const CGType& cgType, const llvm::Twine& name)
+llvm::Instruction* IRBuilder2::CreateEntryAlloca(const CGType& cgType, const llvm::Twine& name, bool isLocalRegion)
 {
     if (cgType.GetSize()) {
         auto allocatedType = cgType.IsCGFunction()
@@ -136,7 +136,8 @@ llvm::Instruction* IRBuilder2::CreateEntryAlloca(const CGType& cgType, const llv
     }
 
     llvm::Value* size = GetLayoutSize_32(cgType.GetOriginal());
-    auto allocaInst = CallIntrinsicAllocaGeneric({CreateTypeInfo(cgType.GetOriginal()), size});
+    auto allocaInst =
+        CallIntrinsicAllocaGeneric({CreateTypeInfo(cgType.GetOriginal()), size}, IsLocalRegion(cgType.GetOriginal()));
     allocaInst->setDebugLoc(llvm::DebugLoc());
     return allocaInst;
 }
@@ -148,7 +149,8 @@ llvm::Value* IRBuilder2::CreateLoad(const CGValue& cgVal, const llvm::Twine& nam
     if (auto& ori = elementCGType->GetOriginal(); !elementCGType->GetSize() && !ori.IsGeneric()) {
         auto ti = CreateTypeInfo(ori);
         auto payloadSize = GetLayoutSize_32(ori);
-        auto tmp = CallIntrinsicAllocaGeneric({ti, payloadSize});
+        bool isLocalRegion = chirExpr ? IsLocalRegion(*chirExpr->GetResult()->GetType()) : false;
+        auto tmp = CallIntrinsicAllocaGeneric({ti, payloadSize}, isLocalRegion);
         auto basePtr = GetCGContext().GetBasePtrOf(cgVal.GetRawValue());
         auto addrSpace = cgVal.GetRawValue()->getType()->getPointerAddressSpace();
         if (basePtr == nullptr) {
@@ -369,8 +371,9 @@ void IRBuilder2::CreateBoxedValueForValueType(const CHIR::Debug& debugNode, cons
     auto argType = arg->getType();
 
     // Alloca and store typeInfo
-    auto tiValue = CreateTypeInfo(DeRef(*debugNode.GetValue()->GetType()));
-    auto thisDebug = CallIntrinsicAllocaGeneric({tiValue, payloadSize});
+    auto debugNodeType = DeRef(*debugNode.GetValue()->GetType());
+    auto tiValue = CreateTypeInfo(debugNodeType);
+    auto thisDebug = CallIntrinsicAllocaGeneric({tiValue, payloadSize}, IsLocalRegion(*debugNodeType));
     thisDebug->setName(arg->getName() + ".generic.alloca");
 
     // Store value for parameter

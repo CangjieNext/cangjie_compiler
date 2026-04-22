@@ -7,12 +7,13 @@
 #include "cangjie/CHIR/Transformation/ClosureConversion.h"
 
 #include "cangjie/CHIR/IR/Annotation.h"
-#include "cangjie/CHIR/Transformation/GenerateVTable/GenerateVTable.h"
-#include "cangjie/CHIR/Utils/CHIRCasting.h"
+#include "cangjie/CHIR/IR/Type/PrivateTypeConverter.h"
 #include "cangjie/CHIR/Optimization/FunctionInline.h"
 #include "cangjie/CHIR/Optimization/LambdaInline.h"
-#include "cangjie/CHIR/IR/Type/PrivateTypeConverter.h"
+#include "cangjie/CHIR/Transformation/GenerateVTable/GenerateVTable.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
+#include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 #include "cangjie/Mangle/CHIRTypeManglingUtils.h"
 #include "cangjie/Option/Option.h"
@@ -323,7 +324,7 @@ ClassType* InstantiateAutoEnvBaseType(ClassDef& autoEnvBaseDef, const FuncType& 
     if (autoEnvBaseDef.TestAttr(Attribute::GENERIC)) {
         typeArgs = funcType.GetTypeArgs();
     }
-    return builder.GetType<ClassType>(&autoEnvBaseDef, typeArgs);
+    return builder.GetType<ClassType>(&autoEnvBaseDef, typeArgs, funcType.Modal());
 }
 
 void LiftCustomDefType(CustomTypeDef& def, TypeConverterForCC& converter)
@@ -1011,6 +1012,7 @@ Ptr<LocalVar> ClosureConversion::CreateAutoEnvImplObject(
 ClassType* ClosureConversion::GenerateInstantiatedClassType(
     ClassType& autoEnvImplType, const Expression& user, Value& srcFunc)
 {
+    auto modal = autoEnvImplType.Modal();
     // The instantiated type args include two parts:
     // 1) args for the generic param of the outer scope decls
     // 2) args for the generic param of func itself
@@ -1050,7 +1052,7 @@ ClassType* ClosureConversion::GenerateInstantiatedClassType(
     }
 
     CJC_ASSERT(autoEnvImplType.GetGenericArgs().size() == autoEnvInstTypeArgs.size());
-    return builder.GetType<ClassType>(autoEnvImplType.GetClassDef(), autoEnvInstTypeArgs);
+    return builder.GetType<ClassType>(autoEnvImplType.GetClassDef(), autoEnvInstTypeArgs, modal);
 }
 
 ClassDef* ClosureConversion::CreateBoxClassDef(Type& type)
@@ -1066,7 +1068,7 @@ ClassDef* ClosureConversion::CreateBoxClassDef(Type& type)
     auto mangledName = MangleUtils::GetMangledNameOfCompilerAddedClass(className);
     auto classDef =
         builder.CreateClass(INVALID_LOCATION, className, mangledName, package.GetName(), true, false);
-    auto classTy = builder.GetType<ClassType>(classDef, genericArgTypes);
+    auto classTy = builder.GetType<ClassType>(classDef, genericArgTypes, type.Modal());
     classDef->SetType(*classTy);
     classDef->SetSuperClassTy(*StaticCast<ClassType*>(objClass.GetType()));
     classDef->Set<IsCapturedClassInCC>(true);
@@ -1332,7 +1334,7 @@ std::vector<Type*> ClosureConversion::ConvertArgsType(const std::vector<Type*>& 
 
 Type* ClosureConversion::ConvertTupleType(const TupleType& type)
 {
-    return builder.GetType<TupleType>(ConvertArgsType(type.GetElementTypes()));
+    return builder.GetType<TupleType>(ConvertArgsType(type.GetElementTypes()), type.Modal());
 }
 
 Type* ClosureConversion::ConvertFuncType(const FuncType& type)
@@ -1344,32 +1346,33 @@ Type* ClosureConversion::ConvertFuncType(const FuncType& type)
 
 Type* ClosureConversion::ConvertEnumType(const EnumType& type)
 {
-    return builder.GetType<EnumType>(type.GetEnumDef(), ConvertArgsType(type.GetGenericArgs()));
+    return builder.GetType<EnumType>(type.GetEnumDef(), ConvertArgsType(type.GetGenericArgs()), type.Modal());
 }
 
 Type* ClosureConversion::ConvertStructType(const StructType& type)
 {
-    return builder.GetType<StructType>(type.GetStructDef(), ConvertArgsType(type.GetGenericArgs()));
+    return builder.GetType<StructType>(type.GetStructDef(), ConvertArgsType(type.GetGenericArgs()), type.Modal());
 }
 
 Type* ClosureConversion::ConvertClassType(const ClassType& type)
 {
-    return builder.GetType<ClassType>(type.GetClassDef(), ConvertArgsType(type.GetGenericArgs()));
+    return builder.GetType<ClassType>(type.GetClassDef(), ConvertArgsType(type.GetGenericArgs()), type.Modal());
 }
 
 Type* ClosureConversion::ConvertRawArrayType(const RawArrayType& type)
 {
-    return builder.GetType<RawArrayType>(ConvertTypeToClosureType(*type.GetElementType()), type.GetDims());
+    return builder.GetType<RawArrayType>(
+        ConvertTypeToClosureType(*type.GetElementType()), type.GetDims(), type.Modal());
 }
 
 Type* ClosureConversion::ConvertVArrayType(const VArrayType& type)
 {
-    return builder.GetType<VArrayType>(ConvertTypeToClosureType(*type.GetElementType()), type.GetSize());
+    return builder.GetType<VArrayType>(ConvertTypeToClosureType(*type.GetElementType()), type.GetSize(), type.Modal());
 }
 
 Type* ClosureConversion::ConvertCPointerType(const CPointerType& type)
 {
-    return builder.GetType<CPointerType>(ConvertTypeToClosureType(*type.GetElementType()));
+    return builder.GetType<CPointerType>(ConvertTypeToClosureType(*type.GetElementType()), type.Modal());
 }
 
 Type* ClosureConversion::ConvertRefType(const RefType& type)
@@ -1540,7 +1543,7 @@ ClassDef* ClosureConversion::GetOrCreateGenericAutoEnvBaseDef(size_t paramNum)
 
     // create class def
     auto classDef = builder.CreateClass(INVALID_LOCATION, "", className, package.GetName(), true, false);
-    auto classTy = builder.GetType<ClassType>(classDef, genericTypeParams);
+    auto classTy = builder.GetType<ClassType>(classDef, genericTypeParams, ModalInfo{});
     classDef->SetType(*classTy);
 
     // set attribute
@@ -1703,8 +1706,7 @@ void ClosureConversion::CreateGenericOverrideMethodInAutoEnvImplDef(ClassDef& au
         *callSrcFunc->GetResult(), *newFuncRetType, builder, *entry, INVALID_LOCATION);
 
     // store return value and exit
-    CreateAndAppendExpression<Store>(
-        builder, builder.GetType<UnitType>(), applyRes, retVal->GetResult(), entry);
+    CreateAndAppendExpression<Store>(builder, builder.GetUnitTy(), applyRes, retVal->GetResult(), entry);
     CreateAndAppendTerminator<Exit>(builder, entry);
 }
 
@@ -1770,7 +1772,7 @@ void ClosureConversion::CreateInstOverrideMethodInAutoEnvImplDef(ClassDef& autoE
     }
     // store return value and exit
     CreateAndAppendExpression<Store>(
-        builder, builder.GetType<UnitType>(), callSrcFunc->GetResult(), retVal->GetResult(), entry);
+        builder, builder.GetUnitTy(), callSrcFunc->GetResult(), retVal->GetResult(), entry);
     CreateAndAppendTerminator<Exit>(builder, entry);
 }
 
@@ -1816,6 +1818,8 @@ ClassDef* ClosureConversion::CreateAutoEnvImplDef(const std::string& className,
     const std::vector<GenericType*>& genericTypes, const Value& srcFunc, ClassDef& superClassDef,
     std::unordered_map<const GenericType*, Type*>& originalTypeToNewType)
 {
+    auto memberFuncType = StaticCast<FuncType*>(srcFunc.GetType());
+    auto modal = memberFuncType->Modal();
     // 1. create generic type params
     std::vector<Type*> classGenericTypeParams;
     classGenericTypeParams.reserve(genericTypes.size());
@@ -1850,14 +1854,13 @@ ClassDef* ClosureConversion::CreateAutoEnvImplDef(const std::string& className,
         genericType->SetUpperBounds(newUpperBounds);
     }
 
-    // 2. create class def
+    // 2. create class def (same modal as original func/lambda so env and init match)
     auto classDef = builder.CreateClass(INVALID_LOCATION, "", className, package.GetName(), true, false);
-    auto classTy = builder.GetType<ClassType>(classDef, classGenericTypeParams);
+    auto classTy = builder.GetType<ClassType>(classDef, classGenericTypeParams, modal);
     classDef->SetType(*classTy);
 
-    // 3. set super type
+    // 3. set super type (base class with same modal)
     std::vector<Type*> superClassGenericArgs;
-    auto memberFuncType = StaticCast<FuncType*>(srcFunc.GetType());
     if (memberFuncType->IsGenericRelated()) {
         for (auto paramTy : memberFuncType->GetParamTypes()) {
             superClassGenericArgs.emplace_back(ReplaceRawGenericArgType(*paramTy, originalTypeToNewType, builder));
@@ -1869,7 +1872,7 @@ ClassDef* ClosureConversion::CreateAutoEnvImplDef(const std::string& className,
      * if func type is generic related, the class `AutoEnvImpl` inherits `AutoEnvGenericBase<...>`,
      * otherwise, class `AutoEnvImpl` inherits `AutoEnvInstBase` which don't have generic args
      */
-    auto superClassTy = builder.GetType<ClassType>(&superClassDef, superClassGenericArgs);
+    auto superClassTy = builder.GetType<ClassType>(&superClassDef, superClassGenericArgs, modal);
     classDef->SetSuperClassTy(*superClassTy);
 
     // 4. set attribute
@@ -2167,11 +2170,11 @@ ClassDef* ClosureConversion::GetOrCreateInstAutoEnvBaseDef(const FuncType& funcT
     // create class def
     auto classDef = builder.CreateClass(INVALID_LOCATION, "", className, package.GetName(), true, false);
     std::vector<Type*> emptyTypeArgs;
-    auto classTy = builder.GetType<ClassType>(classDef, emptyTypeArgs);
+    auto classTy = builder.GetType<ClassType>(classDef, emptyTypeArgs, funcType.Modal());
     classDef->SetType(*classTy);
 
     // set super class type
-    auto superClassTy = builder.GetType<ClassType>(&superClass, funcType.GetTypeArgs());
+    auto superClassTy = builder.GetType<ClassType>(&superClass, funcType.GetTypeArgs(), funcType.Modal());
     classDef->SetSuperClassTy(*superClassTy);
 
     // set attribute
@@ -2346,7 +2349,7 @@ ClassDef* ClosureConversion::CreateAutoEnvWrapper(const std::string& className, 
 {
     auto wrapperClassDef = builder.CreateClass(INVALID_LOCATION, "", className, package.GetName(), true, false);
     std::vector<Type*> emptyTypeArgs;
-    auto classType = builder.GetType<ClassType>(wrapperClassDef, emptyTypeArgs);
+    auto classType = builder.GetType<ClassType>(wrapperClassDef, emptyTypeArgs, ModalInfo{});
     wrapperClassDef->SetType(*classType);
 
     wrapperClassDef->SetSuperClassTy(superClassType);
@@ -2442,7 +2445,7 @@ Function* ClosureConversion::CreateGenericMethodInAutoEnvWrapper(ClassDef& autoE
     invokeRes->GetExpr()->Set<VirMethodOffset>(0);
 
     // 8. store return value and exit
-    CreateAndAppendExpression<Store>(builder, builder.GetType<UnitType>(), invokeRes, retVal->GetResult(), entry);
+    CreateAndAppendExpression<Store>(builder, builder.GetUnitTy(), invokeRes, retVal->GetResult(), entry);
     CreateAndAppendTerminator<Exit>(builder, entry);
 
     return func;
@@ -2496,8 +2499,7 @@ void ClosureConversion::CreateInstMethodInAutoEnvWrapper(ClassDef& autoEnvWrappe
     };
     auto apply = CreateAndAppendExpression<Apply>(builder, retType, &genericFunc, context, entry);
 
-    CreateAndAppendExpression<Store>(
-        builder, builder.GetType<UnitType>(), apply->GetResult(), retVal->GetResult(), entry);
+    CreateAndAppendExpression<Store>(builder, builder.GetUnitTy(), apply->GetResult(), retVal->GetResult(), entry);
     CreateAndAppendTerminator<Exit>(builder, entry);
 
     // 7. create wrapper class if type is mismatched

@@ -114,7 +114,7 @@ std::set<Ptr<Ty>> Promotion::PromoteHandleTyVar(Ty& from, Ty& target)
         return {};
     }
     auto genericTy = RawStaticCast<GenericsTy*>(&from);
-    for (auto& ty : genericTy->upperBounds) {
+    for (auto& ty : StaticCast<GenericsTy>(tyMgr.SubstituteModal(genericTy, {}))->upperBounds) {
         if (auto res = Promote(*ty, target); !res.empty()) {
             return res;
         }

@@ -158,10 +158,92 @@ std::vector<OwnedPtr<FuncArg>> GetFuncArgsForDesugaredPropDecl(
     return args;
 }
 
+ModalInfo GetReceiverModalOfPropAccess(const ASTContext& ctx, const Expr& expr)
+{
+    if (auto ma = DynamicCast<MemberAccess>(&expr); ma && ma->baseExpr && ma->baseExpr->GetTy()) {
+        return ma->baseExpr->GetTy()->Modal();
+    }
+    // prop access through implicit this, get this modal
+    return GetCurThisModal(ctx, expr.scopeName);
+}
+
+OwnedPtr<Expr> CreateSetterBaseExpr(
+    TypeManager& tyMgr, Expr& subExpr, FuncDecl& setFunc, Ptr<Expr>& basePtr, bool& isMemberAccessSuperCall)
+{
+    auto baseExpr = subExpr.astKind == ASTKind::MEMBER_ACCESS
+        ? CreateMemberAccess(ASTCloner::Clone(RawStaticCast<MemberAccess*>(&subExpr)->baseExpr.get()), setFunc)
+        : OwnedPtr<Expr>(CreateRefExpr(setFunc).release());
+    baseExpr->SetTy(tyMgr.GetFunctionTy({subExpr.GetTy()}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT, {})));
+    CopyBasicInfo(&subExpr, baseExpr.get());
+    if (auto ma = DynamicCast<MemberAccess*>(baseExpr.get())) {
+        CJC_NULLPTR_CHECK(ma->baseExpr);
+        basePtr = ma->baseExpr.get();
+        if (auto ref = DynamicCast<RefExpr*>(basePtr); ref) {
+            isMemberAccessSuperCall = ref->isSuper;
+        }
+        if (auto target = basePtr->GetTarget(); !target || !target->IsNominalDecl()) {
+            ma->baseExpr->mapExpr = basePtr;
+        }
+    }
+    return baseExpr;
+}
+
+void DesugarCompoundSetForPropDecl(
+    TypeManager& tyMgr, DiagnosticEngine& diag, const ASTContext& ctx, Expr& expr, Expr& subExpr, PropDecl& propDecl)
+{
+    auto expectModal = GetReceiverModalOfPropAccess(ctx, subExpr);
+    auto getFunc = GetUsableAccessorForProperty(tyMgr, diag, propDecl, expectModal, &expr, true);
+    auto setFunc = GetUsableAccessorForProperty(tyMgr, diag, propDecl, expectModal, &expr, false);
+    if (!getFunc || !setFunc) {
+        return;
+    }
+    subExpr.EnableAttr(Attribute::UNREACHABLE);
+    Ptr<Expr> basePtr = nullptr;
+    bool isMemberAccessSuperCall = false;
+    auto baseExpr = CreateSetterBaseExpr(tyMgr, subExpr, *setFunc, basePtr, isMemberAccessSuperCall);
+    auto args = GetFuncArgsForDesugaredPropDecl(tyMgr, expr, *subExpr.GetTy(), basePtr, *getFunc);
+    auto lastCallExpr = CreateCallExpr(std::move(baseExpr), std::move(args));
+    CopyBasicInfo(&subExpr, lastCallExpr.get());
+    lastCallExpr->callKind = isMemberAccessSuperCall ? CallKind::CALL_SUPER_FUNCTION : CallKind::CALL_DECLARED_FUNCTION;
+    lastCallExpr->resolvedFunction = setFunc;
+    lastCallExpr->SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT, {}));
+    AddCurFile(*lastCallExpr, expr.curFile);
+    lastCallExpr->EnableAttr(Attribute::SIDE_EFFECT);
+    expr.desugarExpr = std::move(lastCallExpr);
+}
+
+void DesugarSimpleSetForPropDecl(
+    TypeManager& tyMgr, DiagnosticEngine& diag, const ASTContext& ctx, AssignExpr& expr, PropDecl& propDecl)
+{
+    CJC_NULLPTR_CHECK(expr.leftValue);
+    auto& subExpr = *expr.leftValue;
+    auto expectModal = GetReceiverModalOfPropAccess(ctx, subExpr);
+    auto setFunc = GetUsableAccessorForProperty(tyMgr, diag, propDecl, expectModal, &expr, false);
+    if (!setFunc) {
+        return;
+    }
+    subExpr.EnableAttr(Attribute::UNREACHABLE);
+    Ptr<Expr> basePtr = nullptr;
+    bool isMemberAccessSuperCall = false;
+    auto baseExpr = CreateSetterBaseExpr(tyMgr, subExpr, *setFunc, basePtr, isMemberAccessSuperCall);
+    auto argExpr = ASTCloner::Clone(StaticCast<AssignExpr&>(expr).rightExpr.get());
+    TrySetMappedExprForProp(*argExpr, basePtr);
+    std::vector<OwnedPtr<FuncArg>> args;
+    args.emplace_back(CreateFuncArg(std::move(argExpr)));
+    auto lastCallExpr = CreateCallExpr(std::move(baseExpr), std::move(args));
+    CopyBasicInfo(&subExpr, lastCallExpr.get());
+    lastCallExpr->callKind = isMemberAccessSuperCall ? CallKind::CALL_SUPER_FUNCTION : CallKind::CALL_DECLARED_FUNCTION;
+    lastCallExpr->resolvedFunction = setFunc;
+    lastCallExpr->SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT, {}));
+    AddCurFile(*lastCallExpr, expr.curFile);
+    expr.desugarExpr = std::move(lastCallExpr);
+}
+} // namespace
+
 /**
  * Desugar of propDecl get is happened after sema well-typed.
  */
-void DesugarGetForPropDecl(TypeManager& tyMgr, Expr& expr)
+void TypeChecker::TypeCheckerImpl::DesugarGetForPropDecl(const ASTContext& ctx, Expr& expr)
 {
     // 1. Do not desugar for expression which already has desugared result.
     // 2. Do not desugar as property get for left value.
@@ -176,9 +258,10 @@ void DesugarGetForPropDecl(TypeManager& tyMgr, Expr& expr)
     if (!target || target->astKind != ASTKind::PROP_DECL) {
         return;
     }
-    auto propDecl = StaticAs<ASTKind::PROP_DECL>(target);
-    auto getFunc = GetUsedMemberDecl(*propDecl, true);
-    if (getFunc->astKind != ASTKind::FUNC_DECL) {
+    auto propDecl = StaticCast<PropDecl>(target);
+    auto expectModal = GetReceiverModalOfPropAccess(ctx, expr);
+    auto getFunc = GetUsableAccessorForProperty(typeManager, diag, *propDecl, expectModal, &expr, true);
+    if (!getFunc) {
         return;
     }
     OwnedPtr<Expr> baseExpr;
@@ -195,7 +278,7 @@ void DesugarGetForPropDecl(TypeManager& tyMgr, Expr& expr)
         baseExpr = CreateRefExpr(*getFunc);
     }
     // 'getFunc' may be generic type, which need to be update to real used type.
-    baseExpr->SetTy(tyMgr.GetFunctionTy({}, expr.GetTy()));
+    baseExpr->SetTy(typeManager.GetFunctionTy({}, expr.GetTy()));
     CopyBasicInfo(&expr, baseExpr.get());
     auto lastCallExpr = CreateCallExpr(std::move(baseExpr), {});
     lastCallExpr->callKind = isMemberAccessSuperCall ? CallKind::CALL_SUPER_FUNCTION : CallKind::CALL_DECLARED_FUNCTION;
@@ -209,7 +292,7 @@ void DesugarGetForPropDecl(TypeManager& tyMgr, Expr& expr)
 /**
  * Desugar of propDecl set is happened after sema well-typed.
  */
-void DesugarSetForPropDecl(TypeManager& tyMgr, Expr& expr)
+void TypeChecker::TypeCheckerImpl::DesugarSetForPropDecl(const ASTContext& ctx, Expr& expr)
 {
     if (expr.desugarExpr || !Ty::IsTyCorrect(expr.GetTy())) {
         return;
@@ -234,49 +317,11 @@ void DesugarSetForPropDecl(TypeManager& tyMgr, Expr& expr)
     if (propDecl == nullptr || !propDecl->isVar) {
         return;
     }
-    auto [getFunc, setFunc] = GetUsableGetterSetterForProperty(*propDecl);
-    if (!getFunc || !setFunc) {
+    if (isCompound) {
+        DesugarCompoundSetForPropDecl(typeManager, diag, ctx, expr, *subExpr, *propDecl);
         return;
     }
-    // Original 'subExpr' should not be checked for further.
-    subExpr->EnableAttr(Attribute::UNREACHABLE);
-
-    // Since current desugar happens inside sema stage, we cannot use 'move' to create new node.
-    auto baseExpr = subExpr->astKind == ASTKind::MEMBER_ACCESS
-        ? CreateMemberAccess(ASTCloner::Clone(RawStaticCast<MemberAccess*>(subExpr)->baseExpr.get()), *setFunc)
-        : OwnedPtr<Expr>(CreateRefExpr(*setFunc).release());
-    // 'setFunc' may be generic type, which need to be update to real used type.
-    baseExpr->SetTy(tyMgr.GetFunctionTy({subExpr->GetTy()}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
-    CopyBasicInfo(subExpr, baseExpr.get());
-    Ptr<Expr> basePtr = nullptr;
-    // For refExpr case, 'a += b' is desugared to aSet(aGet() + b), there is no side effect to be handle.
-    // For memberAccess case, the baseExpr of memberAccess should be mapped to one expression to avoid side effect.
-    // eg: a.b += c ===> a.bSet(a.bGet() + c)
-    // the 'a' part should only be generated once. This is guaranteed by setting both 'a' 's 'mapExpr' to same 'a',
-    // then CHIR will only generate 'a' once.
-    bool isMemberAccessSuperCall = false;
-    if (auto ma = DynamicCast<MemberAccess*>(baseExpr.get())) {
-        CJC_NULLPTR_CHECK(ma->baseExpr);
-        basePtr = ma->baseExpr.get();
-        if (auto ref = DynamicCast<RefExpr*>(basePtr); ref) {
-            isMemberAccessSuperCall = ref->isSuper;
-        }
-        if (auto target = basePtr->GetTarget(); !target || !target->IsNominalDecl()) {
-            ma->baseExpr->mapExpr = basePtr;
-        }
-    }
-    auto args = GetFuncArgsForDesugaredPropDecl(tyMgr, expr, *subExpr->GetTy(), basePtr, *getFunc);
-    auto lastCallExpr = CreateCallExpr(std::move(baseExpr), std::move(args));
-    CopyBasicInfo(subExpr, lastCallExpr.get());
-    lastCallExpr->callKind = isMemberAccessSuperCall ? CallKind::CALL_SUPER_FUNCTION : CallKind::CALL_DECLARED_FUNCTION;
-    lastCallExpr->resolvedFunction = setFunc;
-    // Setter of propDecl must be unit type.
-    lastCallExpr->SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
-    AddCurFile(*lastCallExpr, expr.curFile);
-    if (isCompound) {
-        lastCallExpr->EnableAttr(Attribute::SIDE_EFFECT);
-    }
-    expr.desugarExpr = std::move(lastCallExpr);
+    DesugarSimpleSetForPropDecl(typeManager, diag, ctx, StaticCast<AssignExpr&>(expr), *propDecl);
 }
 
 void UpdatePosForMacroExpandedNodes(const std::vector<Ptr<AST::Package>>& pkgs)
@@ -294,7 +339,6 @@ void UpdatePosForMacroExpandedNodes(const std::vector<Ptr<AST::Package>>& pkgs)
         walker.Walk();
     }
 }
-} // namespace
 
 void TypeChecker::PerformDesugarAfterSema(std::vector<Ptr<Package>>& pkgs) const
 {
@@ -543,21 +587,20 @@ void TypeChecker::TypeCheckerImpl::GenerateMainInvoke()
 }
 
 // Perform desugar after typecheck before generic instantiation.
-void TypeChecker::TypeCheckerImpl::DesugarForPropDecl(Node& pkg)
+void TypeChecker::TypeCheckerImpl::DesugarForPropDecl(const ASTContext& ctx, Node& pkg)
 {
-    Utils::ProfileRecorder recorder("Post TypeCheck", "DesugarForPropDecl");
-    Walker(&pkg, [this](Ptr<Node> node) -> VisitAction {
+    Walker(&pkg, [this, &ctx](Ptr<Node> node) -> VisitAction {
         if (node->TestAnyAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN)) {
             return VisitAction::SKIP_CHILDREN;
         }
         switch (node->astKind) {
             case ASTKind::REF_EXPR:
             case ASTKind::MEMBER_ACCESS:
-                DesugarGetForPropDecl(typeManager, *StaticAs<ASTKind::EXPR>(node));
+                DesugarGetForPropDecl(ctx, *StaticCast<Expr>(node));
                 break;
             case ASTKind::ASSIGN_EXPR:
             case ASTKind::INC_OR_DEC_EXPR:
-                DesugarSetForPropDecl(typeManager, *StaticAs<ASTKind::EXPR>(node));
+                DesugarSetForPropDecl(ctx, *StaticCast<Expr>(node));
                 break;
             default:
                 break;
@@ -656,7 +699,7 @@ Ptr<AST::Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithoutRecover(
     ctx.Ctx().ClearTypeCheckCache(*node);    // ensure newly created nodes have no related cache
     ctx.Ctx().SkipSynForCorrectTyRec(*node); // avoid possible recovery during synthesize for already checked node
     auto ret = Synthesize(ctx, node);
-    DesugarForPropDecl(*node); // seems that the above still aren't enough...
+    DesugarForPropDecl(ctx.Ctx(), *node); // seems that the above still aren't enough...
     return ret;
 }
 
