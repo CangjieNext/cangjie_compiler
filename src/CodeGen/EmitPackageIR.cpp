@@ -329,11 +329,50 @@ void EmitTIOrTTForCustomDefs(CGModule& cgMod)
     }
 }
 
+// The maximum CompatibleSDKVersion that requires legacy version naming (without pre-release suffix).
+constexpr long kMaxLegacySDKVersion = 19;
+
+// Strip the pre-release suffix (e.g. "-beta.10") from a version string if the
+// configured CompatibleSDKVersion indicates a legacy SDK environment.
+std::string StripVersionPreReleaseSuffix(const std::string& version, const GlobalOptions& options)
+{
+    auto it = options.passedWhenKeyValue.find("CompatibleSDKVersion");
+    if (it == options.passedWhenKeyValue.end() || it->second.empty()) {
+        return version;
+    }
+
+    bool isNumber = true;
+    for (char c : it->second) {
+        if (c < '0' || c > '9') {
+            isNumber = false;
+            break;
+        }
+    }
+    if (!isNumber) {
+        return version;
+    }
+
+    long sdkVer = std::strtol(it->second.c_str(), nullptr, 10);
+    if (sdkVer > kMaxLegacySDKVersion) {
+        return version;
+    }
+
+    auto dashPos = version.find('-');
+    if (dashPos != std::string::npos) {
+        return version.substr(0, dashPos);
+    }
+    return version;
+}
+
 void EmitCJSDKVersion(const CGModule& cgMod)
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
     auto linkageType = llvm::GlobalValue::LinkageTypes::PrivateLinkage;
-    auto strConstant = llvm::ConstantDataArray::getString(llvmCtx, CANGJIE_SDK_VERSION);
+
+    const auto& options = cgMod.GetCGContext().GetCGPkgContext().GetGlobalOptions();
+    std::string sdkVersion = StripVersionPreReleaseSuffix(CANGJIE_SDK_VERSION, options);
+
+    auto strConstant = llvm::ConstantDataArray::getString(llvmCtx, sdkVersion);
     auto cjSdkVersion = llvm::cast<llvm::GlobalVariable>(
         cgMod.GetLLVMModule()->getOrInsertGlobal("cj.sdk.version", strConstant->getType()));
     cjSdkVersion->setInitializer(strConstant);
@@ -407,7 +446,7 @@ void GenSubCHIRPackage(CGModule& cgMod)
         InternalError("Broken llvm ir!");
     }
     RecordCodeInfoInCodeGen("CodeGen stage", cgMod);
-    }
+}
 #endif
 } // namespace
 
@@ -490,7 +529,6 @@ private:
 private:
     CGPkgContext cgPkgCtx;
 };
-
 
 // Limit values[0] from values[1] to values[2], values' ty must be Integer.
 // The basic block is automatically inserted after the current insert block.
