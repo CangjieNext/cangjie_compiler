@@ -124,6 +124,11 @@ public:
 
     std::string GetEnumTypeName() const;
 
+    static inline bool NeedAndroidArm32AlignedEnumLayout(const Triple::Info& target)
+    {
+        return target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID;
+    }
+
     static llvm::StructType* GetAssociatedNonRefLayoutType(
         CGModule& cgMod, const std::vector<CHIR::Type*>& fieldTypes);
 

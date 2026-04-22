@@ -15,13 +15,6 @@
 #include "cangjie/CHIR/IR/Type/EnumDef.h"
 
 namespace Cangjie::CodeGen {
-namespace {
-bool NeedAndroidArm32EnumLayout(const Triple::Info& target)
-{
-    return target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID;
-}
-} // namespace
-
 EnumCtorTIOrTTGenerator::EnumCtorTIOrTTGenerator(
     CGModule& cgMod, const CHIR::EnumType& chirEnumType, std::size_t ctorIndex)
     : cgMod(cgMod), cgCtx(cgMod.GetCGContext()), chirEnumType(chirEnumType), ctorIndex(ctorIndex)
@@ -150,7 +143,7 @@ EnumCtorLayout EnumCtorTIOrTTGenerator::GenLayoutForStructure(const CGEnumType* 
     } else { // EXHAUSTIVE_ASSOCIATED_NONREF
         layout.fieldTypes = fields;
         std::vector<llvm::Constant*> offSets(layout.fieldTypes.size());
-        if (NeedAndroidArm32EnumLayout(cgCtx.GetCompileOptions().target)) {
+        if (CGEnumType::NeedAndroidArm32AlignedEnumLayout(cgCtx.GetCompileOptions().target)) {
             auto nonRefLayout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, layout.fieldTypes);
             layout.size = nonRefLayout.size;
             layout.align = nonRefLayout.align;
