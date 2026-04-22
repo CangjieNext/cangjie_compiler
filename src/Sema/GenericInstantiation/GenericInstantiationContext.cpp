@@ -23,6 +23,7 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Modules/ImportManager.h"
+#include "cangjie/Sema/OverrideFunctionResolver.h"
 #include "cangjie/Sema/TypeManager.h"
 
 using namespace Cangjie;
@@ -40,6 +41,7 @@ void GIM::GenericInstantiationManagerImpl::ClearCache()
     instantiatedDeclsMap.clear();
     membersIndexMap.clear();
     skippedMemberOffsets.clear();
+    instTy2Members.clear();
 }
 
 void GIM::GenericInstantiationManagerImpl::WalkImportedInstantiations(
@@ -348,7 +350,8 @@ void GIM::GenericInstantiationManagerImpl::GetInstMemberFromSuper(AST::Ty& instB
         if (!notSkipSuper) {
             continue;
         }
-        GetInstMemberFuncWithInstTy(*type->ty, funcs, identifier);
+        OverrideFunctionResolver resolver(typeManager, promotion);
+        auto superFuncs = resolver.GetInstMemberFuncWithInstTy(*type->ty, identifier);
     }
     auto mappingBasePtrDecl2InstTy = GenerateTypeMappingByTy(baseDecl->ty, &instBaseTy);
     for (auto& superFunc : funcs) {
@@ -429,25 +432,32 @@ void GIM::GenericInstantiationManagerImpl::MergeIntoFuncs(
     }
 }
 
-/*
-1. 找类型定义自身继承的接口中的成员；
-2. 找类型定义自身父Class中以及其扩展中的成员，如果覆盖1中的成员，则替换；
-3. 找类型定义自身的成员，如果覆盖了1、2中的成员，则替换。候选集记为 funcs。
-
-4. 找到扩展的父接口中的成员；
-5. 找到扩展中的成员，如果覆盖了4中的成员，则替换。
-
-6. 将扩展成员合并到 funcs 中，如果是相同的 funcTy，则保留 funcs 中的成员。
-*/
-void GIM::GenericInstantiationManagerImpl::GetInstMemberFuncWithInstTy(
-    Ty& instBaseTy, MemberFuncsWithInstTys& funcs, const std::string& identifier)
+/**
+ * Get instantiated member functions with their instantiation types for a given instantiated type.
+ * This function collects member functions from:
+ * 1. Super interfaces of the base type
+ * 2. Super classes of the base type
+ * 3. The base type itself
+ * 4. All extend declarations of the base type
+ * 5. Super interfaces of all extend declarations
+ * 6. Extend declarations themselve s
+ *
+ * When merging member functions from extend declarations, if functions have the same type,
+ * the existing function is preserved.
+ *
+ * @param instBaseTy The instantiated base type to get member functions from
+ * @param identifier The name of the member functions to retrieve
+ * @return The collection of retrieved member functions with their instantiation types
+ */
+MemberFuncsWithInstTys GIM::GenericInstantiationManagerImpl::GetInstMemberFuncWithInstTy(
+    Ty& instBaseTy, const std::string& identifier)
 {
     auto key = std::make_pair(&instBaseTy, identifier);
     if (auto found = instTy2Members.find(key); found != instTy2Members.end()) {
-        funcs = found->second;
-        return;
+        return found->second;
     }
 
+    MemberFuncsWithInstTys funcs;
     auto baseDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(&instBaseTy);
     std::set<Ptr<ExtendDecl>> extendDecls;
     if (baseDecl) {
@@ -479,6 +489,7 @@ void GIM::GenericInstantiationManagerImpl::GetInstMemberFuncWithInstTy(
     }
     MergeIntoFuncs(funcs, allExtendFuncs);
     instTy2Members.emplace(key, funcs);
+    return funcs;
 }
 
 /**

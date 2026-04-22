@@ -108,7 +108,7 @@ public:
 
     Generic2InsMap GetAllGenericToInsDecls() const;
 
-    void GetInstMemberFuncWithInstTy(AST::Ty& instBaseTy, MemberFuncsWithInstTys& funcs, const std::string& identifier);
+    // GetInstMemberFuncWithInstTy is now in InstantiatedMemberFinder class
 
     friend class InstantiatedExtendRecorder;
     friend class MockUtils;
@@ -155,7 +155,7 @@ private:
     std::unordered_set<Ptr<const AST::Decl>> usedSrcImportedDecls;
     /** Used for incremental compilation, decide whether new created instantiation need to be compiled. */
     bool needCompile = true;
-    std::unordered_map<std::pair<Ptr<AST::Ty>, std::string>, MemberFuncsWithInstTys, HashPair> instTy2Members;
+    // instTy2Members is now in InstantiatedMemberFinder class
 
     /** Implement working flow for incremental compiling package. */
     void InstantiateForIncrementalPackage();
@@ -250,21 +250,23 @@ private:
 
     /** Build interface function to implemented function map for all type decls */
     void BuildAbstractFuncMap();
-    bool IsImplementationFunc(AST::Ty& ty, const AST::FuncDecl& interfaceFunc, const AST::FuncDecl& fd);
+    // The following functions are now in InstantiatedMemberFinder class
+    // bool IsImplementationFunc(AST::Ty& ty, const AST::FuncDecl& interfaceFunc, const AST::FuncDecl& fd);
 
     bool IsImplementationFunc(const AST::FuncDecl& srcFunc, const AST::FuncDecl& superFunc,
         const Ptr<AST::Ty> srcInstFuncTy, const Ptr<AST::Ty> superInstFuncTy);
-    void MergeIntoFuncs(MemberFuncsWithInstTys& funcs, MemberFuncsWithInstTys& newFuncs);
+    // void MergeIntoFuncs(MemberFuncsWithInstTys& funcs, MemberFuncsWithInstTys& newFuncs);
     /** Check if there's already an implementation for the given function with subtype check */
-    bool HasImplementationWithSubTypeCheck(AST::Ty& instBaseTy, const MemberFuncsWithInstTys& funcs,
-        Ptr<AST::Ty> newFuncInstTy, const std::set<Ptr<AST::Ty>>& newFuncOuterDeclInstTys);
+    // bool HasImplementationWithSubTypeCheck(AST::Ty& instBaseTy, const MemberFuncsWithInstTys& funcs,
+    //     Ptr<AST::Ty> newFuncInstTy, const std::set<Ptr<AST::Ty>>& newFuncOuterDeclInstTys);
 
-    void MergeExtendSuperMember(AST::Ty& instBaseTy, MemberFuncsWithInstTys& funcs, MemberFuncsWithInstTys& newFuncs);
+    // void MergeExtendSuperMember(AST::Ty& instBaseTy, MemberFuncsWithInstTys& funcs, MemberFuncsWithInstTys&
+    // newFuncs);
 
-    void GetInstMemberFromSuper(AST::Ty& instBaseTy, Ptr<AST::InheritableDecl> interfaceDecl,
-        MemberFuncsWithInstTys& funcs, const std::string& identifier, bool isCheckingInterface);
-    void CollectDeclMemberFunc(
-        AST::Decl& decl, AST::Ty& instBaseTy, MemberFuncsWithInstTys& funcs, const std::string& identifier);
+    // void GetInstMemberFromSuper(AST::Ty& instBaseTy, Ptr<AST::InheritableDecl> interfaceDecl,
+    //     MemberFuncsWithInstTys& funcs, const std::string& identifier, bool isCheckingInterface);
+    // void CollectDeclMemberFunc(
+    //     AST::Decl& decl, AST::Ty& instBaseTy, MemberFuncsWithInstTys& funcs, const std::string& identifier);
 
     MultiTypeSubst GetTypeMapping(Ptr<AST::Ty>& baseTy, AST::Ty& interfaceTy);
     void CollectDeclMemberFuncs(AST::Decl& decl, std::unordered_set<Ptr<AST::FuncDecl>>& funcs) const;

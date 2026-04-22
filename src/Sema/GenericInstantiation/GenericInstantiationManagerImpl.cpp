@@ -41,6 +41,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Sema/Desugar.h"
+#include "cangjie/Sema/OverrideFunctionResolver.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
@@ -817,8 +818,8 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
         return &fd;
     }
 
-    MemberFuncsWithInstTys funcs;
-    GetInstMemberFuncWithInstTy(ty, funcs, fd.identifier);
+    OverrideFunctionResolver resolver(typeManager, promotion);
+    MemberFuncsWithInstTys funcs = resolver.GetInstMemberFuncWithInstTy(ty, fd.identifier);
     TypeSubst typeMapping = GenerateTypeMappingByTy(fd.outerDecl->ty, &targetBaseTy);
     auto instFuncTy = typeManager.GetInstantiatedTy(fd.ty, typeMapping);
     for (auto& [implFunc, instTys] : funcs) {
