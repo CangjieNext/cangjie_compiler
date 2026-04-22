@@ -333,7 +333,30 @@ void EmitCJSDKVersion(const CGModule& cgMod)
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
     auto linkageType = llvm::GlobalValue::LinkageTypes::PrivateLinkage;
-    auto strConstant = llvm::ConstantDataArray::getString(llvmCtx, CANGJIE_SDK_VERSION);
+
+    std::string sdkVersion = CANGJIE_SDK_VERSION;
+    const auto& options = cgMod.GetCGContext().GetCGPkgContext().GetGlobalOptions();
+    auto it = options.passedWhenKeyValue.find("CompatibleSDKVersion");
+    if (it != options.passedWhenKeyValue.end()) {
+        bool isNumber = !it->second.empty();
+        for (char c : it->second) {
+            if (c < '0' || c > '9') {
+                isNumber = false;
+                break;
+            }
+        }
+        if (isNumber) {
+            long version = std::strtol(it->second.c_str(), nullptr, 10);
+            if (version <= 19) {
+                auto dashPos = sdkVersion.find('-');
+                if (dashPos != std::string::npos) {
+                    sdkVersion = sdkVersion.substr(0, dashPos);
+                }
+            }
+        }
+    }
+
+    auto strConstant = llvm::ConstantDataArray::getString(llvmCtx, sdkVersion);
     auto cjSdkVersion = llvm::cast<llvm::GlobalVariable>(
         cgMod.GetLLVMModule()->getOrInsertGlobal("cj.sdk.version", strConstant->getType()));
     cjSdkVersion->setInitializer(strConstant);
@@ -407,7 +430,7 @@ void GenSubCHIRPackage(CGModule& cgMod)
         InternalError("Broken llvm ir!");
     }
     RecordCodeInfoInCodeGen("CodeGen stage", cgMod);
-    }
+}
 #endif
 } // namespace
 
@@ -490,7 +513,6 @@ private:
 private:
     CGPkgContext cgPkgCtx;
 };
-
 
 // Limit values[0] from values[1] to values[2], values' ty must be Integer.
 // The basic block is automatically inserted after the current insert block.
