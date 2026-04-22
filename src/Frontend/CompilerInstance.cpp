@@ -661,7 +661,8 @@ void DoNewMangling(
                 if (!Ty::IsTyCorrect(decl.ty)) {
                     return VisitAction::SKIP_CHILDREN;
                 }
-                decl.mangledName = baseMangler.Mangle(decl, filteredPrefix);
+                if (decl.mangledName.empty())
+                    decl.mangledName = baseMangler.Mangle(decl, filteredPrefix);
                 return VisitAction::WALK_CHILDREN;
             },
             [&baseMangler, &filteredPrefix](LambdaExpr& lambda) {

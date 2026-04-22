@@ -1001,6 +1001,7 @@ std::string BaseMangler::MangleExportId(Decl& decl) const
         },
         [](const PrimaryCtorDecl& /* primaryCtorDecl */) { return std::string(); },
         [&decl, this]() {
+            if (!decl.exportId.empty()) return decl.exportId;
             decl.exportId = Mangle(decl);
             for (auto& it : decl.GetMemberDeclPtrs()) {
                 it->exportId = MangleExportId(*it);
