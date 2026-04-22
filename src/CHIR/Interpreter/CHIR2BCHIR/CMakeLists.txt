@@ -5,4 +5,7 @@
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 file(GLOB BCHIRInterpreter *.cpp)
+if(MINGW)
+    set_source_files_properties(${BCHIRInterpreter} PROPERTIES COMPILE_OPTIONS "-Wno-inconsistent-dllimport")
+endif()
 set(CHIRInterpreter ${CHIRInterpreter} ${BCHIRInterpreter} PARENT_SCOPE)

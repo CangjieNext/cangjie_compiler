@@ -29,6 +29,9 @@
 #endif
 
 namespace Cangjie {
+#if defined(ERROR)
+#undef ERROR
+#endif
 // Define the errorData array (declaration is in DiagnosticEngine.h)
 const std::vector<ErrorData> errorData = {
 #define ERROR(Kind, ...) {__VA_ARGS__},
