@@ -1610,6 +1610,7 @@ llvm::Value* IRBuilder2::GetEnumTag(const CHIR::Field& field)
 }
 
 namespace {
+
 llvm::Value* GetOptionLikeNonRefAssociatedValue(IRBuilder2& irBuilder, const CHIR::Type& enumType,
     const CHIR::Type& associatedValueType, llvm::Value* enumValueWithTI)
 {
@@ -1706,20 +1707,15 @@ llvm::Value* GetAssociatedNonRefEnumAssociatedValue(
     // 1. get the memory layout of the Enum's constructor.
     auto args = field.GetBase()->GetType()->GetTypeArgs();
     CJC_ASSERT(associatedValIdx < args.size());
-    auto& target = irBuilder.GetCGContext().GetCompileOptions().target;
-    auto useStructGEP = target.arch == Triple::ArchType::ARM32 && target.env == Triple::Environment::ANDROID;
+    auto useStructGEP = CGEnumType::NeedAndroidArm32AlignedEnumLayout(
+        irBuilder.GetCGContext().GetCompileOptions().target);
     // 2. get the associated values.
-    llvm::Value* fieldPtr = nullptr;
+    std::vector<CHIR::Type*> fieldTypes(args.begin(), args.end());
     if (useStructGEP) {
-        std::vector<CHIR::Type*> fieldTypes;
-        fieldTypes.reserve(args.size());
-        //fieldTypes.emplace_back(cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty());
-        fieldTypes.insert(fieldTypes.end(), args.begin(), args.end());
         auto layoutType = CGEnumType::GetAssociatedNonRefLayoutType(cgMod, fieldTypes);
         auto casted = irBuilder.CreateBitCast(cgEnum.GetRawValue(), layoutType->getPointerTo());
         fieldPtr = irBuilder.CreateStructGEP(layoutType, casted, associatedValIdx, "enum.field.ptr");
     } else {
-        std::vector<CHIR::Type*> fieldTypes(args.begin(), args.end());
         auto layout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fieldTypes);
         auto casted = irBuilder.CreateBitCast(cgEnum.GetRawValue(), i8Ty->getPointerTo());
         fieldPtr = irBuilder.CreateConstGEP1_32(i8Ty, casted, layout.offsets[associatedValIdx], "enum.field.ptr");
