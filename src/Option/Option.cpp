@@ -261,6 +261,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
     success = success && ReprocessObfuseOption();
+    success = success && CheckAPILevel();
     RefactJobs();
     RefactAggressiveParallelCompileOption();
     DisableStaticStdForOhos();
@@ -624,6 +625,29 @@ bool GlobalOptions::CheckPgoOptions() const
                 return false;
             }
         }
+    }
+    return true;
+}
+
+bool GlobalOptions::CheckAPILevel() const
+{
+    static constexpr const char* apiLevelKey = "APILevel_level";
+    static constexpr int minimumCfgApiLevel = 20;
+
+    auto it = passedWhenKeyValue.find(apiLevelKey);
+    if (it == passedWhenKeyValue.end()) {
+        return true;
+    }
+    const std::string& valueStr = it->second;
+    auto maybeLevel = TryParseInt(valueStr);
+    if (!maybeLevel.has_value()) {
+        return true;
+    }
+    if (maybeLevel.value() < minimumCfgApiLevel) {
+        DiagnosticEngine diag;
+        (void)diag.DiagnoseRefactor(DiagKindRefactor::driver_cfg_apilevel_too_low, DEFAULT_POSITION,
+            std::to_string(minimumCfgApiLevel), std::to_string(maybeLevel.value()));
+        return false;
     }
     return true;
 }

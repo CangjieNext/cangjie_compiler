@@ -70,6 +70,7 @@ ERROR(dirver_cfg_not_a_dir,
     "'%s' is not a vaild directory path, please check it or pass the key-value pair like: k1=v1,k2=v2.")
 
 ERROR(driver_cfg_file_read_failed, "read '%s' failed, due to '%s'")
+ERROR(driver_cfg_apilevel_too_low, "Compatible SDK version must be at least %s (got %s)")
 WARNING(driver_cfg_path_ignored, DRIVER_ARG,
     "conditional compilation has been set by key-value mode, cfg.toml will be ignored")
 
