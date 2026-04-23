@@ -403,3 +403,277 @@ TEST(ToStringTest, PatternCompositeRestore)
     VerifyExceptTypePatternRestore();
     VerifyCommandTypePatternRestore();
 }
+
+namespace {
+void ExpectExprToString(const std::string& src)
+{
+    auto expr = ParseExprFromSrc(src);
+    ASSERT_NE(expr, nullptr) << "Failed to parse: " << src;
+    (void)expr->ToString();
+}
+
+void VerifyIfExprToString()
+{
+    auto ifExpr = ParseExprFromSrc("if (true) {}");
+    ASSERT_NE(ifExpr, nullptr);
+    ASSERT_TRUE(Is<IfExpr>(ifExpr.get()));
+    auto parsed = As<ASTKind::IF_EXPR>(ifExpr.get());
+    EXPECT_EQ("if (true) {}", parsed->ToString());
+
+    auto ifElseExpr = ParseExprFromSrc("if (true) {} else {}");
+    ASSERT_NE(ifElseExpr, nullptr);
+    ASSERT_TRUE(Is<IfExpr>(ifElseExpr.get()));
+    auto parsedElse = As<ASTKind::IF_EXPR>(ifElseExpr.get());
+    EXPECT_EQ("if (true) {} else {}", parsedElse->ToString());
+}
+
+void VerifyWhileExprToString()
+{
+    auto whileExpr = ParseExprFromSrc("while (true) {}");
+    ASSERT_NE(whileExpr, nullptr);
+    ASSERT_TRUE(Is<WhileExpr>(whileExpr.get()));
+    auto parsed = As<ASTKind::WHILE_EXPR>(whileExpr.get());
+    EXPECT_EQ("while (true) {}", parsed->ToString());
+}
+
+void VerifyDoWhileExprToString()
+{
+    auto doWhileExpr = ParseExprFromSrc("do {} while (true)");
+    ASSERT_NE(doWhileExpr, nullptr);
+    ASSERT_TRUE(Is<DoWhileExpr>(doWhileExpr.get()));
+    auto parsed = As<ASTKind::DO_WHILE_EXPR>(doWhileExpr.get());
+    EXPECT_EQ("do {} while (true)", parsed->ToString());
+}
+
+void VerifyForInExprToString()
+{
+    auto forInExpr = ParseExprFromSrc("for (i in arr) {}");
+    ASSERT_NE(forInExpr, nullptr);
+    ASSERT_TRUE(Is<ForInExpr>(forInExpr.get()));
+    auto parsed = As<ASTKind::FOR_IN_EXPR>(forInExpr.get());
+    EXPECT_EQ("for (i in arr) {}", parsed->ToString());
+}
+
+void VerifyReturnExprToString()
+{
+    auto returnExpr = ParseExprFromSrc("return");
+    ASSERT_NE(returnExpr, nullptr);
+    ASSERT_TRUE(Is<ReturnExpr>(returnExpr.get()));
+    auto parsed = As<ASTKind::RETURN_EXPR>(returnExpr.get());
+    (void)parsed->ToString();
+
+    auto returnValExpr = ParseExprFromSrc("return 1");
+    ASSERT_NE(returnValExpr, nullptr);
+    ASSERT_TRUE(Is<ReturnExpr>(returnValExpr.get()));
+    auto parsedVal = As<ASTKind::RETURN_EXPR>(returnValExpr.get());
+    EXPECT_EQ("return 1", parsedVal->ToString());
+}
+
+void VerifyJumpExprToString()
+{
+    auto breakExpr = ParseExprFromSrc("break");
+    ASSERT_NE(breakExpr, nullptr);
+    ASSERT_TRUE(Is<JumpExpr>(breakExpr.get()));
+    auto parsedBreak = As<ASTKind::JUMP_EXPR>(breakExpr.get());
+    EXPECT_EQ("break", parsedBreak->ToString());
+
+    auto continueExpr = ParseExprFromSrc("continue");
+    ASSERT_NE(continueExpr, nullptr);
+    ASSERT_TRUE(Is<JumpExpr>(continueExpr.get()));
+    auto parsedCont = As<ASTKind::JUMP_EXPR>(continueExpr.get());
+    EXPECT_EQ("continue", parsedCont->ToString());
+}
+
+void VerifyThrowExprToString()
+{
+    auto throwExpr = ParseExprFromSrc("throw e");
+    ASSERT_NE(throwExpr, nullptr);
+    ASSERT_TRUE(Is<ThrowExpr>(throwExpr.get()));
+    auto parsed = As<ASTKind::THROW_EXPR>(throwExpr.get());
+    EXPECT_EQ("throw e", parsed->ToString());
+}
+
+void VerifyMatchExprToString()
+{
+    auto matchExpr = ParseExprFromSrc("match (x) { case 1 => 1 }");
+    ASSERT_NE(matchExpr, nullptr);
+    ASSERT_TRUE(Is<MatchExpr>(matchExpr.get()));
+    auto parsed = As<ASTKind::MATCH_EXPR>(matchExpr.get());
+    (void)parsed->ToString();
+}
+
+void VerifyTryCatchToString()
+{
+    auto tryCatchExpr = ParseExprFromSrc("try {} catch(e: Exception) {}");
+    ASSERT_NE(tryCatchExpr, nullptr);
+    ASSERT_TRUE(Is<TryExpr>(tryCatchExpr.get()));
+    auto parsed = As<ASTKind::TRY_EXPR>(tryCatchExpr.get());
+    (void)parsed->ToString();
+
+    auto tryCatchFinally = ParseExprFromSrc("try {} catch(e: Exception) {} finally {}");
+    ASSERT_NE(tryCatchFinally, nullptr);
+    ASSERT_TRUE(Is<TryExpr>(tryCatchFinally.get()));
+    (void)As<ASTKind::TRY_EXPR>(tryCatchFinally.get())->ToString();
+
+    auto tryFinally = ParseExprFromSrc("try {} finally {}");
+    ASSERT_NE(tryFinally, nullptr);
+    ASSERT_TRUE(Is<TryExpr>(tryFinally.get()));
+    (void)As<ASTKind::TRY_EXPR>(tryFinally.get())->ToString();
+}
+
+void VerifyTryHandleToString()
+{
+    auto funcDecl = ParseDeclFromSrcExperimental("func f() { try {} handle(effect: Effect1) {} }");
+    ASSERT_NE(funcDecl, nullptr);
+    ASSERT_TRUE(Is<FuncDecl>(funcDecl.get()));
+    auto parsedFuncDecl = As<ASTKind::FUNC_DECL>(funcDecl.get());
+    ASSERT_NE(parsedFuncDecl->funcBody, nullptr);
+    ASSERT_NE(parsedFuncDecl->funcBody->body, nullptr);
+    ASSERT_FALSE(parsedFuncDecl->funcBody->body->body.empty());
+    ASSERT_TRUE(Is<TryExpr>(parsedFuncDecl->funcBody->body->body[0].get()));
+    auto parsedTryExpr = As<ASTKind::TRY_EXPR>(parsedFuncDecl->funcBody->body->body[0].get());
+    (void)parsedTryExpr->ToString();
+}
+
+void VerifyFuncDeclToString()
+{
+    auto funcDecl = ParseDeclFromSrc("func foo() {}");
+    ASSERT_NE(funcDecl, nullptr);
+    ASSERT_TRUE(Is<FuncDecl>(funcDecl.get()));
+    (void)As<ASTKind::FUNC_DECL>(funcDecl.get())->ToString();
+
+    auto funcWithParam = ParseDeclFromSrc("func foo(a: Int64) {}");
+    ASSERT_NE(funcWithParam, nullptr);
+    ASSERT_TRUE(Is<FuncDecl>(funcWithParam.get()));
+    (void)As<ASTKind::FUNC_DECL>(funcWithParam.get())->ToString();
+
+    auto funcWithRet = ParseDeclFromSrc("func foo(a: Int64): Int64 { return a }");
+    ASSERT_NE(funcWithRet, nullptr);
+    ASSERT_TRUE(Is<FuncDecl>(funcWithRet.get()));
+    (void)As<ASTKind::FUNC_DECL>(funcWithRet.get())->ToString();
+
+    auto funcGeneric = ParseDeclFromSrc("func foo<T>(a: T): T { return a }");
+    ASSERT_NE(funcGeneric, nullptr);
+    ASSERT_TRUE(Is<FuncDecl>(funcGeneric.get()));
+    (void)As<ASTKind::FUNC_DECL>(funcGeneric.get())->ToString();
+}
+
+void VerifyClassBodyToString()
+{
+    auto classDecl = ParseDeclFromSrc("class Data { func f(): This { this } }");
+    ASSERT_NE(classDecl, nullptr);
+    ASSERT_TRUE(Is<ClassDecl>(classDecl.get()));
+    auto parsedClassDecl = As<ASTKind::CLASS_DECL>(classDecl.get());
+    ASSERT_NE(parsedClassDecl->body, nullptr);
+    (void)parsedClassDecl->body->ToString();
+    (void)parsedClassDecl->ToString();
+}
+
+void VerifyStructBodyToString()
+{
+    auto structDecl = ParseDeclFromSrc("struct Point { var x: Int64 }");
+    ASSERT_NE(structDecl, nullptr);
+    ASSERT_TRUE(Is<StructDecl>(structDecl.get()));
+    auto parsedStructDecl = As<ASTKind::STRUCT_DECL>(structDecl.get());
+    ASSERT_NE(parsedStructDecl->body, nullptr);
+    (void)parsedStructDecl->body->ToString();
+    (void)parsedStructDecl->ToString();
+}
+
+void VerifyInterfaceBodyToString()
+{
+    auto interfaceDecl = ParseDeclFromSrc("interface I { func f(): Int64 }");
+    ASSERT_NE(interfaceDecl, nullptr);
+    ASSERT_TRUE(Is<InterfaceDecl>(interfaceDecl.get()));
+    auto parsedInterfaceDecl = As<ASTKind::INTERFACE_DECL>(interfaceDecl.get());
+    ASSERT_NE(parsedInterfaceDecl->body, nullptr);
+    (void)parsedInterfaceDecl->body->ToString();
+    (void)parsedInterfaceDecl->ToString();
+}
+
+void VerifyGenericToString()
+{
+    auto funcDecl = ParseDeclFromSrc("func foo<T>(a: T): T { return a }");
+    ASSERT_NE(funcDecl, nullptr);
+    ASSERT_TRUE(Is<FuncDecl>(funcDecl.get()));
+    auto parsed = As<ASTKind::FUNC_DECL>(funcDecl.get());
+    ASSERT_NE(parsed->funcBody, nullptr);
+    ASSERT_NE(parsed->funcBody->generic, nullptr);
+    EXPECT_FALSE(parsed->funcBody->generic->typeParameters.empty());
+    EXPECT_EQ("T", parsed->funcBody->generic->typeParameters[0]->ToString());
+}
+
+void VerifyGenericConstraintToString()
+{
+    auto funcDecl = ParseDeclFromSrc("func foo<T>(a: T): T where T <: Comparable { return a }");
+    ASSERT_NE(funcDecl, nullptr);
+    ASSERT_TRUE(Is<FuncDecl>(funcDecl.get()));
+    auto parsed = As<ASTKind::FUNC_DECL>(funcDecl.get());
+    ASSERT_NE(parsed->funcBody, nullptr);
+    ASSERT_NE(parsed->funcBody->generic, nullptr);
+    (void)parsed->funcBody->generic->ToString();
+}
+
+void VerifyTypeAliasDeclToString()
+{
+    auto typeAliasDecl = ParseDeclFromSrc("type MyInt = Int64");
+    ASSERT_NE(typeAliasDecl, nullptr);
+    ASSERT_TRUE(Is<TypeAliasDecl>(typeAliasDecl.get()));
+    auto parsed = As<ASTKind::TYPE_ALIAS_DECL>(typeAliasDecl.get());
+    (void)parsed->ToString();
+}
+
+void VerifyEmptyNodeToString()
+{
+    auto dummyBody = MakeOwned<DummyBody>();
+    EXPECT_EQ("", dummyBody->ToString());
+
+    auto emptyBlock = MakeOwned<Block>();
+    EXPECT_EQ("{}", emptyBlock->ToString());
+}
+} // namespace
+
+TEST(ToStringTest, ControlFlowRestore)
+{
+    VerifyIfExprToString();
+    VerifyWhileExprToString();
+    VerifyDoWhileExprToString();
+    VerifyForInExprToString();
+    VerifyReturnExprToString();
+    VerifyJumpExprToString();
+    VerifyThrowExprToString();
+
+    ExpectExprToString("if (x) {}");
+    ExpectExprToString("if (x) {} else {}");
+    ExpectExprToString("while (x) {}");
+    ExpectExprToString("do {} while (x)");
+    ExpectExprToString("for (i in arr) {}");
+    ExpectExprToString("return");
+    ExpectExprToString("return x");
+    ExpectExprToString("break");
+    ExpectExprToString("continue");
+    ExpectExprToString("throw e");
+}
+
+TEST(ToStringTest, MatchAndTryRestore)
+{
+    VerifyMatchExprToString();
+    VerifyTryCatchToString();
+    VerifyTryHandleToString();
+}
+
+TEST(ToStringTest, FunctionAndBodyRestore)
+{
+    VerifyFuncDeclToString();
+    VerifyClassBodyToString();
+    VerifyStructBodyToString();
+    VerifyInterfaceBodyToString();
+}
+
+TEST(ToStringTest, GenericAndDeclRestore)
+{
+    VerifyGenericToString();
+    VerifyGenericConstraintToString();
+    VerifyTypeAliasDeclToString();
+    VerifyEmptyNodeToString();
+}
