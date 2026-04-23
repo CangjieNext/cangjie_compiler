@@ -1635,4 +1635,518 @@ std::string LetPatternDestructor::ToString() const
     return ret;
 }
 
+std::string Block::ToString() const
+{
+    std::string ret = "{";
+    for (size_t i = 0; i < body.size(); ++i) {
+        CJC_NULLPTR_CHECK(body[i]);
+        ret += "\n" + body[i]->ToString();
+    }
+    if (!body.empty()) {
+        ret += "\n";
+    }
+    ret += "}";
+    return ret;
+}
+
+std::string JumpExpr::ToString() const
+{
+    return isBreak ? "break" : "continue";
+}
+
+std::string ReturnExpr::ToString() const
+{
+    if (expr) {
+        return "return " + expr->ToString();
+    }
+    return "return";
+}
+
+std::string ThrowExpr::ToString() const
+{
+    CJC_NULLPTR_CHECK(expr);
+    return "throw " + expr->ToString();
+}
+
+std::string PerformExpr::ToString() const
+{
+    CJC_NULLPTR_CHECK(expr);
+    return "perform " + expr->ToString();
+}
+
+std::string ResumeExpr::ToString() const
+{
+    std::string ret = "resume";
+    if (withExpr) {
+        ret += " with " + withExpr->ToString();
+    }
+    if (throwingExpr) {
+        ret += " throwing " + throwingExpr->ToString();
+    }
+    return ret;
+}
+
+std::string IfExpr::ToString() const
+{
+    std::string ret = "if (";
+    CJC_NULLPTR_CHECK(condExpr);
+    ret += condExpr->ToString();
+    ret += ") ";
+    CJC_NULLPTR_CHECK(thenBody);
+    ret += thenBody->ToString();
+    if (elseBody) {
+        ret += " else " + elseBody->ToString();
+    }
+    return ret;
+}
+
+std::string WhileExpr::ToString() const
+{
+    CJC_NULLPTR_CHECK(condExpr);
+    CJC_NULLPTR_CHECK(body);
+    return "while (" + condExpr->ToString() + ") " + body->ToString();
+}
+
+std::string DoWhileExpr::ToString() const
+{
+    CJC_NULLPTR_CHECK(body);
+    CJC_NULLPTR_CHECK(condExpr);
+    return "do " + body->ToString() + " while (" + condExpr->ToString() + ")";
+}
+
+std::string ForInExpr::ToString() const
+{
+    CJC_NULLPTR_CHECK(pattern);
+    CJC_NULLPTR_CHECK(inExpression);
+    std::string ret = "for (" + pattern->ToString() + " in " + inExpression->ToString();
+    if (patternGuard) {
+        ret += " where " + patternGuard->ToString();
+    }
+    ret += ") ";
+    CJC_NULLPTR_CHECK(body);
+    ret += body->ToString();
+    return ret;
+}
+
+std::string MatchCase::ToString() const
+{
+    std::string ret = "case " + JoinNodeStrings(patterns, " | ");
+    if (patternGuard) {
+        ret += " where " + patternGuard->ToString();
+    }
+    CJC_NULLPTR_CHECK(exprOrDecls);
+    ret += " => " + exprOrDecls->ToString();
+    return ret;
+}
+
+std::string MatchCaseOther::ToString() const
+{
+    CJC_NULLPTR_CHECK(matchExpr);
+    CJC_NULLPTR_CHECK(exprOrDecls);
+    return "case " + matchExpr->ToString() + " => " + exprOrDecls->ToString();
+}
+
+std::string MatchExpr::ToString() const
+{
+    std::string ret = "match (";
+    CJC_NULLPTR_CHECK(selector);
+    ret += selector->ToString();
+    ret += ") {";
+    for (auto& mc : matchCases) {
+        CJC_NULLPTR_CHECK(mc);
+        ret += "\n" + mc->ToString();
+    }
+    for (auto& mco : matchCaseOthers) {
+        CJC_NULLPTR_CHECK(mco);
+        ret += "\n" + mco->ToString();
+    }
+    if (!matchCases.empty() || !matchCaseOthers.empty()) {
+        ret += "\n";
+    }
+    ret += "}";
+    return ret;
+}
+
+std::string TryExpr::ToString() const
+{
+    std::string ret = "try ";
+    if (!resourceSpec.empty()) {
+        ret += "(" + JoinNodeStrings(resourceSpec, ", ") + ") ";
+    }
+    CJC_NULLPTR_CHECK(tryBlock);
+    ret += tryBlock->ToString();
+    for (size_t i = 0; i < catchBlocks.size(); ++i) {
+        ret += " catch(";
+        if (i < catchPatterns.size() && catchPatterns[i]) {
+            ret += catchPatterns[i]->ToString();
+        }
+        ret += ") ";
+        CJC_NULLPTR_CHECK(catchBlocks[i]);
+        ret += catchBlocks[i]->ToString();
+    }
+    for (auto& handler : handlers) {
+        ret += " handle(";
+        if (handler.commandPattern) {
+            ret += handler.commandPattern->ToString();
+        }
+        ret += ") ";
+        if (handler.block) {
+            ret += handler.block->ToString();
+        }
+    }
+    if (finallyBlock) {
+        ret += " finally " + finallyBlock->ToString();
+    }
+    return ret;
+}
+
+std::string SpawnExpr::ToString() const
+{
+    std::string ret = "spawn";
+    if (arg) {
+        ret += "(" + arg->ToString() + ")";
+    }
+    CJC_NULLPTR_CHECK(task);
+    ret += " " + task->ToString();
+    return ret;
+}
+
+std::string SynchronizedExpr::ToString() const
+{
+    CJC_NULLPTR_CHECK(mutex);
+    CJC_NULLPTR_CHECK(body);
+    return "synchronized (" + mutex->ToString() + ") " + body->ToString();
+}
+
+std::string GenericParamDecl::ToString() const
+{
+    return identifier.Val();
+}
+
+std::string GenericConstraint::ToString() const
+{
+    CJC_NULLPTR_CHECK(type);
+    std::string ret = type->ToString();
+    if (!upperBounds.empty()) {
+        ret += " <: " + JoinNodeStrings(upperBounds, " & ");
+    }
+    return ret;
+}
+
+std::string Generic::ToString() const
+{
+    if (typeParameters.empty()) {
+        return "";
+    }
+    return "<" + JoinNodeStrings(typeParameters, ", ") + ">";
+}
+
+std::string FuncParam::ToString() const
+{
+    std::string ret = identifier.Val();
+    if (isNamedParam) {
+        ret += "!";
+    }
+    if (type) {
+        ret += ": " + type->ToString();
+    }
+    return ret;
+}
+
+std::string FuncParamList::ToString() const
+{
+    return "(" + JoinNodeStrings(params, ", ") + ")";
+}
+
+std::string FuncBody::ToString() const
+{
+    std::string ret;
+    if (generic) {
+        ret += generic->ToString();
+    }
+    for (size_t i = 0; i < paramLists.size(); ++i) {
+        if (i > 0) {
+            ret += " ";
+        }
+        CJC_NULLPTR_CHECK(paramLists[i]);
+        ret += paramLists[i]->ToString();
+    }
+    if (retType) {
+        if (!colonPos.IsZero()) {
+            ret += ": ";
+        } else if (!doubleArrowPos.IsZero()) {
+            ret += " => ";
+        }
+        ret += retType->ToString();
+    }
+    if (generic && !generic->genericConstraints.empty()) {
+        ret += " where " + JoinNodeStrings(generic->genericConstraints, ", ");
+    }
+    if (body) {
+        ret += " " + body->ToString();
+    }
+    return ret;
+}
+
+std::string FuncDecl::ToString() const
+{
+    std::string ret;
+    for (auto& modifier : modifiers) {
+        auto modStr = modifier.ToString();
+        if (!modStr.empty()) {
+            ret += modStr + " ";
+        }
+    }
+    ret += "func " + identifier.Val();
+    if (funcBody) {
+        ret += funcBody->ToString();
+    }
+    return ret;
+}
+
+std::string LambdaExpr::ToString() const
+{
+    CJC_NULLPTR_CHECK(funcBody);
+    return "{ " + funcBody->ToString() + " }";
+}
+
+std::string TrailingClosureExpr::ToString() const
+{
+    CJC_NULLPTR_CHECK(expr);
+    std::string ret = expr->ToString();
+    if (lambda) {
+        ret += " " + lambda->ToString();
+    }
+    return ret;
+}
+
+std::string ClassBody::ToString() const
+{
+    std::string ret = "{";
+    for (auto& decl : decls) {
+        CJC_NULLPTR_CHECK(decl);
+        ret += "\n" + decl->ToString();
+    }
+    if (!decls.empty()) {
+        ret += "\n";
+    }
+    ret += "}";
+    return ret;
+}
+
+std::string StructBody::ToString() const
+{
+    std::string ret = "{";
+    for (auto& decl : decls) {
+        CJC_NULLPTR_CHECK(decl);
+        ret += "\n" + decl->ToString();
+    }
+    if (!decls.empty()) {
+        ret += "\n";
+    }
+    ret += "}";
+    return ret;
+}
+
+std::string InterfaceBody::ToString() const
+{
+    std::string ret = "{";
+    for (auto& decl : decls) {
+        CJC_NULLPTR_CHECK(decl);
+        ret += "\n" + decl->ToString();
+    }
+    if (!decls.empty()) {
+        ret += "\n";
+    }
+    ret += "}";
+    return ret;
+}
+
+std::string TypeAliasDecl::ToString() const
+{
+    std::string ret;
+    for (auto& modifier : modifiers) {
+        auto modStr = modifier.ToString();
+        if (!modStr.empty()) {
+            ret += modStr + " ";
+        }
+    }
+    ret += "type " + identifier.Val();
+    if (generic) {
+        ret += generic->ToString();
+    }
+    CJC_NULLPTR_CHECK(type);
+    ret += " = " + type->ToString();
+    return ret;
+}
+
+std::string InvalidType::ToString() const
+{
+    return "<invalid>";
+}
+
+std::string InvalidExpr::ToString() const
+{
+    return value.empty() ? std::string("<invalid>") : value;
+}
+
+std::string InvalidDecl::ToString() const
+{
+    return "<invalid>";
+}
+
+std::string InvalidPattern::ToString() const
+{
+    return "<invalid>";
+}
+
+std::string TokenPart::ToString() const
+{
+    std::string ret;
+    for (auto& tok : tokens) {
+        ret += tok.Value();
+    }
+    return ret;
+}
+
+std::string QuoteExpr::ToString() const
+{
+    std::string ret = "quote(";
+    ret += JoinNodeStrings(exprs, ", ");
+    ret += ")";
+    return ret;
+}
+
+std::string InterpolationExpr::ToString() const
+{
+    return rawString;
+}
+
+std::string StrInterpolationExpr::ToString() const
+{
+    return rawString;
+}
+
+std::string MacroExpandExpr::ToString() const
+{
+    std::string ret = "@" + invocation.fullName;
+    if (!invocation.attrs.empty()) {
+        ret += "[";
+        for (size_t i = 0; i < invocation.attrs.size(); ++i) {
+            if (i > 0) {
+                ret += ", ";
+            }
+            ret += invocation.attrs[i].Value();
+        }
+        ret += "]";
+    }
+    if (invocation.hasParenthesis) {
+        ret += "(";
+        for (size_t i = 0; i < invocation.args.size(); ++i) {
+            if (i > 0) {
+                ret += ", ";
+            }
+            ret += invocation.args[i].Value();
+        }
+        ret += ")";
+    }
+    if (!invocation.nodes.empty()) {
+        ret += " { ";
+        for (auto& node : invocation.nodes) {
+            if (node) {
+                ret += node->ToString();
+            }
+        }
+        ret += " }";
+    }
+    return ret;
+}
+
+std::string MacroExpandDecl::ToString() const
+{
+    return "@" + invocation.fullName;
+}
+
+std::string MacroDecl::ToString() const
+{
+    std::string ret;
+    for (auto& modifier : modifiers) {
+        auto modStr = modifier.ToString();
+        if (!modStr.empty()) {
+            ret += modStr + " ";
+        }
+    }
+    ret += "macro " + identifier.Val();
+    if (funcBody) {
+        ret += funcBody->ToString();
+    }
+    return ret;
+}
+
+std::string MainDecl::ToString() const
+{
+    std::string ret;
+    for (auto& modifier : modifiers) {
+        auto modStr = modifier.ToString();
+        if (!modStr.empty()) {
+            ret += modStr + " ";
+        }
+    }
+    ret += "main";
+    if (funcBody) {
+        ret += funcBody->ToString();
+    }
+    return ret;
+}
+
+std::string ImportSpec::ToString() const
+{
+    std::string ret = "import ";
+    if (modifier) {
+        auto modStr = modifier->ToString();
+        if (!modStr.empty()) {
+            ret += modStr + " ";
+        }
+    }
+    ret += content.ToString();
+    return ret;
+}
+
+std::string PackageSpec::ToString() const
+{
+    return "package " + GetPackageName();
+}
+
+std::string PackageDecl::ToString() const
+{
+    return identifier.Val();
+}
+
+std::string File::ToString() const
+{
+    std::string ret;
+    if (package) {
+        ret += package->ToString() + "\n";
+    }
+    for (auto& imp : imports) {
+        CJC_NULLPTR_CHECK(imp);
+        ret += imp->ToString() + "\n";
+    }
+    for (auto& decl : decls) {
+        CJC_NULLPTR_CHECK(decl);
+        ret += decl->ToString() + "\n";
+    }
+    return ret;
+}
+
+std::string Package::ToString() const
+{
+    std::string ret;
+    for (auto& file : files) {
+        CJC_NULLPTR_CHECK(file);
+        ret += file->ToString();
+    }
+    return ret;
+}
+
 } // namespace Cangjie
