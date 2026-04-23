@@ -1581,7 +1581,7 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveDecl(const Decl& decl, bool isTopLe
     // 3. deck is instance member variable.
     bool ignoreMangledName = IsInDeclWithAttribute(decl, Attribute::GENERIC) ||
         Utils::In(decl.astKind,
-            {ASTKind::GENERIC_PARAM_DECL, ASTKind::PROP_DECL, ASTKind::TYPE_ALIAS_DECL, ASTKind::EXTEND_DECL}) ||
+            {ASTKind::GENERIC_PARAM_DECL, ASTKind::PROP_DECL, ASTKind::TYPE_ALIAS_DECL}) ||
         (decl.astKind == ASTKind::VAR_DECL && !decl.TestAnyAttr(Attribute::STATIC, Attribute::GLOBAL));
     bool isInExtendToExportForTest = decl.outerDecl && Is<ExtendDecl>(decl.outerDecl) &&
         !decl.outerDecl->TestAttr(Attribute::IMPORTED) && !decl.outerDecl->TestAttr(Attribute::COMPILER_ADD) &&
