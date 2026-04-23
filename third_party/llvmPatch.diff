@@ -8404,10 +8404,10 @@ index 494249b44..0a5d3b716 100644
      lldbBreakpoint
 diff --git a/lldb/source/Commands/CommandObjCJThreadCommon.cpp b/lldb/source/Commands/CommandObjCJThreadCommon.cpp
 new file mode 100644
-index 000000000..222c5837e
+index 000000000..12fa4ea51
 --- /dev/null
 +++ b/lldb/source/Commands/CommandObjCJThreadCommon.cpp
-@@ -0,0 +1,355 @@
+@@ -0,0 +1,356 @@
 +//===-- CommandObjCJThreadCommon.cpp --------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -8698,12 +8698,13 @@ index 000000000..222c5837e
 +  Status error;
 +  Stream &stream = result.GetOutputStream();
 +  if (!cjthread_context) {
-+     result.AppendErrorWithFormat("invalid cjthread context");
++    result.AppendErrorWithFormat("invalid cjthread context");
++    return false;
 +  }
 +  GetDescription(stream, error, cjthread_context);
 +  if (error.Fail()) {
 +    result.AppendErrorWithFormat("%s", error.AsCString());
-+     return false;
++    return false;
 +  }
 +  HandOneCJThread(thread, cjthread_context, error);
 +  if (error.Fail()) {
@@ -10912,10 +10913,10 @@ index 000000000..b848ed20d
 +endif()
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.cpp
 new file mode 100644
-index 000000000..a6d22f277
+index 000000000..8f7825e1b
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.cpp
-@@ -0,0 +1,827 @@
+@@ -0,0 +1,832 @@
 +//===-- CangjieASTUtils.cpp -----------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -11001,7 +11002,7 @@ index 000000000..a6d22f277
 +
 +std::string lldb_private::GetTypeNameWithoutPrefix(ConstString type_name, std::string& pkgname)
 +{
-+    std::string name = type_name.GetCString();
++    std::string name = SafeAsCString(type_name);
 +    name.erase(std::remove(name.begin(), name.end(), ' '), name.end());
 +    if (EndsWith(name, "*")) {
 +      name = name.substr(0, name.size() - 1);
@@ -11084,7 +11085,7 @@ index 000000000..a6d22f277
 +
 +std::string lldb_private::GetPkgNameFromCompilerUnit(const CompileUnit& compUnit)
 +{
-+  std::string diFileName = compUnit.GetPrimaryFile().GetFilename().GetCString();
++  std::string diFileName = SafeAsCString(compUnit.GetPrimaryFile().GetFilename());
 +  return diFileName.substr(diFileName.find('-') + 1);
 +}
 +
@@ -11140,13 +11141,13 @@ index 000000000..a6d22f277
 +  auto paramCount = func_type.GetFunctionArgumentCount();
 +  for (int i = 0; i < paramCount; i++) {
 +    auto paramType = func_type.GetFunctionArgumentAtIndex(i);
-+    std::string paramTypeStr = paramType.GetTypeName().GetCString();
++    std::string paramTypeStr = SafeAsCString(paramType.GetTypeName());
 +    ret->paramTypes.emplace_back(CreateAstType(AstTypeInfo(paramTypeStr, paramType), target, pkg, true));
 +  }
 +
 +  auto retType = func_type.GetFunctionReturnType();
 +  if (retType.IsValid()) {
-+    std::string retTypeStr = retType.GetTypeName().GetCString();
++    std::string retTypeStr = SafeAsCString(retType.GetTypeName());
 +    ret->retType = CreateAstType(AstTypeInfo(retTypeStr, retType), target, pkg, true);
 +  }
 +  return ret;
@@ -11193,13 +11194,13 @@ index 000000000..a6d22f277
 +    return elements_type;
 +  }
 +
-+  for (int i = 0; i < type.GetNumDirectBaseClasses(); i++) {
++  for (uint32_t i = 0; i < type.GetNumDirectBaseClasses(); i++) {
 +    auto base = type.GetDirectBaseClassAtIndex(i, nullptr);
 +    auto num_fields = base.GetNumFields();
 +    if (num_fields != elements.size() + 1) {
 +      continue;
 +    }
-+    for (int j = 1; j < num_fields; j++) {
++    for (uint32_t j = 1; j < num_fields; j++) {
 +      std::string name;
 +      arg = base.GetFieldAtIndex(j, name, nullptr, nullptr, nullptr);
 +      if (arg.IsPointerType()) {
@@ -11514,7 +11515,7 @@ index 000000000..a6d22f277
 +    CompilerType type, std::string name, std::string prefix, Ptr<Decl> target) {
 +  auto decl = MakeOwned<Cangjie::AST::VarDecl>();
 +  decl->identifier = name;
-+  std::string typeStr = type.GetTypeName().GetCString();
++  std::string typeStr = SafeAsCString(type.GetTypeName());
 +  decl->type = nullptr;
 +  decl->EnableAttr(Attribute::PUBLIC, Attribute::EXTERNAL);
 +  decl->isVar = true;
@@ -11528,7 +11529,7 @@ index 000000000..a6d22f277
 +    const CompilerType type, std::string name, std::string prefix, Ptr<Decl> target) {
 +  auto decl = MakeOwned<Cangjie::AST::VarDecl>();
 +  decl->identifier = name;
-+  decl->type = CreateAstType(AstTypeInfo(type.GetTypeName().GetCString(), type), target, prefix, true);
++  decl->type = CreateAstType(AstTypeInfo(SafeAsCString(type.GetTypeName()), type), target, prefix, true);
 +  decl->EnableAttr(Attribute::PUBLIC, Attribute::GLOBAL);
 +  decl->isVar = true;
 +  if (decl->type) {
@@ -11543,13 +11544,13 @@ index 000000000..a6d22f277
 +  decl->identifier = funcName;
 +  decl->funcBody = MakeOwned<FuncBody>();
 +  // For example, a generic type's name can be default::Enum$RGBColor<$G_T>.
-+  std::string typeStr = enumType.GetTypeName().GetCString();
++  std::string typeStr = SafeAsCString(enumType.GetTypeName());
 +  decl->funcBody->retType = CreateAstType(AstTypeInfo(typeStr, enumType), pdecl, m_current_pkgname, true);
 +  auto paramList = MakeOwned<FuncParamList>();
 +
 +  if (typeStr.find(E2_PREFIX_NAME_OPTION_LIKE) != std::string::npos) {
 +    bool isMember = (pdecl != nullptr);
-+    std::string paramTypeStr = ctorFuncType.GetTypeName().GetCString();
++    std::string paramTypeStr = SafeAsCString(ctorFuncType.GetTypeName());
 +    if (IsGenericTypeParameters(typeStr)) {
 +      paramTypeStr = GENERIC_TYPE_PREFIX_NAME + GetGenericParamDeclName(typeStr);
 +    }
@@ -11563,7 +11564,7 @@ index 000000000..a6d22f277
 +      bool isMember = (pdecl != nullptr);
 +      std::string member_name2;
 +      auto field = ctorFuncType.GetFieldAtIndex(i, member_name2, nullptr, nullptr, nullptr);
-+      std::string paramTypeStr = field.GetTypeName().GetCString();
++      std::string paramTypeStr = SafeAsCString(field.GetTypeName());
 +      OwnedPtr<FuncParam> param = MakeOwned<FuncParam>();
 +      param->identifier = "a" + std::to_string(i);
 +      auto tempDecl = isMember ? pdecl: decl.get();
@@ -11624,14 +11625,14 @@ index 000000000..a6d22f277
 +    decl->funcBody->retType = CreateAstType(AstTypeInfo(pdecl->identifier), pdecl, m_current_pkgname);
 +  } else {
 +    auto retType = type.GetFunctionReturnType();
-+    std::string retTypeStr = retType.GetTypeName().GetCString();
++    std::string retTypeStr = SafeAsCString(retType.GetTypeName());
 +    auto tempDecl = lldb_private::IsGenericFromFuncDecl(instantiatedNames, retTypeStr) ? decl.get():pdecl;
 +    decl->funcBody->retType = CreateAstType(AstTypeInfo(retTypeStr, retType), tempDecl, m_current_pkgname, true);
 +  }
 +  auto paramList = MakeOwned<FuncParamList>();
 +  for (int i = 0; i < type.GetFunctionArgumentCount(); i++) {
 +    auto paramType = type.GetFunctionArgumentAtIndex(i);
-+    std::string paramTypeStr = paramType.GetTypeName().GetCString();
++    std::string paramTypeStr = SafeAsCString(paramType.GetTypeName());
 +    if (i == 0 && paramTypeStr.find(LOCAL_FUNC_CAPTUREDVAR) != std::string::npos) {
 +      // If the first argument is about captured variables, you need to omit the first argument.
 +      m_capture_vars.insert({identifier, paramType});
@@ -11743,12 +11744,17 @@ index 000000000..a6d22f277
 +  }
 +  return name.substr(0, pos);
 +}
++
++std::string lldb_private::SafeAsCString(const ConstString& cs) {
++  const char *s = cs.AsCString();
++  return s ? std::string(s) : std::string();
++}
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.h b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.h
 new file mode 100644
-index 000000000..844d69389
+index 000000000..658549b48
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.h
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,106 @@
 +//===-- CangjieASTUtils.h -------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -11851,6 +11857,7 @@ index 000000000..844d69389
 +std::string GetGenericDeclName(const std::string& type_name);
 +std::string GetGenericParamDeclName(const std::string& name);
 +std::string GetTypeNameWithoutPrefix(ConstString type_name, std::string& pkgname);
++std::string SafeAsCString(const ConstString& cs);
 +}
 +
 +#endif
@@ -13206,10 +13213,10 @@ index 000000000..6595dcf91
 +#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CANGJIE_CANGJIECOMPILERINSTANCE_H
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp
 new file mode 100644
-index 000000000..b775b90b7
+index 000000000..f89e12fd5
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp
-@@ -0,0 +1,2285 @@
+@@ -0,0 +1,2292 @@
 +//===-- CangjieDeclMap.cpp ------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -13239,7 +13246,7 @@ index 000000000..b775b90b7
 +
 +bool CangjieDeclMap::IsInterfaceType(CompilerType& type) {
 +  if (type.GetTypeClass() == lldb::eTypeClassClass) {
-+    std::string typeName = type.GetTypeName().GetCString();
++    std::string typeName = SafeAsCString(type.GetTypeName());
 +    if (typeName.find(INTERFACE_PREFIX_NAME) != std::string::npos) {
 +      return true;
 +    }
@@ -13305,7 +13312,7 @@ index 000000000..b775b90b7
 +    }
 +    if (child_type.GetTypeClass() == lldb::eTypeClassTypedef) {
 +      auto underlyingType = child_type.GetTypedefedType();
-+      std::string typeName = underlyingType.GetTypeName().GetCString();
++      std::string typeName = SafeAsCString(underlyingType.GetTypeName());
 +      m_parsed_types.insert({DeletePrefixOfType(typeName), underlyingType});
 +    }
 +  }
@@ -13314,7 +13321,7 @@ index 000000000..b775b90b7
 +CompilerType CangjieDeclMap::GetVariableType(lldb::VariableSP var) {
 +    CompilerType type = var->GetType()->GetFullCompilerType();
 +    ReplaceTypeDefWithInterfaceType(type);
-+    std::string type_name = type.GetTypeName().GetCString();
++    std::string type_name = SafeAsCString(type.GetTypeName());
 +    if (CangjieASTBuiler::IsFunctionType(type.GetTypeName())) {
 +      type_name = GetSubNameWithoutPkgname(type_name, m_current_pkgname);
 +    }
@@ -13333,7 +13340,7 @@ index 000000000..b775b90b7
 +        auto valobj = frame->GetValueObjectForFrameVariable(var, lldb::DynamicValueType::eNoDynamicValues);
 +        auto dynamic_Type = valobj->GetDynamicType();
 +        type = dynamic_Type;
-+        type_name = type.GetTypeName().GetCString();
++        type_name = SafeAsCString(type.GetTypeName());
 +        if (CangjieASTBuiler::IsFunctionType(type.GetTypeName())) {
 +          type_name = GetSubNameWithoutPkgname(type_name, m_current_pkgname);
 +        }
@@ -13553,7 +13560,7 @@ index 000000000..b775b90b7
 +      if (decl_ctx.IsClassMethod(nullptr, nullptr, nullptr)) {
 +        continue;
 +      }
-+      std::string funcName = sym_ctx.function->GetNameNoArguments().GetCString();
++      std::string funcName = SafeAsCString(sym_ctx.function->GetNameNoArguments());
 +      auto type = sym_ctx.function->GetCompilerType();
 +      CompilerTypeInfo tempInfo(type, sym_ctx.GetFunctionStartLineEntry().line,
 +                                sym_ctx.GetFunctionName(Mangled::NamePreference::ePreferMangled).AsCString());
@@ -13632,7 +13639,7 @@ index 000000000..b775b90b7
 +  target->GetImages().FindFunctions(ConstString(name),
 +      lldb::eFunctionNameTypeFull | lldb::eFunctionNameTypeBase, function_options, sc_list);
 +
-+  std::string re_cstr = std::string("^") + name + std::string("<.+>$");
++  std::string re_cstr = std::string("^") + llvm::Regex::escape(name) + std::string("<.+>$");
 +  target->GetImages().FindFunctions(RegularExpression(llvm::StringRef(re_cstr)), function_options, sc_generic_list);
 +  sc_list.Append(sc_generic_list);
 +  if (sc_list.IsEmpty()) {
@@ -13643,7 +13650,7 @@ index 000000000..b775b90b7
 +  // Collect some info about our frame's context.
 +  auto frame_sym_ctx = frame->GetSymbolContext(lldb::eSymbolContextFunction | lldb::eSymbolContextBlock);
 +  if (frame_sym_ctx.function) {
-+    localScope = frame_sym_ctx.function->GetNameNoArguments().GetCString();
++    localScope = SafeAsCString(frame_sym_ctx.function->GetNameNoArguments());
 +  }
 +  Log *log = GetLog(LLDBLog::Expressions);
 +  auto num_indices = sc_list.GetSize();
@@ -13656,7 +13663,7 @@ index 000000000..b775b90b7
 +    if (CheckNestedGenericFunction(sym_ctx.function->GetNameNoArguments())) {
 +      return result;
 +    }
-+    std::string funcNameWithPkg = sym_ctx.function->GetNameNoArguments().GetCString();
++    std::string funcNameWithPkg = SafeAsCString(sym_ctx.function->GetNameNoArguments());
 +    if (funcNameWithPkg.find(m_current_pkgname) == std::string::npos) {
 +      builder.m_type_names.insert(funcNameWithPkg);
 +      continue;
@@ -13667,7 +13674,7 @@ index 000000000..b775b90b7
 +      continue;
 +    }
 +    std::string funcName = m_current_pkgname + PACKAGE_SUFFIX + decl_ctx.GetName().AsCString();
-+    std::string mangleName = sym_ctx.function->GetNameNoArguments().GetCString();
++    std::string mangleName = SafeAsCString(sym_ctx.function->GetNameNoArguments());
 +    auto funcScope = mangleName.substr(0, mangleName.rfind(PACKAGE_SUFFIX));
 +    if (IsLocalFunction(localScope, funcScope)) {
 +      funcName = decl_ctx.GetName().AsCString();
@@ -13828,7 +13835,7 @@ index 000000000..b775b90b7
 +      return;
 +    }
 +    // Check and add static variable
-+    std::string prefixname = type.GetTypeName().GetCString() + std::string("::");
++    std::string prefixname = SafeAsCString(type.GetTypeName()) + std::string("::");
 +    auto pos = prefixname.find("<");
 +    if (pos != std::string::npos) {
 +      // "default::Rect2<$G_T>""  ==> "default::Rect2<"
@@ -13837,7 +13844,7 @@ index 000000000..b775b90b7
 +    auto varSize = m_static_variables->GetSize();
 +    for (size_t i = 0; i < varSize; i++) {
 +      auto var = m_static_variables->GetVariableAtIndex(i);
-+      std::string varname = var->GetName().GetCString();
++      std::string varname = SafeAsCString(var->GetName());
 +      if (varname.find(prefixname) != 0) {
 +        continue;
 +      }
@@ -13934,6 +13941,9 @@ index 000000000..b775b90b7
 +    name = DeletePrefixOfType(name);
 +  }
 +  auto idLen = refType->ref.identifier.Val().size();
++  if (name.size() < idLen + 2) {  // 2 is size of string "<>"
++    return;
++  }
 +  auto args = name.substr(idLen + 1, name.size() - idLen - 2);
 +  auto elements = builder.SplitTypeName(args);
 +  // The generic type parameter of the superclass comes from the subclass or instancetiated.
@@ -13972,7 +13982,7 @@ index 000000000..b775b90b7
 +  for (size_t i = 0; i < type.GetNumDirectBaseClasses(); i++) {
 +    auto superType = type.GetDirectBaseClassAtIndex(i, nullptr);
 +    ReplaceTypeDefWithInterfaceType(superType);
-+    std::string superName = superType.GetTypeName().GetCString();
++    std::string superName = SafeAsCString(superType.GetTypeName());
 +    if (!superType.IsValid()) {
 +      continue;
 +    }
@@ -14057,7 +14067,11 @@ index 000000000..b775b90b7
 +  auto gc = MakeOwned<GenericConstraint>();
 +  OwnedPtr<RefType> t = MakeOwned<RefType>();
 +  std::string gn = type.GetTypeName().AsCString();
-+  t->ref.identifier = gn.substr(GENERIC_TYPE_PREFIX_NAME.size(), gn.size());
++  if (GENERIC_TYPE_PREFIX_NAME.size() > gn.size()) {
++    t->ref.identifier = gn;
++  } else {
++    t->ref.identifier = gn.substr(GENERIC_TYPE_PREFIX_NAME.size(), gn.size());
++  }
 +  for (auto& gen:decl->generic->typeParameters) {
 +    if (gen->identifier.Val() == t->ref.identifier.Val()) {
 +      t->ref.target = gen;
@@ -14076,7 +14090,7 @@ index 000000000..b775b90b7
 +    OwnedPtr<AST::Type> ctype = builder.CreateAstType(AstTypeInfo(up), decltmp, m_current_pkgname);
 +
 +    gc->upperBounds.emplace_back(std::move(ctype));
-+    std::string superName = superType.GetTypeName().GetCString();
++    std::string superName = SafeAsCString(superType.GetTypeName());
 +  }
 +  return gc;
 +}
@@ -14114,7 +14128,7 @@ index 000000000..b775b90b7
 +  decl->identifier = name;
 +  decl->fullPackageName = m_current_pkgname;
 +  decl->mangledName = BaseMangler().Mangle(*decl);
-+  std::string typeName = type.GetTypeName().GetCString();
++  std::string typeName = SafeAsCString(type.GetTypeName());
 +  builder.CreateDeclGeneric(decl.get(), typeName);
 +  Ptr<AST::Decl> cla = RawStaticCast<AST::Decl *>(decl.get());
 +  CreateGenericConstraints(cla, type);
@@ -14151,7 +14165,7 @@ index 000000000..b775b90b7
 +    type = type.GetPointeeType();
 +  }
 +  auto decl = builder.CreateEnumDecl(type);
-+  std::string typeName = type.GetTypeName().GetCString();
++  std::string typeName = SafeAsCString(type.GetTypeName());
 +  builder.CreateDeclGeneric(decl.get(), typeName);
 +  CreateEnumConstructors(decl, type);
 +  auto eDecl = Ptr(RawStaticCast<AST::Decl *>(decl.get()));
@@ -14167,7 +14181,7 @@ index 000000000..b775b90b7
 +  decl->fullPackageName = m_current_pkgname;
 +  decl->mangledName = BaseMangler().Mangle(*decl);
 +  decl->EnableAttr(Attribute::PUBLIC, Attribute::GLOBAL);
-+  std::string typeName = type.GetTypeName().GetCString();
++  std::string typeName = SafeAsCString(type.GetTypeName());
 +  builder.CreateDeclGeneric(decl.get(), typeName);
 +  Ptr<AST::Decl> cla = RawStaticCast<AST::Decl *>(decl.get());
 +  CreateGenericConstraints(cla, type);
@@ -14184,7 +14198,7 @@ index 000000000..b775b90b7
 +  decl->fullPackageName = m_current_pkgname;
 +  decl->mangledName = BaseMangler().Mangle(*decl);
 +  decl->EnableAttr(Attribute::PUBLIC, Attribute::GLOBAL);
-+  std::string typeName = type.GetTypeName().GetCString();
++  std::string typeName = SafeAsCString(type.GetTypeName());
 +  typeName = DeletePrefixOfType(typeName);
 +  builder.CreateDeclGeneric(decl.get(), typeName);
 +  auto target = GetSameGlobalDecl(std::move(decl), true);
@@ -14222,7 +14236,7 @@ index 000000000..b775b90b7
 +  if (!type.IsValid()) {
 +    return nullptr;
 +  }
-+  std::string typeName = type.GetTypeName().GetCString();
++  std::string typeName = SafeAsCString(type.GetTypeName());
 +  if (CangjieASTBuiler::IsFunctionType(ConstString(typeName.c_str()))) {
 +    return nullptr;
 +  }
@@ -14271,7 +14285,7 @@ index 000000000..b775b90b7
 +void CangjieDeclMap::CreateInjectedThis()
 +{
 +  m_parsed_vars.insert({ConstString("this"), m_this_variable->GetVariable()});
-+  std::string name = m_this_variable->GetTypeName().GetCString();
++  std::string name = SafeAsCString(m_this_variable->GetTypeName());
 +  CompilerType realType = m_this_variable->GetCompilerType();
 +  if (IsGenericTypeParameters(name)) {
 +    realType = m_this_variable->GetDynamicType();
@@ -14454,7 +14468,7 @@ index 000000000..b775b90b7
 +  // for example,  enum RGBColor { Red | Green} have enum type RGBColor.
 +  // step1: find enum type Ctor-RGBColor.
 +  // for example, enum RGBColor's type name is Enum$RGBColor, subName is RGBColor.
-+  std::string typeName = type.GetTypeName().GetCString();
++  std::string typeName = SafeAsCString(type.GetTypeName());
 +  EnumLayout kind = GetEnumLayout(typeName);
 +  // for enum type
 +  decl->hasArguments = (kind != EnumLayout::E0Int);
@@ -14727,16 +14741,14 @@ index 000000000..b775b90b7
 +
 +void CangjieDeclMap::CollectGenericTypeOfVariable(const CompilerType& type)   {
 +  Log *log = GetLog(LLDBLog::Expressions);
-+  std::string varTypeName = std::string(type.GetTypeName().AsCString());
-+
 +  if (!type.IsValid() || type.GetTypeClass() == lldb::eTypeClassEnumeration) {
 +    return;
 +  }
-+  std::string fullName = type.GetTypeName().AsCString();
++  std::string fullName = SafeAsCString(type.GetTypeName());
 +  if (!lldb_private::IsGenericInstanced(fullName)) {
 +    return;
 +  }
-+  auto name = lldb_private::GetGenericDeclName(varTypeName);
++  auto name = lldb_private::GetGenericDeclName(fullName);
 +  auto userDefinedType = GetGenericTypeByPartName(name);
 +  if (userDefinedType.IsValid()) {
 +    LLDB_LOGF(log, "[Generic]: get generic type [%s] from variable[%s]. \n",
@@ -14904,7 +14916,7 @@ index 000000000..b775b90b7
 +    cd->identifier = fn + "$class" + LOCAL_FUNC_CAPTUREDVAR;
 +    cd->fullPackageName = m_current_pkgname;
 +    cd->mangledName = BaseMangler().Mangle(*cd);
-+    std::string typeName = type.GetTypeName().GetCString();
++    std::string typeName = SafeAsCString(type.GetTypeName());
 +    builder.CreateDeclGeneric(cd.get(), typeName);
 +    Ptr<AST::Decl> cla = RawStaticCast<AST::Decl *>(cd.get());
 +    CreateGenericConstraints(cla, type);
@@ -15101,7 +15113,7 @@ index 000000000..b775b90b7
 +      LLDB_LOGF(log, "    start add [%s.%s : %s]. \n", ConstString(decl->identifier.Val()).AsCString(),
 +                ConstString(member_name).AsCString(), child_type.GetTypeName().AsCString());
 +    }
-+    std::string compilerTypeName = child_type.GetTypeName().AsCString();
++    std::string compilerTypeName = SafeAsCString(child_type.GetTypeName());
 +    auto subTy = GetMemberDeclTyByName(ty, member_name, typeName);
 +    // There are three kind cases, for example
 +    // class A<T> {
@@ -15241,10 +15253,12 @@ index 000000000..b775b90b7
 +    return enum_type;
 +  }
 +  // case: enum with args , compilerType is struct type with ctor.
-+  auto pos = typeName.find(PACKAGE_SUFFIX) + PACKAGE_SUFFIX.size();
-+  CJC_ASSERT(pos != std::string::npos);
-+  auto enumPrefix = GetEnumPrefix(genericName);
-+  typeName = typeName.substr(0, pos) + enumPrefix + typeName.substr(pos);
++  auto pos = typeName.find(PACKAGE_SUFFIX);
++  if (pos != std::string::npos) {
++    pos = pos + PACKAGE_SUFFIX.size();
++    auto enumPrefix = GetEnumPrefix(genericName);
++    typeName = typeName.substr(0, pos) + enumPrefix + typeName.substr(pos);
++  }
 +
 +  TypeSystemClang* ast = this->GetTypeSystem();
 +  CompilerType dynamic_type = ast->CreateRecordType(nullptr, OptionalClangModuleID(), lldb::eAccessPublic,
@@ -15710,7 +15724,7 @@ index 000000000..6c910dff5
 +#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CANGJIE_DECL_MAP_H
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionParser.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionParser.cpp
 new file mode 100644
-index 000000000..07531142a
+index 000000000..012c109f1
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionParser.cpp
 @@ -0,0 +1,297 @@
@@ -15788,8 +15802,8 @@ index 000000000..07531142a
 +  }
 +  m_in_class_context = true;
 +  if (sym_ctx.function) {
-+    std::string classname = thisVar->GetTypeName().GetCString();
-+    std::string funcscope = sym_ctx.function->GetNameNoArguments().GetCString();
++    std::string classname = SafeAsCString(thisVar->GetTypeName());
++    std::string funcscope = SafeAsCString(sym_ctx.function->GetNameNoArguments());
 +    auto pos = funcscope.rfind("::");
 +    auto funcname = (pos == std::string::npos) ? funcscope: funcscope.substr(pos + 2);
 +    m_in_constructor = (funcname == "init" || funcname == classname);
@@ -15860,8 +15874,8 @@ index 000000000..07531142a
 +  auto triple = target_arch.GetTriple();
 +  SetTripleInfoIfNeed(target_arch, target_triple);
 +  LLDB_LOGF(log, "using target triple %s %s %s %s %s\n", triple.str().c_str(),
-+            triple.getArchName().data(), triple.getVendorName().data(),
-+            triple.getOSName().data(), triple.getEnvironmentName().data());
++            triple.getArchName().str().c_str(), triple.getVendorName().str().c_str(),
++            triple.getOSName().str().c_str(), triple.getEnvironmentName().str().c_str());
 +  if (target_triple.env == Cangjie::Triple::Environment::ANDROID) {
 +    target_triple.apiLevel = "31";
 +  }
@@ -16013,7 +16027,7 @@ index 000000000..07531142a
 +}
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionParser.h b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionParser.h
 new file mode 100644
-index 000000000..18bfba3ea
+index 000000000..900de8606
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionParser.h
 @@ -0,0 +1,96 @@
@@ -16094,11 +16108,11 @@ index 000000000..18bfba3ea
 +                                          ///to use when reporting used
 +                                          ///variables.
 +  lldb_private::Materializer::PersistentVariableDelegate
-+      *m_result_delegate; ///< If non-NULL, used to report expression results to
++      *m_result_delegate = nullptr; ///< If non-NULL, used to report expression results to
 +                          ///ClangUserExpression.
 +
 +  lldb_private::Materializer::PersistentVariableDelegate
-+      *m_error_result_delegate; ///< If non-NULL, used to report expression results to
++      *m_error_result_delegate = nullptr; ///< If non-NULL, used to report expression results to
 +                          ///ClangUserExpression.
 +  std::vector<std::string> m_include_directories;
 +  std::string m_result_type_name;
@@ -16115,10 +16129,10 @@ index 000000000..18bfba3ea
 +#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CANGJIE_CANGJIEEXPRESSIONPARSER_H
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionSourceCode.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionSourceCode.cpp
 new file mode 100644
-index 000000000..731a8ab5c
+index 000000000..461a21627
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionSourceCode.cpp
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,94 @@
 +//===-- CangjieExpressionSourceCode.cpp -----------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -16131,8 +16145,19 @@ index 000000000..731a8ab5c
 +
 +#include "CangjieExpressionSourceCode.h"
 +#include "lldb/Utility/StreamString.h"
++#include <regex>
 +
 +using namespace lldb_private;
++
++bool ValidateClassname(const std::string& classname) {
++    if (classname.empty()) {
++        return false;
++    }
++
++    const std::regex pattern(R"(^[a-zA-Z0-9_.<,>]+$)");
++
++    return std::regex_match(classname, pattern);
++}
 +
 +bool CangjieExpressionSourceCode::GetText(
 +    std::string &text, ExecutionContext &exe_ctx, bool add_locals,
@@ -16170,6 +16195,7 @@ index 000000000..731a8ab5c
 +          module_imports.c_str(), m_body.c_str());
 +      break;
 +    case WrapKind::MemberFunction:
++      std::string classname = ValidateClassname(m_class_name) ? m_class_name : "";
 +      wrap_stream.Printf(
 +          "package __cjdb_expr\n"
 +          "%s\n"
@@ -16192,7 +16218,7 @@ index 000000000..731a8ab5c
 +          "  __lldb_injected_self.__lldb_wrapped_expr(__lldb_arg)\n"
 +          "}\n",
 +          module_imports.c_str(),
-+          m_class_name.c_str(), m_body.c_str());
++          classname.c_str(), m_body.c_str());
 +      break;
 +    }
 +    text = std::string(wrap_stream.GetString());
@@ -16258,7 +16284,7 @@ index 000000000..4d9a88c12
 +#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CANGJIE_CANGJIEEXPRESSIONSOUECECODE_H
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieIRForTarget.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieIRForTarget.cpp
 new file mode 100644
-index 000000000..3fbe52394
+index 000000000..263d6de1b
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieIRForTarget.cpp
 @@ -0,0 +1,558 @@
@@ -16569,11 +16595,11 @@ index 000000000..3fbe52394
 +void CangjieIRForTarget::AddVariableToArgs() {
 +  lldb_private::Log *log = GetLog(LLDBLog::Expressions);
 +  for (llvm::GlobalVariable &global_var : m_module->globals()) {
-+    lldb_private::ConstString global_name(global_var.getName().data());
++    lldb_private::ConstString global_name(global_var.getName().str().c_str());
 +    lldb_private::Mangled mangled_name(global_name);
 +    lldb_private::ConstString demanglede_name = mangled_name.GetName();
 +    if (demanglede_name.GetStringRef().startswith("__lldb_locals::")) {
-+      demanglede_name.SetCString(demanglede_name.GetStringRef().substr(strlen("__lldb_locals::")).data());
++      demanglede_name.SetCString(demanglede_name.GetStringRef().substr(strlen("__lldb_locals::")).str().c_str());
 +    }
 +
 +    lldb::VariableSP value;
@@ -16720,7 +16746,7 @@ index 000000000..3fbe52394
 +    // If the class context does not contain the this variable, the struct is zero size.
 +    // __lldb_injected_self will be deleted by codegen.
 +    if (this_var != m_this_obj_name) {
-+      m_func_name.SetCString(extend_func.data());
++      m_func_name.SetCString(extend_func.str().c_str());
 +      m_replace_this_object = false;
 +    }
 +  }
@@ -16728,7 +16754,7 @@ index 000000000..3fbe52394
 +  // Check whether the "this" variable needs to be replaced.
 +  if (m_replace_this_object) {
 +    ReplaceIRGlobals();
-+    m_func_name.SetCString(extend_func.data());
++    m_func_name.SetCString(extend_func.str().c_str());
 +  }
 +
 +  // Replace all result variables and variables in the program with parameters of the expr function.
@@ -16793,7 +16819,7 @@ index 000000000..3fbe52394
 +  // There are two wrapper kind: Function and MemberFunction.
 +  lldb_private::ConstString replaceFunc = m_func_name;
 +  if (in_member) {
-+    replaceFunc.SetCString(FindExtendFunction().data());
++    replaceFunc.SetCString(FindExtendFunction().str().c_str());
 +  }
 +  Function *llvm_function =
 +      replaceFunc.IsEmpty() ? nullptr
@@ -17233,7 +17259,7 @@ index 000000000..c3e84f057
 +}
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieUserExpression.h b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieUserExpression.h
 new file mode 100644
-index 000000000..1b0fef56d
+index 000000000..09cd0e18b
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieUserExpression.h
 @@ -0,0 +1,99 @@
@@ -17302,8 +17328,8 @@ index 000000000..1b0fef56d
 +      : public Materializer::PersistentVariableDelegate {
 +  public:
 +    CangjiePersistentVariableDelegate() {}
-+    ConstString GetName();
-+    void DidDematerialize(lldb::ExpressionVariableSP &variable);
++    ConstString GetName() override;
++    void DidDematerialize(lldb::ExpressionVariableSP &variable) override;
 +    lldb::ExpressionVariableSP GetVariable() { return m_variable; }
 +    void RegisterPersistentState(PersistentExpressionState *persistent_state);
 +  private:
@@ -17545,10 +17571,10 @@ index 53a01cfc4..646750708 100644
  
 diff --git a/lldb/source/Plugins/Language/CPlusPlus/CjTypes.cpp b/lldb/source/Plugins/Language/CPlusPlus/CjTypes.cpp
 new file mode 100644
-index 000000000..7d2296864
+index 000000000..778852600
 --- /dev/null
 +++ b/lldb/source/Plugins/Language/CPlusPlus/CjTypes.cpp
-@@ -0,0 +1,966 @@
+@@ -0,0 +1,973 @@
 +//===-- CjTypes.cpp ---------------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -17683,8 +17709,6 @@ index 000000000..7d2296864
 +    // Need delete cpoint after CString refactor to built-in on Jet backend.
 +    cpoint = chars;
 +  }
-+  time_t currentTime;
-+  struct tm* localTime = localtime(&currentTime);
 +  stream.Printf("%s", cpoint->GetSummaryAsCString());
 +
 +  return true;
@@ -17878,6 +17902,9 @@ index 000000000..7d2296864
 +    }
 +
 +    auto id = type->GetValueAsUnsigned(0);
++    if (id >= valueSP->GetNumChildren()) {
++      continue;
++    }
 +    auto real_ctor = valueSP->GetChildAtIndex(id, true);
 +    if (!real_ctor) {
 +      continue;
@@ -18071,6 +18098,9 @@ index 000000000..7d2296864
 +          stringArrBound++;
 +          rem = stringArr[stringArrBound - 1] / anyBase;
 +          stringArr[stringArrBound - 1] %= anyBase;
++          if (stringArrBound >= stringArr.size()) {
++            break;
++          }
 +      }
 +      return stringArrBound;
 +    }
@@ -18178,6 +18208,9 @@ index 000000000..7d2296864
 +      decimalStrArr = _bigInt + decimalStrArr;
 +      return decimalStrArr;
 +    }
++    if (_scale > INT32_MAX) {
++      return "";
++    }
 +    std::string unscaleValStrArr = _bigInt;
 +    // scale value bigger than 0, need insert decimal point to corresponding position.
 +    // precision is bigger than 0 and scale range [0, Int32.Max]
@@ -18200,7 +18233,7 @@ index 000000000..7d2296864
 +    } else {
 +      // decimalPointIndex less than 0, decimal point in the left of bigint value.
 +      // when decimalPointIndex less than 0, it's range [-Int32.Max, 0], abs will nerver overflow.
-+      std::string temp(unscaleValStrArr.size() + abs(decimalPointIndex) + 2, '0');
++      std::string temp(unscaleValStrArr.size() + abs(decimalPointIndex) + 3, '0');
 +      decimalStrArr = temp;
 +      if (unscaleValStrArr[0] == '-') {
 +        decimalStrArr[0] = '-';
@@ -18562,10 +18595,10 @@ index 000000000..86fb31227
 +#endif // liblldb_CjTypes_h_
 diff --git a/lldb/source/Plugins/Language/CPlusPlus/LibCj.cpp b/lldb/source/Plugins/Language/CPlusPlus/LibCj.cpp
 new file mode 100644
-index 000000000..2fb82df81
+index 000000000..832b71a52
 --- /dev/null
 +++ b/lldb/source/Plugins/Language/CPlusPlus/LibCj.cpp
-@@ -0,0 +1,842 @@
+@@ -0,0 +1,843 @@
 +//===-- LibCj.cpp ---------------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -18616,7 +18649,7 @@ index 000000000..2fb82df81
 +
 +private:
 +  uint64_t m_size;
-+  CjArraySyntheticFrontEnd *m_data;
++  std::unique_ptr<CjArraySyntheticFrontEnd> m_data;
 +};
 +
 +class CjHashMapSyntheticFrontEnd : public SyntheticChildrenFrontEnd {
@@ -18636,7 +18669,7 @@ index 000000000..2fb82df81
 +  int64_t m_freeOffset = 0;
 +  ValueObjectSP m_appendIndex;
 +  ValueObjectSP m_freeSize;
-+  CjArraySyntheticFrontEnd *m_data;
++  std::unique_ptr<CjArraySyntheticFrontEnd> m_data;
 +  bool m_internal = false;
 +};
 +
@@ -18651,7 +18684,7 @@ index 000000000..2fb82df81
 +  size_t GetIndexOfChildWithName(ConstString name) override { return ExtractIndexFromString(name.GetCString()); }
 +
 +private:
-+  CjHashMapSyntheticFrontEnd *m_map;
++  std::unique_ptr<CjHashMapSyntheticFrontEnd> m_map;
 +};
 +
 +class CjTupleSyntheticFrontEnd : public SyntheticChildrenFrontEnd {
@@ -18786,6 +18819,7 @@ index 000000000..2fb82df81
 +  ValueObjectSP non_synth_valobj = m_backend.GetNonSyntheticValue();
 +  if (!non_synth_valobj) {
 +    m_some = nullptr;
++    return false;
 +  }
 +
 +  if (non_synth_valobj->IsPointerType()) {
@@ -18809,13 +18843,13 @@ index 000000000..2fb82df81
 +    Status err;
 +    value = value->Dereference(err);
 +  }
-+
-+  if (value != nullptr) {
-+    auto dynamic = value->GetDynamicValue(eDynamicDontRunTarget);
-+    if (dynamic != nullptr) {
-+      m_dynamic = true;
-+      value = dynamic;
-+    }
++  if (!value) {
++    return false;
++  }
++  auto dynamic = value->GetDynamicValue(eDynamicDontRunTarget);
++  if (dynamic != nullptr) {
++    m_dynamic = true;
++    value = dynamic;
 +  }
 +
 +  if (value->HasSyntheticValue()) {
@@ -18950,7 +18984,7 @@ index 000000000..2fb82df81
 +  ValueObjectSP data = m_backend.GetChildMemberWithName(ConstString("myData"), true);
 +  ValueObjectSP size = m_backend.GetChildMemberWithName(ConstString("mySize"), true);
 +  if (data) {
-+    m_data = new CjArraySyntheticFrontEnd(data);
++    m_data = std::make_unique<CjArraySyntheticFrontEnd>(data);
 +  }
 +  if (size) {
 +    m_size = size->GetValueAsUnsigned(0);
@@ -19314,7 +19348,7 @@ index 000000000..2fb82df81
 +  m_freeSize = m_backend.GetChildMemberWithName(ConstString("freeSize"), true);
 +  auto entries = m_backend.GetChildMemberWithName(ConstString("entries"), true);
 +  if (entries) {
-+    m_data = new CjArraySyntheticFrontEnd(entries);
++    m_data = std::make_unique<CjArraySyntheticFrontEnd>(entries);
 +  }
 +  return false;
 +}
@@ -19325,7 +19359,7 @@ index 000000000..2fb82df81
 +}
 +
 +bool CjHashSetSyntheticFrontEnd::Update() {
-+  m_map = new CjHashMapSyntheticFrontEnd(m_backend.GetChildMemberWithName(ConstString("myMap"), true));
++  m_map = std::make_unique<CjHashMapSyntheticFrontEnd>(m_backend.GetChildMemberWithName(ConstString("myMap"), true));
 +  if (m_map) {
 +    // Mark the map(HashMap) is a child of HashSet.
 +    m_map->SetIsInternalType(true);
@@ -20816,10 +20850,10 @@ index f0d305a63..0153bfa62 100644
           "lldb will instead stop on the BSD signal the exception was converted "
 diff --git a/lldb/source/Plugins/Platform/MacOSX/cangjie_cjdb.py b/lldb/source/Plugins/Platform/MacOSX/cangjie_cjdb.py
 new file mode 100644
-index 000000000..1c76152d6
+index 000000000..badb24cb1
 --- /dev/null
 +++ b/lldb/source/Plugins/Platform/MacOSX/cangjie_cjdb.py
-@@ -0,0 +1,1782 @@
+@@ -0,0 +1,1787 @@
 +# Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
 +# This source file is part of the Cangjie project, licensed under Apache-2.0
 +# with Runtime Library Exception.
@@ -20998,6 +21032,9 @@ index 000000000..1c76152d6
 +        end -= 1
 +    return s[start:end]
 +
++def EscapeExpressionString(s):
++    return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
++
 +def FunctionSummaryProvider(valobj, _):
 +    raw = valobj.GetNonSyntheticValue()
 +    ptr = raw.GetChildMemberWithName("ptr")
@@ -21010,6 +21047,7 @@ index 000000000..1c76152d6
 +       mangle_name = sb_context.GetFunction().GetName()
 +    if (sb_context.GetSymbol().IsValid()):
 +       mangle_name = sb_context.GetSymbol().GetName()
++    mangle_name = EscapeExpressionString(mangle_name)
 +    if mangle_name.startswith("_"):
 +        expr = f'(char *)CJ_MRT_DemangleHandle("{"_" + mangle_name}")'
 +    else:
@@ -22461,6 +22499,7 @@ index 000000000..1c76152d6
 +            str.Clear()
 +            frame.GetDescription(str)
 +            mangled = frame.GetFunctionName().split("(", 1)[0]
++            mangled = EscapeExpressionString(mangled)
 +            if mangled.startswith("_"):
 +                expr = f'(char *)CJ_MRT_DemangleHandle("{"_" + mangled}")'
 +            else:
@@ -22628,10 +22667,10 @@ index 000000000..38530e2f6
 +target_link_directories(lldbPluginPlatformOHOS PUBLIC ${CMAKE_SOURCE_DIR}/../utils/boundscheck/lib/${ARCH_NAME})
 diff --git a/lldb/source/Plugins/Platform/OHOS/HdcClient.cpp b/lldb/source/Plugins/Platform/OHOS/HdcClient.cpp
 new file mode 100644
-index 000000000..997c52259
+index 000000000..07df4f364
 --- /dev/null
 +++ b/lldb/source/Plugins/Platform/OHOS/HdcClient.cpp
-@@ -0,0 +1,879 @@
+@@ -0,0 +1,927 @@
 +//===-- HdcClient.cpp -----------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -22675,6 +22714,7 @@ index 000000000..997c52259
 +#include <sstream>
 +#include <utility>
 +#include <securec.h>
++#include <regex>
 +
 +// On Windows, transitive dependencies pull in <Windows.h>, which defines a
 +// macro that clashes with a method name.
@@ -22692,6 +22732,8 @@ index 000000000..997c52259
 +const seconds kReadTimeout(20);
 +const char *kSocketNamespaceAbstract = "localabstract";
 +const char *kSocketNamespaceFileSystem = "localfilesystem";
++
++#define MAX_PACKET_SIZE   67108864U  // 64MB
 +
 +Status ReadAllBytes(Connection &conn, void *buffer, size_t size) {
 +  Status error;
@@ -22836,9 +22878,22 @@ index 000000000..997c52259
 +  return ReadResponseStatus("Forwardport result:OK");
 +}
 +
++bool ValidateSocketName(const std::string& name) {
++    if (name.empty()) {
++        return false;
++    }
++
++    const std::regex valid_chars(R"(^[a-zA-Z0-9_.-]+$)");
++
++    return std::regex_match(name, valid_chars);
++}
++
 +Status HdcClient::SetPortForwarding(const uint16_t local_port,
 +                                    llvm::StringRef remote_socket_name,
 +                                    const UnixSocketNamespace socket_namespace) {
++  if (!ValidateSocketName(remote_socket_name.str())) {
++    return Status("Remote socket name is invalid: %s", remote_socket_name.str().c_str());
++  }
 +  const char *sock_namespace_str = (socket_namespace == UnixSocketNamespace::UnixSocketNamespaceAbstract)
 +                                   ? kSocketNamespaceAbstract
 +                                   : kSocketNamespaceFileSystem;
@@ -22879,6 +22934,18 @@ index 000000000..997c52259
 +  return ReadResponseStatus("Remove forward ruler success");
 +}
 +
++static std::string EscapeHdcPath(const std::string& path) {
++  std::string result = "\"";
++  for (char c : path) {
++    if (c == '"' || c == '\\') {
++      result += '\\';
++    }
++    result += c;
++  }
++  result += "\"";
++  return result;
++}
++
 +Status HdcClient::LocalTransferFile(const char *direction, const FileSpec &src,
 +                                    const FileSpec &dst) {
 +  const unsigned vector_size = 128;
@@ -22890,7 +22957,7 @@ index 000000000..997c52259
 +  std::stringstream cmd;
 +  cmd << "file " << direction << " -cwd ";
 +  cmd.write(cwd.data(), cwd.size());
-+  cmd << " \"" << src.GetPath() << "\" \"" << dst.GetPath() << "\"";
++  cmd << " " << EscapeHdcPath(src.GetPath()) << " " << EscapeHdcPath(dst.GetPath());
 +  Status error = SendMessage(cmd.str());
 +  if (error.Fail())
 +    return error;
@@ -23175,6 +23242,9 @@ index 000000000..997c52259
 +    return Status("Compression is not supported");
 +
 +  uint32_t read_bytes = std::get<3>(*transfer_payload);
++  if (read_bytes >= MAX_PACKET_SIZE) {
++    return Status("Read transfer payload too large: %u", read_bytes);
++  }
 +  buffer.resize(read_bytes, 0);
 +  error = ReadAllBytes(buffer.data(), buffer.size());
 +  if (error.Fail())
@@ -23197,7 +23267,7 @@ index 000000000..997c52259
 +
 +  std::stringstream cmd;
 +  cmd << "file recv remote -m";
-+  cmd << " \"" << src.GetPath() << "\" \"" << dst.GetPath() << "\"";
++  cmd << " " << EscapeHdcPath(src.GetPath()) << " " << EscapeHdcPath(dst.GetPath());
 +  Status error = SendMessage(cmd.str());
 +  if (error.Fail())
 +    return error;
@@ -23213,18 +23283,27 @@ index 000000000..997c52259
 +  std::vector<char> buf;
 +  while (cur_size < all_size) {
 +    error = PullFileChunk(buf);
-+    if (error.Fail())
++    if (error.Fail()) {
++      dst_file.close();
 +      return error;
++    }
++    if (buf.empty()) {
++      break;
++    }
 +    dst_file.write(buf.data(), buf.size());
 +    cur_size += buf.size();
 +  }
 +
 +  error = SendCommandMessage(HdcCommand::CMD_FILE_FINISH, {});
-+  if (error.Fail())
++  if (error.Fail()) {
++    dst_file.close();
 +    return error;
++  }
 +  error = ReadResponseStatus("FileTransfer finish");
-+  if (error.Fail())
++  if (error.Fail()) {
++    dst_file.close();
 +    return error;
++  }
 +
 +  dst_file.close();
 +  if (dst_file.has_error())
@@ -23305,7 +23384,7 @@ index 000000000..997c52259
 +    return Status("Unable to open local file %s", local_file_path.c_str());
 +
 +  std::stringstream cmd;
-+  cmd << "file send remote -m \"" << src.GetPath() << "\" \"" << dst.GetPath() << "\"";
++  cmd << "file send remote -m " << EscapeHdcPath(src.GetPath()) << " " << EscapeHdcPath(dst.GetPath());
 +  Status error = SendMessage(cmd.str());
 +  if (error.Fail())
 +    return error;
@@ -23365,6 +23444,9 @@ index 000000000..997c52259
 +      return error;
 +    }
 +  }
++  if (packet.size() >= MAX_PACKET_SIZE) {
++    return Status("Send message packet too large: %lu", packet.size());
++  }
 +
 +  unsigned msg_len = packet.size() + 1;
 +  const unsigned vector_size = 128;
@@ -23399,6 +23481,9 @@ index 000000000..997c52259
 +  }
 +
 +  packet_len = htonl(packet_len);
++  if (packet_len >= MAX_PACKET_SIZE) {
++    return Status("Read message packet too large: %u", packet_len);
++  }
 +  message.resize(packet_len, 0);
 +  error = ReadAllBytes(&message[0], packet_len);
 +  if (error.Fail()) {
@@ -23474,6 +23559,9 @@ index 000000000..997c52259
 +    return error;
 +  }
 +  len = htonl(len);
++  if (len >= MAX_PACKET_SIZE) {
++    return Status("Read response packet too large: %u", len);
++  }
 +  const unsigned vector_size = 128;
 +  llvm::SmallVector<char, vector_size> message(len + 1);
 +  error = ReadAllBytes(message.data(), len);
@@ -23496,7 +23584,6 @@ index 000000000..997c52259
 +
 +Status HdcClient::Shell(const char *command, milliseconds timeout,
 +                        std::string *output) {
-+  assert(command && command[0]);
 +  std::string cmd = "shell ";
 +  cmd += command;
 +  Status error = SendMessage(cmd);
@@ -25546,7 +25633,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..6612a3c80 100644
+index b391fe1ea..61ef4893e 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -25602,7 +25689,7 @@ index b391fe1ea..6612a3c80 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.1.1";
++    g_version_str += "\n  cangjie 1.1.2";
    }
  
    return g_version_str.c_str();
@@ -28896,7 +28983,7 @@ index 4ff48c366..fd01aa3bd 100644
  class AssumeInst : public IntrinsicInst {
  public:
 diff --git a/llvm/include/llvm/IR/Intrinsics.td b/llvm/include/llvm/IR/Intrinsics.td
-index d46fa4fbf..c8e95cc88 100644
+index d46fa4fbf..7ae9ced63 100644
 --- a/llvm/include/llvm/IR/Intrinsics.td
 +++ b/llvm/include/llvm/IR/Intrinsics.td
 @@ -180,6 +180,9 @@ class LLVMQualPointerType<LLVMType elty, int addrspace>
@@ -28968,7 +29055,7 @@ index d46fa4fbf..c8e95cc88 100644
  
  def llvm_x86mmx_ty     : LLVMType<x86mmx>;
  def llvm_ptrx86mmx_ty  : LLVMPointerType<llvm_x86mmx_ty>;         // <1 x i64>*
-@@ -417,6 +432,201 @@ def int_gcwrite : Intrinsic<[],
+@@ -417,6 +432,209 @@ def int_gcwrite : Intrinsic<[],
                              [IntrArgMemOnly, NoCapture<ArgIndex<1>>,
                               NoCapture<ArgIndex<2>>]>;
  
@@ -29153,6 +29240,14 @@ index d46fa4fbf..c8e95cc88 100644
 +                                                [IntrNoMem, IntrWillReturn, IntrSpeculatable]>;
 +def int_cj_get_vtable_func          : Intrinsic<[llvm_ptr_ty],
 +                                                [llvm_ptr_ty, llvm_i64_ty, llvm_i64_ty, llvm_ptr_ty]>;
++// Binds a virtual/interface function pointer with its VFE metadata (objType
++// and FuncTable offset) as explicit intrinsic arguments, so that the metadata
++// survives optimization passes.
++def int_cj_vfe_info                 : Intrinsic<[llvm_ptr_ty],
++                                                [llvm_ptr_ty, llvm_metadata_ty,
++                                                 llvm_i64_ty],
++                                                [IntrNoMem, IntrWillReturn,
++                                                 IntrSpeculatable]>;
 +def int_cj_assign_generic           : Intrinsic<[],
 +                                                [llvm_gcptr_ty, llvm_gcptr_ty, llvm_ptr_ty],
 +                                                [IntrArgMemOnly, IntrWillReturn,
@@ -29170,7 +29265,7 @@ index d46fa4fbf..c8e95cc88 100644
  //===------------------- ObjC ARC runtime Intrinsics --------------------===//
  //
  // Note these are to support the Objective-C ARC optimizer which wants to
-@@ -1257,6 +1467,25 @@ def int_experimental_gc_get_pointer_offset : Intrinsic<[llvm_i64_ty],
+@@ -1257,6 +1475,25 @@ def int_experimental_gc_get_pointer_offset : Intrinsic<[llvm_i64_ty],
                   [llvm_anyptr_ty], [IntrNoMem, IntrWillReturn,
                   ReadNone<ArgIndex<0>>, NoCapture<ArgIndex<0>>]>;
  
@@ -29932,7 +30027,7 @@ index 000000000..1ec3ef1f2
 +
 +#endif
 diff --git a/llvm/include/llvm/Transforms/IPO/GlobalDCE.h b/llvm/include/llvm/Transforms/IPO/GlobalDCE.h
-index a24196efb..79d0ee061 100644
+index a24196efb..28565387a 100644
 --- a/llvm/include/llvm/Transforms/IPO/GlobalDCE.h
 +++ b/llvm/include/llvm/Transforms/IPO/GlobalDCE.h
 @@ -18,9 +18,12 @@
@@ -29948,7 +30043,7 @@ index a24196efb..79d0ee061 100644
  #include <unordered_map>
  
  namespace llvm {
-@@ -70,6 +73,75 @@ private:
+@@ -70,6 +73,76 @@ private:
    void ScanVTableLoad(Function *Caller, Metadata *TypeId, uint64_t CallOffset);
  
    void ComputeDependencies(Value *V, SmallPtrSetImpl<GlobalValue *> &U);
@@ -30019,6 +30114,7 @@ index a24196efb..79d0ee061 100644
 +
 +  void initTIE(Module &);
 +  void updateLiveExtensions();
++  void updateNonExternalExtensionDefs(Module &M);
 +  void rewriteExtensions(Module &);
 +  void rewriteLLVMUsed(Module &);
  };
@@ -34896,7 +34992,7 @@ index 1943b5db9..0c8822991 100644
    IndirectSymbolInits.push_back(std::make_pair(NewGA, Val));
    return Error::success();
 diff --git a/llvm/lib/Bitcode/Writer/BitcodeWriter.cpp b/llvm/lib/Bitcode/Writer/BitcodeWriter.cpp
-index d7e012fb6..0dced4209 100644
+index d7e012fb6..e2a2d0d57 100644
 --- a/llvm/lib/Bitcode/Writer/BitcodeWriter.cpp
 +++ b/llvm/lib/Bitcode/Writer/BitcodeWriter.cpp
 @@ -780,6 +780,8 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
@@ -34908,6 +35004,99 @@ index d7e012fb6..0dced4209 100644
    case Attribute::EndAttrKinds:
      llvm_unreachable("Can not encode end-attribute kinds marker.");
    case Attribute::None:
+@@ -4671,6 +4673,9 @@ void BitcodeWriter::writeModule(const Module &M,
+   assert(M.isMaterialized());
+   Mods.push_back(const_cast<Module *>(&M));
+ 
++  if (GenerateHash)
++    CanonicalizeBitcodeWriterUseListOrder(*Mods.back());
++
+   ModuleBitcodeWriter ModuleWriter(M, Buffer, StrtabBuilder, *Stream,
+                                    ShouldPreserveUseListOrder, Index,
+                                    GenerateHash, ModHash);
+diff --git a/llvm/lib/Bitcode/Writer/ValueEnumerator.cpp b/llvm/lib/Bitcode/Writer/ValueEnumerator.cpp
+index 998f629aa..3dd2bb3e3 100644
+--- a/llvm/lib/Bitcode/Writer/ValueEnumerator.cpp
++++ b/llvm/lib/Bitcode/Writer/ValueEnumerator.cpp
+@@ -11,6 +11,7 @@
+ //===----------------------------------------------------------------------===//
+ 
+ #include "ValueEnumerator.h"
++#include "llvm/ADT/SmallPtrSet.h"
+ #include "llvm/ADT/SmallVector.h"
+ #include "llvm/Config/llvm-config.h"
+ #include "llvm/IR/Argument.h"
+@@ -220,6 +221,54 @@ static void predictValueUseListOrderImpl(const Value *V, const Function *F,
+     Stack.back().Shuffle[I] = List[I].second;
+ }
+ 
++static bool isBeforeInBitcodeUseListOrder(const Use &L, const Use &R,
++                                          unsigned ID, const OrderMap &OM) {
++  if (&L == &R)
++    return false;
++
++  auto LID = OM.lookup(L.getUser()).first;
++  auto RID = OM.lookup(R.getUser()).first;
++  bool IsGlobalValue = OM.isGlobalValue(ID);
++
++  if (LID < RID) {
++    if (RID <= ID)
++      if (!IsGlobalValue)
++        return true;
++    return false;
++  }
++  if (RID < LID) {
++    if (LID <= ID)
++      if (!IsGlobalValue)
++        return false;
++    return true;
++  }
++
++  if (LID <= ID)
++    if (!IsGlobalValue)
++      return L.getOperandNo() < R.getOperandNo();
++  return L.getOperandNo() > R.getOperandNo();
++}
++
++void llvm::CanonicalizeBitcodeWriterUseListOrder(Module &M) {
++  OrderMap OM = orderModule(M);
++
++  SmallVector<std::pair<Value *, unsigned>, 0> OrderedValues;
++  OrderedValues.reserve(OM.IDs.size());
++  for (const auto &Entry : OM.IDs)
++    OrderedValues.emplace_back(const_cast<Value *>(Entry.first),
++                               Entry.second.first);
++  llvm::sort(OrderedValues, llvm::less_second());
++
++  for (const auto &Entry : OrderedValues) {
++    Value *V = Entry.first;
++    unsigned ID = Entry.second;
++    if (V->use_empty() || std::next(V->use_begin()) == V->use_end())
++      continue;
++    V->sortUseList(
++        [&](const Use &L, const Use &R) { return isBeforeInBitcodeUseListOrder(L, R, ID, OM); });
++  }
++}
++
+ static void predictValueUseListOrder(const Value *V, const Function *F,
+                                      OrderMap &OM, UseListOrderStack &Stack) {
+   auto &IDPair = OM[V];
+diff --git a/llvm/lib/Bitcode/Writer/ValueEnumerator.h b/llvm/lib/Bitcode/Writer/ValueEnumerator.h
+index 6c3f6d4ff..5003ae65d 100644
+--- a/llvm/lib/Bitcode/Writer/ValueEnumerator.h
++++ b/llvm/lib/Bitcode/Writer/ValueEnumerator.h
+@@ -300,6 +300,11 @@ private:
+   void EnumerateNamedMetadata(const Module &M);
+ };
+ 
++/// Canonicalize use-list order to a deterministic bitcode-writer order before
++/// serialization. This mutates the in-memory module but does not change IR
++/// semantics.
++void CanonicalizeBitcodeWriterUseListOrder(Module &M);
++
+ } // end namespace llvm
+ 
+ #endif // LLVM_LIB_BITCODE_WRITER_VALUEENUMERATOR_H
 diff --git a/llvm/lib/CMakeLists.txt b/llvm/lib/CMakeLists.txt
 index 5ecdf5af9..99f246d58 100644
 --- a/llvm/lib/CMakeLists.txt
@@ -46070,7 +46259,7 @@ index 42fde3752..e050a7b57 100644
    }
  
 diff --git a/llvm/lib/Passes/PassBuilderPipelines.cpp b/llvm/lib/Passes/PassBuilderPipelines.cpp
-index 945ef5123..d77b59f45 100644
+index 945ef5123..7a0efe1a7 100644
 --- a/llvm/lib/Passes/PassBuilderPipelines.cpp
 +++ b/llvm/lib/Passes/PassBuilderPipelines.cpp
 @@ -17,6 +17,7 @@
@@ -46418,12 +46607,8 @@ index 945ef5123..d77b59f45 100644
  
    // LoopSink (and other loop passes since the last simplifyCFG) might have
    // resulted in single-entry-single-exit or empty blocks. Clean up the CFG.
-@@ -1278,9 +1428,13 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
-     MPM.addPass(IROutlinerPass());
- 
-   // Merge functions if requested.
--  if (PTO.MergeFunctions)
-+  if (PTO.MergeFunctions || CJPipeline)
+@@ -1281,6 +1431,10 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
+   if (PTO.MergeFunctions)
      MPM.addPass(MergeFunctionsPass());
  
 +  if (!LTOPreLink && CJPipeline) {
@@ -46600,7 +46785,18 @@ index 945ef5123..d77b59f45 100644
  
    if (EnableConstraintElimination)
      MainFPM.addPass(ConstraintEliminationPass());
-@@ -1776,8 +1976,9 @@ ModulePassManager PassBuilder::buildO0DefaultPipeline(OptimizationLevel Level,
+@@ -1747,7 +1947,9 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
+   // Now that we have optimized the program, discard unreachable functions.
+   MPM.addPass(GlobalDCEPass());
+ 
+-  if (PTO.MergeFunctions)
++  // It will conflict with VFE, so it is necessary to ensure that VFE is not
++  // executed after MergeFunction.
++  if (PTO.MergeFunctions || CJPipeline)
+     MPM.addPass(MergeFunctionsPass());
+ 
+   if (PTO.CallGraphProfile)
+@@ -1776,8 +1978,9 @@ ModulePassManager PassBuilder::buildO0DefaultPipeline(OptimizationLevel Level,
    if (PGOOpt && PGOOpt->PseudoProbeForProfiling)
      MPM.addPass(SampleProfileProbePass(TM));
  
@@ -46612,7 +46808,7 @@ index 945ef5123..d77b59f45 100644
      addPGOInstrPassesForO0(
          MPM,
          /* RunProfileGen */ (PGOOpt->Action == PGOOptions::IRInstr),
-@@ -1886,6 +2087,9 @@ AAManager PassBuilder::buildDefaultAAPipeline() {
+@@ -1886,6 +2089,9 @@ AAManager PassBuilder::buildDefaultAAPipeline() {
    AA.registerFunctionAnalysis<ScopedNoAliasAA>();
    AA.registerFunctionAnalysis<TypeBasedAA>();
  
@@ -48713,7 +48909,7 @@ index ca7d53dce..407631e03 100644
    intrinsics_gen
  
 diff --git a/llvm/lib/Target/ARM/ARMAsmPrinter.cpp b/llvm/lib/Target/ARM/ARMAsmPrinter.cpp
-index 57cbd7a3b..b4cfb57a9 100644
+index 57cbd7a3b..1e7c08110 100644
 --- a/llvm/lib/Target/ARM/ARMAsmPrinter.cpp
 +++ b/llvm/lib/Target/ARM/ARMAsmPrinter.cpp
 @@ -27,11 +27,13 @@
@@ -48867,7 +49063,7 @@ index 57cbd7a3b..b4cfb57a9 100644
 +                                     .addReg(0));
 +  } else {
 +    assert((Opcode != ARM::TCRETURNri) && (Opcode != ARM::TCRETURNdi) &&
-+           (Opcode != ARM::TAILJPr) &&
++           (Opcode != ARM::TAILJMPr) &&
 +           "Do not support TCRETURNdi/TCRETURNri/TAILJMPr.");
 +    EmitToStreamer(*OutStreamer,
 +                   MCInstBuilder(ARM::BL).addOperand(MCOperand::createExpr(
@@ -55300,10 +55496,10 @@ index 50710eaa1..b9065ec1a 100644
  
  /// Deduce returned attributes for the SCC.
 diff --git a/llvm/lib/Transforms/IPO/GlobalDCE.cpp b/llvm/lib/Transforms/IPO/GlobalDCE.cpp
-index f35827220..1c2f6496f 100644
+index f35827220..538855dc8 100644
 --- a/llvm/lib/Transforms/IPO/GlobalDCE.cpp
 +++ b/llvm/lib/Transforms/IPO/GlobalDCE.cpp
-@@ -18,6 +18,7 @@
+@@ -18,12 +18,14 @@
  #include "llvm/ADT/SmallPtrSet.h"
  #include "llvm/ADT/Statistic.h"
  #include "llvm/Analysis/TypeMetadataUtils.h"
@@ -55311,7 +55507,14 @@ index f35827220..1c2f6496f 100644
  #include "llvm/IR/Instructions.h"
  #include "llvm/IR/IntrinsicInst.h"
  #include "llvm/IR/Module.h"
-@@ -32,10 +33,23 @@ using namespace llvm;
+ #include "llvm/InitializePasses.h"
+ #include "llvm/Pass.h"
+ #include "llvm/Support/CommandLine.h"
++#include "llvm/Support/ErrorHandling.h"
+ #include "llvm/Transforms/IPO.h"
+ #include "llvm/Transforms/Utils/CtorUtils.h"
+ #include "llvm/Transforms/Utils/GlobalStatus.h"
+@@ -32,10 +34,23 @@ using namespace llvm;
  
  #define DEBUG_TYPE "globaldce"
  
@@ -55335,11 +55538,11 @@ index f35827220..1c2f6496f 100644
  STATISTIC(NumAliases  , "Number of global aliases removed");
  STATISTIC(NumFunctions, "Number of functions removed");
  STATISTIC(NumIFuncs,    "Number of indirect functions removed");
-@@ -138,6 +152,14 @@ void GlobalDCEPass::UpdateGVDependencies(GlobalValue &GV) {
+@@ -138,6 +153,14 @@ void GlobalDCEPass::UpdateGVDependencies(GlobalValue &GV) {
                          << GV.getName() << "\n");
        continue;
      }
-+    if (CJPipeline) {
++    if (CJPipeline && ClEnableCJTIE) {
 +      auto *Usee = dyn_cast<GlobalVariable>(&GV);
 +      auto *User = dyn_cast<GlobalVariable>(GVU);
 +      if (VFESafeVTables.count(User) && Usee && Usee->isCJTypeInfo())
@@ -55350,7 +55553,7 @@ index f35827220..1c2f6496f 100644
      GVDependencies[GVU].insert(&GV);
    }
  }
-@@ -290,6 +312,7 @@ void GlobalDCEPass::AddVirtualFunctionDependencies(Module &M) {
+@@ -290,6 +313,7 @@ void GlobalDCEPass::AddVirtualFunctionDependencies(Module &M) {
  
  PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
    bool Changed = false;
@@ -55358,7 +55561,7 @@ index f35827220..1c2f6496f 100644
  
    // The algorithm first computes the set L of global variables that are
    // trivially live.  Then it walks the initialization of these variables to
-@@ -318,6 +341,11 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -318,6 +342,11 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
    // might call, if we have that information.
    AddVirtualFunctionDependencies(M);
  
@@ -55370,12 +55573,14 @@ index f35827220..1c2f6496f 100644
    // Loop over the module, adding globals which are obviously necessary.
    for (GlobalObject &GO : M.global_objects()) {
      GO.removeDeadConstantUsers();
-@@ -361,15 +389,23 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -361,15 +390,25 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
        MarkLive(*GVD, &NewLiveGVs);
    }
  
-+  if (CJPipeline && ClEnableCJTIE)
++  if (CJPipeline && ClEnableCJTIE) {
 +    CJDCE.updateLiveExtensions();
++    CJDCE.updateNonExternalExtensionDefs(M);
++  }
 +
    // Now that all globals which are needed are in the AliveGlobals set, we loop
    // through the program, deleting those which are not alive.
@@ -55396,7 +55601,7 @@ index f35827220..1c2f6496f 100644
        if (GV.hasInitializer()) {
          Constant *Init = GV.getInitializer();
          GV.setInitializer(nullptr);
-@@ -377,16 +413,20 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -377,16 +416,20 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
            Init->destroyConstant();
        }
      }
@@ -55421,7 +55626,7 @@ index f35827220..1c2f6496f 100644
    // The third pass drops targets of aliases which are dead...
    std::vector<GlobalAlias*> DeadAliases;
    for (GlobalAlias &GA : M.aliases())
-@@ -435,8 +475,12 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -435,8 +478,12 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
    }
  
    NumVariables += DeadGlobalVars.size();
@@ -55435,7 +55640,7 @@ index f35827220..1c2f6496f 100644
  
    NumAliases += DeadAliases.size();
    for (GlobalAlias *GA : DeadAliases)
-@@ -446,6 +490,11 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -446,6 +493,11 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
    for (GlobalIFunc *GIF : DeadIFuncs)
      EraseUnusedGlobalValue(GIF);
  
@@ -55447,7 +55652,7 @@ index f35827220..1c2f6496f 100644
    // Make sure that all memory is released
    AliveGlobals.clear();
    ConstantDependenciesCache.clear();
-@@ -458,3 +507,395 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -458,3 +510,534 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
      return PreservedAnalyses::none();
    return PreservedAnalyses::all();
  }
@@ -55617,45 +55822,29 @@ index f35827220..1c2f6496f 100644
 +    // Value: offsets
 +    DenseMap<GenericFuncInfo *, SmallSet<uint64_t, 4>> RelatedGV;
 +    for (auto &I : instructions(F)) {
-+      // There is an overlap between MD_obj_type and MD_intro_type, which needs
-+      // to be considered for merging in the future.
-+      auto *TypeMD = I.getMetadata(LLVMContext::MD_obj_type);
-+      if (!TypeMD)
++      // Look for @llvm.cj.vfe.info calls which carry VFE metadata as explicit
++      // intrinsic arguments (objType as metadata arg, offset as i64 arg).
++      auto *CI = dyn_cast<CallInst>(&I);
++      if (!CI)
 +        continue;
-+      assert(isa<LoadInst>(&I));
-+      auto *OffsetMD = I.getMetadata(LLVMContext::MD_func_table);
-+      if (!OffsetMD)
-+        report_fatal_error("objType present without FuncTable");
++      Function *Callee = CI->getCalledFunction();
++      if (!Callee || Callee->getIntrinsicID() != Intrinsic::cj_vfe_info)
++        continue;
 +
-+      // Merged format: operand(0) is MDNode (vs MDString for single-entry).
-+      // Each operand pair (TypeMD[i], OffsetMD[i]) represents one (obj_type, offset).
-+      if (TypeMD->getNumOperands() > 0 && isa<MDNode>(TypeMD->getOperand(0))) {
-+        if (TypeMD->getNumOperands() != OffsetMD->getNumOperands())
-+          report_fatal_error(
-+              "Merged objType and FuncTable have different operand counts");
-+        for (unsigned i = 0; i < TypeMD->getNumOperands(); i++) {
-+          auto *SubType = dyn_cast<MDNode>(TypeMD->getOperand(i));
-+          auto *SubOff = dyn_cast<MDNode>(OffsetMD->getOperand(i));
-+          if (!SubType || !SubOff || SubOff->getNumOperands() == 0)
-+            report_fatal_error("Malformed merged objType or FuncTable");
-+          auto *GFI = resolveVFEMeta(SubType, M);
-+          if (!GFI)
-+            continue;
-+          auto Offset =
-+              mdconst::extract<ConstantInt>(SubOff->getOperand(0))
-+                  ->getZExtValue();
-+          RelatedGV[GFI].insert(Offset);
-+        }
-+      } else {
-+        // Single-entry format.
-+        auto *GFI = resolveVFEMeta(TypeMD, M);
-+        if (!GFI)
-+          continue;
-+        auto Offset =
-+            mdconst::extract<ConstantInt>(OffsetMD->getOperand(0))
-+                ->getZExtValue();
-+        RelatedGV[GFI].insert(Offset);
-+      }
++      auto *MAV = dyn_cast<MetadataAsValue>(CI->getArgOperand(1));
++      if (!MAV)
++        report_fatal_error("objType is missing in llvm.cj.vfe.info");
++      Metadata *TypeMD = MAV->getMetadata();
++      // Arg 2: i64 FuncTable offset.
++      auto *OffsetCI = dyn_cast<ConstantInt>(CI->getArgOperand(2));
++      if (!OffsetCI)
++        report_fatal_error("FuncTable offset is missing in llvm.cj.vfe.info");
++
++      auto *GFI = resolveVFEMeta(TypeMD, M);
++      if (!GFI)
++        continue;
++      uint64_t Offset = OffsetCI->getZExtValue();
++      RelatedGV[GFI].insert(Offset);
 +    }
 +    updateDependencies(&F, RelatedGV);
 +  }
@@ -55776,6 +55965,161 @@ index f35827220..1c2f6496f 100644
 +      continue;
 +    assert(ReverseDeps.count(Ty));
 +    MarkRelatedMeta(ReverseDeps[Ty], LiveTypes);
++  }
++}
++
++void CangjieDCE::updateNonExternalExtensionDefs(Module &M) {
++  auto ReorderArray = [this](GlobalVariable &GV,
++                             std::vector<unsigned> &OldToNew,
++                             SmallSet<GlobalVariable *, 8> &RewriteTypeInfos) {
++    ArrayType *ATy = cast<ArrayType>(GV.getValueType());
++    auto *C = GV.getInitializer();
++    unsigned NumElements = C->getNumOperands();
++    std::vector<Constant *> NewElements(
++        NumElements,
++        ConstantPointerNull::get(cast<PointerType>(ATy->getElementType())));
++    unsigned NextLiveIndex = 0, NextDeadIndex = NumElements - 1;
++    DenseMap<unsigned, unsigned> DeadGVIndex;
++    for (unsigned I = 0; I < NumElements; ++I) {
++      auto *Ext = cast<Constant>(C->getOperand(I)->stripPointerCasts());
++      auto *ExtGV = dyn_cast_or_null<GlobalVariable>(Ext);
++      if (ExtGV)
++        if (auto *TI = dyn_cast_or_null<GlobalVariable>(
++                cast<GlobalVariable>(Ext)
++                    ->getInitializer()
++                    ->getOperand(ExtensionDefFieldType::ET_TARGET_TYPE)
++                    ->stripPointerCasts());
++            TI && TI->isCJTypeInfo() && TI->hasInitializer())
++          RewriteTypeInfos.insert(TI);
++      if (isa<ConstantPointerNull>(Ext) ||
++          !DCE.AliveGlobals.count(cast<GlobalVariable>(Ext))) {
++        NewElements[NextDeadIndex] = Ext;
++        DeadGVIndex[NextDeadIndex] = I;
++        OldToNew[I] = NextDeadIndex--;
++        continue;
++      }
++      NewElements[NextLiveIndex] = Ext;
++      OldToNew[I] = NextLiveIndex++;
++    }
++    if (NextDeadIndex + 1 != NextLiveIndex ||
++        !(isa<ConstantPointerNull>(NewElements[NextLiveIndex]) ||
++          !DCE.AliveGlobals.count(
++              cast<GlobalVariable>(NewElements[NextLiveIndex]))))
++      report_fatal_error("error");
++    NextDeadIndex = NumElements - 1;
++    while (NextLiveIndex < NextDeadIndex) {
++      OldToNew[DeadGVIndex[NextLiveIndex]] = NextDeadIndex;
++      OldToNew[DeadGVIndex[NextDeadIndex]] = NextLiveIndex;
++      std::swap(NewElements[NextLiveIndex++], NewElements[NextDeadIndex--]);
++    }
++    GV.setInitializer(ConstantArray::get(dyn_cast<ArrayType>(GV.getValueType()),
++                                         NewElements));
++  };
++  auto FixupConstantUsers = [](SmallVectorImpl<ConstantExpr *> &GEPUsers,
++                               std::vector<unsigned> &OldToNew) {
++    // We must NOT use replaceAllUsesWith on GEP ConstantExprs here.
++    // ConstantExprs are uniqued: if GEP@104's new index is 92,
++    // getWithOperands returns the existing GEP@92 object. Then
++    // replaceAllUsesWith merges Expr104's users into Expr92. When Expr92
++    // is later processed (92->80), ALL users (including ones that should
++    // stay at 92) are moved to 80.
++    //
++    // Fix: snapshot each GEP's user chain (GEP -> Constant -> GV) before
++    // any mutation, then rebuild each GlobalVariable initializer directly.
++    struct InitFixup {
++      GlobalVariable *TI;
++      unsigned FieldIdx;
++      Constant *NewGEP;
++    };
++    SmallVector<InitFixup, 8> InitFixups;
++
++    for (auto *Expr : GEPUsers) {
++      unsigned Op = Expr->getNumOperands() - 1;
++      auto *OldIndex = cast<ConstantInt>(Expr->getOperand(Op));
++      unsigned NewIdx = OldToNew[OldIndex->getZExtValue()];
++      if (OldIndex->getZExtValue() == NewIdx)
++        continue;
++      SmallVector<Constant *, 4> Operands;
++      Operands.reserve(Expr->getNumOperands());
++      for (Value *Operand : Expr->operands())
++        Operands.push_back(cast<Constant>(Operand));
++      Operands[Op] = ConstantInt::get(OldIndex->getType(), NewIdx);
++      Constant *NewGEP = Expr->getWithOperands(Operands);
++
++      // Walk the user chain: GEP -> Constant (initializer) -> GlobalVariable.
++      // Snapshot before any mutation to avoid cross-contamination.
++      for (User *U : Expr->users()) {
++        for (User *UU : U->users()) {
++          auto *TI = dyn_cast<GlobalVariable>(UU);
++          auto *CS = dyn_cast<ConstantStruct>(TI->getInitializer());
++          for (unsigned i = 0; i < CS->getNumOperands(); ++i) {
++            if (CS->getOperand(i) == Expr) {
++              InitFixups.push_back({TI, i, NewGEP});
++              break;
++            }
++          }
++        }
++      }
++    }
++
++    // Apply all collected fixups by rebuilding each GV's initializer.
++    for (auto &F : InitFixups) {
++      auto *CS = cast<ConstantStruct>(F.TI->getInitializer());
++      SmallVector<Constant *, 16> Fields;
++      Fields.reserve(CS->getNumOperands());
++      for (unsigned i = 0; i < CS->getNumOperands(); i++)
++        Fields.push_back(i == F.FieldIdx ? F.NewGEP
++                                         : cast<Constant>(CS->getOperand(i)));
++      F.TI->setInitializer(
++          ConstantStruct::get(cast<StructType>(CS->getType()), Fields));
++      if (isSafeToDestroyConstant(CS))
++        CS->destroyConstant();
++    }
++  };
++  auto ResetBitmap = [](SmallSet<GlobalVariable *, 8> &RewriteTypeInfos) {
++    for (auto *TI : RewriteTypeInfos) {
++      auto *TIC = TI->getInitializer();
++      unsigned Op = ClassInfoFieldType::CIT_ITABLE;
++      if (isa<ConstantPointerNull>(TIC->getOperand(Op)))
++        continue;
++      auto *StructInit = dyn_cast<ConstantStruct>(TIC);
++      SmallVector<Constant *, 8> Operands;
++      Operands.reserve(TIC->getNumOperands());
++      for (Value *Operand : TIC->operands())
++        Operands.push_back(cast<Constant>(Operand));
++      Operands[Op] = Constant::getNullValue(Operands[Op]->getType());
++      Constant *New = ConstantStruct::get(
++          cast<StructType>(StructInit->getType()), Operands);
++      if (New != TIC)
++        TI->setInitializer(New);
++      if (isSafeToDestroyConstant(TIC))
++        TIC->destroyConstant();
++    }
++  };
++  for (auto &GV : M.globals()) {
++    if (!GV.isCJInnerTypeExtensions())
++      continue;
++    auto *C = GV.getInitializer();
++    if (C->getNumOperands() == 0)
++      continue;
++    // Reorder the array, move dead GV to the back.
++    std::vector<unsigned> OldToNew(C->getNumOperands());
++    SmallSet<GlobalVariable *, 8> RewriteTypeInfos;
++    ReorderArray(GV, OldToNew, RewriteTypeInfos);
++    SmallVector<ConstantExpr *, 8> GEPUsers;
++    for (auto *U : GV.users()) {
++      auto *Expr = dyn_cast<ConstantExpr>(U);
++      if (Expr && Expr->getOpcode() == Instruction::GetElementPtr)
++        GEPUsers.push_back(Expr);
++    }
++    // Modify typeinfo and typetemplate using GV.
++    FixupConstantUsers(GEPUsers, OldToNew);
++    // Reset bitmap in typeinfo.
++    ResetBitmap(RewriteTypeInfos);
++    // Delete dead users and constant.
++    GV.removeDeadConstantUsers();
++    if (isSafeToDestroyConstant(C))
++      C->destroyConstant();
 +  }
 +}
 +
@@ -61626,10 +61970,10 @@ index 000000000..f55d9b667
 +                "Cangjie Barriers Split", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJDevirtualOpt.cpp b/llvm/lib/Transforms/Scalar/CJDevirtualOpt.cpp
 new file mode 100644
-index 000000000..584438e2a
+index 000000000..c385f341b
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJDevirtualOpt.cpp
-@@ -0,0 +1,483 @@
+@@ -0,0 +1,486 @@
 +//===- CJDevirtualOpt.cpp - -------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -61649,6 +61993,7 @@ index 000000000..584438e2a
 +
 +#include "llvm/IR/IRBuilder.h"
 +#include "llvm/IR/InstIterator.h"
++#include "llvm/IR/IntrinsicInst.h"
 +#include "llvm/Transforms/IPO/CJPartialEscapeAnalysis.h"
 +#include "llvm/Transforms/Scalar/CJFillMetadata.h"
 +#include "llvm/Transforms/Utils/CallGraphUpdater.h"
@@ -61696,8 +62041,7 @@ index 000000000..584438e2a
 +        break;
 +      }
 +      case Instruction::Load: {
-+        if (I->hasMetadata(LLVMContext::MD_func_table) &&
-+            I->hasMetadata(LLVMContext::MD_intro_type)) {
++        if (I->hasMetadata(LLVMContext::MD_func_table)) {
 +          FTLIS.push_back(cast<LoadInst>(I));
 +          break;
 +        }
@@ -61967,9 +62311,18 @@ index 000000000..584438e2a
 +  Function *TableFunc = Data.getFuncByIndex(FuncIdx);
 +  IRBuilder<> IRB(I);
 +  auto *BI = IRB.CreateBitCast(TableFunc, I->getType());
++  SmallVector<Instruction *, 4> DeadInsts = {I};
++  for (auto *U : I->users()) {
++    if (auto *II = dyn_cast<IntrinsicInst>(U);
++        II && II->getIntrinsicID() == Intrinsic::cj_vfe_info) {
++      II->replaceAllUsesWith(BI);
++      DeadInsts.push_back(II);
++    }
++  }
 +  I->replaceAllUsesWith(BI);
 +  assert(I->use_empty() && "CJ_MCC_GetMTable user is not empty");
-+  I->eraseFromParent();
++  for (auto *II : DeadInsts)
++    II->eraseFromParent();
 +}
 +
 +static bool devirtual(DevirtualCallData &CallData) {
@@ -61995,13 +62348,6 @@ index 000000000..584438e2a
 +    for (auto *FTLI : FTLIS) {
 +      MDNode *MDFT = FTLI->getMetadata(LLVMContext::MD_func_table);
 +      assert(MDFT != nullptr && "metadata IntroType must have value");
-+      // Skip merged metadata format (produced when instructions with different
-+      // VFE metadata are combined). Merged format has MDNode operands instead
-+      // of ConstantAsMetadata.
-+      if (isa<MDNode>(MDFT->getOperand(0))) {
-+        UnresolvedLoad.push_back(FTLI);
-+        continue;
-+      }
 +      uint64_t FuncIndex =
 +          mdconst::extract<ConstantInt>(MDFT->getOperand(0))->getZExtValue();
 +      bool Resolved = DevirtualImpl(Klass0, GetKlass1(FTLI), FTLI, FuncIndex);
@@ -62057,11 +62403,12 @@ index 000000000..584438e2a
 +      // Klass0 is get from TILI (the first load).
 +      GlobalVariable *Klass0 = findTypeInfoGV(TI);
 +      SmallVector<LoadInst *, 4> UnresolvedLoad;
-+      OnceResolved |=
-+          ResolveFTLI(FTLIS, Klass0, UnresolvedLoad, [](LoadInst *FTLI) {
++      OnceResolved |= ResolveFTLI(
++          FTLIS, Klass0, UnresolvedLoad,
++          [](LoadInst *FTLI) -> GlobalVariable * {
 +            MDNode *MDTI = FTLI->getMetadata(LLVMContext::MD_intro_type);
 +            if (MDTI == nullptr)
-+              report_fatal_error("metadata IntroType must have value");
++              return nullptr;
 +            assert(MDTI != nullptr && "");
 +            const Twine &GVName =
 +                dyn_cast<MDString>(MDTI->getOperand(0))->getString() +
@@ -72479,10 +72826,10 @@ index 000000000..2b87826d1
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
 new file mode 100644
-index 000000000..03797260f
+index 000000000..a2cfb380b
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
-@@ -0,0 +1,1152 @@
+@@ -0,0 +1,1171 @@
 +//===- CJRuntimeLowering.cpp - CJ Runtime Lowering --------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -73072,9 +73419,19 @@ index 000000000..03797260f
 +                                     CB->getArgOperand(2)))}));
 +    LI3->setMetadata(LLVMContext::MD_invariant_load,
 +                     MDNode::get(CB->getContext(), {}));
-+    LI3->setMetadata(LLVMContext::MD_obj_type,
-+                     CB->getMetadata(LLVMContext::MD_obj_type));
-+    CB->replaceAllUsesWith(LI3);
++    // Wrap with @llvm.cj.vfe.info to preserve VFE metadata as intrinsic args.
++    auto *ObjTypeMD = CB->getMetadata(LLVMContext::MD_obj_type);
++    auto *FuncOffset = cast<ConstantInt>(CB->getArgOperand(2));
++    Value *Result = LI3;
++    if (ObjTypeMD) {
++      auto *VFEInfoFn = Intrinsic::getDeclaration(
++          CB->getModule(), Intrinsic::cj_vfe_info);
++      Result = IRB.CreateCall(VFEInfoFn,
++                              {LI3, MetadataAsValue::get(CB->getContext(),
++                                                         ObjTypeMD),
++                               FuncOffset});
++    }
++    CB->replaceAllUsesWith(Result);
 +    CB->eraseFromParent();
 +  }
 +
@@ -73098,9 +73455,18 @@ index 000000000..03797260f
 +    LI->setMetadata(LLVMContext::MD_func_table,
 +                    MDNode::get(C, {ConstantAsMetadata::get(cast<ConstantInt>(
 +                                       CB->getArgOperand(2)))}));
-+    LI->setMetadata(LLVMContext::MD_obj_type,
-+                    CB->getMetadata(LLVMContext::MD_obj_type));
-+    CB->replaceAllUsesWith(LI);
++    // Wrap with @llvm.cj.vfe.info to preserve VFE metadata as intrinsic args.
++    auto *ObjTypeMD = CB->getMetadata(LLVMContext::MD_obj_type);
++    auto *FuncOffset = cast<ConstantInt>(CB->getArgOperand(2));
++    Value *Result = LI;
++    if (ObjTypeMD) {
++      auto *VFEInfoFn = Intrinsic::getDeclaration(
++          CB->getModule(), Intrinsic::cj_vfe_info);
++      Result = IRB.CreateCall(VFEInfoFn,
++                              {LI, MetadataAsValue::get(C, ObjTypeMD),
++                               FuncOffset});
++    }
++    CB->replaceAllUsesWith(Result);
 +    CB->eraseFromParent();
 +  }
 +
@@ -75102,10 +75468,10 @@ index 000000000..247781471
 +                "Cangjie simple range analysis.", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp b/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp
 new file mode 100644
-index 000000000..ab3187578
+index 000000000..d8d986733
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp
-@@ -0,0 +1,497 @@
+@@ -0,0 +1,514 @@
 +//===- CJSpecificOpt.cpp ----------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -75543,6 +75909,23 @@ index 000000000..ab3187578
 +static bool processCangjieIR(Module &M, unsigned OptLevel) {
 +  bool Changed = false;
 +
++  // Lower @llvm.cj.vfe.info intrinsic calls to their first argument (identity).
++  // This intrinsic is used to carry VFE metadata through optimization passes
++  // and must be removed before codegen.
++  if (Function *VFEInfoFn = M.getFunction("llvm.cj.vfe.info")) {
++    SmallVector<CallInst *, 16> ToRemove;
++    for (User *U : VFEInfoFn->users()) {
++      if (auto *CI = dyn_cast<CallInst>(U))
++        ToRemove.push_back(CI);
++    }
++    for (auto *CI : ToRemove) {
++      CI->replaceAllUsesWith(CI->getArgOperand(0));
++      CI->eraseFromParent();
++    }
++    if (!ToRemove.empty())
++      Changed = true;
++  }
++
 +  llvm::Triple T(M.getTargetTriple());
 +  if (!T.isOSWindows()) {
 +    Changed |= generateAliasForStaticGI(M);
@@ -75940,7 +76323,7 @@ index cf2824954..8fa54674a 100644
            Changed = true;
          }
 diff --git a/llvm/lib/Transforms/Scalar/GVN.cpp b/llvm/lib/Transforms/Scalar/GVN.cpp
-index b460637b7..a32a7a139 100644
+index b460637b7..4280ca3b7 100644
 --- a/llvm/lib/Transforms/Scalar/GVN.cpp
 +++ b/llvm/lib/Transforms/Scalar/GVN.cpp
 @@ -49,15 +49,18 @@
@@ -76011,20 +76394,7 @@ index b460637b7..a32a7a139 100644
    // Unknown def - must be conservative
    LLVM_DEBUG(
        // fast print dep, using operator<< on instruction is too slow.
-@@ -1373,6 +1404,12 @@ void GVNPass::eliminatePartiallyRedundantLoad(
-       if (LI &&
-           LI->getLoopFor(Load->getParent()) == LI->getLoopFor(UnavailableBlock))
-         NewLoad->setMetadata(LLVMContext::MD_access_group, AccessMD);
-+    if (auto *ObjTypeMD = Load->getMetadata(LLVMContext::MD_obj_type))
-+      NewLoad->setMetadata(LLVMContext::MD_obj_type, ObjTypeMD);
-+    if (auto *FuncTableMD = Load->getMetadata(LLVMContext::MD_func_table))
-+      NewLoad->setMetadata(LLVMContext::MD_func_table, FuncTableMD);
-+    if (auto *IntroTypeMD = Load->getMetadata(LLVMContext::MD_intro_type))
-+      NewLoad->setMetadata(LLVMContext::MD_intro_type, IntroTypeMD);
- 
-     // We do not propagate the old load's debug location, because the new
-     // load now lives in a different BB, and we want to avoid a jumpy line
-@@ -2023,6 +2060,10 @@ static void patchAndReplaceAllUsesWith(Instruction *I, Value *Repl) {
+@@ -2023,6 +2054,10 @@ static void patchAndReplaceAllUsesWith(Instruction *I, Value *Repl) {
  /// Attempt to eliminate a load, first by eliminating it
  /// locally, and then attempting non-local elimination if that fails.
  bool GVNPass::processLoad(LoadInst *L) {
@@ -77118,7 +77488,7 @@ index b31eab50c..e336cd470 100644
      NewPN->addIncoming(SI->getTrueValue(), Term->getParent());
      NewPN->addIncoming(SI->getFalseValue(), BB);
 diff --git a/llvm/lib/Transforms/Scalar/LICM.cpp b/llvm/lib/Transforms/Scalar/LICM.cpp
-index f54264b1d..39a783638 100644
+index f54264b1d..0b525b16b 100644
 --- a/llvm/lib/Transforms/Scalar/LICM.cpp
 +++ b/llvm/lib/Transforms/Scalar/LICM.cpp
 @@ -65,13 +65,19 @@
@@ -77258,7 +77628,7 @@ index f54264b1d..39a783638 100644
          hoist(I, DT, CurLoop, CFH.getOrCreateHoistedBlock(BB), SafetyInfo,
                MSSAU, SE, ORE);
          HoistedInstructions.push_back(&I);
-@@ -1715,8 +1782,16 @@ static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
+@@ -1715,8 +1782,14 @@ static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
        // The check on hasMetadataOtherThanDebugLoc is to prevent us from burning
        // time in isGuaranteedToExecute if we don't actually have anything to
        // drop.  It is a compile time optimization, not required for correctness.
@@ -77267,9 +77637,7 @@ index f54264b1d..39a783638 100644
 +      !SafetyInfo->isGuaranteedToExecute(I, DT, CurLoop)) {
 +    if (CJPipeline) {
 +      I.dropUndefImplyingAttrsAndUnknownMetadata(
-+          {LLVMContext::MD_tbaa, LLVMContext::MD_untrusted_ref,
-+           LLVMContext::MD_obj_type, LLVMContext::MD_intro_type,
-+           LLVMContext::MD_func_table});
++          {LLVMContext::MD_tbaa, LLVMContext::MD_untrusted_ref});
 +    } else {
 +      I.dropUndefImplyingAttrsAndUnknownMetadata();
 +    }
@@ -77277,7 +77645,7 @@ index f54264b1d..39a783638 100644
  
    if (isa<PHINode>(I))
      // Move the new node to the end of the phi list in the destination block.
-@@ -1734,6 +1809,149 @@ static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
+@@ -1734,6 +1807,149 @@ static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
    ++NumHoisted;
  }
  
@@ -77427,7 +77795,7 @@ index f54264b1d..39a783638 100644
  /// Only sink or hoist an instruction if it is not a trapping instruction,
  /// or if the instruction is known not to trap when moved to the preheader.
  /// or if it is a trapping instruction and is guaranteed to execute.
-@@ -1741,9 +1959,13 @@ static bool isSafeToExecuteUnconditionally(
+@@ -1741,9 +1957,13 @@ static bool isSafeToExecuteUnconditionally(
      Instruction &Inst, const DominatorTree *DT, const TargetLibraryInfo *TLI,
      const Loop *CurLoop, const LoopSafetyInfo *SafetyInfo,
      OptimizationRemarkEmitter *ORE, const Instruction *CtxI,
@@ -77442,7 +77810,7 @@ index f54264b1d..39a783638 100644
  
    bool GuaranteedToExecute =
        SafetyInfo->isGuaranteedToExecute(Inst, DT, CurLoop);
-@@ -1765,6 +1987,7 @@ static bool isSafeToExecuteUnconditionally(
+@@ -1765,6 +1985,7 @@ static bool isSafeToExecuteUnconditionally(
  namespace {
  class LoopPromoter : public LoadAndStorePromoter {
    Value *SomePtr; // Designated pointer to store to.
@@ -77450,7 +77818,7 @@ index f54264b1d..39a783638 100644
    const SmallSetVector<Value *, 8> &PointerMustAliases;
    SmallVectorImpl<BasicBlock *> &LoopExitBlocks;
    SmallVectorImpl<Instruction *> &LoopInsertPts;
-@@ -1804,11 +2027,13 @@ public:
+@@ -1804,11 +2025,13 @@ public:
                 SmallVectorImpl<MemoryAccess *> &MSSAIP, PredIteratorCache &PIC,
                 MemorySSAUpdater &MSSAU, LoopInfo &li, DebugLoc dl,
                 Align Alignment, bool UnorderedAtomic, const AAMDNodes &AATags,
@@ -77469,7 +77837,7 @@ index f54264b1d..39a783638 100644
          SafetyInfo(SafetyInfo),
          CanInsertStoresInExitBlocks(CanInsertStoresInExitBlocks) {}
  
-@@ -1817,6 +2042,9 @@ public:
+@@ -1817,6 +2040,9 @@ public:
      Value *Ptr;
      if (LoadInst *LI = dyn_cast<LoadInst>(I))
        Ptr = LI->getOperand(0);
@@ -77479,7 +77847,7 @@ index f54264b1d..39a783638 100644
      else
        Ptr = cast<StoreInst>(I)->getPointerOperand();
      return PointerMustAliases.count(Ptr);
-@@ -1833,23 +2061,53 @@ public:
+@@ -1833,23 +2059,53 @@ public:
        LiveInValue = maybeInsertLCSSAPHI(LiveInValue, ExitBlock);
        Value *Ptr = maybeInsertLCSSAPHI(SomePtr, ExitBlock);
        Instruction *InsertPos = LoopInsertPts[i];
@@ -77546,7 +77914,7 @@ index f54264b1d..39a783638 100644
        MSSAInsertPts[i] = NewMemAcc;
        MSSAU.insertDef(cast<MemoryDef>(NewMemAcc), true);
        // FIXME: true for safety, false may still be correct.
-@@ -1869,6 +2127,10 @@ public:
+@@ -1869,6 +2125,10 @@ public:
    bool shouldDelete(Instruction *I) const override {
      if (isa<StoreInst>(I))
        return CanInsertStoresInExitBlocks;
@@ -77557,7 +77925,7 @@ index f54264b1d..39a783638 100644
      return true;
    }
  };
-@@ -1904,18 +2166,20 @@ bool isNotVisibleOnUnwindInLoop(const Value *Object, const Loop *L,
+@@ -1904,18 +2164,20 @@ bool isNotVisibleOnUnwindInLoop(const Value *Object, const Loop *L,
  /// loop invariant.
  ///
  bool llvm::promoteLoopAccessesToScalars(
@@ -77580,7 +77948,7 @@ index f54264b1d..39a783638 100644
    Value *SomePtr = *PointerMustAliases.begin();
    BasicBlock *Preheader = CurLoop->getLoopPreheader();
  
-@@ -2018,7 +2282,8 @@ bool llvm::promoteLoopAccessesToScalars(
+@@ -2018,7 +2280,8 @@ bool llvm::promoteLoopAccessesToScalars(
          if (!DereferenceableInPH || (InstAlignment > Alignment))
            if (isSafeToExecuteUnconditionally(
                    *Load, DT, TLI, CurLoop, SafetyInfo, ORE,
@@ -77590,7 +77958,7 @@ index f54264b1d..39a783638 100644
              DereferenceableInPH = true;
              Alignment = std::max(Alignment, InstAlignment);
            }
-@@ -2069,6 +2334,40 @@ bool llvm::promoteLoopAccessesToScalars(
+@@ -2069,6 +2332,40 @@ bool llvm::promoteLoopAccessesToScalars(
                Store->getPointerOperand(), Store->getValueOperand()->getType(),
                Store->getAlign(), MDL, Preheader->getTerminator(), DT, TLI);
          }
@@ -77631,7 +77999,7 @@ index f54264b1d..39a783638 100644
        } else
          return false; // Not a load or store.
  
-@@ -2154,7 +2453,7 @@ bool llvm::promoteLoopAccessesToScalars(
+@@ -2154,7 +2451,7 @@ bool llvm::promoteLoopAccessesToScalars(
    LoopPromoter Promoter(SomePtr, LoopUses, SSA, PointerMustAliases, ExitBlocks,
                          InsertPts, MSSAInsertPts, PIC, MSSAU, *LI, DL,
                          Alignment, SawUnorderedAtomic, AATags, *SafetyInfo,
@@ -77640,7 +78008,7 @@ index f54264b1d..39a783638 100644
  
    // Set up the preheader to have a definition of the value.  It is the live-out
    // value from the preheader that uses in the loop will use.
-@@ -2203,7 +2502,7 @@ static void foreachMemoryAccess(MemorySSA *MSSA, Loop *L,
+@@ -2203,7 +2500,7 @@ static void foreachMemoryAccess(MemorySSA *MSSA, Loop *L,
            Fn(MUD->getMemoryInst());
  }
  
@@ -77649,7 +78017,7 @@ index f54264b1d..39a783638 100644
  collectPromotionCandidates(MemorySSA *MSSA, AliasAnalysis *AA, Loop *L) {
    AliasSetTracker AST(*AA);
  
-@@ -2212,6 +2511,9 @@ collectPromotionCandidates(MemorySSA *MSSA, AliasAnalysis *AA, Loop *L) {
+@@ -2212,6 +2509,9 @@ collectPromotionCandidates(MemorySSA *MSSA, AliasAnalysis *AA, Loop *L) {
        return L->isLoopInvariant(SI->getPointerOperand());
      if (const auto *LI = dyn_cast<LoadInst>(I))
        return L->isLoopInvariant(LI->getPointerOperand());
@@ -77659,7 +78027,7 @@ index f54264b1d..39a783638 100644
      return false;
    };
  
-@@ -2243,12 +2545,12 @@ collectPromotionCandidates(MemorySSA *MSSA, AliasAnalysis *AA, Loop *L) {
+@@ -2243,12 +2543,12 @@ collectPromotionCandidates(MemorySSA *MSSA, AliasAnalysis *AA, Loop *L) {
      });
    });
  
@@ -80167,7 +80535,7 @@ index 421f1f329..56965aaf0 100644
    if (BFI && NumExitBlocks > 1)
      calculateNewCallTerminatorWeights(codeReplacer, ExitWeights, BPI);
 diff --git a/llvm/lib/Transforms/Utils/Local.cpp b/llvm/lib/Transforms/Utils/Local.cpp
-index 2f1d0c2f9..876b939e8 100644
+index 2f1d0c2f9..6134fa648 100644
 --- a/llvm/lib/Transforms/Utils/Local.cpp
 +++ b/llvm/lib/Transforms/Utils/Local.cpp
 @@ -2485,6 +2485,16 @@ void llvm::removeUnwindEdge(BasicBlock *BB, DomTreeUpdater *DTU) {
@@ -80187,17 +80555,14 @@ index 2f1d0c2f9..876b939e8 100644
    SmallPtrSet<BasicBlock *, 16> Reachable;
    bool Changed = markAliveBlocks(F, Reachable, DTU);
  
-@@ -2588,6 +2598,18 @@ void llvm::combineMetadata(Instruction *K, const Instruction *J,
+@@ -2588,6 +2598,15 @@ void llvm::combineMetadata(Instruction *K, const Instruction *J,
        case LLVMContext::MD_preserve_access_index:
          // Preserve !preserve.access.index in K.
          break;
 +      case LLVMContext::MD_cj_agg:
 +        K->setMetadata(Kind, JMD);
 +        break;
-+      case LLVMContext::MD_obj_type:
 +      case LLVMContext::MD_func_table:
-+        // Handled after the loop - these two must be kept in sync.
-+        break;
 +      case LLVMContext::MD_intro_type:
 +        // Only set the !IntroType if it is same in both instructions.
 +        if (K->getMetadata(Kind) != JMD)
@@ -80206,70 +80571,7 @@ index 2f1d0c2f9..876b939e8 100644
      }
    }
    // Set !invariant.group from J if J has it. If both instructions have it
-@@ -2599,6 +2621,62 @@ void llvm::combineMetadata(Instruction *K, const Instruction *J,
-   if (auto *JMD = J->getMetadata(LLVMContext::MD_invariant_group))
-     if (isa<LoadInst>(K) || isa<StoreInst>(K))
-       K->setMetadata(LLVMContext::MD_invariant_group, JMD);
-+
-+  // MD_obj_type and MD_func_table are CangjieVFE (virtual function elimination)
-+  // metadata that must coexist and be kept in sync. GlobalDCE uses them to
-+  // mark virtual function dependencies; dropping them causes functions to be
-+  // incorrectly eliminated. When merging two instructions with different
-+  // values, we produce a merged representation where each operand is a
-+  // sub-MDNode, preserving the union of dependency information.
-+  //   Original format:  !{!"A.tt"}          / !{i64 0}
-+  //   Merged format:    !{!{!"A.tt"}, ...}  / !{!{i64 0}, ...}
-+  if (J->getFunction()->hasCangjieGC()) {
-+    auto &Ctx = K->getContext();
-+    MDNode *KObj = K->getMetadata(LLVMContext::MD_obj_type);
-+    MDNode *JObj = J->getMetadata(LLVMContext::MD_obj_type);
-+    MDNode *KFT = K->getMetadata(LLVMContext::MD_func_table);
-+    MDNode *JFT = J->getMetadata(LLVMContext::MD_func_table);
-+
-+    if (!KObj && JObj) {
-+      // K didn't have VFE metadata but J did — preserve J's.
-+      if (!JFT)
-+          report_fatal_error("MD_obj_type present without MD_func_table");
-+      K->setMetadata(LLVMContext::MD_obj_type, JObj);
-+      K->setMetadata(LLVMContext::MD_func_table, JFT);
-+    } else if (KObj && JObj && (KObj != JObj || KFT != JFT)) {
-+      // Both have VFE metadata with different values: merge into wrapped
-+      // format.
-+      SmallSet<std::pair<llvm::Metadata *, llvm::Metadata *>, 4> Visited;
-+      auto Expand = [&Visited](MDNode *Obj, MDNode *FT,
-+                       SmallVectorImpl<llvm::Metadata *> &ObjEntries,
-+                       SmallVectorImpl<llvm::Metadata *> &FTEntries) {
-+        if (!FT || Obj->getNumOperands() != FT->getNumOperands())
-+          report_fatal_error("objType present without FuncTable or objType and "
-+                             "FuncTable have different operand counts");
-+        if (Obj->getNumOperands() > 0 && isa<MDNode>(Obj->getOperand(0))) {
-+          // Already in merged format — expand existing entries.
-+          for (unsigned i = 0; i < Obj->getNumOperands(); i++) {
-+            if (!Visited.insert({Obj->getOperand(i), FT->getOperand(i)}).second)
-+              continue;
-+            ObjEntries.push_back(Obj->getOperand(i));
-+            FTEntries.push_back(FT->getOperand(i));
-+          }
-+        } else {
-+          if (!Visited.insert({Obj, FT}).second)
-+            return;
-+          // Single-entry format.
-+          ObjEntries.push_back(Obj);
-+          FTEntries.push_back(FT);
-+        }
-+      };
-+      SmallVector<llvm::Metadata *, 4> ObjEntries, FTEntries;
-+      Expand(KObj, KFT, ObjEntries, FTEntries);
-+      Expand(JObj, JFT, ObjEntries, FTEntries);
-+      K->setMetadata(LLVMContext::MD_obj_type, MDNode::get(Ctx, ObjEntries));
-+      K->setMetadata(LLVMContext::MD_func_table, MDNode::get(Ctx, FTEntries));
-+    }
-+    // else: only K has metadata, or both are identical — K is already correct.
-+  }
- }
- 
- void llvm::combineMetadataForCSE(Instruction *K, const Instruction *J,
-@@ -2608,9 +2686,11 @@ void llvm::combineMetadataForCSE(Instruction *K, const Instruction *J,
+@@ -2608,9 +2627,10 @@ void llvm::combineMetadataForCSE(Instruction *K, const Instruction *J,
        LLVMContext::MD_noalias,         LLVMContext::MD_range,
        LLVMContext::MD_invariant_load,  LLVMContext::MD_nonnull,
        LLVMContext::MD_invariant_group, LLVMContext::MD_align,
@@ -80278,12 +80580,11 @@ index 2f1d0c2f9..876b939e8 100644
        LLVMContext::MD_dereferenceable_or_null,
 -      LLVMContext::MD_access_group,    LLVMContext::MD_preserve_access_index};
 +      LLVMContext::MD_access_group,    LLVMContext::MD_preserve_access_index,
-+      LLVMContext::MD_obj_type,        LLVMContext::MD_func_table,
-+      LLVMContext::MD_intro_type,};
++      LLVMContext::MD_func_table,      LLVMContext::MD_intro_type,};
    combineMetadata(K, J, KnownIDs, KDominatesJ);
  }
  
-@@ -2642,6 +2722,11 @@ void llvm::copyMetadataForLoad(LoadInst &Dest, const LoadInst &Source) {
+@@ -2642,6 +2662,11 @@ void llvm::copyMetadataForLoad(LoadInst &Dest, const LoadInst &Source) {
      case LLVMContext::MD_nontemporal:
      case LLVMContext::MD_mem_parallel_loop_access:
      case LLVMContext::MD_access_group:
@@ -80295,18 +80596,18 @@ index 2f1d0c2f9..876b939e8 100644
        // All of these directly apply.
        Dest.setMetadata(ID, N);
        break;
-@@ -2693,7 +2778,9 @@ void llvm::patchReplacementInstruction(Instruction *I, Value *Repl) {
+@@ -2693,7 +2718,9 @@ void llvm::patchReplacementInstruction(Instruction *I, Value *Repl) {
        LLVMContext::MD_noalias,         LLVMContext::MD_range,
        LLVMContext::MD_fpmath,          LLVMContext::MD_invariant_load,
        LLVMContext::MD_invariant_group, LLVMContext::MD_nonnull,
 -      LLVMContext::MD_access_group,    LLVMContext::MD_preserve_access_index};
 +      LLVMContext::MD_access_group,    LLVMContext::MD_preserve_access_index,
-+      LLVMContext::MD_cj_agg,          LLVMContext::MD_obj_type,
-+      LLVMContext::MD_func_table,      LLVMContext::MD_intro_type,};
++      LLVMContext::MD_cj_agg,          LLVMContext::MD_func_table,
++      LLVMContext::MD_intro_type,};
    combineMetadata(ReplInst, I, KnownIDs, false);
  }
  
-@@ -2762,7 +2849,8 @@ bool llvm::callsGCLeafFunction(const CallBase *Call,
+@@ -2762,7 +2789,8 @@ bool llvm::callsGCLeafFunction(const CallBase *Call,
        return IID != Intrinsic::experimental_gc_statepoint &&
               IID != Intrinsic::experimental_deoptimize &&
               IID != Intrinsic::memcpy_element_unordered_atomic &&
@@ -80605,7 +80906,7 @@ index 37019e3bf..01a0b2a02 100644
  
      // The last stored value that happened is the live-out for the block.
 diff --git a/llvm/lib/Transforms/Utils/SimplifyCFG.cpp b/llvm/lib/Transforms/Utils/SimplifyCFG.cpp
-index 180608167..7b526100c 100644
+index 180608167..7e1f9b230 100644
 --- a/llvm/lib/Transforms/Utils/SimplifyCFG.cpp
 +++ b/llvm/lib/Transforms/Utils/SimplifyCFG.cpp
 @@ -57,6 +57,7 @@
@@ -80627,20 +80928,19 @@ index 180608167..7b526100c 100644
  cl::opt<bool> llvm::RequireAndPreserveDomTree(
      "simplifycfg-require-and-preserve-domtree", cl::Hidden,
  
-@@ -1551,7 +1556,11 @@ bool SimplifyCFGOpt::HoistThenElseCodeToIf(BranchInst *BI,
+@@ -1551,7 +1556,10 @@ bool SimplifyCFGOpt::HoistThenElseCodeToIf(BranchInst *BI,
                               LLVMContext::MD_dereferenceable_or_null,
                               LLVMContext::MD_mem_parallel_loop_access,
                               LLVMContext::MD_access_group,
 -                             LLVMContext::MD_preserve_access_index};
 +                             LLVMContext::MD_preserve_access_index,
 +                             LLVMContext::MD_cj_agg,
-+                             LLVMContext::MD_obj_type,
 +                             LLVMContext::MD_func_table,
 +                             LLVMContext::MD_intro_type};
        combineMetadata(I1, I2, KnownIDs, true);
  
        // I1 and I2 are being combined into a single instruction.  Its debug
-@@ -6213,6 +6222,20 @@ static void reuseTableCompare(
+@@ -6213,6 +6221,20 @@ static void reuseTableCompare(
    }
  }
  
@@ -80661,7 +80961,7 @@ index 180608167..7b526100c 100644
  /// If the switch is only used to initialize one or more phi nodes in a common
  /// successor block with different constant values, replace the switch with
  /// lookup tables.
-@@ -6284,6 +6307,13 @@ static bool SwitchToLookupTable(SwitchInst *SI, IRBuilder<> &Builder,
+@@ -6284,6 +6306,13 @@ static bool SwitchToLookupTable(SwitchInst *SI, IRBuilder<> &Builder,
    // Keep track of the result types.
    for (PHINode *PHI : PHIs) {
      ResultTypes[PHI] = ResultLists[PHI][0].second->getType();
@@ -95625,10 +95925,10 @@ index 000000000..911c81dc0
 +!0 = !{i64 0}
 diff --git a/llvm/test/Transforms/CJDevirtualOpt/generic_vtable.ll b/llvm/test/Transforms/CJDevirtualOpt/generic_vtable.ll
 new file mode 100644
-index 000000000..018853ef6
+index 000000000..4fac8232a
 --- /dev/null
 +++ b/llvm/test/Transforms/CJDevirtualOpt/generic_vtable.ll
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,49 @@
 +; RUN: opt '-passes=cj-runtime-lowering,cj-devirtual-opt' --cangjie-pipeline -S < %s | FileCheck %s
 +
 +%TypeTemplate = type { i8*, i8, i8, i16, i16, i8*, i8*, i8*, i8*, %ExtensionDef**, i16 }
@@ -95647,12 +95947,12 @@ index 000000000..018853ef6
 +@NonExternalExtensionDefs = internal global [3 x %ExtensionDef*] [%ExtensionDef* @"default:B<T>_ed_default:A", %ExtensionDef* @"default:A_ed_default:A", %ExtensionDef* null]
 +
 +; CHECK: [[TMP0:%.*]] = bitcast i8* bitcast (i64 (i8 addrspace(1)*, %TypeInfo*)* @test_func_B to i8*) to i64 (i8 addrspace(1)*, %TypeInfo*)*
-+; CHECK-NEXT: call i64 [[TMP0]](i8 addrspace(1)* [[TMP1:%.*]], %TypeInfo* [[TMP2:%.*]])
++; CHECK-NEXT: [[TMP3:%.*]] = call i64 [[TMP0]](i8 addrspace(1)* [[TMP1:%.*]], %TypeInfo* [[TMP2:%.*]])
 +define internal i64 @callee(i8 addrspace(1)* %ptr) {
 +  %1 = bitcast i8 addrspace(1)* %ptr to %TypeInfo* addrspace(1)*
 +  %2 = load %TypeInfo*, %TypeInfo* addrspace(1)* %1, align 8
 +  %3 = bitcast %TypeInfo* %2 to i8*
-+  %4 = call i8* @llvm.cj.get.vtable.func(i8* %3, i64 0, i64 0, i8* bitcast (%TypeInfo* @"default:A.ti" to i8*)), !IntroType !0
++  %4 = call i8* @llvm.cj.get.vtable.func(i8* %3, i64 0, i64 0, i8* bitcast (%TypeInfo* @"default:A.ti" to i8*)), !IntroType !0, !objType !1
 +  %5 = bitcast i8* %4 to i64 (i8 addrspace(1)*, %TypeInfo*)*
 +  %6 = call i64 %5(i8 addrspace(1)* %ptr, %TypeInfo* %2)
 +  ret i64 %6
@@ -95677,12 +95977,13 @@ index 000000000..018853ef6
 +attributes #0 = { "CFileKlass" }
 +
 +!0 = !{!"default:A"}
++!1 = !{!"default:A.ti"}
 diff --git a/llvm/test/Transforms/CJDevirtualOpt/multi_generic_vtable.ll b/llvm/test/Transforms/CJDevirtualOpt/multi_generic_vtable.ll
 new file mode 100644
-index 000000000..702845579
+index 000000000..ee1a6aa2d
 --- /dev/null
 +++ b/llvm/test/Transforms/CJDevirtualOpt/multi_generic_vtable.ll
-@@ -0,0 +1,73 @@
+@@ -0,0 +1,75 @@
 +; RUN: opt '-passes=cj-runtime-lowering,cj-devirtual-opt' --cangjie-pipeline -S < %s | FileCheck %s
 +
 +%TypeTemplate = type { i8*, i8, i8, i16, i16, i8*, i8*, i8*, i8*, %ExtensionDef**, i16 }
@@ -95718,13 +96019,13 @@ index 000000000..702845579
 +  %1 = bitcast i8 addrspace(1)* %ptr to %TypeInfo* addrspace(1)*
 +  %2 = load %TypeInfo*, %TypeInfo* addrspace(1)* %1, align 8
 +  %3 = bitcast %TypeInfo* %2 to i8*
-+  %4 = call i8* @llvm.cj.get.vtable.func(i8* %3, i64 0, i64 0, i8* bitcast (%TypeInfo* @"default:A1.ti" to i8*)), !IntroType !0
++  %4 = call i8* @llvm.cj.get.vtable.func(i8* %3, i64 0, i64 0, i8* bitcast (%TypeInfo* @"default:A1.ti" to i8*)), !IntroType !0, !objType !2
 +  %5 = bitcast i8* %4 to i64 (i8 addrspace(1)*, %TypeInfo*)*
 +  %6 = call i64 %5(i8 addrspace(1)* %ptr, %TypeInfo* %2)
-+  %7 = call i8* @llvm.cj.get.vtable.func(i8* %3, i64 0, i64 0, i8* bitcast (%TypeInfo* @"default:A1.ti" to i8*)), !IntroType !0
++  %7 = call i8* @llvm.cj.get.vtable.func(i8* %3, i64 0, i64 0, i8* bitcast (%TypeInfo* @"default:A1.ti" to i8*)), !IntroType !0, !objType !2
 +  %8 = bitcast i8* %7 to i64 (i8 addrspace(1)*, %TypeInfo*)*
 +  %9 = call i64 %8(i8 addrspace(1)* %ptr, %TypeInfo* %2)
-+  %10 = call i8* @llvm.cj.get.vtable.func(i8* %3, i64 1, i64 0, i8* bitcast (%TypeInfo* @"default:A2.ti" to i8*)), !IntroType !1
++  %10 = call i8* @llvm.cj.get.vtable.func(i8* %3, i64 1, i64 0, i8* bitcast (%TypeInfo* @"default:A2.ti" to i8*)), !IntroType !1, !objType !3
 +  %11 = bitcast i8* %10 to i64 (i8 addrspace(1)*, %TypeInfo*)*
 +  %12 = call i64 %11(i8 addrspace(1)* %ptr, %TypeInfo* %2)
 +  ret void
@@ -95756,6 +96057,9 @@ index 000000000..702845579
 +
 +!0 = !{!"default:A1"}
 +!1 = !{!"default:A2"}
++!2 = !{!"default:A1.ti"}
++!3 = !{!"default:A2.ti"}
+\ No newline at end of file
 diff --git a/llvm/test/Transforms/CJDevirtualOpt/non_generic_itable.ll b/llvm/test/Transforms/CJDevirtualOpt/non_generic_itable.ll
 new file mode 100644
 index 000000000..b95abec16
@@ -95808,10 +96112,10 @@ index 000000000..b95abec16
 +!0 = !{i64 0}
 diff --git a/llvm/test/Transforms/CJDevirtualOpt/non_generic_vtable.ll b/llvm/test/Transforms/CJDevirtualOpt/non_generic_vtable.ll
 new file mode 100644
-index 000000000..1df8d9607
+index 000000000..8a544ea75
 --- /dev/null
 +++ b/llvm/test/Transforms/CJDevirtualOpt/non_generic_vtable.ll
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,48 @@
 +; RUN: opt '-passes=cj-runtime-lowering,cj-devirtual-opt' --cangjie-pipeline -S < %s | FileCheck %s
 +
 +%TypeInfo = type { i8*, i8, i8, i16, i32, i8*, i32, i8, i8, i16, i32*, i8*, i8*, i8*, %TypeInfo*, %ExtensionDef**, i8*, i8* }
@@ -95829,12 +96133,12 @@ index 000000000..1df8d9607
 +@NonExternalExtensionDefs = internal global [3 x %ExtensionDef*] [%ExtensionDef* @"default:B_ed_default:A", %ExtensionDef* @"default:A_ed_default:A", %ExtensionDef* null]
 +
 +; CHECK: [[TMP0:%.*]] = bitcast i8* bitcast (i64 (i8 addrspace(1)*, %TypeInfo*)* @test_func_B to i8*) to i64 (i8 addrspace(1)*, %TypeInfo*)*
-+; CHECK-NEXT: call i64 [[TMP0]](i8 addrspace(1)* [[TMP1:%.*]], %TypeInfo* [[TMP2:%.*]])
++; CHECK-NEXT: [[TMP3:%.*]] = call i64 [[TMP0]](i8 addrspace(1)* [[TMP1:%.*]], %TypeInfo* [[TMP2:%.*]])
 +define internal i64 @callee(i8 addrspace(1)* %ptr) {
 +  %1 = bitcast i8 addrspace(1)* %ptr to %TypeInfo* addrspace(1)*
 +  %2 = load %TypeInfo*, %TypeInfo* addrspace(1)* %1, align 8
 +  %3 = bitcast %TypeInfo* %2 to i8*
-+  %4 = call i8* @llvm.cj.get.vtable.func(i8* %3, i64 0, i64 0, i8* bitcast (%TypeInfo* @"default:A.ti" to i8*)), !IntroType !0
++  %4 = call i8* @llvm.cj.get.vtable.func(i8* %3, i64 0, i64 0, i8* bitcast (%TypeInfo* @"default:A.ti" to i8*)), !IntroType !0, !objType !1
 +  %5 = bitcast i8* %4 to i64 (i8 addrspace(1)*, %TypeInfo*)*
 +  %6 = call i64 %5(i8 addrspace(1)* %ptr, %TypeInfo* %2)
 +  ret i64 %6
@@ -95859,6 +96163,7 @@ index 000000000..1df8d9607
 +attributes #0 = { "CFileKlass" }
 +
 +!0 = !{!"default:A"}
++!1 = !{!"default:A.ti"}
 diff --git a/llvm/test/Transforms/CJFillMetadata/reflection.ll b/llvm/test/Transforms/CJFillMetadata/reflection.ll
 new file mode 100644
 index 000000000..df84353ff
@@ -109501,10 +109806,10 @@ index 000000000..5864a81e2
 \ No newline at end of file
 diff --git a/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie-vfe-1.ll b/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie-vfe-1.ll
 new file mode 100644
-index 000000000..35d630569
+index 000000000..5e1990f11
 --- /dev/null
 +++ b/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie-vfe-1.ll
-@@ -0,0 +1,176 @@
+@@ -0,0 +1,184 @@
 +; RUN: opt < %s -passes='globaldce' --cangjie-pipeline -S | FileCheck %s
 +
 +; interface I1<T> {
@@ -109527,31 +109832,33 @@ index 000000000..35d630569
 +; public func call_I2_1<T>(v: I2<I1<T>>) { v.func_I22() }
 +
 +%TypeTemplate = type { i8*, i8, i8, i16, i16, i8*, i8*, i8*, i8*, %ExtensionDef**, i16 }
-+%ExtensionDef = type { i32, i8, i8*, i8*, i8*, i8* }
++%ExtensionDef = type { i32, i8, i8, i16, i8*, i8*, i8*, i8* }
 +%TypeInfo = type { i8*, i8, i8, i16, i32, i8*, i32, i8, i8, i16, i32*, i8*, i8*, i8*, %TypeInfo*, %ExtensionDef**, i8*, i8* }
 +%Unit.Type = type {}
 +
-+@"default:A.tt" = private global %TypeTemplate { i8* null, i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** getelementptr inbounds ([6 x %ExtensionDef*], [6 x %ExtensionDef*]* @NonExternalExtensionDefs, i32 0, i32 0), i16 -32768 }
-+@"default:B.tt" = private global %TypeTemplate { i8* null, i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** getelementptr inbounds ([6 x %ExtensionDef*], [6 x %ExtensionDef*]* @NonExternalExtensionDefs, i32 0, i32 2), i16 -32768 }
-+@"default:I1.tt" = private global %TypeTemplate { i8* null, i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** null, i16 -32768 }
-+@"default:I2.ti" = internal global %TypeInfo { i8* null, i8 -127, i8 0, i16 0, i32 0, i8* null, i32 0, i8 1, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo *null, %ExtensionDef** null, i8* null, i8* null }
++@"default:A.tt" = private global %TypeTemplate { i8* null, i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** getelementptr inbounds ([6 x %ExtensionDef*], [6 x %ExtensionDef*]* @NonExternalExtensionDefs, i32 0, i32 0), i16 -32768 } #2
++@"default:B.tt" = private global %TypeTemplate { i8* null, i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** getelementptr inbounds ([6 x %ExtensionDef*], [6 x %ExtensionDef*]* @NonExternalExtensionDefs, i32 0, i32 2), i16 -32768 } #2
++@"default:I1.tt" = private global %TypeTemplate { i8* null, i8 -127, i8 0, i16 0, i16 1, i8* null, i8* null, i8* null, i8* null, %ExtensionDef** null, i16 -32768 } #2
++@"default:I2.ti" = internal global %TypeInfo { i8* null, i8 -127, i8 0, i16 0, i32 0, i8* null, i32 0, i8 1, i8 0, i16 -32768, i32* null, i8* null, i8* null, i8* null, %TypeInfo *null, %ExtensionDef** null, i8* null, i8* null } #1
 +
 +@"default:A<T>_ed_default:I1<T>.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @_CN7default1AIG_E7func_I1Hv to i8*)]
-+@"default:A<T>_ed_default:I1<T>" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i8* bitcast (i8* (i32, %TypeInfo**)* @"default:A<T>_ed_default:I1<T>_iFn" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:A<T>_ed_default:I1<T>.ft" to i8*) }, !inheritedType !0 #0
-+; CHECK: @"default:A<T>_ed_default:I2.ft = private global [1 x i8*] zeroinitializer"
++@"default:A<T>_ed_default:I1<T>" = private global %ExtensionDef { i32 1, i8 0, i8 0, i16 0, i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i8* bitcast (i8* (i32, %TypeInfo**)* @"default:A<T>_ed_default:I1<T>_iFn" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:A<T>_ed_default:I1<T>.ft" to i8*) }, !inheritedType !0 #0
++; CHECK: @"default:A<T>_ed_default:I2.ft" = private global [1 x i8*] zeroinitializer
 +@"default:A<T>_ed_default:I2.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @_CN7default1AIG_E7func_I2Hv to i8*)]
-+@"default:A<T>_ed_default:I2" = private global %ExtensionDef { i32 1, i8 1, i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i8* bitcast (%TypeInfo* @"default:I2.ti" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:A<T>_ed_default:I2.ft" to i8*) }, !inheritedType !1 #0
++@"default:A<T>_ed_default:I2" = private global %ExtensionDef { i32 1, i8 1, i8 0, i16 0, i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i8* bitcast (%TypeInfo* @"default:I2.ti" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:A<T>_ed_default:I2.ft" to i8*) }, !inheritedType !1 #0
 +; CHECK: @"default:B<T>_ed_default:A<T>.ft" = private global [1 x i8*] zeroinitializer
 +@"default:B<T>_ed_default:A<T>.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @_CN7default1BIG_E6func_AHv to i8*)]
-+@"default:B<T>_ed_default:A<T>" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"default:B.tt" to i8*), i8* bitcast (i8* (i32, %TypeInfo**)* @"default:B<T>_ed_default:A<T>_iFn" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:B<T>_ed_default:A<T>.ft" to i8*) }, !inheritedType !2 #0
++@"default:B<T>_ed_default:A<T>" = private global %ExtensionDef { i32 1, i8 0, i8 0, i16 0, i8* bitcast (%TypeTemplate* @"default:B.tt" to i8*), i8* bitcast (i8* (i32, %TypeInfo**)* @"default:B<T>_ed_default:A<T>_iFn" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:B<T>_ed_default:A<T>.ft" to i8*) }, !inheritedType !2 #0
 +@"default:B<T>_ed_default:I1<T>.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @_CN7default1BIG_E7func_I1Hv to i8*)]
-+@"default:B<T>_ed_default:I1<T>" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"default:B.tt" to i8*), i8* bitcast (i8* (i32, %TypeInfo**)* @"default:B<T>_ed_default:I1<T>_iFn" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:B<T>_ed_default:I1<T>.ft" to i8*) }, !inheritedType !0 #0
++@"default:B<T>_ed_default:I1<T>" = private global %ExtensionDef { i32 1, i8 0, i8 0, i16 0, i8* bitcast (%TypeTemplate* @"default:B.tt" to i8*), i8* bitcast (i8* (i32, %TypeInfo**)* @"default:B<T>_ed_default:I1<T>_iFn" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:B<T>_ed_default:I1<T>.ft" to i8*) }, !inheritedType !0 #0
 +; CHECK: @"default:B<T>_ed_default:I2.ft" = private global [1 x i8*] zeroinitializer
 +@"default:B<T>_ed_default:I2.ft" = private global [1 x i8*] [i8* bitcast (void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)* @"_CVN7default1AIG_E7func_I2Hv$N7default1BIG_E$CN7default2I2E" to i8*)]
-+@"default:B<T>_ed_default:I2" = private global %ExtensionDef { i32 1, i8 1, i8* bitcast (%TypeTemplate* @"default:B.tt" to i8*), i8* bitcast (%TypeInfo* @"default:I2.ti" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:B<T>_ed_default:I2.ft" to i8*) }, !inheritedType !1 #0
++@"default:B<T>_ed_default:I2" = private global %ExtensionDef { i32 1, i8 1, i8 0, i16 0, i8* bitcast (%TypeTemplate* @"default:B.tt" to i8*), i8* bitcast (%TypeInfo* @"default:I2.ti" to i8*), i8* null, i8* bitcast ([1 x i8*]* @"default:B<T>_ed_default:I2.ft" to i8*) }, !inheritedType !1 #0
 +
 +@NonExternalExtensionDefs = private global [6 x %ExtensionDef*] [%ExtensionDef* @"default:A<T>_ed_default:I1<T>", %ExtensionDef* @"default:A<T>_ed_default:I2", %ExtensionDef* @"default:B<T>_ed_default:A<T>", %ExtensionDef* @"default:B<T>_ed_default:I1<T>", %ExtensionDef* @"default:B<T>_ed_default:I2", %ExtensionDef* null]
 +@llvm.used = appending global [1 x i8*] [i8* bitcast ([6 x %ExtensionDef*]* @NonExternalExtensionDefs to i8*)]
++
++declare i8* @llvm.cj.vfe.info(i8*, metadata, i64)
 +
 +define private i8* @"default:A<T>_ed_default:I1<T>_iFn"(i32 %0, %TypeInfo** %1) {
 +allocas:
@@ -109606,7 +109913,7 @@ index 000000000..35d630569
 +define internal void @_CN7default1AIG_E7func_I2Hv(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %this, %TypeInfo* %outerTI) gc "cangjie" {
 +allocas:
 +  %1 = alloca %Unit.Type, align 8
-+  br label %1
++  br label %prepTi
 +
 +prepTi:
 +  %2 = bitcast i8 addrspace(1)* %this to %TypeInfo* addrspace(1)*
@@ -109614,10 +109921,12 @@ index 000000000..35d630569
 +  %3 = bitcast %TypeInfo* %ti to i8*
 +  %4 = bitcast %TypeInfo* %outerTI to i8*
 +  %5 = call i8* @CJ_MCC_GetMTable(i8* %3, i8* %4)
-+  %6 = bitcast i8* %5 to void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)**
-+  %7 = load void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)*, void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)** %6, align 8, !objType !2, !FuncTable !3
++  %6 = bitcast i8* %5 to i8**
++  %7 = load i8*, i8** %6, align 8
++  %8 = call i8* @llvm.cj.vfe.info(i8* %7, metadata !2, i64 0)
++  %9 = bitcast i8* %8 to void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)*
 +  %ti1 = load %TypeInfo*, %TypeInfo* addrspace(1)* %2, align 8
-+  call void %7(%Unit.Type* noalias sret(%Unit.Type) %1, i8 addrspace(1)* %this, %TypeInfo* ti1)
++  call void %9(%Unit.Type* noalias sret(%Unit.Type) %1, i8 addrspace(1)* %this, %TypeInfo* %ti1)
 +  ret void
 +}
 +
@@ -109629,7 +109938,7 @@ index 000000000..35d630569
 +  ret void
 +}
 +
-+define internal void @"_CVN7default1AIG_E7func_I2Hv$N7default1BIG_E$CN7default2I2E"(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %this, %TypeInfo* %outerTI) gc "cangjie" {
++define internal void @"_CVN7default1AIG_E7func_I2Hv$N7default1BIG_E$CN7default2I2E"(%Unit.Type* noalias sret(%Unit.Type) %0, i8 addrspace(1)* %1, %TypeInfo* %outerTI) gc "cangjie" {
 +allocas:
 +  %2 = alloca %Unit.Type, align 8
 +  %3 = alloca [1 x %TypeInfo*], align 8
@@ -109646,7 +109955,7 @@ index 000000000..35d630569
 +  %9 = bitcast [1 x %TypeInfo*]* %3 to i8**
 +  %10 = call i8* @CJ_MCC_GetOrCreateTypeInfo(i8* bitcast (%TypeTemplate* @"default:A.tt" to i8*), i32 1, i8** %9)
 +  %11 = bitcast i8* %10 to %TypeInfo*
-+  call void @_CN7default1AIG_E7func_I2Hv(%Unit.Type* noalias sret(%Unit.Type) %2, i8 addrspace(1)* %1, %TypeInfo& %11)
++  call void @_CN7default1AIG_E7func_I2Hv(%Unit.Type* noalias sret(%Unit.Type) %2, i8 addrspace(1)* %1, %TypeInfo* %11)
 +  ret void
 +}
 +
@@ -109665,10 +109974,12 @@ index 000000000..35d630569
 +  %ti = load %TypeInfo*, %TypeInfo* addrspace(1)* %6, align 8
 +  %7 = bitcast %TypeInfo* %ti to i8*
 +  %8 = call i8* @CJ_MCC_GetMTable(i8* %7, i8* %5)
-+  %9 = bitcast i8* %8 to void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)**
-+  %10 = load void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)*, void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)** %9, align 8, !objType !0, !FuncTable !3
++  %9 = bitcast i8* %8 to i8**
++  %10 = load i8*, i8** %9, align 8
++  %11 = call i8* @llvm.cj.vfe.info(i8* %10, metadata !0, i64 0)
++  %12 = bitcast i8* %11 to void (%Unit.Type*, i8 addrspace(1)*, %TypeInfo*)*
 +  %ti1 = load %TypeInfo*, %TypeInfo* addrspace(1)* %6, align 8
-+  call void %10(%Unit.Type* noalias sret(%Unit.Type) %1, i8 addrspace(1)* %v, %TypeInfo* %ti1)
++  call void %12(%Unit.Type* noalias sret(%Unit.Type) %1, i8 addrspace(1)* %v, %TypeInfo* %ti1)
 +  ret void
 +}
 +
@@ -109676,135 +109987,14 @@ index 000000000..35d630569
 +declare i8* @CJ_MCC_GetMTable(i8*, i8*)
 +
 +attributes #0 = { "CFileMTable" }
++attributes #1 = { "CFileKlass" }
++attributes #2 = { "cj_tt" }
 +
 +!0 = !{!"default:I1.tt"}
 +!1 = !{!"default:I2.ti"}
 +!2 = !{!"default:A.tt"}
 +!3 = !{i64 0}
 \ No newline at end of file
-diff --git a/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie-vfe-merged-simplifycfg.ll b/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie-vfe-merged-simplifycfg.ll
-new file mode 100644
-index 000000000..1d41649a1
---- /dev/null
-+++ b/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie-vfe-merged-simplifycfg.ll
-@@ -0,0 +1,117 @@
-+; RUN: opt < %s -passes='function(simplifycfg),globaldce' -sink-common-insts --cangjie-pipeline -S | FileCheck %s
-+
-+%TypeTemplate = type { i8*, i8, i8, i16, i16, i8*, i8*, i8*, i8*, %ExtensionDef**, i16 }
-+%ExtensionDef = type { i32, i8, i8*, i8*, i8*, i8* }
-+%Unit.Type = type {}
-+
-+@"I.tt" = internal global %TypeTemplate zeroinitializer #1
-+@"J.tt" = internal global %TypeTemplate zeroinitializer #1
-+@"K.tt" = internal global %TypeTemplate zeroinitializer #1
-+@"L.tt" = internal global %TypeTemplate zeroinitializer #1
-+@"A.tt" = internal global %TypeTemplate zeroinitializer #1
-+; CHECK: @A_ed_I.ft = private global [1 x i8*] [i8* bitcast (void ()* @funcA_I to i8*)]
-+@"A_ed_I.ft" = private global [1 x i8*] [i8* bitcast (void ()* @funcA_I to i8*)]
-+@"A_ed_I" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"A.tt" to i8*), i8* null, i8* null, i8* bitcast ([1 x i8*]* @"A_ed_I.ft" to i8*) }, !inheritedType !0 #0
-+; CHECK: @A_ed_J.ft = private global [1 x i8*] [i8* bitcast (void ()* @funcA_J to i8*)]
-+@"A_ed_J.ft" = private global [1 x i8*] [i8* bitcast (void ()* @funcA_J to i8*)]
-+@"A_ed_J" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"A.tt" to i8*), i8* null, i8* null, i8* bitcast ([1 x i8*]* @"A_ed_J.ft" to i8*) }, !inheritedType !1 #0
-+; CHECK: @A_ed_K.ft = private global [1 x i8*] zeroinitializer
-+@"A_ed_K.ft" = private global [1 x i8*] [i8* bitcast (void ()* @funcA_K to i8*)]
-+@"A_ed_K" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"A.tt" to i8*), i8* null, i8* null, i8* bitcast ([1 x i8*]* @"A_ed_K.ft" to i8*) }, !inheritedType !2 #0
-+; CHECK: @A_ed_L.ft = private global [1 x i8*] [i8* bitcast (void ()* @funcA_L to i8*)]
-+@"A_ed_L.ft" = private global [1 x i8*] [i8* bitcast (void ()* @funcA_L to i8*)]
-+@"A_ed_L" = private global %ExtensionDef { i32 1, i8 0, i8* bitcast (%TypeTemplate* @"A.tt" to i8*), i8* null, i8* null, i8* bitcast ([1 x i8*]* @"A_ed_L.ft" to i8*) }, !inheritedType !3 #0
-+
-+
-+@NonExternalExtensionDefs = private global [5 x %ExtensionDef*] [
-+  %ExtensionDef* @"A_ed_I",
-+  %ExtensionDef* @"A_ed_J",
-+  %ExtensionDef* @"A_ed_K",
-+  %ExtensionDef* @"A_ed_L",
-+  %ExtensionDef* null
-+]
-+@llvm.used = appending global [1 x i8*] [i8* bitcast ([5 x %ExtensionDef*]* @NonExternalExtensionDefs to i8*)]
-+
-+define internal void @funcA_I() gc "cangjie" {
-+  ret void
-+}
-+define internal void @funcA_J() gc "cangjie" {
-+  ret void
-+}
-+define internal void @funcA_K() gc "cangjie" {
-+  ret void
-+}
-+define internal void @funcA_L() gc "cangjie" {
-+  ret void
-+}
-+
-+; CHECK: define internal void @funcA_I()
-+; CHECK: define internal void @funcA_J()
-+; CHECK-NOT: @funcA_K
-+
-+define void @caller1(i1 %cond, void ()** %ptr0, void ()** %ptr1) gc "cangjie" {
-+entry:
-+  br i1 %cond, label %then, label %else
-+
-+then:
-+  %fp1 = load void ()*, void ()** %ptr0, !objType !0, !FuncTable !7
-+  br label %merge
-+
-+else:
-+  %fp2 = load void ()*, void ()** %ptr1, !objType !1, !FuncTable !7
-+  br label %merge
-+
-+merge:
-+  %fp = phi void ()* [ %fp1, %then ], [ %fp2, %else ]
-+  call void %fp()
-+  ret void
-+}
-+
-+define void @caller2(i1 %cond, void ()** %ptr0, void ()** %ptr1) gc "cangjie" {
-+entry:
-+  br i1 %cond, label %then, label %else
-+
-+then:
-+  %fp1 = load void ()*, void ()** %ptr0, !objType !0, !FuncTable !7
-+  br label %merge
-+
-+else:
-+  %fp2 = load void ()*, void ()** %ptr1, !objType !4, !FuncTable !5
-+  br label %merge
-+
-+merge:
-+  %fp = phi void ()* [ %fp1, %then ], [ %fp2, %else ]
-+  call void %fp()
-+  ret void
-+}
-+
-+define void @caller3(i1 %cond, void ()** %ptr0, void ()** %ptr1) gc "cangjie" {
-+entry:
-+  br i1 %cond, label %then, label %else
-+
-+then:
-+  %fp1 = load void ()*, void ()** %ptr0, !objType !4, !FuncTable !5
-+  br label %merge
-+
-+else:
-+  %fp2 = load void ()*, void ()** %ptr1, !objType !6, !FuncTable !5
-+  br label %merge
-+
-+merge:
-+  %fp = phi void ()* [ %fp1, %then ], [ %fp2, %else ]
-+  call void %fp()
-+  ret void
-+}
-+
-+attributes #0 = { "CFileMTable" }
-+attributes #1 = { "cj_tt" }
-+
-+!0 = !{!"I.tt"}
-+!1 = !{!"J.tt"}
-+!2 = !{!"K.tt"}
-+!3 = !{!"L.tt"}
-+!4 = !{!0, !1}
-+!5 = !{!7, !7}
-+!6 = !{!0, !3}
-+!7 = !{i64 0}
-+
 diff --git a/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie_metadata_elim_1.ll b/llvm/test/Transforms/Cangjie/CangjieDCE/cangjie_metadata_elim_1.ll
 new file mode 100644
 index 000000000..89b65d8be
