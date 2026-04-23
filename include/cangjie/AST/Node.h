@@ -707,6 +707,7 @@ struct InvalidType : Type {
         begin = pos;
         end = pos;
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -906,6 +907,7 @@ struct GenericConstraint : public Node {
     GenericConstraint() : Node(ASTKind::GENERIC_CONSTRAINT)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -920,6 +922,7 @@ struct Generic : public Node {
     Generic() : Node(ASTKind::GENERIC)
     {
     }
+    std::string ToString() const override;
 };
 
 struct DeclHash {
@@ -1102,6 +1105,7 @@ struct GenericParamDecl : public Decl {
     GenericParamDecl() : Decl(ASTKind::GENERIC_PARAM_DECL)
     {
     }
+    std::string ToString() const override;
 };
 
 struct VarDeclAbstract : Decl {
@@ -1158,6 +1162,7 @@ struct FuncParam : VarDecl {
     FuncParam() : VarDecl(ASTKind::FUNC_PARAM)
     {
     }
+    std::string ToString() const override;
     void Clear() noexcept override
     {
         Decl::Clear();
@@ -1177,6 +1182,7 @@ struct DummyBody : Node {
     DummyBody() : Node(ASTKind::DUMMY_BODY)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1216,6 +1222,7 @@ struct TypeAliasDecl : Decl {
     TypeAliasDecl() : Decl(ASTKind::TYPE_ALIAS_DECL)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1230,6 +1237,7 @@ struct FuncParamList : Node {
     FuncParamList() : Node(ASTKind::FUNC_PARAM_LIST)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1258,6 +1266,7 @@ struct FuncBody : Node {
     FuncBody() : Node(ASTKind::FUNC_BODY)
     {
     }
+    std::string ToString() const override;
     void Clear() noexcept override
     {
         Node::Clear();
@@ -1300,6 +1309,7 @@ struct FuncDecl : Decl {
     FuncDecl() : Decl(ASTKind::FUNC_DECL)
     {
     }
+    std::string ToString() const override;
     ~FuncDecl() override = default;
 
     /**
@@ -1325,6 +1335,7 @@ struct MacroDecl : Decl {
     MacroDecl() : Decl(ASTKind::MACRO_DECL)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1339,6 +1350,7 @@ struct MainDecl : Decl {
     MainDecl() : Decl(ASTKind::MAIN_DECL)
     {
     }
+    std::string ToString() const override;
 };
 
 struct PrimaryCtorDecl : Decl {
@@ -1382,6 +1394,7 @@ struct StructBody : Node {
     StructBody() : Node(ASTKind::STRUCT_BODY)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1424,6 +1437,7 @@ struct InterfaceBody : Node {
     InterfaceBody() : Node(ASTKind::INTERFACE_BODY)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1466,6 +1480,7 @@ struct ClassBody : Node {
     ClassBody() : Node(ASTKind::CLASS_BODY)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1546,6 +1561,7 @@ struct InvalidDecl : Decl {
         end = pos;
         doNotExport = true;
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1575,6 +1591,7 @@ struct InvalidPattern : Pattern {
         begin = pos;
         end = pos;
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1817,6 +1834,7 @@ struct Block : Expr {
     Block() : Expr(ASTKind::BLOCK)
     {
     }
+    std::string ToString() const override;
     Ptr<Node> GetLastExprOrDecl() const;
 };
 
@@ -1837,6 +1855,7 @@ struct IfExpr : Expr {
     IfExpr() : Expr(ASTKind::IF_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1869,6 +1888,7 @@ struct TokenPart : Expr {
             end = tokens.back().End();
         }
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1885,6 +1905,7 @@ struct QuoteExpr : Expr {
     QuoteExpr() : Expr(ASTKind::QUOTE_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1900,6 +1921,7 @@ struct MatchCase : Node {
     MatchCase() : Node(ASTKind::MATCH_CASE)
     {
     }
+    std::string ToString() const override;
     void SetCtxExprForPatterns(Ptr<Expr> ctxExpr)
     {
         for (auto& pattern : patterns) {
@@ -1920,6 +1942,7 @@ struct MatchCaseOther : Node {
     MatchCaseOther() : Node(ASTKind::MATCH_CASE_OTHER)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1938,6 +1961,7 @@ struct MatchExpr : Expr {
     MatchExpr() : Expr(ASTKind::MATCH_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 struct Handler {
@@ -1976,6 +2000,7 @@ struct TryExpr : Expr {
     TryExpr() : Expr(ASTKind::TRY_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1987,6 +2012,7 @@ struct ThrowExpr : Expr {
     ThrowExpr() : Expr(ASTKind::THROW_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -1998,6 +2024,7 @@ struct PerformExpr : Expr {
     PerformExpr() : Expr(ASTKind::PERFORM_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2013,6 +2040,7 @@ struct ResumeExpr : Expr {
     ResumeExpr() : Expr(ASTKind::RESUME_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 /**
  * A ReturnExpr node represents return expression.
@@ -2024,6 +2052,7 @@ struct ReturnExpr : Expr {
     ReturnExpr() : Expr(ASTKind::RETURN_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2035,6 +2064,7 @@ struct JumpExpr : Expr {
     JumpExpr() : Expr(ASTKind::JUMP_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2054,6 +2084,7 @@ struct ForInExpr : Expr {
     ForInExpr() : Expr(ASTKind::FOR_IN_EXPR), forInKind(ForInKind::FORIN_INVALID)
     {
     }
+    std::string ToString() const override;
 
     /// Test whether the range expression of this forin is closed range, and the step is either missing, or literal one.
     /// Some CHIR optimization depends on this.
@@ -2075,6 +2106,7 @@ struct WhileExpr : Expr {
     WhileExpr() : Expr(ASTKind::WHILE_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2090,6 +2122,7 @@ struct DoWhileExpr : Expr {
     DoWhileExpr() : Expr(ASTKind::DO_WHILE_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2245,6 +2278,7 @@ struct InterpolationExpr : Expr {
     InterpolationExpr() : Expr(ASTKind::INTERPOLATION_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2260,6 +2294,7 @@ struct StrInterpolationExpr : Expr {
     StrInterpolationExpr() : Expr(ASTKind::STR_INTERPOLATION_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2404,6 +2439,7 @@ struct MacroExpandExpr : Expr {
     MacroExpandExpr() : Expr(ASTKind::MACRO_EXPAND_EXPR)
     {
     }
+    std::string ToString() const override;
 
     Ptr<FuncArg> GetNamedArg() const;
     Ptr<struct LambdaExpr> GetLambda(size_t i) const;
@@ -2419,6 +2455,7 @@ struct MacroExpandDecl : Decl {
     MacroExpandDecl() : Decl(ASTKind::MACRO_EXPAND_DECL)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -2603,6 +2640,7 @@ struct LambdaExpr : Expr {
     explicit LambdaExpr(OwnedPtr<FuncBody> body) : Expr(ASTKind::LAMBDA_EXPR), funcBody(std::move(body))
     {
     }
+    std::string ToString() const override;
 };
 
 struct TrailingClosureExpr : Expr {
@@ -2613,6 +2651,7 @@ struct TrailingClosureExpr : Expr {
     TrailingClosureExpr() : Expr(ASTKind::TRAIL_CLOSURE_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 struct OptionalExpr : Expr {
@@ -2779,6 +2818,7 @@ struct InvalidExpr : Expr {
         begin = pos;
         end = pos;
     }
+    std::string ToString() const override;
 };
 
  /**
@@ -2882,6 +2922,7 @@ struct ImportSpec : Node {
     ImportSpec() : Node(ASTKind::IMPORT_SPEC)
     {
     }
+    std::string ToString() const override;
 
     bool IsReExport(bool noSubPkg = false) const
     {
@@ -2933,6 +2974,7 @@ struct PackageSpec : Node {
     PackageSpec() : Node(ASTKind::PACKAGE_SPEC)
     {
     }
+    std::string ToString() const override;
     std::string GetPackageName() const;
 };
 
@@ -2960,6 +3002,7 @@ struct File : Node {
     File() : Node(ASTKind::FILE)
     {
     }
+    std::string ToString() const override;
     bool operator==(const File& r) const
     {
         return fileName == r.fileName && filePath == r.filePath && fileHash == r.fileHash;
@@ -3038,6 +3081,7 @@ public:
     Package(const std::string& pkgName) : Node(ASTKind::PACKAGE), fullPackageName(pkgName)
     {
     }
+    std::string ToString() const override;
 
     bool IsEmpty() const
     {
@@ -3095,6 +3139,7 @@ struct PackageDecl : Decl {
             EnableAttr(Attribute::IMPORTED);
         }
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -3110,6 +3155,7 @@ struct SpawnExpr : Expr {
     SpawnExpr() : Expr(ASTKind::SPAWN_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 /**
@@ -3124,6 +3170,7 @@ struct SynchronizedExpr : Expr {
     SynchronizedExpr() : Expr(ASTKind::SYNCHRONIZED_EXPR)
     {
     }
+    std::string ToString() const override;
 };
 
 inline bool CompNodeByPos(Ptr<const AST::Node> n1, Ptr<const AST::Node> n2)
