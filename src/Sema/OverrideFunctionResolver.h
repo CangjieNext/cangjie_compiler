@@ -61,6 +61,8 @@ public:
      */
     MemberFuncsWithInstTys GetInstMemberFuncWithInstTy(AST::Ty& instBaseTy, const std::string& identifier);
 
+    bool IsImplementationFunc(AST::Ty& instBaseTy, const AST::FuncDecl& srcFunc, const AST::FuncDecl& superFunc);
+
     /**
      * Clear the global cache.
      */

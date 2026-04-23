@@ -195,6 +195,28 @@ void OverrideFunctionResolver::MergeIntoFuncs(MemberFuncsWithInstTys& funcs, Mem
 }
 
 bool OverrideFunctionResolver::IsImplementationFunc(
+    AST::Ty& instBaseTy, const FuncDecl& srcFunc, const FuncDecl& superFunc)
+{
+    if (srcFunc.identifier != superFunc.identifier) {
+        return false;
+    }
+    CJC_ASSERT(srcFunc.outerDecl && superFunc.outerDecl);
+    auto identifier = srcFunc.identifier;
+    auto srcFuncOuterInstTys = Promotion(*typeManager).GetPromoteTypeMapping(instBaseTy, *srcFunc.outerDecl->ty);
+    auto superFuncOuterInstTys = Promotion(*typeManager).GetPromoteTypeMapping(instBaseTy, *superFunc.outerDecl->ty);
+    auto srcInstFuncTys = typeManager->GetInstantiatedTys(srcFunc.ty, srcFuncOuterInstTys);
+    auto superInstFuncTys = typeManager->GetInstantiatedTys(superFunc.ty, superFuncOuterInstTys);
+    for (auto srcInstFuncTy : srcInstFuncTys) {
+        for (auto superInstFuncTy : superInstFuncTys) {
+            if (IsImplementationFunc(srcFunc, superFunc, srcInstFuncTy, superInstFuncTy)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool OverrideFunctionResolver::IsImplementationFunc(
     const FuncDecl& srcFunc, const FuncDecl& superFunc, const Ptr<Ty> srcInstFuncTy, const Ptr<Ty> superInstFuncTy)
 {
     CJC_ASSERT(srcFunc.outerDecl && superFunc.outerDecl);
@@ -204,6 +226,58 @@ bool OverrideFunctionResolver::IsImplementationFunc(
         srcFunc.identifier != superFunc.identifier;
     if (noRelation) {
         return false;
+    }
+    if (srcFunc.funcBody->generic && superFunc.funcBody->generic) {
+        if (srcFunc.generic->typeParameters.size() != superFunc.generic->typeParameters.size()) {
+            return false;
+        }
+
+        // 1. 按照 typeParameters 顺序，映射srcFunc.generic的泛型参数和superFunc.generic泛型参数
+        // 创建泛型参数映射关系: superParamPtr -> srcParamPtr
+        std::unordered_map<Ptr<GenericParamDecl>, Ptr<GenericParamDecl>> paramMapping;
+        for (size_t i = 0; i < srcFunc.generic->typeParameters.size(); ++i) {
+            paramMapping[srcFunc.generic->typeParameters[i]] = superFunc.generic->typeParameters[i];
+        }
+
+        // 2. 通过 typeParameters 在 genericConstraints 中找对应的约束
+        // 3. 要求 srcFunc 的约束比 superFunc 的约束更宽松
+        // 即对于superFunc的每个约束，srcFunc必须有对应的更宽松的约束
+        for (const auto& superConstraint : superFunc.generic->genericConstraints) {
+            if (!superConstraint) {
+                continue;
+            }
+
+            // 查找srcFunc中对应的约束
+            bool foundMatchingConstraint = false;
+            for (const auto& srcConstraint : srcFunc.generic->genericConstraints) {
+                if (!srcConstraint) {
+                    continue;
+                }
+
+                // 检查约束类型是否匹配
+                if (srcConstraint->astKind != superConstraint->astKind) {
+                    continue;
+                }
+
+                // 根据paramMapping检查约束中的泛型参数是否对应
+                // 这里简化处理，假设约束结构简单，主要检查类型参数对应关系
+                bool paramsMatch = true;
+                // TODO: 实现更复杂的约束参数匹配逻辑
+                // 目前假设如果能找到对应参数名的约束，就认为匹配
+
+                // 检查srcConstraint是否比superConstraint更宽松
+                // 对于类型约束，更宽松意味着srcConstraint的类型是superConstraint类型的超类型
+                // 或者srcConstraint没有约束（即完全宽松）
+                // 这里简化处理，假设如果找到匹配的约束名称，就认为满足宽松条件
+                foundMatchingConstraint = true;
+                break;
+            }
+
+            // 如果superFunc的某个约束在srcFunc中没有对应的更宽松约束，则返回false
+            if (!foundMatchingConstraint) {
+                return false;
+            }
+        }
     }
     return typeManager->IsSubtype(srcInstFuncTy, superInstFuncTy);
 }
