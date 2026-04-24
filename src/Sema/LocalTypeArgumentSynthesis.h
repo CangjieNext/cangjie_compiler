@@ -107,6 +107,8 @@ private:
     // The series of functions return false if obvious errors are detected.
     bool UnifyOne(const Tracked<AST::Ty>& argTTy, const Tracked<AST::Ty>& paramTTy);
     bool UnifyTyVar(const Tracked<AST::Ty>& argTTy, const Tracked<AST::Ty>& paramTTy);
+    void InsertConstraintIfSuitable(TyVar& tyVar, const Tracked<AST::Ty>& lbTTy, const Tracked<AST::Ty>& ubTTy,
+        AST::Ty& lb, AST::Ty& ub, Constraint& c) const;
     bool UnifyTyVarCollectConstraints(TyVar& tyVar, const Tracked<AST::Ty>& lbTTy, const Tracked<AST::Ty>& ubTTy);
     bool UnifyContextTyVar(const Tracked<AST::Ty>& argTTy, const Tracked<AST::Ty>& paramTTy);
     bool UnifyBuiltInTy(const Tracked<AST::Ty>& argTTy, const Tracked<AST::Ty>& paramTTy);
@@ -146,6 +148,8 @@ private:
     void CopyUpperbound();
 
     bool IsGreedySolution(const TyVar& tv, const AST::Ty& bound, bool isUpperbound);
+
+    bool IsNotOutOfScopeBound(TyVar& tv, const AST::Ty& bound) const;
 
     bool VerifyAndSetCMS(const ConstraintWithMemos& newCMS);
 };

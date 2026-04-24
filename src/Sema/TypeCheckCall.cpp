@@ -1964,7 +1964,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::GetOrderedCandidates(co
 std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::MatchFunctionForCall(
     ASTContext& ctx, std::vector<Ptr<FuncDecl>>& candidates, CallExpr& ce, Ptr<Ty> target, SubstPack& typeMapping)
 {
-    TyVarScope ts(typeManager);
+    TyVarScope ts(typeManager, &ce);
     std::vector<std::vector<Ptr<Ty>>> argCombinations = GetArgsCombination(ctx, ce);
     if (!ce.args.empty() && argCombinations.empty()) {
         return {};
