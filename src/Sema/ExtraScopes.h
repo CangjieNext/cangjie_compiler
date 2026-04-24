@@ -27,11 +27,14 @@ public:
 
     TyVarScope(const TyVarScope& other) = delete;
     TyVarScope& operator =(const TyVarScope& other) = delete;
+    bool ContainsTyVar(Ptr<AST::GenericsTy>);
+    Ptr<AST::CallExpr> GetCallOfTy(Ptr<AST::GenericsTy> tyVar) const;
 
 private:
     friend class TypeManager;
-    void AddTyVar(Ptr<AST::GenericsTy> tyVar);
-    std::vector<Ptr<AST::GenericsTy>> tyVars;
+    void AddTyVar(Ptr<AST::GenericsTy> tyVar, Ptr<AST::CallExpr> ce);
+    // key: tyVar, value: the call expr that introduces this ty var
+    std::map<Ptr<AST::GenericsTy>, Ptr<AST::CallExpr>> tyVars;
     TypeManager& tyMgr;
     std::string scope;
 };
@@ -71,8 +74,8 @@ private:
         const ASTContext& ctx, const AST::FuncDecl& fd, const AST::CallExpr& ce, SubstPack& typeMapping);
     bool GenerateTypeMappingByCallContext(
         const ASTContext& ctx, const AST::FuncDecl& fd, const AST::CallExpr& ce, SubstPack& typeMapping);
-    void GenerateSubstPackByTyArgs(
-        SubstPack& tmaps, const std::vector<Ptr<AST::Type>>& typeArgs, const AST::Generic& generic) const;
+    void GenerateSubstPackByTyArgs(SubstPack& tmaps, const std::vector<Ptr<AST::Type>>& typeArgs,
+        const AST::Generic& generic, AST::CallExpr& ce) const;
 };
 }
 

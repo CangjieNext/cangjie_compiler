@@ -2062,7 +2062,8 @@ std::pair<bool, bool> TypeManager::IsExtendInheritRelation(const ExtendDecl& r, 
     return {hasInheritRelat, isRSuper};
 }
 
-Ptr<AST::GenericsTy> TypeManager::AllocTyVar(const std::string& srcId, bool needSolving, Ptr<TyVar> derivedFrom)
+Ptr<AST::GenericsTy> TypeManager::AllocTyVar(
+    const std::string& srcId, bool needSolving, Ptr<TyVar> derivedFrom, Ptr<CallExpr> ce)
 {
     Ptr<AST::GenericsTy> ret;
     // allocate
@@ -2085,10 +2086,10 @@ Ptr<AST::GenericsTy> TypeManager::AllocTyVar(const std::string& srcId, bool need
     // manage scope
     if (derivedFrom) {
         size_t lv = tyVarScopeDepth[derivedFrom];
-        tyVarScopes[lv]->AddTyVar(ret);
+        tyVarScopes[lv]->AddTyVar(ret, ce);
         tyVarScopeDepth[ret] = lv;
     } else {
-        tyVarScopes.back()->AddTyVar(ret);
+        tyVarScopes.back()->AddTyVar(ret, ce);
         tyVarScopeDepth[ret] = tyVarScopes.size() - 1;
     }
     if (needSolving) {
@@ -2123,7 +2124,7 @@ void TypeManager::MarkAsUnsolvedTyVar(GenericsTy& tv)
 std::set<Ptr<TyVar>> TypeManager::GetInnermostUnsolvedTyVars()
 {
     std::set<Ptr<TyVar>> ret;
-    for (auto tv : tyVarScopes.back()->tyVars) {
+    for (auto [tv, _] : tyVarScopes.back()->tyVars) {
         if (unsolvedTyVars.count(tv) > 0) {
             ret.insert(tv);
         }
@@ -2154,6 +2155,17 @@ Ptr<AST::Ty> TypeManager::RecoverUnivTyVar(Ptr<AST::Ty> ty)
 SubstPack TypeManager::GetInstMapping()
 {
     return instCtxScopes.back()->maps;
+}
+
+Ptr<CallExpr> TypeManager::GetCallOfTyVar(Ptr<TyVar> ty)
+{
+    for (auto tyVarScope : tyVarScopes) {
+        if (tyVarScope->ContainsTyVar(ty)) {
+            return tyVarScope->GetCallOfTy(ty);
+        }
+    }
+
+    return nullptr;
 }
 
 Ptr<Ty> TypeManager::ApplySubstPack(const Ptr<Ty> declaredTy, const SubstPack& maps, bool ignoreUnsolved)

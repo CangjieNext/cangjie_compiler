@@ -66,15 +66,26 @@ TyVarScope::TyVarScope(TypeManager& tyMgr) : tyMgr(tyMgr)
 
 TyVarScope::~TyVarScope()
 {
-    for (auto tyVar: tyVars) {
+    for (auto [tyVar, _]: tyVars) {
         tyMgr.ReleaseTyVar(tyVar);
     }
     tyMgr.tyVarScopes.pop_back();
 }
 
-void TyVarScope::AddTyVar(Ptr<GenericsTy> tyVar)
+bool TyVarScope::ContainsTyVar(Ptr<AST::GenericsTy> tyVar)
 {
-    tyVars.push_back(tyVar);
+    return tyVars.find(tyVar) != tyVars.end();
+}
+
+Ptr<AST::CallExpr> TyVarScope::GetCallOfTy(Ptr<AST::GenericsTy> tyVar) const
+{
+    auto it = tyVars.find(tyVar);
+    return it != tyVars.end() ? it->second : nullptr;
+}
+
+void TyVarScope::AddTyVar(Ptr<GenericsTy> tyVar, Ptr<CallExpr> ce)
+{
+    tyVars[tyVar] = ce;
 }
 
 InstCtxScope::InstCtxScope(TypeChecker::TypeCheckerImpl& typeChecker)
@@ -203,7 +214,7 @@ bool InstCtxScope::GenerateExtendGenericTypeMapping(
 }
 
 void InstCtxScope::GenerateSubstPackByTyArgs(
-    SubstPack& tmaps, const std::vector<Ptr<Type>>& typeArgs, const Generic& generic) const
+    SubstPack& tmaps, const std::vector<Ptr<Type>>& typeArgs, const Generic& generic, CallExpr& ce) const
 {
     // Add u2i mapping anyway
     // Add inst mapping when we can get the type parameters and type arguments.
@@ -220,7 +231,7 @@ void InstCtxScope::GenerateSubstPackByTyArgs(
         if (Ty::IsTyCorrect(uTy)) {
             auto uGenTy = StaticCast<GenericsTy*>(uTy);
             if (tmaps.u2i.count(uGenTy) == 0) {
-                auto iGenTy = tyMgr.AllocTyVar();
+                auto iGenTy = tyMgr.AllocTyVar("Ti", false, nullptr, &ce);
                 tmaps.u2i.emplace(uGenTy, iGenTy);
             }
             if (i >= typeArgs.size()) {
@@ -333,7 +344,7 @@ bool InstCtxScope::SetRefDecl(ASTContext& ctx, AST::FuncDecl& fd, CallExpr& ce)
         }
     }
     if (auto generic = GetCurrentGeneric(fd, ce)) {
-        GenerateSubstPackByTyArgs(refMaps, typeArgs, *generic);
+        GenerateSubstPackByTyArgs(refMaps, typeArgs, *generic, ce);
     }
     maps = curMaps;
     MergeSubstPack(maps, refMaps);
