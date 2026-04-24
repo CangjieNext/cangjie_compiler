@@ -62,6 +62,7 @@ private:
     SubstPack curMaps; // mapping only from current decl
     SubstPack refMaps; // mapping only from referenced decl
     SubstPack maps; // merged mapping, users should use this
+    Ptr<AST::CallExpr> curCall;
 
     TypeManager& tyMgr;
     DiagnosticEngine& diag;

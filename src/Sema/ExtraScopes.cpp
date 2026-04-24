@@ -303,6 +303,7 @@ void InstCtxScope::SetRefDeclSimple(const AST::FuncDecl& fd, const AST::CallExpr
 
 bool InstCtxScope::SetRefDecl(ASTContext& ctx, AST::FuncDecl& fd, CallExpr& ce)
 {
+    curCall = &ce;
     refMaps = {};
     std::vector<Ptr<Type>> typeArgs = GetEffectiveTypeArgsForCall(*ce.baseFunc, ce.baseFunc->GetTypeArgs());
     bool isInStructDecl = fd.outerDecl && fd.outerDecl->IsNominalDecl() && !IsTypeObjectCreation(fd, ce);

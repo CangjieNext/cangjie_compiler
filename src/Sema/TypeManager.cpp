@@ -2156,6 +2156,11 @@ SubstPack TypeManager::GetInstMapping()
     return instCtxScopes.back()->maps;
 }
 
+Ptr<CallExpr> TypeManager::GetInstCurCall()
+{
+    return instCtxScopes.back()->curCall;
+}
+
 Ptr<Ty> TypeManager::ApplySubstPack(const Ptr<Ty> declaredTy, const SubstPack& maps, bool ignoreUnsolved)
 {
     Ptr<Ty> t1;
