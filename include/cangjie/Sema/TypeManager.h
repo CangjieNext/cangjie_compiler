@@ -124,6 +124,7 @@ public:
     /** recover instance ty vars back to universal ty vars for err reporting */
     Ptr<AST::Ty> RecoverUnivTyVar(Ptr<AST::Ty> ty);
     SubstPack GetInstMapping();
+    Ptr<AST::CallExpr> GetCallOfTyVar(Ptr<TyVar> ty);
     void PackMapping(SubstPack& maps, const MultiTypeSubst m);
     void PackMapping(SubstPack& maps, const TypeSubst m);
     void PackMapping(SubstPack& maps, AST::GenericsTy& tv, AST::Ty& instTy);
