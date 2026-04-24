@@ -361,13 +361,13 @@ bool LocalTypeArgumentSynthesis::UnifyTyVarCollectConstraints(
     auto& lb = lbTTy.ty;
     auto& ub = ubTTy.ty;
     Constraint& c = cms.front().constraint;
-    if (Ty::IsTyCorrect(&lb)) {
+    if (Ty::IsTyCorrect(&lb) && IsNotOutOfScopeBound(tyVar, lb)) {
         TyVarBounds bounds;
         bounds.lbs.insert(&lb);
         bounds.lb2Blames[&lb] = lbTTy.blames;
         InsertConstraint(c, tyVar, bounds);
     }
-    if (Ty::IsTyCorrect(&ub)) {
+    if (Ty::IsTyCorrect(&ub) && IsNotOutOfScopeBound(tyVar, ub)) {
         TyVarBounds bounds;
         bounds.ubs.insert(&ub);
         bounds.ub2Blames[&ub] = ubTTy.blames;
@@ -1217,6 +1217,48 @@ std::optional<TypeSubst> LocalTypeArgumentSynthesis::SolveConstraints(TypeManage
     synIns.cms = {{cst}};
     synIns.deterministic = true;
     return synIns.SolveConstraints(true);
+}
+
+/**
+ * If we are using a bound, we must make sure the bound is not out of scope.
+ * For example:
+ * ```cj
+ * class MyClass<T> {
+ *     func add(t: T) {}
+ * }
+ *
+ * func bar<T>(f: (MyClass<T>) -> Unit): Unit {
+ *     return f(MyClass<T>())
+ * }
+ *
+ * func foo() {
+ *     bar { it =>
+ *         func local<T1>(t: T1) {
+ *             it.add(t)
+ *         }
+ *     }
+ * }
+ * ```
+ * The placeholder T' in bar call in foo has a bound: T' <: T1, but T1 is out of scope in the local function,
+ * so T' cannot be solved as T1. In this case, we should not consider T1.
+ */
+bool LocalTypeArgumentSynthesis::IsNotOutOfScopeBound(TyVar& ty, const Ty& bound) const
+{
+    if (!bound.IsGeneric()) return true;
+    auto genericBound = StaticCast<GenericsTy&>(bound);
+    auto boundDecl = genericBound.decl;
+    if (boundDecl == nullptr) return true;
+    auto curCallOrLambda = tyMgr.GetCallOrLambdaOfTyVar(&ty);
+    if (!curCallOrLambda) return true;
+    bool result = true;
+    AST::ConstWalker(curCallOrLambda, [&boundDecl, &result](auto node) {
+        if (node == boundDecl) {
+            result = false;
+            return AST::VisitAction::STOP_NOW;
+        }
+        return AST::VisitAction::WALK_CHILDREN;
+    }).Walk();
+    return result;
 }
 
 bool LocalTypeArgumentSynthesis::IsGreedySolution(const TyVar& tv, const Ty& bound, bool isUpperbound)
