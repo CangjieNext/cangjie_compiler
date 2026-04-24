@@ -2156,6 +2156,17 @@ SubstPack TypeManager::GetInstMapping()
     return instCtxScopes.back()->maps;
 }
 
+Ptr<Node> TypeManager::GetCallOrLambdaOfTyVar(Ptr<TyVar> ty)
+{
+    for (auto tyVarScope : tyVarScopes) {
+        if (tyVarScope->ContainsTyVar(ty)) {
+            return tyVarScope->GetCorrespondingCallOrLambda();
+        }
+    }
+
+    return nullptr;
+}
+
 Ptr<Ty> TypeManager::ApplySubstPack(const Ptr<Ty> declaredTy, const SubstPack& maps, bool ignoreUnsolved)
 {
     Ptr<Ty> t1;
