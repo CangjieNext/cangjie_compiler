@@ -22,11 +22,13 @@ namespace Cangjie {
 // scope of introducing placeholder type var
 class TyVarScope {
 public:
-    explicit TyVarScope(TypeManager& tyMgr);
+    explicit TyVarScope(TypeManager& tyMgr, Ptr<AST::Node> correspondingNode = nullptr);
     ~TyVarScope();
 
     TyVarScope(const TyVarScope& other) = delete;
     TyVarScope& operator =(const TyVarScope& other) = delete;
+    Ptr<AST::Node> GetCorrespondingCallOrLambda() const;
+    bool ContainsTyVar(Ptr<AST::GenericsTy> ty);
 
 private:
     friend class TypeManager;
@@ -34,6 +36,7 @@ private:
     std::vector<Ptr<AST::GenericsTy>> tyVars;
     TypeManager& tyMgr;
     std::string scope;
+    Ptr<AST::Node> correspondingCallOrLambda;
 };
 
 // scope of type instantiation context
