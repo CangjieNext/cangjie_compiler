@@ -361,13 +361,13 @@ bool LocalTypeArgumentSynthesis::UnifyTyVarCollectConstraints(
     auto& lb = lbTTy.ty;
     auto& ub = ubTTy.ty;
     Constraint& c = cms.front().constraint;
-    if (Ty::IsTyCorrect(&lb)) {
+    if (Ty::IsTyCorrect(&lb) && IsNotOutOfScopeBound(lb)) {
         TyVarBounds bounds;
         bounds.lbs.insert(&lb);
         bounds.lb2Blames[&lb] = lbTTy.blames;
         InsertConstraint(c, tyVar, bounds);
     }
-    if (Ty::IsTyCorrect(&ub)) {
+    if (Ty::IsTyCorrect(&ub) && IsNotOutOfScopeBound(ub)) {
         TyVarBounds bounds;
         bounds.ubs.insert(&ub);
         bounds.ub2Blames[&ub] = ubTTy.blames;
@@ -1217,6 +1217,25 @@ std::optional<TypeSubst> LocalTypeArgumentSynthesis::SolveConstraints(TypeManage
     synIns.cms = {{cst}};
     synIns.deterministic = true;
     return synIns.SolveConstraints(true);
+}
+
+bool LocalTypeArgumentSynthesis::IsNotOutOfScopeBound(const Ty& bound) const
+{
+    if (!bound.IsGeneric()) return true;
+    auto genericBound =  StaticCast<GenericsTy&>(bound);
+    auto boundDecl = genericBound.decl;
+    if (boundDecl == nullptr) return true;
+    auto curCall = tyMgr.GetInstCurCall();
+    if (!curCall) return true;
+    bool result = true;
+    AST::ConstWalker(curCall, [&boundDecl, &result](auto node) {
+        if (node == boundDecl) {
+            result = false;
+            return AST::VisitAction::STOP_NOW;
+        }
+        return AST::VisitAction::WALK_CHILDREN;
+    }).Walk();
+    return result;
 }
 
 bool LocalTypeArgumentSynthesis::IsGreedySolution(const TyVar& tv, const Ty& bound, bool isUpperbound)
