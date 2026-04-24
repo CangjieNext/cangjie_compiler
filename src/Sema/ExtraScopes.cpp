@@ -59,7 +59,8 @@ std::vector<Ptr<Type>> GetEffectiveTypeArgsForCall(Expr& baseFunc, std::vector<P
 }
 }
 
-TyVarScope::TyVarScope(TypeManager& tyMgr) : tyMgr(tyMgr)
+TyVarScope::TyVarScope(TypeManager& tyMgr, Ptr<AST::Node> correspondingNode)
+    : tyMgr(tyMgr), correspondingCallOrLambda(correspondingNode)
 {
     tyMgr.tyVarScopes.push_back(this);
 }
@@ -70,6 +71,16 @@ TyVarScope::~TyVarScope()
         tyMgr.ReleaseTyVar(tyVar);
     }
     tyMgr.tyVarScopes.pop_back();
+}
+
+Ptr<AST::Node> TyVarScope::GetCorrespondingCallOrLambda() const
+{
+    return correspondingCallOrLambda;
+}
+
+bool TyVarScope::ContainsTyVar(Ptr<AST::GenericsTy> ty)
+{
+    return std::find(tyVars.begin(), tyVars.end(), ty) != tyVars.end();
 }
 
 void TyVarScope::AddTyVar(Ptr<GenericsTy> tyVar)

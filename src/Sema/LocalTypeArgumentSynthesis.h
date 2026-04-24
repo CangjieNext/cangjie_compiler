@@ -147,6 +147,8 @@ private:
 
     bool IsGreedySolution(const TyVar& tv, const AST::Ty& bound, bool isUpperbound);
 
+    bool IsNotOutOfScopeBound(TyVar& tv, const AST::Ty& bound) const;
+
     bool VerifyAndSetCMS(const ConstraintWithMemos& newCMS);
 };
 } // namespace Cangjie

@@ -263,7 +263,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le
     le.funcBody->retType->begin = le.begin;
     le.funcBody->retType->end = le.end;
     CJC_ASSERT(le.funcBody && !le.funcBody->paramLists.empty());
-    TyVarScope sc(typeManager);
+    TyVarScope sc(typeManager, &le);
     for (auto& node : le.funcBody->paramLists[0]->params) {
         CJC_NULLPTR_CHECK(node);
         Ptr<Ty> ty = Synthesize(ctx, node->type.get());
