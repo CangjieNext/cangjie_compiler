@@ -762,9 +762,6 @@ void AST2CHIR::CreatePseudoImportedFuncSignatureAndSetGlobalCache(const AST::Fun
     // Global or member function. Must not be nested func.
     auto fn = builder.CreateFunction(funcTy, funcDecl.mangledName, funcDecl.identifier,
         funcDecl.rawMangleName, funcDecl.fullPackageName, genericParamTy);
-    // in cjdb, using `expr` will generate a wrong AST decl
-    // an AST decl in imported package but without `IMPORTED` attr
-    fn->EnableAttr(Attribute::IMPORTED);
     SetFuncAttributeAndLinkageType(funcDecl, *fn);
 
     CJC_ASSERT(funcDecl.funcBody->paramLists.size() == 1);
@@ -827,9 +824,6 @@ void AST2CHIR::CreateImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl&
     auto genericParamTy = GetGenericParamType(funcDecl, chirType);
     fn = builder.CreateFunction(fnTy, funcDecl.mangledName, funcDecl.identifier,
         funcDecl.rawMangleName, funcDecl.fullPackageName, genericParamTy);
-    // in cjdb, using `expr` will generate a wrong AST decl
-    // an AST decl in imported package but without `IMPORTED` attr
-    fn->EnableAttr(Attribute::IMPORTED);
     auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), funcDecl.begin, funcDecl.end);
     fn->SetDebugLocation(loc);
     SetFuncAttributeAndLinkageType(funcDecl, *fn);
@@ -866,9 +860,6 @@ void AST2CHIR::CreateImportedValueSignatureAndSetGlobalCache(const AST::VarDecl&
     if (varDecl.IsConst()) {
         var->EnableAttr(Attribute::CONST);
     }
-    // in cjdb, using expr will generate a wrong AST decl
-    // an AST decl in imported package but without IMPORTED attr
-    var->EnableAttr(Attribute::IMPORTED);
 
     globalCache.Set(varDecl, *var);
 }
