@@ -8,8 +8,11 @@
 #include "cangjie/Macro/MacroEvaluation.h"
 
 #include <algorithm>
+#include <atomic>
+#include <cerrno>
 #include <optional>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 #ifdef __WIN32
@@ -19,9 +22,11 @@
 #ifdef __ohos__
 #include <signal.h>
 #else
+#include <pthread.h>
 #include <sys/signal.h>
 #endif
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 using namespace Cangjie;
@@ -43,17 +48,34 @@ const size_t IDX_OF_CJC_FOLDER = 4;
 const size_t IDX_OF_PPID = 5;
 #if defined(__linux__) || defined(__APPLE__)
 const unsigned int CHECK_INTERVAL = 2;
-static void MonitoringParentProcess(pid_t pid)
+std::atomic_bool parentProcessExited{false};
+
+static void WakeupMainThread(int)
+{
+}
+
+static void RegisterWakeupSignal()
+{
+    struct sigaction sa {};
+    sa.sa_handler = WakeupMainThread;
+    sigemptyset(&sa.sa_mask);
+    (void)sigaction(SIGUSR1, &sa, nullptr);
+}
+
+static void MonitoringParentProcess(pid_t pid, pthread_t mainThread)
 {
     while (true) {
         sleep(CHECK_INTERVAL);
-        if (kill(pid, 0) != 0) {
-            perror("parent process not exits");
-            [[maybe_unused]] std::lock_guard lg(MacroProcMsger::GetInstance().mutex);
-            MacroProcMsger::GetInstance().CloseClientResource();
-            RuntimeInit::GetInstance().CloseRuntime();
-            exit(1);
+        if (kill(pid, 0) == 0 || errno == EPERM || errno == EINTR) {
+            continue;
         }
+        if (errno == ESRCH) {
+            perror("parent process not exits");
+            parentProcessExited.store(true);
+            (void)pthread_kill(mainThread, SIGUSR1);
+            return;
+        }
+        perror("check parent process failed");
     }
 }
 #endif
@@ -144,7 +166,8 @@ int main(int argc, const char* argv[], [[maybe_unused]] const char** envp)
     int hRead = stoi(args[IDX_OF_READ_HANDLE]);
     int hWrite = stoi(args[IDX_OF_WRITE_HANDLE]);
     int ppid = stoi(args[IDX_OF_PPID]);
-    std::thread w(MonitoringParentProcess, ppid);
+    RegisterWakeupSignal();
+    std::thread w(MonitoringParentProcess, ppid, pthread_self());
     w.detach();
 #endif
     if (!CheckPipe(hRead, hWrite)) {
@@ -180,6 +203,9 @@ int main(int argc, const char* argv[], [[maybe_unused]] const char** envp)
 #else
     [[maybe_unused]] std::lock_guard lg(MacroProcMsger::GetInstance().mutex);
     MacroProcMsger::GetInstance().CloseClientResource();
+    if (parentProcessExited.load()) {
+        return 1;
+    }
 #endif
     return 0;
 }
