@@ -100,7 +100,7 @@ void ClearLineInfoAfterSema(Package& pkg)
     }
 }
 
-void IterateTyWithArgs(Ptr<Ty> ty, const std::function<void(Ptr<Ty>)>& func)
+void IterateTyWithArgs(ModalTy ty, const std::function<void(ModalTy)>& func)
 {
     if (!Ty::IsTyCorrect(ty)) {
         return;
@@ -153,7 +153,7 @@ VisitAction TypeCheckerImpl::MarkUsedDecl(Ptr<Decl> decl, unsigned walkerId)
 void TypeCheckerImpl::MarkUsedNode(Ptr<Node> node, unsigned walkerId)
 {
     std::function<VisitAction(Ptr<Node>)> collectUsed = [this, &walkerId, &collectUsed](Ptr<Node> node) -> VisitAction {
-        auto procTy = [&walkerId, &collectUsed](Ptr<Ty> ty) {
+        auto procTy = [&walkerId, &collectUsed](ModalTy ty) {
             if (auto decl = Ty::GetDeclOfTy(ty)) {
                 Walker(decl, walkerId, collectUsed).Walk();
             }
@@ -394,7 +394,7 @@ void AutoBoxing::AddOptionBoxHandleBlock(Block& block, Ty& ty)
     // If the block is empty or end with declaration, the last type is 'Unit',
     // otherwise the last type is the type of last expression.
     auto lastExprOrDecl = block.GetLastExprOrDecl();
-    Ptr<Ty> lastTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT, {});
+    ModalTy lastTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     if (auto expr = DynamicCast<Expr*>(lastExprOrDecl)) {
         lastTy = expr->GetTy();
     }

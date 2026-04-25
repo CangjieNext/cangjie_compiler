@@ -30,8 +30,8 @@ void UpdateInconsistentTypes(
     member.inconsistentTypes.insert(inconsistentTypes.begin(), inconsistentTypes.end());
 }
 
-std::vector<std::unordered_set<Ptr<Ty>>> UpdateUpperBoundsSet(
-    TypeManager& tyMgr, const std::vector<std::unordered_set<Ptr<Ty>>>& upperBounds, const TypeSubst& typeMapping)
+std::vector<std::unordered_set<DataTy>> UpdateUpperBoundsSet(
+    TypeManager& tyMgr, const std::vector<std::unordered_set<DataTy>>& upperBounds, const TypeSubst& typeMapping)
 {
     if (typeMapping.empty() ||
         std::all_of(upperBounds.begin(), upperBounds.end(), [](auto it) { return it.empty(); })) {
@@ -39,9 +39,9 @@ std::vector<std::unordered_set<Ptr<Ty>>> UpdateUpperBoundsSet(
         // All elements in 'upperBounds' are empty, quick quit.
         return upperBounds;
     }
-    std::vector<std::unordered_set<Ptr<Ty>>> allUpperBounds;
+    std::vector<std::unordered_set<DataTy>> allUpperBounds;
     for (const auto& uppers : std::as_const(upperBounds)) {
-        std::unordered_set<Ptr<Ty>> newUppers;
+        std::unordered_set<DataTy> newUppers;
         for (auto it : uppers) {
             newUppers.emplace(tyMgr.GetInstantiatedTy(it, typeMapping));
         }

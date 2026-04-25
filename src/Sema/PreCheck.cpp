@@ -109,8 +109,8 @@ bool IsGenericParamExistInUpperBounds(GenericsTy& gTy, Ty& upper)
         return false;
     }
     CJC_NULLPTR_CHECK(gTy.decl);
-    std::unordered_set<Ptr<Ty>> visited{&gTy};
-    std::queue<Ptr<Ty>> q;
+    std::unordered_set<DataTy> visited{&gTy};
+    std::queue<DataTy> q;
     q.push(&upper);
     while (!q.empty()) {
         auto curTy = q.front();
@@ -175,7 +175,7 @@ void CreateGenericConstraints(Generic& generic)
         auto gc = MakeOwnedNode<GenericConstraint>();
         CopyBasicInfo(&generic, gc.get());
         // Sort upper bound tys. To ensure the compiler added upperBounds are in stable order.
-        std::set<Ptr<Ty>, CmpTyByName> sortedUpperTys;
+        std::set<DataTy, CmpTyByName> sortedUpperTys;
         sortedUpperTys.insert(genericTy->upperBounds.begin(), genericTy->upperBounds.end());
         for (auto& it : sortedUpperTys) {
             auto sub = MakeOwnedNode<RefType>();
@@ -328,7 +328,7 @@ void TypeCheckerImpl::CheckConflictDeclWithSubPackage(const Package& pkg)
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, Ptr<Node> type)
+ModalTy TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, Ptr<Node> type)
 {
     if (type == nullptr) {
         return TypeManager::GetInvalidTy();
@@ -380,7 +380,7 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, Ptr<Node> type)
         }
         case ASTKind::INVALID_TYPE: {
             auto invalidType = StaticAs<ASTKind::INVALID_TYPE>(type);
-            invalidType->SetTy(RawStaticCast<Ty*>(TypeManager::GetInvalidTy()));
+            invalidType->SetTy(TypeManager::GetInvalidTy());
             return invalidType->GetTy();
         }
         case ASTKind::THIS_TYPE:
@@ -392,7 +392,7 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, Ptr<Node> type)
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, RefType& rt)
+ModalTy TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, RefType& rt)
 {
     // If rt.GetTy() is nullptr but rt.GetTarget() is packageDecl, rt is the base of another qualified type and is already
     // resolved.
@@ -460,7 +460,7 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, RefType& rt)
     return TypeManager::GetInvalidTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::GetTyFromASTCFuncType(ASTContext& ctx, RefType& rt)
+ModalTy TypeCheckerImpl::GetTyFromASTCFuncType(ASTContext& ctx, RefType& rt)
 {
     if (rt.typeArguments.size() != 1) {
         diag.DiagnoseRefactor(
@@ -472,19 +472,19 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTCFuncType(ASTContext& ctx, RefType& rt)
         diag.Diagnose(rt.typeArguments[0]->GetBegin(), rt.typeArguments[0]->GetEnd(), "sema_cfunc_type");
         return TypeManager::GetInvalidTy();
     }
-    std::vector<Ptr<Ty>> paramTys;
+    std::vector<ModalTy> paramTys;
     for (size_t i{0}; i < funcType->paramTypes.size(); ++i) {
         auto& param = funcType->paramTypes[i];
         param->SetTy(GetTyFromASTType(ctx, &*param));
         paramTys.push_back(param->GetTy());
     }
     funcType->retType->SetTy(GetTyFromASTType(ctx, funcType->retType.get()));
-    Ptr<Ty> retTy = funcType->retType->GetTy();
+    ModalTy retTy = funcType->retType->GetTy();
     funcType->SetTy(GetTyFromASTType(ctx, funcType));
     return typeManager.GetFunctionTy(std::move(paramTys), retTy, {.isC = true}, rt.modal.ToModalInfo());
 }
 
-Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, QualifiedType& qt)
+ModalTy TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, QualifiedType& qt)
 {
     // If qt.GetTy() is nullptr but qt.GetTarget() is packageDecl, qt is the base of another qualified type and is already
     // resolved.
@@ -539,7 +539,7 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, QualifiedType& qt)
     return qt.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, VArrayType& varrayType)
+ModalTy TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, VArrayType& varrayType)
 {
     varrayType.typeArgument->SetTy(GetTyFromASTType(ctx, varrayType.typeArgument.get()));
     auto expr = StaticAs<ASTKind::CONSTANT_TYPE>(varrayType.constantType.get())->constantExpr.get();
@@ -562,12 +562,12 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, VArrayType& varrayTyp
     return varrayType.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, TupleType& tupleType)
+ModalTy TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, TupleType& tupleType)
 {
     if (!Ty::IsInitialTy(tupleType.GetTy())) {
         return tupleType.GetTy();
     }
-    std::vector<Ptr<Ty>> elemTy;
+    std::vector<DataTy> elemTy;
     for (auto& fieldType : tupleType.fieldTypes) {
         if (!fieldType) {
             return TypeManager::GetInvalidTy();
@@ -582,12 +582,12 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, TupleType& tupleType)
     return tupleType.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, FuncType& funcType)
+ModalTy TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, FuncType& funcType)
 {
     if (!Ty::IsInitialTy(funcType.GetTy())) {
         return funcType.GetTy();
     }
-    std::vector<Ptr<Ty>> paramTys;
+    std::vector<ModalTy> paramTys;
     for (auto& paramType : funcType.paramTypes) {
         if (!paramType) {
             return TypeManager::GetInvalidTy();
@@ -609,7 +609,7 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, FuncType& funcType)
     return funcType.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, OptionType& optionType)
+ModalTy TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, OptionType& optionType)
 {
     if (optionType.componentType) {
         optionType.componentType->SetTy(GetTyFromASTType(ctx, optionType.componentType.get()));
@@ -622,7 +622,7 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, OptionType& optionTyp
     return optionType.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(Decl& decl, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modal)
+ModalTy TypeCheckerImpl::GetTyFromASTType(Decl& decl, const std::vector<DataTy>& typeArgs, ModalInfo modal)
 {
     switch (decl.astKind) {
         case ASTKind::CLASS_DECL: {
@@ -658,8 +658,8 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(Decl& decl, const std::vector<Ptr<Ty>>
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::GetTyFromBuiltinDecl(
-    const BuiltInDecl& bid, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modal)
+ModalTy TypeCheckerImpl::GetTyFromBuiltinDecl(
+    const BuiltInDecl& bid, const std::vector<DataTy>& typeArgs, ModalInfo modal)
 {
     switch (bid.type) {
         case BuiltInType::ARRAY: {
@@ -682,13 +682,13 @@ Ptr<Ty> TypeCheckerImpl::GetTyFromBuiltinDecl(
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::GetBuiltInPointerType(const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modal)
+ModalTy TypeCheckerImpl::GetBuiltInPointerType(const std::vector<DataTy>& typeArgs, ModalInfo modal)
 {
     auto elemTy = typeArgs.empty() ? TypeManager::GetInvalidTy() : typeArgs[0];
     return typeManager.GetPointerTy(elemTy, modal);
 }
 
-Ptr<Ty> TypeCheckerImpl::GetBuiltInArrayType(const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modal)
+ModalTy TypeCheckerImpl::GetBuiltInArrayType(const std::vector<DataTy>& typeArgs, ModalInfo modal)
 {
     if (typeArgs.size() > 1) {
         return TypeManager::GetInvalidTy();
@@ -697,14 +697,14 @@ Ptr<Ty> TypeCheckerImpl::GetBuiltInArrayType(const std::vector<Ptr<Ty>>& typeArg
     return typeManager.GetArrayTy(elemTy, 1, modal);
 }
 
-Ptr<Ty> TypeCheckerImpl::GetBuiltInVArrayType(const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modal)
+ModalTy TypeCheckerImpl::GetBuiltInVArrayType(const std::vector<DataTy>& typeArgs, ModalInfo modal)
 {
     CJC_ASSERT(typeArgs.size() == 1);
     auto elemTy = typeArgs.empty() ? TypeManager::GetInvalidTy() : typeArgs[0];
     return typeManager.GetVArrayTy(*elemTy, 0, modal);
 }
 
-Ptr<AST::Ty> TypeCheckerImpl::GetBuiltinCFuncType(const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modal)
+AST::ModalTy TypeCheckerImpl::GetBuiltinCFuncType(const std::vector<AST::ModalTy>& typeArgs, ModalInfo modal)
 {
     // the return type is CFunc<T>
     CJC_ASSERT(typeArgs.size() == 1 && Ty::IsTyCorrect(typeArgs[0]));
@@ -712,10 +712,10 @@ Ptr<AST::Ty> TypeCheckerImpl::GetBuiltinCFuncType(const std::vector<Ptr<AST::Ty>
         typeArgs, typeArgs[0], {.isC = true, .isClosureTy = false, .hasVariableLenArg = false, .noCast = false}, modal);
 }
 
-std::vector<Ptr<Ty>> TypeCheckerImpl::GetTyFromASTType(
+std::vector<DataTy> TypeCheckerImpl::GetTyFromASTType(
     const std::vector<OwnedPtr<GenericParamDecl>>& typeParameters)
 {
-    std::vector<Ptr<Ty>> typeArgs;
+    std::vector<DataTy> typeArgs;
     for (auto& gpd : typeParameters) {
         if (Ty::IsInitialTy(gpd->GetTy())) {
             gpd->SetTy(GetTyFromASTType(*gpd, {}, {}));
@@ -725,10 +725,10 @@ std::vector<Ptr<Ty>> TypeCheckerImpl::GetTyFromASTType(
     return typeArgs;
 }
 
-std::vector<Ptr<Ty>> TypeCheckerImpl::GetTyFromASTType(
+std::vector<DataTy> TypeCheckerImpl::GetTyFromASTType(
     ASTContext& ctx, std::vector<OwnedPtr<Type>>& typeArguments)
 {
-    std::vector<Ptr<Ty>> typeArgs;
+    std::vector<DataTy> typeArgs;
     for (auto& arg : typeArguments) {
         if (Ty::IsInitialTy(arg->GetTy())) {
             arg->SetTy(GetTyFromASTType(ctx, arg.get()));
@@ -740,7 +740,7 @@ std::vector<Ptr<Ty>> TypeCheckerImpl::GetTyFromASTType(
 
 void TypeCheckerImpl::SetDeclTy(Decl& decl)
 {
-    std::vector<Ptr<Ty>> typeArgs;
+    std::vector<DataTy> typeArgs;
     auto generic = decl.GetGeneric();
     if (generic) {
         typeArgs = GetTyFromASTType(generic->typeParameters);
@@ -839,7 +839,7 @@ void TypeCheckerImpl::ResolveBuiltinDeclMembers(const std::vector<AST::Symbol*>&
             if (!fd->TestAttr(Attribute::CONSTRUCTOR)) {
                 continue;
             }
-            Ptr<Ty> retTy = fd->TestAttr(Attribute::STATIC)
+            DataTy retTy = fd->TestAttr(Attribute::STATIC)
                 ? TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)
                 : bd->GetTy();
             fd->SetTy(typeManager.GetFunctionTy(paramTys, retTy));
@@ -906,7 +906,7 @@ void TypeCheckerImpl::SetTypeTy(ASTContext& ctx, Type& type)
     type.SetTy(GetTyFromASTType(ctx, &type));
     // Set aliasTy for a type reference if refer a type alias. Use to export alias info when export cjo.
     if (auto target = type.GetTarget(); target && target->TyKind() == TypeKind::TYPE) {
-        std::vector<Ptr<Ty>> typeArgs;
+        std::vector<ModalTy> typeArgs;
         for (auto typeArg : type.GetTypeArgs()) {
             typeArgs.emplace_back(typeArg->GetTy());
         }
@@ -987,7 +987,7 @@ void TypeCheckerImpl::ResolveNames(ASTContext& ctx)
 }
 
 bool TypeCheckerImpl::CheckAndReduceUpperBounds(
-    GenericsTy& genericTy, const std::set<Ptr<Ty>>& upperBounds)
+    GenericsTy& genericTy, const std::set<DataTy>& upperBounds)
 {
     if (!Ty::AreTysCorrect(upperBounds)) {
         return false;
@@ -997,8 +997,8 @@ bool TypeCheckerImpl::CheckAndReduceUpperBounds(
     }
     auto joinAndMeet = JoinAndMeet(typeManager, upperBounds);
     auto meetRes = joinAndMeet.MeetAsVisibleTy();
-    if (std::get_if<Ptr<Ty>>(&meetRes)) {
-        auto maxCommonChildTy = std::get<Ptr<Ty>>(meetRes);
+    if (std::get_if<DataTy>(&meetRes)) {
+        auto maxCommonChildTy = std::get<DataTy>(meetRes);
         for (auto& it : upperBounds) {
             if (it != maxCommonChildTy) {
                 genericTy.upperBounds.erase(it);
@@ -1081,7 +1081,7 @@ bool TypeCheckerImpl::CheckUpperBoundsLegalityRecursively(const Ty& upper)
 }
 
 void TypeCheckerImpl::SanityCheckForClassUpperBounds(
-    GenericsTy& genericTy, const std::set<Ptr<Ty>>& classUpperBounds)
+    GenericsTy& genericTy, const std::set<DataTy>& classUpperBounds)
 {
     if (!CheckAndReduceUpperBounds(genericTy, classUpperBounds)) {
         auto diagInfo = Ty::GetTypesToStableStr(classUpperBounds, ", ");
@@ -1095,9 +1095,9 @@ void TypeCheckerImpl::SanityCheckForClassUpperBounds(
 
 void TypeCheckerImpl::SanityCheckForOneGenericTy(GenericsTy& genericTy)
 {
-    std::set<Ptr<Ty>> classUpperBounds;
+    std::set<DataTy> classUpperBounds;
     bool invalidUpperbound = false;
-    std::set<Ptr<Ty>, CmpTyByName> sortedUpperTys;
+    std::set<DataTy, CmpTyByName> sortedUpperTys;
     sortedUpperTys.insert(genericTy.upperBounds.begin(), genericTy.upperBounds.end());
     for (auto& upper : sortedUpperTys) {
         CJC_NULLPTR_CHECK(upper);
@@ -1166,7 +1166,7 @@ void TypeCheckerImpl::ExposeGenericUpperBounds(ASTContext& ctx, const Generic& g
         if (!genericTy) {
             continue;
         }
-        std::set<Ptr<Ty>> exposedUpperBounds(genericTy->upperBounds.begin(), genericTy->upperBounds.end());
+        std::set<DataTy> exposedUpperBounds(genericTy->upperBounds.begin(), genericTy->upperBounds.end());
         std::queue<Ptr<GenericsTy>> q;
         q.push(genericTy);
         std::unordered_set<Ptr<GenericsTy>> visited = {};
@@ -1497,10 +1497,10 @@ void TypeCheckerImpl::AddUpperBoundOnTypeParameters(
             auto uppers = allAssumptionMap[StaticCast<GenericsTy*>(it)];
             constraints.merge(uppers);
         }
-        std::set<Ptr<Ty>> upperBoundsForParam;
+        std::set<DataTy> upperBoundsForParam;
         std::for_each(constraints.begin(), constraints.end(),
             [this, &ctx, &constraintTys, &genericTy, &typeArgAppliedMap, &upperBoundsForParam](auto ty) {
-                Ptr<Ty> instTy = typeManager.GetInstantiatedTy(ty, typeArgAppliedMap);
+                DataTy instTy = typeManager.GetInstantiatedTy(ty, typeArgAppliedMap);
                 if (Ty::IsTyCorrect(instTy)) {
                     upperBoundsForParam.insert(instTy);
                     for (auto it : constraintTys) {
@@ -1902,7 +1902,7 @@ void TypeCheckerImpl::PreSetDeclType(const ASTContext& ctx)
         }
         SetThisParamType(*fd);
         auto paramTys = GetFuncBodyParamTys(*fd->funcBody);
-        Ptr<Ty> retTy = TypeManager::GetQuestTy();
+        DataTy retTy = TypeManager::GetQuestTy();
         if (fd->TestAttr(Attribute::CONSTRUCTOR)) {
             // Static init has return type of unit. Instance init has return type of current typeDecl.
             retTy = fd->TestAttr(Attribute::STATIC)

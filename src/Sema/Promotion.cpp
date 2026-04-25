@@ -34,7 +34,7 @@ MultiTypeSubst Promotion::GetPromoteTypeMapping(Ty& from, Ty& target)
     Utils::EraseIf(prRes, [&target](auto& e) { return e->typeArgs.size() != target.typeArgs.size(); });
     std::for_each(prRes.begin(), prRes.end(), [&target, &mts](auto prResI) {
         for (size_t i = 0; i < target.typeArgs.size(); i++) {
-            if (auto targetGenParam = DynamicCast<GenericsTy*>(target.typeArgs[i])) {
+            if (auto targetGenParam = DynamicCast<GenericsTy*>(target.typeArgs[i].get())) {
                 mts[targetGenParam].emplace(prResI->typeArgs[i]);
             }
         }
@@ -69,7 +69,7 @@ MultiTypeSubst Promotion::GetDowngradeTypeMapping(Ty& target, Ty& upfrom)
 
 // Given C<X> <: D<X>, Promote(C<Bool>, D<_>) will give a promoted singleton set {D<Bool>}.
 // Given C<X> <: D<X> & C<X> <: D<Int64>, Promote(C<Bool>, D<_>) will give a promoted set {D<Bool>, D<Int64>}
-std::set<Ptr<Ty>> Promotion::Promote(Ty& from, Ty& target)
+std::set<ModalTy> Promotion::Promote(Ty& from, Ty& target)
 {
     if (!Ty::IsTyCorrect(&from) || !Ty::IsTyCorrect(&target)) {
         return {};
@@ -79,7 +79,7 @@ std::set<Ptr<Ty>> Promotion::Promote(Ty& from, Ty& target)
     // 2. 'target' is type of 'Any';
     // 3. 'from' is a type which meets CType constraints and 'target' is 'CType';
     // 4. 'from' is a type which meets JType constraints and 'target' is 'JType'.
-    bool useTarget = from.IsNothing() || target.IsAny() || (target.IsCType() && Ty::IsMetCType(from));
+    bool useTarget = from.IsNothing() || target.IsAny() || (target.IsCType() && from.IsMetCType());
     if (useTarget) {
         return {&target};
     }
@@ -98,7 +98,7 @@ std::set<Ptr<Ty>> Promotion::Promote(Ty& from, Ty& target)
     return PromoteHandleNominal(from, target);
 }
 
-std::set<Ptr<AST::Ty>> Promotion::Downgrade(AST::Ty& target, AST::Ty& upfrom)
+std::set<AST::ModalTy> Promotion::Downgrade(AST::Ty& target, AST::Ty& upfrom)
 {
     auto dMaps = GetDowngradeTypeMapping(target, upfrom);
     if (dMaps.size() < target.typeArgs.size()) {
@@ -108,13 +108,13 @@ std::set<Ptr<AST::Ty>> Promotion::Downgrade(AST::Ty& target, AST::Ty& upfrom)
     }
 }
 
-std::set<Ptr<Ty>> Promotion::PromoteHandleTyVar(Ty& from, Ty& target)
+std::set<ModalTy> Promotion::PromoteHandleTyVar(Ty& from, Ty& target)
 {
     if (!from.IsGeneric()) {
         return {};
     }
     auto genericTy = RawStaticCast<GenericsTy*>(&from);
-    for (auto& ty : StaticCast<GenericsTy>(tyMgr.SubstituteModal(genericTy, {}))->upperBounds) {
+    for (auto& ty : StaticCast<GenericsTy>(genericTy)->upperBounds) {
         if (auto res = Promote(*ty, target); !res.empty()) {
             return res;
         }
@@ -122,7 +122,7 @@ std::set<Ptr<Ty>> Promotion::PromoteHandleTyVar(Ty& from, Ty& target)
     return {};
 }
 
-std::set<Ptr<Ty>> Promotion::PromoteHandleIdealTys(Ty& from, Ty& target) const
+std::set<ModalTy> Promotion::PromoteHandleIdealTys(Ty& from, Ty& target) const
 {
     // Caller guarantees the 'from' and 'target' are primitive type.
     if (from.kind == target.kind) {
@@ -138,7 +138,7 @@ std::set<Ptr<Ty>> Promotion::PromoteHandleIdealTys(Ty& from, Ty& target) const
     }
 }
 
-std::set<Ptr<Ty>> Promotion::PromoteHandleFunc(Ty& from, Ty& target)
+std::set<ModalTy> Promotion::PromoteHandleFunc(Ty& from, Ty& target)
 {
     if (tyMgr.IsTyEqual(&from, &target)) {
         return {&from};
@@ -147,7 +147,7 @@ std::set<Ptr<Ty>> Promotion::PromoteHandleFunc(Ty& from, Ty& target)
     }
 }
 
-std::set<Ptr<Ty>> Promotion::PromoteHandleTuple(Ty& from, Ty& target)
+std::set<ModalTy> Promotion::PromoteHandleTuple(Ty& from, Ty& target)
 {
     if (tyMgr.IsTyEqual(&from, &target)) {
         return {&from};
@@ -156,14 +156,14 @@ std::set<Ptr<Ty>> Promotion::PromoteHandleTuple(Ty& from, Ty& target)
     }
 }
 
-std::set<Ptr<Ty>> Promotion::PromoteHandleNominal(Ty& from, const Ty& target)
+std::set<ModalTy> Promotion::PromoteHandleNominal(Ty& from, const Ty& target)
 {
     if (Ty::GetDeclPtrOfTy<InheritableDecl>(&from) == Ty::GetDeclPtrOfTy<InheritableDecl>(&target)) {
         return {&from};
     }
 
     TypeSubst typeMapping;
-    auto emplaceElem = [&from, &typeMapping](const std::vector<Ptr<Ty>>& tyVars) {
+    auto emplaceElem = [&from, &typeMapping](const std::vector<ModalTy>& tyVars) {
         if (tyVars.size() != from.typeArgs.size()) {
             return;
         }
@@ -197,7 +197,7 @@ std::set<Ptr<Ty>> Promotion::PromoteHandleNominal(Ty& from, const Ty& target)
         }
     }
 
-    std::set<Ptr<Ty>> res;
+    std::set<ModalTy> res;
     auto supTys = tyMgr.GetAllSuperTys(from, typeMapping);
     for (auto ty : supTys) {
         auto cly = DynamicCast<ClassLikeTy*>(ty);

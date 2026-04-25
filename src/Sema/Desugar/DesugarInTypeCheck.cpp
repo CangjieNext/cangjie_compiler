@@ -575,7 +575,7 @@ void TypeCheckerImpl::DesugarPointerCall(ASTContext& ctx, CallExpr& ce)
     IgnoreEmptyIntersection(baseArgs);
     // Eg: type A<T> = Pointer<T>; A(v), type arg of this A is not useful.
     bool usefulTypeArg = !typeArgs.empty() && (!typeArgs[0]->IsGeneric() || !baseArgs.empty());
-    Ptr<Ty> argTy = nullptr;
+    DataTy argTy = nullptr;
     if (usefulTypeArg) {
         argTy = typeArgs[0];
     } else if (!baseArgs.empty()) {
@@ -610,7 +610,7 @@ void TypeCheckerImpl::DesugarArrayCall(ASTContext& ctx, CallExpr& ce)
     auto baseArgs = ce.baseFunc->GetTypeArgs();
     IgnoreEmptyIntersection(baseArgs);
     if (auto varrTy = DynamicCast<VArrayTy*>(baseFuncTy); varrTy) {
-        Ptr<Ty> argTy = TypeManager::GetInvalidTy();
+        DataTy argTy = TypeManager::GetInvalidTy();
         if (!typeArgs.empty()) {
             argTy = typeArgs[0];
         }

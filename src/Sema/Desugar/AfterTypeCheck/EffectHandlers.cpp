@@ -977,7 +977,7 @@ void TypeCheckerImpl::DesugarTryToFrame(ASTContext& ctx, TryExpr& te)
 }
 
 OwnedPtr<Expr> TypeCheckerImpl::GetHelperFrameMethod(
-    AST::Node& base, const std::string& methodName, std::vector<Ptr<Ty>> typeArgs)
+    AST::Node& base, const std::string& methodName, std::vector<ModalTy> typeArgs)
 {
     auto frameDecl = importManager.GetImportedDecl<ClassDecl>(EFFECT_INTERNALS_PACKAGE_NAME, CLASS_HANDLER_FRAME);
     CJC_NULLPTR_CHECK(frameDecl);

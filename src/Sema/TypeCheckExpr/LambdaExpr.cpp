@@ -254,7 +254,7 @@ void TypeCheckerImpl::TryInferFromSyntaxInfo(ASTContext& ctx, const AST::LambdaE
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le)
+ModalTy TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le)
 {
     if (le.funcBody == nullptr || le.funcBody->paramLists.empty()) {
         return TypeManager::GetInvalidTy();
@@ -268,7 +268,7 @@ Ptr<Ty> TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le)
     TyVarScope sc(typeManager);
     for (auto& node : le.funcBody->paramLists[0]->params) {
         CJC_NULLPTR_CHECK(node);
-        Ptr<Ty> ty = Synthesize({ctx, SynPos::NONE}, node->type.get());
+        ModalTy ty = Synthesize({ctx, SynPos::NONE}, node->type.get());
         if (Ty::IsTyCorrect(ty)) {
             node->SetTy(ty);
         } else if (ctx.funcArgReachable.count(&le) == 0 && !node->type) {
@@ -281,7 +281,7 @@ Ptr<Ty> TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le)
     }
     TryInferFromSyntaxInfo(ctx, le);
     bool skipSolving = typeManager.GetInnermostUnsolvedTyVars().empty();
-    Ptr<Ty> leTy = nullptr;
+    ModalTy leTy = nullptr;
     {
         DiagSuppressor ds(diag);
         leTy = Synthesize({ctx, SynPos::EXPR_ARG}, le.funcBody.get());
@@ -324,7 +324,7 @@ bool TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, Ty& target, LambdaExpr& le)
         (void)ReplaceIdealTy(le);
         return Ty::IsTyCorrect(le.GetTy());
     }
-    Ptr<Ty> targetTy = TypeCheckUtil::UnboxOptionType(&target);
+    ModalTy targetTy = TypeCheckUtil::UnboxOptionType(&target);
     if (!Ty::IsTyCorrect(targetTy) || !targetTy->IsFunc()) {
         auto ds = DiagSuppressor(diag);
         auto synTy = Synthesize({ctx, SynPos::EXPR_ARG}, &le);
@@ -339,7 +339,7 @@ bool TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, Ty& target, LambdaExpr& le)
     { // Suppress errors if check lambda failed. Only report when type check succeed.
         auto ds = DiagSuppressor(diag);
         auto tgtTy = StaticCast<FuncTy*>(targetTy);
-        std::vector<Ptr<Ty>> lamParamTys;
+        std::vector<ModalTy> lamParamTys;
         // Check arguments' types against parameters' types.
         bool paramsMatched = ChkLamParamTys(ctx, le, tgtTy->paramTys, lamParamTys);
         // In the check mode, a lambda's return type is explicitly given.
@@ -381,7 +381,7 @@ bool TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, Ty& target, LambdaExpr& le)
 }
 
 bool TypeCheckerImpl::ChkLamParamTys(
-    ASTContext& ctx, LambdaExpr& le, const std::vector<Ptr<AST::Ty>>& tgtParamTys, std::vector<Ptr<Ty>>& lamParamTys)
+    ASTContext& ctx, LambdaExpr& le, const std::vector<AST::ModalTy>& tgtParamTys, std::vector<ModalTy>& lamParamTys)
 {
     CJC_ASSERT(le.funcBody && !le.funcBody->paramLists.empty());
     if (le.funcBody->paramLists[0]->params.size() != tgtParamTys.size()) {
@@ -393,7 +393,7 @@ bool TypeCheckerImpl::ChkLamParamTys(
     size_t i = 0;
     for (auto& node : le.funcBody->paramLists[0]->params) {
         CJC_NULLPTR_CHECK(node);
-        Ptr<Ty> paramTy = tgtParamTys[i]; // Caller guarantees the 'paramTy' is valid.
+        ModalTy paramTy = tgtParamTys[i]; // Caller guarantees the 'paramTy' is valid.
         if (!Check(ctx, paramTy, node.get())) {
             le.SetTy(TypeManager::GetInvalidTy());
             return false;

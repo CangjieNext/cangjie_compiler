@@ -10,6 +10,9 @@
 #include "cangjie/AST/Nodes/Expr.h"
 
 namespace Cangjie::AST {
+struct VarDecl;
+struct Block;
+
 /**
  * A spawn expression node.
  */
@@ -23,6 +26,7 @@ struct SpawnExpr : Expr {
     SpawnExpr() : Expr(ASTKind::SPAWN_EXPR)
     {
     }
+    ~SpawnExpr();
 };
 
 /**
@@ -37,6 +41,7 @@ struct SynchronizedExpr : Expr {
     SynchronizedExpr() : Expr(ASTKind::SYNCHRONIZED_EXPR)
     {
     }
+    ~SynchronizedExpr();
 };
 } // namespace Cangjie::AST
 

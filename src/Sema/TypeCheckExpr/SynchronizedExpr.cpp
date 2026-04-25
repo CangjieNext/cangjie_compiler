@@ -11,13 +11,13 @@
 using namespace Cangjie;
 using namespace AST;
 
-Ptr<Ty> TypeCheckerImpl::SynSyncExpr(ASTContext& ctx, SynchronizedExpr& se)
+ModalTy TypeCheckerImpl::SynSyncExpr(ASTContext& ctx, SynchronizedExpr& se)
 {
     ChkSyncExpr(ctx, nullptr, se);
     return se.GetTy();
 }
 
-bool TypeCheckerImpl::ChkSyncExpr(ASTContext& ctx, Ptr<Ty> tgtTy, SynchronizedExpr& se)
+bool TypeCheckerImpl::ChkSyncExpr(ASTContext& ctx, ModalTy tgtTy, SynchronizedExpr& se)
 {
     bool isWellTyped = true;
     auto lockDecl = importManager.GetSyncDecl("Lock");

@@ -21,7 +21,7 @@ static bool IsNonConstructorMemberFunc(const AST::FuncDecl* func)
         !func->TestAttr(AST::Attribute::ENUM_CONSTRUCTOR) && func->IsMemberDecl();
 }
 
-std::vector<Type*> Translator::TranslateASTTypes(const std::vector<Ptr<AST::Ty>>& genericInfos)
+std::vector<Type*> Translator::TranslateASTTypes(const std::vector<AST::ModalTy>& genericInfos)
 {
     std::vector<Type*> ts;
     for (auto& genericInfo : genericInfos) {

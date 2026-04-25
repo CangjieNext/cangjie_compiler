@@ -60,7 +60,7 @@ void ExpandToAPILevel(MacroInvocation& invocation)
     expandedDecl->annotations.emplace_back(std::move(apilevelAnno));
 }
 
-bool IsSameType(Ptr<Type> lt, Ptr<Ty> rty);
+bool IsSameType(Ptr<Type> lt, ModalTy rty);
 // Only extend's extendedType or class/struct/enum/interface/extend's inheritedType can be in.
 bool IsSameType(Ptr<Type> lt, Ptr<Type> rt)
 {
@@ -125,7 +125,7 @@ bool IsSameType(Ptr<Type> lt, Ptr<Type> rt)
     return true;
 }
 
-bool IsSameType(Ptr<Type> lt, Ptr<Ty> rty)
+bool IsSameType(Ptr<Type> lt, ModalTy rty)
 {
     switch (lt->astKind) {
         case ASTKind::REF_TYPE: {

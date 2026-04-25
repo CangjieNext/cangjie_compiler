@@ -56,7 +56,7 @@ void CopyNodeWithFileID(Ptr<Node> ret, Ptr<const Node> e)
     CopyFileID(ret, e);
 }
 
-OwnedPtr<Expr> CreateUnitExpr(Ptr<Ty> ty)
+OwnedPtr<Expr> CreateUnitExpr(DataTy ty)
 {
     OwnedPtr<LitConstExpr> ret = MakeOwned<LitConstExpr>();
     ret->kind = LitConstKind::UNIT;
@@ -145,7 +145,7 @@ OwnedPtr<ForInExpr> CreateForInExpr(
     return ret;
 }
 
-OwnedPtr<AssignExpr> CreateAssignExpr(OwnedPtr<Expr> leftValue, OwnedPtr<Expr> rightExpr, Ptr<Ty> ty)
+OwnedPtr<AssignExpr> CreateAssignExpr(OwnedPtr<Expr> leftValue, OwnedPtr<Expr> rightExpr, DataTy ty)
 {
     auto ret = MakeOwned<AssignExpr>();
     CJC_NULLPTR_CHECK(leftValue);
@@ -161,7 +161,7 @@ OwnedPtr<AssignExpr> CreateAssignExpr(OwnedPtr<Expr> leftValue, OwnedPtr<Expr> r
     return ret;
 }
 
-OwnedPtr<FuncArg> CreateFuncArg(OwnedPtr<Expr> expr, const std::string& argName, Ptr<Ty> ty)
+OwnedPtr<FuncArg> CreateFuncArg(OwnedPtr<Expr> expr, const std::string& argName, ModalTy ty)
 {
     auto ret = MakeOwned<FuncArg>();
     CJC_NULLPTR_CHECK(expr);
@@ -178,7 +178,7 @@ OwnedPtr<FuncArg> CreateFuncArg(OwnedPtr<Expr> expr, const std::string& argName,
     }
     ret->name = argName;
     ret->EnableAttr(Attribute::COMPILER_ADD);
-    ret->SetTy(Ty::IsTyCorrect(ty) ? ty : ret->expr->GetTy());
+    ret->SetTy(ty.IsCorrect() ? ty : ret->expr->GetTy());
     return ret;
 }
 
@@ -217,7 +217,7 @@ OwnedPtr<FuncParam> CreateFuncParamForOptional(const FuncParam& param)
     return pa;
 }
 
-OwnedPtr<FuncDecl> CreateFuncDecl(const std::string& funcName, OwnedPtr<FuncBody> body, Ptr<Ty> ty)
+OwnedPtr<FuncDecl> CreateFuncDecl(const std::string& funcName, OwnedPtr<FuncBody> body, ModalTy ty)
 {
     auto ret = MakeOwned<FuncDecl>();
     ret->identifier = funcName;
@@ -235,7 +235,7 @@ OwnedPtr<FuncDecl> CreateFuncDecl(const std::string& funcName, OwnedPtr<FuncBody
 }
 
 OwnedPtr<FuncBody> CreateFuncBody(std::vector<OwnedPtr<FuncParamList>> paramLists,
-    OwnedPtr<AST::Type> retType, OwnedPtr<Block> body, Ptr<Ty> ty)
+    OwnedPtr<AST::Type> retType, OwnedPtr<Block> body, DataTy ty)
 {
     auto ret = MakeOwned<FuncBody>();
     ret->paramLists = std::move(paramLists);
@@ -252,7 +252,7 @@ OwnedPtr<FuncBody> CreateFuncBody(std::vector<OwnedPtr<FuncParamList>> paramList
 }
 
 OwnedPtr<FuncParam> CreateFuncParam(
-    const std::string& paramName, OwnedPtr<AST::Type> paramType, OwnedPtr<Expr> paramValue, Ptr<Ty> ty)
+    const std::string& paramName, OwnedPtr<AST::Type> paramType, OwnedPtr<Expr> paramValue, ModalTy ty)
 {
     auto ret = MakeOwned<FuncParam>();
     ret->identifier = paramName;
@@ -285,7 +285,7 @@ OwnedPtr<FuncParamList> CreateFuncParamList(std::vector<Ptr<FuncParam>> params, 
     return ret;
 }
 
-OwnedPtr<Block> CreateBlock(std::vector<OwnedPtr<Node>> nodes, Ptr<Ty> ty)
+OwnedPtr<Block> CreateBlock(std::vector<OwnedPtr<Node>> nodes, ModalTy ty)
 {
     auto ret = MakeOwned<Block>();
     nodes.erase(std::remove_if(nodes.begin(), nodes.end(), [](auto& e) { return e == nullptr; }), nodes.end());
@@ -298,7 +298,7 @@ OwnedPtr<Block> CreateBlock(std::vector<OwnedPtr<Node>> nodes, Ptr<Ty> ty)
         }
     }
     ret->EnableAttr(Attribute::COMPILER_ADD);
-    if (Ty::IsTyCorrect(ty)) {
+    if (ty.IsCorrect()) {
         ret->SetTy(ty);
     }
     return ret;
@@ -326,7 +326,7 @@ OwnedPtr<VarDecl> CreateTmpVarDecl(Ptr<Type> type, Ptr<Expr> initializer)
     return CreateVarDecl(tmpVarName, ASTCloner::Clone(initializer), type);
 }
 
-OwnedPtr<VarPattern> CreateVarPattern(const std::string& varName, Ptr<AST::Ty> ty)
+OwnedPtr<VarPattern> CreateVarPattern(const std::string& varName, AST::DataTy ty)
 {
     auto v = MakeOwned<VarPattern>();
     v->varDecl = MakeOwned<VarDecl>();
@@ -341,7 +341,7 @@ OwnedPtr<VarPattern> CreateVarPattern(const std::string& varName, Ptr<AST::Ty> t
     return v;
 }
 
-OwnedPtr<RefExpr> CreateRefExpr(const SrcIdentifier& id, Ptr<Ty> ty, const Position& pos, std::vector<Ptr<Type>> args)
+OwnedPtr<RefExpr> CreateRefExpr(const SrcIdentifier& id, ModalTy ty, const Position& pos, std::vector<Ptr<Type>> args)
 {
     auto ret = MakeOwned<RefExpr>();
     ret->ref.identifier = id;
@@ -413,17 +413,17 @@ OwnedPtr<RefType> CreateRefType(const std::string& refName, std::vector<Ptr<Type
     return ret;
 }
 
-OwnedPtr<RefType> CreateRefType(InheritableDecl& typeDecl, Ptr<Ty> instantTy)
+OwnedPtr<RefType> CreateRefType(InheritableDecl& typeDecl, ModalTy instantTy)
 {
     auto ret = MakeOwned<RefType>();
     ret->ref.identifier = typeDecl.identifier;
     ret->SetTarget(&typeDecl);
-    ret->SetTy(instantTy ? instantTy : typeDecl.GetTy());
+    ret->SetTy(instantTy);
     ret->EnableAttr(Attribute::COMPILER_ADD);
     return ret;
 }
 
-OwnedPtr<ArrayLit> CreateArrayLit(std::vector<OwnedPtr<Expr>> elements, Ptr<Ty> ty)
+OwnedPtr<ArrayLit> CreateArrayLit(std::vector<OwnedPtr<Expr>> elements, ModalTy ty)
 {
     auto ret = MakeOwned<ArrayLit>();
     auto arrayType = DynamicCast<StructTy*>(ty);
@@ -537,7 +537,7 @@ OwnedPtr<MatchCase> CreateMatchCase(OwnedPtr<Pattern> pattern, OwnedPtr<Expr> ex
 }
 
 OwnedPtr<MatchExpr> CreateMatchExpr(OwnedPtr<Expr> selector,
-    std::vector<OwnedPtr<MatchCase>> matchCases, Ptr<Ty> ty, Expr::SugarKind sugarKind)
+    std::vector<OwnedPtr<MatchCase>> matchCases, ModalTy ty, Expr::SugarKind sugarKind)
 {
     auto matchExpr = MakeOwned<MatchExpr>();
     matchExpr->EnableAttr(Attribute::COMPILER_ADD);
@@ -549,7 +549,7 @@ OwnedPtr<MatchExpr> CreateMatchExpr(OwnedPtr<Expr> selector,
     return matchExpr;
 }
 
-OwnedPtr<LitConstExpr> CreateLitConstExpr(LitConstKind kind, const std::string& val, Ptr<Ty> ty, bool needToMakeRef)
+OwnedPtr<LitConstExpr> CreateLitConstExpr(LitConstKind kind, const std::string& val, ModalTy ty, bool needToMakeRef)
 {
     auto ret = MakeOwned<LitConstExpr>();
     ret->kind = kind;
@@ -590,7 +590,7 @@ OwnedPtr<LitConstExpr> CreateLitConstExpr(LitConstKind kind, const std::string& 
     return ret;
 }
 
-OwnedPtr<TupleLit> CreateTupleLit(std::vector<OwnedPtr<Expr>> elements, Ptr<Ty> ty)
+OwnedPtr<TupleLit> CreateTupleLit(std::vector<OwnedPtr<Expr>> elements, ModalTy ty)
 {
     auto ret = MakeOwned<TupleLit>();
     auto tupleType = DynamicCast<TupleTy*>(ty);
@@ -601,7 +601,7 @@ OwnedPtr<TupleLit> CreateTupleLit(std::vector<OwnedPtr<Expr>> elements, Ptr<Ty> 
 }
 
 OwnedPtr<CallExpr> CreateCallExpr(OwnedPtr<Expr> funcExpr,
-    std::vector<OwnedPtr<FuncArg>> args, Ptr<FuncDecl> resolvedFunc, Ptr<Ty> ty, CallKind callTy)
+    std::vector<OwnedPtr<FuncArg>> args, Ptr<FuncDecl> resolvedFunc, ModalTy ty, CallKind callTy)
 {
     auto ret = MakeOwned<CallExpr>();
     CJC_NULLPTR_CHECK(funcExpr);
@@ -644,7 +644,7 @@ OwnedPtr<LambdaExpr> CreateLambdaExpr(OwnedPtr<FuncBody> funcBody)
     return ret;
 }
 
-OwnedPtr<FuncParamList> CreateFuncParamList(std::vector<OwnedPtr<FuncParam>> params, Ptr<Ty> ty)
+OwnedPtr<FuncParamList> CreateFuncParamList(std::vector<OwnedPtr<FuncParam>> params, ModalTy ty)
 {
     auto ret = MakeOwned<FuncParamList>();
     ret->params = std::move(params);
@@ -655,7 +655,7 @@ OwnedPtr<FuncParamList> CreateFuncParamList(std::vector<OwnedPtr<FuncParam>> par
 }
 
 OwnedPtr<IfExpr> CreateIfExpr(
-    OwnedPtr<Expr> condExpr, OwnedPtr<Block> body, OwnedPtr<Block> elseBody, Ptr<Ty> semaType)
+    OwnedPtr<Expr> condExpr, OwnedPtr<Block> body, OwnedPtr<Block> elseBody, ModalTy semaType)
 {
     auto ret = MakeOwned<IfExpr>();
     ret->condExpr = std::move(condExpr);
@@ -674,9 +674,9 @@ OwnedPtr<IfExpr> CreateIfExpr(
 OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index)
 {
     auto elem = MakeOwned<SubscriptExpr>();
-    if (auto type = DynamicCast<TupleTy*>(expr->GetTy())) {
+    if (auto type = DynamicCast<TupleTy*>(expr->GetDataTy())) {
         elem->isTupleAccess = true;
-        elem->SetTy(type->typeArgs[index]);
+        elem->SetTy({type->typeArgs[index], expr->TyMode()});
         elem->baseExpr = std::move(expr);
         elem->indexExprs.emplace_back(MakeOwned<LitConstExpr>(LitConstKind::INTEGER, std::to_string(index)));
         elem->indexExprs[0]->constNumValue.asInt.SetUint64(index);
@@ -710,7 +710,7 @@ OwnedPtr<TypePattern> CreateTypePattern(
     OwnedPtr<Pattern> && pattern, OwnedPtr<Type> && type, Expr& selector
 )
 {
-    Ptr<Ty> ty = type->GetTy();
+    DataTy ty = type->GetDataTy();
     CJC_NULLPTR_CHECK(ty);
     CJC_NULLPTR_CHECK(selector.GetTy());
     auto typePattern = MakeOwned<TypePattern>();

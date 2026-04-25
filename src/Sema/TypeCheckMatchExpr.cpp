@@ -42,8 +42,8 @@ const std::unordered_map<ASTKind, std::string> PATTERN_ASTKIND_TO_STRING_MAP = {
     {ASTKind::ENUM_PATTERN, "enum"},
 };
 
-void CheckMatchExprSetTy(MatchExpr& me, Ptr<Ty> target, TypeManager& typeManager, ImportManager& impMgr,
-    const std::set<Ptr<Ty>>& matchCaseTys)
+void CheckMatchExprSetTy(MatchExpr& me, ModalTy target, TypeManager& typeManager, ImportManager& impMgr,
+    const std::set<ModalTy>& matchCaseTys)
 {
     // If any of branch equal to the target type, do not join branches' types (avoiding unexpected common supertype).
     if (matchCaseTys.find(target) != matchCaseTys.end()) {
@@ -52,12 +52,12 @@ void CheckMatchExprSetTy(MatchExpr& me, Ptr<Ty> target, TypeManager& typeManager
     }
     auto joinAndMeet = JoinAndMeet(typeManager, matchCaseTys, {}, &impMgr, me.curFile);
     auto joinRes = joinAndMeet.JoinAsVisibleTy();
-    me.SetTy(std::get_if<Ptr<Ty>>(&joinRes) ? std::get<Ptr<Ty>>(joinRes) : target);
+    me.SetTy(std::get_if<ModalTy>(&joinRes) ? std::get<ModalTy>(joinRes) : target);
 }
 } // namespace
 
 namespace Cangjie {
-Ptr<Ty> TypeCheckerImpl::SynMatchExpr(ASTContext& ctx, MatchExpr& me)
+ModalTy TypeCheckerImpl::SynMatchExpr(ASTContext& ctx, MatchExpr& me)
 {
     if (me.selector) {
         return SynMatchExprHasSelector(ctx, me);
@@ -73,7 +73,7 @@ bool TypeCheckerImpl::ChkMatchExpr(ASTContext& ctx, Ty& target, MatchExpr& me)
     return ChkMatchExprNoSelector(ctx, target, me);
 }
 
-Ptr<Ty> TypeCheckerImpl::SynMatchExprHasSelector(ASTContext& ctx, MatchExpr& me)
+ModalTy TypeCheckerImpl::SynMatchExprHasSelector(ASTContext& ctx, MatchExpr& me)
 {
     // Synthesize selector's ty.
     CJC_NULLPTR_CHECK(me.selector);
@@ -89,9 +89,9 @@ Ptr<Ty> TypeCheckerImpl::SynMatchExprHasSelector(ASTContext& ctx, MatchExpr& me)
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::SynNormalMatchCaseBody(ASTContext& ctx, MatchExpr& me)
+ModalTy TypeCheckerImpl::SynNormalMatchCaseBody(ASTContext& ctx, MatchExpr& me)
 {
-    std::set<Ptr<Ty>> matchCaseTyVec;
+    std::set<ModalTy> matchCaseTyVec;
     CJC_NULLPTR_CHECK(me.selector);
     auto selectorTy = me.selector->GetTy();
     bool isMatchCorrect = !me.matchCases.empty();
@@ -150,7 +150,7 @@ Ptr<Ty> TypeCheckerImpl::SynNormalMatchCaseBody(ASTContext& ctx, MatchExpr& me)
     return me.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::SynQuestSugarMatchCaseBody(ASTContext& ctx, MatchExpr& me)
+ModalTy TypeCheckerImpl::SynQuestSugarMatchCaseBody(ASTContext& ctx, MatchExpr& me)
 {
     auto selectorTy = me.selector->GetTy();
     if (!Ty::IsTyCorrect(selectorTy)) {
@@ -187,9 +187,9 @@ Ptr<Ty> TypeCheckerImpl::SynQuestSugarMatchCaseBody(ASTContext& ctx, MatchExpr& 
     return me.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::SynMatchExprNoSelector(ASTContext& ctx, MatchExpr& me)
+ModalTy TypeCheckerImpl::SynMatchExprNoSelector(ASTContext& ctx, MatchExpr& me)
 {
-    std::set<Ptr<Ty>> matchCaseTyVec;
+    std::set<ModalTy> matchCaseTyVec;
     bool hasInvalidCase = false;
     for (auto& mco : me.matchCaseOthers) {
         if (!Ty::IsTyCorrect(SynMatchCaseNoSelector(ctx, *mco))) {
@@ -224,7 +224,7 @@ Ptr<Ty> TypeCheckerImpl::SynMatchExprNoSelector(ASTContext& ctx, MatchExpr& me)
 bool TypeCheckerImpl::ChkMatchExprHasSelector(ASTContext& ctx, AST::Ty& target, AST::MatchExpr& me)
 {
     CJC_NULLPTR_CHECK(me.selector);
-    std::set<Ptr<Ty>> matchCaseTyVec;
+    std::set<ModalTy> matchCaseTyVec;
     bool isMatchCorrect =
         Synthesize({ctx, SynPos::EXPR_ARG}, me.selector.get()) && ReplaceIdealTy(*me.selector);
     auto selectorTy = me.selector->GetTy();
@@ -262,7 +262,7 @@ bool TypeCheckerImpl::ChkMatchExprHasSelector(ASTContext& ctx, AST::Ty& target, 
 bool TypeCheckerImpl::ChkMatchExprNoSelector(ASTContext& ctx, AST::Ty& target, AST::MatchExpr& me)
 {
     bool isWellTyped = true;
-    std::set<Ptr<Ty>> matchCaseTyVec;
+    std::set<ModalTy> matchCaseTyVec;
     for (auto& mco : me.matchCaseOthers) {
         if (!ChkMatchCaseNoSelector(ctx, target, *mco)) {
             isWellTyped = false;
@@ -282,7 +282,7 @@ bool TypeCheckerImpl::ChkMatchExprNoSelector(ASTContext& ctx, AST::Ty& target, A
     return isWellTyped;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynMatchCaseNoSelector(ASTContext& ctx, MatchCaseOther& mco)
+ModalTy TypeCheckerImpl::SynMatchCaseNoSelector(ASTContext& ctx, MatchCaseOther& mco)
 {
     // Type of patternGuard (matchExpr) is boolean.
     if (Is<WildcardExpr>(mco.matchExpr.get())) {
@@ -302,13 +302,13 @@ bool TypeCheckerImpl::ChkMatchCasePatGuard(ASTContext& ctx, const MatchCase& mc)
 {
     bool ret = true;
     if (mc.patternGuard) {
-        Ptr<Ty> boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
+        ModalTy boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
         ret = Check(ctx, boolTy, mc.patternGuard.get());
     }
     return ret;
 }
 
-bool TypeCheckerImpl::ChkMatchCaseActions(ASTContext& ctx, Ptr<Ty> target, MatchCase& mc)
+bool TypeCheckerImpl::ChkMatchCaseActions(ASTContext& ctx, ModalTy target, MatchCase& mc)
 {
     bool ret = true;
     if (!mc.exprOrDecls) {
@@ -399,7 +399,7 @@ bool TypeCheckerImpl::ChkPatternsSameASTKind(const ASTContext& ctx, const std::v
     return true;
 }
 
-bool TypeCheckerImpl::ChkMatchCasePatterns(ASTContext& ctx, Ptr<Ty> target, MatchCase& mc)
+bool TypeCheckerImpl::ChkMatchCasePatterns(ASTContext& ctx, ModalTy target, MatchCase& mc)
 {
     if (!ChkNoVarPatternInOrPattern(ctx, mc.patterns) || !ChkPatternsSameASTKind(ctx, mc.patterns)) {
         for (auto& pattern : mc.patterns) {

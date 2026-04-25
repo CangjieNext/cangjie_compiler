@@ -14,7 +14,7 @@ using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
 
-bool TypeCheckerImpl::CheckRangeElements(ASTContext& ctx, Ptr<Ty> elemTy, const RangeExpr& re)
+bool TypeCheckerImpl::CheckRangeElements(ASTContext& ctx, ModalTy elemTy, const RangeExpr& re)
 {
     bool isWellTyped = !re.startExpr || Check(ctx, elemTy, re.startExpr.get());
     isWellTyped = (!re.stopExpr || Check(ctx, elemTy, re.stopExpr.get())) && isWellTyped;
@@ -25,7 +25,7 @@ bool TypeCheckerImpl::CheckRangeElements(ASTContext& ctx, Ptr<Ty> elemTy, const 
             diag.Diagnose(re, "sema_inconsistency_range_elemType");
         }
     }
-    if (isWellTyped && !CheckGenericDeclInstantiation(re.decl, std::vector<Ptr<Ty>>{elemTy}, re)) {
+    if (isWellTyped && !CheckGenericDeclInstantiation(re.decl, std::vector<ModalTy>{elemTy}, re)) {
         isWellTyped = false;
     }
     if (re.stepExpr) {
@@ -65,7 +65,7 @@ bool TypeCheckerImpl::ChkRangeExpr(ASTContext& ctx, Ty& target, RangeExpr& re)
         return isWellTyped;
     };
 
-    Ptr<Ty> targetTy = TypeCheckUtil::UnboxOptionType(&target);
+    ModalTy targetTy = TypeCheckUtil::UnboxOptionType(&target);
     bool isWellTyped = Ty::IsTyCorrect(targetTy) && (targetTy->IsStruct() || targetTy->IsInterface());
     if (!isWellTyped) {
         (void)synAndCheckRangeTy();
@@ -99,14 +99,14 @@ bool TypeCheckerImpl::ChkRangeExpr(ASTContext& ctx, Ty& target, RangeExpr& re)
     return isWellTyped;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynRangeExpr(ASTContext& ctx, RangeExpr& re)
+ModalTy TypeCheckerImpl::SynRangeExpr(ASTContext& ctx, RangeExpr& re)
 {
     re.SetTy(TypeManager::GetInvalidTy()); // Set type invalid first, will be updated if check passed.
     re.decl = importManager.GetCoreDecl<StructDecl>("Range");
     if (!re.decl) {
         return re.GetTy();
     }
-    Ptr<Ty> elemTy = SynRangeExprInferElemTy(re, ctx);
+    ModalTy elemTy = SynRangeExprInferElemTy(re, ctx);
 
     if (Ty::IsTyCorrect(elemTy) && elemTy->IsIdeal() && elemTy->IsInteger()) {
         elemTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
@@ -119,17 +119,17 @@ Ptr<Ty> TypeCheckerImpl::SynRangeExpr(ASTContext& ctx, RangeExpr& re)
     return re.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::SynRangeExprInferElemTy(const RangeExpr& re, ASTContext& ctx)
+ModalTy TypeCheckerImpl::SynRangeExprInferElemTy(const RangeExpr& re, ASTContext& ctx)
 {
     // If type of startExpr is Nothing or startExpr is litconst when only one of start/stop is litconst,
     // using type of stopExpr or default Int64 type.
-    Ptr<Ty> startTy =
+    ModalTy startTy =
         re.startExpr ? Synthesize({ctx, SynPos::EXPR_ARG}, re.startExpr.get()) : TypeManager::GetInvalidTy();
     bool useStartLit = !Is<LitConstExpr>(re.startExpr.get()) || Is<LitConstExpr>(re.stopExpr.get());
     if (Ty::IsTyCorrect(startTy) && !startTy->IsNothing() && useStartLit) {
         return startTy;
     }
-    Ptr<Ty> stopTy =
+    ModalTy stopTy =
         re.stopExpr ? Synthesize({ctx, SynPos::EXPR_ARG}, re.stopExpr.get()) : TypeManager::GetInvalidTy();
     if (Ty::IsTyCorrect(stopTy) && !stopTy->IsNothing()) {
         return stopTy;

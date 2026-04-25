@@ -36,8 +36,8 @@ bool StructInheritanceChecker::IsBuiltInOperatorFuncInExtend(
     auto fd = RawStaticCast<const FuncDecl*>(member.decl);
     auto funcTy = RawStaticCast<FuncTy*>(member.GetTy());
     auto iFuncRetTy = funcTy->retTy;
-    const std::vector<Ptr<Ty>>& paramTys = funcTy->paramTys;
-    Ptr<Ty> thisTy = ed->extendedType->GetTy();
+    const std::vector<ModalTy>& paramTys = funcTy->paramTys;
+    ModalTy thisTy = ed->extendedType->GetTy();
     if (paramTys.size() == 1 && thisTy && paramTys[0] && IsBuiltinBinaryExpr(fd->op, *thisTy, *paramTys[0])) {
         TypeKind returnTyKind = GetBuiltinBinaryExprReturnKind(fd->op, thisTy->kind);
         auto expectedRetTy = TypeManager::GetPrimitiveTy(returnTyKind);
@@ -112,7 +112,7 @@ void StructInheritanceChecker::CreateBuiltInUnaryOperatorFunc(TokenKind op, Exte
 }
 
 void StructInheritanceChecker::CreateBuiltInBinaryOperatorFunc(
-    TokenKind op, Ptr<Ty> rightTy, ExtendDecl& ed, TypeKind returnTyKind) const
+    TokenKind op, ModalTy rightTy, ExtendDecl& ed, TypeKind returnTyKind) const
 {
     auto retTy = TypeManager::GetPrimitiveTy(returnTyKind);
     auto nothingTy = TypeManager::GetNothingTy();

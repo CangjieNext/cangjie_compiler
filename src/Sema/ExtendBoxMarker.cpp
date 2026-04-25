@@ -60,7 +60,7 @@ std::function<VisitAction(Ptr<Node>)> ExtendBoxMarker::GetMarkExtendBoxFunc(Type
     return markerFunc;
 }
 
-bool ExtendBoxMarker::NeedAutoBox(Ptr<Ty> child, Ptr<Ty> interface, bool isUpcast)
+bool ExtendBoxMarker::NeedAutoBox(ModalTy child, ModalTy interface, bool isUpcast)
 {
     CJC_ASSERT(typeManager);
     CJC_NULLPTR_CHECK(child);
@@ -83,7 +83,7 @@ bool ExtendBoxMarker::NeedAutoBox(Ptr<Ty> child, Ptr<Ty> interface, bool isUpcas
 void ExtendBoxMarker::CheckBlockNeedBox(const Block& block, Ty& ty, Node& nodeToCheck)
 {
     auto lastExpr = block.GetLastExprOrDecl();
-    Ptr<Ty> lastTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT, {});
+    DataTy lastTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     if (auto expr = DynamicCast<Expr*>(lastExpr); expr) {
         lastTy = expr->GetTy();
     }
@@ -106,28 +106,6 @@ VisitAction ExtendBoxMarker::MarkBoxPointHandleArrayExpr(ArrayExpr& ae)
             ae.EnableAttr(Attribute::NEED_AUTO_BOX);
         }
         return VisitAction::WALK_CHILDREN;
-    }
-    // For 'RawArray(size, item: T)' constructor may need auto box.
-    if (ae.args.size() > 1) {
-        if (NeedAutoBox(ae.args[1]->GetTy(), typeManager->GetTypeArgs(*ae.GetTy())[0])) {
-            ae.EnableAttr(Attribute::NEED_AUTO_BOX);
-        }
-        return VisitAction::WALK_CHILDREN;
-    }
-    // For 'RawArray(Collection)' constructor may need auto box.
-    Ptr<Ty> argTy = ae.args[0]->GetTy();
-    if (!Ty::IsTyCorrect(argTy)) {
-        return VisitAction::WALK_CHILDREN;
-    }
-    auto iface = DynamicCast<InterfaceTy*>(argTy.get());
-    if (!iface || !iface->decl || iface->decl->identifier != "Collection") {
-        return VisitAction::WALK_CHILDREN;
-    }
-    Ptr<InterfaceDecl> collDecl = iface->GetGenericTy() ? iface->GetGenericTy()->decl : iface->decl;
-    auto eleTy = typeManager->GetTypeArgs(*ae.GetTy())[0];
-    Ptr<Ty> expectedColl = typeManager->GetInterfaceTy(*collDecl, {eleTy}, argTy->Modal());
-    if (NeedAutoBox(argTy, expectedColl)) {
-        ae.EnableAttr(Attribute::NEED_AUTO_BOX);
     }
     return VisitAction::WALK_CHILDREN;
 }

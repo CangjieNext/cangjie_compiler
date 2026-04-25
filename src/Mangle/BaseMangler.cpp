@@ -311,7 +311,7 @@ std::string BaseMangler::MangleGenericArgumentsHelper(const Decl& decl, std::vec
     bool declare, bool isCollectGTy) const
 {
     std::string mangled;
-    std::vector<Ptr<Ty>> args;
+    std::vector<ModalTy> args;
 
     if (decl.GetTy() && !decl.GetTy()->IsFunc()) {
         args = decl.GetTy()->typeArgs;

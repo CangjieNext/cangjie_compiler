@@ -580,7 +580,7 @@ void TypeCheckerImpl::FindEnumPatternTarget(ASTContext& ctx, Ptr<EnumDecl> ed, E
     }
 }
 
-bool TypeCheckerImpl::ChkTryWildcardPattern(Ptr<Ty> target, WildcardPattern& p, std::vector<Ptr<Ty>>& included)
+bool TypeCheckerImpl::ChkTryWildcardPattern(ModalTy target, WildcardPattern& p, std::vector<ModalTy>& included)
 {
     p.SetTy(target);
     if (auto classTy = DynamicCast<ClassTy*>(target); classTy) {
@@ -591,10 +591,10 @@ bool TypeCheckerImpl::ChkTryWildcardPattern(Ptr<Ty> target, WildcardPattern& p, 
     return true;
 }
 
-bool TypeCheckerImpl::ChkExceptTypePattern(ASTContext& ctx, ExceptTypePattern& etp, std::vector<Ptr<Ty>>& included)
+bool TypeCheckerImpl::ChkExceptTypePattern(ASTContext& ctx, ExceptTypePattern& etp, std::vector<ModalTy>& included)
 {
     bool result = true;
-    std::set<Ptr<Ty>> typeTys;
+    std::set<ModalTy> typeTys;
     auto exception = importManager.GetCoreDecl<ClassDecl>(CLASS_EXCEPTION);
     auto error = importManager.GetCoreDecl<ClassDecl>(CLASS_ERROR);
     bool foundClass = exception && error;
@@ -608,7 +608,7 @@ bool TypeCheckerImpl::ChkExceptTypePattern(ASTContext& ctx, ExceptTypePattern& e
             result = false;
             continue;
         }
-        if (Utils::In(included, [this, &type](Ptr<Ty> ty) { return typeManager.IsSubtype(type->GetTy(), ty); })) {
+        if (Utils::In(included, [this, &type](ModalTy ty) { return typeManager.IsSubtype(type->GetTy(), ty); })) {
             diag.Diagnose(*type, "sema_useless_exception_type");
         } else {
             included.emplace_back(type->GetTy());
@@ -630,7 +630,7 @@ bool TypeCheckerImpl::ChkExceptTypePattern(ASTContext& ctx, ExceptTypePattern& e
     return Check(ctx, etp.GetTy(), etp.pattern.get());
 }
 
-bool TypeCheckerImpl::ChkHandlePatterns(ASTContext& ctx, Handler& h, std::vector<Ptr<Ty>>& included)
+bool TypeCheckerImpl::ChkHandlePatterns(ASTContext& ctx, Handler& h, std::vector<ModalTy>& included)
 {
     auto& ctp = *StaticAs<ASTKind::COMMAND_TYPE_PATTERN>(h.commandPattern.get());
     CJC_ASSERT(ctp.types.size() >= 1);
@@ -644,18 +644,18 @@ bool TypeCheckerImpl::ChkHandlePatterns(ASTContext& ctx, Handler& h, std::vector
     return Check(ctx, ctp.GetTy(), ctp.pattern.get());
 }
 
-std::optional<Ptr<Ty>> TypeCheckerImpl::ChkCommandTypePattern(
-    ASTContext& ctx, CommandTypePattern& ctp, std::vector<Ptr<Ty>>& included)
+std::optional<ModalTy> TypeCheckerImpl::ChkCommandTypePattern(
+    ASTContext& ctx, CommandTypePattern& ctp, std::vector<ModalTy>& included)
 {
     CJC_ASSERT(ctp.types.size() == 1);
     bool result = true;
-    std::set<Ptr<Ty>> typeTys;
+    std::set<ModalTy> typeTys;
     auto command = importManager.GetImportedDecl(EFFECT_PACKAGE_NAME, CLASS_COMMAND);
     if (!command) {
         diag.DiagnoseRefactor("sema_command_handle_type_error", *ctp.types[0]);
         return {};
     }
-    std::optional<Ptr<Ty>> cmdTypeAsCommand;
+    std::optional<ModalTy> cmdTypeAsCommand;
     CJC_ASSERT(ctp.types.size() == 1);
     auto cmdTypePat = ctp.types[0].get();
     CJC_NULLPTR_CHECK(cmdTypePat);
@@ -669,7 +669,7 @@ std::optional<Ptr<Ty>> TypeCheckerImpl::ChkCommandTypePattern(
         return {};
     }
     CJC_ASSERT(prCTys.size() == 1);
-    if (Utils::In(included, [this, &cmdTypePat](Ty* ty) { return typeManager.IsSubtype(cmdTypePat->GetTy(), ty); })) {
+    if (Utils::In(included, [this, &cmdTypePat](ModalTy ty) { return typeManager.IsSubtype(cmdTypePat->GetTy(), ty); })) {
         diag.DiagnoseRefactor("sema_useless_command_type", *cmdTypePat);
     } else {
         included.emplace_back(cmdTypePat->GetTy());

@@ -84,7 +84,7 @@ void DiagInvalidUnaryExprWithTarget(DiagnosticEngine& diag, const UnaryExpr& ue,
 }
 
 void DiagInvalidSubscriptExpr(
-    DiagnosticEngine& diag, const SubscriptExpr& se, const Ty& baseTy, const std::vector<Ptr<Ty>>& indexTys)
+    DiagnosticEngine& diag, const SubscriptExpr& se, const Ty& baseTy, const std::vector<ModalTy>& indexTys)
 {
     if (!se.ShouldDiagnose()) {
         return;

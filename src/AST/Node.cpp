@@ -29,10 +29,12 @@
 #include "cangjie/AST/Nodes/FeatureId.h"
 #include "cangjie/AST/Nodes/File.h"
 #include "cangjie/AST/Nodes/FuncArg.h"
+#include "cangjie/AST/Nodes/IfExpr.h"
 #include "cangjie/AST/Nodes/MacroInvocation.h"
 #include "cangjie/AST/Nodes/MatchExpr.h"
 #include "cangjie/AST/Nodes/MemberAccess.h"
 #include "cangjie/AST/Nodes/Pattern.h"
+#include "cangjie/AST/Nodes/SpawnExpr.h"
 #include "cangjie/AST/RecoverDesugar.h"
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/AST/Types.h"
@@ -784,7 +786,7 @@ std::set<Ptr<InterfaceTy>> InheritableDecl::GetSuperInterfaceTys() const
     std::set<Ptr<InterfaceTy>> ret;
     for (auto& types : inheritedTypes) {
         if (types && types->GetTy() && types->TyKind() == TypeKind::TYPE_INTERFACE) {
-            ret.insert(RawStaticCast<InterfaceTy*>(types->GetTy()));
+            ret.insert(RawStaticCast<InterfaceTy*>(types->GetDataTy()));
         }
     }
     return ret;
@@ -797,7 +799,7 @@ std::vector<Ptr<InterfaceTy>> InheritableDecl::GetStableSuperInterfaceTys() cons
     std::set<Ptr<InterfaceTy>, decltype(cmp)> ret(cmp);
     for (auto& types : inheritedTypes) {
         if (types && types->GetTy() && types->TyKind() == TypeKind::TYPE_INTERFACE) {
-            ret.emplace(RawStaticCast<InterfaceTy*>(types->GetTy()));
+            ret.emplace(RawStaticCast<InterfaceTy*>(types->GetDataTy()));
         }
     }
     return std::vector<Ptr<InterfaceTy>>(ret.begin(), ret.end());
@@ -817,11 +819,11 @@ std::vector<Ptr<ClassLikeDecl>> InheritableDecl::GetAllSuperDecls()
         auto curDecl = workList.front();
         workList.pop();
         for (auto& it : curDecl->inheritedTypes) {
-            if (auto clsTy = DynamicCast<ClassTy*>(it->GetTy()); clsTy && visited.count(clsTy->declPtr) == 0) {
+            if (auto clsTy = DynamicCast<ClassTy*>(it->GetDataTy()); clsTy && visited.count(clsTy->declPtr) == 0) {
                 workList.push(clsTy->declPtr);
                 visited.emplace(clsTy->declPtr);
                 ret.emplace_back(clsTy->declPtr);
-            } else if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy());
+            } else if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetDataTy());
                        interfaceTy && visited.count(interfaceTy->declPtr) == 0) {
                 workList.push(interfaceTy->declPtr);
                 visited.emplace(interfaceTy->declPtr);
@@ -1606,7 +1608,7 @@ bool ExtendDecl::IsExportedDecl() const
             }
         }
     }
-    auto extendedDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(GetTy());
+    auto extendedDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(GetDataTy());
     bool isInSamePkg = extendedDecl && extendedDecl->fullPackageName == fullPackageName;
     auto isUpperBoundExport = [this]() {
         bool isUpperboundAllExported = true;
@@ -1673,7 +1675,7 @@ bool PropDecl::IsExportedDecl() const
         return Decl::IsExportedDecl();
     }
     auto extend = StaticCast<ExtendDecl>(outerDecl);
-    auto extendedDecl = Ty::GetDeclPtrOfTy(extend->GetTy());
+    auto extendedDecl = Ty::GetDeclPtrOfTy(extend->GetDataTy());
     // If extend and extended decleration in same package, all member of extend will be exported.
     if (!extendedDecl || extendedDecl->fullPackageName == extend->fullPackageName) {
         return Decl::IsExportedDecl();
@@ -1691,7 +1693,7 @@ bool FuncDecl::IsExportedDecl() const
         return Decl::IsExportedDecl();
     }
     auto extend = StaticCast<ExtendDecl>(outerDecl);
-    auto extendedDecl = Ty::GetDeclPtrOfTy(extend->GetTy());
+    auto extendedDecl = Ty::GetDeclPtrOfTy(extend->GetDataTy());
     // If extend and extended decleration in same package, all member of extend will be exported.
     if (!extendedDecl || extendedDecl->fullPackageName == extend->fullPackageName) {
         return Decl::IsExportedDecl();
@@ -1871,6 +1873,11 @@ std::string PrimitiveTypeExpr::ToString() const
 {
     return Ty::KindName(typeKind);
 }
+
+SpawnExpr::~SpawnExpr() = default;
+SynchronizedExpr::~SynchronizedExpr() = default;
+IfExpr::~IfExpr() = default;
+LetPatternDestructor::~LetPatternDestructor() = default;
 
 bool CompNodeByPos(Ptr<const Node> n1, Ptr<const Node> n2)
 {

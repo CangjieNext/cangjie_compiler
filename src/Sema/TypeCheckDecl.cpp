@@ -170,11 +170,11 @@ void TypeCheckerImpl::CheckOperatorOverloadFunc(const FuncDecl& fd)
     if (!Ty::IsTyCorrect(funcTy) || fd.op == TokenKind::ILLEGAL || fd.op == TokenKind::LPAREN) {
         return;
     }
-    Ptr<Ty> baseTy = (fd.outerDecl != nullptr) ? fd.outerDecl->GetTy() : nullptr;
+    DataTy baseTy = (fd.outerDecl != nullptr) ? fd.outerDecl->GetDataTy() : nullptr;
     if (fd.op == TokenKind::LSQUARE) {
         return HandIndexOperatorOverload(fd, *funcTy);
     }
-    const std::vector<Ptr<Ty>>& paramTys = funcTy->paramTys;
+    const std::vector<ModalTy>& paramTys = funcTy->paramTys;
     switch (paramTys.size()) {
         case 0: { // If the size of paramsTy is 0.
             // Unary operators.
@@ -524,7 +524,7 @@ void TypeCheckerImpl::CheckEnumFuncDeclIsCStructParam(const FuncDecl& funcDecl)
     }
     for (auto& it : funcDecl.funcBody->paramLists[0]->params) {
         // String type is special, we should solve this after.
-        if (it->GetTy() && Ty::IsCStructType(*it->GetTy())) {
+        if (it->GetTy() && it->GetTy()->IsCStructType()) {
             auto structTy = RawStaticCast<StructTy*>(it->GetTy());
             CJC_ASSERT(structTy && structTy->declPtr);
             if (structTy->declPtr->identifier != "String" && funcDecl.outerDecl) {
@@ -544,7 +544,7 @@ void TypeCheckerImpl::SetEnumEleTyHandleFuncDecl(FuncDecl& funcDecl)
     }
     // EnumDecl's func constructor must be 'CtorName(Type1, Type2...)'.
     // The target and type of parameters should be checked in 'ResolveName' stage.
-    std::vector<Ptr<Ty>> paramTys;
+    std::vector<ModalTy> paramTys;
     for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
         if (!param->type) {
             continue;
@@ -589,7 +589,7 @@ void TypeCheckerImpl::CheckStructDecl(ASTContext& ctx, StructDecl& sd)
             (void)diag.Diagnose(sd, "sema_type_implement_non_interface", "struct", sd.identifier.Val());
         }
     }
-    if (sd.GetTy() && Ty::IsCStructType(*sd.GetTy())) {
+    if (sd.GetTy() && sd.GetTy()->IsCStructType()) {
         if (sd.generic) {
             (void)diag.Diagnose(
                 *sd.generic, sd.generic->leftAnglePos, "sema_cffi_cannot_have_type_param", "struct with @C");
@@ -611,7 +611,7 @@ void TypeCheckerImpl::CheckStructDecl(ASTContext& ctx, StructDecl& sd)
 }
 
 void TypeCheckerImpl::GetRevTypeMapping(
-    std::vector<Ptr<Ty>>& params, std::vector<Ptr<Ty>>& args, MultiTypeSubst& revTyMap)
+    std::vector<ModalTy>& params, std::vector<ModalTy>& args, MultiTypeSubst& revTyMap)
 {
     if (args.size() != params.size()) {
         return;
@@ -689,9 +689,9 @@ void TypeCheckerImpl::CheckTypeAliasAccess(const TypeAliasDecl& tad)
 }
 
 namespace {
-std::unordered_set<Ptr<Ty>> GetTyArgsRecursive(Ty& ty)
+std::unordered_set<ModalTy> GetTyArgsRecursive(Ty& ty)
 {
-    std::unordered_set<Ptr<Ty>> tyArgSet;
+    std::unordered_set<ModalTy> tyArgSet;
     if (!Ty::IsTyCorrect(&ty)) {
         return tyArgSet;
     }
@@ -703,13 +703,13 @@ std::unordered_set<Ptr<Ty>> GetTyArgsRecursive(Ty& ty)
 }
 } // namespace
 
-std::vector<Ptr<Ty>> TypeCheckerImpl::GetUnusedTysInTypeAlias(const TypeAliasDecl& tad) const
+std::vector<DataTy> TypeCheckerImpl::GetUnusedTysInTypeAlias(const TypeAliasDecl& tad) const
 {
-    std::vector<Ptr<Ty>> diffs;
+    std::vector<DataTy> diffs;
     if (!tad.generic || !tad.type || Ty::IsInitialTy(tad.type->GetTy())) {
         return diffs;
     }
-    std::vector<Ptr<Ty>> declTys; // Use vector to keep defined order.
+    std::vector<DataTy> declTys; // Use vector to keep defined order.
     for (auto& param : tad.generic->typeParameters) {
         declTys.emplace_back(param->GetTy());
     }
@@ -735,7 +735,7 @@ void TypeCheckerImpl::CheckTypeAlias(ASTContext& ctx, TypeAliasDecl& tad)
     CheckTypeAliasAccess(tad);
     // Check type parameters which are not used
     if (tad.generic) {
-        std::vector<Ptr<Ty>> diffs = GetUnusedTysInTypeAlias(tad);
+        std::vector<DataTy> diffs = GetUnusedTysInTypeAlias(tad);
         if (!diffs.empty()) {
             diag.Diagnose(tad, "typealias_unused_type_parameters", Ty::GetTypesToStr(diffs, ","));
         }
@@ -746,7 +746,7 @@ void TypeCheckerImpl::CheckTypeAlias(ASTContext& ctx, TypeAliasDecl& tad)
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::SynFuncParam(ASTContext& ctx, FuncParam& fp)
+ModalTy TypeCheckerImpl::SynFuncParam(ASTContext& ctx, FuncParam& fp)
 {
     if (!fp.type && !Ty::IsTyCorrect(fp.GetTy())) {
         return TypeManager::GetInvalidTy();
@@ -768,7 +768,7 @@ Ptr<Ty> TypeCheckerImpl::SynFuncParam(ASTContext& ctx, FuncParam& fp)
     return fp.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::SynThisParam(ASTContext& ctx, ThisParam& tp)
+ModalTy TypeCheckerImpl::SynThisParam(ASTContext& ctx, ThisParam& tp)
 {
     auto cl = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, tp.scopeName);
     if (!cl || !cl->node->GetTy()) {
@@ -776,7 +776,7 @@ Ptr<Ty> TypeCheckerImpl::SynThisParam(ASTContext& ctx, ThisParam& tp)
         return tp.GetTy();
     }
     auto modalInfo = tp.modal.ToModalInfo();
-    Ptr<Ty> ty = cl->node->GetTy();
+    ModalTy ty = cl->node->GetTy();
     switch (ty->kind) {
         case TypeKind::TYPE_CLASS: {
             auto* classTy = StaticCast<ClassTy>(ty.get());

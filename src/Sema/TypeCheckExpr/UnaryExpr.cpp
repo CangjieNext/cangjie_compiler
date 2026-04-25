@@ -74,7 +74,7 @@ void TypeCheckerImpl::DiagnoseForUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::SynUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
+ModalTy TypeCheckerImpl::SynUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
 {
     if (ue.desugarExpr) {
         return ue.desugarExpr->GetTy();
@@ -101,7 +101,7 @@ Ptr<Ty> TypeCheckerImpl::SynUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
     return ue.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::SynBuiltinUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
+ModalTy TypeCheckerImpl::SynBuiltinUnaryExpr(ASTContext& ctx, UnaryExpr& ue)
 {
     auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, ue.expr.get());
     if (!Ty::IsTyCorrect(ty)) {
@@ -140,7 +140,7 @@ bool TypeCheckerImpl::ChkUnaryExpr(ASTContext& ctx, Ty& target, UnaryExpr& ue)
     bool isWellTyped = true;
     // If the 'target' is correct type, 'unboxedTy' must also be correct;
     auto unboxedTy = TypeCheckUtil::UnboxOptionType(&target);
-    Ptr<Ty> retTy = nullptr;
+    ModalTy retTy = nullptr;
     // If 'unboxedTy' is builtin type, we need to use this type checking with expression for ideal literal,
     // otherwise only only check type relation here for possible type boxing relation.
     if (unboxedTy->IsBuiltin()) {

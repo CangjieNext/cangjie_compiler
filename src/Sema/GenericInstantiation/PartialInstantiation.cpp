@@ -1810,7 +1810,7 @@ OwnedPtr<Node> PartialInstantiation::InstantiateWithRearrange(Ptr<Node> node, co
     return targetNode;
 }
 
-Ptr<Ty> TyGeneralizer::Generalize(Ty& ty)
+ModalTy TyGeneralizer::Generalize(Ty& ty)
 {
     if (typeMapping.empty()) {
         return &ty;
@@ -1820,18 +1820,18 @@ Ptr<Ty> TyGeneralizer::Generalize(Ty& ty)
     }
     switch (ty.kind) {
         case TypeKind::TYPE_FUNC: {
-            std::vector<Ptr<Ty>> paramTys;
+            std::vector<ModalTy> paramTys;
             auto& funcTy = static_cast<FuncTy&>(ty);
             for (auto& it : funcTy.paramTys) {
-                paramTys.push_back(Generalize(it));
+                paramTys.emplace_back(Generalize(it));
             }
             auto retType = Generalize(funcTy.retTy);
-            Ptr<Ty> ret = tyMgr.GetFunctionTy(
+            ModalTy ret = tyMgr.GetFunctionTy(
                 paramTys, retType, {funcTy.IsCFunc(), funcTy.isClosureTy, funcTy.hasVariableLenArg});
             return ret;
         }
         case TypeKind::TYPE_TUPLE: {
-            std::vector<Ptr<Ty>> typeArgs;
+            std::vector<ModalTy> typeArgs;
             std::transform(ty.typeArgs.begin(), ty.typeArgs.end(), std::back_inserter(typeArgs),
                 [this](auto it) { return Generalize(it); });
             return tyMgr.GetTupleTy(typeArgs, static_cast<TupleTy&>(ty).isClosureTy);
@@ -1849,7 +1849,7 @@ Ptr<Ty> TyGeneralizer::Generalize(Ty& ty)
         case TypeKind::TYPE_ENUM:
             return GetGeneralizedEnumTy(static_cast<EnumTy&>(ty));
         case TypeKind::TYPE: {
-            std::vector<Ptr<Ty>> typeArgs;
+            std::vector<DataTy> typeArgs;
             for (auto& it : ty.typeArgs) {
                 typeArgs.push_back(Generalize(it));
             }
@@ -1864,13 +1864,13 @@ Ptr<Ty> TyGeneralizer::Generalize(Ty& ty)
     return &ty;
 }
 
-Ptr<Ty> TyGeneralizer::GetGeneralizedStructTy(StructTy& structTy)
+ModalTy TyGeneralizer::GetGeneralizedStructTy(StructTy& structTy)
 {
     // If is a struct without generic parameter, no need do instantiation.
     if (!structTy.declPtr || !structTy.declPtr->generic) {
         return &structTy;
     }
-    std::vector<Ptr<Ty>> typeArgs;
+    std::vector<DataTy> typeArgs;
     // Build type arguments.
     for (auto& it : structTy.typeArgs) {
         typeArgs.push_back(Generalize(it));
@@ -1879,12 +1879,12 @@ Ptr<Ty> TyGeneralizer::GetGeneralizedStructTy(StructTy& structTy)
     return recTy;
 }
 
-Ptr<Ty> TyGeneralizer::GetGeneralizedClassTy(ClassTy& classTy)
+ModalTy TyGeneralizer::GetGeneralizedClassTy(ClassTy& classTy)
 {
     if (!classTy.declPtr || !classTy.declPtr->generic) {
         return &classTy;
     }
-    std::vector<Ptr<Ty>> typeArgs;
+    std::vector<DataTy> typeArgs;
     for (auto& it : classTy.typeArgs) {
         typeArgs.push_back(Generalize(it));
     }
@@ -1897,12 +1897,12 @@ Ptr<Ty> TyGeneralizer::GetGeneralizedClassTy(ClassTy& classTy)
     return insTy;
 }
 
-Ptr<Ty> TyGeneralizer::GetGeneralizedInterfaceTy(InterfaceTy& interfaceTy)
+ModalTy TyGeneralizer::GetGeneralizedInterfaceTy(InterfaceTy& interfaceTy)
 {
     if (!interfaceTy.declPtr || !interfaceTy.declPtr->generic) {
         return &interfaceTy;
     }
-    std::vector<Ptr<Ty>> typeArgs;
+    std::vector<DataTy> typeArgs;
     for (auto& it : interfaceTy.typeArgs) {
         typeArgs.push_back(Generalize(it));
     }
@@ -1910,13 +1910,13 @@ Ptr<Ty> TyGeneralizer::GetGeneralizedInterfaceTy(InterfaceTy& interfaceTy)
     return insTy;
 }
 
-Ptr<Ty> TyGeneralizer::GetGeneralizedEnumTy(EnumTy& enumTy)
+ModalTy TyGeneralizer::GetGeneralizedEnumTy(EnumTy& enumTy)
 {
     // If is an enum without generic parameter, no need to do instantiation.
     if (!enumTy.declPtr || !enumTy.declPtr->generic) {
         return &enumTy;
     }
-    std::vector<Ptr<Ty>> typeArgs;
+    std::vector<DataTy> typeArgs;
     // Build type arguments.
     for (auto& it : enumTy.typeArgs) {
         typeArgs.push_back(Generalize(it));
@@ -1929,7 +1929,7 @@ Ptr<Ty> TyGeneralizer::GetGeneralizedEnumTy(EnumTy& enumTy)
     return tmp;
 }
 
-Ptr<Ty> TyGeneralizer::GetGeneralizedArrayTy(ArrayTy& arrayTy)
+ModalTy TyGeneralizer::GetGeneralizedArrayTy(ArrayTy& arrayTy)
 {
     if (arrayTy.typeArgs.empty()) {
         return &arrayTy;
@@ -1939,7 +1939,7 @@ Ptr<Ty> TyGeneralizer::GetGeneralizedArrayTy(ArrayTy& arrayTy)
     return tyMgr.GetArrayTy(elemTy, dims, arrayTy.Modal());
 }
 
-Ptr<Ty> TyGeneralizer::GetGeneralizedPointerTy(PointerTy& cptrTy)
+ModalTy TyGeneralizer::GetGeneralizedPointerTy(PointerTy& cptrTy)
 {
     if (cptrTy.typeArgs.empty()) {
         return &cptrTy;
@@ -1949,9 +1949,9 @@ Ptr<Ty> TyGeneralizer::GetGeneralizedPointerTy(PointerTy& cptrTy)
 }
 
 // Get instantiated ty of set type 'IntersectionTy' and 'UnionTy'.
-template <typename SetTy> Ptr<Ty> TyGeneralizer::GetGeneralizedSetTy(SetTy& ty)
+template <typename SetTy> ModalTy TyGeneralizer::GetGeneralizedSetTy(SetTy& ty)
 {
-    std::set<Ptr<Ty>> tys;
+    std::set<ModalTy> tys;
     for (auto it : ty.tys) {
         tys.emplace(Generalize(it));
     }

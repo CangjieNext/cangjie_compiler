@@ -72,7 +72,7 @@ void TypeCheckerImpl::CheckOptionType(ASTContext& ctx, const OptionType& ot)
     }
 }
 
-std::tuple<bool, std::string> TypeCheckerImpl::CheckVArrayWithRefType(Ty& ty, std::unordered_set<Ptr<Ty>>& traversedTy)
+std::tuple<bool, std::string> TypeCheckerImpl::CheckVArrayWithRefType(Ty& ty, std::unordered_set<ModalTy>& traversedTy)
 {
     if (ty.IsStructArray() || ty.IsClassLike() || ty.IsArray() || ty.IsEnum() || ty.IsGeneric() ||
         (ty.IsFunc() && !ty.IsCFunc())) {
@@ -118,7 +118,7 @@ void TypeCheckerImpl::CheckVArrayType(ASTContext& ctx, const VArrayType& vt)
     if (!Ty::IsTyCorrect(typeArgTy)) {
         return;
     }
-    std::unordered_set<Ptr<Ty>> traversedTy = {};
+    std::unordered_set<ModalTy> traversedTy = {};
     auto [isReferenceType, type] = CheckVArrayWithRefType(*typeArgTy, traversedTy);
     if (isReferenceType) {
         auto builder = diag.DiagnoseRefactor(
@@ -209,7 +209,7 @@ void TypeCheckerImpl::CheckRefTypeWithRealTarget(RefType& rt)
         return;
     }
     if (auto aliasTarget = DynamicCast<TypeAliasDecl*>(target)) {
-        std::vector<Ptr<Ty>> diffs = GetUnusedTysInTypeAlias(*aliasTarget);
+        std::vector<DataTy> diffs = GetUnusedTysInTypeAlias(*aliasTarget);
         Utils::EraseIf(typeArgs, [&diffs](auto type) { return Utils::In(type->GetTy(), diffs); });
     }
     if (!CheckGenericDeclInstantiation(realTarget, typeArgs, rt)) {
@@ -315,7 +315,7 @@ void TypeCheckerImpl::CheckTupleType(ASTContext& ctx, TupleType& tt)
     for (auto& it : tt.fieldTypes) {
         CJC_NULLPTR_CHECK(it);
         Synthesize({ctx, SynPos::NONE}, it.get());
-        if (it->GetTy() && Ty::IsCTypeConstraint(*it->GetTy())) {
+        if (it->GetTy() && it->GetTy()->IsCTypeConstraint()) {
             diag.Diagnose(*it, "sema_invalid_tuple_field_ctype");
             return;
         }
@@ -343,7 +343,7 @@ void TypeCheckerImpl::CheckFuncType(ASTContext& ctx, FuncType& ft)
 
 void TypeCheckerImpl::CheckCFuncReturnType(const Type& type)
 {
-    if (!Ty::IsMetCType(*type.GetTy())) {
+    if (!type.GetTy()->IsMetCType()) {
         auto builder = diag.DiagnoseRefactor("sema_invalid_cfunc_return_type", type);
         builder.AddNote("return type is " + type.GetTy()->String());
     } else if (Is<VArrayTy>(type.GetTy())) {

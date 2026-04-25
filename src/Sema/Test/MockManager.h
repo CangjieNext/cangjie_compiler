@@ -44,8 +44,8 @@ public:
         AST::File& curFile, TypeManager& typeMgr, ImportManager& importMgr);
     static OwnedPtr<AST::CallExpr> CreateInitCallOfMockClass(
         AST::ClassDecl& mockClass, std::vector<OwnedPtr<AST::FuncArg>>& mockCallArgs,
-        TypeManager& typeManager, const std::vector<Ptr<AST::Ty>> instTys,
-        const std::vector<Ptr<AST::Ty>> valueParamTys);
+        TypeManager& typeManager, const std::vector<AST::DataTy> instTys,
+        const std::vector<AST::DataTy> valueParamTys);
     static bool IsMockCall(const AST::CallExpr& ce);
     static bool IsMockClass(const AST::Decl& decl);
     static MockKind GetMockKind(const AST::CallExpr& ce);
@@ -53,7 +53,7 @@ public:
 
 private:
     static OwnedPtr<AST::VarDecl> CreateFieldDecl(
-        AST::ClassLikeDecl& decl, const std::string& identifier, const Ptr<AST::Ty> ty, const AST::Package& curPkg
+        AST::ClassLikeDecl& decl, const std::string& identifier, const AST::ModalTy ty, const AST::Package& curPkg
     );
 
     TypeManager& typeManager;
@@ -91,22 +91,22 @@ private:
     void AddMockedInterface(AST::ClassDecl& mockedDecl, AST::VarDecl& handlerFieldDecl);
 
     OwnedPtr<AST::MatchExpr> CreateTypeCastForOnCallReturnValue(
-        OwnedPtr<AST::Expr> exprToCast, const Ptr<AST::Ty> castTy
+        OwnedPtr<AST::Expr> exprToCast, const AST::ModalTy castTy
     ) const;
     OwnedPtr<AST::AssignExpr> CreateMemberAssignment(
         AST::VarDecl& member, OwnedPtr<AST::Expr> rhsExpr, AST::ModalInfo modal) const;
 
     OwnedPtr<AST::MatchCase> CreateOnCallReturnZeroMatchCase(
-        const AST::FuncDecl& originalFunc, const Ptr<AST::Ty> zeroValueTy, AST::Decl& enumConstructor) const;
+        const AST::FuncDecl& originalFunc, const AST::ModalTy zeroValueTy, AST::Decl& enumConstructor) const;
     OwnedPtr<AST::MatchCase> CreateOnCallReturnMatchCase(
-        const AST::FuncDecl& originalFunc, const Ptr<AST::Ty> retTy, AST::Decl& enumConstructor) const;
+        const AST::FuncDecl& originalFunc, const AST::ModalTy retTy, AST::Decl& enumConstructor) const;
     OwnedPtr<AST::MatchCase> CreateOnCallThrowMatchCase(
         const AST::FuncDecl& originalFunc, AST::Decl& enumConstructor) const;
     OwnedPtr<AST::MatchCase> CreateOnCallCallBaseMatchCase(
         AST::FuncDecl& originalFunc, const AST::FuncDecl& mockedFunc, AST::Decl& enumConstructor) const;
     OwnedPtr<AST::MatchCase> CreateOnCallReturnDefaultMatchCase(
-        const AST::FuncDecl& originalFunc, const Ptr<AST::Ty> retTy, AST::Decl& enumConstructor);
-    Ptr<AST::FuncDecl> FindDefaultValueForStubMethod(const Ptr<AST::Ty> retTy) const;
+        const AST::FuncDecl& originalFunc, const AST::ModalTy retTy, AST::Decl& enumConstructor);
+    Ptr<AST::FuncDecl> FindDefaultValueForStubMethod(const AST::DataTy retTy) const;
     OwnedPtr<AST::MatchCase> CreateOnCallResultMatchCase(
         AST::FuncDecl& originalFunc, const Ptr<AST::FuncDecl> mockedFunc, AST::Decl& enumConstructor);
     OwnedPtr<AST::FuncDecl> CreateEmptyConstructorDecl(

@@ -111,7 +111,7 @@ AnnoCheckMap& GetAnnoCheckMap()
 
 bool IsZeroSizedTy(const Ty& ty)
 {
-    std::unordered_set<const Ty*> traversesCache;
+    std::unordered_set<const Ptr<Ty>> traversesCache;
     std::function<bool(const Ty& ty)> isZeroSizedTy = [&isZeroSizedTy, &traversesCache](const Ty& ty) {
         if (ty.IsUnitOrNothing()) {
             return true;
@@ -224,14 +224,14 @@ void TypeCheckerImpl::CheckCTypeMember(const Decl& decl)
         !Ty::IsTyCorrect(decl.outerDecl->GetTy())) {
         return;
     }
-    if (Ty::IsCStructType(*decl.outerDecl->GetTy())) {
+    if (decl.outerDecl->GetTy()->IsCStructType()) {
         const auto& vd = StaticCast<const VarDecl&>(decl);
         if (vd.GetTy()->IsUnit()) {
             diag.Diagnose(vd.identifier.Begin(), vd.type ? vd.type->end : vd.identifier.End(),
                 "sema_cstruct_cannot_have_unit_fields", vd.identifier.Val());
             return;
         }
-        if (Ty::IsMetCType(*vd.GetTy())) {
+        if (vd.GetTy()->IsMetCType()) {
             return;
         }
         diag.Diagnose(vd.identifier.Begin(), vd.type ? vd.type->end : vd.identifier.End(),
@@ -267,7 +267,7 @@ void TypeCheckerImpl::CheckLegalityOfUnsafeAndInout(Node& root)
             // it's wrong and will be diagnosed in the previous stage.
             if (fa.withInout && Ty::IsTyCorrect(fa.expr->GetTy()) &&
                 Utils::In(fa.expr->astKind, {ASTKind::REF_EXPR, ASTKind::MEMBER_ACCESS}) &&
-                Ty::IsMetCType(*fa.expr->GetTy()) && IsZeroSizedTy(*fa.expr->GetTy())) {
+                fa.expr->GetTy()->IsMetCType() && IsZeroSizedTy(*fa.expr->GetTy())) {
                 diag.DiagnoseRefactor("sema_inout_modify_cstring_or_zerosized", fa, "zero-sized type");
             }
         }
@@ -286,7 +286,7 @@ void TypeCheckerImpl::UnsafeCheck(const FuncBody& fb)
         if (!Ty::IsTyCorrect(fb.retType->GetTy())) {
             return;
         }
-        if (!Ty::IsMetCType(*fb.retType->GetTy())) {
+        if (!fb.retType->GetTy()->IsMetCType()) {
             auto builder = diag.DiagnoseRefactor("sema_invalid_cfunc_return_type", *fb.retType,
                 GetFuncBodyRange(fb, *fb.retType));
             builder.AddNote("return type is " + fb.retType->GetTy()->String());
@@ -308,7 +308,7 @@ void TypeCheckerImpl::CheckCFuncParam(const AST::FuncParam& fp)
     }
     if (fp.GetTy()->IsUnit()) {
         diag.Diagnose(fp.identifier.Begin(), fp.type->end, "sema_cfunc_cannot_have_unit_args");
-    } else if (!Ty::IsMetCType(*fp.GetTy())) {
+    } else if (!fp.GetTy()->IsMetCType()) {
         diag.Diagnose(fp.identifier.Begin(), fp.type->end, "sema_invalid_cfunc_arg_type");
     }
 }
@@ -317,7 +317,7 @@ void TypeCheckerImpl::CheckCFuncParamType(const AST::Type& type)
 {
     if (type.GetTy()->IsUnit()) {
         diag.Diagnose(type.begin, type.end, "sema_cfunc_cannot_have_unit_args");
-    } else if (!Ty::IsMetCType(*type.GetTy())) {
+    } else if (!type.GetTy()->IsMetCType()) {
         diag.Diagnose(type.begin, type.end, "sema_invalid_cfunc_arg_type");
     }
 }

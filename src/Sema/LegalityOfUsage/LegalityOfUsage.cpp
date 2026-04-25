@@ -94,7 +94,7 @@ void TypeCheckerImpl::CheckLegalityOfUsage(ASTContext& ctx, AST::Package& pkg)
     CheckSubscriptLegality(pkg);
 }
 
-void TypeCheckerImpl::CheckStaticMemberWithGeneric(Decl& member, const std::vector<Ptr<Ty>>& outerGenericTys)
+void TypeCheckerImpl::CheckStaticMemberWithGeneric(Decl& member, const std::vector<DataTy>& outerGenericTys)
 {
     // Static member variables, properties and init func can't depend on generic parameters of outer type.
     if (!member.TestAttr(Attribute::STATIC) || outerGenericTys.empty()) {
@@ -110,7 +110,7 @@ void TypeCheckerImpl::CheckStaticMemberWithGeneric(Decl& member, const std::vect
         // Because static member var and prop cannot themselves declare generic parameters, static member var and
         // prop cannot contain any outside generic types.
         if (node->GetTy() && node->GetTy()->HasGeneric() && !node->begin.IsZero()) {
-            std::set<Ptr<Ty>> targetTys;
+            std::set<DataTy> targetTys;
             for (auto& usedTy : node->GetTy()->GetGenericTyArgs()) {
                 if (usedTy && Utils::In(usedTy, outerGenericTys)) {
                     targetTys.emplace(usedTy);
@@ -146,10 +146,10 @@ void TypeCheckerImpl::CheckStaticMembersWithGeneric(const Package& pkg)
             return;
         }
         for (auto& member : decl->GetMemberDecls()) {
-            std::vector<Ptr<Ty>> outersideGenericParamTys;
+            std::vector<DataTy> outersideGenericParamTys;
             for (auto& tp : decl->generic->typeParameters) {
                 CJC_ASSERT(tp && Ty::IsTyCorrect(tp->GetTy()));
-                outersideGenericParamTys.emplace_back(tp->GetTy());
+                outersideGenericParamTys.emplace_back(tp->GetDataTy());
             }
             CheckStaticMemberWithGeneric(*member, outersideGenericParamTys);
         }

@@ -10,7 +10,7 @@
 using namespace Cangjie;
 using namespace AST;
 
-Ptr<Ty> TypeCheckerImpl::SynThrowExpr(ASTContext& ctx, ThrowExpr& te)
+ModalTy TypeCheckerImpl::SynThrowExpr(ASTContext& ctx, ThrowExpr& te)
 {
     CJC_NULLPTR_CHECK(te.expr); // Parser guarantees.
     Synthesize({ctx, SynPos::EXPR_ARG}, te.expr.get());

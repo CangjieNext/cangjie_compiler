@@ -31,7 +31,7 @@ using namespace AST;
 using namespace TypeCheckUtil;
 
 namespace {
-std::string GetParamsType(const std::vector<Ptr<Ty>>& typeList)
+std::string GetParamsType(const std::vector<ModalTy>& typeList)
 {
     std::string result = "(";
     for (auto& ty : typeList) {
@@ -46,7 +46,7 @@ std::string GetParamsType(const std::vector<Ptr<Ty>>& typeList)
 }
 
 void DiagWrongNumberOfArgumentsCommon(
-    DiagnosticEngine& diag, const CallExpr& ce, const std::vector<Ptr<Ty>>& paramTys, Ptr<const FuncDecl> fd)
+    DiagnosticEngine& diag, const CallExpr& ce, const std::vector<ModalTy>& paramTys, Ptr<const FuncDecl> fd)
 {
     auto expectedNum = paramTys.size();
     auto foundNum = ce.args.size();
@@ -360,7 +360,7 @@ void DiagUnableToInferReturnType(DiagnosticEngine& diag, const FuncBody& fb)
     }
 }
 
-void DiagWrongNumberOfArguments(DiagnosticEngine& diag, const CallExpr& ce, const std::vector<Ptr<Ty>>& paramTys)
+void DiagWrongNumberOfArguments(DiagnosticEngine& diag, const CallExpr& ce, const std::vector<ModalTy>& paramTys)
 {
     if (!ce.ShouldDiagnose(true)) {
         return;
@@ -377,7 +377,7 @@ void DiagWrongNumberOfArguments(DiagnosticEngine& diag, const CallExpr& ce, cons
     CJC_ASSERT(!fd.funcBody->paramLists.empty());
     CJC_NULLPTR_CHECK(fd.funcBody->paramLists.front());
     auto& params = fd.funcBody->paramLists.front()->params;
-    std::vector<Ptr<Ty>> paramTys;
+    std::vector<ModalTy> paramTys;
     std::transform(params.cbegin(), params.cend(), std::back_inserter(paramTys),
         [](auto& param) { return param->type == nullptr ? param->GetTy() : param->type->GetTy(); });
     DiagWrongNumberOfArgumentsCommon(diag, ce, paramTys, &fd);
@@ -702,7 +702,7 @@ void DiagNeedNamedArgument(
     diag.DiagnoseRefactor("sema_need_named_argument", *ce.args[argPos], expectedPrefix);
 }
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-void DiagForStaticVariableDependsGeneric(DiagnosticEngine& diag, const Node& node, const std::set<Ptr<Ty>>& targetTys)
+void DiagForStaticVariableDependsGeneric(DiagnosticEngine& diag, const Node& node, const std::set<ModalTy>& targetTys)
 {
     if (targetTys.empty()) {
         return;

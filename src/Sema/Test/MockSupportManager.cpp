@@ -780,7 +780,7 @@ OwnedPtr<FuncDecl> MockSupportManager::GenerateErasedFuncAccessor(FuncDecl& meth
     OwnedPtr<FuncDecl> methodAccessor = ASTCloner::Clone(Ptr(&methodDecl));
     mockUtils->AddGenericIfNeeded(methodDecl, *methodAccessor);
 
-    std::vector<Ptr<Ty>> typeParamTys;
+    std::vector<ModalTy> typeParamTys;
     auto memberAccessOriginal = CreateRefExpr(methodDecl);
 
     if (auto& generic = methodAccessor->funcBody->generic; generic) {
@@ -855,7 +855,7 @@ OwnedPtr<FuncDecl> MockSupportManager::GenerateFuncAccessor(FuncDecl& methodDecl
 
     OwnedPtr<FuncDecl> erasedAccessor = needEraseTypes ? GenerateErasedFuncAccessor(methodDecl) : nullptr;
 
-    std::vector<Ptr<Ty>> typeParamTys;
+    std::vector<ModalTy> typeParamTys;
     OwnedPtr<RefExpr> memberAccessOriginal =
         needEraseTypes ? CreateRefExpr(*erasedAccessor) : CreateRefExpr(methodDecl);
 
@@ -1776,7 +1776,7 @@ OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(
 }
 
 OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(OwnedPtr<Expr> baseExpr,
-    Ptr<Decl> memberDecl, Ptr<Ty> memberRefTy, AccessorKind kind, Ptr<File> curFile)
+    Ptr<Decl> memberDecl, ModalTy memberRefTy, AccessorKind kind, Ptr<File> curFile)
 {
     Ptr<FuncDecl> accessorDecl =
         As<ASTKind::FUNC_DECL>(mockUtils->FindAccessorForMemberAccess(memberDecl->outerDecl->GetTy(), memberDecl, kind));
@@ -1828,7 +1828,7 @@ OwnedPtr<CallExpr> MockSupportManager::GenerateAccessorCallForField(OwnedPtr<Exp
     return accessorCall;
 }
 
-std::vector<Ptr<Ty>> MockSupportManager::CloneFuncDecl(
+std::vector<ModalTy> MockSupportManager::CloneFuncDecl(
     Ptr<FuncDecl> fromDecl, Ptr<FuncDecl> toDecl, Ptr<File> curFile, std::string fullPackageName)
 {
     CopyBasicInfo(fromDecl, toDecl);
@@ -2087,7 +2087,7 @@ std::tuple<Ptr<InterfaceDecl>, Ptr<FuncDecl>> MockSupportManager::FindDefaultAcc
 }
 
 Ptr<AST::FuncDecl> MockSupportManager::FindDefaultAccessorImplementation(
-    Ptr<AST::Ty> baseTy, Ptr<AST::FuncDecl> accessorDecl)
+    AST::ModalTy baseTy, Ptr<AST::FuncDecl> accessorDecl)
 {
     CJC_NULLPTR_CHECK(baseTy);
     // FIXME: for some types (e.g. Unit) extend with accessors is not found/not generated
@@ -2105,7 +2105,7 @@ Ptr<AST::FuncDecl> MockSupportManager::FindDefaultAccessorImplementation(
 
 namespace {
 
-bool IsClassLikeOrGeneric(Ptr<Ty> ty)
+bool IsClassLikeOrGeneric(ModalTy ty)
 {
     return ty->IsClassLike() || ty->IsGeneric();
 }
@@ -2113,7 +2113,7 @@ bool IsClassLikeOrGeneric(Ptr<Ty> ty)
 } // namespace
 
 void MockSupportManager::ReplaceInterfaceDefaultFunc(
-    AST::Expr& originalExpr, Ptr<Ty> outerTy, bool isInMockAnnotatedLambda)
+    AST::Expr& originalExpr, ModalTy outerTy, bool isInMockAnnotatedLambda)
 {
     auto expr = ExtractLastDesugaredExpr(originalExpr);
     if (expr->TestAttr(Attribute::GENERATED_TO_MOCK)) {
@@ -2194,7 +2194,7 @@ void MockSupportManager::ReplaceInterfaceDefaultFunc(
 }
 
 void MockSupportManager::ReplaceInterfaceDefaultFuncInCall(
-    AST::Node& node, Ptr<Ty> outerTy, bool isInMockAnnotatedLambda)
+    AST::Node& node, ModalTy outerTy, bool isInMockAnnotatedLambda)
 {
     if (isInMockAnnotatedLambda) {
         return;

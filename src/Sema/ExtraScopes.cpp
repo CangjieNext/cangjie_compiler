@@ -89,7 +89,7 @@ InstCtxScope::~InstCtxScope()
     tyMgr.instCtxScopes.pop_back();
 }
 
-void InstCtxScope::SetRefDecl(const AST::Decl& decl, Ptr<AST::Ty> instTy)
+void InstCtxScope::SetRefDecl(const AST::Decl& decl, AST::ModalTy instTy)
 {
     if (!decl.generic) {
         return;
@@ -272,7 +272,7 @@ void TypeCheckerImpl::GenerateTypeMappingForBaseExpr(const Expr& baseExpr, Subst
             typeManager.PackMapping(typeMapping, GenerateTypeMapping(*realBase, instBaseTy->typeArgs));
         }
         auto baseTypeArgs = ma.baseExpr->GetTypeArgs();
-        std::unordered_set<Ptr<Ty>> baseTyArgs;
+        std::unordered_set<DataTy> baseTyArgs;
         std::for_each(
             baseTypeArgs.begin(), baseTypeArgs.end(), [&baseTyArgs](auto type) { baseTyArgs.emplace(type->GetTy()); });
         auto genericTys = GetAllGenericTys(typeManager, realBase->GetTy());

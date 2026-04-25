@@ -30,7 +30,7 @@ void AddConstraint(TyVarEnv& typeConstraintCollection, Ty& subTy, Ty& upperBound
     subGen->upperBounds.insert(&upperBoundTy);
     auto found = typeConstraintCollection.find(subGen);
     if (found == typeConstraintCollection.end()) {
-        typeConstraintCollection.emplace(subGen, std::set<Ptr<Ty>>{&upperBoundTy});
+        typeConstraintCollection.emplace(subGen, std::set<DataTy>{&upperBoundTy});
     } else {
         found->second.insert(&upperBoundTy);
     }

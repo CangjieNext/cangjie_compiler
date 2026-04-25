@@ -22,26 +22,26 @@
 
 namespace Cangjie {
 struct DualMode {
-    Ptr<AST::Ty> bound; // Any for join, Nothing for meet
-    std::function<Ptr<AST::Ty>(const std::set<Ptr<AST::Ty>>&)> coFunc; // join for join, meet for meet
-    std::function<Ptr<AST::Ty>(const std::set<Ptr<AST::Ty>>&)> contraFunc; // meet for join, join for meet
-    std::function<bool(Ptr<AST::Ty>, Ptr<AST::Ty>)> coSubtyFunc; // is-subtype for join, is-supertype for meet
+    AST::ModalTy bound; // Any for join, Nothing for meet
+    std::function<AST::ModalTy(const std::set<AST::ModalTy>&)> coFunc; // join for join, meet for meet
+    std::function<AST::ModalTy(const std::set<AST::ModalTy>&)> contraFunc; // meet for join, join for meet
+    std::function<bool(AST::ModalTy, AST::ModalTy)> coSubtyFunc; // is-subtype for join, is-supertype for meet
 };
 
 class JoinAndMeet {
     using ErrMsg = std::stack<std::string>;
-    using ErrOrTy = std::variant<ErrMsg, Ptr<AST::Ty>>;
+    using ErrOrTy = std::variant<ErrMsg, AST::ModalTy>;
 
 public:
     // if curFile is given, impMgr must also be given
-    JoinAndMeet(TypeManager& tyMgr, const std::initializer_list<Ptr<AST::Ty>> tySet,
+    JoinAndMeet(TypeManager& tyMgr, const std::initializer_list<AST::ModalTy> tySet,
         const std::initializer_list<Ptr<TyVar>> ignoredTyVars = {}, Ptr<const ImportManager> impMgr = nullptr,
         Ptr<AST::File> curFile = nullptr)
         : tyMgr(tyMgr), tySet(tySet), ignoredTyVars(ignoredTyVars), impMgr(impMgr), curFile(curFile)
     {
     }
     // if curFile is given, impMgr must also be given
-    JoinAndMeet(TypeManager& tyMgr, const std::set<Ptr<AST::Ty>> tySet, const std::set<Ptr<TyVar>> ignoredTyVars = {},
+    JoinAndMeet(TypeManager& tyMgr, const std::set<AST::ModalTy> tySet, const std::set<Ptr<TyVar>> ignoredTyVars = {},
         Ptr<const ImportManager> impMgr = nullptr, Ptr<AST::File> curFile = nullptr)
         : tyMgr(tyMgr), tySet(tySet), ignoredTyVars(ignoredTyVars), impMgr(impMgr), curFile(curFile)
     {
@@ -62,29 +62,29 @@ public:
     ErrOrTy MeetAsVisibleTy();
     static std::string CombineErrMsg(ErrMsg& msgs);
 
-    static std::pair<std::optional<std::string>, Ptr<AST::Ty>> SetJoinedType(
-        Ptr<AST::Ty> ty, std::variant<std::stack<std::string>, Ptr<AST::Ty>>& joinRes);
-    static std::pair<std::optional<std::string>, Ptr<AST::Ty>> SetMetType(
-        Ptr<AST::Ty> ty, std::variant<std::stack<std::string>, Ptr<AST::Ty>>& metRes);
+    static std::pair<std::optional<std::string>, AST::ModalTy> SetJoinedType(
+        AST::ModalTy ty, std::variant<std::stack<std::string>, AST::ModalTy>& joinRes);
+    static std::pair<std::optional<std::string>, AST::ModalTy> SetMetType(
+        AST::ModalTy ty, std::variant<std::stack<std::string>, AST::ModalTy>& metRes);
 
     // Convert the input type to a user-visible one by eliminating intersection and union types.
     // Use a boolean value isJoin to distinguish the join and meet mode.
-    Ptr<AST::Ty> ToUserVisibleTy(Ptr<AST::Ty> ty);
+    AST::ModalTy ToUserVisibleTy(AST::ModalTy ty);
 
 private:
     TypeManager& tyMgr;
-    const std::set<Ptr<AST::Ty>> tySet;
+    const std::set<AST::ModalTy> tySet;
     const TyVars ignoredTyVars;
     Ptr<const ImportManager> impMgr;
     Ptr<AST::File> curFile;
     ErrMsg errMsg;
     bool isForcedToUserVisible = false;
 
-    Ptr<AST::Ty> BatchJoin(const std::set<Ptr<AST::Ty>>& tys);
-    Ptr<AST::Ty> BatchMeet(const std::set<Ptr<AST::Ty>>& tys);
+    AST::ModalTy BatchJoin(const std::set<AST::ModalTy>& tys);
+    AST::ModalTy BatchMeet(const std::set<AST::ModalTy>& tys);
 
-    Ptr<AST::Ty> JoinOrMeetFuncTy(const DualMode& mode, const std::set<Ptr<AST::Ty>>& tys);
-    Ptr<AST::Ty> JoinOrMeetTupleTy(const DualMode& mode, const std::set<Ptr<AST::Ty>>& tys);
+    AST::ModalTy JoinOrMeetFuncTy(const DualMode& mode, const std::set<AST::ModalTy>& tys);
+    AST::ModalTy JoinOrMeetTupleTy(const DualMode& mode, const std::set<AST::ModalTy>& tys);
 
     void AddFinalErrMsgs(const AST::Ty& ty, bool isJoin);
     bool IsInputValid() const;

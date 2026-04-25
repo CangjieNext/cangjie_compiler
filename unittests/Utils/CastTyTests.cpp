@@ -39,7 +39,7 @@ protected:
         tyPool.emplace_back(MakeOwned<PointerTy>(tyMap[TypeKind::TYPE_INT8], {LocalModal::NOT}));
         tyMap.emplace(TypeKind::TYPE_POINTER, tyPool.back().get());
 
-        std::vector<Ptr<Ty>> elemTys{tyMap[TypeKind::TYPE_INT8], tyMap[TypeKind::TYPE_INT16]};
+        std::vector<DataTy> elemTys{tyMap[TypeKind::TYPE_INT8], tyMap[TypeKind::TYPE_INT16]};
         tyPool.emplace_back(MakeOwned<TupleTy>(elemTys));
         tyMap.emplace(TypeKind::TYPE_TUPLE, tyPool.back().get());
 
@@ -83,12 +83,12 @@ protected:
         astPool.emplace_back(std::move(gpd));
     }
 
-    static std::map<AST::TypeKind, Ptr<AST::Ty>> tyMap;
+    static std::map<AST::TypeKind, AST::DataTy> tyMap;
     static std::vector<OwnedPtr<AST::Ty>> tyPool;
     static std::vector<OwnedPtr<AST::Node>> astPool;
 };
 
-std::map<AST::TypeKind, Ptr<AST::Ty>> CastTyTests::tyMap = {};
+std::map<AST::TypeKind, AST::DataTy> CastTyTests::tyMap = {};
 std::vector<OwnedPtr<AST::Ty>> CastTyTests::tyPool = {};
 std::vector<OwnedPtr<AST::Node>> CastTyTests::astPool = {};
 

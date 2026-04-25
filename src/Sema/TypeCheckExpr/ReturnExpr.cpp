@@ -15,7 +15,7 @@ bool TypeCheckerImpl::ChkReturnExpr(ASTContext& ctx, ReturnExpr& re)
     return Ty::IsTyCorrect(SynReturnExpr(ctx, re));
 }
 
-Ptr<Ty> TypeCheckerImpl::SynReturnExpr(ASTContext& ctx, ReturnExpr& re)
+ModalTy TypeCheckerImpl::SynReturnExpr(ASTContext& ctx, ReturnExpr& re)
 {
     if (!re.refFuncBody || !re.refFuncBody->retType) {
         re.SetTy(TypeManager::GetInvalidTy());

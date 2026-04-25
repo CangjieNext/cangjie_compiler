@@ -368,7 +368,7 @@ private:
         return true;
     }
 
-    bool IsConst(Ptr<Ty> ty)
+    bool IsConst(DataTy ty)
     {
         if (Is<GenericsTy>(ty)) {
             return true;
@@ -618,7 +618,7 @@ private:
         return cache;
     }
 
-    bool IsConstType(Ptr<Ty> ty)
+    bool IsConstType(DataTy ty)
     {
         if (Is<GenericsTy>(ty)) {
             return true;

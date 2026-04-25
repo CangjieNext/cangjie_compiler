@@ -11,7 +11,7 @@
 using namespace Cangjie;
 using namespace Sema;
 
-Ptr<Ty> TypeCheckerImpl::SynIsExpr(ASTContext& ctx, IsExpr& ie)
+ModalTy TypeCheckerImpl::SynIsExpr(ASTContext& ctx, IsExpr& ie)
 {
     if (Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ie.leftExpr.get())) &&
         Ty::IsTyCorrect(Synthesize({ctx, SynPos::NONE}, ie.isType.get())) && ReplaceIdealTy(*ie.leftExpr)) {
@@ -41,7 +41,7 @@ bool TypeCheckerImpl::ChkIsExpr(ASTContext& ctx, Ty& target, IsExpr& ie)
     return isWellTyped;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynAsExpr(ASTContext& ctx, AsExpr& ae)
+ModalTy TypeCheckerImpl::SynAsExpr(ASTContext& ctx, AsExpr& ae)
 {
     if (Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ae.leftExpr.get())) &&
         Ty::IsTyCorrect(Synthesize({ctx, SynPos::NONE}, ae.asType.get())) && ReplaceIdealTy(*ae.leftExpr)) {

@@ -237,7 +237,7 @@ void CollectFullExportParamDecl(
     }
 }
 
-void CollectInstantiatedTys(Ty* ty, std::unordered_set<Ty*>& tys)
+void CollectInstantiatedTys(DataTy ty, std::unordered_set<DataTy>& tys)
 {
     if (!Ty::IsTyCorrect(ty) || ty->typeArgs.empty()) {
         return;
@@ -251,12 +251,12 @@ void CollectInstantiatedTys(Ty* ty, std::unordered_set<Ty*>& tys)
 }
 
 // Collect instantiated types used by type declarations' members.
-std::unordered_set<Ty*> CollectInstantiations(const Decl& decl)
+std::unordered_set<DataTy> CollectInstantiations(const Decl& decl)
 {
     if (decl.TestAttr(Attribute::GENERIC)) {
         return {};
     }
-    std::unordered_set<Ty*> instTys;
+    std::unordered_set<DataTy> instTys;
     if (auto id = DynamicCast<const InheritableDecl*>(&decl)) {
         for (auto& it : id->inheritedTypes) {
             CollectInstantiatedTys(it->GetTy(), instTys);
@@ -272,10 +272,10 @@ std::unordered_set<Ty*> CollectInstantiations(const Decl& decl)
     return instTys;
 }
 
-void CollectInstantiationRecursively(std::unordered_set<Ty*>& instTys)
+void CollectInstantiationRecursively(std::unordered_set<DataTy>& instTys)
 {
-    std::unordered_set<Ty*> visited;
-    std::queue<Ty*> q;
+    std::unordered_set<DataTy> visited;
+    std::queue<DataTy> q;
     for (auto it : instTys) {
         q.push(it);
     }
@@ -287,7 +287,7 @@ void CollectInstantiationRecursively(std::unordered_set<Ty*>& instTys)
         }
         auto id = Ty::GetDeclOfTy<InheritableDecl>(ty);
         CJC_NULLPTR_CHECK(id);
-        std::unordered_set<Ty*> newTys;
+        std::unordered_set<DataTy> newTys;
         for (auto& it : id->inheritedTypes) {
             CollectInstantiatedTys(it->GetTy(), newTys);
         }
@@ -649,7 +649,7 @@ inline bool ASTWriter::ASTWriterImpl::NeedToExportDecl(Ptr<const Decl> decl)
 void ASTWriter::ASTWriterImpl::DFSCollectFilesDeclarations(Ptr<File> file,
     std::unordered_set<File*>& alreadyVisitedFiles,
     std::vector<Ptr<const Decl>>& topLevelDeclsOrdered,
-    std::unordered_set<Ty*>& usedTys)
+    std::unordered_set<DataTy>& usedTys)
 {
     if (alreadyVisitedFiles.find(file) != alreadyVisitedFiles.end()) {
         // File was visited as dependency of another file
@@ -727,7 +727,7 @@ void ASTWriter::ASTWriterImpl::ExportAST(const PackageDecl& package)
     // 2. Obtain all topLevelDecl
     std::vector<Ptr<const Decl>> topLevelDeclsOrdered;
     std::unordered_set<File*> alreadyVisitedFiles;
-    std::unordered_set<Ty*> usedTys;
+    std::unordered_set<DataTy> usedTys;
     for (auto& file : package.srcPackage->files) {
         CJC_NULLPTR_CHECK(file.get());
         DFSCollectFilesDeclarations(file.get(), alreadyVisitedFiles, topLevelDeclsOrdered, usedTys);
@@ -1089,7 +1089,7 @@ TTypeOffset ASTWriter::ASTWriterImpl::SaveNominalTy(const Ty& type)
 TTypeOffset ASTWriter::ASTWriterImpl::SaveGenericsTy(const GenericsTy& gty)
 {
     std::vector<FormattedIndex> uppers;
-    std::set<Ptr<Ty>, CmpTyByName> sortedUppers; // Sort for bep.
+    std::set<DataTy, CmpTyByName> sortedUppers; // Sort for bep.
     sortedUppers.insert(gty.upperBounds.begin(), gty.upperBounds.end());
     for (auto& it : sortedUppers) {
         uppers.push_back(SaveType(it));

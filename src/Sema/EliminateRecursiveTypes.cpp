@@ -262,7 +262,7 @@ void CheckAndUpdateDeclTyWithNewTy(Decl& decl, const EnumTy& specifiedTy, TypeMa
         if (!hasSpecifiedTy) {
             return;
         }
-        std::vector<Ptr<Ty>> vec;
+        std::vector<DataTy> vec;
         for (auto elemTy : tupleTy->typeArgs) {
             if (elemTy == &specifiedTy) {
                 auto enumTy = RawStaticCast<EnumTy*>(elemTy);

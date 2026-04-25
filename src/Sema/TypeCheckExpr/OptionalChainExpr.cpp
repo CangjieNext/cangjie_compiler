@@ -11,7 +11,7 @@
 using namespace Cangjie;
 using namespace Sema;
 
-Ptr<Ty> TypeCheckerImpl::SynOptionalChainExpr(const CheckerContext& ctx, OptionalChainExpr& oce)
+ModalTy TypeCheckerImpl::SynOptionalChainExpr(const CheckerContext& ctx, OptionalChainExpr& oce)
 {
     CJC_NULLPTR_CHECK(oce.desugarExpr);
     oce.SetTy(Synthesize(ctx, oce.desugarExpr.get()));

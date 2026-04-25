@@ -62,8 +62,8 @@ void SetMemberDeclReference(Decl& member, Decl& parentDecl)
     }
 }
 
-OwnedPtr<Type> WrapType(Ptr<Ty> ty);
-OwnedPtr<RefType> Wrap2RefType(Ptr<Ty> ty)
+OwnedPtr<Type> WrapType(ModalTy ty);
+OwnedPtr<RefType> Wrap2RefType(ModalTy ty)
 {
     const std::unordered_set<TypeKind> CAN_BE_REF = {
         TypeKind::TYPE_ENUM,
@@ -108,7 +108,7 @@ OwnedPtr<RefType> Wrap2RefType(Ptr<Ty> ty)
  * @param ty The semantic type.
  * @return The wrapped AST type node.
  */
-OwnedPtr<Type> WrapType(Ptr<Ty> ty)
+OwnedPtr<Type> WrapType(ModalTy ty)
 {
     if (ty == nullptr) {
         return nullptr;
@@ -201,7 +201,7 @@ void PostLoadReference(Expr& expr)
 }
 } // namespace
 
-Ptr<Ty> ASTLoader::LoadType(FormattedIndex type) const
+ModalTy ASTLoader::LoadType(FormattedIndex type) const
 {
     CJC_NULLPTR_CHECK(pImpl);
     return pImpl->LoadType(type);
@@ -266,7 +266,7 @@ void ASTLoader::ASTLoaderImpl::LoadRefs()
 }
 
 // Load and reproduce ty according to type index, the mapping pointers are constructed using decl index.
-Ptr<Ty> ASTLoader::ASTLoaderImpl::LoadType(FormattedIndex type)
+ModalTy ASTLoader::ASTLoaderImpl::LoadType(FormattedIndex type)
 {
     if (type == INVALID_FORMAT_INDEX) {
         return TypeManager::GetInvalidTy();
@@ -313,9 +313,9 @@ void ASTLoader::ASTLoaderImpl::SetGenericTy(FormattedIndex type, const PackageFo
         return; // For invalid indirect importing, this may be true.
     }
     auto gpd = StaticCast<GenericParamDecl*>(decl);
-    auto t = typeManager.GetGenericsTy(*gpd, ModalInfo(FromFormatLocalModal(typeObj.local())));
-    auto substitutedTy = typeManager.SubstituteModal(t, ModalInfo(FromFormatLocalModal(typeObj.local())));
-    allTypes[type] = Ptr<Ty>(substitutedTy);
+    auto t = typeManager.GetGenericsTy(*gpd);
+    auto substitutedTy = t.With(FromFormatLocalModal(typeObj.local()));
+    allTypes[type] = ModalTy(substitutedTy);
 
     if (isLoadCache) {
         return; // Do not load upper bounds cache for generic type.
@@ -333,9 +333,9 @@ void ASTLoader::ASTLoaderImpl::SetGenericTy(FormattedIndex type, const PackageFo
     }
 }
 
-std::vector<Ptr<Ty>> ASTLoader::ASTLoaderImpl::LoadTypeArgs(const PackageFormat::SemaTy& typeObj)
+std::vector<ModalTy> ASTLoader::ASTLoaderImpl::LoadTypeArgs(const PackageFormat::SemaTy& typeObj)
 {
-    std::vector<Ptr<Ty>> typeArgs;
+    std::vector<ModalTy> typeArgs;
     CJC_NULLPTR_CHECK(typeObj.typeArgs());
     auto length = static_cast<uoffset_t>(typeObj.typeArgs()->size());
     for (uoffset_t i = 0; i < length; i++) {
@@ -350,7 +350,7 @@ void ASTLoader::ASTLoaderImpl::SetTypeTy(FormattedIndex type, const PackageForma
     // Get the modal from the serialized data first
     auto modalInfo = ModalInfo(FromFormatLocalModal(typeObj.local()));
 
-    Ptr<Ty> ty = TypeManager::GetInvalidTy();
+    ModalTy ty{TypeManager::GetInvalidTy()};
     if constexpr (std::is_same_v<TypeT, CStringTy>) {
         ty = TypeManager::GetCStringTy(modalInfo);
     } else if constexpr (std::is_same_v<TypeT, PointerTy>) {

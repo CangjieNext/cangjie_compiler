@@ -101,13 +101,13 @@ void EnumSugarTargetsFinder::RefineTargets()
 }
 
 // Get real enum type of the given target. Only return value with valid type.
-std::optional<Ptr<AST::Ty>> EnumSugarTargetsFinder::RefineTargetTy(
-    TypeManager& typeManager, Ptr<Ty> targetTy, Ptr<const Decl> target)
+std::optional<AST::ModalTy> EnumSugarTargetsFinder::RefineTargetTy(
+    TypeManager& typeManager, ModalTy targetTy, Ptr<const Decl> target)
 {
     if (!target || !targetTy) {
         return {};
     }
-    Ptr<Ty> currentTy = targetTy;
+    ModalTy currentTy = targetTy;
     while (currentTy != nullptr && currentTy->kind == TypeKind::TYPE_ENUM) {
         auto targetEnumTy = RawStaticCast<EnumTy*>(currentTy);
         if (targetEnumTy->declPtr == target->outerDecl) {

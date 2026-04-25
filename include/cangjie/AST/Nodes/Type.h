@@ -39,7 +39,7 @@ struct Type : Node {
     bool typeParameterNameIsRawId{false};
 
     /*< Alias ty of type node if it's alias type reference. Written by PreCheck. */
-    Ptr<Ty> aliasTy{Ty::GetInitialTy()};
+    DataTy aliasTy{Ty::GetInitialTy()};
 
     Type() : Node(ASTKind::TYPE)
     {

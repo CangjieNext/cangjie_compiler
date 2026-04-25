@@ -19,11 +19,11 @@
 #include "cangjie/Sema/TestManager.h"
 namespace Cangjie {
 /** Get @p decl 's sema type. If decl is extend decl, get it's extended sema type. */
-inline Ptr<AST::Ty> GetDeclTy(const AST::Decl& decl)
+inline AST::DataTy GetDeclTy(const AST::Decl& decl)
 {
-    auto ty = decl.GetTy();
+    auto ty = decl.GetDataTy();
     if (decl.astKind == AST::ASTKind::EXTEND_DECL) {
-        ty = static_cast<const AST::ExtendDecl&>(decl).extendedType->GetTy();
+        ty = static_cast<const AST::ExtendDecl&>(decl).extendedType->GetDataTy();
     }
     return ty;
 }

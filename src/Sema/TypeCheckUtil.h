@@ -37,7 +37,7 @@ std::vector<AST::TypeKind> GetIdealTypesByKind(AST::TypeKind type);
 
 constexpr std::string_view WILDCARD_CHAR{"_"};
 
-using FuncSig = std::pair<std::string, std::vector<Ptr<AST::Ty>>>;
+using FuncSig = std::pair<std::string, std::vector<AST::ModalTy>>;
 struct FuncSigCmp {
     bool operator()(const FuncSig& lhs, const FuncSig& rhs) const
     {
@@ -83,10 +83,10 @@ template <typename T> bool IsAllFuncDecl(T& results)
     return true;
 }
 
-inline std::vector<Ptr<AST::Ty>> GetInstanationTys(const AST::Expr& expr)
+inline std::vector<AST::DataTy> GetInstanationTys(const AST::Expr& expr)
 {
     auto ref = DynamicCast<const AST::NameReferenceExpr*>(&expr);
-    return ref ? ref->instTys : std::vector<Ptr<AST::Ty>>{};
+    return ref ? ref->instTys : std::vector<AST::DataTy>{};
 }
 
 template <typename T> void RemoveDuplicateElements(std::vector<T>& candidates)
@@ -128,7 +128,7 @@ bool IsFieldOperator(const std::string& field);
 bool IsGenericUpperBoundCall(const AST::Expr& expr, AST::Decl& target);
 bool IsNode1ScopeVisibleForNode2(const AST::Node& node1, const AST::Node& node2);
 size_t CountOptionNestedLevel(const AST::Ty& ty);
-Ptr<AST::Ty> UnboxOptionType(Ptr<AST::Ty> ty);
+AST::ModalTy UnboxOptionType(AST::ModalTy ty);
 
 /**
  * Check if ThisType compatibility in class inheritance
@@ -143,17 +143,17 @@ ComparisonRes CompareIntAndFloat(const AST::Ty& left, const AST::Ty& right);
  * Util functions for manipulating 'MultiTypeSubst'.
  */
 std::set<TypeSubst> ExpandMultiTypeSubst(
-    TypeManager& tm, const MultiTypeSubst& mts, const std::set<Ptr<AST::Ty>>& usefulTys);
-std::vector<SubstPack> ExpandMultiTypeSubst(const SubstPack& maps, const std::set<Ptr<AST::Ty>>& usefulTys);
+    TypeManager& tm, const MultiTypeSubst& mts, const std::set<AST::ModalTy>& usefulTys);
+std::vector<SubstPack> ExpandMultiTypeSubst(const SubstPack& maps, const std::set<AST::ModalTy>& usefulTys);
 /**
  * Reduce type mapping to only contains direct mapping from given generic ty vars to instantiated tys.
  */
 MultiTypeSubst ReduceMultiTypeSubst(TypeManager& tyMgr, const TyVars& tyVars, const MultiTypeSubst& mts);
 TypeSubst MultiTypeSubstToTypeSubst(const MultiTypeSubst& mts);
-TypeSubst GenerateTypeMappingByTy(const Ptr<AST::Ty> genericTy, const Ptr<AST::Ty> instantTy);
-TypeSubst GenerateTypeMapping(const AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& typeArgs);
+TypeSubst GenerateTypeMappingByTy(const AST::DataTy genericTy, const AST::DataTy instantTy);
+TypeSubst GenerateTypeMapping(const AST::Decl& decl, const std::vector<AST::DataTy>& typeArgs);
 void GenerateTypeMapping(
-    TypeManager& tyMgr, SubstPack& m, const AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& typeArgs);
+    TypeManager& tyMgr, SubstPack& m, const AST::Decl& decl, const std::vector<AST::DataTy>& typeArgs);
 void RelayMappingFromExtendToExtended(TypeManager& tyMgr, SubstPack& m, const AST::ExtendDecl& decl);
 TypeSubst InverseMapping(const TypeSubst& typeMapping);
 void MergeTypeSubstToMultiTypeSubst(MultiTypeSubst& mts, const TypeSubst& typeMapping);
@@ -161,26 +161,26 @@ void MergeMultiTypeSubsts(MultiTypeSubst& target, const MultiTypeSubst& src);
 /* u2i map can't have conflict between the two */
 void MergeSubstPack(SubstPack& target, const SubstPack& src);
 /** Get set of generic sema tys used in given @p ty */
-std::unordered_set<Ptr<AST::Ty>> GetAllGenericTys(TypeManager& tm, Ptr<AST::Ty> ty);
-std::vector<Ptr<AST::Ty>> GetDeclTypeParams(const AST::Decl& decl);
+std::unordered_set<AST::DataTy> GetAllGenericTys(TypeManager& tm, AST::DataTy ty);
+std::vector<AST::DataTy> GetDeclTypeParams(const AST::Decl& decl);
 /** Get mapped type of given @p tyVar . If the tyVar is not mapped in TypeSubst/MultiTypeSubst, return itself. */
-Ptr<AST::Ty> GetMappedTy(const MultiTypeSubst& mts, TyVar* tyVar);
-Ptr<AST::Ty> GetMappedTy(const TypeSubst& typeMapping, TyVar* tyVar);
+AST::DataTy GetMappedTy(const MultiTypeSubst& mts, TyVar* tyVar);
+AST::DataTy GetMappedTy(const TypeSubst& typeMapping, TyVar* tyVar);
 /** Occurs check for tyVars in @p typeMapping */
 bool HaveCyclicSubstitution(TypeManager& tyMgr, const TypeSubst& typeMapping);
 
 /**
  * Get parameter tys of given function declaration @p fd.
  */
-std::vector<Ptr<AST::Ty>> GetParamTys(const AST::FuncDecl& fd);
-std::vector<Ptr<AST::Ty>> GetFuncBodyParamTys(const AST::FuncBody& fb);
+std::vector<AST::ModalTy> GetParamTys(const AST::FuncDecl& fd);
+std::vector<AST::ModalTy> GetFuncBodyParamTys(const AST::FuncBody& fb);
 /**
  * Check whether src is an override or implementation of target.
  */
 bool IsOverrideOrShadow(TypeManager& typeManager, const AST::FuncDecl& src, const AST::FuncDecl& target,
-    const Ptr<AST::Ty> baseTy = nullptr, const Ptr<AST::Ty> expectInstParent = nullptr);
+    const AST::DataTy baseTy = nullptr, const AST::DataTy expectInstParent = nullptr);
 bool IsOverrideOrShadow(
-    TypeManager& typeManager, const AST::PropDecl& src, const AST::PropDecl& target, Ptr<AST::Ty> baseTy = nullptr);
+    TypeManager& typeManager, const AST::PropDecl& src, const AST::PropDecl& target, AST::DataTy baseTy = nullptr);
 MultiTypeSubst GenerateTypeMappingBetweenFuncs(
     TypeManager& typeManager, const AST::FuncDecl& src, const AST::FuncDecl& target);
 /** Get real target decl since given decl maybe typealias decl. */
@@ -215,7 +215,7 @@ Ptr<AST::FuncDecl> GetUsableGetterForProperty(TypeManager& tm, DiagnosticEngine&
 Ptr<AST::FuncDecl> GetUsableSetterForProperty(TypeManager& tm, DiagnosticEngine& diag, AST::PropDecl& pd);
 /** Collect all related extends of 'decl' and it's super classes' extends if exist. */
 std::set<Ptr<AST::ExtendDecl>> CollectAllRelatedExtends(TypeManager& tyMgr, AST::InheritableDecl& boxedDecl);
-std::unordered_set<Ptr<AST::Ty>> GetContextGenericTys(const ASTContext& ctx, const AST::Expr& expr);
+std::unordered_set<AST::DataTy> GetContextGenericTys(const ASTContext& ctx, const AST::Expr& expr);
 OwnedPtr<AST::FuncDecl> CreateDefaultCtor(AST::InheritableDecl& decl, bool isStatic = false);
 Ptr<AST::FuncBody> GetCurFuncBody(const ASTContext& ctx, const std::string& scopeName);
 /** Get the outer inheritable decl where the current context is. */
@@ -231,10 +231,10 @@ TyVars GetTyVars(const AST::FuncDecl& fd, const AST::CallExpr& ce, bool ignoreCo
 TyVars GetTyVarsToSolve(const SubstPack& maps);
 bool HasTyVarsToSolve(const SubstPack& maps);
 bool HasUnsolvedTyVars(const TypeSubst& subst, const std::set<Ptr<TyVar>>& tyVars);
-std::vector<Ptr<AST::Ty>> GetParamTysInArgsOrder(TypeManager& tyMgr, const AST::CallExpr& ce, const AST::FuncDecl& fd);
+std::vector<AST::ModalTy> GetParamTysInArgsOrder(TypeManager& tyMgr, const AST::CallExpr& ce, const AST::FuncDecl& fd);
 Ptr<AST::Generic> GetCurrentGeneric(const AST::FuncDecl& fd, const AST::CallExpr& ce);
 std::string GetArgName(const AST::FuncDecl& fd, const AST::FuncArg& arg);
-std::optional<std::pair<Ptr<AST::Ty>, size_t>> GetParamTyAccordingToArgName(
+std::optional<std::pair<AST::ModalTy, size_t>> GetParamTyAccordingToArgName(
     const AST::FuncDecl& fd, const std::string argName);
 inline bool IsTypeObjectCreation(const AST::FuncDecl& fd, const AST::CallExpr& ce)
 {
@@ -277,30 +277,30 @@ bool IsNeedRuntimeCheck(TypeManager& typeManager, AST::Ty& srcTy, AST::Ty& targe
 Ptr<AST::TypeAliasDecl> GetLastTypeAliasTarget(AST::TypeAliasDecl& decl);
 
 // find the type that is subtype/supertype of all types. subtype or supertype is specified by lessThan
-Ptr<AST::Ty> FindSmallestTy(
-    const std::set<Ptr<AST::Ty>>& tys, const std::function<bool(Ptr<AST::Ty>, Ptr<AST::Ty>)>& lessThan);
-bool LessThanAll(Ptr<AST::Ty> ty, const std::set<Ptr<AST::Ty>>& tys,
-    const std::function<bool(Ptr<AST::Ty>, Ptr<AST::Ty>)>& lessThan);
+AST::ModalTy FindSmallestTy(
+    const std::set<AST::ModalTy>& tys, const std::function<bool(AST::ModalTy, AST::ModalTy)>& lessThan);
+bool LessThanAll(AST::ModalTy ty, const std::set<AST::ModalTy>& tys,
+    const std::function<bool(AST::ModalTy, AST::ModalTy)>& lessThan);
 void TryEnforceCandidate(TyVar& tv, const std::set<Ptr<AST::Decl>>& candidates, TypeManager& tyMgr);
-std::set<Ptr<AST::Ty>> TypeMapToTys(
+std::set<AST::ModalTy> TypeMapToTys(
     const std::map<AST::TypeKind, AST::TypeKind>& m, bool fromKey, AST::ModalInfo modalInfo);
 // get generic params for the decl and outer decl(if there is) and extended decl(if there is)
-std::set<Ptr<AST::Ty>> GetGenericParamsForDecl(const AST::Decl& decl);
+std::set<AST::DataTy> GetGenericParamsForDecl(const AST::Decl& decl);
 // get generic params for the decl of the type
-std::set<Ptr<AST::Ty>> GetGenericParamsForTy(const AST::Ty& ty);
+std::set<AST::DataTy> GetGenericParamsForTy(const AST::Ty& ty);
 // get generic params for all decls used in the call
-std::set<Ptr<AST::Ty>> GetGenericParamsForCall(const AST::CallExpr& ce, const AST::FuncDecl& fd);
+std::set<AST::DataTy> GetGenericParamsForCall(const AST::CallExpr& ce, const AST::FuncDecl& fd);
 
 OwnedPtr<AST::ThrowExpr> CreateThrowException(const AST::ClassDecl& exceptionDecl,
     std::vector<OwnedPtr<AST::Expr>> args, AST::File& curFile, TypeManager& typeManager);
-std::optional<std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>>> FindInitDecl(const AST::InheritableDecl& decl,
+std::optional<std::pair<Ptr<AST::FuncDecl>, AST::ModalTy>> FindInitDecl(const AST::InheritableDecl& decl,
     TypeManager& typeManager, std::vector<OwnedPtr<AST::Expr>>& valueArgs,
-    const std::vector<Ptr<AST::Ty>> instTys = {});
-std::optional<std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>>> FindInitDecl(const AST::InheritableDecl& decl,
-    TypeManager& typeManager, const std::vector<Ptr<AST::Ty>> valueParamTys,
-    const std::vector<Ptr<AST::Ty>> instTys = {});
-OwnedPtr<AST::CallExpr> CreateInitCall(const std::pair<Ptr<AST::FuncDecl>, Ptr<AST::Ty>> initDeclInfo,
-    std::vector<OwnedPtr<AST::Expr>>& valueArgs, AST::File& curFile, const std::vector<Ptr<AST::Ty>> instTys = {});
+    const std::vector<AST::ModalTy> instTys = {});
+std::optional<std::pair<Ptr<AST::FuncDecl>, AST::ModalTy>> FindInitDecl(const AST::InheritableDecl& decl,
+    TypeManager& typeManager, const std::vector<AST::ModalTy> valueParamTys,
+    const std::vector<AST::ModalTy> instTys = {});
+OwnedPtr<AST::CallExpr> CreateInitCall(const std::pair<Ptr<AST::FuncDecl>, AST::ModalTy> initDeclInfo,
+    std::vector<OwnedPtr<AST::Expr>>& valueArgs, AST::File& curFile, const std::vector<AST::ModalTy> instTys = {});
 
 Ptr<AST::FuncDecl> GenerateGetTypeForTypeParamIntrinsic(AST::Package& pkg, TypeManager& typeManager);
 
@@ -316,7 +316,7 @@ OwnedPtr<AST::GenericParamDecl> CreateGenericParamDecl(
 OwnedPtr<AST::GenericParamDecl> CreateGenericParamDecl(AST::Decl& decl, TypeManager& typeManager);
 
 template <typename T> T* GetMemberDecl(
-    const AST::Decl& decl, const std::string& identifier, std::vector<Ptr<AST::Ty>> paramTys, TypeManager& typeManager)
+    const AST::Decl& decl, const std::string& identifier, std::vector<AST::ModalTy> paramTys, TypeManager& typeManager)
 {
     for (auto& member : decl.GetMemberDecls()) {
         if (member->identifier != identifier) {
@@ -328,7 +328,7 @@ template <typename T> T* GetMemberDecl(
             if (originalParamTys.size() != paramTys.size()) {
                 continue;
             }
-            for (std::vector<Ptr<AST::Ty>>::size_type i = 0; i < paramTys.size(); i++) {
+            for (size_t i = 0; i < paramTys.size(); i++) {
                 // Object super type is added later, at "desugar after type instantiation" stage,
                 // so we check it here explicitly
                 if (originalParamTys[i]->IsObject() && paramTys[i]->IsClass()) {

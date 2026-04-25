@@ -18,14 +18,14 @@ namespace Cangjie::CHIR {
 
 class CHIRTypeCache {
 public:
-    std::unordered_map<AST::Ty*, Type*>& typeMap; // AST::Type -> CHIR::Type
+    std::unordered_map<AST::ModalTy, Type*>& typeMap; // AST::Type -> CHIR::Type
     // cache custom type(interface decl, class decl, struct decl, enum decl), except for extend decl
     AST2CHIRNodeMap<CustomTypeDef> globalNominalCache;
-    explicit CHIRTypeCache(std::unordered_map<AST::Ty*, Type*>& typeMap) : typeMap(typeMap)
+    explicit CHIRTypeCache(std::unordered_map<AST::ModalTy, Type*>& typeMap) : typeMap(typeMap)
     {
     }
     explicit CHIRTypeCache(
-        std::unordered_map<AST::Ty*, Type*>& typeMap, const AST2CHIRNodeMap<CustomTypeDef>& globalNominalCache)
+        std::unordered_map<AST::ModalTy, Type*>& typeMap, const AST2CHIRNodeMap<CustomTypeDef>& globalNominalCache)
         : typeMap(typeMap), globalNominalCache(globalNominalCache)
     {
     }
@@ -76,7 +76,7 @@ public:
     {
         return chirTypeCache.globalNominalCache.GetALL();
     }
-    std::unordered_map<AST::Ty*, Type*>& GetTypeMap() const
+    std::unordered_map<AST::ModalTy, Type*>& GetTypeMap() const
     {
         return chirTypeCache.typeMap;
     }

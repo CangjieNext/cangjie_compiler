@@ -14,7 +14,7 @@ using namespace Sema;
 using namespace TypeCheckUtil;
 
 namespace {
-Ptr<Ty> GetInnerNumericType(Ty& boxTy, Ty& basicTy)
+ModalTy GetInnerNumericType(Ty& boxTy, Ty& basicTy)
 {
     // This function only used after type was checked by "IsLitBoxableType" for integer and float LitConst.
     // that guaranteed boxTy must be N-dims Option<T> where T is numeric type.
@@ -132,7 +132,7 @@ bool TypeCheckerImpl::ChkLitConstExprOfTypeChar(Ty& targetTy, LitConstExpr& lce)
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::SynLitConstStringExpr(ASTContext& ctx, LitConstExpr& lce)
+ModalTy TypeCheckerImpl::SynLitConstStringExpr(ASTContext& ctx, LitConstExpr& lce)
 {
     // For string literal expr.
     if (!lce.siExpr) {
@@ -217,7 +217,7 @@ bool TypeCheckerImpl::ChkLitConstExpr(ASTContext& ctx, Ty& target, LitConstExpr&
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::SynLitConstExpr(ASTContext& ctx, LitConstExpr& lce)
+ModalTy TypeCheckerImpl::SynLitConstExpr(ASTContext& ctx, LitConstExpr& lce)
 {
     switch (lce.kind) {
         case LitConstKind::BOOL:

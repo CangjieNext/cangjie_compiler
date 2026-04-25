@@ -268,7 +268,7 @@ Ptr<Decl> TypeCheckerImpl::GetRealTarget(Ptr<Expr> const node, Ptr<Decl> const t
 }
 
 void TypeCheckerImpl::SubstituteTypeForTypeAliasTypeMapping(
-    const TypeAliasDecl& tad, const std::vector<Ptr<AST::Ty>>& typeArgs, TypeSubst& typeMapping) const
+    const TypeAliasDecl& tad, const std::vector<AST::DataTy>& typeArgs, TypeSubst& typeMapping) const
 {
     if (!tad.generic || tad.generic->typeParameters.size() != typeArgs.size()) {
         return;
@@ -337,7 +337,7 @@ TypeSubst TypeCheckerImpl::GenerateTypeMappingForTypeAliasDeclVisit(
     //     current tad is B1, target is A1. We need to collect X here.
     //  or have 'type A2<T, K> = Type<Rune, T>' & 'type B2<X> = A2<Int64, X>'
     //     current tad is B2, target is A1. We need to collect 'Int64 & X' here.
-    std::vector<Ptr<AST::Ty>> typeArgs;
+    std::vector<AST::DataTy> typeArgs;
     for (auto& it : tad.type->GetTypeArgs()) {
         typeArgs.push_back(it->GetTy());
     }

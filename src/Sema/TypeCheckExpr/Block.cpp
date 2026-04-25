@@ -22,7 +22,7 @@ bool TypeCheckerImpl::SynthesizeAndReplaceIdealTy(const CheckerContext& ctx, Nod
     return valid;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynBlock(const CheckerContext& ctx, Block& b)
+ModalTy TypeCheckerImpl::SynBlock(const CheckerContext& ctx, Block& b)
 {
     if (b.body.empty()) {
         b.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
@@ -48,7 +48,7 @@ Ptr<Ty> TypeCheckerImpl::SynBlock(const CheckerContext& ctx, Block& b)
 
 bool TypeCheckerImpl::ChkBlock(ASTContext& ctx, Ty& target, Block& b)
 {
-    Ptr<Ty> unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    ModalTy unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     if (b.body.empty()) {
         b.SetTy(unitTy);
         // NOTE: This function may return false, the caller should handle diagnostics.

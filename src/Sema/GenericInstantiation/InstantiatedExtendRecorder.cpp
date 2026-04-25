@@ -135,7 +135,7 @@ void GenericInstantiationManager::InstantiatedExtendRecorder::RecordExtendForMem
 }
 
 void GenericInstantiationManager::InstantiatedExtendRecorder::RecordImplExtendDecl(
-    Ty& ty, FuncDecl& fd, Ptr<Ty> upperTy)
+    Ty& ty, FuncDecl& fd, DataTy upperTy)
 {
     auto baseTy = typeManager.GetTyForExtendMap(ty);
     auto genericFd = RawStaticCast<FuncDecl*>(gim.GetGeneralDecl(fd));

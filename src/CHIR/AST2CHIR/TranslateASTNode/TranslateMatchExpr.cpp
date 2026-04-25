@@ -311,7 +311,7 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateOrPattern(
     return TranslateComplicatedOrPattern(patterns, selectorVal, originLoc);
 }
 
-Ptr<Value> Translator::GetEnumIDValue(Ptr<AST::Ty> ty, Ptr<Value> selectorVal)
+Ptr<Value> Translator::GetEnumIDValue(AST::DataTy ty, Ptr<Value> selectorVal)
 {
     CJC_ASSERT(ty && ty->kind == AST::TypeKind::TYPE_ENUM);
     auto enumDecl = StaticCast<AST::EnumDecl>(AST::Ty::GetDeclOfTy(ty));
@@ -422,7 +422,7 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateNestingCasePattern(const 
     return {falseBlock, trueBlock};
 }
 
-void Translator::CollectingSubPatterns(const Ptr<AST::Ty>& patternTy,
+void Translator::CollectingSubPatterns(const AST::DataTy& patternTy,
     const std::vector<OwnedPtr<AST::Pattern>>& patterns, const Ptr<Value> value,
     std::queue<std::pair<Ptr<const AST::Pattern>, Ptr<Value>>>& queue, unsigned offset)
 {
@@ -435,7 +435,7 @@ void Translator::CollectingSubPatterns(const Ptr<AST::Ty>& patternTy,
     // NOTE: When expected pattern type is type of function, current is destructing Enum
     // that we can only load first level field here.
     bool isEnumField = funcTy != nullptr;
-    using CollectFnType = std::function<void(Ptr<const AST::Pattern>, Ptr<AST::Ty>)>;
+    using CollectFnType = std::function<void(Ptr<const AST::Pattern>, AST::ModalTy)>;
     CollectFnType collectRecursively = [this, &indexes, &queue, &collectRecursively, &value, isEnumField](
                                            auto pattern, auto ty) {
         if (pattern->astKind == AST::ASTKind::WILDCARD_PATTERN) {
@@ -511,7 +511,7 @@ Ptr<Value> Translator::CastEnumValueToConstructorTupleType(Ptr<Value> enumValue,
     std::vector<Type*> resTypes = {
         GetSelectorType(StaticCast<AST::EnumTy>(*target->outerDecl->GetTy()))
     };
-    std::vector<Ptr<AST::Ty>> paramTys;
+    std::vector<AST::ModalTy> paramTys;
     if (auto funcTy = DynamicCast<AST::FuncTy*>(enumPattern.constructor->GetTy())) {
         paramTys = funcTy->paramTys;
     } else {
@@ -683,12 +683,12 @@ uint64_t Translator::GetJumpablePatternVal(const AST::Pattern& pattern)
     }
 }
 
-bool Translator::IsOptimizableTy(Ptr<AST::Ty> ty)
+bool Translator::IsOptimizableTy(AST::DataTy ty)
 {
     return ty->IsInteger() || ty->IsRune();
 }
 
-bool Translator::IsOptimizableEnumTy(Ptr<AST::Ty> ty)
+bool Translator::IsOptimizableEnumTy(AST::DataTy ty)
 {
     CJC_ASSERT(ty->IsEnum());
     auto selectorKind = Cangjie::CHIR::GetSelectorType(*StaticCast<AST::EnumTy>(ty)->decl);

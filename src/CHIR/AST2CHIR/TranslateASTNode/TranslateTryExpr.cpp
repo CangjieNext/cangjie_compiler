@@ -216,7 +216,7 @@ std::vector<ClassType*> Translator::GetExceptionsForTry(const AST::TryExpr& tryE
             return {};
         }
     }
-    std::set<Ptr<AST::Ty>> exceptionTys;
+    std::set<AST::DataTy> exceptionTys;
     auto collectTys = [&exceptionTys](auto ty) {
         auto gty = DynamicCast<AST::GenericsTy>(ty);
         if (!gty) {
@@ -234,12 +234,12 @@ std::vector<ClassType*> Translator::GetExceptionsForTry(const AST::TryExpr& tryE
         auto currentTry = *it;
         for (auto& pattern : currentTry->catchPatterns) {
             if (pattern->astKind == AST::ASTKind::WILDCARD_PATTERN) {
-                collectTys(pattern->GetTy());
+                collectTys(pattern->GetDataTy());
                 continue;
             }
             auto& exceptPattern = StaticCast<AST::ExceptTypePattern>(*pattern);
             for (auto& eType : exceptPattern.types) {
-                collectTys(eType->GetTy());
+                collectTys(eType->GetDataTy());
             }
         }
     }

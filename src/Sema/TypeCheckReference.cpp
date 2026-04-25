@@ -74,7 +74,7 @@ void TypeCheckerImpl::CheckThisOrSuper(const ASTContext& ctx, RefExpr& re)
     // Legality of using this/super will be checked after typecheck in 'CheckLegalityOfReference'.
 }
 
-Ptr<Ty> TypeCheckerImpl::InferTypeOfThis(const ASTContext& ctx, RefExpr& re, InheritableDecl& objDecl)
+ModalTy TypeCheckerImpl::InferTypeOfThis(const ASTContext& ctx, RefExpr& re, InheritableDecl& objDecl)
 {
     Ptr<InheritableDecl> outerDecl = &objDecl;
     auto typeDecl = outerDecl;
@@ -114,7 +114,7 @@ Ptr<Ty> TypeCheckerImpl::InferTypeOfThis(const ASTContext& ctx, RefExpr& re, Inh
     return ret;
 }
 
-Ptr<Ty> TypeCheckerImpl::InferTypeOfSuper(const ASTContext& ctx, RefExpr& re, const InheritableDecl& objDecl)
+ModalTy TypeCheckerImpl::InferTypeOfSuper(const ASTContext& ctx, RefExpr& re, const InheritableDecl& objDecl)
 {
     // Super can only used in classDecl, if not in class decl, super's ty is invalid.
     if (objDecl.astKind != ASTKind::CLASS_DECL) {
@@ -126,7 +126,7 @@ Ptr<Ty> TypeCheckerImpl::InferTypeOfSuper(const ASTContext& ctx, RefExpr& re, co
         if (superClassTy) {
             CJC_NULLPTR_CHECK(superClassTy->declPtr);
             ReplaceTarget(&re, superClassTy->declPtr);
-            Ptr<Ty> ret =
+            ModalTy ret =
                 ReplaceWithGenericTyInInheritableDecl(superClassTy->declPtr->GetTy(), objDecl, *superClassTy->declPtr);
             ModalInfo modal = GetCurThisModal(ctx, re.scopeName);
             ret = typeManager.SubstituteModal(ret, modal);
@@ -136,8 +136,8 @@ Ptr<Ty> TypeCheckerImpl::InferTypeOfSuper(const ASTContext& ctx, RefExpr& re, co
     return TypeManager::GetInvalidTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::ReplaceWithGenericTyInInheritableDecl(
-    Ptr<Ty> ty, const Decl& outerDecl, const InheritableDecl& id)
+DataTy TypeCheckerImpl::ReplaceWithGenericTyInInheritableDecl(
+    DataTy ty, const Decl& outerDecl, const InheritableDecl& id)
 {
     if (!ty || !ty->HasGeneric()) {
         return ty;
@@ -156,7 +156,7 @@ Ptr<Ty> TypeCheckerImpl::ReplaceWithGenericTyInInheritableDecl(
     // So we need to replace the T's to T1's.
     // currentType is the A<T> (AST node) in class B<T> <: A<T>, or extend A<T>
     // targetGeneric is the <T> (AST node) at the declaration of A<T>, e.g. class A<T>
-    Ptr<Ty> currentTy = outerDecl.GetTy();
+    DataTy currentTy = outerDecl.GetTy();
     MultiTypeSubst typeMapping;
     if (currentTy && id.GetTy()) {
         typeMapping = promotion.GetPromoteTypeMapping(*currentTy, *id.GetTy());
@@ -414,7 +414,7 @@ bool TypeCheckerImpl::FilterTargetsForFuncReference(const Expr& expr, std::vecto
     return true;
 }
 
-void TypeCheckerImpl::RemoveTargetNotMeetExtendConstraint(const Ptr<Ty> baseTy, std::vector<Ptr<Decl>>& targets)
+void TypeCheckerImpl::RemoveTargetNotMeetExtendConstraint(const ModalTy baseTy, std::vector<Ptr<Decl>>& targets)
 {
     Utils::EraseIf(targets, [this, &baseTy](auto target) -> bool {
         bool ignored = !target || !Ty::IsTyCorrect(baseTy) || !Is<InheritableDecl>(target->outerDecl) ||
@@ -446,7 +446,7 @@ void TypeCheckerImpl::RemoveTargetNotMeetExtendConstraint(const Ptr<Ty> baseTy, 
 }
 
 bool TypeCheckerImpl::FilterTargetsInExtend(
-    const AST::NameReferenceExpr& nre, Ptr<Ty> baseTy, std::vector<Ptr<Decl>>& targets)
+    const AST::NameReferenceExpr& nre, ModalTy baseTy, std::vector<Ptr<Decl>>& targets)
 {
     if (auto ma = DynamicCast<MemberAccess*>(&nre)) {
         CJC_NULLPTR_CHECK(ma->baseExpr);

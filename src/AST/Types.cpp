@@ -38,7 +38,7 @@ template <typename TypeDeclT> size_t HashNominalTy(const TypeDeclT& ty)
     size_t ret = 0;
     ret = hash_combine<std::string>(ret, ty.name);
     for (auto typeArg : ty.typeArgs) {
-        ret = hash_combine<Ptr<const Ty>>(ret, typeArg);
+        ret = hash_combine<ModalTy>(ret, typeArg);
     }
     ret = hash_combine<Ptr<const Decl>>(ret, ty.declPtr);
     return ret;
@@ -61,46 +61,32 @@ size_t Ty::Hash() const
 {
     size_t ret = 0;
     ret = hash_combine<Ptr<const Ty>>(ret, this);
-    ret = hash_combine<int>(ret, ToIndex(modal));
     return ret;
-}
-
-bool Ty::IsDataType() const
-{
-    return modal.local == LocalModal::NOT;
-}
-
-bool Ty::IsLocalType() const
-{
-    return modal.local != LocalModal::NOT;
 }
 
 size_t ArrayTy::Hash() const
 {
     size_t ret = 0;
-    ret = hash_combine<Ptr<Ty>>(ret, typeArgs.empty() ? nullptr : typeArgs[0]);
+    ret = hash_combine<ModalTy>(ret, typeArgs.empty() ? ModalTy{} : typeArgs[0]);
     ret = hash_combine<size_t>(ret, dims);
     ret = hash_combine<TypeKind>(ret, TypeKind::TYPE_ARRAY);
-    ret = hash_combine(ret, static_cast<uint8_t>(modal.local));
     return ret;
 }
 
 size_t VArrayTy::Hash() const
 {
     size_t ret = 0;
-    ret = hash_combine<Ptr<Ty>>(ret, typeArgs.empty() ? nullptr : typeArgs[0]);
+    ret = hash_combine<ModalTy>(ret, typeArgs.empty() ? ModalTy{} : typeArgs[0]);
     ret = hash_combine<int64_t>(ret, size);
     ret = hash_combine<TypeKind>(ret, TypeKind::TYPE_VARRAY);
-    ret = hash_combine(ret, static_cast<uint8_t>(modal.local));
     return ret;
 }
 
 size_t PointerTy::Hash() const
 {
     size_t ret = 0;
-    ret = hash_combine<Ptr<Ty>>(ret, typeArgs.empty() ? nullptr : typeArgs[0]);
+    ret = hash_combine<ModalTy>(ret, typeArgs.empty() ? ModalTy{} : typeArgs[0]);
     ret = hash_combine<TypeKind>(ret, TypeKind::TYPE_POINTER);
-    ret = hash_combine(ret, static_cast<uint8_t>(modal.local));
     return ret;
 }
 
@@ -109,26 +95,24 @@ size_t TupleTy::Hash() const
     size_t ret = 0;
     ret = hash_combine<bool>(ret, isClosureTy);
     for (auto typeArg : typeArgs) {
-        ret = hash_combine<Ptr<Ty>>(ret, typeArg);
+        ret = hash_combine<ModalTy>(ret, typeArg);
     }
     ret = hash_combine<TypeKind>(ret, TypeKind::TYPE_TUPLE);
-    ret = hash_combine(ret, static_cast<uint8_t>(modal.local));
     return ret;
 }
 
 size_t FuncTy::Hash() const
 {
     size_t ret = 0;
-    ret = hash_combine<Ptr<Ty>>(ret, retTy);
+    ret = hash_combine<ModalTy>(ret, retTy);
     for (auto paramTy : paramTys) {
-        ret = hash_combine<Ptr<Ty>>(ret, paramTy);
+        ret = hash_combine<ModalTy>(ret, paramTy);
     }
     ret = hash_combine<bool>(ret, isClosureTy);
     ret = hash_combine<bool>(ret, isC);
     ret = hash_combine<bool>(ret, hasVariableLenArg);
     ret = hash_combine<bool>(ret, noCast);
     ret = hash_combine<TypeKind>(ret, TypeKind::TYPE_FUNC);
-    ret = hash_combine(ret, static_cast<uint8_t>(modal.local));
     return ret;
 }
 
@@ -156,13 +140,30 @@ size_t GenericsTy::Hash() const
 {
     size_t ret = 0;
     ret = hash_combine<Ptr<const GenericParamDecl>>(ret, decl);
-    ret = hash_combine<int>(ret, ToIndex(modal));
     return ret;
 }
 
 std::string Ty::String() const
 {
-    return KindName(kind) + modal.AsTypeSuffixString();
+    return KindName(kind);
+}
+
+std::string ModalTy::String() const
+{
+    if (!dataTy) {
+        return Ty::ToString(nullptr);
+    }
+    if (auto funcTy = dynamic_cast<FuncTy*>(dataTy.get())) {
+        auto modalString = modal.AsTypeSuffixString();
+        return funcTy->isC ? "CFunc<" + funcTy->String() + ">" + modal.AsTypeSuffixString()
+            : modalString.empty() ? funcTy->String() : "(" + funcTy->String() + ")" + modalString;
+    }
+    return dataTy->String() + modal.AsTypeSuffixString();
+}
+
+bool ModalTy::IsCorrect() const
+{
+    return Ty::IsTyCorrect(dataTy);
 }
 
 std::string Ty::KindName(TypeKind k)
@@ -172,38 +173,46 @@ std::string Ty::KindName(TypeKind k)
 }
 
 InterfaceTy::InterfaceTy(
-    const std::string& name, InterfaceDecl& id, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modalInfo)
-    : ClassLikeTy(TypeKind::TYPE_INTERFACE, id, modalInfo), declPtr(&id), decl(&id)
+    const std::string& name, InterfaceDecl& id, const std::vector<DataTy>& typeArgs)
+    : ClassLikeTy(TypeKind::TYPE_INTERFACE, id), declPtr(&id), decl(&id)
 {
     this->name = name;
-    this->typeArgs = typeArgs;
+    for (auto ty: typeArgs) {
+        this->typeArgs.emplace_back(ty);
+    }
     this->invalid = !Ty::AreTysCorrect(Utils::VecToSet(this->typeArgs));
     this->generic = Ty::ExistGeneric(this->typeArgs);
 }
 
-ClassTy::ClassTy(const std::string& name, ClassDecl& cd, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modalInfo)
-    : ClassLikeTy(TypeKind::TYPE_CLASS, cd, modalInfo), declPtr(&cd), decl(&cd)
+ClassTy::ClassTy(const std::string& name, ClassDecl& cd, const std::vector<DataTy>& typeArgs)
+    : ClassLikeTy(TypeKind::TYPE_CLASS, cd), declPtr(&cd), decl(&cd)
 {
     this->name = name;
-    this->typeArgs = typeArgs;
+    for (auto ty: typeArgs) {
+        this->typeArgs.emplace_back(ty);
+    }
     this->invalid = !Ty::AreTysCorrect(Utils::VecToSet(this->typeArgs));
     this->generic = Ty::ExistGeneric(this->typeArgs);
 }
 
-EnumTy::EnumTy(const std::string& name, EnumDecl& ed, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modalInfo)
-    : Ty(TypeKind::TYPE_ENUM, modalInfo), declPtr(&ed), decl(&ed)
+EnumTy::EnumTy(const std::string& name, EnumDecl& ed, const std::vector<DataTy>& typeArgs)
+    : Ty(TypeKind::TYPE_ENUM), declPtr(&ed), decl(&ed)
 {
     this->name = name;
-    this->typeArgs = typeArgs;
+    for (auto ty: typeArgs) {
+        this->typeArgs.emplace_back(ty);
+    }
     this->invalid = !Ty::AreTysCorrect(Utils::VecToSet(this->typeArgs));
     this->generic = Ty::ExistGeneric(this->typeArgs);
 }
 
-StructTy::StructTy(const std::string& name, StructDecl& sd, const std::vector<Ptr<Ty>>& typeArgs, ModalInfo modalInfo)
-    : Ty(TypeKind::TYPE_STRUCT, modalInfo), declPtr(&sd), decl(&sd)
+StructTy::StructTy(const std::string& name, StructDecl& sd, const std::vector<DataTy>& typeArgs)
+    : Ty(TypeKind::TYPE_STRUCT), declPtr(&sd), decl(&sd)
 {
     this->name = name;
-    this->typeArgs = typeArgs;
+    for (auto ty: typeArgs) {
+        this->typeArgs.emplace_back(ty);
+    }
     this->invalid = !Ty::AreTysCorrect(Utils::VecToSet(this->typeArgs));
     this->generic = Ty::ExistGeneric(this->typeArgs);
 }
@@ -231,7 +240,6 @@ Ptr<StructTy> StructTy::GetGenericTy() const
 size_t ClassTy::Hash() const
 {
     size_t hash = HashNominalTy(*this);
-    hash = hash_combine(hash, static_cast<uint8_t>(modal.local));
     return hash_combine<bool>(hash, false);
 }
 
@@ -244,28 +252,24 @@ bool ClassTy::operator==(const Ty& other) const
 size_t ClassThisTy::Hash() const
 {
     size_t hash = HashNominalTy(*this);
-    hash = hash_combine(hash, static_cast<uint8_t>(modal.local));
     return hash_combine<bool>(hash, true);
 }
 
 size_t InterfaceTy::Hash() const
 {
     size_t hash = HashNominalTy(*this);
-    hash = hash_combine(hash, static_cast<uint8_t>(modal.local));
     return hash;
 }
 
 size_t StructTy::Hash() const
 {
     size_t hash = HashNominalTy(*this);
-    hash = hash_combine(hash, static_cast<uint8_t>(modal.local));
     return hash;
 }
 
 size_t EnumTy::Hash() const
 {
     size_t hash = HashNominalTy(*this);
-    hash = hash_combine(hash, static_cast<uint8_t>(modal.local));
     return hash;
 }
 
@@ -283,14 +287,13 @@ bool EnumTy::IsNonExhaustive() const
 size_t RefEnumTy::Hash() const
 {
     size_t hash = HashNominalTy(*this);
-    hash = hash_combine(hash, static_cast<uint8_t>(modal.local));
     return hash_combine<bool>(hash, true);
 }
 
 size_t TypeAliasTy::Hash() const
 {
     size_t hash = HashNominalTy(*this);
-    return hash_combine(hash, static_cast<uint8_t>(modal.local));
+    return hash;
 }
 
 bool Ty::IsInteger() const
@@ -579,7 +582,7 @@ bool Ty::IsRange() const
     return false;
 }
 
-bool Ty::Contains(Ptr<Ty> ty) const
+bool Ty::Contains(ModalTy ty) const
 {
     if (this == ty) {
         return true;
@@ -705,14 +708,14 @@ bool Ty::IsImmutableType() const
 
 std::string ArrayTy::String() const
 {
-    std::string str = ToString(typeArgs[0]);
+    std::string str = typeArgs[0]->String();
     std::string prefix;
     std::string suffix;
     for (int i = 0; i < static_cast<int>(dims); i++) {
         prefix += "RawArray<";
         suffix += ">";
     }
-    return prefix + str + suffix + modal.AsTypeSuffixString();
+    return prefix + str + suffix;
 }
 
 Ptr<ClassTy> ClassTy::GetSuperClassTy() const
@@ -762,7 +765,7 @@ std::set<Ptr<InterfaceTy>> EnumTy::GetSuperInterfaceTys() const
 
 std::string PointerTy::String() const
 {
-    return "CPointer<" + ToString(typeArgs[0]) + ">" + modal.AsTypeSuffixString();
+    return "CPointer<" + typeArgs[0].String() + ">";
 }
 
 std::string TupleTy::String() const
@@ -775,12 +778,12 @@ std::string TupleTy::String() const
     }
     for (auto& typeArg : typeArgs) {
         if (&typeArg == &typeArgs.back()) {
-            str += ToString(typeArg);
+            str += typeArg.String();
         } else {
-            str += ToString(typeArg) + ", ";
+            str += typeArg.String() + ", ";
         }
     }
-    return str + ">" + modal.AsTypeSuffixString();
+    return str + ">";
 }
 
 std::string FuncTy::String() const
@@ -788,23 +791,20 @@ std::string FuncTy::String() const
     std::string str{"("};
     for (auto& paramTy : paramTys) {
         if (&paramTy == &paramTys.back()) {
-            str += ToString(paramTy);
+            str += paramTy.String();
         } else {
-            str += ToString(paramTy) + ", ";
+            str += paramTy.String() + ", ";
         }
     }
-    str = str + ") -> " + ToString(retTy);
-    auto modalString = modal.AsTypeSuffixString();
-    return isC                ? "CFunc<" + str + ">" + modal.AsTypeSuffixString()
-        : modalString.empty() ? str
-                              : "(" + str + ")" + modalString;
+    str = str + ") -> " + retTy.String();
+    return isC ? "CFunc<" + str + ">" : str;
 }
 
-template std::string Ty::GetTypesToStableStr(const std::unordered_set<Ptr<Ty>>& tys, const std::string& delimiter);
-template std::string Ty::GetTypesToStableStr(const std::set<Ptr<Ty>>& tys, const std::string& delimiter);
+template std::string Ty::GetTypesToStableStr(const std::unordered_set<ModalTy>& tys, const std::string& delimiter);
+template std::string Ty::GetTypesToStableStr(const std::set<ModalTy>& tys, const std::string& delimiter);
 template <typename Container> std::string Ty::GetTypesToStableStr(const Container& tys, const std::string& delimiter)
 {
-    std::set<Ptr<Ty>, CmpTyByName> sortedTys;
+    std::set<ModalTy, CmpTyByName> sortedTys;
     sortedTys.insert(tys.begin(), tys.end());
     return GetTypesToStr(sortedTys, delimiter);
 }
@@ -819,8 +819,8 @@ std::string UnionTy::String() const
     return GetTypesToStableStr(tys, " | ");
 }
 
-GenericsTy::GenericsTy(const std::string& name, GenericParamDecl& gpd, ModalInfo modal)
-    : Ty(TypeKind::TYPE_GENERICS, modal), decl(&gpd), isEraseMode(IsJavaGeneric(gpd))
+GenericsTy::GenericsTy(const std::string& name, GenericParamDecl& gpd)
+    : Ty(TypeKind::TYPE_GENERICS), decl(&gpd), isEraseMode(IsJavaGeneric(gpd))
 {
     this->name = name;
     this->generic = true;
@@ -828,37 +828,37 @@ GenericsTy::GenericsTy(const std::string& name, GenericParamDecl& gpd, ModalInfo
 
 std::string GenericsTy::String() const
 {
-    return "Generics-" + name + modal.AsTypeSuffixString();
+    return "Generics-" + name;
 }
 
 std::string EnumTy::String() const
 {
-    return "Enum-" + name + PrintTypeArgs() + modal.AsTypeSuffixString();
+    return "Enum-" + name + PrintTypeArgs();
 }
 
 std::string RefEnumTy::String() const
 {
-    return "Enum-" + name + PrintTypeArgs() + "(asRef)" + modal.AsTypeSuffixString();
+    return "Enum-" + name + PrintTypeArgs() + "(asRef)";
 }
 
 std::string ClassTy::String() const
 {
-    return "Class-" + name + PrintTypeArgs() + modal.AsTypeSuffixString();
+    return "Class-" + name + PrintTypeArgs();
 }
 
 std::string InterfaceTy::String() const
 {
-    return "Interface-" + name + PrintTypeArgs() + modal.AsTypeSuffixString();
+    return "Interface-" + name + PrintTypeArgs();
 }
 
 std::string StructTy::String() const
 {
-    return "Struct-" + name + PrintTypeArgs() + modal.AsTypeSuffixString();
+    return "Struct-" + name + PrintTypeArgs();
 }
 
 std::string TypeAliasTy::String() const
 {
-    return "TypeAlias-" + name + PrintTypeArgs() + modal.AsTypeSuffixString();
+    return "TypeAlias-" + name + PrintTypeArgs();
 }
 
 std::string Ty::PrintTypeArgs() const
@@ -869,7 +869,7 @@ std::string Ty::PrintTypeArgs() const
     return "<" + GetTypesToStr(typeArgs, ", ") + ">";
 }
 
-Ptr<Ty> Ty::GetPrimitiveUpperBound(Ptr<Ty> ty)
+ModalTy Ty::GetPrimitiveUpperBound(ModalTy ty)
 {
     if (auto genTy = DynamicCast<GenericsTy*>(ty)) {
         if (!genTy->isPlaceholder && genTy->lowerBound) {
@@ -884,48 +884,62 @@ bool Ty::IsTyCorrect(Ptr<const Ty> ty) noexcept
     return ty != nullptr && !ty->invalid;
 }
 
-bool Ty::IsPrimitiveCType(const Ty& ty)
+bool Ty::AreTysCorrect(const std::vector<ModalTy>& tys)
+{
+    return std::all_of(tys.begin(), tys.end(), [](auto& ty) { return Ty::IsTyCorrect(ty); });
+}
+bool Ty::AreTysCorrect(const std::set<ModalTy>& tys)
+{
+    return std::all_of(tys.begin(), tys.end(), [](auto& ty) { return Ty::IsTyCorrect(ty); });
+}
+
+bool Ty::IsPrimitiveCType() const
 {
     // Primitive CType.
     static std::unordered_set<TypeKind> primitiveCType = {TypeKind::TYPE_UNIT, TypeKind::TYPE_BOOLEAN,
         TypeKind::TYPE_INT8, TypeKind::TYPE_UINT8, TypeKind::TYPE_INT16, TypeKind::TYPE_UINT16, TypeKind::TYPE_INT32,
         TypeKind::TYPE_UINT32, TypeKind::TYPE_INT64, TypeKind::TYPE_UINT64, TypeKind::TYPE_INT_NATIVE,
         TypeKind::TYPE_UINT_NATIVE, TypeKind::TYPE_FLOAT32, TypeKind::TYPE_FLOAT64};
-    return primitiveCType.find(ty.kind) != primitiveCType.end();
+    return primitiveCType.find(kind) != primitiveCType.end();
 }
 
-bool Ty::IsCStructType(const Ty& ty)
+bool Ty::IsCStructType() const
 {
-    if (ty.kind != TypeKind::TYPE_STRUCT) {
+    if (kind != TypeKind::TYPE_STRUCT) {
         return false;
     }
-    auto rty = RawStaticCast<const StructTy*>(&ty);
+    auto rty = RawStaticCast<const StructTy*>(this);
     return rty->declPtr && rty->declPtr->TestAttr(Attribute::C);
 }
 
 // Check if ty is CType.
-bool Ty::IsMetCType(const Ty& ty)
+bool Ty::IsMetCType() const
 {
-    if (Is<VArrayTy>(ty)) {
-        CJC_ASSERT(!ty.typeArgs.empty() && Ty::IsTyCorrect(ty.typeArgs[0]));
-        return IsMetCType(*ty.typeArgs[0]);
+    if (Is<VArrayTy>(*this)) {
+        CJC_ASSERT(!typeArgs.empty() && typeArgs[0].IsCorrect());
+        return typeArgs[0]->IsMetCType();
     }
-    bool isCType = IsPrimitiveCType(ty) || ty.IsPointer() || ty.IsCString() || ty.IsCFunc() || IsCStructType(ty);
+    bool isCType = IsPrimitiveCType() || IsPointer() || IsCString() || IsCFunc() || IsCStructType();
     // TYPE_FLOAT16 is used by AI and cannot be directly deleted.
-    return isCType || ty.kind == TypeKind::TYPE_QUEST;
+    return isCType || kind == TypeKind::TYPE_QUEST;
 }
 
-bool Ty::IsCTypeConstraint(const Ty& ty)
+bool Ty::IsCTypeConstraint() const
 {
-    if (IsMetCType(ty) && !IsPrimitiveCType(ty)) {
-        return ty.kind == TypeKind::TYPE_STRUCT && RawStaticCast<const StructTy*>(&ty)->name != "String";
+    if (IsMetCType() && !IsPrimitiveCType()) {
+        return kind == TypeKind::TYPE_STRUCT && RawStaticCast<const StructTy*>(this)->name != "String";
     }
     return false;
 }
 
-bool Ty::ExistGeneric(const std::vector<Ptr<Ty>>& tySet)
+bool Ty::ExistGeneric(const std::vector<ModalTy>& tySet)
 {
     return std::any_of(tySet.begin(), tySet.end(), [](auto& ty) { return ty && ty->HasGeneric(); });
+}
+
+bool Ty::ExistGeneric(const std::vector<DataTy>& tySet)
+{
+    return std::any_of(tySet.begin(), tySet.end(), [](const auto& ty) { return ty && ty->HasGeneric(); });
 }
 
 bool Ty::IsTyArgsSizeEqual(const Ty& ty1, const Ty& ty2)
@@ -938,12 +952,12 @@ bool Ty::IsTyArgsSingleton() const
     return this->typeArgs.size() == 1;
 }
 
-std::set<Ptr<Ty>> Ty::GetGenericTyArgs()
+std::set<ModalTy> Ty::GetGenericTyArgs()
 {
     if (IsGeneric()) {
         return {this};
     }
-    std::set<Ptr<Ty>> tys;
+    std::set<ModalTy> tys;
     for (auto& it : typeArgs) {
         if (it && it->HasGeneric()) {
             tys.merge(it->GetGenericTyArgs());
@@ -1001,6 +1015,11 @@ template <typename T> Ptr<T> Ty::GetDeclOfTy(Ptr<const Ty> ty)
     return DynamicCast<T*>(decl);
 }
 
+template <typename T> Ptr<T> Ty::GetDeclOfTy(ModalTy ty)
+{
+    return GetDeclOfTy(ty.get());
+}
+
 /** Get ty's corresponding declaration, always be generic decl if has generic. */
 template Ptr<Decl> Ty::GetDeclPtrOfTy(Ptr<const AST::Ty> ty);
 template Ptr<InheritableDecl> Ty::GetDeclPtrOfTy(Ptr<const AST::Ty> ty);
@@ -1035,8 +1054,13 @@ template <typename T> Ptr<T> Ty::GetDeclPtrOfTy(Ptr<const Ty> ty)
     return DynamicCast<T*>(decl);
 }
 
+template <typename T> Ptr<T> Ty::GetDeclPtrOfTy(ModalTy ty)
+{
+    return GetDeclPtrOfTy(ty.get());
+}
+
 /** Get instantiated ty's corresponding generic ty. */
-Ptr<Ty> Ty::GetGenericTyOfInsTy(const Ty& ty)
+ModalTy Ty::GetGenericTyOfInsTy(const Ty& ty)
 {
     if (!Ty::IsTyCorrect(&ty)) {
         return nullptr;
@@ -1060,7 +1084,7 @@ bool Ty::IsInitialTy(Ptr<const AST::Ty> ty)
     return !ty || ty->kind == TypeKind::TYPE_INITIAL;
 }
 
-Ptr<Ty> Ty::GetInitialTy()
+ModalTy Ty::GetInitialTy()
 {
     static InitialTy initialTy = InitialTy();
     return &initialTy;
@@ -1079,6 +1103,16 @@ bool CompTyByNames(Ptr<const Ty> ty1, Ptr<const Ty> ty2)
     auto decl1 = Ty::GetDeclPtrOfTy(ty1);
     auto decl2 = Ty::GetDeclPtrOfTy(ty2);
     return str1 < str2 || (str1 == str2 && ((!decl1 || !decl2) ? ty1 < ty2 : CompNodeByPos(decl1, decl2)));
+}
+
+bool CmpTyByName::operator()(DataTy ty1, DataTy ty2) const
+{
+    return CompTyByNames(ty1, ty2);
+}
+bool CmpTyByName::operator()(ModalTy ty1, ModalTy ty2) const
+{
+    return CompTyByNames(ty1.Ty(), ty2.Ty()) ||
+        (ty1.Ty() == ty2.Ty() && ToIndex(ty1.Mode()) < ToIndex(ty2.Mode()));
 }
 
 template <typename TypeDeclT> bool Ty::NominalTyEqualTo(const TypeDeclT& base, const Ty& other)
@@ -1276,3 +1310,10 @@ Position ModalASTInfo::End() const
     return LocalEnd();
 }
 } // namespace Cangjie::AST
+
+namespace std {
+template<> size_t hash<ModalTy>::operator()() const
+{
+    return std::hash<DataTy>{}(dataTy) & std::hash<int>{}(ToIndex(modal));
+}
+}

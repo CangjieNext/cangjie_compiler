@@ -93,7 +93,7 @@ bool IsAssignableSubScriptExpr(
 }
 
 bool CheckMatchOfDimensionAndTypes(DiagnosticEngine& diag, TypeManager& typeManager,
-    std::pair<const std::vector<Ptr<Ty>>&, uint64_t&> tysOfExprAndItsIndex,
+    std::pair<const std::vector<ModalTy>&, uint64_t&> tysOfExprAndItsIndex,
     const std::pair<const TupleLit&, const TupleTy&>& tupleLitAndTy, const Expr& rightExpr)
 {
     auto [tupleLit, tupleTy] = tupleLitAndTy;
@@ -148,7 +148,7 @@ void CheckMultipleAssignExpr(DiagnosticEngine& diag, TypeManager& typeManager, A
     CJC_ASSERT(Ty::IsTyCorrect(rightExpr.GetTy()));
     // Collect tys of desugarExpr(except VarDecl) to help decide whether type match on corresponding single assign
     // expression.
-    std::vector<Ptr<Ty>> tysOfDesugarExpr;
+    std::vector<ModalTy> tysOfDesugarExpr;
     // Index of tysOfDesugarExprs, increase when travel a non-tupleLit of leftValue.
     uint64_t indexOfDesugaredTys = 0;
     CJC_ASSERT(assignExpr.desugarExpr->astKind == ASTKind::BLOCK);
@@ -251,7 +251,7 @@ void TypeCheckerImpl::DiagnoseForSubscriptAssignExpr(
     }
 }
 
-std::optional<Ptr<Ty>> TypeCheckerImpl::InferAssignExprCheckCaseOverloading(
+std::optional<ModalTy> TypeCheckerImpl::InferAssignExprCheckCaseOverloading(
     ASTContext& ctx, AssignExpr& ae, std::vector<Diagnostic>& diags)
 {
     auto ds = DiagSuppressor(diag);
@@ -302,7 +302,7 @@ bool TypeCheckerImpl::ChkAssignExpr(ASTContext& ctx, Ty& target, AssignExpr& ae)
     if (!Ty::IsTyCorrect(SynAssignExpr(ctx, ae))) {
         return false;
     }
-    Ptr<Ty> unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    ModalTy unitTy = {TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)};
     if (typeManager.IsSubtype(ae.GetTy(), &target)) {
         return true;
     } else {
@@ -313,7 +313,7 @@ bool TypeCheckerImpl::ChkAssignExpr(ASTContext& ctx, Ty& target, AssignExpr& ae)
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::SynMultipleAssignExpr(ASTContext& ctx, AST::AssignExpr& ae)
+ModalTy TypeCheckerImpl::SynMultipleAssignExpr(ASTContext& ctx, AST::AssignExpr& ae)
 {
     Synthesize({ctx, SynPos::UNUSED}, ae.desugarExpr.get());
     CJC_NULLPTR_CHECK(ae.desugarExpr);
@@ -323,7 +323,7 @@ Ptr<Ty> TypeCheckerImpl::SynMultipleAssignExpr(ASTContext& ctx, AST::AssignExpr&
     if (!Ty::IsTyCorrect(ae.rightExpr->GetTy())) {
         return ae.GetTy();
     }
-    Ptr<Ty> rightTy = ae.rightExpr->GetTy();
+    ModalTy rightTy = ae.rightExpr->GetTy();
     typeManager.ReplaceIdealTy(&rightTy);
     ae.rightExpr->SetTy(rightTy);
     { // Create a scope for DiagSuppressor.
@@ -334,7 +334,7 @@ Ptr<Ty> TypeCheckerImpl::SynMultipleAssignExpr(ASTContext& ctx, AST::AssignExpr&
     return ae.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr& ae)
+ModalTy TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr& ae)
 {
     if (ae.desugarExpr) {
         // It is a multiple assignment expression.
@@ -352,7 +352,7 @@ Ptr<Ty> TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr& ae)
     ae.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
     if (ae.leftValue->astKind == ASTKind::WILDCARD_EXPR) {
         if (Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ae.rightExpr.get()))) {
-            Ptr<Ty> rightTy = ae.rightExpr->GetTy();
+            ModalTy rightTy = ae.rightExpr->GetTy();
             typeManager.ReplaceIdealTy(&rightTy);
             ae.rightExpr->SetTy(rightTy);
         } else {

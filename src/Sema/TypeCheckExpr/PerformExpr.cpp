@@ -12,7 +12,7 @@
 using namespace Cangjie;
 using namespace Sema;
 
-Ptr<Ty> TypeCheckerImpl::SynPerformExpr(ASTContext& ctx, PerformExpr& pe)
+ModalTy TypeCheckerImpl::SynPerformExpr(ASTContext& ctx, PerformExpr& pe)
 {
     CJC_NULLPTR_CHECK(pe.expr); // Parser guarantees.
     auto exprTy = Synthesize({ctx, SynPos::EXPR_ARG}, pe.expr.get());

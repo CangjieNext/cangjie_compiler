@@ -59,7 +59,7 @@ private:
     static constexpr int SYN_LINE = 1;
     int column{1}; // to make functions have unique pos, and make them after their class decl
 
-    Ptr<Ty> CTypeUpperBoundTy()
+    DataTy CTypeUpperBoundTy()
     {
         auto id = c.importManager.GetCoreDecl<InterfaceDecl>(CTYPE_NAME);
         if (!id || !Ty::IsTyCorrect(id->GetTy())) {
@@ -143,7 +143,7 @@ private:
         return StaticCast<FuncDecl>(decl.memberDecls.back().get());
     }
 
-    Ptr<FuncParam> MakeFuncParam(FuncDecl& decl, std::string&& id, Ptr<Ty> ty)
+    Ptr<FuncParam> MakeFuncParam(FuncDecl& decl, std::string&& id, ModalTy ty)
     {
         Ptr<const Node> file = decl.curFile;
         auto ret = MakeOwnedNode<FuncParam>();
@@ -318,9 +318,9 @@ void TypeCheckerImpl::CreateBuiltinDecls(AST::Package& pkg)
     imp.CreateBuiltinDecls();
 }
 
-Ptr<Ty> TypeCheckerImpl::GetArrayTypeByInterface(Ty& interfaceTy)
+DataTy TypeCheckerImpl::GetArrayTypeByInterface(Ty& interfaceTy)
 {
-    Ptr<Ty> invalid = TypeManager::GetInvalidTy();
+    DataTy invalid = TypeManager::GetInvalidTy();
     auto arrayStruct = importManager.GetCoreDecl<StructDecl>("Array");
     if (!arrayStruct) {
         return invalid;
@@ -369,7 +369,7 @@ bool TypeCheckerImpl::ChkArrayLit(ASTContext& ctx, Ty& target, ArrayLit& al)
         matched = false;
     }
 
-    Ptr<Ty> arrayElemTy = targetTy->typeArgs[0];
+    DataTy arrayElemTy = targetTy->typeArgs[0];
     for (auto& child : al.children) {
         if (!Check(ctx, arrayElemTy, child.get())) {
             matched = false;
@@ -382,14 +382,14 @@ bool TypeCheckerImpl::ChkArrayLit(ASTContext& ctx, Ty& target, ArrayLit& al)
     return matched;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
+ModalTy TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
 {
     if (al.children.empty()) {
         diag.Diagnose(al, "sema_empty_arrayLit_type_undefined");
         al.SetTy(TypeManager::GetInvalidTy());
         return al.GetTy();
     }
-    std::set<Ptr<Ty>> arrayElemTys;
+    std::set<ModalTy> arrayElemTys;
     bool hasInvalidElemTy = false;
     for (auto& child : al.children) {
         if (Synthesize({ctx, SynPos::EXPR_ARG}, child.get()) && !ReplaceIdealTy(*child)) {
@@ -407,7 +407,7 @@ Ptr<Ty> TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
     }
 
     auto joinRes = JoinAndMeet(typeManager, arrayElemTys, {}, &importManager, al.curFile).JoinAsVisibleTy();
-    if (auto ty = std::get_if<Ptr<Ty>>(&joinRes)) {
+    if (auto ty = std::get_if<ModalTy>(&joinRes)) {
         al.SetTy(typeManager.GetStructTy(*arrayStruct, {*ty}, (*ty)->Modal()));
     } else {
         al.SetTy(TypeManager::GetInvalidTy());
@@ -424,7 +424,7 @@ bool TypeCheckerImpl::IsBuiltinTypeAlias(const Decl& decl, TypeKind kind) const
     }
     auto& typeAliasDecl = static_cast<const TypeAliasDecl&>(decl);
     // If typealias' base type is array, expr is not a normal call base.
-    Ptr<Ty> origTy = typeAliasDecl.type->GetTy();
+    DataTy origTy = typeAliasDecl.type->GetTy();
     if (origTy) {
         if (kind == AST::TypeKind::TYPE_ANY) {
             // rawarray, cfunc, cstring use normal ChkCallExpr
@@ -534,10 +534,10 @@ bool TypeCheckerImpl::ChkVArrayArg(ASTContext& ctx, ArrayExpr& ve)
     return ret;
 }
 
-bool TypeCheckerImpl::ChkVArrayExpr(ASTContext& ctx, Ty& target, ArrayExpr& ve)
+bool TypeCheckerImpl::ChkVArrayExpr(ASTContext& ctx, ModalTy target, ArrayExpr& ve)
 {
     CJC_NULLPTR_CHECK(ve.type);
-    Ptr<Ty> targetTy = TypeCheckUtil::UnboxOptionType(&target);
+    ModalTy targetTy = TypeCheckUtil::UnboxOptionType(target);
     ve.type->SetTy(Synthesize({ctx, SynPos::EXPR_ARG}, ve.type.get()));
     if (!Ty::IsTyCorrect(ve.type->GetTy()) || !Is<VArrayTy>(ve.type->GetTy())) {
         ve.SetTy(TypeManager::GetInvalidTy());
@@ -557,7 +557,7 @@ bool TypeCheckerImpl::ChkVArrayExpr(ASTContext& ctx, Ty& target, ArrayExpr& ve)
     return true;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynVArrayExpr(ASTContext& ctx, ArrayExpr& ve)
+ModalTy TypeCheckerImpl::SynVArrayExpr(ASTContext& ctx, ArrayExpr& ve)
 {
     CJC_NULLPTR_CHECK(ve.type);
     ve.type->SetTy(Synthesize({ctx, SynPos::EXPR_ARG}, ve.type.get()));
@@ -573,7 +573,7 @@ Ptr<Ty> TypeCheckerImpl::SynVArrayExpr(ASTContext& ctx, ArrayExpr& ve)
     return ve.GetTy();
 }
 
-Ptr<AST::Ty> TypeCheckerImpl::SynRawArrayExpr(ASTContext& ctx, ArrayExpr& ae)
+ModalTy TypeCheckerImpl::SynRawArrayExpr(ASTContext& ctx, ArrayExpr& ae)
 {
     DesugarRawArrayExpr(ae);
     auto ty = Synthesize({ctx, SynPos::EXPR_ARG}, ae.desugarExpr.get());
@@ -633,7 +633,7 @@ bool TypeCheckerImpl::ChkPointerCall(ASTContext& ctx, Ty& target, CallExpr& ce)
 {
     if (IsCallOfBuiltInType(ce, AST::TypeKind::TYPE_POINTER)) {
         bool ret = false;
-        Ptr<Ty> resultTy = TypeManager::GetInvalidTy();
+        DataTy resultTy = TypeManager::GetInvalidTy();
         DesugarPointerCall(ctx, ce);
         auto pointerExpr = StaticAs<ASTKind::POINTER_EXPR>(ce.desugarExpr.get());
         if (target.IsInvalid()) {
@@ -659,7 +659,7 @@ bool TypeCheckerImpl::ChkVArrayCall(ASTContext& ctx, Ty& target, CallExpr& ce)
 {
     if (IsCallOfBuiltInType(ce, AST::TypeKind::TYPE_VARRAY)) {
         bool ret = false;
-        Ptr<Ty> resultTy = TypeManager::GetInvalidTy();
+        DataTy resultTy = TypeManager::GetInvalidTy();
         DesugarArrayCall(ctx, ce);
         auto arrayExpr = StaticAs<ASTKind::ARRAY_EXPR>(ce.desugarExpr.get());
         if (target.IsInvalid()) {
@@ -683,7 +683,7 @@ bool TypeCheckerImpl::ChkPointerExpr(ASTContext& ctx, Ty& target, PointerExpr& c
     CJC_ASSERT(cpe.type && cpe.type->GetTy());
     bool ret = true;
     // 'var a: CPointer<T> = CPointer()': Generic types should need to be derived.
-    Ptr<Ty> targetTy = TypeCheckUtil::UnboxOptionType(&target);
+    ModalTy targetTy = TypeCheckUtil::UnboxOptionType(&target);
     if (!targetTy->typeArgs.empty() && Ty::IsTyCorrect(targetTy->typeArgs[0]) &&
         (!Ty::IsTyCorrect(cpe.type->GetTy()->typeArgs[0]) || cpe.type->GetTy()->HasGeneric())) {
         cpe.type->SetTy(targetTy);
@@ -726,7 +726,7 @@ bool TypeCheckerImpl::ChkPointerExpr(ASTContext& ctx, Ty& target, PointerExpr& c
     return ret;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynPointerExpr(ASTContext& ctx, PointerExpr& cptrExpr)
+ModalTy TypeCheckerImpl::SynPointerExpr(ASTContext& ctx, PointerExpr& cptrExpr)
 {
     if (!ChkPointerExpr(ctx, *TypeManager::GetInvalidTy(), cptrExpr)) {
         return TypeManager::GetInvalidTy();

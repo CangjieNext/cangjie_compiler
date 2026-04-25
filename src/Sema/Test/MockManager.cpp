@@ -200,7 +200,7 @@ MockManager::GeneratedClassResult MockManager::GenerateMockClassIfNeededAndGet(
     mockedDecl->EnableAttr(Attribute::OPEN);
 
     auto originalDeclRef = CreateRefType(originalDecl);
-    Ptr<Ty> substitutedOriginalTy =
+    ModalTy substitutedOriginalTy =
         typeManager.GetInstantiatedTy(originalDeclRef->GetTy(), GenerateTypeMapping(originalDecl, mockedDecl->GetTy()->typeArgs));
     originalDeclRef->SetTy(substitutedOriginalTy);
 
@@ -408,8 +408,8 @@ OwnedPtr<CallExpr> MockManager::CreateInitCallOfMockClass(
     ClassDecl& mockClass,
     std::vector<OwnedPtr<FuncArg>>& mockCallArgs,
     TypeManager& typeManager,
-    const std::vector<Ptr<Ty>> instTys,
-    const std::vector<Ptr<Ty>> valueParamTys)
+    const std::vector<DataTy> instTys,
+    const std::vector<DataTy> valueParamTys)
 {
     std::vector<OwnedPtr<Expr>> initArgs;
     std::transform(
@@ -432,7 +432,7 @@ OwnedPtr<ThrowExpr> MockManager::CreateIllegalMockCallException(
 }
 
 OwnedPtr<MatchExpr> MockManager::CreateTypeCastForOnCallReturnValue(
-    OwnedPtr<Expr> exprToCast, const Ptr<Ty> castTy) const
+    OwnedPtr<Expr> exprToCast, const ModalTy castTy) const
 {
     auto castType = MockUtils::CreateType<Type>(castTy);
     auto varPattern = CreateVarPattern(V_COMPILER, castTy);
@@ -470,7 +470,7 @@ OwnedPtr<AssignExpr> MockManager::CreateMemberAssignment(
 }
 
 OwnedPtr<MatchCase> MockManager::CreateOnCallReturnZeroMatchCase(
-    const FuncDecl& originalMethod, const Ptr<Ty> zeroValueTy, Decl& enumConstructor) const
+    const FuncDecl& originalMethod, const ModalTy zeroValueTy, Decl& enumConstructor) const
 {
     auto pattern = MakeOwned<EnumPattern>();
     pattern->SetTy(enumConstructor.GetTy()->IsFunc() ? StaticCast<FuncTy>(enumConstructor.GetTy())->retTy : enumConstructor.GetTy());
@@ -481,7 +481,7 @@ OwnedPtr<MatchCase> MockManager::CreateOnCallReturnZeroMatchCase(
 }
 
 OwnedPtr<MatchCase> MockManager::CreateOnCallReturnMatchCase(
-    const FuncDecl& originalMethod, const Ptr<Ty> retTy, Decl& enumConstructor) const
+    const FuncDecl& originalMethod, const ModalTy retTy, Decl& enumConstructor) const
 {
     auto arg = MakeOwned<VarPattern>(SrcIdentifier{
         PARAMETER_TO_MATCH_RETURN_ENTRY, INVALID_POSITION, INVALID_POSITION, false});
@@ -628,7 +628,7 @@ OwnedPtr<MatchCase> MockManager::CreateOnCallCallBaseMatchCase(
     return std::move(callBaseMatch);
 }
 
-Ptr<FuncDecl> MockManager::FindDefaultValueForStubMethod(const Ptr<Ty> retTy) const
+Ptr<FuncDecl> MockManager::FindDefaultValueForStubMethod(const ModalTy retTy) const
 {
     for (auto& extend : typeManager.GetAllExtendsByTy(*retTy)) {
         auto extendedTy = extend->extendedType->GetTy();
@@ -664,7 +664,7 @@ Ptr<FuncDecl> MockManager::FindDefaultValueForStubMethod(const Ptr<Ty> retTy) co
 }
 
 OwnedPtr<MatchCase> MockManager::CreateOnCallReturnDefaultMatchCase(
-    const FuncDecl& originalMethod, const Ptr<Ty> retTy, Decl& enumConstructor)
+    const FuncDecl& originalMethod, const ModalTy retTy, Decl& enumConstructor)
 {
     OwnedPtr<Expr> rhsExpr;
 
@@ -743,7 +743,7 @@ OwnedPtr<FuncDecl> MockManager::CreateEmptyConstructorDecl(
     constructorDecl->fullPackageName = curFile.curPackage->fullPackageName;
     constructorDecl->outerDecl = &mockedClass;
     constructorDecl->EnableAttr(Attribute::CONSTRUCTOR);
-    std::vector<Ptr<Ty>> paramTys;
+    std::vector<ModalTy> paramTys;
     std::for_each(params.begin(), params.end(),
         [&paramTys](const OwnedPtr<FuncParam>& param) { paramTys.emplace_back(param->GetTy()); });
     constructorDecl->SetTy(typeManager.GetFunctionTy(paramTys, mockedClass.GetTy()));
@@ -830,7 +830,7 @@ void MockManager::AddAssignmentsForSuperFields(const FuncDecl& constructorOfMock
 }
 
 OwnedPtr<VarDecl> MockManager::CreateFieldDecl(
-    ClassLikeDecl& decl, const std::string& identifier, const Ptr<Ty> ty, const Package& curPkg)
+    ClassLikeDecl& decl, const std::string& identifier, const DataTy ty, const Package& curPkg)
 {
     auto fieldDecl = MakeOwned<VarDecl>();
     fieldDecl->identifier = identifier;

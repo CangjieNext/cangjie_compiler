@@ -30,7 +30,7 @@ bool IsIfExprWithoutElse(const IfExpr& ie)
 } // namespace
 
 // Syntax : if t1 then t2 else t3.
-Ptr<Ty> TypeCheckerImpl::SynIfExpr(const CheckerContext& ctx, IfExpr& ie)
+ModalTy TypeCheckerImpl::SynIfExpr(const CheckerContext& ctx, IfExpr& ie)
 {
     SynPos pos = ctx.SynthPos();
     CJC_NULLPTR_CHECK(ie.condExpr);
@@ -40,7 +40,7 @@ Ptr<Ty> TypeCheckerImpl::SynIfExpr(const CheckerContext& ctx, IfExpr& ie)
     if (IsIfExprWithoutElse(ie)) {
         // For the case that if-elseif without ending 'else' branch.
         isWellTyped = (!ie.elseBody || Ty::IsTyCorrect(Synthesize(ctx.With(SynPos::EXPR_ARG), ie.elseBody.get()))) && isWellTyped;
-        ie.SetTy(isWellTyped ? RawStaticCast<Ty*>(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT))
+        ie.SetTy(isWellTyped ? RawStaticCast<ModalTy>(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT))
                             : TypeManager::GetInvalidTy());
         return ie.GetTy();
     }
@@ -134,7 +134,7 @@ bool TypeCheckerImpl::SynLetPatternDestructor(
     ASTContext& ctx, LetPatternDestructor& lpd, bool suppressIntroducingVariableError)
 {
     CJC_NULLPTR_CHECK(lpd.initializer);
-    Ptr<Ty> boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
+    ModalTy boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
     for (auto& p : lpd.patterns) {
         p->ctxExpr = lpd.initializer.get();
         PropagateCtxExpr(*p, *p->ctxExpr);
@@ -177,7 +177,7 @@ bool TypeCheckerImpl::CheckCondition(ASTContext& ctx, Expr& e, bool suppressIntr
         return res;
     }
 
-    Ptr<Ty> boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
+    ModalTy boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
     if (Check(ctx, boolTy, &e)) {
         return true;
     }
@@ -191,7 +191,7 @@ bool TypeCheckerImpl::CheckCondition(ASTContext& ctx, Expr& e, bool suppressIntr
 
 bool TypeCheckerImpl::CheckBinaryCondition(ASTContext& ctx, BinaryExpr& e, bool suppressIntroducingVariableError)
 {
-    Ptr<Ty> boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
+    ModalTy boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
     if (!IsCondition(e)) {
         return Check(ctx, boolTy, &e);
     }
@@ -225,7 +225,7 @@ bool TypeCheckerImpl::CheckBinaryCondition(ASTContext& ctx, BinaryExpr& e, bool 
 
 bool TypeCheckerImpl::ChkIfExprNoElse(ASTContext& ctx, Ty& target, IfExpr& ie)
 {
-    Ptr<Ty> unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    ModalTy unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     ie.SetTy(unitTy);
     Synthesize({ctx, SynPos::EXPR_ARG}, ie.thenBody.get());
     Synthesize({ctx, SynPos::EXPR_ARG}, ie.elseBody.get());

@@ -217,12 +217,12 @@ std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::MergeMem
 std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::CollectInheritedMembers(
     Ty& ty, Decl& decl)
 {
-    std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Decl>>> visited;
+    std::set<std::pair<AST::DataTy, Ptr<AST::Decl>>> visited;
     return CollectInheritedMembersVisit(ty, decl, visited);
 }
 
 std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::CollectInheritedMembersVisit(
-    Ty& ty, Decl& decl, std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Decl>>>& visited)
+    Ty& ty, Decl& decl, std::set<std::pair<AST::DataTy, Ptr<AST::Decl>>>& visited)
 {
     auto visitedKey = std::make_pair(&ty, &decl);
     if (visited.count(visitedKey) != 0) {
@@ -322,7 +322,7 @@ std::unordered_set<Ptr<InheritableDecl>> GIM::GenericInstantiationManagerImpl::G
     }
 
     // Collect inheritableType which declare in super.
-    std::unordered_set<Ptr<Ty>> allInterfaceTys;
+    std::unordered_set<DataTy> allInterfaceTys;
     for (auto i : inheritableType) {
         if (i->GetTy()) {
             allInterfaceTys.merge(typeManager.GetAllSuperTys(*i->GetTy()));
@@ -354,7 +354,7 @@ void GIM::GenericInstantiationManagerImpl::MapFuncWithDecl(Ty& ty, FuncDecl& int
     }
 }
 
-MultiTypeSubst GIM::GenericInstantiationManagerImpl::GetTypeMapping(Ptr<Ty>& baseTy, Ty& interfaceTy)
+MultiTypeSubst GIM::GenericInstantiationManagerImpl::GetTypeMapping(DataTy& baseTy, Ty& interfaceTy)
 {
     MultiTypeSubst typeMapping;
     if (!baseTy) {

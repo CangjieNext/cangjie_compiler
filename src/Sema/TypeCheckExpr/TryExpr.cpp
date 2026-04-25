@@ -17,14 +17,14 @@ using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
 
-Ptr<Ty> TypeCheckerImpl::SynTryWithResourcesExpr(ASTContext& ctx, TryExpr& te)
+ModalTy TypeCheckerImpl::SynTryWithResourcesExpr(ASTContext& ctx, TryExpr& te)
 {
     auto resourceDecl = importManager.GetCoreDecl("Resource");
     if (resourceDecl == nullptr) {
         te.SetTy(TypeManager::GetInvalidTy());
         return te.GetTy();
     }
-    Ptr<Ty> resourceTy = resourceDecl->GetTy();
+    ModalTy resourceTy = resourceDecl->GetTy();
     bool isWellTyped = true;
     for (auto& vd : te.resourceSpec) {
         CJC_NULLPTR_CHECK(vd);
@@ -55,7 +55,7 @@ Ptr<Ty> TypeCheckerImpl::SynTryWithResourcesExpr(ASTContext& ctx, TryExpr& te)
     return te.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::SynTryExpr(ASTContext& ctx, TryExpr& te)
+ModalTy TypeCheckerImpl::SynTryExpr(ASTContext& ctx, TryExpr& te)
 {
     if (!te.resourceSpec.empty()) {
         return SynTryWithResourcesExpr(ctx, te);
@@ -79,10 +79,10 @@ Ptr<Ty> TypeCheckerImpl::SynTryExpr(ASTContext& ctx, TryExpr& te)
     return te.GetTy();
 }
 
-std::optional<Ptr<Ty>> TypeCheckerImpl::SynTryExprCatchesAndHandles(ASTContext& ctx, TryExpr& te)
+std::optional<ModalTy> TypeCheckerImpl::SynTryExprCatchesAndHandles(ASTContext& ctx, TryExpr& te)
 {
     CJC_NULLPTR_CHECK(te.tryBlock);
-    Ptr<Ty> jTy = Ty::IsTyCorrect(te.tryBlock->GetTy()) ? te.tryBlock->GetTy() : TypeManager::GetNothingTy();
+    ModalTy jTy = Ty::IsTyCorrect(te.tryBlock->GetTy()) ? te.tryBlock->GetTy() : TypeManager::GetNothingTy();
     if (te.tryLambda && Ty::IsTyCorrect(te.tryLambda->GetTy())) {
         jTy = DynamicCast<FuncTy*>(te.tryLambda->GetTy())->retTy;
     }
@@ -100,7 +100,7 @@ std::optional<Ptr<Ty>> TypeCheckerImpl::SynTryExprCatchesAndHandles(ASTContext& 
             continue;
         }
         auto joinRes = JoinAndMeet(
-            typeManager, std::initializer_list<Ptr<Ty>>{jTy, catchBlock->GetTy()}, {}, &importManager, te.curFile)
+            typeManager, std::initializer_list<ModalTy>{jTy, catchBlock->GetTy()}, {}, &importManager, te.curFile)
                            .JoinAsVisibleTy();
         // Do not overwrite the previous jTy immediately for the sake of error reporting; pass current jTy (sink only).
         if (auto [optErrs, tmpJTy] = JoinAndMeet::SetJoinedType(jTy, joinRes); optErrs) {
@@ -147,7 +147,7 @@ std::optional<Ptr<ClassTy>> TypeCheckerImpl::PromoteToCommandTy(const AST::Node&
     return StaticCast<ClassTy*>(*promotedTys.begin());
 }
 
-bool TypeCheckerImpl::SynHandler(ASTContext& ctx, Handler& handler, Ptr<Ty> tgtTy, TryExpr& te)
+bool TypeCheckerImpl::SynHandler(ASTContext& ctx, Handler& handler, ModalTy tgtTy, TryExpr& te)
 {
     // We need to validate the handler before synthesizing since it's necessary for
     // resume expressions
@@ -159,7 +159,7 @@ bool TypeCheckerImpl::SynHandler(ASTContext& ctx, Handler& handler, Ptr<Ty> tgtT
     }
 
     auto joinRes = JoinAndMeet(
-        typeManager, std::initializer_list<Ptr<Ty>>{tgtTy, handler.block->GetTy()}, {}, &importManager, te.curFile)
+        typeManager, std::initializer_list<ModalTy>{tgtTy, handler.block->GetTy()}, {}, &importManager, te.curFile)
                        .JoinAsVisibleTy();
     // Do not overwrite tgtTy on error; pass current tgtTy (sink only for now).
     auto [optErrs, tmpJTy] = JoinAndMeet::SetJoinedType(tgtTy, joinRes);
@@ -189,9 +189,9 @@ bool TypeCheckerImpl::ChkHandler(ASTContext& ctx, Handler& handler, Ty& tgtTy)
     if (cmdTy->IsInvalid()) {
         return false;
     }
-    std::vector<Ptr<Ty>> args;
+    std::vector<ModalTy> args;
     args.emplace_back(cmdTy);
-    Ptr<Ty> handleLambdaTy = typeManager.GetFunctionTy(args, &tgtTy);
+    ModalTy handleLambdaTy = typeManager.GetFunctionTy(args, &tgtTy);
     if (!Check(ctx, handleLambdaTy, handler.desugaredLambda)) {
         DiagMismatchedTypes(diag, *handler.desugaredLambda->funcBody->body, tgtTy);
         return false;
@@ -279,13 +279,13 @@ bool TypeCheckerImpl::ChkTryExprFinallyBlock(ASTContext& ctx, const TryExpr& te)
             isWellTyped = Check(ctx, finallyLamTy, te.finallyLambda) && isWellTyped;
         }
     }
-    te.finallyBlock->SetTy(isWellTyped ? StaticCast<Ty*>(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)) : TypeManager::GetInvalidTy());
+    te.finallyBlock->SetTy(isWellTyped ? StaticCast<ModalTy>(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)) : TypeManager::GetInvalidTy());
     return isWellTyped;
 }
 
 bool TypeCheckerImpl::ChkTryExprCatchPatterns(ASTContext& ctx, TryExpr& te)
 {
-    std::vector<Ptr<Ty>> included{};
+    std::vector<ModalTy> included{};
     auto exception = importManager.GetCoreDecl<ClassDecl>(CLASS_EXCEPTION);
     for (auto& pattern : te.catchPatterns) {
         CJC_NULLPTR_CHECK(pattern);
@@ -308,7 +308,7 @@ bool TypeCheckerImpl::ChkTryExprCatchPatterns(ASTContext& ctx, TryExpr& te)
 
 bool TypeCheckerImpl::ChkTryExprHandlePatterns(ASTContext& ctx, TryExpr& te)
 {
-    std::vector<Ptr<Ty>> included{};
+    std::vector<ModalTy> included{};
     for (auto& handler : te.handlers) {
         if (handler.commandPattern.get()->astKind != ASTKind::COMMAND_TYPE_PATTERN ||
             !handler.desugaredLambda) {

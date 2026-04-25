@@ -64,14 +64,14 @@ struct UnaryExpr;
 struct VarDecl;
 struct VarPattern;
 /** Create an expression node of type Unit. */
-OwnedPtr<Expr> CreateUnitExpr(Ptr<Ty> ty = nullptr);
+OwnedPtr<Expr> CreateUnitExpr(DataTy ty = nullptr);
 OwnedPtr<LitConstExpr> CreateBoolLit(bool isTrue);
 
 OwnedPtr<ForInExpr> CreateForInExpr(
     OwnedPtr<Pattern>&& pattern, OwnedPtr<Expr>&& inExpression, OwnedPtr<Block>&& body);
 OwnedPtr<JumpExpr> CreateBreakExpr(Expr& refLoop);
 OwnedPtr<CallExpr> CreateCallExpr(OwnedPtr<Expr> funcExpr,
-    std::vector<OwnedPtr<FuncArg>> args, Ptr<FuncDecl> resolvedFunc = nullptr, Ptr<Ty> ty = nullptr,
+    std::vector<OwnedPtr<FuncArg>> args, Ptr<FuncDecl> resolvedFunc = nullptr, ModalTy ty = {},
     CallKind callTy = CallKind::CALL_INVALID);
 OwnedPtr<FuncArg> CreateFuncArgForOptional(const FuncParam& param);
 OwnedPtr<FuncParam> CreateFuncParamForOptional(const FuncParam& param);
@@ -81,10 +81,10 @@ OwnedPtr<FuncParamList> CreateFuncParamList(
 /** Create Type in core node. */
 OwnedPtr<RefType> CreateRefTypeInCore(const std::string& name);
 OwnedPtr<VarDecl> CreateTmpVarDecl(Ptr<Type> type = nullptr, Ptr<Expr> initializer = nullptr);
-OwnedPtr<VarPattern> CreateVarPattern(const std::string& varName, Ptr<Ty> ty = nullptr);
+OwnedPtr<VarPattern> CreateVarPattern(const std::string& varName, DataTy ty = nullptr);
 /** Create RefExpr node. */
 OwnedPtr<RefExpr> CreateRefExpr(
-    const SrcIdentifier& id, Ptr<Ty> ty = nullptr, const Position& pos = {0, 0, 0}, std::vector<Ptr<Type>> args = {});
+    const SrcIdentifier& id, ModalTy ty = {}, const Position& pos = {0, 0, 0}, std::vector<Ptr<Type>> args = {});
 /**
  * Create a compiler-generated RefExpr node. This node may not have proper location info.
  * Note that this funnction do not add COMPILER_ADD attribute to the result expr.
@@ -97,7 +97,7 @@ OwnedPtr<RefExpr> CreateRefExpr(Decl& vd);
 OwnedPtr<RefExpr> CreateRefExpr(Decl& vd, const Node& pos);
 /** Create RefType node */
 OwnedPtr<RefType> CreateRefType(const std::string& refName, std::vector<Ptr<Type>> args = {});
-OwnedPtr<RefType> CreateRefType(InheritableDecl& typeDecl, Ptr<Ty> instantTy = nullptr);
+OwnedPtr<RefType> CreateRefType(InheritableDecl& typeDecl, ModalTy instantTy = {});
 /** Create MemberAccess node with given target sema. */
 OwnedPtr<MemberAccess> CreateMemberAccess(OwnedPtr<Expr> expr, Decl& field);
 OwnedPtr<MemberAccess> CreateMemberAccess(OwnedPtr<Expr> expr, const std::string& field);
@@ -105,13 +105,13 @@ OwnedPtr<MemberAccess> CreateMemberAccess(OwnedPtr<Expr> expr, const std::string
 OwnedPtr<GenericConstraint> CreateConstraintForFFI(const std::string& upperBound);
 OwnedPtr<MatchCase> CreateMatchCase(OwnedPtr<Pattern> pattern, OwnedPtr<Expr> expr);
 OwnedPtr<MatchExpr> CreateMatchExpr(OwnedPtr<Expr> selector,
-    std::vector<OwnedPtr<MatchCase>> matchCases, Ptr<Ty> ty,
+    std::vector<OwnedPtr<MatchCase>> matchCases, DataTy ty,
     Expr::SugarKind sugarKind = Expr::SugarKind::NO_SUGAR);
 OwnedPtr<LitConstExpr> CreateLitConstExpr(
-    LitConstKind kind, const std::string& val, Ptr<Ty> ty, bool needToMakeRef = false
+    LitConstKind kind, const std::string& val, ModalTy ty, bool needToMakeRef = false
 );
-OwnedPtr<TupleLit> CreateTupleLit(std::vector<OwnedPtr<Expr>> elements, Ptr<Ty> ty);
-OwnedPtr<ArrayLit> CreateArrayLit(std::vector<OwnedPtr<Expr>> elements, Ptr<Ty> ty);
+OwnedPtr<TupleLit> CreateTupleLit(std::vector<OwnedPtr<Expr>> elements, ModalTy ty);
+OwnedPtr<ArrayLit> CreateArrayLit(std::vector<OwnedPtr<Expr>> elements, ModalTy ty);
 OwnedPtr<SubscriptExpr> CreateTupleAccess(OwnedPtr<Expr> expr, size_t index);
 OwnedPtr<UnaryExpr> CreateUnaryExpr(OwnedPtr<Expr> expr, TokenKind op);
 OwnedPtr<BinaryExpr> CreateBinaryExpr(
@@ -119,18 +119,18 @@ OwnedPtr<BinaryExpr> CreateBinaryExpr(
 OwnedPtr<ReturnExpr> CreateReturnExpr(OwnedPtr<Expr> expr, Ptr<FuncBody> refFuncBody = nullptr);
 OwnedPtr<LambdaExpr> CreateLambdaExpr(OwnedPtr<FuncBody> funcBody);
 OwnedPtr<AssignExpr> CreateAssignExpr(
-    OwnedPtr<Expr> leftValue, OwnedPtr<Expr> rightExpr, Ptr<Ty> ty = nullptr);
-OwnedPtr<FuncArg> CreateFuncArg(OwnedPtr<Expr> expr, const std::string& argName = "", Ptr<Ty> ty = nullptr);
+    OwnedPtr<Expr> leftValue, OwnedPtr<Expr> rightExpr, ModalTy ty = {});
+OwnedPtr<FuncArg> CreateFuncArg(OwnedPtr<Expr> expr, const std::string& argName = "", ModalTy ty = {});
 OwnedPtr<FuncDecl> CreateFuncDecl(
-    const std::string& funcName, OwnedPtr<FuncBody> body = nullptr, Ptr<Ty> ty = nullptr);
+    const std::string& funcName, OwnedPtr<FuncBody> body = nullptr, ModalTy ty = {});
 OwnedPtr<FuncBody> CreateFuncBody(std::vector<OwnedPtr<FuncParamList>> paramLists,
-    OwnedPtr<Type> retType, OwnedPtr<Block> body, Ptr<Ty> ty = nullptr);
+    OwnedPtr<Type> retType, OwnedPtr<Block> body, DataTy ty = nullptr);
 OwnedPtr<FuncParam> CreateFuncParam(const std::string& paramName, OwnedPtr<Type> paramType = nullptr,
-    OwnedPtr<Expr> paramValue = nullptr, Ptr<Ty> ty = nullptr);
-OwnedPtr<FuncParamList> CreateFuncParamList(std::vector<OwnedPtr<FuncParam>> params, Ptr<Ty> ty = nullptr);
-OwnedPtr<Block> CreateBlock(std::vector<OwnedPtr<Node>> nodes, Ptr<Ty> ty = nullptr);
+    OwnedPtr<Expr> paramValue = nullptr, ModalTy ty = {});
+OwnedPtr<FuncParamList> CreateFuncParamList(std::vector<OwnedPtr<FuncParam>> params, ModalTy ty = {});
+OwnedPtr<Block> CreateBlock(std::vector<OwnedPtr<Node>> nodes, DataTy ty = nullptr);
 OwnedPtr<IfExpr> CreateIfExpr(OwnedPtr<Expr> condExpr, OwnedPtr<Block> body,
-    OwnedPtr<Block> elseBody = nullptr, Ptr<Ty> semaType = nullptr);
+    OwnedPtr<Block> elseBody = nullptr, ModalTy semaType = {});
 OwnedPtr<VarDecl> CreateVarDecl(
     const std::string& varName, OwnedPtr<Expr> initializer = nullptr, Ptr<Type> type = nullptr);
 OwnedPtr<ThrowExpr> CreateThrowExpr(Decl& var);

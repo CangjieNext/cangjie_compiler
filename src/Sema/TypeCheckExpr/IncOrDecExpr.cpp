@@ -27,7 +27,7 @@ bool TypeCheckerImpl::ChkIncOrDecExpr(ASTContext& ctx, Ty& target, IncOrDecExpr&
     return false;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynIncOrDecExpr(ASTContext& ctx, IncOrDecExpr& ide)
+ModalTy TypeCheckerImpl::SynIncOrDecExpr(ASTContext& ctx, IncOrDecExpr& ide)
 {
     if (ide.desugarExpr == nullptr) { // `ide` or parent of `ide` is broken.
         return TypeManager::GetInvalidTy();

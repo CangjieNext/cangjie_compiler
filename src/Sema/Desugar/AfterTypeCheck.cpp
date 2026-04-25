@@ -653,7 +653,7 @@ void TypeCheckerImpl::PerformDesugarAfterTypeCheck(ASTContext& ctx, Package& pkg
     Walker(&pkg, preVisit).Walk();
 }
 
-Ptr<AST::Ty> TypeCheckerImpl::SynthesizeWithoutRecover(const CheckerContext& ctx, Ptr<AST::Node> node)
+AST::ModalTy TypeCheckerImpl::SynthesizeWithoutRecover(const CheckerContext& ctx, Ptr<AST::Node> node)
 {
     CJC_NULLPTR_CHECK(node);
     ctx.Ctx().ClearTypeCheckCache(*node);    // ensure newly created nodes have no related cache

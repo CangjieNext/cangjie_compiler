@@ -18,7 +18,7 @@ using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
 
-bool TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se)
+bool TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, ModalTy target, SubscriptExpr& se)
 {
     if (se.desugarExpr) {
         return typeManager.IsSubtype(se.desugarExpr->GetTy(), target);
@@ -29,8 +29,8 @@ bool TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> target, Subscrip
         return false;
     }
     SetIsNotAlone(*se.baseExpr);
-    Ptr<Ty> baseTy = Synthesize({ctx, SynPos::EXPR_ARG}, se.baseExpr.get());
-    std::vector<Ptr<Ty>> indexTys{};
+    ModalTy baseTy = Synthesize({ctx, SynPos::EXPR_ARG}, se.baseExpr.get());
+    std::vector<ModalTy> indexTys{};
     for (auto& expr : se.indexExprs) {
         indexTys.push_back(Synthesize({ctx, SynPos::EXPR_ARG}, expr.get()));
     }
@@ -83,7 +83,7 @@ bool TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> target, Subscrip
     return false;
 }
 
-bool TypeCheckerImpl::ChkTupleAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se, TupleTy& tupleTy)
+bool TypeCheckerImpl::ChkTupleAccess(ASTContext& ctx, ModalTy target, SubscriptExpr& se, TupleTy& tupleTy)
 {
     if (se.baseExpr == nullptr || se.indexExprs.size() != 1) {
         return false;
@@ -118,7 +118,7 @@ bool TypeCheckerImpl::ChkTupleAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptE
             tl->SetTy(TypeManager::GetInvalidTy());
             return false;
         }
-        std::vector<Ptr<Ty>> elemTy;
+        std::vector<ModalTy> elemTy;
         for (auto& it : tl->children) {
             if (it != nullptr && ReplaceIdealTy(*it)) {
                 elemTy.emplace_back(it->GetTy());
@@ -138,7 +138,7 @@ bool TypeCheckerImpl::ChkTupleAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptE
     return true;
 }
 
-bool TypeCheckerImpl::ChkVArrayAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se, VArrayTy& varrTy)
+bool TypeCheckerImpl::ChkVArrayAccess(ASTContext& ctx, ModalTy target, SubscriptExpr& se, VArrayTy& varrTy)
 {
     if (se.indexExprs.size() != 1) {
         diag.DiagnoseRefactor("sema_varray_subscript_num", se);
@@ -171,7 +171,7 @@ bool TypeCheckerImpl::ChkVArrayAccess(ASTContext& ctx, Ptr<Ty> target, Subscript
     return true;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynSubscriptExpr(ASTContext& ctx, SubscriptExpr& se)
+ModalTy TypeCheckerImpl::SynSubscriptExpr(ASTContext& ctx, SubscriptExpr& se)
 {
     ChkSubscriptExpr(ctx, nullptr, se);
     return se.GetTy();

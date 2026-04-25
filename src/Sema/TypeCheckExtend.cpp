@@ -101,9 +101,9 @@ void TypeCheckerImpl::CheckDefImplWithoutOutsideGeneric(Decl& inhertDecl, const 
     if (!id || !id->generic || id->generic->typeParameters.empty()) {
         return;
     }
-    std::vector<Ptr<Ty>> outersideGenericParamTys;
+    std::vector<DataTy> outersideGenericParamTys;
     for (auto& tp : id->generic->typeParameters) {
-        outersideGenericParamTys.emplace_back(tp->GetTy());
+        outersideGenericParamTys.emplace_back(tp->GetDataTy());
     }
     for (auto& member : id->GetMemberDecls()) {
         if (!member->TestAttr(Attribute::DEFAULT) || !Ty::IsTyCorrect(member->GetTy())) {
@@ -129,7 +129,7 @@ void TypeCheckerImpl::CheckExtendInterfaces(Ty& ty, const std::set<Ptr<ExtendDec
 {
     std::unordered_set<Ptr<InterfaceTy>> inheritInterfaces;
     if (auto extendedDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(&ty); extendedDecl) {
-        std::vector<Ptr<Ty>> allSuperTys{};
+        std::vector<DataTy> allSuperTys{};
         for (const auto& inheritedType : extendedDecl->inheritedTypes) {
             if (inheritedType->GetTy()) {
                 auto superTys = typeManager.GetAllSuperTys(*inheritedType->GetTy());
@@ -242,7 +242,7 @@ void TypeCheckerImpl::CheckSpecializationExtendDupImstantation(const Ty& extende
             compareSuperInterface->GetTy()->typeArgs.empty()) {
             continue;
         }
-        std::unordered_set<Ptr<Ty>> allSuperTys{};
+        std::unordered_set<DataTy> allSuperTys{};
         for (const auto& inheritedType : beComparedDecl.inheritedTypes) {
             if (!inheritedType->GetTy()) {
                 continue;
@@ -274,7 +274,7 @@ void TypeCheckerImpl::PreCheckAllExtendInterface()
 {
     Utils::ProfileRecorder recorder("PreCheck", "PreCheckAllExtendInterface");
     // Check extend decls of primitive types in stable order.
-    std::set<Ptr<Ty>, CmpTyByName> keys;
+    std::set<DataTy, CmpTyByName> keys;
     std::for_each(typeManager.builtinTyToExtendMap.begin(), typeManager.builtinTyToExtendMap.end(),
         [&keys](auto& it) { keys.emplace(it.first); });
     for (auto ty : keys) {
@@ -527,7 +527,7 @@ void TypeCheckerImpl::CheckExtendOrphanRule(const ASTContext& ctx, ExtendDecl& e
     CJC_ASSERT(ed.extendedType && ed.extendedType->GetTy());
     // Collect interfaces which has already been extended in other packages.
     auto extendedTypeTarget = Ty::GetDeclPtrOfTy<InheritableDecl>(ed.extendedType->GetTy());
-    std::unordered_set<Ptr<Ty>> otherPackageExtendInterfaceTy{};
+    std::unordered_set<DataTy> otherPackageExtendInterfaceTy{};
     // 1. collect direct inherited interfaces of type decl.
     if (extendedTypeTarget && extendedTypeTarget->GetTy()) {
         auto iTys = typeManager.GetAllSuperTys(*extendedTypeTarget->GetTy(), {}, false);
@@ -555,7 +555,7 @@ void TypeCheckerImpl::CheckExtendOrphanRule(const ASTContext& ctx, ExtendDecl& e
     bool isImportedExtendedType = (extendedTypeTarget && extendedTypeTarget->fullPackageName != ctx.fullPackageName) ||
         ed.extendedType->GetTy()->IsBuiltin();
     // Check whether all extended interfaces are imported.
-    std::set<Ptr<Ty>, CmpTyByName> externalDecls = {};
+    std::set<DataTy, CmpTyByName> externalDecls = {};
     for (const auto& inheritedType : ed.inheritedTypes) {
         if (!inheritedType->GetTy()) {
             continue;

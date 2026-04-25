@@ -10,9 +10,9 @@
 using namespace Cangjie;
 using namespace AST;
 
-Ptr<Ty> TypeCheckerImpl::SynResumeExpr(ASTContext& ctx, ResumeExpr& re)
+ModalTy TypeCheckerImpl::SynResumeExpr(ASTContext& ctx, ResumeExpr& re)
 {
-    Ty* resumptionParamTy = typeManager.GetAnyTy();
+    ModalTy resumptionParamTy = typeManager.GetAnyTy();
 
     if (re.enclosing) {
         resumptionParamTy = (*re.enclosing)->commandResultTy;

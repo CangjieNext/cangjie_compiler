@@ -20,7 +20,7 @@ bool TypeCheckerImpl::ChkTupleLit(ASTContext& ctx, Ty& target, TupleLit& tl)
         ReplaceIdealTy(tl);
         return Ty::IsTyCorrect(tl.GetTy());
     }
-    Ptr<Ty> targetTy = UnboxOptionType(&target);
+    ModalTy targetTy = UnboxOptionType(&target);
     if (!Ty::IsTyCorrect(targetTy) || !targetTy->IsTuple()) {
         DiagMismatchedTypesWithFoundTy(diag, tl, targetTy->String(), "Tuple");
         tl.SetTy(TypeManager::GetNonNullTy(tl.GetTy()));
@@ -35,7 +35,7 @@ bool TypeCheckerImpl::ChkTupleLit(ASTContext& ctx, Ty& target, TupleLit& tl)
         return false;
     }
     // If the size of target elemTys and elements are equal, check one by one.
-    std::vector<Ptr<Ty>> realElemTys;
+    std::vector<ModalTy> realElemTys;
     for (size_t i = 0; i < typeArgs.size(); ++i) {
         CJC_NULLPTR_CHECK(tl.children[i]);
         if (!Check(ctx, typeArgs[i], tl.children[i].get())) {
@@ -56,9 +56,9 @@ bool TypeCheckerImpl::ChkTupleLit(ASTContext& ctx, Ty& target, TupleLit& tl)
     return true;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynTupleLit(ASTContext& ctx, TupleLit& tl)
+ModalTy TypeCheckerImpl::SynTupleLit(ASTContext& ctx, TupleLit& tl)
 {
-    std::vector<Ptr<Ty>> elemTy;
+    std::vector<ModalTy> elemTy;
     // Synthesize the type of each element.
     for (auto& it : tl.children) {
         if (!it) {

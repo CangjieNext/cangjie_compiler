@@ -565,7 +565,7 @@ private:
     }
 
     static std::vector<DestructedPattern> SubPatternsFromPatterns(TypeManager& typeManager,
-        const std::vector<Ptr<AST::Ty>>& goalTys, const std::vector<OwnedPtr<Pattern>>& patterns)
+        const std::vector<AST::ModalTy>& goalTys, const std::vector<OwnedPtr<Pattern>>& patterns)
     {
         std::vector<DestructedPattern> subPatterns;
         CJC_ASSERT(goalTys.size() == patterns.size());
@@ -595,7 +595,7 @@ private:
         }
         MultiTypeSubst m;
         typeManager.GenerateGenericMapping(m, *enumPattern.GetTy());
-        Ptr<AST::Ty> instTy = typeManager.GetBestInstantiatedTy(target->GetTy(), m);
+        AST::DataTy instTy = typeManager.GetBestInstantiatedTy(target->GetTy(), m);
         CJC_ASSERT(Ty::IsTyCorrect(instTy));
         Constructor ctor = Constructor::Enum(*target, *instTy);
         if (instTy->IsFunc()) {
@@ -643,7 +643,7 @@ private:
             CJC_ASSERT(ty.IsTuple());
             CJC_ASSERT(ctor.Arity() == ty.typeArgs.size());
             for (size_t i = 0; i < ctor.Arity(); i++) {
-                Ptr<AST::Ty> argTy = ty.typeArgs[i];
+                AST::DataTy argTy = ty.typeArgs[i].get();
                 CJC_ASSERT(Ty::IsTyCorrect(argTy));
                 subPatterns.emplace_back(DestructedPattern(Constructor::Wildcard(), {}, *argTy, nullptr));
             }
@@ -928,8 +928,8 @@ private:
 
     static void SplitWildcardForSealed(std::vector<Constructor>& ctors, ClassLikeTy& sealedTy)
     {
-        std::set<Ptr<Ty>, CmpTyByName> directSubtypes(sealedTy.directSubtypes.cbegin(), sealedTy.directSubtypes.cend());
-        for (Ptr<Ty> subTy : directSubtypes) {
+        std::set<DataTy, CmpTyByName> directSubtypes(sealedTy.directSubtypes.cbegin(), sealedTy.directSubtypes.cend());
+        for (DataTy subTy : directSubtypes) {
             CJC_ASSERT(Ty::IsTyCorrect(subTy));
             if (auto subSealed = AsSealedLikeClassLikeTy(*subTy); subSealed && !IsSuperTypeForFFI(*subTy)) {
                 SplitWildcardForSealed(ctors, *subSealed);

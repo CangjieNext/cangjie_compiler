@@ -116,7 +116,7 @@ bool TypeCheckerImpl::ReplaceIdealTy(Node& node)
     if (!Ty::IsTyCorrect(node.GetTy())) {
         return false;
     }
-    Ptr<Ty> idealTy = node.GetTy();
+    ModalTy idealTy = node.GetTy();
     typeManager.ReplaceIdealTy(&idealTy);
     node.SetTy(idealTy);
     if (node.astKind == ASTKind::LIT_CONST_EXPR) {

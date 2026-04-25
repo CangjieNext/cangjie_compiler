@@ -9,7 +9,7 @@
 using namespace Cangjie;
 using namespace AST;
 
-Ptr<Ty> TypeCheckerImpl::SynParenExpr(const CheckerContext& ctx, ParenExpr& pe)
+ModalTy TypeCheckerImpl::SynParenExpr(const CheckerContext& ctx, ParenExpr& pe)
 {
     Synthesize(ctx, pe.expr.get());
     if (!pe.expr || !Ty::IsTyCorrect(pe.expr->GetTy())) {

@@ -25,9 +25,9 @@ using namespace AST;
 using namespace TypeCheckUtil;
 
 namespace {
-Ptr<Ty> GetSmallestClassTy(TypeManager& tyMgr, const std::set<Ptr<Ty>>& uppers)
+DataTy GetSmallestClassTy(TypeManager& tyMgr, const std::set<DataTy>& uppers)
 {
-    Ptr<Ty> smallest = nullptr;
+    DataTy smallest = nullptr;
     for (auto it : uppers) {
         if (!it->IsClass()) {
             continue;

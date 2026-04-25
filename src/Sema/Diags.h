@@ -38,12 +38,12 @@ void DiagInvalidBinaryExpr(DiagnosticEngine& diag, const BinaryExpr& be);
 void DiagInvalidUnaryExpr(DiagnosticEngine& diag, const UnaryExpr& ue);
 void DiagInvalidUnaryExprWithTarget(DiagnosticEngine& diag, const UnaryExpr& ue, Ty& target);
 void DiagInvalidSubscriptExpr(
-    DiagnosticEngine& diag, const SubscriptExpr& se, const Ty& baseTy, const std::vector<Ptr<Ty>>& indexTys);
+    DiagnosticEngine& diag, const SubscriptExpr& se, const Ty& baseTy, const std::vector<ModalTy>& indexTys);
 void DiagUnableToInferExpr(DiagnosticEngine& diag, const Expr& expr);
 void DiagUnableToInferReturnType(DiagnosticEngine& diag, const FuncDecl& fd);
 void DiagUnableToInferReturnType(DiagnosticEngine& diag, const FuncBody& fb);
 void DiagUnableToInferReturnType(DiagnosticEngine& diag, const FuncDecl& fd, const Expr& expr);
-void DiagWrongNumberOfArguments(DiagnosticEngine& diag, const CallExpr& ce, const std::vector<Ptr<Ty>>& paramTys);
+void DiagWrongNumberOfArguments(DiagnosticEngine& diag, const CallExpr& ce, const std::vector<ModalTy>& paramTys);
 void DiagWrongNumberOfArguments(DiagnosticEngine& diag, const CallExpr& ce, const FuncDecl& fd);
 void DiagGenericFuncWithoutTypeArg(DiagnosticEngine& diag, const Expr& expr);
 void DiagStaticAndNonStaticOverload(DiagnosticEngine& diag, const FuncDecl& fd, const FuncDecl& firstNonStatic);
@@ -70,7 +70,7 @@ void DiagUseClosureCaptureVarAlone(DiagnosticEngine& diag, const Expr& expr);
 void DiagNeedNamedArgument(
     DiagnosticEngine& diag, const CallExpr& ce, const FuncDecl& fd, size_t paramPos, size_t argPos);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-void DiagForStaticVariableDependsGeneric(DiagnosticEngine& diag, const Node& node, const std::set<Ptr<Ty>>& targetTys);
+void DiagForStaticVariableDependsGeneric(DiagnosticEngine& diag, const Node& node, const std::set<ModalTy>& targetTys);
 #endif
 /**
  * @brief Returns a vector of recommendations.

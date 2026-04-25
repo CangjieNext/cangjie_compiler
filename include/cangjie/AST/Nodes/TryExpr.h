@@ -20,7 +20,7 @@ struct Handler {
     OwnedPtr<Pattern> commandPattern;
     OwnedPtr<Block> block;
     OwnedPtr<LambdaExpr> desugaredLambda;
-    Ty* commandResultTy;
+    ModalTy commandResultTy;
 };
 
 /**

@@ -30,8 +30,8 @@ public:
     void GenerateAccessors(AST::Decl& decl);
     Ptr<AST::Expr> ReplaceExprWithAccessor(
         AST::Expr& originalExpr, bool isInConstructor, bool isSubMemberAccess = false);
-    void ReplaceInterfaceDefaultFunc(AST::Expr& originalExpr, Ptr<AST::Ty> outerTy, bool isInMockAnnotatedLambda);
-    void ReplaceInterfaceDefaultFuncInCall(AST::Node& node, Ptr<AST::Ty> outerty, bool isInMockAnnotatedLambda);
+    void ReplaceInterfaceDefaultFunc(AST::Expr& originalExpr, AST::ModalTy outerTy, bool isInMockAnnotatedLambda);
+    void ReplaceInterfaceDefaultFuncInCall(AST::Node& node, AST::ModalTy outerty, bool isInMockAnnotatedLambda);
     void MarkNodeMockSupportedIfNeeded(AST::Node& node);
     void WriteGeneratedMockDecls();
     void PrepareToSpy(AST::Decl& decl);
@@ -88,7 +88,7 @@ private:
     OwnedPtr<AST::CallExpr> GenerateSetterCall(const AST::NameReferenceExpr& nameRefExpr);
     OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(const AST::NameReferenceExpr& nameRefExpr, AccessorKind kind);
     OwnedPtr<AST::CallExpr> GenerateAccessorCallForField(OwnedPtr<AST::Expr> baseExpr, Ptr<AST::Decl> memberDecl,
-        Ptr<AST::Ty> memberRefTy, AccessorKind kind, Ptr<AST::File> curFile);
+        AST::ModalTy memberRefTy, AccessorKind kind, Ptr<AST::File> curFile);
     Ptr<AST::Expr> ReplaceFieldGetWithAccessor(AST::MemberAccess& memberAccess, bool isInConstructor);
     OwnedPtr<AST::Block> GenerateBlockForAssignExpr(AST::AssignExpr& assignExpr,
         OwnedPtr<AST::CallExpr> accessorCall);
@@ -125,7 +125,7 @@ private:
     template <typename T> Ptr<T> FindGeneratedGlobalDecl(Ptr<AST::File> file, const std::string& identifier);
     std::tuple<Ptr<AST::InterfaceDecl>, Ptr<AST::FuncDecl>> FindDefaultAccessorInterfaceAndFunction(
         Ptr<AST::FuncDecl> original);
-    Ptr<AST::FuncDecl> FindDefaultAccessorImplementation(Ptr<AST::Ty> baseTy, Ptr<AST::FuncDecl> accessorDecl);
+    Ptr<AST::FuncDecl> FindDefaultAccessorImplementation(AST::ModalTy baseTy, Ptr<AST::FuncDecl> accessorDecl);
     void TransformAccessorCallForMutOperation(
         AST::NameReferenceExpr& originalNre, AST::Expr& replacedNre, AST::Expr& topLevelExpr);
     void ReplaceSubMemberAccessWithAccessor(
@@ -141,7 +141,7 @@ private:
         OwnedPtr<AST::EnumPattern> optionFuncTyPattern, OwnedPtr<AST::CallExpr> handlerCallExpr);
     Ptr<AST::Decl> GenerateSpiedObjectVar(const AST::Decl& decl);
 
-    std::vector<Ptr<AST::Ty>> CloneFuncDecl(Ptr<AST::FuncDecl> fromDecl, Ptr<AST::FuncDecl> toDecl,
+    std::vector<AST::ModalTy> CloneFuncDecl(Ptr<AST::FuncDecl> fromDecl, Ptr<AST::FuncDecl> toDecl,
         Ptr<AST::File> curFile = nullptr, std::string fullPackageName = "");
     void GenerateSpyCallHandler(AST::FuncDecl& funcDecl, AST::Decl& spiedObjectDecl);
     void PrepareInterfaceDecl(AST::InterfaceDecl& interfaceDecl);

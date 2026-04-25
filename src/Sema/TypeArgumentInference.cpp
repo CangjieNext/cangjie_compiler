@@ -206,7 +206,7 @@ bool IsConcrete(const TyVars& tyVarsToSolve, AST::Ty& ty)
     }
     auto allTyVars = ty.GetGenericTyArgs();
     return std::all_of(allTyVars.begin(), allTyVars.end(),
-        [&tyVarsToSolve](Ptr<Ty> ty) { return tyVarsToSolve.count(RawStaticCast<TyVar*>(ty)) == 0; });
+        [&tyVarsToSolve](ModalTy ty) { return tyVarsToSolve.count(RawStaticCast<TyVar*>(ty)) == 0; });
 }
 
 /**
@@ -214,13 +214,13 @@ bool IsConcrete(const TyVars& tyVarsToSolve, AST::Ty& ty)
  *  Will only do so if QuestTy at the position can be supported.
  *  Otherwise a nullopt will be returned.
  */
-std::optional<Ptr<AST::Ty>> UnsolvedAsQuest(TypeManager& tyMgr, const TyVars& tyVarsToSolve, AST::Ty& ty)
+std::optional<AST::ModalTy> UnsolvedAsQuest(TypeManager& tyMgr, const TyVars& tyVarsToSolve, AST::Ty& ty)
 {
     if (!Ty::IsTyCorrect(&ty)) {
         return &ty;
     }
     if (auto funcTy = DynamicCast<FuncTy>(&ty)) {
-        std::vector<Ptr<Ty>> paramTys;
+        std::vector<ModalTy> paramTys;
         for (auto& it : funcTy->paramTys) {
             if (!IsConcrete(tyVarsToSolve, *it)) {
                 return std::nullopt;
@@ -228,7 +228,7 @@ std::optional<Ptr<AST::Ty>> UnsolvedAsQuest(TypeManager& tyMgr, const TyVars& ty
             paramTys.push_back(it);
         }
         if (auto retType = UnsolvedAsQuest(tyMgr, tyVarsToSolve, *funcTy->retTy)) {
-            Ptr<Ty> fin = tyMgr.GetFunctionTy(paramTys, *retType,
+            ModalTy fin = tyMgr.GetFunctionTy(paramTys, *retType,
                 {funcTy->IsCFunc(), funcTy->isClosureTy, funcTy->hasVariableLenArg});
             return fin;
         } else {
@@ -245,13 +245,13 @@ std::optional<Ptr<AST::Ty>> UnsolvedAsQuest(TypeManager& tyMgr, const TyVars& ty
 
 struct TyArgSynState {
     TyVars tyVarsToSolve;
-    Ptr<Ty> retTarget;
-    std::vector<Ptr<Ty>> argTys;
+    ModalTy retTarget;
+    std::vector<ModalTy> argTys;
     std::unordered_set<size_t> ignoredEnumCtor;
     // bitmap for arugments failed to be synthesized
     std::vector<bool> failSet;
     // param tys with quest type, used as check target for args in failSet
-    std::vector<Ptr<Ty>> questParamTys;
+    std::vector<ModalTy> questParamTys;
     // number of type vars not yet solved
     size_t unsolvedCount;
     // any new information derived from this iteration
@@ -277,7 +277,7 @@ bool MayNeedNextIteration(TyArgSynState& stat, size_t newUnsolvedCount)
     }
 }
 
-bool PrepareQuestParamTy(TypeManager& tyMgr, const std::vector<Ptr<Ty>>& paramsTy, TyArgSynState& stat)
+bool PrepareQuestParamTy(TypeManager& tyMgr, const std::vector<ModalTy>& paramsTy, TyArgSynState& stat)
 {
     // prepare param ty with new info
     bool anyNewTarget = false;
@@ -298,9 +298,9 @@ bool PrepareQuestParamTy(TypeManager& tyMgr, const std::vector<Ptr<Ty>>& paramsT
     return anyNewTarget;
 }
 
-std::vector<Ptr<Ty>> ValidateArgTys(CallExpr& ce, TyArgSynState& stat)
+std::vector<ModalTy> ValidateArgTys(CallExpr& ce, TyArgSynState& stat)
 {
-    std::vector<Ptr<Ty>> validArgTys;
+    std::vector<ModalTy> validArgTys;
     stat.ignoredEnumCtor.clear();
     for (size_t i = 0; i < ce.args.size(); ++i) {
         // For code 'Some(None)' the sema type of 'None' needs to be inferred,
@@ -316,8 +316,8 @@ std::vector<Ptr<Ty>> ValidateArgTys(CallExpr& ce, TyArgSynState& stat)
     return validArgTys;
 }
 
-std::vector<Blame> MakeArgBlames(const TyArgSynState& stat, const CallExpr& ce, const std::vector<Ptr<Ty>>& argTys,
-    const std::vector<Ptr<Ty>>& paramTys, TypeManager& tyMgr)
+std::vector<Blame> MakeArgBlames(const TyArgSynState& stat, const CallExpr& ce, const std::vector<ModalTy>& argTys,
+    const std::vector<ModalTy>& paramTys, TypeManager& tyMgr)
 {
     CJC_ASSERT(argTys.size() == paramTys.size());
     std::vector<Blame> blames;
@@ -372,7 +372,7 @@ bool NeedLastTry(CallExpr& ce)
     return ret;
 }
 
-void TryUpdateEnumTyByTarget(const CallExpr& ce, const FuncDecl& fd, Ptr<Ty> retTarget)
+void TryUpdateEnumTyByTarget(const CallExpr& ce, const FuncDecl& fd, ModalTy retTarget)
 {
     if (auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get()); ma && ma->baseExpr) {
         // To handle omiting the generic parameter but it can be defined by target ty.
@@ -401,7 +401,7 @@ void ConstrainByUpperbound(TypeManager& tyMgr)
 } // namespace
 
 std::optional<TypeSubst> TypeCheckerImpl::PropagatePlaceholderAndSolve(
-    ASTContext& ctx, CallExpr& ce, const std::vector<Ptr<Ty>>& paramTys, const Ptr<Ty> retTy, const Ptr<Ty> retTyUB)
+    ASTContext& ctx, CallExpr& ce, const std::vector<ModalTy>& paramTys, const ModalTy retTy, const ModalTy retTyUB)
 {
     if (!NeedLastTry(ce)) {
         return {};
@@ -423,7 +423,7 @@ std::optional<TypeSubst> TypeCheckerImpl::PropagatePlaceholderAndSolve(
 }
 
 ErrOrSubst TypeCheckerImpl::PrepareTyArgsSynthesis(
-    ASTContext& ctx, const FunctionCandidate& candidate, Ptr<Ty> const retTyUB)
+    ASTContext& ctx, const FunctionCandidate& candidate, ModalTy const retTyUB)
 {
     auto& [fd, ce, argCombinations, _] = candidate;
     // Guarantees the RawStaticCast<FuncTy*> below.
@@ -431,7 +431,7 @@ ErrOrSubst TypeCheckerImpl::PrepareTyArgsSynthesis(
     DisableBodyInferForArgs(ctx, ce);
     TyArgSynState stat;
     // If args not empty, get argTys. Index 0 is set as current args' types combination.
-    stat.argTys = argCombinations.empty() ? std::vector<Ptr<Ty>>{} : argCombinations[0];
+    stat.argTys = argCombinations.empty() ? std::vector<ModalTy>{} : argCombinations[0];
     if (stat.argTys.size() != ce.args.size()) {
         return SolvingErrInfo{};
     }
@@ -439,7 +439,7 @@ ErrOrSubst TypeCheckerImpl::PrepareTyArgsSynthesis(
         Synthesize({ctx, SynPos::NONE}, &fd);
     }
     stat.failSet = std::vector<bool>(stat.argTys.size(), true);
-    stat.questParamTys = std::vector<Ptr<Ty>>(stat.argTys.size(), nullptr);
+    stat.questParamTys = std::vector<ModalTy>(stat.argTys.size(), nullptr);
     stat.tyVarsToSolve = GetTyVarsToSolve(typeManager.GetInstMapping());
     stat.unsolvedCount = stat.tyVarsToSolve.size() + 1;
     // Suppressing errors generated in 'Synthesize', only report them when type inference failed.
@@ -459,7 +459,7 @@ ErrOrSubst TypeCheckerImpl::PrepareTyArgsSynthesis(
     for (size_t i = 0; i < paramsTyInOrder.size(); ++i) {
         paramsTyInOrder[i] = typeManager.InstOf(paramsTyInOrder[i]);
     }
-    Ptr<Ty> funcRetTy = typeManager.InstOf(RawStaticCast<FuncTy*>(fd.GetTy())->retTy);
+    ModalTy funcRetTy = typeManager.InstOf(RawStaticCast<FuncTy*>(fd.GetTy())->retTy);
     LocTyArgSynArgPack argPack;
 
     while (stat.newInfo) {
@@ -483,8 +483,8 @@ ErrOrSubst TypeCheckerImpl::PrepareTyArgsSynthesis(
             }
         }
         // 2. collect valid arg tys & update failSet
-        std::vector<Ptr<Ty>> validArgTys = ValidateArgTys(ce, stat);
-        std::vector<Ptr<Ty>> paramTys;
+        std::vector<ModalTy> validArgTys = ValidateArgTys(ce, stat);
+        std::vector<ModalTy> paramTys;
         for (size_t i = 0; i < paramsTyInOrder.size(); ++i) {
             if (!stat.failSet[i]) {
                 paramTys.push_back(paramsTyInOrder[i]);
@@ -533,7 +533,7 @@ ErrOrSubst TypeCheckerImpl::PrepareTyArgsSynthesis(
 // not be the right target, so the generation of typeMapping may fail as well. This function will return empty in this
 // case.
 std::vector<SubstPack> TypeCheckerImpl::GenerateTypeMappingForCall(
-    ASTContext& ctx, FunctionCandidate& candidate, Ptr<Ty> retTarget)
+    ASTContext& ctx, FunctionCandidate& candidate, ModalTy retTarget)
 {
     auto& ce = candidate.ce;
     auto& fd = candidate.fd;
@@ -549,7 +549,7 @@ std::vector<SubstPack> TypeCheckerImpl::GenerateTypeMappingForCall(
 }
 
 std::vector<SubstPack> TypeCheckerImpl::GenerateTypeMappingByInference(
-    ASTContext& ctx, const FunctionCandidate& candidate, Ptr<Ty> retTarget)
+    ASTContext& ctx, const FunctionCandidate& candidate, ModalTy retTarget)
 {
     auto& ce = candidate.ce;
     auto& fd = candidate.fd;

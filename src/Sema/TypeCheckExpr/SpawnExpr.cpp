@@ -11,7 +11,7 @@
 using namespace Cangjie;
 using namespace Sema;
 
-Ptr<Ty> TypeCheckerImpl::SynSpawnExpr(ASTContext& ctx, SpawnExpr& se)
+ModalTy TypeCheckerImpl::SynSpawnExpr(ASTContext& ctx, SpawnExpr& se)
 {
     bool isWellTyped = !se.arg ||
         (Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, se.arg.get())) &&
@@ -82,7 +82,7 @@ bool TypeCheckerImpl::ChkSpawnExprSimple(ASTContext& ctx, Ty& tgtTy, SpawnExpr& 
 
 bool TypeCheckerImpl::ChkSpawnExpr(ASTContext& ctx, Ty& tgtTy, SpawnExpr& se)
 {
-    Ptr<Ty> fuTy;
+    ModalTy fuTy;
     if (TypeManager::IsCoreFutureType(tgtTy)) {
         fuTy = &tgtTy;
     } else {

@@ -21,15 +21,15 @@
 namespace Cangjie {
 struct LocTyArgSynArgPack {
     TyVars tyVarsToSolve;
-    std::vector<Ptr<AST::Ty>> argTys;
-    std::vector<Ptr<AST::Ty>> paramTys;
+    std::vector<AST::DataTy> argTys;
+    std::vector<AST::DataTy> paramTys;
     std::vector<Blame> argBlames;
-    Ptr<AST::Ty> funcRetTy = nullptr; // Nullable
-    Ptr<AST::Ty> retTyUB = nullptr; // Nullable
+    AST::DataTy funcRetTy = nullptr; // Nullable
+    AST::DataTy retTyUB = nullptr; // Nullable
     Blame retBlame;
 };
 
-using MemoForUnifiedTys = std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Ty>>>;
+using MemoForUnifiedTys = std::set<std::pair<AST::ModalTy, AST::ModalTy>>;
 
 class LocalTypeArgumentSynthesis {
     struct ConstraintWithMemo {
@@ -131,8 +131,8 @@ private:
     std::optional<TypeSubst> GetBestSolution(const TypeSubsts& substs, bool allowPartial = false);
     std::optional<size_t> GetBestIndex(const std::vector<bool>& maximals) const;
     void CompareCandidates(Ptr<TyVar> tyVar, const std::vector<TypeSubst>& candidates, std::vector<bool>& maximals);
-    std::pair<std::set<Ptr<AST::Ty>>::iterator, std::set<Ptr<AST::Ty>>::iterator> GetMaybeStableIters(
-        const std::set<Ptr<AST::Ty>>& s, std::optional<StableTys>& ss) const;
+    std::pair<std::set<AST::ModalTy>::iterator, std::set<AST::ModalTy>::iterator> GetMaybeStableIters(
+        const std::set<AST::ModalTy>& s, std::optional<StableTys>& ss) const;
     std::pair<TyVars::iterator, TyVars::iterator> GetMaybeStableIters(
         const TyVars& s, std::optional<StableTyVars>& ss) const;
 

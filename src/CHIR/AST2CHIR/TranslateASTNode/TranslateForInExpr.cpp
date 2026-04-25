@@ -560,7 +560,7 @@ void Translator::GenerateSignalCheckForThrow()
     currentBlock = returnBB; // contents of returnBB is filled on the caller side
 }
 
-Ptr<Value> Translator::TranslateForInIterCondition(Ptr<Value>& iterNextLocation, Ptr<AST::Ty> astTy)
+Ptr<Value> Translator::TranslateForInIterCondition(Ptr<Value>& iterNextLocation, AST::ModalTy astTy)
 {
     // Block #8: // preds: #6
     //   %51: Enum-_CNat6OptionIRNat6StringEE<Struct-Nat6StringE> = Load(%34)

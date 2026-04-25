@@ -202,7 +202,7 @@ OwnedPtr<VarDecl> CreateLetIter(ASTContext& ctx, VarPattern& vp, ForInExpr& forI
     return letValue;
 }
 
-OwnedPtr<MatchCase> CreateNoneCaseForForInIter(Ptr<Decl> optionDecl, Expr& refLoop, Ptr<Ty> caseTy)
+OwnedPtr<MatchCase> CreateNoneCaseForForInIter(Ptr<Decl> optionDecl, Expr& refLoop, ModalTy caseTy)
 {
     auto caseNone = MakeOwnedNode<MatchCase>();
     auto nonePattern = MakeOwnedNode<EnumPattern>();
@@ -228,7 +228,7 @@ OwnedPtr<MatchCase> CreateNoneCaseForForInIter(Ptr<Decl> optionDecl, Expr& refLo
 OwnedPtr<MatchCase> CreateSomeCaseForForInIter(
     Ptr<Decl> optionDecl, Expr& refLoop, Ptr<FuncTy> someRefTy, ForInExpr& forInExpr)
 {
-    Ptr<Ty> patternTy = forInExpr.pattern->GetTy();
+    ModalTy patternTy = forInExpr.pattern->GetTy();
     CJC_NULLPTR_CHECK(patternTy);
     // To : case Some(v)
     auto caseSome = MakeOwnedNode<MatchCase>();
@@ -343,7 +343,7 @@ void TypeCheckerImpl::DesugarForInCloseRange(ASTContext& ctx, AST::ForInExpr& fo
     // For update the iter 'iter += step'.
     auto update = CreateUpdate(forInExpr, *rangeExpr, *index);
     AddCurFile(*update, forInExpr.curFile);
-    Ptr<Ty> updateTy = SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, update.get()); // Need syn to desugar.
+    ModalTy updateTy = SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, update.get()); // Need syn to desugar.
     CJC_ASSERT(updateTy && updateTy->kind != TypeKind::TYPE_INVALID);
     // Create first if-else part in while body.
     auto firstRun = CreateFirstIf(forInExpr, *firstFlag, std::move(update));
@@ -372,7 +372,7 @@ void TypeCheckerImpl::DesugarForInCloseRange(ASTContext& ctx, AST::ForInExpr& fo
     blockExpr->body.push_back(std::move(whileExpr));
     AddCurFile(*blockExpr, forInExpr.curFile);
     // last expr of for in is not used as the value of the for expr, so we use UNUSED context
-    Ptr<Ty> blockExprTy = SynthesizeWithoutRecover({ctx, SynPos::UNUSED}, blockExpr.get());
+    ModalTy blockExprTy = SynthesizeWithoutRecover({ctx, SynPos::UNUSED}, blockExpr.get());
     CJC_ASSERT(blockExprTy && blockExprTy->kind != TypeKind::TYPE_INVALID);
     /* must do after synthesize */
     RearrangeRefLoop(forInExpr, *refWhile, refWhile->body.get());
@@ -434,7 +434,7 @@ void TypeCheckerImpl::DesugarForInNonCloseRange(ASTContext& ctx, AST::ForInExpr&
     // To: 'iter += step'
     auto update = CreateUpdate(forInExpr, *rangeExpr, *index);
     AddCurFile(*update, forInExpr.curFile);
-    Ptr<Ty> updateTy = SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, update.get());
+    ModalTy updateTy = SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, update.get());
     CJC_ASSERT(updateTy && updateTy->kind != TypeKind::TYPE_INVALID);
     whileExpr->body->body.push_back(std::move(update));
     CopyBasicInfo(condBody->thenBody.get(), whileExpr->body.get());
@@ -449,7 +449,7 @@ void TypeCheckerImpl::DesugarForInNonCloseRange(ASTContext& ctx, AST::ForInExpr&
     blockExpr->body.push_back(std::move(rangeStop));
     blockExpr->body.push_back(std::move(whileExpr));
     AddCurFile(*blockExpr, forInExpr.curFile);
-    Ptr<Ty> blockExprTy = SynthesizeWithoutRecover({ctx, SynPos::UNUSED}, blockExpr.get());
+    ModalTy blockExprTy = SynthesizeWithoutRecover({ctx, SynPos::UNUSED}, blockExpr.get());
     /* must do after synthesize */
     RearrangeRefLoop(forInExpr, *refWhile, refWhile->body.get());
     CJC_ASSERT(blockExprTy && blockExprTy->kind != TypeKind::TYPE_INVALID);
@@ -490,7 +490,7 @@ void TypeCheckerImpl::ReArrangeForInRangeExpr(ASTContext& ctx, ForInExpr& forInE
     auto update = CreateUpdate(forInExpr, *rangeExpr, *index);
     CopyBasicInfo(forInExpr.inExpression, update.get());
     AddCurFile(*update, forInExpr.curFile);
-    Ptr<Ty> updateTy = SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, update.get());
+    ModalTy updateTy = SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, update.get());
     CJC_ASSERT(updateTy && updateTy->kind != TypeKind::TYPE_INVALID);
     // composite block structure
     auto blockExpr = MakeOwnedNode<Block>();
@@ -808,7 +808,7 @@ void TypeCheckerImpl::DesugarForInString(ASTContext& ctx, AST::ForInExpr& forInE
     update->op = TokenKind::ADD_ASSIGN;
     update->isCompound = true;
     AddCurFile(*update, forInExpr.curFile);
-    Ty* updateTy = SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, update.get());
+    ModalTy updateTy = SynthesizeWithoutRecover({ctx, SynPos::EXPR_ARG}, update.get());
     CJC_ASSERT(updateTy && updateTy->kind != TypeKind::TYPE_INVALID);
     whileExpr->body->body.push_back(std::move(update));
     whileExpr->body->body.push_back(std::move(condBody));
@@ -823,7 +823,7 @@ void TypeCheckerImpl::DesugarForInString(ASTContext& ctx, AST::ForInExpr& forInE
     blockExpr->body.push_back(std::move(end));
     blockExpr->body.push_back(std::move(whileExpr));
     AddCurFile(*blockExpr, forInExpr.curFile);
-    Ty* blockExprTy = SynthesizeWithoutRecover({ctx, SynPos::UNUSED}, blockExpr.get());
+    ModalTy blockExprTy = SynthesizeWithoutRecover({ctx, SynPos::UNUSED}, blockExpr.get());
     /* must do after synthesize */
     RearrangeRefLoop(forInExpr, *refWhile, refWhile->body.get());
     CJC_ASSERT(blockExprTy && blockExprTy->kind != TypeKind::TYPE_INVALID);

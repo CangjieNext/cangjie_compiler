@@ -29,7 +29,7 @@ using namespace Cangjie;
 using namespace AST;
 
 namespace {
-std::vector<size_t> GetOrderedCheckingIndexes(const std::vector<Ptr<AST::Ty>>& tys)
+std::vector<size_t> GetOrderedCheckingIndexes(const std::vector<AST::ModalTy>& tys)
 {
     // Ordering index of types to make index of non-ideal types precedes the index of ideal types.
     // Synthesis non-ideal types first to restrict possible range of ideal type.
@@ -255,7 +255,7 @@ bool LocalTypeArgumentSynthesis::UnifyOne(const Tracked<Ty>& argTTy, const Track
     }
 
     MemoForUnifiedTys& memo = cms.front().memo;
-    auto inProcessing = std::pair<Ptr<Ty>, Ptr<Ty>>(&argTy, &paramTy);
+    auto inProcessing = std::pair<ModalTy, ModalTy>(&argTy, &paramTy);
     if (Utils::In(inProcessing, memo)) {
         return true;
     }
@@ -309,12 +309,12 @@ bool LocalTypeArgumentSynthesis::UnifyTyVar(const Tracked<Ty>& argTTy, const Tra
     auto& paramTy = paramTTy.ty;
     // If paramTy is the generic parameter to be solved.
     Ptr<TyVar> tyVar = nullptr;
-    Ptr<Ty> lb = TypeManager::GetInvalidTy();
-    Ptr<Ty> ub = TypeManager::GetInvalidTy();
+    DataTy lb = TypeManager::GetInvalidTy();
+    DataTy ub = TypeManager::GetInvalidTy();
     std::set<Blame> lbBlames;
     std::set<Blame> ubBlames;
 
-    auto unifyBound = [&tyVar, this](Ptr<Ty>& one, Ptr<Ty>& other, const Tracked<Ty>& bound, bool isUb) {
+    auto unifyBound = [&tyVar, this](DataTy& one, DataTy& other, const Tracked<Ty>& bound, bool isUb) {
         one = &bound.ty;
 
         if (one->IsNothing()) {
@@ -381,7 +381,7 @@ bool LocalTypeArgumentSynthesis::UnifyTyVarCollectConstraints(
         // lb and ub are initialized to INVALID_TY and thus are not null.
         // Elements in ubs are tested to be not null in UnifyTyVarCollectNewConstraints.
         // The join adds option box to lb if option-boxed lb already exists in the type var's lbs.
-        Ptr<Ty> lbTy{};
+        DataTy lbTy{};
         if (deterministic) {
             lbTy = &lb;
         } else {
@@ -584,8 +584,8 @@ void LocalTypeArgumentSynthesis::UpdateIdealTysInConstraints(PrimitiveTy& tgtTy)
         return;
     }
 
-    Ptr<Ty> idealInt = TypeManager::GetPrimitiveTy(TypeKind::TYPE_IDEAL_INT, {});
-    Ptr<Ty> idealFloat = TypeManager::GetPrimitiveTy(TypeKind::TYPE_IDEAL_FLOAT, {});
+    DataTy idealInt = TypeManager::GetPrimitiveTy(TypeKind::TYPE_IDEAL_INT, {});
+    DataTy idealFloat = TypeManager::GetPrimitiveTy(TypeKind::TYPE_IDEAL_FLOAT, {});
     auto& lbs = c[this->curTyVar].lbs;
     // Actually only one of the contains is true otherwise errors will be reported beforehand when checking
     // argTy <: paramTy and the program will not run up to here.
@@ -732,16 +732,16 @@ std::optional<TypeSubst> LocalTypeArgumentSynthesis::SolveConstraints(bool allow
 }
 
 namespace {
-Ptr<Ty> MeetUpperBounds(TypeManager& tyMgr, Ptr<TyVar> tyVar, const UpperBounds& ubs, const TyVars& ignoredTyVars)
+DataTy MeetUpperBounds(TypeManager& tyMgr, Ptr<TyVar> tyVar, const UpperBounds& ubs, const TyVars& ignoredTyVars)
 {
     // Classify the upperbound into tys which is a generic type with 'tyVar' in its typeArgs and other tys.
     // eg: T <: Interface<T>
     // First calculate meet result with ty without tyVars. If there exists valid result 'tyM',
     // than instantiating 'tysWithTyVar' with the mapping "tyVar -> tyM", and calculate final meet result
     // using substituted tys and 'tyM'.
-    Ptr<Ty> tyM = nullptr;
-    std::set<Ptr<Ty>> tysWithoutTyVar;
-    std::set<Ptr<Ty>> tysWithTyVar;
+    DataTy tyM = nullptr;
+    std::set<DataTy> tysWithoutTyVar;
+    std::set<DataTy> tysWithTyVar;
     // Step 1, classify tys.
     std::for_each(ubs.begin(), ubs.end(),
         [&](auto ty) { ty->Contains(tyVar) ? tysWithTyVar.emplace(ty) : tysWithoutTyVar.emplace(ty); });
@@ -783,9 +783,9 @@ std::optional<TypeSubst> LocalTypeArgumentSynthesis::FindSolution(
             }
 
             auto joinRes = JoinAndMeet(tyMgr, thisM[tyVar].lbs, tyVarsOfThisM).JoinAsVisibleTy();
-            Ptr<Ty> tyJ{};
+            DataTy tyJ{};
             tyJ = JoinAndMeet::SetJoinedType(tyJ, joinRes).second;
-            Ptr<Ty> tyM = MeetUpperBounds(tyMgr, tyVar, thisM[tyVar].ubs, tyVarsOfThisM);
+            DataTy tyM = MeetUpperBounds(tyMgr, tyVar, thisM[tyVar].ubs, tyVarsOfThisM);
             bool validAnyTy = hasAnyTy || (deterministic && thisM[tyVar].ubs.count(tyMgr.GetAnyTy()) > 0);
             bool validNothingTy =
                 hasNothingTy || (deterministic && thisM[tyVar].lbs.count(TypeManager::GetNothingTy({})) > 0);
@@ -1066,7 +1066,7 @@ TypeSubst LocalTypeArgumentSynthesis::ResetIdealTypesInSubst(TypeSubst& m)
     TypeSubst res;
     for (const auto& pair : std::as_const(m)) {
         Ptr<TyVar> tyVar = pair.first;
-        Ptr<Ty> instTy = pair.second;
+        ModalTy instTy = pair.second;
         tyMgr.ReplaceIdealTy(&instTy);
         res.emplace(tyVar, instTy);
     }
@@ -1113,8 +1113,8 @@ SolvingErrInfo LocalTypeArgumentSynthesis::GetErrInfo()
     return errMsg;
 }
 
-std::pair<std::set<Ptr<Ty>>::iterator, std::set<Ptr<Ty>>::iterator> LocalTypeArgumentSynthesis::GetMaybeStableIters(
-    const std::set<Ptr<Ty>>& s, std::optional<StableTys>& ss) const
+std::pair<std::set<ModalTy>::iterator, std::set<ModalTy>::iterator> LocalTypeArgumentSynthesis::GetMaybeStableIters(
+    const std::set<ModalTy>& s, std::optional<StableTys>& ss) const
 {
     auto tyL = s.cbegin();
     auto tyR = s.cend();

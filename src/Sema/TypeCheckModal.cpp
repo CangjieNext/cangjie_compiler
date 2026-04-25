@@ -325,9 +325,9 @@ private:
     }
 
     /// When the init has expr, use the first expr pos; otherwise use the body pos.
-    void DiagInitModalMustBeInExclave(const Node& pos, Ptr<Ty> ty)
+    void DiagInitModalMustBeInExclave(const Node& pos, ModalTy ty)
     {
-        d.DiagnoseRefactor("sema_init_modal_must_be_in_exclave", pos, ty->Modal().ToString());
+        d.DiagnoseRefactor("sema_init_modal_must_be_in_exclave", pos, ty.Modal().ToString());
     }
 
     /// The following functions need mark needsRegion:
@@ -360,7 +360,7 @@ private:
                     // nothing call itself does not require a region, but exprs before the call may require a region
                     return VisitAction::WALK_CHILDREN;
                 }
-                Ptr<Ty> targetTy = nullptr;
+                ModalTy targetTy = nullptr;
                 if (call->callKind == CallKind::CALL_FUNCTION_PTR) {
                     // fp call, no target
                     if (auto funcTy = DynamicCast<FuncTy>(call->baseFunc->GetTy())) {
@@ -443,7 +443,7 @@ private:
                     if (fd->TestAttr(Attribute::STATIC)) {
                         return target->GetTy()->Modal().local;
                     }
-                    Ptr<Ty> thisTy = type.GetThisParamTy(*fd);
+                    ModalTy thisTy = type.GetThisParamTy(*fd);
                     if (thisTy && Ty::IsTyCorrect(thisTy)) {
                         return thisTy->IsLocalType() ? thisTy->Modal().local : LocalModal::NOT;
                     }
@@ -601,7 +601,7 @@ private:
         return defSite->node != useSite->node;
     }
 
-    DiagnosticBuilder DiagBadAssignment(const Node& position, const ModalInfo& lModal, const Ty* rTy)
+    DiagnosticBuilder DiagBadAssignment(const Node& position, const ModalInfo& lModal, ModalTy rTy)
     {
         std::string arg1 = lModal.local != LocalModal::NOT ? " " + lModal.LocalString() : "";
         std::string arg2 = rTy->String();
@@ -609,7 +609,7 @@ private:
     }
 
     DiagnosticBuilder DiagBadAssignment(
-        const Node& position, const ModalInfo& lModal, const Ty* rTy, bool lExternal, bool rExternal)
+        const Node& position, const ModalInfo& lModal, ModalTy rTy, bool lExternal, bool rExternal)
     {
         std::string arg1 = (lExternal ? " external " : " internal ") + lModal.LocalString();
         std::string arg2 = (rExternal ? " external " : " internal ") + rTy->String();
@@ -824,7 +824,7 @@ private:
     }
 
     struct FuncParamInfo {
-        Ptr<Ty> ty;
+        ModalTy ty;
         ModalInfo modal;
         std::string_view name;
     };
@@ -1072,7 +1072,7 @@ void TypeCheckerImpl::CheckModalType(const ASTContext& ctx, Package& pkg)
 }
 
 void TypeCheckerImpl::ExpectSubtypeOf(
-    Ptr<AST::Node> node, Ptr<AST::Ty> expect, Ptr<AST::Ty> actual, ModalMatchMode modal)
+    Ptr<AST::Node> node, AST::ModalTy expect, AST::ModalTy actual, ModalMatchMode modal)
 {
     if (!typeManager.IsSubtype(expect, actual, true, true, modal)) {
         Sema::DiagMismatchedTypesWithFoundTy(diag, *node, *expect, *actual);
@@ -1113,7 +1113,7 @@ DiagnosticBuilder TypeCheckerImpl::DiagUndeclaredIdentifier(Range range, const s
     return diag.DiagnoseRefactor("sema_undeclared_identifier", range, identifier);
 }
 
-Ptr<Ty> TypeCheckerImpl::SynExclaveExpr(ASTContext& ctx, ExclaveExpr& expr)
+ModalTy TypeCheckerImpl::SynExclaveExpr(ASTContext& ctx, ExclaveExpr& expr)
 {
     // DiagExclaveOutsideFunc is only reported in ModalCheckExclaveInsideFunction.
 

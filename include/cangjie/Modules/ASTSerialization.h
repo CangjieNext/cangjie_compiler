@@ -91,7 +91,7 @@ public:
     bool PreloadCommonPartOfPackage(AST::Package& pkg) const;
     std::vector<std::string> ReadFileNames() const;
 
-    Ptr<AST::Ty> LoadType(FormattedIndex type) const;
+    AST::ModalTy LoadType(FormattedIndex type) const;
     // A flag to avoid conflicts when we are reusing the AST serialiser from CHIR
     void SetIsChirNow(bool isChirNow = false);
 

@@ -128,7 +128,7 @@ ASTKind GetTargetsSameASTKind(const std::vector<Ptr<Decl>>& targets)
     return ret;
 }
 
-ASTKind GetTargetsSameASTKind(std::unordered_map<Ptr<Ty>, std::vector<Ptr<Decl>>>& allTargets)
+ASTKind GetTargetsSameASTKind(std::unordered_map<ModalTy, std::vector<Ptr<Decl>>>& allTargets)
 {
     ASTKind ret = ASTKind::INVALID_DECL;
     for (auto& it : allTargets) {
@@ -141,10 +141,10 @@ ASTKind GetTargetsSameASTKind(std::unordered_map<Ptr<Ty>, std::vector<Ptr<Decl>>
     return ret;
 }
 
-std::unordered_map<Ptr<Decl>, std::unordered_set<Ptr<Ty>>> GetUpperBoundTargetsWithGivenKind(
-    const std::unordered_map<Ptr<Ty>, std::vector<Ptr<Decl>>>& allTargets, const std::unordered_set<ASTKind>& kinds)
+std::unordered_map<Ptr<Decl>, std::unordered_set<ModalTy>> GetUpperBoundTargetsWithGivenKind(
+    const std::unordered_map<ModalTy, std::vector<Ptr<Decl>>>& allTargets, const std::unordered_set<ASTKind>& kinds)
 {
-    std::unordered_map<Ptr<Decl>, std::unordered_set<Ptr<Ty>>> results;
+    std::unordered_map<Ptr<Decl>, std::unordered_set<ModalTy>> results;
     for (auto [ty, targets] : allTargets) {
         for (auto target : targets) {
             if (Utils::In(target->astKind, kinds)) {
@@ -165,11 +165,11 @@ bool IsCloserToImpl(const Decl& src, const Decl& target)
     return updateAbstract || updateNonInterface;
 }
 
-std::map<Ptr<Ty>, Ptr<Decl>>::const_iterator FoundSameSignatureMember(
-    TypeManager& tyMgr, const Decl& decl, FuncTy& funcTy, std::map<Ptr<Ty>, Ptr<Decl>>& methodSigs)
+std::map<ModalTy, Ptr<Decl>>::const_iterator FoundSameSignatureMember(
+    TypeManager& tyMgr, const Decl& decl, FuncTy& funcTy, std::map<ModalTy, Ptr<Decl>>& methodSigs)
 {
     auto curTy = &funcTy;
-    std::map<Ptr<Ty>, Ptr<Decl>>::const_iterator found = methodSigs.find(curTy);
+    std::map<ModalTy, Ptr<Decl>>::const_iterator found = methodSigs.find(curTy);
     if (found != methodSigs.cend()) {
         return found;
     }
@@ -277,7 +277,7 @@ std::vector<Ptr<Decl>> MergeFuncTargetsInSum(TypeManager& tyMgr, const MemberAcc
     // Functions found in upperbounds which have same signature must have only one valid implementation.
     // So, classify functions by function signature.
     std::unordered_set<Ptr<Decl>> targets;
-    std::map<Ptr<Ty>, Ptr<Decl>> methodSigs;
+    std::map<ModalTy, Ptr<Decl>> methodSigs;
     for (auto decl : upperDecls) {
         CJC_NULLPTR_CHECK(decl);
         if (decl->astKind != ASTKind::FUNC_DECL) {
@@ -370,7 +370,7 @@ bool TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, Ty& target, NameReferenceExpr&
     auto [genericIgnored, candidates] = CollectValidFuncTys(ctx, targets, refNode, DynamicCast<FuncTy*>(&target));
     TypeSubst resultMapping;
     Ptr<FuncDecl> matchedFd = nullptr;
-    Ptr<Ty> validCandidateTy = nullptr;
+    ModalTy validCandidateTy = nullptr;
     for (auto [fd, fdTy, mapping] : candidates) {
         if (!typeManager.IsSubtype(fdTy, &target)) {
             if (!validCandidateTy && Ty::IsTyCorrect(fdTy) && !StaticCast<FuncTy>(fdTy)->retTy->IsQuest()) {
@@ -570,14 +570,14 @@ void TypeCheckerImpl::InferCFuncExpr(ASTContext& ctx, RefExpr& re)
     }
 
     // synthesise type
-    std::vector<Ptr<Ty>> paramTys;
+    std::vector<ModalTy> paramTys;
     for (size_t i{0}; i < funcType->paramTypes.size(); ++i) {
         auto& param = funcType->paramTypes[i];
         param->SetTy(GetTyFromASTType(ctx, &*param));
         paramTys.push_back(param->GetTy());
     }
     funcType->retType->SetTy(GetTyFromASTType(ctx, funcType->retType.get()));
-    Ptr<Ty> retTy = funcType->retType->GetTy();
+    ModalTy retTy = funcType->retType->GetTy();
     auto resTy = typeManager.GetFunctionTy(std::move(paramTys), retTy, {.isC = true});
     re.SetTy(resTy);
 }
@@ -809,7 +809,7 @@ void TypeCheckerImpl::InferInstanceAccess(const ASTContext& ctx, MemberAccess& m
 }
 
 Ptr<Decl> TypeCheckerImpl::CheckUpperBoundTargetsCaseFuncCall(
-    const ASTContext& ctx, MemberAccess& ma, const std::unordered_map<Ptr<Ty>, std::vector<Ptr<Decl>>>& allTargets)
+    const ASTContext& ctx, MemberAccess& ma, const std::unordered_map<ModalTy, std::vector<Ptr<Decl>>>& allTargets)
 {
     ma.SetTargets({}); // Need clear before insertion.
     ma.foundUpperBoundMap = GetUpperBoundTargetsWithGivenKind(allTargets, {ASTKind::FUNC_DECL});
@@ -835,7 +835,7 @@ Ptr<Decl> TypeCheckerImpl::CheckUpperBoundTargetsCaseFuncCall(
 }
 
 Ptr<Decl> TypeCheckerImpl::CheckUpperBoundTargetsCaseOthers(const ASTContext& ctx,
-    MemberAccess& ma, const std::unordered_map<Ptr<Ty>, std::vector<Ptr<Decl>>>& allTargets)
+    MemberAccess& ma, const std::unordered_map<ModalTy, std::vector<Ptr<Decl>>>& allTargets)
 {
     ma.foundUpperBoundMap = GetUpperBoundTargetsWithGivenKind(allTargets, {ASTKind::VAR_DECL, ASTKind::PROP_DECL});
     std::vector<Ptr<Decl>> tempTargets;
@@ -874,7 +874,7 @@ Ptr<Decl> TypeCheckerImpl::CheckUpperBoundTargetsCaseOthers(const ASTContext& ct
 
 void TypeCheckerImpl::FilterSumUpperbound(const ASTContext& ctx, AST::MemberAccess& ma,
     AST::GenericsTy& tv, std::vector<Ptr<AST::Decl>>& targets,
-    const std::unordered_map<Ptr<Ty>, std::vector<Ptr<Decl>>>& allTargets)
+    const std::unordered_map<ModalTy, std::vector<Ptr<Decl>>>& allTargets)
 {
     auto& m = ctx.targetTypeMap;
     auto tgtTy = m.count(&ma) > 0 ? m.at(&ma) : nullptr;
@@ -882,14 +882,14 @@ void TypeCheckerImpl::FilterSumUpperbound(const ASTContext& ctx, AST::MemberAcce
         tgtTy = nullptr;
     }
     if (tgtTy) {
-        std::map<Ptr<Decl>, Ptr<Ty>> decl2Ub;
+        std::map<Ptr<Decl>, ModalTy> decl2Ub;
         for (auto& [ub, decls] : allTargets) {
             for (auto d : decls) {
                 decl2Ub[d] = ub;
             }
         }
         std::vector<Ptr<AST::Decl>> filteredTargets;
-        Ptr<Ty> validTy = nullptr;
+        ModalTy validTy = nullptr;
         for (auto d : targets) {
             auto ub = decl2Ub[d];
             // ub should never be filtered out
@@ -919,7 +919,7 @@ void TypeCheckerImpl::FilterSumUpperbound(const ASTContext& ctx, AST::MemberAcce
 bool TypeCheckerImpl::FilterSumUpperbound(AST::MemberAccess& ma, AST::GenericsTy& tv, const AST::Decl& d)
 {
     CJC_ASSERT(tv.isPlaceholder);
-    auto hasMemOfTargetSig = [this, &ma, &d](Ptr<Ty> ty)->bool {
+    auto hasMemOfTargetSig = [this, &ma, &d](ModalTy ty)->bool {
         for (auto& [d2, ub] : ma.foundUpperBoundMap) {
             if (ub.count(ty) > 0 && typeManager.IsTyEqual(d.GetTy(), d2->GetTy())) {
                 return true;
@@ -953,7 +953,7 @@ Ptr<Decl> TypeCheckerImpl::GetIdealTypeFuncTargetFromExtend(
 {
     CJC_NULLPTR_CHECK(ma.curFile);
     std::unordered_set<Ptr<Decl>> candidates;
-    std::vector<Ptr<Ty>> targetTys;
+    std::vector<ModalTy> targetTys;
     for (auto& tyKind : GetIdealTypesByKind(baseExprTy.kind)) {
         auto targets = ExtendFieldLookup(ctx, *ma.curFile, TypeManager::GetPrimitiveTy(tyKind), ma.field);
         for (auto& target : targets) {
@@ -1000,7 +1000,7 @@ Ptr<Decl> TypeCheckerImpl::GetMemberAccessExposedTarget(
         return nullptr; // If not legal, errors should be reported before.
     }
     auto allUpperBounds = genericsTy.upperBounds;
-    std::unordered_map<Ptr<Ty>, std::vector<Ptr<Decl>>> allTargets;
+    std::unordered_map<ModalTy, std::vector<Ptr<Decl>>> allTargets;
     for (auto& upperBound : allUpperBounds) {
         if (!Ty::IsTyCorrect(upperBound)) {
             continue;

@@ -41,7 +41,7 @@ void MarkUpperBoundIgnored(const Node& node, Generic& generic)
     }
 }
 
-std::pair<Ptr<Ty>, Ptr<Decl>> GetRealReferenceType(const Node& node)
+std::pair<ModalTy, Ptr<Decl>> GetRealReferenceType(const Node& node)
 {
     auto target = GetRealTarget(node.GetTarget());
     auto baseTy = node.GetTy(); // Ty is guaranteed by caller.
@@ -58,7 +58,7 @@ std::pair<Ptr<Ty>, Ptr<Decl>> GetRealReferenceType(const Node& node)
 } // namespace
 
 void StructInheritanceChecker::CheckInstMemberSignatures(
-    const InheritableDecl& decl, const std::vector<Ptr<Ty>>& instTys)
+    const InheritableDecl& decl, const std::vector<DataTy>& instTys)
 {
     if (instTriggerInfos.empty()) {
         return;
@@ -123,7 +123,7 @@ void StructInheritanceChecker::CheckInstMemberSignatures(
 }
 
 std::set<Ptr<ExtendDecl>, CmpNodeByPos> StructInheritanceChecker::GetVisibleExtendsForInstantiation(
-    const Decl& decl, const std::vector<Ptr<Ty>>& instTys)
+    const Decl& decl, const std::vector<DataTy>& instTys)
 {
     if (decl.astKind == ASTKind::EXTEND_DECL || !Ty::IsTyCorrect(decl.GetTy())) {
         return {};
@@ -143,7 +143,7 @@ std::set<Ptr<ExtendDecl>, CmpNodeByPos> StructInheritanceChecker::GetVisibleExte
 }
 
 bool StructInheritanceChecker::WillCauseInfiniteInstantiation(
-    const Node& triggerNode, const Decl& decl, const std::vector<Ptr<Ty>>& instTys)
+    const Node& triggerNode, const Decl& decl, const std::vector<DataTy>& instTys)
 {
     auto generic = decl.GetGeneric();
     // Relation between 'generic' and 'instTys' already been checked in previous step in 'CheckInstDupFuncsRecursively'.
@@ -168,7 +168,7 @@ bool StructInheritanceChecker::WillCauseInfiniteInstantiation(
         // Index 1 of 'instTriggerInfo' value is the decl which previously triggered instantiation.
         triggeredInside = &decl == std::get<1>(instTriggerInfos.back());
     }
-    Ptr<Ty> genericTy = TypeManager::GetInvalidTy();
+    DataTy genericTy = TypeManager::GetInvalidTy();
     auto checkRecursion = [&genericTy, triggeredInside, typeMapping, this](auto ty) -> bool {
         CJC_ASSERT(ty);
         auto substitutedTy = typeManager.GetInstantiatedTy(ty, typeMapping);
@@ -218,13 +218,13 @@ VisitAction StructInheritanceChecker::CheckInstDupFuncsRecursively(Node& node)
     if (target->IsNominalDecl() && target->TestAttr(Attribute::GENERIC)) {
         // NOTE: We must guarantee 'target' decl does not have 'generic infinite instantiation' status
         // before checking for its instantiated status, and also avoid re-entry.
-        if (auto [_, success] = instantiatedDecls.insert(std::make_pair(target, std::vector<Ptr<Ty>>{})); success) {
+        if (auto [_, success] = instantiatedDecls.insert(std::make_pair(target, std::vector<DataTy>{})); success) {
             Walker(target, [this](auto node) { return CheckInstDupFuncsRecursively(*node); }).Walk();
         }
     }
     CheckInstWithCStructTypeArg(node);
     auto ref = DynamicCast<NameReferenceExpr*>(&node);
-    std::vector<Ptr<Ty>> instTys = ref ? ref->instTys : typeManager.GetTypeArgs(*baseTy);
+    std::vector<DataTy> instTys = ref ? ref->instTys : typeManager.GetTypeArgs(*baseTy);
     TypeSubst typeMapping = GenerateTypeMapping(*target, instTys);
     // If failed to generate new typeMapping with current target, return now.
     if (typeMapping.empty()) {
@@ -263,7 +263,7 @@ VisitAction StructInheritanceChecker::CheckInstDupFuncsRecursively(Node& node)
     return VisitAction::WALK_CHILDREN;
 }
 
-void StructInheritanceChecker::CheckInstantiatedDecl(Decl& decl, const std::vector<Ptr<Ty>>& instTys)
+void StructInheritanceChecker::CheckInstantiatedDecl(Decl& decl, const std::vector<DataTy>& instTys)
 {
     if (decl.IsBuiltIn()) {
         return; // Do not check for builtin decl.
@@ -291,7 +291,7 @@ void StructInheritanceChecker::CheckInstDupFuncsInNominalDecls()
         for (auto& decl : file->decls) {
             // NOTE: We must guarantee 'target' decl does not have 'generic infinite instantiation' status
             // before checking for its instantiated status, and also avoid re-entry.
-            if (auto [_, success] = instantiatedDecls.insert(std::make_pair(decl.get(), std::vector<Ptr<Ty>>{}));
+            if (auto [_, success] = instantiatedDecls.insert(std::make_pair(decl.get(), std::vector<DataTy>{}));
                 success) {
                 Walker(decl.get(), [this](auto node) { return CheckInstDupFuncsRecursively(*node); }).Walk();
             }
@@ -352,7 +352,7 @@ void StructInheritanceChecker::CheckCStructArguments(const Node& node, const AST
     if (typeArgs.empty()) {
         return;
     }
-    if (Ty::IsCStructType(ty)) {
+    if (ty.IsCStructType()) {
         (void)diag.Diagnose(node, leftAnglePos, "sema_cffi_cannot_have_type_param", "struct with @C");
     }
     for (auto& type : typeArgs) {
@@ -370,7 +370,7 @@ void StructInheritanceChecker::CheckCStructArgument(const Ty& ty, const Type& ty
         // The type arg of CPointer constraint:
         // 1. CPointer<T>, defined in core/CPointer.cj
         // 2. CPointer<`CType`>
-        if (!typeArg.GetTy()->IsGeneric() && !Ty::IsMetCType(*typeArg.GetTy())) {
+        if (!typeArg.GetTy()->IsGeneric() && !typeArg.GetTy()->IsMetCType()) {
             diag.Diagnose(typeArg, "sema_illegal_cpointer_generic_type");
         }
         return;
@@ -393,7 +393,7 @@ void StructInheritanceChecker::CheckCStruct(const Ty& ty, const Type& typeArg)
         // 1. CPointer<T>, defined in core/CPointer.cj
         // 2. CPointer<`CType`>
         if (!ty.typeArgs.empty() && ty.typeArgs[0] && !ty.typeArgs[0]->IsGeneric() &&
-            !Ty::IsMetCType(*ty.typeArgs[0])) {
+            !ty.typeArgs[0]->IsMetCType()) {
             diag.Diagnose(typeArg, "sema_illegal_cpointer_generic_type");
         }
         return;

@@ -414,7 +414,7 @@ void CjoManagerImpl::ReplaceTypeAliasInNode(Ptr<Node> node)
         if (!Ty::IsTyCorrect(node->GetTy()) || !node->GetTy()->HasAliasTy()) {
             return VisitAction::WALK_CHILDREN;
         }
-        Ptr<Ty> key = node->GetTy();
+        ModalTy key = node->GetTy();
         auto cacheIt = typeAliasCache.find(key);
         if (cacheIt != typeAliasCache.end()) {
             node->SetTy(cacheIt->second);

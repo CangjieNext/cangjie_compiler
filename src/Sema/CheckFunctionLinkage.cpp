@@ -273,7 +273,7 @@ private:
     {
         srcExportedExprs.emplace(expr);
     }
-    void AddExportedTy(Ptr<Ty> ty)
+    void AddExportedTy(DataTy ty)
     {
         if (visitedExportedTys.count(ty) == 0) {
             exportedTys.emplace(ty);
@@ -291,10 +291,10 @@ private:
     }
     const Package& pkg;
     std::unordered_set<Ptr<Decl>> srcExportedDecls; // Include FuncDecl and VarDecl.
-    std::unordered_set<Ptr<Ty>> exportedTys;
+    std::unordered_set<DataTy> exportedTys;
     std::unordered_set<Ptr<Expr>> srcExportedExprs;
     std::unordered_set<Ptr<Decl>> visitedSrcExportedDecls;
-    std::unordered_set<Ptr<Ty>> visitedExportedTys;
+    std::unordered_set<DataTy> visitedExportedTys;
 };
 
 /**

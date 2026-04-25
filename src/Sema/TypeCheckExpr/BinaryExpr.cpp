@@ -201,7 +201,7 @@ bool TypeCheckerImpl::ChkOperatorFuncIfTyCannotBeInferred(ASTContext& ctx, Binar
 
 // Helper function to handle operator overload checking and return type inference errors
 // Returns true if operator overload succeeded, false otherwise
-bool TypeCheckerImpl::TryCheckOperatorOverload(ASTContext& ctx, Ty* target, BinaryExpr& be)
+bool TypeCheckerImpl::TryCheckOperatorOverload(ASTContext& ctx, ModalTy target, BinaryExpr& be)
 {
     DesugarOperatorOverloadExpr(ctx, be);
     {
@@ -296,7 +296,7 @@ bool TypeCheckerImpl::ChkArithmeticExpr(ASTContext& ctx, Ty& target, BinaryExpr&
     }
     // Update the targetTy so that the binary expression is of a primitive type, which can be boxed properly
     // to an interface type later. Forced by the current box algorithm.
-    Ptr<Ty> optionUnboxTy = TypeCheckUtil::UnboxOptionType(&target);
+    ModalTy optionUnboxTy = TypeCheckUtil::UnboxOptionType(&target);
     if (!Ty::IsTyCorrect(optionUnboxTy)) {
         return false;
     }
@@ -331,9 +331,9 @@ bool TypeCheckerImpl::ChkArithmeticExpr(ASTContext& ctx, Ty& target, BinaryExpr&
 
 bool TypeCheckerImpl::ChkExpoExpr(ASTContext& ctx, Ty& tgtTy, BinaryExpr& be)
 {
-    Ptr<Ty> i64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
-    Ptr<Ty> f64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_FLOAT64);
-    Ptr<Ty> u64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT64);
+    ModalTy i64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
+    ModalTy f64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_FLOAT64);
+    ModalTy u64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT64);
     // Using the IsSubtype function to fit the ImplicitConvert interface in the future.
     bool isBaseWellTyped = false;
     bool isExponentWellTyped = false;
@@ -344,7 +344,7 @@ bool TypeCheckerImpl::ChkExpoExpr(ASTContext& ctx, Ty& tgtTy, BinaryExpr& be)
     if (i64Compatible) {
         auto ds = DiagSuppressor(diag);
         isBaseWellTyped = ChkExpoExprBase(ctx, be, *i64);
-        std::vector<Ptr<Ty>> exponentTys = {u64};
+        std::vector<ModalTy> exponentTys = {u64};
         isExponentWellTyped = ChkExpoExprExponent(ctx, *be.rightExpr, exponentTys);
         maybef64 = maybef64 && !(isBaseWellTyped && isExponentWellTyped);
         if (!maybef64) {
@@ -355,7 +355,7 @@ bool TypeCheckerImpl::ChkExpoExpr(ASTContext& ctx, Ty& tgtTy, BinaryExpr& be)
     }
     if (maybef64) {
         isBaseWellTyped = ChkExpoExprBase(ctx, be, *f64);
-        std::vector<Ptr<Ty>> exponentTys = {i64, f64};
+        std::vector<ModalTy> exponentTys = {i64, f64};
         isExponentWellTyped = ChkExpoExprExponent(ctx, *be.rightExpr, exponentTys);
     }
     if (!i64Compatible && !f64Compatible) {
@@ -385,12 +385,12 @@ bool TypeCheckerImpl::ChkExpoExprBase(ASTContext& ctx, const BinaryExpr& be, Ty&
     }
 }
 
-bool TypeCheckerImpl::ChkExpoExprExponent(ASTContext& ctx, Expr& exponent, std::vector<Ptr<Ty>> exTys)
+bool TypeCheckerImpl::ChkExpoExprExponent(ASTContext& ctx, Expr& exponent, std::vector<ModalTy> exTys)
 {
     bool isWellTyped = true;
     std::vector<short> pass;
     auto cs = PData::CommitScope(typeManager.constraints);
-    (void)std::for_each(exTys.cbegin(), exTys.cend(), [this, &ctx, &exponent, &pass](Ptr<Ty> ty) {
+    (void)std::for_each(exTys.cbegin(), exTys.cend(), [this, &ctx, &exponent, &pass](ModalTy ty) {
         auto ds = DiagSuppressor(diag);
         // Use check mode to let more cases such as a ** f() where f is overloaded pass type checking.
         (void)pass.emplace_back(CheckWithNegCache(ctx, ty, &exponent) ? 1 : 0);
@@ -433,13 +433,13 @@ bool TypeCheckerImpl::ChkExpoExprExponent(ASTContext& ctx, Expr& exponent, std::
     return isWellTyped;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynExpoExpr(ASTContext& ctx, BinaryExpr& be)
+ModalTy TypeCheckerImpl::SynExpoExpr(ASTContext& ctx, BinaryExpr& be)
 {
     SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, be.leftExpr.get());
     ReplaceIdealTy(*be.leftExpr);
 
     auto& exponent = *be.rightExpr;
-    Ptr<Ty> baseTy = be.leftExpr->GetTy();
+    ModalTy baseTy = be.leftExpr->GetTy();
     CJC_NULLPTR_CHECK(baseTy);
     bool isExponentWellTyped = CheckExponentByBaseTy(ctx, *baseTy, *be.leftExpr, exponent);
 
@@ -449,13 +449,13 @@ Ptr<Ty> TypeCheckerImpl::SynExpoExpr(ASTContext& ctx, BinaryExpr& be)
 
 bool TypeCheckerImpl::CheckExponentByBaseTy(ASTContext& ctx, Ty& baseTy, const Expr& base, Expr& exponent)
 {
-    Ptr<Ty> i64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
-    Ptr<Ty> u64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT64);
-    Ptr<Ty> f64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_FLOAT64);
+    ModalTy i64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
+    ModalTy u64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT64);
+    ModalTy f64 = TypeManager::GetPrimitiveTy(TypeKind::TYPE_FLOAT64);
     // The left operand of ** can only be of type Int64 or Float64.
     bool isExponentWellTyped = true;
     if (baseTy.IsPlaceholder()) {
-        std::set<std::pair<Ptr<Ty>, Ptr<Ty>>> validCombos = {{i64, u64}, {f64, i64}, {f64, f64}};
+        std::set<std::pair<ModalTy, ModalTy>> validCombos = {{i64, u64}, {f64, i64}, {f64, f64}};
         SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, &exponent);
         ReplaceIdealTy(exponent);
         if (!Ty::IsTyCorrect(exponent.GetTy())) {
@@ -472,10 +472,10 @@ bool TypeCheckerImpl::CheckExponentByBaseTy(ASTContext& ctx, Ty& baseTy, const E
         }
     }
     if (isExponentWellTyped && typeManager.IsSubtype(&baseTy, i64)) {
-        std::vector<Ptr<Ty>> exponentTys = {u64};
+        std::vector<ModalTy> exponentTys = {u64};
         isExponentWellTyped = ChkExpoExprExponent(ctx, exponent, exponentTys);
     } else if (isExponentWellTyped && typeManager.IsSubtype(&baseTy, f64)) {
-        std::vector<Ptr<Ty>> exponentTys = {i64, f64};
+        std::vector<ModalTy> exponentTys = {i64, f64};
         isExponentWellTyped = ChkExpoExprExponent(ctx, exponent, exponentTys);
     } else {
         isExponentWellTyped = false;
@@ -516,7 +516,7 @@ bool TypeCheckerImpl::ChkRelationalExpr(ASTContext& ctx, Ty& target, BinaryExpr&
 
 bool TypeCheckerImpl::ChkLogicalExpr(ASTContext& ctx, Ty& target, BinaryExpr& be)
 {
-    Ptr<Ty> boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
+    ModalTy boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
     // Check T is bool type.
     if (!target.IsBoolean()) {
         // Option type allow auto box.
@@ -569,7 +569,7 @@ bool TypeCheckerImpl::CheckTupleCanEqual(ASTContext& ctx, BinaryExpr& be)
         auto elementCmpExpr = CreateBinaryExpr(std::move(leftElements[i]), std::move(rightElements[i]), be.op);
         elementCmpExpr->EnableAttr(Attribute::IMPLICIT_ADD);
         CopyBasicInfo(&be, elementCmpExpr.get());
-        Ptr<Ty> returnTy = nullptr;
+        ModalTy returnTy = nullptr;
         {
             auto ds = DiagSuppressor(diag);
             returnTy = SynBinaryExpr(ctx, *elementCmpExpr);
@@ -598,7 +598,7 @@ bool TypeCheckerImpl::CheckTupleCanEqual(ASTContext& ctx, BinaryExpr& be)
     return true;
 }
 
-std::optional<bool> TypeCheckerImpl::CheckBinaryExprCaseBuiltIn(ASTContext& ctx, BinaryExpr& be, Ptr<Ty> target)
+std::optional<bool> TypeCheckerImpl::CheckBinaryExprCaseBuiltIn(ASTContext& ctx, BinaryExpr& be, ModalTy target)
 {
     CJC_ASSERT(target);
     bool checkRet = false;
@@ -651,7 +651,7 @@ std::optional<bool> TypeCheckerImpl::CheckBinaryExprCaseBuiltIn(ASTContext& ctx,
     return {};
 }
 
-Ptr<Ty> TypeCheckerImpl::SynLiteralInBinaryExpr(ASTContext& ctx, BinaryExpr& be)
+ModalTy TypeCheckerImpl::SynLiteralInBinaryExpr(ASTContext& ctx, BinaryExpr& be)
 {
     CJC_NULLPTR_CHECK(be.leftExpr);
     CJC_NULLPTR_CHECK(be.rightExpr);
@@ -663,7 +663,7 @@ Ptr<Ty> TypeCheckerImpl::SynLiteralInBinaryExpr(ASTContext& ctx, BinaryExpr& be)
     return SynLiteralInBinaryExprFromLeft(ctx, be);
 }
 
-std::optional<Ptr<Ty>> TypeCheckerImpl::SynLiteralInBinaryExprFromRight(ASTContext& ctx, BinaryExpr& be)
+std::optional<ModalTy> TypeCheckerImpl::SynLiteralInBinaryExprFromRight(ASTContext& ctx, BinaryExpr& be)
 {
     CJC_NULLPTR_CHECK(be.rightExpr);
     CJC_NULLPTR_CHECK(be.leftExpr);
@@ -705,7 +705,7 @@ std::optional<Ptr<Ty>> TypeCheckerImpl::SynLiteralInBinaryExprFromRight(ASTConte
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::SynLiteralInBinaryExprFromLeft(ASTContext& ctx, BinaryExpr& be)
+ModalTy TypeCheckerImpl::SynLiteralInBinaryExprFromLeft(ASTContext& ctx, BinaryExpr& be)
 {
     bool isWellTyped =
         SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, be.leftExpr.get()) && ReplaceIdealTy(*be.leftExpr);
@@ -732,7 +732,7 @@ Ptr<Ty> TypeCheckerImpl::SynLiteralInBinaryExprFromLeft(ASTContext& ctx, BinaryE
     }
 }
 
-std::optional<Ptr<Ty>> TypeCheckerImpl::SynArithmeticOrRelationalExpr(
+std::optional<ModalTy> TypeCheckerImpl::SynArithmeticOrRelationalExpr(
     ASTContext& ctx, BinaryExpr& be, bool isArithmetic)
 {
     // Exponentiation expressions have special rules and thus be handled differently.
@@ -768,7 +768,7 @@ std::optional<Ptr<Ty>> TypeCheckerImpl::SynArithmeticOrRelationalExpr(
     return {be.GetTy()};
 }
 
-Ptr<Ty> TypeCheckerImpl::SynLogicalExpr(ASTContext& ctx, BinaryExpr& be)
+ModalTy TypeCheckerImpl::SynLogicalExpr(ASTContext& ctx, BinaryExpr& be)
 {
     CJC_NULLPTR_CHECK(be.leftExpr);
     CJC_NULLPTR_CHECK(be.rightExpr);
@@ -814,7 +814,7 @@ bool TypeCheckerImpl::ChkShiftExpr(ASTContext& ctx, Ty& target, BinaryExpr& be)
     return isWellTyped;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynShiftExpr(ASTContext& ctx, BinaryExpr& be)
+ModalTy TypeCheckerImpl::SynShiftExpr(ASTContext& ctx, BinaryExpr& be)
 {
     CJC_NULLPTR_CHECK(be.leftExpr);
     CJC_NULLPTR_CHECK(be.rightExpr);
@@ -904,7 +904,7 @@ void TypeCheckerImpl::DiagnoseForBinaryExpr(ASTContext& ctx, BinaryExpr& be)
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::SynBinaryExpr(ASTContext& ctx, BinaryExpr& be)
+ModalTy TypeCheckerImpl::SynBinaryExpr(ASTContext& ctx, BinaryExpr& be)
 {
     if (be.desugarExpr) {
         return be.desugarExpr->GetTy();
@@ -917,7 +917,7 @@ Ptr<Ty> TypeCheckerImpl::SynBinaryExpr(ASTContext& ctx, BinaryExpr& be)
     // 1. Try built-in binary expression inference
     { // Create a scope for DiagSuppressor.
         auto ds = DiagSuppressor(diag);
-        Ptr<Ty> inferRet = TypeManager::GetInvalidTy();
+        ModalTy inferRet = TypeManager::GetInvalidTy();
         if (auto optTy = InferBinaryExprCaseBuiltIn(ctx, be, inferRet)) {
             ds.ReportDiag();
             return *optTy;
@@ -977,7 +977,7 @@ void TypeCheckerImpl::SynBinaryLeafs(ASTContext& ctx, BinaryExpr& be)
     Walker(&be, id, synLeafs).Walk();
 }
 
-std::optional<Ptr<Ty>> TypeCheckerImpl::InferBinaryExprCaseBuiltIn(ASTContext& ctx, BinaryExpr& be, Ptr<Ty>& inferRet)
+std::optional<ModalTy> TypeCheckerImpl::InferBinaryExprCaseBuiltIn(ASTContext& ctx, BinaryExpr& be, ModalTy& inferRet)
 {
     bool failNow = false;
     if (Utils::In(be.op, ARITHMETIC_OPERATOR)) {
@@ -1057,7 +1057,7 @@ bool TypeCheckerImpl::CheckFlowOperandsHaveNamedParam(const CallExpr& ce)
     });
 }
 
-bool TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, Ptr<Ty> target, BinaryExpr& be)
+bool TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, ModalTy target, BinaryExpr& be)
 {
     if (Ty::IsTyCorrect(be.GetTy())) {
         return !(target && typeManager.CheckTypeCompatibility(be.GetTy(), target) == TypeCompatibility::INCOMPATIBLE);
@@ -1126,7 +1126,7 @@ bool TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, Ptr<Ty> target, BinaryExpr& b
     return true;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynFlowExpr(ASTContext& ctx, BinaryExpr& be)
+ModalTy TypeCheckerImpl::SynFlowExpr(ASTContext& ctx, BinaryExpr& be)
 {
     if (!ChkFlowExpr(ctx, nullptr, be)) {
         be.SetTy(TypeManager::GetInvalidTy());
@@ -1136,7 +1136,7 @@ Ptr<Ty> TypeCheckerImpl::SynFlowExpr(ASTContext& ctx, BinaryExpr& be)
 
 bool TypeCheckerImpl::IsCoalescingLeftTyValid(Ty& ty) const
 {
-    Ptr<Ty> realTy = &ty;
+    ModalTy realTy = &ty;
     if (ty.IsPlaceholder()) {
         auto optionDecl = importManager.GetCoreDecl("Option");
         realTy = typeManager.ConstrainByCtor(StaticCast<GenericsTy&>(ty), *optionDecl->GetTy());
@@ -1157,7 +1157,7 @@ bool TypeCheckerImpl::IsCoalescingLeftTyValid(Ty& ty) const
     return false;
 }
 
-bool TypeCheckerImpl::ChkCoalescingExpr(ASTContext& ctx, Ptr<Ty> tgtTy, BinaryExpr& be)
+bool TypeCheckerImpl::ChkCoalescingExpr(ASTContext& ctx, ModalTy tgtTy, BinaryExpr& be)
 {
     auto leftTy = SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, be.leftExpr.get());
     bool isLeftTyInvalid = !leftTy || !IsCoalescingLeftTyValid(*leftTy);
@@ -1194,7 +1194,7 @@ bool TypeCheckerImpl::ChkCoalescingExpr(ASTContext& ctx, Ptr<Ty> tgtTy, BinaryEx
     return true;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynCoalescingExpr(ASTContext& ctx, BinaryExpr& be)
+ModalTy TypeCheckerImpl::SynCoalescingExpr(ASTContext& ctx, BinaryExpr& be)
 {
     if (!ChkCoalescingExpr(ctx, nullptr, be)) {
         be.SetTy(TypeManager::GetInvalidTy());
@@ -1202,11 +1202,11 @@ Ptr<Ty> TypeCheckerImpl::SynCoalescingExpr(ASTContext& ctx, BinaryExpr& be)
     return be.GetTy();
 }
 
-MatchResult TypeCheckerImpl::PickConstaintFromTys(TyVar& tv, std::set<Ptr<AST::Ty>> tys, bool isUB)
+MatchResult TypeCheckerImpl::PickConstaintFromTys(TyVar& tv, std::set<AST::ModalTy> tys, bool isUB)
 {
     PData::CommitScope cs(typeManager.constraints);
     size_t cnt = 0;
-    Ptr<Ty> target = nullptr;
+    ModalTy target = nullptr;
     for (auto ty : tys) {
         if (isUB ? typeManager.IsSubtype(&tv, ty) : typeManager.IsSubtype(ty, &tv)) {
             cnt++;
@@ -1225,12 +1225,12 @@ MatchResult TypeCheckerImpl::PickConstaintFromTys(TyVar& tv, std::set<Ptr<AST::T
 }
 
 MatchResult TypeCheckerImpl::PickConstaintFromTys(
-    Ty& tv1, Ty& tv2, std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Ty>>> tys, bool isUB)
+    Ty& tv1, Ty& tv2, std::set<std::pair<AST::ModalTy, AST::ModalTy>> tys, bool isUB)
 {
     PData::CommitScope cs(typeManager.constraints);
     size_t cnt = 0;
-    Ptr<Ty> target1 = nullptr;
-    Ptr<Ty> target2 = nullptr;
+    ModalTy target1 = nullptr;
+    ModalTy target2 = nullptr;
     for (auto [ty1, ty2] : tys) {
         if (isUB ? typeManager.IsSubtype(&tv1, ty1) && typeManager.IsSubtype(&tv2, ty2)
                  : typeManager.IsSubtype(ty1, &tv1) && typeManager.IsSubtype(ty2, &tv2)) {

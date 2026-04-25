@@ -47,7 +47,7 @@ bool TypeCheckerImpl::ChkQuoteExpr(ASTContext& ctx, Ty& target, QuoteExpr& qe)
     return true;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynQuoteExpr(ASTContext& ctx, QuoteExpr& qe)
+ModalTy TypeCheckerImpl::SynQuoteExpr(ASTContext& ctx, QuoteExpr& qe)
 {
     ChkIfImportLibAST(diag, importManager, qe);
     if (qe.desugarExpr) {

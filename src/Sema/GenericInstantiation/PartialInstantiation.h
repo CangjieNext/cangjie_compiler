@@ -270,7 +270,7 @@ private:
 };
 
 class TypeManager;
-using ReversedTypeSubst = std::map<Ptr<AST::Ty>, Ptr<TyVar>>;
+using ReversedTypeSubst = std::map<AST::DataTy, Ptr<TyVar>>;
 class TyGeneralizer {
 public:
     TyGeneralizer(TypeManager& tyMgr, const ReversedTypeSubst& mapping) : tyMgr(tyMgr), typeMapping(mapping)
@@ -279,21 +279,21 @@ public:
 
     ~TyGeneralizer() = default;
 
-    inline Ptr<AST::Ty> Generalize(Ptr<AST::Ty> ty)
+    inline AST::ModalTy Generalize(AST::ModalTy ty)
     {
         return AST::Ty::IsTyCorrect(ty) ? Generalize(*ty) : ty;
     }
 
 private:
-    Ptr<AST::Ty> Generalize(AST::Ty& ty);
-    Ptr<AST::Ty> GetGeneralizedStructTy(AST::StructTy& structTy);
-    Ptr<AST::Ty> GetGeneralizedClassTy(AST::ClassTy& classTy);
-    Ptr<AST::Ty> GetGeneralizedInterfaceTy(AST::InterfaceTy& interfaceTy);
-    Ptr<AST::Ty> GetGeneralizedEnumTy(AST::EnumTy& enumTy);
-    Ptr<AST::Ty> GetGeneralizedArrayTy(AST::ArrayTy& arrayTy);
-    Ptr<AST::Ty> GetGeneralizedPointerTy(AST::PointerTy& cptrTy);
+    AST::ModalTy Generalize(AST::Ty& ty);
+    AST::ModalTy GetGeneralizedStructTy(AST::StructTy& structTy);
+    AST::ModalTy GetGeneralizedClassTy(AST::ClassTy& classTy);
+    AST::ModalTy GetGeneralizedInterfaceTy(AST::InterfaceTy& interfaceTy);
+    AST::ModalTy GetGeneralizedEnumTy(AST::EnumTy& enumTy);
+    AST::ModalTy GetGeneralizedArrayTy(AST::ArrayTy& arrayTy);
+    AST::ModalTy GetGeneralizedPointerTy(AST::PointerTy& cptrTy);
     // Get instantiated ty of set type 'IntersectionTy' and 'UnionTy'.
-    template <typename SetTy> Ptr<AST::Ty> GetGeneralizedSetTy(SetTy& ty);
+    template <typename SetTy> AST::ModalTy GetGeneralizedSetTy(SetTy& ty);
 
     TypeManager& tyMgr;
     const ReversedTypeSubst& typeMapping;

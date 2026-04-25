@@ -86,7 +86,7 @@ private:
         const std::unordered_set<Ptr<const Ty>> inconsistentTypes = {}) const
     {
         bool isSubOfAll = std::all_of(inconsistentTypes.begin(), inconsistentTypes.end(), [&childTy, this](auto ty) {
-            return typeManager.IsSubtype(childTy.retTy, const_cast<Ty*>(ty.get()), false);
+            return typeManager.IsSubtype(childTy.retTy, ty, false);
         });
         if (!CheckReturnOverrideByGeneric(parentTy, childTy)) {
             return false;
@@ -109,24 +109,24 @@ private:
      * Generates the built-in operator function and adds to ed.members.
      * e.g. operator func +(right: Int64): Int64 { return this + right }
      */
-    void CreateBuiltInBinaryOperatorFunc(TokenKind op, Ptr<Ty> rightTy, ExtendDecl& ed, TypeKind returnTyKind) const;
+    void CreateBuiltInBinaryOperatorFunc(TokenKind op, ModalTy rightTy, ExtendDecl& ed, TypeKind returnTyKind) const;
     /**
      * Walk source package and checking inside instantiated decls to find whether
      * there conflict members existing in instantiated nominal decls.
      */
     void CheckInstDupFuncsInNominalDecls();
     VisitAction CheckInstDupFuncsRecursively(Node& node);
-    void CheckInstMemberSignatures(const InheritableDecl& decl, const std::vector<Ptr<Ty>>& instTys);
-    void CheckInstantiatedDecl(Decl& decl, const std::vector<Ptr<Ty>>& instTys);
+    void CheckInstMemberSignatures(const InheritableDecl& decl, const std::vector<DataTy>& instTys);
+    void CheckInstantiatedDecl(Decl& decl, const std::vector<DataTy>& instTys);
     /**
      * Get visible extend decls in stable order for given @p decl with @p instTys .
      */
     std::set<Ptr<ExtendDecl>, CmpNodeByPos> GetVisibleExtendsForInstantiation(
-        const Decl& decl, const std::vector<Ptr<Ty>>& instTys);
+        const Decl& decl, const std::vector<DataTy>& instTys);
     /**
      * Check whether the given decl instantiation info may cause infinite instantiation.
      */
-    bool WillCauseInfiniteInstantiation(const Node& triggerNode, const Decl& decl, const std::vector<Ptr<Ty>>& instTys);
+    bool WillCauseInfiniteInstantiation(const Node& triggerNode, const Decl& decl, const std::vector<DataTy>& instTys);
     void DiagnoseForInstantiatedMember(const MemberSignature& parent, const MemberSignature& child) const;
 
     /** CStruct checking methods. */
@@ -153,16 +153,16 @@ private:
     std::unordered_map<Ptr<const InheritableDecl>, MemberMap> structInheritedMembers;
     std::vector<Ptr<const Decl>> checkingDecls;
     /** Following members are used to cache instantiation checking status. */
-    std::set<std::pair<Ptr<const Decl>, const std::vector<Ptr<Ty>>>> instantiatedDecls;
-    std::map<std::pair<Ptr<const Decl>, const std::vector<Ptr<Ty>>>, std::unordered_map<Ptr<Ty>, Ptr<Ty>>>
+    std::set<std::pair<Ptr<const Decl>, const std::vector<DataTy>>> instantiatedDecls;
+    std::map<std::pair<Ptr<const Decl>, const std::vector<DataTy>>, std::unordered_map<DataTy, DataTy>>
         instantiatedTyCache;
     /**
      * Used to cache instantiation checking status which need to report diagnoses.
      * key: generic decl with instantiated type, value: pair of member signatures to report diagnose.
      */
-    std::map<std::pair<Ptr<const Decl>, const std::vector<Ptr<Ty>>>,
+    std::map<std::pair<Ptr<const Decl>, const std::vector<DataTy>>,
         std::vector<std::pair<MemberSignature, MemberSignature>>> genericMembersForInstantiatedDecl;
-    std::vector<std::tuple<Ptr<const Node>, Ptr<const Decl>, const std::vector<Ptr<Ty>>>> instTriggerInfos;
+    std::vector<std::tuple<Ptr<const Node>, Ptr<const Decl>, const std::vector<DataTy>>> instTriggerInfos;
     std::stack<TypeSubst> institutionMaps;
     bool infiniteInstantiationOccured{false};
 
@@ -172,7 +172,7 @@ private:
     class InstantiatedContext {
     public:
         InstantiatedContext(StructInheritanceChecker& checker, Ptr<AST::Node> node, Ptr<const Decl> target,
-            const std::vector<Ptr<Ty>>& instTys, bool updateTrigger)
+            const std::vector<DataTy>& instTys, bool updateTrigger)
             : checker(checker), needUpdate(updateTrigger)
         {
             if (needUpdate) {
@@ -192,10 +192,10 @@ private:
     };
 };
 
-std::vector<std::unordered_set<Ptr<Ty>>> GetAllGenericUpperBounds(TypeManager& tyMgr, const Decl& decl);
+std::vector<std::unordered_set<DataTy>> GetAllGenericUpperBounds(TypeManager& tyMgr, const Decl& decl);
 
 void CheckGenericTypeBoundsMapped(const Decl& parent, const Decl& child,
-    std::vector<std::unordered_set<Ptr<Ty>>> parentBounds, std::vector<std::unordered_set<Ptr<Ty>>> childBounds,
+    std::vector<std::unordered_set<DataTy>> parentBounds, std::vector<std::unordered_set<DataTy>> childBounds,
     DiagnosticEngine& diag, TypeManager& typeManager);
 
 } // namespace Cangjie

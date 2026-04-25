@@ -235,13 +235,13 @@ bool CompMemberSignatureByPosAndTy(Ptr<const MemberSignature> m1, Ptr<const Memb
 
 namespace Cangjie {
 
-std::vector<std::unordered_set<Ptr<Ty>>> GetAllGenericUpperBounds(TypeManager& tyMgr, const Decl& decl)
+std::vector<std::unordered_set<DataTy>> GetAllGenericUpperBounds(TypeManager& tyMgr, const Decl& decl)
 {
     auto generic = decl.GetGeneric();
     if (!generic) {
         return {};
     }
-    std::vector<std::unordered_set<Ptr<Ty>>> allUpperBounds;
+    std::vector<std::unordered_set<DataTy>> allUpperBounds;
     for (auto& type : generic->typeParameters) {
         auto genericTy = DynamicCast<GenericsTy*>(type->GetTy());
         if (!genericTy) {
@@ -249,7 +249,7 @@ std::vector<std::unordered_set<Ptr<Ty>>> GetAllGenericUpperBounds(TypeManager& t
         }
         // NOTE: Since 'upperBounds' contains all direct and transitive non-generic upperbounds,
         //       we also need to collect generic upperBounds to check generic constraints correctly.
-        std::set<Ptr<Ty>> tys(genericTy->upperBounds.begin(), genericTy->upperBounds.end());
+        std::set<DataTy> tys(genericTy->upperBounds.begin(), genericTy->upperBounds.end());
         std::queue<Ptr<GenericsTy>> q;
         q.push(genericTy);
         std::unordered_set<Ptr<GenericsTy>> traversedTy = {};
@@ -267,7 +267,7 @@ std::vector<std::unordered_set<Ptr<Ty>>> GetAllGenericUpperBounds(TypeManager& t
             }
         }
         if (tys.size() > 1) {
-            allUpperBounds.emplace_back(std::unordered_set<Ptr<Ty>>{tyMgr.GetIntersectionTy(tys)});
+            allUpperBounds.emplace_back(std::unordered_set<DataTy>{tyMgr.GetIntersectionTy(tys)});
         } else {
             allUpperBounds.emplace_back(tys.begin(), tys.end());
         }
@@ -423,7 +423,7 @@ void StructInheritanceChecker::CheckMembersWithInheritedDecls(const InheritableD
  */
 MemberMap StructInheritanceChecker::GetAndCheckInheritedInterfaces(const InheritableDecl& decl)
 {
-    std::set<Ptr<Ty>, CmpTyByName> interfaceTys;
+    std::set<DataTy, CmpTyByName> interfaceTys;
     for (auto& type : decl.inheritedTypes) {
         auto baseDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(type->GetTy());
         if (!baseDecl || baseDecl->astKind != ASTKind::INTERFACE_DECL ||
@@ -489,7 +489,7 @@ MemberMap StructInheritanceChecker::GetAndCheckInheritedMembers(const Inheritabl
         return {};
     }
     Ptr<InheritableDecl> baseDecl = nullptr;
-    Ptr<Ty> baseTy = nullptr;
+    DataTy baseTy = nullptr;
     if (decl.astKind == ASTKind::CLASS_DECL) {
         auto& cd = static_cast<const ClassDecl&>(decl);
         baseDecl = cd.GetSuperClassDecl();
@@ -569,16 +569,16 @@ std::optional<bool> StructInheritanceChecker::DeterminingSkipExtendByInheritance
     const ExtendDecl& curDecl, ExtendDecl& ed, const Ptr<Decl>& extendedDecl)
 {
     std::optional<bool> skipExtend = std::nullopt;
-    std::pair<Ptr<Ty>, Ptr<Ty>> lastInherTy;
+    std::pair<DataTy, DataTy> lastInherTy;
     auto mappingOfExtended2Ed =
         extendedDecl ? GenerateTypeMapping(*extendedDecl, ed.extendedType->GetTy()->typeArgs) : TypeSubst();
     auto mappingOfExtended2CurExtend =
         extendedDecl ? GenerateTypeMapping(*extendedDecl, curDecl.extendedType->GetTy()->typeArgs) : TypeSubst();
     for (auto& curDeclSuper : std::as_const(curDecl.inheritedTypes)) {
-        Ptr<Ty> hasSubImpl = nullptr;
-        Ptr<Ty> hasSuperImpl = nullptr;
-        Ptr<Ty> curDeclSuperInsTy = curDeclSuper->GetTy();
-        auto typeArgs = extendedDecl ? extendedDecl->GetTy()->typeArgs : std::vector<Ptr<Ty>>();
+        DataTy hasSubImpl = nullptr;
+        DataTy hasSuperImpl = nullptr;
+        DataTy curDeclSuperInsTy = curDeclSuper->GetTy();
+        auto typeArgs = extendedDecl ? extendedDecl->GetTy()->typeArgs : std::vector<DataTy>();
         for (auto typeArg : typeArgs) {
             auto tyArgGen = StaticCast<GenericsTy*>(typeArg);
             auto mappingOfCurExtend2Extend =
@@ -1212,7 +1212,7 @@ void StructInheritanceChecker::CheckAccessVisibility(const Decl& parent, const D
 
 namespace Cangjie {
 void CheckGenericTypeBoundsMapped(const Decl& parent, const Decl& child,
-    std::vector<std::unordered_set<Ptr<Ty>>> parentBounds, std::vector<std::unordered_set<Ptr<Ty>>> childBounds,
+    std::vector<std::unordered_set<DataTy>> parentBounds, std::vector<std::unordered_set<DataTy>> childBounds,
     DiagnosticEngine& diag, TypeManager& typeManager)
 {
     if (parent.GetGenericsCount() != child.GetGenericsCount()) {
@@ -1235,7 +1235,7 @@ void CheckGenericTypeBoundsMapped(const Decl& parent, const Decl& child,
             continue; // Empty upperBounds is always looser.
         }
         auto& parentUppers = parentBounds[i];
-        std::unordered_set<Ptr<Ty>> instUppers;
+        std::unordered_set<DataTy> instUppers;
         for (auto it : parentUppers) {
             instUppers.emplace(typeManager.GetInstantiatedTy(it, typeMapping));
         }
@@ -1484,7 +1484,7 @@ std::vector<Ptr<const ExtendDecl>> StructInheritanceChecker::GetAllNeedCheckExte
     // Collect all extended builtIn. Used for checking confliction between imported extends.
     auto extendedBuiltInTys = typeManager.GetAllExtendedBuiltIn();
     // Use ordered set to diagnose in consistent order.
-    std::set<Ptr<AST::Ty>, CmpTyByName> sortedBuiltInTys(extendedBuiltInTys.cbegin(), extendedBuiltInTys.cend());
+    std::set<AST::DataTy, CmpTyByName> sortedBuiltInTys(extendedBuiltInTys.cbegin(), extendedBuiltInTys.cend());
     for (auto extendedBuiltInTy : sortedBuiltInTys) {
         auto extends = typeManager.GetBuiltinTyExtends(*extendedBuiltInTy);
         filter(extends);

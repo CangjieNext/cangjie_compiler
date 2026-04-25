@@ -24,18 +24,18 @@ public:
     }
     MultiTypeSubst GetPromoteTypeMapping(AST::Ty& from, AST::Ty& target);
     MultiTypeSubst GetDowngradeTypeMapping(AST::Ty& target, AST::Ty& upfrom);
-    std::set<Ptr<AST::Ty>> Promote(AST::Ty& from, AST::Ty& target);
+    std::set<AST::ModalTy> Promote(AST::Ty& from, AST::Ty& target);
     // will return empty if any type arg of target (the subtype) unused in upfrom (the supertype)
     // e.g. downgrading to Future<T> from Any
-    std::set<Ptr<AST::Ty>> Downgrade(AST::Ty& target, AST::Ty& upfrom);
+    std::set<AST::ModalTy> Downgrade(AST::Ty& target, AST::Ty& upfrom);
 
 private:
     TypeManager& tyMgr;
-    std::set<Ptr<AST::Ty>> PromoteHandleIdealTys(AST::Ty& from, AST::Ty& target) const;
-    std::set<Ptr<AST::Ty>> PromoteHandleFunc(AST::Ty& from, AST::Ty& target);
-    std::set<Ptr<AST::Ty>> PromoteHandleTuple(AST::Ty& from, AST::Ty& target);
-    std::set<Ptr<AST::Ty>> PromoteHandleTyVar(AST::Ty& from, AST::Ty& target);
-    std::set<Ptr<AST::Ty>> PromoteHandleNominal(AST::Ty& from, const AST::Ty& target);
+    std::set<AST::ModalTy> PromoteHandleIdealTys(AST::Ty& from, AST::Ty& target) const;
+    std::set<AST::ModalTy> PromoteHandleFunc(AST::Ty& from, AST::Ty& target);
+    std::set<AST::ModalTy> PromoteHandleTuple(AST::Ty& from, AST::Ty& target);
+    std::set<AST::ModalTy> PromoteHandleTyVar(AST::Ty& from, AST::Ty& target);
+    std::set<AST::ModalTy> PromoteHandleNominal(AST::Ty& from, const AST::Ty& target);
 };
 } // namespace Cangjie
 #endif // CANGJIE_SEMA_PROMOTION_H

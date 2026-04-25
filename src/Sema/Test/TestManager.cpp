@@ -178,7 +178,7 @@ VisitAction TestManager::HandleCreateMockCall(CallExpr& callExpr, Package& pkg)
             return VisitAction::WALK_CHILDREN;
         }
 
-        std::vector<Ptr<Ty>> valueParamTys;
+        std::vector<ModalTy> valueParamTys;
         valueParamTys.emplace_back(callExpr.args[0]->GetTy());
 
         if (MockManager::GetMockKind(callExpr) == MockKind::SPY) {
@@ -577,7 +577,7 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
 
     bool isInConstructor = false;
     bool isInMockAnnotatedLambda = false;
-    Ptr<Ty> outerTy;
+    ModalTy outerTy;
 
     Walker(&pkg, Walker::GetNextWalkerID(),
         [this, &isInConstructor, &isInMockAnnotatedLambda, &outerTy, &pkg](const Ptr<Node> node) {

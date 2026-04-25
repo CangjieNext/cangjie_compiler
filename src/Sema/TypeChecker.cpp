@@ -173,14 +173,14 @@ bool TypeCheckerImpl::CheckBodyRetType(ASTContext& ctx, FuncBody& fb)
     }
 }
 
-void TypeCheckerImpl::ReplaceFuncRetTyWithThis(FuncBody& fb, Ptr<Ty> ty)
+void TypeCheckerImpl::ReplaceFuncRetTyWithThis(FuncBody& fb, ModalTy ty)
 {
     if (auto ct = DynamicCast<ClassTy*>(ty); ct) {
         auto rt = MakeOwned<RefType>();
         rt->curFile = fb.curFile;
         rt->SetTarget(ct->decl);
         rt->ref.identifier = "This";
-        rt->SetTy(typeManager.GetClassThisTy(*ct->declPtr, ct->typeArgs, ct->Modal()));
+        rt->SetTy({typeManager.GetClassThisTy(*ct->declPtr, ct->typeArgs), ty.Mode()});
         rt->EnableAttr(Attribute::COMPILER_ADD);
         if (fb.retType) {
             CJC_ASSERT(fb.curFile);
@@ -210,7 +210,7 @@ bool TypeCheckerImpl::CheckFuncBody(ASTContext& ctx, FuncBody& fb)
     if (!CheckThisTypeOfFuncBody(fb)) {
         diag.Diagnose(*fb.retType, "sema_invalid_position_of_this_type");
     }
-    std::vector<Ptr<Ty>> paramTys;
+    std::vector<ModalTy> paramTys;
     if (!CheckNormalFuncBody(ctx, fb, paramTys)) {
         return false;
     }
@@ -230,7 +230,7 @@ void TypeCheckerImpl::AddRetTypeNode(FuncBody& fb) const
     fb.retType->EnableAttr(Attribute::IS_CHECK_VISITED);
 }
 
-bool TypeCheckerImpl::CheckNormalFuncBody(ASTContext& ctx, FuncBody& fb, std::vector<Ptr<Ty>>& paramTys)
+bool TypeCheckerImpl::CheckNormalFuncBody(ASTContext& ctx, FuncBody& fb, std::vector<ModalTy>& paramTys)
 {
     if (fb.paramLists.empty()) {
         return false;
@@ -446,7 +446,7 @@ void TypeCheckerImpl::CheckCtorFuncBody(ASTContext& ctx, FuncBody& fb)
             fb.funcDecl->EnableAttr(attr.value());
         }
     }
-    Ptr<Ty> ctorTy = TypeManager::GetInvalidTy();
+    DataTy ctorTy = TypeManager::GetInvalidTy();
     if (fb.funcDecl->TestAttr(Attribute::STATIC)) {
         // Static init always has type of 'Unit' as return type.
         ctorTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
@@ -475,7 +475,7 @@ void TypeCheckerImpl::CheckCtorFuncBody(ASTContext& ctx, FuncBody& fb)
 void TypeCheckerImpl::CheckFuncParamList(ASTContext& ctx, FuncParamList& fpl)
 {
     // We use the tupleType to handle the type of FuncParamList.
-    std::vector<Ptr<Ty>> paramTys;
+    std::vector<ModalTy> paramTys;
     // Synthesize thisParam first (before early return for empty params)
     if (fpl.thisParam) {
         Synthesize({ctx, SynPos::NONE}, fpl.thisParam.get());
@@ -490,7 +490,7 @@ void TypeCheckerImpl::CheckFuncParamList(ASTContext& ctx, FuncParamList& fpl)
             paramTys.push_back(TypeManager::GetInvalidTy()); // Set type to get correct size of function type.
             continue;
         }
-        Ptr<Ty> paramTy = param->GetTy();
+        ModalTy paramTy = param->GetTy();
         paramTys.push_back(paramTy);
         // Infer param assignment's type by param's type.
         if (param->assignment) {
@@ -670,14 +670,14 @@ bool TypeCheckerImpl::ChkInoutMemberAccess(const MemberAccess& ma)
     return false;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynFuncArg(ASTContext& ctx, FuncArg& fa)
+ModalTy TypeCheckerImpl::SynFuncArg(ASTContext& ctx, FuncArg& fa)
 {
     if (fa.expr) {
         Synthesize({ctx, SynPos::EXPR_ARG}, fa.expr.get());
         if (fa.withInout) {
             if (!Ty::IsTyCorrect(fa.expr->GetTy()) || !ChkInoutFuncArg(fa)) {
                 fa.SetTy(TypeManager::GetInvalidTy());
-            } else if (!Ty::IsMetCType(*fa.expr->GetTy())) {
+            } else if (!fa.expr->GetTy()->IsMetCType()) {
                 diag.DiagnoseRefactor("sema_inout_modify_non_ctype", fa);
                 fa.SetTy(TypeManager::GetInvalidTy());
             } else if (fa.expr->GetTy()->IsCString()) {
@@ -728,7 +728,7 @@ CacheKey GetCacheKeyForSyn(const ASTContext& ctx, Ptr<const Node> node)
         .target = target, .isDesugared = IsNodeDesugared(node), .diagKey = DiagnosticCache::ExtractKey(ctx.diag)};
 }
 
-CacheKey GetCacheKeyForChk(const ASTContext& ctx, Ptr<const Node> node, Ptr<Ty> target)
+CacheKey GetCacheKeyForChk(const ASTContext& ctx, Ptr<const Node> node, ModalTy target)
 {
     return CacheKey{
         .target = target, .isDesugared = IsNodeDesugared(node), .diagKey = DiagnosticCache::ExtractKey(ctx.diag)};
@@ -759,7 +759,7 @@ bool TypeCheckerImpl::IsChecked(ASTContext& ctx, Node& node) const
         (visitedExpr || visitedDecl || (type && type->TestAttr(Attribute::IS_CHECK_VISITED)));
 }
 
-std::optional<Ptr<Ty>> TypeCheckerImpl::PerformBasicChecksForSynthesize(
+std::optional<ModalTy> TypeCheckerImpl::PerformBasicChecksForSynthesize(
     ASTContext& ctx, Ptr<Node> node) const
 {
     if (!node) {
@@ -779,7 +779,7 @@ std::optional<Ptr<Ty>> TypeCheckerImpl::PerformBasicChecksForSynthesize(
     return {};
 }
 
-Ptr<Ty> TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<Node> node)
+ModalTy TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<Node> node)
 {
     if (auto res = PerformBasicChecksForSynthesize(ctx.Ctx(), node)) {
         return *res;
@@ -1081,7 +1081,7 @@ Ptr<Ty> TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<Node> node)
 }
 
 std::optional<bool> TypeCheckerImpl::PerformBasicChecksForCheck(
-    ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node) const
+    ASTContext& ctx, ModalTy target, Ptr<Node> node) const
 {
     if (!node) {
         return {false};
@@ -1102,7 +1102,7 @@ std::optional<bool> TypeCheckerImpl::PerformBasicChecksForCheck(
     return {};
 }
 
-bool TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
+bool TypeCheckerImpl::Check(ASTContext& ctx, ModalTy target, Ptr<Node> node)
 {
     if (auto res = PerformBasicChecksForCheck(ctx, target, node)) {
         return *res;
@@ -1122,11 +1122,11 @@ bool TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
     auto realTarget = typeManager.TryGreedySubst(target);
     if (realTarget->IsPlaceholder() && !AcceptPlaceholderTarget(*node)) {
         auto& cst = typeManager.constraints[RawStaticCast<GenericsTy*>(realTarget)];
-        Ptr<Ty> lub = nullptr;
+        DataTy lub = nullptr;
         if (!cst.ubs.empty()) {
             auto meetRes = JoinAndMeet(typeManager, cst.ubs.raw(), typeManager.GetUnsolvedTyVars()).MeetAsVisibleTy();
-            if (std::holds_alternative<Ptr<Ty>>(meetRes)) {
-                lub = std::get<Ptr<Ty>>(meetRes);
+            if (std::holds_alternative<DataTy>(meetRes)) {
+                lub = std::get<DataTy>(meetRes);
             }
         }
         if (lub) {
@@ -1416,7 +1416,7 @@ void TypeCheckerImpl::CheckCallsInConstructor(
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::SynthesizeWithCache(const CheckerContext& ctx, Ptr<Node> node)
+ModalTy TypeCheckerImpl::SynthesizeWithCache(const CheckerContext& ctx, Ptr<Node> node)
 {
     CJC_NULLPTR_CHECK(node);
     if (!typeManager.GetUnsolvedTyVars().empty()) {
@@ -1432,7 +1432,7 @@ Ptr<Ty> TypeCheckerImpl::SynthesizeWithCache(const CheckerContext& ctx, Ptr<Node
     }
 }
 
-bool TypeCheckerImpl::CheckWithCache(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
+bool TypeCheckerImpl::CheckWithCache(ASTContext& ctx, ModalTy target, Ptr<Node> node)
 {
     CJC_NULLPTR_CHECK(node);
     if (!typeManager.GetUnsolvedTyVars().empty()) {
@@ -1448,7 +1448,7 @@ bool TypeCheckerImpl::CheckWithCache(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> 
     }
 }
 
-Ptr<Ty> TypeCheckerImpl::SynthesizeWithNegCache(const CheckerContext& ctx, Ptr<Node> node)
+ModalTy TypeCheckerImpl::SynthesizeWithNegCache(const CheckerContext& ctx, Ptr<Node> node)
 {
     CJC_NULLPTR_CHECK(node);
     if (!typeManager.GetUnsolvedTyVars().empty()) {
@@ -1464,7 +1464,7 @@ Ptr<Ty> TypeCheckerImpl::SynthesizeWithNegCache(const CheckerContext& ctx, Ptr<N
     }
 }
 
-bool TypeCheckerImpl::CheckWithNegCache(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
+bool TypeCheckerImpl::CheckWithNegCache(ASTContext& ctx, ModalTy target, Ptr<Node> node)
 {
     CJC_NULLPTR_CHECK(node);
     if (!typeManager.GetUnsolvedTyVars().empty()) {
@@ -1481,7 +1481,7 @@ bool TypeCheckerImpl::CheckWithNegCache(ASTContext& ctx, Ptr<Ty> target, Ptr<Nod
 }
 
 bool TypeCheckerImpl::CheckWithEffectiveCache(
-    ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node, bool recoverDiag)
+    ASTContext& ctx, ModalTy target, Ptr<Node> node, bool recoverDiag)
 {
     if (!typeManager.GetUnsolvedTyVars().empty() || !node) {
         return Check(ctx, target, node);
@@ -1502,7 +1502,7 @@ bool TypeCheckerImpl::CheckWithEffectiveCache(
     return CheckAndCache(ctx, target, node, key);
 }
 
-Ptr<Ty> TypeCheckerImpl::SynthesizeWithEffectiveCache(const CheckerContext& ctx, Ptr<Node> node, bool recoverDiag)
+ModalTy TypeCheckerImpl::SynthesizeWithEffectiveCache(const CheckerContext& ctx, Ptr<Node> node, bool recoverDiag)
 {
     if (!typeManager.GetUnsolvedTyVars().empty() || !node) {
         return Synthesize(ctx, node);
@@ -1522,7 +1522,7 @@ Ptr<Ty> TypeCheckerImpl::SynthesizeWithEffectiveCache(const CheckerContext& ctx,
     return SynthesizeAndCache(ctx, node, key);
 }
 
-Ptr<AST::Ty> TypeCheckerImpl::SynthesizeAndCache(
+AST::ModalTy TypeCheckerImpl::SynthesizeAndCache(
     const CheckerContext& ctx, Ptr<AST::Node> node, const CacheKey& key)
 {
     DiagnosticCache dc;
@@ -1536,7 +1536,7 @@ Ptr<AST::Ty> TypeCheckerImpl::SynthesizeAndCache(
     return ret;
 }
 
-bool TypeCheckerImpl::CheckAndCache(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node, const CacheKey& key)
+bool TypeCheckerImpl::CheckAndCache(ASTContext& ctx, ModalTy target, Ptr<Node> node, const CacheKey& key)
 {
     DiagnosticCache dc;
     dc.ToExclude(ctx.diag);
@@ -1796,7 +1796,7 @@ void TypeCheckerImpl::CheckLegalUseOfClosure(const ASTContext& ctx, Node& node) 
 
 bool TypeCheckerImpl::IsCapturedCStructOfClosure(const VarDecl& decl) const
 {
-    return decl.TestAttr(Attribute::IS_CAPTURE) && decl.GetTy() && Ty::IsCTypeConstraint(*decl.GetTy());
+    return decl.TestAttr(Attribute::IS_CAPTURE) && decl.GetTy() && decl.GetTy()->IsCTypeConstraint();
 }
 
 void TypeCheckerImpl::CheckCHIRClassDependencies()
@@ -2732,7 +2732,7 @@ void TypeCheckerImpl::CheckOverflow(Node& node)
     walker.Walk();
 }
 
-Ptr<Ty> TypeCheckerImpl::CalcFuncRetTyFromBody(const FuncBody& fb)
+ModalTy TypeCheckerImpl::CalcFuncRetTyFromBody(const FuncBody& fb)
 {
     if (!fb.body) {
         return TypeManager::GetInvalidTy();
@@ -2743,9 +2743,9 @@ Ptr<Ty> TypeCheckerImpl::CalcFuncRetTyFromBody(const FuncBody& fb)
     }
 
     auto& lastNode = fb.body->body.back();
-    Ptr<Ty> bodyTy = lastNode->IsDecl() ? TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT) : lastNode->GetTy();
-    Ptr<Ty> retTy = bodyTy;
-    std::set<Ptr<Ty>> retTys;
+    ModalTy bodyTy = lastNode->IsDecl() ? {TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)} : lastNode->GetTy();
+    ModalTy retTy = bodyTy;
+    std::set<ModalTy> retTys;
     Walker(fb.body.get(), [&retTys](auto node) {
         CJC_ASSERT(node);
         if (node->astKind == ASTKind::FUNC_DECL || node->astKind == ASTKind::LAMBDA_EXPR) {

@@ -39,7 +39,7 @@ bool MaybeStruct(const Ty& ty)
         return false;
     }
     const GenericsTy& gty = static_cast<const GenericsTy&>(ty);
-    for (Ptr<Ty> upperBound : gty.upperBounds) {
+    for (DataTy upperBound : gty.upperBounds) {
         if (upperBound && MaybeStruct(*upperBound)) {
             return true;
         }

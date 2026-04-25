@@ -542,7 +542,7 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
         const AST::Expr* base = &member;
         std::vector<std::string> path;
         bool readOnly = false;
-        AST::Ty* targetBaseASTTy = nullptr;
+        AST::ModalTy targetBaseASTTy = nullptr;
         for (;;) {
             base = base->desugarExpr ? base->desugarExpr.get().get() : base;
             if (auto ma = DynamicCast<AST::MemberAccess*>(base)) {

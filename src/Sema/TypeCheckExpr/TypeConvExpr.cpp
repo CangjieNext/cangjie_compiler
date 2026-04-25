@@ -15,7 +15,7 @@ using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
 
-Ptr<Ty> TypeCheckerImpl::SynTypeConvExpr(ASTContext& ctx, TypeConvExpr& tce)
+ModalTy TypeCheckerImpl::SynTypeConvExpr(ASTContext& ctx, TypeConvExpr& tce)
 {
     CJC_NULLPTR_CHECK(tce.expr);
     CJC_NULLPTR_CHECK(tce.type);
@@ -32,7 +32,7 @@ Ptr<Ty> TypeCheckerImpl::SynTypeConvExpr(ASTContext& ctx, TypeConvExpr& tce)
     return tce.GetTy();
 }
 
-Ptr<Ty> TypeCheckerImpl::SynNumTypeConvExpr(TypeConvExpr& tce)
+ModalTy TypeCheckerImpl::SynNumTypeConvExpr(TypeConvExpr& tce)
 {
     tce.SetTy(TypeManager::GetPrimitiveTy(StaticCast<PrimitiveType*>(tce.type.get())->kind));
     if (!Ty::IsTyCorrect(tce.expr->GetTy()) || !Ty::IsTyCorrect(tce.GetTy())) {

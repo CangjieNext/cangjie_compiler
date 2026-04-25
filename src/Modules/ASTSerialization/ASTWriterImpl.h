@@ -72,7 +72,7 @@ public:
     void DFSCollectFilesDeclarations(Ptr<AST::File> file,
         std::unordered_set<AST::File*>& alreadyVisitedFiles,
         std::vector<Ptr<const AST::Decl>>& topLevelDeclsOrdered,
-        std::unordered_set<AST::Ty*>& usedTys);
+        std::unordered_set<AST::DataTy>& usedTys);
     // Export external decls of a package AST to a buffer.
     void ExportAST(const AST::PackageDecl& package);
     void AST2FB(std::vector<uint8_t>& data, const AST::PackageDecl& package);

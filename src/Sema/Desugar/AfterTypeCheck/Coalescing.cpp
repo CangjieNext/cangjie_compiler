@@ -61,7 +61,7 @@ OwnedPtr<MatchCase> GetValueMatchCase(
  * NOTE: this happens before generic instantiation.
  */
 OwnedPtr<Expr> TypeCheckerImpl::ConstructOptionMatch(OwnedPtr<Expr> selector, OwnedPtr<Block> someExpr,
-    OwnedPtr<Block> otherExpr, RefExpr& someVar, Ptr<Ty> someTy) const
+    OwnedPtr<Block> otherExpr, RefExpr& someVar, ModalTy someTy) const
 {
     Ptr<FuncDecl> ctorDecl = nullptr;
     // Caller guarantees seletor is enum option type.

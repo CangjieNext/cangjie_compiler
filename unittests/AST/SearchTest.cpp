@@ -1611,7 +1611,7 @@ main() {
     ASSERT_FALSE(results.hasDecl);
     auto tys = results.tys;
     ASSERT_EQ(tys.size(), 2);
-    auto str = Ty::GetTypesToStableStr(std::set<Ptr<Ty>>(tys.begin(), tys.end()), " ");
+    auto str = Ty::GetTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
     EXPECT_EQ(str, "Class-A Int64");
     // 'test().foo()'
     auto ma = CreateMemberAccess(std::move(ce), "foo");
@@ -1905,7 +1905,7 @@ main() {
     ASSERT_FALSE(results.hasDecl);
     tys = results.tys;
     ASSERT_EQ(tys.size(), 3);
-    auto str = Ty::GetTypesToStableStr(std::set<Ptr<Ty>>(tys.begin(), tys.end()), " ");
+    auto str = Ty::GetTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
     EXPECT_EQ(str, "Struct-Array<Struct-String> Struct-String Unit");
 
     OwnedPtr<Expr> access06 = Parser("z[0].get(0).getOrThrow()", diag, sm).ParseExpr();
@@ -1914,7 +1914,7 @@ main() {
     ASSERT_FALSE(results.hasDecl);
     tys = results.tys;
     ASSERT_EQ(tys.size(), 2);
-    str = Ty::GetTypesToStableStr(std::set<Ptr<Ty>>(tys.begin(), tys.end()), " ");
+    str = Ty::GetTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
     EXPECT_EQ(str, "Struct-String UInt8");
 }
 
@@ -1952,7 +1952,7 @@ main() {
     auto results = instance->GetGivenReferenceTarget(ctx, scopeName, *access01, false);
     ASSERT_FALSE(results.hasDecl);
     auto tys = results.tys;
-    auto str = Ty::GetTypesToStableStr(std::set<Ptr<Ty>>(tys.begin(), tys.end()), " ");
+    auto str = Ty::GetTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
     EXPECT_EQ(str, "Struct-String UInt8");
 
     OwnedPtr<Expr> access02 = Parser("x[1].get(0).getOrThrow()", diag, sm).ParseExpr();
@@ -1960,7 +1960,7 @@ main() {
     results = instance->GetGivenReferenceTarget(ctx, scopeName, *access02, false);
     ASSERT_FALSE(results.hasDecl);
     tys = results.tys;
-    str = Ty::GetTypesToStableStr(std::set<Ptr<Ty>>(tys.begin(), tys.end()), " ");
+    str = Ty::GetTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
     EXPECT_EQ(str, "Struct-String");
 
     OwnedPtr<Expr> access03 = Parser("A<Array<String>>([\"1\"])[1].get(0).getOrThrow()", diag, sm).ParseExpr();
@@ -1968,7 +1968,7 @@ main() {
     results = instance->GetGivenReferenceTarget(ctx, scopeName, *access03, false);
     ASSERT_FALSE(results.hasDecl);
     tys = results.tys;
-    str = Ty::GetTypesToStableStr(std::set<Ptr<Ty>>(tys.begin(), tys.end()), " ");
+    str = Ty::GetTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
     EXPECT_EQ(str, "Struct-String");
 
     OwnedPtr<Expr> access04 = Parser("A<Array<String>>.test([\"1\"])[1].get(0).getOrThrow()", diag, sm).ParseExpr();
@@ -1976,7 +1976,7 @@ main() {
     results = instance->GetGivenReferenceTarget(ctx, scopeName, *access04, false);
     ASSERT_FALSE(results.hasDecl);
     tys = results.tys;
-    str = Ty::GetTypesToStableStr(std::set<Ptr<Ty>>(tys.begin(), tys.end()), " ");
+    str = Ty::GetTypesToStableStr(std::set<ModalTy>(tys.begin(), tys.end()), " ");
     EXPECT_EQ(str, "Struct-String UInt8");
 }
 

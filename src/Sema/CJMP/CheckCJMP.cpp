@@ -45,7 +45,7 @@ MPTypeCheckerImpl::MPTypeCheckerImpl(const CompilerInstance& ci)
 
 namespace {
 std::string GetTypeNameFromTy(
-    const Ptr<Ty>& ty, bool forCJMPMatch, const std::unordered_map<Ptr<Ty>, unsigned>& genericIdx)
+    const DataTy& ty, bool forCJMPMatch, const std::unordered_map<DataTy, unsigned>& genericIdx)
 {
     CJC_ASSERT(Ty::IsTyCorrect(ty.get()));
     if (ty->IsPrimitive()) {
@@ -92,7 +92,7 @@ std::string GetTypeNameFromTy(
 }
 
 std::string CalculatedGenericConstraintsStr(const std::vector<OwnedPtr<GenericConstraint>>& genericConstraints,
-    const std::unordered_map<Ptr<Ty>, unsigned>& genericIdx)
+    const std::unordered_map<DataTy, unsigned>& genericIdx)
 {
     std::string ret;
 
@@ -394,7 +394,7 @@ void MPTypeCheckerImpl::MergeCJMPExtensions(CompilerInstance& ci, ScopeManager& 
             continue;
         }
 
-        std::unordered_map<Ptr<Ty>, unsigned> genericIdx;
+        std::unordered_map<DataTy, unsigned> genericIdx;
         if (ed->generic) {
             for (unsigned idx = 0; idx < ed->generic->typeParameters.size(); ++idx) {
                 genericIdx.emplace(ed->generic->typeParameters[idx]->GetTy(), idx);
@@ -534,7 +534,7 @@ void MPTypeCheckerImpl::RemoveCommonCandidatesIfHasSpecific(std::vector<Ptr<Func
     });
 }
 
-static Ptr<Ty> CheckFuncReturnType(Ptr<Ty> ty)
+static ModalTy CheckFuncReturnType(ModalTy ty)
 {
     CJC_ASSERT_WITH_MSG(!!ty, "Function should be already resolved");
     CJC_ASSERT_WITH_MSG(ty->IsFunc(), "Function's type should be a FuncTy");
@@ -1122,7 +1122,7 @@ bool MPTypeCheckerImpl::MatchSpecificDeclWithCommonDecls(
 // if there are same-named private functions declared, a clash is reported
 void MPTypeCheckerImpl::CheckCommonExtensions(std::vector<Ptr<Decl>>& commonDecls)
 {
-    std::map<Ptr<Ty>, std::set<std::string>> privateFunctionsOfExtensions;
+    std::map<DataTy, std::set<std::string>> privateFunctionsOfExtensions;
     for (auto decl : commonDecls) {
         if (decl->astKind != ASTKind::EXTEND_DECL) {
             continue;

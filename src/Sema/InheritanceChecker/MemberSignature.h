@@ -23,20 +23,20 @@ struct ExtendDecl;
 struct MemberSignature {
     Ptr<AST::Decl> decl = nullptr;
 
-    Ptr<AST::Ty> GetTy() const
+    AST::ModalTy GetTy() const
     {
         return ty;
     }
 
-    void SetTy(Ptr<AST::Ty> newTy)
+    void SetTy(AST::ModalTy newTy)
     {
         ty = newTy;
     }
 
-    Ptr<AST::Ty> structTy = nullptr;
+    AST::ModalTy structTy = nullptr;
     Ptr<AST::ExtendDecl> extendDecl = nullptr; // If the member is a member of another visible extension, it points to the
                                           // extension declaration. Otherwise, it is null.
-    std::vector<std::unordered_set<Ptr<AST::Ty>>> upperBounds;
+    std::vector<std::unordered_set<AST::ModalTy>> upperBounds;
     std::unordered_set<Ptr<const AST::Ty>> inconsistentTypes; // List of the corresponding types came from super-types which
                                                          // are inconsistent
     bool shouldBeImplemented = false;                    // True: if this member has multiple default implementation.
@@ -45,9 +45,9 @@ struct MemberSignature {
 
     MemberSignature() = default;
 
-    MemberSignature(Ptr<AST::Decl> declIn, Ptr<AST::Ty> memberTyIn, Ptr<AST::Ty> structTyIn = nullptr,
+    MemberSignature(Ptr<AST::Decl> declIn, AST::ModalTy memberTyIn, AST::ModalTy structTyIn = nullptr,
         Ptr<AST::ExtendDecl> extendDeclIn = nullptr,
-        std::vector<std::unordered_set<Ptr<AST::Ty>>> upperBoundsIn = {})
+        std::vector<std::unordered_set<AST::ModalTy>> upperBoundsIn = {})
         : decl(std::move(declIn)),
           structTy(std::move(structTyIn)),
           extendDecl(std::move(extendDeclIn)),
@@ -57,7 +57,7 @@ struct MemberSignature {
     }
 
 private:
-    Ptr<AST::Ty> ty = nullptr;
+    AST::ModalTy ty = nullptr;
 };
 
 using MemberMap = std::multimap<std::string, MemberSignature>;

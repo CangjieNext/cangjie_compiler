@@ -45,14 +45,14 @@ public:
 
     void LoadStdDecls();
 
-    template <typename T> static OwnedPtr<T> CreateType(const Ptr<AST::Ty> ty)
+    template <typename T> static OwnedPtr<T> CreateType(const AST::ModalTy ty)
     {
         auto type = MakeOwned<T>();
         type->SetTy(ty);
         return type;
     }
 
-    Ptr<Cangjie::AST::PointerTy> WrapTy2CPointer(const Ptr<AST::Ty> ty)
+    Ptr<Cangjie::AST::PointerTy> WrapTy2CPointer(const AST::ModalTy ty)
     {
         CJC_NULLPTR_CHECK(ty);
         auto pointerTy = typeManager.GetPointerTy(ty, {});
@@ -108,9 +108,9 @@ public:
      * }
      */
     static OwnedPtr<AST::Expr> CreateTypeCast(
-        OwnedPtr<AST::Expr> selector, Ptr<AST::Ty> castTy,
+        OwnedPtr<AST::Expr> selector, AST::ModalTy castTy,
         std::function<OwnedPtr<AST::Expr>(Ptr<AST::VarDecl>)> createMatchedBranch,
-        OwnedPtr<AST::Expr> otherwiseBranch, Ptr<AST::Ty> ty);
+        OwnedPtr<AST::Expr> otherwiseBranch, AST::ModalTy ty);
 
     /**
      * match ([selector]) {
@@ -119,7 +119,7 @@ public:
      * }
      */
     OwnedPtr<AST::Expr> CreateTypeCastOrThrow(
-        OwnedPtr<AST::Expr> selector, Ptr<AST::Ty> castTy, const std::string& message);
+        OwnedPtr<AST::Expr> selector, AST::ModalTy castTy, const std::string& message);
 
     /**
      * match ([selector]) {
@@ -127,7 +127,7 @@ public:
      *   case _ => zerValue<[castTy]>()
      * }
      */
-    OwnedPtr<AST::Expr> CreateTypeCastOrZeroValue(OwnedPtr<AST::Expr> selector, Ptr<AST::Ty> castTy) const;
+    OwnedPtr<AST::Expr> CreateTypeCastOrZeroValue(OwnedPtr<AST::Expr> selector, AST::ModalTy castTy) const;
 
     /**
      * Replaces all argument's types and return type with Any
@@ -140,7 +140,7 @@ public:
     std::string GetOriginalIdentifierOfAccessor(const AST::FuncDecl& decl) const;
     std::string GetOriginalIdentifierOfMockAccessor(const AST::Decl& decl) const;
 
-    bool MayContainInternalTypes(Ptr<AST::Ty> ty) const;
+    bool MayContainInternalTypes(AST::ModalTy ty) const;
 private:
     ImportManager& importManager;
     TypeManager& typeManager;
@@ -171,29 +171,29 @@ private:
 
     Ptr<AST::Decl> FindAccessor(AST::ClassDecl& outerClass, const Ptr<AST::Decl> member, AccessorKind kind) const;
     Ptr<AST::Decl> FindAccessorForMemberAccess(
-        const Ptr<AST::Ty> ty, const Ptr<AST::Decl> resolvedMember, AccessorKind kind) const;
+        const AST::ModalTy ty, const Ptr<AST::Decl> resolvedMember, AccessorKind kind) const;
     Ptr<AST::FuncDecl> FindTopLevelAccessor(Ptr<AST::Decl> member, AccessorKind kind) const;
     OwnedPtr<AST::Expr> WrapCallTypeArgsIntoArray(const AST::Decl& decl);
     bool IsGeneratedGetter(AccessorKind kind);
     Ptr<AST::FuncDecl> FindAccessor(Ptr<AST::MemberAccess> ma, Ptr<AST::Decl> target, AccessorKind kind) const;
-    std::vector<Ptr<AST::Ty>> AddGenericIfNeeded(AST::Decl& originalDecl, AST::Decl& mockedDecl) const;
+    std::vector<AST::ModalTy> AddGenericIfNeeded(AST::Decl& originalDecl, AST::Decl& mockedDecl) const;
     OwnedPtr<AST::ArrayLit> WrapCallArgsIntoArray(const AST::FuncDecl& mockedFunc);
-    Ptr<AST::Ty> GetInstantiatedTy(const Ptr<AST::Ty> ty, std::vector<TypeSubst>& typeSubsts);
+    AST::ModalTy GetInstantiatedTy(const AST::ModalTy ty, std::vector<TypeSubst>& typeSubsts);
     void SetGetTypeForTypeParamDecl(AST::Package& pkg);
     void SetIsSubtypeTypes(AST::Package& pkg);
     OwnedPtr<AST::Expr> CreateGetTypeForTypeParameterCall(const Ptr<AST::GenericParamDecl> genericParam);
-    OwnedPtr<AST::Expr> CreateIsSubtypeTypesCall(Ptr<AST::Ty> tyToCheck, Ptr<AST::Ty> ty);
+    OwnedPtr<AST::Expr> CreateIsSubtypeTypesCall(AST::ModalTy tyToCheck, AST::ModalTy ty);
     std::string Mangle(const AST::Decl& decl) const;
 
     OwnedPtr<AST::RefExpr> CreateRefExprWithInstTys(
-        AST::Decl& target, const std::vector<Ptr<AST::Ty>>& instTys,
+        AST::Decl& target, const std::vector<AST::ModalTy>& instTys,
         const std::string& refName, AST::File& curFile) const;
     OwnedPtr<AST::RefExpr> CreateDeclBasedReferenceExpr(
-        AST::Decl& target, const std::vector<Ptr<AST::Ty>>& instTys,
+        AST::Decl& target, const std::vector<AST::ModalTy>& instTys,
         const std::string& refName, AST::File& curFile
     ) const;
 
-    OwnedPtr<AST::CallExpr> CreateZeroValue(Ptr<AST::Ty> ty, AST::File& curFile) const;
+    OwnedPtr<AST::CallExpr> CreateZeroValue(AST::ModalTy ty, AST::File& curFile) const;
 
     template <typename T>
     Ptr<T> GetGenericDecl(Ptr<T> decl) const
@@ -213,7 +213,7 @@ private:
     Ptr<AST::Decl> GetExtendedTypeDecl(AST::FuncDecl& decl) const;
     void UpdateRefTypesTarget(
         Ptr<AST::Type> type, Ptr<AST::Generic> oldGeneric, Ptr<AST::Generic> newGeneric) const;
-    int GetIndexOfGenericTypeParam(Ptr<AST::Ty> ty, Ptr<AST::Generic> generic) const;
+    int GetIndexOfGenericTypeParam(AST::ModalTy ty, Ptr<AST::Generic> generic) const;
 
     friend class TestManager;
     friend class MockManager;

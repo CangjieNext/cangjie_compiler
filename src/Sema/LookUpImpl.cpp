@@ -103,7 +103,7 @@ bool IgnoredMember(const Decl& decl)
 }
 
 void UpdatePropOverriddenCache(
-    TypeManager& typeManager, const PropDecl& src, std::vector<Ptr<Decl>>& results, Ptr<Ty> baseTy)
+    TypeManager& typeManager, const PropDecl& src, std::vector<Ptr<Decl>>& results, DataTy baseTy)
 {
     for (auto it = results.begin(); it != results.end(); ++it) {
         if (auto fd2 = DynamicCast<PropDecl*>(*it)) {
@@ -222,7 +222,7 @@ void LookUpImpl::ResolveOverrideOrShadow(std::vector<Ptr<Decl>>& results, Decl& 
         }
         auto newDecl = RawStaticCast<Decl*>(&decl);
         auto inResult = RawStaticCast<Decl*>(results[i]);
-        Ptr<Ty> inResultOuter = inResult->outerDecl->GetTy();
+        DataTy inResultOuter = inResult->outerDecl->GetTy();
         if (resultsWithInstTyV.size() > i && resultsWithInstTyV[i].second) {
             inResultOuter = resultsWithInstTyV[i].second;
         } else if (inResult->outerDecl->astKind == ASTKind::EXTEND_DECL &&
@@ -743,7 +743,7 @@ std::vector<Ptr<Decl>> TypeCheckerImpl::LookupTopLevel(
 }
 
 std::vector<Ptr<Decl>> TypeCheckerImpl::ExtendFieldLookup(
-    const ASTContext& ctx, const File& file, Ptr<Ty> ty, const std::string& fieldName)
+    const ASTContext& ctx, const File& file, DataTy ty, const std::string& fieldName)
 {
     LookUpImpl lookUpImpl(ctx, diag, typeManager, importManager);
     std::vector<Ptr<Decl>> results = {};

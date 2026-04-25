@@ -68,7 +68,7 @@ bool TypeCheckerImpl::ChkIfAvailableExpr(ASTContext& ctx, Ty& ty, IfAvailableExp
     return true;
 }
 
-Ptr<Ty> TypeCheckerImpl::SynIfAvailableExpr(ASTContext& ctx, IfAvailableExpr& iae)
+ModalTy TypeCheckerImpl::SynIfAvailableExpr(ASTContext& ctx, IfAvailableExpr& iae)
 {
     // Desugar before type checker.
     auto ie = DynamicCast<IfExpr>(iae.desugarExpr.get());

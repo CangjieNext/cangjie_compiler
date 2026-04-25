@@ -25,6 +25,7 @@
 #include "cangjie/AST/ScopeManagerApi.h"
 #include "cangjie/AST/Searcher.h"
 #include "cangjie/AST/Symbol.h"
+#include "cangjie/AST/Types.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 
 namespace Cangjie {
@@ -77,7 +78,7 @@ struct InvertedIndex {
 // Names is constructed with 'declaration name, scopeName'
 using Names = std::pair<std::string, std::string>;
 // ty var -> upperbound -> AST nodes of generic constraints
-using GCBlames = std::map<Ptr<AST::Ty>, std::map<Ptr<AST::Ty>, std::set<Ptr<const AST::Node>>>>;
+using GCBlames = std::map<AST::DataTy, std::map<AST::DataTy, std::set<Ptr<const AST::Node>>>>;
 
 /** AST Context for sema and codegen. */
 class ASTContext {
@@ -178,8 +179,8 @@ public:
     std::unordered_map<Ptr<const AST::Node>, Ptr<AST::Ty>>
         lastTargetTypeMap; /**< Target last time the expr is checked */
     std::unordered_map<Ptr<const AST::Node>, AST::TypeCheckCache> typeCheckCache;
-    std::unordered_map<Ptr<AST::Ty>, OwnedPtr<AST::ClassDecl>> typeToAutoBoxedDeclMap;
-    std::unordered_map<Ptr<AST::Ty>, OwnedPtr<AST::ClassDecl>> typeToAutoBoxedDeclBaseMap;
+    std::unordered_map<AST::DataTy, OwnedPtr<AST::ClassDecl>> typeToAutoBoxedDeclMap;
+    std::unordered_map<AST::DataTy, OwnedPtr<AST::ClassDecl>> typeToAutoBoxedDeclBaseMap;
     std::unique_ptr<Searcher> searcher = std::make_unique<Searcher>();
     /** A vector for checking qualified types. */
     std::vector<Ptr<AST::PackageDecl>> packageDecls;

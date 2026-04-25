@@ -10,6 +10,9 @@
 #include "cangjie/AST/Nodes/Expr.h"
 
 namespace Cangjie::AST {
+struct Block;
+struct Pattern;
+
 /**
  * An IfExpr node represents an if expression or an if-let expression
  */
@@ -27,6 +30,7 @@ struct IfExpr : Expr {
     IfExpr() : Expr(ASTKind::IF_EXPR)
     {
     }
+    ~IfExpr();
 };
 
 /**
@@ -41,6 +45,7 @@ struct LetPatternDestructor : Expr {
     LetPatternDestructor() : Expr{ASTKind::LET_PATTERN_DESTRUCTOR}
     {
     }
+    ~LetPatternDestructor();
 };
 } // namespace Cangjie::AST
 

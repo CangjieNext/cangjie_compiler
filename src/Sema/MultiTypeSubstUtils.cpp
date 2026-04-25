@@ -17,11 +17,11 @@ namespace Cangjie::TypeCheckUtil {
 using namespace AST;
 
 namespace {
-std::set<Ptr<Ty>> GetDirectMappingTys(
+std::set<DataTy> GetDirectMappingTys(
     Ptr<TyVar> const tyVar, const MultiTypeSubst& mts)
 {
     std::vector<Ptr<TyVar>> stack{tyVar};
-    std::set<Ptr<Ty>> res;
+    std::set<DataTy> res;
     auto mapping = mts;
     while (!stack.empty()) {
         auto curTy = stack.back();
@@ -49,7 +49,7 @@ std::set<Ptr<Ty>> GetDirectMappingTys(
 }
 
 // remove mappings not useful(either directly or transitively used) in tys
-SubstPack FilterUnusedMapping(const SubstPack& mapping, const std::set<Ptr<Ty>>& tys)
+SubstPack FilterUnusedMapping(const SubstPack& mapping, const std::set<ModalTy>& tys)
 {
     std::set<Ptr<TyVar>> allu;
     std::set<Ptr<TyVar>> alli;
@@ -94,13 +94,13 @@ SubstPack FilterUnusedMapping(const SubstPack& mapping, const std::set<Ptr<Ty>>&
     return ret;
 }
 
-MultiTypeSubst FilterUnusedMapping(TypeManager& tm, const MultiTypeSubst& mapping, const std::set<Ptr<Ty>>& tys)
+MultiTypeSubst FilterUnusedMapping(TypeManager& tm, const MultiTypeSubst& mapping, const std::set<ModalTy>& tys)
 {
     std::set<Ptr<TyVar>> all = Utils::GetKeys(mapping);
     std::set<Ptr<TyVar>> reachable;
     std::queue<Ptr<TyVar>> worklist;
     // collect tyvars directly used
-    std::vector<Ptr<Ty>> dataTys;
+    std::vector<ModalTy> dataTys;
     for (auto ty : tys) {
         dataTys.emplace_back(tm.RemoveModalRec(ty));
     }
@@ -180,13 +180,13 @@ TypeSubst MultiTypeSubstToTypeSubst(const MultiTypeSubst& mts)
     return m;
 }
 
-std::vector<Ptr<Ty>> GetDeclTypeParams(const Decl& decl)
+std::vector<DataTy> GetDeclTypeParams(const Decl& decl)
 {
     if (decl.astKind == ASTKind::EXTEND_DECL) {
         CJC_NULLPTR_CHECK(decl.GetTy());
         return decl.GetTy()->typeArgs;
     }
-    std::vector<Ptr<Ty>> ret;
+    std::vector<DataTy> ret;
     auto generic = decl.GetGeneric();
     if (!generic) {
         return ret;
@@ -197,11 +197,11 @@ std::vector<Ptr<Ty>> GetDeclTypeParams(const Decl& decl)
     return ret;
 }
 
-std::unordered_set<Ptr<Ty>> GetAllGenericTys(TypeManager& tm, Ptr<Ty> ty)
+std::unordered_set<DataTy> GetAllGenericTys(TypeManager& tm, ModalTy ty)
 {
-    std::unordered_set<Ptr<Ty>> res;
-    std::unordered_set<Ptr<Ty>> visited;
-    std::queue<Ptr<Ty>> q;
+    std::unordered_set<DataTy> res;
+    std::unordered_set<DataTy> visited;
+    std::queue<ModalTy> q;
     q.emplace(ty);
     while (!q.empty()) {
         auto curTy = q.front();
@@ -210,11 +210,11 @@ std::unordered_set<Ptr<Ty>> GetAllGenericTys(TypeManager& tm, Ptr<Ty> ty)
             continue;
         }
         if (curTy->IsGeneric()) {
-            res.emplace(tm.SubstituteModal(curTy, {}));
+            res.emplace(curTy.get());
             continue;
         }
         for (auto it : curTy->typeArgs) {
-            q.emplace(tm.SubstituteModal(it, {}));
+            q.emplace(it.get());
         }
     }
     return res;
@@ -228,9 +228,9 @@ MultiTypeSubst ReduceMultiTypeSubst(TypeManager& tyMgr, const TyVars& tyVars,
     }
     auto mapping = mts;
     // Erase self-reference mappings.
-    std::unordered_set<Ptr<Ty>> visited;
+    std::unordered_set<DataTy> visited;
     for (auto& p : mts) {
-        for (Ptr<Ty> ty : p.second) {
+        for (DataTy ty : p.second) {
             if (auto [_, succ] = visited.emplace(ty); !succ) {
                 continue;
             }
@@ -249,7 +249,7 @@ MultiTypeSubst ReduceMultiTypeSubst(TypeManager& tyMgr, const TyVars& tyVars,
         }
     }
     for (auto& it : res) {
-        std::set<Ptr<Ty>> targetRes;
+        std::set<DataTy> targetRes;
         for (auto& ty : it.second) {
             targetRes.merge(tyMgr.GetInstantiatedTys(ty, mapping));
         }
@@ -258,7 +258,7 @@ MultiTypeSubst ReduceMultiTypeSubst(TypeManager& tyMgr, const TyVars& tyVars,
     return res;
 }
 
-std::vector<SubstPack> ExpandMultiTypeSubst(const SubstPack& maps, const std::set<Ptr<Ty>>& usefulTys)
+std::vector<SubstPack> ExpandMultiTypeSubst(const SubstPack& maps, const std::set<ModalTy>& usefulTys)
 {
     std::vector<SubstPack> ret;
     auto filtered = FilterUnusedMapping(maps, usefulTys);
@@ -271,13 +271,13 @@ std::vector<SubstPack> ExpandMultiTypeSubst(const SubstPack& maps, const std::se
     return ret;
 }
 
-std::set<TypeSubst> ExpandMultiTypeSubst(TypeManager& tm, const MultiTypeSubst& mts, const std::set<Ptr<Ty>>& usefulTys)
+std::set<TypeSubst> ExpandMultiTypeSubst(TypeManager& tm, const MultiTypeSubst& mts, const std::set<ModalTy>& usefulTys)
 {
     auto filtered = FilterUnusedMapping(tm, mts, usefulTys);
     return ExpandFilteredMultiTypeSubst(filtered);
 }
 
-Ptr<Ty> GetMappedTy(const MultiTypeSubst& mts, TyVar* tyVar)
+DataTy GetMappedTy(const MultiTypeSubst& mts, TyVar* tyVar)
 {
     auto found = mts.find(tyVar);
     if (found != mts.end()) {
@@ -290,7 +290,7 @@ Ptr<Ty> GetMappedTy(const MultiTypeSubst& mts, TyVar* tyVar)
     return tyVar;
 }
 
-Ptr<Ty> GetMappedTy(const TypeSubst& typeMapping, TyVar* tyVar)
+DataTy GetMappedTy(const TypeSubst& typeMapping, TyVar* tyVar)
 {
     auto found = typeMapping.find(tyVar);
     if (found != typeMapping.end()) {
@@ -309,7 +309,7 @@ void InsertInstMapping(TypeManager& tyMgr, SubstPack& m, GenericsTy& genTy, Ty& 
     m.inst[StaticCast<TyVar*>(m.u2i[&genTy])].emplace(&instTy);
 }
 
-TypeSubst GenerateTypeMappingByArgs(const std::vector<Ptr<Ty>>& srcArgs, const std::vector<Ptr<Ty>>& instantiateArgs)
+TypeSubst GenerateTypeMappingByArgs(const std::vector<ModalTy>& srcArgs, const std::vector<ModalTy>& instantiateArgs)
 {
     if (srcArgs.size() != instantiateArgs.size()) {
         return {};
@@ -344,7 +344,7 @@ TypeSubst GenerateTypeMappingByArgs(const std::vector<Ptr<Ty>>& srcArgs, const s
  * inst: [R1' |-> String, R2' |-> Int]
  */
 void GenerateTypeMappingByArgs(
-    TypeManager& tyMgr, SubstPack& m, const std::vector<Ptr<Ty>>& srcArgs, const std::vector<Ptr<Ty>>& instantiateArgs)
+    TypeManager& tyMgr, SubstPack& m, const std::vector<ModalTy>& srcArgs, const std::vector<ModalTy>& instantiateArgs)
 {
     if (srcArgs.size() != instantiateArgs.size()) {
         return;
@@ -364,7 +364,7 @@ void GenerateTypeMappingByArgs(
 }
 } // namespace
 
-TypeSubst GenerateTypeMappingByTy(const Ptr<Ty> genericTy, const Ptr<Ty> instantTy)
+TypeSubst GenerateTypeMappingByTy(const DataTy genericTy, const DataTy instantTy)
 {
     if (!genericTy || !instantTy) {
         return {};
@@ -383,7 +383,7 @@ TypeSubst GenerateTypeMappingByTy(const Ptr<Ty> genericTy, const Ptr<Ty> instant
  * for the entire inheritance chain.
  * See `GenerateTypeMappingByArgs` for an example.
  */
-void GenerateTypeMapping(TypeManager& tyMgr, SubstPack& m, const Decl& decl, const std::vector<Ptr<Ty>>& typeArgs)
+void GenerateTypeMapping(TypeManager& tyMgr, SubstPack& m, const Decl& decl, const std::vector<DataTy>& typeArgs)
 {
     auto generic = decl.GetGeneric();
     if (!generic) {
@@ -430,7 +430,7 @@ void RelayMappingFromExtendToExtended(TypeManager& tyMgr, SubstPack& m, const Ex
     GenerateTypeMappingByArgs(tyMgr, m, originalTypeArgs, extendedTypeArgsInst);
 }
 
-TypeSubst GenerateTypeMapping(const Decl& decl, const std::vector<Ptr<Ty>>& typeArgs)
+TypeSubst GenerateTypeMapping(const Decl& decl, const std::vector<DataTy>& typeArgs)
 {
     TypeSubst substituteMapping;
     auto generic = decl.GetGeneric();

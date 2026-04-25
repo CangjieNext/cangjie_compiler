@@ -33,7 +33,7 @@ private:
     AST::VisitAction RecordUsedExtendDecl(AST::Node& node);
     void RecordExtendForRefExpr(const AST::RefExpr& re);
     void RecordExtendForMemberAccess(const AST::MemberAccess& ma);
-    void RecordImplExtendDecl(AST::Ty& ty, AST::FuncDecl& fd, Ptr<AST::Ty> upperTy);
+    void RecordImplExtendDecl(AST::Ty& ty, AST::FuncDecl& fd, AST::DataTy upperTy);
 
     GenericInstantiationManagerImpl& gim;
     TypeManager& typeManager;
