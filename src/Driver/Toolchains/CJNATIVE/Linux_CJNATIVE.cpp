@@ -81,6 +81,7 @@ void Linux_CJNATIVE::GenerateLinkingTool(const std::vector<TempFileInfo>& objFil
     }
 
     tool->AppendArgIf(driverOptions.stripSymbolTable, "-s");
+    tool->AppendArgIf(driverOptions.enableRelr, "--pack-dyn-relocs=relr");
     tool->AppendArg("-m", GetEmulation());
 
     // Hot reload relies on .gnu.hash section.

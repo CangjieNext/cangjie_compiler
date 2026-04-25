@@ -606,6 +606,7 @@ public:
     bool enableTimer = false; /**< Whether enable timer report. */
 
     bool enableMemoryCollect = false; /**< Whether enable memory usage report. */
+    bool enableRelr = false; /**< Whether enable RELR relocation compression. */
 
     enum class InteropLanguage : uint8_t { NA, Java, ObjC };
 

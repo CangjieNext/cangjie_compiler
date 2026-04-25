@@ -729,6 +729,7 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
 
     // ---------- COVERAGE OPTIONS ----------
     { Options::ID::ENABLE_COVERAGE, OPTION_TRUE_ACTION(opts.enableCoverage = true) },
+    { Options::ID::ENABLE_RELR, OPTION_TRUE_ACTION(opts.enableRelr = true) },
 
     // ---------- WARNING & ERROR CONTROL OPTIONS ----------'
     { Options::ID::WARN_OFF, [](GlobalOptions& /* opts */, const OptionArgInstance& arg) {

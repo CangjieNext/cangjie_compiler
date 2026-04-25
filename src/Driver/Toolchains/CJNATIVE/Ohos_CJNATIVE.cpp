@@ -61,6 +61,9 @@ void Ohos_CJNATIVE::GenerateLinkingTool(const std::vector<TempFileInfo>& objFile
     }
     tool->AppendArg("-z", "max-page-size=4096");
     tool->AppendArgIf(driverOptions.stripSymbolTable, "-s");
+    if (driverOptions.enableRelr || driverOptions.target.arch == Triple::ArchType::AARCH64) {
+        tool->AppendArg("--pack-dyn-relocs=relr");
+    }
 
     // Hot reload relies on .gnu.hash section.
     tool->AppendArg("--hash-style=both");

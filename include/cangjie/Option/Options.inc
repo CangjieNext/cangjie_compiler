@@ -628,6 +628,9 @@ OPTION("--compile-macro", COMPILE_MACRO, FLAG, { BACKEND(ALL) },
 OPTION("--coverage", ENABLE_COVERAGE, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
        "Enable coverage")
+OPTION("--enable-relr", ENABLE_RELR, FLAG, { BACKEND(CJNATIVE) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Enable RELR relocation compression")
 OPTION("--experimental", EXPERIMENTAL, FLAG, { BACKEND(CJNATIVE) },
     { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
        "Enable experimental options")
