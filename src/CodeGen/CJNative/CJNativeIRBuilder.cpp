@@ -79,8 +79,7 @@ llvm::Value* IRBuilder2::FixFuncArg(const CGValue& srcValue, const CGType& destT
             //   the "struct" mentioned above is the `this` parameter of the method.
             auto size = GetLayoutSize_64(*srcDerefType);
             if (IsTypeContainsRef(srcDerefCGType->GetLLVMType())) {
-                CallGCWriteAgg(
-                    srcDerefCGType->GetLayoutType(), {temp, payloadPtr, &srcRawVal, size});
+                CallGCWriteAgg(srcDerefCGType->GetLayoutType(), {temp, payloadPtr, &srcRawVal, size});
             } else {
                 CreateMemCpy(payloadPtr, llvm::MaybeAlign(), &srcRawVal, llvm::MaybeAlign(), size);
             }
