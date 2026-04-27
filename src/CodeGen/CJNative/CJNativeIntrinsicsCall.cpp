@@ -307,11 +307,7 @@ llvm::Value* IRBuilder2::CallArrayIntrinsicGet(
     } else {
         elePtr = GetArrayElementAddr(arrTy, array, index, isChecked);
     }
-    auto loadInst = CreateLoad(elemType, elePtr);
-    if (elemCHIRTy->IsEnum()) {
-        llvm::cast<llvm::Instruction>(loadInst)->setMetadata("untrusted_ref", llvm::MDNode::get(GetLLVMContext(), {}));
-    }
-    return loadInst;
+    return CreateLoad(elemType, elePtr);
 }
 
 llvm::Value* IRBuilder2::AcquireRawData(const CHIRIntrinsicWrapper& intrinsic)
@@ -1170,6 +1166,20 @@ llvm::Value* IRBuilder2::CallIntrinsicFloatToIntegerSat(llvm::Type& destTy, llvm
     auto id = static_cast<llvm::Intrinsic::ID>(isSigned ? llvm::Intrinsic::fptosi_sat : llvm::Intrinsic::fptoui_sat);
     llvm::Function* func = llvm::Intrinsic::getDeclaration(GetLLVMModule(), id, {&destTy, srcValue.getType()});
     return CreateCall(func, &srcValue);
+}
+
+llvm::Value* IRBuilder2::CallIntrinsicUnsafePointer(llvm::Value* value)
+{
+    CJC_ASSERT(value->getType()->isPointerTy());
+    auto* valuePtrTy = llvm::cast<llvm::PointerType>(value->getType());
+    auto addrSpace = valuePtrTy->getAddressSpace();
+    auto* intrinsicPtrTy = getInt8PtrTy(addrSpace);
+    auto funcName = "llvm.cj.unsafe.pointer.p" + std::to_string(addrSpace) + "i8";
+    auto funcType = llvm::FunctionType::get(intrinsicPtrTy, {intrinsicPtrTy}, false);
+    auto func = cgMod.GetOrInsertFunction(funcName, funcType);
+    auto arg = value->getType() == intrinsicPtrTy ? value : CreateBitCast(value, intrinsicPtrTy);
+    auto unsafeValue = CreateCall(func, {arg});
+    return value->getType() == intrinsicPtrTy ? unsafeValue : CreateBitCast(unsafeValue, value->getType());
 }
 
 llvm::Instruction* IRBuilder2::CallIntrinsicGetTypeInfo(const std::vector<llvm::Value*>& parameters)
