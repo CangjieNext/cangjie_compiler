@@ -809,7 +809,7 @@ public:
     bool disableSemaVic = false;
     bool enableChirRGetOrThrowE = false;
     bool disableChirUselessImportElimination = false;
-    bool enableOpaque = false;
+    bool enableOpaque = true;
     CHIRMode chirRenderMode = CHIRMode::NA;
 
     bool chirHLIR = false;

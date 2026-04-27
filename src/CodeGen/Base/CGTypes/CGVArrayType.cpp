@@ -15,7 +15,7 @@ void CGVArrayType::CalculateSizeAndAlign()
     if (auto arrayType = llvm::dyn_cast<llvm::ArrayType>(llvmType)) {
         auto layOut = cgMod.GetLLVMModule()->getDataLayout();
         size = layOut.getTypeAllocSize(arrayType);
-        align = layOut.getABITypeAlignment(arrayType);
+        align = layOut.getABITypeAlign(arrayType).value();
     }
 }
 
