@@ -164,12 +164,7 @@ llvm::Value* IRBuilder2::CreateLoad(const CGValue& cgVal, const llvm::Twine& nam
         return tmp;
     }
 
-    auto* loadInst = CreateLoad(elementType, cgVal.GetRawValue(), name);
-    if (auto& ori = elementCGType->GetOriginal(); ori.IsEnum()) {
-        llvm::cast<llvm::Instruction>(loadInst)->setMetadata(
-            "untrusted_ref", llvm::MDNode::get(cgMod.GetLLVMContext(), {}));
-    }
-    return loadInst;
+    return CreateLoad(elementType, cgVal.GetRawValue(), name);
 }
 
 llvm::Value* IRBuilder2::CreateStructGEP(llvm::Type* ty, llvm::Value* ptr, unsigned idx, const llvm::Twine& name)

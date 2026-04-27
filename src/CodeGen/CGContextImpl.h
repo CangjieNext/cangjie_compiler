@@ -35,7 +35,7 @@ private:
         CGType::TypeExtraInfoHasher> chirType2CGTypeMap;
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     std::unordered_map<const llvm::Value*, llvm::Value*> valueAndBasePtrMap;
-    std::unordered_set<llvm::Value*> nullableReference; // Record those i8(1)* which are nullable.
+    std::unordered_set<llvm::Value*> nullableReferenceProvenance; // Record nullable-ref provenance on values/slots.
 #endif
 };
 
