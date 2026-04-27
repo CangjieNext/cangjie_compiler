@@ -396,7 +396,8 @@ public:
         return llvmUsedGVs;
     }
 
-    void AddNullableReference(llvm::Value* value);
+    void AddNullableReferenceProvenance(llvm::Value* value);
+    bool HasNullableReferenceProvenance(const llvm::Value* value) const;
 
     void SetBasePtr(const llvm::Value* val, llvm::Value* basePtr);
     llvm::Value* GetBasePtrOf(llvm::Value* val) const;

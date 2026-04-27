@@ -24,6 +24,21 @@
 namespace Cangjie::CodeGen {
 
 namespace {
+bool ShouldWrapEnumAssociatedValueWithUnsafePointer(const CHIR::Type& fieldType, CGModule& cgMod)
+{
+    return IsReferenceType(fieldType, cgMod) || fieldType.IsCPointer() || IsCFunc(fieldType);
+}
+
+llvm::Value* WrapEnumAssociatedValueWithUnsafePointer(
+    IRBuilder2& irBuilder, llvm::Value* value, const CHIR::Type& fieldType)
+{
+    if (!value->getType()->isPointerTy() ||
+        !ShouldWrapEnumAssociatedValueWithUnsafePointer(fieldType, irBuilder.GetCGModule())) {
+        return value;
+    }
+    return irBuilder.CallIntrinsicUnsafePointer(value);
+}
+
 llvm::Value* DoSimpleCast(IRBuilder2& irBuilder, const CGValue& srcValue, const CGType& destType)
 {
     llvm::Value& srcRawVal = *srcValue.GetRawValue();
@@ -358,6 +373,12 @@ llvm::Value* IRBuilder2::GetReturnValue(const CGFunctionType& calleeType, llvm::
     if (returnCHIRType.IsUnit()) {
         ret = cgMod.GenerateUnitTypeValue();
     }
+    if (returnCGType.IsOptionLikeRef()) {
+        // Option-like ref returns are represented as nullable refs. Record the
+        // returned value first, and materialize `unsafe.pointer` only when the
+        // caller later loads it from a local slot.
+        cgMod.GetCGContext().AddNullableReferenceProvenance(ret);
+    }
     return ret;
 }
 
@@ -442,7 +463,7 @@ size_t IRBuilder2::GetPtrSize() const
 }
 
 // For 64 bit OS: {typeinfo*, <payload>}
-// For 32 bit OS: {typeinfo*, i32, <payload>} 
+// For 32 bit OS: {typeinfo*, i32, <payload>}
 size_t IRBuilder2::GetPayloadOffset() const
 {
     return GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::ARM32 ? GetPtrSize() + 4U : GetPtrSize();
@@ -753,6 +774,11 @@ llvm::Instruction* IRBuilder2::CreateStore(const CGValue& cgVal, const CGValue& 
         return LLVMIRBuilder2::CreateStore(val, destAddr, isVolatile);
     }
 
+    if (!isMemberWrite && valType && (valType->IsReference() || valType->IsOptionLikeRef()) &&
+        GetCGContext().HasNullableReferenceProvenance(val)) {
+        GetCGContext().AddNullableReferenceProvenance(destAddr);
+    }
+
     return LLVMIRBuilder2::CreateStore(val, destAddr, isVolatile);
 }
 
@@ -893,7 +919,12 @@ llvm::Value* IRBuilder2::CreateLoad(llvm::Type* elementType, llvm::Value* addr, 
         CJC_ASSERT(base->getType()->getPointerAddressSpace() == 1);
         return CallGCRead({base, addr});
     }
-    return LLVMIRBuilder2::CreateLoad(elementType, addr, name);
+    auto loaded = LLVMIRBuilder2::CreateLoad(elementType, addr, name);
+    if (elementType == CGType::GetRefType(GetLLVMContext()) &&
+        GetCGContext().HasNullableReferenceProvenance(addr)) {
+        return CallIntrinsicUnsafePointer(loaded);
+    }
+    return loaded;
 }
 
 llvm::CallInst* IRBuilder2::CreateMemsetStructWith0(llvm::AllocaInst* addr)
@@ -1527,17 +1558,7 @@ llvm::Value* IRBuilder2::CreateEnumGEP(const CHIR::Field& field)
 {
     CJC_ASSERT(field.GetPath().size() == 1);
     auto index = field.GetPath()[0];
-    if (index == 0) {
-        return GetEnumTag(field);
-    } else {
-        auto res = GetEnumAssociatedValue(field);
-        if (auto cgType = dynamic_cast<CGEnumType*>(CGType::GetOrCreate(cgMod, field.GetResult()->GetType()));
-            cgType && cgType->IsOptionLikeRef()) {
-            llvm::cast<llvm::Instruction>(res)->setMetadata(
-                "untrusted_ref", llvm::MDNode::get(cgMod.GetLLVMContext(), {}));
-        }
-        return res;
-    }
+    return index == 0 ? GetEnumTag(field) : GetEnumAssociatedValue(field);
 }
 
 llvm::Value* IRBuilder2::GetEnumTag(const CHIR::Field& field)
@@ -1631,6 +1652,7 @@ llvm::Value* GetCommonEnumAssociatedValue(IRBuilder2& irBuilder, const CHIR::Fie
 {
     auto& cgMod = irBuilder.GetCGModule();
     auto& cgCtx = irBuilder.GetCGContext();
+    auto fieldType = field.GetResult()->GetType();
 
     std::vector<llvm::Type*> elemTypes;
     bool isSized = true;
@@ -1653,7 +1675,8 @@ llvm::Value* GetCommonEnumAssociatedValue(IRBuilder2& irBuilder, const CHIR::Fie
         auto castedEnumValPtr = irBuilder.CreateBitCast(payload, layoutType->getPointerTo(1));
         auto fieldPtr = irBuilder.CreateStructGEP(layoutType, castedEnumValPtr, associatedValIdx);
         cgCtx.SetBasePtr(fieldPtr, enumVal);
-        return irBuilder.CreateLoad(layoutType->getStructElementType(associatedValIdx), fieldPtr);
+        auto fieldValue = irBuilder.CreateLoad(layoutType->getStructElementType(associatedValIdx), fieldPtr);
+        return WrapEnumAssociatedValueWithUnsafePointer(irBuilder, fieldValue, *fieldType);
     } else {
         auto typeCastExpr = StaticCast<CHIR::TypeCast*>(StaticCast<CHIR::LocalVar*>(field.GetBase())->GetExpr());
         const auto& chirEnumType = *StaticCast<CHIR::EnumType*>(typeCastExpr->GetSourceTy());
@@ -1682,7 +1705,8 @@ llvm::Value* GetCommonEnumAssociatedValue(IRBuilder2& irBuilder, const CHIR::Fie
         }
         cgCtx.SetBasePtr(fieldAddr, enumVal);
         auto cgAddr = CGValue(fieldAddr, fieldAddrType);
-        return irBuilder.CreateLoad(cgAddr);
+        auto fieldValue = irBuilder.CreateLoad(cgAddr);
+        return WrapEnumAssociatedValueWithUnsafePointer(irBuilder, fieldValue, *fieldType);
     }
 }
 
@@ -1714,7 +1738,8 @@ llvm::Value* GetAssociatedNonRefEnumAssociatedValue(
     auto casted = irBuilder.CreateBitCast(cgEnum.GetRawValue(), i8Ty->getPointerTo());
     auto fieldPtr = irBuilder.CreateConstGEP1_32(i8Ty, casted, offset, "enum.field.ptr");
     auto retLLVMType = CGType::GetOrCreate(cgMod, field.GetResult()->GetType())->GetLLVMType();
-    return irBuilder.CreateLoad(retLLVMType, irBuilder.CreateBitCast(fieldPtr, retLLVMType->getPointerTo()));
+    auto fieldValue = irBuilder.CreateLoad(retLLVMType, irBuilder.CreateBitCast(fieldPtr, retLLVMType->getPointerTo()));
+    return WrapEnumAssociatedValueWithUnsafePointer(irBuilder, fieldValue, *field.GetResult()->GetType());
 }
 } // namespace
 
@@ -1751,6 +1776,7 @@ llvm::Value* IRBuilder2::GetEnumAssociatedValue(const CHIR::Field& field)
             SetInsertPoint(refBB);
             auto enumVal = cgEnum->GetRawValue();
             auto payload = CreateBitCast(GetPayloadFromObject(enumVal), i8PtrTy);
+            // Ref-instantiations of option-like T are represented as ref/null rather than {tag, ...}.
             auto refResult = CallGCRead({enumVal, payload});
             CreateBr(endBB);
 
@@ -1768,8 +1794,9 @@ llvm::Value* IRBuilder2::GetEnumAssociatedValue(const CHIR::Field& field)
         }
         case CGEnumType::CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_REF: {
             CJC_ASSERT(index == 1);
+            // Option-like ref uses nullable ref layout, not a tag-first aggregate.
             auto value = cgEnum->GetRawValue();
-            cgMod.GetCGContext().AddNullableReference(value);
+            cgMod.GetCGContext().AddNullableReferenceProvenance(value);
             return value;
         }
         case CGEnumType::CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_NONREF: {
@@ -1779,7 +1806,8 @@ llvm::Value* IRBuilder2::GetEnumAssociatedValue(const CHIR::Field& field)
                 auto enumType = cgEnumType->GetLLVMType();
                 auto casted = CreateBitCast(
                     cgEnum->GetRawValue(), enumType->getPointerTo(enumVal->getType()->getPointerAddressSpace()));
-                return CreateLoad(enumType->getStructElementType(1U), CreateStructGEP(enumType, casted, 1U));
+                auto value = CreateLoad(enumType->getStructElementType(1U), CreateStructGEP(enumType, casted, 1U));
+                return WrapEnumAssociatedValueWithUnsafePointer(*this, value, *field.GetResult()->GetType());
             }
             auto associatedValueType = field.GetResult()->GetType();
             auto nonRefResult = GetOptionLikeNonRefAssociatedValue(
