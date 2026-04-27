@@ -352,7 +352,7 @@ const std::vector<GenericType*>& DynamicDispatchWithException::GetGenericTypePar
     return virMethodCtx.genericTypeParams;
 }
 
-std::vector<VTableSearchRes> DynamicDispatchWithException::GetVirtualMethodInfo(CHIRBuilder& builder) const
+VTableSearchRes DynamicDispatchWithException::GetVirtualMethodInfo(CHIRBuilder& builder) const
 {
     auto thisTypeDeref = thisType->StripAllRefs();
     if (thisTypeDeref->IsThis()) {
@@ -368,8 +368,8 @@ std::vector<VTableSearchRes> DynamicDispatchWithException::GetVirtualMethodInfo(
     auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
     FuncCallType funcCallType{virMethodCtx.srcCodeIdentifier, instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);
-    CJC_ASSERT(!res.empty());
-    return res;
+    CJC_ASSERT(res.has_value());
+    return res.value();
 }
 
 size_t DynamicDispatchWithException::GetVirtualMethodOffset(CHIRBuilder* builder) const
@@ -379,38 +379,20 @@ size_t DynamicDispatchWithException::GetVirtualMethodOffset(CHIRBuilder* builder
         return offset.value();
     } else {
         CJC_NULLPTR_CHECK(builder);
-        return GetVirtualMethodInfo(*builder)[0].offset;
+        return GetVirtualMethodInfo(*builder).offset;
     }
 }
 
 ClassType* DynamicDispatchWithException::GetInstSrcParentCustomTypeOfMethod(CHIRBuilder& builder) const
 {
-    ClassType* result = nullptr;
-    for (auto& r : GetVirtualMethodInfo(builder)) {
-        if (r.offset == GetVirtualMethodOffset()) {
-            auto def = r.instSrcParentType->GetClassDef();
-            const auto& parentFuncInfo = def->GetDefVTable().GetExpectedTypeVTable(*def->GetType());
-            auto originalType = parentFuncInfo.GetVirtualMethods()[r.offset].GetOriginalFuncType();
-            if (VirMethodTypeIsMatched(*originalType, *GetMethodType())) {
-                CJC_NULLPTR_CHECK(r.instSrcParentType);
-                return r.instSrcParentType;
-            }
-        }
-    }
-    CJC_NULLPTR_CHECK(result);
-    return result;
+    const auto& r = GetVirtualMethodInfo(builder);
+    return r.instSrcParentType;
 }
 
 AttributeInfo DynamicDispatchWithException::GetVirtualMethodAttr(CHIRBuilder& builder) const
 {
-    for (auto& r : GetVirtualMethodInfo(builder)) {
-        if (r.offset == GetVirtualMethodOffset()) {
-            CJC_NULLPTR_CHECK(r.instSrcParentType);
-            return r.attr;
-        }
-    }
-    CJC_ABORT();
-    return AttributeInfo{};
+    const auto& r = GetVirtualMethodInfo(builder);
+    return r.attr;
 }
 
 InvokeWithException::InvokeWithException(

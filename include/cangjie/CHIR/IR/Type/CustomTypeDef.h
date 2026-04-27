@@ -238,7 +238,7 @@ public:
     * @param replaceTable an auxiliary map
     * @param builder CHIR builder
     */
-    std::vector<VTableSearchRes> GetFuncIndexInVTable(const FuncCallType& funcCallType,
+    std::optional<VTableSearchRes> GetFuncIndexInVTable(const FuncCallType& funcCallType,
         std::unordered_map<const GenericType*, Type*>& replaceTable, CHIRBuilder& builder) const;
 
     // ===--------------------------------------------------------------------===//
