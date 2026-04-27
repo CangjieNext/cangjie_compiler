@@ -48,7 +48,17 @@ inline void AddSRetAttribute(llvm::CallBase* call)
     auto retType = call->arg_begin()->get()->getType();
     CJC_ASSERT(retType->isPointerTy());
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    auto type = GetPointerElementType(retType);
+    llvm::Type* type = nullptr;
+    if (auto* callee = call->getCalledFunction(); callee && !callee->arg_empty() && callee->arg_begin()->hasStructRetAttr()) {
+        type = callee->arg_begin()->getParamStructRetType();
+    }
+    if (!type) {
+        auto* ptrTy = llvm::dyn_cast<llvm::PointerType>(retType);
+        if (!ptrTy || ptrTy->isOpaque()) {
+            return;
+        }
+        type = ptrTy->getNonOpaquePointerElementType();
+    }
     auto sRetAttr = llvm::Attribute::getWithStructRetType(call->getContext(), type);
     AddParamAttr(call, 0, sRetAttr);
 #endif
@@ -110,8 +120,15 @@ inline void AddRetAttr(llvm::Function* func, llvm::Attribute::AttrKind kind)
 inline void AddSRetAttribute(llvm::Argument* value)
 {
     CJC_ASSERT(value->getType()->isPointerTy());
-    auto type = GetPointerElementType(value->getType());
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    if (value->hasStructRetAttr() && value->getParamStructRetType()) {
+        return;
+    }
+    auto* ptrTy = llvm::dyn_cast<llvm::PointerType>(value->getType());
+    if (!ptrTy || ptrTy->isOpaque()) {
+        return;
+    }
+    auto type = ptrTy->getNonOpaquePointerElementType();
     auto sRet = llvm::Attribute::getWithStructRetType(value->getContext(), type);
     value->addAttr(sRet);
 #endif
@@ -158,8 +175,15 @@ inline void SetSRetAttrForStructReturnType(const CHIR::FuncType& chirFuncTy, llv
 #endif
 
     if (!llvmFunc.arg_empty() && shouldSetSRet) {
-        llvmFunc.arg_begin()->addAttr(llvm::Attribute::NoAlias);
-        AddSRetAttribute(llvmFunc.arg_begin());
+        auto* sretArg = llvmFunc.arg_begin();
+        sretArg->addAttr(llvm::Attribute::NoAlias);
+        // LLVM 21 opaque pointers no longer carry an argument pointee type, so
+        // re-synthesizing sret from the raw arg type would silently create an
+        // untyped attr and poison the emitted bitcode. Preserve the typed sret
+        // that was already attached when the function was built.
+        if (!sretArg->hasStructRetAttr() || !sretArg->getParamStructRetType()) {
+            AddSRetAttribute(sretArg);
+        }
     }
 }
 } // namespace CodeGen

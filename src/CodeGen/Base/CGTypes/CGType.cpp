@@ -398,7 +398,7 @@ llvm::Type* CGType::GetUnitType(llvm::LLVMContext& llvmCtx)
 
 llvm::Type* CGType::GetRefType(llvm::LLVMContext& llvmCtx)
 {
-    return llvm::Type::getInt8PtrTy(llvmCtx, 1U);
+    return llvm::PointerType::get(llvmCtx, 1U);
 }
 
 llvm::Type* CGType::GetLandingPadType(llvm::LLVMContext& llvmCtx)
@@ -487,7 +487,7 @@ llvm::StructType* CGType::GetOrCreateTypeInfoType(llvm::LLVMContext& llvmCtx)
         auto i8Ty = llvm::Type::getInt8Ty(llvmCtx);
         auto i16Ty = llvm::Type::getInt16Ty(llvmCtx);
         auto i32Ty = llvm::Type::getInt32Ty(llvmCtx);
-        auto i8PtrTy = llvm::Type::getInt8PtrTy(llvmCtx);
+        auto i8PtrTy = llvm::PointerType::get(llvmCtx, 0);
 
         typeInfoType = llvm::StructType::create(llvmCtx, "TypeInfo");
         std::vector<llvm::Type*> bodyVec(static_cast<size_t>(TYPE_INFO_FIELDS_NUM));
@@ -525,7 +525,7 @@ llvm::StructType* CGType::GetClassTTExtTypeVer1(llvm::LLVMContext& llvmCtx)
     auto type = llvm::StructType::getTypeByName(llvmCtx, "ext_class_type_ver_1");
     if (type == nullptr) {
         std::vector<llvm::Type*> containedTypes = {
-            llvm::Type::getInt8PtrTy(llvmCtx),
+            llvm::PointerType::get(llvmCtx, 0),
             llvm::Type::getInt16Ty(llvmCtx),
             llvm::Type::getInt32Ty(llvmCtx),
             llvm::Type::getInt8Ty(llvmCtx)
@@ -541,7 +541,7 @@ llvm::StructType* CGType::GetOrCreateTypeTemplateType(llvm::LLVMContext& llvmCtx
     if (typeTemplateType == nullptr) {
         auto i8Ty = llvm::Type::getInt8Ty(llvmCtx);
         auto i16Ty = llvm::Type::getInt16Ty(llvmCtx);
-        auto i8PtrTy = llvm::Type::getInt8PtrTy(llvmCtx);
+        auto i8PtrTy = llvm::PointerType::get(llvmCtx, 0);
 
         typeTemplateType = llvm::StructType::create(llvmCtx, "TypeTemplate");
         std::vector<llvm::Type*> bodyVec(static_cast<size_t>(TYPE_TEMPLATE_FIELDS_NUM));
@@ -568,7 +568,7 @@ llvm::StructType* CGType::GetOrCreateExtensionDefType(llvm::LLVMContext& llvmCtx
     if (extensionDefType == nullptr) {
         auto i16Ty = llvm::Type::getInt16Ty(llvmCtx);
         auto i32Ty = llvm::Type::getInt32Ty(llvmCtx);
-        auto i8PtrTy = llvm::Type::getInt8PtrTy(llvmCtx);
+        auto i8PtrTy = llvm::PointerType::get(llvmCtx, 0);
         extensionDefType = llvm::StructType::create(llvmCtx, "ExtensionDef");
         std::vector<llvm::Type*> bodyVec(static_cast<size_t>(EXTENSION_DEF_FIELDS_NUM));
         bodyVec[static_cast<size_t>(TYPE_PARAM_COUNT)] = i32Ty;
@@ -724,7 +724,7 @@ llvm::Constant* CGType::GenMTableOfTypeInfo()
         : &chirType;
     cgExtensionDef = CGType::GetOrCreate(cgMod, targetDefType)->cgExtensionDef;
     if ((inheritedClassNum >> 14U) != 0 || !cgExtensionDef) {
-        return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(llvmCtx));
+        return llvm::ConstantPointerNull::get(llvm::PointerType::get(llvmCtx, 0));
     }
     auto& extendInterfaces = cgExtensionDef->GetExtendInterfaces();
     constexpr size_t bitsPerByte = 8U;
@@ -750,7 +750,7 @@ llvm::Constant* CGType::GenMTableOfTypeInfo()
         }
         return cgMod.GetOrInsertBitMap(flag);
     }
-    return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(llvmCtx));
+    return llvm::ConstantPointerNull::get(llvm::PointerType::get(llvmCtx, 0));
 }
 
 llvm::Constant* CGType::GenNameOfTypeInfo()
@@ -816,7 +816,7 @@ llvm::Constant* CGType::GenFieldsNumOfTypeInfo()
 
 llvm::Constant* CGType::GenFieldsOfTypeInfo()
 {
-    return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    return llvm::ConstantPointerNull::get(llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
 }
 
 llvm::Constant* CGType::GenSizeOfTypeInfo()
@@ -831,7 +831,7 @@ llvm::Constant* CGType::GenAlignOfTypeInfo()
 
 llvm::Constant* CGType::GenSourceGenericOfTypeInfo()
 {
-    auto p0i8 = llvm::Type::getInt8PtrTy(cgCtx.GetLLVMContext());
+    auto p0i8 = llvm::PointerType::get(cgCtx.GetLLVMContext(), 0);
     if (IsStaticGI()) {
         return llvm::ConstantExpr::getBitCast(GetOrCreateTypeTemplate(), p0i8);
     }
@@ -845,12 +845,12 @@ llvm::Constant* CGType::GenTypeArgsNumOfTypeInfo()
 
 llvm::Constant* CGType::GenOffsetsOfTypeInfo()
 {
-    return llvm::ConstantPointerNull::get(llvm::Type::getInt32PtrTy(cgMod.GetLLVMContext()));
+    return llvm::ConstantPointerNull::get(llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
 }
 
 llvm::Constant* CGType::GenTypeArgsOfTypeInfo()
 {
-    return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    return llvm::ConstantPointerNull::get(llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
 }
 
 llvm::Constant* CGType::GenSuperOfTypeInfo()
@@ -865,7 +865,7 @@ llvm::Constant* CGType::GenFlagOfTypeInfo()
 
 llvm::Constant* CGType::GenReflectionOfTypeInfo()
 {
-    return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    return llvm::ConstantPointerNull::get(llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
 }
 
 CGTIType::CGTIType(CGModule& cgMod)
@@ -922,10 +922,10 @@ llvm::StructType* CGType::GetOrCreateGenericTypeInfoType(llvm::LLVMContext& llvm
     if (genericTypeInfoType == nullptr) {
         genericTypeInfoType = llvm::StructType::create(llvmCtx, "GenericTypeInfo");
         std::vector<llvm::Type*> bodyVec(static_cast<size_t>(GENERIC_TYPE_INFO_FIELDS_NUM));
-        bodyVec[static_cast<size_t>(GENERIC_TYPEINFO_NAME)] = llvm::Type::getInt8PtrTy(llvmCtx);
+        bodyVec[static_cast<size_t>(GENERIC_TYPEINFO_NAME)] = llvm::PointerType::get(llvmCtx, 0);
         bodyVec[static_cast<size_t>(GENERIC_TYPEINFO_TYPE_KIND)] = llvm::Type::getInt8Ty(llvmCtx);
         bodyVec[static_cast<size_t>(GENERIC_TYPEINFO_UPPERBOUNDS_NUM)] = llvm::Type::getInt32Ty(llvmCtx);
-        bodyVec[static_cast<size_t>(GENERIC_TYPEINFO_UPPERBOUNDS)] = llvm::Type::getInt8PtrTy(llvmCtx);
+        bodyVec[static_cast<size_t>(GENERIC_TYPEINFO_UPPERBOUNDS)] = llvm::PointerType::get(llvmCtx, 0);
         SetStructTypeBody(genericTypeInfoType, bodyVec);
     }
     return genericTypeInfoType;
@@ -937,7 +937,7 @@ llvm::StructType* CGType::GetOrCreateGenericCustomTypeInfoType(llvm::LLVMContext
     if (genericCustomTypeInfoType == nullptr) {
         genericCustomTypeInfoType = llvm::StructType::create(llvmCtx, "GenericCustomTypeInfo");
         std::vector<llvm::Type*> bodyVec(static_cast<size_t>(GENERIC_CUSTOM_TYPE_INFO_FIELDS_NUM));
-        auto i8PtrTy = llvm::Type::getInt8PtrTy(llvmCtx);
+        auto i8PtrTy = llvm::PointerType::get(llvmCtx, 0);
         auto i8Ty = llvm::Type::getInt8Ty(llvmCtx);
         bodyVec[static_cast<size_t>(GENERIC_CUSTOM_TYPEINFO_NAME)] = i8PtrTy;
         bodyVec[static_cast<size_t>(GENERIC_CUSTOM_TYPEINFO_TYPE_KIND)] = i8Ty;
@@ -1061,7 +1061,7 @@ llvm::GlobalVariable* CGType::GetOrCreateGenericCustomTypeInfo()
     auto genericCustomTypeInfoType = GetOrCreateGenericCustomTypeInfoType(cgMod.GetLLVMContext());
     auto genericCustomTypeInfo = llvm::cast<llvm::GlobalVariable>(
         cgMod.GetLLVMModule()->getOrInsertGlobal(qualifiedName + ".ti", genericCustomTypeInfoType));
-    auto i8PtrTy = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto i8PtrTy = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     unsigned typeInfoKind = UGTypeKind::UG_GENERIC_CUSTOM;
     std::vector<llvm::Constant*> typeInfoVec(GENERIC_CUSTOM_TYPE_INFO_FIELDS_NUM);
     typeInfoVec[static_cast<size_t>(GENERIC_CUSTOM_TYPEINFO_NAME)] =
@@ -1080,7 +1080,7 @@ llvm::GlobalVariable* CGType::GetOrCreateGenericCustomTypeInfo()
 
 llvm::Constant* CGType::GenTypeArgsOfGenericCustomTypeInfo()
 {
-    auto p0i8 = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto p0i8 = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     auto genericArgs = static_cast<const CHIR::CustomType&>(chirType).GetGenericArgs();
     if (genericArgs.empty()) {
         return llvm::ConstantPointerNull::get(p0i8);
