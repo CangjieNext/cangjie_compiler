@@ -24,7 +24,7 @@
 #include <utility>
 #include <vector>
 
-#include "cangjie/Basic/WarnGroupEnum.h"
+#include "cangjie/Basic/WarnGroup.h"
 #include "cangjie/Driver/TempFileInfo.h"
 #include "cangjie/Option/OptionTable.h"
 #include "cangjie/Utils/FileUtil.h"
@@ -334,7 +334,7 @@ public:
 #endif
 #ifdef __APPLE__
         Triple::Environment::NOT_AVAILABLE,
-#elif __ohos__
+#elif defined(__ohos__)
         Triple::Environment::OHOS,
 #else
         Triple::Environment::GNU,

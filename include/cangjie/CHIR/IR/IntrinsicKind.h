@@ -293,7 +293,6 @@ enum IntrinsicKind : uint16_t {
     ARRAY_SET_UNCHECKED,
     ARRAY_SIZE,
     ARRAY_CLONE,
-    RAW_ARRAY_ALLOCATE,
     ARRAY_SLICE_INIT,
     ARRAY_SLICE,
     ARRAY_SLICE_RAWARRAY,
@@ -621,6 +620,9 @@ enum IntrinsicKind : uint16_t {
 
     // cjnative only
     EXCLUSIVE_SCOPE,
+
+    // modal used
+    RAW_ARRAY_ALLOCATE,
 };
 
 

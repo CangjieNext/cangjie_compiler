@@ -1873,4 +1873,33 @@ bool CompNodeByPos(Ptr<const Node> n1, Ptr<const Node> n2)
 MacroExpandExpr::MacroExpandExpr() : Expr(ASTKind::MACRO_EXPAND_EXPR)
 {
 }
+
+bool Package::IsEmpty() const
+{
+    for (auto& file : files) {
+        if (file->package || !file->decls.empty()) {
+            return false;
+        }
+        // Filter compiler added importSpec of core in stdlib.
+        for (auto& import : file->imports) {
+            if (!import->TestAttr(Attribute::COMPILER_ADD)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+VarPattern::VarPattern(SrcIdentifier ident, const Position& nodePos) : Pattern(ASTKind::VAR_PATTERN)
+{
+    varDecl = MakeOwned<VarDecl>();
+    varDecl->begin = nodePos;
+    varDecl->identifier = std::move(ident);
+    varDecl->end = nodePos;
+    varDecl->end = varDecl->identifier.End();
+    varDecl->isVar = false;
+    begin = nodePos;
+    end = varDecl->end;
+    varDecl->parentPattern = this;
+}
 } // namespace Cangjie::AST

@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -12,6 +12,12 @@
 namespace Cangjie::AST {
 struct Pattern;
 struct Block;
+
+/**
+ * ForInKind of the ForInExpr.
+ */
+enum class ForInKind : uint8_t { FORIN_INVALID, FORIN_RANGE, FORIN_STRING, FORIN_ITER };
+
 /**
  * A ForInExpr node represents for-in expression.
  */

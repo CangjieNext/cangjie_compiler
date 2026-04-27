@@ -20,6 +20,7 @@
 #include <thread>
 
 #include "cangjie/AST/Utils.h"
+#include "cangjie/AST/Nodes/MacroInvocation.h"
 #include "cangjie/Basic/DiagnosticEmitter.h"
 #include "cangjie/Basic/DiagnosticJsonFormatter.h"
 #include "cangjie/Basic/Display.h"
@@ -171,7 +172,7 @@ const WarnGroup rWarnGroups[] = {
 // Define warnGroupDescrs table (declaration is in DiagnosticEngineConstants.h)
 const std::string_view warnGroupDescrs[] = {
 #define WARN_GROUP(DESCR, KIND) DESCR,
-#include "diagnostics/DKRef/WarnGroupKind.def"
+#include "cangjie/Basic/WarnGroupKind.def"
 #undef WARN_GROUP
 };
 
@@ -313,7 +314,7 @@ DiagCategory Diagnostic::GetDiagnoseCategory(DiagId id)
         int endOrd;
         DiagCategory category;
     };
-    static const std::array<RangeOrd, 11> kRanges = {
+    static const RangeOrd kRanges[] = {
         RangeOrd{LookupDiagKindRefactor("lex_diag_begin").Val(),
             LookupDiagKindRefactor("lex_diag_end").Val(), DiagCategory::LEX},
         RangeOrd{LookupDiagKindRefactor("parse_diag_begin").Val(),

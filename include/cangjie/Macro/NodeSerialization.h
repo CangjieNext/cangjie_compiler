@@ -22,41 +22,41 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 
 namespace Cangjie::AST {
-struct Node;
-struct Expr;
-struct CallExpr;
-struct LambdaExpr;
-struct Type;
-struct RefType;
-struct RefExpr;
-struct PrimitiveType;
 struct Annotation;
+struct Block;
+struct CallExpr;
+struct ClassBody;
 struct Decl;
-struct VarDecl;
-struct MainDecl;
-struct MacroDecl;
-struct Modifier;
-struct MacroExpandDecl;
+struct EnumPattern;
+struct Expr;
+struct FeatureId;
+struct FeaturesDirective;
+struct FeaturesSet;
 struct FuncArg;
 struct FuncBody;
 struct FuncParam;
-struct MacroExpandParam;
-struct Block;
-struct StructBody;
-struct InterfaceBody;
-struct ClassBody;
 struct Generic;
 struct GenericConstraint;
-struct Pattern;
-struct EnumPattern;
+struct ImportContent;
+struct ImportSpec;
+struct InterfaceBody;
+struct LambdaExpr;
+struct MacroDecl;
+struct MacroExpandDecl;
+struct MacroExpandParam;
+struct MainDecl;
 struct MatchCase;
 struct MatchCaseOther;
-struct FeaturesDirective;
+struct Modifier;
+struct Node;
 struct PackageSpec;
-struct ImportSpec;
-struct FeaturesSet;
-struct ImportContent;
-struct FeatureId;
+struct Pattern;
+struct PrimitiveType;
+struct RefExpr;
+struct RefType;
+struct StructBody;
+struct Type;
+struct VarDecl;
 }
 
 using AstNode = Ptr<const Cangjie::AST::Node>;

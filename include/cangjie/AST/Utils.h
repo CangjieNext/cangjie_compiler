@@ -15,19 +15,26 @@
 
 #include <functional>
 
-#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Nodes/Decl.h"
 #include "cangjie/AST/Nodes/Expr.h"
 #include "cangjie/AST/Nodes/Modifier.h"
-#include "cangjie/AST/Nodes/Package.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
 namespace Cangjie::AST {
 struct MacroInvocation;
 struct LitConstExpr;
+enum class AccessLevel;
 struct Package;
 struct Pattern;
 struct MemberAccess;
+struct VarWithPatternDecl;
+struct ImportContent;
+struct LetPatternDestructor;
+struct CallExpr;
+struct FuncDecl;
+struct PropDecl;
+struct VarDecl;
+struct ClassDecl;
 
 /**
  * Add Attribute and curfile in macro expanded node.
@@ -42,10 +49,7 @@ void AddCurFile(AST::Node& root, Ptr<AST::File> file = nullptr);
 /**
  * Whether the macrocall node is actually a pure annotation.
  */
-inline bool IsPureAnnotation(const AST::MacroInvocation& invocation)
-{
-    return invocation.isCustom && invocation.isCurFile;
-}
+bool IsPureAnnotation(const AST::MacroInvocation& invocation);
 
 std::vector<Ptr<const AST::Modifier>> SortModifierByPos(const std::set<AST::Modifier>& modifiers);
 
@@ -120,13 +124,7 @@ bool IsInDeclWithAttribute(const AST::Decl& decl, AST::Attribute attr);
 /**
  * Iterate all toplevel decls in given 'pkg', and perform the function 'process' on each of toplevel decl.
  */
-inline void IterateToplevelDecls(const Package& pkg, const std::function<void(OwnedPtr<Decl>&)>& process)
-{
-    for (auto& file : pkg.files) {
-        (void)std::for_each(file->decls.begin(), file->decls.end(), process);
-        (void)std::for_each(file->exportedInternalDecls.begin(), file->exportedInternalDecls.end(), process);
-    }
-}
+void IterateToplevelDecls(const Package& pkg, const std::function<void(OwnedPtr<Decl>&)>& process);
 
 /**
  * Iterate all exportable function from toplevel and member decls.
@@ -150,15 +148,12 @@ inline bool InsideAtJavaDecl(const AST::Decl& decl)
 bool IsPackageMemberAccess(const AST::MemberAccess& ma);
 bool IsThisOrSuper(const AST::Expr& expr);
 
-AST::AccessLevel GetAccessLevel(const AST::Node& node);
-AST::Attribute GetAttrByAccessLevel(AccessLevel level);
-std::string GetAccessLevelStr(const AST::Node& node, const std::string& surround = "");
-std::string GetAccessLevelStr(const AST::Package& pkg);
+AccessLevel GetAccessLevel(const Node& node);
+Attribute GetAttrByAccessLevel(AccessLevel level);
+std::string GetAccessLevelStr(const Node& node, const std::string& surround = "");
+std::string GetAccessLevelStr(const Package& pkg);
 
-inline bool IsCompatibleAccessLevel(AST::AccessLevel srcLevel, AST::AccessLevel refLevel)
-{
-    return srcLevel <= refLevel;
-}
+bool IsCompatibleAccessLevel(AccessLevel srcLevel, AccessLevel refLevel);
 
 std::string GetImportedItemFullName(const AST::ImportContent& content, const std::string& commonPrefix = "");
 
@@ -175,10 +170,7 @@ bool DoesNotHaveEnumSubpattern(const LetPatternDestructor& let);
 
 bool IsValidCFuncConstructorCall(const CallExpr& ce);
 
-inline bool IsNestedFunc(const AST::FuncDecl& fd)
-{
-    return !fd.TestAttr(AST::Attribute::GLOBAL) && (!fd.outerDecl || fd.outerDecl->IsFunc());
-}
+bool IsNestedFunc(const AST::FuncDecl& fd);
 
 inline bool IsDefaultImplementation(const AST::Decl& decl)
 {
@@ -187,24 +179,9 @@ inline bool IsDefaultImplementation(const AST::Decl& decl)
 }
 
 // Check if the function can be source-exported without regard to its modifier.
-inline bool CanBeSrcExported(const AST::FuncDecl& fd)
-{
-    if (fd.isInline) {
-        return true;
-    }
-    const bool isGenericFunction = (fd.funcBody && fd.funcBody->generic) || fd.TestAttr(Attribute::GENERIC);
-    if ((isGenericFunction || fd.IsExportedDecl() || fd.linkage != Linkage::INTERNAL) && (fd.isConst || fd.isFrozen)) {
-        return true;
-    }
-    auto decl = fd.ownerFunc ? fd.ownerFunc.get() : &fd;
-    return !IsInDeclWithAttribute(*decl, Attribute::GENERIC_INSTANTIATED) && IsDefaultImplementation(*decl);
-}
+bool CanBeSrcExported(const AST::FuncDecl& fd);
 
-inline bool IsInstMemberVarInGenericDecl(const AST::VarDecl& vd)
-{
-    return vd.astKind == ASTKind::VAR_DECL && !vd.TestAttr(AST::Attribute::STATIC) &&
-        IsInDeclWithAttribute(vd, AST::Attribute::GENERIC);
-}
+bool IsInstMemberVarInGenericDecl(const AST::VarDecl& vd);
 
 inline bool IsCommonWithoutDefault(const Decl& decl)
 {
@@ -222,17 +199,7 @@ inline bool IsStaticVar(const AST::Decl& decl)
  * If the member variable has initializer and there is const init in its parent declaration,
  * it should be source exported.
  */
-inline bool IsMemberVarShouldBeSrcExported(const AST::VarDecl& vd)
-{
-    // Non-const static member variables are not exported because the static init function cannot be invoked by users.
-    // Therefore source code export is not required.
-    if (!vd.outerDecl || !vd.initializer || vd.TestAttr(AST::Attribute::STATIC)) {
-        return false;
-    }
-    auto& od = *vd.outerDecl;
-    return (od.astKind == AST::ASTKind::STRUCT_DECL && StaticCast<AST::StructDecl>(od).HasConstOrFrozenInit()) ||
-        (od.astKind == AST::ASTKind::CLASS_DECL && StaticCast<AST::ClassDecl>(od).HasConstOrFrozenInit());
-}
+bool IsMemberVarShouldBeSrcExported(const AST::VarDecl& vd);
 
 struct VarDeclWithPosition {
     Ptr<VarDecl> decl;

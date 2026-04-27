@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -50,11 +50,6 @@ const static std::unordered_map<ASTKind, std::string> ASTKIND_TO_STR = {
 #include "cangjie/AST/ASTKind.inc"
 #undef ASTKIND
 };
-
-/**
- * ForInKind of the ForInExpr.
- */
-enum class ForInKind : uint8_t { FORIN_INVALID, FORIN_RANGE, FORIN_STRING, FORIN_ITER };
 
 // Used to convert unique_ptr vector to pointer vector.
 template <typename T> std::vector<Ptr<T>> ConverVector(const std::vector<OwnedPtr<T>>& source)
