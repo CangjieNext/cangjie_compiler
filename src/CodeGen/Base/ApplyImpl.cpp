@@ -20,11 +20,83 @@
 #include "IRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
+#include "llvm/Support/raw_ostream.h"
+#include <cstdlib>
 
 using namespace Cangjie;
 using namespace CodeGen;
 
 namespace {
+bool ShouldTraceGenerateApply()
+{
+    const char* env = std::getenv("CJ_TRACE_GENERATE_APPLY");
+    return env && env[0] && env[0] != '0';
+}
+
+void TraceGenerateApply(const CHIRApplyWrapper& apply, const char* stage, const CHIR::FuncType* chirFuncTy = nullptr,
+    const CGFunctionType* funcType = nullptr, llvm::Value* calleeVal = nullptr, llvm::Value* thisTI = nullptr)
+{
+    if (!ShouldTraceGenerateApply()) {
+        return;
+    }
+    llvm::errs() << "[generate-apply] stage=" << stage;
+    auto* callee = apply.GetCallee();
+    llvm::errs() << " callee=";
+    if (callee && !callee->GetSrcCodeIdentifier().empty()) {
+        llvm::errs() << callee->GetSrcCodeIdentifier();
+    } else {
+        llvm::errs() << "<anonymous>";
+    }
+    llvm::errs() << " args=" << apply.GetArgs().size()
+                 << " isStatic=" << apply.IsCalleeStatic()
+                 << " isMethod=" << apply.IsCalleeMethod()
+                 << " isStructInstanceMethod=" << apply.IsCalleeStructInstanceMethod();
+    if (chirFuncTy) {
+        llvm::errs() << " chirFuncTy=" << static_cast<const void*>(chirFuncTy)
+                     << " paramCount=" << chirFuncTy->GetParamTypes().size()
+                     << " isCFunc=" << chirFuncTy->IsCFunc()
+                     << " hasVarArg=" << chirFuncTy->HasVarArg();
+    }
+    if (funcType) {
+        llvm::errs() << " funcType=" << static_cast<const void*>(funcType)
+                     << " llvmFnTy=" << static_cast<const void*>(funcType->GetLLVMFunctionType())
+                     << " hasSRet=" << funcType->HasSRet();
+    }
+    if (calleeVal) {
+        llvm::errs() << " calleeValTy=";
+        calleeVal->getType()->print(llvm::errs());
+    }
+    if (thisTI) {
+        llvm::errs() << " thisTITy=";
+        thisTI->getType()->print(llvm::errs());
+    }
+    llvm::errs() << '\n';
+}
+
+void TraceCFuncLowering(const char* stage, const CHIR::FuncType& funcTy, llvm::Value* calleeVal = nullptr,
+    llvm::Function* actualCallee = nullptr, size_t argCount = 0)
+{
+    if (!ShouldTraceGenerateApply()) {
+        return;
+    }
+    llvm::errs() << "[generate-apply-cfunc] stage=" << stage
+                 << " paramCount=" << funcTy.GetParamTypes().size()
+                 << " argCount=" << argCount
+                 << " retIsStruct=" << funcTy.GetReturnType()->IsStruct()
+                 << " retIsGeneric=" << funcTy.GetReturnType()->IsGeneric();
+    if (calleeVal) {
+        llvm::errs() << " calleeValTy=";
+        calleeVal->getType()->print(llvm::errs());
+        llvm::errs() << " isFunction=" << llvm::isa<llvm::Function>(calleeVal);
+    }
+    if (actualCallee) {
+        llvm::errs() << " actualCallee=" << actualCallee->getName()
+                     << " actualTy=";
+        actualCallee->getFunctionType()->print(llvm::errs());
+    }
+    llvm::errs() << '\n';
+}
+
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 void AddAttributeForWrapper(const IRBuilder2& builder, const CHIR::FuncType& funcTy,
     const llvm::FunctionType* varFuncTy, llvm::Function* func, llvm::CallBase& callInst, const bool sret)
@@ -131,14 +203,15 @@ void GenerateWrapperFuncBody(IRBuilder2& builder, const CHIR::FuncType& funcTy, 
  */
 llvm::Function* GetIndirectCFuncCallWrapper(IRBuilder2& builder, const CHIR::FuncType& funcTy, llvm::Type* funcPtrType)
 {
-    llvm::FunctionType* funcType = nullptr;
     auto& cgMod = builder.GetCGModule();
-    if (IsLitStructPtrType(funcPtrType)) {
-        // In indirect calling scenario, we can get the actual cfunc type by funcTy.
-        auto cgType = static_cast<CGFunctionType*>(CGType::GetOrCreate(cgMod, &funcTy));
-        CJC_ASSERT(cgType && llvm::isa<llvm::FunctionType>(cgType->GetLLVMFunctionType()));
-        funcType = llvm::cast<llvm::FunctionType>(cgType->GetLLVMFunctionType());
-    } else {
+    // Under opaque pointers, an indirect CFunc callee is often just `ptr`, so
+    // the pointee function type is no longer recoverable from `funcPtrType`.
+    // The CHIR function type already encodes the canonical cfunc signature, so
+    // use it as the primary source of truth here.
+    auto cgType = static_cast<CGFunctionType*>(CGType::GetOrCreate(cgMod, &funcTy));
+    CJC_ASSERT(cgType);
+    llvm::FunctionType* funcType = llvm::dyn_cast_or_null<llvm::FunctionType>(cgType->GetLLVMFunctionType());
+    if (!funcType && !IsLitStructPtrType(funcPtrType)) {
         funcType = llvm::dyn_cast<llvm::FunctionType>(GetPointerElementType(funcPtrType));
     }
     CJC_NULLPTR_CHECK(funcType);
@@ -179,6 +252,7 @@ llvm::Function* UpdateCFuncCalleeAndArgs(
 {
     CJC_NULLPTR_CHECK(callee);
     CJC_ASSERT(funcTy.IsCFunc());
+    TraceCFuncLowering("update-callee.begin", funcTy, callee, nullptr, args.size());
     if (!llvm::isa<llvm::Function>(callee)) {
         auto calleeType = callee->getType();
         auto wrapperFunc = GetIndirectCFuncCallWrapper(builder, funcTy, calleeType);
@@ -192,9 +266,12 @@ llvm::Function* UpdateCFuncCalleeAndArgs(
         } else {
             (void)args.insert(args.begin(), cgMod.CreateGhostCFuncArgValue(*callee, *cgType));
         }
+        TraceCFuncLowering("update-callee.wrapper", funcTy, callee, wrapperFunc, args.size());
         return wrapperFunc;
     }
-    return llvm::cast<llvm::Function>(callee);
+    auto* directCallee = llvm::cast<llvm::Function>(callee);
+    TraceCFuncLowering("update-callee.direct", funcTy, callee, directCallee, args.size());
+    return directCallee;
 }
 
 inline bool HasAddrSpace(const CGValue* cgVal, unsigned int addrSpace)
@@ -205,10 +282,11 @@ inline bool HasAddrSpace(const CGValue* cgVal, unsigned int addrSpace)
     return llvmType->isPointerTy() && llvmType->getPointerAddressSpace() == addrSpace;
 }
 
-llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& callee,
+llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, const CHIR::FuncType& funcTy, llvm::Function& callee,
     const std::vector<CGValue*>& argsVal, const CHIR::Type& chirRetTy, bool isSRet)
 {
     auto& cgMod = irBuilder.GetCGModule();
+    TraceCFuncLowering("create-call.begin", funcTy, &callee, &callee, argsVal.size());
     std::vector<llvm::Value*> llvmArgs;
     if (isSRet) {
         llvmArgs.reserve(argsVal.size() + 1);
@@ -230,6 +308,7 @@ llvm::Value* CreateCFuncCallOrInvoke(IRBuilder2& irBuilder, llvm::Function& call
             llvmArgs.emplace_back(cgVal->GetRawValue());
         }
     }
+    TraceCFuncLowering("create-call.args-ready", funcTy, &callee, &callee, llvmArgs.size());
     auto callRet = irBuilder.CreateCallOrInvoke(callee.getFunctionType(), &callee, llvmArgs);
     const auto& target = cgMod.GetCGContext().GetCompileOptions().target;
     const bool nonAarch64 = target.arch != Triple::ArchType::AARCH64;
@@ -325,7 +404,8 @@ llvm::Value* HandleApplyCFunc(
     auto chirRetTy = chirFuncTy.GetReturnType();
     CJC_ASSERT(actualCallee && chirRetTy);
     bool isSRet = !handleRet && chirRetTy->IsStruct() && !IsZeroSizedTypeInC(cgMod, *chirRetTy);
-    auto callRet = CreateCFuncCallOrInvoke(irBuilder, *actualCallee, argsVal, *chirRetTy, isSRet);
+    TraceCFuncLowering("handle-cfunc.pre-call", chirFuncTy, callee.GetRawValue(), actualCallee, argsVal.size());
+    auto callRet = CreateCFuncCallOrInvoke(irBuilder, chirFuncTy, *actualCallee, argsVal, *chirRetTy, isSRet);
     if (IsZeroSizedTypeInC(cgMod, *chirRetTy)) {
         return irBuilder.CreateEntryAlloca(
             *CGType::GetOrCreate(cgMod, chirRetTy), apply.GetCallee()->GetSrcCodeIdentifier() + ".ret");
@@ -349,8 +429,10 @@ llvm::Value* CodeGen::GenerateApply(IRBuilder2& irBuilder, const CHIRApplyWrappe
     CJC_ASSERT(apply.GetCallee()->GetType() && apply.GetCallee()->GetType()->IsFunc());
 
     auto chirFuncTy = StaticCast<const CHIR::FuncType*>(apply.GetCallee()->GetType());
+    TraceGenerateApply(apply, "begin", chirFuncTy);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (chirFuncTy->IsCFunc()) {
+        TraceGenerateApply(apply, "cfunc", chirFuncTy);
         return HandleApplyCFunc(irBuilder, apply, *chirFuncTy, *callee);
     }
 #endif
@@ -363,6 +445,7 @@ llvm::Value* CodeGen::GenerateApply(IRBuilder2& irBuilder, const CHIRApplyWrappe
     auto funcType = static_cast<CGFunctionType*>(CGType::GetOrCreateWithNode(cgMod, apply.GetCallee()));
     auto funcPtrType = funcType->GetLLVMFunctionType()->getPointerTo();
     llvm::Value* calleeVal = callee->GetRawValue();
+    TraceGenerateApply(apply, "after-cgtype", chirFuncTy, funcType, calleeVal);
     if (!apply.GetCallee()->TestAttr(CHIR::Attribute::STATIC)) {
         if (IsStructOrExtendMethod(*apply.GetCallee()) &&
             argsVal[0]->GetRawValue()->getType()->getPointerAddressSpace() == 1U &&
@@ -406,5 +489,6 @@ llvm::Value* CodeGen::GenerateApply(IRBuilder2& irBuilder, const CHIRApplyWrappe
         }
         CJC_ASSERT(thisTI != nullptr);
     }
+    TraceGenerateApply(apply, "before-call", chirFuncTy, funcType, castedCallee, thisTI);
     return irBuilder.CreateCallOrInvoke(*funcType, castedCallee, argsVal, isClosureCall, thisTI);
 }

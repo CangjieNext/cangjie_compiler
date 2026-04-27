@@ -87,7 +87,7 @@ void CGStructType::CalculateSizeAndAlign()
     if (auto structType = llvm::dyn_cast<llvm::StructType>(llvmType)) {
         auto layOut = cgMod.GetLLVMModule()->getDataLayout();
         size = layOut.getTypeAllocSize(structType);
-        align = layOut.getABITypeAlignment(structType);
+        align = layOut.getABITypeAlign(structType).value();
     }
 }
 

@@ -12,8 +12,48 @@
 #include "IRBuilder.h"
 #include "IRGenerator.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "cangjie/CHIR/Utils/ToStringUtils.h"
+
+#include <cstdio>
+#include <cstdlib>
 
 using namespace Cangjie::CHIR;
+
+namespace {
+using namespace Cangjie;
+using namespace CodeGen;
+
+bool IsLLVM21TraceEnabled()
+{
+    static bool enabled = [] {
+        const char* env = std::getenv("CJ_LLVM21_TRACE");
+        return env != nullptr && env[0] != '\0' && env[0] != '0';
+    }();
+    return enabled;
+}
+
+void TraceLLVM21(const CGModule& cgMod, const CHIR::Expression& expr, size_t index, const char* stage)
+{
+    if (!IsLLVM21TraceEnabled()) {
+        return;
+    }
+    std::string detail;
+    if (expr.GetExprKind() == CHIR::ExprKind::INTRINSIC) {
+        auto intrinsicKind = StaticCast<const CHIR::Intrinsic&>(expr).GetIntrinsicKind();
+        auto it = CHIR::INTRINSIC_KIND_TO_STRING_MAP.find(intrinsicKind);
+        detail = " detail=" + (it == CHIR::INTRINSIC_KIND_TO_STRING_MAP.end() ? std::to_string(intrinsicKind)
+                                                                              : it->second);
+    }
+    const auto* topLevelFunc = expr.GetTopLevelFunc();
+    const auto* parentBlock = expr.GetParentBlock();
+    std::fprintf(stderr, "[llvm21-trace] Expr.%s pkg=%s module=%s func=%s bb=%s idx=%zu kind=%s%s\n", stage,
+        cgMod.GetCGContext().GetCurrentPkgName().c_str(), cgMod.GetLLVMModule()->getSourceFileName().c_str(),
+        topLevelFunc ? topLevelFunc->GetIdentifierWithoutPrefix().c_str() : "<null>",
+        parentBlock ? parentBlock->GetIdentifierWithoutPrefix().c_str() : "<null>", index,
+        CHIRExprWrapper(expr).GetExprKindName().c_str(), detail.c_str());
+    std::fflush(stderr);
+}
+} // namespace
 
 namespace Cangjie::CodeGen {
 
@@ -54,7 +94,9 @@ void ExpressionGeneratorImpl::EmitIR()
         irBuilder.SetInsertPoint(cgMod.GetMappedBB(parentBB));
     }
     irBuilder.CreateGenericParaDeclare(*cgMod.GetOrInsertCGFunction(chirExprs.front()->GetTopLevelFunc()));
-    for (auto chirExpr : chirExprs) {
+    for (size_t index = 0; index < chirExprs.size(); ++index) {
+        auto chirExpr = chirExprs[index];
+        TraceLLVM21(cgMod, *chirExpr, index, "begin");
         CHIRExprWrapper chirExprWrapper = CHIRExprWrapper(*chirExpr);
         if (chirExpr->GetParentBlock()) {
             irBuilder.EmitLocation(chirExprWrapper);
@@ -113,6 +155,7 @@ void ExpressionGeneratorImpl::EmitIR()
                 irBuilder.GetInsertCGFunction()->IsSRet() && chirExpr->GetTopLevelFunc()->GetReturnValue() == rst;
             cgMod.SetOrUpdateMappedCGValue(rst, std::make_unique<CGValue>(rawRet, cgType, isSRetArg));
         }
+        TraceLLVM21(cgMod, *chirExpr, index, "end");
     }
 }
 
