@@ -49,8 +49,8 @@ void GlobalVariableGeneratorImpl::EmitIR()
         if (quickGVs.find(chirGV) == quickGVs.end()) {
             continue;
         }
-        const auto align = cgMod.GetLLVMModule()->getDataLayout().getPrefTypeAlignment(rawGV->getType());
-        rawGV->setAlignment(llvm::MaybeAlign(align));
+        const auto align = cgMod.GetLLVMModule()->getDataLayout().getPrefTypeAlign(rawGV->getType());
+        rawGV->setAlignment(align);
         if (auto literal = chirGV->GetInitializer()) {
             auto literalValue = HandleLiteralValue(irBuilder, *literal);
             if (literal->GetType()->IsString()) {

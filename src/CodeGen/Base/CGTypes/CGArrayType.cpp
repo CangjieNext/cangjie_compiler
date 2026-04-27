@@ -29,7 +29,7 @@ bool CGArrayType::IsRefArray(const CGType& elemType)
 llvm::StructType* CGArrayType::GenerateRefArrayLayoutType(CGContext& cgCtx)
 {
     return GenerateArrayLayoutTypeInfo(
-        cgCtx, ARRAY_LAYOUT_PREFIX + "refArray", llvm::Type::getInt8PtrTy(cgCtx.GetLLVMContext(), 1u));
+        cgCtx, ARRAY_LAYOUT_PREFIX + "refArray", llvm::PointerType::get(cgCtx.GetLLVMContext(), 1u));
 }
 
 llvm::StructType* CGArrayType::GenerateArrayLayoutTypeInfo(

@@ -680,7 +680,7 @@ std::string EnumMetadataInfo::GenerateCtorFn(
         argTypes.emplace_back(llvm::Type::getInt32Ty(module.GetLLVMContext()));
         argTypes.emplace_back(typeInfoType->getPointerTo()->getPointerTo());
         llvm::FunctionType* ctorFn =
-            llvm::FunctionType::get(llvm::Type::getInt8PtrTy(module.GetLLVMContext()), argTypes, false);
+            llvm::FunctionType::get(llvm::PointerType::get(module.GetLLVMContext(), 0), argTypes, false);
         getTiFn = llvm::Function::Create(ctorFn, llvm::Function::PrivateLinkage, funcName, module.GetLLVMModule());
         CodeGen::IRBuilder2 irBuilder(module);
         auto entryBB = irBuilder.CreateEntryBasicBlock(getTiFn, "entry");
@@ -695,7 +695,7 @@ std::string EnumMetadataInfo::GenerateCtorFn(
         } else {
             ti = module.GetOrCreateEnumCtorTIOrTT(*chirEnumType, index);
         }
-        llvm::Value* bitcastedValue = irBuilder.CreateBitCast(ti, llvm::Type::getInt8PtrTy(module.GetLLVMContext()));
+        llvm::Value* bitcastedValue = irBuilder.CreateBitCast(ti, llvm::PointerType::get(module.GetLLVMContext(), 0));
         irBuilder.CreateRet(bitcastedValue);
     }
     return funcName;

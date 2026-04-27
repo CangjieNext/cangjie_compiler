@@ -18,6 +18,7 @@
 
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Module.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Transforms/Utils/Cloning.h"
@@ -41,7 +42,7 @@ const size_t SMALL_VECTOR_SIZE = 8;
 inline bool AllowFunctionBodyBeReplaced(const llvm::Function& func)
 {
     auto funcName = func.getName();
-    return !funcName.equals(FOR_KEEPING_SOME_TYPES_FUNC_NAME);
+    return funcName != FOR_KEEPING_SOME_TYPES_FUNC_NAME;
 }
 
 inline bool IsFileInitFuncName(const std::string& funcName)
@@ -360,7 +361,7 @@ void IncrementalGen::UpdateDefinitionsOfFunction(llvm::ValueToValueMapTy& valueM
 void IncrementalGen::UpdateBodyOfKeepTypesFunction(llvm::ValueToValueMapTy& valueMap)
 {
     auto funcToKeepTypes = injectedModule->getFunction(FOR_KEEPING_SOME_TYPES_FUNC_NAME);
-    for (const auto& bb : incrementalModule->getFunction(FOR_KEEPING_SOME_TYPES_FUNC_NAME)->getBasicBlockList()) {
+    for (const auto& bb : *incrementalModule->getFunction(FOR_KEEPING_SOME_TYPES_FUNC_NAME)) {
         (void)llvm::CloneBasicBlock(&bb, valueMap, "", funcToKeepTypes);
     }
 }
@@ -464,7 +465,7 @@ void IncrementalGen::UpdateReflectionMetadata()
     std::vector<llvm::MDNode*> metaBoundByTI;
     std::vector<llvm::MDNode*> metaBoundByTT;
     std::vector<llvm::MDNode*> metaBoundByGV;
-    for (auto& gv : injectedModule->getGlobalList()) {
+    for (auto& gv : injectedModule->globals()) {
         if (gv.isDeclaration()) {
             continue;
         }

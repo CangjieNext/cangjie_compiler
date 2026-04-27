@@ -39,7 +39,7 @@ llvm::Function* GenTypeInfoFns(llvm::FunctionType* fieldFnType, CGModule& cgMod,
         }
         ti = irBuilder.CreateTypeInfo(*DeRef(memberType), genericParamsMap);
     }
-    llvm::Value* bitcastedValue = irBuilder.CreateBitCast(ti, llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    llvm::Value* bitcastedValue = irBuilder.CreateBitCast(ti, llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
     irBuilder.CreateRet(bitcastedValue);
     return getTiFn;
 }
@@ -50,7 +50,7 @@ llvm::Constant* GenSuperFnOfTypeTemplate(CGModule& cgMod, const std::string& fun
     std::vector<llvm::Type*> argTypes{llvm::Type::getInt32Ty(cgMod.GetLLVMContext()),
         CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext())->getPointerTo()};
     llvm::FunctionType* superFnType =
-        llvm::FunctionType::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()), argTypes, false);
+        llvm::FunctionType::get(llvm::PointerType::get(cgMod.GetLLVMContext(), 0), argTypes, false);
 
     std::unordered_map<const CHIR::GenericType*, size_t> localGenericParamIndicesMap;
     size_t idx = 0;
@@ -60,14 +60,14 @@ llvm::Constant* GenSuperFnOfTypeTemplate(CGModule& cgMod, const std::string& fun
     }
     llvm::Function* superFn =
         GenTypeInfoFns(superFnType, cgMod, funcName, localGenericParamIndicesMap, superType, superType.ToString());
-    return llvm::ConstantExpr::getBitCast(superFn, llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    return llvm::ConstantExpr::getBitCast(superFn, llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
 }
 
 llvm::Constant* GenFieldsFnsOfTypeTemplate(
     CGModule& cgMod, const std::string& funcPrefixName, const std::vector<llvm::Constant*>& fieldsFn)
 {
     auto fieldNum = fieldsFn.size();
-    auto i8PtrTy = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto i8PtrTy = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     CJC_ASSERT(fieldNum > 0 && "field num should be at least 1");
     llvm::ArrayType* arrayType = llvm::ArrayType::get(fieldsFn[0]->getType(), fieldNum);
     llvm::GlobalVariable* globalArray = llvm::cast<llvm::GlobalVariable>(
@@ -83,7 +83,7 @@ llvm::Constant* GenFieldsFnsOfTypeTemplate(CGModule& cgMod,
     const std::unordered_map<const CHIR::GenericType*, size_t>& genericParamIndicesMap)
 {
     auto fieldNum = fieldTypes.size();
-    auto i8PtrTy = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto i8PtrTy = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     if (fieldNum == 0) {
         return llvm::ConstantPointerNull::get(i8PtrTy);
     }
@@ -93,7 +93,7 @@ llvm::Constant* GenFieldsFnsOfTypeTemplate(CGModule& cgMod,
     argTypes.emplace_back(llvm::Type::getInt32Ty(cgMod.GetLLVMContext()));
     argTypes.emplace_back(typeInfoType->getPointerTo()->getPointerTo());
     llvm::FunctionType* fieldFn =
-        llvm::FunctionType::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()), argTypes, false);
+        llvm::FunctionType::get(llvm::PointerType::get(cgMod.GetLLVMContext(), 0), argTypes, false);
 
     // Step2 create a global array named "type_mangled_name + $GetFieldFns", which size is fieldNum, element is
     // fill the elements inside the array
