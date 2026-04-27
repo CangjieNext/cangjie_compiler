@@ -118,9 +118,15 @@ bool CGContext::IsGlobalsOfCompileUnit(const std::string& globalsName)
 }
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-void CGContext::AddNullableReference(llvm::Value* value)
+void CGContext::AddNullableReferenceProvenance(llvm::Value* value)
 {
-    (void)impl->nullableReference.emplace(value);
+    (void)impl->nullableReferenceProvenance.emplace(value);
+}
+
+bool CGContext::HasNullableReferenceProvenance(const llvm::Value* value) const
+{
+    return impl->nullableReferenceProvenance.find(const_cast<llvm::Value*>(value)) !=
+        impl->nullableReferenceProvenance.end();
 }
 #endif
 } // namespace CodeGen

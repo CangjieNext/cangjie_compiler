@@ -291,6 +291,7 @@ public:
         const std::vector<llvm::Type*>& tys = {});
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     llvm::Value* CallIntrinsicNull() const;
+    llvm::Value* CallIntrinsicUnsafePointer(llvm::Value* value);
 #endif
     llvm::Value* CallIntrinsicIsNull(llvm::Value* value);
     llvm::Value* CallIntrinsicIsNonNull(llvm::Value* value);
