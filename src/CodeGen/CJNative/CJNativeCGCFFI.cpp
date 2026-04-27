@@ -33,11 +33,8 @@ inline bool IsStructPtrTy(llvm::Type* type)
     if (!type->isPointerTy()) {
         return false;
     }
-    auto ptrType = llvm::cast<llvm::PointerType>(type);
-    if (GetPointerElementType(ptrType)->isStructTy()) {
-        return true;
-    }
-    return false;
+    auto typedPtr = llvm::dyn_cast<llvm::TypedPointerType>(type);
+    return typedPtr && typedPtr->getElementType()->isStructTy();
 }
 
 inline llvm::Type* GetArgType(const llvm::Function* func, unsigned idx)
@@ -347,7 +344,7 @@ ProcessKind LinuxAmd64CJNativeCGCFFI::GetParamType(
     llvm::Type* paramType = GetLLVMType(chirTy);
     // VArray as CFunc parameter pass by a i8*.
     if (chirTy.IsVArray()) {
-        paramType = llvm::Type::getInt8PtrTy(ctx.GetLLVMContext());
+        paramType = llvm::PointerType::get(ctx.GetLLVMContext(), 0);
     }
     if (paramType->isIntOrPtrTy()) {
         intNum -= intNum > 0 ? 1 : 0;
@@ -893,7 +890,7 @@ ProcessKind LinuxAarch64CJNativeCGCFFI::GetParamType(CHIR::Type& chirTy, std::ve
     llvm::Type* paramType = GetLLVMType(chirTy);
     // VArray as CFunc parameter pass by a i8*.
     if (chirTy.IsVArray()) {
-        paramType = llvm::Type::getInt8PtrTy(ctx.GetLLVMContext());
+        paramType = llvm::PointerType::get(ctx.GetLLVMContext(), 0);
     }
     params.emplace_back(paramType);
     return ProcessKind::NO_PROCESS;
@@ -1147,7 +1144,7 @@ ProcessKind MacAArch64CJNativeCGCFFI::GetParamType(CHIR::Type& chirTy, std::vect
     llvm::Type* paramType = GetLLVMType(chirTy);
     // VArray as CFunc parameter pass by a i8*.
     if (chirTy.IsVArray()) {
-        paramType = llvm::Type::getInt8PtrTy(ctx.GetLLVMContext());
+        paramType = llvm::PointerType::get(ctx.GetLLVMContext(), 0);
     }
     params.emplace_back(paramType);
     return ProcessKind::NO_PROCESS;
@@ -1330,7 +1327,7 @@ ProcessKind WindowsAmd64CJNativeCGCFFI::GetParamType(CHIR::Type& chirTy, std::ve
     llvm::Type* paramType = GetLLVMType(chirTy);
     // VArray as CFunc parameter pass by a i8*.
     if (chirTy.IsVArray()) {
-        paramType = llvm::Type::getInt8PtrTy(ctx.GetLLVMContext());
+        paramType = llvm::PointerType::get(ctx.GetLLVMContext(), 0);
     }
     params.emplace_back(paramType);
     return ProcessKind::NO_PROCESS;
@@ -1483,7 +1480,7 @@ ProcessKind LinuxOhosArm32CJNativeCGCFFI::GetParamType(CHIR::Type& chirTy, std::
     llvm::Type* paramType = GetLLVMType(chirTy);
     // VArray as CFunc parameter pass by a i8*.
     if (chirTy.IsVArray()) {
-        paramType = llvm::Type::getInt8PtrTy(ctx.GetLLVMContext());
+        paramType = llvm::PointerType::get(ctx.GetLLVMContext(), 0);
     }
     params.emplace_back(paramType);
     return ProcessKind::NO_PROCESS;

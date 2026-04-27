@@ -80,6 +80,11 @@ public:
         return llvm::ConstantInt::getFalse(llvm::Type::getInt1Ty(GetLLVMContext()));
     }
 
+    inline llvm::PointerType* getInt8PtrTy(unsigned AddressSpace = 0) const
+    {
+        return llvm::PointerType::get(GetLLVMContext(), AddressSpace);
+    }
+
     llvm::Function* GetInsertFunction() const
     {
         auto bb = GetInsertBlock();
@@ -130,13 +135,13 @@ public:
         const std::initializer_list<std::string>& basicBlocksName) const;
 
 private:
-    inline llvm::CallInst* CreateCall(llvm::Function* callee, llvm::ArrayRef<llvm::Value*> args = llvm::None,
+    inline llvm::CallInst* CreateCall(llvm::Function* callee, llvm::ArrayRef<llvm::Value*> args = {},
         const llvm::Twine& name = "", llvm::MDNode* fpMathTag = nullptr)
     {
         return LLVMIRBuilder2::CreateCall(callee, args, name, fpMathTag);
     }
     inline llvm::CallInst* CreateCall(llvm::FunctionType* fTy, llvm::Value* callee,
-        llvm::ArrayRef<llvm::Value*> args = llvm::None, const llvm::Twine& name = "", llvm::MDNode* fpMathTag = nullptr)
+        llvm::ArrayRef<llvm::Value*> args = {}, const llvm::Twine& name = "", llvm::MDNode* fpMathTag = nullptr)
     {
         if (auto f = llvm::dyn_cast<llvm::Function>(callee)) {
             return CreateCall(f, args, name, fpMathTag);
@@ -145,12 +150,12 @@ private:
     }
 
     inline llvm::InvokeInst* CreateInvoke(llvm::Function* callee, llvm::BasicBlock* normalDest,
-        llvm::BasicBlock* unwindDest, llvm::ArrayRef<llvm::Value*> args = llvm::None, const llvm::Twine& name = "")
+        llvm::BasicBlock* unwindDest, llvm::ArrayRef<llvm::Value*> args = {}, const llvm::Twine& name = "")
     {
         return LLVMIRBuilder2::CreateInvoke(callee, normalDest, unwindDest, args, name);
     }
     inline llvm::InvokeInst* CreateInvoke(llvm::FunctionType* fTy, llvm::Value* callee, llvm::BasicBlock* normalDest,
-        llvm::BasicBlock* unwindDest, llvm::ArrayRef<llvm::Value*> args = llvm::None, const llvm::Twine& name = "")
+        llvm::BasicBlock* unwindDest, llvm::ArrayRef<llvm::Value*> args = {}, const llvm::Twine& name = "")
     {
         if (auto f = llvm::dyn_cast<llvm::Function>(callee)) {
             return CreateInvoke(f, normalDest, unwindDest, args, name);
@@ -160,7 +165,7 @@ private:
 
 public:
     llvm::CallBase* CreateCallOrInvoke(llvm::FunctionType* fTy, llvm::Value* callee, std::vector<llvm::Value*> args);
-    llvm::CallBase* CreateCallOrInvoke(llvm::Function* callee, const llvm::ArrayRef<llvm::Value*> args = llvm::None);
+    llvm::CallBase* CreateCallOrInvoke(llvm::Function* callee, const llvm::ArrayRef<llvm::Value*> args = {});
     llvm::Value* CreateCallOrInvoke(const CGFunctionType& calleeType, llvm::Value* callee, std::vector<CGValue*> args,
         bool isClosureCall = false, llvm::Value* thisTypeInfo = nullptr);
     llvm::Value* CreateCallOrInvoke(

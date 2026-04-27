@@ -22,7 +22,7 @@ llvm::Type* CGRefType::GenLLVMType()
     }
     auto cgType = CGType::GetOrCreate(cgMod, baseType);
     if (!cgType->GetSize() && !baseType->IsGeneric() && addrspace == 1U) {
-        return llvm::Type::getInt8PtrTy(cgCtx.GetLLVMContext(), 1U);
+        return llvm::PointerType::get(cgCtx.GetLLVMContext(), 1U);
     }
     return CGType::GetOrCreate(cgMod, baseType)->GetLLVMType()->getPointerTo(addrspace);
 }
@@ -37,6 +37,6 @@ void CGRefType::CalculateSizeAndAlign()
 {
     llvm::DataLayout layOut = cgMod.GetLLVMModule()->getDataLayout();
     size = layOut.getTypeAllocSize(llvmType);
-    align = layOut.getABITypeAlignment(llvmType);
+    align = layOut.getABITypeAlign(llvmType).value();
 }
 } // namespace Cangjie::CodeGen

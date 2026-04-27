@@ -56,7 +56,7 @@ llvm::Value* CodeGen::GenerateInstanceOf(IRBuilder2& irBuilder, const CHIR::Inst
         auto instanceTi = irBuilder.GetTypeInfoFromObject(*objectVal);
         return irBuilder.CallIntrinsicIsSubtype({instanceTi, targetTi});
     } else if (objectCHIRType->IsTuple()) {
-        auto i8PtrTy = llvm::Type::getInt8PtrTy(irBuilder.GetLLVMContext());
+        auto i8PtrTy = llvm::PointerType::get(irBuilder.GetLLVMContext(), 0);
         auto instanceTi = objectVal.GetCGType()->GetSize().has_value() ? irBuilder.CreateTypeInfo(objectCHIRType)
                                                                        : llvm::Constant::getNullValue(i8PtrTy);
         return irBuilder.CallIntrinsicIsTupleTypeOf({*objectVal, instanceTi, targetTi});

@@ -143,7 +143,7 @@ llvm::Value* HandleGetElementRef(IRBuilder2& irBuilder, const CHIR::GetElementRe
         auto value = irBuilder.CreateLoad(*(cgMod | base));
         if (cgEnumType->IsCommonEnum()) {
             auto payload = irBuilder.GetPayloadFromObject(value);
-            auto tagLLVMType = llvm::Type::getInt32PtrTy(cgMod.GetLLVMContext(), 1U);
+            auto tagLLVMType = llvm::PointerType::get(cgMod.GetLLVMContext(), 1U);
             retValue = irBuilder.CreateBitCast(payload, tagLLVMType);
         } else if (cgEnumType->IsOptionLikeNonRef()) {
             llvm::Value* payload = cgEnumType->GetSize().has_value()
@@ -158,7 +158,7 @@ llvm::Value* HandleGetElementRef(IRBuilder2& irBuilder, const CHIR::GetElementRe
         } else if (cgEnumType->IsOptionLikeT()) {
             retValue = GetElementRefOfOptionLikeT(irBuilder, *enumType, cgEnumType->IsAntiOptionLike(), value);
         } else if (cgEnumType->IsAllAssociatedValuesAreNonRef()) {
-            retValue = irBuilder.CreateBitCast(value, llvm::Type::getInt32PtrTy(cgMod.GetLLVMContext()));
+            retValue = irBuilder.CreateBitCast(value, llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
         } else if (cgEnumType->IsZeroSizeEnum()) {
             retValue = irBuilder.CreateEntryAlloca(irBuilder.getInt32Ty());
             irBuilder.CreateStore(llvm::ConstantInt::get(irBuilder.getInt32Ty(), 0U), retValue);

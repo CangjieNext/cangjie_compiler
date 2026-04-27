@@ -7,6 +7,9 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/Dominators.h"
 
+#include <cstdlib>
+#include <string>
+
 #include "Base/CGTypes/CGFunctionType.h"
 #include "CGModule.h"
 #include "IRBuilder.h"
@@ -21,6 +24,48 @@ void EmitBasicBlockIR(CGModule& cgMod, const CHIR::Block& chirBB);
 void BuildCJFunc(CGModule& cgMod, const CHIR::Func& chirFunc, const CGFunction& cgFunc);
 
 namespace {
+bool IsSRetTraceEnabled()
+{
+    return std::getenv("CJ_LLVM21_TRACE_SRET") != nullptr;
+}
+
+bool ShouldTraceSRet(const llvm::Function& function)
+{
+    if (!IsSRetTraceEnabled()) {
+        return false;
+    }
+    auto* match = std::getenv("CJ_LLVM21_TRACE_FUNC_MATCH");
+    if (!match || *match == '\0') {
+        return function.hasStructRetAttr();
+    }
+    return function.getName().contains(match);
+}
+
+void TraceSRetState(const char* stage, const llvm::Function& function)
+{
+    if (!ShouldTraceSRet(function)) {
+        return;
+    }
+    llvm::errs() << "[llvm21-sret] " << stage << " func=" << function.getName()
+                 << " hasStructRet=" << function.hasStructRetAttr();
+    if (!function.arg_empty()) {
+        auto* arg0 = function.getArg(0);
+        llvm::errs() << " arg0Ty=";
+        arg0->getType()->print(llvm::errs(), false);
+        llvm::errs() << " arg0HasSRet=" << arg0->hasStructRetAttr();
+        if (arg0->hasStructRetAttr()) {
+            auto* sretTy = arg0->getParamStructRetType();
+            llvm::errs() << " sretTyPtr=" << static_cast<const void*>(sretTy) << " sretTy=";
+            if (sretTy) {
+                sretTy->print(llvm::errs(), false);
+            } else {
+                llvm::errs() << "<null>";
+            }
+        }
+    }
+    llvm::errs() << '\n';
+}
+
 llvm::Function* CreateFunctionWrapperForNoBasePtrCases(const CHIR::Value* chirFunc, CGModule& cgMod)
 {
     auto func = VirtualCast<CHIR::Func*>(chirFunc);
@@ -121,9 +166,11 @@ llvm::Function* CreateFunctionWrapper(
     auto wrapperF =
         llvm::cast<llvm::Function>(cgMod.GetLLVMModule()->getOrInsertFunction(wrapperFName, wrapperFType).getCallee());
     if (cgType->HasSRet()) {
+        TraceSRetState("CreateFunctionWrapper.before-copy.original", *function);
         auto sRetAttr = function->getParamAttribute(0, llvm::Attribute::StructRet);
         wrapperF->addParamAttr(0, sRetAttr);
         wrapperF->addParamAttr(0, llvm::Attribute::NoAlias);
+        TraceSRetState("CreateFunctionWrapper.after-copy.wrapper", *wrapperF);
     }
     AddLinkageTypeMetadata(*wrapperF, GetLinkageTypeOfGlobalObject(*function), cgCtx.IsCGParallelEnabled());
     if (!cgCtx.IsValueOfOtherLLVMModule(*chirFunc)) {
@@ -141,13 +188,15 @@ CGFunction::CGFunction(
     cgCtx.function2CGFunc.emplace(function, this);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (isStructRet) {
-        auto retCGType = cgType->GetContainedTypeAt(0)->GetPointerElementType();
+        auto& retType = *StaticCast<const CHIR::FuncType&>(cgType->GetOriginal()).GetReturnType();
+        auto retCGType = CGType::GetOrCreate(cgMod, &retType);
         function->getArg(0)->addAttr(llvm::Attribute::NoAlias);
         auto sret = llvm::Attribute::getWithStructRetType(function->getContext(),
-            (!retCGType->GetSize() && !retCGType->GetOriginal().IsGeneric())
+            (!retCGType->GetSize() && !retType.IsGeneric())
                 ? llvm::Type::getInt8Ty(cgMod.GetLLVMContext())
                 : retCGType->GetLLVMType());
         function->getArg(0)->addAttr(sret);
+        TraceSRetState("CGFunction.ctor.after-add.original", *function);
     }
     if (!cgType->closureParamIndices.empty()) {
         function->setMetadata(
