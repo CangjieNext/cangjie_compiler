@@ -9,11 +9,16 @@
 #include <queue>
 #include <sstream>
 #include <cctype>
+#include <limits>
 
 #include "llvm/Bitcode/BitcodeWriter.h"
+#include "llvm/IR/Comdat.h"
 #include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Metadata.h"
+#include "llvm/IR/ModuleSlotTracker.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "Base/CGTypes/CGEnumType.h"
 #include "Utils/CGCommonDef.h"
@@ -54,6 +59,78 @@ const std::unordered_map<ChirTypeKind, std::string> TYPE_MANGLING_LUT = {
     {ChirTypeKind::TYPE_CSTRING, "k"},
     {ChirTypeKind::TYPE_VOID, "u"},
 };
+
+bool IsLLVM21TraceEnabled()
+{
+    return std::getenv("CJ_LLVM21_TRACE") != nullptr;
+}
+
+void TraceModuleEntitiesBeforeSave(const llvm::Module& module)
+{
+    llvm::raw_null_ostream nullOS;
+    llvm::errs() << "[llvm21-trace] SavePackageModule.entities.begin module=" << module.getName() << '\n';
+    for (const auto& global : module.globals()) {
+        llvm::errs() << "[llvm21-trace] SavePackageModule.global " << global.getName() << '\n';
+        global.print(nullOS);
+    }
+    for (const auto& alias : module.aliases()) {
+        llvm::errs() << "[llvm21-trace] SavePackageModule.alias " << alias.getName() << '\n';
+        alias.print(nullOS);
+    }
+    for (const auto& ifunc : module.ifuncs()) {
+        llvm::errs() << "[llvm21-trace] SavePackageModule.ifunc " << ifunc.getName() << '\n';
+        ifunc.print(nullOS);
+    }
+    for (const auto& function : module) {
+        llvm::errs() << "[llvm21-trace] SavePackageModule.function " << function.getName() << '\n';
+        function.print(nullOS);
+    }
+    llvm::errs() << "[llvm21-trace] SavePackageModule.entities.end module=" << module.getName() << '\n';
+}
+
+void TraceModuleTopLevelBeforeSave(const llvm::Module& module)
+{
+    llvm::raw_null_ostream nullOS;
+    llvm::errs() << "[llvm21-trace] SavePackageModule.module.begin module=" << module.getName() << '\n';
+
+    auto identifiedTypes = module.getIdentifiedStructTypes();
+    llvm::errs() << "[llvm21-trace] SavePackageModule.module.types.begin count=" << identifiedTypes.size() << '\n';
+    for (const auto* type : identifiedTypes) {
+        if (!type || !type->hasName()) {
+            llvm::errs() << "[llvm21-trace] SavePackageModule.module.type <unnamed>\n";
+        } else {
+            llvm::errs() << "[llvm21-trace] SavePackageModule.module.type " << type->getStructName() << '\n';
+        }
+        type->print(nullOS);
+    }
+    llvm::errs() << "[llvm21-trace] SavePackageModule.module.types.end\n";
+
+    const auto& comdatSymTab = module.getComdatSymbolTable();
+    llvm::errs() << "[llvm21-trace] SavePackageModule.module.comdats.begin count=" << comdatSymTab.size() << '\n';
+    for (const auto& entry : comdatSymTab) {
+        llvm::errs() << "[llvm21-trace] SavePackageModule.module.comdat " << entry.getKey() << '\n';
+        entry.getValue().print(nullOS);
+    }
+    llvm::errs() << "[llvm21-trace] SavePackageModule.module.comdats.end\n";
+
+    llvm::errs() << "[llvm21-trace] SavePackageModule.module.namedmd.begin\n";
+    for (const auto& namedMD : module.named_metadata()) {
+        llvm::errs() << "[llvm21-trace] SavePackageModule.module.namedmd " << namedMD.getName() << '\n';
+        namedMD.print(nullOS);
+    }
+    llvm::errs() << "[llvm21-trace] SavePackageModule.module.namedmd.end\n";
+
+    llvm::ModuleSlotTracker mst(&module, true);
+    llvm::ModuleSlotTracker::MachineMDNodeListType mdNodes;
+    mst.collectMDNodes(mdNodes, 0, std::numeric_limits<unsigned>::max());
+    llvm::errs() << "[llvm21-trace] SavePackageModule.module.mdnodes.begin count=" << mdNodes.size() << '\n';
+    for (const auto& mdNode : mdNodes) {
+        llvm::errs() << "[llvm21-trace] SavePackageModule.module.mdnode slot=" << mdNode.first << '\n';
+        mdNode.second->print(nullOS, &module);
+    }
+    llvm::errs() << "[llvm21-trace] SavePackageModule.module.mdnodes.end\n";
+    llvm::errs() << "[llvm21-trace] SavePackageModule.module.end module=" << module.getName() << '\n';
+}
 
 void GetGenericArgsFromCHIRTypeHelper(const Cangjie::CHIR::Type& type, std::vector<size_t> path,
     std::vector<Cangjie::CodeGen::GenericTypeAndPath>& res)
@@ -264,6 +341,13 @@ bool SaveToBitcodeFile(const llvm::Module& module, const std::string& bcFilePath
 #else
     llvm::raw_fd_ostream os(bcFilePath, errorCode);
 #endif
+    if (IsLLVM21TraceEnabled()) {
+        TraceModuleEntitiesBeforeSave(module);
+        TraceModuleTopLevelBeforeSave(module);
+    }
+    if (IsLLVM21TraceEnabled() && !bcFilePath.empty()) {
+        DumpIR(module, bcFilePath + ".ll");
+    }
     llvm::WriteBitcodeToFile(module, os);
     if (errorCode) {
         Errorln("Failed to write bitcode to file:", errorCode.message());
@@ -298,7 +382,7 @@ uint64_t GetTypeAlignment(const CGModule& cgMod, const CHIR::Type& ty)
 
 uint64_t GetTypeAlignment(const CGModule& cgMod, llvm::Type& ty)
 {
-    return cgMod.GetLLVMModule()->getDataLayout().getABITypeAlignment(&ty);
+    return cgMod.GetLLVMModule()->getDataLayout().getABITypeAlign(&ty).value();
 }
 
 bool IsZeroSizedTypeInC(const CGModule& cgMod, const CHIR::Type& chirTy)

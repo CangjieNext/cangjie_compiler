@@ -362,7 +362,7 @@ CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func, bool forWra
     }
     if (func->TestAttr(CHIR::Attribute::NO_SIDE_EFFECT)) {
         function->addFnAttr(llvm::Attribute::NoUnwind);
-        function->addFnAttr(llvm::Attribute::ReadOnly);
+        function->setOnlyReadsMemory();
         function->addFnAttr(llvm::Attribute::WillReturn);
     }
 #endif
@@ -511,7 +511,7 @@ llvm::Constant* CGModule::GenerateTypeNameConstantString(const std::string& type
     klassName->setConstant(true);
     klassName->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     AddLinkageTypeMetadata(*klassName, linkageType, false);
-    return llvm::ConstantExpr::getBitCast(klassName, llvm::Type::getInt8PtrTy(module->getContext()));
+    return llvm::ConstantExpr::getBitCast(klassName, llvm::PointerType::get(module->getContext(), 0));
 }
 
 llvm::GlobalVariable* CGModule::GeneratePrivateUnnamedAddrConstant(
@@ -523,7 +523,7 @@ llvm::GlobalVariable* CGModule::GeneratePrivateUnnamedAddrConstant(
     res->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     AddLinkageTypeMetadata(*res, llvm::GlobalValue::PrivateLinkage, false);
     auto& layOut = module->getDataLayout();
-    auto align = llvm::MaybeAlign(layOut.getPrefTypeAlignment(type));
+    auto align = layOut.getPrefTypeAlign(type);
     res->setAlignment(align);
     res->setInitializer(constVal);
     return res;
@@ -579,9 +579,9 @@ std::vector<llvm::Constant*> CGModule::InitRawArrayUInt8Constants() const
 {
     auto& ctx = GetLLVMContext();
     auto int32Ty = llvm::Type::getInt32Ty(ctx);
-    auto int32PtrTy = llvm::Type::getInt32PtrTy(ctx);
+    auto int32PtrTy = llvm::PointerType::get(ctx, 0);
     auto int8Ty = llvm::Type::getInt8Ty(ctx);
-    auto int8PtrTy = llvm::Type::getInt8PtrTy(ctx);
+    auto int8PtrTy = llvm::PointerType::get(ctx, 0);
     auto int16Ty = llvm::Type::getInt16Ty(ctx);
 
     auto typeTemplateType = CGType::GetOrCreateTypeTemplateType(ctx);
