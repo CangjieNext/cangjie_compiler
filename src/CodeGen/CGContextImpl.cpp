@@ -23,7 +23,7 @@ void CGContextImpl::Clear()
     chirType2CGTypeMap.clear();
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     valueAndBasePtrMap.clear();
-    nullableReference.clear();
+    nullableReferenceProvenance.clear();
 #endif
 }
 } // namespace Cangjie::CodeGen
