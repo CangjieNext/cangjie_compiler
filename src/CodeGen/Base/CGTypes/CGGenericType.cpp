@@ -30,7 +30,7 @@ void CGGenericType::GenContainedCGTypes()
 
 llvm::Constant* CGGenericType::GenUpperBoundsOfGenericType(std::string& uniqueName)
 {
-    auto p0i8 = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto p0i8 = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     if (upperBounds.empty()) {
         return llvm::ConstantPointerNull::get(p0i8);
     }

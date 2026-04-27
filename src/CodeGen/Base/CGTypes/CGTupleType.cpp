@@ -34,7 +34,7 @@ void CGTupleType::CalculateSizeAndAlign()
     if (auto structType = llvm::dyn_cast<llvm::StructType>(llvmType)) {
         auto layOut = cgMod.GetLLVMModule()->getDataLayout();
         size = layOut.getTypeAllocSize(structType);
-        align = layOut.getABITypeAlignment(structType);
+        align = layOut.getABITypeAlign(structType).value();
     }
 }
 
@@ -111,7 +111,7 @@ llvm::Constant* CGTupleType::GenTypeArgsOfTypeInfo()
 {
     auto genericArgs = StaticCast<const CHIR::TupleType&>(chirType).GetElementTypes();
     auto typeInfoPtrTy = CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext());
-    auto p0i8 = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto p0i8 = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     if (genericArgs.empty()) {
         return llvm::ConstantPointerNull::get(p0i8);
     }

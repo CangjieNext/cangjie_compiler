@@ -16,7 +16,7 @@ llvm::Type* CGCStringType::GenLLVMType()
         return llvmType;
     }
     auto& llvmCtx = cgCtx.GetLLVMContext();
-    llvmType = llvm::Type::getInt8PtrTy(llvmCtx);
+    llvmType = llvm::PointerType::get(llvmCtx, 0);
 
     layoutType = llvm::StructType::getTypeByName(llvmCtx, "CString.Type");
     if (!layoutType) {
@@ -29,6 +29,6 @@ void CGCStringType::CalculateSizeAndAlign()
 {
     llvm::DataLayout layOut = cgMod.GetLLVMModule()->getDataLayout();
     size = layOut.getTypeAllocSize(llvmType);
-    align = layOut.getABITypeAlignment(llvmType);
+    align = layOut.getABITypeAlign(llvmType).value();
 }
 } // namespace Cangjie::CodeGen

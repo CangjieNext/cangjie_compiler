@@ -58,7 +58,7 @@ llvm::Constant* CGExtensionDef::GetTargetType(CGModule& cgModule, const CHIR::Ty
     } else {
         res = cgType->GetOrCreateTypeInfo();
     }
-    return llvm::ConstantExpr::getBitCast(res, llvm::Type::getInt8PtrTy(cgModule.GetLLVMContext()));
+    return llvm::ConstantExpr::getBitCast(res, llvm::PointerType::get(cgModule.GetLLVMContext(), 0));
 }
 
 llvm::Value* CGExtensionDef::CreateTypeComparison(
@@ -296,7 +296,7 @@ llvm::Constant* CGExtensionDef::GenerateWhereConditionFn()
         return !isAllTypeArgsGeneric && chirDef.GetCustomKind() == CHIR::CustomDefKind::TYPE_EXTEND &&
             genericTypes != targetType->GetTypeArgs();
     };
-    auto i8PtrTy = llvm::Type::getInt8PtrTy(llvmCtx);
+    auto i8PtrTy = llvm::PointerType::get(llvmCtx, 0);
     auto targetCGType = CGType::GetOrCreate(cgMod, targetType);
     if (!targetCGType->IsDynamicGI() || !needGenerateFnForGenericType()) {
         return llvm::Constant::getNullValue(i8PtrTy);
@@ -323,7 +323,7 @@ llvm::Constant* CGExtensionDef::GenerateOuterTi(const CHIR::VirtualMethodInfo& f
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
     if (funcInfo.GetVirtualMethod() == nullptr) {
-        return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(llvmCtx));
+        return llvm::ConstantPointerNull::get(llvm::PointerType::get(llvmCtx, 0));
     }
     auto parentType = DeRef(*funcInfo.GetInstParentType());
     if (parentType->GetTypeArgs().empty()) {
@@ -331,17 +331,17 @@ llvm::Constant* CGExtensionDef::GenerateOuterTi(const CHIR::VirtualMethodInfo& f
         // the value of `outerTypeinfo` is unimportant and can be filled with any data. To reduce
         // relocation, we choose to fill it with 0x1 instead of a TypeInfo pointer.
         return llvm::ConstantExpr::getIntToPtr(
-            llvm::ConstantInt::get(llvm::Type::getInt64Ty(llvmCtx), 0x1), llvm::Type::getInt8PtrTy(llvmCtx));
+            llvm::ConstantInt::get(llvm::Type::getInt64Ty(llvmCtx), 0x1), llvm::PointerType::get(llvmCtx, 0));
     }
     auto outerTi = CGType::GetOrCreate(cgMod, parentType)->GetOrCreateTypeInfo();
-    return llvm::ConstantExpr::getBitCast(outerTi, llvm::Type::getInt8PtrTy(llvmCtx));
+    return llvm::ConstantExpr::getBitCast(outerTi, llvm::PointerType::get(llvmCtx, 0));
 }
 
 llvm::Constant* CGExtensionDef::GenerateOuterTiFn(const CHIR::VirtualMethodInfo& funcInfo)
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
     if (funcInfo.GetVirtualMethod() == nullptr) {
-        return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(llvmCtx));
+        return llvm::ConstantPointerNull::get(llvm::PointerType::get(llvmCtx, 0));
     }
 
     auto fnName = extendDefName + "_" + funcInfo.GetVirtualMethod()->GetIdentifierWithoutPrefix() + "_GetOuterTiFn";
@@ -363,14 +363,14 @@ llvm::Constant* CGExtensionDef::GenerateOuterTiFn(const CHIR::VirtualMethodInfo&
         CJC_ASSERT(false &&
             "GenerateOuterTiFn should not be called multiple times for the same function. Something is wrong.");
     }
-    return llvm::ConstantExpr::getBitCast(getOuterTiFn, llvm::Type::getInt8PtrTy(llvmCtx));
+    return llvm::ConstantExpr::getBitCast(getOuterTiFn, llvm::PointerType::get(llvmCtx, 0));
 }
 
 llvm::Constant* CGExtensionDef::GenerateFuncTableForType(
     const CHIR::ClassType& inheritedType, const CHIR::VTableInType& vtableInType)
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
-    auto i8PtrType = llvm::Type::getInt8PtrTy(llvmCtx);
+    auto i8PtrType = llvm::PointerType::get(llvmCtx, 0);
     if (vtableInType.IsEmpty()) {
         return llvm::Constant::getNullValue(i8PtrType);
     }
@@ -406,7 +406,7 @@ std::pair<llvm::Constant*, bool> CGExtensionDef::GenerateInterfaceFn(const CHIR:
 {
     CJC_ASSERT(!inheritedType.IsGeneric());
     auto& llvmCtx = cgMod.GetLLVMContext();
-    auto i8PtrTy = llvm::Type::getInt8PtrTy(llvmCtx);
+    auto i8PtrTy = llvm::PointerType::get(llvmCtx, 0);
     if (auto cgType = CGType::GetOrCreate(cgMod, &inheritedType); cgType && !cgType->IsDynamicGI()) {
         auto ti = cgType->GetOrCreateTypeInfo();
         return {llvm::ConstantExpr::getBitCast(ti, i8PtrTy), true};
@@ -440,7 +440,7 @@ std::vector<llvm::Constant*> CGExtensionDef::GetEmptyExtensionDefContent(CGModul
     auto& llvmCtx = cgMod.GetLLVMContext();
     auto i8NullVal = llvm::ConstantInt::getNullValue(llvm::Type::getInt8Ty(llvmCtx));
     auto i16NullVal = llvm::ConstantInt::getNullValue(llvm::Type::getInt16Ty(llvmCtx));
-    auto i8PtrNullVal = llvm::ConstantInt::getNullValue(llvm::Type::getInt8PtrTy(llvmCtx));
+    auto i8PtrNullVal = llvm::ConstantInt::getNullValue(llvm::PointerType::get(llvmCtx, 0));
     std::vector<llvm::Constant*> defConstants(static_cast<unsigned>(EXTENSION_DEF_FIELDS_NUM));
     defConstants[static_cast<size_t>(IS_INTERFACE_TI)] = i8NullVal;
     defConstants[static_cast<size_t>(INTERFACE_FN_OR_INTERFACE_TI)] = i8PtrNullVal;

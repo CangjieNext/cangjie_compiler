@@ -21,9 +21,32 @@
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 
+#include <cstdio>
+#include <cstdlib>
+
 namespace {
 using namespace Cangjie;
 using namespace CodeGen;
+
+bool IsLLVM21TraceEnabled()
+{
+    static bool enabled = [] {
+        const char* env = std::getenv("CJ_LLVM21_TRACE");
+        return env != nullptr && env[0] != '\0' && env[0] != '0';
+    }();
+    return enabled;
+}
+
+void TraceLLVM21(const char* stage, const CGModule& cgMod, const CHIR::Func& chirFunc)
+{
+    if (!IsLLVM21TraceEnabled()) {
+        return;
+    }
+    std::fprintf(stderr, "[llvm21-trace] %s pkg=%s module=%s func=%s\n", stage,
+        cgMod.GetCGContext().GetCurrentPkgName().c_str(), cgMod.GetLLVMModule()->getSourceFileName().c_str(),
+        chirFunc.GetIdentifierWithoutPrefix().c_str());
+    std::fflush(stderr);
+}
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 inline bool NeedProcessParamOnDemand(const CGModule& cgMod, const CHIR::FuncType& chirFuncTy, size_t index)
@@ -186,7 +209,9 @@ public:
 void FunctionGeneratorImpl::EmitIR()
 {
     IRBuilder2 builder(cgMod);
+    TraceLLVM21("Function.EmitIR.begin", cgMod, chirFunc);
     auto cgFunc = cgMod.GetOrInsertCGFunction(&chirFunc);
+    TraceLLVM21("Function.GetOrInsertCGFunction.end", cgMod, chirFunc);
     auto rawFunction = cgFunc->GetRawFunction();
     bool isMockMode = (cgMod.GetCGContext().GetCompileOptions().mock == MockMode::ON) 
                       || cgMod.GetCGContext().GetCompileOptions().enableCompileTest;
@@ -198,9 +223,13 @@ void FunctionGeneratorImpl::EmitIR()
     CJC_NULLPTR_CHECK(chirFuncTy);
     if (chirFuncTy->IsCFunc()) {
         CJC_ASSERT(!chirFunc.TestAttr(CHIR::Attribute::FOREIGN));
+        TraceLLVM21("Function.BuildCFunc.begin", cgMod, chirFunc);
         BuildCFunc(cgMod, chirFunc, *cgFunc, builder);
+        TraceLLVM21("Function.BuildCFunc.end", cgMod, chirFunc);
     } else {
+        TraceLLVM21("Function.BuildCJFunc.begin", cgMod, chirFunc);
         BuildCJFunc(cgMod, chirFunc, *cgFunc);
+        TraceLLVM21("Function.BuildCJFunc.end", cgMod, chirFunc);
     }
 
     if (!ShouldReturnVoid(chirFunc)) {
@@ -208,7 +237,9 @@ void FunctionGeneratorImpl::EmitIR()
     }
 
     auto entryBB = chirFunc.GetBody()->GetEntryBlock();
+    TraceLLVM21("Function.EmitBasicBlockIR.begin", cgMod, chirFunc);
     EmitBasicBlockIR(cgMod, *entryBB);
+    TraceLLVM21("Function.EmitBasicBlockIR.end", cgMod, chirFunc);
     if (rawFunction->getSubprogram()) {
         cgMod.GetCGContext().debugValue = nullptr;
         cgMod.diBuilder->FinalizeSubProgram(*rawFunction);
@@ -228,6 +259,7 @@ void FunctionGeneratorImpl::EmitIR()
         cgFunc->GetRawFunction()->addFnAttr(FUNC_USED_BY_CLOSURE);
     }
 #endif
+    TraceLLVM21("Function.EmitIR.end", cgMod, chirFunc);
 }
 
 void EmitFunctionIR(CGModule& cgMod, const CHIR::Func& chirFunc)
