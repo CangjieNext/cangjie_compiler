@@ -94,7 +94,7 @@ bool CheckCustomAnnotationPlace(DiagnosticEngine& diag, const Decl& decl, const 
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::CheckAnnotationDecl(ASTContext& ctx, Annotation& ann)
+void TypeCheckerImpl::CheckAnnotationDecl(ASTContext& ctx, Annotation& ann)
 {
     if (ann.TestAttr(Attribute::TOOL_ADD)) {
         return;
@@ -130,7 +130,7 @@ void TypeChecker::TypeCheckerImpl::CheckAnnotationDecl(ASTContext& ctx, Annotati
 }
 
 
-OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CheckCustomAnnotation(
+OwnedPtr<CallExpr> TypeCheckerImpl::CheckCustomAnnotation(
     ASTContext& ctx, const Decl& decl, Annotation& ann)
 {
     CJC_ASSERT(ann.kind == AnnotationKind::CUSTOM);
@@ -154,7 +154,7 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CheckCustomAnnotation(
     return nullptr;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckAnnotations(ASTContext& ctx, Decl& decl)
+void TypeCheckerImpl::CheckAnnotations(ASTContext& ctx, Decl& decl)
 {
     std::vector<std::reference_wrapper<Annotation>> annotations;
     std::vector<OwnedPtr<Expr>> annotationsArray;

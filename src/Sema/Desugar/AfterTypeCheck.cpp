@@ -302,7 +302,7 @@ void TypeChecker::PerformDesugarAfterSema(std::vector<Ptr<Package>>& pkgs) const
     impl->PerformDesugarAfterSema(pkgs);
 }
 
-void TypeChecker::TypeCheckerImpl::ParsePackageConfigFile(
+void TypeCheckerImpl::ParsePackageConfigFile(
     Ptr<AST::Package>& pkg, InteropCJPackageConfigReader packagesFullConfig)
 {
     std::string currentPackageName = pkg->fullPackageName;
@@ -423,7 +423,7 @@ void TypeChecker::TypeCheckerImpl::ParsePackageConfigFile(
 }
 
 /** @p pkgs is set of source packages, desugar only needs to be done on source package. */
-void TypeChecker::TypeCheckerImpl::PerformDesugarAfterSema(std::vector<Ptr<AST::Package>>& pkgs)
+void TypeCheckerImpl::PerformDesugarAfterSema(std::vector<Ptr<AST::Package>>& pkgs)
 {
     TyVarScope ts(typeManager);
     InteropCJPackageConfigReader packagesFullConfig;
@@ -477,7 +477,7 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterSema(std::vector<Ptr<AST::
     }
 }
 
-void TypeChecker::TypeCheckerImpl::GenerateMainInvoke()
+void TypeCheckerImpl::GenerateMainInvoke()
 {
     if (mainFunctionMap.size() != 1 || mainFunctionMap.begin()->second.size() != 1) {
         return;
@@ -539,7 +539,7 @@ void TypeChecker::TypeCheckerImpl::GenerateMainInvoke()
 }
 
 // Perform desugar after typecheck before generic instantiation.
-void TypeChecker::TypeCheckerImpl::DesugarForPropDecl(Node& pkg)
+void TypeCheckerImpl::DesugarForPropDecl(Node& pkg)
 {
     Utils::ProfileRecorder recorder("Post TypeCheck", "DesugarForPropDecl");
     Walker(&pkg, [this](Ptr<Node> node) -> VisitAction {
@@ -563,7 +563,7 @@ void TypeChecker::TypeCheckerImpl::DesugarForPropDecl(Node& pkg)
 }
 
 // Perform desugar after typecheck before generic instantiation.
-void TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck(ASTContext& ctx, Package& pkg)
+void TypeCheckerImpl::PerformDesugarAfterTypeCheck(ASTContext& ctx, Package& pkg)
 {
     Interop::Java::JavaInteropManager jim(importManager, typeManager, diag, *ci->mangler,
         ci->invocation.globalOptions.outputJavaGenDir, ci->invocation.globalOptions.output,
@@ -645,7 +645,7 @@ void TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck(ASTContext& ctx,
     Walker(&pkg, preVisit).Walk();
 }
 
-Ptr<AST::Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithoutRecover(
+Ptr<AST::Ty> TypeCheckerImpl::SynthesizeWithoutRecover(
     const CheckerContext& ctx, Ptr<AST::Node> node)
 {
     CJC_NULLPTR_CHECK(node);
@@ -658,7 +658,7 @@ Ptr<AST::Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithoutRecover(
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 // public func toAny(): Any { return this }
-OwnedPtr<AST::FuncDecl> TypeChecker::TypeCheckerImpl::CreateToAny(AST::Decl& outerDecl)
+OwnedPtr<AST::FuncDecl> TypeCheckerImpl::CreateToAny(AST::Decl& outerDecl)
 {
     OwnedPtr<FuncBody> funcBody = MakeOwned<FuncBody>();
     funcBody->body = MakeOwned<Block>();
@@ -674,7 +674,7 @@ OwnedPtr<AST::FuncDecl> TypeChecker::TypeCheckerImpl::CreateToAny(AST::Decl& out
     auto funcParamList = MakeOwned<FuncParamList>();
     funcBody->paramLists.push_back(std::move(funcParamList));
     auto xRef = CreateRefExpr("this");
-    xRef->ref.target = &outerDecl;
+    xRef->ref.SetTarget(&outerDecl);
     xRef->SetTy(fromTy);
     xRef->EnableAttr(Attribute::NO_REFLECT_INFO);
     auto returnExpr = CreateReturnExpr(std::move(xRef), funcBody.get());

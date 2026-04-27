@@ -29,7 +29,7 @@ namespace {
 constexpr unsigned int CORES_REQUIRED_WARMUP = 8;
 }
 
-void TypeChecker::TypeCheckerImpl::WarmupCache(const ASTContext& ctx) const
+void TypeCheckerImpl::WarmupCache(const ASTContext& ctx) const
 {
     Utils::ProfileRecorder recorder("PrepareTypeCheck", "WarmupCache");
     auto numProcessors = std::thread::hardware_concurrency();
@@ -73,7 +73,7 @@ void TypeChecker::TypeCheckerImpl::WarmupCache(const ASTContext& ctx) const
     ctx.searcher->SetCache(cache);
 }
 
-std::vector<Symbol*> TypeChecker::TypeCheckerImpl::GetToplevelDecls(const ASTContext& ctx) const
+std::vector<Symbol*> TypeCheckerImpl::GetToplevelDecls(const ASTContext& ctx) const
 {
     // "scope_level:0 && ast_kind: *decl"
     Query q(Operator::AND);
@@ -83,13 +83,13 @@ std::vector<Symbol*> TypeChecker::TypeCheckerImpl::GetToplevelDecls(const ASTCon
     return ctx.searcher->Search(ctx, &q, Sort::posAsc);
 }
 
-std::vector<Symbol*> TypeChecker::TypeCheckerImpl::GetAllDecls(const ASTContext& ctx) const
+std::vector<Symbol*> TypeCheckerImpl::GetAllDecls(const ASTContext& ctx) const
 {
     Query q("ast_kind", "decl", MatchKind::SUFFIX);
     return ctx.searcher->Search(ctx, &q, Sort::posAsc);
 }
 
-std::vector<Symbol*> TypeChecker::TypeCheckerImpl::GetGenericCandidates(const ASTContext& ctx) const
+std::vector<Symbol*> TypeCheckerImpl::GetGenericCandidates(const ASTContext& ctx) const
 {
     return ctx.searcher->Search(ctx,
         "ast_kind : class_decl || ast_kind : interface_decl || ast_kind : struct_decl || ast_kind : enum_decl || "
@@ -97,7 +97,7 @@ std::vector<Symbol*> TypeChecker::TypeCheckerImpl::GetGenericCandidates(const AS
         Sort::posAsc);
 }
 
-std::vector<Symbol*> TypeChecker::TypeCheckerImpl::GetAllStructDecls(const ASTContext& ctx) const
+std::vector<Symbol*> TypeCheckerImpl::GetAllStructDecls(const ASTContext& ctx) const
 {
     return ctx.searcher->Search(ctx,
         "ast_kind : class_decl || ast_kind : interface_decl || ast_kind : struct_decl || ast_kind : enum_decl || "
@@ -105,7 +105,7 @@ std::vector<Symbol*> TypeChecker::TypeCheckerImpl::GetAllStructDecls(const ASTCo
         Sort::posAsc);
 }
 
-std::vector<Symbol*> TypeChecker::TypeCheckerImpl::GetSymsByASTKind(
+std::vector<Symbol*> TypeCheckerImpl::GetSymsByASTKind(
     const ASTContext& ctx, ASTKind astKind, const Order& order) const
 {
     Query q = Query("ast_kind", ASTKIND_TO_STRING_MAP[astKind]);

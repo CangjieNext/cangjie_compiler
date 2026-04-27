@@ -18,7 +18,7 @@ using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
 
-bool TypeChecker::TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se)
+bool TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se)
 {
     if (se.desugarExpr) {
         return typeManager.IsSubtype(se.desugarExpr->GetTy(), target);
@@ -83,7 +83,7 @@ bool TypeChecker::TypeCheckerImpl::ChkSubscriptExpr(ASTContext& ctx, Ptr<Ty> tar
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkTupleAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se, TupleTy& tupleTy)
+bool TypeCheckerImpl::ChkTupleAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se, TupleTy& tupleTy)
 {
     if (se.baseExpr == nullptr || se.indexExprs.size() != 1) {
         return false;
@@ -138,7 +138,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTupleAccess(ASTContext& ctx, Ptr<Ty> targe
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkVArrayAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se, VArrayTy& varrTy)
+bool TypeCheckerImpl::ChkVArrayAccess(ASTContext& ctx, Ptr<Ty> target, SubscriptExpr& se, VArrayTy& varrTy)
 {
     if (se.indexExprs.size() != 1) {
         diag.DiagnoseRefactor("sema_varray_subscript_num", se);
@@ -171,7 +171,7 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayAccess(ASTContext& ctx, Ptr<Ty> targ
     return true;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynSubscriptExpr(ASTContext& ctx, SubscriptExpr& se)
+Ptr<Ty> TypeCheckerImpl::SynSubscriptExpr(ASTContext& ctx, SubscriptExpr& se)
 {
     ChkSubscriptExpr(ctx, nullptr, se);
     return se.GetTy();

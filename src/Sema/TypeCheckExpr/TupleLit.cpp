@@ -13,7 +13,7 @@ using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
 
-bool TypeChecker::TypeCheckerImpl::ChkTupleLit(ASTContext& ctx, Ty& target, TupleLit& tl)
+bool TypeCheckerImpl::ChkTupleLit(ASTContext& ctx, Ty& target, TupleLit& tl)
 {
     if (target.IsAny()) {
         tl.SetTy(Synthesize({ctx, SynPos::EXPR_ARG}, &tl));
@@ -56,7 +56,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTupleLit(ASTContext& ctx, Ty& target, Tupl
     return true;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTupleLit(ASTContext& ctx, TupleLit& tl)
+Ptr<Ty> TypeCheckerImpl::SynTupleLit(ASTContext& ctx, TupleLit& tl)
 {
     std::vector<Ptr<Ty>> elemTy;
     // Synthesize the type of each element.

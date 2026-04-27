@@ -14,9 +14,14 @@
 #define CANGJIE_SEMA_TYPECHECKER_H
 
 #include "cangjie/AST/ASTContext.h"
+#include "cangjie/AST/Candidate.h"
 
 namespace Cangjie {
 class InstCtxScope;
+
+/** Performs type-checking logic; referenced by {@link TypeChecker} facade. */
+class TypeCheckerImpl;
+
 class TypeChecker {
 public:
     explicit TypeChecker(class CompilerInstance* ci);
@@ -63,8 +68,8 @@ private:
     class Synthesizer;
     /** The class for checking enum sugar. */
     class EnumSugarChecker;
-    class TypeCheckerImpl;
-    std::unique_ptr<TypeCheckerImpl> impl;
+    friend class TypeCheckerImpl;
+    std::unique_ptr<class TypeCheckerImpl> impl;
 }; // class TypeChecker
 } // namespace Cangjie
 #endif

@@ -12,9 +12,24 @@
 #ifndef CANGJIE_SEMA_DESUGAR_AFTER_TYPECHECK_H
 #define CANGJIE_SEMA_DESUGAR_AFTER_TYPECHECK_H
 
-#include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 #include "cangjie/Sema/TypeManager.h"
+
+namespace Cangjie::AST {
+struct Pattern;
+struct Type;
+struct Expr;
+struct FuncParam;
+struct BinaryExpr;
+struct IsExpr;
+struct AsExpr;
+struct Block;
+struct Ty;
+struct TypePattern;
+struct IfExpr;
+struct RangeExpr;
+struct CallExpr;
+}
 
 namespace Cangjie::Sema::Desugar::AfterTypeCheck {
 using namespace Cangjie;

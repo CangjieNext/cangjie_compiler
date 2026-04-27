@@ -27,6 +27,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/SourceManager.h"
+#include "cangjie/CHIR/Interpreter/BCHIR.h"
 #include "cangjie/Driver/StdlibMap.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Modules/ASTSerialization.h"
@@ -1054,6 +1055,11 @@ void ImportManager::SetPackageBchirCache(const std::string& fullPackageName, con
         return;
     }
     bchirFileCacheMap[fullPackageName] = bchirData;
+}
+
+void ImportManager::ClearPackageBCHIRCache()
+{
+    bchirFileCacheMap.clear();
 }
 
 const std::vector<uint8_t>* ImportManager::GetBchirCache(const std::string& fullPackageName)

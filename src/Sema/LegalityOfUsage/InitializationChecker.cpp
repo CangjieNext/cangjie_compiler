@@ -716,7 +716,7 @@ void InitializationChecker::CheckLetFlagInMemberAccess(const Expr& ae, const Mem
     if (ma.baseExpr == nullptr) {
         return;
     }
-    if (auto vd = DynamicCast<VarDecl*>(ma.target); vd) {
+    if (auto vd = DynamicCast<VarDecl*>(ma.GetTarget()); vd) {
         auto& realBaseExpr = ma.baseExpr->desugarExpr ? ma.baseExpr->desugarExpr : ma.baseExpr;
         if (realBaseExpr == nullptr) {
             return;
@@ -738,12 +738,12 @@ void InitializationChecker::CheckLetFlagInMemberAccess(const Expr& ae, const Mem
     }
     // Do not allow assignments of fields of 'let' struct instance
     if (auto re = DynamicCast<RefExpr*>(ma.baseExpr.get()); re) {
-        if (auto vd = DynamicCast<VarDecl*>(re->ref.target); vd && !vd->isVar && MayBeStructTy(*vd)) {
+        if (auto vd = DynamicCast<VarDecl*>(re->ref.GetTarget()); vd && !vd->isVar && MayBeStructTy(*vd)) {
             DiagCannotAssignToImmutable(diag, ae, *re);
         }
     }
     if (auto m = DynamicCast<MemberAccess*>(ma.baseExpr.get()); m) {
-        if (auto vd = DynamicCast<VarDecl*>(m->target); vd && MayBeStructTy(*vd)) {
+        if (auto vd = DynamicCast<VarDecl*>(m->GetTarget()); vd && MayBeStructTy(*vd)) {
             if (!vd->isVar) {
                 DiagCannotAssignToImmutable(diag, ae, ma);
             } else {
@@ -755,7 +755,7 @@ void InitializationChecker::CheckLetFlagInMemberAccess(const Expr& ae, const Mem
 
 bool InitializationChecker::CheckInitInRefExpr(const RefExpr& re)
 {
-    auto target = TypeCheckUtil::GetRealTarget(re.ref.target);
+    auto target = TypeCheckUtil::GetRealTarget(re.ref.GetTarget());
     if (target == nullptr || target->astKind == ASTKind::GENERIC_PARAM_DECL) {
         return true;
     }
@@ -820,24 +820,24 @@ bool InitializationChecker::CheckInitInRefExpr(const RefExpr& re)
 bool InitializationChecker::CheckInitInMemberAccess(MemberAccess& ma)
 {
     bool res = CheckInitInExpr(ma.baseExpr.get());
-    if (!ma.target) {
+    if (!ma.GetTarget()) {
         return res;
     }
-    RecordInstanceVariableUsage(*ma.target);
+    RecordInstanceVariableUsage(*ma.GetTarget());
     auto curStructOfMemberAccess = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, ma.scopeName);
-    if (auto re = DynamicCast<RefExpr*>(ma.baseExpr.get()); re && ma.target->outerDecl &&
-        !ma.target->TestAttr(Attribute::STATIC) && curStructOfMemberAccess &&
+    if (auto re = DynamicCast<RefExpr*>(ma.baseExpr.get()); re && ma.GetTarget()->outerDecl &&
+        !ma.GetTarget()->TestAttr(Attribute::STATIC) && curStructOfMemberAccess &&
         curStructOfMemberAccess->node->IsStructOrClassDecl()) {
         // Check illegal `this.member` access
-        if (re->isThis && re->ref.target && re->ref.target->IsStructOrClassDecl()) {
-            if (!CheckIllegalMemberAccess(ma, *ma.target, *re->ref.target)) {
+        if (re->isThis && re->ref.GetTarget() && re->ref.GetTarget()->IsStructOrClassDecl()) {
+            if (!CheckIllegalMemberAccess(ma, *ma.GetTarget(), *re->ref.GetTarget())) {
                 return false;
             }
         }
         // Check illegal `super.memberFunc` access
-        if (re->isSuper && IsFuncOrProp(*ma.target)) {
+        if (re->isSuper && IsFuncOrProp(*ma.GetTarget())) {
             CJC_NULLPTR_CHECK(curStructOfMemberAccess->node); // Symbol must have non-null 'node'.
-            if (!CheckIllegalMemberAccess(ma, *ma.target, *curStructOfMemberAccess->node)) {
+            if (!CheckIllegalMemberAccess(ma, *ma.GetTarget(), *curStructOfMemberAccess->node)) {
                 return false;
             }
         }
@@ -845,16 +845,16 @@ bool InitializationChecker::CheckInitInMemberAccess(MemberAccess& ma)
     // Do not report use before initialization when:
     // 1. target is function or property;
     // 2. target is instance or static member variable which will be checked separately in constructor.
-    if (IsFuncOrProp(*ma.target) || IsMemberUseOutsideCtor(ctx, ma, *ma.target)) {
+    if (IsFuncOrProp(*ma.GetTarget()) || IsMemberUseOutsideCtor(ctx, ma, *ma.GetTarget())) {
         return res;
     }
-    bool isUndefinedVar = ma.target->TestAttr(Attribute::GLOBAL) && ma.target->begin.fileID == ma.begin.fileID &&
-        ma.begin < ma.target->begin;
+    bool isUndefinedVar = ma.GetTarget()->TestAttr(Attribute::GLOBAL) &&
+        ma.GetTarget()->begin.fileID == ma.begin.fileID && ma.begin < ma.GetTarget()->begin;
     if (isUndefinedVar) {
         (void)diag.DiagnoseRefactor("sema_undefined_variable", ma, ma.GetTarget()->identifier.Val());
         return false;
     }
-    auto curStructOfTarget = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, ma.target->scopeName);
+    auto curStructOfTarget = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, ma.GetTarget()->scopeName);
     bool isInSameDecl = curStructOfMemberAccess && curStructOfMemberAccess == curStructOfTarget;
     if (isInSameDecl && !IsInitialized(ma)) {
         (void)diag.Diagnose(ma, "sema_used_before_initialization", ma.GetTarget()->identifier.Val());
@@ -1533,20 +1533,20 @@ bool InitializationChecker::CheckIllegalRefExprAccess(
     CJC_NULLPTR_CHECK(toplevelSymOfTarget.node);
     if (&toplevelSymOfRe == &toplevelSymOfTarget) {
         // Check current class/struct member access
-        CJC_NULLPTR_CHECK(re.ref.target);
-        return CheckIllegalMemberAccess(re, *re.ref.target, *toplevelSymOfRe.node);
+        CJC_NULLPTR_CHECK(re.ref.GetTarget());
+        return CheckIllegalMemberAccess(re, *re.ref.GetTarget(), *toplevelSymOfRe.node);
     }
     // Check super class/interface member access
     Symbol* symOfExprFunc = ScopeManager::GetOutMostSymbol(ctx, SymbolKind::FUNC_LIKE, re.scopeName);
-    if (re.ref.target != nullptr && re.ref.target->astKind == ASTKind::VAR_DECL) {
+    if (re.ref.GetTarget() != nullptr && re.ref.GetTarget()->astKind == ASTKind::VAR_DECL) {
         if (symOfExprFunc == nullptr || symOfExprFunc->astKind != AST::ASTKind::FUNC_DECL ||
             (symOfExprFunc->astKind == AST::ASTKind::FUNC_DECL &&
                 !Is<InheritableDecl>(StaticAs<ASTKind::FUNC_DECL>(symOfExprFunc->node)->outerDecl))) {
             diag.Diagnose(re, "sema_illegal_usage_of_super_member", re.ref.identifier.Val());
             return false;
         }
-    } else if (re.ref.target && IsFuncOrProp(*re.ref.target) &&
-        !CheckIllegalMemberAccess(re, *re.ref.target, *toplevelSymOfRe.node)) {
+    } else if (re.ref.GetTarget() && IsFuncOrProp(*re.ref.GetTarget()) &&
+        !CheckIllegalMemberAccess(re, *re.ref.GetTarget(), *toplevelSymOfRe.node)) {
         return false;
     }
     return true;

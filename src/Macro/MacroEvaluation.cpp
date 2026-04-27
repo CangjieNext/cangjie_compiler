@@ -14,6 +14,8 @@
 
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/AST/Nodes/Package.h"
+#include "cangjie/AST/Nodes/TokenPart.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Lex/Lexer.h"
@@ -21,6 +23,7 @@
 #include "cangjie/Macro/TokenSerialization.h"
 #include "cangjie/Modules/PackageManager.h"
 #include "cangjie/Parse/Parser.h"
+#include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 #include "cangjie/Utils/Utils.h"
 

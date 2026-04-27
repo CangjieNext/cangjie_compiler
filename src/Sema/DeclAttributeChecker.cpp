@@ -15,6 +15,7 @@
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Utils/CheckUtils.h"
@@ -440,7 +441,7 @@ void DeclAttributeChecker::Check() const
  * Check and set attributes for decls.
  * NOTE: should be called after decl type resolved.
  */
-void TypeChecker::TypeCheckerImpl::CheckAllDeclAttributes(const ASTContext& ctx)
+void TypeCheckerImpl::CheckAllDeclAttributes(const ASTContext& ctx)
 {
     std::vector<Symbol*> syms = GetAllDecls(ctx);
     for (auto& sym : syms) {

@@ -16,11 +16,6 @@
 #include <deque>
 #include <tuple>
 
-#include "cangjie/AST/Match.h"
-#include "cangjie/AST/PrintNode.h"
-#include "cangjie/AST/Walker.h"
-
-#include "cangjie/AST/Utils.h"
 #include "cangjie/CHIR/AST2CHIR/ImplicitImportedFuncMgr.h"
 #include "cangjie/CHIR/AST2CHIR/AST2CHIRNodeMap.h"
 #include "cangjie/CHIR/AST2CHIR/GlobalVarInitializer.h"
@@ -30,11 +25,13 @@
 #include "cangjie/IncrementalCompilation/CompilationCache.h"
 #include "cangjie/Mangle/CHIRMangler.h"
 #include "cangjie/Modules/ImportManager.h"
-#include "cangjie/Sema/GenericInstantiationManager.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
-#include "cangjie/AST/Types.h"
-#include "cangjie/Sema/TypeManager.h"
+namespace Cangjie {
+class GenericInstantiationManager;
+class TypeManager;
+class ImportManager;
+}
 
 namespace Cangjie::CHIR {
 class AST2CHIR {

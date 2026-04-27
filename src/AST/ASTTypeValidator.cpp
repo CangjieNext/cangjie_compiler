@@ -11,7 +11,23 @@
  */
 
 #include "cangjie/AST/ASTTypeValidator.h"
+
 #include <stack>
+#include <unordered_map>
+#include <unordered_set>
+
+#include "cangjie/AST/Match.h"
+#include "cangjie/AST/Walker.h"
+#include "cangjie/AST/Nodes/ClassLikeDecl.h"
+#include "cangjie/AST/Nodes/EnumDecl.h"
+#include "cangjie/AST/Nodes/Expr.h"
+#include "cangjie/AST/Nodes/FuncParamList.h"
+#include "cangjie/AST/Nodes/Package.h"
+#include "cangjie/AST/Nodes/StructDecl.h"
+#include "cangjie/AST/Nodes/Type.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
+#include "cangjie/Utils/CastingTemplate.h"
+#include "cangjie/Utils/Utils.h"
 
 namespace Cangjie::AST {
 class ASTTypeValidator {

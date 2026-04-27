@@ -15,6 +15,7 @@
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 
 using namespace Cangjie;
@@ -220,7 +221,7 @@ void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, co
 } // namespace
 
 // Set integer overflow strategy before sema typechecking.
-void TypeChecker::TypeCheckerImpl::SetIntegerOverflowStrategy() const
+void TypeCheckerImpl::SetIntegerOverflowStrategy() const
 {
     CJC_NULLPTR_CHECK(ci);
     if (ci->invocation.globalOptions.overflowStrategy == OverflowStrategy::NA) {

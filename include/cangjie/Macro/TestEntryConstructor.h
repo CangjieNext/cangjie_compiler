@@ -17,6 +17,10 @@
 #include "cangjie/AST/Nodes/Node.h"
 
 namespace Cangjie {
+namespace AST {
+struct MacroExpandDecl;
+}
+
 template <typename T> inline std::unique_ptr<T> MakeUniquePtr()
 {
     auto ptr = std::make_unique<T>();

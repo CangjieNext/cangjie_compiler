@@ -31,7 +31,76 @@
 namespace Cangjie {
 class GenericInstantiationManager;
 enum class IncreKind;
+namespace AST {
+struct Annotation;
+struct ArrayExpr;
+struct ArrayLit;
+struct AsExpr;
+struct AssignExpr;
+struct BinaryExpr;
+struct Block;
+struct ClassBody;
+struct ClassDecl;
+struct ConstPattern;
+struct Decl;
+struct DoWhileExpr;
+struct EnumPattern;
+struct ExceptTypePattern;
+struct Expr;
+struct ExtendDecl;
+struct ForInExpr;
+struct FuncArg;
+struct FuncBody;
+struct FuncDecl;
+struct FuncParam;
+struct FuncParamList;
+struct GenericConstraint;
+struct GenericParamDecl;
+struct IfExpr;
+struct ImportSpec;
+struct InterfaceBody;
+struct InterpolationExpr;
+struct InvalidExpr;
+struct IsExpr;
+struct JumpExpr;
+struct LetPatternDestructor;
+struct LitConstExpr;
+struct MacroExpandDecl;
+struct MatchCase;
+struct MatchCaseOther;
+struct MatchExpr;
+struct NameReferenceExpr;
+struct Node;
+struct OptionalChainExpr;
+struct OptionalExpr;
+struct OverloadableExpr;
+struct ParenExpr;
+struct PointerExpr;
+struct PrimaryCtorDecl;
+struct PropDecl;
+struct RefExpr;
+struct ReturnExpr;
+struct SpawnExpr;
+struct StrInterpolationExpr;
+struct StructBody;
+struct SubscriptExpr;
+struct SynchronizedExpr;
+struct ThrowExpr;
+struct TrailingClosureExpr;
+struct TryExpr;
+struct TupleLit;
+struct TuplePattern;
+struct TypeConvExpr;
+struct TypePattern;
+struct UnaryExpr;
+struct VarDecl;
+struct VarOrEnumPattern;
+struct VarPattern;
+struct VarWithPatternDecl;
+struct WhileExpr;
+} // namespace Cangjie::AST
 } // namespace Cangjie
+
 namespace Cangjie::CHIR {
 
 class Translator {
@@ -71,47 +140,7 @@ public:
      * @param trans The translator instance used for translation.
      * @return A pointer to the translated Value.
      */
-    static Ptr<Value> TranslateASTNode(const AST::Node& node, Translator& trans)
-    {
-        auto base = &node;
-        auto backBlock = trans.currentBlock;
-        auto nodePtr = GetDesugaredExpr(node);
-        if (auto expr = DynamicCast<AST::Expr*>(nodePtr); expr && expr->mapExpr != nullptr) {
-            base = expr->mapExpr;
-        }
-        if (auto res = trans.exprValueTable.TryGet(*base)) {
-            return res;
-        }
-        Ptr<Value> res = nullptr;
-        switch (nodePtr->astKind) {
-#define ASTKIND(KIND, VALUE, NODE, SIZE)                                                                               \
-    case AST::ASTKind::KIND: {                                                                                         \
-        res = trans.Visit(*AST::StaticAs<AST::ASTKind::KIND>(nodePtr));                                                \
-        break;                                                                                                         \
-    }
-#include "cangjie/AST/ASTKind.inc"
-#undef ASTKIND
-            default:
-                res = trans.Visit(*nodePtr);
-        }
-
-        /* There are two cases need add `Goto` when translate AST::Block
-            case1: if the Block node is a desugar node, then add `Goto`.
-            example code：
-                                                                                                 |     |   desugar block
-            `print("${a.a.b}\n")` => desugar to  `print({var tmp1 = Stringbuilder(); tmp1.append({a.a.b})})`
-                                                        |                                                | desugar block
-            case2: unsafe block.
-            example code:
-            var a = unsafe{}
-        */
-        if (auto subBlock = DynamicCast<AST::Block>(nodePtr)) {
-            if (nodePtr != &node || nodePtr->TestAttr(AST::Attribute::UNSAFE)) {
-                trans.CreateAndAppendTerminator<GoTo>(trans.GetBlockByAST(*subBlock), backBlock);
-            }
-        }
-        return res;
-    }
+    static Ptr<Value> TranslateASTNode(const AST::Node& node, Translator& trans);
 
     struct InstCalleeInfo {
         Type* instParentCustomTy{nullptr};
@@ -463,16 +492,7 @@ public:
      * @param node The node to desugar.
      * @return A pointer to the desugared expression.
      */
-    static const Ptr<const AST::Node> GetDesugaredExpr(const AST::Node& node)
-    {
-        auto expr = DynamicCast<AST::Expr*>(&node);
-        auto nodePtr = &node;
-        while (expr != nullptr && expr->desugarExpr != nullptr) {
-            nodePtr = expr->desugarExpr.get();
-            expr = DynamicCast<AST::Expr*>(nodePtr);
-        }
-        return nodePtr;
-    }
+    static const Ptr<const AST::Node> GetDesugaredExpr(const AST::Node& node);
 
     Translator Copy() const;
     /// Set the top level decl this Translator object is visiting. These apis are used to make sure local const funcs
@@ -644,12 +664,7 @@ private:
     Ptr<CustomTypeDef> GetNominalSymbolTable(const AST::Node& node);
     Ptr<Value> TypeCastOrBoxIfNeeded(
         Value& val, Type& expectedTy, const DebugLocation& loc = INVALID_LOCATION, bool needCheck = true);
-    Ptr<Block> GetBlockByAST(const AST::Block& block)
-    {
-        auto val = GetSymbolTable(block);
-        CJC_ASSERT(val->IsBlock());
-        return StaticCast<Block*>(val.get());
-    }
+    Ptr<Block> GetBlockByAST(const AST::Block& block);
     Block* CreateBlock()
     {
         return builder.CreateBlock(blockGroupStack.back());
@@ -804,14 +819,7 @@ private:
     Ptr<Value> Visit(const AST::VarDecl& decl);
     Ptr<Value> Visit(const AST::VarWithPatternDecl& patternDecl);
     Ptr<Value> Visit(const AST::WhileExpr& whileExpr);
-    Ptr<Value> Visit(const AST::Node& node) const
-    {
-        if (isComputingAnnos && Is<AST::IfAvailableExpr>(node)) {
-            return nullptr;
-        }
-        CJC_ASSERT(false && "Should not reach here!");
-        return nullptr;
-    }
+    Ptr<Value> Visit(const AST::Node& node) const;
 
     // ===--------------------------------------------------------------------===//
     // Helper data structure for left-value translation

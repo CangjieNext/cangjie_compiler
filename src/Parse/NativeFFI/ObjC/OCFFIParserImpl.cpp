@@ -12,8 +12,10 @@
 
 #include "OCFFIParserImpl.h"
 #include "../../ParserImpl.h"
-#include "cangjie/Utils/CastingTemplate.h"
+#include "cangjie/AST/Nodes/ClassLikeDecl.h"
+#include "cangjie/AST/Nodes/FuncDecl.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/Utils/CastingTemplate.h"
 
 using namespace Cangjie;
 using namespace AST;

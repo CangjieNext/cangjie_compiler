@@ -8,6 +8,8 @@
 
 #include "Diags.h"
 #include "TypeCheckUtil.h"
+#include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie;
@@ -912,7 +914,7 @@ private:
     bool inInit = false;                                      // inside a constructor
 };
 
-void TypeChecker::TypeCheckerImpl::CheckConstEvaluation(Package& pkg)
+void TypeCheckerImpl::CheckConstEvaluation(Package& pkg)
 {
     Utils::ProfileRecorder recorder("Post TypeCheck", "CheckConstEvaluation");
     ConstEvaluationChecker(diag, pkg).Check();

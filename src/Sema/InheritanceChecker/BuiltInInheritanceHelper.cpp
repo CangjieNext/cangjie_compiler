@@ -150,7 +150,7 @@ void StructInheritanceChecker::CreateBuiltInBinaryOperatorFunc(
 
     auto rightExpr = MakeOwnedNode<RefExpr>();
     rightExpr->ref.identifier = "right";
-    rightExpr->ref.target = rightParam.get();
+    rightExpr->ref.SetTarget(rightParam.get());
     rightExpr->SetTy(rightTy);
 
     auto be = MakeOwnedNode<BinaryExpr>();

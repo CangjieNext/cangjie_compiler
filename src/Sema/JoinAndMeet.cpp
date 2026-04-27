@@ -14,6 +14,7 @@
 
 #include "TypeCheckUtil.h"
 
+#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/Utils/CheckUtils.h"

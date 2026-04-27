@@ -48,7 +48,7 @@ const std::unordered_map<std::string, GlobalOptions::InteropLanguage> INTEROP_LA
 
 const std::unordered_map<std::string, uint8_t> WARN_GROUP_MAP = {
 #define WARN_GROUP(DESCR, KIND) {DESCR, uint8_t(WarnGroup::KIND)},
-#include "diagnostics/DKRef/WarnGroupKind.def"
+#include "cangjie/Basic/WarnGroupKind.def"
 #undef WARN_GROUP
 };
 

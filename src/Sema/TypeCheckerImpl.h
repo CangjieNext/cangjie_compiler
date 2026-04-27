@@ -23,9 +23,9 @@
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Nodes/CmpNodeByPos.h"
+#include "cangjie/AST/Nodes/File.h"
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/AST/Types.h"
-#include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagIdOld.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Modules/ImportManager.h"
@@ -34,6 +34,76 @@
 #include "cangjie/Utils/ProfileRecorder.h"
 
 namespace Cangjie {
+namespace AST {
+struct AssignExpr;
+struct ArrayExpr;
+struct ArrayLit;
+struct AsExpr;
+struct BinaryExpr;
+struct Block;
+struct BuiltInDecl;
+struct CacheKey;
+struct CallExpr;
+enum class CallKind;
+struct ClassDecl;
+struct CommandTypePattern;
+struct ConstPattern;
+struct Decl;
+struct DoWhileExpr;
+struct EnumPattern;
+struct EnumDecl;
+struct ExceptTypePattern;
+struct Expr;
+struct File;
+struct ForInExpr;
+struct FuncDecl;
+struct FuncTy;
+struct Generic;
+struct GenericParamDecl;
+struct Handler;
+struct IfExpr;
+struct IfAvailableExpr;
+struct IncOrDecExpr;
+struct InterfaceDecl;
+struct IsExpr;
+struct JumpExpr;
+struct MatchCase;
+struct MatchCaseOther;
+struct MatchExpr;
+struct NameReferenceExpr;
+struct Node;
+struct OptionalChainExpr;
+struct Package;
+struct ParenExpr;
+struct Pattern;
+struct PointerExpr;
+struct PerformExpr;
+struct QuoteExpr;
+struct RefExpr;
+struct RangeExpr;
+struct ReturnExpr;
+struct ResumeExpr;
+struct SpawnExpr;
+struct SubscriptExpr;
+struct Symbol;
+struct SynchronizedExpr;
+struct TrailingClosureExpr;
+struct TryExpr;
+struct TupleLit;
+struct TuplePattern;
+struct Type;
+struct TypeAliasDecl;
+struct TypeConvExpr;
+struct TypePattern;
+struct UnaryExpr;
+struct VArrayType;
+struct VarOrEnumPattern;
+struct VarDecl;
+struct VarPattern;
+struct WhileExpr;
+struct WildcardPattern;
+enum class VisitAction: uint8_t;
+}
 class Synthesizer;
 
 struct MatchingStat {
@@ -124,7 +194,7 @@ private:
     SynPos synthesizePos;
 };
 
-class TypeChecker::TypeCheckerImpl {
+class TypeCheckerImpl {
 public:
     explicit TypeCheckerImpl(CompilerInstance* ci);
 
@@ -1537,29 +1607,7 @@ private:
 
     // usage could be an AST::Type or AST::Expr, both of which can have written type arguements
     template <typename T>
-    TypeSubst GenerateTypeMappingForTypeAliasUse(const AST::TypeAliasDecl& tad, const T& usage) const
-    {
-        TypeSubst typeMapping;
-        if (!tad.type) {
-            return typeMapping;
-        }
-        std::vector<Ptr<AST::Ty>> typeArgs;
-        for (auto& it : usage.GetTypeArgs()) {
-            typeArgs.push_back(it->GetTy());
-        }
-        auto target = tad.type->GetTarget();
-        if (!target || target->astKind != AST::ASTKind::TYPE_ALIAS_DECL) {
-            return TypeCheckUtil::GenerateTypeMapping(tad, typeArgs);
-        }
-        typeMapping = GenerateTypeMappingForTypeAliasDecl(tad);
-        SubstituteTypeForTypeAliasTypeMapping(tad, typeArgs, typeMapping);
-        // Also generate direct mapping from type alias decl's type parameters to the provided type arguments
-        auto directMapping = TypeCheckUtil::GenerateTypeMapping(tad, typeArgs);
-        for (auto& [key, value] : directMapping) {
-            typeMapping[key] = value;
-        }
-        return typeMapping;
-    }
+    TypeSubst GenerateTypeMappingForTypeAliasUse(const AST::TypeAliasDecl& tad, const T& usage) const;
 
     void SubstituteTypeArguments(
         const AST::TypeAliasDecl& tad, std::vector<OwnedPtr<AST::Type>>& typeArguments, const TypeSubst& typeMapping);
@@ -1703,7 +1751,7 @@ private:
             auto newTypeArg = AST::ASTCloner::Clone(it.get());
             newTypeArg->SetTy(newTypeArg->GetTy() ? typeManager.SubstituteTypeAliasInTy(*newTypeArg->GetTy(), true, typeMapping)
                                             : TypeManager::GetInvalidTy());
-            if (auto ity = DynamicCast<AST::IntersectionTy*>(newTypeArg->GetTy()); ity && ity->tys.empty()) {
+            if (auto ity = dynamic_cast<AST::IntersectionTy*>(newTypeArg->GetTy()); ity && ity->tys.empty()) {
                 continue;
             }
             newTypeArg->EnableAttr(AST::Attribute::COMPILER_ADD);
@@ -1770,7 +1818,7 @@ private:
     // cjmp typechecker implementation class
     class MPTypeCheckerImpl* mpImpl;
     /**
-     * Will be passed as a reference in TypeChecker::TypeCheckerImpl::PerformDesugarAfterTypeCheck
+     * Will be passed as a reference in TypeCheckerImpl::PerformDesugarAfterTypeCheck
      * at Perform desugar after typecheck before generic instantiation stage.
      *
      * Needed for Java, Objective C interop Synthetic class wrappers generation.

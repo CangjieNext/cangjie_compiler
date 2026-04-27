@@ -30,8 +30,8 @@ ParserImpl::DeclHandler ParserImpl::LookupDeclHandler(TokenKind kind)
     static constexpr int LAST_KIND = static_cast<int>(TokenKind::MAIN);
     static constexpr int ARRAY_SIZE = LAST_KIND - FIRST_KIND + 1;
     // clang-format off
-    static const DeclHandler HANDLERS[ARRAY_SIZE] = {
 SUPPRESS_WARNING("-Wcast-function-type-mismatch")
+    static const DeclHandler HANDLERS[ARRAY_SIZE] = {
         reinterpret_cast<DeclHandler>(&ParserImpl::ParseStructDecl),
         reinterpret_cast<DeclHandler>(&ParserImpl::ParseEnumDecl),
         nullptr, nullptr, nullptr, nullptr,
@@ -55,8 +55,8 @@ SUPPRESS_WARNING("-Wcast-function-type-mismatch")
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
         nullptr, nullptr,
         reinterpret_cast<DeclHandler>(&ParserImpl::ParseMainDecl),
-UNSUPPRESS_WARNING()
     };
+UNSUPPRESS_WARNING()
     // clang-format on
 
     int index = static_cast<int>(kind) - FIRST_KIND;

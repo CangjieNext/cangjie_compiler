@@ -14,6 +14,9 @@
 
 #include "Diags.h"
 #include "TypeCheckUtil.h"
+#include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Nodes/EnumDecl.h"
+#include "cangjie/AST/Nodes/RefExpr.h"
 
 using namespace Cangjie;
 using namespace TypeCheckUtil;

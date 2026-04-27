@@ -6,9 +6,82 @@
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
+#include "cangjie/AST/Match.h"
+#include "cangjie/AST/Nodes/Block.h"
+#include "cangjie/AST/Nodes/Expr.h"
+#include "cangjie/AST/Nodes/IfAvailableExpr.h"
 
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
+
+const Ptr<const AST::Node> Translator::GetDesugaredExpr(const AST::Node& node)
+{
+    auto expr = DynamicCast<AST::Expr*>(&node);
+    auto nodePtr = &node;
+    while (expr != nullptr && expr->desugarExpr != nullptr) {
+        nodePtr = expr->desugarExpr.get();
+        expr = DynamicCast<AST::Expr*>(nodePtr);
+    }
+    return nodePtr;
+}
+
+Ptr<Value> Translator::TranslateASTNode(const AST::Node& node, Translator& trans)
+{
+    auto base = &node;
+    auto backBlock = trans.currentBlock;
+    auto nodePtr = GetDesugaredExpr(node);
+    if (auto expr = DynamicCast<AST::Expr*>(nodePtr); expr && expr->mapExpr != nullptr) {
+        base = expr->mapExpr;
+    }
+    if (auto res = trans.exprValueTable.TryGet(*base)) {
+        return res;
+    }
+    Ptr<Value> res = nullptr;
+    switch (nodePtr->astKind) {
+#define ASTKIND(KIND, VALUE, NODE, SIZE)                                                                               \
+    case AST::ASTKind::KIND: {                                                                                         \
+        res = trans.Visit(*AST::StaticAs<AST::ASTKind::KIND>(nodePtr));                                                \
+        break;                                                                                                          \
+    }
+#include "cangjie/AST/ASTKind.inc"
+#undef ASTKIND
+        default:
+            res = trans.Visit(*nodePtr);
+    }
+
+    /* There are two cases need add `Goto` when translate AST::Block
+        case1: if the Block node is a desugar node, then add `Goto`.
+        example code：
+                                                                                             |     |   desugar block
+        `print("${a.a.b}\n")` => desugar to  `print({var tmp1 = Stringbuilder(); tmp1.append({a.a.b})})`
+                                                    |                                                | desugar block
+        case2: unsafe block.
+        example code:
+        var a = unsafe{}
+    */
+    if (auto subBlock = DynamicCast<AST::Block>(nodePtr)) {
+        if (nodePtr != &node || nodePtr->TestAttr(AST::Attribute::UNSAFE)) {
+            trans.CreateAndAppendTerminator<GoTo>(trans.GetBlockByAST(*subBlock), backBlock);
+        }
+    }
+    return res;
+}
+
+Ptr<Block> Translator::GetBlockByAST(const AST::Block& block)
+{
+    auto val = GetSymbolTable(block);
+    CJC_ASSERT(val->IsBlock());
+    return StaticCast<Block*>(val.get());
+}
+
+Ptr<Value> Translator::Visit(const AST::Node& node) const
+{
+    if (isComputingAnnos && Is<AST::IfAvailableExpr>(node)) {
+        return nullptr;
+    }
+    CJC_ASSERT(false && "Should not reach here!");
+    return nullptr;
+}
 
 void Translator::SetSymbolTable(const AST::Node& node, Value& val, bool isLocal)
 {

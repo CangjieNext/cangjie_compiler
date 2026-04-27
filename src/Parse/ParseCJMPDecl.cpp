@@ -10,7 +10,11 @@
  */
 
 #include "ParserImpl.h"
+#include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Nodes/File.h"
+#include "cangjie/AST/Nodes/InterfaceDecl.h"
 #include "cangjie/AST/Nodes/Node.h"
+#include "cangjie/AST/Nodes/PackageSpec.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include <functional>

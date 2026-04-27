@@ -19,6 +19,18 @@
 #include "cangjie/Modules/ImportManager.h"
 
 namespace Cangjie {
+namespace AST {
+struct ReturnExpr;
+struct AssignExpr;
+struct CallExpr;
+struct IfExpr;
+struct TryExpr;
+struct MatchExpr;
+struct ArrayExpr;
+struct TupleLit;
+struct Block;
+struct Ty;
+}
 class AutoBoxing {
 public:
     explicit AutoBoxing(TypeManager& typeManager) : typeManager(typeManager)

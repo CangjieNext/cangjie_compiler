@@ -19,7 +19,7 @@
 using namespace Cangjie;
 using namespace Cangjie::AST;
 
-void TypeChecker::TypeCheckerImpl::PreCheckAnnoForFFI(Node& root)
+void TypeCheckerImpl::PreCheckAnnoForFFI(Node& root)
 {
     if (root.TestAttr(Attribute::IMPORTED)) {
         return;

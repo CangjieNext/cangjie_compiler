@@ -10,12 +10,12 @@ using namespace Cangjie;
 using namespace AST;
 
 // The function does not need a target type since bottom type is a subtype of all (target) types.
-bool TypeChecker::TypeCheckerImpl::ChkReturnExpr(ASTContext& ctx, ReturnExpr& re)
+bool TypeCheckerImpl::ChkReturnExpr(ASTContext& ctx, ReturnExpr& re)
 {
     return Ty::IsTyCorrect(SynReturnExpr(ctx, re));
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynReturnExpr(ASTContext& ctx, ReturnExpr& re)
+Ptr<Ty> TypeCheckerImpl::SynReturnExpr(ASTContext& ctx, ReturnExpr& re)
 {
     if (!re.refFuncBody || !re.refFuncBody->retType) {
         re.SetTy(TypeManager::GetInvalidTy());
@@ -59,13 +59,13 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynReturnExpr(ASTContext& ctx, ReturnExpr&
     return re.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckReturnInConstructors(ASTContext& ctx, const ReturnExpr& re)
+bool TypeCheckerImpl::CheckReturnInConstructors(ASTContext& ctx, const ReturnExpr& re)
 {
     CJC_NULLPTR_CHECK(re.expr);
     return Check(ctx, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT), re.expr.get());
 }
 
-bool TypeChecker::TypeCheckerImpl::NeedCheckBodyReturn(const FuncBody& fb) const
+bool TypeCheckerImpl::NeedCheckBodyReturn(const FuncBody& fb) const
 {
     if (fb.parentClassLike && HasJavaAttr(*fb.parentClassLike) &&
         fb.parentClassLike->TestAttr(Attribute::GENERIC, Attribute::IMPORTED)) {

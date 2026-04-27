@@ -22,6 +22,7 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Modules/ModulesUtils.h"
 #include "cangjie/Sema/TypeManager.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/CheckUtils.h"
 
 using namespace Cangjie;
@@ -94,7 +95,7 @@ void CheckMutationInStructNonMut(DiagnosticEngine& diag, const StructDecl& sd, c
 }
 } // namespace
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::GetAccessibleDecls(
+std::vector<Ptr<Decl>> TypeCheckerImpl::GetAccessibleDecls(
     const ASTContext& ctx, const Expr& e, const std::vector<Ptr<Decl>>& targets) const
 {
     std::vector<Ptr<Decl>> res;
@@ -111,14 +112,14 @@ std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::GetAccessibleDecls(
     return res;
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::GetAccessibleDecl(
+Ptr<Decl> TypeCheckerImpl::GetAccessibleDecl(
     const ASTContext& ctx, const Expr& e, const std::vector<Ptr<Decl>>& targets) const
 {
     auto res = GetAccessibleDecls(ctx, e, targets);
     return res.empty() ? nullptr : res[0];
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::CheckFuncAccessControl(
+Ptr<Decl> TypeCheckerImpl::CheckFuncAccessControl(
     const ASTContext& ctx, const Expr& e, const std::vector<Ptr<Decl>>& targets) const
 {
     auto accessibleDecl = GetAccessibleDecl(ctx, e, targets);
@@ -130,7 +131,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::CheckFuncAccessControl(
     return accessibleDecl;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckNonFuncAccessControl(
+bool TypeCheckerImpl::CheckNonFuncAccessControl(
     const ASTContext& ctx, const Expr& e, const Decl& target) const
 {
     Symbol* sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, e.scopeName);
@@ -141,7 +142,7 @@ bool TypeChecker::TypeCheckerImpl::CheckNonFuncAccessControl(
     return ret;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckMemberAccessInCtorParamOrCtorArg(const ASTContext& ctx, const FuncDecl& fd)
+void TypeCheckerImpl::CheckMemberAccessInCtorParamOrCtorArg(const ASTContext& ctx, const FuncDecl& fd)
 {
     if (fd.funcBody == nullptr) {
         return;
@@ -166,7 +167,7 @@ void TypeChecker::TypeCheckerImpl::CheckMemberAccessInCtorParamOrCtorArg(const A
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckIllegalMemberWalker(
+void TypeCheckerImpl::CheckIllegalMemberWalker(
     const ASTContext& ctx, Ptr<Node> node, bool reportThis, const std::string& errorStr)
 {
     Walker walker(node, [this, &ctx, reportThis, errorStr](Ptr<Node> node) -> VisitAction {
@@ -196,7 +197,7 @@ void TypeChecker::TypeCheckerImpl::CheckIllegalMemberWalker(
     walker.Walk();
 }
 
-void TypeChecker::TypeCheckerImpl::CheckIllegalMemberHelper(
+void TypeCheckerImpl::CheckIllegalMemberHelper(
     const ASTContext& ctx, bool reportThis, const std::string& errorStr, const NameReferenceExpr& nre)
 {
     auto target = nre.GetTarget();
@@ -229,7 +230,7 @@ void TypeChecker::TypeCheckerImpl::CheckIllegalMemberHelper(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckMutationInStruct(const ASTContext& ctx, const Expr& expr) const
+void TypeCheckerImpl::CheckMutationInStruct(const ASTContext& ctx, const Expr& expr) const
 {
     auto target = expr.GetTarget();
     if (!target || target->astKind != ASTKind::VAR_DECL) {
@@ -256,7 +257,7 @@ void TypeChecker::TypeCheckerImpl::CheckMutationInStruct(const ASTContext& ctx, 
     CheckMutationInStructNonMut(diag, *sd, expr);
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckIfUseInout(const FuncDecl& decl)
+bool TypeCheckerImpl::CheckIfUseInout(const FuncDecl& decl)
 {
     if (auto found = inoutCache.find(&decl); found != inoutCache.end()) {
         return found->second;
@@ -293,7 +294,7 @@ bool TypeChecker::TypeCheckerImpl::CheckIfUseInout(const FuncDecl& decl)
 }
 
 // let instance of struct cannot access mut function.
-void TypeChecker::TypeCheckerImpl::CheckLetInstanceAccessMutableFunc(
+void TypeCheckerImpl::CheckLetInstanceAccessMutableFunc(
     const ASTContext& ctx, const MemberAccess& ma, const Decl& target)
 {
     CJC_NULLPTR_CHECK(ma.baseExpr);

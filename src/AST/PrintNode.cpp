@@ -889,11 +889,11 @@ void PrintMemberAccess(unsigned indent, const MemberAccess& expr, std::ostream& 
         }
         PrintIndent(stream, indent + ONE_INDENT, "]");
     }
-    if (expr.target) {
-        PrintTarget(indent + ONE_INDENT, *expr.target, stream);
+    if (expr.GetTarget()) {
+        PrintTarget(indent + ONE_INDENT, *expr.GetTarget(), stream);
     }
     PrintIndent(stream, indent + ONE_INDENT, "targets [");
-    for (auto t : expr.targets) {
+    for (auto t : expr.GetTargets()) {
         PrintTarget(indent + TWO_INDENT, *t, stream);
     }
     PrintIndent(stream, indent + ONE_INDENT, "]");
@@ -1082,11 +1082,11 @@ void PrintRefExpr(unsigned indent, const RefExpr& refExpr, std::ostream& stream 
         }
         PrintIndent(stream, indent + ONE_INDENT, "]");
     }
-    if (refExpr.ref.target) {
-        PrintTarget(indent + ONE_INDENT, *refExpr.ref.target, stream);
+    if (refExpr.ref.GetTarget()) {
+        PrintTarget(indent + ONE_INDENT, *refExpr.ref.GetTarget(), stream);
     }
     PrintIndent(stream, indent + ONE_INDENT, "targets [");
-    for (auto t : refExpr.ref.targets) {
+    for (auto t : refExpr.ref.GetTargets()) {
         PrintTarget(indent + TWO_INDENT, *t, stream);
     }
     PrintIndent(stream, indent + ONE_INDENT, "]");
@@ -1226,11 +1226,11 @@ void PrintRefType(unsigned indent, const RefType& refType, std::ostream& stream 
         }
         PrintIndent(stream, indent + ONE_INDENT, "]");
     }
-    if (refType.ref.target) {
-        PrintTarget(indent + ONE_INDENT, *refType.ref.target, stream);
+    if (refType.ref.GetTarget()) {
+        PrintTarget(indent + ONE_INDENT, *refType.ref.GetTarget(), stream);
     }
     PrintIndent(stream, indent + ONE_INDENT, "targets [");
-    for (auto t : refType.ref.targets) {
+    for (auto t : refType.ref.GetTargets()) {
         PrintTarget(indent + TWO_INDENT, *t, stream);
     }
     PrintIndent(stream, indent + ONE_INDENT, "]");
@@ -1310,8 +1310,8 @@ void PrintQualifiedType(unsigned indent, const QualifiedType& type, std::ostream
     PrintBasic(indent + ONE_INDENT, type, stream);
     PrintNode(type.baseType.get(), indent + ONE_INDENT, "baseType", stream);
     PrintIndent(stream, indent + ONE_INDENT, "field:", type.field.Val());
-    if (type.target) {
-        PrintTarget(indent + ONE_INDENT, *type.target, stream);
+    if (type.GetTarget()) {
+        PrintTarget(indent + ONE_INDENT, *type.GetTarget(), stream);
     }
     PrintIndent(stream, indent, "}");
 }

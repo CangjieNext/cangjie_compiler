@@ -7,6 +7,7 @@
 #ifndef CANGJIE_CACHE_DATA_ASTDIFF_IMPL_H
 #define CANGJIE_CACHE_DATA_ASTDIFF_IMPL_H
 
+#include "cangjie/AST/Nodes/Decl.h"
 #include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
 #include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"

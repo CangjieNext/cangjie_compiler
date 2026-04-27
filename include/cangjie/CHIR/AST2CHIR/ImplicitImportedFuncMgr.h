@@ -7,7 +7,13 @@
 #ifndef CANGJIE_CHIR_IMPLICIT_IMPORTED_FUNC_MGR_H
 #define CANGJIE_CHIR_IMPLICIT_IMPORTED_FUNC_MGR_H
 
-#include "cangjie/AST/Nodes/ASTKind.h"
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace Cangjie::AST {
+enum class ASTKind: uint8_t;
+}
 
 namespace Cangjie::CHIR {
 /**

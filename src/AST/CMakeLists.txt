@@ -6,8 +6,6 @@
 
 set(LIBAST_FFI_AST
     Node.cpp
-    Package.cpp
-    Pattern.cpp
     RecoverDesugar.cpp
     Types.cpp
     IntLiteral.cpp

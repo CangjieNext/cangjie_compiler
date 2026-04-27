@@ -15,7 +15,7 @@ using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTypeConvExpr(ASTContext& ctx, TypeConvExpr& tce)
+Ptr<Ty> TypeCheckerImpl::SynTypeConvExpr(ASTContext& ctx, TypeConvExpr& tce)
 {
     CJC_NULLPTR_CHECK(tce.expr);
     CJC_NULLPTR_CHECK(tce.type);
@@ -32,7 +32,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTypeConvExpr(ASTContext& ctx, TypeConvE
     return tce.GetTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynNumTypeConvExpr(TypeConvExpr& tce)
+Ptr<Ty> TypeCheckerImpl::SynNumTypeConvExpr(TypeConvExpr& tce)
 {
     tce.SetTy(TypeManager::GetPrimitiveTy(StaticCast<PrimitiveType*>(tce.type.get())->kind));
     if (!Ty::IsTyCorrect(tce.expr->GetTy()) || !Ty::IsTyCorrect(tce.GetTy())) {
@@ -58,7 +58,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynNumTypeConvExpr(TypeConvExpr& tce)
     return tce.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkTypeConvExpr(ASTContext& ctx, Ty& targetTy, TypeConvExpr& tce)
+bool TypeCheckerImpl::ChkTypeConvExpr(ASTContext& ctx, Ty& targetTy, TypeConvExpr& tce)
 {
     // Additionally, given a context type T0 and an expression T1(t), since T1(t) : T1, we always require T1 <: T0.
     if (Ty::IsTyCorrect(SynTypeConvExpr(ctx, tce)) && typeManager.IsSubtype(tce.GetTy(), &targetTy)) {

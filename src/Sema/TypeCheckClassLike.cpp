@@ -44,7 +44,7 @@ void CheckAnnotationHasConstInit(DiagnosticEngine& diag, const ClassDecl& cd)
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::CheckSealedInheritance(const Decl& child, const Type& parent)
+void TypeCheckerImpl::CheckSealedInheritance(const Decl& child, const Type& parent)
 {
     Ptr<const Decl> target = parent.GetTarget();
     if (target == nullptr) {
@@ -76,7 +76,7 @@ void TypeChecker::TypeCheckerImpl::CheckSealedInheritance(const Decl& child, con
  * Check some constraints for decls that inherit `ThreadContext` from package `core`.
  * eg: Should not inherit or implement `ThreadContext` if decls are not within the whitelist.
  */
-void TypeChecker::TypeCheckerImpl::CheckThreadContextInheritance(const Decl& decl, const Type& parent)
+void TypeCheckerImpl::CheckThreadContextInheritance(const Decl& decl, const Type& parent)
 {
     static std::unordered_map<std::string, std::string> whitelist = {
         {"ThreadContext", "std.core"},
@@ -99,7 +99,7 @@ void TypeChecker::TypeCheckerImpl::CheckThreadContextInheritance(const Decl& dec
     (void)diag.DiagnoseRefactor("sema_inherit_thread_context_invalid", decl, decl.identifier);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckClassDecl(ASTContext& ctx, ClassDecl& cd)
+void TypeCheckerImpl::CheckClassDecl(ASTContext& ctx, ClassDecl& cd)
 {
     if (cd.TestAttr(Attribute::IS_CHECK_VISITED)) {
         return;
@@ -123,7 +123,7 @@ void TypeChecker::TypeCheckerImpl::CheckClassDecl(ASTContext& ctx, ClassDecl& cd
     for (auto& it : cd.inheritedTypes) {
         CJC_NULLPTR_CHECK(it);
         Synthesize({ctx, SynPos::NONE}, it.get());
-        if (auto rt = DynamicCast<RefType*>(it.get()); rt && rt->ref.target) {
+        if (auto rt = DynamicCast<RefType*>(it.get()); rt && rt->ref.GetTarget()) {
             CheckSealedInheritance(cd, *rt);
             CheckThreadContextInheritance(cd, *rt);
         }
@@ -138,7 +138,7 @@ void TypeChecker::TypeCheckerImpl::CheckClassDecl(ASTContext& ctx, ClassDecl& cd
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckAndAddSubDecls(
+void TypeCheckerImpl::CheckAndAddSubDecls(
     const Type& type, ClassDecl& cd, bool& hasSuperClass, int& superClassLikeNum) const
 {
     auto target = Ty::IsTyCorrect(type.GetTy()) ? Ty::GetDeclPtrOfTy(type.GetTy()) : type.GetTarget();
@@ -170,7 +170,7 @@ void TypeChecker::TypeCheckerImpl::CheckAndAddSubDecls(
     superClassLikeNum++;
 }
 
-bool TypeChecker::TypeCheckerImpl::HasSuperClass(ClassDecl& cd) const
+bool TypeCheckerImpl::HasSuperClass(ClassDecl& cd) const
 {
     int count = 0;
     bool hasSuperClass = false;
@@ -180,7 +180,7 @@ bool TypeChecker::TypeCheckerImpl::HasSuperClass(ClassDecl& cd) const
     return hasSuperClass;
 }
 
-void TypeChecker::TypeCheckerImpl::AddObjectSuperClass(ASTContext& ctx, ClassDecl& cd)
+void TypeCheckerImpl::AddObjectSuperClass(ASTContext& ctx, ClassDecl& cd)
 {
     auto tmp = MakeOwned<RefType>();
     tmp->curFile = cd.curFile;
@@ -189,15 +189,15 @@ void TypeChecker::TypeCheckerImpl::AddObjectSuperClass(ASTContext& ctx, ClassDec
     if (ctx.fullPackageName == CORE_PACKAGE_NAME && cd.identifier == OBJECT_NAME) {
         return; // Do not add 'Object' for itself.
     } else if (auto objectDecl = importManager.GetCoreDecl(OBJECT_NAME)) {
-        tmp->ref.target = objectDecl;
-        tmp->SetTy(tmp->ref.target->GetTy());
+        tmp->ref.SetTarget(objectDecl);
+        tmp->SetTy(tmp->ref.GetTarget()->GetTy());
         cd.inheritedTypes.insert(cd.inheritedTypes.begin(), std::move(tmp));
     } else {
         ctx.diag.Diagnose(cd, "sema_no_core_object");
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::AddJObjectSuperClassJavaInterop(ASTContext& ctx, ClassDecl& cd)
+bool TypeCheckerImpl::AddJObjectSuperClassJavaInterop(ASTContext& ctx, ClassDecl& cd)
 {
     using namespace Interop::Java;
     if (ctx.fullPackageName == INTEROP_JAVA_LANG_PACKAGE && cd.identifier == INTEROP_JOBJECT_NAME) {
@@ -210,8 +210,8 @@ bool TypeChecker::TypeCheckerImpl::AddJObjectSuperClassJavaInterop(ASTContext& c
         tmp->EnableAttr(AST::Attribute::COMPILER_ADD);
         tmp->curFile = cd.curFile;
         tmp->ref.identifier = SrcIdentifier{INTEROP_JOBJECT_NAME};
-        tmp->ref.target = objectDecl;
-        tmp->SetTy(tmp->ref.target->GetTy());
+        tmp->ref.SetTarget(objectDecl);
+        tmp->SetTy(tmp->ref.GetTarget()->GetTy());
         cd.inheritedTypes.insert(cd.inheritedTypes.begin(), std::move(tmp));
         cd.EnableAttr(Attribute::JAVA_MIRROR_SUBTYPE);
     } else {
@@ -221,7 +221,7 @@ bool TypeChecker::TypeCheckerImpl::AddJObjectSuperClassJavaInterop(ASTContext& c
     return true;
 }
 
-void TypeChecker::TypeCheckerImpl::AddObjCIdSuperInterfaceObjCInterop(ASTContext& ctx, ClassLikeDecl& classLikeDecl)
+void TypeCheckerImpl::AddObjCIdSuperInterfaceObjCInterop(ASTContext& ctx, ClassLikeDecl& classLikeDecl)
 {
     using namespace Interop::ObjC;
     if (ctx.fullPackageName == OBJ_C_LANG_PACKAGE_IDENT && classLikeDecl.identifier == OBJ_C_ID_IDENT) {
@@ -233,8 +233,8 @@ void TypeChecker::TypeCheckerImpl::AddObjCIdSuperInterfaceObjCInterop(ASTContext
         tmp->EnableAttr(AST::Attribute::COMPILER_ADD);
         tmp->curFile = classLikeDecl.curFile;
         tmp->ref.identifier = SrcIdentifier{OBJ_C_ID_IDENT};
-        tmp->ref.target = id;
-        tmp->SetTy(tmp->ref.target->GetTy());
+        tmp->ref.SetTarget(id);
+        tmp->SetTy(tmp->ref.GetTarget()->GetTy());
         classLikeDecl.inheritedTypes.emplace_back(std::move(tmp));
     } else {
         ctx.diag.DiagnoseRefactor("sema_member_not_imported", classLikeDecl.identifier.Begin(),
@@ -242,7 +242,7 @@ void TypeChecker::TypeCheckerImpl::AddObjCIdSuperInterfaceObjCInterop(ASTContext
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckInterfaceDecl(ASTContext& ctx, InterfaceDecl& id)
+void TypeCheckerImpl::CheckInterfaceDecl(ASTContext& ctx, InterfaceDecl& id)
 {
     if (id.TestAttr(Attribute::IS_CHECK_VISITED)) {
         return;

@@ -30,8 +30,8 @@ OwnedPtr<MatchCase> GetValueMatchCase(
     
     someArg->EnableAttr(Attribute::COMPILER_ADD);
     // 'x' in '=> x'.
-    someVar.ref.target = someArg->varDecl.get();
-    someVar.SetTy(someVar.ref.target->GetTy());
+    someVar.ref.SetTarget(someArg->varDecl.get());
+    someVar.SetTy(someVar.ref.GetTarget()->GetTy());
     // Enum pattern 'Some(x)'.
     auto enumPattern = MakeOwnedNode<EnumPattern>();
     CopyBasicInfo(someExpr.get(), enumPattern.get());
@@ -60,7 +60,7 @@ OwnedPtr<MatchCase> GetValueMatchCase(
  * }
  * NOTE: this happens before generic instantiation.
  */
-OwnedPtr<Expr> TypeChecker::TypeCheckerImpl::ConstructOptionMatch(OwnedPtr<Expr> selector, OwnedPtr<Block> someExpr,
+OwnedPtr<Expr> TypeCheckerImpl::ConstructOptionMatch(OwnedPtr<Expr> selector, OwnedPtr<Block> someExpr,
     OwnedPtr<Block> otherExpr, RefExpr& someVar, Ptr<Ty> someTy) const
 {
     Ptr<FuncDecl> ctorDecl = nullptr;
@@ -82,7 +82,7 @@ OwnedPtr<Expr> TypeChecker::TypeCheckerImpl::ConstructOptionMatch(OwnedPtr<Expr>
     matchExpr->selector = std::move(selector);
 
     auto valueRef = CreateRefExpr({OPTION_VALUE_CTOR, DEFAULT_POSITION, DEFAULT_POSITION, false}, someTy);
-    valueRef->ref.target = ctorDecl;
+    valueRef->ref.SetTarget(ctorDecl);
     auto valMatchCase = GetValueMatchCase(std::move(valueRef), std::move(someExpr), someVar, *matchExpr->selector);
     matchExpr->matchCases.emplace_back(std::move(valMatchCase));
 
@@ -112,7 +112,7 @@ OwnedPtr<Expr> TypeChecker::TypeCheckerImpl::ConstructOptionMatch(OwnedPtr<Expr>
  *     case $None => 11
  * }
  */
-void TypeChecker::TypeCheckerImpl::DesugarForCoalescing(BinaryExpr& binaryExpr) const
+void TypeCheckerImpl::DesugarForCoalescing(BinaryExpr& binaryExpr) const
 {
     // Caller guarantees the 'binaryExpr.desugarExpr' is not existed.
     CJC_ASSERT(binaryExpr.rightExpr && binaryExpr.leftExpr);
@@ -141,7 +141,7 @@ void TypeChecker::TypeCheckerImpl::DesugarForCoalescing(BinaryExpr& binaryExpr) 
     }
 }
 
-void TypeChecker::TypeCheckerImpl::TryDesugarForCoalescing(Node& root) const
+void TypeCheckerImpl::TryDesugarForCoalescing(Node& root) const
 {
     std::function<VisitAction(Ptr<Node>)> visitBe = [this](Ptr<Node> node) -> VisitAction {
         if (auto be = DynamicCast<BinaryExpr*>(node); be && be->op == TokenKind::COALESCING && !be->desugarExpr) {

@@ -7,6 +7,7 @@
 #ifndef CANGJIE_CACHE_DATA_UTILS_H
 #define CANGJIE_CACHE_DATA_UTILS_H
 
+#include "cangjie/AST/Nodes/Decl.h"
 #include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"

@@ -13,10 +13,20 @@
 #include "MergeAnnoFromCjd.h"
 
 #include "cangjie/AST/Create.h"
+#include "cangjie/AST/Nodes/Annotation.h"
+#include "cangjie/AST/Nodes/ExtendDecl.h"
+#include "cangjie/AST/Nodes/FuncDecl.h"
+#include "cangjie/AST/Nodes/FuncArg.h"
+#include "cangjie/AST/Nodes/FuncParamList.h"
+#include "cangjie/AST/Nodes/InterpolationExpr.h"
+#include "cangjie/AST/Nodes/LitConstExpr.h"
+#include "cangjie/AST/Nodes/MacroInvocation.h"
+#include "cangjie/AST/Nodes/Pattern.h"
+#include "cangjie/AST/Nodes/Type.h"
 #include "cangjie/AST/PrintNode.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
-#include "cangjie/Utils/CastingTemplate.h"
+#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/Utils/ICEUtil.h"
 #include "cangjie/Utils/SafePointer.h"
 
@@ -301,8 +311,6 @@ bool IsSameFuncByIdentifier(Ptr<FuncBody> lb, Ptr<FuncBody> rb)
     }
     return true;
 }
-
-bool IsSameDeclByIdentifier(Ptr<Decl> l, Ptr<Decl> r);
 
 void ColllectPattern(Ptr<Pattern> pattern, std::unordered_map<Ptr<Decl>, Ptr<Decl>>& topDeclMapping,
     std::vector<OwnedPtr<Annotation>>& annos)

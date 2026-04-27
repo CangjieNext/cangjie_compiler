@@ -17,7 +17,7 @@ using namespace AST;
 using namespace TypeCheckUtil;
 using namespace Sema::Desugar::AfterTypeCheck;
 
-void TypeChecker::TypeCheckerImpl::DesugarTokenCallExpr(ASTContext& ctx, CallExpr& ce)
+void TypeCheckerImpl::DesugarTokenCallExpr(ASTContext& ctx, CallExpr& ce)
 {
     if (!Ty::IsTyCorrect(ce.GetTy()) || ce.desugarExpr != nullptr ||
         ce.sugarKind == Expr::SugarKind::TOKEN_CALL) {
@@ -27,8 +27,9 @@ void TypeChecker::TypeCheckerImpl::DesugarTokenCallExpr(ASTContext& ctx, CallExp
         return;
     }
     auto re = StaticCast<RefExpr>(ce.baseFunc.get());
+    auto refTargets = re->ref.GetTargets();
     if (re->ref.identifier != "Token" || ce.args.empty() || ce.args.size() > G_TOKEN_ARG_NUM ||
-        re->ref.targets.empty() || re->ref.targets[0]->fullPackageName != "std.ast") {
+        refTargets.empty() || refTargets[0]->fullPackageName != "std.ast") {
         // If Token() args num is greater than 2, the token already has a position.
         return;
     }

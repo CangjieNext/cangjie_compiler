@@ -10,12 +10,14 @@
  * This file implements the API ResolveMacroCall.
  */
 #include "cangjie/AST/Nodes/FuncDecl.h"
+#include "cangjie/AST/Nodes/MacroInvocation.h"
 #include "cangjie/AST/Nodes/Package.h"
+#include "cangjie/AST/Nodes/TypeAliasDecl.h"
+#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/Basic/DiagnosticEmitter.h"
 #include "cangjie/Macro/MacroCall.h"
 #include "cangjie/Macro/TokenSerialization.h"
 #include "cangjie/Modules/ImportManager.h"
-#include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
 namespace {

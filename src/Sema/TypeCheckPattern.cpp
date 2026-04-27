@@ -191,7 +191,7 @@ bool IsSubtypeBoxed(TypeManager& typeManager, Ty& leaf, Ty& root)
 }
 }; // namespace
 
-bool TypeChecker::TypeCheckerImpl::ChkPattern(ASTContext& ctx, Ty& target, Pattern& p, bool isPatternInMatch)
+bool TypeCheckerImpl::ChkPattern(ASTContext& ctx, Ty& target, Pattern& p, bool isPatternInMatch)
 {
     switch (p.astKind) {
         case ASTKind::WILDCARD_PATTERN: {
@@ -235,13 +235,13 @@ bool TypeChecker::TypeCheckerImpl::ChkPattern(ASTContext& ctx, Ty& target, Patte
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkWildcardPattern(Ty& target, WildcardPattern& p) const
+bool TypeCheckerImpl::ChkWildcardPattern(Ty& target, WildcardPattern& p) const
 {
     p.SetTy(&target);
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkConstPattern(ASTContext& ctx, Ty& target, ConstPattern& p)
+bool TypeCheckerImpl::ChkConstPattern(ASTContext& ctx, Ty& target, ConstPattern& p)
 {
     CJC_NULLPTR_CHECK(p.literal);
     // 1. Check the type of the literal in the constant pattern.
@@ -279,7 +279,7 @@ bool TypeChecker::TypeCheckerImpl::ChkConstPattern(ASTContext& ctx, Ty& target, 
     return ChkOpOverloadForConstPattern(ctx, target, p);
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkOpOverloadForConstPattern(ASTContext& ctx, Ty& target, ConstPattern& p)
+bool TypeCheckerImpl::ChkOpOverloadForConstPattern(ASTContext& ctx, Ty& target, ConstPattern& p)
 {
     auto boolTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
     auto callExpr = MakeOwnedNode<CallExpr>();
@@ -311,7 +311,7 @@ bool TypeChecker::TypeCheckerImpl::ChkOpOverloadForConstPattern(ASTContext& ctx,
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkTypePattern(ASTContext& ctx, Ty& target, TypePattern& p)
+bool TypeCheckerImpl::ChkTypePattern(ASTContext& ctx, Ty& target, TypePattern& p)
 {
     CJC_NULLPTR_CHECK(p.pattern);
     CJC_NULLPTR_CHECK(p.type);
@@ -337,7 +337,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTypePattern(ASTContext& ctx, Ty& target, T
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkVarPattern(const ASTContext& ctx, Ty& target, VarPattern& p)
+bool TypeCheckerImpl::ChkVarPattern(const ASTContext& ctx, Ty& target, VarPattern& p)
 {
     if (p.varDecl->identifier != V_COMPILER) {
         auto decls = ctx.GetDeclsByName({p.varDecl->identifier, p.varDecl->scopeName});
@@ -368,7 +368,7 @@ bool TypeChecker::TypeCheckerImpl::ChkVarPattern(const ASTContext& ctx, Ty& targ
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkEnumPattern(ASTContext& ctx, Ty& target, EnumPattern& p)
+bool TypeCheckerImpl::ChkEnumPattern(ASTContext& ctx, Ty& target, EnumPattern& p)
 {
     CJC_NULLPTR_CHECK(p.constructor);
     bool mayMatch = false;
@@ -407,7 +407,7 @@ bool TypeChecker::TypeCheckerImpl::ChkEnumPattern(ASTContext& ctx, Ty& target, E
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::IsFuncTyEnumPatternMatched(
+bool TypeCheckerImpl::IsFuncTyEnumPatternMatched(
     ASTContext& ctx, Ty& target, const FuncTy& funcTy, const EnumPattern& p)
 {
     if (funcTy.paramTys.size() != p.patterns.size()) {
@@ -427,7 +427,7 @@ bool TypeChecker::TypeCheckerImpl::IsFuncTyEnumPatternMatched(
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkVarOrEnumPattern(ASTContext& ctx, Ty& target, VarOrEnumPattern& p)
+bool TypeCheckerImpl::ChkVarOrEnumPattern(ASTContext& ctx, Ty& target, VarOrEnumPattern& p)
 {
     if (p.pattern != nullptr) {
         // We have to ChkPattern again because of the LSPCompilerInstance.
@@ -464,7 +464,7 @@ bool TypeChecker::TypeCheckerImpl::ChkVarOrEnumPattern(ASTContext& ctx, Ty& targ
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkTuplePattern(ASTContext& ctx, Ty& target, TuplePattern& p, bool isPatternInMatch)
+bool TypeCheckerImpl::ChkTuplePattern(ASTContext& ctx, Ty& target, TuplePattern& p, bool isPatternInMatch)
 {
     if (auto tupleTy = DynamicCast<TupleTy*>(&target); tupleTy) {
         if (tupleTy->typeArgs.size() != p.patterns.size()) {
@@ -491,16 +491,18 @@ bool TypeChecker::TypeCheckerImpl::ChkTuplePattern(ASTContext& ctx, Ty& target, 
     return true;
 }
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::FindEnumPatternTargets(
+std::vector<Ptr<Decl>> TypeCheckerImpl::FindEnumPatternTargets(
     ASTContext& ctx, Ptr<EnumDecl> ed, EnumPattern& ep)
 {
     if (auto ma = DynamicCast<MemberAccess*>(ep.constructor.get()); ma) {
         InferMemberAccess(ctx, *ma);
-        if (!ma->target || !ma->target->outerDecl || ma->target->outerDecl->astKind != ASTKind::ENUM_DECL) {
+        auto maTarget = ma->GetTarget();
+        if (!maTarget || !maTarget->outerDecl || maTarget->outerDecl->astKind != ASTKind::ENUM_DECL) {
             return {};
         }
-        std::vector<Ptr<Decl>> result{ma->target};
-        result.insert(result.end(), ma->targets.begin(), ma->targets.end());
+        std::vector<Ptr<Decl>> result{maTarget};
+        auto maTargets = ma->GetTargets();
+        result.insert(result.end(), maTargets.begin(), maTargets.end());
         return result;
     } else if (ed) {
         return FieldLookup(ctx, ed, ep.GetIdentifier(), {.lookupExtend = false});
@@ -508,18 +510,20 @@ std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::FindEnumPatternTargets(
         // in case selector is placeholder
         re->callOrPattern = &ep;
         InferRefExpr(ctx, *re);
-        if (!re->ref.target || !re->ref.target->outerDecl || re->ref.target->outerDecl->astKind != ASTKind::ENUM_DECL) {
+        auto reTarget = re->ref.GetTarget();
+        if (!reTarget || !reTarget->outerDecl || reTarget->outerDecl->astKind != ASTKind::ENUM_DECL) {
             return {};
         }
-        std::vector<Ptr<Decl>> result{re->ref.target};
-        result.insert(result.end(), re->ref.targets.begin(), re->ref.targets.end());
+        std::vector<Ptr<Decl>> result{reTarget};
+        auto reTargets = re->ref.GetTargets();
+        result.insert(result.end(), reTargets.begin(), reTargets.end());
         return result;
     }
     return {};
 }
 
 // Use enumType to determine enumPattern's target recursively.
-void TypeChecker::TypeCheckerImpl::FindEnumPatternTarget(ASTContext& ctx, Ptr<EnumDecl> ed, EnumPattern& ep)
+void TypeCheckerImpl::FindEnumPatternTarget(ASTContext& ctx, Ptr<EnumDecl> ed, EnumPattern& ep)
 {
     CJC_NULLPTR_CHECK(ep.constructor);
     // Search the enum element in enumDecl.
@@ -574,7 +578,7 @@ void TypeChecker::TypeCheckerImpl::FindEnumPatternTarget(ASTContext& ctx, Ptr<En
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkTryWildcardPattern(
+bool TypeCheckerImpl::ChkTryWildcardPattern(
     Ptr<Ty> target, WildcardPattern& p, std::vector<Ptr<Ty>>& included)
 {
     p.SetTy(target);
@@ -586,7 +590,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTryWildcardPattern(
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkExceptTypePattern(
+bool TypeCheckerImpl::ChkExceptTypePattern(
     ASTContext& ctx, ExceptTypePattern& etp, std::vector<Ptr<Ty>>& included)
 {
     bool result = true;
@@ -626,7 +630,7 @@ bool TypeChecker::TypeCheckerImpl::ChkExceptTypePattern(
     return Check(ctx, etp.GetTy(), etp.pattern.get());
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkHandlePatterns(ASTContext& ctx, Handler& h,
+bool TypeCheckerImpl::ChkHandlePatterns(ASTContext& ctx, Handler& h,
     std::vector<Ptr<Ty>>& included)
 {
     auto& ctp = *StaticAs<ASTKind::COMMAND_TYPE_PATTERN>(h.commandPattern.get());
@@ -641,7 +645,7 @@ bool TypeChecker::TypeCheckerImpl::ChkHandlePatterns(ASTContext& ctx, Handler& h
     return Check(ctx, ctp.GetTy(), ctp.pattern.get());
 }
 
-std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::ChkCommandTypePattern(
+std::optional<Ptr<Ty>> TypeCheckerImpl::ChkCommandTypePattern(
     ASTContext& ctx, CommandTypePattern& ctp, std::vector<Ptr<Ty>>& included)
 {
     CJC_ASSERT(ctp.types.size() == 1);

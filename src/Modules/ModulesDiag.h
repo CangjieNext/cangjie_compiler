@@ -18,6 +18,11 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Modules/ImportManager.h"
 
+namespace Cangjie::AST {
+struct FeaturesDirective;
+struct PackageSpec;
+}
+
 namespace Cangjie::Modules {
 using namespace AST;
 void WarnUselessImport(DiagnosticEngine& diag, const Range& importRange, const Decl& decl);

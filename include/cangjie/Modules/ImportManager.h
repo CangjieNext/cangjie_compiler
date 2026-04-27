@@ -19,14 +19,11 @@
 #include <set>
 #include <unordered_map>
 
-#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Nodes/CmpNodeByPos.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/Interpreter/BCHIR.h"
 #include "cangjie/Modules/CjoManager.h"
 #include "cangjie/Utils/CheckUtils.h"
-
-#include "CjoManager.h"
 
 namespace Cangjie {
 class DefaultCompilerInstance;
@@ -35,6 +32,9 @@ class ASTLoader;
 class ASTWriter;
 class CjoManager;
 
+namespace AST {
+struct Type;
+}
 struct ExternalLibCfg {
     std::string name;
     std::string path;
@@ -158,7 +158,7 @@ public:
     template <typename T> T* GetImportedDecl(const std::string& fullPackageName, const std::string& name) const
     {
         Ptr<AST::Decl> decl = GetImportedDecl(fullPackageName, name);
-        return DynamicCast<T*>(decl);
+        return dynamic_cast<T*>(decl.get());
     }
     Ptr<AST::Decl> GetAstDecl(const std::string& name) const
     {
@@ -167,7 +167,7 @@ public:
     template <typename T> T* GetAstDecl(const std::string& name) const
     {
         auto decl = GetAstDecl(name);
-        return DynamicCast<T*>(decl);
+        return dynamic_cast<T*>(decl.get());
     }
     Ptr<AST::Decl> GetCoreDecl(const std::string& name) const
     {
@@ -176,7 +176,7 @@ public:
     template <typename T> T* GetCoreDecl(const std::string& name) const
     {
         Ptr<AST::Decl> decl = GetCoreDecl(name);
-        return DynamicCast<T*>(decl);
+        return dynamic_cast<T*>(decl.get());
     }
     Ptr<AST::Decl> GetSyncDecl(const std::string& name) const
     {
@@ -262,10 +262,7 @@ public:
     }
 
     /** @brief Clear the cache for BCHIR packages. */
-    void ClearPackageBCHIRCache()
-    {
-        bchirFileCacheMap.clear();
-    }
+    void ClearPackageBCHIRCache();
 
     /** Set BCHIRCache. only for lsp. */
     void SetUseBCHIRCache(bool shouldImport)
@@ -334,7 +331,7 @@ public:
      */
     bool implicitPrelude{false};
 
-    std::unordered_map<std::string, Cangjie::CHIR::Interpreter::Bchir> importedBchirs;
+    std::unordered_map<std::string, std::unique_ptr<Cangjie::CHIR::Interpreter::Bchir>> importedBchirs;
 
     const std::vector<std::string>& GetSearchPath() const
     {

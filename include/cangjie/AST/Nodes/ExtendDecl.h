@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -10,6 +10,8 @@
 #include "cangjie/AST/Nodes/InheritableDecl.h"
 
 namespace Cangjie::AST {
+struct DummyBody;
+
 /**
  * An ExtendDecl node represents a extend declaration.
  */
@@ -20,9 +22,8 @@ struct ExtendDecl : InheritableDecl {
     Position leftCurlPos;                /**< The position of '{'. */
     std::vector<OwnedPtr<Decl>> members; /**< Declarations of the extend decl. */
     Position rightCurlPos;               /**< The position of '}'. */
-    ExtendDecl() : InheritableDecl(ASTKind::EXTEND_DECL)
-    {
-    }
+    ExtendDecl();
+    ~ExtendDecl();
     std::vector<OwnedPtr<Decl>>& GetMemberDecls() override
     {
         return members;

@@ -67,7 +67,7 @@ bool IsUpperBoundsValid(const std::vector<OwnedPtr<Type>>& upperBounds)
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::PerformAssumeReferenceTypeUpperBound(TyVarUB& typeConstraintCollection,
+void TypeCheckerImpl::PerformAssumeReferenceTypeUpperBound(TyVarUB& typeConstraintCollection,
     GCBlames& blames, const AST::Type& referenceTypeUpperBound, const TypeSubst& typeMapping)
 {
     auto upperBoundTy = referenceTypeUpperBound.GetTy();
@@ -82,7 +82,7 @@ void TypeChecker::TypeCheckerImpl::PerformAssumeReferenceTypeUpperBound(TyVarUB&
     }
 }
 
-void TypeChecker::TypeCheckerImpl::AssumeOneUpperBound(
+void TypeCheckerImpl::AssumeOneUpperBound(
     TyVarUB& typeConstraintCollection, GCBlames& blames, const AST::Type& upperBound, const TypeSubst& typeMapping)
 {
     switch (upperBound.astKind) {
@@ -96,7 +96,7 @@ void TypeChecker::TypeCheckerImpl::AssumeOneUpperBound(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PerformAssumptionForOneGenericConstraint(
+void TypeCheckerImpl::PerformAssumptionForOneGenericConstraint(
     TyVarUB& typeConstraintCollection, GCBlames& blames, const GenericConstraint& gc, const TypeSubst& typeMapping)
 {
     auto subTypeTy = gc.type->GetTy();
@@ -124,7 +124,7 @@ void TypeChecker::TypeCheckerImpl::PerformAssumptionForOneGenericConstraint(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::Assumption(
+void TypeCheckerImpl::Assumption(
     TyVarUB& typeConstraintCollection, GCBlames& blames, const AST::Decl& decl, const TypeSubst& typeMapping)
 {
     Ptr<Generic> generic = decl.GetGeneric();

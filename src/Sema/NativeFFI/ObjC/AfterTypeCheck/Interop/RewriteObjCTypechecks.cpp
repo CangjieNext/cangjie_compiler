@@ -275,10 +275,10 @@ OwnedPtr<Block> CastAndSubstitudeVars(
         CJC_ASSERT(node);
 
         if (auto refExpr = DynamicCast<RefExpr>(node.get())) {
-            auto target = refExpr->ref.target;
+            auto target = refExpr->ref.GetTarget();
             if (auto castedVarIt = varsMapping.find(target); castedVarIt != varsMapping.end()) {
                 refExpr->ref.identifier = castedVarIt->second->identifier;
-                refExpr->ref.target = castedVarIt->second;
+                refExpr->ref.SetTarget(castedVarIt->second);
             }
         }
 

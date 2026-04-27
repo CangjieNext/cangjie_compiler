@@ -37,7 +37,7 @@ Ptr<Ty> GetIterableTy(TypeManager& tyMgr, ImportManager& importManager, Promotio
 }
 } // namespace
 
-bool TypeChecker::TypeCheckerImpl::ChkWhileExpr(ASTContext& ctx, Ty& target, WhileExpr& we)
+bool TypeCheckerImpl::ChkWhileExpr(ASTContext& ctx, Ty& target, WhileExpr& we)
 {
     Ptr<Ty> unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     bool isWellTyped = typeManager.IsSubtype(unitTy, &target);
@@ -48,7 +48,7 @@ bool TypeChecker::TypeCheckerImpl::ChkWhileExpr(ASTContext& ctx, Ty& target, Whi
     return isWellTyped;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynWhileExpr(ASTContext& ctx, WhileExpr& we)
+Ptr<Ty> TypeCheckerImpl::SynWhileExpr(ASTContext& ctx, WhileExpr& we)
 {
     bool isWellTyped = CheckCondition(ctx, *we.condExpr, false);
     isWellTyped = Ty::IsTyCorrect(Synthesize({ctx, SynPos::UNUSED}, we.body.get())) && isWellTyped;
@@ -56,7 +56,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynWhileExpr(ASTContext& ctx, WhileExpr& w
     return we.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkDoWhileExpr(ASTContext& ctx, Ty& target, DoWhileExpr& dwe)
+bool TypeCheckerImpl::ChkDoWhileExpr(ASTContext& ctx, Ty& target, DoWhileExpr& dwe)
 {
     Ptr<Ty> unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     bool isWellTyped = typeManager.IsSubtype(unitTy, &target);
@@ -67,7 +67,7 @@ bool TypeChecker::TypeCheckerImpl::ChkDoWhileExpr(ASTContext& ctx, Ty& target, D
     return isWellTyped;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynDoWhileExpr(ASTContext& ctx, DoWhileExpr& dwe)
+Ptr<Ty> TypeCheckerImpl::SynDoWhileExpr(ASTContext& ctx, DoWhileExpr& dwe)
 {
     bool isWellTyped = Ty::IsTyCorrect(Synthesize({ctx, SynPos::UNUSED}, dwe.body.get()));
     isWellTyped = CheckCondition(ctx, *dwe.condExpr, false) && isWellTyped;
@@ -75,7 +75,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynDoWhileExpr(ASTContext& ctx, DoWhileExp
     return dwe.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkForInExpr(ASTContext& ctx, Ty& target, ForInExpr& fie)
+bool TypeCheckerImpl::ChkForInExpr(ASTContext& ctx, Ty& target, ForInExpr& fie)
 {
     Ptr<Ty> unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     bool isWellTyped = typeManager.IsSubtype(unitTy, &target);
@@ -89,7 +89,7 @@ bool TypeChecker::TypeCheckerImpl::ChkForInExpr(ASTContext& ctx, Ty& target, For
     return isWellTyped;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynForInExpr(ASTContext& ctx, ForInExpr& fie)
+Ptr<Ty> TypeCheckerImpl::SynForInExpr(ASTContext& ctx, ForInExpr& fie)
 {
     CJC_NULLPTR_CHECK(fie.inExpression);
     CJC_NULLPTR_CHECK(fie.pattern);

@@ -70,7 +70,7 @@ void SetFuncBodyCaptureKind(FuncBody& fb)
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::CheckLegalityOfUsage(ASTContext& ctx, AST::Package& pkg)
+void TypeCheckerImpl::CheckLegalityOfUsage(ASTContext& ctx, AST::Package& pkg)
 {
     Utils::ProfileRecorder recorder("Post TypeCheck", "CheckLegalityOfUsage");
     // Check whether value type decl contains value type recursive dependency.
@@ -94,7 +94,7 @@ void TypeChecker::TypeCheckerImpl::CheckLegalityOfUsage(ASTContext& ctx, AST::Pa
     CheckSubscriptLegality(pkg);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckStaticMemberWithGeneric(
+void TypeCheckerImpl::CheckStaticMemberWithGeneric(
     Decl& member, const std::vector<Ptr<Ty>>& outerGenericTys)
 {
     // Static member variables, properties and init func can't depend on generic parameters of outer type.
@@ -139,7 +139,7 @@ void TypeChecker::TypeCheckerImpl::CheckStaticMemberWithGeneric(
     Walker(&member, preVisitor).Walk();
 }
 
-void TypeChecker::TypeCheckerImpl::CheckStaticMembersWithGeneric(const Package& pkg)
+void TypeCheckerImpl::CheckStaticMembersWithGeneric(const Package& pkg)
 {
     IterateToplevelDecls(pkg, [this](auto& decl) {
         if (!decl || !decl->generic || decl->generic->typeParameters.empty()) {
@@ -156,7 +156,7 @@ void TypeChecker::TypeCheckerImpl::CheckStaticMembersWithGeneric(const Package& 
     });
 }
 
-void TypeChecker::TypeCheckerImpl::CheckValueTypeRecursive(const Package& pkg)
+void TypeCheckerImpl::CheckValueTypeRecursive(const Package& pkg)
 {
     IterateToplevelDecls(pkg, [this](auto& decl) {
         if (decl->astKind == ASTKind::ENUM_DECL || decl->astKind == ASTKind::STRUCT_DECL) {
@@ -170,7 +170,7 @@ void TypeChecker::TypeCheckerImpl::CheckValueTypeRecursive(const Package& pkg)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckClosures(const ASTContext& ctx, Node& node) const
+void TypeCheckerImpl::CheckClosures(const ASTContext& ctx, Node& node) const
 {
     // 1. mark all reference capture status.
     Walker(&node, [&ctx, this](auto node) {
@@ -195,7 +195,7 @@ void TypeChecker::TypeCheckerImpl::CheckClosures(const ASTContext& ctx, Node& no
     }).Walk();
 }
 
-void TypeChecker::TypeCheckerImpl::CheckSubscriptLegality(Node& node)
+void TypeCheckerImpl::CheckSubscriptLegality(Node& node)
 {
     auto postVisit = [this](Ptr<Node> node) -> VisitAction {
         if (node->astKind != ASTKind::SUBSCRIPT_EXPR) {
@@ -232,7 +232,7 @@ void TypeChecker::TypeCheckerImpl::CheckSubscriptLegality(Node& node)
     walker.Walk();
 }
 
-void TypeChecker::TypeCheckerImpl::CheckAllInvocationHasImpl(const ASTContext& ctx, Node& node)
+void TypeCheckerImpl::CheckAllInvocationHasImpl(const ASTContext& ctx, Node& node)
 {
     auto preVisit = [this, &ctx](Ptr<Node> node) -> VisitAction {
         if (node->astKind != ASTKind::MEMBER_ACCESS) {

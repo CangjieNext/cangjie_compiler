@@ -14,7 +14,7 @@ using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
 
-bool TypeChecker::TypeCheckerImpl::CheckRangeElements(ASTContext& ctx, Ptr<Ty> elemTy, const RangeExpr& re)
+bool TypeCheckerImpl::CheckRangeElements(ASTContext& ctx, Ptr<Ty> elemTy, const RangeExpr& re)
 {
     bool isWellTyped = !re.startExpr || Check(ctx, elemTy, re.startExpr.get());
     isWellTyped = (!re.stopExpr || Check(ctx, elemTy, re.stopExpr.get())) && isWellTyped;
@@ -44,7 +44,7 @@ bool TypeChecker::TypeCheckerImpl::CheckRangeElements(ASTContext& ctx, Ptr<Ty> e
     return isWellTyped;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkRangeExpr(ASTContext& ctx, Ty& target, RangeExpr& re)
+bool TypeCheckerImpl::ChkRangeExpr(ASTContext& ctx, Ty& target, RangeExpr& re)
 {
     re.SetTy(TypeManager::GetInvalidTy()); // Set type invalid first, will be updated if check passed.
     re.decl = importManager.GetCoreDecl<StructDecl>("Range");
@@ -99,7 +99,7 @@ bool TypeChecker::TypeCheckerImpl::ChkRangeExpr(ASTContext& ctx, Ty& target, Ran
     return isWellTyped;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynRangeExpr(ASTContext& ctx, RangeExpr& re)
+Ptr<Ty> TypeCheckerImpl::SynRangeExpr(ASTContext& ctx, RangeExpr& re)
 {
     re.SetTy(TypeManager::GetInvalidTy()); // Set type invalid first, will be updated if check passed.
     re.decl = importManager.GetCoreDecl<StructDecl>("Range");
@@ -119,7 +119,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynRangeExpr(ASTContext& ctx, RangeExpr& r
     return re.GetTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynRangeExprInferElemTy(const RangeExpr& re, ASTContext& ctx)
+Ptr<Ty> TypeCheckerImpl::SynRangeExprInferElemTy(const RangeExpr& re, ASTContext& ctx)
 {
     // If type of startExpr is Nothing or startExpr is litconst when only one of start/stop is litconst,
     // using type of stopExpr or default Int64 type.

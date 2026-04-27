@@ -17,6 +17,9 @@
 #include "TypeCheckUtil.h"
 
 #include "cangjie/AST/ASTContext.h"
+#include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Nodes/EnumDecl.h"
+#include "cangjie/AST/Nodes/RefExpr.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/Utils/Utils.h"
@@ -46,7 +49,7 @@ std::vector<Ptr<Decl>> EnumSugarTargetsFinder::FindEnumSugarTargets()
         }
         Utils::EraseIf(decls, [this](auto decl) {
             CJC_NULLPTR_CHECK(decl);
-            auto& ed = *StaticCast<EnumDecl*>(decl->outerDecl);
+            auto& ed = *RawStaticCast<EnumDecl*>(decl->outerDecl);
             // Filter out the `enum`s that mismatch the number of type arguments.
             return !refExpr.typeArguments.empty() &&
                 (ed.generic == nullptr || (refExpr.typeArguments.size() != ed.generic->typeParameters.size()));

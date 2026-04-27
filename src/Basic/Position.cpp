@@ -18,6 +18,11 @@
 using namespace Cangjie;
 using Cangjie::Position;
 
+// Define the global constants
+const Position Cangjie::INVALID_POSITION{0, 0, 0};
+const Position Cangjie::BEGIN_POSITION{0, 1, 1};
+const Position Cangjie::DEFAULT_POSITION{0, -1, -1};
+
 bool Position::operator==(const Position& rhs) const
 {
     return std::tie(line, column) == std::tie(rhs.line, rhs.column);

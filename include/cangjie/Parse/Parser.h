@@ -130,7 +130,7 @@ public:
 
     /// Issue a diagnostic. If the parsing context is in a macro call, consider it.
     template <typename... Args>
-    DiagnosticBuilder ParseDiagnoseRefactor(std::string_view kindName, const Position pos, Args&&... args)
+    DiagnosticBuilder ParseDiagnoseRefactor(std::string_view kind, const Position pos, Args&&... args)
     {
         auto n = MakeOwned<AST::Node>();
         n->begin = pos;
@@ -138,11 +138,11 @@ public:
         if (CurMacroCall()) {
             n->curMacroCall = CurMacroCall();
         }
-        return GetDiagnosticEngine().DiagnoseRefactor(kindName, *n, pos, std::forward<Args>(args)...);
+        return GetDiagnosticEngine().DiagnoseRefactor(kind, *n, pos, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    DiagnosticBuilder ParseDiagnoseRefactor(std::string_view kindName, const Range range, Args&&... args)
+    DiagnosticBuilder ParseDiagnoseRefactor(std::string_view kind, const Range range, Args&&... args)
     {
         auto n = MakeOwned<AST::Node>();
         n->begin = range.begin;
@@ -150,11 +150,11 @@ public:
         if (CurMacroCall()) {
             n->curMacroCall = CurMacroCall();
         }
-        return GetDiagnosticEngine().DiagnoseRefactor(kindName, *n, range, std::forward<Args>(args)...);
+        return GetDiagnosticEngine().DiagnoseRefactor(kind, *n, range, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    DiagnosticBuilder ParseDiagnoseRefactor(std::string_view kindName, const Token& token, Args&&... args)
+    DiagnosticBuilder ParseDiagnoseRefactor(std::string_view kind, const Token& token, Args&&... args)
     {
         auto n = MakeOwned<AST::Node>();
         n->begin = token.Begin();
@@ -162,11 +162,11 @@ public:
         if (CurMacroCall()) {
             n->curMacroCall = CurMacroCall();
         }
-        return GetDiagnosticEngine().DiagnoseRefactor(kindName, *n, token, std::forward<Args>(args)...);
+        return GetDiagnosticEngine().DiagnoseRefactor(kind, *n, token, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    DiagnosticBuilder ParseDiagnoseRefactor(std::string_view kindName, const AST::Node& node, Args&&... args)
+    DiagnosticBuilder ParseDiagnoseRefactor(std::string_view kind, const AST::Node& node, Args&&... args)
     {
         auto n = MakeOwned<AST::Node>();
         n->begin = node.begin;
@@ -174,7 +174,7 @@ public:
         if (CurMacroCall()) {
             n->curMacroCall = CurMacroCall();
         }
-        return GetDiagnosticEngine().DiagnoseRefactor(kindName, *n, std::forward<Args>(args)...);
+        return GetDiagnosticEngine().DiagnoseRefactor(kind, *n, std::forward<Args>(args)...);
     }
     /// Skip next token if token kind satisfied
     bool Skip(TokenKind kind);

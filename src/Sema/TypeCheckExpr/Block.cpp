@@ -12,7 +12,7 @@
 using namespace Cangjie;
 using namespace Sema;
 
-bool TypeChecker::TypeCheckerImpl::SynthesizeAndReplaceIdealTy(const CheckerContext& ctx, Node& node)
+bool TypeCheckerImpl::SynthesizeAndReplaceIdealTy(const CheckerContext& ctx, Node& node)
 {
     // Call `Synthesize` on declares containing invalid types may return valid types.
     // Therefore, we need to know if there are any errors during the inference process.
@@ -22,7 +22,7 @@ bool TypeChecker::TypeCheckerImpl::SynthesizeAndReplaceIdealTy(const CheckerCont
     return valid;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBlock(const CheckerContext& ctx, Block& b)
+Ptr<Ty> TypeCheckerImpl::SynBlock(const CheckerContext& ctx, Block& b)
 {
     if (b.body.empty()) {
         b.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
@@ -46,7 +46,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBlock(const CheckerContext& ctx, Block&
     return b.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkBlock(ASTContext& ctx, Ty& target, Block& b)
+bool TypeCheckerImpl::ChkBlock(ASTContext& ctx, Ty& target, Block& b)
 {
     Ptr<Ty> unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     if (b.body.empty()) {

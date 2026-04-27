@@ -7,7 +7,6 @@
 #ifndef CANGJIE_CHIR_TOSTRING_UTILS_H
 #define CANGJIE_CHIR_TOSTRING_UTILS_H
 
-#include "cangjie/AST/Nodes/OverflowStrategy.h"
 #include "cangjie/CHIR/IR/IntrinsicKind.h"
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/CHIR/Utils/StringWrapper.h"
@@ -19,6 +18,10 @@
 #include <iostream>
 #include <set>
 #include <vector>
+
+namespace Cangjie {
+enum class OverflowStrategy : uint8_t;
+}
 
 namespace Cangjie::CHIR {
 /**

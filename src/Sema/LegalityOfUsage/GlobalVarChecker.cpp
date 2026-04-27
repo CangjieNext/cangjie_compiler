@@ -71,8 +71,8 @@ bool IsGlobalOrStaticOrConstVar(const Decl& decl)
 
 bool IsRefGlobalOrStaticVar(const RefExpr& re)
 {
-    CJC_ASSERT(re.ref.target);
-    return IsGlobalOrStaticOrConstVar(*re.ref.target);
+    CJC_ASSERT(re.ref.GetTarget());
+    return IsGlobalOrStaticOrConstVar(*re.ref.GetTarget());
 }
 
 Ptr<Decl> GetTargetIfShouldCollect(const Expr& expr)
@@ -503,13 +503,14 @@ void GlobalVarChecker::CollectVarUsageBFSImpl(const Node& node, std::queue<Ptr<c
 
 void GlobalVarChecker::CollectInRefExpr(const RefExpr& re)
 {
-    if (re.ref.target == nullptr || re.ref.target->astKind == ASTKind::GENERIC_PARAM_DECL || re.isThis ||
-        re.ref.target->TestAnyAttr(Attribute::IMPORTED, Attribute::FOREIGN, Attribute::ENUM_CONSTRUCTOR)) {
+    auto reTarget = re.ref.GetTarget();
+    if (reTarget == nullptr || reTarget->astKind == ASTKind::GENERIC_PARAM_DECL || re.isThis ||
+        reTarget->TestAnyAttr(Attribute::IMPORTED, Attribute::FOREIGN, Attribute::ENUM_CONSTRUCTOR)) {
         return;
     }
     // If referring a global or static variable, add it in the graph.
     if (IsRefGlobalOrStaticVar(re)) {
-        auto targetVarDecl = StaticAs<ASTKind::VAR_DECL>(re.ref.target);
+        auto targetVarDecl = StaticAs<ASTKind::VAR_DECL>(reTarget);
         CJC_ASSERT(targetVarDecl);
         graph.AddEdge(currentNode->var, *targetVarDecl, re);
     }
@@ -518,14 +519,15 @@ void GlobalVarChecker::CollectInRefExpr(const RefExpr& re)
 
 void GlobalVarChecker::CollectInMemberAccessExpr(const MemberAccess& ma)
 {
-    if (!ma.target) {
+    auto maTarget = ma.GetTarget();
+    if (!maTarget) {
         return;
     }
     // If referring a global or static variable via a member access,
     // e.g., SomeClass.some_static_variable,
     // add it in the graph.
-    if (IsGlobalOrStaticOrConstVar(*ma.target)) {
-        auto varDecl = StaticAs<ASTKind::VAR_DECL>(ma.target);
+    if (IsGlobalOrStaticOrConstVar(*maTarget)) {
+        auto varDecl = StaticAs<ASTKind::VAR_DECL>(maTarget);
         CJC_ASSERT(varDecl);
         graph.AddEdge(currentNode->var, *varDecl, ma);
     }
@@ -668,7 +670,7 @@ void GlobalVarChecker::DoCheck(const Package& package)
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::CheckGlobalVarInitialization([[maybe_unused]]ASTContext& ctx, const Package& package)
+void TypeCheckerImpl::CheckGlobalVarInitialization([[maybe_unused]]ASTContext& ctx, const Package& package)
 {
     GlobalVarChecker checker(diag);
     checker.DoCollect(package);

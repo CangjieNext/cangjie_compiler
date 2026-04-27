@@ -56,7 +56,7 @@ inline bool CheckForQuestFuncRetType(DiagnosticEngine& diag, Decl& target, const
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::CheckThisOrSuper(const ASTContext& ctx, RefExpr& re)
+void TypeCheckerImpl::CheckThisOrSuper(const ASTContext& ctx, RefExpr& re)
 {
     re.SetTy(TypeManager::GetInvalidTy());
     auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, re.scopeName);
@@ -74,7 +74,7 @@ void TypeChecker::TypeCheckerImpl::CheckThisOrSuper(const ASTContext& ctx, RefEx
     // Legality of using this/super will be checked after typecheck in 'CheckLegalityOfReference'.
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::InferTypeOfThis(RefExpr& re, InheritableDecl& objDecl)
+Ptr<Ty> TypeCheckerImpl::InferTypeOfThis(RefExpr& re, InheritableDecl& objDecl)
 {
     Ptr<InheritableDecl> outerDecl = &objDecl;
     auto typeDecl = outerDecl;
@@ -100,7 +100,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::InferTypeOfThis(RefExpr& re, InheritableDe
     return ret;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::InferTypeOfSuper(RefExpr& re, const InheritableDecl& objDecl)
+Ptr<Ty> TypeCheckerImpl::InferTypeOfSuper(RefExpr& re, const InheritableDecl& objDecl)
 {
     // Super can only used in classDecl, if not in class decl, super's ty is invalid.
     if (objDecl.astKind != ASTKind::CLASS_DECL) {
@@ -118,7 +118,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::InferTypeOfSuper(RefExpr& re, const Inheri
     return TypeManager::GetInvalidTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::ReplaceWithGenericTyInInheritableDecl(
+Ptr<Ty> TypeCheckerImpl::ReplaceWithGenericTyInInheritableDecl(
     Ptr<Ty> ty, const Decl& outerDecl, const InheritableDecl& id)
 {
     if (!ty || !ty->HasGeneric()) {
@@ -149,7 +149,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::ReplaceWithGenericTyInInheritableDecl(
     return typeManager.GetBestInstantiatedTy(ty, typeMapping);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckUsageOfThis(const ASTContext& ctx, const RefExpr& re) const
+void TypeCheckerImpl::CheckUsageOfThis(const ASTContext& ctx, const RefExpr& re) const
 {
     auto outerDecl = GetCurInheritableDecl(ctx, re.scopeName);
     if (outerDecl == nullptr) {
@@ -210,7 +210,7 @@ void TypeChecker::TypeCheckerImpl::CheckUsageOfThis(const ASTContext& ctx, const
     CheckInvalidRefInCFunc(ctx, re);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckUsageOfSuper(const ASTContext& ctx, const RefExpr& re) const
+void TypeCheckerImpl::CheckUsageOfSuper(const ASTContext& ctx, const RefExpr& re) const
 {
     auto outerDecl = GetCurInheritableDecl(ctx, re.scopeName);
     if (outerDecl == nullptr) {
@@ -242,7 +242,7 @@ void TypeChecker::TypeCheckerImpl::CheckUsageOfSuper(const ASTContext& ctx, cons
     CheckInvalidRefInCFunc(ctx, re);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckThisOrSuperInInitializer(const Node& node, const RefExpr& re) const
+void TypeCheckerImpl::CheckThisOrSuperInInitializer(const Node& node, const RefExpr& re) const
 {
     if (node.astKind == ASTKind::VAR_DECL) {
         if (node.TestAttr(Attribute::STATIC)) {
@@ -255,7 +255,7 @@ void TypeChecker::TypeCheckerImpl::CheckThisOrSuperInInitializer(const Node& nod
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::IsRefTypeArgSizeValid(const Expr& expr, std::vector<Ptr<Decl>>& targets)
+bool TypeCheckerImpl::IsRefTypeArgSizeValid(const Expr& expr, std::vector<Ptr<Decl>>& targets)
 {
     auto typeArgs = expr.GetTypeArgs();
     if (typeArgs.empty()) {
@@ -282,7 +282,7 @@ bool TypeChecker::TypeCheckerImpl::IsRefTypeArgSizeValid(const Expr& expr, std::
     return isValid;
 }
 
-void TypeChecker::TypeCheckerImpl::FilterCandidatesForRef(
+void TypeCheckerImpl::FilterCandidatesForRef(
     const ASTContext& ctx, const RefExpr& re, std::vector<Ptr<Decl>>& targets)
 {
     auto curFuncBody = GetCurFuncBody(ctx, re.scopeName);
@@ -311,7 +311,7 @@ void TypeChecker::TypeCheckerImpl::FilterCandidatesForRef(
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::FilterInvalidEnumTargets(
+bool TypeCheckerImpl::FilterInvalidEnumTargets(
     const NameReferenceExpr& nre, std::vector<Ptr<Decl>>& targets)
 {
     CJC_ASSERT(!targets.empty());
@@ -333,7 +333,7 @@ bool TypeChecker::TypeCheckerImpl::FilterInvalidEnumTargets(
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::FilterAndCheckTargetsOfRef(
+bool TypeCheckerImpl::FilterAndCheckTargetsOfRef(
     const ASTContext& ctx, RefExpr& re, std::vector<Ptr<Decl>>& targets)
 {
     RemoveDuplicateElements(targets);
@@ -377,7 +377,7 @@ bool TypeChecker::TypeCheckerImpl::FilterAndCheckTargetsOfRef(
     return !targets.empty() ? CheckForQuestFuncRetType(diag, *targets[0], re, hasTarget) : false;
 }
 
-bool TypeChecker::TypeCheckerImpl::FilterTargetsForFuncReference(const Expr& expr, std::vector<Ptr<Decl>>& targets)
+bool TypeCheckerImpl::FilterTargetsForFuncReference(const Expr& expr, std::vector<Ptr<Decl>>& targets)
 {
     auto typeArgs = expr.GetTypeArgs();
     // Reference without target type and used alone must be inferred.
@@ -399,7 +399,7 @@ bool TypeChecker::TypeCheckerImpl::FilterTargetsForFuncReference(const Expr& exp
     return true;
 }
 
-void TypeChecker::TypeCheckerImpl::RemoveTargetNotMeetExtendConstraint(
+void TypeCheckerImpl::RemoveTargetNotMeetExtendConstraint(
     const Ptr<Ty> baseTy, std::vector<Ptr<Decl>>& targets)
 {
     Utils::EraseIf(targets, [this, &baseTy](auto target) -> bool {
@@ -431,7 +431,7 @@ void TypeChecker::TypeCheckerImpl::RemoveTargetNotMeetExtendConstraint(
     });
 }
 
-bool TypeChecker::TypeCheckerImpl::FilterTargetsInExtend(
+bool TypeCheckerImpl::FilterTargetsInExtend(
     const AST::NameReferenceExpr& nre, Ptr<Ty> baseTy, std::vector<Ptr<Decl>>& targets)
 {
     if (auto ma = DynamicCast<MemberAccess*>(&nre)) {
@@ -450,7 +450,7 @@ bool TypeChecker::TypeCheckerImpl::FilterTargetsInExtend(
     return !targets.empty();
 }
 
-bool TypeChecker::TypeCheckerImpl::FilterAndCheckTargetsOfNameAccess(
+bool TypeCheckerImpl::FilterAndCheckTargetsOfNameAccess(
     const ASTContext& ctx, const MemberAccess& ma, std::vector<Ptr<Decl>>& targets)
 {
     if (targets.empty()) {
@@ -501,7 +501,7 @@ bool TypeChecker::TypeCheckerImpl::FilterAndCheckTargetsOfNameAccess(
     return !targets.empty() ? CheckForQuestFuncRetType(diag, *targets[0], ma, hasTarget) : false;
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::FilterAndGetTargetsOfObjAccess(
+Ptr<Decl> TypeCheckerImpl::FilterAndGetTargetsOfObjAccess(
     const ASTContext& ctx, MemberAccess& ma, std::vector<Ptr<Decl>>& targets)
 {
     if (targets.empty()) {
@@ -520,7 +520,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::FilterAndGetTargetsOfObjAccess(
             it = targets.erase(it);
         } else {
             if (decl && decl->astKind == ASTKind::FUNC_DECL) {
-                ma.targets.push_back(StaticAs<ASTKind::FUNC_DECL>(decl));
+                ma.AddTarget(StaticAs<ASTKind::FUNC_DECL>(decl));
             }
             ++it;
         }
@@ -552,7 +552,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::FilterAndGetTargetsOfObjAccess(
     return target && CheckForQuestFuncRetType(diag, *target, ma, hasTarget) ? target : nullptr;
 }
 
-void TypeChecker::TypeCheckerImpl::InstantiateReferenceType(
+void TypeCheckerImpl::InstantiateReferenceType(
     const ASTContext& ctx, NameReferenceExpr& expr, const TypeSubst& instantiateMap)
 {
     if (expr.compilerAddedTyArgs) {
@@ -586,10 +586,11 @@ void TypeChecker::TypeCheckerImpl::InstantiateReferenceType(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckAccessLegalityOfRefExpr(const ASTContext& ctx, RefExpr& re)
+void TypeCheckerImpl::CheckAccessLegalityOfRefExpr(const ASTContext& ctx, RefExpr& re)
 {
-    // Get target from re.ref.target, if re.ref.target is null but re.ref.targets not empty, get first of targets.
-    auto decl = (!re.ref.target && !re.ref.targets.empty()) ? re.ref.targets[0] : re.ref.target;
+    // Get target from re.ref.GetTarget(), if it's null but re.ref.GetTargets() not empty, get first of targets.
+    auto targets = re.ref.GetTargets();
+    auto decl = (!re.ref.GetTarget() && !targets.empty()) ? targets[0] : re.ref.GetTarget();
     if (!decl || decl->astKind == ASTKind::PACKAGE_DECL) {
         return;
     }
@@ -608,7 +609,7 @@ void TypeChecker::TypeCheckerImpl::CheckAccessLegalityOfRefExpr(const ASTContext
     }
     if (decl->IsFunc()) {
         if (re.isAlone) {
-            (void)CheckFuncAccessControl(ctx, re, re.ref.targets);
+            (void)CheckFuncAccessControl(ctx, re, targets);
             // The unsafe function can only be called rather than as name reference
             if (decl->TestAttr(Attribute::UNSAFE) && !re.isInFlowExpr) {
                 diag.DiagnoseRefactor("sema_unsafe_func_can_only_be_called", re);
@@ -622,7 +623,7 @@ void TypeChecker::TypeCheckerImpl::CheckAccessLegalityOfRefExpr(const ASTContext
     // check. In that case, we will leave the check to the place where we resolve the overload
     // issue.
     // NOTE: some desugared expressions only have 're.ref.target' with no targets, so checking with <= 1.
-    if (re.ref.targets.size() <= 1) {
+    if (targets.size() <= 1) {
         (void)IsLegalAccessFromStaticFunc(ctx, re, *decl);
     }
     // When isAlone is false, refExpr is part of a rvalue expression, which can be callExpr or memberAccess (the
@@ -636,10 +637,11 @@ void TypeChecker::TypeCheckerImpl::CheckAccessLegalityOfRefExpr(const ASTContext
     CheckInvalidRefInCFunc(ctx, re, *decl);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckAccessLegalityOfMemberAccess(const ASTContext& ctx, MemberAccess& ma)
+void TypeCheckerImpl::CheckAccessLegalityOfMemberAccess(const ASTContext& ctx, MemberAccess& ma)
 {
-    // Get target from ma.target, if ma.target is null but ma.targets not empty, get first of targets.
-    auto decl = (!ma.target && !ma.targets.empty()) ? ma.targets[0] : ma.target;
+    // Get target from ma.GetTarget(), if it's null but ma.GetTargets() not empty, get first of targets.
+    auto targets = ma.GetTargets();
+    auto decl = (!ma.GetTarget() && !targets.empty()) ? targets[0] : ma.GetTarget();
     if (!decl || decl->astKind == ASTKind::PACKAGE_DECL || !ma.baseExpr) {
         return;
     }
@@ -648,8 +650,8 @@ void TypeChecker::TypeCheckerImpl::CheckAccessLegalityOfMemberAccess(const ASTCo
     }
     if (decl->IsFunc()) {
         if (ma.isAlone) {
-            std::vector<Ptr<Decl>> targets{ma.target};
-            (void)CheckFuncAccessControl(ctx, ma, targets);
+            std::vector<Ptr<Decl>> funcTargets{ma.GetTarget()};
+            (void)CheckFuncAccessControl(ctx, ma, funcTargets);
             // The unsafe function can only be called rather than as name reference
             if (decl->TestAttr(Attribute::UNSAFE) && !ma.isInFlowExpr) {
                 diag.DiagnoseRefactor("sema_unsafe_func_can_only_be_called", ma);
@@ -668,7 +670,7 @@ void TypeChecker::TypeCheckerImpl::CheckAccessLegalityOfMemberAccess(const ASTCo
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckStaticMemberAccessLegality(const MemberAccess& ma, const Decl& target)
+void TypeCheckerImpl::CheckStaticMemberAccessLegality(const MemberAccess& ma, const Decl& target)
 {
     auto targetOfBase = ma.baseExpr->GetTarget();
     if (targetOfBase) {
@@ -685,7 +687,7 @@ void TypeChecker::TypeCheckerImpl::CheckStaticMemberAccessLegality(const MemberA
     }
 }
 
-void TypeChecker::TypeCheckerImpl::IsNamespaceMemberAccessLegal(
+void TypeCheckerImpl::IsNamespaceMemberAccessLegal(
     const MemberAccess& ma, AST::Decl& targetOfBaseDecl, const Decl& target)
 {
     auto realTarget = TypeCheckUtil::GetRealTarget(&targetOfBaseDecl);
@@ -714,7 +716,7 @@ void TypeChecker::TypeCheckerImpl::IsNamespaceMemberAccessLegal(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckInstanceMemberAccessLegality(
+void TypeCheckerImpl::CheckInstanceMemberAccessLegality(
     const ASTContext& ctx, const MemberAccess& ma, const Decl& target)
 {
     CheckForbiddenMemberAccess(ctx, ma, target);
@@ -728,7 +730,7 @@ void TypeChecker::TypeCheckerImpl::CheckInstanceMemberAccessLegality(
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceIsSkip(Ptr<Node> node)
+bool TypeCheckerImpl::CheckLegalityOfReferenceIsSkip(Ptr<Node> node)
 {
     switch (node->astKind) {
         case ASTKind::PRIMARY_CTOR_DECL:
@@ -747,7 +749,7 @@ bool TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceIsSkip(Ptr<Node> node
     }
 }
 
-AST::VisitAction TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceForNameReferenceExpr(
+AST::VisitAction TypeCheckerImpl::CheckLegalityOfReferenceForNameReferenceExpr(
     ASTContext& ctx, Ptr<AST::NameReferenceExpr> nameRef)
 {
     if (!nameRef->instTys.empty()) {
@@ -765,7 +767,7 @@ AST::VisitAction TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceForNameRe
     return VisitAction::WALK_CHILDREN;
 }
 
-VisitAction TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceForExpr(
+VisitAction TypeCheckerImpl::CheckLegalityOfReferenceForExpr(
     unsigned id, ASTContext& ctx, Ptr<AST::Expr> node)
 {
     if (node->desugarExpr) {
@@ -782,13 +784,13 @@ VisitAction TypeChecker::TypeCheckerImpl::CheckLegalityOfReferenceForExpr(
     return VisitAction::WALK_CHILDREN;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckLegalityOfReference(ASTContext& ctx, Node& node)
+void TypeCheckerImpl::CheckLegalityOfReference(ASTContext& ctx, Node& node)
 {
     unsigned id = Walker::GetNextWalkerID();
     CheckLegalityOfReference(id, ctx, node);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckLegalityOfReference(unsigned id, ASTContext& ctx, Node& node)
+void TypeCheckerImpl::CheckLegalityOfReference(unsigned id, ASTContext& ctx, Node& node)
 {
     std::function<VisitAction(Ptr<Node>)> postVisit = [this, &ctx](Ptr<Node> node) -> VisitAction {
         if (node->astKind == ASTKind::VAR_DECL) {
@@ -819,7 +821,7 @@ void TypeChecker::TypeCheckerImpl::CheckLegalityOfReference(unsigned id, ASTCont
     Walker(&node, id, preVisit, postVisit).Walk();
 }
 
-std::string TypeChecker::TypeCheckerImpl::GetDiagnoseKindOfFuncDecl(const Ptr<Decl> target) const
+std::string TypeCheckerImpl::GetDiagnoseKindOfFuncDecl(const Ptr<Decl> target) const
 {
     auto funcDecl = DynamicCast<const FuncDecl*>(target);
     CJC_ASSERT(funcDecl);
@@ -840,7 +842,7 @@ std::string TypeChecker::TypeCheckerImpl::GetDiagnoseKindOfFuncDecl(const Ptr<De
     return "function";
 }
 
-std::optional<std::string> TypeChecker::TypeCheckerImpl::GetDiagnoseKindOfFuncDecl(
+std::optional<std::string> TypeCheckerImpl::GetDiagnoseKindOfFuncDecl(
     const Ptr<Node> usage,
     const Ptr<Decl> target
 ) const
@@ -881,7 +883,7 @@ std::optional<std::string> TypeChecker::TypeCheckerImpl::GetDiagnoseKindOfFuncDe
     return GetDiagnoseKindOfFuncDecl(target);
 }
 
-std::string TypeChecker::TypeCheckerImpl::GetDiagnoseKindOfVarDecl(const Ptr<Decl> target) const
+std::string TypeCheckerImpl::GetDiagnoseKindOfVarDecl(const Ptr<Decl> target) const
 {
     CJC_ASSERT(target->astKind == ASTKind::VAR_DECL);
     if (target->TestAttr(AST::Attribute::ENUM_CONSTRUCTOR)) {
@@ -896,7 +898,7 @@ std::string TypeChecker::TypeCheckerImpl::GetDiagnoseKindOfVarDecl(const Ptr<Dec
     return "variable";
 }
 
-std::optional<std::string> TypeChecker::TypeCheckerImpl::GetKindfOfDeprecatedDeclaration(
+std::optional<std::string> TypeCheckerImpl::GetKindfOfDeprecatedDeclaration(
     const Ptr<Decl> target, const Ptr<Node> usage) const
 {
     switch (target->astKind) {
@@ -933,7 +935,7 @@ std::optional<std::string> TypeChecker::TypeCheckerImpl::GetKindfOfDeprecatedDec
     return std::nullopt;
 }
 
-bool TypeChecker::TypeCheckerImpl::ShouldSkipDeprecationDiagnostic(const Ptr<Decl> target, bool strict)
+bool TypeCheckerImpl::ShouldSkipDeprecationDiagnostic(const Ptr<Decl> target, bool strict)
 {
     if (strictDeprecatedContext && target->IsSamePackage(*strictDeprecatedContext)) {
         return true;
@@ -946,7 +948,7 @@ bool TypeChecker::TypeCheckerImpl::ShouldSkipDeprecationDiagnostic(const Ptr<Dec
     return false;
 }
 
-void TypeChecker::TypeCheckerImpl::DiagnoseDeprecatedUsage(
+void TypeCheckerImpl::DiagnoseDeprecatedUsage(
     const Ptr<Node> usage,
     const Ptr<Decl> target,
     const std::string& nameOfDiagnose
@@ -1003,7 +1005,7 @@ void TypeChecker::TypeCheckerImpl::DiagnoseDeprecatedUsage(
     diag.DiagnoseRefactor(diagnoseKind, *usage, range, kind.value(), name, since, message);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckUsageOfDeprecatedParameters(
+void TypeCheckerImpl::CheckUsageOfDeprecatedParameters(
     const Ptr<Node> usage
 )
 {
@@ -1045,7 +1047,7 @@ void TypeChecker::TypeCheckerImpl::CheckUsageOfDeprecatedParameters(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckUsageOfDeprecatedNominative(
+void TypeCheckerImpl::CheckUsageOfDeprecatedNominative(
     const Ptr<Node> usage,
     const Ptr<Decl> target
 )
@@ -1093,7 +1095,7 @@ void TypeChecker::TypeCheckerImpl::CheckUsageOfDeprecatedNominative(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckOverridingOrRedefiningOfDeprecated(
+void TypeCheckerImpl::CheckOverridingOrRedefiningOfDeprecated(
     const Ptr<Decl> overridden,
     const Ptr<Decl> overriding,
     const std::string& declType
@@ -1135,7 +1137,7 @@ void TypeChecker::TypeCheckerImpl::CheckOverridingOrRedefiningOfDeprecated(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckOverridingOrRedefinitionOfDeprecatedFunction(
+void TypeCheckerImpl::CheckOverridingOrRedefinitionOfDeprecatedFunction(
     const Ptr<ClassDecl> cd,
     const Ptr<Decl> member
 )
@@ -1167,7 +1169,7 @@ void TypeChecker::TypeCheckerImpl::CheckOverridingOrRedefinitionOfDeprecatedFunc
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckOverridingOrRedefinitionOfDeprecatedProperty(
+void TypeCheckerImpl::CheckOverridingOrRedefinitionOfDeprecatedProperty(
     const Ptr<ClassDecl> cd,
     const Ptr<Decl> member
 )
@@ -1215,7 +1217,7 @@ void TypeChecker::TypeCheckerImpl::CheckOverridingOrRedefinitionOfDeprecatedProp
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckOverridingOrRedefinitionOfDeprecated(
+void TypeCheckerImpl::CheckOverridingOrRedefinitionOfDeprecated(
     const Ptr<ClassDecl> cd
 )
 {
@@ -1225,7 +1227,7 @@ void TypeChecker::TypeCheckerImpl::CheckOverridingOrRedefinitionOfDeprecated(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckUsageOfDeprecatedSetter(
+void TypeCheckerImpl::CheckUsageOfDeprecatedSetter(
     const Ptr<Node> usage
 )
 {
@@ -1255,7 +1257,7 @@ void TypeChecker::TypeCheckerImpl::CheckUsageOfDeprecatedSetter(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckDeprecationLevelOnInheritors(
+void TypeCheckerImpl::CheckDeprecationLevelOnInheritors(
     const Ptr<ClassLikeDecl> classLike
 )
 {
@@ -1284,7 +1286,7 @@ void TypeChecker::TypeCheckerImpl::CheckDeprecationLevelOnInheritors(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckUsageOfDeprecatedWithTarget(
+void TypeCheckerImpl::CheckUsageOfDeprecatedWithTarget(
     const Ptr<Node> usage,
     const Ptr<Decl> target
 )
@@ -1329,7 +1331,7 @@ void TypeChecker::TypeCheckerImpl::CheckUsageOfDeprecatedWithTarget(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckUsageOfDeprecated(
+void TypeCheckerImpl::CheckUsageOfDeprecated(
     Node& node
 )
 {

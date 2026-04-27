@@ -10,6 +10,8 @@
  * This file implements logics related to parsing in java FFI in Cangjie Native
  */
 #include "../../ParserImpl.h"
+#include "cangjie/AST/Nodes/ClassLikeDecl.h"
+#include "cangjie/AST/Nodes/FuncDecl.h"
 #include "cangjie/AST/Utils.h"
 
 #include "JFFIParserImpl.h"

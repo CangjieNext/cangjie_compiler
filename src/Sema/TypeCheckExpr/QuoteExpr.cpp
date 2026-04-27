@@ -27,7 +27,7 @@ void ChkIfImportLibAST(DiagnosticEngine& diag, const ImportManager& im, const Qu
 }
 } // namespace
 
-bool TypeChecker::TypeCheckerImpl::ChkQuoteExpr(ASTContext& ctx, Ty& target, QuoteExpr& qe)
+bool TypeCheckerImpl::ChkQuoteExpr(ASTContext& ctx, Ty& target, QuoteExpr& qe)
 {
     ChkIfImportLibAST(diag, importManager, qe);
     if (!Ty::IsTyCorrect(Synthesize({ctx, SynPos::NONE}, &qe))) {
@@ -47,7 +47,7 @@ bool TypeChecker::TypeCheckerImpl::ChkQuoteExpr(ASTContext& ctx, Ty& target, Quo
     return true;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynQuoteExpr(ASTContext& ctx, QuoteExpr& qe)
+Ptr<Ty> TypeCheckerImpl::SynQuoteExpr(ASTContext& ctx, QuoteExpr& qe)
 {
     ChkIfImportLibAST(diag, importManager, qe);
     if (qe.desugarExpr) {

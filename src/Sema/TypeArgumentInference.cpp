@@ -17,6 +17,7 @@
 #include "LocalTypeArgumentSynthesis.h"
 #include "DiagSuppressor.h"
 #include "Diags.h"
+#include "cangjie/AST/Walker.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -400,7 +401,7 @@ void ConstrainByUpperbound(TypeManager& tyMgr)
 }
 } // namespace
 
-std::optional<TypeSubst> TypeChecker::TypeCheckerImpl::PropagatePlaceholderAndSolve(
+std::optional<TypeSubst> TypeCheckerImpl::PropagatePlaceholderAndSolve(
     ASTContext& ctx, CallExpr& ce, const std::vector<Ptr<Ty>>& paramTys, const Ptr<Ty> retTy, const Ptr<Ty> retTyUB)
 {
     if (!NeedLastTry(ce)) {
@@ -422,7 +423,7 @@ std::optional<TypeSubst> TypeChecker::TypeCheckerImpl::PropagatePlaceholderAndSo
     return SolveConstraints(typeManager.constraints);
 }
 
-ErrOrSubst TypeChecker::TypeCheckerImpl::PrepareTyArgsSynthesis(
+ErrOrSubst TypeCheckerImpl::PrepareTyArgsSynthesis(
     ASTContext& ctx, const FunctionCandidate& candidate, Ptr<Ty> const retTyUB)
 {
     auto& [fd, ce, argCombinations, _] = candidate;
@@ -532,7 +533,7 @@ ErrOrSubst TypeChecker::TypeCheckerImpl::PrepareTyArgsSynthesis(
 // Generate the type mapping table if the current call involves generic types. Before overload resolution, the fd may
 // not be the right target, so the generation of typeMapping may fail as well. This function will return empty in this
 // case.
-std::vector<SubstPack> TypeChecker::TypeCheckerImpl::GenerateTypeMappingForCall(
+std::vector<SubstPack> TypeCheckerImpl::GenerateTypeMappingForCall(
     ASTContext& ctx, FunctionCandidate& candidate, Ptr<Ty> retTarget)
 {
     auto& ce = candidate.ce;
@@ -548,7 +549,7 @@ std::vector<SubstPack> TypeChecker::TypeCheckerImpl::GenerateTypeMappingForCall(
     return {typeManager.GetInstMapping()};
 }
 
-std::vector<SubstPack> TypeChecker::TypeCheckerImpl::GenerateTypeMappingByInference(
+std::vector<SubstPack> TypeCheckerImpl::GenerateTypeMappingByInference(
     ASTContext& ctx, const FunctionCandidate& candidate, Ptr<Ty> retTarget)
 {
     auto& ce = candidate.ce;

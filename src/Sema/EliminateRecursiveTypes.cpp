@@ -11,6 +11,7 @@
  */
 
 #include "TypeCheckerImpl.h"
+#include "cangjie/AST/ASTCasting.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -285,7 +286,7 @@ void CheckAndUpdateDeclTyWithNewTy(Decl& decl, const EnumTy& specifiedTy, TypeMa
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::UpdateMemberVariableTy(const Decl& decl, const EnumTy& eTy)
+void TypeCheckerImpl::UpdateMemberVariableTy(const Decl& decl, const EnumTy& eTy)
 {
     switch (decl.astKind) {
         case ASTKind::STRUCT_DECL: {
@@ -317,7 +318,7 @@ void TypeChecker::TypeCheckerImpl::UpdateMemberVariableTy(const Decl& decl, cons
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PerformRecursiveTypesElimination()
+void TypeCheckerImpl::PerformRecursiveTypesElimination()
 {
     // Since `RefEnumTy` and `EnumTy` cannot be distinguished in cjo, we have to check all the imported packages.
     // NOTE: This api will also contains current source package.

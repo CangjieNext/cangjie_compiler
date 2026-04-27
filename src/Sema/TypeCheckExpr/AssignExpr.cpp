@@ -174,7 +174,7 @@ void CheckMultipleAssignExpr(DiagnosticEngine& diag, TypeManager& typeManager, A
 }
 } // namespace
 
-bool TypeChecker::TypeCheckerImpl::IsAssignable(Expr& e, bool isCompound, const std::vector<Diagnostic>& diags) const
+bool TypeCheckerImpl::IsAssignable(Expr& e, bool isCompound, const std::vector<Diagnostic>& diags) const
 {
     auto getTargetName = [](const Decl& decl) {
         return decl.TestAttr(AST::Attribute::MACRO_FUNC)
@@ -216,7 +216,7 @@ bool TypeChecker::TypeCheckerImpl::IsAssignable(Expr& e, bool isCompound, const 
     return true;
 }
 
-void TypeChecker::TypeCheckerImpl::DiagnoseForSubscriptAssignExpr(
+void TypeCheckerImpl::DiagnoseForSubscriptAssignExpr(
     ASTContext& ctx, const AssignExpr& ae, std::vector<Diagnostic>& diags)
 {
     CJC_NULLPTR_CHECK(ae.leftValue);
@@ -251,7 +251,7 @@ void TypeChecker::TypeCheckerImpl::DiagnoseForSubscriptAssignExpr(
     }
 }
 
-std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::InferAssignExprCheckCaseOverloading(
+std::optional<Ptr<Ty>> TypeCheckerImpl::InferAssignExprCheckCaseOverloading(
     ASTContext& ctx, AssignExpr& ae, std::vector<Diagnostic>& diags)
 {
     auto ds = DiagSuppressor(diag);
@@ -297,7 +297,7 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::InferAssignExprCheckCaseOve
     return {};
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkAssignExpr(ASTContext& ctx, Ty& target, AssignExpr& ae)
+bool TypeCheckerImpl::ChkAssignExpr(ASTContext& ctx, Ty& target, AssignExpr& ae)
 {
     if (!Ty::IsTyCorrect(SynAssignExpr(ctx, ae))) {
         return false;
@@ -313,7 +313,7 @@ bool TypeChecker::TypeCheckerImpl::ChkAssignExpr(ASTContext& ctx, Ty& target, As
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynMultipleAssignExpr(ASTContext& ctx, AST::AssignExpr& ae)
+Ptr<Ty> TypeCheckerImpl::SynMultipleAssignExpr(ASTContext& ctx, AST::AssignExpr& ae)
 {
     Synthesize({ctx, SynPos::UNUSED}, ae.desugarExpr.get());
     CJC_NULLPTR_CHECK(ae.desugarExpr);
@@ -334,7 +334,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynMultipleAssignExpr(ASTContext& ctx, AST
     return ae.GetTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr& ae)
+Ptr<Ty> TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr& ae)
 {
     if (ae.desugarExpr) {
         // It is a multiple assignment expression.
@@ -408,7 +408,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAssignExpr(ASTContext& ctx, AssignExpr&
     return ae.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::IsShiftAssignValid(const AssignExpr& ae)
+bool TypeCheckerImpl::IsShiftAssignValid(const AssignExpr& ae)
 {
     if (Utils::In(ae.op, SHIFT_ASSIGN_OPERATOR) && ae.rightExpr->astKind == ASTKind::LIT_CONST_EXPR) {
         if (ae.rightExpr->constNumValue.asInt.IsNegativeNum()) {
@@ -425,7 +425,7 @@ bool TypeChecker::TypeCheckerImpl::IsShiftAssignValid(const AssignExpr& ae)
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::PreCheckCompoundAssign(
+bool TypeCheckerImpl::PreCheckCompoundAssign(
     ASTContext& ctx, const AssignExpr& ae, const Ty& lTy, const std::vector<Diagnostic>& diags)
 {
     if (ae.isCompound) {

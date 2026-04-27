@@ -33,6 +33,7 @@
 #include "cangjie/AST/Nodes/MatchExpr.h"
 #include "cangjie/AST/Nodes/MemberAccess.h"
 #include "cangjie/AST/Nodes/Pattern.h"
+#include "cangjie/AST/Nodes/RefExpr.h"
 #include "cangjie/AST/RecoverDesugar.h"
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/AST/Types.h"
@@ -470,6 +471,50 @@ std::string FuncArg::ToString() const
     return ss.str();
 }
 
+Ptr<Decl> Reference::GetTarget() const noexcept { return target; }
+
+void Reference::SetTarget(Ptr<Decl> newTarget) noexcept { target = std::move(newTarget); }
+
+std::vector<Ptr<Decl>> Reference::GetTargets() const { return targets; }
+
+void Reference::SetTargets(std::vector<Ptr<Decl>> newTargets) { targets = std::move(newTargets); }
+
+void Reference::AddTarget(Ptr<Decl> decl) { targets.push_back(std::move(decl)); }
+
+Ptr<Decl> RefExpr::GetTarget() const { return ref.GetTarget(); }
+
+void RefExpr::SetTarget(Ptr<Decl> newTarget) { ref.SetTarget(std::move(newTarget)); }
+
+std::vector<Ptr<Decl>> RefExpr::GetTargets() const { return ref.GetTargets(); }
+
+void RefExpr::SetTargets(std::vector<Ptr<Decl>> decls) { ref.SetTargets(std::move(decls)); }
+
+void RefExpr::AddTarget(Ptr<Decl> decl) { ref.AddTarget(std::move(decl)); }
+
+Ptr<Decl> RefType::GetTarget() const { return ref.GetTarget(); }
+
+void RefType::SetTarget(Ptr<Decl> newTarget) { ref.SetTarget(std::move(newTarget)); }
+
+std::vector<Ptr<Decl>> RefType::GetTargets() const { return ref.GetTargets(); }
+
+void RefType::SetTargets(std::vector<Ptr<Decl>> decls) { ref.SetTargets(std::move(decls)); }
+
+void RefType::AddTarget(Ptr<Decl> decl) { ref.AddTarget(std::move(decl)); }
+
+Ptr<Decl> QualifiedType::GetTarget() const { return target; }
+
+void QualifiedType::SetTarget(Ptr<Decl> newTarget) { target = std::move(newTarget); }
+
+Ptr<Decl> MemberAccess::GetTarget() const { return target; }
+
+void MemberAccess::SetTarget(Ptr<Decl> newTarget) { target = std::move(newTarget); }
+
+std::vector<Ptr<Decl>> MemberAccess::GetTargets() const { return targets; }
+
+void MemberAccess::SetTargets(std::vector<Ptr<Decl>> decls) { targets = std::move(decls); }
+
+void MemberAccess::AddTarget(Ptr<Decl> decl) { targets.push_back(std::move(decl)); }
+
 std::string MemberAccess::ToString() const
 {
     std::stringstream ss;
@@ -758,7 +803,7 @@ void ParenExpr::Clear() noexcept
 
 bool RefType::IsGenericThisType() const
 {
-    if (auto cd = DynamicCast<ClassDecl*>(ref.target);
+    if (auto cd = DynamicCast<ClassDecl*>(ref.GetTarget());
         cd && cd->generic && !cd->generic->typeParameters.empty() && ref.identifier == "This") {
         return true;
     }
@@ -855,19 +900,19 @@ void Node::SetTarget(Ptr<Decl> target)
 {
     switch (astKind) {
         case ASTKind::REF_TYPE: {
-            RawStaticCast<RefType*>(this)->ref.target = target;
+            RawStaticCast<RefType*>(this)->ref.SetTarget(target);
             break;
         }
         case ASTKind::REF_EXPR: {
-            RawStaticCast<RefExpr*>(this)->ref.target = target;
+            RawStaticCast<RefExpr*>(this)->ref.SetTarget(target);
             break;
         }
         case ASTKind::QUALIFIED_TYPE: {
-            RawStaticCast<QualifiedType*>(this)->target = target;
+            RawStaticCast<QualifiedType*>(this)->SetTarget(target);
             break;
         }
         case ASTKind::MEMBER_ACCESS: {
-            RawStaticCast<MemberAccess*>(this)->target = target;
+            RawStaticCast<MemberAccess*>(this)->SetTarget(target);
             break;
         }
         case ASTKind::MACRO_EXPAND_DECL: {
@@ -891,16 +936,16 @@ Ptr<Decl> Node::GetTarget() const
 {
     switch (astKind) {
         case ASTKind::REF_TYPE: {
-            return RawStaticCast<const RefType*>(this)->ref.target;
+            return RawStaticCast<const RefType*>(this)->ref.GetTarget();
         }
         case ASTKind::REF_EXPR: {
-            return RawStaticCast<const RefExpr*>(this)->ref.target;
+            return RawStaticCast<const RefExpr*>(this)->ref.GetTarget();
         }
         case ASTKind::QUALIFIED_TYPE: {
-            return RawStaticCast<const QualifiedType*>(this)->target;
+            return RawStaticCast<const QualifiedType*>(this)->GetTarget();
         }
         case ASTKind::MEMBER_ACCESS: {
-            return RawStaticCast<const MemberAccess*>(this)->target;
+            return RawStaticCast<const MemberAccess*>(this)->GetTarget();
         }
         case ASTKind::MACRO_EXPAND_DECL: {
             return RawStaticCast<const MacroExpandDecl*>(this)->invocation.target;
@@ -920,18 +965,56 @@ std::vector<Ptr<Decl>> Node::GetTargets() const
 {
     switch (astKind) {
         case ASTKind::REF_TYPE: {
-            return RawStaticCast<const RefType*>(this)->ref.targets;
+            return RawStaticCast<const RefType*>(this)->ref.GetTargets();
         }
         case ASTKind::REF_EXPR: {
-            return RawStaticCast<const RefExpr*>(this)->ref.targets;
+            return RawStaticCast<const RefExpr*>(this)->ref.GetTargets();
         }
         case ASTKind::MEMBER_ACCESS: {
-            auto targetDecls = RawStaticCast<const MemberAccess*>(this)->targets;
-            std::vector<Ptr<Decl>> decls(targetDecls.begin(), targetDecls.end());
-            return decls;
+            return RawStaticCast<const MemberAccess*>(this)->GetTargets();
         }
         default:
             return {};
+    }
+}
+
+void Node::SetTargets(std::vector<Ptr<Decl>> targets)
+{
+    switch (astKind) {
+        case ASTKind::REF_TYPE: {
+            RawStaticCast<RefType*>(this)->ref.SetTargets(std::move(targets));
+            break;
+        }
+        case ASTKind::REF_EXPR: {
+            RawStaticCast<RefExpr*>(this)->ref.SetTargets(std::move(targets));
+            break;
+        }
+        case ASTKind::MEMBER_ACCESS: {
+            RawStaticCast<MemberAccess*>(this)->SetTargets(std::move(targets));
+            break;
+        }
+        default:
+            return;
+    }
+}
+
+void Node::AddTarget(Ptr<Decl> decl)
+{
+    switch (astKind) {
+        case ASTKind::REF_TYPE: {
+            RawStaticCast<RefType*>(this)->ref.AddTarget(std::move(decl));
+            break;
+        }
+        case ASTKind::REF_EXPR: {
+            RawStaticCast<RefExpr*>(this)->ref.AddTarget(std::move(decl));
+            break;
+        }
+        case ASTKind::MEMBER_ACCESS: {
+            RawStaticCast<MemberAccess*>(this)->AddTarget(std::move(decl));
+            break;
+        }
+        default:
+            return;
     }
 }
 
@@ -1773,4 +1856,39 @@ bool CompNodeByPos(Ptr<const Node> n1, Ptr<const Node> n2)
 MacroExpandExpr::MacroExpandExpr() : Expr(ASTKind::MACRO_EXPAND_EXPR)
 {
 }
+
+bool Package::IsEmpty() const
+{
+    for (auto& file : files) {
+        if (file->package || !file->decls.empty()) {
+            return false;
+        }
+        // Filter compiler added importSpec of core in stdlib.
+        for (auto& import : file->imports) {
+            if (!import->TestAttr(Attribute::COMPILER_ADD)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+VarPattern::VarPattern(SrcIdentifier ident, const Position& nodePos) : Pattern(ASTKind::VAR_PATTERN)
+{
+    varDecl = MakeOwned<VarDecl>();
+    varDecl->begin = nodePos;
+    varDecl->identifier = std::move(ident);
+    varDecl->end = nodePos;
+    varDecl->end = varDecl->identifier.End();
+    varDecl->isVar = false;
+    begin = nodePos;
+    end = varDecl->end;
+    varDecl->parentPattern = this;
+}
+
+ExtendDecl::ExtendDecl() : InheritableDecl(ASTKind::EXTEND_DECL)
+{
+}
+
+ExtendDecl::~ExtendDecl() = default;
 } // namespace Cangjie::AST

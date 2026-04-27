@@ -21,7 +21,7 @@ using namespace Cangjie;
 using namespace TypeCheckUtil;
 using namespace AST;
 
-void TypeChecker::TypeCheckerImpl::CheckUpperBound(ASTContext& ctx, const GenericConstraint& genericConstraint)
+void TypeCheckerImpl::CheckUpperBound(ASTContext& ctx, const GenericConstraint& genericConstraint)
 {
     // The generic constraint is as: type <: upperBound.
     // The upperBound must be class like decl or primitive type.
@@ -35,7 +35,7 @@ void TypeChecker::TypeCheckerImpl::CheckUpperBound(ASTContext& ctx, const Generi
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckGenericConstraints(ASTContext& ctx, const Generic& generic)
+void TypeCheckerImpl::CheckGenericConstraints(ASTContext& ctx, const Generic& generic)
 {
     if (generic.genericConstraints.empty()) {
         return;
@@ -60,7 +60,7 @@ void TypeChecker::TypeCheckerImpl::CheckGenericConstraints(ASTContext& ctx, cons
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::HasIncompleteStaticFuncOrProp(
+bool TypeCheckerImpl::HasIncompleteStaticFuncOrProp(
     const ASTContext& ctx, InheritableDecl& cd, std::vector<Ptr<Decl>>& staticMemberFuncsOrProps)
 {
     if (!cd.TestAttr(Attribute::ABSTRACT) && cd.astKind != ASTKind::INTERFACE_DECL) {
@@ -115,7 +115,7 @@ inline std::unordered_map<Ptr<Ty>, size_t> GetTyArgsIndexMap(const std::vector<P
 }
 } // namespace
 
-bool TypeChecker::TypeCheckerImpl::CheckInstTyWithUpperbound(
+bool TypeCheckerImpl::CheckInstTyWithUpperbound(
     const ASTContext& ctx, TypeSubst& typeMapping, const NameReferenceExpr& expr)
 {
     if (typeMapping.empty()) {
@@ -171,7 +171,7 @@ bool TypeChecker::TypeCheckerImpl::CheckInstTyWithUpperbound(
 }
 
 // This checking method is performed after sema type completed.
-bool TypeChecker::TypeCheckerImpl::CheckInstTypeCompleteness(const ASTContext& ctx, const NameReferenceExpr& expr)
+bool TypeCheckerImpl::CheckInstTypeCompleteness(const ASTContext& ctx, const NameReferenceExpr& expr)
 {
     auto target = TypeCheckUtil::GetRealTarget(expr.GetTarget());
     auto genericDecl = target ? (target->TestAttr(Attribute::CONSTRUCTOR) ? target->outerDecl : target) : nullptr;
@@ -192,7 +192,7 @@ bool TypeChecker::TypeCheckerImpl::CheckInstTypeCompleteness(const ASTContext& c
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckCallGenericDeclInstantiation(
+bool TypeCheckerImpl::CheckCallGenericDeclInstantiation(
     Ptr<const Decl> d, const std::vector<Ptr<AST::Type>>& typeArgs, const Expr& checkNode)
 {
     if (!d) {
@@ -215,7 +215,7 @@ bool TypeChecker::TypeCheckerImpl::CheckCallGenericDeclInstantiation(
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckGenericDeclInstantiation(Ptr<const Decl> d,
+bool TypeCheckerImpl::CheckGenericDeclInstantiation(Ptr<const Decl> d,
     const std::variant<std::vector<Ptr<Type>>, std::vector<Ptr<Ty>>>& arguments, const Node& checkNode)
 {
     size_t index = arguments.index();
@@ -283,7 +283,7 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericDeclInstantiation(Ptr<const Decl>
     return true;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetGenericType(Decl& d, const std::vector<Ptr<Type>>& typeArgs)
+Ptr<Ty> TypeCheckerImpl::GetGenericType(Decl& d, const std::vector<Ptr<Type>>& typeArgs)
 {
     // For GenericParam check typeArgs
     if (auto gp = DynamicCast<GenericParamDecl*>(&d); gp) {
@@ -310,7 +310,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetGenericType(Decl& d, const std::vector<
     return typeManager.GetInstantiatedTy(d.GetTy(), typeMapping);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckGenericExpr(Expr& expr)
+void TypeCheckerImpl::CheckGenericExpr(Expr& expr)
 {
     auto exprTarget = expr.GetTarget();
     auto realTarget = GetRealTarget(&expr, exprTarget);
@@ -330,7 +330,7 @@ void TypeChecker::TypeCheckerImpl::CheckGenericExpr(Expr& expr)
     }
 }
 
-SubstPack TypeChecker::TypeCheckerImpl::GenerateGenericTypeMapping(const ASTContext& ctx, const Expr& expr)
+SubstPack TypeCheckerImpl::GenerateGenericTypeMapping(const ASTContext& ctx, const Expr& expr)
 {
     SubstPack typeMapping;
     // Generate typeMapping by given expression node.

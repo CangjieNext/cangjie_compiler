@@ -27,7 +27,7 @@ Ptr<Ty> GetInnerNumericType(Ty& boxTy, Ty& basicTy)
 }
 } // namespace
 
-bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeBool(Ty& target, LitConstExpr& lce)
+bool TypeCheckerImpl::ChkLitConstExprOfTypeBool(Ty& target, LitConstExpr& lce)
 {
     if (target.IsBooleanSubType()) {
         lce.SetTy(&target);
@@ -45,7 +45,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeBool(Ty& target, LitCons
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeUnit(Ty& target, LitConstExpr& lce)
+bool TypeCheckerImpl::ChkLitConstExprOfTypeUnit(Ty& target, LitConstExpr& lce)
 {
     if (target.IsAny() || target.IsUnit() || target.IsCType() ||
         typeManager.IsLitBoxableType(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT), &target)) {
@@ -58,7 +58,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeUnit(Ty& target, LitCons
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeInteger(Ty& target, LitConstExpr& lce)
+bool TypeCheckerImpl::ChkLitConstExprOfTypeInteger(Ty& target, LitConstExpr& lce)
 {
     TypeKind intSuffixTokenKind = lce.GetNumLitTypeKind();
     TypeKind defaultIntTokenKind =
@@ -87,7 +87,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeInteger(Ty& target, LitC
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeFloat(Ty& targetTy, LitConstExpr& lce)
+bool TypeCheckerImpl::ChkLitConstExprOfTypeFloat(Ty& targetTy, LitConstExpr& lce)
 {
     TypeKind intSuffixTokenKind = lce.GetNumLitTypeKind();
     TypeKind defaultFloat64TokenKind =
@@ -114,7 +114,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeFloat(Ty& targetTy, LitC
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeChar(Ty& targetTy, LitConstExpr& lce)
+bool TypeCheckerImpl::ChkLitConstExprOfTypeChar(Ty& targetTy, LitConstExpr& lce)
 {
     if (&targetTy == TypeManager::GetPrimitiveTy(TypeKind::TYPE_RUNE)) {
         lce.SetTy(&targetTy);
@@ -132,7 +132,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeChar(Ty& targetTy, LitCo
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLitConstStringExpr(ASTContext& ctx, LitConstExpr& lce)
+Ptr<Ty> TypeCheckerImpl::SynLitConstStringExpr(ASTContext& ctx, LitConstExpr& lce)
 {
     // For string literal expr.
     if (!lce.siExpr) {
@@ -183,7 +183,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLitConstStringExpr(ASTContext& ctx, Lit
     return lce.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeString(ASTContext& ctx, Ty& target, LitConstExpr& lce)
+bool TypeCheckerImpl::ChkLitConstExprOfTypeString(ASTContext& ctx, Ty& target, LitConstExpr& lce)
 {
     auto ty = SynLitConstStringExpr(ctx, lce);
     bool isWellTyped = typeManager.IsLitBoxableType(ty, &target) || target.IsAny();
@@ -194,7 +194,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExprOfTypeString(ASTContext& ctx, 
     return isWellTyped;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkLitConstExpr(ASTContext& ctx, Ty& target, LitConstExpr& lce)
+bool TypeCheckerImpl::ChkLitConstExpr(ASTContext& ctx, Ty& target, LitConstExpr& lce)
 {
     switch (lce.kind) {
         case LitConstKind::BOOL:
@@ -217,7 +217,7 @@ bool TypeChecker::TypeCheckerImpl::ChkLitConstExpr(ASTContext& ctx, Ty& target, 
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLitConstExpr(ASTContext& ctx, LitConstExpr& lce)
+Ptr<Ty> TypeCheckerImpl::SynLitConstExpr(ASTContext& ctx, LitConstExpr& lce)
 {
     switch (lce.kind) {
         case LitConstKind::BOOL:

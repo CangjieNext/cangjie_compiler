@@ -561,7 +561,7 @@ void DesugarVariadicCallExpr(ASTContext& ctx, CallExpr& ce, size_t fixedPosition
     AddCurFile(ce, ce.curFile);
 }
 
-void TypeChecker::TypeCheckerImpl::DesugarPointerCall(ASTContext& ctx, CallExpr& ce)
+void TypeCheckerImpl::DesugarPointerCall(ASTContext& ctx, CallExpr& ce)
 {
     auto pointerExpr = MakeOwnedNode<PointerExpr>();
     pointerExpr->type = MakeOwnedNode<Type>();
@@ -597,7 +597,7 @@ void TypeChecker::TypeCheckerImpl::DesugarPointerCall(ASTContext& ctx, CallExpr&
     AddCurFile(ce, ce.curFile);
 }
 
-void TypeChecker::TypeCheckerImpl::DesugarArrayCall(ASTContext& ctx, CallExpr& ce)
+void TypeCheckerImpl::DesugarArrayCall(ASTContext& ctx, CallExpr& ce)
 {
     auto arrayExpr = MakeOwnedNode<ArrayExpr>();
     arrayExpr->type = MakeOwnedNode<Type>();

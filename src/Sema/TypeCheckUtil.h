@@ -14,11 +14,22 @@
 #define CANGJIE_SEMA_TYPECHECKUTIL_H
 
 #include "ScopeManager.h"
-#include "cangjie/AST/Nodes/Node.h"
+#include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Nodes/FuncDecl.h"
+#include "cangjie/AST/Nodes/NameReferenceExpr.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
 
+namespace Cangjie::AST {
+struct NameReferenceExpr;
+struct RefExpr;
+struct FuncBody;
+struct Generic;
+struct FuncArg;
+struct CallExpr;
+struct ThrowExpr;
+}
 namespace Cangjie::TypeCheckUtil {
 // The comparison result of two types.
 // If left < right, return LT.
@@ -85,7 +96,7 @@ template <typename T> bool IsAllFuncDecl(T& results)
 
 inline std::vector<Ptr<AST::Ty>> GetInstanationTys(const AST::Expr& expr)
 {
-    auto ref = DynamicCast<const AST::NameReferenceExpr*>(&expr);
+    auto ref = dynamic_cast<const AST::NameReferenceExpr*>(&expr);
     return ref ? ref->instTys : std::vector<Ptr<AST::Ty>>{};
 }
 
@@ -214,11 +225,7 @@ std::unordered_set<Ptr<AST::Ty>> GetContextGenericTys(const ASTContext& ctx, con
 OwnedPtr<AST::FuncDecl> CreateDefaultCtor(AST::InheritableDecl& decl, bool isStatic = false);
 Ptr<AST::FuncBody> GetCurFuncBody(const ASTContext& ctx, const std::string& scopeName);
 /** Get the outer inheritable decl where the current context is. */
-inline Ptr<AST::InheritableDecl> GetCurInheritableDecl(const ASTContext& ctx, const std::string& scopeName)
-{
-    auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, scopeName);
-    return sym ? DynamicCast<AST::InheritableDecl*>(sym->node) : nullptr;
-}
+Ptr<AST::InheritableDecl> GetCurInheritableDecl(const ASTContext& ctx, const std::string& scopeName);
 
 /* Utils for TypeCheckCall and TypeArgumentInference */
 bool IsEnumCtorWithoutTypeArgs(const AST::Expr& expr, Ptr<const AST::Decl> target);
@@ -231,15 +238,7 @@ Ptr<AST::Generic> GetCurrentGeneric(const AST::FuncDecl& fd, const AST::CallExpr
 std::string GetArgName(const AST::FuncDecl& fd, const AST::FuncArg& arg);
 std::optional<std::pair<Ptr<AST::Ty>, size_t>> GetParamTyAccordingToArgName(
     const AST::FuncDecl& fd, const std::string argName);
-inline bool IsTypeObjectCreation(const AST::FuncDecl& fd, const AST::CallExpr& ce)
-{
-    // Get type variables from the outer (class, struct, enum) declaration of a constructor function
-    // when call by type name (enum constructor is alway treated as called by typename).
-    bool isTypeNameCall =
-        ce.callKind == AST::CallKind::CALL_OBJECT_CREATION || ce.callKind == AST::CallKind::CALL_STRUCT_CREATION;
-    return (isTypeNameCall && fd.TestAttr(AST::Attribute::CONSTRUCTOR)) ||
-        fd.TestAttr(AST::Attribute::ENUM_CONSTRUCTOR);
-}
+bool IsTypeObjectCreation(const AST::FuncDecl& fd, const AST::CallExpr& ce);
 
 /**
  * Get a specific modifier of a given declaration @p d.
@@ -312,8 +311,8 @@ template <typename T> T* GetMemberDecl(
             continue;
         }
         bool isSuitableDecl = true;
-        if (auto funcMember = DynamicCast<AST::FuncDecl>(member.get()); funcMember) {
-            auto originalParamTys = RawStaticCast<const AST::FuncTy*>(funcMember->GetTy())->paramTys;
+        if (auto funcMember = dynamic_cast<AST::FuncDecl*>(&*member); funcMember) {
+            auto originalParamTys = static_cast<const AST::FuncTy*>(funcMember->GetTy().get())->paramTys;
             if (originalParamTys.size() != paramTys.size()) {
                 continue;
             }

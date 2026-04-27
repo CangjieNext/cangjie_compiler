@@ -11,6 +11,8 @@
  */
 
 #include "TypeCheckerImpl.h"
+#include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/Utils.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
@@ -365,7 +367,7 @@ void CheckUnusedImportImpl::Check()
     ReportUnusedImports();
 }
 
-void TypeChecker::TypeCheckerImpl::CheckUnusedImportSpec(Package& pkg)
+void TypeCheckerImpl::CheckUnusedImportSpec(Package& pkg)
 {
     Utils::ProfileRecorder recorder("Post TypeCheck", "CheckUnusedImportSpec");
     CheckUnusedImportImpl(pkg, diag, importManager).Check();

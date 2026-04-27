@@ -731,9 +731,9 @@ std::pair<std::string, std::string> JavaSourceCodeGenerator::GenNativeSuperArgCa
 {
     CJC_ASSERT(arg.expr->desugarExpr->astKind == ASTKind::REF_EXPR);
     auto ref = StaticCast<const RefExpr*>(arg.expr->desugarExpr.get());
-    CJC_NULLPTR_CHECK(ref->ref.target);
-    CJC_ASSERT(ref->ref.target->astKind == ASTKind::FUNC_DECL);
-    auto nativeFn = StaticCast<FuncDecl*>(ref->ref.target);
+    CJC_NULLPTR_CHECK(ref->ref.GetTarget());
+    CJC_ASSERT(ref->ref.GetTarget()->astKind == ASTKind::FUNC_DECL);
+    auto nativeFn = StaticCast<FuncDecl*>(ref->ref.GetTarget());
     std::string id = nativeFn->identifier.Val();
     const std::string keyword = "_super";
     size_t pos = id.rfind(keyword);

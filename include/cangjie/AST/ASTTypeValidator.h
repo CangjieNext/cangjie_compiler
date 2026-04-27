@@ -13,15 +13,12 @@
 #ifndef CANGJIE_AST_TYPE_VALIDATOR_H
 #define CANGJIE_AST_TYPE_VALIDATOR_H
 
-#include "cangjie/AST/ASTCasting.h"
-#include "cangjie/AST/Nodes/Package.h"
-#include "cangjie/AST/PrintNode.h"
-#include "cangjie/AST/Utils.h"
-#include "cangjie/AST/Walker.h"
-#include "cangjie/Basic/DiagnosticEngine.h"
+namespace Cangjie {    
+class DiagnosticEngine;
+}
 
 namespace Cangjie::AST {
-void ValidateUsedNodes(DiagnosticEngine& diagEngine, Package& pkg);
+void ValidateUsedNodes(DiagnosticEngine& diagEngine, struct Package& pkg);
 } // namespace Cangjie::AST
 
 #endif

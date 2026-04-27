@@ -620,6 +620,9 @@ enum IntrinsicKind : uint16_t {
 
     // cjnative only
     EXCLUSIVE_SCOPE,
+
+    // modal used
+    RAW_ARRAY_ALLOCATE,
 };
 
 static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {

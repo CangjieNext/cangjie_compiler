@@ -21,6 +21,7 @@
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
 namespace Cangjie {
@@ -221,7 +222,7 @@ void DiagRecursiveConstructorCall(DiagnosticEngine& diag, const std::vector<Ptr<
 } // namespace
 
 // desugar primary ctor before cjmp customDef merging
-void TypeChecker::TypeCheckerImpl::CheckPrimaryCtorBeforeMerge(Node &root)
+void TypeCheckerImpl::CheckPrimaryCtorBeforeMerge(Node &root)
 {
     Utils::ProfileRecorder recorder("PrepareTypeCheck", "CheckPrimaryCtorBeforeMerge");
     // Create by cjogen is not need to add default construct.
@@ -243,7 +244,7 @@ void TypeChecker::TypeCheckerImpl::CheckPrimaryCtorBeforeMerge(Node &root)
     walkerPackage.Walk();
 }
 
-void TypeChecker::TypeCheckerImpl::AddDefaultFunction(Node& root)
+void TypeCheckerImpl::AddDefaultFunction(Node& root)
 {
     // Create by cjogen is not need to add default construct.
     if (root.TestAttr(Attribute::TOOL_ADD)) {
@@ -366,7 +367,7 @@ Ptr<FuncBody> TypeCheckUtil::GetCurFuncBody(const ASTContext& ctx, const std::st
 
 // if there is no default constructor, insert one.
 // NOTICE: it will change AST Node!
-void TypeChecker::TypeCheckerImpl::AddDefaultCtor(InheritableDecl& decl) const
+void TypeCheckerImpl::AddDefaultCtor(InheritableDecl& decl) const
 {
     if (decl.astKind != ASTKind::STRUCT_DECL && decl.astKind != ASTKind::CLASS_DECL) {
         return;
@@ -395,7 +396,7 @@ void TypeChecker::TypeCheckerImpl::AddDefaultCtor(InheritableDecl& decl) const
     }
 }
 
-void TypeChecker::TypeCheckerImpl::AddDefaultSuperCall(const FuncBody& funcBody) const
+void TypeCheckerImpl::AddDefaultSuperCall(const FuncBody& funcBody) const
 {
     bool hasSuper = false;
     Walker(funcBody.body.get(), [&hasSuper](auto node) {
@@ -426,7 +427,7 @@ void TypeChecker::TypeCheckerImpl::AddDefaultSuperCall(const FuncBody& funcBody)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::GetTypeArgsOfType(Ptr<Type> type, std::vector<Ptr<Type>>& params)
+void TypeCheckerImpl::GetTypeArgsOfType(Ptr<Type> type, std::vector<Ptr<Type>>& params)
 {
     if (type == nullptr) {
         return;
@@ -469,7 +470,7 @@ void TypeChecker::TypeCheckerImpl::GetTypeArgsOfType(Ptr<Type> type, std::vector
 }
 
 // Check value type recursive.
-void TypeChecker::TypeCheckerImpl::CheckValueTypeRecursiveDFS(Ptr<Decl> root, std::deque<Ptr<Decl>> path)
+void TypeCheckerImpl::CheckValueTypeRecursiveDFS(Ptr<Decl> root, std::deque<Ptr<Decl>> path)
 {
     if (!root || root->checkFlag == InheritanceVisitStatus::VISITED) {
         return;
@@ -497,7 +498,7 @@ void TypeChecker::TypeCheckerImpl::CheckValueTypeRecursiveDFS(Ptr<Decl> root, st
     root->checkFlag = InheritanceVisitStatus::VISITED;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckValueTypeRecursiveDFSSwitch(Ptr<Decl> root, const std::deque<Ptr<Decl>>& path)
+void TypeCheckerImpl::CheckValueTypeRecursiveDFSSwitch(Ptr<Decl> root, const std::deque<Ptr<Decl>>& path)
 {
     if (root == nullptr) {
         return;
@@ -546,7 +547,7 @@ void TypeChecker::TypeCheckerImpl::CheckValueTypeRecursiveDFSSwitch(Ptr<Decl> ro
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckRecursiveConstructorCall(const std::vector<OwnedPtr<Decl>>& decls)
+void TypeCheckerImpl::CheckRecursiveConstructorCall(const std::vector<OwnedPtr<Decl>>& decls)
 {
     if (decls.empty()) {
         return;
@@ -565,12 +566,12 @@ void TypeChecker::TypeCheckerImpl::CheckRecursiveConstructorCall(const std::vect
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::HasModifier(const std::set<Modifier>& modifiers, TokenKind kind) const
+bool TypeCheckerImpl::HasModifier(const std::set<Modifier>& modifiers, TokenKind kind) const
 {
     return std::any_of(modifiers.begin(), modifiers.end(), [kind](const auto& it) { return it.modifier == kind; });
 }
 
-bool TypeChecker::TypeCheckerImpl::IsDeprecatedStrict(
+bool TypeCheckerImpl::IsDeprecatedStrict(
     const Ptr<Decl> decl
 ) const
 {

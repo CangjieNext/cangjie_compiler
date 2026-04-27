@@ -12,6 +12,9 @@
 
 #include "TypeCheckUtil.h"
 
+#include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Nodes/ExtendDecl.h"
+
 namespace Cangjie::TypeCheckUtil {
 using namespace AST;
 

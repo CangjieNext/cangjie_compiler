@@ -13,8 +13,17 @@
 #include "TypeCheckUtil.h"
 #include "TypeCheckerImpl.h"
 
+#include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Nodes/ClassDecl.h"
+#include "cangjie/AST/Nodes/EnumDecl.h"
+#include "cangjie/AST/Nodes/ExtendDecl.h"
+#include "cangjie/AST/Nodes/InterfaceDecl.h"
+#include "cangjie/AST/Nodes/PropDecl.h"
+#include "cangjie/AST/Nodes/RefExpr.h"
+#include "cangjie/AST/Nodes/StructDecl.h"
 #include "cangjie/AST/ScopeManagerApi.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Modules/ModulesUtils.h"
 
 using namespace Cangjie;
@@ -710,28 +719,28 @@ std::vector<Ptr<Decl>> LookUpImpl::Lookup(
     return results;
 }
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::FieldLookup(
+std::vector<Ptr<Decl>> TypeCheckerImpl::FieldLookup(
     const ASTContext& ctx, Ptr<Decl> decl, const std::string& fieldName, const LookupInfo& info)
 {
     LookUpImpl lookUpImpl(ctx, diag, typeManager, importManager);
     return lookUpImpl.FieldLookup(decl, fieldName, info);
 }
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::Lookup(
+std::vector<Ptr<Decl>> TypeCheckerImpl::Lookup(
     const ASTContext& ctx, const std::string& name, const std::string& scopeName, const Node& node, bool isSetter)
 {
     LookUpImpl lookUpImpl(ctx, diag, typeManager, importManager);
     return lookUpImpl.Lookup(name, scopeName, node, false, isSetter);
 }
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::LookupTopLevel(
+std::vector<Ptr<Decl>> TypeCheckerImpl::LookupTopLevel(
     const ASTContext& ctx, const std::string& name, const std::string& scopeName, const Node& node, bool isSetter)
 {
     LookUpImpl lookUpImpl(ctx, diag, typeManager, importManager);
     return lookUpImpl.Lookup(name, scopeName, node, true, isSetter);
 }
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::ExtendFieldLookup(
+std::vector<Ptr<Decl>> TypeCheckerImpl::ExtendFieldLookup(
     const ASTContext& ctx, const File& file, Ptr<Ty> ty, const std::string& fieldName)
 {
     LookUpImpl lookUpImpl(ctx, diag, typeManager, importManager);

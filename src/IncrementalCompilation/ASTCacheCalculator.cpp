@@ -6,6 +6,11 @@
 
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
 
+#include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/Nodes/Decl.h"
+#include "cangjie/AST/Nodes/ExtendDecl.h"
+#include "cangjie/AST/Nodes/Package.h"
+#include "cangjie/AST/Nodes/VarDecl.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/IncrementalCompilation/IncrementalScopeAnalysis.h"
 #include "cangjie/IncrementalCompilation/Utils.h"

@@ -64,7 +64,7 @@ void CollectGenericTyAccessibility(const AST::Decl& decl, std::vector<std::pair<
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::CheckAccessLevelValidity(Package& package)
+void TypeCheckerImpl::CheckAccessLevelValidity(Package& package)
 {
     for (auto& file : package.files) {
         for (auto& decl : file->decls) {
@@ -80,7 +80,7 @@ void TypeChecker::TypeCheckerImpl::CheckAccessLevelValidity(Package& package)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckNonPrivateDeclAccessLevelValidity(Decl& decl)
+void TypeCheckerImpl::CheckNonPrivateDeclAccessLevelValidity(Decl& decl)
 {
     if (!Ty::IsTyCorrect(decl.GetTy())) {
         return;
@@ -122,7 +122,7 @@ void TypeChecker::TypeCheckerImpl::CheckNonPrivateDeclAccessLevelValidity(Decl& 
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckNominalDeclAccessLevelValidity(const InheritableDecl& id)
+void TypeCheckerImpl::CheckNominalDeclAccessLevelValidity(const InheritableDecl& id)
 {
     if (id.astKind == AST::ASTKind::EXTEND_DECL) {
         return;
@@ -138,7 +138,7 @@ void TypeChecker::TypeCheckerImpl::CheckNominalDeclAccessLevelValidity(const Inh
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckFuncAccessLevelValidity(const FuncDecl& fd)
+void TypeCheckerImpl::CheckFuncAccessLevelValidity(const FuncDecl& fd)
 {
     CJC_NULLPTR_CHECK(fd.funcBody);
     std::vector<std::pair<Node&, Decl&>> limitedDecls;
@@ -167,7 +167,7 @@ void TypeChecker::TypeCheckerImpl::CheckFuncAccessLevelValidity(const FuncDecl& 
     DiagLowerAccessLevelTypesUse(diag, fd, limitedDecls, hintDecls);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckPatternVarAccessLevelValidity(AST::Pattern& pattern)
+void TypeCheckerImpl::CheckPatternVarAccessLevelValidity(AST::Pattern& pattern)
 {
     std::vector<std::pair<Node&, Decl&>> limitedDecls;
     Walker(&pattern, [&limitedDecls](Ptr<Node> node) -> VisitAction {

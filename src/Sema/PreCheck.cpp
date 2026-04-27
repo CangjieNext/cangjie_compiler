@@ -20,11 +20,13 @@
 #include <unordered_set>
 
 #include "cangjie/AST/ASTContext.h"
+#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Utils/CheckUtils.h"
@@ -201,7 +203,7 @@ inline std::string GetNormalizedName(const Symbol& sym)
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::CheckRedefinition(ASTContext& ctx)
+void TypeCheckerImpl::CheckRedefinition(ASTContext& ctx)
 {
     std::vector<Symbol*> syms;
     auto enableMacroInLSP = ci->invocation.globalOptions.enableMacroInLSP;
@@ -228,7 +230,7 @@ void TypeChecker::TypeCheckerImpl::CheckRedefinition(ASTContext& ctx)
     CheckConflictDeclWithSubPackage(*ctx.curPackage);
 }
 
-void TypeChecker::TypeCheckerImpl::CollectDeclMapAndCheckRedefinitionForOneSymbol(
+void TypeCheckerImpl::CollectDeclMapAndCheckRedefinitionForOneSymbol(
     ASTContext& ctx, const Symbol& sym, const Names& names)
 {
     CJC_NULLPTR_CHECK(sym.node);
@@ -272,7 +274,7 @@ void TypeChecker::TypeCheckerImpl::CollectDeclMapAndCheckRedefinitionForOneSymbo
     ctx.AddDeclName(names, StaticCast<Decl>(*sym.node));
 }
 
-void TypeChecker::TypeCheckerImpl::CheckRedefinitionInDeclHelper(ASTContext& ctx, std::vector<Symbol*>& syms)
+void TypeCheckerImpl::CheckRedefinitionInDeclHelper(ASTContext& ctx, std::vector<Symbol*>& syms)
 {
     auto ignoredMacroDecl = [](const Node& node) {
         return node.astKind == ASTKind::MACRO_EXPAND_DECL || node.TestAttr(Attribute::MACRO_INVOKE_FUNC);
@@ -293,7 +295,7 @@ void TypeChecker::TypeCheckerImpl::CheckRedefinitionInDeclHelper(ASTContext& ctx
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckConflictDeclWithSubPackage(const Package& pkg)
+void TypeCheckerImpl::CheckConflictDeclWithSubPackage(const Package& pkg)
 {
     if (pkg.files.empty()) {
         return;
@@ -327,7 +329,7 @@ void TypeChecker::TypeCheckerImpl::CheckConflictDeclWithSubPackage(const Package
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, Ptr<Node> type)
+Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, Ptr<Node> type)
 {
     if (type == nullptr) {
         return TypeManager::GetInvalidTy();
@@ -391,11 +393,11 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, Ptr<Node
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, RefType& rt)
+Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, RefType& rt)
 {
-    // If rt.GetTy() is nullptr but rt.ref.target is packageDecl, rt is the base of another qualified type and is already
+    // If rt.GetTy() is nullptr but rt.ref.GetTarget() is packageDecl, rt is the base of another qualified type and is already
     // resolved.
-    if ((rt.ref.target && rt.ref.target->astKind == ASTKind::PACKAGE_DECL) || !Ty::IsInitialTy(rt.GetTy())) {
+    if ((rt.ref.GetTarget() && rt.ref.GetTarget()->astKind == ASTKind::PACKAGE_DECL) || !Ty::IsInitialTy(rt.GetTy())) {
         return rt.GetTy();
     }
     // Get scope target.
@@ -445,7 +447,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, RefType&
         target = targets[0];
         if (auto builtin = DynamicCast<BuiltInDecl>(target); builtin && builtin->type == BuiltInType::CFUNC) {
             auto ty = GetTyFromASTCFuncType(ctx, rt);
-            rt.ref.target = target;
+            rt.ref.SetTarget(target);
             return ty;
         }
         ReplaceTarget(&rt, target);
@@ -459,7 +461,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, RefType&
     return TypeManager::GetInvalidTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTCFuncType(ASTContext& ctx, RefType& rt)
+Ptr<Ty> TypeCheckerImpl::GetTyFromASTCFuncType(ASTContext& ctx, RefType& rt)
 {
     if (rt.typeArguments.size() != 1) {
         diag.DiagnoseRefactor(
@@ -483,11 +485,11 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTCFuncType(ASTContext& ctx, Ref
     return typeManager.GetFunctionTy(std::move(paramTys), retTy, {.isC = true});
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, QualifiedType& qt)
+Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, QualifiedType& qt)
 {
-    // If qt.GetTy() is nullptr but qt.target is packageDecl, qt is the base of another qualified type and is already
+    // If qt.GetTy() is nullptr but qt.GetTarget() is packageDecl, qt is the base of another qualified type and is already
     // resolved.
-    bool earlyQuit = (qt.target && qt.target->astKind == ASTKind::PACKAGE_DECL) || !Ty::IsInitialTy(qt.GetTy());
+    bool earlyQuit = (qt.GetTarget() && qt.GetTarget()->astKind == ASTKind::PACKAGE_DECL) || !Ty::IsInitialTy(qt.GetTy());
     if (earlyQuit) {
         return qt.GetTy();
     }
@@ -538,7 +540,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, Qualifie
     return qt.GetTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, VArrayType& varrayType)
+Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, VArrayType& varrayType)
 {
     varrayType.typeArgument->SetTy(GetTyFromASTType(ctx, varrayType.typeArgument.get()));
     auto expr = StaticAs<ASTKind::CONSTANT_TYPE>(varrayType.constantType.get())->constantExpr.get();
@@ -560,7 +562,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, VArrayTy
     return varrayType.GetTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, TupleType& tupleType)
+Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, TupleType& tupleType)
 {
     if (!Ty::IsInitialTy(tupleType.GetTy())) {
         return tupleType.GetTy();
@@ -580,7 +582,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, TupleTyp
     return tupleType.GetTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, FuncType& funcType)
+Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, FuncType& funcType)
 {
     if (!Ty::IsInitialTy(funcType.GetTy())) {
         return funcType.GetTy();
@@ -607,7 +609,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, FuncType
     return funcType.GetTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, OptionType& optionType)
+Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, OptionType& optionType)
 {
     if (optionType.componentType) {
         optionType.componentType->SetTy(GetTyFromASTType(ctx, optionType.componentType.get()));
@@ -620,7 +622,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, OptionTy
     return optionType.GetTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(Decl& decl, const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<Ty> TypeCheckerImpl::GetTyFromASTType(Decl& decl, const std::vector<Ptr<Ty>>& typeArgs)
 {
     switch (decl.astKind) {
         case ASTKind::CLASS_DECL: {
@@ -656,7 +658,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(Decl& decl, const std::ve
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromBuiltinDecl(const BuiltInDecl& bid, const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<Ty> TypeCheckerImpl::GetTyFromBuiltinDecl(const BuiltInDecl& bid, const std::vector<Ptr<Ty>>& typeArgs)
 {
     switch (bid.type) {
         case BuiltInType::ARRAY: {
@@ -679,13 +681,13 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromBuiltinDecl(const BuiltInDecl& bi
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetBuiltInPointerType(const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<Ty> TypeCheckerImpl::GetBuiltInPointerType(const std::vector<Ptr<Ty>>& typeArgs)
 {
     auto elemTy = typeArgs.empty() ? TypeManager::GetInvalidTy() : typeArgs[0];
     return typeManager.GetPointerTy(elemTy);
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetBuiltInArrayType(const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<Ty> TypeCheckerImpl::GetBuiltInArrayType(const std::vector<Ptr<Ty>>& typeArgs)
 {
     if (typeArgs.size() > 1) {
         return TypeManager::GetInvalidTy();
@@ -694,14 +696,14 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetBuiltInArrayType(const std::vector<Ptr<
     return typeManager.GetArrayTy(elemTy, 1);
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetBuiltInVArrayType(const std::vector<Ptr<Ty>>& typeArgs)
+Ptr<Ty> TypeCheckerImpl::GetBuiltInVArrayType(const std::vector<Ptr<Ty>>& typeArgs)
 {
     CJC_ASSERT(typeArgs.size() == 1);
     auto elemTy = typeArgs.empty() ? TypeManager::GetInvalidTy() : typeArgs[0];
     return typeManager.GetVArrayTy(*elemTy, 0);
 }
 
-Ptr<AST::Ty> TypeChecker::TypeCheckerImpl::GetBuiltinCFuncType(const std::vector<Ptr<AST::Ty>>& typeArgs)
+Ptr<AST::Ty> TypeCheckerImpl::GetBuiltinCFuncType(const std::vector<Ptr<AST::Ty>>& typeArgs)
 {
     // the return type is CFunc<T>
     CJC_ASSERT(typeArgs.size() == 1 && Ty::IsTyCorrect(typeArgs[0]));
@@ -709,7 +711,7 @@ Ptr<AST::Ty> TypeChecker::TypeCheckerImpl::GetBuiltinCFuncType(const std::vector
         typeArgs, typeArgs[0], {.isC = true, .isClosureTy = false, .hasVariableLenArg = false, .noCast = false});
 }
 
-std::vector<Ptr<Ty>> TypeChecker::TypeCheckerImpl::GetTyFromASTType(
+std::vector<Ptr<Ty>> TypeCheckerImpl::GetTyFromASTType(
     const std::vector<OwnedPtr<GenericParamDecl>>& typeParameters)
 {
     std::vector<Ptr<Ty>> typeArgs;
@@ -722,7 +724,7 @@ std::vector<Ptr<Ty>> TypeChecker::TypeCheckerImpl::GetTyFromASTType(
     return typeArgs;
 }
 
-std::vector<Ptr<Ty>> TypeChecker::TypeCheckerImpl::GetTyFromASTType(
+std::vector<Ptr<Ty>> TypeCheckerImpl::GetTyFromASTType(
     ASTContext& ctx, std::vector<OwnedPtr<Type>>& typeArguments)
 {
     std::vector<Ptr<Ty>> typeArgs;
@@ -735,7 +737,7 @@ std::vector<Ptr<Ty>> TypeChecker::TypeCheckerImpl::GetTyFromASTType(
     return typeArgs;
 }
 
-void TypeChecker::TypeCheckerImpl::SetDeclTy(Decl& decl)
+void TypeCheckerImpl::SetDeclTy(Decl& decl)
 {
     std::vector<Ptr<Ty>> typeArgs;
     auto generic = decl.GetGeneric();
@@ -745,7 +747,7 @@ void TypeChecker::TypeCheckerImpl::SetDeclTy(Decl& decl)
     decl.SetTy(GetTyFromASTType(decl, typeArgs));
 }
 
-void TypeChecker::TypeCheckerImpl::SetTypeAliasDeclTy(ASTContext& ctx, TypeAliasDecl& tad)
+void TypeCheckerImpl::SetTypeAliasDeclTy(ASTContext& ctx, TypeAliasDecl& tad)
 {
     SetDeclTy(tad);
     if (tad.type == nullptr) {
@@ -765,7 +767,7 @@ void TypeChecker::TypeCheckerImpl::SetTypeAliasDeclTy(ASTContext& ctx, TypeAlias
     }
 }
 
-void TypeChecker::TypeCheckerImpl::ResolveOneDecl(ASTContext& ctx, Decl& decl)
+void TypeCheckerImpl::ResolveOneDecl(ASTContext& ctx, Decl& decl)
 {
     switch (decl.astKind) {
         case ASTKind::CLASS_DECL:
@@ -811,7 +813,7 @@ void TypeChecker::TypeCheckerImpl::ResolveOneDecl(ASTContext& ctx, Decl& decl)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::ResolveDecls(ASTContext& ctx)
+void TypeCheckerImpl::ResolveDecls(ASTContext& ctx)
 {
     std::vector<Symbol*> syms = GetAllDecls(ctx);
     for (auto& sym : syms) {
@@ -826,7 +828,7 @@ void TypeChecker::TypeCheckerImpl::ResolveDecls(ASTContext& ctx)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::ResolveTypeAlias(const std::vector<Ptr<ASTContext>>& contexts)
+void TypeCheckerImpl::ResolveTypeAlias(const std::vector<Ptr<ASTContext>>& contexts)
 {
     Utils::ProfileRecorder recorder("PreCheck", "ResolveTypeAlias");
     auto setTypAliasFunc = [this](ASTContext& ctx, TypeAliasDecl& tad) { return SetTypeAliasDeclTy(ctx, tad); };
@@ -851,7 +853,7 @@ void TypeChecker::TypeCheckerImpl::ResolveTypeAlias(const std::vector<Ptr<ASTCon
     }
 }
 
-void TypeChecker::TypeCheckerImpl::SetTypeTy(ASTContext& ctx, Type& type)
+void TypeCheckerImpl::SetTypeTy(ASTContext& ctx, Type& type)
 {
     type.SetTy(GetTyFromASTType(ctx, &type));
     // Set aliasTy for a type reference if refer a type alias. Use to export alias info when export cjo.
@@ -867,7 +869,7 @@ void TypeChecker::TypeCheckerImpl::SetTypeTy(ASTContext& ctx, Type& type)
     type.SetTy(typeManager.SubstituteTypeAliasInTy(*type.GetTy()));
 }
 
-void TypeChecker::TypeCheckerImpl::SubstituteTypeAliasForAlias(TypeAliasDecl& tad)
+void TypeCheckerImpl::SubstituteTypeAliasForAlias(TypeAliasDecl& tad)
 {
     auto resolveTypes = [this](Ptr<Node> node) -> VisitAction {
         switch (node->astKind) {
@@ -893,7 +895,7 @@ void TypeChecker::TypeCheckerImpl::SubstituteTypeAliasForAlias(TypeAliasDecl& ta
     Walker(&tad, resolveTypes).Walk();
 }
 
-void TypeChecker::TypeCheckerImpl::ResolveNames(ASTContext& ctx)
+void TypeCheckerImpl::ResolveNames(ASTContext& ctx)
 {
     auto id = Walker::GetNextWalkerID();
     // NOTE: ThisType should be resolved with function and it's parent.
@@ -935,7 +937,7 @@ void TypeChecker::TypeCheckerImpl::ResolveNames(ASTContext& ctx)
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckAndReduceUpperBounds(
+bool TypeCheckerImpl::CheckAndReduceUpperBounds(
     GenericsTy& genericTy, const std::set<Ptr<Ty>>& upperBounds)
 {
     if (!Ty::AreTysCorrect(upperBounds)) {
@@ -961,7 +963,7 @@ bool TypeChecker::TypeCheckerImpl::CheckAndReduceUpperBounds(
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::ValidRecursiveConstraintCheck(const Generic& generic)
+bool TypeCheckerImpl::ValidRecursiveConstraintCheck(const Generic& generic)
 {
     for (auto& it : generic.typeParameters) {
         CJC_NULLPTR_CHECK(it);
@@ -993,7 +995,7 @@ bool TypeChecker::TypeCheckerImpl::ValidRecursiveConstraintCheck(const Generic& 
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckUpperBoundsLegality(const Generic& generic)
+bool TypeCheckerImpl::CheckUpperBoundsLegality(const Generic& generic)
 {
     for (auto& gp : generic.typeParameters) {
         CJC_NULLPTR_CHECK(gp);
@@ -1011,7 +1013,7 @@ bool TypeChecker::TypeCheckerImpl::CheckUpperBoundsLegality(const Generic& gener
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckUpperBoundsLegalityRecursively(const Ty& upper)
+bool TypeCheckerImpl::CheckUpperBoundsLegalityRecursively(const Ty& upper)
 {
     auto decl = Ty::GetDeclPtrOfTy(&upper);
     if (!decl) {
@@ -1029,7 +1031,7 @@ bool TypeChecker::TypeCheckerImpl::CheckUpperBoundsLegalityRecursively(const Ty&
     return true;
 }
 
-void TypeChecker::TypeCheckerImpl::SanityCheckForClassUpperBounds(
+void TypeCheckerImpl::SanityCheckForClassUpperBounds(
     GenericsTy& genericTy, const std::set<Ptr<Ty>>& classUpperBounds)
 {
     if (!CheckAndReduceUpperBounds(genericTy, classUpperBounds)) {
@@ -1042,7 +1044,7 @@ void TypeChecker::TypeCheckerImpl::SanityCheckForClassUpperBounds(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::SanityCheckForOneGenericTy(GenericsTy& genericTy)
+void TypeCheckerImpl::SanityCheckForOneGenericTy(GenericsTy& genericTy)
 {
     std::set<Ptr<Ty>> classUpperBounds;
     bool invalidUpperbound = false;
@@ -1070,7 +1072,7 @@ void TypeChecker::TypeCheckerImpl::SanityCheckForOneGenericTy(GenericsTy& generi
     SanityCheckForClassUpperBounds(genericTy, classUpperBounds);
 }
 
-void TypeChecker::TypeCheckerImpl::AssumptionSanityCheck(const Generic& generic)
+void TypeCheckerImpl::AssumptionSanityCheck(const Generic& generic)
 {
     // Rule 1: There can be no recursive constraint if the upper bound of a type argument is a class irrelevant type.
     if (!ValidRecursiveConstraintCheck(generic)) {
@@ -1086,7 +1088,7 @@ void TypeChecker::TypeCheckerImpl::AssumptionSanityCheck(const Generic& generic)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CollectAssumption(ASTContext& ctx, const Decl& decl)
+void TypeCheckerImpl::CollectAssumption(ASTContext& ctx, const Decl& decl)
 {
     switch (decl.astKind) {
         case ASTKind::FUNC_DECL:
@@ -1107,7 +1109,7 @@ void TypeChecker::TypeCheckerImpl::CollectAssumption(ASTContext& ctx, const Decl
     }
 }
 
-void TypeChecker::TypeCheckerImpl::ExposeGenericUpperBounds(ASTContext& ctx, const Generic& generic) const
+void TypeCheckerImpl::ExposeGenericUpperBounds(ASTContext& ctx, const Generic& generic) const
 {
     for (auto& it : generic.typeParameters) {
         CJC_NULLPTR_CHECK(it);
@@ -1140,7 +1142,7 @@ void TypeChecker::TypeCheckerImpl::ExposeGenericUpperBounds(ASTContext& ctx, con
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckAssumption(ASTContext& ctx, const Decl& decl)
+void TypeCheckerImpl::CheckAssumption(ASTContext& ctx, const Decl& decl)
 {
     if (decl.TestAttr(Attribute::FROM_COMMON_PART)) {
         return;
@@ -1162,7 +1164,7 @@ void TypeChecker::TypeCheckerImpl::CheckAssumption(ASTContext& ctx, const Decl& 
     AssumptionSanityCheck(*generic);
 }
 
-void TypeChecker::TypeCheckerImpl::AddSuperClassObjectForClassDecl(ASTContext& ctx)
+void TypeCheckerImpl::AddSuperClassObjectForClassDecl(ASTContext& ctx)
 {
     std::vector<Symbol*> syms = GetSymsByASTKind(ctx, ASTKind::CLASS_DECL, Sort::posAsc);
     for (auto& sym : syms) {
@@ -1182,7 +1184,7 @@ void TypeChecker::TypeCheckerImpl::AddSuperClassObjectForClassDecl(ASTContext& c
     }
 }
 
-void TypeChecker::TypeCheckerImpl::AddSuperInterfaceForClassLikeDecl(ASTContext& ctx)
+void TypeCheckerImpl::AddSuperInterfaceForClassLikeDecl(ASTContext& ctx)
 {
     // TODO: move it to Interop::ObjC
     std::vector<Symbol*> syms = GetAllDecls(ctx);
@@ -1198,7 +1200,7 @@ void TypeChecker::TypeCheckerImpl::AddSuperInterfaceForClassLikeDecl(ASTContext&
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CollectAndCheckAssumption(ASTContext& ctx)
+void TypeCheckerImpl::CollectAndCheckAssumption(ASTContext& ctx)
 {
     std::vector<Symbol*> syms = GetGenericCandidates(ctx);
     for (auto& sym : syms) {
@@ -1215,7 +1217,7 @@ void TypeChecker::TypeCheckerImpl::CollectAndCheckAssumption(ASTContext& ctx)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::TypeAliasCircleCheck(const ASTContext& ctx)
+void TypeCheckerImpl::TypeAliasCircleCheck(const ASTContext& ctx)
 {
     if (ctx.curPackage->TestAttr(Attribute::IMPORTED)) {
         return; // Alias dependency check can be ignored for imported package.
@@ -1229,20 +1231,20 @@ void TypeChecker::TypeCheckerImpl::TypeAliasCircleCheck(const ASTContext& ctx)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckTypeAliasCycleForOneType(Type& type, std::deque<Ptr<Decl>>& path)
+void TypeCheckerImpl::CheckTypeAliasCycleForOneType(Type& type, std::deque<Ptr<Decl>>& path)
 {
     switch (type.astKind) {
         case ASTKind::REF_TYPE: {
             auto rt = StaticAs<ASTKind::REF_TYPE>(&type);
-            if (rt->ref.target && rt->ref.target->astKind == ASTKind::TYPE_ALIAS_DECL) {
-                CheckTypeAliasCycleForOneDecl(*StaticAs<ASTKind::TYPE_ALIAS_DECL>(rt->ref.target), path);
+            if (rt->ref.GetTarget() && rt->ref.GetTarget()->astKind == ASTKind::TYPE_ALIAS_DECL) {
+                CheckTypeAliasCycleForOneDecl(*StaticAs<ASTKind::TYPE_ALIAS_DECL>(rt->ref.GetTarget()), path);
             }
             break;
         }
         case ASTKind::QUALIFIED_TYPE: {
             auto qt = StaticAs<ASTKind::QUALIFIED_TYPE>(&type);
-            if (qt->target && qt->target->astKind == ASTKind::TYPE_ALIAS_DECL) {
-                CheckTypeAliasCycleForOneDecl(*StaticAs<ASTKind::TYPE_ALIAS_DECL>(qt->target), path);
+            if (qt->GetTarget() && qt->GetTarget()->astKind == ASTKind::TYPE_ALIAS_DECL) {
+                CheckTypeAliasCycleForOneDecl(*StaticAs<ASTKind::TYPE_ALIAS_DECL>(qt->GetTarget()), path);
             }
             break;
         }
@@ -1251,7 +1253,7 @@ void TypeChecker::TypeCheckerImpl::CheckTypeAliasCycleForOneType(Type& type, std
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckTypeAliasCycleForTypeArgsRecursively(
+void TypeCheckerImpl::CheckTypeAliasCycleForTypeArgsRecursively(
     std::vector<Ptr<Type>>& typeArgs, std::deque<Ptr<Decl>>& path)
 {
     for (auto type : typeArgs) {
@@ -1262,7 +1264,7 @@ void TypeChecker::TypeCheckerImpl::CheckTypeAliasCycleForTypeArgsRecursively(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckTypeAliasCycleForOneDecl(TypeAliasDecl& tad, std::deque<Ptr<Decl>>& path)
+void TypeCheckerImpl::CheckTypeAliasCycleForOneDecl(TypeAliasDecl& tad, std::deque<Ptr<Decl>>& path)
 {
     if (tad.checkFlag == InheritanceVisitStatus::VISITING) {
         // Found a cycle; mark every decl in this cycle.
@@ -1279,7 +1281,7 @@ void TypeChecker::TypeCheckerImpl::CheckTypeAliasCycleForOneDecl(TypeAliasDecl& 
     tad.checkFlag = InheritanceVisitStatus::VISITED;
 }
 
-void TypeChecker::TypeCheckerImpl::StructDeclCircleOrDupCheckForOneSymbol(ASTContext& ctx, const Symbol& sym)
+void TypeCheckerImpl::StructDeclCircleOrDupCheckForOneSymbol(ASTContext& ctx, const Symbol& sym)
 {
     CJC_NULLPTR_CHECK(sym.node);
     switch (sym.node->astKind) {
@@ -1313,7 +1315,7 @@ void TypeChecker::TypeCheckerImpl::StructDeclCircleOrDupCheckForOneSymbol(ASTCon
     }
 }
 
-void TypeChecker::TypeCheckerImpl::StructDeclCircleOrDupCheck(ASTContext& ctx)
+void TypeCheckerImpl::StructDeclCircleOrDupCheck(ASTContext& ctx)
 {
     std::vector<Symbol*> syms = GetAllStructDecls(ctx);
     for (auto& sym : syms) {
@@ -1321,7 +1323,7 @@ void TypeChecker::TypeCheckerImpl::StructDeclCircleOrDupCheck(ASTContext& ctx)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckDupInterfaceInStructDecl(InheritableDecl& decl)
+void TypeCheckerImpl::CheckDupInterfaceInStructDecl(InheritableDecl& decl)
 {
     if (!Ty::IsTyCorrect(decl.GetTy())) {
         return;
@@ -1331,7 +1333,7 @@ void TypeChecker::TypeCheckerImpl::CheckDupInterfaceInStructDecl(InheritableDecl
 }
 
 template <typename T>
-void TypeChecker::TypeCheckerImpl::CheckInheritanceCycleHelper(
+void TypeCheckerImpl::CheckInheritanceCycleHelper(
     ASTContext& ctx, const Decl& decl, const Type& te, std::deque<Ptr<Decl>>& path, Ptr<ExtendDecl> extendDecl)
 {
     if (te.astKind == ASTKind::REF_TYPE || te.astKind == ASTKind::QUALIFIED_TYPE) {
@@ -1347,7 +1349,7 @@ void TypeChecker::TypeCheckerImpl::CheckInheritanceCycleHelper(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckInheritanceCycleWithExtend(
+void TypeCheckerImpl::CheckInheritanceCycleWithExtend(
     ASTContext& ctx, const InheritableDecl& decl, std::deque<Ptr<Decl>>& path)
 {
     std::set<Ptr<ExtendDecl>> extends = typeManager.GetDeclExtends(decl);
@@ -1364,7 +1366,7 @@ void TypeChecker::TypeCheckerImpl::CheckInheritanceCycleWithExtend(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckInheritanceCycleDFS(
+void TypeCheckerImpl::CheckInheritanceCycleDFS(
     ASTContext& ctx, Decl& decl, std::deque<Ptr<Decl>>& path, Ptr<ExtendDecl> extendDecl)
 {
     if (decl.checkFlag == InheritanceVisitStatus::VISITING) {
@@ -1391,7 +1393,7 @@ void TypeChecker::TypeCheckerImpl::CheckInheritanceCycleDFS(
     decl.checkFlag = InheritanceVisitStatus::VISITED;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckInheritanceCycleDFSHandleVisiting(
+void TypeCheckerImpl::CheckInheritanceCycleDFSHandleVisiting(
     const Decl& decl, const std::deque<Ptr<Decl>>& path, Ptr<const ExtendDecl> extendDecl)
 {
     // Found a cycle; mark every decl in this cycle.
@@ -1399,7 +1401,7 @@ void TypeChecker::TypeCheckerImpl::CheckInheritanceCycleDFSHandleVisiting(
     diag.Diagnose((extendDecl == nullptr) ? decl : *extendDecl, "sema_inheritance_cycle", str);
 }
 
-void TypeChecker::TypeCheckerImpl::IgnoreAssumptionForTypeAliasDecls(const ASTContext& ctx) const
+void TypeCheckerImpl::IgnoreAssumptionForTypeAliasDecls(const ASTContext& ctx) const
 {
     std::vector<Symbol*> syms = GetSymsByASTKind(ctx, ASTKind::TYPE_ALIAS_DECL, Sort::posAsc);
     for (auto& sym : syms) {
@@ -1413,7 +1415,7 @@ void TypeChecker::TypeCheckerImpl::IgnoreAssumptionForTypeAliasDecls(const ASTCo
     }
 }
 
-void TypeChecker::TypeCheckerImpl::AddAssumptionForExtendDecls(ASTContext& ctx)
+void TypeCheckerImpl::AddAssumptionForExtendDecls(ASTContext& ctx)
 {
     std::vector<Symbol*> syms = GetSymsByASTKind(ctx, ASTKind::EXTEND_DECL, Sort::posAsc);
     for (auto& sym : syms) {
@@ -1425,7 +1427,7 @@ void TypeChecker::TypeCheckerImpl::AddAssumptionForExtendDecls(ASTContext& ctx)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::AddUpperBoundOnTypeParameters(
+void TypeCheckerImpl::AddUpperBoundOnTypeParameters(
     ASTContext& ctx, const Generic& generic, const Decl& typeTarget, MultiTypeSubst& revTypeMapping,
     TyVarUB& allAssumptionMap, const TypeSubst& typeArgAppliedMap)
 {
@@ -1462,7 +1464,7 @@ void TypeChecker::TypeCheckerImpl::AddUpperBoundOnTypeParameters(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::AddAssumptionForType(ASTContext& ctx, const Type& type, Generic& generic)
+void TypeCheckerImpl::AddAssumptionForType(ASTContext& ctx, const Type& type, Generic& generic)
 {
     if (type.astKind != ASTKind::REF_TYPE && type.astKind != ASTKind::QUALIFIED_TYPE) {
         return;
@@ -1484,7 +1486,7 @@ void TypeChecker::TypeCheckerImpl::AddAssumptionForType(ASTContext& ctx, const T
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PreCheckMacroRedefinition(const std::vector<Ptr<FuncDecl>>& funcs) const
+void TypeCheckerImpl::PreCheckMacroRedefinition(const std::vector<Ptr<FuncDecl>>& funcs) const
 {
     std::vector<Ptr<FuncDecl>> macroVec;
     std::for_each(funcs.begin(), funcs.end(), [&macroVec](auto func) {
@@ -1511,7 +1513,7 @@ void TypeChecker::TypeCheckerImpl::PreCheckMacroRedefinition(const std::vector<P
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionForEnum(const std::vector<Ptr<FuncDecl>>& funcs)
+void TypeCheckerImpl::PreCheckFuncRedefinitionForEnum(const std::vector<Ptr<FuncDecl>>& funcs)
 {
     CJC_ASSERT(!funcs.empty()); // Caller guarantees.
     if (funcs[0]->outerDecl == nullptr || funcs[0]->outerDecl->astKind != ASTKind::ENUM_DECL) {
@@ -1544,7 +1546,7 @@ void TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionForEnum(const std::ve
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionForFFI(const std::vector<Ptr<FuncDecl>>& funcs)
+void TypeCheckerImpl::PreCheckFuncRedefinitionForFFI(const std::vector<Ptr<FuncDecl>>& funcs)
 {
     std::vector<Ptr<FuncDecl>> nativeDuplicates;
     std::copy_if(funcs.begin(), funcs.end(), std::back_inserter(nativeDuplicates),
@@ -1560,7 +1562,7 @@ void TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionForFFI(const std::vec
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PreCheckFuncStaticConflict(const std::vector<Ptr<FuncDecl>>& funcs)
+void TypeCheckerImpl::PreCheckFuncStaticConflict(const std::vector<Ptr<FuncDecl>>& funcs)
 {
     std::vector<Ptr<FuncDecl>> staticFuncs;
     std::copy_if(funcs.begin(), funcs.end(), std::back_inserter(staticFuncs), [](Ptr<const FuncDecl> fd) {
@@ -1595,7 +1597,7 @@ inline bool IsSameDeserializedFunction(Ptr<FuncDecl> f1, Ptr<FuncDecl> f2)
 }
 }
 
-bool TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
+bool TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
     std::vector<Ptr<FuncDecl>> funcs, bool needReportErr)
 {
     bool ret = false;
@@ -1649,7 +1651,7 @@ bool TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
     return ret;
 }
 
-void TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinition(const ASTContext& ctx)
+void TypeCheckerImpl::PreCheckFuncRedefinition(const ASTContext& ctx)
 {
     // Redefinition check can be ignored for imported package or package generate by cjogen.
     if (ctx.curPackage->TestAnyAttr(Attribute::IMPORTED, Attribute::TOOL_ADD)) {
@@ -1708,7 +1710,7 @@ Ptr<ReturnExpr> GetDanglingReturn(const FuncParam& fp)
 }
 }; // namespace
 
-void TypeChecker::TypeCheckerImpl::CheckReturnAndJump(const ASTContext& ctx)
+void TypeCheckerImpl::CheckReturnAndJump(const ASTContext& ctx)
 {
     auto syms = GetSymsByASTKind(ctx, ASTKind::RETURN_EXPR);
     for (auto sym : syms) {
@@ -1749,7 +1751,7 @@ void TypeChecker::TypeCheckerImpl::CheckReturnAndJump(const ASTContext& ctx)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::ReplaceThisTypeInFunc(const AST::FuncDecl& funcDecl)
+void TypeCheckerImpl::ReplaceThisTypeInFunc(const AST::FuncDecl& funcDecl)
 {
     CJC_ASSERT(funcDecl.funcBody);
     // Parser guarantees 'This' only exist on the return type of function decl inside classBody.
@@ -1760,7 +1762,7 @@ void TypeChecker::TypeCheckerImpl::ReplaceThisTypeInFunc(const AST::FuncDecl& fu
     // Replace ThisType to RefType.
     if (auto thisType = DynamicCast<ThisType*>(funcDecl.funcBody->retType.get())) {
         auto rt = MakeOwned<RefType>();
-        rt->ref.target = cd;
+        rt->ref.SetTarget(cd);
         rt->ref.identifier = "This";
         rt->ref.identifier.SetPos(thisType->begin, thisType->begin + std::string_view{"This"}.size());
         CopyBasicInfo(thisType, rt.get());
@@ -1769,7 +1771,7 @@ void TypeChecker::TypeCheckerImpl::ReplaceThisTypeInFunc(const AST::FuncDecl& fu
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PreSetDeclType(const ASTContext& ctx)
+void TypeCheckerImpl::PreSetDeclType(const ASTContext& ctx)
 {
     // 1. Set user defined enum constructor's type.
     auto syms = GetSymsByASTKind(ctx, ASTKind::ENUM_DECL);
@@ -1827,7 +1829,7 @@ void TypeChecker::TypeCheckerImpl::PreSetDeclType(const ASTContext& ctx)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PreCheckUsage(ASTContext& ctx, const Package& pkg)
+void TypeCheckerImpl::PreCheckUsage(ASTContext& ctx, const Package& pkg)
 {
     // NOTE: processing order is important.
     // Build enum constructors map.
@@ -1865,7 +1867,7 @@ void TypeChecker::TypeCheckerImpl::PreCheckUsage(ASTContext& ctx, const Package&
     mpImpl->PreCheck4CJMP(pkg);
 }
 
-void TypeChecker::TypeCheckerImpl::PreCheckInvalidInherit(const ASTContext& ctx, const AST::Package& pkg)
+void TypeCheckerImpl::PreCheckInvalidInherit(const ASTContext& ctx, const AST::Package& pkg)
 {
     if (pkg.TestAttr(Attribute::IMPORTED)) {
         return;
@@ -1936,7 +1938,7 @@ MemSig MemDecl2Sig(Decl& d)
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::CollectDeclsWithMember(Ptr<Package> pkg, ASTContext& ctx)
+void TypeCheckerImpl::CollectDeclsWithMember(Ptr<Package> pkg, ASTContext& ctx)
 {
     std::unordered_map<Ptr<Decl>, std::unordered_set<MemSig, MemSigHash>> decl2Mems;
     std::unordered_set<Ptr<Decl>> allTops; // includes extendDecl needed for finding super types
@@ -1998,7 +2000,7 @@ void TypeChecker::TypeCheckerImpl::CollectDeclsWithMember(Ptr<Package> pkg, ASTC
     }
 }
 
-void TypeChecker::TypeCheckerImpl::PreCheck(const std::vector<Ptr<ASTContext>>& contexts)
+void TypeCheckerImpl::PreCheck(const std::vector<Ptr<ASTContext>>& contexts)
 {
     Utils::ProfileRecorder recorder("Pre TypeCheck", "PreCheck");
     // NOTE: PreCheck should not contains any 'Synthesize' call.

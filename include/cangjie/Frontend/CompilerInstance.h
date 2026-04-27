@@ -86,7 +86,7 @@ class CompilerInstance {
     friend class CompileStrategy;
     friend class MacroExpansion;
     friend class MacroEvaluation;
-    friend class TypeChecker;
+    friend class TypeCheckerImpl;
     friend class GenericInstantiationManager;
     friend class FullCompileStrategy;
     friend class IncrementalCompileStrategy;

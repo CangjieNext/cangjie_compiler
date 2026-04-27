@@ -7,12 +7,15 @@
 #ifndef CANGJIE_CHIR_CHIRTYPE_H
 #define CANGJIE_CHIR_CHIRTYPE_H
 
-#include "cangjie/AST/Types.h"
 #include "cangjie/CHIR/AST2CHIR/AST2CHIRNodeMap.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
 
 #include <mutex>
+
+namespace Cangjie::AST {
+struct Ty;
+}
 
 namespace Cangjie::CHIR {
 

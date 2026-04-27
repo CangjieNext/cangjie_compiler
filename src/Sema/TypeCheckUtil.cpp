@@ -82,21 +82,18 @@ void ModifyTargetOfRef(RefExpr& re, Ptr<Decl> decl, const std::vector<Ptr<Decl>>
     ReplaceTarget(&re, decl);
     // If the target of refExpr is FuncDecl, it should not be the real target of RefExpr.
     // The real target will be determined by resolvedFunction in the typecheck of CallExpr.
-    re.ref.targets.clear();
-    for (auto& it : targets) {
-        re.ref.targets.push_back(it);
-    }
+    re.ref.SetTargets(targets);
 }
 
 void AddFuncTargetsForMemberAccess(MemberAccess& ma, const std::vector<Ptr<Decl>>& targets)
 {
-    ma.targets.clear();
+    ma.SetTargets({});
     for (auto& decl : targets) {
         if (!decl || (!ma.isPattern && decl->astKind != ASTKind::FUNC_DECL)) {
             continue;
         }
         auto funcDecl = RawStaticCast<FuncDecl*>(decl);
-        ma.targets.push_back(funcDecl);
+        ma.AddTarget(funcDecl);
     }
 }
 
@@ -109,7 +106,7 @@ void ReplaceTarget(Ptr<Node> node, Ptr<Decl> target, bool insertTarget)
     switch (node->astKind) {
         case ASTKind::REF_EXPR: {
             auto re = StaticAs<ASTKind::REF_EXPR>(node);
-            re->ref.target = target;
+            re->ref.SetTarget(target);
             // Update type alias decl or clear the target.
             if (aliasDecl || !target) {
                 re->aliasTarget = aliasDecl;
@@ -118,7 +115,7 @@ void ReplaceTarget(Ptr<Node> node, Ptr<Decl> target, bool insertTarget)
         }
         case ASTKind::MEMBER_ACCESS: {
             auto ma = StaticAs<ASTKind::MEMBER_ACCESS>(node);
-            ma->target = target;
+            ma->SetTarget(target);
             // Update type alias decl or clear the target.
             if (aliasDecl || !target) {
                 ma->aliasTarget = aliasDecl;
@@ -127,12 +124,12 @@ void ReplaceTarget(Ptr<Node> node, Ptr<Decl> target, bool insertTarget)
         }
         case ASTKind::REF_TYPE: {
             auto rt = StaticAs<ASTKind::REF_TYPE>(node);
-            rt->ref.target = target;
+            rt->ref.SetTarget(target);
             break;
         }
         case ASTKind::QUALIFIED_TYPE: {
             auto qt = StaticAs<ASTKind::QUALIFIED_TYPE>(node);
-            qt->target = target;
+            qt->SetTarget(target);
             break;
         }
         case ASTKind::MACRO_EXPAND_EXPR: {
@@ -595,7 +592,7 @@ std::vector<Ptr<FuncDecl>> GetFuncTargets(const Node& node)
     switch (node.astKind) {
         case ASTKind::REF_EXPR: {
             std::vector<Ptr<FuncDecl>> funcTargets;
-            auto refTargets = StaticCast<const RefExpr&>(node).ref.targets;
+            auto refTargets = StaticCast<const RefExpr&>(node).ref.GetTargets();
             for (auto& it : refTargets) {
                 if (auto fd = DynamicCast<FuncDecl*>(it)) {
                     funcTargets.push_back(fd);
@@ -604,7 +601,13 @@ std::vector<Ptr<FuncDecl>> GetFuncTargets(const Node& node)
             return funcTargets;
         }
         case ASTKind::MEMBER_ACCESS: {
-            return StaticCast<const MemberAccess&>(node).targets;
+            std::vector<Ptr<FuncDecl>> funcTargets;
+            for (auto& it : StaticCast<const MemberAccess&>(node).GetTargets()) {
+                if (auto fd = DynamicCast<FuncDecl*>(it)) {
+                    funcTargets.push_back(fd);
+                }
+            }
+            return funcTargets;
         }
         default:
             return {};
@@ -812,6 +815,21 @@ std::vector<Ptr<Ty>> GetParamTysInArgsOrder(TypeManager& tyMgr, const CallExpr& 
         }
     }
     return tyInArgOrder;
+}
+
+Ptr<InheritableDecl> GetCurInheritableDecl(const ASTContext& ctx, const std::string& scopeName)
+{
+    auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, scopeName);
+    return sym ? DynamicCast<InheritableDecl*>(sym->node) : nullptr;
+}
+
+bool IsTypeObjectCreation(const FuncDecl& fd, const CallExpr& ce)
+{
+    // Get type variables from the outer (class, struct, enum) declaration of a constructor function
+    // when call by type name (enum constructor is alway treated as called by typename).
+    bool isTypeNameCall =
+        ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION;
+    return (isTypeNameCall && fd.TestAttr(Attribute::CONSTRUCTOR)) || fd.TestAttr(Attribute::ENUM_CONSTRUCTOR);
 }
 
 bool IsEnumCtorWithoutTypeArgs(const Expr& expr, Ptr<const Decl> target)
@@ -1032,15 +1050,15 @@ std::set<Ptr<AST::Ty>> GetGenericParamsForCall(const AST::CallExpr& ce, const AS
             ret.merge(GetGenericParamsForTy(*base->GetTy()));
         }
         if (auto ma = DynamicCast<MemberAccess*>(base)) {
-            if (ma->target) {
-                ret.merge(GetGenericParamsForDecl(*ma->target));
+            if (auto maTarget = ma->GetTarget()) {
+                ret.merge(GetGenericParamsForDecl(*maTarget));
             }
             base = ma->baseExpr;
         } else if (auto ce0 = DynamicCast<CallExpr*>(base)) {
             base = ce0->baseFunc;
         } else if (auto re = DynamicCast<RefExpr*>(base)) {
-            if (re->ref.target) {
-                ret.merge(GetGenericParamsForDecl(*re->ref.target));
+            if (auto reTarget = re->ref.GetTarget()) {
+                ret.merge(GetGenericParamsForDecl(*reTarget));
             }
             base = nullptr;
         } else {

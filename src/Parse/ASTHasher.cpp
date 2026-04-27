@@ -492,7 +492,7 @@ struct ASTHasherImpl {
     template <int whatTypeToHash> void HashMemberAccess(const MemberAccess& ma)
     {
         SUPERHash<whatTypeToHash>(ma.baseExpr, ma.field, ma.typeArguments, ma.isPattern);
-        if (auto maTarget = ma.target) {
+        if (auto maTarget = ma.GetTarget()) {
             SUPERHash<whatTypeToHash>(maTarget->rawMangleName);
             CJC_ASSERT(maTarget->GetTy());
             SUPERHash<whatTypeToHash>(maTarget->GetTy()->String());
@@ -529,7 +529,7 @@ struct ASTHasherImpl {
         HashExpr<whatTypeToHash>(re);
         SUPERHash<whatTypeToHash>(
             re.ref.identifier.Val(), re.typeArguments, re.isThis, re.isSuper, re.isQuoteDollar);
-        if (auto refTarget = re.ref.target) {
+        if (auto refTarget = re.ref.GetTarget()) {
             SUPERHash<whatTypeToHash>(refTarget->rawMangleName);
             CJC_ASSERT(refTarget->GetTy());
             SUPERHash<whatTypeToHash>(refTarget->GetTy()->String());
@@ -685,7 +685,7 @@ struct ASTHasherImpl {
     {
         HashType<whatTypeToHash>(qt);
         SUPERHash<whatTypeToHash>(qt.baseType, qt.field, qt.typeArguments);
-        if (auto refTarget = qt.target) {
+        if (auto refTarget = qt.GetTarget()) {
             SUPERHash<whatTypeToHash>(refTarget->rawMangleName);
             CJC_ASSERT(refTarget->GetTy());
             SUPERHash<whatTypeToHash>(refTarget->GetTy()->String());
@@ -696,7 +696,7 @@ struct ASTHasherImpl {
     {
         HashType<whatTypeToHash>(rt);
         SUPERHash<whatTypeToHash>(rt.ref.identifier.Val(), rt.typeArguments);
-        if (auto refTarget = rt.ref.target) {
+        if (auto refTarget = rt.ref.GetTarget()) {
             SUPERHash<whatTypeToHash>(refTarget->rawMangleName);
             CJC_ASSERT(refTarget->GetTy());
             SUPERHash<whatTypeToHash>(refTarget->GetTy()->String());

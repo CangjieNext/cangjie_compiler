@@ -12,6 +12,7 @@
 
 #include "cangjie/AST/Utils.h"
 
+#include <algorithm>
 #include <mutex>
 #include <deque>
 #include <sstream>
@@ -19,6 +20,8 @@
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/AST/Nodes/Package.h"
+#include "cangjie/AST/Nodes/MacroInvocation.h"
 #include "cangjie/Basic/Utils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Utils/FloatFormat.h"
@@ -26,6 +29,60 @@
 #include "cangjie/Utils/Utils.h"
 
 namespace Cangjie::AST {
+bool IsPureAnnotation(const AST::MacroInvocation& invocation)
+{
+    return invocation.isCustom && invocation.isCurFile;
+}
+
+void IterateToplevelDecls(const Package& pkg, const std::function<void(OwnedPtr<Decl>&)>& process)
+{
+    for (auto& file : pkg.files) {
+        (void)std::for_each(file->decls.begin(), file->decls.end(), process);
+        (void)std::for_each(file->exportedInternalDecls.begin(), file->exportedInternalDecls.end(), process);
+    }
+}
+
+bool IsNestedFunc(const AST::FuncDecl& fd)
+{
+    return !fd.TestAttr(AST::Attribute::GLOBAL) && (!fd.outerDecl || fd.outerDecl->IsFunc());
+}
+
+bool CanBeSrcExported(const AST::FuncDecl& fd)
+{
+    if (fd.isInline) {
+        return true;
+    }
+    const bool isGenericFunction = (fd.funcBody && fd.funcBody->generic) || fd.TestAttr(Attribute::GENERIC);
+    if ((isGenericFunction || fd.IsExportedDecl() || fd.linkage != Linkage::INTERNAL) && (fd.isConst || fd.isFrozen)) {
+        return true;
+    }
+    auto decl = fd.ownerFunc ? fd.ownerFunc.get() : &fd;
+    return !IsInDeclWithAttribute(*decl, Attribute::GENERIC_INSTANTIATED) && IsDefaultImplementation(*decl);
+}
+
+bool IsInstMemberVarInGenericDecl(const AST::VarDecl& vd)
+{
+    return vd.astKind == ASTKind::VAR_DECL && !vd.TestAttr(AST::Attribute::STATIC) &&
+        IsInDeclWithAttribute(vd, AST::Attribute::GENERIC);
+}
+
+bool IsMemberVarShouldBeSrcExported(const AST::VarDecl& vd)
+{
+    // Non-const static member variables are not exported because the static init function cannot be invoked by users.
+    // Therefore source code export is not required.
+    if (!vd.outerDecl || !vd.initializer || vd.TestAttr(AST::Attribute::STATIC)) {
+        return false;
+    }
+    auto& od = *vd.outerDecl;
+    return (od.astKind == AST::ASTKind::STRUCT_DECL && StaticCast<AST::StructDecl>(od).HasConstOrFrozenInit()) ||
+        (od.astKind == AST::ASTKind::CLASS_DECL && StaticCast<AST::ClassDecl>(od).HasConstOrFrozenInit());
+}
+
+bool IsCompatibleAccessLevel(AccessLevel srcLevel, AccessLevel refLevel)
+{
+    return srcLevel <= refLevel;
+}
+
 void AddCurFile(Node& root, Ptr<File> file)
 {
     Ptr<File> curFile = file;
@@ -534,7 +591,7 @@ bool IsValidCFuncConstructorCall(const CallExpr& ce)
     // ce.GetTy() is correct only when the whole CFunc constructor call is correct
     if (Ty::IsTyCorrect(ce.GetTy()) && ce.baseFunc && Is<RefExpr>(ce.baseFunc)) {
         // if this is a builtin CFunc constructor call, do not check the arguments
-        if (auto callee = DynamicCast<BuiltInDecl>(StaticCast<RefExpr>(ce.baseFunc.get())->ref.target);
+        if (auto callee = DynamicCast<BuiltInDecl>(StaticCast<RefExpr>(ce.baseFunc.get())->ref.GetTarget());
             callee && callee->type == BuiltInType::CFUNC) {
             return true;
         }

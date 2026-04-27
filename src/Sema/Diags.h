@@ -18,6 +18,27 @@
 
 #include <string>
 
+namespace Cangjie::AST {
+struct Decl;
+struct Expr;
+struct Node;
+struct Ty;
+struct Type;
+struct FuncDecl;
+struct FuncBody;
+struct FuncParam;
+struct CallExpr;
+struct BinaryExpr;
+struct UnaryExpr;
+struct SubscriptExpr;
+struct MemberAccess;
+struct PackageDecl;
+}
+
+namespace Cangjie {
+class TypeManager;
+}
+
 namespace Cangjie::Sema {
 using namespace AST;
 Range MakeRangeForDeclIdentifier(const AST::Decl& decl);

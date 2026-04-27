@@ -244,6 +244,18 @@ bool IsInterfaceStaticMethod(const Function& func)
     return func.TestAttr(Attribute::STATIC);
 }
 
+bool IsSemanticAbstractInstance(const AST::FuncDecl& func)
+{
+    return !func.TestAttr(AST::Attribute::STATIC) &&
+        (func.TestAttr(AST::Attribute::ABSTRACT) ||
+            (func.outerDecl && func.outerDecl->astKind == AST::ASTKind::INTERFACE_DECL));
+}
+
+bool IsEnumOption(const AST::EnumDecl& enumDecl)
+{
+    return enumDecl.identifier == STD_LIB_OPTION && enumDecl.fullPackageName == CORE_PACKAGE_NAME;
+}
+
 struct VisitStackElem {
     Block* bb;
     std::vector<Block*> successors;

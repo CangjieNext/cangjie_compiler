@@ -653,7 +653,7 @@ void JavaDesugarManager::ReplaceCallsWithArrayJavaEntityGet(File& file)
         auto newCallExpr = ASTCloner::Clone(callExpr);
         newCallExpr->resolvedFunction = arrayJavaEntityGetDecl;
         auto base = As<ASTKind::MEMBER_ACCESS>(newCallExpr->baseFunc);
-        base->target = arrayJavaEntityGetDecl;
+        base->SetTarget(arrayJavaEntityGetDecl);
         base->SetTy(arrayJavaEntityGetDecl->GetTy());
         callExpr->desugarExpr = lib.UnwrapJavaEntity(
             std::move(newCallExpr), arrayElementType, *As<ASTKind::CLASS_LIKE_DECL>(funcDecl->outerDecl));
@@ -701,7 +701,7 @@ void JavaDesugarManager::ReplaceCallsWithArrayJavaEntitySet(File& file)
         newCallExpr->desugarArgs = std::nullopt;
         callExpr->desugarArgs = std::nullopt;
         auto base = As<ASTKind::MEMBER_ACCESS>(newCallExpr->baseFunc);
-        base->target = arrayJavaEntitySetDecl;
+        base->SetTarget(arrayJavaEntitySetDecl);
         base->SetTy(arrayJavaEntitySetDecl->GetTy());
         callExpr->args[1] = ASTCloner::Clone(newCallExpr->args[1].get());
 

@@ -17,7 +17,7 @@ using namespace Cangjie;
 using namespace Sema;
 using namespace TypeCheckUtil;
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTryWithResourcesExpr(ASTContext& ctx, TryExpr& te)
+Ptr<Ty> TypeCheckerImpl::SynTryWithResourcesExpr(ASTContext& ctx, TryExpr& te)
 {
     auto resourceDecl = importManager.GetCoreDecl("Resource");
     if (resourceDecl == nullptr) {
@@ -55,7 +55,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTryWithResourcesExpr(ASTContext& ctx, T
     return te.GetTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTryExpr(ASTContext& ctx, TryExpr& te)
+Ptr<Ty> TypeCheckerImpl::SynTryExpr(ASTContext& ctx, TryExpr& te)
 {
     if (!te.resourceSpec.empty()) {
         return SynTryWithResourcesExpr(ctx, te);
@@ -79,7 +79,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTryExpr(ASTContext& ctx, TryExpr& te)
     return te.GetTy();
 }
 
-std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::SynTryExprCatchesAndHandles(ASTContext& ctx, TryExpr& te)
+std::optional<Ptr<Ty>> TypeCheckerImpl::SynTryExprCatchesAndHandles(ASTContext& ctx, TryExpr& te)
 {
     CJC_NULLPTR_CHECK(te.tryBlock);
     Ptr<Ty> jTy = Ty::IsTyCorrect(te.tryBlock->GetTy()) ? te.tryBlock->GetTy() : TypeManager::GetNothingTy();
@@ -126,7 +126,7 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::SynTryExprCatchesAndHandles
     return isWellTyped ? std::make_optional(jTy) : std::nullopt;
 }
 
-std::optional<Ptr<ClassTy>> TypeChecker::TypeCheckerImpl::PromoteToCommandTy(const AST::Node& cause, AST::Ty& cmdTy)
+std::optional<Ptr<ClassTy>> TypeCheckerImpl::PromoteToCommandTy(const AST::Node& cause, AST::Ty& cmdTy)
 {
     // Check if the type of expression performed is derived from `core.Command<T>` interface
     // For class type and generic type.
@@ -147,7 +147,7 @@ std::optional<Ptr<ClassTy>> TypeChecker::TypeCheckerImpl::PromoteToCommandTy(con
     return StaticCast<ClassTy*>(*promotedTys.begin());
 }
 
-bool TypeChecker::TypeCheckerImpl::SynHandler(ASTContext& ctx, Handler& handler, Ptr<Ty> tgtTy, TryExpr& te)
+bool TypeCheckerImpl::SynHandler(ASTContext& ctx, Handler& handler, Ptr<Ty> tgtTy, TryExpr& te)
 {
     // We need to validate the handler before synthesizing since it's necessary for
     // resume expressions
@@ -176,7 +176,7 @@ bool TypeChecker::TypeCheckerImpl::SynHandler(ASTContext& ctx, Handler& handler,
     return ChkHandler(ctx, handler, *tgtTy);
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkHandler(ASTContext& ctx, Handler& handler, Ty& tgtTy)
+bool TypeCheckerImpl::ChkHandler(ASTContext& ctx, Handler& handler, Ty& tgtTy)
 {
     if (!handler.commandPattern || !handler.desugaredLambda) {
         // Parse error has already been reported.
@@ -199,7 +199,7 @@ bool TypeChecker::TypeCheckerImpl::ChkHandler(ASTContext& ctx, Handler& handler,
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkTryExpr(ASTContext& ctx, Ty& tgtTy, TryExpr& te)
+bool TypeCheckerImpl::ChkTryExpr(ASTContext& ctx, Ty& tgtTy, TryExpr& te)
 {
     if (!te.resourceSpec.empty()) {
         auto ty = SynTryWithResourcesExpr(ctx, te);
@@ -236,7 +236,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExpr(ASTContext& ctx, Ty& tgtTy, TryExp
     return isWellTyped;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkTryExprCatchesAndHandles(ASTContext& ctx, Ty& tgtTy, TryExpr& te)
+bool TypeCheckerImpl::ChkTryExprCatchesAndHandles(ASTContext& ctx, Ty& tgtTy, TryExpr& te)
 {
     bool isWellTyped = ChkTryExprCatchPatterns(ctx, te) && ChkTryExprHandlePatterns(ctx, te);
     for (auto& catchBlock : te.catchBlocks) {
@@ -257,7 +257,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExprCatchesAndHandles(ASTContext& ctx, 
     return isWellTyped;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkTryExprFinallyBlock(ASTContext& ctx, const TryExpr& te)
+bool TypeCheckerImpl::ChkTryExprFinallyBlock(ASTContext& ctx, const TryExpr& te)
 {
     if (!te.finallyBlock) {
         return true;
@@ -283,7 +283,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExprFinallyBlock(ASTContext& ctx, const
     return isWellTyped;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkTryExprCatchPatterns(ASTContext& ctx, TryExpr& te)
+bool TypeCheckerImpl::ChkTryExprCatchPatterns(ASTContext& ctx, TryExpr& te)
 {
     std::vector<Ptr<Ty>> included{};
     auto exception = importManager.GetCoreDecl<ClassDecl>(CLASS_EXCEPTION);
@@ -306,7 +306,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExprCatchPatterns(ASTContext& ctx, TryE
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkTryExprHandlePatterns(ASTContext& ctx, TryExpr& te)
+bool TypeCheckerImpl::ChkTryExprHandlePatterns(ASTContext& ctx, TryExpr& te)
 {
     std::vector<Ptr<Ty>> included{};
     for (auto& handler : te.handlers) {
@@ -322,7 +322,7 @@ bool TypeChecker::TypeCheckerImpl::ChkTryExprHandlePatterns(ASTContext& ctx, Try
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ValidateHandler(Handler& h)
+bool TypeCheckerImpl::ValidateHandler(Handler& h)
 {
     bool valid = ValidateBlockInTryHandle(*h.block);
     std::vector<Ptr<Node>> scopeChanges;
@@ -356,7 +356,7 @@ bool TypeChecker::TypeCheckerImpl::ValidateHandler(Handler& h)
     return valid;
 }
 
-bool TypeChecker::TypeCheckerImpl::ValidateBlockInTryHandle(Block& block)
+bool TypeCheckerImpl::ValidateBlockInTryHandle(Block& block)
 {
     bool hasReturns = false;
     const auto& findReturns = [this, &hasReturns](Ptr<Node> node) -> VisitAction {

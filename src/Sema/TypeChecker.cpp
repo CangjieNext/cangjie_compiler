@@ -34,6 +34,7 @@
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Nodes/Node.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Frontend/CompilerInstance.h"
@@ -55,7 +56,7 @@ TypeChecker::~TypeChecker()
 {
 }
 
-TypeChecker::TypeCheckerImpl::TypeCheckerImpl(CompilerInstance* ci)
+TypeCheckerImpl::TypeCheckerImpl(CompilerInstance* ci)
     : promotion(Promotion(*ci->typeManager)),
       typeManager(*ci->typeManager),
       ci(ci),
@@ -66,7 +67,7 @@ TypeChecker::TypeCheckerImpl::TypeCheckerImpl(CompilerInstance* ci)
 {
 }
 
-TypeChecker::TypeCheckerImpl::~TypeCheckerImpl()
+TypeCheckerImpl::~TypeCheckerImpl()
 {
     if (mpImpl) {
         delete mpImpl;
@@ -74,7 +75,7 @@ TypeChecker::TypeCheckerImpl::~TypeCheckerImpl()
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckThisTypeOfFuncBody(const FuncBody& fb) const
+bool TypeCheckerImpl::CheckThisTypeOfFuncBody(const FuncBody& fb) const
 {
     CJC_ASSERT(fb.retType);
     bool returnThis = fb.retType->astKind == ASTKind::THIS_TYPE ||
@@ -88,13 +89,13 @@ bool TypeChecker::TypeCheckerImpl::CheckThisTypeOfFuncBody(const FuncBody& fb) c
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::IsIndexAssignmentOperator(const AST::FuncDecl& fd) const
+bool TypeCheckerImpl::IsIndexAssignmentOperator(const AST::FuncDecl& fd) const
 {
     return fd.op == TokenKind::LSQUARE && fd.funcBody != nullptr && !fd.funcBody->paramLists.empty() &&
         !fd.funcBody->paramLists[0]->params.empty() && fd.funcBody->paramLists[0]->params.back()->isNamedParam;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckBodyRetType(ASTContext& ctx, FuncBody& fb)
+bool TypeCheckerImpl::CheckBodyRetType(ASTContext& ctx, FuncBody& fb)
 {
     CJC_ASSERT(fb.retType);
     CJC_ASSERT(fb.retType->GetTy());
@@ -170,12 +171,12 @@ bool TypeChecker::TypeCheckerImpl::CheckBodyRetType(ASTContext& ctx, FuncBody& f
     }
 }
 
-void TypeChecker::TypeCheckerImpl::ReplaceFuncRetTyWithThis(FuncBody& fb, Ptr<Ty> ty)
+void TypeCheckerImpl::ReplaceFuncRetTyWithThis(FuncBody& fb, Ptr<Ty> ty)
 {
     if (auto ct = DynamicCast<ClassTy*>(ty); ct) {
         auto rt = MakeOwned<RefType>();
         rt->curFile = fb.curFile;
-        rt->ref.target = ct->decl;
+        rt->ref.SetTarget(ct->decl);
         rt->ref.identifier = "This";
         rt->SetTy(typeManager.GetClassThisTy(*ct->declPtr, ct->typeArgs));
         rt->EnableAttr(Attribute::COMPILER_ADD);
@@ -187,7 +188,7 @@ void TypeChecker::TypeCheckerImpl::ReplaceFuncRetTyWithThis(FuncBody& fb, Ptr<Ty
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckFuncBody(ASTContext& ctx, FuncBody& fb)
+bool TypeCheckerImpl::CheckFuncBody(ASTContext& ctx, FuncBody& fb)
 {
     if (fb.retType) {
         Synthesize({ctx, SynPos::NONE}, fb.retType.get());
@@ -214,7 +215,7 @@ bool TypeChecker::TypeCheckerImpl::CheckFuncBody(ASTContext& ctx, FuncBody& fb)
     return true;
 }
 
-void TypeChecker::TypeCheckerImpl::AddRetTypeNode(FuncBody& fb) const
+void TypeCheckerImpl::AddRetTypeNode(FuncBody& fb) const
 {
     // For incremental type check's compatibility. Incremental type check will erase retType->GetTy() but not retType.
     // Adding retType node more than once leads to memory leak.
@@ -227,7 +228,7 @@ void TypeChecker::TypeCheckerImpl::AddRetTypeNode(FuncBody& fb) const
     fb.retType->EnableAttr(Attribute::IS_CHECK_VISITED);
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckNormalFuncBody(ASTContext& ctx, FuncBody& fb, std::vector<Ptr<Ty>>& paramTys)
+bool TypeCheckerImpl::CheckNormalFuncBody(ASTContext& ctx, FuncBody& fb, std::vector<Ptr<Ty>>& paramTys)
 {
     if (fb.paramLists.empty()) {
         return false;
@@ -386,7 +387,7 @@ constexpr std::string_view INOUT_TEMP_VALUE{"temporary value"};
 constexpr std::string_view INOUT_IMMUTABLE{"is a immutable variable"};
 } // namespace
 
-bool TypeChecker::TypeCheckerImpl::CheckReturnThisInFuncBody(const FuncBody& fb) const
+bool TypeCheckerImpl::CheckReturnThisInFuncBody(const FuncBody& fb) const
 {
     // traverse funcBody to update returnThis which will be set to true only in two cases:
     // 1. return this
@@ -435,7 +436,7 @@ bool TypeChecker::TypeCheckerImpl::CheckReturnThisInFuncBody(const FuncBody& fb)
     return false;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckCtorFuncBody(ASTContext& ctx, FuncBody& fb)
+void TypeCheckerImpl::CheckCtorFuncBody(ASTContext& ctx, FuncBody& fb)
 {
     CJC_ASSERT(fb.funcDecl); // Ctor must have related funcDecl.
     if (fb.parentClassLike) {
@@ -466,7 +467,7 @@ void TypeChecker::TypeCheckerImpl::CheckCtorFuncBody(ASTContext& ctx, FuncBody& 
     Synthesize({ctx, SynPos::UNUSED}, fb.body.get());
 }
 
-void TypeChecker::TypeCheckerImpl::CheckFuncParamList(ASTContext& ctx, FuncParamList& fpl)
+void TypeCheckerImpl::CheckFuncParamList(ASTContext& ctx, FuncParamList& fpl)
 {
     // We use the tupleType to handle the type of FuncParamList.
     std::vector<Ptr<Ty>> paramTys;
@@ -500,7 +501,7 @@ void TypeChecker::TypeCheckerImpl::CheckFuncParamList(ASTContext& ctx, FuncParam
     fpl.SetTy(typeManager.GetTupleTy(paramTys));
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkFuncArg(ASTContext& ctx, Ty& target, FuncArg& fa)
+bool TypeCheckerImpl::ChkFuncArg(ASTContext& ctx, Ty& target, FuncArg& fa)
 {
     if (!fa.expr) {
         fa.SetTy(TypeManager::GetInvalidTy());
@@ -517,7 +518,7 @@ bool TypeChecker::TypeCheckerImpl::ChkFuncArg(ASTContext& ctx, Ty& target, FuncA
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkFuncArgWithInout(ASTContext& ctx, Ty& target, FuncArg& fa)
+bool TypeCheckerImpl::ChkFuncArgWithInout(ASTContext& ctx, Ty& target, FuncArg& fa)
 {
     auto realTarget = &target;
     auto exprTy = fa.expr->GetTy();
@@ -555,7 +556,7 @@ bool TypeChecker::TypeCheckerImpl::ChkFuncArgWithInout(ASTContext& ctx, Ty& targ
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkInoutFuncArg(const FuncArg& fa)
+bool TypeCheckerImpl::ChkInoutFuncArg(const FuncArg& fa)
 {
     switch (fa.expr->astKind) {
         case ASTKind::REF_EXPR:
@@ -575,7 +576,7 @@ bool TypeChecker::TypeCheckerImpl::ChkInoutFuncArg(const FuncArg& fa)
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkInoutRefExpr(RefExpr& re, bool isBase)
+bool TypeCheckerImpl::ChkInoutRefExpr(RefExpr& re, bool isBase)
 {
     auto target = GetRealTarget(&re, re.GetTarget());
     bool thisOrSuper = re.isThis || re.isSuper;
@@ -608,7 +609,7 @@ bool TypeChecker::TypeCheckerImpl::ChkInoutRefExpr(RefExpr& re, bool isBase)
  *   - if a or n defined with 'let', report error;
  *   - if a is class object, report error.
  */
-bool TypeChecker::TypeCheckerImpl::ChkInoutMemberAccess(const MemberAccess& ma)
+bool TypeCheckerImpl::ChkInoutMemberAccess(const MemberAccess& ma)
 {
     // Currently, `ma.desugarExpr` can only be `VArray.size`.
     if (ma.desugarExpr && ma.desugarExpr->astKind == ASTKind::LIT_CONST_EXPR) {
@@ -616,12 +617,12 @@ bool TypeChecker::TypeCheckerImpl::ChkInoutMemberAccess(const MemberAccess& ma)
         builder.AddMainHintArguments(std::string(INOUT_IMMUTABLE));
         return false;
     }
-    if (!ma.target) {
+    if (!ma.GetTarget()) {
         return false;
     }
     bool meetContraints = true;
-    if (ma.target->astKind == ASTKind::VAR_DECL) {
-        auto vd = StaticAs<ASTKind::VAR_DECL>(ma.target);
+    if (ma.GetTarget()->astKind == ASTKind::VAR_DECL) {
+        auto vd = StaticAs<ASTKind::VAR_DECL>(ma.GetTarget());
         if (!vd->isVar) {
             auto builder = diag.DiagnoseRefactor("sema_inout_must_be_var_variable", ma.field.Begin());
             builder.AddMainHintArguments(std::string(INOUT_IMMUTABLE));
@@ -659,7 +660,7 @@ bool TypeChecker::TypeCheckerImpl::ChkInoutMemberAccess(const MemberAccess& ma)
     return false;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynFuncArg(ASTContext& ctx, FuncArg& fa)
+Ptr<Ty> TypeCheckerImpl::SynFuncArg(ASTContext& ctx, FuncArg& fa)
 {
     if (fa.expr) {
         Synthesize({ctx, SynPos::EXPR_ARG}, fa.expr.get());
@@ -686,7 +687,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynFuncArg(ASTContext& ctx, FuncArg& fa)
     return fa.GetTy();
 }
 
-void TypeChecker::TypeCheckerImpl::SubstituteTypeArguments(
+void TypeCheckerImpl::SubstituteTypeArguments(
     const TypeAliasDecl& tad, std::vector<OwnedPtr<Type>>& typeArguments, const TypeSubst& typeMapping)
 {
     if (!typeArguments.empty() && typeArguments[0]->TestAttr(Attribute::COMPILER_ADD)) {
@@ -737,7 +738,7 @@ void RestoreCached(ASTContext& ctx, Ptr<Node> node, CacheEntry& cache, bool reco
 }
 } // namespace
 
-bool TypeChecker::TypeCheckerImpl::IsChecked(ASTContext& ctx, Node& node) const
+bool TypeCheckerImpl::IsChecked(ASTContext& ctx, Node& node) const
 {
     auto decl = As<ASTKind::DECL>(&node);
     auto type = As<ASTKind::TYPE>(&node);
@@ -748,7 +749,7 @@ bool TypeChecker::TypeCheckerImpl::IsChecked(ASTContext& ctx, Node& node) const
         (visitedExpr || visitedDecl || (type && type->TestAttr(Attribute::IS_CHECK_VISITED)));
 }
 
-std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::PerformBasicChecksForSynthesize(
+std::optional<Ptr<Ty>> TypeCheckerImpl::PerformBasicChecksForSynthesize(
     ASTContext& ctx, Ptr<Node> node) const
 {
     if (!node) {
@@ -768,7 +769,7 @@ std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::PerformBasicChecksForSynthe
     return {};
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<Node> node)
+Ptr<Ty> TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<Node> node)
 {
     if (auto res = PerformBasicChecksForSynthesize(ctx.Ctx(), node)) {
         return *res;
@@ -1057,7 +1058,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::Synthesize(const CheckerContext& ctx, Ptr<
     return TypeManager::GetNonNullTy(node->GetTy());
 }
 
-std::optional<bool> TypeChecker::TypeCheckerImpl::PerformBasicChecksForCheck(
+std::optional<bool> TypeCheckerImpl::PerformBasicChecksForCheck(
     ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node) const
 {
     if (!node) {
@@ -1079,7 +1080,7 @@ std::optional<bool> TypeChecker::TypeCheckerImpl::PerformBasicChecksForCheck(
     return {};
 }
 
-bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
+bool TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
 {
     if (auto res = PerformBasicChecksForCheck(ctx, target, node)) {
         return *res;
@@ -1294,7 +1295,7 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
     return chkRet;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckConstructor(ASTContext& ctx, const Decl& decl, FuncDecl& fd)
+void TypeCheckerImpl::CheckConstructor(ASTContext& ctx, const Decl& decl, FuncDecl& fd)
 {
     if (decl.astKind != ASTKind::CLASS_DECL && decl.astKind != ASTKind::STRUCT_DECL) {
         return;
@@ -1328,7 +1329,7 @@ void TypeChecker::TypeCheckerImpl::CheckConstructor(ASTContext& ctx, const Decl&
     CheckCallsInConstructor(ctx, decl, fd, *firstExprOrDecl, needEraseSuper);
 }
 
-void TypeChecker::TypeCheckerImpl::CheckCallsInConstructor(
+void TypeCheckerImpl::CheckCallsInConstructor(
     ASTContext& ctx, const Decl& decl, FuncDecl& fd, Node& firstExprOrDecl, bool needEraseSuper)
 {
     CJC_ASSERT(!fd.funcBody->body->body.empty()); // Caller guarantees.
@@ -1379,7 +1380,7 @@ void TypeChecker::TypeCheckerImpl::CheckCallsInConstructor(
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithCache(const CheckerContext& ctx, Ptr<Node> node)
+Ptr<Ty> TypeCheckerImpl::SynthesizeWithCache(const CheckerContext& ctx, Ptr<Node> node)
 {
     CJC_NULLPTR_CHECK(node);
     if (!typeManager.GetUnsolvedTyVars().empty()) {
@@ -1395,7 +1396,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithCache(const CheckerContext& 
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckWithCache(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
+bool TypeCheckerImpl::CheckWithCache(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
 {
     CJC_NULLPTR_CHECK(node);
     if (!typeManager.GetUnsolvedTyVars().empty()) {
@@ -1411,7 +1412,7 @@ bool TypeChecker::TypeCheckerImpl::CheckWithCache(ASTContext& ctx, Ptr<Ty> targe
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithNegCache(const CheckerContext& ctx, Ptr<Node> node)
+Ptr<Ty> TypeCheckerImpl::SynthesizeWithNegCache(const CheckerContext& ctx, Ptr<Node> node)
 {
     CJC_NULLPTR_CHECK(node);
     if (!typeManager.GetUnsolvedTyVars().empty()) {
@@ -1427,7 +1428,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithNegCache(const CheckerContex
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckWithNegCache(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
+bool TypeCheckerImpl::CheckWithNegCache(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node)
 {
     CJC_NULLPTR_CHECK(node);
     if (!typeManager.GetUnsolvedTyVars().empty()) {
@@ -1443,7 +1444,7 @@ bool TypeChecker::TypeCheckerImpl::CheckWithNegCache(ASTContext& ctx, Ptr<Ty> ta
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckWithEffectiveCache(
+bool TypeCheckerImpl::CheckWithEffectiveCache(
     ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node, bool recoverDiag)
 {
     if (!typeManager.GetUnsolvedTyVars().empty() || !node) {
@@ -1465,7 +1466,7 @@ bool TypeChecker::TypeCheckerImpl::CheckWithEffectiveCache(
     return CheckAndCache(ctx, target, node, key);
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithEffectiveCache(const CheckerContext& ctx, Ptr<Node> node, bool recoverDiag)
+Ptr<Ty> TypeCheckerImpl::SynthesizeWithEffectiveCache(const CheckerContext& ctx, Ptr<Node> node, bool recoverDiag)
 {
     if (!typeManager.GetUnsolvedTyVars().empty() || !node) {
         return Synthesize(ctx, node);
@@ -1485,7 +1486,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynthesizeWithEffectiveCache(const Checker
     return SynthesizeAndCache(ctx, node, key);
 }
 
-Ptr<AST::Ty> TypeChecker::TypeCheckerImpl::SynthesizeAndCache(
+Ptr<AST::Ty> TypeCheckerImpl::SynthesizeAndCache(
     const CheckerContext& ctx, Ptr<AST::Node> node, const CacheKey& key)
 {
     DiagnosticCache dc;
@@ -1499,7 +1500,7 @@ Ptr<AST::Ty> TypeChecker::TypeCheckerImpl::SynthesizeAndCache(
     return ret;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckAndCache(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node, const CacheKey& key)
+bool TypeCheckerImpl::CheckAndCache(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node, const CacheKey& key)
 {
     DiagnosticCache dc;
     dc.ToExclude(ctx.diag);
@@ -1548,7 +1549,7 @@ bool HasNonParamCtorForClass(const ClassDecl& classDecl)
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::CheckConstructorSuper(
+void TypeCheckerImpl::CheckConstructorSuper(
     const CallExpr& ce, const Decl& decl, FuncDecl& fd, bool& needEraseSuper)
 {
     if (!ce.baseFunc || ce.baseFunc->astKind != ASTKind::REF_EXPR) {
@@ -1575,7 +1576,7 @@ void TypeChecker::TypeCheckerImpl::CheckConstructorSuper(
     fd.constructorCall = ConstructorCall::NONE;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckFinalizer(const FuncDecl& fd)
+void TypeCheckerImpl::CheckFinalizer(const FuncDecl& fd)
 {
     if (!fd.funcBody) {
         return;
@@ -1595,7 +1596,7 @@ void TypeChecker::TypeCheckerImpl::CheckFinalizer(const FuncDecl& fd)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckPrimaryCtorForClassOrStruct(InheritableDecl& id)
+void TypeCheckerImpl::CheckPrimaryCtorForClassOrStruct(InheritableDecl& id)
 {
     if (id.TestAttr(Attribute::IMPORTED)) {
         return; // Do not desugar primary ctor for imported type decl.
@@ -1629,7 +1630,7 @@ void TypeChecker::TypeCheckerImpl::CheckPrimaryCtorForClassOrStruct(InheritableD
     }
 }
 
-void TypeChecker::TypeCheckerImpl::TypeCheckCompositeBody(
+void TypeCheckerImpl::TypeCheckCompositeBody(
     ASTContext& ctx, const Decl& structDecl, const std::vector<OwnedPtr<Decl>>& body)
 {
     for (auto& decl : body) {
@@ -1647,7 +1648,7 @@ void TypeChecker::TypeCheckerImpl::TypeCheckCompositeBody(
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckJavaInteropLibImport(Decl& decl)
+void TypeCheckerImpl::CheckJavaInteropLibImport(Decl& decl)
 {
     if (!Interop::Java::InteropLibBridge::IsInteropLibAccessible(importManager)) {
         diag.DiagnoseRefactor("sema_java_mirror_interoplib_must_be_imported", decl);
@@ -1655,7 +1656,7 @@ void TypeChecker::TypeCheckerImpl::CheckJavaInteropLibImport(Decl& decl)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckObjCInteropLibImport(Decl& decl)
+void TypeCheckerImpl::CheckObjCInteropLibImport(Decl& decl)
 {
     if (!Interop::ObjC::InteropLibBridge::IsInteropLibAccessible(importManager)) {
         diag.DiagnoseRefactor("sema_objc_mirror_interoplib_must_be_imported", decl);
@@ -1663,22 +1664,23 @@ void TypeChecker::TypeCheckerImpl::CheckObjCInteropLibImport(Decl& decl)
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::IsCapturedInCFuncLambda(const ASTContext& ctx, const AST::RefExpr& re) const
+bool TypeCheckerImpl::IsCapturedInCFuncLambda(const ASTContext& ctx, const AST::RefExpr& re) const
 {
-    if (re.ref.target == nullptr || re.ref.target->fullPackageName != ctx.fullPackageName) {
+    auto target = re.ref.GetTarget();
+    if (target == nullptr || target->fullPackageName != ctx.fullPackageName) {
         return false;
     }
     auto fb = GetCurFuncBody(ctx, re.scopeName);
-    auto targetFb = GetCurFuncBody(ctx, re.ref.target->scopeName);
+    auto targetFb = GetCurFuncBody(ctx, target->scopeName);
     // Fast path 1: RefExpr and target are in the same function body. Or target is a global node.
-    if (fb == nullptr || targetFb == nullptr || fb == targetFb || re.ref.target->TestAttr(Attribute::GLOBAL)) {
+    if (fb == nullptr || targetFb == nullptr || fb == targetFb || target->TestAttr(Attribute::GLOBAL)) {
         return false;
     }
     // Fast path 2: RefExpr and target are not in the same function body and current function is a CFunc.
     if (auto fty = DynamicCast<AST::FuncTy*>(fb->GetTy()); fty && fty->isC) {
         return true;
     }
-    if (!Is<AST::VarDecl*>(re.ref.target) && !Is<AST::FuncDecl*>(re.ref.target)) {
+    if (!Is<AST::VarDecl*>(target) && !Is<AST::FuncDecl*>(target)) {
         return false;
     }
     // Check whether outer function of current function body is CFunc.
@@ -1708,7 +1710,7 @@ void TypeCheckerImpl::CheckLegalUseOfClosure(Expr& e, std::string_view kind) con
         }
     }
     if (auto ref = DynamicCast<RefExpr*>(&e); ref) {
-        if (auto target = DynamicCast<FuncDecl*>(ref->ref.target); target) {
+        if (auto target = DynamicCast<FuncDecl*>(ref->ref.GetTarget()); target) {
             if (target->funcBody->captureKind == CaptureKind::CAPTURE_VAR) {
                 DiagUseClosureCaptureVarAlone(diag, e);
             } else if (target->funcBody->captureKind == CaptureKind::TRANSITIVE_CAPTURE) {
@@ -1718,7 +1720,7 @@ void TypeCheckerImpl::CheckLegalUseOfClosure(Expr& e, std::string_view kind) con
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(const ASTContext& ctx, Node& node) const
+void TypeCheckerImpl::CheckLegalUseOfClosure(const ASTContext& ctx, Node& node) const
 {
     if (auto vd = DynamicCast<VarDecl*>(&node); vd) {
         if (vd->initializer) {
@@ -1752,12 +1754,12 @@ void TypeChecker::TypeCheckerImpl::CheckLegalUseOfClosure(const ASTContext& ctx,
     }
 }
 
-bool TypeChecker::TypeCheckerImpl::IsCapturedCStructOfClosure(const VarDecl& decl) const
+bool TypeCheckerImpl::IsCapturedCStructOfClosure(const VarDecl& decl) const
 {
     return decl.TestAttr(Attribute::IS_CAPTURE) && decl.GetTy() && Ty::IsCTypeConstraint(*decl.GetTy());
 }
 
-void TypeChecker::TypeCheckerImpl::CheckCHIRClassDependencies()
+void TypeCheckerImpl::CheckCHIRClassDependencies()
 {
     auto objectDecl = importManager.GetImportedDecl(CORE_PACKAGE_NAME, "Object");
     if (objectDecl == nullptr) {
@@ -1902,7 +1904,7 @@ void MarkImplicitUsedFunctions(const Package& pkg)
 }
 } // namespace
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::GetImplementedTargetIfExist(
+Ptr<Decl> TypeCheckerImpl::GetImplementedTargetIfExist(
     const ASTContext& ctx, const Ty& interfaceTy, Decl& target, const MultiTypeSubst& typeMapping)
 {
     auto targetInstanceTy = typeManager.GetBestInstantiatedTy(target.GetTy(), typeMapping);
@@ -1955,7 +1957,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetImplementedTargetIfExist(
     return nullptr;
 }
 
-std::pair<bool, Ptr<RefExpr>> TypeChecker::TypeCheckerImpl::CheckInvokeTargetHasImpl(const ASTContext& ctx,
+std::pair<bool, Ptr<RefExpr>> TypeCheckerImpl::CheckInvokeTargetHasImpl(const ASTContext& ctx,
     Ty& interfaceTy, Decl& decl, MultiTypeSubst& typeMapping, std::unordered_set<Ptr<AST::Decl>>& traversedDecls)
 {
     std::pair<bool, Ptr<RefExpr>> ret{false, nullptr};
@@ -2003,7 +2005,7 @@ void TypeChecker::TypeCheckForPackages(const std::vector<Ptr<Package>>& pkgs) co
     impl->TypeCheckForPackages(pkgs);
 }
 
-std::vector<Ptr<ASTContext>> TypeChecker::TypeCheckerImpl::PreTypeCheck(const std::vector<Ptr<AST::Package>>& pkgs)
+std::vector<Ptr<ASTContext>> TypeCheckerImpl::PreTypeCheck(const std::vector<Ptr<AST::Package>>& pkgs)
 {
     Utils::ProfileRecorder recorder("Semantic", "Pre TypeCheck");
     std::vector<Ptr<ASTContext>> contexts;
@@ -2040,7 +2042,7 @@ std::vector<Ptr<ASTContext>> TypeChecker::TypeCheckerImpl::PreTypeCheck(const st
     return contexts;
 }
 
-void TypeChecker::TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& contexts)
+void TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& contexts)
 {
     Utils::ProfileRecorder recorder("Semantic", "Post TypeCheck");
     // Post checking for legality of semantic.
@@ -2074,7 +2076,7 @@ void TypeChecker::TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& c
     CheckWhetherHasProgramEntry();
 }
 
-void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pkg)
+void TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pkg)
 {
     // Reset search's cache.
     ctx.searcher->InvalidateCache();
@@ -2117,7 +2119,7 @@ void TypeChecker::TypeCheckerImpl::PrepareTypeCheck(ASTContext& ctx, Package& pk
     WarmupCache(ctx);
 }
 
-void TypeChecker::TypeCheckerImpl::TypeCheckTopLevelDecl(ASTContext& ctx, Decl& decl)
+void TypeCheckerImpl::TypeCheckTopLevelDecl(ASTContext& ctx, Decl& decl)
 {
     TyVarScope ts(typeManager); // to release local placeholder ty var
     Synthesize({ctx, SynPos::NONE}, &decl);
@@ -2125,7 +2127,7 @@ void TypeChecker::TypeCheckerImpl::TypeCheckTopLevelDecl(ASTContext& ctx, Decl& 
 }
 
 // Check generic members declared inside non-generic inheritable decls.
-void TypeChecker::TypeCheckerImpl::TypeCheckImportedGenericMember(ASTContext& ctx)
+void TypeCheckerImpl::TypeCheckImportedGenericMember(ASTContext& ctx)
 {
     std::vector<Symbol*> syms = GetAllStructDecls(ctx);
     for (auto sym : syms) {
@@ -2143,7 +2145,7 @@ void TypeChecker::TypeCheckerImpl::TypeCheckImportedGenericMember(ASTContext& ct
     }
 }
 
-void TypeChecker::TypeCheckerImpl::TypeCheck(ASTContext& ctx, Package& pkg)
+void TypeCheckerImpl::TypeCheck(ASTContext& ctx, Package& pkg)
 {
     std::vector<Symbol*> syms = GetToplevelDecls(ctx);
     // 1. Check from toplevel decls.
@@ -2186,7 +2188,7 @@ void TypeChecker::TypeCheckerImpl::TypeCheck(ASTContext& ctx, Package& pkg)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckWhetherHasProgramEntry()
+void TypeCheckerImpl::CheckWhetherHasProgramEntry()
 {
     CJC_ASSERT(ci);
     if (!ci->invocation.globalOptions.CompileExecutable() || ci->invocation.globalOptions.enableCompileTest ||
@@ -2217,7 +2219,7 @@ bool HasCtorForTypeDecl(const InheritableDecl& id)
 }
 } // namespace
 
-VisitAction TypeChecker::TypeCheckerImpl::CheckDefaultParamFunc(StructDecl& sd) const
+VisitAction TypeCheckerImpl::CheckDefaultParamFunc(StructDecl& sd) const
 {
     CJC_ASSERT(sd.body);
     // Do not desugar for broken body.
@@ -2231,7 +2233,7 @@ VisitAction TypeChecker::TypeCheckerImpl::CheckDefaultParamFunc(StructDecl& sd) 
     return VisitAction::WALK_CHILDREN;
 }
 
-VisitAction TypeChecker::TypeCheckerImpl::CheckDefaultParamFunc(ClassDecl& cd, const File& file) const
+VisitAction TypeCheckerImpl::CheckDefaultParamFunc(ClassDecl& cd, const File& file) const
 {
     CJC_ASSERT(cd.body);
     // Do not desugar for broken body.
@@ -2273,7 +2275,7 @@ VisitAction TypeChecker::TypeCheckerImpl::CheckDefaultParamFunc(ClassDecl& cd, c
     return VisitAction::WALK_CHILDREN;
 }
 
-void TypeChecker::TypeCheckerImpl::SetFuncDeclConstructorCall(FuncDecl& fd) const
+void TypeCheckerImpl::SetFuncDeclConstructorCall(FuncDecl& fd) const
 {
     CJC_ASSERT(fd.funcBody && fd.funcBody->body);
     if (fd.funcBody->body->body.empty()) {
@@ -2303,7 +2305,7 @@ void TypeChecker::TypeCheckerImpl::SetFuncDeclConstructorCall(FuncDecl& fd) cons
     }
 }
 
-VisitAction TypeChecker::TypeCheckerImpl::CheckDefaultParamFunc(const InterfaceDecl& ifd) const
+VisitAction TypeCheckerImpl::CheckDefaultParamFunc(const InterfaceDecl& ifd) const
 {
     CJC_ASSERT(ifd.body);
     // Do not desugar for broken body.
@@ -2314,13 +2316,13 @@ VisitAction TypeChecker::TypeCheckerImpl::CheckDefaultParamFunc(const InterfaceD
     return VisitAction::WALK_CHILDREN;
 }
 
-VisitAction TypeChecker::TypeCheckerImpl::CheckDefaultParamFunc(const EnumDecl& ed) const
+VisitAction TypeCheckerImpl::CheckDefaultParamFunc(const EnumDecl& ed) const
 {
     AddSetterGetterInProp(ed);
     return VisitAction::WALK_CHILDREN;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckDefaultParamFuncsEntry(File& file)
+void TypeCheckerImpl::CheckDefaultParamFuncsEntry(File& file)
 {
     auto visitFunc = [&file, this](Ptr<Node> node) -> VisitAction {
         switch (node->astKind) {
@@ -2509,7 +2511,7 @@ OwnedPtr<FuncDecl> MakeDefaultParamFunction(
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::GetSingleParamFunc(Decl& decl)
+void TypeCheckerImpl::GetSingleParamFunc(Decl& decl)
 {
     auto fd = As<ASTKind::FUNC_DECL>(&decl);
     // Source imported decl does not inherit initial state and desugar decl, need to generate again.
@@ -2556,7 +2558,7 @@ void TypeChecker::TypeCheckerImpl::GetSingleParamFunc(Decl& decl)
     }
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::GetDupInterfaceRecursively(const Node& triggerNode, Ty& interfaceTy,
+Ptr<Decl> TypeCheckerImpl::GetDupInterfaceRecursively(const Node& triggerNode, Ty& interfaceTy,
     const TypeSubst& instantiateMap, std::unordered_set<Ptr<InterfaceTy>>& res,
     std::unordered_set<Ptr<ClassLikeDecl>>& passedClassLikeDecls)
 {
@@ -2579,7 +2581,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetDupInterfaceRecursively(const Node& t
     return GetDupSuperInterface(triggerNode, *ity->declPtr, superInstantiateMap, passedClassLikeDecls);
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::GetExtendDupSuperInterface(const Node& triggerNode, const InheritableDecl& decl,
+Ptr<Decl> TypeCheckerImpl::GetExtendDupSuperInterface(const Node& triggerNode, const InheritableDecl& decl,
     const TypeSubst& instantiateMap, std::unordered_set<Ptr<InterfaceTy>>& res,
     std::unordered_set<Ptr<ClassLikeDecl>>& passedClassLikeDecls)
 {
@@ -2608,7 +2610,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetExtendDupSuperInterface(const Node& t
     return nullptr;
 }
 
-Ptr<Decl> TypeChecker::TypeCheckerImpl::GetDupSuperInterface(const Node& triggerNode, InheritableDecl& decl,
+Ptr<Decl> TypeCheckerImpl::GetDupSuperInterface(const Node& triggerNode, InheritableDecl& decl,
     const TypeSubst& instantiateMap, std::unordered_set<Ptr<ClassLikeDecl>>& passedClassLikeDecls, bool checkExtend)
 {
     if (decl.IsClassLikeDecl()) {
@@ -2636,7 +2638,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetDupSuperInterface(const Node& trigger
     }
 }
 
-void TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfaces(
+void TypeCheckerImpl::CheckInstDupSuperInterfaces(
     const Node& triggerNode, InheritableDecl& decl, const TypeSubst& instantiateMap, bool checkExtend)
 {
     std::unordered_set<Ptr<ClassLikeDecl>> passedClassLikeDecls;
@@ -2649,7 +2651,7 @@ void TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfaces(
     }
 }
 
-VisitAction TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfaces(const Type& type)
+VisitAction TypeCheckerImpl::CheckInstDupSuperInterfaces(const Type& type)
 {
     if (!Ty::IsTyCorrect(type.GetTy())) {
         return VisitAction::SKIP_CHILDREN;
@@ -2667,7 +2669,7 @@ VisitAction TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfaces(const Type
     return VisitAction::WALK_CHILDREN;
 }
 
-VisitAction TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfaces(const Expr& expr)
+VisitAction TypeCheckerImpl::CheckInstDupSuperInterfaces(const Expr& expr)
 {
     if (!Ty::IsTyCorrect(expr.GetTy())) {
         return VisitAction::WALK_CHILDREN;
@@ -2691,7 +2693,7 @@ VisitAction TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfaces(const Expr
     return VisitAction::WALK_CHILDREN;
 }
 
-void TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfacesEntry(Node& n)
+void TypeCheckerImpl::CheckInstDupSuperInterfacesEntry(Node& n)
 {
     Utils::ProfileRecorder recorder("Post TypeCheck", "CheckInstDupSuperInterfacesEntry");
     std::function<VisitAction(Ptr<Node>)> visitor = [this, &visitor](Ptr<Node> n) {
@@ -2721,7 +2723,7 @@ void TypeChecker::TypeCheckerImpl::CheckInstDupSuperInterfacesEntry(Node& n)
 }
 
 // Remove after Chir's constant folding really works.
-void TypeChecker::TypeCheckerImpl::CheckOverflow(Node& node)
+void TypeCheckerImpl::CheckOverflow(Node& node)
 {
     Utils::ProfileRecorder recorder("Post TypeCheck", "CheckOverflow");
     Walker walker(&node, nullptr, [this](Ptr<Node> node) -> VisitAction {
@@ -2741,7 +2743,7 @@ void TypeChecker::TypeCheckerImpl::CheckOverflow(Node& node)
     walker.Walk();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::CalcFuncRetTyFromBody(const FuncBody& fb)
+Ptr<Ty> TypeCheckerImpl::CalcFuncRetTyFromBody(const FuncBody& fb)
 {
     if (!fb.body) {
         return TypeManager::GetInvalidTy();

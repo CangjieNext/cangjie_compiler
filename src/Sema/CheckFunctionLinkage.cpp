@@ -18,7 +18,9 @@
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Driver/StdlibMap.h"
+#include "cangjie/Utils/CastingTemplate.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -623,7 +625,7 @@ void ExternalLinkageAnalyzer::SetVarTargetLinkage(VarDecl& vd, bool byTy, bool i
  * The former means whether a function can be imported and used (from the CangjieLang level);
  * while the latter means whether a function can be linked (from the binary level).
  */
-void TypeChecker::TypeCheckerImpl::AnalyzeFunctionLinkage(Package& pkg) const
+void TypeCheckerImpl::AnalyzeFunctionLinkage(Package& pkg) const
 {
     AnalyzeLinkageBasedOnModifier(pkg, ci->invocation.globalOptions);
     ExternalLinkageAnalyzer(pkg).Run();

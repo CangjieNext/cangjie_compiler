@@ -17,8 +17,10 @@
 #include <unordered_set>
 
 #include "TypeCheckUtil.h"
+#include "cangjie/AST/ASTCasting.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/CheckUtils.h"
 
 using namespace Cangjie;
@@ -225,7 +227,7 @@ void CheckFuncDeclIsInline(Package& pkg)
 }
 } // namespace
 
-void TypeChecker::TypeCheckerImpl::CheckInlineFunctions(const std::vector<Ptr<Package>>& pkgs) const
+void TypeCheckerImpl::CheckInlineFunctions(const std::vector<Ptr<Package>>& pkgs) const
 {
     std::vector<Ptr<FuncDecl>> allImportInlineFunctions;
     for (auto& pkg : pkgs) {

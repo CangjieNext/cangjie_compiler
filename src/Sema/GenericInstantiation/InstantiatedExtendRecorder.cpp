@@ -83,12 +83,13 @@ VisitAction GenericInstantiationManager::InstantiatedExtendRecorder::RecordUsedE
  */
 void GenericInstantiationManager::InstantiatedExtendRecorder::RecordExtendForRefExpr(const RefExpr& re)
 {
-    bool ignored = !Ty::IsTyCorrect(re.GetTy()) || !re.ref.target || re.ref.target->IsBuiltIn() ||
-        !re.ref.target->TestAttr(Attribute::IN_EXTEND);
+    auto reTarget = re.ref.GetTarget();
+    bool ignored = !Ty::IsTyCorrect(re.GetTy()) || !reTarget || reTarget->IsBuiltIn() ||
+        !reTarget->TestAttr(Attribute::IN_EXTEND);
     if (ignored || gim.structContext.empty()) {
         return;
     }
-    auto extend = re.ref.target->outerDecl;
+    auto extend = reTarget->outerDecl;
     CJC_ASSERT(extend && extend->astKind == ASTKind::EXTEND_DECL);
     auto structDecl = gim.GetStructDeclByContext();
     CJC_ASSERT(structDecl);
@@ -115,13 +116,14 @@ void GenericInstantiationManager::InstantiatedExtendRecorder::RecordExtendForRef
  */
 void GenericInstantiationManager::InstantiatedExtendRecorder::RecordExtendForMemberAccess(const MemberAccess& ma)
 {
-    auto ignored = !ma.target || !ma.baseExpr || !Ty::IsTyCorrect(ma.baseExpr->GetTy()) || ma.baseExpr->GetTy()->HasGeneric() ||
-        !ma.target->outerDecl;
+    auto maTarget = ma.GetTarget();
+    auto ignored = !maTarget || !ma.baseExpr || !Ty::IsTyCorrect(ma.baseExpr->GetTy()) ||
+        ma.baseExpr->GetTy()->HasGeneric() || !maTarget->outerDecl;
     if (ignored) {
         return;
     }
-    auto outerDecl = ma.target->outerDecl;
-    if (auto fd = DynamicCast<FuncDecl*>(ma.target); fd && outerDecl->astKind == ASTKind::INTERFACE_DECL) {
+    auto outerDecl = maTarget->outerDecl;
+    if (auto fd = DynamicCast<FuncDecl*>(maTarget); fd && outerDecl->astKind == ASTKind::INTERFACE_DECL) {
         RecordImplExtendDecl(*ma.baseExpr->GetTy(), *fd, ma.matchedParentTy);
     } else if (outerDecl->astKind == ASTKind::EXTEND_DECL) {
         auto promoteRes = promotion.Promote(*ma.baseExpr->GetTy(), *outerDecl->GetTy());

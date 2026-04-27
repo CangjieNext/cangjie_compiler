@@ -15,7 +15,6 @@
 
 #include <type_traits>
 
-// Every header under cangjie/AST/Nodes/ (dependency-safe order for ASTKind.inc / casting).
 #include "cangjie/AST/Nodes/ASTKind.h"
 #include "cangjie/AST/Nodes/Annotation.h"
 #include "cangjie/AST/Nodes/AnnotationKind.h"

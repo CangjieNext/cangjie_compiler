@@ -99,14 +99,14 @@ std::pair<bool, std::string> CollectParams(
         if (!ref) {
             return VisitAction::WALK_CHILDREN;
         }
-        auto target = ref->ref.target;
+        auto target = ref->ref.GetTarget();
         CJC_NULLPTR_CHECK(target);
         // explicit and implicit using this
         if (ref->isThis || IsInstMember(*target)) {
             usingThis = true;
         } else if (target->astKind == ASTKind::FUNC_PARAM) {
             // using parameter
-            refParams.insert(ref->ref.target);
+            refParams.insert(ref->ref.GetTarget());
         }
         return VisitAction::WALK_CHILDREN;
     }).Walk();
@@ -142,7 +142,7 @@ bool CollectStaticRefs(Ptr<Expr> expr, std::vector<Ptr<RefExpr>>& staticRefs)
             if (ref->desugarExpr) {
                 return VisitAction::WALK_CHILDREN;
             }
-            auto target = ref->ref.target;
+            auto target = ref->ref.GetTarget();
             CJC_NULLPTR_CHECK(target);
             if (!IsStaticMember(*target)) {
                 return VisitAction::SKIP_CHILDREN;
@@ -152,7 +152,7 @@ bool CollectStaticRefs(Ptr<Expr> expr, std::vector<Ptr<RefExpr>>& staticRefs)
             }
             staticRefs.push_back(ref);
         } else if (auto ma = As<ASTKind::MEMBER_ACCESS>(node)) {
-            if (IsPrivateStaticMember(ma->target)) {
+            if (IsPrivateStaticMember(ma->GetTarget())) {
                 usingPrivate = true;
             }
         }
@@ -274,11 +274,11 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateNativeFunc4Argument(const FuncArg
     }
     for (auto sf : staticRefs) {
         // Create temp var for static member ref: `let tv = A.sf`.
-        auto outerDecl = sf->ref.target->outerDecl;
+        auto outerDecl = sf->ref.GetTarget()->outerDecl;
         CJC_NULLPTR_CHECK(outerDecl);
-        OwnedPtr<Expr> initializer = CreateMemberAccess(CreateRefExpr(*outerDecl), *sf->ref.target);
+        OwnedPtr<Expr> initializer = CreateMemberAccess(CreateRefExpr(*outerDecl), *sf->ref.GetTarget());
         auto tv = CreateTmpVarDecl(nullptr, std::move(initializer));
-        source2cloned[sf->ref.target] = tv.get();
+        source2cloned[sf->ref.GetTarget()] = tv.get();
         nodes.push_back(std::move(tv));
     }
     // For `foo(x, y + z)` the parameters x, y and implicit static field z need be replaced by temp vars.
@@ -290,18 +290,18 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateNativeFunc4Argument(const FuncArg
     auto replaceTarget = [&mp = std::as_const(source2cloned)](Node& source, Node& target) {
         if (auto srcRef = As<ASTKind::REF_EXPR>(&source)) {
             // replace ref by temp var
-            auto it = mp.find(srcRef->ref.target);
+            auto it = mp.find(srcRef->ref.GetTarget());
             if (it != mp.end()) {
                 auto dstRef = StaticAs<ASTKind::REF_EXPR>(&target);
                 dstRef->ref.identifier = it->second->identifier;
-                dstRef->ref.target = it->second;
+                dstRef->ref.SetTarget(it->second);
             }
         } else if (auto call = As<ASTKind::CALL_EXPR>(&source)) {
             if (call->baseFunc->astKind != ASTKind::REF_EXPR) {
                 return;
             }
             auto refExpr = As<ASTKind::REF_EXPR>(call->baseFunc);
-            auto it = mp.find(refExpr->ref.target);
+            auto it = mp.find(refExpr->ref.GetTarget());
             // update call member access by call temp var
             if (it != mp.end()) {
                 auto targetCall = As<ASTKind::CALL_EXPR>(&target);
@@ -338,7 +338,7 @@ OwnedPtr<CallExpr> JavaDesugarManager::DesugarJavaImplSuperCall(const FuncDecl& 
         if (expr.astKind != ASTKind::REF_EXPR) {
             return true;
         }
-        auto refTarget = StaticAs<ASTKind::REF_EXPR>(&expr)->ref.target;
+        auto refTarget = StaticAs<ASTKind::REF_EXPR>(&expr)->ref.GetTarget();
         CJC_NULLPTR_CHECK(refTarget);
         return refTarget->astKind != ASTKind::FUNC_PARAM;
     };
@@ -703,7 +703,7 @@ void JavaDesugarManager::DesugarInJavaImpls(File& file)
     for (auto& decl : file.decls) {
         if (auto extendDecl = As<ASTKind::EXTEND_DECL>(decl.get())) {
             if (auto rt = DynamicCast<const RefType*>(extendDecl->extendedType.get())) {
-                ref2extend[rt->ref.target].emplace_back(extendDecl);
+                ref2extend[rt->ref.GetTarget()].emplace_back(extendDecl);
             }
         } else if (auto cdecl = As<ASTKind::CLASS_DECL>(decl.get())) {
             if (cdecl->TestAttr(Attribute::IS_BROKEN) || !IsImpl(*cdecl)) {
@@ -973,10 +973,10 @@ OwnedPtr<Block> JavaDesugarManager::CastAndSubstituteVars(
         CJC_ASSERT(node);
 
         if (auto refExpr = DynamicCast<RefExpr>(node.get())) {
-            auto target = refExpr->ref.target;
+            auto target = refExpr->ref.GetTarget();
             if (auto castedVarIt = varsMapping.find(target); castedVarIt != varsMapping.end()) {
                 refExpr->ref.identifier = castedVarIt->second->identifier;
-                refExpr->ref.target = castedVarIt->second;
+                refExpr->ref.SetTarget(castedVarIt->second);
             }
         }
 

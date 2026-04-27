@@ -27,7 +27,7 @@ OwnedPtr<RefExpr> CreateThisRef(Ptr<Decl> target, Ptr<Ty> ty, Ptr<File> curFile)
     thisRef->isThis = true;
     thisRef->SetTy(ty);
     thisRef->ref.identifier = SrcIdentifier("this");
-    thisRef->ref.target = target;
+    thisRef->ref.SetTarget(target);
     thisRef->curFile = curFile;
     return thisRef;
 }
@@ -70,7 +70,7 @@ OwnedPtr<RefExpr> CreateSuperRef(Ptr<Decl> target, Ptr<Ty> ty)
     superRef->isSuper = true;
     superRef->SetTy(ty);
     superRef->ref.identifier = SrcIdentifier("super");
-    superRef->ref.target = target;
+    superRef->ref.SetTarget(target);
     return superRef;
 }
 
