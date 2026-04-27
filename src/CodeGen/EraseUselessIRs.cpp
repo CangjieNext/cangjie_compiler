@@ -50,7 +50,7 @@ std::vector<llvm::Instruction*> CollectInstructions(
     llvm::BasicBlock* block, const std::function<bool(const llvm::Instruction&)>& condition = nullptr)
 {
     std::vector<llvm::Instruction*> collectedInsts;
-    for (auto& inst : block->getInstList()) {
+    for (auto& inst : *block) {
         if (!condition || condition(inst)) {
             collectedInsts.emplace_back(&inst);
         }
@@ -62,7 +62,7 @@ std::vector<llvm::Instruction*> CollectInstructions(
     llvm::Function* function, const std::function<bool(const llvm::Instruction&)>& condition = nullptr)
 {
     std::vector<llvm::Instruction*> collectedInsts;
-    for (auto& block : function->getBasicBlockList()) {
+    for (auto& block : *function) {
         auto bbRes = CollectInstructions(&block, condition);
         collectedInsts.insert(collectedInsts.end(), bbRes.begin(), bbRes.end());
     }
@@ -95,9 +95,10 @@ void CGModule::MergeUselessBBIntoPreds(llvm::Function* function) const
     if (function->getName().find(PKG_GV_INIT_PREFIX)) {
         return;
     }
-    auto& tmpBlocks = function->getBasicBlockList();
     std::vector<llvm::BasicBlock*> blocks;
-    std::for_each(tmpBlocks.begin(), tmpBlocks.end(), [&blocks](auto& block) { blocks.emplace_back(&block); });
+    for (auto& block : *function) {
+        blocks.emplace_back(&block);
+    }
     // The first BB cannot be merged to any basic block, so erase it from `blocks`.
     blocks.erase(blocks.begin());
     auto entryBB = &function->getEntryBlock();
@@ -108,7 +109,7 @@ void CGModule::MergeUselessBBIntoPreds(llvm::Function* function) const
     for (auto& block : blocks) {
         // We would like to save the basic blocks which are used to specify the `start` and `end`
         // of each global variable.
-        if (block->getName().equals("init.files")) {
+        if (block->getName() == "init.files") {
             continue;
         }
         auto uniquePreBB = block->getUniquePredecessor();
@@ -150,9 +151,10 @@ bool CGModule::CheckUnusedGV(const llvm::GlobalVariable* var, const std::set<std
 
 void CGModule::EraseUnusedGVs(const std::function<bool(const llvm::GlobalObject&)> extraCond)
 {
-    auto& gvList = module->getGlobalList();
     std::vector<llvm::GlobalVariable*> globals;
-    std::for_each(gvList.begin(), gvList.end(), [&globals](auto& var) { globals.emplace_back(&var); });
+    for (auto& var : module->globals()) {
+        globals.emplace_back(&var);
+    }
     auto& llvmUsed = GetCGContext().GetLLVMUsedVars();
     for (auto var : globals) {
         var->removeDeadConstantUsers();
@@ -169,8 +171,9 @@ void CGModule::EraseUnusedFuncs(const std::function<bool(const llvm::GlobalObjec
     std::vector<llvm::GlobalVariable*> globals;
     auto& funcList = module->getFunctionList();
     std::for_each(funcList.begin(), funcList.end(), [&funcs](auto& func) { funcs.emplace_back(&func); });
-    auto& gvList = module->getGlobalList();
-    std::for_each(gvList.begin(), gvList.end(), [&globals](auto& var) { globals.emplace_back(&var); });
+    for (auto& var : module->globals()) {
+        globals.emplace_back(&var);
+    }
     auto& llvmUsed = GetCGContext().GetLLVMUsedVars();
     bool erased;
     do {
@@ -208,7 +211,7 @@ void CGModule::EraseUselessInstsAndDeclarations()
     std::for_each(funcList.begin(), funcList.end(), [&funcs](auto& func) { funcs.emplace_back(&func); });
     std::for_each(funcs.begin(), funcs.end(), [this](auto func) {
         // Function which does not have body and users can be erased from module.
-        if (!func->isDeclaration() && !func->getName().equals(FOR_KEEPING_SOME_TYPES_FUNC_NAME)) {
+        if (!func->isDeclaration() && func->getName() != FOR_KEEPING_SOME_TYPES_FUNC_NAME) {
             EraseUnreachableBBs(func);
             MergeUselessBBIntoPreds(func);
             EraseUselessLoad(func);

@@ -46,7 +46,7 @@ std::vector<llvm::Constant*> CGCustomType::GenTypeInfoConstantVectorForTypes(
 llvm::Constant* CGCustomType::GenTypeInfoArray(
     CGModule& cgMod, std::string name, std::vector<llvm::Constant*> constants, const std::string_view& attr)
 {
-    auto p0i8 = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto p0i8 = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     if (constants.empty()) {
         return llvm::Constant::getNullValue(p0i8);
     }
@@ -127,7 +127,7 @@ llvm::Constant* CGCustomType::GenTypeArgsNumOfTypeInfo()
 llvm::Constant* CGCustomType::GenTypeArgsOfTypeInfo()
 {
     auto genericArgs = StaticCast<const CHIR::CustomType&>(chirType).GetGenericArgs();
-    auto p0i8 = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto p0i8 = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     if (genericArgs.empty()) {
         return llvm::ConstantPointerNull::get(p0i8);
     }
@@ -219,14 +219,14 @@ llvm::Constant* CGCustomType::GenFieldsFnsOfTypeTemplate()
 llvm::Constant* CGCustomType::GenSuperFnOfTypeTemplate()
 {
     // classType will override this function
-    auto i8PtrTy = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto i8PtrTy = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     return llvm::ConstantPointerNull::get(i8PtrTy);
 }
 
 llvm::Constant* CGCustomType::GenFinalizerOfTypeTemplate()
 {
     // classType will override this function
-    auto i8PtrTy = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto i8PtrTy = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     return llvm::ConstantPointerNull::get(i8PtrTy);
 }
 
@@ -335,7 +335,7 @@ bool CGCustomType::IsSized() const
 
 llvm::Constant* CGCustomType::GenReflectionOfTypeInfo()
 {
-    return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    return llvm::ConstantPointerNull::get(llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
 }
 } // namespace CodeGen
 } // namespace Cangjie

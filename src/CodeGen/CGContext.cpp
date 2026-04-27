@@ -17,7 +17,7 @@ CGContext::CGContext(const SubCHIRPackage& subCHIRPackage, CGPkgContext& cgPkgCo
     : cgPkgContext(cgPkgContext), subCHIRPackage(subCHIRPackage), llvmContext(nullptr)
 {
     llvmContext = new llvm::LLVMContext(); // This `llvmContext` will be released in the de-constructor of `CGModule`.
-    llvmContext->setOpaquePointers(cgPkgContext.GetGlobalOptions().enableOpaque);
+    // LLVM 21 is opaque-pointer-only. The legacy typed/opaque toggle no longer exists.
     impl = std::make_unique<CGContextImpl>();
 }
 #endif
@@ -26,7 +26,7 @@ CGContext::~CGContext() = default;
 
 llvm::StructType* CGContext::GetCjStringType() const
 {
-    auto p1i8Type = llvm::Type::getInt8PtrTy(*llvmContext, 1u);
+    auto p1i8Type = llvm::PointerType::get(*llvmContext, 1u);
     auto int32Type = llvm::Type::getInt32Ty(*llvmContext);
     const std::string stringTypeStr = "record.std.core:String";
     if (auto stringType = llvm::StructType::getTypeByName(*llvmContext, stringTypeStr)) {

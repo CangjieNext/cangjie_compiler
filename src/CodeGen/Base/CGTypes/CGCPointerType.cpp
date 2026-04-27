@@ -16,7 +16,7 @@ llvm::Type* CGCPointerType::GenLLVMType()
         return llvmType;
     }
     auto& llvmCtx = cgCtx.GetLLVMContext();
-    llvmType = llvm::Type::getInt8PtrTy(llvmCtx);
+    llvmType = llvm::PointerType::get(llvmCtx, 0);
 
     layoutType = llvm::StructType::getTypeByName(llvmCtx, "CPointer.Type");
     if (!layoutType) {
@@ -47,7 +47,7 @@ llvm::Constant* CGCPointerType::GenTypeArgsOfTypeInfo()
 {
     auto genericArg = StaticCast<const CHIR::CPointerType&>(chirType).GetElementType();
     auto typeInfoPtrTy = CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext());
-    auto p0i8 = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto p0i8 = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
 
     auto elemCGType = CGType::GetOrCreate(cgMod, DeRef(*genericArg));
     std::vector<llvm::Constant*> constants{elemCGType->GetOrCreateTypeInfo()};
@@ -70,6 +70,6 @@ void CGCPointerType::CalculateSizeAndAlign()
 {
     llvm::DataLayout layOut = cgMod.GetLLVMModule()->getDataLayout();
     size = layOut.getTypeAllocSize(llvmType);
-    align = layOut.getABITypeAlignment(llvmType);
+    align = layOut.getABITypeAlign(llvmType).value();
 }
 } // namespace Cangjie::CodeGen

@@ -317,7 +317,7 @@ void CollectDependentPackages(llvm::Function& func, std::vector<std::string>& gi
         SPECIAL_NAME_FOR_INIT_FLAG_RESET_FUNCTION + MANGLE_FUNC_PARAM_TYPE_PREFIX + MANGLE_VOID_TY_SUFFIX;
     const std::string CALL_DEPENDENT_PACKAGES_INITS_SUFFIX =
         SPECIAL_NAME_FOR_IMPORTS_INIT_FUNCTION + MANGLE_FUNC_PARAM_TYPE_PREFIX + MANGLE_VOID_TY_SUFFIX;
-    for (auto& block : func.getBasicBlockList()) {
+    for (auto& block : func) {
         for (auto& inst : block) {
             auto ci = llvm::dyn_cast<llvm::CallInst>(&inst);
             if (!ci) {
@@ -410,7 +410,7 @@ void RegisterExceptionRaiser(CGModule& cgMod)
         CJC_ASSERT(bb != nullptr);
         IRBuilder2 irBuilder(cgMod);
         irBuilder.SetInsertPoint(bb->getTerminator());
-        auto int8PtrType = llvm::Type::getInt8PtrTy(llvmCtx);
+        auto int8PtrType = llvm::PointerType::get(llvmCtx, 0);
         auto chirFunc = cgMod.GetCGContext().GetCGPkgContext().FindCHIRGlobalValue("rt$ThrowImplicitException");
         auto func = cgMod.GetOrInsertCGFunction(chirFunc)->GetRawFunction();
         auto param = irBuilder.CreateBitCast(func, int8PtrType);
@@ -499,7 +499,7 @@ void CreateLLVMUsedGVs(const CGModule& cgMod)
         return;
     }
 
-    auto i8pTy = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto i8pTy = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     std::vector<llvm::Constant*> gvOrGFs{};
     gvOrGFs.reserve(llvmUsedGVs.size());
     for (const auto& gvName : llvmUsedGVs) {
@@ -621,8 +621,8 @@ void InlineFunction(CGModule& cgMod)
     auto findAllocInstOfThisWithoutTI = [](llvm::Function* function) -> llvm::Instruction* {
         llvm::Instruction* allocInstOfThisWithoutTI = nullptr;
         auto& entryBB = function->getEntryBlock();
-        for (auto& inst : entryBB.getInstList()) {
-            if (inst.getOpcode() == llvm::Instruction::Alloca && inst.getName().equals("this.debug.i")) {
+        for (auto& inst : entryBB) {
+            if (inst.getOpcode() == llvm::Instruction::Alloca && inst.getName() == "this.debug.i") {
                 allocInstOfThisWithoutTI = &inst;
             }
         }
@@ -659,7 +659,7 @@ void InlineFunction(CGModule& cgMod)
         // step3: update the dbgDeclare of 'this'
         llvm::Value* thisWithTI = nullptr;
         for (auto& arg : parentFunction->args()) {
-            if (arg.getName().equals("this.withTI")) {
+            if (arg.getName() == "this.withTI") {
                 thisWithTI = &arg;
                 break;
             }
@@ -711,7 +711,7 @@ llvm::Constant* GetReadOnlyArrayKlassInfo(const CGModule& cgMod)
 void InitializeCjStringLiteral(const CGModule& cgMod)
 {
     auto& ctx = cgMod.GetLLVMContext();
-    auto int8PtrType = llvm::Type::getInt8PtrTy(ctx);
+    auto int8PtrType = llvm::PointerType::get(ctx, 0);
     auto int32Type = llvm::Type::getInt32Ty(ctx);
     auto int64Type = llvm::Type::getInt64Ty(ctx);
 
@@ -763,7 +763,7 @@ void InitializeCjStringLiteral(const CGModule& cgMod)
     // 3. Set Initializer for all cj string literal
     auto cjStringType = cgMod.GetCGContext().GetCjStringType();
     auto i8Ptr = llvm::ConstantExpr::getBitCast(gvRawData, int8PtrType);
-    auto i8PtrAddr1 = llvm::ConstantExpr::getAddrSpaceCast(i8Ptr, llvm::Type::getInt8PtrTy(ctx, 1u));
+    auto i8PtrAddr1 = llvm::ConstantExpr::getAddrSpaceCast(i8Ptr, llvm::PointerType::get(ctx, 1u));
 
     for (const auto& cjStringIter : cjStrings) {
         auto& cjStringName = cjStringIter.first;

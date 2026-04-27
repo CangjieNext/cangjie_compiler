@@ -31,6 +31,9 @@
 #include "cangjie/Utils/ProfileRecorder.h"
 #include "cangjie/Utils/TaskQueue.h"
 
+#include <cstdio>
+#include <cstdlib>
+
 namespace Cangjie::CodeGen {
 void EmitMain(CGModule& cgMod);
 void CreatePackageInitResetFunction(CGModule& cgMod);
@@ -44,6 +47,44 @@ void InlineFunction(CGModule& cgMod);
 #endif
 
 namespace {
+bool IsLLVM21TraceEnabled()
+{
+    static bool enabled = [] {
+        const char* env = std::getenv("CJ_LLVM21_TRACE");
+        return env != nullptr && env[0] != '\0' && env[0] != '0';
+    }();
+    return enabled;
+}
+
+const char* GetLLVM21DumpDir()
+{
+    return std::getenv("CJ_LLVM21_DUMP_DIR");
+}
+
+void TraceLLVM21(const char* stage, const CGModule& cgMod)
+{
+    if (!IsLLVM21TraceEnabled()) {
+        return;
+    }
+    auto module = cgMod.GetLLVMModule();
+    std::fprintf(stderr, "[llvm21-trace] %s pkg=%s module=%s\n", stage,
+        cgMod.GetCGContext().GetCGPkgContext().GetCurrentPkgName().c_str(), module->getSourceFileName().c_str());
+    std::fflush(stderr);
+}
+
+void DumpBrokenIRForLLVM21(const CGModule& cgMod)
+{
+    const char* dumpDir = GetLLVM21DumpDir();
+    if (!IsLLVM21TraceEnabled() || dumpDir == nullptr || dumpDir[0] == '\0') {
+        return;
+    }
+    auto module = cgMod.GetLLVMModule();
+    auto path = std::string(dumpDir) + "/" + module->getSourceFileName() + ".broken.ll";
+    DumpIR(*module, path);
+    std::fprintf(stderr, "[llvm21-trace] BrokenIR.dumped path=%s\n", path.c_str());
+    std::fflush(stderr);
+}
+
 #ifdef CJ_SDK_VERSION
 const std::string CANGJIE_SDK_VERSION = CJ_SDK_VERSION;
 #else
@@ -394,55 +435,109 @@ void GenerateReflectionMetadata(CGModule& module, const SubCHIRPackage& subCHIRP
 void GenSubCHIRPackage(CGModule& cgMod)
 {
     auto& subCHIRPkg = cgMod.GetCGContext().GetSubCHIRPackage();
+    TraceLLVM21("GenSubCHIRPackage.begin", cgMod);
+    TraceLLVM21("EmitTIOrTTForCustomDefs.begin", cgMod);
     EmitTIOrTTForCustomDefs(cgMod);
+    TraceLLVM21("EmitTIOrTTForCustomDefs.end", cgMod);
+    TraceLLVM21("EmitGlobalVariableIR.begin", cgMod);
     EmitGlobalVariableIR(cgMod, std::vector<CHIR::GlobalVar*>(subCHIRPkg.chirGVs.begin(), subCHIRPkg.chirGVs.end()));
+    TraceLLVM21("EmitGlobalVariableIR.end", cgMod);
+    TraceLLVM21("EmitFunctionIR.begin", cgMod);
     EmitFunctionIR(cgMod, std::vector<CHIR::Func*>(subCHIRPkg.chirFuncs.begin(), subCHIRPkg.chirFuncs.end()));
+    TraceLLVM21("EmitFunctionIR.end", cgMod);
+    TraceLLVM21("EmitImportedCFuncIR.begin", cgMod);
     EmitImportedCFuncIR(cgMod,
         std::vector<CHIR::ImportedFunc*>(subCHIRPkg.chirImportedCFuncs.begin(), subCHIRPkg.chirImportedCFuncs.end()));
+    TraceLLVM21("EmitImportedCFuncIR.end", cgMod);
     if (subCHIRPkg.mainModule) {
+        TraceLLVM21("EmitMainSection.begin", cgMod);
         EmitCJSDKVersion(cgMod);
         EmitMain(cgMod);
         RegisterExceptionRaiser(cgMod);
         CreatePackageInitResetFunction(cgMod);
         SpecifyPackageInitFunc(cgMod);
+        TraceLLVM21("EmitMainSection.end", cgMod);
     }
     size_t subDirNum = 0; // for sub-directory naming, starts from 0, increments after each dump.
     DumpIRIfNeeded(cgMod, "TranslateCHIRNode", subDirNum);
+    TraceLLVM21("GenerateExtensionDefs.begin", cgMod);
     GenerateExtensionDefs(cgMod);
+    TraceLLVM21("GenerateExtensionDefs.end", cgMod);
     DumpIRIfNeeded(cgMod, "GenExtensionDefs", subDirNum);
+    TraceLLVM21("GenTypeTemplate.begin", cgMod);
     cgMod.GenTypeTemplate();
+    TraceLLVM21("GenTypeTemplate.end", cgMod);
     DumpIRIfNeeded(cgMod, "GenTypeTemplates", subDirNum);
+    TraceLLVM21("GenTypeInfo.begin", cgMod);
     cgMod.GenTypeInfo();
+    TraceLLVM21("GenTypeInfo.end", cgMod);
     DumpIRIfNeeded(cgMod, "GenTypeInfos", subDirNum);
+    TraceLLVM21("ReplaceFunction.begin", cgMod);
     ReplaceFunction(cgMod);
+    TraceLLVM21("ReplaceFunction.end", cgMod);
+    TraceLLVM21("Opt.begin", cgMod);
     cgMod.Opt();
+    TraceLLVM21("Opt.end", cgMod);
+    TraceLLVM21("InlineFunction.begin", cgMod);
     InlineFunction(cgMod);
+    TraceLLVM21("InlineFunction.end", cgMod);
     DumpIRIfNeeded(cgMod, "ReplaceAndInlineFunc", subDirNum);
+    TraceLLVM21("GenerateReflectionMetadata.begin", cgMod);
     GenerateReflectionMetadata(cgMod, subCHIRPkg);
+    TraceLLVM21("GenerateReflectionMetadata.end", cgMod);
+    TraceLLVM21("GenTypeInfo.reflect.begin", cgMod);
     cgMod.GenTypeInfo(); // for reflect generated typeinfo
+    TraceLLVM21("GenTypeInfo.reflect.end", cgMod);
     DumpIRIfNeeded(cgMod, "GenReflectionInfo", subDirNum);
+    TraceLLVM21("DIBuilder.Finalize.begin", cgMod);
     cgMod.diBuilder->Finalize();
+    TraceLLVM21("DIBuilder.Finalize.end", cgMod);
+    TraceLLVM21("TransformFFIs.begin", cgMod);
     TransformFFIs(cgMod);
+    TraceLLVM21("TransformFFIs.end", cgMod);
     DumpIRIfNeeded(cgMod, "TransformFFIs", subDirNum);
+    TraceLLVM21("InitializeCjStringLiteral.begin", cgMod);
     InitializeCjStringLiteral(cgMod);
+    TraceLLVM21("InitializeCjStringLiteral.end", cgMod);
     DumpIRIfNeeded(cgMod, "InitCJStringLiteral", subDirNum);
+    TraceLLVM21("GenerateBinarySectionInfo.begin", cgMod);
     GenerateBinarySectionInfo(cgMod);
+    TraceLLVM21("GenerateBinarySectionInfo.end", cgMod);
+    TraceLLVM21("KeepSomeTypesManually.begin", cgMod);
     KeepSomeTypesManually(cgMod);
+    TraceLLVM21("KeepSomeTypesManually.end", cgMod);
     DumpIRIfNeeded(cgMod, "GenBinarySectionInfo", subDirNum);
+    TraceLLVM21("EraseUselessInstsAndDeclarations.begin", cgMod);
     cgMod.EraseUselessInstsAndDeclarations();
+    TraceLLVM21("EraseUselessInstsAndDeclarations.end", cgMod);
     DumpIRIfNeeded(cgMod, "EraseUselessInstsAndDecls", subDirNum);
     RecordCodeInfoInCodeGen("CodeGen EmitIR", cgMod);
+    TraceLLVM21("GenIncremental.begin", cgMod);
     cgMod.GenIncremental();
+    TraceLLVM21("GenIncremental.end", cgMod);
+    TraceLLVM21("SetSymbolLinkageType.begin", cgMod);
     SetSymbolLinkageType(cgMod);
+    TraceLLVM21("SetSymbolLinkageType.end", cgMod);
     DumpIRIfNeeded(cgMod, "GenIncremental", subDirNum);
+    TraceLLVM21("EraseUselessGVAndFunctions.begin", cgMod);
     cgMod.EraseUselessGVAndFunctions();
+    TraceLLVM21("EraseUselessGVAndFunctions.end", cgMod);
     DumpIRIfNeeded(cgMod, "EraseUselessGVAndFuncs", subDirNum);
+    TraceLLVM21("GenerateStaticGIs.begin", cgMod);
     GenerateStaticGIs(cgMod);
+    TraceLLVM21("GenerateStaticGIs.end", cgMod);
     DumpIRIfNeeded(cgMod, "GenStaticGIs", subDirNum);
+    TraceLLVM21("CreateLLVMUsedGVs.begin", cgMod);
     CreateLLVMUsedGVs(cgMod);
+    TraceLLVM21("CreateLLVMUsedGVs.end", cgMod);
     // Incremental compilation generates invalid IRs, which need to be deleted by EraseUselessGVAndFunctions.
     // Therefore, the verification is performed after incremental compilation.
+    TraceLLVM21("Verify.begin", cgMod);
     auto success = cgMod.Verify();
+    TraceLLVM21("Verify.end", cgMod);
+    if (!success) {
+        DumpBrokenIRForLLVM21(cgMod);
+    }
 #ifndef NDEBUG
     if (!success) {
         auto& cgPkgCtx = cgMod.GetCGContext().GetCGPkgContext();
@@ -456,6 +551,7 @@ void GenSubCHIRPackage(CGModule& cgMod)
         InternalError("Broken llvm ir!");
     }
     RecordCodeInfoInCodeGen("CodeGen stage", cgMod);
+    TraceLLVM21("GenSubCHIRPackage.end", cgMod);
     }
 #endif
 } // namespace
@@ -595,7 +691,7 @@ llvm::Function* CreateMainFunc(const CGModule& cgMod)
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     auto& context = cgMod.GetCGContext().GetLLVMContext();
     auto i32Ty = llvm::Type::getInt32Ty(context);
-    auto i8PtrPtrTy = llvm::Type::getInt8PtrTy(context)->getPointerTo();
+    auto i8PtrPtrTy = llvm::PointerType::get(context, 0)->getPointerTo();
     auto voidType = llvm::Type::getVoidTy(context);
     auto mainFuncType = llvm::FunctionType::get(voidType, {i32Ty, i8PtrPtrTy}, false);
     mainFunc = llvm::cast<llvm::Function>(module->getOrInsertFunction("main", mainFuncType).getCallee());
@@ -612,6 +708,11 @@ void PackageGeneratorImpl::EmitIR()
     // Splitting CHIRPackage into n subCHIRPackages and Construct cgMods.
     CHIRSplitter chirSplitter(cgPkgCtx);
     auto subCHIRPkgs = chirSplitter.SplitCHIRPackage();
+    if (IsLLVM21TraceEnabled()) {
+        std::fprintf(stderr, "[llvm21-trace] SplitCHIRPackage pkg=%s subpkgs=%zu\n",
+            cgPkgCtx.GetCurrentPkgName().c_str(), subCHIRPkgs.size());
+        std::fflush(stderr);
+    }
     for (auto& subCHIRPkg : subCHIRPkgs) {
         auto cgMod = std::make_unique<CGModule>(subCHIRPkg, cgPkgCtx);
         cgPkgCtx.AddCGModule(cgMod);

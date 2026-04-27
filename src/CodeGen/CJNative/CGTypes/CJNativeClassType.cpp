@@ -52,8 +52,8 @@ llvm::Type* CGClassType::GenLLVMType()
 
     std::vector<llvm::Type*> bodyVec{};
     if (classType.IsAutoEnv()) {
-        (void)bodyVec.emplace_back(llvm::Type::getInt8PtrTy(llvmCtx));
-        (void)bodyVec.emplace_back(llvm::Type::getInt8PtrTy(llvmCtx));
+        (void)bodyVec.emplace_back(llvm::PointerType::get(llvmCtx, 0));
+        (void)bodyVec.emplace_back(llvm::PointerType::get(llvmCtx, 0));
     }
     auto& nonConstClassType = const_cast<CHIR::ClassType&>(classType);
     for (auto fieldType : nonConstClassType.GetInstantiatedMemberTys(cgMod.GetCGContext().GetCHIRBuilder())) {
@@ -96,7 +96,7 @@ llvm::Constant* CGClassType::GenSourceGenericOfTypeInfo()
     auto& classType = StaticCast<const CHIR::ClassType&>(chirType);
     if (auto finalizer = classType.GetClassDef()->GetFinalizer(); finalizer && !IsStaticGI()) {
         CJC_ASSERT(classType.GetTypeArgs().empty());
-        auto p0i8 = llvm::Type::getInt8PtrTy(cgCtx.GetLLVMContext());
+        auto p0i8 = llvm::PointerType::get(cgCtx.GetLLVMContext(), 0);
         return llvm::ConstantExpr::getBitCast(cgMod.GetOrInsertCGFunction(finalizer)->GetRawFunction(), p0i8);
     }
     return CGType::GenSourceGenericOfTypeInfo();
@@ -108,7 +108,7 @@ llvm::Constant* CGClassType::GenSuperFnOfTypeTemplate()
     auto& nonConstClassType = const_cast<CHIR::ClassType&>(classType);
     auto superType = nonConstClassType.GetSuperClassTy(&cgMod.GetCGContext().GetCHIRBuilder());
     if (!classType.GetClassDef()->IsClass() || !superType) {
-        return llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+        return llvm::ConstantPointerNull::get(llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
     }
     auto funcName = CGType::GetNameOfTypeTemplateGV(chirType) + ".superTiFn";
     return CGTypeInfo::GenSuperFnOfTypeTemplate(
@@ -118,7 +118,7 @@ llvm::Constant* CGClassType::GenSuperFnOfTypeTemplate()
 llvm::Constant* CGClassType::GenFinalizerOfTypeTemplate()
 {
     auto& classType = static_cast<const CHIR::ClassType&>(chirType);
-    auto p0i8 = llvm::Type::getInt8PtrTy(cgCtx.GetLLVMContext());
+    auto p0i8 = llvm::PointerType::get(cgCtx.GetLLVMContext(), 0);
     if (auto finalizer = classType.GetClassDef()->GetFinalizer()) {
         return llvm::ConstantExpr::getBitCast(cgMod.GetOrInsertCGFunction(finalizer)->GetRawFunction(), p0i8);
     } else {
@@ -131,7 +131,7 @@ void CGClassType::CalculateSizeAndAlign()
     if (layoutType) {
         auto layOut = cgMod.GetLLVMModule()->getDataLayout();
         size = layOut.getTypeAllocSize(layoutType);
-        align = layOut.getABITypeAlignment(layoutType);
+        align = layOut.getABITypeAlign(layoutType).value();
     }
 }
 
@@ -177,7 +177,7 @@ void CGClassType::PostActionOfGenTypeInfo()
             "ext_" + typeInfo->getName().str(), extPartType));
         auto size = cgMod.GetLLVMModule()->getDataLayout().getTypeAllocSize(extPartType);
         std::vector<llvm::Constant*> cons = {
-            llvm::ConstantExpr::getBitCast(typeInfo, llvm::Type::getInt8PtrTy(llvmCtx)),
+            llvm::ConstantExpr::getBitCast(typeInfo, llvm::PointerType::get(llvmCtx, 0)),
             llvm::ConstantInt::get(llvm::Type::getInt16Ty(llvmCtx), 1U),
             llvm::ConstantInt::get(llvm::Type::getInt32Ty(llvmCtx), size),
             llvm::ConstantInt::get(llvm::Type::getInt8Ty(llvmCtx), 1U)
