@@ -17,11 +17,25 @@
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/Utils/ToStringUtils.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace Cangjie {
 namespace CodeGen {
 
 namespace {
+[[noreturn]] void ReportBrokenCPointerRead(const CHIRIntrinsicWrapper& intrinsic, const CHIR::Type& retTy)
+{
+    llvm::errs() << "[llvm15-opaque][CPointerRead] unable to materialize LLVM type for result type\n";
+    llvm::errs() << "  retTy: " << retTy.ToString() << " (kind=" << static_cast<int>(retTy.GetTypeKind()) << ")\n";
+    if (auto* stripped = retTy.StripAllRefs(); stripped != nullptr && stripped != &retTy) {
+        llvm::errs() << "  strippedRetTy: " << stripped->ToString() << " (kind="
+                     << static_cast<int>(stripped->GetTypeKind()) << ")\n";
+    }
+    llvm::errs() << "  intrinsic: " << intrinsic.ToString() << "\n";
+    llvm::report_fatal_error("broken CPointerRead result type");
+}
+
 CGIntrinsicKind GetCGIntrinsicKind(CHIR::IntrinsicKind intrinsicKind)
 {
     switch (intrinsicKind) {
@@ -340,14 +354,18 @@ llvm::Value* CallArrayIntrinsicCopy(
 
 inline bool IsVArrayPtrType(llvm::Type* type)
 {
-    return type->isPointerTy() && GetPointerElementType(type)->isArrayTy();
+    if (!type || !type->isPointerTy()) {
+        return false;
+    }
+    auto elemType = GetPointerElementType(type);
+    return elemType && elemType->isArrayTy();
 }
 
 inline void InstrumentPointerOps(
     IRBuilder2& irBuilder, const std::string& instFunc, llvm::Value* ptr, llvm::Value* typeSize)
 {
     auto& llvmCtx = irBuilder.GetLLVMContext();
-    auto castVal = irBuilder.CreateBitCast(ptr, llvm::Type::getInt8PtrTy(llvmCtx));
+    auto castVal = irBuilder.CreateBitCast(ptr, llvm::PointerType::get(llvmCtx, 0));
     auto& cgMod = irBuilder.GetCGModule();
     irBuilder.CallIntrinsicFunction(llvm::Type::getVoidTy(llvmCtx), instFunc,
         {cgMod.CreateGhostCFuncArgValue(*castVal, *CGType::GetCStringCGType(cgMod)),
@@ -416,18 +434,18 @@ llvm::Value* ConvertCStringToCPointer(const IRBuilder2& irBuilder, const CHIRInt
     return **(irBuilder.GetCGModule() | intrinsic.GetOperand(0));
 }
 
-inline llvm::Value* HandleValuePtr(IRBuilder2& irBuilder, llvm::Value* valPtr)
+inline llvm::Value* HandleValuePtr(IRBuilder2& irBuilder, llvm::Value* valPtr, llvm::Type* valueType)
 {
-    llvm::Type* type = valPtr->getType();
-    CJC_ASSERT(type->isPointerTy());
+    CJC_ASSERT(valPtr->getType()->isPointerTy());
+    CJC_NULLPTR_CHECK(valueType);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     // For cjnative backend, structTy/varrayTy is passed by reference
-    if (IsStructPtrType(type) || IsVArrayPtrType(type)) {
+    if (valueType->isStructTy() || valueType->isArrayTy()) {
         return valPtr;
     }
 #endif
 
-    return irBuilder.CreateLoad(GetPointerElementType(valPtr->getType()), valPtr);
+    return irBuilder.CreateLoad(valueType, valPtr);
 }
 
 inline llvm::Type* GetPointerToWithSpecificAddrspace(llvm::Type* srcType, unsigned dstAddrspace)
@@ -472,10 +490,14 @@ llvm::Value* CPointerRead(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& int
         auto cgRetTy = CGType::GetOrCreate(cgMod, retTy);
         CJC_NULLPTR_CHECK(cgRetTy);
         llvm::Type* realValType = cgRetTy->GetLLVMType();
-        auto realValPtr = irBuilder.CreateBitCast(pointerRefPtr, realValType->getPointerTo());
-        gep = irBuilder.CreateGEP(GetPointerElementType(realValPtr->getType()), realValPtr, pointerIndex);
+        if (realValType == nullptr) {
+            ReportBrokenCPointerRead(intrinsic, *retTy);
+        }
+        auto pointerAddrSpace = pointerRefPtr->getType()->getPointerAddressSpace();
+        auto realValPtr = irBuilder.CreateBitCast(pointerRefPtr, realValType->getPointerTo(pointerAddrSpace));
+        gep = irBuilder.CreateGEP(realValType, realValPtr, pointerIndex);
         InsertAsanInstrument(cgMod, irBuilder, intrinsic, gep, "CJ_MCC_AsanRead");
-        ret = HandleValuePtr(irBuilder, gep);
+        ret = HandleValuePtr(irBuilder, gep, realValType);
     }
 
     return ret;
@@ -503,16 +525,18 @@ llvm::Value* CPointerWrite(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& in
         InsertAsanInstrument(cgMod, irBuilder, intrinsic, gep, "CJ_MCC_AsanWrite");
         irBuilder.CreateMemCpy(gep, llvm::MaybeAlign(), payloadPtr, llvm::MaybeAlign(), valueTySize);
     } else {
-        auto paramType = IsStructPtrType(valueArg->getType())
-            ? GetPointerToWithSpecificAddrspace(valueArg->getType(), pointerRefPtr->getType()->getPointerAddressSpace())
-            : valueArg->getType()->getPointerTo();
+        auto cgValueTy = CGType::GetOrCreate(cgMod, chirValueTy);
+        CJC_NULLPTR_CHECK(cgValueTy);
+        auto pointeeType = cgValueTy->GetLLVMType();
+        auto pointerAddrSpace = pointerRefPtr->getType()->getPointerAddressSpace();
+        auto paramType = pointeeType->getPointerTo(pointerAddrSpace);
         auto realValPtr = irBuilder.CreateBitCast(pointerRefPtr, paramType);
-        gep = irBuilder.CreateGEP(GetPointerElementType(realValPtr->getType()), realValPtr, indexArg);
+        gep = irBuilder.CreateGEP(pointeeType, realValPtr, indexArg);
         InsertAsanInstrument(cgMod, irBuilder, intrinsic, gep, "CJ_MCC_AsanWrite");
 
         if (chirValueTy->IsStruct() || chirValueTy->IsUnit()) {
             auto layOut = cgMod.GetLLVMModule()->getDataLayout().getStructLayout(
-                llvm::cast<llvm::StructType>(GetPointerElementType(valueArg->getType())));
+                llvm::cast<llvm::StructType>(pointeeType));
             CJC_NULLPTR_CHECK(layOut);
             auto size = layOut->getSizeInBytes();
             auto align = layOut->getAlignment();

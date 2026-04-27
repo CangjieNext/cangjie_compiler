@@ -693,9 +693,17 @@ llvm::Instruction* IRBuilder2::CreateStore(const CGValue& cgVal, const CGValue& 
         auto align = llvm::Align(cgMod.GetLLVMModule()->getDataLayout().getABITypeAlignment(valueType));
         return CreateMemCpy(destAddr, align, val, align, size);
     }
-    if (IsFuncPtrType(val->getType()) && IsLitStructPtrType(GetPointerElementType((destAddr)->getType()))) {
-        val = CreateBitCast(val, llvm::PointerType::get(llvm::StructType::get(cgMod.GetLLVMContext()), 0));
-        return LLVMIRBuilder2::CreateStore(val, destAddr, isVolatile);
+    auto* valLLVMType = val->getType();
+    auto* destLLVMType = destAddr->getType();
+    if (valLLVMType->isPointerTy() && destLLVMType->isPointerTy() && valLLVMType->getNumContainedTypes() == 1U &&
+        destLLVMType->getNumContainedTypes() == 1U) {
+        auto* valElemType = valLLVMType->getContainedType(0U);
+        auto* destElemType = destLLVMType->getContainedType(0U);
+        auto* destStructType = llvm::dyn_cast<llvm::StructType>(destElemType);
+        if (valElemType->isFunctionTy() && destStructType && destStructType->isLiteral()) {
+            val = CreateBitCast(val, llvm::PointerType::get(llvm::StructType::get(cgMod.GetLLVMContext()), 0));
+            return LLVMIRBuilder2::CreateStore(val, destAddr, isVolatile);
+        }
     }
 
     return LLVMIRBuilder2::CreateStore(val, destAddr, isVolatile);

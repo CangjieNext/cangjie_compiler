@@ -141,10 +141,11 @@ CGFunction::CGFunction(
     cgCtx.function2CGFunc.emplace(function, this);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (isStructRet) {
-        auto retCGType = cgType->GetContainedTypeAt(0)->GetPointerElementType();
+        auto& retType = *StaticCast<const CHIR::FuncType&>(cgType->GetOriginal()).GetReturnType();
+        auto retCGType = CGType::GetOrCreate(cgMod, &retType);
         function->getArg(0)->addAttr(llvm::Attribute::NoAlias);
         auto sret = llvm::Attribute::getWithStructRetType(function->getContext(),
-            (!retCGType->GetSize() && !retCGType->GetOriginal().IsGeneric())
+            (!retCGType->GetSize() && !retType.IsGeneric())
                 ? llvm::Type::getInt8Ty(cgMod.GetLLVMContext())
                 : retCGType->GetLLVMType());
         function->getArg(0)->addAttr(sret);

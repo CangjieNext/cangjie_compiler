@@ -126,7 +126,11 @@ inline llvm::Type* GetPointerToWithSpecificAddrSpace(const CGType* srcType, unsi
 
 inline llvm::Type* GetPointerElementType(const llvm::Type* type)
 {
-    return type->getNonOpaquePointerElementType();
+    if (auto ptrType = llvm::dyn_cast_or_null<llvm::PointerType>(type); ptrType && !ptrType->isOpaque()) {
+        return ptrType->getNonOpaquePointerElementType();
+    }
+    CJC_ASSERT(false && "opaque pointer element type query requires operation-specific migration");
+    return nullptr;
 }
 
 /**
@@ -134,7 +138,11 @@ inline llvm::Type* GetPointerElementType(const llvm::Type* type)
  */
 inline bool IsStructPtrType(llvm::Type* type)
 {
-    return type->isPointerTy() && GetPointerElementType(type)->isStructTy();
+    if (!type || !type->isPointerTy()) {
+        return false;
+    }
+    auto elemType = GetPointerElementType(type);
+    return elemType && elemType->isStructTy();
 }
 
 inline bool HasNoUse(const llvm::Value& value)
@@ -251,7 +259,11 @@ inline void NameFunctionParam(llvm::Function* function, std::vector<std::string>
  */
 inline bool IsFuncPtrType(llvm::Type* type)
 {
-    return type->isPointerTy() && GetPointerElementType(type)->isFunctionTy();
+    auto ptrType = llvm::dyn_cast_or_null<llvm::PointerType>(type);
+    if (!ptrType || ptrType->isOpaque()) {
+        return false;
+    }
+    return ptrType->getNonOpaquePointerElementType()->isFunctionTy();
 }
 
 /**
@@ -260,10 +272,11 @@ inline bool IsFuncPtrType(llvm::Type* type)
  */
 inline bool IsLitStructPtrType(llvm::Type* type)
 {
-    if (!type || !type->isPointerTy()) {
+    auto ptrType = llvm::dyn_cast_or_null<llvm::PointerType>(type);
+    if (!ptrType || ptrType->isOpaque()) {
         return false;
     }
-    auto structType = llvm::dyn_cast<llvm::StructType>(GetPointerElementType(type));
+    auto structType = llvm::dyn_cast<llvm::StructType>(ptrType->getNonOpaquePointerElementType());
     return structType && structType->isLiteral();
 }
 

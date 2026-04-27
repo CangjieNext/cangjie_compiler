@@ -131,14 +131,14 @@ void GenerateWrapperFuncBody(IRBuilder2& builder, const CHIR::FuncType& funcTy, 
  */
 llvm::Function* GetIndirectCFuncCallWrapper(IRBuilder2& builder, const CHIR::FuncType& funcTy, llvm::Type* funcPtrType)
 {
-    llvm::FunctionType* funcType = nullptr;
     auto& cgMod = builder.GetCGModule();
-    if (IsLitStructPtrType(funcPtrType)) {
-        // In indirect calling scenario, we can get the actual cfunc type by funcTy.
-        auto cgType = static_cast<CGFunctionType*>(CGType::GetOrCreate(cgMod, &funcTy));
-        CJC_ASSERT(cgType && llvm::isa<llvm::FunctionType>(cgType->GetLLVMFunctionType()));
-        funcType = llvm::cast<llvm::FunctionType>(cgType->GetLLVMFunctionType());
-    } else {
+    // Under opaque pointers, the indirect callee type is often just `ptr`, so
+    // recover the canonical signature from CHIR first and only fall back to
+    // the raw LLVM pointer type while typed pointers still exist.
+    auto cgType = static_cast<CGFunctionType*>(CGType::GetOrCreate(cgMod, &funcTy));
+    CJC_ASSERT(cgType);
+    llvm::FunctionType* funcType = llvm::dyn_cast_or_null<llvm::FunctionType>(cgType->GetLLVMFunctionType());
+    if (!funcType && !IsLitStructPtrType(funcPtrType)) {
         funcType = llvm::dyn_cast<llvm::FunctionType>(GetPointerElementType(funcPtrType));
     }
     CJC_NULLPTR_CHECK(funcType);
