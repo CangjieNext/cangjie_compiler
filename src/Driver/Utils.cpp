@@ -12,6 +12,7 @@
 
 #include "cangjie/Driver/Utils.h"
 
+#include <cstdio>
 #include <sstream>
 
 #include "cangjie/Utils/FileUtil.h"
@@ -54,6 +55,35 @@ std::vector<std::string> PrependToPaths(const std::string& prefix, const std::ve
         searchPaths.emplace_back(tmp);
     }
     return searchPaths;
+}
+
+std::optional<std::string> GetDarwinSDKPath()
+{
+#if defined(__APPLE__)
+    constexpr auto XCRunGetSDKCmd = "xcrun --sdk macosx --show-sdk-path 2>/dev/null";
+    FILE* pipe = popen(XCRunGetSDKCmd, "r");
+    if (pipe == nullptr) {
+        return std::nullopt;
+    }
+    std::string output;
+    char buffer[1024] = {};
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        output += buffer;
+    }
+    if (pclose(pipe) != 0) {
+        return std::nullopt;
+    }
+    while (!output.empty() && (output.back() == '\n' || output.back() == '\r' || output.back() == ' ' ||
+        output.back() == '\t')) {
+        output.pop_back();
+    }
+    if (output.empty()) {
+        return std::nullopt;
+    }
+    return FileUtil::GetAbsPath(output);
+#else
+    return std::nullopt;
+#endif
 }
 
 std::optional<std::string> GetDarwinSDKVersion(const std::string& sdkPath)

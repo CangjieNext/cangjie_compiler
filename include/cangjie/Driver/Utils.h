@@ -51,6 +51,13 @@ std::vector<std::string> PrependToPaths(
     const std::string& prefix, const std::vector<std::string>& paths, bool quoted = false);
 
 /**
+ * @brief Try to locate the macOS SDK path on Darwin hosts.
+ *
+ * @return std::optional<std::string> The resolved SDK path, if available.
+ */
+std::optional<std::string> GetDarwinSDKPath();
+
+/**
  * @brief Get darwin SDK version.
  *
  * @param sdkPath The sdk path.

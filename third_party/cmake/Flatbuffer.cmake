@@ -9,7 +9,13 @@ set(FLATBUFFERS_COMPILE_OPTIONS -DCMAKE_C_FLAGS=${GCC_TOOLCHAIN_FLAG} -DCMAKE_CX
 if(CMAKE_HOST_WIN32)
     list(APPEND FLATBUFFERS_COMPILE_OPTIONS -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++)
 else()
-    list(APPEND FLATBUFFERS_COMPILE_OPTIONS -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)
+    # Reuse the fully resolved toolchain path from the top-level build. Passing
+    # bare `clang/clang++` here makes the sub-build think the compiler changed
+    # on every reconfigure and it silently drops the intended cache settings
+    # such as `FLATBUFFERS_BUILD_TESTS=OFF`.
+    list(APPEND FLATBUFFERS_COMPILE_OPTIONS
+        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+        -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
 endif()
 
 # for CloudDragon, download in Prebuild

@@ -113,7 +113,7 @@ std::string Tool::GenerateCommand() const
     });
 #ifndef _WIN32
     if (!GetLdLibraryPath().empty()) {
-        tempCommand = "LD_LIBRARY_PATH=" + GetSingleQuoted(GetLdLibraryPath()) + ":$" + LD_LIBRARY_PATH + " ";
+        tempCommand = LD_LIBRARY_PATH + "=" + GetSingleQuoted(GetLdLibraryPath()) + ":$" + LD_LIBRARY_PATH + " ";
     }
 #endif
 

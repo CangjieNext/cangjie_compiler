@@ -426,19 +426,17 @@ void IRBuilder2::CreateLoadInstForParameter(const CHIR::Expression& chirExpressi
                 continue;
             }
             auto payload = GetPayloadFromObject(it->second);
-            auto castedPtr =
-                CreateBitCast(payload, llvm::cast<llvm::PointerType>(it->first)->getElementType()->getPointerTo(1));
+            auto elemType = GetPointerElementType(it->first);
+            auto castedPtr = CreateBitCast(payload, elemType->getPointerTo(1));
             if (chirExpression.GetExprKind() == CHIR::ExprKind::STORE && chirExpression.GetOperand(1) == operand) {
                 FixedCGTypeOfFuncArg(cgMod, *operand, *castedPtr);
                 continue;
             }
             CJC_ASSERT(castedPtr->getType()->isPointerTy() && it->first->isPointerTy());
             llvm::Value* temp = castedPtr;
-            if (llvm::cast<llvm::PointerType>(it->first)->getElementType()->isStructTy() &&
+            if (elemType->isStructTy() &&
                 llvm::cast<llvm::PointerType>(it->first)->getAddressSpace() == 0) {
-                auto elemType = llvm::cast<llvm::PointerType>(it->first)->getElementType();
-                temp = CreateEntryAlloca(llvm::cast<llvm::PointerType>(it->first)->getElementType(), nullptr,
-                    it->second->getName() + ".copied");
+                temp = CreateEntryAlloca(elemType, nullptr, it->second->getName() + ".copied");
                 if (IsTypeContainsRef(elemType)) {
                     auto structType = llvm::cast<llvm::StructType>(elemType);
                     auto layOut = GetLLVMModule()->getDataLayout().getStructLayout(structType);

@@ -11,6 +11,7 @@
  */
 
 #include "cangjie/Driver/DriverOptions.h"
+#include "cangjie/Driver/Utils.h"
 #include  "cangjie/Utils/Semaphore.h"
 
 #include <unordered_set>
@@ -268,6 +269,11 @@ bool DriverOptions::SetupSysroot()
     if (!customizedSysroot) {
         if (target.IsMacOS() && environment.macOSSDKRoot.has_value()) {
             sysroot = environment.macOSSDKRoot.value();
+        } else if (target.IsMacOS()) {
+            auto maybeSDKRoot = GetDarwinSDKPath();
+            if (maybeSDKRoot.has_value()) {
+                sysroot = maybeSDKRoot.value();
+            }
         }
     }
     return true;
@@ -335,4 +341,3 @@ bool DriverOptions::CheckStaticOption()
     }
     return true;
 }
-

@@ -43,12 +43,30 @@ inline void AddRetAttr(llvm::CallBase* callBase, llvm::Attribute::AttrKind kind)
     AddAttributeAtIndex(callBase, llvm::AttributeList::ReturnIndex, kind);
 }
 
+inline llvm::Type* GetNonOpaquePointeeOrNull(llvm::Type* type)
+{
+    auto* ptrType = llvm::dyn_cast_or_null<llvm::PointerType>(type);
+    if (!ptrType || ptrType->isOpaque()) {
+        return nullptr;
+    }
+    return ptrType->getNonOpaquePointerElementType();
+}
+
 inline void AddSRetAttribute(llvm::CallBase* call)
 {
     auto retType = call->arg_begin()->get()->getType();
     CJC_ASSERT(retType->isPointerTy());
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    auto type = GetPointerElementType(retType);
+    llvm::Type* type = nullptr;
+    if (auto* callee = call->getCalledFunction(); callee && !callee->arg_empty() && callee->arg_begin()->hasStructRetAttr()) {
+        type = callee->arg_begin()->getParamStructRetType();
+    }
+    if (!type) {
+        type = GetNonOpaquePointeeOrNull(retType);
+    }
+    if (!type) {
+        return;
+    }
     auto sRetAttr = llvm::Attribute::getWithStructRetType(call->getContext(), type);
     AddParamAttr(call, 0, sRetAttr);
 #endif
@@ -110,8 +128,17 @@ inline void AddRetAttr(llvm::Function* func, llvm::Attribute::AttrKind kind)
 inline void AddSRetAttribute(llvm::Argument* value)
 {
     CJC_ASSERT(value->getType()->isPointerTy());
-    auto type = GetPointerElementType(value->getType());
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    if (value->hasStructRetAttr() && value->getParamStructRetType()) {
+        return;
+    }
+    auto type = value->getParamStructRetType();
+    if (!type) {
+        type = GetNonOpaquePointeeOrNull(value->getType());
+    }
+    if (!type) {
+        return;
+    }
     auto sRet = llvm::Attribute::getWithStructRetType(value->getContext(), type);
     value->addAttr(sRet);
 #endif
@@ -120,10 +147,17 @@ inline void AddSRetAttribute(llvm::Argument* value)
 inline void AddByValAttribute(llvm::Argument* value, uint64_t align = 8)
 {
     CJC_ASSERT(value->getType()->isPointerTy());
-    CJC_ASSERT(GetPointerElementType(value->getType())->isStructTy());
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    auto* type = value->getParamByValType();
+    if (!type) {
+        type = GetNonOpaquePointeeOrNull(value->getType());
+    }
+    CJC_ASSERT(type && type->isStructTy());
+    if (!type || !type->isStructTy()) {
+        return;
+    }
     auto& llvmCtx = value->getContext();
-    auto byValAttr = llvm::Attribute::getWithByValType(llvmCtx, GetPointerElementType(value->getType()));
+    auto byValAttr = llvm::Attribute::getWithByValType(llvmCtx, type);
     value->addAttr(byValAttr);
     auto alignAttr = llvm::Attribute::getWithAlignment(llvmCtx, llvm::Align(align));
     value->addAttr(alignAttr);
@@ -158,8 +192,11 @@ inline void SetSRetAttrForStructReturnType(const CHIR::FuncType& chirFuncTy, llv
 #endif
 
     if (!llvmFunc.arg_empty() && shouldSetSRet) {
-        llvmFunc.arg_begin()->addAttr(llvm::Attribute::NoAlias);
-        AddSRetAttribute(llvmFunc.arg_begin());
+        auto* sretArg = llvmFunc.arg_begin();
+        sretArg->addAttr(llvm::Attribute::NoAlias);
+        if (!sretArg->hasStructRetAttr() || !sretArg->getParamStructRetType()) {
+            AddSRetAttribute(sretArg);
+        }
     }
 }
 } // namespace CodeGen
