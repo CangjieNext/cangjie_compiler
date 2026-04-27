@@ -39,6 +39,27 @@ llvm::Value* WrapEnumAssociatedValueWithUnsafePointer(
     return irBuilder.CallIntrinsicUnsafePointer(value);
 }
 
+bool ShouldWrapTagFirstEnumArgWithUnsafePointer(const CGValue& srcValue, const CGType& destType, llvm::Value* llvmVal)
+{
+    if (!llvmVal->getType()->isPointerTy() || llvmVal->getType()->getPointerAddressSpace() != 0U ||
+        !destType.IsPointerType()) {
+        return false;
+    }
+    auto srcCGType = srcValue.GetCGType();
+    if (!srcCGType || !srcCGType->IsPointerType()) {
+        return false;
+    }
+    auto srcElemType = srcCGType->GetPointerElementType();
+    if (!srcElemType->IsCGEnum()) {
+        return false;
+    }
+    auto enumCGType = StaticCast<const CGEnumType*>(srcElemType);
+    // Tag-first enums/options are passed by reference. Wrap their aggregate address
+    // before calling into consumers such as `getOrThrow`, so later optimizations keep
+    // treating any nested ref fields as potentially nullable.
+    return enumCGType->PassByReference() && IsTypeContainsRef(enumCGType->GetLLVMType());
+}
+
 llvm::Value* DoSimpleCast(IRBuilder2& irBuilder, const CGValue& srcValue, const CGType& destType)
 {
     llvm::Value& srcRawVal = *srcValue.GetRawValue();
@@ -135,6 +156,9 @@ std::vector<llvm::Value*> IRBuilder2::FixFuncArgs(const CGFunctionType& calleeTy
         bool isThis = idx == 0 && applyWrapper && applyWrapper->IsCalleeStructInstanceMethod();
         auto& paramType = *calleeType.GetParamType(idx);
         auto llvmVal = isThis ? DoSimpleCast(*this, *arg, paramType) : FixFuncArg(*arg, paramType);
+        if (ShouldWrapTagFirstEnumArgWithUnsafePointer(*arg, paramType, llvmVal)) {
+            llvmVal = CallIntrinsicUnsafePointer(llvmVal);
+        }
         if (isGlobalStructArgOnAArch64(idx)) {
             llvmVal = tagGlobalStructAddrForAArch64(llvmVal);
         }
@@ -372,6 +396,12 @@ llvm::Value* IRBuilder2::GetReturnValue(const CGFunctionType& calleeType, llvm::
 
     if (returnCHIRType.IsUnit()) {
         ret = cgMod.GenerateUnitTypeValue();
+    }
+    if (returnCGType.IsOptionLikeRef()) {
+        // Option-like ref returns are represented as nullable refs. When the caller
+        // consumes that return value, replace the old untrusted-ref style handling
+        // with an explicit unsafe-pointer intrinsic at the call result.
+        ret = CallIntrinsicUnsafePointer(ret);
     }
     return ret;
 }
