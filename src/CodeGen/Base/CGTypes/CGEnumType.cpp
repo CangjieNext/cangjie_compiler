@@ -214,7 +214,7 @@ llvm::Type* CGEnumType::GenCommonEnumLLVMType()
     layoutType = llvm::StructType::getTypeByName(llvmCtx, typeName);
     if (!layoutType) {
         layoutType = llvm::StructType::create(llvmCtx, typeName);
-        SetStructTypeBody(layoutType, {llvm::Type::getInt8PtrTy(llvmCtx, 1U)});
+        SetStructTypeBody(layoutType, {llvm::PointerType::get(llvmCtx, 1U)});
     }
     return GetRefType(llvmCtx);
 }
@@ -238,7 +238,7 @@ llvm::Type* CGEnumType::GenOptionLikeRefLLVMType()
     if (!layoutType) {
         layoutType = llvm::StructType::create(llvmCtx, typeName);
         auto i8Ty = llvm::Type::getInt8Ty(llvmCtx);
-        SetStructTypeBody(layoutType, {llvm::Type::getInt8PtrTy(llvmCtx, 1U), llvm::ArrayType::get(i8Ty, 0U)});
+        SetStructTypeBody(layoutType, {llvm::PointerType::get(llvmCtx, 1U), llvm::ArrayType::get(i8Ty, 0U)});
     }
     cgCtx.AddGeneratedStructType(layoutType->getName().str());
     return GetRefType(llvmCtx);
@@ -337,7 +337,7 @@ void CGEnumType::CalculateSizeAndAlign()
         case CGEnumTypeKind::EXHAUSTIVE_OTHER:
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_OPTION_LIKE_REF: {
             size = layOut.getTypeAllocSize(llvmType);
-            align = layOut.getABITypeAlignment(llvmType);
+            align = layOut.getABITypeAlign(llvmType).value();
             return;
         }
         case CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_NONREF: {
@@ -350,7 +350,7 @@ void CGEnumType::CalculateSizeAndAlign()
             if (layoutType) {
                 auto layOut = cgMod.GetLLVMModule()->getDataLayout();
                 size = layOut.getTypeAllocSize(layoutType);
-                align = layOut.getABITypeAlignment(layoutType);
+                align = layOut.getABITypeAlign(layoutType).value();
             } else {
                 size = std::nullopt;
                 align = std::nullopt;
@@ -437,7 +437,7 @@ llvm::Constant* CGEnumType::GenFieldsOfTypeInfo()
 llvm::Constant* CGEnumType::GenOffsetsOfTypeInfo()
 {
     if (cgEnumTypeKind == CGEnumTypeKind::EXHAUSTIVE_ASSOCIATED_NONREF) {
-        return llvm::ConstantPointerNull::get(llvm::Type::getInt32PtrTy(cgMod.GetLLVMContext()));
+        return llvm::ConstantPointerNull::get(llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
     } else {
         return CGCustomType::GenOffsetsOfTypeInfo();
     }
@@ -470,7 +470,7 @@ llvm::Constant* CGEnumType::GenFieldsNumOfTypeTemplate()
 llvm::Constant* CGEnumType::GenFieldsFnsOfTypeTemplateForOptionLikeT(CGModule& cgMod, const std::string& funcPrefixName)
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
-    auto p0i8 = llvm::Type::getInt8PtrTy(llvmCtx);
+    auto p0i8 = llvm::PointerType::get(llvmCtx, 0);
     if (auto gv = cgMod.GetLLVMModule()->getNamedGlobal(funcPrefixName + ".fieldTiFns");
         gv && gv->hasInitializer()) {
         return llvm::ConstantExpr::getBitCast(gv, p0i8);

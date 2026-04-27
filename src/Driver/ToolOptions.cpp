@@ -48,10 +48,17 @@ void SetMtripleOption(SetFuncType setOptionHandler, const DriverOptions& driverO
 }
 
 namespace OPT {
+static constexpr const char* CJ_OPAQUE_DEFAULT_O2_PIPELINE =
+    R"(verify,cj-ir-verifier,function(insert-cj-tbaa),cj-fill-metadata,cj-runtime-lowering,cj-barrier-split,function(cj-simple-opt),annotation2metadata,forceattrs,inferattrs,coro-early,function<eager-inv>(loop(loop-simplifycfg),lower-expect,simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;no-switch-range-to-icmp;no-switch-to-lookup;keep-loops;no-hoist-common-insts;no-sink-common-insts>,sroa,early-cse<>),openmp-opt,ipsccp,called-value-propagation,globalopt,function(mem2reg),deadargelim,function<eager-inv>(instcombine,simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;switch-range-to-icmp;no-switch-to-lookup;keep-loops;no-hoist-common-insts;no-sink-common-insts>),require<globals-aa>,function(invalidate<aa>),require<profile-summary>,cgscc(devirt<4>(inline<only-mandatory>,inline,function-attrs,openmp-opt-cgscc,cj-devirtual-opt,function(simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;switch-range-to-icmp;no-switch-to-lookup;keep-loops;no-hoist-common-insts;no-sink-common-insts>),function(instcombine),function(sccp),cj-pea,function<eager-inv>(cj-simple-opt,sroa,early-cse<memssa>,speculative-execution,jump-threading,correlated-propagation,cj-generic-intrinsic-opt,cj-simple-range-analysis,simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;switch-range-to-icmp;no-switch-to-lookup;keep-loops;no-hoist-common-insts;no-sink-common-insts>,instcombine,libcalls-shrinkwrap,tailcallelim,simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;switch-range-to-icmp;no-switch-to-lookup;keep-loops;no-hoist-common-insts;no-sink-common-insts>,reassociate,instcombine,require<opt-remark-emit>,loop-mssa(licm<no-allowspeculation>,loop-rotate,indvars,loop-deletion,loop-instsimplify,loop-simplifycfg,licm<no-allowspeculation>,loop-rotate,licm<allowspeculation>,simple-loop-unswitch<no-nontrivial;trivial>),simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;switch-range-to-icmp;no-switch-to-lookup;keep-loops;no-hoist-common-insts;no-sink-common-insts>,instcombine,cj-loop-float-opt,loop(loop-idiom,indvars,loop-deletion,loop-unroll-full),sroa,mldst-motion<no-split-footer-bb>,gvn<>,sccp,bdce,instcombine,jump-threading,correlated-propagation,adce,memcpyopt,cj-rssce,dse,loop-mssa(licm<allowspeculation>),coro-elide,simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;switch-range-to-icmp;no-switch-to-lookup;keep-loops;hoist-common-insts;sink-common-insts>,instcombine),coro-split)),coro-cleanup,globalopt,globaldce,rpo-function-attrs,recompute-globalsaa,cgscc(function-attrs),function<eager-inv>(irce,simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;switch-range-to-icmp;no-switch-to-lookup;keep-loops;no-hoist-common-insts;no-sink-common-insts>,loop(simple-loop-unswitch<no-nontrivial;trivial>),loop-mssa(licm<allowspeculation>),gvn<>,memcpyopt,cj-rssce,dse,mldst-motion<no-split-footer-bb>),function<eager-inv>(float2int,lower-constant-intrinsics,loop(loop-rotate,loop-deletion),loop-distribute,inject-tli-mappings,loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>,loop-load-elim,instcombine,simplifycfg<bonus-inst-threshold=1;forward-switch-cond;switch-range-to-icmp;switch-to-lookup;no-keep-loops;hoist-common-insts;sink-common-insts>,slp-vectorizer,vector-combine,instcombine,loop-unroll<O2>,transform-warning,instcombine,require<opt-remark-emit>,loop-mssa(licm<allowspeculation>),alignment-from-assumptions,cj-after-inline-simple-opt,loop(indvars),early-cse<>,loop-sink,instsimplify,div-rem-pairs,tailcallelim,simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;switch-range-to-icmp;no-switch-to-lookup;keep-loops;no-hoist-common-insts;no-sink-common-insts>),elim-avail-extern,globaldce,constmerge,cg-profile,rel-lookup-table-converter,function(annotation-remarks),cj-specific-opt,place-safepoints,cj-barrier-opt,cj-rewrite-statepoint,verify)";
+
 void SetOptimizationLevelOptions(SetFuncType setOptionHandler, const DriverOptions& driverOptions)
 {
     auto optimizationLevel =
         driverOptions.disableBackendOpt ? GlobalOptions::OptimizationLevel::O0 : driverOptions.optimizationLevel;
+    if (driverOptions.enableOpaque && optimizationLevel == GlobalOptions::OptimizationLevel::O2) {
+        setOptionHandler(CJ_OPAQUE_DEFAULT_O2_PIPELINE);
+        return;
+    }
     setOptionHandler("default<" + OPTIMIZATION_LEVEL_TO_BACKEND_OPTION.find(optimizationLevel)->second.substr(1) + ">");
 }
 
@@ -300,7 +307,6 @@ void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
     setOptionHandler("--mllvm");
     setOptionHandler("--cj-lto-opt");
     setOptionHandler("--allow-multiple-definition");
-    setOptionHandler("--plugin-opt=no-opaque-pointers");
     if (driverOptions.IsCompileAsExeEnabled()) {
         setOptionHandler("--compile-as-exe");
     }

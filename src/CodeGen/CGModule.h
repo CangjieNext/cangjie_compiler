@@ -10,7 +10,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/CJStructTypeGCInfo.h"
-#include "llvm/Support/Host.h"
+#include "llvm/TargetParser/Host.h"
 #include "llvm/Transforms/Utils/Local.h"
 
 #include "Base/CGTypes/CGArrayType.h"
@@ -129,7 +129,7 @@ public:
 
     llvm::Constant* GetOrInsertBitMap(const std::string& bitStr, const std::string& name = "")
     {
-        return commonBitMap->getOrInsertBitMap(bitStr, llvm::Type::getInt8PtrTy(cgCtx->GetLLVMContext()), name);
+        return commonBitMap->getOrInsertBitMap(bitStr, llvm::PointerType::get(cgCtx->GetLLVMContext(), 0), name);
     }
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND

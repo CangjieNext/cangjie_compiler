@@ -29,7 +29,7 @@ llvm::Constant* EnumCtorTIOrTTGenerator::GenTypeArgsNumOfTypeInfo()
 llvm::Constant* EnumCtorTIOrTTGenerator::GenTypeArgsOfTypeInfo()
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
-    auto i8Ptr = llvm::Type::getInt8PtrTy(llvmCtx);
+    auto i8Ptr = llvm::PointerType::get(llvmCtx, 0);
     auto typeArgsNum = chirEnumType.GetGenericArgs().size();
     if (!typeArgsNum) {
         return llvm::ConstantPointerNull::get(i8Ptr);
@@ -43,12 +43,12 @@ llvm::Constant* EnumCtorTIOrTTGenerator::GenTypeArgsOfTypeInfo()
     typeInfoOfGenericArgs->setConstant(true);
     typeInfoOfGenericArgs->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     AddLinkageTypeMetadata(*typeInfoOfGenericArgs, llvm::GlobalVariable::PrivateLinkage, cgCtx.IsCGParallelEnabled());
-    return llvm::ConstantExpr::getBitCast(typeInfoOfGenericArgs, llvm::Type::getInt8PtrTy(llvmCtx));
+    return llvm::ConstantExpr::getBitCast(typeInfoOfGenericArgs, llvm::PointerType::get(llvmCtx, 0));
 }
 
 llvm::Constant* EnumCtorTIOrTTGenerator::GenSourceGenericOfTypeInfo()
 {
-    auto p0i8 = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto p0i8 = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     if (chirEnumType.GetCustomTypeDef()->IsGenericDef()) {
         auto genericDecl = chirEnumType.GetCustomTypeDef();
         return llvm::ConstantExpr::getBitCast(
@@ -66,7 +66,7 @@ EnumCtorLayout EnumCtorTIOrTTGenerator::ComputeLLVMLayout(
     auto layoutType = GetLLVMStructType(cgMod, layout.fieldTypes, GetClassObjLayoutName(className));
     auto& dataLayout = cgMod.GetLLVMModule()->getDataLayout();
     layout.size = dataLayout.getTypeAllocSize(layoutType);
-    layout.align = dataLayout.getABITypeAlignment(layoutType);
+    layout.align = dataLayout.getABITypeAlign(layoutType).value();
     layout.offsets = CGCustomType::GenOffsetsArray(cgMod, tiName + ".offsets", layoutType);
     return layout;
 }
@@ -255,7 +255,7 @@ llvm::Constant* EnumCtorTIOrTTGenerator::GenTypeArgsNumOfTypeTemplate()
 
 llvm::Constant* EnumCtorTIOrTTGenerator::GenSuperFnOfTypeTemplate(const std::string& funcName)
 {
-    auto i8PtrTy = llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext());
+    auto i8PtrTy = llvm::PointerType::get(cgMod.GetLLVMContext(), 0);
     std::vector<llvm::Type*> argTypes{
         llvm::Type::getInt32Ty(cgMod.GetLLVMContext()),
         CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext())->getPointerTo()
@@ -277,7 +277,7 @@ void EnumCtorTIOrTTGenerator::GenerateGenericEnumCtorTypeTemplate(llvm::GlobalVa
 {
     auto& llvmCtx = cgMod.GetLLVMContext();
     auto i8Ty = llvm::Type::getInt8Ty(llvmCtx);
-    auto i8PtrTy = llvm::Type::getInt8PtrTy(llvmCtx);
+    auto i8PtrTy = llvm::PointerType::get(llvmCtx, 0);
     auto i16Ty = llvm::Type::getInt16Ty(llvmCtx);
     auto i8PtrNull = llvm::ConstantPointerNull::get(i8PtrTy);
 

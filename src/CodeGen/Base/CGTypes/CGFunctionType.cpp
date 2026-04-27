@@ -57,7 +57,7 @@ llvm::Type* CGFunctionType::GenLLVMType()
     auto& llvmCtx = cgCtx.GetLLVMContext();
     layoutType = llvm::StructType::getTypeByName(llvmCtx, "Func.Type");
     if (!layoutType) {
-        layoutType = llvm::StructType::create(llvmCtx, {llvm::Type::getInt8PtrTy(llvmCtx)}, "Func.Type");
+        layoutType = llvm::StructType::create(llvmCtx, {llvm::PointerType::get(llvmCtx, 0)}, "Func.Type");
     }
 
     auto& funcTy = StaticCast<const CHIR::FuncType&>(chirType);
@@ -68,7 +68,7 @@ llvm::Type* CGFunctionType::GenLLVMType()
         return llvmFuncTy ? llvmFuncTy->getPointerTo() : llvmType;
     }
 #endif
-    llvmType = llvm::Type::getInt8PtrTy(llvmCtx);
+    llvmType = llvm::PointerType::get(llvmCtx, 0);
 
     std::vector<llvm::Type*> paramTypes;
     size_t realArgIdx = 0;
@@ -109,7 +109,7 @@ llvm::Type* CGFunctionType::GenLLVMType()
             llvmType = CGType::GetOrCreate(cgMod, DeRef(*paramType))->GetLLVMType()->getPointerTo(1U);
             (void)paramTypes.emplace_back(llvmType);
             if (allowBasePtr) {
-                (void) paramTypes.emplace_back(llvm::Type::getInt8PtrTy(llvmCtx, 1));
+                (void) paramTypes.emplace_back(llvm::PointerType::get(llvmCtx, 1));
                 structParamNeedsBasePtr[realArgIdx] = containedCGTypeIndex;
                 ++realArgIdx;
                 hasBasePtr = true;
@@ -262,13 +262,13 @@ llvm::Constant* CGFunctionType::GenTypeArgsOfTypeInfo()
     typeInfoOfGenericArgs->addAttribute(CJTI_TYPE_ARGS_ATTR);
     typeInfoOfGenericArgs->setConstant(true);
     typeInfoOfGenericArgs->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
-    return llvm::ConstantExpr::getBitCast(typeInfoOfGenericArgs, llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    return llvm::ConstantExpr::getBitCast(typeInfoOfGenericArgs, llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
 }
 
 void CGFunctionType::CalculateSizeAndAlign()
 {
     llvm::DataLayout layOut = cgMod.GetLLVMModule()->getDataLayout();
     size = layOut.getTypeAllocSize(llvmType);
-    align = layOut.getABITypeAlignment(llvmType);
+    align = layOut.getABITypeAlign(llvmType).value();
 }
 } // namespace Cangjie::CodeGen

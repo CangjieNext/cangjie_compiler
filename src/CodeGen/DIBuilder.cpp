@@ -1255,7 +1255,7 @@ llvm::DICompositeType* DIBuilder::GetOrCreateEnumCtorType(const CHIR::EnumType& 
     auto size = isOptionLike ? 8u : 32u; // The size of Int32 is 32-bit.
     auto basicType = createBasicType("Int32", size, static_cast<unsigned>(llvm::dwarf::DW_ATE_signed));
     auto enumCtorType = createEnumerationType(diNamespace, name, diFile, position.GetBeginPos().line, size, 0u,
-        getOrCreateArray(ctors), basicType, enumTy.ToString(), true);
+        getOrCreateArray(ctors), basicType, 0, enumTy.ToString(), true);
     // Cache it.
     enumCtorCache[&enumTy] = llvm::TrackingMDRef(enumCtorType);
     return enumCtorType;

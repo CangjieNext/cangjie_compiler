@@ -10,6 +10,7 @@
 #include "CGModule.h"
 #include "DIBuilder.h"
 #include "IRBuilder.h"
+#include "Utils/CGUtils.h"
 
 namespace Cangjie {
 namespace CodeGen {
@@ -180,7 +181,7 @@ llvm::Value* IRBuilder2::CreateVArrayGEP(
 
 llvm::BasicBlock* IRBuilder2::CreateEntryBasicBlock(llvm::Function* parent, const std::string& name) const
 {
-    auto& functionBBs = parent->getBasicBlockList();
+    auto& functionBBs = *parent;
     llvm::BasicBlock* oldEntryBB = nullptr;
     if (!functionBBs.empty()) {
         oldEntryBB = &functionBBs.front();
@@ -216,14 +217,14 @@ void IRBuilder2::CreateLocalVarPointer(const CHIR::Debug& debugNode, const CGVal
     auto cgType = cgValue.GetCGType();
     auto arg = cgValue.GetRawValue();
     auto tmpArg = CreateEntryAlloca(
-        llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext(), 1), nullptr, debugNode.GetSrcCodeIdentifier() + ".debug");
+        llvm::PointerType::get(cgMod.GetLLVMContext(), 1), nullptr, debugNode.GetSrcCodeIdentifier() + ".debug");
     auto inst = CreateStore(arg, tmpArg);
     llvm::cast<llvm::Instruction>(tmpArg)->setDebugLoc(llvm::DebugLoc());
     CJC_NULLPTR_CHECK(inst);
     inst->setDebugLoc(llvm::DebugLoc());
     cgMod.SetOrUpdateMappedCGValue(debugNode.GetValue(), std::make_unique<CGValue>(tmpArg, cgType));
     EmitDeclare(debugNode);
-    cgMod.SetValuesToLoad(debugNode.GetValue(), llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext(), 1), tmpArg);
+    cgMod.SetValuesToLoad(debugNode.GetValue(), llvm::PointerType::get(cgMod.GetLLVMContext(), 1), tmpArg);
     cgMod.SetOrUpdateMappedCGValue(debugNode.GetValue(), std::make_unique<CGValue>(arg, cgType));
 }
 
@@ -426,19 +427,17 @@ void IRBuilder2::CreateLoadInstForParameter(const CHIR::Expression& chirExpressi
                 continue;
             }
             auto payload = GetPayloadFromObject(it->second);
-            auto castedPtr =
-                CreateBitCast(payload, llvm::cast<llvm::PointerType>(it->first)->getElementType()->getPointerTo(1));
+            auto elemType = GetPointerElementType(it->first);
+            auto castedPtr = CreateBitCast(payload, elemType->getPointerTo(1));
             if (chirExpression.GetExprKind() == CHIR::ExprKind::STORE && chirExpression.GetOperand(1) == operand) {
                 FixedCGTypeOfFuncArg(cgMod, *operand, *castedPtr);
                 continue;
             }
             CJC_ASSERT(castedPtr->getType()->isPointerTy() && it->first->isPointerTy());
             llvm::Value* temp = castedPtr;
-            if (llvm::cast<llvm::PointerType>(it->first)->getElementType()->isStructTy() &&
+            if (elemType->isStructTy() &&
                 llvm::cast<llvm::PointerType>(it->first)->getAddressSpace() == 0) {
-                auto elemType = llvm::cast<llvm::PointerType>(it->first)->getElementType();
-                temp = CreateEntryAlloca(llvm::cast<llvm::PointerType>(it->first)->getElementType(), nullptr,
-                    it->second->getName() + ".copied");
+                temp = CreateEntryAlloca(elemType, nullptr, it->second->getName() + ".copied");
                 if (IsTypeContainsRef(elemType)) {
                     auto structType = llvm::cast<llvm::StructType>(elemType);
                     auto layOut = GetLLVMModule()->getDataLayout().getStructLayout(structType);
@@ -468,7 +467,7 @@ void IRBuilder2::CreateGenericParaDeclare(const CGFunction& cgFunc)
     }
     auto chirFunc = dynamic_cast<const CHIR::Func*>(&cgFunc.GetOriginal());
     size_t genericIndex = 0;
-    auto null = llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    auto null = llvm::ConstantPointerNull::get(llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
     // For member function only.
     if (cgFunc.GetCGFunctionType()->GetOuterTypeInfoIndex().has_value()) {
         auto outerDef = chirFunc->GetParentCustomTypeDef();
@@ -529,7 +528,7 @@ llvm::Value* IRBuilder2::CallClassIntrinsicInstanceOf(
     auto instanceInt8Ptr = CreateBitCast(instance, getInt8PtrTy()->getPointerTo(1));
     auto instanceTi = CreateLoad(getInt8PtrTy(), instanceInt8Ptr);
     auto targetTiPtr = CreateTypeInfo(*targetTy);
-    auto targetTi = CreateBitCast(targetTiPtr, llvm::Type::getInt8PtrTy(cgMod.GetLLVMContext()));
+    auto targetTi = CreateBitCast(targetTiPtr, llvm::PointerType::get(cgMod.GetLLVMContext(), 0));
     return CallIntrinsicIsSubtype({instanceTi, targetTi});
 #endif
 }

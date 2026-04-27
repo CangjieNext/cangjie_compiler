@@ -41,6 +41,20 @@ bool IsPlatformDependent(CHIR::IntrinsicKind intrinsicKind)
     return (intrinsicKind >= CHIR::IntrinsicKind::GET_MAX_HEAP_SIZE && intrinsicKind <= CHIR::IntrinsicKind::GET_NATIVE_THREAD_NUMBER) ||
         intrinsicKind == CHIR::IntrinsicKind::GET_GC_COUNT || intrinsicKind==CHIR::IntrinsicKind::GET_GC_FREED_SIZE;
 }
+
+bool CanCacheTypeInfoValue(const llvm::Function* function, const llvm::Value* value)
+{
+    if (!llvm::isa<llvm::Instruction>(value)) {
+        return true;
+    }
+    CJC_NULLPTR_CHECK(function);
+    auto inst = llvm::cast<llvm::Instruction>(value);
+    auto bb = inst->getParent();
+    if (bb == nullptr) {
+        return false;
+    }
+    return bb == &function->getEntryBlock() || bb->getName() == "allocas" || bb->getName() == "prepTi";
+}
 }
 llvm::Value* IRBuilder2::CallIntrinsic(
     const CHIRIntrinsicWrapper& intrinsic, const std::vector<llvm::Value*>& args, const std::vector<llvm::Type*>& tys)
@@ -320,7 +334,7 @@ llvm::Value* IRBuilder2::AcquireRawData(const CHIRIntrinsicWrapper& intrinsic)
     CJC_NULLPTR_CHECK(int1ty);
     auto tmp = CreateEntryAlloca(int1ty);
     (void)CreateStore(getFalse(), tmp);
-    auto isCopyPtr = CreateBitCast(tmp, llvm::Type::getInt8PtrTy(llvmCtx));
+    auto isCopyPtr = CreateBitCast(tmp, llvm::PointerType::get(llvmCtx, 0));
     // i8* @cj_acquire_rawdata(i8 addrspace(1)*, i8*)
     auto func = llvm::Intrinsic::getDeclaration(
         cgMod.GetLLVMModule(), static_cast<llvm::Intrinsic::ID>(llvm::Intrinsic::cj_acquire_rawdata));
@@ -605,7 +619,7 @@ llvm::Value* IRBuilder2::CallSpawnIntrinsic(
     // otherwise, `obj` is a struct Clsoure and `executeFuncName` is `Future.execuClosure`.
     auto rtFuncName =
         spawnWithFuture ? PREFIX_OF_BACKEND_SYMS + "NewCJThread" : PREFIX_OF_BACKEND_SYMS + "NewCJThreadNoReturn";
-    auto i8PtrTy = llvm::Type::getInt8PtrTy(GetLLVMContext());
+    auto i8PtrTy = llvm::PointerType::get(GetLLVMContext(), 0);
     std::vector<CGValue*> args = {&cgFunc, &obj};
     auto futureTIVal = CGValue(spawnWithFuture ? futureTI : CreateBitCast(futureTI, i8PtrTy), CGType::GetCGTI(cgMod));
     if (threadCtx.has_value()) {
@@ -1209,16 +1223,13 @@ llvm::Instruction* IRBuilder2::CallIntrinsicIsSubtype(const std::vector<llvm::Va
 llvm::Instruction* IRBuilder2::CallIntrinsicIsTupleTypeOf(const std::vector<llvm::Value*>& parameters)
 {
     CJC_ASSERT(parameters.size() == 3U);
-    auto boolTy = getInt1Ty();
-    auto pi8 = getInt8PtrTy();
-    auto p1i8 = getInt8PtrTy(1U);
     auto objectLLVMType = parameters[0]->getType();
-
     bool isRefType = objectLLVMType->isPointerTy() && objectLLVMType->getPointerAddressSpace() == 1U;
-    auto funcName = std::string("llvm.cj.is.tupletype.of.") + (isRefType ? "p1i8" : "p0i8");
-    auto funcType = llvm::FunctionType::get(boolTy, {(isRefType ? p1i8 : pi8), pi8, pi8}, false);
-    auto func = cgMod.GetOrInsertFunction(funcName, funcType);
-    auto fixedParams = {CreateBitCast(parameters[0], isRefType ? p1i8 : pi8), CreateBitCast(parameters[1], pi8),
+    auto objectPtrTy = llvm::PointerType::get(GetLLVMContext(), isRefType ? 1U : 0U);
+    auto pi8 = getInt8PtrTy();
+    auto func = llvm::Intrinsic::getDeclaration(
+        cgMod.GetLLVMModule(), llvm::Intrinsic::cj_is_tupletype_of, {objectPtrTy});
+    auto fixedParams = {CreateBitCast(parameters[0], objectPtrTy), CreateBitCast(parameters[1], pi8),
         CreateBitCast(parameters[2], pi8)};
     return CreateCall(func, fixedParams);
 }
@@ -1449,10 +1460,24 @@ llvm::Value* IRBuilder2::CreateTypeInfo(const CHIR::Type& gt,
         LLVMIRBuilder2::SetInsertPoint(curBB, curPt);
     }
 
-    if (llvm::isa<llvm::GlobalVariable>(res) && res->getType() == typeInfoPtrType->getPointerTo()) {
+    // Under opaque pointers, both a real `%TypeInfo` global and a "pointer-to-TypeInfo"
+    // slot are seen as `ptr` at the value level. Distinguish them by the global's
+    // stored value type instead of `res->getType()`, otherwise we may accidentally
+    // load from the `%TypeInfo` object itself and materialize garbage/poison.
+    if (auto *global = llvm::dyn_cast<llvm::GlobalVariable>(res); global && global->getValueType() == typeInfoPtrType) {
+        auto curPt = LLVMIRBuilder2::GetInsertPoint();
+        auto curBB = LLVMIRBuilder2::GetInsertBlock();
+        if (canChangeBB) {
+            SetInsertPointForPreparingTypeInfo();
+        }
         res = CreateLoad(typeInfoPtrType, res);
+        if (curBB != nullptr) {
+            LLVMIRBuilder2::SetInsertPoint(curBB, curPt);
+        }
     }
-    (void)cacheMap.emplace(baseType, res);
+    if (CanCacheTypeInfoValue(GetInsertFunction(), res)) {
+        (void)cacheMap.emplace(baseType, res);
+    }
     return res;
 }
 
