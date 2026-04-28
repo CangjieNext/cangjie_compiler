@@ -774,6 +774,7 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     }},
     { Options::ID::EXPORT_FOR_TESTS, [](GlobalOptions& opts, [[maybe_unused]] OptionArgInstance& arg) {
         opts.exportForTest = true;
+        opts.enableCompileTest = true;
         return true;
     }},
     // ---------- MOCKING OPTIONS ----------
