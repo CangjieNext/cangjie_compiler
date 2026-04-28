@@ -763,13 +763,6 @@ void ToCHIR::RecordCodeInfoAtTheBegin()
     Utils::ProfileRecorder::RecordCodeInfo(
         "import pkg", static_cast<int64_t>(importManager.GetAllImportedPackages(true).size()));
     Utils::ProfileRecorder::RecordCodeInfo("src file", static_cast<int64_t>(pkg->files.size()));
-    Utils::ProfileRecorder::RecordCodeInfo(
-        "global func in CHIR after trans", static_cast<int64_t>(chirPkg->GetGlobalFuncsWithBody().size()));
-    Utils::ProfileRecorder::RecordCodeInfo(
-        "global var in CHIR", static_cast<int64_t>(chirPkg->GetGlobalVarsWithInit().size()));
-    int64_t funcInlineCnt = std::count_if(
-        pkg->inlineFuncDecls.begin(), pkg->inlineFuncDecls.end(), [](auto func) { return func && func->isInline; });
-    Utils::ProfileRecorder::RecordCodeInfo("imported inline func", funcInlineCnt);
     std::function<int64_t(void)> getCurPkgInstantiatedAstNode = [this]() -> int64_t {
         int64_t astNodeCnt = 0;
         for (auto& decl : pkg->genericInstantiatedDecls) {
@@ -1083,7 +1076,6 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     if (!TranslateToCHIR(std::move(annoOnly))) {
         return false;
     }
-    ClearASTResources();
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
         auto fileName =
@@ -1152,6 +1144,8 @@ bool ToCHIR::Run()
     CJC_NULLPTR_CHECK(&releaseCHIRMemory);
     CJC_NULLPTR_CHECK(&cangjieHome);
 
+    RecordCodeInfoAtTheBegin();
+
     // 1. AST to CHIR
     if (!TranslateToCHIR({})) {
         return false;
@@ -1177,7 +1171,6 @@ bool ToCHIR::Run()
         return true;
     }
     RecordCHIRExprNum("trans");
-    RecordCodeInfoAtTheBegin();
 
     if (ci.isCJLint) {
         return RunAnalysisForCJLint() && RunIRChecker(Phase::ANALYSIS_FOR_CJLINT);
@@ -1205,9 +1198,6 @@ bool ToCHIR::Run()
     if (!AnnotationChecker(*chirPkg, diag).Run()) {
         return false;
     }
-    // It should move to the end of TranslateToCHIR, Waiting for diag to remove its dependency on AST and for CHIR to
-    // stop saving Annotation nodes.
-    ClearASTResources();
 
     RunSanitizerCoverage();
     if (opts.enIncrementalCompilation) {
@@ -1344,6 +1334,7 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
         annoFactoryFuncs = ast2CHIR.GetAnnoFactoryFuncs();
         globalNominalCache = std::move(chirTypeCache.globalNominalCache);
     }
+    ClearASTResources();
     return true;
 }
 
@@ -1366,10 +1357,18 @@ VarInitDepMap ToCHIR::GetVarInitDepMap() const
 
 void ToCHIR::ClearASTResources()
 {
+    // in cjmp, `save cjo` is after CHIR stage, there is a bug if move `save cjo` before CHIR
+    if (ci.invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR) {
+        return;
+    }
+    // cjlint can compile many packages at same time, we can't release all AST resource after one package is done
+    // cjlint need to modify its strategy because cjc can't support to compile many packages at same time
+    if (ci.isCJLint) {
+        return;
+    }
     Utils::ProfileRecorder recorder("CHIR", "ClearASTResources");
     pkg = nullptr;
     annoFactoryFuncs.clear();
-    diagEngine.EmitCategoryDiagnostics(DiagCategory::CHIR);
     ci.DestroyASTResources();
 }
 
