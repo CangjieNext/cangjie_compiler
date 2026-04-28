@@ -29,19 +29,19 @@ bool ShouldWrapI1TaggedEnumAssociatedValueWithUnsafePointer(const CHIR::Type& fi
     return IsReferenceType(fieldType, cgMod) || fieldType.IsCPointer() || IsCFunc(fieldType);
 }
 
-bool ShouldWrapI1TaggedEnumArgWithUnsafePointer(const CGValue& srcValue, CGModule& cgMod)
-{
-    auto srcType = DeRef(srcValue.GetCGType()->GetOriginal());
-    if (!srcType || !srcType->IsEnum()) {
-        return false;
-    }
-    auto* cgEnumType = StaticCast<const CGEnumType*>(CGType::GetOrCreate(cgMod, srcType));
-    if (!cgEnumType->IsOptionLikeNonRef()) {
-        return false;
-    }
-    auto* layoutType = llvm::dyn_cast<llvm::StructType>(cgEnumType->GetLLVMType());
-    return layoutType && layoutType->getNumElements() >= 2U && layoutType->getElementType(0)->isIntegerTy(1U);
-}
+// bool ShouldWrapI1TaggedEnumArgWithUnsafePointer(const CGValue& srcValue, CGModule& cgMod)
+// {
+//     auto srcType = DeRef(srcValue.GetCGType()->GetOriginal());
+//     if (!srcType || !srcType->IsEnum()) {
+//         return false;
+//     }
+//     auto* cgEnumType = StaticCast<const CGEnumType*>(CGType::GetOrCreate(cgMod, srcType));
+//     if (!cgEnumType->IsOptionLikeNonRef()) {
+//         return false;
+//     }
+//     auto* layoutType = llvm::dyn_cast<llvm::StructType>(cgEnumType->GetLLVMType());
+//     return layoutType && layoutType->getNumElements() >= 2U && layoutType->getElementType(0)->isIntegerTy(1U);
+// }
 
 llvm::Value* WrapI1TaggedEnumAssociatedValueWithUnsafePointer(
     IRBuilder2& irBuilder, llvm::Value* value, const CHIR::Type& fieldType)
@@ -53,14 +53,14 @@ llvm::Value* WrapI1TaggedEnumAssociatedValueWithUnsafePointer(
     return irBuilder.CallIntrinsicUnsafePointer(value);
 }
 
-llvm::Value* WrapI1TaggedEnumArgWithUnsafePointer(IRBuilder2& irBuilder, const CGValue& srcValue, llvm::Value* value)
-{
-    if (!value->getType()->isPointerTy() ||
-        !ShouldWrapI1TaggedEnumArgWithUnsafePointer(srcValue, irBuilder.GetCGModule())) {
-        return value;
-    }
-    return irBuilder.CallIntrinsicUnsafePointer(value);
-}
+// llvm::Value* WrapI1TaggedEnumArgWithUnsafePointer(IRBuilder2& irBuilder, const CGValue& srcValue, llvm::Value* value)
+// {
+//     if (!value->getType()->isPointerTy() ||
+//         !ShouldWrapI1TaggedEnumArgWithUnsafePointer(srcValue, irBuilder.GetCGModule())) {
+//         return value;
+//     }
+//     return irBuilder.CallIntrinsicUnsafePointer(value);
+// }
 
 llvm::Value* DoSimpleCast(IRBuilder2& irBuilder, const CGValue& srcValue, const CGType& destType)
 {
@@ -161,7 +161,7 @@ std::vector<llvm::Value*> IRBuilder2::FixFuncArgs(const CGFunctionType& calleeTy
         if (isGlobalStructArgOnAArch64(idx)) {
             llvmVal = tagGlobalStructAddrForAArch64(llvmVal);
         }
-        llvmVal = WrapI1TaggedEnumArgWithUnsafePointer(*this, *arg, llvmVal);
+        // llvmVal = WrapI1TaggedEnumArgWithUnsafePointer(*this, *arg, llvmVal);
         (void)argsVal.emplace_back(llvmVal); // Insert the fixed argument, may do some casting meanwhile.
         auto cgType = arg->GetCGType();
         CJC_ASSERT(!cgType->IsStructType());
