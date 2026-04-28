@@ -210,6 +210,12 @@ void IRBuilder2::EmitDeclare(const CHIR::Debug& debugNode, bool pointerWrapper)
     EmitLocation(CHIRExprWrapper(debugNode));
 }
 
+void IRBuilder2::EmitDeclare(const CHIR::Value& value, bool pointerWrapper)
+{
+    CJC_ASSERT(cgMod.GetCGContext().GetCompileOptions().enableCompileDebug);
+    cgMod.diBuilder->EmitDeclare(value, *GetInsertBlock(), pointerWrapper);
+}
+
 void IRBuilder2::CreateLocalVarPointer(const CHIR::Debug& debugNode, const CGValue& cgValue)
 {
     CJC_ASSERT(cgMod.GetCGContext().GetCompileOptions().enableCompileDebug);

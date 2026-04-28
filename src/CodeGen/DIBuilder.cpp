@@ -297,21 +297,26 @@ void DIBuilder::FinalizeSubProgram(llvm::Function& function)
 
 void DIBuilder::EmitDeclare(const CHIR::Debug& debugNode, llvm::BasicBlock& curBB, bool pointerWrapper)
 {
+    EmitDeclare(*debugNode.GetValue(), curBB, pointerWrapper);
+}
+
+void DIBuilder::EmitDeclare(const CHIR::Value& value, llvm::BasicBlock& curBB, bool pointerWrapper)
+{
     CJC_ASSERT(cgMod.GetCGContext().GetCompileOptions().enableCompileDebug);
 
     if (curBB.getParent()->getSubprogram() == nullptr) {
         return;
     }
-    if (debugNode.GetValue()->IsParameter()) {
-        CreateParameter(debugNode, curBB, pointerWrapper);
+    if (value.IsParameter()) {
+        CreateParameter(value, curBB, pointerWrapper);
         return;
     }
-    auto identifier = debugNode.GetSrcCodeIdentifier();
-    auto position = debugNode.GetDebugLocation();
+    auto identifier = value.GetSrcCodeIdentifier();
+    auto position = value.GetDebugLocation();
     auto scope = GetOrCreateScope(position, curBB);
     auto diFile = GetOrCreateFile(position);
-    auto ty = DeRef(*debugNode.GetValue()->GetType());
-    bool isReadOnly = debugNode.GetValue()->TestAttr(CHIR::Attribute::READONLY);
+    auto ty = DeRef(*value.GetType());
+    bool isReadOnly = value.TestAttr(CHIR::Attribute::READONLY);
     auto type = GetOrCreateType(*ty, isReadOnly);
     std::vector<uint64_t> expr;
     auto flags = llvm::DINode::FlagZero;
@@ -330,7 +335,7 @@ void DIBuilder::EmitDeclare(const CHIR::Debug& debugNode, llvm::BasicBlock& curB
     } else if (pointerWrapper) {
         expr.emplace_back(llvm::dwarf::DW_OP_deref);
     }
-    auto llvmValue = **(cgMod | debugNode.GetValue());
+    auto llvmValue = **(cgMod | &value);
     auto localVariable =
         createAutoVariable(scope, identifier, diFile, position.GetBeginPos().line, type, true, flags, 0u);
     insertDeclare(llvmValue, localVariable, createExpression(expr),
@@ -376,8 +381,13 @@ void DIBuilder::EmitGenericDeclare(
 
 void DIBuilder::CreateParameter(const CHIR::Debug& debugNode, llvm::BasicBlock& curBB, bool pointerWrapper)
 {
-    bool isEnv = debugNode.GetSrcCodeIdentifier() == "$env";
-    auto paraTy = DeRef(*debugNode.GetValue()->GetType());
+    CreateParameter(*debugNode.GetValue(), curBB, pointerWrapper);
+}
+
+void DIBuilder::CreateParameter(const CHIR::Value& value, llvm::BasicBlock& curBB, bool pointerWrapper)
+{
+    bool isEnv = value.GetSrcCodeIdentifier() == "$env";
+    auto paraTy = DeRef(*value.GetType());
     // skip DebugNode generation when env is empty.
     if (isEnv && IsCoreObject(*StaticCast<CHIR::ClassType*>(paraTy)->GetClassDef())) {
         return;
@@ -385,11 +395,11 @@ void DIBuilder::CreateParameter(const CHIR::Debug& debugNode, llvm::BasicBlock& 
     CJC_NULLPTR_CHECK(curBB.getParent());
     auto scope = curBB.getParent()->getSubprogram();
     std::vector<uint64_t> expr;
-    auto& position = debugNode.GetDebugLocation();
+    auto& position = value.GetDebugLocation();
     auto file = GetOrCreateFile(position);
     auto type = GetOrCreateType(*paraTy, true);
-    auto name = debugNode.GetSrcCodeIdentifier();
-    auto llvmValue = **(cgMod | debugNode.GetValue());
+    auto name = value.GetSrcCodeIdentifier();
+    auto llvmValue = **(cgMod | &value);
     if (name == "this") {
         bool isTrivialEnum = paraTy->IsEnum() &&
             StaticCast<const CHIR::EnumType*>(paraTy)->GetEnumDef()->IsAllCtorsTrivial();
