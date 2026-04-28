@@ -1083,7 +1083,6 @@ bool ToCHIR::ComputeAnnotations(std::vector<const AST::Decl*>&& annoOnly)
     if (!TranslateToCHIR(std::move(annoOnly))) {
         return false;
     }
-    ClearASTResources();
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
         auto fileName =
@@ -1205,9 +1204,6 @@ bool ToCHIR::Run()
     if (!AnnotationChecker(*chirPkg, diag).Run()) {
         return false;
     }
-    // It should move to the end of TranslateToCHIR, Waiting for diag to remove its dependency on AST and for CHIR to
-    // stop saving Annotation nodes.
-    ClearASTResources();
 
     RunSanitizerCoverage();
     if (opts.enIncrementalCompilation) {
@@ -1344,6 +1340,7 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
         annoFactoryFuncs = ast2CHIR.GetAnnoFactoryFuncs();
         globalNominalCache = std::move(chirTypeCache.globalNominalCache);
     }
+    ClearASTResources();
     return true;
 }
 
@@ -1366,10 +1363,12 @@ VarInitDepMap ToCHIR::GetVarInitDepMap() const
 
 void ToCHIR::ClearASTResources()
 {
+    if (ci.invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR) {
+        return;
+    }
     Utils::ProfileRecorder recorder("CHIR", "ClearASTResources");
     pkg = nullptr;
     annoFactoryFuncs.clear();
-    diagEngine.EmitCategoryDiagnostics(DiagCategory::CHIR);
     ci.DestroyASTResources();
 }
 
