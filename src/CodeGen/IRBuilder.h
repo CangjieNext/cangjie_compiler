@@ -7,6 +7,8 @@
 #ifndef CANGJIE_IRBUILDER2_H
 #define CANGJIE_IRBUILDER2_H
 
+#include <unordered_set>
+
 #include "llvm/IR/IRBuilder.h"
 
 #include "Base/CHIRExprWrapper.h"
@@ -169,6 +171,7 @@ public:
     }
 
     void EmitDeclare(const CHIR::Debug& debugNode, bool pointerWrapper = false);
+    void EmitDeclare(const CHIR::Value& value, bool pointerWrapper = false);
     void CreateLocalVarPointer(const CHIR::Debug& debugNode, const CGValue& cgValue);
     void CreateUnBoxDeclare(const CHIR::Debug& debugNode, const CGValue& cgValue);
     void CreateEnvDeclare(const CHIR::GetElementRef& getEleRef, llvm::Value* gep);
@@ -178,6 +181,19 @@ public:
     void CreateBoxedValueForValueType(const CHIR::Debug& debugNode, const CGValue& cgValue);
     void CreateLoadInstForParameter(const CHIR::Expression& chirExpression);
     void CreateGenericParaDeclare(const CGFunction& cgFunc);
+
+    // --- pending debug var mechanism for start_scope fix ---
+    // Local variables are recorded here at Debug/Allocate time,
+    // and their dbg.declare is deferred until the first Store.
+    void AddPendingDebugVar(const CHIR::Value* value)
+    {
+        pendingDebugVars.insert(value);
+    }
+    bool TryClaimPendingDebugVar(const CHIR::Value* value)
+    {
+        return pendingDebugVars.erase(value) > 0;
+    }
+    void FlushPendingDebugVars();
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     llvm::Value* CreateBitCast(llvm::Value* value, llvm::Type* destTy, const llvm::Twine& name = "")
@@ -505,6 +521,9 @@ private:
     CGModule& cgMod;
     const CHIRExprWrapper* chirExpr{nullptr};
     const CGFunction* cgFunction{nullptr};
+    // Variables whose dbg.declare is deferred until first Store.
+    // Key is the CHIR::Value* (LocalVar).
+    std::unordered_set<const CHIR::Value*> pendingDebugVars;
 };
 
 class TemporarilySetDebugLocInThisScope {

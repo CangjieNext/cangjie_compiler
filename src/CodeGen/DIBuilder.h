@@ -52,6 +52,7 @@ public:
     void SetSubprogram(const CHIR::Function* func, llvm::Function* function);
     void FinalizeSubProgram(llvm::Function& function);
     void EmitDeclare(const CHIR::Debug& debugNode, llvm::BasicBlock& curBB, bool pointerWrapper = false);
+    void EmitDeclare(const CHIR::Value& value, llvm::BasicBlock& curBB, bool pointerWrapper = false);
     void EmitUnBoxDeclare(const CHIR::Expression& exprNode, const CHIR::Type& ty, const std::string& name,
         llvm::Value* value, llvm::BasicBlock& curBB);
     void EmitGenericDeclare(
@@ -89,6 +90,7 @@ private:
     llvm::DIFile* GetOrCreateFile(const CHIR::DebugLocation& position);
     llvm::DIType* GetOrCreateType(const CHIR::Type& ty, bool isReadOnly = false);
     void CreateParameter(const CHIR::Debug& debugNode, llvm::BasicBlock& curBB, bool pointerWrapper);
+    void CreateParameter(const CHIR::Value& value, llvm::BasicBlock& curBB, bool pointerWrapper);
     llvm::DIType* CreateUnitType();
     llvm::DIType* CreateRefType();
     llvm::DIType* CreatePointerType(llvm::DIType* diType, uint64_t sizeInBits = 64uL);
