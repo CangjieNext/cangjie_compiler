@@ -209,6 +209,8 @@ void FunctionGeneratorImpl::EmitIR()
 
     auto entryBB = chirFunc.GetBody()->GetEntryBlock();
     EmitBasicBlockIR(cgMod, *entryBB);
+    // Emit dbg.declare for variables that were never stored (e.g., var x: Int64).
+    cgMod.FlushPendingDebugVars(*builder.GetInsertBlock());
     if (rawFunction->getSubprogram()) {
         cgMod.GetCGContext().debugValue = nullptr;
         cgMod.diBuilder->FinalizeSubProgram(*rawFunction);

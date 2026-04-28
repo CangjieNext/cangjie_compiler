@@ -76,7 +76,8 @@ llvm::Value* HandleDebugExpr(IRBuilder2& irBuilder, const CHIR::Expression& chir
     } else if (isBoxClass) {
         irBuilder.CreateUnBoxDeclare(debug, cgVal);
     } else {
-        irBuilder.EmitDeclare(debug);
+        // Defer dbg.declare until first Store to avoid reading uninitialized stack memory.
+        irBuilder.GetCGModule().AddPendingDebugVar(debug.GetValue());
     }
     return rawVal;
 }

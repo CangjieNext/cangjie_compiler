@@ -169,6 +169,7 @@ public:
     }
 
     void EmitDeclare(const CHIR::Debug& debugNode, bool pointerWrapper = false);
+    void EmitDeclare(const CHIR::Value& value, bool pointerWrapper = false);
     void CreateLocalVarPointer(const CHIR::Debug& debugNode, const CGValue& cgValue);
     void CreateUnBoxDeclare(const CHIR::Debug& debugNode, const CGValue& cgValue);
     void CreateEnvDeclare(const CHIR::GetElementRef& getEleRef, llvm::Value* gep);

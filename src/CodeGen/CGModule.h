@@ -293,11 +293,28 @@ public:
         delayGenTypeTemplate.push(cgType);
     }
 #endif
+
+    // --- pending debug var mechanism for start_scope fix ---
+    // Local variables are recorded at Debug time and their dbg.declare
+    // is deferred until the first Store. Stored at CGModule level so it
+    // is shared across all basic blocks within a function.
+    void AddPendingDebugVar(const CHIR::Value* value)
+    {
+        pendingDebugVars.insert(value);
+    }
+    bool TryClaimPendingDebugVar(const CHIR::Value* value)
+    {
+        return pendingDebugVars.erase(value) > 0;
+    }
+    void FlushPendingDebugVars(llvm::BasicBlock& curBB);
+
 private:
     std::unique_ptr<CGContext> cgCtx;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::CommonBitmap> commonBitMap;
     std::unique_ptr<IncrementalGen> incrementalGen;
+    // Variables whose dbg.declare is deferred until first Store (start_scope fix).
+    std::unordered_set<const CHIR::Value*> pendingDebugVars;
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     std::unique_ptr<CGCFFI> cffi;
     std::vector<std::unique_ptr<CGValue>> ghostCFuncArgValues;

@@ -265,7 +265,14 @@ llvm::Value* HandleMemoryExpression(IRBuilder2& irBuilder, const CHIR::Expressio
         }
         case CHIR::ExprKind::STORE: {
             auto& store = StaticCast<const CHIR::Store&>(chirExpr);
-            return HandleStoreExpr(irBuilder, store);
+            auto result = HandleStoreExpr(irBuilder, store);
+            // Emit deferred dbg.declare at first Store (start_scope fix).
+            if (auto* lv = DynamicCast<CHIR::LocalVar*>(store.GetLocation())) {
+                if (irBuilder.GetCGModule().TryClaimPendingDebugVar(lv)) {
+                    irBuilder.EmitDeclare(*lv);
+                }
+            }
+            return result;
         }
         case CHIR::ExprKind::GET_ELEMENT_REF: {
             auto& getEleRef = StaticCast<const CHIR::GetElementRef&>(chirExpr);

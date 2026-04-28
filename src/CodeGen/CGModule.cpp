@@ -678,4 +678,11 @@ const std::vector<std::unique_ptr<CGExtensionDef>>& CGModule::GetAllCGExtensionD
     }
     return cgExtensionDefs;
 }
+void CGModule::FlushPendingDebugVars(llvm::BasicBlock& curBB)
+{
+    for (auto* value : pendingDebugVars) {
+        diBuilder->EmitDeclare(*value, curBB, false);
+    }
+    pendingDebugVars.clear();
+}
 } // namespace Cangjie::CodeGen
