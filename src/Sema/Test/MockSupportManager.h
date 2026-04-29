@@ -33,7 +33,6 @@ public:
     void ReplaceInterfaceDefaultFunc(AST::Expr& originalExpr, Ptr<AST::Ty> outerTy, bool isInMockAnnotatedLambda);
     void ReplaceInterfaceDefaultFuncInCall(AST::Node& node, Ptr<AST::Ty> outerty, bool isInMockAnnotatedLambda);
     static void MarkNodeMockSupportedIfNeeded(AST::Node& node);
-    void WriteGeneratedMockDecls();
     void PrepareToSpy(AST::Decl& decl);
 
     struct DeclsToPrepare {
@@ -64,7 +63,6 @@ public:
 private:
     TypeManager& typeManager;
     Ptr<MockUtils> mockUtils;
-    std::vector<OwnedPtr<AST::Decl>> generatedMockDecls;
     std::unordered_set<Ptr<AST::Decl>> usedInternalDecls;
 
     static void MakeOpenToMockIfNeeded(AST::Decl& decl);
