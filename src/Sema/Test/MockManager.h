@@ -34,7 +34,6 @@ public:
     };
     GeneratedClassResult GenerateMockClassIfNeededAndGet(
         AST::ClassLikeDecl& originalDecl, AST::Package& curPkg, MockKind mockKind);
-    void WriteGeneratedClasses();
     void HandleMockAnnotatedLambdaValue(AST::Expr& expr);
     void WrapWithRequireMockObject(AST::Expr& receiverExpr);
 
@@ -58,9 +57,9 @@ private:
     ImportManager& importManager;
     Ptr<MockUtils> mockUtils;
 
-    std::map<std::string, OwnedPtr<AST::ClassDecl>> mockedClassDecls;
-    std::map<Ptr<AST::ClassLikeDecl>, int> instantiationCounters;
-    std::map<Ptr<const AST::FuncDecl>, bool> defaultForTypePresence;
+    std::unordered_map<Ptr<AST::ClassLikeDecl>, Ptr<AST::ClassDecl>> mockedClassDecls;
+    std::unordered_map<Ptr<AST::ClassLikeDecl>, int> instantiationCounters;
+    std::unordered_map<Ptr<const AST::FuncDecl>, bool> defaultForTypePresence;
 
     Ptr<AST::InterfaceDecl> callHandlerDecl;
     Ptr<AST::InterfaceDecl> mockedInterfaceDecl;
