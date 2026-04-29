@@ -18,11 +18,23 @@ set(BASIC_SRC
     Utils.cpp
     Print.cpp)
 
-set(BASIC_SRC ${BASIC_SRC} Version.cpp)
+set(CANGJIE_GIT_VERSION_SRC "${CMAKE_CURRENT_BINARY_DIR}/generated/CangjieGitVersion.cpp")
+set_source_files_properties("${CANGJIE_GIT_VERSION_SRC}" PROPERTIES GENERATED TRUE)
+set(BASIC_SRC ${BASIC_SRC} Version.cpp "${CANGJIE_GIT_VERSION_SRC}")
 
 include_directories(${CMAKE_SOURCE_DIR}/third_party/tinytoml)
 
+add_custom_target(CangjieGitVersionSource
+    COMMAND ${CMAKE_COMMAND}
+        -D SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -D OUTPUT_FILE=${CANGJIE_GIT_VERSION_SRC}
+        -P "${CMAKE_SOURCE_DIR}/cmake/modules/GenerateGitVersion.cmake"
+    BYPRODUCTS ${CANGJIE_GIT_VERSION_SRC}
+    COMMENT "Generating Cangjie git version source"
+    VERBATIM)
+
 add_library(CangjieBasic OBJECT ${BASIC_SRC})
+add_dependencies(CangjieBasic CangjieGitVersionSource)
 target_compile_options(CangjieBasic PRIVATE -Wno-deprecated-declarations)
 target_compile_options(CangjieBasic PRIVATE ${CJC_EXTRA_WARNINGS})
 set_source_files_properties(InteropCJPackageConfigReader.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions")

@@ -23,8 +23,10 @@ const std::string CANGJIE_COMPILER_VERSION = "Cangjie Compiler: " + CANGJIE_VERS
 const std::string CANGJIE_COMPILER_VERSION = "Cangjie Compiler: " + CANGJIE_VERSION + VERSION_TAIL;
 #endif
 #endif
+extern const char CANGJIE_GIT_COMMIT_INFO[];
 void PrintVersion()
 {
     Cangjie::Println(CANGJIE_COMPILER_VERSION);
+    Cangjie::Println("Commit: " + std::string(CANGJIE_GIT_COMMIT_INFO));
 }
 } // namespace Cangjie
