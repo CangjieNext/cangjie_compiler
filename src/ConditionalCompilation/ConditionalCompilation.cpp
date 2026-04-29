@@ -108,7 +108,6 @@ const std::map<std::string, std::vector<std::string>> CONDITION_VALUES = {
             "Windows",
             "Linux",
             "macOS",
-            "HarmonyOS",
         },
     },
 };
