@@ -27,6 +27,17 @@ void SetFuncBodyCaptureKind(FuncBody& fb)
     if (!fb.body) {
         return;
     }
+    bool hasCall = false;
+    Walker(fb.body.get(), [&hasCall](Ptr<Node> n) {
+        if (n->astKind == ASTKind::CALL_EXPR) {
+            hasCall = true;
+            return VisitAction::STOP_NOW;
+        }
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+    if (!hasCall) {
+        return;
+    }
     // Collect mutable variables declared in the function `fb`.
     std::unordered_set<Ptr<Decl>> mutVars;
     Walker(fb.body.get(), [&mutVars](Ptr<Node> n) {
@@ -76,24 +87,58 @@ void TypeChecker::TypeCheckerImpl::CheckLegalityOfUsage(ASTContext& ctx, AST::Pa
 {
     Utils::ProfileRecorder recorder("Post TypeCheck", "CheckLegalityOfUsage");
     // Check whether value type decl contains value type recursive dependency.
-    CheckValueTypeRecursive(pkg);
+    {
+        Utils::ProfileRecorder subRecorder("CheckLegalityOfUsage", "CheckValueTypeRecursive");
+        CheckValueTypeRecursive(pkg);
+    }
     // Check legality of reference usage.
-    CheckLegalityOfReference(ctx, pkg);
-    CheckStaticMembersWithGeneric(pkg);
-    CheckUsageOfDeprecated(pkg);
+    {
+        Utils::ProfileRecorder subRecorder("CheckLegalityOfUsage", "CheckLegalityOfReference");
+        CheckLegalityOfReference(ctx, pkg);
+    }
+    {
+        Utils::ProfileRecorder subRecorder("CheckLegalityOfUsage", "CheckStaticMembersWithGeneric");
+        CheckStaticMembersWithGeneric(pkg);
+    }
+    {
+        Utils::ProfileRecorder subRecorder("CheckLegalityOfUsage", "CheckUsageOfDeprecated");
+        CheckUsageOfDeprecated(pkg);
+    }
     // Check initialization.
     if (!ci->invocation.globalOptions.disableSemaVic) {
+        Utils::ProfileRecorder subRecorder("CheckLegalityOfUsage", "InitializationChecker");
         InitializationChecker::Check(*ci, ctx, &pkg);
     }
-    CheckGlobalVarInitialization(ctx, pkg);
+    {
+        Utils::ProfileRecorder subRecorder("CheckLegalityOfUsage", "CheckGlobalVarInitialization");
+        CheckGlobalVarInitialization(ctx, pkg);
+    }
     // CFunc must be called in an unsafe block.
-    CheckLegalityOfUnsafeAndInout(pkg);
+    {
+        Utils::ProfileRecorder subRecorder("CheckLegalityOfUsage", "CheckLegalityOfUnsafeAndInout");
+        CheckLegalityOfUnsafeAndInout(pkg);
+    }
     // Check structure declaration inheritance.
-    CheckInheritance(pkg);
-    CheckClosures(ctx, pkg);
-    CheckAccessLevelValidity(pkg);
-    CheckAllInvocationHasImpl(ctx, pkg);
-    CheckSubscriptLegality(pkg);
+    {
+        Utils::ProfileRecorder subRecorder("CheckLegalityOfUsage", "CheckInheritance");
+        CheckInheritance(pkg);
+    }
+    {
+        Utils::ProfileRecorder subRecorder("CheckLegalityOfUsage", "CheckClosures");
+        CheckClosures(ctx, pkg);
+    }
+    {
+        Utils::ProfileRecorder subRecorder("CheckLegalityOfUsage", "CheckAccessLevelValidity");
+        CheckAccessLevelValidity(pkg);
+    }
+    {
+        Utils::ProfileRecorder subRecorder("CheckLegalityOfUsage", "CheckAllInvocationHasImpl");
+        CheckAllInvocationHasImpl(ctx, pkg);
+    }
+    {
+        Utils::ProfileRecorder subRecorder("CheckLegalityOfUsage", "CheckSubscriptLegality");
+        CheckSubscriptLegality(pkg);
+    }
 }
 
 void TypeChecker::TypeCheckerImpl::CheckStaticMemberWithGeneric(
@@ -183,7 +228,7 @@ void TypeChecker::TypeCheckerImpl::CheckClosures(const ASTContext& ctx, Node& no
         }
         return VisitAction::WALK_CHILDREN;
     }).Walk();
-    // 2. set all funcBody capture status.
+    // 2. set all funcBody capture status after every direct capture has been marked.
     Walker(&node, nullptr, [](auto node) {
         if (auto fb = DynamicCast<FuncBody*>(node); fb) {
             SetFuncBodyCaptureKind(*fb);
