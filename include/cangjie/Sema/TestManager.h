@@ -72,10 +72,12 @@ private:
     bool IsThereMockUsage(AST::Package& pkg) const;
     static bool ArePackagesMockSupportConsistent(
         const AST::Package& currentPackage, const AST::Package& importedPackage);
-    AST::VisitAction HandleCreateMockCall(AST::CallExpr& callExpr, AST::Package& pkg);
+    AST::VisitAction CollectToCreateMockCalls(AST::CallExpr& callExpr, std::vector<Ptr<AST::CallExpr>>& callExprs);
+    void CreateMockCalls(AST::Package& pkg, const std::vector<Ptr<AST::CallExpr>>& callExprs);
     Ptr<AST::MemberAccess> ExtractMemberAccessFromExpr(Ptr<AST::Expr> expr);
     void WrapWithRequireMockObjectIfNeeded(Ptr<AST::Expr> expr, Ptr<AST::Decl> target);
-    AST::VisitAction HandleMockAnnotatedLambda(const AST::LambdaExpr& lambda);
+    AST::VisitAction CollectToMockAnnotatedLambdas(const AST::LambdaExpr& lambda,
+        std::vector<Ptr<AST::Expr>>& inLambdaExprs);
     void ReportDoesntSupportMocking(const AST::Expr& reportOn, const std::string& name, const std::string& package);
     void ReportDoesntSupportFrozen(const AST::Expr& reportOn);
     void ReportUnsupportedType(const AST::Expr& reportOn);
@@ -84,14 +86,12 @@ private:
     void ReportWrongStaticDecl(const AST::Expr& reportOn);
     void PrepareDecls(AST::Package& pkg);
     void PrepareToSpy(AST::Package& pkg);
-#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     void ReportFrozenRequired(const AST::FuncDecl& reportOn);
     void MarkMockCreationContainingGenericFuncs(AST::Package& pkg) const;
     bool ShouldBeMarkedAsContainingMockCreationCall(
         const AST::CallExpr& callExpr, const Ptr<AST::FuncDecl> enclosingFunc) const;
     void HandleDeclsToExportForTest(std::vector<Ptr<AST::Package>> pkgs) const;
     void CollectInternalDeclUsages(AST::Package& pkg);
-#endif
 };
 
 } // namespace Cangjie
