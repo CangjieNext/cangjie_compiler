@@ -13,6 +13,7 @@
 #ifndef CANGJIE_SEMA_MOCK_UTILS_H
 #define CANGJIE_SEMA_MOCK_UTILS_H
 
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Modules/ImportManager.h"
@@ -41,7 +42,12 @@ class MockUtils {
 public:
     explicit MockUtils(
         ImportManager& importManager, TypeManager& typeManager, BaseMangler& mangler);
+    static bool CanMock(AST::Node& node);
     static bool IsMockAccessor(const AST::Decl& decl);
+    static std::vector<AST::Decl*> ListExistingMembers(Ptr<AST::Decl> decl);
+    void Walk(Ptr<AST::Node> node, std::function<AST::VisitAction(Ptr<AST::Node>)> visitPre = nullptr,
+        std::function<AST::VisitAction(Ptr<AST::Node>)> visitPost = nullptr);
+    bool isWalking{false};
 
     void LoadStdDecls();
 
@@ -64,38 +70,50 @@ public:
     static std::string spyCallMarkerVarName;
     static std::string defaultAccessorSuffix;
 
-    template <typename T> static Ptr<T> FindGlobalDecl(Ptr<AST::File> file, const std::string& identifier)
+    template <typename... Args> static std::string Concatenate(const Args&... args)
     {
-        for (auto& decl : file->decls) {
-            if (decl->identifier == identifier) {
-                return DynamicCast<T>(decl.get());
-            }
-        }
-        return nullptr;
+        static_assert((true && ... && std::is_same_v<Args, std::string>));
+        std::string result;
+        size_t size = (0 + ... + args.size());
+        result.reserve(size);
+        (result.append(args), ...);
+        return result;
     }
 
-    template <typename T> static Ptr<T> FindGlobalDecl(Ptr<AST::Package> package, const std::string& identifier)
+    template <typename T> Ptr<T> FindGlobalDecl(Ptr<AST::File> file, const std::string& identifier)
     {
-        for (auto& file : package->files) {
-            if (auto decl = FindGlobalDecl<T>(file, identifier)) {
-                return decl;
-            }
-        }
-        return nullptr;
+        auto& indexMap = DemandIndex(file);
+        auto it = indexMap.find(identifier);
+        return it == indexMap.end() ? nullptr : DynamicCast<T>(it->second);
     }
 
-    template <typename T>
-    static Ptr<T> FindMemberDecl(AST::Decl& decl, const std::string& identifier)
+    template <typename T> Ptr<T> FindGlobalDecl(Ptr<AST::Package> package, const std::string& identifier)
     {
-        for (auto& member : decl.GetMemberDecls()) {
-            if (member->identifier == identifier) {
-                return DynamicCast<T>(member.get());
-            }
-        }
-    
-        return nullptr;
+        auto& indexMap = DemandIndex(package);
+        auto it = indexMap.find(identifier);
+        return it == indexMap.end() ? nullptr : DynamicCast<T>(it->second);
     }
-    
+
+    template <typename T> Ptr<T> FindMemberDecl(Ptr<AST::Decl> decl, const std::string& identifier)
+    {
+        auto& indexMap = DemandIndex(decl);
+        auto it = indexMap.find(identifier);
+        return it == indexMap.end() ? nullptr : DynamicCast<T>(it->second);
+    }
+
+    std::unordered_map<Ptr<AST::Package>, std::unordered_map<std::string, Ptr<AST::Decl>>> globalsByPackage;
+    std::unordered_map<Ptr<AST::File>, std::unordered_map<std::string, Ptr<AST::Decl>>> globalsByFile;
+    std::unordered_map<Ptr<AST::Decl>, std::unordered_map<std::string, Ptr<AST::Decl>>> localsByOuter;
+
+    std::unordered_map<std::string, std::string> DemandMappingIndex(Ptr<AST::Package> package);
+    std::unordered_map<std::string, Ptr<AST::Decl>>& DemandIndex(Ptr<AST::Package> package);
+    std::unordered_map<std::string, Ptr<AST::Decl>>& DemandIndex(Ptr<AST::File> file);
+    std::unordered_map<std::string, Ptr<AST::Decl>>& DemandIndex(Ptr<AST::Decl> decl);
+
+    void AttachGeneratedDecl(OwnedPtr<AST::Decl>&& decl);
+    void AttachGeneratedDecl(OwnedPtr<AST::Decl>&& decl, const AST::Package& originPackage);
+    void AttachGeneratedDecl(OwnedPtr<AST::Decl>&& decl, const AST::Decl& originDecl);
+
     /**
      * throw Exception([message])
      **/
@@ -135,7 +153,7 @@ public:
     Ptr<AST::FuncTy> EraseFuncTypes(Ptr<AST::FuncTy> funcTy);
 
     std::string BuildMockAccessorIdentifier(
-        const AST::Decl& originalDecl, AccessorKind kind, bool includeArgumentTypes = false) const;
+        const AST::Decl& originalDecl, AccessorKind kind, bool forErased = false) const;
     std::string BuildArgumentList(const AST::Decl& decl) const;
     std::string GetOriginalIdentifierOfAccessor(const AST::FuncDecl& decl) const;
     std::string GetOriginalIdentifierOfMockAccessor(const AST::Decl& decl) const;
@@ -158,9 +176,9 @@ private:
 
     static bool IsMockAccessorRequired(const AST::Decl& decl);
     static AccessorKind ComputeAccessorKind(const AST::FuncDecl& accessorDecl);
-    static bool IsGetterForMutField(const AST::FuncDecl& accessorDecl);
+    bool IsGetterForMutField(const AST::FuncDecl& accessorDecl);
 
-    static Ptr<AST::Decl> FindMockGlobalDecl(const AST::Decl& decl, const std::string& name);
+    Ptr<AST::Decl> FindMockGlobalDecl(const AST::Decl& decl, const std::string& name);
     static void PrependFuncGenericSubst(
         const Ptr<AST::Generic> originalGeneric,
         const Ptr<AST::Generic> mockedGeneric,
@@ -168,20 +186,18 @@ private:
     static std::vector<TypeSubst> BuildGenericSubsts(const Ptr<AST::InheritableDecl> decl);
     static std::string GetForeignAccessorName(const AST::FuncDecl& decl);
 
-    Ptr<AST::Decl> FindAccessor(AST::ClassDecl& outerClass, const Ptr<AST::Decl> member, AccessorKind kind) const;
+    Ptr<AST::Decl> FindAccessor(AST::ClassDecl& outerClass, const Ptr<AST::Decl> member, AccessorKind kind);
     Ptr<AST::Decl> FindAccessorForMemberAccess(
-        const Ptr<AST::Ty> ty, const Ptr<AST::Decl> resolvedMember, AccessorKind kind) const;
-    Ptr<AST::FuncDecl> FindTopLevelAccessor(Ptr<AST::Decl> member, AccessorKind kind) const;
+        const Ptr<AST::Ty> ty, const Ptr<AST::Decl> resolvedMember, AccessorKind kind);
+    Ptr<AST::FuncDecl> FindTopLevelAccessor(Ptr<AST::Decl> member, AccessorKind kind);
     OwnedPtr<AST::Expr> WrapCallTypeArgsIntoArray(const AST::Decl& decl);
     bool IsGeneratedGetter(AccessorKind kind);
-    Ptr<AST::FuncDecl> FindAccessor(Ptr<AST::MemberAccess> ma, Ptr<AST::Decl> target, AccessorKind kind) const;
+    Ptr<AST::FuncDecl> FindAccessor(Ptr<AST::MemberAccess> ma, Ptr<AST::Decl> target, AccessorKind kind);
     std::vector<Ptr<AST::Ty>> AddGenericIfNeeded(AST::Decl& originalDecl, AST::Decl& mockedDecl) const;
     OwnedPtr<AST::ArrayLit> WrapCallArgsIntoArray(const AST::FuncDecl& mockedFunc);
     Ptr<AST::Ty> GetInstantiatedTy(const Ptr<AST::Ty> ty, std::vector<TypeSubst>& typeSubsts);
     void SetGetTypeForTypeParamDecl(AST::Package& pkg);
-    void SetIsSubtypeTypes(AST::Package& pkg);
     OwnedPtr<AST::Expr> CreateGetTypeForTypeParameterCall(const Ptr<AST::GenericParamDecl> genericParam);
-    OwnedPtr<AST::Expr> CreateIsSubtypeTypesCall(Ptr<AST::Ty> tyToCheck, Ptr<AST::Ty> ty);
     std::string Mangle(const AST::Decl& decl) const;
 
     OwnedPtr<AST::RefExpr> CreateRefExprWithInstTys(

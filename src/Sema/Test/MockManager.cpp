@@ -172,10 +172,10 @@ MockManager::GeneratedClassResult MockManager::GenerateMockClassIfNeededAndGet(
     CJC_ASSERT(originalDecl.astKind == ASTKind::CLASS_DECL ||
         originalDecl.astKind == ASTKind::INTERFACE_DECL);
 
-    auto originalMangledName = mockUtils->Mangle(originalDecl);
-    if (mockedClassDecls.find(originalMangledName) != mockedClassDecls.end()) {
+    auto found = mockedClassDecls.find(&originalDecl);
+    if (found != mockedClassDecls.end()) {
         return {
-            .classDecl=mockedClassDecls[originalMangledName],
+            .classDecl=found->second,
             .generated=false,
         };
     }
@@ -194,7 +194,6 @@ MockManager::GeneratedClassResult MockManager::GenerateMockClassIfNeededAndGet(
     mockedDecl->fullPackageName = curPkg.fullPackageName;
     mockedDecl->identifier = originalDecl.identifier + MOCKED_DECL_SUFFIX
         + std::to_string(ComputeInstantiationNumberToMangleMockedDecl(originalDecl));
-    mockedDecl->EnableAttr(Attribute::GENERATED_TO_MOCK);
     mockedDecl->body = MakeOwned<ClassBody>();
     mockedDecl->linkage = Linkage::INTERNAL;
     mockedDecl->EnableAttr(GetAttrByAccessLevel(GetAccessLevel(originalDecl)));
@@ -227,7 +226,8 @@ MockManager::GeneratedClassResult MockManager::GenerateMockClassIfNeededAndGet(
 
     auto mockClassPtr = mockedDecl.get();
 
-    mockedClassDecls[originalMangledName] = std::move(mockedDecl);
+    mockedClassDecls[&originalDecl] = mockedDecl;
+    mockUtils->AttachGeneratedDecl(std::move(mockedDecl));
 
     return {
         .classDecl=mockClassPtr,
@@ -239,10 +239,7 @@ namespace {
 
 bool EndsWith(const std::string& s, const std::string& suffix)
 {
-    if (suffix.length() > s.length()) {
-        return false;
-    }
-    return std::string_view(s).substr(s.length() - suffix.length()) == suffix;
+    return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 } // namespace
@@ -342,14 +339,6 @@ void MockManager::FindOverridesInSuperDecl(
             }
         }
     }
-}
-
-void MockManager::WriteGeneratedClasses()
-{
-    for (auto& [mn, mockedClass] : mockedClassDecls) {
-        mockedClass->curFile->decls.emplace_back(std::move(mockedClass));
-    }
-    mockedClassDecls.clear();
 }
 
 bool MockManager::IsMockCall(const CallExpr& ce)
@@ -577,7 +566,7 @@ OwnedPtr<MatchCase> MockManager::CreateOnCallCallBaseMatchCase(
         enumConstructor, enumConstructor.GetTy()->typeArgs, CALL_BASE_ENTRY, *(originalFunc.curFile));
 
     auto mangledName = mockUtils->Mangle(*originalFunc.outerDecl);
-    auto spiedInstanceDecl = MockUtils::FindMockGlobalDecl(
+    auto spiedInstanceDecl = mockUtils->FindMockGlobalDecl(
         *mockedClass, MockUtils::spyObjVarName + "$" + mangledName);
     if (!spiedInstanceDecl || !originalFunc.funcBody->body) {
         return CreateMatchCase(std::move(pattern), std::move(callBaseFunc));
@@ -620,7 +609,7 @@ OwnedPtr<MatchCase> MockManager::CreateOnCallCallBaseMatchCase(
     trueLit->curFile = mockedClass->curFile;
     auto trueSpyCallMarkerAssign =
         CreateAssignExpr(
-            CreateRefExpr(*MockUtils::FindMockGlobalDecl(*mockedClass, MockUtils::spyCallMarkerVarName)),
+            CreateRefExpr(*mockUtils->FindMockGlobalDecl(*mockedClass, MockUtils::spyCallMarkerVarName)),
             std::move(trueLit), UNIT_TY);
 
     callBaseMatch->exprOrDecls->body.emplace_back(std::move(trueSpyCallMarkerAssign));
@@ -996,7 +985,7 @@ OwnedPtr<CallExpr> MockManager::CreateDeclKind(const FuncDecl& decl) const
 
     if (accessorKind == AccessorKind::FIELD_GETTER) {
         needToRecordSetterPresence = true;
-        hasSetter = MockUtils::IsGetterForMutField(decl);
+        hasSetter = mockUtils->IsGetterForMutField(decl);
     } else if (accessorKind == AccessorKind::PROP_GETTER) {
         needToRecordSetterPresence = true;
         hasSetter = decl.propDecl->isVar;
@@ -1467,7 +1456,7 @@ std::tuple<Ptr<InterfaceDecl>, Ptr<FuncDecl>> MockManager::FindDefaultAccessorIn
         return {nullptr, nullptr};
     }
 
-    Ptr<InterfaceDecl> accessorInterfaceDecl = MockUtils::FindGlobalDecl<InterfaceDecl>(
+    Ptr<InterfaceDecl> accessorInterfaceDecl = mockUtils->FindGlobalDecl<InterfaceDecl>(
         interfaceDecl->curFile, interfaceDecl->identifier + MockUtils::defaultAccessorSuffix);
     if (!accessorInterfaceDecl) {
         return {nullptr, nullptr};
@@ -1475,8 +1464,8 @@ std::tuple<Ptr<InterfaceDecl>, Ptr<FuncDecl>> MockManager::FindDefaultAccessorIn
 
     if (auto extendDecl =
             typeManager.GetExtendDeclByInterface(*baseFunc->baseExpr->GetTy(), *accessorInterfaceDecl->GetTy())) {
-        Ptr<FuncDecl> accessorImplDecl = MockUtils::FindMemberDecl<FuncDecl>(
-            *extendDecl.value(), mockUtils->Mangle(*original) + MockUtils::defaultAccessorSuffix);
+        Ptr<FuncDecl> accessorImplDecl = mockUtils->FindMemberDecl<FuncDecl>(
+            extendDecl.value(), mockUtils->Mangle(*original) + MockUtils::defaultAccessorSuffix);
         CJC_ASSERT(accessorImplDecl);
 
         return {accessorInterfaceDecl, accessorImplDecl};
@@ -1484,7 +1473,7 @@ std::tuple<Ptr<InterfaceDecl>, Ptr<FuncDecl>> MockManager::FindDefaultAccessorIn
 
     auto baseDecl = Ty::GetDeclOfTy(baseFunc->baseExpr->GetTy());
     Ptr<FuncDecl> accessorImplDecl =
-        MockUtils::FindMemberDecl<FuncDecl>(*baseDecl, mockUtils->Mangle(*original) + MockUtils::defaultAccessorSuffix);
+        mockUtils->FindMemberDecl<FuncDecl>(baseDecl, mockUtils->Mangle(*original) + MockUtils::defaultAccessorSuffix);
 
     if (!accessorImplDecl) {
         return {nullptr, nullptr};
@@ -1566,7 +1555,7 @@ void MockManager::GenerateCallHandlerForStaticDecl(FuncDecl& decl, Expr& injectT
     auto genericDecl = mockUtils->GetGenericDecl(Ptr(&decl));
     auto mangledName = mockUtils->Mangle(*genericDecl);
     Ptr<VarDecl> handlerDecl = As<ASTKind::VAR_DECL>(
-        MockUtils::FindMockGlobalDecl(*genericDecl, mangledName));
+        mockUtils->FindMockGlobalDecl(*genericDecl, mangledName));
     CJC_NULLPTR_CHECK(handlerDecl);
     auto handlerRef = CreateRefExpr(*handlerDecl);
     handlerRef->curFile = injectTo.curFile;
