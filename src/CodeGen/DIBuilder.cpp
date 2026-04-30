@@ -12,6 +12,7 @@
 #include "cangjie/CHIR/IR/Type/Type.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include "cangjie/Utils/FileUtil.h"
 
 namespace Cangjie {
 namespace CodeGen {
@@ -106,7 +107,7 @@ bool IsParaInitFunc(const CHIR::Value& chirFunc)
 }
 } // namespace
 
-void DIBuilder::CreateCompileUnit(const std::string& pkgName)
+void DIBuilder::CreateCompileUnit(const std::string& pkgName, const std::string& sourceFilePath)
 {
     std::string tempPkgName(pkgName);
     if (cgMod.GetCGContext().GetCompileOptions().enableCoverage) {
@@ -130,9 +131,31 @@ void DIBuilder::CreateCompileUnit(const std::string& pkgName)
             tempPkgName += ".pkg";
         }
     }
-    defaultFile = createFile(pkgName, ".");
+
+    // Use the real source file path for debug info, not the module identifier.
+    // Split the source file path into directory and filename for DIFile creation.
+    std::string filePath = sourceFilePath;
+    std::string dirPath = ".";
+
+    // If sourceFilePath is empty or invalid, fall back to using package name as a placeholder
+    if (filePath.empty() || filePath.find(DIR_SEPARATOR) == std::string::npos) {
+        filePath = pkgName;
+    } else {
+        auto pos = filePath.find_last_of(DIR_SEPARATOR);
+        if (pos != std::string::npos) {
+            dirPath = filePath.substr(0, pos);
+            filePath = filePath.substr(pos + 1);
+        }
+        // Apply '--trimpath' option if enabled and coverage is not enabled
+        if (!cgMod.GetCGContext().GetCompileOptions().enableCoverage &&
+            !cgMod.GetCGContext().GetCompileOptions().removedPathPrefix.empty()) {
+            dirPath = RemovePathPrefix(dirPath, cgMod.GetCGContext().GetCompileOptions().removedPathPrefix);
+        }
+    }
+
+    defaultFile = createFile(filePath, dirPath);
     diCompileUnit = createCompileUnit(static_cast<unsigned>(llvm::dwarf::DW_LANG_C_plus_plus_14),
-        createFile(tempPkgName, "."), "Cangjie Compiler", false, "", 0u);
+        defaultFile, "Cangjie Compiler", false, "", 0u);
 }
 
 void DIBuilder::CreateNameSpace(const std::string& pkgName)
