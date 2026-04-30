@@ -123,7 +123,7 @@ struct JavaInteropTypeChecker {
                     // for javaref getter stub wich is generated on Parser stage
                     return true;
                 }
-                if (!isImpl && pos == Position::OUT && ty.IsString()) {
+                if (ty.IsString()) {
                     return true;
                 }
                 return false;
@@ -166,7 +166,7 @@ struct JavaInteropTypeChecker {
         auto isJavaArray = IsJArray(*fdecl.outerDecl);
         for (auto& paramList : fdecl.funcBody->paramLists) {
             for (auto& param : paramList->params) {
-                if (!IsJavaCompatible(*param->ty) && !isJavaArray) {
+                if (!IsJavaCompatible(*param->ty, Position::IN) && !isJavaArray) {
                     diag.DiagnoseRefactor(errkind, *param);
                     fdecl.EnableAttr(Attribute::IS_BROKEN);
                     fdecl.outerDecl->EnableAttr(Attribute::HAS_BROKEN);

@@ -616,11 +616,67 @@ OwnedPtr<Expr> InteropLibBridge::CreateJavaEntityCall(OwnedPtr<Expr> arg)
     return call;
 }
 
-OwnedPtr<Expr> InteropLibBridge::WrapJavaEntity(OwnedPtr<Expr> cjExpr)
+OwnedPtr<Expr> InteropLibBridge::JObjectToString(OwnedPtr<Expr> jobjectExpr, Ptr<File> curFile)
+{
+    auto env = CreateGetJniEnvCall(curFile);
+    auto entity = CreateJavaEntityJobjectCall(WithinFile(std::move(jobjectExpr), curFile));
+    return CreateJavaStringToCangjieCall(std::move(env), std::move(entity));
+}
+
+OwnedPtr<Expr> InteropLibBridge::OptionStringToJObject(OwnedPtr<Expr> optionExpr,
+                                                       FuncParam& jniEnv,
+                                                       const Decl& outerDecl)
+{
+    auto curFile = optionExpr->curFile;
+    return utils.CreateOptionMatch(std::move(optionExpr),
+        [&](VarDecl& v) -> OwnedPtr<Expr> {
+            auto inner = WithinFile(CreateRefExpr(v), curFile);
+            auto env = WithinFile(CreateRefExpr(jniEnv), curFile);
+            auto entity = CreateCangjieStringToJavaCall(std::move(env), std::move(inner));
+            return UnwrapJavaEntity(std::move(entity), GetJobjectTy(), outerDecl, true);
+        },
+        [&]() -> OwnedPtr<Expr> { return CreateJobjectNull(); },
+        GetJobjectTy()
+    );
+}
+
+OwnedPtr<Expr> InteropLibBridge::StringToJObject(OwnedPtr<Expr> cjStringExpr, Ptr<File> curFile,
+                                                 FuncParam& jniEnvParam, const Decl& outerDecl)
+{
+    auto env = WithinFile(CreateRefExpr(jniEnvParam), curFile);
+    auto entity = CreateCangjieStringToJavaCall(std::move(env), WithinFile(std::move(cjStringExpr), curFile));
+    return UnwrapJavaEntity(WithinFile(std::move(entity), curFile), GetJobjectTy(), outerDecl, true);
+}
+
+/**
+ * Lower CJ expression into Java boundary representation (JavaEntity / jobject).
+ */
+ OwnedPtr<Expr> InteropLibBridge::WrapJavaEntity(OwnedPtr<Expr> cjExpr)
 {
     CJC_NULLPTR_CHECK(cjExpr->curFile);
     if (cjExpr->ty->kind == TypeKind::TYPE_UNIT) {
         return CreateJavaEntityCall(cjExpr->curFile);
+    }
+
+    if (IsOptionOfString(cjExpr->ty)) {
+        auto curFile = cjExpr->curFile;
+        auto match = utils.CreateOptionMatch(std::move(cjExpr),
+            [&](VarDecl& v) -> OwnedPtr<Expr> {
+                auto ref = WithinFile(CreateRefExpr(v), curFile);
+                return WrapJavaEntity(std::move(ref));
+            },
+            [&]() -> OwnedPtr<Expr> { return CreateJobjectNull(); },
+            GetJavaEntityTy()
+        );
+        return WithinFile(std::move(match), curFile);
+    }
+
+    if (cjExpr->ty->IsString()) {
+        // Special handling for String: convert Cangjie String to jstring
+        // before wrapping it into JavaEntity for JNI interop.
+        auto curFile = cjExpr->curFile;
+        auto env = CreateGetJniEnvCall(curFile);
+        return CreateCangjieStringToJavaCall(std::move(env), std::move(cjExpr));
     }
 
     return CreateJavaEntityCall(std::move(cjExpr));
@@ -1117,6 +1173,18 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateGetFromRegistryByEntityCall(
     return CreateCallExpr(std::move(fdRef), std::move(callArgs), funcDecl, retTy, CallKind::CALL_DECLARED_FUNCTION);
 }
 
+OwnedPtr<CallExpr> InteropLibBridge::CreateCangjieStringToJavaCall(OwnedPtr<Expr> env, OwnedPtr<Expr> string)
+{
+    auto curFile = string->curFile;
+    auto funcDecl = GetCangjieStringToJava();
+    if (!funcDecl) {
+        return nullptr;
+    }
+
+    return CreateCall(funcDecl, curFile, std::move(env), std::move(string));
+}
+
+
 OwnedPtr<CallExpr> InteropLibBridge::CreateJavaStringToCangjieCall(OwnedPtr<Expr> env, OwnedPtr<Expr> jstring)
 {
     auto curFile = jstring->curFile;
@@ -1445,6 +1513,9 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaPrimitiveEntity(OwnedPtr<Expr> entity
     return std::move(callExpr);
 }
 
+/**
+  * Lift Java boundary reference (possibly null) into a typed CJ value
+  */
 OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, const Decl& outerDecl, bool toRaw)
 {
     auto curFile = entity->curFile;
@@ -1464,6 +1535,7 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
     }
 
     if (ty->IsString()) {
+		// Convert jstring from JavaEntity to Cangjie String.
         return CreateJavaStringToCangjieCall(CreateGetJniEnvCall(curFile), std::move(entity));
     }
 

@@ -790,6 +790,11 @@ std::string GetMangledJniInitCjObjectFuncNameForEnum(
     return name;
 }
 
+bool IsOptionOfString(Ptr<Ty> ty)
+{
+    return ty->IsCoreOptionType() && ty->typeArgs.size() > 0 && ty->typeArgs[0]->IsString();
+}
+
 bool IsMirror(const Ty& ty)
 {
     auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty);
