@@ -666,7 +666,7 @@ OwnedPtr<Expr> InteropLibBridge::StringToJObject(OwnedPtr<Expr> cjStringExpr, Pt
                 return WrapJavaEntity(std::move(ref));
             },
             [&]() -> OwnedPtr<Expr> { return CreateJobjectNull(); },
-            GetJobjectTy()
+            GetJavaEntityTy()
         );
         return WithinFile(std::move(match), curFile);
     }
