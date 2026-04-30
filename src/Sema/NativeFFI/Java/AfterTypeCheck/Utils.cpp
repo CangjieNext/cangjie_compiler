@@ -792,7 +792,7 @@ std::string GetMangledJniInitCjObjectFuncNameForEnum(
 
 bool IsOptionOfString(Ptr<Ty> ty)
 {
-    return ty->IsCoreOptionType() && ty->typeArgs[0]->IsString();
+    return ty->IsCoreOptionType() && ty->typeArgs.size() > 0 && ty->typeArgs[0]->IsString();
 }
 
 bool IsMirror(const Ty& ty)
