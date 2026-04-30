@@ -1001,7 +1001,9 @@ std::string BaseMangler::MangleExportId(Decl& decl) const
         },
         [](const PrimaryCtorDecl& /* primaryCtorDecl */) { return std::string(); },
         [&decl, this]() {
-            decl.exportId = Mangle(decl);
+            if (decl.exportId.empty()) {
+                decl.exportId = Mangle(decl);
+            }
             for (auto& it : decl.GetMemberDeclPtrs()) {
                 it->exportId = MangleExportId(*it);
             }
@@ -1323,26 +1325,26 @@ void ManglerContext::SaveFunc2CurDecl(const Ptr<Node> node)
     }).Walk();
 }
 
-void ManglerContext::SaveLocalWildcardVar2Decl(const Ptr<AST::Node> node)	
-{	
-    Ptr<Node> key = nullptr;	
-    if (auto lambda = DynamicCast<LambdaExpr>(node)) {	
-        key = lambda->funcBody.get();	
-    } else if (auto function = DynamicCast<FuncDecl>(node)) {	
-        key = function->funcBody.get();	
-    } else if (auto pcd = DynamicCast<PrimaryCtorDecl>(node)) {	
-        key = pcd->funcBody.get();	
-    } else if (auto vda = DynamicCast<VarDeclAbstract>(node); vda && vda->TestAttr(Attribute::GLOBAL)) {	
-        key = vda;	
-    }	
-    if (!key) {	
-        return;	
-    }	
+void ManglerContext::SaveLocalWildcardVar2Decl(const Ptr<AST::Node> node)
+{
+    Ptr<Node> key = nullptr;
+    if (auto lambda = DynamicCast<LambdaExpr>(node)) {
+        key = lambda->funcBody.get();
+    } else if (auto function = DynamicCast<FuncDecl>(node)) {
+        key = function->funcBody.get();
+    } else if (auto pcd = DynamicCast<PrimaryCtorDecl>(node)) {
+        key = pcd->funcBody.get();
+    } else if (auto vda = DynamicCast<VarDeclAbstract>(node); vda && vda->TestAttr(Attribute::GLOBAL)) {
+        key = vda;
+    }
+    if (!key) {
+        return;
+    }
 
-    Walker(key, [this, &key](const Ptr<Node>& node) {	
-        if (auto vda = DynamicCast<VarWithPatternDecl>(node); vda && node != key) {	
-            node2LocalWildcardVar[key].emplace_back(vda);	
-        } else if (Is<FuncBody>(node) && node != key) {	
+    Walker(key, [this, &key](const Ptr<Node>& node) {
+        if (auto vda = DynamicCast<VarWithPatternDecl>(node); vda && node != key) {
+            node2LocalWildcardVar[key].emplace_back(vda);
+        } else if (Is<FuncBody>(node) && node != key) {
             return VisitAction::SKIP_CHILDREN;
         }
         return VisitAction::WALK_CHILDREN;
