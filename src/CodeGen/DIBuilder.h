@@ -59,7 +59,7 @@ public:
     llvm::DILocation* CreateDILoc(const CHIRExprWrapper& chirNode, const bool removable = false);
     llvm::DILocation* CreateDILoc(llvm::DIScope* currentScope, const CHIR::Position& position);
 
-    void CreateCompileUnit(const std::string& pkgName);
+    void CreateCompileUnit(const std::string& pkgName, const std::string& sourceFilePath);
     void CreateNameSpace(const std::string& pkgName);
 
 private:

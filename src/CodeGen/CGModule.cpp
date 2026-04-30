@@ -487,7 +487,58 @@ void CGModule::InitDebugInfo()
         llvm::Module::Warning, "Debug Info Version", static_cast<uint32_t>(llvm::DEBUG_METADATA_VERSION));
     module->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 4); // Use dwarf 4 format.
     diBuilder = std::make_unique<DIBuilder>(*this);
-    diBuilder->CreateCompileUnit(module->getSourceFileName());      // Create artificial CompileUnit.
+
+    // Get the real source file path from the first available function or global variable.
+    // This is needed for proper debug info generation - the debugger needs to know the actual source file.
+    std::string sourceFilePath;
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    const auto& subCHIRPackage = cgCtx->GetSubCHIRPackage();
+
+    // Try to get source file from functions first
+    for (auto chirFunc : subCHIRPackage.chirFuncs) {
+        if (chirFunc && !chirFunc->TestAttr(CHIR::Attribute::NO_DEBUG_INFO)) {
+            auto& debugLoc = chirFunc->GetDebugLocation();
+            if (!debugLoc.IsInvalidPos()) {
+                sourceFilePath = debugLoc.GetAbsPath();
+                break;
+            }
+        }
+    }
+
+    // If no source file from functions, try global variables
+    if (sourceFilePath.empty()) {
+        for (auto chirGV : subCHIRPackage.chirGVs) {
+            if (chirGV && !chirGV->TestAttr(CHIR::Attribute::NO_DEBUG_INFO)) {
+                auto& debugLoc = chirGV->GetDebugLocation();
+                if (!debugLoc.IsInvalidPos()) {
+                    sourceFilePath = debugLoc.GetAbsPath();
+                    break;
+                }
+            }
+        }
+    }
+
+    // If still empty, try custom type defs (class/struct/enum definitions)
+    if (sourceFilePath.empty()) {
+        for (auto customDef : subCHIRPackage.chirCustomDefs) {
+            if (customDef) {
+                auto& debugLoc = customDef->GetDebugLocation();
+                if (!debugLoc.IsInvalidPos()) {
+                    sourceFilePath = debugLoc.GetAbsPath();
+                    break;
+                }
+            }
+        }
+    }
+#endif
+
+    // If we couldn't find any source file, fall back to the package name
+    // This is a fallback that won't provide correct debug info but prevents crashes
+    if (sourceFilePath.empty()) {
+        sourceFilePath = GetCGContext().GetCurrentPkgName();
+    }
+
+    diBuilder->CreateCompileUnit(GetCGContext().GetCurrentPkgName(), sourceFilePath);
     diBuilder->CreateNameSpace(GetCGContext().GetCurrentPkgName()); // Create current package as namespace.
 }
 
