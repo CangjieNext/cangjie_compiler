@@ -487,8 +487,68 @@ void CGModule::InitDebugInfo()
         llvm::Module::Warning, "Debug Info Version", static_cast<uint32_t>(llvm::DEBUG_METADATA_VERSION));
     module->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 4); // Use dwarf 4 format.
     diBuilder = std::make_unique<DIBuilder>(*this);
-    diBuilder->CreateCompileUnit(module->getSourceFileName());      // Create artificial CompileUnit.
-    diBuilder->CreateNameSpace(GetCGContext().GetCurrentPkgName()); // Create current package as namespace.
+
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+    // Only create DICompileUnit for the main module.
+    // Sub-modules split from the same package should not create their own compile units
+    // to avoid multiple compile units pointing to the same source file.
+    const auto& subCHIRPackage = cgCtx->GetSubCHIRPackage();
+    if (subCHIRPackage.mainModule) {
+        // Get the real source file path from the first available function or global variable.
+        // This is needed for proper debug info generation - the debugger needs to know the actual source file.
+        std::string sourceFilePath;
+
+        // Try to get source file from functions first
+        for (auto chirFunc : subCHIRPackage.chirFuncs) {
+            if (chirFunc && !chirFunc->TestAttr(CHIR::Attribute::NO_DEBUG_INFO)) {
+                auto& debugLoc = chirFunc->GetDebugLocation();
+                if (!debugLoc.IsInvalidPos()) {
+                    sourceFilePath = debugLoc.GetAbsPath();
+                    break;
+                }
+            }
+        }
+
+        // If no source file from functions, try global variables
+        if (sourceFilePath.empty()) {
+            for (auto chirGV : subCHIRPackage.chirGVs) {
+                if (chirGV && !chirGV->TestAttr(CHIR::Attribute::NO_DEBUG_INFO)) {
+                    auto& debugLoc = chirGV->GetDebugLocation();
+                    if (!debugLoc.IsInvalidPos()) {
+                        sourceFilePath = debugLoc.GetAbsPath();
+                        break;
+                    }
+                }
+            }
+        }
+
+        // If still empty, try custom type defs (class/struct/enum definitions)
+        if (sourceFilePath.empty()) {
+            for (auto customDef : subCHIRPackage.chirCustomDefs) {
+                if (customDef) {
+                    auto& debugLoc = customDef->GetDebugLocation();
+                    if (!debugLoc.IsInvalidPos()) {
+                        sourceFilePath = debugLoc.GetAbsPath();
+                        break;
+                    }
+                }
+            }
+        }
+
+        // If we couldn't find any source file, fall back to the package name
+        // This is a fallback that won't provide correct debug info but prevents crashes
+        if (sourceFilePath.empty()) {
+            sourceFilePath = GetCGContext().GetCurrentPkgName();
+        }
+
+        diBuilder->CreateCompileUnit(GetCGContext().GetCurrentPkgName(), sourceFilePath);
+        diBuilder->CreateNameSpace(GetCGContext().GetCurrentPkgName()); // Create current package as namespace.
+    }
+#else
+    // For non-CJNATIVE backend, always create compile unit with package name as fallback
+    diBuilder->CreateCompileUnit(GetCGContext().GetCurrentPkgName(), GetCGContext().GetCurrentPkgName());
+    diBuilder->CreateNameSpace(GetCGContext().GetCurrentPkgName());
+#endif
 }
 
 llvm::Constant* CGModule::GenerateTypeNameConstantString(const std::string& typeMangledName, bool isWeakODR, const std::string& qualifiedName) const
