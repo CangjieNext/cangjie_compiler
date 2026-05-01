@@ -11863,7 +11863,7 @@ index 000000000..658549b48
 +#endif
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieCompilerInstance.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieCompilerInstance.cpp
 new file mode 100644
-index 000000000..c1de6c155
+index 000000000..37c31e9b6
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieCompilerInstance.cpp
 @@ -0,0 +1,1263 @@
@@ -11897,11 +11897,11 @@ index 000000000..c1de6c155
 +using namespace lldb_private::CangjieExpr;
 +
 +bool CangjieCompilerInstance::PerformCodeGen() {
-+  if (chirData.GetCurrentCHIRPackage() == nullptr) {
++  CJC_NULLPTR_CHECK(chirData);
++  if (chirData->GetCurrentCHIRPackage() == nullptr) {
 +    return false;
 +  }
-+  Cangjie::CHIR::CHIRBuilder builder(chirData.GetCHIRContext());
-+  auto llvmModules = Cangjie::CodeGen::GenPackageModules(builder, chirData, invocation.globalOptions, *this, false);
++  auto llvmModules = Cangjie::CodeGen::GenPackageModules(*this, false);
 +  CJC_ASSERT(llvmModules.size() == 1);
 +  m_module_up = std::move(llvmModules[0]);
 +  return true;
@@ -11920,16 +11920,16 @@ index 000000000..c1de6c155
 +    if (rt.ref.identifier.Val().find(curpkgPre) == 0) {
 +      // Delete prefix "std.core::"/"std.collection::"
 +      rt.ref.identifier = rt.ref.identifier.Val().substr(curpkgPre.size());
-+      decl = importManager.GetImportedDecl(pkg, rt.ref.identifier);
++      decl = importManager->GetImportedDecl(pkg, rt.ref.identifier);
 +      break;
 +    }
 +  }
 +  if (!decl) {
 +    // Check if it is in core package.
-+    decl = importManager.GetCoreDecl(rt.ref.identifier);
++    decl = importManager->GetCoreDecl(rt.ref.identifier);
 +    if (!decl) {
 +      // Check if it is in collection package.
-+      decl = importManager.GetImportedDecl(COLLECTION_PACKAGE_NAME, rt.ref.identifier);
++      decl = importManager->GetImportedDecl(COLLECTION_PACKAGE_NAME, rt.ref.identifier);
 +    }
 +  }
 +  std::vector<Ptr<Ty>> typeArgs;
@@ -12089,7 +12089,7 @@ index 000000000..c1de6c155
 +    refType->curFile = classDecl->curFile;
 +    refType->ref.identifier = OBJECT_NAME;
 +    refType->EnableAttr(Attribute::COMPILER_ADD);
-+    refType->ref.target = importManager.GetCoreDecl(OBJECT_NAME);
++    refType->ref.target = importManager->GetCoreDecl(OBJECT_NAME);
 +    if (refType->ref.target) {
 +      refType->ty = refType->ref.target->ty;
 +    }
@@ -12588,7 +12588,7 @@ index 000000000..c1de6c155
 +  // Add import to __lldb_expr_pkg.
 +  AddImportSpecToLLDBExprPackage();
 +  // Set fake package to importManager.
-+  importManager.SetImportedPackageFromASTNode(m_fake_packages);
++  importManager->SetImportedPackageFromASTNode(m_fake_packages);
 +
 +  PerformImportPackage();
 +  Log *log = GetLog(LLDBLog::Expressions);
@@ -12977,7 +12977,7 @@ index 000000000..c1de6c155
 +  auto int64ty = typeManager->GetPrimitiveTy(AST::TypeKind::TYPE_INT64);
 +  rangeExpr->stepExpr = AST::CreateLitConstExpr(Cangjie::AST::LitConstKind::INTEGER, "1", int64ty);
 +  rangeExpr->ty = ty;
-+  rangeExpr->decl = importManager.GetCoreDecl<Cangjie::AST::StructDecl>(RANGE_NAME);
++  rangeExpr->decl = importManager->GetCoreDecl<Cangjie::AST::StructDecl>(RANGE_NAME);
 +  return rangeExpr;
 +}
 +
@@ -25641,7 +25641,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..8210806f3 100644
+index b391fe1ea..6bdc91932 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -25697,7 +25697,7 @@ index b391fe1ea..8210806f3 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.2.0-alpha.08";
++    g_version_str += "\n  cangjie 1.2.0-alpha.16";
    }
  
    return g_version_str.c_str();
@@ -48856,7 +48856,7 @@ index ca7d53dce..407631e03 100644
    intrinsics_gen
  
 diff --git a/llvm/lib/Target/ARM/ARMAsmPrinter.cpp b/llvm/lib/Target/ARM/ARMAsmPrinter.cpp
-index 57cbd7a3b..b94fffaf9 100644
+index 57cbd7a3b..52678802c 100644
 --- a/llvm/lib/Target/ARM/ARMAsmPrinter.cpp
 +++ b/llvm/lib/Target/ARM/ARMAsmPrinter.cpp
 @@ -27,11 +27,13 @@
@@ -48873,7 +48873,14 @@ index 57cbd7a3b..b94fffaf9 100644
  #include "llvm/MC/MCAsmInfo.h"
  #include "llvm/MC/MCAssembler.h"
  #include "llvm/MC/MCContext.h"
-@@ -55,7 +57,10 @@ using namespace llvm;
+@@ -52,10 +54,17 @@ using namespace llvm;
+ 
+ #define DEBUG_TYPE "asm-printer"
+ 
++namespace llvm {
++extern cl::opt<bool> CJPipeline;
++}
++
  ARMAsmPrinter::ARMAsmPrinter(TargetMachine &TM,
                               std::unique_ptr<MCStreamer> Streamer)
      : AsmPrinter(TM, std::move(Streamer)), Subtarget(nullptr), AFI(nullptr),
@@ -48885,7 +48892,7 @@ index 57cbd7a3b..b94fffaf9 100644
  
  void ARMAsmPrinter::emitFunctionBodyEnd() {
    // Make sure to terminate any constant pools that were at the end
-@@ -173,6 +178,8 @@ bool ARMAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
+@@ -173,6 +182,8 @@ bool ARMAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
    // Emit the XRay table for this function.
    emitXRayTable();
  
@@ -48894,7 +48901,7 @@ index 57cbd7a3b..b94fffaf9 100644
    // If we need V4T thumb mode Register Indirect Jump pads, emit them.
    // These are created per function, rather than per TU, since it's
    // relatively easy to exceed the thumb branch range within a TU.
-@@ -577,6 +584,9 @@ void ARMAsmPrinter::emitEndOfAsmFile(Module &M) {
+@@ -577,6 +588,9 @@ void ARMAsmPrinter::emitEndOfAsmFile(Module &M) {
    OptimizationGoals = -1;
  
    ATS.finishAttributeSection();
@@ -48904,7 +48911,7 @@ index 57cbd7a3b..b94fffaf9 100644
  }
  
  //===----------------------------------------------------------------------===//
-@@ -1332,6 +1342,195 @@ void ARMAsmPrinter::EmitUnwindingInstruction(const MachineInstr *MI) {
+@@ -1332,10 +1346,247 @@ void ARMAsmPrinter::EmitUnwindingInstruction(const MachineInstr *MI) {
    }
  }
  
@@ -49100,7 +49107,59 @@ index 57cbd7a3b..b94fffaf9 100644
  // Simple pseudo-instructions have their lowering (with expansion to real
  // instructions) auto-generated.
  #include "ARMGenMCPseudoLowering.inc"
-@@ -1356,6 +1555,10 @@ void ARMAsmPrinter::emitInstruction(const MachineInstr *MI) {
+ 
++void ARMAsmPrinter::emitCJStackCheck(const MachineInstr &MI) {
++  using namespace ARM;
++  MCContext &Ctx = MF->getContext();
++MCSymbol *StackGrowStubFunc = Ctx.getOrCreateSymbol("CJ_MCC_StackGrowStub");
++  MCInst BLStackGrowStub= MCInstBuilder(ARM::BL)
++      .addExpr(MCSymbolRefExpr::create(StackGrowStubFunc, MCSymbolRefExpr::VK_None, Ctx));
++  EmitToStreamer(*OutStreamer, BLStackGrowStub);
++}
++
++void ARMAsmPrinter::LowerSTATEPOINT(MCStreamer &OutStreamer, StackMaps &SM,
++                                        const MachineInstr &MI) {
++  StatepointOpers SOpers(&MI);
++  const MachineOperand &CallTarget = SOpers.getCallTarget();
++  if (CJPipeline) {
++    uint64_t ID = SOpers.getID();
++    if (ID == Cangjie::CJStatepointID::StackCheck) {
++      emitCangjieStackCheck(MI);
++      return;
++    }
++  }
++  MCOperand CallTargetMCOp;
++  unsigned CallOpcode;
++  switch (CallTarget.getType()) {
++  default:
++    llvm_unreachable("Unsupported operand type in statepoint call target");
++    break;
++  case MachineOperand::MO_GlobalAddress:
++  case MachineOperand::MO_ExternalSymbol:
++    CallOpcode = ARM::BL;
++    if (tryEmitCangjieSpecificCallByMOSym(&MI, CallTarget, CallOpcode)) {
++      return;
++    }
++    lowerOperand(CallTarget, CallTargetMCOp);
++    break;
++  case MachineOperand::MO_Immediate:
++    CallTargetMCOp = MCOperand::createImm(CallTarget.getImm());
++    CallOpcode = ARM::BL;
++    break;
++  case MachineOperand::MO_Register:
++    CallTargetMCOp = MCOperand::createReg(CallTarget.getReg());
++    CallOpcode = ARM::BLX;
++    break;
++  }
++  EmitToStreamer(OutStreamer, MCInstBuilder(CallOpcode).addOperand(CallTargetMCOp));
++  SM.recordCJStackMap(MI);
++  return;
++}
++
+ void ARMAsmPrinter::emitInstruction(const MachineInstr *MI) {
+   // TODOD FIXME: Enable feature predicate checks once all the test pass.
+   // ARM_MC::verifyInstructionPredicates(MI->getOpcode(),
+@@ -1356,6 +1607,10 @@ void ARMAsmPrinter::emitInstruction(const MachineInstr *MI) {
         MI->getFlag(MachineInstr::FrameSetup))
      EmitUnwindingInstruction(MI);
  
@@ -49111,7 +49170,7 @@ index 57cbd7a3b..b94fffaf9 100644
    // Do any auto-generated pseudo lowerings.
    if (emitPseudoExpansionLowering(*OutStreamer, MI))
      return;
-@@ -1363,6 +1566,9 @@ void ARMAsmPrinter::emitInstruction(const MachineInstr *MI) {
+@@ -1363,6 +1618,9 @@ void ARMAsmPrinter::emitInstruction(const MachineInstr *MI) {
    assert(!convertAddSubFlagsOpcode(MI->getOpcode()) &&
           "Pseudo flag setting opcode should be expanded early");
  
@@ -49121,46 +49180,18 @@ index 57cbd7a3b..b94fffaf9 100644
    // Check for manual lowerings.
    unsigned Opc = MI->getOpcode();
    switch (Opc) {
-@@ -2319,6 +2525,37 @@ void ARMAsmPrinter::emitInstruction(const MachineInstr *MI) {
+@@ -2319,6 +2577,9 @@ void ARMAsmPrinter::emitInstruction(const MachineInstr *MI) {
    case ARM::SEH_EpilogEnd:
      ATS.emitARMWinCFIEpilogEnd();
      return;
 +
-+  case TargetOpcode::STATEPOINT: {
-+    StatepointOpers SOpers(MI);
-+    const MachineOperand &CallTarget = SOpers.getCallTarget();
-+    MCOperand CallTargetMCOp;
-+    unsigned CallOpcode;
-+    switch (CallTarget.getType()) {
-+    default:
-+      llvm_unreachable("Unsupported operand type in statepoint call target");
-+      break;
-+    case MachineOperand::MO_GlobalAddress:
-+    case MachineOperand::MO_ExternalSymbol:
-+      CallOpcode = ARM::BL;
-+      if (tryEmitCangjieSpecificCallByMOSym(MI, CallTarget, CallOpcode)) {
-+        return;
-+      }
-+      lowerOperand(CallTarget, CallTargetMCOp);
-+      break;
-+    case MachineOperand::MO_Immediate:
-+      CallTargetMCOp = MCOperand::createImm(CallTarget.getImm());
-+      CallOpcode = ARM::BL;
-+      break;
-+    case MachineOperand::MO_Register:
-+      CallTargetMCOp = MCOperand::createReg(CallTarget.getReg());
-+      CallOpcode = ARM::BLX;
-+      break;
-+    }
-+    EmitToStreamer(*OutStreamer, MCInstBuilder(CallOpcode).addOperand(CallTargetMCOp));
-+    SM.recordCJStackMap(*MI);
-+    return;
-+  }
++  case TargetOpcode::STATEPOINT:
++    return LowerSTATEPOINT(*OutStreamer, SM, *MI);
    }
  
    MCInst TmpInst;
 diff --git a/llvm/lib/Target/ARM/ARMAsmPrinter.h b/llvm/lib/Target/ARM/ARMAsmPrinter.h
-index f8ff047a1..096b50622 100644
+index f8ff047a1..1ff47ada1 100644
 --- a/llvm/lib/Target/ARM/ARMAsmPrinter.h
 +++ b/llvm/lib/Target/ARM/ARMAsmPrinter.h
 @@ -11,6 +11,8 @@
@@ -49199,6 +49230,16 @@ index f8ff047a1..096b50622 100644
  public:
    unsigned getISAEncoding() override {
      // ARM/Darwin adds ISA to the DWARF info for each function.
+@@ -151,6 +166,9 @@ public:
+   /// EmitMachineConstantPoolValue - Print a machine constantpool value to
+   /// the .s file.
+   void emitMachineConstantPoolValue(MachineConstantPoolValue *MCPV) override;
++  void LowerSTATEPOINT(MCStreamer &OutStreamer, StackMaps &SM,
++                       const MachineInstr &MI);
++  void emitCJStackCheck(const MachineInstr &MI) override;
+ };
+ } // end namespace llvm
+ 
 diff --git a/llvm/lib/Target/ARM/ARMBaseInstrInfo.cpp b/llvm/lib/Target/ARM/ARMBaseInstrInfo.cpp
 index 183febe75..5eef12ee9 100644
 --- a/llvm/lib/Target/ARM/ARMBaseInstrInfo.cpp
@@ -75457,10 +75498,10 @@ index 000000000..247781471
 +                "Cangjie simple range analysis.", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp b/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp
 new file mode 100644
-index 000000000..613558d5b
+index 000000000..f8046441a
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp
-@@ -0,0 +1,506 @@
+@@ -0,0 +1,505 @@
 +//===- CJSpecificOpt.cpp ----------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -75844,8 +75885,7 @@ index 000000000..613558d5b
 +  Changed |= deadAllocaElimination(F);
 +  Changed |= replaceInvalidAddrpaceCast(F);
 +  const Triple TT(F.getParent()->getTargetTriple());
-+  if (!TT.isARM())
-+    Changed |= insertStackCheck(F);
++  Changed |= insertStackCheck(F);
 +  Changed |= insertResetFPState(F, OptLevel);
 +  return Changed;
 +}
