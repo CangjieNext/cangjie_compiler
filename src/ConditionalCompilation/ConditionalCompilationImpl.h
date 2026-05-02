@@ -14,7 +14,7 @@
 #define CANGJIE_CONDITIONALCOMPILATION_CONDITIONALCOMPILATIONIMPL_H
 
 #include <regex>
-#include <optional>
+#include <unordered_map>
 
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
@@ -67,12 +67,9 @@ private:
     {
         return std::to_string(static_cast<int>(test));
     }
-    std::optional<std::string> GetUserDefinedInfoByName(const std::string& name) const;
-    inline auto GetPassedValues() const
-    {
-        return passedCondition;
-    }
-    std::optional<std::string> GetRelatedInfo(const std::string& target) const;
+    void InitBuiltinConditionCache();
+    const std::string* GetUserDefinedInfoByName(const std::string& name) const;
+    const std::string* GetRelatedInfo(const std::string& target) const;
 
     CompilerInstance* ci{nullptr};
     Triple::BackendType backendType;
@@ -81,8 +78,12 @@ private:
     bool debug;
     bool test;
     std::unordered_map<std::string, std::string> passedCondition;
+    std::unordered_map<std::string, std::string> builtinConditionCache;
+    std::unordered_map<std::string, bool> judgeConditionCache;
+    std::unordered_map<std::string, bool> conditionExprCache;
 
     bool EvalConditionExpr(const Expr& condition);
+    bool EvalCachedConditionExpr(const Expr& condition);
 
     bool ConditionCheck(const std::string& conditionStr, const Position& begin, const std::string& right);
 
@@ -93,7 +94,17 @@ private:
     bool EvalUnaryExpr(const UnaryExpr& ue) const;
     bool EvalRefExpr(const RefExpr& re) const;
 
+    bool CheckConditionExpr(const Expr& condition);
+    bool CheckBinaryExpr(const BinaryExpr& be);
+    bool CheckParenExpr(const ParenExpr& pe);
+    bool CheckUnaryExpr(const UnaryExpr& ue) const;
+    bool CheckRefExpr(const RefExpr& re) const;
+    bool CheckJudgeConditionExpr(const BinaryExpr& be);
+    bool CheckConditionOp(const BinaryExpr& be, const std::string& conditionStr) const;
+    const std::string* GetDebugOrTestRelatedInfo(const RefExpr& re, const Position& diagnosePos) const;
+
     bool EvalLogicBinaryExpr(const BinaryExpr& be);
+    bool CheckJudgeBinaryExpr(const BinaryExpr& be) const;
     bool EvalJudgeBinaryExpr(const BinaryExpr& be);
 
     std::string RefreshVersionStr(std::string& version) const

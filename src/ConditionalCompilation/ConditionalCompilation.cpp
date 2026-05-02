@@ -10,7 +10,11 @@
  * This file implements macro conditional compilation related apis for compiler.
  */
 
+#include <algorithm>
+#include <functional>
+#include <optional>
 #include <regex>
+#include <utility>
 
 #include "ConditionalCompilationImpl.h"
 #include "cangjie/AST/Match.h"
@@ -38,6 +42,8 @@ const std::string DEBUG_STR = "debug";
 const std::string TEST_STR = "test";
 const std::string ENV_STR = "env";
 const std::string CONDITION_TRUE = "1"; // Used in debug and test condition variable.
+constexpr size_t CACHE_SEPARATOR_SIZE = sizeof('\0');
+constexpr size_t JUDGE_CONDITION_CACHE_KEY_EXTRA_SIZE = CACHE_SEPARATOR_SIZE + sizeof(char) + CACHE_SEPARATOR_SIZE;
 // Condition value map.
 const std::unordered_set<std::string> TARGET_CONDITION = {
     BACKEND_STR,
@@ -134,6 +140,98 @@ const std::map<std::string, std::vector<std::string>> CONDITION_VALUES = {
         }
     },
 };
+
+template <typename T, typename Pred> void EraseConditionalIf(T& container, Pred pred)
+{
+    container.erase(std::remove_if(container.begin(), container.end(), pred), container.end());
+}
+
+std::string MakeJudgeConditionCacheKey(const std::string& condition, TokenKind op, const std::string& right)
+{
+    std::string key;
+    key.reserve(condition.size() + right.size() + JUDGE_CONDITION_CACHE_KEY_EXTRA_SIZE);
+    key.append(condition);
+    key.push_back('\0');
+    key.push_back(static_cast<char>(static_cast<unsigned char>(op)));
+    key.push_back('\0');
+    key.append(right);
+    return key;
+}
+
+void AppendCacheField(std::string& key, const std::string& field)
+{
+    key.append(field);
+    key.push_back('\0');
+}
+
+template <typename T> void AppendEnumCacheField(std::string& key, T value)
+{
+    key.append(std::to_string(static_cast<unsigned>(value)));
+    key.push_back('\0');
+}
+
+bool AppendConditionExprCacheKey(const Expr& condition, std::string& key)
+{
+    AppendEnumCacheField(key, condition.astKind);
+    switch (condition.astKind) {
+        case ASTKind::BINARY_EXPR: {
+            auto& be = static_cast<const BinaryExpr&>(condition);
+            if (be.leftExpr == nullptr || be.rightExpr == nullptr) {
+                return false;
+            }
+            AppendEnumCacheField(key, be.op);
+            return AppendConditionExprCacheKey(*be.leftExpr, key) && AppendConditionExprCacheKey(*be.rightExpr, key);
+        }
+        case ASTKind::UNARY_EXPR: {
+            auto& ue = static_cast<const UnaryExpr&>(condition);
+            if (ue.expr == nullptr) {
+                return false;
+            }
+            AppendEnumCacheField(key, ue.op);
+            return AppendConditionExprCacheKey(*ue.expr, key);
+        }
+        case ASTKind::REF_EXPR: {
+            auto& re = static_cast<const RefExpr&>(condition);
+            AppendCacheField(key, re.ref.identifier.Val());
+            return true;
+        }
+        case ASTKind::PAREN_EXPR: {
+            auto& pe = static_cast<const ParenExpr&>(condition);
+            if (pe.expr == nullptr) {
+                return false;
+            }
+            return AppendConditionExprCacheKey(*pe.expr, key);
+        }
+        case ASTKind::LIT_CONST_EXPR: {
+            auto& lit = static_cast<const LitConstExpr&>(condition);
+            AppendEnumCacheField(key, lit.kind);
+            key.push_back(lit.siExpr != nullptr ? '1' : '0');
+            key.push_back('\0');
+            AppendCacheField(key, lit.stringValue);
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+std::optional<std::string> MakeConditionExprCacheKey(const Expr& condition)
+{
+    switch (condition.astKind) {
+        case ASTKind::BINARY_EXPR:
+        case ASTKind::UNARY_EXPR:
+        case ASTKind::REF_EXPR:
+        case ASTKind::PAREN_EXPR:
+            break;
+        default:
+            return std::nullopt;
+    }
+    std::string key;
+    if (!AppendConditionExprCacheKey(condition, key)) {
+        return std::nullopt;
+    }
+    return key;
+}
 } // namespace
 
 static auto GetVersionUInt(const std::string& version) -> uint32_t
@@ -162,6 +260,7 @@ ConditionalCompilationImpl::ConditionalCompilationImpl(CompilerInstance* c)
       test(ci->invocation.globalOptions.enableCompileTest),
       passedCondition(ci->invocation.globalOptions.passedWhenKeyValue)
 {
+    InitBuiltinConditionCache();
     // in cjc cfg has been parsed, in lsp need parse and check cfg here.
     if (ci->invocation.globalOptions.enableMacroInLSP) {
         if (!passedCondition.empty()) {
@@ -197,6 +296,17 @@ ConditionalCompilationImpl::ConditionalCompilationImpl(CompilerInstance* c)
     }
 }
 
+void ConditionalCompilationImpl::InitBuiltinConditionCache()
+{
+    builtinConditionCache.emplace(ARCH_STR, GetArchType());
+    builtinConditionCache.emplace(BACKEND_STR, GetBackendType());
+    builtinConditionCache.emplace(CJC_VERSION_STR, GetCJCVersion());
+    builtinConditionCache.emplace(DEBUG_STR, GetDebug());
+    builtinConditionCache.emplace(ENV_STR, GetEnv());
+    builtinConditionCache.emplace(TEST_STR, GetTest());
+    builtinConditionCache.emplace(OS_STR, GetOSType());
+}
+
 static inline auto IsLogicBinaryExpr(const BinaryExpr& expr) -> bool
 {
     return expr.op >= TokenKind::AND && expr.op <= TokenKind::OR;
@@ -230,22 +340,22 @@ std::string ConditionalCompilationImpl::GetOSType() const
     return triple.OSToString();
 }
 
-std::optional<std::string> ConditionalCompilationImpl::GetUserDefinedInfoByName(const std::string& name) const
+const std::string* ConditionalCompilationImpl::GetUserDefinedInfoByName(const std::string& name) const
 {
-    auto passedValues = GetPassedValues();
-    if (passedValues.count(name) == 0) {
-        return std::nullopt; // "" is one of env options. 
+    auto found = passedCondition.find(name);
+    if (found == passedCondition.end()) {
+        return nullptr; // "" is one of env options.
     }
 
-    return passedValues.at(name);
+    return &found->second;
 }
 
 bool ConditionalCompilationImpl::EvalLogicBinaryExpr(const BinaryExpr& be)
 {
     if (be.op == TokenKind::AND) {
-        return Utils::AllOf(EvalConditionExpr(be.leftExpr.operator*()), EvalConditionExpr(be.rightExpr.operator*()));
+        return EvalConditionExpr(be.leftExpr.operator*()) && EvalConditionExpr(be.rightExpr.operator*());
     } else {
-        return Utils::AnyOf(EvalConditionExpr(be.leftExpr.operator*()), EvalConditionExpr(be.rightExpr.operator*()));
+        return EvalConditionExpr(be.leftExpr.operator*()) || EvalConditionExpr(be.rightExpr.operator*());
     }
 }
 
@@ -260,9 +370,10 @@ bool ConditionalCompilationImpl::ConditionCheck(
         return false;
     }
     // Check `arch`, `env`, `backend` and `os` condition value.
-    if (CONDITION_VALUES.count(conditionStr) > 0 && !Utils::In(right, CONDITION_VALUES.at(conditionStr))) {
+    auto conditionValues = CONDITION_VALUES.find(conditionStr);
+    if (conditionValues != CONDITION_VALUES.end() && !Utils::In(right, conditionValues->second)) {
         std::string supportedValues = "";
-        for (const auto& it : CONDITION_VALUES.at(conditionStr)) {
+        for (const auto& it : conditionValues->second) {
             supportedValues += it + " ";
         }
         supportedValues.pop_back();
@@ -272,7 +383,7 @@ bool ConditionalCompilationImpl::ConditionCheck(
     }
     // Check `cjc_version`.
     if (conditionStr == CJC_VERSION_STR) {
-        std::regex cjcVersionRegex("[0-9]{1,2}[.][0-9]{1,2}[.][0-9]{1,2}");
+        static const std::regex cjcVersionRegex("[0-9]{1,2}[.][0-9]{1,2}[.][0-9]{1,2}");
         if (!std::regex_match(right, cjcVersionRegex)) {
             (void)ci->diag.DiagnoseRefactor(
                 DiagKindRefactor::conditional_compilation_not_support_cjc_version_format, begin);
@@ -304,7 +415,18 @@ bool ConditionalCompilationImpl::Eval(const BinaryExpr& expr, const std::string&
     }
 }
 
-bool ConditionalCompilationImpl::EvalJudgeBinaryExpr(const BinaryExpr& be)
+bool ConditionalCompilationImpl::CheckConditionOp(const BinaryExpr& be, const std::string& conditionStr) const
+{
+    auto conditionOps = CONDITION_OP.find(conditionStr);
+    if (conditionOps != CONDITION_OP.end() && Utils::NotIn(be.op, conditionOps->second)) {
+        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_not_support_op, be.begin,
+            conditionStr, TOKENS[static_cast<int>(be.op)]);
+        return false;
+    }
+    return true;
+}
+
+bool ConditionalCompilationImpl::CheckJudgeBinaryExpr(const BinaryExpr& be) const
 {
     if (be.leftExpr == nullptr || be.rightExpr == nullptr) {
         (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, be.begin);
@@ -325,28 +447,146 @@ bool ConditionalCompilationImpl::EvalJudgeBinaryExpr(const BinaryExpr& be)
             DiagKindRefactor::conditional_compilation_invalid_condition_value, be.rightExpr->begin);
         return false;
     }
+    return true;
+}
+
+bool ConditionalCompilationImpl::CheckJudgeConditionExpr(const BinaryExpr& be)
+{
+    if (!CheckJudgeBinaryExpr(be)) {
+        return false;
+    }
+    auto right = RawStaticCast<LitConstExpr*>(be.rightExpr.get());
     auto left = RawStaticCast<RefExpr*>(be.leftExpr.get());
-    auto conditionStr = left->ref.identifier;
-    if (!ConditionCheck(conditionStr, be.begin, right->stringValue)) {
+    const auto& conditionStr = left->ref.identifier.Val();
+    const auto& rightValue = right->stringValue;
+    if (!ConditionCheck(conditionStr, be.begin, rightValue)) {
+        return false;
+    }
+    if (GetRelatedInfo(conditionStr) == nullptr) {
+        return false;
+    }
+    return CheckConditionOp(be, conditionStr);
+}
+
+bool ConditionalCompilationImpl::CheckBinaryExpr(const BinaryExpr& be)
+{
+    if (be.leftExpr == nullptr || be.rightExpr == nullptr) {
+        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, be.begin);
+        return false;
+    }
+    if (IsLogicBinaryExpr(be)) {
+        auto leftValid = CheckConditionExpr(be.leftExpr.operator*());
+        auto rightValid = CheckConditionExpr(be.rightExpr.operator*());
+        return leftValid && rightValid;
+    }
+    if (IsJudgeBinaryExpr(be) || IsRangeBinaryExpr(be)) {
+        return CheckJudgeConditionExpr(be);
+    }
+    (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, be.begin);
+    return false;
+}
+
+bool ConditionalCompilationImpl::CheckParenExpr(const ParenExpr& pe)
+{
+    if (pe.expr == nullptr) {
+        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, pe.begin);
+        return false;
+    }
+    return CheckConditionExpr(pe.expr.operator*());
+}
+
+const std::string* ConditionalCompilationImpl::GetDebugOrTestRelatedInfo(
+    const RefExpr& re, const Position& diagnosePos) const
+{
+    if (re.ref.identifier != DEBUG_STR && re.ref.identifier != TEST_STR) {
+        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, diagnosePos);
+        return nullptr;
+    }
+    return GetRelatedInfo(re.ref.identifier);
+}
+
+bool ConditionalCompilationImpl::CheckUnaryExpr(const UnaryExpr& ue) const
+{
+    if (ue.expr == nullptr || ue.expr->astKind != ASTKind::REF_EXPR) {
+        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, ue.begin);
+        return false;
+    }
+    auto conditionExpr = RawStaticCast<RefExpr*>(ue.expr.get());
+    if (conditionExpr == nullptr) {
+        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, ue.begin);
+        return false;
+    }
+    auto relatedInfo = GetDebugOrTestRelatedInfo(*conditionExpr, ue.begin);
+    if (relatedInfo == nullptr) {
+        return false;
+    }
+    if (ue.op != TokenKind::NOT) {
+        auto builder =
+            ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, ue.begin);
+        builder.AddNote("debug and test builtin conditions only support the logic ! operator");
+        return false;
+    }
+    return true;
+}
+
+bool ConditionalCompilationImpl::CheckRefExpr(const RefExpr& re) const
+{
+    return GetDebugOrTestRelatedInfo(re, re.begin) != nullptr;
+}
+
+bool ConditionalCompilationImpl::CheckConditionExpr(const Expr& condition)
+{
+    switch (condition.astKind) {
+        case ASTKind::BINARY_EXPR:
+            return CheckBinaryExpr(static_cast<const BinaryExpr&>(condition));
+        case ASTKind::UNARY_EXPR:
+            return CheckUnaryExpr(static_cast<const UnaryExpr&>(condition));
+        case ASTKind::REF_EXPR:
+            return CheckRefExpr(static_cast<const RefExpr&>(condition));
+        case ASTKind::PAREN_EXPR:
+            return CheckParenExpr(static_cast<const ParenExpr&>(condition));
+        default:
+            (void)ci->diag.DiagnoseRefactor(
+                DiagKindRefactor::conditional_compilation_invalid_condition_expr, condition.begin);
+            return false;
+    }
+}
+
+bool ConditionalCompilationImpl::EvalJudgeBinaryExpr(const BinaryExpr& be)
+{
+    if (!CheckJudgeBinaryExpr(be)) {
+        return false;
+    }
+    auto right = RawStaticCast<LitConstExpr*>(be.rightExpr.get());
+    auto left = RawStaticCast<RefExpr*>(be.leftExpr.get());
+    const auto& conditionStr = left->ref.identifier.Val();
+    const auto& rightValue = right->stringValue;
+    auto cacheKey = MakeJudgeConditionCacheKey(conditionStr, be.op, rightValue);
+    auto cached = judgeConditionCache.find(cacheKey);
+    if (cached != judgeConditionCache.end()) {
+        return cached->second;
+    }
+    if (!ConditionCheck(conditionStr, be.begin, rightValue)) {
         return false;
     }
     auto relatedInfo = GetRelatedInfo(conditionStr);
-    if (!relatedInfo.has_value()) {
+    if (relatedInfo == nullptr) {
         return false;
     }
-    // Filter not support op.
-    if (CONDITION_OP.count(conditionStr) > 0 && Utils::NotIn(be.op, CONDITION_OP.at(conditionStr))) {
-        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_not_support_op, be.begin,
-            conditionStr.Val(), TOKENS[static_cast<int>(be.op)]);
+    if (!CheckConditionOp(be, conditionStr)) {
         return false;
     }
     // Decode cjc version to judge.
+    auto evalRightValue = &rightValue;
+    std::string refreshedRightValue;
     if (conditionStr == CJC_VERSION_STR) {
-        std::string version = std::to_string(GetVersionUInt(right->stringValue));
-        right->stringValue = RefreshVersionStr(version);
+        refreshedRightValue = std::to_string(GetVersionUInt(rightValue));
+        refreshedRightValue = RefreshVersionStr(refreshedRightValue);
+        evalRightValue = &refreshedRightValue;
     }
-    auto leftValue = relatedInfo.value();
-    return Eval(be, leftValue, right->stringValue);
+    auto evalResult = Eval(be, *relatedInfo, *evalRightValue);
+    judgeConditionCache.emplace(std::move(cacheKey), evalResult);
+    return evalResult;
 }
 
 bool ConditionalCompilationImpl::EvalBinaryExpr(const BinaryExpr& be)
@@ -376,9 +616,12 @@ bool ConditionalCompilationImpl::EvalUnaryExpr(const UnaryExpr& ue) const
         return false;
     }
     auto conditionExpr = RawStaticCast<RefExpr*>(ue.expr.get());
-    if (conditionExpr == nullptr || (conditionExpr->ref.identifier != DEBUG_STR &&
-        conditionExpr->ref.identifier != TEST_STR)) {
+    if (conditionExpr == nullptr) {
         (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, ue.begin);
+        return false;
+    }
+    auto relatedInfo = GetDebugOrTestRelatedInfo(*conditionExpr, ue.begin);
+    if (relatedInfo == nullptr) {
         return false;
     }
     if (ue.op != TokenKind::NOT) { // -debug or -test should compile error
@@ -386,24 +629,16 @@ bool ConditionalCompilationImpl::EvalUnaryExpr(const UnaryExpr& ue) const
         builder.AddNote("debug and test builtin conditions only support the logic ! operator");
         return false;
     }
-    auto relatedInfo = GetRelatedInfo(conditionExpr->ref.identifier);
-    if (!relatedInfo.has_value()) {
-        return false;
-    }
-    return relatedInfo.value() != CONDITION_TRUE; // !debug or !test
+    return *relatedInfo != CONDITION_TRUE; // !debug or !test
 }
 
 bool ConditionalCompilationImpl::EvalRefExpr(const RefExpr& re) const
 {
-    if (re.ref.identifier != DEBUG_STR && re.ref.identifier != TEST_STR) {
-        (void)ci->diag.DiagnoseRefactor(DiagKindRefactor::conditional_compilation_invalid_condition_expr, re.begin);
+    auto relatedInfo = GetDebugOrTestRelatedInfo(re, re.begin);
+    if (relatedInfo == nullptr) {
         return false;
     }
-    auto relatedInfo = GetRelatedInfo(re.ref.identifier);
-    if (!relatedInfo.has_value()) {
-        return false;
-    }
-    return relatedInfo.value() == CONDITION_TRUE;
+    return *relatedInfo == CONDITION_TRUE;
 }
 
 bool ConditionalCompilationImpl::EvalConditionExpr(const Expr& condition)
@@ -423,6 +658,27 @@ bool ConditionalCompilationImpl::EvalConditionExpr(const Expr& condition)
             return false;
         }
     }
+}
+
+bool ConditionalCompilationImpl::EvalCachedConditionExpr(const Expr& condition)
+{
+    auto cacheKey = MakeConditionExprCacheKey(condition);
+    if (cacheKey.has_value()) {
+        auto cached = conditionExprCache.find(*cacheKey);
+        if (cached != conditionExprCache.end()) {
+            return cached->second;
+        }
+    }
+    auto beforeErrCnt = ci->diag.GetErrorCount();
+    // Validate the full tree before evaluation so short-circuiting cannot hide invalid branches.
+    if (!CheckConditionExpr(condition)) {
+        return false;
+    }
+    auto result = EvalConditionExpr(condition);
+    if (cacheKey.has_value() && beforeErrCnt == ci->diag.GetErrorCount()) {
+        conditionExprCache.emplace(std::move(*cacheKey), result);
+    }
+    return result;
 }
 
 void ConditionalCompilationImpl::HandleConditionalCompilation(const Package& root)
@@ -459,7 +715,7 @@ template <typename T> bool ConditionalCompilationImpl::EvalNodeCondition(Ptr<T> 
                 DiagKindRefactor::conditional_compilation_not_have_condition_expr, anno->begin);
             return true;
         }
-        evalResult = EvalConditionExpr(anno->condExpr.operator*());
+        evalResult = EvalCachedConditionExpr(anno->condExpr.operator*());
         return true;
     };
     Utils::EraseIf(node->annotations, filterPred);
@@ -483,50 +739,50 @@ void ConditionalCompilationImpl::HandleFileConditionalCompilation(File& file)
         switch (curNode->astKind) {
             case ASTKind::FILE: {
                 auto file = StaticAs<ASTKind::FILE>(curNode);
-                Utils::EraseIf(file->imports, std::not_fn(pred));
-                Utils::EraseIf(file->decls, std::not_fn(pred));
+                EraseConditionalIf(file->imports, std::not_fn(pred));
+                EraseConditionalIf(file->decls, std::not_fn(pred));
                 break;
             }
             case ASTKind::INTERFACE_BODY: {
                 auto ib = StaticAs<ASTKind::INTERFACE_BODY>(curNode);
-                Utils::EraseIf(ib->decls, std::not_fn(pred));
+                EraseConditionalIf(ib->decls, std::not_fn(pred));
                 break;
             }
             case ASTKind::CLASS_BODY: {
                 auto cb = StaticAs<ASTKind::CLASS_BODY>(curNode);
-                Utils::EraseIf(cb->decls, std::not_fn(pred));
+                EraseConditionalIf(cb->decls, std::not_fn(pred));
                 break;
             }
             case ASTKind::STRUCT_BODY: {
                 auto sb = StaticAs<ASTKind::STRUCT_BODY>(curNode);
-                Utils::EraseIf(sb->decls, std::not_fn(pred));
+                EraseConditionalIf(sb->decls, std::not_fn(pred));
                 break;
             }
             case ASTKind::ENUM_DECL: {
                 auto ed = StaticAs<ASTKind::ENUM_DECL>(curNode);
-                Utils::EraseIf(ed->members, std::not_fn(pred));
-                Utils::EraseIf(ed->constructors, std::not_fn(pred));
+                EraseConditionalIf(ed->members, std::not_fn(pred));
+                EraseConditionalIf(ed->constructors, std::not_fn(pred));
                 break;
             }
             case ASTKind::EXTEND_DECL: {
                 auto ed = StaticAs<ASTKind::EXTEND_DECL>(curNode);
-                Utils::EraseIf(ed->members, std::not_fn(pred));
+                EraseConditionalIf(ed->members, std::not_fn(pred));
                 break;
             }
             case ASTKind::PROP_DECL: {
                 auto pd = StaticAs<ASTKind::PROP_DECL>(curNode);
-                Utils::EraseIf(pd->setters, std::not_fn(pred));
-                Utils::EraseIf(pd->getters, std::not_fn(pred));
+                EraseConditionalIf(pd->setters, std::not_fn(pred));
+                EraseConditionalIf(pd->getters, std::not_fn(pred));
                 break;
             }
             case ASTKind::FUNC_PARAM_LIST: {
                 auto fpl = StaticAs<ASTKind::FUNC_PARAM_LIST>(curNode);
-                Utils::EraseIf(fpl->params, std::not_fn(pred));
+                EraseConditionalIf(fpl->params, std::not_fn(pred));
                 break;
             }
             case ASTKind::BLOCK: {
                 auto block = StaticAs<ASTKind::BLOCK>(curNode);
-                Utils::EraseIf(block->body, std::not_fn(pred));
+                EraseConditionalIf(block->body, std::not_fn(pred));
                 break;
             }
             case ASTKind::MACRO_EXPAND_DECL:
@@ -557,23 +813,11 @@ void ConditionalCompilation::HandleFileConditionalCompilation(File& file) const
     impl->HandleFileConditionalCompilation(file);
 }
 
-std::optional<std::string> ConditionalCompilationImpl::GetRelatedInfo(const std::string& target) const
+const std::string* ConditionalCompilationImpl::GetRelatedInfo(const std::string& target) const
 {
-    // only used in this function
-    const std::map<const std::string, std::function<std::string()>> conditionMap = {
-        {ARCH_STR, [this]() -> std::string { return GetArchType(); }},
-        {BACKEND_STR, [this]() -> std::string { return GetBackendType(); }},
-        {CJC_VERSION_STR, [this]() -> std::string { return GetCJCVersion(); }},
-        {DEBUG_STR, [this]() -> std::string { return GetDebug(); }},
-        {ENV_STR, [this]() -> std::string { return GetEnv(); }},
-        {TEST_STR, [this]() -> std::string { return GetTest(); }},
-        {OS_STR, [this]() -> std::string { return GetOSType(); }},
-    };
-    std::optional<std::string> ret;
-    if (conditionMap.find(target) != conditionMap.end()) {
-        ret = conditionMap.at(target)();
-    } else {
-        ret = GetUserDefinedInfoByName(target);
+    auto builtin = builtinConditionCache.find(target);
+    if (builtin != builtinConditionCache.end()) {
+        return &builtin->second;
     }
-    return ret;
+    return GetUserDefinedInfoByName(target);
 }
