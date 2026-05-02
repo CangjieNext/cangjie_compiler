@@ -417,7 +417,7 @@ void StructInheritanceChecker::CheckMembersWithInheritedDecls(const InheritableD
         member.second.isInheritedInterface = false;
         member.second.extendDecl = nullptr;
     }
-    structInheritedMembers.emplace(&decl, interfaceMembers);
+    structInheritedMembers.emplace(&decl, std::move(interfaceMembers));
 }
 
 /**
@@ -440,7 +440,7 @@ MemberMap StructInheritanceChecker::GetAndCheckInheritedInterfaces(const Inherit
     // Merge inherited interfaces' members.
     for (auto iTy : interfaceTys) {
         auto interfaceDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(iTy);
-        auto interfaceMembers = structInheritedMembers[interfaceDecl];
+        const auto& interfaceMembers = structInheritedMembers[interfaceDecl];
         MergeInheritedMembers(members, interfaceMembers, *iTy, true);
     }
     DiagnoseForConflictInheritance(decl, members);
@@ -473,7 +473,7 @@ MemberMap StructInheritanceChecker::GetInheritedSuperMembers(
             continue;
         }
         CheckMembersWithInheritedDecls(*extend);
-        auto extendMembers = structInheritedMembers[extend];
+        const auto& extendMembers = structInheritedMembers[extend];
         RemoveInvisibleMember(members, curFile.curPackage->fullPackageName);
         MergeInheritedMembers(members, extendMembers, baseTy);
     }
