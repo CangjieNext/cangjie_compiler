@@ -175,9 +175,9 @@ OwnedPtr<Expr> ASTFactory::UnwrapEntity(OwnedPtr<Expr> expr)
     return expr;
 }
 
-OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy)
+OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy, Retain withRetain)
 {
-    if (typeMapper.IsValidObjCMirror(wrapTy)) {
+    if (typeMapper.IsObjCMirror(wrapTy)) {
         CJC_ASSERT(expr->GetTy()->IsPointer());
         auto classLikeTy = StaticCast<ClassLikeTy>(&wrapTy);
         auto mirror = As<ASTKind::CLASS_DECL>(classLikeTy->commonDecl);
@@ -187,6 +187,9 @@ OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy)
         }
 
         auto ctor = GetGeneratedBaseCtor(*mirror);
+        if (withRetain == Retain::YES) {
+            expr = CreateObjCRetainCall(std::move(expr));
+        }
         return CreateCallExpr(CreateRefExpr(*ctor), Nodes<FuncArg>(CreateFuncArg(std::move(expr))), ctor, classLikeTy,
             CallKind::CALL_OBJECT_CREATION);
     }
@@ -273,7 +276,7 @@ OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy)
         if (auto classALTy = DynamicCast<ClassLikeTy>(wrapTy.typeArgs[0])) {
             if (auto decl = classALTy->commonDecl;
                 decl && decl->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
-                    return WrapObjCMirrorOption(expr, decl, expr->curFile);
+                    return WrapObjCMirrorOption(expr, decl, expr->curFile, withRetain);
             }
         }
     }
@@ -418,7 +421,7 @@ OwnedPtr<Expr> ASTFactory::UnwrapObjCMirrorOption(
     }()
  */
 OwnedPtr<Expr> ASTFactory::WrapObjCMirrorOption(
-    const Ptr<Expr> entity, Ptr<ClassLikeDecl> mirror, const Ptr<File> curFile)
+    const Ptr<Expr> entity, Ptr<ClassLikeDecl> mirror, const Ptr<File> curFile, Retain withRetain)
 {
     std::vector<OwnedPtr<Node>> nodes;
     auto baseTy = typeManager.GetPointerTy(typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT));
@@ -426,13 +429,13 @@ OwnedPtr<Expr> ASTFactory::WrapObjCMirrorOption(
     CopyBasicInfo(tmpVar->initializer.get(), tmpVar.get());
     tmpVar->begin = entity->begin;
     tmpVar->curFile = curFile;
-    auto objcrefExpr = CreateRefExpr(*tmpVar);
+    auto objcrefExpr = WithinFile(CreateRefExpr(*tmpVar), curFile);
 
     auto castTy = mirror->GetTy();
     // case true => None
     OwnedPtr<Expr> trueBranch = CreateOptionNoneRef(castTy);
     // case false => wrap($tmp, T)
-    OwnedPtr<Expr> falseBranch =  WrapEntity(std::move(objcrefExpr), *castTy);
+    OwnedPtr<Expr> falseBranch =  WrapEntity(std::move(objcrefExpr), *castTy, withRetain);
 
     auto isInstanceCall = WithinFile(CreateGetObjcEntityOrNullCall(*tmpVar, curFile), curFile);
     auto boolMatch = CreateBoolMatch(
@@ -1619,7 +1622,7 @@ OwnedPtr<Expr> ASTFactory::CreateNativeLambdaForBlockType(Ty& ty, Ptr<File> curF
             CreateFuncArg(
                 WrapEntity(
                     WithinFile(CreateRefExpr(*lambdaParams[i]), curFile),
-                    *fty->paramTys[i - 1])));
+                    *fty->paramTys[i - 1], Retain::YES)));
     }
     auto resultCangjie = CreateCallExpr(
         std::move(cangjieFuncExpr),
@@ -1896,7 +1899,6 @@ OwnedPtr<CallExpr> ASTFactory::CreateObjCMsgSendCall(
     auto selectorCall = CreateRegisterNameCall(selector, nativeHandle->curFile);
 
     auto ft = MakeOwned<FuncType>();
-    ft->isC = true;
     ft->retType = CreateType(retTy);
 
     args.insert(args.begin(), std::move(selectorCall));
@@ -2263,7 +2265,6 @@ OwnedPtr<CallExpr> ASTFactory::CreateObjCMsgSendSuperCall(OwnedPtr<Expr> receive
     auto selCall = CreateRegisterNameCall(selector, receiver->curFile);
 
     auto ft = MakeOwned<FuncType>();
-    ft->isC = true;
     ft->retType = CreateType(retTy);
 
     rawArgs.insert(rawArgs.begin(), ASTCloner::Clone(selCall.get()));
@@ -2344,6 +2345,12 @@ OwnedPtr<Expr> ASTFactory::CreateConvertToNSStringCall(OwnedPtr<Expr> id, ClassD
 OwnedPtr<Expr> ASTFactory::CreateDescriptionAsStringCall(OwnedPtr<Expr> id)
 {
     auto convertDecl = bridge.GetDescriptionAsStringDecl();
-    auto convertExpr = CreateRefExpr(*convertDecl);
     return CreateCall(std::move(convertDecl), convertDecl->curFile, std::move(id));
+}
+
+OwnedPtr<Expr> ASTFactory::CreateObjCRetainCall(OwnedPtr<Expr> id)
+{
+    auto curFile = id->curFile;
+    auto objCRetainDecl = bridge.GetObjCRetainDecl();
+    return CreateCall(std::move(objCRetainDecl), curFile, std::move(id));
 }

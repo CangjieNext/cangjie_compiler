@@ -78,6 +78,7 @@ constexpr auto EQ_OP = "=";
 constexpr auto EQ_CHECK_OP = "==";
 
 constexpr auto FALSE_KW = "false";
+constexpr auto NIL_KW = "nil";
 constexpr auto FAIL_CALL_UNINIT_CTOR = "[self doesNotRecognizeSelector:_cmd];";
 constexpr auto FAIL_CALL_CANGJIE_BEFORE_INIT =
     "[NSException raise: @\"Use before Cangjie counterpart is initialized\" format: @\"selector `%@` is overriden in "
@@ -933,7 +934,9 @@ void ObjCGenerator::AddConstructors()
                 GenerateFuncParamLists(ctor->funcBody->paramLists, selectorComponents, FunctionListFormat::DECLARATION,
                     ObjCFunctionType::INSTANCE, GetForeignNameAnnotation(*ctor) != nullptr);
             AddWithIndent(result, GenerationTarget::BOTH, OptionalBlockOp::OPEN);
-            AddWithIndent(FAIL_CALL_UNINIT_CTOR, GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
+            AddWithIndent(FAIL_CALL_UNINIT_CTOR, GenerationTarget::SOURCE);
+            // This `return nil;` is necessary, to make clang diagnostic happy
+            AddWithIndent(GenerateReturn(NIL_KW), GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
             generatedCtors.insert(selectorComponents);
         }
     }

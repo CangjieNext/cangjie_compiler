@@ -23,6 +23,14 @@
 
 namespace Cangjie::Interop::ObjC {
 
+/**
+ * Indicates whether the object needs to be retained
+ */
+enum class Retain {
+    NO,
+    YES
+};
+
 class ASTFactory {
 public:
     explicit ASTFactory(InteropLibBridge& bridge, TypeManager& typeManager, NameGenerator& nameGenerator,
@@ -47,9 +55,12 @@ public:
      * - for primitive value: the value itself
      * - for CPointer<Unit> (mirror class M): constructor call `M(expr)`
      * - for CPointer<Unit> (mirror interface M): constructor call `M$impl(expr)`
-     * - for CPointer<Unit> (impl I): call to retrieve corresponding instance from regirstry for `expr`
+     * - for CPointer<Unit> (impl I): call to retrieve corresponding instance from registry for `expr`
+     *
+     * If `withRetain == Retain::YES`, then `objCRetain(expr)` is called additionally. Only affects ObjCMirrors
+     * currently.
      */
-    OwnedPtr<AST::Expr> WrapEntity(OwnedPtr<AST::Expr> expr, AST::Ty& wrapTy);
+    OwnedPtr<AST::Expr> WrapEntity(OwnedPtr<AST::Expr> expr, AST::Ty& wrapTy, Retain withRetain = Retain::NO);
 
     // Option type handling
     Ptr<AST::Ty> GetOptionTy(Ptr<AST::Ty> ty);
@@ -180,8 +191,8 @@ public:
     OwnedPtr<AST::Expr> CreateUnsafePointerCast(OwnedPtr<AST::Expr> expr, Ptr<AST::Ty> elementType);
 
     void SetDesugarExpr(Ptr<AST::Expr> original, OwnedPtr<AST::Expr> desugared);
-    OwnedPtr<AST::Expr> WrapObjCMirrorOption(
-        const Ptr<AST::Expr> entity, Ptr<AST::ClassLikeDecl> mirror, const Ptr<AST::File> curFile);
+    OwnedPtr<AST::Expr> WrapObjCMirrorOption(const Ptr<AST::Expr> entity, Ptr<AST::ClassLikeDecl> mirror,
+        const Ptr<AST::File> curFile, Retain withRetain = Retain::NO);
     OwnedPtr<AST::Expr> CreateObjCobjectNull();
     Ptr<AST::Ty> GetObjCTy();
     OwnedPtr<AST::Expr> CreateGetObjcEntityOrNullCall(AST::VarDecl& entity, Ptr<AST::File> file);
@@ -241,6 +252,7 @@ public:
     OwnedPtr<AST::Expr> CreateConvertToNSStringCall(OwnedPtr<AST::Expr> id, AST::ClassDecl& classDecl,
         Ptr<AST::File> curFile);
     OwnedPtr<AST::Expr> CreateDescriptionAsStringCall(OwnedPtr<AST::Expr> id);
+    OwnedPtr<AST::Expr> CreateObjCRetainCall(OwnedPtr<AST::Expr> id);
 
 private:
     void PutDeclToClassLikeBody(AST::Decl& decl, AST::ClassLikeDecl& target);
