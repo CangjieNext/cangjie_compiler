@@ -328,8 +328,8 @@ std::pair<FuncBase*, bool> CustomTypeDef::GetExpectedFunc(
     return failed;
 }
 
-std::vector<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallType& funcCallType,
-    bool isStatic, std::unordered_map<const GenericType*, Type*>& replaceTable, CHIRBuilder& builder) const
+std::optional<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallType& funcCallType,
+    bool isStatic, const std::unordered_map<const GenericType*, Type*>& replaceTable, CHIRBuilder& builder) const
 {
     auto& funcName = funcCallType.funcName;
     auto& funcInstTypeArgs = funcCallType.genericTypeArgs;
@@ -339,6 +339,8 @@ std::vector<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallT
         instArgTys.erase(instArgTys.begin());
     }
     std::vector<VTableSearchRes> res;
+    std::vector<FuncType*> candidateTypes;
+    std::unordered_map<const GenericType*, Type*> tempTable = replaceTable;
     for (auto& mapIt : vtable) {
         for (size_t i = 0; i < mapIt.second.size(); ++i) {
             if (mapIt.second[i].srcCodeIdentifier != funcName) {
@@ -353,11 +355,11 @@ std::vector<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallT
                 continue;
             }
             for (size_t j = 0; j < genericTypeParams.size(); ++j) {
-                replaceTable.emplace(genericTypeParams[j], funcInstTypeArgs[j]);
+                tempTable.emplace(genericTypeParams[j], funcInstTypeArgs[j]);
             }
             bool matched = true;
             for (size_t j = 0; j < genericParamTys.size(); ++j) {
-                auto declaredInstType = ReplaceRawGenericArgType(*genericParamTys[j], replaceTable, builder);
+                auto declaredInstType = ReplaceRawGenericArgType(*genericParamTys[j], tempTable, builder);
                 if (!ParamTypeIsEquivalent(*declaredInstType, *instArgTys[j])) {
                     matched = false;
                     break;
@@ -365,7 +367,7 @@ std::vector<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallT
             }
             if (matched) {
                 auto instSrcParentTy =
-                    ReplaceRawGenericArgType(*const_cast<ClassType*>(mapIt.first), replaceTable, builder);
+                    ReplaceRawGenericArgType(*const_cast<ClassType*>(mapIt.first), tempTable, builder);
                 auto& funcInfo = mapIt.second[i];
                 res.emplace_back(VTableSearchRes{
                     .instSrcParentType = StaticCast<ClassType*>(instSrcParentTy),
@@ -374,11 +376,44 @@ std::vector<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallT
                     .attr = funcInfo.attr,
                     .offset = i
                 });
-                break;
+                /** open class A<X> {
+                 *  open public func test<T>(x: X, y: X): Unit {
+                 *          println("a");
+                 *      }
+                 *  }
+                 *
+                 *  open class B<X> <: A<X> {
+                 *  open public func test<Y>(x: C<Y>, y: C<Y>): Unit {
+                 *          println("b");
+                 *      }
+                 *  }
+                 *
+                 *  class C<T> {}
+                 *
+                 *  main() {
+                 *      let x: C<Int64> = C<Int64>()
+                 *      B<C<Int64>>().test<Int64>(x, x)
+                 *  }
+                 *  face to this example, we can get two candidates for func call `B<C<Int64>>().test<Int64>(x, x)`
+                 *  one is A<X>.test<T>(x: X, y: X), the other is B<X>.test<Y>(x: C<Y>, y: C<Y>)
+                 *  we need to choose which one is better, according to spec, we need to instantiate func type,
+                 *  but only instantiate generic type which defined in class decl, not in func decl,
+                 *  so our candidate types are:
+                 *  1. (C<Int64>, C<Int64>), instantiated result of A<X>.test<T>(x: X, y: X)
+                 *      because generic type `X` is instantiated by `C<Int64>`
+                 *  2. (C<Y>, C<Y>), instantiated result of B<X>.test<Y>(x: C<Y>, y: C<Y>)
+                 *      because generic type `Y` is defined in func decl, not in class decl
+                 *
+                 */
+                auto instTy = ReplaceRawGenericArgType(*mapIt.second[i].typeInfo.sigType, replaceTable, builder);
+                candidateTypes.emplace_back(StaticCast<FuncType*>(instTy));
             }
         }
     }
-    return res;
+    if (res.empty()) {
+        return std::nullopt;
+    }
+    return res[GetBestMatchingResultIndex(candidateTypes, builder)];
 }
 
 std::string CustomTypeDef::ToString() const

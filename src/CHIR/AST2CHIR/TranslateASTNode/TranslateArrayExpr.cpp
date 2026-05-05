@@ -245,12 +245,12 @@ CHIR::Type* Translator::GetExactParentType(
     return result;
 }
 
-std::vector<VTableSearchRes> Translator::GetFuncIndexInVTable(
+std::optional<VTableSearchRes> Translator::GetFuncIndexInVTable(
     Type& root, const FuncCallType& funcCallType, bool isStatic, [[maybe_unused]] bool report)
 {
     auto result = CHIR::GetFuncIndexInVTable(root, funcCallType, isStatic, builder);
 #ifndef NDEBUG
-    if (report && result.empty()) {
+    if (report && !result.has_value()) {
         const std::string msg = "can't find '" + funcCallType.funcName + "': " +
             funcCallType.funcType->ToString() + ", in " + root.ToString() + " vtable.";
         Errorln(msg);
@@ -287,7 +287,7 @@ Ptr<Value> Translator::InitArrayByCollection(const AST::ArrayExpr& array)
     auto funcName = "$sizeget";
     FuncCallType funcCallType{funcName, sizeGetInstFuncTy};
     auto vtableRes =
-        GetFuncIndexInVTable(*collectionDerefType, funcCallType, false)[0];
+        GetFuncIndexInVTable(*collectionDerefType, funcCallType, false).value();
     InstInvokeCalleeInfo funcInfo{funcName, sizeGetInstFuncTy, vtableRes.originalFuncType, vtableRes.instSrcParentType,
         StaticCast<ClassType*>(vtableRes.instSrcParentType->GetCustomTypeDef()->GetType()), std::vector<Type*>{},
         collectionDerefType, vtableRes.offset};

@@ -756,7 +756,7 @@ private:
 
     CHIR::Type* GetExactParentType(Type& fuzzyParentType, const AST::FuncDecl& resolvedFunction, FuncType& funcType,
         std::vector<Type*>& funcInstTypeArgs, bool checkAbstractMethod, [[maybe_unused]] bool report = true);
-    std::vector<VTableSearchRes> GetFuncIndexInVTable(
+    std::optional<VTableSearchRes> GetFuncIndexInVTable(
         Type& root, const FuncCallType& funcCallType, bool isStatic, [[maybe_unused]] bool report = true);
 
     // translate var decl

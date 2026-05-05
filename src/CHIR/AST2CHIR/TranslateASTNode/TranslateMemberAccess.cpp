@@ -322,7 +322,7 @@ Translator::InstInvokeCalleeInfo Translator::CreateVirFuncInvokeInfo(
     std::vector<Type*> funcInstTypeArgs{funcInstArgs.begin(), funcInstArgs.end()};
     FuncCallType funcCallType{funcName, instFuncType, funcInstTypeArgs};
     auto vtableRes = GetFuncIndexInVTable(
-        *rootTy, funcCallType, resolvedFunction.TestAttr(AST::Attribute::STATIC))[0];
+        *rootTy, funcCallType, resolvedFunction.TestAttr(AST::Attribute::STATIC)).value();
     auto thisType = strInstFuncType.thisType;
     if (thisType == nullptr) {
         thisType = builder.GetType<RefType>(builder.GetType<ThisType>());

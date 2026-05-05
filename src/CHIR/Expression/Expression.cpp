@@ -777,7 +777,7 @@ FuncType* DynamicDispatch::GetMethodType() const
     return virMethodCtx.originalFuncType;
 }
 
-std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& builder) const
+VTableSearchRes DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& builder) const
 {
     auto thisTypeDeref = thisType->StripAllRefs();
     if (thisTypeDeref->IsThis()) {
@@ -790,8 +790,8 @@ std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& 
     auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
     FuncCallType funcCallType{virMethodCtx.srcCodeIdentifier, instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, IsInvokeStaticBase(), builder);
-    CJC_ASSERT(!res.empty());
-    return res;
+    CJC_ASSERT(res.has_value());
+ 	return res.value();
 }
 
 size_t DynamicDispatch::GetVirtualMethodOffset() const
@@ -812,27 +812,14 @@ ClassType* DynamicDispatch::GetInstSrcParentCustomTypeOfMethod(CHIRBuilder& buil
     auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
     FuncCallType funcCallType{virMethodCtx.srcCodeIdentifier, instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, IsInvokeStaticBase(), builder);
-    CJC_ASSERT(!res.empty());
-    for (auto& r : res) {
-        if (r.offset == virMethodCtx.offset) {
-            CJC_NULLPTR_CHECK(r.instSrcParentType);
-            return r.instSrcParentType;
-        }
-    }
-    CJC_ABORT();
-    return nullptr;
+    CJC_ASSERT(res.has_value());
+ 	return res.value().instSrcParentType;
 }
 
 AttributeInfo DynamicDispatch::GetVirtualMethodAttr(CHIRBuilder& builder) const
 {
-    for (auto& r : GetVirtualMethodInfo(builder)) {
-        if (r.offset == GetVirtualMethodOffset()) {
-            CJC_NULLPTR_CHECK(r.instSrcParentType);
-            return r.attr;
-        }
-    }
-    CJC_ABORT();
-    return AttributeInfo{};
+    const auto& r = GetVirtualMethodInfo(builder);
+ 	return r.attr;
 }
 
 // Invoke

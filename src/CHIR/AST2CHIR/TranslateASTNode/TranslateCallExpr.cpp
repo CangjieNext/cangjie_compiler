@@ -1002,7 +1002,7 @@ Value* Translator::TranslateNonStaticMemberFuncCall(const AST::CallExpr& expr)
         paramInstTys.insert(paramInstTys.begin(), instParentTy);
         auto instTargetFuncTy = builder.GetType<FuncType>(paramInstTys, retInstTy);
         FuncCallType funcCallType{funcName, instTargetFuncTy, funcInstTypeArgs};
-        auto vtableRes = GetFuncIndexInVTable(*thisType, funcCallType, false)[0];
+        auto vtableRes = GetFuncIndexInVTable(*thisType, funcCallType, false).value();
         InstInvokeCalleeInfo dynamicDispatchFuncInfo{funcName, instTargetFuncTy, vtableRes.originalFuncType,
             vtableRes.instSrcParentType,
             StaticCast<ClassType*>(vtableRes.instSrcParentType->GetCustomTypeDef()->GetType()), funcInstTypeArgs,
@@ -1146,7 +1146,7 @@ Value* Translator::TranslateStaticMemberFuncCall(const AST::CallExpr& expr)
     if (IsInvokeStatic(expr) && !IsInsideCFunc(*currentBlock) && !isInGVInit) {
         auto funcName = expr.resolvedFunction->identifier;
         FuncCallType funcCallType{funcName, instTargetFuncTy, funcInstTypeArgs};
-        auto vtableRes = GetFuncIndexInVTable(*thisType, funcCallType, true)[0];
+        auto vtableRes = GetFuncIndexInVTable(*thisType, funcCallType, true).value();
         auto useThisType = [thisType, &expr]() {
             if (auto thisCustomType = DynamicCast<CustomType*>(thisType)) {
                 if (auto outerInterface = DynamicCast<ClassDef*>(thisCustomType->GetCustomTypeDef())) {
