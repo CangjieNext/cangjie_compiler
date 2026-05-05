@@ -150,7 +150,6 @@ private:
     bool RunVarInitChecking();
     void RunConstantPropagation();
     void RunRangePropagation();
-    bool RunNativeFFIChecks();
     void RunArrayListConstStartOpt();
     void RunFunctionInline(DevirtualizationInfo& devirtInfo);
     void RunArrayLambdaOpt();

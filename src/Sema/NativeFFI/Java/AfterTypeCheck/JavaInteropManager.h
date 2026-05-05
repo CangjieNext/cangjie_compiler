@@ -57,13 +57,9 @@ public:
     void DesugarPackage(Package& pkg, const std::unordered_map<Ptr<const InheritableDecl>, MemberMap>& memberMap);
 
 private:
-    void CheckUsageOfJavaTypes(Decl& decl);
-
-private:
     void CheckNonJavaSuperType(ClassLikeDecl& decl) const;
     void CheckJavaMirrorSubtypeAttrClassLikeDecl(ClassLikeDecl& decl) const;
     void CheckExtendDecl(ExtendDecl& decl) const;
-    void CheckGenericsInstantiation(Decl& file);
 
     ImportManager& importManager;
     TypeManager& typeManager;

@@ -384,8 +384,6 @@ void JavaInteropManager::CheckTypes(File& file)
         }
 
         CheckCJMappingType(*decl);
-        CheckUsageOfJavaTypes(*decl);
-        CheckGenericsInstantiation(*decl);
     }
 }
 

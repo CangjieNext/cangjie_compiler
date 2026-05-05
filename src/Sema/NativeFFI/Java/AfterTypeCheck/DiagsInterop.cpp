@@ -132,48 +132,4 @@ const std::string& GetOuterDeclKindName(const Decl& outerDecl)
     }
 }
 
-void DiagUsageOfJavaTypes(
-    DiagnosticEngine& diag, const Decl& varDecl, std::vector<Ptr<Decl>>&& javaDecls, Ptr<Decl> nonJavaOuterDecl)
-{
-    if (javaDecls.empty()) {
-        return;
-    }
-
-    auto primaryDiagJavaDecl = javaDecls.back();
-    javaDecls.pop_back();
-
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_variable_of_java_type, varDecl, GetVarKindName(varDecl),
-        primaryDiagJavaDecl->identifier);
-
-    for (auto javaDecl : javaDecls) {
-        builder.AddNote("Also uses java interoperability type '" + javaDecl->identifier + "'");
-    }
-
-    if (nonJavaOuterDecl) {
-        builder.AddNote(*nonJavaOuterDecl,
-            "Declared inside non java interoperability " + GetOuterDeclKindName(*nonJavaOuterDecl) + " '" +
-                nonJavaOuterDecl->identifier + "'");
-    }
-}
-
-void DiagJavaTypesAsGenericParam(DiagnosticEngine& diag, const Node& expr, std::vector<Ptr<Decl>>&& javaDecls)
-{
-    if (javaDecls.empty()) {
-        return;
-    }
-
-    auto primaryDiagJavaDecl = javaDecls.back();
-    javaDecls.pop_back();
-
-    auto genericDecl = expr.GetTarget();
-    CJC_ASSERT(genericDecl);
-
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_parameter_of_java_type, expr,
-        genericDecl->identifier, primaryDiagJavaDecl->identifier);
-
-    for (auto javaDecl : javaDecls) {
-        builder.AddNote("Also uses java interoperability type '" + javaDecl->identifier + "'");
-    }
-}
-
 } // namespace Cangjie::Interop::Java

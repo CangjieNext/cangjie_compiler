@@ -52,8 +52,6 @@
 #endif
 #include "cangjie/Utils/ProfileRecorder.h"
 
-#include "cangjie/CHIR/Checker/TypeCastCheck.h"
-
 namespace Cangjie::CHIR {
 static void FlattenEffectMap(OptEffectCHIRMap& effectMap)
 {
@@ -413,14 +411,6 @@ bool ToCHIR::RunVarInitChecking()
     Utils::ProfileRecorder recorder("RulesChecking", "VarInitCheck");
     auto vic = CHIR::VarInitCheck(diag);
     vic.RunOnPackage(chirPkg, opts.GetJobs());
-    return diag.GetErrorCount() == 0;
-}
-
-bool ToCHIR::RunNativeFFIChecks()
-{
-    Utils::ProfileRecorder recorder("RulesChecking", "NativeFFIChecks");
-    auto checker = CHIR::NativeFFI::TypeCastCheck(diag);
-    checker.RunOnPackage(*chirPkg, opts.GetJobs());
     return diag.GetErrorCount() == 0;
 }
 
@@ -874,9 +864,6 @@ bool ToCHIR::RunAnalysisForCJLint()
     if (!RunVarInitChecking()) {
         return false;
     }
-    if (!RunNativeFFIChecks()) {
-        return false;
-    }
     UnreachableBlockElimination();
     RunConstantPropagation();
     if (diag.GetErrorCount() > 0) {
@@ -1113,9 +1100,6 @@ bool ToCHIR::RulesChecking()
     NothingTypeExprElimination();
     RunConstantAnalysis();
     if (!RunVarInitChecking()) {
-        return false;
-    }
-    if (!RunNativeFFIChecks()) {
         return false;
     }
     UnreachableBranchReporter();
