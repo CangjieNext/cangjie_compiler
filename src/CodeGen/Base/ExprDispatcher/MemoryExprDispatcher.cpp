@@ -257,7 +257,22 @@ llvm::Value* HandleMemoryExpression(IRBuilder2& irBuilder, const CHIR::Expressio
                 return retValueStorage;
             }
             irBuilder.EmitLocation(CHIRExprWrapper(alloca));
-            return GenerateAllocate(irBuilder, CHIRAllocateWrapper(alloca));
+            auto result = GenerateAllocate(irBuilder, CHIRAllocateWrapper(alloca));
+            // Zero the stack slot for class-type variables in debug mode
+            // so cjdb does not read garbage typeinfo pointers before the
+            // variable is initialised.
+            auto* localVar = alloca.GetResult();
+            if (irBuilder.GetCGContext().GetCompileOptions().enableCompileDebug &&
+                localVar && !localVar->GetSrcCodeIdentifier().empty()) {
+                auto chirType = DeRef(*alloca.GetType());
+                if (chirType->IsClass() && llvm::isa<llvm::AllocaInst>(result)) {
+                    auto allocTy = llvm::cast<llvm::AllocaInst>(result)->getAllocatedType();
+                    auto nullPtr = llvm::ConstantPointerNull::get(
+                        llvm::cast<llvm::PointerType>(allocTy));
+                    irBuilder.CreateStore(nullPtr, result);
+                }
+            }
+            return result;
         }
         case CHIR::ExprKind::LOAD: {
             auto& load = StaticCast<const CHIR::Load&>(chirExpr);
