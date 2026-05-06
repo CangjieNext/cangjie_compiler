@@ -47,13 +47,17 @@ Ptr<Value> Translator::Visit(const AST::StructDecl& decl)
             CJC_ABORT();
         }
     }
-    // set implemented interface
-    for (auto& superInterfaceTy : decl.GetStableSuperInterfaceTys()) {
-        auto astType = TranslateType(*superInterfaceTy);
-        // The implemented interface type must be of reference type.
-        CJC_ASSERT(astType->IsRef());
-        auto realType = StaticCast<ClassType*>(StaticCast<RefType*>(astType)->GetBaseType());
-        structDef->AddImplementedInterfaceTy(*realType);
+    // common and specific upper bounds are same, do not set again
+    bool needInitialSuperClassSetup = !decl.TestAttr(AST::Attribute::SPECIFIC);
+    if (needInitialSuperClassSetup) {
+        // set implemented interface
+        for (auto& superInterfaceTy : decl.GetStableSuperInterfaceTys()) {
+            auto astType = TranslateType(*superInterfaceTy);
+            // The implemented interface type must be of reference type.
+            CJC_ASSERT(astType->IsRef());
+            auto realType = StaticCast<ClassType*>(StaticCast<RefType*>(astType)->GetBaseType());
+            structDef->AddImplementedInterfaceTy(*realType);
+        }
     }
     return nullptr;
 }

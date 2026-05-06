@@ -365,6 +365,27 @@ private:
         ) {
             noNeedToTranslateDecls.insert(&decl);
         }
+        // remember AST to CHIR type mapping not to duplicate chir types
+        if (res && decl.TestAnyAttr(AST::Attribute::FROM_COMMON_PART, AST::Attribute::SPECIFIC)) {
+            auto addInTypeMap = [this](Ptr<AST::Ty> astTy, Type* chirTy) {
+                if (chirType.GetTypeMap().count(astTy) == 0) {
+                    chirType.GetTypeMap()[astTy] = chirTy;
+                }
+            };
+            auto type = res->GetType();
+            if (type->NeedWrapInRef()) {
+                type = builder.GetType<RefType>(type);
+            }
+            addInTypeMap(decl.ty, type);
+
+            if (decl.generic) {
+                for (unsigned idx = 0; idx < decl.generic->typeParameters.size(); ++idx) {
+                    auto astGenericTy = decl.generic->typeParameters[idx]->ty;
+                    auto chirGenericTy = res->GetType()->GetTypeArgs()[idx];
+                    addInTypeMap(astGenericTy, chirGenericTy);
+                }
+            }
+        }
         return res;
     }
     // build symbol table for deserialized decls from common part.

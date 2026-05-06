@@ -255,7 +255,7 @@ Type* CHIRType::TranslateType(AST::Ty& ty)
         }
     }
 
-    if (type->IsClassOrArray() || type->IsBox()) {
+    if (type->NeedWrapInRef()) {
         type = builder.GetType<RefType>(type);
     }
     chirTypeCache.typeMap[&ty] = type;
