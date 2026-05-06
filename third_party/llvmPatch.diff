@@ -22667,10 +22667,10 @@ index 000000000..38530e2f6
 +target_link_directories(lldbPluginPlatformOHOS PUBLIC ${CMAKE_SOURCE_DIR}/../utils/boundscheck/lib/${ARCH_NAME})
 diff --git a/lldb/source/Plugins/Platform/OHOS/HdcClient.cpp b/lldb/source/Plugins/Platform/OHOS/HdcClient.cpp
 new file mode 100644
-index 000000000..07df4f364
+index 000000000..ac5a69034
 --- /dev/null
 +++ b/lldb/source/Plugins/Platform/OHOS/HdcClient.cpp
-@@ -0,0 +1,927 @@
+@@ -0,0 +1,935 @@
 +//===-- HdcClient.cpp -----------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -22881,6 +22881,14 @@ index 000000000..07df4f364
 +bool ValidateSocketName(const std::string& name) {
 +    if (name.empty()) {
 +        return false;
++    }
++
++    const std::regex kAndroidSocketPattern(
++        R"(^/[a-zA-Z][a-zA-Z0-9]*(\.[a-zA-Z][a-zA-Z0-9]*)*/[a-zA-Z][a-zA-Z0-9]*-[0-9]+\.sock$)"
++    );
++
++    if (std::regex_match(name, kAndroidSocketPattern)) {
++        return true;
 +    }
 +
 +    const std::regex valid_chars(R"(^[a-zA-Z0-9_.-]+$)");
@@ -34992,7 +35000,7 @@ index 1943b5db9..0c8822991 100644
    IndirectSymbolInits.push_back(std::make_pair(NewGA, Val));
    return Error::success();
 diff --git a/llvm/lib/Bitcode/Writer/BitcodeWriter.cpp b/llvm/lib/Bitcode/Writer/BitcodeWriter.cpp
-index d7e012fb6..e2a2d0d57 100644
+index d7e012fb6..0dced4209 100644
 --- a/llvm/lib/Bitcode/Writer/BitcodeWriter.cpp
 +++ b/llvm/lib/Bitcode/Writer/BitcodeWriter.cpp
 @@ -780,6 +780,8 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
@@ -35004,99 +35012,6 @@ index d7e012fb6..e2a2d0d57 100644
    case Attribute::EndAttrKinds:
      llvm_unreachable("Can not encode end-attribute kinds marker.");
    case Attribute::None:
-@@ -4671,6 +4673,9 @@ void BitcodeWriter::writeModule(const Module &M,
-   assert(M.isMaterialized());
-   Mods.push_back(const_cast<Module *>(&M));
- 
-+  if (GenerateHash)
-+    CanonicalizeBitcodeWriterUseListOrder(*Mods.back());
-+
-   ModuleBitcodeWriter ModuleWriter(M, Buffer, StrtabBuilder, *Stream,
-                                    ShouldPreserveUseListOrder, Index,
-                                    GenerateHash, ModHash);
-diff --git a/llvm/lib/Bitcode/Writer/ValueEnumerator.cpp b/llvm/lib/Bitcode/Writer/ValueEnumerator.cpp
-index 998f629aa..3dd2bb3e3 100644
---- a/llvm/lib/Bitcode/Writer/ValueEnumerator.cpp
-+++ b/llvm/lib/Bitcode/Writer/ValueEnumerator.cpp
-@@ -11,6 +11,7 @@
- //===----------------------------------------------------------------------===//
- 
- #include "ValueEnumerator.h"
-+#include "llvm/ADT/SmallPtrSet.h"
- #include "llvm/ADT/SmallVector.h"
- #include "llvm/Config/llvm-config.h"
- #include "llvm/IR/Argument.h"
-@@ -220,6 +221,54 @@ static void predictValueUseListOrderImpl(const Value *V, const Function *F,
-     Stack.back().Shuffle[I] = List[I].second;
- }
- 
-+static bool isBeforeInBitcodeUseListOrder(const Use &L, const Use &R,
-+                                          unsigned ID, const OrderMap &OM) {
-+  if (&L == &R)
-+    return false;
-+
-+  auto LID = OM.lookup(L.getUser()).first;
-+  auto RID = OM.lookup(R.getUser()).first;
-+  bool IsGlobalValue = OM.isGlobalValue(ID);
-+
-+  if (LID < RID) {
-+    if (RID <= ID)
-+      if (!IsGlobalValue)
-+        return true;
-+    return false;
-+  }
-+  if (RID < LID) {
-+    if (LID <= ID)
-+      if (!IsGlobalValue)
-+        return false;
-+    return true;
-+  }
-+
-+  if (LID <= ID)
-+    if (!IsGlobalValue)
-+      return L.getOperandNo() < R.getOperandNo();
-+  return L.getOperandNo() > R.getOperandNo();
-+}
-+
-+void llvm::CanonicalizeBitcodeWriterUseListOrder(Module &M) {
-+  OrderMap OM = orderModule(M);
-+
-+  SmallVector<std::pair<Value *, unsigned>, 0> OrderedValues;
-+  OrderedValues.reserve(OM.IDs.size());
-+  for (const auto &Entry : OM.IDs)
-+    OrderedValues.emplace_back(const_cast<Value *>(Entry.first),
-+                               Entry.second.first);
-+  llvm::sort(OrderedValues, llvm::less_second());
-+
-+  for (const auto &Entry : OrderedValues) {
-+    Value *V = Entry.first;
-+    unsigned ID = Entry.second;
-+    if (V->use_empty() || std::next(V->use_begin()) == V->use_end())
-+      continue;
-+    V->sortUseList(
-+        [&](const Use &L, const Use &R) { return isBeforeInBitcodeUseListOrder(L, R, ID, OM); });
-+  }
-+}
-+
- static void predictValueUseListOrder(const Value *V, const Function *F,
-                                      OrderMap &OM, UseListOrderStack &Stack) {
-   auto &IDPair = OM[V];
-diff --git a/llvm/lib/Bitcode/Writer/ValueEnumerator.h b/llvm/lib/Bitcode/Writer/ValueEnumerator.h
-index 6c3f6d4ff..5003ae65d 100644
---- a/llvm/lib/Bitcode/Writer/ValueEnumerator.h
-+++ b/llvm/lib/Bitcode/Writer/ValueEnumerator.h
-@@ -300,6 +300,11 @@ private:
-   void EnumerateNamedMetadata(const Module &M);
- };
- 
-+/// Canonicalize use-list order to a deterministic bitcode-writer order before
-+/// serialization. This mutates the in-memory module but does not change IR
-+/// semantics.
-+void CanonicalizeBitcodeWriterUseListOrder(Module &M);
-+
- } // end namespace llvm
- 
- #endif // LLVM_LIB_BITCODE_WRITER_VALUEENUMERATOR_H
 diff --git a/llvm/lib/CMakeLists.txt b/llvm/lib/CMakeLists.txt
 index 5ecdf5af9..99f246d58 100644
 --- a/llvm/lib/CMakeLists.txt
@@ -35925,10 +35840,10 @@ index c3ca9c92b..a7760f5cb 100644
  
 diff --git a/llvm/lib/CodeGen/CJBarrierLowering.cpp b/llvm/lib/CodeGen/CJBarrierLowering.cpp
 new file mode 100644
-index 000000000..2d593f10d
+index 000000000..fa881f44d
 --- /dev/null
 +++ b/llvm/lib/CodeGen/CJBarrierLowering.cpp
-@@ -0,0 +1,1197 @@
+@@ -0,0 +1,1215 @@
 +//===-- GCBarrierLowering.cpp - Cangjie Barrier Lowering ------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -36071,11 +35986,12 @@ index 000000000..2d593f10d
 +    Function *Callee = getOrInsertRuntimeFunc(II);
 +    switch (II->getIntrinsicID()) {
 +    case Intrinsic::cj_gcwrite_struct: {
-+      Value *Param[5] = {II->getArgOperand(GCWriteStruct::BaseObj),
++      Value *GCTib = getOrInsertGCTib(II);
++      Value *Param[6] = {II->getArgOperand(GCWriteStruct::BaseObj),
 +                         II->getArgOperand(GCWriteStruct::Dst),
 +                         II->getArgOperand(GCWriteStruct::Size),
 +                         II->getArgOperand(GCWriteStruct::Src),
-+                         II->getArgOperand(GCWriteStruct::Size)};
++                         II->getArgOperand(GCWriteStruct::Size), GCTib};
 +      // gcwrite.agg src has two case:
 +      // i8* on the stack and i8 addrspace(1)* on the heap.
 +      // The runtime function has only one signature. Here, the src of i8*
@@ -36084,6 +36000,16 @@ index 000000000..2d593f10d
 +        Param[3] = new AddrSpaceCastInst(II->getArgOperand(GCWriteStruct::Src),
 +                                         Type::getInt8PtrTy(C, 1), "", II);
 +      }
++      // Replace the original intrinsic with the runtime function.
++      replaceCallInst(Callee, Param, II);
++      break;
++    }
++    case Intrinsic::cj_gcread_struct: {
++      Value *GCTib = getOrInsertGCTib(II);
++      Value *Param[5] = {II->getArgOperand(GCReadStruct::Dst),
++                         II->getArgOperand(GCReadStruct::BaseObj),
++                         II->getArgOperand(GCReadStruct::Src),
++                         II->getArgOperand(GCReadStruct::Size), GCTib};
 +      // Replace the original intrinsic with the runtime function.
 +      replaceCallInst(Callee, Param, II);
 +      break;
@@ -36155,9 +36081,16 @@ index 000000000..2d593f10d
 +    auto isARM = TT.isARM();
 +    switch (II->getIntrinsicID()) {
 +    case Intrinsic::cj_gcwrite_struct: {
-+      Type *ParamType[5] = {GCPtr, GCPtr, I64, GCPtr, I64};
++      Type *ParamType[6] = {GCPtr, GCPtr, I64, GCPtr, I64, I8Ptr};
 +      if (isARM)
 +        ParamType[2] = ParamType[4] = I32;
++      FuncType = FunctionType::get(Type::getVoidTy(C), ParamType, false);
++      break;
++    }
++    case Intrinsic::cj_gcread_struct: {
++      Type *ParamType[5] = {I8Ptr, GCPtr, GCPtr, I64, I8Ptr};
++      if (isARM)
++        ParamType[3] = I32;
 +      FuncType = FunctionType::get(Type::getVoidTy(C), ParamType, false);
 +      break;
 +    }
@@ -55496,7 +55429,7 @@ index 50710eaa1..b9065ec1a 100644
  
  /// Deduce returned attributes for the SCC.
 diff --git a/llvm/lib/Transforms/IPO/GlobalDCE.cpp b/llvm/lib/Transforms/IPO/GlobalDCE.cpp
-index f35827220..538855dc8 100644
+index f35827220..a1fe3e018 100644
 --- a/llvm/lib/Transforms/IPO/GlobalDCE.cpp
 +++ b/llvm/lib/Transforms/IPO/GlobalDCE.cpp
 @@ -18,12 +18,14 @@
@@ -55652,7 +55585,7 @@ index f35827220..538855dc8 100644
    // Make sure that all memory is released
    AliveGlobals.clear();
    ConstantDependenciesCache.clear();
-@@ -458,3 +510,534 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
+@@ -458,3 +510,539 @@ PreservedAnalyses GlobalDCEPass::run(Module &M, ModuleAnalysisManager &MAM) {
      return PreservedAnalyses::none();
    return PreservedAnalyses::all();
  }
@@ -56077,7 +56010,12 @@ index f35827220..538855dc8 100644
 +    }
 +  };
 +  auto ResetBitmap = [](SmallSet<GlobalVariable *, 8> &RewriteTypeInfos) {
-+    for (auto *TI : RewriteTypeInfos) {
++    SmallVector<GlobalVariable *, 8> SortedTypeInfos(RewriteTypeInfos.begin(),
++                                                     RewriteTypeInfos.end());
++    llvm::sort(SortedTypeInfos, [](GlobalVariable *L, GlobalVariable *R) {
++      return L->getName() < R->getName();
++    });
++    for (auto *TI : SortedTypeInfos) {
 +      auto *TIC = TI->getInitializer();
 +      unsigned Op = ClassInfoFieldType::CIT_ITABLE;
 +      if (isa<ConstantPointerNull>(TIC->getOperand(Op)))
@@ -69758,10 +69696,10 @@ index 000000000..cdc7e67f9
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJRewriteStatepoint.cpp b/llvm/lib/Transforms/Scalar/CJRewriteStatepoint.cpp
 new file mode 100644
-index 000000000..2b87826d1
+index 000000000..bedd16770
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJRewriteStatepoint.cpp
-@@ -0,0 +1,3062 @@
+@@ -0,0 +1,3070 @@
 +//===- CJRewriteStatepoint.cpp - Make Cangjie GC relocations explicit -----===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -71568,6 +71506,12 @@ index 000000000..2b87826d1
 +      InitialAllocaNum++;
 +#endif
 +
++  DenseMap<const Instruction *, unsigned> InstOrder;
++  unsigned NextInstOrder = 0;
++  for (BasicBlock &BB : F)
++    for (Instruction &I : BB)
++      InstOrder[&I] = NextInstOrder++;
++
 +  // TODO-PERF: change data structures, reserve
 +  DenseMap<Value *, AllocaInst *> AllocaMap;
 +  SmallVector<AllocaInst *, 200> PromotableAllocas;
@@ -71653,7 +71597,9 @@ index 000000000..2b87826d1
 +      }
 +    }
 +
-+    llvm::sort(Uses);
++    llvm::sort(Uses, [&](Instruction *L, Instruction *R) {
++      return InstOrder.lookup(L) < InstOrder.lookup(R);
++    });
 +    auto Last = std::unique(Uses.begin(), Uses.end());
 +    Uses.erase(Last, Uses.end());
 +
@@ -75468,10 +75414,10 @@ index 000000000..247781471
 +                "Cangjie simple range analysis.", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp b/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp
 new file mode 100644
-index 000000000..d8d986733
+index 000000000..613558d5b
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJSpecificOpt.cpp
-@@ -0,0 +1,514 @@
+@@ -0,0 +1,506 @@
 +//===- CJSpecificOpt.cpp ----------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -75941,14 +75887,6 @@ index 000000000..d8d986733
 +  GlobalVariable *UsedGV = M.getNamedGlobal("llvm.used");
 +  if (UsedGV) {
 +    UsedGV->eraseFromParent();
-+    Changed = true;
-+  }
-+  // "0_for_keeping_some_types" is not needed after opt, clear it.
-+  Function *KeepingTypeFunc = M.getFunction("0_for_keeping_some_types");
-+  if (KeepingTypeFunc) {
-+    auto *FunPtrTy = cast<PointerType>(KeepingTypeFunc->getType());
-+    KeepingTypeFunc->replaceAllUsesWith(ConstantPointerNull::get(FunPtrTy));
-+    KeepingTypeFunc->eraseFromParent();
 +    Changed = true;
 +  }
 +  return Changed;
