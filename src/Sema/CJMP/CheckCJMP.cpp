@@ -214,6 +214,43 @@ void Check4CommonInstanceVar(DiagnosticEngine& diag, const Decl& specificDecl)
     }
 }
 
+void UseTypesFromCommonInSpecific(Decl& commonDecl, Decl& specificDecl)
+{
+    specificDecl.ty = commonDecl.ty;
+
+    switch (commonDecl.ty->kind) {
+        case TypeKind::TYPE_CLASS: {
+            ClassDecl& specificClass = StaticCast<ClassDecl>(specificDecl);
+            RawStaticCast<ClassTy*>(commonDecl.ty)->decl = &specificClass;
+            break;
+        }
+        case TypeKind::TYPE_INTERFACE: {
+            InterfaceDecl& specificInterface = StaticCast<InterfaceDecl>(specificDecl);
+            RawStaticCast<InterfaceTy*>(commonDecl.ty)->decl = &specificInterface;
+            break;
+        }
+        case TypeKind::TYPE_STRUCT: {
+            StructDecl& specificStruct = StaticCast<StructDecl>(specificDecl);
+            RawStaticCast<StructTy*>(commonDecl.ty)->decl = &specificStruct;
+            break;
+        }
+        case TypeKind::TYPE_ENUM: {
+            EnumDecl& specificEnum = StaticCast<EnumDecl>(specificDecl);
+            RawStaticCast<EnumTy*>(commonDecl.ty)->decl = &specificEnum;
+            break;
+        }
+        default:;
+    }
+
+    if (specificDecl.generic != nullptr && commonDecl.generic != nullptr) {
+        CJC_ASSERT(specificDecl.generic->typeParameters.size() == commonDecl.generic->typeParameters.size());
+        for (unsigned idx = 0; idx < commonDecl.generic->typeParameters.size(); ++idx) {
+            specificDecl.generic->typeParameters[idx]->ty = commonDecl.generic->typeParameters[idx]->ty;
+            commonDecl.generic->typeParameters[idx]->specificImplementation = specificDecl.generic->typeParameters[idx];
+        }
+    }
+}
+
 // Merge common nominative decl into specific one, do some match for fields.
 void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& specificDecl)
 {
@@ -291,6 +328,8 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
 
     commonDecl.doNotExport = true;
     commonDecl.specificImplementation = &specificDecl;
+
+    UseTypesFromCommonInSpecific(commonDecl, specificDecl);
 }
 }
 

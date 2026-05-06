@@ -65,6 +65,9 @@ template <typename TypeT, typename... Args> TypeT* TypeManager::GetTypeTy(Args&&
 
 Ptr<GenericsTy> TypeManager::GetGenericsTy(GenericParamDecl& gpd)
 {
+    if (auto genTy = DynamicCast<GenericsTy*>(gpd.ty)) {
+        return genTy;
+    }
     auto ty = new GenericsTy(gpd.identifier, gpd);
     auto it = allocatedTys.find(TypePointer(ty));
     if (it != allocatedTys.end()) {
