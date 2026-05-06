@@ -3,7 +3,7 @@
 # with Runtime Library Exception.
 #
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
-
+# test1
 cmake_minimum_required(VERSION 3.16.5)
 project(cangjie)
 # Set default version if not provided externally
