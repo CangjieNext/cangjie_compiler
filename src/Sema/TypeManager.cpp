@@ -1494,7 +1494,13 @@ std::unordered_set<Ptr<Ty>> TypeManager::GetAllSuperTys(Ty& ty, const TypeSubst&
     if (auto found = tyToSuperTysMap.find(key); found != tyToSuperTysMap.end()) {
         return found->second;
     }
-    auto maybeInstTy = typeMapping.empty() ? Ptr(&ty) : GetInstantiatedTy(&ty, typeMapping);
+    auto maybeInstTy = Ptr(&ty);
+    if (!typeMapping.empty()) {
+        TyVarScope ts(*this);
+        SubstPack substPack;
+        PackMapping(substPack, typeMapping);
+        maybeInstTy = ApplySubstPack(maybeInstTy, substPack);
+    }
     if (auto classLikeTy = DynamicCast<ClassLikeTy*>(maybeInstTy)) {
         tyList.emplace(classLikeTy);
     } else if (auto structTy = DynamicCast<StructTy*>(maybeInstTy)) {
