@@ -234,9 +234,9 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
             .instTypeArgs = instFuncType.instantiatedTypeArgs,
             .thisType = instFuncType.thisType
         },
-        .virMethodCtx = VirMethodContext {
-            .srcCodeIdentifier = funcName,
-            .originalFuncType = originalFuncType,
+        .virMethodCtx = FuncSigInfo {
+            .funcName = funcName,
+            .funcType = originalFuncType,
             .genericTypeParams = originalGenericTypeParams
         }
     };
