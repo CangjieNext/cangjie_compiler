@@ -2238,9 +2238,9 @@ void ClosureConversion::ConvertApplyToInvoke(Apply& apply)
             .args = apply.GetArgs(),
             .thisType = instParentType
         },
-        .virMethodCtx = VirMethodContext {
-            .srcCodeIdentifier = methodName,
-            .originalFuncType = originalFuncType
+        .virMethodCtx = FuncSigInfo {
+            .funcName = methodName,
+            .funcType = originalFuncType
         }
     };
     auto invoke = builder.CreateExpression<Invoke>(
@@ -2271,9 +2271,9 @@ void ClosureConversion::ConvertApplyWithExceptionToInvokeWithException(ApplyWith
             .args = apply.GetArgs(),
             .thisType = instParentType
         },
-        .virMethodCtx = VirMethodContext {
-            .srcCodeIdentifier = methodName,
-            .originalFuncType = originalFuncType
+        .virMethodCtx = FuncSigInfo {
+            .funcName = methodName,
+            .funcType = originalFuncType
         }
     };
     auto invoke = builder.CreateExpression<InvokeWithException>(
@@ -2433,9 +2433,9 @@ Function* ClosureConversion::CreateGenericMethodInAutoEnvWrapper(ClassDef& autoE
             .args = invokeArgs,
             .thisType = instCustomType
         },
-        .virMethodCtx = VirMethodContext {
-            .srcCodeIdentifier = methodName,
-            .originalFuncType = originalFuncType
+        .virMethodCtx = FuncSigInfo {
+            .funcName = methodName,
+            .funcType = originalFuncType
         }
     };
     auto invokeRes = CreateAndAppendExpression<Invoke>(builder, retType, invokeInfo, entry)->GetResult();

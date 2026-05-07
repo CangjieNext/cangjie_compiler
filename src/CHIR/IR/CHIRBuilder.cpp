@@ -110,27 +110,6 @@ Parameter* CHIRBuilder::CreateParameter(Type* ty, const DebugLocation& loc, Lamb
     return param;
 }
 
-namespace {
-// Helper function to check if new features is a superset of old features
-// and update the value's features and PREVIOUSLY_DESERIALIZED attribute accordingly
-template <typename T>
-void TryUpdateExistingValue(T* existing, const std::set<std::string>& newFeatures)
-{
-    auto oldFeatures = existing->GetFeatures();
-    bool newIsSuperSet = std::includes(newFeatures.begin(), newFeatures.end(),
-        oldFeatures.begin(), oldFeatures.end()) && newFeatures.size() > oldFeatures.size();
-    if (!newIsSuperSet) {
-        // already existed value more specific, so no need to update
-        existing->EnableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
-    } else {
-        // will be updated as it is loaded first time
-        existing->DisableAttr(Attribute::PREVIOUSLY_DESERIALIZED);
-        existing->SetFeatures(newFeatures);
-    }
-}
-
-} // namespace
-
 GlobalVar* CHIRBuilder::CreateGlobalVar(
     Type* ty, const std::string& mangledName, const std::string& srcCodeIdentifier,
     const std::string& rawMangledName, const std::string& packageName)
