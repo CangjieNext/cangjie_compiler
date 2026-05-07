@@ -237,9 +237,9 @@ Ptr<Value> Translator::InitArrayByCollection(const AST::ArrayExpr& array)
         .funcCallCtx = FuncCallContext {
             .thisType = collection->GetType()->StripAllRefs()
         },
-        .virMethodCtx = VirMethodContext {
-            .srcCodeIdentifier = "$sizeget",
-            .originalFuncType = builder.GetType<FuncType>(std::vector<Type*>({originalObjType}), sizeTy)
+        .virMethodCtx = FuncSigInfo {
+            .funcName = "$sizeget",
+            .funcType = builder.GetType<FuncType>(std::vector<Type*>({originalObjType}), sizeTy)
         }
     };
     auto loc = TranslateLocation(array);
