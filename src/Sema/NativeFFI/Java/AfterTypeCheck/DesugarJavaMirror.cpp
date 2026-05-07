@@ -7,10 +7,12 @@
 #include "TypeCheckUtil.h"
 #include "JavaDesugarManager.h"
 
+#include "NativeFFI/Utils.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "Utils.h"
@@ -18,6 +20,7 @@
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "cangjie/AST/Utils.h"
 
+#include "cangjie/Utils/SafePointer.h"
 
 namespace Cangjie::Interop::Java {
 using namespace Cangjie::Native::FFI;
@@ -309,6 +312,11 @@ void JavaDesugarManager::InsertJavaRefGetterWithBody(ClassDecl& decl)
 
 void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& generatedCtor)
 {
+
+    if (IsJArray(*ctor.outerDecl)) {
+        jarrayDesugarer.InsertOriginalSizeConstructorBody(ctor);
+        return;
+    }
     auto curFile = ctor.curFile;
     CJC_ASSERT(ctor.TestAttr(Attribute::CONSTRUCTOR) && ctor.TestAttr(Attribute::JAVA_MIRROR));
     ctor.constructorCall = ConstructorCall::OTHER_INIT;
@@ -330,19 +338,8 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     }
 
     auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, jniEnvCall);
-    OwnedPtr<CallExpr> newObjectCall;
-
-    if (IsJArray(*ctor.outerDecl)) {
-        CJC_ASSERT_WITH_MSG(
-            !ctor.outerDecl->generic->typeParameters.empty(), "JArray ctor must be generic");
-        auto genericParam = ctor.outerDecl->generic->typeParameters[0].get();
-        newObjectCall = lib.CreateCFFINewJavaArrayCall(
-            WithinFile(CreateRefExpr(*jniEnvVar), curFile), *ctor.funcBody->paramLists[0], genericParam);
-    } else {
-        newObjectCall = lib.CreateCFFINewJavaObjectCall(
-            WithinFile(CreateRefExpr(*jniEnvVar), curFile), utils.GetJavaClassNormalizeSignature(*ctor.outerDecl->ty),
-            *ctor.funcBody->paramLists[0], true, *curFile);
-    }
+    OwnedPtr<CallExpr> newObjectCall = lib.CreateCFFINewJavaObjectCall(WithinFile(CreateRefExpr(*jniEnvVar), curFile),
+        utils.GetJavaClassNormalizeSignature(*ctor.outerDecl->ty), *ctor.funcBody->paramLists[0], true, *curFile);
 
     if (newObjectCall) {
         std::vector<OwnedPtr<Node>> nodes;
@@ -432,7 +429,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     // Return type has to be specified, so it's safe to use it below
     fun.funcBody->body = CreateBlock(std::move(blockNodes), fun.funcBody->retType->ty);
     fun.funcBody->ty = TypeManager::GetNothingTy();
-    if(fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
+    if (fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
         fun.funcBody->parentClassLike = &mirror;
     }
     if (IsSynthetic(mirror)) {
@@ -440,7 +437,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     }
 }
 
-void JavaDesugarManager::DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror, GenericConfigInfo *genericConfig)
+void JavaDesugarManager::DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror, GenericConfigInfo* genericConfig)
 {
     CJC_ASSERT(!fun.TestAttr(Attribute::CONSTRUCTOR) &&
         (fun.TestAttr(Attribute::JAVA_MIRROR) || fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)));
@@ -475,8 +472,9 @@ void JavaDesugarManager::InsertJavaMirrorPropGetter(PropDecl& prop)
     CopyBasicInfo(jniGetterCallRes.get(), callResRef.get());
 
     auto outerDecl = As<ASTKind::CLASS_LIKE_DECL>(prop.outerDecl);
-    OwnedPtr<Expr> unwrapJavaEntityCall = isArrayGetLength || !outerDecl ? std::move(callResRef) :
-        lib.UnwrapJavaEntity(std::move(callResRef), prop.ty, *outerDecl);
+    OwnedPtr<Expr> unwrapJavaEntityCall = isArrayGetLength || !outerDecl
+        ? std::move(callResRef)
+        : lib.UnwrapJavaEntity(std::move(callResRef), prop.ty, *outerDecl);
     if (!unwrapJavaEntityCall) {
         prop.EnableAttr(Attribute::IS_BROKEN);
         prop.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
@@ -504,8 +502,8 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
     auto paramRef = WithinFile(CreateRefExpr(*prop.setters[0]->funcBody->paramLists[0]->params[0]), curFile);
 
     if (prop.TestAttr(Attribute::STATIC)) {
-        jniSetterCall = lib.CreateSetStaticFieldCall(
-            lib.CreateGetJniEnvCall(curFile), utils.GetJavaClassNormalizeSignature(*mirror.ty), GetJavaMemberName(prop),
+        jniSetterCall = lib.CreateSetStaticFieldCall(lib.CreateGetJniEnvCall(curFile),
+            utils.GetJavaClassNormalizeSignature(*mirror.ty), GetJavaMemberName(prop),
             utils.GetJavaTypeSignature(*prop.ty), std::move(paramRef));
     } else {
         jniSetterCall = lib.CreateSetFieldCall(
@@ -589,6 +587,11 @@ void JavaDesugarManager::GenerateInMirror(ClassDecl& classDecl, bool doStub)
         // Generate java reference field for JObject. This field is accessible inside predecessors
         InsertJavaRefVarDecl(classDecl);
     }
+
+    if (IsJArray(classDecl) && !doStub) {
+        jarrayDesugarer.GenerateJniTypeConstructor(classDecl);
+    }
+
     InsertJavaMirrorCtor(classDecl, doStub);
 
     if (!doStub) {
@@ -748,6 +751,7 @@ void JavaDesugarManager::GenerateInMirrors(File& file, bool doStub)
     if (!doStub) {
         ReplaceCallsWithArrayJavaEntityGet(file);
         ReplaceCallsWithArrayJavaEntitySet(file);
+        jarrayDesugarer.TransformConstructorCallsToPassJNIParam(file);
     }
 }
 

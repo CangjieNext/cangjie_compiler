@@ -14,6 +14,7 @@
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Utils/CastingTemplate.h"
+#include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
@@ -724,6 +725,55 @@ std::string GetLambdaJavaClassName(Ptr<Ty> ty)
     std::string retStr = funTy->retTy->String();
     name = name + "To" + retStr;
     return name;
+}
+
+ClassDecl& GetExceptionDecl(const ImportManager& importManager)
+{
+
+    const static auto exception = [&] {
+        const auto exceptionDecl = importManager.GetCoreDecl("Exception");
+        CJC_NULLPTR_CHECK(exceptionDecl);
+
+        ClassDecl* res = nullptr;
+        if (auto ex = As<ASTKind::CLASS_DECL>(exceptionDecl)) {
+            res = ex;
+        } else {
+            CJC_ABORT_WITH_MSG("'Exception' declaration expected to be 'ClassDecl'");
+        }
+
+        return res;
+    }();
+
+    return *exception;
+}
+
+OwnedPtr<ThrowExpr> CreateThrowExceptionCall(
+    ImportManager& importManager, TypeManager& typeManager, const std::string& msg, Ptr<File> curFile)
+{
+    auto exceptionArgs = [&] {
+        auto exceptionMsg =
+            WithinFile(CreateLitConstExpr(LitConstKind::STRING, msg, GetStringDecl(importManager).ty), curFile);
+        std::vector<OwnedPtr<Expr>> res;
+        res.emplace_back(std::move(exceptionMsg));
+        return res;
+    }();
+    const auto& exception = GetExceptionDecl(importManager);
+
+    return CreateThrowException(exception, std::move(exceptionArgs), *curFile, typeManager);
+}
+
+bool AreParamTypeKindsValid(const FuncDecl& fd, const std::vector<TypeKind>& typeKinds)
+{
+    if (!fd.funcBody || fd.funcBody->paramLists[0]->params.size() != typeKinds.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < typeKinds.size(); ++i) {
+        CJC_NULLPTR_CHECK(fd.funcBody->paramLists[0]->params[i]->ty);
+        if (fd.funcBody->paramLists[0]->params[i]->ty->kind != typeKinds[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace Cangjie::Native::FFI
