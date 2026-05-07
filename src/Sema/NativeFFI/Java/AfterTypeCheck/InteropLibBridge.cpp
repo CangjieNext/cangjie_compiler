@@ -11,6 +11,8 @@
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
+#include "cangjie/Utils/CheckUtils.h"
+#include <utility>
 
 namespace {
 
@@ -818,26 +820,21 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateCFFIArrayLengthGetCall(OwnedPtr<Expr>
     return CreateCall(GetJavaArrayGetLengthDecl(), curFile, CreateGetJniEnvCall(curFile), std::move(javarefExpr));
 }
 
-OwnedPtr<CallExpr> InteropLibBridge::CreateCFFINewJavaArrayCall(
-    OwnedPtr<Expr> jniEnv, FuncParamList& params, const Ptr<GenericParamDecl> genericParam)
+OwnedPtr<CallExpr> InteropLibBridge::CreateCFFINewJavaArrayCall(OwnedPtr<Expr> jniEnv, FuncParamList& params)
 {
-    auto curFile = genericParam->curFile;
+    constexpr int expectedParamsSize = 2;
+    CJC_ASSERT_WITH_MSG(params.params.size() == expectedParamsSize, "expected 2 params: 'length', '$jniType'.");
+    CJC_ASSERT_WITH_MSG(jniEnv->curFile, "'curFile' expected to be not null in 'jniEnv' param");
+
     static auto funcDecl = GetNewJavaArrayDecl();
-    if (!funcDecl) {
-        return nullptr;
-    }
+    auto curFile = jniEnv->curFile;
+    auto getNthParam = [&params, &curFile](size_t ind) {
+        return WithinFile(CreateRefExpr(*params.params[ind]), curFile);
+    };
+    auto sizeParam = getNthParam(0);
+    auto jniTypeParam = getNthParam(1);
 
-    static auto strTy = utils.GetStringDecl().GetTy();
-    auto defaultTypeOption =
-        CreateLitConstExpr(LitConstKind::STRING, utils.GetJavaTypeSignature(*utils.GetJObjectDecl()->GetTy()), strTy);
-    defaultTypeOption->curFile = curFile;
-    auto typeMatch = CreateMatchByTypeArgument(genericParam,
-        GenerateTypeMappingWithSelector([this](TypeKind kind, Ptr<Ty> ty) { return SelectJSigByTypeKind(kind, ty); }),
-        strTy, std::move(defaultTypeOption));
-    CJC_ASSERT_WITH_MSG(!params.params.empty(), "mandatory size param is absent");
-    auto sizeParam = WithinFile(CreateRefExpr(*params.params[0]), curFile);
-
-    return CreateCall(funcDecl, curFile, std::move(jniEnv), std::move(typeMatch), std::move(sizeParam));
+    return CreateCall(funcDecl, curFile, std::move(jniEnv), std::move(jniTypeParam), std::move(sizeParam));
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreateCFFINewJavaCFFINewJavaProxyObjectForCJMappingCall(
