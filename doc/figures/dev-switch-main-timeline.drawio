@@ -1,0 +1,71 @@
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" page="1" pageWidth="800" pageHeight="560" background="#ffffff">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="bg" value="" style="rounded=0;fillColor=#ffffff;strokeColor=none;fontSize=1;" vertex="1" parent="1">
+      <mxGeometry x="0" y="0" width="800" height="560" as="geometry"/>
+    </mxCell>
+    <mxCell id="title" value="分支策略切换时间轴" style="text;html=1;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;fontColor=#24292f;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1">
+      <mxGeometry x="190" y="30" width="420" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="subtitle" value="差异审视 → main差异回灌 → dev冻结 → 全量合入main → 迭代出口验证" style="text;html=1;strokeColor=none;fillColor=none;fontSize=12;fontColor=#57606a;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1">
+      <mxGeometry x="120" y="70" width="560" height="30" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="dot1" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#1f6feb;strokeColor=#1f6feb;" vertex="1" parent="1">
+      <mxGeometry x="84" y="244" width="14" height="14" as="geometry"/>
+    </mxCell>
+    <mxCell id="dot2" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#1f6feb;strokeColor=#1f6feb;" vertex="1" parent="1">
+      <mxGeometry x="238" y="244" width="14" height="14" as="geometry"/>
+    </mxCell>
+    <mxCell id="dot3" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#1f6feb;strokeColor=#1f6feb;" vertex="1" parent="1">
+      <mxGeometry x="392" y="244" width="14" height="14" as="geometry"/>
+    </mxCell>
+    <mxCell id="dot4" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#1f6feb;strokeColor=#1f6feb;" vertex="1" parent="1">
+      <mxGeometry x="546" y="244" width="14" height="14" as="geometry"/>
+    </mxCell>
+    <mxCell id="dot5" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#1f6feb;strokeColor=#1f6feb;" vertex="1" parent="1">
+      <mxGeometry x="700" y="244" width="14" height="14" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="timeline" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=3;strokeColor=#1f6feb;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="dot1" target="dot5" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="card1" value="05.10 前置条件&#xa;平台提供双分支 PR 差异查看能力&#xa;前端组：王音强" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#f6f8fa;strokeColor=#8c959f;fontSize=12;fontColor=#24292f;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+      <mxGeometry x="30" y="130" width="126" height="88" as="geometry"/>
+    </mxCell>
+    <mxCell id="card2" value="05.15 差异梳理&#xa;main 比 dev 多：额外同步&#xa;dev 比 main 多：影响审视与测试加固&#xa;责任人：各团队" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#1f6feb;fontSize=12;fontColor=#24292f;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+      <mxGeometry x="164" y="308" width="164" height="112" as="geometry"/>
+    </mxCell>
+    <mxCell id="card3" value="05.22 前 main 回灌&#xa;main 独有内容提 PR 同步到 dev&#xa;main 新增代码冻结&#xa;责任人：有差异团队" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#fff5cc;strokeColor=#d4a017;fontSize=12;fontColor=#24292f;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+      <mxGeometry x="330" y="126" width="150" height="104" as="geometry"/>
+    </mxCell>
+    <mxCell id="card4" value="05.22 出版本后&#xa;dev 冻结&#xa;dev 内容全量覆盖到 main&#xa;版本号变更并提交 PR&#xa;周期：2 天&#xa;责任人：内核各仓库 Owner" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#ffe0e0;strokeColor=#c0392b;fontSize=12;fontColor=#24292f;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+      <mxGeometry x="486" y="308" width="154" height="132" as="geometry"/>
+    </mxCell>
+    <mxCell id="card5" value="6 月初 迭代出口&#xa;常规验证，重点保障兼容性&#xa;dev 增量特性补充终端场景测试&#xa;责任人：测试团队" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#e6ffed;strokeColor=#2da44e;fontSize=12;fontColor=#24292f;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+      <mxGeometry x="644" y="124" width="126" height="116" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="link1" value="" style="endArrow=none;html=1;rounded=0;dashed=1;strokeColor=#8c959f;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="card1" target="dot1" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="link2" value="" style="endArrow=none;html=1;rounded=0;dashed=1;strokeColor=#8c959f;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" source="card2" target="dot2" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="link3" value="" style="endArrow=none;html=1;rounded=0;dashed=1;strokeColor=#8c959f;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="card3" target="dot3" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="link4" value="" style="endArrow=none;html=1;rounded=0;dashed=1;strokeColor=#8c959f;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" source="card4" target="dot4" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="link5" value="" style="endArrow=none;html=1;rounded=0;dashed=1;strokeColor=#8c959f;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="card5" target="dot5" parent="1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="legend" value="蓝：差异审视　黄：main 回灌与冻结　红：dev 覆盖 main 的高风险窗口　绿：测试出口" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d0d7de;fontSize=12;fontColor=#57606a;align=center;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
+      <mxGeometry x="90" y="478" width="620" height="40" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>
