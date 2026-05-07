@@ -37,6 +37,8 @@ struct FuncSigInfo {
     std::vector<GenericType*> genericTypeParams;
 
     std::string ToString() const;
+
+    void Dump() const;
 };
 
 struct FuncCallType {
