@@ -388,7 +388,7 @@ public:
     OwnedPtr<Expr> WrapJavaEntity(OwnedPtr<Expr> cjExpr);
 
     /**
-     * interoplib.interop.Java_CFFI_JavaEntityJobject(jobject: CPointer<Unit>)
+     * java.internal.Java_CFFI_JavaEntityJobject(jobject: CPointer<Unit>)
      */
     OwnedPtr<Expr> CreateJavaEntityJobjectCall(OwnedPtr<Expr> arg);
 
@@ -670,7 +670,7 @@ public:
 
 private:
     static constexpr auto INTEROPLIB_VERSION = 9;
-    static constexpr auto INTEROPLIB_PACKAGE_NAME = "interoplib.interop";
+    static constexpr auto INTEROPLIB_PACKAGE_NAME = "java.internal";
 
     const std::vector<TypeKind> supportedArrayPrimitiveElementType = {
         TypeKind::TYPE_BOOLEAN,
