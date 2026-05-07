@@ -424,8 +424,7 @@ public:
     /**
      * Java_CFFI_newJavaArray(env, signature, [args])
      */
-    OwnedPtr<CallExpr> CreateCFFINewJavaArrayCall(
-        OwnedPtr<Expr> jniEnv, FuncParamList& params, const Ptr<GenericParamDecl> genericParam);
+    OwnedPtr<CallExpr> CreateCFFINewJavaArrayCall(OwnedPtr<Expr> jniEnv, FuncParamList& params);
 
     /**
      * Java_CFFI_newJavaProxyObjectForCJMapping(env, entity, name, withMarkerParam)
