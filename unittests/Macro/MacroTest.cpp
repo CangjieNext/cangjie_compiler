@@ -11,13 +11,34 @@
 #include "TestCompilerInstance.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
-
+#include "cangjie/AST/PrintNode.h"
 #ifdef _WIN32
 #include <windows.h>
+#else
+extern char **environ;
 #endif
 
 using namespace Cangjie;
 using namespace AST;
+
+namespace {
+std::unordered_map<std::string, std::string> GetEnvironmentVars()
+{
+    std::unordered_map<std::string, std::string> envVars;
+    char **env = environ;
+    while (env && *env) {
+        std::string entry(*env);
+        size_t pos = entry.find('=');
+        if (pos != std::string::npos) {
+            std::string key = entry.substr(0, pos);
+            std::string value = entry.substr(pos + 1);
+            envVars[key] = value;
+        }
+        ++env;
+    }
+    return envVars;
+}
+}
 
 class MacroTest : public testing::Test {
 protected:
@@ -42,6 +63,15 @@ protected:
         invocation.globalOptions.target.os = Cangjie::Triple::OSType::LINUX;
         invocation.globalOptions.executablePath = projectPath + "/output/bin";
 #endif
+        std::string cangjieHome = projectPath + "/output";
+#ifdef __x86_64__
+        std::string cangjiePath = cangjieHome + "/modules/linux_x86_64_cjnative";
+#else
+        std::string cangjiePath = cangjieHome + "/modules/linux_aarch64_cjnative";
+#endif
+        setenv("CANGJIE_HOME", cangjieHome.c_str(), 1);
+        setenv("CANGJIE_PATH", cangjiePath.c_str(), 1);
+        invocation.globalOptions.ReadPathsFromEnvironmentVars(GetEnvironmentVars());
         invocation.globalOptions.importPaths = {definePath};
     }
 
@@ -60,7 +90,7 @@ protected:
     std::unique_ptr<TestCompilerInstance> instance;
 };
 
-TEST_F(MacroTest, DISABLED_MacroProcess_Curfile)
+TEST_F(MacroTest, MacroProcess_Curfile)
 {
     auto src = srcPath + "func.cj";
     instance = std::make_unique<TestCompilerInstance>(invocation, diag);
@@ -79,7 +109,7 @@ TEST_F(MacroTest, DISABLED_MacroProcess_Curfile)
     EXPECT_EQ(diag.GetErrorCount(), 0);
 }
 
-TEST_F(MacroTest, DISABLED_MacroCall_GetNewPos)
+TEST_F(MacroTest, MacroCall_GetNewPos)
 {
     auto src = srcPath + "func_not_annotation.cj";
     invocation.globalOptions.enableMacroInLSP = true;
@@ -194,7 +224,7 @@ TEST_F(MacroTest, MacroCall_Complementatcion_For_LSP)
     EXPECT_EQ(diag.GetErrorCount(), 1);
 }
 
-TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP)
+TEST_F(MacroTest, MacroCall_Check_For_LSP)
 {
     Cangjie::ICE::TriggerPointSetter iceSetter(static_cast<int64_t>(Cangjie::ICE::UNITTEST_TP));
     auto defInstance = std::make_unique<TestCompilerInstance>(invocation, diag);
@@ -273,7 +303,7 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP)
     EXPECT_EQ(diag.GetErrorCount(), 2);
 }
 
-TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP_Paralle)
+TEST_F(MacroTest, MacroCall_Check_For_LSP_Paralle)
 {
     Cangjie::ICE::TriggerPointSetter iceSetter(static_cast<int64_t>(Cangjie::ICE::UNITTEST_TP));
     auto defInstance = std::make_unique<TestCompilerInstance>(invocation, diag);
@@ -361,7 +391,7 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP_Paralle)
 }
 
 #ifndef _WIN32
-TEST_F(MacroTest, DISABLED_IfAvailable_In_LSP)
+TEST_F(MacroTest, IfAvailable_In_LSP)
 {
     auto src = srcPath + "test_IfAvailable_LSP.cj";
     invocation.globalOptions.enableMacroInLSP = true;
@@ -375,7 +405,7 @@ TEST_F(MacroTest, DISABLED_IfAvailable_In_LSP)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP_context)
+TEST_F(MacroTest, MacroCall_Check_For_LSP_context)
 {
     std::string command = "cd " + definePath + " && cjc define_childMessage.cj --compile-macro";
     int err = system(command.c_str());
@@ -392,7 +422,7 @@ TEST_F(MacroTest, DISABLED_MacroCall_Check_For_LSP_context)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(MacroTest, DISABLED_MacroDiagReportForLsp)
+TEST_F(MacroTest, MacroDiagReportForLsp)
 {
     std::string command = "cd " + definePath + " && cjc define_report.cj --compile-macro";
     int err = system(command.c_str());
@@ -414,7 +444,7 @@ TEST_F(MacroTest, DISABLED_MacroDiagReportForLsp)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(MacroTest, DISABLED_NoErrorInLSPMacro)
+TEST_F(MacroTest, NoErrorInLSPMacro)
 {
     std::string command = "cd " + definePath + " && cjc define.cj --compile-macro";
     int err = system(command.c_str());
@@ -432,7 +462,7 @@ TEST_F(MacroTest, DISABLED_NoErrorInLSPMacro)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(MacroTest, DISABLED_NoErrorInDeriveEnum)
+TEST_F(MacroTest, NoErrorInDeriveEnum)
 {
     auto src = srcPath + "derive_enum2.cj";
     invocation.globalOptions.enableMacroInLSP = true;
@@ -446,7 +476,7 @@ TEST_F(MacroTest, DISABLED_NoErrorInDeriveEnum)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(MacroTest, DISABLED_MacroCall_HighLight_LSP)
+TEST_F(MacroTest, MacroCall_HighLight_LSP)
 {
     std::string command = "cd " + definePath + " && cjc define3.cj --compile-macro";
     int err = system(command.c_str());
@@ -467,14 +497,14 @@ TEST_F(MacroTest, DISABLED_MacroCall_HighLight_LSP)
         if (auto cd = AST::As<ASTKind::CLASS_DECL>(decl.get()); cd && macrocall) {
             auto newTks = macrocall->GetInvocation()->newTokens;
             // class A
-            ASSERT_TRUE(macrocall->GetMacroCallNewPos(Position{1, 6, 7}).isCurFile);
-            ASSERT_EQ(macrocall->GetMacroCallNewPos(Position{1, 6, 7}), (Position{1, 4, 20}));
+            ASSERT_TRUE(macrocall->GetMacroCallNewPos(Position{1, 13, 7}).isCurFile);
+            ASSERT_EQ(macrocall->GetMacroCallNewPos(Position{1, 13, 7}), (Position{1, 11, 10}));
             // var a
-            auto pos = Position{1, 8, 9};
-            ASSERT_TRUE(macrocall->GetMacroCallNewPos(Position{1, 8, 9}).isCurFile);
-            ASSERT_EQ(macrocall->GetMacroCallNewPos(Position{1, 8, 9}), (Position{1, 4, 40}));
+            auto pos = Position{1, 15, 9};
+            ASSERT_TRUE(macrocall->GetMacroCallNewPos(Position{1, 15, 9}).isCurFile);
+            ASSERT_EQ(macrocall->GetMacroCallNewPos(Position{1, 15, 9}), (Position{1, 11, 20}));
             // identifier ttt, define in macro Rename
-            ASSERT_EQ(newTks[15].Value(), "ttt");
+            ASSERT_EQ(newTks[12].Value(), "ttt");
         }
     }
 }
