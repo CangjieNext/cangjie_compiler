@@ -7,6 +7,7 @@
 #ifndef CANGJIE_CHIR_DESERIALIZER_IMPL_H
 #define CANGJIE_CHIR_DESERIALIZER_IMPL_H
 
+#include "cangjie/CHIR/IR/Value/LiteralValue.h"
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wfloat-equal"
@@ -56,6 +57,9 @@ public:
     void Run(const PackageFormat::CHIRPackage* package);
     explicit CHIRDeserializerImpl(CHIRBuilder& chirBuilder, bool compilePlatform = false)
         : builder(chirBuilder), compilePlatform(compilePlatform){};
+
+private:
+    Constant* DeserializeConstant(Type& resultTy, LiteralValue& val, Block& parent);
 
 private:
     Cangjie::CHIR::CHIRBuilder& builder;
