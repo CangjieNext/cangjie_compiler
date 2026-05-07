@@ -13,6 +13,7 @@
 #define CANGJIE_SEMA_NATIVE_FFI_JAVA_DESUGAR_MANAGER
 
 #include "InteropLibBridge.h"
+#include "NativeFFI/Java/AfterTypeCheck/JArrayDesugarer.h"
 #include "Utils.h"
 
 #include "cangjie/Mangle/BaseMangler.h"
@@ -54,7 +55,8 @@ public:
           lib(importManager, typeManager, diag, utils),
           javaCodeGenPath(javaCodeGenPath),
           outputLibPath(outputLibPath),
-          memberMap(memberMap)
+          memberMap(memberMap),
+          jarrayDesugarer(typeManager, importManager, lib)
     {
         lib.CheckInteropLibVersion();
     }
@@ -681,6 +683,7 @@ private:
     const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& memberMap;
     std::map<std::string, Ptr<FuncDecl>> lambdaConfUtilFuncs;
     bool isInitLambdaUtilFunc = false;
+    JArrayDesugarer jarrayDesugarer;
 };
 
 } // namespace Cangjie::Interop::Java
