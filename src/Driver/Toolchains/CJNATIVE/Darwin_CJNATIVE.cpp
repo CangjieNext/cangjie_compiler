@@ -111,6 +111,7 @@ TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileIn
     tool->AppendArg("-o", tempBinaryInfo.filePath);
     GenerateLinkOptionsForLTO(*tool);
     tool->AppendArg("-object_path_lto", ltoObjectDir);
+    tool->AppendArg("-lto-emit-obj-only");
     tool->AppendArg("-dylib");
     tool->AppendArg("-arch", GetTargetArchString());
 
