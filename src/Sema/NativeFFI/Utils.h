@@ -220,6 +220,11 @@ std::string GetLambdaJavaClassName(Ptr<Ty> ty);
 
 std::string GetCjMappingTupleName(const Ty& tupleTy);
 
+ClassDecl& GetExceptionDecl(const ImportManager& importManager);
+OwnedPtr<ThrowExpr> CreateThrowExceptionCall(
+    ImportManager& importManager, TypeManager& typeManager, const std::string& msg, Ptr<File> curFile);
+bool AreParamTypeKindsValid(const FuncDecl& fd, const std::vector<TypeKind>& typeKinds);
+
 } // namespace Cangjie::Native::FFI
 
 #endif // CANGJIE_SEMA_NATIVE_FFI_UTILS
