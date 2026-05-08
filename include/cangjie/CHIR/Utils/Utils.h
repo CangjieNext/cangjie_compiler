@@ -726,7 +726,7 @@ std::vector<ClassType*> GetSuperTypesRecusively(Type& subType, CHIRBuilder& buil
 Type* GetInstParentCustomTypeForApplyCallee(const Apply& expr, CHIRBuilder& builder);
 Type* GetInstParentCustomTypeForAweCallee(const ApplyWithException& expr, CHIRBuilder& builder);
 
-std::optional<VTableSearchRes> GetFuncIndexInVTable(
+std::vector<VTableSearchRes> GetFuncIndexInVTable(
     Type& root, const FuncCallType& funcCallType, CHIRBuilder& builder);
 
 bool ParamTypeIsEquivalent(const Type& paramType, const Type& argType);
@@ -797,6 +797,12 @@ uint64_t GetRefDims(const Type& type);
  */
 bool IsSTDFunction(const FuncBase& func);
 
-size_t GetBestMatchingResultIndex(const std::vector<FuncType*>& candidateTypes, CHIRBuilder& builder);
+/**
+ * @brief Retrieves the non-debug users of a value.
+ *
+ * @param val The value to retrieve the non-debug users from.
+ * @return The non-debug users of the value.
+ */
+std::vector<Expression*> GetNonDebugUsers(const Value& val);
 } // namespace Cangjie::CHIR
 #endif
