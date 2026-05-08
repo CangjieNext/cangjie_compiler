@@ -872,7 +872,7 @@ FuncType* DynamicDispatch::GetMethodType() const
     return virMethodCtx.originalFuncType;
 }
 
-VTableSearchRes DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& builder) const
+std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& builder) const
 {
     auto thisTypeDeref = thisType->StripAllRefs();
     if (thisTypeDeref->IsThis()) {
@@ -888,8 +888,8 @@ VTableSearchRes DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& builder) cons
     auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
     FuncCallType funcCallType{virMethodCtx.srcCodeIdentifier, instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);
-    CJC_ASSERT(res.has_value());
-    return res.value();
+    CJC_ASSERT(!res.empty());
+    return res;
 }
 
 const std::vector<GenericType*>& DynamicDispatch::GetGenericTypeParams() const
@@ -904,14 +904,25 @@ size_t DynamicDispatch::GetVirtualMethodOffset(CHIRBuilder* builder) const
         return offset.value();
     } else {
         CJC_NULLPTR_CHECK(builder);
-        return GetVirtualMethodInfo(*builder).offset;
+        return GetVirtualMethodInfo(*builder)[0].offset;
     }
 }
 
 ClassType* DynamicDispatch::GetInstSrcParentCustomTypeOfMethod(CHIRBuilder& builder) const
 {
-    const auto& r = GetVirtualMethodInfo(builder);
-    return r.instSrcParentType;
+    for (auto& r : GetVirtualMethodInfo(builder)) {
+        if (r.offset == GetVirtualMethodOffset()) {
+            auto def = r.instSrcParentType->GetClassDef();
+            const auto& parentFuncInfo = def->GetDefVTable().GetExpectedTypeVTable(*def->GetType());
+            auto originalType = parentFuncInfo.GetVirtualMethods()[r.offset].GetOriginalFuncType();
+            if (VirMethodTypeIsMatched(*originalType, *GetMethodType())) {
+                CJC_NULLPTR_CHECK(r.instSrcParentType);
+                return r.instSrcParentType;
+            }
+        }
+    }
+    CJC_ABORT();
+    return nullptr;
 }
 
 AttributeInfo DynamicDispatch::GetVirtualMethodAttr(CHIRBuilder& builder) const
