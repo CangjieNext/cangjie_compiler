@@ -7,7 +7,7 @@
 /**
  * @file
  *
- * This file declares a thin bridge to interoplib.objc library
+ * This file declares a thin bridge to interop runtime and support library
  */
 
 #ifndef CANGJIE_SEMA_OBJ_C_UTILS_INTEROPLIB_BRIDGE_H
@@ -183,7 +183,7 @@ public:
     Ptr<AST::FuncDecl> GetObjCBlockAbiPointerAccessor();
     Ptr<AST::FuncDecl> GetObjCBlockFPointerAccessor();
     /**
-    * Get interoplib.objc.NativeBlockABI declaration
+    * Get objc.internal.NativeBlockABI declaration
     */
     Ptr<AST::StructDecl> GetNativeBlockABIDecl();
     Ptr<AST::StructDecl> GetCangjieBlockABIDecl();
@@ -196,7 +196,7 @@ public:
     static bool IsInteropLibAccessible(ImportManager& importManager);
 
 private:
-    static constexpr auto INTEROPLIB_PACKAGE_NAME = "interoplib.objc";
+    static constexpr auto INTEROPLIB_PACKAGE_NAME = "objc.internal";
 
     template <AST::ASTKind K = AST::ASTKind::DECL> auto GetInteropLibDecl(const std::string& ident)
     {

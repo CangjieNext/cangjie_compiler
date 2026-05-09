@@ -291,11 +291,12 @@ OwnedPtr<Block> CastAndSubstitudeVars(
 
 void DesugarMatchCaseExpr(InteropContext& ctx, MatchCase& expr)
 {
-    auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
-
     std::vector<Ptr<TypePattern>> typePatterns = CollectTypePatternWithObjCClass(ctx, expr.patterns);
     
     if (typePatterns.empty()) { return; }
+
+    auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
+    CJC_ASSERT(objCIdDecl);
 
     std::vector<OwnedPtr<Expr>> interopGuards;
     std::vector<std::tuple<Ptr<VarDecl>, Ptr<Ty>>> patternVars;
@@ -369,8 +370,6 @@ void DesugarMatchCaseExpr(InteropContext& ctx, MatchCase& expr)
 void DesugarLetDestructorExpr(InteropContext& ctx, IfExpr& expr)
 {
     if (auto lpat = As<ASTKind::LET_PATTERN_DESTRUCTOR>(expr.condExpr)) {
-        auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
-
         std::vector<Ptr<TypePattern>> typePatterns = CollectTypePatternWithObjCClass(ctx, lpat->patterns);
         
         if (typePatterns.empty()) { return; }
@@ -389,6 +388,9 @@ void DesugarLetDestructorExpr(InteropContext& ctx, IfExpr& expr)
 
         auto type = static_cast<ClassTy*>(originalTy.get());
         auto targetName = ctx.nameGenerator.GetObjCDeclName(*type->decl);
+
+        auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
+        CJC_ASSERT(objCIdDecl);
 
         pat->type = CreateType(objCIdDecl->ty);
         pat->ty = objCIdDecl->ty;
@@ -428,8 +430,6 @@ void DesugarLetDestructorExpr(InteropContext& ctx, IfExpr& expr)
 void DesugarWhileExpr(InteropContext& ctx, WhileExpr& expr)
 {
     if (auto lpat = As<ASTKind::LET_PATTERN_DESTRUCTOR>(expr.condExpr)) {
-        auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
-
         std::vector<Ptr<TypePattern>> typePatterns = CollectTypePatternWithObjCClass(ctx, lpat->patterns);
 
         if (typePatterns.empty()) { return; }
@@ -448,6 +448,9 @@ void DesugarWhileExpr(InteropContext& ctx, WhileExpr& expr)
 
         auto type = static_cast<ClassTy*>(originalTy.get());
         auto targetName = ctx.nameGenerator.GetObjCDeclName(*type->decl);
+
+        auto objCIdDecl = ctx.bridge.GetObjCIdDecl();
+        CJC_ASSERT(objCIdDecl);
 
         pat->type = CreateType(objCIdDecl->ty);
         pat->ty = objCIdDecl->ty;

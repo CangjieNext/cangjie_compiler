@@ -364,7 +364,7 @@ ERROR(sema_objc_mirror_subtype_cannot_multiple_inherit, "Objective-C mirror subt
 ERROR(sema_objc_mirror_subtype_must_be_annotated, "Objective-C mirror subtype must be annotated with @ObjCMirror or @ObjCImpl")
 ERROR(sema_objc_mirror_subtype_must_inherit_mirror, "@ObjCImpl declaration must inherit @ObjCMirror")
 ERROR(sema_objc_mirror_must_inherit_mirror, "@ObjCMirror declaration cannot inherit not @ObjCMirror declarations")
-ERROR(sema_objc_mirror_interoplib_must_be_imported, "interoplib.objc must be imported to use Objective-C interoperability")
+ERROR(sema_objc_mirror_interoplib_must_be_imported, "objc.lang must be imported to use Objective-C interoperability")
 ERROR(sema_objc_interop_not_supported, "Objective-C interoperability feature '%s' is not yet supported")
 ERROR(sema_objc_pointer_argument_must_be_objc_compatible, "ObjCPointer can only be used with Objective-C compatible types")
 ERROR(sema_objc_interop_toplevel_param_must_be_objc_compatible, "param type of Objective-C mirror top-level function '%s' must be Objective-C compatible")
