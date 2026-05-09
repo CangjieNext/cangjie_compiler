@@ -70,10 +70,8 @@ public:
     void PreSaveFullExportDecls(AST::Package& package);
     void SaveOptions(bool debug, GlobalOptions::OptimizationLevel level);
     inline bool NeedToExportDecl(Ptr<const AST::Decl> decl);
-    void DFSCollectFilesDeclarations(Ptr<AST::File> file,
-        std::unordered_set<AST::File*>& alreadyVisitedFiles,
-        std::vector<Ptr<const AST::Decl>>& topLevelDeclsOrdered,
-        std::unordered_set<AST::Ty*>& usedTys);
+    void DFSCollectFilesDeclarations(Ptr<AST::File> file, std::unordered_set<AST::File*>& alreadyVisitedFiles,
+        std::vector<Ptr<const AST::Decl>>& topLevelDeclsOrdered, std::unordered_set<AST::ModalTy>& usedTys);
     // Export external decls of a package AST to a buffer.
     void ExportAST(const AST::PackageDecl& package);
     void AST2FB(std::vector<uint8_t>& data, const AST::PackageDecl& package);
@@ -222,8 +220,7 @@ private:
         // SuperInterfaceTypes.
         std::vector<FormattedIndex> superInterfaceTypes;
         for (auto& it : decl.inheritedTypes) {
-            superInterfaceTypes.push_back(
-                SaveType(typeManager.SubstituteModal(typeManager.ObtainsAliasType(it.get()).get(), {})));
+            superInterfaceTypes.push_back(SaveType(typeManager.ObtainsAliasType(it.get()).Ty()));
         }
         return builder.CreateVector<FormattedIndex>(superInterfaceTypes);
     }
@@ -330,7 +327,7 @@ private:
     TTypeOffset SaveTupleTy(const AST::TupleTy& type);
     TTypeOffset SaveFuncTy(const AST::FuncTy& type);
     TTypeOffset SaveGenericsTy(const AST::GenericsTy& gty);
-    TTypeOffset SaveNominalTy(const AST::Ty& type);
+    TTypeOffset SaveNominalTy(AST::ModalTy type);
 
     void SaveBasicNodeInfo(PackageFormat::ExprBuilder& dbuilder, const NodeInfo& info);
     Ptr<const AST::Expr> GetRealExpr(const AST::Expr& expr);

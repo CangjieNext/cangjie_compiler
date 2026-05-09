@@ -456,12 +456,12 @@ void ObjCGenerator::GenerateForwardDeclarations()
                 dependencies.insert(Ty::GetDeclOfTy(ty));
             }
         }
-        for (auto&& typeArg : ty->typeArgs) {
+        for (auto&& typeArg : ty->TyArgs()) {
             self(typeArg, self);
         }
     };
     for (auto&& member : decl->GetMemberDecls()) {
-        walker(member->GetTy(), walker);
+        walker(member->DataTy(), walker);
     }
     // remove our own declaration from the set
     dependencies.erase(decl);
@@ -503,8 +503,9 @@ void ObjCGenerator::GenerateExternalDeclarations()
 
         if (declPtr->astKind == ASTKind::FUNC_DECL) {
             const auto& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(declPtr.get());
-            CJC_ASSERT(funcDecl.GetTy()->IsFunc());
-            auto& retTy = *StaticCast<const FuncTy*>(funcDecl.GetTy())->retTy;
+            CJC_ASSERT(funcDecl.DataTy()->IsFunc());
+            auto funcTy = StaticCast<FuncTy>(funcDecl.DataTy());
+            auto& retTy = *funcTy->retTy;
             const auto retType = ctx.typeMapper.IsObjCObjectType(retTy) || ctx.typeMapper.IsObjCBlock(retTy)
                 ? VOID_POINTER_TYPE
                 : MapCJTypeToObjCType(retTy);
@@ -647,7 +648,7 @@ std::string ObjCGenerator::GenerateFuncParamLists(const std::vector<OwnedPtr<Fun
                 genParams += ")";
                 break;
             case FunctionListFormat::CANGJIE_DECL:
-                genParams += cur->identifier.Val() + ": " + Ty::ToString(cur->type->GetTy());
+                genParams += cur->identifier.Val() + ": " + Ty::ToString(cur->type->DataTy());
                 if (i != paramLists[0]->params.size() - 1) {
                     genParams += ", ";
                 }
@@ -673,7 +674,7 @@ std::string ObjCGenerator::GenerateSetterParamLists(const std::string& type) con
 
 bool ObjCGenerator::SkipSetterForValueTypeDecl(Decl& declArg) const
 {
-    return interopType == InteropType::CJ_Mapping && DynamicCast<StructTy*>(declArg.GetTy().get()) != nullptr;
+    return interopType == InteropType::CJ_Mapping && DynamicCast<StructTy*>(declArg.DataTy()) != nullptr;
 }
 
 /*
@@ -707,9 +708,9 @@ void ObjCGenerator::AddProperties()
         const auto& staticType =
             varDecl.TestAttr(Attribute::STATIC) ? ObjCFunctionType::STATIC : ObjCFunctionType::INSTANCE;
         std::string type;
-        if (isGenericGlueCode && varDecl.GetTy()->IsGeneric()) {
+        if (isGenericGlueCode && varDecl.DataTy()->IsGeneric()) {
             auto genericActualTy = TypeManager::GetPrimitiveTy(
-                GetActualTypeKind(GetGenericActualType(genericConfig, varDecl.GetTy()->name)));
+                GetActualTypeKind(GetGenericActualType(genericConfig, varDecl.DataTy()->name)));
             type = MapCJTypeToObjCType(*genericActualTy);
         } else {
             type = MapCJTypeToObjCType(*varDecl.GetTy());
@@ -732,7 +733,7 @@ void ObjCGenerator::AddProperties()
             AddCallCangjieBeforeInitGuard();
         }
         bool isInnerGenericProp = false;
-        if (genericConfig && !varDecl.GetTy()->HasGeneric()) {
+        if (genericConfig && !varDecl.DataTy()->HasGeneric()) {
             isInnerGenericProp = genericConfig->funcNames.find(name) != genericConfig->funcNames.end();
         }
         auto implementationName = genericConfig ? ctx.nameGenerator.GetFieldGetterWrapperName(varDecl, &genericConfig->declInstName,
@@ -1112,13 +1113,13 @@ std::string ObjCGenerator::MapCJTypeToObjCType(const OwnedPtr<Type>& type)
         return UNSUPPORTED_TYPE;
     }
 
-    if (IsGenericParam(type->GetTy(), *decl, genericConfig)) {
+    if (IsGenericParam(type->DataTy(), *decl, genericConfig)) {
         // Current generic only support primitive type.
         auto genericActualTy =
-            TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, type->GetTy()->name)));
+            TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, type->DataTy()->name)));
         return MapCJTypeToObjCType(*genericActualTy);
     }
-    return MapCJTypeToObjCType(*type->GetTy());
+    return MapCJTypeToObjCType(*type->DataTy());
 }
 
 std::string ObjCGenerator::MapCJTypeToObjCType(const OwnedPtr<FuncParam>& param)
@@ -1128,13 +1129,13 @@ std::string ObjCGenerator::MapCJTypeToObjCType(const OwnedPtr<FuncParam>& param)
     }
 
     auto paraTy = param->type->GetTy();
-    if (IsGenericParam(paraTy, *decl, genericConfig)) {
+    if (IsGenericParam(paraTy.Ty(), *decl, genericConfig)) {
         // Current generic only support primitive type.
         auto genericActualTy =
-            TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, paraTy->name)));
+            TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, paraTy.Ty()->name)));
         return MapCJTypeToObjCType(*genericActualTy);
     }
-    return MapCJTypeToObjCType(*param->type->GetTy());
+    return MapCJTypeToObjCType(*param->type->DataTy());
 }
 
 std::string ObjCGenerator::GenerateArgumentCast(const Ty& retTy, std::string value) const
@@ -1142,7 +1143,7 @@ std::string ObjCGenerator::GenerateArgumentCast(const Ty& retTy, std::string val
     if (ctx.typeMapper.IsObjCCJMapping(retTy)) {
         return value + "." + SELF_WEAKLINK_NAME;
     }
-    const auto& actualTy = retTy.IsCoreOptionType() ? *retTy.typeArgs[0] : retTy;
+    const auto& actualTy = retTy.IsCoreOptionType() ? *retTy.TyArg(0) : retTy;
     if (ctx.typeMapper.IsObjCImpl(actualTy)) {
         return CAST_TO_VOID_PTR + std::move(value);
     }
@@ -1258,8 +1259,8 @@ void ObjCGenerator::GenerateMethods4CJMapping()
  */
 void ObjCGenerator::GenerateMethod4CJMapping(AST::FuncDecl& fn)
 {
-    auto fnTy = DynamicCast<FuncTy>(fn.GetTy());
-    CJC_ASSERT(fnTy);
+    auto fnTy = DynamicCast<FuncTy>(fn.DataTy());
+    CJC_NULLPTR_CHECK(fnTy);
     auto originalOpenFn = ctx.fwdOverrideTable.at(&fn);
     CJC_ASSERT(originalOpenFn);
     std::vector<Ptr<FuncParam>> params;

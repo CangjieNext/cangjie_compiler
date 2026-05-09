@@ -83,12 +83,12 @@ protected:
         astPool.emplace_back(std::move(gpd));
     }
 
-    static std::map<AST::TypeKind, Ptr<AST::Ty>> tyMap;
+    static std::map<AST::TypeKind, AST::ModalTy> tyMap;
     static std::vector<OwnedPtr<AST::Ty>> tyPool;
     static std::vector<OwnedPtr<AST::Node>> astPool;
 };
 
-std::map<AST::TypeKind, Ptr<AST::Ty>> CastTyTests::tyMap = {};
+std::map<AST::TypeKind, AST::ModalTy> CastTyTests::tyMap = {};
 std::vector<OwnedPtr<AST::Ty>> CastTyTests::tyPool = {};
 std::vector<OwnedPtr<AST::Node>> CastTyTests::astPool = {};
 

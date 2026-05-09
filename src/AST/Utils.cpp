@@ -195,7 +195,7 @@ FloatTypeInfo GetFloatTypeInfoByKind(AST::TypeKind kind)
 
 void InitializeLitConstValue(LitConstExpr& lce)
 {
-    if (!Ty::IsTyCorrect(lce.GetTy())) {
+    if (!lce.GetTy().IsCorrect()) {
         return;
     }
     // LitConstExpr is always a const expression.
@@ -532,8 +532,8 @@ void ExtractArgumentsOfDeprecatedAnno(
 
 bool IsValidCFuncConstructorCall(const CallExpr& ce)
 {
-    // ce.GetTy() is correct only when the whole CFunc constructor call is correct
-    if (!Ty::IsTyCorrect(ce.GetTy()) || !Is<NameReferenceExpr>(ce.baseFunc)) {
+    // ce.ty is correct only when the whole CFunc constructor call is correct
+    if (!ce.GetTy().IsCorrect() || !Is<NameReferenceExpr>(ce.baseFunc)) {
         return false;
     }
     // if this is a builtin CFunc constructor call, do not check the arguments
@@ -842,7 +842,7 @@ void InsertJavaRefGetterStubWithBody(ClassDecl& decl)
         CreateRefType(INTEROPLIB_CFFI_JAVA_ENTITY),
         CreateBlock(std::move(nodes)));
 
-    auto fd = CreateFuncDecl(JAVA_REF_GETTER_FUNC_NAME, std::move(funcBody), nullptr);
+    auto fd = CreateFuncDecl(JAVA_REF_GETTER_FUNC_NAME, std::move(funcBody), {});
     fd->EnableAttr(Attribute::PUBLIC, Attribute::IN_CLASSLIKE);
     fd->fullPackageName = decl.fullPackageName;
     fd->funcBody->funcDecl = fd.get();

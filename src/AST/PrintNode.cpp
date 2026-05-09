@@ -117,8 +117,8 @@ void PrintBasic(unsigned indent, const Node& node, std::ostream& stream = std::c
     if (!node.scopeName.empty()) {
         PrintIndent(stream, indent, "scopeName:", "\"" + node.scopeName + "\"");
     }
-    if (!Ty::IsInitialTy(node.GetTy())) {
-        PrintIndent(stream, indent, "ty:", node.GetTy()->String());
+    if (!Ty::IsInitialTy(node.DataTy())) {
+        PrintIndent(stream, indent, "ty:", node.GetTy().String());
     }
     PrintIndent(stream, indent, "ptr:", &node);
     const auto& fullPkgName = node.GetFullPackageName();
@@ -1118,7 +1118,7 @@ void PrintRefExpr(unsigned indent, const RefExpr& refExpr, std::ostream& stream 
 
 void PrintPrimitiveTypeExpr(unsigned indent, const PrimitiveTypeExpr& pte, std::ostream& stream = std::cout)
 {
-    PrintIndent(stream, indent, "PrimitiveTypeExpr:", pte.GetTy() ? pte.GetTy()->String() : "unknown", "{");
+    PrintIndent(stream, indent, "PrimitiveTypeExpr:", pte.GetTy() ? pte.GetTy().String() : "unknown", "{");
     PrintBasic(indent + ONE_INDENT, pte, stream);
     if (pte.modal) {
         PrintIndent(stream, indent + ONE_INDENT, "modal:", pte.modal.ToModalInfo().ToString());

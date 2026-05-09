@@ -104,8 +104,8 @@ TVectorOffset<TModeOffset> CreateTyModesVector(
 TVectorOffset<TModeOffset> SaveModalVector(
     flatbuffers::FlatBufferBuilder& fbb, const std::vector<ModalInfo>& modals);
 
-/// Applies modal from serialized Mode; skips substitution when \p mode is null.
-Ptr<AST::Ty> ApplyLoadedModal(TypeManager& typeManager, Ptr<AST::Ty> shape, const PackageFormat::Mode* mode);
+/// Combines shape-only \p ty (from SemaTy / LoadType cache) with optional serialized \p mode.
+AST::ModalTy ApplyLoadedModal(AST::DataTy ty, const PackageFormat::Mode* mode);
 } // namespace Cangjie
 
 #endif

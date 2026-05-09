@@ -70,7 +70,7 @@ bool CanCountedRefExprOrMemberExpr(const Expr& expr)
     return true;
 }
 
-bool ContainsInternalType(const Ptr<Ty>& ty)
+bool ContainsInternalType(ModalTy ty)
 {
     if (!Ty::IsTyCorrect(ty)) {
         return true;

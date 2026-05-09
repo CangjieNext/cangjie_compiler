@@ -71,9 +71,19 @@ LocalModal operator|(LocalModal lhs, LocalModal rhs)
     return static_cast<LocalModal>(static_cast<int>(lhs) | static_cast<int>(rhs));
 }
 
+LocalModal operator&(LocalModal lhs, LocalModal rhs)
+{
+    return static_cast<LocalModal>(static_cast<int>(lhs) & static_cast<int>(rhs));
+}
+
 ModalInfo ModalInfo::operator|(ModalInfo other) const
 {
     return {local | other.local};
+}
+
+ModalInfo ModalInfo::operator&(ModalInfo other) const
+{
+    return {local & other.local};
 }
 
 bool ModalInfo::IsSubModal(ModalInfo other) const

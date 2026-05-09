@@ -40,9 +40,8 @@ NodeInfo ASTWriter::ASTWriterImpl::PackNodeInfo(const Node& node)
     auto [pkgIndex, fileIndex] = GetFileIndex(begin.fileID);
     TPosition posBegin(fileIndex, pkgIndex, begin.line, begin.column, begin.GetStatus() == PositionStatus::IGNORE);
     TPosition posEnd(fileIndex, pkgIndex, end.line, end.column, end.GetStatus() == PositionStatus::IGNORE);
-    auto dataTy = typeManager.SubstituteModal(const_cast<Ty*>(node.GetTy().get()), {});
-    auto ty = SaveType(dataTy);
-    auto mode = SaveModal(builder, node.GetTy()->Modal());
+    auto ty = SaveType(node.DataTy());
+    auto mode = SaveModal(builder, node.TyMode());
 
     return {posBegin, posEnd, ty, mode};
 }
@@ -147,14 +146,14 @@ TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const MemberAccess& ma, con
     auto target = GetFullDeclIndex(ma.target);
     std::vector<FormattedIndex> types(ma.instTys.size());
     for (size_t i = 0; i < ma.instTys.size(); ++i) {
-        types[i] = SaveType(typeManager.SubstituteModal(ma.instTys[i].get(), {}));
+        types[i] = SaveType(ma.instTys[i]);
     }
     auto tyIdx = builder.CreateVector<FormattedIndex>(types);
     FormattedIndex parentTy = INVALID_FORMAT_INDEX;
     TModeOffset parentTyMode{};
     if (ma.matchedParentTy) {
-        parentTy = SaveType(typeManager.SubstituteModal(ma.matchedParentTy.get(), {}));
-        parentTyMode = SaveModal(builder, ma.matchedParentTy->Modal());
+        parentTy = SaveType(ma.matchedParentTy.Ty());
+        parentTyMode = SaveModal(builder, ma.matchedParentTy.Mode());
     }
     auto eInfo = PackageFormat::CreateReferenceInfo(builder, fieldIdx, target, tyIdx, parentTy, parentTyMode);
     PackageFormat::ExprBuilder dbuilder(builder);
@@ -179,8 +178,8 @@ TExprOffset ASTWriter::ASTWriterImpl::SaveExpression(const RefExpr& re, const No
     FormattedIndex parentTy = INVALID_FORMAT_INDEX;
     TModeOffset parentTyMode{};
     if (re.matchedParentTy) {
-        parentTy = SaveType(typeManager.SubstituteModal(re.matchedParentTy.get(), {}));
-        parentTyMode = SaveModal(builder, re.matchedParentTy->Modal());
+        parentTy = SaveType(re.matchedParentTy.Ty());
+        parentTyMode = SaveModal(builder, re.matchedParentTy.Mode());
     }
     auto eInfo = PackageFormat::CreateReferenceInfo(builder, name, target, tyIdx, parentTy, parentTyMode);
     PackageFormat::ExprBuilder dbuilder(builder);
@@ -756,14 +755,15 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveConstPattern(const ConstPattern& cp
     auto info = PackNodeInfo(cp);
     auto tyIdx = builder.CreateVector<FormattedIndex>({info.ty});
     auto exprsIdx = builder.CreateVector<FormattedIndex>(exprs);
+    auto tyModesIdx = info.tyMode.o != 0 ? CreateTyModesVector(builder, {info.tyMode}) : TVectorOffset<TModeOffset>{};
     PackageFormat::PatternBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::PatternKind_ConstPattern);
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
     dbuilder.add_exprs(exprsIdx);
     dbuilder.add_types(tyIdx);
-    if (info.tyMode.o != 0) {
-        dbuilder.add_tyModes(CreateTyModesVector(builder, {info.tyMode}));
+    if (tyModesIdx.o != 0) {
+        dbuilder.add_tyModes(tyModesIdx);
     }
     return dbuilder.Finish();
 }
@@ -772,13 +772,14 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveWildcardPattern(const WildcardPatte
 {
     auto info = PackNodeInfo(wp);
     auto tyIdx = builder.CreateVector<FormattedIndex>({info.ty});
+    auto tyModesIdx = info.tyMode.o != 0 ? CreateTyModesVector(builder, {info.tyMode}) : TVectorOffset<TModeOffset>{};
     PackageFormat::PatternBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::PatternKind_WildcardPattern);
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
     dbuilder.add_types(tyIdx);
-    if (info.tyMode.o != 0) {
-        dbuilder.add_tyModes(CreateTyModesVector(builder, {info.tyMode}));
+    if (tyModesIdx.o != 0) {
+        dbuilder.add_tyModes(tyModesIdx);
     }
     return dbuilder.Finish();
 }
@@ -790,13 +791,14 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveVarPattern(const VarPattern& vp)
     auto info = PackNodeInfo(vp);
     auto tyIdx = builder.CreateVector<FormattedIndex>({info.ty});
     auto exprsIdx = builder.CreateVector<FormattedIndex>({declIdx});
+    auto tyModesIdx = info.tyMode.o != 0 ? CreateTyModesVector(builder, {info.tyMode}) : TVectorOffset<TModeOffset>{};
     PackageFormat::PatternBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::PatternKind_VarPattern);
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
     dbuilder.add_types(tyIdx);
-    if (info.tyMode.o != 0) {
-        dbuilder.add_tyModes(CreateTyModesVector(builder, {info.tyMode}));
+    if (tyModesIdx.o != 0) {
+        dbuilder.add_tyModes(tyModesIdx);
     }
     dbuilder.add_exprs(exprsIdx);
     return dbuilder.Finish();
@@ -811,13 +813,14 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveTuplePattern(const TuplePattern& tp
     auto info = PackNodeInfo(tp);
     auto tyIdx = builder.CreateVector<FormattedIndex>({info.ty});
     auto patternsIdx = builder.CreateVector<TPatternOffset>(patterns);
+    auto tyModesIdx = info.tyMode.o != 0 ? CreateTyModesVector(builder, {info.tyMode}) : TVectorOffset<TModeOffset>{};
     PackageFormat::PatternBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::PatternKind_TuplePattern);
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
     dbuilder.add_types(tyIdx);
-    if (info.tyMode.o != 0) {
-        dbuilder.add_tyModes(CreateTyModesVector(builder, {info.tyMode}));
+    if (tyModesIdx.o != 0) {
+        dbuilder.add_tyModes(tyModesIdx);
     }
     dbuilder.add_patterns(patternsIdx);
     return dbuilder.Finish();
@@ -830,13 +833,14 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveTypePattern(const TypePattern& tp)
     auto info = PackNodeInfo(tp);
     auto tyIdx = builder.CreateVector<FormattedIndex>({info.ty});
     auto patternsIdx = builder.CreateVector<TPatternOffset>({pIdx});
+    auto tyModesIdx = info.tyMode.o != 0 ? CreateTyModesVector(builder, {info.tyMode}) : TVectorOffset<TModeOffset>{};
     PackageFormat::PatternBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::PatternKind_TypePattern);
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
     dbuilder.add_types(tyIdx);
-    if (info.tyMode.o != 0) {
-        dbuilder.add_tyModes(CreateTyModesVector(builder, {info.tyMode}));
+    if (tyModesIdx.o != 0) {
+        dbuilder.add_tyModes(tyModesIdx);
     }
     dbuilder.add_patterns(patternsIdx);
     dbuilder.add_matchBeforeRuntime(tp.matchBeforeRuntime);
@@ -856,13 +860,14 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveEnumPattern(const EnumPattern& ep)
     auto tyIdx = builder.CreateVector<FormattedIndex>({info.ty});
     auto exprsIdx = builder.CreateVector<FormattedIndex>({ctor});
     auto patternsIdx = builder.CreateVector<TPatternOffset>(patterns);
+    auto tyModesIdx = info.tyMode.o != 0 ? CreateTyModesVector(builder, {info.tyMode}) : TVectorOffset<TModeOffset>{};
     PackageFormat::PatternBuilder dbuilder(builder);
     dbuilder.add_kind(PackageFormat::PatternKind_EnumPattern);
     dbuilder.add_begin(&info.begin);
     dbuilder.add_end(&info.end);
     dbuilder.add_types(tyIdx);
-    if (info.tyMode.o != 0) {
-        dbuilder.add_tyModes(CreateTyModesVector(builder, {info.tyMode}));
+    if (tyModesIdx.o != 0) {
+        dbuilder.add_tyModes(tyModesIdx);
     }
     dbuilder.add_exprs(exprsIdx);
     dbuilder.add_patterns(patternsIdx);
@@ -876,7 +881,7 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveExceptTypePattern(const ExceptTypeP
     std::vector<FormattedIndex> types{info.ty};
     for (auto& type : etp.types) {
         CJC_NULLPTR_CHECK(type);
-        types.emplace_back(SaveType(typeManager.ObtainsAliasType(type.get())));
+        types.emplace_back(SaveType(Ptr<const Ty>(typeManager.ObtainsAliasType(type.get()).Ty())));
     }
     auto tyIdx = builder.CreateVector<FormattedIndex>(types);
     auto patternsIdx = builder.CreateVector<TPatternOffset>({pIdx});
@@ -896,7 +901,7 @@ TPatternOffset ASTWriter::ASTWriterImpl::SaveCommandTypePattern(const CommandTyp
     std::vector<FormattedIndex> types{info.ty};
     for (auto& type : ctp.types) {
         CJC_NULLPTR_CHECK(type);
-        types.emplace_back(SaveType(typeManager.ObtainsAliasType(type.get())));
+        types.emplace_back(SaveType(Ptr<const Ty>(typeManager.ObtainsAliasType(type.get()).Ty())));
     }
     auto tyIdx = builder.CreateVector<FormattedIndex>(types);
     auto patternsIdx = builder.CreateVector<TPatternOffset>({pIdx});

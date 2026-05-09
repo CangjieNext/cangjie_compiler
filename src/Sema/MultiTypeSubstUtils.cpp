@@ -13,6 +13,8 @@
 #include "TypeCheckUtil.h"
 #include "cangjie/Sema/TypeManager.h"
 
+#include <unordered_set>
+
 namespace Cangjie::TypeCheckUtil {
 using namespace AST;
 
@@ -94,7 +96,7 @@ SubstPack FilterUnusedMapping(const SubstPack& mapping, const std::set<Ptr<Ty>>&
     return ret;
 }
 
-MultiTypeSubst FilterUnusedMapping(TypeManager& tm, const MultiTypeSubst& mapping, const std::set<Ptr<Ty>>& tys)
+MultiTypeSubst FilterUnusedMapping(const MultiTypeSubst& mapping, const std::set<Ptr<Ty>>& tys)
 {
     std::set<Ptr<TyVar>> all = Utils::GetKeys(mapping);
     std::set<Ptr<TyVar>> reachable;
@@ -102,12 +104,12 @@ MultiTypeSubst FilterUnusedMapping(TypeManager& tm, const MultiTypeSubst& mappin
     // collect tyvars directly used
     std::vector<Ptr<Ty>> dataTys;
     for (auto ty : tys) {
-        dataTys.emplace_back(tm.RemoveModalRec(ty));
+        dataTys.emplace_back(ty);
     }
     for (auto ty : dataTys) {
         auto a = ty->GetGenericTyArgs(all);
         for (auto b : a) {
-            reachable.insert(StaticCast<TyVar>(tm.SubstituteModal(b, {})));
+            reachable.insert(StaticCast<TyVar>(b));
         }
     }
     for (auto tv : reachable) {
@@ -121,7 +123,7 @@ MultiTypeSubst FilterUnusedMapping(TypeManager& tm, const MultiTypeSubst& mappin
             for (auto instTy : mapping.at(tv)) {
                 auto a = instTy->GetGenericTyArgs(all);
                 for (auto b : a) {
-                    reachable.insert(StaticCast<TyVar>(tm.SubstituteModal(b, {})));
+                    reachable.insert(StaticCast<TyVar>(b));
                 }
             }
         }
@@ -184,7 +186,7 @@ std::vector<Ptr<Ty>> GetDeclTypeParams(const Decl& decl)
 {
     if (decl.astKind == ASTKind::EXTEND_DECL) {
         CJC_NULLPTR_CHECK(decl.GetTy());
-        return decl.GetTy()->typeArgs;
+        return decl.GetTy()->TyArgs();
     }
     std::vector<Ptr<Ty>> ret;
     auto generic = decl.GetGeneric();
@@ -192,12 +194,12 @@ std::vector<Ptr<Ty>> GetDeclTypeParams(const Decl& decl)
         return ret;
     }
     for (auto& it : generic->typeParameters) {
-        ret.emplace_back(it->GetTy());
+        ret.emplace_back(it->DataTy());
     }
     return ret;
 }
 
-std::unordered_set<Ptr<Ty>> GetAllGenericTys(TypeManager& tm, Ptr<Ty> ty)
+std::unordered_set<Ptr<Ty>> GetAllGenericTys(Ptr<Ty> ty)
 {
     std::unordered_set<Ptr<Ty>> res;
     std::unordered_set<Ptr<Ty>> visited;
@@ -210,11 +212,11 @@ std::unordered_set<Ptr<Ty>> GetAllGenericTys(TypeManager& tm, Ptr<Ty> ty)
             continue;
         }
         if (curTy->IsGeneric()) {
-            res.emplace(tm.SubstituteModal(curTy, {}));
+            res.emplace(curTy);
             continue;
         }
         for (auto it : curTy->typeArgs) {
-            q.emplace(tm.SubstituteModal(it, {}));
+            q.emplace(it.Ty());
         }
     }
     return res;
@@ -234,7 +236,7 @@ MultiTypeSubst ReduceMultiTypeSubst(TypeManager& tyMgr, const TyVars& tyVars,
             if (auto [_, succ] = visited.emplace(ty); !succ) {
                 continue;
             }
-            auto gtys = GetAllGenericTys(tyMgr, ty);
+            auto gtys = GetAllGenericTys(ty);
             if (gtys.find(p.first) != gtys.cend()) {
                 mapping.erase(p.first);
             }
@@ -258,7 +260,7 @@ MultiTypeSubst ReduceMultiTypeSubst(TypeManager& tyMgr, const TyVars& tyVars,
     return res;
 }
 
-std::vector<SubstPack> ExpandMultiTypeSubst(const SubstPack& maps, const std::set<Ptr<Ty>>& usefulTys)
+std::vector<SubstPack> ExpandMultiTypeSubst(const SubstPack& maps, const std::set<DataTy>& usefulTys)
 {
     std::vector<SubstPack> ret;
     auto filtered = FilterUnusedMapping(maps, usefulTys);
@@ -271,10 +273,24 @@ std::vector<SubstPack> ExpandMultiTypeSubst(const SubstPack& maps, const std::se
     return ret;
 }
 
-std::set<TypeSubst> ExpandMultiTypeSubst(TypeManager& tm, const MultiTypeSubst& mts, const std::set<Ptr<Ty>>& usefulTys)
+std::set<TypeSubst> ExpandMultiTypeSubst(const MultiTypeSubst& mts, const std::set<DataTy>& usefulTys)
 {
-    auto filtered = FilterUnusedMapping(tm, mts, usefulTys);
+    auto filtered = FilterUnusedMapping(mts, usefulTys);
     return ExpandFilteredMultiTypeSubst(filtered);
+}
+
+std::set<TypeSubst> ExpandMultiTypeSubst(
+    TypeManager& tyMgr, const MultiTypeSubst& mts, const std::set<DataTy>& usefulTys)
+{
+    std::unordered_set<Ptr<Ty>> allGeneric;
+    for (auto ty : usefulTys) {
+        if (ty) {
+            allGeneric.merge(GetAllGenericTys(ty));
+        }
+    }
+    TyVars tyVarsForInst = StaticToTyVars(allGeneric);
+    MultiTypeSubst reducedMs = ReduceMultiTypeSubst(tyMgr, tyVarsForInst, mts);
+    return ExpandMultiTypeSubst(reducedMs, usefulTys);
 }
 
 Ptr<Ty> GetMappedTy(const MultiTypeSubst& mts, TyVar* tyVar)
@@ -300,13 +316,23 @@ Ptr<Ty> GetMappedTy(const TypeSubst& typeMapping, TyVar* tyVar)
 }
 
 namespace {
-void InsertInstMapping(TypeManager& tyMgr, SubstPack& m, GenericsTy& genTy, Ty& instTy)
+std::vector<Ptr<Ty>> GetTypeArgTys(const Ty& ty)
+{
+    std::vector<Ptr<Ty>> tys;
+    tys.reserve(ty.typeArgs.size());
+    for (const auto& arg : ty.typeArgs) {
+        tys.emplace_back(arg.Ty());
+    }
+    return tys;
+}
+
+void InsertInstMapping(TypeManager& tyMgr, SubstPack& m, GenericsTy& genTy, DataTy instTy)
 {
     CJC_ASSERT(!genTy.isPlaceholder);
     if (m.u2i.count(&genTy) == 0) {
         m.u2i[&genTy] = tyMgr.AllocTyVar();
     }
-    m.inst[StaticCast<TyVar*>(m.u2i[&genTy])].emplace(&instTy);
+    m.inst[StaticCast<TyVar*>(m.u2i[&genTy])].emplace(instTy);
 }
 
 TypeSubst GenerateTypeMappingByArgs(const std::vector<Ptr<Ty>>& srcArgs, const std::vector<Ptr<Ty>>& instantiateArgs)
@@ -323,7 +349,8 @@ TypeSubst GenerateTypeMappingByArgs(const std::vector<Ptr<Ty>>& srcArgs, const s
                 Ty::GetDeclPtrOfTy(srcArgs[i]) != Ty::GetDeclPtrOfTy(instantiateArgs[i])) {
                 continue;
             }
-            typeMapping.merge(GenerateTypeMappingByArgs(srcArgs[i]->typeArgs, instantiateArgs[i]->typeArgs));
+            typeMapping.merge(
+                GenerateTypeMappingByArgs(GetTypeArgTys(*srcArgs[i]), GetTypeArgTys(*instantiateArgs[i])));
         }
     }
     return typeMapping;
@@ -352,13 +379,13 @@ void GenerateTypeMappingByArgs(
     TypeSubst typeMapping;
     for (size_t i = 0; i < srcArgs.size(); ++i) {
         if (auto genTy = DynamicCast<GenericsTy*>(srcArgs[i])) {
-            InsertInstMapping(tyMgr, m, *genTy, *instantiateArgs[i]);
+            InsertInstMapping(tyMgr, m, *genTy, instantiateArgs[i]);
         } else {
             if (srcArgs[i]->kind != instantiateArgs[i]->kind ||
                 Ty::GetDeclPtrOfTy(srcArgs[i]) != Ty::GetDeclPtrOfTy(instantiateArgs[i])) {
                 continue;
             }
-            GenerateTypeMappingByArgs(tyMgr, m, srcArgs[i]->typeArgs, instantiateArgs[i]->typeArgs);
+            GenerateTypeMappingByArgs(tyMgr, m, GetTypeArgTys(*srcArgs[i]), GetTypeArgTys(*instantiateArgs[i]));
         }
     }
 }
@@ -390,15 +417,15 @@ void GenerateTypeMapping(TypeManager& tyMgr, SubstPack& m, const Decl& decl, con
         return;
     }
     if (decl.astKind == ASTKind::EXTEND_DECL) {
-        auto extendedTypeArgs = StaticCast<ExtendDecl>(decl).extendedType->GetTy()->typeArgs;
+        auto extendedTypeArgs = StaticCast<ExtendDecl>(decl).extendedType->GetTy()->TyArgs();
         GenerateTypeMappingByArgs(tyMgr, m, extendedTypeArgs, typeArgs);
         return;
     }
     if (generic->typeParameters.size() == typeArgs.size()) {
         for (size_t i = 0; i < typeArgs.size(); ++i) {
-            if (Ty::IsTyCorrect(generic->typeParameters[i]->GetTy()) && Ty::IsTyCorrect(typeArgs[i])) {
-                auto genTy = StaticCast<TyVar*>(generic->typeParameters[i]->GetTy());
-                InsertInstMapping(tyMgr, m, *genTy, *typeArgs[i]);
+            if (generic->typeParameters[i]->GetTy().IsCorrect() && Ty::IsTyCorrect(typeArgs[i])) {
+                auto genTy = StaticCast<TyVar>(generic->typeParameters[i]->DataTy());
+                InsertInstMapping(tyMgr, m, *genTy, typeArgs[i]);
             }
         }
     }
@@ -422,8 +449,8 @@ void RelayMappingFromExtendToExtended(TypeManager& tyMgr, SubstPack& m, const Ex
     if (!target) {
         return;
     }
-    auto originalTypeArgs = GetRealTarget(target)->GetTy()->typeArgs;
-    auto extendedTypeArgsInst = decl.extendedType->GetTy()->typeArgs;
+    auto originalTypeArgs = GetRealTarget(target)->GetTy()->TyArgs();
+    auto extendedTypeArgsInst = decl.extendedType->GetTy()->TyArgs();
     for (auto& ty : extendedTypeArgsInst) {
         ty = tyMgr.GetInstantiatedTy(ty, m.u2i);
     }
@@ -438,14 +465,14 @@ TypeSubst GenerateTypeMapping(const Decl& decl, const std::vector<Ptr<Ty>>& type
         return substituteMapping;
     }
     if (decl.astKind == ASTKind::EXTEND_DECL) {
-        auto extendedTypeArgs = StaticCast<ExtendDecl>(decl).extendedType->GetTy()->typeArgs;
+        auto extendedTypeArgs = StaticCast<ExtendDecl>(decl).extendedType->GetTy()->TyArgs();
         return GenerateTypeMappingByArgs(extendedTypeArgs, typeArgs);
     }
     if (generic->typeParameters.size() == typeArgs.size()) {
         for (size_t i = 0; i < typeArgs.size(); ++i) {
-            if (Ty::IsTyCorrect(generic->typeParameters[i]->GetTy()) && Ty::IsTyCorrect(typeArgs[i])) {
+            if (generic->typeParameters[i]->GetTy().IsCorrect() && Ty::IsTyCorrect(typeArgs[i])) {
                 // could be used by instantiated decl, therefore need to check
-                if (auto declGenParam = DynamicCast<TyVar*>(generic->typeParameters[i]->GetTy())) {
+                if (auto declGenParam = DynamicCast<TyVar>(generic->typeParameters[i]->DataTy())) {
                     substituteMapping[declGenParam] = typeArgs[i];
                 }
             }

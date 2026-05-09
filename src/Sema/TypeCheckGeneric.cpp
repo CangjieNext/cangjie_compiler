@@ -107,9 +107,9 @@ void CollectStaticMember(const InheritableDecl& id, std::vector<Ptr<Decl>>& ret)
     }
 }
 
-inline std::unordered_map<Ptr<Ty>, size_t> GetTyArgsIndexMap(const std::vector<Ptr<Ty>>& tyArgs)
+inline std::unordered_map<DataTy, size_t> GetTyArgsIndexMap(const std::vector<DataTy>& tyArgs)
 {
-    std::unordered_map<Ptr<Ty>, size_t> indexMap;
+    std::unordered_map<DataTy, size_t> indexMap;
     for (size_t i = 0; i < tyArgs.size(); ++i) {
         indexMap[tyArgs[i]] = i;
     }
@@ -123,7 +123,7 @@ bool TypeChecker::TypeCheckerImpl::CheckInstTyWithUpperbound(
     if (typeMapping.empty()) {
         return true; // Errors must be reported before.
     }
-    std::unordered_map<Ptr<Ty>, size_t> indexMap = GetTyArgsIndexMap(expr.instTys);
+    std::unordered_map<DataTy, size_t> indexMap = GetTyArgsIndexMap(expr.instTys);
     auto typeArgs = expr.GetTypeArgs();
     // If generic parameter is instantiated by a type that has unimplemented static function, including static funcion
     // in interface and abstract class.
@@ -200,7 +200,6 @@ bool TypeChecker::TypeCheckerImpl::CheckCallGenericDeclInstantiation(
     if (!d) {
         return false;
     }
-    std::vector<Ptr<Ty>> typeArgTys;
     Position diagPos;
     // RefExpr, MemberAccess 's typeArgTys maybe synthesized by type infer, which are saved in instTys of Expr Node.
     if (!typeArgs.empty()) {
@@ -208,7 +207,7 @@ bool TypeChecker::TypeCheckerImpl::CheckCallGenericDeclInstantiation(
     } else {
         diagPos = checkNode.begin;
     }
-    typeArgTys = TypeCheckUtil::GetInstanationTys(checkNode);
+    auto typeArgTys = TypeCheckUtil::GetInstanationTys(checkNode);
     auto genericDecl = d->GetGeneric();
     if (!genericDecl || genericDecl->typeParameters.size() != typeArgTys.size()) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_argument_no_match, checkNode, diagPos);
@@ -218,21 +217,24 @@ bool TypeChecker::TypeCheckerImpl::CheckCallGenericDeclInstantiation(
 }
 
 bool TypeChecker::TypeCheckerImpl::CheckGenericDeclInstantiation(Ptr<const Decl> d,
-    const std::variant<std::vector<Ptr<Type>>, std::vector<Ptr<Ty>>>& arguments, const Node& checkNode)
+    const std::variant<std::vector<Ptr<Type>>, std::vector<ModalTy>>& arguments, const Node& checkNode)
 {
     size_t index = arguments.index();
-    if (!d || !Ty::IsTyCorrect(d->GetTy()) || index == std::variant_npos) {
+    if (!d || !d->GetTy().IsCorrect() || index == std::variant_npos) {
         return false;
     }
 
-    std::vector<Ptr<Ty>> typeArgs;
+    std::vector<DataTy> typeArgs;
     std::vector<Ptr<Type>> typeNodes;
     bool isTypeNode = index == 0;
     if (isTypeNode) {
         typeNodes = std::get<0>(arguments);
-        std::for_each(typeNodes.begin(), typeNodes.end(), [&typeArgs](auto it) { typeArgs.emplace_back(it->GetTy()); });
+        std::for_each(
+            typeNodes.begin(), typeNodes.end(), [&typeArgs](auto it) { typeArgs.emplace_back(it->DataTy()); });
     } else {
-        typeArgs = std::get<1>(arguments);
+        for (const auto& m : std::get<1>(arguments)) {
+            typeArgs.push_back(m.Ty());
+        }
     }
     auto genericParams = GetDeclTypeParams(*d);
     bool invalid = typeArgs.empty() || genericParams.size() != typeArgs.size();
@@ -255,10 +257,10 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericDeclInstantiation(Ptr<const Decl>
     }
     auto typeMapping = GenerateTypeMapping(*d, typeArgs);
     instantiateMap.merge(typeMapping);
-    std::unordered_map<Ptr<Ty>, size_t> indexMap = GetTyArgsIndexMap(typeArgs);
+    std::unordered_map<DataTy, size_t> indexMap = GetTyArgsIndexMap(typeArgs);
     // Check generic constraints.
     for (auto& gc : genericDecl->genericConstraints) {
-        auto instTy = typeManager.GetInstantiatedTy(gc->type->GetTy(), instantiateMap);
+        auto instTy = typeManager.GetInstantiatedTy(gc->type->DataTy(), instantiateMap);
         if (!Ty::IsTyCorrect(instTy)) {
             return false;
         }
@@ -266,7 +268,7 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericDeclInstantiation(Ptr<const Decl>
             continue; // If instantiated ty is generic type with invalid upper bounds, do not report error.
         }
         for (const auto& upperBound : gc->upperBounds) {
-            auto upperBoundTy = typeManager.GetInstantiatedTy(upperBound->GetTy(), instantiateMap);
+            auto upperBoundTy = typeManager.GetInstantiatedTy(upperBound->DataTy(), instantiateMap);
             if (!Ty::IsTyCorrect(upperBoundTy)) {
                 return false;
             }
@@ -275,7 +277,7 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericDeclInstantiation(Ptr<const Decl>
                 auto& node = isTypeNode && !typeNodes[indexMap[instTy]]->TestAttr(Attribute::COMPILER_ADD)
                     ? *typeNodes[indexMap[instTy]]
                     : checkNode;
-                diag.Diagnose(node, DiagKind::sema_generic_type_argument_not_match_constraint, d->GetTy()->String())
+                diag.Diagnose(node, DiagKind::sema_generic_type_argument_not_match_constraint, d->GetTy().String())
                     .AddNote(*gc, DiagKind::sema_which_constraint_not_match, instTy->String(),
                         "'" + upperBoundTy->String() + "'");
                 return false;
@@ -285,7 +287,7 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericDeclInstantiation(Ptr<const Decl>
     return true;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetGenericType(Decl& d, const std::vector<Ptr<Type>>& typeArgs)
+ModalTy TypeChecker::TypeCheckerImpl::GetGenericType(Decl& d, const std::vector<Ptr<Type>>& typeArgs)
 {
     // For GenericParam check typeArgs
     if (auto gp = DynamicCast<GenericParamDecl*>(&d); gp) {
@@ -306,7 +308,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetGenericType(Decl& d, const std::vector<
     // Build generic type mapping.
     TypeSubst typeMapping;
     for (size_t i = 0; i < typeArgs.size(); ++i) {
-        typeMapping[StaticCast<TyVar*>(generic->typeParameters[i]->GetTy())] = typeArgs[i]->GetTy();
+        typeMapping[StaticCast<TyVar*>(generic->typeParameters[i]->DataTy())] = typeArgs[i]->DataTy();
     }
     // Instantiate the typeParameters of base function.
     return typeManager.GetInstantiatedTy(d.GetTy(), typeMapping);
@@ -321,13 +323,13 @@ void TypeChecker::TypeCheckerImpl::CheckGenericExpr(Expr& expr)
         return;
     }
     if (exprTarget->astKind == ASTKind::TYPE_ALIAS_DECL) {
-        std::vector<Ptr<Ty>> diffs = GetUnusedTysInTypeAlias(*StaticAs<ASTKind::TYPE_ALIAS_DECL>(exprTarget));
+        std::vector<ModalTy> diffs = GetUnusedTysInTypeAlias(*StaticAs<ASTKind::TYPE_ALIAS_DECL>(exprTarget));
         Utils::EraseIf(typeArgs, [&diffs](auto type) { return Utils::In(type->GetTy(), diffs); });
     }
 
     expr.SetTy(GetGenericType(*realTarget, typeArgs));
     if (!CheckGenericDeclInstantiation(realTarget, typeArgs, expr)) {
-        expr.SetTy(TypeManager::GetInvalidTy());
+        expr.SetTy({TypeManager::GetInvalidTy()});
         return;
     }
 }
@@ -347,7 +349,7 @@ SubstPack TypeChecker::TypeCheckerImpl::GenerateGenericTypeMapping(const ASTCont
         auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, re->scopeName);
         if (sym && sym->node->IsNominalDecl()) { // Symbol guarantees sym->node not null.
             // Sema ty of structure declaration should be set in PreCheck stage.
-            if (!Ty::IsTyCorrect(sym->node->GetTy())) {
+            if (!sym->node->GetTy().IsCorrect()) {
                 return typeMapping;
             }
             typeManager.GenerateGenericMapping(typeMapping, *sym->node->GetTy());

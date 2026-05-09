@@ -35,7 +35,7 @@ using namespace TypeCheckUtil;
 namespace {
 OwnedPtr<AST::Expr> TryDesugarFunctionCallExpr(OwnedPtr<AST::Expr> base)
 {
-    if (!Ty::IsInitialTy(base->GetTy()) && base->TyKind() != TypeKind::TYPE_FUNC) {
+    if (!Ty::IsInitialTy(base->DataTy()) && base->TyKind() != TypeKind::TYPE_FUNC) {
         // Try to desugar base as base.operator().
         // NOTE: 'curFile' and 'curMacroCall' will be set from caller of current method.
         auto newBase = MakeOwnedNode<MemberAccess>();
@@ -105,7 +105,7 @@ void IgnoreEmptyIntersection(std::vector<Ptr<Type>>& baseArgs)
 {
     for (auto it = baseArgs.begin(); it != baseArgs.end();) {
         CJC_ASSERT(*it != nullptr);
-        auto iTy = DynamicCast<IntersectionTy*>((*it)->GetTy());
+        auto iTy = DynamicCast<IntersectionTy>((*it)->DataTy());
         bool isEmpty = iTy && iTy->tys.empty();
         it = isEmpty ? baseArgs.erase(it) : it + 1;
     }
@@ -592,21 +592,23 @@ void TypeChecker::TypeCheckerImpl::DesugarPointerCall(ASTContext& ctx, CallExpr&
     pointerExpr->type = MakeOwnedNode<Type>();
     ctx.RemoveTypeCheckCache(*pointerExpr);
     ctx.RemoveTypeCheckCache(*(pointerExpr->type));
-    auto baseFuncTy =
-        ce.baseFunc->GetTy() ? typeManager.SubstituteTypeAliasInTy(*ce.baseFunc->GetTy()) : TypeManager::GetInvalidTy();
+    auto baseFuncTy = ce.baseFunc->GetTy()
+        ? typeManager.SubstituteTypeAliasInTy(ce.baseFunc->GetTy())
+        : ModalTy{TypeManager::GetInvalidTy()};
     CJC_ASSERT(baseFuncTy);
     auto typeArgs = baseFuncTy->typeArgs;
     auto baseArgs = ce.baseFunc->GetTypeArgs();
     IgnoreEmptyIntersection(baseArgs);
     // Eg: type A<T> = Pointer<T>; A(v), type arg of this A is not useful.
     bool usefulTypeArg = !typeArgs.empty() && (!typeArgs[0]->IsGeneric() || !baseArgs.empty());
-    Ptr<Ty> argTy = nullptr;
+    ModalTy argTy{};
     if (usefulTypeArg) {
         argTy = typeArgs[0];
     } else if (!baseArgs.empty()) {
         argTy = baseArgs[0]->GetTy();
     }
-    pointerExpr->type->SetTy(typeManager.GetPointerTy(argTy, argTy ? argTy->Modal() : ModalInfo{}));
+    pointerExpr->type->SetTy(
+        ModalTy{typeManager.GetPointerTy(argTy.Ty())}.With(argTy ? argTy.Mode() : AST::ModalInfo{}));
     if (!ce.args.empty()) {
         pointerExpr->arg = std::move(ce.args[0]);
     }
@@ -628,22 +630,22 @@ void TypeChecker::TypeCheckerImpl::DesugarVArrayCall(ASTContext& ctx, CallExpr& 
     arrayExpr->type = MakeOwnedNode<Type>();
     ctx.RemoveTypeCheckCache(*arrayExpr);
     ctx.RemoveTypeCheckCache(*(arrayExpr->type));
-    auto baseFuncTy =
-        ce.baseFunc->GetTy() ? typeManager.SubstituteTypeAliasInTy(*ce.baseFunc->GetTy()) : TypeManager::GetInvalidTy();
+    auto baseFuncTy = ce.baseFunc->GetTy()
+        ? typeManager.SubstituteTypeAliasInTy(ce.baseFunc->GetTy())
+        : ModalTy{TypeManager::GetInvalidTy()};
     CJC_ASSERT(baseFuncTy);
     auto typeArgs = typeManager.GetTypeArgs(*baseFuncTy); // ArrayTy has 'dims', must using function to get arguments.
     auto baseArgs = ce.baseFunc->GetTypeArgs();
     IgnoreEmptyIntersection(baseArgs);
-    auto varrTy = DynamicCast<VArrayTy*>(baseFuncTy);
-    CJC_ASSERT(varrTy);
+    auto varrTy = DynamicCast<VArrayTy*>(baseFuncTy.Ty());
     Ptr<Ty> argTy = TypeManager::GetInvalidTy();
     if (!typeArgs.empty()) {
         argTy = typeArgs[0];
     }
     if (typeArgs[0]->IsGeneric() && !baseArgs.empty()) {
-        argTy = baseArgs[0]->GetTy();
+        argTy = baseArgs[0]->DataTy();
     }
-    arrayExpr->type->SetTy(typeManager.GetVArrayTy(*argTy, varrTy->size, varrTy->Modal()));
+    arrayExpr->type->SetTy({typeManager.GetVArrayTy(*argTy, varrTy->size), baseFuncTy.Mode()});
     arrayExpr->isValueArray = true;
     arrayExpr->args = std::move(ce.args);
     ce.args.clear();

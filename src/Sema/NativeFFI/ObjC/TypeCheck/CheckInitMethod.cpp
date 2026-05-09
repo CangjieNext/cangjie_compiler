@@ -29,7 +29,7 @@ void CheckInitMethod::HandleImpl(TypeCheckContext& ctx)
             continue;
         }
         auto& method = *StaticAs<ASTKind::FUNC_DECL>(member);
-        auto fTy = DynamicCast<FuncTy*>(method.GetTy());
+        auto fTy = DynamicCast<FuncTy*>(method.DataTy());
         if (!fTy || !method.funcBody->retType) {
             continue;
         }
@@ -39,7 +39,8 @@ void CheckInitMethod::HandleImpl(TypeCheckContext& ctx)
             continue;
         }
 
-        Sema::DiagSemaMismatchedTypes(ctx.diag, *method.funcBody->retType, Ty::ToString(mirrorTy), Ty::ToString(retTy));
+        Sema::DiagSemaMismatchedTypes(
+            ctx.diag, *method.funcBody->retType, Ty::ToString(mirrorTy.Ty()), Ty::ToString(retTy.Ty()));
         ctx.target.EnableAttr(Attribute::IS_BROKEN);
     }
 }

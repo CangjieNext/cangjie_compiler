@@ -530,14 +530,14 @@ void TypeChecker::TypeCheckerImpl::CheckValueTypeRecursiveDFSSwitch(Ptr<Decl> ro
     if (root->astKind != ASTKind::STRUCT_DECL && root->astKind != ASTKind::ENUM_DECL) {
         return;
     }
-    if (root->GetTy() != nullptr && root->GetTy()->IsEnum() && DynamicCast<RefEnumTy*>(root->GetTy())) {
+    if (root->GetTy() != nullptr && root->GetTy()->IsEnum() && DynamicCast<RefEnumTy>(root->DataTy())) {
         return;
     }
     auto checkField = [this, &path](const Decl& decl) {
-        if (decl.GetTy()->IsEnum() && DynamicCast<RefEnumTy*>(decl.GetTy())) {
+        if (decl.GetTy()->IsEnum() && DynamicCast<RefEnumTy*>(decl.DataTy())) {
             return;
         }
-        auto needCheckElemTy = Is<TupleTy*>(decl.GetTy()) || Is<VArrayTy*>(decl.GetTy());
+        auto needCheckElemTy = Is<TupleTy*>(decl.DataTy()) || Is<VArrayTy*>(decl.DataTy());
         if (!needCheckElemTy) {
             return CheckValueTypeRecursiveDFS(Ty::GetDeclOfTy(decl.GetTy()), path);
         }
@@ -668,25 +668,25 @@ std::string TyVarBounds::ToString() const
     std::string s = "Lower bounds: ";
     s += "{";
     for (auto& ty : std::as_const(lbs)) {
-        s += Ty::ToString(ty) + ", ";
+        s += ty.String() + ", ";
     }
     s += "}\n";
     s += "Upper bounds: ";
     s += "{";
     for (auto& ty : std::as_const(ubs)) {
-        s += Ty::ToString(ty) + ", ";
+        s += ty.String() + ", ";
     }
     s += "}\n";
     s += "Sum: ";
     s += "{";
     for (auto& ty : std::as_const(sum)) {
-        s += Ty::ToString(ty) + ", ";
+        s += ty.String() + ", ";
     }
     s += "}\n";
     s += "Equals: ";
     s += "{";
     for (auto& ty : std::as_const(eq)) {
-        s += Ty::ToString(ty) + ", ";
+        s += ty.String() + ", ";
     }
     s += "}\n";
     return s;

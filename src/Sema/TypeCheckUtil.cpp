@@ -71,7 +71,7 @@ void UpdateInstTysWithTypeArgs(NameReferenceExpr& expr)
         return;
     }
     for (auto& typeArg : typeArgs) {
-        (void)expr.instTys.emplace_back(typeArg->GetTy());
+        (void)expr.instTys.emplace_back(typeArg->DataTy());
     }
 }
 
@@ -119,7 +119,7 @@ void AddFuncTargetsForMemberAccess(MemberAccess& ma, const std::vector<Ptr<Decl>
 void ReplaceTarget(Ptr<Node> node, Ptr<Decl> target, bool insertTarget)
 {
     if (target == nullptr && (!node->GetTy() || node->GetTy()->IsNothing())) {
-        node->SetTy(TypeManager::GetInvalidTy());
+        node->SetTy({TypeManager::GetInvalidTy()});
     }
     auto aliasDecl = As<ASTKind::TYPE_ALIAS_DECL>(target);
     switch (node->astKind) {
@@ -247,7 +247,7 @@ bool IsOverloadableOperator(TokenKind op)
 
 bool CanSkipDiag(const Node& node)
 {
-    return !Ty::IsTyCorrect(node.GetTy());
+    return !node.GetTy().IsCorrect();
 }
 
 bool IsFieldOperator(const std::string& field)
@@ -255,26 +255,26 @@ bool IsFieldOperator(const std::string& field)
     return Utils::In(field, BUILTIN_OPERATORS);
 }
 
-std::vector<Ptr<Ty>> GetParamTys(const FuncDecl& fd)
+std::vector<ModalTy> GetParamTys(const FuncDecl& fd)
 {
-    if (fd.TestAttr(Attribute::IMPORTED) && Ty::IsTyCorrect(fd.GetTy()) && fd.GetTy()->IsFunc()) {
-        return RawStaticCast<FuncTy*>(fd.GetTy())->paramTys;
+    if (fd.TestAttr(Attribute::IMPORTED) && fd.GetTy().IsCorrect() && fd.GetTy()->IsFunc()) {
+        return DynamicCast<FuncTy*>(fd.DataTy())->paramTys;
     }
     CJC_NULLPTR_CHECK(fd.funcBody);
     return GetFuncBodyParamTys(*fd.funcBody);
 }
 
-std::vector<Ptr<Ty>> GetFuncBodyParamTys(const FuncBody& fb)
+std::vector<ModalTy> GetFuncBodyParamTys(const FuncBody& fb)
 {
     if (fb.paramLists.empty()) {
         return {};
     }
-    std::vector<Ptr<Ty>> ret;
+    std::vector<ModalTy> ret;
     for (auto& param : fb.paramLists[0].get()->params) {
         if (param->type) {
             param->SetTy(param->type->GetTy());
         }
-        ret.emplace_back(param->GetTy() ? param->GetTy() : TypeManager::GetInvalidTy());
+        ret.emplace_back(param->GetTy() ? param->GetTy() : ModalTy{TypeManager::GetInvalidTy()});
     }
     return ret;
 }
@@ -283,7 +283,7 @@ std::vector<Ptr<Ty>> GetFuncBodyParamTys(const FuncBody& fb)
 MultiTypeSubst GenerateTypeMappingBetweenFuncs(TypeManager& typeManager, const FuncDecl& src, const FuncDecl& target)
 {
     MultiTypeSubst typeMapping;
-    if (src.outerDecl && Ty::IsTyCorrect(src.outerDecl->GetTy())) {
+    if (src.outerDecl && src.outerDecl->GetTy().IsCorrect()) {
         typeMapping = typeManager.GenerateStructDeclTypeMapping(*src.outerDecl);
     }
     if (target.TestAttr(Attribute::GENERIC) && src.TestAttr(Attribute::GENERIC)) {
@@ -294,8 +294,8 @@ MultiTypeSubst GenerateTypeMappingBetweenFuncs(TypeManager& typeManager, const F
 }
 
 // Check if src is an override or implement of target. DO NOT call 'Synthesize'.
-bool IsOverrideOrShadow(TypeManager& typeManager, const FuncDecl& src, const FuncDecl& target, const Ptr<Ty> baseTy,
-    const Ptr<AST::Ty> expectInstParent)
+bool IsOverrideOrShadow(
+    TypeManager& typeManager, const FuncDecl& src, const FuncDecl& target, DataTy baseTy, DataTy expectInstParent)
 {
     if (auto ret = typeManager.GetOverrideCache(&src, &target, baseTy, expectInstParent); ret.has_value()) {
         return ret.value();
@@ -308,18 +308,18 @@ bool IsOverrideOrShadow(TypeManager& typeManager, const FuncDecl& src, const Fun
     }
     // override this param must use the same modal. data type always equals.
     if (typeManager.HasThisParam(src) && typeManager.HasThisParam(target)) {
-        if (typeManager.GetThisParamTy(src)->Modal() != typeManager.GetThisParamTy(target)->Modal()) {
+        if (typeManager.GetThisParamTy(src).Mode() != typeManager.GetThisParamTy(target).Mode()) {
             return false;
         }
     }
-    auto srcFt = DynamicCast<FuncTy*>(src.GetTy());
-    auto targetFt = DynamicCast<FuncTy*>(target.GetTy());
+    auto srcFt = DynamicCast<FuncTy*>(src.DataTy());
+    auto targetFt = DynamicCast<FuncTy*>(target.DataTy());
     MultiTypeSubst mts;
     if (expectInstParent) {
         CJC_ASSERT(src.outerDecl && Is<InheritableDecl>(src.outerDecl));
-        MergeTypeSubstToMultiTypeSubst(mts, GenerateTypeMappingByTy(target.outerDecl->GetTy(), expectInstParent));
-        auto substituteToParent = Promotion(typeManager).Promote(*src.outerDecl->GetTy(), *target.outerDecl->GetTy());
-        for (auto p : substituteToParent) {
+        MergeTypeSubstToMultiTypeSubst(mts, GenerateTypeMappingByTy(target.outerDecl->DataTy(), expectInstParent));
+        auto substituteToParent = Promotion(typeManager).Promote(src.outerDecl->DataTy(), target.outerDecl->DataTy());
+        for (const auto& p : substituteToParent) {
             MergeTypeSubstToMultiTypeSubst(mts, GenerateTypeMappingByTy(p, expectInstParent));
         }
         if (target.TestAttr(Attribute::GENERIC) && src.TestAttr(Attribute::GENERIC)) {
@@ -371,7 +371,7 @@ bool IsOverrideOrShadow(TypeManager& typeManager, const FuncDecl& src, const Fun
 }
 
 // Check if src is an override or implement of target. DO NOT call 'Synthesize'.
-bool IsOverrideOrShadow(TypeManager& typeManager, const PropDecl& src, const PropDecl& target, Ptr<Ty> baseTy)
+bool IsOverrideOrShadow(TypeManager& typeManager, const PropDecl& src, const PropDecl& target, DataTy baseTy)
 {
     CJC_ASSERT(src.outerDecl);
     MultiTypeSubst mts = typeManager.GenerateStructDeclTypeMapping(*src.outerDecl);
@@ -459,6 +459,9 @@ std::pair<Ptr<FuncDecl>, Ptr<FuncDecl>> GetUsableGetterSetterForProperty(
 static Ptr<FuncDecl> GetUsableAccessorInOneProp(
     TypeManager& tm, DiagnosticEngine& diag, PropDecl& pd, ModalInfo expectModal, Expr* pos, bool isGetter)
 {
+    if (pd.TestAttr(Attribute::HAS_BROKEN)) {
+        return {};
+    }
     std::vector<Ptr<FuncDecl>> candidates;
     for (auto& g : isGetter ? pd.getters : pd.setters) {
         if (auto thisMod = tm.GetAccessorThisModal(*g); !expectModal.IsSubModal(thisMod)) {
@@ -621,22 +624,23 @@ std::set<Ptr<ExtendDecl>> CollectAllRelatedExtends(TypeManager& tyMgr, Inheritab
     return allExtends;
 }
 
-size_t CountOptionNestedLevel(const Ty& ty)
+size_t CountOptionNestedLevel(DataTy ty)
 {
     size_t level = 0;
-    Ptr<const Ty> currentTy = &ty;
+    DataTy currentTy = ty;
     while (currentTy->IsCoreOptionType()) {
-        CJC_ASSERT(currentTy->typeArgs.size() == 1);
-        CJC_NULLPTR_CHECK(currentTy->typeArgs.front());
-        currentTy = currentTy->typeArgs.front();
+        auto args = currentTy->TyArgs();
+        CJC_ASSERT(args.size() == 1);
+        CJC_NULLPTR_CHECK(args.front());
+        currentTy = args.front();
         level++;
     }
     return level;
 }
 
-Ptr<Ty> UnboxOptionType(Ptr<Ty> ty)
+ModalTy UnboxOptionType(ModalTy ty)
 {
-    Ptr<Ty> optionUnboxTy = ty;
+    ModalTy optionUnboxTy = ty;
     // Option type allow type auto box.
     while (Ty::IsTyCorrect(optionUnboxTy) && optionUnboxTy->IsCoreOptionType()) {
         // CoreOptionType test guarantees that typeArgs.size == 1.
@@ -649,7 +653,7 @@ std::string GetFullInheritedTy(ExtendDecl& extend)
 {
     std::string fullType = PosSearchApi::PosToStr(extend.begin);
     for (auto& interface : extend.inheritedTypes) {
-        fullType += interface->GetTy()->String();
+        fullType += interface->GetTy().String();
     }
     return fullType;
 }
@@ -744,7 +748,7 @@ void AddArrayLitConstructor(ArrayLit& al)
             if (fd->funcBody->paramLists.empty() || fd->funcBody->paramLists[0]->params.size() != 3) {
                 continue;
             }
-            if (GetThisParamModal(*fd) != al.GetTy()->Modal()) {
+            if (GetThisParamModal(*fd) != al.TyMode()) {
                 continue;
             }
             auto firstParamTy = fd->funcBody->paramLists[0]->params[0]->GetTy();
@@ -756,7 +760,7 @@ void AddArrayLitConstructor(ArrayLit& al)
     }
 }
 
-std::optional<std::pair<Ptr<Ty>, size_t>> GetParamTyAccordingToArgName(const FuncDecl& fd, const std::string argName)
+std::optional<std::pair<ModalTy, size_t>> GetParamTyAccordingToArgName(const FuncDecl& fd, const std::string argName)
 {
     CJC_ASSERT(!argName.empty());
     // Null test is done in the caller.
@@ -805,7 +809,7 @@ TyVars GetTyVars(const FuncDecl& fd, const CallExpr& ce, bool ignoreContext)
     auto curGeneric = GetCurrentGeneric(fd, ce);
     if (curGeneric) {
         for (auto& tyParam : curGeneric->typeParameters) {
-            res.emplace(StaticCast<TyVar*>(tyParam->GetTy()));
+            res.emplace(StaticCast<TyVar*>(tyParam->DataTy()));
         }
     }
     // A special case for static function calls or enum constructor.
@@ -824,7 +828,7 @@ TyVars GetTyVars(const FuncDecl& fd, const CallExpr& ce, bool ignoreContext)
         return res;
     }
     for (auto& tyParam : fd.outerDecl->generic->typeParameters) {
-        res.emplace(StaticCast<TyVar*>(tyParam->GetTy()));
+        res.emplace(StaticCast<TyVar*>(tyParam->DataTy()));
     }
     return res;
 }
@@ -862,7 +866,7 @@ TyVars GetTyVarsToSolve(const SubstPack& maps)
 /**
  * This function is only used to collect param types in arguments order and will NOT report diagnostics.
  */
-std::vector<Ptr<Ty>> GetParamTysInArgsOrder(TypeManager& tyMgr, const CallExpr& ce, const FuncDecl& fd)
+std::vector<ModalTy> GetParamTysInArgsOrder(TypeManager& tyMgr, const CallExpr& ce, const FuncDecl& fd)
 {
     if (!fd.funcBody || fd.funcBody->paramLists.empty()) {
         return {};
@@ -877,7 +881,7 @@ std::vector<Ptr<Ty>> GetParamTysInArgsOrder(TypeManager& tyMgr, const CallExpr& 
 
     // Help to record whether named argument has been appear.
     bool namedArgFound = false;
-    std::vector<Ptr<Ty>> tyInArgOrder;
+    std::vector<ModalTy> tyInArgOrder;
     for (size_t i = 0; i < ce.args.size(); ++i) {
         std::string argName = GetArgName(fd, *ce.args[i]);
         if (argName.empty()) {
@@ -929,8 +933,8 @@ std::optional<ModalInfo> GetCallBaseModal(const CallExpr& ce)
             if (re->modal.HasLocal()) {
                 return {re->modal.ToModalInfo()};
             }
-            if (Ty::IsTyCorrect(re->GetTy()) && re->GetTy()->IsLocalType()) {
-                return {re->GetTy()->Modal()};
+            if (re->GetTy().IsCorrect() && re->GetTy().IsLocalType()) {
+                return {re->GetTy().Mode()};
             }
             return {};
         }
@@ -990,29 +994,32 @@ bool AcceptPlaceholderTarget(const AST::Node& n)
 }
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-bool IsNeedRuntimeCheck(TypeManager& typeManager, Ty& srcTy, Ty& targetTy)
+bool IsNeedRuntimeCheck(TypeManager& typeManager, DataTy srcTy, DataTy targetTy)
 {
-    auto isFinalType = [](Ty& ty) {
-        if (ty.IsStruct() || ty.IsEnum() || ty.IsPointer() || ty.IsCString() || ty.IsPrimitive() || Is<VArrayTy>(ty) ||
-            ty.IsArray()) {
+    auto isFinalType = [](DataTy ty) {
+        if (!ty) {
+            return false;
+        }
+        if (ty->IsStruct() || ty->IsEnum() || ty->IsPointer() || ty->IsCString() || ty->IsPrimitive() ||
+            Is<VArrayTy>(ty.get()) || ty->IsArray()) {
             return true;
         }
-        if (ty.IsClass()) {
-            auto decl = Ty::GetDeclPtrOfTy(&ty);
+        if (ty->IsClass()) {
+            auto decl = Ty::GetDeclPtrOfTy(ty);
             return decl && !decl->TestAnyAttr(Attribute::ABSTRACT, Attribute::OPEN);
         }
         return false;
     };
     if (isFinalType(srcTy) && isFinalType(targetTy)) {
-        auto srcDecl = Ty::GetDeclPtrOfTy(&srcTy);
-        auto targetDecl = Ty::GetDeclPtrOfTy(&targetTy);
+        auto srcDecl = Ty::GetDeclPtrOfTy(srcTy);
+        auto targetDecl = Ty::GetDeclPtrOfTy(targetTy);
         if (srcDecl || targetDecl) {
             return srcDecl == targetDecl;
         }
     }
-    return (srcTy.IsClassLike() && targetTy.IsClassLike()) || srcTy.IsGeneric() || targetTy.IsGeneric() ||
-        srcTy.HasGeneric() || targetTy.HasGeneric() || typeManager.IsSubtype(&srcTy, &targetTy, true, false) ||
-        typeManager.IsSubtype(&targetTy, &srcTy, true, false);
+    return (srcTy && srcTy->IsClassLike() && targetTy && targetTy->IsClassLike()) || (srcTy && srcTy->IsGeneric()) ||
+        (targetTy && targetTy->IsGeneric()) || (srcTy && srcTy->HasGeneric()) || (targetTy && targetTy->HasGeneric()) ||
+        typeManager.IsSubtype(srcTy, targetTy, true, false) || typeManager.IsSubtype(targetTy, srcTy, true, false);
 }
 #endif
 
@@ -1052,19 +1059,19 @@ void MergeSubstPack(SubstPack& target, const SubstPack& src)
 }
 
 // decide if one type is subtype/supertype of all types. subtype or supertype is specified by lessThan
-bool LessThanAll(Ptr<Ty> ty, const std::set<Ptr<Ty>>& tys, const std::function<bool(Ptr<Ty>, Ptr<Ty>)>& lessThan)
+bool LessThanAll(DataTy ty, const std::set<DataTy>& tys, const std::function<bool(DataTy, DataTy)>& lessThan)
 {
-    return std::all_of(tys.cbegin(), tys.cend(), [ty, &lessThan](Ptr<Ty> element) { return lessThan(ty, element); });
+    return std::all_of(tys.cbegin(), tys.cend(), [ty, &lessThan](DataTy element) { return lessThan(ty, element); });
 }
 
-Ptr<Ty> FindSmallestTy(const std::set<Ptr<Ty>>& tys, const std::function<bool(Ptr<Ty>, Ptr<Ty>)>& lessThan)
+DataTy FindSmallestTy(const std::set<DataTy>& tys, const std::function<bool(DataTy, DataTy)>& lessThan)
 {
     if (tys.empty()) {
-        return TypeManager::GetNothingTy();
+        return {TypeManager::GetNothingTy()};
     }
-    Ptr<Ty> bubble = nullptr;
+    DataTy bubble{};
     // bubble over one or two tys that are not min by each iteration
-    for (Ptr<Ty> ty : tys) {
+    for (DataTy ty : tys) {
         if (!bubble) {
             bubble = ty;
         } else {
@@ -1090,12 +1097,12 @@ void TryEnforceCandidate(TyVar& tv, const std::set<Ptr<Decl>>& candidates, TypeM
     if (candidates.empty()) {
         return;
     }
-    std::set<Ptr<Ty>> declTys;
+    std::set<DataTy> declTys;
     for (auto d : candidates) {
-        declTys.emplace(d->GetTy());
+        declTys.emplace(d->DataTy());
     }
     auto pro = Promotion(tyMgr);
-    auto isSuperDecl = [&pro](Ptr<Ty> sup, Ptr<Ty> sub) { return sub && sup && !pro.Promote(*sub, *sup).empty(); };
+    auto isSuperDecl = [&pro](DataTy sup, DataTy sub) { return sub && sup && !pro.Promote(sub, sup).empty(); };
     // try to find the most general type
     auto uniq = FindSmallestTy(declTys, isSuperDecl);
     if (Ty::IsTyCorrect(uniq)) {
@@ -1111,21 +1118,21 @@ void TryEnforceCandidate(TyVar& tv, const std::set<Ptr<Decl>>& candidates, TypeM
     }
 }
 
-std::set<Ptr<Ty>> TypeMapToTys(const std::map<TypeKind, TypeKind>& m, bool fromKey, ModalInfo modalInfo)
+std::set<DataTy> TypeMapToTys(const std::map<TypeKind, TypeKind>& m, bool fromKey)
 {
-    std::set<Ptr<Ty>> result;
+    std::set<DataTy> result;
     for (auto& [operandKind, retKind] : m) {
-        result.insert(TypeManager::GetPrimitiveTy(fromKey ? operandKind : retKind, modalInfo));
+        result.insert(TypeManager::GetPrimitiveTy(fromKey ? operandKind : retKind));
     }
     return result;
 }
 
-std::set<Ptr<Ty>> GetGenericParamsForDecl(const AST::Decl& decl)
+std::set<DataTy> GetGenericParamsForDecl(const AST::Decl& decl)
 {
-    std::set<Ptr<Ty>> ret;
+    std::set<DataTy> ret;
     if (decl.generic) {
         for (auto& gp : decl.generic->typeParameters) {
-            ret.insert(gp->GetTy());
+            ret.insert(gp->DataTy());
         }
     }
     if (auto ed = DynamicCast<ExtendDecl*>(&decl)) {
@@ -1135,7 +1142,7 @@ std::set<Ptr<Ty>> GetGenericParamsForDecl(const AST::Decl& decl)
         }
     } else if (auto fd = DynamicCast<FuncDecl*>(&decl); fd && fd->funcBody && fd->funcBody->generic) {
         for (auto& gp : fd->funcBody->generic->typeParameters) {
-            ret.insert(gp->GetTy());
+            ret.insert(gp->DataTy());
         }
     }
     if (auto outer = decl.outerDecl) {
@@ -1144,21 +1151,21 @@ std::set<Ptr<Ty>> GetGenericParamsForDecl(const AST::Decl& decl)
     return ret;
 }
 
-std::set<Ptr<AST::Ty>> GetGenericParamsForTy(const AST::Ty& ty)
+std::set<AST::DataTy> GetGenericParamsForTy(AST::ModalTy ty)
 {
-    if (auto id = Ty::GetDeclPtrOfTy<InheritableDecl>(&ty)) {
+    if (auto id = Ty::GetDeclPtrOfTy<InheritableDecl>(ty)) {
         return GetGenericParamsForDecl(*id);
     }
     return {};
 }
 
-std::set<Ptr<AST::Ty>> GetGenericParamsForCall(const AST::CallExpr& ce, const AST::FuncDecl& fd)
+std::set<AST::DataTy> GetGenericParamsForCall(const AST::CallExpr& ce, const AST::FuncDecl& fd)
 {
     auto ret = GetGenericParamsForDecl(fd);
     auto base = ce.baseFunc.get();
     while (base) {
         if (base->GetTy()) {
-            ret.merge(GetGenericParamsForTy(*base->GetTy()));
+            ret.merge(GetGenericParamsForTy(base->GetTy()));
         }
         if (auto ma = DynamicCast<MemberAccess*>(base)) {
             if (ma->target) {
@@ -1179,18 +1186,18 @@ std::set<Ptr<AST::Ty>> GetGenericParamsForCall(const AST::CallExpr& ce, const AS
     return ret;
 }
 
-std::optional<std::pair<Ptr<FuncDecl>, Ptr<Ty>>> FindInitDecl(const InheritableDecl& decl, TypeManager& typeManager,
-    std::vector<OwnedPtr<Expr>>& valueArgs, const std::vector<Ptr<Ty>> instTys)
+std::optional<std::pair<Ptr<FuncDecl>, DataTy>> FindInitDecl(const InheritableDecl& decl, TypeManager& typeManager,
+    std::vector<OwnedPtr<Expr>>& valueArgs, const std::vector<DataTy> instTys)
 {
-    std::vector<Ptr<Ty>> valueParamTys;
+    std::vector<ModalTy> valueParamTys;
     std::transform(
         valueArgs.begin(), valueArgs.end(), std::back_inserter(valueParamTys), [](auto& arg) { return arg->GetTy(); });
 
     return FindInitDecl(decl, typeManager, valueParamTys, instTys);
 }
 
-std::optional<std::pair<Ptr<FuncDecl>, Ptr<Ty>>> FindInitDecl(const InheritableDecl& decl, TypeManager& typeManager,
-    const std::vector<Ptr<Ty>> valueParamTys, const std::vector<Ptr<Ty>> instTys)
+std::optional<std::pair<Ptr<FuncDecl>, DataTy>> FindInitDecl(const InheritableDecl& decl, TypeManager& typeManager,
+    const std::vector<ModalTy> valueParamTys, const std::vector<DataTy> instTys)
 {
     auto initFuncDecl = GetMemberDecl<FuncDecl>(decl, "init", valueParamTys, typeManager);
 
@@ -1199,11 +1206,11 @@ std::optional<std::pair<Ptr<FuncDecl>, Ptr<Ty>>> FindInitDecl(const InheritableD
     }
 
     return std::make_pair(
-        initFuncDecl, typeManager.GetInstantiatedTy(initFuncDecl->GetTy(), GenerateTypeMapping(decl, instTys)));
+        initFuncDecl, typeManager.GetInstantiatedTy(initFuncDecl->DataTy(), GenerateTypeMapping(decl, instTys)));
 }
 
-OwnedPtr<CallExpr> CreateInitCall(const std::pair<Ptr<FuncDecl>, Ptr<Ty>> initDeclInfo,
-    std::vector<OwnedPtr<Expr>>& valueArgs, File& curFile, const std::vector<Ptr<Ty>> instTys)
+OwnedPtr<CallExpr> CreateInitCall(const std::pair<Ptr<FuncDecl>, DataTy> initDeclInfo,
+    std::vector<OwnedPtr<Expr>>& valueArgs, File& curFile, const std::vector<DataTy> instTys)
 {
     std::vector<OwnedPtr<FuncArg>> valueFuncArgs;
     std::transform(valueArgs.begin(), valueArgs.end(), std::back_inserter(valueFuncArgs),
@@ -1213,14 +1220,14 @@ OwnedPtr<CallExpr> CreateInitCall(const std::pair<Ptr<FuncDecl>, Ptr<Ty>> initDe
     auto initDecl = initDeclInfo.first;
     auto ty = initDeclInfo.second;
     auto refExpr = CreateRefExpr(*initDecl);
-    refExpr->SetTy(ty);
+    refExpr->SetTy({ty});
     refExpr->curFile = &curFile;
     refExpr->instTys = instTys;
     call->baseFunc = std::move(refExpr);
     call->curFile = &curFile;
     call->resolvedFunction = initDecl;
     CJC_ASSERT(ty && ty->IsFunc());
-    call->SetTy(StaticCast<FuncTy>(ty)->retTy);
+    call->SetTy({StaticCast<FuncTy>(ty)->retTy});
     call->args = std::move(valueFuncArgs);
     return call;
 }
@@ -1230,7 +1237,7 @@ OwnedPtr<ThrowExpr> CreateThrowException(
 {
     auto throwExpr = MakeOwned<ThrowExpr>();
     throwExpr->expr = CreateInitCall(FindInitDecl(exceptionDecl, typeManager, args).value(), args, curFile);
-    throwExpr->SetTy(TypeManager::GetNothingTy());
+    throwExpr->SetTy({TypeManager::GetNothingTy()});
     throwExpr->curFile = &curFile;
     return throwExpr;
 }
@@ -1239,7 +1246,7 @@ OwnedPtr<GenericParamDecl> CreateGenericParamDecl(Decl& decl, const std::string&
 {
     auto typeParam = MakeOwned<GenericParamDecl>();
     typeParam->identifier = name;
-    typeParam->SetTy(typeManager.GetGenericsTy(*typeParam, {}));
+    typeParam->SetTy({typeManager.GetGenericsTy(*typeParam)});
     typeParam->outerDecl = &decl;
     typeParam->fullPackageName = decl.fullPackageName;
     return typeParam;
@@ -1254,23 +1261,23 @@ Ptr<FuncDecl> GenerateGetTypeForTypeParamIntrinsic(Package& pkg, TypeManager& ty
 {
     auto file = pkg.files[0].get();
     auto retTy = typeManager.GetCStringTy();
-    auto funcTy = typeManager.GetFunctionTy({}, retTy);
+    auto funcTy = typeManager.GetFunctionTy({}, {retTy});
     auto decl = MakeOwned<FuncDecl>();
     auto funcBody = MakeOwned<FuncBody>();
     funcBody->paramLists.emplace_back(CreateFuncParamList(std::vector<OwnedPtr<FuncParam>>{}));
     funcBody->retType = MakeOwned<RefType>();
-    funcBody->retType->SetTy(retTy);
+    funcBody->retType->SetTy({retTy});
     funcBody->retType->EnableAttr(Attribute::COMPILER_ADD);
     funcBody->generic = MakeOwned<Generic>();
     funcBody->generic->typeParameters.emplace_back(CreateGenericParamDecl(*decl, typeManager));
-    funcBody->SetTy(funcTy);
+    funcBody->SetTy({funcTy});
 
     decl->curFile = file;
     decl->begin = file->begin;
     decl->end = file->begin;
     decl->identifier = GET_TYPE_FOR_TYPE_PARAMETER_FUNC_NAME;
     decl->fullPackageName = pkg.fullPackageName;
-    decl->SetTy(funcTy);
+    decl->SetTy({funcTy});
     decl->funcBody = std::move(funcBody);
     decl->EnableAttr(Attribute::INTRINSIC);
     decl->EnableAttr(Attribute::GENERIC);
@@ -1287,23 +1294,23 @@ Ptr<FuncDecl> GenerateIsSubtypeTypesIntrinsic(Package& pkg, TypeManager& typeMan
 {
     auto file = pkg.files[0].get();
     auto retTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
-    auto funcTy = typeManager.GetFunctionTy({}, retTy);
+    auto funcTy = typeManager.GetFunctionTy({}, {retTy});
     auto decl = MakeOwned<FuncDecl>();
     auto funcBody = MakeOwned<FuncBody>();
     funcBody->paramLists.emplace_back(CreateFuncParamList(std::vector<OwnedPtr<FuncParam>>{}));
     funcBody->retType = MakeOwned<RefType>();
-    funcBody->retType->SetTy(retTy);
+    funcBody->retType->SetTy({retTy});
     funcBody->generic = MakeOwned<Generic>();
     funcBody->generic->typeParameters.emplace_back(CreateGenericParamDecl(*decl, "T1", typeManager));
     funcBody->generic->typeParameters.emplace_back(CreateGenericParamDecl(*decl, "T2", typeManager));
-    funcBody->SetTy(funcTy);
+    funcBody->SetTy({funcTy});
 
     AddCurFile(*decl, file);
     decl->begin = file->begin;
     decl->end = file->begin;
     decl->identifier = IS_SUBTYPE_TYPES_FUNC_NAME;
     decl->fullPackageName = pkg.fullPackageName;
-    decl->SetTy(funcTy);
+    decl->SetTy({funcTy});
     decl->funcBody = std::move(funcBody);
     decl->EnableAttr(Attribute::INTRINSIC);
     decl->EnableAttr(Attribute::GENERIC);

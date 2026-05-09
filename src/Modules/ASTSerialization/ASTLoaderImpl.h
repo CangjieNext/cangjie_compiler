@@ -59,9 +59,9 @@ public:
     }
 
     std::string importedPackageName;
-    Ptr<AST::Ty> LoadType(FormattedIndex type);
-    std::vector<Ptr<AST::Ty>> LoadFuncSemaTyParamTypes(const PackageFormat::SemaTy& typeObj);
-    Ptr<AST::Ty> LoadFuncSemaTyRetType(const PackageFormat::SemaTy& typeObj);
+    AST::DataTy LoadType(FormattedIndex type);
+    std::vector<AST::ModalTy> LoadFuncSemaTyParamTypes(const PackageFormat::SemaTy& typeObj);
+    AST::ModalTy LoadFuncSemaTyRetType(const PackageFormat::SemaTy& typeObj);
     // A flag to avoid conflicts when we are reusing the AST serialiser from CHIR
     bool isChirNow = false;
 
@@ -77,7 +77,7 @@ private:
     // Store dependent package names in loading index order.
     std::vector<std::string> importedFullPackageNames;
     // Loaded all types and decls
-    std::vector<Ptr<AST::Ty>> allTypes;
+    std::vector<AST::DataTy> allTypes;
     // When exporting ast, we use fileOffest in each package and index is offset in vector puls 1.
     std::vector<unsigned int> allFileIds;
     std::unordered_map<unsigned int, Ptr<AST::File>> idToFileMap;
@@ -229,7 +229,7 @@ private:
     // Load Position Node according to Position object.
     Position LoadPos(const PackageFormat::Position* posObj);
     void LoadImportContent(AST::ImportContent& content, const PackageFormat::ImportSpec& is) const;
-    std::vector<Ptr<AST::Ty>> LoadTypeArgs(const PackageFormat::SemaTy& typeObj);
+    std::vector<AST::DataTy> LoadTypeArgs(const PackageFormat::SemaTy& typeObj);
     void SetGenericTy(FormattedIndex type, const PackageFormat::SemaTy& typeObj);
     bool GetPrimitiveTy(FormattedIndex type, const PackageFormat::SemaTy* typeObj);
     template <typename TypeT, typename TypeDecl = void>

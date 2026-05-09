@@ -85,13 +85,13 @@ std::unordered_set<Ptr<const StructTy>> CollectChangedStructTypes(
         if (decl->astKind != ASTKind::STRUCT_DECL || decl->TestAttr(Attribute::GENERIC)) {
             continue;
         }
-        if (auto structTy = DynamicCast<StructTy*>(decl->GetTy())) {
+        if (auto structTy = DynamicCast<StructTy>(decl->DataTy())) {
             (void)tys.emplace(structTy);
         }
     }
     for (auto& it : pkg.genericInstantiatedDecls) {
         if (it->toBeCompiled && it->astKind == ASTKind::STRUCT_DECL) {
-            (void)tys.emplace(StaticCast<StructTy*>(it->GetTy()));
+            (void)tys.emplace(StaticCast<StructTy*>(it->DataTy()));
         }
     }
     return tys;
@@ -159,18 +159,18 @@ void HandleCtorForIncr(
     });
 }
 
-std::string GetTypeRawMangleName(const Ty& ty)
+std::string GetTypeRawMangleName(ModalTy ty)
 {
     std::string name;
-    auto boxDecl = Ty::GetDeclPtrOfTy(&ty);
+    auto boxDecl = Ty::GetDeclPtrOfTy(ty);
     if (boxDecl) {
         name = boxDecl->rawMangleName;
     } else {
         // NOTE: extend of function & tuple type is not supported now.
-        CJC_ASSERT(ty.IsBuiltin());
-        name = ASTMangler::MangleBuiltinType(Ty::KindName(ty.kind));
+        CJC_ASSERT(ty->IsBuiltin());
+        name = ASTMangler::MangleBuiltinType(Ty::KindName(ty.Kind()));
     }
-    return name + MangleUtils::MangleLocalModifier(ty.Modal());
+    return name + MangleUtils::MangleLocalModifier(ty.Mode());
 }
 
 std::string GetRawMangleOfBoxedType(const InheritableDecl& cd)
@@ -179,7 +179,7 @@ std::string GetRawMangleOfBoxedType(const InheritableDecl& cd)
     for (auto& member : cd.GetMemberDecls()) {
         if (auto vd = DynamicCast<VarDecl>(member.get())) {
             CJC_ASSERT(vd->identifier == "$value");
-            return GetTypeRawMangleName(*vd->GetTy());
+            return GetTypeRawMangleName(vd->GetTy());
         }
     }
     InternalError("Found incorrect base box class: " + cd.identifier);

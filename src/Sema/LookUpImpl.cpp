@@ -39,10 +39,10 @@ public:
     std::vector<Ptr<Decl>> Lookup(const std::string& name, const std::string& scopeName, const Node& node,
         bool onlyLookUpTopLevel = false, bool isSetter = false);
     void FieldLookupExtend(
-        Ty& ty, const std::string& fieldName, std::vector<Ptr<Decl>>& results, const LookupInfo& info);
+        DataTy ty, const std::string& fieldName, std::vector<Ptr<Decl>>& results, const LookupInfo& info);
 
 private:
-    void AddMemberIfValidForLookup(std::vector<Ptr<Decl>>& results, Ty& baseTy, bool isSetter, Decl& decl);
+    void AddMemberIfValidForLookup(std::vector<Ptr<Decl>>& results, DataTy baseTy, bool isSetter, Decl& decl);
     /**
      * @brief Determine whether @param decl forms an override or implementation with decl in @param results.
      *        If decl in @param results override the @param decl, do nothing.
@@ -120,7 +120,7 @@ inline Ptr<T> GetSpecificDecl(Ptr<Decl> decl)
 }
 } // namespace
 
-void LookUpImpl::AddMemberIfValidForLookup(std::vector<Ptr<Decl>>& results, Ty& baseTy, bool isSetter, Decl& decl)
+void LookUpImpl::AddMemberIfValidForLookup(std::vector<Ptr<Decl>>& results, DataTy baseTy, bool isSetter, Decl& decl)
 {
     bool covered{false};
     if (auto pd = DynamicCast<PropDecl*>(&decl); pd) {
@@ -136,14 +136,14 @@ void LookUpImpl::AddMemberIfValidForLookup(std::vector<Ptr<Decl>>& results, Ty& 
     }
     if (decl.astKind != ASTKind::FUNC_DECL) {
         if (auto prop = DynamicCast<PropDecl>(&decl)) {
-            UpdatePropOverriddenCache(typeManager, *prop, results, &baseTy);
+            UpdatePropOverriddenCache(typeManager, *prop, results, baseTy);
         }
         results.push_back(&decl);
         return;
     }
     for (auto it = results.begin(); it != results.end();) {
         if (auto fd2 = DynamicCast<FuncDecl*>(*it);
-            fd2 && IsOverrideOrShadow(typeManager, *fd2, static_cast<FuncDecl&>(decl), &baseTy)) {
+            fd2 && IsOverrideOrShadow(typeManager, *fd2, static_cast<FuncDecl&>(decl), baseTy)) {
             // if fd2 is abstract and fd1 is the implementation, then we remove fd2 from results and push
             // fd1 into results
             if (fd2->TestAttr(Attribute::ABSTRACT) && !decl.TestAttr(Attribute::ABSTRACT)) {
@@ -162,14 +162,13 @@ void LookUpImpl::AddMemberIfValidForLookup(std::vector<Ptr<Decl>>& results, Ty& 
 }
 
 void LookUpImpl::FieldLookupExtend(
-    Ty& ty, const std::string& fieldName, std::vector<Ptr<Decl>>& results, const LookupInfo& info)
+    DataTy ty, const std::string& fieldName, std::vector<Ptr<Decl>>& results, const LookupInfo& info)
 {
     CJC_NULLPTR_CHECK(info.file);
     // NOTE: decl which has 'IN_REFERENCE_CYCLE' should only be intercepted during checking 'inheritedTypes'.
     OrderedDeclSet extendFuncs; // Ordered set for diagnostic consistency.
     // always use data type for lookup
-    auto dataTy = typeManager.SubstituteModal(&ty, {});
-    auto extends = typeManager.GetAllExtendsByTy(*dataTy);
+    auto extends = typeManager.GetAllExtendsByTy(*ty);
     std::set<Ptr<ExtendDecl>, CmpNodeByPos> orderExtends(extends.begin(), extends.end());
     for (auto& extend : orderExtends) {
         CJC_NULLPTR_CHECK(extend);
@@ -196,12 +195,12 @@ void LookUpImpl::FieldLookupExtend(
             if (it == nullptr) {
                 continue;
             }
-            auto interfaceDecl = Ty::GetDeclPtrOfTy(it->GetTy());
+            auto interfaceDecl = Ty::GetDeclPtrOfTy(it->DataTy());
             if (!interfaceDecl || interfaceDecl->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
                 continue;
             }
-            auto mappingExtendWithDecl = GenerateTypeMappingByTy(extend->GetTy(), &ty);
-            auto interfaceTy = typeManager.GetInstantiatedTy(it->GetTy(), mappingExtendWithDecl);
+            auto mappingExtendWithDecl = GenerateTypeMappingByTy(extend->DataTy(), ty);
+            auto interfaceTy = typeManager.GetInstantiatedTy(it->DataTy(), mappingExtendWithDecl);
             FieldLookup(*StaticCast<InterfaceTy>(interfaceTy), fieldName, results, info);
         }
     }
@@ -222,7 +221,7 @@ void LookUpImpl::ResolveOverrideOrShadow(std::vector<Ptr<Decl>>& results, Decl& 
         }
         auto newDecl = RawStaticCast<Decl*>(&decl);
         auto inResult = RawStaticCast<Decl*>(results[i]);
-        Ptr<Ty> inResultOuter = inResult->outerDecl->GetTy();
+        Ptr<Ty> inResultOuter = inResult->outerDecl->DataTy();
         if (resultsWithInstTyV.size() > i && resultsWithInstTyV[i].second) {
             inResultOuter = resultsWithInstTyV[i].second;
         } else if (inResult->outerDecl->astKind == ASTKind::EXTEND_DECL &&
@@ -230,10 +229,10 @@ void LookUpImpl::ResolveOverrideOrShadow(std::vector<Ptr<Decl>>& results, Decl& 
             // If the decl in results is from extend, we need to check whether the outer type of decl in results
             // is subtype of parentTy. If not, we need to get the instantiated type of the outer type of decl in
             // results.
-            auto extendTy = inResult->outerDecl->GetTy();
+            auto extendTy = inResult->outerDecl->DataTy();
             auto extendedDecl = Ty::GetDeclPtrOfTy(extendTy);
             if (extendedDecl) {
-                auto mappingExtendWithDecl = GenerateTypeMappingByTy(extendTy, extendedDecl->GetTy());
+                auto mappingExtendWithDecl = GenerateTypeMappingByTy(extendTy, extendedDecl->DataTy());
                 inResultOuter = typeManager.GetInstantiatedTy(inResultOuter, mappingExtendWithDecl);
             }
         }
@@ -290,7 +289,7 @@ void LookUpImpl::FieldLookup(
                 foundTy = genericTy;
             }
         }
-        AddMemberIfValidForLookup(results, *TypeManager::GetNonNullTy(foundTy), info.isSetter, *decl);
+        AddMemberIfValidForLookup(results, TypeManager::GetNonNullTy(foundTy).Ty(), info.isSetter, *decl);
     }
     if (!info.lookupInherit) {
         return;
@@ -306,18 +305,18 @@ void LookUpImpl::FieldLookup(
             superInfo.lookupExtend = true;
             FieldLookup(*superClass, fieldName, results, superInfo);
         } else if (Is<InterfaceDecl*>(super)) {
-            FieldLookup(*StaticCast<InterfaceTy>(it->GetTy()), fieldName, results, {info.baseTy});
+            FieldLookup(*StaticCast<InterfaceTy>(it->DataTy()), fieldName, results, {info.baseTy});
         }
     }
     if (info.lookupExtend) {
-        FieldLookupExtend(*cd.GetTy(), fieldName, results, info);
+        FieldLookupExtend(cd.DataTy(), fieldName, results, info);
     }
 }
 
 void LookUpImpl::FieldLookup(
     InterfaceTy& idTy, const std::string& fieldName, std::vector<Ptr<Decl>>& results, const LookupInfo& info)
 {
-    auto dataTy = StaticCast<InterfaceTy>(typeManager.SubstituteModal(&idTy, {}));
+    auto dataTy = StaticCast<InterfaceTy>(&idTy);
     auto id = GetSpecificDecl<InterfaceDecl>(dataTy->decl);
     // NOTE: decl which has 'IN_REFERENCE_CYCLE' should only be intercepted during checking 'inheritedTypes'.
     if (!id->body) {
@@ -350,9 +349,9 @@ void LookUpImpl::FieldLookup(
         if (!it) {
             continue;
         }
-        if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy());
+        if (auto interfaceTy = DynamicCast<InterfaceTy>(it->DataTy());
             interfaceTy && interfaceTy->decl && !interfaceTy->decl->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
-            auto promTys = Promotion(typeManager).Promote(idTy, *it->GetTy());
+            auto promTys = Promotion(typeManager).Promote(&idTy, it->DataTy());
             for (auto promTy : promTys) {
                 FieldLookup(*StaticCast<InterfaceTy>(promTy), fieldName, results, {info.baseTy});
             }
@@ -375,13 +374,13 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(const EnumDecl& ed, const std::st
         }
     }
     for (auto& it : ed.inheritedTypes) {
-        if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy());
+        if (auto interfaceTy = DynamicCast<InterfaceTy>(it->DataTy());
             interfaceTy && interfaceTy->decl && !interfaceTy->decl->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
             FieldLookup(*interfaceTy, fieldName, results, info);
         }
     }
     if (info.lookupExtend) {
-        FieldLookupExtend(*ed.GetTy(), fieldName, results, info);
+        FieldLookupExtend(ed.DataTy(), fieldName, results, info);
     }
     return results;
 }
@@ -400,7 +399,7 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(
         if (it == nullptr) {
             return;
         }
-        if (auto interfaceTy = DynamicCast<InterfaceTy*>(it->GetTy());
+        if (auto interfaceTy = DynamicCast<InterfaceTy>(it->DataTy());
             interfaceTy && interfaceTy->decl && !interfaceTy->decl->TestAttr(Attribute::IN_REFERENCE_CYCLE)) {
             FieldLookup(*interfaceTy, fieldName, results, info);
         }
@@ -408,7 +407,7 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(
     std::for_each(sd.body->decls.begin(), sd.body->decls.end(), bodySetter);
     std::for_each(sd.inheritedTypes.begin(), sd.inheritedTypes.end(), inheritedTypesSetter);
     if (info.lookupExtend) {
-        FieldLookupExtend(*sd.GetTy(), fieldName, results, info);
+        FieldLookupExtend(sd.DataTy(), fieldName, results, info);
     }
     return results;
 }
@@ -436,9 +435,9 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(Ptr<Decl> decl, const std::string
         FieldLookup(*cd, fieldName, results, info);
         return results;
     }
-    if (auto id = DynamicCast<InterfaceDecl*>(decl); id && Ty::IsTyCorrect(id->GetTy())) {
+    if (auto id = DynamicCast<InterfaceDecl*>(decl); id && id->GetTy().IsCorrect()) {
         CJC_ASSERT(id->TyKind() == TypeKind::TYPE_INTERFACE);
-        FieldLookup(*StaticCast<InterfaceTy>(id->GetTy()), fieldName, results, info);
+        FieldLookup(*StaticCast<InterfaceTy>(id->DataTy()), fieldName, results, info);
         return results;
     }
     if (auto ed = DynamicCast<EnumDecl*>(decl)) {
@@ -630,7 +629,7 @@ void LookUpImpl::ProcessStructDeclBody(
     auto typeDecl = Ty::GetDeclPtrOfTy(currentDecl->GetTy());
     if (!typeDecl) {
         // Lookup for extend of builtin type.
-        FieldLookupExtend(*currentDecl->GetTy(), name, results, info);
+        FieldLookupExtend(currentDecl->DataTy(), name, results, info);
         return;
     }
     auto fields = FieldLookup(typeDecl, name, info);
@@ -744,13 +743,13 @@ std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::LookupTopLevel(
 }
 
 std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::ExtendFieldLookup(
-    const ASTContext& ctx, const File& file, Ptr<Ty> ty, const std::string& fieldName)
+    const ASTContext& ctx, const File& file, DataTy ty, const std::string& fieldName)
 {
     LookUpImpl lookUpImpl(ctx, diag, typeManager, importManager);
     std::vector<Ptr<Decl>> results = {};
     if (Ty::IsTyCorrect(ty)) {
         LookupInfo info{ty, &file};
-        lookUpImpl.FieldLookupExtend(*ty, fieldName, results, info);
+        lookUpImpl.FieldLookupExtend(ty, fieldName, results, info);
     }
     return results;
 }

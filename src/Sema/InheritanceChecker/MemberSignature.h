@@ -26,11 +26,11 @@ struct MemberSignature {
      * Otherwise, it is null.
      */
     Ptr<AST::ExtendDecl> extendDecl = nullptr;
-    std::vector<std::unordered_set<Ptr<AST::Ty>>> upperBounds;
+    std::vector<std::unordered_set<AST::DataTy>> upperBounds;
     /*
      * List of the corresponding types came from super-types which are inconsistent.
      */
-    std::unordered_set<Ptr<const AST::Ty>> inconsistentTypes;
+    std::unordered_set<AST::ModalTy> inconsistentTypes;
     /*
      * True: if this member has multiple default implementation.
      */

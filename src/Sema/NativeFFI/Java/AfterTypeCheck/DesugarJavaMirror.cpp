@@ -52,7 +52,7 @@ void JavaDesugarManager::InsertArrayJavaEntityGet(ClassDecl& decl)
     auto javaEntityGetDecl = ASTCloner::Clone(getOperationDecl);
     javaEntityGetDecl->identifier = JAVA_ARRAY_GET_FOR_REF_TYPES;
     javaEntityGetDecl->SetTy(
-        typeManager.GetFunctionTy({TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT32)}, lib.GetJavaEntityTy()));
+        {typeManager.GetFunctionTy({{TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT32)}}, {lib.GetJavaEntityTy()})});
 
     auto javaEntity = lib.GetJavaEntityTy();
     if (!javaEntity || !javaEntityGetDecl->funcBody->retType) {
@@ -97,12 +97,12 @@ void JavaDesugarManager::InsertArrayJavaEntitySet(ClassDecl& decl)
     javaEntitySetDecl->identifier = JAVA_ARRAY_SET_FOR_REF_TYPES;
     javaEntitySetDecl->funcBody->paramLists[0]->params[1]->SetTy(javaEntity);
     if (javaEntitySetDecl->funcBody->paramLists[0]->params[1]->type) {
-        javaEntitySetDecl->funcBody->paramLists[0]->params[1]->type->SetTy(javaEntity);
+        javaEntitySetDecl->funcBody->paramLists[0]->params[1]->type->SetTy({javaEntity});
     }
     javaEntitySetDecl->SetTy(
-        typeManager.GetFunctionTy({TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT32), javaEntity}, unitTy));
+        {typeManager.GetFunctionTy({{TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT32)}, {javaEntity}}, {unitTy})});
 
-    javaEntitySetDecl->funcBody->retType->SetTy(unitTy);
+    javaEntitySetDecl->funcBody->retType->SetTy({unitTy});
     decl.body->decls.push_back(std::move(javaEntitySetDecl));
 }
 
@@ -149,7 +149,7 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
             false);
 
         auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
-        auto refAssignment = CreateAssignExpr(std::move(lhsRef), std::move(rhs), unitTy);
+        auto refAssignment = CreateAssignExpr(std::move(lhsRef), std::move(rhs), {unitTy});
         ctorNodes.push_back(lib.CreateEnsureNotNullCall(WithinFile(CreateRefExpr(*param), curFile)));
         ctorNodes.push_back(std::move(refAssignment));
     } else if (!doStub) {
@@ -157,13 +157,13 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
         CJC_NULLPTR_CHECK(ctor);
         auto actualParam = CreateFuncArg(WithinFile(CreateRefExpr(*ctor->funcBody->paramLists[0]->params[0]), curFile));
         auto& superCtor = *GetGeneratedJavaMirrorConstructor(*decl.GetSuperClassDecl());
-        auto superCall = CreateSuperCall(decl, superCtor, superCtor.GetTy());
+        auto superCall = CreateSuperCall(decl, superCtor, superCtor.DataTy());
         superCall->args.emplace_back(std::move(actualParam));
         ctor->funcBody->body->body.emplace_back(std::move(superCall));
         return;
     }
 
-    std::vector<Ptr<Ty>> ctorFuncParamTys;
+    std::vector<ModalTy> ctorFuncParamTys;
     ctorFuncParamTys.push_back(param->GetTy());
     auto ctorFuncTy = typeManager.GetFunctionTy(std::move(ctorFuncParamTys), decl.GetTy());
 
@@ -177,7 +177,7 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
     auto ctorFuncBody = CreateFuncBody(
         std::move(paramLists), CreateRefType(decl), CreateBlock(std::move(ctorNodes), decl.GetTy()), decl.GetTy());
 
-    auto fd = CreateFuncDecl("init", std::move(ctorFuncBody), ctorFuncTy);
+    auto fd = CreateFuncDecl("init", std::move(ctorFuncBody), {ctorFuncTy});
     fd->fullPackageName = decl.fullPackageName;
     fd->outerDecl = &decl;
     fd->funcBody->funcDecl = fd.get();
@@ -197,11 +197,11 @@ void JavaDesugarManager::InsertJavaMirrorFinalizer(ClassDecl& mirror)
 {
     static auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     auto curFile = mirror.curFile;
-    auto fbody = CreateFuncBody({}, nullptr, CreateBlock({}, unitTy), unitTy);
+    auto fbody = CreateFuncBody({}, nullptr, CreateBlock({}, {unitTy}), {unitTy});
     fbody->paramLists.emplace_back(MakeOwned<FuncParamList>());
     auto delCall = lib.CreateDeleteGlobalRefCall(lib.CreateGetJniEnvCall(curFile), CreateJavaRefCall(mirror, curFile));
     fbody->body->body.emplace_back(std::move(delCall));
-    auto fd = CreateFuncDecl("~init", std::move(fbody), typeManager.GetFunctionTy({}, unitTy));
+    auto fd = CreateFuncDecl("~init", std::move(fbody), {typeManager.GetFunctionTy({}, {unitTy})});
     fd->EnableAttr(Attribute::PRIVATE, Attribute::FINALIZER, Attribute::IN_CLASSLIKE);
     fd->linkage = Linkage::EXTERNAL;
     fd->funcBody->funcDecl = fd.get();
@@ -216,7 +216,7 @@ void JavaDesugarManager::InsertJavaMirrorHasInited(ClassDecl& mirror)
 {
     static auto boolTy = typeManager.GetPrimitiveTy(TypeKind::TYPE_BOOLEAN);
     auto curFile = mirror.curFile;
-    auto initializer = CreateLitConstExpr(LitConstKind::BOOL, "false", boolTy);
+    auto initializer = CreateLitConstExpr(LitConstKind::BOOL, "false", {boolTy});
     auto ret = WithinFile(CreateVarDecl(HAS_INITED_IDENT, std::move(initializer)), curFile);
     ret->isVar = true;
     ret->fullPackageName = mirror.fullPackageName;
@@ -234,18 +234,15 @@ void JavaDesugarManager::InsertAbstractJavaRefGetter(ClassLikeDecl& decl)
     std::vector<OwnedPtr<FuncParamList>> paramLists;
     paramLists.emplace_back(CreateFuncParamList(std::move(callParams)));
 
-    auto funcBody = CreateFuncBody(
-        std::move(paramLists),
-        CreateRefType(javaEntityDecl),
-        nullptr,
-        TypeManager::GetNothingTy());
+    auto funcBody =
+        CreateFuncBody(std::move(paramLists), CreateRefType(javaEntityDecl), nullptr, {TypeManager::GetNothingTy()});
 
     funcBody->parentClassLike = &decl;
 
-    std::vector<Ptr<Ty>> funcParamTys;
+    std::vector<ModalTy> funcParamTys;
     Ptr<FuncTy> funcTy = typeManager.GetFunctionTy(std::move(funcParamTys), javaEntityDecl.GetTy());
 
-    auto fd = CreateFuncDecl(JAVA_REF_GETTER_FUNC_NAME, std::move(funcBody), funcTy);
+    auto fd = CreateFuncDecl(JAVA_REF_GETTER_FUNC_NAME, std::move(funcBody), {funcTy});
     fd->EnableAttr(Attribute::PUBLIC, Attribute::IN_CLASSLIKE, Attribute::ABSTRACT);
     fd->funcBody->funcDecl = fd.get();
     fd->fullPackageName = decl.fullPackageName;
@@ -281,22 +278,19 @@ void JavaDesugarManager::InsertJavaRefGetterWithBody(ClassDecl& decl)
     auto ref = CreateRefExpr(*javaRef);
 
     auto ret = CreateReturnExpr(std::move(ref));
-    ret->SetTy(TypeManager::GetNothingTy());
+    ret->SetTy({TypeManager::GetNothingTy()});
     std::vector<OwnedPtr<Node>> nodes;
     nodes.emplace_back(std::move(ret));
 
     auto block = CreateBlock(std::move(nodes), javaEntityDecl->GetTy());
 
     auto funcBody = CreateFuncBody(
-        std::move(paramLists),
-        CreateRefType(*javaEntityDecl),
-        std::move(block),
-        TypeManager::GetNothingTy());
+        std::move(paramLists), CreateRefType(*javaEntityDecl), std::move(block), {TypeManager::GetNothingTy()});
 
-    std::vector<Ptr<Ty>> funcParamTys;
+    std::vector<ModalTy> funcParamTys;
     Ptr<FuncTy> funcTy = typeManager.GetFunctionTy(std::move(funcParamTys), javaEntityDecl->GetTy());
 
-    auto fd = CreateFuncDecl(JAVA_REF_GETTER_FUNC_NAME, std::move(funcBody), funcTy);
+    auto fd = CreateFuncDecl(JAVA_REF_GETTER_FUNC_NAME, std::move(funcBody), {funcTy});
     fd->EnableAttr(Attribute::PUBLIC, Attribute::IN_CLASSLIKE, Attribute::INITIALIZED,
         Attribute::IS_CHECK_VISITED);
     fd->fullPackageName = decl.fullPackageName;
@@ -317,7 +311,7 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     auto curFile = ctor.curFile;
     CJC_ASSERT(ctor.TestAttr(Attribute::CONSTRUCTOR) && ctor.TestAttr(Attribute::JAVA_MIRROR));
     ctor.constructorCall = ConstructorCall::OTHER_INIT;
-    auto thisCall = CreateThisCall(*ctor.outerDecl, generatedCtor, generatedCtor.GetTy(), curFile);
+    auto thisCall = CreateThisCall(*ctor.outerDecl, generatedCtor, generatedCtor.DataTy(), curFile);
 
     CJC_ASSERT(ctor.funcBody);
     CJC_ASSERT(ctor.funcBody->paramLists.size() == 1);
@@ -407,9 +401,9 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     // cjmapping interface return param support lambda.
     if (fun.funcBody->retType->TyKind() == TypeKind::TYPE_FUNC &&
         fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
-        retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), fun.funcBody->retType->GetTy(), mirror);
+        retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), fun.funcBody->retType->DataTy(), mirror);
     } else {
-        retCallExpr = lib.UnwrapJavaEntity(std::move(callResRef), fun.funcBody->retType->GetTy(), mirror);
+        retCallExpr = lib.UnwrapJavaEntity(std::move(callResRef), fun.funcBody->retType->DataTy(), mirror);
     }
 
     if (!retCallExpr) {
@@ -418,13 +412,13 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     }
     std::vector<OwnedPtr<Node>> blockNodes;
     auto retExpr = CreateReturnExpr(std::move(retCallExpr), fun.funcBody.get());
-    retExpr->SetTy(TypeManager::GetNothingTy());
+    retExpr->SetTy({TypeManager::GetNothingTy()});
     retExpr->refFuncBody = fun.funcBody.get();
     blockNodes.push_back(std::move(methodCallRes));
     blockNodes.push_back(std::move(retExpr));
     // Return type has to be specified, so it's safe to use it below
     fun.funcBody->body = CreateBlock(std::move(blockNodes), fun.funcBody->retType->GetTy());
-    fun.funcBody->SetTy(TypeManager::GetNothingTy());
+    fun.funcBody->SetTy({TypeManager::GetNothingTy()});
     if (fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
         fun.funcBody->parentClassLike = &mirror;
     }
@@ -469,7 +463,7 @@ void JavaDesugarManager::InsertJavaMirrorPropGetter(PropDecl& prop)
     auto outerDecl = As<ASTKind::CLASS_LIKE_DECL>(prop.outerDecl);
     OwnedPtr<Expr> unwrapJavaEntityCall = isArrayGetLength || !outerDecl
         ? std::move(callResRef)
-        : lib.UnwrapJavaEntity(std::move(callResRef), prop.GetTy(), *outerDecl);
+        : lib.UnwrapJavaEntity(std::move(callResRef), prop.DataTy(), *outerDecl);
     if (!unwrapJavaEntityCall) {
         prop.EnableAttr(Attribute::IS_BROKEN);
         prop.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
@@ -513,7 +507,7 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
     auto& setter = *prop.setters.begin();
     auto& setterBody = setter->funcBody;
     setterBody->body = std::move(block);
-    setterBody->SetTy(unitTy);
+    setterBody->SetTy({unitTy});
 
     setterBody->body->body.emplace_back(std::move(jniSetterCall));
 }
@@ -639,8 +633,8 @@ void JavaDesugarManager::ReplaceCallsWithArrayJavaEntityGet(File& file)
         }
 
         auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
-        CJC_ASSERT_WITH_MSG(!ma->baseExpr->GetTy()->typeArgs.empty(), "JArray type must be generic");
-        auto arrayElementType = ma->baseExpr->GetTy()->typeArgs[0];
+        CJC_ASSERT_WITH_MSG(!ma->baseExpr->DataTy()->TyArgs().empty(), "JArray type must be generic");
+        auto arrayElementType = ma->baseExpr->DataTy()->TyArg(0);
         if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType()) {
             return VisitAction::WALK_CHILDREN;
         }
@@ -683,8 +677,8 @@ void JavaDesugarManager::ReplaceCallsWithArrayJavaEntitySet(File& file)
         }
 
         auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
-        CJC_ASSERT_WITH_MSG(!ma->baseExpr->GetTy()->typeArgs.empty(), "JArray type must be generic");
-        auto arrayElementType = ma->baseExpr->GetTy()->typeArgs[0];
+        CJC_ASSERT_WITH_MSG(!ma->baseExpr->DataTy()->TyArgs().empty(), "JArray type must be generic");
+        auto arrayElementType = ma->baseExpr->DataTy()->TyArg(0);
         if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType()) {
             return VisitAction::WALK_CHILDREN;
         }
@@ -784,7 +778,7 @@ void JavaDesugarManager::InsertJStringOfStringCtor(ClassDecl& decl, bool doStub)
         auto convertCall = CreateCall(lib.GetCangjieStringToJava(), curFile,
             lib.CreateGetJniEnvCall(curFile), WithinFile(CreateRefExpr(*param), curFile));
 
-        auto superCall = CreateSuperCall(decl, *jObjectCtor, jObjectCtor->GetTy());
+        auto superCall = CreateSuperCall(decl, *jObjectCtor, jObjectCtor->DataTy());
         superCall->args.emplace_back(CreateFuncArg(std::move(convertCall)));
 
         generatedCtor->funcBody->body->body.emplace_back(std::move(superCall));
@@ -806,7 +800,7 @@ void JavaDesugarManager::InsertJStringOfStringCtor(ClassDecl& decl, bool doStub)
     auto ctorFuncBody =
         CreateFuncBody(std::move(paramLists), CreateRefType(decl), CreateBlock({}, decl.GetTy()), decl.GetTy());
 
-    auto fd = CreateFuncDecl("init", std::move(ctorFuncBody), ctorFuncTy);
+    auto fd = CreateFuncDecl("init", std::move(ctorFuncBody), {ctorFuncTy});
     fd->fullPackageName = decl.fullPackageName;
     fd->outerDecl = &decl;
     fd->funcBody->funcDecl = fd.get();

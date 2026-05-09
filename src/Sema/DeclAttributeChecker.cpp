@@ -18,6 +18,7 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Frontend/CompilerInstance.h"
+#include "cangjie/Frontend/CompilerInvocation.h"
 #include "cangjie/Utils/CheckUtils.h"
 
 using namespace Cangjie;
@@ -249,7 +250,7 @@ void DeclAttributeChecker::CheckExtendAttribute(ExtendDecl& ed) const
                     DiagKindRefactor::sema_invalid_mut_modifier_extend_of_struct, *mutDecl, extendedDecl->identifier);
             } else if (ed.GetTy()->IsPrimitive()) {
                 diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_invalid_mut_modifier_extend_of_struct, *mutDecl, ed.GetTy()->String());
+                    DiagKindRefactor::sema_invalid_mut_modifier_extend_of_struct, *mutDecl, ed.GetTy().String());
             }
         }
         if (auto pd = DynamicCast<PropDecl*>(member.get()); pd) {

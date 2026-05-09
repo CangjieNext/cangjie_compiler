@@ -6,8 +6,6 @@
 
 #include "ASTSerializeUtils.h"
 
-#include "cangjie/AST/ModalInfo.h"
-#include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CheckUtils.h"
 
 namespace Cangjie {
@@ -84,12 +82,11 @@ TVectorOffset<TModeOffset> SaveModalVector(
     return {};
 }
 
-Ptr<AST::Ty> ApplyLoadedModal(TypeManager& typeManager, Ptr<AST::Ty> shape, const PackageFormat::Mode* mode)
+AST::ModalTy ApplyLoadedModal(AST::DataTy ty, const PackageFormat::Mode* mode)
 {
-    CJC_NULLPTR_CHECK(shape);
     if (mode == nullptr) {
-        return shape;
+        return ty;
     }
-    return typeManager.SubstituteModal(shape.get(), ReadModal(mode));
+    return AST::ModalTy{ty, ReadModal(mode)};
 }
 } // namespace Cangjie

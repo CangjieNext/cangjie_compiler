@@ -85,13 +85,13 @@ std::string FuncParamToString(const OwnedPtr<FuncParam>& p, Cangjie::Native::FFI
     if (auto ty = Ty::GetDeclOfTy(p->type->GetTy())) {
         bool castToId = IsCJMapping(*ty) && !IsCJMappingInterface(*(p->type->GetTy()));
         res += castToId ? ".self" : "";
-    } else if (p->type->GetTy()->IsFunc()) {
-        auto actualTy = p->type->GetTy()->HasGeneric()
-            ? GetGenericInstTy(genericConfig, p->type->GetTy(), typeManager)
-            : p->type->GetTy();
+    } else if (p->type->DataTy()->IsFunc()) {
+        auto actualTy = p->type->DataTy()->HasGeneric()
+            ? GetGenericInstTy(genericConfig, p->type->DataTy(), typeManager)
+            : p->type->DataTy();
         res = GetLambdaJavaClassName(actualTy) + ".box(" + res + ")";
     }
-    if (p->type->GetTy()->IsTuple()) {
+    if (p->type->DataTy()->IsTuple()) {
         res += ".self";
     }
     return res;
@@ -375,7 +375,7 @@ std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(
     const Ptr<Ty> ty, std::set<std::string>* javaImports, const std::string* curPackageName, bool isNativeMethod)
 {
     if (ty->IsCoreOptionType()) {
-        return MapCJTypeToJavaType(ty->typeArgs[0], javaImports, curPackageName, isNativeMethod);
+        return MapCJTypeToJavaType(ty->TyArg(0), javaImports, curPackageName, isNativeMethod);
     }
 
     std::string javaType = "";
@@ -412,7 +412,7 @@ std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(
         case TypeKind::TYPE_INTERFACE:
         case TypeKind::TYPE_CLASS:
             if (IsJArray(*declTy)) {
-                return MapCJTypeToJavaType(ty->typeArgs[0], javaImports, curPackageName) + "[]";
+                return MapCJTypeToJavaType(ty->TyArg(0), javaImports, curPackageName) + "[]";
             } else if (isNativeMethod && declTy && IsCJMapping(*declTy) && !IsCJMappingInterface(*ty)) {
                 return "long";
             }
@@ -449,25 +449,26 @@ std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(const OwnedPtr<Type>& t
     const std::string* curPackageName, bool isNativeMethod)
 {
     CJC_ASSERT(type && type->GetTy());
-    if (IsGenericParam(type->GetTy(), *decl, genericConfig)) {
+    auto ty = type->DataTy();
+    if (IsGenericParam(ty, *decl, genericConfig)) {
         // Current generic only support primitive type.
-        auto genericActualTy = GetGenericInstTy(genericConfig, type->GetTy(), typeManager);
+        auto genericActualTy = GetGenericInstTy(genericConfig, ty, typeManager);
         return MapCJTypeToJavaType(genericActualTy, javaImports, curPackageName, isNativeMethod);
     }
-    return MapCJTypeToJavaType(type->GetTy(), javaImports, curPackageName, isNativeMethod);
+    return MapCJTypeToJavaType(ty, javaImports, curPackageName, isNativeMethod);
 }
 
 std::string JavaSourceCodeGenerator::MapCJTypeToJavaType(const OwnedPtr<FuncParam>& param,
     std::set<std::string>* javaImports, const std::string* curPackageName, bool isNativeMethod)
 {
     CJC_ASSERT(param && param->type && param->type->GetTy());
-    auto paraTy = param->type->GetTy();
+    auto paraTy = param->type->DataTy();
     if (IsGenericParam(paraTy, *decl, genericConfig)) {
         // Current generic only support primitive type.
         auto genericActualTy = GetGenericInstTy(genericConfig, paraTy, typeManager);
         return MapCJTypeToJavaType(genericActualTy, javaImports, curPackageName, isNativeMethod);
     }
-    return MapCJTypeToJavaType(param->type->GetTy(), javaImports, curPackageName, isNativeMethod);
+    return MapCJTypeToJavaType(paraTy, javaImports, curPackageName, isNativeMethod);
 }
 
 void JavaSourceCodeGenerator::AddInterfaceDeclaration()
@@ -498,7 +499,7 @@ void JavaSourceCodeGenerator::AddClassDeclaration()
 
         if (isClassInheritedFromClass) {
             res += " extends ";
-            res += MapCJTypeToJavaType(superClassPtr->GetTy(), &imports, &classDecl->fullPackageName);
+            res += MapCJTypeToJavaType(superClassPtr->DataTy(), &imports, &classDecl->fullPackageName);
         }
 
         if (implementedInterfacesCnt > 0) {
@@ -758,10 +759,10 @@ std::pair<std::string, std::string> JavaSourceCodeGenerator::GenNativeSuperArgCa
         auto index = pid.value();
         auto& pname = params[static_cast<size_t>(index)]->identifier.Val();
         args.push_back(pname);
-        nativeParams.push_back(mpTy(params[static_cast<size_t>(index)]->GetTy()) + " " + pname);
+        nativeParams.push_back(mpTy(params[static_cast<size_t>(index)]->DataTy()) + " " + pname);
     }
     std::string superCall = id + "(" + Cangjie::Utils::JoinStrings(args, ", ") + ")";
-    std::string nativeFnDecl = "public static native " + mpTy(arg.GetTy()) + " " + id + "(" +
+    std::string nativeFnDecl = "public static native " + mpTy(arg.DataTy()) + " " + id + "(" +
         Cangjie::Utils::JoinStrings(nativeParams, ", ") + ");";
     return std::make_pair(superCall, nativeFnDecl);
 }
@@ -1140,7 +1141,7 @@ void JavaSourceCodeGenerator::AddInterfaceMethods()
 void JavaSourceCodeGenerator::AddTupleItemMethod()
 {
     size_t i = 0;
-    for (auto& ty : tupleTy->typeArgs) {
+    for (auto& ty : tupleTy->TyArgs()) {
         std::string funcIdentifier = "item" + std::to_string(i);
         const std::string retType = MapCJTypeToJavaType(ty, &imports, &decl->fullPackageName);
         std::string methodSignature;

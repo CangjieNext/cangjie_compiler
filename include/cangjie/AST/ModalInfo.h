@@ -52,6 +52,8 @@ struct ModalInfo {
     std::string AsTypeSuffixString() const;
     /// Returns the ModalInfo that both \ref lhs and \ref rhs can be converted to.
     ModalInfo operator|(ModalInfo other) const;
+    ModalInfo operator&(ModalInfo other) const;
+
     bool IsSubModal(ModalInfo other) const;
 };
 constexpr int MODAL_INFO_COUNT = 3;

@@ -501,7 +501,7 @@ struct ASTHasherImpl {
         if (auto maTarget = ma.target) {
             SUPERHash<whatTypeToHash>(maTarget->rawMangleName);
             CJC_ASSERT(maTarget->GetTy());
-            SUPERHash<whatTypeToHash>(maTarget->GetTy()->String());
+            SUPERHash<whatTypeToHash>(maTarget->GetTy().String());
         }
     }
     template <int whatTypeToHash> void HashTypeConvExpr(const TypeConvExpr& ntc)
@@ -538,7 +538,7 @@ struct ASTHasherImpl {
         if (auto refTarget = re.ref.target) {
             SUPERHash<whatTypeToHash>(refTarget->rawMangleName);
             CJC_ASSERT(refTarget->GetTy());
-            SUPERHash<whatTypeToHash>(refTarget->GetTy()->String());
+            SUPERHash<whatTypeToHash>(refTarget->GetTy().String());
         }
     }
     template <int whatTypeToHash> void HashReturnExpr(const ReturnExpr& re)
@@ -694,7 +694,7 @@ struct ASTHasherImpl {
         if (auto refTarget = qt.target) {
             SUPERHash<whatTypeToHash>(refTarget->rawMangleName);
             CJC_ASSERT(refTarget->GetTy());
-            SUPERHash<whatTypeToHash>(refTarget->GetTy()->String());
+            SUPERHash<whatTypeToHash>(refTarget->GetTy().String());
         }
     }
 
@@ -705,7 +705,7 @@ struct ASTHasherImpl {
         if (auto refTarget = rt.ref.target) {
             SUPERHash<whatTypeToHash>(refTarget->rawMangleName);
             CJC_ASSERT(refTarget->GetTy());
-            SUPERHash<whatTypeToHash>(refTarget->GetTy()->String());
+            SUPERHash<whatTypeToHash>(refTarget->GetTy().String());
         }
     }
 

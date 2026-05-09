@@ -51,7 +51,7 @@ bool IsAnyTypeParamUsedInTypeArgs(
 {
     for (auto& typeParam : typeParams) {
         for (auto& typeArg : std::as_const(typeArgs)) {
-            if (typeArg->GetTy()->Contains(typeParam->GetTy())) {
+            if (typeArg->GetTy()->Contains(typeParam->DataTy())) {
                 return true;
             }
         }
@@ -191,7 +191,7 @@ void TestManager::CreateMockCalls(Package& pkg, const std::vector<Ptr<CallExpr>>
             continue;
         }
 
-        std::vector<Ptr<Ty>> valueParamTys;
+        std::vector<ModalTy> valueParamTys;
         valueParamTys.emplace_back(callExpr->args[0]->GetTy());
 
         if (MockManager::GetMockKind(*callExpr) == MockKind::SPY) {
@@ -394,7 +394,7 @@ Ptr<ClassDecl> TestManager::GenerateMockClassIfNeededAndGet(const CallExpr& call
     } else {
         auto packageName =
             declToMock->genericDecl ? declToMock->genericDecl->fullPackageName : declToMock->fullPackageName;
-        ReportDoesntSupportMocking(callExpr, Ty::ToString(typeArgument), packageName);
+        ReportDoesntSupportMocking(callExpr, Ty::ToString(typeArgument.Ty()), packageName);
         return nullptr;
     }
 }
@@ -567,7 +567,7 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
 
     bool isInConstructor = false;
     bool isInMockAnnotatedLambda = false;
-    Ptr<Ty> outerTy;
+    ModalTy outerTy;
 
     mockUtils->Walk(&pkg, [this, &isInConstructor, &isInMockAnnotatedLambda, &outerTy, &pkg](const Ptr<Node> node) {
         if (node->astKind == ASTKind::PRIMARY_CTOR_DECL) {
@@ -615,10 +615,10 @@ void TestManager::ReplaceCallsWithAccessors(Package& pkg)
         }
         if (auto inheritableDecl = DynamicCast<InheritableDecl>(node)) {
             CJC_ASSERT(outerTy == inheritableDecl->GetTy());
-            outerTy = nullptr;
+            outerTy = {};
         } else if (auto extendDecl = DynamicCast<ExtendDecl>(node)) {
             CJC_ASSERT(outerTy == extendDecl->extendedType->GetTy());
-            outerTy = nullptr;
+            outerTy = {};
         }
         return VisitAction::KEEP_DECISION;
     });

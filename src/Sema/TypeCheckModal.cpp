@@ -34,10 +34,6 @@ static FuncBody* GetFuncBody(const Node& funcLike)
     if (auto md = DynamicCast<MacroDecl>(&funcLike)) {
         return md->desugarDecl->funcBody.get();
     }
-    if (Is<PrimaryCtorDecl>(&funcLike)) {
-        // desugared, should not have body
-        return nullptr;
-    }
     return StaticCast<MainDecl>(&funcLike)->funcBody.get();
 }
 
@@ -95,13 +91,13 @@ struct ModalTypeChecker {
                     CheckMemberVarModality(*decl);
                 }
                 if (auto var = DynamicCast<VarDecl>(node)) {
-                    if (!Ty::IsTyCorrect(var->GetTy())) {
+                    if (!var->GetTy().IsCorrect()) {
                         return VisitAction::SKIP_CHILDREN;
                     }
                     CheckGlobalVarModalType(*var);
                 }
                 if (auto call = DynamicCast<CallExpr>(node)) {
-                    if (!Ty::IsTyCorrect(call->GetTy())) {
+                    if (!call->GetTy().IsCorrect()) {
                         return VisitAction::SKIP_CHILDREN;
                     }
                     CheckCallExpr(ctx, *call);
@@ -110,7 +106,7 @@ struct ModalTypeChecker {
                     CheckAssignExpr(ctx, *assign);
                 }
                 if (node->IsFuncLike()) {
-                    if (!Ty::IsTyCorrect(node->GetTy())) {
+                    if (!node->GetTy().IsCorrect()) {
                         return VisitAction::SKIP_CHILDREN;
                     }
                     CheckReturnModalType(ctx, *node);
@@ -222,16 +218,16 @@ private:
     void CheckReturnModalType(const ASTContext& ctx, const Node& func)
     {
         auto body = GetFuncBody(func);
-        if (!body || !body->retType || !Ty::IsTyCorrect(body->retType->GetTy())) {
+        if (!body || !body->retType || !body->retType->GetTy().IsCorrect()) {
             return;
         }
-        auto retLocal = body->retType->GetTy()->Modal().local;
+        auto retLocal = body->retType->TyMode().local;
         if (retLocal == LocalModal::NOT) {
             return;
         }
         auto r = CollectReturnedExpr(*body);
         for (auto& e : r) {
-            if (!IsExternalLocal(ctx, *e) && !type.ImplementsCopyInterface(e->GetTy()) &&
+            if (!IsExternalLocal(ctx, *e) && !type.ImplementsCopyInterface(e->DataTy()) &&
                 !IsInExclaveExpr(ctx, *e)) {
                 DiagBadInternalLocalReturn(*e);
             }
@@ -311,7 +307,7 @@ private:
         }
         auto& body = init.funcBody->body;
         auto initTy = type.GetThisParamTy(init);
-        if (!body || !Ty::IsTyCorrect(initTy) || initTy->IsDataType()) {
+        if (!body || !Ty::IsTyCorrect(initTy) || initTy.IsDataType()) {
             return;
         }
         if (body->body.empty()) {
@@ -324,9 +320,9 @@ private:
     }
 
     /// When the init has expr, use the first expr pos; otherwise use the body pos.
-    void DiagInitModalMustBeInExclave(const Node& pos, Ptr<Ty> ty)
+    void DiagInitModalMustBeInExclave(const Node& pos, ModalTy ty)
     {
-        d.DiagnoseRefactor(DiagKindRefactor::sema_init_modal_must_be_in_exclave, pos, ty->Modal().ToString());
+        d.DiagnoseRefactor(DiagKindRefactor::sema_init_modal_must_be_in_exclave, pos, ty.Mode().ToString());
     }
 
     /// The following functions need mark needsRegion:
@@ -336,7 +332,7 @@ private:
     /// be immediately closed, so this is an optimization.
     void CheckNeedsRegion(const Node& body, bool& needsRegion)
     {
-        if (!Ty::IsTyCorrect(body.GetTy())) {
+        if (!body.GetTy().IsCorrect()) {
             return;
         }
         ConstWalker w{&body, [this, &needsRegion](Ptr<const Node> node) {
@@ -344,15 +340,14 @@ private:
                 return VisitAction::SKIP_CHILDREN;
             }
             if (auto ref = DynamicCast<NameReferenceExpr>(node)) {
-                if (auto target = ref->GetTarget(); target &&
-                    target->TestAttr(Attribute::ENUM_CONSTRUCTOR) &&
-                    !type.ImplementsCopyInterface(ref->GetTy()) && !ref->GetTy()->IsDataType()) {
+                if (auto target = ref->GetTarget(); target && target->TestAttr(Attribute::ENUM_CONSTRUCTOR) &&
+                    !type.ImplementsCopyInterface(ref->DataTy()) && !ref->GetTy().IsDataType()) {
                     needsRegion = true;
                     return VisitAction::SKIP_CHILDREN;
                 }
             }
             if (auto call = DynamicCast<CallExpr>(node)) {
-                if (!call->baseFunc || !Ty::IsTyCorrect(call->GetTy())) {
+                if (!call->baseFunc || !call->GetTy().IsCorrect()) {
                     // invalid call node, skip
                     return VisitAction::SKIP_CHILDREN;
                 }
@@ -361,10 +356,10 @@ private:
                     // require a region
                     return VisitAction::WALK_CHILDREN;
                 }
-                Ptr<Ty> targetTy = nullptr;
+                ModalTy targetTy{};
                 if (call->callKind == CallKind::CALL_FUNCTION_PTR) {
                     // fp call, no target
-                    if (auto funcTy = DynamicCast<FuncTy>(call->baseFunc->GetTy())) {
+                    if (auto funcTy = DynamicCast<FuncTy*>(call->baseFunc->DataTy())) {
                         targetTy = funcTy->retTy;
                     } else {
                         targetTy = call->baseFunc->GetTy();
@@ -374,7 +369,7 @@ private:
                     call->callKind == CallKind::CALL_STRUCT_CREATION) {
                     targetTy = call->GetTy(); // do not use retTy because only targetTy has the correct
                                             // modal type, retTy is of data type
-                    if (auto funcTy = DynamicCast<FuncTy>(targetTy)) {
+                    if (auto funcTy = DynamicCast<FuncTy*>(targetTy.Ty())) {
                         targetTy = funcTy->retTy;
                     }
                 } else {
@@ -383,8 +378,8 @@ private:
                 CJC_NULLPTR_CHECK(targetTy);
 
                 // non copy non @~local type, needs a region
-                if ((targetTy->IsLocalType() && !type.ImplementsCopyInterface(targetTy)) ||
-                    (!type.ImplementsCopyInterface(targetTy) && !targetTy->IsDataType())) {
+                if ((targetTy.IsLocalType() && !type.ImplementsCopyInterface(targetTy.Ty())) ||
+                    (!type.ImplementsCopyInterface(targetTy.Ty()) && !targetTy.IsDataType())) {
                     needsRegion = true;
                     return VisitAction::STOP_NOW;
                 }
@@ -442,18 +437,22 @@ private:
                 })) {
                     auto fd = StaticCast<FuncDecl>(fn->node);
                     if (fd->TestAttr(Attribute::STATIC)) {
-                        return target->GetTy()->Modal().local;
+                        return target->TyMode().local;
                     }
-                    Ptr<Ty> thisTy = type.GetThisParamTy(*fd);
+                    ModalTy thisTy = type.GetThisParamTy(*fd);
                     if (thisTy && Ty::IsTyCorrect(thisTy)) {
-                        return thisTy->IsLocalType() ? thisTy->Modal().local : LocalModal::NOT;
+                        return thisTy.IsLocalType() ? thisTy.Mode().local : LocalModal::NOT;
                     }
                 }
             }
-            return left->GetTy()->IsLocalType() ? left->GetTy()->Modal().local : LocalModal::NOT;
+            return left->GetTy().IsLocalType() ? left->TyMode().local : LocalModal::NOT;
         }
         if (auto ma = DynamicCast<MemberAccess>(left)) {
-            return ma->baseExpr->GetTy()->IsLocalType() ? ma->baseExpr->GetTy()->Modal().local : LocalModal::NOT;
+            return ma->baseExpr->GetTy().IsLocalType() ? ma->baseExpr->TyMode().local : LocalModal::NOT;
+        }
+        // VArray member access
+        if (auto sub = DynamicCast<SubscriptExpr>(left)) {
+            return sub->baseExpr->TyMode().local;
         }
         CJC_ABORT();
         return {};
@@ -477,7 +476,7 @@ private:
         }
         if (!func->funcBody->paramLists.empty()) {
             if (auto& thisParam = func->funcBody->paramLists[0]->thisParam) {
-                return thisParam->GetTy()->Modal().local == LocalModal::HALF;
+                return thisParam->TyMode().local == LocalModal::HALF;
             }
         }
         return false;
@@ -503,7 +502,7 @@ private:
             if (IsInLocalQuestCtorOrAnyFinalizer(ctx, assign.scopeName)) {
                 return;
             }
-            auto diag = DiagBadAssignment(assign, left->GetTy()->Modal(), left->GetTy());
+            auto diag = DiagBadAssignment(assign, left->TyMode(), left->GetTy());
             diag.AddNote("This assignment is only allowed in @local? constructor or finalizer.");
             return;
         }
@@ -541,7 +540,7 @@ private:
             if (IsInLocalQuestCtorOrAnyFinalizer(ctx, assign.scopeName)) {
                 return;
             }
-            auto diag = DiagBadAssignment(assign, left->GetTy()->Modal(), left->GetTy());
+            auto diag = DiagBadAssignment(assign, left->TyMode(), left->GetTy());
             diag.AddNote("This assignment is only allowed in @local? constructor or finalizer.");
             return;
         }
@@ -561,15 +560,15 @@ private:
             return;
         }
         auto right = assign.rightExpr.get();
-        if (!Ty::IsTyCorrect(right->GetTy())) {
+        if (!right->GetTy().IsCorrect()) {
             return;
         }
-        if (type.ImplementsCopyInterface(right->GetTy())) {
+        if (type.ImplementsCopyInterface(right->DataTy())) {
             return;
         }
-        auto rLocal = right->GetTy()->IsLocalType() ? right->GetTy()->Modal().local : LocalModal::NOT;
+        auto rLocal = right->TyMode().local != LocalModal::NOT ? right->TyMode().local : LocalModal::NOT;
         auto left = assign.leftValue.get();
-        if (!Ty::IsTyCorrect(left->GetTy()) || Is<WildcardExpr>(left)) {
+        if (!left->GetTy().IsCorrect() || Is<WildcardExpr>(left)) {
             return;
         }
         auto lLocal = GetLvalueLocal(ctx, left);
@@ -598,7 +597,7 @@ private:
         return defSite->node != useSite->node;
     }
 
-    DiagnosticBuilder DiagBadAssignment(const Node& position, const ModalInfo& lModal, const Ty* rTy)
+    DiagnosticBuilder DiagBadAssignment(const Node& position, const ModalInfo& lModal, ModalTy rTy)
     {
         std::string arg1 = lModal.local != LocalModal::NOT ? " " + lModal.LocalString() : "";
         std::string arg2 = rTy->String();
@@ -606,7 +605,7 @@ private:
     }
 
     DiagnosticBuilder DiagBadAssignment(
-        const Node& position, const ModalInfo& lModal, const Ty* rTy, bool lExternal, bool rExternal)
+        const Node& position, const ModalInfo& lModal, ModalTy rTy, bool lExternal, bool rExternal)
     {
         std::string arg1 = (lExternal ? " external " : " internal ") + lModal.LocalString();
         std::string arg2 = (rExternal ? " external " : " internal ") + rTy->String();
@@ -622,8 +621,8 @@ private:
         if (!thisParam) {
             return;
         }
-        if (!thisParam->GetTy()->IsDataType()) {
-            DiagExpectedDataType(func, thisParam->GetTy()->String());
+        if (!thisParam->GetTy().IsDataType()) {
+            DiagExpectedDataType(func, thisParam->GetTy().String());
         }
     }
 
@@ -642,10 +641,10 @@ private:
     {
         for (auto member : decl.GetMemberDeclPtrs()) {
             if (auto var = DynamicCast<VarDecl>(member)) {
-                if (!Ty::IsTyCorrect(var->GetTy()) || var->TestAttr(Attribute::STATIC)) {
+                if (!var->GetTy().IsCorrect() || var->TestAttr(Attribute::STATIC)) {
                     continue;
                 }
-                if (var->initializer && !type.ImplementsCopyInterface(var->GetTy())) {
+                if (var->initializer && !type.ImplementsCopyInterface(var->DataTy())) {
                     DiagMemberVarInitalizerInMixedInit(*var, decl);
                 }
             }
@@ -655,7 +654,7 @@ private:
     void DiagMemberVarInitalizerInMixedInit(const VarDecl& var, const InheritableDecl& decl)
     {
         d.DiagnoseRefactor(DiagKindRefactor::sema_member_var_initalizer_in_mixed_init, var, var.identifier.Val(),
-            var.GetTy()->String(), ASTKIND_TO_STR.at(decl.astKind));
+            var.GetTy().String(), ASTKIND_TO_STR.at(decl.astKind));
     }
 
     bool HasMixedLocalTypeInit(const InheritableDecl& decl)
@@ -667,7 +666,7 @@ private:
                 // primary ctor is already desugared
                 auto& init = *StaticCast<FuncDecl>(member)->funcBody->paramLists[0];
                 auto thisLocal =
-                    static_cast<int>(init.thisParam ? init.thisParam->GetTy()->Modal().local : LocalModal::NOT);
+                    static_cast<int>(init.thisParam ? init.thisParam->TyMode().local : LocalModal::NOT);
                 if (lastUsedLocal == -1) {
                     lastUsedLocal = thisLocal;
                 } else if (lastUsedLocal != thisLocal) {
@@ -680,11 +679,11 @@ private:
 
     void CheckMemberVarModalType(const VarDecl& var)
     {
-        if (!Ty::IsTyCorrect(var.GetTy()) || var.TestAttr(Attribute::STATIC)) {
+        if (!var.GetTy().IsCorrect() || var.TestAttr(Attribute::STATIC)) {
             return;
         }
         // member var with modal type is not allowed
-        if (var.GetTy()->IsLocalType()) {
+        if (var.GetTy().IsLocalType()) {
             DiagMemberVarLocalModalType(var);
         }
     }
@@ -693,9 +692,9 @@ private:
     {
         // Use written type's position if available, otherwise use variable location
         if (var.type) {
-            DiagExpectedDataType(*var.type, var.GetTy()->String());
+            DiagExpectedDataType(*var.type, var.GetTy().String());
         } else {
-            DiagExpectedDataType(var, var.GetTy()->String());
+            DiagExpectedDataType(var, var.GetTy().String());
         }
     }
 
@@ -703,7 +702,7 @@ private:
     void CheckGlobalVarModalType(const VarDecl& var)
     {
         if (var.TestAnyAttr(Attribute::GLOBAL, Attribute::STATIC)) {
-            if (Ty::IsTyCorrect(var.GetTy()) && var.GetTy()->IsLocalType()) {
+            if (var.GetTy().IsCorrect() && var.GetTy().IsLocalType()) {
                 DiagGlobalVarLocalModalType(var);
             }
         }
@@ -711,12 +710,12 @@ private:
 
     void CheckCapture(const Node& func, const RefExpr& expr)
     {
-        auto funcLocal = func.GetTy()->Modal().local;
+        auto funcLocal = func.TyMode().local;
         if (auto target = expr.GetTarget()) {
-            if (type.ImplementsCopyInterface(target->GetTy())) {
+            if (type.ImplementsCopyInterface(target->DataTy())) {
                 return;
             }
-            auto varLocal = target->GetTy()->Modal().local;
+            auto varLocal = target->TyMode().local;
             // these are the only allowed cases
             if (funcLocal == LocalModal::NOT && varLocal == LocalModal::NOT) {
                 return;
@@ -760,9 +759,9 @@ private:
 
     void DiagBadCapture(const Node& func, const NameReferenceExpr& capture)
     {
-        auto db = d.DiagnoseRefactor(DiagKindRefactor::sema_bad_capture_local, capture,
-            capture.GetTy()->Modal().LocalString(), capture.GetTarget()->identifier.Val(),
-            func.GetTy()->Modal().LocalString(), func.astKind == ASTKind::FUNC_DECL ? "function" : "lambda");
+        auto db = d.DiagnoseRefactor(DiagKindRefactor::sema_bad_capture_local, capture, capture.TyMode().LocalString(),
+            capture.GetTarget()->identifier.Val(), func.TyMode().LocalString(),
+            func.astKind == ASTKind::FUNC_DECL ? "function" : "lambda");
     }
 
     static bool IsNonStaticMemberFunction(const FuncDecl& func)
@@ -806,7 +805,7 @@ private:
     }
 
     struct FuncParamInfo {
-        Ptr<Ty> ty;
+        ModalTy ty;
         ModalInfo modal;
         std::string_view name;
     };
@@ -817,15 +816,15 @@ private:
             return GetFuncParam(*inner, index);
         }
         if (auto array = DynamicCast<ArrayExpr>(call.desugarExpr.get())) {
-            return {array->args[index]->GetTy(), array->args[index]->GetTy()->Modal(), ""};
+            return {array->args[index]->GetTy(), array->args[index]->TyMode(), ""};
         }
         auto func = call.resolvedFunction;
         if (!func) {
             // function pointer call, no need to check 'this' param, no arg name
-            return {call.args[index]->GetTy(), call.args[index]->GetTy()->Modal(), ""};
+            return {call.args[index]->GetTy(), call.args[index]->TyMode(), ""};
         }
         if (call.baseFunc->GetTy()->IsPointer()) {
-            return {call.args[index]->GetTy(), call.args[index]->GetTy()->Modal(), ""};
+            return {call.args[index]->GetTy(), call.args[index]->TyMode(), ""};
         }
         if (func->funcBody->paramLists[0]->thisParam) {
             if (index == 0) {
@@ -833,7 +832,7 @@ private:
                     func->funcBody->paramLists[0]->thisParam->modal, "this"};
             }
             return {func->funcBody->paramLists[0]->params[index - 1]->GetTy(),
-                func->funcBody->paramLists[0]->params[index - 1]->GetTy()->Modal(),
+                func->funcBody->paramLists[0]->params[index - 1]->TyMode(),
                 func->funcBody->paramLists[0]->params[index - 1]->identifier.Val()};
         }
         if (IsNonStaticMemberFunction(*func)) {
@@ -841,11 +840,11 @@ private:
                 return {func->outerDecl->GetTy(), TypeCheckUtil::GetThisParamModal(*func), "this"};
             }
             return {func->funcBody->paramLists[0]->params[index - 1]->GetTy(),
-                func->funcBody->paramLists[0]->params[index - 1]->GetTy()->Modal(),
+                func->funcBody->paramLists[0]->params[index - 1]->TyMode(),
                 func->funcBody->paramLists[0]->params[index - 1]->identifier.Val()};
         }
         return {func->funcBody->paramLists[0]->params[index]->GetTy(),
-            func->funcBody->paramLists[0]->params[index]->GetTy()->Modal(),
+            func->funcBody->paramLists[0]->params[index]->TyMode(),
             func->funcBody->paramLists[0]->params[index]->identifier.Val()};
     }
 
@@ -866,7 +865,7 @@ private:
                 return 1UL;
             }
             // function pointer call, no need to check 'this' param
-            if (auto fty = DynamicCast<FuncTy>(call.baseFunc->GetTy())) {
+            if (auto fty = DynamicCast<FuncTy*>(call.baseFunc->DataTy())) {
                 return fty->paramTys.size();
             }
             // invalid
@@ -927,7 +926,7 @@ private:
                 lastExpr = lastExpr->desugarExpr.get();
             }
         }
-        if (auto funcTy = DynamicCast<FuncTy>(body.GetTy())) {
+        if (auto funcTy = DynamicCast<FuncTy*>(body.DataTy())) {
             if (funcTy->retTy->IsUnit() || (body.funcDecl && body.funcDecl->TestAttr(Attribute::CONSTRUCTOR))) {
                 // do not collect last expr if it is return type is Unit
                 return ret;
@@ -946,11 +945,10 @@ private:
             return true;
         }
         if (auto fun = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, node.scopeName)) {
-            if (auto fd = DynamicCast<FuncDecl>(fun->node)) {
-                if (std::any_of(fd->modifiers.begin(), fd->modifiers.end(),
-                    [](const Modifier& m) { return m.modifier == TokenKind::EXCLAVE; })) {
-                    return true;
-                }
+            auto fd = StaticCast<FuncDecl>(fun->node);
+            if (std::any_of(fd->modifiers.begin(), fd->modifiers.end(),
+                [](const Modifier& m) { return m.modifier == TokenKind::EXCLAVE; })) {
+                return true;
             }
         }
         return false;
@@ -958,7 +956,7 @@ private:
 
     void DiagBadExternalLocalArg(const FuncParamInfo& param, const Expr& arg)
     {
-        d.DiagnoseRefactor(DiagKindRefactor::sema_bad_external_local_arg, arg, arg.GetTy()->Modal().ToString(),
+        d.DiagnoseRefactor(DiagKindRefactor::sema_bad_external_local_arg, arg, arg.TyMode().ToString(),
             std::string{param.name});
     }
 
@@ -986,7 +984,7 @@ private:
             }
             auto param = GetFuncParam(call, i);
             if (param.modal.local == LocalModal::FULL) {
-                if (IsExternalLocal(ctx, *arg) && !type.ImplementsCopyInterface(arg->GetTy())) {
+                if (IsExternalLocal(ctx, *arg) && !type.ImplementsCopyInterface(arg->DataTy())) {
                     DiagBadExternalLocalArg(param, *arg);
                 }
             }
@@ -997,9 +995,9 @@ private:
     {
         // Use written type's position if available, otherwise use variable location
         if (var.type) {
-            DiagExpectedDataType(*var.type, var.GetTy()->String());
+            DiagExpectedDataType(*var.type, var.GetTy().String());
         } else {
-            DiagExpectedDataType(var, var.GetTy()->String());
+            DiagExpectedDataType(var, var.GetTy().String());
         }
     }
 
@@ -1013,7 +1011,7 @@ private:
     {
         for (auto member : decl.GetMemberDeclPtrs()) {
             if (auto var = DynamicCast<VarDecl>(member)) {
-                if (type.ImplementsCopyInterface(var->GetTy())) {
+                if (type.ImplementsCopyInterface(var->DataTy())) {
                     continue;
                 }
                 DiagCopyStructBadField(decl, *var);
@@ -1055,16 +1053,16 @@ void TypeChecker::TypeCheckerImpl::CheckModalType(const ASTContext& ctx, Package
 }
 
 void TypeChecker::TypeCheckerImpl::ExpectSubtypeOf(
-    Ptr<AST::Node> node, Ptr<AST::Ty> expect, Ptr<AST::Ty> actual, ModalMatchMode modal)
+    Ptr<AST::Node> node, AST::ModalTy expect, AST::ModalTy actual, ModalMatchMode modal)
 {
     if (!typeManager.IsSubtype(expect, actual, true, true, modal)) {
-        Sema::DiagMismatchedTypesWithFoundTy(diag, *node, *expect, *actual);
-        node->SetTy(TypeManager::GetInvalidTy());
+        Sema::DiagMismatchedTypesWithFoundTy(diag, *node, expect, actual);
+        node->SetTy({TypeManager::GetInvalidTy()});
     }
 }
 
 using namespace Sema;
-bool TypeChecker::TypeCheckerImpl::ChkExclaveExpr(ASTContext& ctx, Ty& target, ExclaveExpr& expr)
+bool TypeChecker::TypeCheckerImpl::ChkExclaveExpr(ASTContext& ctx, ModalTy target, ExclaveExpr& expr)
 {
     auto type = SynExclaveExpr(ctx, expr);
     if (!Ty::IsTyCorrect(type)) {
@@ -1072,9 +1070,9 @@ bool TypeChecker::TypeCheckerImpl::ChkExclaveExpr(ASTContext& ctx, Ty& target, E
     }
     // syn exclave either returns invalid, or returns Nothing, so subtype always holds
     // but in our design, InvalidTy is not a subtype of anything, so we still need to check
-    if (!typeManager.IsSubtype(type, &target)) {
+    if (!typeManager.IsSubtype(type, target)) {
         DiagMismatchedTypes(diag, expr, target);
-        expr.SetTy(TypeManager::GetInvalidTy());
+        expr.SetTy({TypeManager::GetInvalidTy()});
         return false;
     }
     return true;
@@ -1088,10 +1086,10 @@ void TypeChecker::TypeCheckerImpl::DiagNestedExclave(const ExclaveExpr& expr, co
 
 void TypeChecker::TypeCheckerImpl::DiagExpectedDataType(const AST::Node& node)
 {
-    diag.DiagnoseRefactor(DiagKindRefactor::sema_expected_data_type, node, node.GetTy()->String());
+    diag.DiagnoseRefactor(DiagKindRefactor::sema_expected_data_type, node, node.GetTy().String());
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynExclaveExpr(ASTContext& ctx, ExclaveExpr& expr)
+ModalTy TypeChecker::TypeCheckerImpl::SynExclaveExpr(ASTContext& ctx, ExclaveExpr& expr)
 {
     // DiagExclaveOutsideFunc is only reported in ModalCheckExclaveInsideFunction.
 
@@ -1111,16 +1109,16 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynExclaveExpr(ASTContext& ctx, ExclaveExp
     // Target from global/static var initializer (use var's type for last expr / exclave type)
     VarDecl* gv = topLevelVar.get();
     if (gv && gv->initializer) {
-        if (!Ty::IsTyCorrect(gv->GetTy()) || gv->GetTy()->kind == TypeKind::TYPE_QUEST) {
+        if (!gv->GetTy().IsCorrect() || gv->GetTy()->kind == TypeKind::TYPE_QUEST) {
             SynBlock({ctx, SynPos::EXPR_ARG}, *expr.body);
-            expr.SetTy(TypeManager::GetNothingTy());
+            expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
             return expr.GetTy();
         }
-        if (!ChkBlock(ctx, *gv->GetTy(), *expr.body)) {
-            expr.SetTy(TypeManager::GetInvalidTy());
+        if (!ChkBlock(ctx, gv->GetTy(), *expr.body)) {
+            expr.SetTy({TypeManager::GetInvalidTy()});
             return expr.GetTy();
         }
-        expr.SetTy(TypeManager::GetNothingTy());
+        expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
         return expr.GetTy();
     }
 
@@ -1128,41 +1126,41 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynExclaveExpr(ASTContext& ctx, ExclaveExp
     auto fun = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, expr.scopeName);
     if (fun && fun->node) {
         auto fb = GetFuncBody(*fun->node);
-        if (auto funcBodyTy = DynamicCast<FuncTy>(fb->GetTy())) {
+        if (auto funcBodyTy = DynamicCast<FuncTy*>(fb->DataTy())) {
             auto target = funcBodyTy->retTy;
-            if (target->kind == TypeKind::TYPE_QUEST) {
+            if (!target.Ty() || target->kind == TypeKind::TYPE_QUEST) {
                 SynBlock({ctx, SynPos::EXPR_ARG}, *expr.body);
-                expr.SetTy(TypeManager::GetNothingTy());
+                expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
                 return expr.GetTy();
             }
             if (auto func = DynamicCast<FuncDecl>(fun->node)) {
                 if (func->TestAttr(Attribute::CONSTRUCTOR) || func->IsFinalizer()) {
                     SynBlock({ctx, SynPos::EXPR_ARG}, *expr.body);
-                    expr.SetTy(TypeManager::GetNothingTy());
+                    expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
                     return expr.GetTy();
                 }
             }
-            if (!ChkBlock(ctx, *target, *expr.body)) {
-                expr.SetTy(TypeManager::GetInvalidTy());
+            if (!ChkBlock(ctx, target, *expr.body)) {
+                expr.SetTy({TypeManager::GetInvalidTy()});
                 return expr.GetTy();
             }
-            expr.SetTy(TypeManager::GetNothingTy());
+            expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
             return expr.GetTy();
         }
     }
 
     // No target: do not check exclave return type; any type inside body is correct
     SynBlock({ctx, SynPos::EXPR_ARG}, *expr.body);
-    expr.SetTy(TypeManager::GetNothingTy());
+    expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
     return expr.GetTy();
 }
 
 void TypeChecker::TypeCheckerImpl::CheckHasLocalMod(const AST::Expr& node, LocalModal local)
 {
-    if (!Ty::IsTyCorrect(node.GetTy())) {
+    if (!node.GetTy().IsCorrect()) {
         return;
     }
-    if (node.GetTy()->Modal().local != local) {
+    if (node.TyMode().local != local) {
         DiagLocalModNotSatisfied(node, local);
     }
 }
@@ -1170,6 +1168,6 @@ void TypeChecker::TypeCheckerImpl::CheckHasLocalMod(const AST::Expr& node, Local
 void TypeChecker::TypeCheckerImpl::DiagLocalModNotSatisfied(const AST::Expr& node, LocalModal local)
 {
     diag.DiagnoseRefactor(DiagKindRefactor::sema_local_modal_not_satisfied, node, std::string{ToString(local)},
-        node.GetTy()->String());
+        node.GetTy().String());
 }
 } // namespace Cangjie

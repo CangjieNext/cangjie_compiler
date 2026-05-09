@@ -28,19 +28,19 @@ std::vector<OwnedPtr<FuncArg>> EstimatingLengthOfString(const StrInterpolationEx
             size += lce->stringValue.size();
         }
     }
-    auto int64Ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64, {});
-    auto ctorArg = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(size), int64Ty);
+    auto int64Ty = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
+    auto ctorArg = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(size), {int64Ty});
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateFuncArg(std::move(ctorArg)));
     return args;
 }
 
-Ptr<Decl> MatchAppendFuncByParamTy(std::vector<Ptr<Decl>> candidate, const Ty& paramTy)
+Ptr<Decl> MatchAppendFuncByParamTy(std::vector<Ptr<Decl>> candidate, ModalTy paramTy)
 {
     auto matchedAppend = std::find_if(candidate.begin(), candidate.end(), [&paramTy](Ptr<Decl> d) {
         // StringBuilder's append function only accept one parameter.
-        if (auto funcTy = DynamicCast<FuncTy>(d->GetTy()); funcTy && funcTy->paramTys.size() == 1) {
-            return funcTy->paramTys[0].get() == &paramTy;
+        if (auto funcTy = DynamicCast<FuncTy>(d->DataTy()); funcTy && funcTy->paramTys.size() == 1) {
+            return funcTy->paramTys[0] == paramTy;
         } else {
             return false;
         }
@@ -49,19 +49,20 @@ Ptr<Decl> MatchAppendFuncByParamTy(std::vector<Ptr<Decl>> candidate, const Ty& p
 }
 } // namespace
 
-std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::MatchToStringImpl(const ASTContext& ctx, const File& file, Ty& ty)
+std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::MatchToStringImpl(
+    const ASTContext& ctx, const File& file, ModalTy ty)
 {
     std::vector<Ptr<Decl>> found;
-    if (ty.IsBuiltin()) {
-        found = ExtendFieldLookup(ctx, file, &ty, "toString");
+    if (ty->IsBuiltin()) {
+        found = ExtendFieldLookup(ctx, file, ty.Ty(), "toString");
     } else {
-        auto decl = Ty::GetDeclPtrOfTy(&ty);
+        auto decl = Ty::GetDeclPtrOfTy(ty);
         found = FieldLookup(ctx, decl, "toString", {.file = &file});
     }
     for (auto it = found.begin(); it != found.end();) {
         auto stringDecl = importManager.GetCoreDecl<InheritableDecl>(STD_LIB_STRING);
         CJC_NULLPTR_CHECK(stringDecl);
-        auto funcTy = DynamicCast<FuncTy*>((*it)->GetTy());
+        auto funcTy = DynamicCast<FuncTy>((*it)->DataTy());
         CJC_NULLPTR_CHECK(funcTy);
         // toString function have no parameter and return type is Struct-String.
         if (!funcTy->paramTys.empty() || funcTy->retTy != stringDecl->GetTy()) {
@@ -82,9 +83,9 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::DesugarStrPartExpr(
     CJC_NULLPTR_CHECK(expr.curFile);
     if (auto ie = DynamicCast<InterpolationExpr>(&expr)) {
         // For interpolation part.
-        CJC_ASSERT(ie->block && Ty::IsTyCorrect(ie->block->GetTy()));
+        CJC_ASSERT(ie->block && ie->block->GetTy().IsCorrect());
         // Find an 'append' function that matches with ie->block->GetTy().
-        auto matchedAppend = MatchAppendFuncByParamTy(appendDecls, *ie->block->GetTy());
+        auto matchedAppend = MatchAppendFuncByParamTy(appendDecls, ie->block->GetTy());
         if (matchedAppend) {
             appendArgs.emplace_back(CreateFuncArg(std::move(ie->block)));
             // Select append of the corresponding parameter type version: $tmp.append({...}).
@@ -92,7 +93,7 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::DesugarStrPartExpr(
         } else {
             // Find toString function target, if can't find by interpolation expr type, use the version in the ToString
             // interface. Only one candidate should be eligible.
-            auto found = MatchToStringImpl(ctx, *expr.curFile, *ie->block->GetTy());
+            auto found = MatchToStringImpl(ctx, *expr.curFile, ie->block->GetTy());
             if (found.empty()) {
                 auto toStringInterface = importManager.GetCoreDecl<InheritableDecl>(TOSTRING_NAME);
                 found = FieldLookup(ctx, toStringInterface, "toString");
@@ -101,12 +102,12 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::DesugarStrPartExpr(
             auto toStringFunc = CreateMemberAccess(std::move(ie->block), *found[0]);
             CopyBasicInfo(toStringFunc->baseExpr.get(), toStringFunc.get());
             auto toStringCall = CreateCallExpr(std::move(toStringFunc), {});
-            auto funcTy = StaticCast<FuncTy*>(found[0]->GetTy());
+            auto funcTy = StaticCast<FuncTy*>(found[0]->DataTy());
             toStringCall->SetTy(funcTy->retTy);
             toStringCall->resolvedFunction = DynamicCast<FuncDecl*>(found[0]);
             appendArgs.emplace_back(CreateFuncArg(std::move(toStringCall)));
             // Select append of with Struct-String type version, and add toString call: $tmp.append({...}.toString()).
-            appendDecl = MatchAppendFuncByParamTy(appendDecls, *funcTy->retTy);
+            appendDecl = MatchAppendFuncByParamTy(appendDecls, funcTy->retTy);
         }
     } else if (auto lce = DynamicCast<LitConstExpr>(&expr)) {
         // There is always an extra empty string at the end of the interpolation string, and there is no need to
@@ -115,7 +116,7 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::DesugarStrPartExpr(
             return nullptr;
         }
         // For String Literal.
-        appendDecl = MatchAppendFuncByParamTy(appendDecls, *expr.GetTy());
+        appendDecl = MatchAppendFuncByParamTy(appendDecls, expr.GetTy());
         appendArgs.emplace_back(CreateFuncArg(ASTCloner::Clone(Ptr(&expr))));
     }
     CJC_ASSERT(appendDecl);
@@ -124,7 +125,7 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::DesugarStrPartExpr(
     CopyBasicInfo(&expr, appendFunc.get());
     // sb.append() return type is unit.
     auto appendCall = CreateCallExpr(
-        std::move(appendFunc), std::move(appendArgs), nullptr, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT, {}));
+        std::move(appendFunc), std::move(appendArgs), nullptr, {TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)});
     appendCall->resolvedFunction = DynamicCast<FuncDecl*>(appendDecl);
     return appendCall;
 }
@@ -180,7 +181,7 @@ void TypeChecker::TypeCheckerImpl::DesugarStrInterpolationExpr(ASTContext& ctx, 
         }
         blk->body.emplace_back(std::move(appendCall));
     }
-    auto field = MatchToStringImpl(ctx, *litConstExpr.curFile, *sbDecl->GetTy());
+    auto field = MatchToStringImpl(ctx, *litConstExpr.curFile, sbDecl->GetTy());
     CJC_ASSERT(field.size() == 1);
     auto toStringFunc = CreateMemberAccess(CreateRefExpr(*sbItem), *field[0]);
     CopyBasicInfo(sbCtorCall.get(), toStringFunc->baseExpr.get());

@@ -54,7 +54,7 @@ public:
      * @param baseTy specialized extended type.
      * @param targets all candidate members.
      */
-    void RemoveTargetNotMeetExtendConstraint(const Ptr<AST::Ty> baseTy, std::vector<Ptr<AST::Decl>>& targets);
+    void RemoveTargetNotMeetExtendConstraint(AST::ModalTy baseTy, std::vector<Ptr<AST::Decl>>& targets);
 
 private:
     friend class InstCtxScope;

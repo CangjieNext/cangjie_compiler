@@ -75,7 +75,11 @@ OwnedPtr<ClassDecl> InsertFwdClasses::GenerateGenericInterfaceFwdclassMethod(Int
         actualTyArgMap[typeStr] = ty;
     }
     auto instantTy = GetInstantyForGenericTy(*interfaceDecl, actualTyArgMap, ctx.typeManager);
-    instantTy->typeArgs = typeArgs;
+    std::vector<ModalTy> modalTypeArgs;
+    for (auto ty : typeArgs) {
+        modalTypeArgs.emplace_back(ty);
+    }
+    instantTy->typeArgs = std::move(modalTypeArgs);
     // Set fwdclassDecl inheritedTypes.
     auto interfaceRefType = CreateRefType(*interfaceDecl, instantTy);
     std::vector<OwnedPtr<Type>> typeArguments;
@@ -84,11 +88,11 @@ OwnedPtr<ClassDecl> InsertFwdClasses::GenerateGenericInterfaceFwdclassMethod(Int
         interfaceRefType->typeArguments.emplace_back(std::move(priType));
     }
     fwdclassDecl->inheritedTypes.emplace_back(std::move(interfaceRefType));
-    fwdclassDecl->SetTy(ctx.typeManager.GetClassTy(*fwdclassDecl, {}, {}));
+    fwdclassDecl->SetTy({ctx.typeManager.GetClassTy(*fwdclassDecl, {})});
 
     auto classLikeTy = DynamicCast<ClassLikeTy*>(instantTy);
     CJC_ASSERT(classLikeTy);
-    classLikeTy->directSubtypes.insert(fwdclassDecl->GetTy());
+    classLikeTy->directSubtypes.insert(fwdclassDecl->DataTy());
     GenerateInterfaceFwdClassBody(ctx, *fwdclassDecl, *interfaceDecl, genericConfig);
     return fwdclassDecl;
 }
@@ -106,10 +110,14 @@ void InsertFwdClasses::HandleImpl(InteropContext& ctx)
         } else {
             auto fwdclassDecl = InitInterfaceFwdClassDecl(interfaceDecl);
             fwdclassDecl->inheritedTypes.emplace_back(CreateRefType(*interfaceDecl));
-            fwdclassDecl->SetTy(ctx.typeManager.GetClassTy(*fwdclassDecl, interfaceDecl->GetTy()->typeArgs, {}));
-            auto classLikeTy = DynamicCast<ClassLikeTy*>(interfaceDecl->GetTy());
+            std::vector<DataTy> interfaceTypeArgs;
+            for (auto argTy : interfaceDecl->DataTy()->TyArgs()) {
+                interfaceTypeArgs.push_back(argTy);
+            }
+            fwdclassDecl->SetTy({ctx.typeManager.GetClassTy(*fwdclassDecl, interfaceTypeArgs)});
+            auto classLikeTy = DynamicCast<ClassLikeTy*>(interfaceDecl->DataTy());
             CJC_ASSERT(classLikeTy);
-            classLikeTy->directSubtypes.insert(fwdclassDecl->GetTy());
+            classLikeTy->directSubtypes.insert(fwdclassDecl->DataTy());
             GenerateInterfaceFwdClassBody(ctx, *fwdclassDecl, *interfaceDecl);
             ctx.genDecls.emplace_back(std::move(fwdclassDecl));
         }

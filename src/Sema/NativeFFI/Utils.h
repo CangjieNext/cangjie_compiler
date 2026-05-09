@@ -110,8 +110,7 @@ template <typename... Args> OwnedPtr<CallExpr> CreateCall(Ptr<FuncDecl> fd, Ptr<
 
     (Details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
 
-    auto funcTy = StaticCast<FuncTy*>(fd->GetTy());
-
+    auto funcTy = StaticCast<FuncTy*>(fd->DataTy());
     return CreateCallExpr(WithinFile(CreateRefExpr(*fd), curFile), std::move(funcArgs), fd, funcTy->retTy,
         CallKind::CALL_DECLARED_FUNCTION);
 }
@@ -125,7 +124,7 @@ OwnedPtr<CallExpr> CreateMemberCall(OwnedPtr<Expr> receiver, Ptr<FuncDecl> fd, O
 
     (Details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
 
-    auto funcTy = StaticCast<FuncTy*>(fd->GetTy());
+    auto funcTy = StaticCast<FuncTy*>(fd->DataTy());
     auto ma = CreateMemberAccess(std::move(receiver), *fd);
     CopyBasicInfo(ma->baseExpr, ma);
     return CreateCallExpr(std::move(ma), std::move(funcArgs), fd, funcTy->retTy, CallKind::CALL_DECLARED_FUNCTION);
@@ -209,7 +208,7 @@ void ReplaceGenericTyForFunc(Ptr<FuncDecl> funcDecl, GenericConfigInfo* genericC
 void ReplaceGenericTyForFuncTy(Ptr<Ty> ty, GenericConfigInfo* genericConfig, TypeManager& typeManager);
 
 void GetArgsAndRetGenericActualTyVector(const GenericConfigInfo* config, FuncDecl& ctor,
-    std::unordered_map<std::string, Ptr<Ty>>& actualTyArgMap, std::vector<Ptr<Ty>>& funcTyParams,
+    std::unordered_map<std::string, Ptr<Ty>>& actualTyArgMap, std::vector<ModalTy>& funcTyParams,
     std::vector<OwnedPtr<Type>>& actualPrimitiveType, TypeManager& typeManager);
 
 Ptr<Ty> GetInstantyForGenericTy(

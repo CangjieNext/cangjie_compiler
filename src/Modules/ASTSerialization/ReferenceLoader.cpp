@@ -19,6 +19,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include "flatbuffers/NodeFormat_generated.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -64,8 +65,32 @@ void SetMemberDeclReference(Decl& member, Decl& parentDecl)
     }
 }
 
-OwnedPtr<Type> WrapType(Ptr<Ty> ty);
-OwnedPtr<RefType> Wrap2RefType(Ptr<Ty> ty)
+OwnedPtr<Type> WrapType(ModalTy ty);
+
+LocalModalAST LocalModalToAST(LocalModal modal)
+{
+    switch (modal) {
+        case LocalModal::NOT:
+            return LocalModalAST::NOT;
+        case LocalModal::HALF:
+            return LocalModalAST::HALF;
+        case LocalModal::FULL:
+            return LocalModalAST::FULL;
+        default:
+            CJC_ABORT_WITH_MSG("Unhandled local modal.");
+    }
+}
+
+/// Wrap the modal info to the type node.
+void WrapTyMode(Type& typeNode, ModalTy ty)
+{
+    if (ty.IsDataType()) {
+        return;
+    }
+    typeNode.modal.SetLocal(LocalModalToAST(ty.Mode().local), DEFAULT_POSITION);
+}
+
+OwnedPtr<RefType> Wrap2RefType(ModalTy ty)
 {
     const std::unordered_set<TypeKind> CAN_BE_REF = {
         TypeKind::TYPE_ENUM,
@@ -96,11 +121,13 @@ OwnedPtr<RefType> Wrap2RefType(Ptr<Ty> ty)
     refType->ref.identifier = ty->name;
     if (auto decl = Ty::GetDeclPtrOfTy(ty)) {
         refType->ref.target = decl;
-        refType->ref.identifier = Is<ClassThisTy>(refType->GetTy()) ? "This" : decl->identifier.Val();
+        refType->ref.identifier =
+            Is<ClassThisTy>(*refType->DataTy()) ? "This" : decl->identifier.Val();
     }
     if (hasTypeAlias) {
-        refType->aliasTy = ty;
+        refType->aliasTy = ty.Ty();
     }
+    WrapTyMode(*refType, ty);
     refType->EnableAttr(Attribute::IMPORTED, Attribute::COMPILER_ADD, Attribute::IS_CHECK_VISITED);
     return refType;
 }
@@ -110,7 +137,7 @@ OwnedPtr<RefType> Wrap2RefType(Ptr<Ty> ty)
  * @param ty The semantic type.
  * @return The wrapped AST type node.
  */
-OwnedPtr<Type> WrapType(Ptr<Ty> ty)
+OwnedPtr<Type> WrapType(ModalTy ty)
 {
     if (ty == nullptr) {
         return nullptr;
@@ -120,34 +147,37 @@ OwnedPtr<Type> WrapType(Ptr<Ty> ty)
         auto pt = MakeOwned<PrimitiveType>();
         pt->str = ty->String();
         pt->SetTy(ty);
+        WrapTyMode(*pt, ty);
         pt->EnableAttr(Attribute::IMPORTED, Attribute::COMPILER_ADD, Attribute::IS_CHECK_VISITED);
         return pt;
     } else if (ty->kind == TypeKind::TYPE_FUNC) {
         auto funcType = MakeOwned<FuncType>();
-        auto funcTy = StaticCast<FuncTy>(ty);
-        for (auto param : funcTy->paramTys) {
+        auto& funcTy = StaticCast<FuncTy&>(*ty.Ty());
+        for (auto param : funcTy.paramTys) {
             funcType->paramTypes.emplace_back(WrapType(param));
             hasTypeAlias = hasTypeAlias || !Ty::IsInitialTy(funcType->paramTypes.back()->aliasTy);
         }
         funcType->SetTy(ty);
-        funcType->retType = WrapType(funcTy->retTy);
+        funcType->retType = WrapType(funcTy.retTy);
         hasTypeAlias = hasTypeAlias || !Ty::IsInitialTy(funcType->retType->aliasTy);
+        WrapTyMode(*funcType, ty);
         funcType->EnableAttr(Attribute::IMPORTED, Attribute::COMPILER_ADD, Attribute::IS_CHECK_VISITED);
         if (hasTypeAlias) {
-            funcType->aliasTy = ty;
+            funcType->aliasTy = ty.Ty();
         }
         return funcType;
     } else if (ty->kind == TypeKind::TYPE_TUPLE) {
         auto tupleType = MakeOwned<TupleType>();
-        auto tupleTy = StaticCast<TupleTy>(ty);
-        for (auto typeArg : tupleTy->typeArgs) {
+        auto& tupleTy = StaticCast<TupleTy&>(*ty.Ty());
+        for (auto typeArg : tupleTy.typeArgs) {
             tupleType->fieldTypes.emplace_back(WrapType(typeArg));
             hasTypeAlias = hasTypeAlias || !Ty::IsInitialTy(tupleType->fieldTypes.back()->aliasTy);
         }
         tupleType->SetTy(ty);
+        WrapTyMode(*tupleType, ty);
         tupleType->EnableAttr(Attribute::IMPORTED, Attribute::COMPILER_ADD, Attribute::IS_CHECK_VISITED);
         if (hasTypeAlias) {
-            tupleType->aliasTy = ty;
+            tupleType->aliasTy = ty.Ty();
         }
         return tupleType;
     }
@@ -159,7 +189,7 @@ void UpdateType(OwnedPtr<Type>& astType, OwnedPtr<Type> loadedType)
     CJC_NULLPTR_CHECK(loadedType);
     if (astType == nullptr) {
         astType = std::move(loadedType);
-    } else if (Ty::IsTyCorrect(loadedType->GetTy())) {
+    } else if (loadedType->GetTy().IsCorrect()) {
         // If type is invalid, it means the type decl is need to be recompiled, do not load type cache further.
         astType->SetTy(loadedType->GetTy());
         astType->EnableAttr(Attribute::IS_CHECK_VISITED);
@@ -203,7 +233,7 @@ void PostLoadReference(Expr& expr)
 }
 } // namespace
 
-Ptr<Ty> ASTLoader::LoadType(FormattedIndex type) const
+DataTy ASTLoader::LoadType(FormattedIndex type) const
 {
     CJC_NULLPTR_CHECK(pImpl);
     return pImpl->LoadType(type);
@@ -267,15 +297,14 @@ void ASTLoader::ASTLoaderImpl::LoadRefs()
     }
 }
 
-// Load and reproduce ty according to type index, the mapping pointers are constructed using decl index.
-Ptr<Ty> ASTLoader::ASTLoaderImpl::LoadType(FormattedIndex type)
+// Load shape-only ty from SemaTy table; modal is loaded separately from parallel Mode fields.
+DataTy ASTLoader::ASTLoaderImpl::LoadType(FormattedIndex type)
 {
     if (type == INVALID_FORMAT_INDEX) {
         return TypeManager::GetInvalidTy();
     }
     // NOTE: serialized index is real table offset plus 1.
     auto index = type - 1;
-    // If ty is found in allTypes, return it.
     if (auto ty = allTypes[index]; ty) {
         return ty;
     }
@@ -289,32 +318,34 @@ Ptr<Ty> ASTLoader::ASTLoaderImpl::LoadType(FormattedIndex type)
     } else {
         allTypes[index] = TypeManager::GetInvalidTy();
     }
+    if (!allTypes[index]) {
+        allTypes[index] = TypeManager::GetInvalidTy();
+    }
     return allTypes[index];
 }
 
-std::vector<Ptr<Ty>> ASTLoader::ASTLoaderImpl::LoadFuncSemaTyParamTypes(const PackageFormat::SemaTy& typeObj)
+std::vector<ModalTy> ASTLoader::ASTLoaderImpl::LoadFuncSemaTyParamTypes(const PackageFormat::SemaTy& typeObj)
 {
     auto info = typeObj.info_as_FuncTyInfo();
     CJC_NULLPTR_CHECK(info);
     CJC_NULLPTR_CHECK(typeObj.typeArgs());
     const auto* modesVec = info->typeArgsMode();
-    std::vector<Ptr<Ty>> params;
+    std::vector<ModalTy> params;
     const auto len = static_cast<uoffset_t>(typeObj.typeArgs()->size());
     for (uoffset_t i = 0; i < len; ++i) {
-        auto t = LoadType(static_cast<FormattedIndex>(typeObj.typeArgs()->Get(i)));
         const PackageFormat::Mode* modePtr =
             (modesVec != nullptr && i < modesVec->size()) ? modesVec->Get(i) : nullptr;
-        params.emplace_back(ApplyLoadedModal(typeManager, std::move(t), modePtr));
+        params.emplace_back(ApplyLoadedModal(
+            LoadType(static_cast<FormattedIndex>(typeObj.typeArgs()->Get(i))), modePtr));
     }
     return params;
 }
 
-Ptr<Ty> ASTLoader::ASTLoaderImpl::LoadFuncSemaTyRetType(const PackageFormat::SemaTy& typeObj)
+ModalTy ASTLoader::ASTLoaderImpl::LoadFuncSemaTyRetType(const PackageFormat::SemaTy& typeObj)
 {
     auto info = typeObj.info_as_FuncTyInfo();
     CJC_NULLPTR_CHECK(info);
-    auto ret = LoadType(static_cast<FormattedIndex>(info->retType()));
-    return ApplyLoadedModal(typeManager, ret, info->retTyMode());
+    return ApplyLoadedModal(LoadType(static_cast<FormattedIndex>(info->retType())), info->retTyMode());
 }
 
 bool ASTLoader::ASTLoaderImpl::GetPrimitiveTy(FormattedIndex type, const PackageFormat::SemaTy* typeObj)
@@ -323,8 +354,7 @@ bool ASTLoader::ASTLoaderImpl::GetPrimitiveTy(FormattedIndex type, const Package
         typeObj->kind() <= PackageFormat::TypeKind_Bool) {
         auto astKind = GetASTTypeKind(typeObj->kind());
         CJC_ASSERT(astKind != TypeKind::TYPE_INVALID);
-        auto t = TypeManager::GetPrimitiveTy(astKind, {});
-        allTypes[type] = t;
+        allTypes[type] = TypeManager::GetPrimitiveTy(astKind);
         return true;
     }
     return false;
@@ -336,11 +366,12 @@ void ASTLoader::ASTLoaderImpl::SetGenericTy(FormattedIndex type, const PackageFo
     CJC_NULLPTR_CHECK(info);
     auto decl = GetDeclFromIndex(info->declPtr());
     if (decl == nullptr) {
+        allTypes[type] = TypeManager::GetInvalidTy();
         return; // For invalid indirect importing, this may be true.
     }
     auto gpd = StaticCast<GenericParamDecl*>(decl);
-    auto t = typeManager.GetGenericsTy(*gpd, {});
-    allTypes[type] = Ptr<Ty>(t);
+    auto t = typeManager.GetGenericsTy(*gpd);
+    allTypes[type] = t;
 
     if (isLoadCache) {
         return; // Do not load upper bounds cache for generic type.
@@ -354,13 +385,17 @@ void ASTLoader::ASTLoaderImpl::SetGenericTy(FormattedIndex type, const PackageFo
         CJC_NULLPTR_CHECK(gpd->outerDecl);
         auto generic = gpd->outerDecl->GetGeneric();
         CJC_NULLPTR_CHECK(generic);
-        generic->assumptionCollection.emplace(gTy, gTy->upperBounds);
+        std::set<ModalTy> upperModal;
+        for (const auto& ub : gTy->upperBounds) {
+            upperModal.insert(ModalTy{ub});
+        }
+        generic->assumptionCollection.emplace(gTy, upperModal);
     }
 }
 
-std::vector<Ptr<Ty>> ASTLoader::ASTLoaderImpl::LoadTypeArgs(const PackageFormat::SemaTy& typeObj)
+std::vector<DataTy> ASTLoader::ASTLoaderImpl::LoadTypeArgs(const PackageFormat::SemaTy& typeObj)
 {
-    std::vector<Ptr<Ty>> typeArgs;
+    std::vector<DataTy> typeArgs;
     CJC_NULLPTR_CHECK(typeObj.typeArgs());
     auto length = static_cast<uoffset_t>(typeObj.typeArgs()->size());
     for (uoffset_t i = 0; i < length; i++) {
@@ -372,34 +407,32 @@ std::vector<Ptr<Ty>> ASTLoader::ASTLoaderImpl::LoadTypeArgs(const PackageFormat:
 template <typename TypeT, typename TypeDecl>
 void ASTLoader::ASTLoaderImpl::SetTypeTy(FormattedIndex type, const PackageFormat::SemaTy& typeObj)
 {
-    const ModalInfo modalInfo{};
-
-    Ptr<Ty> ty = TypeManager::GetInvalidTy();
+    DataTy ty = TypeManager::GetInvalidTy();
     if constexpr (std::is_same_v<TypeT, CStringTy>) {
-        ty = TypeManager::GetCStringTy(modalInfo);
+        ty = TypeManager::GetCStringTy();
     } else if constexpr (std::is_same_v<TypeT, PointerTy>) {
         CJC_ASSERT(typeObj.typeArgs() && typeObj.typeArgs()->size() == 1u);
-        ty = typeManager.GetPointerTy(LoadType(typeObj.typeArgs()->Get(0)), modalInfo);
+        ty = typeManager.GetPointerTy(LoadType(typeObj.typeArgs()->Get(0)));
     } else if constexpr (std::is_same_v<TypeT, ArrayTy>) {
         auto info = typeObj.info_as_ArrayTyInfo();
         CJC_NULLPTR_CHECK(info);
         unsigned int dims = static_cast<unsigned int>(info->dimsOrSize());
         CJC_ASSERT(typeObj.typeArgs() && typeObj.typeArgs()->size() == 1u);
-        ty = typeManager.GetArrayTy(LoadType(typeObj.typeArgs()->Get(0)), dims, modalInfo);
+        ty = typeManager.GetArrayTy(LoadType(typeObj.typeArgs()->Get(0)), dims);
     } else if constexpr (std::is_same_v<TypeT, VArrayTy>) {
         auto info = typeObj.info_as_ArrayTyInfo();
         CJC_NULLPTR_CHECK(info);
         CJC_ASSERT(typeObj.typeArgs() && typeObj.typeArgs()->size() == 1u);
-        ty = typeManager.GetVArrayTy(*LoadType(typeObj.typeArgs()->Get(0)), info->dimsOrSize(), modalInfo);
+        ty = typeManager.GetVArrayTy(*LoadType(typeObj.typeArgs()->Get(0)), info->dimsOrSize());
     } else if constexpr (std::is_same_v<TypeT, TupleTy>) {
-        ty = typeManager.GetTupleTy(LoadTypeArgs(typeObj), false, modalInfo);
+        ty = typeManager.GetTupleTy(LoadTypeArgs(typeObj), false);
     } else if constexpr (std::is_same_v<TypeT, FuncTy>) {
         auto params = LoadFuncSemaTyParamTypes(typeObj);
         auto retTy = LoadFuncSemaTyRetType(typeObj);
         auto finfo = typeObj.info_as_FuncTyInfo();
         CJC_NULLPTR_CHECK(finfo);
         ty = typeManager.GetFunctionTy(
-            std::move(params), std::move(retTy), {finfo->isC(), false, finfo->hasVariableLenArg()}, modalInfo);
+            std::move(params), std::move(retTy), {finfo->isC(), false, finfo->hasVariableLenArg()});
     } else {
         auto info = typeObj.info_as_CompositeTyInfo();
         CJC_NULLPTR_CHECK(info);
@@ -410,16 +443,16 @@ void ASTLoader::ASTLoaderImpl::SetTypeTy(FormattedIndex type, const PackageForma
         }
         auto typeArgs = LoadTypeArgs(typeObj);
         if constexpr (std::is_same_v<TypeT, TypeAliasTy>) {
-            ty = typeManager.GetTypeAliasTy(*typeDecl, typeArgs, modalInfo);
+            ty = typeManager.GetTypeAliasTy(*typeDecl, typeArgs);
         } else if constexpr (std::is_same_v<TypeT, ClassTy>) {
-            ty = info->isThisTy() ? typeManager.GetClassThisTy(*typeDecl, typeArgs, modalInfo)
-                                  : typeManager.GetClassTy(*typeDecl, typeArgs, modalInfo);
+            ty = info->isThisTy() ? typeManager.GetClassThisTy(*typeDecl, typeArgs)
+                                  : typeManager.GetClassTy(*typeDecl, typeArgs);
         } else if constexpr (std::is_same_v<TypeT, InterfaceTy>) {
-            ty = typeManager.GetInterfaceTy(*typeDecl, typeArgs, modalInfo);
+            ty = typeManager.GetInterfaceTy(*typeDecl, typeArgs);
         } else if constexpr (std::is_same_v<TypeT, StructTy>) {
-            ty = typeManager.GetStructTy(*typeDecl, typeArgs, modalInfo);
+            ty = typeManager.GetStructTy(*typeDecl, typeArgs);
         } else if constexpr (std::is_same_v<TypeT, EnumTy>) {
-            ty = typeManager.GetEnumTy(*typeDecl, typeArgs, modalInfo);
+            ty = typeManager.GetEnumTy(*typeDecl, typeArgs);
         } else {
             static_assert(std::is_same_v<TypeT, Ty>);
         }
@@ -442,13 +475,15 @@ void ASTLoader::ASTLoaderImpl::LoadInheritedTypes(const PackageFormat::Decl& dec
     for (uoffset_t i = 0; i < length; i++) {
         auto index = inheritedTypes->Get(i);
         if (index != INVALID_FORMAT_INDEX) {
-            auto type = WrapType(LoadType(index));
-            CJC_NULLPTR_CHECK(type);
-            if (!Ty::IsTyCorrect(type->GetTy()) && isLoadCache) {
-                return; // If any invalid type existed, do not load type cache for current 'id'.
+            auto type = WrapType(ModalTy{LoadType(index)});
+            if (!type || !type->GetTy().IsCorrect()) {
+                if (isLoadCache) {
+                    return; // If any invalid type existed, do not load type cache for current 'id'.
+                }
+                continue;
             }
-            if (auto classLikeTy = DynamicCast<ClassLikeTy*>(type->GetTy())) {
-                (void)classLikeTy->directSubtypes.emplace(id.GetTy());
+            if (auto classLikeTy = DynamicCast<ClassLikeTy>(type->DataTy())) {
+                (void)classLikeTy->directSubtypes.emplace(id.DataTy());
             }
             loadedTypes.emplace_back(std::move(type));
         }
@@ -470,11 +505,12 @@ void ASTLoader::ASTLoaderImpl::LoadGenericConstraintsRef(
     for (uoffset_t i = 0; i < length; i++) {
         auto vConstraint = genericRef->constraints()->Get(i);
         auto constraint = CreateAndLoadBasicInfo<GenericConstraint>(*vConstraint, INVALID_FORMAT_INDEX);
-        constraint->type = Wrap2RefType(LoadType(vConstraint->type()));
+        constraint->type = Wrap2RefType(ModalTy{LoadType(vConstraint->type())});
         if (vConstraint->uppers()) {
             auto upperSize = vConstraint->uppers()->size();
             for (uoffset_t j = 0; j < upperSize; j++) {
-                constraint->upperBounds.emplace_back(WrapType(LoadType(vConstraint->uppers()->Get(j))));
+                constraint->upperBounds.emplace_back(
+                    WrapType(ModalTy{LoadType(vConstraint->uppers()->Get(j))}));
             }
         }
         constraint->isImplicitlyIntroduced = vConstraint->isImplicitlyIntroduced();
@@ -519,9 +555,8 @@ void ASTLoader::ASTLoaderImpl::LoadNominalDeclRef(const PackageFormat::Decl& dec
             CJC_NULLPTR_CHECK(info);
             auto fb = info->funcBody();
             CJC_NULLPTR_CHECK(fb);
-            auto retShape = LoadType(static_cast<FormattedIndex>(fb->retType()));
-            auto retTy = ApplyLoadedModal(typeManager, std::move(retShape), fb->retTyMode());
-            auto type = WrapType(std::move(retTy));
+            auto retTy = ApplyLoadedModal(LoadType(static_cast<FormattedIndex>(fb->retType())), fb->retTyMode());
+            auto type = WrapType(retTy);
             UpdateType(astDecl.funcBody->retType, std::move(type));
         }
         astDecl.funcBody->SetTy(astDecl.GetTy());
@@ -538,7 +573,7 @@ void ASTLoader::ASTLoaderImpl::LoadTypeAliasDeclRef(const PackageFormat::Decl& d
 {
     auto info = decl.info_as_AliasInfo();
     CJC_NULLPTR_CHECK(info);
-    tad.type = WrapType(LoadType(info->aliasedTy()));
+    tad.type = WrapType(ModalTy{LoadType(info->aliasedTy())});
 }
 
 void ASTLoader::ASTLoaderImpl::LoadDeclDependencies(const PackageFormat::Decl& decl, Decl& astDecl)
@@ -557,8 +592,7 @@ void ASTLoader::ASTLoaderImpl::LoadDeclDependencies(const PackageFormat::Decl& d
 void ASTLoader::ASTLoaderImpl::LoadDeclRefs(const PackageFormat::Decl& declObj, Decl& decl)
 {
     // Load ty for all decls and try to load generic constraints.
-    decl.SetTy(ApplyLoadedModal(
-        typeManager, LoadType(static_cast<FormattedIndex>(declObj.type())), declObj.tyMode()));
+    decl.SetTy(ApplyLoadedModal(LoadType(static_cast<FormattedIndex>(declObj.type())), declObj.tyMode()));
     if (!Ty::IsTyCorrect(decl.GetTy()) && isLoadCache) {
         return; // Skip following steps if ty is not correct during loading cache.
     }
@@ -618,24 +652,15 @@ void ASTLoader::ASTLoaderImpl::LoadDeclRefs(const PackageFormat::Decl& declObj, 
         case PackageFormat::DeclKind_ThisParam: {
             auto tp = StaticCast<ThisParam*>(&decl);
             // Modal is serialized on Decl.tyMode while SemaTy is shape-only; recover if ApplySerializedTyMode missed.
-            ModalInfo tyModal = tp->GetTy()->Modal();
+            ModalInfo tyModal = tp->TyMode();
             if (tyModal == ModalInfo{} && declObj.tyMode() != nullptr) {
-                tp->SetTy(ApplyLoadedModal(typeManager, tp->GetTy(), declObj.tyMode()));
-                tyModal = tp->GetTy()->Modal();
+                tp->SetTy(ApplyLoadedModal(tp->DataTy(), declObj.tyMode()));
+                tyModal = tp->TyMode();
             }
             if (tyModal == ModalInfo{}) {
                 CJC_ABORT_WITH_MSG("do not save modal for @~local this param");
             }
-            LocalModalAST astModal;
-            if (tyModal == ModalInfo{LocalModal::HALF}) {
-                astModal = LocalModalAST::HALF;
-            } else if (tyModal == ModalInfo{LocalModal::FULL}) {
-                astModal = LocalModalAST::FULL;
-            } else {
-                CJC_ABORT_WITH_MSG("Unhandled local modal.");
-                break;
-            }
-            tp->modal.SetLocal(astModal, DEFAULT_POSITION);
+            tp->modal.SetLocal(LocalModalToAST(tyModal.local), DEFAULT_POSITION);
             break;
         }
         default:
@@ -645,8 +670,7 @@ void ASTLoader::ASTLoaderImpl::LoadDeclRefs(const PackageFormat::Decl& declObj, 
 
 void ASTLoader::ASTLoaderImpl::LoadExprRefs(const PackageFormat::Expr& exprObj, Expr& expr)
 {
-    expr.SetTy(ApplyLoadedModal(
-        typeManager, LoadType(static_cast<FormattedIndex>(exprObj.type())), exprObj.tyMode()));
+    expr.SetTy(ApplyLoadedModal(LoadType(static_cast<FormattedIndex>(exprObj.type())), exprObj.tyMode()));
     expr.mapExpr = GetExprByIndex(exprObj.mapExpr());
     // Only following 4 kind of expression has referenced target decl.
     switch (exprObj.kind()) {
@@ -658,7 +682,7 @@ void ASTLoader::ASTLoaderImpl::LoadExprRefs(const PackageFormat::Expr& exprObj, 
                 StaticCast<MemberAccess>(expr).instTys.emplace_back(LoadType(info->instTys()->Get(i)));
             }
             if (info->matchedParentTy() != INVALID_FORMAT_INDEX) {
-                StaticCast<MemberAccess>(expr).matchedParentTy = ApplyLoadedModal(typeManager,
+                StaticCast<MemberAccess>(expr).matchedParentTy = ApplyLoadedModal(
                     LoadType(static_cast<FormattedIndex>(info->matchedParentTy())), info->matchedParentTyMode());
             }
             break;
@@ -671,7 +695,7 @@ void ASTLoader::ASTLoaderImpl::LoadExprRefs(const PackageFormat::Expr& exprObj, 
                 StaticCast<RefExpr&>(expr).instTys.emplace_back(LoadType(info->instTys()->Get(i)));
             }
             if (info->matchedParentTy() != INVALID_FORMAT_INDEX) {
-                StaticCast<RefExpr&>(expr).matchedParentTy = ApplyLoadedModal(typeManager,
+                StaticCast<RefExpr&>(expr).matchedParentTy = ApplyLoadedModal(
                     LoadType(static_cast<FormattedIndex>(info->matchedParentTy())), info->matchedParentTyMode());
             }
             break;
@@ -732,8 +756,7 @@ void ASTLoader::ASTLoaderImpl::LoadSubNodeRefs(const PackageFormat::Expr& exprOb
                 CJC_ASSERT(index != INVALID_FORMAT_INDEX);
                 auto argObj = GetFormatExprByIndex(index);
                 auto arg = ce.args[i - 1].get();
-                arg->SetTy(ApplyLoadedModal(
-                    typeManager, LoadType(static_cast<FormattedIndex>(argObj->type())), argObj->tyMode()));
+                arg->SetTy(ApplyLoadedModal(LoadType(static_cast<FormattedIndex>(argObj->type())), argObj->tyMode()));
                 if (arg->TestAttr(Attribute::HAS_INITIAL)) {
                     // Default param's arg does not loaded expr, which should retrieve type from arg's type.
                     arg->expr->SetTy(arg->GetTy());
@@ -763,8 +786,8 @@ void ASTLoader::ASTLoaderImpl::LoadSubNodeRefs(const PackageFormat::Expr& exprOb
             } else {
                 for (uoffset_t i = 0; i < exprObj.operands()->size(); i++) {
                     auto mcObj = GetFormatExprByIndex(exprObj.operands()->Get(i));
-                    me.matchCaseOthers[i]->SetTy(ApplyLoadedModal(
-                        typeManager, LoadType(static_cast<FormattedIndex>(mcObj->type())), mcObj->tyMode()));
+                    me.matchCaseOthers[i]->SetTy(
+                        ApplyLoadedModal(LoadType(static_cast<FormattedIndex>(mcObj->type())), mcObj->tyMode()));
                 }
             }
             break;
@@ -793,8 +816,8 @@ void ASTLoader::ASTLoaderImpl::LoadSubNodeRefs2(const PackageFormat::Expr& exprO
             }
             {
                 auto initObj = GetFormatExprByIndex(exprObj.operands()->Get(0));
-                let.initializer->SetTy(ApplyLoadedModal(
-                    typeManager, LoadType(initObj->type()), initObj->tyMode()));
+                let.initializer->SetTy(
+                    ApplyLoadedModal(LoadType(static_cast<FormattedIndex>(initObj->type())), initObj->tyMode()));
             }
             break;
         }
@@ -806,7 +829,7 @@ void ASTLoader::ASTLoaderImpl::LoadSubNodeRefs2(const PackageFormat::Expr& exprO
 void ASTLoader::ASTLoaderImpl::LoadMatchCaseRef(FormattedIndex index, MatchCase& mc, Expr& selector)
 {
     auto mcObj = GetFormatExprByIndex(index);
-    mc.SetTy(ApplyLoadedModal(typeManager, LoadType(mcObj->type()), mcObj->tyMode()));
+    mc.SetTy(ApplyLoadedModal(LoadType(static_cast<FormattedIndex>(mcObj->type())), mcObj->tyMode()));
     auto info = mcObj->info_as_MatchCaseInfo();
     CJC_NULLPTR_CHECK(info);
     CJC_ASSERT(info->patterns()->size() == mc.patterns.size());
@@ -819,7 +842,7 @@ void ASTLoader::ASTLoaderImpl::LoadMatchCaseRef(FormattedIndex index, MatchCase&
 void ASTLoader::ASTLoaderImpl::LoadPatternRefs(const PackageFormat::Pattern& pObj, Pattern& pattern)
 {
     CJC_ASSERT(pObj.types()->size() >= 1);
-    pattern.SetTy(ApplyLoadedModal(typeManager, LoadType(pObj.types()->Get(0)),
+    pattern.SetTy(ApplyLoadedModal(LoadType(static_cast<FormattedIndex>(pObj.types()->Get(0))),
         pObj.tyModes() != nullptr ? pObj.tyModes()->Get(0) : nullptr));
     // Sub patterns is guaranteed and created during 'LoadPattern'.
     switch (pObj.kind()) {
@@ -843,7 +866,7 @@ void ASTLoader::ASTLoaderImpl::LoadPatternRefs(const PackageFormat::Pattern& pOb
             CJC_ASSERT(pObj.types()->size() >= 1);
             etp.types.resize(pObj.types()->size() - 1);
             for (uoffset_t i = 1; i < pObj.types()->size(); i++) {
-                etp.types[i - 1] = WrapType(ApplyLoadedModal(typeManager, LoadType(pObj.types()->Get(i)),
+                etp.types[i - 1] = WrapType(ApplyLoadedModal(LoadType(static_cast<FormattedIndex>(pObj.types()->Get(i))),
                     pObj.tyModes() != nullptr ? pObj.tyModes()->Get(i) : nullptr));
             }
             break;
@@ -854,7 +877,7 @@ void ASTLoader::ASTLoaderImpl::LoadPatternRefs(const PackageFormat::Pattern& pOb
             CJC_ASSERT(pObj.types()->size() >= 1);
             ctp.types.resize(pObj.types()->size() - 1);
             for (uoffset_t i = 1; i < pObj.types()->size(); i++) {
-                ctp.types[i - 1] = WrapType(ApplyLoadedModal(typeManager, LoadType(pObj.types()->Get(i)),
+                ctp.types[i - 1] = WrapType(ApplyLoadedModal(LoadType(static_cast<FormattedIndex>(pObj.types()->Get(i))),
                     pObj.tyModes() != nullptr ? pObj.tyModes()->Get(i) : nullptr));
             }
             break;
