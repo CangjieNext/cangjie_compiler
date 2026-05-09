@@ -7,7 +7,7 @@
 /**
  * @file
  *
- * This file implements a thin bridge to interoplib.objc library
+ * This file implements a thin bridge to interop runtime and support library
  */
 
 #include "InteropLibBridge.h"
@@ -219,7 +219,7 @@ Ptr<ClassDecl> InteropLibBridge::GetObjCUnreachableCodeExceptionDecl()
 
 Ptr<ClassDecl> InteropLibBridge::GetObjCOptionalMethodUnimplementedExceptionDecl()
 {
-    static auto decl = GetInteropLibDecl<ASTKind::CLASS_DECL>(INTEROPLIB_OBJ_C_OPTIONAL_METHOD_UNIMPLEMENTED_EXCEPTION);
+    static auto decl = GetObjCLangDecl<ASTKind::CLASS_DECL>(INTEROPLIB_OBJ_C_OPTIONAL_METHOD_UNIMPLEMENTED_EXCEPTION);
     return decl;
 }
 
