@@ -13,8 +13,8 @@
 #include "PluginCustomAnnoChecker.h"
 
 #include <functional>
-#include <iterator>
 #include <iostream>
+#include <iterator>
 #include <stack>
 #include <unordered_map>
 
@@ -147,17 +147,8 @@ void ClearAnnoInfoOfDepPkg(ImportManager& importManager)
     }
 }
 
-void MarkTargetAsExternalWeak(Ptr<Node> node)
+void SetLinkageAsExternalWeak(Ptr<Decl> target)
 {
-    if (!node) {
-        return;
-    }
-    Ptr<Decl> target = nullptr;
-    if (node->GetTarget()) {
-        target = node->GetTarget();
-    } else if (auto ce = DynamicCast<CallExpr>(node); ce && ce->resolvedFunction) {
-        target = ce->resolvedFunction;
-    }
     if (!target) {
         return;
     }
@@ -189,9 +180,25 @@ void MarkTargetAsExternalWeak(Ptr<Node> node)
             setter->linkage = Linkage::EXTERNAL_WEAK;
         }
     }
+}
+
+void MarkTargetAsExternalWeak(Ptr<Node> node)
+{
+    if (!node) {
+        return;
+    }
+    Ptr<Decl> target = nullptr;
+    if (node->GetTarget()) {
+        target = node->GetTarget();
+    } else if (auto ce = DynamicCast<CallExpr>(node); ce && ce->resolvedFunction) {
+        target = ce->resolvedFunction;
+    }
+    if (!target) {
+        return;
+    }
+    SetLinkageAsExternalWeak(target);
     if (target->outerDecl && target->outerDecl->IsNominalDecl()) {
-        target->outerDecl->linkage = Linkage::EXTERNAL_WEAK;
-        MarkTargetAsExternalWeak(target->outerDecl);
+        SetLinkageAsExternalWeak(target->outerDecl);
     }
 }
 
@@ -516,8 +523,8 @@ bool PluginCustomAnnoChecker::CheckLevel(
     LevelType scopeLevel = scopeAnnoInfo.since != 0 ? scopeAnnoInfo.since : globalLevel;
     PluginCustomAnnoInfo targetAPILevel;
     Parse(target, targetAPILevel);
-    if (targetAPILevel.since > scopeLevel && !diagCfg.node->begin.IsZero()) {
-        if (diagCfg.reportDiag && !diagCfg.message.empty()) {
+    if (targetAPILevel.since > scopeLevel) {
+        if (diagCfg.reportDiag && !diagCfg.message.empty() && !diagCfg.node->begin.IsZero()) {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_apilevel_ref_higher, *diagCfg.node, diagCfg.message[0],
                 std::to_string(targetAPILevel.since), std::to_string(scopeLevel));
         }
@@ -550,8 +557,8 @@ bool PluginCustomAnnoChecker::CheckSyscap(
     // If scopeAnnoInfo.syscap is not empty and equals targetLevel, it is considered a match.
     bool inUnionSet = (unionSet.find(targetLevel) != unionSet.end()) ||
         (!scopeAnnoInfo.syscap.empty() && scopeAnnoInfo.syscap == targetLevel);
-    if (!inUnionSet && !diagCfg.node->begin.IsZero()) {
-        if (diagCfg.reportDiag) {
+    if (!inUnionSet) {
+        if (diagCfg.reportDiag && !diagCfg.node->begin.IsZero()) {
             diagForSyscap(scopeAnnoInfo.syscap, unionSet, DiagKindRefactor::sema_apilevel_syscap_error);
         }
         return false;
@@ -561,8 +568,8 @@ bool PluginCustomAnnoChecker::CheckSyscap(
     // If scopeAnnoInfo.syscap is not empty and equals targetLevel, it is considered a match.
     bool inIntersectionSet = (intersectionSet.find(targetLevel) != intersectionSet.end()) ||
         (!scopeAnnoInfo.syscap.empty() && scopeAnnoInfo.syscap == targetLevel);
-    if (!inIntersectionSet && !diagCfg.node->begin.IsZero()) {
-        if (diagCfg.reportDiag) {
+    if (!inIntersectionSet) {
+        if (diagCfg.reportDiag && !diagCfg.node->begin.IsZero()) {
             diagForSyscap(scopeAnnoInfo.syscap, intersectionSet, DiagKindRefactor::sema_apilevel_syscap_warning);
         }
         return false;
@@ -582,6 +589,68 @@ bool PluginCustomAnnoChecker::CheckCheckingHide(const Decl& target, DiagConfig d
         return false;
     }
     return true;
+}
+
+void PluginCustomAnnoChecker::MarkClassLikeMembersAsExternalWeakIfNeeded(
+    Decl& target, const PluginCustomAnnoInfo& scopeAnnoInfo)
+{
+    if (!target.IsClassLikeDecl() || !target.TestAttr(Attribute::IMPORTED)) {
+        return;
+    }
+    // Only check open or abstract class or interface.
+    if (target.astKind == ASTKind::CLASS_DECL && !target.TestAnyAttr(Attribute::ABSTRACT, Attribute::OPEN)) {
+        return;
+    }
+    auto cld = StaticCast<ClassLikeDecl>(&target);
+    for (auto member : cld->GetMemberDeclPtrs()) {
+        // Constructor, finalizer, and abstract(function without funcbody) function or property must not be in vtable.
+        if (!member->IsFuncOrProp() ||
+            member->TestAnyAttr(Attribute::CONSTRUCTOR, Attribute::FINALIZER, Attribute::ABSTRACT)) {
+            continue;
+        }
+        auto legalAPI = CheckLevel(*member, scopeAnnoInfo, {.reportDiag = false});
+        legalAPI = legalAPI && CheckSyscap(*member, scopeAnnoInfo, {.reportDiag = false});
+        if (!legalAPI) {
+            SetLinkageAsExternalWeak(member);
+        }
+    }
+    for (auto super : cld->GetAllSuperDecls()) {
+        if (super == cld) {
+            continue;
+        }
+        MarkClassLikeMembersAsExternalWeakIfNeeded(*super, scopeAnnoInfo);
+    }
+}
+
+void PluginCustomAnnoChecker::MarkClassLikeMembersAsExternalWeakIfNeeded(
+    Decl& target, const PluginCustomAnnoInfo& scopeAnnoInfo)
+{
+    if (!target.IsClassLikeDecl() || !target.TestAttr(Attribute::IMPORTED)) {
+        return;
+    }
+    // Only check open or abstract class or interface.
+    if (target.astKind == ASTKind::CLASS_DECL && !target.TestAnyAttr(Attribute::ABSTRACT, Attribute::OPEN)) {
+        return;
+    }
+    auto cld = StaticCast<ClassLikeDecl>(&target);
+    for (auto member : cld->GetMemberDeclPtrs()) {
+        // Constructor, finalizer, and abstract(function without funcbody) function or property must not be in vtable.
+        if (!member->IsFuncOrProp() ||
+            member->TestAnyAttr(Attribute::CONSTRUCTOR, Attribute::FINALIZER, Attribute::ABSTRACT)) {
+            continue;
+        }
+        auto legalAPI = CheckLevel(*member, scopeAnnoInfo, {.reportDiag = false});
+        legalAPI = legalAPI && CheckSyscap(*member, scopeAnnoInfo, {.reportDiag = false});
+        if (!legalAPI) {
+            SetLinkageAsExternalWeak(member);
+        }
+    }
+    for (auto super : cld->GetAllSuperDecls()) {
+        if (super == cld) {
+            continue;
+        }
+        MarkClassLikeMembersAsExternalWeakIfNeeded(*super, scopeAnnoInfo);
+    }
 }
 
 bool PluginCustomAnnoChecker::CheckNode(Ptr<Node> node, const PluginCustomAnnoInfo& scopeAnnoInfo, bool reportDiag)
@@ -617,6 +686,11 @@ bool PluginCustomAnnoChecker::CheckNode(Ptr<Node> node, const PluginCustomAnnoIn
     ret = ret && CheckCheckingHide(*target, {reportDiag, node, {target->identifier.Val()}});
     ret = ret && CheckLevel(*target, scopeAnnoInfo, {reportDiag, node, {target->identifier.Val()}});
     ret = ret && CheckSyscap(*target, scopeAnnoInfo, {reportDiag, node, {target->identifier.Val()}});
+    // When an external user inherits a parent class, but the virtual functions in the parent class
+    // do not meet the APILevel requirements, those virtual functions will exist in the vtable
+    // of downstream packages. They should be marked as External_weak, indicating they are not
+    // required to exist.
+    MarkClassLikeMembersAsExternalWeakIfNeeded(*target, scopeAnnoInfo);
     return ret;
 }
 
