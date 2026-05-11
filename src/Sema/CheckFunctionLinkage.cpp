@@ -249,6 +249,9 @@ private:
     // since all propDecl accesses will be rearraged to getter/setter function which belongs to the propDecl.
     void SetTargetLinkage(Ptr<Decl> target)
     {
+        if (target->TestAttr(Attribute::IMPORTED)) {
+            return;
+        }
         if (auto fd = DynamicCast<FuncDecl>(target)) {
             SetFuncTargetLinkage(*fd);
         } else if (auto vd = DynamicCast<VarDecl>(target)) {
@@ -328,6 +331,9 @@ void ExternalLinkageAnalyzer::PerformPublicType(const OwnedPtr<Decl>& decl)
         return;
     }
     for (auto& super : id->GetAllSuperDecls()) {
+        if (super->TestAttr(Attribute::IMPORTED)) {
+            continue;
+        }
         AddExportedTy(super->GetTy());
     }
 
@@ -475,7 +481,7 @@ void ExternalLinkageAnalyzer::AnalyzeExternalLinkageByExportedTy()
         }
 
         auto decl = Ty::GetDeclPtrOfTy(ty);
-        if (!decl) {
+        if (!decl || decl->TestAttr(Attribute::IMPORTED)) {
             continue;
         }
         decl->linkage = Linkage::EXTERNAL;
