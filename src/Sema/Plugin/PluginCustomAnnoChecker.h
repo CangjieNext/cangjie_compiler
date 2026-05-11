@@ -15,7 +15,6 @@
 
 #include <set>
 #include <string>
-#include <set>
 
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/NodeX.h"
@@ -108,6 +107,7 @@ private:
     bool CheckSyscap(const AST::Decl& target, const PluginCustomAnnoInfo& scopeAnnoInfo, DiagConfig diagCfg);
     bool CheckCheckingHide(const AST::Decl& target, DiagConfig diagCfg);
     bool CheckNode(Ptr<AST::Node> node, const PluginCustomAnnoInfo& scopeAnnoInfo, bool reportDiag = true);
+    void MarkClassLikeMembersAsExternalWeakIfNeeded(AST::Decl& target, const PluginCustomAnnoInfo& scopeAnnoInfo);
     void CheckIfAvailableExpr(AST::IfAvailableExpr& iae, const PluginCustomAnnoInfo& scopeAnnoInfo);
     bool IsAnnoAPILevel(Ptr<AST::Annotation> anno, const AST::Decl& decl);
     bool IsAnnoHide(Ptr<AST::Annotation> anno);

@@ -249,6 +249,9 @@ private:
     // since all propDecl accesses will be rearraged to getter/setter function which belongs to the propDecl.
     void SetTargetLinkage(Ptr<Decl> target)
     {
+        if (target->TestAttr(Attribute::IMPORTED)) {
+            return;
+        }
         if (auto fd = DynamicCast<FuncDecl>(target)) {
             SetFuncTargetLinkage(*fd);
         } else if (auto vd = DynamicCast<VarDecl>(target)) {
@@ -328,6 +331,9 @@ void ExternalLinkageAnalyzer::PerformPublicType(const OwnedPtr<Decl>& decl)
         return;
     }
     for (auto& super : id->GetAllSuperDecls()) {
+        if (super->TestAttr(Attribute::IMPORTED)) {
+            continue;
+        }
         AddExportedTy(super->ty);
     }
 
@@ -475,7 +481,7 @@ void ExternalLinkageAnalyzer::AnalyzeExternalLinkageByExportedTy()
         }
 
         auto decl = Ty::GetDeclPtrOfTy(ty);
-        if (!decl) {
+        if (!decl || decl->TestAttr(Attribute::IMPORTED)) {
             continue;
         }
         decl->linkage = Linkage::EXTERNAL;
@@ -569,8 +575,7 @@ void ExternalLinkageAnalyzer::SetPropTargetLinkage(PropDecl& pd, bool byTy)
 void ExternalLinkageAnalyzer::SetVarTargetLinkage(VarDecl& vd, bool byTy, bool isConstInCJMP)
 {
     const bool isPrivateStatic = vd.TestAttr(Attribute::PRIVATE, Attribute::STATIC);
-    if (!IsGlobalOrMember(vd) ||
-        (byTy && vd.astKind == ASTKind::VAR_DECL && isPrivateStatic && !isConstInCJMP)) {
+    if (!IsGlobalOrMember(vd) || (byTy && vd.astKind == ASTKind::VAR_DECL && isPrivateStatic && !isConstInCJMP)) {
         return;
     }
     vd.linkage = Linkage::EXTERNAL;
