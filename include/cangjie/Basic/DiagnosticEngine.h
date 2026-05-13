@@ -295,6 +295,12 @@ struct SubDiagnostic {
     {
         return !(mainHint.IsDefault() && otherHints.empty());
     }
+    Ptr<const AST::Node> GetNodeSubDiagAt() {
+        return node;
+    }
+    void SetNodeOfSubDiag(Ptr<const AST::Node> n) {
+        node = n;
+    }
 
 private:
     void AddMainHint(const Position& pos, const std::string& str)
@@ -307,11 +313,15 @@ private:
         Range range = MakeRange(tok.Begin(), tok.End());
         AddMainHint(range, str);
     }
-    void AddMainHint(const AST::Node& node, const std::string& str)
+    void AddMainHint(const AST::Node& n, const std::string& str)
     {
-        Range range = MakeRange(node.begin, node.end);
+        Range range = MakeRange(n.begin, n.end);
         AddMainHint(range, str);
     }
+
+    /// The node where the diagnostic is located.
+    /// For LSP, enhance automatic error correction functionality.
+    Ptr<const AST::Node> node{nullptr};
 };
 
 /**
@@ -383,6 +393,8 @@ public:
     Ptr<const AST::Node> node{nullptr};
     DiagKind kind{DEFAULT_KIND}; /**< Diagnostic kind */
     bool printSourceCode{true};                /**< Whether to print the related source code. */
+
+    ///-------------------- use for refactor diagnostic --------------------//
     /// Whether this Diagnostic is created from \ref DiagnoseRefactor
     bool isRefactor{false};
     bool isConvertedToRefactor{false};
@@ -400,6 +412,8 @@ public:
     // Stands for refactor notes to differ with notes, need modify after refactor.
     std::vector<SubDiagnostic> subDiags;
     std::vector<DiagHelp> helps;
+    ///---------------------------------------------------------------------//
+
     std::vector<DiagArgument> args;
     DiagSeverity diagSeverity;
     std::string diagMessage;
@@ -612,9 +626,29 @@ public:
     DiagnosticEngine& diag;
     DiagnosticBuilder(const DiagnosticBuilder& p) = delete;
     DiagnosticBuilder& operator=(const DiagnosticBuilder& p) = delete;
-    template <typename... Args> void AddNote(const Position& pos, DiagKind kind, Args... args);
-    template <typename... Args> void AddNote(const AST::Node& node, const Position& pos, DiagKind kind, Args... args);
-    template <typename... Args> void AddNote(const AST::Node& node, DiagKind kind, Args... args);
+
+    // Use for old diagnostic to add note.
+    template <typename... Args> void AddNote(const Position& pos, DiagKind kind, Args... args)
+    {
+        auto end = pos == DEFAULT_POSITION ? pos : pos + 1;
+        Diagnostic myDiag(pos, end, kind, args...);
+        diagnostic.notes.push_back(myDiag);
+    }
+
+    // Use for old diagnostic to add note.
+    template <typename... Args> void AddNote(const AST::Node& node, const Position& pos, DiagKind kind, Args... args)
+    {
+        auto begin = node.GetMacroCallPos(pos);
+        auto end = begin == DEFAULT_POSITION ? begin : begin + 1;
+        Diagnostic myDiag(begin, end, kind, args...);
+        diagnostic.notes.push_back(myDiag);
+    }
+
+    // Use for old diagnostic to add note.
+    template <typename... Args> void AddNote(const AST::Node& node, DiagKind kind, Args... args)
+    {
+        AddNote(node.GetBegin(), kind, args...);
+    }
 
     template <typename... Args> void AddHint(const Position& pos, Args... args)
     {
@@ -826,13 +860,10 @@ public:
         // Refactor the Diagnose of the node after the macro expansion.
         if (node.curMacroCall) {
             Diagnostic diagnostic(node.GetBegin(), node.GetEnd(), kind, args...);
-            diagnostic.node = &node;
             AddMacroCallNote(diagnostic, node, node.begin);
             return DiagnosticBuilder(*this, diagnostic);
         }
-        auto diagnostic = Diagnostic(node.GetBegin(), node.GetEnd(), kind, args...);
-        diagnostic.node = &node;
-        return DiagnosticBuilder(*this, diagnostic);
+        return Diagnose(node.GetBegin(), kind, args...);
     }
 
     DiagnosticBuilder Diagnose(const Diagnostic& diagnostic)
@@ -1039,39 +1070,6 @@ private:
     std::vector<Diagnostic> DisableDiagnose();
     void EnableDiagnose();
 };
-
-template <typename... Args> void DiagnosticBuilder::AddNote(const Position& pos, DiagKind kind, Args... args)
-{
-    auto end = pos == DEFAULT_POSITION ? pos : pos + 1;
-    Diagnostic myDiag(pos, end, kind, args...);
-    diagnostic.notes.push_back(myDiag);
-    diag.ConvertArgsToDiagMessage(myDiag);
-    AddNote(MakeRange(pos, end), myDiag.diagMessage);
-}
-
-template <typename... Args>
-void DiagnosticBuilder::AddNote(const AST::Node& node, const Position& pos, DiagKind kind, Args... args)
-{
-    auto begin = node.GetMacroCallPos(pos);
-    auto end = begin == DEFAULT_POSITION ? begin : begin + 1;
-    Diagnostic myDiag(begin, end, kind, args...);
-    myDiag.node = &node;
-    diagnostic.notes.push_back(myDiag);
-    diag.ConvertArgsToDiagMessage(myDiag);
-    AddNote(MakeRange(begin, end), myDiag.diagMessage);
-}
-
-template <typename... Args> void DiagnosticBuilder::AddNote(const AST::Node& node, DiagKind kind, Args... args)
-{
-    auto pos = node.GetBegin();
-    auto end = pos == DEFAULT_POSITION ? pos : pos + 1;
-    Diagnostic myDiag(pos, end, kind, args...);
-    myDiag.node = &node;
-    diagnostic.notes.push_back(myDiag);
-    diag.ConvertArgsToDiagMessage(myDiag);
-    AddNote(MakeRange(pos, end), myDiag.diagMessage);
-}
-
 } // namespace Cangjie
 
 #endif // CANGJIE_BASIC_DIAGNOSTICENGINE_H
