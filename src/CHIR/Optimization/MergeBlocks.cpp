@@ -181,8 +181,8 @@ void MergeBlocks::RunOnFunc(const BlockGroup& body, CHIRBuilder& builder, const 
             return false;
         }
         if (opts.enableCompileDebug || opts.enableCoverage) {
-            auto [line, column] = term->GetDebugLocation().GetBeginPos();
-            return line == 0 && column == 0;
+            const auto& begin = term->GetDebugLocation().GetBeginPos();
+            return begin.line == 0 && begin.column == 0;
         }
         return true;
     };

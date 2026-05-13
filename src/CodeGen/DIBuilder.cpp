@@ -469,9 +469,9 @@ llvm::DILocation* DIBuilder::CreateDILoc(const CHIRExprWrapper& chirNode, const 
     if (parentFunc && parentFunc->GetFuncKind() == CHIR::DEFAULT_PARAMETER_FUNC) {
         return HandleDefaultParamLocation(chirNode, scope);
     }
-    auto [line, column] = position.GetBeginPos();
-    return llvm::DILocation::get(
-        cgMod.GetLLVMContext(), line, column, scope, nullptr, !position.GetBeginPos().IsLegal());
+    const auto& begin = position.GetBeginPos();
+    return llvm::DILocation::get(cgMod.GetLLVMContext(), begin.line, begin.column, scope, nullptr,
+        !position.GetBeginPos().IsLegal());
 }
 
 llvm::DILocation* DIBuilder::CreateDILoc(llvm::DIScope* currentScope, const CHIR::Position& position)

@@ -94,9 +94,9 @@ template <typename T> Cangjie::Range ToRange(const T& loc)
     auto begin = loc.GetBeginPos();
     auto end = loc.GetEndPos();
     Cangjie::Position beginPos = Cangjie::Position(
-        loc.GetFileID(), static_cast<int>(begin.line), static_cast<int>(begin.column));
+        loc.GetFileID(), static_cast<int>(begin.line), static_cast<int>(begin.column), begin.isCurFile);
     Cangjie::Position endPos = Cangjie::Position(
-        loc.GetFileID(), static_cast<int>(end.line), static_cast<int>(end.column));
+        loc.GetFileID(), static_cast<int>(end.line), static_cast<int>(end.column), end.isCurFile);
     return MakeRange(beginPos, endPos);
 }
 
@@ -109,8 +109,9 @@ template <typename T> std::pair<bool, Cangjie::Range> ToRangeIfNotZero(const T& 
 {
     auto begin = loc.GetBeginPos();
     auto end = loc.GetEndPos();
-    Cangjie::Position beginPos(loc.GetFileID(), static_cast<int>(begin.line), static_cast<int>(begin.column));
-    Cangjie::Position endPos(loc.GetFileID(), static_cast<int>(end.line), static_cast<int>(end.column));
+    Cangjie::Position beginPos(
+        loc.GetFileID(), static_cast<int>(begin.line), static_cast<int>(begin.column), begin.isCurFile);
+    Cangjie::Position endPos(loc.GetFileID(), static_cast<int>(end.line), static_cast<int>(end.column), end.isCurFile);
     if (!beginPos.IsZero() && !endPos.IsZero()) {
         return std::make_pair(true, MakeRange(beginPos, endPos));
     }

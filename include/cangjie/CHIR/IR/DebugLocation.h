@@ -22,7 +22,7 @@ const std::string INVALID_NAME = ""; // Invalid file name
 struct Position {
     unsigned line{0};
     unsigned column{0};
-
+    bool isCurFile{false};
     bool IsLegal() const
     {
         return line != 0 && column != 0;
