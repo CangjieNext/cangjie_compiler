@@ -73,15 +73,16 @@ std::string GetObjChildName(std::string parentName, size_t fieldIdx)
 
 Cangjie::Position ToPosition(const DebugLocation& loc)
 {
-    return Cangjie::Position(loc.GetFileID(),
-        static_cast<int>(loc.GetBeginPos().line), static_cast<int>(loc.GetBeginPos().column));
+    const auto& begin = loc.GetBeginPos();
+    return Cangjie::Position(loc.GetFileID(), static_cast<int>(begin.line), static_cast<int>(begin.column),
+        begin.isCurFile);
 }
 
 std::string ToPosInfo(const DebugLocation& loc, bool isPrintFileName)
 {
-    auto [line, column] = loc.GetBeginPos();
+    const auto& begin = loc.GetBeginPos();
     auto fileName = isPrintFileName ? Cangjie::FileUtil::GetFileName(loc.GetAbsPath()) + "," : "";
-    return " at [" + fileName + std::to_string(line) + "," + std::to_string(column) + "]";
+    return " at [" + fileName + std::to_string(begin.line) + "," + std::to_string(begin.column) + "]";
 }
 
 std::optional<size_t> IsInitialisingMemberVar(const Function& func, const StoreElementRef& store)

@@ -96,7 +96,8 @@ DebugLocation TranslateLocationWithoutScope(
 {
     // Note: AST2CHIL adaptation of scopeInfo is needed.
     return {context.GetSourceFileName(beginPos.fileID), beginPos.fileID,
-        {unsigned(beginPos.line), unsigned(beginPos.column)}, {unsigned(endPos.line), unsigned(endPos.column)}, {0}};
+        {unsigned(beginPos.line), unsigned(beginPos.column), beginPos.isCurFile},
+        {unsigned(endPos.line), unsigned(endPos.column), endPos.isCurFile}, {0}};
 }
 
 std::vector<GenericType*> GetGenericParamType(const AST::Decl& decl, CHIRType& chirType)
