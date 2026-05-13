@@ -181,5 +181,5 @@ int main(int argc, const char* argv[], [[maybe_unused]] const char** envp)
     [[maybe_unused]] std::lock_guard lg(MacroProcMsger::GetInstance().mutex);
     MacroProcMsger::GetInstance().CloseClientResource();
 #endif
-    return 0;
+    _exit(0);
 }
