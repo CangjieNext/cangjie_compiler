@@ -921,7 +921,6 @@ TEST_F(MacroTest, ExpandDecl_WithNoMacroCall_ReturnsSameDecl)
     EXPECT_EQ(expandedDecl->identifier, "SingleAnno");
     EXPECT_EQ(expandedDecl->annotations.size(), 1);
     EXPECT_EQ(expandedDecl->annotations[0]->identifier, "LogWithLevel");
-
 }
 
 TEST_F(MacroTest, ExpandDecl_WithNullDecl_ReturnsEmpty)
