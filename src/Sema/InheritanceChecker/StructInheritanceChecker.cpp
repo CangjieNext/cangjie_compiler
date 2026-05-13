@@ -1020,8 +1020,9 @@ void StructInheritanceChecker::DiagnoseForUnimplementedInterfaces(const MemberMa
             }
             std::string abstractType =
                 member->decl->outerDecl->astKind == ASTKind::CLASS_DECL ? "abstract" : "interface";
-            builder.AddNote(*member->decl, DiagKind::sema_unimplemented_member, abstractType,
-                DeclKindToString(*member->decl), identifierName);
+            std::string note =
+                "unimplemented " + abstractType + " " + DeclKindToString(*member->decl) + " " + identifierName;
+            builder.AddNote(*member->decl, note);
         }
     }
 }

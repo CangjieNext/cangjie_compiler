@@ -393,6 +393,7 @@ void DiagnosticBuilder::AddNote(const AST::Node& node, const std::string& note)
     auto range = MakeRange(node.begin, node.end);
     diag.CheckRange(diagnostic.GetDiagCategory(), range);
     SubDiagnostic subDiag(range, note);
+    subDiag.SetNodeOfSubDiag(&node);
     AddNote(subDiag);
 }
 
