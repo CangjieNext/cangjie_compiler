@@ -68,8 +68,11 @@ FuncType* AdjustVarInitType(
 FuncType* AdjustFuncType(FuncType& funcType, const AST::FuncDecl& funcDecl, CHIRBuilder& builder, CHIRType& chirType)
 {
     auto params = funcType.GetParamTypes();
+
+    // type can be already modififed if it is from common part (deserialized from CHIR)
     // Instance member function needs to add this type.
-    if (IsInstanceMember(funcDecl)) {
+    bool typeAlreadyModified = params.size() == 1 + funcDecl.funcBody->paramLists[0]->params.size();
+    if (IsInstanceMember(funcDecl) && !typeAlreadyModified) {
         std::vector<Type*> paramsTy;
         paramsTy.reserve(params.size() + 1); // additional 1 means the type of this.
         auto thisTy = chirType.TranslateType(*funcDecl.outerDecl->ty);

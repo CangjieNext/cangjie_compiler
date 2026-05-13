@@ -7,8 +7,8 @@
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
-#include "cangjie/CHIR/Utils/ConstantUtils.h"
 #include "cangjie/CHIR/IR/Package.h"
+#include "cangjie/CHIR/Utils/ConstantUtils.h"
 #include "cangjie/Mangle/CHIRManglingUtils.h"
 
 using namespace Cangjie::CHIR;
@@ -32,16 +32,16 @@ bool InheritedChainHasCommon(const CustomTypeDef& def)
 
 bool FuncDeclIsOpen(const AST::FuncDecl& funcDecl)
 {
-    if (funcDecl.TestAnyAttr(AST::Attribute::GENERIC_INSTANTIATED,
-        AST::Attribute::PRIMARY_CONSTRUCTOR, AST::Attribute::CONSTRUCTOR, AST::Attribute::FINALIZER)) {
+    if (funcDecl.TestAnyAttr(AST::Attribute::GENERIC_INSTANTIATED, AST::Attribute::PRIMARY_CONSTRUCTOR,
+            AST::Attribute::CONSTRUCTOR, AST::Attribute::FINALIZER)) {
         return false;
     }
     auto funcHasOpenFlag = funcDecl.TestAnyAttr(AST::Attribute::OPEN, AST::Attribute::ABSTRACT) ||
         (funcDecl.outerDecl && funcDecl.outerDecl->astKind == AST::ASTKind::INTERFACE_DECL);
-    auto instanceMethodIsOpen = funcHasOpenFlag &&
-        (funcDecl.TestAttr(AST::Attribute::PUBLIC) || funcDecl.TestAttr(AST::Attribute::PROTECTED));
-    auto staticMethodIsOpen = funcDecl.outerDecl->IsClassLikeDecl() &&
-        funcDecl.TestAttr(AST::Attribute::STATIC) && !funcDecl.TestAttr(AST::Attribute::PRIVATE);
+    auto instanceMethodIsOpen =
+        funcHasOpenFlag && (funcDecl.TestAttr(AST::Attribute::PUBLIC) || funcDecl.TestAttr(AST::Attribute::PROTECTED));
+    auto staticMethodIsOpen = funcDecl.outerDecl->IsClassLikeDecl() && funcDecl.TestAttr(AST::Attribute::STATIC) &&
+        !funcDecl.TestAttr(AST::Attribute::PRIVATE);
     return instanceMethodIsOpen || staticMethodIsOpen;
 }
 
@@ -61,8 +61,7 @@ bool IsInsideCFuncLambda(const CHIR::Block& bl)
 } // namespace
 
 // `obj.foo()` is a virtual func call ?
-bool Translator::IsVirtualFuncCall(
-    const CustomTypeDef& obj, const AST::FuncDecl& funcDecl, bool baseExprIsSuper)
+bool Translator::IsVirtualFuncCall(const CustomTypeDef& obj, const AST::FuncDecl& funcDecl, bool baseExprIsSuper)
 {
     /**
      *  open class A {
@@ -136,7 +135,10 @@ std::pair<CHIR::Type*, FuncCallType> Translator::GetExactParentTypeAndFuncType(
     auto funcType = StaticCast<FuncType*>(TranslateType(*expr.ty));
     auto paramTys = funcType->GetParamTypes();
     if (!funcDecl.TestAttr(AST::Attribute::STATIC)) {
-        paramTys.insert(paramTys.begin(), &thisType);
+        bool typeAlreadyModified = paramTys.size() == 1 + funcDecl.funcBody->paramLists[0]->params.size();
+        if (!typeAlreadyModified) {
+            paramTys.insert(paramTys.begin(), &thisType);
+        }
         funcType = builder.GetType<FuncType>(paramTys, funcType->GetReturnType());
     }
     std::vector<Type*> funcInstArgs;
@@ -205,13 +207,11 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromVarInit(const AST::R
     CJC_NULLPTR_CHECK(funcDecl->outerDecl);
     CJC_ASSERT(funcDecl->TestAttr(AST::Attribute::STATIC));
     auto parentType = GetNominalSymbolTable(*funcDecl->outerDecl)->GetType();
-    return InstCalleeInfo {
-        .instParentCustomTy = parentType,
+    return InstCalleeInfo{.instParentCustomTy = parentType,
         .thisType = parentType,
         .instParamTys = paramTys,
         .instRetTy = funcType->GetReturnType(),
-        .isVirtualFuncCall = false
-    };
+        .isVirtualFuncCall = false};
 }
 
 Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::RefExpr& expr)
@@ -221,7 +221,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
     if (currentFunc->IsGVInit() || currentFunc->IsStaticInit()) {
         return GetInstCalleeInfoFromVarInit(expr);
     }
-    
+
     // 1. calculate `thisType`
     auto thisType = currentFunc->GetParentCustomTypeOrExtendedType();
     CJC_NULLPTR_CHECK(thisType);
@@ -256,14 +256,12 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
     if (isVirtualFuncCall) {
         thisType = builder.GetType<RefType>(builder.GetType<ThisType>());
     }
-    return InstCalleeInfo {
-        .instParentCustomTy = parentType,
+    return InstCalleeInfo{.instParentCustomTy = parentType,
         .thisType = thisType,
         .instParamTys = funcCallType.funcType->GetParamTypes(),
         .instRetTy = funcCallType.funcType->GetReturnType(),
         .instantiatedTypeArgs = std::move(funcCallType.genericTypeArgs),
-        .isVirtualFuncCall = isVirtualFuncCall
-    };
+        .isVirtualFuncCall = isVirtualFuncCall};
 }
 
 Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const AST::MemberAccess& expr)
@@ -283,8 +281,8 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
     }
     // only `obj.foo()` and `T.foo()` need to calculate if is virtual func call
     // `classA.foo()` is Apply call
-    if (auto customType = DynamicCast<CustomType*>(thisDerefTy); customType &&
-        !funcDecl->TestAttr(AST::Attribute::STATIC)) {
+    if (auto customType = DynamicCast<CustomType*>(thisDerefTy);
+        customType && !funcDecl->TestAttr(AST::Attribute::STATIC)) {
         isVirtualFuncCall = IsVirtualFuncCall(*customType->GetCustomTypeDef(), *funcDecl, isSuper);
     } else if (auto genericType = DynamicCast<GenericType*>(thisDerefTy)) {
         isVirtualFuncCall = true;
@@ -297,18 +295,16 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
 
     // 3. calculate parent type and func type
     auto [parentType, funcCallType] = GetExactParentTypeAndFuncType(expr, *thisType, *funcDecl, isVirtualFuncCall);
-    return InstCalleeInfo {
-        .instParentCustomTy = parentType,
+    return InstCalleeInfo{.instParentCustomTy = parentType,
         .thisType = thisType,
         .instParamTys = funcCallType.funcType->GetParamTypes(),
         .instRetTy = funcCallType.funcType->GetReturnType(),
         .instantiatedTypeArgs = std::move(funcCallType.genericTypeArgs),
-        .isVirtualFuncCall = isVirtualFuncCall
-    };
+        .isVirtualFuncCall = isVirtualFuncCall};
 }
 
-Value* Translator::GetWrapperFuncFromMemberAccess(Type& thisType, const std::string funcName,
-    FuncType& instFuncType, bool isStatic, std::vector<Type*>& funcInstTypeArgs)
+Value* Translator::GetWrapperFuncFromMemberAccess(Type& thisType, const std::string funcName, FuncType& instFuncType,
+    bool isStatic, std::vector<Type*>& funcInstTypeArgs)
 {
     Function* result = nullptr;
     if (auto genericType = DynamicCast<GenericType*>(&thisType)) {
@@ -416,7 +412,8 @@ Ptr<Value> Translator::TransformThisType(Value& rawThis, Type& expectedTy, Lambd
     } else {
         // case e
         expr = StaticCast<LocalVar*>(
-            CHIR::TypeCastOrBoxIfNeeded(rawThis, expectedTy, builder, *curLambda.GetParentBlock()))->GetExpr();
+            CHIR::TypeCastOrBoxIfNeeded(rawThis, expectedTy, builder, *curLambda.GetParentBlock()))
+                   ->GetExpr();
     }
     // this is really hack, should change this
     if (expr->GetResult() != &rawThis) {
@@ -490,8 +487,7 @@ Ptr<Value> Translator::TranslateEnumMemberAccess(const AST::MemberAccess& member
         args.emplace_back(intExpr->GetResult());
     }
 
-    return CreateAndAppendExpression<Tuple>(TranslateLocation(member), ty, args, currentBlock)
-        ->GetResult();
+    return CreateAndAppendExpression<Tuple>(TranslateLocation(member), ty, args, currentBlock)->GetResult();
 }
 
 Ptr<Value> Translator::TranslateInstanceMemberMemberAccess(const AST::MemberAccess& member)
@@ -600,15 +596,14 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
                     auto getMemberRef = CreateGetElementRefWithPath(
                         loc, baseLeftValue, baseLeftValuePath, currentBlock, *baseCustomType);
                     auto memberType = StaticCast<RefType*>(getMemberRef->GetType())->GetBaseType();
-                    CJC_ASSERT(memberType->IsReferenceTypeWithRefDims(1) ||
-                        memberType->IsValueOrGenericTypeWithRefDims(0));
-                    auto loadMemberValue =
-                        CreateAndAppendExpression<Load>(loc, memberType, getMemberRef, currentBlock);
+                    CJC_ASSERT(
+                        memberType->IsReferenceTypeWithRefDims(1) || memberType->IsValueOrGenericTypeWithRefDims(0));
+                    auto loadMemberValue = CreateAndAppendExpression<Load>(loc, memberType, getMemberRef, currentBlock);
                     baseVal = loadMemberValue->GetResult();
                 } else if (baseLeftValueTy->IsValueOrGenericTypeWithRefDims(0)) {
                     auto memberType = GetInstMemberTypeByName(*baseCustomType, baseLeftValuePath, builder);
-                    CJC_ASSERT(memberType->IsReferenceTypeWithRefDims(1) ||
-                        memberType->IsValueOrGenericTypeWithRefDims(0));
+                    CJC_ASSERT(
+                        memberType->IsReferenceTypeWithRefDims(1) || memberType->IsValueOrGenericTypeWithRefDims(0));
                     auto getField = CreateAndAppendExpression<FieldByName>(
                         loc, memberType, baseLeftValue, baseLeftValuePath, currentBlock);
                     baseVal = getField->GetResult();

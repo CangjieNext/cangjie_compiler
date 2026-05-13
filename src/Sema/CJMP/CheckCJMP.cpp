@@ -28,6 +28,7 @@
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ProfileRecorder.h"
+#include "cangjie/Utils/SafePointer.h"
 #include <algorithm>
 
 using namespace Cangjie;
@@ -90,42 +91,42 @@ std::string GetTypeNameFromTy(
     }
 }
 
-std::string CalculatedGenericConstraintsStr(const std::vector<OwnedPtr<GenericConstraint>>& genericConstraints,
-    const std::unordered_map<Ptr<Ty>, unsigned>& genericIdx)
-{
-    std::string ret;
-
-    auto&& constraintCount = std::count_if(
-        genericConstraints.begin(),
-        genericConstraints.end(),
-        [](auto&& gc) { return !gc->isImplicitlyIntroduced; }
-    );
-
-    if (constraintCount == 0) {
-        return ret;
-    }
-
-    std::set<std::string> gcStrs;
-    for (auto& genericConstraint : genericConstraints) {
-        if (genericConstraint->isImplicitlyIntroduced) { 
-            continue; 
-        }
-        std::set<std::string> ubStrs;
-        for (auto& upperBound : genericConstraint->upperBounds) {
-            ubStrs.emplace(GetTypeNameFromTy(upperBound->ty, true, genericIdx));
-        }
-        CJC_ASSERT(!ubStrs.empty());
-
-        auto gcStr = "[" + GetTypeNameFromTy(genericConstraint->type->ty, true, genericIdx) + "<:";
-        std::for_each(ubStrs.begin(), ubStrs.end(), [&gcStr](const std::string& s) { gcStr += s + ","; });
-        gcStr += "]";
-        gcStrs.emplace(gcStr);
-    }
-    CJC_ASSERT(!gcStrs.empty());
-
-    std::for_each(gcStrs.begin(), gcStrs.end(), [&ret](const std::string& s) { ret += s; });
-    return ret;
-}
+// std::string CalculatedGenericConstraintsStr(const std::vector<OwnedPtr<GenericConstraint>>& genericConstraints,
+//     const std::unordered_map<Ptr<Ty>, unsigned>& genericIdx)
+// {
+//     std::string ret;
+//
+//     auto&& constraintCount = std::count_if(
+//         genericConstraints.begin(),
+//         genericConstraints.end(),
+//         [](auto&& gc) { return !gc->isImplicitlyIntroduced; }
+//     );
+//
+//     if (constraintCount == 0) {
+//         return ret;
+//     }
+//
+//     std::set<std::string> gcStrs;
+//     for (auto& genericConstraint : genericConstraints) {
+//         if (genericConstraint->isImplicitlyIntroduced) { 
+//             continue; 
+//         }
+//         std::set<std::string> ubStrs;
+//         for (auto& upperBound : genericConstraint->upperBounds) {
+//             ubStrs.emplace(GetTypeNameFromTy(upperBound->ty, true, genericIdx));
+//         }
+//         CJC_ASSERT(!ubStrs.empty());
+//
+//         auto gcStr = "[" + GetTypeNameFromTy(genericConstraint->type->ty, true, genericIdx) + "<:";
+//         std::for_each(ubStrs.begin(), ubStrs.end(), [&gcStr](const std::string& s) { gcStr += s + ","; });
+//         gcStr += "]";
+//         gcStrs.emplace(gcStr);
+//     }
+//     CJC_ASSERT(!gcStrs.empty());
+//
+//     std::for_each(gcStrs.begin(), gcStrs.end(), [&ret](const std::string& s) { ret += s; });
+//     return ret;
+// }
 
 // Diag report
 void DiagNotMatchedDecl(DiagnosticEngine &diag, const AST::Decl& decl, const std::string& p0, const std::string& p2)
@@ -214,6 +215,49 @@ void Check4CommonInstanceVar(DiagnosticEngine& diag, const Decl& specificDecl)
     }
 }
 
+void RemapGenericParamDecls(Decl& commonDecl, Decl& specificDecl) {
+    if (specificDecl.generic != nullptr && commonDecl.generic != nullptr) {
+        CJC_ASSERT(specificDecl.generic->typeParameters.size() == commonDecl.generic->typeParameters.size());
+        for (unsigned idx = 0; idx < commonDecl.generic->typeParameters.size(); ++idx) {
+            specificDecl.generic->typeParameters[idx]->ty = commonDecl.generic->typeParameters[idx]->ty;
+            commonDecl.generic->typeParameters[idx]->specificImplementation = specificDecl.generic->typeParameters[idx];
+        }
+    }
+}
+
+void UseTypesFromCommonInSpecific(Decl& commonDecl, Decl& specificDecl)
+{
+    specificDecl.ty = commonDecl.ty;
+
+    switch (commonDecl.astKind) {
+        case ASTKind::CLASS_DECL: {
+            ClassDecl& specificClass = StaticCast<ClassDecl>(specificDecl);
+            RawStaticCast<ClassTy*>(commonDecl.ty)->decl = &specificClass;
+            break;
+        }
+        case ASTKind::INTERFACE_DECL: {
+            InterfaceDecl& specificInterface = StaticCast<InterfaceDecl>(specificDecl);
+            RawStaticCast<InterfaceTy*>(commonDecl.ty)->decl = &specificInterface;
+            break;
+        }
+        case ASTKind::STRUCT_DECL: {
+            StructDecl& specificStruct = StaticCast<StructDecl>(specificDecl);
+            RawStaticCast<StructTy*>(commonDecl.ty)->decl = &specificStruct;
+            break;
+        }
+        case ASTKind::ENUM_DECL: {
+            EnumDecl& specificEnum = StaticCast<EnumDecl>(specificDecl);
+            RawStaticCast<EnumTy*>(commonDecl.ty)->decl = &specificEnum;
+            break;
+        }
+        default: {
+            CJC_ASSERT(commonDecl.astKind == ASTKind::EXTEND_DECL);
+        };
+    }
+
+    RemapGenericParamDecls(commonDecl, specificDecl);
+}
+
 // Merge common nominative decl into specific one, do some match for fields.
 void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& specificDecl)
 {
@@ -291,6 +335,8 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
 
     commonDecl.doNotExport = true;
     commonDecl.specificImplementation = &specificDecl;
+
+    UseTypesFromCommonInSpecific(commonDecl, specificDecl);
 }
 }
 
@@ -386,58 +432,66 @@ void UpdateDeclMap(DiagnosticEngine& diag, ASTContext& ctx, Ptr<ExtendDecl>& ed)
 void MPTypeCheckerImpl::MergeCJMPExtensions(CompilerInstance& ci, ScopeManager& scopeManager, ASTContext& ctx,
     const std::unordered_set<Ptr<ExtendDecl>>& extends)
 {
-    std::unordered_map<std::string, Ptr<ExtendDecl>> specificExtendDecls;
-    std::unordered_map<std::string, std::set<Ptr<ExtendDecl>>> commonExtendDecls;
+    std::unordered_map<Ptr<Decl>, Ptr<ExtendDecl>> specificExtendDecls;
+    std::unordered_map<Ptr<Decl>, std::set<Ptr<ExtendDecl>>> commonExtendDecls;
     for (auto ed : extends) {
         if (!Ty::IsTyCorrect(ed->ty.get()) || !ed->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC)) {
             continue;
         }
 
-        std::unordered_map<Ptr<Ty>, unsigned> genericIdx;
-        if (ed->generic) {
-            for (unsigned idx = 0; idx < ed->generic->typeParameters.size(); ++idx) {
-                genericIdx.emplace(ed->generic->typeParameters[idx]->ty, idx);
-            }
+        auto decl = Ty::GetDeclOfTy(ed->extendedType->ty);
+        if (decl->specificImplementation) {
+            decl = decl->specificImplementation;
         }
 
-        std::string key;
-        // serialize the extended type.
-        key += GetTypeNameFromTy(ed->extendedType->ty, true, genericIdx);
-        // serialize the inherited types.
-        std::set<std::string> inheritedTysStr;
-        for (auto& inheritedType : ed->inheritedTypes) {
-            inheritedTysStr.emplace(GetTypeNameFromTy(inheritedType->ty, true, genericIdx));
-        }
-        if (!inheritedTysStr.empty()) {
-            key += "<:";
-        }
-        std::for_each(inheritedTysStr.begin(), inheritedTysStr.end(), [&key](const std::string& str) { key += str; });
-        // serialize the generic constraints.
-        if (ed->generic) {
-            key += CalculatedGenericConstraintsStr(ed->generic->genericConstraints, genericIdx);
-        }
+        // std::unordered_map<Ptr<Ty>, unsigned> genericIdx;
+        // if (ed->generic) {
+        //     for (unsigned idx = 0; idx < ed->generic->typeParameters.size(); ++idx) {
+        //         genericIdx.emplace(ed->generic->typeParameters[idx]->ty, idx);
+        //     }
+        // }
+
+        // std::string key;
+        // // serialize the extended type.
+        // key += GetTypeNameFromTy(ed->extendedType->ty, true, genericIdx);
+        // // serialize the inherited types.
+        // std::set<std::string> inheritedTysStr;
+        // for (auto& inheritedType : ed->inheritedTypes) {
+        //     inheritedTysStr.emplace(GetTypeNameFromTy(inheritedType->ty, true, genericIdx));
+        // }
+        // if (!inheritedTysStr.empty()) {
+        //     key += "<:";
+        // }
+        // std::for_each(inheritedTysStr.begin(), inheritedTysStr.end(), [&key](const std::string& str) { key += str; });
+        // // serialize the generic constraints.
+        // if (ed->generic) {
+        //     key += CalculatedGenericConstraintsStr(ed->generic->genericConstraints, genericIdx);
+        // }
 
         // After merging `common extend` into `specific extend`, the symbol table (scopeName) needs to be updated,
         // otherwise redefined functions cannot be detected.
         // After updating the symbol table, the `declMap` must also be updated,
         // otherwise symbols within function bodies won't find their definitions.
         if (ed->TestAttr(Attribute::COMMON)) {
-            if (auto it = specificExtendDecls.find(key); it != specificExtendDecls.end()) {
+            if (auto it = specificExtendDecls.find(decl); it != specificExtendDecls.end()) {
                 auto specificExtendDecl = it->second;
                 MergeCommonIntoSpecific(diag, *ed, *specificExtendDecl);
+                // specificExtendDecl->extendedType = OwnedPtr<Type>(ed->extendedType.get());
+                specificExtendDecl->extendedType.swap(ed->extendedType);
+                RemapGenericParamDecls(*ed, *specificExtendDecl);
                 Collector collector(scopeManager, ci.invocation.globalOptions.enableMacroInLSP);
                 collector.BuildSymbolTable(ctx, specificExtendDecl, ci.IsBuildTrie());
                 UpdateDeclMap(diag, ctx, specificExtendDecl);
             }
-            commonExtendDecls[key].emplace(ed);
+            commonExtendDecls[decl].emplace(ed);
         } else {
-            if (specificExtendDecls.find(key) != specificExtendDecls.end()) {
+            if (specificExtendDecls.find(decl) != specificExtendDecls.end()) {
                 // A common declaration may have one or more matching specific declarations
                 // in descending source sets (at most one specific per source set)
                 diag.DiagnoseRefactor(
                     DiagKindRefactor::sema_specific_has_duplicate_extensions, *ed, ed->extendedType->ToString());
                 continue;
-            } else if (auto it = commonExtendDecls.find(key); it != commonExtendDecls.end()) {
+            } else if (auto it = commonExtendDecls.find(decl); it != commonExtendDecls.end()) {
                 for (auto ced : it->second) {
                     MergeCommonIntoSpecific(diag, *ced, *ed);
                 }
@@ -445,7 +499,7 @@ void MPTypeCheckerImpl::MergeCJMPExtensions(CompilerInstance& ci, ScopeManager& 
                 collector.BuildSymbolTable(ctx, ed, ci.IsBuildTrie());
                 UpdateDeclMap(diag, ctx, ed);
             }
-            specificExtendDecls.emplace(key, ed);
+            specificExtendDecls.emplace(decl, ed);
         }
     }
 }

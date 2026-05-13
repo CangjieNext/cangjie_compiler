@@ -277,6 +277,7 @@ bool Translator::ShouldTranslateMember(const AST::Decl& decl, const AST::Decl& m
 
     if (decl.TestAttr(AST::Attribute::GENERIC_INSTANTIATED)) {
         // Always translate since common side doesn't have instantiated versions
+        // NOTE: check SkipMemberFuncInSpecificMerging
         return true;
     }
 
@@ -285,6 +286,18 @@ bool Translator::ShouldTranslateMember(const AST::Decl& decl, const AST::Decl& m
         // Skip decls from common part when compiling platform
         return false;
     }
+
+    // TODO: feeling something strange
+    // NOTE: mind that there is also no common/specific members
+    // if (DeclaredInDifferentFiles(decl, member)) {
+    //     // decl points to mose specific declaration
+    //     // but member is from another file, so it's more common
+    //     return false;
+    // }
+    // if (decl.TestAttr(AST::Attribute::SPECIFIC)) {
+    //     // common exists and it was translated previously
+    //     return false;
+    // }
 
     return true;
 }
