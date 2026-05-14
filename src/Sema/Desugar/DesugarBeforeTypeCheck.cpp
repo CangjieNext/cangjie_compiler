@@ -16,6 +16,7 @@
 #include "DesugarMacro.h"
 #include "TypeCheckUtil.h"
 
+#include "../Plugin/APILevelVersion.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
@@ -281,8 +282,7 @@ Ptr<OptionalChainExpr> GetOptionalChainExprForLeftVale(Expr& leftValue)
     return nullptr;
 }
 
-OwnedPtr<AssignExpr> CreateCompoundAssignExpr(
-    OwnedPtr<Expr> left, OwnedPtr<Expr> right, TokenKind op)
+OwnedPtr<AssignExpr> CreateCompoundAssignExpr(OwnedPtr<Expr> left, OwnedPtr<Expr> right, TokenKind op)
 {
     auto ae = CreateAssignExpr(std::move(left), std::move(right));
     ae->op = op;
@@ -310,8 +310,7 @@ void DesugarIncOrDecExpr(IncOrDecExpr& ide)
     ide.desugarExpr = std::move(ae);
 }
 
-void DesugarAssignExprRecursively(
-    const TupleLit& leftValues, Expr& rightExprs, std::vector<OwnedPtr<Node>>& nodes)
+void DesugarAssignExprRecursively(const TupleLit& leftValues, Expr& rightExprs, std::vector<OwnedPtr<Node>>& nodes)
 {
     uint64_t indexOfRightExpr = 0;
     auto varDecl = CreateTmpVarDecl(nullptr, &rightExprs);
@@ -467,20 +466,77 @@ const std::string SYSCAP_IDENTGIFIER = "syscap";
 // For level check:
 const std::string DEVICE_INFO = "DeviceInfo";
 const std::string SDK_API_VERSION = "sdkApiVersion";
+const std::string API_AVAILABLE = "apiAvailable";
 // For syscap check:
 const std::string CANIUSE_IDENTIFIER = "canIUse";
+constexpr uint32_t IFAVAILABLE_RUNTIME_APILEVEL_MAJOR = 26;
 
-// Before desugar: `@IfAvaliable(level: 11, {=>...}, {=>...})`
-// Desugar as: `if (DeviceInfo.sdkApiVersion >= 11) {...} else {...}`
-OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae)
+OwnedPtr<Expr> CreateSDKApiVersionCheck(IfAvailableExpr& iae, OwnedPtr<Expr> levelExpr, const Expr& levelExprBase)
 {
     auto me = CreateMemberAccess(CreateRefExpr(SrcIdentifier(DEVICE_INFO)), SDK_API_VERSION);
     CopyBasicInfo(&iae, me->baseExpr.get());
-    auto condition = CreateBinaryExpr(std::move(me), std::move(iae.GetArg()->expr), TokenKind::GE);
+    auto condition = CreateBinaryExpr(std::move(me), std::move(levelExpr), TokenKind::GE);
+    CopyBasicInfo(&levelExprBase, condition->rightExpr.get());
     CopyBasicInfo(&iae, condition->leftExpr.get());
     AddCurFile(*condition, iae.curFile);
     CopyBasicInfo(&iae, condition.get());
-    return std::move(condition);
+    return condition;
+}
+
+OwnedPtr<Expr> CreateApiAvailableCheck(IfAvailableExpr& iae, OwnedPtr<Expr> levelExpr)
+{
+    auto apiAvailableRef = CreateRefExpr(SrcIdentifier(API_AVAILABLE));
+    CopyBasicInfo(&iae, apiAvailableRef.get());
+    std::vector<OwnedPtr<FuncArg>> argList;
+    argList.emplace_back(CreateFuncArg(std::move(levelExpr)));
+    auto condition = CreateCallExpr(std::move(apiAvailableRef), std::move(argList));
+    AddCurFile(*condition, iae.curFile);
+    CopyBasicInfo(&iae, condition.get());
+    return condition;
+}
+
+OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae, const std::string& compatibleSDKVersion)
+{
+    auto compatibleLevel =
+        Cangjie::APILevelVersion::ParseChecked(compatibleSDKVersion, Cangjie::APILevelVersion::ParseRule::MAJOR_OR_TRIPLE)
+            .value_or(Cangjie::APILevelVersion());
+    auto argExpr = iae.GetArg()->expr.get();
+    if (!argExpr || argExpr->astKind != ASTKind::LIT_CONST_EXPR) {
+        return ASTCloner::Clone(iae.GetArg()->expr.get());
+    }
+    auto lce = StaticCast<LitConstExpr>(argExpr);
+    if (lce->kind == LitConstKind::INTEGER) {
+        if (compatibleLevel >= Cangjie::APILevelVersion(IFAVAILABLE_RUNTIME_APILEVEL_MAJOR)) {
+            return CreateApiAvailableCheck(iae, ASTCloner::Clone(iae.GetArg()->expr.get()));
+        }
+        return CreateSDKApiVersionCheck(iae, ASTCloner::Clone(iae.GetArg()->expr.get()), *lce);
+    }
+    if (lce->kind != LitConstKind::STRING) {
+        return ASTCloner::Clone(iae.GetArg()->expr.get());
+    }
+    auto parsedLevel =
+        Cangjie::APILevelVersion::ParseChecked(lce->stringValue, Cangjie::APILevelVersion::ParseRule::TRIPLE_ONLY);
+    if (!parsedLevel.has_value()) {
+        return CreateApiAvailableCheck(iae, ASTCloner::Clone(iae.GetArg()->expr.get()));
+    }
+    if (compatibleLevel >= Cangjie::APILevelVersion(IFAVAILABLE_RUNTIME_APILEVEL_MAJOR)) {
+        return CreateApiAvailableCheck(iae, ASTCloner::Clone(iae.GetArg()->expr.get()));
+    }
+    if (parsedLevel->Major < IFAVAILABLE_RUNTIME_APILEVEL_MAJOR) {
+        auto majorExpr =
+            CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(parsedLevel->Major), Ty::GetInitialTy());
+        CopyBasicInfo(lce, majorExpr.get());
+        return CreateSDKApiVersionCheck(iae, std::move(majorExpr), *lce);
+    }
+    auto majorGate = CreateLitConstExpr(
+        LitConstKind::INTEGER, std::to_string(IFAVAILABLE_RUNTIME_APILEVEL_MAJOR), Ty::GetInitialTy());
+    CopyBasicInfo(lce, majorGate.get());
+    auto majorCondition = CreateSDKApiVersionCheck(iae, std::move(majorGate), *lce);
+    auto runtimeCondition = CreateApiAvailableCheck(iae, ASTCloner::Clone(iae.GetArg()->expr.get()));
+    auto condition = CreateBinaryExpr(std::move(majorCondition), std::move(runtimeCondition), TokenKind::AND);
+    AddCurFile(*condition, iae.curFile);
+    CopyBasicInfo(&iae, condition.get());
+    return condition;
 }
 
 // Before desugar: `@IfAvaliable(syscap: "xxx", {=>...}, {=>...})`
@@ -497,10 +553,10 @@ OwnedPtr<Expr> DesugarIfAvailableSyscapCondition(IfAvailableExpr& iae)
     return std::move(condition);
 }
 
-OwnedPtr<Expr> DesugarIfAvailableCondition(IfAvailableExpr& iae)
+OwnedPtr<Expr> DesugarIfAvailableCondition(IfAvailableExpr& iae, const std::string& compatibleSDKVersion)
 {
     if (iae.GetArg()->name == LEVEL_IDENTGIFIER) {
-        return DesugarIfAvailableLevelCondition(iae);
+        return DesugarIfAvailableLevelCondition(iae, compatibleSDKVersion);
     } else if (iae.GetArg()->name == SYSCAP_IDENTGIFIER) {
         return DesugarIfAvailableSyscapCondition(iae);
     } else {
@@ -509,13 +565,13 @@ OwnedPtr<Expr> DesugarIfAvailableCondition(IfAvailableExpr& iae)
 }
 
 /// @IfAvailable(namedArg, lambda1, lambda2) is parsed as a MacroExpandExpr and desguared into an IfAvailableExpr here
-void DesugarIfAvailableExpr(IfAvailableExpr& iae)
+void DesugarIfAvailableExpr(IfAvailableExpr& iae, const std::string& compatibleSDKVersion)
 {
     if (iae.desugarExpr) {
         return;
     }
     // Create condition.
-    OwnedPtr<Expr> condition = DesugarIfAvailableCondition(iae);
+    OwnedPtr<Expr> condition = DesugarIfAvailableCondition(iae, compatibleSDKVersion);
     auto ifBlock = ASTCloner::Clone(iae.GetLambda1()->funcBody->body.get());
     auto elseBlock = ASTCloner::Clone(iae.GetLambda2()->funcBody->body.get());
     auto ifExpr = CreateIfExpr(std::move(condition), std::move(ifBlock), std::move(elseBlock), iae.GetTy());
@@ -590,14 +646,13 @@ struct DiscardedHelper {
         };
 
         auto isNothingExpr = [](const Node& n) -> bool {
-            return std::set<ASTKind>{ASTKind::JUMP_EXPR,
-                ASTKind::THROW_EXPR, ASTKind::RETURN_EXPR}.count(n.astKind) > 0;
+            return std::set<ASTKind>{ASTKind::JUMP_EXPR, ASTKind::THROW_EXPR, ASTKind::RETURN_EXPR}.count(n.astKind) >
+                0;
         };
 
         auto unitifyBlock = [&isUnitExpr, &isNothingExpr](Block& b) -> void {
-            if (b.body.empty() || (b.body.back() &&
-                (!isUnitExpr(*b.body.back())) &&
-                (!isNothingExpr(*b.body.back())))) {
+            if (b.body.empty() ||
+                (b.body.back() && (!isUnitExpr(*b.body.back())) && (!isNothingExpr(*b.body.back())))) {
                 b.body.push_back(CreateUnitExpr());
             }
         };
@@ -660,7 +715,7 @@ private:
         static const std::set<ASTKind> caseKinds = {ASTKind::MATCH_CASE, ASTKind::MATCH_CASE_OTHER};
         // if expr to then blk and else blk
         bool ifBody = parent.astKind == ASTKind::IF_EXPR &&
-                (&node == StaticAs<ASTKind::IF_EXPR>(&parent)->thenBody.get() ||
+            (&node == StaticAs<ASTKind::IF_EXPR>(&parent)->thenBody.get() ||
                 &node == StaticAs<ASTKind::IF_EXPR>(&parent)->elseBody.get());
         // try expr to try blk and catch blk
         bool tryBody = parent.astKind == ASTKind::TRY_EXPR && node.astKind == ASTKind::BLOCK;
@@ -674,7 +729,7 @@ private:
         bool parentheses = parent.astKind == ASTKind::PAREN_EXPR;
         // info of FuncDecl has to pass down through FuncBody node
         bool funcBody = parent.astKind == ASTKind::FUNC_BODY;
-        return ifBody || tryBody || matchCase || matchCaseBody || syncBody || parentheses || funcBody ;
+        return ifBody || tryBody || matchCase || matchCaseBody || syncBody || parentheses || funcBody;
     };
 
     /* Some expressions will ignore a child block's return value. */
@@ -717,7 +772,7 @@ private:
 };
 } // namespace
 
-void PerformDesugarBeforeTypeCheck(Node& root, bool desugarMacrocall)
+void PerformDesugarBeforeTypeCheck(Node& root, bool desugarMacrocall, const std::string& compatibleSDKVersion)
 {
     DiscardedHelper dHelper;
     std::function<VisitAction(Ptr<Node>)> visitorPost = [&dHelper](Ptr<Node> node) -> VisitAction {
@@ -725,7 +780,7 @@ void PerformDesugarBeforeTypeCheck(Node& root, bool desugarMacrocall)
         return VisitAction::KEEP_DECISION;
     };
     std::function<VisitAction(Ptr<Node>)> visitor =
-        [&visitor, &visitorPost, &dHelper, &desugarMacrocall](Ptr<Node> node) -> VisitAction {
+        [&visitor, &visitorPost, &dHelper, &desugarMacrocall, &compatibleSDKVersion](Ptr<Node> node) -> VisitAction {
         if (node->TestAttr(Attribute::IS_BROKEN)) {
             // must push before return to pair with visitorPost
             dHelper.PushCtxt(false, node);
@@ -758,7 +813,7 @@ void PerformDesugarBeforeTypeCheck(Node& root, bool desugarMacrocall)
         } else if (node->astKind == ASTKind::ASSIGN_EXPR) {
             DesugarAssignExpr(*StaticAs<ASTKind::ASSIGN_EXPR>(node));
         } else if (node->astKind == ASTKind::IF_AVAILABLE_EXPR) {
-            DesugarIfAvailableExpr(*StaticAs<ASTKind::IF_AVAILABLE_EXPR>(node));
+            DesugarIfAvailableExpr(*StaticAs<ASTKind::IF_AVAILABLE_EXPR>(node), compatibleSDKVersion);
         }
         if (dHelper.IsNodeDiscarded(*node)) {
             dHelper.PushCtxt(true, node);
