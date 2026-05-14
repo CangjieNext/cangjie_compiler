@@ -586,6 +586,10 @@ void PackageGeneratorImpl::EmitIR()
     const_cast<GlobalOptions&>(cgPkgCtx.GetGlobalOptions()).symbolsNeedLocalized =
         std::vector<std::string>(localizedSymbols.begin(), localizedSymbols.end());
 
+    auto& weakSyms = cgPkgCtx.GetWeakUndefinedSymbols();
+    auto& globalWeakSyms = const_cast<GlobalOptions&>(cgPkgCtx.GetGlobalOptions()).weakUndefinedSymbols;
+    globalWeakSyms.insert(weakSyms.begin(), weakSyms.end());
+
     cgPkgCtx.Clear();
 }
 #endif
