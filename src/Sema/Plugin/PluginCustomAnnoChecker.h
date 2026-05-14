@@ -13,12 +13,15 @@
 #ifndef PLUGIN_CUSTOM_ANNO_CHECKER_H
 #define PLUGIN_CUSTOM_ANNO_CHECKER_H
 
+#include <functional>
+#include <optional>
 #include <set>
 #include <string>
-#include <set>
 
+#include "PluginCustomAnnoInfo.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/NodeX.h"
+#include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Modules/ImportManager.h"
@@ -62,17 +65,9 @@ namespace PluginCheck {
  * ```
  */
 
-using LevelType = uint32_t;
-
 /**
  * @brief Structure to hold custom annotation information.
  */
-struct PluginCustomAnnoInfo {
-    LevelType since{0};
-    std::string syscap{""};
-    std::optional<bool> hasHideAnno{std::nullopt};
-};
-
 using SysCapSet = std::set<std::string>;
 
 class PluginCustomAnnoChecker {
@@ -109,6 +104,7 @@ private:
     bool CheckCheckingHide(const AST::Decl& target, DiagConfig diagCfg);
     bool CheckNode(Ptr<AST::Node> node, PluginCustomAnnoInfo& scopeAnnoInfo, bool reportDiag = true);
     void CheckIfAvailableExpr(AST::IfAvailableExpr& iae, PluginCustomAnnoInfo& scopeAnnoInfo);
+    void CheckIfExpr(AST::IfExpr& ife, PluginCustomAnnoInfo& scopeAnnoInfo);
     bool IsAnnoAPILevel(Ptr<AST::Annotation> anno, const AST::Decl& decl);
     bool IsAnnoHide(Ptr<AST::Annotation> anno);
     void ParseHideArg(const AST::Annotation& anno, PluginCustomAnnoInfo& annoInfo);
@@ -116,6 +112,22 @@ private:
     void CheckHideOfExtendDecl(const AST::Decl& decl, const PluginCustomAnnoInfo& annoInfo);
     void CheckHideOfOverrideFunction(const AST::Decl& decl, const PluginCustomAnnoInfo& annoInfo);
     void CheckAnnoBeforeMacro(AST::Package& pkg);
+    bool TryBuildIfAvailableScopeFromIfExpr(const AST::IfExpr& ife, PluginCustomAnnoInfo& ifscopeAnnoInfo);
+
+    /// Walk all nodes in a block body using the given checker.
+    static void WalkBranchBody(Ptr<AST::Block> body,
+        const std::function<AST::VisitAction(Ptr<AST::Node>)>& checker);
+
+    /// Build the "if-branch" visitor for an IfAvailable/IfExpr scope.
+    std::function<AST::VisitAction(Ptr<AST::Node>)> MakeIfBranchChecker(
+        PluginCustomAnnoInfo& ifscopeAnnoInfo, PluginCustomAnnoInfo& scopeAnnoInfo);
+
+    /// Build the "else-branch" visitor for an IfAvailable/IfExpr scope.
+    std::function<AST::VisitAction(Ptr<AST::Node>)> MakeElseBranchChecker(PluginCustomAnnoInfo& scopeAnnoInfo);
+
+    /// Parse the level argument of an @IfAvailable expression into ifscopeAnnoInfo.
+    /// Returns false and emits diagnostics if the argument is invalid.
+    bool ParseIfAvailableLevelArg(AST::FuncArg& arg, PluginCustomAnnoInfo& ifscopeAnnoInfo);
 
 private:
     CompilerInstance& ci;
@@ -123,7 +135,7 @@ private:
     ImportManager& importManager;
     Ptr<ASTContext> ctx;
 
-    LevelType globalLevel{0};
+    APILevelVersion globalLevel;
     SysCapSet intersectionSet;
     SysCapSet unionSet;
     std::unordered_map<Ptr<const AST::Decl>, PluginCustomAnnoInfo> levelCache;
