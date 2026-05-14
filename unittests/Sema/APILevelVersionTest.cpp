@@ -316,7 +316,7 @@ TEST(APILevelVersionTest, IsValidFormat)
     EXPECT_FALSE(APILevelVersion::IsValidFormat(".20"));      // leading dot
     EXPECT_FALSE(APILevelVersion::IsValidFormat("20..1"));    // consecutive dots
     EXPECT_FALSE(APILevelVersion::IsValidFormat("20.abc.1")); // non-numeric component
-    EXPECT_FALSE(APILevelVersion::IsValidFormat("20.500.600.700")); // too many components
+    EXPECT_FALSE(APILevelVersion::IsValidFormat("20.500.600.700")); // too many components; kept non-IP for local Huawei rule checker
     EXPECT_FALSE(APILevelVersion::IsValidFormat("20.1.2a"));  // alphanumeric
 }
 
