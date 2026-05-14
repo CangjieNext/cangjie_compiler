@@ -12,8 +12,12 @@
 
 #include "Toolchains/MachO.h"
 
+#include <cstdio>
+#include <cstdlib>
 #include <tuple>
 #include <unordered_set>
+
+#include "cangjie/Utils/FileUtil.h"
 
 #include "cangjie/Driver/TempFileManager.h"
 #include "cangjie/Driver/Toolchains/GCCPathScanner.h"
@@ -23,6 +27,8 @@
 namespace {
 const std::string LINK_PREFIX = "-l";
 const std::string STATIC_LIB_EXTEBSION = ".a";
+// Marker string used to identify weak undefined symbols in llvm-nm -m output.
+const std::string MACHO_WEAK_UNDEFINED_MARKER = "(undefined) weak external";
 
 const std::map<std::string, std::string> LLVM_LTO_CSTD_FFI_OPTION_MAP = {
 #define CJNATIVE_LTO_CSTD_FFI_OPTIONS(STATILIB, FFILIB) {STATILIB, FFILIB},
@@ -82,6 +88,132 @@ void MachO::GenerateArchiveTool(const std::vector<TempFileInfo>& objFiles)
     backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
 }
 
+// Locate llvm-nm without emitting any diagnostic on miss. The Cangjie SDK does
+// not always ship llvm-nm; absence is non-fatal and simply means we skip the
+// weak-undefined symbol injection. We deliberately do NOT use
+// FindCangjieLLVMToolPath here because it Errorf's on miss.
+static std::string LocateLLVMNmSilent(const std::string& cangjieHome)
+{
+    const std::string toolName = "llvm-nm";
+    std::string sdkPath = FileUtil::JoinPath(
+        FileUtil::JoinPath(cangjieHome, "third_party/llvm/bin"), toolName);
+    if (FileUtil::FileExist(sdkPath)) {
+        return sdkPath;
+    }
+    const char* pathEnv = std::getenv("PATH"); // NOLINT(concurrency-mt-unsafe)
+    if (pathEnv == nullptr) {
+        return "";
+    }
+    std::string paths(pathEnv);
+    size_t start = 0;
+    while (start <= paths.size()) {
+        size_t end = paths.find(':', start);
+        if (end == std::string::npos) {
+            end = paths.size();
+        }
+        if (end > start) {
+            std::string candidate = FileUtil::JoinPath(paths.substr(start, end - start), toolName);
+            if (FileUtil::FileExist(candidate)) {
+                return candidate;
+            }
+        }
+        start = end + 1;
+    }
+    return "";
+}
+
+// Collect weak-undefined symbol names from a single file (bitcode or native obj)
+// by running llvm-nm -m and parsing "(undefined) weak external <sym>" lines.
+// Discovered symbols are inserted into `seen` and -U <sym> is appended to `tool`.
+static void ScanFileForWeakUndefinedSymbols(const std::string& llvmNmPath, const std::string& filePath,
+    std::unordered_set<std::string>& seen, Tool& tool)
+{
+    // Quote the paths to guard against spaces; use 2>/dev/null so nm errors are silent.
+    std::string cmd = "\"" + llvmNmPath + "\" -m \"" + filePath + "\" 2>/dev/null";
+    FILE* pipe = popen(cmd.c_str(), "r"); // NOLINT(cert-env33-c)
+    if (pipe == nullptr) {
+        return;
+    }
+
+    char buf[4096];
+    while (fgets(buf, static_cast<int>(sizeof(buf)), pipe) != nullptr) {
+        std::string line(buf);
+        // llvm-nm -m output (works for both Mach-O .o and LLVM bitcode .bc):
+        //   <addr/dash> (undefined) weak external <symbol>
+        auto markerPos = line.find(MACHO_WEAK_UNDEFINED_MARKER);
+        if (markerPos == std::string::npos) {
+            continue;
+        }
+        // Symbol name follows the marker, possibly preceded by a space.
+        auto symStart = markerPos + MACHO_WEAK_UNDEFINED_MARKER.size();
+        while (symStart < line.size() && line[symStart] == ' ') {
+            ++symStart;
+        }
+        auto symEnd = line.size();
+        while (symEnd > symStart &&
+               (line[symEnd - 1] == '\n' || line[symEnd - 1] == '\r' || line[symEnd - 1] == ' ')) {
+            --symEnd;
+        }
+        if (symStart >= symEnd) {
+            continue;
+        }
+        std::string sym = line.substr(symStart, symEnd - symStart);
+        if (seen.insert(sym).second) {
+            tool.AppendArg("-U");
+            tool.AppendArg(sym);
+        }
+    }
+    (void)pclose(pipe);
+}
+
+// Scan compiler-produced bitcode files (.bc) and user-supplied .o/.a files for
+// symbols marked "(undefined) weak external", then inject -U <sym> flags so that
+// ld64.lld accepts undefined weak references produced by @IfAvailable on macOS.
+// NOTE on timing: this function is called during command *assembly* (inside
+// HandleLLVMLinkOptions), before any backend tool (opt/llc/ld64.lld) actually
+// runs.  The frontend has already finished and written its .bc files to the temp
+// directory; those files therefore exist on disk when this function executes.
+// The .o files (output of llc) have NOT been produced yet, so we resolve the .bc
+// sibling by replacing the ".o" suffix.  For pre-compiled inputs supplied by the
+// user (driverOptions.inputObjs), the .o files already exist and are scanned
+// directly.
+void MachO::AppendWeakUndefinedSymbols(const std::vector<TempFileInfo>& objFiles, Tool& tool)
+{
+    // llvm-nm is not bundled with the Cangjie SDK. Probe silently; if absent,
+    // skip the injection (any genuine weak-undefined references will surface
+    // as the regular ld64.lld error, identical to behavior before this scan
+    // was introduced).
+    std::string llvmNmPath = LocateLLVMNmSilent(driver.cangjieHome);
+    if (llvmNmPath.empty()) {
+        return;
+    }
+
+    std::unordered_set<std::string> seen;
+
+    // 1. Scan frontend-produced bitcode files.
+    //    objFiles[i].filePath is the planned .o path in the temp dir; the .bc file
+    //    produced by cjc-frontend lives in the same directory with the same base name.
+    for (const auto& f : objFiles) {
+        if (!f.isFrontendOutput) {
+            continue; // pre-compiled inputs are handled below via inputObjs
+        }
+        std::string bcPath = f.filePath;
+        // Replace trailing ".o" with ".bc"
+        const std::string objSuffix = ".o";
+        const std::string bcSuffix = ".bc";
+        if (bcPath.size() >= objSuffix.size() &&
+            bcPath.compare(bcPath.size() - objSuffix.size(), objSuffix.size(), objSuffix) == 0) {
+            bcPath.replace(bcPath.size() - objSuffix.size(), objSuffix.size(), bcSuffix);
+        }
+        ScanFileForWeakUndefinedSymbols(llvmNmPath, bcPath, seen, tool);
+    }
+
+    // 2. Scan user-supplied pre-compiled .o / .a files; these exist on disk already.
+    for (const auto& p : driverOptions.inputObjs) {
+        ScanFileForWeakUndefinedSymbols(llvmNmPath, p, seen, tool);
+    }
+}
+
 // Have no idea how to use linker script on MacOS currently.
 void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Tool& tool)
 {
@@ -133,6 +265,9 @@ void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Too
     GenerateLinkOptionsOfBuiltinLibs(tool);
     // 5. System library dependencies required by the backend
     GenerateLinkOptions(tool);
+    // 6. Inject -U flags for every EXTERNAL_WEAK symbol found in the object files so that
+    //    ld64.lld accepts undefined weak references produced by @IfAvailable on macOS.
+    AppendWeakUndefinedSymbols(objFiles, tool);
 }
 
 void MachO::HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath)
