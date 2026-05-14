@@ -892,6 +892,7 @@ public:
     bool aggressiveParallelCompileWithoutArg = false;
     std::vector<std::string> bitcodeFilesName; /** < the name of packageMoudle.bc. */
     std::vector<std::string> symbolsNeedLocalized; /** < Symbols that need to be localized in the compiled binary. */
+    std::set<std::string> weakUndefinedSymbols; /**< ExternalWeak symbols emitted for @IfAvailable dispatch. */
 
     /**
      * @brief Determine if the output mode is executable.

@@ -12,11 +12,14 @@
 #ifndef CANGJIE_SEMA_DESUGAR_H
 #define CANGJIE_SEMA_DESUGAR_H
 
+#include <string>
+
 #include "cangjie/AST/Node.h"
 
 namespace Cangjie {
 using namespace AST;
-void PerformDesugarBeforeTypeCheck(Node& root, bool desugarMacrocall = false);
+void PerformDesugarBeforeTypeCheck(
+    Node& root, bool desugarMacrocall = false, const std::string& compatibleSDKVersion = "");
 } // namespace Cangjie
 
 #endif

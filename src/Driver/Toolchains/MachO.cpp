@@ -15,6 +15,8 @@
 #include <tuple>
 #include <unordered_set>
 
+#include "cangjie/Utils/FileUtil.h"
+
 #include "cangjie/Driver/TempFileManager.h"
 #include "cangjie/Driver/Toolchains/GCCPathScanner.h"
 #include "cangjie/Driver/Toolchains/ToolChain.h"
@@ -82,6 +84,21 @@ void MachO::GenerateArchiveTool(const std::vector<TempFileInfo>& objFiles)
     backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
 }
 
+// Inject -U <sym> flags for every ExternalWeak symbol recorded by CodeGen during
+// @IfAvailable dispatch so that ld64.lld accepts undefined weak references on macOS.
+// The symbol set is populated by CGModule when it emits ExternalWeakLinkage declarations
+// and propagated through GlobalOptions to DriverOptions by ExecuteFrontendByDriver.
+// On Mach-O, ld64.lld -U expects the Mach-O symbol table name (with leading '_' that
+// LLVM adds when emitting the object), so we prepend '_' to the LLVM IR name here.
+void MachO::AppendWeakUndefinedSymbols(const std::vector<TempFileInfo>& objFiles, Tool& tool)
+{
+    (void)objFiles;
+    for (const auto& sym : driverOptions.weakUndefinedSymbols) {
+        tool.AppendArg("-U");
+        tool.AppendArg("_" + sym);
+    }
+}
+
 // Have no idea how to use linker script on MacOS currently.
 void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Tool& tool)
 {
@@ -133,6 +150,9 @@ void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Too
     GenerateLinkOptionsOfBuiltinLibs(tool);
     // 5. System library dependencies required by the backend
     GenerateLinkOptions(tool);
+    // 6. Inject -U flags for every EXTERNAL_WEAK symbol found in the object files so that
+    //    ld64.lld accepts undefined weak references produced by @IfAvailable on macOS.
+    AppendWeakUndefinedSymbols(objFiles, tool);
 }
 
 void MachO::HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath)
