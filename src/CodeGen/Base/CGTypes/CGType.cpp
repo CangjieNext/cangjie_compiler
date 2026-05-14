@@ -639,6 +639,7 @@ void CGType::GenTypeInfo()
         auto customType = dynamic_cast<const CHIR::CustomType*>(&chirType);
         if (customType && customType->GetCustomTypeDef()->Get<CHIR::LinkTypeInfo>() == Linkage::EXTERNAL_WEAK) {
             typeInfo->setLinkage(llvm::GlobalValue::ExternalWeakLinkage);
+            cgMod.GetCGContext().AddWeakUndefinedSymbol(typeInfo->getName().str());
         }
         return;
     }

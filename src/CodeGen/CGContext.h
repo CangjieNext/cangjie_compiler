@@ -268,6 +268,11 @@ public:
     {
         cgPkgContext.AddLocalizedSymbol(symName);
     }
+
+    void AddWeakUndefinedSymbol(const std::string& symName)
+    {
+        cgPkgContext.AddWeakUndefinedSymbol(symName);
+    }
 #endif
 
     void AddCJString(const std::string& cjStringName, const std::string& cjStringContent)

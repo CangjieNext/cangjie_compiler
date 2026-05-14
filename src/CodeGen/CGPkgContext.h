@@ -83,6 +83,8 @@ public:
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     void AddLocalizedSymbol(const std::string& symName);
     const std::set<std::string>& GetLocalizedSymbols();
+    void AddWeakUndefinedSymbol(const std::string& symName);
+    const std::set<std::string>& GetWeakUndefinedSymbols();
 #endif
 
     void CollectSubTypeMap();
@@ -104,6 +106,8 @@ private:
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     // The symbols, which need to be changed linkageType after the link.
     ObjectLocker<std::set<std::string>> localizedSymbols;
+    // ExternalWeak symbols emitted for @IfAvailable dispatch; injected as -U to ld64.lld on macOS.
+    ObjectLocker<std::set<std::string>> weakUndefinedSymbols;
 #endif
 };
 } // namespace CodeGen
