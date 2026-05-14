@@ -232,7 +232,7 @@ fi
 # Set Cangjie related environment variables
 export CANGJIE_HOME="${script_dir}"
 export PATH="${CANGJIE_HOME}/bin:${CANGJIE_HOME}/tools/bin${PATH:+:${PATH}}:${HOME}/.cjpm/bin"
-export LD_LIBRARY_PATH="${CANGJIE_HOME}/runtime/lib/linux${hw_arch}_cjnative:${CANGJIE_HOME}/tools/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+export LD_LIBRARY_PATH="${CANGJIE_HOME}/runtime/lib/linux${hw_arch}_cjnative:${CANGJIE_HOME}/tools/lib:${LD_LIBRARY_PATH}"
 
 # Clean up temporary variables
 unset hw_arch

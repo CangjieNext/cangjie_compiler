@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
 # This source file is part of the Cangjie project, licensed under Apache-2.0
 # with Runtime Library Exception.
@@ -102,7 +104,7 @@ fi
 
 export CANGJIE_HOME="${script_dir}"
 export PATH="${CANGJIE_HOME}/bin:${CANGJIE_HOME}/tools/bin${PATH:+:${PATH}}:${HOME}/.cjpm/bin"
-export DYLD_FALLBACK_LIBRARY_PATH="${CANGJIE_HOME}/runtime/lib/darwin_${hw_arch}_cjnative:${CANGJIE_HOME}/tools/lib${DYLD_FALLBACK_LIBRARY_PATH:+:${DYLD_FALLBACK_LIBRARY_PATH}}"
+export DYLD_LIBRARY_PATH="${CANGJIE_HOME}/runtime/lib/darwin_${hw_arch}_cjnative:${CANGJIE_HOME}/tools/lib:${DYLD_LIBRARY_PATH}"
 unset hw_arch
 
 if [ -z ${SDKROOT+x} ]; then
