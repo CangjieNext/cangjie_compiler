@@ -7,6 +7,7 @@
 #include "Desugar/DesugarInTypeCheck.h"
 #include "Diags.h"
 #include "TypeCheckerImpl.h"
+#include "../Plugin/APILevelVersion.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -14,11 +15,43 @@ using namespace AST;
 namespace {
 const std::string LEVEL_IDENTGIFIER = "level";
 const std::string SYSCAP_IDENTGIFIER = "syscap";
-const std::string DEVICE_INFO = "DeviceInfo";
 // For level check:
 const std::string PKG_NAME_DEVICE_INFO_AT = "ohos.device_info";
 // For syscap check:
 const std::string PKG_NAME_CANIUSE_AT = "ohos.base";
+
+bool IsValidIfAvailableLevelLiteral(const Expr& expr)
+{
+    auto lce = DynamicCast<LitConstExpr>(&expr);
+    if (!lce) {
+        return false;
+    }
+    if (lce->kind == LitConstKind::INTEGER) {
+        return true;
+    }
+    if (lce->kind != LitConstKind::STRING) {
+        return false;
+    }
+    return APILevelVersion::ParseChecked(lce->stringValue, APILevelVersion::ParseRule::TRIPLE_ONLY).has_value();
+}
+
+bool IsLiteralLevelCondition(const Expr& condExpr)
+{
+    if (condExpr.astKind == ASTKind::CALL_EXPR) {
+        auto callExpr = StaticCast<CallExpr>(&condExpr);
+        return callExpr->args.size() == 1 && callExpr->args[0]->expr &&
+            callExpr->args[0]->expr->astKind == ASTKind::LIT_CONST_EXPR;
+    }
+    if (condExpr.astKind != ASTKind::BINARY_EXPR) {
+        return false;
+    }
+    auto binaryExpr = StaticCast<BinaryExpr>(&condExpr);
+    if (binaryExpr->op == TokenKind::AND) {
+        return binaryExpr->leftExpr && binaryExpr->rightExpr && IsLiteralLevelCondition(*binaryExpr->leftExpr) &&
+            IsLiteralLevelCondition(*binaryExpr->rightExpr);
+    }
+    return binaryExpr->rightExpr && binaryExpr->rightExpr->astKind == ASTKind::LIT_CONST_EXPR;
+}
 
 bool ChkIfImportDeviceInfo(DiagnosticEngine& diag, const ImportManager& im, const IfAvailableExpr& iae)
 {
@@ -53,6 +86,84 @@ bool ChkIfImportBase(DiagnosticEngine& diag, const ImportManager& im, const IfAv
     builder.AddNote("depend on declaration 'canIUse'");
     return false;
 }
+
+// Mirrors ChkIfImportBase but the diagnostic note points to 'apiAvailable',
+// which lives in the same `ohos.base` package as `canIUse`. The @IfAvailable
+// `level:` desugar may lower to a call to `apiAvailable(...)` (see issue 824),
+// so the package must be imported regardless of whether the particular
+// (compatibleSDKVersion, level) combination ends up generating that call.
+bool ChkIfImportApiAvailableBase(DiagnosticEngine& diag, const ImportManager& im, const IfAvailableExpr& iae)
+{
+    if (iae.GetFullPackageName() == PKG_NAME_CANIUSE_AT) {
+        return true;
+    }
+    auto importedPkgs = im.GetAllImportedPackages();
+    for (auto& importedPkg : importedPkgs) {
+        if (importedPkg->srcPackage && importedPkg->srcPackage->fullPackageName == PKG_NAME_CANIUSE_AT) {
+            return true;
+        }
+    }
+    auto builder =
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_use_expr_without_import, iae, PKG_NAME_CANIUSE_AT, "IfAvailable");
+    builder.AddNote("depend on declaration 'apiAvailable'");
+    return false;
+}
+/// Aggregates the three mutable outputs of the IfAvailable argument checkers,
+/// keeping function parameter counts within the G.FUN.01 threshold of 5.
+struct IfAvailableCheckState {
+    bool res{true};
+    bool hasHardError{false};
+    bool hasLevelFormatWarning{false};
+};
+
+/// Validate the `level:` argument and update state.
+void ChkLevelArgument(DiagnosticEngine& diag, const ImportManager& importManager,
+    IfAvailableExpr& iae, const IfExpr& ie, IfAvailableCheckState& state)
+{
+    auto hasDeviceInfoImport = ChkIfImportDeviceInfo(diag, importManager, iae);
+    state.res = hasDeviceInfoImport && state.res;
+    state.hasHardError = !hasDeviceInfoImport || state.hasHardError;
+    // The level-form desugar may lower to apiAvailable(...) (issue 824),
+    // which lives in ohos.base. Require the package import unconditionally.
+    auto hasApiAvailableImport = ChkIfImportApiAvailableBase(diag, importManager, iae);
+    state.res = hasApiAvailableImport && state.res;
+    state.hasHardError = !hasApiAvailableImport || state.hasHardError;
+    auto argExpr = iae.GetArg()->expr.get();
+    if (!argExpr || !IsValidIfAvailableLevelLiteral(*argExpr)) {
+        auto lce = DynamicCast<LitConstExpr>(argExpr);
+        if (lce && lce->kind == LitConstKind::STRING) {
+            diag.DiagnoseRefactor(
+                DiagKindRefactor::sema_apilevel_invalid_version_format, *iae.GetArg(), lce->stringValue.c_str());
+            state.hasLevelFormatWarning = true;
+        } else {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_arg_not_literal, *iae.GetArg());
+            state.hasHardError = true;
+        }
+        state.res = false;
+    }
+    if (!IsLiteralLevelCondition(*ie.condExpr)) {
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_arg_not_literal, *iae.GetArg());
+        state.res = false;
+        state.hasHardError = true;
+    }
+}
+
+/// Validate the `syscap:` argument and update state.
+void ChkSyscapArgument(DiagnosticEngine& diag, const ImportManager& importManager,
+    IfAvailableExpr& iae, const IfExpr& ie, IfAvailableCheckState& state)
+{
+    auto hasBaseImport = ChkIfImportBase(diag, importManager, iae);
+    state.res = hasBaseImport && state.res;
+    state.hasHardError = !hasBaseImport || state.hasHardError;
+    CJC_ASSERT(ie.condExpr->astKind == ASTKind::CALL_EXPR);
+    auto argExpr = StaticCast<CallExpr>(ie.condExpr.get());
+    CJC_ASSERT(argExpr->args.size() == 1);
+    if (argExpr->args[0]->expr->astKind != ASTKind::LIT_CONST_EXPR) {
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_arg_not_literal, *iae.GetArg());
+        state.res = false;
+        state.hasHardError = true;
+    }
+}
 } // namespace
 
 bool TypeChecker::TypeCheckerImpl::ChkIfAvailableExpr(ASTContext& ctx, Ty& ty, IfAvailableExpr& ie)
@@ -75,39 +186,32 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIfAvailableExpr(ASTContext& ctx, IfAvai
     if (!ie) {
         return typeManager.GetInvalidTy();
     }
-    bool res{true};
+    IfAvailableCheckState state;
     auto argName = iae.GetArg()->name;
     if (argName.Empty()) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_arg_no_name, *iae.GetArg());
-        res = false;
+        state.res = false;
+        state.hasHardError = true;
     }
     if (argName == LEVEL_IDENTGIFIER && ie->condExpr) {
-        res = ChkIfImportDeviceInfo(diag, importManager, iae) && res;
-        CJC_ASSERT(ie->condExpr->astKind == ASTKind::BINARY_EXPR);
-        auto argExpr = StaticCast<BinaryExpr>(ie->condExpr.get())->rightExpr.get();
-        if (argExpr->astKind != ASTKind::LIT_CONST_EXPR) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_arg_not_literal, *iae.GetArg());
-            res = false;
-        }
+        ChkLevelArgument(diag, importManager, iae, *ie, state);
     } else if (argName == SYSCAP_IDENTGIFIER && ie->condExpr) {
-        res = ChkIfImportBase(diag, importManager, iae) && res;
-        CJC_ASSERT(ie->condExpr->astKind == ASTKind::CALL_EXPR);
-        auto argExpr = StaticCast<CallExpr>(ie->condExpr.get());
-        CJC_ASSERT(argExpr->args.size() == 1);
-        if (argExpr->args[0]->expr->astKind != ASTKind::LIT_CONST_EXPR) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_arg_not_literal, *iae.GetArg());
-            res = false;
-        }
+        ChkSyscapArgument(diag, importManager, iae, *ie, state);
     } else {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_unknow_arg_name, MakeRange(iae.GetArg()->name),
             iae.GetArg()->name.Val());
-        res = false;
+        state.res = false;
+        state.hasHardError = true;
     }
     auto targetTy = typeManager.GetFunctionTy({}, typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT));
-    res = Check(ctx, targetTy, iae.GetLambda1()) && res;
-    res = Check(ctx, targetTy, iae.GetLambda2()) && res;
-    if (!res) {
-        iae.SetTy(typeManager.GetInvalidTy());
+    state.res = Check(ctx, targetTy, iae.GetLambda1()) && state.res;
+    state.res = Check(ctx, targetTy, iae.GetLambda2()) && state.res;
+    if (!state.res) {
+        Ptr<Ty> fallbackTy = typeManager.GetInvalidTy();
+        if (!state.hasHardError && state.hasLevelFormatWarning) {
+            fallbackTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+        }
+        iae.SetTy(fallbackTy);
         return iae.GetTy();
     }
     iae.SetTy(Synthesize({ctx, SynPos::EXPR_ARG}, iae.desugarExpr));
