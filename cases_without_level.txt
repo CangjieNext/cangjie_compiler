@@ -1,0 +1,1 @@
+/Users/cjdebug/workspace/apilevel_ws/cangjie_test/testsuites/LLT/compiler/Sema/annotation/ifavailable/external_weak/external_weak.cj
