@@ -233,6 +233,7 @@ bool Cangjie::ExecuteFrontendByDriver(DefaultCompilerInstance& instance, const D
         driver.driverOptions->incrementalCompileNoChange =
             (instance.invocation.globalOptions.enIncrementalCompilation && instance.kind == IncreKind::NO_CHANGE);
         driver.driverOptions->symbolsNeedLocalized = instance.invocation.globalOptions.symbolsNeedLocalized;
+        driver.driverOptions->weakUndefinedSymbols = instance.invocation.globalOptions.weakUndefinedSymbols;
         {
             Cangjie::ICE::TriggerPointSetter iceSetter(Cangjie::ICE::TriggerPointSetter::writeCahedTP);
             instance.UpdateAndWriteCachedInfoToDisk();

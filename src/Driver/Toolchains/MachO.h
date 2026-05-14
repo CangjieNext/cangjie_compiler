@@ -46,6 +46,9 @@ protected:
     virtual void GenerateArchiveTool(const std::vector<TempFileInfo>& objFiles);
     void HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Tool& tool);
     virtual void HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath);
+    // Inject -U <sym> for each ExternalWeak symbol recorded by CodeGen so that
+    // ld64.lld accepts undefined weak references from @IfAvailable on macOS.
+    void AppendWeakUndefinedSymbols(const std::vector<TempFileInfo>& objFiles, Tool& tool);
 
     virtual void AddCRuntimeLibraryPaths();
     // Gather library paths from LIBRARY_PATH and compiler guesses.

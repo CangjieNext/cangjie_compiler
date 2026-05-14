@@ -284,6 +284,7 @@ void CGCustomType::GenTypeTemplate()
     if (cgMod.GetCGContext().IsCustomTypeOfOtherLLVMModule(customType) || chirType.IsAutoEnvBase()) {
         if (customTypeDef->Get<CHIR::LinkTypeInfo>() == Linkage::EXTERNAL_WEAK) {
             typeTemplate->setLinkage(llvm::GlobalValue::ExternalWeakLinkage);
+            cgMod.GetCGContext().AddWeakUndefinedSymbol(typeTemplate->getName().str());
         }
         return;
     }
