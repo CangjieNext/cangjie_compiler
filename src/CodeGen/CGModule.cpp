@@ -314,6 +314,7 @@ CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func, bool forWra
     } else if (chirLinkage == Linkage::EXTERNAL_WEAK) {
         // Import function in if branch of @IfAvailable need to mark as EXTERNAL_WEAK.
         function->setLinkage(llvm::GlobalValue::ExternalWeakLinkage);
+        cgCtx->AddWeakUndefinedSymbol(function->getName().str());
     }
 
     auto cgFunc = std::make_unique<CGFunction>(function, cgFuncType, func, *this);

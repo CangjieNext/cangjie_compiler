@@ -42,6 +42,7 @@ void CGPkgContext::Clear()
     quickCHIRValues.Do([](std::unordered_map<std::string, CHIR::Value*>& object) { object.clear(); });
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     localizedSymbols.Do([](std::set<std::string>& object) { object.clear(); });
+    weakUndefinedSymbols.Do([](std::set<std::string>& object) { object.clear(); });
 #endif
 }
 
@@ -87,6 +88,17 @@ void CGPkgContext::AddLocalizedSymbol(const std::string& symName)
 const std::set<std::string>& CGPkgContext::GetLocalizedSymbols()
 {
     return localizedSymbols.Do(
+        [](const std::set<std::string>& object) -> const std::set<std::string>& { return object; });
+}
+
+void CGPkgContext::AddWeakUndefinedSymbol(const std::string& symName)
+{
+    weakUndefinedSymbols.Do([&symName](std::set<std::string>& object) { object.emplace(symName); });
+}
+
+const std::set<std::string>& CGPkgContext::GetWeakUndefinedSymbols()
+{
+    return weakUndefinedSymbols.Do(
         [](const std::set<std::string>& object) -> const std::set<std::string>& { return object; });
 }
 

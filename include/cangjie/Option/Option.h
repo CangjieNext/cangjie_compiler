@@ -892,6 +892,22 @@ public:
     bool aggressiveParallelCompileWithoutArg = false;
     std::vector<std::string> bitcodeFilesName; /** < the name of packageMoudle.bc. */
     std::vector<std::string> symbolsNeedLocalized; /** < Symbols that need to be localized in the compiled binary. */
+    /**
+     * Mangled names of ExternalWeakLinkage symbols emitted during @IfAvailable runtime dispatch.
+     *
+     * Populated by CodeGen (CGModule / CGType / CGCustomType) whenever a declaration with
+     * ExternalWeakLinkage is emitted (functions, TypeInfo globals, TypeTemplate globals).
+     * The set is threaded through CGPkgContext -> GlobalOptions -> DriverOptions so that the
+     * linker invocation stage can act on it.
+     *
+     * macOS only: ld64.lld rejects undefined weak symbols by default. MachO::AppendWeakUndefinedSymbols
+     * injects a "-U _<sym>" flag for each entry in this set, where the leading underscore is the
+     * Mach-O ABI name-mangling prefix.
+     *
+     * Linux / Windows: GNU ld and lld-link accept undefined weak symbols without extra flags,
+     * so this set is not consumed on those platforms.
+     */
+    std::set<std::string> weakUndefinedSymbols;
 
     /**
      * @brief Determine if the output mode is executable.
