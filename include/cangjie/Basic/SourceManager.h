@@ -126,6 +126,11 @@ public:
     bool IsSourceFileExist(const unsigned int id);
     int GetLineEnd(const Position& pos);
 
+    /**
+     * @brief Whether @p pos lies in the macro expansion shadow source (`*.macrocall`, suffix from registered path).
+     */
+    bool IsInMacroCallSourceFile(const Position& pos) const;
+
     void SaveSourceFile(unsigned int fileID, std::string normalizedPath,
         std::string buffer, uint64_t fileHash, std::optional<std::string> packageName = std::nullopt);
 

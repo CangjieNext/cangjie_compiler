@@ -902,7 +902,7 @@ bool IsTextOnlyWarning(const WarnGroup& warnGroup)
  *
  * @param diagnostic The diagnostic object whose message will be swapped with its note.
  */
-void SwapErrorMessageWithNote(Diagnostic& diagnostic)
+void SwapErrorMessageWithNote(Diagnostic& diagnostic, const SourceManager& sm)
 {
     // Check if the diagnostic is a macro call and has sub-diagnostics.
     if (!diagnostic.curMacroCall || diagnostic.subDiags.empty()) {
@@ -911,7 +911,8 @@ void SwapErrorMessageWithNote(Diagnostic& diagnostic)
     // Check if the diagnostic is in the current file.
     auto pInvocation = diagnostic.curMacroCall->GetInvocation();
     auto mainHint = diagnostic.mainHint;
-    if ((pInvocation && pInvocation->isCurFile) || mainHint.range.begin.isCurFile || diagnostic.start.isCurFile) {
+    if ((pInvocation && pInvocation->isCurFile) || mainHint.range.begin.isCurFile || diagnostic.start.isCurFile ||
+        !sm.IsInMacroCallSourceFile(mainHint.range.begin)) {
         return;
     }
     // Swap error message with note.
@@ -940,7 +941,7 @@ void SwapErrorMessageWithNote(Diagnostic& diagnostic)
 bool DiagnosticEmitterImpl::Emit()
 {
     // Swap error message with note when dealing with macro calls.
-    SwapErrorMessageWithNote(diag);
+    SwapErrorMessageWithNote(diag, sm);
     const std::map<DiagSeverity, std::string_view> seveToStr = {
         {DiagSeverity::DS_ERROR, "error"}, {DiagSeverity::DS_WARNING, "warning"},
         {DiagSeverity::DS_NOTE, "note"},
