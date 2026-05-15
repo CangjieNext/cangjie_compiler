@@ -1589,6 +1589,10 @@ inline bool IsSamePosition(const Position& pos1, const Position& pos2)
 /// Both function are deserialized, so it's not duplicate, it's actulayy the same function.
 inline bool IsSameDeserializedFunction(Ptr<FuncDecl> f1, Ptr<FuncDecl> f2)
 {
+    // Self-comparison guard
+    if (f1 == f2) {
+        return false;
+    }
     return IsSamePosition(f1->begin, f2->begin) &&
         (f1->TestAttr(Attribute::ALREADY_LOADED) || f2->TestAttr(Attribute::ALREADY_LOADED));
 }

@@ -151,6 +151,10 @@ inline bool IsSamePosition(const Position& pos1, const Position& pos2)
 /// Both function are deserialized, so it's not duplicate, it's actulayy the same function.
 inline bool IsSameDeserializedFunction(const Decl& left, const Decl& right)
 {
+    // Self-comparison guard
+    if (&left == &right) {
+        return false;
+    }
     return IsSamePosition(left.begin, right.begin) &&
         (left.TestAttr(Attribute::ALREADY_LOADED) || right.TestAttr(Attribute::ALREADY_LOADED));
 }
