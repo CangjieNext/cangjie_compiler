@@ -121,6 +121,14 @@ unsigned int SourceManager::AppendSource(const std::string& path, const std::str
     return GetFileId(normalizePath, buffer, fileHash, std::nullopt, isCjmpFile, true);
 }
 
+bool SourceManager::IsInMacroCallSourceFile(const Position& pos) const
+{
+    if (pos.fileID == 0 || pos.fileID >= sources.size()) {
+        return false;
+    }
+    return FileUtil::GetFileExtension(sources[pos.fileID].path) == "macrocall";
+}
+
 bool SourceManager::IsSourceFileExist(const unsigned int id)
 {
     // Check whether the *.macrocall exists or not.
