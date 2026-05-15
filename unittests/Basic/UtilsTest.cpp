@@ -16,8 +16,10 @@ TEST(UtilsTest, GetHashTest)
 {
     std::string case1 = "hello world";
     uint64_t h1 = Cangjie::Utils::GetHash(case1);
-    EXPECT_EQ(h1, std::hash<std::string>{}(case1));
+    uint64_t constexpr fnv1a = 8618312879776256743ull;
+    EXPECT_EQ(h1, fnv1a);
 }
+
 
 TEST(UtilsTest, JoinStringsTest)
 {

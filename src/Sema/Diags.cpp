@@ -151,6 +151,9 @@ inline bool IsSamePosition(const Position& pos1, const Position& pos2)
 /// Both function are deserialized, so it's not duplicate, it's actulayy the same function.
 inline bool IsSameDeserializedFunction(const Decl& left, const Decl& right)
 {
+    if (&left == &right) {
+        return false;
+    }
     return IsSamePosition(left.begin, right.begin) &&
         (left.TestAttr(Attribute::ALREADY_LOADED) || right.TestAttr(Attribute::ALREADY_LOADED));
 }
@@ -219,7 +222,13 @@ void DiagOverloadConflict(DiagnosticEngine& diag, const std::vector<Ptr<FuncDecl
     // If the 'sameSigFuncs' has size 1, then the function is conflicting with imported declaration,
     // and the error for imported declaration will be generated later.
     CJC_ASSERT(sameSigFuncs.size() >= 1);
-    auto baseFd = sameSigFuncs.front();
+    // Sort by position to ensure deterministic diagnostic output regardless of fileID hash values.
+    auto sorted = sameSigFuncs;
+    std::sort(sorted.begin(), sorted.end(), [](auto a, auto b) {
+        return std::tie(a->begin.fileID, a->begin.line, a->begin.column) <
+               std::tie(b->begin.fileID, b->begin.line, b->begin.column);
+    });
+    auto baseFd = sorted.front();
     auto getIdentifier = [](auto fd) {
         return fd->identifierForLsp.empty() ? fd->identifier.Val() : fd->identifierForLsp;
     };
@@ -238,10 +247,10 @@ void DiagOverloadConflict(DiagnosticEngine& diag, const std::vector<Ptr<FuncDecl
         auto generic = fd->GetGeneric();
         return generic && !generic->genericConstraints.empty();
     };
-    if (std::any_of(sameSigFuncs.begin(), sameSigFuncs.end(), hasConstraints)) {
+    if (std::any_of(sorted.begin(), sorted.end(), hasConstraints)) {
         builder.AddNote("generic constraints are not involved in the overloading");
     }
-    for (auto it = sameSigFuncs.begin() + 1; it != sameSigFuncs.end(); ++it) {
+    for (auto it = sorted.begin() + 1; it != sorted.end(); ++it) {
         auto fd = *it;
         builder.AddNote(*fd, MakeRange(fd->identifier.Begin(), getIdentifier(fd)), "conflict with the declaration");
     }
