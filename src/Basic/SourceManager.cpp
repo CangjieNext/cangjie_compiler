@@ -107,7 +107,7 @@ unsigned int SourceManager::AddSource(
     const std::string& path, const std::string& buffer, std::optional<std::string> packageName, bool isCjmpFile)
 {
     // path canonicalize
-    std::string normalizePath = FileUtil::Normalize(path);
+    std::string normalizePath = FileUtil::Normalize(path, true);
     // Change fileHash from content hash to path hash.
     uint64_t fileHash = Utils::GetHash(normalizePath);
     return GetFileId(normalizePath, buffer, fileHash, packageName, isCjmpFile, false);
@@ -116,7 +116,7 @@ unsigned int SourceManager::AddSource(
 unsigned int SourceManager::AppendSource(const std::string& path, const std::string& buffer, bool isCjmpFile)
 {
     // path canonicalize
-    std::string normalizePath = FileUtil::Normalize(path);
+    std::string normalizePath = FileUtil::Normalize(path, true);
     uint64_t fileHash = Utils::GetHash(normalizePath);
     return GetFileId(normalizePath, buffer, fileHash, std::nullopt, isCjmpFile, true);
 }
