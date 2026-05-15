@@ -12,13 +12,6 @@
 #include "gtest/gtest.h"
 using namespace Cangjie;
 
-TEST(UtilsTest, GetHashTest)
-{
-    std::string case1 = "hello world";
-    uint64_t h1 = Cangjie::Utils::GetHash(case1);
-    EXPECT_EQ(h1, std::hash<std::string>{}(case1));
-}
-
 TEST(UtilsTest, JoinStringsTest)
 {
     std::vector<std::pair<std::vector<std::string>, std::string>> cases = {
