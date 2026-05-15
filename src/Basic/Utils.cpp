@@ -22,10 +22,18 @@
 using namespace Cangjie;
 
 namespace Cangjie {
+
+// 64 bit FNV-1a algorithm
 uint64_t Utils::GetHash(const std::string& content)
 {
-    std::size_t ret = std::hash<std::string>{}(content);
-    return static_cast<uint64_t>(ret);
+    uint64_t constexpr fnv_prime = 1099511628211ull;
+    uint64_t constexpr fnv_offset_basis = 14695981039346656037ull;
+    uint64_t hash = fnv_offset_basis;
+    for (char c : content) {
+        hash ^= static_cast<uint64_t>(c);
+        hash *= fnv_prime;
+    }
+    return hash;
 }
 
 std::vector<std::string> Utils::SplitLines(const std::string& str)
