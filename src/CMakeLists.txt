@@ -163,7 +163,7 @@ if(MINGW)
     target_link_libraries(cjc ${GET_CRT_GLOB_OUTPUT})
 endif()
 
-if(CMAKE_BUILD_TYPE MATCHES Release AND MINGW)
+if(MINGW)
     # Add static link option for cjc when building MinGW release. This use
     # case is defined in GCC Runtime Libraries Exception and has no GPL issue.
     target_link_options(cjc PRIVATE -static)
@@ -208,6 +208,7 @@ endif()
 if(COMPILER_EXPLORER_RACE_FIX)
     add_compile_definitions(COMPILER_EXPLORER_RACE_FIX)
 endif()
+
 
 if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Release)
     install(TARGETS cjc-frontend)

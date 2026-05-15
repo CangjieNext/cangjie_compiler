@@ -88,13 +88,11 @@ unsigned int SourceManager::GetFileId(
     } else {
         auto fileID = static_cast<unsigned int>(sources.size());
         if (isCjmpFile) {
-            // CJMP files can not have incremental file IDs,
-            // because 1) Some IDs may already be used for parent source set files
+            // CJMP files can not have incremental file IDs:
+            // 1) Some IDs may already be used for parent source set files
             // 2) Or in neighbour source set.
-            // So IDs need to be evaluated based path.
-            std::hash<std::string> hasher;
-            size_t hashValue = hasher(normalizedPath);
-            fileID = static_cast<unsigned int>(hashValue);
+            // Thus IDs are evaluated based path.
+            fileID = static_cast<unsigned int>(Utils::GetHash(normalizedPath));
         }
 
         sources.emplace(fileID, Source(fileID, normalizedPath, buffer, fileHash, packageName));
@@ -107,7 +105,7 @@ unsigned int SourceManager::AddSource(
     const std::string& path, const std::string& buffer, std::optional<std::string> packageName, bool isCjmpFile)
 {
     // path canonicalize
-    std::string normalizePath = FileUtil::Normalize(path);
+    std::string normalizePath = FileUtil::Normalize(path, true);
     // Change fileHash from content hash to path hash.
     uint64_t fileHash = Utils::GetHash(normalizePath);
     return GetFileId(normalizePath, buffer, fileHash, packageName, isCjmpFile, false);
@@ -116,7 +114,7 @@ unsigned int SourceManager::AddSource(
 unsigned int SourceManager::AppendSource(const std::string& path, const std::string& buffer, bool isCjmpFile)
 {
     // path canonicalize
-    std::string normalizePath = FileUtil::Normalize(path);
+    std::string normalizePath = FileUtil::Normalize(path, true);
     uint64_t fileHash = Utils::GetHash(normalizePath);
     return GetFileId(normalizePath, buffer, fileHash, std::nullopt, isCjmpFile, true);
 }
