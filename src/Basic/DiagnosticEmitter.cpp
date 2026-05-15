@@ -901,7 +901,7 @@ bool IsTextOnlyWarning(const WarnGroup& warnGroup)
  *
  * @param diagnostic The diagnostic object whose message will be swapped with its note.
  */
-void SwapErrorMessageWithNote(Diagnostic& diagnostic)
+void SwapErrorMessageWithNote(Diagnostic& diagnostic, const SourceManager& sm)
 {
     // Check if the diagnostic is a macro call and has sub-diagnostics.
     if (!diagnostic.macroDiagInfo || diagnostic.subDiags.empty()) {
@@ -917,7 +917,11 @@ void SwapErrorMessageWithNote(Diagnostic& diagnostic)
     //    refactor-style diagnostic main hint is already in original source file.
     // 3) diagnostic.start.isCurFile:
     //    legacy diagnostic start position is already in original source file.
-    if ((macroDiagInfo && macroDiagInfo->isCurFile) || mainHint.range.begin.isCurFile || diagnostic.start.isCurFile) {
+    // 4) !IsInMacroCallSourceFile(mainHint) || !IsInMacroCallSourceFile(diagnostic.start):
+    //    CHIR-stage positions do not carry isCurFile, so we cannot rely on cases 1–3 alone.
+    //    Use whether the position's fileID maps to a *.macrocall source in SourceManager instead.
+    if ((macroDiagInfo && macroDiagInfo->isCurFile)  || mainHint.range.begin.isCurFile || diagnostic.start.isCurFile ||
+        !sm.IsInMacroCallSourceFile(mainHint.range.begin) || !sm.IsInMacroCallSourceFile(diagnostic.start)) {
         return;
     }
     // Swap error message with note.
@@ -946,7 +950,7 @@ void SwapErrorMessageWithNote(Diagnostic& diagnostic)
 bool DiagnosticEmitterImpl::Emit(bool enableOnlyHint)
 {
     // Swap error message with note when dealing with macro calls.
-    SwapErrorMessageWithNote(diag);
+    SwapErrorMessageWithNote(diag, sm);
     const std::map<DiagSeverity, std::string_view> seveToStr = {
         {DiagSeverity::DS_ERROR, "error"}, {DiagSeverity::DS_WARNING, "warning"},
         {DiagSeverity::DS_NOTE, "note"},
