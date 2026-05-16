@@ -10,8 +10,8 @@
  * This file implements semantic checks for @ForeignName anno
  */
 
-#include "NativeFFI/Utils.h"
 #include "Handlers.h"
+#include "NativeFFI/Utils.h"
 #include "cangjie/AST/Match.h"
 
 using namespace Cangjie::AST;
@@ -63,9 +63,10 @@ void CheckForeignName::HandleImpl(TypeCheckContext& ctx)
         memberDecl->EnableAttr(Attribute::IS_BROKEN);
         ctx.target.EnableAttr(Attribute::HAS_BROKEN);
         if (memberDecl->TestAttr(Attribute::CONSTRUCTOR)) {
-            ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_ctor_must_have_foreign_name, *memberDecl, targetKind);
+            ctx.diag.DiagnoseRefactor("sema_objc_ctor_must_have_foreign_name", *memberDecl, targetKind);
         } else {
-            ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_method_must_have_foreign_name, *memberDecl, targetKind, memberDecl->identifier);
+            ctx.diag.DiagnoseRefactor(
+                "sema_objc_method_must_have_foreign_name", *memberDecl, targetKind, memberDecl->identifier);
         }
     }
 }

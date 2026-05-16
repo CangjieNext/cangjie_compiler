@@ -1006,7 +1006,7 @@ private:
             for (Ptr<Node> unreachable : unreachables) {
                 CJC_NULLPTR_CHECK(unreachable);
                 unreachable->EnableAttr(Attribute::UNREACHABLE);
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_unreachable_pattern, *unreachable);
+                diag.DiagnoseRefactor("sema_unreachable_pattern", *unreachable);
             }
         }
         // Otherwise, every sub-pattern is unreachable and the or-pattern itself is unreachable.
@@ -1052,8 +1052,8 @@ bool CheckMatchExprHasSelectorExhaustivenessAndReachability(
             }
         } else {
             mc->EnableAttr(Attribute::UNREACHABLE);
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_unreachable_pattern, *mc,
-                MakeRange(mc->patterns.front()->begin, mc->patterns.back()->end));
+            diag.DiagnoseRefactor(
+                "sema_unreachable_pattern", *mc, MakeRange(mc->patterns.front()->begin, mc->patterns.back()->end));
         }
     }
     auto stack = PatternStack(
@@ -1062,7 +1062,7 @@ bool CheckMatchExprHasSelectorExhaustivenessAndReachability(
     if (witnesses.empty()) {
         return true;
     }
-    DiagnosticBuilder diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::sema_nonexhuastive_patterns, *me.selector);
+    DiagnosticBuilder diagBuilder = diag.DiagnoseRefactor("sema_nonexhuastive_patterns", *me.selector);
     diagBuilder.AddMainHintArguments(me.selector->GetTy()->String());
     for (PatternStack& witness : witnesses) {
         // Every witness has only one item in the final result of FindWitnesses()

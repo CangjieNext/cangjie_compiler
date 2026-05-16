@@ -236,15 +236,14 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateNativeFunc4Argument(const FuncArg
     auto [usingThis, paramIds] = CollectParams(arg.expr.get(), params, usingParams);
     if (usingThis) {
         // Report error for using this in super call.
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, arg, "using this in super call");
+        diag.DiagnoseRefactor("sema_java_interop_not_supported", arg, "using this in super call");
         return nullptr;
     }
     std::vector<Ptr<RefExpr>> staticRefs;
     auto usingPrivate = CollectStaticRefs(arg.expr.get(), staticRefs);
     if (usingPrivate) {
         // Report error for using private static member in super call.
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_java_interop_not_supported, arg, "using private static member in super call");
+        diag.DiagnoseRefactor("sema_java_interop_not_supported", arg, "using private static member in super call");
         return nullptr;
     }
     // The encoding rules of super call id: C{ctorId}A{argId}{usingParamIds: P{paramId}P{paramId}...}
@@ -1003,8 +1002,8 @@ void JavaDesugarManager::DesugarLetPattern(LetPatternDestructor& letPat)
     }
 
     for (auto typePat : typePatterns) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *typePat,
-            "let type patterns with JavaImpl or JavaMirror types");
+        diag.DiagnoseRefactor(
+            "sema_java_interop_not_supported", *typePat, "let type patterns with JavaImpl or JavaMirror types");
     }
 }
 

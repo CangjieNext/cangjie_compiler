@@ -11,6 +11,9 @@
  */
 #include "DiagnosticEngineImpl.h"
 
+#include <array>
+#include <map>
+
 #include <set>
 #include <sstream>
 #include <string>
@@ -29,98 +32,101 @@
 #endif
 
 namespace Cangjie {
-#if defined(ERROR)
-#undef ERROR
-#endif
-// Define the errorData array (declaration is in DiagnosticEngine.h)
-const std::vector<ErrorData> errorData = {
+
+namespace {
+const std::map<DiagSeverity, DiagColor> SEVE_TO_COLOR{{DiagSeverity::DS_ERROR, DiagColor::RED},
+    {DiagSeverity::DS_WARNING, DiagColor::YELLOW}, {DiagSeverity::DS_NOTE, DiagColor::RED}};
+} // namespace
+
+// Define the errorData table (declaration is in DiagnosticEngineConstants.h)
+const ErrorData errorData[] = {
 #define ERROR(Kind, ...) {__VA_ARGS__},
 #define WARNING(Kind, Group, ...) {__VA_ARGS__},
-#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#include "Diagnostics/DKRef/All.def"
 #undef WARNING
 #undef ERROR
 };
 
-// Define DIAG_KIND_STR array (declaration is in DiagnosticEngine.h)
-const std::vector<std::string_view> DIAG_KIND_STR = {
+// Define DIAG_KIND_STR table (declaration is in DiagnosticEngineConstants.h)
+const std::string_view DIAG_KIND_STR[] = {
 #define NOTE(Kind, Info) #Kind,
 #define ERROR(Kind, Info) #Kind,
 #define WARNING(Kind, Group, Info) #Kind,
-#include "cangjie/Basic/DiagnosticsAll.def"
+#include "Diagnostics/DK/All.def"
 #undef ERROR
 #undef WARNING
 #undef NOTE
 };
-const size_t DIAG_KIND_STR_SIZE = DIAG_KIND_STR.size();
+extern const int DIAG_KIND_STR_SIZE = sizeof(DIAG_KIND_STR) / sizeof(DIAG_KIND_STR[0]);
 
-// Define DiagSeveritys array (declaration is in DiagnosticEngine.h)
-const std::vector<DiagSeverity> DiagSeveritys = {
+// Define DiagSeveritys table (declaration is in DiagnosticEngineConstants.h)
+const DiagSeverity DiagSeveritys[] = {
 #define ERROR(Kind, Info) DiagSeverity::DS_ERROR,
 #define NOTE(Kind, Info) DiagSeverity::DS_NOTE,
 #define WARNING(Kind, Group, Info) DiagSeverity::DS_WARNING,
-#include "cangjie/Basic/DiagnosticsAll.def"
+#include "Diagnostics/DK/All.def"
 #undef ERROR
 #undef WARNING
 #undef NOTE
 };
 
-// Define DiagMessages array (declaration is in DiagnosticEngine.h)
-const std::vector<std::string_view> DiagMessages = {
+// Define DiagMessages table (declaration is in DiagnosticEngineConstants.h)
+const std::string_view DiagMessages[] = {
 #define ERROR(Kind, Info) Info,
 #define WARNING(Kind, Group, Info) Info,
 #define NOTE(Kind, Info) Info,
-#include "cangjie/Basic/DiagnosticsAll.def"
+#include "Diagnostics/DK/All.def"
 #undef ERROR
 #undef WARNING
 #undef NOTE
 };
 
-// Define warnGroups array (declaration is in DiagnosticEngine.h)
-const std::vector<WarnGroup> warnGroups = {
+// Define warnGroups table (declaration is in DiagnosticEngineConstants.h)
+const WarnGroup warnGroups[] = {
 #define ERROR(Kind, ...) WarnGroup::NONE,
 #define WARNING(Kind, Group, ...) WarnGroup::Group,
 #define NOTE(Kind, Info) WarnGroup::NONE,
-#include "cangjie/Basic/DiagnosticsAll.def"
+#include "Diagnostics/DK/All.def"
 #undef WARNING
 #undef ERROR
 #undef NOTE
 };
+const int WARN_GROUP_DESCRS_SIZE = sizeof(warnGroups) / sizeof(warnGroups[0]);
 
-// Define rDiagSeveritys array (declaration is in DiagnosticEngine.h)
-const std::vector<DiagSeverity> rDiagSeveritys = {
+// Define rDiagSeveritys table (declaration is in DiagnosticEngineConstants.h)
+const DiagSeverity rDiagSeveritys[] = {
 #define ERROR(Kind, ...) DiagSeverity::DS_ERROR,
 #define WARNING(Kind, ...) DiagSeverity::DS_WARNING,
-#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#include "Diagnostics/DKRef/All.def"
 #undef WARNING
 #undef ERROR
 };
 
-// Define rWarnGroups array (declaration is in DiagnosticEngine.h)
-const std::vector<WarnGroup> rWarnGroups = {
+// Define rWarnGroups table (declaration is in DiagnosticEngineConstants.h)
+const WarnGroup rWarnGroups[] = {
 #define ERROR(Kind, ...) WarnGroup::NONE,
 #define WARNING(Kind, Group, ...) WarnGroup::Group,
-#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#include "Diagnostics/DKRef/All.def"
 #undef WARNING
 #undef ERROR
 };
 
-// Define warnGroupDescrs array (declaration is in DiagnosticEngine.h)
-const std::vector<std::string_view> warnGroupDescrs = {
+// Define warnGroupDescrs table (declaration is in DiagnosticEngineConstants.h)
+const std::string_view warnGroupDescrs[] = {
 #define WARN_GROUP(DESCR, KIND) DESCR,
-#include "cangjie/Basic/DiagRefactor/DiagnosticWarnGroupKind.def"
+#include "cangjie/Basic/DKRef/WarnGroupKind.def"
 #undef WARN_GROUP
 };
-const size_t WARN_GROUP_DESCRS_SIZE = warnGroupDescrs.size();
 
-// Define RE_DIAG_KIND_STR array (declaration is in DiagnosticEngine.h)
-const std::vector<std::string_view> RE_DIAG_KIND_STR = {
+// Define RE_DIAG_KIND_STR table (declaration is in DiagnosticEngineConstants.h)
+const std::string_view RE_DIAG_KIND_STR[] = {
 #define ERROR(Kind, ...) #Kind,
 #define WARNING(Kind, ...) #Kind,
-#include "cangjie/Basic/DiagRefactor/DiagnosticAll.def"
+#include "Diagnostics/DKRef/All.def"
 #undef WARNING
 #undef ERROR
 };
-const size_t RE_DIAG_KIND_STR_SIZE = RE_DIAG_KIND_STR.size();
+extern const int RE_DIAG_KIND_STR_SIZE = sizeof(RE_DIAG_KIND_STR) / sizeof(RE_DIAG_KIND_STR[0]);
 
 size_t HashForPosition(const Position& pos)
 {
@@ -168,52 +174,104 @@ Range MakeRange(const Identifier& id)
     return MakeRange(id.Begin(), id.End());
 }
 
-DiagCategory Diagnostic::GetDiagnoseCategory(DiagKind diagKind)
+SubDiagnostic::SubDiagnostic(const Range& range, const std::string& s) : subDiagMessage(s)
 {
-    DiagCategory dc = DiagCategory::OTHER;
-#define GET_CATE(kind, KIND)                                                                                           \
-    do {                                                                                                               \
-        if (diagKind > DiagKind::kind##_diag_begin && diagKind <= DiagKind::kind##_diag_end) {                         \
-            dc = DiagCategory::KIND;                                                                                   \
-        }                                                                                                              \
-    } while (0)
-    GET_CATE(macro_expand, MACRO_EXPAND);
-    GET_CATE(sema, SEMA);
-#undef GET_CATE
-    return dc;
+    mainHint = IntegratedString{range, "", NOTE_COLOR};
 }
 
-struct DiagRange {
-    DiagKindRefactor start;
-    DiagKindRefactor end;
-    DiagCategory category;
-};
-
-DiagCategory Diagnostic::GetDiagnoseCategory(DiagKindRefactor diagKind)
+void SubDiagnostic::AddMainHint(const Range& range, const std::string& str)
 {
-    static const std::array<DiagRange, 11> RANGES = {{
-        {DiagKindRefactor::lex_diag_begin, DiagKindRefactor::lex_diag_end, DiagCategory::LEX},
-        {DiagKindRefactor::parse_diag_begin, DiagKindRefactor::parse_diag_end, DiagCategory::PARSE},
-        {DiagKindRefactor::sema_diag_begin, DiagKindRefactor::sema_diag_end, DiagCategory::SEMA},
-        {DiagKindRefactor::chir_diag_begin, DiagKindRefactor::chir_diag_end, DiagCategory::CHIR},
-        {DiagKindRefactor::import_package_diag_begin, DiagKindRefactor::import_package_diag_end,
-            DiagCategory::IMPORT_PACKAGE},
-        {DiagKindRefactor::module_diag_begin, DiagKindRefactor::module_diag_end, DiagCategory::MODULE},
-        {DiagKindRefactor::driver_diag_begin, DiagKindRefactor::driver_diag_end, DiagCategory::OTHER},
-        {DiagKindRefactor::incremental_compilation_diag_begin, DiagKindRefactor::incremental_compilation_diag_end,
-            DiagCategory::OTHER},
-        {DiagKindRefactor::parse_query_diag_begin, DiagKindRefactor::parse_query_diag_end, DiagCategory::PARSE_QUERY},
-        {DiagKindRefactor::frontend_diag_begin, DiagKindRefactor::frontend_diag_end, DiagCategory::OTHER},
-        {DiagKindRefactor::conditional_compilation_diag_begin, DiagKindRefactor::conditional_compilation_diag_end,
-            DiagCategory::CONDITIONAL_COMPILATION},
-    }};
+    mainHint = IntegratedString{range, str, NOTE_COLOR};
+}
 
-    for (const auto& range : RANGES) {
-        if (diagKind > range.start && diagKind < range.end) {
+DiagCategory Diagnostic::GetDiagnoseCategory(DiagIdOld id)
+{
+    static const int macroBegin = LookupDiagKind("macro_expand_diag_begin").Val();
+    static const int macroEnd = LookupDiagKind("macro_expand_diag_end").Val();
+    static const int semaBegin = LookupDiagKind("sema_diag_begin").Val();
+    static const int semaEnd = LookupDiagKind("sema_diag_end").Val();
+    int v = id.Val();
+    if (v > macroBegin && v <= macroEnd) {
+        return DiagCategory::MACRO_EXPAND;
+    }
+    if (v > semaBegin && v <= semaEnd) {
+        return DiagCategory::SEMA;
+    }
+    return DiagCategory::OTHER;
+}
+
+Diagnostic::Diagnostic()
+{
+    diagSeverity = DiagSeveritys[kind.Val()];
+    diagCategory = GetDiagnoseCategory(kind);
+    warnGroup = warnGroups[kind.Val()];
+}
+
+Diagnostic::Diagnostic(const Position& s, const Position& e, DiagIdOld kid, std::vector<DiagArgument> args)
+    : start(s), end(e), kind(kid), args(std::move(args))
+{
+    diagSeverity = DiagSeveritys[kid.Val()];
+    diagCategory = GetDiagnoseCategory(kid);
+    warnGroup = warnGroups[kid.Val()];
+    // Refactor kind is set by default.
+    rKind = LookupDiagKindRefactor("parse_diag_begin");
+}
+
+Diagnostic::Diagnostic(bool isRefactor, const Range& range, DiagId kid, std::vector<std::string> args)
+    : kind(DEFAULT_KIND), isRefactor(isRefactor), rKind(kid)
+{
+    const int k = kid.Val();
+    auto errData = errorData[k];
+    diagSeverity = rDiagSeveritys[k];
+    warnGroup = rWarnGroups[k];
+
+    errorMessage = InsertArguments(errData.message, args);
+    if (SEVE_TO_COLOR.find(diagSeverity) != SEVE_TO_COLOR.end()) {
+        mainHint = IntegratedString(range, errData.mainHint, SEVE_TO_COLOR.at(diagSeverity));
+    } else {
+        mainHint = IntegratedString(range, errData.mainHint, DiagColor::RED);
+    }
+
+    diagCategory = GetDiagnoseCategory(kid);
+}
+
+DiagCategory Diagnostic::GetDiagnoseCategory(DiagId id)
+{
+    int o = id.Val();
+    struct RangeOrd {
+        int beginOrd;
+        int endOrd;
+        DiagCategory category;
+    };
+    static const std::array<RangeOrd, 11> kRanges = {
+        RangeOrd{LookupDiagKindRefactor("lex_diag_begin").Val(), LookupDiagKindRefactor("lex_diag_end").Val(),
+            DiagCategory::LEX},
+        RangeOrd{LookupDiagKindRefactor("parse_diag_begin").Val(), LookupDiagKindRefactor("parse_diag_end").Val(),
+            DiagCategory::PARSE},
+        RangeOrd{LookupDiagKindRefactor("sema_diag_begin").Val(), LookupDiagKindRefactor("sema_diag_end").Val(),
+            DiagCategory::SEMA},
+        RangeOrd{LookupDiagKindRefactor("chir_diag_begin").Val(), LookupDiagKindRefactor("chir_diag_end").Val(),
+            DiagCategory::CHIR},
+        RangeOrd{LookupDiagKindRefactor("import_package_diag_begin").Val(),
+            LookupDiagKindRefactor("import_package_diag_end").Val(), DiagCategory::IMPORT_PACKAGE},
+        RangeOrd{LookupDiagKindRefactor("module_diag_begin").Val(), LookupDiagKindRefactor("module_diag_end").Val(),
+            DiagCategory::MODULE},
+        RangeOrd{LookupDiagKindRefactor("driver_diag_begin").Val(), LookupDiagKindRefactor("driver_diag_end").Val(),
+            DiagCategory::OTHER},
+        RangeOrd{LookupDiagKindRefactor("incremental_compilation_diag_begin").Val(),
+            LookupDiagKindRefactor("incremental_compilation_diag_end").Val(), DiagCategory::OTHER},
+        RangeOrd{LookupDiagKindRefactor("parse_query_diag_begin").Val(),
+            LookupDiagKindRefactor("parse_query_diag_end").Val(), DiagCategory::PARSE_QUERY},
+        RangeOrd{LookupDiagKindRefactor("frontend_diag_begin").Val(), LookupDiagKindRefactor("frontend_diag_end").Val(),
+            DiagCategory::OTHER},
+        RangeOrd{LookupDiagKindRefactor("conditional_compilation_diag_begin").Val(),
+            LookupDiagKindRefactor("conditional_compilation_diag_end").Val(), DiagCategory::CONDITIONAL_COMPILATION},
+    };
+    for (const auto& range : kRanges) {
+        if (o > range.beginOrd && o < range.endOrd) {
             return range.category;
         }
     }
-
     CJC_ABORT();
     return DiagCategory::OTHER;
 }
@@ -256,12 +314,14 @@ DiagCategory Diagnostic::GetDiagCategory() const
 
 int Diagnostic::GetDiagKind() const
 {
-    if (!start.IsZero()) {
-        return static_cast<int>(kind);
+    if (isRefactor) {
+        return rKind.Val();
     }
-    // Sema diag end is last position in normal diag kind.
-    // In order to make diagKind is unique, we only need to add rKind on it.
-    return static_cast<int>(DiagKind::sema_diag_end) + static_cast<int>(rKind);
+    if (!start.IsZero()) {
+        return kind.Val();
+    }
+    static const int semaDiagEnd = LookupDiagKind("sema_diag_end").Val();
+    return semaDiagEnd + kind.Val();
 }
 
 std::string Diagnostic::InsertArguments(std::string& rawString, std::vector<std::string>& arguments)
@@ -347,8 +407,7 @@ void DiagnosticBuilder::AddHint(const Range& range, std::vector<std::string>& ar
 {
     diag.CheckRange(diagnostic.GetDiagCategory(), range);
 
-    auto errData = errorData[static_cast<unsigned>(diagnostic.rKind)];
-    
+    auto errData = errorData[diagnostic.rKind.Val()];
     if (diagnostic.otherHints.size() >= errData.otherHints.size()) {
         CJC_ASSERT(arguments.size() <= 1);
         auto str = arguments.empty() ? "" : arguments.front();
@@ -511,7 +570,7 @@ void DiagnosticEngine::RegisterHandler(DiagFormat format)
 bool DiagnosticEngineImpl::IsSupressedUnusedMain(const Diagnostic& diagnostic) noexcept
 {
     return warningOption->IsSuppressed(static_cast<size_t>(WarnGroup::UNUSED_MAIN)) &&
-        diagnostic.rKind == DiagKindRefactor::chir_dce_unused_function_main;
+        diagnostic.rKind == LookupDiagKindRefactor("chir_dce_unused_function_main");
 }
 
 void DiagnosticEngineImpl::HandleDiagnostic(Diagnostic& diagnostic) noexcept
@@ -622,7 +681,7 @@ std::string DiagnosticEngineImpl::GetArgStr(
 
 void DiagnosticEngineImpl::ConvertArgsToDiagMessage(Diagnostic& diagnostic) noexcept
 {
-    std::string formatStr = std::string(DiagMessages[static_cast<size_t>(diagnostic.kind)]);
+    std::string formatStr = std::string(DiagMessages[diagnostic.kind.Val()]);
     // C string format length, like length of '%f', '%d'.
     const static size_t formatLens = 2;
     uint8_t index = 0;
@@ -915,7 +974,7 @@ static void ConvertOldDiagToNew(Diagnostic& d)
     d.end = INVALID_POSITION;
     d.diagMessage.clear();
     d.notes.clear();
-    d.rKind = DiagKindRefactor::lex_diag_begin;
+    d.rKind = LookupDiagKindRefactor("lex_diag_begin");
 }
 
 bool CompilerDiagnosticHandler::SaveDiagnostics(const Diagnostic& d)

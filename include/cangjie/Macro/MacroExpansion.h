@@ -18,6 +18,7 @@
 
 #include "cangjie/AST/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
+#include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Macro/InvokeUtil.h"
 #include "cangjie/Macro/MacroCommon.h"
 
