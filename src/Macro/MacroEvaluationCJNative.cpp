@@ -63,8 +63,8 @@ HANDLE InvokeMacroFunc(HANDLE mc)
     uint8_t* retBuffer{nullptr};
     if (pInvocation->hasAttr) {
         auto attrMacroFunc = reinterpret_cast<AttrFuncPtrT>(pMacCall->invokeFunc);
-        retBuffer = attrMacroFunc(attrTksBytes.data(), static_cast<int64_t>(attrTksBytes.size()),
-            inputTksBytes.data(), static_cast<int64_t>(inputTksBytes.size()), pMacCall);
+        retBuffer = attrMacroFunc(attrTksBytes.data(), static_cast<int64_t>(attrTksBytes.size()), inputTksBytes.data(),
+            static_cast<int64_t>(inputTksBytes.size()), pMacCall);
     } else {
         auto commonMacroFunc = reinterpret_cast<CommonFuncPtrT>(pMacCall->invokeFunc);
         retBuffer = commonMacroFunc(inputTksBytes.data(), static_cast<int64_t>(inputTksBytes.size()), pMacCall);
@@ -100,7 +100,7 @@ void MacroEvaluation::CollectMacroLibs()
         for (auto& dyfile : dynFiles) {
             auto handle = InvokeRuntime::OpenSymbolTable(dyfile);
             if (handle == nullptr) {
-                (void)ci->diag.Diagnose(DiagKind::can_not_open_macro_library, dyfile);
+                (void)ci->diag.Diagnose("can_not_open_macro_library", dyfile);
                 return;
             }
             InvokeRuntime::SetOpenedLibHandles(handle);
@@ -179,7 +179,6 @@ void MacroEvaluation::InitGlobalVariable()
 
 void MacroEvaluation::ReleaseThreadHandle(MacroCall& macCall)
 {
-    auto invokeReleaseHandle =
-        reinterpret_cast<ReleaseHandleFromC>(RuntimeInit::GetInstance().runtimeReleaseFunc);
+    auto invokeReleaseHandle = reinterpret_cast<ReleaseHandleFromC>(RuntimeInit::GetInstance().runtimeReleaseFunc);
     invokeReleaseHandle(macCall.coroutineHandle);
 }

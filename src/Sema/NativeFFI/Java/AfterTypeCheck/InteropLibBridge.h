@@ -10,9 +10,9 @@
 #include "Utils.h"
 #include "NativeFFI/Utils.h"
 
+#include "cangjie/AST/Match.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
-#include "cangjie/AST/Match.h"
 
 namespace Cangjie::Interop::Java {
 using namespace AST;
@@ -689,8 +689,7 @@ private:
         auto decl = importManager.GetImportedDecl(package, declname);
         if (!decl) {
             if (!silent) {
-                diag.DiagnoseRefactor(DiagKindRefactor::sema_member_not_imported,
-                                      DEFAULT_POSITION, package + "." + declname);
+                diag.DiagnoseRefactor("sema_member_not_imported", DEFAULT_POSITION, package + "." + declname);
             }
             return Ptr(As<K>(nullptr));
         }

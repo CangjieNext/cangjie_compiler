@@ -44,7 +44,7 @@ bool StructInheritanceChecker::IsBuiltInOperatorFuncInExtend(
         if (expectedRetTy == iFuncRetTy) {
             CreateBuiltInBinaryOperatorFunc(fd->op, paramTys[0], *const_cast<ExtendDecl*>(ed), returnTyKind);
         } else {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_return_type_incompatible, structDecl, fd->identifier);
+            diag.DiagnoseRefactor("sema_return_type_incompatible", structDecl, fd->identifier);
         }
         return true;
     } else if (paramTys.empty() && thisTy && IsBuiltinUnaryExpr(fd->op, *thisTy)) {
@@ -53,7 +53,7 @@ bool StructInheritanceChecker::IsBuiltInOperatorFuncInExtend(
         if (expectedRetTy == iFuncRetTy) {
             CreateBuiltInUnaryOperatorFunc(fd->op, *const_cast<ExtendDecl*>(ed));
         } else {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_return_type_incompatible, structDecl, fd->identifier);
+            diag.DiagnoseRefactor("sema_return_type_incompatible", structDecl, fd->identifier);
         }
         return true;
     }

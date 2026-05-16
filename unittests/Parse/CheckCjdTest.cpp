@@ -38,7 +38,7 @@ std::vector<Diagnostic> CheckCjd(const std::string& cjdFilePath)
     diag.SetDisableWarning(true);
     diag.SetIsEmitter(false);
     std::string failedReason;
-    GlobalOptions::ValidateInputFilePath(cjdFilePath, DiagKindRefactor::driver_invalid_source_file, diag);
+    GlobalOptions::ValidateInputFilePath(cjdFilePath, "driver_invalid_source_file", diag);
     auto driverDiags = diag.GetCategoryDiagnostic(DiagCategory::OTHER);
     if (!driverDiags.empty()) {
         return FormatCjdCheckResult(diag);
@@ -74,8 +74,8 @@ TEST_F(CheckCjdTest, TwoErrors)
     auto src = FileUtil::JoinPath(srcPath, "twoerrors.cj.d");
     auto diags = CheckCjd(src);
     ASSERT_EQ(diags.size(), 2);
-    EXPECT_EQ(diags[0].rKind, DiagKindRefactor::lex_unterminated_single_line_string);
-    EXPECT_EQ(diags[1].rKind, DiagKindRefactor::parse_expected_one_of_identifier_or_pattern);
+    EXPECT_EQ(diags[0].rKind, LookupDiagId("lex_unterminated_single_line_string"));
+    EXPECT_EQ(diags[1].rKind, LookupDiagId("parse_expected_one_of_identifier_or_pattern"));
 }
 
 TEST_F(CheckCjdTest, Good)
