@@ -109,7 +109,7 @@ bool MPParserImpl::CheckCJMPModifiers(const std::set<AST::Modifier>& modifiers) 
     auto currentFile = ref->currentFile;
     if (ref->HasModifier(modifiers, TokenKind::SPECIFIC)) {
         if (!CompilePlatform() && !CompileCommon()) {
-            ref->diag.DiagnoseRefactor(DiagKindRefactor::parse_unexpected_cjmp_decl, *currentFile);
+            ref->diag.DiagnoseRefactor("parse_unexpected_cjmp_decl", *currentFile);
             return false;
         }
         if (currentFile->package != nullptr) {
@@ -119,7 +119,7 @@ bool MPParserImpl::CheckCJMPModifiers(const std::set<AST::Modifier>& modifiers) 
     }
     if (ref->HasModifier(modifiers, TokenKind::COMMON)) {
         if (!CompilePlatform() && !CompileCommon()) {
-            ref->diag.DiagnoseRefactor(DiagKindRefactor::parse_unexpected_cjmp_decl, *currentFile);
+            ref->diag.DiagnoseRefactor("parse_unexpected_cjmp_decl", *currentFile);
             return false;
         }
         if (currentFile->package != nullptr) {
@@ -190,8 +190,7 @@ static bool CheckGenericDeclFrozen(const AST::Decl& decl, DiagnosticEngine& diag
         if (found != decl.annotations.end()) {
             reportAt = &**found; // unwrap interator, then unwrap OwnedPtr
         }
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_common_generic_frozen_not_supported, *reportAt, decl.identifier.Val());
+        diag.DiagnoseRefactor("sema_common_generic_frozen_not_supported", *reportAt, decl.identifier.Val());
         return false;
     }
 
@@ -217,8 +216,7 @@ void MPParserImpl::CheckCJMPCtorPresence(const AST::Decl& decl) const
     if (!hasCtor) {
         const Identifier& ident = decl.identifier;
         std::string declType{(decl.astKind == ASTKind::CLASS_DECL) ? "class" : "struct"};
-        ref->diag.DiagnoseRefactor(DiagKindRefactor::parse_cjmp_in_common_ctor_required,
-            MakeRange(ident), declType, ident.Val());
+        ref->diag.DiagnoseRefactor("parse_cjmp_in_common_ctor_required", MakeRange(ident), declType, ident.Val());
     }
 }
 
@@ -236,12 +234,12 @@ bool MPParserImpl::CheckCJMPModifiersOf(const AST::Decl& decl) const
         if (decl.astKind == ASTKind::VAR_WITH_PATTERN_DECL && decl.TestAttr(Attribute::COMMON)) {
             auto& varDecl = StaticCast<AST::VarWithPatternDecl&>(decl);
             auto& pattern = *(varDecl.irrefutablePattern);
-            ref->diag.DiagnoseRefactor(DiagKindRefactor::parse_cjmp_pattern_decl, pattern, GetDiagKind(pattern), kind);
+            ref->diag.DiagnoseRefactor("parse_cjmp_pattern_decl", pattern, GetDiagKind(pattern), kind);
             return false;
         }
         // static init
         if (IsStaticInitializer(decl)) {
-            ref->diag.DiagnoseRefactor(DiagKindRefactor::parse_cjmp_static_init, decl, kind);
+            ref->diag.DiagnoseRefactor("parse_cjmp_static_init", decl, kind);
             return false;
         }
     }
@@ -283,8 +281,8 @@ void MPParserImpl::CheckSpecificInterface(const AST::InterfaceDecl& decl) const
     // Check that the general member of specific interface must have the body
     for (auto& member : decl.GetMemberDeclPtrs()) {
         if (!HasDefault(*member)) {
-            ref->diag.DiagnoseRefactor(DiagKindRefactor::parse_specific_member_must_have_implementation,
-                *member, member->identifier.Val(), decl.identifier.Val());
+            ref->diag.DiagnoseRefactor("parse_specific_member_must_have_implementation", *member,
+                member->identifier.Val(), decl.identifier.Val());
         }
     }
 }
@@ -292,7 +290,7 @@ void MPParserImpl::CheckSpecificInterface(const AST::InterfaceDecl& decl) const
 void MPParserImpl::DiagOuterDeclMissMatch(const AST::Node& node,
     const std::string& p0, const std::string& p1, const std::string& p2, const std::string& p3) const
 {
-    ref->diag.DiagnoseRefactor(DiagKindRefactor::parse_cjmp_outdecl_miss_match, node, p0, p1, p2, p3);
+    ref->diag.DiagnoseRefactor("parse_cjmp_outdecl_miss_match", node, p0, p1, p2, p3);
 }
 
 bool MPParserImpl::CompileCommon() const

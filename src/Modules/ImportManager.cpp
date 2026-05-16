@@ -233,8 +233,7 @@ void CollectStdDependency(std::map<std::string, std::set<std::string>>& stdDepen
     std::string cjoPath = FileUtil::FindSerializationFile(
         FileUtil::ToPackageName(stdpkg), SERIALIZED_FILE_EXTENSION, importMgr.GetSearchPath());
     if (cjoPath.empty()) {
-        importMgr.GetDiagnosticEngine().DiagnoseRefactor(DiagKindRefactor::package_search_error, DEFAULT_POSITION,
-            stdpkg);
+        importMgr.GetDiagnosticEngine().DiagnoseRefactor("package_search_error", DEFAULT_POSITION, stdpkg);
         return;
     }
     if (!cjoManager.LoadPackageHeader(stdpkg, cjoPath)) {
@@ -407,8 +406,8 @@ void ImportManager::HandleAlreadyParsedPackage(const ParsedPackageContext& conte
     if (!context.importPkg.TestAttr(Attribute::IMPORTED) && context.curPkg.TestAttr(Attribute::IMPORTED)) {
         // Source package have same name with indirect dependent package. Was reported during loading package.
         success = false;
-        diag.DiagnoseRefactor(DiagKindRefactor::module_same_name_with_indirect_dependent_pkg, DEFAULT_POSITION,
-            context.fullPackageName, context.curPkg.fullPackageName);
+        diag.DiagnoseRefactor("module_same_name_with_indirect_dependent_pkg", DEFAULT_POSITION, context.fullPackageName,
+            context.curPkg.fullPackageName);
     } else {
         success = HandleParsedPackage(context.importPkg, context.cjoPath,
                                     !context.isMacroRelated || context.isVisible, context.isRecursive) && success;
@@ -514,10 +513,9 @@ bool ImportManager::CheckCjoPathLegality(const OwnedPtr<ImportSpec>& import, con
             isRecursive ? MakeRange(import->begin, import->begin + 1) : GetPackageNameRange(*cjoManager, *import);
         CJC_ASSERT(!range.HasZero()); // Except for IMPLICIT_ADD, there should be no zero.
 
-        DiagnosticBuilder builder = diag.DiagnoseRefactor(isMainPartPkgForTestPkg
-                ? DiagKindRefactor::package_missed_cjo_main_pkg_part_for_test_pkg
-                : DiagKindRefactor::package_search_error,
-            range, fullPackageName);
+        DiagnosticBuilder builder = diag.DiagnoseRefactor(
+            isMainPartPkgForTestPkg ? "package_missed_cjo_main_pkg_part_for_test_pkg" : "package_search_error", range,
+            fullPackageName);
         builder.AddHelp(DiagHelp(Modules::NO_CJO_HELP_INFO));
         return false;
     }
@@ -615,11 +613,10 @@ void ImportManager::CheckImports(const AST::Package& pkg)
             }
             auto range = GetPackageNameRange(*cjoManager, *import);
             if (fullPackageName != package->fullPackageName) {
-                diag.DiagnoseRefactor(
-                    DiagKindRefactor::package_import_inconsistent, range, package->fullPackageName, fullPackageName);
+                diag.DiagnoseRefactor("package_import_inconsistent", range, package->fullPackageName, fullPackageName);
                 continue;
             } else if (fullPackageName == pkg.fullPackageName) {
-                diag.DiagnoseRefactor(DiagKindRefactor::package_import_itself_illegal, range, fullPackageName);
+                diag.DiagnoseRefactor("package_import_itself_illegal", range, fullPackageName);
                 continue;
             }
             if (import->TestAttr(Attribute::IMPLICIT_ADD)) {
@@ -630,17 +627,17 @@ void ImportManager::CheckImports(const AST::Package& pkg)
                 (package->accessible == AccessLevel::INTERNAL && relation != PackageRelation::CHILD &&
                     !IsSuperPackage(pkg.fullPackageName, fullPackageName))) {
                 // Report error when the package is not accessible.
-                diag.DiagnoseRefactor(DiagKindRefactor::package_accessibility, range, fullPackageName,
-                    GetAccessLevelStr(*package), RelationToString(relation), pkg.fullPackageName);
+                diag.DiagnoseRefactor("package_accessibility", range, fullPackageName, GetAccessLevelStr(*package),
+                    RelationToString(relation), pkg.fullPackageName);
             } else if (import->IsReExport() && !pkg.isMacroPackage && package->isMacroPackage) {
-                diag.DiagnoseRefactor(DiagKindRefactor::package_cannot_export_macro_package, range);
+                diag.DiagnoseRefactor("package_cannot_export_macro_package", range);
                 continue;
             } else if (import->IsImportAll()) {
                 continue;
             } else if (cjoManager->IsImportPackage(*import)) {
                 if (import->IsReExport()) {
-                    diag.DiagnoseRefactor(DiagKindRefactor::package_re_export_package_name, range, fullPackageName,
-                        GetAccessLevelStr(*import));
+                    diag.DiagnoseRefactor(
+                        "package_re_export_package_name", range, fullPackageName, GetAccessLevelStr(*import));
                 }
                 continue;
             }
@@ -650,8 +647,7 @@ void ImportManager::CheckImports(const AST::Package& pkg)
             if (decls.empty()) {
                 auto& im = import->content;
                 auto nameRange = MakeRange(im.prefixPoses.front(), im.identifier.End());
-                diag.DiagnoseRefactor(
-                    DiagKindRefactor::package_decl_not_find_in_package, nameRange, im.identifier, fullPackageName);
+                diag.DiagnoseRefactor("package_decl_not_find_in_package", nameRange, im.identifier, fullPackageName);
             }
         }
     }
@@ -1598,7 +1594,7 @@ bool ImportManager::AnalyzeDepStdPkgsOfBC(const std::string& fullPackageName)
 
     std::string cjoPath = FileUtil::FindSerializationFile(fullPackageName, SERIALIZED_FILE_EXTENSION, GetSearchPath());
     if (cjoPath.empty() || !cjoManager->LoadPackageHeader(fullPackageName, cjoPath)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::bc_cjo_error, DEFAULT_POSITION, fullPackageName);
+        diag.DiagnoseRefactor("bc_cjo_error", DEFAULT_POSITION, fullPackageName);
         return false;
     }
 

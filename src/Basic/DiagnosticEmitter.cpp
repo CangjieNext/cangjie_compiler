@@ -11,6 +11,7 @@
  */
 
 #include "DiagnosticEmitterImpl.h"
+#include "DiagnosticEngineConstants.h"
 
 #include <map>
 #include <regex>

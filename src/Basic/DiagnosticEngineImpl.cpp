@@ -105,22 +105,24 @@ void DiagnosticEngine::RegisterMacroCallDiagInfo(std::unique_ptr<MacroCallDiagIn
     return impl->RegisterMacroCallDiagInfo(std::move(info));
 }
 
-DiagnosticBuilder DiagnosticEngine::DiagnoseRefactor(DiagKindRefactor kind, const MacroCallDiagInfo& info,
-    const Range& range, std::vector<std::string> formatArgs)
+DiagnosticBuilder DiagnosticEngine::DiagnoseRefactor(
+    std::string_view kind, const MacroCallDiagInfo& info, const Range& range, std::vector<std::string> formatArgs)
 {
-    CheckRange(Diagnostic::GetDiagnoseCategory(kind), range);
+    DiagId diagId = LookupDiagId(kind);
+    CheckRange(Diagnostic::GetDiagnoseCategory(diagId), range);
     auto newRange = MakeRange(info.MapPos(range.begin), info.MapPos(range.end, true));
-    Diagnostic diagnostic(true, newRange, kind, std::move(formatArgs));
+    Diagnostic diagnostic(true, newRange, diagId, std::move(formatArgs));
     AddMacroCallNote(diagnostic, info, range.begin);
     return DiagnosticBuilder(*this, diagnostic);
 }
 
-DiagnosticBuilder DiagnosticEngine::DiagnoseRefactor(DiagKindRefactor kind, const MacroCallDiagInfo& info,
-    const Position pos, std::vector<std::string> formatArgs)
+DiagnosticBuilder DiagnosticEngine::DiagnoseRefactor(
+    std::string_view kind, const MacroCallDiagInfo& info, const Position pos, std::vector<std::string> formatArgs)
 {
+    DiagId diagId = LookupDiagId(kind);
     auto begin = info.MapPos(pos);
     Range range = MakeRange(begin, begin + 1);
-    Diagnostic diagnostic(true, range, kind, std::move(formatArgs));
+    Diagnostic diagnostic(true, range, diagId, std::move(formatArgs));
     AddMacroCallNote(diagnostic, info, pos);
     return DiagnosticBuilder(*this, diagnostic);
 }

@@ -249,7 +249,7 @@ void TypeChecker::TypeCheckerImpl::CheckSubscriptLegality(Node& node)
                 return VisitAction::SKIP_CHILDREN;
             }
             if (index.Uint64() >= static_cast<uint64_t>(varrTy->size) && se->ShouldDiagnose(true)) {
-                auto builder = diag.Diagnose(*se, DiagKind::sema_builtin_index_in_bound, VARRAY_NAME);
+                auto builder = diag.Diagnose(*se, "sema_builtin_index_in_bound", VARRAY_NAME);
                 std::string hint;
                 if (index.Int64() < 0) {
                     hint = "'VArray' index can not be negative";
@@ -298,7 +298,7 @@ void TypeChecker::TypeCheckerImpl::CheckAllInvocationHasImpl(const ASTContext& c
                 std::string strType = retTarget->IsFunc() ? "function" : "property";
                 std::string strNote = "indirect use of unimplemented " + strType + " reference here";
                 auto builder = diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_interface_call_with_unimplemented_call, ma, strType, retTarget->identifier);
+                    "sema_interface_call_with_unimplemented_call", ma, strType, retTarget->identifier);
                 builder.AddNote(MakeRange(ret.second->begin, ret.second->end), strNote);
                 return VisitAction::SKIP_CHILDREN;
             }

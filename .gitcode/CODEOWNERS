@@ -10,8 +10,8 @@
 /include/cangjie/Basic/InteropCJPackageConfigReader.h @belyaev-mikhail
 
 /include/cangjie/CHIR/ @Mr_Kang_Yi
-/include/cangjie/CHIR/Interpreter @claudio_
 /include/cangjie/CHIR/Serializer @Mr_Kang_Yi
+/include/cangjie/CHIR/Interpreter @claudio_
 /include/cangjie/CodeGen/ @duo-duo
 /include/cangjie/ConditionalCompilation/ @mini-tang
 /include/cangjie/Driver/ @neilliuistaken
@@ -36,6 +36,26 @@
 
 /src/AST/ @Augus_Jan
 /src/Basic/ @kkkkkkkbbbbbbb
+/src/Basic/Diagnostics/DK/Chir.def @Mr_Kang_Yi
+/src/Basic/Diagnostics/DK/DisplayColumn.def @kkkkkkkbbbbbbb
+/src/Basic/Diagnostics/DK/Macro.def @mini-tang
+/src/Basic/Diagnostics/DK/Sema.def @huohuixin
+/src/Basic/Diagnostics/DKRef/APILevel.def @Augus_Jan
+/src/Basic/Diagnostics/DKRef/Chir.def @Mr_Kang_Yi
+/src/Basic/Diagnostics/DKRef/Cjmp.def @belyaev-mikhail
+/src/Basic/Diagnostics/DKRef/ConditionalCompilation.def @mini-tang
+/src/Basic/Diagnostics/DKRef/Deprecation.def @belyaev-mikhail
+/src/Basic/Diagnostics/DKRef/Driver.def @neilliuistaken
+/src/Basic/Diagnostics/DKRef/EffectHandlers.def @magnusmorton
+/src/Basic/Diagnostics/DKRef/Frontend.def @wyq1213
+/src/Basic/Diagnostics/DKRef/IncrementalCompilation.def @kkkkkkkbbbbbbb
+/src/Basic/Diagnostics/DKRef/Lexer.def @kkkkkkkbbbbbbb
+/src/Basic/Diagnostics/DKRef/Module.def @Augus_Jan
+/src/Basic/Diagnostics/DKRef/Package.def @Augus_Jan
+/src/Basic/Diagnostics/DKRef/Parser.def @kkkkkkkbbbbbbb
+/src/Basic/Diagnostics/DKRef/ParserQuery.def @kkkkkkkbbbbbbb
+/src/Basic/Diagnostics/DKRef/Sema.def @huohuixin
+/src/Basic/Diagnostics/DKRef/Unittest.def @belyaev-mikhail
 /src/Basic/InteropCJPackageConfigReader.cpp @belyaev-mikhail
 /src/CHIR/ @Mr_Kang_Yi
 /src/CodeGen/ @duo-duo
