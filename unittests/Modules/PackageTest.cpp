@@ -81,8 +81,7 @@ protected:
         std::string failedReason;
         auto content = FileUtil::ReadFileContent(coreFile, failedReason);
         if (!content.has_value()) {
-            diag.DiagnoseRefactor(
-                DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, coreFile, failedReason);
+            diag.DiagnoseRefactor("module_read_file_to_buffer_failed", DEFAULT_POSITION, coreFile, failedReason);
         }
         instance = std::make_unique<TestCompilerInstance>(invocation, diag);
         // create modules dir.
@@ -109,8 +108,7 @@ protected:
             auto srcFile = srcPath + fileNames[i] + ".cj";
             content = FileUtil::ReadFileContent(srcFile, failedReason);
             if (!content.has_value()) {
-                diag.DiagnoseRefactor(
-                    DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, srcFile, failedReason);
+                diag.DiagnoseRefactor("module_read_file_to_buffer_failed", DEFAULT_POSITION, srcFile, failedReason);
             }
             instance = std::make_unique<TestCompilerInstance>(invocation, diag);
             instance->code = std::move(content.value());
@@ -814,7 +812,7 @@ TEST_F(PackageTest, CollectStdDependency_PackageSearchError)
     EXPECT_EQ(diags.size(), 1);
     bool foundPackageSearchError = false;
     for (const auto& d : diags) {
-        if (static_cast<int>(d.rKind) == static_cast<int>(DiagKindRefactor::package_search_error) &&
+        if (d.rKind == LookupDiagKindRefactor("package_search_error") &&
             d.errorMessage == "can not find package 'std.reflect'") {
             foundPackageSearchError = true;
             break;
@@ -1255,8 +1253,7 @@ TEST_F(PackageTest, ImportOptFlag)
         std::string failedReason;
         auto content = FileUtil::ReadFileContent(srcFile, failedReason);
         if (!content.has_value()) {
-            diag.DiagnoseRefactor(
-                DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, srcFile, failedReason);
+            diag.DiagnoseRefactor("module_read_file_to_buffer_failed", DEFAULT_POSITION, srcFile, failedReason);
         }
         instance = std::make_unique<TestCompilerInstance>(invocation, diag);
         instance->invocation.globalOptions.implicitPrelude = true;

@@ -280,20 +280,20 @@ void TestEntryConstructor::CheckFunctionWithAtTest(
     }
     Ptr<FuncDecl> fd = StaticAs<ASTKind::FUNC_DECL>(node);
     if (macroName == "Test" && FindMacro(med, macroName) && !FindTopLevelFunc(funcs, fd)) {
-        diag.Diagnose(*GetMacroDecl(med, macroName), DiagKind::macro_using_error,
+        diag.Diagnose(*GetMacroDecl(med, macroName), "macro_using_error",
             "@" + macroName + " modified function is not top level");
     }
     if (macroName == "TestCase" && FindMacro(med, macroName) && FindTopLevelFunc(funcs, fd)) {
-        diag.Diagnose(*GetMacroDecl(med, macroName), DiagKind::macro_using_error,
-            "@" + macroName + " modified top level function");
+        diag.Diagnose(
+            *GetMacroDecl(med, macroName), "macro_using_error", "@" + macroName + " modified top level function");
     }
     if (FindMacro(med, macroName) && !IsUnitFunction(*fd)) {
-        diag.Diagnose(*GetMacroDecl(med, macroName), DiagKind::macro_using_error,
+        diag.Diagnose(*GetMacroDecl(med, macroName), "macro_using_error",
             "@" + macroName + " modified function type is not ()->Unit");
     }
     if (FindMacro(med, macroName) && FindFuncModifier(*fd, "foreign")) {
         diag.Diagnose(
-            *GetMacroDecl(med, macroName), DiagKind::macro_using_error, "@" + macroName + " modified foreign function");
+            *GetMacroDecl(med, macroName), "macro_using_error", "@" + macroName + " modified foreign function");
     }
 }
 
@@ -308,13 +308,13 @@ void TestEntryConstructor::CheckClassWithMacro(MacroExpandDecl& med)
     }
     Ptr<ClassDecl> cd = StaticAs<ASTKind::CLASS_DECL>(node);
     if (FindMacro(med, "Test") && FindClassModifier(*cd, "foreign")) {
-        diag.Diagnose(*GetMacroDecl(med, "Test"), DiagKind::macro_using_error, "@Test modified foreign class");
+        diag.Diagnose(*GetMacroDecl(med, "Test"), "macro_using_error", "@Test modified foreign class");
     }
     if (FindMacro(med, "TestCase") && FindClassModifier(*cd, "foreign")) {
-        diag.Diagnose(*GetMacroDecl(med, "TestCase"), DiagKind::macro_using_error, "@TestCase modified foreign class");
+        diag.Diagnose(*GetMacroDecl(med, "TestCase"), "macro_using_error", "@TestCase modified foreign class");
     }
     if (FindMacro(med, "Test") && !IsRightClassConstructor(*cd)) {
-        diag.Diagnose(*GetMacroDecl(med, "Test"), DiagKind::macro_using_error,
+        diag.Diagnose(*GetMacroDecl(med, "Test"), "macro_using_error",
             "Class modified by @Test must contain a parameterless construction.");
     }
 }

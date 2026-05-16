@@ -1032,9 +1032,7 @@ private:
     void CheckConstructorBody(AST::FuncDecl& ctor, ScopeKind scopeKind, bool inMacro = false);
     void SetMemberParentInheritableDecl(AST::InheritableDecl& ret, const OwnedPtr<AST::Decl>& decl) const;
     void FFICheckClassLikeFuncBody(
-        FuncDecl& decl,
-        DiagKindRefactor functionMustHaveReturnType,
-        DiagKindRefactor functionCanNotHaveBody);
+        FuncDecl& decl, std::string_view functionMustHaveReturnTypeKind, std::string_view functionCanNotHaveBodyKind);
     void CheckClassLikePropAbstractness(AST::PropDecl& prop);
     void CheckClassLikeFuncBodyAbstractness(AST::FuncDecl& decl);
     void CheckJavaInteropMember(Decl& decl);
@@ -1054,7 +1052,7 @@ private:
     friend class Parser;
 
     template <typename... Args>
-    DiagnosticBuilder ParseDiagnoseRefactor(DiagKindRefactor kind, const Position pos, Args&&... args)
+    DiagnosticBuilder ParseDiagnoseRefactor(std::string_view kindName, const Position pos, Args&&... args)
     {
         auto n = MakeOwned<AST::Node>();
         n->begin = pos;
@@ -1062,11 +1060,11 @@ private:
         if (curMacroCall) {
             n->curMacroCall = curMacroCall;
         }
-        return diag.DiagnoseRefactor(kind, *n, pos, std::forward<Args>(args)...);
+        return diag.DiagnoseRefactor(kindName, *n, pos, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    DiagnosticBuilder ParseDiagnoseRefactor(DiagKindRefactor kind, const Range range, Args&&... args)
+    DiagnosticBuilder ParseDiagnoseRefactor(std::string_view kindName, const Range range, Args&&... args)
     {
         auto n = MakeOwned<AST::Node>();
         n->begin = range.begin;
@@ -1074,11 +1072,11 @@ private:
         if (curMacroCall) {
             n->curMacroCall = curMacroCall;
         }
-        return diag.DiagnoseRefactor(kind, *n, range, std::forward<Args>(args)...);
+        return diag.DiagnoseRefactor(kindName, *n, range, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    DiagnosticBuilder ParseDiagnoseRefactor(DiagKindRefactor kind, const Token& token, Args&&... args)
+    DiagnosticBuilder ParseDiagnoseRefactor(std::string_view kindName, const Token& token, Args&&... args)
     {
         auto n = MakeOwned<AST::Node>();
         n->begin = token.Begin();
@@ -1086,11 +1084,11 @@ private:
         if (curMacroCall) {
             n->curMacroCall = curMacroCall;
         }
-        return diag.DiagnoseRefactor(kind, *n, token, std::forward<Args>(args)...);
+        return diag.DiagnoseRefactor(kindName, *n, token, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    DiagnosticBuilder ParseDiagnoseRefactor(DiagKindRefactor kind, const AST::Node& node, Args&&... args)
+    DiagnosticBuilder ParseDiagnoseRefactor(std::string_view kindName, const AST::Node& node, Args&&... args)
     {
         auto n = MakeOwned<AST::Node>();
         n->begin = node.begin;
@@ -1098,7 +1096,7 @@ private:
         if (curMacroCall) {
             n->curMacroCall = curMacroCall;
         }
-        return diag.DiagnoseRefactor(kind, *n, std::forward<Args>(args)...);
+        return diag.DiagnoseRefactor(kindName, *n, std::forward<Args>(args)...);
     }
 };
 

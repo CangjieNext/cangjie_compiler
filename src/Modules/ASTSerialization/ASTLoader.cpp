@@ -210,8 +210,7 @@ bool ASTLoader::ASTLoaderImpl::VerifyForData(const std::string& id)
     // We need to verify the size first.
     flatbuffers::Verifier verifier(data.data(), size, FB_MAX_DEPTH, FB_MAX_TABLES);
     if (!PackageFormat::VerifyPackageBuffer(verifier)) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::module_loaded_ast_failed, DEFAULT_POSITION, id, importedPackageName, CANGJIE_VERSION);
+        diag.DiagnoseRefactor("module_loaded_ast_failed", DEFAULT_POSITION, id, importedPackageName, CANGJIE_VERSION);
         return false;
     }
     return true;
@@ -570,8 +569,7 @@ Ptr<Decl> ASTLoader::ASTLoaderImpl::GetDeclFromIndex(const PackageFormat::FullId
         }
     }
     if (cjoManager.GetPackageDecl(fullPackageName) == nullptr && !isLoadCache) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::package_invalid_cjo_dependency, DEFAULT_POSITION, importedPackageName, fullPackageName);
+        diag.DiagnoseRefactor("package_invalid_cjo_dependency", DEFAULT_POSITION, importedPackageName, fullPackageName);
     }
     return nullptr;
 }
@@ -961,7 +959,7 @@ OwnedPtr<Decl> ASTLoader::ASTLoaderImpl::LoadGenericParamDecl(const PackageForma
 
 OwnedPtr<Decl> ASTLoader::ASTLoaderImpl::LoadInvalidDecl(const PackageFormat::Decl& decl)
 {
-    diag.DiagnoseRefactor(DiagKindRefactor::package_unsupported_load, DEFAULT_POSITION, "declaration");
+    diag.DiagnoseRefactor("package_unsupported_load", DEFAULT_POSITION, "declaration");
     auto invalidDecl = MakeOwned<InvalidDecl>(INVALID_POSITION);
     LoadDeclBasicInfo(decl, *invalidDecl);
     LoadNodePos(decl, *invalidDecl);

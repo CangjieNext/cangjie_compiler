@@ -912,7 +912,7 @@ TEST_F(LexerTest, Diagnose)
     Token tok = lexer.Next();
     EXPECT_EQ(tok.End(), Position(1, 1, 4));
     DiagnosticEngine diag;
-    diag.DiagnoseRefactor(DiagKindRefactor::parse_this_type_not_allow, tok.Begin());
+    diag.DiagnoseRefactor("parse_this_type_not_allow", tok.Begin());
 }
 
 TEST_F(LexerTest, PrintAsciiControlCode)

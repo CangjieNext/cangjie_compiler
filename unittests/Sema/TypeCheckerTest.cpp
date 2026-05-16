@@ -321,8 +321,7 @@ TEST_F(TypeCheckerTest, DISABLED_SpawnTest)
     std::string failedReason;
     auto content = FileUtil::ReadFileContent(srcFile, failedReason);
     if (!content.has_value()) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, srcFile, failedReason);
+        diag.DiagnoseRefactor("module_read_file_to_buffer_failed", DEFAULT_POSITION, srcFile, failedReason);
     }
     instance->code = std::move(content.value());
     instance->invocation.globalOptions.implicitPrelude = true;
@@ -374,7 +373,7 @@ main() {}
     auto diags = diag.GetCategoryDiagnostic(DiagCategory::SEMA);
     int foundDiag = 0;
     for (auto& d : diags) {
-        if (d.rKind == DiagKindRefactor::sema_class_need_abstract_modifier_or_func_need_impl) {
+        if (d.rKind == LookupDiagKindRefactor("sema_class_need_abstract_modifier_or_func_need_impl")) {
             foundDiag++;
             EXPECT_TRUE(d.node != nullptr);
             EXPECT_EQ(d.node->astKind, ASTKind::CLASS_DECL);
@@ -388,7 +387,7 @@ main() {}
             EXPECT_EQ(funcDecl->identifier.Val(), "foo");
             EXPECT_EQ(funcDecl->outerDecl->identifier.Val(), "I");
         }
-        if (d.rKind == DiagKindRefactor::sema_need_member_implementation) {
+        if (d.rKind == LookupDiagKindRefactor("sema_need_member_implementation")) {
             foundDiag++;
             EXPECT_TRUE(d.node != nullptr);
             EXPECT_EQ(d.node->astKind, ASTKind::STRUCT_DECL);

@@ -21,6 +21,7 @@
 #undef AARCH64
 #endif
 #include "cangjie/Basic/DiagnosticEngine.h"
+#include "cangjie/CHIR/Checker/OverflowChecking.h"
 #include "cangjie/CHIR/Interpreter/BCHIR.h"
 #include "cangjie/CHIR/Interpreter/BCHIRPrinter.h"
 #include "cangjie/CHIR/Interpreter/BCHIRResult.h"
@@ -28,10 +29,10 @@
 #include "cangjie/CHIR/Interpreter/InterpreterEnv.h"
 #include "cangjie/CHIR/Interpreter/InterpreterStack.h"
 #include "cangjie/CHIR/Interpreter/InterpreterValueUtils.h"
-#include "cangjie/CHIR/Checker/OverflowChecking.h"
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <string_view>
 #ifdef _WIN32
 #include <windows.h>
 // we need to undefine THIS, INTERFACE, and FASTCALL which are defined by MinGW
@@ -291,7 +292,7 @@ private:
      */
     DiagnosticEngine& diag;
     template <typename... Args>
-    void FailWith(Bchir::ByteCodeIndex opIdx, std::string excErrorMsg, DiagKind kind, Args... args)
+    void FailWith(Bchir::ByteCodeIndex opIdx, std::string excErrorMsg, std::string_view kindName, Args... args)
     {
         auto& sm = diag.GetSourceManager();
         auto pos = bchir.GetLinkedByteCode().GetCodePositionAnnotation(opIdx);
@@ -304,9 +305,9 @@ private:
         Cangjie::Position cjPos{
             *fileId, static_cast<int>(pos.line), static_cast<int>(pos.column)};
         if (cjPos.IsZero()) {
-            diag.Diagnose(kind, args...);
+            diag.Diagnose(kindName, args...);
         } else {
-            diag.Diagnose(cjPos, kind, args...);
+            diag.Diagnose(cjPos, kindName, args...);
         }
         RaiseError(opIdx, excErrorMsg);
     }

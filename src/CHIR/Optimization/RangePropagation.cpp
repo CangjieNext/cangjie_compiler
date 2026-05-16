@@ -264,8 +264,7 @@ void RangePropagation::CheckVarrayIndex(const Ptr<Intrinsic>& intrin, const Rang
         auto ltUpperBound{ComputeRelIntBinop({indexRange, varraySizeNode, index, nullptr, ExprKind::LT, false})};
         auto geLowerBound{ComputeRelIntBinop({indexRange, zeroNode, index, nullptr, ExprKind::GE, false})};
         if (ltUpperBound.IsFalse() || geLowerBound.IsFalse()) {
-            auto bd =
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_idx_out_of_bounds, ToRange(intrin->GetDebugLocation()));
+            auto bd = diag.DiagnoseRefactor("chir_idx_out_of_bounds", ToRange(intrin->GetDebugLocation()));
             std::stringstream ss;
             ss << "range of index " << i - begin << " is (" << indexRange.ToString()
                << "), however the size of varray is " + std::to_string(size);
