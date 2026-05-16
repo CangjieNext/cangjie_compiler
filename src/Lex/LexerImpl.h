@@ -303,11 +303,11 @@ private:
     void TryRegisterLineOffset();
 
     const char* PrefixName(const char prefix) const;
-    template <typename... T> void Diagnose(DiagKind kind, T... args)
+    template <typename... T> void Diagnose(DiagIdOld kind, T... args)
     {
         diag.Diagnose(pos, kind, args...);
     }
-    template <typename... T> void Diagnose(const Position diagPos, DiagKind kind, T... args)
+    template <typename... T> void Diagnose(const Position diagPos, DiagIdOld kind, T... args)
     {
         diag.Diagnose(diagPos, kind, args...);
     }

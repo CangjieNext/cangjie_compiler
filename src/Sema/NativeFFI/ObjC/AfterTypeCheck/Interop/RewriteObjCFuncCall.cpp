@@ -10,14 +10,13 @@
  * This file implements desugaring of ObjCPointer struct accessors
  */
 
-
-#include "NativeFFI/Utils.h"
-#include "NativeFFI/ObjC/Utils/Common.h"
-#include "cangjie/AST/Create.h"
-#include "cangjie/AST/Walker.h"
-#include "cangjie/AST/Match.h"
-#include "cangjie/AST/Clone.h"
 #include "Handlers.h"
+#include "NativeFFI/ObjC/Utils/Common.h"
+#include "NativeFFI/Utils.h"
+#include "cangjie/AST/Clone.h"
+#include "cangjie/AST/Create.h"
+#include "cangjie/AST/Match.h"
+#include "cangjie/AST/Walker.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -94,9 +93,7 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
 
             if (FTypeKindByCallPropertyDecl(ctx.typeMapper, decl) != ObjCFTypeKind::NONE) {
                 ctx.diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_objc_func_call_property_can_only_be_called,
-                    *node,
-                    decl->outerDecl->identifier.Val());
+                    "sema_objc_func_call_property_can_only_be_called", *node, decl->outerDecl->identifier.Val());
                 node->EnableAttr(Attribute::IS_BROKEN);
                 return VisitAction::WALK_CHILDREN;
             }

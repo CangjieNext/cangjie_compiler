@@ -229,8 +229,8 @@ bool VarInitCheck::CheckLoadToUninitedAllocation(const MaybeUninitDomain& state,
     auto targetVal = load.GetLocation();
     if (state.IsMaybeUninitedAllocation(targetVal).value_or(false)) {
         auto identifier = targetVal->GetSrcCodeIdentifier();
-        auto builder = diag.DiagnoseRefactor(
-            DiagKindRefactor::chir_used_before_initialization, ToPosition(load.GetDebugLocation()), identifier);
+        auto builder =
+            diag.DiagnoseRefactor("chir_used_before_initialization", ToPosition(load.GetDebugLocation()), identifier);
         AddMaybeInitedPosNote(builder, identifier, state.GetMaybeInitedPos(targetVal));
         return true;
     }
@@ -249,8 +249,7 @@ bool VarInitCheck::CheckGetElementRefToUninitedAllocation(
     if (state.IsMaybeUninitedAllocation(targetVal).value_or(false)) {
         auto identifier = targetVal->GetSrcCodeIdentifier();
         auto builder = diag.DiagnoseRefactor(
-            DiagKindRefactor::chir_used_before_initialization, ToPosition(getElementRef.GetDebugLocation()),
-            identifier);
+            "chir_used_before_initialization", ToPosition(getElementRef.GetDebugLocation()), identifier);
         AddMaybeInitedPosNote(builder, identifier, state.GetMaybeInitedPos(targetVal));
         return true;
     }
@@ -361,8 +360,7 @@ void VarInitCheck::RaiseUninitedDefMemberError(const MaybeUninitDomain& state, c
         })) {
         return;
     }
-    auto builder =
-        diag.DiagnoseRefactor(DiagKindRefactor::chir_class_uninitialized_field, ToPosition(func->GetDebugLocation()));
+    auto builder = diag.DiagnoseRefactor("chir_class_uninitialized_field", ToPosition(func->GetDebugLocation()));
     for (auto idx : uninitedMemberIdx) {
         auto identifier = members[idx].name;
         std::string msg = "in line " + std::to_string(members[idx].loc.GetBeginPos().line) + ", variable '" +
@@ -377,12 +375,12 @@ void VarInitCheck::CheckUninitedDefMember(const MaybeUninitDomain& state, const 
 {
     auto checkUninitedRes = state.IsMaybeUninitedMember(index);
     if (checkUninitedRes == MaybeUninitDomain::UninitedMemberKind::SUPER_MEMBER) {
-        diag.DiagnoseRefactor(DiagKindRefactor::chir_illegal_usage_of_super_member,
-            ToPosition(expr->GetDebugLocation()), members[index].name);
+        diag.DiagnoseRefactor(
+            "chir_illegal_usage_of_super_member", ToPosition(expr->GetDebugLocation()), members[index].name);
     } else if (checkUninitedRes == MaybeUninitDomain::UninitedMemberKind::LOCAL_MEMBER && !onlyCheckSuper) {
         auto identifier = members[index].name;
-        auto builder = diag.DiagnoseRefactor(
-            DiagKindRefactor::chir_used_before_initialization, ToPosition(expr->GetDebugLocation()), identifier);
+        auto builder =
+            diag.DiagnoseRefactor("chir_used_before_initialization", ToPosition(expr->GetDebugLocation()), identifier);
         AddMaybeInitedPosNote(builder, identifier, state.GetMaybeInitedPos(index));
     }
 }
@@ -410,8 +408,7 @@ void VarInitCheck::RaiseIllegalMemberFunCallError(const Expression* apply, const
         constexpr size_t getterNameLength{4}; // length of "$get" or "$set"
         identifier = identifier.substr(1, identifier.length() - getterNameLength);
     }
-    diag.DiagnoseRefactor(
-        DiagKindRefactor::chir_illegal_usage_of_member, ToPosition(apply->GetDebugLocation()), identifier);
+    diag.DiagnoseRefactor("chir_illegal_usage_of_member", ToPosition(apply->GetDebugLocation()), identifier);
 }
 
 void VarInitCheck::ReassignInitedLetVarCheck(const Function* func, const ConstructorInitInfo* ctorInitInfo,
@@ -435,8 +432,8 @@ void VarInitCheck::ReassignInitedLetVarCheck(const Function* func, const Constru
                 return;
             }
             if (targetVal->TestAttr(Attribute::READONLY) && state.IsMaybeInitedAllocation(targetVal).value_or(false)) {
-                diag.DiagnoseRefactor(DiagKindRefactor::chir_cannot_assign_initialized_let_variable,
-                    ToPosition(expr->GetDebugLocation()));
+                diag.DiagnoseRefactor(
+                    "chir_cannot_assign_initialized_let_variable", ToPosition(expr->GetDebugLocation()));
             }
         } else if (expr->GetExprKind() == ExprKind::STORE_ELEMENT_REF) {
             CheckStoreToInitedCustomDefMember(state, func, StaticCast<const StoreElementRef*>(expr), members);
@@ -461,8 +458,7 @@ void VarInitCheck::CheckStoreToInitedCustomDefMember(const MaybeInitDomain& stat
         if (members[paths[0]].TestAttr(Attribute::READONLY) &&
             state.IsMaybeInitedMember(paths[0]) != MaybeInitDomain::InitedMemberKind::NA) {
             // this `let-defined` member variable has already been initialised
-            diag.DiagnoseRefactor(
-                DiagKindRefactor::chir_cannot_assign_initialized_let_variable, ToPosition(store->GetDebugLocation()));
+            diag.DiagnoseRefactor("chir_cannot_assign_initialized_let_variable", ToPosition(store->GetDebugLocation()));
         }
         return;
     }

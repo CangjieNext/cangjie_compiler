@@ -31,8 +31,7 @@ bool ChkIfImportDeviceInfo(DiagnosticEngine& diag, const ImportManager& im, cons
             return true;
         }
     }
-    auto builder = diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_use_expr_without_import, iae, PKG_NAME_DEVICE_INFO_AT, "IfAvailable");
+    auto builder = diag.DiagnoseRefactor("sema_use_expr_without_import", iae, PKG_NAME_DEVICE_INFO_AT, "IfAvailable");
     builder.AddNote("depend on declaration 'DeviceInfo'");
     return false;
 }
@@ -48,8 +47,7 @@ bool ChkIfImportBase(DiagnosticEngine& diag, const ImportManager& im, const IfAv
             return true;
         }
     }
-    auto builder =
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_use_expr_without_import, iae, PKG_NAME_CANIUSE_AT, "IfAvailable");
+    auto builder = diag.DiagnoseRefactor("sema_use_expr_without_import", iae, PKG_NAME_CANIUSE_AT, "IfAvailable");
     builder.AddNote("depend on declaration 'canIUse'");
     return false;
 }
@@ -78,7 +76,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIfAvailableExpr(ASTContext& ctx, IfAvai
     bool res{true};
     auto argName = iae.GetArg()->name;
     if (argName.Empty()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_arg_no_name, *iae.GetArg());
+        diag.DiagnoseRefactor("sema_ifavailable_arg_no_name", *iae.GetArg());
         res = false;
     }
     if (argName == LEVEL_IDENTGIFIER && ie->condExpr) {
@@ -86,7 +84,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIfAvailableExpr(ASTContext& ctx, IfAvai
         CJC_ASSERT(ie->condExpr->astKind == ASTKind::BINARY_EXPR);
         auto argExpr = StaticCast<BinaryExpr>(ie->condExpr.get())->rightExpr.get();
         if (argExpr->astKind != ASTKind::LIT_CONST_EXPR) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_arg_not_literal, *iae.GetArg());
+            diag.DiagnoseRefactor("sema_ifavailable_arg_not_literal", *iae.GetArg());
             res = false;
         }
     } else if (argName == SYSCAP_IDENTGIFIER && ie->condExpr) {
@@ -95,12 +93,12 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynIfAvailableExpr(ASTContext& ctx, IfAvai
         auto argExpr = StaticCast<CallExpr>(ie->condExpr.get());
         CJC_ASSERT(argExpr->args.size() == 1);
         if (argExpr->args[0]->expr->astKind != ASTKind::LIT_CONST_EXPR) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_arg_not_literal, *iae.GetArg());
+            diag.DiagnoseRefactor("sema_ifavailable_arg_not_literal", *iae.GetArg());
             res = false;
         }
     } else {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_ifavailable_unknow_arg_name, MakeRange(iae.GetArg()->name),
-            iae.GetArg()->name.Val());
+        diag.DiagnoseRefactor(
+            "sema_ifavailable_unknow_arg_name", MakeRange(iae.GetArg()->name), iae.GetArg()->name.Val());
         res = false;
     }
     auto targetTy = typeManager.GetFunctionTy({}, typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT));

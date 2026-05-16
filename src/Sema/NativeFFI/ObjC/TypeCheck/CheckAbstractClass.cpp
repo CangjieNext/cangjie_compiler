@@ -19,7 +19,7 @@ using namespace Cangjie::Interop::ObjC;
 void CheckAbstractClass::HandleImpl(TypeCheckContext& ctx)
 {
     if (auto cd = As<ASTKind::CLASS_DECL>(&ctx.target); cd && cd->TestAttr(Attribute::ABSTRACT)) {
-        ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_interop_not_supported, *cd, "abstract");
+        ctx.diag.DiagnoseRefactor("sema_objc_interop_not_supported", *cd, "abstract");
         cd->EnableAttr(Attribute::IS_BROKEN);
     }
 }

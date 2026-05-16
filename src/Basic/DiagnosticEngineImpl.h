@@ -13,9 +13,11 @@
 #ifndef CANGJIE_BASIC_DIAGNOSTICENGINEIMPL_H
 #define CANGJIE_BASIC_DIAGNOSTICENGINEIMPL_H
 
+#include "DiagnosticEngineConstants.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 
 namespace Cangjie {
+constexpr int DEFAULT_DIAG_NUM = 8; // default number of max diagnostics, i.e. when not passing --error-count-limit
 class DiagnosticEngineImpl {
 public:
     ~DiagnosticEngineImpl() noexcept

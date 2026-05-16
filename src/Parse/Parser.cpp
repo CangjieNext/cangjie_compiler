@@ -298,8 +298,8 @@ OwnedPtr<PackageSpec> ParserImpl::ParsePackageHeader(std::set<Modifier>&& modifi
             packageHeader->EnableAttr(Attribute::IS_BROKEN);
             if (curIdent.IsRaw()) {
                 // If isRawId is true, curIdentPos has been added 1, so we decrease 1 here to get the original position.
-                ParseDiagnoseRefactor(DiagKindRefactor::parse_package_name_has_backtick,
-                    MakeRange(curIdent.Begin() - 1, curIdent.End() + 1));
+                ParseDiagnoseRefactor(
+                    "parse_package_name_has_backtick", MakeRange(curIdent.Begin() - 1, curIdent.End() + 1));
             }
             break;
         }
@@ -461,8 +461,7 @@ void ParserImpl::CheckClassLikePropAbstractness(AST::PropDecl& prop)
 
     if (HasModifier(prop.modifiers, TokenKind::ABSTRACT) && !isCommon && !inAbstractCJMP &&
         !isJavaMirrorOrJavaMirrorSubtype) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_explicitly_abstract_only_for_cjmp_abstract_class,
-            lastToken.End(), "property");
+        ParseDiagnoseRefactor("parse_explicitly_abstract_only_for_cjmp_abstract_class", lastToken.End(), "property");
     }
 
     if (inObjCMirror) {
@@ -495,8 +494,7 @@ void ParserImpl::DiagMissingPropertyBody(AST::PropDecl& prop)
     if (parseDeclFile) {
         return;
     }
-    auto builder =
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_character, lookahead, "'{'", ConvertToken(lookahead));
+    auto builder = ParseDiagnoseRefactor("parse_expected_character", lookahead, "'{'", ConvertToken(lookahead));
     builder.AddMainHintArguments("'{'");
     builder.AddNote("property declaration must have body");
     prop.EnableAttr(Attribute::HAS_BROKEN);
@@ -615,7 +613,7 @@ OwnedPtr<Block> ParserImpl::ParseExpressionOrDeclarations(ScopeKind sk)
             auto node = ParseExprOrDecl(sk);
             result->body.emplace_back(std::move(node));
         } else {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_expr_or_decl_in, lookahead, ConvertToken(lookahead));
+            ParseDiagnoseRefactor("parse_expected_expr_or_decl_in", lookahead, ConvertToken(lookahead));
             ConsumeUntilAny({TokenKind::RCURL, TokenKind::NL}, false);
         }
     }
@@ -634,7 +632,7 @@ bool ParserImpl::DiagForBlock(const Block& block)
             DiagExpectedRightDelimiter("{", block.begin);
             return true; // early return.
         } else {
-            ParseDiagnoseRefactor(DiagKindRefactor::parse_unmatched_right_delimiter, lookahead, lookahead.Value());
+            ParseDiagnoseRefactor("parse_unmatched_right_delimiter", lookahead, lookahead.Value());
         }
     } else {
         DiagExpectSemiOrNewline();
@@ -645,7 +643,7 @@ bool ParserImpl::DiagForBlock(const Block& block)
 OwnedPtr<Block> ParserImpl::ParseBlock(ScopeKind scopeKind)
 {
     if (!Skip(TokenKind::LCURL)) {
-        ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_left_brace, lookahead, ConvertToken(lookahead));
+        ParseDiagnoseRefactor("parse_expected_left_brace", lookahead, ConvertToken(lookahead));
         return MakeInvalid<Block>(lookahead.Begin());
     }
     return ParseExpressionOrDeclarations(scopeKind);

@@ -11,6 +11,7 @@
  */
 
 #include "cangjie/Basic/DiagnosticJsonFormatter.h"
+#include "DiagnosticEngineConstants.h"
 #include "cangjie/Basic/StringConvertor.h"
 namespace Cangjie {
 
@@ -226,14 +227,15 @@ std::string DiagnosticJsonFormatter::FormatDiagnosticToJson(const Diagnostic& d,
     ++deep;
     diagsJsonStr += Whitespace(deep * INDENT_WIDTH) + "\"DiagKind\": \"";
     if (d.isRefactor && !d.isConvertedToRefactor) {
-        if (static_cast<size_t>(d.rKind) < RE_DIAG_KIND_STR_SIZE) {
+        const int ord = d.rKind.Val();
+        if (ord >= 0 && ord < static_cast<int>(RE_DIAG_KIND_STR_SIZE)) {
             diagsJsonStr +=
-                StringConvertor::EscapeToJsonString(std::string(RE_DIAG_KIND_STR[static_cast<size_t>(d.rKind)]));
+                StringConvertor::EscapeToJsonString(std::string(RE_DIAG_KIND_STR[static_cast<unsigned>(ord)]));
         }
     } else {
-        if ((static_cast<size_t>(d.kind) < DIAG_KIND_STR_SIZE)) {
+        if (d.kind.Val() >= 0 && d.kind.Val() < static_cast<int>(DIAG_KIND_STR_SIZE)) {
             diagsJsonStr +=
-                StringConvertor::EscapeToJsonString(std::string(DIAG_KIND_STR[static_cast<size_t>(d.kind)]));
+                StringConvertor::EscapeToJsonString(std::string(DIAG_KIND_STR[static_cast<unsigned>(d.kind.Val())]));
         }
     }
 
@@ -251,7 +253,7 @@ std::string DiagnosticJsonFormatter::FormatDiagnosticToJson(const Diagnostic& d,
     } else if (d.warnGroup == WarnGroup::UNGROUPED) {
         diagsJsonStr += "ungrouped";
     } else {
-        CJC_ASSERT(static_cast<unsigned>(d.warnGroup) < WARN_GROUP_DESCRS_SIZE);
+        CJC_ASSERT(static_cast<int>(d.warnGroup) < static_cast<int>(WARN_GROUP_DESCRS_SIZE));
         diagsJsonStr +=
             StringConvertor::EscapeToJsonString(std::string(warnGroupDescrs[static_cast<unsigned>(d.warnGroup)]));
     }
