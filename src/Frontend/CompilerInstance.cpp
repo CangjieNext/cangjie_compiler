@@ -379,13 +379,13 @@ bool CompilerInstance::PerformPluginLoad()
 #endif
             auto metaTransformPlugin = MetaTransformPlugin::Get(pluginPath);
             if (!metaTransformPlugin.IsValid()) {
-                diag.DiagnoseRefactor(DiagKindRefactor::not_a_valid_plugin, DEFAULT_POSITION, pluginPath);
+                diag.DiagnoseRefactor("not_a_valid_plugin", DEFAULT_POSITION, pluginPath);
             }
             AddPluginHandle(metaTransformPlugin.GetHandle());
             metaTransformPlugin.RegisterCallbackTo(metaTransformPluginBuilder); // register MetaTransform into builder
 #ifndef CANGJIE_ENABLE_GCOV
         } catch (...) {
-            diag.DiagnoseRefactor(DiagKindRefactor::not_a_valid_plugin, DEFAULT_POSITION, pluginPath);
+            diag.DiagnoseRefactor("not_a_valid_plugin", DEFAULT_POSITION, pluginPath);
             return false;
         }
 #endif
@@ -996,8 +996,7 @@ bool CompilerInstance::DumpTokens()
         std::string failedReason;
         auto content = FileUtil::ReadFileContent(filePath, failedReason);
         if (!content.has_value()) {
-            diag.DiagnoseRefactor(
-                DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, filePath, failedReason);
+            diag.DiagnoseRefactor("module_read_file_to_buffer_failed", DEFAULT_POSITION, filePath, failedReason);
             ret = false;
             return;
         }
@@ -1200,8 +1199,8 @@ bool CompilerInstance::DetectCangjieHome()
     }
     // Detect from exepath.
     if (invocation.globalOptions.executablePath.empty()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::frontend_failed_to_detect_cangjie_home,
-            DEFAULT_POSITION, "can not resolve executable path");
+        diag.DiagnoseRefactor(
+            "frontend_failed_to_detect_cangjie_home", DEFAULT_POSITION, "can not resolve executable path");
         return false;
     } else {
         cangjieHome =
@@ -1209,8 +1208,7 @@ bool CompilerInstance::DetectCangjieHome()
                                    FileUtil::IdenticalFunc),
                 "..");
         if (!FileUtil::FileExist(cangjieHome) || !FileUtil::FileExist(FileUtil::JoinPath(cangjieHome, "modules"))) {
-            diag.DiagnoseRefactor(
-                DiagKindRefactor::frontend_failed_to_detect_cangjie_home, DEFAULT_POSITION, "invalid cjc home");
+            diag.DiagnoseRefactor("frontend_failed_to_detect_cangjie_home", DEFAULT_POSITION, "invalid cjc home");
             return false;
         }
     }
@@ -1220,20 +1218,20 @@ bool CompilerInstance::DetectCangjieHome()
 bool CompilerInstance::DetectCangjieModules()
 {
     if (cangjieHome.empty()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::frontend_failed_to_detect_cangjie_modules,
+        diag.DiagnoseRefactor("frontend_failed_to_detect_cangjie_modules",
             MakeRange(DEFAULT_POSITION, DEFAULT_POSITION), "cangjie home is empty");
         return false;
     }
     auto libPathName = invocation.globalOptions.GetCangjieLibTargetPathName();
     auto modulesName = FileUtil::JoinPath(cangjieHome, "modules");
     if (libPathName.empty()) {
-        diag.DiagnoseRefactor(DiagKindRefactor::frontend_failed_to_detect_cangjie_modules,
+        diag.DiagnoseRefactor("frontend_failed_to_detect_cangjie_modules",
             MakeRange(DEFAULT_POSITION, DEFAULT_POSITION), "target library path name is empty");
         return false;
     }
     cangjieModules = FileUtil::JoinPath(modulesName, libPathName);
     if (!FileUtil::FileExist(cangjieModules)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::frontend_failed_to_detect_cangjie_modules,
+        diag.DiagnoseRefactor("frontend_failed_to_detect_cangjie_modules",
             MakeRange(DEFAULT_POSITION, DEFAULT_POSITION), "target library path is not exist : " + cangjieModules);
         return false;
     }

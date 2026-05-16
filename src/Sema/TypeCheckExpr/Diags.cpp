@@ -16,7 +16,7 @@ namespace Cangjie::Sema {
 void DiagInvalidMultipleAssignExpr(
     DiagnosticEngine& diag, const Node& leftNode, const Expr& rightExpr, const std::string& because)
 {
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types_multiple_assign, rightExpr);
+    auto builder = diag.DiagnoseRefactor("sema_mismatched_types_multiple_assign", rightExpr);
     builder.AddMainHintArguments(rightExpr.GetTy()->String());
     builder.AddHint(leftNode, because);
 }
@@ -29,8 +29,8 @@ void DiagInvalidBinaryExpr(DiagnosticEngine& diag, const BinaryExpr& be)
     CJC_ASSERT(Ty::IsTyCorrect(be.rightExpr->GetTy()));
     const std::string& opStr = TOKENS[static_cast<int>(be.op)];
     auto range = be.operatorPos.IsZero() ? MakeRange(be.begin, be.end) : MakeRange(be.operatorPos, opStr);
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_binary_expr, be, range, opStr,
-        be.leftExpr->GetTy()->String(), be.rightExpr->GetTy()->String());
+    auto builder = diag.DiagnoseRefactor(
+        "sema_invalid_binary_expr", be, range, opStr, be.leftExpr->GetTy()->String(), be.rightExpr->GetTy()->String());
     if (be.leftExpr->GetTy()->IsFunc() || be.leftExpr->GetTy()->IsCFunc() || be.leftExpr->GetTy()->IsTuple()) {
         // func and tuple type cannot be extended
         return;
@@ -63,8 +63,7 @@ void DiagInvalidUnaryExpr(DiagnosticEngine& diag, const UnaryExpr& ue)
     CJC_NULLPTR_CHECK(ue.expr);
     CJC_ASSERT(Ty::IsTyCorrect(ue.expr->GetTy()));
     const std::string& opStr = TOKENS[static_cast<int>(ue.op)];
-    auto builder =
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_unary_expr, ue, opStr, ue.expr->GetTy()->String());
+    auto builder = diag.DiagnoseRefactor("sema_invalid_unary_expr", ue, opStr, ue.expr->GetTy()->String());
     if (ue.expr->GetTy()->IsExtendable()) {
         builder.AddNote(
             "you may want to implement 'operator func " + opStr + "()' for type '" + ue.expr->GetTy()->String() + "'");
@@ -81,7 +80,7 @@ void DiagInvalidUnaryExprWithTarget(DiagnosticEngine& diag, const UnaryExpr& ue,
     CJC_ASSERT(Ty::IsTyCorrect(&target));
     const std::string& opStr = TOKENS[static_cast<int>(ue.op)];
     auto builder = diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_invalid_unary_expr_with_target, ue, opStr, ue.expr->GetTy()->String(), target.String());
+        "sema_invalid_unary_expr_with_target", ue, opStr, ue.expr->GetTy()->String(), target.String());
 }
 
 void DiagInvalidSubscriptExpr(
@@ -95,7 +94,7 @@ void DiagInvalidSubscriptExpr(
     CJC_ASSERT(Ty::AreTysCorrect(indexTys));
     std::string indexPrefix = "type" + (indexTys.size() > 1 ? std::string("s ") : " ");
     std::string indexStr = indexPrefix + "'" + Ty::GetTypesToStr(indexTys, "', ") + "'";
-    auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_subscript_expr, se, baseTy.String(), indexStr);
+    auto builder = diag.DiagnoseRefactor("sema_invalid_subscript_expr", se, baseTy.String(), indexStr);
     if (baseTy.IsExtendable()) {
         std::string indexParam;
         for (size_t i = 0; i < indexTys.size(); ++i) {
@@ -111,6 +110,6 @@ void DiagInvalidSubscriptExpr(
 
 void DiagUnableToInferExpr(DiagnosticEngine& diag, const Expr& expr)
 {
-    (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_unable_to_infer_expr, expr);
+    (void)diag.DiagnoseRefactor("sema_unable_to_infer_expr", expr);
 }
 } // namespace Cangjie::Sema

@@ -609,7 +609,7 @@ std::set<Symbol*> Searcher::GetIDsByScopeName(const ASTContext& ctx, const Query
             ids = Union(ids, GetIDsByScopeName(ctx, n));
         }
     } else {
-        ctx.diag.DiagnoseRefactor(DiagKindRefactor::searcher_invalid_scope_name, DEFAULT_POSITION, query.value);
+        ctx.diag.DiagnoseRefactor("searcher_invalid_scope_name", DEFAULT_POSITION, query.value);
     }
     return ids;
 }
@@ -656,7 +656,7 @@ std::set<Symbol*> Searcher::GetIDs(const ASTContext& ctx, const Query& query) co
 unsigned long Searcher::StrToUint(const ASTContext& ctx, const std::string& queryVal) const
 {
     if (queryVal.empty()) {
-        ctx.diag.DiagnoseRefactor(DiagKindRefactor::searcher_empty_number, DEFAULT_POSITION);
+        ctx.diag.DiagnoseRefactor("searcher_empty_number", DEFAULT_POSITION);
         return UINT32_MAX;
     }
     unsigned long uintValue = UINT32_MAX;
@@ -669,11 +669,11 @@ unsigned long Searcher::StrToUint(const ASTContext& ctx, const std::string& quer
         }
     }
     if (!validDigits) {
-        ctx.diag.DiagnoseRefactor(DiagKindRefactor::searcher_invalid_number, DEFAULT_POSITION, queryVal);
+        ctx.diag.DiagnoseRefactor("searcher_invalid_number", DEFAULT_POSITION, queryVal);
         return UINT32_MAX;
     }
     if (uintValue >= ctx.symbolTable.size() && !ctx.symbolTable.empty()) {
-        ctx.diag.DiagnoseRefactor(DiagKindRefactor::searcher_past_the_end_of_array, DEFAULT_POSITION, queryVal);
+        ctx.diag.DiagnoseRefactor("searcher_past_the_end_of_array", DEFAULT_POSITION, queryVal);
         return UINT32_MAX;
     }
     return uintValue;

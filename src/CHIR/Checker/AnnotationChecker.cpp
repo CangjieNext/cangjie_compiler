@@ -145,8 +145,7 @@ void AnnotationChecker::CheckTargets(const AnnoInfo& annoInfo, const std::string
             continue;
         }
         auto [_, loc] = ToRangeIfNotZero(annoPair.GetDebugLocation());
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::chir_annotation_not_applicable, loc, annoClassName, targetToErrMsg.at(target));
+        diag.DiagnoseRefactor("chir_annotation_not_applicable", loc, annoClassName, targetToErrMsg.at(target));
     }
 }
 

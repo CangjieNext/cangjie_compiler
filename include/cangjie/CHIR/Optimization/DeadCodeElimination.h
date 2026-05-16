@@ -7,6 +7,8 @@
 #ifndef CANGJIE_CHIR_TRANSFORMATION_DEAD_CODE_ELIMINATION_H
 #define CANGJIE_CHIR_TRANSFORMATION_DEAD_CODE_ELIMINATION_H
 
+#include <string_view>
+
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
@@ -123,8 +125,8 @@ private:
     void DiagUnusedVariable(const Debug& expr);
     void ReportUnusedLocalVariable(const Expression& expr, bool isDebug);
     void ReportUnusedExpression(Expression& expr);
-    template <typename... Args> void DiagUnusedCode(
-        const std::pair<bool, Cangjie::Range>& nodeRange, DiagKindRefactor diagKind, Args&& ... args);
+    template <typename... Args>
+    void DiagUnusedCode(const std::pair<bool, Cangjie::Range>& nodeRange, std::string_view diagKind, Args&&... args);
     void DiagUnusedVariableForParam(const Debug& expr);
     void DiagUnusedVariableForLocalVar(const Debug& expr, bool isDebug);
     void DiagUnusedLambdaVariable(const Debug& expr);

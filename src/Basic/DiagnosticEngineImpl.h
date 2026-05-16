@@ -13,7 +13,7 @@
 #ifndef CANGJIE_BASIC_DIAGNOSTICENGINEIMPL_H
 #define CANGJIE_BASIC_DIAGNOSTICENGINEIMPL_H
 
-#include "cangjie/Basic/DiagnosticEngine.h"
+#include "DiagnosticEngineConstants.h"
 
 namespace Cangjie {
 class DiagnosticEngineImpl {
