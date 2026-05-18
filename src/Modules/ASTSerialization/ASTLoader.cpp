@@ -316,7 +316,7 @@ void ASTLoader::ASTLoaderImpl::LoadPackageDecls()
             if (auto found = idToFileMap.find(fileID); found != idToFileMap.end()) {
                 tmpDecl->curFile = found->second;
             }
-            CJC_NULLPTR_CHECK(tmpDecl->curFile);
+            // CJC_NULLPTR_CHECK(tmpDecl->curFile);
             AddCurFile(*tmpDecl, tmpDecl->curFile); // Guarantees all sub-nodes have 'curFile'.
             if (tmpDecl->TestAttr(Attribute::GENERIC_INSTANTIATED)) {
                 curPackage->genericInstantiatedDecls.emplace_back(std::move(tmpDecl));

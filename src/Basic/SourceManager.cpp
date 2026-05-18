@@ -108,8 +108,10 @@ unsigned int SourceManager::AddSource(
 {
     // path canonicalize
     std::string normalizePath = FileUtil::Normalize(path, true);
+    std::cout << "Normalized string is: '" << normalizePath << "'." << '\n';
     // Change fileHash from content hash to path hash.
     uint64_t fileHash = Utils::GetHash(normalizePath);
+    std::cout << "Hash is: '" << fileHash << "'." << '\n';
     return GetFileId(normalizePath, buffer, fileHash, packageName, isCjmpFile, false);
 }
 
@@ -117,7 +119,9 @@ unsigned int SourceManager::AppendSource(const std::string& path, const std::str
 {
     // path canonicalize
     std::string normalizePath = FileUtil::Normalize(path, true);
+    std::cout << "Normalized string is: '" << normalizePath << "'." << '\n';
     uint64_t fileHash = Utils::GetHash(normalizePath);
+    std::cout << "Hash is: '" << fileHash << "'." << '\n';
     return GetFileId(normalizePath, buffer, fileHash, std::nullopt, isCjmpFile, true);
 }
 
