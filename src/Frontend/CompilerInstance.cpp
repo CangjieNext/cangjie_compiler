@@ -724,45 +724,67 @@ struct DeclAndPackageNameHasher {
 };
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-void DoNewMangling(
-    const BaseMangler& baseMangler, const std::vector<DeclAndPackageName>& decls, size_t start, size_t end)
+static std::vector<Ptr<Node>> FilterPrefix(const std::vector<Ptr<Node>>& prefix)
+{
+    std::vector<Ptr<Node>> filteredPrefix;
+    for (size_t i = 0; i < prefix.size(); i++) {
+        if (!filteredPrefix.empty() && Is<Expr>(filteredPrefix.back().get()) &&
+            static_cast<AST::Expr*>(filteredPrefix.back().get())->desugarExpr.get() == prefix[i].get()) {
+            filteredPrefix.pop_back();
+        }
+        filteredPrefix.emplace_back(prefix[i]);
+    }
+    return filteredPrefix;
+}
+
+static VisitAction HandleDeclMangle(Decl& decl, const BaseMangler& baseMangler,
+    const std::vector<Ptr<Node>>& filteredPrefix)
+{
+    if (decl.astKind == ASTKind::MAIN_DECL) {
+        return VisitAction::WALK_CHILDREN;
+    }
+    if (decl.astKind == ASTKind::MACRO_DECL) {
+        auto& desugar = *StaticCast<MacroDecl*>(&decl)->desugarDecl;
+        desugar.mangledName = baseMangler.Mangle(desugar);
+        return VisitAction::WALK_CHILDREN;
+    }
+    if (!Ty::IsTyCorrect(decl.ty)) {
+        return VisitAction::SKIP_CHILDREN;
+    }
+
+    if (decl.TestAttr(Attribute::FROM_COMMON_PART) && !decl.exportId.empty()) {
+        decl.mangledName = decl.exportId;
+    } else {
+        decl.mangledName = baseMangler.Mangle(decl, filteredPrefix);
+    }
+
+    return VisitAction::WALK_CHILDREN;
+}
+
+static VisitAction HandleLambdaMangle(LambdaExpr& lambda, const BaseMangler& baseMangler,
+    const std::vector<Ptr<Node>>& filteredPrefix)
+{
+    if (lambda.TestAttr(Attribute::GENERIC) || !Ty::IsTyCorrect(lambda.ty)) {
+        return VisitAction::SKIP_CHILDREN;
+    }
+    lambda.mangledName = baseMangler.MangleLambda(lambda, filteredPrefix);
+    return VisitAction::WALK_CHILDREN;
+}
+
+void DoNewMangling(const BaseMangler& baseMangler, const std::vector<DeclAndPackageName>& decls,
+    size_t start, size_t end)
 {
     std::vector<Ptr<Node>> prefix;
     auto handleMangle = [&baseMangler, &prefix](Ptr<Node> node) -> VisitAction {
-        std::vector<Ptr<Node>> filteredPrefix;
-        for (size_t i = 0; i < prefix.size(); i++) {
-            if (filteredPrefix.size() != 0 && Is<Expr>(filteredPrefix.back().get()) &&
-                static_cast<AST::Expr*>(filteredPrefix.back().get())->desugarExpr.get() == prefix[i].get()) {
-                filteredPrefix.pop_back();
-            }
-            filteredPrefix.emplace_back(prefix[i]);
-        }
+        auto filteredPrefix = FilterPrefix(prefix);
         auto nextAction = Meta::match(*node)(
             [&baseMangler, &filteredPrefix](Decl& decl) {
-                if (decl.astKind == ASTKind::MAIN_DECL) {
-                    return VisitAction::WALK_CHILDREN;
-                }
-                if (decl.astKind == ASTKind::MACRO_DECL) {
-                    auto& desugar = *StaticCast<MacroDecl*>(&decl)->desugarDecl;
-                    desugar.mangledName = baseMangler.Mangle(desugar);
-                    return VisitAction::WALK_CHILDREN;
-                }
-                if (!Ty::IsTyCorrect(decl.GetTy())) {
-                    return VisitAction::SKIP_CHILDREN;
-                }
-                decl.mangledName = baseMangler.Mangle(decl, filteredPrefix);
-                return VisitAction::WALK_CHILDREN;
+return HandleDeclMangle(decl, baseMangler, filteredPrefix);
             },
             [&baseMangler, &filteredPrefix](LambdaExpr& lambda) {
-                if (lambda.TestAttr(Attribute::GENERIC) || !Ty::IsTyCorrect(lambda.GetTy())) {
-                    return VisitAction::SKIP_CHILDREN;
-                }
-                lambda.mangledName = baseMangler.MangleLambda(lambda,
-                    filteredPrefix);
-                return VisitAction::WALK_CHILDREN;
+                return HandleLambdaMangle(lambda, baseMangler, filteredPrefix);
             },
             []([[maybe_unused]] const Annotation& anno) {
-                // The annotation node should be desugared during the Sema, this node is only used in ExportAST.
                 return VisitAction::SKIP_CHILDREN;
             },
             []([[maybe_unused]] const Node& node) { return VisitAction::WALK_CHILDREN; },

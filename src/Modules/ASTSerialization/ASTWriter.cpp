@@ -755,7 +755,7 @@ void ASTWriter::SetSerializingCommon()
 {
     pImpl->SetSerializingCommon();
 }
- 
+
 void ASTWriter::ASTWriterImpl::SetSerializingCommon()
 {
     serializingCommon = true;
@@ -1610,7 +1610,7 @@ std::vector<TFullIdOffset> ASTWriter::ASTWriterImpl::CollectInitializationDepend
             }
         }
     }
-    
+
     return dependencies;
 }
 
@@ -1626,11 +1626,11 @@ FormattedIndex ASTWriter::ASTWriterImpl::SaveDecl(const Decl& decl, bool isTopLe
     auto exportId = builder.CreateSharedString(decl.exportId);
     // The Decl meet one of the following conditions does not need to export 'mangledName':
     // 1. decl in generic decls.
-    // 2. decl is GenericParamDecl, propDecl, typeAliasDecl，extendDecl
+    // 2. decl is GenericParamDecl, propDecl, typeAliasDecl, extendDecl
     // 3. deck is instance member variable.
     bool ignoreMangledName = IsInDeclWithAttribute(decl, Attribute::GENERIC) ||
         Utils::In(decl.astKind,
-            {ASTKind::GENERIC_PARAM_DECL, ASTKind::PROP_DECL, ASTKind::TYPE_ALIAS_DECL, ASTKind::EXTEND_DECL}) ||
+            {ASTKind::GENERIC_PARAM_DECL, ASTKind::PROP_DECL, ASTKind::TYPE_ALIAS_DECL}) ||
         (decl.astKind == ASTKind::VAR_DECL && !decl.TestAnyAttr(Attribute::STATIC, Attribute::GLOBAL));
     bool isInExtendToExportForTest = decl.outerDecl && Is<ExtendDecl>(decl.outerDecl) &&
         !decl.outerDecl->TestAttr(Attribute::IMPORTED) && !decl.outerDecl->TestAttr(Attribute::COMPILER_ADD) &&
