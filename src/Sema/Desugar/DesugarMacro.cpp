@@ -58,7 +58,7 @@ OwnedPtr<ArrayLit> DesugarTokensToArrayLiteral(std::vector<Token>& tokens)
     arrayLit->children.reserve(buffers.size());
 
     std::transform(buffers.begin(), buffers.end(), std::back_inserter(arrayLit->children),
-        [](auto& byte) { return CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(byte), nullptr); });
+        [](auto& byte) { return CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(byte), Ty::GetInitialTy()); });
 
     return arrayLit;
 }
@@ -79,7 +79,7 @@ OwnedPtr<ForInExpr> CreateReadingForInExpr(const std::tuple<std::string, std::st
 {
     auto [declName, argPtr, argSize] = declArgs;
     auto varPattern = CreateVarPattern("i");
-    auto start = CreateLitConstExpr(LitConstKind::INTEGER, "0", nullptr);
+    auto start = CreateLitConstExpr(LitConstKind::INTEGER, "0", Ty::GetInitialTy());
     auto end = CreateRefExpr(argSize);
     auto rangeExpr = MakeOwned<RangeExpr>();
     rangeExpr->startExpr = std::move(start);
@@ -133,7 +133,7 @@ OwnedPtr<VarDecl> CreateReadingVarDecl(
     auto baseF = CreateRefExpr({v, newPos, newPos, false}, nullptr, newPos, {typeArgs.get()});
     baseF->EnableAttr(Attribute::IN_CORE);
     auto funcArg1 = CreateFuncArg(CreateRefExpr(argSize));
-    auto litConst = CreateLitConstExpr(LitConstKind::INTEGER, "0", nullptr);
+    auto litConst = CreateLitConstExpr(LitConstKind::INTEGER, "0", Ty::GetInitialTy());
 
     std::vector<OwnedPtr<FuncArg>> funcVector;
     funcVector.emplace_back(std::move(funcArg1));
@@ -481,7 +481,7 @@ OwnedPtr<IfExpr> CreateWrapperIfExpr(
     // Create condition expr, like: paramSize > 0
     auto [argName, argBuf, argSize] = declArgs;
     auto argSizeExpr = CreateRefExpr(argSize);
-    auto litConst = CreateLitConstExpr(LitConstKind::INTEGER, "0", nullptr);
+    auto litConst = CreateLitConstExpr(LitConstKind::INTEGER, "0", Ty::GetInitialTy());
     auto cond = CreateBinaryExpr(std::move(argSizeExpr), std::move(litConst), TokenKind::GT);
 
     // Create assign expr, like: params = Tokens(bufParam)
