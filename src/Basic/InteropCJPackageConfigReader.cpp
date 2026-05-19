@@ -329,9 +329,10 @@ void ParseLmabdaPatternsConfiguration(toml::Table& packageTable, PackageConfig& 
 
 // Helper function: Validates a comma-separated type string and returns the validated types
 bool ValidateAndProcessTypeString(const std::string& typeString,
-                                 const std::unordered_set<std::string>& validTypeSet,
-                                 const PackageConfig& pkgConfig,
-                                 std::vector<std::string>& validatedTypes) {
+    const std::unordered_set<std::string>& validTypeSet,
+    const PackageConfig& pkgConfig,
+    std::vector<std::string>& validatedTypes)
+{
     std::istringstream typeStream(typeString);
     std::string individualType;
 
@@ -372,7 +373,8 @@ bool ValidateAndProcessTypeString(const std::string& typeString,
 }
 
 // Helper function: Combines a vector of type strings into a comma-separated string
-std::string CombineTypesToString(const std::vector<std::string>& types) {
+std::string CombineTypesToString(const std::vector<std::string>& types)
+{
     if (types.empty()) {
         return "";
     }
@@ -390,10 +392,10 @@ std::string CombineTypesToString(const std::vector<std::string>& types) {
 
 // Helper function: Processes a TOML array of type parameters
 bool ProcessTypeParameterArray(const toml::Array& typeArgs,
-                              const std::unordered_set<std::string>& validTypeSet,
-                              const PackageConfig& pkgConfig,
-                              std::vector<std::string>& collectedTypes,
-                              std::unordered_map<std::string, GenericTypeArguments>& genericInstantiations) {
+    const std::unordered_set<std::string>& validTypeSet,
+    const PackageConfig& pkgConfig, std::vector<std::string>& collectedTypes,
+    std::unordered_map<std::string, GenericTypeArguments>& genericInstantiations)
+{
     for (const auto& type : typeArgs) {
         if (!type.is<std::string>()) {
             // Skip non-string type entries
@@ -404,9 +406,8 @@ bool ProcessTypeParameterArray(const toml::Array& typeArgs,
         std::vector<std::string> validatedTypes;
 
         // Validate the type string
-        if (!ValidateAndProcessTypeString(typeString, validTypeSet,
-                                         pkgConfig, validatedTypes)) {
-            return false;  // Validation failed
+        if (!ValidateAndProcessTypeString(typeString, validTypeSet, pkgConfig, validatedTypes)) {
+            return false; // Validation failed
         }
 
         if (validatedTypes.empty()) {
@@ -466,10 +467,9 @@ bool CollectTypeArguments(toml::Array& allowedGenerics,
         std::vector<std::string> collectedTypes;
 
         // Process all type arguments in the array
-        if (!ProcessTypeParameterArray(typeArgs, VALID_TYPE_SET,
-                                      pkgConfig, collectedTypes,
-                                      pkgConfig.allowedInteropCJGenericInstantiations[packageName])) {
-            return false;  // Validation failed
+        if (!ProcessTypeParameterArray(typeArgs, VALID_TYPE_SET, pkgConfig, collectedTypes,
+                pkgConfig.allowedInteropCJGenericInstantiations[packageName])) {
+            return false; // Validation failed
         }
 
         if (!collectedTypes.empty()) {
@@ -501,9 +501,8 @@ void ProcessSymbolConfigurations(toml::Array& allowedGenerics,
         size_t pos = name.find('<');
         if (pos != std::string::npos && name.back() == '>') {
             ProcessGenericTypeWithSymbols(genTable, name, pos, typeArgumentsMap, pkgConfig);
-        }
-        // Non-generic class with symbols
-        else if (genTable.find(SYMBOLS) != genTable.end() && genTable[SYMBOLS].is<toml::Array>()) {
+        } else if (genTable.find(SYMBOLS) != genTable.end() && genTable[SYMBOLS].is<toml::Array>()) {
+            // Non-generic class with symbols
             ProcessNonGenericTypeWithSymbols(genTable, name, pkgConfig);
         }
     }
@@ -540,7 +539,6 @@ void ParseDefaultConfig(toml::Table& tbl, InteropCJPackageConfigReader& reader)
     }
 
     auto defaultTable = defaultEntry.as<toml::Table>();
-
     if (defaultTable.find(API_STRATEGY) != defaultTable.end() && defaultTable[API_STRATEGY].is<std::string>()) {
         auto strategy = defaultTable[API_STRATEGY].as<std::string>();
         reader.defaultApiStrategy = StringToStrategy(strategy);

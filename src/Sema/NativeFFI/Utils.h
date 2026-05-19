@@ -79,7 +79,7 @@ template <typename Ret = Node, typename... Args> std::vector<OwnedPtr<Ret>> Node
     return nodes;
 }
 
-namespace details {
+namespace Details {
 
 template <typename T> void WrapArg(std::vector<OwnedPtr<FuncArg>>* funcArgs, OwnedPtr<T>&& e)
 {
@@ -91,7 +91,7 @@ template <typename T> void WrapArg(std::vector<OwnedPtr<FuncArg>>* funcArgs, Own
     }
 }
 
-} // namespace details
+} // namespace Details
 
 template <typename T> OwnedPtr<T> WithinFile(OwnedPtr<T> node, Ptr<File> curFile)
 {
@@ -108,7 +108,7 @@ template <typename... Args> OwnedPtr<CallExpr> CreateCall(Ptr<FuncDecl> fd, Ptr<
 
     std::vector<OwnedPtr<FuncArg>> funcArgs;
 
-    (details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
+    (Details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
 
     auto funcTy = StaticCast<FuncTy*>(fd->GetTy());
 
@@ -123,7 +123,7 @@ OwnedPtr<CallExpr> CreateMemberCall(OwnedPtr<Expr> receiver, Ptr<FuncDecl> fd, O
     CJC_NULLPTR_CHECK(fd);
     std::vector<OwnedPtr<FuncArg>> funcArgs;
 
-    (details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
+    (Details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
 
     auto funcTy = StaticCast<FuncTy*>(fd->GetTy());
     auto ma = CreateMemberAccess(std::move(receiver), *fd);
