@@ -1204,30 +1204,172 @@ bool ToCHIR::Run()
 }
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+struct PluginResult {
+    uint8_t* data;
+    int64_t size;
+    bool success;
+};
+
+void ToCHIR::PrepareBeforePlugin(
+    std::unordered_set<std::string>& srcCodeImportedFuncNames,
+    std::unordered_set<std::string>& srcCodeImportedVarNames,
+    std::vector<std::string>& initFuncsForConstVarNames,
+    std::unordered_set<std::string>& implicitFuncNames,
+    std::unordered_map<std::string, std::pair<std::string, std::string>>& unreachableBlockNames)
+{
+    for (auto f : srcCodeImportedFuncs) {
+        srcCodeImportedFuncNames.emplace(f->GetIdentifierWithoutPrefix());
+    }
+    for (auto v : srcCodeImportedVars) {
+        srcCodeImportedVarNames.emplace(v->GetIdentifierWithoutPrefix());
+    }
+    for (auto f : initFuncsForConstVar) {
+        initFuncsForConstVarNames.emplace_back(f->GetIdentifierWithoutPrefix());
+    }
+    for (auto& it : implicitFuncs) {
+        implicitFuncNames.emplace(it.first);
+    }
+    for (auto& it : maybeUnreachable) {
+        auto funcName = it.first->GetTopLevelFunc()->GetIdentifierWithoutPrefix();
+        auto blockName = it.first->GetIdentifierWithoutPrefix();
+        // maybe a terminator is created and removed in AST2CHIR, so it doesn't have a parent block
+        if (it.second->GetParentBlock()) {
+            auto terminatorName = it.second->GetParentBlock()->GetIdentifierWithoutPrefix();
+            unreachableBlockNames[funcName] = {blockName, terminatorName};
+        }
+    }
+    builder.MergeAllocatedInstance();
+    builder.GetChirContext().FreeWholePackage();
+    builder.GetChirContext().Init();
+}
+
+void ToCHIR::UpdateAfterPlugin(
+    std::unordered_set<std::string>& srcCodeImportedFuncNames,
+    std::unordered_set<std::string>& srcCodeImportedVarNames,
+    std::vector<std::string>& initFuncsForConstVarNames,
+    std::unordered_set<std::string>& implicitFuncNames,
+    std::unordered_map<std::string, std::pair<std::string, std::string>>& unreachableBlockNames)
+{
+    chirPkg = builder.GetCurPackage();
+    for (auto def : chirPkg->GetAllExtendDef()) {
+        if (auto builtinType = DynamicCast<BuiltinType*>(def->GetExtendedType())) {
+            GetBuiltinTypeWithVTable(*builtinType, builder)->AddExtend(*def);
+        } else {
+            auto customType = StaticCast<CustomType*>(def->GetExtendedType());
+            auto customTypeDef = customType->GetCustomTypeDef();
+            CJC_NULLPTR_CHECK(customTypeDef);
+            CJC_ASSERT(customTypeDef->GetCustomKind() != CustomDefKind::TYPE_EXTEND);
+            customTypeDef->AddExtend(*def);
+        }
+    }
+    builder.UpdateTypeInCorePackage();
+
+    implicitFuncs.clear();
+    for (auto& it : implicitFuncNames) {
+        for (auto f : chirPkg->GetGlobalFuncsWithoutBody()) {
+            if (f->GetIdentifierWithoutPrefix() == it) {
+                implicitFuncs.emplace(it, f);
+                break;
+            }
+        }
+    }
+    srcCodeImportedFuncs.clear();
+    for (auto& it : srcCodeImportedFuncNames) {
+        for (auto f : chirPkg->GetGlobalFuncsWithBody()) {
+            if (f->GetIdentifierWithoutPrefix() == it) {
+                srcCodeImportedFuncs.emplace(f);
+                break;
+            }
+        }
+    }
+    srcCodeImportedVars.clear();
+    for (auto& it : srcCodeImportedVarNames) {
+        for (auto v : chirPkg->GetGlobalVarsWithInit()) {
+            if (v->GetIdentifierWithoutPrefix() == it) {
+                srcCodeImportedVars.emplace(v);
+                break;
+            }
+        }
+    }
+    initFuncsForConstVar.clear();
+    for (auto& it : initFuncsForConstVarNames) {
+        for (auto f : chirPkg->GetGlobalFunctions()) {
+            if (f->GetIdentifierWithoutPrefix() == it) {
+                initFuncsForConstVar.emplace_back(f);
+                break;
+            }
+        }
+    }
+    maybeUnreachable.clear();
+    for (auto& it : unreachableBlockNames) {
+        for (auto f : chirPkg->GetGlobalFuncsWithBody()) {
+            if (f->GetIdentifierWithoutPrefix() != it.first) {
+                continue;
+            }
+            auto allBlocks = f->GetBody()->GetBlocks();
+            Block* bb = nullptr;
+            Terminator* tt = nullptr;
+            for (auto block : allBlocks) {
+                if (bb != nullptr && tt != nullptr) {
+                    break;
+                }
+                if (block->GetIdentifierWithoutPrefix() == it.second.first) {
+                    bb = block;
+                }
+                if (block->GetIdentifierWithoutPrefix() == it.second.second) {
+                    tt = block->GetTerminator();
+                }
+            }
+            if (bb != nullptr && tt != nullptr) {
+                maybeUnreachable.emplace(bb, tt);
+            }
+        }
+    }
+}
+
 bool ToCHIR::PerformPlugin(CHIR::Package& package)
 {
+    if (opts.pluginPaths.empty()) {
+        return true;
+    }
     bool succeed = true;
     bool hasPluginForCHIR = false;
 #ifndef CANGJIE_ENABLE_GCOV
     try {
 #endif
         Utils::ProfileRecorder recorder("CHIR", "Plugin Execution");
-        CHIRPluginManager chirPluginManager = ci.metaTransformPluginBuilder.BuildCHIRPluginManager(builder);
-        chirPluginManager.ForEachMetaTransformConcept([&package, &hasPluginForCHIR](MetaTransformConcept& mtc) {
-            if (!mtc.IsForCHIR()) {
-                return;
-            }
-            hasPluginForCHIR = true;
-            if (mtc.IsForFunc()) {
-                for (auto func : package.GetGlobalFuncsWithBody()) {
-                    static_cast<MetaTransform<CHIR::Function>*>(&mtc)->Run(*func);
-                }
-            } else if (mtc.IsForPackage()) {
-                static_cast<MetaTransform<CHIR::Package>*>(&mtc)->Run(package);
-            } else {
-                CJC_ASSERT(false && "Should not reach here.");
-            }
-        });
+        auto [data, size] = CHIRSerializer::Serialize(package);
+        if (data == nullptr || size == 0) {
+            printf("CHIR serialize failed in cpp\n");
+            return false;
+        }
+        HANDLE handle = InvokeRuntime::OpenSymbolTable(opts.pluginPaths[0], RTLD_NOW | RTLD_LOCAL);
+        void* fPtr = InvokeRuntime::GetMethod(handle, "executeCHIRPlugins");
+        if (!fPtr) {
+            printf("get CHIRPluginEntry failed\n");
+            return false;
+        }
+        auto pluginResult = reinterpret_cast<PluginResult (*)(uint8_t*, int64_t)>(fPtr)(data, size);
+        if (!pluginResult.success) {
+            printf("CHIR plugin failed in cpp\n");
+            return false;
+        }
+        std::unordered_set<std::string> srcCodeImportedFuncNames;
+        std::unordered_set<std::string> srcCodeImportedVarNames;
+        std::vector<std::string> initFuncsForConstVarNames;
+        std::unordered_set<std::string> implicitFuncNames;
+        std::unordered_map<std::string, std::pair<std::string, std::string>> unreachableBlockNames;
+        PrepareBeforePlugin(srcCodeImportedFuncNames,
+            srcCodeImportedVarNames, initFuncsForConstVarNames, implicitFuncNames, unreachableBlockNames);
+        CHIRDeserializer::Deserialize(pluginResult.data, pluginResult.size, builder);
+        UpdateAfterPlugin(srcCodeImportedFuncNames,
+            srcCodeImportedVarNames, initFuncsForConstVarNames, implicitFuncNames, unreachableBlockNames);
+        fPtr = InvokeRuntime::GetMethod(handle, "freeSerializedMemory");
+        if (!fPtr) {
+            printf("get freeSerializedMemory failed\n");
+            return false;
+        }
+        reinterpret_cast<void (*)()>(fPtr)();
 #ifndef CANGJIE_ENABLE_GCOV
     } catch (...) {
         succeed = false;
@@ -1237,6 +1379,7 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
         diag.DiagnoseRefactor(DiagKindRefactor::plugin_throws_exception, DEFAULT_POSITION);
     } else if (hasPluginForCHIR && builder.IsEnableIRCheckerAfterPlugin()) {
         DumpCHIRToFile("PLUGIN");
+        succeed = RunIRChecker(Phase::PLUGIN);
     }
     return succeed;
 }

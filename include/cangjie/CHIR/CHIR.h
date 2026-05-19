@@ -172,6 +172,18 @@ private:
     void ReplaceSrcCodeImportedValueWithSymbol();
     void Canonicalization();
     void ClearASTResources();
+    void PrepareBeforePlugin(
+        std::unordered_set<std::string>& srcCodeImportedFuncNames,
+        std::unordered_set<std::string>& srcCodeImportedVarNames,
+        std::vector<std::string>& initFuncsForConstVarNames,
+        std::unordered_set<std::string>& implicitFuncNames,
+        std::unordered_map<std::string, std::pair<std::string, std::string>>& unreachableBlockNames);
+    void UpdateAfterPlugin(
+        std::unordered_set<std::string>& srcCodeImportedFuncNames,
+        std::unordered_set<std::string>& srcCodeImportedVarNames,
+        std::vector<std::string>& initFuncsForConstVarNames,
+        std::unordered_set<std::string>& implicitFuncNames,
+        std::unordered_map<std::string, std::pair<std::string, std::string>>& unreachableBlockNames);
 
     template <typename T>
     std::pair<Value*, Apply*> DoCFFIFuncWrapper(T& curFunc, bool isForeign, bool isExternal = true);
