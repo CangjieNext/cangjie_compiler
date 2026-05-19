@@ -37,6 +37,14 @@ void CHIRSerializer::Serialize(const Package& package, const std::string filenam
     serializer.Save(filename, phase);
 }
 
+std::pair<uint8_t*, int64_t> CHIRSerializer::Serialize(const Package& package)
+{
+    static CHIRSerializerImpl serializer(package);
+    serializer.Initialize();
+    serializer.Dispatch();
+    return serializer.ConvertToMemoryData();
+}
+
 // ========================== ID Fetchers ==============================
 
 template <typename T, typename E> std::vector<uint32_t> CHIRSerializer::CHIRSerializerImpl::GetId(std::vector<E*> vec)
@@ -1554,4 +1562,17 @@ void CHIRSerializer::CHIRSerializerImpl::Initialize()
         allValue.emplace_back(0);
         valueKind.emplace_back(0);
     }
+}
+
+std::pair<uint8_t*, int64_t> CHIRSerializer::CHIRSerializerImpl::ConvertToMemoryData()
+{
+    auto accesslevel = package.GetPackageAccessLevel();
+    auto packageName = package.GetName();
+    auto serializedPackage = PackageFormat::CreateCHIRPackageDirect(builder, packageName.c_str(), "",
+        PackageFormat::PackageAccessLevel(accesslevel), &typeKind, &allType, &valueKind, &allValue, &exprKind,
+        &allExpression, &defKind, &allCustomTypeDef, packageInitFunc, PackageFormat::Phase::Phase_RAW,
+        packageLiteralInitFunc);
+
+    builder.Finish(serializedPackage);
+    return std::make_pair(builder.GetBufferPointer(), static_cast<int64_t>(builder.GetSize()));
 }
