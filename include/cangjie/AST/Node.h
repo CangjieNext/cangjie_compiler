@@ -125,7 +125,6 @@ struct Node {
 
     void SetTy(Ptr<Ty> newTy)
     {
-        CJC_ASSERT(newTy);
         ty = newTy;
     }
 

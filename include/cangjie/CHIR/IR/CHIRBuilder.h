@@ -321,6 +321,12 @@ public:
         return context.dynamicAllocatedTys.size();
     }
 
+    void UpdateTypeInCorePackage()
+    {
+        context.SetObjectTy(context.SearchObjectTyInPackage());
+        context.SetAnyTy(context.SearchAnyTyInPackage());
+    }
+
     void MergeAllocatedInstance()
     {
         context.GetAllocatedValues().insert(
