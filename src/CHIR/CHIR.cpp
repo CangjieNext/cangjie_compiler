@@ -1204,30 +1204,50 @@ bool ToCHIR::Run()
 }
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+struct PluginResult {
+    uint8_t* data;
+    int64_t size;
+    bool success;
+};
+
 bool ToCHIR::PerformPlugin(CHIR::Package& package)
 {
+    if (opts.pluginPaths.empty()) {
+        return true;
+    }
     bool succeed = true;
     bool hasPluginForCHIR = false;
 #ifndef CANGJIE_ENABLE_GCOV
     try {
 #endif
         Utils::ProfileRecorder recorder("CHIR", "Plugin Execution");
-        CHIRPluginManager chirPluginManager = ci.metaTransformPluginBuilder.BuildCHIRPluginManager(builder);
-        chirPluginManager.ForEachMetaTransformConcept([&package, &hasPluginForCHIR](MetaTransformConcept& mtc) {
-            if (!mtc.IsForCHIR()) {
-                return;
-            }
-            hasPluginForCHIR = true;
-            if (mtc.IsForFunc()) {
-                for (auto func : package.GetGlobalFuncsWithBody()) {
-                    static_cast<MetaTransform<CHIR::Function>*>(&mtc)->Run(*func);
-                }
-            } else if (mtc.IsForPackage()) {
-                static_cast<MetaTransform<CHIR::Package>*>(&mtc)->Run(package);
-            } else {
-                CJC_ASSERT(false && "Should not reach here.");
-            }
-        });
+        auto [data, size] = CHIRSerializer::Serialize(package);
+        if (data == nullptr || size == 0) {
+            printf("CHIR serialize failed in cpp\n");
+            return false;
+        }
+        HANDLE handle = InvokeRuntime::OpenSymbolTable(opts.pluginPaths[0], RTLD_NOW | RTLD_LOCAL);
+        void* fPtr = InvokeRuntime::GetMethod(handle, "executeCHIRPlugins");
+        if (!fPtr) {
+            printf("get CHIRPluginEntry failed\n");
+            return false;
+        }
+        auto pluginResult = reinterpret_cast<PluginResult (*)(uint8_t*, int64_t)>(fPtr)(data, size);
+        if (!pluginResult.success) {
+            printf("CHIR plugin failed in cpp\n");
+            return false;
+        }
+        CHIR::CHIRContext cctxTmp;
+        cctxTmp.SetFileNameMap(
+            const_cast<std::unordered_map<unsigned int, std::string>*>(builder.GetChirContext().GetFileNameMap()));
+        CHIR::CHIRBuilder builderTmp(cctxTmp, 1);
+        CHIRDeserializer::Deserialize(pluginResult.data, pluginResult.size, builderTmp);
+        fPtr = InvokeRuntime::GetMethod(handle, "freeSerializedMemory");
+        if (!fPtr) {
+            printf("get freeSerializedMemory failed\n");
+            return false;
+        }
+        reinterpret_cast<void (*)()>(fPtr)();
 #ifndef CANGJIE_ENABLE_GCOV
     } catch (...) {
         succeed = false;
@@ -1237,6 +1257,7 @@ bool ToCHIR::PerformPlugin(CHIR::Package& package)
         diag.DiagnoseRefactor(DiagKindRefactor::plugin_throws_exception, DEFAULT_POSITION);
     } else if (hasPluginForCHIR && builder.IsEnableIRCheckerAfterPlugin()) {
         DumpCHIRToFile("PLUGIN");
+        succeed = RunIRChecker(Phase::PLUGIN);
     }
     return succeed;
 }
