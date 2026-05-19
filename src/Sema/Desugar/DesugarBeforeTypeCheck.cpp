@@ -469,13 +469,24 @@ const std::string SDK_API_VERSION = "sdkApiVersion";
 const std::string API_AVAILABLE = "apiAvailable";
 // For syscap check:
 const std::string CANIUSE_IDENTIFIER = "canIUse";
-/// SDK major level that introduced the `apiAvailable` runtime API (issue #824 desugar matrix).
-/// When compatibleSDKVersion (--cfg=APILevel_level) major >= 26, the desugar path emits
-/// `apiAvailable(...)` calls (from ohos.base); when < 26 it falls back to the legacy
-/// `DeviceInfo.sdkApiVersion >= xx` integer comparison, because `apiAvailable` does not
-/// exist in older SDKs. See DesugarIfAvailableLevelCondition for the full 5-way matrix.
-constexpr uint32_t IFAVAILABLE_RUNTIME_APILEVEL_MAJOR = 26;
+// SDK 26 is the minimum version that introduces the apiAvailable(...) runtime check
+// (from ohos.base, per issue #824). For compatibleSDKVersion >= 26 the desugar path
+// emits apiAvailable(...); for < 26 it falls back to DeviceInfo.sdkApiVersion >= N,
+// because apiAvailable does not exist in older SDKs.
+// See DesugarIfAvailableLevelCondition for the full 5-way desugar matrix.
+constexpr uint32_t IFAVAILABLE_RUNTIME_APILEVEL_MAJOR = 26; // apiAvailable introduced at SDK 26
 
+/*
+ * Build a `DeviceInfo.sdkApiVersion >= <levelExpr>` boolean condition node,
+ * with source-position info copied from iae and levelExprBase.
+ * Used by DesugarIfAvailableLevelCondition for the legacy integer-comparison
+ * path (compatibleSDKVersion < 26 or argument major < 26).
+ * *************** before desugar ****************
+   @IfAvailable(level: 11, {=>...}, {=>...})
+ * *************** after desugar (condition only) ***
+   DeviceInfo.sdkApiVersion >= 11
+ * **********************************************
+ */
 OwnedPtr<Expr> CreateSDKApiVersionCheck(IfAvailableExpr& iae, OwnedPtr<Expr> levelExpr, const Expr& levelExprBase)
 {
     auto me = CreateMemberAccess(CreateRefExpr(SrcIdentifier(DEVICE_INFO)), SDK_API_VERSION);
@@ -488,6 +499,19 @@ OwnedPtr<Expr> CreateSDKApiVersionCheck(IfAvailableExpr& iae, OwnedPtr<Expr> lev
     return condition;
 }
 
+/*
+ * Build an `apiAvailable(<levelExpr>)` call expression node, with
+ * source-position info copied from iae. levelExpr may be an integer literal
+ * or a string literal depending on the @IfAvailable argument shape.
+ * Used by DesugarIfAvailableLevelCondition for the SDK-26+ path.
+ * apiAvailable is defined in ohos.base and is only available from SDK 26
+ * onwards — callers must guard with IFAVAILABLE_RUNTIME_APILEVEL_MAJOR.
+ * *************** before desugar ****************
+   @IfAvailable(level: 26, {=>...}, {=>...})
+ * *************** after desugar (condition only) ***
+   apiAvailable(26)
+ * **********************************************
+ */
 OwnedPtr<Expr> CreateApiAvailableCheck(IfAvailableExpr& iae, OwnedPtr<Expr> levelExpr)
 {
     auto apiAvailableRef = CreateRefExpr(SrcIdentifier(API_AVAILABLE));
@@ -500,20 +524,31 @@ OwnedPtr<Expr> CreateApiAvailableCheck(IfAvailableExpr& iae, OwnedPtr<Expr> leve
     return condition;
 }
 
-/// Desugar an IfAvailable expression whose argument selects a level. Implements the
-/// 5-way desugar matrix from issue #824. The resulting condition depends on
-/// compatibleSDKVersion (--cfg=APILevel_level) and the argument shape:
-/// - integer arg, compatibleSDKVersion >= 26: `apiAvailable(int)`
-/// - integer arg, compatibleSDKVersion < 26: `DeviceInfo.sdkApiVersion >= int`
-/// - dotted-string arg, compatibleSDKVersion >= 26: `apiAvailable(string)`
-/// - dotted-string arg whose major < 26 and compatibleSDKVersion < 26:
-///   `DeviceInfo.sdkApiVersion >= major`
-/// - dotted-string arg whose major >= 26 and compatibleSDKVersion < 26:
-///   `DeviceInfo.sdkApiVersion >= 26 && apiAvailable(string)`
-/// The if-expr wrapper around the condition is built by DesugarIfAvailableExpr.
-/// When the string argument cannot be parsed, CheckIfAvailableExpr emits a hard ERROR
-/// (sema_apilevel_invalid_version_format); this function returns the raw clone so
-/// the sema error fires on the correct AST node before any codegen is reached.
+/*
+ * Desugar the level condition of an @IfAvailable expression into a boolean
+ * check expression. Implements the 5-way matrix from issue #824; the exact
+ * output depends on the integer or string argument and compatibleSDKVersion
+ * (--cfg=APILevel_level). The surrounding if-expr is built by DesugarIfAvailableExpr.
+ *
+ * 26 is the minimum SDK major version that introduces the apiAvailable(...)
+ * runtime API (ohos.base). Older devices only expose DeviceInfo.sdkApiVersion.
+ *
+ * *************** before desugar ****************
+   @IfAvailable(level: 11, {=>...}, {=>...})          // compatibleSDKVersion < 26
+ * *************** after desugar (condition only) ***
+   DeviceInfo.sdkApiVersion >= 11
+ * **********************************************
+ * *************** before desugar ****************
+   @IfAvailable(level: 26, {=>...}, {=>...})          // compatibleSDKVersion >= 26
+ * *************** after desugar (condition only) ***
+   apiAvailable(26)
+ * **********************************************
+ * *************** before desugar ****************
+   @IfAvailable(level: "26.0.0", {=>...}, {=>...})    // compatibleSDKVersion < 26, major >= 26
+ * *************** after desugar (condition only) ***
+   DeviceInfo.sdkApiVersion >= 26 && apiAvailable("26.0.0")
+ * **********************************************
+ */
 OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae, const std::string& compatibleSDKVersion)
 {
     auto compatibleLevel = Cangjie::APILevelVersion::ParseChecked(
@@ -564,9 +599,17 @@ OwnedPtr<Expr> DesugarIfAvailableLevelCondition(IfAvailableExpr& iae, const std:
     return condition;
 }
 
-/// Desugar an IfAvailable expression whose argument selects a syscap. Converts the
-/// syscap string literal argument into a `canIUse(string)` call expression. The
-/// if-expr wrapper around the condition is built by DesugarIfAvailableExpr.
+/*
+ * Desugar the syscap condition of an @IfAvailable expression into a
+ * canIUse(string) call expression. The syscap string literal argument is
+ * moved directly into the generated call. The surrounding if-expr is built
+ * by DesugarIfAvailableExpr.
+ * *************** before desugar ****************
+   @IfAvailable(syscap: "SystemCapability.ArkUI.ArkUI.Full", {=>...}, {=>...})
+ * *************** after desugar (condition only) ***
+   canIUse("SystemCapability.ArkUI.ArkUI.Full")
+ * **********************************************
+ */
 OwnedPtr<Expr> DesugarIfAvailableSyscapCondition(IfAvailableExpr& iae)
 {
     auto canIUseRef = CreateRefExpr(SrcIdentifier(CANIUSE_IDENTIFIER));
@@ -579,10 +622,24 @@ OwnedPtr<Expr> DesugarIfAvailableSyscapCondition(IfAvailableExpr& iae)
     return std::move(condition);
 }
 
-/// Dispatch IfAvailable condition desugaring by argument kind (level vs syscap).
-/// Delegates to DesugarIfAvailableLevelCondition for level arguments and to
-/// DesugarIfAvailableSyscapCondition for syscap arguments. Returns an InvalidExpr
-/// for unrecognised argument names (sema will error).
+/*
+ * Dispatch @IfAvailable condition desugaring based on the named argument kind.
+ * Delegates to DesugarIfAvailableLevelCondition for "level" arguments and to
+ * DesugarIfAvailableSyscapCondition for "syscap" arguments. Returns an
+ * InvalidExpr for any unrecognised argument name (sema will diagnose).
+ * *************** before desugar ****************
+   @IfAvailable(level: 11, {=>body1}, {=>body2})
+ * *************** after desugar (condition only) ***
+   DesugarIfAvailableLevelCondition(iae, compatibleSDKVersion)
+   // → DeviceInfo.sdkApiVersion >= 11  (or apiAvailable(...), see that function)
+ * **********************************************
+ * *************** before desugar ****************
+   @IfAvailable(syscap: "SystemCapability.X", {=>body1}, {=>body2})
+ * *************** after desugar (condition only) ***
+   DesugarIfAvailableSyscapCondition(iae)
+   // → canIUse("SystemCapability.X")
+ * **********************************************
+ */
 OwnedPtr<Expr> DesugarIfAvailableCondition(IfAvailableExpr& iae, const std::string& compatibleSDKVersion)
 {
     if (iae.GetArg()->name == LEVEL_IDENTGIFIER) {
@@ -594,9 +651,31 @@ OwnedPtr<Expr> DesugarIfAvailableCondition(IfAvailableExpr& iae, const std::stri
     }
 }
 
-/// Desugar an IfAvailable expression into an if-expr. Calls DesugarIfAvailableCondition
-/// to produce the boolean condition, then wraps it in an if-expr whose then-block and
-/// else-block are cloned from the first and second lambda arguments respectively.
+/*
+ * Desugar an @IfAvailable expression into an if-expr. Produces the boolean
+ * condition via DesugarIfAvailableCondition, then wraps it in an if-expr
+ * whose then-block and else-block are cloned from the first and second
+ * lambda arguments of the original macro call respectively.
+ * *************** before desugar ****************
+   @IfAvailable(level: 11, {=> dostuff() }, {=> fallback() })
+ * *************** after desugar ****************
+   if (DeviceInfo.sdkApiVersion >= 11) {
+       dostuff()
+   } else {
+       fallback()
+   }
+ * **********************************************
+ * *************** before desugar ****************
+   @IfAvailable(syscap: "SystemCapability.ArkUI.ArkUI.Full",
+                {=> dostuff() }, {=> fallback() })
+ * *************** after desugar ****************
+   if (canIUse("SystemCapability.ArkUI.ArkUI.Full")) {
+       dostuff()
+   } else {
+       fallback()
+   }
+ * **********************************************
+ */
 void DesugarIfAvailableExpr(IfAvailableExpr& iae, const std::string& compatibleSDKVersion)
 {
     if (iae.desugarExpr) {
