@@ -41,6 +41,10 @@ constexpr auto JAVA_OBJECT_HASHCODE_METHOD_NAME = "hashCode";
 constexpr auto JAVA_OBJECT_EQUALS_METHOD_NAME = "equals";
 constexpr auto JAVA_OBJECT_TOSTRING_METHOD_NAME = "toString";
 
+inline const std::string TAB = "    ";
+inline const std::string TAB2 = TAB + TAB;
+inline const std::string TAB3 = TAB2 + TAB;
+
 bool IsFuncDeclAndNotConstructor(OwnedPtr<Decl>& declPtr)
 {
     return declPtr->astKind == ASTKind::FUNC_DECL && !declPtr->TestAttr(Attribute::CONSTRUCTOR);
@@ -82,8 +86,9 @@ std::string FuncParamToString(const OwnedPtr<FuncParam>& p, Cangjie::Native::FFI
         bool castToId = IsCJMapping(*ty) && !IsCJMappingInterface(*(p->type->GetTy()));
         res += castToId ? ".self" : "";
     } else if (p->type->GetTy()->IsFunc()) {
-        auto actualTy = p->type->GetTy()->HasGeneric() ? GetGenericInstTy(genericConfig, p->type->GetTy(), typeManager)
-                                                       : p->type->GetTy();
+        auto actualTy = p->type->GetTy()->HasGeneric()
+            ? GetGenericInstTy(genericConfig, p->type->GetTy(), typeManager)
+            : p->type->GetTy();
         res = GetLambdaJavaClassName(actualTy) + ".box(" + res + ")";
     }
     if (p->type->GetTy()->IsTuple()) {

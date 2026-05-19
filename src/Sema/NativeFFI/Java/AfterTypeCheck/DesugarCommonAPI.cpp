@@ -170,8 +170,8 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(
     auto retActualTy = retTy->HasGeneric() ? GetGenericInstTy(genericConfig, retTy, typeManager) : retTy;
     CJC_ASSERT_WITH_MSG(!sampleMethod.funcBody->paramLists.empty(), "paramLists cannot be empty");
     for (auto& arg : sampleMethod.funcBody->paramLists[0]->params) {
-        if (!FillMethodParamsByArg(params, methodCallArgs, sampleMethod, arg, jniEnvPtrParam,
-            GetGenericInstTy(genericConfig, arg->GetTy(), typeManager))) {
+        auto genericInstTy = GetGenericInstTy(genericConfig, arg->GetTy(), typeManager);
+        if (!FillMethodParamsByArg(params, methodCallArgs, sampleMethod, arg, jniEnvPtrParam, genericInstTy)) {
             return nullptr;
         }
     }
@@ -386,8 +386,8 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeInitCjObjectFunc(FuncDecl& ctor
             continue;
         }
 
-        if (!FillMethodParamsByArg(params, ctorCallArgs, ctor, arg, jniEnvPtrParam,
-            GetGenericInstTy(genericConfig, arg->GetTy(), typeManager))) {
+        auto genericInstTy = GetGenericInstTy(genericConfig, arg->GetTy(), typeManager);
+        if (!FillMethodParamsByArg(params, ctorCallArgs, ctor, arg, jniEnvPtrParam, genericInstTy)) {
             return nullptr;
         }
     }
