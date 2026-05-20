@@ -87,27 +87,6 @@ bool ChkIfImportBase(DiagnosticEngine& diag, const ImportManager& im, const IfAv
     return false;
 }
 
-// Mirrors ChkIfImportBase but the diagnostic note points to 'apiAvailable',
-// which lives in the same `ohos.base` package as `canIUse`. The @IfAvailable
-// `level:` desugar may lower to a call to `apiAvailable(...)` (see issue 824),
-// so the package must be imported regardless of whether the particular
-// (compatibleSDKVersion, level) combination ends up generating that call.
-bool ChkIfImportApiAvailableBase(DiagnosticEngine& diag, const ImportManager& im, const IfAvailableExpr& iae)
-{
-    if (iae.GetFullPackageName() == PKG_NAME_CANIUSE_AT) {
-        return true;
-    }
-    auto importedPkgs = im.GetAllImportedPackages();
-    for (auto& importedPkg : importedPkgs) {
-        if (importedPkg->srcPackage && importedPkg->srcPackage->fullPackageName == PKG_NAME_CANIUSE_AT) {
-            return true;
-        }
-    }
-    auto builder =
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_use_expr_without_import, iae, PKG_NAME_CANIUSE_AT, "IfAvailable");
-    builder.AddNote("depend on declaration 'apiAvailable'");
-    return false;
-}
 /// Aggregates the two mutable outputs of the IfAvailable argument checkers,
 /// keeping function parameter counts within the G.FUN.01 threshold of 5.
 struct IfAvailableCheckState {
@@ -119,14 +98,11 @@ struct IfAvailableCheckState {
 void ChkLevelArgument(DiagnosticEngine& diag, const ImportManager& importManager,
     IfAvailableExpr& iae, const IfExpr& ie, IfAvailableCheckState& state)
 {
+    // 'apiAvailable' lives in the same 'ohos.device_info' package as DeviceInfo,
+    // so ChkIfImportDeviceInfo covers both desugar targets in one check.
     auto hasDeviceInfoImport = ChkIfImportDeviceInfo(diag, importManager, iae);
     state.res = hasDeviceInfoImport && state.res;
     state.hasHardError = !hasDeviceInfoImport || state.hasHardError;
-    // The level-form desugar may lower to apiAvailable(...) (issue 824),
-    // which lives in ohos.base. Require the package import unconditionally.
-    auto hasApiAvailableImport = ChkIfImportApiAvailableBase(diag, importManager, iae);
-    state.res = hasApiAvailableImport && state.res;
-    state.hasHardError = !hasApiAvailableImport || state.hasHardError;
     auto argExpr = iae.GetArg()->expr.get();
     if (!argExpr || !IsValidIfAvailableLevelLiteral(*argExpr)) {
         auto lce = DynamicCast<LitConstExpr>(argExpr);
