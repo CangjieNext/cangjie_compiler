@@ -397,12 +397,17 @@ bool PluginCustomAnnoChecker::IsAnnoAPILevel(Ptr<Annotation> anno, [[maybe_unuse
         return false;
     }
     auto target = anno->baseExpr ? anno->baseExpr->GetTarget() : nullptr;
-    if (target) {
-        // With semantic info, check by target and its package name.
-        return target->GetFullPackageName() == PKG_NAME_OHOS_LABELS && target->outerDecl &&
+    if (target && target->outerDecl) {
+        // With full semantic info, check by target and its package name.
+        return target->GetFullPackageName() == PKG_NAME_OHOS_LABELS &&
             target->outerDecl->identifier == APILEVEL_ANNO_NAME;
     }
-    // Without semantic info, check by annotation name only.
+    // Fallback: when annotation typecheck failed (e.g. legacy integer-form
+    // @!APILevel[20] fails arg matching before the constructor target's
+    // outerDecl can be resolved), 'target' or 'target->outerDecl' may be null
+    // even though baseExpr still points at the right symbol. Fall back to the
+    // annotation identifier so the plugin checker can still inspect and report
+    // on these malformed usages (e.g. sema_apilevel_integer_form_unsupported).
     return anno->identifier == APILEVEL_ANNO_NAME;
 }
 
@@ -442,8 +447,30 @@ void PluginCustomAnnoChecker::ParseAPILevelArgs(
     const Decl& decl, const Annotation& anno, PluginCustomAnnoInfo& annoInfo)
 {
     bool sinceProvided = false;
+    bool integerFormDiagFired = false;
     for (size_t i = 0; i < anno.args.size(); ++i) {
         std::string_view argName = anno.args[i]->name.Val();
+        // Detect legacy integer-form usage:
+        //   @!APILevel[20]            (positional integer, argName is empty)
+        //   @!APILevel[since: 20]     (named-since with integer value)
+        // Issue #824 dropped support for integer version literals on @!APILevel;
+        // emit a dedicated, migration-friendly diagnostic so users see what to do
+        // rather than relying on the indirect 'sema_need_named_argument' /
+        // 'sema_mismatched_types' that fires from generic arg matching.
+        if (auto lce = DynamicCast<LitConstExpr>(anno.args[i]->expr.get());
+            lce && lce->kind == LitConstKind::INTEGER &&
+            (argName.empty() || argName == SINCE_IDENTIFIER)) {
+            // Anchor the new diag at the '@!APILevel' annotation begin (not the arg
+            // literal) to avoid being dedup'd by the diagnostic engine against
+            // 'sema_need_named_argument', which fires at the same arg-literal range
+            // and severity. equalFunc in DiagnosticEngine.h treats two errors at the
+            // same range as duplicates regardless of DiagKind/message, so reusing the
+            // arg position silently drops our migration hint for positional usage.
+            diag.DiagnoseRefactor(
+                DiagKindRefactor::sema_apilevel_integer_form_unsupported, anno);
+            integerFormDiagFired = true;
+            continue;  // skip generic parse path; it would only emit noisier diags
+        }
         if (argName == SINCE_IDENTIFIER) {
             sinceProvided = true;
         }
@@ -457,11 +484,12 @@ void PluginCustomAnnoChecker::ParseAPILevelArgs(
         }
     }
     // 'since' is the only argument without a default. Emit the missing-arg warning
-    // only when the user did not write any 'since:' at all. When 'since:' was
-    // written but its value failed to parse, ParseSince has already reported a
-    // precise sema_apilevel_invalid_version_format ERROR; re-emitting a generic
-    // missing-arg warning here would just add noise.
-    if (!sinceProvided && annoInfo.since.IsZero()) {
+    // only when the user did not write any 'since:' at all and no integer-form diag
+    // already fired. When 'since:' was written but its value failed to parse
+    // (invalid_version_format) or was the legacy integer literal (integer_form_unsupported),
+    // a more precise ERROR has already been reported; re-emitting a generic missing-arg
+    // warning here would just add noise.
+    if (!sinceProvided && annoInfo.since.IsZero() && !integerFormDiagFired) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_apilevel_missing_arg, anno.begin, "since!: String");
     }
 }
