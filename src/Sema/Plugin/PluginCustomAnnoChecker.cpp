@@ -765,10 +765,10 @@ std::function<VisitAction(Ptr<Node>)> PluginCustomAnnoChecker::MakeIfBranchCheck
             CheckIfAvailableExpr(*e, ifscopeAnnoInfo);
             return VisitAction::SKIP_CHILDREN;
         }
-        if (auto ie = DynamicCast<IfExpr>(node)) {
-            CheckIfExpr(*ie, ifscopeAnnoInfo);
-            return VisitAction::SKIP_CHILDREN;
-        }
+        // Plain 'if (DeviceInfo.sdkApiVersion >= N)' or 'if (canIUse(...))' inside an
+        // @IfAvailable branch is treated as ordinary control flow, not a nested API gate.
+        // Only @IfAvailable itself opts a scope into Sema-level gate semantics; promoting
+        // arbitrary user-written runtime checks here would silently extend that contract.
         // If the reference meets the 'IfAvailable' condition but does not meet the global APILevel
         // configuration, set linkage to 'EXTERNAL_WEAK'.
         auto ret = CheckNode(node, ifscopeAnnoInfo);
@@ -790,10 +790,9 @@ std::function<VisitAction(Ptr<Node>)> PluginCustomAnnoChecker::MakeElseBranchChe
             CheckIfAvailableExpr(*e, scopeAnnoInfo);
             return VisitAction::SKIP_CHILDREN;
         }
-        if (auto ie = DynamicCast<IfExpr>(node)) {
-            CheckIfExpr(*ie, scopeAnnoInfo);
-            return VisitAction::SKIP_CHILDREN;
-        }
+        // Mirror MakeIfBranchChecker: only @IfAvailable opts a scope into gate
+        // semantics. Plain 'if (DeviceInfo.sdkApiVersion >= N)' / 'if (canIUse(...))'
+        // inside an else branch is left as ordinary control flow.
         if (!CheckNode(node, scopeAnnoInfo)) {
             return VisitAction::SKIP_CHILDREN;
         }
