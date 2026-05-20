@@ -138,39 +138,29 @@ const std::map<std::string, std::vector<std::string>> CONDITION_VALUES = {
 
 namespace {
 constexpr uint32_t VERSION_NUM_MIN = 0;
-constexpr uint32_t VERSION_NUM_MAX = 99;
-constexpr uint32_t PRE_RELEASE_SUB_NUM_MIN = 0;
-constexpr uint32_t PRE_RELEASE_SUB_NUM_MAX = 10;
 
 constexpr size_t REGEX_MAJOR_IDX = 1;
 constexpr size_t REGEX_MINOR_IDX = 2;
 constexpr size_t REGEX_PATCH_IDX = 3;
-constexpr size_t REGEX_PRE_RELEASE_TYPE_IDX = 4;
-constexpr size_t REGEX_PRE_RELEASE_NUM_IDX = 5;
-constexpr size_t REGEX_PRE_RELEASE_SUB_NUM_IDX = 6;
-constexpr size_t REGEX_NIGHTLY_DATE_IDX = 7;
 }
 
 bool ConditionalCompilationImpl::IsValidVersionNumber(uint32_t num)
 {
-    return num >= VERSION_NUM_MIN && num <= VERSION_NUM_MAX;
+    return num >= VERSION_NUM_MIN;
 }
 
 /**
  * @brief Parse version string into VersionInfo structure.
- * @param version Version string in format: x.y.z[-alpha.xy|-beta.xy|-YYYYMMDDHHMMSS]
+ * @param version Version string in format: x.y.z (only first three parts are matched)
  * @return VersionInfo structure with parsed values, isValid is false if parsing fails.
  */
 VersionInfo ConditionalCompilationImpl::ParseVersion(const std::string& version)
 {
     VersionInfo info;
-    std::regex pattern(
-        "([0-9]{1,2})[.]([0-9]{1,2})[.]([0-9]{1,2})"
-        "(?:-(alpha|beta)[.]([0-9]{1,2})([0-9]{1,2})|-([0-9]{14}))?"
-    );
+    std::regex pattern("([0-9]+)[.]([0-9]+)[.]([0-9]+)");
 
     std::smatch match;
-    if (!std::regex_match(version, match, pattern)) {
+    if (!std::regex_search(version, match, pattern)) {
         return info;
     }
 
@@ -183,23 +173,6 @@ VersionInfo ConditionalCompilationImpl::ParseVersion(const std::string& version)
         return info;
     }
 
-    if (match[REGEX_PRE_RELEASE_TYPE_IDX].matched) {
-        std::string type = match[REGEX_PRE_RELEASE_TYPE_IDX].str();
-        info.preReleaseType = (type == "alpha") ?
-            VersionInfo::PreReleaseType::ALPHA :
-            VersionInfo::PreReleaseType::BETA;
-        info.preReleaseNum = static_cast<uint32_t>(std::stoul(match[REGEX_PRE_RELEASE_NUM_IDX].str()));
-        info.preReleaseSubNum = static_cast<uint32_t>(std::stoul(match[REGEX_PRE_RELEASE_SUB_NUM_IDX].str()));
-        if (!IsValidVersionNumber(info.preReleaseNum) ||
-            info.preReleaseSubNum < PRE_RELEASE_SUB_NUM_MIN ||
-            info.preReleaseSubNum > PRE_RELEASE_SUB_NUM_MAX) {
-            return info;
-        }
-    } else if (match[REGEX_NIGHTLY_DATE_IDX].matched) {
-        info.preReleaseType = VersionInfo::PreReleaseType::NIGHTLY;
-        info.nightlyDateTime = std::stoull(match[REGEX_NIGHTLY_DATE_IDX].str());
-    }
-
     info.isValid = true;
     return info;
 }
@@ -210,8 +183,7 @@ VersionInfo ConditionalCompilationImpl::ParseVersion(const std::string& version)
  * @param right Right version to compare.
  * @return -1 if left < right, 0 if left == right, 1 if left > right.
  * 
- * Comparison priority: major.minor.patch first, then pre-release type.
- * Pre-release type priority: NONE > BETA > ALPHA > NIGHTLY.
+ * Only compares major.minor.patch, ignoring any pre-release suffixes.
  */
 int ConditionalCompilationImpl::CompareVersion(const VersionInfo& left, const VersionInfo& right)
 {
@@ -223,26 +195,6 @@ int ConditionalCompilationImpl::CompareVersion(const VersionInfo& left, const Ve
     }
     if (left.patch != right.patch) {
         return (left.patch < right.patch) ? -1 : 1;
-    }
-
-    if (left.preReleaseType != right.preReleaseType) {
-        if (left.preReleaseType == VersionInfo::PreReleaseType::NONE) return 1;
-        if (right.preReleaseType == VersionInfo::PreReleaseType::NONE) return -1;
-        return (static_cast<int>(left.preReleaseType) < static_cast<int>(right.preReleaseType)) ? -1 : 1;
-    }
-
-    if (left.preReleaseType == VersionInfo::PreReleaseType::ALPHA ||
-        left.preReleaseType == VersionInfo::PreReleaseType::BETA) {
-        if (left.preReleaseNum != right.preReleaseNum) {
-            return (left.preReleaseNum < right.preReleaseNum) ? -1 : 1;
-        }
-        if (left.preReleaseSubNum != right.preReleaseSubNum) {
-            return (left.preReleaseSubNum < right.preReleaseSubNum) ? -1 : 1;
-        }
-    } else if (left.preReleaseType == VersionInfo::PreReleaseType::NIGHTLY) {
-        if (left.nightlyDateTime != right.nightlyDateTime) {
-            return (left.nightlyDateTime < right.nightlyDateTime) ? -1 : 1;
-        }
     }
 
     return 0;
@@ -356,32 +308,13 @@ std::string ConditionalCompilationImpl::GetOSType() const
 
 /**
  * @brief Get current cjc version string.
- * @return Version string in format: x.y.z[-alpha.xy|-beta.xy|-YYYYMMDDHHMMSS]
+ * @return Version string in format: x.y.z
  */
 std::string ConditionalCompilationImpl::GetCJCVersion() const
 {
-    std::string version = std::to_string(cjcVersionInfo.major) + "." +
-                          std::to_string(cjcVersionInfo.minor) + "." +
-                          std::to_string(cjcVersionInfo.patch);
-    
-    switch (cjcVersionInfo.preReleaseType) {
-        case VersionInfo::PreReleaseType::ALPHA:
-            version += "-alpha." + std::to_string(cjcVersionInfo.preReleaseNum) +
-                       std::to_string(cjcVersionInfo.preReleaseSubNum);
-            break;
-        case VersionInfo::PreReleaseType::BETA:
-            version += "-beta." + std::to_string(cjcVersionInfo.preReleaseNum) +
-                       std::to_string(cjcVersionInfo.preReleaseSubNum);
-            break;
-        case VersionInfo::PreReleaseType::NIGHTLY:
-            version += "-" + std::to_string(cjcVersionInfo.nightlyDateTime);
-            break;
-        case VersionInfo::PreReleaseType::NONE:
-        default:
-            break;
-    }
-    
-    return version;
+    return std::to_string(cjcVersionInfo.major) + "." +
+           std::to_string(cjcVersionInfo.minor) + "." +
+           std::to_string(cjcVersionInfo.patch);
 }
 
 std::optional<std::string> ConditionalCompilationImpl::GetUserDefinedInfoByName(const std::string& name) const
@@ -426,11 +359,8 @@ bool ConditionalCompilationImpl::ConditionCheck(
     }
     // Check `cjc_version`.
     if (conditionStr == CJC_VERSION_STR) {
-        std::regex cjcVersionRegex(
-            "[0-9]{1,2}[.][0-9]{1,2}[.][0-9]{1,2}"
-            "(?:-(alpha|beta)[.][0-9]{1,2}[0-9]{1,2}|-[0-9]{14})?"
-        );
-        if (!std::regex_match(right, cjcVersionRegex)) {
+        std::regex cjcVersionRegex("[0-9]+[.][0-9]+[.][0-9]+");
+        if (!std::regex_search(right, cjcVersionRegex)) {
             (void)ci->diag.DiagnoseRefactor(
                 DiagKindRefactor::conditional_compilation_not_support_cjc_version_format, begin);
             return false;

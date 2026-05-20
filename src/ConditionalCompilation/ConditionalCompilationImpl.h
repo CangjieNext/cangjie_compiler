@@ -31,27 +31,12 @@ namespace Cangjie::AST {
 /**
  * @brief Version information structure for cjc_version condition compilation.
  * 
- * Supports four version formats:
- * 1. LTS version: x.0.z (x, z: 0-99)
- * 2. STS version: x.y.z (y: 1-99, x, z: 0-99)
- * 3. Iteration version: x.y.z-alpha/beta.xy (x: iteration number 0-99, y: sub-version 0-10)
- * 4. Nightly version: x.y.z-YYYYMMDDHHMMSS
+ * Supports version format: x.y.z (x, y, z: 0-99)
  */
 struct VersionInfo {
     uint32_t major = 0;
     uint32_t minor = 0;
     uint32_t patch = 0;
-
-    enum class PreReleaseType {
-        NONE,
-        ALPHA,
-        BETA,
-        NIGHTLY
-    } preReleaseType = PreReleaseType::NONE;
-
-    uint32_t preReleaseNum = 0;
-    uint32_t preReleaseSubNum = 0;
-    uint64_t nightlyDateTime = 0;
 
     bool isValid = false;
 };
