@@ -215,6 +215,8 @@ private:
     flatbuffers::Offset<NodeFormat::File> SerializeFile(AstFile file);
     flatbuffers::Offset<NodeFormat::ImportSpec> SerializeImportSpec(AstImportSpec importSpec);
     flatbuffers::Offset<NodeFormat::ImportContent> SerializeImportContent(const AST::ImportContent& content);
+    flatbuffers::Offset<NodeFormat::MacroImportSpec> SerializeMacroImportSpec(const AST::MacroImportSpec& spec);
+    flatbuffers::Offset<NodeFormat::MacroImportList> SerializeMacroImportList(const AST::MacroImportList& list);
     flatbuffers::Offset<NodeFormat::PackageSpec> SerializePackageSpec(AstPackageSpec packageSpec);
     flatbuffers::Offset<NodeFormat::FeaturesDirective> SerializeFeaturesDirective(AstFeaturesDirective featureDirective);
     flatbuffers::Offset<NodeFormat::FeaturesSet> SerializeFeaturesSet(const AST::FeaturesSet& fSet);

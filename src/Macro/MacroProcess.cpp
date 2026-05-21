@@ -298,6 +298,33 @@ void GenerateMacroCallFile(const std::vector<Ptr<File>>& fileSucVec,
         auto nodes = macroCallMap.at(file);
         auto curFilePosBase = file->begin;
         auto fileID = sm.AddSource(file->macroCallFilePath, "");
+
+        // Add macro-imported statements after the package statement.
+        // Semantic rule 2: macro import takes effect for downstream packages including
+        // downstream macro packages (the .macrocall file exists only when the file has macro
+        // calls, so a downstream macro package that invokes macros is injected here too).
+        // Rule 1 (a package's own macro imports are not imported for itself) is upheld by
+        // CollectTransitiveMacroDeps pre-seeding visited with the package itself, so the
+        // injected set never includes the current package's own macroImports.
+        // GetMacroImportStrings() already filtered out entries whose @When condition is
+        // false in the current target, so emit a bare `import xxx` (no @When, no modifier).
+        bool skipLeadingNewline = false;
+        if (ci.importManager && !ci.importManager->GetMacroImportStrings().empty()) {
+            std::string importHeader;
+            for (const auto& entry : ci.importManager->GetMacroImportStrings()) {
+                importHeader += "import " + entry + "\n";
+            }
+            if (file->package) {
+                // Write package statement first, then import statements
+                content = sm.GetContentBetween(curFilePosBase, file->package->end);
+                (void)sm.AppendSource(file->macroCallFilePath, content, isCjmpFile);
+                (void)sm.AppendSource(file->macroCallFilePath, "\n", isCjmpFile);
+                curFilePosBase = file->package->end;
+            }
+            (void)sm.AppendSource(file->macroCallFilePath, importHeader, isCjmpFile);
+            skipLeadingNewline = true;
+        }
+
         for (auto& node : nodes) {
             auto pMacroInvocation = node->GetInvocation();
             if (!pMacroInvocation) {
@@ -305,6 +332,10 @@ void GenerateMacroCallFile(const std::vector<Ptr<File>>& fileSucVec,
             }
             // Append source code between macroCalls to newFile.
             content = sm.GetContentBetween(curFilePosBase, node->begin);
+            if (skipLeadingNewline && !content.empty() && content[0] == '\n') {
+                content = content.substr(1);
+                skipLeadingNewline = false;
+            }
             (void)sm.AppendSource(file->macroCallFilePath, content, isCjmpFile);
             curFilePosBase = node->end;
             file->macroCallPosBase = sm.GetSource(fileID).GetEndPos();

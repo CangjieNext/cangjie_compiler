@@ -703,7 +703,49 @@ table Package {
   allFileInfo: [FileInfo];
   // record all std full package name dependencies.
   allDependentStdPkgs:[string];
+  // macroImports declarations in a macro package (no importModifier allowed). Each
+  // entry is one macro import statement (single form `macro import xxx` or block form
+  // `macro { ... }`) as a MacroImportList node — a vector so multiple statements each
+  // keep their own macroPos / block braces (positions are never overwritten). Each
+  // MacroImportSpec inside holds flat ImportContent fields + whenExprIndices, a vector
+  // of indices into allExprs for the @When condExprs (one @When → one index; a spec may
+  // carry multiple @When, mirroring the AST annotations vector). The downstream reads
+  // the structure directly (no re-parse) and evaluates @When via EvalNodeCondition<
+  // MacroImportSpec> (which walks the node's annotations).
+  macroImports: [MacroImportList];
   options: CompilationOptions;
+}
+
+// One macro import statement (single form `macro import xxx`) or one item inside a
+// `macro { }` block. Carries no modifier (macro import forbids re-export). Flat
+// ImportContent fields mirror ImportSpec (single/alias/all only — macro import never
+// produces multi-form, so no items sub-table). whenExprIndices holds the indices into
+// the package's allExprs for the @When annotation condExprs — a vector so a spec may
+// carry more than one @When (mirrors the AST `annotations` vector that
+// EvalNodeCondition<MacroImportSpec> walks); empty when the item has no @When (single
+// form or a bare block item).
+table MacroImportSpec {
+  begin:Position;
+  end:Position;
+  importPos:Position;
+  prefixPaths:[string];
+  identifier:string;
+  asIdentifier:string;
+  hasDoubleColon:bool;
+  isDecl:bool=false;
+  whenExprIndices:[uint32];  // indices into allExprs; empty if no @When
+}
+
+// Top-level container of all macro import declarations in a macro package.
+// lcurlPos/rcurlPos are default for the single form (macro import xxx); set for the
+// block form (macro { ... }). items preserve source order.
+table MacroImportList {
+  begin:Position;
+  end:Position;
+  macroPos:Position;
+  lcurlPos:Position;
+  rcurlPos:Position;
+  items:[MacroImportSpec];
 }
 
 root_type Package;

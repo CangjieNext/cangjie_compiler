@@ -20,6 +20,7 @@
 #include "cangjie/Basic/Version.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Option/Option.h"
+#include "cangjie/Parse/Parser.h"
 #include "cangjie/Utils/FileUtil.h"
 #include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
 
@@ -646,6 +647,25 @@ void ConditionalCompilation::HandleConditionalCompilation(const Package& root) c
 void ConditionalCompilation::HandleFileConditionalCompilation(File& file) const
 {
     impl->HandleFileConditionalCompilation(file);
+}
+
+bool ConditionalCompilation::EvalImportWhenCond(ImportSpec& import) const
+{
+    // Reuse the normal-import @When evaluator so semantics stay identical to ordinary
+    // imports (semantic rule 2). EvalNodeCondition walks the node's annotations,
+    // evaluates each @When's condExpr in the current target's context, erases the false
+    // ones, and returns whether the node survives. This is the same call the
+    // CONDITION_COMPILE stage makes for ordinary imports (HandleFileConditionalCompilation).
+    return impl->EvalNodeCondition<ImportSpec>(&import);
+}
+
+bool ConditionalCompilation::EvalMacroImportWhenCond(MacroImportSpec& spec) const
+{
+    // Same as EvalImportWhenCond but for the structured macro-import node. The
+    // EvalNodeCondition template only depends on node->annotations (it EraseIf's
+    // @When entries by condExpr), so it works on MacroImportSpec with no specialization
+    // — MacroImportSpec.annotations carries @When exactly like ImportSpec.annotations.
+    return impl->EvalNodeCondition<MacroImportSpec>(&spec);
 }
 
 std::optional<std::string> ConditionalCompilationImpl::GetRelatedInfo(const std::string& target) const

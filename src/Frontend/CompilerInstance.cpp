@@ -19,6 +19,7 @@
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Basic/Print.h"
 #include "cangjie/Basic/Version.h"
+#include "cangjie/ConditionalCompilation/ConditionalCompilation.h"
 #include "cangjie/CHIR/CHIR.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
 #include "cangjie/CHIR/Transformation/MetaTransform.h"
@@ -1143,6 +1144,14 @@ bool CompilerInstance::ImportPackages()
         }
         return true;
     }
+
+    // Inject a conditional compilation evaluator so macro-imported @When conditions
+    // (reconstructed from the structured MacroImportSpec nodes persisted to cjo, not
+    // evaluated in the macro package per semantic rule 1) can be evaluated in the
+    // downstream package's context during BuildIndex via the normal-import @When path
+    // (semantic rule 2).
+    ConditionalCompilation macroImportCc{this};
+    importManager->SetConditionalCompilation(&macroImportCc);
 
     if (!importManager->BuildIndex(cangjieModules, invocation.globalOptions, pkgs)) {
         return false;

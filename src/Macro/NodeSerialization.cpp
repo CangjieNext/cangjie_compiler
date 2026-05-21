@@ -107,8 +107,18 @@ flatbuffers::Offset<NodeFormat::PackageSpec> NodeWriter::SerializePackageSpec(As
         : packageSpec->modifier->modifier == TokenKind::INTERNAL  ? NodeFormat::AccessibleKind_ACCESSIBLE_INTERNAL
         : packageSpec->modifier->modifier == TokenKind::PROTECTED ? NodeFormat::AccessibleKind_ACCESSIBLE_PROTECTED
                                                                   : NodeFormat::AccessibleKind_ACCESSIBLE_PUBLIC;
+    // Structured scheme: serialize the macroImports vector (one MacroImportList per
+    // statement) for lossless round-trip (parseProgram/toTokens). @When is kept as an
+    // Annotation node (condExpr AST).
+    std::vector<flatbuffers::Offset<NodeFormat::MacroImportList>> stmtOffsets;
+    stmtOffsets.reserve(packageSpec->macroImports.size());
+    for (const auto& stmt : packageSpec->macroImports) {
+        stmtOffsets.push_back(SerializeMacroImportList(*stmt));
+    }
+    auto vmacroImports = builder.CreateVector(stmtOffsets);
     return NodeFormat::CreatePackageSpec(builder, paNodeBase, &macroPos, &packagePos, prefixPaths, prefixPoses,
-        prefixDotPoses, packageName, &packageNamePos, accessible, packageSpec->hasMacro, packageSpec->hasDoubleColon);
+        prefixDotPoses, packageName, &packageNamePos, accessible, packageSpec->hasMacro,
+        packageSpec->hasDoubleColon, vmacroImports);
 }
 
 flatbuffers::Offset<NodeFormat::ImportContent> NodeWriter::SerializeImportContent(const AST::ImportContent& content)
@@ -158,6 +168,34 @@ flatbuffers::Offset<NodeFormat::ImportSpec> NodeWriter::SerializeImportSpec(AstI
         NodeFormat::Position(importSpec->importPos.fileID, importSpec->importPos.line, importSpec->importPos.column);
     auto content = SerializeImportContent(importSpec->content);
     return NodeFormat::CreateImportSpec(builder, imNodeBase, reExport, &importPos, content);
+}
+
+flatbuffers::Offset<NodeFormat::MacroImportSpec> NodeWriter::SerializeMacroImportSpec(const AST::MacroImportSpec& spec)
+{
+    auto nodeBase = SerializeNodeBase(&spec);
+    auto importPos =
+        NodeFormat::Position(spec.importPos.fileID, spec.importPos.line, spec.importPos.column);
+    auto content = SerializeImportContent(spec.content);
+    std::vector<flatbuffers::Offset<NodeFormat::Annotation>> annosVec;
+    for (const auto& item : spec.annotations) {
+        annosVec.emplace_back(SerializeAnnotation(item.get()));
+    }
+    auto annos = builder.CreateVector(annosVec);
+    return NodeFormat::CreateMacroImportSpec(builder, nodeBase, &importPos, content, annos);
+}
+
+flatbuffers::Offset<NodeFormat::MacroImportList> NodeWriter::SerializeMacroImportList(const AST::MacroImportList& list)
+{
+    auto nodeBase = SerializeNodeBase(&list);
+    auto macroPos = NodeFormat::Position(list.macroPos.fileID, list.macroPos.line, list.macroPos.column);
+    auto lcurlPos = NodeFormat::Position(list.lcurlPos.fileID, list.lcurlPos.line, list.lcurlPos.column);
+    auto rcurlPos = NodeFormat::Position(list.rcurlPos.fileID, list.rcurlPos.line, list.rcurlPos.column);
+    std::vector<flatbuffers::Offset<NodeFormat::MacroImportSpec>> itemsVec;
+    for (const auto& item : list.items) {
+        itemsVec.emplace_back(SerializeMacroImportSpec(*item));
+    }
+    auto items = builder.CreateVector(itemsVec);
+    return NodeFormat::CreateMacroImportList(builder, nodeBase, &macroPos, &lcurlPos, &rcurlPos, items);
 }
 
 flatbuffers::Offset<NodeFormat::File> NodeWriter::SerializeFile(AstFile file)
