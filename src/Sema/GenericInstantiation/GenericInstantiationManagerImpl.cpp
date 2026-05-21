@@ -817,7 +817,8 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
     if (shouldIgnore) {
         return &fd;
     }
-
+    /// -------------------------------------------- start new logic --------------------------------------------//
+    Ptr<FuncDecl> newLogicResult = nullptr;
     OverrideFunctionResolver resolver(typeManager);
     MemberFuncsWithInstTys funcs = resolver.GetInstMemberFuncWithInstTy(ty, fd.identifier);
     TypeSubst typeMapping = GenerateTypeMappingByTy(fd.outerDecl->GetTy(), &targetBaseTy);
@@ -837,10 +838,57 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
             }
         }
         if (isInDiffDecl && withSameTy) {
-            return implFunc;
+            newLogicResult = implFunc;
+            break;
+            /// temp uncode: return implFunc;
         }
     }
-    return &fd;
+    newLogicResult = newLogicResult == nullptr ? &fd : newLogicResult;
+    // temp uncode: return &fd;
+    /// -------------------------------------------- end new logic --------------------------------------------//
+
+    /// -------------------------------------------- start old logic --------------------------------------------//
+    // Get base ty: primitive ty, non-generic ty or generic ty of instantiated ty.
+    auto baseTy = typeManager.GetTyForExtendMap(ty);
+    auto genericFd = StaticCast<FuncDecl*>(GetGeneralDecl(fd, true));
+    if (genericFd->genericDecl) {
+        genericFd = StaticCast<FuncDecl*>(genericFd->genericDecl);
+    }
+
+    auto keyPair = std::make_pair(baseTy, genericFd);
+    auto foundAbstFunc = abstractFuncToDeclMap.find(keyPair);
+    if (foundAbstFunc == abstractFuncToDeclMap.end()) {
+        if (&fd != newLogicResult) {
+            Println("!!!!Augus Jan: result not same as new logic, old logic:", fd.outerDecl->identifier, "new logic:", newLogicResult->outerDecl->identifier);
+        }
+        return &fd;
+    }
+    std::vector<std::pair<Ptr<AST::Decl>, size_t>> candidates;
+    bool accessByInterface = ty.IsInterface();
+    std::copy_if(foundAbstFunc->second.begin(), foundAbstFunc->second.end(), std::back_inserter(candidates),
+        [this, accessByInterface, &fd](auto& it) {
+            bool notInSameDecl = it.first != GetGeneralDecl(*fd.outerDecl, true);
+            bool instInInterface = it.first->astKind == ASTKind::INTERFACE_DECL;
+            // Member access through the interface, looking up only the implementation from the interface.
+            if (accessByInterface) {
+                return notInSameDecl && instInInterface;
+            }
+            return notInSameDecl;
+        });
+    Ptr<Decl> member = SelectTypeMatchedImplMember(ty, fd, candidates, targetBaseTy);
+    if (!member) {
+        if (&fd != newLogicResult) {
+            Println("!!!!Augus Jan: result not same as new logic, old logic:", fd.outerDecl->identifier,
+                "new logic:", newLogicResult->outerDecl->identifier);
+        }
+        return &fd;
+    }
+    auto ret = As<ASTKind::FUNC_DECL>(GetUsedMemberDecl(*member, fd.isGetter));
+    if (ret != newLogicResult) {
+        Println("!!!!Augus Jan: result not same as new logic, old logic:", ret->outerDecl->identifier,
+            "new logic:", newLogicResult->outerDecl->identifier);
+    }
+    return ret;
 }
 
 Ptr<AST::Decl> GIM::GenericInstantiationManagerImpl::ReinstantiatedPartialMemberDecl(
