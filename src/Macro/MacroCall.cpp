@@ -9,6 +9,8 @@
  *
  * This file implements the MacroCall.
  */
+#include <algorithm>
+
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Macro/TokenSerialization.h"
 #include "cangjie/Basic/DiagnosticEmitter.h"
@@ -236,6 +238,47 @@ void*** MacroCall::GetChildMessagesFromMacroContext(const char* childrenStr)
     }
     rawPtr[this->macroInfoVec.size()] = nullptr;
     return rawPtr;
+}
+
+/*
+ * 声明宏展开后需要额外导入的包
+ * 包名会被记录，在 CollectRequiredPackages 阶段统一导入
+ */
+void MacroCall::RequirePackageImport(const char* pkgNameStr)
+{
+    std::string pkgName(pkgNameStr);
+    if (pkgName.empty()) {
+        return;
+    }
+
+    if (this->requiredPackagesSet.insert(pkgName).second) {
+        this->requiredPackages.emplace_back(std::move(pkgName));
+    }
+}
+
+/*
+ * 递归收集当前宏及其所有子宏声明的依赖包
+ */
+void MacroCall::CollectRequiredPackagesRecursive(std::unordered_set<std::string>& allPkgs) const
+{
+    for (const auto& pkg : this->requiredPackages) {
+        allPkgs.insert(pkg);
+    }
+
+    for (const auto& pkg : this->parentRequiredPackages) {
+        allPkgs.insert(pkg);
+    }
+
+    for (const MacroCall* child : this->children) {
+        child->CollectRequiredPackagesRecursive(allPkgs);
+    }
+}
+
+std::vector<std::string> MacroCall::GetAllRequiredPackages() const
+{
+    std::unordered_set<std::string> pkgsSet;
+    CollectRequiredPackagesRecursive(pkgsSet);
+    return std::vector<std::string>(pkgsSet.begin(), pkgsSet.end());
 }
 }
 

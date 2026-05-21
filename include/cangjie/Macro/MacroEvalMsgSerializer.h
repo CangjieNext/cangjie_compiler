@@ -51,6 +51,16 @@ public:
     static void DeSerializeAssertParentsFromResult(
         std::vector<std::string>& assertParents, const std::vector<uint8_t>& bufferData);
     static void DeSerializeDiagsFromResult(std::vector<Diagnostic>& diags, const std::vector<uint8_t>& bufferData);
+
+    // 新增：依赖包反序列化
+    static void DeSerializeRequiredPkgsFromCall(
+        std::vector<std::string>& requiredPkgs,
+        std::vector<std::string>& parentRequiredPkgs,
+        const MacroMsgFormat::MacroCall& callFmt);
+    static void DeSerializeRequiredPkgsFromResult(
+        std::vector<std::string>& requiredPkgs,
+        const std::vector<uint8_t>& bufferData);
+
     MacroEvalMsgSerializer() noexcept {};
 
 private:

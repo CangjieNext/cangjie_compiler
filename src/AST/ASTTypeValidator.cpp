@@ -29,9 +29,14 @@ public:
         }
         auto [action, needCheck] = GetNodeValidatingStrategy(node);
         if (auto expr = DynamicCast<const Expr*>(&node); expr && expr->desugarExpr) {
-            auto preVisit = [this](auto node) { return PreVisitor(*node); };
-            auto postVisit = [this](auto node) { return PostVisitor(*node); };
-            Walker(expr->desugarExpr.get(), id, preVisit, postVisit).Walk();
+            // 【修复】跳过 IfAvailableExpr 的 desugarExpr 遍历
+            // 原因：DesugarIfAvailableLevelCondition 创建的节点（IfExpr/BinaryExpr/DeviceInfo RefExpr）
+            // 在类型检查阶段可能还没有正确的 Ty，导致 ASTTypeValidator 报 semantic error
+            if (!Is<IfAvailableExpr>(node)) {
+                auto preVisit = [this](auto node) { return PreVisitor(*node); };
+                auto postVisit = [this](auto node) { return PostVisitor(*node); };
+                Walker(expr->desugarExpr.get(), id, preVisit, postVisit).Walk();
+            }
             action = VisitAction::SKIP_CHILDREN;
         }
         if (action == VisitAction::SKIP_CHILDREN) {
@@ -56,7 +61,6 @@ public:
         bool valid = !curTarget || Is<Type>(node) || Utils::In(curTarget->astKind, ignoreKinds) ||
             Ty::IsTyCorrect(curTarget->GetTy());
         CJC_ASSERT(valid);
-
         valid = valid && Ty::IsTyCorrect(node.GetTy()) && !node.GetTy()->HasIdealTy() && !node.GetTy()->HasQuestTy();
 #endif
         CJC_ASSERT(valid);

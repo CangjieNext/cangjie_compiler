@@ -12,6 +12,7 @@
 #ifndef CANGJIE_MACROCALL_H
 #define CANGJIE_MACROCALL_H
 
+#include <unordered_set>
 #include <vector>
 #include <variant>
 
@@ -188,6 +189,25 @@ public:
      */
     void*** GetChildMessagesFromMacroContext(const char* childrenStr);
 
+    /**
+     * @brief 声明宏展开后需要额外导入的包
+     *
+     * 在宏定义内部调用此接口，告诉编译器在宏展开后的代码中
+     * 需要自动添加对应的 import 语句。
+     *
+     * @param packageName 需要导入的包全名，如 "std.collection.HashMap" 或 "packageA"
+     */
+    void RequirePackageImport(const char* packageName);
+
+    /**
+     * @brief 获取当前宏及其所有子宏声明的依赖包
+     *
+     * 递归遍历宏调用树，收集所有 requiredPackages。
+     *
+     * @return 依赖包名称列表（已去重）
+     */
+    std::vector<std::string> GetAllRequiredPackages() const;
+
     PtrType replaceLoc; /**< Macro replace target Location */
     std::vector<MacroCall*> children;
 
@@ -224,6 +244,12 @@ public:
     std::vector<ItemInfo> items;                // MacroContext: setItem.
     std::vector<ChildMessage> childMessages;    // MacroContext: getChildMessages.
     std::vector<std::string> assertParents;     // MacroContext: assertParentContext failed parentName.
+
+    // ========== 新增：依赖包声明字段 ==========
+    std::vector<std::string> requiredPackages;       // 宏执行时声明的依赖包列表
+    std::unordered_set<std::string> requiredPackagesSet; // 用于 O(1) 去重查找
+    std::vector<std::string> parentRequiredPackages; // 父宏声明的依赖包（LSP场景）
+
 private:
     MacroKind kind;
     Ptr<AST::MacroInvocation> invocation{nullptr};
@@ -249,6 +275,11 @@ private:
     void TraverseMacroNode(
         MacroCall* macroNode, const std::string& childName, std::vector<std::vector<void*>>& macroInfos);
     bool TraverseParentMacroNode(MacroCall* mcNode, const std::string& parentName);
+
+    /*
+     * Recursive function to collect required packages.
+     */
+    void CollectRequiredPackagesRecursive(std::unordered_set<std::string>& allPkgs) const;
 };
 
 }

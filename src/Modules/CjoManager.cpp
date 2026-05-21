@@ -266,6 +266,24 @@ bool CjoManager::LoadPackageHeader(const std::string& fullPackageName, const std
     return true;
 }
 
+void CjoManager::LoadPackageDecls(const std::string& fullPackageName) const
+{
+    auto pkgInfo = impl->GetPackageInfo(fullPackageName);
+    if (pkgInfo == nullptr || pkgInfo->loader == nullptr) {
+        return;
+    }
+    pkgInfo->loader->LoadPackageDecls();
+}
+
+void CjoManager::LoadRefs(const std::string& fullPackageName) const
+{
+    auto pkgInfo = impl->GetPackageInfo(fullPackageName);
+    if (pkgInfo == nullptr || pkgInfo->loader == nullptr) {
+        return;
+    }
+    pkgInfo->loader->LoadRefs();
+}
+
 bool CjoManagerImpl::IsReExportBy(const std::string& srcPackage, const std::string& reExportPackage) const
 {
     auto info = GetPackageInfo(srcPackage);

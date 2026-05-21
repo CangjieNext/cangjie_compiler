@@ -28,16 +28,11 @@ namespace Cangjie {
  * Collect macro infos per package.
  */
 struct MacroCollector {
-    // macro definitions.
     std::vector<Ptr<AST::MacroDecl>> macroDefFuncs;
-    // macro invocations.
     std::vector<MacroCall> macCalls;
-    // current pacakge who uses macros.
     Ptr<AST::Package> curPkg;
-    // imported macro pacakges.
     std::unordered_set<Ptr<AST::Package>> importedMacroPkgs;
 
-    // Clear previous info when we expand macros in a different package.
     void clear()
     {
         macroDefFuncs.clear();

@@ -332,6 +332,48 @@ public:
     void AddUsedMacroDecls(const Ptr<const AST::File> file, Ptr<const AST::Decl> decl);
     std::map<std::string, std::set<Ptr<const AST::Decl>, AST::CmpNodeByPos>>& GetUsedMacroDecls(const AST::File& file);
 
+    /**
+     * @brief 添加宏展开过程中声明的依赖包
+     *
+     * @param packages 宏声明的依赖包集合
+     */
+    void AddMacroRequiredPackages(const std::unordered_set<std::string>& packages);
+
+    /**
+     * @brief 获取宏声明的依赖包列表
+     */
+    const std::unordered_set<std::string>& GetMacroRequiredPackages() const
+    {
+        return macroRequiredPkgs;
+    }
+
+    /**
+     * @brief 检查包是否通过宏依赖声明导入
+     */
+    bool IsMacroRequiredPackage(const std::string& packageName) const
+    {
+        return macroRequiredPkgs.find(packageName) != macroRequiredPkgs.end();
+    }
+
+    /**
+     * @brief 动态导入宏声明的依赖包（在宏展开后调用）
+     *
+     * 将包的符号添加到 importedDeclsMap，使得后续的符号查找能够找到这些声明。
+     * 这个方法模拟 IMPORT_PACKAGE 阶段的导入逻辑，但可以在 MACRO_EXPAND 后调用。
+     *
+     * @param fullPackageName 完整包名，如 "std.deriving.Derive"
+     * @return bool 导入是否成功
+     */
+    bool ImportMacroRequiredPackage(const std::string& fullPackageName);
+
+    /**
+     * @brief 批量动态导入宏声明的依赖包
+     *
+     * @param packages 包名列表
+     * @return bool 是否全部导入成功
+     */
+    bool ImportMacroRequiredPackages(const std::vector<std::string>& packages);
+
 public:
     /**
      * Whether import prelude libraries by default, default value is false, and
@@ -397,6 +439,8 @@ private:
 
     /** Direct imported macro packages. */
     std::unordered_set<Ptr<AST::Package>> directMacroDeps;
+    /** 新增：宏展开声明的依赖包 */
+    std::unordered_set<std::string> macroRequiredPkgs;
     /** Map of fullPackageName -> imported decl to the 'ImportSpec' which imports the decl. */
     std::unordered_map<std::string, DeclImportsMap> declsImportedByNodeMap;
     /** NOTE: Collect imported alias decl and alias-import only. */
@@ -473,6 +517,14 @@ private:
     bool IsDeclAccessible(const AST::File& file, AST::Decl& decl) const;
     const Ptr<AST::Type> FindImplmentInterface(
         const AST::File& file, const AST::Decl& member, const Ptr<AST::Type>& id) const;
+
+    /**
+     * @brief 将包的符号添加到 importedDeclsMap（动态导入的核心逻辑）
+     *
+     * @param fullPackageName 完整包名
+     */
+    void AddPackageSymbolsToImportMap(const std::string& fullPackageName);
+
     /**
      * Check if BuildIndex has been called.
      */

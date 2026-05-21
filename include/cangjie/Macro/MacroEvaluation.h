@@ -100,6 +100,9 @@ private:
     std::unordered_map<std::string, bool> usedMacroPkgs;    // for compiled macro
     bool useChildProcess{false};
 
+    // ========== 新增：依赖包收集与处理 ==========
+    std::unordered_set<std::string> collectedRequiredPkgs;  // 收集到的所有依赖包
+
     // Begin: for process isolation in lsp.
     static MacroEvalMsgSerializer msgSlzer;
     std::list<std::unique_ptr<AST::MacroExpandDecl>> macDecls;
@@ -211,6 +214,11 @@ private:
     void ProcessNewTokens(MacroCall& macCall);
 
     void CollectMacroLibs();
+
+    /**
+     * Collect required packages declared by macros.
+     */
+    void CollectRequiredPackages();
 };
 } // namespace Cangjie
 

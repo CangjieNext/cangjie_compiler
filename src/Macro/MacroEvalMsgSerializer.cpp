@@ -126,8 +126,13 @@ static auto CreateMacroCall(FlatBufferBuilder& builder, const Cangjie::MacroCall
     auto bPos = MacroMsgFormat::Position(beginPos.fileID, beginPos.line, beginPos.column);
     auto ePos = MacroMsgFormat::Position(endPos.fileID, endPos.line, endPos.column);
 
+    // 新增：序列化依赖包
+    auto requiredPkgs = builder.CreateVectorOfStrings(macCall.requiredPackages);
+    auto parentRequiredPkgs = builder.CreateVectorOfStrings(macCall.parentRequiredPackages);
+
     return CreateMacroCall(builder, id, inv.hasAttr, args, attrs, parentNames, childMsges,
-                           methodName, packageName, libPath, &bPos, &ePos);
+                           methodName, packageName, libPath, &bPos, &ePos,
+                           requiredPkgs, parentRequiredPkgs);
 }
 
 static auto CreateItemsVecFromRecordMacroInfo(
@@ -348,8 +353,13 @@ bool MacroEvalMsgSerializer::SerializeMacroCallResultMsg(const MacroCall& macCal
     auto diags = macCall.ci->diag.GetCategoryDiagnostic(DiagCategory::PARSE);
     auto diagnostics = builder.CreateVector(CreateDiagVec(builder, diags));
 
+    // 新增：序列化返回的依赖包
+    auto allRequiredPkgs = macCall.GetAllRequiredPackages();
+    auto requiredPkgs = builder.CreateVectorOfStrings(allRequiredPkgs);
+
     auto macroResultCont =
-        CreateMacroResult(builder, id, static_cast<uint8_t>(macCall.status), tks, items, assertParents, diagnostics);
+        CreateMacroResult(builder, id, static_cast<uint8_t>(macCall.status), tks, items, assertParents, diagnostics,
+                          requiredPkgs);
     auto macroMsg = CreateMacroMsg(builder, MsgContent_macroResult, macroResultCont.Union());
     builder.Finish(macroMsg);
     bufferData.assign(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
@@ -482,6 +492,44 @@ void MacroEvalMsgSerializer::DeSerializeAssertParentsFromResult(
         assertParents.resize(num);
         for (uoffset_t i = 0; i < num; i++) {
             assertParents[i] = result->assertParents()->Get(i)->str();
+        }
+    }
+}
+
+void MacroEvalMsgSerializer::DeSerializeRequiredPkgsFromCall(
+    std::vector<std::string>& requiredPkgs,
+    std::vector<std::string>& parentRequiredPkgs,
+    const MacroMsgFormat::MacroCall& callFmt)
+{
+    // 反序列化当前宏的依赖包
+    if (callFmt.requiredPackages() != nullptr) {
+        uoffset_t num = callFmt.requiredPackages()->size();
+        requiredPkgs.resize(num);
+        for (uoffset_t i = 0; i < num; i++) {
+            requiredPkgs[i] = callFmt.requiredPackages()->Get(i)->str();
+        }
+    }
+
+    // 反序列化父宏传递的依赖包
+    if (callFmt.parentRequiredPackages() != nullptr) {
+        uoffset_t num = callFmt.parentRequiredPackages()->size();
+        parentRequiredPkgs.resize(num);
+        for (uoffset_t i = 0; i < num; i++) {
+            parentRequiredPkgs[i] = callFmt.parentRequiredPackages()->Get(i)->str();
+        }
+    }
+}
+
+void MacroEvalMsgSerializer::DeSerializeRequiredPkgsFromResult(
+    std::vector<std::string>& requiredPkgs,
+    const std::vector<uint8_t>& bufferData)
+{
+    auto result = GetMacroMsg(bufferData.data())->content_as_macroResult();
+    if (result != nullptr && result->requiredPackages() != nullptr) {
+        uoffset_t num = result->requiredPackages()->size();
+        requiredPkgs.resize(num);
+        for (uoffset_t i = 0; i < num; i++) {
+            requiredPkgs[i] = result->requiredPackages()->Get(i)->str();
         }
     }
 }

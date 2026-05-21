@@ -1103,6 +1103,8 @@ void MacroEvaluation::EvalMacros()
 #endif
     CreateMacroCallsTree();
     EvalMacroCalls();
+    // 新增：收集宏声明的依赖包
+    CollectRequiredPackages();
     ReEvalAfterEvalMacroCalls();
     Utils::ProfileRecorder::Stop("MacroExpand", "Evaluate Macros");
 }
@@ -1150,5 +1152,23 @@ void MacroEvaluation::Evaluate()
 #endif
     if (findMethodFlag) {
         EvalMacros();
+    }
+}
+
+void MacroEvaluation::CollectRequiredPackages()
+{
+    collectedRequiredPkgs.clear();
+
+    for (const auto& macCall : macroCollector->macCalls) {
+        auto pkgs = macCall.GetAllRequiredPackages();
+        for (const auto& pkg : pkgs) {
+            collectedRequiredPkgs.insert(pkg);
+        }
+    }
+
+    if (!collectedRequiredPkgs.empty() && ci->importManager) {
+        ci->importManager->AddMacroRequiredPackages(collectedRequiredPkgs);
+        std::vector<std::string> pkgList(collectedRequiredPkgs.begin(), collectedRequiredPkgs.end());
+        ci->importManager->ImportMacroRequiredPackages(pkgList);
     }
 }
