@@ -256,6 +256,7 @@ static const std::string CJ_MACRO_ITEM_INFO = "CJ_SetItemInfo";
 static const std::string CJ_GET_CHILD_MESSAGES = "CJ_GetChildMessages";
 static const std::string CJ_CHECK_ADD_SPACE = "CJ_CheckAddSpace";
 static const std::string CJ_AST_DIAGREPORT = "CJ_AST_DiagReport";
+static const std::string CJ_REQUIRE_PACKAGE_IMPORT = "CJ_RequirePackageImport";
 
 static const std::string BLACK_BOX_NAME = "blackBox";
 // ============================ cjnative only start ==============================
@@ -476,6 +477,7 @@ enum IntrinsicKind : uint16_t {
     FFI_CJ_MACRO_ITEM_INFO,
     FFI_CJ_GET_CHILD_MESSAGES,
     FFI_CJ_CHECK_ADD_SPACE,
+    FFI_CJ_REQUIRE_PACKAGE_IMPORT,
     // CodeGen
     CG_UNSAFE_BEGIN,
     CG_UNSAFE_END,

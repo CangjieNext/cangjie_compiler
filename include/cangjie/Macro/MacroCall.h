@@ -12,6 +12,7 @@
 #ifndef CANGJIE_MACROCALL_H
 #define CANGJIE_MACROCALL_H
 
+#include <unordered_set>
 #include <vector>
 #include <variant>
 
@@ -188,6 +189,26 @@ public:
      */
     void*** GetChildMessagesFromMacroContext(const char* childrenStr);
 
+    /**
+     * @brief Declare a package to be imported after macro expansion
+     *
+     * Call this interface inside a macro definition to tell the compiler
+     * that the corresponding import statement needs to be automatically
+     * added in the macro-expanded code.
+     *
+     * @param packageName Full name of the package to import, e.g. "std.collection.HashMap" or "packageA"
+     */
+    void RequirePackageImport(const char* packageName);
+
+    /**
+     * @brief Get all required packages declared by this macro and its children
+     *
+     * Recursively traverses the macro call tree, collecting all requiredPackages.
+     *
+     * @return Deduplicated list of package names
+     */
+    std::vector<std::string> GetAllRequiredPackages() const;
+
     PtrType replaceLoc; /**< Macro replace target Location */
     std::vector<MacroCall*> children;
 
@@ -224,6 +245,12 @@ public:
     std::vector<ItemInfo> items;                // MacroContext: setItem.
     std::vector<ChildMessage> childMessages;    // MacroContext: getChildMessages.
     std::vector<std::string> assertParents;     // MacroContext: assertParentContext failed parentName.
+
+    // ========== Required package declaration fields ==========
+    std::vector<std::string> requiredPackages;       // Packages declared during macro execution
+    std::unordered_set<std::string> requiredPackagesSet; // For O(1) dedup lookup
+    std::vector<std::string> parentRequiredPackages; // Packages declared by parent macros (LSP scenario)
+
 private:
     MacroKind kind;
     Ptr<AST::MacroInvocation> invocation{nullptr};
@@ -249,6 +276,11 @@ private:
     void TraverseMacroNode(
         MacroCall* macroNode, const std::string& childName, std::vector<std::vector<void*>>& macroInfos);
     bool TraverseParentMacroNode(MacroCall* mcNode, const std::string& parentName);
+
+    /*
+     * Recursive function to collect required packages.
+     */
+    void CollectRequiredPackagesRecursive(std::unordered_set<std::string>& allPkgs) const;
 };
 
 }

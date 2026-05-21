@@ -78,6 +78,9 @@ table MacroCall {
   libPath : string;
   begin : Position;
   end : Position;
+  // 新增：依赖包声明
+  requiredPackages : [string];
+  parentRequiredPackages : [string];
 }
 
 table MacroResult {
@@ -87,6 +90,8 @@ table MacroResult {
   items : [ItemInfo];
   assertParents : [string];
   diags : [Diagnostic];
+  // 新增：返回的依赖包列表
+  requiredPackages : [string];
 }
 
 table MultiMacroCalls {
