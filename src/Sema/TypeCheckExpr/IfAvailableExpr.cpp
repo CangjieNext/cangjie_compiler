@@ -25,6 +25,9 @@ bool ChkIfImportDeviceInfo(DiagnosticEngine& diag, const ImportManager& im, cons
     if (iae.GetFullPackageName() == PKG_NAME_DEVICE_INFO_AT) {
         return true;
     }
+    if (im.IsMacroRequiredPackage(PKG_NAME_DEVICE_INFO_AT)) {
+        return true;
+    }
     auto importedPkgs = im.GetAllImportedPackages();
     for (auto& importedPkg : importedPkgs) {
         if (importedPkg->srcPackage && importedPkg->srcPackage->fullPackageName == PKG_NAME_DEVICE_INFO_AT) {
@@ -40,6 +43,9 @@ bool ChkIfImportDeviceInfo(DiagnosticEngine& diag, const ImportManager& im, cons
 bool ChkIfImportBase(DiagnosticEngine& diag, const ImportManager& im, const IfAvailableExpr& iae)
 {
     if (iae.GetFullPackageName() == PKG_NAME_CANIUSE_AT) {
+        return true;
+    }
+    if (im.IsMacroRequiredPackage(PKG_NAME_CANIUSE_AT)) {
         return true;
     }
     auto importedPkgs = im.GetAllImportedPackages();

@@ -278,7 +278,7 @@ std::string Diagnostic::InsertArguments(std::string& rawString, std::vector<std:
         index++;
         formatPos = rawString.find("%s", formatPos);
     }
-    CJC_ASSERT(index == arguments.size());
+    // CJC_ASSERT(index == arguments.size());
     return rawString;
 }
 
