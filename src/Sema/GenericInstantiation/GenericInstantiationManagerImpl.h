@@ -134,6 +134,17 @@ private:
     Generic2InsMap instantiatedDeclsMap;
     /** Key: generic decl & instantiated types. Value: instantiated decl. */
     std::unordered_multimap<GenericInfo, Ptr<AST::Decl>, GenericInfoHash, GenericInfoEqual> declInstantiationByTypeMap;
+    /**
+     * This map saves the information of the function in which structure declaration implements the abstract function in
+     * interface.
+     * The key is pair of type and the abstract function in interface.
+     * The value is a set that contains pair of:
+     *    1. the structure declaration which contains the function which implements abstract function.
+     *    2. the index of the implementation function in structure declaration.
+     * */
+    std::unordered_map<std::pair<Ptr<AST::Ty>, Ptr<AST::FuncDecl>>,
+        std::unordered_set<std::pair<Ptr<AST::Decl>, size_t>, HashPair>, HashPair>
+        abstractFuncToDeclMap;
     std::unordered_map<Ptr<AST::Decl>, size_t> membersIndexMap;
     std::unordered_map<Ptr<const AST::Decl>, std::vector<size_t>> skippedMemberOffsets;
     /** Node kinds which should be ignored in walker. */
@@ -246,6 +257,19 @@ private:
 
     /** Build interface function to implemented function map for all type decls */
     void BuildAbstractFuncMap();
+    void BuildAbstractFuncMapHelper(AST::Ty& ty);
+    bool IsImplementationFunc(AST::Ty& ty, const AST::FuncDecl& interfaceFunc, const AST::FuncDecl& fd);
+    MultiTypeSubst GetTypeMapping(Ptr<AST::Ty>& baseTy, AST::Ty& interfaceTy);
+    void MapFuncWithDecl(AST::Ty& ty, AST::FuncDecl& interfaceFunc, const AST::FuncDecl& target);
+    void CollectDeclMemberFuncs(AST::Decl& decl, std::unordered_set<Ptr<AST::FuncDecl>>& funcs) const;
+    std::unordered_set<Ptr<AST::FuncDecl>> GetInheritedMemberFuncs(AST::Ty& ty);
+    std::unordered_set<Ptr<AST::InheritableDecl>> GetInheritedInterfaces(AST::Ty& ty);
+    /** Collect inherited members for imported decls which is not check during sema stage. */
+    std::unordered_set<Ptr<AST::FuncDecl>> MergeMemberFuncs(
+        AST::Ty& ty, AST::Decl& decl, const std::unordered_set<Ptr<AST::FuncDecl>>& inheritedMembers);
+    std::unordered_set<Ptr<AST::FuncDecl>> CollectInheritedMembers(AST::Ty& ty, AST::Decl& decl);
+    std::unordered_set<Ptr<AST::FuncDecl>> CollectInheritedMembersVisit(
+        AST::Ty& ty, AST::Decl& decl, std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Decl>>>& visited);
 
     /**
      * Get general version of given @p decl. If getOriginal is on:
@@ -285,6 +309,19 @@ private:
         }
         intersectionTyStatus.emplace(&ty, false);
         return false;
+    }
+    void RemoveFromCache(AST::Decl& decl)
+    {
+        auto genericDecl = decl.genericDecl;
+        instantiatedDeclsMap[genericDecl].erase(&decl);
+        GenericInfo genericInfo(genericDecl, BuildTypeMapping(decl));
+        auto decls = declInstantiationByTypeMap.equal_range(genericInfo);
+        for (auto it = decls.first; it != decls.second; ++it) {
+            if (it->second == &decl) {
+                declInstantiationByTypeMap.erase(it);
+                break;
+            }
+        }
     }
     size_t CountSkippedMembersBefore(const AST::Decl& decl, size_t offset);
     Ptr<AST::Decl> GetMemberByOffset(const AST::Decl& decl, size_t offset);

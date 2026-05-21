@@ -140,10 +140,38 @@ void GenericInstantiationManager::InstantiatedExtendRecorder::RecordImplExtendDe
 {
     OverrideFunctionResolver resolver(typeManager);
     MemberFuncsWithInstTys funcs = resolver.GetInstMemberFuncWithInstTy(ty, fd.identifier);
+
+    auto baseTy = typeManager.GetTyForExtendMap(ty);
+    auto genericFd = RawStaticCast<FuncDecl*>(gim.GetGeneralDecl(fd));
+    CJC_ASSERT(genericFd->astKind == AST::ASTKind::FUNC_DECL);
+
+    auto declMap = gim.abstractFuncToDeclMap.find(std::make_pair(baseTy, genericFd));
+    if (declMap == gim.abstractFuncToDeclMap.end()) {
+        return;
+    }
+    Ptr<Decl> extend1 = nullptr;
     Ptr<Decl> extend = nullptr;
     // All candidates have satisfied functions, choose most matched decl.
     for (auto [func, _] : funcs) {
         auto baseDecl = func->outerDecl;
+        CJC_ASSERT(baseDecl);
+        if (baseDecl->astKind != ASTKind::EXTEND_DECL) {
+            continue; // Function implemented in origin decl, ignored.
+        }
+        if (Ty::IsTyCorrect(upperTy)) {
+            auto& inheritedTys = RawStaticCast<InheritableDecl*>(baseDecl)->inheritedTypes;
+            bool isImplemented = std::any_of(inheritedTys.begin(), inheritedTys.end(),
+                [this, upperTy](auto& type) { return typeManager.IsSubtype(type->GetTy(), upperTy); });
+            if (isImplemented) {
+                // If interface implementation check passed, store and break;
+                extend1 = baseDecl;
+                break;
+            }
+        }
+        // If 'upperTy' check ignored or failed, set decl and continue if exist next match.
+        extend1 = baseDecl;
+    }
+    for (auto [baseDecl, _] : declMap->second) {
         CJC_ASSERT(baseDecl);
         if (baseDecl->astKind != ASTKind::EXTEND_DECL) {
             continue; // Function implemented in origin decl, ignored.
@@ -160,6 +188,15 @@ void GenericInstantiationManager::InstantiatedExtendRecorder::RecordImplExtendDe
         }
         // If 'upperTy' check ignored or failed, set decl and continue if exist next match.
         extend = baseDecl;
+    }
+    if (extend1 != extend) {
+        Println("!!!!Augus Jan4: result not same as new logic, baseTy:", ty.String(), fd.identifier.Val());
+        if (extend1) {
+            Println("    extend1 pos is", extend1->begin.ToString());
+        }
+        if (extend) {
+            Println("    extend pos is", extend->begin.ToString());
+        }
     }
     if (extend) {
         typeManager.RecordUsedGenericExtend(ty, RawStaticCast<ExtendDecl*>(extend));

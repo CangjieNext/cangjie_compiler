@@ -172,6 +172,327 @@ TypeSubst GIM::GenericInstantiationManagerImpl::BuildTypeMapping(
     return typeMapping;
 }
 
+void GIM::GenericInstantiationManagerImpl::CollectDeclMemberFuncs(
+    Decl& decl, std::unordered_set<Ptr<FuncDecl>>& funcs) const
+{
+    for (auto& member : decl.GetMemberDecls()) {
+        // Only collect non-private non-generic member which may implement interface member.
+        bool ignored = member == nullptr || member->astKind == AST::ASTKind::VAR_DECL ||
+            member->TestAnyAttr(Attribute::PRIVATE, Attribute::CONSTRUCTOR);
+        if (ignored) {
+            continue;
+        }
+        WorkForMembers(*member, [&funcs](auto& it) {
+            if (it.astKind == AST::ASTKind::FUNC_DECL) {
+                funcs.emplace(StaticCast<FuncDecl>(&it));
+            }
+        });
+    }
+}
+
+std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::MergeMemberFuncs(
+    Ty& ty, Decl& decl, const std::unordered_set<Ptr<FuncDecl>>& inheritedMembers)
+{
+    std::unordered_set<Ptr<FuncDecl>> memberFuncs;
+    CollectDeclMemberFuncs(decl, memberFuncs);
+    std::unordered_set<Ptr<FuncDecl>> dropped;
+    for (auto member : memberFuncs) {
+        std::vector<Ptr<FuncDecl>> overloads;
+        std::copy_if(inheritedMembers.begin(), inheritedMembers.end(), std::back_inserter(overloads),
+            [member](auto it) { return it->identifier == member->identifier; });
+        for (auto func : overloads) {
+            // If current member func is implementation of inherited function, drop inherited function.
+            // Otherwise store inherited function.
+            if (IsImplementationFunc(ty, *func, *member)) {
+                dropped.emplace(func);
+            }
+        }
+    }
+    // Add inherited members to current collection, except dropped functions.
+    std::copy_if(inheritedMembers.begin(), inheritedMembers.end(), std::inserter(memberFuncs, memberFuncs.end()),
+        [&dropped](auto decl) { return dropped.count(decl) == 0; });
+    return memberFuncs;
+}
+
+std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::CollectInheritedMembers(
+    Ty& ty, Decl& decl)
+{
+    std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Decl>>> visited;
+    return CollectInheritedMembersVisit(ty, decl, visited);
+}
+
+std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::CollectInheritedMembersVisit(
+    Ty& ty, Decl& decl, std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Decl>>>& visited)
+{
+    auto visitedKey = std::make_pair(&ty, &decl);
+    if (visited.count(visitedKey) != 0) {
+        // avoid repeatedly visiting same super-type when there are multiple paths
+        return {};
+    }
+    visited.insert(visitedKey);
+    std::unordered_set<Ptr<FuncDecl>> inheritedFuncs;
+    // Decl is guaranteed as InheritableDecl.
+    auto& inheritDecl = static_cast<InheritableDecl&>(decl);
+    for (auto& type : inheritDecl.inheritedTypes) {
+        Ptr<Decl> baseDecl = Ty::GetDeclPtrOfTy(type->GetTy());
+        if (!baseDecl) {
+            continue;
+        }
+        // If no inherited function exist, directly collection members,
+        // Otherwise merge inherited functions with current type decl's member functions.
+        // If two parents have functions with same signature, current decl must override them,
+        // that we can choose any of them here.
+        inheritedFuncs = inheritedFuncs.empty() ? CollectInheritedMembersVisit(*type->GetTy(), *baseDecl, visited)
+                                                : MergeMemberFuncs(*type->GetTy(), *baseDecl, inheritedFuncs);
+    }
+    return MergeMemberFuncs(ty, decl, inheritedFuncs);
+}
+
+namespace {
+std::set<Ptr<ExtendDecl>> GetAllRelatedExtendsByTy(TypeManager& typeManager, Ty& ty)
+{
+    auto baseDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(&ty);
+    if (baseDecl) {
+        return CollectAllRelatedExtends(typeManager, *baseDecl);
+    } else {
+        return typeManager.GetAllExtendsByTy(ty);
+    }
+}
+} // namespace
+
+std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::GetInheritedMemberFuncs(
+    Ty& ty)
+{
+    std::unordered_set<Ptr<FuncDecl>> funcs;
+    auto baseDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(&ty);
+    if (baseDecl) {
+        // Collect inherited function if sema's InheritedMembers not done.
+        funcs = CollectInheritedMembers(ty, *baseDecl);
+    }
+    // Collect func which declared with related extends.
+    auto extendDecls = GetAllRelatedExtendsByTy(typeManager, ty);
+    for (auto ed : extendDecls) {
+        if (!ed || ed->TestAttr(Attribute::GENERIC_INSTANTIATED)) {
+            continue;
+        }
+        CollectDeclMemberFuncs(*ed, funcs);
+    }
+
+    return funcs;
+}
+
+std::unordered_set<Ptr<InheritableDecl>> GIM::GenericInstantiationManagerImpl::GetInheritedInterfaces(
+    Ty& ty)
+{
+    std::unordered_set<Ptr<InheritableDecl>> inheritableType;
+    // Collect interfaces that are explict implemented by the 'decl'.
+    auto collectInterfaces = [&inheritableType](const InheritableDecl& decl) {
+        auto superITys = decl.GetSuperInterfaceTys();
+        std::for_each(superITys.begin(), superITys.end(), [&inheritableType](auto ty) {
+            if (auto id = DynamicCast<InterfaceDecl*>(Ty::GetDeclPtrOfTy(ty)); id) {
+                inheritableType.insert(id);
+            }
+        });
+    };
+    std::function<void(InheritableDecl&)> collectInheritedInterfaces = [&collectInheritedInterfaces, &inheritableType,
+                                                                           &collectInterfaces](InheritableDecl& decl) {
+        if (auto cd = DynamicCast<ClassDecl*>(&decl); cd) {
+            auto super = cd->GetSuperClassDecl();
+            if (super) {
+                (void)inheritableType.emplace(super); // Collect ineriable class decl.
+                collectInheritedInterfaces(*super);
+            }
+        }
+        collectInterfaces(decl);
+    };
+
+    // Collect inheritableType which declared with extend.
+    std::set<Ptr<ExtendDecl>> extendDecls = GetAllRelatedExtendsByTy(typeManager, ty);
+    for (auto& ed : extendDecls) {
+        if (ed->TestAttr(Attribute::GENERIC_INSTANTIATED)) {
+            continue;
+        }
+        collectInterfaces(*RawStaticCast<InheritableDecl*>(ed));
+    }
+
+    // Collect inheritableType which declare in class, struct, enum (interface decl is not extendable).
+    auto decl = Ty::GetDeclPtrOfTy(&ty);
+    if (auto inheritDecl = DynamicCast<InheritableDecl*>(decl); inheritDecl) {
+        collectInheritedInterfaces(*inheritDecl);
+    }
+
+    // Collect inheritableType which declare in super.
+    std::unordered_set<Ptr<Ty>> allInterfaceTys;
+    for (auto i : inheritableType) {
+        if (i->GetTy()) {
+            allInterfaceTys.merge(typeManager.GetAllSuperTys(*i->GetTy()));
+        }
+    }
+    allInterfaceTys.erase(&ty);
+    for (auto iTy : allInterfaceTys) {
+        if (auto id = DynamicCast<InterfaceDecl*>(Ty::GetDeclPtrOfTy(iTy)); id) {
+            inheritableType.insert(id);
+        }
+    }
+    return inheritableType;
+}
+
+void GIM::GenericInstantiationManagerImpl::MapFuncWithDecl(Ty& ty, FuncDecl& interfaceFunc, const FuncDecl& target)
+{
+    CJC_ASSERT(target.outerDecl);
+
+    auto decls =
+        GetRealIndexingMembers(target.outerDecl->GetMemberDecls(), target.outerDecl->TestAttr(Attribute::GENERIC));
+    auto realDecl = target.propDecl ? RawStaticCast<const Decl*>(target.propDecl) : &target;
+    for (auto it = decls.begin(); it != decls.end(); ++it) {
+        if (*it == realDecl) {
+            auto keyPair = std::make_pair(&ty, &interfaceFunc);
+            auto valuePair = std::make_pair(target.outerDecl, std::distance(decls.begin(), it));
+            abstractFuncToDeclMap[keyPair].emplace(valuePair);
+            break;
+        }
+    }
+}
+
+MultiTypeSubst GIM::GenericInstantiationManagerImpl::GetTypeMapping(Ptr<Ty>& baseTy, Ty& interfaceTy)
+{
+    MultiTypeSubst typeMapping;
+    if (!baseTy) {
+        return typeMapping;
+    }
+    typeMapping = promotion.GetPromoteTypeMapping(*baseTy, interfaceTy);
+    if (!typeMapping.empty()) {
+        return typeMapping;
+    }
+    // For a generic type which extends interface,
+    // only sema type created in extend decl can generate typeMapping with the extended interface type.
+    std::set<Ptr<ExtendDecl>> extendDecls = GetAllRelatedExtendsByTy(typeManager, *baseTy);
+    for (auto& ed : extendDecls) {
+        if (ed->TestAttr(Attribute::GENERIC_INSTANTIATED)) {
+            continue;
+        }
+        baseTy = ed->extendedType->GetTy();
+        MultiTypeSubst prRes;
+        if (baseTy) {
+            prRes = promotion.GetPromoteTypeMapping(*baseTy, interfaceTy);
+        }
+        std::for_each(prRes.begin(), prRes.end(), [&typeMapping](auto it) { typeMapping[it.first].merge(it.second); });
+    }
+    return typeMapping;
+}
+
+/**
+ * Check whether two functions which exist in given type's whole inheritance relationship has
+ * implementation/override relation.
+ * eg. interface I1 {
+ *         func foo():Int64  // f1
+ *     }
+ *     class A {
+ *         func foo():Int64{0} // f2
+ *     }
+ *     extend A <: I1{}
+ * In this case, sema type of 'A', interface function 'f1' and function 'f2' are checked,
+ * result will be 'f2' implements 'f1', function returns true.
+ * Example also for generic declarations.
+ */
+bool GIM::GenericInstantiationManagerImpl::IsImplementationFunc(
+    Ty& ty, const FuncDecl& interfaceFunc, const FuncDecl& fd)
+{
+    CJC_ASSERT(fd.outerDecl && interfaceFunc.outerDecl);
+    // If function's static or generic status not equal, the will not have relation of implementation.
+    bool noRelation = interfaceFunc.TestAttr(Attribute::STATIC) != fd.TestAttr(Attribute::STATIC) ||
+        interfaceFunc.TestAttr(Attribute::GENERIC) != fd.TestAttr(Attribute::GENERIC);
+    if (noRelation) {
+        return false;
+    }
+    if (interfaceFunc.outerDecl->astKind == fd.outerDecl->astKind) {
+        // If both functions are declared in same kind of type decls, directly return if 'fd' is abstract.
+        if (fd.TestAttr(Attribute::ABSTRACT)) {
+            return false;
+        }
+    } else {
+        // If functions are declared in different kind of type decls, directly return if 'fd' is in interface.
+        if (fd.outerDecl->astKind == ASTKind::INTERFACE_DECL) {
+            return false;
+        }
+    }
+    auto baseTy = Ptr(&ty);
+    auto structDecl = RawStaticCast<InheritableDecl*>(fd.outerDecl);
+    // Update base ty to extendDecl's ty when the extended type is current given 'ty'.
+    // For primitive and builtin types, the declPtr is always nullptr that always update baseTy to extendDecl ty.
+    // For user defined types only update baseTy when declPtr is same.
+    bool shouldUpdateImplementTy = true;
+    if (auto ed = DynamicCast<ExtendDecl*>(structDecl);
+        ed && Ty::GetDeclPtrOfTy(ed->extendedType->GetTy()) == Ty::GetDeclPtrOfTy(baseTy)) {
+        baseTy = ed->extendedType->GetTy();
+        shouldUpdateImplementTy = false;
+    }
+    // 1. Substitute interface func's type to baseTy. NOTE: May update baseTy's value.
+    auto interfaceTy = interfaceFunc.outerDecl->GetTy();
+    auto typeMappings = GetTypeMapping(baseTy, *interfaceTy);
+    for (auto& type : structDecl->inheritedTypes) {
+        // Eg: generate mapping for extend Int16 <: Number<Int32> and interface Number<T>.
+        if (type && type->GetTy() && typeManager.IsSubtype(Ty::GetGenericTyOfInsTy(*type->GetTy()), interfaceTy)) {
+            typeManager.GenerateGenericMapping(typeMappings, *type->GetTy());
+            break;
+        }
+    }
+    auto iFuncTy = interfaceFunc.GetTy();
+    // 1.5 Mapping function generic from 'interfaceFunc' to 'fd'.
+    // Previously checked 'interfaceFunc' and 'fd' have same generic status.
+    if (fd.TestAttr(Attribute::GENERIC)) {
+        TypeSubst typeMapping = typeManager.GenerateGenericMappingFromGeneric(interfaceFunc, fd);
+        iFuncTy = typeManager.GetInstantiatedTy(iFuncTy, typeMapping);
+    }
+    // For 'interface I<T> { func foo(a: T) {} }; class C <: I<A> & I<B>',
+    // function 'foo' may have multiple instantiation type.
+    auto interfaceFuncTys = typeManager.GetInstantiatedTys(iFuncTy, typeMappings);
+
+    // 2. Substitute implemented func's type to baseTy.
+    auto implementedFuncTy = RawStaticCast<FuncTy*>(fd.GetTy());
+    if (shouldUpdateImplementTy) {
+        auto structTy = structDecl->GetTy();
+        if (baseTy && structTy) {
+            typeMappings = promotion.GetPromoteTypeMapping(*baseTy, *structTy);
+        } else {
+            typeMappings = {};
+        }
+        implementedFuncTy = RawStaticCast<FuncTy*>(typeManager.GetBestInstantiatedTy(fd.GetTy(), typeMappings));
+    }
+
+    // 3. compare two func's signature. structure declaration mapping relation if signatures are same.
+    // when function have multiple instantiated types, only need one of them passed.
+    // Actual type will be decided in rearrange stage.
+    return std::any_of(interfaceFuncTys.begin(), interfaceFuncTys.end(), [this, implementedFuncTy](auto ty) {
+        return implementedFuncTy && ty &&
+            typeManager.IsFuncParameterTypesIdentical(*implementedFuncTy, *RawStaticCast<FuncTy*>(ty));
+    });
+}
+
+void GIM::GenericInstantiationManagerImpl::BuildAbstractFuncMapHelper(Ty& ty)
+{
+    std::unordered_set<Ptr<FuncDecl>> funcs = GetInheritedMemberFuncs(ty);
+    std::unordered_set<Ptr<InheritableDecl>> interfaces = GetInheritedInterfaces(ty);
+
+    auto dealWithFunDecl = [this, &funcs, &ty](FuncDecl& realMember) {
+        // Currently not adaptable for property decl.
+        for (auto& fd : funcs) {
+            if (fd->identifier != realMember.identifier) {
+                continue;
+            }
+            if (IsImplementationFunc(ty, realMember, *fd)) {
+                MapFuncWithDecl(ty, realMember, *fd);
+            }
+        }
+    };
+
+    for (auto& id : interfaces) {
+        for (auto realMember : GetInheritedMemberFuncs(*id->GetTy())) {
+            dealWithFunDecl(*realMember);
+        }
+    }
+}
+
 /**
  * Build abstract function map for all type which inherited interface.
  * This map helps target rearrange of interface call in generic function which has interface upper bound.
@@ -184,12 +505,23 @@ TypeSubst GIM::GenericInstantiationManagerImpl::BuildTypeMapping(
  */
 void GIM::GenericInstantiationManagerImpl::BuildAbstractFuncMap()
 {
+    Utils::ProfileRecorder::Start("BuildAbstractFuncMap", "primitive types");
+    abstractFuncToDeclMap.clear();
+    // For primitive types.
+    for (auto& it : typeManager.builtinTyToExtendMap) {
+        BuildAbstractFuncMapHelper(*it.first);
+    }
+    Utils::ProfileRecorder::Stop("BuildAbstractFuncMap", "primitive types");
     Utils::ProfileRecorder::Start("BuildAbstractFuncMap", "class/struct/enum/interface type");
     // For all class/struct/enum/interface type.
+    std::unordered_set<Ptr<Decl>> inheritableDecls;
     std::unordered_set<Ptr<Decl>> genericDecls;
-    auto collectDecls = [&genericDecls](const OwnedPtr<Decl>& decl) {
+    auto collectDecls = [&inheritableDecls, &genericDecls](const OwnedPtr<Decl>& decl) {
         if (!decl || !GetDeclTy(*decl) || !decl->IsNominalDecl()) {
             return;
+        }
+        if (decl->astKind != ASTKind::EXTEND_DECL) {
+            inheritableDecls.emplace(decl.get());
         }
         if (decl->generic) {
             genericDecls.emplace(decl.get());
@@ -201,6 +533,11 @@ void GIM::GenericInstantiationManagerImpl::BuildAbstractFuncMap()
         IterateToplevelDecls(*pkg->srcPackage, collectDecls);
     }
     Utils::ProfileRecorder::Stop("BuildAbstractFuncMap", "class/struct/enum/interface type");
+    Utils::ProfileRecorder::Start("BuildAbstractFuncMap", "inheritableDecls");
+    for (auto& decl : inheritableDecls) {
+        BuildAbstractFuncMapHelper(*decl->GetTy());
+    }
+    Utils::ProfileRecorder::Stop("BuildAbstractFuncMap", "inheritableDecls");
     Utils::ProfileRecorder recorder("BuildAbstractFuncMap", " Build index");
     // Build index for members of generic decl.
     for (auto decl : genericDecls) {
