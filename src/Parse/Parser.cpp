@@ -178,7 +178,7 @@ OwnedPtr<File> ParserImpl::ParseTopLevel()
         scope.ResetParserScope();
     }
     // Parse importSpec in TopLevel.
-    ParseImportSpecInTop(ret->imports, annos);
+    ParseImportSpecInTop(ret->imports, annos, ret->package ? ret->package.get() : nullptr);
     if (!scanDepPkg) {
         ParseTopLevelDecls(*ret, annos);
     }

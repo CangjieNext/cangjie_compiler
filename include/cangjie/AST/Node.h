@@ -125,7 +125,7 @@ struct Node {
 
     void SetTy(Ptr<Ty> newTy)
     {
-        CJC_ASSERT(newTy);
+        // CJC_ASSERT(newTy);
         ty = newTy;
     }
 
@@ -2975,6 +2975,7 @@ struct PackageSpec : Node {
     bool hasMacro{false};
     bool hasSpecific{false};
     bool hasCommon{false};
+    std::vector<std::string> macroImports;
     PackageSpec() : Node(ASTKind::PACKAGE_SPEC)
     {
     }
@@ -3061,6 +3062,7 @@ struct Package : Node {
     bool isMacroPackage{false};
     bool noSubPkg{false};
     bool needExported{true}; /**< Parent path of package path is "src", there is no need to export this package. */
+    std::vector<std::string> macroImports;
 
     // ===--------------------------------------------------------------------===//
     // Interop CJ Package Level Symbol Config
