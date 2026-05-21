@@ -7,7 +7,7 @@
 /include/cangjie/AST/ @Augus_Jan
 /include/cangjie/AST/ASTKind.inc @mini-tang
 /include/cangjie/Basic/ @kkkkkkkbbbbbbb
-/include/cangjie/Basic/InteropCJPackageConfigReader.h @belyaev-mikhail
+/include/cangjie/Basic/InteropCJPackageConfigReader.h @Boommmmmm
 
 /include/cangjie/CHIR/ @Mr_Kang_Yi
 /include/cangjie/CHIR/Interpreter @claudio_
@@ -36,7 +36,7 @@
 
 /src/AST/ @Augus_Jan
 /src/Basic/ @kkkkkkkbbbbbbb
-/src/Basic/InteropCJPackageConfigReader.cpp @belyaev-mikhail
+/src/Basic/InteropCJPackageConfigReader.cpp @Boommmmmm
 /src/CHIR/ @Mr_Kang_Yi
 /src/CodeGen/ @duo-duo
 /src/CodeGen/CJNative/CJNativeCGCFFI.cpp @gaoxiang999
@@ -53,14 +53,14 @@
 /src/Modules/ @Augus_Jan
 /src/Option/ @neilliuistaken
 /src/Parse/ @kkkkkkkbbbbbbb
-/src/Parse/NativeFFI @belyaev-mikhail
+/src/Parse/NativeFFI @Boommmmmm
 /src/Parse/ParseQuote.cpp @mini-tang
 /src/Parse/ParseMacro.cpp @mini-tang
 /src/Sema/ @huohuixin
 /src/Sema/GenericInstantiation @Augus_Jan
-/src/Sema/NativeFFI/ @belyaev-mikhail
-/src/Sema/Test/ @belyaev-mikhail
-/src/Sema/CJMP/ @belyaev-mikhail
+/src/Sema/NativeFFI/ @Boommmmmm
+/src/Sema/Test/ @Boommmmmm
+/src/Sema/CJMP/ @Boommmmmm
 /src/Sema/Desugar/DesugarMacro.cpp @mini-tang
 /src/Sema/Desugar/DesugarMacro.h @mini-tang
 /src/Utils/ @wyq1213
