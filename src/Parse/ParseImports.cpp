@@ -20,11 +20,55 @@ using namespace Cangjie;
 using namespace Cangjie::AST;
 using namespace Cangjie::Utils;
 
-void ParserImpl::ParseCommonImportSpec(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos)
+void ParserImpl::ParseMacroImports(AST::PackageSpec& packageSpec)
 {
-    while (SeeingImport() || (SeeingBuiltinAnnotation())) {
+    std::unordered_set<std::string> seenPkgs;
+    while (Seeing({TokenKind::MACRO, TokenKind::IMPORT})) {
+        Skip(TokenKind::MACRO);
+        Skip(TokenKind::IMPORT);
+
+        ImportContent content;
+        ParseImportSingle(content);
+
+        std::string pkgName = content.GetImportedPackageName();
+        if (content.kind == ImportKind::IMPORT_ALL && !content.prefixPaths.empty()) {
+            pkgName = content.prefixPaths[0];
+            for (size_t i = 1; i < content.prefixPaths.size(); i++) {
+                pkgName += "." + content.prefixPaths[i];
+            }
+        } else if (content.kind == ImportKind::IMPORT_SINGLE) {
+            pkgName = content.GetImportedPackageName();
+        }
+
+        if (!pkgName.empty() && seenPkgs.find(pkgName) == seenPkgs.end()) {
+            seenPkgs.insert(pkgName);
+            packageSpec.macroImports.emplace_back(std::move(pkgName));
+        }
+
+        if (!newlineSkipped) {
+            if (Seeing(TokenKind::END)) {
+                break;
+            }
+            if (!Skip(TokenKind::SEMI)) {
+                DiagExpectSemiOrNewline();
+                ConsumeUntilAny({TokenKind::NL, TokenKind::SEMI});
+            }
+        }
+        SkipBlank(TokenKind::SEMI);
+    }
+}
+
+void ParserImpl::ParseCommonImportSpec(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos,
+    PackageSpec* packageSpec)
+{
+    while (SeeingImport() || SeeingBuiltinAnnotation() ||
+           (packageSpec && packageSpec->hasMacro && Seeing({TokenKind::MACRO, TokenKind::IMPORT}))) {
         if (SeeingBuiltinAnnotation()) {
             ParseAnnotations(annos);
+        }
+        if (packageSpec && packageSpec->hasMacro && Seeing({TokenKind::MACRO, TokenKind::IMPORT})) {
+            ParseMacroImports(*packageSpec);
+            continue;
         }
         if (!SeeingImport()) {
             break;
@@ -83,9 +127,10 @@ void ParserImpl::CheckImportSpec(PtrVector<ImportSpec>& imports)
     }
 }
 
-void ParserImpl::ParseImportSpecInTop(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos)
+void ParserImpl::ParseImportSpecInTop(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos,
+    PackageSpec* packageSpec)
 {
-    ParseCommonImportSpec(imports, annos);
+    ParseCommonImportSpec(imports, annos, packageSpec);
     CheckImportSpec(imports);
 }
 

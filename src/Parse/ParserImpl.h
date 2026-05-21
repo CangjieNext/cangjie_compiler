@@ -764,7 +764,8 @@ private:
     void ParseFeatureDirective(OwnedPtr<FeaturesDirective>& features);
     void ParseFeaturesSet(OwnedPtr<FeaturesSet>& features);
     void ParseFeatureId(OwnedPtr<FeaturesSet>& features);
-    void ParseCommonImportSpec(PtrVector<AST::ImportSpec>& imports, PtrVector<AST::Annotation>& annos);
+    void ParseCommonImportSpec(PtrVector<AST::ImportSpec>& imports, PtrVector<AST::Annotation>& annos,
+        AST::PackageSpec* packageSpec = nullptr);
     void CheckImportSpec(PtrVector<AST::ImportSpec>& imports);
     void CheckTypeArgumentsInEnumPattern(Ptr<const AST::EnumPattern> enumPattern);
     void ParseImportSpec(PtrVector<AST::ImportSpec>& imports, const PtrVector<AST::Annotation>& annos);
@@ -777,7 +778,9 @@ private:
     bool ParseImportSingle(AST::ImportContent& content, bool inMultiImport = false);
     void ParseImportMulti(AST::ImportContent& content);
     void ParseImportAliasPart(AST::ImportContent& content);
-    void ParseImportSpecInTop(PtrVector<AST::ImportSpec>& imports, PtrVector<AST::Annotation>& annos);
+    void ParseImportSpecInTop(PtrVector<AST::ImportSpec>& imports, PtrVector<AST::Annotation>& annos,
+        AST::PackageSpec* packageSpec = nullptr);
+    void ParseMacroImports(AST::PackageSpec& packageSpec);
     std::vector<OwnedPtr<AST::RefExpr>> TryParseIdentifierList(
         AST::Expr& expr, const std::string& attrName, const Position& pos);
     bool SeeingBuiltinAnnotation();

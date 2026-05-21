@@ -305,6 +305,8 @@ void MacroEvaluation::DeserializeMacroCallsResult(
             mc->status = MacroEvalMsgSerializer::DeSerializeStatusFromResult(msg);
             MacroEvalMsgSerializer::DeSerializeItemsFromResult(mc->items, msg);
             MacroEvalMsgSerializer::DeSerializeAssertParentsFromResult(mc->assertParents, msg);
+            // 新增：反序列化依赖包
+            MacroEvalMsgSerializer::DeSerializeRequiredPkgsFromResult(mc->requiredPackages, msg);
             std::vector<Diagnostic> diags;
             MacroEvalMsgSerializer::DeSerializeDiagsFromResult(diags, msg);
             for (auto& diag : diags) {
@@ -406,6 +408,8 @@ void MacroEvaluation::WaitMacroCallEvalResult(MacroCall& call) const
     call.status = MacroEvalMsgSerializer::DeSerializeStatusFromResult(resBuf.front());
     MacroEvalMsgSerializer::DeSerializeItemsFromResult(call.items, resBuf.front());
     MacroEvalMsgSerializer::DeSerializeAssertParentsFromResult(call.assertParents, resBuf.front());
+    // 新增：反序列化依赖包
+    MacroEvalMsgSerializer::DeSerializeRequiredPkgsFromResult(call.requiredPackages, resBuf.front());
     std::vector<Diagnostic> diags;
     MacroEvalMsgSerializer::DeSerializeDiagsFromResult(diags, resBuf.front());
     for (auto& diag : diags) {

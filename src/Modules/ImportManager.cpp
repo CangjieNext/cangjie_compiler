@@ -541,6 +541,9 @@ void ImportManager::UpdateMacroPackageUsage(const AST::Package& pkg)
         // Collect dependent cangjie packages.
         if (!pd->srcPackage->TestAttr(Attribute::TOOL_ADD) && pd->srcPackage->isMacroPackage) {
             (void)directMacroDeps.emplace(pd->srcPackage);
+            for (const auto& macroImport : pd->srcPackage->macroImports) {
+                macroImportPkgsFromMacroDeps.insert(macroImport);
+            }
         }
     }
 }
@@ -654,6 +657,29 @@ void ImportManager::CheckImports(const AST::Package& pkg)
                     DiagKindRefactor::package_decl_not_find_in_package, nameRange, im.identifier, fullPackageName);
             }
         }
+    }
+}
+
+void ImportManager::ProcessMacroImports(AST::Package& pkg)
+{
+    for (auto& pd : GetCurImportedPackages(pkg.fullPackageName)) {
+        if (!pd->srcPackage->TestAttr(Attribute::TOOL_ADD) && pd->srcPackage->isMacroPackage &&
+            !pd->srcPackage->macroImports.empty()) {
+            for (const auto& macroImportPkg : pd->srcPackage->macroImports) {
+                if (macroImportPkgsFromMacroDeps.find(macroImportPkg) != macroImportPkgsFromMacroDeps.end()) {
+                    continue;
+                }
+                macroImportPkgsFromMacroDeps.insert(macroImportPkg);
+                AddPackageSymbolsToImportMap(macroImportPkg);
+            }
+        }
+    }
+}
+
+void ImportManager::AddMacroImportPkgs(const std::vector<std::string>& pkgs)
+{
+    for (const auto& pkg : pkgs) {
+        macroImportPkgsFromMacroDeps.insert(pkg);
     }
 }
 
@@ -957,6 +983,12 @@ bool ImportManager::BuildIndex(
     }
     Utils::ProfileRecorder::Stop("BuildIndex", "AddImportedDeclsForSourcePackage");
 
+    Utils::ProfileRecorder::Start("BuildIndex", "ProcessMacroImports");
+    for (auto pkg : packages) {
+        ProcessMacroImports(*pkg);
+    }
+    Utils::ProfileRecorder::Stop("BuildIndex", "ProcessMacroImports");
+
     Utils::ProfileRecorder::Start("BuildIndex", "ResolveImports");
     for (auto pkg : packages) {
         ResolveImports(*pkg);
@@ -1041,11 +1073,13 @@ void ImportManager::UpdateFileNodeImportInfo(Package& package, const File& file,
             import->content.isDecl = true;
         }
     }
-    // MacroExpansion will never change import declarations, just copy file import map for new file and remove old one.
+    // MacroExpansion will never change import declarations, just copy file import map for new file.
+    // [Fix] Preserve old hash entry, since macro-expanded nodes may still reference the original file (curFile)
     auto found = fileImportedDeclsMap.find(file.fileHash);
     if (found != fileImportedDeclsMap.end()) {
-        (void)fileImportedDeclsMap.emplace(newFile->fileHash, std::move(found->second));
-        (void)fileImportedDeclsMap.erase(file.fileHash);
+        // Copy rather than move, preserving the old entry for macro-expanded nodes still referencing the old file
+        (void)fileImportedDeclsMap.emplace(newFile->fileHash, found->second);
+        // Do not erase old entry: fileImportedDeclsMap.erase(file.fileHash);
     }
     auto index = file.indexOfPackage;
     newFile->indexOfPackage = index;
@@ -1614,4 +1648,93 @@ bool ImportManager::AnalyzeDepStdPkgsOfBC(const std::string& fullPackageName)
         }
     }
     return true;
+}
+
+void ImportManager::AddMacroRequiredPackages(const std::unordered_set<std::string>& packages)
+{
+    for (const auto& pkg : packages) {
+        macroRequiredPkgs.insert(pkg);
+    }
+}
+
+bool ImportManager::ImportMacroRequiredPackage(const std::string& fullPackageName)
+{
+    auto existingPkg = cjoManager->GetPackage(fullPackageName);
+    if (existingPkg != nullptr) {
+        existingPkg->EnableAttr(AST::Attribute::IMPORTED);
+        cjoManager->SetOnlyUsedByMacro(fullPackageName, false);
+        auto members = cjoManager->GetPackageMembers(fullPackageName);
+        if (members.empty()) {
+            cjoManager->LoadPackageDeclsAndRefs(fullPackageName);
+            cjoManager->AddPackageDeclMap(fullPackageName);
+        }
+        AddPackageSymbolsToImportMap(fullPackageName);
+        SaveDepPkgCjoPath(fullPackageName, cjoManager->GetPackageCjoPath(fullPackageName));
+        return true;
+    }
+
+    std::string cjoPath = FileUtil::FindSerializationFile(
+        fullPackageName, SERIALIZED_FILE_EXTENSION, GetSearchPath());
+
+    if (cjoPath.empty()) {
+        diag.DiagnoseRefactor(DiagKindRefactor::package_search_error, DEFAULT_POSITION, fullPackageName, NO_CJO_HELP_INFO);
+        return false;
+    }
+
+    auto package = LoadPackageFromCjo(fullPackageName, cjoPath);
+    if (package == nullptr) {
+        diag.DiagnoseRefactor(DiagKindRefactor::bc_cjo_error, DEFAULT_POSITION, fullPackageName);
+        return false;
+    }
+
+    package->EnableAttr(AST::Attribute::IMPORTED);
+    cjoManager->SetOnlyUsedByMacro(fullPackageName, false);
+
+    for (const auto& depStdPkg : package->GetAllDependentStdPkgs()) {
+        if (cjoFilePaths.find(depStdPkg) == cjoFilePaths.end()) {
+            std::string depCjoPath = FileUtil::FindSerializationFile(
+                depStdPkg, SERIALIZED_FILE_EXTENSION, GetSearchPath());
+            HandleStdPackage(depStdPkg, depCjoPath, true);
+            ImportMacroRequiredPackage(depStdPkg);
+        }
+    }
+
+    AddPackageSymbolsToImportMap(fullPackageName);
+    SaveDepPkgCjoPath(fullPackageName, cjoPath);
+
+    return true;
+}
+
+bool ImportManager::ImportMacroRequiredPackages(const std::vector<std::string>& packageNames)
+{
+    bool allSuccess = true;
+    for (const auto& pkgName : packageNames) {
+        if (!ImportMacroRequiredPackage(pkgName)) {
+            allSuccess = false;
+        }
+    }
+    return allSuccess;
+}
+
+void ImportManager::AddPackageSymbolsToImportMap(const std::string& fullPackageName)
+{
+    auto members = cjoManager->GetPackageMembers(fullPackageName);
+
+    if (members.empty()) {
+        return;
+    }
+
+    auto importLevel = AccessLevel::PUBLIC;
+    auto relation = Modules::PackageRelation::NONE;
+
+    for (const auto& [name, declSet] : members) {
+        auto visibleDecls = Modules::GetVisibleDeclToMap(declSet, importLevel, relation);
+        auto& targetMap = importedDeclsMap[name];
+        for (auto decl : visibleDecls) {
+            targetMap.insert(decl);
+            if (curPackage != nullptr) {
+                declsImportedByNodeMap[curPackage->fullPackageName][decl];
+            }
+        }
+    }
 }

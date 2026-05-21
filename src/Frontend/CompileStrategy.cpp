@@ -210,6 +210,9 @@ public:
             }
         }
         package.isMacroPackage = package.files[0]->package->hasMacro;
+        if (package.isMacroPackage) {
+            package.macroImports = package.files[0]->package->macroImports;
+        }
     }
 
     /**

@@ -10,6 +10,7 @@
  * This file implements the API ResolveMacroCall.
  */
 #include "cangjie/Macro/MacroCall.h"
+#include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Macro/TokenSerialization.h"
 #include "cangjie/Basic/DiagnosticEmitter.h"
@@ -259,6 +260,21 @@ bool MacroCall::ResolveMacroCall(CompilerInstance* instance)
 #endif
         return false;
     }
+
+    // Process macro import declarations from the macro definition's package
+    if (definition && definition->curFile && definition->curFile->curPackage) {
+        auto& macroPkg = definition->curFile->curPackage;
+        if (macroPkg->isMacroPackage && !macroPkg->macroImports.empty()) {
+            for (const auto& pkgName : macroPkg->macroImports) {
+                auto& members = instance->importManager->GetCjoManager()->GetPackageMembers(pkgName);
+                if (members.empty()) {
+                    instance->importManager->ImportMacroRequiredPackage(pkgName);
+                }
+            }
+            instance->importManager->AddMacroImportPkgs(macroPkg->macroImports);
+        }
+    }
+
     return true;
 }
 } // namespace Cangjie
