@@ -236,7 +236,11 @@ ConditionalCompilationImpl::ConditionalCompilationImpl(CompilerInstance* c)
       debug(ci->invocation.globalOptions.enableCompileDebug),
       test(ci->invocation.globalOptions.enableCompileTest),
       passedCondition(ci->invocation.globalOptions.passedWhenKeyValue)
-{
+{   
+    if (!cjcVersionInfo.isValid) {
+        ci->diag.DiagnoseRefactor(
+            DiagKindRefactor::conditional_compilation_not_support_cjc_version_format, DEFAULT_POSITION);
+    }
     // in cjc cfg has been parsed, in lsp need parse and check cfg here.
     if (ci->invocation.globalOptions.enableMacroInLSP) {
         if (!passedCondition.empty()) {
