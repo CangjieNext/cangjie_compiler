@@ -2527,7 +2527,7 @@ index c5c46fbf1..abef62a44 100644
  
  private:
 diff --git a/lld/ELF/InputFiles.cpp b/lld/ELF/InputFiles.cpp
-index 473809b05..e2958486f 100644
+index 473809b05..ec9e05afc 100644
 --- a/lld/ELF/InputFiles.cpp
 +++ b/lld/ELF/InputFiles.cpp
 @@ -1559,7 +1559,8 @@ static uint8_t getOsAbi(const Triple &t) {
@@ -2548,14 +2548,16 @@ index 473809b05..e2958486f 100644
  }
  
  static uint8_t mapVisibility(GlobalValue::VisibilityTypes gvVisibility) {
-@@ -1625,8 +1627,10 @@ createBitcodeSymbol(Symbol *&sym, const std::vector<bool> &keptComdats,
+@@ -1625,8 +1627,12 @@ createBitcodeSymbol(Symbol *&sym, const std::vector<bool> &keptComdats,
                                objSym.getCommonSize()});
    } else {
      Defined newSym(&f, StringRef(), binding, visibility, type, 0, 0, nullptr);
 -    if (objSym.canBeOmittedFromSymbolTable())
 +    if (!f.ExportSymbols || objSym.canBeOmittedFromSymbolTable()) {
-+      newSym.visibility = STV_HIDDEN;
        newSym.exportDynamic = false;
++      if (!objSym.isUsed()) {
++        newSym.visibility = STV_HIDDEN;
++      }
 +    }
      sym->resolve(newSym);
    }
@@ -69291,10 +69293,10 @@ index 000000000..9b2a99555
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp b/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp
 new file mode 100644
-index 000000000..e02675f85
+index 000000000..c22ba410c
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp
-@@ -0,0 +1,1626 @@
+@@ -0,0 +1,1627 @@
 +//===- CJFillMetadata.cpp - Fill Cangjie Metadata ---------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -70183,7 +70185,8 @@ index 000000000..e02675f85
 +      if (ReflectMD->getNumOperands() == ERT_MAX)
 +        return getEnumReflectInfo(ReflectMD);
 +      if (ReflectMD->getNumOperands() == ECRT_MAX)
-+        return getEnumCtorReflectInfo(ReflectMD);
++        // for compatibility: old runtime cannot parse this metadata field
++        return Int8PtrNull;
 +      report_fatal_error(GV->getName() +
 +                         ": enum reflect info's operand number error!");
 +    } else {
@@ -83924,10 +83927,10 @@ index 328615011..98d07b460 100644
      auto PrintConstrainedLoopInfo = [L]() {
 diff --git a/llvm/lib/Transforms/Scalar/InsertCJTBAA.cpp b/llvm/lib/Transforms/Scalar/InsertCJTBAA.cpp
 new file mode 100644
-index 000000000..1c7ee123c
+index 000000000..f8d12c0aa
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/InsertCJTBAA.cpp
-@@ -0,0 +1,938 @@
+@@ -0,0 +1,949 @@
 +//===- InsertCJTBAA.cpp - Insert Cangjie TBAA Metadata ----------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -84512,13 +84515,24 @@ index 000000000..1c7ee123c
 +  if (!CheckGEPGEP())
 +    return false;
 +
++  auto *OuterIdx = cast<ConstantInt>(GEP->getOperand(1));
++  if (OuterIdx->isZero())
++    return prepareCJTBAA(TBAAUnit.DL, TBAAUnit.I, GEPGEP, TBAAUnit.DstTy,
++                         false, 0);
++
++  // If a scalar-typed pointer is advanced again, the final access may land in
++  // the middle of a scalar or in struct padding. We cannot reconstruct a
++  // verifier-safe scalar TBAA path from the parent struct in that case, so
++  // conservatively omit TBAA.
++  if (GEP->getSourceElementType()->isSingleValueType())
++    return false;
++
 +  // %1 = gep %"ArrayLayout.xxx" addrspace(1)* %0, 0, 1, %x, 1
 +  // %2 = gep i64 addrspace(1)* %1, i64 1
 +  // load %2
 +  uint64_t Size =
 +      TBAAUnit.DL.getTypeSizeInBits(GEP->getSourceElementType()) / 8;
-+  uint64_t OriginOff =
-+      cast<ConstantInt>(GEP->getOperand(1))->getZExtValue() * Size;
++  uint64_t OriginOff = OuterIdx->getZExtValue() * Size;
 +  return prepareCJTBAA(TBAAUnit.DL, TBAAUnit.I, GEPGEP, TBAAUnit.DstTy, false,
 +                       OriginOff);
 +}
