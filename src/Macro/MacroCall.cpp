@@ -9,6 +9,8 @@
  *
  * This file implements the MacroCall.
  */
+#include <algorithm>
+
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Macro/TokenSerialization.h"
 #include "cangjie/Basic/DiagnosticEmitter.h"

@@ -51,6 +51,7 @@ public:
     static void DeSerializeAssertParentsFromResult(
         std::vector<std::string>& assertParents, const std::vector<uint8_t>& bufferData);
     static void DeSerializeDiagsFromResult(std::vector<Diagnostic>& diags, const std::vector<uint8_t>& bufferData);
+
     MacroEvalMsgSerializer() noexcept {};
 
 private:

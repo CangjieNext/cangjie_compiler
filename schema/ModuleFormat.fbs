@@ -703,6 +703,7 @@ table Package {
   allFileInfo: [FileInfo];
   // record all std full package name dependencies.
   allDependentStdPkgs:[string];
+  macroImports:[string];
   options: CompilationOptions;
 }
 

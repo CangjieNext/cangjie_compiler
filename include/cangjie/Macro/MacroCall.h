@@ -12,6 +12,7 @@
 #ifndef CANGJIE_MACROCALL_H
 #define CANGJIE_MACROCALL_H
 
+#include <unordered_set>
 #include <vector>
 #include <variant>
 
@@ -224,6 +225,7 @@ public:
     std::vector<ItemInfo> items;                // MacroContext: setItem.
     std::vector<ChildMessage> childMessages;    // MacroContext: getChildMessages.
     std::vector<std::string> assertParents;     // MacroContext: assertParentContext failed parentName.
+
 private:
     MacroKind kind;
     Ptr<AST::MacroInvocation> invocation{nullptr};

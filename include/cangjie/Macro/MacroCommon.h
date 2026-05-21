@@ -37,7 +37,6 @@ struct MacroCollector {
     // imported macro pacakges.
     std::unordered_set<Ptr<AST::Package>> importedMacroPkgs;
 
-    // Clear previous info when we expand macros in a different package.
     void clear()
     {
         macroDefFuncs.clear();

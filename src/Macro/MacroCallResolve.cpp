@@ -259,6 +259,7 @@ bool MacroCall::ResolveMacroCall(CompilerInstance* instance)
 #endif
         return false;
     }
+
     return true;
 }
 } // namespace Cangjie
