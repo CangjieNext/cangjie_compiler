@@ -805,7 +805,8 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::SelectTypeMatchedImplMember(
     return member;
 }
 
-Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(Ty& ty, FuncDecl& fd, Ty& targetBaseTy)
+Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFuncNew(
+    Ty& ty, FuncDecl& fd, Ty& targetBaseTy)
 {
     // Rearrange for interface or open class call. Ignore function with following conditions:
     // 1. non-member function;
@@ -819,7 +820,6 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
     if (shouldIgnore) {
         return &fd;
     }
-
     OverrideFunctionResolver resolver(typeManager);
     MemberFuncsWithInstTys funcs = resolver.GetInstMemberFuncWithInstTy(ty, fd.identifier);
     // Handle code: class B<T> { func a(a: T): Unit {} }; class A <: B<B1> {}, given 'targetBaseTy' is 'Class-A',
@@ -862,6 +862,49 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
         return matchedFunc;
     }
     return &fd;
+}
+
+Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(Ty& ty, FuncDecl& fd, Ty& targetBaseTy)
+{
+    // Rearrange for interface or open class call. Ignore function with following conditions:
+    // 1. non-member function;
+    // 2. non-static function which is accessed with interface type.
+    // 3. member function accessed by class type which function belongs to.
+    auto baseTyDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(&ty);
+    bool shouldIgnore = !fd.outerDecl || (ty.IsInterface() && !fd.TestAttr(Attribute::STATIC)) ||
+        (ty.IsClass() && baseTyDecl == Ty::GetDeclPtrOfTy<InheritableDecl>(fd.outerDecl->GetTy()));
+    if (shouldIgnore) {
+        return &fd;
+    }
+    // Get base ty: primitive ty, non-generic ty or generic ty of instantiated ty.
+    auto baseTy = typeManager.GetTyForExtendMap(ty);
+    auto genericFd = StaticCast<FuncDecl*>(GetGeneralDecl(fd, true));
+    if (genericFd->genericDecl) {
+        genericFd = StaticCast<FuncDecl*>(genericFd->genericDecl);
+    }
+
+    auto keyPair = std::make_pair(baseTy, genericFd);
+    auto foundAbstFunc = abstractFuncToDeclMap.find(keyPair);
+    if (foundAbstFunc == abstractFuncToDeclMap.end()) {
+        return &fd;
+    }
+    std::vector<std::pair<Ptr<AST::Decl>, size_t>> candidates;
+    bool accessByInterface = ty.IsInterface();
+    std::copy_if(foundAbstFunc->second.begin(), foundAbstFunc->second.end(), std::back_inserter(candidates),
+        [this, accessByInterface, &fd](auto& it) {
+            bool notInSameDecl = it.first != GetGeneralDecl(*fd.outerDecl, true);
+            bool instInInterface = it.first->astKind == ASTKind::INTERFACE_DECL;
+            // Member access through the interface, looking up only the implementation from the interface.
+            if (accessByInterface) {
+                return notInSameDecl && instInInterface;
+            }
+            return notInSameDecl;
+        });
+    Ptr<Decl> member = SelectTypeMatchedImplMember(ty, fd, candidates, targetBaseTy);
+    if (!member) {
+        return &fd;
+    }
+    return As<ASTKind::FUNC_DECL>(GetUsedMemberDecl(*member, fd.isGetter));
 }
 
 Ptr<AST::Decl> GIM::GenericInstantiationManagerImpl::ReinstantiatedPartialMemberDecl(
@@ -977,11 +1020,25 @@ void GIM::GenericInstantiationManagerImpl::GenericMemberAccessInstantiate(Member
         // Also try to instantiate implementation function of generic interface function.
         target =
             FindImplFuncForAbstractFunc(*ma.baseExpr->GetTy(), *StaticCast<FuncDecl*>(target), *ma.baseExpr->GetTy());
+        auto target1 = FindImplFuncForAbstractFuncNew(
+            *ma.baseExpr->GetTy(), *StaticCast<FuncDecl*>(target), *ma.baseExpr->GetTy());
+        if (target != target1) {
+            Println("!!!!Augus Jan8: result not same as new logic,", ma.baseExpr->GetTy()->String(),
+                target->identifier.Val(), ", old logic:", target->outerDecl->identifier,
+                "new logic:", target1->outerDecl->identifier);
+        }
         InstantiateGenericDeclWithInstTys(*target, instTys);
     } else if (!IsInDeclWithAttribute(*target, Attribute::GENERIC) && ma.isExposedAccess && target->IsFunc()) {
         // Searching for upper bound call of non-generic access to collect used inline functions earlier.
         target =
             FindImplFuncForAbstractFunc(*ma.baseExpr->GetTy(), *StaticCast<FuncDecl*>(target), *ma.baseExpr->GetTy());
+        auto target1 = FindImplFuncForAbstractFuncNew(
+            *ma.baseExpr->GetTy(), *StaticCast<FuncDecl*>(target), *ma.baseExpr->GetTy());
+        if (target != target1) {
+            Println("!!!!Augus Jan9: result not same as new logic,", ma.baseExpr->GetTy()->String(),
+                target->identifier.Val(), ", old logic:", target->outerDecl->identifier,
+                "new logic:", target1->outerDecl->identifier);
+        }
         InstantiateGenericDeclWithInstTys(*target, instTys);
     }
 }
@@ -1026,6 +1083,11 @@ void GIM::GenericInstantiationManagerImpl::GenericRefExprInstantiate(RefExpr& re
     if (baseTy != nullptr && target->IsFunc() && target->TestAttr(Attribute::GENERIC)) {
         // Also try to instantiate implementation function of generic interface function.
         target = FindImplFuncForAbstractFunc(*baseTy, *StaticCast<FuncDecl*>(target), *baseTy);
+        auto target1 = FindImplFuncForAbstractFuncNew(*baseTy, *StaticCast<FuncDecl*>(target), *baseTy);
+        if (target != target1) {
+            Println("!!!!Augus Jan10: result not same as new logic,", baseTy->String(), target->identifier.Val(),
+                ", old logic:", target->outerDecl->identifier, "new logic:", target1->outerDecl->identifier);
+        }
         InstantiateGenericDeclWithInstTys(*target, instTys);
     }
 }
@@ -1290,7 +1352,7 @@ void GIM::GenericInstantiationManagerImpl::RearrangeCallExprReference(CallExpr& 
     }
 }
 
-Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedTarget(
+Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedTargetNew(
     Ty& baseTy, Decl& target, const std::vector<Ptr<Ty>>& instTys, Ptr<Ty> upperTy)
 {
     auto genericDecl = GetGeneralDecl(target);
@@ -1332,6 +1394,46 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedTarget(
     return decl;
 }
 
+Ptr<Decl> GIM::GenericInstantiationManagerImpl::GetInstantiatedTarget(
+    Ty& baseTy, Decl& target, const std::vector<Ptr<Ty>>& instTys, Ptr<Ty> upperTy)
+{
+    auto genericDecl = GetGeneralDecl(target);
+    if (genericDecl->IsBuiltIn()) {
+        return &target;
+    }
+
+    // Rearrange toplevel decls or nested function decls.
+    if (genericDecl->IsNominalDecl() || !genericDecl->outerDecl || !genericDecl->outerDecl->IsNominalDecl()) {
+        if (!genericDecl->GetGeneric() || !genericDecl->TestAttr(Attribute::GENERIC)) {
+            // Target is not a generic decl.
+            return genericDecl;
+        }
+        Ptr<Decl> instantiatedDecl = FindInCache(ConstructGenericInfo(*genericDecl, instTys));
+        if (!instantiatedDecl) {
+            return &target;
+        }
+        return instantiatedDecl;
+    }
+    auto targetBase = Ty::IsTyCorrect(upperTy) && !upperTy->HasGeneric() ? upperTy : Ptr(&baseTy);
+    auto decl = GetInstantiatedMemberTarget(*targetBase, *genericDecl, true);
+    if (decl && decl->TestAttr(Attribute::GENERIC)) {
+        decl = FindInCache(ConstructGenericInfo(*decl, instTys));
+    }
+    // Decl may be an interface function which should be rearranged to implementation decl.
+    if (decl && decl->IsFunc()) {
+        decl = FindImplFuncForAbstractFunc(baseTy, *RawStaticCast<FuncDecl*>(decl), *targetBase);
+        CJC_NULLPTR_CHECK(decl);
+        // Get instantiated version if decl has been updated to implented generic function.
+        if (decl->TestAttr(Attribute::GENERIC)) {
+            decl = FindInCache(ConstructGenericInfo(*decl, instTys));
+        }
+    }
+    if (!decl) {
+        return &target;
+    }
+    return decl;
+}
+
 void GIM::GenericInstantiationManagerImpl::RearrangeRefExprReference(RefExpr& re)
 {
     // Generic type decleration do not need to be instantiated.
@@ -1349,7 +1451,13 @@ void GIM::GenericInstantiationManagerImpl::RearrangeRefExprReference(RefExpr& re
         // For member used inside owner decl, the base type is type of current structure declaration.
         baseTy = GetDeclTy(*structDecl);
     }
-    re.ref.target = GetInstantiatedTarget(*baseTy, *re.ref.target, instTys, re.matchedParentTy);
+    auto oldTarget = GetInstantiatedTarget(*baseTy, *re.ref.target, instTys, re.matchedParentTy);
+    auto newTarget = GetInstantiatedTargetNew(*baseTy, *re.ref.target, instTys, re.matchedParentTy);
+    if (oldTarget != newTarget) {
+        Println("!!!!Augus Jan1: result not same as new logic,", baseTy->String(), oldTarget->identifier.Val(),
+            ", old logic:", oldTarget->outerDecl->identifier, "new logic:", newTarget->outerDecl->identifier);
+    }
+    re.ref.target = oldTarget;
     // If the target of RefExpr has been instantiated, we should clear the field instTys of the latter.
     ClearInstTysIsNeeded(re);
 }
@@ -1368,7 +1476,13 @@ void GIM::GenericInstantiationManagerImpl::RearrangeMemberAccessReference(Member
         baseTy = baseTy->IsFunc() ? RawStaticCast<FuncTy*>(baseTy)->retTy : baseTy;
         instTys = typeManager.GetTypeArgs(*baseTy);
     }
-    ma.target = GetInstantiatedTarget(*baseTy, *ma.target, instTys, ma.matchedParentTy);
+    auto oldTarget = GetInstantiatedTarget(*baseTy, *ma.target, instTys, ma.matchedParentTy);
+    auto newTarget = GetInstantiatedTargetNew(*baseTy, *ma.target, instTys, ma.matchedParentTy);
+    if (oldTarget != newTarget) {
+        Println("!!!!Augus Jan2: result not same as new logic,", baseTy->String(), oldTarget->identifier.Val(),
+            ", old logic:", oldTarget->outerDecl->identifier, "new logic:", newTarget->outerDecl->identifier);
+    }
+    ma.target = oldTarget;
     /**
      * For such case:
      * @Java
@@ -1406,6 +1520,12 @@ void GIM::GenericInstantiationManagerImpl::RearrangeTypeReference(Type& type)
         return;
     }
     auto instantiatedDecl = GetInstantiatedTarget(*type.GetTy(), *target, type.GetTy()->typeArgs);
+    auto newTarget = GetInstantiatedTargetNew(*type.GetTy(), *target, type.GetTy()->typeArgs);
+    if (instantiatedDecl != newTarget) {
+        Println("!!!!Augus Jan3: result not same as new logic,", type.GetTy()->String(),
+            instantiatedDecl->identifier.Val(), ", old logic:", instantiatedDecl->outerDecl->identifier,
+            "new logic:", newTarget->outerDecl->identifier);
+    }
     // Type only will be RefType or QualifiedType, guaranteed by caller.
     if (type.astKind == ASTKind::REF_TYPE) {
         auto& rt = static_cast<RefType&>(type);
@@ -1431,7 +1551,14 @@ void GIM::GenericInstantiationManagerImpl::RearrangeArrayExprReference(ArrayExpr
 void GIM::GenericInstantiationManagerImpl::RearrangeArrayLitReference(ArrayLit& al)
 {
     if (al.initFunc && Ty::IsTyCorrect(al.GetTy())) {
-        al.initFunc = RawStaticCast<FuncDecl*>(GetInstantiatedTarget(*al.GetTy(), *al.initFunc, al.GetTy()->typeArgs));
+        auto oldTarget = GetInstantiatedTarget(*al.GetTy(), *al.initFunc, al.GetTy()->typeArgs);
+        auto newTarget = GetInstantiatedTargetNew(*al.GetTy(), *al.initFunc, al.GetTy()->typeArgs);
+        if (oldTarget != newTarget) {
+            Println("!!!!Augus Jan4: result not same as new logic,", al.GetTy()->String(),
+                oldTarget->identifier.Val(), ", old logic:", oldTarget->outerDecl->identifier,
+                "new logic:", newTarget->outerDecl->identifier);
+        }
+        al.initFunc = RawStaticCast<FuncDecl*>(oldTarget);
     }
 }
 
@@ -1444,13 +1571,31 @@ void GIM::GenericInstantiationManagerImpl::RearrangeFuncBodyReference(FuncBody& 
     auto structDecl = GetStructDeclByContext();
     auto baseTy = GetDeclTy(*structDecl);
     if (fb.parentClassLike) {
-        fb.parentClassLike =
+        auto oldTarget =
             RawStaticCast<ClassLikeDecl*>(GetInstantiatedTarget(*baseTy, *fb.parentClassLike, baseTy->typeArgs));
+        auto newTarget = GetInstantiatedTargetNew(*baseTy, *fb.parentClassLike, baseTy->typeArgs);
+        if (oldTarget != newTarget) {
+            Println("!!!!Augus Jan5: result not same as new logic,", baseTy->String(),
+                oldTarget->identifier.Val(), ", old logic:", oldTarget->outerDecl->identifier,
+                "new logic:", newTarget->outerDecl->identifier);
+        }
+        fb.parentClassLike = RawStaticCast<ClassLikeDecl*>(oldTarget);
     } else if (fb.parentStruct) {
-        fb.parentStruct =
-            RawStaticCast<StructDecl*>(GetInstantiatedTarget(*baseTy, *fb.parentStruct, baseTy->typeArgs));
+        auto oldTarget = GetInstantiatedTarget(*baseTy, *fb.parentStruct, baseTy->typeArgs);
+        auto newTarget = GetInstantiatedTargetNew(*baseTy, *fb.parentStruct, baseTy->typeArgs);
+        if (oldTarget != newTarget) {
+            Println("!!!!Augus Jan6: result not same as new logic,", baseTy->String(), oldTarget->identifier.Val(),
+                ", old logic:", oldTarget->outerDecl->identifier, "new logic:", newTarget->outerDecl->identifier);
+        }
+        fb.parentStruct = RawStaticCast<StructDecl*>(oldTarget);
     } else if (fb.parentEnum) {
-        fb.parentEnum = RawStaticCast<EnumDecl*>(GetInstantiatedTarget(*baseTy, *fb.parentEnum, baseTy->typeArgs));
+        auto oldTarget = GetInstantiatedTarget(*baseTy, *fb.parentEnum, baseTy->typeArgs);
+        auto newTarget = GetInstantiatedTargetNew(*baseTy, *fb.parentEnum, baseTy->typeArgs);
+        if (oldTarget != newTarget) {
+            Println("!!!!Augus Jan7: result not same as new logic,", baseTy->String(), oldTarget->identifier.Val(),
+                ", old logic:", oldTarget->outerDecl->identifier, "new logic:", newTarget->outerDecl->identifier);
+        }
+        fb.parentEnum = RawStaticCast<EnumDecl*>(oldTarget);
     }
 }
 
