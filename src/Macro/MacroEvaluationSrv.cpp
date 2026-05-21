@@ -292,6 +292,9 @@ void MacroEvaluation::DeSerializeMacroCall(const MacroMsgFormat::MacroCall& call
     auto macCall = std::make_unique<MacroCall>(macDecls.back().get());
     MacroEvalMsgSerializer::DeSerializeParentNamesFromCall(macCall->parentNames, callFmt);
     MacroEvalMsgSerializer::DeSerializeChildMsgesFromCall(macCall->childMessages, callFmt);
+    // 新增：反序列化依赖包
+    MacroEvalMsgSerializer::DeSerializeRequiredPkgsFromCall(
+        macCall->requiredPackages, macCall->parentRequiredPackages, callFmt);
     macCall->methodName = callFmt.methodName()->str();
     macCall->packageName = callFmt.packageName()->str();
     macCall->libPath = callFmt.libPath()->str();

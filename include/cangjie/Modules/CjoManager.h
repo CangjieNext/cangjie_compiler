@@ -40,6 +40,12 @@ public:
     void AddSourcePackage(AST::Package& pkg) const;
     void AddImportedPackageFromASTNode(OwnedPtr<AST::Package>&& pkg) const;
     bool LoadPackageHeader(const std::string& fullPackageName, const std::string& cjoPath) const;
+    /**
+     * Load declaration data for a specific package.
+     * Must be called after LoadPackageHeader.
+     */
+    void LoadPackageDecls(const std::string& fullPackageName) const;
+    void LoadRefs(const std::string& fullPackageName) const;
     void LoadAllDeclsAndRefs() const;
     bool NeedCollectDependency(const std::string& curName, bool isCurMacro, const std::string& depName) const;
     /**

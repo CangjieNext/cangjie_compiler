@@ -1372,6 +1372,9 @@ PackageFormat::IntrinsicKind Serialize(const IntrinsicKind& kind)
         case FFI_CJ_CHECK_ADD_SPACE:
             ret = IntrinsicKind_FFI_CJ_CHECK_ADD_SPACE;
             break;
+        case FFI_CJ_REQUIRE_PACKAGE_IMPORT:
+            ret = IntrinsicKind_FFI_CJ_REQUIRE_PACKAGE_IMPORT;
+            break;
         case CG_UNSAFE_BEGIN:
             ret = IntrinsicKind_CG_UNSAFE_BEGIN;
             break;

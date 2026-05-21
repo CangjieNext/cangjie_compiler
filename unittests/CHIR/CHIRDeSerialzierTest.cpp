@@ -1372,6 +1372,9 @@ IntrinsicKind DeSerialize(const PackageFormat::IntrinsicKind& kind)
         case IntrinsicKind_FFI_CJ_CHECK_ADD_SPACE:
             ret = FFI_CJ_CHECK_ADD_SPACE;
             break;
+        case IntrinsicKind_FFI_CJ_REQUIRE_PACKAGE_IMPORT:
+            ret = FFI_CJ_REQUIRE_PACKAGE_IMPORT;
+            break;
         // CodeGen
         case IntrinsicKind_CG_UNSAFE_BEGIN:
             ret = CG_UNSAFE_BEGIN;

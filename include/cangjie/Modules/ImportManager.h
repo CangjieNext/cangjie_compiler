@@ -332,6 +332,49 @@ public:
     void AddUsedMacroDecls(const Ptr<const AST::File> file, Ptr<const AST::Decl> decl);
     std::map<std::string, std::set<Ptr<const AST::Decl>, AST::CmpNodeByPos>>& GetUsedMacroDecls(const AST::File& file);
 
+    /**
+     * @brief Add packages declared during macro expansion
+     *
+     * @param packages Set of package names declared by macros
+     */
+    void AddMacroRequiredPackages(const std::unordered_set<std::string>& packages);
+
+    /**
+     * @brief Get the list of packages declared by macros
+     */
+    const std::unordered_set<std::string>& GetMacroRequiredPackages() const
+    {
+        return macroRequiredPkgs;
+    }
+
+    /**
+     * @brief Check if a package was imported via macro dependency declaration
+     */
+    bool IsMacroRequiredPackage(const std::string& packageName) const
+    {
+        return macroRequiredPkgs.find(packageName) != macroRequiredPkgs.end();
+    }
+
+    /**
+     * @brief Dynamically import a macro-declared dependency package (called after macro expansion)
+     *
+     * Adds the package's symbols to importedDeclsMap so that subsequent symbol lookups
+     * can find these declarations. This method simulates the IMPORT_PACKAGE phase
+     * import logic, but can be called after MACRO_EXPAND.
+     *
+     * @param fullPackageName Full package name, e.g. "std.deriving.Derive"
+     * @return bool Whether the import was successful
+     */
+    bool ImportMacroRequiredPackage(const std::string& fullPackageName);
+
+    /**
+     * @brief Batch dynamically import macro-declared dependency packages
+     *
+     * @param packages List of package names
+     * @return bool Whether all imports were successful
+     */
+    bool ImportMacroRequiredPackages(const std::vector<std::string>& packages);
+
 public:
     /**
      * Whether import prelude libraries by default, default value is false, and
@@ -397,6 +440,8 @@ private:
 
     /** Direct imported macro packages. */
     std::unordered_set<Ptr<AST::Package>> directMacroDeps;
+    /** Packages declared by macros during expansion */
+    std::unordered_set<std::string> macroRequiredPkgs;
     /** Map of fullPackageName -> imported decl to the 'ImportSpec' which imports the decl. */
     std::unordered_map<std::string, DeclImportsMap> declsImportedByNodeMap;
     /** NOTE: Collect imported alias decl and alias-import only. */
@@ -473,6 +518,14 @@ private:
     bool IsDeclAccessible(const AST::File& file, AST::Decl& decl) const;
     const Ptr<AST::Type> FindImplmentInterface(
         const AST::File& file, const AST::Decl& member, const Ptr<AST::Type>& id) const;
+
+    /**
+     * @brief Add a package's symbols to importedDeclsMap (core logic for dynamic import)
+     *
+     * @param fullPackageName Full package name
+     */
+    void AddPackageSymbolsToImportMap(const std::string& fullPackageName);
+
     /**
      * Check if BuildIndex has been called.
      */
