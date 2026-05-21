@@ -400,6 +400,12 @@ OwnedPtr<AST::Package> ASTLoader::ASTLoaderImpl::PreLoadImportedPackageNode()
             packageNode->AddDependentStdPkg(depStdPkg);
         }
     }
+    if (package->macroImports()) {
+        uoffset_t nMacroImports = package->macroImports()->size();
+        for (uoffset_t i = 0; i < nMacroImports; i++) {
+            packageNode->macroImports.emplace_back(package->macroImports()->Get(i)->str());
+        }
+    }
     return packageNode;
 }
 

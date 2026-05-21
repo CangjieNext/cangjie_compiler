@@ -20,11 +20,65 @@ using namespace Cangjie;
 using namespace Cangjie::AST;
 using namespace Cangjie::Utils;
 
-void ParserImpl::ParseCommonImportSpec(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos)
+void ParserImpl::ParseMacroImports(AST::PackageSpec& packageSpec)
 {
-    while (SeeingImport() || (SeeingBuiltinAnnotation())) {
+    std::unordered_set<std::string> seenPkgs;
+    while (Seeing({TokenKind::MACRO, TokenKind::IMPORT})) {
+        Skip(TokenKind::MACRO);
+        Skip(TokenKind::IMPORT);
+
+        ImportContent content;
+        if (!ParseImportSingle(content)) {
+            ParseImportMulti(content);
+        }
+
+        if (content.kind == ImportKind::IMPORT_MULTI) {
+            auto prefix = content.GetPrefixPath();
+            for (const auto& item : content.items) {
+                std::string importStr = prefix + "." + item.identifier.Val();
+                if (seenPkgs.find(importStr) == seenPkgs.end()) {
+                    seenPkgs.insert(importStr);
+                    packageSpec.macroImports.emplace_back(std::move(importStr));
+                }
+            }
+        } else if (content.kind == ImportKind::IMPORT_ALL) {
+            std::string importStr = content.GetPrefixPath() + ".*";
+            if (seenPkgs.find(importStr) == seenPkgs.end()) {
+                seenPkgs.insert(importStr);
+                packageSpec.macroImports.emplace_back(std::move(importStr));
+            }
+        } else if (content.kind == ImportKind::IMPORT_SINGLE) {
+            std::string importStr = content.GetImportedPackageName();
+            if (!importStr.empty() && seenPkgs.find(importStr) == seenPkgs.end()) {
+                seenPkgs.insert(importStr);
+                packageSpec.macroImports.emplace_back(std::move(importStr));
+            }
+        }
+
+        if (!newlineSkipped) {
+            if (Seeing(TokenKind::END)) {
+                break;
+            }
+            if (!Skip(TokenKind::SEMI)) {
+                DiagExpectSemiOrNewline();
+                ConsumeUntilAny({TokenKind::NL, TokenKind::SEMI});
+            }
+        }
+        SkipBlank(TokenKind::SEMI);
+    }
+}
+
+void ParserImpl::ParseCommonImportSpec(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos,
+    PackageSpec* packageSpec)
+{
+    while (SeeingImport() || SeeingBuiltinAnnotation() ||
+           (packageSpec && packageSpec->hasMacro && Seeing({TokenKind::MACRO, TokenKind::IMPORT}))) {
         if (SeeingBuiltinAnnotation()) {
             ParseAnnotations(annos);
+        }
+        if (packageSpec && packageSpec->hasMacro && Seeing({TokenKind::MACRO, TokenKind::IMPORT})) {
+            ParseMacroImports(*packageSpec);
+            continue;
         }
         if (!SeeingImport()) {
             break;
@@ -83,9 +137,10 @@ void ParserImpl::CheckImportSpec(PtrVector<ImportSpec>& imports)
     }
 }
 
-void ParserImpl::ParseImportSpecInTop(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos)
+void ParserImpl::ParseImportSpecInTop(PtrVector<ImportSpec>& imports, PtrVector<Annotation>& annos,
+    PackageSpec* packageSpec)
 {
-    ParseCommonImportSpec(imports, annos);
+    ParseCommonImportSpec(imports, annos, packageSpec);
     CheckImportSpec(imports);
 }
 

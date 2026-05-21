@@ -332,6 +332,34 @@ public:
     void AddUsedMacroDecls(const Ptr<const AST::File> file, Ptr<const AST::Decl> decl);
     std::map<std::string, std::set<Ptr<const AST::Decl>, AST::CmpNodeByPos>>& GetUsedMacroDecls(const AST::File& file);
 
+    /**
+     * @brief Process macro import declarations from all imported macro packages
+     *
+     * When a macro package declares `macro import pkgA`, this method
+     * adds pkgA's symbols to importedDeclsMap after BuildIndex has loaded
+     * all package declarations.
+     *
+     * @param pkg The source package that imports macro packages
+     */
+    void ProcessMacroImports(AST::Package& pkg);
+
+    /**
+     * @brief Get the set of packages declared via macro import
+     */
+    const std::unordered_set<std::string>& GetMacroImportPkgsFromMacroDeps() const
+    {
+        return macroImportPkgsFromMacroDeps;
+    }
+
+    /**
+     * @brief Get the list of full import strings declared via macro import
+     */
+    const std::vector<std::string>& GetMacroImportStrings() const
+    {
+        return macroImportStrings;
+    }
+
+
 public:
     /**
      * Whether import prelude libraries by default, default value is false, and
@@ -397,6 +425,10 @@ private:
 
     /** Direct imported macro packages. */
     std::unordered_set<Ptr<AST::Package>> directMacroDeps;
+    /** Packages declared via macro import in macro packages */
+    std::unordered_set<std::string> macroImportPkgsFromMacroDeps;
+    /** Full import strings declared via macro import (e.g., "std.collection.ArrayList", "std.collection.*") */
+    std::vector<std::string> macroImportStrings;
     /** Map of fullPackageName -> imported decl to the 'ImportSpec' which imports the decl. */
     std::unordered_map<std::string, DeclImportsMap> declsImportedByNodeMap;
     /** NOTE: Collect imported alias decl and alias-import only. */
@@ -473,6 +505,14 @@ private:
     bool IsDeclAccessible(const AST::File& file, AST::Decl& decl) const;
     const Ptr<AST::Type> FindImplmentInterface(
         const AST::File& file, const AST::Decl& member, const Ptr<AST::Type>& id) const;
+
+    /**
+     * @brief Add a package's symbols to importedDeclsMap (core logic for dynamic import)
+     *
+     * @param fullPackageName Full package name
+     */
+    void AddPackageSymbolsToImportMap(const std::string& fullPackageName);
+
     /**
      * Check if BuildIndex has been called.
      */

@@ -802,9 +802,13 @@ void ASTWriter::ASTWriterImpl::AST2FB(std::vector<uint8_t>& data, const PackageD
     auto moduleName =
         builder.CreateString(hasModuleName ? package.srcPackage->files.front()->decls.front()->moduleName : "");
     PackageFormat::CjoVersion cjoVersion(CJO_MAJOR_VERSION, CJO_MINOR_VERSION, CJO_PATCH_VERSION);
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> vmacroImports;
+    if (package.srcPackage->isMacroPackage && !package.srcPackage->macroImports.empty()) {
+        vmacroImports = builder.CreateVectorOfStrings(package.srcPackage->macroImports);
+    }
     auto root = PackageFormat::CreatePackage(builder, cjcVersion, &cjoVersion, packageName, dependencyInfo, vimports,
         vfiles, vfileImports, vtypes, vdecls, vexprs, INVALID_FORMAT_INDEX, kind, access, moduleName, vfileInfo,
-        vdependentStdPkgs, options.has_value() ? options.value() : INVALID_FORMAT_INDEX);
+        vdependentStdPkgs, vmacroImports, options.has_value() ? options.value() : INVALID_FORMAT_INDEX);
     FinishPackageBuffer(builder, root);
     auto size = static_cast<size_t>(builder.GetSize());
     data.resize(size);
