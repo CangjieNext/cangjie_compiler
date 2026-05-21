@@ -88,7 +88,7 @@ std::string GetSystemErrorMessage(int error)
 #endif
 } // namespace
 #ifdef __APPLE__
-const static std::string LD_LIBRARY_PATH = "DYLD_LIBRARY_PATH";
+const static std::string LD_LIBRARY_PATH = "DYLD_FALLBACK_LIBRARY_PATH";
 const static std::string LD_PRELOAD = "DYLD_INSERT_LIBRARIES";
 #elif !defined(_WIN32)
 const static std::string LD_LIBRARY_PATH = "LD_LIBRARY_PATH";
@@ -119,7 +119,7 @@ std::string Tool::GenerateCommand() const
     });
 #ifndef _WIN32
     if (!GetLdLibraryPath().empty()) {
-        tempCommand = "LD_LIBRARY_PATH=" + GetSingleQuoted(GetLdLibraryPath()) + ":$" + LD_LIBRARY_PATH + " ";
+        tempCommand = LD_LIBRARY_PATH + "=" + GetSingleQuoted(GetLdLibraryPath()) + ":$" + LD_LIBRARY_PATH + " ";
     }
 #endif
 
@@ -276,9 +276,9 @@ std::list<std::string> Tool::BuildEnvironmentVector() const
     }
 
     const static std::unordered_set<std::string> blocklist = {
-        // Linux specific
         LD_LIBRARY_PATH,
         LD_PRELOAD,          // Preload shared libraries
+        // Linux specific
         "LD_AUDIT",          // Audit libraries
         "LD_DEBUG",          // Debugging
         "LD_PROFILE",        // Profiling
@@ -288,7 +288,6 @@ std::list<std::string> Tool::BuildEnvironmentVector() const
         "DYLD_INSERT_LIBRARIES",       // Preload libraries on macOS
         "DYLD_FRAMEWORK_PATH",         // Framework search path
         "DYLD_FALLBACK_FRAMEWORK_PATH", // Fallback framework path
-        "DYLD_FALLBACK_LIBRARY_PATH",   // Fallback library path
         "DYLD_VERSIONED_FRAMEWORK_PATH", // Versioned framework path
         "DYLD_VERSIONED_LIBRARY_PATH",   // Versioned library path
         "DYLD_PRINT_LIBRARIES",         // Print loaded libraries

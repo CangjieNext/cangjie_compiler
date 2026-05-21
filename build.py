@@ -45,7 +45,7 @@ CAN_RUN_CJNATIVE = (platform.system(), platform.machine()) in [
     ("Darwin", "x86_64"),
     ("Darwin", "arm64")
 ]
-LD_LIBRARY_PATH = "Path" if IS_WINDOWS else "DYLD_LIBRARY_PATH" if IS_MACOS else "LD_LIBRARY_PATH"
+LD_LIBRARY_PATH = "Path" if IS_WINDOWS else "DYLD_FALLBACK_LIBRARY_PATH" if IS_MACOS else "LD_LIBRARY_PATH"
 LIBRARY_PATH = "Path" if IS_WINDOWS else "LIBRARY_PATH"
 PATH_ENV_SEPERATOR = ";" if IS_WINDOWS else ":"
 # Wait for the version of aarch64 libcore to be ready.
