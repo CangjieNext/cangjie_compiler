@@ -454,7 +454,8 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
 void AST2CHIR::TranslateInParallel(const std::vector<Ptr<const AST::Decl>>& decls)
 {
     Utils::ParallelUtil allDeclsParallel(builder, opts.GetJobs());
-    allDeclsParallel.RunAST2CHIRInParallel(decls, chirType, opts, gim, globalCache, localConstVars, localConstFuncs,
+    allDeclsParallel.RunAST2CHIRInParallel(decls, chirType, opts, gim, globalCache, localConstVars,
+        localConstFuncs,
         kind, deserializedVals, Translator::TranslateASTNode, maybeUnreachable, isComputingAnnos,
         initFuncsForAnnoFactory, types, annoFactoryFuncs);
 }

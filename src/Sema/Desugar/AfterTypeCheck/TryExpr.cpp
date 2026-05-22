@@ -79,7 +79,7 @@ OwnedPtr<MatchExpr> CreateMatchExpr(FuncTy& someTy, VarDecl& freshExc, OwnedPtr<
     std::vector<OwnedPtr<MatchCase>> matchCases;
     (void)matchCases.emplace_back(std::move(caseSome));
     (void)matchCases.emplace_back(std::move(caseNone));
-    return CreateMatchExpr(CreateRefExpr(freshExc), std::move(matchCases), nullptr);
+    return CreateMatchExpr(CreateRefExpr(freshExc), std::move(matchCases), TypeManager::GetInvalidTy());
 }
 
 // Create `x.isClosed()` or `x.close()`.
