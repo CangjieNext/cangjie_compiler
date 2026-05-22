@@ -156,7 +156,7 @@ inline bool SaveInlineLabel(const FuncDecl& funcDecl)
 
 inline bool IsExternalNorminalDecl(const Decl& decl)
 {
-    return decl.IsNominalDecl() && decl.linkage != Linkage::INTERNAL;
+    return (decl.IsNominalDecl() || decl.IsBuiltIn()) && decl.linkage != Linkage::INTERNAL;
 }
 
 inline bool ShouldAlwaysExport(const Decl& decl, bool serializingCommon)
@@ -373,7 +373,7 @@ void SaveDeclBasicInfo(const DeclInfo& declInfo, PackageFormat::DeclBuilder& dbu
 inline bool CanSkip4CJMP(const Decl& decl, bool serializingCommon)
 {
     // Export global func or var, maybe used by global var initializer.
-    if (serializingCommon && !decl.IsNominalDecl() && decl.TestAttr(Attribute::GLOBAL)) {
+    if (serializingCommon && !decl.IsNominalDecl() && !decl.IsBuiltIn() && decl.TestAttr(Attribute::GLOBAL)) {
         return false;
     }
     return true;
@@ -1536,7 +1536,8 @@ TDeclOffset ASTWriter::ASTWriterImpl::SaveTypeAliasDecl(const TypeAliasDecl& typ
 TDeclOffset ASTWriter::ASTWriterImpl::SaveBuiltInDecl(const BuiltInDecl& builtInDecl, const DeclInfo& declInfo)
 {
     auto generic = SaveGeneric(builtInDecl);
-    auto info = PackageFormat::CreateBuiltInInfo(builder, BUILTIN_TYPE_MAP.at(builtInDecl.type));
+    auto builtInBody = GetBody(builtInDecl);
+    auto info = PackageFormat::CreateBuiltInInfo(builder, BUILTIN_TYPE_MAP.at(builtInDecl.type), builtInBody);
     PackageFormat::DeclBuilder dbuilder(builder);
     SaveDeclBasicInfo(declInfo, dbuilder);
     dbuilder.add_kind(PackageFormat::DeclKind_BuiltInDecl);
