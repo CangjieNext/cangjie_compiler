@@ -681,7 +681,7 @@ std::string ArrayTy::String() const
     std::string prefix;
     std::string suffix;
     for (int i = 0; i < static_cast<int>(dims); i++) {
-        prefix += "Array<";
+        prefix += "RawArray<";
         suffix += ">";
     }
     return prefix + str + suffix;
