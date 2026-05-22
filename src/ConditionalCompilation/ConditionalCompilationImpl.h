@@ -28,18 +28,7 @@
 
 namespace Cangjie::AST {
 
-/**
- * @brief Version information structure for cjc_version condition compilation.
- * Supports version format: x.y.z (x, y, z: 0-99)
- */
-struct VersionInfo {
-    uint32_t major = 0;
-    uint32_t minor = 0;
-    uint32_t patch = 0;
-
-    bool isValid = false;
-};
-
+const std::size_t CJC_VERSION_LENGTH = 6; // length of cjc version
 
 class ConditionalCompilationImpl {
 public:
@@ -65,7 +54,11 @@ private:
         return triple.EnvironmentToSimpleString();
     }
     std::string GetOSType() const;
-    std::string GetCJCVersion() const;
+    inline std::string GetCJCVersion() const
+    {
+        std::string version = std::to_string(cjcVersion);
+        return RefreshVersionStr(version);
+    }
     inline std::string GetDebug() const
     {
         return std::to_string(static_cast<int>(debug));
@@ -84,7 +77,7 @@ private:
     CompilerInstance* ci{nullptr};
     Triple::BackendType backendType;
     Triple::Info triple;
-    VersionInfo cjcVersionInfo;
+    uint32_t cjcVersion;
     bool debug;
     bool test;
     std::unordered_map<std::string, std::string> passedCondition;
@@ -94,7 +87,6 @@ private:
     bool ConditionCheck(const std::string& conditionStr, const Position& begin, const std::string& right);
 
     bool Eval(const BinaryExpr& expr, const std::string& left, const std::string& right) const;
-    bool EvalVersion(const BinaryExpr& expr, const VersionInfo& left, const VersionInfo& right) const;
 
     bool EvalBinaryExpr(const BinaryExpr& be);
     bool EvalParenExpr(const ParenExpr& pe);
@@ -104,9 +96,13 @@ private:
     bool EvalLogicBinaryExpr(const BinaryExpr& be);
     bool EvalJudgeBinaryExpr(const BinaryExpr& be);
 
-    static VersionInfo ParseVersion(const std::string& version);
-    static int CompareVersion(const VersionInfo& left, const VersionInfo& right);
-    static bool IsValidVersionNumber(uint32_t num);
+    std::string RefreshVersionStr(std::string& version) const
+    {
+        while (version.size() < CJC_VERSION_LENGTH) {
+            version = "0" + version;
+        }
+        return version;
+    }
 
     template <typename T> bool EvalNodeCondition(Ptr<T> node);
 };
