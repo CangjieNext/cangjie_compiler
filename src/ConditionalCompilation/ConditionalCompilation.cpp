@@ -359,7 +359,7 @@ bool ConditionalCompilationImpl::ConditionCheck(
     // Check `cjc_version`.
     if (conditionStr == CJC_VERSION_STR) {
         std::regex cjcVersionRegex("[0-9]{1,2}[.][0-9]{1,2}[.][0-9]{1,2}");
-        if (!std::regex_search(right, cjcVersionRegex)) {
+        if (!std::regex_match(right, cjcVersionRegex)) {
             (void)ci->diag.DiagnoseRefactor(
                 DiagKindRefactor::conditional_compilation_not_support_cjc_version_format, begin);
             return false;
