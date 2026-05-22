@@ -1114,6 +1114,11 @@ struct BuiltInDecl : public Decl {
     {
         return ty == type;
     }
+    std::vector<OwnedPtr<Decl>>& GetMemberDecls() override
+    {
+        return members;
+    }
+    std::vector<OwnedPtr<Decl>> members;
 };
 
 /**

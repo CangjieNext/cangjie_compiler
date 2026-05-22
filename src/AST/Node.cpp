@@ -596,6 +596,10 @@ std::vector<Ptr<Decl>> Decl::GetMemberDeclPtrs() const
         for (auto& decl : exd->members) {
             results.push_back(decl.get());
         }
+    } else if (auto bid = DynamicCast<BuiltInDecl>(this)) {
+        for (auto& decl : bid->members) {
+            results.push_back(decl.get());
+        }
     }
     return results;
 }

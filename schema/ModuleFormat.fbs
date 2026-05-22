@@ -255,6 +255,7 @@ enum BuiltInType : uint8 {
 }
 table BuiltInInfo {
   builtInType:BuiltInType;
+  body:[uint32];
 }
 table AliasInfo {
   aliasedTy:uint32; // Index of semantic type
