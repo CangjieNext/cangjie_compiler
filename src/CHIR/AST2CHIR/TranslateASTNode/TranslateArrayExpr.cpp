@@ -21,12 +21,9 @@ Ptr<Value> Translator::Visit(const AST::ArrayExpr& array)
         CJC_ASSERT(!array.GetTy()->typeArgs.empty());
 
         if (array.args[0]->GetTy()->IsFunc()) {
-            // Case A: "VArray<Int64, $5>({i => i})"
             return InitVArrayByLambda(array);
-        } else {
-            // Case B: "VArray<Int64, $5>(repeat: 0)"
-            return InitVArrayByItem(array);
         }
+        return InitVArrayByItem(array);
     }
 
     CJC_ASSERT(array.GetTy()->IsArray());
