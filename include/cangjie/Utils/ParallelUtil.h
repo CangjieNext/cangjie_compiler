@@ -52,10 +52,9 @@ public:
         for (size_t idx = 0; idx < funcNum; ++idx) {
             auto decl = decls.at(idx);
             auto subChirType = std::make_unique<CHIRType>(*builderList[idx], chirTypeCache);
-            auto tran = std::make_unique<Translator>(
-                *builderList[idx], *subChirType, opts, gim, globalCache, localConstVars,
-                localConstFuncs, kind, deserializedVals, annoFactoryFuncs, maybeUnreachableBlocks[idx],
-                computeAnnotations, initFuncsForAnnoFactory, typeManager);
+            auto tran = std::make_unique<Translator>(*builderList[idx], *subChirType, opts, gim, globalCache,
+                localConstVars, localConstFuncs, kind, deserializedVals, annoFactoryFuncs,
+                maybeUnreachableBlocks[idx], computeAnnotations, initFuncsForAnnoFactory, typeManager);
             tran->SetTopLevel(*decl);
             taskQueue.AddTask<void>(
                 [translator = tran.get(), decl, &funcForTranlateASTNode]() {

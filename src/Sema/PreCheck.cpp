@@ -790,9 +790,11 @@ void TypeChecker::TypeCheckerImpl::ResolveOneDecl(ASTContext& ctx, Decl& decl)
         }
         case ASTKind::FUNC_DECL:
         case ASTKind::GENERIC_PARAM_DECL:
-        case ASTKind::BUILTIN_DECL:
         case ASTKind::EXTEND_DECL:
             SetDeclTy(decl);
+            break;
+        case ASTKind::BUILTIN_DECL:
+            // BuiltInDecl ty is set in CreateBuiltinDecls; member FuncDecl tys are set in ResolveBuiltinDeclMembers.
             break;
         case ASTKind::VAR_WITH_PATTERN_DECL: {
             auto& vpd = StaticCast<VarWithPatternDecl&>(decl);
@@ -810,6 +812,41 @@ void TypeChecker::TypeCheckerImpl::ResolveOneDecl(ASTContext& ctx, Decl& decl)
     }
 }
 
+void TypeChecker::TypeCheckerImpl::ResolveBuiltinDeclMembers(const std::vector<AST::Symbol*>& syms)
+{
+    for (auto sym : syms) {
+        if (sym->node->begin.fileID > 1) {
+            break;
+        }
+        auto bd = DynamicCast<BuiltInDecl>(sym->node);
+        if (!bd) {
+            continue;
+        }
+        CJC_ASSERT(Ty::IsTyCorrect(bd->GetTy()));
+        for (auto& member : bd->GetMemberDecls()) {
+            auto fd = DynamicCast<FuncDecl>(member.get());
+            if (fd->generic) {
+                GetTyFromASTType(fd->generic->typeParameters);
+            }
+            auto paramTys = GetFuncBodyParamTys(*fd->funcBody);
+            for (auto paramTy : paramTys) {
+                CJC_ASSERT(Ty::IsTyCorrect(paramTy));
+            }
+            if (!fd->TestAttr(Attribute::CONSTRUCTOR)) {
+                continue;
+            }
+            Ptr<Ty> retTy = fd->TestAttr(Attribute::STATIC)
+                ? TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)
+                : bd->GetTy();
+            fd->SetTy(typeManager.GetFunctionTy(paramTys, retTy));
+            fd->funcBody->SetTy(fd->GetTy());
+            if (fd->funcBody->retType) {
+                fd->funcBody->retType->SetTy(retTy);
+            }
+        }
+    }
+}
+
 void TypeChecker::TypeCheckerImpl::ResolveDecls(ASTContext& ctx)
 {
     std::vector<Symbol*> syms = GetAllDecls(ctx);
@@ -821,6 +858,15 @@ void TypeChecker::TypeCheckerImpl::ResolveDecls(ASTContext& ctx)
     for (auto& sym : syms) {
         if (auto decl = AST::As<ASTKind::DECL>(sym->node); decl) {
             ResolveOneDecl(ctx, *decl);
+        }
+    }
+    ResolveBuiltinDeclMembers(syms);
+    for (auto sym : syms) {
+        if (auto bd = DynamicCast<BuiltInDecl>(sym->node)) {
+            CJC_ASSERT(Ty::IsTyCorrect(bd->GetTy()));
+            for (auto& member : bd->GetMemberDecls()) {
+                CJC_ASSERT(Ty::IsTyCorrect(member->GetTy()));
+            }
         }
     }
 }
