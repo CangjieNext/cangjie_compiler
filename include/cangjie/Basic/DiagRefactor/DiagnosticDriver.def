@@ -51,6 +51,7 @@ ERROR(driver_invalid_unsupport_extension, "unsupported output extension '.%s', e
 ERROR(driver_invalid_require_extension, "output to '%s' is not allowed, extension '.%s' is required")
 ERROR(driver_path_exceeds_length_limit, "the path length for %s exceeds the system limit (%s characters)")
 ERROR(driver_unsupported_target_cpu, "cpu type '%s' is not supported for the current target")
+ERROR(driver_static_dystd_conflict, "options --static and --dy-std are mutually exclusive")
 
 // condition compilation arg error and warnings
 ERROR(driver_cfg_value_err, "user defined condition should be like: k1=v1,k2=v2 or <directory path of cfg.toml>")
