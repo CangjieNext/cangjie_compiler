@@ -1236,7 +1236,8 @@ bool IsLegalAccess(Symbol* curComposite, const Decl& d, const AST::Node& node, I
     auto vd = DynamicCast<const VarDecl*>(&d);
     auto fd = DynamicCast<const FuncDecl*>(&d);
     auto cld = DynamicCast<const ClassLikeDecl*>(&d);
-    if (!vd && !fd && !cld) {
+    auto bid = DynamicCast<BuiltInDecl>(&d);
+    if (!vd && !fd && !cld && !bid) {
         // There are four kinds of members in class, VarDecl, funcDecl, classDecl and interfaceDecl. If decl is not one
         // of these, then there is no need to check visibility.
         return true;
