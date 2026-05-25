@@ -609,32 +609,18 @@ void TypeChecker::TypeCheckerImpl::DesugarArrayCall(ASTContext& ctx, CallExpr& c
     auto typeArgs = typeManager.GetTypeArgs(*baseFuncTy); // ArrayTy has 'dims', must using function to get arguments.
     auto baseArgs = ce.baseFunc->GetTypeArgs();
     IgnoreEmptyIntersection(baseArgs);
-    if (auto varrTy = DynamicCast<VArrayTy*>(baseFuncTy); varrTy) {
-        Ptr<Ty> argTy = TypeManager::GetInvalidTy();
-        if (!typeArgs.empty()) {
-            argTy = typeArgs[0];
-        }
-        if (typeArgs[0]->IsGeneric() && !baseArgs.empty()) {
-            argTy = baseArgs[0]->GetTy();
-        }
-        arrayExpr->type->SetTy(typeManager.GetVArrayTy(*argTy, varrTy->size));
-        arrayExpr->isValueArray = true;
-    } else {
-        // Eg: type A<T> = Array<T>; A(size, v), type args of this A is not useful.
-        bool usefulTypeArg = !typeArgs.empty() && (!typeArgs[0]->IsGeneric() || !baseArgs.empty());
-        if (usefulTypeArg) {
-            arrayExpr->type->SetTy(typeManager.GetArrayTy(typeArgs[0], 1));
-        } else {
-            Ptr<Ty> argTy = TypeManager::GetInvalidTy();
-            if (!baseArgs.empty()) {
-                argTy = baseArgs[0]->GetTy();
-            }
-            arrayExpr->type->SetTy(typeManager.GetArrayTy(argTy, 1));
-        }
+    auto varrTy = DynamicCast<VArrayTy*>(baseFuncTy);
+    CJC_ASSERT(varrTy);
+    Ptr<Ty> argTy = TypeManager::GetInvalidTy();
+    if (!typeArgs.empty()) {
+        argTy = typeArgs[0];
     }
-    for (auto& it : ce.args) {
-        (void)arrayExpr->args.emplace_back(std::move(it));
+    if (typeArgs[0]->IsGeneric() && !baseArgs.empty()) {
+        argTy = baseArgs[0]->GetTy();
     }
+    arrayExpr->type->SetTy(typeManager.GetVArrayTy(*argTy, varrTy->size));
+    arrayExpr->isValueArray = true;
+    arrayExpr->args = std::move(ce.args);
     ce.args.clear();
     arrayExpr->scopeName = ce.scopeName;
     arrayExpr->sourceExpr = &ce;

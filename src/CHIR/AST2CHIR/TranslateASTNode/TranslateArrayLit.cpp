@@ -77,7 +77,6 @@ Ptr<Value> Translator::TranslateStructArray(const AST::ArrayLit& array)
         CreateAndAppendExpression<Allocate>(builder.GetType<RefType>(arrayTy), arrayTy, currentBlock)->GetResult();
     auto intExpr = CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, 0UL);
     std::vector<Value*> args = {result, rawArrayRef, intExpr->GetResult(), elementSize};
-    // what are the initFn here all normal constructor or the arrayInitByFunc/arrayInitByCollection
     // check the thisType and instParentCustomDefTy
     std::vector<Type*> instParamTys;
     for (auto arg : args) {

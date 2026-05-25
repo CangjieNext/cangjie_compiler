@@ -37,10 +37,8 @@ public:
         const ElementList<Ptr<const AST::FuncDecl>>& localConstFuncs, const IncreKind& kind,
         const std::unordered_map<std::string, Value*>& deserializedVals,
         std::vector<std::pair<const AST::Decl*, Function*>>& annoFactories,
-        std::unordered_map<Block*, Terminator*>& maybeUnreachable,
-        bool computeAnnotations,
-        std::vector<CHIR::Function*>& initFuncForAnnoFactory,
-        const Cangjie::TypeManager& typeManager)
+        std::unordered_map<Block*, Terminator*>& maybeUnreachable, bool computeAnnotations,
+        std::vector<CHIR::Function*>& initFuncForAnnoFactory, const Cangjie::TypeManager& typeManager)
         : builder(builder),
           chirTy(chirTy),
           globalSymbolTable(globalSymbolTable),
@@ -913,7 +911,7 @@ private:
     // ====================call expr===============
     // ==================== global func or instance member func call===============
     Ptr<Value> TranslateIntrinsicCall(const AST::CallExpr& expr);
-    Ptr<Value> TranslateCStringCtorCall(const AST::CallExpr& expr);
+    Value* TranslateCStringCtorCall(const AST::CallExpr& expr);
     Ptr<Value> TranslateForeignFuncCall(const AST::CallExpr& expr);
 
     Value* GenerateLoadIfNeccessary(Value& arg, bool isThis, bool isMut, bool isInOut, const DebugLocation& loc);
@@ -936,8 +934,9 @@ private:
     // ==================== lambda func call===============
     Ptr<Value> TranslateFuncTypeValueCall(const AST::CallExpr& expr);
     // ==================== constructor call===============
-    Ptr<Value> TranslateCFuncConstructorCall(const AST::CallExpr& expr);
+    Ptr<Value> TranslateCFuncCtorCall(const AST::CallExpr& expr);
     Ptr<Value> TranslateEnumCtorCall(const AST::CallExpr& expr);
+    Value* TranslateCPointerCtorCall(const AST::CallExpr& expr);
     /// Translate common parts of struct/class ctor call of left value and right value versions.
     /// \returns translate this arg.
     std::pair<Value*, Type*> TranslateStructOrClassCtorCallCommon(const AST::CallExpr& expr);
@@ -1123,9 +1122,11 @@ private:
     // => VArrayBuilder ( size, null, initFunc )
     Ptr<Value> InitVArrayByLambda(const AST::ArrayExpr& vArray);
 
+    Ptr<Value> TranslateRawArrayCtorCall(const AST::CallExpr& expr);
+    Ptr<Value> InitRawArrayEmpty(const AST::CallExpr& expr);
+    Ptr<Value> InitRawArrayByItem(const AST::CallExpr& expr);
     Ptr<Value> InitArrayByCollection(const AST::ArrayExpr& array);
-    Ptr<Value> InitArrayByItem(const AST::ArrayExpr& array);
-    Ptr<Value> InitArrayByLambda(const AST::ArrayExpr& array);
+    Ptr<Value> InitRawArrayByLambda(const AST::ArrayExpr& array);
 
     // ArrayLit - StructArray
     Ptr<Value> TranslateStructArray(const AST::ArrayLit& array);
@@ -1147,43 +1148,6 @@ private:
     void BlackBoxModifyArgTypeToRef(std::vector<Value*>& args);
 
     void AddMemberMethodToCustomTypeDef(const AST::FuncDecl& decl, CustomTypeDef& def);
-};
-
-static const std::unordered_map<Cangjie::TokenKind, ExprKind> op2ExprKind = {
-    {Cangjie::TokenKind::ADD, ExprKind::ADD},
-    {Cangjie::TokenKind::SUB, ExprKind::SUB},
-    {Cangjie::TokenKind::MUL, ExprKind::MUL},
-    {Cangjie::TokenKind::DIV, ExprKind::DIV},
-    {Cangjie::TokenKind::MOD, ExprKind::MOD},
-    {Cangjie::TokenKind::EXP, ExprKind::EXP},
-    {Cangjie::TokenKind::BITAND, ExprKind::BITAND},
-    {Cangjie::TokenKind::BITOR, ExprKind::BITOR},
-    {Cangjie::TokenKind::BITXOR, ExprKind::BITXOR},
-    {Cangjie::TokenKind::LSHIFT, ExprKind::LSHIFT},
-    {Cangjie::TokenKind::RSHIFT, ExprKind::RSHIFT},
-    {Cangjie::TokenKind::LT, ExprKind::LT},
-    {Cangjie::TokenKind::GT, ExprKind::GT},
-    {Cangjie::TokenKind::LE, ExprKind::LE},
-    {Cangjie::TokenKind::GE, ExprKind::GE},
-    {Cangjie::TokenKind::NOTEQ, ExprKind::NOTEQUAL},
-    {Cangjie::TokenKind::EQUAL, ExprKind::EQUAL},
-};
-
-const static std::unordered_map<std::string, const std::unordered_map<std::string, IntrinsicKind>> packageMap = {
-    {CORE_PACKAGE_NAME, coreIntrinsicMap},
-    {SYNC_PACKAGE_NAME, cjnativeSyncIntrinsicMap},
-    {OVERFLOW_PACKAGE_NAME, overflowIntrinsicMap},
-    {RUNTIME_PACKAGE_NAME, runtimeIntrinsicMap},
-    {REFLECT_PACKAGE_NAME, reflectIntrinsicMap},
-    {MATH_PACKAGE_NAME, mathIntrinsicMap},
-    {INTEROP_PACKAGE_NAME, interOpIntrinsicMap},
-    {"ohos.ark_interop", ohosArkInteropIntrinsicMap}
-};
-
-// Below are instrinsics without a source-level declaration, their delcaration should be dinamically generated
-const static std::unordered_map<std::string, IntrinsicKind> headlessIntrinsics = {
-    {GET_TYPE_FOR_TYPE_PARAMETER_NAME, IntrinsicKind::GET_TYPE_FOR_TYPE_PARAMETER},
-    {IS_SUBTYPE_TYPES_NAME, IntrinsicKind::IS_SUBTYPE_TYPES},
 };
 } // namespace Cangjie::CHIR
 
