@@ -66,7 +66,7 @@ const std::unordered_map<std::string, std::unordered_map<std::string, std::strin
 
 std::optional<std::string> GetSpecialFuncName(const FuncDecl& fd)
 {
-    auto found = SPECIAL_FUNC_NAMES.find(fd.fullPackageName);
+    auto found = SPECIAL_FUNC_NAMES.find(fd.GetFullPackageName());
     if (found == SPECIAL_FUNC_NAMES.end()) {
         return std::nullopt;
     }
@@ -179,7 +179,7 @@ std::string BaseMangler::MangleFullPackageName(const std::string& packageName) c
 
 std::string BaseMangler::MangleFullPackageName(const AST::Decl& decl) const
 {
-    return MangleFullPackageName(decl.fullPackageName);
+    return MangleFullPackageName(decl.GetFullPackageName());
 }
 
 std::string BaseMangler::GetPrefixOfType(const AST::Ty& ty) const
@@ -319,9 +319,9 @@ std::string BaseMangler::MangleVarDecl(const AST::Decl& decl, const std::vector<
     mangleStr += ManglePrefix(decl, prefix, genericsTypeStack, false);
     mangleStr += MangleUtils::MangleName(decl.identifier.Val());
 
-    if (IsLocalVariable(decl) && manglerCtxTable.find(decl.fullPackageName) != manglerCtxTable.end()) {
+    if (IsLocalVariable(decl) && manglerCtxTable.find(decl.GetFullPackageName()) != manglerCtxTable.end()) {
         mangleStr += MANGLE_COUNT_PREFIX;
-        auto manglerCtx = manglerCtxTable.at(decl.fullPackageName).get();
+        auto manglerCtx = manglerCtxTable.at(decl.GetFullPackageName()).get();
         if (!manglerCtx) {
             return "";
         }
@@ -365,7 +365,7 @@ std::optional<size_t> BaseMangler::GetIndexOfWildcard(
     const AST::VarWithPatternDecl& vwpDecl, const std::vector<Ptr<AST::Node>>& prefix) const
 {
     CJC_ASSERT(ManglerContext::CheckAllElementsWildcard(vwpDecl.irrefutablePattern.get()));
-    std::string pkgName = ManglerContext::ReduceUnitTestPackageName(vwpDecl.fullPackageName);
+    std::string pkgName = ManglerContext::ReduceUnitTestPackageName(vwpDecl.GetFullPackageName());
     CJC_ASSERT(!pkgName.empty() && "pkgName of varWithPatternDecl is empty.");
     CJC_ASSERT(manglerCtxTable.find(pkgName) != manglerCtxTable.end() && "can not find pkgName in manglerCtxTable.");
     auto mangleCtx = manglerCtxTable.at(pkgName);
@@ -622,7 +622,7 @@ std::string BaseMangler::MangleExtendEntity(const AST::ExtendDecl& extendDecl,
     CJC_NULLPTR_CHECK(extendDecl.extendedType->ty);
     std::string mangled;
     mangled += MANGLE_EXTEND_PREFIX + MangleType(*extendDecl.extendedType->ty, genericsTypeStack, declare);
-    auto ctx = manglerCtxTable.find(ManglerContext::ReduceUnitTestPackageName(extendDecl.fullPackageName));
+    auto ctx = manglerCtxTable.find(ManglerContext::ReduceUnitTestPackageName(extendDecl.GetFullPackageName()));
     CJC_ASSERT(ctx != manglerCtxTable.end());
     std::string fileName = extendDecl.curFile.get()->fileName;
     mangled += MANGLE_FILE_ID_PREFIX +
@@ -830,7 +830,7 @@ std::string BaseMangler::ManglePrefix(const Node& node, const std::vector<Ptr<No
 std::string BaseMangler::ManglePackage(const Decl& decl) const
 {
     std::string genericPackageName = ManglePackageNameForGeneric(decl);
-    return genericPackageName.empty() ? MangleFullPackageName(decl.fullPackageName) : genericPackageName;
+    return genericPackageName.empty() ? MangleFullPackageName(decl) : genericPackageName;
 }
 
 std::unique_ptr<ManglerContext> BaseMangler::PrepareContextForPackage(const Ptr<AST::Package> pkg)
@@ -866,7 +866,7 @@ Ptr<AST::Node> BaseMangler::FindOuterNodeOfLambda(
 std::string BaseMangler::GetMangledLocalFuncIndex(const AST::FuncDecl& decl, const std::vector<Ptr<AST::Node>>& prefix) const
 {
     auto outerNode = GetOuterDecl(decl);
-    std::string pkgName = decl.fullPackageName;
+    std::string pkgName = decl.GetFullPackageName();
     pkgName = ManglerContext::ReduceUnitTestPackageName(pkgName);
     auto mangleCtx = manglerCtxTable.at(pkgName);
     std::optional<size_t> index = mangleCtx->GetIndexOfFunc(outerNode, &decl);
