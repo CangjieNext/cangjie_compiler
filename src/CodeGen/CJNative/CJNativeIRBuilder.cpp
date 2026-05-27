@@ -108,7 +108,8 @@ std::vector<llvm::Value*> IRBuilder2::FixFuncArgs(const CGFunctionType& calleeTy
     auto isGlobalStructArgOnAArch64 = [this, applyWrapper, &structParamNeedsBasePtr, &realArgIndices](size_t idx) {
         return applyWrapper && structParamNeedsBasePtr.find(realArgIndices[idx]) != structParamNeedsBasePtr.end() &&
             applyWrapper->GetArgs()[idx]->IsGlobalVar() &&
-            cgMod.GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::AARCH64;
+            cgMod.GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::AARCH64 &&
+            cgMod.GetCGContext().GetCompileOptions().target.env != Triple::Environment::ANDROID;
     };
     auto tagGlobalStructAddrForAArch64 = [this](llvm::Value* llvmVal) {
         auto taggedPtr = CreatePtrToInt(llvmVal, getInt64Ty());
