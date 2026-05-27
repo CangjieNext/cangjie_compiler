@@ -60,18 +60,40 @@ std::optional<std::size_t> TryComputeDefaultConstructorUnionSize(
 std::optional<std::size_t> TryComputeAndroidArm32StructConstructorUnionSize(
     CGModule& cgMod, const std::vector<CHIR::Type*>& paramTypes)
 {
+    // Collect sizes and alignments first, using DeRef to match the semantics
+    // of ComputeAssociatedNonRefLayout. If any type is not yet sized, return
+    // nullopt early without constructing a temporary LLVM StructType. This
+    // avoids the call chain: ComputeAndroidArm32StructAssociatedNonRefLayout
+    // -> GetAndroidArm32AssociatedNonRefLayoutType -> GetLLVMType() on each
+    // field, which on ARM32 may trigger CGType creation for DeRef'd types
+    // that are not yet fully initialized, leaving them permanently incomplete.
+    std::vector<uint32_t> fieldSizes;
+    std::vector<uint32_t> fieldAligns;
+    fieldSizes.reserve(paramTypes.size());
+    fieldAligns.reserve(paramTypes.size());
     for (auto associatedValueCHIRType : paramTypes) {
-        auto associatedValueCGType = CGType::GetOrCreate(cgMod, associatedValueCHIRType);
-        if (!associatedValueCGType->GetSize().has_value()) {
+        auto associatedValueCGType = CGType::GetOrCreate(cgMod, DeRef(*associatedValueCHIRType));
+        auto fieldSize = associatedValueCGType->GetSize();
+        auto fieldAlign = associatedValueCGType->GetAlign();
+        if (!fieldSize.has_value() || !fieldAlign.has_value()) {
             return std::nullopt;
         }
+        fieldSizes.emplace_back(fieldSize.value());
+        fieldAligns.emplace_back(fieldAlign.value());
     }
-    std::vector<CHIR::Type*> fullFieldTypes;
-    fullFieldTypes.reserve(paramTypes.size() + 1U);
-    fullFieldTypes.emplace_back(cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty());
-    fullFieldTypes.insert(fullFieldTypes.end(), paramTypes.begin(), paramTypes.end());
-    auto fullLayout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fullFieldTypes);
-    return fullLayout.size - sizeof(uint32_t);
+
+    // Manually compute the layout size for struct { int32, T1, T2, ... }
+    // without creating an LLVM StructType. This manual alignment mirrors
+    // what LLVM's DataLayout would compute for an ARM32 target.
+    uint32_t currentOffset = sizeof(uint32_t);
+    uint32_t structAlign = alignof(uint32_t);
+    for (size_t i = 0; i < fieldSizes.size(); ++i) {
+        structAlign = std::max(structAlign, fieldAligns[i]);
+        currentOffset = llvm::alignTo(currentOffset, fieldAligns[i]);
+        currentOffset += fieldSizes[i];
+    }
+    uint32_t totalSize = llvm::alignTo(currentOffset, structAlign);
+    return totalSize - sizeof(uint32_t);
 }
 
 std::optional<std::size_t> TryComputeConstructorUnionSize(
