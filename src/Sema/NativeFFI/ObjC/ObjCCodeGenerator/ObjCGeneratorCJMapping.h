@@ -10,8 +10,8 @@
  * This file declares class for Objective-C code generation.
  */
 
-#ifndef CANGJIE_SEMA_OBJC_GENERATOR_H
-#define CANGJIE_SEMA_OBJC_GENERATOR_H
+#ifndef CANGJIE_SEMA_OBJC_GENERATOR_CJMAPPING_H
+#define CANGJIE_SEMA_OBJC_GENERATOR_CJMAPPING_H
 
 #include <fstream>
 #include <string_view>
@@ -24,17 +24,18 @@
 
 namespace Cangjie::Interop::ObjC {
 
-enum class ObjCFunctionType { STATIC, INSTANCE };
-enum class GenerationTarget { HEADER, SOURCE, BOTH };
-enum class FunctionListFormat { DECLARATION, STATIC_REF, CANGJIE_DECL };
-enum class OptionalBlockOp { OPEN, CLOSE, NONE };
+enum class ObjCFunctionTypeCJ { STATIC, INSTANCE };
+enum class GenerationTargetCJ { HEADER, SOURCE, BOTH };
+enum class FunctionListFormatCJ { DECLARATION, STATIC_REF, CANGJIE_DECL };
+enum class OptionalBlockOpCJ { OPEN, CLOSE, NONE };
+
 using ArgsList = std::vector<std::pair<std::string, std::string>>;
 
-class ObjCGenerator {
+class ObjCGeneratorCJMapping {
 public:
-    ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
+    ObjCGeneratorCJMapping(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
         const std::string& cjLibOutputPath, InteropType interopType);
-    ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
+    ObjCGeneratorCJMapping(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
         const std::string& cjLibOutputPath, InteropType interopType, Native::FFI::GenericConfigInfo* genericConfig,
         bool isGenericGlueCode);
     void Generate();
@@ -56,8 +57,8 @@ private:
 
     void OpenBlock();
     void CloseBlock(bool newLineBefore, bool newLineAfter);
-    void AddWithIndent(const std::string& s, const GenerationTarget target = GenerationTarget::HEADER,
-        const OptionalBlockOp bOp = OptionalBlockOp::NONE);
+    void AddWithIndent(const std::string& s, const GenerationTargetCJ target = GenerationTargetCJ::HEADER,
+        const OptionalBlockOpCJ bOp = OptionalBlockOpCJ::NONE);
     void AddToPreamble(const std::string& s);
 
     std::string GenerateReturn(const std::string& statement) const;
@@ -67,18 +68,18 @@ private:
     std::string GenerateCCall(
         const std::string& funcName, const std::vector<std::string> args = std::vector<std::string>()) const;
     std::string GenerateDefaultFunctionImplementation(const std::string& name, const AST::Ty& retTy,
-        const ArgsList args = ArgsList(), const ObjCFunctionType = ObjCFunctionType::INSTANCE);
+        const ArgsList args = ArgsList(), const ObjCFunctionTypeCJ = ObjCFunctionTypeCJ::INSTANCE);
     std::string GenerateFunctionDeclaration(
-        const ObjCFunctionType type, const std::string& returnType, const std::string& name) const;
-    std::string GeneratePropertyDeclaration(const ObjCFunctionType staticType, const std::string& mode,
+        const ObjCFunctionTypeCJ type, const std::string& returnType, const std::string& name) const;
+    std::string GeneratePropertyDeclaration(const ObjCFunctionTypeCJ staticType, const std::string& mode,
         const std::string& type, const std::string& name, const std::string& getterName, const std::string& setterName) const;
     std::string GenerateImport(const std::string& name);
     std::string GenerateExternalFunctionDeclaration(
         const std::string& funcName, const std::string& retType, const std::string& argTypes) const;
     std::string GenerateFuncParamLists(const std::vector<OwnedPtr<AST::FuncParamList>>& paramLists,
         const std::vector<std::string>& selectorComponents,
-        FunctionListFormat format = FunctionListFormat::DECLARATION,
-        const ObjCFunctionType type = ObjCFunctionType::INSTANCE,
+        FunctionListFormatCJ format = FunctionListFormatCJ::DECLARATION,
+        const ObjCFunctionTypeCJ type = ObjCFunctionTypeCJ::INSTANCE,
         bool hasForeignNameAnno = true);
     std::string GenerateArgumentCast(const AST::Ty& retTy, std::string value) const;
     std::string MapCJTypeToObjCType(const AST::Ty& ty);
@@ -137,4 +138,4 @@ private:
 };
 } // namespace Cangjie::Interop::ObjC
 
-#endif // CANGJIE_SEMA_OBJC_GENERATOR_H
+#endif // CANGJIE_SEMA_OBJC_GENERATOR_CJMAPPING_H
