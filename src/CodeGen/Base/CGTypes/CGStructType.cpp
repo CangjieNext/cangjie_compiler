@@ -40,6 +40,7 @@ llvm::Type* CGStructType::GenLLVMType()
         llvmType =  llvm::StructType::create(llvmCtx, typeName);
     }
     layoutType = llvm::cast<llvm::StructType>(llvmType);
+
     cgCtx.AddGeneratedStructType(typeName);
 
     std::vector<llvm::Type*> fieldTypes;
