@@ -11,6 +11,7 @@
  */
 
 #include "NativeFFI/ObjC/ObjCCodeGenerator/ObjCGenerator.h"
+#include "NativeFFI/ObjC/ObjCCodeGenerator/ObjCGeneratorCJMapping.h"
 #include "Handlers.h"
 
 using namespace Cangjie::AST;
@@ -22,8 +23,13 @@ void GenerateGlueCode::HandleImpl(InteropContext& ctx)
         if (decl.TestAnyAttr(Attribute::IS_BROKEN, Attribute::HAS_BROKEN)) {
             return;
         }
-        auto codegen = ObjCGenerator(ctx, &decl, ctx.outputObjCGenDir, ctx.cjLibOutputPath, this->interopType);
-        codegen.Generate();
+        if (this->interopType == InteropType::ObjC_Mirror) {
+            auto codegen = ObjCGenerator(ctx, &decl, ctx.outputObjCGenDir, ctx.cjLibOutputPath, this->interopType);
+            codegen.Generate();
+        } else {
+            auto codegen = ObjCGeneratorCJMapping(ctx, &decl, ctx.outputObjCGenDir, ctx.cjLibOutputPath, this->interopType);
+            codegen.Generate();
+        }
     };
 
     // For Generic Glue Code
@@ -32,16 +38,29 @@ void GenerateGlueCode::HandleImpl(InteropContext& ctx)
         if (decl.TestAnyAttr(Attribute::IS_BROKEN, Attribute::HAS_BROKEN)) {
             return;
         }
-        auto codegen = ObjCGenerator(
-            ctx,
-            &decl,
-            ctx.outputObjCGenDir,
-            ctx.cjLibOutputPath,
-            this->interopType,
-            genericConfig,
-            isGenericGlueCode
-        );
-        codegen.Generate();
+        if (this->interopType == InteropType::ObjC_Mirror) {
+            auto codegen = ObjCGenerator(
+                ctx,
+                &decl,
+                ctx.outputObjCGenDir,
+                ctx.cjLibOutputPath,
+                this->interopType,
+                genericConfig,
+                isGenericGlueCode
+            );
+            codegen.Generate();
+        } else {
+            auto codegen = ObjCGeneratorCJMapping(
+                ctx,
+                &decl,
+                ctx.outputObjCGenDir,
+                ctx.cjLibOutputPath,
+                this->interopType,
+                genericConfig,
+                isGenericGlueCode
+            );
+            codegen.Generate();
+        }
     };
 
     auto processContainer = [&genGlueCode, &genGlueCodeWithGenericConfigs](auto& container) {

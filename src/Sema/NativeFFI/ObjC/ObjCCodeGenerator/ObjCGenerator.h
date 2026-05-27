@@ -21,14 +21,16 @@
 #include "NativeFFI/ObjC/Utils/Handler.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Types.h"
+#include "ObjCParamMapper.h"
+#include "Utils.h"
 
 namespace Cangjie::Interop::ObjC {
 
-enum class ObjCFunctionType { STATIC, INSTANCE };
-enum class GenerationTarget { HEADER, SOURCE, BOTH };
-enum class FunctionListFormat { DECLARATION, STATIC_REF, CANGJIE_DECL };
-enum class OptionalBlockOp { OPEN, CLOSE, NONE };
 using ArgsList = std::vector<std::pair<std::string, std::string>>;
+
+inline static const std::string DEFAULT_OUTPUT_DIR = "objc-gen";
+inline static const std::string DEFAULT_OUTPUT_DIR_WARNING =
+    "default value objc-gen of Objective-C generated sources directory will be changed in next Cangjie SDK release";
 
 class ObjCGenerator {
 public:
@@ -40,91 +42,50 @@ public:
     void Generate();
 
 private:
-    std::string resPreamble;
-    std::string res;
-    std::string resSource;
+    struct EmittableObjCClassMetainfo GetObjCClassMetainfo(AST::ClassDecl* classDecl);
+    struct EmittableObjCFuncMetainfo GetObjCFuncMetainfo(AST::FuncDecl& funcDecl, bool mangled = false);
+    struct EmittableObjCFuncMetainfo GetObjCCtorMetainfo(AST::FuncDecl& funcDecl);
+    struct EmittableObjCPropMetainfo GetObjCPropMetainfoFromProp(AST::VarDeclAbstract& varDecl);
+
+    bool CheckFunction(OwnedPtr<AST::Decl>& arg);
+    bool CheckCtor(OwnedPtr<AST::Decl>& arg);
+    bool CheckProp(OwnedPtr<AST::Decl>& arg);
+    void CollectDependencies(Ptr<AST::Ty> ty);
+
+    std::stringstream sourceBody;
+    std::stringstream headerBody;
+    std::stringstream dependenciesStream;
+    std::stringstream sourceImport;
+    std::stringstream headerImport;
+    std::stringstream staticReferences;
+    std::stringstream funcInitialization;
+    std::stringstream initialize;
+    std::stringstream ctors;
+    std::stringstream defaultFuncImpls;
+
+    std::set<Ptr<AST::Decl>> dependencies;
     std::unordered_set<std::string> typedefs;
+
+    std::string resPreamble;
     const std::string& outputFilePath;
     const std::string& cjLibOutputPath;
     size_t currentBlockIndent = 0;
     Ptr<AST::Decl> decl;
     InteropContext& ctx;
     InteropType interopType;
+    ObjCParamMapper paramMapper;
+    
     std::stringstream buffer;
     Native::FFI::GenericConfigInfo* genericConfig = nullptr;
     bool isGenericGlueCode{false};
 
-    void OpenBlock();
-    void CloseBlock(bool newLineBefore, bool newLineAfter);
-    void AddWithIndent(const std::string& s, const GenerationTarget target = GenerationTarget::HEADER,
-        const OptionalBlockOp bOp = OptionalBlockOp::NONE);
-    void AddToPreamble(const std::string& s);
-
-    std::string GenerateReturn(const std::string& statement) const;
-    std::string GenerateAssignment(const std::string& lhs, const std::string& rhs) const;
-    std::string GenerateIfStatement(const std::string& lhs, const std::string& rhs, const std::string& op) const;
-    std::string GenerateObjCCall(const std::string& lhs, const std::string& rhs) const;
-    std::string GenerateCCall(
-        const std::string& funcName, const std::vector<std::string> args = std::vector<std::string>()) const;
-    std::string GenerateDefaultFunctionImplementation(const std::string& name, const AST::Ty& retTy,
-        const ArgsList args = ArgsList(), const ObjCFunctionType = ObjCFunctionType::INSTANCE);
-    std::string GenerateFunctionDeclaration(
-        const ObjCFunctionType type, const std::string& returnType, const std::string& name) const;
-    std::string GeneratePropertyDeclaration(const ObjCFunctionType staticType, const std::string& mode,
-        const std::string& type, const std::string& name, const std::string& getterName, const std::string& setterName) const;
-    std::string GenerateImport(const std::string& name);
-    std::string GenerateExternalFunctionDeclaration(
-        const std::string& funcName, const std::string& retType, const std::string& argTypes) const;
-    std::string GenerateFuncParamLists(const std::vector<OwnedPtr<AST::FuncParamList>>& paramLists,
-        const std::vector<std::string>& selectorComponents,
-        FunctionListFormat format = FunctionListFormat::DECLARATION,
-        const ObjCFunctionType type = ObjCFunctionType::INSTANCE,
-        bool hasForeignNameAnno = true);
-    std::string GenerateArgumentCast(const AST::Ty& retTy, std::string value) const;
-    std::string MapCJTypeToObjCType(const AST::Ty& ty);
-    std::string MapCJTypeToObjCType(const OwnedPtr<AST::Type>& type);
-    std::string MapCJTypeToObjCType(const OwnedPtr<AST::FuncParam>& param);
-
-    ArgsList ConvertParamsListToArgsList(
-        const std::vector<OwnedPtr<AST::FuncParamList>>& paramLists, bool withRegistryId);
-    std::vector<std::string> ConvertParamsListToCallableParamsString(
-        std::vector<OwnedPtr<AST::FuncParamList>>& paramLists, bool withSelf) const;
-    std::string GenerateSetterParamLists(const std::string& type) const;
-    std::string WrapperCallByInitForCJMappingReturn(const AST::Ty& retTy, const std::string& nativeCall) const;
     bool SkipSetterForValueTypeDecl(AST::Decl& declArg) const;
     bool IsNotThisActualTyFunc(const OwnedPtr<AST::Decl>& declPtr);
 
-    void GenerateImports(const std::string& objCDeclName);
-    void GenerateForwardDeclarations();
-    void GenerateExternalDeclarations();
-    void GenerateInterfaceDecl();
-    void GenerateProtocolDecl();
-    void GenerateInitializer(const std::string& objCDeclName);
-    void AddProperties();
-    void AddConstructors();
-    void GenerateDeleteObject();
-    void GenerateDealloc();
-    void AddMethods();
-    void AddCallCangjieBeforeInitGuard();
+    std::string FormatCJLibName();
     void WriteToFile();
-    void WriteToHeader();
-    void WriteToSource();
-    void InsertTypedefsToPreamble();
-    void InsertPreambleInHeaderFront();
-
-    // Generate for cj mapping
-    void GenerateExternalDeclarations4CJMapping();
-    void AddConstructors4CJMapping();
-    void AddConstructor4CJMapping(AST::FuncDecl& ctor);
-    void GenerateMethods4CJMapping();
-    void GenerateMethod4CJMapping(AST::FuncDecl& fn);
-    void AddProperties4CJMapping();
-    void AddInitWithRegistryId();
-    void AddReinitWithRegistryId();
-    void AddRelease();
-    void AddCalcMask(const std::vector<Ptr<AST::FuncDecl>>& overrides);
-    bool GenerateDeleteObject4CJMapping();
-    void AddCtorsForCjMappingEnum(AST::EnumDecl& enumDecl);
+    void WriteToHeader(std::string content);
+    void WriteToSource(std::string content);
 
     // Write buffer helper functions
     void WriteSeq(const std::vector<std::string>& statements);
@@ -134,6 +95,20 @@ private:
     void WriteFor(const std::string& header, const std::function<void()> loop);
     void WriteBlock(
         std::function<void()> action, const std::string& pre = "", const std::string& suf = "", bool flush = false);
+    
+    void ProcessPreamble(
+        struct EmittableObjCClassMetainfo metainfo,
+        bool hasImplicitImplParent
+    );
+    void ProcessMemberDecls(
+        struct EmittableObjCClassMetainfo metainfo,
+        AST::ClassDecl* classDecl
+    );
+    void ProcessSuffix(
+        std::string cjLibName,
+        struct EmittableObjCClassMetainfo metainfo,
+        bool hasImplicitImplParent
+    );
 };
 } // namespace Cangjie::Interop::ObjC
 
