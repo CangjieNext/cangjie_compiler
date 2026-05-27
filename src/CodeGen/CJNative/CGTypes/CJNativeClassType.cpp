@@ -28,10 +28,6 @@ llvm::Type* CGClassType::GenLLVMType()
     auto& llvmCtx = cgCtx.GetLLVMContext();
     llvmType = llvm::Type::getInt8Ty(llvmCtx);
 
-    if (!IsSized()) {
-        return llvmType;
-    }
-
     auto& classType = StaticCast<const CHIR::ClassType&>(chirType);
 
     std::string layoutName{};
@@ -49,6 +45,10 @@ llvm::Type* CGClassType::GenLLVMType()
         layoutType = llvm::StructType::create(llvmCtx, layoutName);
     }
     cgCtx.AddGeneratedStructType(layoutName);
+
+    if (!IsSized()) {
+        return llvmType;
+    }
 
     std::vector<llvm::Type*> bodyVec{};
     if (classType.IsAutoEnv()) {
