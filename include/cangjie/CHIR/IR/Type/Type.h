@@ -302,6 +302,11 @@ public:
         return kind == TYPE_THIS;
     }
 
+    bool NeedWrapInRef() const
+    {
+        return IsClassOrArray() || IsBox();
+    }
+
     bool IsConstant() const;
 
     bool IsAny() const;

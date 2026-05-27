@@ -408,7 +408,7 @@ void TypeChecker::TypeCheckerImpl::BuildExtendMap(ASTContext& ctx)
     }
     // The matching of `common/specific extend` depends on the resolved symbol type.
     // Here is the first step after resolving the final symbol type, and also the first step in processing extendDecl.
-    mpImpl->PrepareTypeCheck4CJMPExtension(*ci, scopeManager, ctx, allExtends);
+    mpImpl->PrepareTypeCheck4CJMPExtension(scopeManager, ctx, allExtends);
     UpdateExtendMap(typeManager, allExtends);
 }
 

@@ -299,7 +299,11 @@ void Translator::TranslateFuncArgsWithoutThisObj(
     auto& argExprs = expr.desugarArgs.value();
     if (expectedParamTys != nullptr) {
         // maybe callee has variable length argument, so we need to check the index here.
-        CJC_ASSERT(expectedParamTys->size() <= argExprs.size());
+        size_t mbThis = expr.resolvedFunction != nullptr && expr.resolvedFunction->TestAttr(AST::Attribute::CONSTRUCTOR)
+            ? 1 // `This` can in params when compiling specific part of CJMP
+            : 0;
+
+        CJC_ASSERT(expectedParamTys->size() <= argExprs.size() + mbThis);
     }
     const auto& loc = TranslateLocation(expr);
     for (size_t i = 0; i < argExprs.size(); i++) {
@@ -729,7 +733,15 @@ Value* Translator::TranslateStructOrClassCtorCall(const AST::CallExpr& expr)
     auto args = TranslateFuncArgs(expr, thisTyRef, &paramInstTys);
     auto callee = GetSymbolTable(*expr.resolvedFunction);
     CJC_ASSERT(callee != nullptr && "TranslateApply: not supported callee now!");
-    paramInstTys.insert(paramInstTys.begin(), thisTyRef);
+    // if (expr.resolvedFunction == nullptr || !expr.resolvedFunction->TestAttr(AST::Attribute::FROM_COMMON_PART)) {
+    
+    bool typeAlreadyModified = false;
+    if (expr.resolvedFunction == nullptr) {
+        typeAlreadyModified = paramInstTys.size() == 1 + expr.resolvedFunction->funcBody->paramLists[0]->params.size();
+    }
+    if (!typeAlreadyModified) {
+        paramInstTys.insert(paramInstTys.begin(), thisTyRef);
+    } // otherwise THIS is already in expectedParamTys
     auto instTargetFuncTy = builder.GetType<FuncType>(paramInstTys, retInstTy);
     auto funcCallContext = FuncCallContext {
         .args = args,

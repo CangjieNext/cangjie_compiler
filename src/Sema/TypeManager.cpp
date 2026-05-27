@@ -65,6 +65,9 @@ template <typename TypeT, typename... Args> TypeT* TypeManager::GetTypeTy(Args&&
 
 Ptr<GenericsTy> TypeManager::GetGenericsTy(GenericParamDecl& gpd)
 {
+    if (auto genTy = DynamicCast<GenericsTy*>(gpd.GetTy())) {
+        return genTy;
+    }
     auto ty = new GenericsTy(gpd.identifier, gpd);
     auto it = allocatedTys.find(TypePointer(ty));
     if (it != allocatedTys.end()) {
@@ -736,25 +739,6 @@ bool TypeManager::IsGenericSubtype(Ty& leaf, Ty& root, bool implicitBoxed, bool 
     return false;
 }
 
-// Treating specific and common classes/struct/enums types as subtypes of each other
-bool IsCommonAndSpecificRelation(const Ty& leafTy, const Ty& rootTy)
-{
-    if (!leafTy.IsNominal() || !rootTy.IsNominal()) {
-        return false;
-    }
-    auto leafDecl = Ty::GetDeclOfTy(&leafTy);
-    auto rootDecl = Ty::GetDeclOfTy(&rootTy);
-    if (leafDecl && rootDecl) {
-        leafDecl = leafDecl->specificImplementation == nullptr ? leafDecl : leafDecl->specificImplementation;
-        rootDecl = rootDecl->specificImplementation == nullptr ? rootDecl : rootDecl->specificImplementation;
-        if (!leafDecl->TestAttr(Attribute::SPECIFIC) || !rootDecl->TestAttr(Attribute::SPECIFIC)) {
-            return false;
-        }
-        return leafDecl == rootDecl;
-    }
-    return false;
-}
-
 bool TypeManager::IsClassLikeSubtype(Ty& leaf, Ty& root, bool implicitBoxed, bool allowOptionBox)
 {
     if (auto thisTyOfLeaf = DynamicCast<ClassThisTy*>(&leaf); thisTyOfLeaf && thisTyOfLeaf->declPtr) {
@@ -791,7 +775,7 @@ bool TypeManager::IsPlaceholderEqual(Ty& leaf, Ty& root)
 
 bool TypeManager::IsClassTyEqual(Ty& leaf, Ty& root)
 {
-    if (&leaf == &root || IsCommonAndSpecificRelation(leaf, root)) {
+    if (&leaf == &root) {
         return true;
     }
     if (auto ctt = DynamicCast<ClassThisTy*>(&leaf); ctt) {
@@ -1026,9 +1010,7 @@ bool TypeManager::IsSubtype(Ptr<Ty> leaf, Ptr<Ty> root, bool implicitBoxed, bool
         return cacheResult->second;
     }
     auto cacheEntry = subtypeCache.emplace(std::make_pair(cacheKey, false)).first;
-    if (IsCommonAndSpecificRelation(*leaf, *root)) {
-        cacheEntry->second = true;
-    } else if (IsPlaceholderSubtype(*leaf, *root)) {
+    if (IsPlaceholderSubtype(*leaf, *root)) {
         cacheEntry->second = true;
     } else if (IsGenericSubtype(*leaf, *root, implicitBoxed, allowOptionBox)) {
         cacheEntry->second = true;
@@ -1170,7 +1152,7 @@ TypeCompatibility TypeManager::CheckTypeCompatibility(
     if (!Ty::AreTysCorrect(std::set{lvalue, rvalue})) {
         return TypeCompatibility::INCOMPATIBLE;
     }
-    if (lvalue == rvalue || IsCommonAndSpecificRelation(*lvalue, *rvalue)) {
+    if (lvalue == rvalue) {
         return TypeCompatibility::IDENTICAL;
     }
     if (IsSubtype(lvalue, rvalue, implicitBoxed)) {
@@ -1243,8 +1225,8 @@ bool TypeManager::IsTyExtendInterface(const Ty& classTy, const Ty& interfaceTy)
     return false;
 }
 
-bool TypeManager::HasExtendInterfaceTyHelper(Ty& superTy, const std::set<Ptr<ExtendDecl>>& extends,
-    const std::vector<Ptr<Ty>>& typeArgs)
+bool TypeManager::HasExtendInterfaceTyHelper(
+    Ty& superTy, const std::set<Ptr<ExtendDecl>>& extends, const std::vector<Ptr<Ty>>& typeArgs)
 {
     PData::CommitScope cs(constraints);
     for (auto& extend : extends) {

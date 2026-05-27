@@ -754,6 +754,11 @@ void TypeChecker::RemoveTargetNotMeetExtendConstraint(const Ptr<AST::Ty> baseTy,
     return impl->RemoveTargetNotMeetExtendConstraint(baseTy, targets);
 }
 
+Ptr<Ty> TypeChecker::GetTyFromASTType(Decl& decl, const std::vector<Ptr<Ty>>& typeArgs)
+{
+    return impl->GetTyFromASTType(decl, typeArgs);
+}
+
 Candidate TypeChecker::TypeCheckerImpl::SynReferenceSeparately(
     ASTContext& ctx, const std::string& scopeName, Expr& expr, bool hasLocalDecl)
 {
