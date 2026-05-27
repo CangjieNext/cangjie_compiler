@@ -549,6 +549,11 @@ public:
         buildTrie = flag;
     }
 
+    TypeChecker* GetTypeChecker() const
+    {
+        return typeChecker;
+    }
+
     /************** Used by Incremental Compilation End **************/
 
     bool DeserializeCHIR();

@@ -621,6 +621,25 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(ASTContext& ctx, OptionTy
 
 Ptr<Ty> TypeChecker::TypeCheckerImpl::GetTyFromASTType(Decl& decl, const std::vector<Ptr<Ty>>& typeArgs)
 {
+    if (!Ty::IsInitialTy(decl.GetTy()) &&
+        (decl.TestAttr(Attribute::SPECIFIC) || decl.TestAttr(Attribute::FROM_COMMON_PART))) {
+        // Platform declaration already has assigned type,
+        // This is the type from matched nominative common declaration,
+        // that was set in `MergeCommonIntoPlatform` in CheckCJMP.cpp
+
+        auto ty = decl.GetTy();
+        bool typeArgsMatched = ty->typeArgs.size() >= typeArgs.size();
+        for (size_t i = 0; i < typeArgs.size(); i++) {
+            if (typeArgs[i] != ty->typeArgs[i]) {
+                typeArgsMatched = false;
+                break;
+            }
+        }
+
+        if (typeArgsMatched) {
+            return decl.GetTy();
+        }
+    }
     switch (decl.astKind) {
         case ASTKind::CLASS_DECL: {
             auto cd = StaticAs<ASTKind::CLASS_DECL>(&decl);

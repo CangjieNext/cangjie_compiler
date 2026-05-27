@@ -16,16 +16,17 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Sema/CommonTypeAlias.h"
+#include "cangjie/Sema/TypeChecker.h"
 #include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie {
 class MPTypeCheckerImpl {
 public:
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
-    explicit MPTypeCheckerImpl(const CompilerInstance& ci);
+    explicit MPTypeCheckerImpl(CompilerInstance& ci);
     // PrepareTypeCheck for CJMP
     void PrepareTypeCheck4CJMP(AST::Package& pkg);
-    void PrepareTypeCheck4CJMPExtension(CompilerInstance& ci, ScopeManager& scopeManager, ASTContext& ctx,
+    void PrepareTypeCheck4CJMPExtension(ScopeManager& scopeManager, ASTContext& ctx,
         const std::unordered_set<Ptr<AST::ExtendDecl>>& extends);
     // Precheck for CJMP
     void PreCheck4CJMP(const AST::Package& pkg);
@@ -48,7 +49,7 @@ public:
 private:
     // PrepareTypeCheck for CJMP
     void MergeCJMPNominalsExceptExtension(AST::Package& pkg);
-    void MergeCJMPExtensions(CompilerInstance& ci, ScopeManager& scopeManager, ASTContext& ctx,
+    void MergeCJMPExtensions(ScopeManager& scopeManager, ASTContext& ctx,
         const std::unordered_set<Ptr<AST::ExtendDecl>>& extends);
     // Precheck for CJMP
     void PreCheckCJMPClass(const AST::ClassDecl& cls);
@@ -83,6 +84,10 @@ private:
     /// in other cases check that common can me matched with platform(e.g. modifiers conform)
     bool MatchCommonNominalDeclWithSpecific(const AST::InheritableDecl& commonDecl);
     void CheckCommonSpecificGenericMatch(const AST::Decl& specificDecl, const AST::Decl& commonDecl);
+    
+    void MergeCommonIntoSpecific(AST::Decl& commonDecl, AST::Decl& specificDecl);
+    void UseTypesFromCommonInSpecific(AST::Decl& commonDecl, AST::Decl& specificDecl);
+    void RemapSpecificGenericsToCommon(AST::Decl& commonDecl, AST::Decl& specificDecl);
 
 public:
     /**
@@ -106,6 +111,7 @@ private:
     bool compileCommon{false};   // true if compiling common part
     bool compilePlatform{false}; // true if compiling platform part
     bool severalParents{false};  // true if there is more then one incomparable parent source sets
+    CompilerInstance& ci;
 #endif
 };
 } // namespace Cangjie
