@@ -136,7 +136,10 @@ std::pair<CHIR::Type*, FuncCallType> Translator::GetExactParentTypeAndFuncType(
     auto funcType = StaticCast<FuncType*>(TranslateType(*expr.GetTy()));
     auto paramTys = funcType->GetParamTypes();
     if (!funcDecl.TestAttr(AST::Attribute::STATIC)) {
-        paramTys.insert(paramTys.begin(), &thisType);
+        bool typeAlreadyModified = paramTys.size() == 1 + funcDecl.funcBody->paramLists[0]->params.size();
+        if (!typeAlreadyModified) {                                                                       
+            paramTys.insert(paramTys.begin(), &thisType);                                                 
+        }                                                                                                         
         funcType = builder.GetType<FuncType>(paramTys, funcType->GetReturnType());
     }
     std::vector<Type*> funcInstArgs;

@@ -57,6 +57,8 @@ public:
      */
     void RemoveTargetNotMeetExtendConstraint(const Ptr<AST::Ty> baseTy, std::vector<Ptr<AST::Decl>>& targets);
 
+    Ptr<AST::Ty> GetTyFromASTType(AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& typeArgs);
+
 private:
     friend class InstCtxScope;
     /**

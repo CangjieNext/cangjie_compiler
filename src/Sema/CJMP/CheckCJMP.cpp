@@ -24,21 +24,25 @@
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Option/Option.h"
 #include "cangjie/Sema/CommonTypeAlias.h"
+#include "cangjie/Sema/TypeChecker.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 #include <algorithm>
+#include <vector>
 
 using namespace Cangjie;
 using namespace AST;
 using namespace TypeCheckUtil;
 
-MPTypeCheckerImpl::MPTypeCheckerImpl(const CompilerInstance& ci)
-    : typeManager(*ci.typeManager), diag(ci.diag),
+MPTypeCheckerImpl::MPTypeCheckerImpl(CompilerInstance& ci)
+    : typeManager(*ci.typeManager),
+      diag(ci.diag),
       compileCommon(ci.invocation.globalOptions.outputMode == GlobalOptions::OutputMode::CHIR),
       compilePlatform(ci.invocation.globalOptions.commonPartCjos.size() > 0),
-      severalParents(ci.invocation.globalOptions.commonPartCjos.size() > 1)
+      severalParents(ci.invocation.globalOptions.commonPartCjos.size() > 1),
+      ci(ci)
 {
 }
 
@@ -90,53 +94,16 @@ std::string GetTypeNameFromTy(
     }
 }
 
-std::string CalculatedGenericConstraintsStr(const std::vector<OwnedPtr<GenericConstraint>>& genericConstraints,
-    const std::unordered_map<Ptr<Ty>, unsigned>& genericIdx)
-{
-    std::string ret;
-
-    auto&& constraintCount = std::count_if(
-        genericConstraints.begin(),
-        genericConstraints.end(),
-        [](auto&& gc) { return !gc->isImplicitlyIntroduced; }
-    );
-
-    if (constraintCount == 0) {
-        return ret;
-    }
-
-    std::set<std::string> gcStrs;
-    for (auto& genericConstraint : genericConstraints) {
-        if (genericConstraint->isImplicitlyIntroduced) { 
-            continue; 
-        }
-        std::set<std::string> ubStrs;
-        for (auto& upperBound : genericConstraint->upperBounds) {
-            ubStrs.emplace(GetTypeNameFromTy(upperBound->GetTy(), true, genericIdx));
-        }
-        CJC_ASSERT(!ubStrs.empty());
-
-        auto gcStr = "[" + GetTypeNameFromTy(genericConstraint->type->GetTy(), true, genericIdx) + "<:";
-        std::for_each(ubStrs.begin(), ubStrs.end(), [&gcStr](const std::string& s) { gcStr += s + ","; });
-        gcStr += "]";
-        gcStrs.emplace(gcStr);
-    }
-    CJC_ASSERT(!gcStrs.empty());
-
-    std::for_each(gcStrs.begin(), gcStrs.end(), [&ret](const std::string& s) { ret += s; });
-    return ret;
-}
-
 // Diag report
-void DiagNotMatchedDecl(DiagnosticEngine &diag, const AST::Decl& decl, const std::string& p0, const std::string& p2)
+void DiagNotMatchedDecl(DiagnosticEngine& diag, const AST::Decl& decl, const std::string& p0, const std::string& p2)
 {
     std::string info;
     if (decl.astKind == ASTKind::FUNC_DECL && decl.TestAttr(Attribute::CONSTRUCTOR)) {
         info = "constructor";
     } else if (decl.TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
         if (decl.outerDecl) {
-            info = "enum '" + decl.outerDecl->identifier.GetRawText() + "' constructor" +
-                " '" + decl.identifier.GetRawText() + "'";
+            info = "enum '" + decl.outerDecl->identifier.GetRawText() + "' constructor" + " '" +
+                decl.identifier.GetRawText() + "'";
         }
     } else {
         if (decl.astKind == ASTKind::VAR_WITH_PATTERN_DECL) {
@@ -154,38 +121,38 @@ void DiagNotMatchedDecl(DiagnosticEngine &diag, const AST::Decl& decl, const std
     diag.DiagnoseRefactor(DiagKindRefactor::sema_not_matched, decl, p0, info, p2);
 }
 
-inline void DiagNotMatchedCommonDecl(DiagnosticEngine &diag, const AST::Decl& decl)
+inline void DiagNotMatchedCommonDecl(DiagnosticEngine& diag, const AST::Decl& decl)
 {
     DiagNotMatchedDecl(diag, decl, "specific", "common");
 }
 
-inline void DiagNotMatchedSpecificDecl(DiagnosticEngine &diag, const AST::Decl& decl)
+inline void DiagNotMatchedSpecificDecl(DiagnosticEngine& diag, const AST::Decl& decl)
 {
     DiagNotMatchedDecl(diag, decl, "common", "specific");
 }
 
-inline void DiagNotMatchedSuperType(DiagnosticEngine &diag, const AST::Decl& decl)
+inline void DiagNotMatchedSuperType(DiagnosticEngine& diag, const AST::Decl& decl)
 {
     diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_has_different_super_type, decl, DeclKindToString(decl));
 }
 
 // Match nominative decl.
-bool MatchNominativeDecl(DiagnosticEngine &diag, Decl &commonDecl, Decl& specificDecl)
+bool MatchNominativeDecl(DiagnosticEngine& diag, Decl& commonDecl, Decl& specificDecl)
 {
     if (commonDecl.astKind != specificDecl.astKind) {
-        diag.DiagnoseRefactor(DiagKindRefactor::specific_has_different_kind,
-            specificDecl, DeclKindToString(specificDecl), DeclKindToString(commonDecl));
+        diag.DiagnoseRefactor(DiagKindRefactor::specific_has_different_kind, specificDecl,
+            DeclKindToString(specificDecl), DeclKindToString(commonDecl));
         return false;
     }
 
-    if (auto commonEnumDecl = DynamicCast<EnumDecl *>(&commonDecl)) {
-        auto specificEnumDecl = DynamicCast<EnumDecl *>(&specificDecl);
+    if (auto commonEnumDecl = DynamicCast<EnumDecl*>(&commonDecl)) {
+        auto specificEnumDecl = DynamicCast<EnumDecl*>(&specificDecl);
         CJC_NULLPTR_CHECK(specificEnumDecl);
         if (commonEnumDecl->hasEllipsis) {
             specificDecl.EnableAttr(Attribute::COMMON_NON_EXHAUSTIVE);
         } else if (specificEnumDecl->hasEllipsis) {
-            diag.DiagnoseRefactor(DiagKindRefactor::common_non_exaustive_platfrom_exaustive_mismatch,
-                specificDecl, DeclKindToString(commonDecl), DeclKindToString(specificDecl));
+            diag.DiagnoseRefactor(DiagKindRefactor::common_non_exaustive_platfrom_exaustive_mismatch, specificDecl,
+                DeclKindToString(commonDecl), DeclKindToString(specificDecl));
         }
     }
     return true;
@@ -214,8 +181,153 @@ void Check4CommonInstanceVar(DiagnosticEngine& diag, const Decl& specificDecl)
     }
 }
 
+void RemapGenericParamDecls(Decl& commonDecl, Decl& specificDecl)
+{
+    if (specificDecl.generic != nullptr && commonDecl.generic != nullptr) {
+        CJC_ASSERT(specificDecl.generic->typeParameters.size() == commonDecl.generic->typeParameters.size());
+        for (unsigned idx = 0; idx < commonDecl.generic->typeParameters.size(); ++idx) {
+            specificDecl.generic->typeParameters[idx]->SetTy(commonDecl.generic->typeParameters[idx]->GetTy());
+            commonDecl.generic->typeParameters[idx]->specificImplementation = specificDecl.generic->typeParameters[idx];
+        }
+    }
+}
+} // namespace
+
+// TODO: refactor
+void MPTypeCheckerImpl::RemapSpecificGenericsToCommon(Decl& commonDecl, Decl& specificDecl)
+{
+    auto typeChecker = ci.GetTypeChecker(); // ? ci.typeChecker : new TypeChecker(ci);
+    CJC_ASSERT(typeChecker);
+
+    // remap generic parameters on specific declaration
+    RemapGenericParamDecls(commonDecl, specificDecl);
+
+    // Also all usages of specific GenericTy need to be remaped to common GenericTy
+    // NOTE: it need to be remaped for all possible usages, these usages are limited by declaration scope
+    AST::Walker(&specificDecl,
+        [&](auto node) {
+            if (node->TestAttr(Attribute::FROM_COMMON_PART)) {
+                return VisitAction::SKIP_CHILDREN;
+            }
+
+            if (auto ref = DynamicCast<RefType*>(node)) {
+                if (auto ty = DynamicCast<GenericsTy*>(ref->GetTy())) {
+                    auto gpd = DynamicCast<GenericParamDecl*>(ty->decl);
+                    bool gpdInSpecificDecl = gpd->outerDecl->TestAttr(Attribute::SPECIFIC);
+                    if (gpdInSpecificDecl) {
+                        ref->SetTy(gpd->GetTy());
+                    }
+                } else if (auto et = DynamicCast<EnumTy*>(ref->GetTy())) {
+
+                    auto mappedToCommonTypeArgs = std::vector<Ptr<Ty>>();
+
+                    for (size_t i = 0; i < et->typeArgs.size(); i++) {
+                        auto tyArg = et->typeArgs[i];
+                        if (auto gt = DynamicCast<GenericsTy*>(tyArg)) {
+                            auto gpd = DynamicCast<GenericParamDecl*>(gt->decl);
+                            bool gpdInSpecificDecl =
+                                gpd->outerDecl->TestAttr(Attribute::SPECIFIC); // TODO: because of common decl skipped,
+                                                                               // mb this invariant is always true?
+                            if (gpdInSpecificDecl) {
+                                // GenericParamDecl type has been already updated to target common type,
+                                mappedToCommonTypeArgs.emplace_back(gpd->GetTy());
+                            } else {
+                                mappedToCommonTypeArgs.emplace_back(tyArg);
+                            }
+                        }
+                    }
+
+                    auto typeFromCommon = typeChecker->GetTyFromASTType(*ref->ref.target, mappedToCommonTypeArgs);
+                    ref->SetTy(typeFromCommon);
+                } else if (auto interface =
+                               DynamicCast<InterfaceTy*>(ref->GetTy())) { // TODO: all types should be visited
+                    auto mappedToCommonTypeArgs = std::vector<Ptr<Ty>>();
+
+                    for (size_t i = 0; i < interface->typeArgs.size(); i++) {
+                        if (auto gt = DynamicCast<GenericsTy*>(interface->typeArgs[i])) {
+                            auto gpd = DynamicCast<GenericParamDecl*>(gt->decl);
+                            bool gpdInSpecificDecl = gpd->outerDecl->TestAttr(Attribute::SPECIFIC);
+                            if (gpdInSpecificDecl) {
+                                // GenericParamDecl type has been already updated to target common type,
+                                mappedToCommonTypeArgs.emplace_back(gpd->GetTy());
+                            } else {
+                                mappedToCommonTypeArgs.emplace_back(interface->typeArgs[i]);
+                            }
+                        }
+                    }
+
+                    auto typeFromCommon = typeChecker->GetTyFromASTType(*ref->ref.target, mappedToCommonTypeArgs);
+                    ref->SetTy(typeFromCommon);
+                }
+            } else if (auto astOptionType = DynamicCast<OptionType*>(node)) {
+                if (auto ty = DynamicCast<GenericsTy*>(astOptionType->componentType->GetTy())) {
+                    auto gpd = DynamicCast<GenericParamDecl*>(ty->decl);
+                    bool gpdInSpecificDecl = gpd->outerDecl->TestAttr(Attribute::SPECIFIC);
+                    if (gpdInSpecificDecl) {
+                        astOptionType->componentType->SetTy(gpd->GetTy());
+                    }
+                }
+
+                auto mappedToCommonTypeArgs = std::vector<Ptr<Ty>>();
+
+                if (auto optionType = DynamicCast<EnumTy*>(node->GetTy())) {
+                    for (size_t i = 0; i < optionType->typeArgs.size(); i++) {
+                        if (auto gt = DynamicCast<GenericsTy*>(optionType->typeArgs[i])) {
+                            auto gpd = DynamicCast<GenericParamDecl*>(gt->decl);
+                            bool gpdInSpecificDecl = gpd->outerDecl->TestAttr(Attribute::SPECIFIC);
+                            if (gpdInSpecificDecl) {
+                                // GenericParamDecl type has been already updated to target common type,
+                                mappedToCommonTypeArgs.emplace_back(gpd->GetTy());
+                            } else {
+                                mappedToCommonTypeArgs.emplace_back(optionType->typeArgs[i]);
+                            }
+                        }
+                    }
+
+                    auto typeFromCommon = typeChecker->GetTyFromASTType(*optionType->decl, mappedToCommonTypeArgs);
+                    node->SetTy(typeFromCommon);
+                }
+            }
+            return AST::VisitAction::WALK_CHILDREN;
+        })
+        .Walk();
+}
+
+void MPTypeCheckerImpl::UseTypesFromCommonInSpecific(Decl& commonDecl, Decl& specificDecl)
+{
+    specificDecl.SetTy(commonDecl.GetTy());
+
+    switch (commonDecl.astKind) {
+        case ASTKind::CLASS_DECL: {
+            ClassDecl& specificClass = StaticCast<ClassDecl>(specificDecl);
+            RawStaticCast<ClassTy*>(commonDecl.GetTy())->decl = &specificClass;
+            break;
+        }
+        case ASTKind::INTERFACE_DECL: {
+            InterfaceDecl& specificInterface = StaticCast<InterfaceDecl>(specificDecl);
+            RawStaticCast<InterfaceTy*>(commonDecl.GetTy())->decl = &specificInterface;
+            break;
+        }
+        case ASTKind::STRUCT_DECL: {
+            StructDecl& specificStruct = StaticCast<StructDecl>(specificDecl);
+            RawStaticCast<StructTy*>(commonDecl.GetTy())->decl = &specificStruct;
+            break;
+        }
+        case ASTKind::ENUM_DECL: {
+            EnumDecl& specificEnum = StaticCast<EnumDecl>(specificDecl);
+            RawStaticCast<EnumTy*>(commonDecl.GetTy())->decl = &specificEnum;
+            break;
+        }
+        default: {
+            CJC_ASSERT(commonDecl.astKind == ASTKind::EXTEND_DECL);
+        };
+    }
+
+    RemapSpecificGenericsToCommon(commonDecl, specificDecl);
+}
+
 // Merge common nominative decl into specific one, do some match for fields.
-void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& specificDecl)
+void MPTypeCheckerImpl::MergeCommonIntoSpecific(Decl& commonDecl, Decl& specificDecl)
 {
     CJC_ASSERT(commonDecl.TestAttr(AST::Attribute::COMMON));
     CJC_ASSERT(specificDecl.TestAttr(AST::Attribute::SPECIFIC));
@@ -291,7 +403,8 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
 
     commonDecl.doNotExport = true;
     commonDecl.specificImplementation = &specificDecl;
-}
+
+    UseTypesFromCommonInSpecific(commonDecl, specificDecl);
 }
 
 // PrepareTypeCheck for CJMP
@@ -320,9 +433,9 @@ void MPTypeCheckerImpl::MergeCJMPNominalsExceptExtension(Package& pkg)
                     (decl->generic && !matchedDecl->generic) || (!decl->generic && matchedDecl->generic);
                 if (hasGenericMismatch) {
                 } else if (decl->TestAttr(Attribute::SPECIFIC) && matchedDecl->TestAttr(Attribute::COMMON)) {
-                    MergeCommonIntoSpecific(diag, *matchedDecl, *decl);
+                    MergeCommonIntoSpecific(*matchedDecl, *decl);
                 } else if (decl->TestAttr(Attribute::COMMON) && matchedDecl->TestAttr(Attribute::SPECIFIC)) {
-                    MergeCommonIntoSpecific(diag, *decl, *matchedDecl);
+                    MergeCommonIntoSpecific(*decl, *matchedDecl);
                 }
             } else if (decl->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC)) {
                 matchedDecls.emplace(decl->identifier, decl);
@@ -334,118 +447,99 @@ void MPTypeCheckerImpl::MergeCJMPNominalsExceptExtension(Package& pkg)
     walkerPackage.Walk();
 }
 
-void MPTypeCheckerImpl::PrepareTypeCheck4CJMPExtension(CompilerInstance& ci, ScopeManager& scopeManager,
-    ASTContext& ctx, const std::unordered_set<Ptr<AST::ExtendDecl>>& extends)
+void MPTypeCheckerImpl::PrepareTypeCheck4CJMPExtension(
+    ScopeManager& scopeManager, ASTContext& ctx, const std::unordered_set<Ptr<AST::ExtendDecl>>& extends)
 {
     if (!compilePlatform) {
         return;
     }
-    MergeCJMPExtensions(ci, scopeManager, ctx, extends);
+    MergeCJMPExtensions(scopeManager, ctx, extends);
 }
 
-namespace {
-void UpdateDeclMap(DiagnosticEngine& diag, ASTContext& ctx, Ptr<ExtendDecl>& ed)
+// TODO: this function need to be refactored
+// TODO: mb support supertypes and constraints and their upperbounds be in any order
+void MPTypeCheckerImpl::MergeCJMPExtensions([[maybe_unused]] ScopeManager& scopeManager,
+    [[maybe_unused]] ASTContext& ctx, const std::unordered_set<Ptr<ExtendDecl>>& extends)
 {
-    std::vector<Symbol*> syms;
-    std::function<VisitAction(Ptr<Node>)> collector = [&syms](auto node) {
-        static std::vector<ASTKind> ignoredKinds = {ASTKind::PRIMARY_CTOR_DECL, ASTKind::VAR_WITH_PATTERN_DECL};
-        CJC_ASSERT(!Utils::In(node->astKind, ignoredKinds));
-        if (auto decl = DynamicCast<Decl*>(node);
-            decl && !decl->TestAttr(Attribute::IS_BROKEN) && decl->symbol && decl->identifier != WILDCARD_CHAR) {
-            syms.emplace_back(decl->symbol);
-        }
-        return VisitAction::WALK_CHILDREN;
-    };
-    Walker(ed, collector).Walk();
-
-    for (auto sym : syms) {
-        CJC_NULLPTR_CHECK(sym);
-        // macro expanded decls are not added into declMap.
-        // macro invoke func can NOT be seen by developer so should not be added.
-        if (sym->node->astKind == ASTKind::MACRO_EXPAND_DECL || sym->node->TestAttr(Attribute::MACRO_INVOKE_FUNC)) {
+    // std::unordered_map<Ptr<Decl>, Ptr<ExtendDecl>> specificExtendDecls;
+    // std::unordered_map<Ptr<Decl>, std::set<Ptr<ExtendDecl>>> commonExtendDecls;
+    for (auto specific : extends) {
+        if (!Ty::IsTyCorrect(specific->GetTy().get()) || !specific->TestAttr(Attribute::SPECIFIC)) {
             continue;
         }
 
-        std::string scopeName = ScopeManagerApi::GetScopeNameWithoutTail(sym->scopeName);
-        auto names = std::make_pair(sym->name, scopeName);
-        if (sym->astKind == ASTKind::PROP_DECL) { // Function redefinition will not be checked in this phase.
-            if (auto found = ctx.GetDeclsByName(names); !found.empty()) {
-                bool multiPlat =
-                    (sym->node->TestAttr(Attribute::COMMON) && found.front()->TestAttr(Attribute::SPECIFIC)) ||
-                    (sym->node->TestAttr(Attribute::SPECIFIC) && found.front()->TestAttr(Attribute::COMMON));
-                if (!multiPlat) {
-                    Sema::DiagRedefinitionWithFoundNode(diag, StaticCast<Decl>(*sym->node), *found.front());
-                }
-            }
-        }
-        ctx.AddDeclName(names, StaticCast<Decl>(*sym->node));
-    }
-}
-} // namespace
-
-void MPTypeCheckerImpl::MergeCJMPExtensions(CompilerInstance& ci, ScopeManager& scopeManager, ASTContext& ctx,
-    const std::unordered_set<Ptr<ExtendDecl>>& extends)
-{
-    std::unordered_map<std::string, Ptr<ExtendDecl>> specificExtendDecls;
-    std::unordered_map<std::string, std::set<Ptr<ExtendDecl>>> commonExtendDecls;
-    for (auto ed : extends) {
-        if (!Ty::IsTyCorrect(ed->GetTy().get()) || !ed->TestAnyAttr(Attribute::COMMON, Attribute::SPECIFIC)) {
-            continue;
-        }
-
-        std::unordered_map<Ptr<Ty>, unsigned> genericIdx;
-        if (ed->generic) {
-            for (unsigned idx = 0; idx < ed->generic->typeParameters.size(); ++idx) {
-                genericIdx.emplace(ed->generic->typeParameters[idx]->GetTy(), idx);
-            }
-        }
-
-        std::string key;
-        // serialize the extended type.
-        key += GetTypeNameFromTy(ed->extendedType->GetTy(), true, genericIdx);
-        // serialize the inherited types.
-        std::set<std::string> inheritedTysStr;
-        for (auto& inheritedType : ed->inheritedTypes) {
-            inheritedTysStr.emplace(GetTypeNameFromTy(inheritedType->GetTy(), true, genericIdx));
-        }
-        if (!inheritedTysStr.empty()) {
-            key += "<:";
-        }
-        std::for_each(inheritedTysStr.begin(), inheritedTysStr.end(), [&key](const std::string& str) { key += str; });
-        // serialize the generic constraints.
-        if (ed->generic) {
-            key += CalculatedGenericConstraintsStr(ed->generic->genericConstraints, genericIdx);
-        }
-
-        // After merging `common extend` into `specific extend`, the symbol table (scopeName) needs to be updated,
-        // otherwise redefined functions cannot be detected.
-        // After updating the symbol table, the `declMap` must also be updated,
-        // otherwise symbols within function bodies won't find their definitions.
-        if (ed->TestAttr(Attribute::COMMON)) {
-            if (auto it = specificExtendDecls.find(key); it != specificExtendDecls.end()) {
-                auto specificExtendDecl = it->second;
-                MergeCommonIntoSpecific(diag, *ed, *specificExtendDecl);
-                Collector collector(scopeManager, ci.invocation.globalOptions.enableMacroInLSP);
-                collector.BuildSymbolTable(ctx, specificExtendDecl, ci.IsBuildTrie());
-                UpdateDeclMap(diag, ctx, specificExtendDecl);
-            }
-            commonExtendDecls[key].emplace(ed);
-        } else {
-            if (specificExtendDecls.find(key) != specificExtendDecls.end()) {
-                // A common declaration may have one or more matching specific declarations
-                // in descending source sets (at most one specific per source set)
-                diag.DiagnoseRefactor(
-                    DiagKindRefactor::sema_specific_has_duplicate_extensions, *ed, ed->extendedType->ToString());
+        for (auto common : extends) { // find common for specific
+            if (!common->TestAttr(Attribute::COMMON)) {
                 continue;
-            } else if (auto it = commonExtendDecls.find(key); it != commonExtendDecls.end()) {
-                for (auto ced : it->second) {
-                    MergeCommonIntoSpecific(diag, *ced, *ed);
-                }
-                Collector collector(scopeManager, ci.invocation.globalOptions.enableMacroInLSP);
-                collector.BuildSymbolTable(ctx, ed, ci.IsBuildTrie());
-                UpdateDeclMap(diag, ctx, ed);
             }
-            specificExtendDecls.emplace(key, ed);
+
+            auto commonType = Ty::GetDeclOfTy(common->extendedType->GetTy());
+            auto specificType = Ty::GetDeclOfTy(specific->extendedType->GetTy());
+            if (commonType != specificType) {
+                continue;
+            }
+
+            // checking super types
+            if (common->inheritedTypes.size() != specific->inheritedTypes.size()) {
+                continue;
+            }
+            bool superTypesMatched = true;
+            for (size_t i = 0; i < common->inheritedTypes.size(); i++) {
+                if (common->inheritedTypes[i]->GetTy() != specific->inheritedTypes[i]->GetTy()) {
+                    superTypesMatched = false;
+                    break;
+                }
+            }
+            if (!superTypesMatched) {
+                continue;
+            }
+
+            if ((common->generic != nullptr) != (specific->generic != nullptr)) {
+                continue;
+            }
+
+            if (common->generic) {
+                auto& commonConstraints = common->generic->genericConstraints;
+                auto& specificConstraints = specific->generic->genericConstraints;
+
+                bool constraintMatched = true;
+                for (size_t i = 0; i < commonConstraints.size(); i++) {
+                    if (commonConstraints[i]->isImplicitlyIntroduced) {
+                        continue;
+                    }
+                    if (specificConstraints.size() <= i) {
+                        constraintMatched = false;
+                        break;
+                    }
+
+                    if (commonConstraints[i]->upperBounds.size() != specificConstraints[i]->upperBounds.size()) {
+                        constraintMatched = false;
+                    }
+
+                    for (size_t u = 0; u < commonConstraints[i]->upperBounds.size(); u++) {
+                        auto cu = *commonConstraints[i]->upperBounds[u];
+                        auto pu = *specificConstraints[i]->upperBounds[u];
+
+                        bool pointToNominative = Ty::GetDeclOfTy(cu.GetTy()) == Ty::GetDeclOfTy(pu.GetTy());
+                        bool refToIdenticalExtendGPD = false;
+                        if (!pointToNominative || refToIdenticalExtendGPD) {
+                            constraintMatched = false;
+                        }
+                    }
+                }
+
+                if (!constraintMatched) {
+                    continue;
+                }
+            }
+
+            if (common->specificImplementation) {
+                auto type = specific->extendedType->ToString();
+                diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_has_duplicate_extensions, *specific, type);
+                continue;
+            }
+
+            common->specificImplementation = specific;
         }
     }
 }
@@ -463,7 +557,7 @@ bool HasGeneralSubClass(const AST::ClassDecl& cls)
     }
     return false;
 }
-}
+} // namespace
 
 // Precheck for CJMP
 void MPTypeCheckerImpl::PreCheck4CJMP(const Package& pkg)
@@ -486,9 +580,8 @@ void MPTypeCheckerImpl::PreCheckCJMPClass(const ClassDecl& cls)
     // Report error for common open | abstract class without init inherited by general class in common part.
     if (cls.TestAttr(Attribute::COMMON) && cls.TestAnyAttr(Attribute::OPEN, Attribute::ABSTRACT)) {
         const auto& decls = cls.GetMemberDeclPtrs();
-        bool hasInit = std::any_of(decls.cbegin(), decls.cend(), [](const Ptr<Decl>& decl) {
-            return decl->TestAttr(Attribute::CONSTRUCTOR);
-        });
+        bool hasInit = std::any_of(
+            decls.cbegin(), decls.cend(), [](const Ptr<Decl>& decl) { return decl->TestAttr(Attribute::CONSTRUCTOR); });
         if (!hasInit && HasGeneralSubClass(cls)) {
             // report error: please implement the constructor explicitly for common open class 'xxx'
             diag.DiagnoseRefactor(DiagKindRefactor::sema_common_open_class_no_init, cls, cls.identifier.Val());
@@ -510,11 +603,10 @@ void MPTypeCheckerImpl::FilterOutCommonCandidatesIfSpecificExist(
         }
 
         if (hasSpecificCandidates) {
-            funcs.erase(
-                std::remove_if(funcs.begin(), funcs.end(),
-                    [](const Ptr<FuncDecl> decl) {
-                        return decl->TestAttr(Attribute::COMMON) && decl->TestAttr(Attribute::FROM_COMMON_PART);
-                    }),
+            funcs.erase(std::remove_if(funcs.begin(), funcs.end(),
+                            [](const Ptr<FuncDecl> decl) {
+                                return decl->TestAttr(Attribute::COMMON) && decl->TestAttr(Attribute::FROM_COMMON_PART);
+                            }),
                 funcs.end());
         }
     }
@@ -551,20 +643,19 @@ void MPTypeCheckerImpl::CheckMatchedFunctionReturnTypes(FuncDecl& specificFunc, 
     auto commonRetTy = CheckFuncReturnType(commonType);
     auto specificRetTy = CheckFuncReturnType(specificType);
 
-    if (commonRetTy == specificRetTy) return;
-    if (typeManager.IsSubtype(specificRetTy, commonRetTy)) return;
+    if (commonRetTy == specificRetTy)
+        return;
+    if (typeManager.IsSubtype(specificRetTy, commonRetTy))
+        return;
 
-    // the subtype check will handle most of the cases, however in the case of generics, types must 
-    // be substituted properly before checking for subtype that is properly done in MatchCJMPFunction 
+    // the subtype check will handle most of the cases, however in the case of generics, types must
+    // be substituted properly before checking for subtype that is properly done in MatchCJMPFunction
     // that we use as a fallback
 
     // we need to erase the pointer temporarily to avoid the multiple implementations error
     commonFunc.specificImplementation = nullptr;
     if (!MatchCJMPFunction(specificFunc, commonFunc)) {
-        diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_return_type_incompatible,
-            specificFunc,
-            specificFunc.identifier);
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_return_type_incompatible, specificFunc, specificFunc.identifier);
     }
     commonFunc.specificImplementation = &specificFunc;
 }
@@ -585,7 +676,7 @@ void MPTypeCheckerImpl::CheckMatchedVariableTypes(AST::VarDecl& specificVar, AST
     if (typeManager.IsTyEqual(specificVar.GetTy(), commonVar.GetTy()))
         return;
 
-    // the type equality check will handle most of the cases except for the generics case when types 
+    // the type equality check will handle most of the cases except for the generics case when types
     // need to be substituted in order to compare them that is handled in MatchCJMPVar
     //  that is fallback here
 
@@ -650,9 +741,11 @@ void MPTypeCheckerImpl::CheckReturnAndVariableTypes(AST::Package& pkg)
 
 void MPTypeCheckerImpl::ValidateMatchedAnnotationsAndModifiers(AST::Package& pkg)
 {
-    std::function<VisitAction(Ptr<Node>)> visitor = [this](const Ptr<Node> &node) {
+    std::function<VisitAction(Ptr<Node>)> visitor = [this](const Ptr<Node>& node) {
         if (node->IsDecl()) {
-            if (!IsCommon(*node)) { return VisitAction::WALK_CHILDREN; }
+            if (!IsCommon(*node)) {
+                return VisitAction::WALK_CHILDREN;
+            }
             auto commonDecl = StaticCast<Decl>(node);
             if (!commonDecl->specificImplementation) {
                 return VisitAction::WALK_CHILDREN;
@@ -668,8 +761,7 @@ void MPTypeCheckerImpl::ValidateMatchedAnnotationsAndModifiers(AST::Package& pkg
 
 namespace {
 // Collect common or specific decl.
-void CollectDecl(
-    Ptr<Decl> decl, std::vector<Ptr<Decl>>& commonDecls, std::vector<Ptr<Decl>>& specificDecls)
+void CollectDecl(Ptr<Decl> decl, std::vector<Ptr<Decl>>& commonDecls, std::vector<Ptr<Decl>>& specificDecls)
 {
     if (decl->TestAttr(Attribute::COMMON)) {
         commonDecls.emplace_back(decl);
@@ -681,12 +773,12 @@ void CollectDecl(
 // Collect common and specific decls.
 void CollectCJMPDecls(Package& pkg, std::vector<Ptr<Decl>>& commonDecls, std::vector<Ptr<Decl>>& specificDecls)
 {
-    std::function<VisitAction(Ptr<Node>)> visitor = [&commonDecls, &specificDecls](const Ptr<Node> &node) {
+    std::function<VisitAction(Ptr<Node>)> visitor = [&commonDecls, &specificDecls](const Ptr<Node>& node) {
         if (node->IsDecl() && node->astKind != ASTKind::PRIMARY_CTOR_DECL) {
             CollectDecl(StaticAs<ASTKind::DECL>(node), commonDecls, specificDecls);
         }
-        if (node->astKind == ASTKind::PACKAGE || node->astKind == ASTKind::FILE ||
-            node->IsNominalDecl() || node->IsNominalDeclBody()) {
+        if (node->astKind == ASTKind::PACKAGE || node->astKind == ASTKind::FILE || node->IsNominalDecl() ||
+            node->IsNominalDeclBody()) {
             return VisitAction::WALK_CHILDREN;
         }
         return VisitAction::SKIP_CHILDREN;
@@ -699,7 +791,7 @@ void CollectCJMPDecls(Package& pkg, std::vector<Ptr<Decl>>& commonDecls, std::ve
 bool MustMatchWithPlatform(const Decl& decl, const bool compilingCommon)
 {
     CJC_ASSERT(decl.TestAttr(Attribute::COMMON));
-    
+
     if (compilingCommon) {
         // not compiling to binary, only produce CHIR, so it can be matched later.
         return false;
@@ -769,8 +861,8 @@ bool MPTypeCheckerImpl::MatchCJMPDeclAttrs(
                     continue;
                 }
                 // Same as previous check, however static functions has no OPEN modifier
-                if (common.TestAttr(Attribute::ABSTRACT) &&
-                    common.TestAttr(Attribute::STATIC) && specific.TestAttr(Attribute::STATIC)) {
+                if (common.TestAttr(Attribute::ABSTRACT) && common.TestAttr(Attribute::STATIC) &&
+                    specific.TestAttr(Attribute::STATIC)) {
                     continue;
                 }
             }
@@ -782,7 +874,8 @@ bool MPTypeCheckerImpl::MatchCJMPDeclAttrs(
                     diag.DiagnoseRefactor(DiagKindRefactor::sema_property_have_same_declaration_in_inherit_immut,
                         common, common.identifier.Val());
                 }
-            } else if (common.astKind == ASTKind::CLASS_DECL && (attr == Attribute::SEALED || attr == Attribute::OPEN) &&
+            } else if (common.astKind == ASTKind::CLASS_DECL &&
+                (attr == Attribute::SEALED || attr == Attribute::OPEN) &&
                 // Keep silent due to overloaded common funcs.
                 // Allow specific sealed abstract when common is abstract
                 specific.TestAttr(Attribute::SEALED) && common.TestAttr(Attribute::ABSTRACT)) {
@@ -796,8 +889,6 @@ bool MPTypeCheckerImpl::MatchCJMPDeclAttrs(
     }
     return true;
 }
-
-
 
 void MPTypeCheckerImpl::CheckCommonSpecificGenericMatch(const AST::Decl& specificDecl, const AST::Decl& commonDecl)
 {
@@ -884,7 +975,7 @@ bool IsPrimaryConstructor(const FuncDecl& func)
 {
     return func.TestAttr(Attribute::PRIMARY_CONSTRUCTOR);
 }
-}
+} // namespace
 
 bool MPTypeCheckerImpl::IsCJMPDeclMatchable(Decl& lhsDecl, Decl& rhsDecl) const
 {
@@ -900,7 +991,9 @@ bool MPTypeCheckerImpl::IsCJMPDeclMatchable(Decl& lhsDecl, Decl& rhsDecl) const
     if (specificDecl.IsMemberDecl()) {
         CJC_NULLPTR_CHECK(specificDecl.outerDecl);
         CJC_NULLPTR_CHECK(commonDecl.outerDecl);
-        if (specificDecl.outerDecl->rawMangleName != commonDecl.outerDecl->rawMangleName) {
+        if (specificDecl.outerDecl->rawMangleName != commonDecl.outerDecl->rawMangleName &&
+            commonDecl.outerDecl->specificImplementation !=
+                specificDecl.outerDecl) { // TODO: check whether mangled name comparision is still required
             return false;
         }
     }
@@ -920,8 +1013,8 @@ bool MPTypeCheckerImpl::TrySetSpecificImpl(Decl& specificDecl, Decl& commonDecl,
     }
     // common with default but specific without default
     if (NeedToReportMissingBody(commonDecl, specificDecl)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_member_must_have_implementation,
-            specificDecl, specificDecl.identifier.Val(), commonDecl.outerDecl->identifier.Val());
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_member_must_have_implementation, specificDecl,
+            specificDecl.identifier.Val(), commonDecl.outerDecl->identifier.Val());
         return false;
     }
     commonDecl.specificImplementation = &specificDecl;
@@ -963,12 +1056,12 @@ bool MPTypeCheckerImpl::MatchCJMPProp(PropDecl& specificProp, PropDecl& commonPr
     }
     bool ret = TrySetSpecificImpl(specificProp, commonProp, "property " + specificProp.identifier);
     if (ret && !specificProp.getters.empty() && !commonProp.getters.empty()) {
-        ret &= TrySetSpecificImpl(*specificProp.getters[0], *commonProp.getters[0],
-            "property getter " + specificProp.identifier);
+        ret &= TrySetSpecificImpl(
+            *specificProp.getters[0], *commonProp.getters[0], "property getter " + specificProp.identifier);
     }
     if (ret && !specificProp.setters.empty() && !commonProp.setters.empty()) {
-        ret &= TrySetSpecificImpl(*specificProp.setters[0], *commonProp.setters[0],
-            "property setter " + specificProp.identifier);
+        ret &= TrySetSpecificImpl(
+            *specificProp.setters[0], *commonProp.setters[0], "property setter " + specificProp.identifier);
     }
 
     return ret;
@@ -1092,14 +1185,12 @@ bool MPTypeCheckerImpl::MatchSpecificDeclWithCommonDecls(
         if (isEnumConstructor && commonDecl->TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
             matched = MatchCJMPEnumConstructor(specificDecl, *commonDecl) || matched;
         } else if (kind == ASTKind::FUNC_DECL) {
-            matched = MatchCJMPFunction(*StaticCast<FuncDecl>(&specificDecl), *StaticCast<FuncDecl>(commonDecl)) ||
-                matched;
+            matched =
+                MatchCJMPFunction(*StaticCast<FuncDecl>(&specificDecl), *StaticCast<FuncDecl>(commonDecl)) || matched;
         } else if (kind == ASTKind::PROP_DECL) {
-            matched = MatchCJMPProp(*StaticCast<PropDecl>(&specificDecl), *StaticCast<PropDecl>(commonDecl)) ||
-                matched;
+            matched = MatchCJMPProp(*StaticCast<PropDecl>(&specificDecl), *StaticCast<PropDecl>(commonDecl)) || matched;
         } else if (kind == ASTKind::VAR_DECL) {
-            matched = MatchCJMPVar(*StaticCast<VarDecl>(&specificDecl), *StaticCast<VarDecl>(commonDecl)) ||
-                matched;
+            matched = MatchCJMPVar(*StaticCast<VarDecl>(&specificDecl), *StaticCast<VarDecl>(commonDecl)) || matched;
         }
     }
 
@@ -1145,8 +1236,7 @@ void MPTypeCheckerImpl::CheckCommonExtensions(std::vector<Ptr<Decl>>& commonDecl
                     memberDecl->identifier.GetRawText());
             } else if (memberDecl->TestAttr(Attribute::COMMON)) {
                 diag.DiagnoseRefactor(DiagKindRefactor::sema_common_direct_extension_has_common_private_members,
-                    *memberDecl, memberDecl->IsFunc() ? "function" : "property",
-                    memberDecl->identifier.GetRawText());
+                    *memberDecl, memberDecl->IsFunc() ? "function" : "property", memberDecl->identifier.GetRawText());
             } else {
                 privateFunctions.emplace(memberDecl->rawMangleName);
             }
@@ -1196,10 +1286,9 @@ void MPTypeCheckerImpl::MatchCJMPDecls(std::vector<Ptr<Decl>>& commonDecls, std:
         if (specificDecl == nullptr) {
             continue;
         }
-            // need check Attribute::ABSTRACT for abstract class?
-        std::vector<Attribute> matchedAttrs = { Attribute::STATIC, Attribute::MUT, Attribute::PRIVATE, Attribute::PUBLIC,
-            Attribute::PROTECTED, Attribute::FOREIGN, Attribute::UNSAFE, Attribute::OPEN,
-            Attribute::ABSTRACT};
+        // need check Attribute::ABSTRACT for abstract class?
+        std::vector<Attribute> matchedAttrs = {Attribute::STATIC, Attribute::MUT, Attribute::PRIVATE, Attribute::PUBLIC,
+            Attribute::PROTECTED, Attribute::FOREIGN, Attribute::UNSAFE, Attribute::OPEN, Attribute::ABSTRACT};
         MatchCJMPDeclAttrs(matchedAttrs, *commonDecl, *specificDecl);
     }
 }
@@ -1337,7 +1426,6 @@ void MPTypeCheckerImpl::UpdateSpecificMemberGenericTy(
         }
     }
 }
-
 
 void MPTypeCheckerImpl::GetInheritedTypesWithSpecificImpl(
     std::vector<OwnedPtr<AST::Type>>& inheritedTypes, bool hasSpecificImpl, bool compilePlatform)
