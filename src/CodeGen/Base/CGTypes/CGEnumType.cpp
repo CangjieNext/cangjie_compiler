@@ -60,18 +60,37 @@ std::optional<std::size_t> TryComputeDefaultConstructorUnionSize(
 std::optional<std::size_t> TryComputeAndroidArm32StructConstructorUnionSize(
     CGModule& cgMod, const std::vector<CHIR::Type*>& paramTypes)
 {
+    // Compute the constructor-union size for ARM32 without creating a
+    // temporary LLVM StructType. The old path went through:
+    //   ComputeAndroidArm32StructAssociatedNonRefLayout
+    //   -> GetAndroidArm32AssociatedNonRefLayoutType
+    //   -> GetLLVMType() on each DeRef'd field
+    // which may trigger GenLLVMType for types that are not yet fully
+    // initialized, leaving them permanently incomplete in the CGType cache.
+    // Instead, we replicate the layout calculation for struct { tag:i32,
+    // T1, T2, ... } using per-field GetSize()/GetAlign() (already cached
+    // by GetOrCreate) and llvm::alignTo, which matches DataLayout behaviour.
+
+    auto& dataLayout = cgMod.GetLLVMModule()->getDataLayout();
+    auto tagLLVMTy = llvm::Type::getInt32Ty(cgMod.GetLLVMContext());
+    uint32_t tagSize = dataLayout.getTypeAllocSize(tagLLVMTy);
+    uint32_t tagAlign = dataLayout.getABITypeAlignment(tagLLVMTy);
+
+    uint32_t currentOffset = tagSize;
+    uint32_t structAlign = tagAlign;
     for (auto associatedValueCHIRType : paramTypes) {
-        auto associatedValueCGType = CGType::GetOrCreate(cgMod, associatedValueCHIRType);
-        if (!associatedValueCGType->GetSize().has_value()) {
+        auto associatedValueCGType = CGType::GetOrCreate(cgMod, DeRef(*associatedValueCHIRType));
+        auto fieldSize = associatedValueCGType->GetSize();
+        auto fieldAlign = associatedValueCGType->GetAlign();
+        if (!fieldSize.has_value() || !fieldAlign.has_value()) {
             return std::nullopt;
         }
+        structAlign = std::max(structAlign, fieldAlign.value());
+        currentOffset = llvm::alignTo(currentOffset, fieldAlign.value());
+        currentOffset += fieldSize.value();
     }
-    std::vector<CHIR::Type*> fullFieldTypes;
-    fullFieldTypes.reserve(paramTypes.size() + 1U);
-    fullFieldTypes.emplace_back(cgMod.GetCGContext().GetCHIRBuilder().GetInt32Ty());
-    fullFieldTypes.insert(fullFieldTypes.end(), paramTypes.begin(), paramTypes.end());
-    auto fullLayout = CGEnumType::ComputeAssociatedNonRefLayout(cgMod, fullFieldTypes);
-    return fullLayout.size - sizeof(uint32_t);
+    // Subtract tag size: the function returns the payload/union size only.
+    return llvm::alignTo(currentOffset, structAlign) - tagSize;
 }
 
 std::optional<std::size_t> TryComputeConstructorUnionSize(
