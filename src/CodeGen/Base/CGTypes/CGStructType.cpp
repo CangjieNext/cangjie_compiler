@@ -20,10 +20,6 @@ llvm::Type* CGStructType::GenLLVMType()
     auto& llvmCtx = cgCtx.GetLLVMContext();
     auto& structType = StaticCast<const CHIR::StructType&>(chirType);
 
-    if (!IsSized()) {
-        return llvm::Type::getInt8Ty(llvmCtx);
-    }
-
     auto typeName = STRUCT_TYPE_PREFIX;
     if (auto defType = structType.GetStructDef()->GetType();
         &chirType != defType && CGType::GetOrCreate(cgMod, defType)->GetSize()) {
@@ -41,6 +37,10 @@ llvm::Type* CGStructType::GenLLVMType()
     }
     layoutType = llvm::cast<llvm::StructType>(llvmType);
     cgCtx.AddGeneratedStructType(typeName);
+
+    if (!IsSized()) {
+        return llvmType;
+    }
 
     std::vector<llvm::Type*> fieldTypes;
     std::vector<size_t> litStructPtrIdx;
