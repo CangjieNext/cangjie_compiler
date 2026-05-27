@@ -24,6 +24,86 @@
 
 namespace Cangjie::Interop::ObjC {
 
+struct EmittableObjCFuncMetainfo {
+    std::string identifier;
+    std::string mangledIdentifier;
+    std::vector<std::string> selectorComponents;
+    bool isStatic;
+    bool bridge;
+    std::string paramsDecl;
+    std::string paramStaticRef;
+    std::string callingParams;
+    std::string convertedParams;
+    std::string retType;
+};
+
+struct EmittableObjCClassMetainfo {
+    std::string className;
+    std::string superclassName;
+    std::vector<std::string> interfaces;
+    bool isFinal;
+};
+
+struct EmittableObjCPropMetainfo {
+    std::string name;
+    std::string type;
+    bool isStatic;
+    bool isReadwrite;
+    struct EmittableObjCFuncMetainfo getter;
+    struct EmittableObjCFuncMetainfo setter;
+};
+
+class Emitter {
+public:
+    // #import "identifier.h"
+    static void EmitFileImport(std::stringstream *stream, const std::string& identifier);
+    // #import <identifier>
+    static void EmitModuleImport(std::stringstream *s, const std::string& identifier);
+
+    // typedef type(*identifier);
+    static void EmitTypedef(std::stringstream *stream, std::string& identifier);
+    // @class identifier;
+    static void EmitForwardDeclaration(std::stringstream *stream, const std::string& Identifier);
+    // @protocol identifier;
+    static void EmitForwardDeclarationProtocol(std::stringstream *stream, const std::string& Identifier);
+
+    // @interface A : M <Proto1, Proto2>
+    static void EmitInterfaceDeclaration(std::stringstream *stream, struct EmittableObjCClassMetainfo info);
+    // @implementation A
+    static void EmitImplementationDeclaration(std::stringstream *stream, struct EmittableObjCClassMetainfo info);
+
+    // - (int64_t)mirror2WithArg0:(Box*)arg0 withArg1:(Box*)arg1;
+    static void EmitObjCFuncHeaderFunctionDecl(std::stringstream *stream, struct EmittableObjCFuncMetainfo ctor);
+    // static int64_t (*CJImpl_ObjC_cjworld_Derived_mirror1WithArg0_CN7cjworld3BoxE)(int64_t,void*) = NULL;
+    static void EmitObjCFuncStaticReference(std::stringstream *stream, struct EmittableObjCFuncMetainfo info);
+
+    static void EmitObjCFuncInitialization(std::stringstream *stream, struct EmittableObjCFuncMetainfo info);
+
+    static void EmitSyntheticHeaderFunctionDecls(std::stringstream *stream);
+
+    static void EmitSyntheticRefsDealloc(std::stringstream *stream);
+
+    static void EmitInitialize(std::stringstream *stream, std::string cjLibraryPath, struct EmittableObjCClassMetainfo info);
+
+    static void EmitCtor(std::stringstream *s, struct EmittableObjCFuncMetainfo ctor, struct EmittableObjCClassMetainfo cls);
+
+    static void EmitDoesNotRecognizeSelectorCtor(std::stringstream *s, struct EmittableObjCFuncMetainfo ctor);
+
+    static void EmitDefaultFunctionImplementation(std::stringstream *s, struct EmittableObjCFuncMetainfo func);
+
+    static void EmitAdditionalStaticReferences(std::stringstream* s);
+
+    static void EmitDeleteCJObject(std::stringstream *s, std::string mangledName);
+
+    static void EmitDeleteCJObjectInitialization(std::stringstream *s, std::string mangledName);
+
+    static void EmitDealloc(std::stringstream *s);
+
+    static void EmitProperty(std::stringstream *s, struct EmittableObjCPropMetainfo prop);
+
+    static void EmitEnd(std::stringstream *s);
+};
+
 enum class ObjCFunctionType { STATIC, INSTANCE };
 enum class GenerationTarget { HEADER, SOURCE, BOTH };
 enum class FunctionListFormat { DECLARATION, STATIC_REF, CANGJIE_DECL };
@@ -40,6 +120,30 @@ public:
     void Generate();
 
 private:
+    struct EmittableObjCClassMetainfo GetObjCClassMetainfo(AST::ClassDecl* classDecl);
+    struct EmittableObjCFuncMetainfo GetObjCFuncMetainfo(AST::FuncDecl& funcDecl, bool mangled = false);
+    struct EmittableObjCFuncMetainfo GetObjCCtorMetainfo(AST::FuncDecl& funcDecl);
+    struct EmittableObjCPropMetainfo GetObjCPropMetainfoFromProp(AST::PropDecl& varDecl);
+    struct EmittableObjCPropMetainfo GetObjCPropMetainfoFromVar(AST::VarDecl& varDecl);
+
+    bool CheckFunction(OwnedPtr<AST::Decl>& arg);
+    bool CheckCtor(OwnedPtr<AST::Decl>& arg);
+    bool CheckProp(OwnedPtr<AST::Decl>& arg);
+    void CollectDependencies(Ptr<AST::Ty> ty);
+
+    std::stringstream tmpSource;
+    std::stringstream tmpHeader;
+    std::stringstream dependenciesStream;
+    std::stringstream importSource;
+    std::stringstream importHeader;
+    std::stringstream staticReferences;
+    std::stringstream funcInitialization;
+    std::stringstream initialize;
+    std::stringstream ctors;
+    std::stringstream defaultFuncImpls;
+
+    std::set<Ptr<AST::Decl>> dependencies;
+
     std::string resPreamble;
     std::string res;
     std::string resSource;
@@ -87,6 +191,8 @@ private:
 
     ArgsList ConvertParamsListToArgsList(
         const std::vector<OwnedPtr<AST::FuncParamList>>& paramLists, bool withRegistryId);
+    std::string ConvertParamsListToArgsListToString(
+        const std::vector<OwnedPtr<AST::FuncParamList>>& paramLists, bool withRegistryId);
     std::vector<std::string> ConvertParamsListToCallableParamsString(
         std::vector<OwnedPtr<AST::FuncParamList>>& paramLists, bool withSelf) const;
     std::string GenerateSetterParamLists(const std::string& type) const;
@@ -94,6 +200,7 @@ private:
     bool SkipSetterForValueTypeDecl(AST::Decl& declArg) const;
     bool IsNotThisActualTyFunc(const OwnedPtr<AST::Decl>& declPtr);
 
+    std::string FormatCJLibName();
     void GenerateImports(const std::string& objCDeclName);
     void GenerateForwardDeclarations();
     void GenerateExternalDeclarations();
@@ -107,8 +214,8 @@ private:
     void AddMethods();
     void AddCallCangjieBeforeInitGuard();
     void WriteToFile();
-    void WriteToHeader();
-    void WriteToSource();
+    void WriteToHeader(std::string content);
+    void WriteToSource(std::string content);
     void InsertTypedefsToPreamble();
     void InsertPreambleInHeaderFront();
 
