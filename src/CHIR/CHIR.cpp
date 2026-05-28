@@ -1134,6 +1134,9 @@ bool ToCHIR::Run()
     }
     // 2. for cjmp, while compiling common package, just be here and save CHIR to file.
     if (opts.outputMode == GlobalOptions::OutputMode::CHIR) {
+        for (auto& [name, func] : implicitFuncs) {
+            func->Set<ImplicitCoreFuncDecl>(true);
+        }
         auto fileName =
             FileUtil::JoinPath(opts.output, chirPkg->GetName()) + std::string(CHIR_SERIALIZATION_FILE_EXTENSION);
         CHIRSerializer::Serialize(*chirPkg, fileName, CHIR::ToCHIR::RAW);

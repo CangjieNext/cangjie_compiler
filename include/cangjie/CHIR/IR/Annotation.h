@@ -482,5 +482,32 @@ struct GeneratedFromForIn final : public Annotation {
 private:
     bool value;
 };
+
+/// Marks a CHIR Function as an implicit core function declaration (e.g., printStackTrace, eprintln).
+/// These functions are implicitly imported from std.core and used by codegen.
+/// The annotation is set during serialization of the common part and removed during deserialization.
+/// Used to correctly restore CHIRData state after translation.
+struct ImplicitCoreFuncDecl final : public Annotation {
+    explicit ImplicitCoreFuncDecl() = default;
+    explicit ImplicitCoreFuncDecl(bool b) : value(b) {}
+
+    static bool Extract(const ImplicitCoreFuncDecl* label)
+    {
+        return label->value;
+    }
+
+    std::unique_ptr<Annotation> Clone() override
+    {
+        return std::make_unique<ImplicitCoreFuncDecl>(value);
+    }
+
+    std::string ToString() override
+    {
+        return "// implicit-core-func-decl ";
+    }
+
+private:
+    bool value{false};
+};
 } // namespace Cangjie::CHIR
 #endif
