@@ -216,6 +216,10 @@ table OverrideSrcFuncType {
   type: uint32;  // use types id
 }
 
+table ImplicitCoreFuncDecl {
+  value: bool = true;
+}
+
 union Annotation {
   needCheckArrayBound: NeedCheckArrayBound,
   needCheckCast: NeedCheckCast,
@@ -229,7 +233,8 @@ union Annotation {
   enumCaseIndex: EnumCaseIndex,
   virMethodOffset: VirMethodOffset,
   wrappedRawMethod: WrappedRawMethod,
-  overrideSrcFuncType : OverrideSrcFuncType
+  overrideSrcFuncType : OverrideSrcFuncType,
+  implicitCoreFuncDecl: ImplicitCoreFuncDecl
 }
 
 table Base {

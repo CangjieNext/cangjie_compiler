@@ -679,9 +679,6 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
             ResetSpecificFunc(funcDecl, *fn);
         }
         globalCache.Set(funcDecl, *fn);
-        if (implicitDecls.count(&funcDecl) != 0) {
-            implicitFuncs.emplace(fn->GetIdentifierWithoutPrefix(), fn);
-        }
         if (IsSrcCodeImportedGlobalDecl(funcDecl, opts)) {
             srcCodeImportedFuncs.emplace(fn);
         }
@@ -811,9 +808,6 @@ void AST2CHIR::CreateImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl&
     if (fn) {
         ConvertImportedFunctionType(*fn, funcDecl, chirType, builder);
         globalCache.Set(funcDecl, *fn);
-        if (implicitDecls.count(&funcDecl) != 0) {
-            implicitFuncs.emplace(fn->GetIdentifierWithoutPrefix(), fn);
-        }
         const auto& loc = GetDeclLoc(builder.GetChirContext(), funcDecl);
         fn->SetDebugLocation(loc);
         return;
@@ -1679,6 +1673,14 @@ void AST2CHIR::BuildDeserializedTable()
     // build for Value
     BuildDeserializedVec(deserializedVals, package->GetGlobalVars());
     BuildDeserializedVec(deserializedVals, package->GetGlobalFunctions(true));
+    // Reconstruct implicitFuncs from deserialized ImplicitCoreFuncDecl annotations.
+    // These were set during serialization of the common part.
+    for (auto* fn : package->GetGlobalFunctions(true)) {
+        if (fn->Get<ImplicitCoreFuncDecl>()) {
+            implicitFuncs.emplace(fn->GetIdentifierWithoutPrefix(), fn);
+            fn->Remove<ImplicitCoreFuncDecl>();
+        }
+    }
 }
 
 // Reset specific func for CJMP.
