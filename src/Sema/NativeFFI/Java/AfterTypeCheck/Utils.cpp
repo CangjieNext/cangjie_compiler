@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -6,16 +6,24 @@
 
 #include "Utils.h"
 #include "NativeFFI/Utils.h"
+#include "NativeFFI/Java/Utils.h"
 #include "TypeCheckUtil.h"
 
 #include "Desugar/AfterTypeCheck.h"
 #include "JavaDesugarManager.h"
+#include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
+#include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
+namespace Cangjie::Interop::Java {
+using namespace TypeCheckUtil;
+using namespace Cangjie::Native::FFI;
+using namespace Cangjie::Native::FFI::Java;
 
 namespace {
 using namespace Cangjie;
@@ -55,11 +63,6 @@ void GenerateSyntheticClassPropStub(ClassDecl& synthetic, PropDecl& fd)
     // TODO:
 }
 } // namespace
-
-namespace Cangjie::Interop::Java {
-
-using namespace TypeCheckUtil;
-using namespace Cangjie::Native::FFI;
 
 Utils::Utils(ImportManager& importManager, TypeManager& typeManager, Package& pkg)
     : importManager(importManager), typeManager(typeManager), pkg(pkg)
@@ -744,6 +747,26 @@ std::string Utils::GetJavaTypeSignature(Ty& retTy, const std::vector<Ptr<Ty>>& p
     return GetJavaTypeSignature(*typeManager.GetFunctionTy(params, &retTy), fullPackageName);
 }
 
+OwnedPtr<CallExpr> Utils::CreateZeroValue(Ptr<Ty> ty, File& curFile) const
+{
+    static constexpr std::string_view ZERO_VALUE_INTRINSIC_NAME = "zeroValue";
+    static auto zeroValueDecl = importManager.GetCoreDecl<FuncDecl>(std::string(ZERO_VALUE_INTRINSIC_NAME));
+    auto zeroValueCall = MakeOwned<CallExpr>();
+
+    auto fdRef = WithinFile(CreateRefExpr(*zeroValueDecl), &curFile);
+    fdRef->instTys.push_back(ty);
+    auto refTy = typeManager.GetInstantiatedTy(zeroValueDecl->GetTy(),
+        GenerateTypeMapping(*zeroValueDecl, fdRef->instTys));
+    fdRef->SetTy(refTy);
+
+    zeroValueCall->baseFunc = std::move(fdRef);
+    zeroValueCall->SetTy(ty);
+    zeroValueCall->callKind = CallKind::CALL_INTRINSIC_FUNCTION;
+    zeroValueCall->resolvedFunction = zeroValueDecl;
+    zeroValueCall->curFile = &curFile;
+    return zeroValueCall;
+}
+
 std::string GetMangledJniInitCjObjectFuncName(
     const BaseMangler& mangler, const std::vector<OwnedPtr<FuncParam>>& params, bool isGeneratedCtor)
 {
@@ -842,16 +865,6 @@ bool IsCJMappingTuple(const Ptr<Ty>& ty, std::unordered_set<Ptr<Ty>> tupleConfig
     }
 
     return false;
-}
-
-const Ptr<ClassDecl> GetSyntheticClass(const ImportManager& importManager, const ClassLikeDecl& cld)
-{
-    ClassDecl* synthetic =
-        importManager.GetImportedDecl<ClassDecl>(cld.fullPackageName, GetSyntheticNameFromClassLike(cld));
-
-    CJC_NULLPTR_CHECK(synthetic);
-
-    return Ptr(synthetic);
 }
 
 std::string ReplaceClassName(std::string& classTypeSignature, std::string newSegment)
@@ -955,6 +968,45 @@ OwnedPtr<Expr> Utils::CreateOptionMatch(
     return WithinFile(CreateMatchExpr(
         std::move(selector),
         Nodes<MatchCase>(std::move(caseSome), std::move(caseNone)), ty), curFile);
+}
+
+OwnedPtr<FuncDecl> Utils::CreateNativeFunc(std::string& name,
+    std::vector<OwnedPtr<FuncParam>>&& params, Ptr<Ty> retTy, std::vector<OwnedPtr<Node>>&& nodes,
+    File& curFile, std::string& moduleName, std::string& fullPackageName) const
+{
+    CJC_ASSERT(Ty::IsMetCType(*retTy));
+    for (auto& param : params) {
+        CJC_ASSERT(Ty::IsMetCType(*param->GetTy()));
+    }
+
+    auto block = MakeOwned<Block>();
+    block->EnableAttr(Attribute::COMPILER_ADD);
+    block->SetTy(retTy);
+    block->curFile = &curFile;
+    std::move(nodes.begin(), nodes.end(), std::back_inserter(block->body));
+
+    std::vector<Ptr<Ty>> funcTyParams;
+    for (auto& param : params) {
+        funcTyParams.push_back(param->GetTy());
+    }
+
+    auto funcBody = CreateFuncBody({}, nullptr, std::move(block), retTy);
+    funcBody->curFile = &curFile;
+    funcBody->paramLists.emplace_back(CreateFuncParamList(std::move(params)));
+
+    auto funcTy = typeManager.GetFunctionTy(funcTyParams, retTy, {.isC = true});
+    auto fdecl = CreateFuncDecl(name, std::move(funcBody), funcTy);
+    fdecl->funcBody->funcDecl = fdecl.get();
+    fdecl->EnableAttr(Attribute::C);
+    fdecl->EnableAttr(Attribute::GLOBAL);
+    fdecl->EnableAttr(Attribute::PUBLIC);
+    fdecl->EnableAttr(Attribute::NO_MANGLE);
+    fdecl->EnableAttr(Attribute::UNSAFE);
+    fdecl->curFile = &curFile;
+    fdecl->moduleName = moduleName;
+    fdecl->fullPackageName = fullPackageName;
+
+    return fdecl;
 }
 
 bool IsJArray(const Decl& decl)
@@ -1120,6 +1172,41 @@ constexpr auto NATIVE_CONSTRUCTOR_MARKER_CLASS_NAME = "$$NativeConstructorMarker
 constexpr auto NATIVE_CONSTRUCTOR_MARKER_PACKAGE_NAME = "cangjie.lang.internal";
 
 } // namespace
+
+Ptr<FuncDecl> GetJavaImplRegistryCompanionConstructor(AST::ClassDecl& companion)
+{
+    CJC_ASSERT(IsImplRegistryCompanion(companion));
+
+    for (auto member : companion.GetMemberDeclPtrs()) {
+        if (!member->TestAttr(Attribute::CONSTRUCTOR)) {
+            continue;
+        }
+        if (auto ctor = As<ASTKind::FUNC_DECL>(member)) {
+            return ctor;
+        }
+    }
+
+    CJC_ABORT_WITH_MSG("Bad registry companion");
+    return nullptr;
+}
+
+VarDecl& GetJavaImplRegistryCompanionReferenceField(ClassDecl& refWrapper)
+{
+    CJC_ASSERT(IsImplReferenceWrapper(refWrapper));
+    for (auto& member : refWrapper.GetMemberDecls()) {
+        if (member->astKind != ASTKind::VAR_DECL) {
+            continue;
+        }
+        auto field = As<ASTKind::VAR_DECL>(member);
+        if (!field || field->identifier != "$reg") {
+            continue;
+        }
+
+        return *field;
+    }
+
+    CJC_ABORT();
+}
 
 std::string GetConstructorMarkerFQName()
 {
