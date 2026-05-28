@@ -1309,6 +1309,10 @@ void CHIRDeserializer::CHIRDeserializerImpl::ConfigBase(const PackageFormat::Bas
                 obj.Set<CHIR::IsCapturedClassInCC>(
                     static_cast<const PackageFormat::IsCapturedClassInCC*>(anno)->value());
                 break;
+            case PackageFormat::Annotation::Annotation_implicitCoreFuncDecl:
+                obj.Set<CHIR::ImplicitCoreFuncDecl>(
+                    static_cast<const PackageFormat::ImplicitCoreFuncDecl*>(anno)->value());
+                break;
             case PackageFormat::Annotation::Annotation_enumCaseIndex: {
                 int64_t index = static_cast<const PackageFormat::EnumCaseIndex*>(anno)->index();
                 if (index != -1) {
