@@ -243,6 +243,14 @@ template <> flatbuffers::Offset<PackageFormat::Base> CHIRSerializer::CHIRSeriali
                 .Union());
     };
 
+    // ImplicitCoreFuncDecl
+    annoHandler[typeid(CHIR::ImplicitCoreFuncDecl)] = [this, &annos, &annoTypes](Annotation* anno) {
+        annoTypes.push_back(PackageFormat::Annotation::Annotation_implicitCoreFuncDecl);
+        annos.emplace_back(PackageFormat::CreateImplicitCoreFuncDecl(
+            builder, ImplicitCoreFuncDecl::Extract(StaticCast<CHIR::ImplicitCoreFuncDecl*>(anno)))
+                .Union());
+    };
+
     // IsAutoEnvClass
     annoHandler[typeid(CHIR::IsAutoEnvClass)] = [this, &annos, &annoTypes](Annotation* anno) {
         annoTypes.push_back(PackageFormat::Annotation::Annotation_isAutoEnvClass);
