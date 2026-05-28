@@ -160,7 +160,8 @@ llvm::Value* IRBuilder2::CreateCallOrInvoke(const CGFunctionType& calleeType, ll
         auto applyWrapper = dynamic_cast<const CHIRCallExpr*>(this->chirExpr);
         return applyWrapper && structParamNeedsBasePtr.find(realArgIndices[idx]) != structParamNeedsBasePtr.end() &&
             applyWrapper->GetArgs()[idx]->IsGlobalVar() &&
-            cgMod.GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::AARCH64;
+            cgMod.GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::AARCH64 &&
+            cgMod.GetCGContext().GetCompileOptions().target.env != Triple::Environment::ANDROID;
     };
     auto tagGlobalStructAddrForAArch64 = [this](llvm::Value* llvmVal) {
         auto taggedPtr = CreatePtrToInt(llvmVal, getInt64Ty());
