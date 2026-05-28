@@ -37,7 +37,7 @@ void TranslateFunctionGenericUpperBounds(CHIRType& chirTy, const AST::FuncDecl& 
     if (func.funcBody->generic) {
         // We need to translate functions' generic type and fill their upperBounds during translation.
         for (auto& type : func.funcBody->generic->typeParameters) {
-            chirTy.TranslateType(*type->GetTy());
+            chirTy.TranslateType(type->GetTy());
         }
         // Must fill upper bounds after translation all generics.
         for (auto& type : func.funcBody->generic->typeParameters) {
@@ -52,7 +52,7 @@ FuncType* AdjustVarInitType(
     auto params = funcType.GetParamTypes();
     std::vector<Type*> paramsTy;
     paramsTy.reserve(params.size() + 1); // additional 1 means the type of this.
-    auto thisTy = chirType.TranslateType(*outerDecl.GetTy());
+    auto thisTy = chirType.TranslateType(outerDecl.GetTy());
     // ClassLike decl has already been added ref type by `TranslateType`, so we just needs add ref type to
     // constructor and mut function of non-classLike type.
     if (outerDecl.astKind == AST::ASTKind::STRUCT_DECL) {
@@ -113,7 +113,7 @@ std::vector<GenericType*> GetGenericParamType(const AST::Decl& decl, CHIRType& c
     }
     CJC_NULLPTR_CHECK(generic);
     for (auto& genericTy : generic->typeParameters) {
-        ts.emplace_back(StaticCast<GenericType*>(chirType.TranslateType(*(genericTy->GetTy()))));
+        ts.emplace_back(StaticCast<GenericType*>(chirType.TranslateType(genericTy->GetTy())));
     }
     return ts;
 }

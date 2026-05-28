@@ -63,7 +63,7 @@ Value* Translator::TranslateVArrayAssign(const AssignExpr& assign)
     CJC_ASSERT(se->IsVArrayAccess());
 
     const auto& loc = TranslateLocation(assign);
-    auto lhsType = chirTy.TranslateType(*se->GetTy());
+    auto lhsType = chirTy.TranslateType(se->GetTy());
 
     CJC_ASSERT(se->indexExprs.size() == 1);
     auto indexLoc = TranslateLocation(*se->indexExprs[0]);
