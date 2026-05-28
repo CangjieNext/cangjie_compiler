@@ -27,6 +27,25 @@
 using namespace Cangjie;
 using namespace AST;
 
+namespace {
+std::unordered_map<std::string, std::string> GetEnvironmentVars()
+{
+    std::unordered_map<std::string, std::string> envVars;
+    char **env = environ;
+    while (env && *env) {
+        std::string entry(*env);
+        size_t pos = entry.find('=');
+        if (pos != std::string::npos) {
+            std::string key = entry.substr(0, pos);
+            std::string value = entry.substr(pos + 1);
+            envVars[key] = value;
+        }
+        ++env;
+    }
+    return envVars;
+}
+}
+
 class SearchTest : public testing::Test {
 protected:
     void SetUp() override
@@ -43,6 +62,26 @@ protected:
 #elif defined(__unix__)
         invocation.globalOptions.target.os = Cangjie::Triple::OSType::LINUX;
 #endif
+
+        std::string cangjieHome = projectPath + "/output";
+#if defined(_WIN32)
+        std::string cangjiePath = cangjieHome + "/modules/windows_x86_64_cjnative";
+#elif defined(__APPLE__)
+    #if defined(__x86_64__)
+        std::string cangjiePath = cangjieHome + "/modules/darwin_x86_64_cjnative";
+    #else
+        std::string cangjiePath = cangjieHome + "/modules/darwin_arm64_cjnative";
+    #endif
+#else
+    #if defined(__x86_64__)
+        std::string cangjiePath = cangjieHome + "/modules/linux_x86_64_cjnative";
+    #else
+        std::string cangjiePath = cangjieHome + "/modules/linux_aarch64_cjnative";
+    #endif
+#endif
+        setenv("CANGJIE_HOME", cangjieHome.c_str(), 1);
+        setenv("CANGJIE_PATH", cangjiePath.c_str(), 1);
+        invocation.globalOptions.ReadPathsFromEnvironmentVars(GetEnvironmentVars());
     }
 
     std::string code = R"(
@@ -188,7 +227,7 @@ main(): Int64 {
     std::string srcPath;
 };
 
-TEST_F(SearchTest, DISABLED_ErrorFeedbackTest)
+TEST_F(SearchTest, ErrorFeedbackTest)
 {
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->code = regressionTestCode;
@@ -267,7 +306,7 @@ TEST_F(SearchTest, DISABLED_WildcardCharacterTest)
     EXPECT_EQ(res.size(), 32);
 }
 
-TEST_F(SearchTest, DISABLED_SimpleSearchTest)
+TEST_F(SearchTest, SimpleSearchTest)
 {
     srcPath = FileUtil::JoinPath(srcPath, "SimpleSearchTest");
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
@@ -475,7 +514,7 @@ TEST_F(SearchTest, RangeQuery)
     pkg.reset();
 }
 
-TEST_F(SearchTest, DISABLED_SelectedhighlightTest000)
+TEST_F(SearchTest, SelectedhighlightTest000)
 {
     srcPath = FileUtil::JoinPath(srcPath, "SimpleSearchTest");
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
@@ -492,7 +531,7 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest000)
     EXPECT_TRUE(rt->ref.target->identifier.Begin() != INVALID_POSITION);
 }
 
-TEST_F(SearchTest, DISABLED_SelectedhighlightTest001)
+TEST_F(SearchTest, SelectedhighlightTest001)
 {
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->code = codeLSP;
@@ -515,7 +554,7 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest001)
     EXPECT_EQ(re->ref.target->keywordPos.column, 5);
 }
 
-TEST_F(SearchTest, DISABLED_SelectedhighlightTest002)
+TEST_F(SearchTest, SelectedhighlightTest002)
 {
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->code = codeLSP;
@@ -536,7 +575,7 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest002)
     EXPECT_EQ(rt->ref.target->identifier.Begin().column, 16);
 }
 
-TEST_F(SearchTest, DISABLED_SelectedhighlightTest003)
+TEST_F(SearchTest, SelectedhighlightTest003)
 {
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->code = codeLSP;
@@ -557,7 +596,7 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest003)
     EXPECT_EQ(ma->target->identifier.Begin().column, 19);
 }
 
-TEST_F(SearchTest, DISABLED_SelectedhighlightTest004)
+TEST_F(SearchTest, SelectedhighlightTest004)
 {
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->code = codeLSP;
@@ -580,7 +619,7 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest004)
     EXPECT_EQ(ma->field.Begin().column, 15);
 }
 
-TEST_F(SearchTest, DISABLED_SelectedhighlightTest005)
+TEST_F(SearchTest, SelectedhighlightTest005)
 {
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->code = codeLSP;
@@ -603,7 +642,7 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest005)
     EXPECT_EQ(ma->field.Begin().column, 15);
 }
 
-TEST_F(SearchTest, DISABLED_SelectedhighlightTest006)
+TEST_F(SearchTest, SelectedhighlightTest006)
 {
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->code = codeLSP;
@@ -624,7 +663,7 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest006)
     EXPECT_EQ(fb->funcDecl->identifier.Begin().column, 6);
 }
 
-TEST_F(SearchTest, DISABLED_SelectedhighlightTest007)
+TEST_F(SearchTest, SelectedhighlightTest007)
 {
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->code = codeLSP;
@@ -645,7 +684,7 @@ TEST_F(SearchTest, DISABLED_SelectedhighlightTest007)
     EXPECT_EQ(cd->identifier.Begin().column, 16);
 }
 
-TEST_F(SearchTest, DISABLED_SelectedhighlightTest008)
+TEST_F(SearchTest, SelectedhighlightTest008)
 {
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->code = R"(
@@ -731,7 +770,7 @@ TEST_F(SearchTest, DISABLED_CompletionTest001)
     EXPECT_EQ(result[5], "testlsp");
 }
 
-TEST_F(SearchTest, DISABLED_CompletionTest003)
+TEST_F(SearchTest, CompletionTest003)
 {
     std::string codeTest = R"(open class Base {
     protected var one = 1
@@ -785,7 +824,7 @@ func testlsp():Int32 {
     EXPECT_EQ(type->decl->body->decls[2]->identifier, "add2");
 }
 
-TEST_F(SearchTest, DISABLED_CompletionTest004)
+TEST_F(SearchTest, CompletionTest004)
 {
     std::string codeTest = R"(open class Base {
     protected var one = 1
@@ -834,7 +873,7 @@ external class Data <: Base {
     EXPECT_EQ(type->decl->body->decls[4]->identifier, "add2");
 }
 
-TEST_F(SearchTest, DISABLED_CompletionTest005)
+TEST_F(SearchTest, CompletionTest005)
 {
     std::string codeTest = R"(open class Base {
     protected var one = 1
@@ -888,7 +927,7 @@ external class Data <: Base {
     EXPECT_EQ(res.size(), 12);
 }
 
-TEST_F(SearchTest, DISABLED_CompletionTest006)
+TEST_F(SearchTest, CompletionTest006)
 {
     std::string codeTest = R"(interface I {
     let aclass: Int32 = 1
@@ -937,7 +976,7 @@ class Base <: I {
     EXPECT_EQ(type->decl->body->decls[3]->identifier, "getSum2");
 }
 
-TEST_F(SearchTest, DISABLED_CompletionTest007)
+TEST_F(SearchTest, CompletionTest007)
 {
     std::string code = "let g = A.";
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
@@ -956,7 +995,7 @@ TEST_F(SearchTest, DISABLED_CompletionTest007)
     EXPECT_EQ(res[2]->astKind, ASTKind::VAR_DECL);
 }
 
-TEST_F(SearchTest, DISABLED_VarOrEnumPattern00)
+TEST_F(SearchTest, VarOrEnumPattern00)
 {
     std::string code = R"(
 enum E {
@@ -997,7 +1036,7 @@ main() {
     EXPECT_EQ(res[0]->astKind, ASTKind::VAR_DECL);
 }
 
-TEST_F(SearchTest, DISABLED_Annotation00)
+TEST_F(SearchTest, Annotation00)
 {
     std::string code = R"(
 @Annotation
@@ -1029,7 +1068,7 @@ main() {}
     EXPECT_EQ(diag.GetErrorCount(), 1);
 }
 
-TEST_F(SearchTest, DISABLED_Annotation01)
+TEST_F(SearchTest, Annotation01)
 {
     std::string code = R"(
 @Annotation
@@ -1060,7 +1099,7 @@ main() {}
     EXPECT_EQ(diag.GetErrorCount(), 0);
 }
 
-TEST_F(SearchTest, DISABLED_Annotation02)
+TEST_F(SearchTest, Annotation02)
 {
     std::string code = R"(
 @Annotation
@@ -1094,7 +1133,7 @@ main() {}
     EXPECT_EQ(diag.GetErrorCount(), 1);
 }
 
-TEST_F(SearchTest, DISABLED_LambdaExpr)
+TEST_F(SearchTest, LambdaExpr)
 {
     std::string code = "var sum1_newname: (Int32, Int32) -> Int32 = { aaaa:Int32, bbbb => aaaa + bbbb }";
     std::unique_ptr<TestCompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
@@ -1156,7 +1195,7 @@ enum E2<ABC> {
     EXPECT_EQ(res[0]->name, "ABC"); // Found generic decl.
 }
 
-TEST_F(SearchTest, DISABLED_NamedFuncArgSearchTest)
+TEST_F(SearchTest, NamedFuncArgSearchTest)
 {
     std::string codeTest = R"(
  public open class Test12 {
@@ -1203,7 +1242,7 @@ func test42() {
     EXPECT_EQ(argTarget, param);
 }
 
-TEST_F(SearchTest, DISABLED_BinaryExprSearchTest)
+TEST_F(SearchTest, BinaryExprSearchTest)
 {
     std::string codeTest = R"(
 main() {
@@ -1231,7 +1270,7 @@ main() {
     EXPECT_EQ(argTarget->identifier, "c");
 }
 
-TEST_F(SearchTest, DISABLED_AliasCtorSearchTest)
+TEST_F(SearchTest, AliasCtorSearchTest)
 {
     std::string codeTest = R"(
 class C {
@@ -1263,7 +1302,7 @@ main() {
     EXPECT_EQ(func->outerDecl, ref->aliasTarget->type->GetTarget());
 }
 
-TEST_F(SearchTest, DISABLED_MultipleAssignExprHightTest)
+TEST_F(SearchTest, MultipleAssignExprHightTest)
 {
     std::string codeTest = R"(
 main() {
@@ -1425,7 +1464,7 @@ std::string GetScopeName(TestCompilerInstance& instance, const std::string& code
 }
 } // namespace
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_NameReference)
+TEST_F(SearchTest, SynReferenceAfterSema_NameReference)
 {
     // Test for normal name reference accessing.
     std::string codeTest = R"(
@@ -1495,7 +1534,7 @@ main() {
     EXPECT_EQ(decls[0]->GetTy()->String(), "Class-A");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_NameReference_Extend)
+TEST_F(SearchTest, SynReferenceAfterSema_NameReference_Extend)
 {
     std::string codeTest = R"(
 class A<T> {
@@ -1538,7 +1577,7 @@ extend<T> A<T> where T <: I {
     EXPECT_EQ(ty->upperBounds.begin()->get()->name, "I");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_NameReference_ThisAndSuper)
+TEST_F(SearchTest, SynReferenceAfterSema_NameReference_ThisAndSuper)
 {
     // Test for normal name reference accessing.
     std::string codeTest = R"(
@@ -1573,7 +1612,7 @@ open class B {}
     EXPECT_EQ((*results.tys.begin())->name, "B");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_CallAccess)
+TEST_F(SearchTest, SynReferenceAfterSema_CallAccess)
 {
     // Test for call access.
     std::string codeTest = R"(
@@ -1624,7 +1663,7 @@ main() {
     EXPECT_EQ((*tys.begin())->String(), "Class-B");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_CallAccess02)
+TEST_F(SearchTest, SynReferenceAfterSema_CallAccess02)
 {
     // Test for call access.
     std::string codeTest = R"(
@@ -1656,7 +1695,7 @@ main() {
     EXPECT_EQ((*tys.begin())->String(), "CString");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_ThisCallAccess)
+TEST_F(SearchTest, SynReferenceAfterSema_ThisCallAccess)
 {
     // Test for call access for 'This' type.
     std::string codeTest = R"(
@@ -1689,7 +1728,7 @@ main() {
     EXPECT_EQ((*tys.begin())->String(), "Int64");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_LiteralAccess)
+TEST_F(SearchTest, SynReferenceAfterSema_LiteralAccess)
 {
     // Test for literal access.
     std::string codeTest = R"(
@@ -1744,7 +1783,7 @@ main() {
     EXPECT_EQ((*tys.begin())->String(), "Int");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_ArrayLitAccess01)
+TEST_F(SearchTest, SynReferenceAfterSema_ArrayLitAccess01)
 {
     // Test for arraylit access.
     std::string codeTest = R"(
@@ -1815,7 +1854,7 @@ main() {
     EXPECT_EQ((*tys.begin())->String(), "Invalid");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_ArrayLitAccess02)
+TEST_F(SearchTest, SynReferenceAfterSema_ArrayLitAccess02)
 {
     // Test for arraylit access.
     std::string codeTest = R"(
@@ -1843,7 +1882,7 @@ main() {
     EXPECT_EQ((*tys.begin())->String(), "Struct-Array<Class-I>");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_SubscriptAccess)
+TEST_F(SearchTest, SynReferenceAfterSema_SubscriptAccess)
 {
     // Test for subscript access.
     std::string codeTest = R"(
@@ -1918,7 +1957,7 @@ main() {
     EXPECT_EQ(str, "Struct-String UInt8");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_SubscriptAccess02)
+TEST_F(SearchTest, SynReferenceAfterSema_SubscriptAccess02)
 {
     // Test for subscript access with generic.
     std::string codeTest = R"(
@@ -1980,7 +2019,7 @@ main() {
     EXPECT_EQ(str, "Struct-String UInt8");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_FunctionCallOperator)
+TEST_F(SearchTest, SynReferenceAfterSema_FunctionCallOperator)
 {
     // Test for operator '()' overloading access.
     std::string codeTest = R"(
@@ -2021,7 +2060,7 @@ main() {
     EXPECT_EQ((*tys.begin())->String(), "Class-A");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_OptionalChain)
+TEST_F(SearchTest, SynReferenceAfterSema_OptionalChain)
 {
     // Test for operator '()' overloading access.
     std::string codeTest = R"(
@@ -2074,7 +2113,7 @@ main() {
     EXPECT_EQ((*tys.begin())->String(), "Class-A");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_PkgName)
+TEST_F(SearchTest, SynReferenceAfterSema_PkgName)
 {
     std::string codeTest = R"(
 package pkgD
@@ -2098,7 +2137,7 @@ public class pkgDTestClass {  init(a:Int32){}}
     ASSERT_EQ(results.decls.size(), 0);
 }
 
-TEST_F(SearchTest, DISABLED_RemoveMacroInitError)
+TEST_F(SearchTest, RemoveMacroInitError)
 {
     // Test for normal name reference accessing.
     std::string codeTest = R"(
@@ -2118,7 +2157,7 @@ main(){ }
     EXPECT_EQ(diag.GetErrorCount(), 1);
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_TrailingClosureExpr01)
+TEST_F(SearchTest, SynReferenceAfterSema_TrailingClosureExpr01)
 {
     // Test for trailing closure of refExpr.
     std::string codeTest = R"(
@@ -2161,7 +2200,7 @@ main() {
     EXPECT_EQ((*tys.begin())->String(), "Class-A");
 }
 
-TEST_F(SearchTest, DISABLED_SynReferenceAfterSema_TrailingClosureExpr02)
+TEST_F(SearchTest, SynReferenceAfterSema_TrailingClosureExpr02)
 {
     // Test for trailing closure of callExpr.
     std::string codeTest = R"(
