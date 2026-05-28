@@ -88,6 +88,9 @@ public:
 protected:
     explicit Terminator(
         ExprKind kind, const std::vector<Value*>& operands, const std::vector<Block*>& successors, Block* parent);
+    explicit Terminator(
+        ExprKind kind, const std::vector<Value*>& operands, const std::vector<Block*>& successors,
+        const std::vector<BlockGroup*>& blockGroups, Block* parent);
     ~Terminator() override = default;
 
     void AppendSuccessor(Block& block);
@@ -204,6 +207,26 @@ private:
      * Note that default Block does not have the case val.
      */
     std::vector<uint64_t> caseVals;
+};
+
+/**
+ * @brief Exit current function and move control to the caller.
+ */
+class Exclave : public Terminator {
+    friend class CHIRContext;
+    friend class CHIRBuilder;
+public:
+    // ===--------------------------------------------------------------------===//
+    // Base Information
+    // ===--------------------------------------------------------------------===//
+    /** @brief Get the body of this Exclave Expression */
+    BlockGroup* GetBody() const;
+
+private:
+    explicit Exclave(BlockGroup* body, Block* parent);
+    ~Exclave() override = default;
+
+    Exclave* Clone(CHIRBuilder& builder, Block& parent) const override;
 };
 
 /**

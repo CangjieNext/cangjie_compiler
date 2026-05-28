@@ -36,6 +36,17 @@ Terminator::Terminator(
     }
 }
 
+Terminator::Terminator(
+    ExprKind kind, const std::vector<Value*>& operands, const std::vector<Block*>& successors,
+    const std::vector<BlockGroup*>& blockGroups, Block* parent)
+    : Expression(kind, operands, blockGroups, parent)
+{
+    CJC_NULLPTR_CHECK(parent);
+    for (auto succ : successors) {
+        AppendSuccessor(*succ);
+    }
+}
+
 size_t Terminator::GetFirstSuccessorIndex() const
 {
     CJC_ASSERT(GetExprMajorKind() == ExprMajorKind::TERMINATOR);
@@ -886,5 +897,23 @@ RawArrayAllocateWithException* RawArrayAllocateWithException::Clone(CHIRBuilder&
         result->GetType(), GetElementType(), GetSize(), GetSuccessBlock(), GetErrorBlock(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
+    return newNode;
+}
+
+Exclave::Exclave(BlockGroup* body, Block* parent) : Terminator(ExprKind::EXCLAVE, {}, {}, {body}, parent)
+{
+    CJC_NULLPTR_CHECK(body);
+    CJC_NULLPTR_CHECK(parent);
+}
+
+BlockGroup* Exclave::GetBody() const
+{
+    return blockGroups[0];
+}
+
+Exclave* Exclave::Clone(CHIRBuilder& builder, Block& parent) const
+{
+    auto newNode = builder.CreateTerminator<Exclave>(GetBody(), &parent);
+    parent.AppendExpression(newNode);
     return newNode;
 }

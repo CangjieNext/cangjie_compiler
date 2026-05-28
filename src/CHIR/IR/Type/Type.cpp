@@ -1598,4 +1598,81 @@ bool Type::SatisfyGenericConstraints(const GenericType& type, CHIRBuilder& build
     }
     return true;
 }
+
+ModalInfo::ModalInfo() : local(LocalModal::NONE)
+{
+}
+
+ModalInfo::ModalInfo(LocalModal local) : local(local)
+{
+}
+
+LocalModal ModalInfo::Local() const
+{
+    return local;
+}
+
+bool ModalInfo::operator==(const ModalInfo& other) const
+{
+    return local == other.local;
+}
+
+bool ModalInfo::operator!=(const ModalInfo& other) const
+{
+    return local != other.local;
+}
+
+std::string ModalInfo::ToString() const
+{
+    switch (local) {
+        case LocalModal::NONE:
+            return "@~local";
+        case LocalModal::MAYBE:
+            return "@local?";
+        case LocalModal::MUST:
+            return "@local!";
+        default:
+            CJC_ABORT();
+            return "";
+    }
+}
+
+size_t ModalType::Hash() const
+{
+    std::size_t hashVal = HashArgTypes(argTys);
+    HashValue(hashVal, modal.Local());
+    HashValue(hashVal, kind);
+    return hashVal;
+}
+
+bool ModalType::operator==(const Type& other) const
+{
+    auto it = DynamicCast<const ModalType*>(&other);
+    return it && argTys == it->argTys && (modal == it->modal);
+}
+
+std::string ModalType::ToString() const
+{
+    return GetBaseType()->ToString() + " " + modal.ToString();
+}
+
+std::string ModalType::ToSrcCodeString() const
+{
+    return GetBaseType()->ToSrcCodeString() + " " + modal.ToString();
+}
+
+Type* ModalType::GetBaseType() const
+{
+    return argTys[0];
+}
+
+ModalInfo ModalType::GetModalInfo() const
+{
+    return modal;
+}
+
+ModalType::ModalType(Type* baseType, ModalInfo modal) : Type(TypeKind::TYPE_MODAL), modal(modal)
+{
+    this->argTys.emplace_back(baseType);
+}
 } // namespace Cangjie::CHIR

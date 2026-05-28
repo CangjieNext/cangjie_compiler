@@ -68,6 +68,24 @@ template <typename... Types> inline size_t HashValue(const Types&... values)
     return hashVal;
 }
 
+enum class LocalModal : uint8_t {
+    NONE,
+    MAYBE,
+    MUST
+};
+
+class ModalInfo {
+public:
+    ModalInfo();
+    ModalInfo(LocalModal local);
+    LocalModal Local() const;
+    bool operator==(const ModalInfo& other) const;
+    bool operator!=(const ModalInfo& other) const;
+    std::string ToString() const;
+private:
+    LocalModal local;
+};
+
 /*
  * @brief Definitions of all of the base types for the Type system.
  *
@@ -120,6 +138,7 @@ public:
         // Built-in box type
         TYPE_BOXTYPE,
         TYPE_THIS,
+        TYPE_MODAL,
         MAX_TYPE_KIND,
     };
 
@@ -1130,6 +1149,23 @@ private:
     }
     ~VoidType() override = default;
     friend class CHIRContext;
+};
+
+class ModalType : public Type {
+public:
+    Type* GetBaseType() const;
+    ModalInfo GetModalInfo() const;
+    size_t Hash() const override;
+    bool operator==(const Type& other) const override;
+    std::string ToString() const override;
+    std::string ToSrcCodeString() const override;
+
+private:
+    explicit ModalType(Type* baseType, ModalInfo modal);
+    ~ModalType() override = default;
+    friend class CHIRContext;
+
+    ModalInfo modal;
 };
 
 const static std::unordered_map<Type::TypeKind, std::string> TYPEKIND_TO_STRING{
