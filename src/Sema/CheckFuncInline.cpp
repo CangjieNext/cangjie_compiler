@@ -19,6 +19,7 @@
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Utils/CheckUtils.h"
 
 using namespace Cangjie;
@@ -69,7 +70,7 @@ bool CanCountedRefExprOrMemberExpr(const Expr& expr)
     return true;
 }
 
-bool ContainsInternalType(const Ptr<Ty>& ty)
+bool ContainsInternalType(ModalTy ty)
 {
     if (!Ty::IsTyCorrect(ty)) {
         return true;

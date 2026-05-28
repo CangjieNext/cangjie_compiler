@@ -33,8 +33,8 @@ struct GenericInfoHash {
         size_t ret = 0;
         ret = hash_combine<Ptr<const AST::Decl>>(ret, info.decl);
         for (auto n : info.gTyToTyMap) {
-            ret = hash_combine<Ptr<AST::Ty>>(ret, n.first);
-            ret = hash_combine<Ptr<AST::Ty>>(ret, n.second);
+            ret = hash_combine<AST::DataTy>(ret, n.first);
+            ret = hash_combine<AST::DataTy>(ret, n.second);
         }
         return ret;
     }
@@ -142,7 +142,7 @@ private:
      *    1. the structure declaration which contains the function which implements abstract function.
      *    2. the index of the implementation function in structure declaration.
      * */
-    std::unordered_map<std::pair<Ptr<AST::Ty>, Ptr<AST::FuncDecl>>,
+    std::unordered_map<std::pair<AST::ModalTy, Ptr<AST::FuncDecl>>,
         std::unordered_set<std::pair<Ptr<AST::Decl>, size_t>, HashPair>, HashPair>
         abstractFuncToDeclMap;
     std::unordered_map<Ptr<AST::Decl>, size_t> membersIndexMap;
@@ -156,9 +156,9 @@ private:
     };
     std::vector<Ptr<AST::Decl>> structContext;
     /** Key: sema type; Value: whether contains intersection ty. */
-    std::unordered_map<Ptr<AST::Ty>, bool> intersectionTyStatus;
+    std::unordered_map<AST::ModalTy, bool> intersectionTyStatus;
     /** Mark whether current type has instantiated related extends for package in gim. */
-    std::unordered_set<std::pair<Ptr<AST::Ty>, std::string>, HashPair> extendGenerated;
+    std::unordered_set<std::pair<AST::ModalTy, std::string>, HashPair> extendGenerated;
     /** Store the source imported decls which are checked with instantiation status. */
     std::unordered_set<Ptr<const AST::Decl>> usedSrcImportedDecls;
     /** Used for incremental compilation, decide whether new created instantiation need to be compiled. */
@@ -190,7 +190,8 @@ private:
      */
     Ptr<AST::Decl> FindInCache(const GenericInfo& info);
     /** Construct GenericInfo. */
-    GenericInfo ConstructGenericInfo(AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& instTys) const;
+    GenericInfo ConstructGenericInfo(AST::Decl& decl, const std::vector<AST::DataTy>& instTys) const;
+    GenericInfo ConstructGenericInfo(AST::Decl& decl, const std::vector<AST::ModalTy>& instTys) const;
     void AppendGenericMemberMap(const AST::Decl& genericDecl,
         const std::unordered_set<Ptr<AST::Decl>>& insNominalDecls, Generic2InsMap& result) const;
     /**
@@ -204,7 +205,8 @@ private:
     /**
      * Instantiate a generic decl @p genericDecl with type arguments @p instTys.
      */
-    void InstantiateGenericDeclWithInstTys(AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& instTys);
+    void InstantiateGenericDeclWithInstTys(AST::Decl& decl, const std::vector<AST::DataTy>& instTys);
+    void InstantiateGenericDeclWithInstTys(AST::Decl& decl, const std::vector<AST::ModalTy>& instTys);
     /**
      * Walk inherited types which are used by non-generic be boxed extend decls.
      * Used to guarantee all related generic types are instantiated.
@@ -215,10 +217,10 @@ private:
         const AST::Node& genericNode, AST::Node& clonedNode, const GenericInfo& info, const TypeSubst& g2gTyMap);
     void PerformUpdateAttrDuringClone(AST::Node& genericNode, AST::Node& clonedNode) const;
     /** Find implemented version function of abstract function @p interfaceFunc in the decl of Ty @p ty. */
-    Ptr<AST::FuncDecl> FindImplFuncForAbstractFunc(AST::Ty& ty, AST::FuncDecl& fd, AST::Ty& targetBaseTy);
+    Ptr<AST::FuncDecl> FindImplFuncForAbstractFunc(AST::ModalTy ty, AST::FuncDecl& fd, AST::ModalTy targetBaseTy);
     /** Find matched implementation function of abstract function @p fd from candidates */
-    Ptr<AST::Decl> SelectTypeMatchedImplMember(AST::Ty& ty, const AST::FuncDecl& interfaceFunc,
-        std::vector<std::pair<Ptr<AST::Decl>, size_t>>& candidates, AST::Ty& targetBaseTy);
+    Ptr<AST::Decl> SelectTypeMatchedImplMember(AST::ModalTy ty, const AST::FuncDecl& interfaceFunc,
+        std::vector<std::pair<Ptr<AST::Decl>, size_t>>& candidates, AST::ModalTy targetBaseTy);
     /** Walker function for node instantiation. */
     AST::VisitAction CheckNodeInstantiation(AST::Node& node);
     /** Walker function for reference pointer rearrangement. */
@@ -236,8 +238,8 @@ private:
     /** Instantiate generic ArrayList @p al which has Struct-Array type. */
     void GenericArrayLitInstantiate(AST::ArrayLit& al);
     /** Instantiate extend of generic sema type @p ty 's extends. */
-    void GenericTyExtendInstantiate(AST::Ty& ty);
-    void InstantiateGenericTysForMemoryLayout(const AST::Ty& ty);
+    void GenericTyExtendInstantiate(AST::ModalTy ty);
+    void InstantiateGenericTysForMemoryLayout(AST::ModalTy ty);
     /** Instantiate imported partial instantiated member decl. */
     Ptr<AST::Decl> ReinstantiatedPartialMemberDecl(
         const GenericInfo& genericInfo, AST::Decl& structDecl, AST::Decl& genericMember, size_t memberIndex);
@@ -252,24 +254,26 @@ private:
     void RearrangeFuncBodyReference(AST::FuncBody& fb);
     void UpdateTypePatternMatchResult(AST::Pattern& pattern);
     Ptr<AST::Decl> GetInstantiatedTarget(
-        AST::Ty& baseTy, AST::Decl& target, const std::vector<Ptr<AST::Ty>>& instTys, Ptr<AST::Ty> upperTy = nullptr);
-    Ptr<AST::Decl> GetInstantiatedMemberTarget(AST::Ty& baseTy, AST::Decl& target, bool inRearrange = false);
+        AST::ModalTy baseTy, AST::Decl& target, const std::vector<AST::DataTy>& instTys, AST::ModalTy upperTy = {});
+    Ptr<AST::Decl> GetInstantiatedTarget(
+        AST::ModalTy baseTy, AST::Decl& target, const std::vector<AST::ModalTy>& instTys, AST::ModalTy upperTy = {});
+    Ptr<AST::Decl> GetInstantiatedMemberTarget(AST::ModalTy baseTy, AST::Decl& target, bool inRearrange = false);
 
     /** Build interface function to implemented function map for all type decls */
     void BuildAbstractFuncMap();
-    void BuildAbstractFuncMapHelper(AST::Ty& ty);
-    bool IsImplementationFunc(AST::Ty& ty, const AST::FuncDecl& interfaceFunc, const AST::FuncDecl& fd);
-    MultiTypeSubst GetTypeMapping(Ptr<AST::Ty>& baseTy, AST::Ty& interfaceTy);
-    void MapFuncWithDecl(AST::Ty& ty, AST::FuncDecl& interfaceFunc, const AST::FuncDecl& target);
+    void BuildAbstractFuncMapHelper(AST::DataTy ty);
+    bool IsImplementationFunc(AST::DataTy ty, const AST::FuncDecl& interfaceFunc, const AST::FuncDecl& fd);
+    MultiTypeSubst GetTypeMapping(AST::DataTy baseTy, AST::DataTy interfaceTy);
+    void MapFuncWithDecl(AST::ModalTy ty, AST::FuncDecl& interfaceFunc, const AST::FuncDecl& target);
     void CollectDeclMemberFuncs(AST::Decl& decl, std::unordered_set<Ptr<AST::FuncDecl>>& funcs) const;
-    std::unordered_set<Ptr<AST::FuncDecl>> GetInheritedMemberFuncs(AST::Ty& ty);
-    std::unordered_set<Ptr<AST::InheritableDecl>> GetInheritedInterfaces(AST::Ty& ty);
+    std::unordered_set<Ptr<AST::FuncDecl>> GetInheritedMemberFuncs(AST::DataTy ty);
+    std::unordered_set<Ptr<AST::InheritableDecl>> GetInheritedInterfaces(AST::DataTy ty);
     /** Collect inherited members for imported decls which is not check during sema stage. */
     std::unordered_set<Ptr<AST::FuncDecl>> MergeMemberFuncs(
-        AST::Ty& ty, AST::Decl& decl, const std::unordered_set<Ptr<AST::FuncDecl>>& inheritedMembers);
-    std::unordered_set<Ptr<AST::FuncDecl>> CollectInheritedMembers(AST::Ty& ty, AST::Decl& decl);
+        AST::DataTy ty, AST::Decl& decl, const std::unordered_set<Ptr<AST::FuncDecl>>& inheritedMembers);
+    std::unordered_set<Ptr<AST::FuncDecl>> CollectInheritedMembers(AST::DataTy ty, AST::Decl& decl);
     std::unordered_set<Ptr<AST::FuncDecl>> CollectInheritedMembersVisit(
-        AST::Ty& ty, AST::Decl& decl, std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Decl>>>& visited);
+        AST::DataTy ty, AST::Decl& decl, std::set<std::pair<AST::DataTy, Ptr<AST::Decl>>>& visited);
 
     /**
      * Get general version of given @p decl. If getOriginal is on:
@@ -291,23 +295,23 @@ private:
         return decl;
     }
 
-    bool HasIntersectionTy(AST::Ty& ty)
+    bool HasIntersectionTy(AST::ModalTy ty)
     {
-        auto found = intersectionTyStatus.find(&ty);
+        auto found = intersectionTyStatus.find(ty);
         if (found != intersectionTyStatus.end()) {
             return found->second;
         }
-        if (ty.IsIntersection()) {
-            intersectionTyStatus.emplace(&ty, true);
+        if (ty->IsIntersection()) {
+            intersectionTyStatus.emplace(ty, true);
             return true;
         }
-        for (auto typeArg : ty.typeArgs) {
-            if (typeArg && HasIntersectionTy(*typeArg)) {
-                intersectionTyStatus.emplace(&ty, true);
+        for (auto typeArg : ty->typeArgs) {
+            if (typeArg && HasIntersectionTy(typeArg)) {
+                intersectionTyStatus.emplace(ty, true);
                 return true;
             }
         }
-        intersectionTyStatus.emplace(&ty, false);
+        intersectionTyStatus.emplace(ty, false);
         return false;
     }
     void RemoveFromCache(AST::Decl& decl)

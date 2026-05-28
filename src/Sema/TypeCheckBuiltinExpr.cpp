@@ -28,6 +28,7 @@
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Sema/Desugar.h"
+#include "cangjie/AST/ModalInfo.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 
@@ -59,11 +60,11 @@ private:
     static constexpr int SYN_LINE = 1;
     int column{1}; // to make functions have unique pos, and make them after their class decl
 
-    Ptr<Ty> CTypeUpperBoundTy()
+    DataTy CTypeUpperBoundTy()
     {
         auto id = c.importManager.GetCoreDecl<InterfaceDecl>(CTYPE_NAME);
-        if (!id || !Ty::IsTyCorrect(id->GetTy())) {
-            return TypeManager::GetInvalidTy();
+        if (!id || !id->GetTy().IsCorrect()) {
+            return {TypeManager::GetInvalidTy()};
         }
         return tm.GetInterfaceTy(*id, {});
     }
@@ -143,7 +144,7 @@ private:
         return StaticCast<FuncDecl>(decl.members.back().get());
     }
 
-    Ptr<FuncParam> MakeFuncParam(FuncDecl& decl, std::string&& id, Ptr<Ty> ty)
+    Ptr<FuncParam> MakeFuncParam(FuncDecl& decl, std::string&& id, ModalTy ty)
     {
         auto file = decl.curFile;
         auto ret = MakeOwnedNode<FuncParam>();
@@ -170,13 +171,51 @@ private:
         return decl.funcBody->paramLists.back()->params.back();
     }
 
+    static LocalModalAST ToLocalModalAST(ModalInfo modal)
+    {
+        switch (modal.local) {
+            case LocalModal::NOT:
+                return LocalModalAST::NOT;
+            case LocalModal::HALF:
+                return LocalModalAST::HALF;
+            case LocalModal::FULL:
+                return LocalModalAST::FULL;
+            default:
+                return LocalModalAST::NOT;
+        }
+    }
+
+    ModalTy RawArrayInstTy(BuiltInDecl& bid, ModalInfo modal)
+    {
+        auto elemTy = tm.GetGenericsTy(*bid.generic->typeParameters[0]);
+        return c.GetBuiltInArrayType({elemTy}, modal);
+    }
+
+    void AddCtorThisParam(FuncDecl& fd, BuiltInDecl& bid, ModalInfo modal)
+    {
+        if (modal == ModalInfo{}) {
+            return;
+        }
+        CJC_ASSERT(!fd.funcBody->paramLists.empty());
+        auto& pl = *fd.funcBody->paramLists.back();
+        auto thisParam = MakeOwnedNode<ThisParam>();
+        CopyFileID(thisParam.get(), fd.curFile);
+        thisParam->curFile = fd.curFile;
+        thisParam->begin = {SYN_LINE, column++};
+        thisParam->modal.SetLocal(ToLocalModalAST(modal), {SYN_LINE, column++});
+        thisParam->outerDecl = &bid;
+        thisParam->end = {SYN_LINE, column++};
+        thisParam->SetTy(RawArrayInstTy(bid, modal));
+        pl.thisParam = std::move(thisParam);
+    }
+
     void CreateCStringMembers(BuiltInDecl& decl)
     {
         /// public init(cString: CPointer<UInt8>)
         auto cptrUInt8 = tm.GetPointerTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UINT8));
         auto fd = MakeCtor(decl);
         AddParamList(*fd);
-        MakeFuncParam(*fd, "cString", cptrUInt8);
+        MakeFuncParam(*fd, "cString", {cptrUInt8});
         CloseCtor(*fd);
     }
 
@@ -216,36 +255,40 @@ private:
         bid->end.line = SYN_LINE;
         bid->end.column = column++;
         FinalizeBuiltInDeclTy(*bid);
-        CreateRawArrayMembers(*bid);
+        for (int i = 0; i < MODAL_INFO_COUNT; ++i) {
+            CreateRawArrayMembers(*bid, ToModalInfo(i));
+        }
         pkg.files[0]->decls.emplace_back(std::move(bid));
     }
 
-    void CreateRawArrayMembers(BuiltInDecl& bid)
+    void CreateRawArrayMembers(BuiltInDecl& bid, ModalInfo modal)
     {
-        CreateRawArrayCtor0(bid);
-        CreateRawArrayCtorRepeat(bid);
-        CreateRawArrayCtorLambda(bid);
-        CreateRawArrayCtorCollection(bid);
+        CreateRawArrayCtor0(bid, modal);
+        CreateRawArrayCtorRepeat(bid, modal);
+        CreateRawArrayCtorLambda(bid, modal);
+        CreateRawArrayCtorCollection(bid, modal);
     }
 
-    void CreateRawArrayCtorLambda(BuiltInDecl& bid)
+    void CreateRawArrayCtorLambda(BuiltInDecl& bid, ModalInfo modal)
     {
-        // RawArray<T>(size: Int64, initElement: (Int64) -> T)
+        // init(size: Int64, initElement: (Int64) -> T @mode): RawArray<T> @mode
         auto fd = MakeCtor(bid);
         AddParamList(*fd);
-        MakeFuncParam(*fd, "size", TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64));
-        auto tty = tm.GetGenericsTy(*bid.generic->typeParameters[0]);
-        auto lamTy = tm.GetFunctionTy({TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64)}, tty);
+        AddCtorThisParam(*fd, bid, modal);
+        MakeFuncParam(*fd, "size", {TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64)});
+        auto elemTy = ModalTy{tm.GetGenericsTy(*bid.generic->typeParameters[0]), modal};
+        auto lamTy = ModalTy{tm.GetFunctionTy({ModalTy{TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64)}}, elemTy)};
         MakeFuncParam(*fd, "initElement", lamTy);
         fd->DisableAttr(Attribute::PUBLIC);
         CloseCtor(*fd);
     }
 
-    void CreateRawArrayCtorCollection(BuiltInDecl& bid)
+    void CreateRawArrayCtorCollection(BuiltInDecl& bid, ModalInfo modal)
     {
-        // RawArray<T>(collection: Collection<T>)
+        // init(collection: Collection<T> @mode): RawArray<T> @mode
         auto fd = MakeCtor(bid);
         AddParamList(*fd);
+        AddCtorThisParam(*fd, bid, modal);
         auto colDecl = c.importManager.GetCoreDecl<InterfaceDecl>("Collection");
         auto tty = tm.GetGenericsTy(*bid.generic->typeParameters[0]);
         Ptr<Ty> colTy;
@@ -255,29 +298,31 @@ private:
         } else {
             colTy = tm.GetInterfaceTy(*colDecl, {tty});
         }
-        MakeFuncParam(*fd, "collection", colTy);
+        MakeFuncParam(*fd, "collection", ModalTy{colTy, modal});
         fd->DisableAttr(Attribute::PUBLIC);
         CloseCtor(*fd);
     }
 
-    void CreateRawArrayCtorRepeat(BuiltInDecl& bid)
+    void CreateRawArrayCtorRepeat(BuiltInDecl& bid, ModalInfo modal)
     {
-        // RawArray<T>(size: Int64, repeat!: T)
+        // init(size: Int64, repeat!: T @mode): RawArray<T> @mode
         auto fd = MakeCtor(bid);
         AddParamList(*fd);
-        MakeFuncParam(*fd, "size", TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64));
-        auto tty = tm.GetGenericsTy(*bid.generic->typeParameters[0]);
-        auto repeat = MakeFuncParam(*fd, "repeat", tty);
+        AddCtorThisParam(*fd, bid, modal);
+        MakeFuncParam(*fd, "size", {TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64)});
+        auto elemTy = ModalTy{tm.GetGenericsTy(*bid.generic->typeParameters[0]), modal};
+        auto repeat = MakeFuncParam(*fd, "repeat", elemTy);
         repeat->isNamedParam = true;
         fd->DisableAttr(Attribute::PUBLIC);
         CloseCtor(*fd);
     }
 
-    void CreateRawArrayCtor0(BuiltInDecl& bid)
+    void CreateRawArrayCtor0(BuiltInDecl& bid, ModalInfo modal)
     {
-        // RawArray<T>(), parameterless
+        // init(): RawArray<T> @mode
         auto fd = MakeCtor(bid);
         AddParamList(*fd);
+        AddCtorThisParam(*fd, bid, modal);
         fd->DisableAttr(Attribute::PUBLIC);
         CloseCtor(*fd);
     }
@@ -382,41 +427,41 @@ void TypeChecker::TypeCheckerImpl::CreateBuiltinDecls(AST::Package& pkg)
     imp.CreateBuiltinDecls();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::GetArrayTypeByInterface(Ty& interfaceTy)
+ModalTy TypeChecker::TypeCheckerImpl::GetArrayTypeByInterface(ModalTy interfaceTy)
 {
-    Ptr<Ty> invalid = TypeManager::GetInvalidTy();
+    ModalTy invalid = {TypeManager::GetInvalidTy()};
     auto arrayStruct = importManager.GetCoreDecl<StructDecl>("Array");
     if (!arrayStruct) {
         return invalid;
     }
-    auto arrTys = promotion.Downgrade(*arrayStruct->GetTy(), interfaceTy);
+    auto arrTys = promotion.Downgrade(arrayStruct->GetTy(), interfaceTy);
     if (arrTys.empty()) {
         return invalid;
     }
     return *arrTys.begin();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkArrayLit(ASTContext& ctx, Ty& target, ArrayLit& al)
+bool TypeChecker::TypeCheckerImpl::ChkArrayLit(ASTContext& ctx, ModalTy target, ArrayLit& al)
 {
-    auto targetTy = TypeCheckUtil::UnboxOptionType(&target);
+    auto targetTy = TypeCheckUtil::UnboxOptionType(target);
     // Set type first, if check succeed, type will be updated.
-    al.SetTy(TypeManager::GetInvalidTy());
+    al.SetTy({TypeManager::GetInvalidTy()});
     if (targetTy->IsInterface()) {
-        targetTy = GetArrayTypeByInterface(*targetTy);
+        targetTy = GetArrayTypeByInterface(targetTy);
         if (targetTy->IsInvalid()) {
             // If failed to get valid array type, there are two cases:
             // 1. array lit is empty, type is unable to be inferred.
             // 2. array lit is not empty, synthesize arrayLit's type and check with target.
             auto arrayLitTy = SynArrayLit(ctx, al);
-            if (typeManager.IsSubtype(arrayLitTy, &target)) {
+            if (typeManager.IsSubtype(arrayLitTy, target)) {
                 return true;
             }
-            if (Ty::IsTyCorrect(arrayLitTy)) {
+            if (arrayLitTy.IsCorrect()) {
                 DiagMismatchedTypes(diag, al, target);
             }
             return false;
         }
-    } else if (!Ty::IsTyCorrect(targetTy) || (!targetTy->IsStructArray() && !Is<VArrayTy>(targetTy))) {
+    } else if (!targetTy.IsCorrect() || (!targetTy->IsStructArray() && !Is<VArrayTy>(targetTy.Ty()))) {
         DiagMismatchedTypesWithFoundTy(diag, al, targetTy->String(), "Array");
         return false;
     }
@@ -426,14 +471,14 @@ bool TypeChecker::TypeCheckerImpl::ChkArrayLit(ASTContext& ctx, Ty& target, Arra
     }
 
     bool matched = true;
-    auto vt = DynamicCast<VArrayTy*>(targetTy);
+    auto vt = DynamicCast<VArrayTy*>(targetTy.Ty());
     if (vt && vt->size != static_cast<int64_t>(al.children.size())) {
         auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_varray_size_match, al);
         builder.AddMainHintArguments(std::to_string(vt->size), std::to_string(al.children.size()));
         matched = false;
     }
 
-    Ptr<Ty> arrayElemTy = targetTy->typeArgs[0];
+    ModalTy arrayElemTy = targetTy->typeArgs[0];
     for (auto& child : al.children) {
         if (!Check(ctx, arrayElemTy, child.get())) {
             matched = false;
@@ -446,14 +491,14 @@ bool TypeChecker::TypeCheckerImpl::ChkArrayLit(ASTContext& ctx, Ty& target, Arra
     return matched;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
+ModalTy TypeChecker::TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
 {
     if (al.children.empty()) {
         diag.Diagnose(al, DiagKind::sema_empty_arrayLit_type_undefined);
-        al.SetTy(TypeManager::GetInvalidTy());
+        al.SetTy({TypeManager::GetInvalidTy()});
         return al.GetTy();
     }
-    std::set<Ptr<Ty>> arrayElemTys;
+    std::set<ModalTy> arrayElemTys;
     bool hasInvalidElemTy = false;
     for (auto& child : al.children) {
         if (Synthesize({ctx, SynPos::EXPR_ARG}, child.get()) && !ReplaceIdealTy(*child)) {
@@ -466,15 +511,15 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynArrayLit(ASTContext& ctx, ArrayLit& al)
     if (hasInvalidElemTy || arrayStruct == nullptr) {
         // If there exists invalid element ty or 'core' package is not imported correctly,
         // error will be throwed in other process.
-        al.SetTy(TypeManager::GetInvalidTy());
+        al.SetTy({TypeManager::GetInvalidTy()});
         return al.GetTy();
     }
 
     auto joinRes = JoinAndMeet(typeManager, arrayElemTys, {}, &importManager, al.curFile).JoinAsVisibleTy();
-    if (auto ty = std::get_if<Ptr<Ty>>(&joinRes)) {
-        al.SetTy(typeManager.GetStructTy(*arrayStruct, {*ty}));
+    if (auto ty = std::get_if<ModalTy>(&joinRes)) {
+        al.SetTy({typeManager.GetStructTy(*arrayStruct, {ty->Ty()}), ty->Mode()});
     } else {
-        al.SetTy(TypeManager::GetInvalidTy());
+        al.SetTy({TypeManager::GetInvalidTy()});
         auto errMsg = JoinAndMeet::CombineErrMsg(std::get<std::stack<std::string>>(joinRes));
         diag.Diagnose(al, DiagKind::sema_inconsistency_elemType, "array").AddNote(errMsg);
     }
@@ -488,7 +533,7 @@ bool TypeChecker::TypeCheckerImpl::IsBuiltinTypeAlias(const Decl& decl, TypeKind
     }
     auto& typeAliasDecl = static_cast<const TypeAliasDecl&>(decl);
     // If typealias' base type is array, expr is not a normal call base.
-    Ptr<Ty> origTy = typeAliasDecl.type->GetTy();
+    ModalTy origTy = typeAliasDecl.type->GetTy();
     if (origTy) {
         if (kind == AST::TypeKind::TYPE_ANY) {
             // rawarray, cfunc, cstring use normal ChkCallExpr
@@ -538,7 +583,7 @@ void TypeChecker::TypeCheckerImpl::DesugarRawArrayCall(CallExpr& ce)
     arrayExpr->initFunc = importManager.GetCoreDecl<FuncDecl>(funName);
     if (!arrayExpr->initFunc) {
         diag.Diagnose(ce, DiagKind::sema_no_core_object, funName);
-        ce.SetTy(TypeManager::GetInvalidTy());
+        ce.SetTy({TypeManager::GetInvalidTy()});
         return;
     }
     arrayExpr->scopeName = ce.scopeName;
@@ -561,8 +606,8 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayArg(ASTContext& ctx, ArrayExpr& ve)
     if (ve.args[0]->name.Empty()) {
         // For Lambda.
         auto sizeType = TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64);
-        auto expectedExprTy = typeManager.GetFunctionTy({sizeType}, ve.type->GetTy()->typeArgs[0]);
-        ret = Check(ctx, expectedExprTy, ve.args[0].get());
+        auto expectedExprTy = typeManager.GetFunctionTy({{sizeType}}, ve.type->GetTy()->typeArgs[0]);
+        ret = Check(ctx, {expectedExprTy}, ve.args[0].get());
     } else {
         if (ve.args[0]->name != "repeat") {
             auto builder = diag.Diagnose(*ve.args[0], DiagKind::sema_unknown_named_argument, ve.args[0]->name.Val());
@@ -574,61 +619,61 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayArg(ASTContext& ctx, ArrayExpr& ve)
         ret = Check(ctx, expectedItemTy, ve.args[0].get());
     }
 
-    if (Ty::IsTyCorrect(ve.GetTy()) && !Ty::IsTyCorrect(ve.type->GetTy())) {
+    if (ve.GetTy().IsCorrect() && !ve.type->GetTy().IsCorrect()) {
         ve.type->SetTy(ve.GetTy()); // Update array type ty, overwrite Array<Invalid>.
     }
     return ret;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkVArrayExpr(ASTContext& ctx, Ty& target, ArrayExpr& ve)
+bool TypeChecker::TypeCheckerImpl::ChkVArrayExpr(ASTContext& ctx, ModalTy target, ArrayExpr& ve)
 {
     CJC_NULLPTR_CHECK(ve.type);
-    Ptr<Ty> targetTy = TypeCheckUtil::UnboxOptionType(&target);
+    ModalTy targetTy = TypeCheckUtil::UnboxOptionType(target);
     ve.type->SetTy(Synthesize({ctx, SynPos::EXPR_ARG}, ve.type.get()));
-    if (!Ty::IsTyCorrect(ve.type->GetTy()) || !Is<VArrayTy>(ve.type->GetTy())) {
-        ve.SetTy(TypeManager::GetInvalidTy());
+    if (!ve.type->GetTy().IsCorrect() || !Is<VArrayTy>(ve.type->DataTy())) {
+        ve.SetTy({TypeManager::GetInvalidTy()});
         return false;
     }
     if (!ChkVArrayArg(ctx, ve)) {
-        ve.SetTy(TypeManager::GetInvalidTy());
+        ve.SetTy({TypeManager::GetInvalidTy()});
         return false;
     }
     // check T and size.
     if (!typeManager.IsSubtype(ve.type->GetTy(), targetTy)) {
-        DiagMismatchedTypesWithFoundTy(diag, ve, targetTy->String(), ve.type->GetTy()->String());
-        ve.SetTy(TypeManager::GetInvalidTy());
+        DiagMismatchedTypesWithFoundTy(diag, ve, targetTy->String(), ve.type->GetTy().String());
+        ve.SetTy({TypeManager::GetInvalidTy()});
         return false;
     }
     ve.SetTy(ve.type->GetTy());
     return true;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynVArrayExpr(ASTContext& ctx, ArrayExpr& ve)
+ModalTy TypeChecker::TypeCheckerImpl::SynVArrayExpr(ASTContext& ctx, ArrayExpr& ve)
 {
     CJC_NULLPTR_CHECK(ve.type);
     ve.type->SetTy(Synthesize({ctx, SynPos::EXPR_ARG}, ve.type.get()));
-    if (!Ty::IsTyCorrect(ve.type->GetTy()) || !Is<VArrayTy>(ve.type->GetTy())) {
-        ve.SetTy(TypeManager::GetInvalidTy());
+    if (!ve.type->GetTy().IsCorrect() || !Is<VArrayTy>(ve.type->DataTy())) {
+        ve.SetTy({TypeManager::GetInvalidTy()});
         return ve.GetTy();
     }
     ve.SetTy(ve.type->GetTy());
     if (!ChkVArrayArg(ctx, ve)) {
-        ve.SetTy(TypeManager::GetInvalidTy());
+        ve.SetTy({TypeManager::GetInvalidTy()});
         return ve.GetTy();
     }
     return ve.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkPointerCall(ASTContext& ctx, Ty& target, CallExpr& ce)
+bool TypeChecker::TypeCheckerImpl::ChkPointerCall(ASTContext& ctx, ModalTy target, CallExpr& ce)
 {
     if (IsCallOfBuiltInType(ce, AST::TypeKind::TYPE_POINTER)) {
         bool ret = false;
-        Ptr<Ty> resultTy = TypeManager::GetInvalidTy();
+        ModalTy resultTy{TypeManager::GetInvalidTy()};
         DesugarPointerCall(ctx, ce);
         auto pointerExpr = StaticAs<ASTKind::POINTER_EXPR>(ce.desugarExpr.get());
-        if (target.IsInvalid()) {
+        if (target->IsInvalid()) {
             resultTy = SynPointerExpr(ctx, *pointerExpr);
-            ret = Ty::IsTyCorrect(resultTy);
+            ret = resultTy.IsCorrect();
         } else {
             ret = ChkPointerExpr(ctx, target, *pointerExpr);
             resultTy = pointerExpr->GetTy();
@@ -645,16 +690,16 @@ bool TypeChecker::TypeCheckerImpl::ChkPointerCall(ASTContext& ctx, Ty& target, C
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkVArrayCall(ASTContext& ctx, Ty& target, CallExpr& ce)
+bool TypeChecker::TypeCheckerImpl::ChkVArrayCall(ASTContext& ctx, ModalTy target, CallExpr& ce)
 {
     if (IsCallOfBuiltInType(ce, AST::TypeKind::TYPE_VARRAY)) {
         bool ret = false;
-        Ptr<Ty> resultTy = TypeManager::GetInvalidTy();
+        ModalTy resultTy{TypeManager::GetInvalidTy()};
         DesugarArrayCall(ctx, ce);
         auto arrayExpr = StaticAs<ASTKind::ARRAY_EXPR>(ce.desugarExpr.get());
-        if (target.IsInvalid()) {
+        if (target->IsInvalid()) {
             resultTy = SynVArrayExpr(ctx, *arrayExpr);
-            ret = Ty::IsTyCorrect(resultTy);
+            ret = resultTy.IsCorrect();
         } else {
             ret = ChkVArrayExpr(ctx, target, *arrayExpr);
             resultTy = arrayExpr->GetTy();
@@ -668,7 +713,7 @@ bool TypeChecker::TypeCheckerImpl::ChkVArrayCall(ASTContext& ctx, Ty& target, Ca
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkCFuncCall([[maybe_unused]] ASTContext& ctx, AST::Ty& target, AST::CallExpr& ce)
+bool TypeChecker::TypeCheckerImpl::ChkCFuncCall([[maybe_unused]] ASTContext& ctx, AST::ModalTy target, AST::CallExpr& ce)
 {
     if (!ce.baseFunc) {
         return false;
@@ -683,8 +728,8 @@ bool TypeChecker::TypeCheckerImpl::ChkCFuncCall([[maybe_unused]] ASTContext& ctx
         return false;
     }
 
-    if (!target.IsInvalid() && !target.IsCFunc()) {
-        ce.SetTy(TypeManager::GetInvalidTy());
+    if (target.IsCorrect() && !target->IsCFunc()) {
+        ce.SetTy({TypeManager::GetInvalidTy()});
         return false;
     }
 
@@ -692,7 +737,7 @@ bool TypeChecker::TypeCheckerImpl::ChkCFuncCall([[maybe_unused]] ASTContext& ctx
 
     bool ret = SynCFuncCall(ctx, ce);
     if (!ret) {
-        ce.SetTy(TypeManager::GetInvalidTy());
+        ce.SetTy({TypeManager::GetInvalidTy()});
     }
     return ret;
 }
@@ -701,23 +746,23 @@ bool TypeChecker::TypeCheckerImpl::SynCFuncCall(ASTContext& ctx, CallExpr& ce)
 {
     auto callee = DynamicCast<RefExpr>(&*ce.baseFunc);
     if (!callee) {
-        ce.SetTy(TypeManager::GetInvalidTy());
+        ce.SetTy({TypeManager::GetInvalidTy()});
         return false;
     }
     ce.SetTy(Synthesize({ctx, SynPos::EXPR_ARG}, ce.baseFunc.get()));
     if (!Ty::IsTyCorrect(ce.baseFunc->GetTy()) || !Ty::IsTyCorrect(ce.GetTy())) {
-        ce.SetTy(TypeManager::GetInvalidTy());
+        ce.SetTy({TypeManager::GetInvalidTy()});
         return false;
     }
     if (ce.GetTy()->IsCFunc()) {
         if (ce.args.size() != 1) {
             diag.Diagnose(*ce.baseFunc, DiagKind::sema_cfunc_too_many_arguments);
-            ce.SetTy(TypeManager::GetInvalidTy());
+            ce.SetTy({TypeManager::GetInvalidTy()});
             return false;
         }
         Synthesize({ctx, SynPos::EXPR_ARG}, ce.args[0]);
         if (!Ty::IsTyCorrect(ce.args[0]->GetTy())) {
-            ce.SetTy(TypeManager::GetInvalidTy());
+            ce.SetTy({TypeManager::GetInvalidTy()});
             return false;
         }
         bool res{true};
@@ -736,13 +781,13 @@ bool TypeChecker::TypeCheckerImpl::SynCFuncCall(ASTContext& ctx, CallExpr& ce)
     }
     // Otherwise, report error and return a invalid ty.
     diag.Diagnose(*ce.args[0], DiagKind::sema_cfunc_ctor_must_be_cpointer);
-    ce.SetTy(TypeManager::GetInvalidTy());
+    ce.SetTy({TypeManager::GetInvalidTy()});
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkBuiltinCall(ASTContext& ctx, Ty& target, CallExpr& ce)
+bool TypeChecker::TypeCheckerImpl::ChkBuiltinCall(ASTContext& ctx, ModalTy target, CallExpr& ce)
 {
-    static bool (TypeCheckerImpl::*const(CHK_FUNCS[]))(ASTContext&, AST::Ty&, AST::CallExpr&) = {
+    static bool (TypeCheckerImpl::*const CHK_FUNCS[])(ASTContext&, ModalTy, CallExpr&) = {
         &TypeCheckerImpl::ChkPointerCall,
         &TypeCheckerImpl::ChkVArrayCall,
         &TypeCheckerImpl::ChkCFuncCall,
@@ -780,17 +825,17 @@ bool TypeChecker::TypeCheckerImpl::IsCallOfBuiltInType(const CallExpr& ce, const
     return isTypeAlias || isSpecifyBuiltinType;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkPointerExpr(ASTContext& ctx, Ty& target, PointerExpr& cpe)
+bool TypeChecker::TypeCheckerImpl::ChkPointerExpr(ASTContext& ctx, ModalTy target, PointerExpr& cpe)
 {
     CJC_ASSERT(cpe.type && cpe.type->GetTy());
     bool ret = true;
     // 'var a: CPointer<T> = CPointer()': Generic types should need to be derived.
-    Ptr<Ty> targetTy = TypeCheckUtil::UnboxOptionType(&target);
-    if (!targetTy->typeArgs.empty() && Ty::IsTyCorrect(targetTy->typeArgs[0]) &&
-        (!Ty::IsTyCorrect(cpe.type->GetTy()->typeArgs[0]) || cpe.type->GetTy()->HasGeneric())) {
+    ModalTy targetTy = TypeCheckUtil::UnboxOptionType(target);
+    if (!targetTy->typeArgs.empty() && targetTy->typeArgs[0].IsCorrect() &&
+        (!cpe.type->GetTy()->typeArgs[0].IsCorrect() || cpe.type->GetTy()->HasGeneric())) {
         cpe.type->SetTy(targetTy);
     }
-    if (Ty::IsTyCorrect(targetTy)) {
+    if (targetTy.IsCorrect()) {
         ret = Check(ctx, targetTy, cpe.type.get());
     } else {
         // 'var a = CPointer<T>()': Type derivation does not depend on target information.
@@ -798,17 +843,17 @@ bool TypeChecker::TypeCheckerImpl::ChkPointerExpr(ASTContext& ctx, Ty& target, P
     }
     cpe.SetTy(cpe.type->GetTy());
     // 'var a = CPointer()': Generic type cannot be derived.
-    if (!Ty::IsTyCorrect(cpe.GetTy())) {
+    if (!cpe.GetTy().IsCorrect()) {
         diag.Diagnose(cpe, DiagKind::sema_pointer_unknow_generic_type);
         return false;
     } else if (!ret) {
-        DiagMismatchedTypesWithFoundTy(diag, *cpe.sourceExpr, *targetTy, *cpe.GetTy());
+        DiagMismatchedTypesWithFoundTy(diag, *cpe.sourceExpr, targetTy, cpe.GetTy());
     }
 
     // One arg.
     if (cpe.arg) {
         auto argTy = Synthesize({ctx, SynPos::EXPR_ARG}, cpe.arg.get());
-        if (!Ty::IsTyCorrect(argTy) || !(argTy->IsPointer() || argTy->IsCFunc())) {
+        if (!argTy.IsCorrect() || !(argTy->IsPointer() || argTy->IsCFunc())) {
             if (!TypeCheckUtil::CanSkipDiag(*cpe.arg)) {
                 diag.Diagnose(cpe, DiagKind::sema_pointer_single_element_type_error);
             }
@@ -821,18 +866,17 @@ bool TypeChecker::TypeCheckerImpl::ChkPointerExpr(ASTContext& ctx, Ty& target, P
         }
     }
 
-    if (Ty::IsTyCorrect(targetTy) && !typeManager.IsSubtype(cpe.GetTy(), targetTy)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, cpe)
-            .AddMainHintArguments(target.String(), Ty::ToString(cpe.GetTy()));
+    if (targetTy.IsCorrect() && !typeManager.IsSubtype(cpe.GetTy(), targetTy)) {
+        DiagSemaMismatchedTypes(diag, cpe, target.String(), cpe.GetTy().String());
         return false;
     }
     return ret;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynPointerExpr(ASTContext& ctx, PointerExpr& cptrExpr)
+ModalTy TypeChecker::TypeCheckerImpl::SynPointerExpr(ASTContext& ctx, PointerExpr& cptrExpr)
 {
-    if (!ChkPointerExpr(ctx, *TypeManager::GetInvalidTy(), cptrExpr)) {
-        return TypeManager::GetInvalidTy();
+    if (!ChkPointerExpr(ctx, {TypeManager::GetInvalidTy()}, cptrExpr)) {
+        return {TypeManager::GetInvalidTy()};
     }
     return cptrExpr.GetTy();
 }

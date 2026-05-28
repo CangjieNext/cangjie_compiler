@@ -1232,7 +1232,7 @@ TEST_F(PackageTest, LoadPackageFromCjo)
         for (auto& file : std::as_const(pkg->files)) {
             if (file->decls.size() > 0) {
                 for (auto& decl : std::as_const(file->decls)) {
-                    EXPECT_TRUE(Ty::IsTyCorrect(decl->GetTy()));
+                    EXPECT_TRUE(decl->GetTy().IsCorrect());
                 }
             }
         }

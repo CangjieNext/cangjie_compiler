@@ -30,7 +30,7 @@ void TypeMap::CollectImportedDeclExtraRelation(const AST::Decl& decl)
         AddParent(*parentDecl, decl);
     }
     if (auto extend = DynamicCast<ExtendDecl*>(&type)) {
-        AddExtend(Sema::GetTypeRawMangleName(*extend->GetTy()), decl.rawMangleName);
+        AddExtend(Sema::GetTypeRawMangleName(extend->GetTy()), decl.rawMangleName);
     }
 }
 
@@ -929,7 +929,7 @@ std::optional<std::string> PollutionAnalyzer::GetExtendedTypeRawMangleNameImpl(c
     // If this `type` is from imported AST, then we can get what we want directly from sema ty info
     auto ty = extendedType.GetTy();
     if (Ty::IsTyCorrect(ty)) {
-        return Sema::GetTypeRawMangleName(*ty);
+        return Sema::GetTypeRawMangleName(ty);
     }
 
     const std::string* typeId{nullptr};

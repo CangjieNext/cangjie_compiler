@@ -33,7 +33,7 @@ constexpr auto OBJCPOINTER_WRITE_METHOD = "write";
 
 OwnedPtr<Expr> CreateZero(Ptr<Ty> ty)
 {
-    return CreateLitConstExpr(LitConstKind::INTEGER, "0", ty);
+    return CreateLitConstExpr(LitConstKind::INTEGER, "0", {ty});
 }
 
 /**
@@ -60,7 +60,7 @@ void HandleObjCPointerRead(InteropContext& ctx, CallExpr& callExpr)
     CJC_NULLPTR_CHECK(ma);
     auto receiver = ASTCloner::Clone<Expr>(ma->baseExpr);
     CJC_NULLPTR_CHECK(receiver);
-    auto elementType = receiver->GetTy()->typeArgs[0];
+    auto elementType = receiver->DataTy()->TyArg(0);
     auto rawCType = ctx.typeMapper.Cj2CType(elementType);
     Ptr<Ty> pointerType = ctx.typeManager.GetPointerTy(rawCType);
     auto ptrFieldDecl = ctx.bridge.GetObjCPointerPointerField();
@@ -71,7 +71,8 @@ void HandleObjCPointerRead(InteropContext& ctx, CallExpr& callExpr)
     CJC_NULLPTR_CHECK(readPointerFunc);
     auto readPointerRef = CreateRefExpr(*readPointerFunc, callExpr);
     readPointerRef->instTys.push_back(rawCType);
-    readPointerRef->SetTy(ctx.typeManager.GetFunctionTy(std::vector{pointerType, int64Type}, rawCType));
+    readPointerRef->SetTy(
+        {ctx.typeManager.GetFunctionTy(std::vector<ModalTy>{{pointerType}, {int64Type}}, {rawCType})});
 
     auto ptrExpr = ctx.factory.CreateUnsafePointerCast(
         CreateMemberAccess(std::move(receiver), *ptrFieldDecl),
@@ -81,11 +82,7 @@ void HandleObjCPointerRead(InteropContext& ctx, CallExpr& callExpr)
     callArgs.emplace_back(CreateFuncArg(std::move(ptrExpr)));
     callArgs.emplace_back(CreateFuncArg(CreateZero(int64Type)));
     auto call = CreateCallExpr(
-        std::move(readPointerRef),
-        std::move(callArgs),
-        readPointerFunc,
-        rawCType,
-        CallKind::CALL_INTRINSIC_FUNCTION);
+        std::move(readPointerRef), std::move(callArgs), readPointerFunc, {rawCType}, CallKind::CALL_INTRINSIC_FUNCTION);
     ctx.factory.SetDesugarExpr(
         &callExpr,
         ctx.factory.WrapEntity(std::move(call), *elementType)
@@ -117,8 +114,8 @@ void HandleObjCPointerWrite(InteropContext& ctx, CallExpr& callExpr)
     auto receiver = ASTCloner::Clone<Expr>(ma->baseExpr);
     CJC_ASSERT(callExpr.args.size() == 1);
     auto valueArg = ASTCloner::Clone<Expr>(callExpr.args[0]->expr);
-    CJC_ASSERT_WITH_MSG(!receiver->GetTy()->typeArgs.empty(), "ObjCPointer typeArgs is empty");
-    auto elementType = receiver->GetTy()->typeArgs[0];
+    CJC_ASSERT_WITH_MSG(!receiver->DataTy()->typeArgs.empty(), "ObjCPointer typeArgs is empty");
+    auto elementType = receiver->DataTy()->TyArg(0);
     auto rawCType = ctx.typeMapper.Cj2CType(elementType);
     Ptr<Ty> pointerType = ctx.typeManager.GetPointerTy(rawCType);
     auto ptrFieldDecl = ctx.bridge.GetObjCPointerPointerField();
@@ -130,7 +127,8 @@ void HandleObjCPointerWrite(InteropContext& ctx, CallExpr& callExpr)
     CJC_NULLPTR_CHECK(writePointerFunc);
     auto writePointerRef = CreateRefExpr(*writePointerFunc, callExpr);
     writePointerRef->instTys.push_back(rawCType);
-    writePointerRef->SetTy(ctx.typeManager.GetFunctionTy({pointerType, int64Type, rawCType}, unitType));
+    writePointerRef->SetTy(
+        {ctx.typeManager.GetFunctionTy(std::vector<ModalTy>{{pointerType}, {int64Type}, {rawCType}}, {unitType})});
 
     auto ptrExpr = ctx.factory.CreateUnsafePointerCast(
         CreateMemberAccess(std::move(receiver), *ptrFieldDecl),
@@ -140,11 +138,7 @@ void HandleObjCPointerWrite(InteropContext& ctx, CallExpr& callExpr)
     callArgs.emplace_back(CreateFuncArg(std::move(ptrExpr)));
     callArgs.emplace_back(CreateFuncArg(CreateZero(int64Type)));
     callArgs.emplace_back(CreateFuncArg(ctx.factory.UnwrapEntity(std::move(valueArg))));
-    auto call = CreateCallExpr(
-        std::move(writePointerRef),
-        std::move(callArgs),
-        writePointerFunc,
-        unitType,
+    auto call = CreateCallExpr(std::move(writePointerRef), std::move(callArgs), writePointerFunc, {unitType},
         CallKind::CALL_INTRINSIC_FUNCTION);
     ctx.factory.SetDesugarExpr(&callExpr, std::move(call));
 }

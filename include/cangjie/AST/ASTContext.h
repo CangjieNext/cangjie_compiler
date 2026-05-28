@@ -68,7 +68,7 @@ struct InvertedIndex {
 // Names is constructed with 'declaration name, scopeName'
 using Names = std::pair<std::string, std::string>;
 // ty var -> upperbound -> AST nodes of generic constraints
-using GCBlames = std::map<Ptr<AST::Ty>, std::map<Ptr<AST::Ty>, std::set<Ptr<const AST::Node>>>>;
+using GCBlames = std::map<AST::ModalTy, std::map<AST::ModalTy, std::set<Ptr<const AST::Node>>>>;
 
 /** AST Context for sema and codegen. */
 class ASTContext {
@@ -164,13 +164,13 @@ public:
      */
     std::stack<Ptr<AST::Node>> currentCheckingNodes{};
 
-    std::unordered_map<Ptr<const AST::Node>, Ptr<AST::Ty>>
+    std::unordered_map<Ptr<const AST::Node>, AST::ModalTy>
         targetTypeMap; /**< The node should be inferred to the corresponding type. */
-    std::unordered_map<Ptr<const AST::Node>, Ptr<AST::Ty>>
+    std::unordered_map<Ptr<const AST::Node>, AST::ModalTy>
         lastTargetTypeMap; /**< Target last time the expr is checked */
     std::unordered_map<Ptr<const AST::Node>, AST::TypeCheckCache> typeCheckCache;
-    std::unordered_map<Ptr<AST::Ty>, OwnedPtr<AST::ClassDecl>> typeToAutoBoxedDeclMap;
-    std::unordered_map<Ptr<AST::Ty>, OwnedPtr<AST::ClassDecl>> typeToAutoBoxedDeclBaseMap;
+    std::unordered_map<AST::ModalTy, OwnedPtr<AST::ClassDecl>> typeToAutoBoxedDeclMap;
+    std::unordered_map<AST::ModalTy, OwnedPtr<AST::ClassDecl>> typeToAutoBoxedDeclBaseMap;
     std::unique_ptr<Searcher> searcher = std::make_unique<Searcher>();
     /** A vector for checking qualified types. */
     std::vector<Ptr<AST::PackageDecl>> packageDecls;
@@ -208,14 +208,12 @@ private:
  */
 struct Candidate {
     std::vector<Ptr<AST::Decl>> decls;
-    std::unordered_set<Ptr<AST::Ty>> tys;
+    std::unordered_set<AST::ModalTy> tys;
     bool hasDecl;
     explicit Candidate(const std::vector<Ptr<AST::Decl>>& decls) : decls(decls), hasDecl(true)
     {
     }
-    explicit Candidate(const std::unordered_set<Ptr<AST::Ty>>& tys) : tys(tys), hasDecl(false)
-    {
-    }
+    explicit Candidate(const std::unordered_set<AST::ModalTy>& tys) : tys(tys), hasDecl(false) {}
     Candidate() = default;
 };
 } // namespace Cangjie

@@ -101,7 +101,7 @@ void GIM::GenericInstantiationManagerImpl::RestoreInstantiatedDeclTy() const
  */
 void GIM::GenericInstantiationManagerImpl::RestoreInstantiatedDeclTy(Decl& decl) const
 {
-    bool ignore = Ty::IsInitialTy(decl.GetTy()) || !decl.IsNominalDecl() || decl.astKind == ASTKind::EXTEND_DECL;
+    bool ignore = Ty::IsInitialTy(decl.DataTy()) || !decl.IsNominalDecl() || decl.astKind == ASTKind::EXTEND_DECL;
     if (ignore) {
         return;
     }
@@ -110,27 +110,27 @@ void GIM::GenericInstantiationManagerImpl::RestoreInstantiatedDeclTy(Decl& decl)
     }
     switch (decl.TyKind()) {
         case TypeKind::TYPE_CLASS: {
-            auto ty = RawStaticCast<ClassTy*>(decl.GetTy());
+            auto ty = RawStaticCast<ClassTy*>(decl.DataTy());
             ty->decl = StaticAs<ASTKind::CLASS_DECL>(&decl);
             ty->commonDecl = StaticAs<ASTKind::CLASS_DECL>(&decl);
-            auto thisTy = typeManager.GetClassThisTy(*ty->declPtr, ty->typeArgs);
+            auto thisTy = typeManager.GetClassThisTy(*ty->declPtr, ty->TyArgs());
             thisTy->decl = StaticAs<ASTKind::CLASS_DECL>(&decl);
             thisTy->commonDecl = StaticAs<ASTKind::CLASS_DECL>(&decl);
             break;
         }
         case TypeKind::TYPE_INTERFACE: {
-            auto ty = RawStaticCast<InterfaceTy*>(decl.GetTy());
+            auto ty = RawStaticCast<InterfaceTy*>(decl.DataTy().get());
             ty->decl = StaticAs<ASTKind::INTERFACE_DECL>(&decl);
             ty->commonDecl = StaticAs<ASTKind::INTERFACE_DECL>(&decl);
             break;
         }
         case TypeKind::TYPE_STRUCT: {
-            auto ty = RawStaticCast<StructTy*>(decl.GetTy());
+            auto ty = RawStaticCast<StructTy*>(decl.DataTy().get());
             ty->decl = StaticAs<ASTKind::STRUCT_DECL>(&decl);
             break;
         }
         case TypeKind::TYPE_ENUM: {
-            auto ty = RawStaticCast<EnumTy*>(decl.GetTy());
+            auto ty = RawStaticCast<EnumTy*>(decl.DataTy().get());
             ty->decl = StaticAs<ASTKind::ENUM_DECL>(&decl);
             break;
         }
@@ -177,13 +177,13 @@ void GIM::GenericInstantiationManagerImpl::CollectDeclMemberFuncs(
 {
     for (auto& member : decl.GetMemberDecls()) {
         // Only collect non-private non-generic member which may implement interface member.
-        bool ignored = member == nullptr || member->astKind == AST::ASTKind::VAR_DECL ||
+        bool ignored = member == nullptr || member->astKind == ASTKind::VAR_DECL ||
             member->TestAnyAttr(Attribute::PRIVATE, Attribute::CONSTRUCTOR);
         if (ignored) {
             continue;
         }
         WorkForMembers(*member, [&funcs](auto& it) {
-            if (it.astKind == AST::ASTKind::FUNC_DECL) {
+            if (it.astKind == ASTKind::FUNC_DECL) {
                 funcs.emplace(StaticCast<FuncDecl>(&it));
             }
         });
@@ -191,7 +191,7 @@ void GIM::GenericInstantiationManagerImpl::CollectDeclMemberFuncs(
 }
 
 std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::MergeMemberFuncs(
-    Ty& ty, Decl& decl, const std::unordered_set<Ptr<FuncDecl>>& inheritedMembers)
+    DataTy ty, Decl& decl, const std::unordered_set<Ptr<FuncDecl>>& inheritedMembers)
 {
     std::unordered_set<Ptr<FuncDecl>> memberFuncs;
     CollectDeclMemberFuncs(decl, memberFuncs);
@@ -214,17 +214,16 @@ std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::MergeMem
     return memberFuncs;
 }
 
-std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::CollectInheritedMembers(
-    Ty& ty, Decl& decl)
+std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::CollectInheritedMembers(DataTy ty, Decl& decl)
 {
-    std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Decl>>> visited;
+    std::set<std::pair<DataTy, Ptr<Decl>>> visited;
     return CollectInheritedMembersVisit(ty, decl, visited);
 }
 
 std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::CollectInheritedMembersVisit(
-    Ty& ty, Decl& decl, std::set<std::pair<Ptr<AST::Ty>, Ptr<AST::Decl>>>& visited)
+    DataTy ty, Decl& decl, std::set<std::pair<DataTy, Ptr<Decl>>>& visited)
 {
-    auto visitedKey = std::make_pair(&ty, &decl);
+    auto visitedKey = std::make_pair(ty, Ptr<Decl>(&decl));
     if (visited.count(visitedKey) != 0) {
         // avoid repeatedly visiting same super-type when there are multiple paths
         return {};
@@ -242,29 +241,28 @@ std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::CollectI
         // Otherwise merge inherited functions with current type decl's member functions.
         // If two parents have functions with same signature, current decl must override them,
         // that we can choose any of them here.
-        inheritedFuncs = inheritedFuncs.empty() ? CollectInheritedMembersVisit(*type->GetTy(), *baseDecl, visited)
-                                                : MergeMemberFuncs(*type->GetTy(), *baseDecl, inheritedFuncs);
+        inheritedFuncs = inheritedFuncs.empty() ? CollectInheritedMembersVisit(type->DataTy(), *baseDecl, visited)
+            : MergeMemberFuncs(type->DataTy(), *baseDecl, inheritedFuncs);
     }
     return MergeMemberFuncs(ty, decl, inheritedFuncs);
 }
 
 namespace {
-std::set<Ptr<ExtendDecl>> GetAllRelatedExtendsByTy(TypeManager& typeManager, Ty& ty)
+std::set<Ptr<ExtendDecl>> GetAllRelatedExtendsByTy(TypeManager& typeManager, DataTy ty)
 {
-    auto baseDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(&ty);
+    auto baseDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(ty);
     if (baseDecl) {
         return CollectAllRelatedExtends(typeManager, *baseDecl);
     } else {
-        return typeManager.GetAllExtendsByTy(ty);
+        return typeManager.GetAllExtendsByTy(*ty);
     }
 }
 } // namespace
 
-std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::GetInheritedMemberFuncs(
-    Ty& ty)
+std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::GetInheritedMemberFuncs(DataTy ty)
 {
     std::unordered_set<Ptr<FuncDecl>> funcs;
-    auto baseDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(&ty);
+    auto baseDecl = Ty::GetDeclPtrOfTy<InheritableDecl>(ty);
     if (baseDecl) {
         // Collect inherited function if sema's InheritedMembers not done.
         funcs = CollectInheritedMembers(ty, *baseDecl);
@@ -281,15 +279,14 @@ std::unordered_set<Ptr<FuncDecl>> GIM::GenericInstantiationManagerImpl::GetInher
     return funcs;
 }
 
-std::unordered_set<Ptr<InheritableDecl>> GIM::GenericInstantiationManagerImpl::GetInheritedInterfaces(
-    Ty& ty)
+std::unordered_set<Ptr<InheritableDecl>> GIM::GenericInstantiationManagerImpl::GetInheritedInterfaces(DataTy ty)
 {
     std::unordered_set<Ptr<InheritableDecl>> inheritableType;
     // Collect interfaces that are explict implemented by the 'decl'.
     auto collectInterfaces = [&inheritableType](const InheritableDecl& decl) {
         auto superITys = decl.GetSuperInterfaceTys();
         std::for_each(superITys.begin(), superITys.end(), [&inheritableType](auto ty) {
-            if (auto id = DynamicCast<InterfaceDecl*>(Ty::GetDeclPtrOfTy(ty)); id) {
+            if (auto id = Ty::GetDeclOfTy<InterfaceDecl>(DataTy{ty}); id) {
                 inheritableType.insert(id);
             }
         });
@@ -316,19 +313,19 @@ std::unordered_set<Ptr<InheritableDecl>> GIM::GenericInstantiationManagerImpl::G
     }
 
     // Collect inheritableType which declare in class, struct, enum (interface decl is not extendable).
-    auto decl = Ty::GetDeclPtrOfTy(&ty);
+    auto decl = Ty::GetDeclPtrOfTy(ty);
     if (auto inheritDecl = DynamicCast<InheritableDecl*>(decl); inheritDecl) {
         collectInheritedInterfaces(*inheritDecl);
     }
 
     // Collect inheritableType which declare in super.
-    std::unordered_set<Ptr<Ty>> allInterfaceTys;
+    std::unordered_set<DataTy> allInterfaceTys;
     for (auto i : inheritableType) {
         if (i->GetTy()) {
             allInterfaceTys.merge(typeManager.GetAllSuperTys(*i->GetTy()));
         }
     }
-    allInterfaceTys.erase(&ty);
+    allInterfaceTys.erase(ty);
     for (auto iTy : allInterfaceTys) {
         if (auto id = DynamicCast<InterfaceDecl*>(Ty::GetDeclPtrOfTy(iTy)); id) {
             inheritableType.insert(id);
@@ -337,7 +334,7 @@ std::unordered_set<Ptr<InheritableDecl>> GIM::GenericInstantiationManagerImpl::G
     return inheritableType;
 }
 
-void GIM::GenericInstantiationManagerImpl::MapFuncWithDecl(Ty& ty, FuncDecl& interfaceFunc, const FuncDecl& target)
+void GIM::GenericInstantiationManagerImpl::MapFuncWithDecl(ModalTy ty, FuncDecl& interfaceFunc, const FuncDecl& target)
 {
     CJC_ASSERT(target.outerDecl);
 
@@ -346,7 +343,7 @@ void GIM::GenericInstantiationManagerImpl::MapFuncWithDecl(Ty& ty, FuncDecl& int
     auto realDecl = target.propDecl ? RawStaticCast<const Decl*>(target.propDecl) : &target;
     for (auto it = decls.begin(); it != decls.end(); ++it) {
         if (*it == realDecl) {
-            auto keyPair = std::make_pair(&ty, &interfaceFunc);
+            auto keyPair = std::make_pair(ty, Ptr<FuncDecl>(&interfaceFunc));
             auto valuePair = std::make_pair(target.outerDecl, std::distance(decls.begin(), it));
             abstractFuncToDeclMap[keyPair].emplace(valuePair);
             break;
@@ -354,27 +351,27 @@ void GIM::GenericInstantiationManagerImpl::MapFuncWithDecl(Ty& ty, FuncDecl& int
     }
 }
 
-MultiTypeSubst GIM::GenericInstantiationManagerImpl::GetTypeMapping(Ptr<Ty>& baseTy, Ty& interfaceTy)
+MultiTypeSubst GIM::GenericInstantiationManagerImpl::GetTypeMapping(DataTy baseTy, DataTy interfaceTy)
 {
     MultiTypeSubst typeMapping;
     if (!baseTy) {
         return typeMapping;
     }
-    typeMapping = promotion.GetPromoteTypeMapping(*baseTy, interfaceTy);
+    typeMapping = promotion.GetPromoteTypeMapping(baseTy, interfaceTy);
     if (!typeMapping.empty()) {
         return typeMapping;
     }
     // For a generic type which extends interface,
     // only sema type created in extend decl can generate typeMapping with the extended interface type.
-    std::set<Ptr<ExtendDecl>> extendDecls = GetAllRelatedExtendsByTy(typeManager, *baseTy);
+    std::set<Ptr<ExtendDecl>> extendDecls = GetAllRelatedExtendsByTy(typeManager, baseTy);
     for (auto& ed : extendDecls) {
         if (ed->TestAttr(Attribute::GENERIC_INSTANTIATED)) {
             continue;
         }
-        baseTy = ed->extendedType->GetTy();
+        baseTy = ed->extendedType->DataTy();
         MultiTypeSubst prRes;
         if (baseTy) {
-            prRes = promotion.GetPromoteTypeMapping(*baseTy, interfaceTy);
+            prRes = promotion.GetPromoteTypeMapping(baseTy, interfaceTy);
         }
         std::for_each(prRes.begin(), prRes.end(), [&typeMapping](auto it) { typeMapping[it.first].merge(it.second); });
     }
@@ -396,7 +393,7 @@ MultiTypeSubst GIM::GenericInstantiationManagerImpl::GetTypeMapping(Ptr<Ty>& bas
  * Example also for generic declarations.
  */
 bool GIM::GenericInstantiationManagerImpl::IsImplementationFunc(
-    Ty& ty, const FuncDecl& interfaceFunc, const FuncDecl& fd)
+    DataTy ty, const FuncDecl& interfaceFunc, const FuncDecl& fd)
 {
     CJC_ASSERT(fd.outerDecl && interfaceFunc.outerDecl);
     // If function's static or generic status not equal, the will not have relation of implementation.
@@ -416,28 +413,29 @@ bool GIM::GenericInstantiationManagerImpl::IsImplementationFunc(
             return false;
         }
     }
-    auto baseTy = Ptr(&ty);
+    DataTy baseTy = ty;
     auto structDecl = RawStaticCast<InheritableDecl*>(fd.outerDecl);
     // Update base ty to extendDecl's ty when the extended type is current given 'ty'.
     // For primitive and builtin types, the declPtr is always nullptr that always update baseTy to extendDecl ty.
     // For user defined types only update baseTy when declPtr is same.
     bool shouldUpdateImplementTy = true;
-    if (auto ed = DynamicCast<ExtendDecl*>(structDecl);
+    if (auto ed = DynamicCast<ExtendDecl>(structDecl);
         ed && Ty::GetDeclPtrOfTy(ed->extendedType->GetTy()) == Ty::GetDeclPtrOfTy(baseTy)) {
-        baseTy = ed->extendedType->GetTy();
+        baseTy = ed->extendedType->DataTy();
         shouldUpdateImplementTy = false;
     }
     // 1. Substitute interface func's type to baseTy. NOTE: May update baseTy's value.
-    auto interfaceTy = interfaceFunc.outerDecl->GetTy();
-    auto typeMappings = GetTypeMapping(baseTy, *interfaceTy);
+    auto interfaceTy = interfaceFunc.outerDecl->DataTy();
+    auto typeMappings = GetTypeMapping(baseTy, interfaceTy);
     for (auto& type : structDecl->inheritedTypes) {
         // Eg: generate mapping for extend Int16 <: Number<Int32> and interface Number<T>.
-        if (type && type->GetTy() && typeManager.IsSubtype(Ty::GetGenericTyOfInsTy(*type->GetTy()), interfaceTy)) {
+        auto leaf = Ty::GetGenericTyOfInsTy(*type->GetTy());
+        if (leaf && typeManager.IsSubtype(leaf, interfaceTy)) {
             typeManager.GenerateGenericMapping(typeMappings, *type->GetTy());
             break;
         }
     }
-    auto iFuncTy = interfaceFunc.GetTy();
+    DataTy iFuncTy = interfaceFunc.DataTy();
     // 1.5 Mapping function generic from 'interfaceFunc' to 'fd'.
     // Previously checked 'interfaceFunc' and 'fd' have same generic status.
     if (fd.TestAttr(Attribute::GENERIC)) {
@@ -449,27 +447,27 @@ bool GIM::GenericInstantiationManagerImpl::IsImplementationFunc(
     auto interfaceFuncTys = typeManager.GetInstantiatedTys(iFuncTy, typeMappings);
 
     // 2. Substitute implemented func's type to baseTy.
-    auto implementedFuncTy = RawStaticCast<FuncTy*>(fd.GetTy());
+    auto implementedFuncTy = RawStaticCast<FuncTy*>(fd.DataTy());
     if (shouldUpdateImplementTy) {
-        auto structTy = structDecl->GetTy();
+        auto structTy = structDecl->DataTy();
         if (baseTy && structTy) {
-            typeMappings = promotion.GetPromoteTypeMapping(*baseTy, *structTy);
+            typeMappings = promotion.GetPromoteTypeMapping(baseTy, structTy);
         } else {
             typeMappings = {};
         }
-        implementedFuncTy = RawStaticCast<FuncTy*>(typeManager.GetBestInstantiatedTy(fd.GetTy(), typeMappings));
+        implementedFuncTy = RawStaticCast<FuncTy*>(typeManager.GetBestInstantiatedTy(fd.GetTy(), typeMappings).get());
     }
 
     // 3. compare two func's signature. structure declaration mapping relation if signatures are same.
     // when function have multiple instantiated types, only need one of them passed.
     // Actual type will be decided in rearrange stage.
-    return std::any_of(interfaceFuncTys.begin(), interfaceFuncTys.end(), [this, implementedFuncTy](auto ty) {
-        return implementedFuncTy && ty &&
-            typeManager.IsFuncParameterTypesIdentical(*implementedFuncTy, *RawStaticCast<FuncTy*>(ty));
+    return std::any_of(interfaceFuncTys.begin(), interfaceFuncTys.end(), [this, implementedFuncTy](auto instTy) {
+        return implementedFuncTy && instTy &&
+            typeManager.IsFuncParameterTypesIdentical(*implementedFuncTy, *RawStaticCast<FuncTy*>(instTy.get()));
     });
 }
 
-void GIM::GenericInstantiationManagerImpl::BuildAbstractFuncMapHelper(Ty& ty)
+void GIM::GenericInstantiationManagerImpl::BuildAbstractFuncMapHelper(DataTy ty)
 {
     std::unordered_set<Ptr<FuncDecl>> funcs = GetInheritedMemberFuncs(ty);
     std::unordered_set<Ptr<InheritableDecl>> interfaces = GetInheritedInterfaces(ty);
@@ -487,7 +485,7 @@ void GIM::GenericInstantiationManagerImpl::BuildAbstractFuncMapHelper(Ty& ty)
     };
 
     for (auto& id : interfaces) {
-        for (auto realMember : GetInheritedMemberFuncs(*id->GetTy())) {
+        for (auto realMember : GetInheritedMemberFuncs(id->DataTy())) {
             dealWithFunDecl(*realMember);
         }
     }
@@ -509,7 +507,7 @@ void GIM::GenericInstantiationManagerImpl::BuildAbstractFuncMap()
     abstractFuncToDeclMap.clear();
     // For primitive types.
     for (auto& it : typeManager.builtinTyToExtendMap) {
-        BuildAbstractFuncMapHelper(*it.first);
+        BuildAbstractFuncMapHelper({it.first});
     }
     Utils::ProfileRecorder::Stop("BuildAbstractFuncMap", "primitive types");
     Utils::ProfileRecorder::Start("BuildAbstractFuncMap", "class/struct/enum/interface type");
@@ -535,7 +533,7 @@ void GIM::GenericInstantiationManagerImpl::BuildAbstractFuncMap()
     Utils::ProfileRecorder::Stop("BuildAbstractFuncMap", "class/struct/enum/interface type");
     Utils::ProfileRecorder::Start("BuildAbstractFuncMap", "inheritableDecls");
     for (auto& decl : inheritableDecls) {
-        BuildAbstractFuncMapHelper(*decl->GetTy());
+        BuildAbstractFuncMapHelper(decl->DataTy());
     }
     Utils::ProfileRecorder::Stop("BuildAbstractFuncMap", "inheritableDecls");
     Utils::ProfileRecorder recorder("BuildAbstractFuncMap", " Build index");
@@ -561,7 +559,7 @@ void GIM::GenericInstantiationManagerImpl::BuildAbstractFuncMap()
 }
 
 static void AppendGenericFuncMap(
-    const AST::FuncDecl& genericDecl, const std::unordered_set<Ptr<AST::Decl>>& insFuncDecls, Generic2InsMap& result)
+    const FuncDecl& genericDecl, const std::unordered_set<Ptr<Decl>>& insFuncDecls, Generic2InsMap& result)
 {
     result.emplace(&genericDecl, insFuncDecls);
     for (size_t i = 0; i < genericDecl.funcBody->paramLists[0]->params.size(); ++i) {
@@ -569,9 +567,9 @@ static void AppendGenericFuncMap(
         if (genericParam->desugarDecl == nullptr) {
             continue;
         }
-        std::unordered_set<Ptr<AST::Decl>> insParamDecls;
+        std::unordered_set<Ptr<Decl>> insParamDecls;
         for (auto decl : insFuncDecls) {
-            auto& insParam = StaticCast<AST::FuncDecl*>(decl)->funcBody->paramLists[0]->params[i];
+            auto& insParam = StaticCast<FuncDecl*>(decl)->funcBody->paramLists[0]->params[i];
             CJC_NULLPTR_CHECK(insParam->desugarDecl);
             insParamDecls.emplace(insParam->desugarDecl.get());
         }
@@ -580,23 +578,23 @@ static void AppendGenericFuncMap(
 }
 
 static void AppendGenericPropMap(
-    const AST::PropDecl& propDecl, std::unordered_set<Ptr<AST::Decl>>& insPropDecls, Generic2InsMap& result)
+    const PropDecl& propDecl, std::unordered_set<Ptr<Decl>>& insPropDecls, Generic2InsMap& result)
 {
     for (size_t i = 0; i < propDecl.getters.size(); ++i) {
-        std::unordered_set<Ptr<AST::Decl>> insGetterDecls;
+        std::unordered_set<Ptr<Decl>> insGetterDecls;
         auto genericGetter = propDecl.getters[i].get();
         for (auto insProp : insPropDecls) {
-            auto instPopDecl = StaticCast<AST::PropDecl*>(insProp);
+            auto instPopDecl = StaticCast<PropDecl*>(insProp);
             CJC_ASSERT(propDecl.getters.size() == instPopDecl->getters.size());
             insGetterDecls.emplace(instPopDecl->getters[i].get());
         }
         AppendGenericFuncMap(*genericGetter, insGetterDecls, result);
     }
     for (size_t i = 0; i < propDecl.setters.size(); ++i) {
-        std::unordered_set<Ptr<AST::Decl>> insSetterDecls;
+        std::unordered_set<Ptr<Decl>> insSetterDecls;
         auto genericSetter = propDecl.setters[i].get();
         for (auto insProp : insPropDecls) {
-            auto instPopDecl = StaticCast<AST::PropDecl*>(insProp);
+            auto instPopDecl = StaticCast<PropDecl*>(insProp);
             CJC_ASSERT(propDecl.setters.size() == instPopDecl->setters.size());
             insSetterDecls.emplace(instPopDecl->setters[i].get());
         }
@@ -604,19 +602,19 @@ static void AppendGenericPropMap(
     }
 }
 
-void GIM::GenericInstantiationManagerImpl::AppendGenericMemberMap(const AST::Decl& genericDecl,
-    const std::unordered_set<Ptr<AST::Decl>>& insNominalDecls, Generic2InsMap& result) const
+void GIM::GenericInstantiationManagerImpl::AppendGenericMemberMap(
+    const Decl& genericDecl, const std::unordered_set<Ptr<Decl>>& insNominalDecls, Generic2InsMap& result) const
 {
     result.emplace(&genericDecl, insNominalDecls);
     for (auto& genericMember : genericDecl.GetMemberDecls()) {
-        if (genericMember->astKind != AST::ASTKind::FUNC_DECL && genericMember->astKind != AST::ASTKind::PROP_DECL) {
+        if (genericMember->astKind != ASTKind::FUNC_DECL && genericMember->astKind != ASTKind::PROP_DECL) {
             continue;
         }
         auto insMemberDecls = PartialInstantiation::GetInstantiatedDecl(*genericMember);
         if (insMemberDecls.empty()) {
             continue;
         }
-        if (auto genericMemberFunc = DynamicCast<const AST::FuncDecl*>(genericMember.get()); genericMemberFunc) {
+        if (auto genericMemberFunc = DynamicCast<const FuncDecl*>(genericMember.get()); genericMemberFunc) {
             AppendGenericFuncMap(*genericMemberFunc, insMemberDecls, result);
         } else {
             AppendGenericPropMap(*StaticCast<const PropDecl*>(genericMember.get()), insMemberDecls, result);
@@ -630,8 +628,8 @@ Generic2InsMap GIM::GenericInstantiationManagerImpl::GetAllGenericToInsDecls() c
     for (auto& mapIt : instantiatedDeclsMap) {
         if (mapIt.first->IsNominalDecl()) {
             AppendGenericMemberMap(*mapIt.first, mapIt.second, result);
-        } else if (mapIt.first->astKind == AST::ASTKind::FUNC_DECL) {
-            AppendGenericFuncMap(*StaticCast<const AST::FuncDecl*>(mapIt.first), mapIt.second, result);
+        } else if (mapIt.first->astKind == ASTKind::FUNC_DECL) {
+            AppendGenericFuncMap(*StaticCast<const FuncDecl*>(mapIt.first), mapIt.second, result);
         }
     }
     return result;

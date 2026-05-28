@@ -15,13 +15,14 @@
 #include <algorithm>
 #include <tuple>
 
+#include "CJMP/MPTypeCheckerImpl.h"
 #include "Desugar/DesugarInTypeCheck.h"
 #include "DiagSuppressor.h"
 #include "Diags.h"
+#include "ExtraScopes.h"
 #include "JoinAndMeet.h"
 #include "LocalTypeArgumentSynthesis.h"
 #include "TypeCheckUtil.h"
-#include "ExtraScopes.h"
 
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
@@ -41,9 +42,9 @@ using namespace TypeCheckUtil;
 using namespace AST;
 
 namespace {
-Ptr<Ty> GetInoutTargetTy(const OwnedPtr<FuncArg>& arg)
+ModalTy GetInoutTargetTy(const OwnedPtr<FuncArg>& arg)
 {
-    if (Ty::IsTyCorrect(arg->expr->GetTy())) {
+    if (arg->expr->GetTy().IsCorrect()) {
         return arg->expr->GetTy();
     }
     CJC_ASSERT(arg->GetTy()->IsPointer() && arg->GetTy()->typeArgs.size() == 1);
@@ -148,9 +149,9 @@ void ProcessParamToArg(TypeManager& tyMgr, ArgumentTypeUnit& atu)
         CJC_ASSERT(argTy && paramTy);
         paramTy = tyMgr.InstOf(paramTy);
         if (argTy->IsInteger() && paramTy->IsNumeric()) {
-            argTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_IDEAL_INT);
+            argTy = {TypeManager::GetPrimitiveTy(TypeKind::TYPE_IDEAL_INT)};
         } else if (argTy->IsFloating() && paramTy->IsNumeric()) {
-            argTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_IDEAL_FLOAT);
+            argTy = {TypeManager::GetPrimitiveTy(TypeKind::TYPE_IDEAL_FLOAT)};
         }
     }
 }
@@ -194,9 +195,9 @@ bool IsInGenericStructDecl(const FuncDecl& fd)
 }
 
 // Get the generic types in candidate.
-std::vector<Ptr<Ty>> GetAllGenericTys(const Expr& expr, const FuncDecl& fd)
+std::vector<ModalTy> GetAllGenericTys(const Expr& expr, const FuncDecl& fd)
 {
-    std::vector<Ptr<Ty>> result;
+    std::vector<ModalTy> result;
     std::vector<Ptr<Generic>> generics;
     if (fd.funcBody->generic) {
         // Get the candidate's generic types.
@@ -243,7 +244,7 @@ int64_t CalculateEnumCtorScopeLevel(const ASTContext& ctx, const CallExpr& ce, c
 UNSUPPRESS_WARNING()
 
 // Check whether given i types can passed to j types (T_i <: T_j).
-bool CompareParamTys(TypeManager& tyMgr, const std::vector<Ptr<AST::Ty>>& iTys, const std::vector<Ptr<AST::Ty>>& jTys)
+bool CompareParamTys(TypeManager& tyMgr, const std::vector<ModalTy>& iTys, const std::vector<ModalTy>& jTys)
 {
     if (iTys.size() != jTys.size()) {
         return false;
@@ -265,6 +266,33 @@ bool CompareParamTys(TypeManager& tyMgr, const std::vector<Ptr<AST::Ty>>& iTys, 
     return true;
 }
 
+// Check whether arg of i can be passed as arg of j (T_i <: T_j), or if i is better than j for ctor call.
+// Always return true if either does not have this param.
+bool CompareThisParamTy(
+    TypeManager& tyMgr, const FuncDecl& i, const FuncDecl& j, const CallExpr& ce, AST::ModalTy target)
+{
+    if (!tyMgr.HasThisParam(i) || !tyMgr.HasThisParam(j)) {
+        return true;
+    }
+    auto iThis = tyMgr.GetThisParamTy(i);
+    auto jThis = tyMgr.GetThisParamTy(j);
+    // ctor call has special rules for modal, because the modal can be deduced.
+    // in case let c: C@local? = C(), @local? is better, if no @local? is found, the other modals are equally good.
+    // in case let c: C = C(), only @~local is accepted.
+    // in case let c = C(), this means let c: C@~local = C(), so only @~local is accepted.
+    if ((ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) && target &&
+        !tyMgr.ImplementsCopyInterface(target.Ty())) {
+        // if target present in ctor call, exact modal prevails
+        if (iThis.Mode() == target.Mode() && jThis.Mode() != target.Mode()) {
+            return true;
+        }
+        // if modal equally good, neither overload is better, returns true
+        return iThis.Mode() == jThis.Mode();
+    }
+    auto r = iThis.Mode().IsSubModal(jThis.Mode());
+    return r;
+}
+
 std::vector<SubstPack> ResolveTypeMappings(
     TypeManager& tyMgr, const std::vector<SubstPack>& typeMappings, const FuncDecl& fd)
 {
@@ -279,8 +307,8 @@ std::vector<SubstPack> ResolveTypeMappings(
             if (!matchMark[j]) {
                 continue;
             }
-            auto iTy = DynamicCast<FuncTy*>(tyMgr.ApplySubstPack(fd.GetTy(), typeMappings[i]));
-            auto jTy = DynamicCast<FuncTy*>(tyMgr.ApplySubstPack(fd.GetTy(), typeMappings[j]));
+            auto iTy = DynamicCast<FuncTy>(tyMgr.ApplySubstPack(fd.GetTy(), typeMappings[i]).Ty());
+            auto jTy = DynamicCast<FuncTy>(tyMgr.ApplySubstPack(fd.GetTy(), typeMappings[j]).Ty());
             if (iTy == jTy) {
                 matchMark[j] = false;
                 continue;
@@ -355,7 +383,7 @@ bool IsFuncDeclPossibleVariadic(const FuncDecl& fd)
         CJC_NULLPTR_CHECK(param);
         return !param->isNamedParam;
     });
-    return iter != params.crend() && Ty::IsTyCorrect((*iter)->GetTy()) && (*iter)->GetTy()->IsStructArray();
+    return iter != params.crend() && (*iter)->GetTy().IsCorrect() && (*iter)->GetTy()->IsStructArray();
 }
 
 size_t GetPositionalParamSize(const FuncDecl& fd)
@@ -460,7 +488,7 @@ bool IsPossibleVariadicFunction(const FuncTy& funcTy, const CallExpr& ce)
     return Ty::IsTyCorrect(funcTy.paramTys.back()) && funcTy.paramTys.back()->IsStructArray();
 }
 
-inline Ptr<Ty> GetRealNonOptionTy(Ptr<Ty> ty)
+inline ModalTy GetRealNonOptionTy(ModalTy ty)
 {
     if (ty->IsCoreOptionType()) {
         return GetRealNonOptionTy(ty->typeArgs[0]);
@@ -491,7 +519,7 @@ std::vector<Ptr<FuncDecl>> SyntaxFilterCandidates(const CallExpr& ce, const std:
                 definitelyMismatch = true;
                 break;
             }
-            Ptr<Ty> paramTy = nullptr;
+            ModalTy paramTy{};
             if (ce.args[i]->name.Empty()) {
                 paramTy = GetRealNonOptionTy(paramTys[i]);
             } else if (auto res = GetParamTyAccordingToArgName(*fd, ce.args[i]->name)) {
@@ -565,11 +593,11 @@ std::pair<bool, TypeSubst> CheckAndObtainTypeMappingBetweenInterfaceAndExtend(
         if (!super->GetTy()->IsInterface()) {
             continue;
         }
-        auto superTy = RawStaticCast<InterfaceTy*>(super->GetTy());
-        if (&id != Ty::GetDeclPtrOfTy(superTy)) {
+        auto superTy = RawStaticCast<InterfaceTy*>(super->DataTy());
+        if (&id != Ty::GetDeclPtrOfTy(DataTy{superTy})) {
             continue;
         }
-        typeMapping = TypeCheckUtil::GenerateTypeMapping(id, superTy->typeArgs);
+        typeMapping = TypeCheckUtil::GenerateTypeMapping(id, superTy->TyArgs());
         if (typeMapping.empty()) {
             continue; // Failed to generate typeMapping.
         }
@@ -593,27 +621,27 @@ void RemoveNonAnnotationCandidates(std::vector<Ptr<FuncDecl>>& candidates)
     }
 }
 
-inline bool IsFunctionalType(const Ty& ty)
+inline bool IsFunctionalType(ModalTy ty)
 {
-    if (auto genericTy = DynamicCast<GenericsTy>(&ty)) {
+    if (auto genericTy = DynamicCast<GenericsTy*>(ty.Ty())) {
         return std::any_of(
-            genericTy->upperBounds.cbegin(), genericTy->upperBounds.cend(), [](auto ty) { return ty->IsFunc(); });
+            genericTy->upperBounds.cbegin(), genericTy->upperBounds.cend(), [](auto ub) { return ub->IsFunc(); });
     }
-    return ty.IsFunc();
+    return ty->IsFunc();
 }
 
 bool CheckUseTrailingClosureWithFunctionType(
-    DiagnosticEngine& diag, FuncArg& arg, const Ty& originalTy, const FuncDecl& candidate)
+    DiagnosticEngine& diag, FuncArg& arg, ModalTy originalTy, const FuncDecl& candidate)
 {
     // Implicit added func argument is added by trailing closure.
     if (!arg.TestAttr(Attribute::IMPLICIT_ADD) || IsFunctionalType(originalTy)) {
         return true;
     }
-    arg.SetTy(TypeManager::GetInvalidTy());
+    arg.SetTy({TypeManager::GetInvalidTy()});
     CJC_NULLPTR_CHECK(arg.expr);
-    arg.expr->SetTy(TypeManager::GetInvalidTy());
+    arg.expr->SetTy({TypeManager::GetInvalidTy()});
     std::string message =
-        originalTy.IsGeneric() ? "generic type without upper bound of function type" : "non-function type";
+        originalTy->IsGeneric() ? "generic type without upper bound of function type" : "non-function type";
     auto diagBuilder = diag.DiagnoseRefactor(
         DiagKindRefactor::sema_trailing_lambda_cannot_used_for_non_function, arg, message);
     diagBuilder.AddMainHintArguments(originalTy.String());
@@ -628,24 +656,24 @@ void FilterOverriden(
         if (!candidates[i]->fd.outerDecl) {
             return;
         }
-        auto instOuter1 = tm.ApplySubstPack(candidates[i]->fd.outerDecl->GetTy(), candidates[i]->typeMapping);
+        auto instOuter1 = tm.ApplySubstPack(candidates[i]->fd.outerDecl->DataTy(), candidates[i]->typeMapping);
         if (!Ty::IsTyCorrect(instOuter1)) {
             return;
         }
         auto instFuncTy1 =
-            StaticCast<FuncTy*>(tm.ApplySubstPack(candidates[i]->fd.GetTy(), candidates[i]->typeMapping));
+            StaticCast<FuncTy*>(tm.ApplySubstPack(candidates[i]->fd.DataTy(), candidates[i]->typeMapping));
         auto& funcBody1 = candidates[i]->fd.funcBody;
         for (size_t j = 0; j < candidates.size(); ++j) {
             if (!candidates[j]->fd.outerDecl || i == j) {
                 continue;
             }
-            auto instOuter2 = tm.ApplySubstPack(candidates[j]->fd.outerDecl->GetTy(), candidates[j]->typeMapping);
+            auto instOuter2 = tm.ApplySubstPack(candidates[j]->fd.outerDecl->DataTy(), candidates[j]->typeMapping);
             // Do not handle overloaded candidates.-
             if (!Ty::IsTyCorrect(instOuter2) || instOuter1 == instOuter2) {
                 continue;
             }
             auto instFuncTy2 =
-                StaticCast<FuncTy*>(tm.ApplySubstPack(candidates[j]->fd.GetTy(), candidates[j]->typeMapping));
+                StaticCast<FuncTy*>(tm.ApplySubstPack(candidates[j]->fd.DataTy(), candidates[j]->typeMapping));
             auto& funcBody2 = candidates[j]->fd.funcBody;
             auto sameSig = instFuncTy1 == instFuncTy2;
             sameSig = sameSig && ((funcBody1->generic == nullptr) == (funcBody2->generic == nullptr));
@@ -741,7 +769,7 @@ bool TypeChecker::TypeCheckerImpl::IsGenericCall(const ASTContext& ctx, const Ca
     // 4. If the call's baseFunc is a member access, and the base's type has generic, return true;
     if (ce.baseFunc->astKind == ASTKind::MEMBER_ACCESS) {
         auto ma = StaticAs<ASTKind::MEMBER_ACCESS>(ce.baseFunc.get());
-        auto baseType = ma->baseExpr ? ma->baseExpr->GetTy() : nullptr;
+        auto baseType = ma->baseExpr ? ma->baseExpr->GetTy() : ModalTy{};
         if (!Ty::IsTyCorrect(baseType)) {
             return false;
         }
@@ -763,7 +791,7 @@ bool TypeChecker::TypeCheckerImpl::IsGenericCall(const ASTContext& ctx, const Ca
     if (ce.baseFunc->astKind == ASTKind::REF_EXPR) {
         auto sym1 = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, ce.scopeName);
         auto sym2 = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, fd.scopeName);
-        if (sym1 != sym2 && sym2 != nullptr && Ty::IsTyCorrect(sym2->node->GetTy()) &&
+        if (sym1 != sym2 && sym2 != nullptr && sym2->node->GetTy().IsCorrect() &&
             !sym2->node->GetTy()->typeArgs.empty()) {
             return true;
         }
@@ -771,9 +799,8 @@ bool TypeChecker::TypeCheckerImpl::IsGenericCall(const ASTContext& ctx, const Ca
     return false;
 }
 
-// Pass parameters of candidate i to candidate j as arguments. Compare two candidates.
 bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
-    FunctionMatchingUnit& i, FunctionMatchingUnit& j, const CallExpr& ce)
+    FunctionMatchingUnit& i, FunctionMatchingUnit& j, const CallExpr& ce, AST::ModalTy target)
 {
     size_t argSize = i.tysInArgOrder.size();
     // Only resolve for generic when candidate is generic related and its parameter's types contains generic type.
@@ -783,14 +810,17 @@ bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
         ic.SetRefDeclSimple(j.fd, ce);
         ArgumentTypeUnit atu(i.tysInArgOrder, j.tysInArgOrder, {});
         ProcessParamToArg(typeManager, atu);
-        auto argPack = LocTyArgSynArgPack{GetTyVarsToSolve(typeManager.GetInstMapping()),
-            atu.argTys, atu.tysInArgOrder,
-            {}, TypeManager::GetInvalidTy(), TypeManager::GetInvalidTy(), {}};
+        auto argPack = LocTyArgSynArgPack{GetTyVarsToSolve(typeManager.GetInstMapping()), atu.argTys, atu.tysInArgOrder,
+            {}, {TypeManager::GetInvalidTy()}, {TypeManager::GetInvalidTy()}, {}};
         auto optSubst = LocalTypeArgumentSynthesis(typeManager, argPack, {}).SynthesizeTypeArguments();
         if (!optSubst.has_value()) {
             return false;
         }
         for (size_t t = 0; t < argSize; ++t) { // Int64 has priority than float and other int.
+            if (!i.tysInArgOrder[t].Mode().IsSubModal(j.tysInArgOrder[t].Mode()) &&
+                !typeManager.ImplementsCopyInterface(i.tysInArgOrder[t].Ty())) {
+                return false;
+            }
             if (!i.tysInArgOrder[t]->IsNumeric() || !j.tysInArgOrder[t]->IsNumeric()) {
                 continue;
             }
@@ -799,14 +829,19 @@ bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
                 return false;
             }
         }
-        return true;
+        return CompareThisParamTy(typeManager, i.fd, j.fd, ce, target);
     }
     if (i.fd.outerDecl && j.fd.outerDecl) {
         // Since interface allows multiple inheritance, and have default functions, we need to resolve shadow case.
         // When both candidates are member functions and they have the same size of parameters and function signatures,
         // resolve them by deciding whether one is implementing the other.
         bool sameNumberOfParams = j.fd.GetTy()->typeArgs.size() == i.fd.GetTy()->typeArgs.size();
-        if (sameNumberOfParams && typeManager.IsFuncParameterTypesIdentical(i.tysInArgOrder, j.tysInArgOrder)) {
+        bool sameThisParam{true};
+        if (typeManager.HasThisParam(i.fd) && typeManager.HasThisParam(j.fd)) {
+            sameThisParam = GetThisParamModal(i.fd) == GetThisParamModal(j.fd);
+        }
+        if (sameNumberOfParams && sameThisParam &&
+            typeManager.IsFuncParameterTypesIdentical(i.tysInArgOrder, j.tysInArgOrder)) {
             bool isJImplementable =
                 j.fd.outerDecl->astKind == ASTKind::INTERFACE_DECL || j.fd.TestAttr(Attribute::ABSTRACT);
             bool isITheImplementation =
@@ -815,11 +850,12 @@ bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
         }
     }
     // Check whether T_i <: T_j
-    return CompareParamTys(typeManager, i.tysInArgOrder, j.tysInArgOrder);
+    return CompareParamTys(typeManager, i.tysInArgOrder, j.tysInArgOrder) &&
+        CompareThisParamTy(typeManager, i.fd, j.fd, ce, target);
 }
 
 std::vector<size_t> TypeChecker::TypeCheckerImpl::ResolveOverload(
-    std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, const CallExpr& ce)
+    std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, const CallExpr& ce, AST::ModalTy target)
 {
     auto targetNum = candidates.size();
     std::vector<bool> targetMark(targetNum, true); // When get false, the target is excluded.
@@ -832,8 +868,8 @@ std::vector<size_t> TypeChecker::TypeCheckerImpl::ResolveOverload(
             if (!targetMark[j]) {
                 continue;
             }
-            auto iToJ = CompareFuncCandidates(*candidates[i], *candidates[j], ce);
-            auto jToI = CompareFuncCandidates(*candidates[j], *candidates[i], ce);
+            auto iToJ = CompareFuncCandidates(*candidates[i], *candidates[j], ce, target);
+            auto jToI = CompareFuncCandidates(*candidates[j], *candidates[i], ce, target);
             if (iToJ && !jToI) {
                 targetMark[j] = false;
             } else if (!iToJ && jToI) {
@@ -875,7 +911,7 @@ void TypeChecker::TypeCheckerImpl::InstantiatePartOfTheGenericParameters(
             // Delete the generic types that introduced from current candidate. Only type parameters introduced by the
             // outer decls are retained.
             for (auto& it : generic->typeParameters) {
-                outerDeclTypeMapping.u2i.erase(StaticCast<GenericsTy*>(it->GetTy()));
+                outerDeclTypeMapping.u2i.erase(StaticCast<GenericsTy*>(it->DataTy()));
             }
             if (outerDeclTypeMapping.u2i.empty()) {
                 // If the candidate does not introduce type parameters from the outer layer, there is no need to
@@ -898,7 +934,7 @@ void TypeChecker::TypeCheckerImpl::GenerateTypeMappingForBaseExpr(const Expr& ba
         return;
     }
     auto& ma = static_cast<const MemberAccess&>(baseExpr);
-    if (!Ty::IsTyCorrect(ma.baseExpr->GetTy())) {
+    if (!ma.baseExpr->GetTy().IsCorrect()) {
         return;
     }
     CJC_ASSERT(!ma.baseExpr->GetTy()->HasIntersectionTy());
@@ -916,12 +952,12 @@ void TypeChecker::TypeCheckerImpl::GenerateTypeMappingForBaseExpr(const Expr& ba
         (baseDecl->IsTypeDecl() || baseDecl->TestAttr(Attribute::ENUM_CONSTRUCTOR));
     if (typeDeclMemberAccess) {
         CJC_NULLPTR_CHECK(maTarget->outerDecl->GetTy());
-        auto promoteMapping = promotion.GetPromoteTypeMapping(*ma.baseExpr->GetTy(), *maTarget->outerDecl->GetTy());
+        auto promoteMapping = promotion.GetPromoteTypeMapping(ma.baseExpr->DataTy(), maTarget->outerDecl->DataTy());
         auto baseTypeArgs = ma.baseExpr->GetTypeArgs();
-        std::unordered_set<Ptr<Ty>> definedTys;
+        std::unordered_set<ModalTy> definedTys;
         std::for_each(
             baseTypeArgs.begin(), baseTypeArgs.end(), [&definedTys](auto type) { definedTys.emplace(type->GetTy()); });
-        auto genericTys = GetAllGenericTys(baseDecl->GetTy());
+        auto genericTys = GetAllGenericTys(baseDecl->DataTy());
         for (auto it = promoteMapping.begin(); it != promoteMapping.end(); ++it) {
             // If mapped 'ty' is existed in 'baseDecl' generic types
             // and is not found in user defined type args, remove it from mapping.
@@ -950,15 +986,15 @@ TypeSubst TypeChecker::TypeCheckerImpl::GenerateTypeMappingByTyArgs(
         if (!generic.typeParameters[i]) {
             continue;
         }
-        Ptr<Ty> typeArgTy = TypeManager::GetInvalidTy();
+        ModalTy typeArgTy = {TypeManager::GetInvalidTy()};
         if (auto type = typeArgs[i]; type) {
             if (type->GetTy() && type->GetTy()->HasIntersectionTy()) {
                 continue;
             }
             typeArgTy = type->GetTy();
         }
-        if (Ty::IsTyCorrect(generic.typeParameters[i]->GetTy()) && Ty::IsTyCorrect(typeArgTy)) {
-            typeMapping.emplace(StaticCast<GenericsTy*>(generic.typeParameters[i]->GetTy()), typeArgTy);
+        if (generic.typeParameters[i]->GetTy().IsCorrect() && Ty::IsTyCorrect(typeArgTy)) {
+            typeMapping.emplace(DynamicCast<GenericsTy>(generic.typeParameters[i]->DataTy()), typeArgTy.Ty());
         }
     }
     return typeMapping;
@@ -970,8 +1006,8 @@ namespace {
 void ReduceSubstPack(SubstPack& maps, TypeManager& tyMgr)
 {
     for (auto& [tv, insts] : maps.inst) {
-        std::set<Ptr<Ty>> instsOneStep = insts;
-        std::set<Ptr<Ty>> instsFinal;
+        std::set<DataTy> instsOneStep = insts;
+        std::set<DataTy> instsFinal;
         for (auto ty : instsOneStep) {
             instsFinal.merge(tyMgr.GetInstantiatedTys(ty, maps.inst));
         }
@@ -1011,32 +1047,32 @@ void TypeChecker::TypeCheckerImpl::FilterTypeMappings(
         }
     }
     // Reduce type mapping to direct mapping for used generic sema types.
-    auto tyVars = ::GetAllGenericTys(fd.GetTy());
+    auto tyVars = ::GetAllGenericTys(fd.DataTy());
     CJC_ASSERT(fd.funcBody);
     if (fd.funcBody->generic) {
         // Since 'func test<T>(a: Int64):Unit' function type can be used without type parameters' sema ty,
         // we need to add type parameters' sema ty manually to ensure keeping type parameters' mapping.
         for (auto& it : fd.funcBody->generic->typeParameters) {
-            tyVars.emplace(it->GetTy());
+            tyVars.emplace(it->DataTy());
         }
     }
     // If candidate returns 'This' type, need to keep type mapping for current decl.
     if (IsFuncReturnThisType(fd)) {
         auto declOfThisType = GetDeclOfThisType(expr);
         if (declOfThisType) {
-            tyVars.merge(::GetAllGenericTys(declOfThisType->GetTy()));
+            tyVars.merge(::GetAllGenericTys(declOfThisType->DataTy()));
         }
     } else if (auto ma = DynamicCast<const MemberAccess*>(&expr); ma && ma->baseExpr) {
         // 1. Store upperBounds' parent generic ty, if current is generic upper bound function call.
         // 2. If function contains quest ty, also collect typeMapping of outerDecl for possible generic ty.
         if (fd.outerDecl && (IsGenericUpperBoundCall(*ma, fd) || fd.GetTy()->HasQuestTy())) {
-            tyVars.merge(::GetAllGenericTys(fd.outerDecl->GetTy()));
+            tyVars.merge(::GetAllGenericTys(fd.outerDecl->DataTy()));
         }
         auto baseTarget = TypeCheckUtil::GetRealTarget(ma->baseExpr->GetTarget());
         // When type of baseExpr should be inferred, we need to keep tyVars. Such as A.add() or pkg.A.add().
         bool isNameAccessNeedInfer = baseTarget && baseTarget->IsTypeDecl() && ma->baseExpr->GetTypeArgs().empty();
         if (isNameAccessNeedInfer) {
-            tyVars.merge(::GetAllGenericTys(baseTarget->GetTy()));
+            tyVars.merge(::GetAllGenericTys(baseTarget->DataTy()));
         }
     }
     // Erase context type vars from the type mapping, the context tyVar should be substituted.
@@ -1050,8 +1086,77 @@ void TypeChecker::TypeCheckerImpl::FilterTypeMappings(
     }
 }
 
+bool TypeChecker::TypeCheckerImpl::CheckThisParamCompatible(
+    ASTContext& ctx, const FuncDecl& fd, const CallExpr& ce, ModalTy target)
+{
+    if (fd.TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
+        return true;
+    }
+    if (TypeManager::HasThisParam(fd)) {
+        auto callArgTy = GetThisArgTy(ctx, ce);
+        auto fdParamTy = typeManager.GetThisParamTy(fd);
+        if (typeManager.ImplementsCopyInterface(callArgTy.Ty())) {
+            return true;
+        }
+        bool good;
+        ModalTy expect;
+        ModalTy found;
+        if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
+            expect = target ? target : fdParamTy;
+            found = fdParamTy;
+            if (auto ceModal = GetCallBaseModal(ce)) {
+                // object creation with explicit modal, must use exact modal
+                expect = expect.With(*ceModal);
+                good = found.Mode() == expect.Mode();
+            } else if (target) {
+                // modal not specified, sub modal is enough
+                good = found.Mode().IsSubModal(expect.Mode());
+            } else {
+                // object creation without target type, any modal is ok
+                good = true;
+            }
+        } else if (auto ref = DynamicCast<RefExpr>(&*ce.baseFunc); ref && (ref->isThis || ref->isSuper)) {
+            // must call init or super with the same modal
+            expect = callArgTy;
+            found = fdParamTy;
+            good = expect.Mode() == found.Mode();
+        } else {
+            // normal function call, sub modal is ok
+            expect = fdParamTy;
+            found = callArgTy;
+            good = found.Mode().IsSubModal(expect.Mode());
+        }
+        if (!good) {
+            if (ce.baseFunc->ShouldDiagnose() && !CanSkipDiag(*ce.baseFunc)) {
+                DiagMismatchedTypesWithFoundTy(diag, *ce.baseFunc, expect, found);
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TypeChecker::TypeCheckerImpl::IsThisParamIdentical(const FuncDecl& fd1, const FuncDecl& fd2)
+{
+    bool hasThisParam1 = TypeManager::HasThisParam(fd1);
+    bool hasThisParam2 = TypeManager::HasThisParam(fd2);
+    if (hasThisParam1 != hasThisParam2) {
+        return false;
+    }
+    if (!hasThisParam1) {
+        return true;
+    }
+    auto thisParamTy1 = typeManager.GetThisParamTy(fd1);
+    auto thisParamTy2 = typeManager.GetThisParamTy(fd2);
+    if (typeManager.ImplementsCopyInterface(thisParamTy1.Ty()) &&
+        typeManager.ImplementsCopyInterface(thisParamTy2.Ty())) {
+        return true;
+    }
+    return thisParamTy1.Mode().IsSubModal(thisParamTy2.Mode()) && thisParamTy2.Mode().IsSubModal(thisParamTy1.Mode());
+}
+
 bool TypeChecker::TypeCheckerImpl::CheckGenericCallCompatible(
-    ASTContext& ctx, FunctionCandidate& candidate, SubstPack& typeMapping, Ptr<Ty> targetRet)
+    ASTContext& ctx, FunctionCandidate& candidate, SubstPack& typeMapping, ModalTy targetRet)
 {
     auto& ce = candidate.ce;
     auto& fd = candidate.fd;
@@ -1065,13 +1170,18 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericCallCompatible(
     }
     CJC_ASSERT(ce.baseFunc);
     // After generating type mapping, check the compatibility of arguments and parameters.
-    std::vector<Ptr<Ty>> paramTysInArgOrder = GetParamTysInArgsOrder(typeManager, ce, fd);
+    std::vector<ModalTy> paramTysInArgOrder = GetParamTysInArgsOrder(typeManager, ce, fd);
     if (paramTysInArgOrder.size() != ce.args.size()) {
         return false;
     }
+    if (targetRet && targetRet->IsEnum() && fd.TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
+        for (size_t i{0}; i < paramTysInArgOrder.size(); ++i) {
+            paramTysInArgOrder[i] = paramTysInArgOrder[i].With(targetRet.Mode());
+        }
+    }
     std::vector<SubstPack> resMappings;
     for (const auto& mts : typeMappings) {
-        std::set<Ptr<Ty>> usedTys = {fd.GetTy()};
+        std::set<DataTy> usedTys = {fd.DataTy()};
         usedTys.merge(GetGenericParamsForCall(ce, fd));
         auto mappings = ExpandMultiTypeSubst(mts, usedTys);
         resMappings.insert(resMappings.end(), mappings.begin(), mappings.end());
@@ -1080,6 +1190,10 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericCallCompatible(
     for (auto mapping = resMappings.begin(); mapping != resMappings.end();) {
         auto ds = DiagSuppressor(diag);
         bool matched = true;
+        if (!CheckThisParamCompatible(ctx, fd, ce, targetRet)) {
+            ce.SetTy({TypeManager::GetInvalidTy()});
+            matched = false;
+        }
         size_t currentCnt = 0;
         for (size_t i = 0; i < paramTysInArgOrder.size(); ++i) {
             auto paramTy = paramTysInArgOrder[i];
@@ -1091,7 +1205,7 @@ bool TypeChecker::TypeCheckerImpl::CheckGenericCallCompatible(
                 matched = false;
                 break;
             }
-            if (!CheckUseTrailingClosureWithFunctionType(diag, *ce.args[i], *paramTysInArgOrder[i], fd)) {
+            if (!CheckUseTrailingClosureWithFunctionType(diag, *ce.args[i], paramTysInArgOrder[i], fd)) {
                 matched = false;
                 break;
             }
@@ -1126,7 +1240,7 @@ bool TypeChecker::TypeCheckerImpl::CheckAndGetMappingForTypeDecl(
     MultiTypeSubst mts;
     MultiTypeSubst mapping;
     if (baseExpr.GetTy() && targetDecl.GetTy()) {
-        mapping = promotion.GetPromoteTypeMapping(*baseExpr.GetTy(), *targetDecl.GetTy());
+        mapping = promotion.GetPromoteTypeMapping(baseExpr.DataTy(), targetDecl.DataTy());
     }
     for (auto it : std::as_const(mapping)) {
         if (!it.first->IsGeneric()) {
@@ -1154,7 +1268,7 @@ bool TypeChecker::TypeCheckerImpl::CheckAndGetMappingForTypeDecl(
     }
     if (!valid) {
         auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::sema_generic_type_inconsistent, baseExpr,
-            MakeRange(baseExpr.begin, baseExpr.end), typeDecl.GetTy()->String());
+            MakeRange(baseExpr.begin, baseExpr.end), typeDecl.GetTy().String());
         diagBuilder.AddNote(diagMessage);
     }
     return valid;
@@ -1168,14 +1282,14 @@ bool TypeChecker::TypeCheckerImpl::CheckCandidateConstrains(
         !CheckGenericDeclInstantiation(&fd, userDefinedTypeArgs, *ce.baseFunc)) {
         return false;
     }
-    bool ignored = !fd.outerDecl || !fd.outerDecl->IsNominalDecl() || !Ty::IsTyCorrect(fd.outerDecl->GetTy());
+    bool ignored = !fd.outerDecl || !fd.outerDecl->IsNominalDecl() || !fd.outerDecl->GetTy().IsCorrect();
     if (ignored) {
         return true;
     }
     Ptr<Decl> structDecl = fd.outerDecl;
     if (auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get());
-        ma && ma->baseExpr && Ty::IsTyCorrect(ma->baseExpr->GetTy())) {
-        Ptr<Ty> baseTy = ma->baseExpr->GetTy();
+        ma && ma->baseExpr && ma->baseExpr->GetTy().IsCorrect()) {
+        ModalTy baseTy = ma->baseExpr->GetTy();
         if (auto res = typeManager.GetExtendDeclByInterface(*baseTy, *structDecl->GetTy())) {
             structDecl = *res;
         }
@@ -1198,7 +1312,7 @@ bool TypeChecker::TypeCheckerImpl::CheckCandidateConstrains(
         if (structDecl->astKind == ASTKind::EXTEND_DECL && typeDecl) {
             baseTy = ReplaceWithGenericTyInInheritableDecl(baseTy, *structDecl, *typeDecl);
         }
-        auto prRes = promotion.Promote(*baseTy, *structDecl->GetTy());
+        auto prRes = promotion.Promote(baseTy, structDecl->DataTy());
         if (prRes.empty()) {
             return true;
         }
@@ -1213,23 +1327,60 @@ bool TypeChecker::TypeCheckerImpl::CheckCandidateConstrains(
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckCallCompatible(ASTContext& ctx, FunctionCandidate& candidate)
+ModalTy TypeChecker::TypeCheckerImpl::GetThisArgTy(const ASTContext& ctx, const CallExpr& ce)
+{
+    if (auto ma = DynamicCast<MemberAccess>(&*ce.baseFunc)) {
+        return ma->baseExpr->GetTy();
+    }
+    if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
+        if (auto funcTy = DynamicCast<FuncTy>(TypeCheckUtil::GetRealTarget(ce.baseFunc->GetTarget())->DataTy())) {
+            return funcTy->retTy;
+        }
+        // baseFunc is constructor, its ty would be the created object's type
+        return TypeCheckUtil::GetRealTarget(ce.baseFunc->GetTarget())->GetTy();
+    }
+    if (auto ref = DynamicCast<RefExpr>(&*ce.baseFunc)) {
+        // get outer func ty (must be instance method so GetThisParamTy is valid)
+        if (auto fn = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, ref->scopeName, [](const Symbol& sym) {
+            auto node = sym.node;
+            if (auto func = DynamicCast<FuncDecl>(node)) {
+                return Is<InheritableDecl>(func->outerDecl) && !func->TestAttr(Attribute::STATIC);
+            }
+            return false;
+        })) {
+            auto fd = StaticCast<FuncDecl>(fn->node);
+            return typeManager.GetThisParamTy(*fd);
+        }
+        // not inside func, then inside member var init, use type @~local
+        if (auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, ref->scopeName)) {
+            return sym->node->GetTy();
+        }
+    }
+    CJC_ABORT_WITH_MSG("call not a member access or ref expr");
+    return {};
+}
+
+bool TypeChecker::TypeCheckerImpl::CheckCallCompatible(ASTContext& ctx, FunctionCandidate& candidate, ModalTy target)
 {
     auto& ce = candidate.ce;
     auto& fd = candidate.fd;
-    std::vector<Ptr<Ty>> paramTysInArgsOrder = GetParamTysInArgsOrder(typeManager, ce, fd);
+    std::vector<ModalTy> paramTysInArgsOrder = GetParamTysInArgsOrder(typeManager, ce, fd);
     if (paramTysInArgsOrder.size() != ce.args.size()) {
+        return false;
+    }
+    if (!CheckThisParamCompatible(ctx, fd, ce, target)) {
+        ce.SetTy({TypeManager::GetInvalidTy()});
         return false;
     }
     for (size_t i = 0; i < paramTysInArgsOrder.size(); ++i) {
         ce.args[i]->Clear();
         if (!CheckWithCache(ctx, paramTysInArgsOrder[i], ce.args[i].get())) {
             if (ce.args[i]->ShouldDiagnose() && !CanSkipDiag(*ce.args[i])) {
-                DiagMismatchedTypes(diag, *ce.args[i], *paramTysInArgsOrder[i]);
+                DiagMismatchedTypes(diag, *ce.args[i], paramTysInArgsOrder[i]);
             }
             return false;
         }
-        if (!CheckUseTrailingClosureWithFunctionType(diag, *ce.args[i], *paramTysInArgsOrder[i], fd)) {
+        if (!CheckUseTrailingClosureWithFunctionType(diag, *ce.args[i], paramTysInArgsOrder[i], fd)) {
             return false;
         }
         if (fd.TestAttr(Attribute::C) && ce.args[i]->GetTy() && ce.args[i]->GetTy()->IsUnit()) {
@@ -1240,8 +1391,8 @@ bool TypeChecker::TypeCheckerImpl::CheckCallCompatible(ASTContext& ctx, Function
         if (fd.TestAttr(Attribute::FOREIGN) && fd.hasVariableLenArg && i >= fd.funcBody->paramLists[0]->params.size()) {
             continue;
         }
-        if (auto st = DynamicCast<StructTy*>(ce.args[i]->GetTy());
-            st && st->decl->TestAttr(Attribute::C) && st != paramTysInArgsOrder[i]) {
+        if (auto st = DynamicCast<StructTy>(ce.args[i]->DataTy());
+            st && st->decl->TestAttr(Attribute::C) && st != paramTysInArgsOrder[i].Ty()) {
             diag.Diagnose(*ce.args[i], DiagKind::sema_cstruct_cannot_autobox, paramTysInArgsOrder[i]->String());
             return false;
         }
@@ -1263,7 +1414,7 @@ void TypeChecker::TypeCheckerImpl::FillEnumTypeArgumentsTy(
         if (ref->instTys.empty()) {
             for (auto& typeParam : ed->generic->typeParameters) {
                 (void)ref->instTys.emplace_back(
-                    typeManager.ApplySubstPack(StaticCast<GenericsTy*>(typeParam->GetTy()), typeMapping));
+                    typeManager.ApplySubstPack(StaticCast<GenericsTy*>(typeParam->DataTy()), typeMapping));
             }
         }
     }
@@ -1272,6 +1423,9 @@ void TypeChecker::TypeCheckerImpl::FillEnumTypeArgumentsTy(
     bool enumCallNoTyArgs = ma.typeArguments.empty() && baseTypeArgs.empty();
     if (enumCallNoTyArgs) {
         ma.SetTy(typeManager.ApplySubstPack(ma.GetTy(), typeMapping));
+        if (ma.baseExpr->GetTy().IsCorrect()) {
+            ma.SetTy(ma.GetTy().With(ma.baseExpr->TyMode()));
+        }
     }
 }
 
@@ -1286,7 +1440,7 @@ void TypeChecker::TypeCheckerImpl::FillTypeArgumentsTy(const FuncDecl& fd, const
             for (auto& typeParam : generic->typeParameters) {
                 // Store the instantiate type. this is more convenient for later instantiation.
                 (void)ref->instTys.emplace_back(
-                    typeManager.ApplySubstPack(StaticCast<GenericsTy*>(typeParam->GetTy()), typeMapping));
+                    typeManager.ApplySubstPack(StaticCast<GenericsTy*>(typeParam->DataTy()), typeMapping));
             }
         }
     }
@@ -1344,16 +1498,16 @@ void TypeChecker::TypeCheckerImpl::FillTypeArgumentsTy(const FuncDecl& fd, const
         //    EE.test(1) <- T of E<T> should be able to inferred.
         // This part may not be necessary. Could be treated as an unsolved ty var in the future.
         TypeSubst mapping;
-        auto outerDeclTy = typeManager.GetInstantiatedTy(fd.outerDecl->GetTy(), typeMapping.u2i);
+        auto outerDeclTy = typeManager.GetInstantiatedTy(fd.outerDecl->DataTy(), typeMapping.u2i);
         if (baseDecl->GetTy() && fd.outerDecl->GetTy()) {
-            mapping = MultiTypeSubstToTypeSubst(promotion.GetDowngradeTypeMapping(*baseDecl->GetTy(), *outerDeclTy));
+            mapping = MultiTypeSubstToTypeSubst(promotion.GetDowngradeTypeMapping(baseDecl->DataTy(), outerDeclTy));
         }
         typeManager.PackMapping(typeMapping, mapping);
     }
     // If memberAccess's base expression has no explicit type arguments, we should  add instantiated ty to it.
     for (auto& typeParameter : baseGeneric->typeParameters) {
         (void)ref->instTys.emplace_back(
-            typeManager.ApplySubstPack(StaticCast<GenericsTy*>(typeParameter->GetTy()), typeMapping));
+            typeManager.ApplySubstPack(StaticCast<GenericsTy*>(typeParameter->DataTy()), typeMapping));
     }
     // Update the ma's base expression's ty.
     ma->baseExpr->SetTy(typeManager.ApplySubstPack(ma->baseExpr->GetTy(), typeMapping));
@@ -1363,7 +1517,7 @@ void TypeChecker::TypeCheckerImpl::FillTypeArgumentsTy(const FuncDecl& fd, const
 std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::UpdateFuncGenericType(
     ASTContext& ctx, FunctionMatchingUnit& fmu, CallExpr& ce)
 {
-    auto funcTy = RawStaticCast<FuncTy*>(fmu.fd.GetTy());
+    auto funcTy = RawStaticCast<FuncTy*>(fmu.fd.DataTy());
     ReplaceIdealTypeInSubstPack(fmu.typeMapping);
     // Caller guarantees 'desugarArgs' has value.
     if (!ce.desugarArgs.has_value()) {
@@ -1385,8 +1539,8 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::UpdateFuncGenericType(
     if (auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get()); ma && ma->matchedParentTy) {
         // 'matchedParentTy' may be generic ty that can be promoted further.
         if (ma->matchedParentTy->HasGeneric() && !ma->baseExpr->GetTy()->IsGeneric()) {
-            auto prTys = promotion.Promote(*ma->baseExpr->GetTy(), *ma->matchedParentTy);
-            auto updatedTy = prTys.empty() ? TypeManager::GetInvalidTy() : *prTys.begin();
+            auto prTys = promotion.Promote(ma->baseExpr->GetTy(), ma->matchedParentTy);
+            auto updatedTy = prTys.empty() ? ModalTy{TypeManager::GetInvalidTy()} : *prTys.begin();
             if (Ty::IsTyCorrect(updatedTy)) {
                 ma->matchedParentTy = updatedTy;
             }
@@ -1406,14 +1560,15 @@ void TypeChecker::TypeCheckerImpl::ReplaceIdealTypeInSubstPack(SubstPack& maps)
         auto tys0 = tys;
         tys.clear();
         for (auto& ty0 : tys0) { // std::set always has const iterator, can't replace in-place
-            Ptr<Ty> ty1 = typeManager.ReplaceIdealTy(ty0);
-            tys.insert(ty1);
+            ModalTy ty1{ty0};
+            ty1 = typeManager.ReplaceIdealTy(ty1);
+            tys.insert(ty1.Ty());
         }
     }
 }
 
 OwnedPtr<FunctionMatchingUnit> TypeChecker::TypeCheckerImpl::CheckCandidate(
-    ASTContext& ctx, FunctionCandidate& candidate, Ptr<Ty> targetRet, SubstPack& typeMapping)
+    ASTContext& ctx, FunctionCandidate& candidate, ModalTy targetRet, SubstPack& typeMapping)
 {
     auto& ce = candidate.ce;
     auto& fd = candidate.fd;
@@ -1424,7 +1579,7 @@ OwnedPtr<FunctionMatchingUnit> TypeChecker::TypeCheckerImpl::CheckCandidate(
         return nullptr;
     }
     candidate.stat.argNameValid = CheckArgsWithParamName(ce, fd);
-    std::vector<Ptr<Ty>> paramTyInArgOrder = GetParamTysInArgsOrder(typeManager, ce, fd);
+    std::vector<ModalTy> paramTyInArgOrder = GetParamTysInArgsOrder(typeManager, ce, fd);
     if (paramTyInArgOrder.size() != ce.args.size()) {
         return nullptr;
     }
@@ -1433,25 +1588,61 @@ OwnedPtr<FunctionMatchingUnit> TypeChecker::TypeCheckerImpl::CheckCandidate(
         if (!CheckGenericCallCompatible(ctx, candidate, typeMapping, targetRet)) {
             return nullptr;
         }
-    } else if (!CheckCallCompatible(ctx, candidate)) {
+    } else if (!CheckCallCompatible(ctx, candidate, targetRet)) {
         return nullptr;
     }
     if (NeedSynOnUsed(fd)) {
         Synthesize({ctx, SynPos::NONE}, &fd);
     }
-    if (!Ty::IsTyCorrect(fd.GetTy()) || !fd.GetTy()->IsFunc()) {
+    if (!fd.GetTy().IsCorrect() || !fd.GetTy()->IsFunc()) {
         return nullptr;
+    }
+    if (ce.callKind == CallKind::CALL_SUPER_FUNCTION) {
+        auto thisModal = GetThisArgTy(ctx, ce).Mode();
+        auto superModal = GetThisParamModal(fd);
+        // can only call super() with same @local
+        if (Is<RefExpr>(ce.baseFunc) && thisModal != superModal) {
+            return nullptr;
+        }
+        // call to super.foo() can use any compatible modal
+        if (Is<MemberAccess>(ce.baseFunc) && !thisModal.IsSubModal(superModal)) {
+            return nullptr;
+        }
     }
     if (targetRet) {
         // Check if the function's return type is the subtype of the target type that the callExpr should be.
         auto retTy = GetCallTy(ctx, candidate.ce, fd);
         DynamicBindingThisType(*ce.baseFunc, fd, typeMapping);
         auto instRet = typeManager.ApplySubstPack(retTy, typeMapping);
-        // Should delete ideal type in the future.
-        if (!instRet->HasIdealTy() && !typeManager.IsSubtype(instRet, targetRet)) {
-            if (!ce.sourceExpr) {
-                DiagMismatchedTypesWithFoundTy(diag, ce, *targetRet, *instRet);
+        if (fd.TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
+            if (auto modal = GetCallBaseModal(candidate.ce)) {
+                instRet = instRet.With(*modal);
+            } else {
+                instRet = instRet.With(targetRet.Mode());
             }
+        }
+        // a created object can be converted to any modal
+        ModalMatchMode modalMode;
+        if (typeManager.ImplementsCopyInterface(instRet.Ty())) { // copy type can always use any mode
+            modalMode = ModalMatchMode::IGNORE;
+        } else if (GetCallBaseModal(candidate.ce)) { // let c: C @local! = C @local!(), use exact mode in this case
+            modalMode = ModalMatchMode::EXACT;
+        } else {
+            modalMode = ModalMatchMode::SUBTYPE;
+        }
+        // Should delete ideal type in the future.
+        if (!instRet->HasIdealTy() && !typeManager.IsSubtype(instRet, targetRet, true, true, modalMode)) {
+            if (!ce.sourceExpr) {
+                DiagMismatchedTypesWithFoundTy(diag, ce, targetRet, instRet);
+            }
+            return nullptr;
+        }
+    } else if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
+        // ctor call without target, use the modal used in CallExpr
+        auto modal = GetCallBaseModal(candidate.ce).value_or(ModalInfo{});
+        auto thisParamTy = typeManager.GetThisParamTy(fd);
+        if (thisParamTy.Mode() != modal && !typeManager.ImplementsCopyInterface(thisParamTy.Ty())) {
+            DiagSemaMismatchedTypes(diag, ce, thisParamTy->String(), thisParamTy.With(modal)->String());
             return nullptr;
         }
     }
@@ -1469,7 +1660,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::ReorderCallArgument(
             auto arg = CreateFuncArgForOptional(*param);
             if (!fmu.fd.TestAttr(Attribute::TOOL_ADD)) {
                 arg->EnableAttr(Attribute::HAS_INITIAL);
-            } else if (Ty::IsTyCorrect(arg->GetTy()) && !Ty::IsTyCorrect(arg->expr->GetTy())) {
+            } else if (arg->GetTy().IsCorrect() && !arg->expr->GetTy().IsCorrect()) {
                 // When default parameters are created by cjogen, the arg->expr type info is required,
                 // but in Cangjie is used only as a placeholder.
                 auto ret = Check(ctx, arg->GetTy(), arg->expr.get());
@@ -1489,7 +1680,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::ReorderCallArgument(
     defaultArgs.clear();
 
     // Caller guarantees fd not null and type must be function type.
-    auto funcTy = RawStaticCast<FuncTy*>(fmu.fd.GetTy());
+    auto funcTy = RawStaticCast<FuncTy*>(fmu.fd.DataTy());
     // When the funcDecl is a generic function, we should do instantiation and assign the real type to callExpr.
     if (IsGenericCall(ctx, ce, fmu.fd)) {
         return UpdateFuncGenericType(ctx, fmu, ce);
@@ -1505,18 +1696,18 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::ReorderCallArgument(
             return {};
         }
     }
-    ce.baseFunc->SetTy(funcTy);
+    ce.baseFunc->SetTy({funcTy, fmu.fd.TyMode()});
     ce.SetTy(GetCallTy(ctx, ce, fmu.fd));
     return {&fmu.fd};
 }
 
 /// Get return type from a function call. This translates the returned This ty to its underlying type if necessary.
 /// Otherwise it returns the original function return type.
-Ty* TypeChecker::TypeCheckerImpl::GetCallTy(ASTContext& ctx, const CallExpr& ce, const FuncDecl& target) const
+ModalTy TypeChecker::TypeCheckerImpl::GetCallTy(ASTContext& ctx, const CallExpr& ce, const FuncDecl& target) const
 {
-    auto targetRetTy = StaticCast<FuncTy>(target.GetTy())->retTy;
+    auto targetRetTy = StaticCast<FuncTy>(target.DataTy())->retTy;
     auto ret = targetRetTy;
-    if (Is<ClassThisTy>(targetRetTy)) {
+    if (Is<ClassThisTy>(targetRetTy.Ty())) {
         if (auto ma = DynamicCast<MemberAccess>(&*ce.baseFunc)) {
             // SomeClass.StaticFunc() -> SomeClass
             if (target.TestAttr(Attribute::STATIC)) {
@@ -1528,8 +1719,8 @@ Ty* TypeChecker::TypeCheckerImpl::GetCallTy(ASTContext& ctx, const CallExpr& ce,
         auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, ce.scopeName);
         CJC_ASSERT(sym->node);
         // return ThisTy if symbol target is ClassTy/ClassThisTy
-        if (auto classTy = DynamicCast<ClassTy>(sym->node->GetTy())) {
-            return typeManager.GetClassThisTy(*classTy->decl, classTy->typeArgs);
+        if (auto classTy = DynamicCast<ClassTy>(sym->node->DataTy())) {
+            return {typeManager.GetClassThisTy(*classTy->decl, classTy->TyArgs()), sym->node->TyMode()};
         }
         return sym->node->GetTy();
     }
@@ -1543,17 +1734,17 @@ Ty* TypeChecker::TypeCheckerImpl::GetCallTy(ASTContext& ctx, const CallExpr& ce,
 //  1. when the 'targetTy' is given, the function's parameter types should be subtype of the 'targetTy'.
 //  2. the function is imported so it will not have circular dependency when synthesizing.
 //  3. the function does not have user written return type.
-// NOTE: return type is pair of (ignoreGeneric, (funcDecl, ty, typeMapping))
+// NOTE: return type is pair of (ignoreGeneric, (funcDecl, modalTy, typeMapping))
 TypeChecker::TypeCheckerImpl::FuncTyPair TypeChecker::TypeCheckerImpl::CollectValidFuncTys(
     ASTContext& ctx, std::vector<Ptr<FuncDecl>>& funcs, Expr& expr, Ptr<FuncTy> targetTy)
 {
     FilterShadowedFunc(funcs); // Filter invalid and shadowed function.
-    std::vector<std::tuple<Ptr<AST::FuncDecl>, Ptr<AST::Ty>, TypeSubst>> candidates;
+    std::vector<std::tuple<Ptr<AST::FuncDecl>, AST::ModalTy, TypeSubst>> candidates;
     auto typeArgs = expr.GetTypeArgs();
     bool genericIgnored = false;
     auto ds = DiagSuppressor(diag);
     for (auto fd : funcs) {
-        if (fd == nullptr || !Ty::IsTyCorrect(fd->GetTy()) || !fd->GetTy()->IsFunc()) {
+        if (fd == nullptr || !fd->GetTy().IsCorrect() || !fd->GetTy()->IsFunc()) {
             continue;
         }
         SubstPack mts;
@@ -1575,12 +1766,12 @@ TypeChecker::TypeCheckerImpl::FuncTyPair TypeChecker::TypeCheckerImpl::CollectVa
         FilterTypeMappings(expr, *fd, typeMappings);
         CJC_ASSERT(!typeMappings.empty());
 
-        std::set<Ptr<Ty>> usedTys = {fd->GetTy()};
+        std::set<DataTy> usedTys = {fd->DataTy()};
         usedTys.merge(GetGenericParamsForDecl(*fd));
-        std::set<TypeSubst> resMappings = ExpandMultiTypeSubst(typeMappings[0], usedTys);
+        std::set<TypeSubst> resMappings = ExpandMultiTypeSubst(typeManager, typeMappings[0], usedTys);
 
         auto thisCd = DynamicCast<ClassDecl*>(GetDeclOfThisType(expr));
-        bool hasThisRet = thisCd && Ty::IsTyCorrect(thisCd->GetTy()) && IsFuncReturnThisType(*fd);
+        bool hasThisRet = thisCd && thisCd->GetTy().IsCorrect() && IsFuncReturnThisType(*fd);
         auto genericParams = GetAllGenericTys(expr, *fd);
         // Process for all possible type mappings.
         for (auto& mapping : resMappings) {
@@ -1592,11 +1783,11 @@ TypeChecker::TypeCheckerImpl::FuncTyPair TypeChecker::TypeCheckerImpl::CollectVa
             }
             auto instTy = typeManager.GetInstantiatedTy(fd->GetTy(), mapping);
             // If parameters' types already incompatible, ignore current candidate.
-            if (targetTy && !typeManager.IsFuncParametersSubtype(*RawStaticCast<FuncTy*>(instTy), *targetTy)) {
+            if (targetTy && !typeManager.IsFuncParametersSubtype(*RawStaticCast<FuncTy*>(instTy.Ty()), *targetTy)) {
                 continue;
             }
             if (NeedSynOnUsed(*fd) && Synthesize({ctx, SynPos::NONE}, fd) &&
-                (!Ty::IsTyCorrect(fd->GetTy()) || fd->GetTy()->HasQuestTy())) {
+                (!fd->GetTy().IsCorrect() || fd->GetTy()->HasQuestTy())) {
                 DiagUnableToInferReturnType(diag, *fd, expr);
                 break; // If the function's type still contains quest type, ignore current candidate.
             }
@@ -1607,7 +1798,7 @@ TypeChecker::TypeCheckerImpl::FuncTyPair TypeChecker::TypeCheckerImpl::CollectVa
             if (hasThisRet) {
                 // Since 'CollectValidFuncTys' is only used for reference node, we do not need to keep 'This' ty here.
                 auto realThisTy = typeManager.GetInstantiatedTy(thisCd->GetTy(), mapping);
-                instTy = typeManager.GetFunctionTy(RawStaticCast<FuncTy*>(instTy)->paramTys, realThisTy);
+                instTy = {typeManager.GetFunctionTy(RawStaticCast<FuncTy*>(instTy.Ty())->paramTys, realThisTy)};
             }
             candidates.emplace_back(std::make_tuple(fd, instTy, mapping));
         }
@@ -1628,12 +1819,12 @@ bool TypeChecker::TypeCheckerImpl::HasBaseOfPlaceholderTy(ASTContext& ctx, Ptr<N
         }
     }
 
-    bool wasOK = Ty::IsTyCorrect(n->GetTy());
-    if (Ty::IsInitialTy(n->GetTy())) {
+    bool wasOK = n->GetTy().IsCorrect();
+    if (Ty::IsInitialTy(n->DataTy())) {
         DiagSuppressor ds(diag);
-        ctx.targetTypeMap[n] = TypeManager::GetQuestTy();
+        ctx.targetTypeMap[n] = {TypeManager::GetQuestTy()};
         SynthesizeWithCache({ctx, SynPos::EXPR_ARG}, n);
-        ctx.targetTypeMap[n] = nullptr;
+        ctx.targetTypeMap[n] = {};
     }
     if (n->GetTy()->IsPlaceholder()) {
         return true;
@@ -1644,11 +1835,11 @@ bool TypeChecker::TypeCheckerImpl::HasBaseOfPlaceholderTy(ASTContext& ctx, Ptr<N
     return false;
 }
 
-std::vector<std::set<Ptr<Ty>>> TypeChecker::TypeCheckerImpl::GetArgTyPossibilities(ASTContext& ctx, CallExpr& ce)
+std::vector<std::set<ModalTy>> TypeChecker::TypeCheckerImpl::GetArgTyPossibilities(ASTContext& ctx, CallExpr& ce)
 {
-    std::vector<std::set<Ptr<Ty>>> ceArgs;
+    std::vector<std::set<ModalTy>> ceArgs;
     for (auto& arg : ce.args) {
-        std::vector<Ptr<Ty>> argCandidates;
+        std::vector<ModalTy> argCandidates;
         if (!arg->expr) {
             continue;
         }
@@ -1661,14 +1852,14 @@ std::vector<std::set<Ptr<Ty>>> TypeChecker::TypeCheckerImpl::GetArgTyPossibiliti
         // Set dummy target type for synthesize target, this will only used for skip filter function,
         // since ambiguous target of reference is acceptable as func arg, which is knonw from existence of target Ty.
         // Avoid error report by 'Synthesize' in current and later steps.
-        ctx.targetTypeMap[arg->expr.get()] = TypeManager::GetQuestTy();
+        ctx.targetTypeMap[arg->expr.get()] = {TypeManager::GetQuestTy()};
         SynthesizeWithCache({ctx, SynPos::EXPR_ARG}, arg.get());
-        ctx.targetTypeMap[arg->expr.get()] = nullptr;
+        ctx.targetTypeMap[arg->expr.get()] = {};
         // Get all possible definition for each function argument.
         auto targets = GetFuncTargets(*arg->expr);
         // Only refExpr/memberAccess base with function target may have different types for a call,
         // So record and skip function check for other cases.
-        if (!Ty::IsTyCorrect(arg->GetTy()) || targets.empty()) {
+        if (!arg->GetTy().IsCorrect() || targets.empty()) {
             argCandidates.emplace_back(arg->GetTy());
             ceArgs.emplace_back(Utils::VecToSet(argCandidates));
             continue;
@@ -1689,17 +1880,17 @@ std::vector<std::set<Ptr<Ty>>> TypeChecker::TypeCheckerImpl::GetArgTyPossibiliti
     return ceArgs;
 }
 
-std::vector<std::vector<Ptr<Ty>>> TypeChecker::TypeCheckerImpl::GetArgsCombination(ASTContext& ctx, CallExpr& ce)
+std::vector<std::vector<ModalTy>> TypeChecker::TypeCheckerImpl::GetArgsCombination(ASTContext& ctx, CallExpr& ce)
 {
-    std::vector<std::set<Ptr<Ty>>> ceArgs = GetArgTyPossibilities(ctx, ce);
+    std::vector<std::set<ModalTy>> ceArgs = GetArgTyPossibilities(ctx, ce);
     if (ceArgs.empty()) {
         return {};
     }
-    std::vector<std::vector<Ptr<Ty>>> combinations;
-    std::function<void(std::vector<Ptr<Ty>>&)> fillCombination;
+    std::vector<std::vector<ModalTy>> combinations;
+    std::function<void(std::vector<ModalTy>&)> fillCombination;
     size_t numArgs = ceArgs.size();
     // Combine every arguments possibilities.
-    fillCombination = [&fillCombination, &ceArgs, &numArgs, &combinations](std::vector<Ptr<Ty>>& argSet) {
+    fillCombination = [&fillCombination, &ceArgs, &numArgs, &combinations](std::vector<ModalTy>& argSet) {
         size_t cur = argSet.size();
         for (auto& it : ceArgs[cur]) {
             argSet.emplace_back(it);
@@ -1711,13 +1902,13 @@ std::vector<std::vector<Ptr<Ty>>> TypeChecker::TypeCheckerImpl::GetArgsCombinati
             argSet.pop_back();
         }
     };
-    std::vector<Ptr<Ty>> argSet;
+    std::vector<ModalTy> argSet;
     fillCombination(argSet);
     return combinations;
 }
 
 std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckFunctionMatch(
-    ASTContext& ctx, FunctionCandidate& candidate, Ptr<Ty> target, SubstPack& typeMapping)
+    ASTContext& ctx, FunctionCandidate& candidate, ModalTy target, SubstPack& typeMapping)
 {
     auto matched = CheckCandidate(ctx, candidate, target, typeMapping);
     if (!matched) {
@@ -1725,11 +1916,11 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckFunctionMatch(
     }
     if (candidate.fd.outerDecl && candidate.fd.outerDecl->astKind == ASTKind::INTERFACE_DECL) {
         if (auto ref = DynamicCast<NameReferenceExpr*>(candidate.ce.baseFunc.get())) {
-            ref->matchedParentTy = candidate.fd.outerDecl->GetTy();
+            ref->matchedParentTy = candidate.fd.outerDecl->DataTy();
         }
     }
     // Infer the arguments' type again, to update ideal type and reference's targets which may overload.
-    ReInferCallArgs(ctx, candidate.ce, *matched);
+    ReInferCallArgs(ctx, candidate.ce, *matched, target);
     return ReorderCallArgument(ctx, *matched, candidate.ce);
 }
 
@@ -1739,15 +1930,18 @@ void TypeChecker::TypeCheckerImpl::RemoveShadowedFunc(
     if (targetLevel >= currentLevel) {
         return;
     }
-    auto funcTy = DynamicCast<FuncTy*>(fd.GetTy());
-    auto paramTys = funcTy ? funcTy->paramTys : GetParamTys(fd);
+    auto paramTys = GetParamTys(fd);
     auto isFuncSignatureSame = [this, &fd, &paramTys](auto& target) -> bool {
         if (fd.TestAttr(Attribute::GENERIC) != target->TestAttr(Attribute::GENERIC)) {
             return false;
         }
-        auto targetTy = DynamicCast<FuncTy*>(target->GetTy());
-        auto targetParamTys = targetTy ? targetTy->paramTys : GetParamTys(*target);
-        return typeManager.IsFuncParameterTypesIdentical(targetParamTys, paramTys);
+        auto targetParamTys = GetParamTys(*target);
+        bool thisParamMatch{true};
+        if (TypeManager::HasThisParam(*target) && TypeManager::HasThisParam(fd)) {
+            thisParamMatch = typeManager.CheckTypeCompatibility(typeManager.GetThisParamTy(*target),
+                typeManager.GetThisParamTy(fd), false) == TypeCompatibility::IDENTICAL;
+        }
+        return typeManager.IsFuncParameterTypesIdentical(targetParamTys, paramTys) && thisParamMatch;
     };
     funcs.erase(std::remove_if(funcs.begin(), funcs.end(), isFuncSignatureSame), funcs.end());
 }
@@ -1797,14 +1991,14 @@ void TypeChecker::TypeCheckerImpl::FilterExtendImplAbstractFunc(std::vector<Ptr<
 {
     std::set<Ptr<FuncDecl>> implementedOrOverridenFuncs;
     for (auto& fd1 : candidates) {
-        if (!(fd1->TestAttr(Attribute::ABSTRACT) && Ty::IsTyCorrect(fd1->GetTy()) && fd1->outerDecl &&
+        if (!(fd1->TestAttr(Attribute::ABSTRACT) && fd1->GetTy().IsCorrect() && fd1->outerDecl &&
                 fd1->outerDecl->astKind == ASTKind::INTERFACE_DECL)) {
             continue;
         }
         auto id = StaticAs<ASTKind::INTERFACE_DECL>(fd1->outerDecl);
         for (auto it2 = candidates.begin(); it2 != candidates.end(); ++it2) {
             auto fd2 = *it2;
-            if (!(Ty::IsTyCorrect(fd2->GetTy()) && fd2->outerDecl && fd2->outerDecl->astKind == ASTKind::EXTEND_DECL)) {
+            if (!(fd2->GetTy().IsCorrect() && fd2->outerDecl && fd2->outerDecl->astKind == ASTKind::EXTEND_DECL)) {
                 continue;
             }
             auto ed = StaticAs<ASTKind::EXTEND_DECL>(fd2->outerDecl);
@@ -1812,10 +2006,13 @@ void TypeChecker::TypeCheckerImpl::FilterExtendImplAbstractFunc(std::vector<Ptr<
             if (!flag) {
                 continue;
             }
-            auto funcTy1 = StaticCast<FuncTy*>(typeManager.GetInstantiatedTy(fd1->GetTy(), typeMapping));
-            auto funcTy2 = StaticCast<FuncTy*>(fd2->GetTy());
-            if (typeManager.IsFuncParameterTypesIdentical(funcTy1->paramTys, funcTy2->paramTys) &&
-                typeManager.IsSubtype(funcTy2->retTy, funcTy1->retTy)) {
+            auto params1 = StaticCast<FuncTy*>(typeManager.GetInstantiatedTy(fd1->DataTy(), typeMapping))->paramTys;
+            if (TypeManager::HasThisParam(*fd1)) {
+                params1.insert(params1.begin(), typeManager.GetThisParamTy(*fd1));
+            }
+            auto params2 = GetParamTys(*fd2);
+            if (typeManager.IsFuncParameterTypesIdentical(params1, params2) &&
+                typeManager.IsSubtype(fd2->GetTy(), fd1->GetTy())) {
                 implementedOrOverridenFuncs.insert(fd1);
             }
         }
@@ -1894,7 +2091,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::FilterCandidates(
     FilterIncompatibleCandidatesForCall(ce, candidates);
 
     auto paramInvalid = [](Ptr<FuncDecl> fd) {
-        auto funcTy = DynamicCast<FuncTy*>(fd->GetTy());
+        auto funcTy = DynamicCast<FuncTy>(fd->DataTy());
         // 'IsTyCorrect' check will confirm all typeArgs are valid.
         if (!Ty::IsTyCorrect(funcTy)) {
             return true;
@@ -2006,18 +2203,22 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::GetOrderedCandidates(co
 }
 
 std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::MatchFunctionForCall(
-    ASTContext& ctx, std::vector<Ptr<FuncDecl>>& candidates, CallExpr& ce, Ptr<Ty> target, SubstPack& typeMapping)
+    ASTContext& ctx, std::vector<Ptr<FuncDecl>>& candidates, CallExpr& ce, ModalTy target, SubstPack& typeMapping)
 {
     TyVarScope ts(typeManager);
-    std::vector<std::vector<Ptr<Ty>>> argCombinations = GetArgsCombination(ctx, ce);
+    std::vector<std::vector<ModalTy>> argCombinations = GetArgsCombination(ctx, ce);
     if (!ce.args.empty() && argCombinations.empty()) {
         return {};
     }
-    auto filterSum = [this, &ce](std::vector<Ptr<FuncDecl>> ret) {
+    auto filterSum = [this, &ce, target](std::vector<Ptr<FuncDecl>> ret) {
         if (auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get())) {
             if (ma->baseExpr->GetTy()->IsPlaceholder() && ret.size() == 1) {
-                FilterSumUpperbound(*ma, *RawStaticCast<GenericsTy*>(ma->baseExpr->GetTy()), *ret[0]);
+                FilterSumUpperbound(*ma, *RawStaticCast<GenericsTy*>(ma->baseExpr->DataTy()), *ret[0]);
             }
+        }
+        // for constructor call, convert ce.ty to target modal
+        if (ce.GetTy().IsCorrect() && Ty::IsTyCorrect(target) && ce.callKind == CallKind::CALL_OBJECT_CREATION) {
+            ce.SetTy(ce.GetTy().With(target.Mode()));
         }
         return ret;
     };
@@ -2048,7 +2249,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::MatchFunctionForCall(
         auto ret = CheckCandidate(ctx, candidate, target, typeMapping);
         // Check result & If current function declaration is already matched, do not add again.
         if (!ret || (!legals.empty() && legals.back()->id == static_cast<int64_t>(i))) {
-            illegals.emplace_back(*orderedCandidates[i], std::vector<Ptr<AST::Ty>>(), SubstPack());
+            illegals.emplace_back(*orderedCandidates[i], std::vector<AST::ModalTy>(), SubstPack());
             illegals.back().diags = std::make_pair(ds.GetSuppressedDiag(), candidate.stat);
             PData::Reset(typeManager.constraints);
             continue;
@@ -2059,21 +2260,28 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::MatchFunctionForCall(
         preScopeLevel = curScopeLevel;
         legals.emplace_back(std::move(ret));
     }
-    return filterSum(CheckMatchResult(ctx, ce, legals, illegals));
+    return filterSum(CheckMatchResult(ctx, ce, legals, illegals, target));
 }
 
 void TypeChecker::TypeCheckerImpl::ReInferCallArgs(
-    ASTContext& ctx, const CallExpr& ce, const FunctionMatchingUnit& legal)
+    ASTContext& ctx, const CallExpr& ce, const FunctionMatchingUnit& legal, AST::ModalTy target)
 {
     for (size_t i = 0; i < legal.tysInArgOrder.size(); ++i) {
         auto instTy = typeManager.ApplySubstPack(legal.tysInArgOrder[i], legal.typeMapping);
+        if (legal.fd.TestAttr(Attribute::ENUM_CONSTRUCTOR)) {
+            if (auto modal = GetCallBaseModal(ce)) {
+                instTy = instTy.With(*modal);
+            } else if (target) {
+                instTy = instTy.With(target.Mode());
+            }
+        }
         // Since the call has been checked, return value can be ignored.
         (void)CheckWithEffectiveCache(ctx, instTy, ce.args[i].get(), false);
     }
 }
 
 void TypeChecker::TypeCheckerImpl::RecoverCallArgs(
-    ASTContext& ctx, const CallExpr& ce, const std::vector<Ptr<Ty>>& argsTys)
+    ASTContext& ctx, const CallExpr& ce, const std::vector<ModalTy>& argsTys)
 {
     // Recover arguments' types if current check failed but previous check passed (argsTys not empty).
     if (argsTys.empty() || argsTys.size() != ce.args.size()) {
@@ -2145,7 +2353,7 @@ void CheckEmptyMatchResult(DiagnosticEngine& diag, CallExpr& ce,
 } // namespace
 
 std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckMatchResult(ASTContext& ctx, CallExpr& ce,
-    std::vector<OwnedPtr<FunctionMatchingUnit>>& legals, std::vector<FunctionMatchingUnit>& illegals)
+    std::vector<OwnedPtr<FunctionMatchingUnit>>& legals, std::vector<FunctionMatchingUnit>& illegals, ModalTy target)
 {
     // No matching function.
     if (legals.empty()) {
@@ -2165,7 +2373,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckMatchResult(ASTCon
             return result; // Find at least one enum candidates in all.
         }
         InstantiatePartOfTheGenericParameters(legals);
-        auto indexRes = ResolveOverload(legals, ce);
+        auto indexRes = ResolveOverload(legals, ce, target);
         if (indexRes.size() == 1) {
             id = indexRes[0];
         } else {
@@ -2186,16 +2394,16 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckMatchResult(ASTCon
     }
     if (legals[id]->fd.outerDecl && legals[id]->fd.outerDecl->astKind == ASTKind::INTERFACE_DECL) {
         if (auto ref = DynamicCast<NameReferenceExpr*>(ce.baseFunc.get())) {
-            ref->matchedParentTy = legals[id]->fd.outerDecl->GetTy();
+            ref->matchedParentTy = legals[id]->fd.outerDecl->DataTy();
         }
     }
     // Infer the arguments' type again, to update ideal type and reference's targets which may overload.
-    ReInferCallArgs(ctx, ce, *legals[id]);
+    ReInferCallArgs(ctx, ce, *legals[id], target);
     auto ret = ReorderCallArgument(ctx, *legals[id], ce);
     return ret;
 }
 
-static std::optional<std::vector<Ptr<Ty>>> CheckCallArgs(
+static std::optional<std::vector<ModalTy>> CheckCallArgs(
     DiagnosticEngine& diag, TypeManager& tyMgr, CallExpr& ce, FuncTy& funcTy)
 {
     auto paramTys = funcTy.paramTys;
@@ -2217,7 +2425,7 @@ static std::optional<std::vector<Ptr<Ty>>> CheckCallArgs(
     return paramTys;
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckFuncPtrCall(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce, FuncTy& funcTy)
+bool TypeChecker::TypeCheckerImpl::CheckFuncPtrCall(ASTContext& ctx, ModalTy target, CallExpr& ce, FuncTy& funcTy)
 {
     // no need to check the arguments of CFunc call again
     if (IsValidCFuncConstructorCall(ce)) {
@@ -2267,7 +2475,7 @@ bool TypeChecker::TypeCheckerImpl::CheckFuncPtrCall(ASTContext& ctx, Ptr<Ty> tar
     }
     ce.SetTy(typeManager.ApplySubstPack(funcTy.retTy, typeMapping));
     if (target && !typeManager.IsSubtype(ce.GetTy(), target)) {
-        DiagMismatchedTypes(diag, ce, *target);
+        DiagMismatchedTypes(diag, ce, target);
         return false;
     } else {
         ce.callKind = CallKind::CALL_FUNCTION_PTR; // Only set 'callKind' when check succeed (allow re-enter).
@@ -2275,36 +2483,36 @@ bool TypeChecker::TypeCheckerImpl::CheckFuncPtrCall(ASTContext& ctx, Ptr<Ty> tar
     }
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynCallExpr(ASTContext& ctx, CallExpr& ce)
+ModalTy TypeChecker::TypeCheckerImpl::SynCallExpr(ASTContext& ctx, CallExpr& ce)
 {
-    if (!ChkCallExpr(ctx, nullptr, ce)) {
-        return TypeManager::GetInvalidTy();
+    if (!ChkCallExpr(ctx, {}, ce)) {
+        return {TypeManager::GetInvalidTy()};
     }
     return ce.GetTy();
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynTrailingClosure(ASTContext& ctx, TrailingClosureExpr& tc)
+ModalTy TypeChecker::TypeCheckerImpl::SynTrailingClosure(ASTContext& ctx, TrailingClosureExpr& tc)
 {
     // TrailingClosureExpr will be desugared if ast node is valid.
     if (tc.desugarExpr) {
         tc.SetTy(Synthesize({ctx, SynPos::EXPR_ARG}, tc.desugarExpr.get()));
     } else {
-        tc.SetTy(TypeManager::GetInvalidTy());
+        tc.SetTy({TypeManager::GetInvalidTy()});
     }
     return tc.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkTrailingClosureExpr(ASTContext& ctx, Ty& target, TrailingClosureExpr& tc)
+bool TypeChecker::TypeCheckerImpl::ChkTrailingClosureExpr(ASTContext& ctx, ModalTy target, TrailingClosureExpr& tc)
 {
     // TrailingClosureExpr will be desugared if ast node is valid.
     if (tc.desugarExpr) {
-        if (Check(ctx, &target, tc.desugarExpr.get())) {
+        if (Check(ctx, target, tc.desugarExpr.get())) {
             tc.SetTy(tc.desugarExpr->GetTy());
             return true;
         }
-        tc.desugarExpr->SetTy(TypeManager::GetInvalidTy());
+        tc.desugarExpr->SetTy({TypeManager::GetInvalidTy()});
     }
-    tc.SetTy(TypeManager::GetInvalidTy());
+    tc.SetTy({TypeManager::GetInvalidTy()});
     return false;
 }
 
@@ -2406,9 +2614,9 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
     ma->callOrPattern = &ce;
     ma->isAlone = false;
     // in case base is enum, its type arg may be inferred from func call, so disable error report here
-    ctx.targetTypeMap[ma->baseExpr] = TypeManager::GetQuestTy();
+    ctx.targetTypeMap[ma->baseExpr] = {TypeManager::GetQuestTy()};
     Synthesize({ctx, SynPos::EXPR_ARG}, ma);
-    ctx.targetTypeMap[ma->baseExpr] = nullptr;
+    ctx.targetTypeMap[ma->baseExpr] = {};
     auto maRealTarget = GetRealTarget(ma, ma->GetTarget());
     if (ma->GetTy() && ma->GetTy()->IsNothing()) {
         return true;
@@ -2416,9 +2624,9 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
         return false;
     } else if (!ma->target && ma->targets.empty()) {
         // 'varr' is VArray type, 'varr.size()' is illegitimate, 'size' of VArray is a property.
-        if (Is<VArrayTy>(ma->baseExpr->GetTy()) && ma->field == "size") {
+        if (Is<VArrayTy>(ma->baseExpr->DataTy()) && ma->field == "size") {
             diag.Diagnose(ce, DiagKind::sema_no_match_operator_function_call);
-            ma->SetTy(TypeManager::GetInvalidTy());
+            ma->SetTy({TypeManager::GetInvalidTy()});
         }
         return false;
     } else {
@@ -2462,43 +2670,43 @@ bool CanReachFuncCallByQuestable(Node& root)
  * Since targetForBase is an overestimation with noCast set and possibly QuestTy,
  * it can only pass down questable nodes to ensure it's not misused as the ty of any Node.
  */
-bool TypeChecker::TypeCheckerImpl::ChkCurryCallBase(ASTContext& ctx, CallExpr& ce, Ptr<Ty>& targetRet)
+bool TypeChecker::TypeCheckerImpl::ChkCurryCallBase(ASTContext& ctx, CallExpr& ce, ModalTy targetRet)
 {
-    std::vector<Ptr<Ty>> paramTys;
-    Ptr<Ty> retTy = targetRet ? targetRet : TypeManager::GetQuestTy();
+    std::vector<ModalTy> paramTys;
+    ModalTy retTy = targetRet ? targetRet : ModalTy{TypeManager::GetQuestTy()};
     {
         auto ds = DiagSuppressor(diag);
         for (auto& arg: ce.args) {
-            if (Ty::IsInitialTy(arg->GetTy())) {
+            if (Ty::IsInitialTy(arg->DataTy())) {
                 SynthesizeWithCache({ctx, SynPos::EXPR_ARG}, arg);
             }
-            if (Ty::IsTyCorrect(arg->GetTy())) {
+            if (arg->GetTy().IsCorrect()) {
                 paramTys.push_back(arg->GetTy());
             } else {
-                paramTys.push_back(TypeManager::GetQuestTy());
+                paramTys.push_back({TypeManager::GetQuestTy()});
             }
         }
     }
     auto targetForBase = typeManager.GetFunctionTy(paramTys, retTy, {false, false, false, true});
-    return Check(ctx, targetForBase, ce.baseFunc.get());
+    return Check(ctx, {targetForBase}, ce.baseFunc.get());
 }
 
 bool TypeChecker::TypeCheckerImpl::ChkCallBaseExpr(
-    ASTContext& ctx, CallExpr& ce, Ptr<Decl>& targetDecl, Ptr<Ty>& targetRet, std::vector<Ptr<FuncDecl>>& candidates)
+    ASTContext& ctx, CallExpr& ce, Ptr<Decl>& targetDecl, ModalTy targetRet, std::vector<Ptr<FuncDecl>>& candidates)
 {
     auto setFuncArgsInvalidTy = [&ce]() {
-        ce.SetTy(TypeManager::GetInvalidTy());
+        ce.SetTy({TypeManager::GetInvalidTy()});
         // Skip the check for function's arguments.
         std::for_each(ce.args.begin(), ce.args.end(), [](const OwnedPtr<FuncArg>& fa) {
             CJC_NULLPTR_CHECK(fa->expr);
-            if (!Ty::IsTyCorrect(fa->expr->GetTy())) {
-                fa->expr->SetTy(TypeManager::GetInvalidTy());
+            if (!fa->expr->GetTy().IsCorrect()) {
+                fa->expr->SetTy({TypeManager::GetInvalidTy()});
             }
-            fa->SetTy(TypeManager::GetInvalidTy());
+            fa->SetTy({TypeManager::GetInvalidTy()});
         });
     };
     if (ce.baseFunc->desugarExpr != nullptr && !Is<TrailingClosureExpr>(ce.baseFunc.get())) {
-        if (!Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ce.baseFunc.get()))) {
+        if (!Synthesize({ctx, SynPos::EXPR_ARG}, ce.baseFunc.get()).IsCorrect()) {
             setFuncArgsInvalidTy();
             return false;
         }
@@ -2526,7 +2734,7 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseExpr(
             }
             break;
     }
-    if (!isWellTyped && !Ty::IsTyCorrect(ce.baseFunc->GetTy())) {
+    if (!isWellTyped && !ce.baseFunc->GetTy().IsCorrect()) {
         setFuncArgsInvalidTy();
     }
     return isWellTyped;
@@ -2650,6 +2858,8 @@ DiagKind TypeChecker::TypeCheckerImpl::GetErrorKindForCall(const std::vector<Ptr
             return DiagKind::sema_enum_constructor_type_not_match;
         } else if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
             return DiagKind::sema_no_match_constructor;
+        } else if (Is<PropDecl>(target)) {
+            return DiagKind::sema_no_match_prop_accessor_for_call;
         } else {
             return DiagKind::sema_no_match_function_declaration_for_call;
         }
@@ -2674,9 +2884,8 @@ void TypeChecker::TypeCheckerImpl::DiagnoseForCall(const std::vector<Ptr<FuncDec
         return;
     }
     // If ce contains invalid type, diagnostics are reported before.
-    bool invalid = !candidatesBeforeCheck.empty() && candidatesAfterCheck.empty() &&
-        Ty::IsTyCorrect(ce.baseFunc->GetTy()) &&
-        Utils::In(ce.args, [](const auto& arg) { return !Ty::IsTyCorrect(arg->GetTy()); });
+    bool invalid = !candidatesBeforeCheck.empty() && candidatesAfterCheck.empty() && ce.baseFunc->GetTy().IsCorrect() &&
+        Utils::In(ce.args, [](const auto& arg) { return !arg->GetTy().IsCorrect(); });
     if (invalid) {
         return;
     }
@@ -2685,8 +2894,8 @@ void TypeChecker::TypeCheckerImpl::DiagnoseForCall(const std::vector<Ptr<FuncDec
     Position identifierPos{ce.begin};
     if (auto re = DynamicCast<RefExpr*>(ce.baseFunc.get()); re) {
         identifier = re->ref.identifier; // We should diagnose with alias rather than real name.
-    } else if (auto memberAccess = DynamicCast<MemberAccess*>(ce.baseFunc.get());
-               memberAccess && !memberAccess->field.ZeroPos()) {
+    } else if (auto memberAccess = DynamicCast<MemberAccess>(ce.baseFunc.get());
+        memberAccess && !memberAccess->field.ZeroPos()) {
         identifierPos = memberAccess->field.Begin();
     }
     DiagKind errorKind = GetErrorKindForCall(candidatesBeforeCheck, candidatesAfterCheck, ce);
@@ -2724,7 +2933,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetDeclOfThisType(const Expr& expr) cons
 {
     Ptr<Decl> decl = nullptr;
     if (auto ma = DynamicCast<const MemberAccess*>(&expr); ma && ma->baseExpr) {
-        if (auto ct = DynamicCast<ClassTy*>(ma->baseExpr->GetTy()); ct) {
+        if (auto ct = DynamicCast<ClassTy>(ma->baseExpr->DataTy()); ct) {
             decl = ct->declPtr;
         }
     } else if (auto re = DynamicCast<const RefExpr*>(&expr); re) {
@@ -2734,8 +2943,8 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetDeclOfThisType(const Expr& expr) cons
             // get decl of This type from non normal call
             Ptr<MemberAccess> maInitializer = RawStaticCast<MemberAccess*>(vd->initializer.get());
             Ptr<Decl> baseTarget = maInitializer->baseExpr->GetTarget();
-            if (baseTarget != nullptr && baseTarget->GetTy() != nullptr && baseTarget->GetTy()->IsClass()) {
-                decl = RawStaticCast<ClassTy*>(baseTarget->GetTy())->declPtr;
+            if (baseTarget != nullptr && baseTarget->GetTy() && baseTarget->GetTy()->IsClass()) {
+                decl = RawStaticCast<ClassTy*>(baseTarget->DataTy())->declPtr;
             }
         } else {
             // get decl of This type from normal call
@@ -2751,27 +2960,28 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetDeclOfThisType(const Expr& expr) cons
     return decl;
 }
 
-std::optional<Ptr<Ty>> TypeChecker::TypeCheckerImpl::DynamicBindingThisType(
+std::optional<ModalTy> TypeChecker::TypeCheckerImpl::DynamicBindingThisType(
     Expr& baseExpr, const FuncDecl& fd, const SubstPack& typeMapping)
 {
     if (!IsFuncReturnThisType(fd)) {
         return {};
     }
     auto funcTy = DynamicCast<FuncTy*>(
-        Ty::IsTyCorrect(baseExpr.GetTy()) && baseExpr.GetTy()->IsFunc() ? baseExpr.GetTy() : fd.GetTy());
+        baseExpr.GetTy().IsCorrect() && baseExpr.GetTy()->IsFunc() ? baseExpr.DataTy() : fd.DataTy());
     if (funcTy == nullptr) {
         return {};
     }
     auto declOfThisType = GetDeclOfThisType(baseExpr);
-    if (auto cd = DynamicCast<ClassDecl*>(declOfThisType); cd && Ty::IsTyCorrect(cd->GetTy())) {
-        auto instTy = typeManager.ApplySubstPack(typeManager.GetClassThisTy(*cd, cd->GetTy()->typeArgs), typeMapping);
-        baseExpr.SetTy(typeManager.GetFunctionTy(funcTy->paramTys, instTy));
-        return instTy;
+    auto thisMode = funcTy->retTy.Mode();
+    if (auto cd = DynamicCast<ClassDecl*>(declOfThisType); cd && cd->GetTy().IsCorrect()) {
+        auto instTy = typeManager.ApplySubstPack(typeManager.GetClassThisTy(*cd, cd->GetTy()->TyArgs()), typeMapping);
+        baseExpr.SetTy({typeManager.GetFunctionTy(funcTy->paramTys, instTy), thisMode});
+        return baseExpr.GetTy();
     } else if (auto ma = DynamicCast<MemberAccess*>(&baseExpr); ma && ma->baseExpr) {
         // If the baseExpr's type is generic type, set the function call's return type as 'gty'.
-        if (auto gty = DynamicCast<GenericsTy*>(ma->baseExpr->GetTy()); gty) {
-            baseExpr.SetTy(typeManager.GetFunctionTy(funcTy->paramTys, gty));
-            return gty;
+        if (auto gty = DynamicCast<GenericsTy>(ma->baseExpr->DataTy()); gty) {
+            baseExpr.SetTy({typeManager.GetFunctionTy(funcTy->paramTys, {gty, thisMode})});
+            return baseExpr.GetTy();
         }
     }
     return {};
@@ -2792,7 +3002,7 @@ FunctionMatchingUnit* TypeChecker::TypeCheckerImpl::FindFuncWithMaxChildRetTy(
             continue;
         }
         auto meteRes = JoinAndMeet(typeManager, {ty1, ty2}).MeetAsVisibleTy();
-        Ptr<Ty> maxChildRetTy{};
+        ModalTy maxChildRetTy{};
         auto [optErrs, metTy] = JoinAndMeet::SetMetType(maxChildRetTy, meteRes);
         maxChildRetTy = metTy;
         if (optErrs) {
@@ -2814,7 +3024,7 @@ bool TypeChecker::TypeCheckerImpl::PostCheckCallExpr(
 {
     if (!func.TestAttr(Attribute::CONSTRUCTOR) && !CheckStaticCallNonStatic(ctx, ce, func)) {
         // Reset status for re-enter callCheck.
-        ce.SetTy(TypeManager::GetInvalidTy());
+        ce.SetTy({TypeManager::GetInvalidTy()});
         ce.callKind = CallKind::CALL_INVALID;
         return false;
     }
@@ -2826,7 +3036,7 @@ bool TypeChecker::TypeCheckerImpl::PostCheckCallExpr(
         auto isGenericLegal = !(typeArgs.empty() && ref && ref->instTys.empty()) &&
             CheckCallGenericDeclInstantiation(&func, typeArgs, *ce.baseFunc);
         if (!isGenericLegal) {
-            ce.SetTy(TypeManager::GetInvalidTy());
+            ce.SetTy({TypeManager::GetInvalidTy()});
             ce.callKind = CallKind::CALL_INVALID;
             return false;
         }
@@ -2848,7 +3058,7 @@ bool TypeChecker::TypeCheckerImpl::PostCheckCallExpr(
     } else {
         // VArray must modify by 'inout' in CFunc call.
         auto fa = std::find_if(
-            ce.args.begin(), ce.args.end(), [](auto& fa) { return Is<VArrayTy>(fa->GetTy()) && !fa->withInout; });
+            ce.args.begin(), ce.args.end(), [](auto& fa) { return Is<VArrayTy>(fa->DataTy()) && !fa->withInout; });
         if (fa != ce.args.end()) {
             (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_mismatch, *fa->get(), VARRAY_NAME);
             return false;
@@ -2856,7 +3066,7 @@ bool TypeChecker::TypeCheckerImpl::PostCheckCallExpr(
     }
     if (func.GetTy()->HasQuestTy()) {
         DiagUnableToInferReturnType(diag, func, ce);
-        ce.SetTy(TypeManager::GetInvalidTy());
+        ce.SetTy({TypeManager::GetInvalidTy()});
         ce.callKind = CallKind::CALL_INVALID;
         return false;
     }
@@ -2866,23 +3076,23 @@ bool TypeChecker::TypeCheckerImpl::PostCheckCallExpr(
 namespace {
 Ptr<FuncTy> MakePlaceholderFuncTy(size_t arity, TypeManager& tyMgr)
 {
-    std::vector<Ptr<Ty>> paramTys;
-    Ptr<Ty> retTy = tyMgr.AllocTyVar();
+    std::vector<ModalTy> paramTys;
+    ModalTy retTy = {tyMgr.AllocTyVar()};
     for (size_t i = 0; i < arity; i++) {
-        paramTys.push_back(tyMgr.AllocTyVar());
+        paramTys.push_back({tyMgr.AllocTyVar()});
     }
     return tyMgr.GetFunctionTy(paramTys, retTy);
 }
 
-Ptr<FuncTy> TryCastingToFuncTy(Ptr<Ty> ty, size_t arity, TypeManager& tyMgr)
+Ptr<FuncTy> TryCastingToFuncTy(ModalTy ty, size_t arity, TypeManager& tyMgr)
 {
-    if (auto funcTy = DynamicCast<FuncTy*>(ty); funcTy) {
+    if (auto funcTy = DynamicCast<FuncTy*>(ty.Ty()); funcTy) {
         return funcTy;
     }
-    if (auto genTy = DynamicCast<GenericsTy*>(ty); genTy) {
+    if (auto genTy = DynamicCast<GenericsTy*>(ty.Ty()); genTy) {
         if (genTy->isPlaceholder) {
             if (auto placeholderFuncTy = tyMgr.ConstrainByCtor(*genTy, *MakePlaceholderFuncTy(arity, tyMgr))) {
-                return StaticCast<FuncTy*>(placeholderFuncTy);
+                return StaticCast<FuncTy>(placeholderFuncTy.Ty());
             } else {
                 return nullptr;
             }
@@ -2898,7 +3108,7 @@ Ptr<FuncTy> TryCastingToFuncTy(Ptr<Ty> ty, size_t arity, TypeManager& tyMgr)
 };
 }
 
-bool TypeChecker::TypeCheckerImpl::CheckNonNormalCall(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce)
+bool TypeChecker::TypeCheckerImpl::CheckNonNormalCall(ASTContext& ctx, ModalTy target, CallExpr& ce)
 {
     CJC_NULLPTR_CHECK(ce.baseFunc);
     bool res = false;
@@ -2928,14 +3138,14 @@ bool TypeChecker::TypeCheckerImpl::CheckNonNormalCall(ASTContext& ctx, Ptr<Ty> t
             } else {
                 RecoverFromVariadicCallExpr(ce);
                 std::for_each(diagnostics.cbegin(), diagnostics.cend(), [this](auto info) { diag.Diagnose(info); });
-                ce.SetTy(TypeManager::GetInvalidTy());
+                ce.SetTy({TypeManager::GetInvalidTy()});
                 res = false;
             }
         }
         // VArray must modify by 'inout' in CFunc lambda call.
         if (funcTy->IsCFunc()) {
             auto fa = std::find_if(
-                ce.args.begin(), ce.args.end(), [](auto& fa) { return Is<VArrayTy>(fa->GetTy()) && !fa->withInout; });
+                ce.args.begin(), ce.args.end(), [](auto& fa) { return Is<VArrayTy>(fa->DataTy()) && !fa->withInout; });
             if (fa != ce.args.end()) {
                 (void)diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_mismatch, *fa->get(), VARRAY_NAME);
                 res = false;
@@ -2949,7 +3159,7 @@ bool TypeChecker::TypeCheckerImpl::CheckNonNormalCall(ASTContext& ctx, Ptr<Ty> t
         res = true;
     }
     if (!res) {
-        ce.SetTy(TypeManager::GetInvalidTy());
+        ce.SetTy({TypeManager::GetInvalidTy()});
     }
     return res;
 }
@@ -2963,12 +3173,12 @@ void TypeChecker::TypeCheckerImpl::PostProcessForLSP(CallExpr& ce, const std::ve
         ce.resolvedFunction = result[0];
     } else {
         ReplaceTarget(ce.baseFunc.get(), nullptr);
-        ce.baseFunc->SetTy(TypeManager::GetInvalidTy());
+        ce.baseFunc->SetTy({TypeManager::GetInvalidTy()});
     }
 }
 
 // The type of CallExpr depends on the type of its baseExpr, which can be refExpr or memberAccess.
-bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce)
+bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, ModalTy target, CallExpr& ce)
 {
     if (ce.desugarExpr) {
         return ChkDesugarExprOfCallExpr(ctx, target, ce);
@@ -2978,8 +3188,8 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, 
     }
 
     bool prevCheckTrue =
-        ce.callKind != CallKind::CALL_INVALID && Ty::IsTyCorrect(ce.GetTy()) && typeManager.GetUnsolvedTyVars().empty();
-    std::vector<Ptr<Ty>> argsTys;
+        ce.callKind != CallKind::CALL_INVALID && ce.GetTy().IsCorrect() && typeManager.GetUnsolvedTyVars().empty();
+    std::vector<ModalTy> argsTys;
     if (prevCheckTrue) {
         std::transform(
             ce.args.begin(), ce.args.end(), std::back_inserter(argsTys), [](auto& arg) { return arg->GetTy(); });
@@ -2993,9 +3203,9 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, 
     std::vector<Ptr<FuncDecl>> candidates;
     if (!ChkCallBaseExpr(ctx, ce, decl, target, candidates)) {
         // If no call base exist, expr may be array or pointer builtin api call.
-        return ChkBuiltinCall(ctx, *TypeManager::GetNonNullTy(target), ce);
+        return ChkBuiltinCall(ctx, TypeManager::GetNonNullTy(target), ce);
     }
-    if (!Ty::IsTyCorrect(ce.baseFunc->GetTy())) {
+    if (!ce.baseFunc->GetTy().IsCorrect()) {
         return false;
     }
     if (ce.baseFunc->GetTy()->IsNothing()) {
@@ -3044,7 +3254,7 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, 
     }
     PData::Reset(typeManager.constraints);
     // If candidates may be enum constructor or operator(), clear baseFunc's ty when constructor mismatched.
-    ce.baseFunc->SetTy(maybeEnumOrVariadic ? TypeManager::GetInvalidTy() : ce.baseFunc->GetTy());
+    ce.baseFunc->SetTy(maybeEnumOrVariadic ? ModalTy{TypeManager::GetInvalidTy()} : ce.baseFunc->GetTy());
     auto ret = (maybeEnumOverloadOP && ChkFunctionCallExpr(ctx, target, ce)) ||
         (maybeVariadicFunction && result.empty() && ChkVariadicCallExpr(ctx, target, ce, candidates, diagnostics));
     if (ret) {
@@ -3064,9 +3274,9 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, 
     return false;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkDesugarExprOfCallExpr(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce)
+bool TypeChecker::TypeCheckerImpl::ChkDesugarExprOfCallExpr(ASTContext& ctx, ModalTy target, CallExpr& ce)
 {
-    if (Ty::IsTyCorrect(ce.desugarExpr->GetTy())) {
+    if (ce.desugarExpr->GetTy().IsCorrect()) {
         ce.SetTy(ce.desugarExpr->GetTy());
         return !target || typeManager.IsSubtype(ce.desugarExpr->GetTy(), target);
     }
@@ -3075,32 +3285,32 @@ bool TypeChecker::TypeCheckerImpl::ChkDesugarExprOfCallExpr(ASTContext& ctx, Ptr
     if (Ty::IsTyCorrect(target)) {
         isWellTyped = Check(ctx, target, ce.desugarExpr.get());
     } else {
-        isWellTyped = Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, ce.desugarExpr.get()));
+        isWellTyped = Synthesize({ctx, SynPos::EXPR_ARG}, ce.desugarExpr.get()).IsCorrect();
     }
     ce.SetTy(ce.desugarExpr->GetTy());
-    return isWellTyped && Ty::IsTyCorrect(ce.GetTy());
+    return isWellTyped && ce.GetTy().IsCorrect();
 }
 
 bool TypeChecker::TypeCheckerImpl::SynArgsOfNothingBaseExpr(ASTContext& ctx, CallExpr& ce)
 {
     bool isWellTyped = true;
     std::for_each(ce.args.cbegin(), ce.args.cend(), [this, &ctx, &isWellTyped](auto& arg) {
-        isWellTyped = isWellTyped && Ty::IsTyCorrect(Synthesize({ctx, SynPos::EXPR_ARG}, arg.get()));
+        isWellTyped = isWellTyped && Synthesize({ctx, SynPos::EXPR_ARG}, arg.get()).IsCorrect();
         ReplaceIdealTy(*arg);
         ReplaceIdealTy(*arg->expr);
     });
-    ce.SetTy(isWellTyped ? RawStaticCast<Ty*>(TypeManager::GetNothingTy()) : TypeManager::GetInvalidTy());
+    ce.SetTy(isWellTyped ? ModalTy{TypeManager::GetNothingTy()} : ModalTy{TypeManager::GetInvalidTy()});
     return isWellTyped;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkFunctionCallExpr(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce)
+bool TypeChecker::TypeCheckerImpl::ChkFunctionCallExpr(ASTContext& ctx, ModalTy target, CallExpr& ce)
 {
     DesugarCallExpr(ctx, ce);
     auto desugarCallExpr = StaticAs<ASTKind::CALL_EXPR>(ce.desugarExpr.get());
     if (!ChkCallExpr(ctx, target, *desugarCallExpr)) {
         RecoverToCallExpr(ce);
         diag.Diagnose(ce, DiagKind::sema_no_match_operator_function_call);
-        ce.SetTy(TypeManager::GetInvalidTy());
+        ce.SetTy({TypeManager::GetInvalidTy()});
         return false;
     }
     ce.callKind = desugarCallExpr->callKind;
@@ -3108,7 +3318,7 @@ bool TypeChecker::TypeCheckerImpl::ChkFunctionCallExpr(ASTContext& ctx, Ptr<Ty> 
     return true;
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkVariadicCallExpr(ASTContext& ctx, Ptr<Ty> target, CallExpr& ce,
+bool TypeChecker::TypeCheckerImpl::ChkVariadicCallExpr(ASTContext& ctx, ModalTy target, CallExpr& ce,
     const std::vector<Ptr<FuncDecl>>& candidates, std::vector<Diagnostic>& diagnostics)
 {
     if (!ChkArgsOrder(diag, ce)) {
@@ -3174,10 +3384,11 @@ void TypeChecker::TypeCheckerImpl::CheckToTokensImpCallExpr(const CallExpr& ce)
     auto ma = StaticAs<ASTKind::MEMBER_ACCESS>(ce.baseFunc.get());
     auto be = ma->baseExpr.get();
     if (be) {
-        auto prTys = promotion.Promote(*be->GetTy(), *toTokensDecl->GetTy());
-        auto ty = prTys.empty() ? TypeManager::GetInvalidTy() : *prTys.begin();
+        auto prTys = promotion.Promote(be->GetTy(), toTokensDecl->GetTy());
+        auto ty = prTys.empty() ? ModalTy{TypeManager::GetInvalidTy()} : *prTys.begin();
+        // must use @~local mode here
         if (ty != toTokensDecl->GetTy()) {
-            diag.Diagnose(ce, DiagKind::sema_invalid_tokens_implementation, be->GetTy()->String());
+            diag.Diagnose(ce, DiagKind::sema_invalid_tokens_implementation, be->GetTy().String());
         }
     }
 }
@@ -3198,12 +3409,16 @@ bool TypeChecker::TypeCheckerImpl::CheckStaticCallNonStatic(
 
 void TypeChecker::TypeCheckerImpl::SpreadInstantiationTy(Node& node, const SubstPack& typeMapping)
 {
-    if (typeMapping.u2i.empty() || !Ty::IsTyCorrect(node.GetTy())) {
+    if (typeMapping.u2i.empty() || !node.GetTy().IsCorrect()) {
         return;
     }
-    Walker walkerExpr(&node, [this, &typeMapping](Ptr<Node> node) -> VisitAction {
-        if (Ty::IsTyCorrect(node->GetTy())) {
-            node->SetTy(typeManager.ApplySubstPack(node->GetTy(), typeMapping));
+    Walker walkerExpr(&node, [this, &typeMapping](Ptr<Node> n) -> VisitAction {
+        if (n->GetTy().IsCorrect()) {
+            n->SetTy(typeManager.ApplySubstPack(n->GetTy(), typeMapping));
+            if (auto* ma = DynamicCast<MemberAccess>(n.get());
+                ma && ma->baseExpr && ma->baseExpr->GetTy().IsCorrect()) {
+                n->SetTy(n->GetTy().With(ma->baseExpr->TyMode()));
+            }
             return VisitAction::WALK_CHILDREN;
         }
         return VisitAction::WALK_CHILDREN;
