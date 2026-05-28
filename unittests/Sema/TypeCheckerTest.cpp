@@ -6,6 +6,7 @@
 
 #include <cstdlib>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include "gtest/gtest.h"
 #include "TestCompilerInstance.h"
@@ -14,8 +15,33 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Match.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 using namespace Cangjie;
 using namespace AST;
+
+namespace {
+std::unordered_map<std::string, std::string> GetEnvironmentVars()
+{
+    std::unordered_map<std::string, std::string> envVars;
+    char **env = environ;
+    while (env && *env) {
+        std::string entry(*env);
+        size_t pos = entry.find('=');
+        if (pos != std::string::npos) {
+            std::string key = entry.substr(0, pos);
+            std::string value = entry.substr(pos + 1);
+            envVars[key] = value;
+        }
+        ++env;
+    }
+    return envVars;
+}
+}
 
 class TypeCheckerTest : public testing::Test {
 protected:
@@ -37,9 +63,33 @@ protected:
 #endif
 #ifdef _WIN32
         instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::WINDOWS;
+        invocation.globalOptions.executablePath = projectPath + "\\output\\bin\\";
+#elif defined(__APPLE__)
+        instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::DARWIN;
+        invocation.globalOptions.executablePath = projectPath + "/output/bin/";
 #elif defined(__unix__)
         instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::LINUX;
+        invocation.globalOptions.executablePath = projectPath + "/output/bin/";
 #endif
+        std::string cangjieHome = projectPath + "/output";
+#if defined(_WIN32)
+        std::string cangjiePath = cangjieHome + "/modules/windows_x86_64_cjnative";
+#elif defined(__APPLE__)
+    #if defined(__x86_64__)
+        std::string cangjiePath = cangjieHome + "/modules/darwin_x86_64_cjnative";
+    #else
+        std::string cangjiePath = cangjieHome + "/modules/darwin_arm64_cjnative";
+    #endif
+#else
+    #if defined(__x86_64__)
+        std::string cangjiePath = cangjieHome + "/modules/linux_x86_64_cjnative";
+    #else
+        std::string cangjiePath = cangjieHome + "/modules/linux_aarch64_cjnative";
+    #endif
+#endif
+        setenv("CANGJIE_HOME", cangjieHome.c_str(), 1);
+        setenv("CANGJIE_PATH", cangjiePath.c_str(), 1);
+        invocation.globalOptions.ReadPathsFromEnvironmentVars(GetEnvironmentVars());
         Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
     }
     std::string srcPath;
@@ -49,7 +99,7 @@ protected:
     std::unique_ptr<TestCompilerInstance> instance;
 };
 
-TEST_F(TypeCheckerTest, DISABLED_TypecheckTest)
+TEST_F(TypeCheckerTest, TypecheckTest)
 {
     std::string code = R"(
 main() {
@@ -75,7 +125,7 @@ main() {
     EXPECT_EQ(diag.GetErrorCount(), 0);
 }
 
-TEST_F(TypeCheckerTest, DISABLED_MacroDeclTest)
+TEST_F(TypeCheckerTest, MacroDeclTest)
 {
     std::string code = R"(
     public macro
@@ -91,7 +141,7 @@ TEST_F(TypeCheckerTest, DISABLED_MacroDeclTest)
     EXPECT_EQ(diag.GetErrorCount(), 3);
 }
 
-TEST_F(TypeCheckerTest, DISABLED_MacroCallInLSPTest)
+TEST_F(TypeCheckerTest, MacroCallInLSPTest)
 {
     std::string code = R"(
     @M1
@@ -156,7 +206,7 @@ TEST_F(TypeCheckerTest, DISABLED_MacroCallInLSPTest)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(TypeCheckerTest, DISABLED_MacroDiagInLSPTest)
+TEST_F(TypeCheckerTest, MacroDiagInLSPTest)
 {
     instance->invocation.globalOptions.enableMacroInLSP = true;
     srcPath = projectPath + "/unittests/Sema/SemaCangjieFiles/";
@@ -201,7 +251,7 @@ TEST_F(TypeCheckerTest, DISABLED_NoDiagInLSPMacroCallTest)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(TypeCheckerTest, DISABLED_NoDiagInLSPMacroCallForTest)
+TEST_F(TypeCheckerTest, NoDiagInLSPMacroCallForTest)
 {
     srcPath = projectPath + "/unittests/Sema/SemaCangjieFiles/";
     std::string command = "cjc " + srcPath + "ModifyClassBuildFunc.cj --compile-macro -Woff all";
@@ -220,7 +270,7 @@ TEST_F(TypeCheckerTest, DISABLED_NoDiagInLSPMacroCallForTest)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(TypeCheckerTest, DISABLED_MacroCallOfTopLevelInLSPTest)
+TEST_F(TypeCheckerTest, MacroCallOfTopLevelInLSPTest)
 {
     std::string code = R"(
     @M1
@@ -262,7 +312,7 @@ TEST_F(TypeCheckerTest, DISABLED_MacroCallOfTopLevelInLSPTest)
     Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
 }
 
-TEST_F(TypeCheckerTest, DISABLED_AssumptionTest)
+TEST_F(TypeCheckerTest, AssumptionTest)
 {
 #ifdef _WIN32
     srcPath = projectPath + "\\unittests\\Sema\\SemaCangjieFiles\\AssumptionTest";
