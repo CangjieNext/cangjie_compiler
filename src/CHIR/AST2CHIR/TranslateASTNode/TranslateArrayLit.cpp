@@ -34,9 +34,10 @@ Ptr<Value> Translator::TranslateStructArray(const AST::ArrayLit& array)
     auto loc = TranslateLocation(array);
 
     std::vector<Value*> elements;
-    auto arrayTy = StaticCast<StructType*>(chirTy.TranslateType(*array.GetTy()));
-    CJC_ASSERT(arrayTy->IsStructArray());
-    auto eleTy = arrayTy->GetGenericArgs()[0];
+    auto arrayTy = chirTy.TranslateType(array.GetTy());
+    auto pureArrayTy = StaticCast<StructType*>(arrayTy->GetPureType());
+    CJC_ASSERT(pureArrayTy->IsStructArray());
+    auto eleTy = pureArrayTy->GetGenericArgs()[0];
     auto elementSize =
         CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, array.children.size())
             ->GetResult();
@@ -96,9 +97,10 @@ Ptr<Value> Translator::TranslateVArray(const AST::ArrayLit& array)
 {
     auto loc = TranslateLocation(array);
     std::vector<Value*> elements;
-    auto arrayTy = chirTy.TranslateType(*array.GetTy());
-    CJC_ASSERT(arrayTy->IsVArray());
-    auto eleTy = StaticCast<VArrayType*>(arrayTy)->GetElementType();
+    auto arrayTy = chirTy.TranslateType(array.GetTy());
+    auto pureArrayTy = StaticCast<VArrayType*>(arrayTy->GetPureType());
+    CJC_ASSERT(pureArrayTy->IsVArray());
+    auto eleTy = pureArrayTy->GetElementType();
     for (auto& child : array.children) {
         elements.push_back(TranslateExprArg(*child, *eleTy));
     }

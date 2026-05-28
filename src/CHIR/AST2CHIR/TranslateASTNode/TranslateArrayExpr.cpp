@@ -44,9 +44,9 @@ Ptr<Value> Translator::Visit(const AST::ArrayExpr& array)
 Ptr<Value> Translator::InitRawArrayEmpty(const AST::CallExpr& expr)
 {
     auto loc = TranslateLocation(expr);
-    auto arrayTy = chirTy.TranslateType(*expr.GetTy());
+    auto arrayTy = chirTy.TranslateType(expr.GetTy());
     CJC_ASSERT(arrayTy->IsRef());
-    auto eleTy = StaticCast<RawArrayType>(StaticCast<RefType>(arrayTy)->GetBaseType())->GetElementType();
+    auto eleTy = StaticCast<RawArrayType>(arrayTy->GetPureType())->GetElementType();
     auto sizeVal = CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, 0UL)->GetResult();
     auto rawArrayRef = TryCreate<RawArrayAllocate>(currentBlock, loc, arrayTy, eleTy, sizeVal)->GetResult();
     return rawArrayRef;
@@ -103,9 +103,9 @@ Ptr<Value> Translator::InitRawArrayByLambda(const ArrayExpr& array)
     CJC_ASSERT(array.args.size() == ARGS_NUM_TWO && array.initFunc != nullptr);
 
     auto loc = TranslateLocation(array);
-    auto arrayTy = chirTy.TranslateType(*array.GetTy());
+    auto arrayTy = chirTy.TranslateType(array.GetTy());
     CJC_ASSERT(arrayTy->IsRef());
-    auto eleTy = StaticCast<RawArrayType>(StaticCast<RefType>(arrayTy)->GetBaseType())->GetElementType();
+    auto eleTy = StaticCast<RawArrayType>(arrayTy->GetPureType())->GetElementType();
     auto sizeVal = TranslateExprArg(*array.args[0]);
     auto initFn = GetSymbolTable(*array.initFunc);
     auto rawArrayExpr = CreateAndAppendExpression<RawArrayAllocate>(loc, arrayTy, eleTy, sizeVal, currentBlock);
@@ -116,7 +116,7 @@ Ptr<Value> Translator::InitRawArrayByLambda(const ArrayExpr& array)
     // if array init func is instantiated decl, then we will create `Apply` expr like: `Apply(init, args)`
     if (array.initFunc->TestAttr(AST::Attribute::GENERIC)) {
         for (auto ty : array.GetTy()->typeArgs) {
-            instantiatedTypeArgs.emplace_back(chirTy.TranslateType(*ty));
+            instantiatedTypeArgs.emplace_back(chirTy.TranslateType(ty));
         }
     }
     auto userInitFn = TranslateExprArg(*array.args[1]);
@@ -137,9 +137,9 @@ Ptr<Value> Translator::InitRawArrayByLambda(const ArrayExpr& array)
 Ptr<Value> Translator::InitRawArrayByItem(const AST::CallExpr& expr)
 {
     auto loc = TranslateLocation(expr);
-    auto arrayTy = chirTy.TranslateType(*expr.GetTy());
+    auto arrayTy = chirTy.TranslateType(expr.GetTy());
     CJC_ASSERT(arrayTy->IsRef());
-    auto eleTy = StaticCast<RawArrayType>(StaticCast<RefType>(arrayTy)->GetBaseType())->GetElementType();
+    auto eleTy = StaticCast<RawArrayType>(arrayTy->GetPureType())->GetElementType();
 
     auto sizeVal = TranslateExprArg(*expr.args[0]);
     auto initVal = TranslateExprArg(*expr.args[1]);
@@ -162,9 +162,9 @@ CHIR::Type* Translator::GetExactParentType(
     if (outerDecl->TestAttr(AST::Attribute::GENERIC_INSTANTIATED)) {
         Type* parentTy = nullptr;
         if (outerDecl->astKind == AST::ASTKind::EXTEND_DECL) {
-            parentTy = TranslateType(*StaticCast<AST::ExtendDecl*>(outerDecl)->extendedType->GetTy());
+            parentTy = TranslateType(StaticCast<AST::ExtendDecl*>(outerDecl)->extendedType->DataTy());
         } else {
-            parentTy = TranslateType(*outerDecl->GetTy());
+            parentTy = TranslateType(outerDecl->DataTy());
         }
         return parentTy->StripAllRefs();
     }
@@ -238,9 +238,9 @@ Ptr<Value> Translator::InitArrayByCollection(const ArrayExpr& array)
     auto loc = TranslateLocation(array);
     Value* sizeVal = TryCreate<Invoke>(currentBlock, loc, sizeTy, invokeInfo)->GetResult();
 
-    auto arrayTy = chirTy.TranslateType(*array.GetTy());
+    auto arrayTy = chirTy.TranslateType(array.GetTy());
     CJC_ASSERT(arrayTy->IsRef());
-    auto eleTy = StaticCast<RawArrayType>(arrayTy->StripAllRefs())->GetElementType();
+    auto eleTy = StaticCast<RawArrayType>(arrayTy->GetPureType())->GetElementType();
     auto rawArrayRef = CreateAndAppendExpression<RawArrayAllocate>(
         loc, arrayTy, eleTy, sizeVal, currentBlock)->GetResult();
 
@@ -266,12 +266,12 @@ Ptr<Value> Translator::InitArrayByCollection(const ArrayExpr& array)
 Ptr<Value> Translator::InitVArrayByItem(const AST::ArrayExpr& vArray)
 {
     auto loc = TranslateLocation(vArray);
-    auto vArrayTy = StaticCast<VArrayType*>(chirTy.TranslateType(*vArray.GetTy()));
-    auto eleTy = vArrayTy->GetElementType();
+    auto vArrayTy = chirTy.TranslateType(vArray.GetTy());
+    auto pureVArrayTy = StaticCast<VArrayType*>(vArrayTy->GetPureType());
+    auto eleTy = pureVArrayTy->GetElementType();
 
-    auto sizeVal =
-        CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, vArrayTy->GetSize())
-            ->GetResult();
+    auto sizeVal = CreateAndAppendConstantExpression<IntLiteral>(
+        builder.GetInt64Ty(), *currentBlock, pureVArrayTy->GetSize())->GetResult();
     auto valArg = vArray.args[0].get();
     auto val = TranslateExprArg(*valArg);
 
@@ -284,11 +284,11 @@ Ptr<Value> Translator::InitVArrayByItem(const AST::ArrayExpr& vArray)
 Ptr<Value> Translator::InitVArrayByLambda(const AST::ArrayExpr& vArray)
 {
     auto loc = TranslateLocation(vArray);
-    auto vArrayTy = StaticCast<VArrayType*>(chirTy.TranslateType(*vArray.GetTy()));
-    auto eleTy = vArrayTy->GetElementType();
-    auto sizeVal =
-        CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, vArrayTy->GetSize())
-            ->GetResult();
+    auto vArrayTy = chirTy.TranslateType(vArray.GetTy());
+    auto pureVArrayTy = StaticCast<VArrayType*>(vArrayTy->GetPureType());
+    auto eleTy = pureVArrayTy->GetElementType();
+    auto sizeVal = CreateAndAppendConstantExpression<IntLiteral>(
+        builder.GetInt64Ty(), *currentBlock, pureVArrayTy->GetSize())->GetResult();
     auto initFn = TranslateExprArg(*vArray.args[0]);
     auto nullItem = CreateAndAppendConstantExpression<NullLiteral>(eleTy, *currentBlock)->GetResult();
     return CreateAndAppendExpression<VArrayBuilder>(loc, vArrayTy, sizeVal, nullItem, initFn, currentBlock)
