@@ -19,6 +19,25 @@
 using namespace Cangjie;
 using namespace AST;
 
+namespace {
+std::unordered_map<std::string, std::string> GetEnvironmentVars()
+{
+    std::unordered_map<std::string, std::string> envVars;
+    char **env = environ;
+    while (env && *env) {
+        std::string entry(*env);
+        size_t pos = entry.find('=');
+        if (pos != std::string::npos) {
+            std::string key = entry.substr(0, pos);
+            std::string value = entry.substr(pos + 1);
+            envVars[key] = value;
+        }
+        ++env;
+    }
+    return envVars;
+}
+}
+
 class SearchPlusTest : public testing::Test {
 protected:
     void SetUp() override
@@ -40,6 +59,25 @@ protected:
         srcPath = projectPath + "/unittests/AST/CangjieFiles/";
         packagePath = packagePath + "/";
 #endif
+        std::string cangjieHome = projectPath + "/output";
+#if defined(_WIN32)
+        std::string cangjiePath = cangjieHome + "/modules/windows_x86_64_cjnative";
+#elif defined(__APPLE__)
+    #if defined(__x86_64__)
+        std::string cangjiePath = cangjieHome + "/modules/darwin_x86_64_cjnative";
+    #else
+        std::string cangjiePath = cangjieHome + "/modules/darwin_arm64_cjnative";
+    #endif
+#else
+    #if defined(__x86_64__)
+        std::string cangjiePath = cangjieHome + "/modules/linux_x86_64_cjnative";
+    #else
+        std::string cangjiePath = cangjieHome + "/modules/linux_aarch64_cjnative";
+    #endif
+#endif
+        setenv("CANGJIE_HOME", cangjieHome.c_str(), 1);
+        setenv("CANGJIE_PATH", cangjiePath.c_str(), 1);
+        invocation.globalOptions.ReadPathsFromEnvironmentVars(GetEnvironmentVars());
     }
 
 #ifdef PROJECT_SOURCE_DIR
@@ -353,7 +391,7 @@ TEST_F(SearchPlusTest, ScopeTest)
     instance.reset();
 }
 
-TEST_F(SearchPlusTest, DISABLED_MultiFileTest)
+TEST_F(SearchPlusTest, MultiFileTest)
 {
 #ifdef _WIN32
     srcPath = srcPath + "\\pkgs";
