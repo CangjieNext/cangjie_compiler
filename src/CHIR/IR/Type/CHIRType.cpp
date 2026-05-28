@@ -263,4 +263,12 @@ Type* CHIRType::TranslateType(AST::Ty& ty)
     return type;
 }
 
+Type* CHIRType::TranslateType(AST::ModalTy ty)
+{
+    CJC_ASSERT(ty && ty.Ty());
+    Type* base = TranslateType(ty.Ty());
+    // TODO: 需要加上modal
+    return base;
+}
+
 } // namespace Cangjie::CHIR

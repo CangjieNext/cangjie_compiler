@@ -1155,20 +1155,20 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
                 customTypeDef = builder.CreateClass(
                     loc, identifier, mangledName, pkgName, decl.astKind == AST::ASTKind::CLASS_DECL, isImported);
             }
-            uniqueDecl = StaticCast<AST::ClassLikeTy*>(decl.GetTy())->commonDecl;
+            uniqueDecl = StaticCast<AST::ClassLikeTy*>(decl.DataTy())->commonDecl;
             break;
         case AST::ASTKind::STRUCT_DECL:
             if (customTypeDef == nullptr) {
                 customTypeDef = builder.CreateStruct(loc, identifier, mangledName, pkgName, isImported);
             }
-            uniqueDecl = StaticCast<AST::StructTy*>(decl.GetTy())->decl;
+            uniqueDecl = StaticCast<AST::StructTy*>(decl.DataTy())->decl;
             break;
         case AST::ASTKind::ENUM_DECL:
             if (customTypeDef == nullptr) {
                 customTypeDef = builder.CreateEnum(
                     loc, identifier, mangledName, pkgName, isImported, StaticCast<AST::EnumDecl>(decl).hasEllipsis);
             }
-            uniqueDecl = StaticCast<AST::EnumTy*>(decl.GetTy())->decl;
+            uniqueDecl = StaticCast<AST::EnumTy*>(decl.DataTy())->decl;
             break;
         case AST::ASTKind::EXTEND_DECL: {
             if (customTypeDef == nullptr) {
@@ -1278,7 +1278,7 @@ void AST2CHIR::TranslateAllCustomTypeTy()
     }
     // Translate upper bounds after normal decls have been translated.
     for (auto decl : translatedGenericDecls) {
-        for (auto ty : decl->GetTy()->typeArgs) {
+        for (auto ty : decl->GetTy()->TyArgs()) {
             chirType.FillGenericArgType(*RawStaticCast<AST::GenericsTy*>(ty));
         }
     }
