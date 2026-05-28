@@ -17,6 +17,26 @@
 using namespace Cangjie;
 using namespace AST;
 
+
+namespace {
+std::unordered_map<std::string, std::string> GetEnvironmentVars()
+{
+    std::unordered_map<std::string, std::string> envVars;
+    char **env = environ;
+    while (env && *env) {
+        std::string entry(*env);
+        size_t pos = entry.find('=');
+        if (pos != std::string::npos) {
+            std::string key = entry.substr(0, pos);
+            std::string value = entry.substr(pos + 1);
+            envVars[key] = value;
+        }
+        ++env;
+    }
+    return envVars;
+}
+}
+
 class CompilerInstanceTest : public ::testing::Test {
 public:
     CompilerInvocation invocation;
@@ -43,11 +63,32 @@ protected:
 #endif
 #ifdef _WIN32
         invocation.globalOptions.target.os = Cangjie::Triple::OSType::WINDOWS;
+#elif defined(__APPLE__)
+        invocation.globalOptions.target.os = Cangjie::Triple::OSType::DARWIN;
 #elif defined(__unix__)
         invocation.globalOptions.target.os = Cangjie::Triple::OSType::LINUX;
 #endif
         invocation.globalOptions.compilePackage = true;
         invocation.globalOptions.compilationCachedPath = ".";
+        std::string cangjieHome = projectPath + "/output";
+#if defined(_WIN32)
+        std::string cangjiePath = cangjieHome + "/modules/windows_x86_64_cjnative";
+#elif defined(__APPLE__)
+    #if defined(__x86_64__)
+        std::string cangjiePath = cangjieHome + "/modules/darwin_x86_64_cjnative";
+    #else
+        std::string cangjiePath = cangjieHome + "/modules/darwin_aarch64_cjnative";
+    #endif
+#else
+    #if defined(__x86_64__)
+        std::string cangjiePath = cangjieHome + "/modules/linux_x86_64_cjnative";
+    #else
+        std::string cangjiePath = cangjieHome + "/modules/linux_aarch64_cjnative";
+    #endif
+#endif
+        setenv("CANGJIE_HOME", cangjieHome.c_str(), 1);
+        setenv("CANGJIE_PATH", cangjiePath.c_str(), 1);
+        invocation.globalOptions.ReadPathsFromEnvironmentVars(GetEnvironmentVars());
     };
     std::string code = R"(
         package pkg1
@@ -55,7 +96,7 @@ protected:
     )";
 };
 
-TEST_F(CompilerInstanceTest, DISABLED_FullCompile)
+TEST_F(CompilerInstanceTest, FullCompile)
 {
     std::unique_ptr<DefaultCompilerInstance> instance = std::make_unique<DefaultCompilerInstance>(invocation, diag);
     instance->srcDirs.emplace(FileUtil::JoinPath(projectPath, "unittests/Frontend/FullCompile/src"));
@@ -70,7 +111,7 @@ TEST_F(CompilerInstanceTest, DISABLED_FullCompile)
     EXPECT_EQ(ctx->curPackage, pkg);
 }
 
-TEST_F(CompilerInstanceTest, DISABLED_GetAllVisibleExtendMembers01)
+TEST_F(CompilerInstanceTest, GetAllVisibleExtendMembers01)
 {
     std::unique_ptr<DefaultCompilerInstance> instance = std::make_unique<DefaultCompilerInstance>(invocation, diag);
     instance->srcDirs.emplace(FileUtil::JoinPath(projectPath, "unittests/Frontend/FullCompile/src"));
@@ -130,7 +171,7 @@ TEST_F(CompilerInstanceTest, Comments)
     EXPECT_TRUE(oneComments);
 }
 
-TEST_F(CompilerInstanceTest, DISABLED_TrailingClosure)
+TEST_F(CompilerInstanceTest, TrailingClosure)
 {
     std::unique_ptr<DefaultCompilerInstance> instance = std::make_unique<DefaultCompilerInstance>(invocation, diag);
     instance->srcDirs.emplace(FileUtil::JoinPath(projectPath, "unittests/Frontend/TrailingClosure/src"));

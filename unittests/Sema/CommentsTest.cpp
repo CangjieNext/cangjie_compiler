@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include "gtest/gtest.h"
 #include "TestCompilerInstance.h"
@@ -21,8 +22,33 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Match.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 using namespace Cangjie;
 using namespace AST;
+
+namespace {
+std::unordered_map<std::string, std::string> GetEnvironmentVars()
+{
+    std::unordered_map<std::string, std::string> envVars;
+    char **env = environ;
+    while (env && *env) {
+        std::string entry(*env);
+        size_t pos = entry.find('=');
+        if (pos != std::string::npos) {
+            std::string key = entry.substr(0, pos);
+            std::string value = entry.substr(pos + 1);
+            envVars[key] = value;
+        }
+        ++env;
+    }
+    return envVars;
+}
+}
 
 class CommentsTest : public testing::Test {
 protected:
@@ -45,10 +71,32 @@ protected:
 #ifdef _WIN32
         instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::WINDOWS;
         invocation.globalOptions.executablePath = projectPath + "\\output\\bin\\";
+#elif defined(__APPLE__)
+        instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::DARWIN;
+        invocation.globalOptions.executablePath = projectPath + "/output/bin/";
 #elif defined(__unix__)
         instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::LINUX;
         invocation.globalOptions.executablePath = projectPath + "/output/bin/";
 #endif
+        std::string cangjieHome = projectPath + "/output";
+#if defined(_WIN32)
+        std::string cangjiePath = cangjieHome + "/modules/windows_x86_64_cjnative";
+#elif defined(__APPLE__)
+    #if defined(__x86_64__)
+        std::string cangjiePath = cangjieHome + "/modules/darwin_x86_64_cjnative";
+    #else
+        std::string cangjiePath = cangjieHome + "/modules/darwin_aarch64_cjnative";
+    #endif
+#else
+    #if defined(__x86_64__)
+        std::string cangjiePath = cangjieHome + "/modules/linux_x86_64_cjnative";
+    #else
+        std::string cangjiePath = cangjieHome + "/modules/linux_aarch64_cjnative";
+    #endif
+#endif
+        setenv("CANGJIE_HOME", cangjieHome.c_str(), 1);
+        setenv("CANGJIE_PATH", cangjiePath.c_str(), 1);
+        invocation.globalOptions.ReadPathsFromEnvironmentVars(GetEnvironmentVars());
         Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
     }
     std::string srcPath;
@@ -58,7 +106,7 @@ protected:
     std::unique_ptr<TestCompilerInstance> instance;
 };
 
-TEST_F(CommentsTest, DISABLED_MacroDesugarFuncCommentsTest)
+TEST_F(CommentsTest, MacroDesugarFuncCommentsTest)
 {
     std::string code = R"(
 macro package hello
@@ -92,7 +140,7 @@ public macro StorageProp1(attr: Tokens, input: Tokens): Tokens{
     ASSERT_TRUE(hit);
 }
 
-TEST_F(CommentsTest, DISABLED_MainDesugarFuncCommentsTest)
+TEST_F(CommentsTest, MainDesugarFuncCommentsTest)
 {
     std::string code = R"(
 /**

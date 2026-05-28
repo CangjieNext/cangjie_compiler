@@ -64,10 +64,20 @@ protected:
         invocation.globalOptions.executablePath = projectPath + "/output/bin/";
 #endif
         std::string cangjieHome = projectPath + "/output";
-#ifdef __x86_64__
-        std::string cangjiePath = cangjieHome + "/modules/linux_x86_64_cjnative";
+#if defined(_WIN32)
+        std::string cangjiePath = cangjieHome + "/modules/windows_x86_64_cjnative";
+#elif defined(__APPLE__)
+    #if defined(__x86_64__)
+        std::string cangjiePath = cangjieHome + "/modules/darwin_x86_64_cjnative";
+    #else
+        std::string cangjiePath = cangjieHome + "/modules/darwin_aarch64_cjnative";
+    #endif
 #else
+    #if defined(__x86_64__)
+        std::string cangjiePath = cangjieHome + "/modules/linux_x86_64_cjnative";
+    #else
         std::string cangjiePath = cangjieHome + "/modules/linux_aarch64_cjnative";
+    #endif
 #endif
         setenv("CANGJIE_HOME", cangjieHome.c_str(), 1);
         setenv("CANGJIE_PATH", cangjiePath.c_str(), 1);
