@@ -251,6 +251,8 @@ using namespace Cangjie::AST;
 
 
 bool IsImpl(const Node& decl);
+bool IsImplRegistryCompanion(const Node& node);
+bool IsImplReferenceWrapper(const Node& node);
 bool IsJObject(const Decl& decl);
 /**
  * For stages where packageName is not set yet
@@ -271,38 +273,7 @@ bool IsObject(const Node& node);
  * }
  */
 bool IsFwdClass(const Node& decl);
-
-/**
- * public func $getJavaRef(): Java_CFFI_JavaEntity {
- *     return Java_CFFI_JavaEntity()
- * }
- */
-void InsertJavaRefGetterStubWithBody(ClassDecl& decl);
-
-bool IsDeclAppropriateForSyntheticClassGeneration(const Node& decl);
-
-std::string GetSyntheticNameFromClassLike(const ClassLikeDecl& cld);
-
-/**
-    * Generates and inserts the synthetic class declaration.
-    * The synthetic class implements the given interface or abstract class and has the following structure:
-    *
-    * Example of generated synthetic
-    * ```
-    * // CL is interface or abstract class. If CL is interface then JObject will be added as super class
-    * class CL_impl <: CL {
-    *     init(ref: Java_CFFI_JavaEntity) { // inherited from JObject
-    *         $javaref = ref
-    *     }
-    *
-    *     public func $getJavaRef() { // inherited from JObject
-    *         return $javaref
-    *     }
-    * }
-    * ```
-    */
-void InsertSyntheticClassDecl(ClassLikeDecl& decl, File& file);
-}
+} // namespace Cangjie::Interop::Java
 
 namespace Cangjie::Interop::ObjC {
 
@@ -315,7 +286,7 @@ bool IsDeclAppropriateForSyntheticClassGeneration(const AST::Decl& decl);
  * Example of generated synthetic
  * ```
  * interface CL <: ObjCId {}
- * 
+ *
  * class CL$impl <: CL {}
  * ```
  */
