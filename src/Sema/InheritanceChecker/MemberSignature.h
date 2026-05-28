@@ -30,7 +30,7 @@ struct MemberSignature {
     /*
      * List of the corresponding types came from super-types which are inconsistent.
      */
-    std::unordered_set<Ptr<const AST::Ty>> inconsistentTypes;
+    std::unordered_set<AST::ModalTy> inconsistentTypes;
     /*
      * True: if this member has multiple default implementation.
      */

@@ -116,7 +116,7 @@ void JArrayDesugarer::TransformConstructorCallsToPassJNIParam(File& file)
         { // update newCallExpr->baseFunc
             if (auto base = As<ASTKind::REF_EXPR>(newCallExpr->baseFunc)) {
                 CJC_ASSERT_WITH_MSG(!base->typeArguments.empty(), "JArray type must be generic");
-                jarrayElementType = base->typeArguments[0]->GetTy();
+                jarrayElementType = base->typeArguments[0]->GetTy().Ty();
                 base->ref.target = jniTypeConstr;
                 base->SetTy(jniTypeConstr->GetTy());
             } else {
@@ -153,19 +153,19 @@ void JArrayDesugarer::InsertJniTypeParamIntoConstructor(FuncDecl& constr)
     auto strTy = GetStringDecl(importManager).GetTy();
 
     { // add new func param
-        auto jniTypeParam = CreateFuncParam("$jniType", CreateType(strTy), nullptr, strTy);
+        auto jniTypeParam = CreateFuncParam("$jniType", CreateType(strTy.Ty()), nullptr, strTy.Ty());
         constr.funcBody->paramLists[0]->params.emplace_back(std::move(jniTypeParam));
     }
 
     { // add new param ty in constr.ty->paramTys
-        std::vector<Ptr<Ty>> ctorFuncParamTys;
-        if (auto fty = DynamicCast<FuncTy*>(constr.GetTy())) {
-            ctorFuncParamTys = std::move(fty->paramTys);
+        std::vector<ModalTy> ctorFuncParamTys;
+        if (auto fty = DynamicCast<FuncTy*>(constr.GetTy().Ty())) {
+            ctorFuncParamTys = fty->paramTys;
         } else {
             CJC_ABORT_WITH_MSG("'fd.ty' expected to be 'FuncTy'");
         }
         ctorFuncParamTys.push_back(strTy);
-        constr.SetTy(typeManager.GetFunctionTy(std::move(ctorFuncParamTys), constr.outerDecl->GetTy()));
+        constr.SetTy({typeManager.GetFunctionTy(std::move(ctorFuncParamTys), constr.outerDecl->GetTy())});
     }
 }
 
@@ -191,7 +191,7 @@ void JArrayDesugarer::InsertConstructorBody(FuncDecl& constr)
     if (auto jarray = DynamicCast<ClassLikeDecl*>(constr.outerDecl)) {
         static auto generatedJavaRefInitConstr = GetGeneratedJavaMirrorConstructor(*jarray);
         auto thisCall = CreateThisCall(
-            *constr.outerDecl, *generatedJavaRefInitConstr, generatedJavaRefInitConstr->GetTy(), constr.curFile);
+            *constr.outerDecl, *generatedJavaRefInitConstr, generatedJavaRefInitConstr->GetTy().Ty(), constr.curFile);
         thisCall->args.push_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(lambdaNodes))));
         constr.funcBody->body->body.push_back(std::move(thisCall));
     } else {

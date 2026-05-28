@@ -17,15 +17,15 @@ bool TypeChecker::TypeCheckerImpl::SynthesizeAndReplaceIdealTy(const CheckerCont
     // Call `Synthesize` on declares containing invalid types may return valid types.
     // Therefore, we need to know if there are any errors during the inference process.
     auto ds = DiagSuppressor(diag);
-    bool valid = Ty::IsTyCorrect(Synthesize(ctx, &node)) && ReplaceIdealTy(node) && !ds.HasError();
+    bool valid = Synthesize(ctx, &node).IsCorrect() && ReplaceIdealTy(node) && !ds.HasError();
     ds.ReportDiag();
     return valid;
 }
 
-Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBlock(const CheckerContext& ctx, Block& b)
+ModalTy TypeChecker::TypeCheckerImpl::SynBlock(const CheckerContext& ctx, Block& b)
 {
     if (b.body.empty()) {
-        b.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+        b.SetTy({TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)});
     } else {
         bool existInvalid = false;
         for (size_t i = 0; i < b.body.size(); i++) {
@@ -36,9 +36,9 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBlock(const CheckerContext& ctx, Block&
         Ptr<Node> lastNode = b.body[b.body.size() - 1].get();
         CJC_ASSERT(lastNode != nullptr);
         if (existInvalid) {
-            b.SetTy(TypeManager::GetInvalidTy());
+            b.SetTy({TypeManager::GetInvalidTy()});
         } else if (lastNode->IsDecl()) {
-            b.SetTy(TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+            b.SetTy({TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)});
         } else {
             b.SetTy(lastNode->GetTy());
         }
@@ -46,17 +46,16 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynBlock(const CheckerContext& ctx, Block&
     return b.GetTy();
 }
 
-bool TypeChecker::TypeCheckerImpl::ChkBlock(ASTContext& ctx, Ty& target, Block& b)
+bool TypeChecker::TypeCheckerImpl::ChkBlock(ASTContext& ctx, ModalTy target, Block& b)
 {
-    Ptr<Ty> unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
+    ModalTy unitTy = {TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)};
     if (b.body.empty()) {
         b.SetTy(unitTy);
         // NOTE: This function may return false, the caller should handle diagnostics.
         // Only unsafe block is allowed to exist on its own, and needs to diagnose here.
-        auto ret = typeManager.IsSubtype(b.GetTy(), &target);
+        auto ret = typeManager.IsSubtype(b.GetTy(), target);
         if (!ret && b.TestAttr(Attribute::UNSAFE)) {
-            auto builder = diag.DiagnoseRefactor(DiagKindRefactor::sema_mismatched_types, b);
-            builder.AddMainHintArguments(target.String(), b.GetTy()->String());
+            DiagSemaMismatchedTypes(diag, b, target.String(), b.GetTy().String());
         }
         return ret;
     }
@@ -74,26 +73,26 @@ bool TypeChecker::TypeCheckerImpl::ChkBlock(ASTContext& ctx, Ty& target, Block& 
         lastNode = StaticCast<ReturnExpr>(lastNode)->expr.get();
     }
     if (lastNode->IsDecl()) {
-        bool typeMatched = typeManager.IsSubtype(unitTy, &target);
+        bool typeMatched = typeManager.IsSubtype(unitTy, target);
         isWellTyped = SynthesizeAndReplaceIdealTy({ctx, SynPos::IMPLICIT_RETURN}, *lastNode) && typeMatched && isWellTyped;
         if (isWellTyped) {
             b.SetTy(unitTy);
             return true;
         } else {
-            b.SetTy(TypeManager::GetInvalidTy());
+            b.SetTy({TypeManager::GetInvalidTy()});
             if (!typeMatched) {
                 DiagMismatchedTypesWithFoundTy(
-                    diag, *lastNode, target, *unitTy, "definitions and declarations are always of type 'Unit'");
+                    diag, *lastNode, target, unitTy, "definitions and declarations are always of type 'Unit'");
             }
             return false;
         }
     } else {
-        isWellTyped = Check(ctx, &target, lastNode) && isWellTyped;
+        isWellTyped = Check(ctx, target, lastNode) && isWellTyped;
         if (isWellTyped) {
             b.SetTy(lastNode->GetTy());
             return true;
         }
-        b.SetTy(TypeManager::GetInvalidTy());
+        b.SetTy({TypeManager::GetInvalidTy()});
         return false;
     }
 }

@@ -42,7 +42,7 @@ struct MemberJNISignature {
     {
         auto jobject = StaticAs<ASTKind::CLASS_LIKE_DECL>(member.outerDecl);
         CJC_ASSERT(jobject);
-        Ptr<Ty> ty = jobject->GetTy();
+        Ptr<Ty> ty = jobject->DataTy();
         classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
         // turn "cj/A" to "cj/A${type}"
         classTypeSignature = ReplaceClassName(classTypeSignature, genericConfig->declInstName);
@@ -64,14 +64,14 @@ struct MemberJNISignature {
     MemberJNISignature(Utils& utils, Decl& member, Ptr<ClassLikeDecl> jobject)
     {
         CJC_ASSERT(jobject);
-        Ptr<Ty> ty = jobject->GetTy();
+        Ptr<Ty> ty = jobject->DataTy();
 
         if (IsSynthetic(*jobject)) {
             if (jobject->inheritedTypes.size() > 1) {
-                ty = jobject->inheritedTypes[1]->GetTy(); // take interface ty
+                ty = jobject->inheritedTypes[1]->DataTy(); // take interface ty
             } else {
                 CJC_ASSERT_WITH_MSG(!jobject->inheritedTypes.empty(), "JObject must inherit Cangjie Object");
-                ty = jobject->inheritedTypes[0]->GetTy(); // take superclass ty
+                ty = jobject->inheritedTypes[0]->DataTy(); // take superclass ty
             }
         }
         classTypeSignature = utils.GetJavaClassNormalizeSignature(*ty);
@@ -641,9 +641,8 @@ public:
      */
     OwnedPtr<Expr> UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty, const Decl& outerDecl, bool toRaw = false);
 
-    OwnedPtr<AST::MatchExpr> CreateMatchByTypeArgument(
-        const Ptr<AST::GenericParamDecl> genericParam,
-        std::map<std::string, OwnedPtr<Expr>> typeToCaseMap, Ptr<Ty> retTy, OwnedPtr<Expr> defaultCase);
+    OwnedPtr<AST::MatchExpr> CreateMatchByTypeArgument(const Ptr<AST::GenericParamDecl> genericParam,
+        std::map<std::string, OwnedPtr<Expr>> typeToCaseMap, ModalTy retTy, OwnedPtr<Expr> defaultCase);
     OwnedPtr<AST::MatchExpr> CreateMatchWithTypeCast(OwnedPtr<Expr> exprToCast, Ptr<Ty> castTy);
     OwnedPtr<Expr> CreateGetTypeForTypeParameterCall(const Ptr<GenericParamDecl> genericParam) const;
 

@@ -19,6 +19,7 @@
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Driver/StdlibMap.h"
+#include "cangjie/Frontend/CompilerInstance.h"
 
 using namespace Cangjie;
 using namespace AST;
@@ -275,7 +276,7 @@ private:
     {
         srcExportedExprs.emplace(expr);
     }
-    void AddExportedTy(Ptr<Ty> ty)
+    void AddExportedTy(ModalTy ty)
     {
         if (visitedExportedTys.count(ty) == 0) {
             exportedTys.emplace(ty);
@@ -293,10 +294,10 @@ private:
     }
     const Package& pkg;
     std::unordered_set<Ptr<Decl>> srcExportedDecls; // Include FuncDecl and VarDecl.
-    std::unordered_set<Ptr<Ty>> exportedTys;
+    std::unordered_set<ModalTy> exportedTys;
     std::unordered_set<Ptr<Expr>> srcExportedExprs;
     std::unordered_set<Ptr<Decl>> visitedSrcExportedDecls;
-    std::unordered_set<Ptr<Ty>> visitedExportedTys;
+    std::unordered_set<ModalTy> visitedExportedTys;
 };
 
 /**
@@ -464,15 +465,15 @@ void ExternalLinkageAnalyzer::AnalyzeExternalLinkageByExportedTy()
             continue;
         }
         if (ty->IsFunc()) {
-            auto funcTy = StaticCast<FuncTy>(ty);
+            auto funcTy = StaticCast<FuncTy*>(ty.Ty());
             for (auto paramTy : std::as_const(funcTy->paramTys)) {
                 AddExportedTy(paramTy);
             }
             AddExportedTy(funcTy->retTy);
         } else if (ty->IsGeneric()) {
-            auto genTy = StaticCast<GenericsTy>(ty);
+            auto genTy = StaticCast<GenericsTy*>(ty.Ty());
             for (auto up : std::as_const(genTy->upperBounds)) {
-                AddExportedTy(up);
+                AddExportedTy(ModalTy{up});
             }
         } else {
             for (auto tyArg : std::as_const(ty->typeArgs)) {

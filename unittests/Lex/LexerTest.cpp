@@ -637,6 +637,17 @@ TEST_F(LexerTest, ErrorPrint)
     }
 }
 
+TEST_F(LexerTest, LocalModalAndExclaveTokens)
+{
+    std::string src = "@~local @local! @local? exclave";
+    Lexer lexerLocal(src, diag, sm);
+    EXPECT_EQ(lexerLocal.Next().kind, TokenKind::LOCAL_NOT);
+    EXPECT_EQ(lexerLocal.Next().kind, TokenKind::LOCAL_EXCL);
+    EXPECT_EQ(lexerLocal.Next().kind, TokenKind::LOCAL_QUES);
+    EXPECT_EQ(lexerLocal.Next().kind, TokenKind::EXCLAVE);
+    EXPECT_EQ(lexerLocal.Next().kind, TokenKind::END);
+}
+
 TEST_F(LexerTest, TokenValues)
 {
     ASSERT_TRUE(std::string(TOKENS[static_cast<int>(TokenKind::DOT)]) == ".");
@@ -758,7 +769,11 @@ TEST_F(LexerTest, TokenValues)
     ASSERT_TRUE(std::string(TOKENS[static_cast<int>(TokenKind::SPAWN)]) == "spawn");
     ASSERT_TRUE(std::string(TOKENS[static_cast<int>(TokenKind::DOUBLE_COLON)]) == "::");
     ASSERT_TRUE(std::string(TOKENS[static_cast<int>(TokenKind::FEATURES)]) == "features");
-    ASSERT_EQ(static_cast<unsigned int>(TokenKind::FEATURES) + 1, sizeof(TOKENS) / sizeof(*TOKENS));
+    ASSERT_TRUE(std::string(TOKENS[static_cast<int>(TokenKind::LOCAL_NOT)]) == "@~local");
+    ASSERT_TRUE(std::string(TOKENS[static_cast<int>(TokenKind::LOCAL_EXCL)]) == "@local!");
+    ASSERT_TRUE(std::string(TOKENS[static_cast<int>(TokenKind::LOCAL_QUES)]) == "@local?");
+    ASSERT_TRUE(std::string(TOKENS[static_cast<int>(TokenKind::EXCLAVE)]) == "exclave");
+    ASSERT_EQ(static_cast<unsigned int>(TokenKind::EXCLAVE) + 1, sizeof(TOKENS) / sizeof(*TOKENS));
 }
 
 TEST_F(LexerTest, TokenKindValues)
@@ -892,8 +907,12 @@ TEST_F(LexerTest, TokenKindValues)
     ASSERT_TRUE(std::string(TOKEN_KIND_VALUES[static_cast<int>(TokenKind::ILLEGAL)]) == "illegal");
     ASSERT_TRUE(std::string(TOKEN_KIND_VALUES[static_cast<int>(TokenKind::DOUBLE_COLON)]) == "double_colon");
     ASSERT_TRUE(std::string(TOKEN_KIND_VALUES[static_cast<int>(TokenKind::FEATURES)]) == "features");
+    ASSERT_TRUE(std::string(TOKEN_KIND_VALUES[static_cast<int>(TokenKind::LOCAL_NOT)]) == "local_not");
+    ASSERT_TRUE(std::string(TOKEN_KIND_VALUES[static_cast<int>(TokenKind::LOCAL_EXCL)]) == "local_exclamation");
+    ASSERT_TRUE(std::string(TOKEN_KIND_VALUES[static_cast<int>(TokenKind::LOCAL_QUES)]) == "local_question");
+    ASSERT_TRUE(std::string(TOKEN_KIND_VALUES[static_cast<int>(TokenKind::EXCLAVE)]) == "exclave");
     ASSERT_EQ(
-        static_cast<unsigned int>(TokenKind::FEATURES) + 1, sizeof(TOKEN_KIND_VALUES) / sizeof(*TOKEN_KIND_VALUES));
+        static_cast<unsigned int>(TokenKind::EXCLAVE) + 1, sizeof(TOKEN_KIND_VALUES) / sizeof(*TOKEN_KIND_VALUES));
 }
 
 TEST_F(LexerTest, UTF8ToCodepoint)

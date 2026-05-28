@@ -312,6 +312,14 @@ public:
      * @param ty The type to be mangled.
      * @return std::string The mangled signature.
      */
+    std::string MangleType(AST::ModalTy ty) const;
+
+    /**
+     * @brief Helper function for mangling type name.
+     *
+     * @param ty The type to be mangled.
+     * @return std::string The mangled signature.
+     */
     std::string MangleType(const AST::Ty& ty) const;
 
     /**
@@ -323,7 +331,7 @@ public:
      * @param isCollectGTy Indicates whether it is needed to collect generic type.
      * @return std::string The mangled signature.
      */
-    std::string MangleType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack, bool declare = false,
+    std::string MangleType(AST::ModalTy ty, std::vector<std::string>& genericsTypeStack, bool declare = false,
         bool isCollectGTy = true) const;
 
     /**
@@ -344,8 +352,8 @@ public:
      * @param isCollectGTy Indicates whether it is needed to collect generic type.
      * @return std::string The mangled type string.
      */
-    std::string MangleUserDefinedType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack,
-        bool declare, bool isCollectGTy = true) const;
+    std::string MangleUserDefinedType(
+        AST::ModalTy ty, std::vector<std::string>& genericsTypeStack, bool declare, bool isCollectGTy = true) const;
 
     /**
      * @brief Collect variable or lambda to calculate index.
@@ -437,16 +445,16 @@ protected:
      * @brief Mangle `main` func and `test.entry` func.
      */
     virtual std::optional<std::string> MangleEntryFunction(const AST::FuncDecl& funcDecl) const;
-    std::string MangleEnumType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack,
-        bool declare, bool isCollectGTy = true) const;
-    std::string MangleRawArrayType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack,
-        bool declare, bool isCollectGTy = true) const;
-    std::string MangleVArrayType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack, bool declare,
-        bool isCollectGTy = true) const;
-    std::string MangleTupleType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack,
-        bool declare, bool isCollectGTy = true) const;
-    std::string MangleFuncType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack,
-        bool declare, bool isCollectGTy = true) const;
+    std::string MangleEnumType(
+        AST::ModalTy ty, std::vector<std::string>& genericsTypeStack, bool declare, bool isCollectGTy = true) const;
+    std::string MangleRawArrayType(
+        AST::ModalTy ty, std::vector<std::string>& genericsTypeStack, bool declare, bool isCollectGTy = true) const;
+    std::string MangleVArrayType(
+        AST::ModalTy ty, std::vector<std::string>& genericsTypeStack, bool declare, bool isCollectGTy = true) const;
+    std::string MangleTupleType(
+        AST::ModalTy ty, std::vector<std::string>& genericsTypeStack, bool declare, bool isCollectGTy = true) const;
+    std::string MangleFuncType(
+        AST::ModalTy ty, std::vector<std::string>& genericsTypeStack, bool declare, bool isCollectGTy = true) const;
 
     std::string MangleVarDecl(const AST::Decl& decl, const::std::vector<Ptr<AST::Node>>& prefix) const;
     std::string MangleVarWithPatternDecl(const AST::VarWithPatternDecl& vwpDecl,
@@ -465,15 +473,16 @@ private:
      */
     std::string ManglePackageNameForGeneric(const AST::Decl& decl) const;
 
-    std::string MangleCPointerType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack, bool declare,
-        bool isCollectGTy = true) const;
-    std::string MangleGenericType(const AST::Ty& ty, std::vector<std::string>& genericsTypeStack,
-        bool declare = false) const;
-    std::string MangleGenericType(const AST::Ty& ty) const;
+    std::string MangleCPointerType(
+        AST::ModalTy ty, std::vector<std::string>& genericsTypeStack, bool declare, bool isCollectGTy = true) const;
+    std::string MangleGenericType(
+        AST::ModalTy ty, std::vector<std::string>& genericsTypeStack, bool declare = false) const;
+    std::string MangleGenericType(AST::ModalTy ty) const;
     std::string MangleCStringType() const
     {
         return "k";
     }
+    std::string MangleCStringType(AST::ModalTy ty) const;
     void MangleExportIdForGenericParamDecl(const AST::Decl& decl) const;
 };
 
@@ -646,6 +655,8 @@ std::string MangleFilePrivate(const AST::Decl& decl);
  * @return std::string The mangled number string.
  */
 std::string DecimalToManglingNumber(const std::string& decimal);
+
+std::string MangleLocalModifier(AST::ModalInfo modal);
 } // namespace MangleUtils
 } // namespace Cangjie
 #endif // CANGJIE_MANGLE_BASEMANGLER_H
