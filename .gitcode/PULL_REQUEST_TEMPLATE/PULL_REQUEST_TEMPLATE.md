@@ -15,6 +15,19 @@ Please describe the type of changes in this Pull Request (reason). **Simply save
 
 **Please do not modify or delete the following options. Simply save and click the checkbox, or when editing, change `[ ]` to `[x]` for the relevant item.**
 
+### Affected Platforms
+
+- [ ] Windows
+- [ ] Linux
+- [ ] MacOS
+- [ ] HarmonyOS
+
+### Affected Components
+
+- [ ] Cangjie Compiler
+- [ ] LSP 
+- [ ] Other (specify below)
+
 ### Local Compilation Verification Results:
 
 - [ ] Cangjie Compiler compiled successfully
