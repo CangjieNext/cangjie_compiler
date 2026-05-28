@@ -65,7 +65,7 @@ Ptr<Value> Translator::ProcessBinaryExpr(const AST::BinaryExpr& binaryExpr)
         {Cangjie::TokenKind::NOTEQ, ExprKind::NOTEQUAL},
         {Cangjie::TokenKind::EQUAL, ExprKind::EQUAL},
     };
-    const auto chirType = TranslateType(*binaryExpr.GetTy());
+    const auto chirType = TranslateType(binaryExpr.GetTy());
     const auto& loc = TranslateLocation(binaryExpr);
     auto it = OP2_EXPR_KIND.find(binaryExpr.op);
     CJC_ASSERT(it != OP2_EXPR_KIND.end());

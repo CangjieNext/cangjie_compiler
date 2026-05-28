@@ -162,9 +162,9 @@ CHIR::Type* Translator::GetExactParentType(
     if (outerDecl->TestAttr(AST::Attribute::GENERIC_INSTANTIATED)) {
         Type* parentTy = nullptr;
         if (outerDecl->astKind == AST::ASTKind::EXTEND_DECL) {
-            parentTy = TranslateType(*StaticCast<AST::ExtendDecl*>(outerDecl)->extendedType->GetTy());
+            parentTy = TranslateType(StaticCast<AST::ExtendDecl*>(outerDecl)->extendedType->GetTy());
         } else {
-            parentTy = TranslateType(*outerDecl->GetTy());
+            parentTy = TranslateType(outerDecl->GetTy());
         }
         return parentTy->StripAllRefs();
     }
