@@ -77,8 +77,7 @@ Value* Translator::TranslateVArrayAssign(const AssignExpr& assign)
         auto lhsBase = lhsLeftValueInfo.base;
         // polish this
         if (!lhsLeftValueInfo.path.empty()) {
-            auto lhsCustomType = StaticCast<CustomType*>(lhsBase->GetType()->StripAllRefs());
-            lhsBase = CreateGetElementRefWithPath(loc, lhsBase, lhsLeftValueInfo.path, currentBlock, *lhsCustomType);
+            lhsBase = CreateGetElementRefWithPath(loc, lhsBase, lhsLeftValueInfo.path, currentBlock);
         }
         CJC_ASSERT(lhsBase->GetType()->IsRef());
 
@@ -91,8 +90,7 @@ Value* Translator::TranslateVArrayAssign(const AssignExpr& assign)
     auto lhsBase = lhsLeftValueInfo.base;
     // polish this
     if (!lhsLeftValueInfo.path.empty()) {
-        auto lhsCustomType = StaticCast<CustomType*>(lhsBase->GetType()->StripAllRefs());
-        lhsBase = CreateGetElementRefWithPath(loc, lhsBase, lhsLeftValueInfo.path, currentBlock, *lhsCustomType);
+        lhsBase = CreateGetElementRefWithPath(loc, lhsBase, lhsLeftValueInfo.path, currentBlock);
     }
     CJC_ASSERT(lhsBase && lhsBase->GetType()->IsRef());
     auto loadLHSValue = CreateAndAppendExpression<Load>(
@@ -136,8 +134,7 @@ void Translator::CreateAndAppendVArraySet(
 void Translator::CreateAndAppendWrappedStoreElementByName(
     const DebugLocation& loc, Value& rhs, Value& lhs, const std::vector<std::string>& path)
 {
-    auto lhsCustomType = StaticCast<CustomType*>(lhs.GetType()->StripAllRefs());
-    auto memberType = GetInstMemberTypeByName(*lhsCustomType, path, builder);
+    auto memberType = GetInstMemberTypeByName(lhs, path, builder);
     auto castedRhs = TypeCastOrBoxIfNeeded(rhs, *memberType, loc);
     CreateAndAppendExpression<StoreElementByName>(loc, builder.GetUnitTy(), castedRhs, &lhs, path, currentBlock);
 }
@@ -184,10 +181,9 @@ Value* Translator::TranslateCompoundAssign(const AssignExpr& assign)
         // Specially, "A" can also be a implicit/explicit `this` or `super` param
         CJC_ASSERT(lhsLeftValueBaseRefTy->IsReferenceTypeWithRefDims(1) ||
             lhsLeftValueBaseRefTy->IsValueOrGenericTypeWithRefDims(1));
-        auto lhsLeftValueBaseCustomType = StaticCast<CustomType*>(lhsLeftValueBaseTy);
         // Therefore we need to get the element value from the base
         auto getMemberRef = CreateGetElementRefWithPath(
-            leftValLoc, lhsLeftValueBase, lhsLeftValuePath, currentBlock, *lhsLeftValueBaseCustomType);
+            leftValLoc, lhsLeftValueBase, lhsLeftValuePath, currentBlock);
         auto memberType = StaticCast<RefType*>(getMemberRef->GetType())->GetBaseType();
         auto loadMember = CreateAndAppendExpression<Load>(leftValLoc, memberType, getMemberRef, currentBlock);
         lhsRightValue = loadMember->GetResult();
@@ -239,8 +235,7 @@ Value* Translator::TranslateTrivialAssign(const AST::AssignExpr& assign)
         lhs = linfo.base;
         path = std::move(linfo.path);
         if (!path.empty()) {
-            auto lhsCustomType = StaticCast<CustomType*>(lhs->GetType()->StripAllRefs());
-            auto getMemberRef = CreateGetElementRefWithPath(loc, lhs, path, currentBlock, *lhsCustomType);
+            auto getMemberRef = CreateGetElementRefWithPath(loc, lhs, path, currentBlock);
             exprValueTable.Set(*assign.leftValue, *getMemberRef);
         }
 

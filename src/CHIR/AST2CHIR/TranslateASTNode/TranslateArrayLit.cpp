@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
+#include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 
 using namespace Cangjie::CHIR;
@@ -41,7 +42,9 @@ Ptr<Value> Translator::TranslateStructArray(const AST::ArrayLit& array)
     auto elementSize =
         CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, array.children.size())
             ->GetResult();
-    auto rawArrayType = builder.GetType<RefType>(builder.GetType<RawArrayType>(eleTy, 1u));
+    auto modal = ASTModal2CHIRModal(array.GetTy().Mode());
+    Type* rawArrayType = builder.GetType<RefType>(
+        builder.GetType<ModalType>(builder.GetType<RawArrayType>(eleTy, 1u), modal));
     auto rawArrayRef = TryCreate<RawArrayAllocate>(currentBlock, loc, rawArrayType, eleTy, elementSize)->GetResult();
     // in cjdb, if the arrayLit is nested,e.g. [[1,2]]
     // the outer RawArrayAllocate must be generated earlier than inner RawArrayAllocate,

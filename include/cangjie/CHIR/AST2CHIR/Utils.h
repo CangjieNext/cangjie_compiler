@@ -199,13 +199,13 @@ void SetCompileTimeValueFlagRecursively(Function& initFunc);
 /**
  * @brief Retrieves the instantiated member type by given type and name.
  *
- * @param rootType root type
+ * @param baseValue base value
  * @param names Member var name.
  * @param builder The CHIR builder used for building the type.
  * @return The instantiated member type.
  */
 Type* GetInstMemberTypeByName(
-    const CustomType& rootType, const std::vector<std::string>& names, CHIRBuilder& builder);
+    const Value& baseValue, const std::vector<std::string>& names, CHIRBuilder& builder);
 
 /**
  * @brief Retrieves the instantiated member type by given type and name, checking for read-only.
@@ -221,6 +221,8 @@ std::pair<Type*, bool> GetInstMemberTypeByNameCheckingReadOnly(
     const GenericType& rootType, const std::vector<std::string>& names, CHIRBuilder& builder);
 
 Type* AddRefIfFuncIsMutOrClass(Type& thisType, const AST::FuncDecl& funcDecl, CHIRBuilder& builder);
+
+ModalInfo ASTModal2CHIRModal(const AST::ModalInfo& astModal);
 } // namespace CHIR
 } // namespace Cangjie
 

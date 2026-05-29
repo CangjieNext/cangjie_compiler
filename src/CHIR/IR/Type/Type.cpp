@@ -153,6 +153,46 @@ Type* Type::StripAllRefs() const
     return baseTy;
 }
 
+Type* Type::StripAllModalMarks() const
+{
+    Type* baseTy = const_cast<Type*>(this);
+    while (baseTy->IsModal()) {
+        baseTy = StaticCast<ModalType*>(baseTy)->GetBaseType();
+    }
+    return baseTy;
+}
+
+Type* Type::GetPureType() const
+{
+    Type* baseTy = StripAllModalMarks()->StripAllRefs();
+    while (auto tempTy = baseTy->StripAllModalMarks()->StripAllRefs()) {
+        if (tempTy == baseTy) {
+            break;
+        }
+        baseTy = tempTy;
+    }
+    return baseTy;
+}
+
+bool Type::IsCopyable() const
+{
+    if (IsPrimitive() || IsCPointer() || IsCString() || IsVoid() || IsVArray()) {
+        return true;
+    }
+    if (IsStruct()) {
+        return StaticCast<const StructType*>(this)->GetStructDef()->IsCopyable();
+    }
+    if (IsTuple()) {
+        for (auto arg : GetTypeArgs()) {
+            if (!arg->IsCopyable()) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
 bool Type::IsReferenceTypeWithRefDims(size_t dims) const
 {
     if (GetRefDims(*this) != dims) {
@@ -742,6 +782,7 @@ Function* CustomType::GetExpectedFunc(const std::string& funcName, FuncType& fun
     return nullptr;
 }
 
+// return type should be data type
 Type* CustomType::GetExactParentType(
     const std::string& funcName, FuncType& funcType, bool isStatic,
     std::vector<Type*>& funcInstTypeArgs, CHIRBuilder& builder, bool checkAbstractMethod)
@@ -1507,6 +1548,17 @@ bool Type::IsEqualOrSubTypeOf(const Type& parentType, CHIRBuilder& builder,
     if ((this->IsRef() || parentType.IsRef()) && (thisDeref == parentDeref)) {
         return false;
     }
+    if (thisDeref->IsModal()) {
+        if (!parentDeref->IsModal()) {
+            return false;
+        }
+        auto thisModalInfo = StaticCast<ModalType*>(thisDeref)->GetModalInfo();
+        auto parentModalInfo = StaticCast<ModalType*>(parentDeref)->GetModalInfo();
+        // need to check modal and base type both
+        return (thisModalInfo == parentModalInfo || thisModalInfo.IsSubModal(parentModalInfo)) &&
+            StaticCast<ModalType*>(thisDeref)->GetBaseType()->IsEqualOrSubTypeOf(
+                *StaticCast<ModalType*>(parentDeref)->GetBaseType(), builder, visited);
+    }
     // Nothing type is all types' sub type, Any type is all types' parent type
     if (thisDeref == parentDeref || thisDeref->IsNothing() || parentDeref->IsAny()) {
         return true;
@@ -1597,5 +1649,90 @@ bool Type::SatisfyGenericConstraints(const GenericType& type, CHIRBuilder& build
         }
     }
     return true;
+}
+
+ModalInfo::ModalInfo() : local(LocalModal::NONE)
+{
+}
+
+ModalInfo::ModalInfo(LocalModal local) : local(local)
+{
+}
+
+LocalModal ModalInfo::Local() const
+{
+    return local;
+}
+
+bool ModalInfo::operator==(const ModalInfo& other) const
+{
+    return local == other.local;
+}
+
+bool ModalInfo::operator!=(const ModalInfo& other) const
+{
+    return local != other.local;
+}
+
+bool ModalInfo::IsSubModal(const ModalInfo& other) const
+{
+    auto thisLocal = Local();
+    auto otherLocal = other.Local();
+    return (thisLocal == LocalModal::NONE && otherLocal == LocalModal::MAYBE) ||
+           (thisLocal == LocalModal::MUST && otherLocal == LocalModal::MAYBE);
+}
+
+std::string ModalInfo::ToString() const
+{
+    switch (local) {
+        case LocalModal::NONE:
+            return "@~local";
+        case LocalModal::MAYBE:
+            return "@local?";
+        case LocalModal::MUST:
+            return "@local!";
+        default:
+            CJC_ABORT();
+            return "";
+    }
+}
+
+size_t ModalType::Hash() const
+{
+    std::size_t hashVal = HashArgTypes(argTys);
+    HashValue(hashVal, modal.Local());
+    HashValue(hashVal, kind);
+    return hashVal;
+}
+
+bool ModalType::operator==(const Type& other) const
+{
+    auto it = DynamicCast<const ModalType*>(&other);
+    return it && argTys == it->argTys && (modal == it->modal);
+}
+
+std::string ModalType::ToString() const
+{
+    return GetBaseType()->ToString() + " " + modal.ToString();
+}
+
+std::string ModalType::ToSrcCodeString() const
+{
+    return GetBaseType()->ToSrcCodeString() + " " + modal.ToString();
+}
+
+Type* ModalType::GetBaseType() const
+{
+    return argTys[0];
+}
+
+ModalInfo ModalType::GetModalInfo() const
+{
+    return modal;
+}
+
+ModalType::ModalType(Type* baseType, ModalInfo modal) : Type(TypeKind::TYPE_MODAL), modal(modal)
+{
+    this->argTys.emplace_back(baseType);
 }
 } // namespace Cangjie::CHIR

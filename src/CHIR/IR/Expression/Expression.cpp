@@ -2097,6 +2097,7 @@ void Lambda::InitBody(BlockGroup& newBody)
     CJC_ASSERT(body == nullptr);
     CJC_ASSERT(blockGroups.empty());
     // newBody -> lambda
+    RemoveBody();
     newBody.SetOwnerExpression(*this);
 
     // lambda -> newBody

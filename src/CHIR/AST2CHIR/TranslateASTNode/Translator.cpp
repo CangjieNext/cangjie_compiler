@@ -207,9 +207,17 @@ Ptr<Function> Translator::CreateEmptyGVInitFunc(const std::string& mangledName, 
 }
 
 Ptr<LocalVar> Translator::CreateGetElementRefWithPath(const DebugLocation& loc, Ptr<Value> lhsBase,
-    const std::vector<std::string>& path, Ptr<Block> block, const CustomType& customType)
+    const std::vector<std::string>& path, Ptr<Block> block)
 {
-    auto [memberType, isReadOnly] = GetInstMemberTypeByNameCheckingReadOnly(customType, path, builder);
+    ModalInfo modalInfo;
+    if (auto modalType = DynamicCast<ModalType*>(lhsBase->GetType()->StripAllRefs())) {
+        modalInfo = modalType->GetModalInfo();
+    }
+    auto customType = StaticCast<CustomType*>(lhsBase->GetType()->GetPureType());
+    auto [memberType, isReadOnly] = GetInstMemberTypeByNameCheckingReadOnly(*customType, path, builder);
+    if (modalInfo.Local() != LocalModal::NONE) {
+        memberType = builder.GetType<ModalType>(memberType, modalInfo);
+    }
     auto memberRefType = builder.GetType<RefType>(memberType);
     auto getMemberRef =
         CreateAndAppendExpression<GetElementByName>(loc, memberRefType, lhsBase, path, block)->GetResult();

@@ -7,6 +7,7 @@
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 
 #include "cangjie/AST/Utils.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 
 namespace Cangjie {
@@ -72,7 +73,13 @@ FuncType* AdjustFuncType(FuncType& funcType, const AST::FuncDecl& funcDecl, CHIR
     if (IsInstanceMember(funcDecl)) {
         std::vector<Type*> paramsTy;
         paramsTy.reserve(params.size() + 1); // additional 1 means the type of this.
-        auto thisTy = chirType.TranslateType(*funcDecl.outerDecl->GetTy());
+        Type* thisTy = nullptr;
+        auto& paramList = funcDecl.funcBody->paramLists[0];
+        if (paramList->thisParam) {
+            thisTy = chirType.TranslateType(paramList->thisParam->GetTy());
+        } else {
+            thisTy = chirType.TranslateType(funcDecl.outerDecl->GetTy());
+        }
         paramsTy.emplace_back(AddRefIfFuncIsMutOrClass(*thisTy, funcDecl, builder));
         paramsTy.insert(paramsTy.end(), params.begin(), params.end());
 
@@ -304,9 +311,18 @@ MemberVarInfo GetMemberVarByName(const CustomTypeDef& def, const std::string& va
     return MemberVarInfo{.attributeInfo = AttributeInfo{}};
 }
 
-Type* GetInstMemberTypeByName(const CustomType& rootType, const std::vector<std::string>& names, CHIRBuilder& builder)
+Type* GetInstMemberTypeByName(const Value& baseValue, const std::vector<std::string>& names, CHIRBuilder& builder)
 {
-    return GetInstMemberTypeByNameCheckingReadOnly(rootType, names, builder).first;
+    ModalInfo modalInfo;
+    if (auto modalType = DynamicCast<ModalType*>(baseValue.GetType()->StripAllRefs())) {
+        modalInfo = modalType->GetModalInfo();
+    }
+    auto pureType = StaticCast<CustomType*>(baseValue.GetType()->GetPureType());
+    auto [memberType, _] = GetInstMemberTypeByNameCheckingReadOnly(*pureType, names, builder);
+    if (modalInfo.Local() != LocalModal::NONE) {
+        memberType = builder.GetType<ModalType>(memberType, modalInfo);
+    }
+    return memberType;
 }
 
 std::pair<Type*, bool> GetInstMemberTypeByNameCheckingReadOnly(
@@ -379,6 +395,21 @@ Type* AddRefIfFuncIsMutOrClass(Type& thisType, const AST::FuncDecl& funcDecl, CH
         return builder.GetType<RefType>(&thisType);
     } else {
         return &thisType;
+    }
+}
+
+ModalInfo ASTModal2CHIRModal(const AST::ModalInfo& astModal)
+{
+    switch (astModal.local) {
+        case AST::LocalModal::NOT:
+            return ModalInfo(LocalModal::NONE);
+        case AST::LocalModal::HALF:
+            return ModalInfo(LocalModal::MAYBE);
+        case AST::LocalModal::FULL:
+            return ModalInfo(LocalModal::MUST);
+        default:
+            CJC_ABORT();
+            return ModalInfo(LocalModal::NONE);
     }
 }
 } // namespace CHIR

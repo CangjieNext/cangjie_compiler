@@ -775,6 +775,7 @@ private:
     Ptr<Value> Visit(const AST::ClassDecl& decl);
     Ptr<Value> Visit(const AST::DoWhileExpr& doWhileExpr);
     Ptr<Value> Visit(const AST::EnumDecl& decl);
+    Ptr<Value> Visit(const AST::ExclaveExpr& exclaveExpr);
     Ptr<Value> Visit(const AST::ExtendDecl& decl);
     Ptr<Value> Visit(const AST::FuncArg& arg);
     Ptr<Value> Visit(const AST::FuncBody& funcBody);
@@ -1079,7 +1080,7 @@ private:
     }
 
     Ptr<LocalVar> CreateGetElementRefWithPath(const DebugLocation& loc, Ptr<Value> lhsBase,
-        const std::vector<std::string>& path, Ptr<Block> block, const CustomType& customType);
+        const std::vector<std::string>& path, Ptr<Block> block);
 
     /// Create a typecast or some equivalent expressions that represent a typecast.
     TypeCast* CreateWrappedTypeCast(Type* ty, Value* operand, Block* parent)
