@@ -267,8 +267,23 @@ Type* CHIRType::TranslateType(AST::ModalTy ty)
 {
     CJC_ASSERT(ty && ty.Ty());
     Type* base = TranslateType(ty.Ty());
-    // TODO: 需要加上modal
-    return base;
+    if (ty.Mode().local == AST::LocalModal::NOT) {
+        return base;
+    }
+    Type* result = base->StripAllRefs();
+    switch (ty.Mode().local) {
+        case AST::LocalModal::HALF:
+            result = builder.GetType<ModalType>(result, ModalInfo(LocalModal::MAYBE));
+        case AST::LocalModal::FULL:
+            result = builder.GetType<ModalType>(result, ModalInfo(LocalModal::MUST));
+        default:
+            CJC_ABORT();
+            return nullptr;
+    }
+    if (base->IsRef()) {
+        result = builder.GetType<RefType>(result);
+    }
+    return result;
 }
 
 } // namespace Cangjie::CHIR

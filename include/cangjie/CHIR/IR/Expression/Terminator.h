@@ -207,6 +207,28 @@ private:
 };
 
 /**
+ * @brief Exit current function and move control to the caller.
+ */
+class Exclave : public Terminator {
+    friend class CHIRContext;
+    friend class CHIRBuilder;
+public:
+    // ===--------------------------------------------------------------------===//
+    // Base Information
+    // ===--------------------------------------------------------------------===//
+    /** @brief Get the body of this Exclave Expression */
+    BlockGroup* GetBody() const;
+
+    void InitBody(BlockGroup& newBody);
+
+private:
+    explicit Exclave(Block* parent);
+    ~Exclave() override = default;
+
+    Exclave* Clone(CHIRBuilder& builder, Block& parent) const override;
+};
+
+/**
  * @brief Exit current function.
  */
 class Exit : public Terminator {

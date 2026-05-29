@@ -14,6 +14,7 @@ MAJORKIND(TERMINATOR,
 EXPRKIND(GOTO, "GoTo", GoTo)
 EXPRKIND(BRANCH, "Branch", Branch)
 EXPRKIND(MULTIBRANCH, "MultiBranch", MultiBranch)
+EXPRKIND(EXCLAVE, "Exclave", Exclave)
 EXPRKIND(EXIT, "Exit", Exit)
 EXPRKIND(APPLY_WITH_EXCEPTION, "ApplyWithException", ApplyWithException)
 EXPRKIND(INVOKE_WITH_EXCEPTION, "InvokeWithException", InvokeWithException)

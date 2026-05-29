@@ -72,7 +72,13 @@ FuncType* AdjustFuncType(FuncType& funcType, const AST::FuncDecl& funcDecl, CHIR
     if (IsInstanceMember(funcDecl)) {
         std::vector<Type*> paramsTy;
         paramsTy.reserve(params.size() + 1); // additional 1 means the type of this.
-        auto thisTy = chirType.TranslateType(*funcDecl.outerDecl->GetTy());
+        Type* thisTy = nullptr;
+        auto& paramList = funcDecl.funcBody->paramLists[0];
+        if (paramList->thisParam) {
+            thisTy = chirType.TranslateType(*paramList->thisParam->GetTy());
+        } else {
+            thisTy = chirType.TranslateType(*funcDecl.outerDecl->GetTy());
+        }
         paramsTy.emplace_back(AddRefIfFuncIsMutOrClass(*thisTy, funcDecl, builder));
         paramsTy.insert(paramsTy.end(), params.begin(), params.end());
 
