@@ -105,10 +105,15 @@ std::vector<llvm::Value*> IRBuilder2::FixFuncArgs(const CGFunctionType& calleeTy
     // Keep AArch64 global-struct arguments compatible with the existing
     // callee/runtime convention: encode the compatibility marker on the
     // argument value itself and leave the synthetic `basePtr` as null.
+    // Android tags the high 8 bits of native heap pointers starting from
+    // Android 11 / API 30 to detect native memory errors, so Cangjie cannot
+    // reuse the highest address bit there. The runtime handles Android with
+    // the same logic used on x86_64 instead.
     auto isGlobalStructArgOnAArch64 = [this, applyWrapper, &structParamNeedsBasePtr, &realArgIndices](size_t idx) {
         return applyWrapper && structParamNeedsBasePtr.find(realArgIndices[idx]) != structParamNeedsBasePtr.end() &&
             applyWrapper->GetArgs()[idx]->IsGlobalVar() &&
-            cgMod.GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::AARCH64;
+            cgMod.GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::AARCH64 &&
+            cgMod.GetCGContext().GetCompileOptions().target.env != Triple::Environment::ANDROID;
     };
     auto tagGlobalStructAddrForAArch64 = [this](llvm::Value* llvmVal) {
         auto taggedPtr = CreatePtrToInt(llvmVal, getInt64Ty());
