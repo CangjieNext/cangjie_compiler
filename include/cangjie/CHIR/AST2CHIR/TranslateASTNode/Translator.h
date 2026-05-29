@@ -775,6 +775,7 @@ private:
     Ptr<Value> Visit(const AST::ClassDecl& decl);
     Ptr<Value> Visit(const AST::DoWhileExpr& doWhileExpr);
     Ptr<Value> Visit(const AST::EnumDecl& decl);
+    Ptr<Value> Visit(const AST::ExclaveExpr& exclaveExpr);
     Ptr<Value> Visit(const AST::ExtendDecl& decl);
     Ptr<Value> Visit(const AST::FuncArg& arg);
     Ptr<Value> Visit(const AST::FuncBody& funcBody);
