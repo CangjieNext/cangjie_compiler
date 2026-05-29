@@ -449,6 +449,15 @@ template <> VArrayType* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
     return builder.GetType<VArrayType>(elemTy, size);
 }
 
+template <> ModalType* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFormat::ModalType* obj)
+{
+    CJC_NULLPTR_CHECK(obj->base()->argTys());
+    CJC_ASSERT(obj->base()->argTys()->size() >= 1);
+    auto baseTy = GetType<Type>(obj->base()->argTys()->Get(0));
+    auto local = static_cast<LocalModal>(obj->modal()->local());
+    return builder.GetType<ModalType>(baseTy, ModalInfo(local));
+}
+
 template <> FuncType* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFormat::FuncType* obj)
 {
     CJC_NULLPTR_CHECK(obj->base()->argTys());
@@ -552,6 +561,8 @@ template <> BlockGroup* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
         blockGroup = builder.CreateBlockGroup(*ownedExpression->GetTopLevelFunc());
         if (ownedExpression->IsLambda()) {
             StaticCast<Lambda*>(ownedExpression)->InitBody(*blockGroup);
+        } else if (ownedExpression->GetExprKind() == ExprKind::EXCLAVE) {
+            StaticCast<Exclave*>(ownedExpression)->InitBody(*blockGroup);
         }
     }
     return blockGroup;
@@ -660,6 +671,7 @@ static std::pair<ExprKind, bool> CHIRExprKindToExprKind(PackageFormat::CHIRExprK
         case FK::CHIRExprKind_Branch:             return {ExprKind::BRANCH, false};
         case FK::CHIRExprKind_MultiBranch:        return {ExprKind::MULTIBRANCH, false};
         case FK::CHIRExprKind_Exit:               return {ExprKind::EXIT, false};
+        case FK::CHIRExprKind_Exclave:            return {ExprKind::EXCLAVE, false};
         case FK::CHIRExprKind_TryApply:           return {ExprKind::APPLY_WITH_EXCEPTION, true};
         case FK::CHIRExprKind_TryInvoke:          return {ExprKind::INVOKE_WITH_EXCEPTION, true};
         case FK::CHIRExprKind_TryIntrinsic:       return {ExprKind::INTRINSIC_WITH_EXCEPTION, true};
@@ -795,6 +807,8 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
             return DeserializeConstant(*resultTy, *StaticCast<LiteralValue*>(operands[0]), *owner);
         case ExprKind::EXIT:
             return builder.CreateTerminator<Exit>(owner);
+        case ExprKind::EXCLAVE:
+            return builder.CreateTerminator<Exclave>(owner);
         case ExprKind::GET_EXCEPTION:
             return builder.CreateExpression<GetException>(resultTy, owner);
         case ExprKind::GET_RTTI:
@@ -1693,6 +1707,10 @@ Type* CHIRDeserializer::CHIRDeserializerImpl::GetType(uint32_t id)
             case PackageFormat::TypeElem_GenericType:
                 id2Type[id] = Deserialize<GenericType>(
                     static_cast<const PackageFormat::GenericType*>(pool->types()->Get(id - 1)));
+                break;
+            case PackageFormat::TypeElem_ModalType:
+                id2Type[id] = Deserialize<ModalType>(
+                    static_cast<const PackageFormat::ModalType*>(pool->types()->Get(id - 1)));
                 break;
             case PackageFormat::TypeElem_NONE:
                 id2Type[id] = nullptr;

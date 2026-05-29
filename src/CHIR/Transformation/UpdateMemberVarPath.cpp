@@ -74,7 +74,7 @@ std::vector<uint64_t> UpdateMemberVarPath::ChangeNameToPath(
 void UpdateMemberVarPath::UpdateToGetElementRef(GetElementByName& rawExpr)
 {
     auto locationVal = rawExpr.GetLocation();
-    auto locationType = StaticCast<CustomType*>(locationVal->GetType()->StripAllRefs());
+    auto locationType = StaticCast<CustomType*>(locationVal->GetType()->GetPureType());
     auto path = ChangeNameToPath(*locationType, rawExpr.GetNames());
     auto loc = rawExpr.GetDebugLocation();
     auto retType = rawExpr.GetResult()->GetType();
@@ -89,7 +89,7 @@ void UpdateMemberVarPath::UpdateToGetElementRef(GetElementByName& rawExpr)
 void UpdateMemberVarPath::UpdateToStoreElementRef(StoreElementByName& rawExpr)
 {
     auto locationVal = rawExpr.GetLocation();
-    auto locationType = StaticCast<CustomType*>(locationVal->GetType()->StripAllRefs());
+    auto locationType = StaticCast<CustomType*>(locationVal->GetType()->GetPureType());
     auto path = ChangeNameToPath(*locationType, rawExpr.GetNames());
     auto value = rawExpr.GetValue();
     auto loc = rawExpr.GetDebugLocation();
@@ -105,7 +105,7 @@ void UpdateMemberVarPath::UpdateToStoreElementRef(StoreElementByName& rawExpr)
 void UpdateMemberVarPath::UpdateToField(FieldByName& rawExpr)
 {
     auto locationVal = rawExpr.GetBase();
-    auto locationType = StaticCast<CustomType*>(locationVal->GetType()->StripAllRefs());
+    auto locationType = StaticCast<CustomType*>(locationVal->GetType()->GetPureType());
     auto path = ChangeNameToPath(*locationType, rawExpr.GetNames());
     auto loc = rawExpr.GetDebugLocation();
     auto retType = rawExpr.GetResult()->GetType();

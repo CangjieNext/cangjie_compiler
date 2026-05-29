@@ -170,7 +170,7 @@ bool IsUnreachableApply(const Type* thisType)
     if (thisType == nullptr) {
         return false;
     }
-    return thisType->StripAllRefs()->IsNothing();
+    return thisType->GetPureType()->IsNothing();
 }
 
 bool FuncCanBeDynamicDispatch(const Function& func)
@@ -199,7 +199,7 @@ std::vector<Type*> CalculateAllUpperBounds(const GenericType& genericType, CHIRB
     std::unordered_map<const GenericType*, Type*> replaceTable;
     for (auto upperBound : upperBounds) {
         // a hack way, `genericType` may be an orphan generic type
-        auto derefUpperBound = Cangjie::DynamicCast<ClassType*>(upperBound->StripAllRefs());
+        auto derefUpperBound = Cangjie::DynamicCast<ClassType*>(upperBound->GetPureType());
         if (derefUpperBound == nullptr) {
             continue;
         }
@@ -641,7 +641,7 @@ bool CHIRChecker::TypeIsExpected(const Type& srcType, const Type& dstType)
         return true;
     }
     // maybe struct S <: I, S is sub type of I, but we can't send S to I directly
-    if (srcType.IsValueType() && dstType.StripAllRefs()->IsClass()) {
+    if (srcType.IsValueType() && dstType.GetPureType()->IsClass()) {
         return false;
     }
     // we can set a sub type to a parent type, it's safe in llvm ir,
@@ -650,7 +650,7 @@ bool CHIRChecker::TypeIsExpected(const Type& srcType, const Type& dstType)
         return true;
     }
     // it's a hack, in mut wrapper func, CHIR cast param to Any&, this will be corrected later
-    if (srcType.StripAllRefs()->IsAny() && dstType.IsClassRef()) {
+    if (srcType.GetPureType()->IsAny() && dstType.IsClassRef()) {
         return true;
     }
     // a hack way, we will fix later
@@ -1045,7 +1045,7 @@ bool CHIRChecker::CheckParamTypes(
             continue;
         }
         if (pType->IsRef()) {
-            auto baseType = StaticCast<RefType*>(pType)->GetBaseType();
+            auto baseType = StaticCast<RefType*>(pType)->GetBaseType()->StripAllModalMarks();
             // 3. can't use This& as parameter type
             if (baseType->IsThis()) {
                 ErrorInLambdaOrFunc(topLevelFunc, lambda, errMsg + ", it shouldn't be parameter's type.");
@@ -1904,7 +1904,7 @@ void CHIRChecker::CheckRaiseException(const RaiseException& expr, const Function
             CheckCustomTypeDefIsExpected(*type.GetClassDef(), EFFECT_PACKAGE_NAME, "ImmediateFrameErrorWrapper") ||
             CheckCustomTypeDefIsExpected(*type.GetClassDef(), EFFECT_PACKAGE_NAME, "ImmediateFrameExceptionWrapper");
     };
-    auto derefType = exceptionType->StripAllRefs();
+    auto derefType = exceptionType->GetPureType();
     if (auto classType = DynamicCast<ClassType*>(derefType)) {
         if (!isLegalExceptionValueType(*classType)) {
             auto errMsg = "value " + exceptionValue->GetIdentifier() + " used in " + GetExpressionString(expr) +
@@ -1915,7 +1915,7 @@ void CHIRChecker::CheckRaiseException(const RaiseException& expr, const Function
     } else if (auto genericType = DynamicCast<GenericType*>(derefType)) {
         bool ok = false;
         for (auto upperBound : genericType->GetUpperBounds()) {
-            if (isLegalExceptionValueType(*StaticCast<ClassType*>(upperBound->StripAllRefs()))) {
+            if (isLegalExceptionValueType(*StaticCast<ClassType*>(upperBound->GetPureType()))) {
                 ok = true;
                 break;
             }
@@ -2111,7 +2111,7 @@ bool CHIRChecker::CheckThisTypeIsEqualOrSubTypeOfFuncParentType(
 bool CHIRChecker::CheckApplyThisType(
     const Value& callee, const Type* thisType, const Expression& expr, const Function& topLevelFunc)
 {
-    Type* thisDerefTy = thisType == nullptr ? nullptr : thisType->StripAllRefs();
+    Type* thisDerefTy = thisType == nullptr ? nullptr : thisType->GetPureType();
     // 1. thisType must be builtin type, custom type, generic type or nullptr
     /**
      *  generic type is a little weird, but the following code is allowed in Cangjie:
@@ -2167,7 +2167,7 @@ bool CHIRChecker::CheckApplyThisType(
             return true;
         }
         for (auto upperBound : gType->GetUpperBounds()) {
-            if (!StaticCast<CustomType*>(upperBound->StripAllRefs())->GetCustomTypeDef()->CanBeInherited()) {
+            if (!StaticCast<CustomType*>(upperBound->GetPureType())->GetCustomTypeDef()->CanBeInherited()) {
                 return true;
             }
         }
@@ -2213,7 +2213,7 @@ void CHIRChecker::CheckApplyFuncArgs(const std::vector<Value*>& args,
     // 3. func arg can set to func param
     for (size_t i = 0; i < instParamTypes.size(); ++i) {
         if (!TypeIsExpected(*args[i]->GetType(), *instParamTypes[i]) &&
-            !ClosureTypeIsExpected(*args[i]->GetType()->StripAllRefs(), *instParamTypes[i]->StripAllRefs(), builder)) {
+            !ClosureTypeIsExpected(*args[i]->GetType()->GetPureType(), *instParamTypes[i]->GetPureType(), builder)) {
             TypeCheckError(expr, *args[i], instParamTypes[i]->ToString(), topLevelFunc);
         }
     }
@@ -2265,7 +2265,7 @@ void CHIRChecker::CheckInvokeBase(const InvokeBase& expr, const Function& topLev
     }
 
     // a hack way, skip AutoEnvBase for now, we will fix later
-    auto thisType = expr.GetThisType()->StripAllRefs();
+    auto thisType = expr.GetThisType()->GetPureType();
     if (!thisType->IsAutoEnvBase()) {
         // 3. check vritual method
         auto virMethodCtx = VirMethodFullContext {
@@ -2295,7 +2295,7 @@ bool CHIRChecker::CheckInvokeThisType(
         ErrorInExpr(topLevelFunc, expr, errMsg);
         return false;
     }
-    auto thisDerefTy = thisType->StripAllRefs();
+    auto thisDerefTy = thisType->GetPureType();
     // 2. thisType must be builtin type, custom type, `This` or generic type
     if (!thisDerefTy->IsBuiltinType() && !thisDerefTy->IsCustomType() && !thisDerefTy->IsThis() &&
         !thisDerefTy->IsGeneric()) {
@@ -2314,7 +2314,7 @@ bool CHIRChecker::CheckInvokeThisType(
             ErrorInExpr(topLevelFunc, expr, errMsg);
             return false;
         }
-        auto objDerefType = objType.StripAllRefs();
+        auto objDerefType = objType.GetPureType();
         bool ok = false;
         if (auto gType = DynamicCast<GenericType*>(objDerefType)) {
             ok = Generic1IsEqualOrSubTypeOfGeneric2(*genericType, *gType, builder);
@@ -2332,7 +2332,7 @@ bool CHIRChecker::CheckInvokeThisType(
              *  }
              */
             for (auto upperBound : upperBounds) {
-                if (upperBound->StripAllRefs()->IsEqualOrSubTypeOf(*objDerefType, builder)) {
+                if (upperBound->GetPureType()->IsEqualOrSubTypeOf(*objDerefType, builder)) {
                     ok = true;
                     break;
                 }
@@ -2377,8 +2377,8 @@ bool CHIRChecker::CheckInvokeThisType(
             ErrorInFunc(topLevelFunc, errMsg);
             return false;
         }
-    } else if (!thisDerefTy->IsEqualOrSubTypeOf(*objType.StripAllRefs(), builder) &&
-        !ClosureTypeIsExpected(*objType.StripAllRefs(), *thisDerefTy, builder)) {
+    } else if (!thisDerefTy->IsEqualOrSubTypeOf(*objType.GetPureType(), builder) &&
+        !ClosureTypeIsExpected(*objType.GetPureType(), *thisDerefTy, builder)) {
         // 7. thisType is custom type or builtin type now, so object's type must be thisType's parent type
         auto errMsg = "type mismatched, in `" + GetExpressionString(expr) +
             "`, ThisType is " + thisType->ToString() + ", but object's type is " + objType.ToString() +
@@ -2488,7 +2488,7 @@ bool CHIRChecker::InstTypeCanSetToGenericRelatedType(Type& instType, const Type&
              *          // this case failed to pass Sema check, but you can write ir by CHIR directly
              */
             auto superTypes =
-                Cangjie::StaticCast<CustomType*>(instCustomType->StripAllRefs())->GetSuperTypesRecusively(builder);
+                Cangjie::StaticCast<CustomType*>(instCustomType->GetPureType())->GetSuperTypesRecusively(builder);
             for (auto superType : superTypes) {
                 if (superType->GetCustomTypeDef() == genericCustomType->GetCustomTypeDef() &&
                     InstTypeArgsSatisfyGenericConstraints(
@@ -2621,7 +2621,7 @@ const std::vector<VirtualMethodInfo>* CHIRChecker::CheckVTableExist(
     const GenericType& thisType, const ClassType& srcParentType)
 {
     for (auto upperBound : thisType.GetUpperBounds()) {
-        auto res = CheckVTableExist(*StaticCast<ClassType*>(upperBound->StripAllRefs()), srcParentType);
+        auto res = CheckVTableExist(*StaticCast<ClassType*>(upperBound->GetPureType()), srcParentType);
         if (res != nullptr) {
             return res;
         }
@@ -2727,7 +2727,7 @@ void CHIRChecker::CheckInvokeStaticBase(const InvokeStaticBase& expr, const Func
         .originalFuncType = expr.GetMethodType(),
         .genericTypeParams = expr.GetGenericTypeParams(),
         .offset = expr.GetVirtualMethodOffset(),
-        .thisType = expr.GetThisType()->StripAllRefs(),
+        .thisType = expr.GetThisType()->GetPureType(),
         .srcParentType = expr.GetInstSrcParentCustomTypeOfMethod(builder)
     };
     if (!CheckVirtualMethod(virMethodCtx, *expr.GetRawExpr(), topLevelFunc)) {
@@ -3000,7 +3000,7 @@ void CHIRChecker::CheckSpawnBase(const SpawnBase& expr, const Function& topLevel
     }
 
     // 2. the first operand's type must be Class-Future& or closure type
-    auto def = StaticCast<ClassType*>(objType->StripAllRefs())->GetClassDef();
+    auto def = StaticCast<ClassType*>(objType->GetPureType())->GetClassDef();
     if (!IsCoreFuture(*def) && !IsFuncTypeOrClosureBaseRefType(*objType)) {
         auto errMsg = "the first operand's type is `" + objType->ToString() +
             "`, but Class-Future& type or closure type are expected.";
@@ -3036,7 +3036,7 @@ void CHIRChecker::CheckIntrinsicWithException(const IntrinsicWithException& expr
 
 void CHIRChecker::CheckInoutOpSrc(const Value& op, const IntrinsicBase& expr, const Function& topLevelFunc)
 {
-    auto type = op.GetType()->StripAllRefs();
+    auto type = op.GetType()->GetPureType();
     if (!IsCTypeInInout(*type)) {
         auto errMsg = "`inout` operand's type is `" + type->ToString() + "`, but C-type (exclude CString) is expected.";
         ErrorInExpr(topLevelFunc, *expr.GetRawExpr(), errMsg);
@@ -3052,7 +3052,7 @@ void CHIRChecker::CheckInoutOpSrc(const Value& op, const IntrinsicBase& expr, co
         if (auto load = DynamicCast<const Load*>(localExpr)) {
             CheckInoutOpSrc(*load->GetLocation(), expr, topLevelFunc);
         } else if (auto ger = DynamicCast<const GetElementRef*>(localExpr)) {
-            auto locationType = ger->GetLocation()->GetType()->StripAllRefs();
+            auto locationType = ger->GetLocation()->GetType()->GetPureType();
             for (auto p : ger->GetPath()) {
                 locationType = GetFieldOfType(*locationType, p, builder);
                 if (locationType == nullptr) {
@@ -3067,7 +3067,7 @@ void CHIRChecker::CheckInoutOpSrc(const Value& op, const IntrinsicBase& expr, co
             }
             CheckInoutOpSrc(*ger->GetLocation(), expr, topLevelFunc);
         } else if (auto field = DynamicCast<const Field*>(localExpr)) {
-            auto locationType = field->GetBase()->GetType()->StripAllRefs();
+            auto locationType = field->GetBase()->GetType()->GetPureType();
             for (auto p : field->GetPath()) {
                 locationType = GetFieldOfType(*locationType, p, builder);
                 if (locationType == nullptr) {
@@ -3272,7 +3272,7 @@ void CHIRChecker::CheckRawArrayAllocateBase(const RawArrayAllocateBase& expr, co
 {
     // 1. result type must be RawArray&
     auto result = expr.GetResult();
-    if (!result->GetType()->IsRef() || !result->GetType()->StripAllRefs()->IsRawArray()) {
+    if (!result->GetType()->IsRef() || !result->GetType()->GetPureType()->IsRawArray()) {
         TypeCheckError(*expr.GetRawExpr(), *result, "RawArray&", topLevelFunc);
         return;
     }
@@ -3283,7 +3283,7 @@ void CHIRChecker::CheckRawArrayAllocateBase(const RawArrayAllocateBase& expr, co
     }
 
     // 3. result type and element type must be matched
-    auto resultTypeArg = StaticCast<RawArrayType*>(result->GetType()->StripAllRefs())->GetElementType();
+    auto resultTypeArg = StaticCast<RawArrayType*>(result->GetType()->GetPureType())->GetElementType();
     if (resultTypeArg != expr.GetElementType()) {
         TypeCheckError(
             *expr.GetRawExpr(), *result, "RawArray<" + expr.GetElementType()->ToString() + ">&", topLevelFunc);
@@ -3476,7 +3476,7 @@ void CHIRChecker::CheckDebug(const Debug& expr, const Function& topLevelFunc)
     if (!value->IsParameter() && opts.enableCompileDebug) {
         // 3. source value's type must be `ReferenceType&&` or `ValueType&`
         if (!CheckTypeMustBeRef(*value->GetType())) {
-            auto valueType = value->GetType()->StripAllRefs();
+            auto valueType = value->GetType()->GetPureType();
             if (valueType->IsReferenceType()) {
                 TypeCheckError(expr, *value, valueType->ToString() + "&&", topLevelFunc);
             } else {
@@ -3729,8 +3729,8 @@ void CHIRChecker::CheckInstanceOf(const InstanceOf& expr, const Function& topLev
     CheckTypeIsValid(*expr.GetType(), "target", expr, topLevelFunc);
 
     // 3. source type and target type can't be both primitive type, otherwise it should be calculated in compile time.
-    auto objectType = expr.GetObject()->GetType()->StripAllRefs();
-    if (objectType->IsPrimitive() && expr.GetType()->StripAllRefs()->IsPrimitive()) {
+    auto objectType = expr.GetObject()->GetType()->GetPureType();
+    if (objectType->IsPrimitive() && expr.GetType()->GetPureType()->IsPrimitive()) {
         auto errMsg = "invalid InstanceOf `" + result->ToString(0) + "`, source type is " + objectType->ToString() +
             ", target type is " + expr.GetType()->ToString() +
             ", they are both exact type, doesn't need to use `InstanceOf` to check in runtime.";
@@ -3794,12 +3794,12 @@ void CHIRChecker::CheckRawArrayLiteralInit(const RawArrayLiteralInit& expr, cons
 
     // 2. the 1st operand must be RawArray&
     auto rawArray = expr.GetRawArray();
-    if (!rawArray->GetType()->IsRef() || !rawArray->GetType()->StripAllRefs()->IsRawArray()) {
+    if (!rawArray->GetType()->IsRef() || !rawArray->GetType()->GetPureType()->IsRawArray()) {
         TypeCheckError(expr, *rawArray, "RawArray&", topLevelFunc);
     }
 
     // 3. all elements' type must be equal to RawArray's element type
-    auto rawArrayEleTy = StaticCast<RawArrayType*>(rawArray->GetType()->StripAllRefs())->GetElementType();
+    auto rawArrayEleTy = StaticCast<RawArrayType*>(rawArray->GetType()->GetPureType())->GetElementType();
     for (auto e : expr.GetElements()) {
         if (!e->GetType()->IsEqualOrSubTypeOf(*rawArrayEleTy, builder)) {
             TypeCheckError(expr, *e, rawArrayEleTy->ToString(), topLevelFunc);
@@ -3822,10 +3822,10 @@ void CHIRChecker::CheckRawArrayInitByValue(const RawArrayInitByValue& expr, cons
         TypeCheckError(expr, *size, "Int64", topLevelFunc);
     }
     auto rawArray = expr.GetRawArray();
-    if (!rawArray->GetType()->IsRef() || !rawArray->GetType()->StripAllRefs()->IsRawArray()) {
+    if (!rawArray->GetType()->IsRef() || !rawArray->GetType()->GetPureType()->IsRawArray()) {
         TypeCheckError(expr, *rawArray, "RawArray&", topLevelFunc);
     } else {
-        auto rawArrayEleTy = StaticCast<RawArrayType*>(rawArray->GetType()->StripAllRefs())->GetElementType();
+        auto rawArrayEleTy = StaticCast<RawArrayType*>(rawArray->GetType()->GetPureType())->GetElementType();
         if (rawArrayEleTy != expr.GetInitValue()->GetType()) {
             TypeCheckError(expr, *expr.GetInitValue(), rawArrayEleTy->ToString(), topLevelFunc);
         }
@@ -3904,7 +3904,7 @@ void CHIRChecker::CheckBox(const Box& expr, const Function& topLevelFunc)
                 ", then source type must be its base type, can't be " + sourceType->ToString() + ".";
             ErrorInExpr(topLevelFunc, expr, errMsg);
         }
-    } else if (!targetType->StripAllRefs()->IsClass()) {
+    } else if (!targetType->GetPureType()->IsClass()) {
         auto errMsg = "the target type must be Class& or Box&, can't be " + targetType->ToString() + ".";
         ErrorInExpr(topLevelFunc, expr, errMsg);
     }
@@ -3928,7 +3928,7 @@ void CHIRChecker::CheckUnBox(const UnBox& expr, const Function& topLevelFunc)
                 ", then target type must be its base type, can't be " + targetType->ToString() + ".";
             ErrorInExpr(topLevelFunc, expr, errMsg);
         }
-    } else if (!sourceType->StripAllRefs()->IsClass()) {
+    } else if (!sourceType->GetPureType()->IsClass()) {
         auto errMsg = "the source type must be Class& or Box&, can't be " + sourceType->ToString() + ".";
         ErrorInExpr(topLevelFunc, expr, errMsg);
     }
@@ -4106,7 +4106,7 @@ void CHIRChecker::CheckGetRTTIStatic(const GetRTTIStatic& expr, const Function& 
     if (optionalRules.find(Rule::CHIR_GET_RTTI_STATIC_TYPE) == optionalRules.end()) {
         return;
     }
-    auto type = expr.GetRTTIType()->StripAllRefs();
+    auto type = expr.GetRTTIType()->GetPureType();
     if (!type->IsGeneric() && !type->IsThis()) {
         ErrorInExpr(topLevelFunc, expr,
             "RTTI type should be `This` or Generic type, but now it's " + expr.GetRTTIType()->ToString() + ".");

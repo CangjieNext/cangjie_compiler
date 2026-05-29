@@ -85,6 +85,7 @@ enum CHIRTypeKind: uint8 {
   // Built-in box type
   BOXTYPE,
   THIS,
+  MODAL,
 }
 
 enum SourceExpr: uint8 {
@@ -102,6 +103,21 @@ enum SourceExpr: uint8 {
 table Type {
   kind: CHIRTypeKind;
   argTys: [uint32]; // use types id
+}
+
+enum LocalModal: int16 {
+  NONE,
+  MAYBE,
+  MUST,
+}
+
+table ModalInfo {
+  local: LocalModal;
+}
+
+table ModalType {
+  base: Type;
+  modal: ModalInfo;
 }
 
 table RawArrayType {
@@ -585,7 +601,8 @@ enum CHIRExprKind: uint8 {
   Invoke,
   Intrinsic,
   GetRtti,
-  GetRttiStatic
+  GetRttiStatic,
+  Exclave,
 }
 
 enum IntrinsicKind: uint16 {
@@ -1168,6 +1185,7 @@ union TypeElem {
   FuncType,
   CustomType,
   GenericType,
+  ModalType,
 }
 
 union CustomTypeDefElem {

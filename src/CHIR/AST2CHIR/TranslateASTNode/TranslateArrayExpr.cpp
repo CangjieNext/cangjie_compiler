@@ -150,6 +150,8 @@ Ptr<Value> Translator::InitRawArrayByItem(const AST::CallExpr& expr)
     return rawArrayRef;
 }
 
+// fuzzyParentType should be data type
+// return type should be data type
 CHIR::Type* Translator::GetExactParentType(
     Type& fuzzyParentType, const AST::FuncDecl& resolvedFunction, FuncType& funcType,
     std::vector<Type*>& funcInstTypeArgs, bool checkAbstractMethod)
@@ -166,7 +168,7 @@ CHIR::Type* Translator::GetExactParentType(
         } else {
             parentTy = TranslateType(outerDecl->DataTy());
         }
-        return parentTy->StripAllRefs();
+        return parentTy->GetPureType();
     }
 
     auto funcName = resolvedFunction.identifier.Val();
@@ -176,7 +178,7 @@ CHIR::Type* Translator::GetExactParentType(
         auto& upperBounds = genericTy->GetUpperBounds();
         CJC_ASSERT(!upperBounds.empty());
         for (auto upperBound : upperBounds) {
-            ClassType* upperClassType = StaticCast<ClassType*>(StaticCast<RefType*>(upperBound)->GetBaseType());
+            ClassType* upperClassType = StaticCast<ClassType*>(upperBound->GetPureType());
             result = GetExactParentType(
                 *upperClassType, resolvedFunction, funcType, funcInstTypeArgs, checkAbstractMethod);
             if (result != nullptr) {
@@ -222,17 +224,14 @@ Ptr<Value> Translator::InitArrayByCollection(const ArrayExpr& array)
 {
     auto collection = TranslateExprArg(*array.args[0]);
     auto sizeTy = builder.GetInt64Ty();
-    Type* originalObjType =
-        StaticCast<CustomType>(collection->GetType()->StripAllRefs())->GetCustomTypeDef()->GetType();
-    originalObjType = builder.GetType<RefType>(originalObjType);
     auto invokeInfo = InvokeCallContext{
         .caller = collection,
         .funcCallCtx = FuncCallContext{
-            .thisType = collection->GetType()->StripAllRefs()
+            .thisType = collection->GetType()->GetPureType()
         },
         .virMethodCtx = FuncSigInfo{
             .funcName = "$sizeget",
-            .funcType = builder.GetType<FuncType>(std::vector<Type*>{originalObjType}, sizeTy)
+            .funcType = builder.GetType<FuncType>(std::vector<Type*>{collection->GetType()}, sizeTy)
         }
     };
     auto loc = TranslateLocation(array);

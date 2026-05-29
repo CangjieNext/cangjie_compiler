@@ -908,7 +908,7 @@ const std::vector<GenericType*>& DynamicDispatch::GetGenericTypeParams() const
 
 std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& builder) const
 {
-    auto thisTypeDeref = thisType->StripAllRefs();
+    auto thisTypeDeref = thisType->GetPureType();
     if (thisTypeDeref->IsThis()) {
         thisTypeDeref = GetTopLevelFunc()->GetParentCustomTypeDef()->GetType();
     }
@@ -994,8 +994,8 @@ Value* Invoke::GetObject() const
 void Invoke::UpdateThisType()
 {
     auto objType = GetObject()->GetType();
-    auto objDerefType = DynamicCast<ClassType*>(objType->StripAllRefs());
-    auto thisDerefType = DynamicCast<ClassType*>(thisType->StripAllRefs());
+    auto objDerefType = DynamicCast<ClassType*>(objType->GetPureType());
+    auto thisDerefType = DynamicCast<ClassType*>(thisType->GetPureType());
     // for now, we only care about class type, maybe we can handle other types later
     if (objDerefType == thisDerefType || objDerefType == nullptr || thisDerefType == nullptr) {
         return;
@@ -2097,6 +2097,7 @@ void Lambda::InitBody(BlockGroup& newBody)
     CJC_ASSERT(body == nullptr);
     CJC_ASSERT(blockGroups.empty());
     // newBody -> lambda
+    RemoveBody();
     newBody.SetOwnerExpression(*this);
 
     // lambda -> newBody
@@ -2220,7 +2221,7 @@ Value* Debug::GetValue() const
 GetRTTI::GetRTTI(Value* val, Block* parent) : Expression{ExprKind::GET_RTTI, {val}, {}, parent}
 {
     CJC_ASSERT(Is<RefType>(val->GetType()) &&
-        (val->GetType()->StripAllRefs()->IsClass() || val->GetType()->StripAllRefs()->IsClass()) &&
+        (val->GetType()->GetPureType()->IsClass() || val->GetType()->GetPureType()->IsClass()) &&
         "GetRTTI must be used on class ref type");
 }
 

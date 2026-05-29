@@ -24,7 +24,7 @@ namespace {
 bool CalleeIsMutFuncFromParent(Type* thisType, Function* callee, const Function& topLevelFunc)
 {
     // thisType must be Struct
-    if (thisType == nullptr || !thisType->StripAllRefs()->IsStruct()) {
+    if (thisType == nullptr || !thisType->GetPureType()->IsStruct()) {
         return false;
     }
     // callee must be mut func
@@ -149,7 +149,7 @@ Function* GenerateVTable::GetMutFuncWrapper(const Type& thisType, const std::vec
         .funcType = builder.GetType<FuncType>(paramTypes, &retType),
         .genericTypeArgs = instTypeArgs
     };
-    auto vtableRes = GetFuncIndexInVTable(*thisType.StripAllRefs(), funcCallType, builder);
+    auto vtableRes = GetFuncIndexInVTable(*thisType.GetPureType(), funcCallType, builder);
     CJC_ASSERT(vtableRes.size() == 1);
     auto wrapperName = CHIRMangling::GenerateVirtualFuncMangleName(
         &callee, *vtableRes[0].originalDef, vtableRes[0].halfInstSrcParentType, false);

@@ -239,10 +239,10 @@ void Devirtualization::RewriteToApply(CHIRBuilder& builder, std::vector<RewriteI
             realFunc = rewriteInfo->realCallee->Get<WrappedRawMethod>();
         }
         auto args = invoke->GetOperands();
-        auto thisDerefType = thisType->StripAllRefs();
+        auto thisDerefType = thisType->GetPureType();
         auto instThisType = GetInstParentType(
-            *thisDerefType, *realFunc->GetFuncType()->GetParamTypes()[0]->StripAllRefs(), builder);
-        if (thisDerefType->IsClassOrArray() || realFunc->TestAttr(Attribute::MUT)) {
+            *thisDerefType, *realFunc->GetFuncType()->GetParamTypes()[0]->GetPureType(), builder);
+        if (thisDerefType->IsReferenceType() || realFunc->TestAttr(Attribute::MUT)) {
             instThisType = builder.GetType<RefType>(instThisType);
         }
         if (rewriteInfo->thisType->IsBuiltinType()) {

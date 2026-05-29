@@ -164,19 +164,18 @@ Value* Translator::TranslateVarRef(const AST::RefExpr& refExpr)
         // Case 1.1: non static member variables in struct or class
         if (target->outerDecl->astKind == AST::ASTKind::STRUCT_DECL ||
             target->outerDecl->astKind == AST::ASTKind::CLASS_DECL) {
-            auto thisCustomType = StaticCast<CustomType*>(varLeftValueBaseTy->StripAllRefs());
             CJC_ASSERT(varLeftValueBaseTy->IsReferenceTypeWithRefDims(1) ||
                 varLeftValueBaseTy->IsValueOrGenericTypeWithRefDims(1) ||
                 varLeftValueBaseTy->IsValueOrGenericTypeWithRefDims(0));
             if (varLeftValueBaseTy->IsReferenceTypeWithRefDims(1) ||
                 varLeftValueBaseTy->IsValueOrGenericTypeWithRefDims(1)) {
                 auto getMemberRef =
-                    CreateGetElementRefWithPath(loc, varLeftValueBase, path, currentBlock, *thisCustomType);
+                    CreateGetElementRefWithPath(loc, varLeftValueBase, path, currentBlock);
                 auto memberType = StaticCast<RefType*>(getMemberRef->GetType())->GetBaseType();
                 auto loadMemberValue = CreateAndAppendExpression<Load>(loc, memberType, getMemberRef, currentBlock);
                 return loadMemberValue->GetResult();
             } else if (varLeftValueBaseTy->IsValueOrGenericTypeWithRefDims(0)) {
-                auto memberType = GetInstMemberTypeByName(*thisCustomType, path, builder);
+                auto memberType = GetInstMemberTypeByName(*varLeftValueBase, path, builder);
                 auto getField =
                     CreateAndAppendExpression<FieldByName>(loc, memberType, varLeftValueBase, path, currentBlock);
                 return getField->GetResult();
@@ -206,6 +205,7 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
 {
     auto tempDecl = typeManager.GetTopOverriddenFuncDecl(&callee);
     const AST::FuncDecl* originalFuncDecl = tempDecl ? tempDecl.get() : &callee;
+    // lambda and local func can be marked with @local, but global func cannot
     auto originalFuncType = StaticCast<FuncType*>(TranslateType(originalFuncDecl->GetTy()));
     if (!originalFuncDecl->TestAttr(AST::Attribute::STATIC)) {
         auto outerDecl = originalFuncDecl->outerDecl;
@@ -310,7 +310,7 @@ Value* Translator::WrapMemberMethodByLambda(
             instFuncType.instantiatedTypeArgs.begin(), instFuncType.instantiatedTypeArgs.end());
         auto callee = GetSymbolTable(funcDecl);
         auto funcType = builder.GetType<FuncType>(instFuncType.instParamTys, instFuncType.instRetTy);
-        auto wrapperFunc = GetWrapperFuncFromMemberAccess(*instFuncType.instParentCustomTy->StripAllRefs(),
+        auto wrapperFunc = GetWrapperFuncFromMemberAccess(*instFuncType.instParentCustomTy->GetPureType(),
             callee->GetSrcCodeIdentifier(), *funcType, callee->TestAttr(Attribute::STATIC), instTypeArgs);
         if (wrapperFunc != nullptr) {
             callee = wrapperFunc;

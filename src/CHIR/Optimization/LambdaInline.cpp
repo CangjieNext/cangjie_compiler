@@ -43,7 +43,7 @@ bool CheckLambdaUsingForMultiThread(const Lambda& lambda)
     if (returnTy == nullptr) {
         return false;
     }
-    returnTy = returnTy->StripAllRefs();
+    returnTy = returnTy->GetPureType();
     if (!returnTy->IsClass()) {
         return false;
     }

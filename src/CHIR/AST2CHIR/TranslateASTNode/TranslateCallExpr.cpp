@@ -16,15 +16,25 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {SIZE_OF_NAME, SIZE_OF},
     {ALIGN_OF_NAME, ALIGN_OF},
     {ARRAY_ACQUIRE_RAW_DATA_NAME, ARRAY_ACQUIRE_RAW_DATA},
+    {ARRAY_ACQUIRE_RAW_DATA2_NAME, ARRAY_ACQUIRE_RAW_DATA},
     {ARRAY_RELEASE_RAW_DATA_NAME, ARRAY_RELEASE_RAW_DATA},
+    {ARRAY_RELEASE_RAW_DATA2_NAME, ARRAY_RELEASE_RAW_DATA},
     {ARRAY_BUILT_IN_COPY_TO_NAME, ARRAY_BUILT_IN_COPY_TO},
+    {ARRAY_BUILT_IN_COPY_TO2_NAME, ARRAY_BUILT_IN_COPY_TO},
+    {ARRAY_BUILT_IN_COPY_TO3_NAME, ARRAY_BUILT_IN_COPY_TO},
     {ARRAY_GET_NAME, ARRAY_GET},
     {ARRAY_SET_NAME, ARRAY_SET},
+    {ARRAY_SET2_NAME, ARRAY_SET},
+    {ARRAY_SET3_NAME, ARRAY_SET},
     {ARRAY_GET_UNCHECKED_NAME, ARRAY_GET_UNCHECKED},
+    {ARRAY_GET_UNCHECKED2_NAME, ARRAY_GET_UNCHECKED},
+    {ARRAY_GET_UNCHECKED3_NAME, ARRAY_GET_UNCHECKED},
 
     {ARRAY_GET_REF_UNCHECKED_NAME, ARRAY_GET_REF_UNCHECKED},
 
     {ARRAY_SET_UNCHECKED_NAME, ARRAY_SET_UNCHECKED},
+    {ARRAY_SET_UNCHECKED2_NAME, ARRAY_SET_UNCHECKED},
+    {ARRAY_SET_UNCHECKED3_NAME, ARRAY_SET_UNCHECKED},
     {ARRAY_SIZE_NAME, ARRAY_SIZE},
     {ARRAY_CLONE_NAME, ARRAY_CLONE},
     {ARRAY_SLICE_INIT_NAME, ARRAY_SLICE_INIT},
@@ -49,6 +59,7 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {CPOINTER_READ_NAME, CPOINTER_READ},
     {CPOINTER_WRITE_NAME, CPOINTER_WRITE},
     {CPOINTER_ADD_NAME, CPOINTER_ADD},
+    {CPOINTER_ADD2_NAME, CPOINTER_ADD},
 
     {CSTRING_CONVERT_CSTR_TO_PTR_NAME, CSTRING_CONVERT_CSTR_TO_PTR},
     {BIT_CAST_NAME, BIT_CAST},
@@ -68,6 +79,7 @@ static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
     {RAW_ARRAY_REFEQ_NAME, RAW_ARRAY_REFEQ},
 
     {OBJECT_ZERO_VALUE_NAME, OBJECT_ZERO_VALUE},
+    {OBJECT_ZERO_VALUE2_NAME, OBJECT_ZERO_VALUE},
 
     {SOURCE_FILE_NAME, SOURCE_FILE},
     {SOURCE_LINE_NAME, SOURCE_LINE},
@@ -439,8 +451,7 @@ Value* Translator::GenerateLeftValue(const Translator::LeftValueInfo& leftValInf
 {
     Value* result = leftValInfo.base;
     if (!leftValInfo.path.empty()) {
-        auto baseCustomType = StaticCast<CustomType*>(result->GetType()->StripAllRefs());
-        auto memberType = GetInstMemberTypeByName(*baseCustomType, leftValInfo.path, builder);
+        auto memberType = GetInstMemberTypeByName(*result, leftValInfo.path, builder);
         if (result->GetType()->IsRef()) {
             auto memberRefType = builder.GetType<RefType>(memberType);
             auto getMemberRef =
@@ -478,12 +489,11 @@ Value* Translator::TranslateThisObjectForNonStaticMemberFuncCall(const AST::Call
             thisObj = thisObjValueInfo.base;
             // polish this
             if (!thisObjValueInfo.path.empty()) {
-                auto lhsCustomType = StaticCast<CustomType*>(thisObj->GetType()->StripAllRefs());
                 if (thisObj->GetType()->IsRef()) {
                     thisObj =
-                        CreateGetElementRefWithPath(loc, thisObj, thisObjValueInfo.path, currentBlock, *lhsCustomType);
+                        CreateGetElementRefWithPath(loc, thisObj, thisObjValueInfo.path, currentBlock);
                 } else {
-                    auto memberType = GetInstMemberTypeByName(*lhsCustomType, thisObjValueInfo.path, builder);
+                    auto memberType = GetInstMemberTypeByName(*thisObj, thisObjValueInfo.path, builder);
                     auto getMember = CreateAndAppendExpression<FieldByName>(
                         loc, memberType, thisObj, thisObjValueInfo.path, currentBlock);
                     thisObj = getMember->GetResult();
@@ -882,12 +892,11 @@ Value* Translator::TranslateCPointerCtorCall(const AST::CallExpr& expr)
             auto argLeftValInfo = TranslateExprAsLeftValue(*expr.args[0]->expr);
             argVal = argLeftValInfo.base;
             if (!argLeftValInfo.path.empty()) {
-                auto lhsCustomType = StaticCast<CustomType*>(argVal->GetType()->StripAllRefs());
                 if (argVal->GetType()->IsRef()) {
                     argVal = CreateGetElementRefWithPath(
-                        TranslateLocation(expr), argVal, argLeftValInfo.path, currentBlock, *lhsCustomType);
+                        TranslateLocation(expr), argVal, argLeftValInfo.path, currentBlock);
                 } else {
-                    auto memberType = GetInstMemberTypeByName(*lhsCustomType, argLeftValInfo.path, builder);
+                    auto memberType = GetInstMemberTypeByName(*argVal, argLeftValInfo.path, builder);
                     auto getMember = CreateAndAppendExpression<FieldByName>(
                         TranslateLocation(expr), memberType, argVal, argLeftValInfo.path, currentBlock);
                     argVal = getMember->GetResult();
@@ -1148,7 +1157,7 @@ Value* Translator::CreateGetRTTIWrapper(Value* value, Block* bl, const DebugLoca
     auto type = value->GetType();
     Expression* expr;
     // GetRTTI can only be used on Class& or This&. use GetRTTIStatic otherwise
-    if (Is<RefType>(type) && (type->StripAllRefs()->IsClass() || type->StripAllRefs()->IsThis())) {
+    if (Is<RefType>(type) && (type->GetPureType()->IsClass() || type->GetPureType()->IsThis())) {
         expr = builder.CreateExpression<GetRTTI>(loc, builder.GetUnitTy(), value, bl);
     } else {
         expr = builder.CreateExpression<GetRTTIStatic>(loc, builder.GetUnitTy(), type, bl);
@@ -1181,7 +1190,7 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
         // for virtual func call, we should calculate the correct this object type and store it in instParamTys[0]
         if (instCallInfo.isVirtualFuncCall) {
             expectedThisObjTy = instCallInfo.instParentCustomTy;
-            if (expectedThisObjTy->IsClassOrArray() ||
+            if (expectedThisObjTy->IsReferenceType() ||
                 (expectedThisObjTy->IsStruct() && resolvedFunction->TestAttr(AST::Attribute::MUT))) {
                 expectedThisObjTy = builder.GetType<RefType>(expectedThisObjTy);
             }
@@ -1299,16 +1308,12 @@ Ptr<Type> Translator::GetMemberFuncCallerInstType(const AST::CallExpr& expr, boo
         // call own member function in nominal decl, there are 3 cases:
         auto outerDef = currentBlock->GetTopLevelFunc()->GetParentCustomTypeDef();
         if (outerDef != nullptr) {
-            if (auto exDef = DynamicCast<ExtendDef*>(outerDef)) {
-                // 1. struct A { func foo() {} }; extend A { func goo() { foo() } }
-                //                                                        ^^^  call `foo` in extend A, then return `A`
-                callerType = exDef->GetExtendedType();
-            } else {
-                // 2. struct A { func foo() {}; func goo() { foo() } }
-                //                                           ^^^  call `foo` in struct A, then return `A`
-                callerType = outerDef->GetType();
-            }
-            if (callerType->IsClassOrArray()) {
+            // 1. struct A { func foo() {} }; extend A { func goo() { foo() } }
+            //                                                        ^^^  call `foo` in extend A, then return `A`
+            // 2. struct A { func foo() {}; func goo() { foo() } }
+            //                                           ^^^  call `foo` in struct A, then return `A`
+            callerType = outerDef->GetType();
+            if (callerType->IsReferenceType()) {
                 callerType = builder.GetType<RefType>(callerType);
             }
         } else if (IsStaticInit(*expr.resolvedFunction)) {
@@ -1341,8 +1346,8 @@ Ptr<Type> Translator::GetMemberFuncCallerInstType(const AST::CallExpr& expr, boo
                 funcInstTypeArgs.insert(funcInstTypeArgs.end(), tmp.begin(), tmp.end());
             }
         }
-        Type* root = callerType->IsRef() ? StaticCast<RefType*>(callerType)->GetBaseType() : callerType;
-        callerType = GetExactParentType(*root, *expr.resolvedFunction, *instFuncType, funcInstTypeArgs, false);
+        callerType = GetExactParentType(
+            *callerType->GetPureType(), *expr.resolvedFunction, *instFuncType, funcInstTypeArgs, false);
         CJC_NULLPTR_CHECK(callerType);
         if (callerType->IsClass()) {
             callerType = builder.GetType<RefType>(callerType);
@@ -1515,14 +1520,13 @@ void Translator::TranslateCompoundAssignmentElementRef(const AST::MemberAccess& 
     if (baseResLeftValuePath.empty()) {
         exprValueTable.Set(*ma.baseExpr, *baseResLeftValue);
     } else {
-        auto baseResLeftValueCustomType = StaticCast<CustomType*>(baseResLeftValue->GetType()->StripAllRefs());
         if (baseResLeftValue->GetType()->IsReferenceTypeWithRefDims(1) ||
             baseResLeftValue->GetType()->IsValueOrGenericTypeWithRefDims(1)) {
             auto getMemberRef = CreateGetElementRefWithPath(
-                loc, baseResLeftValue, baseResLeftValuePath, currentBlock, *baseResLeftValueCustomType);
+                loc, baseResLeftValue, baseResLeftValuePath, currentBlock);
             exprValueTable.Set(*ma.baseExpr, *getMemberRef);
         } else {
-            auto memberType = GetInstMemberTypeByName(*baseResLeftValueCustomType, baseResLeftValuePath, builder);
+            auto memberType = GetInstMemberTypeByName(*baseResLeftValue, baseResLeftValuePath, builder);
             CJC_ASSERT(baseResLeftValue->GetType()->IsValueOrGenericTypeWithRefDims(0));
             auto getMember = CreateAndAppendExpression<FieldByName>(
                 loc, memberType, baseResLeftValue, baseResLeftValuePath, currentBlock);

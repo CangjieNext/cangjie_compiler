@@ -71,7 +71,7 @@ AnnoInstanceValue CreateValueOfCustomTypeDef(const Value& v)
     auto alloc = DynamicCast<Allocate>(obj->GetExpr());
     if (alloc) {
         // the value is an alloc, so it is a class type object
-        def = StaticCast<ClassType>(alloc->GetType()->StripAllRefs())->GetClassDef();
+        def = StaticCast<ClassType>(alloc->GetType()->GetPureType())->GetClassDef();
     } else {
         // the value is a load of an alloc, it is a struct type object
         auto loadOfAlloc = StaticCast<Load>(obj->GetExpr());
@@ -149,7 +149,7 @@ AnnoInstanceValue CreateValue(const Value& v)
                 // load of gv, valid iff the location is a const global variable lifted from annotationsArray.
                 // Threotically we check it's of Annotation class type, but we do not have such utilities.
                 auto gv = StaticCast<GlobalVar*>(l->GetLocation());
-                CJC_ASSERT(gv->GetType()->StripAllRefs()->IsClass());
+                CJC_ASSERT(gv->GetType()->GetPureType()->IsClass());
                 auto ret = GetValue(*gv);
                 CJC_ASSERT(ret.Object());
                 return ret;

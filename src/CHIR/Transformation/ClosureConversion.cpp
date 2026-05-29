@@ -78,7 +78,7 @@ bool IsMutableVarType(const Value& value)
         return false;
     }
     // type is ref, but not ref a class or array, that means this type is a mutable var's type
-    return !ref->GetBaseType()->IsClassOrArray();
+    return !ref->GetBaseType()->IsReferenceType();
 }
 
 void CollectNestedLambdaExpr(
@@ -633,8 +633,8 @@ std::vector<size_t> OperandNeedTypeCast(
     std::vector<size_t> index;
     CJC_ASSERT(args.size() == paramTypes.size());
     for (size_t i = 0; i < paramTypes.size(); ++i) {
-        auto paramTy = paramTypes[i]->StripAllRefs();
-        auto argTy = args[i]->GetType()->StripAllRefs();
+        auto paramTy = paramTypes[i]->GetPureType();
+        auto argTy = args[i]->GetType()->GetPureType();
         if (!paramTy->IsAutoEnvBase() || !argTy->IsAutoEnvBase()) {
             continue;
         }
@@ -672,7 +672,7 @@ Type* GetFieldBaseType(const Value& base)
 
 bool FieldRetValNeedWrapper(const Field& e, CHIRBuilder& builder)
 {
-    auto fieldRetType = e.GetResult()->GetType()->StripAllRefs();
+    auto fieldRetType = e.GetResult()->GetType()->GetPureType();
     // only Auto_Env_InstBase need wrapper
     if (!fieldRetType->IsAutoEnvInstBase()) {
         return false;
@@ -687,7 +687,7 @@ bool FieldRetValNeedWrapper(const Field& e, CHIRBuilder& builder)
         declaredType = GetFieldOfType(*declaredType, idx, builder);
         CJC_NULLPTR_CHECK(declaredType);
     }
-    declaredType = declaredType->StripAllRefs();
+    declaredType = declaredType->GetPureType();
     return !declaredType->IsAutoEnvInstBase();
 }
 
@@ -792,7 +792,7 @@ void AddTypeCastForOperand(const std::pair<Expression*, std::vector<size_t>>& e,
     for (auto idx : e.second) {
         auto op = expr->GetOperand(idx);
         auto expectedType = builder.GetType<RefType>(
-            StaticCast<ClassType*>(op->GetType()->StripAllRefs())->GetClassDef()->GetSuperClassTy());
+            StaticCast<ClassType*>(op->GetType()->GetPureType())->GetClassDef()->GetSuperClassTy());
         auto typecast = builder.CreateExpression<TypeCast>(expectedType, op, parentBlock);
         typecast->MoveBefore(expr);
         expr->ReplaceOperand(idx, typecast->GetResult());
@@ -2120,7 +2120,7 @@ void ClosureConversion::ReplaceUserPoint(
         // maybe we should call itself, not method in AutoEnvObj
         autoEnvObj = user.GetTopLevelFunc()->GetParam(0);
         thisTy = builder.GetType<RefType>(InstantiateAutoEnvGenericBaseType(
-            *StaticCast<ClassType*>(autoEnvObj->GetType()->StripAllRefs()), user, builder));
+            *StaticCast<ClassType*>(autoEnvObj->GetType()->GetPureType()), user, builder));
     } else {
         autoEnvObj = CreateAutoEnvImplObject(*curBlock, *autoEnvImplType, envs, user, *srcFunc.GetResult());
         thisTy = autoEnvObj->GetType();
@@ -2379,7 +2379,7 @@ Function* ClosureConversion::CreateGenericMethodInAutoEnvWrapper(ClassDef& autoE
     // 1. create function type
     auto memberVars = autoEnvWrapperDef.GetDirectInstanceVars();
     CJC_ASSERT(memberVars.size() == 1);
-    auto memberVarType = StaticCast<ClassType*>(memberVars[0].type->StripAllRefs());
+    auto memberVarType = StaticCast<ClassType*>(memberVars[0].type->GetPureType());
     std::unordered_map<const GenericType*, Type*> emptyTable;
     auto [paramTypes, retType] = CreateFuncTypeWithBoxType(
         autoEnvWrapperDef, memberVarType->GetGenericArgs(), emptyTable, builder);
@@ -2559,8 +2559,8 @@ void ClosureConversion::CastApplyArgAndRetIfNeed(Apply& e)
      *  Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
      *  we can't cast type from parent type to sub type, a wrapper class is needed
      */
-    auto declaredRetType = calleeType->GetReturnType()->StripAllRefs();
-    auto applyRetType = e.GetResult()->GetType()->StripAllRefs();
+    auto declaredRetType = calleeType->GetReturnType()->GetPureType();
+    auto applyRetType = e.GetResult()->GetType()->GetPureType();
     if (!declaredRetType->IsAutoEnvInstBase() && applyRetType->IsAutoEnvInstBase()) {
         WrapApplyRetVal(e);
     }
@@ -2582,7 +2582,7 @@ void ClosureConversion::WrapApplyRetVal(Apply& apply)
     // 1. create $Auto_Env_wrapper
     auto applyRetVal = apply.GetResult();
     auto applyRetType = applyRetVal->GetType();
-    auto applyRetTypeNoRef = StaticCast<ClassType*>(applyRetType->StripAllRefs());
+    auto applyRetTypeNoRef = StaticCast<ClassType*>(applyRetType->GetPureType());
     auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*applyRetTypeNoRef);
 
     // 2. convert return type
@@ -2628,8 +2628,8 @@ void ClosureConversion::CastApplyWithExceptionArgAndRetIfNeed(ApplyWithException
         AddTypeCastForOperand({&e, index}, builder);
     }
      // 2. cast ret, the same with Apply
-    auto declaredRetType = calleeType->GetReturnType()->StripAllRefs();
-    auto applyRetType = e.GetResult()->GetType()->StripAllRefs();
+    auto declaredRetType = calleeType->GetReturnType()->GetPureType();
+    auto applyRetType = e.GetResult()->GetType()->GetPureType();
     if (!declaredRetType->IsAutoEnvInstBase() && applyRetType->IsAutoEnvInstBase()) {
         WrapApplyWithExceptionRetVal(e);
     }
@@ -2662,7 +2662,7 @@ void ClosureConversion::WrapApplyWithExceptionRetVal(ApplyWithException& apply)
     // 1. create $Auto_Env_wrapper
     auto applyRetVal = apply.GetResult();
     auto applyRetType = applyRetVal->GetType();
-    auto applyRetTypeNoRef = StaticCast<ClassType*>(applyRetType->StripAllRefs());
+    auto applyRetTypeNoRef = StaticCast<ClassType*>(applyRetType->GetPureType());
     auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*applyRetTypeNoRef);
 
     // 2. convert return type
@@ -2702,8 +2702,8 @@ void ClosureConversion::WrapApplyWithExceptionRetVal(ApplyWithException& apply)
 void ClosureConversion::CastInvokeRetIfNeed(DynamicDispatch& e)
 {
     // same reason with Apply
-    auto declaredRetType = e.GetMethodType()->GetReturnType()->StripAllRefs();
-    auto invokeRetType = e.GetResult()->GetType()->StripAllRefs();
+    auto declaredRetType = e.GetMethodType()->GetReturnType()->GetPureType();
+    auto invokeRetType = e.GetResult()->GetType()->GetPureType();
     if (!declaredRetType->IsAutoEnvInstBase() && invokeRetType->IsAutoEnvInstBase()) {
         WrapInvokeRetVal(e);
     }
@@ -2725,7 +2725,7 @@ void ClosureConversion::WrapInvokeRetVal(DynamicDispatch& e)
     // 1. create $Auto_Env_wrapper
     auto invokeRetVal = e.GetResult();
     auto invokeRetType = invokeRetVal->GetType();
-    auto invokeRetTypeNoRef = StaticCast<ClassType*>(invokeRetType->StripAllRefs());
+    auto invokeRetTypeNoRef = StaticCast<ClassType*>(invokeRetType->GetPureType());
     auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*invokeRetTypeNoRef);
 
     // 2. convert return type
@@ -2761,8 +2761,8 @@ void ClosureConversion::WrapInvokeRetVal(DynamicDispatch& e)
 void ClosureConversion::CastInvokeWithExceptionRetIfNeed(DynamicDispatchWithException& e)
 {
     // same reason with Invoke
-    auto declaredRetType = e.GetMethodType()->GetReturnType()->StripAllRefs();
-    auto invokeRetType = e.GetResult()->GetType()->StripAllRefs();
+    auto declaredRetType = e.GetMethodType()->GetReturnType()->GetPureType();
+    auto invokeRetType = e.GetResult()->GetType()->GetPureType();
     if (!declaredRetType->IsAutoEnvInstBase() && invokeRetType->IsAutoEnvInstBase()) {
         WrapInvokeWithExceptionRetVal(e);
     }
@@ -2795,7 +2795,7 @@ void ClosureConversion::WrapInvokeWithExceptionRetVal(DynamicDispatchWithExcepti
     // 1. create $Auto_Env_wrapper
     auto invokeRetVal = e.GetResult();
     auto invokeRetType = invokeRetVal->GetType();
-    auto invokeRetTypeNoRef = StaticCast<ClassType*>(invokeRetType->StripAllRefs());
+    auto invokeRetTypeNoRef = StaticCast<ClassType*>(invokeRetType->GetPureType());
     auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*invokeRetTypeNoRef);
 
     // 2. convert return type
@@ -2834,7 +2834,7 @@ void ClosureConversion::WrapInvokeWithExceptionRetVal(DynamicDispatchWithExcepti
 
 void ClosureConversion::CastGetElementRefRetIfNeed(GetElementRef& e)
 {
-    auto getEleRefRetType = e.GetResult()->GetType()->StripAllRefs();
+    auto getEleRefRetType = e.GetResult()->GetType()->GetPureType();
     // only Auto_Env_InstBase need wrapper
     if (!getEleRefRetType->IsAutoEnvInstBase()) {
         return;
@@ -2854,7 +2854,7 @@ void ClosureConversion::CastGetElementRefRetIfNeed(GetElementRef& e)
         locationType = GetFieldOfType(*locationType, idx, builder);
         CJC_NULLPTR_CHECK(locationType);
     }
-    if (!locationType->StripAllRefs()->IsAutoEnvInstBase()) {
+    if (!locationType->GetPureType()->IsAutoEnvInstBase()) {
         WrapGetElementRefRetVal(e);
     }
 }
@@ -2882,7 +2882,7 @@ void ClosureConversion::WrapGetElementRefRetVal(GetElementRef& getEleRef)
     auto getEleRefRetType = getEleRefRetVal->GetType();
     const size_t refDim = 2;
     CJC_ASSERT(getEleRefRetType->IsReferenceTypeWithRefDims(refDim));
-    auto getEleRefRetTypeNoRef = StaticCast<ClassType*>(getEleRefRetType->StripAllRefs());
+    auto getEleRefRetTypeNoRef = StaticCast<ClassType*>(getEleRefRetType->GetPureType());
     auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*getEleRefRetTypeNoRef);
 
     // 2. convert return type
@@ -2946,7 +2946,7 @@ void ClosureConversion::WrapFieldRetVal(Field& field)
     auto fieldRetVal = field.GetResult();
     auto fieldRetType = fieldRetVal->GetType();
     CJC_ASSERT(fieldRetType->IsReferenceTypeWithRefDims(1));
-    auto fieldRetTypeNoRef = StaticCast<ClassType*>(fieldRetType->StripAllRefs());
+    auto fieldRetTypeNoRef = StaticCast<ClassType*>(fieldRetType->GetPureType());
     auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*fieldRetTypeNoRef);
 
     // 2. convert return type
@@ -2988,7 +2988,7 @@ void ClosureConversion::CastRawArrayInitByValueArgIfNeed(RawArrayInitByValue& e)
      *  in `RawArrayInitByValue`, type between %1 and %2 is mismatched,
      *  $AutoEnvInstBase_Bool is sub type of $AutoEnvGenericBase<Bool>, we can cast type from sub type to parent type
      */
-    auto rawArrayType = StaticCast<RawArrayType*>(e.GetRawArray()->GetType()->StripAllRefs());
+    auto rawArrayType = StaticCast<RawArrayType*>(e.GetRawArray()->GetType()->GetPureType());
     auto expectedType = std::vector<Type*>{rawArrayType->GetElementType()};
     auto initValue = std::vector<Value*>{e.GetInitValue()};
     const size_t opOffset = 2;
@@ -3003,8 +3003,8 @@ void ClosureConversion::CastTypeCastArgIfNeed(TypeCast& e)
     /** Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
      *  we can't cast type from parent type to sub type, a wrapper class is needed
      */
-    auto srcType = e.GetSourceTy()->StripAllRefs();
-    auto targetType = e.GetTargetTy()->StripAllRefs();
+    auto srcType = e.GetSourceTy()->GetPureType();
+    auto targetType = e.GetTargetTy()->GetPureType();
     if (IsAutoEnvGenericType(*srcType) && targetType->IsAutoEnvInstBase()) {
         WrapTypeCastSrcVal(e);
     }
@@ -3023,7 +3023,7 @@ void ClosureConversion::WrapTypeCastSrcVal(TypeCast& typecast)
      *  %1: $AutoEnvInstBase& = TypeCast(%3)
      */
     // 1. create $Auto_Env_wrapper
-    auto targetTypeNoRef = StaticCast<ClassType*>(typecast.GetTargetTy()->StripAllRefs());
+    auto targetTypeNoRef = StaticCast<ClassType*>(typecast.GetTargetTy()->GetPureType());
     auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*targetTypeNoRef);
 
     // 2. create $Auto_Env_wrapper object
@@ -3109,7 +3109,7 @@ void ClosureConversion::ModifyTypeMismatchInFunc(Function& func, size_t paramInd
 {
     // 1. create $Auto_Env_wrapper def
     auto param = func.GetParam(paramIndex);
-    auto paramType = param->GetType()->StripAllRefs();
+    auto paramType = param->GetType()->GetPureType();
     auto autoEnvWrapperDef = GetOrCreateAutoEnvWrapper(*StaticCast<ClassType*>(paramType));
 
     // 2. create $Auto_Env_wrapper object
@@ -3147,8 +3147,8 @@ void ClosureConversion::ModifyTypeMismatchInVTable()
         auto paramTypes = func->GetFuncType()->GetParamTypes();
         CJC_ASSERT(rawParamTypes.size() == paramTypes.size());
         for (size_t i = 0; i < rawParamTypes.size(); ++i) {
-            if (rawParamTypes[i]->StripAllRefs()->IsAutoEnvGenericBase() &&
-                paramTypes[i]->StripAllRefs()->IsAutoEnvInstBase()) {
+            if (rawParamTypes[i]->GetPureType()->IsAutoEnvGenericBase() &&
+                paramTypes[i]->GetPureType()->IsAutoEnvInstBase()) {
                 ModifyTypeMismatchInFunc(*func, i);
             }
         }

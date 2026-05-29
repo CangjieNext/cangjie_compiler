@@ -354,6 +354,14 @@ flatbuffers::Offset<PackageFormat::VArrayType> CHIRSerializer::CHIRSerializerImp
 }
 
 template <>
+flatbuffers::Offset<PackageFormat::ModalType> CHIRSerializer::CHIRSerializerImpl::Serialize(const ModalType& obj)
+{
+    auto base = Serialize<PackageFormat::Type>(static_cast<const Type&>(obj));
+    auto modal = PackageFormat::CreateModalInfo(builder, PackageFormat::LocalModal(obj.GetModalInfo().Local()));
+    return PackageFormat::CreateModalType(builder, base, modal);
+}
+
+template <>
 flatbuffers::Offset<PackageFormat::FuncType> CHIRSerializer::CHIRSerializerImpl::Serialize(const FuncType& obj)
 {
     auto base = Serialize<PackageFormat::Type>(static_cast<const Type&>(obj));
@@ -680,6 +688,7 @@ static PackageFormat::CHIRExprKind ToPackageExprKind(const Expression& expr)
         case ExprKind::INTRINSIC:                         return PackageFormat::CHIRExprKind_Intrinsic;
         case ExprKind::GET_RTTI:                          return PackageFormat::CHIRExprKind_GetRtti;
         case ExprKind::GET_RTTI_STATIC:                   return PackageFormat::CHIRExprKind_GetRttiStatic;
+        case ExprKind::EXCLAVE:                           return PackageFormat::CHIRExprKind_Exclave;
         case ExprKind::FORIN_RANGE:
         case ExprKind::FORIN_ITER:
         case ExprKind::FORIN_CLOSED_RANGE:
@@ -1233,6 +1242,9 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
         case Type::TypeKind::TYPE_VARRAY:
             typeKind[GetId<Type>(&obj) - 1] = static_cast<uint8_t>(PackageFormat::TypeElem_VArrayType);
             return Serialize<PackageFormat::VArrayType>(static_cast<const VArrayType&>(obj)).Union();
+        case Type::TypeKind::TYPE_MODAL:
+            typeKind[GetId<Type>(&obj) - 1] = static_cast<uint8_t>(PackageFormat::TypeElem_ModalType);
+            return Serialize<PackageFormat::ModalType>(static_cast<const ModalType&>(obj)).Union();
         case Type::TypeKind::TYPE_GENERIC:
             typeKind[GetId<Type>(&obj) - 1] = static_cast<uint8_t>(PackageFormat::TypeElem_GenericType);
             return Serialize<PackageFormat::GenericType>(static_cast<const GenericType&>(obj)).Union();
@@ -1432,6 +1444,7 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
             return Serialize<PackageFormat::UnaryExpressionBase>(static_cast<const UnaryExpression&>(obj)).Union();
         case ExprKind::GOTO:
         case ExprKind::EXIT:
+        case ExprKind::EXCLAVE:
         case ExprKind::RAISE_EXCEPTION:
         case ExprKind::LOAD:
         case ExprKind::STORE:

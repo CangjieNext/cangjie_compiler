@@ -473,12 +473,12 @@ Value* TypeCastIfNeeded(
     Value& val, Type& expectedTy, CHIRBuilder& builder, Block& parentBlock, const DebugLocation& loc, bool needCheck)
 {
     // Do not cast a nothing type value, otherwise it will mess up the dead code elimination
-    if (val.GetType()->IsNothing()) {
+    if (val.GetType()->GetPureType()->IsNothing()) {
         return &val;
     }
     if (val.GetType() != &expectedTy) {
         Value* tmpValue = &val;
-        if (val.GetType()->StripAllRefs()->IsGeneric() && val.GetType()->IsRef()) {
+        if (val.GetType()->GetPureType()->IsGeneric() && val.GetType()->IsRef()) {
             auto load = builder.CreateExpression<Load>(val.GetType()->StripAllRefs(), &val, &parentBlock);
             parentBlock.AppendExpression(load);
             tmpValue = load->GetResult();
@@ -1222,7 +1222,7 @@ std::vector<ClassType*> GetSuperTypesRecusively(Type& subType, CHIRBuilder& buil
         result = builtinType->GetSuperTypesRecusively(builder);
     } else if (auto genericType = DynamicCast<GenericType*>(&subType)) {
         for (auto upperBound : genericType->GetUpperBounds()) {
-            auto classType = StaticCast<ClassType*>(upperBound->StripAllRefs());
+            auto classType = StaticCast<ClassType*>(upperBound->GetPureType());
             result.emplace_back(classType);
             auto tempParents = GetSuperTypesRecusively(*classType, builder);
             for (auto p : tempParents) {
@@ -1320,7 +1320,7 @@ Type* GetInstParentCustomTyOfCallee(
     if (!calleeParentDef->GetType()->IsBuiltinType() && calleeParentDef->IsExtend()) {
         calleeParentDef = StaticCast<CustomType*>(calleeParentDef->GetType())->GetCustomTypeDef();
     }
-    auto derefThisType = thisType->StripAllRefs();
+    auto derefThisType = thisType->GetPureType();
     // `thisType` is sub class, `calleeParentDef` is parent class, a CustomType can't inherit BuiltinType
     CJC_ASSERT(!(derefThisType->IsCustomType() && calleeParentDef->GetType()->IsBuiltinType()));
     auto typeAndDefIsEquivalent = [](const CustomType& type, const CustomTypeDef& def) {
@@ -1441,10 +1441,11 @@ BuiltinType* GetBuiltinTypeWithVTable(BuiltinType& type, CHIRBuilder& builder)
 
 Type* GetInstSubType(Type& genericSubType, const ClassType& instParentType, CHIRBuilder& builder)
 {
-    if (!genericSubType.IsGenericRelated()) {
+    auto pureType = genericSubType.GetPureType();
+    if (!pureType->IsGenericRelated()) {
         return &genericSubType;
     }
-    if (&genericSubType == &instParentType) {
+    if (pureType == &instParentType) {
         return &genericSubType;
     }
     auto [res, replaceTable] = genericSubType.CalculateGenericTyMapping(instParentType);
@@ -1546,7 +1547,7 @@ Type* GetInstParentType(Type& instSubType, Type& genericParentType, CHIRBuilder&
     if (&instSubType == &genericParentType) {
         return &genericParentType;
     }
-    auto parentDerefType = genericParentType.StripAllRefs();
+    auto parentDerefType = genericParentType.GetPureType();
     auto [res, replaceTable] = parentDerefType->CalculateGenericTyMapping(instSubType);
     if (!res) {
         for (auto p : GetSuperTypesRecusively(instSubType, builder)) {

@@ -161,7 +161,7 @@ void BlockGroupCopyHelper::GetInstMapFromApply(const Apply& apply, const Functio
                 instParentCustomType =
                     customDef->IsExtend() ? StaticCast<ExtendDef*>(customDef)->GetExtendedType() : customDef->GetType();
             }
-            instParentCustomType = instParentCustomType->StripAllRefs();
+            instParentCustomType = instParentCustomType->GetPureType();
             // 2. get inst map from custom type
             if (auto exDef = DynamicCast<const ExtendDef*>(customDef)) {
                 auto newMap = exDef->GetExtendedType()->CalculateGenericTyMapping(*instParentCustomType);

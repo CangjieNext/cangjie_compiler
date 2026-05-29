@@ -20,7 +20,7 @@ bool HasFuncCallWithNothingRetVal(const Block& block)
         if (!Cangjie::Is<FuncCall>(expr)) {
             continue;
         }
-        auto type = expr->GetResultType()->StripAllRefs();
+        auto type = expr->GetResultType()->GetPureType();
         if (type->IsNothing()) {
             return true;
         }
@@ -241,7 +241,7 @@ bool VarInitCheck::CheckGetElementRefToUninitedAllocation(
     const MaybeUninitDomain& state, const GetElementRef& getElementRef) const
 {
     auto targetVal = getElementRef.GetLocation();
-    auto oriType = targetVal->GetType()->StripAllRefs();
+    auto oriType = targetVal->GetType()->GetPureType();
     if (!oriType->IsStruct() && !oriType->IsEnum()) {
         // class need load before use, do not check it, only check struct and enum
         return false;

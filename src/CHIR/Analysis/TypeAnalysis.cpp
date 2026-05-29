@@ -87,7 +87,7 @@ Type* GetRealGenericRetType(const Apply& apply, Type& genericType, const Functio
     }
     if (calleeFunc->GetParentCustomTypeDef() != nullptr) {
         auto def = calleeFunc->GetParentCustomTypeDef();
-        auto thisType = apply.GetThisType()->StripAllRefs();
+        auto thisType = apply.GetThisType()->GetPureType();
         if (thisType->IsClassOrStruct()) {
             auto customType = StaticCast<CustomType*>(thisType);
             auto defGenericParams = def->GetGenericTypeParams();
@@ -370,7 +370,7 @@ static const CustomTypeDef* CheckMemberDefineInWhichParent(CustomType& type, siz
 template <typename TMemberAccess>
 void TypeAnalysis::HandleMemberAccess(TypeDomain& state, const TMemberAccess* memberAccess) const
 {
-    auto locationType = GetInnerTypeFromMemberAccess(*memberAccess, builder)->StripAllRefs();
+    auto locationType = GetInnerTypeFromMemberAccess(*memberAccess, builder)->GetPureType();
     if (!locationType->IsClassOrStruct()) {
         return HandleDefaultExpr(state, memberAccess);
     }
@@ -387,7 +387,7 @@ void TypeAnalysis::HandleMemberAccess(TypeDomain& state, const TMemberAccess* me
     if (it2 == it->second.end()) {
         return HandleDefaultExpr(state, memberAccess);
     }
-    auto resType = it2->second->StripAllRefs();
+    auto resType = it2->second->GetPureType();
     // member define:
     //   class XX<T> {
     //     let member: I<T> = CA<T>()
@@ -453,7 +453,7 @@ void TypeAnalysis::UpdateDefaultValue(
         return;
     }
     auto dest = refObj ? refObj : value;
-    auto type = relType == nullptr ? value->GetType()->StripAllRefs() : relType;
+    auto type = relType == nullptr ? value->GetType()->GetPureType() : relType;
     if (type->IsBox()) {
         type = StaticCast<BoxType*>(type)->GetBaseType();
     }

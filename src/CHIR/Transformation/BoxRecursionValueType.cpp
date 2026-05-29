@@ -78,6 +78,18 @@ bool LeftIsBoxTypeOfRight(const Type& left, const Type& right)
             if (leftType == rightType) {
                 return true;
             }
+            if (leftType->IsModal()) {
+                if (!rightType->IsModal()) {
+                    return false;
+                }
+                auto leftModalInfo = StaticCast<ModalType*>(leftType)->GetModalInfo();
+                auto rightModalInfo = StaticCast<ModalType*>(rightType)->GetModalInfo();
+                if (leftModalInfo != rightModalInfo) {
+                    return false;
+                }
+                return leftIsGenericOrEqualToRight(*StaticCast<ModalType*>(leftType)->GetBaseType(),
+                    *StaticCast<ModalType*>(rightType)->GetBaseType());
+            }
             if (leftType->IsGeneric()) {
                 return true;
             }
@@ -126,7 +138,7 @@ void UnBoxGetElementRefResIfNeed(GetElementRef& ger, CHIRBuilder& builder)
 {
     // If the base of the GetElementRef expression is enum, it must be the index on which we want to get enum.
     // Therefore, we do not need to box the targetType.
-    auto baseType = ger.GetLocation()->GetType()->StripAllRefs();
+    auto baseType = ger.GetLocation()->GetType()->GetPureType();
     if (baseType->IsEnum()) {
         return;
     }
@@ -203,14 +215,17 @@ void InsertUnBoxAfterField(Field& field, CHIRBuilder& builder)
 void CastEnumTypeToTupleWithBoxArg(TypeCast& typecast, const std::vector<size_t>& path, CHIRBuilder& builder)
 {
     auto typecastRes = typecast.GetResult();
-    auto targetType = StaticCast<TupleType*>(typecastRes->GetType());
+    auto targetType = StaticCast<TupleType*>(typecastRes->GetType()->GetPureType());
     auto eleTypes = targetType->GetElementTypes();
     for (auto i : path) {
         auto boxType = builder.GetType<RefType>(builder.GetType<BoxType>(eleTypes[i]));
         CJC_ASSERT(i < eleTypes.size());
         eleTypes[i] = boxType;
     }
-    auto newTargetType = builder.GetType<TupleType>(eleTypes);
+    Type* newTargetType = builder.GetType<TupleType>(eleTypes);
+    if (auto modalType = DynamicCast<ModalType*>(typecastRes->GetType()->StripAllRefs())) {
+        newTargetType = builder.GetType<ModalType>(newTargetType, modalType->GetModalInfo());
+    }
     typecastRes->SetType(*newTargetType);
 }
 

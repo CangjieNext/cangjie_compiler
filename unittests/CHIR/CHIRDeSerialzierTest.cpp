@@ -140,6 +140,9 @@ Type::TypeKind DeSerialize(const PackageFormat::CHIRTypeKind& kind)
         case CHIRTypeKind_THIS:
             ret = Type::TypeKind::TYPE_THIS;
             break;
+        case CHIRTypeKind_MODAL:
+            ret = Type::TypeKind::TYPE_MODAL;
+            break;
             // no defalut here, due to we need use compiler to check all value be handled.
     }
     return ret;
@@ -416,6 +419,9 @@ ExprKind DeSerialize(const PackageFormat::CHIRExprKind& kind)
             break;
         case CHIRExprKind_Exit:
             ret = ExprKind::EXIT;
+            break;
+        case CHIRExprKind_Exclave:
+            ret = ExprKind::EXCLAVE;
             break;
         case CHIRExprKind_TryApply:
             ret = ExprKind::APPLY_WITH_EXCEPTION;

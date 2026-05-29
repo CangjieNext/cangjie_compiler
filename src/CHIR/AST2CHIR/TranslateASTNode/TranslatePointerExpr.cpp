@@ -26,12 +26,11 @@ Ptr<Value> Translator::Visit(const AST::PointerExpr& expr)
             argVal = argLeftValInfo.base;
             // polish this
             if (!argLeftValInfo.path.empty()) {
-                auto lhsCustomType = StaticCast<CustomType*>(argVal->GetType()->StripAllRefs());
                 if (argVal->GetType()->IsRef()) {
                     argVal = CreateGetElementRefWithPath(TranslateLocation(expr), argVal,
-                        argLeftValInfo.path, currentBlock, *lhsCustomType);
+                        argLeftValInfo.path, currentBlock);
                 } else {
-                    auto memberType = GetInstMemberTypeByName(*lhsCustomType, argLeftValInfo.path, builder);
+                    auto memberType = GetInstMemberTypeByName(*argVal, argLeftValInfo.path, builder);
                     auto getMember = CreateAndAppendExpression<FieldByName>(
                         TranslateLocation(expr), memberType, argVal, argLeftValInfo.path, currentBlock);
                     argVal = getMember->GetResult();

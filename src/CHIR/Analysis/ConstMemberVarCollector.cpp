@@ -37,7 +37,7 @@ void ConstMemberVarCollector::CollectConstMemberVarType()
                 // skip variable member
                 continue;
             }
-            auto memberType = member.type->StripAllRefs();
+            auto memberType = member.type->GetPureType();
             if (!memberType->IsCustomType()) {
                 continue;
             }
@@ -109,7 +109,7 @@ void ConstMemberVarCollector::HandleStoreElementRef(
         return;
     }
     auto sourceValue = GetSourceTargetRecursively(stf->GetValue());
-    auto sourceType = sourceValue->GetType()->StripAllRefs();
+    auto sourceType = sourceValue->GetType()->GetPureType();
     auto& info = index2Type[index];
     if (sourceType->IsCustomType() && StaticCast<CustomType*>(sourceType)->GetCustomTypeDef()->CanBeInherited()) {
         // if source type can be inherited, we may get its child type, ending.

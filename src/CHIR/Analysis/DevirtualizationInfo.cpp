@@ -94,7 +94,7 @@ static Type* GetRuntimeTypeFromFunc(const Value* retVal, bool isInLambda = false
     if (!retVal) {
         return nullptr;
     }
-    auto rtTy = retVal->GetType()->StripAllRefs();
+    auto rtTy = retVal->GetType()->GetPureType();
     // Do not process the return type that is not class type.
     if (!rtTy->IsClass()) {
         return nullptr;
@@ -114,7 +114,7 @@ static Type* GetRuntimeTypeFromFunc(const Value* retVal, bool isInLambda = false
             auto applyResType = GetRuntimeTypeFromLambda(*StaticCast<Apply*>(expr), srcTy);
             srcTy = applyResType != nullptr ? applyResType : srcTy;
         }
-        srcTy = srcTy->StripAllRefs();
+        srcTy = srcTy->GetPureType();
         if (srcTy == rtTy) {
             // if type is same, skip
             return nullptr;

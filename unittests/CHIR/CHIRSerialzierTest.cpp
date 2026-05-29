@@ -141,6 +141,9 @@ PackageFormat::CHIRTypeKind Serialize(const Type::TypeKind& kind)
         case Type::TypeKind::TYPE_THIS:
             ret = CHIRTypeKind_THIS;
             break;
+        case Type::TypeKind::TYPE_MODAL:
+            ret = CHIRTypeKind_MODAL;
+            break;
         case Type::TypeKind::MAX_TYPE_KIND:
             CJC_ABORT();
             break;
@@ -425,6 +428,9 @@ PackageFormat::CHIRExprKind Serialize(const ExprKind& kind)
             break;
         case ExprKind::EXIT:
             ret = CHIRExprKind_Exit;
+            break;
+        case ExprKind::EXCLAVE:
+            ret = CHIRExprKind_Exclave;
             break;
         case ExprKind::APPLY_WITH_EXCEPTION:
             ret = CHIRExprKind_TryApply;
