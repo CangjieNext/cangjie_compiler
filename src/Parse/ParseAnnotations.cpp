@@ -143,7 +143,16 @@ void ParserImpl::ParseAnnotationArguments(Annotation& anno)
             if (backArgsIsInvalid) {
                 break;
             }
-            DiagExpectedRightDelimiter("[", pos);
+            static std::map<std::string, std::string> delMap = {{"{", "}"}, {"(", ")"}, {"[", "]"}, {"<", ">"}};
+            auto builder = lookahead.kind == TokenKind::NL
+                ? ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_right_delimiter, lastToken, "[")
+                : ParseDiagnoseRefactor(DiagKindRefactor::parse_expected_right_delimiter, lastToken.End(), "[");
+            builder.AddMainHintArguments(delMap["["]);
+            builder.AddHint(pos, "[");
+            builder.AddNote(
+                "Annotation attribute syntax error. This may be caused by a missing macro definition. "
+                "If not, verify that the annotation attributes are valid."
+            );
         }
     }
     anno.end = lastToken.End();
