@@ -45,7 +45,7 @@ bool HasForeignName(const Decl& member)
 
 void CheckForeignName::HandleImpl(TypeCheckContext& ctx)
 {
-    auto targetKind = ctx.typeMapper.IsObjCMirror(ctx.target) ? "@ObjCMirror" : "@ObjCImpl";
+    auto targetKind = ctx.typeMapper.IsObjCMirror(ctx.target) ? "@ObjC foreign type" : "@ObjC class";
     for (auto memberDecl : ctx.target.GetMemberDeclPtrs()) {
         if (memberDecl->TestAttr(Attribute::IS_BROKEN)) {
             continue;

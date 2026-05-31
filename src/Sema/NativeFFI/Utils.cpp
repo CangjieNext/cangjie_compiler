@@ -252,9 +252,23 @@ Ptr<std::string> GetSingleArgumentAnnotationValue(const Decl& target, Annotation
 
 std::string GetObjCMirrorForeignName(const ClassLikeDecl& target)
 {
-    if (auto customName = GetSingleArgumentAnnotationValue(target, AnnotationKind::OBJ_C_MIRROR)) {
-        return *customName;
+    for (auto& anno : target.annotations) {
+        if (!Interop::ObjC::IsInteropAnnotation(*anno)) {
+            continue;
+        }
+
+        CJC_ASSERT(anno->args.size() < 2);
+        if (anno->args.empty()) {
+            break;
+        }
+
+        CJC_ASSERT(anno->args[0]->expr->astKind == ASTKind::LIT_CONST_EXPR);
+        auto lce = As<ASTKind::LIT_CONST_EXPR>(anno->args[0]->expr.get());
+        CJC_ASSERT(lce);
+
+        return lce->stringValue;
     }
+
     return target.identifier.Val();
 }
 

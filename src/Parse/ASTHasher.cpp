@@ -805,6 +805,7 @@ struct ASTHasherImpl {
             case AnnotationKind::CALLING_CONV:
             case AnnotationKind::INTRINSIC:
             case AnnotationKind::JAVA:
+            case AnnotationKind::OBJC:
             case AnnotationKind::JAVA_MIRROR:
             case AnnotationKind::JAVA_IMPL:
             case AnnotationKind::OBJ_C_MIRROR:
@@ -841,6 +842,7 @@ struct ASTHasherImpl {
             case AnnotationKind::CALLING_CONV:
             case AnnotationKind::INTRINSIC:
             case AnnotationKind::JAVA:
+            case AnnotationKind::OBJC:
             case AnnotationKind::JAVA_MIRROR:
             case AnnotationKind::JAVA_IMPL:
             case AnnotationKind::OBJ_C_MIRROR:

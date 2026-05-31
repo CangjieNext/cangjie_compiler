@@ -70,9 +70,9 @@ struct JavaInteropTypeChecker {
             return "cangjie mirror decl";
         }
         if (isImpl) {
-            return "@JavaImpl";
+            return "class";
         } else {
-            return "@JavaMirror";
+            return "foreign type";
         }
     }
 
@@ -301,7 +301,7 @@ void JavaInteropManager::CheckNonJavaSuperType(ClassLikeDecl& decl) const
         }
     }
 
-    if (decl.HasAnno(AnnotationKind::JAVA_IMPL) && !IsJavaMirrorSubtype(*decl.GetTy())) {
+    if (IsImpl(decl) && !IsJavaMirrorSubtype(*decl.GetTy())) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_java_mirror_subtype_anno_must_inherit_mirror, decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
@@ -399,13 +399,13 @@ void JavaInteropManager::CheckTypes(ClassLikeDecl& classLikeDecl)
 
     if (auto id = As<ASTKind::INTERFACE_DECL>(&classLikeDecl);
         id && id->TestAttr(Attribute::JAVA_MIRROR_SUBTYPE) && !id->TestAttr(Attribute::JAVA_MIRROR)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *id, "@JavaImpl interface");
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *id, "@Java interface");
         classLikeDecl.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
 
     if (auto cd = As<ASTKind::CLASS_DECL>(&classLikeDecl); cd && cd->TestAttr(Attribute::ABSTRACT) && IsImpl(*cd)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *cd, "@JavaImpl abstract");
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *cd, "@Java abstract class");
         classLikeDecl.EnableAttr(Attribute::IS_BROKEN);
         return;
     }

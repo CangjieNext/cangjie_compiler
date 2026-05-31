@@ -67,7 +67,7 @@ private:
 
     void CheckPropTypes(AST::PropDecl& pd, TypeCheckContext& ctx);
     void CheckVarTypes(AST::VarDecl& vd, TypeCheckContext& ctx);
-    std::string GetDeclInteropName();
+    std::string GetDeclInteropName(const TypeCheckContext& ctx);
 
     InteropType interopType;
 };

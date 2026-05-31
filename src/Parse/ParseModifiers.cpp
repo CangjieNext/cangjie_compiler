@@ -17,6 +17,22 @@
 
 using namespace Cangjie;
 
+namespace {
+
+bool IsAccessModifierToken(TokenKind t)
+{
+    return t == TokenKind::PUBLIC || t == TokenKind::PRIVATE || t == TokenKind::INTERNAL ||
+        t == TokenKind::PROTECTED;
+}
+
+bool IsForeignAllowedConflict(TokenKind a, TokenKind b)
+{
+    return (a == TokenKind::FOREIGN && IsAccessModifierToken(b)) ||
+        (b == TokenKind::FOREIGN && IsAccessModifierToken(a));
+}
+
+} // namespace
+
 bool ParserImpl::SeeingModifier()
 {
     return (Peek().kind >= TokenKind::STATIC && Peek().kind <= TokenKind::OPERATOR) ||
@@ -48,7 +64,7 @@ void ParserImpl::SetDeclBeginPos(AST::Decl& decl) const
 
 // Make sure there is no repeat modifier in modifiers.
 std::set<AST::Attribute> ParserImpl::CheckDeclModifiers(const std::set<AST::Modifier>& modifiers, ScopeKind scopeKind,
-    DefKind defKind)
+    DefKind defKind, bool hasInteropAnno)
 {
     // For libast, ignore all scope info.
     if (scopeKind == ScopeKind::UNKNOWN_SCOPE) {
@@ -79,11 +95,11 @@ std::set<AST::Attribute> ParserImpl::CheckDeclModifiers(const std::set<AST::Modi
     if (!mpImpl->CheckCJMPModifiers(modifiers)) {
         return {};
     }
-    return GetModifierAttrs(defKind, scopeKind, modifiersVec);
+    return GetModifierAttrs(defKind, scopeKind, modifiersVec, hasInteropAnno);
 }
 
-std::set<AST::Attribute> ParserImpl::GetModifierAttrs(
-    DefKind defKind, ScopeKind scopeKind, const std::vector<Ptr<const AST::Modifier>>& modifiersVec)
+std::set<AST::Attribute> ParserImpl::GetModifierAttrs(DefKind defKind, ScopeKind scopeKind,
+    const std::vector<Ptr<const AST::Modifier>>& modifiersVec, bool hasInteropAnno)
 {
     // Store the modifiers TokenKind that has been traversed.
     std::vector<Ptr<const AST::Modifier>> traversedModifiers;
@@ -110,6 +126,9 @@ std::set<AST::Attribute> ParserImpl::GetModifierAttrs(
         auto conflicts = GetConflictingModifiers(defKind, scopeKind, it->modifier);
         for (size_t i = 0; i < conflicts.size; ++i) {
             TokenKind cm = conflicts.data[i];
+            if (hasInteropAnno && IsForeignAllowedConflict(cm, it->modifier)) {
+                continue;
+            }
             auto iter = std::find_if(traversedModifiers.begin(), traversedModifiers.end(),
                 [&cm](auto& preMod) { return preMod->modifier == cm; });
             if (iter == traversedModifiers.end()) {

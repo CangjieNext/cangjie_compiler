@@ -33,7 +33,7 @@ void DiagConflictingForeignName(
         if (!anno->TestAttr(Attribute::COMPILER_ADD)) {
             auto declWithAnnoRange = MakeRange(anno->GetBegin(), declWithAnno.identifier.End());
             return diag.DiagnoseRefactor(DiagKindRefactor::sema_foreign_name_conflicting_annotation, declWithAnno,
-                declWithAnnoRange, declWithAnno.identifier, anno->identifier, anno->identifier);
+                declWithAnnoRange, declWithAnno.identifier, anno->identifier);
         } else {
             return diag.DiagnoseRefactor(DiagKindRefactor::sema_foreign_name_conflicting_derived_annotation,
                 declWithAnno,

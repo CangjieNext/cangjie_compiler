@@ -51,7 +51,7 @@ void CheckMemberTypes::CheckPropTypes(PropDecl& pd, TypeCheckContext& ctx)
     }
 
     ctx.diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_objc_interop_prop_must_be_objc_compatible, *pd.type, GetDeclInteropName());
+        DiagKindRefactor::sema_objc_interop_prop_must_be_objc_compatible, *pd.type, GetDeclInteropName(ctx));
     pd.EnableAttr(Attribute::IS_BROKEN);
     pd.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
 }
@@ -63,7 +63,7 @@ void CheckMemberTypes::CheckVarTypes(VarDecl& vd, TypeCheckContext& ctx)
     }
 
     ctx.diag.DiagnoseRefactor(
-        DiagKindRefactor::sema_objc_interop_field_must_be_objc_compatible, *vd.type, GetDeclInteropName());
+        DiagKindRefactor::sema_objc_interop_field_must_be_objc_compatible, *vd.type, GetDeclInteropName(ctx));
     vd.EnableAttr(Attribute::IS_BROKEN);
     vd.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
 }
@@ -85,7 +85,7 @@ void CheckMemberTypes::CheckFuncRetType(FuncDecl& fd, TypeCheckContext& ctx)
 {
     if (fd.funcBody->retType && !ctx.typeMapper.IsObjCCompatible(*fd.funcBody->retType->GetTy())) {
         ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_objc_interop_method_ret_must_be_objc_compatible,
-            *fd.funcBody->retType, GetDeclInteropName());
+            *fd.funcBody->retType, GetDeclInteropName(ctx));
 
         fd.EnableAttr(Attribute::IS_BROKEN);
         fd.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
@@ -107,15 +107,16 @@ void CheckMemberTypes::CheckFuncParamTypes(FuncDecl& fd, TypeCheckContext& ctx)
             fd.EnableAttr(Attribute::IS_BROKEN);
             fd.outerDecl->EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
 
-            ctx.diag.DiagnoseRefactor(errKind, *param, GetDeclInteropName());
+            ctx.diag.DiagnoseRefactor(errKind, *param, GetDeclInteropName(ctx));
         }
     }
 }
 
-std::string CheckMemberTypes::GetDeclInteropName()
+std::string CheckMemberTypes::GetDeclInteropName(const TypeCheckContext& ctx)
 {
     if (interopType == InteropType::ObjC_Mirror) {
-        return "Objective-C mirror";
+        auto isImpl = ctx.typeMapper.IsObjCImpl(*ctx.target.GetTy());
+        return isImpl ? "@ObjC class" : "@ObjC foreign type";
     } else if (interopType == InteropType::CJ_Mapping) {
         return "cangjie mirror decl";
     } else {

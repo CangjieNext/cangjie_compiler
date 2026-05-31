@@ -37,9 +37,9 @@ void InsertStringConversions::HandleImpl(InteropContext& ctx)
             auto classDecl = StaticCast<ClassDecl*>(mirror);
 
             auto foreignName = classDecl->identifier.Val();
-            auto customName = Native::FFI::GetSingleArgumentAnnotationValue(*classDecl, AnnotationKind::OBJ_C_MIRROR);
+            auto customName = ctx.nameGenerator.GetUserDefinedObjCName(*classDecl);
             if (customName) {
-                foreignName = customName;
+                foreignName = *customName;
             }
 
             if (foreignName == NSSTRING_CLASS_IDENT) {

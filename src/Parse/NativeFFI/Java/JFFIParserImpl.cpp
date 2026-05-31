@@ -19,38 +19,42 @@ using namespace AST;
 
 void JFFIParserImpl::CheckAnnotation(const Annotation& anno) const
 {
-    if (anno.kind == AnnotationKind::JAVA_MIRROR) {
-        CheckMirrorAnnoArgs(anno);
-        CheckMirrorAnnoTarget(anno);
-    } else {
-        CJC_ASSERT(anno.kind == AnnotationKind::JAVA_IMPL);
-        CheckImplAnnoArgs(anno);
-        CheckImplAnnoTarget(anno);
+    switch (anno.kind) {
+        case AnnotationKind::JAVA: {
+            CheckInteropAnnoArgs(anno);
+            CheckInteropAnnoTarget(anno);
+            break;
+        }
+        case AnnotationKind::JAVA_MIRROR: {
+            CheckMirrorAnnoArgs(anno);
+            CheckInteropAnnoTarget(anno);
+            break;
+        }
+        case AnnotationKind::JAVA_IMPL: {
+            CheckImplAnnoArgs(anno);
+            CheckInteropAnnoTarget(anno);
+            break;
+        }
+        default: CJC_ABORT(); // Unexpected annotation
     }
 }
 
-void JFFIParserImpl::CheckMirrorAnnoTarget(const Annotation& anno) const
+void JFFIParserImpl::CheckInteropAnnoTarget(const Annotation& anno) const
 {
+    CJC_ASSERT(Interop::Java::IsInteropAnnotation(anno));
+
     if (p.SeeingAny({TokenKind::CLASS, TokenKind::INTERFACE})) {
         return;
     }
 
-    if (anno.kind == AnnotationKind::JAVA_MIRROR) {
-        auto& lah = p.lookahead;
-        p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, lah.Value());
-    }
+    auto& lah = p.lookahead;
+    p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, lah.Value());
 }
 
-void JFFIParserImpl::CheckImplAnnoTarget(const Annotation& anno) const
+void JFFIParserImpl::CheckInteropAnnoArgs(const Annotation& anno) const
 {
-    if (p.SeeingAny({TokenKind::CLASS, TokenKind::INTERFACE})) {
-        return;
-    }
-
-    if (anno.kind == AnnotationKind::JAVA_IMPL) {
-        auto& lah = p.lookahead;
-        p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, lah.Value());
-    }
+    static const std::string JAVA_NAME = "@Java";
+    p.ffiParser->CheckZeroOrSingleStringLitArgAnnotation(anno, JAVA_NAME);
 }
 
 void JFFIParserImpl::CheckMirrorAnnoArgs(const Annotation& anno) const
@@ -67,7 +71,7 @@ void JFFIParserImpl::CheckImplAnnoArgs(const Annotation& anno) const
 
 void JFFIParserImpl::CheckMirrorSignature(AST::ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const
 {
-    CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::JAVA_MIRROR));
+    CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::JAVA) || p.HasAnnotation(annos, AnnotationKind::JAVA_MIRROR));
     decl.EnableAttr(Attribute::JAVA_MIRROR);
     if (!decl.inheritedTypes.empty()) {
         decl.EnableAttr(Attribute::JAVA_MIRROR_SUBTYPE);
@@ -80,7 +84,7 @@ void JFFIParserImpl::CheckMirrorSignature(AST::ClassLikeDecl& decl, const PtrVec
 
 void JFFIParserImpl::CheckImplSignature(AST::ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const
 {
-    CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::JAVA_IMPL));
+    CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::JAVA) || p.HasAnnotation(annos, AnnotationKind::JAVA_IMPL));
     decl.EnableAttr(Attribute::JAVA_MIRROR_SUBTYPE);
 
     // Avoid CJ-MAPPING Generic Check.

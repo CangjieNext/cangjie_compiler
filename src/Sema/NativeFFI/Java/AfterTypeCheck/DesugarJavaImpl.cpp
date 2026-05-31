@@ -1003,7 +1003,7 @@ void JavaDesugarManager::DesugarLetPattern(LetPatternDestructor& letPat)
 
     for (auto typePat : typePatterns) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *typePat,
-            "let type patterns with JavaImpl or JavaMirror types");
+            "let type patterns with @Java types");
     }
 }
 
