@@ -14,6 +14,7 @@
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/Utils/Utils.h"
 
 #include "FFIParserImpl.h"
 #include "cangjie/Lex/Token.h"
@@ -39,6 +40,22 @@ bool IsLitString(Ptr<Expr> expr)
     return true;
 }
 
+std::string InteropReplacementForDeprecated(const Annotation& anno)
+{
+    switch (anno.kind) {
+        case AnnotationKind::JAVA_MIRROR:
+            return "@Java foreign";
+        case AnnotationKind::JAVA_IMPL:
+            return "@Java";
+        case AnnotationKind::OBJ_C_MIRROR:
+            return "@ObjC foreign";
+        case AnnotationKind::OBJ_C_IMPL:
+            return "@ObjC";
+        default:
+            return "";
+    }
+}
+
 } // namespace
 
 void DiagConflictingAnnos(DiagnosticEngine &diag, Annotation &first, Annotation &second, const std::string& onStr)
@@ -50,6 +67,16 @@ void DiagConflictingAnnos(DiagnosticEngine &diag, Annotation &first, Annotation 
         DiagKindRefactor::parse_conflict_annotation,
         MakeRange(minPos, maxPos),
         first.identifier, second.identifier, onStr);
+}
+
+void FFIParserImpl::DiagDeprecatedInteropAnnotation(const Annotation& anno) const
+{
+    const auto replacement = InteropReplacementForDeprecated(anno);
+    if (replacement.empty()) {
+        return;
+    }
+    p.diag.DiagnoseRefactor(DiagKindRefactor::parse_deprecated_interop_annotation, anno,
+        "@" + anno.identifier.Val(), replacement);
 }
 
 void FFIParserImpl::CheckAnnotationsConflict(const PtrVector<Annotation>& annos) const
@@ -84,6 +111,11 @@ void FFIParserImpl::CheckAnnotations(const PtrVector<Annotation>& annos, ScopeKi
         switch (it->kind) {
             case AnnotationKind::JAVA_MIRROR:
             case AnnotationKind::JAVA_IMPL: {
+                DiagDeprecatedInteropAnnotation(anno);
+                jp.CheckAnnotation(anno);
+                break;
+            }
+            case AnnotationKind::JAVA: {
                 jp.CheckAnnotation(anno);
                 break;
             }
@@ -103,7 +135,12 @@ void FFIParserImpl::CheckAnnotations(const PtrVector<Annotation>& annos, ScopeKi
                 break;
             }
             case AnnotationKind::OBJ_C_MIRROR:
-            case AnnotationKind::OBJ_C_IMPL:
+            case AnnotationKind::OBJ_C_IMPL: {
+                DiagDeprecatedInteropAnnotation(anno);
+                op.CheckAnnotation(anno, scopeKind);
+                break;
+            }
+            case AnnotationKind::OBJC:
             case AnnotationKind::OBJ_C_INIT:
             case AnnotationKind::OBJ_C_OPTIONAL: {
                 op.CheckAnnotation(anno, scopeKind);
@@ -210,8 +247,25 @@ void FFIParserImpl::CheckNoArgAnnotation(const AST::Annotation &anno, const std:
 
 void FFIParserImpl::CheckClassLikeSignature(AST::ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const
 {
+    const bool isForeign = decl.TestAttr(Attribute::FOREIGN);
     for (auto& anno : annos) {
         switch (anno->kind) {
+            case AnnotationKind::JAVA:
+                if (isForeign) {
+                    jp.CheckMirrorSignature(decl, annos);
+                    decl.DisableAttr(Attribute::FOREIGN);
+                } else {
+                    jp.CheckImplSignature(decl, annos);
+                }
+                break;
+            case AnnotationKind::OBJC:
+                if (isForeign) {
+                    op.CheckMirrorSignature(decl, annos);
+                    decl.DisableAttr(Attribute::FOREIGN);
+                } else {
+                    op.CheckImplSignature(decl, annos);
+                }
+                break;
             case AnnotationKind::JAVA_MIRROR:
                 jp.CheckMirrorSignature(decl, annos);
                 break;
@@ -232,8 +286,19 @@ void FFIParserImpl::CheckClassLikeSignature(AST::ClassLikeDecl& decl, const PtrV
 
 void FFIParserImpl::CheckFuncSignature(AST::FuncDecl& decl, const PtrVector<Annotation>& annos) const
 {
+    const bool isForeign = decl.TestAttr(Attribute::FOREIGN);
     for (auto& anno : annos) {
         switch (anno->kind) {
+            case AnnotationKind::OBJC:
+                if (isForeign) {
+                    op.CheckMirrorSignature(decl, annos);
+                    decl.DisableAttr(Attribute::FOREIGN);
+                } else {
+                    p.diag.DiagnoseRefactor(DiagKindRefactor::parse_objc_interop_requires_foreign_for_mirror, *anno);
+                    decl.EnableAttr(Attribute::IS_BROKEN);
+                    return;
+                }
+                break;
             case AnnotationKind::OBJ_C_MIRROR:
                 op.CheckMirrorSignature(decl, annos);
                 break;

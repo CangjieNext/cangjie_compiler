@@ -182,8 +182,7 @@ std::string NameGenerator::GetFieldSetterWrapperName(const VarDecl& target)
 Ptr<std::string> NameGenerator::GetUserDefinedObjCName(const Decl& target)
 {
     for (auto& anno : target.annotations) {
-        if (anno->kind != AnnotationKind::OBJ_C_MIRROR && anno->kind != AnnotationKind::OBJ_C_IMPL &&
-            anno->kind != AnnotationKind::FOREIGN_NAME) {
+        if (!IsInteropAnnotation(*anno) && anno->kind != AnnotationKind::FOREIGN_NAME) {
             continue;
         }
 

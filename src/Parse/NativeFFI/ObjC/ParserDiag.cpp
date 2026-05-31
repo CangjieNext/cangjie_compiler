@@ -105,11 +105,6 @@ void OCFFIParserImpl::DiagObjCImplCannotHaveStaticInit(const Node& node) const
     p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_impl_cannot_have_static_init, node);
 }
 
-void OCFFIParserImpl::DiagObjCMirrorFuncCannotBeForeign(const FuncDecl& decl) const
-{
-    p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_func_cannot_be_foreign, decl, decl.identifier.Val());
-}
-
 void OCFFIParserImpl::DiagObjCMirrorFuncCannotBeC(const FuncDecl& decl) const
 {
     p.ParseDiagnoseRefactor(DiagKindRefactor::parse_objc_mirror_func_cannot_be_c, decl, decl.identifier.Val());

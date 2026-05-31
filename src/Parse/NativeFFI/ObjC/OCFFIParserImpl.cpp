@@ -21,9 +21,14 @@ using namespace AST;
 void OCFFIParserImpl::CheckAnnotation(const Annotation& anno, ScopeKind scopeKind) const
 {
     switch (anno.kind) {
+        case AnnotationKind::OBJC: {
+            CheckInteropAnnoArgs(anno);
+            CheckInteropAnnoTarget(anno, scopeKind);
+            break;
+        }
         case AnnotationKind::OBJ_C_MIRROR: {
             CheckMirrorAnnoArgs(anno);
-            CheckMirrorAnnoTarget(anno, scopeKind);
+            CheckInteropAnnoTarget(anno, scopeKind);
             break;
         }
         case AnnotationKind::OBJ_C_IMPL: {
@@ -47,7 +52,7 @@ void OCFFIParserImpl::CheckAnnotation(const Annotation& anno, ScopeKind scopeKin
 
 void OCFFIParserImpl::CheckMirrorSignature(ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const
 {
-    CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::OBJ_C_MIRROR));
+    CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::OBJC) || p.HasAnnotation(annos, AnnotationKind::OBJ_C_MIRROR));
     decl.EnableAttr(Attribute::OBJ_C_MIRROR);
 
     if (decl.TestAttr(Attribute::SEALED)) {
@@ -58,13 +63,8 @@ void OCFFIParserImpl::CheckMirrorSignature(ClassLikeDecl& decl, const PtrVector<
 
 void OCFFIParserImpl::CheckMirrorSignature(FuncDecl& decl, const PtrVector<Annotation>& annos) const
 {
-    CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::OBJ_C_MIRROR));
+    CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::OBJC) || p.HasAnnotation(annos, AnnotationKind::OBJ_C_MIRROR));
     decl.EnableAttr(Attribute::OBJ_C_MIRROR);
-
-    if (decl.TestAttr(Attribute::FOREIGN)) {
-        DiagObjCMirrorFuncCannotBeForeign(decl);
-        decl.EnableAttr(Attribute::IS_BROKEN);
-    }
 
     if (decl.GetGeneric() != nullptr) {
         DiagObjCMirrorFuncCannotBeGeneric(decl);
@@ -94,7 +94,7 @@ void OCFFIParserImpl::CheckMirrorSignature(FuncDecl& decl, const PtrVector<Annot
 
 void OCFFIParserImpl::CheckImplSignature(ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const
 {
-    CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::OBJ_C_IMPL));
+    CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::OBJC) || p.HasAnnotation(annos, AnnotationKind::OBJ_C_IMPL));
     decl.EnableAttr(Attribute::OBJ_C_MIRROR_SUBTYPE);
 
     if (decl.GetGeneric() != nullptr) {
@@ -116,6 +116,12 @@ void OCFFIParserImpl::CheckImplSignature(ClassLikeDecl& decl, const PtrVector<An
         DiagObjCImplCannotBeInterface(decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
+}
+
+void OCFFIParserImpl::CheckInteropAnnoArgs(const Annotation& anno) const
+{
+    static const std::string OBJC_NAME = "@ObjC";
+    p.ffiParser->CheckZeroOrSingleStringLitArgAnnotation(anno, OBJC_NAME);
 }
 
 void OCFFIParserImpl::CheckMirrorAnnoArgs(const Annotation& anno) const
@@ -142,8 +148,10 @@ void OCFFIParserImpl::CheckOptionalAnnoArgs(const Annotation& anno) const
     p.ffiParser->CheckNoArgAnnotation(anno, OBJC_OPTIONAL_NAME);
 }
 
-void OCFFIParserImpl::CheckMirrorAnnoTarget(const Annotation& anno, ScopeKind scopeKind) const
+void OCFFIParserImpl::CheckInteropAnnoTarget(const Annotation& anno, ScopeKind scopeKind) const
 {
+    CJC_ASSERT(anno.kind == AnnotationKind::OBJC || anno.kind == AnnotationKind::OBJ_C_MIRROR);
+
     if (p.SeeingAny({TokenKind::CLASS, TokenKind::INTERFACE})) {
         return;
     }
@@ -151,23 +159,21 @@ void OCFFIParserImpl::CheckMirrorAnnoTarget(const Annotation& anno, ScopeKind sc
         return;
     }
 
-    if (anno.kind == AnnotationKind::OBJ_C_MIRROR) {
-        auto& lah = p.lookahead;
-        auto qualifier = (scopeKind == ScopeKind::TOPLEVEL)? "": "member or local ";
-        p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, qualifier + lah.Value());
-    }
+    auto& lah = p.lookahead;
+    auto qualifier = (scopeKind == ScopeKind::TOPLEVEL) ? "" : "member or local ";
+    p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, qualifier + lah.Value());
 }
 
 void OCFFIParserImpl::CheckImplAnnoTarget(const Annotation& anno) const
 {
+    CJC_ASSERT(anno.kind == AnnotationKind::OBJ_C_IMPL);
+
     if (p.SeeingAny({TokenKind::CLASS, TokenKind::INTERFACE})) {
         return;
     }
 
-    if (anno.kind == AnnotationKind::OBJ_C_IMPL) {
-        auto& lah = p.lookahead;
-        p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, lah.Value());
-    }
+    auto& lah = p.lookahead;
+    p.DiagUnexpectedAnnoOn(anno, lah.Begin(), anno.identifier, lah.Value());
 }
 
 void OCFFIParserImpl::CheckInitAnnoTarget(const Annotation& anno) const

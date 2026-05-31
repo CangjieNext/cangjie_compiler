@@ -20,7 +20,7 @@ Range MakeJavaImplJavaNameRange(const ClassLikeDecl& decl)
     }
 
     for (auto& anno : decl.annotations) {
-        if (anno->kind != AnnotationKind::JAVA_IMPL) {
+        if (!IsInteropAnnotation(*anno)) {
             continue;
         }
 
@@ -78,7 +78,7 @@ void DiagJavaDeclCannotInheritPureCangjieType(DiagnosticEngine& diag, ClassLikeD
         CJC_ASSERT(superDecl);
         if (!IsMirror(*superDecl) && !IsImpl(*superDecl) && !superDecl->GetTy()->IsObject() &&
             !superDecl->GetTy()->IsAny()) {
-            builder.AddNote(*superType, "'" + superType->ToString() + "'" + " is not a java-compatible type");
+            builder.AddNote(*superType, "'" + superType->ToString() + "'" + " is not a Java-compatible type");
         }
     }
 }
@@ -149,7 +149,7 @@ void DiagJavaTypesAsGenericParam(DiagnosticEngine& diag, const Node& expr, std::
         genericDecl->identifier, primaryDiagJavaDecl->identifier);
 
     for (auto javaDecl : javaDecls) {
-        builder.AddNote("Also uses java interoperability type '" + javaDecl->identifier + "'");
+        builder.AddNote("Also uses @Java type '" + javaDecl->identifier + "'");
     }
 }
 

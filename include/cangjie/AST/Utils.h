@@ -246,6 +246,12 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet);
 void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet);
 } // namespace Cangjie::AST
 
+namespace Cangjie::Interop {
+
+bool IsCangjieCallsForeign(const AST::Node& node);
+
+} // namespace Cangjie::Interop
+
 namespace Cangjie::Interop::Java {
 using namespace Cangjie::AST;
 
@@ -259,6 +265,11 @@ bool IsJObject(const Decl& decl, const std::string& packageName);
 bool IsMirror(const Node& node);
 bool IsCJMapping(const Node& node);
 bool IsObject(const Node& node);
+
+/**
+ * Predicate for @Java or @JavaMirror or @JavaImpl annotations.
+ */
+bool IsInteropAnnotation(const Annotation& anno);
 
 /**
  * The forward class is used to forward the method call to Java side.
@@ -305,6 +316,11 @@ void InsertSyntheticClassDecl(ClassLikeDecl& decl, File& file);
 }
 
 namespace Cangjie::Interop::ObjC {
+
+/**
+ * Predicate for @ObjC or @ObjCMirror or @ObjCImpl annotations.
+ */
+bool IsInteropAnnotation(const AST::Annotation& anno);
 
 bool IsDeclAppropriateForSyntheticClassGeneration(const AST::Decl& decl);
 

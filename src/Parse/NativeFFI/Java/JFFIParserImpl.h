@@ -42,11 +42,11 @@ public:
     void DiagJavaImplCannotHaveStaticInit(const Node& node) const;
 
 private:
+    void CheckInteropAnnoArgs(const Annotation& anno) const;
     void CheckMirrorAnnoArgs(const Annotation& anno) const;
     void CheckImplAnnoArgs(const Annotation& anno) const;
 
-    void CheckMirrorAnnoTarget(const Annotation& anno) const;
-    void CheckImplAnnoTarget(const Annotation& anno) const;
+    void CheckInteropAnnoTarget(const Annotation& anno) const;
 
     // Diag report
     void DiagOuterDeclMissMatch(const Node& node,
