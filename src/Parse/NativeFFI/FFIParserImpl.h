@@ -47,6 +47,8 @@ private:
     void CheckForeignGetterSetterNameAnnoArgs(const Annotation& anno) const;
     void CheckForeignGetterSetterNameAnnoTarget(const Annotation& anno) const;
 
+    void DiagDeprecatedInteropAnnotation(const Annotation& anno) const;
+
     ParserImpl& p;
     JFFIParserImpl jp;
     OCFFIParserImpl op;
@@ -57,7 +59,7 @@ void DiagConflictingAnnos(DiagnosticEngine& diag, Annotation& first, Annotation&
 const std::unordered_set<AnnotationKind> CONFLICTED_FFI_ANNOS {
     AnnotationKind::JAVA_MIRROR, AnnotationKind::JAVA_IMPL,
     AnnotationKind::OBJ_C_IMPL, AnnotationKind::OBJ_C_MIRROR,
-    AnnotationKind::C, AnnotationKind::JAVA
+    AnnotationKind::C, AnnotationKind::JAVA, AnnotationKind::OBJC
 };
 
 namespace Native::FFI {

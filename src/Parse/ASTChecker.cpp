@@ -126,9 +126,6 @@ void ASTChecker::CheckAnnotation(Ptr<Node> node)
     EMPTY_STRING_CHECK(node, anno->identifier.Val());
     VEC_AST_NULLPTR_CHECK(node, anno->args);
     switch (anno->kind) {
-        case AnnotationKind::JAVA:
-            EMPTY_STRING_CHECK(node, anno->definedPackage);
-            break;
         case AnnotationKind::WHEN:
             AST_NULLPTR_CHECK(node, anno->condExpr);
             break;

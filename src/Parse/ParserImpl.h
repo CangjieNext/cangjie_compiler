@@ -604,6 +604,7 @@ private:
     bool ParseGenericUpperBound(const OwnedPtr<AST::GenericConstraint>& genericConstraint);
     static bool HasModifier(const std::set<AST::Modifier>& modifiers, TokenKind tk);
     static bool HasAnnotation(const std::vector<OwnedPtr<AST::Annotation>>& annos, AST::AnnotationKind ak);
+    static bool HasInteropAnnotation(const PtrVector<AST::Annotation>& annos);
 
     bool IsLeftValueExpression(const OwnedPtr<AST::Expr>& expr, const Token& tok);
     bool IsLeftAuxExpression(const OwnedPtr<AST::Expr>& expr, const Token& tok);
@@ -812,8 +813,11 @@ private:
         std::vector<OwnedPtr<AST::Annotation>>& annos, ScopeKind scopeKind = ScopeKind::UNKNOWN_SCOPE);
     void CheckAnnotationAnno(PtrVector<AST::Annotation>& annos, std::set<AST::Modifier> modifiers);
     void CheckAnnotationAnno(PtrVector<AST::Annotation>& annos, const OwnedPtr<AST::Decl>& decl);
-    std::set<AST::Attribute> CheckDeclModifiers(
-        const std::set<AST::Modifier>& modifiers, ScopeKind scopeKind, DefKind defKind);
+
+    // When hasInteropAnno is true (@Java/@ObjC annotation is present), `foreign` may coexist with additional modifiers.
+    std::set<AST::Attribute> CheckDeclModifiers(const std::set<AST::Modifier>& modifiers, ScopeKind scopeKind,
+        DefKind defKind, bool hasInteropAnno = false);
+
     AST::Attribute GetModifierAttr(const OwnedPtr<AST::Modifier>& modifier, AST::ASTKind kind) const;
     void SetDeclBeginPos(AST::Decl& decl) const;
     void CheckFuncBody(ScopeKind scopeKind, AST::FuncDecl& decl);
@@ -984,8 +988,11 @@ private:
         std::vector<OwnedPtr<AST::Annotation>> annos = {});
     OwnedPtr<AST::FuncArg> ParseFuncArg();
     OwnedPtr<AST::FuncArg> ParseAnnotationArgument();
-    std::set<AST::Attribute> GetModifierAttrs(
-        DefKind defKind, ScopeKind scopeKind, const std::vector<Ptr<const AST::Modifier>>& modifiersVec);
+
+    // When hasInteropAnno is true (@Java/@ObjC annotation is present), `foreign` may coexist with additional modifiers.
+    std::set<AST::Attribute> GetModifierAttrs(DefKind defKind, ScopeKind scopeKind,
+        const std::vector<Ptr<const AST::Modifier>>& modifiersVec, bool hasInteropAnno);
+
     void ReportModifierWarning(
         DefKind defKind, ScopeKind scopeKind, const std::vector<Ptr<const AST::Modifier>>& modifiers);
     void ParseTypeAndExpr(Ptr<AST::VarDeclAbstract> const ret);
@@ -1025,8 +1032,6 @@ private:
         const std::string& argInfo);
     void DiagAnnotationShouldNotHaveArgs(const Annotation& node, const std::string& annotationName);
 
-    // Cangjie Native & Java/ObjC FFI
-    void CheckObjCMirrorAnnotation(const AST::Annotation& anno) const;
     // Check whether member decl can be abstract
     bool CanBeAbstract(const AST::Decl& decl, ScopeKind scopeKind) const;
     void CheckConstructorBody(AST::FuncDecl& ctor, ScopeKind scopeKind, bool inMacro = false);

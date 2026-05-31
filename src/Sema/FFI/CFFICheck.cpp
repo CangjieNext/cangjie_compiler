@@ -13,6 +13,7 @@
 #include "TypeCheckerImpl.h"
 
 #include "TypeCheckUtil.h"
+#include "cangjie/AST/Utils.h"
 
 using namespace Cangjie;
 using namespace Cangjie::AST;
@@ -167,6 +168,9 @@ Attribute TypeChecker::TypeCheckerImpl::GetDefaultABI()
 
 void TypeChecker::TypeCheckerImpl::SetForeignABIAttr(Decl& decl)
 {
+    if (Interop::IsCangjieCallsForeign(decl)) {
+        return;
+    }
     // Will unify the judgment of foreign, foreign, C, and backend.
     // Update W/R in class Attribute.
     if (HasModifier(decl.modifiers, TokenKind::FOREIGN)) {
@@ -325,7 +329,8 @@ void TypeChecker::TypeCheckerImpl::CheckCFuncParamType(const AST::Type& type)
 
 void TypeChecker::TypeCheckerImpl::PreCheckAnnoForCFFI(Decl& decl)
 {
-    if (HasModifier(decl.modifiers, TokenKind::FOREIGN) && !decl.HasAnno(AnnotationKind::C)) {
+    if (HasModifier(decl.modifiers, TokenKind::FOREIGN) && !decl.HasAnno(AnnotationKind::C) &&
+        !Interop::IsCangjieCallsForeign(decl)) {
         // Check node.
         auto modifier = decl.modifiers.crbegin();
         if (decl.astKind == ASTKind::CLASS_DECL) {

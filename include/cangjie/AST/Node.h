@@ -536,7 +536,8 @@ struct Modifier : Node {
 };
 
 enum class AnnotationKind {
-    JAVA,
+    JAVA, // CJMP/Interop
+    OBJC, // CJMP/Interop
     CALLING_CONV,
     C,
     JAVA_MIRROR,

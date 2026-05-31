@@ -362,7 +362,7 @@ std::string GetJavaMemberName(const Decl& decl)
 bool HasPredefinedJavaName(const ClassLikeDecl& decl)
 {
     for (auto& anno : decl.annotations) {
-        if (anno->kind != AnnotationKind::JAVA_MIRROR && anno->kind != AnnotationKind::JAVA_IMPL) {
+        if (!IsInteropAnnotation(*anno)) {
             continue;
         }
         return !anno->args.empty();
@@ -373,7 +373,7 @@ bool HasPredefinedJavaName(const ClassLikeDecl& decl)
 Ptr<std::string> GetJavaMirrorAnnoAttr(const ClassLikeDecl& decl)
 {
     for (auto& anno : decl.annotations) {
-        if (anno->kind != AnnotationKind::JAVA_MIRROR && anno->kind != AnnotationKind::JAVA_IMPL) {
+        if (!IsInteropAnnotation(*anno)) {
             continue;
         }
 
@@ -542,7 +542,7 @@ ArrayOperationKind GetArrayOperationKind(Decl& decl)
 std::string GetJavaPackage(const Decl& decl)
 {
     for (auto& anno : decl.annotations) {
-        if (anno->kind != AnnotationKind::JAVA_MIRROR && anno->kind != AnnotationKind::JAVA_IMPL) {
+        if (!IsInteropAnnotation(*anno)) {
             continue;
         }
 

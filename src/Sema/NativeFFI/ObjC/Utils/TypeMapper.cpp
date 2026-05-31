@@ -307,11 +307,7 @@ bool TypeMapper::IsObjCMirrorSubtype(const Decl& decl)
 
 bool TypeMapper::IsObjCImpl(const Decl& decl)
 {
-    if (!decl.TestAttr(Attribute::OBJ_C_MIRROR_SUBTYPE) || decl.TestAttr(Attribute::OBJ_C_MIRROR)) {
-        return false;
-    }
-
-    return decl.HasAnno(AnnotationKind::OBJ_C_IMPL);
+    return !decl.TestAttr(Attribute::OBJ_C_MIRROR) && decl.TestAttr(Attribute::OBJ_C_MIRROR_SUBTYPE);
 }
 
 bool TypeMapper::IsValidObjCMirror(const Ty& ty)

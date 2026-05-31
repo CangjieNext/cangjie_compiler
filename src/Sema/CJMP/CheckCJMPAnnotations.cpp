@@ -41,17 +41,17 @@ namespace {
 // Annotations with parameters MUST be serialized for common/specific matching
 const std::unordered_map<AnnotationKind, Attribute> NonSerializedAnnotations = {
     {AnnotationKind::C, Attribute::C},
-    {AnnotationKind::JAVA_MIRROR, Attribute::JAVA_MIRROR},
     {AnnotationKind::JAVA_HAS_DEFAULT, Attribute::JAVA_HAS_DEFAULT},
-    {AnnotationKind::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR},
     {AnnotationKind::OBJ_C_INIT, Attribute::OBJ_C_INIT},
     {AnnotationKind::OBJ_C_OPTIONAL, Attribute::OBJ_C_OPTIONAL},
 };
 
 // Annotations not supported on common/specific (neither serialized nor have attributes)
-const std::unordered_set<AnnotationKind> UnsupportedAnnotations = {AnnotationKind::JAVA, AnnotationKind::CALLING_CONV,
-    AnnotationKind::FOREIGN_GETTER_NAME, AnnotationKind::FOREIGN_SETTER_NAME, AnnotationKind::CONSTSAFE,
-    AnnotationKind::ENSURE_PREPARED_TO_MOCK, AnnotationKind::NON_PRODUCT, AnnotationKind::UNKNOWN};
+const std::unordered_set<AnnotationKind> UnsupportedAnnotations = {
+    AnnotationKind::FOREIGN_GETTER_NAME, AnnotationKind::FOREIGN_SETTER_NAME,
+    AnnotationKind::CALLING_CONV, AnnotationKind::CONSTSAFE,
+    AnnotationKind::ENSURE_PREPARED_TO_MOCK, AnnotationKind::NON_PRODUCT, AnnotationKind::UNKNOWN
+};
 
 bool PostCheckDeprecatedAnnotation(const AST::Decl& specific, DiagnosticEngine& diag)
 {

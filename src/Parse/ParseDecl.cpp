@@ -703,7 +703,7 @@ void ParserImpl::CheckInitCtorDeclJavaMirror(FuncDecl& ctor)
     if (ctor.funcBody && ctor.funcBody->body) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_java_mirror_constructor_cannot_have_body, ctor.funcBody->body->begin);
+            DiagKindRefactor::parse_java_mirror_constructor_cannot_have_body, *ctor.funcBody->body);
     } else if (ctor.funcBody) {
         auto body = MakeOwned<Block>();
         body->EnableAttr(Attribute::COMPILER_ADD, Attribute::IMPLICIT_ADD);
@@ -744,7 +744,7 @@ void ParserImpl::CheckInitCtorDeclObjCMirror(FuncDecl& ctor)
     if (ctor.funcBody && ctor.funcBody->body) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         ParseDiagnoseRefactor(
-            DiagKindRefactor::parse_objc_mirror_ctor_cannot_have_body, ctor.funcBody->body->begin);
+            DiagKindRefactor::parse_objc_mirror_ctor_cannot_have_body, *ctor.funcBody->body);
     } else if (ctor.funcBody) {
         auto body = MakeOwned<Block>();
         body->EnableAttr(Attribute::COMPILER_ADD, Attribute::IMPLICIT_ADD);
@@ -861,11 +861,6 @@ void ParserImpl::ParseFuncDeclAnnos(std::vector<OwnedPtr<AST::Annotation>>& anno
 {
     funcDecl.annotations = std::move(annos);
     for (auto& it : funcDecl.annotations) {
-        if (it->kind == AnnotationKind::JAVA) {
-            // We enable attribute JAVA_APP by default here to facilitate subsequent processing.
-            // It will be checked and reset to the final correct attribute in the Sema phase.
-            funcDecl.EnableAttr(Attribute::JAVA_APP);
-        }
         if (it->kind == AnnotationKind::INTRINSIC) {
             CheckIntrinsicFunc(funcDecl);
             funcDecl.EnableAttr(Attribute::INTRINSIC);
@@ -1401,7 +1396,7 @@ OwnedPtr<ClassDecl> ParserImpl::ParseClassDecl(
     ret->identifier = ExpectIdentifierWithPos(*ret);
     ParseInterfaceDeclOrClassDeclGeneric(*ret);
     CheckDeclarationInScope(scopeKind, DefKind::CLASS);
-    auto attrs = CheckDeclModifiers(modifiers, scopeKind, DefKind::CLASS);
+    auto attrs = CheckDeclModifiers(modifiers, scopeKind, DefKind::CLASS, HasInteropAnnotation(annos));
     for (auto& it : attrs) {
         ret->EnableAttr(it);
     }
@@ -1434,7 +1429,7 @@ OwnedPtr<InterfaceDecl> ParserImpl::ParseInterfaceDecl(
     ret->identifier = ExpectIdentifierWithPos(*ret);
     ParseInterfaceDeclOrClassDeclGeneric(*ret);
     CheckDeclarationInScope(scopeKind, DefKind::INTERFACE);
-    auto attrs = CheckDeclModifiers(modifiers, scopeKind, DefKind::INTERFACE);
+    auto attrs = CheckDeclModifiers(modifiers, scopeKind, DefKind::INTERFACE, HasInteropAnnotation(annos));
     for (auto& it : attrs) {
         ret->EnableAttr(it);
     }
@@ -1923,6 +1918,13 @@ bool ParserImpl::HasAnnotation(const PtrVector<Annotation>& annos, AnnotationKin
     return Utils::In(annos, [&](const auto& anno) { return anno->kind == ak; });
 }
 
+bool ParserImpl::HasInteropAnnotation(const PtrVector<Annotation>& annos)
+{
+    return Utils::In(annos, [](const auto& anno) {
+        return anno->kind == AnnotationKind::JAVA || anno->kind == AnnotationKind::OBJC;
+    });
+}
+
 std::string ParserImpl::ParseForImportToGetContentBetween(
     unsigned int fileID, int beginLine, int beginColumn, int endLine, int endColumn)
 {
@@ -2006,7 +2008,8 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFuncDecl(
         // For import: funcdecl with Mut modifier only allow in interface.
         scopeKind = ScopeKind::INTERFACE_BODY;
     }
-    auto attrs = CheckDeclModifiers(modifiers, scopeKind, DefKind::FUNC);
+    auto hasInteropAnno = HasAnnotation(annos, AnnotationKind::OBJC);
+    auto attrs = CheckDeclModifiers(modifiers, scopeKind, DefKind::FUNC, hasInteropAnno);
     for (auto& it : attrs) {
         ret->EnableAttr(it);
     }
@@ -2028,7 +2031,7 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFuncDecl(
     if (ret->TestAttr(Attribute::SPECIFIC) && hasNoReturnType && hasNoBody) {
         ParseDiagnoseRefactor(DiagKindRefactor::parse_specific_function_must_have_return_type, *ret);
     }
-    if (HasModifier(modifiers, TokenKind::UNSAFE) || HasModifier(modifiers, TokenKind::FOREIGN)) {
+    if (HasModifier(modifiers, TokenKind::UNSAFE) || (HasModifier(modifiers, TokenKind::FOREIGN) && !hasInteropAnno)) {
         SetUnsafe(ret.get(), modifiers);
     }
     ffiParser->CheckFuncSignature(*ret, annos);
@@ -2117,11 +2120,11 @@ void ParserImpl::FFICheckClassLikeFuncBody(
         return;
     }
     if (!decl.funcBody->retType && !decl.funcBody->TestAttr(Attribute::HAS_BROKEN)) {
-        ParseDiagnoseRefactor(functionMustHaveReturnType, decl);
+        ParseDiagnoseRefactor(functionMustHaveReturnType, decl, decl.identifier);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
     if (decl.funcBody->body) {
-        ParseDiagnoseRefactor(functionCanNotHaveBody, decl, decl.identifier);
+        ParseDiagnoseRefactor(functionCanNotHaveBody, *decl.funcBody->body, decl.identifier);
         decl.EnableAttr(Attribute::IS_BROKEN);
     }
 }

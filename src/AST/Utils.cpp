@@ -778,6 +778,16 @@ void SetPositionAndCurFileByProvidedNode(Node& consumer, Node& provider)
 }
 }
 
+namespace Cangjie::Interop {
+
+bool IsCangjieCallsForeign(const Node& node)
+{
+    return node.TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE,
+        Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE);
+}
+
+} // namespace Cangjie::Interop
+
 namespace Cangjie::Interop::Java {
 bool IsImpl(const Node& node)
 {
@@ -814,6 +824,12 @@ bool IsObject(const Node& node)
 bool IsFwdClass(const Node& node)
 {
     return node.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD);
+}
+
+bool IsInteropAnnotation(const Annotation& anno)
+{
+    return anno.kind == AnnotationKind::JAVA || anno.kind == AnnotationKind::JAVA_MIRROR ||
+        anno.kind == AnnotationKind::JAVA_IMPL;
 }
 
 /**
@@ -898,6 +914,12 @@ void InsertSyntheticClassDecl(ClassLikeDecl& decl, File& file)
 } // namespace Cangjie::Interop::Java
 
 namespace Cangjie::Interop::ObjC {
+
+bool IsInteropAnnotation(const Annotation& anno)
+{
+    return anno.kind == AnnotationKind::OBJC || anno.kind == AnnotationKind::OBJ_C_MIRROR ||
+        anno.kind == AnnotationKind::OBJ_C_IMPL;
+}
 
 std::string GetSyntheticNameFromClassLike(const ClassLikeDecl& classLikeDecl)
 {
