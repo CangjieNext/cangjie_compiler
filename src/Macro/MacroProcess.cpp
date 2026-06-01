@@ -64,7 +64,7 @@ size_t GetTokenLenth(const Token& token)
 
 void CollectMacroDebugPosition(MacroInvocation& invocation, const Token& token, unsigned int lastColumn)
 {
-    if (!token.Begin().isCurFile || token.kind == TokenKind::COMMENT || token.kind == TokenKind::NL) {
+    if (token.kind == TokenKind::COMMENT || token.kind == TokenKind::NL) {
         return;
     }
     auto key = token.Begin().Hash64();
@@ -215,9 +215,9 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
         }
         prevTokenKind = token.kind;
     }
-    if (ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo) {
-        pMacroInvocation->macroDebugMap[lastColumn] = node.end;
-    }
+    // if (ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo) {	 
+    //     pMacroInvocation->macroDebugMap[lastColumn] = node.end;	 
+    // }
 }
 
 void RefreshTokensPosMap(Node& node, SourceManager& sm, CompilerInstance& ci)
