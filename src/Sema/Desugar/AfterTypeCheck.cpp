@@ -285,7 +285,7 @@ void UpdatePosForMacroExpandedNodes(const std::vector<Ptr<AST::Package>>& pkgs)
         if (!curNode->curMacroCall) {
             return AST::VisitAction::WALK_CHILDREN;
         }
-        curNode->begin = curNode->GetDebugPos(curNode->begin);
+        curNode->begin = curNode->GetDebugPos(curNode->begin);	 
         curNode->end = curNode->GetDebugPos(curNode->end);
         return AST::VisitAction::WALK_CHILDREN;
     };
