@@ -15,13 +15,12 @@
 
 #include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Node.h"
-#include "cangjie/Frontend/CompilerInstance.h"
 
 namespace Cangjie {
 class InstCtxScope;
 class TypeChecker {
 public:
-    explicit TypeChecker(CompilerInstance* ci);
+    explicit TypeChecker(class CompilerInstance* ci);
     ~TypeChecker();
 
     /**
@@ -56,6 +55,7 @@ public:
      * @param targets all candidate members.
      */
     void RemoveTargetNotMeetExtendConstraint(const Ptr<AST::Ty> baseTy, std::vector<Ptr<AST::Decl>>& targets);
+    class TypeCheckerImpl;
 
 private:
     friend class InstCtxScope;
@@ -65,7 +65,6 @@ private:
     class Synthesizer;
     /** The class for checking enum sugar. */
     class EnumSugarChecker;
-    class TypeCheckerImpl;
     std::unique_ptr<TypeCheckerImpl> impl;
 }; // class TypeChecker
 } // namespace Cangjie
