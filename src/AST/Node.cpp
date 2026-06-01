@@ -993,25 +993,25 @@ size_t Decl::GetGenericsCount() const
 /**
  * For debug, get the original Position of the node if it is from MacroCall in curfile, curPos otherwise.
  */
-Position Node::GetDebugPos(const Position& curPos) const
-{
-    auto pInvocation = this->GetConstInvocation();
-    if (!pInvocation) {
-        // If the node is not macrocall node, then check whether it is expanded from macrocall node or not.
-        if (curPos == INVALID_POSITION || !this->curMacroCall) {
-            return curPos;
-        }
-        // Current node is expanded from macrocall node.
-        pInvocation = this->curMacroCall->GetConstInvocation();
-        if (!pInvocation || pInvocation->macroDebugMap.empty()) {
-            return curPos;
-        }
-    }
-    auto key = static_cast<unsigned int>(curPos.column);
-    if (pInvocation->macroDebugMap.find(key) == pInvocation->macroDebugMap.end()) {
-        return curPos;
-    }
-    return pInvocation->macroDebugMap.find(key)->second;
+Position Node::GetDebugPos(const Position& curPos) const	 
+{	 
+    auto pInvocation = this->GetConstInvocation();	 
+    if (!pInvocation) {	 
+        // If the node is not macrocall node, then check whether it is expanded from macrocall node or not. 
+        if (curPos == INVALID_POSITION || !this->curMacroCall) {	 
+            return curPos;	 
+        }	 
+        // Current node is expanded from macrocall node. 
+        pInvocation = this->curMacroCall->GetConstInvocation();	 
+        if (!pInvocation || pInvocation->macroDebugMap.empty()) {	 
+            return curPos;	 
+        }	 
+    }	 
+    auto key = static_cast<unsigned int>(curPos.column);	 
+    if (pInvocation->macroDebugMap.find(key) == pInvocation->macroDebugMap.end()) {	 
+        return curPos;	 
+    }	 
+    return pInvocation->macroDebugMap.find(key)->second;	 
 }
 
 const std::string& Node::GetFullPackageName() const
