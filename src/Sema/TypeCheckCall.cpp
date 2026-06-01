@@ -53,7 +53,7 @@ Ptr<Ty> GetInoutTargetTy(const OwnedPtr<FuncArg>& arg)
 // Parser guarantees CallExpr's args not contains nullptr.
 // NOTE: 'arg.name' may be named for trailing closure, so we need using calculated 'argName'.
 std::optional<size_t> CheckNameArgInParams(DiagnosticEngine& diag, const FuncArg& arg, const std::string& argName,
-    const FuncParamList& list, const std::vector<bool>& marks)
+    const FuncParamList& list, const std::vector<bool>& marks, const FuncDecl& fd)
 {
     // Size of list.params and marks are guaranteed by caller that will not out of bound here.
     // Traverse the parameters, find the parameter has same identifier with the named argument.
@@ -74,6 +74,14 @@ std::optional<size_t> CheckNameArgInParams(DiagnosticEngine& diag, const FuncArg
             return {};
         }
         return {j};
+    }
+    // Legacy CString(am: ptr) calls use arbitrary labels; accept any named arg for the single-param ctor.
+    if (IsCStringConstructor(fd) && list.params.size() == 1) {
+        if (marks[0]) {
+            diag.Diagnose(arg, DiagKind::sema_multiple_named_argument, argName);
+            return {};
+        }
+        return {0};
     }
     diag.Diagnose(arg, DiagKind::sema_unknown_named_argument, argName);
     return {};
@@ -104,11 +112,16 @@ void SortCallArgumentByParamOrder(const FuncDecl& fd, CallExpr& ce, std::vector<
         namedArgFound = true;
         // Find the parameters whose name is the same as arguments. Then get the correct position where the
         // argument's type should be.
+        bool bound = false;
         for (size_t j = 0; j < fd.funcBody->paramLists[0]->params.size(); ++j) {
             if (fd.funcBody->paramLists[0]->params[j]->identifier == argName) {
                 args[j] = arg.get();
+                bound = true;
                 break;
             }
+        }
+        if (!bound && IsCStringConstructor(fd) && fd.funcBody->paramLists[0]->params.size() == 1) {
+            args[0] = arg.get();
         }
     }
 }
@@ -405,6 +418,10 @@ size_t GetPositionalArgSize(const CallExpr& ce)
 // Caller guarantees the fd is not a function with variable length argument.
 bool HasSamePositionalArgsSize(const FuncDecl& fd, const CallExpr& ce)
 {
+    // Legacy CString(am: ptr) uses an arbitrary label for the single pointer argument.
+    if (IsCStringConstructor(fd) && ce.args.size() == 1 && !ce.args[0]->name.Empty()) {
+        return GetPositionalParamSize(fd) == 1;
+    }
     size_t positionalParamSize = GetPositionalParamSize(fd);
     size_t positionalArgSize = GetPositionalArgSize(ce);
     if (!ce.args.empty() && ce.args.back()->TestAttr(Attribute::IMPLICIT_ADD) &&
@@ -696,7 +713,7 @@ bool TypeChecker::TypeCheckerImpl::CheckArgsWithParamName(const CallExpr& ce, co
             index = pos;
             ++pos;
         } else {
-            auto res = CheckNameArgInParams(diag, *ce.args[i], argName, *fd.funcBody->paramLists[0], marks);
+            auto res = CheckNameArgInParams(diag, *ce.args[i], argName, *fd.funcBody->paramLists[0], marks, fd);
             if (res.has_value()) {
                 index = res.value();
             } else {
@@ -2316,14 +2333,17 @@ bool TypeChecker::TypeCheckerImpl::GetCallBaseCandidates(
         target = target->specificImplementation;
     }
     CJC_NULLPTR_CHECK(target);
-    if (IsBuiltinTypeAlias(*target) || target->IsBuiltIn()) {
+    // only CPointer and VArray use special builtin decl checks
+    if (IsBuiltinTypeAlias(*target) || target->TyKind() == TypeKind::TYPE_VARRAY ||
+        target->TyKind() == TypeKind::TYPE_POINTER) {
         return false;
     }
     bool isFunctionCall = true;
     if (IsInstanceConstructor(*target) && target->outerDecl) {
         target = target->outerDecl;
     }
-    if (target->IsStructOrClassDecl()) {
+    if (target->IsStructOrClassDecl() || target->TyKind() == TypeKind::TYPE_ARRAY ||
+        target->TyKind() == TypeKind::TYPE_CSTRING) {
         // Get constructors for current decl.
         for (auto& member : target->GetMemberDeclPtrs()) {
             CJC_NULLPTR_CHECK(member);
@@ -2386,10 +2406,10 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseRefExpr(
     re->callOrPattern = &ce;
     ctx.targetTypeMap[re] = ctx.targetTypeMap[&ce]; // For enum sugar type infer.
     Synthesize({ctx, SynPos::EXPR_ARG}, re);
-    if (auto builtin = DynamicCast<BuiltInDecl>(re->ref.target); builtin && builtin->type == BuiltInType::CFUNC) {
-        return SynCFuncCall(ctx, ce);
-    }
-    if (!re->ref.target && re->ref.targets.empty()) {
+    auto reRealTarget = GetRealTarget(re, re->GetTarget());
+    if (re->GetTy()->IsCFunc() && reRealTarget && reRealTarget->IsBuiltIn()) {
+        return false;
+    } else if (!re->ref.target && re->ref.targets.empty()) {
         return false;
     } else {
         return CheckRefConstructor(ctx, ce, *re) && GetCallBaseCandidates(ctx, ce, *re, target, candidates);
@@ -2406,8 +2426,11 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseMemberAccess(
     ctx.targetTypeMap[ma->baseExpr] = TypeManager::GetQuestTy();
     Synthesize({ctx, SynPos::EXPR_ARG}, ma);
     ctx.targetTypeMap[ma->baseExpr] = nullptr;
+    auto maRealTarget = GetRealTarget(ma, ma->GetTarget());
     if (ma->GetTy() && ma->GetTy()->IsNothing()) {
         return true;
+    } else if (ma->GetTy() && ma->GetTy()->IsCFunc() && maRealTarget && maRealTarget->IsBuiltIn()) {
+        return false;
     } else if (!ma->target && ma->targets.empty()) {
         // 'varr' is VArray type, 'varr.size()' is illegitimate, 'size' of VArray is a property.
         if (Is<VArrayTy>(ma->baseExpr->GetTy()) && ma->field == "size") {
@@ -2593,8 +2616,9 @@ bool TypeChecker::TypeCheckerImpl::CheckCallKind(const CallExpr& ce, Ptr<Decl> d
         case ASTKind::INTERFACE_DECL:
             diag.Diagnose(ce, DiagKind::sema_interface_can_not_be_instantiated, decl->identifier.Val());
             break;
-        case ASTKind::CLASS_DECL: // Fall-through.
-        case ASTKind::STRUCT_DECL: {
+        case ASTKind::CLASS_DECL:
+        case ASTKind::STRUCT_DECL:
+        case ASTKind::BUILTIN_DECL: {
             // Call of type name for constructor, eg. class A {} -> A(), struct R{} -> R().
             // Call of 'this()' is treated as normal declared function call.
             auto re = As<ASTKind::REF_EXPR>(ce.baseFunc.get());
@@ -3029,7 +3053,11 @@ bool TypeChecker::TypeCheckerImpl::ChkCallExpr(ASTContext& ctx, Ptr<Ty> target, 
     }
     ce.SetTy(TypeManager::GetNonNullTy(ce.GetTy()));
     if (result.size() == 1) {
-        return PostCheckCallExpr(ctx, ce, *result[0], typeMapping);
+        auto ret = PostCheckCallExpr(ctx, ce, *result[0], typeMapping);
+        if (ret) {
+            DesugarRawArrayCall(ce);
+        }
+        return ret;
     }
     PData::Reset(typeManager.constraints);
     // If candidates may be enum constructor or operator(), clear baseFunc's ty when constructor mismatched.

@@ -448,6 +448,14 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(Ptr<Decl> decl, const std::string
         // Lookup package decl.
         return FieldLookup(*pd, fieldName);
     }
+    if (auto bid = DynamicCast<BuiltInDecl>(decl)) {
+        for (auto& m : bid->GetMemberDecls()) {
+            if (m && m->identifier == fieldName) {
+                results.push_back(m.get());
+            }
+        }
+        return results;
+    }
     return results;
 }
 
