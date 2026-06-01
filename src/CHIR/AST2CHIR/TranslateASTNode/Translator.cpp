@@ -99,7 +99,13 @@ DebugLocation Translator::GetValueDebugLocationInfo(const Value& value) const
 
 DebugLocation Translator::TranslateLocation(const AST::Node& node) const
 {
-    return TranslateLocation(node.begin, node.end);
+    // Use GetDebugPos to get the correct position mapping for macro-expanded code.
+    // This ensures that debug information points to the original source location
+    // rather than the macro call location.
+    auto debugBegin = node.GetDebugPos(node.begin);
+    auto debugEnd = node.GetDebugPos(node.end);
+
+    return TranslateLocation(debugBegin, debugEnd);
 }
 
 DebugLocation Translator::TranslateLocation(const Cangjie::Position& begin, const Cangjie::Position& end) const

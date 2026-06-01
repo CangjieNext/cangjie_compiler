@@ -372,7 +372,7 @@ void MacroExpansion::ReplaceEachMacro(MacroCall& macCall)
 
 void MacroExpansion::ReplaceAST(Package& package)
 {
-    // Normal mode or Debug mode: replace all macro nodes, and check if ast is valid.
+    (void)package;
     auto macroCalls = macroCollector.macCalls;
     std::reverse(macroCalls.begin(), macroCalls.end());
     for (auto mc : macroCalls) {
@@ -380,12 +380,6 @@ void MacroExpansion::ReplaceAST(Package& package)
     }
     if (ci->diag.GetErrorCount() != 0) {
         ci->diag.EmitCategoryGroup();
-    }
-    // Debug mode: replace file nodes which have macro calls.
-    if (ci->diag.GetErrorCount() == 0 && ci->invocation.globalOptions.enableMacroDebug) {
-        for (auto& file : package.files) {
-            ReplaceEachFileNode(*file);
-        }
     }
 }
 

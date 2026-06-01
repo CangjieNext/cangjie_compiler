@@ -997,21 +997,52 @@ Position Node::GetDebugPos(const Position& curPos) const
 {
     auto pInvocation = this->GetConstInvocation();
     if (!pInvocation) {
-        // If the node is not macrocall node, then check whether it is expanded from macrocall node or not.
         if (curPos == INVALID_POSITION || !this->curMacroCall) {
             return curPos;
         }
-        // Current node is expanded from macrocall node.
         pInvocation = this->curMacroCall->GetConstInvocation();
         if (!pInvocation || pInvocation->macroDebugMap.empty()) {
             return curPos;
         }
     }
-    auto key = static_cast<unsigned int>(curPos.column);
-    if (pInvocation->macroDebugMap.find(key) == pInvocation->macroDebugMap.end()) {
+    if (curPos.fileID != pInvocation->macroCallDiagInfo.macroCallBegin.fileID ||
+        curPos.line != pInvocation->macroCallDiagInfo.macroCallBegin.line) {
         return curPos;
     }
-    return pInvocation->macroDebugMap.find(key)->second;
+    auto key = static_cast<unsigned int>(curPos.column);
+    auto it = pInvocation->macroDebugMap.lower_bound(key);
+    if (it == pInvocation->macroDebugMap.end()) {
+        return curPos;
+    }
+    auto mappedPos = it->second;
+
+    if (this->curFile) {
+        bool changed = true;
+        while (changed) {
+            changed = false;
+            for (auto& origNode : this->curFile->originalMacroCallNodes) {
+                if (!origNode || origNode->begin == INVALID_POSITION) {
+                    continue;
+                }
+                auto innerInvocation = origNode->GetConstInvocation();
+                if (!innerInvocation || innerInvocation->macroDebugMap.empty()) {
+                    continue;
+                }
+                if (mappedPos.fileID == origNode->begin.fileID &&
+                    mappedPos.line == origNode->begin.line) {
+                    auto innerKey = static_cast<unsigned int>(mappedPos.column);
+                    auto innerIt = innerInvocation->macroDebugMap.lower_bound(innerKey);
+                    if (innerIt != innerInvocation->macroDebugMap.end() && innerIt->second != mappedPos) {
+                        mappedPos = innerIt->second;
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    return mappedPos;
 }
 
 const std::string& Node::GetFullPackageName() const
