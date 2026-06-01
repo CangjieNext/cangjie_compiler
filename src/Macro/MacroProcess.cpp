@@ -64,7 +64,7 @@ size_t GetTokenLenth(const Token& token)
 
 void CollectMacroDebugPosition(MacroInvocation& invocation, const Token& token, unsigned int lastColumn)
 {
-    if (!token.Begin().isCurFile || token.kind == TokenKind::COMMENT || token.kind == TokenKind::NL) {
+    if (token.kind == TokenKind::COMMENT || token.kind == TokenKind::NL) {
         return;
     }
     auto key = token.Begin().Hash64();
@@ -215,9 +215,9 @@ void RefreshNewTokensPos(Node& node, SourceManager& sm, const CompilerInstance& 
         }
         prevTokenKind = token.kind;
     }
-    if (ci.invocation.globalOptions.enableCompileDebug || ci.invocation.globalOptions.displayLineInfo) {
-        pMacroInvocation->macroDebugMap[lastColumn] = node.end;
-    }
+    // Note: Do NOT add a final mapping to node.end here, as it would cause incorrect
+    // position mapping for code that comes after the macro expansion. The macroDebugMap
+    // should only contain mappings for tokens that were actually processed.
 }
 
 void RefreshTokensPosMap(Node& node, SourceManager& sm, CompilerInstance& ci)
@@ -243,11 +243,9 @@ void RefreshTokensPosMap(Node& node, SourceManager& sm, CompilerInstance& ci)
         ReportMappingFailedDiag(pMacroInvocation->newTokens, tokens, node.begin, ci);
         return;
     }
-    // Debug mode: no need to Mapping position.
     if (ci.invocation.globalOptions.enableMacroDebug) {
         return;
     }
-    // Bind new tokens pos after macrocall node's begin Pos.
     RefreshNewTokensPos(node, sm, ci);
 
     // Mapping new position column with new source position in *.macrocall file.
