@@ -641,7 +641,7 @@ void JavaDesugarManager::ReplaceCallsWithArrayJavaEntityGet(File& file)
         auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
         CJC_ASSERT_WITH_MSG(!ma->baseExpr->GetTy()->typeArgs.empty(), "JArray type must be generic");
         auto arrayElementType = ma->baseExpr->GetTy()->typeArgs[0];
-        if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType()) {
+        if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType() && !arrayElementType->IsString()) {
             return VisitAction::WALK_CHILDREN;
         }
 
@@ -685,7 +685,7 @@ void JavaDesugarManager::ReplaceCallsWithArrayJavaEntitySet(File& file)
         auto ma = As<ASTKind::MEMBER_ACCESS>(callExpr->baseFunc);
         CJC_ASSERT_WITH_MSG(!ma->baseExpr->GetTy()->typeArgs.empty(), "JArray type must be generic");
         auto arrayElementType = ma->baseExpr->GetTy()->typeArgs[0];
-        if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType()) {
+        if (!arrayElementType->IsClass() && !arrayElementType->IsCoreOptionType() && !arrayElementType->IsString()) {
             return VisitAction::WALK_CHILDREN;
         }
 
