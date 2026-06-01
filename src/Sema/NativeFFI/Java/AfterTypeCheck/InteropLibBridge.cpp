@@ -1665,6 +1665,7 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
     }
 
     if (ty->IsString()) {
+        entity = CreateEnsureNotNullCall(std::move(entity));
 		// Convert jstring from JavaEntity to Cangjie String.
         return CreateJavaStringToCangjieCall(CreateGetJniEnvCall(curFile), std::move(entity));
     }
