@@ -4,12 +4,31 @@
 
 当前前端编译器构建支持：
 
-1. [Linux 上构建 Linux 平台运行的编译器](#linux-上构建-linux-平台运行的编译器)
-2. [MacOS 上构建 MacOS 平台运行的编译器](#macos-上构建-macos-平台运行的编译器)
-3. [Linux 上构建 Windows 平台运行的编译器（交叉编译）](#linux-上构建-windows-平台运行的编译器交叉编译)
-4. [Linux 上构建适用于 Android 平台的基础库（交叉编译）](#linux-上构建适用于-android-平台的基础库交叉编译)
-5. [MacOS 上构建适用于 Android 平台的基础库（交叉编译）](#macos-上构建适用于-android-平台的基础库交叉编译)
-6. [MacOS 上构建适用于 iOS 平台的基础库（交叉编译）](#macos-上构建适用于-ios-平台的基础库交叉编译)
+- [独立构建指导书](#独立构建指导书)
+  - [规格](#规格)
+  - [Linux 上构建 Linux 平台运行的编译器](#linux-上构建-linux-平台运行的编译器)
+    - [环境依赖](#环境依赖)
+    - [构建命令](#构建命令)
+  - [MacOS 上构建 MacOS 平台运行的编译器](#macos-上构建-macos-平台运行的编译器)
+    - [环境准备](#环境准备)
+    - [构建命令](#构建命令-1)
+  - [Linux 上构建 Windows 平台运行的编译器（交叉编译）](#linux-上构建-windows-平台运行的编译器交叉编译)
+    - [环境准备](#环境准备-1)
+    - [构建命令](#构建命令-2)
+  - [Linux 上构建适用于 Android 平台的基础库（交叉编译）](#linux-上构建适用于-android-平台的基础库交叉编译)
+    - [环境准备](#环境准备-2)
+    - [构建命令](#构建命令-3)
+  - [MacOS 上构建适用于 Android 平台的基础库（交叉编译）](#macos-上构建适用于-android-平台的基础库交叉编译)
+    - [环境准备](#环境准备-3)
+    - [构建命令](#构建命令-4)
+  - [MacOS 上构建适用于 iOS 平台的基础库（交叉编译）](#macos-上构建适用于-ios-平台的基础库交叉编译)
+    - [环境准备](#环境准备-4)
+    - [构建命令](#构建命令-5)
+  - [build.py 选项帮助](#buildpy-选项帮助)
+    - [`clean` 选项](#clean-选项)
+    - [`build` 选项](#build-选项)
+    - [`install` 选项](#install-选项)
+    - [`test` 选项](#test-选项)
 
 ## Linux 上构建 Linux 平台运行的编译器
 
@@ -347,6 +366,10 @@ python3 build.py install;
 - `--build-cjdb`：开启构建仓颉调试器。
 - `--enable-sanitize-option`: 使 cjc 选项 `--sanitize` 对开发者可见，用于构建 sanitizer 版本。
 - `--cjlib-sanitizer-support`： 构建 sanitizer 版本仓颉库，需配合 `--product=libs` 使用。可选项有 `asan`, `tsan` 和 `hwasan`。
+- `-v, --version`：指定 Cangjie SDK 版本号，默认值为 `0.0.1`。版本号必须符合以下格式之一，否则构建阶段将报错退出：
+  - `x.y.z`：三段数字，以 `.` 分隔，例如 `0.0.1`、`1.1.0`。
+  - `x.y.z-<字母>.<数字>`：在三段数字后追加预发布后缀，例如 `0.0.1-alpha.1`、`1.1.0-beta.1`、`1.1.0-rc.1`。
+  - 不符合上述格式的版本号（如 `1.1.0-beta`、`bad`）将导致构建失败。
 
 ### `install` 选项
 
