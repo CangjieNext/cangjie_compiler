@@ -10,6 +10,14 @@ project(cangjie)
 if(NOT DEFINED CJ_SDK_VERSION)
     set(CJ_SDK_VERSION "0.0.1" CACHE STRING "Cangjie SDK Version")
 endif()
+# CJ_SDK_VERSION must be a subset of SemVer 2.0.0 (core + optional pre-release; no build metadata).
+# x/y/z: 0 or positive integer without leading zeros. Pre-release identifiers are dot-separated,
+# each either a numeric identifier (0|[1-9][0-9]*) or an alphanumeric identifier (contains a letter).
+# For example: 0.0.1, 1.0.0-alpha, 0.0.1-alpha.1, 0.0.1-alpha.rc1, 1.0.0-0.3.7, etc.
+set(_CJ_SDK_VERSION_PRERELEASE_ID "(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)")
+if(NOT CJ_SDK_VERSION MATCHES "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-((${_CJ_SDK_VERSION_PRERELEASE_ID})(\\.${_CJ_SDK_VERSION_PRERELEASE_ID})*))?$")
+    message(FATAL_ERROR "Invalid value for CJ_SDK_VERSION: ${CJ_SDK_VERSION}")
+endif()
 # Add path for custom CMake modules and add cmake modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
