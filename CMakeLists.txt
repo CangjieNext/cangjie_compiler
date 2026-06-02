@@ -10,6 +10,12 @@ project(cangjie)
 if(NOT DEFINED CJ_SDK_VERSION)
     set(CJ_SDK_VERSION "0.0.1" CACHE STRING "Cangjie SDK Version")
 endif()
+# CJ_SDK_VERSION must be in the format of x.y.z or x.y.z-text.suffix.
+# text/suffix are alphanumeric; text must start with a letter.
+# For example: 0.0.1, 0.0.1-alpha.1, 0.0.1-alpha.rc1, 0.0.1-alpha1.rc1, etc.
+if(NOT CJ_SDK_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z][a-zA-Z0-9]*\\.[a-zA-Z0-9]+)?$")
+    message(FATAL_ERROR "Invalid value for CJ_SDK_VERSION: ${CJ_SDK_VERSION}")
+endif()
 # Add path for custom CMake modules and add cmake modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 

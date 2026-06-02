@@ -348,6 +348,10 @@ The `build` option builds the project files. It provides the following secondary
 - `--build-cjdb`: Enables building the Cangjie debugger.
 - `--enable-sanitize-option`: Make cjc option `--sanitize` visible to developer, in order to build sanitizer version cangjie code.
 - `--cjlib-sanitizer-support`： Build santizer version of cangjie library，you should use it along with `--product=libs` option. Valid values: `asan`, `tsan` or `hwasan`.
+- `-v, --version`: Specifies the Cangjie SDK version number, with a default value of `0.0.1`. The version number must match one of the following formats; otherwise, the build will fail with an error:
+  - `x.y.z`: Three numeric segments separated by `.`, for example `0.0.1`, `1.1.0`.
+  - `x.y.z-<identifier>.<suffix>`: A pre-release suffix appended after the three segments; the identifier must start with a letter and may contain digits, and the suffix is alphanumeric, for example `0.0.1-alpha.1`, `1.1.0-beta.1`, `1.1.0-rc.1`, `0.0.1-alpha.rc1`, `0.0.1-alpha1.rc1`.
+  - Version numbers that do not match the above formats (for example `1.1.0-beta`, `bad`) will cause the build to fail.
 
 ### `install` Option
 
