@@ -1074,22 +1074,6 @@ bool TypeChecker::TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, Ptr<Ty> target, 
     auto& leftExpr = *be.leftExpr;
     rightExpr.isInFlowExpr = true;
     auto cs = PData::CommitScope(typeManager.constraints);
-    {
-        auto ds = DiagSuppressor(diag);
-        SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, &leftExpr);
-        SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, &rightExpr);
-        if (ds.HasError()) {
-            if (be.op == TokenKind::COMPOSITION) {
-                be.SetTy(TypeManager::GetInvalidTy());
-                ds.ReportDiag();
-                return false;
-            } else {
-                leftExpr.Clear();
-                rightExpr.Clear();
-                PData::Reset(typeManager.constraints);
-            }
-        }
-    }
     // Check if flow expr contains 'this' which is illegal.
     // 'super' is not allowed to be used alone and is checked in 'InferSuperExpr'.
     auto isThisExpr = [this](Expr& exp) {
