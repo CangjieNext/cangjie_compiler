@@ -971,12 +971,15 @@ void TryEnforceCandidate(TyVar& tv, const std::set<Ptr<Decl>>& candidates, TypeM
     if (Ty::IsTyCorrect(uniq)) {
         tyMgr.ConstrainByCtor(tv, *uniq);
     } else {
-        // fill type arguments of found type with placeholder tyvars, in case it's generic
-        // the tyvars may be solved later when inferring the lambda body
-        std::vector<Ptr<GenericsTy>> tyArgs;
-        tyMgr.constraints[&tv].sum.softClear();
-        for (auto ty : declTys) {
-            tyMgr.AddSumByCtor(tv, *ty, tyArgs);
+        // Ambiguous Mem2Decls: keep sum as {Any}. Do not sum.clear() (resets PSet checkpoint
+        // depth vs sibling lbs/ubs/eq → ICE in pipe_lambda_overload) nor AddSumByCtor for
+        // every candidate (wildcard import → compile-time explosion in struct-like cases).
+        auto& sum = tyMgr.constraints[&tv].sum;
+        if (!tyMgr.TyVarHasNoSum(tv)) {
+            while (!sum.empty()) {
+                sum.erase(sum.begin());
+            }
+            sum.insert(tyMgr.GetAnyTy());
         }
     }
 }
