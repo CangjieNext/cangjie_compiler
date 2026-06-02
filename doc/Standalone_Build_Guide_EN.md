@@ -348,6 +348,11 @@ The `build` option builds the project files. It provides the following secondary
 - `--build-cjdb`: Enables building the Cangjie debugger.
 - `--enable-sanitize-option`: Make cjc option `--sanitize` visible to developer, in order to build sanitizer version cangjie code.
 - `--cjlib-sanitizer-support`： Build santizer version of cangjie library，you should use it along with `--product=libs` option. Valid values: `asan`, `tsan` or `hwasan`.
+- `-v, --version`: Specifies the Cangjie SDK version number, with a default value of `0.0.1`. The version must conform to [SemVer 2.0.0](https://semver.org/); otherwise, the build will fail with an error:
+  - `x.y.z`: Three non-negative integers without leading zeros (`0` or starting with `1`–`9`), for example `0.0.1`, `1.10.0`.
+  - `x.y.z-<pre-release>` (optional): Pre-release is a dot-separated list of non-empty `[0-9A-Za-z-]+` identifiers, for example `1.0.0-alpha`, `1.0.0-0.3.7`, `1.0.0-x-y-z.--`. Unlike strict SemVer, numeric identifiers may have leading zeros, for example `1.2.0-beta.03`.
+  - `x.y.z+<build metadata>` or `x.y.z-<pre-release>+<build metadata>` (optional): Build metadata is a dot-separated list of non-empty `[0-9A-Za-z-]+` identifiers, for example `1.0.0+20130313144700`, `1.0.0-alpha+001`, `1.0.0-beta+exp.sha.5114f85`.
+  - Version strings that violate these rules (for example `01.0.0`, `1.0.0+`, `bad`) will cause the build to fail.
 
 ### `install` Option
 
