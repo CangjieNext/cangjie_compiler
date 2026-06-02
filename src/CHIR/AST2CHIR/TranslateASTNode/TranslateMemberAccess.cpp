@@ -62,7 +62,7 @@ bool IsInsideCFuncLambda(const CHIR::Block& bl)
 
 // `obj.foo()` is a virtual func call ?
 bool Translator::IsVirtualFuncCall(
-    const CustomTypeDef& obj, const AST::FuncDecl& funcDecl, bool baseExprIsSuper)
+    const CustomTypeDef& obj, const AST::FuncDecl& funcDecl, bool baseExprIsSuper, const AST::Node& expr)
 {
     /**
      *  open class A {
@@ -76,6 +76,21 @@ bool Translator::IsVirtualFuncCall(
      *      }
      *  }
      */
+    if (!baseExprIsSuper && IsInsideCFuncLambda(*GetCurrentBlock())) {
+        if ((obj.CanBeInherited() && FuncDeclIsOpen(funcDecl)) ||
+            (FuncDeclIsOpen(funcDecl) && funcDecl.outerDecl->IsOpen() && InheritedChainHasCommon(obj))) {
+            auto topLevelFuncName = funcDecl.identifier.Val();
+            auto exprFilePath = expr.curFile ? expr.curFile->filePath : "";
+            auto exprLine = expr.begin.line;
+            auto exprColumn = expr.begin.column;
+            printf("-----------------------\n");
+            printf("xuebin: in function: %s,\n expr call site: file=%s, line=%d, column=%d,\n funcDecl is \n%s, \n "
+                   "object type is \n%s \n",
+                topLevelFuncName.c_str(), exprFilePath.c_str(), exprLine, exprColumn, funcDecl.ToString().c_str(),
+                obj.ToString().c_str());
+            printf("-----------------------\n");
+        }
+    }
     if (baseExprIsSuper || IsInsideCFuncLambda(*GetCurrentBlock())) {
         return false;
     }
@@ -249,7 +264,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
     if (auto customType = DynamicCast<CustomType*>(thisDerefTy)) {
         caller = customType->GetCustomTypeDef();
     }
-    auto isVirtualFuncCall = IsVirtualFuncCall(*caller, *funcDecl, false);
+    auto isVirtualFuncCall = IsVirtualFuncCall(*caller, *funcDecl, false, expr);
 
     // 3. calculate parent type and func type
     auto [parentType, funcCallType] = GetExactParentTypeAndFuncType(expr, *thisType, *funcDecl, isVirtualFuncCall);
@@ -285,13 +300,13 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
     // `classA.foo()` is Apply call
     if (auto customType = DynamicCast<CustomType*>(thisDerefTy); customType &&
         !funcDecl->TestAttr(AST::Attribute::STATIC)) {
-        isVirtualFuncCall = IsVirtualFuncCall(*customType->GetCustomTypeDef(), *funcDecl, isSuper);
+        isVirtualFuncCall = IsVirtualFuncCall(*customType->GetCustomTypeDef(), *funcDecl, isSuper, expr);
     } else if (auto genericType = DynamicCast<GenericType*>(thisDerefTy)) {
         isVirtualFuncCall = true;
         // maybe T <: open class A & non-open class B, then it still not be virtual func call
         for (auto ty : genericType->GetUpperBounds()) {
             auto customDef = StaticCast<ClassType*>(ty->StripAllRefs())->GetClassDef();
-            isVirtualFuncCall &= IsVirtualFuncCall(*customDef, *funcDecl, isSuper);
+            isVirtualFuncCall &= IsVirtualFuncCall(*customDef, *funcDecl, isSuper, expr);
         }
     }
 

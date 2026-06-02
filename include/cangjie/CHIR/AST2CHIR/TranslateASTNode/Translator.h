@@ -958,7 +958,7 @@ private:
     Ptr<Value> TranslateFuncMemberAccess(const AST::MemberAccess& member);
     Value* WrapMemberMethodByLambda(const AST::FuncDecl& funcDecl, const InstCalleeInfo& instFuncType, Value* thisObj);
     bool IsVirtualFuncCall(
-        const CustomTypeDef& obj, const AST::FuncDecl& funcDecl, bool baseExprIsSuper);
+        const CustomTypeDef& obj, const AST::FuncDecl& funcDecl, bool baseExprIsSuper, const AST::Node& expr);
     InvokeCallContext GenerateInvokeCallContext(const InstCalleeInfo& instFuncType, Value& caller,
         const AST::FuncDecl& callee, const std::vector<Value*>& args,
         const OverflowStrategy strategy = OverflowStrategy::THROWING);
