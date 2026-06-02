@@ -163,13 +163,12 @@ public:
     }
 
     // Soft clear: removes all elements while preserving checkpoint depth.
-    // This is safe to use when other PSet members in the same constraint
-    // may have different checkpoint depths, as it maintains consistency.
+    // Unlike element-wise erase(), this clears the current checkpoint log so
+    // reset/resetSoft will not resurrect removed elements.
     void softClear()
     {
-        while (!data.empty()) {
-            erase(data.begin());
-        }
+        data.clear();
+        log.back().clear();
     }
 
     std::pair<typename std::set<T>::iterator, bool> insert(const T& value)
