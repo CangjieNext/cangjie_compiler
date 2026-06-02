@@ -1119,6 +1119,7 @@ bool ToCHIR::RulesChecking()
 
 bool ToCHIR::Run()
 {
+    printf("xuebin ---------------------- get in CHIR -----------\n");
     CJC_NULLPTR_CHECK(typeManager);
     CJC_NULLPTR_CHECK(gim);
     CJC_NULLPTR_CHECK(&needToOptGenericDecl);
