@@ -347,6 +347,10 @@ python3 build.py install;
 - `--build-cjdb`：开启构建仓颉调试器。
 - `--enable-sanitize-option`: 使 cjc 选项 `--sanitize` 对开发者可见，用于构建 sanitizer 版本。
 - `--cjlib-sanitizer-support`： 构建 sanitizer 版本仓颉库，需配合 `--product=libs` 使用。可选项有 `asan`, `tsan` 和 `hwasan`。
+- `-v, --version`：指定 Cangjie SDK 版本号，默认值为 `0.0.1`。版本号必须符合以下格式之一，否则构建阶段将报错退出：
+  - `x.y.z`：三段数字，以 `.` 分隔，例如 `0.0.1`、`1.1.0`。
+  - `x.y.z-<字母>.<数字>`：在三段数字后追加预发布后缀，例如 `0.0.1-alpha.1`、`1.1.0-beta.1`、`1.1.0-rc.1`。
+  - 不符合上述格式的版本号（如 `1.1.0-beta`、`bad`）将导致构建失败。
 
 ### `install` 选项
 
