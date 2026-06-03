@@ -163,6 +163,27 @@ std::optional<GlobalOptions::OptimizationLevel> ParseOptimizationValue(const std
     }
 }
 
+bool IsValidIOSApiLevel(const std::string& apiLevel)
+{
+    // A valid iOS API level is a dot-separated version of digit-only components, e.g. "11" or "17.5".
+    if (apiLevel.empty() || apiLevel.front() == '.' || apiLevel.back() == '.') {
+        return false;
+    }
+    bool lastIsDigit = false;
+    for (const char c : apiLevel) {
+        const bool isDigit = c >= '0' && c <= '9';
+        if (c == '.') {
+            if (!lastIsDigit) {
+                return false; // a dot must follow a digit, otherwise the version is malformed
+            }
+        } else if (!isDigit) {
+            return false; // only digits and dots are allowed
+        }
+        lastIsDigit = isDigit;
+    }
+    return true;
+}
+
 bool ParseAppleTargetTriple(GlobalOptions& opts, const std::vector<std::string>& parts)
 {
     // Parts must contain at least 3 elements.
@@ -185,6 +206,12 @@ bool ParseAppleTargetTriple(GlobalOptions& opts, const std::vector<std::string>&
         opts.target.os = OSType::IOS;
         opts.target.apiLevel = parts[2].substr(3); // 2 is the index of os, 3 is the length of "ios".
         if (opts.target.apiLevel.empty()) {
+            opts.target.apiLevel = "11";
+        } else if (!IsValidIOSApiLevel(opts.target.apiLevel)) {
+            // Keep backward compatibility: fall back to the default iOS 11 instead of rejecting the
+            // target when the API level is malformed (e.g. "iosabc"), so parsing still succeeds.
+            Infoln("The iOS API level \"" + opts.target.apiLevel +
+                "\" in the target is invalid, use API level 11 by default.");
             opts.target.apiLevel = "11";
         }
         // In case of parts contain 4 elements, 3 represents environment type (supports simulator only).
