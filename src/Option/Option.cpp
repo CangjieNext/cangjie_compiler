@@ -89,6 +89,19 @@ inline void RaiseArgumentUnusedMessage(DiagnosticEngine& diag, DiagKindRefactor 
 {
     (void)diag.DiagnoseRefactor(diagKind, DEFAULT_POSITION, args..., " The argument is ignored.");
 }
+
+std::string GetEffectiveAppleIOSTriple(const Triple::Info& target)
+{
+    // Keep the arch name spelled as-is (aarch64 for AARCH64, arm64 for ARM64) so the --mtriple passed
+    // to the LLVM backend matches the target triple; the LLT suite expects e.g. aarch64-apple-ios11-simulator.
+    const std::string archStr = target.ArchToString();
+    const std::string version = target.apiLevel.empty() ? "11" : target.apiLevel;
+    std::string triple = archStr + "-apple-ios" + version;
+    if (target.env == Triple::Environment::SIMULATOR) {
+        triple += "-simulator";
+    }
+    return triple;
+}
 } // namespace
 
 namespace Cangjie {
@@ -167,8 +180,24 @@ std::string Triple::Info::ToFullTripleString() const
     return ArchToString() + "-" + VendorToString() + "-" + systemStr;
 }
 
+std::string Triple::Info::GetIOSDeploymentVersion() const
+{
+    const std::string level = apiLevel.empty() ? "11" : apiLevel;
+    const auto firstDot = level.find('.');
+    if (firstDot == std::string::npos) {
+        return level + ".0.0";
+    }
+    if (level.find('.', firstDot + 1) == std::string::npos) {
+        return level + ".0";
+    }
+    return level;
+}
+
 std::string Triple::Info::GetEffectiveTripleString() const
 {
+    if (os == OSType::IOS) {
+        return GetEffectiveAppleIOSTriple(*this);
+    }
     auto tripleString = ToTripleString();
     if (tripleString == "aarch64-linux-ohos") {
         return "aarch64-linux-gnu";
@@ -178,9 +207,6 @@ std::string Triple::Info::GetEffectiveTripleString() const
     }
     if (tripleString == "x86_64-windows-gnu") {
         return "x86_64-w64-mingw32";
-    }
-    if (tripleString == "aarch64-ios-simulator") {
-        return "arm64-apple-ios17.5-simulator";
     }
     constexpr std::string_view androidPrefix = "arm-linux-android";
     constexpr std::string_view androidBackendPrefix = "armv7a-linux-androideabi";
