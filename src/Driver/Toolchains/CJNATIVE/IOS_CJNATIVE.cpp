@@ -50,11 +50,10 @@ TempFileInfo IOS_CJNATIVE::GenerateLinkingTool(
     tool->AppendArg("-platform_version");
     if (driverOptions.target.env == Triple::Environment::SIMULATOR) {
         tool->AppendArg("ios-simulator");
-        tool->AppendArg("17.5.0");
     } else {
         tool->AppendArg("ios");
-        tool->AppendArg("17.5.0");
     }
+    tool->AppendArg(driverOptions.target.GetIOSDeploymentVersion());
     tool->AppendArg(darwinSDKVersion);
 
     tool->AppendArg("-syslibroot");

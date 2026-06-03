@@ -229,6 +229,13 @@ struct Info {
     std::string GetEffectiveTripleString() const;
 
     /**
+     * @brief Get iOS deployment version for linker -platform_version (e.g. "12.0.0").
+     *
+     * @return std::string The iOS deployment version.
+     */
+    std::string GetIOSDeploymentVersion() const;
+
+    /**
      * @brief Convert Arch type to string.
      *
      * @return std::string The Arch type name.
