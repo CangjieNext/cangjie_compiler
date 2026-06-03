@@ -255,3 +255,52 @@ TEST(ToFullTripleStringTest, EnvironmentNameTest)
         EXPECT_EQ(actualName, pairs[i].second);
     }
 }
+
+TEST(GetIOSDeploymentVersionTest, FormatsApiLevelForLinker)
+{
+    Triple::Info ios12 = {Triple::ArchType::X86_64, Triple::Vendor::APPLE, Triple::OSType::IOS,
+        Triple::Environment::SIMULATOR, "12"};
+    EXPECT_EQ(ios12.GetIOSDeploymentVersion(), "12.0.0");
+
+    Triple::Info ios11 = {Triple::ArchType::AARCH64, Triple::Vendor::APPLE, Triple::OSType::IOS,
+        Triple::Environment::NOT_AVAILABLE, "11"};
+    EXPECT_EQ(ios11.GetIOSDeploymentVersion(), "11.0.0");
+
+    Triple::Info defaultIos = {Triple::ArchType::AARCH64, Triple::Vendor::APPLE, Triple::OSType::IOS,
+        Triple::Environment::SIMULATOR};
+    EXPECT_EQ(defaultIos.GetIOSDeploymentVersion(), "11.0.0");
+
+    Triple::Info ios175 = {Triple::ArchType::AARCH64, Triple::Vendor::APPLE, Triple::OSType::IOS,
+        Triple::Environment::SIMULATOR, "17.5"};
+    EXPECT_EQ(ios175.GetIOSDeploymentVersion(), "17.5.0");
+}
+
+TEST(GetEffectiveTripleStringTest, IOSSimulatorUsesApiLevel)
+{
+    Triple::Info iosSim = {Triple::ArchType::AARCH64, Triple::Vendor::UNKNOWN, Triple::OSType::IOS,
+        Triple::Environment::SIMULATOR, "12"};
+    EXPECT_EQ(iosSim.GetEffectiveTripleString(), "arm64-apple-ios12-simulator");
+
+    Triple::Info x64Sim = {Triple::ArchType::X86_64, Triple::Vendor::UNKNOWN, Triple::OSType::IOS,
+        Triple::Environment::SIMULATOR, "12"};
+    EXPECT_EQ(x64Sim.GetEffectiveTripleString(), "x86_64-apple-ios12-simulator");
+
+    Triple::Info appleX64Sim = {Triple::ArchType::X86_64, Triple::Vendor::APPLE, Triple::OSType::IOS,
+        Triple::Environment::SIMULATOR, "12"};
+    EXPECT_EQ(appleX64Sim.GetEffectiveTripleString(), "x86_64-apple-ios12-simulator");
+
+    Triple::Info appleAarch64Sim = {Triple::ArchType::AARCH64, Triple::Vendor::APPLE, Triple::OSType::IOS,
+        Triple::Environment::SIMULATOR, "12"};
+    EXPECT_EQ(appleAarch64Sim.GetEffectiveTripleString(), "arm64-apple-ios12-simulator");
+}
+
+TEST(GetEffectiveTripleStringTest, IOSDeviceUsesApiLevel)
+{
+    Triple::Info iosDevice = {Triple::ArchType::AARCH64, Triple::Vendor::UNKNOWN, Triple::OSType::IOS,
+        Triple::Environment::NOT_AVAILABLE, "11"};
+    EXPECT_EQ(iosDevice.GetEffectiveTripleString(), "arm64-apple-ios11");
+
+    Triple::Info appleDevice = {Triple::ArchType::ARM64, Triple::Vendor::APPLE, Triple::OSType::IOS,
+        Triple::Environment::NOT_AVAILABLE, "12"};
+    EXPECT_EQ(appleDevice.GetEffectiveTripleString(), "arm64-apple-ios12");
+}
