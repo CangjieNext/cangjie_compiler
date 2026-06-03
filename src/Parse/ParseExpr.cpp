@@ -520,6 +520,10 @@ OwnedPtr<Expr> ParserImpl::ParseExpr(const Token& preT, OwnedPtr<Expr> expr, Exp
     } else {
         base = ParseBaseExpr(std::move(expr), ek);
     }
+    // Do not attach following operators to an already broken atom.
+    if (base->TestAttr(Attribute::IS_BROKEN)) {
+        return base;
+    }
 
     if (!SeeingExprOperator()) {
         return base;
@@ -602,6 +606,15 @@ void ParserImpl::ParseExprWithRightExprOrType(OwnedPtr<Expr>& base, const Token&
     } else {
         auto rExpr = ParseExpr(tok, nullptr, ek);
 
+        if (rExpr->TestAttr(Attribute::IS_BROKEN)) {
+            // The right operand is broken; skip its tail but leave outer delimiters to the enclosing parser.
+            auto isRecoverEnd = [this]() {
+                return SeeingAny({TokenKind::NL, TokenKind::SEMI, TokenKind::COMMA, TokenKind::RPAREN,
+                    TokenKind::RSQUARE, TokenKind::RCURL, TokenKind::CASE, TokenKind::END, TokenKind::DOUBLE_ARROW}) ||
+                    SeeingCombinator(combinedDoubleArrow);
+            };
+            ConsumeUntilAny(isRecoverEnd, false);
+        }
         auto res = CheckMacroExprRules(tok, Token{TokenKind::DOT}, *rExpr);
         if (!res || rExpr->TestAttr(Attribute::HAS_BROKEN) || rExpr->TestAttr(Attribute::IS_BROKEN)) {
             base->EnableAttr(Attribute::HAS_BROKEN);

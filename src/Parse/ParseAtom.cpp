@@ -154,8 +154,16 @@ OwnedPtr<Expr> ParserImpl::ParsePrimitiveTypeExpr()
         return {};
     }
     // no valid input after PrimitiveType, return invalid expr
-    Next(); // skip at least 1 token
-    return GetInvalidExprInAtom(lastToken.Begin());
+    if (chainedAST.empty() || !chainedAST.back()->TestAttr(Attribute::HAS_BROKEN)) {
+        DiagExpectedExpression();
+        if (!chainedAST.empty()) {
+            chainedAST.back()->EnableAttr(Attribute::HAS_BROKEN);
+        }
+    }
+    Next(); // skip at least 1 token to avoid retrying the same primitive type.
+    auto ret = MakeOwned<InvalidExpr>(token.Begin());
+    ret->EnableAttr(Attribute::IS_BROKEN);
+    return ret;
 }
 
 OwnedPtr<Expr> ParserImpl::GetInvalidExprInAtom(Position pos)
@@ -966,7 +974,21 @@ OwnedPtr<ReturnExpr> ParserImpl::ParseReturnExpr()
         }
         ret->expr = ParseExpr();
         if (ret->expr->TestAttr(Attribute::IS_BROKEN)) {
-            ConsumeUntilAny({TokenKind::NL, TokenKind::SEMI});
+            // ParseExpr has already reported a broken return expression. Recover by skipping the malformed
+            // expression tail, but stop before tokens that may terminate an enclosing syntax construct.
+            auto isRecoverEnd = [this]() {
+                return SeeingAny({TokenKind::NL, TokenKind::SEMI, TokenKind::COMMA, TokenKind::RPAREN,
+                    TokenKind::RSQUARE, TokenKind::RCURL, TokenKind::CASE, TokenKind::END, TokenKind::DOUBLE_ARROW}) ||
+                    SeeingCombinator(combinedDoubleArrow);
+            };
+            // Do not consume the stop token here: delimiters like ')', ']', '}', ',', 'case', 'end' and '=>'
+            // should be handled by the outer parser. NL is still consumed by ConsumeUntilAny's newline handling.
+            ConsumeUntilAny(isRecoverEnd, false);
+            // A semicolon belongs to the return statement itself, so keep the previous behavior and record it.
+            if (Skip(TokenKind::SEMI)) {
+                ret->hasSemi = true;
+                ret->semiPos = lastToken.Begin();
+            }
         }
     }
     ret->end = ret->expr->end;
