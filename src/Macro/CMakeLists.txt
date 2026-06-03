@@ -4,7 +4,7 @@
 #
 # See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-
+111
 set(AST_SERIALIZATION_SRC NodeSerialization.cpp ExprSerialization.cpp TokenSerialization.cpp MacroCommon.cpp MacroCall.cpp)
 add_library(CangjieAstSerialization OBJECT ${AST_SERIALIZATION_SRC})
 add_dependencies(CangjieAstSerialization CangjieFlatbuffersHeaders)
