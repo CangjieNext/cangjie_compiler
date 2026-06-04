@@ -78,7 +78,7 @@ bool IsMutableVarType(const Value& value)
         return false;
     }
     // type is ref, but not ref a class or array, that means this type is a mutable var's type
-    return !ref->GetBaseType()->IsClassOrArray();
+    return !ref->GetBaseType()->IsReferenceType();
 }
 
 void CollectNestedLambdaExpr(

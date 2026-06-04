@@ -35,7 +35,7 @@ bool JudgeIfNeedVirtualWrapper(
      *  because `this` in struct is value type, and in interface is ref type
      *  but for static function, we need to follow rules below
      */
-    if (!selfTy.IsClassOrArray() && !virtualFunc.TestAttr(Attribute::STATIC)) {
+    if (!selfTy.IsReferenceType() && !virtualFunc.TestAttr(Attribute::STATIC)) {
         return true;
     }
     /*  there are two cases which need to wrap virtual function:
@@ -227,7 +227,7 @@ void WrapVirtualFunc::CreateWrapperFuncBody(Function& wrapperFunc,
     wrapperFunc.SetReturnValue(*ret->GetResult());
 
     Type* instParentType = childFuncInfo.GetInstParentType();
-    if (instParentType->IsClassOrArray() || (instParentType->IsStruct() && rawFunc->TestAttr(Attribute::MUT))) {
+    if (instParentType->IsReferenceType() || (instParentType->IsStruct() && rawFunc->TestAttr(Attribute::MUT))) {
         instParentType = builder.GetType<RefType>(instParentType);
     }
     auto expectedParamTypes = wrapperFuncType->GetParamTypes();
@@ -253,7 +253,7 @@ void WrapVirtualFunc::CreateWrapperFuncBody(Function& wrapperFunc,
         instArgTypes.emplace_back(funcGenericParam);
     }
     auto thisInstTy = &selfTy;
-    if (thisInstTy->IsClassOrArray()) {
+    if (thisInstTy->IsReferenceType()) {
         thisInstTy = builder.GetType<RefType>(thisInstTy);
     }
     auto apply = CreateAndAppendExpression<Apply>(builder, applyRetTy, rawFunc, FuncCallContext{
@@ -287,7 +287,7 @@ FuncType* WrapVirtualFunc::GetWrapperFuncType(FuncType& parentFuncTyWithoutThisA
 
     if (!isStatic) {
         Type* thisArgTy = builder.GetType<RefType>(&selfTy); // builder.GetType<RefType>(funcInfo.typeInfo.parentType);
-        if (!selfTy.IsClassOrArray()) {
+        if (!selfTy.IsReferenceType()) {
             thisArgTy = builder.GetType<RefType>(builder.GetAnyTy());
         }
         wrapperParamTypes.insert(wrapperParamTypes.begin(), thisArgTy);

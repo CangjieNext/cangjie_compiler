@@ -888,3 +888,29 @@ RawArrayAllocateWithException* RawArrayAllocateWithException::Clone(CHIRBuilder&
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
 }
+
+Exclave::Exclave(Block* parent) : Terminator(ExprKind::EXCLAVE, {}, {}, parent)
+{
+    CJC_NULLPTR_CHECK(parent);
+}
+
+void Exclave::InitBody(BlockGroup& newBody)
+{
+    CJC_ASSERT(blockGroups.empty());
+    newBody.SetOwnerExpression(*this);
+    blockGroups.emplace_back(&newBody);
+}
+
+BlockGroup* Exclave::GetBody() const
+{
+    return blockGroups[0];
+}
+
+Exclave* Exclave::Clone(CHIRBuilder& builder, Block& parent) const
+{
+    auto newNode = builder.CreateTerminator<Exclave>(&parent);
+    parent.AppendExpression(newNode);
+    auto newBody = GetBody()->Clone(builder, *parent.GetTopLevelFunc());
+    newNode->InitBody(*newBody);
+    return newNode;
+}
