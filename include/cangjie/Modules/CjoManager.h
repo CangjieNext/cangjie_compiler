@@ -86,6 +86,7 @@ public:
     std::string GetPackageNameByImport(const AST::ImportSpec& importSpec) const;
 
     bool IsImportPackage(const AST::ImportSpec& importSpec) const;
+    void RemoveImportedPackageNames(const std::vector<OwnedPtr<AST::ImportSpec>>& imports) const;
 
     bool IsOnlyUsedByMacro(const std::string& fullPackageName) const;
     void SetOnlyUsedByMacro(const std::string& fullPackageName, bool onlyUsedByMacro) const;
