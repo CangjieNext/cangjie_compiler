@@ -2172,5 +2172,31 @@ private:
 
     std::vector<Type*> instantiateTys;
 };
+
+/**
+ * @brief Mark the start of a memory region.
+ */
+class StartRegion : public Expression {
+    friend class CHIRContext;
+    friend class CHIRBuilder;
+private:
+    explicit StartRegion(Block* parent);
+    ~StartRegion() override = default;
+
+    StartRegion* Clone(CHIRBuilder& builder, Block& parent) const override;
+};
+
+/**
+ * @brief Mark the end of a memory region.
+ */
+class EndRegion : public Expression {
+    friend class CHIRContext;
+    friend class CHIRBuilder;
+private:
+    explicit EndRegion(Block* parent);
+    ~EndRegion() override = default;
+
+    EndRegion* Clone(CHIRBuilder& builder, Block& parent) const override;
+};
 } // namespace Cangjie::CHIR
 #endif // CANGJIE_CHIR_EXPRESSION_H
