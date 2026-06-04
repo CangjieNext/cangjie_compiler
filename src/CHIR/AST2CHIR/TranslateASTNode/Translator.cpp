@@ -134,7 +134,7 @@ Ptr<Value> Translator::GetDerefedValue(Ptr<Value> val, const DebugLocation& loc)
     if (valType->IsRef()) {
         valType = StaticCast<RefType*>(valType)->GetBaseType();
         // For now, raw class type should not exist. Why, spec indicate that class is reference type.
-        if (valType->IsClassOrArray()) {
+        if (valType->IsReferenceType()) {
             return val;
         }
         auto expr = (loc.IsInvalidPos() ? CreateAndAppendExpression<Load>(valType, val, currentBlock)

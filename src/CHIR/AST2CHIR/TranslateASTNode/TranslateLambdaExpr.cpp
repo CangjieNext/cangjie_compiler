@@ -55,8 +55,10 @@ Ptr<Value> Translator::Visit(const AST::LambdaExpr& lambdaExpr)
 
 Translator Translator::Copy() const
 {
-    return {builder, chirTy, opts, gim, globalSymbolTable, localConstVars, localConstFuncs, increKind,
+    auto trans = Translator{builder, chirTy, opts, gim, globalSymbolTable, localConstVars, localConstFuncs, increKind,
         deserializedVals, annoFactoryFuncs, maybeUnreachable, isComputingAnnos, initFuncsForAnnoFactory, typeManager};
+    trans.topLevelDecl = topLevelDecl;
+    return trans;
 }
 
 Translator Translator::SetupContextForLambda(const AST::Block& body)
