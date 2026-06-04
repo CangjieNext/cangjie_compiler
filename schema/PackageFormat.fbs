@@ -102,6 +102,17 @@ enum SourceExpr: uint8 {
 table Type {
   kind: CHIRTypeKind;
   argTys: [uint32]; // use types id
+  modal: ModalInfo;
+}
+
+enum LocalModal: int16 {
+  NONE,
+  MAYBE,
+  MUST,
+}
+
+table ModalInfo {
+  local: LocalModal;
 }
 
 table RawArrayType {
@@ -585,7 +596,8 @@ enum CHIRExprKind: uint8 {
   Invoke,
   Intrinsic,
   GetRtti,
-  GetRttiStatic
+  GetRttiStatic,
+  Exclave,
 }
 
 enum IntrinsicKind: uint16 {
