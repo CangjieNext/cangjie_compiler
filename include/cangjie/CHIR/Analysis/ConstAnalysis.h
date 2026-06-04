@@ -538,7 +538,7 @@ private:
     {
         auto lhs = binary->GetLHSOperand();
         auto rhs = binary->GetRHSOperand();
-        CJC_ASSERT(lhs->GetType() == rhs->GetType());
+        CJC_ASSERT(lhs->GetType()->GetDataType(this->builder) == rhs->GetType()->GetDataType(this->builder));
         const ConstValue* lhsAbsVal = state.CheckAbstractValue(lhs);
         const ConstValue* rhsAbsVal = state.CheckAbstractValue(rhs);
 
@@ -871,7 +871,7 @@ private:
         auto lhs = binaryExpr->GetLHSOperand();
         auto rhs = binaryExpr->GetRHSOperand();
         auto lhsTy = lhs->GetType();
-        CJC_ASSERT(lhsTy == rhs->GetType());
+        CJC_ASSERT(lhsTy->GetDataType(this->builder) == rhs->GetType()->GetDataType(this->builder));
         if (lhsTy->IsUnit() || (lhs == rhs && !lhsTy->IsFloat())) {
             bool res = true;
             if (kind == ExprKind::LT || kind == ExprKind::GT || kind == ExprKind::NOTEQUAL) {

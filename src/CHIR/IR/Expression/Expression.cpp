@@ -1436,7 +1436,9 @@ std::string Intrinsic::OperandsToString() const
     std::stringstream ss;
     ss << IntrinsicKindToString(intrinsicKind);
     ss << TypeVecToString("<", instantiatedTypeArgs, ">");
-    ss << ", " << ValueIdVecToString("", operands, "");
+    if (auto opString = ValueIdVecToString("", operands, ""); !opString.empty()) {
+        ss << ", " << opString;
+    }
     return ss.str();
 }
 
