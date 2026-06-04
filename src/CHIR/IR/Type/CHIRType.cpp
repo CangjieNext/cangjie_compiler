@@ -9,6 +9,7 @@
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Type/EnumDef.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
+#include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 
 namespace Cangjie::CHIR {
@@ -255,7 +256,7 @@ Type* CHIRType::TranslateType(AST::Ty& ty)
         }
     }
 
-    if (type->IsClassOrArray() || type->IsBox()) {
+    if (type->IsReferenceType()) {
         type = builder.GetType<RefType>(type);
     }
     chirTypeCache.typeMap[&ty] = type;
@@ -266,9 +267,16 @@ Type* CHIRType::TranslateType(AST::Ty& ty)
 Type* CHIRType::TranslateType(AST::ModalTy ty)
 {
     CJC_ASSERT(ty && ty.Ty());
-    Type* base = TranslateType(ty.Ty());
-    // TODO: 需要加上modal
-    return base;
+    Type* base = TranslateType(*ty.Ty());
+    auto modal = ASTModal2CHIRModal(ty.Mode());
+    if (modal == LocalModal::NONE) {
+        return base;
+    }
+    Type* result = builder.WithModal(base->StripAllRefs(), modal);
+    if (base->IsRef()) {
+        result = builder.GetType<RefType>(result);
+    }
+    return result;
 }
 
 } // namespace Cangjie::CHIR

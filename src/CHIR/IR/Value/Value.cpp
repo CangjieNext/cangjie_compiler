@@ -772,24 +772,16 @@ void BlockGroup::SetEntryBlock(Block* block)
 
 void BlockGroup::SetOwnerExpression(Expression& expr)
 {
-#ifndef NDEBUG
-    // we can't move func or lambdas' body to other expression, vice versa
-    if (expr.IsLambda()) {
-        CJC_ASSERT(ownerExpression == nullptr || ownerExpression->IsLambda());
-    } else {
-        CJC_ASSERT(ownerFunc == nullptr && (ownerExpression == nullptr || !ownerExpression->IsLambda()));
-    }
-#endif
-    if (Is<Lambda*>(&expr)) {
-        if (ownerFunc) {
-            ownerFunc->RemoveBody();
-            ownerFunc = nullptr;
-        } else if (auto lambdaExpr = DynamicCast<Lambda*>(ownerExpression)) {
-            lambdaExpr->RemoveBody();
-        }
+    if (ownerFunc) {
+        ownerFunc->RemoveBody();
+        ownerFunc = nullptr;
     }
     if (ownerExpression) {
         RemoveUserOnly(ownerExpression);
+        auto& subGroups = ownerExpression->blockGroups;
+        subGroups.erase(
+            std::remove(subGroups.begin(), subGroups.end(), this), subGroups.end());
+        ownerExpression = nullptr;
     }
     ownerExpression = &expr;
     AddUserOnly(&expr);
@@ -1201,6 +1193,9 @@ std::vector<GenericType*> Function::GetOriginalGenericTypeParams() const
 
 uint64_t Function::GenerateLocalId()
 {
+    if (identifier == "@_CNatXRNat5ArrayIG_E6clone3?Hv" && localId == 12) {
+        std::cout << "localId: " << localId << std::endl;
+    }
     return localId++;
 }
 

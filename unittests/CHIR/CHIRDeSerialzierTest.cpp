@@ -417,6 +417,9 @@ ExprKind DeSerialize(const PackageFormat::CHIRExprKind& kind)
         case CHIRExprKind_Exit:
             ret = ExprKind::EXIT;
             break;
+        case CHIRExprKind_Exclave:
+            ret = ExprKind::EXCLAVE;
+            break;
         case CHIRExprKind_TryApply:
             ret = ExprKind::APPLY_WITH_EXCEPTION;
             break;
