@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -20,34 +20,6 @@
 #include <set>
 
 namespace {
-constexpr auto FOUNDATION_IMPORT = "<Foundation/Foundation.h>";
-constexpr auto STDDEF_IMPORT = "<stddef.h>";
-constexpr auto STDLIB_IMPORT = "<stdlib.h>";
-
-constexpr auto VOID_TYPE = "void";
-constexpr auto VOID_POINTER_TYPE = "void*";
-constexpr auto ID_TYPE = "id";
-constexpr auto UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE";
-constexpr auto INT64_T = "int64_t";
-
-constexpr auto CAST_TO_VOID_PTR = "(__bridge void*)";
-constexpr auto CAST_TO_VOID_PTR_RETAINED = "(__bridge_retained void*)";
-constexpr auto CAST_TO_VOID_PTR_UNSAFE = "(void*)";
-
-constexpr auto SELF_WEAKLINK_NAME = "$registryId";
-constexpr auto SELF_NAME = "self";
-
-static const std::string DEFAULT_OUTPUT_DIR = "objc-gen";
-constexpr auto DEFAULT_OUTPUT_DIR_WARNING =
-    "default value objc-gen of Objective-C generated sources directory will be changed in next Cangjie SDK release";
-
-template <typename... Args> inline std::string Join(Args&&... args)
-{
-    std::stringstream ss;
-    ((ss << args), ...);
-    return ss.str();
-}
-
 template <typename T>
 std::string JoinVec(const std::vector<T>& vec, std::function<std::string(const T&)> trans,
     const std::string& sep = ", ", const std::string& pre = "", const std::string& suf = "", bool force = true)
@@ -83,62 +55,34 @@ using std::string;
 
 ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<Decl> declArg, const std::string& outputFilePath,
     const std::string& cjLibOutputPath, InteropType interopType)
-    : outputFilePath(outputFilePath.empty() ? DEFAULT_OUTPUT_DIR : outputFilePath),
+    : outputFilePath(outputFilePath.empty() ? Emitter::DEFAULT_OUTPUT_DIR : outputFilePath),
       cjLibOutputPath(cjLibOutputPath),
       decl(declArg),
       ctx(ctx),
-      interopType(interopType)
+      interopType(interopType),
+      paramMapper(ObjCParamMapper(ctx, declArg, nullptr))
 {
     if (outputFilePath.empty()) {
-        Warningln(DEFAULT_OUTPUT_DIR_WARNING);
+        Warningln(Emitter::DEFAULT_OUTPUT_DIR_WARNING);
     }
 }
 
 ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
     const std::string& cjLibOutputPath, InteropType interopType, Native::FFI::GenericConfigInfo* genericConfig,
     bool isGenericGlueCode)
-    : outputFilePath(outputFilePath.empty() ? DEFAULT_OUTPUT_DIR : outputFilePath),
+    : outputFilePath(outputFilePath.empty() ? Emitter::DEFAULT_OUTPUT_DIR : outputFilePath),
       cjLibOutputPath(cjLibOutputPath),
       decl(declArg),
       ctx(ctx),
       interopType(interopType),
+      paramMapper(ObjCParamMapper(ctx, declArg, nullptr)),
       genericConfig(genericConfig),
       isGenericGlueCode(isGenericGlueCode)
 {
     if (outputFilePath.empty()) {
-        Warningln(DEFAULT_OUTPUT_DIR_WARNING);
+        Warningln(Emitter::DEFAULT_OUTPUT_DIR_WARNING);
     }
 }
-/*
-    Main access point to translation of CJ class to Objective C. Generates two files - .h and .m
-
-    Example of header, .h:
-    #import <Foundation/Foundation.h>
-            ...
-    @interface A : M
-    + (void)initialize;
-    - (id)init;
-    @property (readwrite) UIntNative obj;
-    - (void)goo;
-            ...
-    @end
-
-    Example of source, .m:
-    #import "A.h"
-            ...
-    static void (*CJImpl_ObjC_A_goo)(size_t) = NULL;
-            ...
-    @implementation A
-    + (void)initialize {
-            ...
-    }
-            ...
-    - (void)goo {
-        CJImpl_ObjC_A_goo(self.obj);
-    }
-            ...
-    @end
-*/
 
 bool ObjCGenerator::CheckFunction(OwnedPtr<Decl>& arg) {
     if (ctx.factory.IsGeneratedMember(*arg)) {
@@ -225,18 +169,14 @@ std::string ObjCGenerator::FormatCJLibName() {
     return cjLibName;
 }
 
-void ObjCGenerator::Generate()
-{
-    auto cjLibName = FormatCJLibName();
-    auto classDecl = dynamic_cast<ClassDecl*>(decl.get());
-    auto metainfo = GetObjCClassMetainfo(classDecl);
-
-    auto hasImplicitImplParent = HasImplSuperClass(*classDecl);
-    // preamble
+void ObjCGenerator::ProcessPreamble(
+    struct EmittableObjCClassMetainfo metainfo,
+    bool hasImplicitImplParent
+) {
     Emitter::EmitFileImport(&importSource, metainfo.className);
-    Emitter::EmitModuleImport(&importSource, STDLIB_IMPORT);
-    Emitter::EmitModuleImport(&importHeader, FOUNDATION_IMPORT);
-    Emitter::EmitModuleImport(&importHeader, STDDEF_IMPORT);
+    Emitter::EmitModuleImport(&importSource, Emitter::STDLIB_IMPORT);
+    Emitter::EmitModuleImport(&importHeader, Emitter::FOUNDATION_IMPORT);
+    Emitter::EmitModuleImport(&importHeader, Emitter::STDDEF_IMPORT);
     for (auto i : metainfo.interfaces) {
         Emitter::EmitFileImport(&importHeader, i);
     }
@@ -249,7 +189,31 @@ void ObjCGenerator::Generate()
     if (!hasImplicitImplParent) {
         Emitter::EmitSyntheticRefsDealloc(&tmpHeader);
     }
+}
 
+void ObjCGenerator::ProcessSuffix(
+    std::string cjLibName,
+    struct EmittableObjCClassMetainfo metainfo,
+    bool hasImplicitImplParent
+) {
+    Emitter::EmitAdditionalStaticReferences(&staticReferences);
+
+    if (!hasImplicitImplParent) {
+        auto deleteCJObjectMangledName = ctx.nameGenerator.GenerateDeleteCjObjectName(*decl);
+        Emitter::EmitDeleteCJObject(&defaultFuncImpls, deleteCJObjectMangledName);
+        Emitter::EmitDeleteCJObjectInitialization(&funcInitialization, deleteCJObjectMangledName);
+        Emitter::EmitDealloc(&defaultFuncImpls);
+    }
+
+    Emitter::EmitEnd(&tmpHeader);
+    Emitter::EmitEnd(&defaultFuncImpls); // TODO: ?
+    Emitter::EmitInitialize(&initialize, cjLibName, metainfo);
+}
+
+void ObjCGenerator::ProcessMemberDecls(
+    struct EmittableObjCClassMetainfo metainfo,
+    ClassDecl* classDecl
+) {
     std::set<std::vector<std::string>> generatedCtors = {};
 
     for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
@@ -345,7 +309,7 @@ void ObjCGenerator::Generate()
             : Emitter::EmitForwardDeclaration(&dependenciesStream, d->identifier.Val());
         Emitter::EmitFileImport(&importSource, d->identifier.Val()); // TODO: not identifier
     }
-    for (auto td : typedefs) { // comes from MapCJTypeToObjCType
+    for (auto td : paramMapper.typedefs) {
         Emitter::EmitTypedef(&importHeader, td);
     }
 
@@ -369,7 +333,7 @@ void ObjCGenerator::Generate()
             }
 
             auto funcMeta = GetObjCFuncMetainfo(*ctor);
-            funcMeta.retType = ID_TYPE;
+            funcMeta.retType = Emitter::ID_TYPE;
 
             std::string result = "";
             Emitter::EmitDoesNotRecognizeSelectorCtor(&ctors, funcMeta);
@@ -377,19 +341,49 @@ void ObjCGenerator::Generate()
             generatedCtors.insert(selectorComponents);
         }
     }
+}
 
-    Emitter::EmitAdditionalStaticReferences(&staticReferences);
+/*
+    Main access point to translation of CJ class to Objective C. Generates two files - .h and .m
 
-    if (!hasImplicitImplParent) {
-        auto deleteCJObjectMangledName = ctx.nameGenerator.GenerateDeleteCjObjectName(*decl);
-        Emitter::EmitDeleteCJObject(&defaultFuncImpls, deleteCJObjectMangledName);
-        Emitter::EmitDeleteCJObjectInitialization(&funcInitialization, deleteCJObjectMangledName);
-        Emitter::EmitDealloc(&defaultFuncImpls);
+    Example of header, .h:
+    #import <Foundation/Foundation.h>
+            ...
+    @interface A : M
+    + (void)initialize;
+    - (id)init;
+    @property (readwrite) UIntNative obj;
+    - (void)goo;
+            ...
+    @end
+
+    Example of source, .m:
+    #import "A.h"
+            ...
+    static void (*CJImpl_ObjC_A_goo)(size_t) = NULL;
+            ...
+    @implementation A
+    + (void)initialize {
+            ...
     }
+            ...
+    - (void)goo {
+        CJImpl_ObjC_A_goo(self.obj);
+    }
+            ...
+    @end
+*/
+void ObjCGenerator::Generate()
+{
+    auto cjLibName = FormatCJLibName();
+    auto classDecl = dynamic_cast<ClassDecl*>(decl.get());
+    auto metainfo = GetObjCClassMetainfo(classDecl);
 
-    Emitter::EmitEnd(&tmpHeader);
-    Emitter::EmitEnd(&defaultFuncImpls); // TODO: ?
-    Emitter::EmitInitialize(&initialize, cjLibName, metainfo);
+    auto hasImplicitImplParent = HasImplSuperClass(*classDecl);
+
+    ProcessPreamble(metainfo, hasImplicitImplParent);
+    ProcessMemberDecls(metainfo, classDecl);
+    ProcessSuffix(cjLibName, metainfo, hasImplicitImplParent);
 
     WriteToFile();
 }
@@ -440,67 +434,6 @@ struct EmittableObjCClassMetainfo ObjCGenerator::GetObjCClassMetainfo(ClassDecl*
     return eocm;
 }
 
-/*
- *  DECLARATION: :(arg1Type)arg1:(arg2Type)arg2:...(argNType)argN
- *  STATIC_REF: (arg1Type, arg2Type, ...argNType)
- */
-std::string ObjCGenerator::GenerateFuncParamLists(const std::vector<OwnedPtr<FuncParamList>>& paramLists,
-    const std::vector<std::string>& selectorComponents, FunctionListFormat format, const ObjCFunctionType type,
-    bool hasForeignNameAnno)
-{
-    auto componentIterator = std::begin(selectorComponents);
-    // skip function name
-    componentIterator++;
-    std::string genParams = format == FunctionListFormat::DECLARATION ? "" : "(";
-    if (paramLists.empty() || !paramLists[0]) {
-        return "";
-    }
-    for (size_t i = 0; i < paramLists[0]->params.size(); i++) {
-        OwnedPtr<FuncParam>& cur = paramLists[0]->params[i];
-        switch (format) {
-            case FunctionListFormat::DECLARATION:
-                if (i != 0) {
-                    /*
-                     * for CJMapping Objective-C method signature, label shouldn't generate if not use @ForeignName
-                     * as it would be more user-friendly to keep both side method signatures the same
-                     */
-                    auto name = hasForeignNameAnno ? *componentIterator++ : "";
-                    genParams += name + ":"; // label
-                } else {
-                    genParams += ":";
-                }
-                genParams += "(" + MapCJTypeToObjCType(*cur->GetTy()) + ")";
-                genParams += cur->identifier.Val();
-                if (i != paramLists[0]->params.size() - 1) {
-                    genParams += " ";
-                }
-                break;
-            case FunctionListFormat::STATIC_REF:
-                if (paramLists[0]->params.size() == 0 && type != ObjCFunctionType::STATIC) {
-                    genParams += VOID_POINTER_TYPE;
-                }
-                genParams += ")";
-                break;
-            case FunctionListFormat::CANGJIE_DECL:
-                genParams += cur->identifier.Val() + ": " + Ty::ToString(cur->type->GetTy());
-                if (i != paramLists[0]->params.size() - 1) {
-                    genParams += ", ";
-                }
-                break;
-            default:
-                break;
-        }
-    }
-    if (format == FunctionListFormat::STATIC_REF || format == FunctionListFormat::CANGJIE_DECL) {
-        if (paramLists[0]->params.size() == 0 && type != ObjCFunctionType::STATIC) {
-            genParams += VOID_POINTER_TYPE;
-        }
-        genParams += ")";
-    }
-
-    return genParams;
-}
-
 bool ObjCGenerator::CheckProp(OwnedPtr<Decl>& arg) {
     if (arg->astKind != ASTKind::VAR_DECL && arg->astKind != ASTKind::PROP_DECL) {
         return false;
@@ -532,9 +465,9 @@ struct EmittableObjCPropMetainfo ObjCGenerator::GetObjCPropMetainfoFromProp(Prop
     if (isGenericGlueCode && varDecl.GetTy()->IsGeneric()) {
         auto genericActualTy =
             TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, varDecl.GetTy()->name)));
-        empm.type = MapCJTypeToObjCType(*genericActualTy);
+        empm.type = paramMapper.MapCJTypeToObjCType(*genericActualTy);
     } else {
-        empm.type = MapCJTypeToObjCType(*varDecl.GetTy());
+        empm.type = paramMapper.MapCJTypeToObjCType(*varDecl.GetTy());
     }
     empm.isReadwrite = varDecl.isVar && !SkipSetterForValueTypeDecl(*decl);
     empm.name = ctx.nameGenerator.GetObjCDeclName(varDecl);
@@ -560,7 +493,7 @@ struct EmittableObjCPropMetainfo ObjCGenerator::GetObjCPropMetainfoFromProp(Prop
         setter.selectorComponents   = {};
         setter.identifier           = ctx.nameGenerator.GetObjCSetterName(varDecl);
         setter.mangledIdentifier    = ctx.nameGenerator.GetFieldSetterWrapperName(varDecl);
-        setter.retType              = VOID_TYPE;
+        setter.retType              = Emitter::VOID_TYPE;
         setter.bridge               = bridge;
         setter.paramsDecl           = "(" + empm.type + ")value"; // TODO: refactor
         setter.paramStaticRef       = (!empm.isStatic
@@ -569,7 +502,7 @@ struct EmittableObjCPropMetainfo ObjCGenerator::GetObjCPropMetainfoFromProp(Prop
         setter.callingParams        = !empm.isStatic ? "self.$registryId, value" : "value";
         setter.convertedParams      = (!empm.isStatic
                                         ? "self.$registryId, "
-                                        : "") + GenerateArgumentCast(*varDecl.GetTy(), "value");
+                                        : "") + paramMapper.GenerateArgumentCast(*varDecl.GetTy(), "value");
         empm.setter = setter;
     }
     
@@ -582,9 +515,9 @@ struct EmittableObjCPropMetainfo ObjCGenerator::GetObjCPropMetainfoFromVar(VarDe
     if (isGenericGlueCode && varDecl.GetTy()->IsGeneric()) {
         auto genericActualTy =
             TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, varDecl.GetTy()->name)));
-        empm.type = MapCJTypeToObjCType(*genericActualTy);
+        empm.type = paramMapper.MapCJTypeToObjCType(*genericActualTy);
     } else {
-        empm.type = MapCJTypeToObjCType(*varDecl.GetTy());
+        empm.type = paramMapper.MapCJTypeToObjCType(*varDecl.GetTy());
     }
     empm.isReadwrite = varDecl.isVar && !SkipSetterForValueTypeDecl(*decl);
     empm.name = ctx.nameGenerator.GetObjCDeclName(varDecl);
@@ -610,7 +543,7 @@ struct EmittableObjCPropMetainfo ObjCGenerator::GetObjCPropMetainfoFromVar(VarDe
         setter.selectorComponents   = {};
         setter.identifier           = ctx.nameGenerator.GetObjCSetterName(varDecl);
         setter.mangledIdentifier    = ctx.nameGenerator.GetFieldSetterWrapperName(varDecl);
-        setter.retType              = VOID_TYPE;
+        setter.retType              = Emitter::VOID_TYPE;
         setter.paramsDecl           = "(" + empm.type + ")value"; // TODO: refactor
         setter.paramStaticRef       = (!empm.isStatic
                                         ? "(int64_t,"
@@ -618,7 +551,7 @@ struct EmittableObjCPropMetainfo ObjCGenerator::GetObjCPropMetainfoFromVar(VarDe
         setter.callingParams        = !empm.isStatic ? "self.$registryId, value" : "value";
         setter.convertedParams      = (!empm.isStatic
                                         ? "self.$registryId, "
-                                        : "") + GenerateArgumentCast(*varDecl.GetTy(), "value");
+                                        : "") + paramMapper.GenerateArgumentCast(*varDecl.GetTy(), "value");
         setter.bridge               = false; // always VOID_TYPE
         empm.setter = setter;
     }
@@ -637,12 +570,12 @@ struct EmittableObjCFuncMetainfo ObjCGenerator::GetObjCFuncMetainfo(FuncDecl& fu
     // eofm.retType             = ctx.typeMapper.IsObjCObjectType(retTy) || ctx.typeMapper.IsObjCBlock(retTy)
     //                             ? VOID_POINTER_TYPE
     //                             : MapCJTypeToObjCType(retTy);
-    eofm.retType             = MapCJTypeToObjCType(retTy);
-    eofm.paramsDecl          = GenerateFuncParamLists(funcDecl.funcBody->paramLists, eofm.selectorComponents,
+    eofm.retType             = paramMapper.MapCJTypeToObjCType(retTy);
+    eofm.paramsDecl          = paramMapper.GenerateFuncParamLists(funcDecl.funcBody->paramLists, eofm.selectorComponents,
                                 FunctionListFormat::DECLARATION, eofm.isStatic ? ObjCFunctionType::STATIC : ObjCFunctionType::INSTANCE, // refactor
                                 GetForeignNameAnnotation(funcDecl) != nullptr);
     auto collectTypes = [this](const OwnedPtr<FuncParam>& fp) -> std::string {
-        return MapCJTypeToObjCType(*fp->GetTy());
+        return paramMapper.MapCJTypeToObjCType(*fp->GetTy());
     };
     eofm.paramStaticRef      = funcDecl.funcBody->paramLists[0]->params.size() == 0
                                     ? "()"
@@ -651,7 +584,7 @@ struct EmittableObjCFuncMetainfo ObjCGenerator::GetObjCFuncMetainfo(FuncDecl& fu
         return fp->identifier;
     };
     eofm.callingParams       = JoinVec<OwnedPtr<FuncParam>>(funcDecl.funcBody->paramLists[0]->params, collectNames, ", ", ", ", "", false);
-    eofm.convertedParams     = ConvertParamsListToArgsListToString(funcDecl.funcBody->paramLists, !eofm.isStatic);
+    eofm.convertedParams     = paramMapper.ConvertParamsListToArgsListToString(funcDecl.funcBody->paramLists, !eofm.isStatic);
     eofm.bridge              = (ctx.typeMapper.IsObjCObjectType(retTy) || ctx.typeMapper.IsObjCBlock(retTy)) &&
                                     !ctx.typeMapper.IsObjCCJMapping(retTy);
     return eofm;
@@ -674,83 +607,20 @@ struct EmittableObjCFuncMetainfo ObjCGenerator::GetObjCCtorMetainfo(FuncDecl& fu
     eofm.selectorComponents  = selectorComponents;
     eofm.mangledIdentifier   = cjWrapperName;
     eofm.identifier          = eofm.selectorComponents[0];
-    eofm.retType             = ID_TYPE;
-    eofm.paramsDecl          = GenerateFuncParamLists(funcDecl.funcBody->paramLists, eofm.selectorComponents,
+    eofm.retType             = Emitter::ID_TYPE;
+    eofm.paramsDecl          = paramMapper.GenerateFuncParamLists(funcDecl.funcBody->paramLists, eofm.selectorComponents,
                                 FunctionListFormat::DECLARATION, eofm.isStatic ? ObjCFunctionType::STATIC : ObjCFunctionType::INSTANCE, // refactor
                                 GetForeignNameAnnotation(funcDecl) != nullptr);
     auto collectTypes = [this](const OwnedPtr<FuncParam>& fp) -> std::string {
-        return MapCJTypeToObjCType(*fp->GetTy());
+        return paramMapper.MapCJTypeToObjCType(*fp->GetTy());
     };
     eofm.paramStaticRef      = JoinVec<OwnedPtr<FuncParam>>(funcDecl.funcBody->paramLists[0]->params, collectTypes, ",", "(", ")", false);
     auto collectNames = [this](const OwnedPtr<FuncParam>& fp) -> std::string {
-        return GenerateArgumentCast(*fp->GetTy(), fp->identifier);
+        return paramMapper.GenerateArgumentCast(*fp->GetTy(), fp->identifier);
     };
     eofm.callingParams       = JoinVec<OwnedPtr<FuncParam>>(funcDecl.funcBody->paramLists[0]->params, collectNames, ", ", ", ", "", false);
     eofm.bridge              = false;
     return eofm;
-}
-
-ArgsList ObjCGenerator::ConvertParamsListToArgsList(
-    const std::vector<OwnedPtr<FuncParamList>>& paramLists, bool withRegistryId)
-{
-    ArgsList result = ArgsList();
-
-    if (withRegistryId) {
-        result.emplace_back(std::pair<std::string, std::string>(INT64_T, string(SELF_NAME) + "." + SELF_WEAKLINK_NAME));
-    }
-
-    if (!paramLists.empty() && paramLists[0]) {
-        for (size_t i = 0; i < paramLists[0]->params.size(); i++) {
-            OwnedPtr<FuncParam>& cur = paramLists[0]->params[i];
-            auto name = cur->identifier.Val();
-            name = GenerateArgumentCast(*cur->GetTy(), std::move(name));
-            result.push_back(std::pair<std::string, std::string>(MapCJTypeToObjCType(cur), name));
-        }
-    }
-    return result;
-}
-
-std::string ObjCGenerator::ConvertParamsListToArgsListToString(const std::vector<OwnedPtr<AST::FuncParamList>>& paramLists, bool withRegistryId) {
-    std::string result = "";
-
-    if (withRegistryId) {
-        result = "self.$registryId";
-    }
-
-    if (!paramLists.empty() && paramLists[0]) {
-        if (withRegistryId && paramLists[0]->params.size() != 0) {
-            result += ", ";
-        }
-        for (size_t i = 0; i < paramLists[0]->params.size(); i++) {
-            OwnedPtr<FuncParam>& cur = paramLists[0]->params[i];
-            auto name = cur->identifier.Val();
-            name = GenerateArgumentCast(*cur->GetTy(), std::move(name));
-            result += name;
-            if (i != paramLists[0]->params.size() - 1) {
-                result += ", ";
-            }
-        }
-    }
-    return result;
-}
-
-std::vector<std::string> ObjCGenerator::ConvertParamsListToCallableParamsString(
-    std::vector<OwnedPtr<FuncParamList>>& paramLists, bool withSelf) const
-{
-    std::vector<string> result = {};
-
-    if (withSelf) {
-        result.emplace_back(std::string(CAST_TO_VOID_PTR) + SELF_NAME);
-    }
-
-    if (!paramLists.empty() && paramLists[0]) {
-        for (size_t i = 0; i < paramLists[0]->params.size(); i++) {
-            OwnedPtr<FuncParam>& cur = paramLists[0]->params[i];
-            std::string name = GenerateArgumentCast(*cur->GetTy(), cur->identifier.Val());
-            result.push_back(std::move(name));
-        }
-    }
-    return result;
 }
 
 void ObjCGenerator::WriteToFile()
@@ -786,64 +656,5 @@ void ObjCGenerator::WriteToSource(std::string content)
         ctx.nameGenerator.GetObjCDeclName(*decl);
     auto sourcePath = FileUtil::JoinPath(outputFilePath, objCDeclName + ".m");
     FileUtil::WriteToFile(sourcePath, content);
-}
-
-std::string ObjCGenerator::MapCJTypeToObjCType(const Ty& ty)
-{
-    auto objctype = ctx.typeMapper.Cj2ObjCForObjC(ty);
-    if (objctype.decl != "") {
-        typedefs.insert(objctype.decl);
-    }
-    return objctype.usage;
-}
-
-std::string ObjCGenerator::MapCJTypeToObjCType(const OwnedPtr<Type>& type)
-{
-    if (!type) {
-        return UNSUPPORTED_TYPE;
-    }
-
-    if (IsGenericParam(type->GetTy(), *decl, genericConfig)) {
-        // Current generic only support primitive type.
-        auto genericActualTy =
-            TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, type->GetTy()->name)));
-        return MapCJTypeToObjCType(*genericActualTy);
-    }
-    return MapCJTypeToObjCType(*type->GetTy());
-}
-
-std::string ObjCGenerator::MapCJTypeToObjCType(const OwnedPtr<FuncParam>& param)
-{
-    if (!param) {
-        return UNSUPPORTED_TYPE;
-    }
-
-    auto paraTy = param->type->GetTy();
-    if (IsGenericParam(paraTy, *decl, genericConfig)) {
-        // Current generic only support primitive type.
-        auto genericActualTy =
-            TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, paraTy->name)));
-        return MapCJTypeToObjCType(*genericActualTy);
-    }
-    return MapCJTypeToObjCType(*param->type->GetTy());
-}
-
-std::string ObjCGenerator::GenerateArgumentCast(const Ty& retTy, std::string value) const
-{
-    if (ctx.typeMapper.IsObjCCJMapping(retTy)) {
-        return value + "." + SELF_WEAKLINK_NAME;
-    }
-    const auto& actualTy = retTy.IsCoreOptionType() ? *retTy.typeArgs[0] : retTy;
-    if (ctx.typeMapper.IsObjCImpl(actualTy)) {
-        return CAST_TO_VOID_PTR + std::move(value);
-    }
-    if (ctx.typeMapper.IsObjCMirror(actualTy) || ctx.typeMapper.IsObjCBlock(actualTy) ||
-        ctx.typeMapper.IsObjCCJMappingInterface(actualTy)) {
-        return CAST_TO_VOID_PTR_RETAINED + std::move(value);
-    }
-    if (ctx.typeMapper.IsObjCPointer(actualTy)) {
-        return CAST_TO_VOID_PTR_UNSAFE + std::move(value);
-    }
-    return value;
 }
 } // namespace Cangjie::Interop::ObjC
