@@ -382,6 +382,7 @@ class BlockGroup : public Value {
     friend class CHIRContext;
     friend class CHIRBuilder;
     friend class Block;
+    friend class Exclave;
     friend class Lambda;
     friend class ForIn;
 

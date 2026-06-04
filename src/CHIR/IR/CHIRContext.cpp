@@ -220,6 +220,87 @@ StructType* CHIRContext::GetStringTy() const
     return GetStructType("std.core", "String");
 }
 
+namespace {
+using Cangjie::StaticCast;
+
+Type* WithModalImpl(CHIRContext& ctx, Type* ty, ModalInfo modal)
+{
+    if (modal == ty->GetModalInfo()) {
+        return ty;
+    }
+    if (ty->IsRef()) {
+        return ctx.GetType<RefType>(WithModalImpl(ctx, StaticCast<RefType*>(ty)->GetBaseType(), modal));
+    }
+    switch (ty->GetTypeKind()) {
+        case Type::TYPE_INT8:
+        case Type::TYPE_INT16:
+        case Type::TYPE_INT32:
+        case Type::TYPE_INT64:
+        case Type::TYPE_INT_NATIVE:
+        case Type::TYPE_UINT8:
+        case Type::TYPE_UINT16:
+        case Type::TYPE_UINT32:
+        case Type::TYPE_UINT64:
+        case Type::TYPE_UINT_NATIVE:
+            return ctx.GetType<IntType>(ty->GetTypeKind(), modal);
+        case Type::TYPE_FLOAT16:
+        case Type::TYPE_FLOAT32:
+        case Type::TYPE_FLOAT64:
+            return ctx.GetType<FloatType>(ty->GetTypeKind(), modal);
+        case Type::TYPE_RUNE:
+            return ctx.GetType<RuneType>(modal);
+        case Type::TYPE_BOOLEAN:
+            return ctx.GetType<BooleanType>(modal);
+        case Type::TYPE_UNIT:
+            return ctx.GetType<UnitType>(modal);
+        case Type::TYPE_NOTHING:
+            return ctx.GetType<NothingType>(modal);
+        case Type::TYPE_VOID:
+            return ctx.GetType<VoidType>(modal);
+        case Type::TYPE_CSTRING:
+            return ctx.GetType<CStringType>(modal);
+        case Type::TYPE_TUPLE:
+            return ctx.GetType<TupleType>(StaticCast<TupleType*>(ty)->GetElementTypes(), modal);
+        case Type::TYPE_FUNC: {
+            auto funcTy = StaticCast<FuncType*>(ty);
+            return ctx.GetType<FuncType>(
+                funcTy->GetParamTypes(), funcTy->GetReturnType(), funcTy->HasVarArg(), funcTy->IsCFunc(), modal);
+        }
+        case Type::TYPE_STRUCT:
+            return ctx.GetType<StructType>(StaticCast<StructType*>(ty)->GetStructDef(), ty->GetTypeArgs(), modal);
+        case Type::TYPE_ENUM:
+            return ctx.GetType<EnumType>(StaticCast<EnumType*>(ty)->GetEnumDef(), ty->GetTypeArgs(), modal);
+        case Type::TYPE_CLASS:
+            return ctx.GetType<ClassType>(StaticCast<ClassType*>(ty)->GetClassDef(), ty->GetTypeArgs(), modal);
+        case Type::TYPE_RAWARRAY:
+            return ctx.GetType<RawArrayType>(
+                StaticCast<RawArrayType*>(ty)->GetElementType(), StaticCast<RawArrayType*>(ty)->GetDims(), modal);
+        case Type::TYPE_VARRAY:
+            return ctx.GetType<VArrayType>(
+                StaticCast<VArrayType*>(ty)->GetElementType(), StaticCast<VArrayType*>(ty)->GetSize(), modal);
+        case Type::TYPE_CPOINTER:
+            return ctx.GetType<CPointerType>(StaticCast<CPointerType*>(ty)->GetElementType(), modal);
+        case Type::TYPE_GENERIC: {
+            auto genericTy = StaticCast<GenericType*>(ty);
+            return ctx.GetType<GenericType>(genericTy->GetIdentifier(), genericTy->GetSrcCodeIdentifier(), modal);
+        }
+        case Type::TYPE_REFTYPE:
+        case Type::TYPE_BOXTYPE:
+        case Type::TYPE_THIS:
+        case Type::TYPE_INVALID:
+        case Type::MAX_TYPE_KIND:
+        default:
+            CJC_ABORT();
+            return ty;
+    }
+}
+} // namespace
+
+Type* CHIRContext::WithModal(Type* ty, ModalInfo modal)
+{
+    return WithModalImpl(*this, ty, modal);
+}
+
 Type* CHIRContext::ToSelectorType(Type::TypeKind kind) const
 {
     switch (kind) {

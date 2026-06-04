@@ -24,6 +24,21 @@
 
 using namespace Cangjie::CHIR;
 
+Type::Type(TypeKind kind, ModalInfo modal) : kind(kind), modal(modal)
+{
+    for (auto ty : argTys) {
+        CJC_NULLPTR_CHECK(ty);
+    }
+}
+
+std::string Type::FormatWithModal(const std::string& baseStr) const
+{
+    if (!IsModal()) {
+        return baseStr;
+    }
+    return baseStr + " " + modal.ToString();
+}
+
 static size_t HashArgTypes(const std::vector<Type*>& argTys)
 {
     std::size_t hashVal = 0;
@@ -54,13 +69,6 @@ static const std::string PrintArgTys(const std::string& prefix,
     }
     ss << suffix;
     return ss.str();
-}
-
-Type::Type(TypeKind kind) : kind(kind)
-{
-    for (auto ty : argTys) {
-        CJC_NULLPTR_CHECK(ty);
-    }
 }
 
 bool Type::IsAutoEnv() const
@@ -136,7 +144,8 @@ bool Type::IsBuiltinType() const
 std::string Type::ToString() const
 {
     auto ite = TYPEKIND_TO_STRING.find(kind);
-    return ite == TYPEKIND_TO_STRING.end() ? "UnknownType" : ite->second;
+    auto base = ite == TYPEKIND_TO_STRING.end() ? "UnknownType" : ite->second;
+    return FormatWithModal(base);
 }
 
 std::string Type::ToSrcCodeString() const
@@ -151,6 +160,25 @@ Type* Type::StripAllRefs() const
         baseTy = StaticCast<RefType*>(baseTy)->GetBaseType();
     }
     return baseTy;
+}
+
+bool Type::IsCopyable() const
+{
+    if (IsPrimitive() || IsCPointer() || IsCString() || IsVoid() || IsVArray()) {
+        return true;
+    }
+    if (IsStruct()) {
+        return StaticCast<const StructType*>(this)->GetStructDef()->IsCopyable();
+    }
+    if (IsTuple()) {
+        for (auto arg : GetTypeArgs()) {
+            if (!arg->IsCopyable()) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
 }
 
 bool Type::IsReferenceTypeWithRefDims(size_t dims) const
@@ -222,12 +250,13 @@ size_t Type::Hash() const
 {
     std::size_t hashVal = HashArgTypes(argTys);
     HashValue(hashVal, kind);
+    HashValue(hashVal, modal.Local());
     return hashVal;
 }
 
 bool Type::operator==(const Type& other) const
 {
-    return kind == other.kind && argTys == other.argTys;
+    return kind == other.kind && argTys == other.argTys && modal == other.modal;
 }
 
 const std::vector<ExtendDef*>& Type::GetExtends(CHIRBuilder* builder) const
@@ -260,12 +289,12 @@ bool Type::IsBoxRefTypeOf(const Type& baseType) const
     return StaticCast<BoxType*>(boxType)->GetBaseType() == &baseType;
 }
 
-IntType::IntType(TypeKind kind) : NumericType(kind)
+IntType::IntType(TypeKind kind, ModalInfo modal) : NumericType(kind, modal)
 {
     CJC_ASSERT(kind >= TYPE_INT8 && kind <= TYPE_UINT_NATIVE);
 }
 
-FloatType::FloatType(TypeKind kind) : NumericType(kind)
+FloatType::FloatType(TypeKind kind, ModalInfo modal) : NumericType(kind, modal)
 {
     CJC_ASSERT(kind >= TYPE_FLOAT16 && kind <= TYPE_FLOAT64);
 }
@@ -286,7 +315,7 @@ std::string FuncType::ToString() const
     }
     ss << ")";
     ss << " -> " << GetReturnType()->ToString();
-    return isCFunc ? "CFunc<" + ss.str() + ">" : ss.str();
+    return FormatWithModal(isCFunc ? "CFunc<" + ss.str() + ">" : ss.str());
 }
 
 std::string FuncType::ToSrcCodeString() const
@@ -305,7 +334,7 @@ std::string FuncType::ToSrcCodeString() const
     }
     ss << ")";
     ss << " -> " << GetReturnType()->ToSrcCodeString();
-    return isCFunc ? "CFunc<" + ss.str() + ">" : ss.str();
+    return FormatWithModal(isCFunc ? "CFunc<" + ss.str() + ">" : ss.str());
 }
 
 size_t FuncType::Hash() const
@@ -314,17 +343,18 @@ size_t FuncType::Hash() const
     HashValue(hashVal, isCFunc);
     HashValue(hashVal, hasVarArg);
     HashValue(hashVal, kind);
+    HashValue(hashVal, modal.Local());
     return hashVal;
 }
 
 bool FuncType::operator==(const Type& other) const
 {
     auto it = DynamicCast<const FuncType*>(&other);
-    return it && argTys == it->argTys && (isCFunc == it->isCFunc) && (hasVarArg == it->hasVarArg);
+    return it && modal == it->modal && argTys == it->argTys && (isCFunc == it->isCFunc) && (hasVarArg == it->hasVarArg);
 }
 
-CustomType::CustomType(TypeKind kind, CustomTypeDef* def, const std::vector<Type*>& typeArgs = {})
-    : Type(kind), def(def)
+CustomType::CustomType(TypeKind kind, CustomTypeDef* def, const std::vector<Type*>& typeArgs, ModalInfo modal)
+    : Type(kind, modal), def(def)
 {
     CJC_NULLPTR_CHECK(def);
     CJC_ASSERT((kind == TYPE_CLASS && def->GetCustomKind() == CustomDefKind::TYPE_CLASS) ||
@@ -516,17 +546,18 @@ size_t CustomType::Hash() const
 {
     std::size_t hashVal = HashArgTypes(argTys);
     HashValue(hashVal, def);
+    HashValue(hashVal, modal.Local());
     return hashVal;
 }
 
 bool CustomType::operator==(const Type& other) const
 {
     auto it = DynamicCast<const CustomType*>(&other);
-    return it && argTys == it->argTys && (def == it->def);
+    return it && modal == it->modal && argTys == it->argTys && (def == it->def);
 }
 
-ClassType::ClassType(ClassDef* classDef, const std::vector<Type*>& genericArgs)
-    : CustomType(TypeKind::TYPE_CLASS, classDef, genericArgs)
+ClassType::ClassType(ClassDef* classDef, const std::vector<Type*>& genericArgs, ModalInfo modal)
+    : CustomType(TypeKind::TYPE_CLASS, classDef, genericArgs, modal)
 {
 }
 
@@ -922,8 +953,8 @@ std::vector<ClassType*> CustomType::GetImplementedInterfaceTysWithoutExtend(CHIR
     return instSuperInterfaceTys;
 }
 
-StructType::StructType(StructDef* structDef, const std::vector<Type*>& genericArgs)
-    : CustomType(TypeKind::TYPE_STRUCT, structDef, genericArgs)
+StructType::StructType(StructDef* structDef, const std::vector<Type*>& genericArgs, ModalInfo modal)
+    : CustomType(TypeKind::TYPE_STRUCT, structDef, genericArgs, modal)
 {
 }
 
@@ -944,8 +975,8 @@ std::string StructType::ToString() const
     return ss.str();
 }
 
-EnumType::EnumType(EnumDef* enumDef, const std::vector<Type*>& genericArgs)
-    : CustomType(TypeKind::TYPE_ENUM, enumDef, genericArgs)
+EnumType::EnumType(EnumDef* enumDef, const std::vector<Type*>& genericArgs, ModalInfo modal)
+    : CustomType(TypeKind::TYPE_ENUM, enumDef, genericArgs, modal)
 {
 }
 
@@ -1085,13 +1116,14 @@ size_t RawArrayType::Hash() const
     std::size_t hashVal = HashArgTypes(argTys);
     HashValue(hashVal, dims);
     HashValue(hashVal, kind);
+    HashValue(hashVal, modal.Local());
     return hashVal;
 }
 
 bool RawArrayType::operator==(const Type& other) const
 {
     auto it = DynamicCast<const RawArrayType*>(&other);
-    return it && argTys == it->argTys && (dims == it->dims);
+    return it && modal == it->modal && argTys == it->argTys && (dims == it->dims);
 }
 
 std::string VArrayType::ToString() const
@@ -1113,13 +1145,14 @@ size_t VArrayType::Hash() const
     std::size_t hashVal = HashArgTypes(argTys);
     HashValue(hashVal, size);
     HashValue(hashVal, kind);
+    HashValue(hashVal, modal.Local());
     return hashVal;
 }
 
 bool VArrayType::operator==(const Type& other) const
 {
     auto it = DynamicCast<const VArrayType*>(&other);
-    return it && argTys == it->argTys && (size == it->size);
+    return it && modal == it->modal && argTys == it->argTys && (size == it->size);
 }
 
 const std::vector<ExtendDef*>& CPointerType::GetExtends(CHIRBuilder* builder) const
@@ -1231,13 +1264,14 @@ size_t GenericType::Hash() const
 {
     std::size_t hashVal{0};
     HashValue(hashVal, identifier);
+    HashValue(hashVal, modal.Local());
     return hashVal;
 }
 
 bool GenericType::operator==(const Type& other) const
 {
     auto it = DynamicCast<const GenericType*>(&other);
-    return it && identifier == it->identifier;
+    return it && modal == it->modal && identifier == it->identifier;
 }
 
 std::string GenericType::ToString() const
@@ -1285,6 +1319,9 @@ Type* GetFieldOfType(Type& baseTy, uint64_t index, CHIRBuilder& builder)
         }
     } else if (baseTy.IsRawArray()) {
         type = StaticCast<RawArrayType&>(baseTy).GetElementType();
+    }
+    if (baseTy.IsModal() && type != nullptr) {
+        type = builder.WithModal(type, baseTy.GetModalInfo());
     }
     return type;
 }
@@ -1507,6 +1544,16 @@ bool Type::IsEqualOrSubTypeOf(const Type& parentType, CHIRBuilder& builder,
     if ((this->IsRef() || parentType.IsRef()) && (thisDeref == parentDeref)) {
         return false;
     }
+    if (thisDeref->IsModal()) {
+        if (!parentDeref->IsModal()) {
+            return false;
+        }
+        auto thisModalInfo = thisDeref->GetModalInfo();
+        auto parentModalInfo = parentDeref->GetModalInfo();
+        return (thisModalInfo == parentModalInfo || thisModalInfo.IsSubModal(parentModalInfo)) &&
+            thisDeref->GetDataType(builder)->IsEqualOrSubTypeOf(
+                *parentDeref->GetDataType(builder), builder, visited);
+    }
     // Nothing type is all types' sub type, Any type is all types' parent type
     if (thisDeref == parentDeref || thisDeref->IsNothing() || parentDeref->IsAny()) {
         return true;
@@ -1597,5 +1644,75 @@ bool Type::SatisfyGenericConstraints(const GenericType& type, CHIRBuilder& build
         }
     }
     return true;
+}
+
+bool Type::IsValueType() const
+{
+    auto pureType = StripAllRefs();
+    return pureType->IsPrimitive() || pureType->IsEnum() || pureType->IsTuple() || pureType->IsStruct() ||
+        pureType->IsVArray() || pureType->IsCPointer() || pureType->IsCString() || pureType->IsFunc();
+}
+
+bool Type::IsValueOrGenericType() const
+{
+    auto pureType = StripAllRefs();
+    return pureType->IsValueType() || pureType->IsGeneric();
+}
+
+bool Type::IsReferenceType() const
+{
+    auto pureType = StripAllRefs();
+    return pureType->IsClassOrArray() || pureType->IsBox() || pureType->IsThis();
+}
+
+Type* Type::GetDataType(CHIRBuilder& builder) const
+{
+    return builder.WithModal(const_cast<Type*>(this), GetModalInfo());
+}
+
+ModalInfo::ModalInfo() : local(LocalModal::NONE)
+{
+}
+
+ModalInfo::ModalInfo(LocalModal local) : local(local)
+{
+}
+
+LocalModal ModalInfo::Local() const
+{
+    return local;
+}
+
+bool ModalInfo::operator==(const ModalInfo& other) const
+{
+    return local == other.local;
+}
+
+bool ModalInfo::operator!=(const ModalInfo& other) const
+{
+    return local != other.local;
+}
+
+bool ModalInfo::IsSubModal(const ModalInfo& other) const
+{
+    auto thisLocal = Local();
+    auto otherLocal = other.Local();
+    return (thisLocal == LocalModal::NONE && otherLocal == LocalModal::MAYBE) ||
+           (thisLocal == LocalModal::MUST && otherLocal == LocalModal::MAYBE);
+}
+
+std::string ModalInfo::ToString() const
+{
+    switch (local) {
+        case LocalModal::NONE:
+            return "@~local";
+        case LocalModal::MAYBE:
+            return "@local?";
+        case LocalModal::MUST:
+            return "@local!";
+        default:
+            CJC_ABORT();
+            return "";
+    }
 }
 } // namespace Cangjie::CHIR

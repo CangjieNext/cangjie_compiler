@@ -431,8 +431,9 @@ Type* ReplaceRawGenericArgType(
     // e.g. class A<T> { func foo<T, U>() {} }
     // if `type` is `foo::T`, return instantiated type
     // if `type` is `foo::U`, return `U`
-    auto genericTy = DynamicCast<const GenericType*>(&type);
+    auto genericTy = DynamicCast<GenericType*>(&type);
     if (genericTy != nullptr) {
+        genericTy = StaticCast<GenericType*>(genericTy->GetDataType(builder));
         auto it = replaceTable.find(genericTy);
         if (it != replaceTable.end()) {
             return it->second;

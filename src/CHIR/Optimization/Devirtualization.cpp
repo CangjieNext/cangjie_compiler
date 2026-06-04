@@ -242,7 +242,7 @@ void Devirtualization::RewriteToApply(CHIRBuilder& builder, std::vector<RewriteI
         auto thisDerefType = thisType->StripAllRefs();
         auto instThisType = GetInstParentType(
             *thisDerefType, *realFunc->GetFuncType()->GetParamTypes()[0]->StripAllRefs(), builder);
-        if (thisDerefType->IsClassOrArray() || realFunc->TestAttr(Attribute::MUT)) {
+        if (thisDerefType->IsReferenceType() || realFunc->TestAttr(Attribute::MUT)) {
             instThisType = builder.GetType<RefType>(instThisType);
         }
         if (rewriteInfo->thisType->IsBuiltinType()) {
