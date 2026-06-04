@@ -136,7 +136,13 @@ std::pair<CHIR::Type*, FuncCallType> Translator::GetExactParentTypeAndFuncType(
     auto funcType = StaticCast<FuncType*>(TranslateType(expr.GetTy()));
     auto paramTys = funcType->GetParamTypes();
     if (!funcDecl.TestAttr(AST::Attribute::STATIC)) {
-        paramTys.insert(paramTys.begin(), &thisType);
+        auto firstParamTy = &thisType;
+        if (funcDecl.funcBody->paramLists[0]->thisParam) {
+            auto astModal = funcDecl.funcBody->paramLists[0]->thisParam->modal;
+            auto chirModal = ASTModal2CHIRModal(astModal);
+            firstParamTy = builder.WithModal(firstParamTy, chirModal);
+        }
+        paramTys.insert(paramTys.begin(), firstParamTy);
         funcType = builder.GetType<FuncType>(paramTys, funcType->GetReturnType());
     }
     std::vector<Type*> funcInstArgs;
@@ -223,10 +229,14 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
     }
     
     // 1. calculate `thisType`
-    auto thisType = currentFunc->GetParentCustomTypeOrExtendedType();
-    CJC_NULLPTR_CHECK(thisType);
-    auto thisDerefTy = thisType;
     auto funcDecl = StaticCast<AST::FuncDecl*>(expr.ref.target);
+    Type* thisType = currentFunc->GetParentCustomTypeOrExtendedType();
+    if (funcDecl->funcBody->paramLists[0]->thisParam) {
+        auto astModal = funcDecl->funcBody->paramLists[0]->thisParam->modal;
+        auto chirModal = ASTModal2CHIRModal(astModal);
+        thisType = builder.WithModal(thisType, chirModal);
+    }
+    CJC_NULLPTR_CHECK(thisType);
     thisType = AddRefIfFuncIsMutOrClass(*thisType, *funcDecl, builder);
 
     // 2. calculate if is virtual func call
@@ -246,7 +256,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
         }
         B.foo()  // should print "2"
     */
-    if (auto customType = DynamicCast<CustomType*>(thisDerefTy)) {
+    if (auto customType = DynamicCast<CustomType*>(thisType->StripAllRefs())) {
         caller = customType->GetCustomTypeDef();
     }
     auto isVirtualFuncCall = IsVirtualFuncCall(*caller, *funcDecl, false);
@@ -274,7 +284,6 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
     thisType = AddRefIfFuncIsMutOrClass(*thisType, *funcDecl, builder);
 
     // 2. calculate if is virtual func call
-
     auto thisDerefTy = thisType->StripAllRefs();
     bool isVirtualFuncCall = false;
     bool isSuper = false;
@@ -567,8 +576,11 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
                         path.insert(path.begin(), name);
                         readOnly = readOnly || !StaticCast<AST::VarDecl*>(refTarget)->isVar;
 
-                        targetBaseASTTy = refTarget->outerDecl->GetTy();
-                        CJC_ASSERT(targetBaseASTTy->IsStruct() || targetBaseASTTy->IsClass());
+                        AST::FuncDecl* curMemberFunc = StaticCast<AST::FuncDecl*>(refTarget);
+                        CJC_ASSERT(curMemberFunc && TypeManager::HasThisParam(*curMemberFunc));
+                        auto& tm = const_cast<TypeManager&>(typeManager);
+                        targetBaseASTTy = refTarget->outerDecl->GetTy().With(tm.GetThisParamTy(*curMemberFunc).Mode());
+                        CJC_ASSERT(targetBaseASTTy.Ty()->IsStruct() || targetBaseASTTy.Ty()->IsClass());
 
                         // this is a hack
                         base = nullptr;
