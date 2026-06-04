@@ -426,6 +426,9 @@ PackageFormat::CHIRExprKind Serialize(const ExprKind& kind)
         case ExprKind::EXIT:
             ret = CHIRExprKind_Exit;
             break;
+        case ExprKind::EXCLAVE:
+            ret = CHIRExprKind_Exclave;
+            break;
         case ExprKind::APPLY_WITH_EXCEPTION:
             ret = CHIRExprKind_TryApply;
             break;

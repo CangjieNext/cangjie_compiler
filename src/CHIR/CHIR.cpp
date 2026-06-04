@@ -650,6 +650,7 @@ void ToCHIR::RunOptimizationPass()
 
 bool ToCHIR::RunConstantEvaluation()
 {
+    return true;
     if (!opts.IsConstEvalEnabled() || opts.enIncrementalCompilation || !opts.commonPartCjos.empty()) {
         return true;
     }
