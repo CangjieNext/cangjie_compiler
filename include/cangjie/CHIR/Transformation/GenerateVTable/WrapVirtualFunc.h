@@ -43,7 +43,7 @@ private:
     FuncType* RemoveThisArg(FuncType* funcTy);
     void HandleVirtualFuncWrapperForIncrCompilation(const Function* wrapper, const Function& curFunc);
     FuncType* GetWrapperFuncType(FuncType& parentFuncTyWithoutThisArg,
-        Type& selfTy, const std::unordered_map<const GenericType*, Type*>& replaceTable, bool isStatic);
+        Type& selfTy, const std::unordered_map<const GenericType*, Type*>& replaceTable, bool isStatic, ModalInfo& modal);
 
 private:
     CHIRBuilder& builder;

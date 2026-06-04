@@ -72,7 +72,13 @@ FuncType* AdjustFuncType(FuncType& funcType, const AST::FuncDecl& funcDecl, CHIR
     if (IsInstanceMember(funcDecl)) {
         std::vector<Type*> paramsTy;
         paramsTy.reserve(params.size() + 1); // additional 1 means the type of this.
-        auto thisTy = chirType.TranslateType(*funcDecl.outerDecl->GetTy());
+        Type* thisTy = nullptr;
+        auto& paramList = funcDecl.funcBody->paramLists[0];
+        if (paramList->thisParam) {
+            thisTy = chirType.TranslateType(paramList->thisParam->GetTy());
+        } else {
+            thisTy = chirType.TranslateType(funcDecl.outerDecl->GetTy());
+        }
         paramsTy.emplace_back(AddRefIfFuncIsMutOrClass(*thisTy, funcDecl, builder));
         paramsTy.insert(paramsTy.end(), params.begin(), params.end());
 
@@ -326,7 +332,11 @@ std::pair<Type*, bool> GetInstMemberTypeByNameCheckingReadOnly(
     auto member = GetMemberVarByName(*customTypeDef, currentName);
     // if one member is readonly in path, the result is readonly
     bool isReadOnly = member.TestAttr(Attribute::READONLY);
-    auto memberTy = ReplaceRawGenericArgType(*member.type, instMap, builder);
+    Type* memberTy = member.type;
+    if (rootType.IsModal()) {
+        memberTy = builder.WithModal(memberTy, rootType.GetModalInfo());
+    }
+    memberTy = ReplaceRawGenericArgType(*memberTy, instMap, builder);
     if (names.size() > 1) {
         auto pureMemberTy = memberTy->StripAllRefs();
         if (pureMemberTy->IsNominal()) {
@@ -366,8 +376,10 @@ std::pair<Type*, bool> GetInstMemberTypeByNameCheckingReadOnly(
         }
     }
     CJC_NULLPTR_CHECK(concreteType);
-    return GetInstMemberTypeByNameCheckingReadOnly(
-        *StaticCast<CustomType*>(concreteType->StripAllRefs()), names, builder);
+    if (rootType.IsModal()) {
+        concreteType = builder.WithModal(concreteType->StripAllRefs(), rootType.GetModalInfo());
+    }
+    return GetInstMemberTypeByNameCheckingReadOnly(*StaticCast<CustomType*>(concreteType), names, builder);
 }
 
 Type* AddRefIfFuncIsMutOrClass(Type& thisType, const AST::FuncDecl& funcDecl, CHIRBuilder& builder)
@@ -375,10 +387,25 @@ Type* AddRefIfFuncIsMutOrClass(Type& thisType, const AST::FuncDecl& funcDecl, CH
     if (thisType.IsRef()) {
         return &thisType;
     }
-    if (thisType.IsClassOrArray() || funcDecl.TestAnyAttr(AST::Attribute::MUT, AST::Attribute::CONSTRUCTOR)) {
+    if (thisType.IsReferenceType() || funcDecl.TestAnyAttr(AST::Attribute::MUT, AST::Attribute::CONSTRUCTOR)) {
         return builder.GetType<RefType>(&thisType);
     } else {
         return &thisType;
+    }
+}
+
+ModalInfo ASTModal2CHIRModal(const AST::ModalInfo& astModal)
+{
+    switch (astModal.local) {
+        case AST::LocalModal::NOT:
+            return ModalInfo(LocalModal::NONE);
+        case AST::LocalModal::HALF:
+            return ModalInfo(LocalModal::MAYBE);
+        case AST::LocalModal::FULL:
+            return ModalInfo(LocalModal::MUST);
+        default:
+            CJC_ABORT();
+            return ModalInfo(LocalModal::NONE);
     }
 }
 } // namespace CHIR

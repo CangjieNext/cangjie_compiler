@@ -172,6 +172,7 @@ private:
     void ReplaceSrcCodeImportedValueWithSymbol();
     void Canonicalization();
     void ClearASTResources();
+    void SetMemoryRegion();
 
     template <typename T>
     std::pair<Value*, Apply*> DoCFFIFuncWrapper(T& curFunc, bool isForeign, bool isExternal = true);

@@ -78,7 +78,7 @@ bool IsMutableVarType(const Value& value)
         return false;
     }
     // type is ref, but not ref a class or array, that means this type is a mutable var's type
-    return !ref->GetBaseType()->IsClassOrArray();
+    return !ref->GetBaseType()->IsReferenceType();
 }
 
 void CollectNestedLambdaExpr(
@@ -1332,7 +1332,7 @@ std::vector<Type*> ClosureConversion::ConvertArgsType(const std::vector<Type*>& 
 
 Type* ClosureConversion::ConvertTupleType(const TupleType& type)
 {
-    return builder.GetType<TupleType>(ConvertArgsType(type.GetElementTypes()));
+    return builder.GetType<TupleType>(ConvertArgsType(type.GetElementTypes()), type.GetModalInfo());
 }
 
 Type* ClosureConversion::ConvertFuncType(const FuncType& type)
@@ -1344,32 +1344,32 @@ Type* ClosureConversion::ConvertFuncType(const FuncType& type)
 
 Type* ClosureConversion::ConvertEnumType(const EnumType& type)
 {
-    return builder.GetType<EnumType>(type.GetEnumDef(), ConvertArgsType(type.GetGenericArgs()));
+    return builder.GetType<EnumType>(type.GetEnumDef(), ConvertArgsType(type.GetGenericArgs()), type.GetModalInfo());
 }
 
 Type* ClosureConversion::ConvertStructType(const StructType& type)
 {
-    return builder.GetType<StructType>(type.GetStructDef(), ConvertArgsType(type.GetGenericArgs()));
+    return builder.GetType<StructType>(type.GetStructDef(), ConvertArgsType(type.GetGenericArgs()), type.GetModalInfo());
 }
 
 Type* ClosureConversion::ConvertClassType(const ClassType& type)
 {
-    return builder.GetType<ClassType>(type.GetClassDef(), ConvertArgsType(type.GetGenericArgs()));
+    return builder.GetType<ClassType>(type.GetClassDef(), ConvertArgsType(type.GetGenericArgs()), type.GetModalInfo());
 }
 
 Type* ClosureConversion::ConvertRawArrayType(const RawArrayType& type)
 {
-    return builder.GetType<RawArrayType>(ConvertTypeToClosureType(*type.GetElementType()), type.GetDims());
+    return builder.GetType<RawArrayType>(ConvertTypeToClosureType(*type.GetElementType()), type.GetDims(), type.GetModalInfo());
 }
 
 Type* ClosureConversion::ConvertVArrayType(const VArrayType& type)
 {
-    return builder.GetType<VArrayType>(ConvertTypeToClosureType(*type.GetElementType()), type.GetSize());
+    return builder.GetType<VArrayType>(ConvertTypeToClosureType(*type.GetElementType()), type.GetSize(), type.GetModalInfo());
 }
 
 Type* ClosureConversion::ConvertCPointerType(const CPointerType& type)
 {
-    return builder.GetType<CPointerType>(ConvertTypeToClosureType(*type.GetElementType()));
+    return builder.GetType<CPointerType>(ConvertTypeToClosureType(*type.GetElementType()), type.GetModalInfo());
 }
 
 Type* ClosureConversion::ConvertRefType(const RefType& type)
