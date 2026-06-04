@@ -30,6 +30,9 @@
 #include "cangjie/Utils/SafePointer.h"
 
 namespace Cangjie::AST {
+using Cangjie::LocalModal;
+using Cangjie::ModalInfo;
+
 struct Decl;
 struct GenericParamDecl;
 struct ClassDecl;
@@ -628,10 +631,7 @@ struct PointerTy : Ty {
      */
     std::string String() const override;
     size_t Hash() const override;
-    bool operator==(const Ty& other) const override
-    {
-        return kind == other.kind && typeArgs == other.typeArgs;
-    }
+    bool operator==(const Ty& other) const override;
 };
 
 struct CStringTy : Ty {

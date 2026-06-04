@@ -202,7 +202,6 @@ OwnedPtr<Decl> ParserImpl::ParseVarWithPatternDecl(
     if (!ret->isConst && HasModifier(modifiers, TokenKind::CONST)) {
         // diag modifier
         DiagUnExpectedModifierOnDeclaration(*ret);
-        CheckMakeCopy(*ret);
         return ret;
     }
     if (ret->initializer == nullptr) {
@@ -214,7 +213,6 @@ OwnedPtr<Decl> ParserImpl::ParseVarWithPatternDecl(
             DiagExpectedInitializerForToplevelVar(*ret);
         }
     }
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -300,7 +298,6 @@ OwnedPtr<Decl> ParserImpl::ParseVarDecl(
     ret->modifiers.insert(modifiers.begin(), modifiers.end());
     CheckVarDeclModifiers(modifiers, ret.get(), scopeKind, keyToken);
 
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -978,7 +975,6 @@ OwnedPtr<FuncDecl> ParserImpl::ParseFinalizer(
             DiagKindRefactor::parse_invalid_return_type, *funcDecl->funcBody->retType, "finalizer");
         funcDecl->EnableAttr(Attribute::HAS_BROKEN);
     }
-    CheckMakeCopy(*funcDecl);
     return funcDecl;
 }
 
@@ -1027,7 +1023,6 @@ OwnedPtr<FuncDecl> ParserImpl::ParseConstructor(
     ParseFuncDeclAnnos(annos, *funcDecl);
     CheckConstructorBody(*funcDecl, scopeKind);
 
-    CheckMakeCopy(*funcDecl);
     return funcDecl;
 }
 
@@ -1090,7 +1085,6 @@ OwnedPtr<PrimaryCtorDecl> ParserImpl::ParsePrimaryConstructor(
         ParseDiagnoseRefactor(
             DiagKindRefactor::parse_invalid_return_type, *primaryCtorDecl->funcBody->retType, "primary constructor");
     }
-    CheckMakeCopy(*primaryCtorDecl);
     return primaryCtorDecl;
 }
 
@@ -1277,7 +1271,6 @@ OwnedPtr<Decl> ParserImpl::ParseEnumConstructorWithArgs(const Token& id, PtrVect
     ret->end = lastToken.End();
     ret->EnableAttr(Attribute::ENUM_CONSTRUCTOR);
     ret->annotations = std::move(annos);
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1290,7 +1283,6 @@ OwnedPtr<Decl> ParserImpl::ParseNoArgsEnumConstructor(const Token& id, PtrVector
     ret->isVar = false;
     ret->EnableAttr(Attribute::ENUM_CONSTRUCTOR);
     ret->annotations = std::move(annos);
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1435,7 +1427,6 @@ OwnedPtr<ClassDecl> ParserImpl::ParseClassDecl(
 
     CheckCJMappingAttr(*ret);
 
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1469,7 +1460,6 @@ OwnedPtr<InterfaceDecl> ParserImpl::ParseInterfaceDecl(
         Interop::ObjC::InsertSyntheticClassDecl(*ret, *currentFile);
     }
 
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1584,7 +1574,6 @@ OwnedPtr<EnumDecl> ParserImpl::ParseEnumDecl(
             ret->EnableAttr(Attribute::IS_BROKEN);
             ret->bodyScope = MakeOwned<DummyBody>(); // The 'bodyScope' must exist.
             ret->end = lastToken.End();
-            CheckMakeCopy(*ret);
             return ret;
         }
     }
@@ -1595,7 +1584,6 @@ OwnedPtr<EnumDecl> ParserImpl::ParseEnumDecl(
 
     CheckCJMappingAttr(*ret);
 
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1672,7 +1660,6 @@ OwnedPtr<StructDecl> ParserImpl::ParseStructDecl(
 
     CheckCJMappingAttr(*ret);
 
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1732,7 +1719,6 @@ OwnedPtr<TypeAliasDecl> ParserImpl::ParseTypeAlias(
     // added to T for type A in a later compiler phase.
     ret->type = ParseType();
     ret->end = lastToken.End();
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1773,7 +1759,6 @@ OwnedPtr<ExtendDecl> ParserImpl::ParseExtendDecl(
     ParseExtendBody(*ret);
     ret->end = lastToken.End();
     ret->bodyScope->end = ret->end;
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -1809,7 +1794,6 @@ OwnedPtr<GenericParamDecl> ParserImpl::ParseGenericParamDecl()
     ret->begin = lookahead.Begin();
     ret->end = lookahead.End();
     Next();
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -2013,7 +1997,6 @@ OwnedPtr<MainDecl> ParserImpl::ParseMainDecl(
         ret->EnableAttr(Attribute::UNSAFE);
         SetUnsafe(ret.get(), modifiers);
     }
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -2093,7 +2076,6 @@ OwnedPtr<AST::FuncDecl> ParserImpl::ParseFuncDecl(
     if (scopeKind != ScopeKind::CLASS_BODY) {
         ffiParser->ObjC().CheckInitAnnotation(*ret);
     }
-    CheckMakeCopy(*ret);
     return ret;
 }
 
@@ -2685,29 +2667,5 @@ template <typename T> void ParserImpl::CheckIntrinsicFunc(T& fd)
         DiagDuplicatedIntrinsicFunc(fd, **iter);
     } else {
         intrinsics.emplace(&fd);
-    }
-}
-
-void ParserImpl::CheckMakeCopy(Decl& decl)
-{
-    if (auto st = DynamicCast<StructDecl>(&decl)) {
-        Annotation* first{};
-        for (auto& anno : decl.annotations) {
-            if (anno->kind != AnnotationKind::MAKE_COPY) {
-                continue;
-            }
-            if (first) {
-                DiagDuplicatedAnno(*anno, *first);
-            } else {
-                first = anno.get();
-                st->SetIsCopyType();
-            }
-        }
-    } else {
-        for (auto& anno : decl.annotations) {
-            if (anno->kind == AnnotationKind::MAKE_COPY) {
-                DiagUnexpectedAnnoOnKind(*anno, decl.identifier.Begin(), anno->identifier, decl.astKind);
-            }
-        }
     }
 }

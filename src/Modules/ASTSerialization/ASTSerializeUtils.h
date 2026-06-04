@@ -92,8 +92,8 @@ inline bool IsExportedMemberFunc(const AST::FuncDecl& fd)
     return fd.linkage != Linkage::INTERNAL;
 }
 
-TModeOffset SaveModal(flatbuffers::FlatBufferBuilder& fbb, AST::ModalInfo modal);
-AST::ModalInfo ReadModal(const PackageFormat::Mode* mode);
+TModeOffset SaveModal(flatbuffers::FlatBufferBuilder& fbb, ModalInfo modal);
+ModalInfo ReadModal(const PackageFormat::Mode* mode);
 
 /// Omits the vector when \p modes is empty or every element is 0.
 TVectorOffset<TModeOffset> CreateTyModesVector(
@@ -102,7 +102,7 @@ TVectorOffset<TModeOffset> CreateTyModesVector(
 /// When every modal is default (@~local), returns 0; otherwise saves each Mode (including NOT) and
 /// returns a tyModes vector via CreateTyModesVector.
 TVectorOffset<TModeOffset> SaveModalVector(
-    flatbuffers::FlatBufferBuilder& fbb, const std::vector<AST::ModalInfo>& modals);
+    flatbuffers::FlatBufferBuilder& fbb, const std::vector<ModalInfo>& modals);
 
 /// Applies modal from serialized Mode; skips substitution when \p mode is null.
 Ptr<AST::Ty> ApplyLoadedModal(TypeManager& typeManager, Ptr<AST::Ty> shape, const PackageFormat::Mode* mode);

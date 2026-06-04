@@ -21,6 +21,9 @@
 #include "cangjie/Modules/ImportManager.h"
 
 namespace Cangjie {
+/** Join modal info from a set of types (bitwise OR of each type's modal). */
+ModalInfo JoinModals(const std::set<Ptr<AST::Ty>>& tys);
+
 struct DualMode {
     Ptr<AST::Ty> bound; // Any for join, Nothing for meet
     std::function<Ptr<AST::Ty>(const std::set<Ptr<AST::Ty>>&)> coFunc; // join for join, meet for meet

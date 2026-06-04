@@ -50,6 +50,9 @@ void TypeChecker::TypeCheckerImpl::CheckSealedInheritance(const Decl& child, con
     if (target == nullptr) {
         return;
     }
+    if (child.astKind == ASTKind::STRUCT_DECL && typeManager.IsCopyInterfaceTy(parent.GetTy())) {
+        return;
+    }
     if (target->TestAttr(Attribute::SEALED)) {
         if (target->TestAttr(Attribute::IMPORTED) && !child.TestAttr(Attribute::IMPORTED)) {
             // Parent is imported, and child is defined in current package.

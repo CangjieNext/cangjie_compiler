@@ -522,7 +522,6 @@ private:
     void ParseFuncParameters(const ScopeKind& scopeKind, AST::FuncBody& fb);
     void DiagThisParamNotAllowed(const AST::ThisParam& thisParam);
     void DiagLocalFuncNotLocal(const FuncDecl& funcDecl);
-    void CheckMakeCopy(Decl& decl);
     OwnedPtr<AST::MacroDecl> ParseMacroDecl(ScopeKind scopeKind, const std::set<AST::Modifier>& modifiers,
         std::vector<OwnedPtr<AST::Annotation>> annos = {});
     bool ParseMacroCallTokens(TokenKind left, std::vector<Token>& tokens);

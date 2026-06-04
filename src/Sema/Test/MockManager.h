@@ -93,7 +93,7 @@ private:
         OwnedPtr<AST::Expr> exprToCast, const Ptr<AST::Ty> castTy
     ) const;
     OwnedPtr<AST::AssignExpr> CreateMemberAssignment(
-        AST::VarDecl& member, OwnedPtr<AST::Expr> rhsExpr, AST::ModalInfo modal) const;
+        AST::VarDecl& member, OwnedPtr<AST::Expr> rhsExpr, ModalInfo modal) const;
 
     OwnedPtr<AST::MatchCase> CreateOnCallReturnZeroMatchCase(
         const AST::FuncDecl& originalFunc, const Ptr<AST::Ty> zeroValueTy, AST::Decl& enumConstructor) const;

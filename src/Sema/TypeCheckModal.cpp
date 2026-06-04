@@ -51,9 +51,9 @@ struct FuncContext {
 /// 1. Check return expression of a function body cannot have internal @local! type
 /// 2. Check global var cannot have local type
 /// 3. Check call expr args cannot be external @local! type if the param is @local! nor Copy
-/// 4. Check validity of @MakeCopy
+/// 4. Check validity of struct inheriting Copyable
 /// 5. Check local of captured variables
-/// 6. Check manually implements Copy
+/// 6. Check non-struct types cannot inherit Copyable (in PreCheckInvalidInherit)
 /// 7. Check assignment/member-assignment
 /// 8. Check exclave expr is inside a function, or global or static var initializer (not counting default param values
 /// as inside that function)
@@ -78,9 +78,6 @@ struct ModalTypeChecker {
                 }
                 if (node->TestAnyAttr(Attribute::IS_BROKEN, Attribute::HAS_BROKEN)) {
                     return VisitAction::SKIP_CHILDREN;
-                }
-                if (auto decl = DynamicCast<InheritableDecl>(node)) {
-                    CheckImplementsCopy(*decl);
                 }
                 if (auto decl = DynamicCast<StructDecl>(node)) {
                     if (decl->IsCopyType()) {
@@ -194,9 +191,7 @@ struct ModalTypeChecker {
                     return false;
                 }
                 auto func = DynamicCast<FuncDecl>(node->node);
-                if (!func) {
-                    return false;
-                }
+                CJC_NULLPTR_CHECK(func);
                 for (auto& fp : func->funcBody->paramLists[0]->params) {
                     if (fp.get() == param) {
                         // rule 4
@@ -236,7 +231,7 @@ private:
         }
         auto r = CollectReturnedExpr(*body);
         for (auto& e : r) {
-            if (!IsExternalLocal(ctx, *e) && type.NeverImplementsCopyInterface(e->GetTy()) &&
+            if (!IsExternalLocal(ctx, *e) && !type.ImplementsCopyInterface(e->GetTy()) &&
                 !IsInExclaveExpr(ctx, *e)) {
                 DiagBadInternalLocalReturn(*e);
             }
@@ -388,7 +383,7 @@ private:
                 CJC_NULLPTR_CHECK(targetTy);
 
                 // non copy non @~local type, needs a region
-                if ((targetTy->IsLocalType() && type.NeverImplementsCopyInterface(targetTy)) ||
+                if ((targetTy->IsLocalType() && !type.ImplementsCopyInterface(targetTy)) ||
                     (!type.ImplementsCopyInterface(targetTy) && !targetTy->IsDataType())) {
                     needsRegion = true;
                     return VisitAction::STOP_NOW;
@@ -491,15 +486,14 @@ private:
     void CheckAssignExprRef(
         const ASTContext& ctx, const AssignExpr& assign, const Expr* left, LocalModal lLocal, LocalModal rLocal)
     {
-        // When llocal is ~, rlocal must be ~
+        // When llocal is @~local, rlocal must be @~local
         if (lLocal == LocalModal::NOT) {
             if (rLocal != LocalModal::NOT) {
                 DiagBadAssignment(assign, {}, assign.rightExpr->GetTy());
             }
             return;
         }
-        // 1. @local? (HALF): member assignment (this/implicit this) only in @local? ctor or finalizer; whole var not
-        // restricted
+        // @local?: member assignment (this/implicit this) only in @local? ctor or finalizer; whole var not restricted
         if (lLocal == LocalModal::HALF) {
             auto ref = StaticCast<RefExpr>(left);
             auto target = ref->GetTarget();
@@ -513,38 +507,36 @@ private:
             diag.AddNote("This assignment is only allowed in @local? constructor or finalizer.");
             return;
         }
-        // 2. @local! (FULL): capture
         if (IsCapture(ctx, *left)) {
             if (lLocal != LocalModal::FULL && rLocal == LocalModal::NOT) {
                 return;
             }
-            DiagBadAssignment(assign, ModalInfo{lLocal}, assign.rightExpr->GetTy());
+            DiagBadAssignment(assign, {lLocal}, assign.rightExpr->GetTy());
             return;
         }
-        // 3. @local! (FULL): both FULL, external vs internal
+        // @local!: both @local!, external vs internal
         if (rLocal == LocalModal::FULL) {
             auto lext = IsExternalLocal(ctx, *left);
             auto rext = IsExternalLocal(ctx, *assign.rightExpr.get());
             if (lext != rext) {
-                DiagBadAssignment(assign, ModalInfo{LocalModal::FULL}, assign.rightExpr->GetTy(), lext, rext);
+                DiagBadAssignment(assign, {LocalModal::FULL}, assign.rightExpr->GetTy(), lext, rext);
             }
         } else {
-            // 4. @local! (FULL): else
-            DiagBadAssignment(assign, ModalInfo{lLocal}, assign.rightExpr->GetTy());
+            DiagBadAssignment(assign, {lLocal}, assign.rightExpr->GetTy());
         }
     }
 
     void CheckAssignExprMa(
         const ASTContext& ctx, const AssignExpr& assign, const Expr* left, LocalModal lLocal, LocalModal rLocal)
     {
-        // When llocal is ~, rlocal must be ~
+        // When llocal is @~local, rlocal must be @~local
         if (lLocal == LocalModal::NOT) {
             if (rLocal != LocalModal::NOT) {
                 DiagBadAssignment(assign, {}, assign.rightExpr->GetTy());
             }
             return;
         }
-        // @local? (HALF): ma is allowed; allow only in @local? ctor or finalizer
+        // @local?: ma is allowed; allow only in @local? ctor or finalizer
         if (lLocal == LocalModal::HALF) {
             if (IsInLocalQuestCtorOrAnyFinalizer(ctx, assign.scopeName)) {
                 return;
@@ -556,12 +548,10 @@ private:
         // lLocal == FULL
         if (rLocal == LocalModal::FULL) {
             auto lext = IsExternalLocal(ctx, *left);
-            auto rext = IsExternalLocal(ctx, *assign.rightExpr.get());
+            auto rext = IsExternalLocal(ctx, *assign.rightExpr);
             if (lext != rext) {
-                DiagBadAssignment(assign, ModalInfo{LocalModal::FULL}, assign.rightExpr->GetTy(), lext, rext);
+                DiagBadAssignment(assign, {LocalModal::FULL}, assign.rightExpr->GetTy(), lext, rext);
             }
-        } else {
-            DiagBadAssignment(assign, ModalInfo{lLocal}, assign.rightExpr->GetTy());
         }
     }
 
@@ -621,23 +611,6 @@ private:
         std::string arg1 = (lExternal ? " external " : " internal ") + lModal.LocalString();
         std::string arg2 = (rExternal ? " external " : " internal ") + rTy->String();
         return d.DiagnoseRefactor(DiagKindRefactor::sema_bad_local_assignment, position, arg1, arg2);
-    }
-
-    void CheckImplementsCopy(const InheritableDecl& decl)
-    {
-        for (auto& parent : decl.inheritedTypes) {
-            if (!Ty::IsTyCorrect(parent->GetTy())) {
-                continue;
-            }
-            if (type.IsCopyInterfaceTy(parent->GetTy())) {
-                DiagImplementsCopy(*parent);
-            }
-        }
-    }
-
-    void DiagImplementsCopy(const Node& position)
-    {
-        d.Diagnose(position, DiagKind::sema_interface_is_not_implementable, std::string{COPY_NAME});
     }
 
     void CheckFinalizerThisParam(const FuncDecl& func)
@@ -797,7 +770,9 @@ private:
         if (func.ownerFunc || func.TestAnyAttr(Attribute::CONSTRUCTOR, Attribute::ENUM_CONSTRUCTOR)) {
             return false;
         }
-        // fix later: check prop
+        if (func.propDecl) {
+            Is<InheritableDecl>(func.outerDecl) && !func.propDecl->TestAttr(Attribute::STATIC);
+        }
         return Is<InheritableDecl>(func.outerDecl) && !func.TestAttr(Attribute::STATIC);
     }
 
@@ -835,7 +810,8 @@ private:
         ModalInfo modal;
         std::string_view name;
     };
-    static FuncParamInfo GetFuncParam(const CallExpr& call, size_t index)
+
+    FuncParamInfo GetFuncParam(const CallExpr& call, size_t index)
     {
         if (auto inner = DynamicCast<CallExpr>(call.desugarExpr.get())) {
             return GetFuncParam(*inner, index);
@@ -862,8 +838,7 @@ private:
         }
         if (IsNonStaticMemberFunction(*func)) {
             if (index == 0) {
-                // fix later: get this type with modal
-                return {func->outerDecl->GetTy(), {}, "this"};
+                return {func->outerDecl->GetTy(), TypeCheckUtil::GetThisParamModal(*func), "this"};
             }
             return {func->funcBody->paramLists[0]->params[index - 1]->GetTy(),
                 func->funcBody->paramLists[0]->params[index - 1]->GetTy()->Modal(),
@@ -1033,7 +1008,7 @@ private:
         d.DiagnoseRefactor(DiagKindRefactor::sema_expected_data_type, node, typeStr);
     }
 
-    /// Check validity of @MakeCopy
+    /// Check field types when struct inherits Copyable
     void CheckCopyType(StructDecl& decl)
     {
         for (auto member : decl.GetMemberDeclPtrs()) {
@@ -1116,11 +1091,6 @@ void TypeChecker::TypeCheckerImpl::DiagExpectedDataType(const AST::Node& node)
     diag.DiagnoseRefactor(DiagKindRefactor::sema_expected_data_type, node, node.GetTy()->String());
 }
 
-DiagnosticBuilder TypeChecker::TypeCheckerImpl::DiagUndeclaredIdentifier(Range range, const std::string& identifier)
-{
-    return diag.DiagnoseRefactor(DiagKindRefactor::sema_undeclared_identifier, range, identifier);
-}
-
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynExclaveExpr(ASTContext& ctx, ExclaveExpr& expr)
 {
     // DiagExclaveOutsideFunc is only reported in ModalCheckExclaveInsideFunction.
@@ -1187,7 +1157,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynExclaveExpr(ASTContext& ctx, ExclaveExp
     return expr.GetTy();
 }
 
-void TypeChecker::TypeCheckerImpl::CheckHasLocalMod(const AST::Expr& node, AST::LocalModal local)
+void TypeChecker::TypeCheckerImpl::CheckHasLocalMod(const AST::Expr& node, LocalModal local)
 {
     if (!Ty::IsTyCorrect(node.GetTy())) {
         return;
@@ -1197,7 +1167,7 @@ void TypeChecker::TypeCheckerImpl::CheckHasLocalMod(const AST::Expr& node, AST::
     }
 }
 
-void TypeChecker::TypeCheckerImpl::DiagLocalModNotSatisfied(const AST::Expr& node, AST::LocalModal local)
+void TypeChecker::TypeCheckerImpl::DiagLocalModNotSatisfied(const AST::Expr& node, LocalModal local)
 {
     diag.DiagnoseRefactor(DiagKindRefactor::sema_local_modal_not_satisfied, node, std::string{ToString(local)},
         node.GetTy()->String());

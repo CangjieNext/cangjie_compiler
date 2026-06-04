@@ -200,7 +200,7 @@ std::pair<bool, Ptr<AST::Decl>> GetRealMemberDecl(AST::Decl& decl);
  * Return 'decl' it self for non-propDecl, return getter/setter function for propDecl.
  */
 Ptr<AST::Decl> GetUsedMemberDecl(
-    TypeManager& tym, DiagnosticEngine& d, AST::Decl& decl, bool isGetter, AST::ModalInfo expectModal);
+    TypeManager& tym, DiagnosticEngine& d, AST::Decl& decl, bool isGetter, ModalInfo expectModal);
 std::string DeclKindToString(const AST::Decl& decl);
 /**
  * Get string of given decls' ast type.
@@ -211,7 +211,7 @@ std::pair<Ptr<AST::FuncDecl>, Ptr<AST::FuncDecl>> GetUsableGetterSetterForProper
 
 /// @param pos the position to report an error
 Ptr<AST::FuncDecl> GetUsableAccessorForProperty(TypeManager& tm, DiagnosticEngine& diag, AST::PropDecl& pd,
-    AST::ModalInfo thisModal, AST::Expr* pos, bool isGetter);
+    ModalInfo thisModal, AST::Expr* pos, bool isGetter);
 Ptr<AST::FuncDecl> GetUsableGetterForProperty(TypeManager& tm, DiagnosticEngine& diag, AST::PropDecl& pd);
 Ptr<AST::FuncDecl> GetUsableSetterForProperty(TypeManager& tm, DiagnosticEngine& diag, AST::PropDecl& pd);
 /** Collect all related extends of 'decl' and it's super classes' extends if exist. */
@@ -229,7 +229,7 @@ inline Ptr<AST::InheritableDecl> GetCurInheritableDecl(const ASTContext& ctx, co
 /* Utils for TypeCheckCall and TypeArgumentInference */
 bool IsCStringConstructor(const AST::FuncDecl& fd);
 /// Get a ctor call modal written by the user, e.g. Foo @local!() or Option<Int> @local.Some(1). Returns empty if none.
-std::optional<AST::ModalInfo> GetCallBaseModal(const AST::CallExpr& ce);
+std::optional<ModalInfo> GetCallBaseModal(const AST::CallExpr& ce);
 bool IsEnumCtorWithoutTypeArgs(const AST::Expr& expr, Ptr<const AST::Decl> target);
 TyVars GetTyVars(const AST::FuncDecl& fd, const AST::CallExpr& ce, bool ignoreContext = false);
 TyVars GetTyVarsToSolve(const SubstPack& maps);
@@ -261,13 +261,13 @@ Ptr<const AST::Modifier> FindModifier(const AST::Decl& d, TokenKind kind);
  */
 Ptr<AST::Annotation> FindFirstAnnotation(const AST::Decl& decl, AST::AnnotationKind kind);
 
-AST::ModalInfo GetThisParamModal(const AST::FuncDecl& fd);
+ModalInfo GetThisParamModal(const AST::FuncDecl& fd);
 
 /**
  * From @p scopeName's current scope, walk outward to the first non-static FuncDecl
  * Returns that function's `this` parameter modal.
  */
-AST::ModalInfo GetCurThisModal(const ASTContext& ctx, const std::string& scopeName);
+ModalInfo GetCurThisModal(const ASTContext& ctx, const std::string& scopeName);
 
 bool HasModifier(const std::set<AST::Modifier>& modifiers, TokenKind kind);
 
@@ -289,7 +289,7 @@ bool LessThanAll(Ptr<AST::Ty> ty, const std::set<Ptr<AST::Ty>>& tys,
     const std::function<bool(Ptr<AST::Ty>, Ptr<AST::Ty>)>& lessThan);
 void TryEnforceCandidate(TyVar& tv, const std::set<Ptr<AST::Decl>>& candidates, TypeManager& tyMgr);
 std::set<Ptr<AST::Ty>> TypeMapToTys(
-    const std::map<AST::TypeKind, AST::TypeKind>& m, bool fromKey, AST::ModalInfo modalInfo);
+    const std::map<AST::TypeKind, AST::TypeKind>& m, bool fromKey, ModalInfo modalInfo);
 // get generic params for the decl and outer decl(if there is) and extended decl(if there is)
 std::set<Ptr<AST::Ty>> GetGenericParamsForDecl(const AST::Decl& decl);
 // get generic params for the decl of the type

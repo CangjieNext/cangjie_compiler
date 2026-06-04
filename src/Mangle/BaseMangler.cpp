@@ -172,14 +172,14 @@ std::string DecimalToManglingNumber(const std::string& decimal)
     return base62 + MANGLE_WILDCARD_PREFIX;
 }
 
-std::string MangleLocalModifier(AST::ModalInfo modal)
+std::string MangleLocalModifier(ModalInfo modal)
 {
     switch (modal.local) {
-        case AST::LocalModal::NOT:
+        case LocalModal::NOT:
             return "";
-        case AST::LocalModal::HALF:
+        case LocalModal::HALF:
             return "?";
-        case AST::LocalModal::FULL:
+        case LocalModal::FULL:
             return "!";
         default:
             CJC_ABORT();

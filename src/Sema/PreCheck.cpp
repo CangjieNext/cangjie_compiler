@@ -1987,8 +1987,18 @@ void TypeChecker::TypeCheckerImpl::PreCheckInvalidInherit(const ASTContext& ctx,
         DiagKind kind = id->astKind == ASTKind::INTERFACE_DECL ? DiagKind::sema_interface_is_not_inheritable
                                                                : DiagKind::sema_interface_is_not_implementable;
         for (auto& it : id->inheritedTypes) {
+            if (!Ty::IsTyCorrect(it->GetTy())) {
+                continue;
+            }
             if (it->GetTy()->IsCType()) {
                 diag.Diagnose(*it, kind, CTYPE_NAME);
+            }
+            if (typeManager.IsCopyInterfaceTy(it->GetTy())) {
+                if (id->astKind == ASTKind::STRUCT_DECL) {
+                    DynamicCast<StructDecl*>(id)->SetIsCopyType();
+                } else {
+                    diag.Diagnose(*it, kind, std::string{COPY_NAME});
+                }
             }
         }
     }
@@ -2140,5 +2150,4 @@ void TypeChecker::TypeCheckerImpl::PreCheck(const std::vector<Ptr<ASTContext>>& 
     // Hotfix. Update 'anyTy' in typeManger to real interface 'Any' type.
     UpdateAnyTy();
     UpdateCTypeTy();
-    UpdateCopyTy();
 }

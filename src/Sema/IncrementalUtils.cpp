@@ -15,6 +15,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/ASTCasting.h"
 #include "cangjie/Mangle/ASTMangler.h"
+#include "cangjie/Mangle/BaseMangler.h"
 
 #include "Desugar/DesugarInTypeCheck.h"
 #include "cangjie/IncrementalCompilation/IncrementalCompilationLogger.h"
@@ -160,13 +161,16 @@ void HandleCtorForIncr(
 
 std::string GetTypeRawMangleName(const Ty& ty)
 {
+    std::string name;
     auto boxDecl = Ty::GetDeclPtrOfTy(&ty);
     if (boxDecl) {
-        return boxDecl->rawMangleName;
+        name = boxDecl->rawMangleName;
+    } else {
+        // NOTE: extend of function & tuple type is not supported now.
+        CJC_ASSERT(ty.IsBuiltin());
+        name = ASTMangler::MangleBuiltinType(Ty::KindName(ty.kind));
     }
-    // NOTE: extend of function & tuple type is not supported now.
-    CJC_ASSERT(ty.IsBuiltin());
-    return ASTMangler::MangleBuiltinType(Ty::KindName(ty.kind));
+    return name + MangleUtils::MangleLocalModifier(ty.Modal());
 }
 
 std::string GetRawMangleOfBoxedType(const InheritableDecl& cd)

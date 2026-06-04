@@ -43,29 +43,28 @@ public:
     ~TypeManager();
 
     // Primitive types.
-    static Ptr<AST::PrimitiveTy> GetPrimitiveTy(AST::TypeKind kind, AST::ModalInfo modalInfo = {});
+    static Ptr<AST::PrimitiveTy> GetPrimitiveTy(AST::TypeKind kind, ModalInfo modalInfo = {});
 
     static Ptr<AST::InvalidTy> GetInvalidTy()
     {
         return &theInvalidTy;
     }
-    static Ptr<AST::PrimitiveTy> GetNothingTy(AST::ModalInfo modalInfo = {})
+    static Ptr<AST::PrimitiveTy> GetNothingTy(ModalInfo modalInfo = {})
     {
         return GetPrimitiveTy(AST::TypeKind::TYPE_NOTHING, modalInfo);
     }
-    static Ptr<AST::QuestTy> GetQuestTy(AST::ModalInfo modalInfo = {})
+    static Ptr<AST::QuestTy> GetQuestTy(ModalInfo modalInfo = {})
     {
         return &theQuestTy[ToIndex(modalInfo)];
     }
-    static Ptr<AST::CStringTy> GetCStringTy(AST::ModalInfo modalInfo = {})
+    static Ptr<AST::CStringTy> GetCStringTy(ModalInfo modalInfo = {})
     {
         return &theCStringTy[ToIndex(modalInfo)];
     }
-    static Ptr<AST::PrimitiveTy> GetBoolTy(AST::ModalInfo modalInfo = {})
+    static Ptr<AST::PrimitiveTy> GetBoolTy(ModalInfo modalInfo = {})
     {
         return GetPrimitiveTy(AST::TypeKind::TYPE_BOOLEAN, modalInfo);
     }
-    Ptr<AST::Ty> GetCopyTy() const;
     bool IsCopyInterfaceTy(Ptr<AST::Ty> ty) const;
     /**
      * Check if there are generic types in ty.
@@ -74,36 +73,32 @@ public:
     static bool IsCoreFutureType(const AST::Ty& ty);
 
     /** APIs to generate new type or get existed type from cache. */
-    Ptr<AST::GenericsTy> GetGenericsTy(AST::GenericParamDecl& gpd, AST::ModalInfo modalInfo);
-    Ptr<AST::EnumTy> GetEnumTy(AST::EnumDecl& ed, const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modalInfo);
+    Ptr<AST::GenericsTy> GetGenericsTy(AST::GenericParamDecl& gpd, ModalInfo modalInfo);
+    Ptr<AST::EnumTy> GetEnumTy(AST::EnumDecl& ed, const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modalInfo);
     Ptr<AST::RefEnumTy> GetRefEnumTy(
-        AST::EnumDecl& ed, const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modalInfo);
+        AST::EnumDecl& ed, const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modalInfo);
     Ptr<AST::StructTy> GetStructTy(
-        AST::StructDecl& sd, const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modalInfo);
+        AST::StructDecl& sd, const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modalInfo);
     Ptr<AST::TupleTy> GetTupleTy(
-        const std::vector<Ptr<AST::Ty>>& typeArgs, bool isClosureTy = false, AST::ModalInfo modalInfo = {});
+        const std::vector<Ptr<AST::Ty>>& typeArgs, bool isClosureTy = false, ModalInfo modalInfo = {});
     Ptr<AST::FuncTy> GetFunctionTy(const std::vector<Ptr<AST::Ty>>& paramTys, Ptr<AST::Ty> retTy,
-        AST::FuncTy::Config cfg = {false, false, false, false}, AST::ModalInfo modalInfo = {});
+        AST::FuncTy::Config cfg = {false, false, false, false}, ModalInfo modalInfo = {});
 
-    Ptr<AST::ArrayTy> GetArrayTy(Ptr<AST::Ty> elemTy, unsigned int dims, AST::ModalInfo modalInfo);
-    Ptr<AST::VArrayTy> GetVArrayTy(AST::Ty& elemTy, int64_t size, AST::ModalInfo modalInfo);
-    Ptr<AST::PointerTy> GetPointerTy(Ptr<AST::Ty> elemTy, AST::ModalInfo modalInfo);
-    Ptr<AST::ArrayTy> GetArrayTy(AST::ModalInfo modalInfo);
+    Ptr<AST::ArrayTy> GetArrayTy(Ptr<AST::Ty> elemTy, unsigned int dims, ModalInfo modalInfo);
+    Ptr<AST::VArrayTy> GetVArrayTy(AST::Ty& elemTy, int64_t size, ModalInfo modalInfo);
+    Ptr<AST::PointerTy> GetPointerTy(Ptr<AST::Ty> elemTy, ModalInfo modalInfo);
+    Ptr<AST::ArrayTy> GetArrayTy(ModalInfo modalInfo);
     Ptr<AST::ClassTy> GetClassTy(
-        AST::ClassDecl& cd, const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modalInfo);
+        AST::ClassDecl& cd, const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modalInfo);
     Ptr<AST::ClassThisTy> GetClassThisTy(
-        AST::ClassDecl& cd, const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modalInfo);
+        AST::ClassDecl& cd, const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modalInfo);
     Ptr<AST::InterfaceTy> GetInterfaceTy(
-        AST::InterfaceDecl& id, const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modalInfo);
+        AST::InterfaceDecl& id, const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modalInfo);
     Ptr<AST::TypeAliasTy> GetTypeAliasTy(
-        AST::TypeAliasDecl& tad, const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modalInfo);
+        AST::TypeAliasDecl& tad, const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modalInfo);
     Ptr<AST::Ty> GetIntersectionTy(const std::set<Ptr<AST::Ty>>& tys);
-    Ptr<AST::Ty> GetUnionTy(const std::set<Ptr<AST::Ty>>& tys, AST::ModalInfo modalInfo);
-    // fix later: there should be anyTy to all modal
-    Ptr<AST::Ty> GetAnyTy()
-    {
-        return anyTy;
-    }
+    Ptr<AST::Ty> GetUnionTy(const std::set<Ptr<AST::Ty>>& tys);
+    Ptr<AST::Ty> GetAnyTy(ModalInfo modalInfo = {});
     Ptr<AST::Ty> GetCTypeTy() const
     {
         // `ctypeTy` is nullptr only when the core package of the standard library does not exist.
@@ -118,11 +113,7 @@ public:
     {
         ctypeTy = semCTypeTy;
     }
-    void SetSemaCopyTy(Ptr<AST::Ty> ty)
-    {
-        copyTy = ty;
-    }
-    AST::Ty* SubstituteModal(AST::Ty* ty, AST::ModalInfo modalInfo);
+    AST::Ty* SubstituteModal(AST::Ty* ty, ModalInfo modalInfo);
     // recursively remove modal in ty and type args
     // this should only behave differently on functy from SubstituteModal
     AST::Ty* RemoveModalRec(AST::Ty* ty);
@@ -189,9 +180,8 @@ public:
     bool HasExtensionRelation(AST::Ty& childTy, AST::Ty& interfaceTy);
 
     bool IsModalSubtype(Ptr<AST::Ty> leaf, Ptr<AST::Ty> root);
-    bool IsModalSubtype(AST::ModalInfo leaf, AST::ModalInfo root);
+    bool IsModalSubtype(ModalInfo leaf, ModalInfo root);
     bool ImplementsCopyInterface(Ptr<AST::Ty> ty);
-    bool NeverImplementsCopyInterface(Ptr<AST::Ty> ty);
 
     /**
      * Check if two function types have the same parameter type. This is used for checking function overloading and
@@ -207,7 +197,7 @@ public:
     static bool HasThisParam(const AST::FuncDecl& fd);
     Ptr<AST::Ty> GetThisParamTy(const AST::FuncDecl& fd);
     /// Get modal of this param of prop accessor
-    AST::ModalInfo GetAccessorThisModal(const AST::FuncDecl& fd);
+    ModalInfo GetAccessorThisModal(const AST::FuncDecl& fd);
     /// Get modal of target (i.e. ret of getter, value type of settter) of prop acessor
     Ptr<AST::Ty> GetAccessorTargetTy(const AST::FuncDecl& fd);
     bool IsSameDataType(Ptr<AST::Ty> l, Ptr<AST::Ty> r);
@@ -412,9 +402,9 @@ public:
 private:
     inline static AST::InvalidTy theInvalidTy = AST::InvalidTy();
     inline static AST::AnyTy theAnyTy = AST::AnyTy();
-    static AST::QuestTy theQuestTy[AST::MODAL_INFO_COUNT];
-    static AST::CStringTy theCStringTy[AST::MODAL_INFO_COUNT];
-    static std::vector<AST::PrimitiveTy> primitiveTys[AST::MODAL_INFO_COUNT];
+    static AST::QuestTy theQuestTy[MODAL_INFO_COUNT];
+    static AST::CStringTy theCStringTy[MODAL_INFO_COUNT];
+    static std::vector<AST::PrimitiveTy> primitiveTys[MODAL_INFO_COUNT];
     AST::InterfaceDecl* copyInterfaceDecl = nullptr;
 
     struct TypePointer {
@@ -501,8 +491,6 @@ private:
     std::unordered_map<Ptr<const AST::Decl>, std::map<std::vector<Ptr<AST::Ty>>, bool>> declInstantiationStatus;
     Ptr<AST::Ty> anyTy = &theAnyTy;
     Ptr<AST::Ty> ctypeTy = nullptr;
-    Ptr<AST::Ty> copyTy = nullptr;
-
     struct SubtypeCacheKey {
         Ptr<AST::Ty> leaf{nullptr};
         Ptr<AST::Ty> root{nullptr};

@@ -619,11 +619,11 @@ void ASTLoader::ASTLoaderImpl::LoadDeclRefs(const PackageFormat::Decl& declObj, 
             auto tp = StaticCast<ThisParam*>(&decl);
             // Modal is serialized on Decl.tyMode while SemaTy is shape-only; recover if ApplySerializedTyMode missed.
             ModalInfo tyModal = tp->GetTy()->Modal();
-            if (tyModal == AST::ModalInfo{} && declObj.tyMode() != nullptr) {
+            if (tyModal == ModalInfo{} && declObj.tyMode() != nullptr) {
                 tp->SetTy(ApplyLoadedModal(typeManager, tp->GetTy(), declObj.tyMode()));
                 tyModal = tp->GetTy()->Modal();
             }
-            if (tyModal == AST::ModalInfo{}) {
+            if (tyModal == ModalInfo{}) {
                 CJC_ABORT_WITH_MSG("do not save modal for @~local this param");
             }
             LocalModalAST astModal;

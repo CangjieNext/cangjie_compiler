@@ -13,35 +13,35 @@
 namespace Cangjie {
 namespace {
 /**
- * Convert AST::LocalModal to PackageFormat::LocalMode.
- * AST::LocalModal values: NOT=1, FULL=2, HALF=3
+ * Convert LocalModal to PackageFormat::LocalMode.
+ * LocalModal values: NOT=1, FULL=2, HALF=3
  * PackageFormat::LocalMode values: NOT=0, FULL=1, HALF=2
  */
-PackageFormat::LocalMode AstLocalToFormat(AST::LocalModal astModal)
+PackageFormat::LocalMode AstLocalToFormat(LocalModal astModal)
 {
     return static_cast<PackageFormat::LocalMode>(static_cast<int>(astModal) - 1);
 }
 
 /**
- * Convert PackageFormat::LocalMode to AST::LocalModal.
+ * Convert PackageFormat::LocalMode to LocalModal.
  * PackageFormat::LocalMode values: NOT=0, FULL=1, HALF=2
- * AST::LocalModal values: NOT=1, FULL=2, HALF=3
+ * LocalModal values: NOT=1, FULL=2, HALF=3
  */
-AST::LocalModal FormatToAstLocal(PackageFormat::LocalMode formatModal)
+LocalModal FormatToAstLocal(PackageFormat::LocalMode formatModal)
 {
-    return static_cast<AST::LocalModal>(static_cast<int>(formatModal) + 1);
+    return static_cast<LocalModal>(static_cast<int>(formatModal) + 1);
 }
 } // namespace
 
-TModeOffset SaveModal(flatbuffers::FlatBufferBuilder& fbb, AST::ModalInfo modal)
+TModeOffset SaveModal(flatbuffers::FlatBufferBuilder& fbb, ModalInfo modal)
 {
-    if (modal == AST::ModalInfo{}) {
+    if (modal == ModalInfo{}) {
         return {};
     }
     return PackageFormat::CreateMode(fbb, AstLocalToFormat(modal.local));
 }
 
-AST::ModalInfo ReadModal(const PackageFormat::Mode* mode)
+ModalInfo ReadModal(const PackageFormat::Mode* mode)
 {
     if (mode == nullptr) {
         return {};
@@ -63,16 +63,16 @@ TVectorOffset<TModeOffset> CreateTyModesVector(
     return {};
 }
 
-TModeOffset SaveModeTable(flatbuffers::FlatBufferBuilder& fbb, AST::ModalInfo modal)
+TModeOffset SaveModeTable(flatbuffers::FlatBufferBuilder& fbb, ModalInfo modal)
 {
     return PackageFormat::CreateMode(fbb, AstLocalToFormat(modal.local));
 }
 
 TVectorOffset<TModeOffset> SaveModalVector(
-    flatbuffers::FlatBufferBuilder& fbb, const std::vector<AST::ModalInfo>& modals)
+    flatbuffers::FlatBufferBuilder& fbb, const std::vector<ModalInfo>& modals)
 {
     for (const auto& modal : modals) {
-        if (modal != AST::ModalInfo{}) {
+        if (modal != ModalInfo{}) {
             std::vector<TModeOffset> offsets;
             offsets.reserve(modals.size());
             for (const auto& m : modals) {

@@ -929,6 +929,9 @@ std::optional<ModalInfo> GetCallBaseModal(const CallExpr& ce)
             if (re->modal.HasLocal()) {
                 return {re->modal.ToModalInfo()};
             }
+            if (Ty::IsTyCorrect(re->GetTy()) && re->GetTy()->IsLocalType()) {
+                return {re->GetTy()->Modal()};
+            }
             return {};
         }
         if (auto ma = DynamicCast<MemberAccess>(check)) {

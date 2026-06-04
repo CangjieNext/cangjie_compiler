@@ -12,7 +12,7 @@ public open class Object {
 
 public interface CType {}
 
-public interface Copy {}
+public interface Copyable {}
 
 public interface Any {}
 

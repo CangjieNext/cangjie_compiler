@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "JoinAndMeet.h"
 #include "TypeCheckUtil.h"
 #include "LocalTypeArgumentSynthesis.h"
 
@@ -81,11 +82,6 @@ QuestTy TypeManager::theQuestTy[MODAL_INFO_COUNT]{
 CStringTy TypeManager::theCStringTy[MODAL_INFO_COUNT]{CStringTy{ModalInfo{LocalModal::NOT}},
     CStringTy{ModalInfo{LocalModal::FULL}}, CStringTy{ModalInfo{LocalModal::HALF}}};
 
-Ptr<Ty> TypeManager::GetCopyTy() const
-{
-    return copyTy;
-}
-
 bool TypeManager::IsCopyInterfaceTy(Ptr<Ty> ty) const
 {
     if (auto interf = DynamicCast<InterfaceTy>(ty)) {
@@ -94,6 +90,11 @@ bool TypeManager::IsCopyInterfaceTy(Ptr<Ty> ty) const
         }
     }
     return false;
+}
+
+Ptr<Ty> TypeManager::GetAnyTy(ModalInfo modalInfo)
+{
+    return SubstituteModal(anyTy, modalInfo);
 }
 
 static std::vector<PrimitiveTy> GeneratePrimitiveTys(ModalInfo mod)
@@ -201,16 +202,12 @@ Ptr<FuncTy> TypeManager::GetFunctionTy(
 
 Ptr<Ty> TypeManager::GetIntersectionTy(const std::set<Ptr<Ty>>& tys)
 {
-    ModalInfo modal = {};
-    for (auto ty : tys) {
-        modal = modal | ty->Modal();
-    }
-    return GetTypeTy<IntersectionTy>(tys, modal);
+    return GetTypeTy<IntersectionTy>(tys, JoinModals(tys));
 }
 
-Ptr<Ty> TypeManager::GetUnionTy(const std::set<Ptr<Ty>>& tys, ModalInfo modalInfo)
+Ptr<Ty> TypeManager::GetUnionTy(const std::set<Ptr<Ty>>& tys)
 {
-    return GetTypeTy<UnionTy>(tys, modalInfo);
+    return GetTypeTy<UnionTy>(tys, JoinModals(tys));
 }
 
 Ty* TypeManager::RemoveModalRec(Ty* ty)
@@ -306,7 +303,7 @@ Ty* TypeManager::SubstituteModal(Ty* ty, ModalInfo modalInfo)
         }
         case TypeKind::TYPE_UNION: {
             auto& unionTy = static_cast<UnionTy&>(*ty);
-            return GetUnionTy(unionTy.tys, modalInfo);
+            return GetUnionTy(unionTy.tys);
         }
         case TypeKind::TYPE_INTERSECTION: {
             auto& intersectionTy = static_cast<IntersectionTy&>(*ty);
@@ -1319,65 +1316,6 @@ bool TypeManager::ImplementsCopyInterface(Ptr<Ty> ty)
     return false;
 }
 
-bool TypeManager::NeverImplementsCopyInterface(Ptr<Ty> ty)
-{
-    if (auto d = DynamicCast<PrimitiveTy>(ty)) {
-        switch (d->kind) {
-            case TypeKind::TYPE_INT64:
-            case TypeKind::TYPE_UINT64:
-            case TypeKind::TYPE_INT32:
-            case TypeKind::TYPE_UINT32:
-            case TypeKind::TYPE_INT16:
-            case TypeKind::TYPE_UINT16:
-            case TypeKind::TYPE_INT8:
-            case TypeKind::TYPE_UINT8:
-            case TypeKind::TYPE_FLOAT64:
-            case TypeKind::TYPE_FLOAT32:
-            case TypeKind::TYPE_FLOAT16:
-            case TypeKind::TYPE_BOOLEAN:
-            case TypeKind::TYPE_RUNE:
-            case TypeKind::TYPE_UNIT:
-            case TypeKind::TYPE_NOTHING:
-            case TypeKind::TYPE_IDEAL_FLOAT:
-            case TypeKind::TYPE_IDEAL_INT:
-            case TypeKind::TYPE_INT_NATIVE:
-            case TypeKind::TYPE_UINT_NATIVE:
-            case TypeKind::TYPE_INVALID:
-                return false; // These implement Copy
-            default:
-                return true; // Other primitives never implement Copy
-        }
-    }
-    if (auto tuple = DynamicCast<TupleTy>(ty)) {
-        return std::any_of(tuple->typeArgs.begin(), tuple->typeArgs.end(),
-            [this](auto& ty) { return NeverImplementsCopyInterface(ty); });
-    }
-    if (auto g = DynamicCast<GenericsTy>(ty)) {
-        if (!g->isUpperBoundLegal) {
-            return false;
-        }
-        for (auto upper : g->upperBounds) {
-            // class upper bound means it can never implement Copy
-            if (Is<ClassTy>(upper)) {
-                return true;
-            }
-            // non-class upper bound means it might implement Copy
-            return false;
-        }
-        // no upper bounds - might be anything
-        return false;
-    }
-    if (auto array = DynamicCast<VArrayTy>(ty)) {
-        return NeverImplementsCopyInterface(array->typeArgs[0]);
-    }
-    auto decl = Ty::GetDeclOfTy(ty);
-    if (auto structDecl = DynamicCast<StructDecl>(decl)) {
-        return !structDecl->IsCopyType();
-    }
-    // Classes and other types never implement Copy
-    return true;
-}
-
 bool TypeManager::IsTyEqual(Ptr<Ty> subTy, Ptr<Ty> baseTy)
 {
     PData::CommitScope cs(constraints);
@@ -2068,13 +2006,13 @@ std::optional<bool> TypeManager::GetOverrideCache(
     return {};
 }
 
-// fix later: add hasThisParam
 void TypeManager::AddOverrideCache(
     const AST::FuncDecl& src, const AST::FuncDecl& target, Ty* baseTy, Ty* expectInstParent, bool val)
 {
     OverrideOrShadowKey key(&src, &target, baseTy, expectInstParent);
     overrideOrShadowCache.emplace(key, val);
-    if (val && src.outerDecl && src.outerDecl == Ty::GetDeclPtrOfTy(baseTy)) {
+    if (val && HasThisParam(src) && HasThisParam(target) && src.outerDecl &&
+        src.outerDecl == Ty::GetDeclPtrOfTy(baseTy)) {
         UpdateTopOverriddenFuncDeclMap(&src, &target);
     }
 }

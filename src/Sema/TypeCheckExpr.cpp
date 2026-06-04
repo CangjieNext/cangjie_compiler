@@ -50,17 +50,6 @@ void TypeChecker::TypeCheckerImpl::UpdateCTypeTy()
     }
 }
 
-void TypeChecker::TypeCheckerImpl::UpdateCopyTy()
-{
-    if (!ci->invocation.globalOptions.implicitPrelude) {
-        return;
-    }
-    auto copyDecl = importManager.GetCoreDecl<InterfaceDecl>(std::string{COPY_NAME});
-    if (copyDecl && Ty::IsTyCorrect(copyDecl->GetTy())) {
-        typeManager.SetSemaCopyTy(copyDecl->GetTy());
-    }
-}
-
 bool TypeChecker::TypeCheckerImpl::IsLegalAccessFromStaticFunc(
     const ASTContext& ctx, const RefExpr& re, const Decl& decl)
 {

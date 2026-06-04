@@ -161,7 +161,8 @@ void TypeChecker::TypeCheckerImpl::CheckExtendInterfaces(
             }
             auto interfaceTy = RawStaticCast<InterfaceTy*>(instantiateTy);
             extendInterfaces[interfaceTy].insert(interface.get());
-            if (interfaceTy->decl && Utils::In(interfaceTy->decl->identifier.Val(), {std::string("Any"), CTYPE_NAME}) &&
+            if (interfaceTy->decl && Utils::In(interfaceTy->decl->identifier.Val(),
+                {std::string("Any"), CTYPE_NAME, std::string{COPY_NAME}}) &&
                 interfaceTy->decl->fullPackageName == CORE_PACKAGE_NAME) {
                 diag.DiagnoseRefactor(
                     DiagKindRefactor::sema_interface_is_not_extendable, *interface, interfaceTy->decl->identifier);

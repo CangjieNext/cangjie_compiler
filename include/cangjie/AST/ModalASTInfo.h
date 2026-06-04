@@ -12,6 +12,9 @@
 #include <string_view>
 
 namespace Cangjie::AST {
+using Cangjie::LocalModal;
+using Cangjie::ModalInfo;
+
 enum class LocalModalAST {
     NONE,
     NOT,

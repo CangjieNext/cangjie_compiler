@@ -252,14 +252,14 @@ private:
     Ptr<AST::Ty> GetTyFromASTType(ASTContext& ctx, AST::FuncType& funcType);
     Ptr<AST::Ty> GetTyFromASTType(ASTContext& ctx, AST::OptionType& optionType);
     std::vector<Ptr<AST::Ty>> GetTyFromASTType(ASTContext& ctx, std::vector<OwnedPtr<AST::Type>>& typeArguments);
-    Ptr<AST::Ty> GetTyFromASTType(AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modal);
+    Ptr<AST::Ty> GetTyFromASTType(AST::Decl& decl, const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modal);
     std::vector<Ptr<AST::Ty>> GetTyFromASTType(const std::vector<OwnedPtr<AST::GenericParamDecl>>& typeParameters);
     Ptr<AST::Ty> GetTyFromBuiltinDecl(
-        const AST::BuiltInDecl& bid, const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modal);
-    Ptr<AST::Ty> GetBuiltInArrayType(const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modal);
-    Ptr<AST::Ty> GetBuiltInVArrayType(const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modal);
-    Ptr<AST::Ty> GetBuiltinCFuncType(const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modal);
-    Ptr<AST::Ty> GetBuiltInPointerType(const std::vector<Ptr<AST::Ty>>& typeArgs, AST::ModalInfo modal);
+        const AST::BuiltInDecl& bid, const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modal);
+    Ptr<AST::Ty> GetBuiltInArrayType(const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modal);
+    Ptr<AST::Ty> GetBuiltInVArrayType(const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modal);
+    Ptr<AST::Ty> GetBuiltinCFuncType(const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modal);
+    Ptr<AST::Ty> GetBuiltInPointerType(const std::vector<Ptr<AST::Ty>>& typeArgs, ModalInfo modal);
 
     /** Check legality of attributes for all decls. */
     void CheckAllDeclAttributes(const ASTContext& ctx);
@@ -1143,7 +1143,6 @@ private:
 
     void UpdateAnyTy();
     void UpdateCTypeTy();
-    void UpdateCopyTy();
     bool IsIrrefutablePattern(const AST::Pattern& pattern);
     Ptr<AST::Ty> SynForInExpr(ASTContext& ctx, AST::ForInExpr& fie);
     bool ChkForInExpr(ASTContext& ctx, AST::Ty& target, AST::ForInExpr& fie);
@@ -1764,10 +1763,9 @@ private:
     bool IsExternalLocal(const ASTContext& ctx, const AST::Expr& expr);
     struct ModalTypeChecker* NewModalTypeChecker();
     void DeleteModalTypeChecker();
-    void CheckHasLocalMod(const AST::Expr& node, AST::LocalModal local);
-    void DiagLocalModNotSatisfied(const AST::Expr& node, AST::LocalModal local);
+    void CheckHasLocalMod(const AST::Expr& node, LocalModal local);
+    void DiagLocalModNotSatisfied(const AST::Expr& node, LocalModal local);
     void DiagExpectedDataType(const AST::Node& node);
-    DiagnosticBuilder DiagUndeclaredIdentifier(Range range, const std::string& identifier);
     bool CheckTyArgsLocal(AST::RefType& rt);
     void SetThisParamType(AST::FuncDecl& fd);
 

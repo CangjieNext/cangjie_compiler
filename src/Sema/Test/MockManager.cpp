@@ -447,7 +447,7 @@ OwnedPtr<MatchExpr> MockManager::CreateTypeCastForOnCallReturnValue(
 }
 
 OwnedPtr<AssignExpr> MockManager::CreateMemberAssignment(
-    VarDecl& member, OwnedPtr<Expr> rhsExpr, AST::ModalInfo modal) const
+    VarDecl& member, OwnedPtr<Expr> rhsExpr, ModalInfo modal) const
 {
     static const auto UNIT_TY = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
     auto decl = RawStaticCast<ClassDecl*>(member.outerDecl);

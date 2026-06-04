@@ -295,11 +295,16 @@ bool CompareThisParamTy(
     // in case let c = C(), this means let c: C@~local = C(), so only @~local is accepted.
     if ((ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) && target &&
         !tyMgr.ImplementsCopyInterface(target)) {
-        // if target present in ctor call, exact modal prevails
-        if (iThis->Modal() == target->Modal() && jThis->Modal() != target->Modal()) {
+        ModalInfo refModal = target->Modal();
+        if (auto ceModal = GetCallBaseModal(ce)) {
+            refModal = *ceModal;
+        }
+        if (iThis->Modal() == refModal && jThis->Modal() != refModal) {
             return true;
         }
-        // if modal equally good, neither overload is better, returns true
+        if (iThis->Modal() != refModal && jThis->Modal() == refModal) {
+            return false;
+        }
         return iThis->Modal() == jThis->Modal();
     }
     auto r = iThis->Modal().IsSubModal(jThis->Modal());
@@ -1120,16 +1125,16 @@ bool TypeChecker::TypeCheckerImpl::CheckThisParamCompatible(
         Ptr<Ty> expect;
         Ptr<Ty> found;
         if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
-            expect = target ? target : fdParamTy;
             found = fdParamTy;
             if (auto ceModal = GetCallBaseModal(ce)) {
-                // object creation with explicit modal, must use exact modal
-                good = found->Modal() == expect->Modal();
+                // Call-site modal (e.g. C @local!()) selects ctor; not the declared target type.
+                expect = typeManager.SubstituteModal(fdParamTy, *ceModal);
+                good = found->Modal() == *ceModal;
             } else if (target) {
-                // modal not specified, sub modal is enough
+                expect = target;
                 good = found->Modal().IsSubModal(expect->Modal());
             } else {
-                // object creation without target type, any modal is ok
+                expect = fdParamTy;
                 good = true;
             }
         } else if (auto ref = DynamicCast<RefExpr>(&*ce.baseFunc); ref && (ref->isThis || ref->isSuper)) {
@@ -1641,8 +1646,10 @@ OwnedPtr<FunctionMatchingUnit> TypeChecker::TypeCheckerImpl::CheckCandidate(
         ModalMatchMode modalMode;
         if (typeManager.ImplementsCopyInterface(instRet)) { // copy type can always use any mode
             modalMode = ModalMatchMode::IGNORE;
-        } else if (GetCallBaseModal(candidate.ce)) { // let c: C @local! = C @local!(), use exact mode in this case
-            modalMode = ModalMatchMode::EXACT;
+        } else if (auto ceModal = GetCallBaseModal(candidate.ce)) {
+            // let c: C @local! = C @local!() — exact; let c: C @local? = C @local!() — @local! <: @local?
+            modalMode =
+                targetRet->Modal() == *ceModal ? ModalMatchMode::EXACT : ModalMatchMode::SUBTYPE;
         } else {
             modalMode = ModalMatchMode::SUBTYPE;
         }
@@ -1723,25 +1730,31 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::ReorderCallArgument(
 Ty* TypeChecker::TypeCheckerImpl::GetCallTy(ASTContext& ctx, const CallExpr& ce, const FuncDecl& target) const
 {
     auto targetRetTy = StaticCast<FuncTy>(target.GetTy())->retTy;
-    auto ret = targetRetTy;
-    if (Is<ClassThisTy>(targetRetTy)) {
-        if (auto ma = DynamicCast<MemberAccess>(&*ce.baseFunc)) {
-            // SomeClass.StaticFunc() -> SomeClass
-            if (target.TestAttr(Attribute::STATIC)) {
-                return target.outerDecl->GetTy();
-            }
-            // instance.Func() -> instance type
-            return ma->baseExpr->GetTy();
-        }
-        auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, ce.scopeName);
-        CJC_ASSERT(sym->node);
-        // return ThisTy if symbol target is ClassTy/ClassThisTy
-        if (auto classTy = DynamicCast<ClassTy>(sym->node->GetTy())) {
-            return typeManager.GetClassThisTy(*classTy->decl, classTy->typeArgs, classTy->Modal());
-        }
-        return sym->node->GetTy();
+    if (!Is<ClassThisTy>(targetRetTy)) {
+        return targetRetTy;
     }
-    return ret;
+    if (auto ma = DynamicCast<MemberAccess>(&*ce.baseFunc)) {
+        // SomeClass.StaticFunc() -> SomeClass
+        if (target.TestAttr(Attribute::STATIC)) {
+            auto outerTy = target.outerDecl->GetTy();
+            if (auto ceModal = GetCallBaseModal(ce)) {
+                return typeManager.SubstituteModal(outerTy, *ceModal);
+            }
+            return outerTy;
+        }
+        // instance.Func() -> instance type
+        return ma->baseExpr->GetTy();
+    }
+    ModalInfo objectModal = GetThisParamModal(target);
+    if (auto ceModal = GetCallBaseModal(ce)) {
+        objectModal = *ceModal;
+    }
+    auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, ce.scopeName);
+    CJC_ASSERT(sym->node);
+    if (auto classTy = DynamicCast<ClassTy>(sym->node->GetTy())) {
+        return typeManager.GetClassThisTy(*classTy->decl, classTy->typeArgs, objectModal);
+    }
+    return typeManager.SubstituteModal(sym->node->GetTy(), objectModal);
 }
 
 // Collect valid function types (non-generic function types & instantiated function types),
@@ -2233,8 +2246,10 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::MatchFunctionForCall(
                 FilterSumUpperbound(*ma, *RawStaticCast<GenericsTy*>(ma->baseExpr->GetTy()), *ret[0]);
             }
         }
-        // for constructor call, convert ce.ty to target modal
-        if (Ty::IsTyCorrect(ce.GetTy()) && Ty::IsTyCorrect(target) && ce.callKind == CallKind::CALL_OBJECT_CREATION) {
+        // For ctor calls, widen @~local result to the context target (e.g. let c: C @local? = C()).
+        // Do not rewrite an already-local result (e.g. init @local!); assignment uses modal subtyping.
+        if (Ty::IsTyCorrect(ce.GetTy()) && Ty::IsTyCorrect(target) && ce.callKind == CallKind::CALL_OBJECT_CREATION &&
+            !ce.GetTy()->IsLocalType()) {
             ce.SetTy(typeManager.SubstituteModal(ce.GetTy(), target->Modal()));
         }
         return ret;

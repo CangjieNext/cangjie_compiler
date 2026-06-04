@@ -8,6 +8,7 @@
 #include "PollutionMapGen.h"
 #include "cangjie/IncrementalCompilation/Utils.h"
 #include "cangjie/Mangle/ASTMangler.h"
+#include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Sema/IncrementalUtils.h"
 
 using namespace Cangjie;
@@ -936,13 +937,14 @@ std::optional<std::string> PollutionAnalyzer::GetExtendedTypeRawMangleNameImpl(c
     switch (extendedType.astKind) {
         case ASTKind::PRIMITIVE_TYPE: {
             auto primitiveType = StaticCast<const PrimitiveType*>(&extendedType);
-            return ASTMangler::ManglePrimitiveType(*primitiveType);
+            return ASTMangler::ManglePrimitiveType(*primitiveType) +
+                MangleUtils::MangleLocalModifier(primitiveType->modal.ToModalInfo());
         }
         case ASTKind::REF_TYPE: {
             auto refType = StaticCast<const RefType*>(&extendedType);
             // use special lookup rule for builtin non-primitive types
             if (auto specialName = LookupSpecialBuiltinType(*refType)) {
-                return *specialName;
+                return *specialName + MangleUtils::MangleLocalModifier(refType->modal.ToModalInfo());
             }
             typeId = &refType->ref.identifier.Val();
             break;

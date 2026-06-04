@@ -301,8 +301,13 @@ OwnedPtr<AST::Type> ParserImpl::ParsePrefixType()
         while (prevSkipNL && Skip(TokenKind::NL)) {
         }
         optionType->end = baseType->end;
-        if (baseType->modal.HasLocal()) {
-            DiagUnexpectedModal(MakeRange(baseType->modal.LocalBegin(), baseType->modal.LocalEnd()));
+        const Type* componentForModal = baseType.get();
+        if (baseType->astKind == ASTKind::PAREN_TYPE) {
+            componentForModal = StaticCast<ParenType>(baseType.get())->type.get();
+        }
+        if (componentForModal != nullptr && componentForModal->modal.HasLocal()) {
+            DiagUnexpectedModal(
+                MakeRange(componentForModal->modal.LocalBegin(), componentForModal->modal.LocalEnd()));
             baseType->EnableAttr(Attribute::IS_BROKEN);
             return MakeOwned<InvalidType>(optionType->begin);
         }

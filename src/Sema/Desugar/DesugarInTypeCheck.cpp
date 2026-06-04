@@ -606,7 +606,7 @@ void TypeChecker::TypeCheckerImpl::DesugarPointerCall(ASTContext& ctx, CallExpr&
     } else if (!baseArgs.empty()) {
         argTy = baseArgs[0]->GetTy();
     }
-    pointerExpr->type->SetTy(typeManager.GetPointerTy(argTy, argTy ? argTy->Modal() : AST::ModalInfo{}));
+    pointerExpr->type->SetTy(typeManager.GetPointerTy(argTy, argTy ? argTy->Modal() : ModalInfo{}));
     if (!ce.args.empty()) {
         pointerExpr->arg = std::move(ce.args[0]);
     }

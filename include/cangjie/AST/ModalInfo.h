@@ -8,7 +8,6 @@
  * @file
  *
  * Modal type info (LocalModal, ModalInfo) shared by AST and CHIR.
- * Defined in AST namespace for compatibility; avoid including AST/Types.h in CHIR.
  */
 
 #ifndef CANGJIE_UTILS_MODALINFO_H
@@ -18,7 +17,7 @@
 #include <string>
 #include <string_view>
 
-namespace Cangjie::AST {
+namespace Cangjie {
 
 enum class LocalModal : uint8_t {
     NOT = 1,  // @~local
@@ -59,6 +58,6 @@ constexpr int MODAL_INFO_COUNT = 3;
 int ToIndex(ModalInfo modal);
 ModalInfo ToModalInfo(int index);
 
-} // namespace Cangjie::AST
+} // namespace Cangjie
 
 #endif // CANGJIE_UTILS_MODALINFO_H

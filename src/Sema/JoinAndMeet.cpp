@@ -24,6 +24,19 @@ using namespace TypeCheckUtil;
 using ErrMsg = std::stack<std::string>;
 using ErrOrTy = std::variant<ErrMsg, Ptr<AST::Ty>>;
 
+namespace Cangjie {
+ModalInfo JoinModals(const std::set<Ptr<Ty>>& tys)
+{
+    ModalInfo result{};
+    for (auto ty : tys) {
+        if (Ty::IsTyCorrect(ty)) {
+            result = result | ty->Modal();
+        }
+    }
+    return result;
+}
+} // namespace Cangjie
+
 namespace {
 enum class Uniformity {
     UNIFORMED,
@@ -161,7 +174,7 @@ Ptr<AST::Ty> JoinAndMeet::BatchJoin(const std::set<Ptr<Ty>>& tys)
         Utils::EraseIf(common, [this](Ptr<Ty> ty) { return !impMgr->IsTyAccessible(*curFile, *ty); });
     }
     if (common.empty()) {
-        return tyMgr.GetAnyTy();
+        return tyMgr.GetAnyTy(JoinModals(realTys));
     }
     auto ret = FindSmallestTy(std::set<Ptr<Ty>>(common.begin(), common.end()), isSubtype);
     // reset unnecessary constaints from finding possible supertypes (e.g. those claimed by conditional extensions),
@@ -352,7 +365,7 @@ Ptr<Ty> JoinAndMeet::ToUserVisibleTy(Ptr<Ty> ty)
         Ptr<Ty> res = ToUserVisibleTy(FindSmallestTy(iSecTy->tys, isSubtype));
         // Given C1 <: I1 & I2 and C2 <: I1 & I2, then Join(C1, C2) gives I1 & I2.
         // Meet(I1, I2) gives Nothing but the result for the original Join.
-        return res->IsNothing() ? tyMgr.GetAnyTy() : res;
+        return res->IsNothing() ? tyMgr.GetAnyTy(res->Modal()) : res;
     } else if (auto unionTy = DynamicCast<UnionTy>(ty)) {
         std::set<Ptr<Ty>> uTys;
         for (auto& t : unionTy->tys) {

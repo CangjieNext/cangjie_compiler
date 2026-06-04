@@ -1163,9 +1163,12 @@ template<typename T>
 DemangleInfo<T> Demangler<T>::DemangleCFuncType()
 {
     SkipString(MANGLE_C_FUNCTY_PREFIX);
-    DemangleInfo<T> di{ DemangleNextUnit().GetFullName(scopeResolution), TypeKind::FUNCTION };
+    auto returnDi = DemangleNextUnit();
+    AppendLocalModifierIfExists(returnDi);
+    DemangleInfo<T> di{ returnDi.GetFullName(scopeResolution), TypeKind::FUNCTION };
     di.args = DemangleArgTypes(ARGS_DELIMITER);
     SkipChar(END);
+    AppendLocalModifierIfExists(di);
     return di;
 }
 
@@ -1173,9 +1176,12 @@ template<typename T>
 DemangleInfo<T> Demangler<T>::DemangleFunction()
 {
     SkipString(MANGLE_FUNCTY_PREFIX);
-    DemangleInfo<T> di{ DemangleNextUnit().GetFullName(scopeResolution), TypeKind::FUNCTION };
+    auto returnDi = DemangleNextUnit();
+    AppendLocalModifierIfExists(returnDi);
+    DemangleInfo<T> di{ returnDi.GetFullName(scopeResolution), TypeKind::FUNCTION };
     di.args = DemangleArgTypes(ARGS_DELIMITER);
     SkipChar(END);
+    AppendLocalModifierIfExists(di);
     return di;
 }
 
@@ -1190,6 +1196,7 @@ DemangleInfo<T> Demangler<T>::DemangleTuple()
     auto generic = DemangleGenericTypes().GetFullName(scopeResolution);
     di.genericTypes = genericTypefilter(generic);
     SkipChar(END);
+    AppendLocalModifierIfExists(di);
     return di;
 }
 
@@ -1203,6 +1210,7 @@ DemangleInfo<T> Demangler<T>::DemangleRawArray()
         di.genericConstraints += "[]";
     }
     di.args = DemangleNextUnit().GetFullName(scopeResolution);
+    AppendLocalModifierIfExists(di);
     return di;
 }
 
@@ -1211,8 +1219,9 @@ DemangleInfo<T> Demangler<T>::DemangleVArray()
 {
     DemangleInfo<T> di{ MANGLE_VARRAY_STR, TypeKind::TUPLE };
     SkipChar(MANGLE_VARRAY_PREFIX);
-    uint32_t num = static_cast<uint32_t>(DemangleManglingNumber());
+    uint32_t num = DemangleManglingNumber();
     di.genericTypes = DemangleGenericTypes().GetFullName(scopeResolution, num);
+    AppendLocalModifierIfExists(di);
     return di;
 }
 
@@ -1223,6 +1232,7 @@ DemangleInfo<T> Demangler<T>::DemangleCPointer()
     SkipChar(MANGLE_PTR_PREFIX);
     auto generic = DemangleType().GetFullName(scopeResolution);
     di.genericTypes = genericTypefilter(generic);
+    AppendLocalModifierIfExists(di);
     return di;
 }
 
@@ -1313,6 +1323,7 @@ DemangleInfo<T> Demangler<T>::DemanglePrimitive()
         SkipChar(ch);
     }
     DemangleInfo<T> di{ GetPrimitiveDemangleMap<T>(ch), TypeKind::PRIMITIVE };
+    AppendLocalModifierIfExists(di);
     return di;
 }
 
@@ -1320,7 +1331,9 @@ template<typename T>
 DemangleInfo<T> Demangler<T>::DemangleCStringType()
 {
     SkipChar(MANGLE_CSTRING_PREFIX);
-    return DemangleInfo<T>{ MANGLE_CSTRING_STR, TypeKind::CSTRING, isValid };
+    auto di = DemangleInfo<T>{ MANGLE_CSTRING_STR, TypeKind::CSTRING, isValid };
+    AppendLocalModifierIfExists(di);
+    return di;
 }
 
 template<typename T>
@@ -1342,7 +1355,9 @@ DemangleInfo<T> Demangler<T>::DemangleGenericType()
 #else
     name = T{ MANGLE_TUPLE_PREFIX } + UIntToString(gNumber);
 #endif
-    return DemangleInfo<T>{ name, TypeKind::GENERIC_TYPES, isValid };
+    auto di = DemangleInfo<T>{ name, TypeKind::GENERIC_TYPES, isValid };
+    AppendLocalModifierIfExists(di);
+    return di;
 }
 
 template<typename T>
@@ -1352,6 +1367,7 @@ DemangleInfo<T> Demangler<T>::DemangleType()
     if (IsQualifiedType()) {
         auto curDi = DemangleNextUnit();
         if (isValid) {
+            AppendLocalModifierIfExists(curDi);
             di.args = curDi.GetFullName(scopeResolution);
             return di;
         }
@@ -1373,6 +1389,7 @@ DemangleInfo<T> Demangler<T>::DemangleGenericTypes()
         if (!isValid) {
             break;
         }
+        AppendLocalModifierIfExists(curDi);
         if (!firstIteration) {
             argTypesFullName += T{ ARGS_DELIMITER_TYPE };
         }
@@ -1399,6 +1416,7 @@ DemangleInfo<T> Demangler<T>::DemangleFunctionParameterTypes()
             if (!isValid) {
                 break;
             }
+            AppendLocalModifierIfExists(curDi);
             if (!firstIteration) {
                 argTypesFullName += T{ ARGS_DELIMITER };
             }
