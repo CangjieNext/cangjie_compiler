@@ -27,6 +27,7 @@
 #include <queue>
 
 #include "cangjie/AST/Node.h"
+#include "cangjie/Macro/InvokeUtil.h"
 #include "cangjie/Parse/Parser.h"
 #include "cangjie/Utils/StdUtils.h"
 
@@ -246,6 +247,26 @@ void FreeIdleMemoryToOS()
     if (default_zone) {
         malloc_zone_pressure_relief(default_zone, 0);
     }
+#endif
+}
+
+void ThrowNullPointerException()
+{
+#ifndef CANGJIE_ENABLE_GCOV
+    throw NullPointerException();
+#else
+    CJC_ABORT();
+#endif
+}
+
+void* OpenSymbolTableInDynamicLibrary(const std::string& path)
+{
+#ifdef _WIN32
+    return InvokeRuntime::OpenSymbolTable(path);
+#elif defined(__linux__) || defined(__APPLE__)
+    return InvokeRuntime::OpenSymbolTable(path, RTLD_NOW | RTLD_LOCAL);
+#else
+    return nullptr;
 #endif
 }
 } // namespace
