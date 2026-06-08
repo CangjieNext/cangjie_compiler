@@ -73,6 +73,7 @@ cangjie_compiler/
 │   ├── Macro                   # Macro expansion
 │   ├── main.cpp                # Compiler entry point
 │   ├── Mangle                  # Symbol mangling
+│   ├── MetaTransformation      # Metaprogramming plugins
 │   ├── Modules                 # Module management
 │   ├── Option                  # Compiler options
 │   ├── Parse                   # Syntax analysis

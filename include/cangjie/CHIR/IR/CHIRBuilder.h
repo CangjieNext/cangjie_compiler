@@ -321,12 +321,6 @@ public:
         return context.dynamicAllocatedTys.size();
     }
 
-    void UpdateTypeInCorePackage()
-    {
-        context.SetObjectTy(context.SearchObjectTyInPackage());
-        context.SetAnyTy(context.SearchAnyTyInPackage());
-    }
-
     void MergeAllocatedInstance()
     {
         context.GetAllocatedValues().insert(
@@ -350,6 +344,10 @@ public:
 
     std::unordered_set<CustomType*> GetAllCustomTypes() const;
     std::unordered_set<GenericType*> GetAllGenericTypes() const;
+
+    void EnableIRCheckerAfterPlugin();
+    void DisableIRCheckerAfterPlugin();
+    bool IsEnableIRCheckerAfterPlugin() const;
 
 private:
     void StoreAllocatedPtrInFuncOrLambda(BlockGroup& bg, Base* ptr = nullptr);

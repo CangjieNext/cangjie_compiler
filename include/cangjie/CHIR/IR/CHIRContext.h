@@ -242,9 +242,6 @@ public:
     void MergeAllocatedPtrInFuncOrLambda(std::unordered_map<BlockGroup*, std::vector<Base*>>& input);
     void FreeMemoryInFunc(BlockGroup& funcBody);
     void FreeWholePackage();
-    void Init();
-    ClassType* SearchObjectTyInPackage() const;
-    ClassType* SearchAnyTyInPackage() const;
 
 private:
     /*
