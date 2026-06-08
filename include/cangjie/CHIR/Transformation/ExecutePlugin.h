@@ -8,6 +8,7 @@
 #define CANGJIE_CHIR_TRANSFORMATION_EXECUTE_PLUGIN_H
 
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
+#include "cangjie/Utils/SafeHandle.h"
 #include <flatbuffers/detached_buffer.h>
 
 namespace Cangjie {
@@ -45,7 +46,7 @@ private:
         bool success;
     };
     CHIRBuilder& builder;
-    void* handle{nullptr};
+    SafeHandle handle{nullptr};
     flatbuffers::DetachedBuffer serializedData;
     PluginResult pluginResult;
 

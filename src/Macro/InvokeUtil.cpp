@@ -70,6 +70,17 @@ int InvokeRuntime::CloseSymbolTable(HANDLE handle)
     return retCode;
 }
 
+HANDLE InvokeRuntime::OpenSymbolTableInDynamicLibrary(const std::string& path)
+{
+#ifdef _WIN32
+    return InvokeRuntime::OpenSymbolTable(path);
+#elif defined(__linux__) || defined(__APPLE__)
+    return InvokeRuntime::OpenSymbolTable(path, RTLD_NOW | RTLD_LOCAL);
+#else
+    return nullptr;
+#endif
+}
+
 RuntimeInit& RuntimeInit::GetInstance()
 {
     static RuntimeInit runtimeInit;

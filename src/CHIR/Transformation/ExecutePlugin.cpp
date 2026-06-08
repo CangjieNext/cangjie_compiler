@@ -17,9 +17,6 @@ ExecutePlugin::ExecutePlugin(CHIRBuilder& builder) : builder(builder) {}
 
 ExecutePlugin::~ExecutePlugin()
 {
-    if (handle != nullptr) {
-        InvokeRuntime::CloseSymbolTable(handle);
-    }
 }
 
 bool ExecutePlugin::SerializePackage(const Package& package)
@@ -33,18 +30,11 @@ bool ExecutePlugin::SerializePackage(const Package& package)
 
 bool ExecutePlugin::Execute(const std::string& pluginPath)
 {
-#ifdef _WIN32
-    handle = InvokeRuntime::OpenSymbolTable(pluginPath);
-#elif defined(__linux__) || defined(__APPLE__)
-    handle = InvokeRuntime::OpenSymbolTable(pluginPath, RTLD_NOW | RTLD_LOCAL);
-#else
-    CJC_ABORT();
-    return false;
-#endif
-    if (handle == nullptr) {
+    handle = SafeHandle(InvokeRuntime::OpenSymbolTableInDynamicLibrary(pluginPath));
+    if (handle.get() == nullptr) {
         return false;
     }
-    void* fPtr = InvokeRuntime::GetMethod(handle, "executeCHIRPlugins");
+    void* fPtr = InvokeRuntime::GetMethod(handle.get(), "executeCHIRPlugins");
     if (fPtr == nullptr) {
         return false;
     }
@@ -206,7 +196,7 @@ void ExecutePlugin::StringToCHIRPtr(
 
 bool ExecutePlugin::FreeCachedData()
 {
-    auto fPtr = InvokeRuntime::GetMethod(handle, "freeSerializedMemory");
+    auto fPtr = InvokeRuntime::GetMethod(handle.get(), "freeSerializedMemory");
     if (!fPtr) {
         return false;
     }

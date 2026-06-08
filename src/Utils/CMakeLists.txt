@@ -35,6 +35,7 @@ set(COMMON_UTIL_SRC
     Utils.cpp
     ICEUtil.cpp
     Semaphore.cpp
+    SafeHandle.cpp
     StdUtils/StdUtils.cpp)
 
 set(PROFILE_SRC
