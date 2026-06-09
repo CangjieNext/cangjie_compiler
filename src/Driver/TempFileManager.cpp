@@ -385,7 +385,13 @@ TempFileInfo TempFileManager::CreateOutputFileInfo(const TempFileInfo& info, Tem
         if (kind == TempFileKind::O_EXE) {
             outputFileName = "main";
         } else if (kind == TempFileKind::O_DYLIB || kind == TempFileKind::O_STATICLIB) {
-            outputFileName = "lib" + info.fileName;
+            // Avoid double "lib" prefix when the package name already starts with "lib".
+            auto libPrefix = std::string("lib");
+            if (info.fileName.compare(0, libPrefix.length(), libPrefix) == 0) {
+                outputFileName = info.fileName;
+            } else {
+                outputFileName = "lib" + info.fileName;
+            }
         } else if (kind == TempFileKind::O_MACRO) {
             outputFileName = "lib-macro_" + info.fileName;
         } else {
