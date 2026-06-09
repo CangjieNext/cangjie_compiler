@@ -626,7 +626,7 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
         return true;
     }},
     { Options::ID::LTO_STATICLIB_FORMAT, [](GlobalOptions& opts, const OptionArgInstance& arg) {
-        opts.emitObjectLibInLTO = (arg.value == "bitcode");
+        opts.emitStaticLibInLTO = (arg.value == "bitcode");
         return true;
     }},
     { Options::ID::COMPILE_AS_EXE, OPTION_TRUE_ACTION(opts.enableCompileAsExe = true) },
