@@ -31,11 +31,8 @@
 namespace Cangjie::CodeGen {
 inline std::string CGModule::GetDataLayoutString(const Triple::Info& target)
 {
-    if (target.IsMacOS()) {
-        if (target.arch == Triple::ArchType::AARCH64) {
-            return "e-m:o-i64:64-i128:128-n32:64-S128";
-        }
-        //e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128
+    if (target.IsMacOS() && target.arch == Triple::ArchType::AARCH64) {
+        return "e-m:o-i64:64-i128:128-n32:64-S128";
     }
     if (target.arch == Triple::ArchType::ARM32) {
         return "e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64";
@@ -82,10 +79,11 @@ CGModule::CGModule(SubCHIRPackage& subCHIRPackage, CGPkgContext& cgPkgCtx)
     }
 
     const auto& options = cgCtx->GetCompileOptions();
-    if (options.IsLTOEnabled() && options.target == Triple::ArchType::X86_64 && options.target.IsMacOS()) {
+    if (options.IsLTOEnabled() && options.target.arch == Triple::ArchType::X86_64 && options.target.IsMacOS()) {
         module->setDataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
+    } else {
+        module->setDataLayout(CGModule::GetDataLayoutString(options.target));
     }
-    else module->setDataLayout(CGModule::GetDataLayoutString(options.target));
     module->setTargetTriple(CGModule::GetTargetTripleString(options.target));
     InitDebugInfo();
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
