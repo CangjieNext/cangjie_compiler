@@ -664,7 +664,7 @@ public:
     LTOMode ltoMod = LTOMode::NO_LTO;
     bool enableCompileAsExe = false;
     bool ltoHideAllPkgs = false;
-    bool emitObjectLibInLTO = false;
+    bool emitStaticLibInLTO = false;
 
     /**
      * @brief Checks whether LTO is enabled.
@@ -686,9 +686,9 @@ public:
         return enableCompileAsExe;
     }
 
-    bool ShouldemitObjectLibInLTO() const
+    bool ShouldEmitStaticLibInLTO() const
     {
-        return emitObjectLibInLTO && outputMode == OutputMode::STATIC_LIB && IsFullLTOEnabled();
+        return emitStaticLibInLTO && outputMode == OutputMode::STATIC_LIB && IsLTOEnabled();
     }
 
     /**

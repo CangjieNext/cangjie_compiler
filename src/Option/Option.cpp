@@ -543,7 +543,7 @@ bool GlobalOptions::CheckSanitizerOptions() const
 
 bool GlobalOptions::CheckLtoOptions() const
 {
-    if (emitObjectLibInLTO) {
+    if (emitStaticLibInLTO) {
         if (outputMode != OutputMode::STATIC_LIB) {
             Errorln("Option '--lto-staticlib-format=bitcode' requires '--output-type=staticlib'.");
             return false;
@@ -555,6 +555,10 @@ bool GlobalOptions::CheckLtoOptions() const
     }
     if (!IsLTOEnabled()) {
         return true;
+    }
+    if (target.IsMacOS() && !experimentalMode) {
+        Errorln("LTO on macOS is an experimental feature, use '--experimental' to enable it.");
+        return false;
     }
     auto osType = target.GetOSFamily();
     std::string osName = target.OSToString();
@@ -572,7 +576,7 @@ bool GlobalOptions::CheckLtoOptions() const
         Errorln("--output-type=obj is not allowed in LTO mode");
         return false;
     }
-    if (outputMode == OutputMode::STATIC_LIB && !bcInputFiles.empty() &&!emitObjectLibInLTO) {
+    if (outputMode == OutputMode::STATIC_LIB && !bcInputFiles.empty() &&!emitStaticLibInLTO) {
         Errorln("The input file cannot be bc files When generating a static library in LTO mode.");
         return false;
     }
@@ -1641,7 +1645,7 @@ std::vector<std::string> GlobalOptions::ToSerialized() const
     result.emplace_back(BoolToSerializedString(enableCoverage));
     result.emplace_back(SanitizerTypeToSerializedString());
     result.emplace_back(BoolToSerializedString(experimentalMode));
-    result.emplace_back(BoolToSerializedString(emitObjectLibInLTO));
+    result.emplace_back(BoolToSerializedString(emitStaticLibInLTO));
     result.emplace_back(OverflowStrategyToSerializedString());
     (void)result.emplace_back(BoolToSerializedString(interpreter));
     (void)result.emplace_back(VectorStrToSerializedString(interpreterSearchPaths, ":"));
