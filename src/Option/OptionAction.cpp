@@ -625,7 +625,10 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
         opts.ltoMod = GlobalOptions::LTOMode(LTO_MODE_MAP.at(arg.value));
         return true;
     }},
-    { Options::ID::EMIT_OBJECT_IN_LTO, OPTION_TRUE_ACTION(opts.emitObjectLibInLTO = true) },
+    { Options::ID::LTO_STATICLIB_FORMAT, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        opts.emitObjectLibInLTO = (arg.value == "bitcode");
+        return true;
+    }},
     { Options::ID::COMPILE_AS_EXE, OPTION_TRUE_ACTION(opts.enableCompileAsExe = true) },
 
     { Options::ID::LTO_KEEP_PKG_VISIBILITY, [](GlobalOptions& opts, const OptionArgInstance& arg) {
