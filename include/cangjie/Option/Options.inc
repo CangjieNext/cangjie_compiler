@@ -326,7 +326,7 @@ OPTION("--lto", LTO, SEPARATED, {BACKEND(CJNATIVE)},
     {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, lto_mode, SINGLE_OCCURRENCE,
     "Enable LTO to either 'full' or 'thin' (Not available for Windows target)")
 OPTION("--lto-staticlib-format", LTO_STATICLIB_FORMAT, SEPARATED, { BACKEND(CJNATIVE) },
-    { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, lto_staticlib_format_value, SINGLE_OCCURRENCE,
+    { GROUP(DRIVER) COMMA GROUP(VISIBLE) }, nullptr, lto_staticlib_format_value, SINGLE_OCCURRENCE,
     "Specify the format of static library output in LTO mode. Candidate formats: ")
 OPTION("--compile-as-exe", COMPILE_AS_EXE, FLAG, {BACKEND(CJNATIVE)},
     {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, {}, MULTIPLE_OCCURRENCE,
