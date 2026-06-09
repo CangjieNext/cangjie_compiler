@@ -14,6 +14,7 @@
 
 #include <unordered_set>
 
+#include "cangjie/Basic/Utils.h"
 #include "cangjie/Driver/TempFileManager.h"
 #include "cangjie/Driver/ToolOptions.h"
 #include "cangjie/Driver/Utils.h"
@@ -62,6 +63,17 @@ void Darwin_CJNATIVE::GenerateLinkOptionsForLTO(Tool& tool) const
     }
     tool.AppendArg("-mllvm");
     tool.AppendArg("--cj-lto-opt");
+
+    // Set --visible-pkgs for symbol visibility control in LTO mode.
+    // This is also needed when building static libraries with LTO, so we use
+    // IsLTOPkgVisibilityEnabled / IsCompileAsExeEnabled instead of checking outputMode.
+    if (driverOptions.IsLTOPkgVisibilityEnabled() || driverOptions.IsCompileAsExeEnabled()) {
+        if (!driverOptions.GetLtoVisiblePkgs().empty()) {
+            tool.AppendArg("--visible-pkgs=" + Utils::JoinStrings(driverOptions.GetLtoVisiblePkgs(), ","));
+        } else {
+            tool.AppendArg("--visible-pkgs=");
+        }
+    }
 
     std::unordered_set<std::string> optionSet = {};
     SetFuncType setCompositeOption = [&tool, &optionSet](const std::string& option) {
