@@ -178,6 +178,9 @@ PREDEFVALUE(compile_target_list, {
 PREDEFVALUE(lto_mode, {
     VALUE("full", "", { BACKEND(CJNATIVE) }, { GROUP(STABLE) COMMA GROUP(VISIBLE) }) COMMA
     VALUE("thin", "", { BACKEND(CJNATIVE) }, { GROUP(STABLE) COMMA GROUP(VISIBLE) }) });
+PREDEFVALUE(lto_staticlib_format_value, {
+    VALUE("bitcode", "", { BACKEND(CJNATIVE) }, { GROUP(STABLE) COMMA GROUP(VISIBLE) }) COMMA
+    VALUE("native", "", { BACKEND(CJNATIVE) }, { GROUP(STABLE) COMMA GROUP(VISIBLE) }) });
 PREDEFVALUE(bchir_print_mode, {
     VALUE("deserialized", "after deserialisation", { BACKEND(CJNATIVE) }, { GROUP(STABLE) }) COMMA
     VALUE("linked", "after linkage", { BACKEND(CJNATIVE) }, { GROUP(STABLE) }) COMMA
@@ -322,9 +325,9 @@ OPTION("--dy-libs", DY_LIBS, FLAG, { BACKEND(CJNATIVE) },
 OPTION("--lto", LTO, SEPARATED, {BACKEND(CJNATIVE)},
     {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, lto_mode, SINGLE_OCCURRENCE,
     "Enable LTO to either 'full' or 'thin' (Not available for Windows target)")
-OPTION("--emit-object-in-lto", EMIT_OBJECT_IN_LTO, FLAG, { BACKEND(CJNATIVE) },
-    { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
-    "Run Darwin Full LTO for static library builds and preserve the linker-generated LTO object")
+OPTION("--lto-staticlib-format", LTO_STATICLIB_FORMAT, SEPARATED, { BACKEND(CJNATIVE) },
+    { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, lto_staticlib_format_value, SINGLE_OCCURRENCE,
+    "Specify the format of static library output in LTO mode. Candidate formats: ")
 OPTION("--compile-as-exe", COMPILE_AS_EXE, FLAG, {BACKEND(CJNATIVE)},
     {GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE)}, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Hide symbols from bitcode files in LTO mode, and only the package init symbols remain visible")

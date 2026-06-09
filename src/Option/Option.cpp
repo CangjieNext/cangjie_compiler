@@ -545,11 +545,11 @@ bool GlobalOptions::CheckLtoOptions() const
 {
     if (emitObjectLibInLTO) {
         if (outputMode != OutputMode::STATIC_LIB) {
-            Errorln("Option '--emit-object-in-lto' requires '--output-type=staticlib'.");
+            Errorln("Option '--lto-staticlib-format=bitcode' requires '--output-type=staticlib'.");
             return false;
         }
         if (target.os != OSType::DARWIN && target.os != OSType::IOS) {
-            Errorln("Option '--emit-object-in-lto' is only supported on Apple platforms.");
+            Errorln("Option '--lto-staticlib-format=bitcode' is only supported on Apple platforms.");
             return false;
         }
     }
