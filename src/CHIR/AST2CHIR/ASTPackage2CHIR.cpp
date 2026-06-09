@@ -671,7 +671,9 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
         CreatePseudoImportedFuncSignatureAndSetGlobalCache(funcDecl);
         return;
     }
-    auto features = funcDecl.curFile->GetFeatures();
+    // Defensive: a compiler-generated FuncDecl may be left without a `curFile`. Treat a missing
+    // file as "no features" instead of dereferencing a null pointer and crashing with an ICE.
+    auto features = funcDecl.curFile ? funcDecl.curFile->GetFeatures() : std::set<std::string>{};
     // Try get deserialized func.
     Function* fn = TryGetDeserialized<Function>(funcDecl);
     if (fn) {
