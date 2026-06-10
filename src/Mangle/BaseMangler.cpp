@@ -630,7 +630,7 @@ std::string BaseMangler::MangleDecl(const Decl& decl, const std::vector<Ptr<Node
             if (decl.IsFunc()) {
                 auto& funcDecl = StaticCast<const AST::FuncDecl&>(decl);
                 newMangled +=
-                    IsLocalFunc(funcDecl) ? GetMangledLocalFuncIndex(StaticCast<const FuncDecl&>(decl)) : "";
+                    IsMemberFunc(funcDecl) ? GetMangledLocalFuncIndex(StaticCast<const FuncDecl&>(decl)) : "";
             }
         }
         newMangled += MangleGenericArguments(decl, genericsTypeStack, true);
@@ -688,7 +688,7 @@ std::string BaseMangler::ManglePrefix(const Node& node, const std::vector<Ptr<No
             case ASTKind::FUNC_DECL: {
                 auto& decl = StaticCast<const FuncDecl&>(*curPrefix);
                 mangled += MangleUtils::MangleName(decl.identifier);
-                if (IsLocalFunc(decl)) {
+                if (IsMemberFunc(decl)) {
                     mangled += GetMangledLocalFuncIndex(decl);
                 }
                 mangled += MangleGenericArgumentsHelper(decl, genericsTypeStack, true) + MANGLE_FUNC_PARAM_TYPE_PREFIX +
@@ -1202,9 +1202,10 @@ bool BaseMangler::IsLocalVariable(const AST::Decl& decl) const
     return false;
 }
 
-bool BaseMangler::IsLocalFunc(const AST::FuncDecl& funcDecl) const
+bool BaseMangler::IsMemberFunc(const AST::FuncDecl& funcDecl) const
 {
-    return !funcDecl.TestAttr(AST::Attribute::GLOBAL) && funcDecl.outerDecl && !funcDecl.outerDecl->IsNominalDecl();
+    return !funcDecl.TestAttr(AST::Attribute::GLOBAL) && funcDecl.outerDecl && !funcDecl.outerDecl->IsNominalDecl() &&
+        !funcDecl.outerDecl->IsBuiltIn();
 }
 
 std::string BaseMangler::HashToBase62(const std::string& input)

@@ -304,7 +304,7 @@ public:
      * @param funcDecl The decl to be judged.
      * @return bool If yes, true is returned. Otherwise, false is returned.
      */
-    bool IsLocalFunc(const AST::FuncDecl& funcDecl) const;
+    bool IsMemberFunc(const AST::FuncDecl& funcDecl) const;
 
     /**
      * @brief Helper function for mangling type name.
