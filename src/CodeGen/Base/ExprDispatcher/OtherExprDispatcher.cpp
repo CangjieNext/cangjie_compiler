@@ -330,7 +330,8 @@ llvm::Value* HandleTransformToConcreteExpr(IRBuilder2& irBuilder, const CHIR::Ex
             irBuilder.SetInsertPoint(handleNonRefBB);
             auto sizeOfSrc = irBuilder.GetSizeFromTypeInfo(srcTi);
             // 1. Allocate memory for boxing srcValue.
-            llvm::Value* temp = irBuilder.CallIntrinsicAllocaGeneric({srcTi, sizeOfSrc});
+            llvm::Value* temp =
+                irBuilder.CallIntrinsicAllocaGeneric({srcTi, sizeOfSrc}, targetCHIRType->IsLocalRegion());
             // 2. store srcValue to temp
             auto basePtrOfSrc = cgMod.GetCGContext().GetBasePtrOf(cgVal.GetRawValue());
             std::vector<llvm::Value*> copyGenericParams{temp, basePtrOfSrc, cgVal.GetRawValue(), sizeOfSrc};
@@ -394,6 +395,18 @@ llvm::Value* HandleGetRTTIStatic(IRBuilder2& irBuilder, const CHIR::Expression& 
     auto value = irBuilder.CreateTypeInfo(*expr.GetRTTIType());
     return irBuilder.CreateBitCast(value, CGType::GetOrCreateTypeInfoPtrType(cgMod.GetLLVMContext()));
 }
+
+llvm::Value* HandleStartRegion(IRBuilder2& irBuilder, [[maybe_unused]] const CHIR::Expression& chirExpr)
+{
+    return irBuilder.CallIntrinsicFunction(
+        llvm::Type::getInt1Ty(irBuilder.GetLLVMContext()), "MCC_StartLocalRegion", {});
+}
+
+llvm::Value* HandleEndRegion(IRBuilder2& irBuilder, [[maybe_unused]] const CHIR::Expression& chirExpr)
+{
+    irBuilder.CallIntrinsicFunction(llvm::Type::getVoidTy(irBuilder.GetLLVMContext()), "MCC_EndLocalRegion", {});
+    return nullptr;
+}
 } // namespace
 
 namespace Cangjie::CodeGen {
@@ -419,6 +432,8 @@ llvm::Value* HandleOthersExpression(IRBuilder2& irBuilder, const CHIR::Expressio
             {CHIR::ExprKind::UNBOX_TO_REF, HandleUnBoxToRefExpr},
             {CHIR::ExprKind::GET_RTTI, HandleGetRTTI},
             {CHIR::ExprKind::GET_RTTI_STATIC, HandleGetRTTIStatic},
+            {CHIR::ExprKind::START_REGION, HandleStartRegion},
+            {CHIR::ExprKind::END_REGION, HandleEndRegion},
     };
     if (auto found = handleExprMap.find(chirExpr.GetExprKind()); found != handleExprMap.end()) {
         irBuilder.EmitLocation(CHIRExprWrapper(chirExpr));

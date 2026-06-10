@@ -382,7 +382,7 @@ public:
     ///*----------------- Class related --------------------//
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     llvm::Value* CallClassIntrinsicAlloc(const CHIR::Type& type);
-    llvm::Instruction* CallClassIntrinsicAlloc(const std::vector<llvm::Value*>& parameters);
+    llvm::Instruction* CallClassIntrinsicAlloc(const std::vector<llvm::Value*>& parameters, bool isLocal);
 #endif
     llvm::Value* CallClassIntrinsicInstanceOf(llvm::Value* instance, const CHIR::Type* targetTy);
     llvm::Value* CallArrayIntrinsicAllocWithConstantContent(llvm::Value* array, const std::vector<CGValue*>& args,
@@ -390,8 +390,8 @@ public:
     llvm::Value* CreateEnumGEP(const CHIR::Field& field);
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     llvm::Value* AllocateArray(const CHIR::RawArrayType& rawArrayType, llvm::Value* length);
-    llvm::Function* GetArrayNonGenericElemMalloc() const;
-    llvm::Function* GetArrayGenericElemMalloc() const;
+    llvm::Function* GetArrayNonGenericElemMalloc(bool isLocal) const;
+    llvm::Function* GetArrayGenericElemMalloc(bool isLocal) const;
     llvm::Value* InitArrayFilledWithConstant(llvm::Value* array, const CHIR::RawArrayType& arrTy,
         const std::vector<llvm::Constant*>& arrayConstantElems, const std::string& serialized);
     void CreateCopyTo(ArrayCopyToInfo arrayCopyToInfo);
@@ -429,7 +429,7 @@ public:
     llvm::Instruction* CallIntrinsicIsSubtype(const std::vector<llvm::Value*>& parameters);
     llvm::Instruction* CallIntrinsicIsTupleTypeOf(const std::vector<llvm::Value*>& parameters);
     llvm::Instruction* CallIntrinsicIsTypeEqualTo(const std::vector<llvm::Value*>& parameters);
-    llvm::Instruction* CallIntrinsicAllocaGeneric(const std::vector<llvm::Value*>& parameters);
+    llvm::Instruction* CallIntrinsicAllocaGeneric(const std::vector<llvm::Value*>& parameters, bool isLocal);
     llvm::Instruction* CallIntrinsicGCWriteGeneric(const std::vector<llvm::Value*>& parameters);
     llvm::Instruction* CallGCWriteGenericPayload(const std::vector<llvm::Value*>& parameters);
     llvm::Instruction* CallGCReadGeneric(const std::vector<llvm::Value*>& parameters);
