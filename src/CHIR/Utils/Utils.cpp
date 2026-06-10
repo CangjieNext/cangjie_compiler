@@ -359,8 +359,8 @@ bool IsNestedBlockOf(const BlockGroup* blockGroup, const BlockGroup* scope)
     if (blockGroup == scope) {
         return true;
     }
-    if (auto parentLambda = DynamicCast<Lambda*>(blockGroup->GetOwnerExpression())) {
-        return IsNestedBlockOf(parentLambda->GetParentBlockGroup(), scope);
+    if (auto ownerExpr = blockGroup->GetOwnerExpression()) {
+        return IsNestedBlockOf(ownerExpr->GetParentBlockGroup(), scope);
     }
     return false;
 }

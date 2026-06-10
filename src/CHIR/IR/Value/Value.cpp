@@ -894,16 +894,17 @@ BlockGroup* BlockGroup::Clone(CHIRBuilder& builder, Function& newFunc) const
     return newGroup;
 }
 
-BlockGroup* BlockGroup::Clone(CHIRBuilder& builder, Lambda& newLambda) const
+BlockGroup* BlockGroup::Clone(CHIRBuilder& builder, Expression& newExpression) const
 {
-    auto parentFunc = newLambda.GetTopLevelFunc();
-    CJC_NULLPTR_CHECK(parentFunc);
-    auto newGroup = builder.CreateBlockGroup(*parentFunc);
-    if (newLambda.GetBody() == nullptr) {
-        newLambda.InitBody(*newGroup);
-    }
+    auto newGroup = builder.CreateBlockGroup(*newExpression.GetTopLevelFunc());
     newGroup->AppendAttributeInfo(GetAttributeInfo());
-
+    if (auto lambda = DynamicCast<Lambda*>(&newExpression)) {
+        lambda->InitBody(*newGroup);
+    } else if (auto exclave = DynamicCast<Exclave*>(&newExpression)) {
+        exclave->InitBody(*newGroup);
+    } else {
+        CJC_ABORT();
+    }
     CloneBlocks(builder, *newGroup);
     return newGroup;
 }
