@@ -116,16 +116,18 @@ struct MetadataTypeItem {
     llvm::MDTuple* instanceMethods;
     llvm::MDTuple* staticMethods;
     llvm::MDTuple* typeAttrs;
+    llvm::MDTuple* ctorAnnoInfo = nullptr; // annotation info for enum constructors
     explicit MetadataTypeItem(llvm::MDString* name, llvm::MDString* declaredGenericTi, llvm::MDTuple* instanceFields,
         llvm::MDTuple* staticFields, llvm::MDTuple* instanceMethods, llvm::MDTuple* staticMethods,
-        llvm::MDTuple* typeAttrs)
+        llvm::MDTuple* typeAttrs, llvm::MDTuple* ctorAnnoInfo = nullptr)
         : name(name),
           declaredGenericTi(declaredGenericTi),
           instanceFields(instanceFields),
           staticFields(staticFields),
           instanceMethods(instanceMethods),
           staticMethods(staticMethods),
-          typeAttrs(typeAttrs)
+          typeAttrs(typeAttrs),
+ 	      ctorAnnoInfo(ctorAnnoInfo)
     {
     }
 
@@ -133,7 +135,7 @@ struct MetadataTypeItem {
     {
         if (isEnum) {
             return llvm::MDTuple::get(ctx,
-                {name, instanceFields, declaredGenericTi, instanceMethods, staticMethods, typeAttrs});
+                {name, instanceFields, declaredGenericTi, instanceMethods, staticMethods, ctorAnnoInfo, typeAttrs});
         } else {
             return llvm::MDTuple::get(ctx,
                 {name, declaredGenericTi, instanceFields, staticFields, instanceMethods, staticMethods, typeAttrs});
@@ -225,6 +227,7 @@ private:
     void GenerateAllEnumsMetadata();
     void GenerateEnumMetadata(const CHIR::EnumDef& ed);
     llvm::MDTuple* GenerateEnumConstructorMetadata(const CHIR::EnumDef& ed);
+    llvm::MDTuple* GenerateEnumCtorAnnoMetadata(const CHIR::EnumDef& ed);
     void GenerateEnumMethodMetadata(const CHIR::EnumDef& ed, std::vector<llvm::Metadata*>& methodsVec,
         std::vector<llvm::Metadata*>& staticMethodsVec);
     std::string GenerateCtorFn(const CHIR::EnumDef& enumDef, size_t index, const std::string& qualifiedName);
