@@ -56,26 +56,31 @@ void SetMemRegion::RunOnFunc(const Function& func)
     if (needsRegion) {
         SetRegions(func);
     }
-    FlattenExclave(func, needsRegion);
+    FlattenExclave(*func.GetBody(), needsRegion);
 }
 
-void SetMemRegion::FlattenExclave(const Function& func, bool needsRegion)
+void SetMemRegion::FlattenExclave(BlockGroup& blockGroup, bool needsEndRegion)
 {
-    for (auto& block : func.GetBody()->GetBlocks()) {
+    for (auto& block : blockGroup.GetBlocks()) {
         auto terminator = block->GetTerminator();
         if (!Is<Exclave>(terminator)) {
             continue;
         }
+        // 1. flatten the innermost exclave
         auto exclave = StaticCast<Exclave*>(terminator);
+        FlattenExclave(*exclave->GetBody(), false);
+        // 2. move the sub blocks to the parent block group
         auto subEntryBlock = exclave->GetBody()->GetEntryBlock();
         auto subBlocks = exclave->GetBody()->GetBlocks();
         for (auto subBlock : subBlocks) {
-            subBlock->MoveTo(*func.GetBody());
+            subBlock->MoveTo(blockGroup);
         }
+        // 3. replace the exclave terminator with a goto to the sub entry block
         auto parentBlock = exclave->GetParentBlock();
         auto gotoExpr = builder.CreateTerminator<GoTo>(subEntryBlock, parentBlock);
         terminator->ReplaceWith(*gotoExpr);
-        if (needsRegion) {
+        // 4. add an end region instruction if needed
+        if (needsEndRegion) {
             auto endRegion = builder.CreateExpression<EndRegion>(builder.GetUnitTy(), parentBlock);
             endRegion->MoveBefore(gotoExpr);
         }

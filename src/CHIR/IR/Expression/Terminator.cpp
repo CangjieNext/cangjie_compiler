@@ -912,7 +912,6 @@ Exclave* Exclave::Clone(CHIRBuilder& builder, Block& parent) const
 {
     auto newNode = builder.CreateTerminator<Exclave>(&parent);
     parent.AppendExpression(newNode);
-    auto newBody = GetBody()->Clone(builder, *parent.GetTopLevelFunc());
-    newNode->InitBody(*newBody);
+    GetBody()->Clone(builder, *newNode);
     return newNode;
 }

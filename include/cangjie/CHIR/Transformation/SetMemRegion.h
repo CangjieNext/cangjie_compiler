@@ -20,7 +20,7 @@ public:
 private:
     void RunOnFunc(const Function& func);
     bool FunctionNeedsRegion(const Function& func) const;
-    void FlattenExclave(const Function& func, bool needsRegion);
+    void FlattenExclave(BlockGroup& blockGroup, bool needsEndRegion);
     void SetRegions(const Function& func);
     CHIRBuilder& builder;
 };

@@ -576,7 +576,7 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
                         path.insert(path.begin(), name);
                         readOnly = readOnly || !StaticCast<AST::VarDecl*>(refTarget)->isVar;
 
-                        AST::FuncDecl* curMemberFunc = StaticCast<AST::FuncDecl*>(refTarget);
+                        const AST::FuncDecl* curMemberFunc = StaticCast<const AST::FuncDecl*>(topLevelDecl);
                         CJC_ASSERT(curMemberFunc && TypeManager::HasThisParam(*curMemberFunc));
                         auto& tm = const_cast<TypeManager&>(typeManager);
                         targetBaseASTTy = refTarget->outerDecl->GetTy().With(tm.GetThisParamTy(*curMemberFunc).Mode());

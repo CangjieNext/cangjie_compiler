@@ -1544,6 +1544,9 @@ bool Type::IsEqualOrSubTypeOf(const Type& parentType, CHIRBuilder& builder,
     if (!visited->emplace(this, &parentType).second) {
         return false;
     }
+    if (!this->GetModalInfo().IsEqualOrSubModal(parentType.GetModalInfo())) {
+        return false;
+    }
     if (this->IsRef() && parentType.IsRef()) {
         auto subBaseType = StaticCast<const RefType*>(this)->GetBaseType();
         auto parentBaseType = StaticCast<const RefType&>(parentType).GetBaseType();
@@ -1554,16 +1557,6 @@ bool Type::IsEqualOrSubTypeOf(const Type& parentType, CHIRBuilder& builder,
     // we can't think class-A and class-A& is equal
     if ((this->IsRef() || parentType.IsRef()) && (thisDeref == parentDeref)) {
         return false;
-    }
-    if (thisDeref->IsModal()) {
-        if (!parentDeref->IsModal()) {
-            return false;
-        }
-        auto thisModalInfo = thisDeref->GetModalInfo();
-        auto parentModalInfo = parentDeref->GetModalInfo();
-        return thisModalInfo.IsEqualOrSubModal(parentModalInfo) &&
-            thisDeref->GetDataType(builder)->IsEqualOrSubTypeOf(
-                *parentDeref->GetDataType(builder), builder, visited);
     }
     // Nothing type is all types' sub type, Any type is all types' parent type
     if (thisDeref == parentDeref || thisDeref->IsNothing() || parentDeref->IsAny()) {
