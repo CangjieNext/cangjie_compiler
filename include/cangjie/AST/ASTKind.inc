@@ -19,7 +19,7 @@ ASTKIND(ENUM_DECL, "enum_decl", EnumDecl, 928)
 ASTKIND(STRUCT_DECL, "struct_decl", StructDecl, 792) // end of subtypes of InheritableDecl.
 ASTKIND(TYPE_ALIAS_DECL, "type_alias_decl", TypeAliasDecl, 760)
 ASTKIND(PRIMARY_CTOR_DECL, "primary_ctor_decl", PrimaryCtorDecl, 744)
-ASTKIND(BUILTIN_DECL, "builtin_decl", BuiltInDecl, 736)
+ASTKIND(BUILTIN_DECL, "builtin_decl", BuiltInDecl, 760)
 ASTKIND(VAR_DECL, "var_decl", VarDecl, 808) // begin of subtypes of VarDecl and VarDeclAbstract.
 ASTKIND(PROP_DECL, "prop_decl", PropDecl, 896)
 ASTKIND(MACRO_EXPAND_PARAM, "macro_expand_param", MacroExpandParam, 1648)
