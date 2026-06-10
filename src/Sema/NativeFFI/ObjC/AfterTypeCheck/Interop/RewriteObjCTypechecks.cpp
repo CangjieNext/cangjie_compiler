@@ -181,8 +181,10 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
         std::move(objCIdType), *expr.leftExpr);
     objCIdTypePattern->needRuntimeTypeCheck = true;
     objCIdTypePattern->matchBeforeRuntime = false;
-    
-    OwnedPtr<Expr> objCIdBranch = ctx.factory.WrapEntity(std::move(nativeHandle), *castResultTy);
+
+    // We use objc_retain here, because a successfull typecast creates a new @ObjCMirror object that will call
+    // objCRelease in its finalizer.
+    OwnedPtr<Expr> objCIdBranch = ctx.factory.WrapEntity(std::move(nativeHandle), *castResultTy, Retain::RETAINED);
 
     auto objCIdMatchCase = CreateMatchCase(std::move(objCIdTypePattern), std::move(objCIdBranch));
     objCIdMatchCase->patternGuard = std::move(checkCall);
@@ -266,7 +268,9 @@ OwnedPtr<Block> CastAndSubstitudeVars(
         CJC_ASSERT(castDecl);
 
         auto nativeHandle = ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varDecl), curFile));
-        OwnedPtr<Expr> initializer = ctx.factory.WrapEntity(std::move(nativeHandle), *castTy);
+        // We use objc_retain here, because a successfull typecast creates a new @ObjCMirror object that will call
+        // objCRelease in its finalizer.
+        OwnedPtr<Expr> initializer = ctx.factory.WrapEntity(std::move(nativeHandle), *castTy, Retain::RETAINED);
         auto castedVar = WithinFile(CreateTmpVarDecl(CreateType(castDecl->GetTy()), std::move(initializer)), curFile);
         varsMapping[varDecl] = castedVar;
         varsBlock->body.emplace_back(std::move(castedVar));

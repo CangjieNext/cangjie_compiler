@@ -132,9 +132,12 @@ void RewriteObjCFuncCall::HandleImpl(InteropContext& ctx)
             auto call = ctx.factory.CreateFuncCallViaOpaquePointer(
                 CreateMemberCall(WithinFile(CreateRefExpr(*tmpVar), node->curFile), fptrAccessor),
                 ctx.typeMapper.Cj2CType(callExpr->GetTy()), std::move(unwrappedArguments));
+            call->curFile = node->curFile;
             std::vector<OwnedPtr<Node>> block;
             block.emplace_back(std::move(tmpVar));
-            block.emplace_back(ctx.factory.WrapEntity(std::move(call), *callExpr->GetTy()));
+            // We use objc_retain here, because we don't know in advance if
+            // ARC applied objc_autoreleaseReturnValue to the result of the ObjCFunc
+            block.push_back(ctx.factory.WrapEntity(std::move(call), *callExpr->GetTy(), Retain::RETAINED));
             ctx.factory.SetDesugarExpr(
                 callExpr,
                 WrapReturningLambdaCall(

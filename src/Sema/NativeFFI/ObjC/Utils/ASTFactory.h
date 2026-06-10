@@ -23,6 +23,17 @@
 
 namespace Cangjie::Interop::ObjC {
 
+/**
+ * Indicates whether the object needs to be retained
+ */
+enum class Retain {
+    UNRETAINED,
+    RETAINED,
+    // The difference with RETAINED is that this works faster but has a more limited scope of application.
+    // It works only on Objective-C object values affected by objc_autoreleaseReturnValue.
+    RETAIN_AUTORELEASED_RETURN_VALUE
+};
+
 class ASTFactory {
 public:
     explicit ASTFactory(InteropLibBridge& bridge, TypeManager& typeManager, NameGenerator& nameGenerator,
@@ -47,9 +58,14 @@ public:
      * - for primitive value: the value itself
      * - for CPointer<Unit> (mirror class M): constructor call `M(expr)`
      * - for CPointer<Unit> (mirror interface M): constructor call `M$impl(expr)`
-     * - for CPointer<Unit> (impl I): call to retrieve corresponding instance from regirstry for `expr`
+     * - for CPointer<Unit> (impl I): call to retrieve corresponding instance from registry for `expr`
+     *
+     * If `withRetain == Retain::RETAINED`, then `objCRetain(expr)` is called additionally. Only affects ObjCMirrors
+     * currently.
+     * If `withRetain == Retain::RETAIN_AUTORELEASED_RETURN_VALUE`, then `objCRetainAutoreleasedReturnValue(expr)` is
+     * called additionally. Only affects ObjCMirrors currently.
      */
-    OwnedPtr<AST::Expr> WrapEntity(OwnedPtr<AST::Expr> expr, AST::Ty& wrapTy);
+    OwnedPtr<AST::Expr> WrapEntity(OwnedPtr<AST::Expr> expr, AST::Ty& wrapTy, Retain withRetain = Retain::UNRETAINED);
 
     // Option type handling
     Ptr<AST::Ty> GetOptionTy(Ptr<AST::Ty> ty);
@@ -180,8 +196,8 @@ public:
     OwnedPtr<AST::Expr> CreateUnsafePointerCast(OwnedPtr<AST::Expr> expr, Ptr<AST::Ty> elementType);
 
     void SetDesugarExpr(Ptr<AST::Expr> original, OwnedPtr<AST::Expr> desugared);
-    OwnedPtr<AST::Expr> WrapObjCMirrorOption(
-        const Ptr<AST::Expr> entity, Ptr<AST::ClassLikeDecl> mirror, const Ptr<AST::File> curFile);
+    OwnedPtr<AST::Expr> WrapObjCMirrorOption(const Ptr<AST::Expr> entity, Ptr<AST::ClassLikeDecl> mirror,
+        const Ptr<AST::File> curFile, Retain withRetain = Retain::UNRETAINED);
     OwnedPtr<AST::Expr> CreateObjCobjectNull();
     Ptr<AST::Ty> GetObjCTy();
     OwnedPtr<AST::Expr> CreateGetObjcEntityOrNullCall(AST::VarDecl& entity, Ptr<AST::File> file);
@@ -201,8 +217,6 @@ public:
         Ptr<AST::File> file);
     OwnedPtr<AST::Expr> CreateObjCConformsToProtocolCall(OwnedPtr<AST::Expr> id, OwnedPtr<AST::Expr> cls,
         Ptr<AST::File> file);
-    OwnedPtr<AST::Expr> CreateWithMethodEnvScope(OwnedPtr<AST::Expr> nativeHandle, AST::ClassDecl& outerDecl, Ptr<AST::Ty> retTy,
-        std::function<std::vector<OwnedPtr<AST::Node>>(OwnedPtr<AST::Expr>, OwnedPtr<AST::Expr>)> bodyFactory);
     OwnedPtr<AST::Expr> CreateWithObjCSuperScope(OwnedPtr<AST::Expr> nativeHandle, AST::ClassDecl& outerDecl, Ptr<AST::Ty> retTy,
         std::function<std::vector<OwnedPtr<AST::Node>>(OwnedPtr<AST::Expr>, OwnedPtr<AST::Expr>)> bodyFactory);
 
@@ -241,6 +255,8 @@ public:
     OwnedPtr<AST::Expr> CreateConvertToNSStringCall(OwnedPtr<AST::Expr> id, AST::ClassDecl& classDecl,
         Ptr<AST::File> curFile);
     OwnedPtr<AST::Expr> CreateDescriptionAsStringCall(OwnedPtr<AST::Expr> id);
+    OwnedPtr<AST::Expr> CreateObjCRetainCall(OwnedPtr<AST::Expr> id);
+    OwnedPtr<AST::Expr> CreateObjCRetainAutoreleasedReturnValueCall(OwnedPtr<AST::Expr> id);
 
 private:
     void PutDeclToClassLikeBody(AST::Decl& decl, AST::ClassLikeDecl& target);

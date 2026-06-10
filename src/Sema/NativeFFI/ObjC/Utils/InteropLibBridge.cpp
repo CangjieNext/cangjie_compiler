@@ -46,8 +46,6 @@ constexpr auto INTEROPLIB_OBJ_C_SET_INSTANCE_VARIABLE = "setInstanceVariable";
 constexpr auto INTEROPLIB_OBJ_C_GET_CLASS = "getClass";
 constexpr auto INTEROPLIB_OBJ_C_GET_PROTOCOL = "getProtocol";
 constexpr auto INTEROPLIB_OBJ_C_GET_SUPER_CLASS = "getSuperClass";
-constexpr auto INTEROPLIB_OBJ_C_WITH_METHOD_ENV = "withMethodEnv";
-constexpr auto INTEROPLIB_OBJ_C_WITH_METHOD_ENV_OBJ = "withMethodEnvObj";
 constexpr auto INTEROPLIB_OBJ_C_WITH_OBJ_C_SUPER = "withObjCSuper";
 constexpr auto INTEROPLIB_OBJ_C_MSG_SEND = "objCMsgSend";
 constexpr auto INTEROPLIB_OBJ_C_MSG_SEND_SUPER = "objCMsgSendSuper";
@@ -65,6 +63,7 @@ constexpr auto INTEROPLIB_OBJ_C_IS_KIND_OF_CLASS = "isKindOfClass";
 constexpr auto INTEROPLIB_OBJ_C_CONFORMS_TO_PROTOCOL = "conformsToProtocol";
 constexpr auto INTEROPLIB_OBJ_C_CONVERT_TO_NSSTRING = "convertToNSString";
 constexpr auto INTEROPLIB_OBJ_C_DESCRIPTION_AS_STRING = "descriptionAsString";
+constexpr auto INTEROPLIB_OBJ_C_RETAIN_AUTORELEASED_RETURN_VALUE = "objCRetainAutoreleasedReturnValue";
 
 // objc.lang
 constexpr auto OBJ_C_FUNC_GET_FPOINTER = "unsafeGetFunctionPointer";
@@ -320,18 +319,6 @@ Ptr<FuncDecl> InteropLibBridge::GetGetSuperClassDecl()
     return decl;
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetWithMethodEnvDecl()
-{
-    static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_WITH_METHOD_ENV);
-    return decl;
-}
-
-Ptr<FuncDecl> InteropLibBridge::GetWithMethodEnvObjDecl()
-{
-    static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_WITH_METHOD_ENV_OBJ);
-    return decl;
-}
-
 Ptr<FuncDecl> InteropLibBridge::GetObjCMsgSendDecl()
 {
     static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_MSG_SEND);
@@ -395,6 +382,12 @@ Ptr<FuncDecl> InteropLibBridge::GetConvertToNSStringDecl()
 Ptr<FuncDecl> InteropLibBridge::GetDescriptionAsStringDecl()
 {
     static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_DESCRIPTION_AS_STRING);
+    return decl;
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetObjCRetainAutoreleasedReturnValue()
+{
+    static auto decl = GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_OBJ_C_RETAIN_AUTORELEASED_RETURN_VALUE);
     return decl;
 }
 
