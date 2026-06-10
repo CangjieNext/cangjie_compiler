@@ -175,9 +175,9 @@ OwnedPtr<Expr> ASTFactory::UnwrapEntity(OwnedPtr<Expr> expr)
     return expr;
 }
 
-OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy)
+OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy, Retain withRetain)
 {
-    if (typeMapper.IsValidObjCMirror(wrapTy)) {
+    if (typeMapper.IsObjCMirror(wrapTy)) {
         CJC_ASSERT(expr->GetTy()->IsPointer());
         auto classLikeTy = StaticCast<ClassLikeTy>(&wrapTy);
         auto mirror = As<ASTKind::CLASS_DECL>(classLikeTy->commonDecl);
@@ -187,6 +187,17 @@ OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy)
         }
 
         auto ctor = GetGeneratedBaseCtor(*mirror);
+        switch (withRetain) {
+            case Retain::RETAINED:
+                expr = CreateObjCRetainCall(std::move(expr));
+                break;
+            case Retain::RETAIN_AUTORELEASED_RETURN_VALUE:
+                expr = CreateObjCRetainAutoreleasedReturnValueCall(std::move(expr));
+                break;
+            case Retain::UNRETAINED:
+            default:
+                break;
+        }
         return CreateCallExpr(CreateRefExpr(*ctor), Nodes<FuncArg>(CreateFuncArg(std::move(expr))), ctor, classLikeTy,
             CallKind::CALL_OBJECT_CREATION);
     }
@@ -273,7 +284,7 @@ OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy)
         if (auto classALTy = DynamicCast<ClassLikeTy>(wrapTy.typeArgs[0])) {
             if (auto decl = classALTy->commonDecl;
                 decl && decl->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
-                    return WrapObjCMirrorOption(expr, decl, expr->curFile);
+                    return WrapObjCMirrorOption(expr, decl, expr->curFile, withRetain);
             }
         }
     }
@@ -419,7 +430,7 @@ OwnedPtr<Expr> ASTFactory::UnwrapObjCMirrorOption(
     }()
  */
 OwnedPtr<Expr> ASTFactory::WrapObjCMirrorOption(
-    const Ptr<Expr> entity, Ptr<ClassLikeDecl> mirror, const Ptr<File> curFile)
+    const Ptr<Expr> entity, Ptr<ClassLikeDecl> mirror, const Ptr<File> curFile, Retain withRetain)
 {
     std::vector<OwnedPtr<Node>> nodes;
     auto baseTy = typeManager.GetPointerTy(typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT));
@@ -427,13 +438,13 @@ OwnedPtr<Expr> ASTFactory::WrapObjCMirrorOption(
     CopyBasicInfo(tmpVar->initializer.get(), tmpVar.get());
     tmpVar->begin = entity->begin;
     tmpVar->curFile = curFile;
-    auto objcrefExpr = CreateRefExpr(*tmpVar);
+    auto objcrefExpr = WithinFile(CreateRefExpr(*tmpVar), curFile);
 
     auto castTy = mirror->GetTy();
     // case true => None
     OwnedPtr<Expr> trueBranch = CreateOptionNoneRef(castTy);
     // case false => wrap($tmp, T)
-    OwnedPtr<Expr> falseBranch =  WrapEntity(std::move(objcrefExpr), *castTy);
+    OwnedPtr<Expr> falseBranch = WrapEntity(std::move(objcrefExpr), *castTy, withRetain);
 
     auto isInstanceCall = WithinFile(CreateGetObjcEntityOrNullCall(*tmpVar, curFile), curFile);
     auto boolMatch = CreateBoolMatch(
@@ -954,7 +965,16 @@ OwnedPtr<FuncDecl> ASTFactory::CreateMethodWrapper(FuncDecl& method, const Nativ
     if (!method.TestAttr(Attribute::STATIC)) {
         wrapperNodes.emplace_back(std::move(objTmpVarDecl));
     }
-    wrapperNodes.emplace_back(UnwrapEntity(std::move(methodCall)));
+    auto resTy = methodCall->GetTy();
+    auto unwrappedMethodCall = UnwrapEntity(std::move(methodCall));
+    if (typeMapper.IsObjCObjectType(*resTy)) {
+        // We always return object values with retain count +1
+        // ARC balances it with __bridge_transfer
+        // It's done to prevent over release objects, e.g. if Cangjie GC triggers before control acquired by ARC and
+        // @Mirror object is collected
+        unwrappedMethodCall = CreateObjCRetainCall(std::move(unwrappedMethodCall));
+    }
+    wrapperNodes.emplace_back(std::move(unwrappedMethodCall));
 
     auto wrapperBody = CreateFuncBody(std::move(wrapperParamLists), CreateType(retWrapperTy->retTy),
         CreateBlock(std::move(wrapperNodes), retWrapperTy->retTy), retWrapperTy);
@@ -1020,7 +1040,15 @@ OwnedPtr<FuncDecl> ASTFactory::CreateGetterWrapper(PropDecl& prop)
     if (!prop.TestAttr(Attribute::STATIC)) {
         wrapperNodes.emplace_back(std::move(objTmpVarDecl));
     }
-    wrapperNodes.emplace_back(UnwrapEntity(std::move(propGetterCall)));
+    auto unwrappedPropGetterCall = UnwrapEntity(std::move(propGetterCall));
+    if (typeMapper.IsObjCObjectType(*prop.GetTy())) {
+        // We always return object values with retain count +1
+        // ARC balances it with __bridge_transfer
+        // It's done to prevent over release objects, e.g. if Cangjie GC triggers before control acquired by ARC and
+        // @Mirror object is collected
+        unwrappedPropGetterCall = CreateObjCRetainCall(std::move(unwrappedPropGetterCall));
+    }
+    wrapperNodes.emplace_back(std::move(unwrappedPropGetterCall));
 
     auto wrapperBody = CreateFuncBody(std::move(wrapperParamLists), CreateType(wrapperTy->retTy),
         CreateBlock(std::move(wrapperNodes), wrapperTy->retTy), wrapperTy);
@@ -1201,7 +1229,15 @@ OwnedPtr<FuncDecl> ASTFactory::CreateGetterWrapper(VarDecl& field, const Native:
     if (!field.TestAttr(Attribute::STATIC)) {
         wrapperNodes.emplace_back(std::move(objTmpVarDecl));
     }
-    wrapperNodes.emplace_back(UnwrapEntity(std::move(fieldExpr)));
+    auto unwrappedFieldExpr = UnwrapEntity(std::move(fieldExpr));
+    if (typeMapper.IsObjCObjectType(*field.GetTy())) {
+        // We always return object values with retain count +1
+        // ARC balances it with __bridge_transfer
+        // It's done to prevent over release objects, e.g. if Cangjie GC triggers before control acquired by ARC and
+        // @Mirror object is collected
+        unwrappedFieldExpr = CreateObjCRetainCall(std::move(unwrappedFieldExpr));
+    }
+    wrapperNodes.emplace_back(std::move(unwrappedFieldExpr));
 
     auto wrapperBody = CreateFuncBody(std::move(wrapperParamLists), CreateType(wrapperTy->retTy),
         CreateBlock(std::move(wrapperNodes), wrapperTy->retTy), wrapperTy);
@@ -1620,14 +1656,15 @@ OwnedPtr<Expr> ASTFactory::CreateNativeLambdaForBlockType(Ty& ty, Ptr<File> curF
             CreateFuncArg(
                 WrapEntity(
                     WithinFile(CreateRefExpr(*lambdaParams[i]), curFile),
-                    *fty->paramTys[i - 1])));
+                    *fty->paramTys[i - 1], Retain::RETAINED)));
     }
     auto resultCangjie = CreateCallExpr(
         std::move(cangjieFuncExpr),
         std::move(cangjieFuncArgs),
         nullptr, cResTy);
     std::vector<OwnedPtr<Node>> body;
-    body.push_back(UnwrapEntity(std::move(resultCangjie)));
+    auto unwrappedResultCj = UnwrapEntity(std::move(resultCangjie));
+    body.push_back(std::move(unwrappedResultCj));
     auto lambda = WrapReturningLambdaExpr(
         typeManager,
         std::move(body),
@@ -1790,45 +1827,6 @@ OwnedPtr<Expr> ASTFactory::CreateGetSuperClassExpr(OwnedPtr<Expr> objCSuper, Ptr
         bridge.GetNativeObjCClassTy(), CallKind::CALL_DECLARED_FUNCTION), file);
 }
 
-OwnedPtr<Expr> ASTFactory::CreateWithMethodEnvScope(OwnedPtr<Expr> nativeHandle, ClassDecl& outerDecl, Ptr<Ty> retTy,
-    std::function<std::vector<OwnedPtr<Node>>(OwnedPtr<Expr>, OwnedPtr<Expr>)> bodyFactory)
-{
-    CJC_ASSERT(typeMapper.IsObjCCompatible(*retTy));
-
-    Ptr<FuncDecl> withMethodEnvDecl;
-    OwnedPtr<RefExpr> withMethodEnvRef;
-    if (typeMapper.IsObjCObjectType(*retTy)) {
-        withMethodEnvDecl = bridge.GetWithMethodEnvObjDecl();
-        withMethodEnvRef = CreateRefExpr(*withMethodEnvDecl);
-    } else {
-        withMethodEnvDecl = bridge.GetWithMethodEnvDecl();
-        auto unwrappedTy = typeMapper.Cj2CType(retTy);
-        withMethodEnvRef = CreateRefExpr(*withMethodEnvDecl);
-        withMethodEnvRef->instTys.emplace_back(unwrappedTy);
-        withMethodEnvRef->SetTy(typeManager.GetInstantiatedTy(
-            withMethodEnvDecl->GetTy(), GenerateTypeMapping(*withMethodEnvDecl, withMethodEnvRef->instTys)));
-        withMethodEnvRef->typeArguments.emplace_back(CreateType(unwrappedTy));
-    }
-    auto receiverParam =
-        WithinFile(CreateFuncParam("receiver", nullptr, nullptr, bridge.GetNativeObjCIdTy()), nativeHandle->curFile);
-    auto receiverRef = WithinFile(CreateRefExpr(*receiverParam), nativeHandle->curFile);
-
-    auto objCSuperParam = WithinFile(
-        CreateFuncParam("objCSuper", nullptr, nullptr, bridge.GetNativeObjCSuperPtrTy()), nativeHandle->curFile);
-    auto objCSuperRef = WithinFile(CreateRefExpr(*objCSuperParam), nativeHandle->curFile);
-
-    auto actionParams = Nodes<FuncParam>(std::move(receiverParam), std::move(objCSuperParam));
-    auto objcname = nameGenerator.GetObjCDeclName(outerDecl);
-    auto classNameExpr = CreateLitConstExpr(LitConstKind::STRING, objcname, GetStringDecl(importManager).GetTy());
-    auto args = Nodes<FuncArg>(CreateFuncArg(std::move(nativeHandle)), CreateFuncArg(std::move(classNameExpr)),
-        CreateFuncArg(WrapReturningLambdaExpr(
-            typeManager, bodyFactory(std::move(receiverRef), std::move(objCSuperRef)), std::move(actionParams))));
-
-    auto realRetTy = StaticCast<FuncTy>(withMethodEnvRef->GetTy())->retTy;
-    return CreateCallExpr(
-        std::move(withMethodEnvRef), std::move(args), withMethodEnvDecl, realRetTy, CallKind::CALL_DECLARED_FUNCTION);
-}
-
 OwnedPtr<Expr> ASTFactory::CreateWithObjCSuperScope(OwnedPtr<Expr> nativeHandle, ClassDecl& outerDecl, Ptr<Ty> retTy,
     std::function<std::vector<OwnedPtr<Node>>(OwnedPtr<Expr>, OwnedPtr<Expr>)> bodyFactory)
 {
@@ -1897,7 +1895,6 @@ OwnedPtr<CallExpr> ASTFactory::CreateObjCMsgSendCall(
     auto selectorCall = CreateRegisterNameCall(selector, nativeHandle->curFile);
 
     auto ft = MakeOwned<FuncType>();
-    ft->isC = true;
     ft->retType = CreateType(retTy);
 
     args.insert(args.begin(), std::move(selectorCall));
@@ -2264,7 +2261,6 @@ OwnedPtr<CallExpr> ASTFactory::CreateObjCMsgSendSuperCall(OwnedPtr<Expr> receive
     auto selCall = CreateRegisterNameCall(selector, receiver->curFile);
 
     auto ft = MakeOwned<FuncType>();
-    ft->isC = true;
     ft->retType = CreateType(retTy);
 
     rawArgs.insert(rawArgs.begin(), ASTCloner::Clone(selCall.get()));
@@ -2345,6 +2341,19 @@ OwnedPtr<Expr> ASTFactory::CreateConvertToNSStringCall(OwnedPtr<Expr> id, ClassD
 OwnedPtr<Expr> ASTFactory::CreateDescriptionAsStringCall(OwnedPtr<Expr> id)
 {
     auto convertDecl = bridge.GetDescriptionAsStringDecl();
-    auto convertExpr = CreateRefExpr(*convertDecl);
     return CreateCall(std::move(convertDecl), convertDecl->curFile, std::move(id));
+}
+
+OwnedPtr<Expr> ASTFactory::CreateObjCRetainCall(OwnedPtr<Expr> id)
+{
+    auto curFile = id->curFile;
+    auto objCRetainDecl = bridge.GetObjCRetainDecl();
+    return CreateCall(std::move(objCRetainDecl), curFile, std::move(id));
+}
+
+OwnedPtr<Expr> ASTFactory::CreateObjCRetainAutoreleasedReturnValueCall(OwnedPtr<Expr> id)
+{
+    auto curFile = id->curFile;
+    auto objCRetainAutoreleasedReturnValueDecl = bridge.GetObjCRetainAutoreleasedReturnValue();
+    return CreateCall(std::move(objCRetainAutoreleasedReturnValueDecl), curFile, std::move(id));
 }

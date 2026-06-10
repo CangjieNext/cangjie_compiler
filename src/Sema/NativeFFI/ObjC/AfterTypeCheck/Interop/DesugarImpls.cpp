@@ -112,8 +112,8 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
         return;
     }
 
-    auto withMethodEnv = WithinFile(
-        ctx.factory.CreateWithMethodEnvScope(std::move(objCSelf), impl, impl.GetTy(),
+    auto withObjCSuper = WithinFile(
+        ctx.factory.CreateWithObjCSuperScope(std::move(objCSelf), impl, impl.GetTy(),
             [&](auto&& receiver, auto&& objCSuper) {
                 std::vector<OwnedPtr<Expr>> superInitArgs;
                 std::transform(ce->args.begin(), ce->args.end(), std::back_inserter(superInitArgs), [&](auto& arg) {
@@ -134,10 +134,13 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
             }),
         curFile);
 
+    // We use objc_retainAutoreleasedReturnValue instead of objc_retain here, because
+    // we assume that ARC applied objc_autoreleaseReturnValue on the result of the init method
+    auto withObjCSuperRetained = ctx.factory.CreateObjCRetainAutoreleasedReturnValueCall(std::move(withObjCSuper));
     auto baseCtor = ctx.factory.GetGeneratedBaseCtor(impl);
     CJC_NULLPTR_CHECK(baseCtor);
     auto baseCtorCall = WithinFile(CreateSuperCall(*baseCtor->outerDecl, *baseCtor, baseCtor->GetTy()), curFile);
-    baseCtorCall->args.push_back(CreateFuncArg(std::move(withMethodEnv)));
+    baseCtorCall->args.push_back(CreateFuncArg(std::move(withObjCSuperRetained)));
     ce->desugarExpr = std::move(baseCtorCall);
 }
 
@@ -254,13 +257,13 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
         [&](auto& arg) { return ctx.factory.UnwrapEntity(WithinFile(ASTCloner::Clone(arg->expr.get()), curFile)); });
 
     auto nativeHandle = ctx.factory.CreateNativeHandleExpr(impl, false, ce.curFile);
-    auto withMethodEnvCall = ctx.factory.CreateWithMethodEnvScope(
+    auto withObjCSuperCall = ctx.factory.CreateWithObjCSuperScope(
         std::move(nativeHandle), impl, targetFdTy->retTy, [&](auto&& receiver, auto&& objCSuper) {
             OwnedPtr<Expr> msgSendSuperCall;
             if (targetFd->propDecl) {
                 if (!msgSendSuperArgs.empty()) {
-                    msgSendSuperCall = ctx.factory.CreatePropSetterCallViaMsgSendSuper(
-                        *targetFd->propDecl, std::move(receiver), ASTCloner::Clone(objCSuper.get()), std::move(msgSendSuperArgs[0]));
+                    msgSendSuperCall = ctx.factory.CreatePropSetterCallViaMsgSendSuper(*targetFd->propDecl,
+                        std::move(receiver), ASTCloner::Clone(objCSuper.get()), std::move(msgSendSuperArgs[0]));
                 } else {
                     msgSendSuperCall = ctx.factory.CreatePropGetterCallViaMsgSendSuper(
                         *targetFd->propDecl, std::move(receiver), ASTCloner::Clone(objCSuper.get()));
@@ -273,16 +276,21 @@ void DesugarImpls::DesugarCallExpr(InteropContext& ctx, ClassDecl& impl, CallExp
             if (targetFd->HasAnno(AST::AnnotationKind::OBJ_C_OPTIONAL)) {
                 auto methodSelector = ctx.nameGenerator.GetObjCDeclName(*targetFd);
                 auto superClass = ctx.factory.CreateGetSuperClassExpr(std::move(objCSuper), curFile);
-                auto guardCall = ctx.factory.CreateOptionalMethodGuard(std::move(msgSendSuperCall), std::move(superClass),
-                    methodSelector, curFile);
+                auto guardCall = ctx.factory.CreateOptionalMethodGuard(
+                    std::move(msgSendSuperCall), std::move(superClass), methodSelector, curFile);
                 guardCall->curFile = curFile;
                 return Nodes<Node>(std::move(guardCall));
             }
 
             return Nodes<Node>(std::move(msgSendSuperCall));
         });
-    withMethodEnvCall->curFile = curFile;
-    ce.desugarExpr = ctx.factory.WrapEntity(std::move(withMethodEnvCall), *targetFdTy->retTy);
+    withObjCSuperCall->curFile = curFile;
+
+    // We use objc_retainAutoreleasedReturnValue instead of objc_retain here, because
+    // we assume that ARC applied objc_autoreleaseReturnValue to the result of the method
+    auto withObjCSuperCallWrapped = ctx.factory.WrapEntity(
+        std::move(withObjCSuperCall), *targetFdTy->retTy, Retain::RETAIN_AUTORELEASED_RETURN_VALUE);
+    ctx.factory.SetDesugarExpr(&ce, std::move(withObjCSuperCallWrapped));
 }
 
 void DesugarImpls::DesugarGetForPropDecl(
@@ -311,14 +319,19 @@ void DesugarImpls::DesugarGetForPropDecl(
         return;
     }
     auto nativeHandle = ctx.factory.CreateNativeHandleExpr(impl, false, ma.curFile);
-    auto withMethodEnvCall = ctx.factory.CreateWithMethodEnvScope(
+    auto withObjCSuperCall = ctx.factory.CreateWithObjCSuperScope(
         std::move(nativeHandle), impl, ma.GetTy(), [&](auto&& receiver, auto&& objCSuper) {
             auto msgSendSuperCall =
                 ctx.factory.CreatePropGetterCallViaMsgSendSuper(*pd, std::move(receiver), std::move(objCSuper));
 
             return Nodes<Node>(std::move(msgSendSuperCall));
         });
-    withMethodEnvCall->curFile = ma.curFile;
-    ma.desugarExpr = ctx.factory.WrapEntity(std::move(withMethodEnvCall), *ma.GetTy());
+    withObjCSuperCall->curFile = ma.curFile;
+
+    // We use objc_retainAutoreleasedReturnValue instead of objc_retain here, because
+    // we assume that ARC applied objc_autoreleaseReturnValue on the result of the prop getter
+    auto withObjCSuperCallWrapped =
+        ctx.factory.WrapEntity(std::move(withObjCSuperCall), *ma.GetTy(), Retain::RETAIN_AUTORELEASED_RETURN_VALUE);
+    ctx.factory.SetDesugarExpr(&ma, std::move(withObjCSuperCallWrapped));
 }
 } // namespace Cangjie::Interop::ObjC
