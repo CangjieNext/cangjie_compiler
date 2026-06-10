@@ -221,6 +221,7 @@ inline Ptr<AST::InheritableDecl> GetCurInheritableDecl(const ASTContext& ctx, co
 }
 
 /* Utils for TypeCheckCall and TypeArgumentInference */
+bool IsCStringConstructor(const AST::FuncDecl& fd);
 bool IsEnumCtorWithoutTypeArgs(const AST::Expr& expr, Ptr<const AST::Decl> target);
 TyVars GetTyVars(const AST::FuncDecl& fd, const AST::CallExpr& ce, bool ignoreContext = false);
 TyVars GetTyVarsToSolve(const SubstPack& maps);

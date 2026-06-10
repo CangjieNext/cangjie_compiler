@@ -32,6 +32,17 @@ const std::set<std::string> BUILTIN_OPERATORS = {"@", ".", "[]", "()", "++", "--
     "=", "**=", "*=", "/=", "%/", "+=", "-=", "<<=", ">>=", "&=", "^=", "|="};
 } // namespace
 
+bool IsCStringConstructor(const FuncDecl& fd)
+{
+    if (!IsInstanceConstructor(fd) || !fd.funcBody || fd.funcBody->paramLists.empty()) {
+        return false;
+    }
+    if (!fd.outerDecl || !fd.outerDecl->IsBuiltIn()) {
+        return false;
+    }
+    return StaticCast<BuiltInDecl*>(fd.outerDecl)->type == BuiltInType::CSTRING;
+}
+
 std::vector<TypeKind> GetIdealTypesByKind(TypeKind type)
 {
     if (type == TypeKind::TYPE_IDEAL_INT) {
@@ -664,6 +675,11 @@ std::optional<std::pair<Ptr<Ty>, size_t>> GetParamTyAccordingToArgName(const Fun
             return {std::make_pair(ty, j)};
         }
     }
+    // Legacy CString(am: ptr) calls use arbitrary labels; accept any named arg for the single-param ctor.
+    if (IsCStringConstructor(fd) && paramList->params.size() == 1 && paramList->params[0]) {
+        auto ty = paramList->params[0]->type ? paramList->params[0]->type->GetTy() : paramList->params[0]->GetTy();
+        return {std::make_pair(ty, 0U)};
+    }
     return {};
 }
 
@@ -1236,7 +1252,8 @@ bool IsLegalAccess(Symbol* curComposite, const Decl& d, const AST::Node& node, I
     auto vd = DynamicCast<const VarDecl*>(&d);
     auto fd = DynamicCast<const FuncDecl*>(&d);
     auto cld = DynamicCast<const ClassLikeDecl*>(&d);
-    if (!vd && !fd && !cld) {
+    auto bid = DynamicCast<BuiltInDecl>(&d);
+    if (!vd && !fd && !cld && !bid) {
         // There are four kinds of members in class, VarDecl, funcDecl, classDecl and interfaceDecl. If decl is not one
         // of these, then there is no need to check visibility.
         return true;
