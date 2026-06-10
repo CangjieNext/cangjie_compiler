@@ -66,8 +66,8 @@ llvm::Value* IRBuilder2::FixFuncArg(const CGValue& srcValue, const CGType& destT
         // Note: in this branch, we should realize the dest must begin with TypeInfo*.
         auto srcDerefType = DeRef(srcValue.GetCGType()->GetOriginal());
         // 1. Allocate a stack memory for storing srcValue.
-        auto temp =
-            CallIntrinsicAllocaGeneric({CreateTypeInfo(*srcDerefType), GetLayoutSize_32(*srcDerefType)});
+        auto temp = CallIntrinsicAllocaGeneric(
+            {CreateTypeInfo(*srcDerefType), GetLayoutSize_32(*srcDerefType)}, srcDerefType->IsLocalRegion());
         // 2. store srcValue to temp
         auto payloadPtr = GetPayloadFromObject(temp);
         const CGType* srcDerefCGType = CGType::GetOrCreate(cgMod, srcDerefType);
@@ -208,7 +208,7 @@ llvm::Value* CreateSRetGeneric(IRBuilder2& irBuilder, const CGType& returnCGType
     irBuilder.CreateCondBr(irBuilder.CreateTypeInfoIsReferenceCall(retValType), endBB, prepareForNonRefBB);
     irBuilder.SetInsertPoint(prepareForNonRefBB);
     irBuilder.CreateStore(irBuilder.CallIntrinsicAllocaGeneric(
-        {ti, irBuilder.GetLayoutSize_32(retValType)}), allocaForRetVal);
+        {ti, irBuilder.GetLayoutSize_32(retValType)}, retValType.IsLocalRegion()), allocaForRetVal);
     irBuilder.CreateBr(endBB);
     irBuilder.SetInsertPoint(endBB);
     return allocaForRetVal;
@@ -239,12 +239,12 @@ llvm::Value* IRBuilder2::CreateSRetForUnknownSize(const CHIR::Type& returnCHIRTy
         auto retValCGType = CGType::GetOrCreate(cgMod, &retValType);
         if (!retValCGType->IsReference()) {
             std::vector<llvm::Value*> parameters{CreateTypeInfo(retValType), GetLayoutSize_32(retValType)};
-            CreateStore(CallIntrinsicAllocaGeneric(parameters), allocaForRetVal);
+            CreateStore(CallIntrinsicAllocaGeneric(parameters, retValType.IsLocalRegion()), allocaForRetVal);
         }
     } else if (returnCHIRType.IsStruct() || returnCHIRType.IsTuple() ||
         (returnCHIRType.IsEnum() && StaticCast<CGEnumType>(returnCGType).IsOptionLike())) {
         std::vector<llvm::Value*> parameters{CreateTypeInfo(retValType), GetLayoutSize_32(retValType)};
-        allocaForRetVal = CallIntrinsicAllocaGeneric(parameters);
+        allocaForRetVal = CallIntrinsicAllocaGeneric(parameters, retValType.IsLocalRegion());
     } else {
         CJC_ASSERT_WITH_MSG(false, "Unreachable");
     }
@@ -343,7 +343,7 @@ llvm::Value* IRBuilder2::GetReturnValue(const CGFunctionType& calleeType, llvm::
             if (!rstCGType->GetSize() && !rstType->IsGeneric()) {
                 // Opt: if we can return `ret` without the copy?
                 auto ti = CreateTypeInfo(*rstType);
-                auto tmp = CallIntrinsicAllocaGeneric({ti, GetLayoutSize_32(*rstType)});
+                auto tmp = CallIntrinsicAllocaGeneric({ti, GetLayoutSize_32(*rstType)}, rstType->IsLocalRegion());
                 CallIntrinsicAssignGeneric({tmp, ret, ti});
                 ret = tmp;
             } else if (rstCGType->GetSize() && !rstCGType->IsReference()) {
@@ -607,13 +607,14 @@ llvm::Instruction* IRBuilder2::CreateStore(const CGValue& cgVal, const CGValue& 
     // GetTypeInfoIsReference
     if (valType && valType->GetOriginal().IsGeneric() && !valType->GetSize() &&
         destDerefType->GetOriginal().IsGeneric() && !destDerefType->GetSize() && !isMemberWrite) {
-        auto dstTypeInfo = CreateTypeInfo(boxType != nullptr ? *boxType : destDerefType->GetOriginal());
+        const auto& dstChirType = boxType != nullptr ? *boxType : destDerefType->GetOriginal();
+        auto dstTypeInfo = CreateTypeInfo(dstChirType);
         // Check whether dstType is a reference.
         auto [handleRefBB, handleNonRefBB, exitBB] = Vec2Tuple<3>(CreateAndInsertBasicBlocks(
             {GenNameForBB("handle_store_ref"), GenNameForBB("handle_store_non_ref"), GenNameForBB("store_exit")}));
         destAddr =
             CreateBitCast(destAddr, getInt8PtrTy(1U)->getPointerTo(destAddr->getType()->getPointerAddressSpace()));
-        CreateCondBr(CreateTypeInfoIsReferenceCall(boxType != nullptr ? *boxType : destDerefType->GetOriginal()),
+        CreateCondBr(CreateTypeInfoIsReferenceCall(dstChirType),
             handleRefBB, handleNonRefBB);
 
         SetInsertPoint(handleRefBB);
@@ -625,8 +626,8 @@ llvm::Instruction* IRBuilder2::CreateStore(const CGValue& cgVal, const CGValue& 
         if (cgDestAddr.IsSRetArg()) {
             tmpPtr = CreateLoad(cgDestAddr);
         } else {
-            auto dstTypeSize = GetLayoutSize_32(boxType != nullptr ? *boxType : destDerefType->GetOriginal());
-            tmpPtr = CallIntrinsicAllocaGeneric({dstTypeInfo, dstTypeSize});
+            auto dstTypeSize = GetLayoutSize_32(dstChirType);
+            tmpPtr = CallIntrinsicAllocaGeneric({dstTypeInfo, dstTypeSize}, dstChirType.IsLocalRegion());
             (void)CreateStore(tmpPtr, destAddr);
         }
         std::vector<llvm::Value*> copyGenericParams{tmpPtr, val, dstTypeInfo};
@@ -856,7 +857,7 @@ llvm::Value* IRBuilder2::CreateLoad(llvm::Type* elementType, llvm::Value* addr, 
             // gcread.generic while T is value type:
             SetInsertPoint(handleNonRefBB);
             auto tiSize = GetLayoutSize_32(*t);
-            auto valueVal = CallIntrinsicAllocaGeneric({ti, tiSize});
+            auto valueVal = CallIntrinsicAllocaGeneric({ti, tiSize}, elemCHIRType->IsLocalRegion());
             if (auto base = GetCGContext().GetBasePtrOf(addr)) {
                 CallGCReadGeneric({valueVal, base, addr, tiSize});
             } else if (addr->getType() == getInt8PtrTy()) {
@@ -875,7 +876,7 @@ llvm::Value* IRBuilder2::CreateLoad(llvm::Type* elementType, llvm::Value* addr, 
         } else if (!CGType::GetOrCreate(cgMod, elemCHIRType)->GetSize()) {
             auto tiOfElement = CreateTypeInfo(elemCHIRType);
             auto tiSize = GetSizeFromTypeInfo(tiOfElement);
-            auto valueVal = CallIntrinsicAllocaGeneric({tiOfElement, tiSize});
+            auto valueVal = CallIntrinsicAllocaGeneric({tiOfElement, tiSize}, elemCHIRType->IsLocalRegion());
             if (auto base = GetCGContext().GetBasePtrOf(addr)) {
                 CallGCReadGeneric({valueVal, base, addr, tiSize});
             } else if (addr->getType() == getInt8PtrTy()) {
@@ -945,7 +946,7 @@ llvm::Value* IRBuilder2::CreateNullValue(const CHIR::Type& ty)
     // -----------------------------------------------------------------------------------------
     //  Codegen    |  GV(global variable)  |  LV(local variable)
     // ------------|-----------------------|----------------------------------------------------
-    //  CJNATIVE     |  llvm::Constant::     |  1) struct type: memset a struct with 0, returns
+    //  CJNATIVE   |  llvm::Constant::     |  1) struct type: memset a struct with 0, returns
     //             |  getNullValue         |     the struct;
     //             |                       |  2) non-struct type: llvm::Constant::getNullValue;
     //             |                       |  3) array type: return alloca arrayType;
@@ -958,7 +959,7 @@ llvm::Value* IRBuilder2::CreateNullValue(const CHIR::Type& ty)
     if (!cgType->GetSize()) {
         auto typeInfoOfSrc = CreateTypeInfo(ty);
         std::vector<llvm::Value*> parameters{typeInfoOfSrc, GetLayoutSize_32(ty)};
-        return CallIntrinsicAllocaGeneric(parameters);
+        return CallIntrinsicAllocaGeneric(parameters, ty.IsLocalRegion());
     } else if (type == CGType::GetUnitCGType(cgMod)->GetLLVMType()) {
         return cgMod.GenerateUnitTypeValue();
     } else if (type->isStructTy()) {
@@ -1169,7 +1170,9 @@ llvm::Value* IRBuilder2::AllocateArray(const CHIR::RawArrayType& rawArrayType, l
     }
     auto elementSize = GetSize_64(*rawArrayType.GetElementType());
     bool isArrayElementGeneric = CGType::GetOrCreate(cgMod, rawArrayType.GetElementType())->IsDynamicGI();
-    auto allocFunc = isArrayElementGeneric ? GetArrayGenericElemMalloc() : GetArrayNonGenericElemMalloc();
+    auto isLocal = rawArrayType.IsLocalRegion();
+    auto allocFunc =
+        isArrayElementGeneric ? GetArrayGenericElemMalloc(isLocal) : GetArrayNonGenericElemMalloc(isLocal);
     std::vector<llvm::Value*> args = {rawArrayTI, length};
     if (!isArrayElementGeneric) {
         args.emplace_back(elementSize);
@@ -1179,18 +1182,20 @@ llvm::Value* IRBuilder2::AllocateArray(const CHIR::RawArrayType& rawArrayType, l
     return callInst;
 }
 
-llvm::Function* IRBuilder2::GetArrayNonGenericElemMalloc() const
+llvm::Function* IRBuilder2::GetArrayNonGenericElemMalloc(bool isLocal) const
 {
     auto gcArrayMallocFunc =
-        llvm::Intrinsic::getDeclaration(GetLLVMModule(), static_cast<unsigned>(llvm::Intrinsic::cj_malloc_array));
+        llvm::Intrinsic::getDeclaration(GetLLVMModule(), static_cast<unsigned>(
+            isLocal ? llvm::Intrinsic::cj_malloc_local_array : llvm::Intrinsic::cj_malloc_array));
     AddRetAttr(gcArrayMallocFunc, llvm::Attribute::NoAlias);
     return gcArrayMallocFunc;
 }
 
-llvm::Function* IRBuilder2::GetArrayGenericElemMalloc() const
+llvm::Function* IRBuilder2::GetArrayGenericElemMalloc(bool isLocal) const
 {
     auto gcArrayMallocFunc = llvm::Intrinsic::getDeclaration(
-        GetLLVMModule(), static_cast<unsigned>(llvm::Intrinsic::cj_malloc_array_generic));
+        GetLLVMModule(), static_cast<unsigned>(
+            isLocal ? llvm::Intrinsic::cj_malloc_local_array_generic : llvm::Intrinsic::cj_malloc_array_generic));
     AddRetAttr(gcArrayMallocFunc, llvm::Attribute::NoAlias);
     return gcArrayMallocFunc;
 }
@@ -1614,7 +1619,8 @@ llvm::Value* GetOptionLikeNonRefAssociatedValue(IRBuilder2& irBuilder, const CHI
 {
     auto associatedValueTypeTI = irBuilder.CreateTypeInfo(associatedValueType);
     auto sizeOfAssociatedValueType = irBuilder.GetLayoutSize_32(associatedValueType);
-    auto nonRefResult = irBuilder.CallIntrinsicAllocaGeneric({associatedValueTypeTI, sizeOfAssociatedValueType});
+    auto nonRefResult = irBuilder.CallIntrinsicAllocaGeneric(
+        {associatedValueTypeTI, sizeOfAssociatedValueType}, associatedValueType.IsLocalRegion());
 
     auto ti = irBuilder.CreateTypeInfo(enumType);
     // `1` means the second field, `8` means skipping TypeInfo* additionally.
