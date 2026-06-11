@@ -40,6 +40,7 @@
 #include "cangjie/CHIR/Transformation/NoSideEffectMarker.h"
 #include "cangjie/CHIR/Transformation/ReplaceSrcCodeImportedVal.h"
 #include "cangjie/CHIR/Transformation/SanitizerCoverage.h"
+#include "cangjie/CHIR/Transformation/SetMemRegion.h"
 #include "cangjie/CHIR/Transformation/UpdateMemberVarPath.h"
 #include "cangjie/CHIR/Utils/CHIRPrinter.h"
 #include "cangjie/CHIR/Utils/Utils.h"
@@ -648,6 +649,14 @@ void ToCHIR::RunOptimizationPass()
     RunGetRefToArrayElemOpt();
 }
 
+void ToCHIR::SetMemoryRegion()
+{
+    Utils::ProfileRecorder recorder("CHIR", "SetMemoryRegion");
+    auto setMemRegion = SetMemRegion(builder);
+    setMemRegion.RunOnPackage(*chirPkg);
+    DumpCHIRToFile("SetMemoryRegion");
+}
+
 bool ToCHIR::RunConstantEvaluation()
 {
     if (!opts.IsConstEvalEnabled() || opts.enIncrementalCompilation || !opts.commonPartCjos.empty()) {
@@ -1188,6 +1197,7 @@ bool ToCHIR::Run()
 
     EraseDebugExpr();
     CFFIFuncWrapper();
+    SetMemoryRegion();
     RecordCHIRExprNum("CHIR stage");
     RecordCodeInfoAtTheEnd();
     if (!RunIRChecker(Phase::OPT)) {

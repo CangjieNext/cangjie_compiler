@@ -172,17 +172,32 @@ std::string DecimalToManglingNumber(const std::string& decimal)
     return base62 + MANGLE_WILDCARD_PREFIX;
 }
 
-std::string MangleLocalModifier(ModalInfo modal)
+std::string MangleLocalModifier(Cangjie::AST::ModalInfo modal)
 {
     switch (modal.local) {
-        case LocalModal::NOT:
+        case Cangjie::AST::LocalModal::NOT:
             return "";
-        case LocalModal::HALF:
+        case Cangjie::AST::LocalModal::HALF:
             return "?";
-        case LocalModal::FULL:
+        case Cangjie::AST::LocalModal::FULL:
             return "!";
         default:
             CJC_ABORT();
+            return "";
+    }
+}
+
+std::string MangleLocalModifier(Cangjie::CHIR::ModalInfo modal)
+{
+    switch (modal.Local()) {
+        case Cangjie::CHIR::LocalModal::NONE:
+            return "";
+        case Cangjie::CHIR::LocalModal::MAYBE:
+            return "?";
+        case Cangjie::CHIR::LocalModal::MUST:
+            return "!";
+        default:
+            CJC_ASSERT(false && "unexpected modal to be mangled");
             return "";
     }
 }

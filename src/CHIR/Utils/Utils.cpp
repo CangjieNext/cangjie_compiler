@@ -359,8 +359,8 @@ bool IsNestedBlockOf(const BlockGroup* blockGroup, const BlockGroup* scope)
     if (blockGroup == scope) {
         return true;
     }
-    if (auto parentLambda = DynamicCast<Lambda*>(blockGroup->GetOwnerExpression())) {
-        return IsNestedBlockOf(parentLambda->GetParentBlockGroup(), scope);
+    if (auto ownerExpr = blockGroup->GetOwnerExpression()) {
+        return IsNestedBlockOf(ownerExpr->GetParentBlockGroup(), scope);
     }
     return false;
 }
@@ -373,25 +373,25 @@ Type* CreateNewTypeWithArgs(Type& oldType, const std::vector<Type*>& newArgs, CH
     Type* newType = nullptr;
     switch (oldType.GetTypeKind()) {
         case Type::TypeKind::TYPE_TUPLE:
-            newType = builder.GetType<TupleType>(newArgs);
+            newType = builder.GetType<TupleType>(newArgs, oldType.GetModalInfo());
             break;
         case Type::TypeKind::TYPE_STRUCT:
-            newType = builder.GetType<StructType>(StaticCast<const StructType&>(oldType).GetStructDef(), newArgs);
+            newType = builder.GetType<StructType>(StaticCast<const StructType&>(oldType).GetStructDef(), newArgs, oldType.GetModalInfo());
             break;
         case Type::TypeKind::TYPE_ENUM: {
             auto& enumType = StaticCast<const EnumType&>(oldType);
-            newType = builder.GetType<EnumType>(enumType.GetEnumDef(), newArgs);
+            newType = builder.GetType<EnumType>(enumType.GetEnumDef(), newArgs, oldType.GetModalInfo());
             break;
         }
         case Type::TypeKind::TYPE_FUNC: {
             std::vector<Type*> paramTys{newArgs.begin(), newArgs.end() - 1};
             Type* retTy = newArgs.back();
             auto hasVarArg = StaticCast<const FuncType&>(oldType).HasVarArg();
-            newType = builder.GetType<FuncType>(paramTys, retTy, hasVarArg, oldType.IsCFunc());
+            newType = builder.GetType<FuncType>(paramTys, retTy, hasVarArg, oldType.IsCFunc(), oldType.GetModalInfo());
             break;
         }
         case Type::TypeKind::TYPE_CLASS:
-            newType = builder.GetType<ClassType>(StaticCast<const ClassType&>(oldType).GetClassDef(), newArgs);
+            newType = builder.GetType<ClassType>(StaticCast<const ClassType&>(oldType).GetClassDef(), newArgs, oldType.GetModalInfo());
             break;
         case Type::TypeKind::TYPE_REFTYPE:
             CJC_ASSERT(newArgs.size() == 1);
@@ -399,15 +399,15 @@ Type* CreateNewTypeWithArgs(Type& oldType, const std::vector<Type*>& newArgs, CH
             break;
         case Type::TypeKind::TYPE_CPOINTER:
             CJC_ASSERT(newArgs.size() == 1);
-            newType = builder.GetType<CPointerType>(newArgs[0]);
+            newType = builder.GetType<CPointerType>(newArgs[0], oldType.GetModalInfo());
             break;
         case Type::TypeKind::TYPE_RAWARRAY:
             CJC_ASSERT(newArgs.size() == 1);
-            newType = builder.GetType<RawArrayType>(newArgs[0], StaticCast<const RawArrayType&>(oldType).GetDims());
+            newType = builder.GetType<RawArrayType>(newArgs[0], StaticCast<const RawArrayType&>(oldType).GetDims(), oldType.GetModalInfo());
             break;
         case Type::TypeKind::TYPE_VARRAY:
             CJC_ASSERT(newArgs.size() == 1);
-            newType = builder.GetType<VArrayType>(newArgs[0], StaticCast<const VArrayType&>(oldType).GetSize());
+            newType = builder.GetType<VArrayType>(newArgs[0], StaticCast<const VArrayType&>(oldType).GetSize(), oldType.GetModalInfo());
             break;
         case Type::TypeKind::TYPE_BOXTYPE:
             CJC_ASSERT(newArgs.size() == 1);
@@ -431,11 +431,12 @@ Type* ReplaceRawGenericArgType(
     // e.g. class A<T> { func foo<T, U>() {} }
     // if `type` is `foo::T`, return instantiated type
     // if `type` is `foo::U`, return `U`
-    auto genericTy = DynamicCast<const GenericType*>(&type);
+    auto genericTy = DynamicCast<GenericType*>(&type);
     if (genericTy != nullptr) {
-        auto it = replaceTable.find(genericTy);
+        auto dataType = StaticCast<GenericType*>(genericTy->GetDataType(builder));
+        auto it = replaceTable.find(dataType);
         if (it != replaceTable.end()) {
-            return it->second;
+            return builder.WithModal(it->second, genericTy->GetModalInfo());
         } else {
             return &type;
         }
@@ -1593,6 +1594,38 @@ std::vector<Expression*> GetNonDebugUsers(const Value& val)
     for (auto expr: val.GetUsers()) {
         if (expr->GetExprKind() != CHIR::ExprKind::DEBUGEXPR) {
             res.emplace_back(expr);
+        }
+    }
+    return res;
+}
+
+std::vector<Block*> FlattenExclave(
+    const std::vector<Block*>& blocks, BlockGroup& outerBG, CHIRBuilder& builder, bool needsEndRegion)
+{
+    std::vector<Block*> res;
+    for (auto& block : blocks) {
+        res.emplace_back(block);
+        auto terminator = block->GetTerminator();
+        if (!Is<Exclave>(terminator)) {
+            continue;
+        }
+        // 1. flatten the innermost exclave
+        auto exclave = StaticCast<Exclave*>(terminator);
+        auto subBlocks = FlattenExclave(exclave->GetBody()->GetBlocks(), *exclave->GetBody(), builder, false);
+        res.insert(res.end(), subBlocks.begin(), subBlocks.end());
+        // 2. move the sub blocks to the parent block group
+        auto subEntryBlock = exclave->GetBody()->GetEntryBlock();
+        for (auto subBlock : exclave->GetBody()->GetBlocks()) {
+            subBlock->MoveTo(outerBG);
+        }
+        // 3. replace the exclave terminator with a goto to the sub entry block
+        auto parentBlock = exclave->GetParentBlock();
+        auto gotoExpr = builder.CreateTerminator<GoTo>(subEntryBlock, parentBlock);
+        terminator->ReplaceWith(*gotoExpr);
+        // 4. add an end region instruction if needed
+        if (needsEndRegion) {
+            auto endRegion = builder.CreateExpression<EndRegion>(builder.GetUnitTy(), parentBlock);
+            endRegion->MoveBefore(gotoExpr);
         }
     }
     return res;

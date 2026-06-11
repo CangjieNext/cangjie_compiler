@@ -134,7 +134,7 @@ Ptr<Value> Translator::GetDerefedValue(Ptr<Value> val, const DebugLocation& loc)
     if (valType->IsRef()) {
         valType = StaticCast<RefType*>(valType)->GetBaseType();
         // For now, raw class type should not exist. Why, spec indicate that class is reference type.
-        if (valType->IsClassOrArray()) {
+        if (valType->IsReferenceType()) {
             return val;
         }
         auto expr = (loc.IsInvalidPos() ? CreateAndAppendExpression<Load>(valType, val, currentBlock)
@@ -225,7 +225,11 @@ Value* Translator::TranslateExprArg(const AST::Node& node, Type& targetTy, bool 
     if (targetTy.IsUnit()) {
         return CreateAndAppendConstantExpression<UnitLiteral>(builder.GetUnitTy(), *GetCurrentBlock())->GetResult();
     }
-    if (node.GetTy()->IsNothing() || targetTy.IsNothing()) {
+    auto nodeTy = node.GetTy();
+    if (auto exclave = DynamicCast<AST::ExclaveExpr>(&node)) {
+        nodeTy = exclave->body->GetTy();
+    }
+    if (nodeTy->IsNothing() || targetTy.IsNothing()) {
         return CreateAndAppendConstantExpression<NullLiteral>(builder.GetNothingType(),
             *GetCurrentBlock())->GetResult();
     }

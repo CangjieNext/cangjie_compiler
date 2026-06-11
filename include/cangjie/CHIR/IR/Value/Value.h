@@ -382,6 +382,7 @@ class BlockGroup : public Value {
     friend class CHIRContext;
     friend class CHIRBuilder;
     friend class Block;
+    friend class Exclave;
     friend class Lambda;
     friend class ForIn;
 
@@ -426,7 +427,7 @@ public:
     Expression* GetOwnerExpression() const;
 
     BlockGroup* Clone(CHIRBuilder& builder, Function& newFunc) const;
-    BlockGroup* Clone(CHIRBuilder& builder, Lambda& newLambda) const;
+    BlockGroup* Clone(CHIRBuilder& builder, Expression& newExpression) const;
 private:
     explicit BlockGroup(std::string identifier);
     ~BlockGroup() override = default;

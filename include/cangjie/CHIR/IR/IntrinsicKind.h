@@ -34,15 +34,25 @@ namespace Cangjie::CHIR {
 static const std::string SIZE_OF_NAME = "sizeOfType";
 static const std::string ALIGN_OF_NAME = "alignOfType";
 static const std::string ARRAY_ACQUIRE_RAW_DATA_NAME = "acquireRawData";
+static const std::string ARRAY_ACQUIRE_RAW_DATA2_NAME = "acquireRawData2";
 static const std::string ARRAY_RELEASE_RAW_DATA_NAME = "releaseRawData";
+static const std::string ARRAY_RELEASE_RAW_DATA2_NAME = "releaseRawData2";
 static const std::string ARRAY_BUILT_IN_COPY_TO_NAME = "intrinsicBuiltInCopyTo";
+static const std::string ARRAY_BUILT_IN_COPY_TO2_NAME = "intrinsicBuiltInCopyTo2";
+static const std::string ARRAY_BUILT_IN_COPY_TO3_NAME = "intrinsicBuiltInCopyTo3";
 static const std::string ARRAY_GET_NAME = "arrayGet";
 static const std::string ARRAY_SET_NAME = "arraySet";
+static const std::string ARRAY_SET2_NAME = "arraySet2";
+static const std::string ARRAY_SET3_NAME = "arraySet3";
 static const std::string ARRAY_GET_UNCHECKED_NAME = "arrayGetUnchecked";
+static const std::string ARRAY_GET_UNCHECKED2_NAME = "arrayGetUnchecked2";
+static const std::string ARRAY_GET_UNCHECKED3_NAME = "arrayGetUnchecked3";
 
 static const std::string ARRAY_GET_REF_UNCHECKED_NAME = "arrayGetRefUnchecked"; // cjnative only
 
 static const std::string ARRAY_SET_UNCHECKED_NAME = "arraySetUnchecked";
+static const std::string ARRAY_SET_UNCHECKED2_NAME = "arraySetUnchecked2";
+static const std::string ARRAY_SET_UNCHECKED3_NAME = "arraySetUnchecked3";
 static const std::string ARRAY_SIZE_NAME = "arraySize";
 static const std::string ARRAY_CLONE_NAME = "arrayClone";
 static const std::string ARRAY_SLICE_INIT_NAME = "arraySliceInit";
@@ -76,6 +86,7 @@ static const std::string CPOINTER_GET_POINTER_ADDRESS_NAME = "getPointerAddress"
 static const std::string CPOINTER_READ_NAME = "readPointer";
 static const std::string CPOINTER_WRITE_NAME = "writePointer";
 static const std::string CPOINTER_ADD_NAME = "addPointer";
+static const std::string CPOINTER_ADD2_NAME = "addPointer2";
 
 static const std::string CSTRING_CONVERT_CSTR_TO_PTR_NAME = "convertCStr2Ptr";
 static const std::string BIT_CAST_NAME = "bitCast";
@@ -114,6 +125,7 @@ static const std::string OBJECT_REFEQ_NAME = "intrinsicRefEq";
 static const std::string RAW_ARRAY_REFEQ_NAME = "intrinsicRefEqRawArray"; // cjnative only
 static const std::string FUNC_REFEQ_NAME = "intrinsicRefEqFunc"; // cjnative only
 static const std::string OBJECT_ZERO_VALUE_NAME = "zeroValue";
+static const std::string OBJECT_ZERO_VALUE2_NAME = "zeroValue2";
 
 static const std::string IS_THREAD_OBJECT_INITED_NAME = "isThreadObjectInited";
 static const std::string GET_THREAD_OBJECT_NAME = "getThreadObject";

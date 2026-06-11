@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "cangjie/AST/Node.h"
+#include "cangjie/CHIR/IR/Type/Type.h"
 #include "cangjie/Driver/StdlibMap.h"
 #include "cangjie/Mangle/MangleUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
@@ -656,7 +657,8 @@ std::string MangleFilePrivate(const AST::Decl& decl);
  */
 std::string DecimalToManglingNumber(const std::string& decimal);
 
-std::string MangleLocalModifier(ModalInfo modal);
+std::string MangleLocalModifier(AST::ModalInfo modal);
+std::string MangleLocalModifier(CHIR::ModalInfo modal);
 } // namespace MangleUtils
 } // namespace Cangjie
 #endif // CANGJIE_MANGLE_BASEMANGLER_H

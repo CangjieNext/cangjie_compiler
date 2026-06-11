@@ -1219,7 +1219,7 @@ DemangleInfo<T> Demangler<T>::DemangleVArray()
 {
     DemangleInfo<T> di{ MANGLE_VARRAY_STR, TypeKind::TUPLE };
     SkipChar(MANGLE_VARRAY_PREFIX);
-    uint32_t num = DemangleManglingNumber();
+    uint32_t num = static_cast<uint32_t>(DemangleManglingNumber());
     di.genericTypes = DemangleGenericTypes().GetFullName(scopeResolution, num);
     AppendLocalModifierIfExists(di);
     return di;

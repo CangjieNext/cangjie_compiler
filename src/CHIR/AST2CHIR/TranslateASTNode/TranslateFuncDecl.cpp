@@ -440,6 +440,9 @@ Ptr<Value> Translator::TranslateConstructorFuncInline(const AST::Decl& parent, c
                 CJC_ASSERT(!pureCurObjType->IsRef() && pureCurObjType->IsNominal());
                 auto pureCurObjCustomType = StaticCast<CustomType*>(pureCurObjType);
                 auto memberType = pureCurObjCustomType->GetInstMemberTypeByPath(path, builder);
+                if (auto newType = builder.WithModal(value->GetType(), memberType->GetModalInfo()); newType != value->GetType()) {
+                    value->SetType(*newType);
+                }
                 if (value->GetType() == memberType) {
                     CreateAndAppendExpression<StoreElementRef>(
                         loc, builder.GetUnitTy(), value, thisVar, path, currentBlock);

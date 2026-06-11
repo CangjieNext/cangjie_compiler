@@ -413,6 +413,7 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
     // `funcEntry` is `Block #27`
     auto funcEntry = GetEntryBlock(*oldFuncGroup, newBlocks);
     // `exitBlock` is `Block #27`, `returnVal` is `%20`
+    newBlocks = FlattenExclave(newBlocks, *apply.GetParentBlockGroup(), builder, false);
     auto exitBlocks = GetExitBlocks(newBlocks);
 
     // step 2: change connection of func args

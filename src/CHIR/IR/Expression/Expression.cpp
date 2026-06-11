@@ -1436,7 +1436,9 @@ std::string Intrinsic::OperandsToString() const
     std::stringstream ss;
     ss << IntrinsicKindToString(intrinsicKind);
     ss << TypeVecToString("<", instantiatedTypeArgs, ">");
-    ss << ", " << ValueIdVecToString("", operands, "");
+    if (auto opString = ValueIdVecToString("", operands, ""); !opString.empty()) {
+        ss << ", " << opString;
+    }
     return ss.str();
 }
 
@@ -2258,4 +2260,28 @@ GetRTTIStatic::GetRTTIStatic(Type* type, Block* parent)
 Type* GetRTTIStatic::GetRTTIType() const
 {
     return ty;
+}
+
+StartRegion::StartRegion(Block* parent) : Expression(ExprKind::START_REGION, {}, {}, parent)
+{
+}
+
+StartRegion* StartRegion::Clone(CHIRBuilder& builder, Block& parent) const
+{
+    auto newNode = builder.CreateExpression<StartRegion>(result->GetType(), &parent);
+    parent.AppendExpression(newNode);
+    newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
+    return newNode;
+}
+
+EndRegion::EndRegion(Block* parent) : Expression(ExprKind::END_REGION, {}, {}, parent)
+{
+}
+
+EndRegion* EndRegion::Clone(CHIRBuilder& builder, Block& parent) const
+{
+    auto newNode = builder.CreateExpression<EndRegion>(result->GetType(), &parent);
+    parent.AppendExpression(newNode);
+    newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
+    return newNode;
 }

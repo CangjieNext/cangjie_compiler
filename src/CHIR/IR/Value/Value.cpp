@@ -772,24 +772,16 @@ void BlockGroup::SetEntryBlock(Block* block)
 
 void BlockGroup::SetOwnerExpression(Expression& expr)
 {
-#ifndef NDEBUG
-    // we can't move func or lambdas' body to other expression, vice versa
-    if (expr.IsLambda()) {
-        CJC_ASSERT(ownerExpression == nullptr || ownerExpression->IsLambda());
-    } else {
-        CJC_ASSERT(ownerFunc == nullptr && (ownerExpression == nullptr || !ownerExpression->IsLambda()));
-    }
-#endif
-    if (Is<Lambda*>(&expr)) {
-        if (ownerFunc) {
-            ownerFunc->RemoveBody();
-            ownerFunc = nullptr;
-        } else if (auto lambdaExpr = DynamicCast<Lambda*>(ownerExpression)) {
-            lambdaExpr->RemoveBody();
-        }
+    if (ownerFunc) {
+        ownerFunc->RemoveBody();
+        ownerFunc = nullptr;
     }
     if (ownerExpression) {
         RemoveUserOnly(ownerExpression);
+        auto& subGroups = ownerExpression->blockGroups;
+        subGroups.erase(
+            std::remove(subGroups.begin(), subGroups.end(), this), subGroups.end());
+        ownerExpression = nullptr;
     }
     ownerExpression = &expr;
     AddUserOnly(&expr);
@@ -902,16 +894,17 @@ BlockGroup* BlockGroup::Clone(CHIRBuilder& builder, Function& newFunc) const
     return newGroup;
 }
 
-BlockGroup* BlockGroup::Clone(CHIRBuilder& builder, Lambda& newLambda) const
+BlockGroup* BlockGroup::Clone(CHIRBuilder& builder, Expression& newExpression) const
 {
-    auto parentFunc = newLambda.GetTopLevelFunc();
-    CJC_NULLPTR_CHECK(parentFunc);
-    auto newGroup = builder.CreateBlockGroup(*parentFunc);
-    if (newLambda.GetBody() == nullptr) {
-        newLambda.InitBody(*newGroup);
-    }
+    auto newGroup = builder.CreateBlockGroup(*newExpression.GetTopLevelFunc());
     newGroup->AppendAttributeInfo(GetAttributeInfo());
-
+    if (auto lambda = DynamicCast<Lambda*>(&newExpression)) {
+        lambda->InitBody(*newGroup);
+    } else if (auto exclave = DynamicCast<Exclave*>(&newExpression)) {
+        exclave->InitBody(*newGroup);
+    } else {
+        CJC_ABORT();
+    }
     CloneBlocks(builder, *newGroup);
     return newGroup;
 }

@@ -60,6 +60,17 @@ bool IsInsideCFuncLambda(const CHIR::Block& bl)
 }
 } // namespace
 
+CHIR::Type* Translator::GetThisTypeWithModal(CHIR::Type& thisType, const AST::FuncDecl& funcDecl)
+{
+    auto result = AddRefIfFuncIsMutOrClass(thisType, funcDecl, builder);
+    if (funcDecl.funcBody->paramLists[0]->thisParam) {
+        auto astModal = funcDecl.funcBody->paramLists[0]->thisParam->modal;
+        auto chirModal = ASTModal2CHIRModal(astModal);
+        result = builder.WithModal(result, chirModal);
+    }
+    return result;
+}
+
 // `obj.foo()` is a virtual func call ?
 bool Translator::IsVirtualFuncCall(
     const CustomTypeDef& obj, const AST::FuncDecl& funcDecl, bool baseExprIsSuper)
@@ -136,7 +147,7 @@ std::pair<CHIR::Type*, FuncCallType> Translator::GetExactParentTypeAndFuncType(
     auto funcType = StaticCast<FuncType*>(TranslateType(expr.GetTy()));
     auto paramTys = funcType->GetParamTypes();
     if (!funcDecl.TestAttr(AST::Attribute::STATIC)) {
-        paramTys.insert(paramTys.begin(), &thisType);
+        paramTys.insert(paramTys.begin(), GetThisTypeWithModal(thisType, funcDecl));
         funcType = builder.GetType<FuncType>(paramTys, funcType->GetReturnType());
     }
     std::vector<Type*> funcInstArgs;
@@ -165,26 +176,23 @@ std::pair<CHIR::Type*, FuncCallType> Translator::GetExactParentTypeAndFuncType(
         CJC_NULLPTR_CHECK(parentType);
         isVirtualFuncCall = true;
     }
-    if (!funcDecl.TestAttr(AST::Attribute::STATIC)) {
-        CJC_ASSERT(!paramTys.empty());
-        /**
-            interface I {
-                mut func foo() { goo() }
-                mut func goo() {}
-            }
-            struct S <: I {
-                mut func goo() {}
-            }
-            S().foo() // even if foo's parent type is `I`, we shouldn't typecast `S()` from `S&` to `I&`,
-                      // because `S&` is a memory in stack, but `I&` is a memory in heap, so if typecast happened,
-                      // `S()` will be copied to heap, that will not implement `mut` semantic correctly.
-        */
-        if (thisDerefTy->IsStruct() && parentType != thisDerefTy && funcDecl.TestAttr(AST::Attribute::MUT)) {
-            paramTys[0] = &thisType;
-        } else if (parentType->IsClass()) {
-            paramTys[0] = AddRefIfFuncIsMutOrClass(*parentType, funcDecl, builder);
-            funcType = builder.GetType<FuncType>(paramTys, funcType->GetReturnType());
+    /**
+        interface I {
+            mut func foo() { goo() }
+            mut func goo() {}
         }
+        struct S <: I {
+            mut func goo() {}
+        }
+        S().foo() // even if foo's parent type is `I`, we shouldn't typecast `S()` from `S&` to `I&`,
+                    // because `S&` is a memory in stack, but `I&` is a memory in heap, so if typecast happened,
+                    // `S()` will be copied to heap, that will not implement `mut` semantic correctly.
+    */
+    if (!funcDecl.TestAttr(AST::Attribute::STATIC) &&
+        !(thisDerefTy->IsStruct() && funcDecl.TestAttr(AST::Attribute::MUT))) {
+        CJC_ASSERT(!paramTys.empty());
+        paramTys[0] = GetThisTypeWithModal(*parentType, funcDecl);
+        funcType = builder.GetType<FuncType>(paramTys, funcType->GetReturnType());
     }
     return {parentType, FuncCallType{funcDecl.identifier.Val(), funcType, funcInstArgs}};
 }
@@ -223,11 +231,10 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
     }
     
     // 1. calculate `thisType`
-    auto thisType = currentFunc->GetParentCustomTypeOrExtendedType();
-    CJC_NULLPTR_CHECK(thisType);
-    auto thisDerefTy = thisType;
     auto funcDecl = StaticCast<AST::FuncDecl*>(expr.ref.target);
-    thisType = AddRefIfFuncIsMutOrClass(*thisType, *funcDecl, builder);
+    Type* thisType = currentFunc->GetParentCustomTypeOrExtendedType();
+    CJC_NULLPTR_CHECK(thisType);
+    thisType = GetThisTypeWithModal(*thisType, *funcDecl);
 
     // 2. calculate if is virtual func call
     auto caller = currentFunc->GetParentCustomTypeDef();
@@ -246,7 +253,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
         }
         B.foo()  // should print "2"
     */
-    if (auto customType = DynamicCast<CustomType*>(thisDerefTy)) {
+    if (auto customType = DynamicCast<CustomType*>(thisType->StripAllRefs())) {
         caller = customType->GetCustomTypeDef();
     }
     auto isVirtualFuncCall = IsVirtualFuncCall(*caller, *funcDecl, false);
@@ -254,7 +261,7 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromRefExpr(const AST::R
     // 3. calculate parent type and func type
     auto [parentType, funcCallType] = GetExactParentTypeAndFuncType(expr, *thisType, *funcDecl, isVirtualFuncCall);
     if (isVirtualFuncCall) {
-        thisType = builder.GetType<RefType>(builder.GetType<ThisType>());
+        thisType = GetThisTypeWithModal(*builder.GetType<ThisType>(), *funcDecl);
     }
     return InstCalleeInfo {
         .instParentCustomTy = parentType,
@@ -274,7 +281,6 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
     thisType = AddRefIfFuncIsMutOrClass(*thisType, *funcDecl, builder);
 
     // 2. calculate if is virtual func call
-
     auto thisDerefTy = thisType->StripAllRefs();
     bool isVirtualFuncCall = false;
     bool isSuper = false;
@@ -567,8 +573,11 @@ Translator::LeftValueInfo Translator::TranslateMemberAccessAsLeftValue(const AST
                         path.insert(path.begin(), name);
                         readOnly = readOnly || !StaticCast<AST::VarDecl*>(refTarget)->isVar;
 
-                        targetBaseASTTy = refTarget->outerDecl->GetTy();
-                        CJC_ASSERT(targetBaseASTTy->IsStruct() || targetBaseASTTy->IsClass());
+                        const AST::FuncDecl* curMemberFunc = StaticCast<const AST::FuncDecl*>(topLevelDecl);
+                        CJC_ASSERT(curMemberFunc && TypeManager::HasThisParam(*curMemberFunc));
+                        auto& tm = const_cast<TypeManager&>(typeManager);
+                        targetBaseASTTy = refTarget->outerDecl->GetTy().With(tm.GetThisParamTy(*curMemberFunc).Mode());
+                        CJC_ASSERT(targetBaseASTTy.Ty()->IsStruct() || targetBaseASTTy.Ty()->IsClass());
 
                         // this is a hack
                         base = nullptr;

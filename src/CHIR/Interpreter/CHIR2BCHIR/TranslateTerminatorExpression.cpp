@@ -113,6 +113,11 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
             TranslateTryTerminatorJumps(ctx, *StaticCast<const Terminator*>(&expr));
             break;
         }
+        case ExprKind::EXCLAVE: {
+            CJC_ASSERT(expr.GetNumOfOperands() == 0);
+            TranslateBlockGroup(ctx, *StaticCast<const Exclave&>(expr).GetBody());
+            break;
+        }
         default: {
             // unreachable
             CJC_ASSERT(false);

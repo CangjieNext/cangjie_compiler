@@ -211,7 +211,7 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
         auto outerDecl = originalFuncDecl->outerDecl;
         CJC_NULLPTR_CHECK(outerDecl);
         auto parentType = GetNominalSymbolTable(*outerDecl)->GetType();
-        parentType = AddRefIfFuncIsMutOrClass(*parentType, *originalFuncDecl, builder);
+        parentType = GetThisTypeWithModal(*parentType, *originalFuncDecl);
         auto paramTypes = originalFuncType->GetParamTypes();
         paramTypes.insert(paramTypes.begin(), parentType);
         originalFuncType = builder.GetType<FuncType>(paramTypes, originalFuncType->GetReturnType());
@@ -300,7 +300,7 @@ Value* Translator::WrapMemberMethodByLambda(
         // Apply
         if (thisObj != nullptr) {
             auto objExpectedType = instFuncType.instParentCustomTy;
-            if (objExpectedType->IsReferenceType()) {
+            if (objExpectedType->IsReferenceType() || (objExpectedType->IsStruct() && funcDecl.TestAttr(AST::Attribute::MUT))) {
                 objExpectedType = builder.GetType<RefType>(objExpectedType);
             }
             args.insert(args.begin(), TransformThisType(*thisObj, *objExpectedType, *lambda));

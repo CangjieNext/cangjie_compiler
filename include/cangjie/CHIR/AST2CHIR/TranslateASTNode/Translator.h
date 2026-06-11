@@ -375,7 +375,7 @@ public:
      * @param block The block to which the constant will be added.
      * @return A pointer to the translated constant.
      */
-    Ptr<Constant> TranslateLitConstant(const AST::LitConstExpr& expr, AST::DataTy realTy, Ptr<Block> block);
+    Ptr<Constant> TranslateLitConstant(const AST::LitConstExpr& expr, AST::ModalTy realTy, Ptr<Block> block);
     
     /**
      * @brief Translates a literal constant expression to a CHIR literal value.
@@ -384,7 +384,7 @@ public:
      * @param realTy The real type of the constant.
      * @return A pointer to the translated literal value.
      */
-    Ptr<LiteralValue> TranslateLitConstant(const AST::LitConstExpr& expr, AST::DataTy realTy);
+    Ptr<LiteralValue> TranslateLitConstant(const AST::LitConstExpr& expr, AST::ModalTy realTy);
     
     /**
      * @brief Creates annotation factory functions for a declaration.
@@ -775,6 +775,7 @@ private:
     Ptr<Value> Visit(const AST::ClassDecl& decl);
     Ptr<Value> Visit(const AST::DoWhileExpr& doWhileExpr);
     Ptr<Value> Visit(const AST::EnumDecl& decl);
+    Ptr<Value> Visit(const AST::ExclaveExpr& exclaveExpr);
     Ptr<Value> Visit(const AST::ExtendDecl& decl);
     Ptr<Value> Visit(const AST::FuncArg& arg);
     Ptr<Value> Visit(const AST::FuncBody& funcBody);
@@ -884,6 +885,7 @@ private:
     int64_t CalculateDelayExitLevelForThrow();
     void UpdateDelayExitSignal(int64_t level);
     Ptr<Value> GetOuterBlockGroupReturnValLocation();
+    Value* GetReturnValueFromBlockGroup(const BlockGroup& blockGroup);
     void TranslateForInCondControlFlow(Ptr<Value>& condVar);
     void TranslateForInBodyBlockGroup(const AST::ForInExpr& forInExpr);
     friend class TranslateForInExpr;
@@ -1149,6 +1151,8 @@ private:
     void BlackBoxModifyArgTypeToRef(std::vector<Value*>& args);
 
     void AddMemberMethodToCustomTypeDef(const AST::FuncDecl& decl, CustomTypeDef& def);
+
+    Type* GetThisTypeWithModal(Type& thisType, const AST::FuncDecl& funcDecl);
 };
 } // namespace Cangjie::CHIR
 

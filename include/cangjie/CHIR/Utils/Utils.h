@@ -804,5 +804,8 @@ bool IsSTDFunction(const Function& func);
  * @return The non-debug users of the value.
  */
 std::vector<Expression*> GetNonDebugUsers(const Value& val);
+
+std::vector<Block*> FlattenExclave(
+    const std::vector<Block*>& blocks, BlockGroup& outerBG, CHIRBuilder& builder, bool needsEndRegion);
 } // namespace Cangjie::CHIR
 #endif

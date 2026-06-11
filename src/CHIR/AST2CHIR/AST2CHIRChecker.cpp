@@ -6,6 +6,7 @@
 
 #include "cangjie/CHIR/AST2CHIR/AST2CHIRChecker.h"
 
+#include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/Utils.h"
@@ -189,6 +190,12 @@ bool CheckCPointerType(AST::ModalTy astTy, const Type& chirTy)
 
 bool CheckType(AST::ModalTy astTy, const Type& chirTy)
 {
+    if (chirTy.IsRef()) {
+        return CheckType(astTy, *chirTy.StripAllRefs());
+    }
+    if (ASTModal2CHIRModal(astTy.Mode()) != chirTy.GetModalInfo()) {
+        return false;
+    }
     if (chirTy.IsPrimitive()) {
         return CheckPrimitiveType(astTy, chirTy);
     } else if (chirTy.IsTuple()) {
@@ -213,8 +220,6 @@ bool CheckType(AST::ModalTy astTy, const Type& chirTy)
         return CheckCPointerType(astTy, chirTy);
     } else if (chirTy.IsCString()) {
         return astTy->IsCString();
-    } else if (chirTy.IsRef()) {
-        return CheckType(astTy, *chirTy.GetTypeArgs()[0]);
     }
     return true;
 }
