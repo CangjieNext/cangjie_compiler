@@ -242,7 +242,7 @@ void HandleStoreElementRef(IRBuilder2& irBuilder, const CHIR::StoreElementRef& s
     if (!srcCGType->GetSize() && IsThisArgOfStructMethod(*rhs)) {
         auto typeInfoOfSrc = irBuilder.CreateTypeInfo(srcCGType->GetOriginal());
         auto size = irBuilder.GetLayoutSize_32(srcCGType->GetOriginal());
-        auto tmp = irBuilder.CallClassIntrinsicAlloc({typeInfoOfSrc, size});
+        auto tmp = irBuilder.CallClassIntrinsicAlloc({typeInfoOfSrc, size}, false);
         auto payloadPtr = irBuilder.GetPayloadFromObject(tmp);
         // Note: in this branch, it means:
         // - we are assigning a "struct" that doesn't begin with TypeInfo* to an address
