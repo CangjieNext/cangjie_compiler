@@ -66,7 +66,12 @@ Ptr<Value> Translator::GetSymbolTable(const AST::Node& node) const
     return localValSymbolTable.Get(node);
 }
 
-Ptr<Type> Translator::TranslateType(AST::Ty& ty)
+Ptr<Type> Translator::TranslateType(AST::DataTy ty)
+{
+    return chirTy.TranslateType(ty);
+}
+
+Ptr<Type> Translator::TranslateType(AST::ModalTy ty)
 {
     return chirTy.TranslateType(ty);
 }
@@ -75,7 +80,7 @@ Ptr<FuncType> Translator::CreateVirtualFuncType(const AST::FuncDecl& decl)
 {
     std::vector<Type*> args;
     for (size_t i = 0; i < decl.funcBody->paramLists[0]->params.size(); i++) {
-        args.emplace_back(TranslateType(*decl.funcBody->paramLists[0]->params[i]->GetTy()));
+        args.emplace_back(TranslateType(decl.funcBody->paramLists[0]->params[i]->GetTy()));
     }
     return builder.GetType<FuncType>(args, builder.GetUnitTy());
 }

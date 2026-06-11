@@ -63,7 +63,7 @@ Ptr<Value> Translator::TranslateTupleAccess(const AST::SubscriptExpr& subscriptE
         base = CreateAndAppendExpression<Load>(
             loc, StaticCast<RefType*>(base->GetType())->GetBaseType(), base, currentBlock)->GetResult();
     }
-    auto res = CreateAndAppendExpression<Field>(loc, chirTy.TranslateType(*subscriptExpr.GetTy()), base,
+    auto res = CreateAndAppendExpression<Field>(loc, chirTy.TranslateType(subscriptExpr.GetTy()), base,
         std::vector<uint64_t>(indexs.cbegin(), indexs.cend()), currentBlock);
     /*
         If the SubscriptExpr is added by compiler, DCE will skip it.
@@ -113,6 +113,6 @@ Ptr<Value> Translator::TranslateVArrayAccess(const AST::SubscriptExpr& subscript
         .args = indexs
     };
     return CreateAndAppendExpression<Intrinsic>(
-        loc, chirTy.TranslateType(*subscriptExpr.GetTy()), callContext, currentBlock)
+        loc, chirTy.TranslateType(subscriptExpr.GetTy()), callContext, currentBlock)
         ->GetResult();
 }

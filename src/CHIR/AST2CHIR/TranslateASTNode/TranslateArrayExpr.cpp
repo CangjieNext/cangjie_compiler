@@ -59,9 +59,9 @@ CHIR::Type* Translator::GetExactParentType(
     if (outerDecl->TestAttr(AST::Attribute::GENERIC_INSTANTIATED)) {
         Type* parentTy = nullptr;
         if (outerDecl->astKind == AST::ASTKind::EXTEND_DECL) {
-            parentTy = TranslateType(*StaticCast<AST::ExtendDecl*>(outerDecl)->extendedType->GetTy());
+            parentTy = TranslateType(StaticCast<AST::ExtendDecl*>(outerDecl)->extendedType->DataTy());
         } else {
-            parentTy = TranslateType(*outerDecl->GetTy());
+            parentTy = TranslateType(outerDecl->DataTy());
         }
         return parentTy->StripAllRefs();
     }
@@ -119,12 +119,12 @@ CHIR::Type* Translator::GetExactParentType(
 Ptr<Value> Translator::InitVArrayByItem(const AST::ArrayExpr& vArray)
 {
     auto loc = TranslateLocation(vArray);
-    auto vArrayTy = StaticCast<VArrayType*>(chirTy.TranslateType(*vArray.GetTy()));
-    auto eleTy = vArrayTy->GetElementType();
+    auto vArrayTy = chirTy.TranslateType(vArray.GetTy());
+    auto pureVArrayTy = StaticCast<VArrayType*>(vArrayTy->StripAllRefs());
+    auto eleTy = pureVArrayTy->GetElementType();
 
-    auto sizeVal =
-        CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, vArrayTy->GetSize())
-            ->GetResult();
+    auto sizeVal = CreateAndAppendConstantExpression<IntLiteral>(
+        builder.GetInt64Ty(), *currentBlock, pureVArrayTy->GetSize())->GetResult();
     auto valArg = vArray.args[0].get();
     auto val = TranslateExprArg(*valArg);
 
@@ -137,11 +137,11 @@ Ptr<Value> Translator::InitVArrayByItem(const AST::ArrayExpr& vArray)
 Ptr<Value> Translator::InitVArrayByLambda(const AST::ArrayExpr& vArray)
 {
     auto loc = TranslateLocation(vArray);
-    auto vArrayTy = StaticCast<VArrayType*>(chirTy.TranslateType(*vArray.GetTy()));
-    auto eleTy = vArrayTy->GetElementType();
-    auto sizeVal =
-        CreateAndAppendConstantExpression<IntLiteral>(builder.GetInt64Ty(), *currentBlock, vArrayTy->GetSize())
-            ->GetResult();
+    auto vArrayTy = chirTy.TranslateType(vArray.GetTy());
+    auto pureVArrayTy = StaticCast<VArrayType*>(vArrayTy->StripAllRefs());
+    auto eleTy = pureVArrayTy->GetElementType();
+    auto sizeVal = CreateAndAppendConstantExpression<IntLiteral>(
+        builder.GetInt64Ty(), *currentBlock, pureVArrayTy->GetSize())->GetResult();
     auto initFn = TranslateExprArg(*vArray.args[0]);
     auto nullItem = CreateAndAppendConstantExpression<NullLiteral>(eleTy, *currentBlock)->GetResult();
     return CreateAndAppendExpression<VArrayBuilder>(loc, vArrayTy, sizeVal, nullItem, initFn, currentBlock)

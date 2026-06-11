@@ -18,7 +18,7 @@ Ptr<Value> Translator::Visit(const AST::LambdaExpr& lambdaExpr)
     CJC_ASSERT(lambdaExpr.funcBody && lambdaExpr.funcBody->body);
     CJC_ASSERT(!lambdaExpr.mangledName.empty());
     auto lambdaTrans = SetupContextForLambda(*lambdaExpr.funcBody->body);
-    auto funcTy = RawStaticCast<FuncType*>(TranslateType(*lambdaExpr.GetTy()));
+    auto funcTy = StaticCast<FuncType*>(TranslateType(lambdaExpr.GetTy()));
     // Create lambda body and parameters.
     CJC_ASSERT(currentBlock->GetTopLevelFunc());
     BlockGroup* body = builder.CreateBlockGroup(*currentBlock->GetTopLevelFunc());
