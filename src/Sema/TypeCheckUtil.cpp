@@ -955,7 +955,194 @@ Ptr<Ty> FindSmallestTy(const std::set<Ptr<Ty>>& tys, const std::function<bool(Pt
     }
 }
 
-void TryEnforceCandidate(TyVar& tv, const std::set<Ptr<Decl>>& candidates, TypeManager& tyMgr)
+namespace {
+bool MemberMatchesSig(const Decl& member, const MemSig& sig)
+{
+    if (member.identifier != sig.id) {
+        return false;
+    }
+    if (sig.isVarOrProp) {
+        return member.astKind == ASTKind::VAR_DECL || member.astKind == ASTKind::PROP_DECL;
+    }
+    auto fd = DynamicCast<const FuncDecl*>(&member);
+    if (!fd || !fd->funcBody || fd->funcBody->paramLists.empty()) {
+        return false;
+    }
+    auto generic = fd->GetGeneric();
+    auto genArity = generic ? generic->typeParameters.size() : 0;
+    // Generic members are also registered with genArity 0 for inferred type arguments.
+    return fd->funcBody->paramLists[0]->params.size() == sig.arity &&
+        (sig.genArity == 0 || genArity == sig.genArity);
+}
+
+std::vector<Ptr<GenericsTy>> GetDeclGenericParamVec(const Decl& d)
+{
+    std::vector<Ptr<GenericsTy>> res;
+    if (auto generic = d.GetGeneric()) {
+        for (auto& tp : generic->typeParameters) {
+            if (auto gTy = DynamicCast<GenericsTy*>(tp->GetTy())) {
+                res.push_back(gTy);
+            }
+        }
+    }
+    return res;
+}
+
+// Collect the generic params of `member`'s owner appearing in `member`'s parameter types,
+// i.e. those determined once the member call's arguments are known.
+void CollectMemberParamCoverage(
+    const Decl& member, const std::set<Ptr<GenericsTy>>& ownerGps, std::set<Ptr<GenericsTy>>& covered)
+{
+    auto fd = DynamicCast<const FuncDecl*>(&member);
+    if (!fd || !fd->funcBody || fd->funcBody->paramLists.empty()) {
+        return; // vars & props have no parameters, thus determine nothing
+    }
+    for (auto& param : fd->funcBody->paramLists[0]->params) {
+        if (param->GetTy() && param->GetTy()->HasGeneric()) {
+            covered.merge(param->GetTy()->GetGenericTyArgs(ownerGps));
+        }
+    }
+}
+
+// Collect the generic params of `owner` that appear in the parameter types of `owner`'s own
+// members matching any of `memSigs`, i.e. those determined once such a member call's arguments
+// are known. `anyMatch` is set when at least one member matches.
+std::set<Ptr<GenericsTy>> DirectMemberCoverage(
+    const Decl& owner, const std::vector<MemSig>& memSigs, const std::set<Ptr<GenericsTy>>& ownerGps, bool& anyMatch)
+{
+    std::set<Ptr<GenericsTy>> covered;
+    for (auto& member : owner.GetMemberDecls()) {
+        CJC_NULLPTR_CHECK(member);
+        auto matchesSig = [&member](const MemSig& sig) { return MemberMatchesSig(*member, sig); };
+        if (std::none_of(memSigs.begin(), memSigs.end(), matchesSig)) {
+            continue;
+        }
+        anyMatch = true;
+        CollectMemberParamCoverage(*member, ownerGps, covered);
+    }
+    return covered;
+}
+
+std::set<Ptr<GenericsTy>> CoveredGenericsOf(
+    Decl& d, const std::vector<MemSig>& memSigs, TypeManager& tyMgr, bool& anyMatch, std::set<Ptr<Decl>>& visited);
+
+struct CoverageContext {
+    const std::vector<MemSig>* memSigs;
+    TypeManager* tyMgr;
+    bool* anyMatch;
+    std::set<Ptr<GenericsTy>>* covered;
+};
+
+// Collect into `covered` the generic params of the extended decl that are determined by members
+// declared in extends of it. The extended decl's i-th generic param unifies with the i-th type
+// arg of the extended type; it is determined once all extend generics inside that type arg are
+// determined by the matching extend members' parameter types.
+void CollectExtendCoverage(const InheritableDecl& id, const std::vector<Ptr<GenericsTy>>& gpsVec,
+    CoverageContext& ctx)
+{
+    for (auto extend : ctx.tyMgr->GetDeclExtends(id)) {
+        CJC_NULLPTR_CHECK(extend);
+        auto extGpsVec = GetDeclGenericParamVec(*extend);
+        std::set<Ptr<GenericsTy>> extGps(extGpsVec.begin(), extGpsVec.end());
+        bool extMatch = false;
+        auto extCovered = DirectMemberCoverage(*extend, *ctx.memSigs, extGps, extMatch);
+        if (!extMatch) {
+            continue;
+        }
+        *ctx.anyMatch = true;
+        auto extTy = extend->extendedType ? extend->extendedType->GetTy() : nullptr;
+        if (!extTy) {
+            continue;
+        }
+        for (size_t i = 0; i < gpsVec.size() && i < extTy->typeArgs.size(); ++i) {
+            auto arg = extTy->typeArgs[i];
+            if (!arg || !arg->HasGeneric()) {
+                continue;
+            }
+            auto need = arg->GetGenericTyArgs(extGps);
+            if (!need.empty() && std::includes(extCovered.begin(), extCovered.end(), need.begin(), need.end())) {
+                ctx.covered->insert(gpsVec[i]);
+            }
+        }
+    }
+}
+
+// Collect into `covered` the generic params of `id` determined by inherited members. A covered
+// super generic param is unified with the corresponding type arg of the inherited type, which
+// structurally determines `id`'s generics inside that type arg.
+void CollectSuperCoverage(
+    const InheritableDecl& id, const std::set<Ptr<GenericsTy>>& gps, std::set<Ptr<Decl>>& visited,
+    CoverageContext& ctx)
+{
+    for (auto& inheritedType : id.inheritedTypes) {
+        auto superTy = inheritedType ? inheritedType->GetTy() : nullptr;
+        auto superDecl = Ty::GetDeclOfTy<InheritableDecl>(superTy);
+        if (!superDecl || !visited.insert(superDecl).second) {
+            continue;
+        }
+        bool superMatch = false;
+        auto superCovered = CoveredGenericsOf(*superDecl, *ctx.memSigs, *ctx.tyMgr, superMatch, visited);
+        if (!superMatch) {
+            continue;
+        }
+        *ctx.anyMatch = true;
+        auto superGpsVec = GetDeclGenericParamVec(*superDecl);
+        for (size_t j = 0; j < superGpsVec.size() && j < superTy->typeArgs.size(); ++j) {
+            auto arg = superTy->typeArgs[j];
+            if (superCovered.count(superGpsVec[j]) > 0 && arg && arg->HasGeneric()) {
+                ctx.covered->merge(arg->GetGenericTyArgs(gps));
+            }
+        }
+    }
+}
+
+// Collect the generic params of `d` determined by member usages matching `memSigs`, considering
+// members declared in `d` itself, in extends of `d`, and inherited ones; coverage of extend/super
+// generic params is mapped back to `d`'s own params through the extended/inherited type's args.
+std::set<Ptr<GenericsTy>> CoveredGenericsOf(
+    Decl& d, const std::vector<MemSig>& memSigs, TypeManager& tyMgr, bool& anyMatch, std::set<Ptr<Decl>>& visited)
+{
+    auto gpsVec = GetDeclGenericParamVec(d);
+    std::set<Ptr<GenericsTy>> gps(gpsVec.begin(), gpsVec.end());
+    auto covered = DirectMemberCoverage(d, memSigs, gps, anyMatch);
+    auto id = DynamicCast<InheritableDecl*>(&d);
+    if (!id) {
+        return covered;
+    }
+    CoverageContext ctx{&memSigs, &tyMgr, &anyMatch, &covered};
+    CollectExtendCoverage(*id, gpsVec, ctx);
+    CollectSuperCoverage(*id, gps, visited, ctx);
+    return covered;
+}
+
+// A generic candidate is only useful in a sum constraint if the member usages that produced it
+// can eventually determine all of its generic params. A candidate like HashMap<K, V> matched via
+// `operator [](key: K): V` leaves V as a placeholder no later constraint can solve; it cannot be
+// disambiguated anyway, while the free placeholder keeps all dependent constraints unsolvable and
+// causes combinatorial re-checks of the enclosing expressions.
+bool CanDetermineCandidate(Decl& candidate, const std::vector<MemSig>& memSigs, TypeManager& tyMgr)
+{
+    if (memSigs.empty()) {
+        return true;
+    }
+    auto gpsVec = GetDeclGenericParamVec(candidate);
+    if (gpsVec.empty()) {
+        // non-generic candidates never introduce free placeholders
+        return true;
+    }
+    bool anyMatch = false;
+    std::set<Ptr<Decl>> visited{&candidate};
+    auto covered = CoveredGenericsOf(candidate, memSigs, tyMgr, anyMatch, visited);
+    if (!anyMatch) {
+        // no declared or inherited member matched; nothing can be concluded, keep conservatively
+        return true;
+    }
+    return std::all_of(gpsVec.begin(), gpsVec.end(), [&covered](Ptr<GenericsTy> gp) { return covered.count(gp) > 0; });
+}
+} // namespace
+
+void TryEnforceCandidate(
+    TyVar& tv, const std::set<Ptr<Decl>>& candidates, TypeManager& tyMgr, const std::vector<MemSig>& memSigs)
 {
     if (candidates.empty()) {
         return;
@@ -971,11 +1158,21 @@ void TryEnforceCandidate(TyVar& tv, const std::set<Ptr<Decl>>& candidates, TypeM
     if (Ty::IsTyCorrect(uniq)) {
         tyMgr.ConstrainByCtor(tv, *uniq);
     } else {
+        std::set<Ptr<Ty>> sumTys;
+        for (auto d : candidates) {
+            if (CanDetermineCandidate(*d, memSigs, tyMgr)) {
+                sumTys.emplace(d->GetTy());
+            }
+        }
+        if (sumTys.empty()) {
+            // constraining tv by any of these candidates is hopeless, leave it free
+            return;
+        }
         // fill type arguments of found type with placeholder tyvars, in case it's generic
         // the tyvars may be solved later when inferring the lambda body
         std::vector<Ptr<GenericsTy>> tyArgs;
         tyMgr.constraints[&tv].sum.softClear();
-        for (auto ty : declTys) {
+        for (auto ty : sumTys) {
             tyMgr.AddSumByCtor(tv, *ty, tyArgs);
         }
     }
