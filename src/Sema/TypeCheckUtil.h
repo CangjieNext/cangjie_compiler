@@ -14,6 +14,7 @@
 #define CANGJIE_SEMA_TYPECHECKUTIL_H
 
 #include "ScopeManager.h"
+#include "cangjie/AST/Cache.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/Modules/ImportManager.h"
@@ -268,7 +269,11 @@ Ptr<AST::Ty> FindSmallestTy(
     const std::set<Ptr<AST::Ty>>& tys, const std::function<bool(Ptr<AST::Ty>, Ptr<AST::Ty>)>& lessThan);
 bool LessThanAll(Ptr<AST::Ty> ty, const std::set<Ptr<AST::Ty>>& tys,
     const std::function<bool(Ptr<AST::Ty>, Ptr<AST::Ty>)>& lessThan);
-void TryEnforceCandidate(TyVar& tv, const std::set<Ptr<AST::Decl>>& candidates, TypeManager& tyMgr);
+// `memSigs` are the member usages that produced `candidates`; when given, ambiguous generic
+// candidates whose generic params cannot all be determined by these usages are not added to
+// the sum constraint, since their placeholder type args would stay free forever.
+void TryEnforceCandidate(TyVar& tv, const std::set<Ptr<AST::Decl>>& candidates, TypeManager& tyMgr,
+    const std::vector<AST::MemSig>& memSigs = {});
 std::set<Ptr<AST::Ty>> TypeMapToTys(const std::map<AST::TypeKind, AST::TypeKind>& m, bool fromKey);
 // get generic params for the decl and outer decl(if there is) and extended decl(if there is)
 std::set<Ptr<AST::Ty>> GetGenericParamsForDecl(const AST::Decl& decl);
