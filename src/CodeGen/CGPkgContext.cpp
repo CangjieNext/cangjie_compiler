@@ -39,7 +39,7 @@ void CGPkgContext::Clear()
     }
     subTypeMap.clear();
     correctedCachedMangleMap.Clear();
-    quickCHIRValues.Do([](std::unordered_map<std::string, CHIR::Value*>& object) { object.clear(); });
+    quickCHIRValues.Do([](std::unordered_map<std::string, CHIR::GlobalValue*>& object) { object.clear(); });
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     localizedSymbols.Do([](std::set<std::string>& object) { object.clear(); });
 #endif
@@ -50,14 +50,6 @@ std::string CGPkgContext::GetCurrentPkgName() const
     auto curPackage = chirData.GetCurrentCHIRPackage();
     CJC_NULLPTR_CHECK(curPackage);
     return curPackage->GetName();
-}
-
-CHIR::Function* CGPkgContext::GetImplicitUsedFunc(const std::string& funcMangledName)
-{
-    auto funcs = chirData.GetImplicitFuncs();
-    auto it = funcs.find(funcMangledName);
-    CJC_ASSERT_WITH_MSG(it != funcs.end(), funcMangledName + " is not found in implicit used functions");
-    return it->second;
 }
 
 void CGPkgContext::AddCGModule(std::unique_ptr<CGModule>& cgMod)
@@ -133,11 +125,11 @@ bool CGPkgContext::NeedOuterTypeInfo(const CHIR::ClassType& classType)
 }
 #endif
 
-CHIR::Value* CGPkgContext::FindCHIRGlobalValue(const std::string& mangledName)
+CHIR::GlobalValue* CGPkgContext::FindCHIRGlobalValue(const std::string& mangledName)
 {
     const CHIR::Package& capturedChirPkg = GetCHIRPackage();
     return quickCHIRValues.Do(
-        [&capturedChirPkg, &mangledName](std::unordered_map<std::string, CHIR::Value*>& object) -> CHIR::Value* {
+        [&capturedChirPkg, &mangledName](std::unordered_map<std::string, CHIR::GlobalValue*>& object) -> CHIR::GlobalValue* {
             if (object.empty()) {
                 auto globalFuncs = capturedChirPkg.GetGlobalFunctions();
                 auto globalVars = capturedChirPkg.GetGlobalVars();

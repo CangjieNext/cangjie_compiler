@@ -301,13 +301,6 @@ void AST2CHIR::TranslateInitOfGlobalVars(const AST::Package& pkg, const InitOrde
 void AST2CHIR::CollectTopLevelDecls(AST::Package& pkg)
 {
     Utils::ProfileRecorder recorder("AST to CHIR Translation", "CollectTopLevelDecls");
-    // For some special functions, they are explicitly imported even they are NOT explicitly used.
-    // Collect implicit imported/used decl, the decl list is made by
-    // `REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC` and `REG_IMPLICIT_IMPORTED_GENERIC_FUNC`,there are two cases:
-    //   1. if `pkg` is not std.core, we collect implicit imported decls, especially those generic decl in std.core, but
-    //   instantiated decls in other imported package.
-    //   2. if `pkg` is std.core (aka we are compiling std.core), we collect implicit used decls by down stream package.
-    CollectImplicitFuncs();
 
     // Collect Imported Pkg Top-Level Decl Part
     CollectImportedDecls(pkg);

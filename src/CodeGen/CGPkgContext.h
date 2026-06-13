@@ -54,8 +54,6 @@ public:
         return options;
     }
 
-    CHIR::Function* GetImplicitUsedFunc(const std::string& funcMangledName);
-
     const CachedMangleMap& GetCachedMangleMap() const
     {
         return correctedCachedMangleMap;
@@ -88,7 +86,7 @@ public:
     void CollectSubTypeMap();
     bool NeedOuterTypeInfo(const CHIR::ClassType& classType);
 
-    CHIR::Value* FindCHIRGlobalValue(const std::string& mangledName);
+    CHIR::GlobalValue* FindCHIRGlobalValue(const std::string& mangledName);
 
 private:
     CHIRData& chirData;
@@ -100,7 +98,7 @@ private:
     std::vector<std::unique_ptr<CGModule>> cgMods;
     std::unordered_map<const CHIR::ClassType*, std::unordered_set<CHIR::Type*>> subTypeMap;
     // Container that support quick search for target global chirValue.
-    ObjectLocker<std::unordered_map<std::string, CHIR::Value*>> quickCHIRValues;
+    ObjectLocker<std::unordered_map<std::string, CHIR::GlobalValue*>> quickCHIRValues;
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     // The symbols, which need to be changed linkageType after the link.
     ObjectLocker<std::set<std::string>> localizedSymbols;

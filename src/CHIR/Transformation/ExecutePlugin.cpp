@@ -50,11 +50,10 @@ Package* ExecutePlugin::DeserializePluginResult(
     std::unordered_set<Function*>& srcCodeImportedFuncs,
     std::unordered_set<GlobalVar*>& srcCodeImportedVars,
     std::vector<Function*>& initFuncsForConstVar,
-    std::unordered_map<std::string, Function*>& implicitFuncs,
     std::unordered_map<Block*, Terminator*>& maybeUnreachable)
 {
     // 1. convert CHIR pointers to strings
-    CHIRPtrToString(srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, implicitFuncs, maybeUnreachable);
+    CHIRPtrToString(srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, maybeUnreachable);
 
     // 2. reset CHIR context
     builder.MergeAllocatedInstance();
@@ -75,7 +74,7 @@ Package* ExecutePlugin::DeserializePluginResult(
 #endif
 
     // 4. convert strings to CHIR pointers
-    StringToCHIRPtr(srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, implicitFuncs, maybeUnreachable);
+    StringToCHIRPtr(srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, maybeUnreachable);
     return builder.GetCurPackage();
 }
 
@@ -83,7 +82,6 @@ void ExecutePlugin::CHIRPtrToString(
     std::unordered_set<Function*>& srcCodeImportedFuncs,
     std::unordered_set<GlobalVar*>& srcCodeImportedVars,
     std::vector<Function*>& initFuncsForConstVar,
-    std::unordered_map<std::string, Function*>& implicitFuncs,
     std::unordered_map<Block*, Terminator*>& maybeUnreachable)
 {
     for (auto f : srcCodeImportedFuncs) {
@@ -98,10 +96,6 @@ void ExecutePlugin::CHIRPtrToString(
         initFuncsForConstVarNames.emplace_back(f->GetIdentifierWithoutPrefix());
     }
     initFuncsForConstVar.clear();
-    for (auto& it : implicitFuncs) {
-        implicitFuncNames.emplace(it.first);
-    }
-    implicitFuncs.clear();
     for (auto& it : maybeUnreachable) {
         auto funcName = it.first->GetTopLevelFunc()->GetIdentifierWithoutPrefix();
         auto blockName = it.first->GetIdentifierWithoutPrefix();
@@ -118,7 +112,6 @@ void ExecutePlugin::StringToCHIRPtr(
     std::unordered_set<Function*>& srcCodeImportedFuncs,
     std::unordered_set<GlobalVar*>& srcCodeImportedVars,
     std::vector<Function*>& initFuncsForConstVar,
-    std::unordered_map<std::string, Function*>& implicitFuncs,
     std::unordered_map<Block*, Terminator*>& maybeUnreachable)
 {
     auto chirPkg = builder.GetCurPackage();
@@ -134,15 +127,6 @@ void ExecutePlugin::StringToCHIRPtr(
         }
     }
     builder.UpdateTypeInCorePackage();
-
-    for (auto& it : implicitFuncNames) {
-        for (auto f : chirPkg->GetGlobalFuncsWithoutBody()) {
-            if (f->GetIdentifierWithoutPrefix() == it) {
-                implicitFuncs.emplace(it, f);
-                break;
-            }
-        }
-    }
 
     for (auto& it : srcCodeImportedFuncNames) {
         for (auto f : chirPkg->GetGlobalFuncsWithBody()) {

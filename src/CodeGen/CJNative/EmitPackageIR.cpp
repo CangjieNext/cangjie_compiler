@@ -27,7 +27,7 @@ void CreatePrintStackTraceCall(IRBuilder2& irBuilder, llvm::Value* exceptionValu
 
     auto& cgMod = irBuilder.GetCGModule();
     auto& cgCtx = irBuilder.GetCGContext();
-    auto printStackTraceFuncNode = cgCtx.GetImplicitUsedFunc(printStackTraceFuncName);
+    auto printStackTraceFuncNode = cgCtx.GetCGPkgContext().FindCHIRGlobalValue(printStackTraceFuncName);
     auto printStackTraceFuncType = static_cast<CHIR::FuncType*>(printStackTraceFuncNode->GetType());
     // For now:
     auto exceptionTi = irBuilder.GetTypeInfoFromObject(exceptionValue);
@@ -226,7 +226,7 @@ llvm::Function* GenerateEntryFunction(CGModule& cgMod, llvm::Function& userMain)
         std::vector<llvm::Value*> userMainArgs{};
         if (!userMain.arg_empty()) {
             auto getCommandLineArgsFuncCHIRNode =
-                cgMod.GetCGContext().GetImplicitUsedFunc("_CNat18getCommandLineArgsHv");
+                cgMod.GetCGContext().GetCGPkgContext().FindCHIRGlobalValue("_CNat18getCommandLineArgsHv");
             auto getCommandLineArgsFuncReturnType =
                 StaticCast<CHIR::FuncType*>(getCommandLineArgsFuncCHIRNode->GetType())->GetReturnType();
             auto retCGType = CGType::GetOrCreate(cgMod, getCommandLineArgsFuncReturnType);

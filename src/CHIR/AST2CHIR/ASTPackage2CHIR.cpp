@@ -24,25 +24,6 @@
 
 namespace Cangjie::CHIR {
 namespace {
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::CLASS_DECL, init, SpawnException);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::CLASS_DECL, init, Exception);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::CLASS_DECL, init, IndexOutOfBoundsException);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::CLASS_DECL, init, NegativeArraySizeException);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::CLASS_DECL, init, OutOfMemoryError);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::CLASS_DECL, printStackTrace, Exception);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::CLASS_DECL, printStackTrace, Error);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::INVALID_DECL, getCommandLineArgs);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::INVALID_DECL, createArithmeticExceptionMsg);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::INVALID_DECL, createOverflowExceptionMsg);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::INVALID_DECL, CJ_CORE_ExecAtexitCallbacks);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::INVALID_DECL, handleException);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::INVALID_DECL, eprintln);
-REG_IMPLICIT_IMPORTED_NON_GENERIC_FUNC(AST::ASTKind::CLASS_DECL, setRuntimeCJThreadHandle, Thread);
-
-REG_IMPLICIT_IMPORTED_GENERIC_FUNC(AST::ASTKind::CLASS_DECL, execute, Future);
-REG_IMPLICIT_IMPORTED_GENERIC_FUNC(AST::ASTKind::CLASS_DECL, executeClosure, Future);
-REG_IMPLICIT_IMPORTED_GENERIC_FUNC(AST::ASTKind::CLASS_DECL, get, Future);
-
 Linkage GetFuncLinkage(const GlobalOptions& opts, const AST::FuncDecl& func)
 {
     if (func.TestAttr(AST::Attribute::IMPORTED)) {
@@ -95,68 +76,6 @@ void TryUpdateExistingValue(GlobalValue& existing, const std::set<std::string>& 
     }
 }
 } // namespace
-
-void AST2CHIR::AddToImplicitFuncs(AST::FuncDecl& funcDecl,
-    std::vector<ImplicitImportedFunc>& registeredImplicitFuncs,
-    std::unordered_set<Ptr<const AST::Decl>>& implicitlyImportedDecls) const
-{
-    std::unordered_set<std::string> usedFuncInSanCov{FUNC_MANGLE_NAME_MALLOC_CSTRING, FUNC_MANGLE_NAME_CSTRING_SIZE};
-    if (opts.sancovOption.IsSancovEnabled() && usedFuncInSanCov.find(funcDecl.mangledName) != usedFuncInSanCov.end()) {
-        implicitlyImportedDecls.emplace(&funcDecl);
-        return;
-    }
-    auto checkFuncInfo = [](const AST::FuncDecl& funcDecl, const ImplicitImportedFunc& funcInfo) {
-        const auto parentDecl = funcDecl.outerDecl;
-        return funcDecl.identifier == funcInfo.identifier &&
-            (funcInfo.parentName == "" ? !parentDecl
-                                       : (parentDecl && parentDecl->identifier == funcInfo.parentName &&
-                                             parentDecl->astKind == funcInfo.parentKind));
-    };
-    // collect implicit funcDecl.
-    auto it = std::find_if(registeredImplicitFuncs.begin(), registeredImplicitFuncs.end(),
-        [&checkFuncInfo, &funcDecl](auto& funcInfo) { return checkFuncInfo(funcDecl, funcInfo); });
-    if (it != registeredImplicitFuncs.end()) {
-        implicitlyImportedDecls.emplace(&funcDecl);
-    }
-}
-
-void AST2CHIR::CollectImplicitFuncs()
-{
-    std::vector<ImplicitImportedFunc> registeredImplicitFuncs{};
-
-    auto collectImplicitDecls = [&registeredImplicitFuncs, this](AST::Node* node) -> AST::VisitAction {
-        if (node->astKind == AST::ASTKind::FUNC_DECL) {
-            auto funcDecl = StaticCast<AST::FuncDecl*>(node);
-            AddToImplicitFuncs(*funcDecl, registeredImplicitFuncs, implicitDecls);
-            return AST::VisitAction::SKIP_CHILDREN;
-        }
-        return AST::VisitAction::WALK_CHILDREN;
-    };
-
-    auto importedPkgs = importManager.GetAllImportedPackages();
-    AST::PackageDecl* stdCorePkg = importManager.GetPackageDecl(CORE_PACKAGE_NAME);
-    CJC_NULLPTR_CHECK(stdCorePkg);
-    // Collect implicitly imported/used generic funcDecl.
-    // These generic functions that are called implicitly only in CodeGen are from the "std.core" package.
-    // But their generic instances may be in other import packages,so all import packages need to be traversed.
-    registeredImplicitFuncs = ImplicitImportedFuncMgr::Instance().GetImplicitImportedFuncs(
-        ImplicitImportedFuncMgr::FuncKind::GENERIC);
-    for (auto& importedPkg : importedPkgs) {
-        for (auto& instantiatedDecl : importedPkg->srcPackage->genericInstantiatedDecls) {
-            AST::Walker(instantiatedDecl.get(), collectImplicitDecls).Walk();
-        }
-    }
-    // Collect implicitly imported/used non-generic funcDecl.
-    // These functions that are called implicitly only in CodeGen are from the "std.core" package.
-    registeredImplicitFuncs = ImplicitImportedFuncMgr::Instance().GetImplicitImportedFuncs(
-        ImplicitImportedFuncMgr::FuncKind::NONE_GENERIC);
-    AST::IterateToplevelDecls(*stdCorePkg->srcPackage, [&collectImplicitDecls](const OwnedPtr<AST::Decl>& decl) {
-        AST::Walker(decl.get(), collectImplicitDecls).Walk();
-    });
-    for (auto& implicitDecl : implicitDecls) {
-        CJC_ASSERT(implicitDecl->IsFunc());
-    }
-}
 
 void AST2CHIR::CollectDeclToList(AST::Decl& decl, std::vector<Ptr<const AST::Decl>>& astNodes)
 {
@@ -679,9 +598,6 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
             ResetSpecificFunc(funcDecl, *fn);
         }
         globalCache.Set(funcDecl, *fn);
-        if (implicitDecls.count(&funcDecl) != 0) {
-            implicitFuncs.emplace(fn->GetIdentifierWithoutPrefix(), fn);
-        }
         if (IsSrcCodeImportedGlobalDecl(funcDecl, opts)) {
             srcCodeImportedFuncs.emplace(fn);
         }
@@ -739,9 +655,6 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
         srcCodeImportedFuncs.emplace(fn);
     }
     TranslateFuncParams(funcDecl, *fn);
-    if (implicitDecls.count(&funcDecl) != 0) {
-        implicitFuncs.emplace(fn->GetIdentifierWithoutPrefix(), fn);
-    }
     globalCache.Set(funcDecl, *fn);
 
     // collect annotation info, and create anno factory func
@@ -782,9 +695,6 @@ void AST2CHIR::CreatePseudoImportedFuncSignatureAndSetGlobalCache(const AST::Fun
         chirParam->SetSrcCodeIdentifier(param->identifier.GetRawText());
         fn->AddParam(*chirParam);
     }
-    if (implicitDecls.count(&funcDecl) != 0) {
-        implicitFuncs.emplace(fn->GetIdentifierWithoutPrefix(), fn);
-    }
     globalCache.Set(funcDecl, *fn);
 }
 
@@ -811,9 +721,6 @@ void AST2CHIR::CreateImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl&
     if (fn) {
         ConvertImportedFunctionType(*fn, funcDecl, chirType, builder);
         globalCache.Set(funcDecl, *fn);
-        if (implicitDecls.count(&funcDecl) != 0) {
-            implicitFuncs.emplace(fn->GetIdentifierWithoutPrefix(), fn);
-        }
         const auto& loc = GetDeclLoc(builder.GetChirContext(), funcDecl);
         fn->SetDebugLocation(loc);
         return;
@@ -833,9 +740,6 @@ void AST2CHIR::CreateImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl&
     auto loc = TranslateLocationWithoutScope(builder.GetChirContext(), funcDecl.begin, funcDecl.end);
     fn->SetDebugLocation(loc);
     SetFuncAttributeAndLinkageType(funcDecl, *fn);
-    if (implicitDecls.count(&funcDecl) != 0) {
-        implicitFuncs.emplace(fn->GetIdentifierWithoutPrefix(), fn);
-    }
     // set param infos of imported func
     if (IsInstanceMember(funcDecl)) {
         auto pType = StaticCast<FuncType*>(fnTy)->GetParamTypes()[0];

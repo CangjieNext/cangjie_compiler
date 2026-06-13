@@ -22,7 +22,6 @@ public:
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
         std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<std::string, Function*>& implicitFuncs,
         std::unordered_map<Block*, Terminator*>& maybeUnreachable);
     bool FreeCachedData();
 private:
@@ -30,13 +29,11 @@ private:
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
         std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<std::string, Function*>& implicitFuncs,
         std::unordered_map<Block*, Terminator*>& maybeUnreachable);
     void StringToCHIRPtr(
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
         std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<std::string, Function*>& implicitFuncs,
         std::unordered_map<Block*, Terminator*>& maybeUnreachable);
 
     struct PluginResult {
@@ -52,7 +49,6 @@ private:
     std::unordered_set<std::string> srcCodeImportedFuncNames;
     std::unordered_set<std::string> srcCodeImportedVarNames;
     std::vector<std::string> initFuncsForConstVarNames;
-    std::unordered_set<std::string> implicitFuncNames;
     std::unordered_map<std::string, std::pair<std::string, std::string>> unreachableBlockNames;
 };
 }

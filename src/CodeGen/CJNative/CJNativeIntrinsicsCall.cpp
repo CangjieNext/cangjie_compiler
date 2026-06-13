@@ -791,7 +791,7 @@ void IRBuilder2::CreateOverflowOrArithmeticException(const std::string& ident, b
     const std::string createOverflowExceptionFuncName = "rt$CreateOverflowException_msg";
     const std::string createArithmeticExceptionFuncName = "rt$CreateArithmeticException_msg";
     auto funcName = isOverflow ? createOverflowExceptionFuncName : createArithmeticExceptionFuncName;
-    auto createExceptionFuncCHIRNode = GetCGContext().GetImplicitUsedFunc(funcName);
+    auto createExceptionFuncCHIRNode = GetCGContext().GetCGPkgContext().FindCHIRGlobalValue(funcName);
     auto createExceptionFunc = cgMod.GetOrInsertCGFunction(createExceptionFuncCHIRNode);
     auto rawFunction = createExceptionFunc->GetRawFunction();
     auto createExceptionFuncRawType = rawFunction->getFunctionType();
@@ -810,8 +810,8 @@ namespace {
 inline void CreateImplicitUsedFuncCall(
     IRBuilder2& irBuilder, const std::string& funcMangledName, const std::vector<llvm::Value*>& args)
 {
-    auto implicitImportedFunc =
-        irBuilder.GetCGModule().GetOrInsertCGFunction(irBuilder.GetCGContext().GetImplicitUsedFunc(funcMangledName));
+    auto implicitImportedFunc = irBuilder.GetCGModule().GetOrInsertCGFunction(
+        irBuilder.GetCGContext().GetCGPkgContext().FindCHIRGlobalValue(funcMangledName));
     CJC_ASSERT(implicitImportedFunc && "Cant get the implicit Imported function.");
     auto implicitImportedFuncRaw = implicitImportedFunc->GetRawFunction();
     irBuilder.CreateCallOrInvoke(implicitImportedFuncRaw, args);
@@ -886,7 +886,7 @@ void IRBuilder2::CreateSetRuntimeCJThreadHandleCall(const std::vector<llvm::Valu
 void IRBuilder2::CreateEPrintlnCall(const std::string& eMsg)
 {
     const std::string eprintlnFuncName = "_CNat8eprintlnHRNat6StringE";
-    auto eprintlnFuncCHIRNode = GetCGContext().GetImplicitUsedFunc(eprintlnFuncName);
+    auto eprintlnFuncCHIRNode = GetCGContext().GetCGPkgContext().FindCHIRGlobalValue(eprintlnFuncName);
     auto eprintlnFunc = cgMod.GetOrInsertCGFunction(eprintlnFuncCHIRNode);
     auto rawFunction = eprintlnFunc->GetRawFunction();
     auto eprintlnFuncRawType = rawFunction->getFunctionType();

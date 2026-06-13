@@ -1238,7 +1238,7 @@ bool ToCHIR::ExecuteCjPlugins()
     // 3. deserialize plugin result, get new package of cpp
     if (succeed) {
         if (auto newPackage = executePlugin.DeserializePluginResult(
-            srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, implicitFuncs, maybeUnreachable)) {
+            srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, maybeUnreachable)) {
             chirPkg = newPackage;
         } else {
             succeed = false;
@@ -1346,7 +1346,6 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
 
     srcCodeImportedFuncs = ast2CHIR.GetSrcCodeImportedFuncs();
     srcCodeImportedVars = ast2CHIR.GetSrcCodeImportedVars();
-    implicitFuncs = ast2CHIR.GetImplicitFuncs();
     initFuncsForConstVar = ast2CHIR.GetInitFuncsForConstVar();
     maybeUnreachable = ast2CHIR.GetMaybeUnreachableBlocks();
     if (isComputingAnnos) {

@@ -95,11 +95,6 @@ public:
         return builderList;
     }
 
-    std::unordered_map<std::string, CHIR::Function*> GetImplicitFuncs() const
-    {
-        return implicitFuncs;
-    }
-
     std::vector<CHIR::Function*> GetConstVarInitFuncs() const
     {
         return initFuncsForConstVar;
@@ -212,7 +207,6 @@ private:
     std::unordered_set<GlobalVar*> srcCodeImportedVars;
     std::unordered_set<ClassDef*> uselessClasses;
     std::unordered_set<Function*> uselessLambda;
-    std::unordered_map<std::string, Function*> implicitFuncs;
     std::vector<CHIR::Function*> initFuncsForConstVar;
     std::unordered_map<Block*, Terminator*> maybeUnreachable;
     /// Whether this CHIR convertor is translating Annotations

@@ -370,7 +370,7 @@ void CollectLinkNameUsedInMeta(const llvm::NamedMDNode* n, std::unordered_set<st
 CHIR::CustomTypeDef* GetTypeDefFromImplicitUsedFuncParam(
     const CGModule& cgModule, const std::string& funcName, const size_t paramIndex)
 {
-    auto func = cgModule.GetCGContext().GetImplicitUsedFunc(funcName);
+    auto func = cgModule.GetCGContext().GetCGPkgContext().FindCHIRGlobalValue(funcName);
     CJC_ASSERT(func);
     auto fType = dynamic_cast<CHIR::FuncType*>(func->GetType());
     auto classBaseType = dynamic_cast<CHIR::RefType*>(fType->GetParamType(paramIndex))->GetBaseType();

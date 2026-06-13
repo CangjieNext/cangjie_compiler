@@ -73,9 +73,6 @@ public:
     std::vector<CHIR::Package*> GetAllCHIRPackages() const;
     CHIR::Package* GetCurrentCHIRPackage() const;
 
-    void SetImplicitFuncs(const std::unordered_map<std::string, CHIR::Function*>& funcs);
-    std::unordered_map<std::string, CHIR::Function*> GetImplicitFuncs() const;
-
     void SetConstVarInitFuncs(const std::vector<CHIR::Function*>& funcs);
     std::vector<CHIR::Function*> GetConstVarInitFuncs() const;
 
@@ -90,8 +87,6 @@ public:
 private:
     CHIR::CHIRContext cctx;
     std::vector<CHIR::Package*> chirPkgs;
-    // used by codegen
-    std::unordered_map<std::string, CHIR::Function*> implicitFuncs;
     // used by interpreter
     std::vector<CHIR::Function*> initFuncsForConstVar;
     // only for AnalysisWrapper

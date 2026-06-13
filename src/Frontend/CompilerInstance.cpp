@@ -1001,7 +1001,6 @@ bool CompilerInstance::GenerateCHIRForPkg(AST::Package& pkg)
     chirInfo.optEffectMap = convertor.GetOptEffectMap();
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     chirData->AppendNewPackage(chirPkg);
-    chirData->SetImplicitFuncs(convertor.GetImplicitFuncs());
     chirData->SetConstVarInitFuncs(convertor.GetConstVarInitFuncs());
     chirInfo.curVirtFuncWrapDep = convertor.GetCurVirtualFuncWrapperDepForIncr();
     chirInfo.delVirtFuncWrapForIncr = convertor.GetDeleteVirtualFuncWrapperForIncr();
@@ -1370,16 +1369,6 @@ CHIR::Package* CHIRData::GetCurrentCHIRPackage() const
         return nullptr;
     }
     return chirPkgs[0];
-}
-
-void CHIRData::SetImplicitFuncs(const std::unordered_map<std::string, CHIR::Function*>& funcs)
-{
-    implicitFuncs = funcs;
-}
-
-std::unordered_map<std::string, CHIR::Function*> CHIRData::GetImplicitFuncs() const
-{
-    return implicitFuncs;
 }
 
 void CHIRData::SetConstVarInitFuncs(const std::vector<CHIR::Function*>& funcs)
