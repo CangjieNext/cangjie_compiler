@@ -46,6 +46,7 @@ TempFileInfo IOS_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>
     GenerateLinkOptionsForLTO(*tool);
     tool->AppendArg("-object_path_lto", ltoObjectDir);
     tool->AppendArg("-dylib");
+    tool->AppendArg("-lto-emit-obj-only");
     tool->AppendArg("-arch", GetTargetArchString());
 
     tool->AppendArg("-platform_version");
