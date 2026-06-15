@@ -283,9 +283,15 @@ TempFileInfo ToolChain::GetOutputFileInfo(const std::vector<TempFileInfo>& objFi
 TempFileInfo ToolChain::CreateNewFileInfoWrapper(const std::vector<TempFileInfo>& objFiles, TempFileKind kind) const
 {
     TempFileInfo optionalInfo;
-    if (!objFiles.empty()) {
+    for (const auto& objFile : objFiles) {
+        if (objFile.isFrontendOutput) {
+            optionalInfo = objFile;
+            break;
+        }
+    }
+    if (optionalInfo.fileName.empty() && !objFiles.empty()) {
         optionalInfo = objFiles[0];
-    } else if (!driverOptions.inputObjs.empty()) {
+    } else if (optionalInfo.fileName.empty() && !driverOptions.inputObjs.empty()) {
         optionalInfo.fileName = FileUtil::GetFileNameWithoutExtension(driverOptions.inputObjs[0]);
     }
     return TempFileManager::Instance().CreateNewFileInfo(optionalInfo, kind);
