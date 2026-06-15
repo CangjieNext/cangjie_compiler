@@ -61,3 +61,14 @@ target_link_libraries(
     GTest::gtest_main
     TestCompilerInstanceObject)
 add_test(NAME ParseIncrTest COMMAND ParseIncrTest)
+
+add_executable(ParseOuterInterfaceTest ParseOuterInterfaceTest.cpp)
+target_link_libraries(
+    ParseOuterInterfaceTest
+    cangjie-lsp
+    ${CMAKE_DL_LIBS}
+    boundscheck-static
+    GTest::gtest
+    GTest::gtest_main
+    TestCompilerInstanceObject)
+add_test(NAME ParseOuterInterfaceTest COMMAND ParseOuterInterfaceTest)

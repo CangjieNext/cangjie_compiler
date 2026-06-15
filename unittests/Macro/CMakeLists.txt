@@ -9,6 +9,7 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
     add_executable(TokenSerializationTest TokenSerializationTest.cpp)
     add_executable(NodeSerializationTest NodeSerializationTest.cpp)
     add_executable(MacroTest MacroTest.cpp)
+    add_executable(MacroForOuterInterfaceTest MacroForOuterInterfaceTest.cpp)
 
     target_link_libraries(
         TokenSerializationTest
@@ -33,11 +34,21 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
         GTest::gtest_main
         TestCompilerInstanceObject)
 
+    target_link_libraries(
+        MacroForOuterInterfaceTest
+        cangjie-lsp
+        ${LINK_LIBS}
+        boundscheck-static
+        GTest::gtest
+        GTest::gtest_main
+        TestCompilerInstanceObject)
+
     add_dependencies(NodeSerializationTest CangjieFlatbuffersHeaders)
     target_include_directories(NodeSerializationTest PRIVATE ${FLATBUFFERS_INCLUDE_DIR})
 
     add_test(NAME TokenSerializationTest COMMAND TokenSerializationTest)
     add_test(NAME NodeSerializationTest COMMAND NodeSerializationTest)
     add_test(NAME MacroTest COMMAND MacroTest)
+    add_test(NAME MacroForOuterInterfaceTest COMMAND MacroForOuterInterfaceTest)
 
 endif()
