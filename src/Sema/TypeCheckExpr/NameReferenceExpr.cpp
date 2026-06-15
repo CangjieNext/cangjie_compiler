@@ -463,7 +463,8 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
 
     if (auto target = re.ref.target; target->IsBuiltIn()) {
         if (auto cfunc = StaticCast<BuiltInDecl>(target); cfunc->type == BuiltInType::CFUNC) {
-            return InferCFuncExpr(ctx, re);
+            InferCFuncExpr(ctx, re);
+            return;
         }
     }
     // If refExpr is base of call, decide real target & type in function call checking.
@@ -486,24 +487,22 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
     }
 }
 
-void TypeChecker::TypeCheckerImpl::InferCFuncExpr(ASTContext& ctx, RefExpr& re)
+void TypeChecker::TypeCheckerImpl::InferCFuncExpr(ASTContext& ctx, NameReferenceExpr& nre)
 {
-    // check type arguments
     // infer type arguments of CFunc is currently disallowed
-    if (re.typeArguments.size() != 1) {
+    if (nre.typeArguments.size() != 1) {
         diag.DiagnoseRefactor(
-            DiagKindRefactor::sema_generic_argument_no_match, re, MakeRange(re.GetBegin(), re.GetEnd()));
-        re.SetTy(TypeManager::GetInvalidTy());
+            DiagKindRefactor::sema_generic_argument_no_match, nre, MakeRange(nre.GetBegin(), nre.GetEnd()));
+        nre.SetTy(TypeManager::GetInvalidTy());
         return;
     }
-    auto funcType = DynamicCast<FuncType>(&*re.typeArguments[0]);
+    auto funcType = DynamicCast<FuncType>(&*nre.typeArguments[0]);
     if (!funcType) {
-        diag.Diagnose(re.typeArguments[0]->GetBegin(), re.typeArguments[0]->GetEnd(), DiagKind::sema_cfunc_type);
-        re.SetTy(TypeManager::GetInvalidTy());
+        diag.Diagnose(nre.typeArguments[0]->GetBegin(), nre.typeArguments[0]->GetEnd(), DiagKind::sema_cfunc_type);
+        nre.SetTy(TypeManager::GetInvalidTy());
         return;
     }
 
-    // synthesise type
     std::vector<Ptr<Ty>> paramTys;
     for (size_t i{0}; i < funcType->paramTypes.size(); ++i) {
         auto& param = funcType->paramTypes[i];
@@ -513,7 +512,8 @@ void TypeChecker::TypeCheckerImpl::InferCFuncExpr(ASTContext& ctx, RefExpr& re)
     funcType->retType->SetTy(GetTyFromASTType(ctx, funcType->retType.get()));
     Ptr<Ty> retTy = funcType->retType->GetTy();
     auto resTy = typeManager.GetFunctionTy(std::move(paramTys), retTy, {.isC = true});
-    re.SetTy(resTy);
+    funcType->SetTy(resTy);
+    nre.SetTy(resTy);
 }
 
 void TypeChecker::TypeCheckerImpl::TryInitializeBaseSum(ASTContext& ctx, MemberAccess& ma)
@@ -576,6 +576,10 @@ void TypeChecker::TypeCheckerImpl::InferMemberAccess(ASTContext& ctx, MemberAcce
         InferInstanceAccess(ctx, ma);
     }
     if (!ma.target) {
+        return;
+    }
+    if (auto builtin = DynamicCast<BuiltInDecl>(ma.target); builtin && builtin->type == BuiltInType::CFUNC) {
+        InferCFuncExpr(ctx, ma);
         return;
     }
     // Legality of using memberAccess will be checked after typecheck in 'CheckLegalityOfReference'.
