@@ -10,9 +10,238 @@
 #include "cangjie/AST/Walker.h"
 #include "cangjie/CHIR/Utils/ConstantUtils.h"
 #include "cangjie/CHIR/IR/IntrinsicKind.h"
+#include "cangjie/Utils/ConstantsUtils.h"
 
-using namespace Cangjie::CHIR;
-using namespace Cangjie;
+namespace Cangjie::CHIR {
+static const std::unordered_map<std::string, IntrinsicKind> coreIntrinsicMap = {
+    {SIZE_OF_NAME, SIZE_OF},
+    {ALIGN_OF_NAME, ALIGN_OF},
+    {ARRAY_ACQUIRE_RAW_DATA_NAME, ARRAY_ACQUIRE_RAW_DATA},
+    {ARRAY_RELEASE_RAW_DATA_NAME, ARRAY_RELEASE_RAW_DATA},
+    {ARRAY_BUILT_IN_COPY_TO_NAME, ARRAY_BUILT_IN_COPY_TO},
+    {ARRAY_GET_NAME, ARRAY_GET},
+    {ARRAY_SET_NAME, ARRAY_SET},
+    {ARRAY_GET_UNCHECKED_NAME, ARRAY_GET_UNCHECKED},
+
+    {ARRAY_GET_REF_UNCHECKED_NAME, ARRAY_GET_REF_UNCHECKED},
+
+    {ARRAY_SET_UNCHECKED_NAME, ARRAY_SET_UNCHECKED},
+    {ARRAY_SIZE_NAME, ARRAY_SIZE},
+    {ARRAY_CLONE_NAME, ARRAY_CLONE},
+    {ARRAY_SLICE_INIT_NAME, ARRAY_SLICE_INIT},
+    {ARRAY_SLICE_NAME, ARRAY_SLICE},
+    {ARRAY_SLICE_RAWARRAY_NAME, ARRAY_SLICE_RAWARRAY},
+    {ARRAY_SLICE_START_NAME, ARRAY_SLICE_START},
+    {ARRAY_SLICE_SIZE_NAME, ARRAY_SLICE_SIZE},
+    {ARRAY_SLICE_GET_ELEMENT_NAME, ARRAY_SLICE_GET_ELEMENT},
+    {ARRAY_SLICE_SET_ELEMENT_NAME, ARRAY_SLICE_SET_ELEMENT},
+    {ARRAY_SLICE_GET_ELEMENT_UNCHECKED_NAME, ARRAY_SLICE_GET_ELEMENT_UNCHECKED},
+    {ARRAY_SLICE_SET_ELEMENT_UNCHECKED_NAME, ARRAY_SLICE_SET_ELEMENT_UNCHECKED},
+
+    {VECTOR_COMPARE_32_NAME, VECTOR_COMPARE_32},
+    {VECTOR_INDEX_BYTE_32_NAME, VECTOR_INDEX_BYTE_32},
+
+    {FILL_IN_STACK_TRACE_NAME, FILL_IN_STACK_TRACE},
+    {DECODE_STACK_TRACE_NAME, DECODE_STACK_TRACE},
+    {DUMP_CURRENT_THREAD_INFO_NAME, DUMP_CURRENT_THREAD_INFO},
+    {DUMP_ALL_THREADS_INFO_NAME, DUMP_ALL_THREADS_INFO},
+
+    {CPOINTER_GET_POINTER_ADDRESS_NAME, CPOINTER_GET_POINTER_ADDRESS},
+    {CPOINTER_READ_NAME, CPOINTER_READ},
+    {CPOINTER_WRITE_NAME, CPOINTER_WRITE},
+    {CPOINTER_ADD_NAME, CPOINTER_ADD},
+
+    {CSTRING_CONVERT_CSTR_TO_PTR_NAME, CSTRING_CONVERT_CSTR_TO_PTR},
+    {BIT_CAST_NAME, BIT_CAST},
+
+    {FUTURE_INIT_NAME, FUTURE_INIT},
+
+    {IS_THREAD_OBJECT_INITED_NAME, IS_THREAD_OBJECT_INITED},
+    {GET_THREAD_OBJECT_NAME, GET_THREAD_OBJECT},
+    {SET_THREAD_OBJECT_NAME, SET_THREAD_OBJECT},
+
+    {FUTURE_IS_COMPLETE_NAME, FUTURE_IS_COMPLETE},
+    {FUTURE_WAIT_NAME, FUTURE_WAIT},
+    {FUTURE_NOTIFYALL_NAME, FUTURE_NOTIFYALL},
+
+    {OBJECT_REFEQ_NAME, OBJECT_REFEQ},
+
+    {RAW_ARRAY_REFEQ_NAME, RAW_ARRAY_REFEQ},
+
+    {OBJECT_ZERO_VALUE_NAME, OBJECT_ZERO_VALUE},
+
+    {SOURCE_FILE_NAME, SOURCE_FILE},
+    {SOURCE_LINE_NAME, SOURCE_LINE},
+
+    {IDENTITY_HASHCODE_NAME, IDENTITY_HASHCODE},
+    {IDENTITY_HASHCODE_FOR_ARRAY_NAME, IDENTITY_HASHCODE_FOR_ARRAY},
+    {STRLEN_NAME, STRLEN},
+    {MEMCPY_S_NAME, MEMCPY_S},
+    {MEMSET_S_NAME, MEMSET_S},
+    {FREE_NAME, FREE},
+    {MALLOC_NAME, MALLOC},
+    {STRCMP_NAME, STRCMP},
+    {MEMCMP_NAME, MEMCMP},
+    {STRNCMP_NAME, STRNCMP},
+    {STRCASECMP_NAME, STRCASECMP},
+
+    // atomic for Thread Class
+
+    {ATOMIC_LOAD_NAME, ATOMIC_LOAD},
+    {ATOMIC_STORE_NAME, ATOMIC_STORE},
+    {ATOMIC_FETCH_ADD_NAME, ATOMIC_FETCH_ADD},
+    {ATOMIC_COMPARE_AND_SWAP_NAME, ATOMIC_COMPARE_AND_SWAP},
+
+    {SLEEP_NAME, SLEEP},
+
+    {GET_TYPE_FOR_TYPE_PARAMETER_NAME, GET_TYPE_FOR_TYPE_PARAMETER},
+    {IS_SUBTYPE_TYPES_NAME, IS_SUBTYPE_TYPES},
+
+    {std::string{EXCLUSIVE_SCOPE_NAME}, EXCLUSIVE_SCOPE},
+};
+
+static const std::unordered_map<std::string, IntrinsicKind> overflowIntrinsicMap = {
+    {OVERFLOW_CHECKED_ADD_NAME, OVERFLOW_CHECKED_ADD},
+    {OVERFLOW_CHECKED_SUB_NAME, OVERFLOW_CHECKED_SUB},
+    {OVERFLOW_CHECKED_MUL_NAME, OVERFLOW_CHECKED_MUL},
+    {OVERFLOW_CHECKED_DIV_NAME, OVERFLOW_CHECKED_DIV},
+    {OVERFLOW_CHECKED_MOD_NAME, OVERFLOW_CHECKED_MOD},
+    {OVERFLOW_CHECKED_POW_NAME, OVERFLOW_CHECKED_POW},
+    {OVERFLOW_CHECKED_INC_NAME, OVERFLOW_CHECKED_INC},
+    {OVERFLOW_CHECKED_DEC_NAME, OVERFLOW_CHECKED_DEC},
+    {OVERFLOW_CHECKED_NEG_NAME, OVERFLOW_CHECKED_NEG},
+    {OVERFLOW_THROWING_ADD_NAME, OVERFLOW_THROWING_ADD},
+    {OVERFLOW_THROWING_SUB_NAME, OVERFLOW_THROWING_SUB},
+    {OVERFLOW_THROWING_MUL_NAME, OVERFLOW_THROWING_MUL},
+    {OVERFLOW_THROWING_DIV_NAME, OVERFLOW_THROWING_DIV},
+    {OVERFLOW_THROWING_MOD_NAME, OVERFLOW_THROWING_MOD},
+    {OVERFLOW_THROWING_POW_NAME, OVERFLOW_THROWING_POW},
+    {OVERFLOW_THROWING_INC_NAME, OVERFLOW_THROWING_INC},
+    {OVERFLOW_THROWING_DEC_NAME, OVERFLOW_THROWING_DEC},
+    {OVERFLOW_THROWING_NEG_NAME, OVERFLOW_THROWING_NEG},
+    {OVERFLOW_SATURATING_ADD_NAME, OVERFLOW_SATURATING_ADD},
+    {OVERFLOW_SATURATING_SUB_NAME, OVERFLOW_SATURATING_SUB},
+    {OVERFLOW_SATURATING_MUL_NAME, OVERFLOW_SATURATING_MUL},
+    {OVERFLOW_SATURATING_DIV_NAME, OVERFLOW_SATURATING_DIV},
+    {OVERFLOW_SATURATING_MOD_NAME, OVERFLOW_SATURATING_MOD},
+    {OVERFLOW_SATURATING_POW_NAME, OVERFLOW_SATURATING_POW},
+    {OVERFLOW_SATURATING_INC_NAME, OVERFLOW_SATURATING_INC},
+    {OVERFLOW_SATURATING_DEC_NAME, OVERFLOW_SATURATING_DEC},
+    {OVERFLOW_SATURATING_NEG_NAME, OVERFLOW_SATURATING_NEG},
+    {OVERFLOW_WRAPPING_ADD_NAME, OVERFLOW_WRAPPING_ADD},
+    {OVERFLOW_WRAPPING_SUB_NAME, OVERFLOW_WRAPPING_SUB},
+    {OVERFLOW_WRAPPING_MUL_NAME, OVERFLOW_WRAPPING_MUL},
+    {OVERFLOW_WRAPPING_DIV_NAME, OVERFLOW_WRAPPING_DIV},
+    {OVERFLOW_WRAPPING_MOD_NAME, OVERFLOW_WRAPPING_MOD},
+    {OVERFLOW_WRAPPING_POW_NAME, OVERFLOW_WRAPPING_POW},
+    {OVERFLOW_WRAPPING_INC_NAME, OVERFLOW_WRAPPING_INC},
+    {OVERFLOW_WRAPPING_DEC_NAME, OVERFLOW_WRAPPING_DEC},
+    {OVERFLOW_WRAPPING_NEG_NAME, OVERFLOW_WRAPPING_NEG},
+};
+static const std::unordered_map<std::string, IntrinsicKind> reflectIntrinsicMap = {
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+#define REFLECTION_KIND_TO_RUNTIME_FUNCTION(REFLECTION_KIND, CJ_FUNCTION, RUNTIME_FUNCTION)                            \
+    {REFLECTION_KIND##_NAME, REFLECTION_KIND},
+#include "cangjie/CHIR/Utils/LLVMReflectionIntrinsics.def"
+#undef REFLECTION_KIND_TO_RUNTIME_FUNCTION
+#endif
+};
+
+static const std::unordered_map<std::string, IntrinsicKind> interOpIntrinsicMap = {
+    {CROSS_ACCESS_BARRIER_NAME, CROSS_ACCESS_BARRIER},
+    {CREATE_EXPORT_HANDLE_NAME, CREATE_EXPORT_HANDLE},
+    {GET_EXPORTED_REF_NAME, GET_EXPORTED_REF},
+    {REMOVE_EXPORTED_REF_NAME, REMOVE_EXPORTED_REF}
+};
+
+static const std::unordered_map<std::string, IntrinsicKind> ohosArkInteropIntrinsicMap = {
+    {"getJSLambdaAddr", GET_JSLAMBDA_ADDR}
+};
+
+static const std::unordered_map<std::string, IntrinsicKind> cjnativeSyncIntrinsicMap = {
+    {ATOMIC_LOAD_NAME, ATOMIC_LOAD},
+    {ATOMIC_STORE_NAME, ATOMIC_STORE},
+    {ATOMIC_SWAP_NAME, ATOMIC_SWAP},
+    {ATOMIC_COMPARE_AND_SWAP_NAME, ATOMIC_COMPARE_AND_SWAP},
+    {ATOMIC_FETCH_ADD_NAME, ATOMIC_FETCH_ADD},
+    {ATOMIC_FETCH_SUB_NAME, ATOMIC_FETCH_SUB},
+    {ATOMIC_FETCH_AND_NAME, ATOMIC_FETCH_AND},
+    {ATOMIC_FETCH_OR_NAME, ATOMIC_FETCH_OR},
+    {ATOMIC_FETCH_XOR_NAME, ATOMIC_FETCH_XOR},
+    {MUTEX_INIT_NAME, MUTEX_INIT},
+    {MUTEX_LOCK_NAME, CJ_MUTEX_LOCK},
+    {MUTEX_TRY_LOCK_NAME, MUTEX_TRY_LOCK},
+    {MUTEX_CHECK_STATUS_NAME, MUTEX_CHECK_STATUS},
+    {MUTEX_UNLOCK_NAME, MUTEX_UNLOCK},
+    {WAITQUEUE_INIT_NAME, WAITQUEUE_INIT},
+    {MONITOR_INIT_NAME, MONITOR_INIT},
+    {MOITIOR_WAIT_NAME, MOITIOR_WAIT},
+    {MOITIOR_NOTIFY_NAME, MOITIOR_NOTIFY},
+    {MOITIOR_NOTIFY_ALL_NAME, MOITIOR_NOTIFY_ALL},
+    {MULTICONDITION_WAIT_NAME, MULTICONDITION_WAIT},
+    {MULTICONDITION_NOTIFY_NAME, MULTICONDITION_NOTIFY},
+    {MULTICONDITION_NOTIFY_ALL_NAME, MULTICONDITION_NOTIFY_ALL},
+};
+
+static const std::unordered_map<std::string, IntrinsicKind> runtimeIntrinsicMap = {
+    {INVOKE_GC_NAME, INVOKE_GC},
+    {SET_GC_THRESHOLD_NAME, SET_GC_THRESHOLD},
+    {DUMP_CJ_HEAP_DATA_NAME, DUMP_CJ_HEAP_DATA},
+    {GET_GC_COUNT_NAME, GET_GC_COUNT},
+    {GET_GC_TIME_US_NAME, GET_GC_TIME_US},
+    {GET_GC_FREED_SIZE_NAME, GET_GC_FREED_SIZE},
+    {START_CJ_CPU_PROFILING_NAME, START_CJ_CPU_PROFILING},
+    {STOP_CJ_CPU_PROFILING_NAME, STOP_CJ_CPU_PROFILING},
+    {BLACK_BOX_NAME, BLACK_BOX},
+    {GET_MAX_HEAP_SIZE_NAME, GET_MAX_HEAP_SIZE},
+    {GET_ALLOCATE_HEAP_SIZE_NAME, GET_ALLOCATE_HEAP_SIZE},
+    {GET_REAL_HEAP_SIZE_NAME, GET_REAL_HEAP_SIZE},
+    {GET_THREAD_NUMBER_NAME, GET_THREAD_NUMBER},
+    {GET_BLOCKING_THREAD_NUMBER_NAME, GET_BLOCKING_THREAD_NUMBER},
+    {GET_NATIVE_THREAD_NUMBER_NAME, GET_NATIVE_THREAD_NUMBER},
+    {CROSS_ACCESS_BARRIER_NAME, CROSS_ACCESS_BARRIER},
+    {CREATE_EXPORT_HANDLE_NAME, CREATE_EXPORT_HANDLE},
+    {GET_EXPORTED_REF_NAME, GET_EXPORTED_REF},
+    {REMOVE_EXPORTED_REF_NAME, REMOVE_EXPORTED_REF},
+    {FUNC_REFEQ_NAME, FUNC_REFEQ},
+};
+static const std::unordered_map<std::string, IntrinsicKind> mathIntrinsicMap = {
+    {ABS_NAME, ABS},
+    {FABS_NAME, FABS},
+    {FLOOR_NAME, FLOOR},
+    {CEIL_NAME, CEIL},
+    {TRUC_NAME, TRUNC},
+    {SIN_NAME, SIN},
+    {COS_NAME, COS},
+    {EXP_NAME, EXP},
+    {EXP2_NAME, EXP2},
+    {LOG_NAME, LOG},
+    {LOG2_NAME, LOG2},
+    {LOG10_NAME, LOG10},
+    {SQRT_NAME, SQRT},
+    {ROUND_NAME, ROUND},
+    {POW_NAME, POW},
+    {POWI_NAME, POWI},
+};
+
+namespace {
+const std::unordered_map<std::string, const std::unordered_map<std::string, IntrinsicKind>> PACKAGE_MAP = {
+    {CORE_PACKAGE_NAME, coreIntrinsicMap},
+    {SYNC_PACKAGE_NAME, cjnativeSyncIntrinsicMap},
+    {OVERFLOW_PACKAGE_NAME, overflowIntrinsicMap},
+    {RUNTIME_PACKAGE_NAME, runtimeIntrinsicMap},
+    {REFLECT_PACKAGE_NAME, reflectIntrinsicMap},
+    {MATH_PACKAGE_NAME, mathIntrinsicMap},
+    {INTEROP_PACKAGE_NAME, interOpIntrinsicMap},
+    {"ohos.ark_interop", ohosArkInteropIntrinsicMap}
+};
+
+// Below are instrinsics without a source-level declaration, their declaration should be dynamically generated.
+const std::unordered_map<std::string, IntrinsicKind> HEADLESS_INTRINSICS = {
+    {GET_TYPE_FOR_TYPE_PARAMETER_NAME, IntrinsicKind::GET_TYPE_FOR_TYPE_PARAMETER},
+    {IS_SUBTYPE_TYPES_NAME, IntrinsicKind::IS_SUBTYPE_TYPES},
+};
+} // namespace
 
 // Conditions to check if this is a call to member func (constructor is not counted here)
 static bool IsNonConstructorMemberFunc(const AST::FuncDecl* func)
@@ -511,7 +740,31 @@ void Translator::BlackBoxModifyArgTypeToRef(std::vector<Value*>& args)
         arg = newArg;
     }
 }
- 
+
+Ptr<Value> Translator::TranslateRawArrayAllocate(const AST::CallExpr& expr)
+{
+    CJC_ASSERT(expr.args.size() == 1);
+    const auto& loc = TranslateLocation(expr);
+    auto arrayTy = chirTy.TranslateType(*expr.GetTy());
+    CJC_ASSERT(arrayTy->IsRef());
+    auto eleTy = StaticCast<RawArrayType>(StaticCast<RefType>(arrayTy)->GetBaseType())->GetElementType();
+    auto sizeVal = TranslateExprArg(*expr.args[0]);
+    return TryCreate<RawArrayAllocate>(currentBlock, loc, arrayTy, eleTy, sizeVal)->GetResult();
+}
+
+Ptr<Value> Translator::TranslateRawArrayInitByValue(const AST::CallExpr& expr)
+{
+    constexpr size_t INIT_BY_VALUE_ARGS = 3;
+    CJC_ASSERT(expr.args.size() == INIT_BY_VALUE_ARGS);
+    const auto& loc = TranslateLocation(expr);
+    auto rawArrayVal = TranslateExprArg(*expr.args[0]);
+    auto sizeVal = TranslateExprArg(*expr.args[1]);
+    auto initVal = TranslateExprArg(*expr.args[2]);
+    CreateAndAppendExpression<RawArrayInitByValue>(
+        loc, builder.GetUnitTy(), rawArrayVal, sizeVal, initVal, currentBlock);
+    return CreateAndAppendConstantExpression<UnitLiteral>(builder.GetUnitTy(), *currentBlock)->GetResult();
+}
+
 Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
 {
     // Conditions to check if this is a call to intrinsic
@@ -521,7 +774,7 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
 
     auto target = expr.baseFunc->GetTarget();
     CJC_NULLPTR_CHECK(target);
-    std::string identifier = target->identifier;
+    const std::string& identifier = target->identifier.Val();
 
     // Translate code position info
     const auto& loc = TranslateLocation(expr);
@@ -537,11 +790,20 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
     } else {
         packageName = target->fullPackageName;
     }
+    if (packageName == CORE_PACKAGE_NAME) {
+        if (identifier == "rawArrayAllocate") {
+            return TranslateRawArrayAllocate(expr);
+        }
+        if (identifier == "rawArrayInitByValue") {
+            return TranslateRawArrayInitByValue(expr);
+        }
+    }
+
     CHIR::IntrinsicKind intrinsicKind{NOT_INTRINSIC};
     // Should handle headlessIntrinsics first, because it can appear in any package
-    if (auto it1 = headlessIntrinsics.find(identifier); it1 != headlessIntrinsics.end()) {
+    if (auto it1 = HEADLESS_INTRINSICS.find(identifier); it1 != HEADLESS_INTRINSICS.end()) {
         intrinsicKind = it1->second;
-    } else if (auto it = packageMap.find(packageName); it != packageMap.end()) {
+    } else if (auto it = PACKAGE_MAP.find(packageName); it != PACKAGE_MAP.end()) {
         CJC_ASSERT(it->second.find(identifier) != it->second.end());
         intrinsicKind = it->second.at(identifier);
     }
@@ -603,10 +865,21 @@ Ptr<Value> Translator::TranslateForeignFuncCall(const AST::CallExpr& expr)
     return funcCall->GetResult();
 }
 
-Ptr<Value> Translator::TranslateCStringCtorCall(const AST::CallExpr& expr)
+Value* Translator::TranslateCStringCtorCall(const AST::CallExpr& expr)
 {
-    if (auto target = DynamicCast<AST::BuiltInDecl*>(expr.baseFunc->GetTarget());
-        target && target->type == AST::BuiltInType::CSTRING) {
+    auto isCStringCtor = [&expr]() -> bool {
+        if (expr.resolvedFunction && expr.resolvedFunction->outerDecl &&
+            expr.resolvedFunction->outerDecl->IsBuiltIn()) {
+            auto bid = StaticCast<AST::BuiltInDecl*>(expr.resolvedFunction->outerDecl);
+            return bid->type == AST::BuiltInType::CSTRING;
+        }
+        if (auto target = DynamicCast<AST::BuiltInDecl>(expr.baseFunc->GetTarget());
+            target && target->type == AST::BuiltInType::CSTRING) {
+            return true;
+        }
+        return false;
+    };
+    if (isCStringCtor()) {
         auto ty = TranslateType(*expr.GetTy());
         const auto& loc = TranslateLocation(expr);
         CJC_ASSERT(expr.args.size() == 1);
@@ -704,6 +977,28 @@ Translator::LeftValueInfo Translator::TranslateStructOrClassCtorCallAsLeftValue(
     return LeftValueInfo(args[0], {});
 }
 
+Expression* Translator::CreateAndAppendApplyCallFromCallExpr(
+    Value& callee, FuncCallContext& context, const FuncType& instFuncTy, const AST::CallExpr& expr)
+{
+    auto funcCall = TryCreate<Apply>(currentBlock, instFuncTy.GetReturnType(), &callee, context);
+    const auto& loc = TranslateLocation(expr);
+    funcCall->SetDebugLocation(loc);
+    if (expr.callKind == AST::CallKind::CALL_SUPER_FUNCTION) {
+        if (auto apply = DynamicCast<Apply>(funcCall)) {
+            apply->SetSuperCall();
+        }
+    }
+    if (HasNothingTypeArg(context.args)) {
+        if (expr.baseFunc != nullptr) {
+            const auto& warningLoc = TranslateLocation(*expr.baseFunc);
+            funcCall->Set<DebugLocationInfoForWarning>(warningLoc);
+        } else {
+            funcCall->Set<DebugLocationInfoForWarning>(loc);
+        }
+    }
+    return funcCall;
+}
+
 // Conditions to check if this is a call to member func (constructor is not counted here)
 static bool IsCtorCall(const AST::CallExpr& expr)
 {
@@ -753,7 +1048,7 @@ Value* Translator::TranslateStructOrClassCtorCall(const AST::CallExpr& expr)
     return args[0];
 }
 
-Ptr<Value> Translator::TranslateCFuncConstructorCall(const AST::CallExpr& expr)
+Ptr<Value> Translator::TranslateCFuncCtorCall(const AST::CallExpr& expr)
 {
     if (!IsValidCFuncConstructorCall(expr)) {
         return nullptr;
@@ -1124,19 +1419,19 @@ bool Translator::HasNothingTypeArg(std::vector<Value*>& args) const
 
 Ptr<Value> Translator::ProcessCallExpr(const AST::CallExpr& expr)
 {
-    if (auto res = TranslateIntrinsicCall(expr); res) {
+    if (auto res = TranslateIntrinsicCall(expr)) {
         return res;
     }
-    if (auto res = TranslateForeignFuncCall(expr); res) {
+    if (auto res = TranslateForeignFuncCall(expr)) {
         return res;
     }
-    if (auto res = TranslateCFuncConstructorCall(expr)) {
+    if (auto res = TranslateCFuncCtorCall(expr)) {
         return res;
     }
-    if (auto res = TranslateCStringCtorCall(expr); res) {
+    if (auto res = TranslateCStringCtorCall(expr)) {
         return res;
     }
-    if (auto res = TranslateEnumCtorCall(expr); res) {
+    if (auto res = TranslateEnumCtorCall(expr)) {
         return res;
     }
     if (IsCtorCall(expr)) {
@@ -1146,13 +1441,13 @@ Ptr<Value> Translator::ProcessCallExpr(const AST::CallExpr& expr)
         isNothingCall) {
         return TranslateExprArg(*expr.baseFunc);
     }
-    if (auto res = TranslateFuncTypeValueCall(expr); res) {
+    if (auto res = TranslateFuncTypeValueCall(expr)) {
         return res;
     }
     if (IsNonConstructorMemberFunc(expr.resolvedFunction)) {
         return TranslateMemberFuncCall(expr);
     }
-    if (auto res = TranslateTrivialFuncCall(expr); res) {
+    if (auto res = TranslateTrivialFuncCall(expr)) {
         return res;
     }
     InternalError("translating unsupported CallExpr");
@@ -1270,3 +1565,4 @@ void Translator::PrintDevirtualizationMessage(const AST::CallExpr& expr, const s
         nodeType + " call.\n";
     std::cout << message;
 }
+} // namespace Cangjie::CHIR
