@@ -710,6 +710,9 @@ void Collector::BuildSymbolTable(ASTContext& ctx, Ptr<Node> node, bool buildTrie
                 CollectGeneric(ctx, *bid, *bid->generic, buildTrie);
                 scopeManager.FinalizeScope(ctx);
             }
+            for (auto& m : bid->GetMemberDecls()) {
+                BuildSymbolTable(ctx, m.get(), buildTrie);
+            }
             break;
         }
         case ASTKind::CLASS_DECL: {

@@ -277,6 +277,7 @@ private:
      * @param root the root node of AST.
      */
     void ResolveDecls(ASTContext& ctx);
+    void ResolveBuiltinDeclMembers(const std::vector<AST::Symbol*>& syms);
     void ResolveTypeAlias(const std::vector<Ptr<ASTContext>>& contexts);
     /**
      * 1.Set declaration's semantic types only by its ASTKind, name and type arguments.
@@ -304,6 +305,8 @@ private:
      * firstly, build symbol table for all packages and typecheck redefinition except functions.
      */
     void PrepareTypeCheck(ASTContext& ctx, AST::Package& pkg);
+    friend class BuiltinDeclCreater;
+    void CreateBuiltinDecls(AST::Package& pkg);
     /**
      * Collect mem2Decls map in ASTContext for quick lookup during type check
      */
@@ -566,7 +569,7 @@ private:
     /**
      * Desugar APIs during sema check.
      */
-    void DesugarArrayCall(ASTContext& ctx, AST::CallExpr& ce);
+    void DesugarVArrayCall(ASTContext& ctx, AST::CallExpr& ce);
     void DesugarPointerCall(ASTContext& ctx, AST::CallExpr& ce);
     /** Desugar 'propDecl' after typecheck but still inside 'Sema' stage. Keep this order for cjLint usage. */
     void DesugarForPropDecl(AST::Node& pkg);
@@ -829,35 +832,22 @@ private:
     bool CheckRangeElements(ASTContext& ctx, Ptr<AST::Ty> elemTy, const AST::RangeExpr& re);
 
     Ptr<AST::Ty> SynArrayLit(ASTContext& ctx, AST::ArrayLit& al);
-    bool ChkArrayLit(ASTContext& ctx, AST::Ty& target, AST::ArrayLit& al);
-    Ptr<AST::Ty> GetArrayTypeByInterface(AST::Ty& interfaceTy);
-    Ptr<AST::Ty> SynArrayExpr(ASTContext& ctx, AST::ArrayExpr& ae);
+    bool IsCallOfBuiltInType(const AST::CallExpr& ce, const AST::TypeKind kind) const;
     Ptr<AST::Ty> SynVArrayExpr(ASTContext& ctx, AST::ArrayExpr& ve);
-    bool ChkArrayExpr(ASTContext& ctx, AST::Ty& target, AST::ArrayExpr& ae);
     bool ChkVArrayExpr(ASTContext& ctx, AST::Ty& target, AST::ArrayExpr& ve);
     bool ChkVArrayArg(ASTContext& ctx, AST::ArrayExpr& ve);
-    bool ChkSizedArrayExpr(ASTContext& ctx, AST::Ty& target, AST::ArrayExpr& ae);
-    bool ChkSingeArgArrayExpr(ASTContext& ctx, AST::Ty& target, AST::ArrayExpr& ae);
-    bool ChkSingeArgArrayWithoutElemTy(ASTContext& ctx, AST::Ty& target, AST::ArrayExpr& ae);
-    bool ChkArrayArgs(AST::ArrayExpr& ae);
+    bool ChkArrayLit(ASTContext& ctx, AST::Ty& target, AST::ArrayLit& al);
+    Ptr<AST::Ty> GetArrayTypeByInterface(AST::Ty& interfaceTy);
     /**
      * Check whether the alias is a built-in type.
      * @param kind Check whether the alias is of the specified type. If it's TYPE_ANY, Check Array/CPointer/CString.
      */
-    bool IsBuiltinTypeAlias(const AST::Decl& decl, const AST::TypeKind kind = AST::TypeKind::TYPE_ANY) const;
-    bool ChkSizedArrayElement(ASTContext& ctx, AST::Ty& elemTargetTy, AST::ArrayExpr& ae);
-    bool ChkSizedArrayWithoutElemTy(ASTContext& ctx, AST::Ty& target, AST::ArrayExpr& ae);
-    bool IsCallOfBuiltInType(const AST::CallExpr& ce, const AST::TypeKind kind) const;
-    bool ChkArrayCall(ASTContext& ctx, AST::Ty& target, AST::CallExpr& ce);
+    bool IsBuiltinTypeAlias(const AST::Decl& decl, AST::TypeKind kind = AST::TypeKind::TYPE_ANY) const;
     bool ChkCFuncCall(ASTContext& ctx, AST::Ty& target, AST::CallExpr& ce);
     bool ChkBuiltinCall(ASTContext& ctx, AST::Ty& target, AST::CallExpr& ce);
     bool ChkPointerCall(ASTContext& ctx, AST::Ty& target, AST::CallExpr& ce);
     bool ChkVArrayCall(ASTContext& ctx, AST::Ty& target, AST::CallExpr& ce);
     bool ChkPointerExpr(ASTContext& ctx, AST::Ty& target, AST::PointerExpr& cpe);
-    /**
-     * Check whether the CString is invoked.
-     */
-    bool ChkCStringCall(ASTContext& ctx, AST::Ty& target, AST::CallExpr& ce);
     Ptr<AST::Ty> SynPointerExpr(ASTContext& ctx, AST::PointerExpr& cptrExpr);
     Ptr<AST::Ty> SynMatchExpr(ASTContext& ctx, AST::MatchExpr& me);
     Ptr<AST::Ty> SynMatchExprHasSelector(ASTContext& ctx, AST::MatchExpr& me);
@@ -898,6 +888,7 @@ private:
     bool CheckRefConstructor(const ASTContext& ctx, const AST::CallExpr& ce, const AST::RefExpr& re);
     /**
      * Check call expression's base expression. Get current target and function candidates.
+     * Force to return false on CFunc call to ensure CFunc undergoes builtin decl check not overload resolution.
      */
     bool ChkCallBaseExpr(ASTContext& ctx, AST::CallExpr& ce, Ptr<AST::Decl>& targetDecl, Ptr<AST::Ty>& targetRet,
         std::vector<Ptr<AST::FuncDecl>>& candidates);
@@ -1143,7 +1134,7 @@ private:
      * in targets.
      */
     void InferRefExpr(ASTContext& ctx, AST::RefExpr& re);
-    void InferCFuncExpr(ASTContext& ctx, AST::RefExpr& re);
+    void InferCFuncExpr(ASTContext& ctx, AST::NameReferenceExpr& nre);
     bool SynTargetOnUsed(ASTContext& ctx, const AST::NameReferenceExpr& nre, AST::Decl& target);
     void CheckThisOrSuper(const ASTContext& ctx, AST::RefExpr& re);
     Ptr<AST::Ty> InferTypeOfThis(AST::RefExpr& re, AST::InheritableDecl& objDecl);
