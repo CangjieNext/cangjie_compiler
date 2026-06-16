@@ -2641,7 +2641,7 @@ index ad80d4344..84f875406 100644
  
    // This is used to:
 diff --git a/lld/MachO/Config.h b/lld/MachO/Config.h
-index c7e4b4f96..91e7faf2e 100644
+index c7e4b4f96..94440801c 100644
 --- a/lld/MachO/Config.h
 +++ b/lld/MachO/Config.h
 @@ -131,6 +131,7 @@ struct Configuration {
@@ -2652,11 +2652,117 @@ index c7e4b4f96..91e7faf2e 100644
    uint32_t headerPad;
    uint32_t dylibCompatibilityVersion = 0;
    uint32_t dylibCurrentVersion = 0;
+@@ -152,6 +153,7 @@ struct Configuration {
+   llvm::StringRef thinLTOJobs;
+   llvm::StringRef umbrella;
+   uint32_t ltoo = 2;
++  bool ltoEmitObjOnly = false;
+   llvm::CachePruningPolicy thinLTOCachePolicy;
+   llvm::StringRef thinLTOCacheDir;
+   bool deadStripDylibs = false;
+@@ -172,6 +174,9 @@ struct Configuration {
+   std::vector<std::string> astPaths;
+   std::vector<Symbol *> explicitUndefineds;
+   llvm::StringSet<> explicitDynamicLookups;
++  llvm::StringSet<> visiblePkgs;
++  bool hasMatchedVisiblePkg = false;
++  bool hideAllVisiblePkgs = false;
+   // There are typically few custom sectionAlignments or segmentProtections,
+   // so use a vector instead of a map.
+   std::vector<SectionAlign> sectionAlignments;
 diff --git a/lld/MachO/Driver.cpp b/lld/MachO/Driver.cpp
-index ce2d55bef..8f383c521 100644
+index ce2d55bef..818d715f0 100644
 --- a/lld/MachO/Driver.cpp
 +++ b/lld/MachO/Driver.cpp
-@@ -1350,6 +1350,8 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
+@@ -247,6 +247,70 @@ static llvm::CachePruningPolicy getLTOCachePolicy(InputArgList &args) {
+   return CHECK(parseCachePruningPolicy(ltoPolicy), "invalid LTO cache policy");
+ }
+ 
++static bool collectVisiblePkgs(InputArgList &args) {
++  for (const Arg *arg : args.filtered(OPT_visible_pkgs_eq)) {
++    StringRef rawValue = arg->getValue();
++    if (rawValue.empty()) {
++      config->hideAllVisiblePkgs = true;
++      continue;
++    }
++
++    SmallVector<StringRef, 4> pkgNames;
++    rawValue.split(pkgNames, ',', /*MaxSplit=*/-1, /*KeepEmpty=*/true);
++    for (StringRef pkg : pkgNames) {
++      pkg = pkg.trim();
++      if (pkg.empty()) {
++        error("empty package name in --visible-pkgs");
++        return false;
++      }
++      config->visiblePkgs.insert(pkg);
++    }
++  }
++  return true;
++}
++
++static Optional<StringRef> getBitcodePackageName(const BitcodeFile &file) {
++  if (!file.obj)
++    return None;
++
++  // For Cangjie bitcode, the module identifier is:
++  //   <subCHIRPackageIdx>-<pkgName>
++  StringRef pkgName = file.obj->getSourceFileName();
++  unsigned subCHIRPackageIdx = 0;
++  if (pkgName.consumeInteger(10, subCHIRPackageIdx) ||
++      !pkgName.consume_front("-") || pkgName.empty())
++    return None;
++  return pkgName;
++}
++
++static bool validateVisiblePkgModules() {
++  if (!config->hideAllVisiblePkgs && config->visiblePkgs.empty())
++    return true;
++
++  for (InputFile *file : inputFiles) {
++    auto *bitcodeFile = dyn_cast<BitcodeFile>(file);
++    if (!bitcodeFile)
++      continue;
++    Optional<StringRef> pkgName = getBitcodePackageName(*bitcodeFile);
++    if (!pkgName) {
++      error("invalid Cangjie bitcode module identifier '" +
++            bitcodeFile->obj->getSourceFileName() +
++            "' for --visible-pkgs, expected <split-index>-<package-name>");
++      return false;
++    }
++    if (config->visiblePkgs.count(*pkgName) != 0) {
++      config->hasMatchedVisiblePkg = true;
++    }
++  }
++  return true;
++}
++
++static bool parseVisiblePkgs(InputArgList &args) {
++  if (!collectVisiblePkgs(args))
++    return false;
++  return true;
++}
++
+ // What caused a given library to be loaded. Only relevant for archives.
+ // Note that this does not tell us *how* we should load the library, i.e.
+ // whether we should do it lazily or eagerly (AKA force loading). The "how" is
+@@ -1319,6 +1383,7 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
+     config->umbrella = arg->getValue();
+   }
+   config->ltoObjPath = args.getLastArgValue(OPT_object_path_lto);
++  config->ltoEmitObjOnly = args.hasArg(OPT_lto_emit_obj_only);
+   config->ltoo = args::getInteger(args, OPT_lto_O, 2);
+   if (config->ltoo > 3)
+     error("--lto-O: invalid optimization level: " + Twine(config->ltoo));
+@@ -1330,6 +1395,8 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
+   config->applicationExtension = args.hasFlag(
+       OPT_application_extension, OPT_no_application_extension, false);
+   config->exportDynamic = args.hasArg(OPT_export_dynamic);
++  if (!parseVisiblePkgs(args))
++    return false;
+   config->forceLoadObjC = args.hasArg(OPT_ObjC);
+   config->forceLoadSwift = args.hasArg(OPT_force_load_swift_libs);
+   config->deadStripDylibs = args.hasArg(OPT_dead_strip_dylibs);
+@@ -1350,6 +1417,8 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
    config->callGraphProfileSort = args.hasFlag(
        OPT_call_graph_profile_sort, OPT_no_call_graph_profile_sort, true);
    config->printSymbolOrder = args.getLastArgValue(OPT_print_symbol_order);
@@ -2665,6 +2771,24 @@ index ce2d55bef..8f383c521 100644
  
    for (const Arg *arg : args.filtered(OPT_alias)) {
      config->aliasedSymbols.push_back(
+@@ -1557,6 +1626,8 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
+ 
+     initLLVM(); // must be run before any call to addFile()
+     createFiles(args);
++    if (!validateVisiblePkgModules())
++      return false;
+ 
+     config->isPic = config->outputType == MH_DYLIB ||
+                     config->outputType == MH_BUNDLE ||
+@@ -1594,6 +1665,8 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
+       parseClangOption(arg->getValue(), arg->getSpelling());
+ 
+     compileBitcodeFiles();
++    if (config->ltoEmitObjOnly)
++      return !errorCount();
+     replaceCommonSymbols();
+ 
+     StringRef orderFile = args.getLastArgValue(OPT_order_file);
 diff --git a/lld/MachO/InputFiles.cpp b/lld/MachO/InputFiles.cpp
 index 87034d41e..65aaf2e71 100644
 --- a/lld/MachO/InputFiles.cpp
@@ -2748,6 +2872,89 @@ index 87034d41e..65aaf2e71 100644
        loadReexport(intfRef.getInstallName(), exportingFile, topLevel);
    }
  }
+diff --git a/lld/MachO/LTO.cpp b/lld/MachO/LTO.cpp
+index 0b76216d2..5b57f7d42 100644
+--- a/lld/MachO/LTO.cpp
++++ b/lld/MachO/LTO.cpp
+@@ -31,6 +31,30 @@ using namespace llvm;
+ using namespace llvm::MachO;
+ using namespace llvm::sys;
+ 
++static Optional<StringRef> getBitcodePackageName(const BitcodeFile &file) {
++  if (!file.obj)
++    return None;
++
++  // For Cangjie bitcode, the module identifier is:
++  //   <subCHIRPackageIdx>-<pkgName>
++  StringRef pkgName = file.obj->getSourceFileName();
++  unsigned subCHIRPackageIdx = 0;
++  constexpr unsigned decimalBase = 10;
++  if (pkgName.consumeInteger(decimalBase, subCHIRPackageIdx) ||
++      !pkgName.consume_front("-") || pkgName.empty())
++    return None;
++  return pkgName;
++}
++
++static bool shouldKeepVisibleForPkg(const BitcodeFile &file) {
++  if (config->hideAllVisiblePkgs)
++    return false;
++  if (!config->hasMatchedVisiblePkg || config->visiblePkgs.empty())
++    return true;
++  Optional<StringRef> pkgName = getBitcodePackageName(file);
++  return pkgName && config->visiblePkgs.count(*pkgName);
++}
++
+ static lto::Config createConfig() {
+   lto::Config c;
+   c.Options = initTargetOptionsFromCodeGenFlags();
+@@ -46,6 +70,7 @@ static lto::Config createConfig() {
+   c.TimeTraceGranularity = config->timeTraceGranularity;
+   c.OptLevel = config->ltoo;
+   c.CGOptLevel = args::getCGOptLevel(config->ltoo);
++  c.OpaquePointers =false;
+   if (config->saveTemps)
+     checkError(c.addSaveTemps(config->outputFile.str() + ".",
+                               /*UseInputModulePath=*/true));
+@@ -62,10 +87,12 @@ void BitcodeCompiler::add(BitcodeFile &f) {
+   ArrayRef<lto::InputFile::Symbol> objSyms = f.obj->symbols();
+   std::vector<lto::SymbolResolution> resols;
+   resols.reserve(objSyms.size());
++  bool exportForPkg = shouldKeepVisibleForPkg(f);
+ 
+   // Provide a resolution to the LTO API for each symbol.
+-  bool exportDynamic =
++  bool defaultExportDynamic =
+       config->outputType != MH_EXECUTE || config->exportDynamic;
++  bool exportDynamic = defaultExportDynamic && exportForPkg;
+   auto symIt = f.symbols.begin();
+   for (const lto::InputFile::Symbol &objSym : objSyms) {
+     resols.emplace_back();
+diff --git a/lld/MachO/Options.td b/lld/MachO/Options.td
+index 064862fb1..558633fbc 100644
+--- a/lld/MachO/Options.td
++++ b/lld/MachO/Options.td
+@@ -92,6 +92,10 @@ def no_call_graph_profile_sort : Flag<["--"], "no-call-graph-profile-sort">,
+ def print_symbol_order: Joined<["--"], "print-symbol-order=">,
+     HelpText<"Print a symbol order specified by --call-graph-profile-sort into the specified file">,
+     Group<grp_lld>;
++def visible_pkgs_eq : Joined<["--"], "visible-pkgs=">,
++    HelpText<"Keep symbols visible for the specified Cangjie packages in FullLTO">,
++    MetaVarName<"<pkg[,pkg...]>">,
++    Group<grp_lld>;
+ 
+ // This is a complete Options.td compiled from Apple's ld(1) manpage
+ // dated 2018-03-07 and cross checked with ld64 source code in repo
+@@ -945,6 +949,10 @@ def object_path_lto : Separate<["-"], "object_path_lto">,
+     MetaVarName<"<path>">,
+     HelpText<"Retain any temporary mach-o file in <path> that would otherwise be deleted during LTO">,
+     Group<grp_rare>;
++def lto_emit_obj_only : Flag<["-"], "lto-emit-obj-only">,
++    HelpText<"Stop after emitting LTO native object files">,
++    Flags<[HelpHidden]>,
++    Group<grp_rare>;
+ def cache_path_lto : Separate<["-"], "cache_path_lto">,
+     MetaVarName<"<path>">,
+     HelpText<"Use <path> as a directory for the incremental LTO cache">,
 diff --git a/lld/MachO/OutputSegment.cpp b/lld/MachO/OutputSegment.cpp
 index da1394c08..f2949e7f3 100644
 --- a/lld/MachO/OutputSegment.cpp
@@ -41540,7 +41747,7 @@ index 000000000..67f368133
 +  return this->ObfConfigInstance;
 +}
 diff --git a/llvm/lib/Analysis/PHITransAddr.cpp b/llvm/lib/Analysis/PHITransAddr.cpp
-index 5b0fbca23..a6a87208a 100644
+index 5b0fbca23..b5ce53e22 100644
 --- a/llvm/lib/Analysis/PHITransAddr.cpp
 +++ b/llvm/lib/Analysis/PHITransAddr.cpp
 @@ -21,6 +21,10 @@
@@ -41554,7 +41761,7 @@ index 5b0fbca23..a6a87208a 100644
  static cl::opt<bool> EnableAddPhiTranslation(
      "gvn-add-phi-translation", cl::init(false), cl::Hidden,
      cl::desc("Enable phi-translation of add instructions"));
-@@ -197,15 +201,21 @@ Value *PHITransAddr::PHITranslateSubExpr(Value *V, BasicBlock *CurBB,
+@@ -197,15 +201,26 @@ Value *PHITransAddr::PHITranslateSubExpr(Value *V, BasicBlock *CurBB,
      if (Constant *C = dyn_cast<Constant>(PHIIn))
        return AddAsInput(ConstantExpr::getCast(Cast->getOpcode(),
                                                C, Cast->getType()));
@@ -41579,8 +41786,13 @@ index 5b0fbca23..a6a87208a 100644
 +        if (CastInst *CastI = dyn_cast<CastInst>(U))
 +          if (CastI->getOpcode() == Cast->getOpcode() &&
 +              CastI->getType() == Cast->getType() &&
-+              (!DT || DT->dominates(CastI->getParent(), PredBB)))
++              (!DT || DT->dominates(CastI->getParent(), PredBB))) {
++            if (V != PHIIn) {
++              RemoveInstInputs(PHIIn, InstInputs);
++              AddAsInput(CastI->getOperand(0));
++            }
 +            return CastI;
++          }
 +      }
      }
      return nullptr;
@@ -43757,10 +43969,10 @@ index 000000000..fa881f44d
 +}
 diff --git a/llvm/lib/CodeGen/CJMetadata.cpp b/llvm/lib/CodeGen/CJMetadata.cpp
 new file mode 100644
-index 000000000..7fa71a461
+index 000000000..62b822261
 --- /dev/null
 +++ b/llvm/lib/CodeGen/CJMetadata.cpp
-@@ -0,0 +1,873 @@
+@@ -0,0 +1,879 @@
 +//===- CJMetadata.cpp - Self-Defined CJMetadata Section ----------*- C++-*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -44506,6 +44718,12 @@ index 000000000..7fa71a461
 +    if (IsMachO) {
 +      FuncName.push_back('\0');
 +      OS.emitBytes(FuncName);
++      // Pad to 8-byte alignment so runtime can iterate entries with aligned reads,
++      // This does not affect backward compatibility with older runtimes that use unaligned reads.
++      unsigned EntrySize = FuncPtrSize + FuncName.size();
++      unsigned Padding = (8 - (EntrySize % 8)) % 8;
++      if (Padding > 0)
++        OS.emitZeros(Padding);
 +    }
 +  };
 +  for (auto &Method : InitMethodTable)
@@ -46118,9 +46336,27 @@ index 6b481a374..a5f29a3b7 100644
    Alignment = STI->getTargetLowering()->getMinFunctionAlignment();
  
 diff --git a/llvm/lib/CodeGen/MachineInstr.cpp b/llvm/lib/CodeGen/MachineInstr.cpp
-index e92dec5be..3b5639db3 100644
+index e92dec5be..0d880ae4a 100644
 --- a/llvm/lib/CodeGen/MachineInstr.cpp
 +++ b/llvm/lib/CodeGen/MachineInstr.cpp
+@@ -100,7 +100,7 @@ void MachineInstr::addImplicitDefUseOperands(MachineFunction &MF) {
+ /// the MCInstrDesc.
+ MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &TID,
+                            DebugLoc DL, bool NoImp)
+-    : MCID(&TID), DbgLoc(std::move(DL)), DebugInstrNum(0) {
++    : MCID(&TID), DbgLoc(std::move(DL)), DebugInstrNum(0), CJStackSize(0) {
+   assert(DbgLoc.hasTrivialDestructor() && "Expected trivial destructor");
+ 
+   // Reserve space for the expected number of operands.
+@@ -119,7 +119,7 @@ MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &TID,
+ /// uniqueness.
+ MachineInstr::MachineInstr(MachineFunction &MF, const MachineInstr &MI)
+     : MCID(&MI.getDesc()), Info(MI.Info), DbgLoc(MI.getDebugLoc()),
+-      DebugInstrNum(0) {
++      DebugInstrNum(0), CJStackSize(MI.CJStackSize) {
+   assert(DbgLoc.hasTrivialDestructor() && "Expected trivial destructor");
+ 
+   CapOperands = OperandCapacity::get(MI.getNumOperands());
 @@ -212,9 +212,13 @@ void MachineInstr::addOperand(MachineFunction &MF, const MachineOperand &Op) {
    // OpNo now points as the desired insertion point.  Unless this is a variadic
    // instruction, only implicit regs are allowed beyond MCID->getNumOperands().
@@ -58683,10 +58919,10 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..f7924d8aa
+index 000000000..2e48842b9
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
-@@ -0,0 +1,3414 @@
+@@ -0,0 +1,3422 @@
 +//===- CJPartialEscapeAnalysis.cpp - escape analysis for Cangjie ----------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -61262,6 +61498,10 @@ index 000000000..f7924d8aa
 +
 +  bool run() {
 +    bool Changed = false;
++    if (GCNew.empty()) {
++      cleanupAnalysisState();
++      return Changed;
++    }
 +    for (Function *Func : SCCFunctions) {
 +      ProcessedFunc = Func;
 +      handleLiveness(Func);
@@ -61297,6 +61537,11 @@ index 000000000..f7924d8aa
 +      }
 +    }
 +
++    cleanupAnalysisState();
++    return Changed;
++  }
++
++  void cleanupAnalysisState() {
 +    for (auto PInfo : AllPtrLocInfo) {
 +      delete PInfo.second;
 +    }
@@ -61305,7 +61550,6 @@ index 000000000..f7924d8aa
 +      delete MemInfo.second;
 +    }
 +    AllMemLocInfo.clear();
-+    return Changed;
 +  }
 +
 +  void walkBBs(BasicBlock *CurBB) {
