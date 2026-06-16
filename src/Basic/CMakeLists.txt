@@ -8,6 +8,7 @@ set(BASIC_SRC
     StringConvertor.cpp
     DiagnosticEngine.cpp
     DiagnosticEngineImpl.cpp
+    DiagSuppressor.cpp
     InteropCJPackageConfigReader.cpp
     MacroCallDiagInfo.cpp
     Position.cpp
