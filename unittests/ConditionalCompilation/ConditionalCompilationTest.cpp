@@ -38,6 +38,130 @@ protected:
     std::unique_ptr<TestCompilerInstance> instance;
 };
 
+/**
+ * @brief Test basic conditional compilation functionality
+ * 
+ * Test purpose:
+ *   Verify that the PerformConditionCompile interface can correctly handle conditional compilation directives
+ * 
+ * Test steps:
+ *   1. Create compiler instance, set source file to os.cj
+ *   2. Call Compile to compile to CONDITION_COMPILE stage
+ *   3. Verify compilation succeeds with no errors
+ *   4. Check AST structure integrity
+ * 
+ * Expected results:
+ *   - Compilation succeeds with no diagnostic errors
+ *   - AST contains package and file nodes
+ *   - File contains declaration nodes
+ * 
+ * Key verification points:
+ *   - Conditional compilation stage executes correctly (parseResult == true)
+ *   - AST structure is complete (packages not empty, files not empty, decls not empty)
+ */
+TEST_F(ConditionalCompilationTest, PerformConditionCompile_Basic)
+{
+    auto src = srcPath + "os.cj";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+
+    bool parseResult = instance->Compile(CompileStage::CONDITION_COMPILE);
+    EXPECT_TRUE(parseResult);
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+
+    auto packages = instance->GetSourcePackages();
+    ASSERT_FALSE(packages.empty());
+    ASSERT_FALSE(packages[0]->files.empty());
+    auto file = packages[0]->files[0].get();
+    ASSERT_FALSE(file->decls.empty());
+}
+
+/**
+ * @brief Test conditional compilation after parsing
+ * 
+ * Test purpose:
+ *   Verify behavior of explicitly calling PerformConditionCompile after PARSE stage
+ * 
+ * Test steps:
+ *   1. Create compiler instance, set source file to os.cj
+ *   2. First execute PARSE stage
+ *   3. Record declaration count after parsing
+ *   4. Explicitly call PerformConditionCompile
+ *   5. Verify declaration count changes after conditional compilation
+ * 
+ * Expected results:
+ *   - 3 declarations after parsing
+ *   - Conditional compilation executes successfully
+ *   - 2 declarations remain after conditional compilation (1 filtered out based on conditions)
+ * 
+ * Key verification points:
+ *   - Parse stage executes correctly
+ *   - Conditional compilation can filter out declarations that don't meet conditions
+ *   - Declaration count changes as expected
+ */
+TEST_F(ConditionalCompilationTest, PerformConditionCompile_AfterParse)
+{
+    auto src = srcPath + "os.cj";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+
+    bool parseResult = instance->Compile(CompileStage::PARSE);
+    ASSERT_TRUE(parseResult);
+
+    auto packages = instance->GetSourcePackages();
+    auto declCountBefore = packages[0]->files[0]->decls.size();
+    EXPECT_EQ(declCountBefore, 3);
+
+    bool ccResult = instance->PerformConditionCompile();
+    EXPECT_TRUE(ccResult);
+
+    auto declCountAfter = packages[0]->files[0]->decls.size();
+    EXPECT_EQ(declCountAfter, 2);
+}
+
+/**
+ * @brief Test files without conditional compilation directives
+ * 
+ * Test purpose:
+ *   Verify that PerformConditionCompile does not filter any declarations when source file contains no conditional compilation directives
+ * 
+ * Test steps:
+ *   1. Create compiler instance using func_plain.cj without conditional compilation directives
+ *   2. Execute PARSE stage
+ *   3. Record declaration count after parsing
+ *   4. Execute conditional compilation
+ *   5. Verify declaration count remains unchanged
+ * 
+ * Expected results:
+ *   - Conditional compilation executes successfully
+ *   - Declaration count remains unchanged
+ * 
+ * Key verification points:
+ *   - Files without conditional compilation directives are not affected
+ *   - All declarations are preserved
+ */
+TEST_F(ConditionalCompilationTest, PerformConditionCompile_AfterParse_NoFilter)
+{
+    auto src = srcPath + "func_plain.cj";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+
+    bool parseResult = instance->Compile(CompileStage::PARSE);
+    ASSERT_TRUE(parseResult);
+
+    auto packages = instance->GetSourcePackages();
+    auto declCountBefore = packages[0]->files[0]->decls.size();
+
+    bool ccResult = instance->PerformConditionCompile();
+    EXPECT_TRUE(ccResult);
+
+    auto declCountAfter = packages[0]->files[0]->decls.size();
+    EXPECT_EQ(declCountAfter, declCountBefore);
+}
+
 TEST_F(ConditionalCompilationTest, for_lsp)
 {
     auto src = srcPath + "os.cj";
