@@ -39,25 +39,25 @@ protected:
 };
 
 /**
- * @brief 测试条件编译的基本功能
+ * @brief Test basic conditional compilation functionality
  * 
- * 测试目的：
- *   验证 PerformConditionCompile 接口能够正确处理条件编译指令
+ * Test purpose:
+ *   Verify that the PerformConditionCompile interface can correctly handle conditional compilation directives
  * 
- * 测试步骤：
- *   1. 创建编译器实例，设置源文件为 os.cj
- *   2. 调用 Compile 编译到 CONDITION_COMPILE 阶段
- *   3. 验证编译成功且无错误
- *   4. 检查 AST 结构完整性
+ * Test steps:
+ *   1. Create compiler instance, set source file to os.cj
+ *   2. Call Compile to compile to CONDITION_COMPILE stage
+ *   3. Verify compilation succeeds with no errors
+ *   4. Check AST structure integrity
  * 
- * 预期结果：
- *   - 编译成功，无诊断错误
- *   - AST 包含包和文件节点
- *   - 文件中包含声明节点
+ * Expected results:
+ *   - Compilation succeeds with no diagnostic errors
+ *   - AST contains package and file nodes
+ *   - File contains declaration nodes
  * 
- * 关键验证点：
- *   - 条件编译阶段正确执行（parseResult == true）
- *   - AST 结构完整（packages 非空，files 非空，decls 非空）
+ * Key verification points:
+ *   - Conditional compilation stage executes correctly (parseResult == true)
+ *   - AST structure is complete (packages not empty, files not empty, decls not empty)
  */
 TEST_F(ConditionalCompilationTest, PerformConditionCompile_Basic)
 {
@@ -78,27 +78,27 @@ TEST_F(ConditionalCompilationTest, PerformConditionCompile_Basic)
 }
 
 /**
- * @brief 测试解析后执行条件编译
+ * @brief Test conditional compilation after parsing
  * 
- * 测试目的：
- *   验证在 PARSE 阶段后显式调用 PerformConditionCompile 的行为
+ * Test purpose:
+ *   Verify behavior of explicitly calling PerformConditionCompile after PARSE stage
  * 
- * 测试步骤：
- *   1. 创建编译器实例，设置源文件为 os.cj
- *   2. 先执行 PARSE 阶段
- *   3. 记录解析后的声明数量
- *   4. 显式调用 PerformConditionCompile
- *   5. 验证条件编译后声明数量变化
+ * Test steps:
+ *   1. Create compiler instance, set source file to os.cj
+ *   2. First execute PARSE stage
+ *   3. Record declaration count after parsing
+ *   4. Explicitly call PerformConditionCompile
+ *   5. Verify declaration count changes after conditional compilation
  * 
- * 预期结果：
- *   - 解析后有 3 个声明
- *   - 条件编译成功执行
- *   - 条件编译后剩余 2 个声明（根据条件过滤掉 1 个）
+ * Expected results:
+ *   - 3 declarations after parsing
+ *   - Conditional compilation executes successfully
+ *   - 2 declarations remain after conditional compilation (1 filtered out based on conditions)
  * 
- * 关键验证点：
- *   - 解析阶段正确执行
- *   - 条件编译能够过滤掉不符合条件的声明
- *   - 声明数量变化符合预期
+ * Key verification points:
+ *   - Parse stage executes correctly
+ *   - Conditional compilation can filter out declarations that don't meet conditions
+ *   - Declaration count changes as expected
  */
 TEST_F(ConditionalCompilationTest, PerformConditionCompile_AfterParse)
 {
@@ -122,25 +122,25 @@ TEST_F(ConditionalCompilationTest, PerformConditionCompile_AfterParse)
 }
 
 /**
- * @brief 测试不包含条件编译指令的文件
+ * @brief Test files without conditional compilation directives
  * 
- * 测试目的：
- *   验证当源文件不包含条件编译指令时，PerformConditionCompile 不会过滤任何声明
+ * Test purpose:
+ *   Verify that PerformConditionCompile does not filter any declarations when source file contains no conditional compilation directives
  * 
- * 测试步骤：
- *   1. 创建编译器实例，使用不包含条件编译指令的 func_plain.cj
- *   2. 执行 PARSE 阶段
- *   3. 记录解析后的声明数量
- *   4. 执行条件编译
- *   5. 验证声明数量不变
+ * Test steps:
+ *   1. Create compiler instance using func_plain.cj without conditional compilation directives
+ *   2. Execute PARSE stage
+ *   3. Record declaration count after parsing
+ *   4. Execute conditional compilation
+ *   5. Verify declaration count remains unchanged
  * 
- * 预期结果：
- *   - 条件编译成功执行
- *   - 声明数量保持不变
+ * Expected results:
+ *   - Conditional compilation executes successfully
+ *   - Declaration count remains unchanged
  * 
- * 关键验证点：
- *   - 无条件编译指令的文件不会受影响
- *   - 所有声明都被保留
+ * Key verification points:
+ *   - Files without conditional compilation directives are not affected
+ *   - All declarations are preserved
  */
 TEST_F(ConditionalCompilationTest, PerformConditionCompile_AfterParse_NoFilter)
 {

@@ -6,15 +6,15 @@
 
 /**
  * @file ParseOuterInterfaceTest.cpp
- * @brief 解析相关外部接口的单元测试
+ * @brief Unit tests for parsing-related external interfaces
  * 
- * 本文件提供编译器解析相关外部接口的综合单元测试，覆盖以下接口：
- *   1. PerformParse - 解析源代码生成 AST
+ * This file provides comprehensive unit tests for compiler parsing-related external interfaces, covering:
+ *   1. PerformParse - Parse source code to generate AST
  * 
- * 测试场景包括：
- *   - 基本源代码解析测试
- *   - 多源文件解析测试
- *   - 空文件列表处理测试
+ * Test scenarios include:
+ *   - Basic source code parsing test
+ *   - Multiple source files parsing test
+ *   - Empty file list handling test
  */
 
 #include <cstdlib>
@@ -159,26 +159,26 @@ protected:
 };
 
 /**
- * @brief 测试基本源代码的解析功能
+ * @brief Test basic source code parsing functionality
  * 
- * 测试目的：
- *   验证 PerformParse 接口能够正确解析源文件并生成 AST 节点
+ * Test purpose:
+ *   Verify that the PerformParse interface can correctly parse source files and generate AST nodes
  * 
- * 测试步骤：
- *   1. 创建编译器实例，设置源文件为 Test.cj
- *   2. 调用 Compile 编译到 PARSE 阶段
- *   3. 验证编译成功且无错误
- *   4. 检查生成的 AST 结构
+ * Test steps:
+ *   1. Create compiler instance, set source file to Test.cj
+ *   2. Call Compile to compile to PARSE stage
+ *   3. Verify compilation succeeds with no errors
+ *   4. Check generated AST structure
  * 
- * 预期结果：
- *   - 编译成功，无诊断错误
- *   - AST 包含包和文件节点
- *   - 文件中包含宏展开声明节点
+ * Expected results:
+ *   - Compilation succeeds with no diagnostic errors
+ *   - AST contains package and file nodes
+ *   - File contains macro expand declaration nodes
  * 
- * 关键验证点：
- *   - 解析阶段正确执行（parseResult == true）
- *   - AST 结构完整（packages 非空，files 非空，decls 非空）
- *   - AST 节点类型正确（包含 MACRO_EXPAND_DECL）
+ * Key verification points:
+ *   - Parse stage executes correctly (parseResult == true)
+ *   - AST structure is complete (packages not empty, files not empty, decls not empty)
+ *   - AST node types are correct (contains MACRO_EXPAND_DECL)
  */
 TEST_F(ParseOuterInterfaceTest, PerformParse_BasicSourceCode)
 {
@@ -203,24 +203,24 @@ TEST_F(ParseOuterInterfaceTest, PerformParse_BasicSourceCode)
 }
 
 /**
- * @brief 测试解析多个源文件
+ * @brief Test parsing multiple source files
  * 
- * 测试目的：
- *   验证 PerformParse 能够正确处理多个源文件的解析
+ * Test purpose:
+ *   Verify that PerformParse can correctly handle parsing of multiple source files
  * 
- * 测试步骤：
- *   1. 创建编译器实例，设置两个源文件（Test.cj 和 Test1.cj）
- *   2. 调用 Compile 编译到 PARSE 阶段
- *   3. 验证编译成功且无错误
- *   4. 检查包中包含多个文件
+ * Test steps:
+ *   1. Create compiler instance, set two source files (Test.cj and Test1.cj)
+ *   2. Call Compile to compile to PARSE stage
+ *   3. Verify compilation succeeds with no errors
+ *   4. Check that package contains multiple files
  * 
- * 预期结果：
- *   - 编译成功，无诊断错误
- *   - 包中至少包含 1 个文件（多个文件可能被合并）
+ * Expected results:
+ *   - Compilation succeeds with no diagnostic errors
+ *   - Package contains at least 1 file (multiple files may be merged)
  * 
- * 关键验证点：
- *   - 多文件解析不会失败
- *   - 文件数量符合预期
+ * Key verification points:
+ *   - Multi-file parsing does not fail
+ *   - File count matches expectations
  */
 TEST_F(ParseOuterInterfaceTest, PerformParse_MultipleSourceFiles)
 {
@@ -240,23 +240,23 @@ TEST_F(ParseOuterInterfaceTest, PerformParse_MultipleSourceFiles)
 }
 
 /**
- * @brief 测试空源文件列表的处理
+ * @brief Test handling of empty source file list
  * 
- * 测试目的：
- *   验证当源文件列表为空时，PerformParse 能够优雅地处理而不会崩溃
+ * Test purpose:
+ *   Verify that PerformParse can gracefully handle empty source file list without crashing
  * 
- * 测试步骤：
- *   1. 创建编译器实例，不设置任何源文件
- *   2. 调用 Compile 编译到 PARSE 阶段
- *   3. 验证编译不会崩溃
+ * Test steps:
+ *   1. Create compiler instance without setting any source files
+ *   2. Call Compile to compile to PARSE stage
+ *   3. Verify compilation does not crash
  * 
- * 预期结果：
- *   - 编译成功返回（不会崩溃）
- *   - 空文件列表被优雅处理
+ * Expected results:
+ *   - Compilation returns successfully (does not crash)
+ *   - Empty file list is handled gracefully
  * 
- * 关键验证点：
- *   - 空文件列表不会导致异常
- *   - 编译器能够正常返回
+ * Key verification points:
+ *   - Empty file list does not cause exceptions
+ *   - Compiler can return normally
  */
 TEST_F(ParseOuterInterfaceTest, PerformParse_EmptySourceFile)
 {

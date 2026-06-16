@@ -6,18 +6,18 @@
 
 /**
  * @file MacroForOuterInterfaceTest.cpp
- * @brief 宏相关外部接口的单元测试
+ * @brief Unit tests for macro-related external interfaces
  * 
- * 本文件提供编译器宏相关外部接口的综合单元测试，覆盖以下接口：
- *   1. PerformMacroExpand     - 展开所有 MacroExpandDecl 节点
- *   2. ExpandDecl             - 展开单个 MacroExpandDecl 节点
- *   3. CreateMacroSrvProcess  - 为 LSP 创建宏服务进程
+ * This file provides comprehensive unit tests for compiler macro-related external interfaces, covering:
+ *   1. PerformMacroExpand     - Expand all MacroExpandDecl nodes
+ *   2. ExpandDecl             - Expand a single MacroExpandDecl node
+ *   3. CreateMacroSrvProcess  - Create macro service process for LSP
  * 
- * 测试场景包括：
- *   - 宏展开的基本功能测试
- *   - 单个宏声明的展开测试
- *   - 多注解宏声明的展开测试
- *   - LSP 模式下的宏服务测试
+ * Test scenarios include:
+ *   - Basic macro expansion functionality test
+ *   - Single macro declaration expansion test
+ *   - Multiple annotation macro declaration expansion test
+ *   - Macro service test in LSP mode
  */
 
 #include <cstdlib>
@@ -162,26 +162,26 @@ protected:
 };
 
 /**
- * @brief 测试宏展开的基本功能
+ * @brief Test basic macro expansion functionality
  * 
- * 测试目的：
- *   验证 PerformMacroExpand 接口能够正确展开源文件中的所有宏声明
+ * Test purpose:
+ *   Verify that the PerformMacroExpand interface can correctly expand all macro declarations in source files
  * 
- * 测试步骤：
- *   1. 编译宏定义文件 define.cj，生成宏库
- *   2. 创建编译器实例，设置源文件为 test_gen.cj
- *   3. 调用 Compile 编译到 MACRO_EXPAND 阶段
- *   4. 验证编译成功且无错误
- *   5. 检查 AST 中是否包含宏展开后生成的类声明
+ * Test steps:
+ *   1. Compile macro definition file define.cj to generate macro library
+ *   2. Create compiler instance, set source file to test_gen.cj
+ *   3. Call Compile to compile to MACRO_EXPAND stage
+ *   4. Verify compilation succeeds with no errors
+ *   5. Check if AST contains class declarations generated after macro expansion
  * 
- * 预期结果：
- *   - 编译成功，无诊断错误
- *   - @GenClass 宏被正确展开，AST 中包含 ClassDecl 节点
+ * Expected results:
+ *   - Compilation succeeds with no diagnostic errors
+ *   - @GenClass macro is correctly expanded, AST contains ClassDecl node
  * 
- * 关键验证点：
- *   - 宏库编译成功（err == 0）
- *   - 编译阶段正确执行（result == true）
- *   - AST 包含展开后的类声明（foundClass == true）
+ * Key verification points:
+ *   - Macro library compilation succeeds (err == 0)
+ *   - Compilation stage executes correctly (result == true)
+ *   - AST contains expanded class declaration (foundClass == true)
  */
 TEST_F(MacroForOuterInterfaceTest, PerformMacroExpand_Basic)
 {
@@ -214,26 +214,26 @@ TEST_F(MacroForOuterInterfaceTest, PerformMacroExpand_Basic)
 }
 
 /**
- * @brief 测试在包导入后显式调用宏展开
+ * @brief Test explicit macro expansion call after package import
  * 
- * 测试目的：
- *   验证 PerformMacroExpand 可以在 IMPORT_PACKAGE 阶段后显式调用
+ * Test purpose:
+ *   Verify that PerformMacroExpand can be explicitly called after IMPORT_PACKAGE stage
  * 
- * 测试步骤：
- *   1. 编译宏定义文件，生成宏库
- *   2. 创建编译器实例
- *   3. 先执行到 IMPORT_PACKAGE 阶段
- *   4. 显式调用 PerformMacroExpand 方法
- *   5. 验证宏展开成功且无错误
+ * Test steps:
+ *   1. Compile macro definition file to generate macro library
+ *   2. Create compiler instance
+ *   3. First execute to IMPORT_PACKAGE stage
+ *   4. Explicitly call PerformMacroExpand method
+ *   5. Verify macro expansion succeeds with no errors
  * 
- * 预期结果：
- *   - 包导入成功（importResult == true）
- *   - 宏展开成功（expandResult == true）
- *   - 无诊断错误
+ * Expected results:
+ *   - Package import succeeds (importResult == true)
+ *   - Macro expansion succeeds (expandResult == true)
+ *   - No diagnostic errors
  * 
- * 关键验证点：
- *   - 编译阶段可以分步执行
- *   - PerformMacroExpand 可以独立调用
+ * Key verification points:
+ *   - Compilation stages can be executed step by step
+ *   - PerformMacroExpand can be called independently
  */
 TEST_F(MacroForOuterInterfaceTest, PerformMacroExpand_CalledAfterImportPackage)
 {
@@ -256,23 +256,23 @@ TEST_F(MacroForOuterInterfaceTest, PerformMacroExpand_CalledAfterImportPackage)
 }
 
 /**
- * @brief 测试源文件中不包含宏时的行为
+ * @brief Test behavior when source file contains no macros
  * 
- * 测试目的：
- *   验证当源文件不包含任何宏声明时，PerformMacroExpand 能正常处理
+ * Test purpose:
+ *   Verify that PerformMacroExpand handles source files without macro declarations normally
  * 
- * 测试步骤：
- *   1. 使用不包含宏的普通函数文件 func_plain.cj
- *   2. 编译到 MACRO_EXPAND 阶段
- *   3. 验证编译成功且 AST 正常生成
+ * Test steps:
+ *   1. Use plain function file func_plain.cj without macros
+ *   2. Compile to MACRO_EXPAND stage
+ *   3. Verify compilation succeeds and AST is generated normally
  * 
- * 预期结果：
- *   - 编译成功，无错误
- *   - AST 包含原有的函数声明
+ * Expected results:
+ *   - Compilation succeeds with no errors
+ *   - AST contains original function declarations
  * 
- * 关键验证点：
- *   - 无宏源文件不会导致编译失败
- *   - 原有声明保持不变
+ * Key verification points:
+ *   - Source files without macros do not cause compilation failure
+ *   - Original declarations remain unchanged
  */
 TEST_F(MacroForOuterInterfaceTest, PerformMacroExpand_NoMacroInSource)
 {
@@ -291,25 +291,25 @@ TEST_F(MacroForOuterInterfaceTest, PerformMacroExpand_NoMacroInSource)
 }
 
 /**
- * @brief 测试展开非宏声明时的行为
+ * @brief Test behavior when expanding non-macro declarations
  * 
- * 测试目的：
- *   验证当传入非 MacroExpandDecl 类型的声明时，ExpandDecl 返回原声明
+ * Test purpose:
+ *   Verify that ExpandDecl returns original declaration when given non-MacroExpandDecl type
  * 
- * 测试步骤：
- *   1. 使用不包含宏的普通函数文件
- *   2. 编译到 IMPORT_PACKAGE 阶段
- *   3. 获取文件中的第一个声明（函数声明）
- *   4. 调用 ExpandDecl 展开该声明
- *   5. 验证返回的声明类型和内容不变
+ * Test steps:
+ *   1. Use plain function file without macros
+ *   2. Compile to IMPORT_PACKAGE stage
+ *   3. Get the first declaration (function declaration) in the file
+ *   4. Call ExpandDecl to expand the declaration
+ *   5. Verify returned declaration type and content are unchanged
  * 
- * 预期结果：
- *   - 返回的声明数量为 1
- *   - 返回的声明类型仍为 FuncDecl
+ * Expected results:
+ *   - Returned declaration count is 1
+ *   - Returned declaration type is still FuncDecl
  * 
- * 关键验证点：
- *   - 非宏声明不会被错误处理
- *   - 原声明被正确保留并返回
+ * Key verification points:
+ *   - Non-macro declarations are not mishandled
+ *   - Original declaration is correctly preserved and returned
  */
 TEST_F(MacroForOuterInterfaceTest, ExpandDecl_NonMacroDecl_ReturnsSameDecl)
 {
@@ -331,27 +331,27 @@ TEST_F(MacroForOuterInterfaceTest, ExpandDecl_NonMacroDecl_ReturnsSameDecl)
 }
 
 /**
- * @brief 测试展开单个宏声明生成类声明
+ * @brief Test expanding single macro declaration to generate class declaration
  * 
- * 测试目的：
- *   验证 ExpandDecl 能够正确展开单个 MacroExpandDecl 并生成预期的 AST 节点
+ * Test purpose:
+ *   Verify that ExpandDecl can correctly expand a single MacroExpandDecl and generate expected AST nodes
  * 
- * 测试步骤：
- *   1. 编译宏定义文件，生成宏库
- *   2. 编译测试文件到 IMPORT_PACKAGE 阶段
- *   3. 在 AST 中查找 @GenClass 宏声明
- *   4. 调用 ExpandDecl 展开该宏声明
- *   5. 验证展开结果为 ClassDecl 且标识符为 "A"
+ * Test steps:
+ *   1. Compile macro definition file to generate macro library
+ *   2. Compile test file to IMPORT_PACKAGE stage
+ *   3. Find @GenClass macro declaration in AST
+ *   4. Call ExpandDecl to expand the macro declaration
+ *   5. Verify expansion result is ClassDecl with identifier "A"
  * 
- * 预期结果：
- *   - 找到 @GenClass 宏声明
- *   - 展开后生成 1 个 ClassDecl
- *   - 类名为 "A"
+ * Expected results:
+ *   - Find @GenClass macro declaration
+ *   - Expansion generates 1 ClassDecl
+ *   - Class name is "A"
  * 
- * 关键验证点：
- *   - 宏声明能够被正确识别
- *   - 展开后的 AST 节点类型正确
- *   - 展开后的类名符合预期
+ * Key verification points:
+ *   - Macro declaration can be correctly identified
+ *   - Expanded AST node type is correct
+ *   - Expanded class name matches expectation
  */
 TEST_F(MacroForOuterInterfaceTest, ExpandDecl_MacroExpandDecl_ExpandsToClass)
 {
@@ -386,26 +386,26 @@ TEST_F(MacroForOuterInterfaceTest, ExpandDecl_MacroExpandDecl_ExpandsToClass)
 }
 
 /**
- * @brief 测试带有多个注解的声明展开
+ * @brief Test expansion of declarations with multiple annotations
  * 
- * 测试目的：
- *   验证当一个声明带有多个宏注解时，ExpandDecl 能够正确展开所有注解
+ * Test purpose:
+ *   Verify that ExpandDecl can correctly expand all annotations when a declaration has multiple macro annotations
  * 
- * 测试步骤：
- *   1. 编译宏定义文件
- *   2. 编译测试文件到 PARSE 阶段后执行包导入
- *   3. 查找带有多个注解（@GenVar 和 @GenLet）的宏声明
- *   4. 调用 ExpandDecl 展开该声明
- *   5. 验证展开后生成多个声明
+ * Test steps:
+ *   1. Compile macro definition file
+ *   2. Compile test file to PARSE stage then execute package import
+ *   3. Find macro declaration with multiple annotations (@GenVar and @GenLet)
+ *   4. Call ExpandDecl to expand the declaration
+ *   5. Verify multiple declarations are generated after expansion
  * 
- * 预期结果：
- *   - 找到带有多个注解的宏声明
- *   - 展开后生成 2 个声明（@GenVar 和 @GenLet 各生成一个）
+ * Expected results:
+ *   - Find macro declaration with multiple annotations
+ *   - Expansion generates 2 declarations (@GenVar and @GenLet each generate one)
  * 
- * 关键验证点：
- *   - 多注解宏声明能够被正确识别
- *   - 每个注解都能正确展开
- *   - 展开后的声明数量正确
+ * Key verification points:
+ *   - Multi-annotation macro declaration can be correctly identified
+ *   - Each annotation can be correctly expanded
+ *   - Expanded declaration count is correct
  */
 TEST_F(MacroForOuterInterfaceTest, ExpandDecl_MultipleAnnotationsExpand)
 {
@@ -438,24 +438,24 @@ TEST_F(MacroForOuterInterfaceTest, ExpandDecl_MultipleAnnotationsExpand)
 }
 
 /**
- * @brief 测试 LSP 模式下宏服务进程的创建
+ * @brief Test macro service process creation in LSP mode
  * 
- * 测试目的：
- *   验证当启用 LSP 模式时，宏服务进程能够正确创建并处理宏展开
+ * Test purpose:
+ *   Verify that macro service process can be correctly created and handle macro expansion when LSP mode is enabled
  * 
- * 测试步骤：
- *   1. 启用宏在 LSP 中的支持（enableMacroInLSP = true）
- *   2. 创建编译器实例，使用普通函数文件
- *   3. 编译到 MACRO_EXPAND 阶段
- *   4. 验证编译成功且无错误
+ * Test steps:
+ *   1. Enable macro support in LSP (enableMacroInLSP = true)
+ *   2. Create compiler instance using plain function file
+ *   3. Compile to MACRO_EXPAND stage
+ *   4. Verify compilation succeeds with no errors
  * 
- * 预期结果：
- *   - 编译成功
- *   - 无诊断错误
+ * Expected results:
+ *   - Compilation succeeds
+ *   - No diagnostic errors
  * 
- * 关键验证点：
- *   - LSP 模式能够正常启用
- *   - 宏服务进程正确初始化
+ * Key verification points:
+ *   - LSP mode can be enabled normally
+ *   - Macro service process initializes correctly
  */
 TEST_F(MacroForOuterInterfaceTest, CreateMacroSrvProcess_LSPModeEnabled)
 {
@@ -471,24 +471,57 @@ TEST_F(MacroForOuterInterfaceTest, CreateMacroSrvProcess_LSPModeEnabled)
 }
 
 /**
- * @brief 测试 LSP 模式禁用时的行为
+ * @brief Test macro expansion failure in LSP mode
  * 
- * 测试目的：
- *   验证当 LSP 模式禁用时，编译器仍能正常处理宏展开
+ * Test purpose:
+ *   Verify that compiler correctly handles and reports macro expansion failures in LSP mode
  * 
- * 测试步骤：
- *   1. 保持 LSP 模式禁用（默认状态）
- *   2. 创建编译器实例，使用普通函数文件
- *   3. 编译到 MACRO_EXPAND 阶段
- *   4. 验证编译成功且无错误
+ * Test steps:
+ *   1. Enable LSP mode
+ *   2. Create compiler instance using file with invalid macro expansion
+ *   3. Compile to MACRO_EXPAND stage
+ *   4. Verify compilation fails and error count is greater than 0
  * 
- * 预期结果：
- *   - 编译成功
- *   - 无诊断错误
+ * Expected results:
+ *   - Compilation fails
+ *   - Diagnostic errors are reported
  * 
- * 关键验证点：
- *   - 非 LSP 模式下编译器正常工作
- *   - 宏展开流程不受影响
+ * Key verification points:
+ *   - LSP mode correctly handles macro expansion failures
+ *   - Error diagnostics are properly generated in LSP mode
+ */
+TEST_F(MacroForOuterInterfaceTest, MacroExpansionFailure_LSPModeEnabled)
+{
+    invocation.globalOptions.enableMacroInLSP = true;
+    auto src = srcPath + "test_failExpand.cj";
+    instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+    instance->compileOnePackageFromSrcFiles = true;
+    instance->srcFilePaths = {src};
+
+    bool result = instance->Compile(CompileStage::MACRO_EXPAND);
+    EXPECT_FALSE(result);
+    EXPECT_GT(diag.GetErrorCount(), 0);
+}
+
+/**
+ * @brief Test behavior when LSP mode is disabled
+ * 
+ * Test purpose:
+ *   Verify that compiler can still handle macro expansion normally when LSP mode is disabled
+ * 
+ * Test steps:
+ *   1. Keep LSP mode disabled (default state)
+ *   2. Create compiler instance using plain function file
+ *   3. Compile to MACRO_EXPAND stage
+ *   4. Verify compilation succeeds with no errors
+ * 
+ * Expected results:
+ *   - Compilation succeeds
+ *   - No diagnostic errors
+ * 
+ * Key verification points:
+ *   - Compiler works normally in non-LSP mode
+ *   - Macro expansion process is not affected
  */
 TEST_F(MacroForOuterInterfaceTest, CreateMacroSrvProcess_LSPModeDisabled)
 {
