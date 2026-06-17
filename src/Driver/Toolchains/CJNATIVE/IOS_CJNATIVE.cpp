@@ -29,6 +29,11 @@ void IOS_CJNATIVE::AddSystemLibraryPaths()
     MachO::AddSystemLibraryPaths();
 }
 
+// This function shares most of its logic with Darwin_CJNATIVE::GenerateLTOObjectFile.
+// The only difference is the -platform_version args (platform name, version, default SDK).
+// Consider extracting the platform-specific parts into a virtual function (e.g. AppendPlatformVersion)
+// if more Apple-platform subclasses are added in the future. For now, the duplication is minimal
+// and not worth the indirection.
 TempFileInfo IOS_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>& objFiles)
 {
     std::optional<std::string> darwinSDKVersion = GetDarwinSDKVersion(driverOptions.sysroot);

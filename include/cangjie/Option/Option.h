@@ -1235,6 +1235,7 @@ private:
     bool CheckOutputModeOptions();
     bool CheckCompileAsExeOptions() const;
     bool CheckLTOPkgVisibilityOptions() const;
+    bool CheckLTOStaticLibFormatOptions() const;
     bool CheckPgoOptions() const;
     bool CheckCompileMacro() const;
     bool CheckCJMPOptions() const;
