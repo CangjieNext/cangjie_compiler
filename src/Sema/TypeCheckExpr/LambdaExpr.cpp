@@ -139,12 +139,13 @@ struct ParamMemUsage {
     std::string id;
     MemSig sig;
     std::set<Ptr<Decl>> decls;
+    bool resultConstrained = false;
 };
 
 // if it's a member func call to a param, return the param's id, the member sig and possible type decls
 // otherwise return empty string and empty set
-ParamMemUsage FindCandidatesFromCall(
-    ASTContext& ctx, const CallExpr& ce, const std::map<std::string, Ptr<FuncParam>>& unsolvedParams)
+ParamMemUsage FindCandidatesFromCall(ASTContext& ctx, const CallExpr& ce,
+    const std::map<std::string, Ptr<FuncParam>>& unsolvedParams, bool resultConstrained)
 {
     auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get());
     auto re = ma ? DynamicCast<RefExpr*>(ma->baseExpr.get()) : nullptr;
@@ -153,19 +154,32 @@ ParamMemUsage FindCandidatesFromCall(
     }
     auto id = re->ref.identifier;
     auto sig = MemSig{ma->field, false, ce.args.size(), ma->typeArguments.size()};
-    return {id, sig, ctx.Mem2Decls(sig)};
+    return {id, sig, ctx.Mem2Decls(sig), resultConstrained};
 }
 
 // if it's a member access to a param, return the param's id, the member sig and possible type decls
 // otherwise return empty string and empty set
-ParamMemUsage FindCandidatesFromAccess(
-    ASTContext& ctx, MemberAccess& ma, const std::map<std::string, Ptr<FuncParam>>& unsolvedParams)
+ParamMemUsage FindCandidatesFromAccess(ASTContext& ctx, MemberAccess& ma,
+    const std::map<std::string, Ptr<FuncParam>>& unsolvedParams, bool resultConstrained)
 {
     if (auto re = DynamicCast<RefExpr*>(ma.baseExpr.get())) {
         if (unsolvedParams.count(re->ref.identifier) > 0) {
             auto id = re->ref.identifier;
             auto sig = MemSig{ma.field, true};
-            return {id, sig, ctx.Mem2Decls(sig)};
+            return {id, sig, ctx.Mem2Decls(sig), resultConstrained};
+        }
+    }
+    return {"", {}, {}};
+}
+
+ParamMemUsage FindCandidatesFromSubscript(ASTContext& ctx, SubscriptExpr& se,
+    const std::map<std::string, Ptr<FuncParam>>& unsolvedParams, bool resultConstrained)
+{
+    if (auto re = DynamicCast<RefExpr*>(se.baseExpr.get())) {
+        if (unsolvedParams.count(re->ref.identifier) > 0) {
+            auto id = re->ref.identifier;
+            auto sig = MemSig{"[]", false, se.indexExprs.size(), 0};
+            return {id, sig, ctx.Mem2Decls(sig), resultConstrained};
         }
     }
     return {"", {}, {}};
@@ -216,6 +230,7 @@ void TypeChecker::TypeCheckerImpl::TryInferFromSyntaxInfo(ASTContext& ctx, const
     std::map<std::string, Ptr<FuncParam>> unsolvedParams;
     std::map<std::string, std::set<Ptr<Decl>>> candidates;
     std::map<std::string, std::vector<MemSig>> memSigs;
+    std::map<std::string, MemSigSet> resultConstrainedMemSigs;
     for (auto& param : le.funcBody->paramLists[0]->params) {
         if (param->GetTy()->IsPlaceholder()) {
             unsolvedParams[param->identifier] = param;
@@ -225,11 +240,14 @@ void TypeChecker::TypeCheckerImpl::TryInferFromSyntaxInfo(ASTContext& ctx, const
         return;
     }
 
-    auto candiHandler = [&candidates, &memSigs](const ParamMemUsage& candi) {
+    auto candiHandler = [&candidates, &memSigs, &resultConstrainedMemSigs](const ParamMemUsage& candi) {
         if (candi.id.empty()) {
             return false;
         }
         memSigs[candi.id].push_back(candi.sig);
+        if (candi.resultConstrained) {
+            resultConstrainedMemSigs[candi.id].insert(candi.sig);
+        }
         if (candidates.count(candi.id) == 0) {
             candidates[candi.id] = candi.decls;
         } else {
@@ -237,25 +255,57 @@ void TypeChecker::TypeCheckerImpl::TryInferFromSyntaxInfo(ASTContext& ctx, const
         }
         return true;
     };
-    std::function<VisitAction(Ptr<Node>)> memberScanner = [&ctx, &unsolvedParams, &candiHandler, &memberScanner](
-                                                              Ptr<Node> n) -> VisitAction {
+    bool resultConstrained = false;
+    std::function<VisitAction(Ptr<Node>)> memberScanner;
+    memberScanner = [&ctx, &unsolvedParams, &candiHandler, &memberScanner, &resultConstrained](
+        Ptr<Node> n) -> VisitAction {
+        if (auto be = DynamicCast<BinaryExpr*>(n)) {
+            auto old = resultConstrained;
+            resultConstrained = true;
+            Walker(be->leftExpr.get(), memberScanner).Walk();
+            Walker(be->rightExpr.get(), memberScanner).Walk();
+            resultConstrained = old;
+            return VisitAction::SKIP_CHILDREN;
+        }
+        if (auto ie = DynamicCast<IsExpr*>(n)) {
+            auto old = resultConstrained;
+            resultConstrained = true;
+            Walker(ie->leftExpr.get(), memberScanner).Walk();
+            resultConstrained = old;
+            return VisitAction::SKIP_CHILDREN;
+        }
+        if (auto ae = DynamicCast<AsExpr*>(n)) {
+            auto old = resultConstrained;
+            resultConstrained = true;
+            Walker(ae->leftExpr.get(), memberScanner).Walk();
+            resultConstrained = old;
+            return VisitAction::SKIP_CHILDREN;
+        }
         if (auto ce = DynamicCast<CallExpr*>(n)) {
-            if (candiHandler(FindCandidatesFromCall(ctx, *ce, unsolvedParams))) {
+            if (candiHandler(FindCandidatesFromCall(ctx, *ce, unsolvedParams, resultConstrained))) {
                 // need to skip baseFunc to avoid handling it again as an access to var/prop
                 for (auto& arg : ce->args) {
                     Walker(arg.get(), memberScanner).Walk();
                 }
                 return VisitAction::SKIP_CHILDREN;
             }
+        } else if (auto se = DynamicCast<SubscriptExpr*>(n)) {
+            if (candiHandler(FindCandidatesFromSubscript(ctx, *se, unsolvedParams, resultConstrained))) {
+                for (auto& index : se->indexExprs) {
+                    Walker(index.get(), memberScanner).Walk();
+                }
+                return VisitAction::SKIP_CHILDREN;
+            }
         } else if (auto ma = DynamicCast<MemberAccess*>(n)) {
-            candiHandler(FindCandidatesFromAccess(ctx, *ma, unsolvedParams));
+            candiHandler(FindCandidatesFromAccess(ctx, *ma, unsolvedParams, resultConstrained));
         }
         return VisitAction::WALK_CHILDREN;
     };
     Walker(le.funcBody.get(), memberScanner).Walk();
 
     for (auto& [id, decls] : candidates) {
-        TryEnforceCandidate(*StaticCast<TyVar*>(unsolvedParams[id]->GetTy()), decls, typeManager, memSigs[id]);
+        TryEnforceCandidate(*StaticCast<TyVar*>(unsolvedParams[id]->GetTy()), decls, typeManager, memSigs[id],
+            resultConstrainedMemSigs[id]);
     }
 }
 

@@ -13,6 +13,8 @@
 #ifndef CANGJIE_SEMA_TYPECHECKUTIL_H
 #define CANGJIE_SEMA_TYPECHECKUTIL_H
 
+#include <unordered_set>
+
 #include "ScopeManager.h"
 #include "cangjie/AST/Cache.h"
 #include "cangjie/AST/Node.h"
@@ -21,6 +23,8 @@
 #include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie::TypeCheckUtil {
+using MemSigSet = std::unordered_set<AST::MemSig, AST::MemSigHash>;
+
 // The comparison result of two types.
 // If left < right, return LT.
 // If left > right, return GT.
@@ -273,7 +277,7 @@ bool LessThanAll(Ptr<AST::Ty> ty, const std::set<Ptr<AST::Ty>>& tys,
 // candidates whose generic params cannot all be determined by these usages are not added to
 // the sum constraint, since their placeholder type args would stay free forever.
 void TryEnforceCandidate(TyVar& tv, const std::set<Ptr<AST::Decl>>& candidates, TypeManager& tyMgr,
-    const std::vector<AST::MemSig>& memSigs = {});
+    const std::vector<AST::MemSig>& memSigs = {}, const MemSigSet& resultConstrainedMemSigs = {});
 std::set<Ptr<AST::Ty>> TypeMapToTys(const std::map<AST::TypeKind, AST::TypeKind>& m, bool fromKey);
 // get generic params for the decl and outer decl(if there is) and extended decl(if there is)
 std::set<Ptr<AST::Ty>> GetGenericParamsForDecl(const AST::Decl& decl);
