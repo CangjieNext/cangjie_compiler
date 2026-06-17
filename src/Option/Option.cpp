@@ -269,6 +269,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckLtoOptions();
     success = success && CheckCompileAsExeOptions();
     success = success && CheckLTOPkgVisibilityOptions();
+    success = success && CheckLTOStaticLibFormatOptions();
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
     success = success && ReprocessObfuseOption();
@@ -562,16 +563,6 @@ bool GlobalOptions::CheckLtoOptions() const
         Errorln("LTO on iOS is an experimental feature, use '--experimental' to enable it.");
         return false;
     }
-    if (emitStaticLibInLTO) {
-        if (outputMode != OutputMode::STATIC_LIB) {
-            Errorln("Option '--lto-staticlib-format=native' requires '--output-type=staticlib'.");
-            return false;
-        }
-        if (target.os != OSType::IOS) {
-            Errorln("Option '--lto-staticlib-format=native' is only supported on iOS platforms.");
-            return false;
-        }
-    }
     if (outputMode == OutputMode::OBJ) {
         Errorln("--output-type=obj is not allowed in LTO mode");
         return false;
@@ -615,7 +606,8 @@ bool GlobalOptions::CheckCompileAsExeOptions() const
     }
     if (IsCompileAsExeEnabled() && !IsLTOEnabled()) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_compile_as_exe, DEFAULT_POSITION);
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_option_requires_lto, DEFAULT_POSITION,
+                              "--compile-as-exe");
         return false;
     }
     auto osType = target.GetOSFamily();
@@ -631,7 +623,8 @@ bool GlobalOptions::CheckLTOPkgVisibilityOptions() const
 {
     if (IsLTOPkgVisibilityEnabled() && !IsLTOEnabled()) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_visible_pkgs, DEFAULT_POSITION);
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_option_requires_lto, DEFAULT_POSITION,
+                              "--lto-keep-pkg-visibility");
         return false;
     }
 
@@ -651,6 +644,29 @@ bool GlobalOptions::CheckLTOPkgVisibilityOptions() const
     }
 
     return true;
+}
+
+bool GlobalOptions::CheckLTOStaticLibFormatOptions() const
+{
+    if (!emitStaticLibInLTO) {
+        return true;
+    }
+
+    if (!IsLTOEnabled()) {
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_option_requires_lto, DEFAULT_POSITION,
+                              "--lto-staticlib-format");
+        return false;
+    }
+    
+    if (outputMode != OutputMode::STATIC_LIB) {
+        Errorln("Option '--lto-staticlib-format=native' requires '--output-type=staticlib'.");
+        return false;
+    }
+    if (target.os != OSType::IOS) {
+        Errorln("Option '--lto-staticlib-format=native' is only supported on iOS platforms.");
+        return false;
+    }
 }
 
 bool GlobalOptions::CheckPgoOptions() const
