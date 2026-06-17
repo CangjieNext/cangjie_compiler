@@ -306,7 +306,7 @@ void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
     bool shouldSetVisiblePkgs =
         (driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB &&
          driverOptions.target.os == Triple::OSType::LINUX) ||
-        (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB && driverOptions.target.IsMacOS());
+        (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB && driverOptions.target.IsIOS());
     if (shouldSetVisiblePkgs) {
         if (!driverOptions.GetLtoVisiblePkgs().empty()) {
             setOptionHandler("--visible-pkgs=" + Utils::JoinStrings(driverOptions.GetLtoVisiblePkgs(), ","));
