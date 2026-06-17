@@ -647,8 +647,8 @@ bool CreateMacroMsgPipe()
 std::string GetMacroSrvCmd(bool enableParallelMacro, std::string& cjcPath)
 {
     // For Windows: The file 'cjc' and the LSPMacroServer are not in the same directory, requiring special handling.
-    std::string cmdStr = FileUtil::JoinPath(
-        FileUtil::GetDirPath(cjcPath), "..\\tools\\bin\\" + MACRO_SRV_NAME + ".exe");
+    std::string cmdStr = "\"" + FileUtil::JoinPath(
+        FileUtil::GetDirPath(cjcPath), "..\\tools\\bin\\" + MACRO_SRV_NAME + ".exe") + "\"";
     const size_t buffLen = 20;
     char handlebuffer[buffLen];
     sprintf_s(handlebuffer, buffLen, "%d", MacroProcMsger::GetInstance().hChildRead);
@@ -677,8 +677,10 @@ void MacroEvaluation::CreateMacroSrvProcess()
     si.cb = sizeof(si);
     RedirectStdOutForMarcoSrv(si);
     PROCESS_INFORMATION pi;
-    BOOL bRet = CreateProcess(nullptr, const_cast<LPSTR>(GetMacroSrvCmd(enableParallelMacro,
-        ci->invocation.globalOptions.executablePath).c_str()), nullptr, nullptr,
+    std::string cmd = GetMacroSrvCmd(enableParallelMacro, ci->invocation.globalOptions.executablePath);
+    std::vector<char> cmdBuf(cmd.begin(), cmd.end());
+    cmdBuf.push_back('\0');
+    BOOL bRet = CreateProcess(nullptr, cmdBuf.data(), nullptr, nullptr,
         TRUE, NULL, nullptr, nullptr, &si, &pi);
     if (bRet == FALSE) {
         CloseSrvPipe();
