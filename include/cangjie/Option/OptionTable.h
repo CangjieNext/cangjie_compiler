@@ -47,7 +47,7 @@ enum class Group : uint8_t {
 };
 
 enum class ID : uint16_t {
-#define OPTION(NAME, ID, KIND, BACKENDS, GROUPS, ALIAS, FLAGS, HELPTEXT, OCCURRENCE) ID,
+#define OPTION(NAME, ID, KIND, BACKENDS, GROUPS, ALIAS, FLAGS, OCCURRENCE, HELPTEXT) ID,
 #include "cangjie/Option/Options.inc"
 #undef OPTION
 };
