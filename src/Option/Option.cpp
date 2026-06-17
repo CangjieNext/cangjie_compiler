@@ -606,7 +606,8 @@ bool GlobalOptions::CheckCompileAsExeOptions() const
     }
     if (IsCompileAsExeEnabled() && !IsLTOEnabled()) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_compile_as_exe, DEFAULT_POSITION);
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_option_requires_lto, DEFAULT_POSITION,
+                              "--compile-as-exe");
         return false;
     }
     auto osType = target.GetOSFamily();
@@ -622,7 +623,8 @@ bool GlobalOptions::CheckLTOPkgVisibilityOptions() const
 {
     if (IsLTOPkgVisibilityEnabled() && !IsLTOEnabled()) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_visible_pkgs, DEFAULT_POSITION);
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_option_requires_lto, DEFAULT_POSITION,
+                              "--lto-keep-pkg-visibility");
         return false;
     }
 
@@ -637,7 +639,7 @@ bool GlobalOptions::CheckLTOPkgVisibilityOptions() const
         bool validForStaticLib = (outputMode == OutputMode::STATIC_LIB && target.os == OSType::IOS);
         if (!validForDylib && !validForStaticLib) {
             DiagnosticEngine diag;
-            diag.DiagnoseRefactor(DiagKindRefactor::driver_visible_pkgs_only_for_dylib, DEFAULT_POSITION);
+            diag.DiagnoseRefactor(DiagKindRefactor::driver_lto_visible_pkgs_no_effect, DEFAULT_POSITION);
         }
     }
 
@@ -651,10 +653,12 @@ bool GlobalOptions::CheckLTOStaticLibFormatOptions() const
     }
 
     if (!IsLTOEnabled()) {
-        Errorln("Option '--lto-staticlib-format=native' only takes effect when lto mode is enabled.");
+        DiagnosticEngine diag;
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_option_requires_lto, DEFAULT_POSITION,
+                              "--lto-staticlib-format");
         return false;
     }
-
+    
     if (outputMode != OutputMode::STATIC_LIB) {
         Errorln("Option '--lto-staticlib-format=native' requires '--output-type=staticlib'.");
         return false;
