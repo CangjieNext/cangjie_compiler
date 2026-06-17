@@ -267,11 +267,6 @@ void JavaInteropManager::CheckExtendDecl(ExtendDecl& decl) const
     if (!IsMirror(ty) && !IsImpl(ty)) {
         return;
     }
-
-    if (!decl.inheritedTypes.empty()) {
-        DiagJavaDeclCannotBeExtendedWithInterface(diag, decl);
-        decl.EnableAttr(Attribute::IS_BROKEN);
-    }
 }
 
 void JavaInteropManager::CheckJavaMirrorTypes(ClassLikeDecl& decl)
@@ -327,7 +322,11 @@ void JavaInteropManager::CheckTypes(File& file)
             CheckExtendDecl(*extendDecl);
         }
 
+<<<<<<< HEAD
         CheckGenericsInstantiation(*decl);
+=======
+        CheckCJMappingType(*decl);
+>>>>>>> 9021107a (chore(nativeffi-java): make javaref accessible, remove restrictions)
     }
 }
 
