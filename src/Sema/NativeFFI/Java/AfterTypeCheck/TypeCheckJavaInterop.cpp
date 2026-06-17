@@ -324,10 +324,10 @@ void JavaInteropManager::CheckExtendDecl(ExtendDecl& decl) const
         return;
     }
 
-    if (!decl.inheritedTypes.empty()) {
-        DiagJavaDeclCannotBeExtendedWithInterface(diag, decl);
-        decl.EnableAttr(Attribute::IS_BROKEN);
-    }
+    // if (!decl.inheritedTypes.empty()) {
+    //     DiagJavaDeclCannotBeExtendedWithInterface(diag, decl);
+    //     decl.EnableAttr(Attribute::IS_BROKEN);
+    // }
 }
 
 void JavaInteropManager::CheckJavaMirrorTypes(ClassLikeDecl& decl)
@@ -385,7 +385,7 @@ void JavaInteropManager::CheckTypes(File& file)
         }
 
         CheckCJMappingType(*decl);
-        CheckGenericsInstantiation(*decl);
+        // CheckGenericsInstantiation(*decl);
     }
 }
 
