@@ -15,24 +15,24 @@ namespace Cangjie::Utils {
 
 class SipHash {
 public:
-    template <size_t N> static uint64_t GetHashValue(const std::bitset<N>& rawData)
+    template <uint64_t N> static uint64_t GetHashValue(const std::bitset<N>& rawData)
     {
         const uint64_t data = rawData.to_ullong();
         const uint8_t* bytes = reinterpret_cast<const uint8_t*>(&data);
-        const size_t size = sizeof(uint64_t);
+        const uint64_t size = sizeof(uint64_t);
         return SipHash_2_4(bytes, size);
     }
     template <typename T> static uint64_t GetHashValue(T data)
     {
         static_assert(std::is_arithmetic_v<T>);
         const uint8_t* bytes = reinterpret_cast<const uint8_t*>(&data);
-        const size_t size = sizeof(T);
+        const uint64_t size = sizeof(T);
         return SipHash_2_4(bytes, size);
     }
     static uint64_t GetHashValue(std::string data)
     {
         const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data.data());
-        const size_t size = data.size();
+        const uint64_t size = data.size();
         return SipHash_2_4(bytes, size);
     }
     static uint64_t GetHashValue(const char* data)
@@ -44,7 +44,7 @@ private:
     static const uint64_t k0_ = 0xdeadbeef;
     static const uint64_t k1_ = 0x12345678;
 
-    static size_t GetValueLeft(const uint8_t* dataPointer, size_t sizeLeft)
+    static uint64_t GetValueLeft(const uint8_t* dataPointer, uint64_t sizeLeft)
     {
         uint64_t valueLeft{0};
         static_assert(CHAR_BIT <= 8);
@@ -76,7 +76,7 @@ private:
         return valueLeft;
     }
 
-    static uint64_t SipHash_2_4(const uint8_t* data, const size_t size)
+    static uint64_t SipHash_2_4(const uint8_t* data, uint64_t size)
     {
         uint64_t v0 = k0_ ^ 0x736f6d6570736575ull;
         uint64_t v1 = k1_ ^ 0x646f72616e646f6dull;

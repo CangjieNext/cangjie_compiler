@@ -126,7 +126,7 @@ std::vector<AttrSizeType> AttributePack::GetAllIdxOfAttr() const
 {
     std::vector<AttrSizeType> enableAttrIdxs;
     for (size_t i = 0; i < attributes.size(); ++i) {
-        for (AttrSizeType j = 0; j < ATTR_SIZE; ++j) {
+        for (size_t j = 0; j < ATTR_SIZE; ++j) {
             if (attributes[i].test(j)) {
                 enableAttrIdxs.emplace_back(i * ATTR_SIZE + j);
             }

@@ -230,10 +230,11 @@ void DiagnosticEmitterImpl::CompressLineCode(CollectedInfoMap& infoMap, SourceCo
             return;
         }
         if (second - m.first > COMPRESS_LEN) {
-            auto targetIter = bindLineCodes.begin() + m.first - base + COMPRESS_LEN;
+            auto targetIter = bindLineCodes.begin() + static_cast<int>(m.first - base) +
+                static_cast<int>(static_cast<unsigned>(COMPRESS_LEN));
             targetIter->line = 0;
             targetIter->meta = "...";
-            bindLineCodes.erase(targetIter + 1, bindLineCodes.begin() + second - base);
+            bindLineCodes.erase(targetIter + 1, bindLineCodes.begin() + static_cast<int>(second - base));
         }
         second = m.first;
     });
@@ -408,7 +409,8 @@ bool DiagnosticEmitterImpl::CombineErrorPrint(CollectedInfoMap& infoMap, SourceC
                 CombineErrorPrintSingleLine(insertedStr, info, sourceLine);
             }
         });
-        combinedVec.insert(combinedVec.begin() + static_cast<int64_t>(i) + 1, insertedStr.begin(), insertedStr.end());
+        combinedVec.insert(combinedVec.begin() + static_cast<int>(static_cast<int64_t>(i)) + 1,
+            insertedStr.begin(), insertedStr.end());
     }
     return true;
 }
