@@ -303,10 +303,11 @@ void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
     setOptionHandler("--allow-multiple-definition");
     setOptionHandler("--plugin-opt=no-opaque-pointers");
 
-    bool shouldSetVisiblePkgs =
-        (driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB &&
-         driverOptions.target.os == Triple::OSType::LINUX) ||
-        (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB && driverOptions.target.IsMacOS());
+    bool shouldSetVisiblePkgs = (driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB &&
+                                    driverOptions.target.os == Triple::OSType::LINUX) ||
+        (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB &&
+            driverOptions.target.os == Triple::OSType::IOS &&
+            driverOptions.ShouldEmitStaticLibInLTO());
     if (shouldSetVisiblePkgs) {
         if (!driverOptions.GetLtoVisiblePkgs().empty()) {
             setOptionHandler("--visible-pkgs=" + Utils::JoinStrings(driverOptions.GetLtoVisiblePkgs(), ","));
