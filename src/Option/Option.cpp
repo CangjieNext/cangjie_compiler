@@ -269,6 +269,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckLtoOptions();
     success = success && CheckCompileAsExeOptions();
     success = success && CheckLTOPkgVisibilityOptions();
+    success = success && CheckLTOStaticLibFormatOptions();
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
     success = success && ReprocessObfuseOption();
@@ -562,16 +563,6 @@ bool GlobalOptions::CheckLtoOptions() const
         Errorln("LTO on iOS is an experimental feature, use '--experimental' to enable it.");
         return false;
     }
-    if (emitStaticLibInLTO) {
-        if (outputMode != OutputMode::STATIC_LIB) {
-            Errorln("Option '--lto-staticlib-format=native' requires '--output-type=staticlib'.");
-            return false;
-        }
-        if (target.os != OSType::IOS) {
-            Errorln("Option '--lto-staticlib-format=native' is only supported on iOS platforms.");
-            return false;
-        }
-    }
     if (outputMode == OutputMode::OBJ) {
         Errorln("--output-type=obj is not allowed in LTO mode");
         return false;
@@ -643,13 +634,35 @@ bool GlobalOptions::CheckLTOPkgVisibilityOptions() const
 
     if (IsLTOPkgVisibilityEnabled()) {
         bool validForDylib = (outputMode == OutputMode::SHARED_LIB && target.os == OSType::LINUX);
-        bool validForStaticLib = (outputMode == OutputMode::STATIC_LIB && target.IsMacOS());
+        bool validForStaticLib = (outputMode == OutputMode::STATIC_LIB && target.os == OSType::IOS);
         if (!validForDylib && !validForStaticLib) {
             DiagnosticEngine diag;
             diag.DiagnoseRefactor(DiagKindRefactor::driver_visible_pkgs_only_for_dylib, DEFAULT_POSITION);
         }
     }
 
+    return true;
+}
+
+bool GlobalOptions::CheckLTOStaticLibFormatOptions() const
+{
+    if (!emitStaticLibInLTO) {
+        return true;
+    }
+
+    if (!IsLTOEnabled()) {
+        Errorln("Option '--lto-staticlib-format=native' only takes effect when lto mode is enabled.");
+        return false;
+    }
+
+    if (outputMode != OutputMode::STATIC_LIB) {
+        Errorln("Option '--lto-staticlib-format=native' requires '--output-type=staticlib'.");
+        return false;
+    }
+    if (target.os != OSType::IOS) {
+        Errorln("Option '--lto-staticlib-format=native' is only supported on iOS platforms.");
+        return false;
+    }
     return true;
 }
 
