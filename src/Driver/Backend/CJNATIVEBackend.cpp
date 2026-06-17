@@ -162,7 +162,8 @@ bool CJNATIVEBackend::ProcessGenerationOfNormalCompile(const std::vector<TempFil
         // On Apple platforms an explicit opt-in allows the toolchain to continue
         // and preserve the LTO-generated native object emitted by the linker flow.
         if (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB &&
-            !(driverOptions.ShouldEmitStaticLibInLTO() && driverOptions.target.IsMacOS())) {
+            !(driverOptions.ShouldEmitStaticLibInLTO() &&
+                driverOptions.target.os == Triple::OSType::IOS)) {
             return true;
         }
         // In LTO mode, compilation is not performed using llc.
@@ -225,7 +226,8 @@ bool CJNATIVEBackend::ProcessGenerationOfIncrementalNoChangeCompile(const std::v
         }
         auto preprocessedFiles = GeneratePreprocessTools(preprocessorInputs);
         if (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB &&
-            !(driverOptions.ShouldEmitStaticLibInLTO() && driverOptions.target.IsMacOS())) {
+            !(driverOptions.ShouldEmitStaticLibInLTO() &&
+                driverOptions.target.os == Triple::OSType::IOS)) {
             return true;
         }
         return TC->ProcessGeneration(preprocessedFiles);
