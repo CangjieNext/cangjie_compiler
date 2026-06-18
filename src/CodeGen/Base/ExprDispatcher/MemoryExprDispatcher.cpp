@@ -255,6 +255,8 @@ void HandleStoreElementRef(IRBuilder2& irBuilder, const CHIR::StoreElementRef& s
         } else {
             irBuilder.CreateMemCpy(payloadPtr, llvm::MaybeAlign(), value->GetRawValue(), llvm::MaybeAlign(), size);
         }
+        auto destAddr = irBuilder.CreateGEP(*place, path);
+        irBuilder.CreateStore(CGValue(tmp, destAddr.GetCGType()->GetPointerElementType()), destAddr);
     } else if (auto node = DynamicCast<CHIR::LocalVar*>(rhs);
                node && node->GetExpr()->IsConstantNull() && rhs->GetType()->IsClass()) {
         // If the source is null or class, do nothing.
