@@ -2641,7 +2641,7 @@ index ad80d4344..84f875406 100644
  
    // This is used to:
 diff --git a/lld/MachO/Config.h b/lld/MachO/Config.h
-index c7e4b4f96..91e7faf2e 100644
+index c7e4b4f96..94440801c 100644
 --- a/lld/MachO/Config.h
 +++ b/lld/MachO/Config.h
 @@ -131,6 +131,7 @@ struct Configuration {
@@ -2652,11 +2652,117 @@ index c7e4b4f96..91e7faf2e 100644
    uint32_t headerPad;
    uint32_t dylibCompatibilityVersion = 0;
    uint32_t dylibCurrentVersion = 0;
+@@ -152,6 +153,7 @@ struct Configuration {
+   llvm::StringRef thinLTOJobs;
+   llvm::StringRef umbrella;
+   uint32_t ltoo = 2;
++  bool ltoEmitObjOnly = false;
+   llvm::CachePruningPolicy thinLTOCachePolicy;
+   llvm::StringRef thinLTOCacheDir;
+   bool deadStripDylibs = false;
+@@ -172,6 +174,9 @@ struct Configuration {
+   std::vector<std::string> astPaths;
+   std::vector<Symbol *> explicitUndefineds;
+   llvm::StringSet<> explicitDynamicLookups;
++  llvm::StringSet<> visiblePkgs;
++  bool hasMatchedVisiblePkg = false;
++  bool hideAllVisiblePkgs = false;
+   // There are typically few custom sectionAlignments or segmentProtections,
+   // so use a vector instead of a map.
+   std::vector<SectionAlign> sectionAlignments;
 diff --git a/lld/MachO/Driver.cpp b/lld/MachO/Driver.cpp
-index ce2d55bef..8f383c521 100644
+index ce2d55bef..818d715f0 100644
 --- a/lld/MachO/Driver.cpp
 +++ b/lld/MachO/Driver.cpp
-@@ -1350,6 +1350,8 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
+@@ -247,6 +247,70 @@ static llvm::CachePruningPolicy getLTOCachePolicy(InputArgList &args) {
+   return CHECK(parseCachePruningPolicy(ltoPolicy), "invalid LTO cache policy");
+ }
+ 
++static bool collectVisiblePkgs(InputArgList &args) {
++  for (const Arg *arg : args.filtered(OPT_visible_pkgs_eq)) {
++    StringRef rawValue = arg->getValue();
++    if (rawValue.empty()) {
++      config->hideAllVisiblePkgs = true;
++      continue;
++    }
++
++    SmallVector<StringRef, 4> pkgNames;
++    rawValue.split(pkgNames, ',', /*MaxSplit=*/-1, /*KeepEmpty=*/true);
++    for (StringRef pkg : pkgNames) {
++      pkg = pkg.trim();
++      if (pkg.empty()) {
++        error("empty package name in --visible-pkgs");
++        return false;
++      }
++      config->visiblePkgs.insert(pkg);
++    }
++  }
++  return true;
++}
++
++static Optional<StringRef> getBitcodePackageName(const BitcodeFile &file) {
++  if (!file.obj)
++    return None;
++
++  // For Cangjie bitcode, the module identifier is:
++  //   <subCHIRPackageIdx>-<pkgName>
++  StringRef pkgName = file.obj->getSourceFileName();
++  unsigned subCHIRPackageIdx = 0;
++  if (pkgName.consumeInteger(10, subCHIRPackageIdx) ||
++      !pkgName.consume_front("-") || pkgName.empty())
++    return None;
++  return pkgName;
++}
++
++static bool validateVisiblePkgModules() {
++  if (!config->hideAllVisiblePkgs && config->visiblePkgs.empty())
++    return true;
++
++  for (InputFile *file : inputFiles) {
++    auto *bitcodeFile = dyn_cast<BitcodeFile>(file);
++    if (!bitcodeFile)
++      continue;
++    Optional<StringRef> pkgName = getBitcodePackageName(*bitcodeFile);
++    if (!pkgName) {
++      error("invalid Cangjie bitcode module identifier '" +
++            bitcodeFile->obj->getSourceFileName() +
++            "' for --visible-pkgs, expected <split-index>-<package-name>");
++      return false;
++    }
++    if (config->visiblePkgs.count(*pkgName) != 0) {
++      config->hasMatchedVisiblePkg = true;
++    }
++  }
++  return true;
++}
++
++static bool parseVisiblePkgs(InputArgList &args) {
++  if (!collectVisiblePkgs(args))
++    return false;
++  return true;
++}
++
+ // What caused a given library to be loaded. Only relevant for archives.
+ // Note that this does not tell us *how* we should load the library, i.e.
+ // whether we should do it lazily or eagerly (AKA force loading). The "how" is
+@@ -1319,6 +1383,7 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
+     config->umbrella = arg->getValue();
+   }
+   config->ltoObjPath = args.getLastArgValue(OPT_object_path_lto);
++  config->ltoEmitObjOnly = args.hasArg(OPT_lto_emit_obj_only);
+   config->ltoo = args::getInteger(args, OPT_lto_O, 2);
+   if (config->ltoo > 3)
+     error("--lto-O: invalid optimization level: " + Twine(config->ltoo));
+@@ -1330,6 +1395,8 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
+   config->applicationExtension = args.hasFlag(
+       OPT_application_extension, OPT_no_application_extension, false);
+   config->exportDynamic = args.hasArg(OPT_export_dynamic);
++  if (!parseVisiblePkgs(args))
++    return false;
+   config->forceLoadObjC = args.hasArg(OPT_ObjC);
+   config->forceLoadSwift = args.hasArg(OPT_force_load_swift_libs);
+   config->deadStripDylibs = args.hasArg(OPT_dead_strip_dylibs);
+@@ -1350,6 +1417,8 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
    config->callGraphProfileSort = args.hasFlag(
        OPT_call_graph_profile_sort, OPT_no_call_graph_profile_sort, true);
    config->printSymbolOrder = args.getLastArgValue(OPT_print_symbol_order);
@@ -2665,6 +2771,24 @@ index ce2d55bef..8f383c521 100644
  
    for (const Arg *arg : args.filtered(OPT_alias)) {
      config->aliasedSymbols.push_back(
+@@ -1557,6 +1626,8 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
+ 
+     initLLVM(); // must be run before any call to addFile()
+     createFiles(args);
++    if (!validateVisiblePkgModules())
++      return false;
+ 
+     config->isPic = config->outputType == MH_DYLIB ||
+                     config->outputType == MH_BUNDLE ||
+@@ -1594,6 +1665,8 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
+       parseClangOption(arg->getValue(), arg->getSpelling());
+ 
+     compileBitcodeFiles();
++    if (config->ltoEmitObjOnly)
++      return !errorCount();
+     replaceCommonSymbols();
+ 
+     StringRef orderFile = args.getLastArgValue(OPT_order_file);
 diff --git a/lld/MachO/InputFiles.cpp b/lld/MachO/InputFiles.cpp
 index 87034d41e..65aaf2e71 100644
 --- a/lld/MachO/InputFiles.cpp
@@ -2748,6 +2872,88 @@ index 87034d41e..65aaf2e71 100644
        loadReexport(intfRef.getInstallName(), exportingFile, topLevel);
    }
  }
+diff --git a/lld/MachO/LTO.cpp b/lld/MachO/LTO.cpp
+index 0b76216d2..5b57f7d42 100644
+--- a/lld/MachO/LTO.cpp
++++ b/lld/MachO/LTO.cpp
+@@ -31,6 +31,30 @@ using namespace llvm;
+ using namespace llvm::MachO;
+ using namespace llvm::sys;
+ 
++static Optional<StringRef> getBitcodePackageName(const BitcodeFile &file) {
++  if (!file.obj)
++    return None;
++
++  // For Cangjie bitcode, the module identifier is:
++  //   <subCHIRPackageIdx>-<pkgName>
++  StringRef pkgName = file.obj->getSourceFileName();
++  unsigned subCHIRPackageIdx = 0;
++  constexpr unsigned decimalBase = 10;
++  if (pkgName.consumeInteger(decimalBase, subCHIRPackageIdx) ||
++      !pkgName.consume_front("-") || pkgName.empty())
++    return None;
++  return pkgName;
++}
++
++static bool shouldKeepVisibleForPkg(const BitcodeFile &file) {
++  if (config->hideAllVisiblePkgs)
++    return false;
++  if (!config->hasMatchedVisiblePkg || config->visiblePkgs.empty())
++    return true;
++  Optional<StringRef> pkgName = getBitcodePackageName(file);
++  return pkgName && config->visiblePkgs.count(*pkgName);
++}
++
+ static lto::Config createConfig() {
+   lto::Config c;
+   c.Options = initTargetOptionsFromCodeGenFlags();
+@@ -46,6 +70,7 @@ static lto::Config createConfig() {
+   c.TimeTraceGranularity = config->timeTraceGranularity;
+   c.OptLevel = config->ltoo;
+   c.CGOptLevel = args::getCGOptLevel(config->ltoo);
++  c.OpaquePointers =false;
+   if (config->saveTemps)
+     checkError(c.addSaveTemps(config->outputFile.str() + ".",
+                               /*UseInputModulePath=*/true));
+@@ -62,10 +87,12 @@ void BitcodeCompiler::add(BitcodeFile &f) {
+   ArrayRef<lto::InputFile::Symbol> objSyms = f.obj->symbols();
+   std::vector<lto::SymbolResolution> resols;
+   resols.reserve(objSyms.size());
++  bool exportForPkg = shouldKeepVisibleForPkg(f);
+ 
+   // Provide a resolution to the LTO API for each symbol.
+-  bool exportDynamic =
++  bool defaultExportDynamic =
+       config->outputType != MH_EXECUTE || config->exportDynamic;
++  bool exportDynamic = defaultExportDynamic && exportForPkg;
+   auto symIt = f.symbols.begin();
+   for (const lto::InputFile::Symbol &objSym : objSyms) {
+     resols.emplace_back();
+diff --git a/lld/MachO/Options.td b/lld/MachO/Options.td
+index 064862fb1..c995742b8 100644
+--- a/lld/MachO/Options.td
++++ b/lld/MachO/Options.td
+@@ -92,6 +92,10 @@ def no_call_graph_profile_sort : Flag<["--"], "no-call-graph-profile-sort">,
+ def print_symbol_order: Joined<["--"], "print-symbol-order=">,
+     HelpText<"Print a symbol order specified by --call-graph-profile-sort into the specified file">,
+     Group<grp_lld>;
++def visible_pkgs_eq : Joined<["--"], "visible-pkgs=">,
++    HelpText<"Keep symbols visible for the specified Cangjie packages in FullLTO">,
++    MetaVarName<"<pkg[,pkg...]>">,
++    Group<grp_lld>;
+ 
+ // This is a complete Options.td compiled from Apple's ld(1) manpage
+ // dated 2018-03-07 and cross checked with ld64 source code in repo
+@@ -945,6 +949,9 @@ def object_path_lto : Separate<["-"], "object_path_lto">,
+     MetaVarName<"<path>">,
+     HelpText<"Retain any temporary mach-o file in <path> that would otherwise be deleted during LTO">,
+     Group<grp_rare>;
++def lto_emit_obj_only : Flag<["-"], "lto-emit-obj-only">,
++    HelpText<"Stop after emitting LTO native object files">,
++    Group<grp_rare>;
+ def cache_path_lto : Separate<["-"], "cache_path_lto">,
+     MetaVarName<"<path>">,
+     HelpText<"Use <path> as a directory for the incremental LTO cache">,
 diff --git a/lld/MachO/OutputSegment.cpp b/lld/MachO/OutputSegment.cpp
 index da1394c08..f2949e7f3 100644
 --- a/lld/MachO/OutputSegment.cpp
@@ -10140,10 +10346,10 @@ index 000000000..60cc3cfc0
 +#endif /* LLDB_SOURCE_COMMANDS_OBJCJTHREADCOMMON_H */
 diff --git a/lldb/source/Commands/CommandObjectCJThread.cpp b/lldb/source/Commands/CommandObjectCJThread.cpp
 new file mode 100644
-index 000000000..fccc41349
+index 000000000..dea38398a
 --- /dev/null
 +++ b/lldb/source/Commands/CommandObjectCJThread.cpp
-@@ -0,0 +1,671 @@
+@@ -0,0 +1,668 @@
 +//===-- CommandObjectCJThread.cpp -----------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
@@ -10314,18 +10520,16 @@ index 000000000..fccc41349
 +protected:
 +
 +  bool DoExecute(Args &command, CommandReturnObject &result) override {
-+    Status error;
-+    m_exe_ctx.GetProcessPtr()->RefreshCJThreadList(error);
-+    if (error.Fail()) return false;
-+
-+    Debugger &debugger = GetCommandInterpreter().GetDebugger();
-+    TargetSP target_sp = debugger.GetSelectedTarget();
 +    Process *process = m_exe_ctx.GetProcessPtr();
-+
 +    if (process == nullptr) {
 +      result.AppendError("no process");
 +      return false;
 +    }
++
++    Status error;
++    process->RefreshCJThreadList(error);
++    if (error.Fail())
++      return false;
 +
 +    if (command.GetArgumentCount() != 1) {
 +      result.AppendError("cjthread select requires exactly one argument");
@@ -10704,7 +10908,6 @@ index 000000000..fccc41349
 +            eCommandRequiresProcess | eCommandTryTargetAPILock |
 +            eCommandProcessMustBeLaunched | eCommandProcessMustBePaused, true)
 +        {}
-+
 +
 +  bool DoExecute(Args &command, CommandReturnObject &result) override {
 +    Status error;
@@ -12004,7 +12207,7 @@ index 28a99ea3d..1fe8a2d21 100644
          result.SetStatus(eReturnStatusSuccessFinishNoResult);
          result.SetDidChangeProcessState(true);
 diff --git a/lldb/source/Commands/CommandObjectThread.cpp b/lldb/source/Commands/CommandObjectThread.cpp
-index fe0cb0945..60ba16d72 100644
+index fe0cb0945..510e35f1a 100644
 --- a/lldb/source/Commands/CommandObjectThread.cpp
 +++ b/lldb/source/Commands/CommandObjectThread.cpp
 @@ -13,6 +13,7 @@
@@ -12028,7 +12231,11 @@ index fe0cb0945..60ba16d72 100644
 -      // ()
 -      OptionParsingStarting(nullptr);
 -    }
--
++Status CommandObjectThreadBacktrace::CommandOptions::SetOptionValue(uint32_t option_idx, llvm::StringRef option_arg,
++                      ExecutionContext *execution_context) {
++  Status error;
++  const int short_option = m_getopt_table[option_idx].val;
+ 
 -    ~CommandOptions() override = default;
 -
 -    Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_arg,
@@ -12064,11 +12271,7 @@ index fe0cb0945..60ba16d72 100644
 -      }
 -      return error;
 -    }
-+Status CommandObjectThreadBacktrace::CommandOptions::SetOptionValue(uint32_t option_idx, llvm::StringRef option_arg,
-+                      ExecutionContext *execution_context) {
-+  Status error;
-+  const int short_option = m_getopt_table[option_idx].val;
- 
+-
 -    void OptionParsingStarting(ExecutionContext *execution_context) override {
 +  switch (short_option) {
 +  case 'c': {
@@ -12362,7 +12565,30 @@ index fe0cb0945..60ba16d72 100644
  
  enum StepScope { eStepScopeSource, eStepScopeInstruction };
  
-@@ -807,325 +780,289 @@ public:
+@@ -480,7 +453,10 @@ protected:
+ 
+     if (m_step_type == eStepTypeInto) {
+       StackFrame *frame = thread->GetStackFrameAtIndex(0).get();
+-      assert(frame != nullptr);
++      if (!frame) {
++        result.AppendError("no frames available for thread");
++        return false;
++      }
+ 
+       if (frame->HasDebugInformation()) {
+         AddressRange range;
+@@ -536,6 +512,10 @@ protected:
+             false, abort_other_plans, bool_stop_other_threads, new_plan_status);
+     } else if (m_step_type == eStepTypeOver) {
+       StackFrame *frame = thread->GetStackFrameAtIndex(0).get();
++      if (!frame) {
++        result.AppendError("no frames available for thread");
++        return false;
++      }
+ 
+       if (frame->HasDebugInformation())
+         new_plan_sp = thread->QueueThreadPlanForStepOverRange(
+@@ -807,325 +787,289 @@ public:
  #define LLDB_OPTIONS_thread_until
  #include "CommandOptions.inc"
  
@@ -12931,6 +13157,17 @@ index fe0cb0945..60ba16d72 100644
 +}
  
  // CommandObjectThreadSelect
+ 
+@@ -1667,6 +1611,10 @@ protected:
+     StackFrame *frame = m_exe_ctx.GetFramePtr();
+     Thread *thread = m_exe_ctx.GetThreadPtr();
+     Target *target = m_exe_ctx.GetTargetPtr();
++    if (!frame || !reg_ctx || !thread || !target) {
++      result.AppendError("invalid execution context");
++      return false;
++    }
+     const SymbolContext &sym_ctx =
+         frame->GetSymbolContext(eSymbolContextLineEntry);
  
 diff --git a/lldb/source/Commands/CommandObjectThread.h b/lldb/source/Commands/CommandObjectThread.h
 index 3ca6a2159..62ef1ad1b 100644
@@ -14421,9 +14658,18 @@ index 20a521b8e..cd0a4533a 100644
    summary_string.Clear();
  }
 diff --git a/lldb/source/Plugins/DynamicLoader/MacOSX-DYLD/DynamicLoaderMacOS.cpp b/lldb/source/Plugins/DynamicLoader/MacOSX-DYLD/DynamicLoaderMacOS.cpp
-index 63b0b96e8..834f76208 100644
+index 63b0b96e8..8f745b76b 100644
 --- a/lldb/source/Plugins/DynamicLoader/MacOSX-DYLD/DynamicLoaderMacOS.cpp
 +++ b/lldb/source/Plugins/DynamicLoader/MacOSX-DYLD/DynamicLoaderMacOS.cpp
+@@ -55,7 +55,7 @@ DynamicLoader *DynamicLoaderMacOS::CreateInstance(Process *process,
+       case llvm::Triple::IOS:
+       case llvm::Triple::TvOS:
+       case llvm::Triple::WatchOS:
+-      // NEED_BRIDGEOS_TRIPLE case llvm::Triple::BridgeOS:
++        // NEED_BRIDGEOS_TRIPLE case llvm::Triple::BridgeOS:
+         create = triple_ref.getVendor() == llvm::Triple::Apple;
+         break;
+       default:
 @@ -79,7 +79,8 @@ DynamicLoaderMacOS::DynamicLoaderMacOS(Process *process)
      : DynamicLoaderDarwin(process), m_image_infos_stop_id(UINT32_MAX),
        m_break_id(LLDB_INVALID_BREAK_ID),
@@ -14442,7 +14688,7 @@ index 63b0b96e8..834f76208 100644
    }
    return did_exec;
  }
-@@ -144,6 +146,33 @@ void DynamicLoaderMacOS::DoClear() {
+@@ -144,6 +146,38 @@ void DynamicLoaderMacOS::DoClear() {
  
    m_break_id = LLDB_INVALID_BREAK_ID;
    m_dyld_handover_break_id = LLDB_INVALID_BREAK_ID;
@@ -14457,15 +14703,20 @@ index 63b0b96e8..834f76208 100644
 +      m_process->GetDynamicLoaderProcessState());
 +  if (!process_state_sp)
 +    return true;
-+  if (process_state_sp->GetAsDictionary()->HasKey("error"))
++  StructuredData::Dictionary *dict = process_state_sp->GetAsDictionary();
++  if (!dict)
 +    return true;
-+  if (!process_state_sp->GetAsDictionary()->HasKey("process_state string"))
++  if (dict->HasKey("error"))
 +    return true;
-+  std::string proc_state = process_state_sp->GetAsDictionary()
-+                               ->GetValueForKey("process_state string")
-+                               ->GetAsString()
-+                               ->GetValue()
-+                               .str();
++  if (!dict->HasKey("process_state string"))
++    return true;
++  auto state_obj = dict->GetValueForKey("process_state string");
++  if (!state_obj)
++    return true;
++  StructuredData::String *state_str = state_obj->GetAsString();
++  if (!state_str)
++    return true;
++  std::string proc_state = state_str->GetValue().str();
 +  if (proc_state == "dyld_process_state_not_started" ||
 +      proc_state == "dyld_process_state_dyld_initialized" ||
 +      proc_state == "dyld_process_state_terminated_before_inits") {
@@ -14476,7 +14727,7 @@ index 63b0b96e8..834f76208 100644
  }
  
  // Check if we have found DYLD yet
-@@ -204,12 +233,13 @@ bool DynamicLoaderMacOS::NotifyBreakpointHit(void *baton,
+@@ -204,12 +238,13 @@ bool DynamicLoaderMacOS::NotifyBreakpointHit(void *baton,
                                               StoppointCallbackContext *context,
                                               lldb::user_id_t break_id,
                                               lldb::user_id_t break_loc_id) {
@@ -14496,7 +14747,7 @@ index 63b0b96e8..834f76208 100644
  
    DynamicLoaderMacOS *dyld_instance = (DynamicLoaderMacOS *)baton;
  
-@@ -231,37 +261,33 @@ bool DynamicLoaderMacOS::NotifyBreakpointHit(void *baton,
+@@ -231,37 +266,33 @@ bool DynamicLoaderMacOS::NotifyBreakpointHit(void *baton,
      // Build up the value array to store the three arguments given above, then
      // get the values from the ABI:
  
@@ -14547,7 +14798,7 @@ index 63b0b96e8..834f76208 100644
  
      headers_value.SetValueType(Value::ValueType::Scalar);
      headers_value.SetCompilerType(clang_void_ptr_type);
-@@ -283,12 +309,30 @@ bool DynamicLoaderMacOS::NotifyBreakpointHit(void *baton,
+@@ -283,12 +314,30 @@ bool DynamicLoaderMacOS::NotifyBreakpointHit(void *baton,
                argument_values.GetValueAtIndex(2)->GetScalar().ULongLong(-1);
            if (header_array != static_cast<uint64_t>(-1)) {
              std::vector<addr_t> image_load_addresses;
@@ -14581,7 +14832,7 @@ index 63b0b96e8..834f76208 100644
                }
              }
              if (dyld_mode == 0) {
-@@ -333,10 +377,16 @@ bool DynamicLoaderMacOS::NotifyBreakpointHit(void *baton,
+@@ -333,10 +382,16 @@ bool DynamicLoaderMacOS::NotifyBreakpointHit(void *baton,
                Status error;
                addr_t notification_addr =
                    process->ReadPointerFromMemory(notification_location, error);
@@ -14602,7 +14853,7 @@ index 63b0b96e8..834f76208 100644
              }
            }
          }
-@@ -388,7 +438,80 @@ void DynamicLoaderMacOS::PutToLog(Log *log) const {
+@@ -388,7 +443,80 @@ void DynamicLoaderMacOS::PutToLog(Log *log) const {
      return;
  }
  
@@ -14683,7 +14934,7 @@ index 63b0b96e8..834f76208 100644
    if (m_break_id == LLDB_INVALID_BREAK_ID) {
      ModuleSP dyld_sp(GetDYLDModule());
      if (dyld_sp) {
-@@ -402,14 +525,56 @@ bool DynamicLoaderMacOS::SetNotificationBreakpoint() {
+@@ -402,14 +530,56 @@ bool DynamicLoaderMacOS::SetNotificationBreakpoint() {
        Breakpoint *breakpoint =
            m_process->GetTarget()
                .CreateBreakpoint(&dyld_filelist, source_files,
@@ -14744,6 +14995,16 @@ index 63b0b96e8..834f76208 100644
      }
    }
    return m_break_id != LLDB_INVALID_BREAK_ID;
+@@ -485,8 +655,7 @@ Status DynamicLoaderMacOS::CanLoadImage() {
+   if (symbol_address == LLDB_INVALID_ADDRESS) {
+     for (ModuleSP module_sp : target.GetImages().Modules()) {
+       if (module_sp) {
+-        addr_t symbol_address =
+-            GetDyldLockVariableAddressFromModule(module_sp.get());
++        symbol_address = GetDyldLockVariableAddressFromModule(module_sp.get());
+         if (symbol_address != LLDB_INVALID_ADDRESS)
+           break;
+       }
 diff --git a/lldb/source/Plugins/DynamicLoader/MacOSX-DYLD/DynamicLoaderMacOS.h b/lldb/source/Plugins/DynamicLoader/MacOSX-DYLD/DynamicLoaderMacOS.h
 index b6e4ce8e5..bd2c2e0ba 100644
 --- a/lldb/source/Plugins/DynamicLoader/MacOSX-DYLD/DynamicLoaderMacOS.h
@@ -15938,10 +16199,10 @@ index 000000000..a4eb8ad8c
 +#endif
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieCompilerInstance.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieCompilerInstance.cpp
 new file mode 100644
-index 000000000..1c8e5033c
+index 000000000..bc81a6ed6
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieCompilerInstance.cpp
-@@ -0,0 +1,1254 @@
+@@ -0,0 +1,1266 @@
 +//===-- CangjieCompilerInstance.cpp ---------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -16056,6 +16317,10 @@ index 000000000..1c8e5033c
 +    auto constType = RawStaticCast<AST::ConstantType *>(vaType->constantType.get());
 +    auto le = RawStaticCast<AST::LitConstExpr *>(constType->constantExpr.get());
 +    auto vaSize = stoll(le->stringValue);
++    // Max size of varray: 65536
++    if (vaSize < 0 || vaSize > 65536) {
++      vaSize = 0;
++    }
 +    CheckTypeAndAddTy(vaType->typeArgument);
 +    if (vaType->typeArgument) {
 +      vaType->SetTy(typeManager->GetVArrayTy(*vaType->typeArgument->GetTy(), vaSize));
@@ -16090,6 +16355,9 @@ index 000000000..1c8e5033c
 +
 +OwnedPtr<AST::CallExpr> CangjieCompilerInstance::CreateSuperCall(AST::ClassDecl& cd)
 +{
++  if (cd.inheritedTypes.empty()) {
++    return nullptr;
++  }
 +  auto superType = cd.inheritedTypes.front().get();
 +  if (!superType) {
 +    return nullptr;
@@ -16190,18 +16458,18 @@ index 000000000..1c8e5033c
 +  if (!generic) {
 +    return;
 +  }
-+  for (auto& it: generic->typeParameters) {
++  for (auto& it : generic->typeParameters) {
 +    auto gpd = RawStaticCast<AST::GenericParamDecl *>(it.get());
 +    CreateTyAndDefaultCtor(*gpd, {});
 +    typeArgs.push_back(gpd->GetTy());
 +  }
-+  for (auto& it: generic->genericConstraints) {
++  for (auto& it : generic->genericConstraints) {
 +    auto gc = RawStaticCast<AST::GenericConstraint *>(it.get());
 +    if (gc->type->ref.target) {
 +      CreateTyAndDefaultCtor(*gc->type->ref.target, {});
 +      gc->type->SetTy(GetTyFromASTType(*gc->type->ref.target, {}));
 +    }
-+    for (auto& bound:gc->upperBounds) {
++    for (auto& bound : gc->upperBounds) {
 +      auto rt = RawStaticCast<AST::RefType *>(bound.get());
 +      if (rt->ref.target) {
 +        CreateTyAndDefaultCtor(*rt->ref.target, {});
@@ -16233,7 +16501,7 @@ index 000000000..1c8e5033c
 +      auto sd = As<ASTKind::STRUCT_DECL>(&decl);
 +      for (auto& it : sd->inheritedTypes) {
 +        CheckTypeAndAddTy(it);
-+      }      
++      }
 +      return typeManager->GetStructTy(*sd, typeArgs);
 +    }
 +    case ASTKind::ENUM_DECL: {
@@ -16418,7 +16686,7 @@ index 000000000..1c8e5033c
 +std::vector<OwnedPtr<FuncArg>> CangjieCompilerInstance::CreateFuncArgsFromCapturedVars(std::string ident)
 +{
 +  std::vector<OwnedPtr<FuncArg>> funcargs;
-+  for (auto& decl: m_tryExpr_result->curFile->decls) {
++  for (auto& decl : m_tryExpr_result->curFile->decls) {
 +    if (decl->astKind == AST::ASTKind::CLASS_DECL && decl->identifier == ident) {
 +      auto cd = As<AST::ASTKind::CLASS_DECL>(decl.get());
 +      for (auto& d : cd->body->decls) {
@@ -16445,7 +16713,7 @@ index 000000000..1c8e5033c
 +    std::vector<OwnedPtr<Decl>>& localDecls, AST::TryExpr& tryExpr) {
 +    auto hasCapturedVarsClass = [this](std::string fn) -> bool {
 +      auto classname = fn + "$class" + LOCAL_FUNC_CAPTUREDVAR;
-+      for (auto& decl: m_tryExpr_result->curFile->decls) {
++      for (auto& decl : m_tryExpr_result->curFile->decls) {
 +        if (decl->astKind == AST::ASTKind::CLASS_DECL &&
 +          decl->identifier == classname) {
 +          return true;
@@ -16453,7 +16721,7 @@ index 000000000..1c8e5033c
 +      }
 +      return false;
 +    };
-+    for (auto& decl: localDecls) {
++    for (auto& decl : localDecls) {
 +      if (decl->astKind != AST::ASTKind::FUNC_DECL) {
 +        continue;
 +      }
@@ -16518,7 +16786,7 @@ index 000000000..1c8e5033c
 +    // Add capturedVars of local function first.
 +    AddCapturedVarsToTryExpr(localDecls, *tryExpr);
 +    // Add local variable then.
-+    for (auto& decl: localDecls) {
++    for (auto& decl : localDecls) {
 +      if (decl->astKind != AST::ASTKind::VAR_DECL) {
 +        continue;
 +      }
@@ -16661,7 +16929,7 @@ index 000000000..1c8e5033c
 +    if (log) {
 +      LLDB_LOGF(log, "%s", helpInfo.c_str());
 +    }
-+    std::cout<<"help: "<<helpInfo<<std::endl;
++    std::cout << "help: " << helpInfo << std::endl;
 +    return false;
 +  }
 +  bool inBlacklist = false;
@@ -16756,7 +17024,7 @@ index 000000000..1c8e5033c
 +  Log *log = GetLog(LLDBLog::Expressions);
 +  if (log) {
 +    std::string ids = "";
-+    for (auto tmpId:names) {
++    for (auto tmpId : names) {
 +      ids = ids + " ; " + tmpId;
 +    }
 +    LLDB_LOGF(log, "All collected identifiers are as follows: %s! \n", ids.c_str());
@@ -16921,7 +17189,10 @@ index 000000000..1c8e5033c
 +    return nullptr;
 +  }
 +  if (enumTy->IsCoreOptionType()) {
-+    // For Option type, initial is memberAccess, Option<Int64>.None
++    // For Option type, initial is memberAccess, Option<Int64>.None, 2 is size of constructors
++    if (edecl->constructors.size() < 2) {
++      return nullptr;
++    }
 +    auto noneCtor = edecl->constructors[1].get();
 +    if (noneCtor->astKind == AST::ASTKind::VAR_DECL) {
 +      auto init = RawStaticCast<AST::VarDecl*>(noneCtor);
@@ -17080,7 +17351,9 @@ index 000000000..1c8e5033c
 +  if (ty->kind == Cangjie::AST::TypeKind::TYPE_VARRAY) {
 +    auto ret = MakeOwned<ArrayLit>();
 +    auto varrayTy = RawStaticCast<Cangjie::AST::VArrayTy *>(ty);
-+    for (int64_t i = 0; i < varrayTy->size; i++) {
++    // Max size of varray: 65536
++    int64_t safe_size = (varrayTy->size > 0 && varrayTy->size <= 65536) ? varrayTy->size : 0;
++    for (int64_t i = 0; i < safe_size; i++) {
 +      ret->children.emplace_back(CreateInitializer(ty->typeArgs[0]));
 +    }
 +    ret->SetTy(ty);
@@ -29058,10 +29331,10 @@ index f65e73e5d..e2e763218 100644
  bool Variable::NameMatches(ConstString name) const {
 diff --git a/lldb/source/Target/CJRegisterContext.cpp b/lldb/source/Target/CJRegisterContext.cpp
 new file mode 100644
-index 000000000..0c417e050
+index 000000000..b8e5b7ef4
 --- /dev/null
 +++ b/lldb/source/Target/CJRegisterContext.cpp
-@@ -0,0 +1,646 @@
+@@ -0,0 +1,647 @@
 +//===-- CJRegisterContext.cpp ---------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
@@ -29605,9 +29878,11 @@ index 000000000..0c417e050
 +bool CJRegisterContext::WriteRegister(const RegisterInfo *reg_info,
 +                                      const RegisterValue &value) {
 +  if (!reg_info)
-+    return true;
++    return false;
 +
 +  ProcessSP process_sp = GetThread().GetProcess();
++  if (!process_sp)
++    return false;
 +  const llvm::Triple triple = process_sp->GetSystemArchitecture().GetTriple();
 +
 +  bool ok = false;
@@ -29630,8 +29905,7 @@ index 000000000..0c417e050
 +  }
 +
 +  if (!ok)
-+    return true;
-+
++    return false;
 +  llvm::StringRef alias =
 +      GetGenericRegisterAlias(reg_info->kinds[eRegisterKindGeneric]);
 +  if (!alias.empty())
@@ -29710,10 +29984,10 @@ index 000000000..0c417e050
 +}
 diff --git a/lldb/source/Target/CJThread.cpp b/lldb/source/Target/CJThread.cpp
 new file mode 100644
-index 000000000..38ff55b84
+index 000000000..04684edc5
 --- /dev/null
 +++ b/lldb/source/Target/CJThread.cpp
-@@ -0,0 +1,669 @@
+@@ -0,0 +1,687 @@
 +//===-- CJThread.cpp ---------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
@@ -29741,7 +30015,6 @@ index 000000000..38ff55b84
 +#include "lldb/lldb-private-types.h"
 +#include "llvm/ADT/StringRef.h"
 +#include "lldb/Core/Module.h"
-+#include "lldb/Symbol/Variable.h"
 +#include "lldb/Core/ValueObjectVariable.h"
 +#include "lldb/Utility/LLDBLog.h"
 +#include "lldb/Utility/Log.h"
@@ -29808,7 +30081,7 @@ index 000000000..38ff55b84
 +    .offset_of_CJThread_dot_name = 464,
 +    .offset_of_Thread_dot_tid = 104,
 +    .offset_of_boundThread = 432,
-+    .offset_of_boundCJThread =320
++    .offset_of_boundCJThread = 320
 +};
 +
 +constexpr CJThreadLayoutOffsets offsets_aarch64_linux_ohos = {
@@ -29821,7 +30094,7 @@ index 000000000..38ff55b84
 +    .offset_of_CJThread_dot_name = 464,
 +    .offset_of_Thread_dot_tid = 104,
 +    .offset_of_boundThread = 432,
-+    .offset_of_boundCJThread =320
++    .offset_of_boundCJThread = 320
 +};
 +
 +constexpr CJThreadLayoutOffsets offsets_aarch64_darwin = {
@@ -29973,6 +30246,10 @@ index 000000000..38ff55b84
 +
 +  // Traverse the circular doubly linked list
 +  while (dulink_entry != list_head && dulink_entry != 0) {
++    if (dulink_entry < offsets.offset_of_CJThread_dot_allCJThreadDulink) {
++      status.SetErrorString("Invalid dulink entry address (underflow)");
++      break;
++    }
 +    lldb::addr_t cjthread_addr =
 +        dulink_entry - offsets.offset_of_CJThread_dot_allCJThreadDulink;
 +
@@ -30079,7 +30356,7 @@ index 000000000..38ff55b84
 +    lldb::RegisterContextSP reg_ctx = firstThread->GetRegisterContext();
 +    if (!reg_ctx) return false;
 +
-+    for (int i = 0, n = reg_ctx->GetRegisterCount(); i < n; i ++) {
++    for (int i = 0, n = reg_ctx->GetRegisterCount(); i < n; i++) {
 +        const RegisterInfo *reg_info = reg_ctx->GetRegisterInfoAtIndex(i);
 +
 +        std::vector<uint32_t> value_regs, invalidate_regs;
@@ -30106,8 +30383,10 @@ index 000000000..38ff55b84
 +
 +    for (int i = 0, n = reg_ctx->GetRegisterSetCount(); i < n; i++) {
 +        const RegisterSet *rset = reg_ctx->GetRegisterSet(i);
-+        for (int j = 0; j < (int)rset->num_registers; j ++) {
++        for (int j = 0; j < (int)rset->num_registers; j++) {
 +            int regno = rset->registers[j];
++            if (regno < 0 || regno >= (int)registers.size())
++              continue;
 +            registers[regno].set_name = ConstString(rset->name);
 +        }
 +    }
@@ -30200,7 +30479,10 @@ index 000000000..38ff55b84
 +
 +lldb::RegisterContextSP CJThread::GetRegisterContext() {
 +    if (m_cjthread_info.state == CJThreadState::eRunning) {
-+      lldb::ThreadSP holding_osthread_sp = GetProcess()->GetThreadList().FindThreadByID(GetHostThreadID());
++      lldb::ProcessSP process_sp = GetProcess();
++      if (!process_sp)
++        return m_reg_context_sp;
++      lldb::ThreadSP holding_osthread_sp = process_sp->GetThreadList().FindThreadByID(GetHostThreadID());
 +      if (holding_osthread_sp) {
 +        return holding_osthread_sp->GetRegisterContext();
 +      }
@@ -30225,7 +30507,12 @@ index 000000000..38ff55b84
 +
 +bool CJThread::CalculateStopInfo() {
 +  if (m_cjthread_info.state == CJThreadState::eRunning) {
-+    lldb::ThreadSP os_thread = GetProcess()->GetThreadList().FindThreadByID(GetHostThreadID());
++    lldb::ProcessSP process_sp = GetProcess();
++    if (!process_sp) {
++      SetStopInfo(lldb::StopInfoSP());
++      return true;
++    }
++    lldb::ThreadSP os_thread = process_sp->GetThreadList().FindThreadByID(GetHostThreadID());
 +    if (os_thread) {
 +      lldb::StopInfoSP stop_info_sp = os_thread->GetPrivateStopInfo();
 +      if (stop_info_sp && stop_info_sp->IsValidForOperatingSystemThread(*this)) {
@@ -30346,9 +30633,14 @@ index 000000000..38ff55b84
 +  do {
 +    StreamString stream_after_resume;
 +    process_sp->ResumeSynchronous(&stream_after_resume);
-+    lldb::StopInfoSP info = process_sp->GetThreadList().GetSelectedThread()->GetStopInfo();
-+    if (!info) continue;
-+    if (info->GetStopReason() != lldb::eStopReasonBreakpoint) continue;
++    lldb::ThreadSP sel_thread = process_sp->GetThreadList().GetSelectedThread();
++    if (!sel_thread)
++      continue;
++    lldb::StopInfoSP info = sel_thread->GetStopInfo();
++    if (!info)
++      continue;
++    if (info->GetStopReason() != lldb::eStopReasonBreakpoint)
++      continue;
 +    process_sp->RefreshCJThreadList(error, true);
 +    if (error.Fail()) {
 +      return false;
@@ -31893,7 +32185,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..4fd2ecdee 100644
+index b391fe1ea..c573e1594 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -31949,7 +32241,7 @@ index b391fe1ea..4fd2ecdee 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.2.0-alpha.22";
++    g_version_str += "\n  cangjie 1.2.0-beta.01";
    }
  
    return g_version_str.c_str();
@@ -41540,7 +41832,7 @@ index 000000000..67f368133
 +  return this->ObfConfigInstance;
 +}
 diff --git a/llvm/lib/Analysis/PHITransAddr.cpp b/llvm/lib/Analysis/PHITransAddr.cpp
-index 5b0fbca23..a6a87208a 100644
+index 5b0fbca23..b5ce53e22 100644
 --- a/llvm/lib/Analysis/PHITransAddr.cpp
 +++ b/llvm/lib/Analysis/PHITransAddr.cpp
 @@ -21,6 +21,10 @@
@@ -41554,7 +41846,7 @@ index 5b0fbca23..a6a87208a 100644
  static cl::opt<bool> EnableAddPhiTranslation(
      "gvn-add-phi-translation", cl::init(false), cl::Hidden,
      cl::desc("Enable phi-translation of add instructions"));
-@@ -197,15 +201,21 @@ Value *PHITransAddr::PHITranslateSubExpr(Value *V, BasicBlock *CurBB,
+@@ -197,15 +201,26 @@ Value *PHITransAddr::PHITranslateSubExpr(Value *V, BasicBlock *CurBB,
      if (Constant *C = dyn_cast<Constant>(PHIIn))
        return AddAsInput(ConstantExpr::getCast(Cast->getOpcode(),
                                                C, Cast->getType()));
@@ -41579,8 +41871,13 @@ index 5b0fbca23..a6a87208a 100644
 +        if (CastInst *CastI = dyn_cast<CastInst>(U))
 +          if (CastI->getOpcode() == Cast->getOpcode() &&
 +              CastI->getType() == Cast->getType() &&
-+              (!DT || DT->dominates(CastI->getParent(), PredBB)))
++              (!DT || DT->dominates(CastI->getParent(), PredBB))) {
++            if (V != PHIIn) {
++              RemoveInstInputs(PHIIn, InstInputs);
++              AddAsInput(CastI->getOperand(0));
++            }
 +            return CastI;
++          }
 +      }
      }
      return nullptr;
@@ -43757,10 +44054,10 @@ index 000000000..fa881f44d
 +}
 diff --git a/llvm/lib/CodeGen/CJMetadata.cpp b/llvm/lib/CodeGen/CJMetadata.cpp
 new file mode 100644
-index 000000000..7fa71a461
+index 000000000..62b822261
 --- /dev/null
 +++ b/llvm/lib/CodeGen/CJMetadata.cpp
-@@ -0,0 +1,873 @@
+@@ -0,0 +1,879 @@
 +//===- CJMetadata.cpp - Self-Defined CJMetadata Section ----------*- C++-*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -44506,6 +44803,12 @@ index 000000000..7fa71a461
 +    if (IsMachO) {
 +      FuncName.push_back('\0');
 +      OS.emitBytes(FuncName);
++      // Pad to 8-byte alignment so runtime can iterate entries with aligned reads,
++      // This does not affect backward compatibility with older runtimes that use unaligned reads.
++      unsigned EntrySize = FuncPtrSize + FuncName.size();
++      unsigned Padding = (8 - (EntrySize % 8)) % 8;
++      if (Padding > 0)
++        OS.emitZeros(Padding);
 +    }
 +  };
 +  for (auto &Method : InitMethodTable)
