@@ -567,7 +567,7 @@ bool GlobalOptions::CheckLtoOptions() const
         Errorln("--output-type=obj is not allowed in LTO mode");
         return false;
     }
-    if (outputMode == OutputMode::STATIC_LIB && !bcInputFiles.empty() && !emitStaticLibInLTO) {
+    if (outputMode == OutputMode::STATIC_LIB && !bcInputFiles.empty() && !ShouldEmitStaticLibInLTO()) {
         Errorln("The input file cannot be bc files When generating a static library in LTO mode.");
         return false;
     }
@@ -646,21 +646,20 @@ bool GlobalOptions::CheckLTOPkgVisibilityOptions() const
 
 bool GlobalOptions::CheckLTOStaticLibFormatOptions() const
 {
-    if (!emitStaticLibInLTO) {
+    if (!emitStaticLibInLTO.has_value()) {
         return true;
     }
-
     if (!IsLTOEnabled()) {
-        Errorln("Option '--lto-staticlib-format=native' only takes effect when lto mode is enabled.");
+        Errorln("Option '--lto-staticlib-format' only takes effect when lto mode is enabled.");
         return false;
     }
 
     if (outputMode != OutputMode::STATIC_LIB) {
-        Errorln("Option '--lto-staticlib-format=native' requires '--output-type=staticlib'.");
+        Errorln("Option '--lto-staticlib-format' requires '--output-type=staticlib'.");
         return false;
     }
     if (target.os != OSType::IOS) {
-        Errorln("Option '--lto-staticlib-format=native' is only supported on iOS platforms.");
+        Errorln("Option '--lto-staticlib-format' is only supported on iOS platforms.");
         return false;
     }
     return true;
@@ -1662,7 +1661,8 @@ std::vector<std::string> GlobalOptions::ToSerialized() const
     result.emplace_back(BoolToSerializedString(enableCoverage));
     result.emplace_back(SanitizerTypeToSerializedString());
     result.emplace_back(BoolToSerializedString(experimentalMode));
-    result.emplace_back(BoolToSerializedString(emitStaticLibInLTO));
+    result.emplace_back(
+        emitStaticLibInLTO.has_value() ? BoolToSerializedString(emitStaticLibInLTO.value()) : "n");
     result.emplace_back(OverflowStrategyToSerializedString());
     (void)result.emplace_back(BoolToSerializedString(interpreter));
     (void)result.emplace_back(VectorStrToSerializedString(interpreterSearchPaths, ":"));
