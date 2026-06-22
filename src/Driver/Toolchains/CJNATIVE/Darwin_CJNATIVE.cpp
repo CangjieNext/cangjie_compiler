@@ -101,6 +101,11 @@ void Darwin_CJNATIVE::GenerateArchiveTool(const std::vector<TempFileInfo>& objFi
         Infoln("preserved Darwin LTO object at: " + ltoObject.filePath);
     }
     MachO::GenerateArchiveTool({ltoObject});
+    // Clean up the temporary LTO object directory after archiving.
+    auto removeObjDir = std::make_unique<Tool>("RemoveFile", ToolType::INTERNAL_IMPLEMENTED,
+        driverOptions.environment.allVariables);
+    removeObjDir->AppendArg(ltoObject.rawPath);
+    backendCmds.emplace_back(MakeSingleToolBatch({std::move(removeObjDir)}));
 }
 
 TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>& objFiles)
