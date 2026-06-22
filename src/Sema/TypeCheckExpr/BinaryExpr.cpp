@@ -1074,22 +1074,6 @@ bool TypeChecker::TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, Ptr<Ty> target, 
     auto& leftExpr = *be.leftExpr;
     rightExpr.isInFlowExpr = true;
     auto cs = PData::CommitScope(typeManager.constraints);
-    {
-        auto ds = DiagSuppressor(diag);
-        SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, &leftExpr);
-        SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, &rightExpr);
-        if (ds.HasError()) {
-            if (be.op == TokenKind::COMPOSITION) {
-                be.SetTy(TypeManager::GetInvalidTy());
-                ds.ReportDiag();
-                return false;
-            } else {
-                leftExpr.Clear();
-                rightExpr.Clear();
-                PData::Reset(typeManager.constraints);
-            }
-        }
-    }
     // Check if flow expr contains 'this' which is illegal.
     // 'super' is not allowed to be used alone and is checked in 'InferSuperExpr'.
     auto isThisExpr = [this](Expr& exp) {
@@ -1109,26 +1093,42 @@ bool TypeChecker::TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, Ptr<Ty> target, 
     // Desugar flow expr.
     DesugarFlowExpr(ctx, be);
 
-    CJC_ASSERT(be.desugarExpr && be.desugarExpr->astKind == ASTKind::CALL_EXPR);
-    CallExpr& beCallExpr = *StaticCast<CallExpr*>(be.desugarExpr.get());
+    // Synthesize the desugared expression.
+    Ptr<Node> desugarExpr = be.desugarExpr.get();
     {
         auto ds = DiagSuppressor(diag);
-        if (!ChkCallExpr(ctx, target, beCallExpr)) {
+        if (!Ty::IsTyCorrect(SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, desugarExpr))) {
             (void)ds.GetSuppressedDiag();
-            // Should recover the desugaredExpr to binaryExpr if failed.
             RecoverToBinaryExpr(be);
             be.SetTy(TypeManager::GetInvalidTy());
             DiagnoseForBinaryExpr(ctx, be);
             ds.ReportDiag();
             return false;
         }
-        ds.ReportDiag(); // Report warnings.
+        ds.ReportDiag();
     }
-    if (CheckFlowOperandsHaveNamedParam(beCallExpr)) {
-        // Should recover the desugaredExpr to binaryExpr if failed.
-        RecoverToBinaryExpr(be);
-        be.SetTy(TypeManager::GetInvalidTy());
-        return false;
+
+    // For PIPELINE, desugarExpr is CallExpr; for COMPOSITION, it's LambdaExpr.
+    // Check that flow operands do not contain named parameters.
+    if (be.desugarExpr->astKind == ASTKind::CALL_EXPR) {
+        auto& callExpr = *StaticCast<CallExpr*>(be.desugarExpr.get());
+        if (CheckFlowOperandsHaveNamedParam(callExpr)) {
+            RecoverToBinaryExpr(be);
+            be.SetTy(TypeManager::GetInvalidTy());
+            return false;
+        }
+    } else if (be.desugarExpr->astKind == ASTKind::LAMBDA_EXPR) {
+        // For COMPOSITION: { x => rightFunc(leftFunc(x)) }
+        // The CallExpr is inside funcBody->body->body[0].
+        auto& lambdaExpr = *StaticCast<LambdaExpr*>(be.desugarExpr.get());
+        if (lambdaExpr.funcBody && lambdaExpr.funcBody->body && !lambdaExpr.funcBody->body->body.empty()) {
+            auto& innerCall = *StaticCast<CallExpr*>(lambdaExpr.funcBody->body->body[0].get());
+            if (CheckFlowOperandsHaveNamedParam(innerCall)) {
+                RecoverToBinaryExpr(be);
+                be.SetTy(TypeManager::GetInvalidTy());
+                return false;
+            }
+        }
     }
     be.SetTy(be.desugarExpr->GetTy());
     return true;
