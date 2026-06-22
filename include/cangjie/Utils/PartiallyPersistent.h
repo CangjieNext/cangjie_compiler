@@ -361,8 +361,10 @@ private:
     void applyOne(const Log& l)
     {
         if (l.isInsert) {
+            checkIn(l.data);
             data.insert(l.data);
         } else {
+            checkOut(l.data);
             data.erase(l.data);
         }
     }

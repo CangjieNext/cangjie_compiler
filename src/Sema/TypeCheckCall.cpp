@@ -2174,7 +2174,6 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckMatchResult(ASTCon
     }
     // Check and report suppressed diagnoses for matched function call.
     bool funcHasError = false;
-    PData::Apply(typeManager.constraints, legals[id]->ver);
     for (const Diagnostic& funcDiag : legals[id]->diags.first) {
         if (funcDiag.diagSeverity == DiagSeverity::DS_ERROR) {
             funcHasError = true;
