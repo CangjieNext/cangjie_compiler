@@ -1912,11 +1912,10 @@ Ptr<Decl> GetTypeDeclOfMember(TypeManager& tyMgr, const Decl& d)
 MemSig MemDecl2Sig(Decl& d)
 {
     if (auto fd = DynamicCast<FuncDecl*>(&d)) {
-        auto generic = fd->GetGeneric();
         return MemSig{fd->identifier,
             false,
             fd->funcBody->paramLists[0]->params.size(),
-            generic ? generic->typeParameters.size() : 0};
+            fd->generic ? fd->generic->typeParameters.size() : 0};
     } else {
         return MemSig{d.identifier, true};
     }
