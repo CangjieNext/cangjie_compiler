@@ -52,13 +52,19 @@ bool IsTailPositionApply(const CHIRCallExpr& applyWrapper)
     auto* applyExpr = &applyWrapper.GetChirExpr();
     auto it = std::find(exprs.begin(), exprs.end(), applyExpr);
     CJC_ASSERT(it != exprs.end());
-
     for (++it; it != exprs.end(); ++it) {
         if (!IsIgnoredExprBetweenTailCallAndExit(**it, *callerFunc, *applyResult)) {
             return false;
         }
     }
     return true;
+}
+
+bool ReuseCallerSRetForApply(IRBuilder2& irBuilder, const CHIRCallExpr& applyWrapper)
+{
+    auto callerCGFunc = irBuilder.GetInsertCGFunction();
+    CJC_ASSERT(callerCGFunc->IsSRet());
+    return IsTailPositionApply(applyWrapper);
 }
 
 llvm::Value* DoSimpleCast(IRBuilder2& irBuilder, const CGValue& srcValue, const CGType& destType)
@@ -199,8 +205,8 @@ std::vector<llvm::Value*> IRBuilder2::TransformFuncArgs(const CGFunctionType& ca
         auto& returnCHIRType = *chirFuncType.GetReturnType();
         auto& returnCGType = *CGType::GetOrCreate(cgMod, &returnCHIRType);
         llvm::Value* allocaForRetVal = nullptr;
-        auto callerCGFunc = GetInsertCGFunction();
-        bool canReuseCallerSRet = callerCGFunc->IsSRet() && IsTailPositionApply(*applyWrapper);
+        CJC_ASSERT(applyWrapper);
+        bool canReuseCallerSRet = ReuseCallerSRetForApply(*this, *applyWrapper);
         if (canReuseCallerSRet) {
             allocaForRetVal = GetInsertFunction()->getArg(0);
         } else if (returnCGType.GetSize()) {
@@ -375,7 +381,10 @@ llvm::Value* IRBuilder2::GetReturnValue(const CGFunctionType& calleeType, llvm::
                 : returnCGType.GetLLVMType());
         callBaseInst->addAttributeAtIndex(llvm::AttributeList::FirstArgIndex, sretAttr);
         ret = argsVal.front();
-        if (!returnCGType.GetSize()) {
+        auto applyWrapper = dynamic_cast<const CHIRCallExpr*>(this->chirExpr);
+
+        CJC_ASSERT(applyWrapper);
+        if (!returnCGType.GetSize() && !ReuseCallerSRetForApply(*this, *applyWrapper)) {
             CHIR::Type* rstType = nullptr;
             if (this->chirExpr->GetExprKind() == CHIR::ExprKind::VARRAY_BUILDER) {
                 auto& varrayBuilder = StaticCast<const CHIR::VArrayBuilder&>(this->chirExpr->GetChirExpr());
