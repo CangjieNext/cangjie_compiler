@@ -33,28 +33,12 @@ using namespace AST;
 using namespace TypeCheckUtil;
 
 namespace {
-OwnedPtr<AST::Expr> TryDesugarFunctionCallExpr(OwnedPtr<AST::Expr> base)
-{
-    if (!Ty::IsInitialTy(base->GetTy()) && base->TyKind() != TypeKind::TYPE_FUNC) {
-        // Try to desugar base as base.operator().
-        // NOTE: 'curFile' and 'curMacroCall' will be set from caller of current method.
-        auto newBase = MakeOwnedNode<MemberAccess>();
-        newBase->field = "()";
-        newBase->scopeName = base->scopeName;
-        newBase->begin = base->begin;
-        newBase->end = base->end;
-        newBase->baseExpr = std::move(base);
-        return newBase;
-    }
-    return base;
-}
-
 void DesugarPipelineExpr(ASTContext& ctx, BinaryExpr& be)
 {
     auto callExpr = MakeOwnedNode<CallExpr>();
     CopyBasicInfo(&be, callExpr.get());
     ctx.RemoveTypeCheckCache(*callExpr);
-    callExpr->baseFunc = TryDesugarFunctionCallExpr(std::move(be.rightExpr));
+    callExpr->baseFunc = std::move(be.rightExpr);
     ctx.RemoveTypeCheckCache(*(callExpr->baseFunc));
     auto funcArg = MakeOwned<FuncArg>();
     CopyBasicInfo(be.leftExpr.get(), funcArg.get());
@@ -71,29 +55,104 @@ void DesugarPipelineExpr(ASTContext& ctx, BinaryExpr& be)
 
 void DesugarCompositionExpr(ASTContext& ctx, BinaryExpr& be)
 {
-    auto callExpr = MakeOwnedNode<CallExpr>();
-    CopyBasicInfo(&be, callExpr.get());
-    ctx.RemoveTypeCheckCache(*callExpr);
-    auto refExpr = CreateRefExprInCore("composition");
-    CopyBasicInfo(&be, refExpr.get());
-    ctx.RemoveTypeCheckCache(*refExpr);
-    callExpr->baseFunc = std::move(refExpr);
-    auto arg1 = MakeOwned<FuncArg>();
-    CopyBasicInfo(be.leftExpr.get(), arg1.get());
-    ctx.RemoveTypeCheckCache(*arg1);
-    arg1->expr = TryDesugarFunctionCallExpr(std::move(be.leftExpr));
-    arg1->expr->isInFlowExpr = true;
-    ctx.RemoveTypeCheckCache(*(arg1->expr));
-    auto arg2 = MakeOwned<FuncArg>();
-    CopyBasicInfo(be.rightExpr.get(), arg2.get());
-    ctx.RemoveTypeCheckCache(*arg2);
-    arg2->expr = TryDesugarFunctionCallExpr(std::move(be.rightExpr));
-    arg2->expr->isInFlowExpr = true;
-    ctx.RemoveTypeCheckCache(*(arg2->expr));
-    callExpr->args.push_back(std::move(arg1));
-    callExpr->args.push_back(std::move(arg2));
-    callExpr->sourceExpr = &be;
-    be.desugarExpr = std::move(callExpr);
+    // eg: leftFunc ~> rightFunc => { compositionPara: T => rightFunc(leftFunc(compositionPara)) }
+    OwnedPtr<FuncParam> param = MakeOwned<FuncParam>();
+    param->identifier = "compositionPara";
+
+    CopyBasicInfo(&be, param.get());
+    ctx.RemoveTypeCheckCache(*param);
+    ctx.AddDeclName(std::make_pair(param->identifier, param->scopeName), *param);
+
+    OwnedPtr<RefExpr> ref = MakeOwned<RefExpr>();
+    ref->ref.identifier = param->identifier;
+    ref->ref.target = param;
+    ref->sourceExpr = &be;
+
+    CopyBasicInfo(&be, ref.get());
+    ctx.RemoveTypeCheckCache(*ref);
+
+    // If the left operand is a COMPOSITION BinaryExpr that hasn't been desugared yet,
+    // recursively desugar it first to ensure its children are properly handled before
+    // moving leftExpr.
+    if (auto leftBinary = DynamicCast<BinaryExpr*>(be.leftExpr.get())) {
+        if (leftBinary->op == TokenKind::COMPOSITION && leftBinary->desugarExpr == nullptr) {
+            DesugarCompositionExpr(ctx, *leftBinary);
+        }
+    }
+
+    // create leftFunc(compositionPara)
+    auto leftFunc = MakeOwnedNode<CallExpr>();
+    CopyBasicInfo(&be, leftFunc.get());
+    if (be.TestAttr(Attribute::UNSAFE)) {
+        leftFunc->EnableAttr(Attribute::UNSAFE);
+    }
+    leftFunc->sourceExpr = &be;
+    ctx.RemoveTypeCheckCache(*leftFunc);
+
+    // Save the pointer to leftExpr for CopyBasicInfo before moving it.
+    auto leftExprPtr = be.leftExpr.get();
+    auto leftArg = MakeOwned<FuncArg>();
+    CopyBasicInfo(leftExprPtr, leftArg.get());
+    ctx.RemoveTypeCheckCache(*leftArg);
+
+    // If leftExpr is a desugared COMPOSITION BinaryExpr, use its desugarExpr;
+    // otherwise use leftExpr itself.
+    if (auto leftBinary = DynamicCast<BinaryExpr*>(be.leftExpr.get())) {
+        if (leftBinary->op == TokenKind::COMPOSITION && leftBinary->desugarExpr != nullptr) {
+            leftFunc->baseFunc = std::move(leftBinary->desugarExpr);
+        } else {
+            leftFunc->baseFunc = std::move(be.leftExpr);
+        }
+    } else {
+        leftFunc->baseFunc = std::move(be.leftExpr);
+    }
+    ctx.RemoveTypeCheckCache(*(leftFunc->baseFunc));
+    leftArg->expr = std::move(ref);
+    leftArg->expr->isInFlowExpr = true;
+    leftFunc->args.push_back(std::move(leftArg));
+
+    // create rightFunc(leftFunc(compositionPara))
+    auto rightFunc = MakeOwnedNode<CallExpr>();
+    CopyBasicInfo(&be, rightFunc.get());
+    if (be.TestAttr(Attribute::UNSAFE)) {
+        rightFunc->EnableAttr(Attribute::UNSAFE);
+    }
+    rightFunc->sourceExpr = &be;
+    ctx.RemoveTypeCheckCache(*rightFunc);
+    rightFunc->baseFunc = std::move(be.rightExpr);
+    ctx.RemoveTypeCheckCache(*(rightFunc->baseFunc));
+    auto rightArg = MakeOwned<FuncArg>();
+    // Use the previously saved leftExprPtr to avoid accessing the moved be.leftExpr.
+    CopyBasicInfo(leftExprPtr, rightArg.get());
+    ctx.RemoveTypeCheckCache(*rightArg);
+    rightArg->expr = std::move(leftFunc);
+    rightArg->expr->isInFlowExpr = true;
+    rightFunc->args.push_back(std::move(rightArg));
+
+    // { compositionPara => rightFunc(leftFunc(compositionPara)) }
+    OwnedPtr<Block> bodyBlock = MakeOwned<Block>();
+    CopyBasicInfo(&be, bodyBlock.get());
+    ctx.RemoveTypeCheckCache(*bodyBlock);
+    bodyBlock->body.emplace_back(std::move(rightFunc));
+    bodyBlock->sourceExpr = &be;
+
+    auto lambdaBody = MakeOwned<FuncBody>();
+    CopyBasicInfo(&be, lambdaBody.get());
+    ctx.RemoveTypeCheckCache(*lambdaBody);
+    OwnedPtr<FuncParamList> paramList = MakeOwned<FuncParamList>();
+    CopyBasicInfo(&be, paramList.get());
+    ctx.RemoveTypeCheckCache(*paramList);
+    paramList->params.push_back(std::move(param));
+    lambdaBody->paramLists.emplace_back(std::move(paramList));
+    lambdaBody->body = std::move(bodyBlock);
+
+    auto lambdaExpr = MakeOwned<LambdaExpr>();
+    CopyBasicInfo(&be, lambdaExpr.get());
+    ctx.RemoveTypeCheckCache(*lambdaExpr);
+    lambdaExpr->funcBody = std::move(lambdaBody);
+    lambdaExpr->sourceExpr = &be;
+
+    be.desugarExpr = std::move(lambdaExpr);
     if (be.TestAttr(Attribute::UNSAFE)) {
         be.desugarExpr->EnableAttr(Attribute::UNSAFE);
     }

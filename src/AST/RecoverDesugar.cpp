@@ -50,19 +50,28 @@ void RecoverToPipelineExpr(BinaryExpr& be)
 void RecoverToCompositionExpr(BinaryExpr& be)
 {
     CJC_NULLPTR_CHECK(be.desugarExpr);
-    // Recover to CompositionExpr.
-    auto& callExpr = StaticCast<CallExpr&>(*be.desugarExpr);
-    CJC_ASSERT(callExpr.args.size() == 2); // there are 2 arguments
-    CJC_NULLPTR_CHECK(callExpr.args[0]);
-    be.leftExpr = TryRecoverFunctionCallExpr(std::move(callExpr.args[0]->expr));
-    if (auto nre = DynamicCast<NameReferenceExpr*>(be.leftExpr.get())) {
-        UnsetCallExprOfNode(*nre);
-    }
-    CJC_NULLPTR_CHECK(callExpr.args[1]);
-    be.rightExpr = TryRecoverFunctionCallExpr(std::move(callExpr.args[1]->expr));
+    // Recover to CompositionExpr from LambdaExpr.
+    // LambdaExpr structure:
+    // { compositionPara => rightFunc(leftFunc(compositionPara)) }
+    // - funcBody->body->body[0]: rightFunc (CallExpr)
+    //   - baseFunc: MemberAccess of rightExpr
+    //   - args[0]->expr: leftFunc (CallExpr)
+    //     - baseFunc: MemberAccess of leftExpr
+    //     - args[0]->expr: RefExpr (compositionPara)
+    auto& lambdaExpr = StaticCast<LambdaExpr&>(*be.desugarExpr);
+    auto& rightFunc = StaticCast<CallExpr&>(*lambdaExpr.funcBody->body->body[0]);
+    auto& leftFunc = StaticCast<CallExpr&>(*rightFunc.args[0]->expr);
+
+    be.rightExpr = TryRecoverFunctionCallExpr(std::move(rightFunc.baseFunc));
     if (auto nre = DynamicCast<NameReferenceExpr*>(be.rightExpr.get())) {
         UnsetCallExprOfNode(*nre);
     }
+
+    be.leftExpr = TryRecoverFunctionCallExpr(std::move(leftFunc.baseFunc));
+    if (auto nre = DynamicCast<NameReferenceExpr*>(be.leftExpr.get())) {
+        UnsetCallExprOfNode(*nre);
+    }
+
     be.desugarExpr = OwnedPtr<Expr>();
 }
 } // namespace
@@ -107,6 +116,11 @@ void RecoverToUnaryExpr(UnaryExpr& ue)
 void RecoverToBinaryExpr(BinaryExpr& be)
 {
     if (be.desugarExpr == nullptr) {
+        return;
+    }
+    // COMPOSITION desugars to LambdaExpr before typecheck, so handle it before CALL_EXPR check.
+    if (be.op == TokenKind::COMPOSITION && be.desugarExpr->astKind == ASTKind::LAMBDA_EXPR) {
+        RecoverToCompositionExpr(be);
         return;
     }
     // Case for tuple equal desugar.
