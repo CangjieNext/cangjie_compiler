@@ -141,7 +141,7 @@ struct ASTHasherImpl {
     /** CombineHash is a function used to create hash with fewer collisions. */
     template <int whatTypeToHash = 0, typename T> void CombineHash(const T& v)
     {
-        (void)CombineTwoHashes(Utils::SipHash::GetHashValue(v));
+        (void)CombineTwoHashes(static_cast<hash_type>(Utils::SipHash::GetHashValue(v)));
     }
 
     template <int whatTypeToHash = 0, typename T> void CombineHash(const OwnedPtr<T>& v)
