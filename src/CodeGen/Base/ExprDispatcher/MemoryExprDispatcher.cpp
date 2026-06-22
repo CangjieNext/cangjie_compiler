@@ -65,6 +65,29 @@ void TryEmitNullInitForDebugLocalClass(IRBuilder2& irBuilder, const CHIR::Alloca
     storeInst->setDebugLoc(llvm::DebugLoc());
     irBuilder.restoreIP(savedIP);
 }
+
+bool IsNoOpStoreToRet(CGModule& cgMod, const CHIR::Store& store)
+{
+    auto value = store.GetValue();
+    auto addr = store.GetLocation();
+    auto var = DynamicCast<CHIR::LocalVar*>(addr);
+    if (!var || !var->IsRetValue()) {
+        return false;
+    }
+    if (value->GetType()->IsUnit()) {
+        return true;
+    }
+    if (cgMod.GetCGContext().GetCompileOptions().optimizationLevel == GlobalOptions::OptimizationLevel::O0) {
+        return false;
+    }
+    if (!value->IsLocalVar()) {
+        return false;
+    }
+
+    auto* valueCG = cgMod | value;
+    auto* addrCG = cgMod | addr;
+    return valueCG && addrCG && valueCG->GetRawValue() == addrCG->GetRawValue();
+}
 } // namespace
 
 llvm::Value* HandleLoadExpr(IRBuilder2& irBuilder, const CHIR::Load& load)
@@ -101,8 +124,8 @@ llvm::Value* HandleStoreExpr(IRBuilder2& irBuilder, const CHIR::Store& store)
     if (auto node = DynamicCast<CHIR::LocalVar*>(value);
         node && node->GetExpr()->IsConstantNull() && value->GetType()->IsClass()) {
         return nullptr;
-    } else if (auto var = DynamicCast<CHIR::LocalVar*>(addr); var && var->IsRetValue() && value->GetType()->IsUnit()) {
-        // If stored location is function's ret of unit type, do nothing.
+    }
+    if (IsNoOpStoreToRet(cgMod, store)) {
         return nullptr;
     }
     irBuilder.EmitLocation(CHIRExprWrapper(store), true);
