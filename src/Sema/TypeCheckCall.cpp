@@ -2182,6 +2182,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckMatchResult(ASTCon
         diag.Diagnose(funcDiag);
     }
     if (funcHasError) {
+        PData::Reset(typeManager.constraints);
         return {};
     }
     if (legals[id]->fd.outerDecl && legals[id]->fd.outerDecl->astKind == ASTKind::INTERFACE_DECL) {
@@ -2192,6 +2193,11 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::CheckMatchResult(ASTCon
     // Infer the arguments' type again, to update ideal type and reference's targets which may overload.
     ReInferCallArgs(ctx, ce, *legals[id]);
     auto ret = ReorderCallArgument(ctx, *legals[id], ce);
+    // Undo the Apply's constraint changes to prevent pollution of outer overload resolution.
+    // Without this, nested calls (e.g., inside lambda bodies) would have their type variables
+    // greedily resolved via TryGreedySubst using the leaked eq constraints, causing subsequent
+    // overload candidates to fail spuriously.
+    PData::Reset(typeManager.constraints);
     return ret;
 }
 
