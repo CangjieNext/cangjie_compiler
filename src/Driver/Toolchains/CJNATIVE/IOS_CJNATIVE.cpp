@@ -44,9 +44,10 @@ TempFileInfo IOS_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>
     auto tool = std::make_unique<Tool>(ldPath, ToolType::BACKEND, driverOptions.environment.allVariables);
     tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
     auto tempBinaryInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_DYLIB);
-    auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_OBJ);
+    auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::T_OBJ);
     auto ltoObjectDir = outputFileInfo.filePath + ".lto";
-    auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, "0." + GetTargetArchString() + ".lto.o");
+    auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir,
+        outputFileInfo.fileName + "." + GetTargetArchString() + ".lto.o");
     tool->AppendArg("-o", tempBinaryInfo.filePath);
     GenerateLinkOptionsForLTO(*tool);
     tool->AppendArg("-object_path_lto", ltoObjectDir);
@@ -93,6 +94,10 @@ TempFileInfo IOS_CJNATIVE::GenerateLinkingTool(
     if (driverOptions.IsLTOEnabled()) {
         tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
         GenerateLinkOptionsForLTO(*tool);
+        if (!driverOptions.IsFullLTOEnabled()) {
+            tool->AppendArg("-cache_path_lto");
+            tool->AppendArg(driverOptions.compilationCachedPath);
+        }
     }
     tool->AppendArgIf(driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB, "-dylib");
     tool->AppendArg("-arch", GetTargetArchString());
