@@ -1028,6 +1028,20 @@ void Collector::BuildSymbolTable(ASTContext& ctx, Ptr<Node> node, bool buildTrie
         }
         case ASTKind::BINARY_EXPR: {
             auto be = StaticAs<ASTKind::BINARY_EXPR>(node);
+            if (be->op == TokenKind::COMPOSITION) {
+                // Desugaring at type check creates a lambda whose parameter needs a
+                // scope name unique to this composition expression. Open the scope
+                // for the composition node only: its operands stay in the enclosing
+                // scope, so name lookup inside them is unchanged and the synthesized
+                // parameter cannot shadow names used by the operands.
+                scopeManager.InitializeScope(ctx);
+                auto nodeInfo = NodeInfo(*be, "", ctx.currentScopeLevel, ctx.currentScopeName);
+                AddSymbol(ctx, nodeInfo, buildTrie);
+                scopeManager.FinalizeScope(ctx);
+                BuildSymbolTable(ctx, be->leftExpr.get(), buildTrie);
+                BuildSymbolTable(ctx, be->rightExpr.get(), buildTrie);
+                break;
+            }
             auto nodeInfo = NodeInfo(*be, "", ctx.currentScopeLevel, ctx.currentScopeName);
             AddSymbol(ctx, nodeInfo, buildTrie);
             BuildSymbolTable(ctx, be->leftExpr.get(), buildTrie);

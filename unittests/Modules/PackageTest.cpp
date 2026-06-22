@@ -431,10 +431,42 @@ TEST_F(PackageTest, LSPCompileComposition)
     auto fg = pkgs[0]->files[0]->decls[2].get();
     ASSERT_TRUE(fg->astKind == ASTKind::VAR_DECL);
     ASSERT_TRUE(StaticCast<VarDecl*>(fg)->initializer != nullptr);
-    auto callExpr = DynamicCast<CallExpr*>(StaticCast<VarDecl*>(fg)->initializer->desugarExpr.get());
-    ASSERT_TRUE(callExpr != nullptr);
-    ASSERT_TRUE(callExpr->resolvedFunction);
-    EXPECT_EQ(callExpr->resolvedFunction->identifier, "composition");
+    // After the desugar change, `f ~> g` is desugared into a LambdaExpr:
+    // { compositionPara => g(f(compositionPara)) }
+    auto lambdaExpr = DynamicCast<LambdaExpr*>(StaticCast<VarDecl*>(fg)->initializer->desugarExpr.get());
+    ASSERT_TRUE(lambdaExpr != nullptr);
+    ASSERT_TRUE(lambdaExpr->funcBody != nullptr);
+    ASSERT_TRUE(lambdaExpr->funcBody->body != nullptr);
+    ASSERT_TRUE(lambdaExpr->funcBody->body->body.size() == 1);
+    // Lambda should have exactly one parameter named "compositionPara"
+    ASSERT_TRUE(lambdaExpr->funcBody->paramLists.size() == 1);
+    auto &paramList = lambdaExpr->funcBody->paramLists[0];
+    ASSERT_EQ(paramList->params.size(), 1);
+    auto compositionParam = paramList->params[0].get();
+    ASSERT_EQ(compositionParam->identifier.Val(), "compositionPara");
+
+    // Right call: g(f(compositionPara))
+    auto rightCall = DynamicCast<CallExpr*>(lambdaExpr->funcBody->body->body[0].get());
+    ASSERT_TRUE(rightCall != nullptr);
+    ASSERT_TRUE(rightCall->baseFunc != nullptr);
+    auto rightCallRef = DynamicCast<RefExpr*>(rightCall->baseFunc.get());
+    ASSERT_TRUE(rightCallRef != nullptr);
+    ASSERT_EQ(rightCallRef->ref.identifier.Val(), "g");
+    ASSERT_EQ(rightCall->args.size(), 1);
+
+    // Left call: f(compositionPara)
+    auto leftCall = DynamicCast<CallExpr*>(rightCall->args[0]->expr.get());
+    ASSERT_TRUE(leftCall != nullptr);
+    ASSERT_TRUE(leftCall->baseFunc != nullptr);
+    auto leftCallRef = DynamicCast<RefExpr*>(leftCall->baseFunc.get());
+    ASSERT_TRUE(leftCallRef != nullptr);
+    ASSERT_EQ(leftCallRef->ref.identifier.Val(), "f");
+    ASSERT_EQ(leftCall->args.size(), 1);
+
+    // The argument of leftCall should be a RefExpr named "compositionPara"
+    auto argRef = DynamicCast<RefExpr*>(leftCall->args[0]->expr.get());
+    ASSERT_TRUE(argRef != nullptr);
+    ASSERT_EQ(argRef->ref.identifier.Val(), "compositionPara");
 }
 
 TEST_F(PackageTest, LSPCompileWithConstraint)
