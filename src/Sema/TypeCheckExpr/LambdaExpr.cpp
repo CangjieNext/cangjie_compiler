@@ -253,41 +253,36 @@ bool DiagInferParamTyFail(DiagnosticEngine& diag, LambdaExpr& le)
     return false;
 }
 
-// a member usage on a lambda param: the param's id, the member's sig and possible type decls
-struct ParamMemUsage {
-    std::string id;
-    MemSig sig;
-    std::set<Ptr<Decl>> decls;
-};
-
-// if it's a member func call to a param, return the param's id, the member sig and possible type decls
+// if it's a member func call to a param, return the param's id and possible type decls
 // otherwise return empty string and empty set
-ParamMemUsage FindCandidatesFromCall(
+std::pair<std::string, std::set<Ptr<Decl>>> FindCandidatesFromCall(
     ASTContext& ctx, const CallExpr& ce, const std::map<std::string, Ptr<FuncParam>>& unsolvedParams)
 {
-    auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get());
-    auto re = ma ? DynamicCast<RefExpr*>(ma->baseExpr.get()) : nullptr;
-    if (!re || unsolvedParams.count(re->ref.identifier) == 0) {
-        return {"", {}, {}};
+    if (auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get())) {
+        if (auto re = DynamicCast<RefExpr*>(ma->baseExpr.get())) {
+            if (unsolvedParams.count(re->ref.identifier) > 0) {
+                auto id = re->ref.identifier;
+                auto sig = MemSig{ma->field, false, ce.args.size(), ma->typeArguments.size()};
+                return {id, ctx.Mem2Decls(sig)};
+            }
+        }
     }
-    auto id = re->ref.identifier;
-    auto sig = MemSig{ma->field, false, ce.args.size(), ma->typeArguments.size()};
-    return {id, sig, ctx.Mem2Decls(sig)};
+    return {"", {}};
 }
 
-// if it's a member access to a param, return the param's id, the member sig and possible type decls
+// if it's a member access to a param, return the param's id and possible type decls
 // otherwise return empty string and empty set
-ParamMemUsage FindCandidatesFromAccess(
+std::pair<std::string, std::set<Ptr<Decl>>> FindCandidatesFromAccess(
     ASTContext& ctx, MemberAccess& ma, const std::map<std::string, Ptr<FuncParam>>& unsolvedParams)
 {
     if (auto re = DynamicCast<RefExpr*>(ma.baseExpr.get())) {
         if (unsolvedParams.count(re->ref.identifier) > 0) {
             auto id = re->ref.identifier;
             auto sig = MemSig{ma.field, true};
-            return {id, sig, ctx.Mem2Decls(sig)};
+            return {id, ctx.Mem2Decls(sig)};
         }
     }
-    return {"", {}, {}};
+    return {"", {}};
 }
 } // namespace
 
@@ -337,7 +332,6 @@ void TypeChecker::TypeCheckerImpl::TryInferFromSyntaxInfo(ASTContext& ctx, const
     }
     std::map<std::string, Ptr<FuncParam>> unsolvedParams;
     std::map<std::string, std::set<Ptr<Decl>>> candidates;
-    std::map<std::string, std::vector<MemSig>> memSigs;
     for (auto& param : le.funcBody->paramLists[0]->params) {
         if (param->GetTy()->IsPlaceholder()) {
             unsolvedParams[param->identifier] = param;
@@ -347,15 +341,14 @@ void TypeChecker::TypeCheckerImpl::TryInferFromSyntaxInfo(ASTContext& ctx, const
         return;
     }
 
-    auto candiHandler = [&candidates, &memSigs](const ParamMemUsage& candi) {
-        if (candi.id.empty()) {
+    auto candiHandler = [&candidates](const std::pair<std::string, std::set<Ptr<Decl>>>& candi) {
+        if (candi.first.empty()) {
             return false;
         }
-        memSigs[candi.id].push_back(candi.sig);
-        if (candidates.count(candi.id) == 0) {
-            candidates[candi.id] = candi.decls;
+        if (candidates.count(candi.first) == 0) {
+            candidates[candi.first] = candi.second;
         } else {
-            EraseIf(candidates[candi.id], [&candi](Ptr<Decl> d) { return candi.decls.count(d) == 0; });
+            EraseIf(candidates[candi.first], [&candi](Ptr<Decl> d) { return candi.second.count(d) == 0; });
         }
         return true;
     };
@@ -377,7 +370,7 @@ void TypeChecker::TypeCheckerImpl::TryInferFromSyntaxInfo(ASTContext& ctx, const
     Walker(le.funcBody.get(), memberScanner).Walk();
 
     for (auto& [id, decls] : candidates) {
-        TryEnforceCandidate(*StaticCast<TyVar*>(unsolvedParams[id]->GetTy()), decls, typeManager, memSigs[id]);
+        TryEnforceCandidate(*StaticCast<TyVar*>(unsolvedParams[id]->GetTy()), decls, typeManager);
     }
 }
 
