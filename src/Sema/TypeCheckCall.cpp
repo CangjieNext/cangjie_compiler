@@ -2329,15 +2329,35 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
             return false;
         }
     }
+    auto typecheckAsValue = [this, &typecheck](Ptr<Expr> expr) {
+        Ptr<Node> oldCallOrPattern = nullptr;
+        Ptr<NameReferenceExpr> nre = DynamicCast<NameReferenceExpr*>(expr.get());
+        if (nre) {
+            oldCallOrPattern = nre->callOrPattern;
+            nre->callOrPattern = nullptr;
+        }
+        auto ds = DiagSuppressor(diag);
+        auto ty = typecheck(expr);
+        if (nre) {
+            nre->callOrPattern = oldCallOrPattern;
+        }
+        return ty;
+    };
     auto leftmostReceiverTy = leftmostReceiver->GetTy();
     if (!Ty::IsTyCorrect(leftmostReceiverTy) || !TypeIsExtern(leftmostReceiverTy)) {
-        auto ds = DiagSuppressor(diag);
-        leftmostReceiverTy = typecheck(leftmostReceiver);
+        leftmostReceiverTy = typecheckAsValue(leftmostReceiver);
     }
+    bool useDirectCallee = false;
+    Ptr<Ty> sourceExternTy = nullptr;
     if (!Ty::IsTyCorrect(leftmostReceiverTy) || !TypeIsExtern(leftmostReceiverTy)) {
-        return false;
+        sourceExternTy = typecheckAsValue(Ptr<Expr>(ce.baseFunc.get()));
+        if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
+            return false;
+        }
+        externReceiver = Ptr<Expr>(ce.baseFunc.get());
+        useDirectCallee = true;
     }
-    if (!ma) {
+    if (!useDirectCallee && !ma) {
         if (auto re = DynamicCast<RefExpr*>(ce.baseFunc.get());
             re && (!re->ref.target ||
             (re->ref.target->astKind != ASTKind::VAR_DECL && re->ref.target->astKind != ASTKind::FUNC_PARAM))) {
@@ -2345,21 +2365,23 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         }
     }
     SetIsNotAlone(*externReceiver);
-    Ptr<Node> oldCallOrPattern = nullptr;
-    Ptr<NameReferenceExpr> directReceiverRef = nullptr;
-    if (externReceiver == Ptr<Expr>(ce.baseFunc.get())) {
-        if (auto nre = DynamicCast<NameReferenceExpr*>(externReceiver.get())) {
-            directReceiverRef = nre;
-            oldCallOrPattern = nre->callOrPattern;
-            nre->callOrPattern = nullptr;
+    if (!useDirectCallee) {
+        Ptr<Node> oldCallOrPattern = nullptr;
+        Ptr<NameReferenceExpr> directReceiverRef = nullptr;
+        if (externReceiver == Ptr<Expr>(ce.baseFunc.get())) {
+            if (auto nre = DynamicCast<NameReferenceExpr*>(externReceiver.get())) {
+                directReceiverRef = nre;
+                oldCallOrPattern = nre->callOrPattern;
+                nre->callOrPattern = nullptr;
+            }
         }
-    }
-    auto sourceExternTy = typecheck(externReceiver);
-    if (directReceiverRef) {
-        directReceiverRef->callOrPattern = oldCallOrPattern;
-    }
-    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
-        return false;
+        sourceExternTy = typecheck(externReceiver);
+        if (directReceiverRef) {
+            directReceiverRef->callOrPattern = oldCallOrPattern;
+        }
+        if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
+            return false;
+        }
     }
     for (auto& arg : ce.args) {
         CJC_NULLPTR_CHECK(arg);
@@ -2432,7 +2454,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
     };
 
     OwnedPtr<Expr> callableExtern;
-    if (ma && ma->baseExpr) {
+    if (!useDirectCallee && ma && ma->baseExpr) {
         std::vector<OwnedPtr<FuncArg>> memberAccessArgs;
         auto effectiveBase = ma->baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(ma->baseExpr->desugarExpr.get()))
                                                        : ASTCloner::Clone(Ptr(ma->baseExpr.get()));
