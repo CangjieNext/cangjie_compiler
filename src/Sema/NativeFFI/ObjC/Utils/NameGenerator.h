@@ -29,8 +29,8 @@ public:
     std::string GenerateMethodWrapperName(const AST::FuncDecl& target, const std::string* genericActualName = nullptr, bool isInnerGeneric = false);
     std::string GeneratePropGetterWrapperName(const AST::PropDecl& target);
     std::string GetPropSetterWrapperName(const AST::PropDecl& target);
-    std::string GetFieldGetterWrapperName(const AST::VarDecl& target, const std::string* genericActualName = nullptr, bool isInnerGeneric = false);
-    std::string GetFieldSetterWrapperName(const AST::VarDecl& target);
+    std::string GetFieldGetterWrapperName(const AST::VarDeclAbstract& target, const std::string* genericActualName = nullptr, bool isInnerGeneric = false);
+    std::string GetFieldSetterWrapperName(const AST::VarDeclAbstract& target);
 
     /**
      * Returns name declared in @ForeignName or target.identifier if no foreign name specified.
