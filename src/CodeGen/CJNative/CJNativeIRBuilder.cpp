@@ -24,6 +24,43 @@
 namespace Cangjie::CodeGen {
 
 namespace {
+bool IsIgnoredExprBetweenTailCallAndExit(
+    const CHIR::Expression& expr, const CHIR::Function& parentFunc, const CHIR::LocalVar& applyResult)
+{
+    if (expr.GetExprKind() == CHIR::ExprKind::DEBUGEXPR) {
+        return true;
+    }
+    if (expr.GetExprKind() != CHIR::ExprKind::STORE) {
+        return false;
+    }
+    auto& store = StaticCast<const CHIR::Store&>(expr);
+    auto retValue = parentFunc.GetReturnValue();
+    return retValue && store.GetLocation() == retValue && store.GetValue() == &applyResult;
+}
+
+bool IsTailPositionApply(const CHIRCallExpr& applyWrapper)
+{
+    auto callerFunc = applyWrapper.GetTopLevelFunc();
+    auto applyResult = applyWrapper.GetResult();
+    auto parentBlock = applyWrapper.GetParentBlock();
+    auto terminator = parentBlock->GetTerminator();
+    if (!terminator || terminator->GetExprKind() != CHIR::ExprKind::EXIT) {
+        return false;
+    }
+
+    auto exprs = parentBlock->GetNonTerminatorExpressions();
+    auto* applyExpr = &applyWrapper.GetChirExpr();
+    auto it = std::find(exprs.begin(), exprs.end(), applyExpr);
+    CJC_ASSERT(it != exprs.end());
+
+    for (++it; it != exprs.end(); ++it) {
+        if (!IsIgnoredExprBetweenTailCallAndExit(**it, *callerFunc, *applyResult)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 llvm::Value* DoSimpleCast(IRBuilder2& irBuilder, const CGValue& srcValue, const CGType& destType)
 {
     llvm::Value& srcRawVal = *srcValue.GetRawValue();
@@ -162,7 +199,11 @@ std::vector<llvm::Value*> IRBuilder2::TransformFuncArgs(const CGFunctionType& ca
         auto& returnCHIRType = *chirFuncType.GetReturnType();
         auto& returnCGType = *CGType::GetOrCreate(cgMod, &returnCHIRType);
         llvm::Value* allocaForRetVal = nullptr;
-        if (returnCGType.GetSize()) {
+        auto callerCGFunc = GetInsertCGFunction();
+        bool canReuseCallerSRet = callerCGFunc->IsSRet() && IsTailPositionApply(*applyWrapper);
+        if (canReuseCallerSRet) {
+            allocaForRetVal = GetInsertFunction()->getArg(0);
+        } else if (returnCGType.GetSize()) {
             // known size at compile time
             allocaForRetVal = CreateEntryAlloca(returnCGType);
         } else {
@@ -447,7 +488,7 @@ size_t IRBuilder2::GetPtrSize() const
 }
 
 // For 64 bit OS: {typeinfo*, <payload>}
-// For 32 bit OS: {typeinfo*, i32, <payload>} 
+// For 32 bit OS: {typeinfo*, i32, <payload>}
 size_t IRBuilder2::GetPayloadOffset() const
 {
     return GetCGContext().GetCompileOptions().target.arch == Triple::ArchType::ARM32 ? GetPtrSize() + 4U : GetPtrSize();
