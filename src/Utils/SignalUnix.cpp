@@ -24,7 +24,7 @@ constexpr size_t SIGNAL_NUM = 6;
 constexpr int SIGNALS[SIGNAL_NUM] = {SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGSEGV, SIGTRAP};
 const std::vector<std::string> SIGNALS_STR = {"SIGABRT", "SIGBUS", "SIGFPE", "SIGILL", "SIGSEGV", "SIGTRAP"};
 
-void SignalHandler(int signum, [[maybe_unused]] siginfo_t* si, [[maybe_unused]] void* arg)
+void SignalHandler(int signum)
 {
     Cangjie::Signal::ConcurrentSynchronousSignalHandler(signum);
 }
@@ -56,7 +56,7 @@ void CreateAltSignalStack()
 void RegisterCrashSignalHandler()
 {
     struct sigaction sa;
-    sa.sa_sigaction = SignalHandler;
+    sa.sa_handler = SignalHandler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_ONSTACK;
     for (auto& sig : SIGNALS) {
@@ -73,9 +73,9 @@ void RegisterCrashSignalHandler()
 #endif // (defined NDEBUG)
 
 namespace {
-void SigintHandler(int signum, [[maybe_unused]] siginfo_t* si, [[maybe_unused]] void* arg)
+void SigintHandler(int signum)
 {
-    Cangjie::TempFileManager::Instance().DeleteTempFiles();
+    Cangjie::TempFileManager::Instance().DeleteTempFilesSignalSafe();
     _exit(signum + 128);  // Add 128 to return the same error code as if the program crashed.
 }
 } // namespace
@@ -84,9 +84,9 @@ namespace Cangjie {
 void RegisterCrtlCSignalHandler()
 {
     struct sigaction sa;
-    sa.sa_sigaction = SigintHandler;
+    sa.sa_handler = SigintHandler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_ONSTACK;
+    sa.sa_flags = 0;
     (void)sigaction(SIGINT, &sa, nullptr);
 }
 } // namespace Cangjie

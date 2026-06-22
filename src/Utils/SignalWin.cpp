@@ -25,7 +25,7 @@ LONG WINAPI WindowsExceptionHandler(LPEXCEPTION_POINTERS ep)
     }
     int64_t exitCode = ep->ExceptionRecord->ExceptionCode;
     Cangjie::Signal::WriteICEMessage(exitCode);
-    Cangjie::TempFileManager::Instance().DeleteTempFiles();
+    Cangjie::TempFileManager::Instance().DeleteTempFilesSignalSafe();
     return exitCode;
 }
 
@@ -61,7 +61,7 @@ void RegisterCrashSignalHandler()
 namespace {
 BOOL WINAPI LLVMConsoleCtrlHandler(DWORD dwCtrlType)
 {
-    Cangjie::TempFileManager::Instance().DeleteTempFiles();
+    Cangjie::TempFileManager::Instance().DeleteTempFilesSignalSafe();
     return FALSE;
 }
 } // namespace
