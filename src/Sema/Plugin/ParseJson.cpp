@@ -133,7 +133,7 @@ OwnedPtr<JsonObject> ParseJsonObject(size_t& pos, const std::vector<uint8_t>& in
                 ret->pairs.back()->valueStr.emplace_back(ParseJsonString(pos, in));
             }
         }
-        if (in[pos] >= '0' && in[pos] <= '9') {
+        if (pos < in.size() && in[pos] >= '0' && in[pos] <= '9') {
             // Json key cannot be a number.
             if (mod != StringMod::VALUE) {
                 return MakeOwned<JsonObject>();

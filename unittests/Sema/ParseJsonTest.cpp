@@ -164,15 +164,15 @@ TEST_F(ParseJsonTest, GetJsonStringTest)
     size_t pos = 0;
     auto obj = ParseJsonObject(pos, bytes);
     ASSERT_NE(obj, nullptr);
-    
+
     auto values = GetJsonString(obj.get(), "name");
     ASSERT_EQ(values.size(), 1u);
     EXPECT_EQ(values[0], "test");
-    
+
     values = GetJsonString(obj.get(), "value");
     ASSERT_EQ(values.size(), 1u);
     EXPECT_EQ(values[0], "123");
-    
+
     values = GetJsonString(obj.get(), "notexist");
     EXPECT_EQ(values.size(), 0u);
 }
@@ -184,7 +184,7 @@ TEST_F(ParseJsonTest, GetJsonObjectTest)
     size_t pos = 0;
     auto obj = ParseJsonObject(pos, bytes);
     ASSERT_NE(obj, nullptr);
-    
+
     auto innerObj = GetJsonObject(obj.get(), "config", 0);
     ASSERT_NE(innerObj, nullptr);
     ASSERT_EQ(innerObj->pairs.size(), 1u);
@@ -235,4 +235,15 @@ TEST_F(ParseJsonTest, ParseArrayWithoutColon)
     auto obj = ParseJsonObject(pos, bytes);
     ASSERT_NE(obj, nullptr);
     EXPECT_EQ(obj->pairs.size(), 0u);
+}
+
+TEST_F(ParseJsonTest, TestHeapOverflow)
+{
+    std::string json = R"({"})";
+    auto bytes = ToBytes(json);
+    size_t pos = 0;
+    ParseJsonObject(pos, bytes);
+    // The value of bytes[3] is a random number. If this value falls within the range of '0' to '9', it will result in
+    // the position (pos) not being updated to 4.
+    EXPECT_EQ(pos, 4);
 }
