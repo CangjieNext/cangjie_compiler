@@ -729,7 +729,13 @@ private:
      */
     bool CheckTupleCanEqual(ASTContext& ctx, AST::BinaryExpr& be);
     bool ChkFlowExpr(ASTContext& ctx, Ptr<AST::Ty> target, AST::BinaryExpr& be);
+    // Type check the expression produced by desugaring a flow expression, and diagnose
+    // the failure (recovering the binary expression) when the check does not succeed.
+    bool CheckDesugaredFlowExpr(ASTContext& ctx, Ptr<AST::Ty> target, AST::BinaryExpr& be);
     bool CheckFlowOperandsHaveNamedParam(const AST::CallExpr& ce);
+    // Return the operand of a COMPOSITION that refers to a function with named
+    // parameters, or nullptr. The operands are resolved first if necessary.
+    AST::Expr* FindCompositionOperandWithNamedParam(ASTContext& ctx, const AST::BinaryExpr& be);
     void DiagnoseForBinaryExpr(ASTContext& ctx, AST::BinaryExpr& be);
     void DiagnoseForUnaryExpr(ASTContext& ctx, AST::UnaryExpr& ue);
     void DiagnoseForUnaryExprWithTarget(ASTContext& ctx, AST::UnaryExpr& ue, AST::Ty& target);

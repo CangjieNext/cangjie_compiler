@@ -104,6 +104,10 @@ public:
     bool HasTargetTy(Ptr<const AST::Node> node) const;
     void AddDeclName(const Names& names, AST::Decl& decl);
     void RemoveDeclByName(const Names& names, const AST::Decl& decl);
+    // Remove every decl registered under the key. Used by desugaring that
+    // registers a synthesized parameter under a dedicated scope and may run
+    // again after a failed check.
+    void RemoveDeclNames(const Names& names);
     std::vector<Ptr<AST::Decl>> GetDeclsByName(const Names& names) const;
 
     /**

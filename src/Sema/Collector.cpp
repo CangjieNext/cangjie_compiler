@@ -628,6 +628,28 @@ void Collector::CollectSpawnExpr(ASTContext& ctx, SpawnExpr& se, bool buildTrie)
     BuildSymbolTable(ctx, se.arg.get(), buildTrie);
 }
 
+void Collector::CollectBinaryExpr(ASTContext& ctx, BinaryExpr& be, bool buildTrie)
+{
+    if (be.op == TokenKind::COMPOSITION) {
+        // Desugaring at type check creates a lambda whose parameter needs a scope
+        // name unique to this composition expression. Open the scope for the
+        // composition node only: its operands stay in the enclosing scope, so name
+        // lookup inside them is unchanged and the synthesized parameter cannot
+        // shadow names used by the operands.
+        scopeManager.InitializeScope(ctx);
+        auto nodeInfo = NodeInfo(be, "", ctx.currentScopeLevel, ctx.currentScopeName);
+        AddSymbol(ctx, nodeInfo, buildTrie);
+        scopeManager.FinalizeScope(ctx);
+        BuildSymbolTable(ctx, be.leftExpr.get(), buildTrie);
+        BuildSymbolTable(ctx, be.rightExpr.get(), buildTrie);
+        return;
+    }
+    auto nodeInfo = NodeInfo(be, "", ctx.currentScopeLevel, ctx.currentScopeName);
+    AddSymbol(ctx, nodeInfo, buildTrie);
+    BuildSymbolTable(ctx, be.leftExpr.get(), buildTrie);
+    BuildSymbolTable(ctx, be.rightExpr.get(), buildTrie);
+}
+
 void Collector::UpdatePosLimit(Package& package)
 {
     unsigned int fileIdMax = 0;
@@ -1027,11 +1049,7 @@ void Collector::BuildSymbolTable(ASTContext& ctx, Ptr<Node> node, bool buildTrie
             break;
         }
         case ASTKind::BINARY_EXPR: {
-            auto be = StaticAs<ASTKind::BINARY_EXPR>(node);
-            auto nodeInfo = NodeInfo(*be, "", ctx.currentScopeLevel, ctx.currentScopeName);
-            AddSymbol(ctx, nodeInfo, buildTrie);
-            BuildSymbolTable(ctx, be->leftExpr.get(), buildTrie);
-            BuildSymbolTable(ctx, be->rightExpr.get(), buildTrie);
+            CollectBinaryExpr(ctx, *StaticAs<ASTKind::BINARY_EXPR>(node), buildTrie);
             break;
         }
         case ASTKind::UNARY_EXPR: {

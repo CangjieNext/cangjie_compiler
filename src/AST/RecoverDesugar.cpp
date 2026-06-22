@@ -22,47 +22,57 @@ void UnsetCallExprOfNode(NameReferenceExpr& nre)
     nre.callOrPattern = nullptr;
 }
 
-OwnedPtr<Expr> TryRecoverFunctionCallExpr(OwnedPtr<Expr> base)
-{
-    if (base->astKind == ASTKind::MEMBER_ACCESS) {
-        auto ma = RawStaticCast<MemberAccess*>(base.get());
-        if (ma->field == "()") {
-            return std::move(ma->baseExpr);
-        }
-    }
-    return base;
-}
-
 void RecoverToPipelineExpr(BinaryExpr& be)
 {
     CJC_NULLPTR_CHECK(be.desugarExpr);
     // Recover to PipelineExpr.
     auto& callExpr = StaticCast<CallExpr&>(*be.desugarExpr);
-    be.rightExpr = TryRecoverFunctionCallExpr(std::move(callExpr.baseFunc));
+    be.rightExpr = std::move(callExpr.baseFunc);
     if (auto nre = DynamicCast<NameReferenceExpr*>(be.rightExpr.get())) {
         UnsetCallExprOfNode(*nre);
     }
     CJC_ASSERT(callExpr.args.size() == 1);
     be.leftExpr = std::move(callExpr.args[0]->expr);
+    be.rightExpr->Clear();
+    be.leftExpr->Clear();
     be.desugarExpr = OwnedPtr<Expr>();
 }
 
 void RecoverToCompositionExpr(BinaryExpr& be)
 {
     CJC_NULLPTR_CHECK(be.desugarExpr);
-    // Recover to CompositionExpr.
-    auto& callExpr = StaticCast<CallExpr&>(*be.desugarExpr);
-    CJC_ASSERT(callExpr.args.size() == 2); // there are 2 arguments
-    CJC_NULLPTR_CHECK(callExpr.args[0]);
-    be.leftExpr = TryRecoverFunctionCallExpr(std::move(callExpr.args[0]->expr));
-    if (auto nre = DynamicCast<NameReferenceExpr*>(be.leftExpr.get())) {
-        UnsetCallExprOfNode(*nre);
-    }
-    CJC_NULLPTR_CHECK(callExpr.args[1]);
-    be.rightExpr = TryRecoverFunctionCallExpr(std::move(callExpr.args[1]->expr));
+    CJC_ASSERT(be.op == TokenKind::COMPOSITION);
+    // Recover to CompositionExpr from LambdaExpr.
+    // LambdaExpr structure (see DesugarCompositionExpr):
+    // { compositionPara => rightFunc(leftFunc(compositionPara)) }
+    // - funcBody->body->body[0]: rightFunc (CallExpr)
+    //   - baseFunc: the right operand
+    //   - args[0]->expr: leftFunc (CallExpr)
+    //     - baseFunc: the left operand
+    //     - args[0]->expr: RefExpr (compositionPara)
+    auto lambdaExpr = DynamicCast<LambdaExpr*>(be.desugarExpr.get());
+    CJC_NULLPTR_CHECK(lambdaExpr);
+    CJC_NULLPTR_CHECK(lambdaExpr->funcBody);
+    CJC_NULLPTR_CHECK(lambdaExpr->funcBody->body);
+    CJC_ASSERT(lambdaExpr->funcBody->body->body.size() == 1);
+    auto rightFunc = DynamicCast<CallExpr*>(lambdaExpr->funcBody->body->body[0].get());
+    CJC_NULLPTR_CHECK(rightFunc);
+    CJC_ASSERT(rightFunc->args.size() == 1);
+    auto leftFunc = DynamicCast<CallExpr*>(rightFunc->args[0]->expr.get());
+    CJC_NULLPTR_CHECK(leftFunc);
+
+    be.rightExpr = std::move(rightFunc->baseFunc);
     if (auto nre = DynamicCast<NameReferenceExpr*>(be.rightExpr.get())) {
         UnsetCallExprOfNode(*nre);
     }
+
+    be.leftExpr = std::move(leftFunc->baseFunc);
+    if (auto nre = DynamicCast<NameReferenceExpr*>(be.leftExpr.get())) {
+        UnsetCallExprOfNode(*nre);
+    }
+
+    be.rightExpr->Clear();
+    be.leftExpr->Clear();
     be.desugarExpr = OwnedPtr<Expr>();
 }
 } // namespace
@@ -109,6 +119,13 @@ void RecoverToBinaryExpr(BinaryExpr& be)
     if (be.desugarExpr == nullptr) {
         return;
     }
+    // COMPOSITION is always desugared to a LambdaExpr before type checking, so it
+    // must be handled before the CALL_EXPR check.
+    if (be.op == TokenKind::COMPOSITION) {
+        CJC_ASSERT(be.desugarExpr->astKind == ASTKind::LAMBDA_EXPR);
+        RecoverToCompositionExpr(be);
+        return;
+    }
     // Case for tuple equal desugar.
     if (be.desugarExpr->astKind != AST::ASTKind::CALL_EXPR) {
         be.desugarExpr = OwnedPtr<Expr>();
@@ -117,9 +134,6 @@ void RecoverToBinaryExpr(BinaryExpr& be)
     RecoverToCallExpr(StaticCast<CallExpr&>(*be.desugarExpr));
     if (be.op == TokenKind::PIPELINE) {
         RecoverToPipelineExpr(be);
-        return;
-    } else if (be.op == TokenKind::COMPOSITION) {
-        RecoverToCompositionExpr(be);
         return;
     }
     // Recover to BinaryExpr.

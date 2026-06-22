@@ -1065,6 +1065,35 @@ bool TypeChecker::TypeCheckerImpl::CheckFlowOperandsHaveNamedParam(const CallExp
     });
 }
 
+Expr* TypeChecker::TypeCheckerImpl::FindCompositionOperandWithNamedParam(ASTContext& ctx, const BinaryExpr& be)
+{
+    if (!be.leftExpr || !be.rightExpr) {
+        return nullptr;
+    }
+    {
+        // The operands may have been cleared by the failed check or by the recovery,
+        // resolve them again (diagnostics of this step belong to the normal failure path).
+        auto ds = DiagSuppressor(diag);
+        for (auto expr : {be.leftExpr.get(), be.rightExpr.get()}) {
+            if (!expr->GetTarget()) {
+                (void)Synthesize({ctx, SynPos::EXPR_ARG}, expr);
+            }
+        }
+        (void)ds.GetSuppressedDiag();
+    }
+    auto isNamedParamFuncRef = [](const Expr& expr) {
+        auto re = DynamicCast<const RefExpr*>(&expr);
+        return re && RefExprTargetIsFuncDeclAndHasNamedParam(*re);
+    };
+    if (isNamedParamFuncRef(*be.rightExpr)) {
+        return be.rightExpr.get();
+    }
+    if (isNamedParamFuncRef(*be.leftExpr)) {
+        return be.leftExpr.get();
+    }
+    return nullptr;
+}
+
 bool TypeChecker::TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, Ptr<Ty> target, BinaryExpr& be)
 {
     if (Ty::IsTyCorrect(be.GetTy())) {
@@ -1074,22 +1103,6 @@ bool TypeChecker::TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, Ptr<Ty> target, 
     auto& leftExpr = *be.leftExpr;
     rightExpr.isInFlowExpr = true;
     auto cs = PData::CommitScope(typeManager.constraints);
-    {
-        auto ds = DiagSuppressor(diag);
-        SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, &leftExpr);
-        SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, &rightExpr);
-        if (ds.HasError()) {
-            if (be.op == TokenKind::COMPOSITION) {
-                be.SetTy(TypeManager::GetInvalidTy());
-                ds.ReportDiag();
-                return false;
-            } else {
-                leftExpr.Clear();
-                rightExpr.Clear();
-                PData::Reset(typeManager.constraints);
-            }
-        }
-    }
     // Check if flow expr contains 'this' which is illegal.
     // 'super' is not allowed to be used alone and is checked in 'InferSuperExpr'.
     auto isThisExpr = [this](Expr& exp) {
@@ -1108,30 +1121,54 @@ bool TypeChecker::TypeCheckerImpl::ChkFlowExpr(ASTContext& ctx, Ptr<Ty> target, 
     }
     // Desugar flow expr.
     DesugarFlowExpr(ctx, be);
+    if (!CheckDesugaredFlowExpr(ctx, target, be)) {
+        return false;
+    }
 
-    CJC_ASSERT(be.desugarExpr && be.desugarExpr->astKind == ASTKind::CALL_EXPR);
-    CallExpr& beCallExpr = *StaticCast<CallExpr*>(be.desugarExpr.get());
-    {
-        auto ds = DiagSuppressor(diag);
-        if (!ChkCallExpr(ctx, target, beCallExpr)) {
-            (void)ds.GetSuppressedDiag();
-            // Should recover the desugaredExpr to binaryExpr if failed.
+    // For PIPELINE, the desugared call takes the left operand as its argument.
+    // Check that it does not refer to a function with named parameters.
+    if (be.desugarExpr->astKind == ASTKind::CALL_EXPR) {
+        auto& callExpr = *StaticCast<CallExpr*>(be.desugarExpr.get());
+        if (CheckFlowOperandsHaveNamedParam(callExpr)) {
             RecoverToBinaryExpr(be);
             be.SetTy(TypeManager::GetInvalidTy());
-            DiagnoseForBinaryExpr(ctx, be);
-            ds.ReportDiag();
             return false;
         }
-        ds.ReportDiag(); // Report warnings.
-    }
-    if (CheckFlowOperandsHaveNamedParam(beCallExpr)) {
-        // Should recover the desugaredExpr to binaryExpr if failed.
-        RecoverToBinaryExpr(be);
-        be.SetTy(TypeManager::GetInvalidTy());
-        return false;
     }
     be.SetTy(be.desugarExpr->GetTy());
     return true;
+}
+
+bool TypeChecker::TypeCheckerImpl::CheckDesugaredFlowExpr(ASTContext& ctx, Ptr<Ty> target, BinaryExpr& be)
+{
+    // Synthesize the desugared expression, passing target type for constraint propagation.
+    // For PIPELINE, the target helps infer the return type of the pipeline call.
+    // For COMPOSITION (LambdaExpr), the target helps infer the lambda's function type.
+    Ptr<Node> desugarExpr = be.desugarExpr.get();
+    {
+        auto ds = DiagSuppressor(diag);
+        bool failed = target && Ty::IsTyCorrect(target) ?
+            !CheckWithNegCache(ctx, target, desugarExpr) :
+            !Ty::IsTyCorrect(SynthesizeWithNegCache({ctx, SynPos::EXPR_ARG}, desugarExpr));
+        if (!failed) {
+            ds.ReportDiag(); // Report warnings.
+            return true;
+        }
+        (void)ds.GetSuppressedDiag();
+    }
+    RecoverToBinaryExpr(be);
+    be.SetTy(TypeManager::GetInvalidTy());
+    // For COMPOSITION the operands are used as callees, so a named-parameter function
+    // makes the call check fail with a generic diagnostic first. Check the restored
+    // operands here to keep the dedicated flow diagnostic.
+    if (be.op == TokenKind::COMPOSITION) {
+        if (auto operand = FindCompositionOperandWithNamedParam(ctx, be)) {
+            diag.Diagnose(*operand, DiagKind::sema_fail_flow_expr_operand_has_named_param);
+            return false;
+        }
+    }
+    DiagnoseForBinaryExpr(ctx, be);
+    return false;
 }
 
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynFlowExpr(ASTContext& ctx, BinaryExpr& be)

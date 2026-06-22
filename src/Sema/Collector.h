@@ -62,6 +62,7 @@ private:
     void CollectPackageNode(ASTContext& ctx, AST::Package& package, bool buildTrie);
     void CollectFileNode(ASTContext& ctx, AST::File& file, bool buildTrie);
     void CollectAnnotations(ASTContext& ctx, const std::vector<OwnedPtr<AST::Annotation>>& annotations, bool buildTrie);
+    void CollectBinaryExpr(ASTContext& ctx, AST::BinaryExpr& be, bool buildTrie);
     void CollectGeneric(ASTContext& ctx, AST::Decl& outerDecl, const AST::Generic& generic, bool buildTrie);
     void CollectClassDecl(ASTContext& ctx, AST::ClassDecl& cd, bool buildTrie);
     void CollectClassBody(ASTContext& ctx, const AST::ClassBody& cb, bool buildTrie);

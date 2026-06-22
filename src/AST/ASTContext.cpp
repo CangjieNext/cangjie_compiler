@@ -215,6 +215,11 @@ void ASTContext::RemoveDeclByName(const Names& names, const Decl& decl)
     }
 }
 
+void ASTContext::RemoveDeclNames(const Names& names)
+{
+    declMap.erase(names);
+}
+
 bool ASTContext::HasTargetTy(Ptr<const AST::Node> node) const
 {
     auto find = targetTypeMap.find(node);
