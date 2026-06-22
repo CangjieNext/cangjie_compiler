@@ -2296,9 +2296,52 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         ReplaceIdealTy(*node);
         return ty;
     };
-    auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get());
-    auto externReceiver = (ma && ma->baseExpr) ? Ptr<Expr>(ma->baseExpr.get()) : Ptr<Expr>(ce.baseFunc.get());
-    auto getLeftmostReceiver = [](Ptr<Expr> expr) {
+    // A NameReferenceExpr that is the callee of `ce` stores a back-pointer to the call in
+    // `callOrPattern`. Clearing it while synthesizing makes the checker yield the referenced
+    // value's type instead of trying to resolve an overloaded function call. The caller decides
+    // whether diagnostics should be reported during this probe.
+    auto typecheckAsValue = [this, &typecheck](Ptr<Expr> expr, bool suppressDiag) {
+        Ptr<NameReferenceExpr> nre = DynamicCast<NameReferenceExpr*>(expr.get());
+        Ptr<Node> savedCallOrPattern = nre ? nre->callOrPattern : nullptr;
+        if (nre) {
+            nre->callOrPattern = nullptr;
+        }
+        Ptr<Ty> ty = nullptr;
+        if (suppressDiag) {
+            auto ds = DiagSuppressor(diag);
+            ty = typecheck(expr);
+        } else {
+            ty = typecheck(expr);
+        }
+        if (nre) {
+            nre->callOrPattern = savedCallOrPattern;
+        }
+        return ty;
+    };
+    // Probe (without reporting diagnostics) whether `expr` already has, or synthesizes to, an
+    // extern type; returns that type or nullptr.
+    auto externTyOf = [&](Ptr<Expr> expr) -> Ptr<Ty> {
+        auto ty = expr->GetTy();
+        if (!Ty::IsTyCorrect(ty) || !TypeIsExtern(ty)) {
+            ty = typecheckAsValue(expr, /*suppressDiag=*/true);
+        }
+        return Ty::IsTyCorrect(ty) && TypeIsExtern(ty) ? ty : nullptr;
+    };
+    // A bare reference to a non-value declaration (e.g. a function name) can never be an extern
+    // value, so such callees are never desugared here. `nullTargetIsNonValue` controls whether an
+    // unresolved reference is treated as a non-value too.
+    auto isNonValueCalleeRef = [](Ptr<Expr> expr, bool nullTargetIsNonValue) {
+        auto re = DynamicCast<RefExpr*>(expr.get());
+        if (!re) {
+            return false;
+        }
+        if (!re->ref.target) {
+            return nullTargetIsNonValue;
+        }
+        return re->ref.target->astKind != ASTKind::VAR_DECL &&
+            re->ref.target->astKind != ASTKind::FUNC_PARAM;
+    };
+    auto leftmostReceiverOf = [](Ptr<Expr> expr) {
         while (true) {
             if (auto receiverMa = DynamicCast<MemberAccess*>(expr.get())) {
                 if (!receiverMa->baseExpr) {
@@ -2318,67 +2361,43 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         }
         return expr;
     };
-    auto leftmostReceiver = getLeftmostReceiver(externReceiver);
+
+    // Classify the callee. For a member-style callee `e.foo(...)` the relevant extern value is the
+    // receiver `e`; otherwise it is the callee expression itself.
+    auto ma = DynamicCast<MemberAccess*>(ce.baseFunc.get());
+    auto externReceiver = (ma && ma->baseExpr) ? Ptr<Expr>(ma->baseExpr.get()) : Ptr<Expr>(ce.baseFunc.get());
+    auto leftmostReceiver = leftmostReceiverOf(externReceiver);
     if (!leftmostReceiver) {
         return false;
     }
-    if (!ma) {
-        if (auto re = DynamicCast<RefExpr*>(ce.baseFunc.get());
-            re && re->ref.target && re->ref.target->astKind != ASTKind::VAR_DECL &&
-            re->ref.target->astKind != ASTKind::FUNC_PARAM) {
-            return false;
-        }
+    if (!ma && isNonValueCalleeRef(Ptr<Expr>(ce.baseFunc.get()), /*nullTargetIsNonValue=*/false)) {
+        return false;
     }
-    auto typecheckAsValue = [this, &typecheck](Ptr<Expr> expr) {
-        Ptr<Node> oldCallOrPattern = nullptr;
-        Ptr<NameReferenceExpr> nre = DynamicCast<NameReferenceExpr*>(expr.get());
-        if (nre) {
-            oldCallOrPattern = nre->callOrPattern;
-            nre->callOrPattern = nullptr;
-        }
-        auto ds = DiagSuppressor(diag);
-        auto ty = typecheck(expr);
-        if (nre) {
-            nre->callOrPattern = oldCallOrPattern;
-        }
-        return ty;
-    };
-    auto leftmostReceiverTy = leftmostReceiver->GetTy();
-    if (!Ty::IsTyCorrect(leftmostReceiverTy) || !TypeIsExtern(leftmostReceiverTy)) {
-        leftmostReceiverTy = typecheckAsValue(leftmostReceiver);
-    }
+
+    // Two desugaring shapes:
+    //  - receiver chain rooted at an extern value: `e.foo(...)` / `e(...)` (useDirectCallee == false);
+    //  - callee expression that itself evaluates to an extern value, e.g. `hold(x)()` or
+    //    `tool.make()(...)`: call it directly (useDirectCallee == true).
     bool useDirectCallee = false;
     Ptr<Ty> sourceExternTy = nullptr;
-    if (!Ty::IsTyCorrect(leftmostReceiverTy) || !TypeIsExtern(leftmostReceiverTy)) {
-        sourceExternTy = typecheckAsValue(Ptr<Expr>(ce.baseFunc.get()));
-        if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
+    if (externTyOf(leftmostReceiver) == nullptr) {
+        sourceExternTy = externTyOf(Ptr<Expr>(ce.baseFunc.get()));
+        if (sourceExternTy == nullptr) {
             return false;
         }
         externReceiver = Ptr<Expr>(ce.baseFunc.get());
         useDirectCallee = true;
     }
-    if (!useDirectCallee && !ma) {
-        if (auto re = DynamicCast<RefExpr*>(ce.baseFunc.get());
-            re && (!re->ref.target ||
-            (re->ref.target->astKind != ASTKind::VAR_DECL && re->ref.target->astKind != ASTKind::FUNC_PARAM))) {
-            return false;
-        }
+    if (!useDirectCallee && !ma &&
+        isNonValueCalleeRef(Ptr<Expr>(ce.baseFunc.get()), /*nullTargetIsNonValue=*/true)) {
+        return false;
     }
     SetIsNotAlone(*externReceiver);
     if (!useDirectCallee) {
-        Ptr<Node> oldCallOrPattern = nullptr;
-        Ptr<NameReferenceExpr> directReceiverRef = nullptr;
-        if (externReceiver == Ptr<Expr>(ce.baseFunc.get())) {
-            if (auto nre = DynamicCast<NameReferenceExpr*>(externReceiver.get())) {
-                directReceiverRef = nre;
-                oldCallOrPattern = nre->callOrPattern;
-                nre->callOrPattern = nullptr;
-            }
-        }
-        sourceExternTy = typecheck(externReceiver);
-        if (directReceiverRef) {
-            directReceiverRef->callOrPattern = oldCallOrPattern;
-        }
+        // The receiver still needs to be type-checked (with diagnostics) to obtain its extern type.
+        bool calleeIsReceiver = externReceiver == Ptr<Expr>(ce.baseFunc.get());
+        sourceExternTy = calleeIsReceiver ? typecheckAsValue(externReceiver, /*suppressDiag=*/false)
+                                          : typecheck(externReceiver);
         if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
             return false;
         }
