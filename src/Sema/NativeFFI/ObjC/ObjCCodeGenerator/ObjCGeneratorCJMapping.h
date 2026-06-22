@@ -10,8 +10,8 @@
  * This file declares class for Objective-C code generation.
  */
 
-#ifndef CANGJIE_SEMA_OBJC_GENERATOR_H
-#define CANGJIE_SEMA_OBJC_GENERATOR_H
+#ifndef CANGJIE_SEMA_OBJC_GENERATOR_CJMAPPING_H
+#define CANGJIE_SEMA_OBJC_GENERATOR_CJMAPPING_H
 
 #include <fstream>
 #include <string_view>
@@ -21,20 +21,16 @@
 #include "NativeFFI/ObjC/Utils/Handler.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Types.h"
+#include "Utils.h"
 
 namespace Cangjie::Interop::ObjC {
-
-enum class ObjCFunctionType { STATIC, INSTANCE };
-enum class GenerationTarget { HEADER, SOURCE, BOTH };
-enum class FunctionListFormat { DECLARATION, STATIC_REF, CANGJIE_DECL };
-enum class OptionalBlockOp { OPEN, CLOSE, NONE };
 using ArgsList = std::vector<std::pair<std::string, std::string>>;
 
-class ObjCGenerator {
+class ObjCGeneratorCJMapping {
 public:
-    ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
+    ObjCGeneratorCJMapping(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
         const std::string& cjLibOutputPath, InteropType interopType);
-    ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
+    ObjCGeneratorCJMapping(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
         const std::string& cjLibOutputPath, InteropType interopType, Native::FFI::GenericConfigInfo* genericConfig,
         bool isGenericGlueCode);
     void Generate();
@@ -137,4 +133,4 @@ private:
 };
 } // namespace Cangjie::Interop::ObjC
 
-#endif // CANGJIE_SEMA_OBJC_GENERATOR_H
+#endif // CANGJIE_SEMA_OBJC_GENERATOR_CJMAPPING_H
