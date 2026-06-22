@@ -311,6 +311,9 @@ void TypeChecker::TypeCheckerImpl::ResetLambdaForReinfer(ASTContext& ctx, const 
     AddRetTypeNode(*le.funcBody);
     le.funcBody->Clear();
     Walker(le.funcBody->body.get(), [](Ptr<Node> node) {
+        if (Is<GenericParamDecl>(node)) {
+            return VisitAction::SKIP_CHILDREN;
+        }
         if ((Is<Decl>(node) || Is<Expr>(node)) && !Ty::IsInitialTy(node->GetTy())) {
             node->Clear();
         }
@@ -567,6 +570,14 @@ bool TypeChecker::TypeCheckerImpl::ChkLamParamTys(
     for (auto& node : le.funcBody->paramLists[0]->params) {
         CJC_NULLPTR_CHECK(node);
         Ptr<Ty> paramTy = tgtParamTys[i]; // Caller guarantees the 'paramTy' is valid.
+        // If the parameter type is a TyVar, try to extract the concrete type from constraints.
+        // This handles cases like `it |> foo {_ => 0}` where the lambda is passed to a generic function.
+        if (DynamicCast<TyVar*>(paramTy)) {
+            auto concreteTy = typeManager.TryGreedySubst(paramTy);
+            if (concreteTy != paramTy && !concreteTy->IsPlaceholder()) {
+                paramTy = concreteTy;
+            }
+        }
         if (!Check(ctx, paramTy, node.get())) {
             le.SetTy(TypeManager::GetInvalidTy());
             return false;

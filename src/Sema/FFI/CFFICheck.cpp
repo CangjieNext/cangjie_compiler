@@ -258,7 +258,7 @@ void TypeChecker::TypeCheckerImpl::CheckUnsafeInvoke(const CallExpr& ce)
 
 void TypeChecker::TypeCheckerImpl::CheckLegalityOfUnsafeAndInout(Node& root)
 {
-    Walker(&root, [this](auto node) {
+    std::function<VisitAction(Ptr<Node>)> checkUnsafeAndInout = [this, &checkUnsafeAndInout](auto node) {
         CJC_ASSERT(node);
         if (node->astKind == ASTKind::CALL_EXPR) {
             CheckUnsafeInvoke(static_cast<const CallExpr&>(*node));
@@ -271,9 +271,27 @@ void TypeChecker::TypeCheckerImpl::CheckLegalityOfUnsafeAndInout(Node& root)
                 Ty::IsMetCType(*fa.expr->GetTy()) && IsZeroSizedTy(*fa.expr->GetTy())) {
                 diag.DiagnoseRefactor(DiagKindRefactor::sema_inout_modify_cstring_or_zerosized, fa, "zero-sized type");
             }
+        } else if (node->astKind == ASTKind::LAMBDA_EXPR) {
+            auto le = StaticAs<ASTKind::LAMBDA_EXPR>(node);
+            if (le->sourceExpr && le->sourceExpr->astKind == ASTKind::BINARY_EXPR &&
+                StaticAs<ASTKind::BINARY_EXPR>(le->sourceExpr)->op == TokenKind::COMPOSITION && le->funcBody &&
+                le->funcBody->body && !le->funcBody->body->body.empty()) {
+                auto rightCall = DynamicCast<CallExpr*>(le->funcBody->body->body[0].get());
+                if (rightCall && rightCall->baseFunc) {
+                    Walker(rightCall->baseFunc.get(), checkUnsafeAndInout).Walk();
+                }
+                if (rightCall && !rightCall->args.empty()) {
+                    auto leftCall = DynamicCast<CallExpr*>(rightCall->args[0]->expr.get());
+                    if (leftCall && leftCall->baseFunc) {
+                        Walker(leftCall->baseFunc.get(), checkUnsafeAndInout).Walk();
+                    }
+                }
+                return VisitAction::SKIP_CHILDREN;
+            }
         }
         return VisitAction::WALK_CHILDREN;
-    }).Walk();
+    };
+    Walker(&root, checkUnsafeAndInout).Walk();
 }
 
 void TypeChecker::TypeCheckerImpl::UnsafeCheck(const FuncBody& fb)

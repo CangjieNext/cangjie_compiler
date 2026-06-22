@@ -1028,6 +1028,15 @@ void Collector::BuildSymbolTable(ASTContext& ctx, Ptr<Node> node, bool buildTrie
         }
         case ASTKind::BINARY_EXPR: {
             auto be = StaticAs<ASTKind::BINARY_EXPR>(node);
+            if (be->op == TokenKind::COMPOSITION) {
+                scopeManager.InitializeScope(ctx);
+                auto nodeInfo = NodeInfo(*be, "", ctx.currentScopeLevel, ctx.currentScopeName);
+                AddSymbol(ctx, nodeInfo, buildTrie);
+                BuildSymbolTable(ctx, be->leftExpr.get(), buildTrie);
+                BuildSymbolTable(ctx, be->rightExpr.get(), buildTrie);
+                scopeManager.FinalizeScope(ctx);
+                break;
+            }
             auto nodeInfo = NodeInfo(*be, "", ctx.currentScopeLevel, ctx.currentScopeName);
             AddSymbol(ctx, nodeInfo, buildTrie);
             BuildSymbolTable(ctx, be->leftExpr.get(), buildTrie);
