@@ -58,7 +58,7 @@ void RegisterCrashSignalHandler()
     struct sigaction sa;
     sa.sa_sigaction = SignalHandler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_ONSTACK;
+    sa.sa_flags = SA_ONSTACK | SA_SIGINFO;
     for (auto& sig : SIGNALS) {
         if (sigaction(sig, &sa, nullptr) == -1) {
             // Even if sigaction failed, we are still able to continue our compiling.
@@ -75,7 +75,7 @@ void RegisterCrashSignalHandler()
 namespace {
 void SigintHandler(int signum, [[maybe_unused]] siginfo_t* si, [[maybe_unused]] void* arg)
 {
-    Cangjie::TempFileManager::Instance().DeleteTempFiles();
+    Cangjie::TempFileManager::Instance().DeleteTempFilesSignalSafe();
     _exit(signum + 128);  // Add 128 to return the same error code as if the program crashed.
 }
 } // namespace
@@ -86,7 +86,7 @@ void RegisterCrtlCSignalHandler()
     struct sigaction sa;
     sa.sa_sigaction = SigintHandler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_ONSTACK;
+    sa.sa_flags = SA_ONSTACK | SA_SIGINFO;
     (void)sigaction(SIGINT, &sa, nullptr);
 }
 } // namespace Cangjie
