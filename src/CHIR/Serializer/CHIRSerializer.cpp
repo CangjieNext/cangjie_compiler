@@ -28,6 +28,26 @@
 
 using namespace Cangjie::CHIR;
 
+namespace {
+PackageFormat::OverflowStrategy SerializeOverflowStrategy(Cangjie::OverflowStrategy strategy)
+{
+    using Cangjie::OverflowStrategy;
+    switch (strategy) {
+        case OverflowStrategy::NA:
+            return PackageFormat::OverflowStrategy_NA;
+        case OverflowStrategy::WRAPPING:
+            return PackageFormat::OverflowStrategy_WRAPPING;
+        case OverflowStrategy::THROWING:
+            return PackageFormat::OverflowStrategy_THROWING;
+        case OverflowStrategy::SATURATING:
+            return PackageFormat::OverflowStrategy_SATURATING;
+        default:
+            CJC_ABORT();
+            return PackageFormat::OverflowStrategy_NA;
+    }
+}
+} // namespace
+
 void CHIRSerializer::Serialize(const Package& package, const std::string filename, ToCHIR::Phase phase)
 {
     Utils::ProfileRecorder recorder("CHIR", "serialization: " + PhaseToString(phase));
@@ -717,7 +737,7 @@ flatbuffers::Offset<PackageFormat::UnaryExpressionBase> CHIRSerializer::CHIRSeri
     const UnaryExpression& obj)
 {
     auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    auto overflowStrategy = PackageFormat::OverflowStrategy(obj.GetOverflowStrategy());
+    auto overflowStrategy = SerializeOverflowStrategy(obj.GetOverflowStrategy());
     return PackageFormat::CreateUnaryExpressionBase(builder, base, overflowStrategy);
 }
 
@@ -726,7 +746,7 @@ flatbuffers::Offset<PackageFormat::UnaryExpressionBase> CHIRSerializer::CHIRSeri
     const IntOpWithException& obj)
 {
     auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    auto overflowStrategy = PackageFormat::OverflowStrategy(obj.GetOverflowStrategy());
+    auto overflowStrategy = SerializeOverflowStrategy(obj.GetOverflowStrategy());
     return PackageFormat::CreateUnaryExpressionBase(builder, base, overflowStrategy);
 }
 
@@ -735,7 +755,7 @@ flatbuffers::Offset<PackageFormat::BinaryExpressionBase> CHIRSerializer::CHIRSer
     const BinaryExpression& obj)
 {
     auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    auto overflowStrategy = PackageFormat::OverflowStrategy(obj.GetOverflowStrategy());
+    auto overflowStrategy = SerializeOverflowStrategy(obj.GetOverflowStrategy());
     return PackageFormat::CreateBinaryExpressionBase(builder, base, overflowStrategy);
 }
 
@@ -744,7 +764,7 @@ flatbuffers::Offset<PackageFormat::BinaryExpressionBase> CHIRSerializer::CHIRSer
     const IntOpWithException& obj)
 {
     auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    auto overflowStrategy = PackageFormat::OverflowStrategy(obj.GetOverflowStrategy());
+    auto overflowStrategy = SerializeOverflowStrategy(obj.GetOverflowStrategy());
     return PackageFormat::CreateBinaryExpressionBase(builder, base, overflowStrategy);
 }
 
@@ -854,11 +874,9 @@ flatbuffers::Offset<PackageFormat::InvokeBase> CHIRSerializer::CHIRSerializerImp
     auto funcCall = PackageFormat::CreateFuncCallDirect(
         builder, exprBase, instTypeArgs.empty() ? nullptr : &instTypeArgs, thisType);
 
-    // 3. serialize virMethodCtx
-    auto virMethodCtx = Serialize<PackageFormat::FuncSigInfo>(obj.virMethodCtx);
-    
-    // 4. serialize Invoke
-    return PackageFormat::CreateInvokeBase(builder, funcCall, virMethodCtx);
+    // 3. serialize Invoke
+    auto overflowStrategy = SerializeOverflowStrategy(obj.overflowStrategy);
+    return PackageFormat::CreateInvokeBase(builder, funcCall, overflowStrategy);
 }
 
 template <>
@@ -874,11 +892,9 @@ flatbuffers::Offset<PackageFormat::InvokeBase> CHIRSerializer::CHIRSerializerImp
     auto funcCall = PackageFormat::CreateFuncCallDirect(
         builder, exprBase, instTypeArgs.empty() ? nullptr : &instTypeArgs, thisType);
 
-    // 3. serialize virMethodCtx
-    auto virMethodCtx = Serialize<PackageFormat::FuncSigInfo>(obj.virMethodCtx);
-    
-    // 4. serialize InvokeWithException
-    return PackageFormat::CreateInvokeBase(builder, funcCall, virMethodCtx);
+    // 3. serialize InvokeWithException
+    auto overflowStrategy = SerializeOverflowStrategy(obj.overflowStrategy);
+    return PackageFormat::CreateInvokeBase(builder, funcCall, overflowStrategy);
 }
 
 template <>
@@ -893,11 +909,9 @@ flatbuffers::Offset<PackageFormat::InvokeBase> CHIRSerializer::CHIRSerializerImp
     auto funcCall = PackageFormat::CreateFuncCallDirect(
         builder, exprBase, instTypeArgs.empty() ? nullptr : &instTypeArgs, thisType);
 
-    // 3. serialize virMethodCtx
-    auto virMethodCtx = Serialize<PackageFormat::FuncSigInfo>(obj.virMethodCtx);
-    
-    // 4. serialize InvokeStatic
-    return PackageFormat::CreateInvokeBase(builder, funcCall, virMethodCtx);
+    // 3. serialize InvokeStatic
+    auto overflowStrategy = SerializeOverflowStrategy(obj.overflowStrategy);
+    return PackageFormat::CreateInvokeBase(builder, funcCall, overflowStrategy);
 }
 
 template <>
@@ -913,18 +927,16 @@ flatbuffers::Offset<PackageFormat::InvokeBase> CHIRSerializer::CHIRSerializerImp
     auto funcCall = PackageFormat::CreateFuncCallDirect(
         builder, exprBase, instTypeArgs.empty() ? nullptr : &instTypeArgs, thisType);
 
-    // 3. serialize virMethodCtx
-    auto virMethodCtx = Serialize<PackageFormat::FuncSigInfo>(obj.virMethodCtx);
-    
-    // 4. serialize InvokeStaticWithException
-    return PackageFormat::CreateInvokeBase(builder, funcCall, virMethodCtx);
+    // 3. serialize InvokeStaticWithException
+    auto overflowStrategy = SerializeOverflowStrategy(obj.overflowStrategy);
+    return PackageFormat::CreateInvokeBase(builder, funcCall, overflowStrategy);
 }
 
 template <>
 flatbuffers::Offset<PackageFormat::NumericCastBase> CHIRSerializer::CHIRSerializerImpl::Serialize(const TypeCast& obj)
 {
     auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    auto overflowStrategy = PackageFormat::OverflowStrategy(obj.GetOverflowStrategy());
+    auto overflowStrategy = SerializeOverflowStrategy(obj.GetOverflowStrategy());
     return PackageFormat::CreateNumericCastBase(builder, base, overflowStrategy);
 }
 
@@ -933,7 +945,7 @@ flatbuffers::Offset<PackageFormat::NumericCastBase> CHIRSerializer::CHIRSerializ
     const TypeCastWithException& obj)
 {
     auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    auto overflowStrategy = PackageFormat::OverflowStrategy(obj.GetOverflowStrategy());
+    auto overflowStrategy = SerializeOverflowStrategy(obj.GetOverflowStrategy());
     return PackageFormat::CreateNumericCastBase(builder, base, overflowStrategy);
 }
 

@@ -396,11 +396,18 @@ public:
     // Base Information
     // ===--------------------------------------------------------------------===//
     /**
+     * @brief Retrieves the virtual method of this Invoke operation.
+     *
+     * @return The virtual method of this Invoke operation.
+     */
+    Function* GetCallee() const;
+
+    /**
      * @brief Retrieves the method name of this Invoke operation.
      *
      * @return The method name of this Invoke operation.
      */
-    const std::string& GetMethodName() const;
+    std::string GetMethodName() const;
 
     /**
      * @brief Retrieves the method type of this Invoke operation.
@@ -435,7 +442,7 @@ public:
      *
      * @return Virtual method's attribute.
      */
-    AttributeInfo GetVirtualMethodAttr(CHIRBuilder& builder) const;
+    AttributeInfo GetVirtualMethodAttr() const;
 
 protected:
     std::string OperandsToString() const override;
@@ -443,7 +450,7 @@ protected:
     explicit DynamicDispatchWithException(
         ExprKind kind, const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent);
 
-    FuncSigInfo virMethodCtx;
+    Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
 
 private:
     std::vector<VTableSearchRes> GetVirtualMethodInfo(CHIRBuilder& builder) const;
