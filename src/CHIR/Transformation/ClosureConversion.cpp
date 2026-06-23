@@ -60,10 +60,10 @@ bool IsCalleeOfApply(const Expression& user, const Value& op)
         return apply->GetCallee() == &op;
     } else if (auto applyWithException = DynamicCast<const ApplyWithException*>(&user)) {
         return applyWithException->GetCallee() == &op;
-    } else if (auto invoke = DynamicCast<const Invoke*>(&user)) {
-        return invoke->GetObject() == &op;
-    } else if (auto invokeWithException = DynamicCast<const InvokeWithException*>(&user)) {
-        return invokeWithException->GetObject() == &op;
+    } else if (auto invoke = DynamicCast<const DynamicDispatch*>(&user)) {
+        return invoke->GetCallee() == &op;
+    } else if (auto invokeWithException = DynamicCast<const DynamicDispatchWithException*>(&user)) {
+        return invokeWithException->GetCallee() == &op;
     }
     return false;
 }
@@ -2232,15 +2232,14 @@ void ClosureConversion::ConvertApplyToInvoke(Apply& apply)
         autoEnvBaseDef = instParentType->GetClassDef();
     }
     auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
+    auto methods = autoEnvBaseDef->GetMethods();
+    CJC_ASSERT(methods.size() == 1);
     auto invokeInfo = InvokeCallContext {
+        .method = methods[0],
         .caller = callee,
         .funcCallCtx = FuncCallContext {
             .args = apply.GetArgs(),
             .thisType = instParentType
-        },
-        .virMethodCtx = FuncSigInfo {
-            .funcName = methodName,
-            .funcType = originalFuncType
         }
     };
     auto invoke = builder.CreateExpression<Invoke>(
@@ -2265,15 +2264,14 @@ void ClosureConversion::ConvertApplyWithExceptionToInvokeWithException(ApplyWith
         autoEnvBaseDef = instParentType->GetClassDef();
     }
     auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*autoEnvBaseDef);
+    auto methods = autoEnvBaseDef->GetMethods();
+    CJC_ASSERT(methods.size() == 1);
     auto invokeInfo = InvokeCallContext {
+        .method = methods[0],
         .caller = callee,
         .funcCallCtx = FuncCallContext {
             .args = apply.GetArgs(),
             .thisType = instParentType
-        },
-        .virMethodCtx = FuncSigInfo {
-            .funcName = methodName,
-            .funcType = originalFuncType
         }
     };
     auto invoke = builder.CreateExpression<InvokeWithException>(
@@ -2417,6 +2415,8 @@ Function* ClosureConversion::CreateGenericMethodInAutoEnvWrapper(ClassDef& autoE
     auto instParamTypesAndRetType = instCustomType->GetGenericArgs();
     auto instParamTypes = std::vector<Type*>(instParamTypesAndRetType.begin(), instParamTypesAndRetType.end() - 1);
     auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*instCustomType->GetClassDef());
+    auto methods = instCustomType->GetClassDef()->GetMethods();
+    CJC_ASSERT(methods.size() == 1);
 
     auto& funcParams = func->GetParams();
     std::vector<Value*> invokeArgs(funcParams.begin() + 1, funcParams.end());
@@ -2428,14 +2428,11 @@ Function* ClosureConversion::CreateGenericMethodInAutoEnvWrapper(ClassDef& autoE
     auto memberVarRef = CreateAndAppendExpression<Load>(builder, memberVarRefType, memberVarRefRef, entry)->GetResult();
     
     auto invokeInfo = InvokeCallContext {
+        .method = methods[0],
         .caller = memberVarRef,
         .funcCallCtx = FuncCallContext {
             .args = invokeArgs,
             .thisType = instCustomType
-        },
-        .virMethodCtx = FuncSigInfo {
-            .funcName = methodName,
-            .funcType = originalFuncType
         }
     };
     auto invokeRes = CreateAndAppendExpression<Invoke>(builder, retType, invokeInfo, entry)->GetResult();

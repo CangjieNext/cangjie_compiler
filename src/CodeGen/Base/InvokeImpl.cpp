@@ -109,7 +109,7 @@ void GenIRToUnboxResult(IRBuilder2& irBuilder, const CHIRInvokeWrapper& invoke)
     auto& cgCtx = irBuilder.GetCGModule().GetCGContext();
     auto thisValue = **(irBuilder.GetCGModule() | invoke.GetThisParam());
     auto originalNonRefVal = cgCtx.GetOriginalNonRefValOfBoxedValue(thisValue);
-    if (!originalNonRefVal || !invoke.TestVritualMethodAttr(cgCtx.GetCHIRBuilder(), CHIR::Attribute::MUT)) {
+    if (!originalNonRefVal || !invoke.TestVritualMethodAttr(CHIR::Attribute::MUT)) {
         return;
     }
 

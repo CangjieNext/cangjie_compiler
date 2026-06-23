@@ -29,6 +29,7 @@
 namespace Cangjie::CHIR {
 class CHIRBuilder;
 class ExprTypeConverter;
+class Function;
 
 /**
  * @brief Expression major kind.
@@ -746,9 +747,10 @@ struct FuncCallContext {
  * @brief Context for a virtual function calling
  */
 struct InvokeCallContext {
-    Value* caller{nullptr};  // the object in Invoke, or the rtti in InvokeStatic
+    Function* method{nullptr};  // virtual method, like callee in Apply
+    Value* caller{nullptr};       // the object in Invoke, or the rtti in InvokeStatic
     FuncCallContext funcCallCtx;
-    FuncSigInfo virMethodCtx;
+    Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
 };
 
 /**
@@ -893,11 +895,18 @@ public:
     // Base Information
     // ===--------------------------------------------------------------------===//
     /**
+     * @brief Retrieves the virtual method of this Invoke operation.
+     *
+     * @return The virtual method of this Invoke operation.
+     */
+    Function* GetCallee() const;
+
+    /**
      * @brief Retrieves the method name of this Invoke operation.
      *
      * @return The method name of this Invoke operation.
      */
-    const std::string& GetMethodName() const;
+    std::string GetMethodName() const;
 
     /**
      * @brief Retrieves the method type of this Invoke operation.
@@ -933,13 +942,13 @@ public:
      *
      * @return Virtual method's attribute.
      */
-    AttributeInfo GetVirtualMethodAttr(CHIRBuilder& builder) const;
+    AttributeInfo GetVirtualMethodAttr() const;
 
 protected:
     std::string OperandsToString() const override;
     explicit DynamicDispatch(ExprKind kind, const InvokeCallContext& callContext, Block* parent);
 
-    FuncSigInfo virMethodCtx;
+    Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};
 
 private:
     std::vector<VTableSearchRes> GetVirtualMethodInfo(CHIRBuilder& builder) const;

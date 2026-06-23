@@ -854,11 +854,9 @@ flatbuffers::Offset<PackageFormat::InvokeBase> CHIRSerializer::CHIRSerializerImp
     auto funcCall = PackageFormat::CreateFuncCallDirect(
         builder, exprBase, instTypeArgs.empty() ? nullptr : &instTypeArgs, thisType);
 
-    // 3. serialize virMethodCtx
-    auto virMethodCtx = Serialize<PackageFormat::FuncSigInfo>(obj.virMethodCtx);
-    
-    // 4. serialize Invoke
-    return PackageFormat::CreateInvokeBase(builder, funcCall, virMethodCtx);
+    // 3. serialize Invoke
+    auto overflowStrategy = PackageFormat::OverflowStrategy(obj.overflowStrategy);
+    return PackageFormat::CreateInvokeBase(builder, funcCall, overflowStrategy);
 }
 
 template <>
@@ -874,11 +872,9 @@ flatbuffers::Offset<PackageFormat::InvokeBase> CHIRSerializer::CHIRSerializerImp
     auto funcCall = PackageFormat::CreateFuncCallDirect(
         builder, exprBase, instTypeArgs.empty() ? nullptr : &instTypeArgs, thisType);
 
-    // 3. serialize virMethodCtx
-    auto virMethodCtx = Serialize<PackageFormat::FuncSigInfo>(obj.virMethodCtx);
-    
-    // 4. serialize InvokeWithException
-    return PackageFormat::CreateInvokeBase(builder, funcCall, virMethodCtx);
+    // 3. serialize InvokeWithException
+    auto overflowStrategy = PackageFormat::OverflowStrategy(obj.overflowStrategy);
+    return PackageFormat::CreateInvokeBase(builder, funcCall, overflowStrategy);
 }
 
 template <>
@@ -893,11 +889,9 @@ flatbuffers::Offset<PackageFormat::InvokeBase> CHIRSerializer::CHIRSerializerImp
     auto funcCall = PackageFormat::CreateFuncCallDirect(
         builder, exprBase, instTypeArgs.empty() ? nullptr : &instTypeArgs, thisType);
 
-    // 3. serialize virMethodCtx
-    auto virMethodCtx = Serialize<PackageFormat::FuncSigInfo>(obj.virMethodCtx);
-    
-    // 4. serialize InvokeStatic
-    return PackageFormat::CreateInvokeBase(builder, funcCall, virMethodCtx);
+    // 3. serialize InvokeStatic
+    auto overflowStrategy = PackageFormat::OverflowStrategy(obj.overflowStrategy);
+    return PackageFormat::CreateInvokeBase(builder, funcCall, overflowStrategy);
 }
 
 template <>
@@ -913,11 +907,9 @@ flatbuffers::Offset<PackageFormat::InvokeBase> CHIRSerializer::CHIRSerializerImp
     auto funcCall = PackageFormat::CreateFuncCallDirect(
         builder, exprBase, instTypeArgs.empty() ? nullptr : &instTypeArgs, thisType);
 
-    // 3. serialize virMethodCtx
-    auto virMethodCtx = Serialize<PackageFormat::FuncSigInfo>(obj.virMethodCtx);
-    
-    // 4. serialize InvokeStaticWithException
-    return PackageFormat::CreateInvokeBase(builder, funcCall, virMethodCtx);
+    // 3. serialize InvokeStaticWithException
+    auto overflowStrategy = PackageFormat::OverflowStrategy(obj.overflowStrategy);
+    return PackageFormat::CreateInvokeBase(builder, funcCall, overflowStrategy);
 }
 
 template <>
