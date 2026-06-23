@@ -8,6 +8,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
@@ -883,27 +884,35 @@ std::string Apply::AddExtraComment() const
 }
 
 DynamicDispatch::DynamicDispatch(ExprKind kind, const InvokeCallContext& callContext, Block* parent)
-    : FuncCall(kind, callContext.funcCallCtx, parent),
-      virMethodCtx(callContext.virMethodCtx)
+    : FuncCall(kind, callContext.funcCallCtx, parent), overflowStrategy(callContext.overflowStrategy)
 {
-    CJC_ASSERT(!virMethodCtx.funcName.empty());
-    CJC_NULLPTR_CHECK(virMethodCtx.funcType);
+    CJC_NULLPTR_CHECK(callContext.method);
     CJC_NULLPTR_CHECK(callContext.funcCallCtx.thisType);
+    AppendOperand(*callContext.method);
 }
 
-const std::string& DynamicDispatch::GetMethodName() const
+Function* DynamicDispatch::GetCallee() const
 {
-    return virMethodCtx.funcName;
+    return StaticCast<Function*>(operands[0]);
+}
+
+std::string DynamicDispatch::GetMethodName() const
+{
+    auto name = GetCallee()->GetSrcCodeIdentifier();
+    if (overflowStrategy != Cangjie::OverflowStrategy::NA) {
+        return OverflowStrategyPrefix(overflowStrategy) + name;
+    }
+    return name;
 }
 
 FuncType* DynamicDispatch::GetMethodType() const
 {
-    return virMethodCtx.funcType;
+    return GetCallee()->GetFuncType();
 }
 
 const std::vector<GenericType*>& DynamicDispatch::GetGenericTypeParams() const
 {
-    return virMethodCtx.genericTypeParams;
+    return GetCallee()->GetGenericTypeParams();
 }
 
 std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& builder) const
@@ -920,7 +929,7 @@ std::vector<VTableSearchRes> DynamicDispatch::GetVirtualMethodInfo(CHIRBuilder& 
         instParamTypes.erase(instParamTypes.begin());
     }
     auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
-    FuncCallType funcCallType{virMethodCtx.funcName, instFuncType, instantiatedTypeArgs};
+    FuncCallType funcCallType{GetMethodName(), instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);
     CJC_ASSERT(!res.empty());
     return res;
@@ -968,11 +977,16 @@ AttributeInfo DynamicDispatch::GetVirtualMethodAttr(CHIRBuilder& builder) const
 
 std::string DynamicDispatch::OperandsToString() const
 {
-    std::stringstream ss;
-    CJC_NULLPTR_CHECK(thisType);
-    ss << thisType->ToString() << "->" << GetMethodName() << TypeVecToString("<", instantiatedTypeArgs, ">");
-    ss << ", " << GetMethodType()->ToString() << ", " << ValueIdVecToString("", operands, "");
-    return ss.str();
+    std::vector<std::string> res;
+    std::string func;
+    if (thisType != nullptr) {
+        func += thisType->ToString() + "->";
+    }
+    func += GetCallee()->GetIdentifier();
+    func += TypeVecToString("<", instantiatedTypeArgs, ">");
+    res.emplace_back(func);
+    res.emplace_back(ValueIdVecToString("", std::vector<Value*>(operands.begin() + 1, operands.end()), ""));
+    return StringJoin(res, ", ");
 }
 
 // Invoke
@@ -988,7 +1002,7 @@ Invoke::Invoke(const InvokeCallContext& callContext, Block* parent)
 
 Value* Invoke::GetObject() const
 {
-    return operands[0];
+    return operands[1];
 }
 
 void Invoke::UpdateThisType()
@@ -1027,14 +1041,14 @@ void Invoke::ReplaceOperand(Value* oldOperand, Value* newOperand)
 void Invoke::ReplaceOperand(size_t idx, Value* newOperand)
 {
     Expression::ReplaceOperand(idx, newOperand);
-    if (idx == 0) {
+    if (idx == 1) {
         UpdateThisType();
     }
 }
 
 std::vector<Value*> Invoke::GetArgs() const
 {
-    return operands;
+    return {operands.begin() + 1, operands.end()};
 }
 
 InvokeStatic::InvokeStatic(const InvokeCallContext& callContext, Block* parent)
@@ -1049,24 +1063,25 @@ InvokeStatic::InvokeStatic(const InvokeCallContext& callContext, Block* parent)
 
 Value* InvokeStatic::GetRTTIValue() const
 {
-    return operands[0];
+    return operands[1];
 }
 
 std::vector<Value*> InvokeStatic::GetArgs() const
 {
-    return {operands.begin() + 1, operands.end()};
+    return {operands.begin() + 2, operands.end()};
 }
 
 InvokeStatic* InvokeStatic::Clone(CHIRBuilder& builder, Block& parent) const
 {
     auto invokeInfo = InvokeCallContext {
+        .method = GetCallee(),
         .caller = GetRTTIValue(),
         .funcCallCtx = FuncCallContext {
             .args = GetArgs(),
             .instTypeArgs = instantiatedTypeArgs,
             .thisType = thisType
         },
-        .virMethodCtx = virMethodCtx
+        .overflowStrategy = overflowStrategy
     };
     auto newNode = builder.CreateExpression<InvokeStatic>(result->GetType(), invokeInfo, &parent);
     parent.AppendExpression(newNode);
@@ -1746,13 +1761,14 @@ Invoke* Invoke::Clone(CHIRBuilder& builder, Block& parent) const
     auto args = GetArgs();
     args.erase(args.begin());
     auto invokeInfo = InvokeCallContext {
+        .method = GetCallee(),
         .caller = GetObject(),
         .funcCallCtx = FuncCallContext {
             .args = args,
             .instTypeArgs = instantiatedTypeArgs,
             .thisType = thisType
         },
-        .virMethodCtx = virMethodCtx
+        .overflowStrategy = overflowStrategy
     };
     auto newNode = builder.CreateExpression<Invoke>(result->GetType(), invokeInfo, &parent);
     parent.AppendExpression(newNode);

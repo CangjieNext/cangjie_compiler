@@ -142,13 +142,14 @@ void CHIR2BCHIR::TranslateField(Context& ctx, const Expression& expr)
 
 void CHIR2BCHIR::TranslateInvoke(Context& ctx, const Expression& expr)
 {
-    CJC_ASSERT(expr.GetNumOfOperands() > 0);
-    CJC_ASSERT(expr.GetNumOfOperands() <= static_cast<size_t>(Bchir::BYTECODE_CONTENT_MAX));
     auto invokeExpr = StaticCast<const Invoke*>(&expr);
+    auto numberArgs = invokeExpr->GetArgs().size();
+    CJC_ASSERT(numberArgs > 0);
+    CJC_ASSERT(numberArgs <= static_cast<size_t>(Bchir::BYTECODE_CONTENT_MAX));
     auto idx = ctx.def.NextIndex();
     // we dont store mangled name here
     PushOpCodeWithAnnotations<false, true>(
-        ctx, OpCode::INVOKE, expr, static_cast<unsigned>(expr.GetNumOfOperands()), 0u);
+        ctx, OpCode::INVOKE, expr, static_cast<unsigned>(numberArgs), 0u);
     auto methodName = MangleMethodName<true>(invokeExpr->GetMethodName(), *invokeExpr->GetMethodType());
     ctx.def.AddMangledNameAnnotation(idx, methodName);
 }

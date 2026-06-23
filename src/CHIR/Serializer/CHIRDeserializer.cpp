@@ -1026,7 +1026,9 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
     auto base = funcCallBase->base();
     auto owner = GetValue<Block>(base->owner());
     auto operands = GetValue<Value>(base->operands());
-    CJC_ASSERT(!operands.empty());
+    CJC_ASSERT(operands.size() >= 2);
+    auto method = StaticCast<Function*>(operands[0]);
+    operands.erase(operands.begin());
     auto caller = operands[0];
     operands.erase(operands.begin());
     auto resultTy = GetType<Type>(base->resultTy());
@@ -1039,23 +1041,15 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
         normalBlock = StaticCast<Block*>(operands.back());
         operands.pop_back();
     }
-    auto tempTypes = GetType<Type>(obj->virMethodCtx()->genericTypeParams());
-    std::vector<GenericType*> genericTypes;
-    for (auto ty : tempTypes) {
-        genericTypes.emplace_back(Cangjie::StaticCast<GenericType*>(ty));
-    }
     auto invokeInfo = InvokeCallContext {
+        .method = method,
         .caller = caller,
         .funcCallCtx = FuncCallContext {
             .args = operands,
             .instTypeArgs = GetType<Type>(funcCallBase->instantiatedTypeArgs()),
             .thisType = GetType<Type>(funcCallBase->objType())
         },
-        .virMethodCtx = FuncSigInfo {
-            .funcName = obj->virMethodCtx()->funcName()->data(),
-            .funcType = GetType<FuncType>(obj->virMethodCtx()->funcType()),
-            .genericTypeParams = std::move(genericTypes)
-        }
+        .overflowStrategy = OverflowStrategy(obj->overflowStrategy())
     };
     auto isStatic = [](Value& o) {
         if (!o.IsLocalVar()) {
