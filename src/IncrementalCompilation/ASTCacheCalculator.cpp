@@ -123,16 +123,16 @@ private:
         CollectDecl(decl);
     }
 
-    static void CombineDeclHash(size_t& acc, const Decl& decl)
+    static void CombineDeclHash(ASTHasher::hash_type& acc, const Decl& decl)
     {
         acc = ASTHasher::CombineHash(acc, Utils::SipHash::GetHashValue(decl.rawMangleName));
         acc = ASTHasher::CombineHash(acc, ASTHasher::SigHash(decl));
         acc = ASTHasher::CombineHash(acc, ASTHasher::SrcUseHash(decl));
     }
 
-    size_t VisitMemberVariables(const Decl& decl) const
+    ASTHasher::hash_type VisitMemberVariables(const Decl& decl) const
     {
-        size_t hashed{0};
+        ASTHasher::hash_type hashed{0};
         Ptr<const PrimaryCtorDecl> pc{nullptr};
         for (auto member : decl.GetMemberDeclPtrs()) {
             switch (member->astKind) {
@@ -167,18 +167,18 @@ private:
         return hashed;
     }
 
-    size_t VisitEnumConstructors(const EnumDecl& decl) const
+    ASTHasher::hash_type VisitEnumConstructors(const EnumDecl& decl) const
     {
-        size_t hashed = Utils::SipHash::GetHashValue(decl.hasEllipsis);
+        ASTHasher::hash_type hashed = Utils::SipHash::GetHashValue(decl.hasEllipsis);
         for (auto& cons : decl.constructors) {
             CombineDeclHash(hashed, *cons);
         }
         return hashed;
     }
 
-    size_t VirtualHashOfInterface(const Decl& decl) const
+    ASTHasher::hash_type VirtualHashOfInterface(const Decl& decl) const
     {
-        size_t hashed{0};
+        ASTHasher::hash_type hashed{0};
         std::vector<Ptr<const Decl>> allMemberFuncs{};
         for (auto member : decl.GetMemberDeclPtrs()) {
             switch (member->astKind) {

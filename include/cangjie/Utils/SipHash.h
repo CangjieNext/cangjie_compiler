@@ -10,6 +10,7 @@
 #include "cangjie/Utils/CheckUtils.h"
 #include <bitset>
 #include <climits>
+#include <cstdint>
 
 namespace Cangjie::Utils {
 
@@ -44,7 +45,7 @@ private:
     static const uint64_t k0_ = 0xdeadbeef;
     static const uint64_t k1_ = 0x12345678;
 
-    static size_t GetValueLeft(const uint8_t* dataPointer, size_t sizeLeft)
+    static uint64_t GetValueLeft(const uint8_t* dataPointer, size_t sizeLeft)
     {
         uint64_t valueLeft{0};
         static_assert(CHAR_BIT <= 8);

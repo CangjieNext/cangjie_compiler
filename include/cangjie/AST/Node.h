@@ -15,6 +15,7 @@
 #define CANGJIE_AST_NODE_H
 
 #include <bitset>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -945,11 +946,11 @@ struct Generic : public Node {
 };
 
 struct DeclHash {
-    size_t instVar{0}; /**< Hash of type declaration's data layout (instantce member variables). */
-    size_t virt{0};    /**< Hash of member's which allowing dynamic dispatch (virtual functions and properties). */
-    size_t sig{0};     /**< the API of a decl (e.g. name of named parameter). Need recompile user*/
-    size_t srcUse{0};  /**< the ABI (e.g. foreign, @Annotation) and source usage of a decl (e.g. public). */
-    size_t bodyHash{0};    /**< Change of this part does not propagate to users. */
+    uint64_t instVar{0}; /**< Hash of type declaration's data layout (instantce member variables). */
+    uint64_t virt{0};    /**< Hash of member's which allowing dynamic dispatch (virtual functions and properties). */
+    uint64_t sig{0};     /**< the API of a decl (e.g. name of named parameter). Need recompile user*/
+    uint64_t srcUse{0};  /**< the ABI (e.g. foreign, @Annotation) and source usage of a decl (e.g. public). */
+    uint64_t bodyHash{0};    /**< Change of this part does not propagate to users. */
     int gvid{0}; /** GlobalVarOrder. no file here as it is stored in Decl*/
 };
 

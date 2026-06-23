@@ -10,6 +10,7 @@
  */
 #ifndef CANGJIE_ASTHASHER_H
 #define CANGJIE_ASTHASHER_H
+#include <cstdint>
 #include <unordered_map>
 
 #include "cangjie/AST/Node.h"
@@ -21,16 +22,16 @@ public:
     // pass global options to ASTHasher before creating any instance of ASTHasher
     static void Init(const GlobalOptions& op);
 
-    using hash_type = size_t;
+    using hash_type = uint64_t;
     static hash_type HashDeclBody(Ptr<const AST::Decl> decl);
     static hash_type HashDeclSignature(Ptr<const AST::Decl> decl);
     // hash package specs and import specs of package
     static hash_type HashSpecs(const Package& pk);
 
-    static inline size_t CombineHash(const size_t acc, const size_t value)
+    static inline hash_type CombineHash(const hash_type acc, const hash_type value)
     {
         // 6, 2 are specific constants in the hash algorithm.
-        return acc ^ (value + 0x9e3779b9 + (acc << 6) + (acc >> 2));
+        return acc ^ (value + 0x9e3779b9ULL + (acc << 6) + (acc >> 2));
     }
 
     // incr 2.0

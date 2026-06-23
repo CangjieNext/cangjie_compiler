@@ -7,6 +7,7 @@
 #ifndef CANGJIE_COMPILATION_CACHE_H
 #define CANGJIE_COMPILATION_CACHE_H
 
+#include <cstdint>
 #include <list>
 #include <string>
 #include <unordered_map>
@@ -46,9 +47,9 @@ struct GlobalVarIndex {
 
 /// Base class necessary to describe all info of a decl
 struct DeclCacheBase {
-    size_t sigHash{0}; // the API of a decl (e.g. name of named parameter)
-    size_t srcUse{0};   // the ABI (e.g. foreign, @Annotation) and source usage of a decl (e.g. public)
-    size_t bodyHash{0}; // the body hash of a decl that has no impact on API (e.g. @Overflow, line no)
+    uint64_t sigHash{0}; // the API of a decl (e.g. name of named parameter)
+    uint64_t srcUse{0};   // the ABI (e.g. foreign, @Annotation) and source usage of a decl (e.g. public)
+    uint64_t bodyHash{0}; // the body hash of a decl that has no impact on API (e.g. @Overflow, line no)
                         // for type decl, bodyHash records accessibility and constraints
     uint8_t astKind{0};
     // is global var or varwithpattern (excluding var in varwithpattern), or is static var, used in gvid
@@ -66,8 +67,8 @@ struct MemberDeclCache : DeclCacheBase {
 struct TopLevelDeclCache : DeclCacheBase {
     std::vector<RawMangledName> extends;
 
-    size_t instVarHash{0};
-    size_t virtHash{0}; // order of virtual member decls
+    uint64_t instVarHash{0};
+    uint64_t virtHash{0}; // order of virtual member decls
 };
 
 using ASTCache = std::unordered_map<RawMangledName, TopLevelDeclCache>;

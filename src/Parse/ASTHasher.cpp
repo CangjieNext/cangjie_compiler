@@ -241,7 +241,7 @@ struct ASTHasherImpl {
         }
     }
 
-    size_t CombineTwoHashes(const size_t ha)
+    hash_type CombineTwoHashes(const hash_type ha)
     {
         value = ASTHasher::CombineHash(value, ha);
         return value;
