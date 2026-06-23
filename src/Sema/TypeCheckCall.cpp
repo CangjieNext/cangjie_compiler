@@ -2418,77 +2418,20 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         return true;
     }
 
-    auto runtimeTy = sourceExternTy->typeArgs[0];
-    CJC_ASSERT(Ty::IsTyCorrect(runtimeTy));
-    Ptr<Decl> runtimeDecl = nullptr;
-    bool isGenericRuntimeTy = false;
-    if (auto genericsTy = DynamicCast<GenericsTy*>(runtimeTy); genericsTy) {
-        isGenericRuntimeTy = true;
-        runtimeDecl = genericsTy->decl;
-    } else {
-        runtimeDecl = Ty::GetDeclPtrOfTy<Decl>(runtimeTy);
-    }
-    CJC_ASSERT(runtimeDecl);
-
-    auto createRuntimeMember = [&](const std::string& name, Ptr<Ty> retTy) {
-        auto runtimeRef = CreateRefExpr(*runtimeDecl);
-        runtimeRef->isAlone = false;
-        runtimeRef->SetTy(runtimeTy);
-        runtimeRef->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-        CopyBasicInfo(&ce, runtimeRef.get());
-
-        OwnedPtr<MemberAccess> member = nullptr;
-        Ptr<FuncDecl> decl = nullptr;
-        if (isGenericRuntimeTy) {
-            member = MakeOwned<MemberAccess>();
-            member->baseExpr = std::move(runtimeRef);
-            member->field = name;
-            decl = GetRuntimeFuncDecl(name);
-            auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
-            CJC_ASSERT(runtimeInterfaceDecl);
-            CJC_ASSERT(decl);
-            auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
-            member->SetTy(typeManager.GetInstantiatedTy(decl->GetTy(), typeMapping));
-        } else {
-            member = CreateMemberAccess(std::move(runtimeRef), name);
-            decl = DynamicCast<FuncDecl*>(member->target);
-        }
-        member->isAlone = false;
-        member->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-        CopyBasicInfo(&ce, member.get());
-        CJC_ASSERT(decl);
-        member->target = decl;
-        member->targets.emplace_back(decl);
-        return std::make_pair(std::move(member), std::make_pair(decl, retTy));
-    };
-    auto createTypedArg = [](OwnedPtr<Expr> expr) {
-        auto ty = expr->GetTy();
-        auto arg = CreateFuncArg(std::move(expr));
-        arg->SetTy(ty);
-        arg->EnableAttr(Attribute::EXTERN_DESUGAR);
-        CJC_NULLPTR_CHECK(arg->expr);
-        arg->expr->SetTy(ty);
-        arg->expr->EnableAttr(Attribute::EXTERN_DESUGAR);
-        return arg;
-    };
+    auto info = ResolveExternRuntime(sourceExternTy);
 
     OwnedPtr<Expr> callableExtern;
     if (!useDirectCallee && ma && ma->baseExpr) {
         std::vector<OwnedPtr<FuncArg>> memberAccessArgs;
         auto effectiveBase = ma->baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(ma->baseExpr->desugarExpr.get()))
                                                        : ASTCloner::Clone(Ptr(ma->baseExpr.get()));
-        memberAccessArgs.emplace_back(createTypedArg(std::move(effectiveBase)));
-        memberAccessArgs.emplace_back(createTypedArg(CreateStringLit(ma->field.Val())));
+        memberAccessArgs.emplace_back(CreateExternDesugarArg(std::move(effectiveBase)));
+        memberAccessArgs.emplace_back(CreateExternDesugarArg(CreateStringLit(ma->field.Val())));
 
-        auto [memberAccess, memberAccessInfo] = createRuntimeMember("memberAccess", sourceExternTy);
-        auto callTarget = isGenericRuntimeTy ? nullptr : memberAccessInfo.first;
-        callableExtern = CreateCallExpr(
-            std::move(memberAccess), std::move(memberAccessArgs), callTarget, memberAccessInfo.second,
-            CallKind::CALL_DECLARED_FUNCTION);
-        CopyBasicInfo(&ce, callableExtern.get());
-        callableExtern->sourceExpr = &ce;
-        callableExtern->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-        StaticCast<CallExpr*>(callableExtern.get())->resolvedFunction = memberAccessInfo.first;
+        Ptr<FuncDecl> memberAccessDecl = nullptr;
+        auto memberAccess = CreateRuntimeMemberAccess(ce, info, "memberAccess", memberAccessDecl);
+        callableExtern = CreateRuntimeCall(
+            ce, info, std::move(memberAccess), memberAccessDecl, std::move(memberAccessArgs), sourceExternTy);
         callableExtern->SetTy(sourceExternTy);
     } else {
         callableExtern = ce.baseFunc->desugarExpr ? ASTCloner::Clone(Ptr(ce.baseFunc->desugarExpr.get()))
@@ -2514,18 +2457,13 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
     CopyBasicInfo(&ce, argsArray.get());
 
     std::vector<OwnedPtr<FuncArg>> functionCallArgs;
-    functionCallArgs.emplace_back(createTypedArg(std::move(callableExtern)));
-    functionCallArgs.emplace_back(createTypedArg(std::move(argsArray)));
+    functionCallArgs.emplace_back(CreateExternDesugarArg(std::move(callableExtern)));
+    functionCallArgs.emplace_back(CreateExternDesugarArg(std::move(argsArray)));
 
-    auto [functionCall, functionCallInfo] = createRuntimeMember("functionCall", sourceExternTy);
-    auto callTarget = isGenericRuntimeTy ? nullptr : functionCallInfo.first;
-    auto call = CreateCallExpr(
-        std::move(functionCall), std::move(functionCallArgs), callTarget, functionCallInfo.second,
-        CallKind::CALL_DECLARED_FUNCTION);
-    CopyBasicInfo(&ce, call.get());
-    call->sourceExpr = &ce;
-    call->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
-    call->resolvedFunction = functionCallInfo.first;
+    Ptr<FuncDecl> functionCallDecl = nullptr;
+    auto functionCall = CreateRuntimeMemberAccess(ce, info, "functionCall", functionCallDecl);
+    auto call =
+        CreateRuntimeCall(ce, info, std::move(functionCall), functionCallDecl, std::move(functionCallArgs), sourceExternTy);
     ce.SetTy(call->GetTy());
     ce.desugarExpr = std::move(call);
     return true;
