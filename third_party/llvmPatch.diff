@@ -25641,7 +25641,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..b4eaee370 100644
+index b391fe1ea..e386fc6fa 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -25697,7 +25697,7 @@ index b391fe1ea..b4eaee370 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.2.0-alpha.25";
++    g_version_str += "\n  cangjie 1.2.0-alpha.27";
    }
  
    return g_version_str.c_str();
@@ -49639,6 +49639,43 @@ index 4c24d7020..f2a8b4124 100644
      return Builder.CreateCall(Strex, {Lo, Hi, Addr});
    }
  
+diff --git a/llvm/lib/Target/ARM/ARMLoadStoreOptimizer.cpp b/llvm/lib/Target/ARM/ARMLoadStoreOptimizer.cpp
+index 0a38f5633..0d1ab530a 100644
+--- a/llvm/lib/Target/ARM/ARMLoadStoreOptimizer.cpp
++++ b/llvm/lib/Target/ARM/ARMLoadStoreOptimizer.cpp
+@@ -85,6 +85,10 @@ STATISTIC(NumSTRD2STM,  "Number of strd instructions turned back into stm");
+ STATISTIC(NumLDRD2LDR,  "Number of ldrd instructions turned back into ldr's");
+ STATISTIC(NumSTRD2STR,  "Number of strd instructions turned back into str's");
+ 
++namespace llvm {
++extern cl::opt<bool> CJPipeline;
++}
++
+ /// This switch disables formation of double/multi instructions that could
+ /// potentially lead to (new) alignment traps even with CCR.UNALIGN_TRP
+ /// disabled. This can be used to create libraries that are robust even when
+@@ -420,6 +424,12 @@ static bool isLoadSingle(unsigned Opc) {
+   return isi32Load(Opc) || Opc == ARM::VLDRS || Opc == ARM::VLDRD;
+ }
+ 
++static bool isCJArgReg(unsigned Reg) {
++  if (!CJPipeline)
++    return false;
++  return Reg == ARM::R0 || Reg == ARM::R1 || Reg == ARM::R2 || Reg == ARM::R3;
++}
++
+ static unsigned getImmScale(unsigned Opc) {
+   switch (Opc) {
+   default: llvm_unreachable("Unhandled opcode!");
+@@ -694,6 +704,8 @@ MachineInstr *ARMLoadStoreOpt::CreateLoadStoreMulti(
+       if (!isLoadSingle(Opcode))
+         for (const std::pair<unsigned, bool> &R : Regs)
+           LiveRegs.addReg(R.first);
++      if (isCJArgReg(Base))
++        LiveRegs.addReg(Base);
+ 
+       NewBase = findFreeReg(isThumb1 ? ARM::tGPRRegClass : ARM::GPRRegClass);
+       if (NewBase == 0)
 diff --git a/llvm/lib/Target/ARM/ARMSubtarget.cpp b/llvm/lib/Target/ARM/ARMSubtarget.cpp
 index 79244f634..224eaf0eb 100644
 --- a/llvm/lib/Target/ARM/ARMSubtarget.cpp
