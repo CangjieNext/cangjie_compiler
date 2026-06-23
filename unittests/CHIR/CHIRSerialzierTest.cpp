@@ -242,9 +242,6 @@ PackageFormat::OverflowStrategy Serialize(const Cangjie::OverflowStrategy& kind)
         case OverflowStrategy::NA:
             ret = OverflowStrategy_NA;
             break;
-        case OverflowStrategy::CHECKED:
-            ret = OverflowStrategy_CHECKED;
-            break;
         case OverflowStrategy::WRAPPING:
             ret = OverflowStrategy_WRAPPING;
             break;
@@ -1835,14 +1832,10 @@ TEST_F(CHIRSerialzierTest, OverflowStrategyEnum)
 {
     using namespace PackageFormat;
     using Cangjie::OverflowStrategy;
-    OverflowStrategy enumBegin = OverflowStrategy::NA;
-    OverflowStrategy enumEnd = OverflowStrategy::SATURATING; // make sure this is max one we defined
-    EXPECT_EQ(static_cast<size_t>(enumBegin), 0);
-    for (size_t i = static_cast<size_t>(enumBegin); i <= static_cast<size_t>(enumEnd); i++) {
-        EXPECT_EQ(PackageFormat::OverflowStrategy(static_cast<OverflowStrategy>(i)),
-            Serialize(static_cast<OverflowStrategy>(i)))
-            << "cur i: " << i;
-    }
+    EXPECT_EQ(Serialize(OverflowStrategy::NA), OverflowStrategy_NA);
+    EXPECT_EQ(Serialize(OverflowStrategy::WRAPPING), OverflowStrategy_WRAPPING);
+    EXPECT_EQ(Serialize(OverflowStrategy::THROWING), OverflowStrategy_THROWING);
+    EXPECT_EQ(Serialize(OverflowStrategy::SATURATING), OverflowStrategy_SATURATING);
 }
 
 TEST_F(CHIRSerialzierTest, ValueKindEnum)

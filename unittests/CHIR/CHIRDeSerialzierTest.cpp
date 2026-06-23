@@ -238,9 +238,6 @@ Cangjie::OverflowStrategy DeSerialize(const PackageFormat::OverflowStrategy& kin
         case OverflowStrategy_NA:
             ret = OverflowStrategy::NA;
             break;
-        case OverflowStrategy_CHECKED:
-            ret = OverflowStrategy::CHECKED;
-            break;
         case OverflowStrategy_WRAPPING:
             ret = OverflowStrategy::WRAPPING;
             break;
