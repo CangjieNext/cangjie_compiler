@@ -390,6 +390,20 @@ public:
 
     virtual std::vector<Function*> GetDeclareAndExtendMethods(CHIRBuilder& builder) const;
 
+    /**
+     * @brief Retrieves the expected function for a given name and type.
+     *
+     * @param funcName The name of the function.
+     * @param funcType The type of the function.
+     * @param isStatic Indicates whether the function is static.
+     * @param funcInstTypeArgs A vector to store the function instance type arguments.
+     * @param builder The CHIR builder used for building the function.
+     * @param checkAbstractMethod Indicates whether to check for an abstract method.
+     * @return The expected function.
+     */
+    virtual Function* GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
+        std::vector<Type*>& funcInstTypeArgs, CHIRBuilder& builder, bool checkAbstractMethod);
+
     virtual const std::vector<ExtendDef*>& GetExtends(CHIRBuilder* builder = nullptr) const;
 
     virtual std::vector<ClassType*> GetSuperTypesRecusively(CHIRBuilder& builder,
@@ -458,6 +472,8 @@ public:
 
     std::vector<Function*> GetExtendMethods() const;
     std::vector<Function*> GetDeclareAndExtendMethods(CHIRBuilder& builder) const override;
+    Function* GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
+        std::vector<Type*>& funcInstTypeArgs, CHIRBuilder& builder, bool checkAbstractMethod) override;
 
 protected:
     std::vector<ExtendDef*> extends;
@@ -706,7 +722,7 @@ public:
      * @return The expected function.
      */
     Function* GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
-        std::vector<Type*>& funcInstTypeArgs, CHIR::CHIRBuilder& builder, bool checkAbstractMethod);
+        std::vector<Type*>& funcInstTypeArgs, CHIR::CHIRBuilder& builder, bool checkAbstractMethod) override;
 
     /**
      * @brief Retrieves the index of a function in the virtual table.
@@ -1103,6 +1119,8 @@ public:
     bool operator==(const Type& other) const override;
     std::string ToString() const override;
     std::string ToSrcCodeString() const override;
+    Function* GetExpectedFunc(const std::string& funcName, FuncType& funcType, bool isStatic,
+        std::vector<Type*>& funcInstTypeArgs, CHIRBuilder& builder, bool checkAbstractMethod) override;
     std::string GetIdentifier() const
     {
         return identifier;

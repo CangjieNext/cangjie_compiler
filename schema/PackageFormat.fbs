@@ -178,7 +178,6 @@ table NeedCheckCast {
 
 enum OverflowStrategy: uint8 {
   NA,
-  CHECKED,
   WRAPPING,
   THROWING,
   SATURATING,
@@ -1065,7 +1064,7 @@ table ApplyBase {
 
 table InvokeBase {
   base: FuncCall;
-  virMethodCtx: FuncSigInfo;
+  overflowStrategy: OverflowStrategy = NA;
 }
 
 table IntrinsicBase {

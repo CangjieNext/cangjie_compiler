@@ -201,46 +201,32 @@ Value* Translator::TranslateVarRef(const AST::RefExpr& refExpr)
     return varLeftValueBase;
 }
 
-InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& instFuncType, Value& caller,
+InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& instFuncInfo, Value& caller,
     const AST::FuncDecl& callee, const std::vector<Value*>& args, const OverflowStrategy strategy)
 {
     auto tempDecl = typeManager.GetTopOverriddenFuncDecl(&callee);
     const AST::FuncDecl* originalFuncDecl = tempDecl ? tempDecl.get() : &callee;
-    auto originalFuncType = StaticCast<FuncType*>(TranslateType(*originalFuncDecl->GetTy()));
-    if (!originalFuncDecl->TestAttr(AST::Attribute::STATIC)) {
-        auto outerDecl = originalFuncDecl->outerDecl;
-        CJC_NULLPTR_CHECK(outerDecl);
-        auto parentType = GetNominalSymbolTable(*outerDecl)->GetType();
-        parentType = AddRefIfFuncIsMutOrClass(*parentType, *originalFuncDecl, builder);
-        auto paramTypes = originalFuncType->GetParamTypes();
-        paramTypes.insert(paramTypes.begin(), parentType);
-        originalFuncType = builder.GetType<FuncType>(paramTypes, originalFuncType->GetReturnType());
-    }
-    std::vector<GenericType*> originalGenericTypeParams;
-    if (originalFuncDecl->TestAttr(AST::Attribute::GENERIC)) {
-        for (const auto& genericTy : originalFuncDecl->funcBody->generic->typeParameters) {
-            originalGenericTypeParams.emplace_back(StaticCast<GenericType*>(TranslateType(*(genericTy->GetTy()))));
-        }
-    }
     auto funcName = originalFuncDecl->identifier.Val();
-    if (IsOverflowOpCall(*originalFuncDecl)) {
-        funcName = OverflowStrategyPrefix(strategy) + funcName;
+    auto thisType = instFuncInfo.thisType->StripAllRefs();
+    if (thisType->IsThis()) {
+        thisType = GetCurrentFunc()->GetParentCustomTypeDef()->GetType();
     }
+    auto isStatic = originalFuncDecl->TestAttr(AST::Attribute::STATIC);
+    auto instTypeArgs = instFuncInfo.instantiatedTypeArgs;
+    auto instFuncType = builder.GetType<FuncType>(instFuncInfo.instParamTys, instFuncInfo.instRetTy);
+    auto method = thisType->GetExpectedFunc(funcName, *instFuncType, isStatic, instTypeArgs, builder, true);
+    CJC_NULLPTR_CHECK(method);
 
-    auto invokeInfo = InvokeCallContext {
+    return InvokeCallContext {
+        .method = method,
         .caller = &caller,
         .funcCallCtx = FuncCallContext {
             .args = args,
-            .instTypeArgs = instFuncType.instantiatedTypeArgs,
-            .thisType = instFuncType.thisType
+            .instTypeArgs = instFuncInfo.instantiatedTypeArgs,
+            .thisType = instFuncInfo.thisType
         },
-        .virMethodCtx = FuncSigInfo {
-            .funcName = funcName,
-            .funcType = originalFuncType,
-            .genericTypeParams = originalGenericTypeParams
-        }
+        .overflowStrategy = IsOverflowOpCall(*originalFuncDecl) ? strategy : OverflowStrategy::NA
     };
-    return invokeInfo;
 }
 
 Value* Translator::WrapMemberMethodByLambda(
@@ -306,18 +292,10 @@ Value* Translator::WrapMemberMethodByLambda(
             args.insert(args.begin(), TransformThisType(*thisObj, *objExpectedType, *lambda));
         }
         CJC_ASSERT(args.size() == instFuncType.instParamTys.size());
-        std::vector<Type*> instTypeArgs(
-            instFuncType.instantiatedTypeArgs.begin(), instFuncType.instantiatedTypeArgs.end());
         auto callee = GetSymbolTable(funcDecl);
-        auto funcType = builder.GetType<FuncType>(instFuncType.instParamTys, instFuncType.instRetTy);
-        auto wrapperFunc = GetWrapperFuncFromMemberAccess(*instFuncType.instParentCustomTy->StripAllRefs(),
-            callee->GetSrcCodeIdentifier(), *funcType, callee->TestAttr(Attribute::STATIC), instTypeArgs);
-        if (wrapperFunc != nullptr) {
-            callee = wrapperFunc;
-        }
         auto funcCallContext = FuncCallContext {
             .args = args,
-            .instTypeArgs = instTypeArgs,
+            .instTypeArgs = instFuncType.instantiatedTypeArgs,
             .thisType = instFuncType.thisType
         };
         ret = CreateAndAppendExpression<Apply>(

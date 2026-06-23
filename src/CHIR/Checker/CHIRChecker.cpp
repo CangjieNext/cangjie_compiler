@@ -2829,7 +2829,7 @@ void CHIRChecker::OverflowStrategyMustBeValid(
     const OverflowStrategy& ofs, const Expression& expr, const Function& topLevelFunc)
 {
     // we will add `NA` later
-    if (ofs == OverflowStrategy::OVERFLOW_STRATEGY_END) {
+    if (ofs == OverflowStrategy::OVERFLOW_STRATEGY_END || ofs == OverflowStrategy::CHECKED) {
         ErrorInExpr(topLevelFunc, expr, "overflow strategy is invalid.");
     }
 }

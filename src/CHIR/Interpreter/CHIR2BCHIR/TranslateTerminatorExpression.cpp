@@ -85,13 +85,14 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
         case ExprKind::INVOKE_WITH_EXCEPTION: {
             // :: INVOKE_EXC :: number_of_args :: method_name :: idx_when_exception :: LVAR_SET :: lvar_id
             // :: JUMP :: idx_when_normal_return
-            CJC_ASSERT(expr.GetNumOfOperands() > 0);
-            CJC_ASSERT(expr.GetNumOfOperands() <= static_cast<size_t>(Bchir::BYTECODE_CONTENT_MAX));
             auto invoke = StaticCast<const InvokeWithException*>(&expr);
+            auto numberArgs = invoke->GetArgs().size();
+            CJC_ASSERT(numberArgs > 0);
+            CJC_ASSERT(numberArgs <= static_cast<size_t>(Bchir::BYTECODE_CONTENT_MAX));
             auto idx = ctx.def.NextIndex();
             // we dont store mangled name here
             PushOpCodeWithAnnotations<false, true>(
-                ctx, OpCode::INVOKE_EXC, expr, static_cast<unsigned>(expr.GetNumOfOperands()), 0u);
+                ctx, OpCode::INVOKE_EXC, expr, static_cast<unsigned>(numberArgs), 0u);
             auto methodName = MangleMethodName<true>(invoke->GetMethodName(), *invoke->GetMethodType());
             ctx.def.AddMangledNameAnnotation(idx, methodName);
             TranslateTryTerminatorJumps(ctx, *invoke);
