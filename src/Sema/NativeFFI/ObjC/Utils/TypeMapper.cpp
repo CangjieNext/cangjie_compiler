@@ -292,6 +292,10 @@ bool TypeMapper::IsObjCCompatible(const Ty& ty)
             if (ty.IsCString()) {
                 return true;
             }
+        case TypeKind::TYPE_POINTER:
+            if (ty.IsPointer()) { // NOCHECKIN: why?
+                return true;
+            }
         default:
             return false;
     }

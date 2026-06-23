@@ -22,6 +22,7 @@ namespace {
 
 constexpr auto INTEROPLIB_OBJ_C_ID = "ObjCId";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_ID = "NativeObjCId";
+constexpr auto INTEROPLIB_NATIVE_OBJ_C_ID_BOX = "NativeObjCIdBox";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_SEL = "NativeObjCSel";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_SUPER_PTR = "NativeObjCSuperPtr";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_CLASS = "NativeObjCClass";
@@ -161,6 +162,33 @@ Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCIdDecl()
     return decl;
 }
 
+Ptr<StructDecl> InteropLibBridge::GetNativeObjCIdBoxDecl()
+{
+    static auto decl = GetInteropLibDecl<ASTKind::STRUCT_DECL>(INTEROPLIB_NATIVE_OBJ_C_ID_BOX);
+    return decl;
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetNativeObjCIdBoxConstructor()
+{
+    static Ptr<FuncDecl> result = nullptr;
+    if (result) {
+        return result;
+    }
+    auto outer = GetNativeObjCIdBoxDecl();
+    for (auto& member : outer->body->decls) {
+        if (auto funcDecl = DynamicCast<FuncDecl*>(member.get())) {
+            if (funcDecl->TestAttr(Attribute::CONSTRUCTOR)
+                && funcDecl->funcBody
+                && funcDecl->funcBody->paramLists[0]
+                && funcDecl->funcBody->paramLists[0]->params.size() == 0) {
+                result = funcDecl;
+                break;
+            }
+        }
+    }
+    return result;
+}
+
 Ptr<InterfaceDecl> InteropLibBridge::GetObjCIdDecl()
 {
     static auto decl = GetObjCLangDecl<ASTKind::INTERFACE_DECL>(INTEROPLIB_OBJ_C_ID);
@@ -170,6 +198,11 @@ Ptr<InterfaceDecl> InteropLibBridge::GetObjCIdDecl()
 Ptr<Ty> InteropLibBridge::GetNativeObjCIdTy()
 {
     return GetNativeObjCIdDecl()->type->GetTy();
+}
+
+Ptr<Ty> InteropLibBridge::GetNativeObjCIdBoxTy()
+{
+    return GetNativeObjCIdBoxDecl()->GetTy();
 }
 
 Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCSelDecl()

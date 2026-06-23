@@ -108,6 +108,9 @@ void DesugarMirrors::DesugarCtor(InteropContext& ctx, ClassLikeDecl& mirror, Fun
     auto initCall = ctx.factory.CreateAllocInitCall(ctor);
     thisCall->args.emplace_back(CreateFuncArg(std::move(initCall)));
 
+    auto boxCall = ctx.factory.CreateNativeHandleMarker();
+    thisCall->args.emplace_back(CreateFuncArg(std::move(boxCall)));
+
     ctor.constructorCall = ConstructorCall::OTHER_INIT;
     ctor.funcBody->body->body.emplace_back(std::move(thisCall));
 }

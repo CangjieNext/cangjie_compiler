@@ -52,12 +52,24 @@ public:
      */
     Ptr<AST::TypeAliasDecl> GetNativeObjCIdDecl();
 
+    /**
+     * Gets NativeObjCIdBox declaration.
+     * id or Instance Method Pointer type, boxed.
+     */
+    Ptr<AST::StructDecl> GetNativeObjCIdBoxDecl();
+    Ptr<AST::FuncDecl> GetNativeObjCIdBoxConstructor();
+
     Ptr<AST::InterfaceDecl> GetObjCIdDecl();
 
     /**
      * Gets NativeObjCId semantic type.
      */
     Ptr<AST::Ty> GetNativeObjCIdTy();
+
+    /**
+     * Gets NativeObjCIdBox semantic type.
+     */
+    Ptr<AST::Ty> GetNativeObjCIdBoxTy();
 
     /**
      * Gets NativeObjCSel declaration.

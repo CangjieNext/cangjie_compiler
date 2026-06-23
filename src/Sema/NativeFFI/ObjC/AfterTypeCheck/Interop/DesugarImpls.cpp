@@ -101,6 +101,8 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
     if (HasImplSuperClass(impl)) {
         std::vector<OwnedPtr<FuncArg>> args;
         args.push_back(CreateFuncArg(std::move(objCSelf)));
+        auto marker = ctx.factory.CreateNativeHandleMarker();
+        args.push_back(CreateFuncArg(std::move(marker)));
         args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
 
         auto realTarget = ctx.factory.GetGeneratedImplCtor(*GetImplSuperClass(impl), *targetFd);
@@ -138,6 +140,8 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
     CJC_NULLPTR_CHECK(baseCtor);
     auto baseCtorCall = WithinFile(CreateSuperCall(*baseCtor->outerDecl, *baseCtor, baseCtor->GetTy()), curFile);
     baseCtorCall->args.push_back(CreateFuncArg(std::move(withMethodEnv)));
+    auto boxCall = ctx.factory.CreateNativeHandleMarker();
+    baseCtorCall->args.push_back(CreateFuncArg(std::move(boxCall)));
     ce->desugarExpr = std::move(baseCtorCall);
 }
 
@@ -174,6 +178,8 @@ void DesugarThisCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
 
      std::vector<OwnedPtr<FuncArg>> args;
      args.push_back(CreateFuncArg(std::move(objCSelf)));
+     auto marker = ctx.factory.CreateNativeHandleMarker();
+     args.push_back(CreateFuncArg(std::move(marker)));
      args.insert(args.end(), std::make_move_iterator(ce->args.begin()), std::make_move_iterator(ce->args.end()));
 
      auto realTarget = ctx.factory.GetGeneratedImplCtor(impl, *targetFd);

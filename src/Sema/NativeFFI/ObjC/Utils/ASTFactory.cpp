@@ -279,8 +279,8 @@ OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy)
     }
 
     CJC_ASSERT(expr->GetTy()->IsPrimitive() || Ty::IsCStructType(*expr->GetTy()) || expr->GetTy()->IsCFunc() ||
-        expr->GetTy()->IsCString());
-    CJC_ASSERT(wrapTy.IsPrimitive() || Ty::IsCStructType(wrapTy) || wrapTy.IsCFunc() || wrapTy.IsCString());
+        expr->GetTy()->IsCString() || expr->GetTy()->IsPointer());
+    CJC_ASSERT(wrapTy.IsPrimitive() || Ty::IsCStructType(wrapTy) || wrapTy.IsCFunc() || wrapTy.IsCString() || wrapTy.IsPointer());
     return expr;
 }
 
@@ -1338,12 +1338,18 @@ OwnedPtr<FuncDecl> ASTFactory::CreateBaseCtorDecl(ClassDecl& target)
     auto nativeObjCIdTy = bridge.GetNativeObjCIdTy();
     auto param = CreateFuncParam(NATIVE_HANDLE_IDENT, CreateType(nativeObjCIdTy), nullptr, nativeObjCIdTy);
 
+    auto nativeObjCIdBoxTy = bridge.GetNativeObjCIdBoxTy();
+    auto markerParam = CreateFuncParam(NATIVE_HANDLE_MARKER, CreateType(nativeObjCIdBoxTy), nullptr, nativeObjCIdBoxTy);
+
     std::vector<Ptr<Ty>> ctorFuncParamTys;
     ctorFuncParamTys.emplace_back(param->GetTy());
+    ctorFuncParamTys.emplace_back(nativeObjCIdBoxTy);
+
     auto ctorFuncTy = typeManager.GetFunctionTy(std::move(ctorFuncParamTys), target.GetTy());
 
     std::vector<OwnedPtr<FuncParam>> ctorParams;
     ctorParams.emplace_back(std::move(param));
+    ctorParams.emplace_back(std::move(markerParam));
     auto paramList = CreateFuncParamList(std::move(ctorParams));
 
     std::vector<OwnedPtr<Node>> ctorNodes;
@@ -1365,6 +1371,13 @@ OwnedPtr<FuncDecl> ASTFactory::CreateBaseCtorDecl(ClassDecl& target)
     return ctor;
 }
 
+OwnedPtr<CallExpr> ASTFactory::CreateNativeHandleMarker() {
+    auto nativeObjCIdBoxCtor = bridge.GetNativeObjCIdBoxConstructor(); 
+    auto refExpr = CreateRefExpr(*nativeObjCIdBoxCtor);
+    std::vector<OwnedPtr<FuncArg>> nativeObjCIdBoxCtorArgs;
+    return CreateCallExpr(std::move(refExpr), std::move(nativeObjCIdBoxCtorArgs), nativeObjCIdBoxCtor, nativeObjCIdBoxCtor->GetTy(), CallKind::CALL_STRUCT_CREATION);
+}
+
 OwnedPtr<FuncDecl> ASTFactory::CreateImplCtor(FuncDecl& from)
 {
     auto nativeHandleTy = bridge.GetNativeObjCIdTy();
@@ -1373,8 +1386,13 @@ OwnedPtr<FuncDecl> ASTFactory::CreateImplCtor(FuncDecl& from)
 
     auto& implCtorParams = ctor->funcBody->paramLists[0]->params;
 
-    implCtorParams.insert(implCtorParams.begin(),
-        WithinFile(CreateFuncParam(NATIVE_HANDLE_IDENT, CreateType(nativeHandleTy), nullptr, nativeHandleTy), curFile));
+    std::vector<OwnedPtr<FuncParam>> specialParams;
+    specialParams.emplace_back(WithinFile(CreateFuncParam(NATIVE_HANDLE_IDENT, CreateType(nativeHandleTy), nullptr, nativeHandleTy), curFile));
+
+    auto markerTy = bridge.GetNativeObjCIdBoxTy();
+    specialParams.emplace_back(WithinFile(CreateFuncParam(NATIVE_HANDLE_MARKER, CreateType(markerTy), nullptr, markerTy), curFile));
+
+    implCtorParams.insert(implCtorParams.begin(), std::make_move_iterator(specialParams.begin()), std::make_move_iterator(specialParams.end()));
 
     std::vector<Ptr<Ty>> implCtorParamTys;
     std::transform(implCtorParams.begin(), implCtorParams.end(), std::back_inserter(implCtorParamTys),
@@ -1426,11 +1444,11 @@ bool ASTFactory::IsGeneratedBaseCtor(const Decl& decl) const
     // taking first param list probably is not the best idea
     auto& params = paramLists[0]->params;
 
-    if (params.size() != 1) {
+    if (params.size() != 2) {
         return false;
     }
 
-    return params[0]->identifier == NATIVE_HANDLE_IDENT;
+    return params[0]->identifier == NATIVE_HANDLE_IDENT && params[1]->identifier == NATIVE_HANDLE_MARKER;
 }
 
 bool ASTFactory::IsGeneratedCtor(const Decl& decl) const
@@ -1449,11 +1467,11 @@ bool ASTFactory::IsGeneratedCtor(const Decl& decl) const
     // taking first param list probably is not the best idea
     auto& params = paramLists[0]->params;
 
-    if (params.empty()) {
+    if (params.size() < 2) {
         return false;
     }
 
-    return params[0]->identifier == NATIVE_HANDLE_IDENT;
+    return params[0]->identifier == NATIVE_HANDLE_IDENT && params[1]->identifier == NATIVE_HANDLE_MARKER;
 }
 
 bool ASTFactory::IsGeneratedNativeHandleGetter(const Decl& decl) const
@@ -1505,15 +1523,15 @@ Ptr<FuncDecl> ASTFactory::GetGeneratedImplCtor(const Decl& declArg, const FuncDe
             // taking first param list probably is not the best idea
             const auto& fdParams = fdParamLists[0]->params;
 
-            if (originParams.size() + 1 != fdParams.size()) {
+            if (originParams.size() + 2 != fdParams.size()) {
                 continue;
             }
 
             auto matched = true;
-            // assume that first fd param if $obj: NativeObjCId
-            for (size_t i = 1; i < fdParams.size(); ++i) {
+            // assume that first fd param is $obj: NativeObjCId, second is $mrk: NativeObjCMarker
+            for (size_t i = 2; i < fdParams.size(); ++i) {
                 const auto fdParam = fdParams[i].get();
-                const auto originParam = originParams[i - 1].get();
+                const auto originParam = originParams[i - 2].get();
                 if (fdParam->identifier != originParam->identifier || fdParam->GetTy() != originParam->GetTy()) {
                     matched = false;
                     break;

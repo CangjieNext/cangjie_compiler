@@ -110,6 +110,7 @@ public:
     std::set<Ptr<AST::FuncDecl>> GetAllParentCtors(AST::ClassDecl& target) const;
     OwnedPtr<AST::FuncDecl> CreateImplCtor(AST::FuncDecl& from);
     OwnedPtr<AST::FuncDecl> CreateBaseCtorDecl(AST::ClassDecl& target);
+    OwnedPtr<AST::CallExpr> CreateNativeHandleMarker();
     bool IsGeneratedMember(const AST::Decl& decl) const;
     bool IsGeneratedNativeHandleField(const AST::Decl& decl) const;
     bool IsGeneratedGetObjCClassFunction(const AST::Decl& decl) const;
