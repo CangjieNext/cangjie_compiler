@@ -434,19 +434,6 @@ public:
      */
     void CreateAnnoFactoryFuncsForFuncDecl(const AST::FuncDecl& funcDecl, CustomTypeDef* parent);
     
-    /**
-     * @brief Retrieves a wrapper function from a member access.
-     *
-     * @param thisType The type of 'this'.
-     * @param funcName The name of the function.
-     * @param instFuncType The instance function type.
-     * @param isStatic Indicates if the function is static.
-     * @param funcInstTypeArgs The function instance type arguments.
-     * @return A pointer to the wrapper function.
-     */
-    Value* GetWrapperFuncFromMemberAccess(Type& thisType, const std::string funcName,
-        FuncType& instFuncType, bool isStatic, std::vector<Type*>& funcInstTypeArgs);
-    
     void SetCompileTimeValue(bool val)
     {
         isCompileTimeValue = val;
@@ -959,7 +946,7 @@ private:
     Value* WrapMemberMethodByLambda(const AST::FuncDecl& funcDecl, const InstCalleeInfo& instFuncType, Value* thisObj);
     bool IsVirtualFuncCall(
         const CustomTypeDef& obj, const AST::FuncDecl& funcDecl, bool baseExprIsSuper);
-    InvokeCallContext GenerateInvokeCallContext(const InstCalleeInfo& instFuncType, Value& caller,
+    InvokeCallContext GenerateInvokeCallContext(const InstCalleeInfo& instFuncInfo, Value& caller,
         const AST::FuncDecl& callee, const std::vector<Value*>& args,
         const OverflowStrategy strategy = OverflowStrategy::THROWING);
     InstCalleeInfo GetInstCalleeInfoFromVarInit(const AST::RefExpr& expr);

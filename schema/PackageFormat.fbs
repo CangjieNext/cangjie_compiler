@@ -1065,7 +1065,6 @@ table ApplyBase {
 
 table InvokeBase {
   base: FuncCall;
-  virMethodCtx: FuncSigInfo;
 }
 
 table IntrinsicBase {
