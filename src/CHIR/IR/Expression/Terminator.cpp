@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 
+#include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/IR/Expression/Expression.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
@@ -310,21 +311,20 @@ std::string ApplyWithException::OperandsToString() const
 
 inline static void CheckVirFuncInvokeInfo(const InvokeCallContext& callContext)
 {
+    CJC_NULLPTR_CHECK(callContext.method);
     CJC_NULLPTR_CHECK(callContext.caller);
     CJC_NULLPTR_CHECK(callContext.funcCallCtx.thisType);
-    CJC_ASSERT(!callContext.virMethodCtx.funcName.empty());
-    CJC_NULLPTR_CHECK(callContext.virMethodCtx.funcType);
 }
 
 DynamicDispatchWithException::DynamicDispatchWithException(
     ExprKind kind, const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent)
-    : FuncCallWithException(kind, callContext.funcCallCtx, parent),
-      virMethodCtx(callContext.virMethodCtx)
+    : FuncCallWithException(kind, callContext.funcCallCtx, parent), overflowStrategy(callContext.overflowStrategy)
 {
     CJC_NULLPTR_CHECK(sucBlock);
     CJC_NULLPTR_CHECK(errBlock);
     CJC_NULLPTR_CHECK(parent);
     CheckVirFuncInvokeInfo(callContext);
+    AppendOperand(*callContext.method);
     AppendOperand(*callContext.caller);
     for (auto op : callContext.funcCallCtx.args) {
         AppendOperand(*op);
@@ -334,19 +334,28 @@ DynamicDispatchWithException::DynamicDispatchWithException(
     AppendSuccessor(*errBlock);
 }
 
-const std::string& DynamicDispatchWithException::GetMethodName() const
+Function* DynamicDispatchWithException::GetCallee() const
 {
-    return virMethodCtx.funcName;
+    return StaticCast<Function*>(operands[0]);
+}
+
+std::string DynamicDispatchWithException::GetMethodName() const
+{
+    auto name = GetCallee()->GetSrcCodeIdentifier();
+    if (overflowStrategy != Cangjie::OverflowStrategy::NA) {
+        return OverflowStrategyPrefix(overflowStrategy) + name;
+    }
+    return name;
 }
 
 FuncType* DynamicDispatchWithException::GetMethodType() const
 {
-    return virMethodCtx.funcType;
+    return GetCallee()->GetFuncType();
 }
 
 const std::vector<GenericType*>& DynamicDispatchWithException::GetGenericTypeParams() const
 {
-    return virMethodCtx.genericTypeParams;
+    return GetCallee()->GetGenericTypeParams();
 }
 
 std::vector<VTableSearchRes> DynamicDispatchWithException::GetVirtualMethodInfo(CHIRBuilder& builder) const
@@ -363,7 +372,7 @@ std::vector<VTableSearchRes> DynamicDispatchWithException::GetVirtualMethodInfo(
         instParamTypes.erase(instParamTypes.begin());
     }
     auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
-    FuncCallType funcCallType{virMethodCtx.funcName, instFuncType, instantiatedTypeArgs};
+    FuncCallType funcCallType{GetMethodName(), instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);
     CJC_ASSERT(!res.empty());
     return res;
@@ -398,16 +407,9 @@ ClassType* DynamicDispatchWithException::GetInstSrcParentCustomTypeOfMethod(CHIR
     return result;
 }
 
-AttributeInfo DynamicDispatchWithException::GetVirtualMethodAttr(CHIRBuilder& builder) const
+AttributeInfo DynamicDispatchWithException::GetVirtualMethodAttr() const
 {
-    for (auto& r : GetVirtualMethodInfo(builder)) {
-        if (r.offset == GetVirtualMethodOffset()) {
-            CJC_NULLPTR_CHECK(r.instSrcParentType);
-            return r.attr;
-        }
-    }
-    CJC_ABORT();
-    return AttributeInfo{};
+    return GetCallee()->GetAttributeInfo();
 }
 
 InvokeWithException::InvokeWithException(
@@ -418,22 +420,28 @@ InvokeWithException::InvokeWithException(
 
 Value* InvokeWithException::GetObject() const
 {
-    return operands[0];
+    return operands[1];
 }
 
 /** @brief Get the call args of this InvokeWithException operation */
 std::vector<Value*> InvokeWithException::GetArgs() const
 {
-    return {operands.begin(), operands.begin() + static_cast<long>(GetFirstSuccessorIndex())};
+    return {operands.begin() + 1, operands.begin() + static_cast<long>(GetFirstSuccessorIndex())};
 }
 
 std::string DynamicDispatchWithException::OperandsToString() const
 {
-    std::stringstream ss;
-    CJC_NULLPTR_CHECK(thisType);
-    ss << thisType->ToString() << "->" << GetMethodName() << TypeVecToString("<", instantiatedTypeArgs, ">");
-    ss << ", " << GetMethodType()->ToString() << ", " << ValueIdVecToString("", operands, "", true);
-    return ss.str();
+    std::vector<std::string> res;
+    std::string func;
+    if (thisType != nullptr) {
+        func += thisType->ToString() + "->";
+    }
+    func += GetCallee()->GetIdentifier();
+    func += TypeVecToString("<", instantiatedTypeArgs, ">");
+    res.emplace_back(func);
+    auto ops = std::vector<Value*>(operands.begin() + 1, operands.end());
+    res.emplace_back(ValueIdVecToString("", ops, "", true));
+    return StringJoin(res, ", ");
 }
 
 InvokeStaticWithException::InvokeStaticWithException(
@@ -444,12 +452,12 @@ InvokeStaticWithException::InvokeStaticWithException(
 
 Value* InvokeStaticWithException::GetRTTIValue() const
 {
-    return operands[0];
+    return operands[1];
 }
 
 std::vector<Value*> InvokeStaticWithException::GetArgs() const
 {
-    return {operands.begin() + 1, operands.begin() + static_cast<long>(GetFirstSuccessorIndex())};
+    return {operands.begin() + 2, operands.begin() + static_cast<long>(GetFirstSuccessorIndex())};
 }
 
 // IntOpWithException
@@ -794,13 +802,14 @@ InvokeWithException* InvokeWithException::Clone(CHIRBuilder& builder, Block& par
     auto args = GetArgs();
     args.erase(args.begin());
     auto invokeInfo = InvokeCallContext {
+        .method = GetCallee(),
         .caller = GetObject(),
         .funcCallCtx = FuncCallContext {
             .args = args,
             .instTypeArgs = instantiatedTypeArgs,
             .thisType = thisType
         },
-        .virMethodCtx = virMethodCtx
+        .overflowStrategy = overflowStrategy
     };
     InvokeWithException* newNode = builder.CreateExpression<InvokeWithException>(
         result->GetType(), invokeInfo, GetSuccessBlock(), GetErrorBlock(), &parent);
@@ -813,13 +822,14 @@ InvokeStaticWithException* InvokeStaticWithException::Clone(CHIRBuilder& builder
 {
     CJC_NULLPTR_CHECK(result);
     auto invokeInfo = InvokeCallContext {
+        .method = GetCallee(),
         .caller = GetRTTIValue(),
         .funcCallCtx = FuncCallContext {
             .args = GetArgs(),
             .instTypeArgs = instantiatedTypeArgs,
             .thisType = thisType
         },
-        .virMethodCtx = virMethodCtx
+        .overflowStrategy = overflowStrategy
     };
     InvokeStaticWithException* newNode = builder.CreateExpression<InvokeStaticWithException>(
         result->GetType(), invokeInfo, GetSuccessBlock(), GetErrorBlock(), &parent);

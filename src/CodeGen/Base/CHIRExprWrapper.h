@@ -406,12 +406,12 @@ public:
         }
     }
 
-    bool TestVritualMethodAttr(CHIR::CHIRBuilder& builder, CHIR::Attribute attr) const
+    bool TestVritualMethodAttr(CHIR::Attribute attr) const
     {
         if (GetExprKind() == CHIR::ExprKind::INVOKE) {
-            return StaticCast<const CHIR::Invoke&>(chirExpr).GetVirtualMethodAttr(builder).TestAttr(attr);
+            return StaticCast<const CHIR::Invoke&>(chirExpr).GetVirtualMethodAttr().TestAttr(attr);
         } else {
-            return StaticCast<const CHIR::InvokeWithException&>(chirExpr).GetVirtualMethodAttr(builder).TestAttr(attr);
+            return StaticCast<const CHIR::InvokeWithException&>(chirExpr).GetVirtualMethodAttr().TestAttr(attr);
         }
     }
 };

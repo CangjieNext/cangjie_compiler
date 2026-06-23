@@ -70,7 +70,7 @@ void Devirtualization::RunOnFunc(const Function* func, CHIRBuilder& builder)
             return;
         }
         std::vector<Type*> paramTys;
-        for (auto param : invoke->GetOperands()) {
+        for (auto param : invoke->GetArgs()) {
             paramTys.emplace_back(param->GetType());
         }
         // Grab the function from the classMap.
@@ -238,7 +238,7 @@ void Devirtualization::RewriteToApply(CHIRBuilder& builder, std::vector<RewriteI
             }
             realFunc = rewriteInfo->realCallee->Get<WrappedRawMethod>();
         }
-        auto args = invoke->GetOperands();
+        auto args = invoke->GetArgs();
         auto thisDerefType = thisType->StripAllRefs();
         auto instThisType = GetInstParentType(
             *thisDerefType, *realFunc->GetFuncType()->GetParamTypes()[0]->StripAllRefs(), builder);

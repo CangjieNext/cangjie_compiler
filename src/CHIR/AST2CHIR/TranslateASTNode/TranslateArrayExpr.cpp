@@ -232,14 +232,16 @@ Ptr<Value> Translator::InitArrayByCollection(const AST::ArrayExpr& array)
     Type* originalObjType =
         StaticCast<CustomType*>(collection->GetType()->StripAllRefs())->GetCustomTypeDef()->GetType();
     originalObjType = builder.GetType<RefType>(originalObjType);
+    auto funcType = builder.GetType<FuncType>(std::vector<Type*>({originalObjType}), sizeTy);
+    auto collectionType = collection->GetType()->StripAllRefs();
+    std::vector<Type*> emptyInstTypeArgs;
+    auto sizeGetFunc = collectionType->GetExpectedFunc("$sizeget", *funcType, false, emptyInstTypeArgs, builder, true);
+    CJC_NULLPTR_CHECK(sizeGetFunc);
     auto invokeInfo = InvokeCallContext {
+        .method = sizeGetFunc,
         .caller = collection,
         .funcCallCtx = FuncCallContext {
             .thisType = collection->GetType()->StripAllRefs()
-        },
-        .virMethodCtx = FuncSigInfo {
-            .funcName = "$sizeget",
-            .funcType = builder.GetType<FuncType>(std::vector<Type*>({originalObjType}), sizeTy)
         }
     };
     auto loc = TranslateLocation(array);

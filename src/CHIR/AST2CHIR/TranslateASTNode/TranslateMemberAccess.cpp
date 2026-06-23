@@ -293,43 +293,6 @@ Translator::InstCalleeInfo Translator::GetInstCalleeInfoFromMemberAccess(const A
     };
 }
 
-Value* Translator::GetWrapperFuncFromMemberAccess(Type& thisType, const std::string funcName,
-    FuncType& instFuncType, bool isStatic, std::vector<Type*>& funcInstTypeArgs)
-{
-    Function* result = nullptr;
-    if (auto genericType = DynamicCast<GenericType*>(&thisType)) {
-        auto& upperBounds = genericType->GetUpperBounds();
-        CJC_ASSERT(!upperBounds.empty());
-        for (auto upperBound : upperBounds) {
-            ClassType* upperClassType = StaticCast<ClassType*>(StaticCast<RefType*>(upperBound)->GetBaseType());
-            return GetWrapperFuncFromMemberAccess(*upperClassType, funcName, instFuncType, isStatic, funcInstTypeArgs);
-        }
-    } else if (auto customTy = DynamicCast<CustomType*>(&thisType)) {
-        result = customTy->GetExpectedFunc(funcName, instFuncType, true, funcInstTypeArgs, builder, false);
-    } else {
-        std::unordered_map<const GenericType*, Type*> replaceTable;
-        auto classInstArgs = thisType.GetTypeArgs();
-        // extend def
-        for (auto ex : thisType.GetExtends(&builder)) {
-            auto classGenericArgs = ex->GetExtendedType()->GetTypeArgs();
-            CJC_ASSERT(classInstArgs.size() == classGenericArgs.size());
-            for (size_t i = 0; i < classInstArgs.size(); ++i) {
-                if (auto genericTy = DynamicCast<GenericType*>(classGenericArgs[i])) {
-                    replaceTable.emplace(genericTy, classInstArgs[i]);
-                }
-            }
-            auto func =
-                ex->GetExpectedFunc(funcName, instFuncType, true, replaceTable, funcInstTypeArgs, builder, false);
-            if (func != nullptr) {
-                result = func;
-                break;
-            }
-        }
-    }
-
-    return result;
-}
-
 Ptr<Value> Translator::TranslateStaticTargetOrPackageMemberAccess(const AST::MemberAccess& member)
 {
     // 1. classA.foo, pkgA.classB.foo

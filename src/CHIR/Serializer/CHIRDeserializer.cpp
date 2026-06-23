@@ -31,6 +31,26 @@
 
 using namespace Cangjie::CHIR;
 
+namespace {
+Cangjie::OverflowStrategy DeserializeOverflowStrategy(PackageFormat::OverflowStrategy strategy)
+{
+    using Cangjie::OverflowStrategy;
+    switch (strategy) {
+        case PackageFormat::OverflowStrategy_NA:
+            return OverflowStrategy::NA;
+        case PackageFormat::OverflowStrategy_WRAPPING:
+            return OverflowStrategy::WRAPPING;
+        case PackageFormat::OverflowStrategy_THROWING:
+            return OverflowStrategy::THROWING;
+        case PackageFormat::OverflowStrategy_SATURATING:
+            return OverflowStrategy::SATURATING;
+        default:
+            CJC_ABORT();
+            return OverflowStrategy::NA;
+    }
+}
+} // namespace
+
 // explicit specialization
 template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFormat::EnumDef* buffer, EnumDef& obj);
 template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFormat::StructDef* buffer, StructDef& obj);
@@ -781,7 +801,7 @@ Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFor
     auto operand = GetValue<Value>(obj->base()->operands()->Get(0));
     auto parentBlock = GetValue<Block>(obj->base()->owner());
     auto resultTy = GetType<Type>(obj->base()->resultTy());
-    auto ofs = OverflowStrategy(obj->overflowStrategy());
+    auto ofs = DeserializeOverflowStrategy(obj->overflowStrategy());
     auto [kind, isException] = CHIRExprKindToExprKind(obj->base()->kind());
     if (isException) {
         auto normalBlock = StaticCast<Block*>(GetValue<Value>(obj->base()->operands()->Get(1)));
@@ -800,7 +820,7 @@ Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(const PackageFor
     auto rhs = GetValue<Value>(obj->base()->operands()->Get(1));
     auto parentBlock = GetValue<Block>(obj->base()->owner());
     auto resultTy = GetType<Type>(obj->base()->resultTy());
-    auto ofs = OverflowStrategy(obj->overflowStrategy());
+    auto ofs = DeserializeOverflowStrategy(obj->overflowStrategy());
     auto [kind, isException] = CHIRExprKindToExprKind(obj->base()->kind());
     if (isException) {
         auto normalBlock = StaticCast<Block*>(GetValue<Value>(obj->base()->operands()->Get(2)));
@@ -1026,7 +1046,9 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
     auto base = funcCallBase->base();
     auto owner = GetValue<Block>(base->owner());
     auto operands = GetValue<Value>(base->operands());
-    CJC_ASSERT(!operands.empty());
+    CJC_ASSERT(operands.size() >= 2);
+    auto method = StaticCast<Function*>(operands[0]);
+    operands.erase(operands.begin());
     auto caller = operands[0];
     operands.erase(operands.begin());
     auto resultTy = GetType<Type>(base->resultTy());
@@ -1039,23 +1061,15 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
         normalBlock = StaticCast<Block*>(operands.back());
         operands.pop_back();
     }
-    auto tempTypes = GetType<Type>(obj->virMethodCtx()->genericTypeParams());
-    std::vector<GenericType*> genericTypes;
-    for (auto ty : tempTypes) {
-        genericTypes.emplace_back(Cangjie::StaticCast<GenericType*>(ty));
-    }
     auto invokeInfo = InvokeCallContext {
+        .method = method,
         .caller = caller,
         .funcCallCtx = FuncCallContext {
             .args = operands,
             .instTypeArgs = GetType<Type>(funcCallBase->instantiatedTypeArgs()),
             .thisType = GetType<Type>(funcCallBase->objType())
         },
-        .virMethodCtx = FuncSigInfo {
-            .funcName = obj->virMethodCtx()->funcName()->data(),
-            .funcType = GetType<FuncType>(obj->virMethodCtx()->funcType()),
-            .genericTypeParams = std::move(genericTypes)
-        }
+        .overflowStrategy = DeserializeOverflowStrategy(obj->overflowStrategy())
     };
     auto isStatic = [](Value& o) {
         if (!o.IsLocalVar()) {
@@ -1097,7 +1111,7 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
     auto owner = GetValue<Block>(base->owner());
     auto operand = GetValue<Value>(base->operands()->Get(0));
     auto resultTy = GetType<Type>(base->resultTy());
-    auto ofs = OverflowStrategy(obj->overflowStrategy());
+    auto ofs = DeserializeOverflowStrategy(obj->overflowStrategy());
     if (CHIRExprKindToExprKind(base->kind()).second) {
         auto normalBlock = StaticCast<Block*>(GetValue<Value>(base->operands()->Get(1)));
         auto exceptionBlock = StaticCast<Block*>(GetValue<Value>(base->operands()->Get(2)));
