@@ -10,7 +10,7 @@
  * This file implements class for objc code generation.
  */
 
-#include "ObjCGenerator.h"
+#include "ObjCTranspilerCJMapping.h"
 #include "NativeFFI/ObjC/Utils/ASTFactory.h"
 #include "NativeFFI/ObjC/Utils/Common.h"
 #include "NativeFFI/Utils.h"
@@ -100,31 +100,6 @@ template <typename... Args> inline std::string Join(Args&&... args)
     ((ss << args), ...);
     return ss.str();
 }
-
-template <typename T>
-std::string JoinVec(const std::vector<T>& vec, std::function<std::string(const T&)> trans,
-    const std::string& sep = ", ", const std::string& pre = "", const std::string& suf = "", bool force = true)
-{
-    std::stringstream ss;
-    auto it = vec.cbegin();
-    if (it == vec.end()) {
-        if (!force) {
-            return "";
-        }
-        ss << pre << suf;
-        return ss.str();
-    }
-    ss << pre;
-    do {
-        ss << trans(*it);
-        ++it;
-        if (it != vec.cend()) {
-            ss << sep;
-        }
-    } while (it != vec.cend());
-    ss << suf;
-    return ss.str();
-}
 } // namespace
 
 namespace Cangjie::Interop::ObjC {
@@ -143,8 +118,8 @@ std::string ToDecl(ObjCFunctionType fType)
     return INSTANCE_MODIFIER;
 }
 
-ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<Decl> declArg, const std::string& outputFilePath,
-    const std::string& cjLibOutputPath, InteropType interopType)
+ObjCTranspilerCJMapping::ObjCTranspilerCJMapping(InteropContext& ctx, Ptr<Decl> declArg,
+    const std::string& outputFilePath, const std::string& cjLibOutputPath, InteropType interopType)
     : outputFilePath(outputFilePath.empty() ? DEFAULT_OUTPUT_DIR : outputFilePath),
       cjLibOutputPath(cjLibOutputPath),
       decl(declArg),
@@ -156,9 +131,9 @@ ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<Decl> declArg, const std::
     }
 }
 
-ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const std::string& outputFilePath,
-    const std::string& cjLibOutputPath, InteropType interopType, Native::FFI::GenericConfigInfo* genericConfig,
-    bool isGenericGlueCode)
+ObjCTranspilerCJMapping::ObjCTranspilerCJMapping(InteropContext& ctx, Ptr<AST::Decl> declArg,
+    const std::string& outputFilePath, const std::string& cjLibOutputPath, InteropType interopType,
+    Native::FFI::GenericConfigInfo* genericConfig, bool isGenericGlueCode)
     : outputFilePath(outputFilePath.empty() ? DEFAULT_OUTPUT_DIR : outputFilePath),
       cjLibOutputPath(cjLibOutputPath),
       decl(declArg),
@@ -201,10 +176,14 @@ ObjCGenerator::ObjCGenerator(InteropContext& ctx, Ptr<AST::Decl> declArg, const 
             ...
     @end
 */
-void ObjCGenerator::Generate()
+void ObjCTranspilerCJMapping::Generate()
 {
     if (this->interopType == InteropType::CJ_Mapping_Interface) {
         GenerateProtocolDecl();
+        return;
+    }
+
+    if (this->interopType != InteropType::CJ_Mapping) {
         return;
     }
 
@@ -236,7 +215,8 @@ void ObjCGenerator::Generate()
 }
 
 // Filter out elements not currently instantiated.
-bool ObjCGenerator::IsNotThisActualTyFunc(const OwnedPtr<Decl>& declPtr) {
+bool ObjCTranspilerCJMapping::IsNotThisActualTyFunc(const OwnedPtr<Decl>& declPtr)
+{
     if (genericConfig) {
         auto actualOuterDeclName = genericConfig->declInstName;
         if (declPtr->identifier.Val().find(actualOuterDeclName) == std::string::npos) {
@@ -247,17 +227,18 @@ bool ObjCGenerator::IsNotThisActualTyFunc(const OwnedPtr<Decl>& declPtr) {
 }
 
 /* ------------------indent handling-------------------- */
-void ObjCGenerator::OpenBlock()
+void ObjCTranspilerCJMapping::OpenBlock()
 { // needed only in source file generation
     resSource += " {";
     currentBlockIndent += INDENT_SIZE;
 }
-void ObjCGenerator::CloseBlock(bool newLineBefore = false, bool newLineAfter = false)
+void ObjCTranspilerCJMapping::CloseBlock(bool newLineBefore = false, bool newLineAfter = false)
 {
     currentBlockIndent -= INDENT_SIZE;
     resSource += (newLineBefore ? "\n" : "") + std::string(currentBlockIndent, ' ') + "}" + (newLineAfter ? "\n" : "");
 }
-void ObjCGenerator::AddWithIndent(const std::string& s, const GenerationTarget target, const OptionalBlockOp bOp)
+void ObjCTranspilerCJMapping::AddWithIndent(const std::string& s, const GenerationTarget target,
+    const OptionalBlockOp bOp)
 {
     if (target == GenerationTarget::HEADER || target == GenerationTarget::BOTH) {
         res += s;
@@ -279,7 +260,7 @@ void ObjCGenerator::AddWithIndent(const std::string& s, const GenerationTarget t
     }
 }
 
-void ObjCGenerator::AddToPreamble(const std::string& s)
+void ObjCTranspilerCJMapping::AddToPreamble(const std::string& s)
 {
     resPreamble += s + "\n";
 }
@@ -288,7 +269,7 @@ void ObjCGenerator::AddToPreamble(const std::string& s)
 /*
  *   return statement;
  */
-std::string ObjCGenerator::GenerateReturn(const std::string& statement) const
+std::string ObjCTranspilerCJMapping::GenerateReturn(const std::string& statement) const
 {
     return string(RETURN_KEYWORD) + " " + statement + ";";
 }
@@ -296,7 +277,7 @@ std::string ObjCGenerator::GenerateReturn(const std::string& statement) const
 /*
  *   lhs = rhs
  */
-std::string ObjCGenerator::GenerateAssignment(const std::string& lhs, const std::string& rhs) const
+std::string ObjCTranspilerCJMapping::GenerateAssignment(const std::string& lhs, const std::string& rhs) const
 {
     return lhs + " = " + rhs;
 }
@@ -304,7 +285,7 @@ std::string ObjCGenerator::GenerateAssignment(const std::string& lhs, const std:
 /*
  *   if (lhs op rhs)
  */
-std::string ObjCGenerator::GenerateIfStatement(
+std::string ObjCTranspilerCJMapping::GenerateIfStatement(
     const std::string& lhs, const std::string& rhs, const std::string& op) const
 {
     return "if (" + lhs + " " + op + " " + rhs + ")";
@@ -314,7 +295,7 @@ std::string ObjCGenerator::GenerateIfStatement(
  *   objective c style function call
  *   [lhs rhs]
  */
-std::string ObjCGenerator::GenerateObjCCall(const std::string& lhs, const std::string& rhs) const
+std::string ObjCTranspilerCJMapping::GenerateObjCCall(const std::string& lhs, const std::string& rhs) const
 {
     return "[" + lhs + " " + rhs + "]";
 }
@@ -322,7 +303,8 @@ std::string ObjCGenerator::GenerateObjCCall(const std::string& lhs, const std::s
 /*
  *   funcName(arg1, arg2, ... argN)
  */
-std::string ObjCGenerator::GenerateCCall(const std::string& funcName, const std::vector<std::string> args) const
+std::string ObjCTranspilerCJMapping::GenerateCCall(const std::string& funcName,
+    const std::vector<std::string> args) const
 {
     std::string result = funcName + "(";
     if (args.size() != 0) {
@@ -337,7 +319,8 @@ std::string ObjCGenerator::GenerateCCall(const std::string& funcName, const std:
     return result;
 }
 
-std::string ObjCGenerator::WrapperCallByInitForCJMappingReturn(const Ty& retTy, const std::string& nativeCall) const
+std::string ObjCTranspilerCJMapping::WrapperCallByInitForCJMappingReturn(const Ty& retTy,
+    const std::string& nativeCall) const
 {
     std::string retName = isGenericGlueCode ? genericConfig->declInstName : retTy.name;
     std::string result =
@@ -348,7 +331,7 @@ std::string ObjCGenerator::WrapperCallByInitForCJMappingReturn(const Ty& retTy, 
 /*
  *  return CJImpl_ObjC_cjworld_A_goo(arg1, arg2, ... arg3);
  */
-std::string ObjCGenerator::GenerateDefaultFunctionImplementation(
+std::string ObjCTranspilerCJMapping::GenerateDefaultFunctionImplementation(
     const std::string& name, const Ty& retTy, const ArgsList args, [[maybe_unused]] const ObjCFunctionType type)
 {
     std::string result = retTy.IsUnit() ? "" : RETURN_KEYWORD;
@@ -375,7 +358,7 @@ std::string ObjCGenerator::GenerateDefaultFunctionImplementation(
 /*
  *  - (returnType)name
  */
-std::string ObjCGenerator::GenerateFunctionDeclaration(
+std::string ObjCTranspilerCJMapping::GenerateFunctionDeclaration(
     const ObjCFunctionType type, const std::string& returnType, const std::string& name) const
 {
     std::string result = "";
@@ -389,9 +372,9 @@ std::string ObjCGenerator::GenerateFunctionDeclaration(
  * @property (<class>, readwrite, getter=name, <setter=setName:>) type name;
  * Note: <...> are optional.
  */
-std::string ObjCGenerator::GeneratePropertyDeclaration(const ObjCFunctionType staticType, const std::string& mode,
-    const std::string& type, const std::string& name, const std::string& getterName,
-    const std::string& setterName) const
+std::string ObjCTranspilerCJMapping::GeneratePropertyDeclaration(const ObjCFunctionType staticType,
+    const std::string& mode, const std::string& type, const std::string& name,
+    const std::string& getterName, const std::string& setterName) const
 {
     std::string result = "";
     if (name == "" || type == "") {
@@ -426,12 +409,12 @@ std::string ObjCGenerator::GeneratePropertyDeclaration(const ObjCFunctionType st
 /*
  *  #import name
  */
-std::string ObjCGenerator::GenerateImport(const std::string& name)
+std::string ObjCTranspilerCJMapping::GenerateImport(const std::string& name)
 {
     return string(IMPORT_KEYWORD) + " " + name;
 }
 
-void ObjCGenerator::GenerateImports(const std::string& objCDeclName)
+void ObjCTranspilerCJMapping::GenerateImports(const std::string& objCDeclName)
 {
     // Hack: we now only support sequential generation of header file. As we go through types during code generation,
     // and in case of function pointers, typedefs are required to be inserted before type usage. Therefore, we collect
@@ -443,7 +426,7 @@ void ObjCGenerator::GenerateImports(const std::string& objCDeclName)
     AddWithIndent(GenerateImport(STDLIB_IMPORT), GenerationTarget::SOURCE);
 }
 
-void ObjCGenerator::GenerateForwardDeclarations()
+void ObjCTranspilerCJMapping::GenerateForwardDeclarations()
 {
     std::set<Ptr<Decl>> dependencies;
     auto walker = [this, &dependencies](Ptr<Ty> ty, auto& self) -> void {
@@ -485,7 +468,7 @@ void ObjCGenerator::GenerateForwardDeclarations()
     }
 }
 
-void ObjCGenerator::GenerateExternalDeclarations()
+void ObjCTranspilerCJMapping::GenerateExternalDeclarations()
 {
     AddWithIndent(
         GenerateExternalFunctionDeclaration(INIT_CJ_RUNTIME_NAME, BOOL_TYPE, CONST_CHAR_POINTER_TYPE),
@@ -525,7 +508,7 @@ void ObjCGenerator::GenerateExternalDeclarations()
 /*
  *  extern type CJImpl_ObjC_A_funcName(arg1Type, ... argNType);
  */
-std::string ObjCGenerator::GenerateExternalFunctionDeclaration(
+std::string ObjCTranspilerCJMapping::GenerateExternalFunctionDeclaration(
     const std::string& funcName, const std::string& retType, const std::string& argTypes) const
 {
     std::string result = EXTERN_MODIFIER;
@@ -546,7 +529,7 @@ std::string ObjCGenerator::GenerateExternalFunctionDeclaration(
  *  HEADER: @interface A : M <Proto1, Proto2>
  *  SOURCE: @implementation A
  */
-void ObjCGenerator::GenerateInterfaceDecl()
+void ObjCTranspilerCJMapping::GenerateInterfaceDecl()
 {
     std::string resultH = "";
     std::string resultS = "";
@@ -581,9 +564,7 @@ void ObjCGenerator::GenerateInterfaceDecl()
     std::vector<Ptr<Cangjie::AST::InterfaceTy>> interfacesVec;
     std::copy_if (interfaces.begin(), interfaces.end(),
         std::back_inserter(interfacesVec),
-        [](Ptr<Cangjie::AST::InterfaceTy> i) {
-            return !TypeMapper::IsObjCId(*i);
-        }
+        [](Ptr<Cangjie::AST::InterfaceTy> i) { return !TypeMapper::IsObjCId(*i); }
     );
 
     auto collectInterfaceName = [](const Ptr<Cangjie::AST::InterfaceTy>& i) {
@@ -610,7 +591,7 @@ void ObjCGenerator::GenerateInterfaceDecl()
  *  DECLARATION: :(arg1Type)arg1:(arg2Type)arg2:...(argNType)argN
  *  STATIC_REF: (arg1Type, arg2Type, ...argNType)
  */
-std::string ObjCGenerator::GenerateFuncParamLists(const std::vector<OwnedPtr<FuncParamList>>& paramLists,
+std::string ObjCTranspilerCJMapping::GenerateFuncParamLists(const std::vector<OwnedPtr<FuncParamList>>& paramLists,
     const std::vector<std::string>& selectorComponents, FunctionListFormat format, const ObjCFunctionType type,
     bool hasForeignNameAnno)
 {
@@ -667,12 +648,12 @@ std::string ObjCGenerator::GenerateFuncParamLists(const std::vector<OwnedPtr<Fun
     return genParams;
 }
 
-std::string ObjCGenerator::GenerateSetterParamLists(const std::string& type) const
+std::string ObjCTranspilerCJMapping::GenerateSetterParamLists(const std::string& type) const
 {
     return "(" + type + ")" + SETTER_PARAM_NAME;
 }
 
-bool ObjCGenerator::SkipSetterForValueTypeDecl(Decl& declArg) const
+bool ObjCTranspilerCJMapping::SkipSetterForValueTypeDecl(Decl& declArg) const
 {
     return interopType == InteropType::CJ_Mapping && DynamicCast<StructTy*>(declArg.GetTy().get()) != nullptr;
 }
@@ -680,7 +661,7 @@ bool ObjCGenerator::SkipSetterForValueTypeDecl(Decl& declArg) const
 /*
  *  Iterate over properties and generate declarations
  */
-void ObjCGenerator::AddProperties()
+void ObjCTranspilerCJMapping::AddProperties()
 {
     auto registryIdType = CreateType(TypeManager::GetPrimitiveTy(TypeKind::TYPE_INT64));
     AddWithIndent(GeneratePropertyDeclaration(ObjCFunctionType::INSTANCE, READWRITE_MODIFIER, INT64_T,
@@ -736,8 +717,9 @@ void ObjCGenerator::AddProperties()
         if (genericConfig && !varDecl.GetTy()->HasGeneric()) {
             isInnerGenericProp = genericConfig->funcNames.find(name) != genericConfig->funcNames.end();
         }
-        auto implementationName = genericConfig ? ctx.nameGenerator.GetFieldGetterWrapperName(varDecl, &genericConfig->declInstName,
-            isInnerGenericProp) : ctx.nameGenerator.GetFieldGetterWrapperName(varDecl);
+        auto implementationName = genericConfig
+            ? ctx.nameGenerator.GetFieldGetterWrapperName(varDecl, &genericConfig->declInstName, isInnerGenericProp)
+            : ctx.nameGenerator.GetFieldGetterWrapperName(varDecl);
         AddWithIndent(GenerateDefaultFunctionImplementation(implementationName, *varDecl.GetTy(), argList, staticType),
             GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
 
@@ -761,14 +743,14 @@ void ObjCGenerator::AddProperties()
             AddCallCangjieBeforeInitGuard();
         }
         AddWithIndent(GenerateDefaultFunctionImplementation(ctx.nameGenerator.GetFieldSetterWrapperName(varDecl),
-                          *ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT), setterArgsList, staticType),
+            *ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT), setterArgsList, staticType),
             GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
     }
     // Add properties for cj mapping
     AddProperties4CJMapping();
 }
 
-void ObjCGenerator::AddCtorsForCjMappingEnum(AST::EnumDecl& enumDecl)
+void ObjCTranspilerCJMapping::AddCtorsForCjMappingEnum(AST::EnumDecl& enumDecl)
 {
     const std::string enumName = isGenericGlueCode ? genericConfig->declInstName : enumDecl.identifier;
     for (auto& ctor : enumDecl.constructors) {
@@ -777,8 +759,9 @@ void ObjCGenerator::AddCtorsForCjMappingEnum(AST::EnumDecl& enumDecl)
         const ::std::string ctorName = ctor->identifier.Val();
         result += GenerateFunctionDeclaration(ObjCFunctionType::STATIC, retType, ctorName);
         std::vector<std::string> argList;
-        std::string nativeFuncName = genericConfig ? ctx.nameGenerator.GenerateInitCjObjectName(*ctor.get(), &genericConfig->declInstName):
-            ctx.nameGenerator.GenerateInitCjObjectName(*ctor.get());
+        std::string nativeFuncName = genericConfig
+            ? ctx.nameGenerator.GenerateInitCjObjectName(*ctor.get(), &genericConfig->declInstName)
+            : ctx.nameGenerator.GenerateInitCjObjectName(*ctor.get());
 
         if (ctor->astKind == ASTKind::FUNC_DECL) {
             auto funcDecl = As<ASTKind::FUNC_DECL>(ctor.get());
@@ -801,7 +784,7 @@ void ObjCGenerator::AddCtorsForCjMappingEnum(AST::EnumDecl& enumDecl)
 /*
  *  Generate `+ initialize`
  */
-void ObjCGenerator::GenerateInitializer(const string& objCDeclName)
+void ObjCTranspilerCJMapping::GenerateInitializer(const string& objCDeclName)
 {
     AddWithIndent(GenerateFunctionDeclaration(ObjCFunctionType::STATIC, VOID_TYPE, INITIALIZE_FUNC_NAME),
         GenerationTarget::BOTH, OptionalBlockOp::OPEN);
@@ -833,7 +816,7 @@ void ObjCGenerator::GenerateInitializer(const string& objCDeclName)
     CloseBlock(false, true);
 }
 
-void ObjCGenerator::AddConstructors()
+void ObjCTranspilerCJMapping::AddConstructors()
 {
     std::set<std::vector<std::string>> generatedCtors = {};
     for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
@@ -870,8 +853,9 @@ void ObjCGenerator::AddConstructors()
         const auto selectorComponents = ctx.nameGenerator.GetObjCDeclSelectorComponents(funcDecl);
         CJC_ASSERT(selectorComponents.size() > 0);
         // wrapper name MUST use generated ctor
-        const auto cjWrapperName = genericConfig ? ctx.nameGenerator.GenerateInitCjObjectName(*ctor, &genericConfig->declInstName) :
-            ctx.nameGenerator.GenerateInitCjObjectName(*ctor);
+        const auto cjWrapperName = genericConfig
+            ? ctx.nameGenerator.GenerateInitCjObjectName(*ctor, &genericConfig->declInstName)
+            : ctx.nameGenerator.GenerateInitCjObjectName(*ctor);
         const auto staticType = ObjCFunctionType::INSTANCE;
 
         std::string result = "";
@@ -897,9 +881,8 @@ void ObjCGenerator::AddConstructors()
             AddWithIndent(GenerateIfStatement(SELF_NAME, GenerateObjCCall(SUPER_KEYWORD, INIT_FUNC_NAME), EQ_OP),
                 GenerationTarget::SOURCE, OptionalBlockOp::OPEN);
             AddWithIndent(GenerateAssignment(string(SELF_NAME) + "." + SELF_WEAKLINK_NAME,
-                              GenerateCCall(cjWrapperName,
-                                  ConvertParamsListToCallableParamsString(funcDecl.funcBody->paramLists, false))) +
-                    ";",
+                GenerateCCall(cjWrapperName,
+                ConvertParamsListToCallableParamsString(funcDecl.funcBody->paramLists, false))) + ";",
                 GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
         }
 
@@ -944,7 +927,7 @@ void ObjCGenerator::AddConstructors()
     AddConstructors4CJMapping();
 }
 
-void ObjCGenerator::GenerateDeleteObject()
+void ObjCTranspilerCJMapping::GenerateDeleteObject()
 {
     if (GenerateDeleteObject4CJMapping()) {
         return;
@@ -955,14 +938,16 @@ void ObjCGenerator::GenerateDeleteObject()
     }
     AddWithIndent(GenerateFunctionDeclaration(ObjCFunctionType::INSTANCE, VOID_TYPE, DELETE_FUNC_NAME),
         GenerationTarget::BOTH, OptionalBlockOp::OPEN);
-    auto deleteObjName = genericConfig ? ctx.nameGenerator.GenerateDeleteCjObjectName(*decl, &genericConfig->declInstName) :
-        ctx.nameGenerator.GenerateDeleteCjObjectName(*decl);
-    AddWithIndent(GenerateDefaultFunctionImplementation(deleteObjName, *ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT),
-                      {std::pair<std::string, std::string>(INT64_T, string(SELF_NAME) + "." + SELF_WEAKLINK_NAME)}),
+    auto deleteObjName = genericConfig
+        ? ctx.nameGenerator.GenerateDeleteCjObjectName(*decl, &genericConfig->declInstName)
+        : ctx.nameGenerator.GenerateDeleteCjObjectName(*decl);
+    AddWithIndent(GenerateDefaultFunctionImplementation(
+        deleteObjName, *ctx.typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT),
+        { std::pair<std::string, std::string>(INT64_T, string(SELF_NAME) + "." + SELF_WEAKLINK_NAME) }),
         GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
 }
 
-void ObjCGenerator::GenerateDealloc()
+void ObjCTranspilerCJMapping::GenerateDealloc()
 {
     // generate only for root @ObjCImpl classes
     if (auto cd = DynamicCast<ClassDecl>(decl); cd && HasImplSuperClass(*cd)) {
@@ -977,7 +962,7 @@ void ObjCGenerator::GenerateDealloc()
 /*
  *  Iterate over methods and generate default implementations
  */
-void ObjCGenerator::AddMethods()
+void ObjCTranspilerCJMapping::AddMethods()
 {
     for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
         if (ctx.factory.IsGeneratedMember(*declPtr.get())) {
@@ -1027,7 +1012,7 @@ void ObjCGenerator::AddMethods()
     GenerateMethods4CJMapping();
 }
 
-ArgsList ObjCGenerator::ConvertParamsListToArgsList(
+ArgsList ObjCTranspilerCJMapping::ConvertParamsListToArgsList(
     const std::vector<OwnedPtr<FuncParamList>>& paramLists, bool withRegistryId)
 {
     ArgsList result = ArgsList();
@@ -1047,7 +1032,7 @@ ArgsList ObjCGenerator::ConvertParamsListToArgsList(
     return result;
 }
 
-std::vector<std::string> ObjCGenerator::ConvertParamsListToCallableParamsString(
+std::vector<std::string> ObjCTranspilerCJMapping::ConvertParamsListToCallableParamsString(
     std::vector<OwnedPtr<FuncParamList>>& paramLists, bool withSelf) const
 {
     std::vector<string> result = {};
@@ -1066,13 +1051,13 @@ std::vector<std::string> ObjCGenerator::ConvertParamsListToCallableParamsString(
     return result;
 }
 
-void ObjCGenerator::WriteToFile()
+void ObjCTranspilerCJMapping::WriteToFile()
 {
     WriteToHeader();
     WriteToSource();
 }
 
-void ObjCGenerator::WriteToHeader()
+void ObjCTranspilerCJMapping::WriteToHeader()
 {
     auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName) :
         ctx.nameGenerator.GetObjCDeclName(*decl);
@@ -1080,7 +1065,7 @@ void ObjCGenerator::WriteToHeader()
     FileUtil::WriteToFile(headerPath, res);
 }
 
-void ObjCGenerator::WriteToSource()
+void ObjCTranspilerCJMapping::WriteToSource()
 {
     auto objCDeclName = genericConfig ? ctx.nameGenerator.GetObjCDeclName(*decl, &genericConfig->declInstName) :
         ctx.nameGenerator.GetObjCDeclName(*decl);
@@ -1088,19 +1073,19 @@ void ObjCGenerator::WriteToSource()
     FileUtil::WriteToFile(sourcePath, resSource);
 }
 
-void ObjCGenerator::InsertPreambleInHeaderFront()
+void ObjCTranspilerCJMapping::InsertPreambleInHeaderFront()
 {
     res = resPreamble + res;
 }
 
-void ObjCGenerator::InsertTypedefsToPreamble()
+void ObjCTranspilerCJMapping::InsertTypedefsToPreamble()
 {
     for (auto def : typedefs) {
         AddToPreamble(def + ";");
     }
 }
 
-std::string ObjCGenerator::MapCJTypeToObjCType(const Ty& ty)
+std::string ObjCTranspilerCJMapping::MapCJTypeToObjCType(const Ty& ty)
 {
     auto objctype = ctx.typeMapper.Cj2ObjCForObjC(ty);
     if (objctype.decl != "") {
@@ -1109,7 +1094,7 @@ std::string ObjCGenerator::MapCJTypeToObjCType(const Ty& ty)
     return objctype.usage;
 }
 
-std::string ObjCGenerator::MapCJTypeToObjCType(const OwnedPtr<Type>& type)
+std::string ObjCTranspilerCJMapping::MapCJTypeToObjCType(const OwnedPtr<Type>& type)
 {
     if (!type) {
         return UNSUPPORTED_TYPE;
@@ -1124,7 +1109,7 @@ std::string ObjCGenerator::MapCJTypeToObjCType(const OwnedPtr<Type>& type)
     return MapCJTypeToObjCType(*type->GetTy());
 }
 
-std::string ObjCGenerator::MapCJTypeToObjCType(const OwnedPtr<FuncParam>& param)
+std::string ObjCTranspilerCJMapping::MapCJTypeToObjCType(const OwnedPtr<FuncParam>& param)
 {
     if (!param) {
         return UNSUPPORTED_TYPE;
@@ -1140,7 +1125,7 @@ std::string ObjCGenerator::MapCJTypeToObjCType(const OwnedPtr<FuncParam>& param)
     return MapCJTypeToObjCType(*param->type->GetTy());
 }
 
-std::string ObjCGenerator::GenerateArgumentCast(const Ty& retTy, std::string value) const
+std::string ObjCTranspilerCJMapping::GenerateArgumentCast(const Ty& retTy, std::string value) const
 {
     if (ctx.typeMapper.IsObjCCJMapping(retTy)) {
         return value + "." + SELF_WEAKLINK_NAME;
@@ -1159,7 +1144,7 @@ std::string ObjCGenerator::GenerateArgumentCast(const Ty& retTy, std::string val
     return value;
 }
 
-void ObjCGenerator::GenerateProtocolDecl()
+void ObjCTranspilerCJMapping::GenerateProtocolDecl()
 {
     const auto objCDeclName = genericConfig ? genericConfig->declInstName : ctx.nameGenerator.GetObjCDeclName(*decl);
     AddWithIndent(GenerateImport(FOUNDATION_IMPORT), GenerationTarget::HEADER);
@@ -1184,7 +1169,7 @@ void ObjCGenerator::GenerateProtocolDecl()
  * ObjC runtime functions used to calculate override-mask
  *
  */
-void ObjCGenerator::GenerateExternalDeclarations4CJMapping()
+void ObjCTranspilerCJMapping::GenerateExternalDeclarations4CJMapping()
 {
     // If there is no forwarder class, it will not be generated.
     if (interopType != InteropType::CJ_Mapping || ctx.fwdClassMap.empty()) {
@@ -1201,7 +1186,7 @@ extern id objc_getClass(const char *);
 /**
  * Constructors for cjmapping type
  */
-void ObjCGenerator::AddConstructors4CJMapping()
+void ObjCTranspilerCJMapping::AddConstructors4CJMapping()
 {
     if (interopType != InteropType::CJ_Mapping) {
         return;
@@ -1228,7 +1213,7 @@ void ObjCGenerator::AddConstructors4CJMapping()
 /**
  * for open member func.
  */
-void ObjCGenerator::GenerateMethods4CJMapping()
+void ObjCTranspilerCJMapping::GenerateMethods4CJMapping()
 {
     if (interopType != InteropType::CJ_Mapping || !decl->IsOpen()) {
         return;
@@ -1259,7 +1244,7 @@ void ObjCGenerator::GenerateMethods4CJMapping()
  *     }
  * }
  */
-void ObjCGenerator::GenerateMethod4CJMapping(AST::FuncDecl& fn)
+void ObjCTranspilerCJMapping::GenerateMethod4CJMapping(AST::FuncDecl& fn)
 {
     auto fnTy = DynamicCast<FuncTy>(fn.GetTy());
     CJC_ASSERT(fnTy);
@@ -1299,7 +1284,7 @@ void ObjCGenerator::GenerateMethod4CJMapping(AST::FuncDecl& fn)
  *     }
  * }
  */
-void ObjCGenerator::AddConstructor4CJMapping(AST::FuncDecl& ctor)
+void ObjCTranspilerCJMapping::AddConstructor4CJMapping(AST::FuncDecl& ctor)
 {
     std::vector<Ptr<FuncParam>> params;
     auto& fwdParams = ctor.funcBody->paramLists[0]->params;
@@ -1334,7 +1319,7 @@ void ObjCGenerator::AddConstructor4CJMapping(AST::FuncDecl& ctor)
 /**
  * Properties for cjmapping type
  */
-void ObjCGenerator::AddProperties4CJMapping()
+void ObjCTranspilerCJMapping::AddProperties4CJMapping()
 {
     if (interopType != InteropType::CJ_Mapping || !decl->IsOpen()) {
         return;
@@ -1346,7 +1331,7 @@ void ObjCGenerator::AddProperties4CJMapping()
 /**
  * initWithRegistryId
  */
-void ObjCGenerator::AddInitWithRegistryId()
+void ObjCTranspilerCJMapping::AddInitWithRegistryId()
 {
     AddWithIndent(INIT_WITH_REGISTRY_ID_SIGNATURE, GenerationTarget::BOTH, OptionalBlockOp::OPEN);
     AddWithIndent(GenerateIfStatement(SELF_NAME, GenerateObjCCall(SUPER_KEYWORD, INIT_FUNC_NAME), EQ_OP),
@@ -1364,7 +1349,7 @@ void ObjCGenerator::AddInitWithRegistryId()
 /**
  * reinitWithRegistryId
  */
-void ObjCGenerator::AddReinitWithRegistryId()
+void ObjCTranspilerCJMapping::AddReinitWithRegistryId()
 {
     res += Join(REINIT_WITH_REGISTRY_ID_SIGNATURE, ";\n");
     // implementation
@@ -1377,7 +1362,7 @@ void ObjCGenerator::AddReinitWithRegistryId()
 /**
  * - (void)deleteCJObject
  */
-bool ObjCGenerator::GenerateDeleteObject4CJMapping()
+bool ObjCTranspilerCJMapping::GenerateDeleteObject4CJMapping()
 {
     if (interopType != InteropType::CJ_Mapping || !decl->IsOpen()) {
         return false;
@@ -1395,7 +1380,7 @@ bool ObjCGenerator::GenerateDeleteObject4CJMapping()
 /**
  * - (oneway void) release
  */
-void ObjCGenerator::AddRelease()
+void ObjCTranspilerCJMapping::AddRelease()
 {
     auto fwd = ctx.fwdClassMap.at(decl);
     CJC_ASSERT(fwd);
@@ -1425,7 +1410,7 @@ void ObjCGenerator::AddRelease()
 /**
  * - (uint64_t)calcOverrideMask
  */
-void ObjCGenerator::AddCalcMask(const std::vector<Ptr<FuncDecl>>& overrides)
+void ObjCTranspilerCJMapping::AddCalcMask(const std::vector<Ptr<FuncDecl>>& overrides)
 {
     resSource += R"(
 static uint64_t calcMask(Class baseCls, Class selfCls, SEL* methods, int len) {
@@ -1459,20 +1444,20 @@ static uint64_t calcMask(Class baseCls, Class selfCls, SEL* methods, int len) {
     WriteFunc(calcOverrideMaskSig, calcOverrideMaskBody);
 }
 
-void ObjCGenerator::WriteFunc(const std::string& signature, const std::function<void()> body)
+void ObjCTranspilerCJMapping::WriteFunc(const std::string& signature, const std::function<void()> body)
 {
     buffer << std::string(currentBlockIndent, ' ') << signature;
     WriteBlock(body, "", "\n\n", true);
 }
 
-void ObjCGenerator::WriteFor(const std::string& header, const std::function<void()> loop)
+void ObjCTranspilerCJMapping::WriteFor(const std::string& header, const std::function<void()> loop)
 {
     buffer << std::string(currentBlockIndent, ' ') << Join("for (", header, ")");
     WriteBlock(loop);
     buffer << std::endl;
 }
 
-void ObjCGenerator::WriteIf(
+void ObjCTranspilerCJMapping::WriteIf(
     const std::string& cond, const std::function<void()> then, const std::function<void()> other)
 {
     buffer << std::string(currentBlockIndent, ' ') << Join("if (", cond, ")");
@@ -1483,7 +1468,8 @@ void ObjCGenerator::WriteIf(
     buffer << std::endl;
 }
 
-void ObjCGenerator::WriteBlock(std::function<void()> action, const std::string& pre, const std::string& suf, bool flush)
+void ObjCTranspilerCJMapping::WriteBlock(std::function<void()> action, const std::string& pre,
+    const std::string& suf, bool flush)
 {
     buffer << Join(pre, " {") << std::endl;
     currentBlockIndent += INDENT_SIZE;
@@ -1497,21 +1483,21 @@ void ObjCGenerator::WriteBlock(std::function<void()> action, const std::string& 
     }
 }
 
-void ObjCGenerator::WriteSeq(const std::vector<std::string>& statements)
+void ObjCTranspilerCJMapping::WriteSeq(const std::vector<std::string>& statements)
 {
     for (auto& statement : statements) {
         buffer << std::string(currentBlockIndent, ' ') << statement << std::endl;
     }
 }
 
-void ObjCGenerator::AddCallCangjieBeforeInitGuard()
+void ObjCTranspilerCJMapping::AddCallCangjieBeforeInitGuard()
 {
     if (interopType != InteropType::ObjC_Mirror) {
         return;
     }
 
-    AddWithIndent(GenerateIfStatement(std::string(SELF_NAME) + "." + SELF_WEAKLINK_NAME, REGISTRY_ID_UNINIT_VALUE, EQ_CHECK_OP),
-        GenerationTarget::SOURCE, OptionalBlockOp::OPEN);
+    AddWithIndent(GenerateIfStatement(std::string(SELF_NAME) + "." + SELF_WEAKLINK_NAME,
+        REGISTRY_ID_UNINIT_VALUE, EQ_CHECK_OP), GenerationTarget::SOURCE, OptionalBlockOp::OPEN);
     AddWithIndent(FAIL_CALL_CANGJIE_BEFORE_INIT, GenerationTarget::SOURCE, OptionalBlockOp::CLOSE);
 }
 
