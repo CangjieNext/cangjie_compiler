@@ -7,7 +7,7 @@
 file(GLOB SEMA_NATIVE_FFI_OBJ_C_SRC *.cpp)
 add_subdirectory(AfterTypeCheck)
 add_subdirectory(BeforeTypeCheck)
-add_subdirectory(ObjCCodeGenerator)
+add_subdirectory(ObjCCodeTranspiler)
 add_subdirectory(TypeCheck)
 add_subdirectory(Utils)
 set(SEMA_NATIVE_FFI_SRC ${SEMA_NATIVE_FFI_SRC} ${SEMA_NATIVE_FFI_OBJ_C_SRC} PARENT_SCOPE)

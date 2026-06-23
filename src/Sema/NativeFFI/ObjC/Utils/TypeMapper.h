@@ -39,9 +39,10 @@ public:
     }
 
     template <class TypeRep, class ToString>
-    MappedCType BuildFunctionalCType(const AST::FuncTy& funcType, const std::vector<TypeRep>& argTypes, const TypeRep& resultType, bool isBlock, ToString toString) const;
+    static MappedCType BuildFunctionalCType(const AST::FuncTy& funcType, const std::vector<TypeRep>& argTypes,
+        const TypeRep& resultType, bool isBlock, ToString toString);
 
-    MappedCType Cj2ObjCForObjC(const AST::Ty& from) const;
+    static MappedCType Cj2ObjCForObjC(const AST::Ty& from);
     Ptr<AST::Ty> Cj2CType(Ptr<AST::Ty> cjty) const;
     static bool IsObjCCompatible(const AST::Ty& ty);
     static bool IsObjCMirror(const AST::Decl& decl);
@@ -85,7 +86,6 @@ public:
 private:
     InteropLibBridge& bridge;
     TypeManager& typeManager;
-    BaseMangler mangler;
 };
 } // namespace Cangjie::Interop::ObjC
 
