@@ -12,6 +12,7 @@
 
 #include "TypeCheckerImpl.h"
 
+#include "Desugar/DesugarInTypeCheck.h"
 #include "Diags.h"
 #include "ScopeManager.h"
 #include "TypeCheckUtil.h"
@@ -807,6 +808,17 @@ void TypeChecker::TypeCheckerImpl::CheckLegalityOfReference(unsigned id, ASTCont
         }
         if (node->astKind == ASTKind::VAR_DECL) {
             ctx.currentCheckingNodes.push(node);
+        }
+        // Desugar static reference call to member access in C function lambda.
+        // e.g: `let _: CFunc<()->Unit> = { => foo(); }`
+        //   => `let _: CFunc<()->Unit> = { => A.foo(); }`
+        //   where `foo` is a static member function of `A`.
+        // It should be removed after introducing the rule for accessing static member functions with "This".
+        if (auto le = DynamicCast<LambdaExpr>(node); le && le->GetTy()->IsCFunc()) {
+            auto outerDecl = GetCurInheritableDecl(ctx, le->scopeName);
+            if (outerDecl) {
+                DesugarStaticRefCall2MemberAccessInCFuncLam(*le, outerDecl->GetTy());
+            }
         }
         if (auto expr = DynamicCast<Expr*>(node); expr) {
             return CheckLegalityOfReferenceForExpr(id, ctx, expr);
