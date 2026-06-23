@@ -151,7 +151,8 @@ std::string NameGenerator::GetPropSetterWrapperName(const PropDecl& target)
     return WRAPPER_PREFIX + name + WRAPPER_SETTER_SUFFIX;
 }
 
-std::string NameGenerator::GetFieldGetterWrapperName(const VarDecl& target, const std::string* genericActualName, bool isInnerGeneric)
+std::string NameGenerator::GetFieldGetterWrapperName(const VarDeclAbstract& target,
+    const std::string* genericActualName, bool isInnerGeneric)
 {
     CJC_NULLPTR_CHECK(target.outerDecl);
     auto outerDeclName = genericActualName ? GetObjCFullDeclName(*target.outerDecl, genericActualName) :
@@ -167,7 +168,7 @@ std::string NameGenerator::GetFieldGetterWrapperName(const VarDecl& target, cons
     return WRAPPER_PREFIX + name + WRAPPER_GETTER_SUFFIX;
 }
 
-std::string NameGenerator::GetFieldSetterWrapperName(const VarDecl& target)
+std::string NameGenerator::GetFieldSetterWrapperName(const VarDeclAbstract& target)
 {
     CJC_NULLPTR_CHECK(target.outerDecl);
     auto outerDeclName = GetObjCFullDeclName(*target.outerDecl);
