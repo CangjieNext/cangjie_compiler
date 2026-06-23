@@ -54,10 +54,11 @@ void MangleTypedefName(std::string& name)
 
 template <class TypeRep, class ToString>
 MappedCType TypeMapper::BuildFunctionalCType(const FuncTy& funcType, const std::vector<TypeRep>& argTypes,
-    const TypeRep& resultType, bool isBlock, ToString toString) const
+    const TypeRep& resultType, bool isBlock, ToString toString)
 {
     auto typedefNamePrefix = isBlock ? "Block" : "Func";
     auto designator = isBlock ? '^' : '*';
+    static auto mangler = BaseMangler();
     auto mangledName = mangler.MangleType(funcType);
     MangleTypedefName(mangledName);
     mangledName = typedefNamePrefix + mangledName;
@@ -113,7 +114,7 @@ Ptr<Ty> TypeMapper::Cj2CType(Ptr<Ty> cjty) const
     return cjty;
 }
 
-MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from) const
+MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from)
 {
     switch (from.kind) {
         case TypeKind::TYPE_UNIT:
@@ -164,7 +165,7 @@ MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from) const
                     return UNSUPPORTED_TYPE;
                 }
                 return BuildFunctionalCType(*actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, false,
-                    [this](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
+                    [](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
             }
             CJC_ABORT();
             return UNSUPPORTED_TYPE;
@@ -175,7 +176,7 @@ MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from) const
                     return UNSUPPORTED_TYPE;
                 }
                 return BuildFunctionalCType(*actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, true,
-                    [this](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
+                    [](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
             }
             if (IsObjCObjectType(from)) {
                 return from.name + "*";
@@ -201,7 +202,7 @@ MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from) const
             auto actualFuncType = DynamicCast<FuncTy>(&from);
             CJC_NULLPTR_CHECK(actualFuncType);
             return BuildFunctionalCType(*actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, false,
-                [this](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
+                [](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
         }
         case TypeKind::TYPE_ENUM:
             if (IsObjCCJMapping(from)) {
