@@ -539,6 +539,26 @@ private:
      * Desugar APIs during sema check.
      */
     void DesugarArrayCall(ASTContext& ctx, AST::CallExpr& ce);
+    /**
+     * Desugar static reference calls to member access expressions in CFunc lambda.
+     * Ensure that no dynamic dispatch occurs in the CFunc.
+     * For example:
+     * *************** before desugar ****************
+     * interface I {
+     *     static func g(): Unit
+     *     func f() {
+     *         var fn: CFunc<()->Unit> = { => g() }
+     *     }
+     * }
+     * *************** after desugar ****************
+     * interface I {
+     *     static func g(): Unit
+     *     func f() {
+     *         var fn: CFunc<()->Unit> = { => I.g() }
+     *     }
+     * }
+     * */
+    void DesugarStaticRefCall2MemberAccessInCFuncLam(AST::LambdaExpr& le, Ptr<AST::Ty> curTopDeclTy);
     void DesugarPointerCall(ASTContext& ctx, AST::CallExpr& ce);
     /** Desugar 'propDecl' after typecheck but still inside 'Sema' stage. Keep this order for cjLint usage. */
     void DesugarForPropDecl(AST::Node& pkg);
