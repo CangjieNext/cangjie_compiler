@@ -1215,6 +1215,9 @@ std::vector<GenericType*> Function::GetOriginalGenericTypeParams() const
 
 uint64_t Function::GenerateLocalId()
 {
+    if (localId == 24 && identifier == "@_CNat5ArrayIG_E6<init>HCNat10CollectionIG_E") {
+        std::cout << "GenerateLocalId: " << identifier << " " << localId << std::endl;
+    }
     return localId++;
 }
 

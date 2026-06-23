@@ -423,8 +423,22 @@ void CHIR2BCHIR::TranslateExpression(Context& ctx, const Expression& expr)
     }
 
     // translate all operands
-    for (auto value : expr.GetOperands()) {
-        TranslateValue(ctx, *value);
+    // For virtual calls, operands[0] is the abstract method (metadata only). Runtime dispatch uses
+    // GetMethodName()/GetMethodType() and does not push the method Function onto the arg stack.
+    switch (expr.GetExprKind()) {
+        case ExprKind::INVOKE:
+        case ExprKind::INVOKE_WITH_EXCEPTION:
+        case ExprKind::INVOKESTATIC:
+        case ExprKind::INVOKESTATIC_WITH_EXCEPTION:
+            for (size_t i = 1; i < expr.GetNumOfOperands(); ++i) {
+                TranslateValue(ctx, *expr.GetOperand(i));
+            }
+            break;
+        default:
+            for (auto value : expr.GetOperands()) {
+                TranslateValue(ctx, *value);
+            }
+            break;
     }
 
     switch (expr.GetExprMajorKind()) {
