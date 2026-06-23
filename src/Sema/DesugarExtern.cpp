@@ -12,6 +12,7 @@
 
 #include "TypeCheckerImpl.h"
 
+#include "Diags.h"
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
@@ -124,11 +125,8 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
 
     // Make sure everything ends up well
     CJC_ASSERT(info.isGeneric ||
-        (call->resolvedFunction &&
-            call->resolvedFunction->identifier == "toExtern" &&
-            typeManager.IsSubtype(call->GetTy(), targetTy)
-        )
-    );
+        (call->resolvedFunction && call->resolvedFunction->identifier == "toExtern" &&
+            typeManager.IsSubtype(call->GetTy(), targetTy)));
 
     nodeExpr->SetTy(targetTy);
     call->SetTy(targetTy);
@@ -172,8 +170,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
     args.emplace_back(CreateExternDesugarArg(std::move(namedExpr)));
     args.emplace_back(CreateExternDesugarArg(CreateStringLit(ma.field.Val())));
 
-    auto call =
-        CreateRuntimeCall(ma, info, std::move(memberAccess), memberAccessDecl, std::move(args), sourceExternTy);
+    auto call = CreateRuntimeCall(ma, info, std::move(memberAccess), memberAccessDecl, std::move(args), sourceExternTy);
     CJC_ASSERT(info.isGeneric ||
         (call->resolvedFunction && call->resolvedFunction->identifier == "memberAccess" &&
             typeManager.IsSubtype(call->GetTy(), sourceExternTy)));
@@ -322,9 +319,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
     if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
         return false;
     }
-    if (!std::all_of(se->indexExprs.cbegin(), se->indexExprs.cend(), [](auto& indexExpr) {
-        return indexExpr && Ty::IsTyCorrect(indexExpr->GetTy());
-    })) {
+    if (!std::all_of(se->indexExprs.cbegin(), se->indexExprs.cend(),
+            [](auto& indexExpr) { return indexExpr && Ty::IsTyCorrect(indexExpr->GetTy()); })) {
         ae.SetTy(TypeManager::GetInvalidTy());
         return true;
     }
@@ -438,8 +434,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         if (!re->ref.target) {
             return nullTargetIsNonValue;
         }
-        return re->ref.target->astKind != ASTKind::VAR_DECL &&
-            re->ref.target->astKind != ASTKind::FUNC_PARAM;
+        return re->ref.target->astKind != ASTKind::VAR_DECL && re->ref.target->astKind != ASTKind::FUNC_PARAM;
     };
     auto leftmostReceiverOf = [](Ptr<Expr> expr) {
         while (true) {
@@ -488,16 +483,15 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         externReceiver = Ptr<Expr>(ce.baseFunc.get());
         useDirectCallee = true;
     }
-    if (!useDirectCallee && !ma &&
-        isNonValueCalleeRef(Ptr<Expr>(ce.baseFunc.get()), /*nullTargetIsNonValue=*/true)) {
+    if (!useDirectCallee && !ma && isNonValueCalleeRef(Ptr<Expr>(ce.baseFunc.get()), /*nullTargetIsNonValue=*/true)) {
         return false;
     }
     SetIsNotAlone(*externReceiver);
     if (!useDirectCallee) {
         // The receiver still needs to be type-checked (with diagnostics) to obtain its extern type.
         bool calleeIsReceiver = externReceiver == Ptr<Expr>(ce.baseFunc.get());
-        sourceExternTy = calleeIsReceiver ? typecheckAsValue(externReceiver, /*suppressDiag=*/false)
-                                          : typecheck(externReceiver);
+        sourceExternTy =
+            calleeIsReceiver ? typecheckAsValue(externReceiver, /*suppressDiag=*/false) : typecheck(externReceiver);
         if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
             return false;
         }
@@ -562,8 +556,8 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
 
     Ptr<FuncDecl> functionCallDecl = nullptr;
     auto functionCall = CreateRuntimeMemberAccess(ce, info, "functionCall", functionCallDecl);
-    auto call =
-        CreateRuntimeCall(ce, info, std::move(functionCall), functionCallDecl, std::move(functionCallArgs), sourceExternTy);
+    auto call = CreateRuntimeCall(
+        ce, info, std::move(functionCall), functionCallDecl, std::move(functionCallArgs), sourceExternTy);
     ce.SetTy(call->GetTy());
     ce.desugarExpr = std::move(call);
     return true;
@@ -668,8 +662,7 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::CreateRuntimeCall(const Expr& s
     OwnedPtr<MemberAccess> member, Ptr<FuncDecl> decl, std::vector<OwnedPtr<FuncArg>> args, Ptr<Ty> retTy)
 {
     auto callTarget = info.isGeneric ? nullptr : decl;
-    auto call =
-        CreateCallExpr(std::move(member), std::move(args), callTarget, retTy, CallKind::CALL_DECLARED_FUNCTION);
+    auto call = CreateCallExpr(std::move(member), std::move(args), callTarget, retTy, CallKind::CALL_DECLARED_FUNCTION);
     CopyBasicInfo(&srcNode, call.get());
     call->sourceExpr = const_cast<Expr*>(&srcNode);
     call->EnableAttr(Attribute::COMPILER_ADD, Attribute::EXTERN_DESUGAR);
@@ -684,4 +677,4 @@ OwnedPtr<LitConstExpr> TypeChecker::TypeCheckerImpl::CreateStringLit(const std::
     return CreateLitConstExpr(LitConstKind::STRING, value, stringDecl->GetTy(), true);
 }
 
-}
+} // namespace Cangjie
