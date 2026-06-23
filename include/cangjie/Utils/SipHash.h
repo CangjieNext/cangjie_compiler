@@ -10,6 +10,7 @@
 #include "cangjie/Utils/CheckUtils.h"
 #include <bitset>
 #include <climits>
+#include <cstdint>
 
 namespace Cangjie::Utils {
 
