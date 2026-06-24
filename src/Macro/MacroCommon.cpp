@@ -81,11 +81,11 @@ std::string ProcessQuotaMarksForSingle(const std::string& value)
             continue;
         }
         // Special marks that are not in interpolation need to be escaped once.
-        if (ch == '\"' && (ret.back() != '\\' || IsPreEscapeBackslash(ret))) {
+        if (ch == '\"' && (ret.empty() || ret.back() != '\\' || IsPreEscapeBackslash(ret))) {
             ret += "\\\"";
-        } else if (ch == '\r' && ret.back() != '\\') {
+        } else if (ch == '\r' && (ret.empty() || ret.back() != '\\')) {
             ret += "\\r";
-        } else if (ch == '\n' && ret.back() != '\\') {
+        } else if (ch == '\n' && (ret.empty() || ret.back() != '\\')) {
             ret += "\\n";
         } else {
             ret += ch;
