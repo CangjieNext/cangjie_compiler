@@ -32,15 +32,30 @@ VarInitCheck::VarInitCheck(DiagnosticEngine& diag) : diag(diag)
 {
 }
 
+namespace {
+
+bool ShouldRunFuncOnPackage(const Function* func)
+{
+    if (func->GetSrcCodeIdentifier().find("__ad_") != std::string::npos) { return false; }
+    if (func->GetSrcCodeIdentifier() == STATIC_INIT_FUNC) { return false; }
+    if (func->GetIdentifier().find("$Mocked") != std::string::npos) { return false; }
+    if (func->GetFuncKind() == FuncKind::INSTANCEVAR_INIT) { return false; }
+    if (func->Get<SkipCheck>() == SkipKind::SKIP_VIC) { return false; }
+    // Skip deserialized CJMP constructors that were validated during common compilation
+    if (func->IsConstructor() && func->TestAttr(Attribute::DESERIALIZED)) {
+        auto outerDef = func->GetOuterDeclaredOrExtendedDef();
+        if (!outerDef || !outerDef->TestAttr(Attribute::SPECIFIC)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void VarInitCheck::RunOnPackage(const Package* package, size_t threadNum)
 {
     std::vector<Function*> funcs;
     for (auto func : package->GetGlobalFuncsWithBody()) {
-        if (func->GetSrcCodeIdentifier().find("__ad_") == std::string::npos &&
-            func->GetSrcCodeIdentifier() != STATIC_INIT_FUNC &&
-            func->GetIdentifier().find("$Mocked") == std::string::npos &&
-            func->GetFuncKind() != FuncKind::INSTANCEVAR_INIT && // only cjnative for cjmp
-            func->Get<SkipCheck>() != SkipKind::SKIP_VIC) {
+        if (ShouldRunFuncOnPackage(func)) {
             funcs.emplace_back(func);
         }
     }
@@ -352,13 +367,26 @@ void VarInitCheck::RaiseUninitedDefMemberError(const MaybeUninitDomain& state, c
     const std::vector<MemberVarInfo>& members, const std::vector<size_t>& uninitedMemberIdx) const
 {
     // Skip report error when uninitedMember are all common member for CJMP.
-    if (std::all_of(uninitedMemberIdx.begin(), uninitedMemberIdx.end(),
-        [&members](size_t idx) {
-            CJC_ASSERT(idx < members.size());
-            auto member = members[idx];
-            // Skip COMMON which is just added(not deserialized ones), they may not yet be initialized and it's ok.
-            return member.TestAttr(Attribute::COMMON) && !member.TestAttr(Attribute::DESERIALIZED);
-        })) {
+    // Also skip for @JavaImpl FROM_COMMON_PART classes where field values are accessed through getters.
+    auto outerDef = func->GetOuterDeclaredOrExtendedDef();
+    bool isJavaImplFromCommonPart = outerDef &&
+        outerDef->TestAttr(Attribute::JAVA_IMPL) &&
+        outerDef->TestAttr(Attribute::FROM_COMMON_PART);
+    auto isSkippable = [&members, isJavaImplFromCommonPart](size_t idx) {
+        CJC_ASSERT(idx < members.size());
+        auto member = members[idx];
+        // Skip COMMON which is just added(not deserialized ones), they may not yet be initialized and it's ok.
+        if (member.TestAttr(Attribute::COMMON) && !member.TestAttr(Attribute::DESERIALIZED)) {
+            return true;
+        }
+        // For @JavaImpl FROM_COMMON_PART classes, skip uninitialized members -
+        // field values are accessed through getters, and COMPILER_ADD fields are infrastructure.
+        if (isJavaImplFromCommonPart) {
+            return true;
+        }
+        return false;
+    };
+    if (std::all_of(uninitedMemberIdx.begin(), uninitedMemberIdx.end(), isSkippable)) {
         return;
     }
     auto builder =

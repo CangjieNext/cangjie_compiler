@@ -235,6 +235,12 @@ bool CheckClass(const Cangjie::AST::ClassDecl& decl, const ClassDef& classDef)
     auto chirSupClsTy = classDef.GetSuperClassTy();
     // check super class type
     if (astSupClsTy != nullptr && chirSupClsTy != nullptr) {
+        // CJMP relaxation: skip check for deserialized CJMP common/specific classes
+        // These will be patched later in Canonicalization
+        if (classDef.TestAttr(CHIR::Attribute::DESERIALIZED) &&
+            decl.TestAnyAttr(AST::Attribute::COMMON, AST::Attribute::SPECIFIC)) {
+            return true;  // Skip check - will be patched
+        }
         if (!CheckType(*astSupClsTy, *chirSupClsTy)) {
             Errorln(classDef.GetIdentifier() + " set wrong super class.");
             return false;

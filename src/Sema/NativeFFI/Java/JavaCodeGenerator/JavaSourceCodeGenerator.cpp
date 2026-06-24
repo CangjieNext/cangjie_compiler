@@ -912,6 +912,9 @@ void JavaSourceCodeGenerator::AddAllCtorsForCJMappingEnum(const EnumDecl& enumDe
 void JavaSourceCodeGenerator::AddConstructors()
 {
     for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
+        if (declPtr->TestAttr(Attribute::FROM_COMMON_PART) && declPtr->specificImplementation) {
+            continue;
+        }
         auto fd = As<ASTKind::FUNC_DECL>(declPtr.get());
         if (!fd || fd->TestAttr(Attribute::PRIVATE) || !fd->TestAttr(Attribute::CONSTRUCTOR)) {
             continue;
@@ -1008,24 +1011,13 @@ void JavaSourceCodeGenerator::AddStaticMethod(const FuncDecl& funcDecl)
     AddWithIndent(TAB, methodSignature);
 }
 
-void JavaSourceCodeGenerator::AddMethods()
+void JavaSourceCodeGenerator::CollectFuncDeclsFromMembers(
+    const std::vector<OwnedPtr<Decl>>& members, std::vector<Ptr<Decl>>& funcDecls, bool isOpen) const
 {
-    bool hasHashcodeMethod = false;
-    bool hasEqualsMethod = false;
-    bool hasToStringMethod = false;
-    bool isOpen = decl->TestAttr(Attribute::OPEN);
-    std::vector<Ptr<Decl>> funcDecls;
-    for (auto extendDecl : extendDecls) {
-        for (OwnedPtr<Decl>& declPtr : extendDecl->GetMemberDecls()) {
-            if (IsCJMapping(*decl) && !declPtr->TestAttr(Attribute::PUBLIC)) {
-                continue;
-            }
-            if (!declPtr->TestAttr(Attribute::PRIVATE) && IsFuncDeclAndNotConstructor(declPtr)) {
-                funcDecls.emplace_back(declPtr.get());
-            }
+    for (auto& declPtr : members) {
+        if (declPtr->TestAttr(Attribute::FROM_COMMON_PART) && declPtr->specificImplementation) {
+            continue;
         }
-    }
-    for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
         bool needGenerate = (isOpen && declPtr->TestAttr(Attribute::PROTECTED)) || declPtr->TestAttr(Attribute::PUBLIC);
         if (IsCJMapping(*decl) && !needGenerate) {
             continue;
@@ -1034,25 +1026,56 @@ void JavaSourceCodeGenerator::AddMethods()
             funcDecls.emplace_back(declPtr.get());
         }
     }
+}
+
+bool JavaSourceCodeGenerator::HasValidFuncParams(const FuncDecl& funcDecl) const
+{
+    if (funcDecl.funcBody->paramLists.empty() || !funcDecl.funcBody->paramLists[0]) {
+        return true;
+    }
+    for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
+        if (!param || !param->type || !Ty::IsTyCorrect(param->type->GetTy())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void JavaSourceCodeGenerator::AddMethods()
+{
+    bool hasHashcodeMethod = false;
+    bool hasEqualsMethod = false;
+    bool hasToStringMethod = false;
+    bool isOpen = decl->TestAttr(Attribute::OPEN);
+    std::vector<Ptr<Decl>> funcDecls;
+    for (auto extendDecl : extendDecls) {
+        CollectFuncDeclsFromMembers(extendDecl->GetMemberDecls(), funcDecls, false);
+    }
+    CollectFuncDeclsFromMembers(decl->GetMemberDecls(), funcDecls, isOpen);
     for (auto& fdecl : funcDecls) {
+        if (fdecl->TestAttr(Attribute::FROM_COMMON_PART) && fdecl->specificImplementation) {
+            continue;
+        }
         const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(fdecl);
-        // Hidden interopCJ configure unexposed symbol.
         if (isInteropCJPackageConfig && funcDecl.symbol && !funcDecl.symbol->isNeedExposedToInterop) {
             continue;
         }
         if (!IsVisibalFunc(funcDecl, *decl, genericConfig)) {
             continue;
         }
-        if (funcDecl.funcBody && funcDecl.funcBody->retType) {
-            if (funcDecl.TestAttr(Attribute::STATIC)) {
-                AddStaticMethod(funcDecl);
-            } else {
-                AddInstanceMethod(funcDecl);
-            }
-            hasHashcodeMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_HASHCODE_METHOD_NAME;
-            hasEqualsMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_EQUALS_METHOD_NAME;
-            hasToStringMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_TOSTRING_METHOD_NAME;
+        if (!funcDecl.funcBody || !funcDecl.funcBody->retType ||
+            !Ty::IsTyCorrect(funcDecl.funcBody->retType->GetTy()) ||
+            !HasValidFuncParams(funcDecl)) {
+            continue;
         }
+        if (funcDecl.TestAttr(Attribute::STATIC)) {
+            AddStaticMethod(funcDecl);
+        } else {
+            AddInstanceMethod(funcDecl);
+        }
+        hasHashcodeMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_HASHCODE_METHOD_NAME;
+        hasEqualsMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_EQUALS_METHOD_NAME;
+        hasToStringMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_TOSTRING_METHOD_NAME;
     }
     AddEqualOrIdentityMethod(hasHashcodeMethod, hasEqualsMethod, hasToStringMethod);
 }

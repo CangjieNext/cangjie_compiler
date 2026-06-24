@@ -21,6 +21,9 @@
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/CHIR/IR/Type/PrivateTypeConverter.h"
+#include "cangjie/CHIR/Transformation/CHIRFieldPatcher.h"
+#include "cangjie/CHIR/Transformation/CHIRFieldReferencePatcher.h"
+#include "cangjie/CHIR/Transformation/PatchCJMPImplBodies.h"
 
 namespace Cangjie::CHIR {
 namespace {
@@ -581,6 +584,36 @@ void AST2CHIR::SetFuncAttributeAndLinkageType(const AST::FuncDecl& astFunc, Func
     chirFunc.SetFastNative(astFunc.isFastNative);
 }
 
+// Handle CJMP collision where a Function already has a body from a counterpart FuncDecl
+// (e.g. common mirror getter created before this specific one, or vice versa).
+// SPECIFIC replaces common; matched common just reuses the specific body.
+// Returns true if the collision was resolved and the caller should return early.
+bool AST2CHIR::HandleCJMPFunctionCollision(const AST::FuncDecl& funcDecl, Function*& fn,
+    const std::string& mangledName, const std::vector<FeatureId>& features)
+{
+    if (!opts.IsCompilingCJMP()) { return false; }
+    auto exist = package->TryGetGlobalFunc(GLOBAL_VALUE_PREFIX + mangledName);
+    if (!exist) { return false; }
+    fn = exist;
+    TryUpdateExistingValue(*fn, features);
+    if (!fn->GetBody()) { return false; }
+    if (funcDecl.TestAttr(AST::Attribute::SPECIFIC)) {
+        ResetSpecificFunc(funcDecl, *fn);
+        globalCache.Set(funcDecl, *fn);
+        if (IsSrcCodeImportedGlobalDecl(funcDecl, opts)) {
+            srcCodeImportedFuncs.emplace(fn);
+        }
+        fn->SetFeatures(features);
+        return true;
+    }
+    if (funcDecl.specificImplementation) {
+        globalCache.Set(funcDecl, *fn);
+        return true;
+    }
+    fn->DestroyFuncBody();
+    return false;
+}
+
 void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDecl)
 {
     if (funcDecl.TestAttr(AST::Attribute::GENERIC)) {
@@ -624,13 +657,8 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
     }
     auto srcCodeName = funcDecl.identifier;
     auto rawMangledName = funcDecl.rawMangleName;
-    if (opts.IsCompilingCJMP()) {
-        if (auto exist = package->TryGetGlobalFunc(GLOBAL_VALUE_PREFIX + mangledName)) {
-            fn = exist;
-            // Update features set
-            TryUpdateExistingValue(*fn, features);
-        }
-    }
+    auto earlyExit = HandleCJMPFunctionCollision(funcDecl, fn, mangledName, features);
+    if (earlyExit) { return; }
     if (fn == nullptr) {
         fn = builder.CreateFunction(funcTy, mangledName, srcCodeName, rawMangledName, pkgName, genericParamTy);
         fn->SetDebugLocation(loc);
@@ -1096,6 +1124,15 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
             classDeclWithAnnotation.emplace_back(
                 std::make_pair(StaticCast<const AST::ClassDecl*>(&decl), StaticCast<ClassDef*>(customTypeDef)));
         }
+    } else {
+        // For CJMP: deserialized ClassDefs may have different attributes in specific compilation
+        // (e.g., @JavaMirror is only in specific, not in common)
+        // Ensure FFI-related attributes are correctly set
+        if (Interop::Java::IsImpl(decl)) {
+            customTypeDef->EnableAttr(Attribute::JAVA_IMPL);
+        } else if (Interop::Java::IsMirror(decl)) {
+            customTypeDef->EnableAttr(Attribute::JAVA_MIRROR);
+        }
     }
     chirType.SetGlobalNominalCache(decl, *customTypeDef);
     if (uniqueDecl != nullptr && uniqueDecl != &decl) {
@@ -1103,6 +1140,9 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
     }
     if (decl.TestAttr(AST::Attribute::COMMON) && !decl.TestAttr(AST::Attribute::FROM_COMMON_PART)) {
         customTypeDef->EnableAttr(Attribute::COMMON);
+    }
+    if (decl.TestAttr(AST::Attribute::FROM_COMMON_PART)) {
+        customTypeDef->EnableAttr(Attribute::FROM_COMMON_PART);
     }
     if (decl.TestAttr(AST::Attribute::SPECIFIC)) {
         customTypeDef->EnableAttr(Attribute::SPECIFIC);
@@ -1325,6 +1365,10 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     trans.SetGenericFuncMap(genericFuncMap);
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "SetGenericFuncMap");
 
+    Utils::ProfileRecorder::Start("TranslateNominalDecls", "PatchCJMPSuperClass");
+    PatchCJMPSuperClass();
+    Utils::ProfileRecorder::Stop("TranslateNominalDecls", "PatchCJMPSuperClass");
+
     Utils::ProfileRecorder::Start("TranslateNominalDecls", "TranslateDecls");
     // Translate all nominal decls.
     TranslateVecDecl(importedNominalDecls, trans);
@@ -1336,9 +1380,13 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     // Update some info for common specific
     Utils::ProfileRecorder::Start("TranslateNominalDecls", "ProcessCommonAndSpecific");
     ProcessCommonAndSpecificExtends();
+    PatchCommonFieldsForMirror();
+    PatchCommonFieldsForJavaImpl();
+    PatchFieldReferencesForMirror();
     SetExtendInfo();
     UpdateExtendParent();
     ProcessClassStructVarInits(trans);
+    PatchFieldReferencesForJavaImpl();
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "ProcessCommonAndSpecific");
 }
 
@@ -1380,9 +1428,12 @@ void AST2CHIR::TranslateVecDecl(const std::vector<Ptr<const AST::Decl>>& decls, 
 bool AST2CHIR::MaybeDeserialized(const AST::Decl& decl) const
 {
     // When the specific is compiled and decl is from common part or generic instantiated or imported or specific decl.
+    // matched common decl linked to specific at BeforeTypeCheck (e.g. mirror getter/setter with specific counterpart)
+    // — must be deserialized so CHIR can reuse the existing SPECIFIC Function instead of creating a new one
     if (mergingSpecific &&
-        decl.TestAnyAttr(AST::Attribute::SPECIFIC, AST::Attribute::FROM_COMMON_PART,
-            AST::Attribute::GENERIC_INSTANTIATED, AST::Attribute::IMPORTED)) {
+        (decl.TestAnyAttr(AST::Attribute::SPECIFIC, AST::Attribute::FROM_COMMON_PART,
+            AST::Attribute::GENERIC_INSTANTIATED, AST::Attribute::IMPORTED) ||
+        decl.specificImplementation)) {
         return true;
     }
     if (decl.outerDecl && decl.outerDecl->TestAttr(AST::Attribute::GENERIC_INSTANTIATED)) {
@@ -1665,7 +1716,6 @@ void AST2CHIR::ProcessClassStructVarInits(Translator& trans)
     for (auto& container : declContainers) {
         for (const auto& decl : container) {
             CJC_NULLPTR_CHECK(decl);
-            // Skip the common part varInit generation while comparing specific parts.
             if (decl->TestAttr(AST::Attribute::FROM_COMMON_PART)) {
                 continue;
             }
@@ -1676,4 +1726,169 @@ void AST2CHIR::ProcessClassStructVarInits(Translator& trans)
         }
     }
 }
+
+void AST2CHIR::PatchCommonFieldsForMirror()
+{
+    if (!opts.IsCompilingCJMPSpecific()) {
+        return;
+    }
+
+    CHIRFieldPatcher patcher(builder);
+    for (auto& classDef : package->GetClasses()) {
+        if (classDef->TestAttr(Attribute::JAVA_MIRROR)) {
+            patcher.PatchCommonFieldsForMirror(classDef, Attribute::JAVA_MIRROR);
+        }
+        if (classDef->TestAttr(Attribute::OBJ_C_MIRROR)) {
+            patcher.PatchCommonFieldsForMirror(classDef, Attribute::OBJ_C_MIRROR);
+        }
+    }
+}
+
+void AST2CHIR::PatchCommonFieldsForJavaImpl()
+{
+    if (!opts.IsCompilingCJMPSpecific()) {
+        return;
+    }
+
+    CHIRFieldPatcher patcher(builder);
+    for (auto& classDef : package->GetClasses()) {
+        if (classDef->TestAttr(Attribute::JAVA_IMPL)) {
+            patcher.PatchCommonFieldsForJavaImpl(classDef);
+        }
+    }
+}
+
+void AST2CHIR::PatchFieldReferencesForMirror()
+{
+    if (!opts.IsCompilingCJMPSpecific()) {
+        return;
+    }
+
+    CHIRFieldReferencePatcher javaPatcher(*package, builder, Attribute::JAVA_MIRROR);
+    javaPatcher.Run();
+
+    CHIRFieldReferencePatcher objcPatcher(*package, builder, Attribute::OBJ_C_MIRROR);
+    objcPatcher.Run();
+}
+
+void AST2CHIR::PatchFieldReferencesForJavaImpl()
+{
+    if (!opts.IsCompilingCJMPSpecific()) {
+        return;
+    }
+
+    PatchCJMPImplBodies(*package, builder).Run();
+}
+
+void AST2CHIR::PatchCtorFieldInitForJavaImpl()
+{
+    if (!opts.IsCompilingCJMPSpecific()) {
+        return;
+    }
+
+    PatchCJMPImplBodies(*package, builder).RunCtorFieldInitOnly();
+}
+
+namespace {
+bool IsPlatformMirrorClass(const ClassDef& classDef)
+{
+    return classDef.TestAttr(Attribute::JAVA_MIRROR) || classDef.TestAttr(Attribute::OBJ_C_MIRROR);
+}
+
+bool HasObjectAsSuperClass(const ClassDef& classDef)
+{
+    auto superClass = classDef.GetSuperClassDef();
+    if (superClass == nullptr) {
+        return true;  // classDef is Object itself (no superclass)
+    }
+    auto superId = superClass->GetIdentifier();
+    return superId.find("6ObjectE") != std::string::npos;  // inherits from Object
+}
+
+namespace {
+
+const AST::ClassLikeDecl* FindSpecificAstDecl(
+    const ClassDef& classDef,
+    const std::vector<Ptr<const AST::Decl>>& nominalDecls,
+    const std::vector<Ptr<const AST::Decl>>& importedNominalDecls)
+{
+    std::string className = classDef.GetIdentifierWithoutPrefix();
+    for (const auto& container : {nominalDecls, importedNominalDecls}) {
+        for (const auto& decl : container) {
+            if (decl->astKind == AST::ASTKind::CLASS_DECL &&
+                decl->TestAttr(AST::Attribute::SPECIFIC) &&
+                decl->mangledName == className) {
+                return StaticCast<const AST::ClassLikeDecl*>(decl.get());
+            }
+        }
+    }
+    return nullptr;
+}
+
+ClassType* ResolveChirSuperClassTy(const AST::ClassTy& astClassTy, CHIRType& chirType)
+{
+    auto superClassTy = astClassTy.GetSuperClassTy();
+    if (!superClassTy) { return nullptr; }
+
+    Type* chirSuperTy = chirType.TranslateType(*superClassTy);
+    if (!chirSuperTy) { return nullptr; }
+
+    if (chirSuperTy->IsClass()) {
+        return StaticCast<ClassType*>(chirSuperTy);
+    }
+    if (chirSuperTy->IsRef()) {
+        auto refTy = StaticCast<RefType*>(chirSuperTy);
+        auto baseTy = refTy->GetBaseType();
+        if (baseTy && baseTy->IsClass()) {
+            return StaticCast<ClassType*>(baseTy);
+        }
+    }
+    return nullptr;
+}
+
+bool CheckPlatformMirror(const AST::ClassTy& astClassTy, const ClassType& chirSuperClassTy)
+{
+    auto superClassDef = chirSuperClassTy.GetClassDef();
+    if (superClassDef && IsPlatformMirrorClass(*superClassDef)) {
+        return true;
+    }
+    auto astSuperClassTy = astClassTy.GetSuperClassTy();
+    if (astSuperClassTy && astSuperClassTy->decl) {
+        if (astSuperClassTy->decl->HasAnno(AST::AnnotationKind::JAVA_MIRROR) ||
+            astSuperClassTy->decl->HasAnno(AST::AnnotationKind::OBJ_C_MIRROR)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}
+
+void AST2CHIR::PatchCJMPSuperClass()
+{
+    if (!opts.IsCompilingCJMPSpecific()) {
+        return;
+    }
+
+    auto allClasses = package->GetAllClassDef();
+
+    for (auto classDef : allClasses) {
+        if (!classDef->TestAttr(Attribute::SPECIFIC)) continue;
+        if (!HasObjectAsSuperClass(*classDef)) continue;
+
+        auto astDecl = FindSpecificAstDecl(*classDef, nominalDecls, importedNominalDecls);
+        if (!astDecl) continue;
+
+        auto astClassTy = DynamicCast<AST::ClassTy*>(astDecl->GetTy());
+        if (!astClassTy) continue;
+
+        auto chirSuperClassTy = ResolveChirSuperClassTy(*astClassTy, chirType);
+        if (!chirSuperClassTy) continue;
+
+        if (!CheckPlatformMirror(*astClassTy, *chirSuperClassTy)) continue;
+
+        classDef->SetSuperClassTy(*chirSuperClassTy);
+    }
+}
+
 } // namespace Cangjie::CHIR

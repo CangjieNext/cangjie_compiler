@@ -135,6 +135,8 @@ private:
     FormattedIndex SavePackageName(const std::string& fullPackageName);
     // Save file names and add to savedFileMap.
     void SaveFileInfo(const AST::File& file);
+    void SaveFileInfo(const unsigned int fileID, const std::string& fullPackageName,
+        const std::string& filePath, const AST::Node& node, TFeaturesDirectiveOffset feature);
     flatbuffers::Offset<PackageFormat::Imports> SaveFileImports(const AST::File& file);
 
     TFeatureIdOffset CreateFeatureId(const AST::FeatureId& featureId);
@@ -213,6 +215,10 @@ private:
     auto GetVirtualParamLists(const AST::FuncBody& funcBody);
 
     template <typename T> TVectorOffset<FormattedIndex> GetBody(T& decl);
+    bool ShouldExportDecl(const AST::Decl& decl, const AST::Decl& d, bool onlyVisibleSig) const;
+    // Process a specificImplementation of a member decl and add it to body if it should be exported.
+    void TryProcessSpecificImpl(const Ptr<AST::Decl>& it, std::unordered_set<AST::Decl*>& addedPlatformImpls,
+        std::vector<FormattedIndex>& body, bool onlyVisibleSig, const AST::Decl& decl);
     template <typename T> auto GetVirtualInterfaces(T& decl)
     {
         // SuperInterfaceTypes.

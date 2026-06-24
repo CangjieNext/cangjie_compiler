@@ -9,6 +9,7 @@
  * This file implements the AST Writer related classes.
  */
 
+#include "ASTSerializeUtils.h"
 #include "ASTWriterImpl.h"
 
 #include <optional>
@@ -137,6 +138,11 @@ void CheckForConflictExportId(const std::vector<Ptr<const Decl>>& decls)
 
         for (auto it : decl->GetMemberDeclPtrs()) {
             if (it->doNotExport) {
+                continue;
+            }
+            // In CJMP, common-matched vars have their specific counterpart elsewhere in
+            // the same member list. Skip them here to avoid duplicate exportId errors.
+            if (it->specificImplementation && it->TestAttr(AST::Attribute::COMMON)) {
                 continue;
             }
             if (auto found = exportIdDeclMap.find(it->exportId); found != exportIdDeclMap.end()) {
@@ -462,50 +468,55 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
         return builder.CreateVector<FormattedIndex>(body);
     }
 
-    // Check if a decl should be exported
-    auto shouldExportDecl = [&decl, onlyVisibleSig, this](const Decl* d) -> bool {
-        // Because member variables determine the memory layout of a type, all of its member variables should be
-        // stored in cjo as long as the type is externally visible.
-        const bool isInstMemberVar = d->astKind == ASTKind::VAR_DECL && !d->TestAttr(Attribute::STATIC);
-        // For LSP usage, the invalid vpd will exists, we can ignore it.
-        if (d->doNotExport || d->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL ||
-            // For LSP usage, we can ignore invisible members.
-            (onlyVisibleSig && !d->IsExportedDecl())) {
-            return false;
-        }
-        if (decl.astKind == AST::ASTKind::EXTEND_DECL && serializingCommon) {
-            return true;
-        }
-        if (IsGenericInCommonSerialization(this->serializingCommon, *d)) {
-            return true;
-        }
-        // Incr compilation need load ty by cached cjo, so still cache internal or inst member var decls.
-        // Common `decl` members are exported because they can be accessed from specific nominative.
-        if (!config.exportForIncr && !decl.TestAttr(Attribute::COMMON) && !isInstMemberVar &&
-            d->linkage == Linkage::INTERNAL) {
-            return false;
-        }
-        return true;
-    };
-
     for (auto& it : decl.GetMemberDeclPtrs()) {
         CJC_NULLPTR_CHECK(it);
-        // Skip if this decl is already added as a platform implementation
         if (it->TestAttr(AST::Attribute::SPECIFIC) && addedPlatformImpls.count(it.get()) > 0) {
             continue;
         }
-        // Process platform implementation first, applying same filter logic
-        if (it->specificImplementation) {
-            addedPlatformImpls.insert(it->specificImplementation.get());
-            if (shouldExportDecl(it->specificImplementation.get())) {
-                body.push_back(GetDeclIndex(it->specificImplementation));
-            }
-        }
-        if (shouldExportDecl(it.get())) {
+        TryProcessSpecificImpl(it, addedPlatformImpls, body, onlyVisibleSig, decl);
+        if (ShouldExportDecl(decl, *it, onlyVisibleSig)) {
             body.push_back(GetDeclIndex(it));
+            addedPlatformImpls.insert(it.get());
         }
     }
     return builder.CreateVector<FormattedIndex>(body);
+}
+
+void ASTWriter::ASTWriterImpl::TryProcessSpecificImpl(const Ptr<AST::Decl>& it,
+    std::unordered_set<AST::Decl*>& addedPlatformImpls, std::vector<FormattedIndex>& body,
+    bool onlyVisibleSig, const AST::Decl& decl)
+{
+    if (!it->specificImplementation) { return; }
+    if (!addedPlatformImpls.insert(it->specificImplementation.get()).second) { return; }
+    if (ShouldExportDecl(decl, *it->specificImplementation, onlyVisibleSig)) {
+        body.push_back(GetDeclIndex(it->specificImplementation));
+    }
+}
+
+bool ASTWriter::ASTWriterImpl::ShouldExportDecl(const AST::Decl& decl, const AST::Decl& d, bool onlyVisibleSig) const
+{
+    // Because member variables determine the memory layout of a type, all of its member variables should be
+    // stored in cjo as long as the type is externally visible.
+    const bool isInstMemberVar = d.astKind == ASTKind::VAR_DECL && !d.TestAttr(Attribute::STATIC);
+    // For LSP usage, the invalid vpd will exists, we can ignore it.
+    if (d.doNotExport || d.astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL ||
+        // For LSP usage, we can ignore invisible members.
+        (onlyVisibleSig && !d.IsExportedDecl())) {
+        return false;
+    }
+    if (decl.astKind == AST::ASTKind::EXTEND_DECL && serializingCommon) {
+        return true;
+    }
+    if (IsGenericInCommonSerialization(this->serializingCommon, d)) {
+        return true;
+    }
+    // Incr compilation need load ty by cached cjo, so still cache internal or inst member var decls.
+    // Common `decl` members are exported because they can be accessed from specific nominative.
+    if (!config.exportForIncr && !decl.TestAttr(Attribute::COMMON) && !isInstMemberVar &&
+        d.linkage == Linkage::INTERNAL) {
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -713,6 +724,9 @@ void ASTWriter::ASTWriterImpl::MarkImplicitExportOfImportSpec(Package& package)
     importedDeclPkgNames.clear();
     for (auto& file : package.files) {
         allFileImports.push_back(SaveFileImports(*file));
+        if (file->hasMacro && file->macroCallPosBase.fileID != file->begin.fileID) {
+            allFileImports.push_back(SaveFileImports(*file));
+        }
     }
 }
 
@@ -755,7 +769,7 @@ void ASTWriter::SetSerializingCommon()
 {
     pImpl->SetSerializingCommon();
 }
- 
+
 void ASTWriter::ASTWriterImpl::SetSerializingCommon()
 {
     serializingCommon = true;
@@ -904,29 +918,52 @@ TFeaturesDirectiveOffset ASTWriter::ASTWriterImpl::SaveFeaturesDirective(Ptr<Fea
 }
 
 // Save fileNames, and add to savedFileMap and return its index.
+void ASTWriter::ASTWriterImpl::SaveFileInfo(const unsigned int fileID, const std::string& fullPackageName,
+    const std::string& filePath, const Node& node, TFeaturesDirectiveOffset feature)
+{
+    // NOTE: current package's fileIndex is vector offset plus 1.
+    FormattedIndex fileIndex = static_cast<FormattedIndex>(allFiles.size()) + 1;
+    if (config.needAbsPath || serializingCommon) {
+        allFiles.push_back(builder.CreateString(filePath));
+    } else {
+        allFiles.push_back(builder.CreateString(
+            FileUtil::JoinPath(fullPackageName, FileUtil::GetFileName(filePath))));
+    }
+    savedFileMap.emplace(fileID, std::make_pair(0, fileIndex));
+
+    auto begin = TPosition(fileIndex, 0, node.begin.line, node.begin.column, false);
+    auto end = TPosition(fileIndex, 0, node.end.line, node.end.column, false);
+
+    // CJMP common parts are loaded via ASTLoaderCJMP which assigns hash-based file IDs
+    // (isCJMPFile=true in AddSource). Store the same hash-based ID so that the
+    // assertion in PreloadCommonFile passes.
+    unsigned int storedFileID = fileID;
+    if (serializingCommon) {
+        std::string normalizedPath = FileUtil::Normalize(filePath);
+        storedFileID = static_cast<unsigned int>(std::hash<std::string>{}(normalizedPath));
+    }
+
+    allFileInfo.push_back(PackageFormat::CreateFileInfo(builder, storedFileID, &begin, &end, feature));
+}
+
 void ASTWriter::ASTWriterImpl::SaveFileInfo(const File& file)
 {
     // if already saved, just return its index.
     auto found = savedFileMap.find(file.begin.fileID);
     if (found == savedFileMap.end()) {
-        // NOTE: current package's fileIndex is vector offset plus 1.
-        FormattedIndex fileIndex = static_cast<FormattedIndex>(allFiles.size()) + 1;
-        if (config.needAbsPath || serializingCommon) {
-            allFiles.push_back(builder.CreateString(file.filePath));
-        } else {
-            allFiles.push_back(builder.CreateString(
-                FileUtil::JoinPath(file.curPackage->fullPackageName, FileUtil::GetFileName(file.filePath))));
-        }
-        savedFileMap.emplace(file.begin.fileID, std::make_pair(0, fileIndex));
-        // Add additional file info for CJMP
-        auto fileID = file.begin.fileID;
-        auto begin = TPosition(fileIndex, 0, file.begin.line, file.begin.column, false);
-        auto end = TPosition(fileIndex, 0, file.end.line, file.end.column, false);
+        TFeaturesDirectiveOffset feature = 0;
+
         if (file.feature) {
-            auto feature = SaveFeaturesDirective(file.feature);
-            allFileInfo.push_back(PackageFormat::CreateFileInfo(builder, fileID, &begin, &end, feature));
-        } else {
-            allFileInfo.push_back(PackageFormat::CreateFileInfo(builder, fileID, &begin, &end));
+            feature = SaveFeaturesDirective(file.feature);
+        }
+
+        SaveFileInfo(file.begin.fileID, file.curPackage->fullPackageName, file.filePath, file, feature);
+
+        if (file.hasMacro && file.begin.fileID != file.macroCallPosBase.fileID) {
+            // this means that there are potentially decls having the other fileID
+            // so we have to save the macrocall file as well
+            SaveFileInfo(file.macroCallPosBase.fileID, file.curPackage->fullPackageName, file.macroCallFilePath,
+                file, feature);
         }
     }
 }
@@ -1610,7 +1647,7 @@ std::vector<TFullIdOffset> ASTWriter::ASTWriterImpl::CollectInitializationDepend
             }
         }
     }
-    
+
     return dependencies;
 }
 

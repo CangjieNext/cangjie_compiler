@@ -43,6 +43,30 @@ MPTypeCheckerImpl::MPTypeCheckerImpl(const CompilerInstance& ci)
 }
 
 namespace {
+/**
+ * Check if a class is a platform-specific parent for CJMP relaxation.
+ *
+ * A platform parent is a class marked with platform-specific annotations:
+ * - @JavaImpl or @ObjCImpl: Implementation classes for Java/ObjC interop
+ * - @JavaMirror subtype or @ObjCMirror subtype: Mirror classes inheriting from platform mirrors
+ *
+ * This is used in CJMP Object→PlatformParent relaxation where:
+ * - Common class extends Object (implicitly or explicitly)
+ * - Specific class extends a platform parent
+ * - Relaxation allows this mismatch for FFI interop scenarios
+ *
+ * @param cls The class declaration to check
+ * @return true if the class is a platform-specific parent, false otherwise
+ */
+[[maybe_unused]] bool IsPlatformParent(const Ptr<ClassDecl>& cls)
+{
+    if (!cls) { return false; }
+    return FindFirstAnnotation(*cls, AnnotationKind::JAVA_IMPL) ||
+           FindFirstAnnotation(*cls, AnnotationKind::OBJ_C_IMPL) ||
+           cls->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE,
+                            Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE);
+}
+
 std::string GetTypeNameFromTy(
     const Ptr<Ty>& ty, bool forCJMPMatch, const std::unordered_map<Ptr<Ty>, unsigned>& genericIdx)
 {
@@ -107,8 +131,8 @@ std::string CalculatedGenericConstraintsStr(const std::vector<OwnedPtr<GenericCo
 
     std::set<std::string> gcStrs;
     for (auto& genericConstraint : genericConstraints) {
-        if (genericConstraint->isImplicitlyIntroduced) { 
-            continue; 
+        if (genericConstraint->isImplicitlyIntroduced) {
+            continue;
         }
         std::set<std::string> ubStrs;
         for (auto& upperBound : genericConstraint->upperBounds) {
@@ -222,6 +246,7 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
     if (!MatchNominativeDecl(diag, commonDecl, specificDecl)) {
         return;
     }
+
     auto& commonDecls = commonDecl.GetMemberDecls();
     auto& specificDecls = specificDecl.GetMemberDecls();
     std::vector<OwnedPtr<Decl>> mergedDecls;
@@ -255,7 +280,6 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
             if (specificDeclT->TestAttr(Attribute::SPECIFIC)) {
                 auto commonDeclIt = commonVariablesIds.find(id);
                 if (commonDeclIt != commonVariablesIds.end()) {
-                    // match
                     auto& commonDeclT = mergedDecls[commonDeclIt->second];
                     commonDeclT->specificImplementation = specificDeclT;
                     std::swap(specificDeclT, commonDeclT);
@@ -265,17 +289,14 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
                 }
             } else if (varDecl->isMemberParam) {
                 if (memberParamIds.find(id) != memberParamIds.end()) {
-                    // General specific member params will merge into common if exist.
                     continue;
                 }
             }
         }
-        // Merge specific members.
         mergedDecls.emplace_back(std::move(specificDeclT));
     }
     std::swap(specificDecls, mergedDecls);
-    // all the rest declarations need to be saved, because of, at least initializers of common
-    // variables need to be analyzed.
+
     commonDecls.clear();
     for (auto& decl : mergedDecls) {
         if (decl) {
@@ -554,8 +575,8 @@ void MPTypeCheckerImpl::CheckMatchedFunctionReturnTypes(FuncDecl& specificFunc, 
     if (commonRetTy == specificRetTy) return;
     if (typeManager.IsSubtype(specificRetTy, commonRetTy)) return;
 
-    // the subtype check will handle most of the cases, however in the case of generics, types must 
-    // be substituted properly before checking for subtype that is properly done in MatchCJMPFunction 
+    // the subtype check will handle most of the cases, however in the case of generics, types must
+    // be substituted properly before checking for subtype that is properly done in MatchCJMPFunction
     // that we use as a fallback
 
     // we need to erase the pointer temporarily to avoid the multiple implementations error
@@ -585,7 +606,7 @@ void MPTypeCheckerImpl::CheckMatchedVariableTypes(AST::VarDecl& specificVar, AST
     if (typeManager.IsTyEqual(specificVar.GetTy(), commonVar.GetTy()))
         return;
 
-    // the type equality check will handle most of the cases except for the generics case when types 
+    // the type equality check will handle most of the cases except for the generics case when types
     // need to be substituted in order to compare them that is handled in MatchCJMPVar
     //  that is fallback here
 
@@ -604,11 +625,51 @@ static bool IsEnumConstructor(const AST::Node& decl)
     return decl.TestAttr(Attribute::ENUM_CONSTRUCTOR);
 }
 
+namespace {
+
+bool ShouldSkipCJMPVisitNode(const Ptr<Node>& node)
+{
+    return !IsCommon(*node) || IsEnumConstructor(*node);
+}
+
+void CheckCJMPVarDeclTypeMatch(const Ptr<Node>& node, DiagnosticEngine& diag,
+    TypeManager& typeManager, MPTypeCheckerImpl& checker)
+{
+    auto common = StaticAs<ASTKind::VAR_DECL>(node);
+    auto specific = common->specificImplementation;
+    if (!specific) {
+        if (!common->TestAttr(Attribute::INITIALIZED) && common->TestAttr(Attribute::FROM_COMMON_PART)) {
+            DiagNotMatchedSpecificDecl(diag, *common);
+        }
+        return;
+    }
+    if (specific->TestAttr(Attribute::DESUGARED_MIRROR_FIELD)) {
+        auto& commonVar = *common;
+        auto& specificProp = *StaticCast<PropDecl>(specific);
+        if (Ty::IsTyCorrect(commonVar.GetTy()) && Ty::IsTyCorrect(specificProp.GetTy())) {
+            auto cType = commonVar.GetTy();
+            auto pType = specificProp.GetTy();
+            if (!typeManager.IsTyEqual(cType, pType) && !Ty::IsInitialTy(pType)) {
+                diag.DiagnoseRefactor(
+                    DiagKindRefactor::sema_specific_has_different_type, specificProp, "property");
+            }
+        }
+    } else {
+        CJC_ASSERT_WITH_MSG(specific->astKind == AST::ASTKind::VAR_DECL,
+            "Common variable can be only matched to a variable but got another kind");
+        auto& commonVar = *common;
+        auto& specificVar = *StaticCast<VarDecl>(specific);
+        checker.CheckMatchedVariableTypes(specificVar, commonVar);
+    }
+}
+
+}
+
 void MPTypeCheckerImpl::CheckReturnAndVariableTypes(AST::Package& pkg)
 {
     std::function<VisitAction(Ptr<Node>)> visitor = [this](const Ptr<Node>& node) {
         if (node->astKind == ASTKind::FUNC_DECL) {
-            if (!IsCommon(*node) || IsEnumConstructor(*node)) {
+            if (ShouldSkipCJMPVisitNode(node)) {
                 return VisitAction::SKIP_CHILDREN;
             }
             auto common = StaticAs<ASTKind::FUNC_DECL>(node);
@@ -618,28 +679,14 @@ void MPTypeCheckerImpl::CheckReturnAndVariableTypes(AST::Package& pkg)
                     "Common function can be only matched to a function but got another kind");
                 auto& commonFunc = *common;
                 auto& specificFunc = *StaticCast<FuncDecl>(specific);
-
                 CheckMatchedFunctionReturnTypes(specificFunc, commonFunc);
             }
             return VisitAction::SKIP_CHILDREN;
         } else if (node->astKind == ASTKind::VAR_DECL) {
-            if (!IsCommon(*node) || IsEnumConstructor(*node)) {
+            if (ShouldSkipCJMPVisitNode(node)) {
                 return VisitAction::SKIP_CHILDREN;
             }
-            auto common = StaticAs<ASTKind::VAR_DECL>(node);
-            auto specific = common->specificImplementation;
-            if (specific) {
-                CJC_ASSERT_WITH_MSG(specific->astKind == AST::ASTKind::VAR_DECL,
-                    "Common variable can be only matched to a variable but got another kind");
-                auto& commonVar = *common;
-                auto& specificVar = *StaticCast<VarDecl>(specific);
-
-                CheckMatchedVariableTypes(specificVar, commonVar);
-            } else if (!common->TestAttr(Attribute::INITIALIZED) && common->TestAttr(Attribute::FROM_COMMON_PART)) {
-                // this has been postponed, we need this to handle the case when a common var has no matched specified
-                // but it does't fail because there is an initializer for it
-                DiagNotMatchedSpecificDecl(diag, *common);
-            }
+            CheckCJMPVarDeclTypeMatch(node, diag, typeManager, *this);
             return VisitAction::SKIP_CHILDREN;
         }
         return VisitAction::WALK_CHILDREN;
@@ -667,6 +714,80 @@ void MPTypeCheckerImpl::ValidateMatchedAnnotationsAndModifiers(AST::Package& pkg
 }
 
 namespace {
+
+bool HasEmptyConstructorInMembers(const std::vector<Ptr<Decl>>& memberDecls)
+{
+    for (const auto& member : memberDecls) {
+        if (member->astKind == ASTKind::FUNC_DECL) {
+            auto funcDecl = StaticCast<FuncDecl>(member);
+            if (funcDecl->TestAttr(Attribute::CONSTRUCTOR) && funcDecl->funcBody &&
+                !funcDecl->funcBody->paramLists.empty() &&
+                funcDecl->funcBody->paramLists[0]->params.empty()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::set<Ptr<InterfaceTy>> CollectCommonSuperInterfaces(
+    const InheritableDecl& commonDecl, TypeSubst& genericTyMap, TypeManager& typeManager)
+{
+    if (!genericTyMap.empty()) {
+        std::set<Ptr<InterfaceTy>> result;
+        for (auto superInterface : commonDecl.GetSuperInterfaceTys()) {
+            auto updatedInterfaceType = typeManager.GetInstantiatedTy(superInterface, genericTyMap);
+            result.emplace(StaticCast<InterfaceTy*>(updatedInterfaceType));
+        }
+        return result;
+    }
+    return commonDecl.GetSuperInterfaceTys();
+}
+
+bool HasMatchingInterface(const Ptr<InterfaceTy>& target,
+    const std::set<Ptr<InterfaceTy>>& candidates, TypeManager& typeManager)
+{
+    for (auto& candidate : candidates) {
+        if (typeManager.IsTyEqual(target, candidate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Match common super interfaces against specific super interfaces.
+bool MatchInterfaceSets(const std::set<Ptr<InterfaceTy>>& comSupInters,
+    const std::set<Ptr<InterfaceTy>>& platSupInters, const InheritableDecl& specificDecl,
+    DiagnosticEngine& diag, TypeManager& typeManager)
+{
+    for (auto& comSupInter : comSupInters) {
+        if (!HasMatchingInterface(comSupInter, platSupInters, typeManager)) {
+            DiagNotMatchedSuperType(diag, specificDecl);
+            return false;
+        }
+    }
+    return true;
+}
+
+}
+
+void MPTypeCheckerImpl::ValidateCJMPConstructorConstraints(AST::Package& pkg)
+{
+    (void)pkg;
+    for (const auto& relaxInfo : pendingRelaxations) {
+        auto specificDecl = relaxInfo.specificDecl;
+        if (!specificDecl || specificDecl->astKind != ASTKind::CLASS_DECL) { continue; }
+        auto specificClass = StaticCast<ClassDecl>(specificDecl);
+        auto platformParent = specificClass->GetSuperClassDecl();
+        if (!platformParent) { continue; }
+        if (!HasEmptyConstructorInMembers(platformParent->GetMemberDeclPtrs())) {
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_platform_parent_no_empty_constructor,
+                *specificClass, platformParent->identifier.Val());
+        }
+    }
+}
+
+namespace {
 // Collect common or specific decl.
 void CollectDecl(
     Ptr<Decl> decl, std::vector<Ptr<Decl>>& commonDecls, std::vector<Ptr<Decl>>& specificDecls)
@@ -683,7 +804,8 @@ void CollectCJMPDecls(Package& pkg, std::vector<Ptr<Decl>>& commonDecls, std::ve
 {
     std::function<VisitAction(Ptr<Node>)> visitor = [&commonDecls, &specificDecls](const Ptr<Node> &node) {
         if (node->IsDecl() && node->astKind != ASTKind::PRIMARY_CTOR_DECL) {
-            CollectDecl(StaticAs<ASTKind::DECL>(node), commonDecls, specificDecls);
+            auto decl = StaticAs<ASTKind::DECL>(node);
+            CollectDecl(decl, commonDecls, specificDecls);
         }
         if (node->astKind == ASTKind::PACKAGE || node->astKind == ASTKind::FILE ||
             node->IsNominalDecl() || node->IsNominalDeclBody()) {
@@ -699,7 +821,7 @@ void CollectCJMPDecls(Package& pkg, std::vector<Ptr<Decl>>& commonDecls, std::ve
 bool MustMatchWithPlatform(const Decl& decl, const bool compilingCommon)
 {
     CJC_ASSERT(decl.TestAttr(Attribute::COMMON));
-    
+
     if (compilingCommon) {
         // not compiling to binary, only produce CHIR, so it can be matched later.
         return false;
@@ -808,63 +930,65 @@ void MPTypeCheckerImpl::CheckCommonSpecificGenericMatch(const AST::Decl& specifi
     CheckGenericTypeBoundsMapped(commonDecl, specificDecl, parentBounds, childBounds, diag, typeManager);
 }
 
+bool MPTypeCheckerImpl::MatchCommonSpecificSuperInterfaces(
+    const InheritableDecl& commonDecl, const InheritableDecl& specificDecl, TypeSubst& genericTyMap)
+{
+    auto comSupInters = CollectCommonSuperInterfaces(commonDecl, genericTyMap, typeManager);
+    auto platSupInters = specificDecl.GetSuperInterfaceTys();
+    if (comSupInters.size() != platSupInters.size()) {
+        DiagNotMatchedSuperType(diag, specificDecl);
+        return false;
+    }
+    return MatchInterfaceSets(comSupInters, platSupInters, specificDecl, diag, typeManager);
+}
+
+bool MPTypeCheckerImpl::MatchCommonSpecificSuperClass(
+    const InheritableDecl& commonDecl, const InheritableDecl& specificDecl)
+{
+    if (commonDecl.astKind != ASTKind::CLASS_DECL) { return true; }
+    auto comSupClass = StaticCast<ClassDecl>(&commonDecl)->GetSuperClassDecl();
+    auto platSupIClass = StaticCast<ClassDecl>(&specificDecl)->GetSuperClassDecl();
+    // CJMP Object→PlatformParent Relaxation:
+    // Allow common class extending Object to match with specific class extending platform parent.
+    if (!comSupClass || comSupClass->identifier == "Object") {
+        if (platSupIClass && IsPlatformParent(platSupIClass)) {
+            pendingRelaxations.push_back({&commonDecl, &specificDecl});
+            return true;
+        }
+    }
+    // Standard type equality check
+    if (comSupClass && platSupIClass) {
+        if (!typeManager.IsTyEqual(comSupClass->GetTy(), platSupIClass->GetTy())) {
+            DiagNotMatchedSuperType(diag, specificDecl);
+            return false;
+        }
+    } else if (comSupClass || platSupIClass) {
+        DiagNotMatchedSuperType(diag, specificDecl);
+        return false;
+    }
+    return true;
+}
+
 bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(const InheritableDecl& commonDecl)
 {
     auto specificDecl = commonDecl.specificImplementation;
     if (!specificDecl) {
-        // It's okay if common nominative declaration have no platform,
-        // either all member are implemented in common one
-        // or it's not yet compiling into binary, so it can be matched at later phases.
         return true;
     }
-    // Match attributes (modifiers).
     std::vector<Attribute> matchedAttr = {
         Attribute::ABSTRACT, Attribute::PUBLIC, Attribute::OPEN, Attribute::PROTECTED, Attribute::C, Attribute::SEALED};
     if (!MatchCJMPDeclAttrs(matchedAttr, commonDecl, *specificDecl)) {
         return false;
     }
-    // Match super types.
-    std::set<Ptr<InterfaceTy>> comSupInters;
-    auto platSupInters = StaticCast<InheritableDecl>(specificDecl)->GetSuperInterfaceTys();
     TypeSubst genericTyMap;
     MapCJMPGenericTypeArgs(genericTyMap, commonDecl, *specificDecl);
-    if (!genericTyMap.empty()) {
-        for (auto superInterface : commonDecl.GetSuperInterfaceTys()) {
-            auto updatedInterfaceType = typeManager.GetInstantiatedTy(superInterface, genericTyMap);
-            comSupInters.emplace(StaticCast<InterfaceTy*>(updatedInterfaceType));
-        }
-    } else {
-        comSupInters = commonDecl.GetSuperInterfaceTys();
-    }
-    if (comSupInters.size() != platSupInters.size()) {
-        DiagNotMatchedSuperType(diag, *specificDecl);
+    if (!MatchCommonSpecificSuperInterfaces(commonDecl, *specificDecl, genericTyMap)) {
         return false;
     }
-    bool match = false;
-    for (auto& comSupInter : comSupInters) {
-        for (auto& platSupInter : platSupInters) {
-            if (typeManager.IsTyEqual(comSupInter, platSupInter)) {
-                match = true;
-                break;
-            }
-        }
-        if (!match) {
-            DiagNotMatchedSuperType(diag, *specificDecl);
-            return false;
-        }
+    if (!MatchCommonSpecificSuperClass(commonDecl, *specificDecl)) {
+        return false;
     }
-    // Match super class if need.
-    if (commonDecl.astKind == ASTKind::CLASS_DECL) {
-        auto comSupClass = StaticCast<ClassDecl>(&commonDecl)->GetSuperClassDecl();
-        auto platSupIClass = StaticCast<ClassDecl>(specificDecl)->GetSuperClassDecl();
-        if (!typeManager.IsTyEqual(comSupClass->GetTy(), platSupIClass->GetTy())) {
-            DiagNotMatchedSuperType(diag, *specificDecl);
-            return false;
-        }
-    }
-
     CheckCommonSpecificGenericMatch(*specificDecl, commonDecl);
-
     return true;
 }
 
@@ -915,10 +1039,12 @@ bool MPTypeCheckerImpl::IsCJMPDeclMatchable(Decl& lhsDecl, Decl& rhsDecl) const
 bool MPTypeCheckerImpl::TrySetSpecificImpl(Decl& specificDecl, Decl& commonDecl, const std::string& kind)
 {
     if (commonDecl.specificImplementation) {
+        if (commonDecl.specificImplementation.get() == &specificDecl) {
+            return true;
+        }
         diag.DiagnoseRefactor(DiagKindRefactor::sema_multiple_common_implementations, commonDecl, kind);
         return false;
     }
-    // common with default but specific without default
     if (NeedToReportMissingBody(commonDecl, specificDecl)) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_specific_member_must_have_implementation,
             specificDecl, specificDecl.identifier.Val(), commonDecl.outerDecl->identifier.Val());
@@ -1082,7 +1208,6 @@ bool MPTypeCheckerImpl::MatchSpecificDeclWithCommonDecls(
     bool isEnumConstructor = specificDecl.TestAttr(Attribute::ENUM_CONSTRUCTOR);
     auto kind = specificDecl.astKind;
     for (auto& commonDecl : commonDecls) {
-        // In case of several parent source sets there can be more then one matched common decl
         if (matched && !severalParents) {
             break;
         }
@@ -1196,7 +1321,7 @@ void MPTypeCheckerImpl::MatchCJMPDecls(std::vector<Ptr<Decl>>& commonDecls, std:
         if (specificDecl == nullptr) {
             continue;
         }
-            // need check Attribute::ABSTRACT for abstract class?
+        // need check Attribute::ABSTRACT for abstract class?
         std::vector<Attribute> matchedAttrs = { Attribute::STATIC, Attribute::MUT, Attribute::PRIVATE, Attribute::PUBLIC,
             Attribute::PROTECTED, Attribute::FOREIGN, Attribute::UNSAFE, Attribute::OPEN,
             Attribute::ABSTRACT};
@@ -1236,12 +1361,11 @@ void MPTypeCheckerImpl::MatchSpecificWithCommon(Package& pkg)
     std::vector<Ptr<Decl>> commonDecls;
     std::vector<Ptr<Decl>> specificDecls;
     CollectCJMPDecls(pkg, commonDecls, specificDecls);
-    if (compileCommon) { // check common extensions
+
+    if (compileCommon) {
         CheckCommonExtensions(commonDecls);
     }
-    // This does not contradict to previous check.
-    // A source code can be relatively platform and common at the same time.
-    if (compilePlatform) { // match common decls and platform decls
+    if (compilePlatform) {
         MatchCJMPDecls(commonDecls, specificDecls);
     }
 
@@ -1347,8 +1471,12 @@ void MPTypeCheckerImpl::GetInheritedTypesWithSpecificImpl(
     }
 
     for (auto& inhType : inheritedTypes) {
+        if (!inhType) {
+            continue;
+        }
+
         auto decl = Ty::GetDeclOfTy(inhType->GetTy());
-        if (decl && decl->specificImplementation) {
+        if (decl && decl->specificImplementation && Ty::IsTyCorrect(decl->specificImplementation->GetTy())) {
             inhType->SetTy(decl->specificImplementation->GetTy());
         }
     }

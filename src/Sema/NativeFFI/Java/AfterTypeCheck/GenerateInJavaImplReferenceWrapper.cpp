@@ -58,6 +58,9 @@ void RewriteRefWrapperPrimaryConstructor(ClassDecl& refWrapper, ClassDecl& compa
     CJC_ASSERT(Interop::Java::IsImplReferenceWrapper(refWrapper));
 
     for (auto member : refWrapper.GetMemberDeclPtrs()) {
+        if (member->TestAttr(Attribute::FROM_COMMON_PART)) {
+            continue;
+        }
         auto pctor = As<ASTKind::PRIMARY_CTOR_DECL>(member);
         if (!pctor) {
             continue;
@@ -339,6 +342,13 @@ void GenerateInJavaImplReferenceWrapper::Process(ClassDecl& refWrapper, AfterTyp
         InsertJavaSideConstructor(*userDefinedCtor, regCompanionRefField, registryCompanionClass, ctx);
     }
 
+    for (auto commonCtor : ctx.GetJavaImplFromCommonPartConstructors(refWrapper)) {
+        if (commonCtor->TestAttr(Attribute::IS_BROKEN)) {
+            continue;
+        }
+        InsertJavaSideConstructorForFromCommonPart(*commonCtor, regCompanionRefField, registryCompanionClass, ctx);
+    }
+
     RewriteUserDefinedConstructorsInitialization(ctx, refWrapper, regCompanionRefField, registryCompanionClass);
     InsertFinalizer(refWrapper);
 }
@@ -369,6 +379,134 @@ void GenerateInJavaImplReferenceWrapper::Process(AfterTypeCheckContext& ctx)
 
         Process(*refWrapper, ctx);
     }
+}
+
+namespace {
+
+void AddUserParams(FuncDecl& commonCtor, FuncBody& ctorBody, std::vector<Ptr<Ty>>& paramTys)
+{
+    if (!commonCtor.funcBody || commonCtor.funcBody->paramLists.empty() ||
+        !commonCtor.funcBody->paramLists[0]) {
+        return;
+    }
+    for (auto& userParam : commonCtor.funcBody->paramLists[0]->params) {
+        if (userParam && userParam->type) {
+            auto clonedParam = ASTCloner::Clone(Ptr<FuncParam>(userParam.get()));
+            ctorBody.paramLists[0]->params.push_back(std::move(clonedParam));
+        }
+        if (userParam && Ty::IsTyCorrect(userParam->GetTy())) {
+            paramTys.push_back(userParam->GetTy());
+        }
+    }
+}
+
+OwnedPtr<FuncBody> BuildJavaSideConstructorBody(FuncDecl& commonCtor, VarDecl& companionRefField,
+    ClassDecl& companion, ClassDecl& refWrapper, Ptr<FuncDecl> parentCtor,
+    const Ptr<Ty>& javaEntityTy, OwnedPtr<FuncParam>& entityParam, OwnedPtr<FuncParam>& regCompanionParam)
+{
+    std::vector<Ptr<Ty>> paramTys;
+    paramTys.push_back(javaEntityTy);
+    paramTys.push_back(companion.GetTy());
+
+    auto ctorBody = MakeOwned<FuncBody>();
+    ctorBody->EnableAttr(Attribute::COMPILER_ADD);
+    ctorBody->paramLists.push_back(MakeOwned<FuncParamList>());
+    ctorBody->paramLists[0]->EnableAttr(Attribute::COMPILER_ADD);
+    ctorBody->parentClassLike = &refWrapper;
+
+    ctorBody->paramLists[0]->params.push_back(std::move(entityParam));
+    ctorBody->paramLists[0]->params.push_back(std::move(regCompanionParam));
+
+    AddUserParams(commonCtor, *ctorBody, paramTys);
+
+    Ptr<FuncDecl> ctorPtr(parentCtor.get());
+    auto superCall = CreateSuperCall(refWrapper, *ctorPtr, parentCtor->GetTy());
+    superCall->args.push_back(CreateFuncArg(
+        WithinFile(CreateRefExpr(*ctorBody->paramLists[0]->params[0]), commonCtor.curFile)));
+
+    auto regCompanionAssignment = CreateAssignExpr(
+        WithinFile(CreateRefExpr(companionRefField), commonCtor.curFile),
+        WithinFile(CreateRefExpr(*ctorBody->paramLists[0]->params[1]), commonCtor.curFile),
+        TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+
+    auto block = CreateBlock({});
+    block->SetTy(refWrapper.GetTy());
+    block->body.push_back(std::move(regCompanionAssignment));
+    block->body.insert(block->body.begin(), std::move(superCall));
+    ctorBody->body = std::move(block);
+    return ctorBody;
+}
+
+}
+
+OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstructorForFromCommonPart(
+    FuncDecl& commonCtor, VarDecl& companionRefField, ClassDecl& companion) const
+{
+    auto curFile = commonCtor.curFile;
+    auto& refWrapper = *StaticAs<ASTKind::CLASS_DECL>(commonCtor.outerDecl);
+
+    auto javaEntityDecl = ilib.GetJavaEntityDecl();
+    if (!javaEntityDecl) {
+        return nullptr;
+    }
+
+    Ptr<FuncDecl> parentCtor = GetGeneratedJavaMirrorConstructor(*refWrapper.GetSuperClassDecl());
+    if (!parentCtor) {
+        return nullptr;
+    }
+
+    auto entityParam = CreateFuncParam(JAVA_IMPL_ENTITY_ARG_NAME_IN_GENERATED_CTOR,
+        CreateRefType(*javaEntityDecl), nullptr, javaEntityDecl->GetTy());
+    auto regCompanionParam = CreateFuncParam("reg", CreateRefType(companion), nullptr, companion.GetTy());
+
+    auto ctorBody = BuildJavaSideConstructorBody(commonCtor, companionRefField, companion, refWrapper,
+        parentCtor, javaEntityDecl->GetTy(), entityParam, regCompanionParam);
+
+    std::vector<Ptr<Ty>> paramTys;
+    paramTys.push_back(javaEntityDecl->GetTy());
+    paramTys.push_back(companion.GetTy());
+    if (commonCtor.funcBody && !commonCtor.funcBody->paramLists.empty() &&
+        commonCtor.funcBody->paramLists[0]) {
+        for (auto& userParam : commonCtor.funcBody->paramLists[0]->params) {
+            if (userParam && Ty::IsTyCorrect(userParam->GetTy())) {
+                paramTys.push_back(userParam->GetTy());
+            }
+        }
+    }
+    auto ctorTy = typeManager.GetFunctionTy(paramTys, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+
+    auto ctor = MakeOwned<FuncDecl>();
+    ctor->identifier = commonCtor.identifier;
+    ctor->outerDecl = &refWrapper;
+    ctor->EnableAttr(Attribute::COMPILER_ADD, Attribute::FROM_COMMON_PART);
+    ctor->funcBody = std::move(ctorBody);
+    ctor->funcBody->funcDecl = ctor.get();
+    ctor->funcBody->SetTy(ctorTy);
+    ctor->SetTy(ctorTy);
+    ctor->constructorCall = ConstructorCall::SUPER;
+    ctor->DisableAttr(Attribute::PRIMARY_CONSTRUCTOR);
+    ctor->EnableAttr(Attribute::UNSAFE);
+    return ctor;
+}
+
+FuncDecl& GenerateInJavaImplReferenceWrapper::InsertJavaSideConstructorForFromCommonPart(FuncDecl& commonCtor,
+    VarDecl& companionRefField, ClassDecl& companion, AfterTypeCheckContext& ctx) const
+{
+    CJC_ASSERT(commonCtor.outerDecl && IsImpl(*commonCtor.outerDecl));
+    auto refWrapper = StaticAs<ASTKind::CLASS_DECL>(commonCtor.outerDecl);
+    auto ctor = GenerateJavaSideConstructorForFromCommonPart(commonCtor, companionRefField, companion);
+    CJC_ASSERT(ctor);
+    auto& res = *ctor;
+    ctor->outerDecl = refWrapper;
+    ctor->fullPackageName = refWrapper->fullPackageName;
+    ctor->moduleName = refWrapper->moduleName;
+    ctor->begin = refWrapper->body->begin;
+    ctor->end = refWrapper->body->begin;
+    ctor->EnableAttr(Attribute::IN_CLASSLIKE, Attribute::PROTECTED);
+
+    refWrapper->GetMemberDecls().emplace_back(std::move(ctor));
+    ctx.CacheJavaImplReferenceWrapperConstructorsPair(commonCtor, res);
+    return res;
 }
 
 } // namespace Cangjie::Native::FFI::Java

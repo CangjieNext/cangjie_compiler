@@ -10,6 +10,7 @@
 #include "cangjie/AST/Create.h"
 #include "TypeCheckUtil.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include "cangjie/Sema/TypeManager.h"
 
 using namespace Cangjie;
 using namespace Cangjie::AST;
@@ -84,6 +85,49 @@ ClassDecl& GetExceptionDecl(const ImportManager& importManager)
     CJC_NULLPTR_CHECK(exception);
 
     return *exception;
+}
+
+namespace {
+
+void AssignPropGetterTypes(PropDecl& pd, TypeManager& typeManager)
+{
+    for (auto& getter : pd.getters) {
+        if (!Ty::IsTyCorrect(getter->GetTy())) {
+            getter->SetTy(typeManager.GetFunctionTy({}, pd.GetTy()));
+            getter->funcBody->SetTy(getter->GetTy());
+        }
+    }
+}
+
+void AssignPropSetterTypes(PropDecl& pd, TypeManager& typeManager)
+{
+    for (auto& setter : pd.setters) {
+        if (!Ty::IsTyCorrect(setter->GetTy())) {
+            setter->SetTy(typeManager.GetFunctionTy(
+                {pd.GetTy()}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
+            setter->funcBody->SetTy(setter->GetTy());
+        }
+        if (!setter->funcBody->paramLists.empty() && !setter->funcBody->paramLists[0]->params.empty()) {
+            auto& setterParam = setter->funcBody->paramLists[0]->params[0];
+            if (!Ty::IsTyCorrect(setterParam->GetTy())) {
+                setterParam->SetTy(pd.GetTy());
+            }
+        }
+    }
+}
+
+}
+
+void AssignMirrorPropGetterSetterTypes(ClassDecl& decl, TypeManager& typeManager)
+{
+    for (auto& d : decl.body->decls) {
+        if (d->astKind != ASTKind::PROP_DECL) { continue; }
+        auto& pd = *StaticAs<ASTKind::PROP_DECL>(d.get());
+        if (!pd.TestAttr(Attribute::DESUGARED_MIRROR_FIELD)) { continue; }
+        if (!Ty::IsTyCorrect(pd.GetTy())) { continue; }
+        AssignPropGetterTypes(pd, typeManager);
+        AssignPropSetterTypes(pd, typeManager);
+    }
 }
 
 } // namespace Cangjie::Native::FFI::Java

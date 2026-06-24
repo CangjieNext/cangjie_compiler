@@ -741,6 +741,11 @@ private:
     inline bool IsOpenSpecificReplaceAbstractCommon(ClassDef& classDef, const AST::FuncDecl& decl) const;
     void TranslateClassLikeMemberFuncDecl(ClassDef& classDef, const AST::FuncDecl& decl);
     bool SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::FuncDecl& decl);
+    bool SkipGetterSetterForSpecificMerging(ClassDef& classDef, const AST::FuncDecl& decl);
+    // Find a getter in classDef with matching return type for specific-mirror skipping.
+    bool FindMatchingGetterInClass(ClassDef& classDef, const AST::FuncDecl& decl, const Type* declRetTy) const;
+    // Find a setter in classDef with matching parameter type for specific-mirror skipping.
+    bool FindMatchingSetterInClass(ClassDef& classDef, const AST::FuncDecl& decl, const Type* declParamTy) const;
     void AddMemberFunctionGenericInstantiations(
         ClassDef& classDef, const std::vector<AST::FuncDecl*>& instFuncs, const AST::FuncDecl& originalDecl);
     void AddMemberPropDecl(CustomTypeDef& def, const AST::PropDecl& decl);
