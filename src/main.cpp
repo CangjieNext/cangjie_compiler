@@ -102,6 +102,8 @@ int main(int argc, const char** argv, const char** envp)
         RuntimeInit::GetInstance().CloseRuntime();
 #ifndef CANGJIE_ENABLE_GCOV
     } catch (const NullPointerException& nullPointerException) {
+        // Temporarily use CJC_ASSERT for debugging to get backtrace
+        CJC_ASSERT_WITH_MSG(false, "NullPointerException caught - see backtrace for location");
         Cangjie::ICE::TriggerPointSetter iceSetter(nullPointerException.GetTriggerPoint());
         InternalError("null pointer");
     }

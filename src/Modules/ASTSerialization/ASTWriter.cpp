@@ -9,6 +9,7 @@
  * This file implements the AST Writer related classes.
  */
 
+#include "ASTSerializeUtils.h"
 #include "ASTWriterImpl.h"
 
 #include <optional>
@@ -137,6 +138,11 @@ void CheckForConflictExportId(const std::vector<Ptr<const Decl>>& decls)
 
         for (auto it : decl->GetMemberDeclPtrs()) {
             if (it->doNotExport) {
+                continue;
+            }
+            // In CJMP, common-matched vars have their specific counterpart elsewhere in
+            // the same member list. Skip them here to avoid duplicate exportId errors.
+            if (it->specificImplementation && it->TestAttr(AST::Attribute::COMMON)) {
                 continue;
             }
             if (auto found = exportIdDeclMap.find(it->exportId); found != exportIdDeclMap.end()) {
@@ -496,13 +502,15 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
         }
         // Process platform implementation first, applying same filter logic
         if (it->specificImplementation) {
-            addedPlatformImpls.insert(it->specificImplementation.get());
-            if (shouldExportDecl(it->specificImplementation.get())) {
-                body.push_back(GetDeclIndex(it->specificImplementation));
+            if (addedPlatformImpls.insert(it->specificImplementation.get()).second) {
+                if (shouldExportDecl(it->specificImplementation.get())) {
+                    body.push_back(GetDeclIndex(it->specificImplementation));
+                }
             }
         }
         if (shouldExportDecl(it.get())) {
             body.push_back(GetDeclIndex(it));
+            addedPlatformImpls.insert(it.get());
         }
     }
     return builder.CreateVector<FormattedIndex>(body);
@@ -713,6 +721,9 @@ void ASTWriter::ASTWriterImpl::MarkImplicitExportOfImportSpec(Package& package)
     importedDeclPkgNames.clear();
     for (auto& file : package.files) {
         allFileImports.push_back(SaveFileImports(*file));
+        if (file->hasMacro && file->macroCallPosBase.fileID != file->begin.fileID) {
+            allFileImports.push_back(SaveFileImports(*file));
+        }
     }
 }
 
@@ -904,29 +915,52 @@ TFeaturesDirectiveOffset ASTWriter::ASTWriterImpl::SaveFeaturesDirective(Ptr<Fea
 }
 
 // Save fileNames, and add to savedFileMap and return its index.
+void ASTWriter::ASTWriterImpl::SaveFileInfo(const unsigned int fileID, const std::string& fullPackageName, 
+        const std::string& filePath, const Node& node, TFeaturesDirectiveOffset feature)
+{
+    // NOTE: current package's fileIndex is vector offset plus 1.
+    FormattedIndex fileIndex = static_cast<FormattedIndex>(allFiles.size()) + 1;
+    if (config.needAbsPath || serializingCommon) {
+        allFiles.push_back(builder.CreateString(filePath));
+    } else {
+        allFiles.push_back(builder.CreateString(
+            FileUtil::JoinPath(fullPackageName, FileUtil::GetFileName(filePath))));
+    }
+    savedFileMap.emplace(fileID, std::make_pair(0, fileIndex));
+
+    auto begin = TPosition(fileIndex, 0, node.begin.line, node.begin.column, false);
+    auto end = TPosition(fileIndex, 0, node.end.line, node.end.column, false);
+
+    // CJMP common parts are loaded via ASTLoaderCJMP which assigns hash-based file IDs
+    // (isCJMPFile=true in AddSource). Store the same hash-based ID so that the
+    // assertion in PreloadCommonFile passes.
+    unsigned int storedFileID = fileID;
+    if (serializingCommon) {
+        std::string normalizedPath = FileUtil::Normalize(filePath);
+        storedFileID = static_cast<unsigned int>(std::hash<std::string>{}(normalizedPath));
+    }
+
+    allFileInfo.push_back(PackageFormat::CreateFileInfo(builder, storedFileID, &begin, &end, feature));
+}
+
 void ASTWriter::ASTWriterImpl::SaveFileInfo(const File& file)
 {
     // if already saved, just return its index.
     auto found = savedFileMap.find(file.begin.fileID);
     if (found == savedFileMap.end()) {
-        // NOTE: current package's fileIndex is vector offset plus 1.
-        FormattedIndex fileIndex = static_cast<FormattedIndex>(allFiles.size()) + 1;
-        if (config.needAbsPath || serializingCommon) {
-            allFiles.push_back(builder.CreateString(file.filePath));
-        } else {
-            allFiles.push_back(builder.CreateString(
-                FileUtil::JoinPath(file.curPackage->fullPackageName, FileUtil::GetFileName(file.filePath))));
-        }
-        savedFileMap.emplace(file.begin.fileID, std::make_pair(0, fileIndex));
-        // Add additional file info for CJMP
-        auto fileID = file.begin.fileID;
-        auto begin = TPosition(fileIndex, 0, file.begin.line, file.begin.column, false);
-        auto end = TPosition(fileIndex, 0, file.end.line, file.end.column, false);
+        TFeaturesDirectiveOffset feature = 0;
+
         if (file.feature) {
-            auto feature = SaveFeaturesDirective(file.feature);
-            allFileInfo.push_back(PackageFormat::CreateFileInfo(builder, fileID, &begin, &end, feature));
-        } else {
-            allFileInfo.push_back(PackageFormat::CreateFileInfo(builder, fileID, &begin, &end));
+            feature = SaveFeaturesDirective(file.feature);
+        }
+
+        SaveFileInfo(file.begin.fileID, file.curPackage->fullPackageName, file.filePath, file, feature);
+
+        if (file.hasMacro && file.begin.fileID != file.macroCallPosBase.fileID) {
+            // this means that there are potentially decls having the other fileID
+            // so we have to save the macrocall file as well
+            SaveFileInfo(file.macroCallPosBase.fileID, file.curPackage->fullPackageName, file.macroCallFilePath, 
+                    file, feature);
         }
     }
 }
