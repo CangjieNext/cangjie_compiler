@@ -44,6 +44,7 @@ void InsertProxyPropertyGetter(PropDecl& prop, VarDecl& actualField, VarDecl& re
     getter.CloneAttrs(prop);
     getter.DisableAttr(Attribute::MUT);
     getter.EnableAttr(Attribute::COMPILER_ADD);
+    getter.EnableAttr(Attribute::JAVA_IMPL);
 
     getter.funcBody = WithinFile(MakeOwned<FuncBody>(), prop.curFile);
     auto& getterBody = *getter.funcBody;
@@ -80,6 +81,7 @@ void InsertProxyPropertySetter(PropDecl& prop, VarDecl& actualField, VarDecl& re
     setter.CloneAttrs(prop);
     setter.DisableAttr(Attribute::MUT);
     setter.EnableAttr(Attribute::COMPILER_ADD);
+    setter.EnableAttr(Attribute::JAVA_IMPL);
 
     setter.funcBody = WithinFile(MakeOwned<FuncBody>(), prop.curFile);
     auto& setterBody = *setter.funcBody;
@@ -118,6 +120,9 @@ void RewriteJavaImplReferenceWrapperFields::CloneFields(AfterTypeCheckContext& c
         if (member->astKind != ASTKind::VAR_DECL || !Is<VarDecl>(member)) {
             continue;
         }
+        if (member->TestAttr(Attribute::FROM_COMMON_PART) && member->specificImplementation) {
+            continue;
+        }
 
         // Original reference wrapper field
         auto& field = *StaticAs<ASTKind::VAR_DECL>(member.get());
@@ -130,7 +135,7 @@ void RewriteJavaImplReferenceWrapperFields::CloneFields(AfterTypeCheckContext& c
         auto& clone = CloneField(field, registryCompanion);
 
         // Generated reference wrapper property
-        auto prop = GenerateProxyProperty(field, clone, regCompanionField);
+        auto prop = GenerateProxyProperty(field, clone, regCompanionField, refWrapper);
 
         clonedFields[&field] = &clone;
         generatedProps[&field] = std::move(prop);
@@ -280,9 +285,9 @@ void RewriteJavaImplReferenceWrapperFields::EraseUserFields() const
 }
 
 OwnedPtr<PropDecl> RewriteJavaImplReferenceWrapperFields::GenerateProxyProperty(VarDecl& userField,
-    VarDecl& actualCompanionField, VarDecl& regCompanionField) const
+    VarDecl& actualCompanionField, VarDecl& regCompanionField, ClassDecl& refWrapper) const
 {
-    auto propDecl = WithinFile(MakeOwned<PropDecl>(), userField.curFile);
+    auto propDecl = WithinFile(MakeOwned<PropDecl>(), refWrapper.curFile);
     propDecl->begin = userField.begin;
     propDecl->end = userField.end;
     propDecl->keywordPos = userField.keywordPos;
@@ -300,7 +305,7 @@ OwnedPtr<PropDecl> RewriteJavaImplReferenceWrapperFields::GenerateProxyProperty(
     if (userField.isVar) {
         propDecl->EnableAttr(Attribute::MUT);
         Modifier mut = Modifier(TokenKind::MUT, userField.begin);
-        mut.curFile = userField.curFile;
+        mut.curFile = refWrapper.curFile;
         propDecl->modifiers.insert(std::move(mut));
     }
     propDecl->outerDecl = userField.outerDecl;

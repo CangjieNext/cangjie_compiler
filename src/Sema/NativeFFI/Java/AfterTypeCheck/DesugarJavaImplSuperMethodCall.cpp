@@ -61,6 +61,9 @@ void DesugarSuperMethodCallInJavaImplReferenceWrapper::Process(AfterTypeCheckCon
             if (node->TestAttr(Attribute::IS_BROKEN) || node->astKind == ASTKind::PRIMARY_CTOR_DECL) {
                 return VisitAction::SKIP_CHILDREN;
             }
+            if (node->TestAttr(Attribute::FROM_COMMON_PART)) {
+                return VisitAction::SKIP_CHILDREN;
+            }
             auto call = As<ASTKind::CALL_EXPR>(node);
             if (!call) {
                 return VisitAction::WALK_CHILDREN;
