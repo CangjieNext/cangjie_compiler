@@ -296,6 +296,10 @@ void DesugarTypeCheckingAndCasting::Process(AfterTypeCheckContext& ctx)
     Walker(&ctx.pkg, [this](auto node) {
         CJC_ASSERT(node);
 
+        if (node->TestAttr(Attribute::FROM_COMMON_PART)) {
+            return VisitAction::SKIP_CHILDREN;
+        }
+
         if (auto ie = As<ASTKind::IS_EXPR>(node.get())) {
             if (!ShouldDesugarTypecheck(ie->isType, ie->leftExpr)) {
                 return VisitAction::WALK_CHILDREN;

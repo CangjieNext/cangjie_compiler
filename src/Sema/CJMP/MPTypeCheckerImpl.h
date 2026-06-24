@@ -19,6 +19,12 @@
 #include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie {
+#ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
+struct RelaxationInfo {
+    Ptr<const AST::Decl> commonDecl;
+    Ptr<const AST::Decl> specificDecl;
+};
+#endif
 class MPTypeCheckerImpl {
 public:
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
@@ -33,6 +39,7 @@ public:
     void RemoveCommonCandidatesIfHasSpecific(std::vector<Ptr<AST::FuncDecl>>& candidates);
     void CheckReturnAndVariableTypes(AST::Package& pkg);
     void ValidateMatchedAnnotationsAndModifiers(AST::Package& pkg);
+    void ValidateCJMPConstructorConstraints(AST::Package& pkg);
     void CheckMatchedFunctionReturnTypes(AST::FuncDecl& specificFunc, AST::FuncDecl& commonFunc);
     void CheckMatchedVariableTypes(AST::VarDecl& specificVar, AST::VarDecl& commonVar);
     void MatchSpecificWithCommon(AST::Package& pkg);
@@ -43,6 +50,7 @@ public:
     void UpdateGenericTyInMemberFromCommon(TypeSubst& genericTyMap, Ptr<AST::Decl>& member);
     void UpdateSpecificMemberGenericTy(
         ASTContext& ctx, const std::function<std::vector<AST::Symbol*>(ASTContext&, AST::ASTKind)>& getSymsFunc);
+    std::vector<RelaxationInfo>& GetPendingRelaxations() { return pendingRelaxations; }
 #endif
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 private:
@@ -106,6 +114,7 @@ private:
     bool compileCommon{false};   // true if compiling common part
     bool compilePlatform{false}; // true if compiling platform part
     bool severalParents{false};  // true if there is more then one incomparable parent source sets
+    std::vector<RelaxationInfo> pendingRelaxations; // CJMP relaxation tracking for Object->AnyClass
 #endif
 };
 } // namespace Cangjie

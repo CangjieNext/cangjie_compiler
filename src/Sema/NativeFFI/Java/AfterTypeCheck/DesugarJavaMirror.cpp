@@ -111,7 +111,7 @@ void JavaDesugarManager::InsertJavaRefVarDecl(ClassDecl& decl)
 
     auto javaref = CreateVarDecl(JAVA_REF_FIELD_NAME, nullptr, CreateRefType(javaEntityDecl));
     javaref->SetTy(javaEntityDecl.GetTy());
-    javaref->EnableAttr(Attribute::JAVA_MIRROR);
+    javaref->EnableAttr(Attribute::JAVA_MIRROR, Attribute::COMPILER_ADD);
     javaref->begin = decl.body ? decl.body->begin : decl.begin;
     javaref->curFile = decl.curFile;
 
@@ -207,7 +207,8 @@ void JavaDesugarManager::InsertJavaMirrorHasInited(ClassDecl& mirror)
     ret->fullPackageName = mirror.fullPackageName;
     ret->outerDecl = Ptr(&mirror);
     ret->EnableAttr(
-        Attribute::PRIVATE, Attribute::NO_REFLECT_INFO, Attribute::IN_CLASSLIKE, Attribute::HAS_INITED_FIELD);
+        Attribute::PRIVATE, Attribute::NO_REFLECT_INFO,
+        Attribute::IN_CLASSLIKE, Attribute::HAS_INITED_FIELD, Attribute::COMPILER_ADD);
 
     mirror.body->decls.emplace_back(std::move(ret));
 }
@@ -285,6 +286,13 @@ void JavaDesugarManager::InsertJavaRefGetterWithBody(ClassDecl& decl)
 
 void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& generatedCtor)
 {
+    bool isFromCommonPart = ctor.TestAttr(Attribute::FROM_COMMON_PART) ||
+        (ctor.curFile && ctor.curFile->TestAttr(Attribute::FROM_COMMON_PART));
+    if (isFromCommonPart && !ctor.TestAttr(Attribute::JAVA_MIRROR)) {
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_ctor_from_common_has_body, ctor);
+        ctor.EnableAttr(Attribute::IS_BROKEN);
+        return;
+    }
     if (IsJArray(*ctor.outerDecl)) {
         return;
     }
@@ -409,6 +417,13 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
 
 void JavaDesugarManager::DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror, GenericConfigInfo* genericConfig)
 {
+    bool isFromCommonPart = fun.TestAttr(Attribute::FROM_COMMON_PART) ||
+        (fun.curFile && fun.curFile->TestAttr(Attribute::FROM_COMMON_PART));
+    if (isFromCommonPart && !fun.TestAttr(Attribute::JAVA_MIRROR)) {
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_method_from_common_has_body, fun);
+        fun.EnableAttr(Attribute::IS_BROKEN);
+        return;
+    }
     CJC_ASSERT(!fun.TestAttr(Attribute::CONSTRUCTOR) &&
         (fun.TestAttr(Attribute::JAVA_MIRROR) || fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)));
     AddJavaMirrorMethodBody(mirror, fun, CreateJavaRefCall(mirror, mirror.curFile), genericConfig);
@@ -494,6 +509,13 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
 
 void JavaDesugarManager::DesugarJavaMirrorProp(PropDecl& prop)
 {
+    bool isFromCommonPart = prop.TestAttr(Attribute::FROM_COMMON_PART) ||
+        (prop.curFile && prop.curFile->TestAttr(Attribute::FROM_COMMON_PART));
+    if (isFromCommonPart && !prop.TestAttr(Attribute::JAVA_MIRROR)) {
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_prop_from_common, prop);
+        prop.EnableAttr(Attribute::IS_BROKEN);
+        return;
+    }
     CJC_ASSERT(prop.outerDecl);
     InsertJavaMirrorPropGetter(prop);
 
@@ -506,11 +528,14 @@ void JavaDesugarManager::DesugarJavaMirror(ClassDecl& mirror)
 {
     Ptr<FuncDecl> generatedCtor = GetGeneratedJavaMirrorConstructor(mirror);
     for (auto& decl : mirror.GetMemberDecls()) {
-        if (auto fd = As<ASTKind::FUNC_DECL>(decl.get())) {
-            if (fd->TestAttr(Attribute::IS_BROKEN)) {
-                continue;
-            }
+        if (decl->TestAttr(Attribute::IS_BROKEN)) {
+            continue;
+        }
+        if (decl->TestAttr(Attribute::FROM_COMMON_PART) && decl->specificImplementation) {
+            continue;
+        }
 
+        if (auto fd = As<ASTKind::FUNC_DECL>(decl.get())) {
             if (fd->TestAttr(Attribute::CONSTRUCTOR)) {
                 if (!IsGeneratedJavaMirrorConstructor(*fd)) {
                     DesugarJavaMirrorConstructor(*fd, *generatedCtor);
@@ -528,6 +553,9 @@ void JavaDesugarManager::DesugarJavaMirror(InterfaceDecl& mirror)
 {
     for (auto& decl : mirror.GetMemberDecls()) {
         if (decl->TestAttr(Attribute::IS_BROKEN)) {
+            continue;
+        }
+        if (decl->TestAttr(Attribute::FROM_COMMON_PART) && decl->specificImplementation) {
             continue;
         }
         bool isConstructor = decl->TestAttr(Attribute::CONSTRUCTOR);

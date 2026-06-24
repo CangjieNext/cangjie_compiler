@@ -147,6 +147,8 @@ public:
         if (origin != nullptr) {
             return origin;
         } else {
+            // Temporarily use CJC_ASSERT for debugging to get backtrace
+            CJC_ASSERT_WITH_MSG(origin != nullptr, "OwnedPtr dereferencing null pointer");
 #ifndef CANGJIE_ENABLE_GCOV
             throw NullPointerException();
 #else
@@ -275,6 +277,8 @@ public:
         if (ptr != nullptr) {
             return ptr;
         } else {
+            // Temporarily use CJC_ASSERT for debugging to get backtrace
+            CJC_ASSERT_WITH_MSG(ptr != nullptr, "Ptr dereferencing null pointer");
 #ifndef CANGJIE_ENABLE_GCOV
             throw NullPointerException();
 #else

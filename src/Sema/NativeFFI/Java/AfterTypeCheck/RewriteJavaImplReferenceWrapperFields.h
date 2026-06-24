@@ -41,7 +41,7 @@ private:
     void EraseUserFields() const;
 
     OwnedPtr<AST::PropDecl> GenerateProxyProperty(AST::VarDecl& sample,
-        AST::VarDecl& actualCompanionField, VarDecl& actualField) const;
+        AST::VarDecl& actualCompanionField, VarDecl& actualField, ClassDecl& refWrapper) const;
 
     AST::VarDecl& CloneField(AST::VarDecl& sample, AST::ClassDecl& registryCompanion) const;
 
