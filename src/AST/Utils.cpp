@@ -15,6 +15,7 @@
 #include <mutex>
 #include <deque>
 #include <sstream>
+#include <unordered_map>
 
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
@@ -665,6 +666,9 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
     getter->CloneAttrs(prop);
     getter->DisableAttr(Attribute::MUT);
     getter->EnableAttr(Attribute::COMPILER_ADD, attrToBeSet);
+    getter->begin = prop.begin;
+    getter->end = prop.end;
+    getter->curFile = prop.curFile;
 
     if (prop.outerDecl->astKind == ASTKind::INTERFACE_DECL) {
         getter->EnableAttr(Attribute::PUBLIC);
@@ -674,8 +678,11 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
     getterBody->EnableAttr(Attribute::COMPILER_ADD);
     getterBody->paramLists.push_back(MakeOwned<FuncParamList>());
     getterBody->paramLists.begin()->get()->EnableAttr(Attribute::COMPILER_ADD);
+    getterBody->begin = prop.begin;
+    getterBody->curFile = prop.curFile;
     getter->funcBody = std::move(getterBody);
     getter->funcBody->funcDecl = getter.get();
+
     prop.getters.emplace_back(std::move(getter));
 }
 
@@ -689,6 +696,9 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
     setter->CloneAttrs(prop);
     setter->DisableAttr(Attribute::MUT);
     setter->EnableAttr(Attribute::COMPILER_ADD, attrToBeSet);
+    setter->begin = prop.begin;
+    setter->end = prop.end;
+    setter->curFile = prop.curFile;
 
     if (prop.outerDecl->astKind == ASTKind::INTERFACE_DECL) {
         setter->EnableAttr(Attribute::PUBLIC);
@@ -697,19 +707,28 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
     OwnedPtr<FuncBody> setterBody = MakeOwned<FuncBody>();
     setterBody->EnableAttr(Attribute::COMPILER_ADD);
     setterBody->paramLists.push_back(MakeOwned<FuncParamList>());
+    setterBody->begin = prop.begin;
+    setterBody->curFile = prop.curFile;
     auto setterParam = MakeOwned<FuncParam>();
     setterParam->EnableAttr(Attribute::COMPILER_ADD);
     setterParam->identifier = "set";
+    setterParam->begin = prop.begin;
+    setterParam->curFile = prop.curFile;
+    if (prop.type) {
+        setterParam->type = ASTCloner::Clone(prop.type.get());
+    }
     setterBody->paramLists.begin()->get()->params.push_back(std::move(setterParam));
     setterBody->paramLists.begin()->get()->EnableAttr(Attribute::COMPILER_ADD);
     setter->funcBody = std::move(setterBody);
     setter->funcBody->funcDecl = setter.get();
+
     prop.setters.emplace_back(std::move(setter));
 }
 
-void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribute attrToBeSet)
+void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, PropDecl** propPtr, Attribute attrToBeSet)
 {
     auto propDecl = MakeOwned<PropDecl>();
+    
     propDecl->begin = varDecl.begin;
     propDecl->end = varDecl.end;
     propDecl->keywordPos = varDecl.keywordPos;
@@ -721,6 +740,7 @@ void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribute att
     propDecl->EnableAttr(Attribute::DESUGARED_MIRROR_FIELD, Attribute::COMPILER_ADD);
     propDecl->modifiers.insert(varDecl.modifiers.begin(), varDecl.modifiers.end());
     propDecl->isVar = varDecl.isVar;
+    propDecl->curFile = varDecl.curFile;
     for (auto& anno : varDecl.annotations) {
         propDecl->annotations.emplace_back(ASTCloner::Clone(anno.get()));
     }
@@ -731,6 +751,7 @@ void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribute att
         propDecl->modifiers.insert(std::move(mut));
     }
     propDecl->outerDecl = varDecl.outerDecl;
+    *propPtr = propDecl.get();
     InsertPropGetterSignature(*propDecl.get(), attrToBeSet);
     if (varDecl.isVar) {
         InsertPropSetterSignature(*propDecl.get(), attrToBeSet);
@@ -738,31 +759,58 @@ void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribute att
     decl.body->decls.emplace_back(std::move(propDecl));
 }
 
+void LinkMatchedCommonPropToSpecific(PropDecl& commonProp, PropDecl& specificProp)
+{
+    commonProp.specificImplementation = &specificProp;
+    commonProp.doNotExport = true;
+    if (!commonProp.getters.empty() && !specificProp.getters.empty()) {
+        commonProp.getters[0]->specificImplementation = specificProp.getters[0].get();
+        commonProp.getters[0]->doNotExport = true;
+    }
+    if (!commonProp.setters.empty() && !specificProp.setters.empty()) {
+        commonProp.setters[0]->specificImplementation = specificProp.setters[0].get();
+        commonProp.setters[0]->doNotExport = true;
+    }
+}
+
 void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
 {
     auto& members = decl.GetMemberDecls();
-    // Collect the original field
-    std::vector<VarDecl*> oldVars;
-    for (auto& member : members) {
+    std::unordered_map<VarDecl*, PropDecl*> varToPropMap;
+    std::vector<size_t> transformedIndices;
+    
+    for (size_t i = 0; i < members.size(); ++i) {
+        auto& member = members[i];
         if (member->astKind != ASTKind::VAR_DECL) {
-            // extra check for ast kind is required since prop decl inherits var decl
             continue;
         }
         auto field = StaticAs<ASTKind::VAR_DECL>(member.get());
-        if (!field->type) {
+        if (!field->type && !field->TestAttr(Attribute::COMMON) && !field->TestAttr(Attribute::SPECIFIC)) {
             continue;
         }
-        // fields without syntactic type specified are invalid and should be skipped here
-        oldVars.emplace_back(field);
+        
+        PropDecl* propPtr = nullptr;
+        InsertPropConvertedByField(decl, *field, &propPtr, attrToBeSet);
+        varToPropMap[field] = propPtr;
+        transformedIndices.emplace_back(i);
     }
-    // Generate and insert the new prop
-    for (auto var : oldVars) {
-        InsertPropConvertedByField(decl, *var, attrToBeSet);
+    
+    for (auto& [varDecl, propDecl] : varToPropMap) {
+        if (varDecl->specificImplementation) {
+            auto specificVar = static_cast<VarDecl*>(varDecl->specificImplementation.get());
+            auto it = varToPropMap.find(specificVar);
+            if (it != varToPropMap.end()) {
+                LinkMatchedCommonPropToSpecific(*propDecl, *StaticAs<ASTKind::PROP_DECL>(it->second));
+            }
+        }
     }
-    // Delete the original field
+    
+    for (auto idx : transformedIndices) {
+        members[idx].reset();
+    }
     members.erase(std::remove_if(members.begin(), members.end(), [](auto& node) {
-        return node.get()->astKind == ASTKind::VAR_DECL;
-        }), members.end());
+        return !node.get();
+    }), members.end());
 }
 
 } // namespace Cangjie::AST

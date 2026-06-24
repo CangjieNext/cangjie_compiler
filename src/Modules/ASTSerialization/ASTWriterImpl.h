@@ -135,6 +135,8 @@ private:
     FormattedIndex SavePackageName(const std::string& fullPackageName);
     // Save file names and add to savedFileMap.
     void SaveFileInfo(const AST::File& file);
+    void SaveFileInfo(const unsigned int fileID, const std::string& fullPackageName, 
+        const std::string& filePath, const AST::Node& node, TFeaturesDirectiveOffset feature);
     flatbuffers::Offset<PackageFormat::Imports> SaveFileImports(const AST::File& file);
 
     TFeatureIdOffset CreateFeatureId(const AST::FeatureId& featureId);

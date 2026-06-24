@@ -11,6 +11,8 @@
 #include "cangjie/Mangle/CHIRTypeManglingUtils.h"
 #include "cangjie/Modules/ModulesUtils.h"
 
+#include <algorithm>
+
 namespace Cangjie::CHIR {
 
 Ptr<Value> Translator::Visit(const AST::ClassDecl& decl)
@@ -121,6 +123,7 @@ void Translator::AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl)
         auto memberVars = def.GetDirectInstanceVars();
         for (size_t i = 0; i < memberVars.size(); i++) {
             if (memberVars[i].TestAttr(Attribute::DESERIALIZED) && memberVars[i].name == decl.identifier) {
+                varInfo.initializerFunc = memberVars[i].initializerFunc;
                 memberVars[i] = varInfo;
                 def.SetDirectInstanceVars(memberVars);
                 return;
@@ -295,6 +298,17 @@ void Translator::AddMemberMethodToCustomTypeDef(const AST::FuncDecl& decl, Custo
         return;
     }
     auto func = StaticCast<Function>(GetSymbolTable(decl));
+
+    if (def.TestAttr(CHIR::Attribute::JAVA_IMPL) && decl.TestAttr(AST::Attribute::CONSTRUCTOR)) {
+        auto methods = def.GetMethods();
+        auto it = std::find_if(methods.begin(), methods.end(),
+            [&](Function* m) { return m->GetIdentifierWithoutPrefix() == decl.mangledName; });
+        if (it != methods.end()) {
+            methods.erase(it);
+            def.SetMethods(methods);
+        }
+    }
+
     def.AddMethod(func);
     for (auto& param : decl.funcBody->paramLists[0]->params) {
         if (param->desugarDecl != nullptr) {
@@ -358,23 +372,48 @@ void Translator::TranslateClassLikeMemberFuncDecl(ClassDef& classDef, const AST:
 
 bool Translator::SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::FuncDecl& decl)
 {
-    // Check if we're in specific merging mode with deserialized class
     if (!mergingSpecific || !classDef.TestAttr(CHIR::Attribute::DESERIALIZED)) {
         return false;
     }
 
-    auto it = genericFuncMap.find(&decl);
+    if (decl.isGetter || decl.isSetter) {
+        if (decl.TestAttr(AST::Attribute::JAVA_IMPL)) {
+            return false;
+        }
+        for (auto method : classDef.GetMethods()) {
+            if (method->GetFuncKind() == FuncKind::GETTER && decl.isGetter) {
+                auto methodRetTy = method->GetReturnType();
+                auto declRetTy = chirTy.TranslateType(*decl.GetTy());
+                if (methodRetTy && declRetTy && *methodRetTy == *declRetTy) {
+                    return true;
+                }
+            }
+            if (method->GetFuncKind() == FuncKind::SETTER && decl.isSetter) {
+                auto params = method->GetParams();
+                if (params.size() >= 2) {
+                    auto methodParamTy = params[1]->GetType();
+                    auto declParamTy = chirTy.TranslateType(*decl.GetTy());
+                    if (methodParamTy && declParamTy && *methodParamTy == *declParamTy) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
 
-    // Check if member function already exists in deserialized class
+    auto it = genericFuncMap.find(&decl);
     for (auto method : classDef.GetMethods()) {
         if (method->GetIdentifierWithoutPrefix() == decl.mangledName) {
+            if (classDef.TestAttr(CHIR::Attribute::JAVA_IMPL) && decl.TestAttr(AST::Attribute::CONSTRUCTOR)) {
+                return false;
+            }
             if (it != genericFuncMap.end()) {
                 AddMemberFunctionGenericInstantiations(classDef, it->second, decl);
             }
-            return true; // Member function already exists, skip processing
+            return true;
         }
     }
-
     return false;
 }
 
