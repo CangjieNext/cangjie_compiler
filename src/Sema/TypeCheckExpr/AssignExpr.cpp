@@ -200,7 +200,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
     if (ma == nullptr || ma->baseExpr == nullptr) {
         return false;
     }
-    if (!Ty::IsTyCorrect(ma->baseExpr->GetTy()) || !TypeIsExtern(importManager, ma->baseExpr->GetTy())) {
+    if (!Ty::IsTyCorrect(ma->baseExpr->GetTy()) || !TypeIsExtern(ma->baseExpr->GetTy())) {
         return false;
     }
     if (auto baseRef = DynamicCast<RefExpr*>(ma->baseExpr.get()); baseRef && baseRef->isThis) {
@@ -258,7 +258,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
         memberUpdate = MakeOwned<MemberAccess>();
         memberUpdate->baseExpr = std::move(runtimeRef);
         memberUpdate->field = "memberUpdate";
-        memberUpdateDecl = GetRuntimeFuncDecl(importManager, "memberUpdate");
+        memberUpdateDecl = GetRuntimeFuncDecl("memberUpdate");
         auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
         CJC_ASSERT(runtimeInterfaceDecl);
         CJC_ASSERT(memberUpdateDecl);
@@ -277,7 +277,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberUpdate(ASTContext& ctx,
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(createTypedArg(CloneEffectiveExpr(Ptr(ma->baseExpr.get()))));
-    args.emplace_back(createTypedArg(CreateStringLit(importManager, ma->field.Val())));
+    args.emplace_back(createTypedArg(CreateStringLit(ma->field.Val())));
     args.emplace_back(createTypedArg(CloneEffectiveExpr(Ptr(ae.rightExpr.get()))));
 
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
@@ -329,7 +329,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
     for (auto& indexExpr : se->indexExprs) {
         (void)typecheck(indexExpr.get());
     }
-    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(importManager, sourceExternTy)) {
+    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
         return false;
     }
     if (!std::all_of(se->indexExprs.cbegin(), se->indexExprs.cend(), [](auto& indexExpr) {
@@ -371,7 +371,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
             indexAccess = MakeOwned<MemberAccess>();
             indexAccess->baseExpr = std::move(runtimeRef);
             indexAccess->field = "indexAccess";
-            indexAccessDecl = GetRuntimeFuncDecl(importManager, "indexAccess");
+            indexAccessDecl = GetRuntimeFuncDecl("indexAccess");
             indexAccess->target = indexAccessDecl;
             auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
             CJC_ASSERT(runtimeInterfaceDecl);
@@ -426,7 +426,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexUpdate(ASTContext& ctx, 
         indexUpdate = MakeOwned<MemberAccess>();
         indexUpdate->baseExpr = std::move(runtimeRef);
         indexUpdate->field = "indexUpdate";
-        indexUpdateDecl = GetRuntimeFuncDecl(importManager, "indexUpdate");
+        indexUpdateDecl = GetRuntimeFuncDecl("indexUpdate");
         indexUpdate->target = indexUpdateDecl;
         auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
         CJC_ASSERT(runtimeInterfaceDecl);

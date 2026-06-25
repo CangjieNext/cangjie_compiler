@@ -1766,6 +1766,10 @@ private:
     bool TryDesugarExternMemberAccess(ASTContext& ctx, AST::MemberAccess& ma);
     bool TryDesugarExternIndexAccess(ASTContext& ctx, Ptr<AST::Ty> target, AST::SubscriptExpr& se);
     bool TryDesugarFunctionCall(ASTContext& ctx, Ptr<AST::Ty> target, AST::CallExpr& ce);
+    bool TypeIsExtern(Ptr<AST::Ty> ty);
+    Ptr<AST::FuncDecl> GetRuntimeFuncDecl(const std::string& name);
+    OwnedPtr<AST::LitConstExpr> CreateStringLit(const std::string& value);
+
 
     /** Members */
     Promotion promotion;

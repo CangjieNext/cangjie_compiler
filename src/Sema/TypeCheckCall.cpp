@@ -2330,11 +2330,11 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         }
     }
     auto leftmostReceiverTy = leftmostReceiver->GetTy();
-    if (!Ty::IsTyCorrect(leftmostReceiverTy) || !TypeIsExtern(importManager, leftmostReceiverTy)) {
+    if (!Ty::IsTyCorrect(leftmostReceiverTy) || !TypeIsExtern(leftmostReceiverTy)) {
         auto ds = DiagSuppressor(diag);
         leftmostReceiverTy = typecheck(leftmostReceiver);
     }
-    if (!Ty::IsTyCorrect(leftmostReceiverTy) || !TypeIsExtern(importManager, leftmostReceiverTy)) {
+    if (!Ty::IsTyCorrect(leftmostReceiverTy) || !TypeIsExtern(leftmostReceiverTy)) {
         return false;
     }
     if (!ma) {
@@ -2358,7 +2358,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
     if (directReceiverRef) {
         directReceiverRef->callOrPattern = oldCallOrPattern;
     }
-    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(importManager, sourceExternTy)) {
+    if (!Ty::IsTyCorrect(sourceExternTy) || !TypeIsExtern(sourceExternTy)) {
         return false;
     }
     for (auto& arg : ce.args) {
@@ -2402,7 +2402,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
             member = MakeOwned<MemberAccess>();
             member->baseExpr = std::move(runtimeRef);
             member->field = name;
-            decl = GetRuntimeFuncDecl(importManager, name);
+            decl = GetRuntimeFuncDecl(name);
             auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
             CJC_ASSERT(runtimeInterfaceDecl);
             CJC_ASSERT(decl);
@@ -2437,7 +2437,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarFunctionCall(ASTContext& ctx, Ptr<T
         auto effectiveBase = ma->baseExpr->desugarExpr ? ASTCloner::Clone(Ptr(ma->baseExpr->desugarExpr.get()))
                                                        : ASTCloner::Clone(Ptr(ma->baseExpr.get()));
         memberAccessArgs.emplace_back(createTypedArg(std::move(effectiveBase)));
-        memberAccessArgs.emplace_back(createTypedArg(CreateStringLit(importManager, ma->field.Val())));
+        memberAccessArgs.emplace_back(createTypedArg(CreateStringLit(ma->field.Val())));
 
         auto [memberAccess, memberAccessInfo] = createRuntimeMember("memberAccess", sourceExternTy);
         auto callTarget = isGenericRuntimeTy ? nullptr : memberAccessInfo.first;

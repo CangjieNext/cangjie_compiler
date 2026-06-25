@@ -42,7 +42,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(ASTContext& ctx, 
             return true;
         }
     }
-    if (!TypeIsExtern(importManager, sourceExternTy)) {
+    if (!TypeIsExtern(sourceExternTy)) {
         return false;
     }
     if (se.TestAttr(Attribute::LEFT_VALUE)) {
@@ -77,7 +77,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternIndexAccess(ASTContext& ctx, 
             indexAccess = MakeOwned<MemberAccess>();
             indexAccess->baseExpr = std::move(runtimeRef);
             indexAccess->field = "indexAccess";
-            indexAccessDecl = GetRuntimeFuncDecl(importManager, "indexAccess");
+            indexAccessDecl = GetRuntimeFuncDecl("indexAccess");
             indexAccess->target = indexAccessDecl;
             auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
             CJC_ASSERT(runtimeInterfaceDecl);
