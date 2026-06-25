@@ -46,6 +46,53 @@ void Devirtualization::RunOnFuncs(const std::vector<Function*>& funcs, CHIRBuild
     InstantiateFuncIfPossible(builder, rewriteInfos);
 }
 
+static void RewriteInvokeStatic(Expression* expr, CHIRBuilder& builder)
+{
+    auto invoke = DynamicCast<InvokeStatic*>(expr);
+    if (!invoke) { return; }
+    auto rttiLocalVar = DynamicCast<LocalVar>(invoke->GetRTTIValue());
+    if (!rttiLocalVar) { return; }
+    auto value = rttiLocalVar->GetExpr();
+    if (!value) { return; }
+    auto rttiStatic = DynamicCast<GetRTTIStatic*>(value);
+    if (!rttiStatic) { return; }
+    auto thisType = invoke->GetThisType()->StripAllRefs();
+    if (!thisType->IsClass()) {
+        return;
+    }
+    auto clazz = StaticCast<ClassType*>(thisType);
+    rttiStatic->Dump();
+    rttiStatic->GetRTTIType()->Dump();
+    clazz->Dump();
+    if (rttiStatic->GetRTTIType()->StripAllRefs() == clazz) {
+        auto instRetTy = invoke->GetResultType();
+        auto args = invoke->GetArgs();
+        std::vector<Value*> applyArgs{};
+        applyArgs.insert(applyArgs.end(), args.begin(), args.end());
+        auto thisTypeRef = invoke->GetThisType();
+        std::vector<Type*> paramTys;
+        for (auto&& arg : applyArgs) {
+            paramTys.push_back(arg->GetType());
+        }
+
+        std::vector<Type*> funcInstTypeArgs;
+        auto expectedFunc = clazz->GetClassDef()->GetExpectedFunc(
+            invoke->GetMethodName(),
+            *invoke->GetMethodType(),
+            true, {}, funcInstTypeArgs, builder, false);
+        if (!expectedFunc) { return; }
+
+        auto apply = builder.CreateExpression<Apply>(instRetTy, expectedFunc, FuncCallContext{
+            .args = applyArgs,
+            .thisType = thisTypeRef}, expr->GetParentBlock());
+        invoke->ReplaceWith(*apply);
+        return;
+    }
+    invoke->Dump();
+    value->Dump();
+    return;
+}
+
 void Devirtualization::RunOnFunc(const Function* func, CHIRBuilder& builder)
 {
     auto result = analysisWrapper->CheckFuncResult(func);
@@ -58,6 +105,10 @@ void Devirtualization::RunOnFunc(const Function* func, CHIRBuilder& builder)
     std::optional<std::unordered_set<const GenericType*>> visibleGenericTypes = std::nullopt;
     const auto actionBeforeVisitExpr =
         [this, &builder, &visibleGenericTypes, func](const TypeDomain& state, Expression* expr, size_t) {
+        if (expr->GetExprKind() == ExprKind::INVOKESTATIC) {
+            RewriteInvokeStatic(expr, builder);
+            return;
+        }
         if (expr->GetExprKind() != ExprKind::INVOKE) {
             return;
         }
@@ -625,7 +676,7 @@ bool Devirtualization::CheckFuncHasInvoke(const BlockGroup& bg)
                     return true;
                 }
             }
-            if (exprs[i]->GetExprKind() == ExprKind::INVOKE) {
+            if (exprs[i]->GetExprKind() == ExprKind::INVOKE || exprs[i]->GetExprKind() == ExprKind::INVOKESTATIC) {
                 return true;
             }
         }
