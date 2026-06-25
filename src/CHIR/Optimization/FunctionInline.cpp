@@ -247,6 +247,9 @@ bool FunctionInline::CheckCanRewrite(const Apply& apply)
     if (InWhiteList(*func)) {
         return true;
     }
+    if (func->TestAttr(CHIR::Attribute::OBJ_C_MIRROR)) {
+        return true;
+    }
     if (func->GetFuncKind() == FuncKind::INSTANCEVAR_INIT) {
         return true;
     }
