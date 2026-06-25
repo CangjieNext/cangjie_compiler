@@ -142,7 +142,7 @@ bool TypeAnalysis::CheckFuncHasInvoke(const BlockGroup& body)
                     return true;
                 }
             }
-            if (exprs[i]->GetExprKind() == ExprKind::INVOKE) {
+            if (exprs[i]->GetExprKind() == ExprKind::INVOKE || exprs[i]->GetExprKind() == ExprKind::INVOKESTATIC) {
                 return true;
             }
         }
