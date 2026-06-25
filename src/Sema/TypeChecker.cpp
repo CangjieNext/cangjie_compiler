@@ -49,7 +49,7 @@ using namespace AST;
 // `x` -> `T.toExtern(x)` in a context of type `Extern<T>`
 bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targetTy, Ptr<Expr> nodeExpr)
 {
-    CJC_ASSERT(TypeIsExtern(importManager, targetTy));
+    CJC_ASSERT(TypeIsExtern(targetTy));
     CJC_ASSERT(targetTy->typeArgs.size() == 1);
 
     Synthesize({ctx, SynPos::EXPR_ARG}, nodeExpr);
@@ -116,7 +116,7 @@ bool TypeChecker::TypeCheckerImpl::CoerceToExtern(ASTContext& ctx, Ptr<Ty> targe
         toExtern = MakeOwned<MemberAccess>();
         toExtern->baseExpr = std::move(runtimeRef);
         toExtern->field = "toExtern";
-        toExternDecl = GetRuntimeFuncDecl(importManager, "toExtern");
+        toExternDecl = GetRuntimeFuncDecl("toExtern");
         auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
         CJC_ASSERT(runtimeInterfaceDecl);
         auto typeMapping = GenerateTypeMapping(*runtimeInterfaceDecl, {runtimeTy});
@@ -1218,7 +1218,7 @@ bool TypeChecker::TypeCheckerImpl::Check(ASTContext& ctx, Ptr<Ty> target, Ptr<No
     auto realTarget = typeManager.TryGreedySubst(target);
 
     // Check if the type of the actual target is valid, and is Extern. If not, externification is unnecessary
-    if (auto nodeExpr = DynamicCast<Expr*>(node.get()); nodeExpr && node->astKind != ASTKind::BLOCK && TypeIsExtern(importManager, realTarget)) {
+    if (auto nodeExpr = DynamicCast<Expr*>(node.get()); nodeExpr && node->astKind != ASTKind::BLOCK && TypeIsExtern(realTarget)) {
         chkRet = CoerceToExtern(ctx, realTarget, nodeExpr);
     } else if (realTarget->IsPlaceholder() && !AcceptPlaceholderTarget(*node)) {
         auto& cst = typeManager.constraints[RawStaticCast<GenericsTy*>(realTarget)];

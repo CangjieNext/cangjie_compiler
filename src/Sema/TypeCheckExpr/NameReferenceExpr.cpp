@@ -301,7 +301,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
     (void)ctx;
     CJC_NULLPTR_CHECK(ma.baseExpr);
     auto sourceExternTy = ma.baseExpr->GetTy();
-    if (!TypeIsExtern(importManager, sourceExternTy)) {
+    if (!TypeIsExtern(sourceExternTy)) {
         return false;
     }
     if (ma.TestAttr(Attribute::LEFT_VALUE)) {
@@ -343,7 +343,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
         memberAccess = MakeOwned<MemberAccess>();
         memberAccess->baseExpr = std::move(runtimeRef);
         memberAccess->field = "memberAccess";
-        memberAccessDecl = GetRuntimeFuncDecl(importManager, "memberAccess");
+        memberAccessDecl = GetRuntimeFuncDecl("memberAccess");
         memberAccess->target = memberAccessDecl;
         auto runtimeInterfaceDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
         CJC_ASSERT(runtimeInterfaceDecl);
@@ -377,7 +377,7 @@ bool TypeChecker::TypeCheckerImpl::TryDesugarExternMemberAccess(ASTContext& ctx,
                                                         : ASTCloner::Clone(Ptr(ma.baseExpr.get()));
 
     args.emplace_back(createTypedArg(std::move(namedExpr)));
-    args.emplace_back(createTypedArg(CreateStringLit(importManager, ma.field.Val())));
+    args.emplace_back(createTypedArg(CreateStringLit(ma.field.Val())));
 
     auto callTarget = isGenericRuntimeTy ? nullptr : memberAccessDecl;
     auto call = CreateCallExpr(

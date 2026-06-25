@@ -718,4 +718,34 @@ std::string ToStringP(const SubstPack& m)
 {
     return ToStringS(m.u2i) + ToStringMS(m.inst);
 }
+
+bool TypeChecker::TypeCheckerImpl::TypeIsExtern(Ptr<Ty> ty)
+{
+    // Extern declaration always exists
+    auto externDecl = importManager.GetCoreDecl<StructDecl>("Extern");
+    CJC_ASSERT(externDecl);
+
+    // Check if the type of the actual target is valid, and is Extern. If not, externification is unnecessary
+    auto structTy = DynamicCast<StructTy*>(ty);
+    return structTy && structTy->declPtr == externDecl && structTy->typeArgs.size() == 1;
+}
+
+Ptr<FuncDecl> TypeChecker::TypeCheckerImpl::GetRuntimeFuncDecl(const std::string& name)
+{
+    auto runtimeDecl = importManager.GetCoreDecl<InterfaceDecl>("Runtime");
+    CJC_ASSERT(runtimeDecl);
+    for (auto& member : runtimeDecl->GetMemberDecls()) {
+        if (member && member->identifier == name) {
+            return DynamicCast<FuncDecl*>(member.get());
+        }
+    }
+    return nullptr;
+}
+
+OwnedPtr<LitConstExpr> TypeChecker::TypeCheckerImpl::CreateStringLit(const std::string& value)
+{
+    auto stringDecl = importManager.GetCoreDecl<StructDecl>("String");
+    CJC_ASSERT(stringDecl);
+    return CreateLitConstExpr(LitConstKind::STRING, value, stringDecl->GetTy(), true);
+}
 } // namespace Cangjie
