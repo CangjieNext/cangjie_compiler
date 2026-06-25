@@ -16,6 +16,7 @@
 #include "InteropLibBridge.h"
 #include "NameGenerator.h"
 #include "TypeMapper.h"
+#include "DeclarationCache.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/Utils/SafePointer.h"
@@ -37,12 +38,13 @@ enum class Retain {
 class ASTFactory {
 public:
     explicit ASTFactory(InteropLibBridge& bridge, TypeManager& typeManager, NameGenerator& nameGenerator,
-        TypeMapper& typeMapper, ImportManager& importManager)
+        TypeMapper& typeMapper, ImportManager& importManager, DeclarationCache& declarationCache)
         : bridge(bridge),
           typeManager(typeManager),
           nameGenerator(nameGenerator),
           typeMapper(typeMapper),
-          importManager(importManager)
+          importManager(importManager),
+          declarationCache(declarationCache)
     {
     }
 
@@ -258,6 +260,10 @@ public:
     OwnedPtr<AST::Expr> CreateObjCRetainCall(OwnedPtr<AST::Expr> id);
     OwnedPtr<AST::Expr> CreateObjCRetainAutoreleasedReturnValueCall(OwnedPtr<AST::Expr> id);
 
+    OwnedPtr<AST::Expr> CreateGetCachedSelectorAccess(std::string selector, Ptr<AST::File> curFile);
+    OwnedPtr<AST::Expr> CreateGetCachedClassAccess(std::string selector, Ptr<AST::File> curFile);
+    OwnedPtr<AST::Expr> CreateGetCachedClassAccess(AST::ClassLikeTy& ty, Ptr<AST::File> curFile);
+
 private:
     void PutDeclToClassLikeBody(AST::Decl& decl, AST::ClassLikeDecl& target);
     void PutDeclToClassBody(AST::Decl& decl, AST::ClassDecl& target);
@@ -281,6 +287,7 @@ private:
     NameGenerator& nameGenerator;
     TypeMapper& typeMapper;
     ImportManager& importManager;
+    DeclarationCache& declarationCache;
 };
 
 } // namespace Cangjie::Interop::ObjC

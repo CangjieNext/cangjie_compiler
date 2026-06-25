@@ -20,6 +20,7 @@
 #include "cangjie/Option/Option.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "NativeFFI/ObjC/Utils/ASTFactory.h"
+#include "NativeFFI/ObjC/Utils/DeclarationCache.h"
 #include "NativeFFI/ObjC/Utils/InteropLibBridge.h"
 #include "NativeFFI/ObjC/Utils/NameGenerator.h"
 #include "NativeFFI/ObjC/Utils/TypeMapper.h"
@@ -35,7 +36,7 @@ struct InteropContext {
         const Triple::OSType targetOsType)
         : pkg(pkg), diag(diag), typeManager(typeManager), importManager(importManager), bridge(importManager, diag),
           typeMapper(bridge, typeManager), mangler(mangler), nameGenerator(mangler, typeManager),
-          factory(bridge, typeManager, nameGenerator, typeMapper, importManager),
+          declarationCache(), factory(bridge, typeManager, nameGenerator, typeMapper, importManager, declarationCache),
           cjLibOutputPath(cjLibOutputPath), outputObjCGenDir(outputObjCGenDir),
           structMemberSignatures(structMemberSignatures),
           sharedLibraryExtension(GlobalOptions::GetSharedLibraryExtension(targetOsType))
@@ -63,6 +64,7 @@ struct InteropContext {
     TypeMapper typeMapper;
     const BaseMangler& mangler;
     NameGenerator nameGenerator;
+    DeclarationCache declarationCache;
     ASTFactory factory;
     const std::string& cjLibOutputPath;
     const std::string& outputObjCGenDir;

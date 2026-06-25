@@ -84,7 +84,7 @@ void DesugarIsExpr(InteropContext& ctx, IsExpr& expr)
         case TypeKind::TYPE_CLASS:
             checkCall = ctx.factory.CreateObjCIsKindOfClassCall(
                 ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*checkVarPattern->varDecl), curFile)),
-                    ctx.factory.CreateGetClassCall(targetName, curFile), curFile
+                    ctx.factory.CreateGetCachedClassAccess(targetName, curFile), curFile
             );
             break;
         case TypeKind::TYPE_INTERFACE:
@@ -158,7 +158,7 @@ void DesugarAsExpr(InteropContext& ctx, AsExpr& expr)
         case TypeKind::TYPE_CLASS:
             checkCall = ctx.factory.CreateObjCIsKindOfClassCall(
                 ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*objCIdVarPattern->varDecl), curFile)),
-                    ctx.factory.CreateGetClassCall(targetName, curFile), curFile
+                    ctx.factory.CreateGetCachedClassAccess(targetName, curFile), curFile
             );
             break;
         case TypeKind::TYPE_INTERFACE:
@@ -329,7 +329,7 @@ void DesugarMatchCaseExpr(InteropContext& ctx, MatchCase& expr)
             case TypeKind::TYPE_CLASS:
                 checkCall = ctx.factory.CreateObjCIsKindOfClassCall(
                     ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
-                        ctx.factory.CreateGetClassCall(targetName, expr.curFile), expr.curFile
+                        ctx.factory.CreateGetCachedClassAccess(targetName, expr.curFile), expr.curFile
                 );
                 break;
             case TypeKind::TYPE_INTERFACE:
@@ -406,7 +406,7 @@ void DesugarLetDestructorExpr(InteropContext& ctx, IfExpr& expr)
             case TypeKind::TYPE_CLASS:
                 checkCall = ctx.factory.CreateObjCIsKindOfClassCall(
                     ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
-                        ctx.factory.CreateGetClassCall(targetName, expr.curFile), expr.curFile
+                        ctx.factory.CreateGetCachedClassAccess(targetName, expr.curFile), expr.curFile
                 );
                 break;
             case TypeKind::TYPE_INTERFACE:
@@ -466,7 +466,7 @@ void DesugarWhileExpr(InteropContext& ctx, WhileExpr& expr)
             case TypeKind::TYPE_CLASS:
                 checkCall = ctx.factory.CreateObjCIsKindOfClassCall(
                     ctx.factory.CreateNativeHandleExpr(WithinFile(CreateRefExpr(*varPat->varDecl), expr.curFile)),
-                        ctx.factory.CreateGetClassCall(targetName, expr.curFile), expr.curFile
+                        ctx.factory.CreateGetCachedClassAccess(targetName, expr.curFile), expr.curFile
                 );
                 break;
             case TypeKind::TYPE_INTERFACE:
