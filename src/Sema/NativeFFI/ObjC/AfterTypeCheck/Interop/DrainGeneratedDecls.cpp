@@ -16,11 +16,22 @@ using namespace Cangjie::Interop::ObjC;
 
 void DrainGeneratedDecls::HandleImpl(InteropContext& ctx)
 {
-    for (auto pdecl = ctx.genDecls.begin(); pdecl < ctx.genDecls.end(); pdecl++) {
-        auto& file = (*pdecl)->curFile;
-        file->decls.push_back(std::move(*pdecl));
+    for (auto&& decl : ctx.genDecls) {
+        auto& file = decl->curFile;
+        file->decls.push_back(std::move(decl));
+    }
+
+    for ([[maybe_unused]] auto&& [_, decl] : ctx.declarationCache.cachedClassDecls) {
+        auto& file = decl->curFile;
+        file->decls.push_back(std::move(decl));
+    }
+
+    for ([[maybe_unused]] auto&& [_, decl] : ctx.declarationCache.cachedSelectorDecls) {
+        auto& file = decl->curFile;
+        file->decls.push_back(std::move(decl));
     }
 
     ctx.genDecls.clear();
     ctx.fwdClasses.clear();
+    ctx.declarationCache.Clear();
 }
