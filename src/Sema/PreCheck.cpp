@@ -11,6 +11,7 @@
  */
 
 #include "Diags.h"
+#include "DiagSuppressor.h"
 #include "JoinAndMeet.h"
 #include "TypeCheckUtil.h"
 #include "TypeCheckerImpl.h"
@@ -912,6 +913,22 @@ void TypeChecker::TypeCheckerImpl::ResolveNames(ASTContext& ctx)
                     // Update id to ignore baseType for unchanged type in incremental compilation.
                     CJC_NULLPTR_CHECK(qt->baseType);
                     qt->baseType->visitedByWalkerID = id;
+                }
+                return VisitAction::WALK_CHILDREN;
+            }
+            case ASTKind::AMBIGUOUS_FORCED_CAST_EXPR: {
+                // `type` is a speculative forced-cast target; resolve it under
+                // suppression (it may legitimately not be a type, e.g. `(consume)(e)`)
+                // and mark it visited so the generic handling above does not re-resolve
+                // it unsuppressed.
+                auto afce = StaticAs<ASTKind::AMBIGUOUS_FORCED_CAST_EXPR>(node);
+                if (afce->type) {
+                    auto ds = DiagSuppressor(diag);
+                    SetTypeTy(ctx, *afce->type);
+                    if (Ty::IsTyCorrect(afce->type->GetTy())) {
+                        ds.ReportDiag();
+                    }
+                    afce->type->visitedByWalkerID = id;
                 }
                 return VisitAction::WALK_CHILDREN;
             }
