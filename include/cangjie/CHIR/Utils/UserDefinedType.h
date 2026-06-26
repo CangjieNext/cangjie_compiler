@@ -36,6 +36,8 @@ struct FuncSigInfo {
                                   // there may be generic type in it
     std::vector<GenericType*> genericTypeParams;
 
+    std::string ToStringBrief() const;
+
     std::string ToString() const;
 
     void Dump() const;
@@ -45,6 +47,10 @@ struct FuncCallType {
     std::string funcName;         // src code name
     FuncType* funcType{nullptr};  // inst type, including `this` type and return type
     std::vector<Type*> genericTypeArgs;
+
+    std::string ToString() const;
+
+    void Dump() const;
 };
 
 class VirtualMethodInfo {
@@ -64,22 +70,34 @@ public:
     // ===--------------------------------------------------------------------===//
     /** @brief Get attribute information */
     AttributeInfo GetAttributeInfo() const;
+
     /** @brief Get function signature condition information (including function name, function type, and generic type parameters) */
     const FuncSigInfo& GetCondition() const;
+
     /** @brief Get generic type parameters list */
     std::vector<GenericType*> GetGenericTypeParams() const;
+
     /** @brief Get instantiated parent type */
     Type* GetInstParentType() const;
+
     /** @brief Get method instantiated return type */
     Type* GetMethodInstRetType() const;
+
     /** @brief Get method name */
     std::string GetMethodName() const;
+
     /** @brief Get method signature type */
     FuncType* GetMethodSigType() const;
+
     /** @brief Get original function type (from parent definition, including generic parameters) */
     FuncType* GetOriginalFuncType() const;
+
     /** @brief Get virtual method function instance */
     Function* GetVirtualMethod() const;
+
+    std::string ToString(size_t indent) const;
+
+    void Dump() const;
 
     // ===--------------------------------------------------------------------===//
     // Set
@@ -88,22 +106,27 @@ public:
      *  @param newName New function name
      */
     void SetFuncName(const std::string& newName);
+
     /** @brief Set instantiated parent type
      *  @param newParentTy New parent type
      */
     void SetInstParentType(Type& newParentTy);
+
     /** @brief Set original function type
      *  @param newFuncType New function type
      */
     void SetOriginalFuncType(FuncType& newFuncType);
+
     /** @brief Set virtual method function instance
      *  @param newFunc New function instance
      */
     void SetVirtualMethod(Function* newFunc);
+
     /** @brief Update method information (copy information from another VirtualMethodInfo)
      *  @param newInfo New method information to copy from
      */
     void UpdateMethodInfo(const VirtualMethodInfo& newInfo);
+
     /** @brief Convert private types (used in type conversion scenarios)
      *  @param convertFuncParamsAndRetType Conversion function for function parameters and return type
      *  @param convertType Conversion function for types
@@ -120,6 +143,7 @@ public:
      *  @return true if signatures match, false otherwise
      */
     bool FuncSigIsMatched(const FuncSigInfo& other, CHIRBuilder& builder) const;
+
     /** @brief Check if function signature matches (compare with FuncCallType, supports generic substitution)
      *         `replaceTable` is a copy, we don't want generic type defined in func decl to be emplaced in
      *  @param other Function call type to compare
@@ -129,6 +153,7 @@ public:
      */
     bool FuncSigIsMatched(const FuncCallType& other,
         std::unordered_map<const GenericType*, Type*> replaceTable, CHIRBuilder& builder) const;
+
     /** @brief Test if the method has the specified attribute
      *  @param a Attribute to test
      *  @return true if the method has the attribute, false otherwise
@@ -151,10 +176,12 @@ class VTableInType {
 public:
     /** @brief Default constructor, creates an empty virtual function table */
     VTableInType();
+
     /** @brief Constructor, creates a virtual function table for the specified parent type
      *  @param p Source parent type (ClassType)
      */
     explicit VTableInType(ClassType& p);
+
     /** @brief Constructor, creates a virtual function table for the specified parent type and initializes method list
      *  @param p Source parent type (ClassType)
      *  @param methods Virtual method information list
@@ -166,12 +193,19 @@ public:
     // ===--------------------------------------------------------------------===//
     /** @brief Get the number of virtual methods */
     size_t GetMethodNum() const;
+
     /** @brief Get modifiable virtual methods list (non-const reference) */
     std::vector<VirtualMethodInfo>& GetModifiableVirtualMethods();
+
     /** @brief Get source parent type pointer */
     ClassType* GetSrcParentType() const;
+
     /** @brief Get virtual methods list (const reference) */
     const std::vector<VirtualMethodInfo>& GetVirtualMethods() const;
+
+    std::string ToString(size_t indent) const;
+
+    void Dump() const;
 
     // ===--------------------------------------------------------------------===//
     // Set
@@ -180,6 +214,7 @@ public:
      *  @param newMethod New virtual method information (rvalue reference)
      */
     void AppendNewMethod(VirtualMethodInfo&& newMethod);
+
     /** @brief Convert private types (used in type conversion scenarios)
      *  @param convertFuncParamsAndRetType Conversion function for function parameters and return type
      *  @param convertType Conversion function for types
@@ -211,11 +246,17 @@ public:
      *  @return Reference to the virtual function table if found, otherwise returns an empty virtual function table
      */
     const VTableInType& GetExpectedTypeVTable(const ClassType& srcParentType) const;
+
     /** @brief Get modifiable type virtual function tables list (non-const reference) */
     std::vector<VTableInType>& GetModifiableTypeVTables();
+
     /** @brief Get type virtual function tables list (const reference) */
     const std::vector<VTableInType>& GetTypeVTables() const;
-    
+
+    std::string ToString(size_t indent) const;
+
+    void Dump() const;
+
     // ===--------------------------------------------------------------------===//
     // Set
     // ===--------------------------------------------------------------------===//
@@ -225,12 +266,14 @@ public:
      *  @note If the virtual function table for this type does not exist, it will be created automatically
      */
     void AddNewItemToTypeVTable(ClassType& srcParent, VirtualMethodInfo&& funcInfo);
+
     /** @brief Create a new virtual function table for the specified type and add virtual method list
      *  @param srcParent Source parent type
      *  @param funcInfos Virtual method information list (rvalue reference)
      *  @note Requires that the virtual function table for this type does not exist, otherwise an assertion will be triggered
      */
     void AddNewItemToTypeVTable(ClassType& srcParent, std::vector<VirtualMethodInfo>&& funcInfos);
+
     /** @brief Update method information at the specified index in the virtual function table of the specified type
      *  @param srcClassTy Source class type
      *  @param index Index of the method in the virtual function table
@@ -240,6 +283,7 @@ public:
      */
     void UpdateItemInTypeVTable(
         ClassType& srcClassTy, size_t index, Function* newFunc, Type* newParentTy, const std::string& newName);
+
     /** @brief Convert private types (used in type conversion scenarios)
      *  @param convertFuncParamsAndRetType Conversion function for function parameters and return type
      *  @param convertType Conversion function for types
