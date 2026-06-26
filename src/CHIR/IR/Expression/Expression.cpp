@@ -888,6 +888,7 @@ DynamicDispatch::DynamicDispatch(ExprKind kind, const InvokeCallContext& callCon
 {
     CJC_NULLPTR_CHECK(callContext.method);
     CJC_NULLPTR_CHECK(callContext.funcCallCtx.thisType);
+    CJC_ASSERT(callContext.overflowStrategy != Cangjie::OverflowStrategy::CHECKED);
     AppendOperand(*callContext.method);
 }
 

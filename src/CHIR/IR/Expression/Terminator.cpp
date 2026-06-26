@@ -323,6 +323,7 @@ DynamicDispatchWithException::DynamicDispatchWithException(
     CJC_NULLPTR_CHECK(sucBlock);
     CJC_NULLPTR_CHECK(errBlock);
     CJC_NULLPTR_CHECK(parent);
+    CJC_ASSERT(callContext.overflowStrategy != Cangjie::OverflowStrategy::CHECKED);
     CheckVirFuncInvokeInfo(callContext);
     AppendOperand(*callContext.method);
     AppendOperand(*callContext.caller);

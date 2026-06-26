@@ -285,10 +285,7 @@ Value* Translator::WrapMemberMethodByLambda(
     } else {
         // Apply
         if (thisObj != nullptr) {
-            auto objExpectedType = instFuncType.instParentCustomTy;
-            if (objExpectedType->IsReferenceType()) {
-                objExpectedType = builder.GetType<RefType>(objExpectedType);
-            }
+            auto objExpectedType = AddRefIfFuncIsMutOrClass(*instFuncType.instParentCustomTy, funcDecl, builder);
             args.insert(args.begin(), TransformThisType(*thisObj, *objExpectedType, *lambda));
         }
         CJC_ASSERT(args.size() == instFuncType.instParamTys.size());
