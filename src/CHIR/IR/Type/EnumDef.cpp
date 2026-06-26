@@ -26,16 +26,16 @@ bool EnumDef::IsAllCtorsTrivial() const
     return true;
 }
 
-std::string EnumDef::LocalVarToString() const
+std::string EnumDef::LocalVarToString(size_t indent) const
 {
     std::stringstream ss;
     for (auto& ctor : ctors) {
-        ss << AddNewLineOrNot(ctor.annoInfo.ToString(1));
-        ss << IndentToString(1) <<
+        ss << AddNewLineOrNot(ctor.annoInfo.ToString(indent));
+        ss << IndentToString(indent) <<
             "| " << ctor.name << TypeVecToString("(", ctor.funcType->GetParamTypes(), ")") << std::endl;
     }
     if (nonExhaustive) {
-        ss << IndentToString(1) << "| ..." << std::endl;
+        ss << IndentToString(indent) << "| ..." << std::endl;
     }
     return ss.str();
 }

@@ -268,10 +268,9 @@ protected:
     std::string ParentToString() const;
     std::string CommentToString() const;
     virtual std::string AddExtraComment() const;
-    virtual std::string LocalVarToString() const;
-    std::string StaticVarToString() const;
-    std::string MethodToString() const;
-    std::string VTableToString() const;
+    virtual std::string LocalVarToString(size_t indent) const;
+    std::string StaticVarToString(size_t indent) const;
+    std::string MethodToString(size_t indent) const;
 
 protected:
     CustomDefKind kind : 8;
