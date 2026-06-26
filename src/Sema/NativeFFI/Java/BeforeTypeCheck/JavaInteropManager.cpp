@@ -57,7 +57,7 @@ void JavaInteropManager::Process(Package& pkg) const
     //    Late transformations affect generated wrappers (fills bodies, etc).
     auto ctx = PreTypeCheckContext(importManager, typeManager, pkg);
     Process<GenerateJavaMirrorReferenceWrapperClass>(ctx);
-    Process<GenerateJavaImplRegistryCompanionClass>(ctx);
+    Process<GenerateJavaImplRegistryCompanion>(ctx);
 
     // 2. Transform java specific declarations.
     Process<RewriteJavaMirrorFields>(ctx);

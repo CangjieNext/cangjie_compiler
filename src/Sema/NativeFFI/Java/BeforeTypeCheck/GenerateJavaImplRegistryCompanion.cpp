@@ -20,7 +20,7 @@ using namespace std;
 
 namespace Cangjie::Native::FFI::Java {
 
-OwnedPtr<AST::ClassDecl> GenerateJavaImplRegistryCompanionClass::GenerateRegistryCompanion(AST::ClassDecl& impl) const
+OwnedPtr<AST::ClassDecl> GenerateJavaImplRegistryCompanion::GenerateRegistryCompanion(AST::ClassDecl& impl) const
 {
     CJC_ASSERT(IsImpl(impl));
     auto regCompanion = CloneClassSkeleton(impl, GetImplRegistryCompanionClassName(impl));
@@ -29,7 +29,7 @@ OwnedPtr<AST::ClassDecl> GenerateJavaImplRegistryCompanionClass::GenerateRegistr
     return regCompanion;
 }
 
-void GenerateJavaImplRegistryCompanionClass::Process(PreTypeCheckContext& ctx)
+void GenerateJavaImplRegistryCompanion::Process(PreTypeCheckContext& ctx)
 {
     for (auto impl : ctx.javaImpls) {
         ctx.AddGeneratedDecl(GenerateRegistryCompanion(*impl));

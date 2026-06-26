@@ -12,20 +12,20 @@
 #ifndef CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_DESUGAR_JAVA_IMPL_SUPER_CONSTRUCTOR_CALL
 #define CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_DESUGAR_JAVA_IMPL_SUPER_CONSTRUCTOR_CALL
 
-#include "Context.h"
+#include "AfterTypeCheckStage.h"
 #include "InteropLibBridge.h"
+#include "JniBridge.h"
 #include "cangjie/AST/Node.h"
-
-namespace Cangjie::Interop::Java {
-class JavaDesugarManager;
-}
+#include "cangjie/Basic/DiagnosticEngine.h"
+#include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie::Native::FFI::Java {
 using namespace Interop::Java;
 
 class DesugarJavaImplSuperConstructorCall : public AfterTypeCheckStage {
 public:
-    explicit DesugarJavaImplSuperConstructorCall(JavaDesugarManager& man);
+    explicit DesugarJavaImplSuperConstructorCall(TypeManager& typeManager,
+        InteropLibBridge& ilib, JniBridge& jni, DiagnosticEngine& diag, Interop::Java::Utils& utils);
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
 private:
@@ -72,9 +72,13 @@ private:
     OwnedPtr<AST::Expr> WrapExprWithExceptionHandling(std::vector<OwnedPtr<AST::Node>>&& nodes,
         OwnedPtr<AST::Expr> expr, AST::FuncParam& env, const AST::ClassLikeDecl& decl) const;
 
-    InteropLibBridge& ilib;
+    std::string GetJniSuperArgFuncName(const AST::ClassLikeDecl& outer, const std::string& id) const;
+
     TypeManager& typeManager;
-    JavaDesugarManager& man;
+    InteropLibBridge& ilib;
+    JniBridge& jni;
+    DiagnosticEngine& diag;
+    Interop::Java::Utils& utils;
 };
 
 }

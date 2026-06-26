@@ -6,7 +6,6 @@
 
 #include "JavaDesugarManager.h"
 #include "GenerateInJavaImplReferenceWrapper.h"
-#include "DesugarJavaImplSuperConstructorCall.h"
 #include "NativeFFI/Utils.h"
 #include "Utils.h"
 #include "NativeFFI/Java/Utils.h"
@@ -115,7 +114,7 @@ void GenerateInJavaImplReferenceWrapper::GenerateWrappingConstructorBody(FuncDec
     auto curFile = wrappingCtor.curFile;
 
     CJC_ASSERT(wrappingCtor.outerDecl && wrappingCtor.outerDecl->astKind == ASTKind::CLASS_DECL);
-    auto& refWrapper = *As<ASTKind::CLASS_DECL>(wrappingCtor.outerDecl);
+    auto& refWrapper = *StaticAs<ASTKind::CLASS_DECL>(wrappingCtor.outerDecl);
 
     auto& params = wrappingCtor.funcBody->paramLists[0]->params;
 
@@ -343,8 +342,9 @@ void GenerateInJavaImplReferenceWrapper::Process(ClassDecl& refWrapper, AfterTyp
     InsertFinalizer(refWrapper);
 }
 
-GenerateInJavaImplReferenceWrapper::GenerateInJavaImplReferenceWrapper(JavaDesugarManager& man)
-    : typeManager(man.typeManager), importManager(man.importManager), ilib(man.lib), utils(man.utils)
+GenerateInJavaImplReferenceWrapper::GenerateInJavaImplReferenceWrapper(TypeManager& typeManager,
+    const ImportManager& importManager, InteropLibBridge& ilib, Native::FFI::Java::Utils& utils)
+    : typeManager(typeManager), importManager(importManager), ilib(ilib), utils(utils)
 {
 }
 

@@ -12,15 +12,11 @@
 #ifndef CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_GENERATE_IN_JAVA_IMPL_REFERENCE_WRAPPER
 #define CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_GENERATE_IN_JAVA_IMPL_REFERENCE_WRAPPER
 
-#include "Context.h"
+#include "AfterTypeCheckStage.h"
 #include "InteropLibBridge.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
-
-namespace Cangjie::Interop::Java {
-class JavaDesugarManager;
-}
 
 namespace Cangjie::Native::FFI::Java {
 using namespace Interop::Java;
@@ -30,7 +26,8 @@ using namespace Interop::Java;
  */
 class GenerateInJavaImplReferenceWrapper : public AfterTypeCheckStage {
 public:
-    explicit GenerateInJavaImplReferenceWrapper(JavaDesugarManager& man);
+    explicit GenerateInJavaImplReferenceWrapper(TypeManager& typeManager,
+        const ImportManager& importManager, InteropLibBridge& ilib, Native::FFI::Java::Utils& utils);
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
 private:
