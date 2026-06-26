@@ -7,26 +7,52 @@
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
+#include "cangjie/CHIR/IR/Value/Value.h"
 #include "cangjie/CHIR/Utils/ToStringUtils.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/Utils/CheckUtils.h"
+#include <iostream>
 #include <pthread.h>
 #include <sstream>
 
 using namespace Cangjie::CHIR;
 
+std::string FuncSigInfo::ToStringBrief() const
+{
+    auto temp = FuncCallType{
+        .funcName = funcName,
+        .funcType = funcType,
+        .genericTypeArgs = std::vector<Type*>(genericTypeParams.begin(), genericTypeParams.end()),
+    };
+    return temp.ToString();
+}
+
 std::string FuncSigInfo::ToString() const
 {
     std::stringstream ss;
-    ss << funcName;
-    CJC_NULLPTR_CHECK(funcType);
-    ss << TypeVecToString("<", genericTypeParams, ">");
+    ss << ToStringBrief();
+    if (auto str = GetGenericTypeConstaintsStr(genericTypeParams); !str.empty()) {
+        ss << " " << str;
+    }
+    return ss.str();
+}
+
+void FuncSigInfo::Dump() const
+{
+    std::cout << ToString() << std::endl;
+}
+
+std::string FuncCallType::ToString() const
+{
+    std::stringstream ss;
+    ss << "@" << funcName;
+    ss << TypeVecToString("<", genericTypeArgs, ">");
     ss << "(" << TypeVecToString("", funcType->GetParamTypes(), "") << ")";
     ss << " -> " << funcType->GetReturnType()->ToString();
     return ss.str();
 }
 
-void FuncSigInfo::Dump() const
+void FuncCallType::Dump() const
 {
     std::cout << ToString() << std::endl;
 }
@@ -192,6 +218,22 @@ std::vector<GenericType*> VirtualMethodInfo::GetGenericTypeParams() const
     return condition.genericTypeParams;
 }
 
+std::string VirtualMethodInfo::ToString(size_t indent) const
+{
+    CJC_NULLPTR_CHECK(originalType);
+    CJC_NULLPTR_CHECK(instance);
+
+    std::stringstream ss;
+    ss << IndentToString(indent);
+    ss << condition.ToStringBrief() << " => " << instance->GetIdentifier();
+    return ss.str();
+}
+
+void VirtualMethodInfo::Dump() const
+{
+    std::cout << ToString(0) << std::endl;
+}
+
 VTableInType::VTableInType()
 {
 }
@@ -244,6 +286,26 @@ size_t VTableInType::GetMethodNum() const
     return virtualMethods.size();
 }
 
+std::string VTableInType::ToString(size_t indent) const
+{
+    if (IsEmpty()) {
+        return "";
+    }
+    std::stringstream ss;
+    ss << IndentToString(indent++);
+    ss << srcParentType->ToString() << " {" << std::endl;
+    for (const auto& funcInfo : virtualMethods) {
+        ss << funcInfo.ToString(indent) << std::endl;
+    }
+    ss << IndentToString(--indent) << "}" << std::endl;
+    return ss.str();
+}
+
+void VTableInType::Dump() const
+{
+    std::cout << ToString(0);
+}
+
 std::vector<VTableInType>& VTableInDef::GetModifiableTypeVTables()
 {
     return vtables;
@@ -252,6 +314,26 @@ std::vector<VTableInType>& VTableInDef::GetModifiableTypeVTables()
 const std::vector<VTableInType>& VTableInDef::GetTypeVTables() const
 {
     return vtables;
+}
+
+std::string VTableInDef::ToString(size_t indent) const
+{
+    std::stringstream ss;
+    if (vtables.empty()) {
+        return "";
+    }
+    ss << IndentToString(indent++);
+    ss << "vtable {" << std::endl;
+    for (const auto& vtableInType : vtables) {
+        ss << vtableInType.ToString(indent);
+    }
+    ss << IndentToString(--indent) << "}" << std::endl;
+    return ss.str();
+}
+
+void VTableInDef::Dump() const
+{
+    std::cout << ToString(0);
 }
 
 const VTableInType& VTableInDef::GetExpectedTypeVTable(const ClassType& srcParentType) const

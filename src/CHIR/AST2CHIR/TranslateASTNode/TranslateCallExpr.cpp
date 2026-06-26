@@ -871,11 +871,7 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
     if (!resolvedFunction->TestAttr(AST::Attribute::STATIC)) {
         // for virtual func call, we should calculate the correct this object type and store it in instParamTys[0]
         if (instCallInfo.isVirtualFuncCall) {
-            expectedThisObjTy = instCallInfo.instParentCustomTy;
-            if (expectedThisObjTy->IsClassOrArray() ||
-                (expectedThisObjTy->IsStruct() && resolvedFunction->TestAttr(AST::Attribute::MUT))) {
-                expectedThisObjTy = builder.GetType<RefType>(expectedThisObjTy);
-            }
+            expectedThisObjTy = AddRefIfFuncIsMutOrClass(*instCallInfo.instParentCustomTy, *resolvedFunction, builder);
         } else {
             expectedThisObjTy = expectedParamTys[0];
         }

@@ -888,6 +888,7 @@ DynamicDispatch::DynamicDispatch(ExprKind kind, const InvokeCallContext& callCon
 {
     CJC_NULLPTR_CHECK(callContext.method);
     CJC_NULLPTR_CHECK(callContext.funcCallCtx.thisType);
+    CJC_ASSERT(callContext.overflowStrategy != Cangjie::OverflowStrategy::CHECKED);
     AppendOperand(*callContext.method);
 }
 
@@ -980,6 +981,14 @@ std::string DynamicDispatch::OperandsToString() const
     res.emplace_back(func);
     res.emplace_back(ValueIdVecToString("", std::vector<Value*>(operands.begin() + 1, operands.end()), ""));
     return StringJoin(res, ", ");
+}
+
+std::string DynamicDispatch::AddExtraComment() const
+{
+    if (overflowStrategy != Cangjie::OverflowStrategy::NA) {
+        return "methodName: " + GetMethodName();
+    }
+    return "";
 }
 
 // Invoke

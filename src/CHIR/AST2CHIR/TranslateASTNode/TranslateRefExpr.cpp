@@ -206,17 +206,10 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
 {
     auto tempDecl = typeManager.GetTopOverriddenFuncDecl(&callee);
     const AST::FuncDecl* originalFuncDecl = tempDecl ? tempDecl.get() : &callee;
-    auto funcName = originalFuncDecl->identifier.Val();
-    auto thisType = instFuncInfo.thisType->StripAllRefs();
-    if (thisType->IsThis()) {
-        thisType = GetCurrentFunc()->GetParentCustomTypeDef()->GetType();
-    }
-    auto isStatic = originalFuncDecl->TestAttr(AST::Attribute::STATIC);
-    auto instTypeArgs = instFuncInfo.instantiatedTypeArgs;
-    auto instFuncType = builder.GetType<FuncType>(instFuncInfo.instParamTys, instFuncInfo.instRetTy);
-    auto method = thisType->GetExpectedFunc(funcName, *instFuncType, isStatic, instTypeArgs, builder, true);
-    CJC_NULLPTR_CHECK(method);
-
+    auto method = StaticCast<Function*>(GetSymbolTable(*originalFuncDecl));
+    // the overflow strategy is NA in mock case, of course, it's a wrong choice, we have to use SATURATING as default
+    // we choose SATURATING because SATURATING and NA are same in `OverflowStrategyPrefix`
+    auto tempStrategy = strategy == OverflowStrategy::NA ? OverflowStrategy::SATURATING : strategy;
     return InvokeCallContext {
         .method = method,
         .caller = &caller,
@@ -225,7 +218,7 @@ InvokeCallContext Translator::GenerateInvokeCallContext(const InstCalleeInfo& in
             .instTypeArgs = instFuncInfo.instantiatedTypeArgs,
             .thisType = instFuncInfo.thisType
         },
-        .overflowStrategy = IsOverflowOpCall(*originalFuncDecl) ? strategy : OverflowStrategy::NA
+        .overflowStrategy = IsOverflowOpCall(*originalFuncDecl) ? tempStrategy : OverflowStrategy::NA
     };
 }
 
@@ -285,10 +278,7 @@ Value* Translator::WrapMemberMethodByLambda(
     } else {
         // Apply
         if (thisObj != nullptr) {
-            auto objExpectedType = instFuncType.instParentCustomTy;
-            if (objExpectedType->IsReferenceType()) {
-                objExpectedType = builder.GetType<RefType>(objExpectedType);
-            }
+            auto objExpectedType = AddRefIfFuncIsMutOrClass(*instFuncType.instParentCustomTy, funcDecl, builder);
             args.insert(args.begin(), TransformThisType(*thisObj, *objExpectedType, *lambda));
         }
         CJC_ASSERT(args.size() == instFuncType.instParamTys.size());

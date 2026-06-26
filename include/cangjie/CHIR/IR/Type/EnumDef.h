@@ -56,7 +56,7 @@ private:
     }
     ~EnumDef() override = default;
 
-    std::string LocalVarToString() const override;
+    std::string LocalVarToString(size_t indent) const override;
     friend class CHIRContext;
     friend class CHIRBuilder;
 

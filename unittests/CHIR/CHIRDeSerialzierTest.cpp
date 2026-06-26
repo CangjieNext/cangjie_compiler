@@ -1832,15 +1832,12 @@ TEST_F(CHIRDeSerialzierTest, SkipKindEnum)
 
 TEST_F(CHIRDeSerialzierTest, OverflowStrategyEnum)
 {
+    using namespace PackageFormat;
     using Cangjie::OverflowStrategy;
-    auto enumBegin = PackageFormat::OverflowStrategy_MIN;
-    auto enumEnd = PackageFormat::OverflowStrategy_MAX;
-
-    for (size_t i = static_cast<size_t>(enumBegin); i <= static_cast<size_t>(enumEnd); i++) {
-        EXPECT_EQ(OverflowStrategy(static_cast<PackageFormat::OverflowStrategy>(i)),
-            DeSerialize(static_cast<PackageFormat::OverflowStrategy>(i)))
-            << "cur i: " << i;
-    }
+    EXPECT_EQ(DeSerialize(OverflowStrategy_NA), OverflowStrategy::NA);
+    EXPECT_EQ(DeSerialize(OverflowStrategy_WRAPPING), OverflowStrategy::WRAPPING);
+    EXPECT_EQ(DeSerialize(OverflowStrategy_THROWING), OverflowStrategy::THROWING);
+    EXPECT_EQ(DeSerialize(OverflowStrategy_SATURATING), OverflowStrategy::SATURATING);
 }
 
 TEST_F(CHIRDeSerialzierTest, ValueKindEnum)

@@ -946,6 +946,7 @@ public:
 
 protected:
     std::string OperandsToString() const override;
+    std::string AddExtraComment() const override;
     explicit DynamicDispatch(ExprKind kind, const InvokeCallContext& callContext, Block* parent);
 
     Cangjie::OverflowStrategy overflowStrategy{Cangjie::OverflowStrategy::NA};

@@ -251,7 +251,7 @@ PackageFormat::OverflowStrategy Serialize(const Cangjie::OverflowStrategy& kind)
         case OverflowStrategy::SATURATING:
             ret = OverflowStrategy_SATURATING;
             break;
-        case OverflowStrategy::OVERFLOW_STRATEGY_END:
+        default:
             CJC_ABORT();
             break;
     }

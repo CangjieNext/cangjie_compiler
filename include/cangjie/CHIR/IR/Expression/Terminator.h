@@ -447,6 +447,8 @@ public:
 protected:
     std::string OperandsToString() const override;
 
+    std::string AddExtraComment() const override;
+
     explicit DynamicDispatchWithException(
         ExprKind kind, const InvokeCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent);
 

@@ -323,6 +323,7 @@ DynamicDispatchWithException::DynamicDispatchWithException(
     CJC_NULLPTR_CHECK(sucBlock);
     CJC_NULLPTR_CHECK(errBlock);
     CJC_NULLPTR_CHECK(parent);
+    CJC_ASSERT(callContext.overflowStrategy != Cangjie::OverflowStrategy::CHECKED);
     CheckVirFuncInvokeInfo(callContext);
     AppendOperand(*callContext.method);
     AppendOperand(*callContext.caller);
@@ -410,6 +411,14 @@ ClassType* DynamicDispatchWithException::GetInstSrcParentCustomTypeOfMethod(CHIR
 AttributeInfo DynamicDispatchWithException::GetVirtualMethodAttr() const
 {
     return GetCallee()->GetAttributeInfo();
+}
+
+std::string DynamicDispatchWithException::AddExtraComment() const
+{
+    if (overflowStrategy != Cangjie::OverflowStrategy::NA) {
+        return "methodName: " + GetMethodName();
+    }
+    return "";
 }
 
 InvokeWithException::InvokeWithException(

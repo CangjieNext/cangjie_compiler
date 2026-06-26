@@ -74,7 +74,11 @@ std::vector<VTableSearchRes> GetWellMatchingResults(const std::vector<VTableSear
     for (size_t i = 0; i < candidateNum; ++i) {
         if (targetMark[i]) {
             result.emplace_back(candidateRes[i]);
-            instances.emplace(candidateRes[i].instance);
+            if (auto rawFunc = candidateRes[i].instance->Get<WrappedRawMethod>()) {
+                instances.emplace(rawFunc);
+            } else {
+                instances.emplace(candidateRes[i].instance);
+            }
         }
     }
     CJC_ASSERT(!result.empty());
@@ -206,12 +210,12 @@ std::string CustomTypeDef::CommentToString() const
     return ::CommentToString(result);
 }
 
-std::string CustomTypeDef::LocalVarToString() const
+std::string CustomTypeDef::LocalVarToString(size_t indent) const
 {
     std::stringstream ss;
     for (auto& localVar : instanceVars) {
-        ss << AddNewLineOrNot(localVar.annoInfo.ToString(1));
-        ss << IndentToString(1) << localVar.attributeInfo.ToString();
+        ss << AddNewLineOrNot(localVar.annoInfo.ToString(indent));
+        ss << IndentToString(indent) << localVar.attributeInfo.ToString();
         localVar.TestAttr(Attribute::READONLY) ? ss << "let " : ss << "var ";
         ss << localVar.name << ": " << localVar.type->ToString();
         std::vector<std::string> comments;
@@ -230,49 +234,24 @@ std::string CustomTypeDef::LocalVarToString() const
     return ss.str();
 }
 
-std::string CustomTypeDef::StaticVarToString() const
+std::string CustomTypeDef::StaticVarToString(size_t indent) const
 {
     std::stringstream ss;
     for (auto staticVar : staticVars) {
-        ss << IndentToString(1) << staticVar->GetAttributeInfo().ToString();
+        ss << IndentToString(indent) << staticVar->GetAttributeInfo().ToString();
         staticVar->TestAttr(Attribute::READONLY) ? ss << " let " : ss << " var ";
         ss << staticVar->GetIdentifier() << ": " << staticVar->GetType()->ToString() << std::endl;
     }
     return ss.str();
 }
 
-std::string CustomTypeDef::MethodToString() const
+std::string CustomTypeDef::MethodToString(size_t indent) const
 {
     std::stringstream ss;
     for (auto method : methods) {
-        ss << IndentToString(1) << method->GetAttributeInfo().ToString();
+        ss << IndentToString(indent) << method->GetAttributeInfo().ToString();
         ss << " func " << method->GetIdentifier() << ": " << method->GetType()->ToString() << std::endl;
     }
-    return ss.str();
-}
-
-std::string CustomTypeDef::VTableToString() const
-{
-    std::stringstream ss;
-    size_t indent = 1;
-    const auto& vtables = vtable.GetTypeVTables();
-    if (vtables.empty()) {
-        return "";
-    }
-    ss << IndentToString(indent++);
-    ss << "vtable {" << std::endl;
-    for (const auto& vtableInType : vtables) {
-        ss << IndentToString(indent++);
-        ss << vtableInType.GetSrcParentType()->ToString() << " {" << std::endl;
-        for (const auto& funcInfo : vtableInType.GetVirtualMethods()) {
-            ss << IndentToString(indent);
-            ss << "@" << funcInfo.GetMethodName();
-            ss << ": " << funcInfo.GetOriginalFuncType()->ToString();
-            ss << "=> " << funcInfo.GetVirtualMethod()->GetIdentifier() << std::endl;
-        }
-        ss << IndentToString(--indent) << "}" << std::endl;
-    }
-    ss << IndentToString(--indent) << "}" << std::endl;
     return ss.str();
 }
 
@@ -410,17 +389,18 @@ std::string CustomTypeDef::ToString() const
            vtable
        }
     */
+    size_t indent = 0;
     std::stringstream ss;
-    ss << AddNewLineOrNot(annoInfo.ToString(0));
+    ss << AddNewLineOrNot(annoInfo.ToString(indent++));
     ss << attributes.ToString();
     ss << CustomTypeDefTitleToString();
     ss << ParentToString();
     ss << " {";
     ss << AddNewLineOrNot(CommentToString());
-    ss << LocalVarToString();   // has a \n in the end
-    ss << StaticVarToString();  // has a \n in the end
-    ss << MethodToString();     // has a \n in the end
-    ss << VTableToString();     // has a \n in the end
+    ss << LocalVarToString(indent);   // has a \n in the end
+    ss << StaticVarToString(indent);  // has a \n in the end
+    ss << MethodToString(indent);     // has a \n in the end
+    ss << vtable.ToString(indent) << std::endl;
     ss << "}";
     return ss.str();
 }
