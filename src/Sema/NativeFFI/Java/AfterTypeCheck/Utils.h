@@ -79,7 +79,7 @@ public:
      * }
      * ```
      */
-    OwnedPtr<FuncDecl> CreateNativeFunc(std::string& name,
+    OwnedPtr<FuncDecl> CreateNativeFunc(const std::string& name,
         std::vector<OwnedPtr<FuncParam>>&& params, Ptr<Ty> retTy, std::vector<OwnedPtr<Node>>&& nodes,
         File& curFile, std::string& moduleName, std::string& fullPackageName) const;
 
@@ -210,11 +210,6 @@ DestructedJavaClassName DestructJavaClassName(const ClassLikeDecl& decl);
  * Returns package of the decl or package specified in @JavaMirror as attribute (omitting class name)
  */
 std::string GetJavaPackage(const Decl& decl);
-
-/**
- * Mangles java name with JNI correspondence
- */
-void MangleJNIName(std::string& name);
 
 /**
  * Performs mangling of `javaTy` with `mangler`. If `javaTy` is a mirrror or impl, then it returns `jobjectTy`

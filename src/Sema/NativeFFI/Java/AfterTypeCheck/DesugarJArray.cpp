@@ -5,7 +5,6 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "DesugarJArray.h"
-#include "JavaDesugarManager.h"
 #include "Utils.h"
 #include "NativeFFI/Utils.h"
 
@@ -306,8 +305,10 @@ void DesugarJArray::ReplaceCallsWithArrayJavaEntitySet(File& file) const
     }).Walk();
 }
 
-DesugarJArray::DesugarJArray(JavaDesugarManager& man)
-    : typeManager(man.typeManager), importManager(man.importManager), ilib(man.lib)
+DesugarJArray::DesugarJArray(
+    TypeManager& typeManager,
+    const ImportManager& importManager,
+    InteropLibBridge& ilib) : typeManager(typeManager), importManager(importManager), ilib(ilib)
 {
 }
 

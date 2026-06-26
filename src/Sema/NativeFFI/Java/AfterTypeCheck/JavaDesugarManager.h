@@ -12,8 +12,9 @@
 #ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_DESUGAR_MANAGER
 #define CANGJIE_SEMA_NATIVE_FFI_JAVA_DESUGAR_MANAGER
 
-#include "Context.h"
+#include "AfterTypeCheckStage.h"
 #include "InteropLibBridge.h"
+#include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
 #include "Utils.h"
 
 #include "cangjie/AST/Node.h"
@@ -23,20 +24,6 @@
 #include "InheritanceChecker/MemberSignature.h"
 #include "cangjie/Utils/SafePointer.h"
 #include <unordered_map>
-
-namespace Cangjie::Native::FFI::Java {
-class GenerateInJavaImplRegistryCompanion;
-class GenerateNativeBridgeForJavaImpl;
-class GenerateJavaImplWrappingConstructorStub;
-class GenerateInJavaImplReferenceWrapper;
-class GenerateJavaImplRegistryCompanionReferenceField;
-class RewriteJavaImplReferenceWrapperFields;
-class DesugarTypeCheckingAndCasting;
-class DesugarSuperConstructorCallInJavaImplReferenceWrapper;
-class DesugarSuperMethodCallInJavaImplReferenceWrapper;
-class DesugarJArray;
-class DesugarJavaImplSuperConstructorCall;
-}
 
 namespace Cangjie::Interop::Java {
 using namespace AST;
@@ -57,18 +44,6 @@ enum class DesugarCJImplStage : uint8_t {
 };
 
 class JavaDesugarManager {
-// TODO: remove JavaDesugarManager completely and avoid friendship.
-friend class Cangjie::Native::FFI::Java::GenerateInJavaImplRegistryCompanion;
-friend class Cangjie::Native::FFI::Java::GenerateNativeBridgeForJavaImpl;
-friend class Cangjie::Native::FFI::Java::GenerateJavaImplWrappingConstructorStub;
-friend class Cangjie::Native::FFI::Java::GenerateInJavaImplReferenceWrapper;
-friend class Cangjie::Native::FFI::Java::GenerateJavaImplRegistryCompanionReferenceField;
-friend class Cangjie::Native::FFI::Java::RewriteJavaImplReferenceWrapperFields;
-friend class Cangjie::Native::FFI::Java::DesugarTypeCheckingAndCasting;
-friend class Cangjie::Native::FFI::Java::DesugarSuperConstructorCallInJavaImplReferenceWrapper;
-friend class Cangjie::Native::FFI::Java::DesugarSuperMethodCallInJavaImplReferenceWrapper;
-friend class Cangjie::Native::FFI::Java::DesugarJArray;
-friend class Cangjie::Native::FFI::Java::DesugarJavaImplSuperConstructorCall;
 public:
     JavaDesugarManager(ImportManager& importManager, TypeManager& typeManager, DiagnosticEngine& diag,
         const BaseMangler& mangler, const std::optional<std::string>& javaCodeGenPath, const std::string& outputLibPath,
@@ -79,6 +54,7 @@ public:
           diag(diag),
           mangler(mangler),
           lib(importManager, typeManager, diag, utils),
+          jniBridge(typeManager, mangler, utils, *lib.GetJniEnvPtrDecl(), *lib.GetJobjectDecl()),
           javaCodeGenPath(javaCodeGenPath),
           outputLibPath(outputLibPath),
           memberMap(memberMap)
@@ -227,18 +203,6 @@ private:
      */
     void DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& generatedCtor);
 
-    FuncParam& PushEnvParams(std::vector<OwnedPtr<FuncParam>>& params, const std::string& name = "env");
-
-    FuncParam& PushObjParams(std::vector<OwnedPtr<FuncParam>>& params, const std::string& name = "obj");
-
-    OwnedPtr<AST::FuncParam> CreateJniEnvParam(const std::string& name = "$jnienv");
-
-    OwnedPtr<AST::FuncParam> CreateJniJobjectOrJclassParam(const std::string& name = "$obj");
-
-    OwnedPtr<AST::FuncParam> CreateRegistryIdParam(const std::string& name = "$regId");
-
-    FuncParam& PushSelfParams(std::vector<OwnedPtr<FuncParam>>& params, std::string name = "self");
-
     OwnedPtr<CallExpr> GetFwdClassInstance(OwnedPtr<RefExpr> paramRef, Decl& fwdClassDecl);
 
     bool FillMethodParamsByArg(std::vector<OwnedPtr<FuncParam>>& params, std::vector<OwnedPtr<FuncArg>>& callArgs,
@@ -247,9 +211,6 @@ private:
     OwnedPtr<Decl> GenerateNativeMethod(FuncDecl& sampleMethod, Decl& decl,
         const GenericConfigInfo* genericConfig = nullptr);
 
-    void GenerateFuncParamsForNativeDeleteCjObject(
-        Decl& decl, std::vector<OwnedPtr<FuncParam>>& params, FuncParam*& jniEnv, OwnedPtr<Expr>& selfRef);
-
     OwnedPtr<Decl> GenerateNativeFuncDeclBylambda(Decl& decl, OwnedPtr<LambdaExpr>& wrappedNodesLambda,
         std::vector<OwnedPtr<FuncParamList>>& paramLists, FuncParam& jniEnvPtrParam, Ptr<Ty>& retTy,
         std::string funcName);
@@ -257,23 +218,6 @@ private:
     OwnedPtr<Decl> GenerateNativeFuncDeclBylambda(OwnedPtr<LambdaExpr>& wrappedNodesLambda,
         std::vector<OwnedPtr<FuncParamList>>& paramLists, FuncParam& jniEnvPtrParam, Ptr<Ty>& retTy,
         std::string funcName, Ptr<File>& curFile, std::string moduleName, std::string fullPackageName);
-
-    std::string GetJniMethodName(const FuncDecl& method, const std::string* genericActualName = nullptr);
-
-    std::string GetJniTupleItemName(const Ptr<TupleTy>& tupleTy, Package& pkg, size_t index);
-
-    std::string GetJniMethodNameForProp(const PropDecl& propDecl, bool isSet,
-        const std::string* genericActualName = nullptr) const;
-
-    std::string GetJniInitCjObjectFuncName(const FuncDecl& ctor, bool isGeneratedCtor,
-        const std::string* genericActualName = nullptr);
-    std::string GetJniInitCjObjectFuncName(const Ptr<TupleTy>& tupleTy, Package& pkg);
-
-    std::string GetJniInitCjObjectFuncNameForVarDecl(const VarDecl& ctor) const;
-
-    std::string GetJniDeleteCjObjectFuncName(const Decl& decl) const;
-
-    std::string GetJniDetachCjObjectFuncName(const Decl& decl) const;
 
     OwnedPtr<FuncDecl> CreateNativeFunc(const std::string& funcName,
         std::vector<OwnedPtr<FuncParam>> params, Ptr<Ty> retTy, std::vector<OwnedPtr<Node>> nodes);
@@ -379,11 +323,6 @@ private:
 
     void InsertJavaMirrorPropGetter(PropDecl& prop);
     void InsertJavaMirrorPropSetter(PropDecl& prop);
-
-    /**
-     * For CType ty, ty is returned. For mirrors, impls and CJMapping jobject is returned
-     */
-    Ptr<Ty> GetJNITy(Ptr<Ty> ty);
 
     /**
      * Inserts constructor of form `JString(String)`.
@@ -538,7 +477,6 @@ private:
     OwnedPtr<Decl> GenerateCallImplNativeMethod(File& file, LambdaPattern& lambdaPattern);
     Ptr<FuncTy> GetLambdaFuncTy(LambdaPattern& lambdaPattern);
     Ptr<Decl> GetLambdaTmpDecl(File& file, std::string javaClassName, std::string fullPackGeName);
-    std::string GetLambdaCallImplJniMethodName(Decl& decl);
 
     ImportManager& importManager;
     TypeManager& typeManager;
@@ -546,6 +484,7 @@ private:
     DiagnosticEngine& diag;
     const BaseMangler& mangler;
     InteropLibBridge lib;
+    JniBridge jniBridge;
     const std::optional<std::string>& javaCodeGenPath;
     const std::string& outputLibPath;
     std::unordered_set<Ptr<Ty>> tupleConfigs;

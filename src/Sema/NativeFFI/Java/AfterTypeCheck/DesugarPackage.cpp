@@ -27,26 +27,26 @@ void JavaDesugarManager::ProcessJavaMirrorImplStage(AfterTypeCheckContext& ctx,
         GenerateInMirrors(*file, true);
     }
 
-    Process<GenerateJavaImplWrappingConstructorStub>(ctx, *this);
+    Process<GenerateJavaImplWrappingConstructorStub>(ctx, typeManager, lib, jniBridge);
 
     for (auto& file : ctx.pkg.files) {
         GenerateInMirrors(*file, false);
     }
 
-    Process<GenerateInJavaImplRegistryCompanion>(ctx, *this);
-    Process<DesugarJavaImplSuperConstructorCall>(ctx, *this);
-    Process<GenerateInJavaImplReferenceWrapper>(ctx, *this);
-    Process<DesugarSuperMethodCallInJavaImplReferenceWrapper>(ctx, *this);
-    Process<RewriteJavaImplReferenceWrapperFields>(ctx, *this, desugarPropRef);
-    Process<GenerateNativeBridgeForJavaImpl>(ctx, *this);
+    Process<GenerateInJavaImplRegistryCompanion>(ctx, typeManager, lib);
+    Process<DesugarJavaImplSuperConstructorCall>(ctx, typeManager, lib, jniBridge, diag, utils);
+    Process<GenerateInJavaImplReferenceWrapper>(ctx, typeManager, importManager, lib, utils);
+    Process<DesugarJavaImplSuperMethodCall>(ctx, lib, utils);
+    Process<RewriteJavaImplReferenceWrapperFields>(ctx, typeManager, utils, desugarPropRef);
+    Process<GenerateNativeBridgeForJavaImpl>(ctx, typeManager, importManager, lib, jniBridge);
 
     for (auto& file : ctx.pkg.files) {
         DesugarMirrors(*file);
     }
 
-    Process<DesugarJArray>(ctx, *this);
+    Process<DesugarJArray>(ctx, typeManager, importManager, lib);
     GenerateJavaSourceCode(ctx);
-    Process<DesugarTypeCheckingAndCasting>(ctx, *this);
+    Process<DesugarTypeCheckingAndCasting>(ctx, lib, diag, utils);
 }
 
 void JavaDesugarManager::ProcessCJImplStage(DesugarCJImplStage stage, File& file)

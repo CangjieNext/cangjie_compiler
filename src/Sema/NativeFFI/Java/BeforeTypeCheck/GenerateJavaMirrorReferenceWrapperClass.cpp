@@ -31,7 +31,7 @@ void InsertSuperTypes(ClassDecl& wrapper, ClassLikeDecl& mirror)
         jobject->end = mirror.end;
         wrapper.inheritedTypes.emplace_back(std::move(jobject));
     }
-        wrapper.inheritedTypes.emplace_back(CreateRefType(mirror));
+    wrapper.inheritedTypes.emplace_back(CreateRefType(mirror));
 }
 } // namespace
 
@@ -48,7 +48,7 @@ OwnedPtr<ClassDecl> GenerateJavaMirrorReferenceWrapperClass::GenerateWrapperClas
         Attribute::JAVA_MIRROR,
         Attribute::JAVA_MIRROR_SUBTYPE,
         Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER);
-    
+
     InsertSuperTypes(*wrapper, mirror);
     return wrapper;
 }

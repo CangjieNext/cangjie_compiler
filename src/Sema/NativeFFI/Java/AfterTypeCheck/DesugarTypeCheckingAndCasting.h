@@ -14,12 +14,11 @@
 #ifndef CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_DESUGAR_TYPE_CHECKING_AND_CASTING
 #define CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_DESUGAR_TYPE_CHECKING_AND_CASTING
 
-#include "Context.h"
+#include "AfterTypeCheckStage.h"
+#include "InteropLibBridge.h"
+#include "Utils.h"
 #include "cangjie/AST/Node.h"
-
-namespace Cangjie::Interop::Java {
-class JavaDesugarManager;
-}
+#include "cangjie/Basic/DiagnosticEngine.h"
 
 namespace Cangjie::Native::FFI::Java {
 using namespace Interop::Java;
@@ -29,9 +28,10 @@ using namespace Interop::Java;
  */
 class DesugarTypeCheckingAndCasting : public AfterTypeCheckStage {
 public:
-    explicit DesugarTypeCheckingAndCasting(JavaDesugarManager& man) : man(man)
-    {
-    }
+    explicit DesugarTypeCheckingAndCasting(
+        InteropLibBridge& ilib,
+        DiagnosticEngine& diag,
+        Interop::Java::Utils& utils);
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
 private:
@@ -56,7 +56,7 @@ private:
      *       case true =>
      *         (When T is JavaMirror) Some(T(x.javaref))
      *         (When T is JavaImpl) Java_CFFI_getFromRegistryByObj<T>(Java_CFFI_get_env(), x.javaref)
-     *       case flase => None
+     *       case false => None
      *     }
      *   case _ => None
      * }
@@ -96,7 +96,9 @@ private:
     OwnedPtr<AST::Block> CastAndSubstituteVars(
         AST::Expr& expr, const std::vector<std::tuple<Ptr<AST::VarDecl>, Ptr<AST::Ty>>>& patternVars) const;
 
-    JavaDesugarManager& man;
+    InteropLibBridge& ilib;
+    DiagnosticEngine& diag;
+    Interop::Java::Utils& utils;
 };
 
 }

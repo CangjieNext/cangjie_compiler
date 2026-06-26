@@ -125,7 +125,7 @@ public:
     /**
      * JNIEnv_ptr
      */
-    Ptr<TypeAliasDecl> GetJniEnvPtrDecl();
+    Ptr<TypeAliasDecl> GetJniEnvPtrDecl() const;
 
     /**
      * Java_CFFI_get_env
@@ -351,22 +351,22 @@ public:
     /**
      * jobject ty
      */
-    Ptr<Ty> GetJobjectTy();
+    AST::Ty& GetJniJobjectTy() const;
 
     /**
      * jlong
      */
-    Ptr<Ty> GetJlongTy();
+    Ptr<Ty> GetJlongTy() const;
 
     /**
      * jobject type
      */
-    OwnedPtr<Type> CreateJobjectType();
+    OwnedPtr<Type> CreateJobjectType() const;
 
     /**
      * jlong
      */
-    OwnedPtr<Type> CreateJlongType();
+    OwnedPtr<Type> CreateJlongType() const;
 
     /**
      * Lower ?String CJ expression into nullable JNI jobject.
@@ -609,23 +609,6 @@ public:
     OwnedPtr<PointerExpr> CreateJobjectNull();
 
     /**
-     * env: JNIEnv_Ptr
-     */
-    OwnedPtr<FuncParam> CreateEnvFuncParam(); // TODO: merge with the same function but in `JavaDesugarManager`
-
-    /**
-     * _: jobject or jclass, default name is '_'
-     * TODO: merge with the same function but in `JavaDesugarManager`
-     */
-    OwnedPtr<FuncParam> CreateJClassOrJObjectFuncParam(const std::string& name = "_");
-
-    /**
-     * self: jlong
-     * TODO: merge with the same function but in `JavaDesugarManager`
-     */
-    OwnedPtr<FuncParam> CreateSelfFuncParam();
-
-    /**
      * // entityOption: Java_CFFI_JavaEntity
      *   match (entityOption.isNull) {
      *       case true => None<ty>
@@ -699,7 +682,7 @@ public:
 
     bool IsInteropLibAccessible() const;
     void CheckInteropLibVersion();
-    static bool IsInteropLibAccessible(ImportManager& importManager);
+    static bool IsInteropLibAccessible(const ImportManager& importManager);
     static bool IsJavaEntityTy(Ty& ty);
 private:
    /**
@@ -719,7 +702,7 @@ private:
     OwnedPtr<Expr> UnwrapJavaPrimitiveEntity(OwnedPtr<Expr> entity, Ptr<Ty> ty);
 
     template <ASTKind K = ASTKind::DECL>
-    inline auto ImportDecl(const std::string& package, const std::string& declname, bool silent = false)
+    auto ImportDecl(const std::string& package, const std::string& declname, bool silent = false) const
     {
         auto decl = importManager.GetImportedDecl(package, declname);
         if (!decl) {
@@ -735,7 +718,7 @@ private:
     }
 
     template <ASTKind K = ASTKind::DECL>
-    inline auto GetInteropLibDecl(const std::string& declname, bool silent = false)
+    auto GetInteropLibDecl(const std::string& declname, bool silent = false) const
     {
         return ImportDecl<K>(INTEROPLIB_PACKAGE_NAME, declname, silent);
     }
@@ -749,7 +732,7 @@ private:
     Ptr<FuncDecl> GetJavaObjectControllerMethodDecl(std::string methodName);
     OwnedPtr<Expr> CreateParamExpr(FuncParam& param, Ptr<File> curFile);
 
-    ImportManager& importManager;
+    const ImportManager& importManager;
     TypeManager& typeManager;
     DiagnosticEngine& diag;
     Utils& utils;
