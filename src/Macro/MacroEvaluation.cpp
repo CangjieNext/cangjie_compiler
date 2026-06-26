@@ -10,6 +10,8 @@
  * This file implements macro evaluation related apis for macro.
  */
 
+// test commit
+
 #include "cangjie/Macro/MacroEvaluation.h"
 
 #include "cangjie/AST/Walker.h"
