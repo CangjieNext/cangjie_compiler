@@ -35,9 +35,9 @@ namespace Cangjie::Native::FFI::Java {
  * }
  * ```
  */
-class GenerateJavaImplRegistryCompanionClass : public PreTypeCheckStage {
+class GenerateJavaImplRegistryCompanion : public PreTypeCheckStage {
 public:
-    explicit GenerateJavaImplRegistryCompanionClass()
+    explicit GenerateJavaImplRegistryCompanion()
     {
     }
 protected:

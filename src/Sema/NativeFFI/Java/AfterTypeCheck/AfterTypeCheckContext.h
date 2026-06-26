@@ -72,15 +72,6 @@ private:
     std::vector<OwnedPtr<AST::Decl>> generated;
 };
 
-class AfterTypeCheckStage {
-public:
-    void operator()(AfterTypeCheckContext& ctx);
-protected:
-    virtual void Process(AfterTypeCheckContext& ctx) = 0;
-    virtual ~AfterTypeCheckStage()
-    {
-    }
-};
 
 } // namespace Cangjie::Native::FFI::Java
 

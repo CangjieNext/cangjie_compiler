@@ -14,36 +14,13 @@
 #ifndef CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_GENERATE_JAVA_IMPL_WRAPPING_CONSTRUCTOR
 #define CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_GENERATE_JAVA_IMPL_WRAPPING_CONSTRUCTOR
 
-#include "Context.h"
+#include "AfterTypeCheckStage.h"
 #include "InteropLibBridge.h"
+#include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
 #include "cangjie/AST/Node.h"
-
-namespace Cangjie::Interop::Java {
-class JavaDesugarManager;
-}
 
 namespace Cangjie::Native::FFI::Java {
 using namespace Interop::Java;
-
-struct AfterTypeCheckContext;
-class AfterTypeCheckStage;
-
-/**
- * Generates API stubs for Java Impls.
- * Note: Corresponding API for passing impl objects from java to cangjie is available after this stage (wrap/unwrap).
- */
-class GenerateJavaImplApiStub : public AfterTypeCheckStage {
-public:
-    explicit GenerateJavaImplApiStub(JavaDesugarManager& man) : man(man)
-    {
-    }
-protected:
-    void Process(AfterTypeCheckContext& ctx) override;
-private:
-    void Process(AST::ClassDecl& refWrapper, AfterTypeCheckContext& ctx) const;
-
-    JavaDesugarManager& man;
-};
 
 /**
  * Generates API stubs for Java Impls.
@@ -51,7 +28,10 @@ private:
  */
 class GenerateJavaImplWrappingConstructorStub : public AfterTypeCheckStage {
 public:
-    explicit GenerateJavaImplWrappingConstructorStub(JavaDesugarManager& man);
+    explicit GenerateJavaImplWrappingConstructorStub(
+        TypeManager& typeManager,
+        InteropLibBridge& ilib,
+        JniBridge& jni);
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
 private:
@@ -73,9 +53,9 @@ private:
      */
     OwnedPtr<AST::FuncDecl> CreateWrappingConstructorStub(AST::ClassDecl& refWrapper) const;
 
-    JavaDesugarManager& man;
     TypeManager& typeManager;
     InteropLibBridge& ilib;
+    JniBridge& jni;
 };
 
 } // namespace Cangjie::Native::FFI::Java

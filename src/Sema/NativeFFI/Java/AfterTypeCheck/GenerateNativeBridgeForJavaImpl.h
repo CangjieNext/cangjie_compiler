@@ -12,12 +12,10 @@
 #ifndef CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_GENERATE_NATIVE_BRIDGE_FOR_JAVA_IMPL
 #define CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_GENERATE_NATIVE_BRIDGE_FOR_JAVA_IMPL
 
-#include "Context.h"
+#include "AfterTypeCheckStage.h"
+#include "InteropLibBridge.h"
+#include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
 #include "cangjie/AST/Node.h"
-
-namespace Cangjie::Interop::Java {
-class JavaDesugarManager;
-}
 
 namespace Cangjie::Native::FFI::Java {
 using namespace Interop::Java;
@@ -27,9 +25,10 @@ using namespace Interop::Java;
  */
 class GenerateNativeBridgeForJavaImpl : public AfterTypeCheckStage {
 public:
-    explicit GenerateNativeBridgeForJavaImpl(JavaDesugarManager& man) : man(man)
-    {
-    }
+    explicit GenerateNativeBridgeForJavaImpl(
+        TypeManager& typeManager,
+        const ImportManager& importManager,
+        InteropLibBridge& ilib, JniBridge& jniBridge);
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
 private:
@@ -92,20 +91,6 @@ private:
     OwnedPtr<AST::Decl> CreateFinalizationBridge(AST::ClassDecl& refWrapper) const;
 
     /**
-     * Creates @C function with name `name`, return type `retTy` within `curFile` at `fullPackageName` at `moduleName`.
-     * Appends `userParams` to native function parameters to comply with JNI ABI.
-     * Parameters order of @C function: [jniEnv, objOrClass, <userParams>].
-     */
-    OwnedPtr<AST::FuncDecl> CreateNativeJavaABIFunc(std::string& name,
-        std::vector<OwnedPtr<AST::FuncParam>> userParams, Ptr<AST::Ty> retTy,
-        AST::File& curFile, std::string& moduleName, std::string& fullPackageName,
-        std::function<void(
-            AST::FuncDecl& f,
-            AST::FuncParam& jniEnv,
-            AST::FuncParam& objOrClass,
-            std::vector<Ptr<AST::FuncParam>> userParams)> builder) const;
-
-    /**
      * Creates new CType parameter based on java-compatible parameter `sample`.
      * Resulting type is consistent with java native method types ABI.
      */
@@ -124,7 +109,10 @@ private:
     OwnedPtr<AST::Expr> UnwrapCTypeExprAsJavaCompatible(OwnedPtr<AST::Expr> cexpr, Ptr<AST::Ty> javaCompatibleTy,
         Ptr<AST::Decl> outerDecl) const;
 
-    JavaDesugarManager& man;
+    TypeManager& typeManager;
+    const ImportManager& importManager;
+    InteropLibBridge& ilib;
+    JniBridge& jni;
 };
 } // namespace Cangjie::Native::FFI::Java
 

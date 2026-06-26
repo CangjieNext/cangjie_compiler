@@ -4,7 +4,6 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-#include "JavaDesugarManager.h"
 #include "DesugarJavaImplSuperMethodCall.h"
 #include "Utils.h"
 #include "InteropLibBridge.h"
@@ -20,7 +19,7 @@
 namespace Cangjie::Native::FFI::Java {
 using namespace Cangjie::Interop::Java;
 
-void DesugarSuperMethodCallInJavaImplReferenceWrapper::DesugarSuperMethodCall(CallExpr& call,
+void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(CallExpr& call,
     ClassDecl& impl) const
 {
     CJC_ASSERT(call.baseFunc && call.baseFunc->astKind == ASTKind::MEMBER_ACCESS);
@@ -50,11 +49,11 @@ void DesugarSuperMethodCallInJavaImplReferenceWrapper::DesugarSuperMethodCall(Ca
         : ilib.UnwrapJavaEntity(std::move(desugaredCall), call.GetTy(), impl);
 }
 
-DesugarSuperMethodCallInJavaImplReferenceWrapper::DesugarSuperMethodCallInJavaImplReferenceWrapper(
-    JavaDesugarManager& man) : ilib(man.lib), utils(man.utils)
+DesugarJavaImplSuperMethodCall::DesugarJavaImplSuperMethodCall(
+    InteropLibBridge& ilib, Native::FFI::Java::Utils& utils) : ilib(ilib), utils(utils)
 {}
 
-void DesugarSuperMethodCallInJavaImplReferenceWrapper::Process(AfterTypeCheckContext& ctx)
+void DesugarJavaImplSuperMethodCall::Process(AfterTypeCheckContext& ctx)
 {
     for (auto& jimpl : ctx.GetJavaImplReferenceWrappers()) {
         Walker(jimpl, [this, &jimpl](auto node) {

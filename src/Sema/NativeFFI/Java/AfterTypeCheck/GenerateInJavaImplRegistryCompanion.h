@@ -14,13 +14,11 @@
 #ifndef CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_GENERATE_IN_JAVA_IMPL_REGISTRY_COMPANIONS
 #define CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_GENERATE_IN_JAVA_IMPL_REGISTRY_COMPANIONS
 
-#include "Context.h"
+#include "AfterTypeCheckStage.h"
 #include "InteropLibBridge.h"
 #include "cangjie/AST/Node.h"
-
-namespace Cangjie::Interop::Java {
-class JavaDesugarManager;
-}
+#include "cangjie/AST/Types.h"
+#include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie::Native::FFI::Java {
 using namespace Interop::Java;
@@ -30,7 +28,7 @@ using namespace Interop::Java;
  */
 class GenerateInJavaImplRegistryCompanion : public AfterTypeCheckStage {
 public:
-    explicit GenerateInJavaImplRegistryCompanion(JavaDesugarManager& man);
+    explicit GenerateInJavaImplRegistryCompanion(TypeManager& typeManager, InteropLibBridge& ilib);
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
 private:

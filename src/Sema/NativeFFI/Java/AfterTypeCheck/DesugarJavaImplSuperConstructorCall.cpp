@@ -4,7 +4,6 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-#include "JavaDesugarManager.h"
 #include "DesugarJavaImplSuperConstructorCall.h"
 #include "NativeFFI/Utils.h"
 #include "Utils.h"
@@ -15,6 +14,7 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/SafePointer.h"
 #include <cstddef>
@@ -111,14 +111,14 @@ std::pair<bool, std::string> CollectParams(
     return {usingThis, paramIds};
 }
 
-std::string GetJniSuperArgFuncName(const ClassLikeDecl& outer, const std::string& id)
+} // namespace
+
+std::string DesugarJavaImplSuperConstructorCall::GetJniSuperArgFuncName(
+    const ClassLikeDecl& outer, const std::string& id) const
 {
     std::string fqname = GetJavaFQName(outer);
-    MangleJNIName(fqname);
-    return "Java_" + fqname + "_super" + id;
+    return jni.GetJavaNativeFunctionName(fqname, "super" + id);
 }
-
-} // namespace
 
 /**
  * Unwrap a refExpr of native func param into Cangjie type.
@@ -179,7 +179,7 @@ OwnedPtr<FuncDecl> DesugarJavaImplSuperConstructorCall::CreateMemberFunc4Argumen
     auto [usingThis, paramIds] = CollectParams(arg.expr.get(), params, usingParams);
     if (usingThis) {
         // Report error for using this in super call.
-        man.diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, arg, "using this in super call");
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, arg, "using this in super call");
         return nullptr;
     }
     std::vector<Ptr<RefExpr>> staticRefs;
@@ -266,9 +266,8 @@ OwnedPtr<FuncDecl> DesugarJavaImplSuperConstructorCall::CreateNativeFunc4Argumen
     //     {usingParamIds} is the indexes of the func argument using parameters of the constructor.
     std::string funcName = GetJniSuperArgFuncName(refWrapper, memberFunc.identifier);
     std::vector<OwnedPtr<FuncParam>> funcParams;
-    auto& jniEnvParam = *funcParams.emplace_back(ilib.CreateEnvFuncParam());
-    // jobject or jclass
-    funcParams.push_back(ilib.CreateJClassOrJObjectFuncParam());
+    auto& jniEnvParam = *funcParams.emplace_back(jni.CreateJniEnvParam());
+    funcParams.push_back(jni.CreateJniJobjectOrJclassParam());
     // Body
     auto argTy = StaticCast<FuncTy&>(*memberFunc.GetTy()).retTy;
 
@@ -277,23 +276,23 @@ OwnedPtr<FuncDecl> DesugarJavaImplSuperConstructorCall::CreateNativeFunc4Argumen
         {}, &memberFunc, argTy, CallKind::CALL_DECLARED_FUNCTION), memberFunc.curFile);
 
     for (auto& memberParam : memberFunc.funcBody->paramLists[0]->params) {
-        auto jniParamTy = man.GetJNITy(memberParam->GetTy());
-        auto funcParam = CreateFuncParam(memberParam->identifier.Val(), nullptr, nullptr, jniParamTy);
+        auto& jniParamTy = jni.ConvertCangjieToJniTy(*memberParam->GetTy());
+        auto funcParam = CreateFuncParam(memberParam->identifier.Val(), nullptr, nullptr, &jniParamTy);
         auto ref = WithinFile(CreateRefExpr(*funcParam), memberFunc.curFile);
         proxyCall->args.push_back(CreateFuncArg(UnwrapRefExpr(std::move(ref), memberParam->GetTy(), refWrapper)));
         funcParams.push_back(std::move(funcParam));
     }
     auto wrapper = WrapExprWithExceptionHandling({}, std::move(proxyCall), jniEnvParam, refWrapper);
     CJC_NULLPTR_CHECK(refWrapper.curFile);
-    OwnedPtr<FuncDecl> nativeFn = man.utils.CreateNativeFunc(funcName,
+    OwnedPtr<FuncDecl> nativeFn = utils.CreateNativeFunc(funcName,
         std::move(funcParams),
-        man.GetJNITy(argTy),
+        &jni.ConvertCangjieToJniTy(*argTy),
         Nodes(std::move(wrapper)),
         *refWrapper.curFile,
         refWrapper.moduleName,
         refWrapper.fullPackageName);
 
-        return nativeFn;
+    return nativeFn;
 }
 
 void DesugarJavaImplSuperConstructorCall::DesugarSuperConstructorCall(AfterTypeCheckContext& ctx,
@@ -301,8 +300,7 @@ void DesugarJavaImplSuperConstructorCall::DesugarSuperConstructorCall(AfterTypeC
 {
     CJC_ASSERT_WITH_MSG(!ctor.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& paramList = *ctor.funcBody->paramLists[0];
-    auto decl = As<ASTKind::CLASS_LIKE_DECL>(ctor.outerDecl);
-    CJC_NULLPTR_CHECK(decl);
+    auto decl = StaticAs<ASTKind::CLASS_LIKE_DECL>(ctor.outerDecl);
     // super call
     auto superCall = TryGetSuperCall(ctor);
     CJC_NULLPTR_CHECK(superCall);
@@ -341,8 +339,9 @@ void DesugarJavaImplSuperConstructorCall::DesugarSuperConstructorCall(AfterTypeC
     }
 }
 
-DesugarJavaImplSuperConstructorCall::DesugarJavaImplSuperConstructorCall(JavaDesugarManager& man)
-    : ilib(man.lib), typeManager(man.typeManager), man(man)
+DesugarJavaImplSuperConstructorCall::DesugarJavaImplSuperConstructorCall(
+    TypeManager& typeManager, InteropLibBridge& ilib, JniBridge& jni, DiagnosticEngine& diag,
+    Interop::Java::Utils& utils) : typeManager(typeManager), ilib(ilib), jni(jni), diag(diag), utils(utils)
 {
 }
 
