@@ -4,7 +4,7 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-#include "Context.h"
+#include "AfterTypeCheckContext.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Node.h"
@@ -127,11 +127,6 @@ void AfterTypeCheckContext::FlushGeneratedDecls()
     generated.clear();
 }
 
-void AfterTypeCheckStage::operator()(AfterTypeCheckContext& ctx)
-{
-    Process(ctx);
-    ctx.FlushGeneratedDecls();
-}
 
 AfterTypeCheckContext::AfterTypeCheckContext(const ImportManager& importManager, TypeManager& typeManager,
     AST::Package& pkg) : importManager(importManager), typeManager(typeManager), pkg(pkg),

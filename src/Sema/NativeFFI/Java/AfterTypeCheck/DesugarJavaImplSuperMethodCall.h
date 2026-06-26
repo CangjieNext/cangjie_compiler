@@ -12,20 +12,21 @@
 #ifndef CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_DESUGAR_JAVA_IMPL_SUPER_METHOD_CALL
 #define CANGJIE_SEMA_AFTER_TYPECHECK_NATIVE_FFI_JAVA_DESUGAR_JAVA_IMPL_SUPER_METHOD_CALL
 
-#include "Context.h"
+#include "AfterTypeCheckStage.h"
 #include "InteropLibBridge.h"
 #include "cangjie/AST/Node.h"
-
-namespace Cangjie::Interop::Java {
-class JavaDesugarManager;
-}
 
 namespace Cangjie::Native::FFI::Java {
 using namespace Interop::Java;
 
-class DesugarSuperMethodCallInJavaImplReferenceWrapper : public AfterTypeCheckStage {
+/**
+ * Super calls to methods in @JavaImpl reference wrappers are desugared at this stage.
+ * Without desugaring, call `super.foo()` targets `foo` method in its parent (mirror).
+ * In mirror, java methods are called virtually by default.
+ */
+class DesugarJavaImplSuperMethodCall : public AfterTypeCheckStage {
 public:
-    explicit DesugarSuperMethodCallInJavaImplReferenceWrapper(JavaDesugarManager& man);
+    explicit DesugarJavaImplSuperMethodCall(InteropLibBridge& ilib, Native::FFI::Java::Utils& utils);
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
 private:

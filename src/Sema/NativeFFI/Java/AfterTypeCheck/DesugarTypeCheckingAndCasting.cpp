@@ -5,7 +5,6 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "DesugarTypeCheckingAndCasting.h"
-#include "NativeFFI/Java/AfterTypeCheck/JavaDesugarManager.h"
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "NativeFFI/Utils.h"
 #include "cangjie/AST/Clone.h"
@@ -84,13 +83,13 @@ OwnedPtr<VarPattern> CreateTmpVarPattern(Ptr<Ty> ty)
 OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateIsInstanceCall(Ptr<VarDecl> jObjectVar,
     Ptr<Ty> classTy, Ptr<File> curFile) const
 {
-    auto isInstanceOfDecl = man.lib.GetIsInstanceOf();
+    auto isInstanceOfDecl = ilib.GetIsInstanceOf();
 
-    auto jniEnvCall = man.lib.CreateGetJniEnvCall(curFile);
+    auto jniEnvCall = ilib.CreateGetJniEnvCall(curFile);
 
     auto javaRefExpr = CreateJavaRefCall(WithinFile(CreateRefExpr(*jObjectVar), curFile));
 
-    auto nameLit = CreateLitConstExpr(LitConstKind::STRING, man.utils.GetJavaClassNormalizeSignature(*classTy),
+    auto nameLit = CreateLitConstExpr(LitConstKind::STRING, utils.GetJavaClassNormalizeSignature(*classTy),
         isInstanceOfDecl->funcBody->paramLists[0]->params[2]->GetTy());
 
     return CreateCall(isInstanceOfDecl, curFile, std::move(jniEnvCall), std::move(javaRefExpr), std::move(nameLit));
@@ -109,15 +108,15 @@ OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateJObjectCast(Ptr<VarDecl> jOb
 
     // cast true => ...
     // wrap into mirror constructor or into wrapping constructor of java impl on the reference from registry
-    OwnedPtr<Expr> trueBranch = man.utils.CreateOptionSomeCall(
-        man.lib.UnwrapJavaEntity(std::move(javarefExpr), castTy, *castDecl),
+    OwnedPtr<Expr> trueBranch = utils.CreateOptionSomeCall(
+        ilib.UnwrapJavaEntity(std::move(javarefExpr), castTy, *castDecl),
         castTy);
 
     // case false => None
-    OwnedPtr<Expr> falseBranch = man.utils.CreateOptionNoneRef(castTy);
+    OwnedPtr<Expr> falseBranch = utils.CreateOptionNoneRef(castTy);
 
     return CreateBoolMatch(
-        std::move(isInstanceCall), std::move(trueBranch), std::move(falseBranch), man.utils.GetOptionTy(castTy));
+        std::move(isInstanceCall), std::move(trueBranch), std::move(falseBranch), utils.GetOptionTy(castTy));
 }
 
 OwnedPtr<Block> DesugarTypeCheckingAndCasting::CastAndSubstituteVars(
@@ -127,11 +126,10 @@ OwnedPtr<Block> DesugarTypeCheckingAndCasting::CastAndSubstituteVars(
     auto varsBlock = WithinFile(MakeOwned<Block>(), curFile);
     std::unordered_map<Ptr<Decl>, Ptr<Decl>> varsMapping;
     for (auto [varDecl, castTy] : patternVars) {
-        auto castDecl = DynamicCast<ClassLikeDecl>(Ty::GetDeclOfTy(castTy));
-        CJC_ASSERT(castDecl);
+        auto castDecl = StaticAs<ASTKind::CLASS_LIKE_DECL>(Ty::GetDeclOfTy(castTy));
 
         auto javarefExpr = CreateJavaRefCall(WithinFile(CreateRefExpr(*varDecl), curFile));
-        OwnedPtr<Expr> initializer = man.lib.UnwrapJavaEntity(std::move(javarefExpr), castDecl->GetTy(), *castDecl);
+        OwnedPtr<Expr> initializer = ilib.UnwrapJavaEntity(std::move(javarefExpr), castDecl->GetTy(), *castDecl);
         auto castedVar = WithinFile(CreateTmpVarDecl(CreateType(castDecl->GetTy()), std::move(initializer)), curFile);
         varsMapping[varDecl] = castedVar;
         varsBlock->body.emplace_back(std::move(castedVar));
@@ -163,7 +161,7 @@ void DesugarTypeCheckingAndCasting::DesugarIsExpression(IsExpr& ie) const
     CJC_ASSERT(!ie.desugarExpr);
 
     auto castTy = ie.isType->GetTy();
-    auto jObjectDecl = man.utils.GetJObjectDecl();
+    auto jObjectDecl = utils.GetJObjectDecl();
     CJC_ASSERT(jObjectDecl);
 
     // match (x)
@@ -194,9 +192,9 @@ void DesugarTypeCheckingAndCasting::DesugarAsExpression(AsExpr& ae) const
 
     auto castTy = ae.asType->GetTy();
     auto castDecl = DynamicCast<ClassLikeDecl>(Ty::GetDeclOfTy(castTy));
-    auto jObjectDecl = man.utils.GetJObjectDecl();
+    auto jObjectDecl = utils.GetJObjectDecl();
 
-    auto castResultTy = man.utils.GetOptionTy(castTy);
+    auto castResultTy = utils.GetOptionTy(castTy);
 
     // match (obj)
     std::vector<OwnedPtr<MatchCase>> typeMatchCases;
@@ -212,7 +210,7 @@ void DesugarTypeCheckingAndCasting::DesugarAsExpression(AsExpr& ae) const
     typeMatchCases.emplace_back(CreateMatchCase(std::move(typePattern), std::move(isInstanceMatch)));
 
     // case _ => None
-    auto noneRef = man.utils.CreateOptionNoneRef(castTy);
+    auto noneRef = utils.CreateOptionNoneRef(castTy);
     typeMatchCases.emplace_back(CreateMatchCase(MakeOwned<WildcardPattern>(), std::move(noneRef)));
     ae.desugarExpr =
         WithinFile(CreateMatchExpr(std::move(ae.leftExpr), std::move(typeMatchCases), castResultTy), curFile);
@@ -226,7 +224,7 @@ void DesugarTypeCheckingAndCasting::DesugarMatchCase(MatchCase& matchCase) const
         return;
     }
 
-    static auto jObjectDecl = man.utils.GetJObjectDecl();
+    static auto jObjectDecl = utils.GetJObjectDecl();
 
     std::vector<OwnedPtr<Expr>> isInstanceGuards;
     std::vector<std::tuple<Ptr<VarDecl>, Ptr<Ty>>> patternVars;
@@ -285,11 +283,17 @@ void DesugarTypeCheckingAndCasting::DesugarLetPattern(LetPatternDestructor& letP
     }
 
     for (auto typePat : typePatterns) {
-        man.diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *typePat,
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *typePat,
             "let type patterns with JavaImpl or JavaMirror types");
     }
 }
 
+DesugarTypeCheckingAndCasting::DesugarTypeCheckingAndCasting(
+    InteropLibBridge& ilib,
+    DiagnosticEngine& diag,
+    Interop::Java::Utils& utils) : ilib(ilib), diag(diag), utils(utils)
+{
+}
 
 void DesugarTypeCheckingAndCasting::Process(AfterTypeCheckContext& ctx)
 {

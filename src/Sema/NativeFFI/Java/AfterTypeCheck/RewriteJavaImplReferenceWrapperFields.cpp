@@ -5,7 +5,6 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "RewriteJavaImplReferenceWrapperFields.h"
-#include "NativeFFI/Java/AfterTypeCheck/JavaDesugarManager.h"
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "NativeFFI/Java/Utils.h"
 #include "NativeFFI/Utils.h"
@@ -14,22 +13,19 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/AST/Utils.h"
-#include "cangjie/Basic/Linkage.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/AST/Walker.h"
-#include <algorithm>
 
 namespace Cangjie::Native::FFI::Java {
 using namespace Interop::Java;
 
 namespace {
 
-void InsertProxyPropertyGetter(PropDecl& prop, VarDecl& actualField, VarDecl& regCompanionField,
+void InsertProxyPropertyGetter(PropDecl& prop, VarDecl& userField, VarDecl& regCompanionField,
     TypeManager& typeManager)
 {
-    CJC_ASSERT(IsImplRegistryCompanion(*actualField.outerDecl));
     CJC_ASSERT(IsImplReferenceWrapper(*prop.outerDecl));
     prop.getters.emplace_back(WithinFile(MakeOwned<FuncDecl>(), prop.curFile));
     auto& getter = *prop.getters.back();
@@ -59,13 +55,12 @@ void InsertProxyPropertyGetter(PropDecl& prop, VarDecl& actualField, VarDecl& re
     getterBody.body->body.emplace_back(
         CreateMemberAccess(
             WithinFile(CreateRefExpr(regCompanionField), prop.curFile),
-            actualField));
+            userField));
 }
 
-void InsertProxyPropertySetter(PropDecl& prop, VarDecl& actualField, VarDecl& regCompanionField,
+void InsertProxyPropertySetter(PropDecl& prop, VarDecl& userField, VarDecl& regCompanionField,
     TypeManager& typeManager)
 {
-    CJC_ASSERT(IsImplRegistryCompanion(*actualField.outerDecl));
     static auto unitTy = TypeManager::GetPrimitiveTy(AST::TypeKind::TYPE_UNIT);
 
     prop.setters.emplace_back(WithinFile(MakeOwned<FuncDecl>(), prop.curFile));
@@ -102,20 +97,23 @@ void InsertProxyPropertySetter(PropDecl& prop, VarDecl& actualField, VarDecl& re
         WithinFile(CreateAssignExpr(
             CreateMemberAccess(
                 WithinFile(CreateRefExpr(regCompanionField), prop.curFile),
-                actualField),
+                userField),
             WithinFile(CreateRefExpr(setterParam), prop.curFile),
             TypeManager::GetPrimitiveTy(AST::TypeKind::TYPE_UNIT)), prop.curFile));
 }
 
 } // namespace
 
-void RewriteJavaImplReferenceWrapperFields::CloneFields(AfterTypeCheckContext& ctx,
+void RewriteJavaImplReferenceWrapperFields::RelocateFields(AfterTypeCheckContext& ctx,
     ClassDecl& refWrapper, ClassDecl& registryCompanion) const
 {
-    std::vector<OwnedPtr<PropDecl>> props;
     auto& regCompanionField = ctx.GetJavaImplRegistryCompanionReferenceField(refWrapper);
-    for (auto& member : refWrapper.GetMemberDecls()) {
+    auto& wrapperMembers = refWrapper.GetMemberDecls();
+    auto itm = wrapperMembers.begin();
+    while (itm != wrapperMembers.end()) {
+        auto& member = *itm;
         if (member->astKind != ASTKind::VAR_DECL || !Is<VarDecl>(member)) {
+            itm++;
             continue;
         }
 
@@ -123,65 +121,68 @@ void RewriteJavaImplReferenceWrapperFields::CloneFields(AfterTypeCheckContext& c
         auto& field = *StaticAs<ASTKind::VAR_DECL>(member.get());
 
         if (IsJavaImplRegistryCompanionReferenceField(field)) {
+            itm++;
             continue;
         }
 
-        // Corresponding registry companion field
-        auto& clone = CloneField(field, registryCompanion);
+        generatedProps[&field] = GenerateProxyProperty(field, regCompanionField);
 
-        // Generated reference wrapper property
-        auto prop = GenerateProxyProperty(field, clone, regCompanionField);
+        registryCompanion.GetMemberDecls().emplace_back(std::move(member));
+        wrapperMembers.erase(itm);
 
-        clonedFields[&field] = &clone;
-        generatedProps[&field] = std::move(prop);
+        field.outerDecl = &registryCompanion;
+        field.isVar = true;
+        field.modifiers.clear();
+        field.DisableAttr(Attribute::PRIVATE, Attribute::INTERNAL, Attribute::PUBLIC);
+        field.EnableAttr(Attribute::PROTECTED);
+        if (!field.initializer) {
+            field.initializer = utils.CreateZeroValue(field.GetTy(), *field.curFile);
+        }
     }
 }
 
 namespace {
-bool isInsideConstructor(Ptr<Node> node)
+bool IsInsideRefWrapperConstructor(Ptr<Node> node)
 {
     auto fd = As<ASTKind::FUNC_DECL>(node);
-    if (!fd) {
+    if (!fd || !fd->outerDecl || !IsImplReferenceWrapper(*fd->outerDecl)) {
         return false;
     }
     return fd->TestAttr(Attribute::CONSTRUCTOR);
 }
 
-bool isInsideUserFieldInitializer(Ptr<Node> node)
+bool IsInsideRegistryCompanion(Ptr<Node> node)
 {
-    auto vd = As<ASTKind::VAR_DECL>(node);
-    if (!vd || !vd->outerDecl || !IsImplReferenceWrapper(*vd->outerDecl)) {
+    auto cd = As<ASTKind::CLASS_DECL>(node);
+    if (!cd || !IsImplRegistryCompanion(*cd)) {
         return false;
     }
 
-    return vd->astKind == ASTKind::VAR_DECL && vd->initializer && !IsJavaImplRegistryCompanionReferenceField(*vd);
+    return true;
 }
 }
 
 void RewriteJavaImplReferenceWrapperFields::RewriteFieldAccess(AfterTypeCheckContext& ctx, Package& pkg) const
 {
-    bool withinRefWrapperConstructor = false; // Used in rewriter visitor as indicator.
-    bool withinUserField = false;
+    bool withinRefWrapperConstructor = false; // Used in rewriter visitor as an indicator.
     bool hasPropsResolved = false;
 
     /*
      * Generated reference wrapper proxy properties should be skipped by this visitor
-     * because its bodies are already resolved with the correct way.
-     * These properties are not visited by the visitor at this stage since
-     * a reference wrapper still does not own its generated properties as members
-     * (ownership transfers in EraseUserFields method).
+     * because its bodies are already resolved with the correct way
+     * (reference wrapper AST at this stage does not have proxy properties inserted yet until `PushProxyProperties`).
      */
-    Walker(&pkg, [this, &ctx, &pkg, &withinRefWrapperConstructor, &withinUserField, &hasPropsResolved](Ptr<Node> node) {
+    Walker(&pkg, [&](Ptr<Node> node) {
         // Pre-visitor
         if (!node->IsSamePackage(pkg)) {
             return VisitAction::WALK_CHILDREN;
         }
 
-        // Pre-visit: set flags if corresponding node have been visiting.
-        if (isInsideConstructor(node)) {
+        // Pre-visit: set flags if corresponding node has been visiting.
+        if (IsInsideRefWrapperConstructor(node)) {
             withinRefWrapperConstructor = true;
-        } else if (isInsideUserFieldInitializer(node)) {
-            withinUserField = true;
+        } else if (IsInsideRegistryCompanion(node)) {
+            return VisitAction::SKIP_CHILDREN;
         }
 
         Ptr<Decl>* target = nullptr;
@@ -191,62 +192,65 @@ void RewriteJavaImplReferenceWrapperFields::RewriteFieldAccess(AfterTypeCheckCon
             target = &ma->target;
         }
 
-        if (!target || !(*target) || !(*target)->outerDecl || !IsImplReferenceWrapper(*(*target)->outerDecl)) {
+        if (!target || !(*target) || !(*target)->outerDecl || !IsImplRegistryCompanion(*(*target)->outerDecl)) {
             return VisitAction::WALK_CHILDREN;
         }
 
-        auto& refWrapper = *StaticAs<ASTKind::CLASS_DECL>((*target)->outerDecl);
+        if (!(*target)->IsSamePackage(pkg)) {
+            // No need to rewrite access on @JavaImpl fields compiled as another package:
+            // It already should be resolved to proxy property.
+            return VisitAction::WALK_CHILDREN;
+        }
 
-        auto originalField = As<ASTKind::VAR_DECL>(*target);
+        auto userField = As<ASTKind::VAR_DECL>(*target);
         // Also check astKind since VarDecl could be a PropDecl.
         // Property access should not be re-resolved: it is already correct.
-        if (!originalField || originalField->astKind != ASTKind::VAR_DECL) {
+        if (!userField || (*target)->astKind != ASTKind::VAR_DECL) {
             return VisitAction::WALK_CHILDREN;
         }
-        if (IsJavaImplRegistryCompanionReferenceField(*originalField)) {
-            return VisitAction::WALK_CHILDREN;
-        }
+        auto proxyProp = generatedProps[userField].get();
+        CJC_NULLPTR_CHECK(proxyProp);
+        auto& refWrapper = *StaticAs<ASTKind::CLASS_DECL>(proxyProp->outerDecl);
 
-        if (withinRefWrapperConstructor || withinUserField) {
-            auto correspondingField = clonedFields[originalField];
-            CJC_NULLPTR_CHECK(correspondingField);
-            auto isStatic = correspondingField->TestAttr(Attribute::STATIC);
+        if (withinRefWrapperConstructor) {
+            auto isStatic = userField->TestAttr(Attribute::STATIC);
 
-            auto& registryCompanion = *StaticAs<ASTKind::CLASS_DECL>(correspondingField->outerDecl);
+            auto& registryCompanion = *StaticAs<ASTKind::CLASS_DECL>(userField->outerDecl);
 
             auto maReceiver = isStatic
                 ? CreateRefExpr(registryCompanion)
                 : CreateRefExpr(ctx.GetJavaImplRegistryCompanionReferenceField(refWrapper));
             AddCurFile(*maReceiver, refWrapper.curFile);
 
-            auto fieldAccess = CreateMemberAccess(std::move(maReceiver), *correspondingField);
+            auto fieldAccess = CreateMemberAccess(std::move(maReceiver), *userField);
 
             if (auto ref = As<ASTKind::REF_EXPR>(node)) {
                 // Re-points ref wrapper field access to registry companion field.
                 ref->desugarExpr = std::move(fieldAccess);
-            } else if (auto ma = As<ASTKind::MEMBER_ACCESS>(node)) {
+                return VisitAction::SKIP_CHILDREN;
+            }
+            if (auto ma = As<ASTKind::MEMBER_ACCESS>(node)) {
                 if (isStatic) {
                     // Re-points `Type.<field>` access to registry companion field.
                     ma->desugarExpr = std::move(fieldAccess);
-                } else if (auto lvalueRef = As<ASTKind::REF_EXPR>(ma->baseExpr.get()); lvalueRef && lvalueRef->isThis) {
+                    return VisitAction::SKIP_CHILDREN;
+                }
+
+                if (auto lvalueRef = As<ASTKind::REF_EXPR>(ma->baseExpr.get()); lvalueRef && lvalueRef->isThis) {
                     // Re-points `this.<field>` access to registry companion field.
                     ma->desugarExpr = std::move(fieldAccess);
+                    return VisitAction::SKIP_CHILDREN;
                 }
             }
-        } else {
-            auto prop = generatedProps[originalField].get();
-            CJC_NULLPTR_CHECK(prop);
-            *target = prop;
-            hasPropsResolved = true;
         }
+        *target = proxyProp;
+        hasPropsResolved = true;
 
-        return VisitAction::WALK_CHILDREN;
-    }, [&withinRefWrapperConstructor, &withinUserField](Ptr<Node> node) {
+        return VisitAction::SKIP_CHILDREN;
+    }, [&withinRefWrapperConstructor](Ptr<Node> node) {
         // Post-visitor: clear flags after visit.
-        if (isInsideConstructor(node)) {
+        if (IsInsideRefWrapperConstructor(node)) {
             withinRefWrapperConstructor = false;
-        } else if (isInsideUserFieldInitializer(node)) {
-            withinUserField = false;
         }
         return VisitAction::WALK_CHILDREN;
     }).Walk();
@@ -262,25 +266,8 @@ void RewriteJavaImplReferenceWrapperFields::RewriteFieldAccess(AfterTypeCheckCon
     }
 }
 
-void RewriteJavaImplReferenceWrapperFields::EraseUserFields() const
-{
-    for (auto& [userField, generatedProp] : generatedProps) {
-        auto& refWrapper = *generatedProp->outerDecl;
-        auto& members = refWrapper.GetMemberDecls();
-
-        auto& usrField = userField; // Remove extra assignment of structured binding when C++20 will be supported.
-        members.erase(std::find_if(members.begin(), members.end(), [usrField](OwnedPtr<Decl>& member) {
-            // Compares raw pointers.
-            return member.get().get() == usrField.get();
-        }));
-
-        members.push_back(std::move(generatedProp));
-    }
-    generatedProps.clear();
-}
-
 OwnedPtr<PropDecl> RewriteJavaImplReferenceWrapperFields::GenerateProxyProperty(VarDecl& userField,
-    VarDecl& actualCompanionField, VarDecl& regCompanionField) const
+    VarDecl& regCompanionRefField) const
 {
     auto propDecl = WithinFile(MakeOwned<PropDecl>(), userField.curFile);
     propDecl->begin = userField.begin;
@@ -307,46 +294,36 @@ OwnedPtr<PropDecl> RewriteJavaImplReferenceWrapperFields::GenerateProxyProperty(
     propDecl->fullPackageName = userField.fullPackageName;
     propDecl->moduleName = userField.moduleName;
 
-    InsertProxyPropertyGetter(*propDecl, actualCompanionField, regCompanionField, man.typeManager);
+    InsertProxyPropertyGetter(*propDecl, userField, regCompanionRefField, typeManager);
     if (userField.isVar) {
-        InsertProxyPropertySetter(*propDecl, actualCompanionField, regCompanionField, man.typeManager);
+        InsertProxyPropertySetter(*propDecl, userField, regCompanionRefField, typeManager);
     }
     return propDecl;
 }
 
-VarDecl& RewriteJavaImplReferenceWrapperFields::CloneField(VarDecl& sample, ClassDecl& registryCompanion) const
+void RewriteJavaImplReferenceWrapperFields::PushProxyProperties() const
 {
-    auto cloned = ASTCloner::Clone(Ptr(&sample));
-    auto& res = *cloned;
-
-    cloned->DisableAttr(Attribute::PRIVATE, Attribute::INTERNAL, Attribute::PUBLIC);
-    cloned->EnableAttr(Attribute::PROTECTED);
-    cloned->isVar = true;
-    cloned->modifiers.clear();
-    cloned->curFile = registryCompanion.curFile;
-    cloned->doNotExport = false;
-    cloned->fullPackageName = registryCompanion.fullPackageName;
-    cloned->moduleName = registryCompanion.moduleName;
-    cloned->begin = registryCompanion.body->begin;
-    cloned->end = registryCompanion.body->begin;
-    cloned->linkage = Linkage::EXTERNAL;
-    if (!sample.initializer) {
-        cloned->initializer = man.utils.CreateZeroValue(sample.GetTy(), *sample.curFile);
+    for (auto& [_, proxyProp] : generatedProps) {
+        auto& refWrapper = *proxyProp->outerDecl;
+        refWrapper.GetMemberDecls().push_back(std::move(proxyProp));
     }
-    cloned->outerDecl = &registryCompanion;
+    generatedProps.clear();
+}
 
-    registryCompanion.GetMemberDecls().emplace_back(std::move(cloned));
-    return res;
+RewriteJavaImplReferenceWrapperFields::RewriteJavaImplReferenceWrapperFields(TypeManager& typeManager,
+    Native::FFI::Java::Utils& utils, std::function<void(AST::Node&)> desugarPropRef)
+    : typeManager(typeManager), utils(utils), desugarPropRef(desugarPropRef)
+{
 }
 
 void RewriteJavaImplReferenceWrapperFields::Process(AfterTypeCheckContext& ctx)
 {
     for (auto refWrapper : ctx.GetJavaImplReferenceWrappers()) {
         auto& registryCompanion = ctx.GetJavaImplRegistryCompanion(*refWrapper);
-        CloneFields(ctx, *refWrapper, registryCompanion);
+        RelocateFields(ctx, *refWrapper, registryCompanion);
     }
     RewriteFieldAccess(ctx, ctx.pkg);
-    EraseUserFields();
+    PushProxyProperties();
 }
 
 } // namespace Cangjie::Native::FFI::Java

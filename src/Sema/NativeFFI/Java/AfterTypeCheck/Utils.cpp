@@ -572,20 +572,6 @@ std::string GetJavaPackage(const Decl& decl)
     return decl.GetFullPackageName();
 }
 
-void MangleJNIName(std::string& name)
-{
-    size_t startPos = 0;
-    // "_" in name should be replaced with `_1` since `_` is reserved symbol in JNI signatures
-    constexpr std::string_view underscorePattern = "_1";
-    while ((startPos = name.find("_", startPos)) != std::string::npos) {
-        name.replace(startPos, 1, underscorePattern);
-        startPos += underscorePattern.size();
-        // Continue after inserted "_1" substring (2 characters).
-    }
-
-    std::replace(name.begin(), name.end(), '.', '_');
-}
-
 std::string Utils::GetJavaObjectTypeName(const Ty& ty)
 {
     if (ty.IsCoreOptionType()) {
@@ -754,6 +740,7 @@ OwnedPtr<CallExpr> Utils::CreateZeroValue(Ptr<Ty> ty, File& curFile) const
 {
     static constexpr std::string_view ZERO_VALUE_INTRINSIC_NAME = "zeroValue";
     static auto zeroValueDecl = importManager.GetCoreDecl<FuncDecl>(std::string(ZERO_VALUE_INTRINSIC_NAME));
+    CJC_ASSERT(zeroValueDecl);
     auto zeroValueCall = MakeOwned<CallExpr>();
 
     auto fdRef = WithinFile(CreateRefExpr(*zeroValueDecl), &curFile);
@@ -873,11 +860,11 @@ bool IsCJMappingTuple(const Ptr<Ty>& ty, std::unordered_set<Ptr<Ty>> tupleConfig
 std::string ReplaceClassName(std::string& classTypeSignature, std::string newSegment)
 {
     bool hasSemicolon = (!classTypeSignature.empty() && classTypeSignature.back() == ';');
-    
+
     std::string base = hasSemicolon
         ? classTypeSignature.substr(0, classTypeSignature.length() - 1)
         : classTypeSignature;
-    
+
     size_t lastSlash = classTypeSignature.rfind('/');
     if (lastSlash != std::string::npos) {
         base = base.substr(0, lastSlash + 1) + newSegment;
@@ -973,7 +960,7 @@ OwnedPtr<Expr> Utils::CreateOptionMatch(
         Nodes<MatchCase>(std::move(caseSome), std::move(caseNone)), ty), curFile);
 }
 
-OwnedPtr<FuncDecl> Utils::CreateNativeFunc(std::string& name,
+OwnedPtr<FuncDecl> Utils::CreateNativeFunc(const std::string& name,
     std::vector<OwnedPtr<FuncParam>>&& params, Ptr<Ty> retTy, std::vector<OwnedPtr<Node>>&& nodes,
     File& curFile, std::string& moduleName, std::string& fullPackageName) const
 {

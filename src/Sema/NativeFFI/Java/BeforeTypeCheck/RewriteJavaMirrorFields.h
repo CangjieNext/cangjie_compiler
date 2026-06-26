@@ -7,7 +7,7 @@
 /**
  * @file
  *
- * This file declares pre-typecheck Java interop stage: rewritting of fields to the properties with stubs
+ * This file declares pre-typecheck Java interop stage: rewriting of fields to the properties with stubs
  * within @JavaMirror classes.
  *
  * Generated property stubs are replaced with corresponding java calls at later stages.
