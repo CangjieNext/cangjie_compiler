@@ -286,7 +286,7 @@ Value* Translator::WrapMemberMethodByLambda(
         // Apply
         if (thisObj != nullptr) {
             auto objExpectedType = instFuncType.instParentCustomTy;
-            if (objExpectedType->IsReferenceType()) {
+            if (objExpectedType->IsReferenceType() || (objExpectedType->IsStruct() && funcDecl.TestAttr(AST::Attribute::MUT))) {
                 objExpectedType = builder.GetType<RefType>(objExpectedType);
             }
             args.insert(args.begin(), TransformThisType(*thisObj, *objExpectedType, *lambda));
