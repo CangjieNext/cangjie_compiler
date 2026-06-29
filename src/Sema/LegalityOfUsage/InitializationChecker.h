@@ -18,18 +18,27 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "SearchSymbol.h"
+
 #include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Node.h"
+#include "cangjie/AST/Symbol.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 
 namespace Cangjie {
 class InitializationChecker {
 public:
-    static void Check(CompilerInstance& compilerInstance, const ASTContext& ctx, Ptr<AST::Node> n)
+    static void Check(CompilerInstance& compilerInstance, const ASTContext& ctx)
     {
         InitializationChecker checker(compilerInstance, ctx);
-        checker.CheckInitialization(n);
+        std::vector<AST::Symbol*> syms = SearchSymbol::GetToplevelDecls(ctx);
+        // 1. Check from toplevel decls.
+        for (auto sym : syms) {
+            CJC_ASSERT(sym && sym->node);
+            checker.CheckInitialization(sym->node);
+        }
     }
+
 private:
     explicit InitializationChecker(CompilerInstance& ci, const ASTContext& ctx)
         : ctx(ctx), diag(ci.diag), opts{ci.invocation.globalOptions}
