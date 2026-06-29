@@ -73,16 +73,6 @@ void TypeChecker::TypeCheckerImpl::WarmupCache(const ASTContext& ctx) const
     ctx.searcher->SetCache(cache);
 }
 
-std::vector<Symbol*> TypeChecker::TypeCheckerImpl::GetToplevelDecls(const ASTContext& ctx) const
-{
-    // "scope_level:0 && ast_kind: *decl"
-    Query q(Operator::AND);
-    q.left = std::make_unique<Query>("scope_level", "0");
-    q.right = std::make_unique<Query>("ast_kind", "decl");
-    q.right->matchKind = MatchKind::SUFFIX;
-    return ctx.searcher->Search(ctx, &q, Sort::posAsc);
-}
-
 std::vector<Symbol*> TypeChecker::TypeCheckerImpl::GetAllDecls(const ASTContext& ctx) const
 {
     Query q("ast_kind", "decl", MatchKind::SUFFIX);

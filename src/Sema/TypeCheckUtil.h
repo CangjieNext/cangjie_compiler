@@ -359,5 +359,8 @@ bool IsLegalAccess(AST::Symbol* curComposite, const AST::Decl& d, const AST::Nod
  * @return The corresponding common declaration if found, nullptr otherwise.
  */
 Ptr<AST::Decl> FindCorrespondingCommonDecl(const AST::Decl& specificDecl);
+
+/** Get decls with symbol by context searcher. */
+std::vector<AST::Symbol*> GetToplevelDecls(const ASTContext& ctx);
 } // namespace Cangjie::TypeCheckUtil
 #endif

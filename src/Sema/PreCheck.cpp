@@ -920,7 +920,7 @@ void TypeChecker::TypeCheckerImpl::ResolveNames(ASTContext& ctx)
         }
         return VisitAction::WALK_CHILDREN;
     };
-    std::vector<Symbol*> syms = GetToplevelDecls(ctx);
+    std::vector<Symbol*> syms = TypeCheckUtil::GetToplevelDecls(ctx);
     for (auto sym : syms) {
         CJC_NULLPTR_CHECK(sym);
         Walker(sym->node, id, resolveSingleType).Walk();

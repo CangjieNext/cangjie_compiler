@@ -2145,7 +2145,7 @@ void TypeChecker::TypeCheckerImpl::TypeCheckImportedGenericMember(ASTContext& ct
 
 void TypeChecker::TypeCheckerImpl::TypeCheck(ASTContext& ctx, Package& pkg)
 {
-    std::vector<Symbol*> syms = GetToplevelDecls(ctx);
+    std::vector<Symbol*> syms = TypeCheckUtil::GetToplevelDecls(ctx);
     // 1. Check from toplevel decls.
     for (auto sym : syms) {
         CJC_ASSERT(sym && sym->node);

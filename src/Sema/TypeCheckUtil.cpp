@@ -1546,4 +1546,13 @@ Ptr<Decl> FindCorrespondingCommonDecl(const Decl& specificDecl)
     return nullptr;
 }
 
+std::vector<Symbol*> GetToplevelDecls(const ASTContext& ctx)
+{
+    // "scope_level:0 && ast_kind: *decl"
+    Query q(Operator::AND);
+    q.left = std::make_unique<Query>("scope_level", "0");
+    q.right = std::make_unique<Query>("ast_kind", "decl");
+    q.right->matchKind = MatchKind::SUFFIX;
+    return ctx.searcher->Search(ctx, &q, Sort::posAsc);
+}
 } // namespace Cangjie::TypeCheckUtil
