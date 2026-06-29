@@ -100,6 +100,9 @@ private:
     void AddInstanceMethod(const FuncDecl& funcDecl);
     void AddStaticMethod(const FuncDecl& funcDecl);
     void AddMethods();
+    // Collect function declarations from a member list for AddMethods.
+    void CollectFuncDeclsFromMembers(
+        const std::vector<OwnedPtr<Decl>>& members, std::vector<Ptr<Decl>>& funcDecls, bool isOpen) const;
     void AddInterfaceMethods();
     void AddTupleItemMethod();
 

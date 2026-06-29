@@ -713,33 +713,69 @@ void MPTypeCheckerImpl::ValidateMatchedAnnotationsAndModifiers(AST::Package& pkg
     walker.Walk();
 }
 
+namespace {
+
+bool HasEmptyConstructorInMembers(const std::vector<Ptr<Decl>>& memberDecls)
+{
+    for (const auto& member : memberDecls) {
+        if (member->astKind == ASTKind::FUNC_DECL) {
+            auto funcDecl = StaticCast<FuncDecl>(member);
+            if (funcDecl->TestAttr(Attribute::CONSTRUCTOR) && funcDecl->funcBody &&
+                !funcDecl->funcBody->paramLists.empty() &&
+                funcDecl->funcBody->paramLists[0]->params.empty()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::set<Ptr<InterfaceTy>> CollectCommonSuperInterfaces(
+    const InheritableDecl& commonDecl, TypeSubst& genericTyMap, TypeManager& typeManager)
+{
+    if (!genericTyMap.empty()) {
+        std::set<Ptr<InterfaceTy>> result;
+        for (auto superInterface : commonDecl.GetSuperInterfaceTys()) {
+            auto updatedInterfaceType = typeManager.GetInstantiatedTy(superInterface, genericTyMap);
+            result.emplace(StaticCast<InterfaceTy*>(updatedInterfaceType));
+        }
+        return result;
+    }
+    return commonDecl.GetSuperInterfaceTys();
+}
+
+bool MatchInterfaceSets(const std::set<Ptr<InterfaceTy>>& comSupInters,
+    const std::set<Ptr<InterfaceTy>>& platSupInters, const InheritableDecl& specificDecl,
+    DiagnosticEngine& diag, TypeManager& typeManager)
+{
+    for (auto& comSupInter : comSupInters) {
+        bool match = false;
+        for (auto& platSupInter : platSupInters) {
+            if (typeManager.IsTyEqual(comSupInter, platSupInter)) {
+                match = true;
+                break;
+            }
+        }
+        if (!match) {
+            DiagNotMatchedSuperType(diag, specificDecl);
+            return false;
+        }
+    }
+    return true;
+}
+
+}
+
 void MPTypeCheckerImpl::ValidateCJMPConstructorConstraints(AST::Package& pkg)
 {
     (void)pkg;
     for (const auto& relaxInfo : pendingRelaxations) {
         auto specificDecl = relaxInfo.specificDecl;
-        if (!specificDecl || specificDecl->astKind != ASTKind::CLASS_DECL) {
-            continue;
-        }
+        if (!specificDecl || specificDecl->astKind != ASTKind::CLASS_DECL) { continue; }
         auto specificClass = StaticCast<ClassDecl>(specificDecl);
         auto platformParent = specificClass->GetSuperClassDecl();
-        if (!platformParent) {
-            continue;
-        }
-        const auto& memberDecls = platformParent->GetMemberDeclPtrs();
-        bool hasEmptyConstructor = false;
-        for (const auto& member : memberDecls) {
-            if (member->astKind == ASTKind::FUNC_DECL) {
-                auto funcDecl = StaticCast<FuncDecl>(member);
-                if (funcDecl->TestAttr(Attribute::CONSTRUCTOR) && funcDecl->funcBody &&
-                    !funcDecl->funcBody->paramLists.empty() &&
-                    funcDecl->funcBody->paramLists[0]->params.empty()) {
-                    hasEmptyConstructor = true;
-                    break;
-                }
-            }
-        }
-        if (!hasEmptyConstructor) {
+        if (!platformParent) { continue; }
+        if (!HasEmptyConstructorInMembers(platformParent->GetMemberDeclPtrs())) {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_platform_parent_no_empty_constructor,
                 *specificClass, platformParent->identifier.Val());
         }
@@ -892,34 +928,13 @@ void MPTypeCheckerImpl::CheckCommonSpecificGenericMatch(const AST::Decl& specifi
 bool MPTypeCheckerImpl::MatchCommonSpecificSuperInterfaces(
     const InheritableDecl& commonDecl, const InheritableDecl& specificDecl, TypeSubst& genericTyMap)
 {
-    std::set<Ptr<InterfaceTy>> comSupInters;
+    auto comSupInters = CollectCommonSuperInterfaces(commonDecl, genericTyMap, typeManager);
     auto platSupInters = specificDecl.GetSuperInterfaceTys();
-    if (!genericTyMap.empty()) {
-        for (auto superInterface : commonDecl.GetSuperInterfaceTys()) {
-            auto updatedInterfaceType = typeManager.GetInstantiatedTy(superInterface, genericTyMap);
-            comSupInters.emplace(StaticCast<InterfaceTy*>(updatedInterfaceType));
-        }
-    } else {
-        comSupInters = commonDecl.GetSuperInterfaceTys();
-    }
     if (comSupInters.size() != platSupInters.size()) {
         DiagNotMatchedSuperType(diag, specificDecl);
         return false;
     }
-    for (auto& comSupInter : comSupInters) {
-        bool match = false;
-        for (auto& platSupInter : platSupInters) {
-            if (typeManager.IsTyEqual(comSupInter, platSupInter)) {
-                match = true;
-                break;
-            }
-        }
-        if (!match) {
-            DiagNotMatchedSuperType(diag, specificDecl);
-            return false;
-        }
-    }
-    return true;
+    return MatchInterfaceSets(comSupInters, platSupInters, specificDecl, diag, typeManager);
 }
 
 bool MPTypeCheckerImpl::MatchCommonSpecificSuperClass(

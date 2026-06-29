@@ -91,12 +91,12 @@ namespace {
 bool TryReplaceExistingSuperCall(Apply* existingSuperCall, Value* platformConstructor)
 {
     auto callee = existingSuperCall->GetCallee();
-    if (!callee || !callee->IsFunc()) return false;
+    if (!callee || !callee->IsFunc()) { return false; }
     auto calleeFunc = StaticCast<Function*>(callee);
     auto calleeParent = calleeFunc->GetParentCustomTypeDef();
-    if (!calleeParent || !calleeParent->IsClass()) return false;
+    if (!calleeParent || !calleeParent->IsClass()) { return false; }
     auto calleeParentClass = StaticCast<ClassDef*>(calleeParent);
-    if (calleeParentClass->GetSuperClassDef() != nullptr) return false;
+    if (calleeParentClass->GetSuperClassDef() != nullptr) { return false; }
     existingSuperCall->ReplaceOperand(static_cast<size_t>(0), StaticCast<Value*>(platformConstructor));
     return true;
 }

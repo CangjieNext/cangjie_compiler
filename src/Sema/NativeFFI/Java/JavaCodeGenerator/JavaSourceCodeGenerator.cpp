@@ -1011,27 +1011,10 @@ void JavaSourceCodeGenerator::AddStaticMethod(const FuncDecl& funcDecl)
     AddWithIndent(TAB, methodSignature);
 }
 
-void JavaSourceCodeGenerator::AddMethods()
+void JavaSourceCodeGenerator::CollectFuncDeclsFromMembers(
+    const std::vector<OwnedPtr<Decl>>& members, std::vector<Ptr<Decl>>& funcDecls, bool isOpen) const
 {
-    bool hasHashcodeMethod = false;
-    bool hasEqualsMethod = false;
-    bool hasToStringMethod = false;
-    bool isOpen = decl->TestAttr(Attribute::OPEN);
-    std::vector<Ptr<Decl>> funcDecls;
-    for (auto extendDecl : extendDecls) {
-        for (OwnedPtr<Decl>& declPtr : extendDecl->GetMemberDecls()) {
-            if (declPtr->TestAttr(Attribute::FROM_COMMON_PART) && declPtr->specificImplementation) {
-                continue;
-            }
-            if (IsCJMapping(*decl) && !declPtr->TestAttr(Attribute::PUBLIC)) {
-                continue;
-            }
-            if (!declPtr->TestAttr(Attribute::PRIVATE) && IsFuncDeclAndNotConstructor(declPtr)) {
-                funcDecls.emplace_back(declPtr.get());
-            }
-        }
-    }
-    for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
+    for (auto& declPtr : members) {
         if (declPtr->TestAttr(Attribute::FROM_COMMON_PART) && declPtr->specificImplementation) {
             continue;
         }
@@ -1043,6 +1026,19 @@ void JavaSourceCodeGenerator::AddMethods()
             funcDecls.emplace_back(declPtr.get());
         }
     }
+}
+
+void JavaSourceCodeGenerator::AddMethods()
+{
+    bool hasHashcodeMethod = false;
+    bool hasEqualsMethod = false;
+    bool hasToStringMethod = false;
+    bool isOpen = decl->TestAttr(Attribute::OPEN);
+    std::vector<Ptr<Decl>> funcDecls;
+    for (auto extendDecl : extendDecls) {
+        CollectFuncDeclsFromMembers(extendDecl->GetMemberDecls(), funcDecls, false);
+    }
+    CollectFuncDeclsFromMembers(decl->GetMemberDecls(), funcDecls, isOpen);
     for (auto& fdecl : funcDecls) {
         if (fdecl->TestAttr(Attribute::FROM_COMMON_PART) && fdecl->specificImplementation) {
             continue;

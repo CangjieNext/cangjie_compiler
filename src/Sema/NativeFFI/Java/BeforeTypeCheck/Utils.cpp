@@ -87,38 +87,46 @@ ClassDecl& GetExceptionDecl(const ImportManager& importManager)
     return *exception;
 }
 
+namespace {
+
+void AssignPropGetterTypes(PropDecl& pd, TypeManager& typeManager)
+{
+    for (auto& getter : pd.getters) {
+        if (!Ty::IsTyCorrect(getter->GetTy())) {
+            getter->SetTy(typeManager.GetFunctionTy({}, pd.GetTy()));
+            getter->funcBody->SetTy(getter->GetTy());
+        }
+    }
+}
+
+void AssignPropSetterTypes(PropDecl& pd, TypeManager& typeManager)
+{
+    for (auto& setter : pd.setters) {
+        if (!Ty::IsTyCorrect(setter->GetTy())) {
+            setter->SetTy(typeManager.GetFunctionTy(
+                {pd.GetTy()}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
+            setter->funcBody->SetTy(setter->GetTy());
+        }
+        if (!setter->funcBody->paramLists.empty() && !setter->funcBody->paramLists[0]->params.empty()) {
+            auto& setterParam = setter->funcBody->paramLists[0]->params[0];
+            if (!Ty::IsTyCorrect(setterParam->GetTy())) {
+                setterParam->SetTy(pd.GetTy());
+            }
+        }
+    }
+}
+
+}
+
 void AssignMirrorPropGetterSetterTypes(ClassDecl& decl, TypeManager& typeManager)
 {
     for (auto& d : decl.body->decls) {
-        if (d->astKind != ASTKind::PROP_DECL) {
-            continue;
-        }
+        if (d->astKind != ASTKind::PROP_DECL) { continue; }
         auto& pd = *StaticAs<ASTKind::PROP_DECL>(d.get());
-        if (!pd.TestAttr(Attribute::DESUGARED_MIRROR_FIELD)) {
-            continue;
-        }
-        if (!Ty::IsTyCorrect(pd.GetTy())) {
-            continue;
-        }
-        for (auto& getter : pd.getters) {
-            if (!Ty::IsTyCorrect(getter->GetTy())) {
-                getter->SetTy(typeManager.GetFunctionTy({}, pd.GetTy()));
-                getter->funcBody->SetTy(getter->GetTy());
-            }
-        }
-        for (auto& setter : pd.setters) {
-            if (!Ty::IsTyCorrect(setter->GetTy())) {
-                setter->SetTy(typeManager.GetFunctionTy(
-                    {pd.GetTy()}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
-                setter->funcBody->SetTy(setter->GetTy());
-            }
-            if (!setter->funcBody->paramLists.empty() && !setter->funcBody->paramLists[0]->params.empty()) {
-                auto& setterParam = setter->funcBody->paramLists[0]->params[0];
-                if (!Ty::IsTyCorrect(setterParam->GetTy())) {
-                    setterParam->SetTy(pd.GetTy());
-                }
-            }
-        }
+        if (!pd.TestAttr(Attribute::DESUGARED_MIRROR_FIELD)) { continue; }
+        if (!Ty::IsTyCorrect(pd.GetTy())) { continue; }
+        AssignPropGetterTypes(pd, typeManager);
+        AssignPropSetterTypes(pd, typeManager);
     }
 }
 
