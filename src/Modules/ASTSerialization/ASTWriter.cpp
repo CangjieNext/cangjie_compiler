@@ -468,32 +468,6 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
         return builder.CreateVector<FormattedIndex>(body);
     }
 
-    // Check if a decl should be exported
-    auto shouldExportDecl = [&decl, onlyVisibleSig, this](const Decl* d) -> bool {
-        // Because member variables determine the memory layout of a type, all of its member variables should be
-        // stored in cjo as long as the type is externally visible.
-        const bool isInstMemberVar = d->astKind == ASTKind::VAR_DECL && !d->TestAttr(Attribute::STATIC);
-        // For LSP usage, the invalid vpd will exists, we can ignore it.
-        if (d->doNotExport || d->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL ||
-            // For LSP usage, we can ignore invisible members.
-            (onlyVisibleSig && !d->IsExportedDecl())) {
-            return false;
-        }
-        if (decl.astKind == AST::ASTKind::EXTEND_DECL && serializingCommon) {
-            return true;
-        }
-        if (IsGenericInCommonSerialization(this->serializingCommon, *d)) {
-            return true;
-        }
-        // Incr compilation need load ty by cached cjo, so still cache internal or inst member var decls.
-        // Common `decl` members are exported because they can be accessed from specific nominative.
-        if (!config.exportForIncr && !decl.TestAttr(Attribute::COMMON) && !isInstMemberVar &&
-            d->linkage == Linkage::INTERNAL) {
-            return false;
-        }
-        return true;
-    };
-
     for (auto& it : decl.GetMemberDeclPtrs()) {
         CJC_NULLPTR_CHECK(it);
         // Skip if this decl is already added as a platform implementation
@@ -503,17 +477,43 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
         // Process platform implementation first, applying same filter logic
         if (it->specificImplementation) {
             if (addedPlatformImpls.insert(it->specificImplementation.get()).second) {
-                if (shouldExportDecl(it->specificImplementation.get())) {
+                if (ShouldExportDecl(decl, *it->specificImplementation, onlyVisibleSig)) {
                     body.push_back(GetDeclIndex(it->specificImplementation));
                 }
             }
         }
-        if (shouldExportDecl(it.get())) {
+        if (ShouldExportDecl(decl, *it, onlyVisibleSig)) {
             body.push_back(GetDeclIndex(it));
             addedPlatformImpls.insert(it.get());
         }
     }
     return builder.CreateVector<FormattedIndex>(body);
+}
+
+bool ASTWriter::ASTWriterImpl::ShouldExportDecl(const AST::Decl& decl, const AST::Decl& d, bool onlyVisibleSig) const
+{
+    // Because member variables determine the memory layout of a type, all of its member variables should be
+    // stored in cjo as long as the type is externally visible.
+    const bool isInstMemberVar = d.astKind == ASTKind::VAR_DECL && !d.TestAttr(Attribute::STATIC);
+    // For LSP usage, the invalid vpd will exists, we can ignore it.
+    if (d.doNotExport || d.astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL ||
+        // For LSP usage, we can ignore invisible members.
+        (onlyVisibleSig && !d.IsExportedDecl())) {
+        return false;
+    }
+    if (decl.astKind == AST::ASTKind::EXTEND_DECL && serializingCommon) {
+        return true;
+    }
+    if (IsGenericInCommonSerialization(this->serializingCommon, d)) {
+        return true;
+    }
+    // Incr compilation need load ty by cached cjo, so still cache internal or inst member var decls.
+    // Common `decl` members are exported because they can be accessed from specific nominative.
+    if (!config.exportForIncr && !decl.TestAttr(Attribute::COMMON) && !isInstMemberVar &&
+        d.linkage == Linkage::INTERNAL) {
+        return false;
+    }
+    return true;
 }
 
 /**

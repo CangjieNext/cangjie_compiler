@@ -60,7 +60,7 @@ namespace {
  */
 [[maybe_unused]] bool IsPlatformParent(const Ptr<ClassDecl>& cls)
 {
-    if (!cls) return false;
+    if (!cls) { return false; }
     return FindFirstAnnotation(*cls, AnnotationKind::JAVA_IMPL) ||
            FindFirstAnnotation(*cls, AnnotationKind::OBJ_C_IMPL) ||
            cls->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE,
