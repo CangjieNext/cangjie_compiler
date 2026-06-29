@@ -64,6 +64,7 @@
     {"std.unittest.diff", "cb"},
     {"std.unittest.mock.mockmacro", "cc"},
     {"std.unittest.mock.internal", "cd"},
+    {"std.unittest.concurrent", "cr"},
     {"std.core.native", "ce"},
     {"std.random.native", "cf"},
     {"std.ast.native", "cg"},
