@@ -321,7 +321,9 @@ ClassType* InstantiateAutoEnvBaseType(ClassDef& autoEnvBaseDef, const FuncType& 
 {
     std::vector<Type*> typeArgs;
     if (autoEnvBaseDef.TestAttr(Attribute::GENERIC)) {
-        typeArgs = funcType.GetTypeArgs();
+        for (auto ty : funcType.GetTypeArgs()) {
+            typeArgs.emplace_back(ty->GetDataType(builder));
+        }
     }
     return builder.GetType<ClassType>(&autoEnvBaseDef, typeArgs);
 }
@@ -916,6 +918,18 @@ ClassType* InstantiateAutoEnvGenericBaseType(ClassType& closureType, const Expre
     }
     return StaticCast<ClassType*>(ReplaceRawGenericArgType(closureType, replaceTable, builder));
 }
+
+std::vector<Type*> GetInstFuncTypeArgsOfAutoEnvWrapper(ClassDef& autoEnvWrapperDef, CHIRBuilder& builder)
+{
+    auto autoEnvGenericBaseType = autoEnvWrapperDef.GetSuperClassTy()->GetSuperClassTy(&builder);
+    std::unordered_map<const GenericType*, Type*> instMap;
+    autoEnvGenericBaseType->GetInstMap(instMap, builder);
+    auto genericFuncType = autoEnvGenericBaseType->GetClassDef()->GetMethods().front()->GetFuncType();
+    auto instFuncType = ReplaceRawGenericArgType(*genericFuncType, instMap, builder);
+    auto instFuncTypeArgs = instFuncType->GetTypeArgs();
+    instFuncTypeArgs.erase(instFuncTypeArgs.begin());
+    return instFuncTypeArgs;
+}
 } // namespace
 
 ClosureConversion::ClosureConversion(Package& package, CHIRBuilder& builder, const GlobalOptions& opts,
@@ -1279,7 +1293,7 @@ void ClosureConversion::DoFunctionInlineForLambda()
 
 ClassDef* ClosureConversion::GetOrCreateAutoEnvBaseDef(const FuncType& funcType)
 {
-    auto autoEnvBaseDef = GetOrCreateGenericAutoEnvBaseDef(funcType.GetParamTypes().size());
+    auto autoEnvBaseDef = GetOrCreateGenericAutoEnvBaseDef(funcType);
     if (!funcType.IsGenericRelated()) {
         autoEnvBaseDef = GetOrCreateInstAutoEnvBaseDef(funcType, *autoEnvBaseDef);
     }
@@ -1337,7 +1351,7 @@ Type* ClosureConversion::ConvertTupleType(const TupleType& type)
 
 Type* ClosureConversion::ConvertFuncType(const FuncType& type)
 {
-    auto autoEnvBaseDef = GetOrCreateGenericAutoEnvBaseDef(type.GetParamTypes().size());
+    auto autoEnvBaseDef = GetOrCreateGenericAutoEnvBaseDef(type);
     auto convertedFuncType = ConvertFuncArgsAndRetType(type);
     return builder.GetType<RefType>(InstantiateAutoEnvBaseType(*autoEnvBaseDef, *convertedFuncType, builder));
 }
@@ -1515,9 +1529,9 @@ void ClosureConversion::LiftType()
     }
 }
 
-ClassDef* ClosureConversion::GetOrCreateGenericAutoEnvBaseDef(size_t paramNum)
+ClassDef* ClosureConversion::GetOrCreateGenericAutoEnvBaseDef(const FuncType& funcType)
 {
-    auto className = CHIRMangling::ClosureConversion::GenerateGenericBaseClassMangleName(paramNum);
+    auto className = CHIRMangling::ClosureConversion::GenerateGenericBaseClassMangleName(funcType);
     auto it = genericAutoEnvBaseDefs.find(className);
     if (it != genericAutoEnvBaseDefs.end()) {
         return it->second;
@@ -1530,6 +1544,7 @@ ClassDef* ClosureConversion::GetOrCreateGenericAutoEnvBaseDef(size_t paramNum)
     */
     // create generic type params
     std::vector<Type*> genericTypeParams;
+    auto paramNum = funcType.GetParamTypes().size();
     auto paramTypePrefix = "ccbase_p" + std::to_string(paramNum) + "_";
     for (size_t i = 0; i < paramNum; ++i) {
         auto paramTypeName = paramTypePrefix + std::to_string(i);
@@ -1548,6 +1563,12 @@ ClassDef* ClosureConversion::GetOrCreateGenericAutoEnvBaseDef(size_t paramNum)
     classDef->EnableAttr(Attribute::GENERIC);
 
     // add abstract method
+    auto paramTypes = funcType.GetParamTypes();
+    for (size_t i = 0; i < paramNum; ++i) {
+        genericTypeParams[i] = builder.WithModal(genericTypeParams[i], paramTypes[i]->StripAllRefs()->GetModalInfo());
+    }
+    genericTypeParams.back() =
+        builder.WithModal(genericTypeParams.back(), funcType.GetReturnType()->StripAllRefs()->GetModalInfo());
     CreateVirtualFuncInAutoEnvBaseDef(*classDef, GENERIC_VIRTUAL_FUNC, genericTypeParams, builder);
 
     // cache class def
@@ -1860,10 +1881,12 @@ ClassDef* ClosureConversion::CreateAutoEnvImplDef(const std::string& className,
     auto memberFuncType = StaticCast<FuncType*>(srcFunc.GetType());
     if (memberFuncType->IsGenericRelated()) {
         for (auto paramTy : memberFuncType->GetParamTypes()) {
-            superClassGenericArgs.emplace_back(ReplaceRawGenericArgType(*paramTy, originalTypeToNewType, builder));
+            superClassGenericArgs.emplace_back(
+                ReplaceRawGenericArgType(*paramTy->GetDataType(builder), originalTypeToNewType, builder));
         }
         auto retType = memberFuncType->GetReturnType();
-        superClassGenericArgs.emplace_back(ReplaceRawGenericArgType(*retType, originalTypeToNewType, builder));
+        superClassGenericArgs.emplace_back(
+            ReplaceRawGenericArgType(*retType->GetDataType(builder), originalTypeToNewType, builder));
     }
     /**
      * if func type is generic related, the class `AutoEnvImpl` inherits `AutoEnvGenericBase<...>`,
@@ -2171,7 +2194,11 @@ ClassDef* ClosureConversion::GetOrCreateInstAutoEnvBaseDef(const FuncType& funcT
     classDef->SetType(*classTy);
 
     // set super class type
-    auto superClassTy = builder.GetType<ClassType>(&superClass, funcType.GetTypeArgs());
+    std::vector<Type*> typeArgs;
+    for (auto& ty : funcType.GetTypeArgs()) {
+        typeArgs.emplace_back(ty->GetDataType(builder));
+    }
+    auto superClassTy = builder.GetType<ClassType>(&superClass, typeArgs);
     classDef->SetSuperClassTy(*superClassTy);
 
     // set attribute
@@ -2377,12 +2404,10 @@ void ClosureConversion::CreateMemberVarInAutoEnvWrapper(ClassDef& autoEnvWrapper
 Function* ClosureConversion::CreateGenericMethodInAutoEnvWrapper(ClassDef& autoEnvWrapperDef)
 {
     // 1. create function type
-    auto memberVars = autoEnvWrapperDef.GetDirectInstanceVars();
-    CJC_ASSERT(memberVars.size() == 1);
-    auto memberVarType = StaticCast<ClassType*>(memberVars[0].type->StripAllRefs());
+    auto instFuncTypeArgs = GetInstFuncTypeArgsOfAutoEnvWrapper(autoEnvWrapperDef, builder);
     std::unordered_map<const GenericType*, Type*> emptyTable;
     auto [paramTypes, retType] = CreateFuncTypeWithBoxType(
-        autoEnvWrapperDef, memberVarType->GetGenericArgs(), emptyTable, builder);
+        autoEnvWrapperDef, instFuncTypeArgs, emptyTable, builder);
     auto autoEnvWrapperRefType = builder.GetType<RefType>(autoEnvWrapperDef.GetType());
     paramTypes.insert(paramTypes.begin(), autoEnvWrapperRefType);
     auto funcType = builder.GetType<FuncType>(paramTypes, retType);
@@ -2413,9 +2438,10 @@ Function* ClosureConversion::CreateGenericMethodInAutoEnvWrapper(ClassDef& autoE
     func->SetReturnValue(*retVal->GetResult());
 
     // 7. create invoke
+    auto memberVars = autoEnvWrapperDef.GetDirectInstanceVars();
+    CJC_ASSERT(memberVars.size() == 1);
+    auto memberVarType = StaticCast<ClassType*>(memberVars[0].type->StripAllRefs());
     auto instCustomType = memberVarType;
-    auto instParamTypesAndRetType = instCustomType->GetGenericArgs();
-    auto instParamTypes = std::vector<Type*>(instParamTypesAndRetType.begin(), instParamTypesAndRetType.end() - 1);
     auto [methodName, originalFuncType] = GetFuncTypeFromAutoEnvBaseDef(*instCustomType->GetClassDef());
 
     auto& funcParams = func->GetParams();
