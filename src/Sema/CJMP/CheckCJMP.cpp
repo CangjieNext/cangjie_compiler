@@ -299,6 +299,11 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
 
     commonDecls.clear();
     for (auto& decl : mergedDecls) {
+        if (decl && decl->astKind == ASTKind::VAR_DECL) {
+            specificDecls.emplace_back(std::move(decl));
+        }
+    }
+    for (auto& decl : mergedDecls) {
         if (decl) {
             commonDecls.emplace_back(std::move(decl));
         }
