@@ -470,24 +470,27 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
 
     for (auto& it : decl.GetMemberDeclPtrs()) {
         CJC_NULLPTR_CHECK(it);
-        // Skip if this decl is already added as a platform implementation
         if (it->TestAttr(AST::Attribute::SPECIFIC) && addedPlatformImpls.count(it.get()) > 0) {
             continue;
         }
-        // Process platform implementation first, applying same filter logic
-        if (it->specificImplementation) {
-            if (addedPlatformImpls.insert(it->specificImplementation.get()).second) {
-                if (ShouldExportDecl(decl, *it->specificImplementation, onlyVisibleSig)) {
-                    body.push_back(GetDeclIndex(it->specificImplementation));
-                }
-            }
-        }
+        TryProcessSpecificImpl(it, addedPlatformImpls, body, onlyVisibleSig, decl);
         if (ShouldExportDecl(decl, *it, onlyVisibleSig)) {
             body.push_back(GetDeclIndex(it));
             addedPlatformImpls.insert(it.get());
         }
     }
     return builder.CreateVector<FormattedIndex>(body);
+}
+
+void ASTWriter::ASTWriterImpl::TryProcessSpecificImpl(const Ptr<AST::Decl>& it,
+    std::unordered_set<AST::Decl*>& addedPlatformImpls, std::vector<FormattedIndex>& body,
+    bool onlyVisibleSig, const AST::Decl& decl)
+{
+    if (!it->specificImplementation) { return; }
+    if (!addedPlatformImpls.insert(it->specificImplementation.get()).second) { return; }
+    if (ShouldExportDecl(decl, *it->specificImplementation, onlyVisibleSig)) {
+        body.push_back(GetDeclIndex(it->specificImplementation));
+    }
 }
 
 bool ASTWriter::ASTWriterImpl::ShouldExportDecl(const AST::Decl& decl, const AST::Decl& d, bool onlyVisibleSig) const

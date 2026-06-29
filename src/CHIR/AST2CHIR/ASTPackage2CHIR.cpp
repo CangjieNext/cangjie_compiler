@@ -584,6 +584,36 @@ void AST2CHIR::SetFuncAttributeAndLinkageType(const AST::FuncDecl& astFunc, Func
     chirFunc.SetFastNative(astFunc.isFastNative);
 }
 
+// Handle CJMP collision where a Function already has a body from a counterpart FuncDecl
+// (e.g. common mirror getter created before this specific one, or vice versa).
+// SPECIFIC replaces common; matched common just reuses the specific body.
+// Returns true if the collision was resolved and the caller should return early.
+bool AST2CHIR::HandleCJMPFunctionCollision(const AST::FuncDecl& funcDecl, Function*& fn,
+    const std::string& mangledName, const std::vector<FeatureId>& features)
+{
+    if (!opts.IsCompilingCJMP()) { return false; }
+    auto exist = package->TryGetGlobalFunc(GLOBAL_VALUE_PREFIX + mangledName);
+    if (!exist) { return false; }
+    fn = exist;
+    TryUpdateExistingValue(*fn, features);
+    if (!fn->GetBody()) { return false; }
+    if (funcDecl.TestAttr(AST::Attribute::SPECIFIC)) {
+        ResetSpecificFunc(funcDecl, *fn);
+        globalCache.Set(funcDecl, *fn);
+        if (IsSrcCodeImportedGlobalDecl(funcDecl, opts)) {
+            srcCodeImportedFuncs.emplace(fn);
+        }
+        fn->SetFeatures(features);
+        return true;
+    }
+    if (funcDecl.specificImplementation) {
+        globalCache.Set(funcDecl, *fn);
+        return true;
+    }
+    fn->DestroyFuncBody();
+    return false;
+}
+
 void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDecl)
 {
     if (funcDecl.TestAttr(AST::Attribute::GENERIC)) {
@@ -627,35 +657,8 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
     }
     auto srcCodeName = funcDecl.identifier;
     auto rawMangledName = funcDecl.rawMangleName;
-    if (opts.IsCompilingCJMP()) {
-        if (auto exist = package->TryGetGlobalFunc(GLOBAL_VALUE_PREFIX + mangledName)) {
-            fn = exist;
-            // Update features set
-            TryUpdateExistingValue(*fn, features);
-            // CJMP collision: Function already has body from a counterpart FuncDecl
-            // (e.g. common mirror getter created before this specific one, or vice versa).
-            // SPECIFIC replaces common; matched common just reuses the specific body.
-            if (fn->GetBody()) {
-                if (funcDecl.TestAttr(AST::Attribute::SPECIFIC)) {
-                    ResetSpecificFunc(funcDecl, *fn);
-                    globalCache.Set(funcDecl, *fn);
-                    if (IsSrcCodeImportedGlobalDecl(funcDecl, opts)) {
-                        srcCodeImportedFuncs.emplace(fn);
-                    }
-                    fn->SetFeatures(features);
-                    return;
-                }
-                // matched common decl (specificImplementation set by LinkMatchedCommonPropToSpecific):
-                // the SPECIFIC counterpart already set up this Function via ResetSpecificFunc,
-                // so just cache the mapping — skip InitBody/attributes/params to avoid overwriting SPECIFIC state
-                if (funcDecl.specificImplementation) {
-                    globalCache.Set(funcDecl, *fn);
-                    return;
-                }
-                fn->DestroyFuncBody(); // fallback: unexpected collision — destroy and recreate from scratch
-            }
-        }
-    }
+    auto earlyExit = HandleCJMPFunctionCollision(funcDecl, fn, mangledName, features);
+    if (earlyExit) { return; }
     if (fn == nullptr) {
         fn = builder.CreateFunction(funcTy, mangledName, srcCodeName, rawMangledName, pkgName, genericParamTy);
         fn->SetDebugLocation(loc);
@@ -1825,10 +1828,10 @@ const AST::ClassLikeDecl* FindSpecificAstDecl(
 ClassType* ResolveChirSuperClassTy(const AST::ClassTy& astClassTy, CHIRType& chirType)
 {
     auto superClassTy = astClassTy.GetSuperClassTy();
-    if (!superClassTy) return nullptr;
+    if (!superClassTy) { return nullptr; }
 
     Type* chirSuperTy = chirType.TranslateType(*superClassTy);
-    if (!chirSuperTy) return nullptr;
+    if (!chirSuperTy) { return nullptr; }
 
     if (chirSuperTy->IsClass()) {
         return StaticCast<ClassType*>(chirSuperTy);

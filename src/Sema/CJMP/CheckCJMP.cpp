@@ -625,11 +625,51 @@ static bool IsEnumConstructor(const AST::Node& decl)
     return decl.TestAttr(Attribute::ENUM_CONSTRUCTOR);
 }
 
+namespace {
+
+bool ShouldSkipCJMPVisitNode(const Ptr<Node>& node)
+{
+    return !IsCommon(*node) || IsEnumConstructor(*node);
+}
+
+void CheckCJMPVarDeclTypeMatch(const Ptr<Node>& node, DiagnosticEngine& diag,
+    TypeManager& typeManager, MPTypeCheckerImpl& checker)
+{
+    auto common = StaticAs<ASTKind::VAR_DECL>(node);
+    auto specific = common->specificImplementation;
+    if (!specific) {
+        if (!common->TestAttr(Attribute::INITIALIZED) && common->TestAttr(Attribute::FROM_COMMON_PART)) {
+            DiagNotMatchedSpecificDecl(diag, *common);
+        }
+        return;
+    }
+    if (specific->TestAttr(Attribute::DESUGARED_MIRROR_FIELD)) {
+        auto& commonVar = *common;
+        auto& specificProp = *StaticCast<PropDecl>(specific);
+        if (Ty::IsTyCorrect(commonVar.GetTy()) && Ty::IsTyCorrect(specificProp.GetTy())) {
+            auto cType = commonVar.GetTy();
+            auto pType = specificProp.GetTy();
+            if (!typeManager.IsTyEqual(cType, pType) && !Ty::IsInitialTy(pType)) {
+                diag.DiagnoseRefactor(
+                    DiagKindRefactor::sema_specific_has_different_type, specificProp, "property");
+            }
+        }
+    } else {
+        CJC_ASSERT_WITH_MSG(specific->astKind == AST::ASTKind::VAR_DECL,
+            "Common variable can be only matched to a variable but got another kind");
+        auto& commonVar = *common;
+        auto& specificVar = *StaticCast<VarDecl>(specific);
+        checker.CheckMatchedVariableTypes(specificVar, commonVar);
+    }
+}
+
+}
+
 void MPTypeCheckerImpl::CheckReturnAndVariableTypes(AST::Package& pkg)
 {
     std::function<VisitAction(Ptr<Node>)> visitor = [this](const Ptr<Node>& node) {
         if (node->astKind == ASTKind::FUNC_DECL) {
-            if (!IsCommon(*node) || IsEnumConstructor(*node)) {
+            if (ShouldSkipCJMPVisitNode(node)) {
                 return VisitAction::SKIP_CHILDREN;
             }
             auto common = StaticAs<ASTKind::FUNC_DECL>(node);
@@ -639,43 +679,14 @@ void MPTypeCheckerImpl::CheckReturnAndVariableTypes(AST::Package& pkg)
                     "Common function can be only matched to a function but got another kind");
                 auto& commonFunc = *common;
                 auto& specificFunc = *StaticCast<FuncDecl>(specific);
-
                 CheckMatchedFunctionReturnTypes(specificFunc, commonFunc);
             }
             return VisitAction::SKIP_CHILDREN;
         } else if (node->astKind == ASTKind::VAR_DECL) {
-            if (!IsCommon(*node) || IsEnumConstructor(*node)) {
+            if (ShouldSkipCJMPVisitNode(node)) {
                 return VisitAction::SKIP_CHILDREN;
             }
-            auto common = StaticAs<ASTKind::VAR_DECL>(node);
-            auto specific = common->specificImplementation;
-            if (specific) {
-                // For CJMP @JavaMirror, VarDecl may be matched with PropDecl (desugared from mirror field)
-                if (specific->TestAttr(Attribute::DESUGARED_MIRROR_FIELD)) {
-                    // Type check using ty (resolved type)
-                    auto& commonVar = *common;
-                    auto& specificProp = *StaticCast<PropDecl>(specific);
-                    if (Ty::IsTyCorrect(commonVar.GetTy()) && Ty::IsTyCorrect(specificProp.GetTy())) {
-                        auto cType = commonVar.GetTy();
-                        auto pType = specificProp.GetTy();
-                        if (!typeManager.IsTyEqual(cType, pType) && !Ty::IsInitialTy(pType)) {
-                            diag.DiagnoseRefactor(
-                                DiagKindRefactor::sema_specific_has_different_type, specificProp, "property");
-                        }
-                    }
-                } else {
-                    CJC_ASSERT_WITH_MSG(specific->astKind == AST::ASTKind::VAR_DECL,
-                        "Common variable can be only matched to a variable but got another kind");
-                    auto& commonVar = *common;
-                    auto& specificVar = *StaticCast<VarDecl>(specific);
-
-                    CheckMatchedVariableTypes(specificVar, commonVar);
-                }
-            } else if (!common->TestAttr(Attribute::INITIALIZED) && common->TestAttr(Attribute::FROM_COMMON_PART)) {
-                // this has been postponed, we need this to handle the case when a common var has no matched specified
-                // but it does't fail because there is an initializer for it
-                DiagNotMatchedSpecificDecl(diag, *common);
-            }
+            CheckCJMPVarDeclTypeMatch(node, diag, typeManager, *this);
             return VisitAction::SKIP_CHILDREN;
         }
         return VisitAction::WALK_CHILDREN;
@@ -878,26 +889,11 @@ void MPTypeCheckerImpl::CheckCommonSpecificGenericMatch(const AST::Decl& specifi
     CheckGenericTypeBoundsMapped(commonDecl, specificDecl, parentBounds, childBounds, diag, typeManager);
 }
 
-bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(const InheritableDecl& commonDecl)
+bool MPTypeCheckerImpl::MatchCommonSpecificSuperInterfaces(
+    const InheritableDecl& commonDecl, const InheritableDecl& specificDecl, TypeSubst& genericTyMap)
 {
-    auto specificDecl = commonDecl.specificImplementation;
-    if (!specificDecl) {
-        // It's okay if common nominative declaration have no platform,
-        // either all member are implemented in common one
-        // or it's not yet compiling into binary, so it can be matched at later phases.
-        return true;
-    }
-    // Match attributes (modifiers).
-    std::vector<Attribute> matchedAttr = {
-        Attribute::ABSTRACT, Attribute::PUBLIC, Attribute::OPEN, Attribute::PROTECTED, Attribute::C, Attribute::SEALED};
-    if (!MatchCJMPDeclAttrs(matchedAttr, commonDecl, *specificDecl)) {
-        return false;
-    }
-    // Match super types.
     std::set<Ptr<InterfaceTy>> comSupInters;
-    auto platSupInters = StaticCast<InheritableDecl>(specificDecl)->GetSuperInterfaceTys();
-    TypeSubst genericTyMap;
-    MapCJMPGenericTypeArgs(genericTyMap, commonDecl, *specificDecl);
+    auto platSupInters = specificDecl.GetSuperInterfaceTys();
     if (!genericTyMap.empty()) {
         for (auto superInterface : commonDecl.GetSuperInterfaceTys()) {
             auto updatedInterfaceType = typeManager.GetInstantiatedTy(superInterface, genericTyMap);
@@ -907,11 +903,11 @@ bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(const InheritableDecl
         comSupInters = commonDecl.GetSuperInterfaceTys();
     }
     if (comSupInters.size() != platSupInters.size()) {
-        DiagNotMatchedSuperType(diag, *specificDecl);
+        DiagNotMatchedSuperType(diag, specificDecl);
         return false;
     }
-    bool match = false;
     for (auto& comSupInter : comSupInters) {
+        bool match = false;
         for (auto& platSupInter : platSupInters) {
             if (typeManager.IsTyEqual(comSupInter, platSupInter)) {
                 match = true;
@@ -919,44 +915,60 @@ bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(const InheritableDecl
             }
         }
         if (!match) {
-            DiagNotMatchedSuperType(diag, *specificDecl);
+            DiagNotMatchedSuperType(diag, specificDecl);
             return false;
         }
     }
-    // Match super class if need.
-    if (commonDecl.astKind == ASTKind::CLASS_DECL) {
-        auto comSupClass = StaticCast<ClassDecl>(&commonDecl)->GetSuperClassDecl();
-        auto platSupIClass = StaticCast<ClassDecl>(specificDecl)->GetSuperClassDecl();
-// CJMP Object→PlatformParent Relaxation:
-        // Allow common class extending Object to match with specific class extending platform parent.
-        // This enables FFI interop patterns where:
-        //   - Common: class MyClass { } (implicitly extends Object)
-        //   - Specific: @JavaImpl specific class MyClass <: MyJavaMirrorParent { }
-        // Relaxation is allowed only when:
-        //   1. Common parent is Object (or null/invalid - means implicit Object)
-        //   2. Specific parent is a platform parent (@JavaMirror/@ObjCMirror or @JavaImpl/@ObjCImpl)
-        // Constructor validation is deferred to PostTypeCheck phase.
-        if (!comSupClass || comSupClass->identifier == "Object") {
-            if (platSupIClass && IsPlatformParent(platSupIClass)) {
-                pendingRelaxations.push_back({&commonDecl, specificDecl});
-                return true;
-            }
-        }
+    return true;
+}
 
-        // Standard type equality check (both must have valid superclasses)
-        if (comSupClass && platSupIClass) {
-            if (!typeManager.IsTyEqual(comSupClass->GetTy(), platSupIClass->GetTy())) {
-                DiagNotMatchedSuperType(diag, *specificDecl);
-                return false;
-            }
-        } else if (comSupClass || platSupIClass) {
-            DiagNotMatchedSuperType(diag, *specificDecl);
-            return false;
+bool MPTypeCheckerImpl::MatchCommonSpecificSuperClass(
+    const InheritableDecl& commonDecl, const InheritableDecl& specificDecl)
+{
+    if (commonDecl.astKind != ASTKind::CLASS_DECL) { return true; }
+    auto comSupClass = StaticCast<ClassDecl>(&commonDecl)->GetSuperClassDecl();
+    auto platSupIClass = StaticCast<ClassDecl>(&specificDecl)->GetSuperClassDecl();
+    // CJMP Object→PlatformParent Relaxation:
+    // Allow common class extending Object to match with specific class extending platform parent.
+    if (!comSupClass || comSupClass->identifier == "Object") {
+        if (platSupIClass && IsPlatformParent(platSupIClass)) {
+            pendingRelaxations.push_back({&commonDecl, &specificDecl});
+            return true;
         }
     }
+    // Standard type equality check
+    if (comSupClass && platSupIClass) {
+        if (!typeManager.IsTyEqual(comSupClass->GetTy(), platSupIClass->GetTy())) {
+            DiagNotMatchedSuperType(diag, specificDecl);
+            return false;
+        }
+    } else if (comSupClass || platSupIClass) {
+        DiagNotMatchedSuperType(diag, specificDecl);
+        return false;
+    }
+    return true;
+}
 
+bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(const InheritableDecl& commonDecl)
+{
+    auto specificDecl = commonDecl.specificImplementation;
+    if (!specificDecl) {
+        return true;
+    }
+    std::vector<Attribute> matchedAttr = {
+        Attribute::ABSTRACT, Attribute::PUBLIC, Attribute::OPEN, Attribute::PROTECTED, Attribute::C, Attribute::SEALED};
+    if (!MatchCJMPDeclAttrs(matchedAttr, commonDecl, *specificDecl)) {
+        return false;
+    }
+    TypeSubst genericTyMap;
+    MapCJMPGenericTypeArgs(genericTyMap, commonDecl, *specificDecl);
+    if (!MatchCommonSpecificSuperInterfaces(commonDecl, *specificDecl, genericTyMap)) {
+        return false;
+    }
+    if (!MatchCommonSpecificSuperClass(commonDecl, *specificDecl)) {
+        return false;
+    }
     CheckCommonSpecificGenericMatch(*specificDecl, commonDecl);
-
     return true;
 }
 

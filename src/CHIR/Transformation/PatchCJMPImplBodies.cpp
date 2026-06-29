@@ -55,8 +55,9 @@ void FindCregStore(Function& ctor, size_t regIdx, Value*& cregRef, Block*& targe
 }
 
 void InitFieldsInCompanion(const std::vector<MemberVarInfo>& allFields, CHIRBuilder& builder,
-    Value* thisParam, Value* cregRef, Block* targetBlock, Block::Terminator* terminator)
+    Value* thisParam, Value* cregRef, Block* targetBlock)
 {
+    auto terminator = targetBlock->GetTerminator();
     for (auto& field : allFields) {
         if (field.TestAttr(Attribute::COMPILER_ADD)) continue;
         if (!field.initializerFunc) continue;
@@ -331,5 +332,5 @@ void PatchCJMPImplBodies::PatchConstructorFieldInit(Function& ctor, ClassDef& im
     auto terminator = targetBlock->GetTerminator();
     if (!terminator) { return; }
 
-    InitFieldsInCompanion(allFields, builder, thisParam, cregRef, targetBlock, terminator);
+    InitFieldsInCompanion(allFields, builder, thisParam, cregRef, targetBlock);
 }
