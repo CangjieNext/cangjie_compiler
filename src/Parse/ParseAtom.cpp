@@ -1110,6 +1110,28 @@ static OwnedPtr<Expr> DeriveExprFromType(const Type& type)
         }
         return re;
     }
+    // A qualified type `a.b` (e.g. `pkg.Type`, `obj.member`) reads as a member access
+    // `a.b` when the construct turns out to be an ordinary call/subscript rather than
+    // a forced cast (e.g. `(obj.method)(args)`). Derive it recursively so the operand
+    // form stays consistent with simple `RefType` names.
+    if (auto qt = DynamicCast<const QualifiedType*>(&type)) {
+        auto base = DeriveExprFromType(*qt->baseType);
+        if (!base) {
+            return nullptr;
+        }
+        auto ma = MakeOwned<MemberAccess>();
+        ma->baseExpr = std::move(base);
+        ma->field = qt->field;
+        ma->dotPos = qt->dotPos;
+        ma->begin = qt->begin;
+        ma->end = qt->end;
+        ma->leftAnglePos = qt->leftAnglePos;
+        ma->rightAnglePos = qt->rightAnglePos;
+        for (auto& ta : qt->typeArguments) {
+            ma->typeArguments.emplace_back(ASTCloner::Clone(ta.get()));
+        }
+        return ma;
+    }
     return nullptr;
 }
 

@@ -581,7 +581,17 @@ OwnedPtr<CallExpr> TypeChecker::TypeCheckerImpl::BuildForcedCastCall(
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAmbiguousForcedCastExpr(const CheckerContext& ctx, AmbiguousForcedCastExpr& afce)
 {
     if (afce.desugarExpr) {
-        return afce.GetTy();
+        if (Ty::IsTyCorrect(afce.GetTy())) {
+            return afce.GetTy();
+        }
+        // A cloned AFC (e.g. from function-argument overload resolution) can carry a
+        // copied desugar whose type was left invalid because the source was still
+        // unresolved when cloned. Re-type the existing desugar instead of returning
+        // the stale invalid type; `rightExpr` may already have been consumed when the
+        // original was desugared, so it cannot be re-resolved from scratch here.
+        auto ty = Synthesize(ctx, afce.desugarExpr.get());
+        afce.SetTy(ty);
+        return ty;
     }
     CJC_NULLPTR_CHECK(afce.rightExpr);
 
