@@ -21,10 +21,10 @@
 #include <vector>
 
 #include "BuiltInOperatorUtil.h"
-#include "Collector.h"
 #include "DiagSuppressor.h"
 #include "Diags.h"
 #include "JoinAndMeet.h"
+#include "SymbolTable/Collector.cpp"
 #include "TypeCheckUtil.h"
 
 #include "cangjie/AST/ASTContext.h"

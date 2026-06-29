@@ -499,3 +499,57 @@ main() {}
     }
     EXPECT_EQ(foundDiag, 2);
 }
+
+TEST_F(TypeCheckerTest, OrderOfInitializationCheck)
+{
+    // Source files are passed in through bufferCache, exercising the loadSrcFilesFromCache branch
+    // (lines 374-385) of FullCompileStrategy::ParseOnePackage.
+    srcPath = projectPath + "/unittests/Sema/SemaCangjieFiles/InitializationCheck/";
+    std::string fileA = srcPath + "a.cj";
+    std::string fileB = srcPath + "b.cj";
+    std::string failedReason;
+    auto contentA = FileUtil::ReadFileContent(fileA, failedReason);
+    ASSERT_TRUE(contentA.has_value());
+    auto contentB = FileUtil::ReadFileContent(fileB, failedReason);
+    ASSERT_TRUE(contentB.has_value());
+
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->invocation.globalOptions.outputMode = GlobalOptions::OutputMode::STATIC_LIB;
+    instance->loadSrcFilesFromCache = true;
+    instance->bufferCache[fileB] = CompilerInstance::SrcCodeCacheInfo(
+        CompilerInstance::SrcCodeChangeState::ADDED, contentB.value());
+    instance->bufferCache[fileA] = CompilerInstance::SrcCodeCacheInfo(
+        CompilerInstance::SrcCodeChangeState::ADDED, contentA.value());
+
+    // The bufferCache is an unordered_map whose iteration order is unspecified, so the fileID assigned
+    // during the cache iteration is not guaranteed by insertion order. Pre-register b.cj before a.cj in
+    // the SourceManager so their fileIDs are locked (b.cj < a.cj) regardless of the cache iteration order.
+    auto& sourceManager = instance->GetSourceManager();
+    unsigned int preBFileID = sourceManager.AddSource(fileB, contentB.value());
+    unsigned int preAFileID = sourceManager.AddSource(fileA, contentA.value());
+    EXPECT_LT(preBFileID, preAFileID);
+
+    instance->Compile(CompileStage::SEMA);
+    // Sema should finish without any error.
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+
+    // Verify that in the created AST, the fileID of b.cj is smaller than the fileID of a.cj.
+    auto packages = instance->GetSourcePackages();
+    ASSERT_FALSE(packages.empty());
+    unsigned int astAFileID = 0;
+    unsigned int astBFileID = 0;
+    bool foundA = false;
+    bool foundB = false;
+    for (auto& file : packages[0]->files) {
+        if (file->fileName == "a.cj") {
+            astAFileID = file->begin.fileID;
+            foundA = true;
+        } else if (file->fileName == "b.cj") {
+            astBFileID = file->begin.fileID;
+            foundB = true;
+        }
+    }
+    EXPECT_TRUE(foundA);
+    EXPECT_TRUE(foundB);
+    EXPECT_LT(astBFileID, astAFileID);
+}
