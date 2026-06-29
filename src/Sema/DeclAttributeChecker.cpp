@@ -10,6 +10,7 @@
  * This file implements the functions to check decl attributes.
  */
 
+#include "SearchSymbol.h"
 #include "TypeCheckerImpl.h"
 
 #include "cangjie/AST/Match.h"
@@ -442,7 +443,7 @@ void DeclAttributeChecker::Check() const
  */
 void TypeChecker::TypeCheckerImpl::CheckAllDeclAttributes(const ASTContext& ctx)
 {
-    std::vector<Symbol*> syms = GetAllDecls(ctx);
+    std::vector<Symbol*> syms = SearchSymbol::GetAllDecls(ctx);
     for (auto& sym : syms) {
         if (auto decl = AST::As<ASTKind::DECL>(sym->node)) {
             CJC_ASSERT(!decl->TestAttr(Attribute::IMPORTED) || decl->TestAnyAttr(Attribute::TOOL_ADD,

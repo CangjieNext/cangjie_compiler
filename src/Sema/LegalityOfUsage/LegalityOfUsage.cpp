@@ -83,7 +83,7 @@ void TypeChecker::TypeCheckerImpl::CheckLegalityOfUsage(ASTContext& ctx, AST::Pa
     CheckUsageOfDeprecated(pkg);
     // Check initialization.
     if (!ci->invocation.globalOptions.disableSemaVic) {
-        InitializationChecker::Check(*ci, ctx, &pkg);
+        InitializationChecker::Check(*ci, ctx);
     }
     CheckGlobalVarInitialization(ctx, pkg);
     // CFunc must be called in an unsafe block.

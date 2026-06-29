@@ -15,6 +15,8 @@
 
 #include <unordered_set>
 
+#include "CJMP/MPTypeCheckerImpl.h"
+#include "InheritanceChecker/MemberSignature.h"
 #include "Promotion.h"
 #include "ScopeManager.h"
 #include "TypeCheckUtil.h"
@@ -28,8 +30,6 @@
 #include "cangjie/Sema/TypeChecker.h"
 #include "cangjie/Sema/TypeManager.h"
 #include "cangjie/Utils/ProfileRecorder.h"
-#include "CJMP/MPTypeCheckerImpl.h"
-#include "InheritanceChecker/MemberSignature.h"
 
 namespace Cangjie {
 class Synthesizer;
@@ -649,17 +649,6 @@ private:
     void DesugarTokenCallExpr(ASTContext& ctx, AST::CallExpr& ce);
     void DesugarSpawnExpr(const ASTContext& ctx, AST::SpawnExpr& se);
     void DesugarSpawnArgExpr(const ASTContext& ctx, const AST::SpawnExpr& se);
-
-    /** Get decls with symbol by context searcher. */
-    std::vector<AST::Symbol*> GetToplevelDecls(const ASTContext& ctx) const;
-    std::vector<AST::Symbol*> GetAllDecls(const ASTContext& ctx) const;
-    std::vector<AST::Symbol*> GetGenericCandidates(const ASTContext& ctx) const;
-    std::vector<AST::Symbol*> GetAllStructDecls(const ASTContext& ctx) const;
-
-    void WarmupCache(const ASTContext& ctx) const;
-
-    std::vector<AST::Symbol*> GetSymsByASTKind(
-        const ASTContext& ctx, AST::ASTKind astKind, const Order& order = Sort::posDesc) const;
 
     /**
      * Get the target members for the extends of @param ty.
