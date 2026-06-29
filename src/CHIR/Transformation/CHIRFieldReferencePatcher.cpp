@@ -264,7 +264,6 @@ Expression* CHIRFieldReferencePatcher::TryPatchStoreElementRef(StoreElementRef& 
     auto baseValue = store.GetLocation();
     auto valueToStore = store.GetValue();
     auto path = store.GetPath();
-
     if (path.empty()) return nullptr;
     auto fieldIdx = path[0];
 
@@ -284,7 +283,6 @@ Expression* CHIRFieldReferencePatcher::TryPatchField(Field& fieldExpr, ClassDef&
 {
     auto baseValue = fieldExpr.GetBase();
     auto path = fieldExpr.GetPath();
-
     if (path.empty()) return nullptr;
     auto fieldIdx = path[0];
 

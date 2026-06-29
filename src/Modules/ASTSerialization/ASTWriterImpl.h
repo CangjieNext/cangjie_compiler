@@ -215,6 +215,7 @@ private:
     auto GetVirtualParamLists(const AST::FuncBody& funcBody);
 
     template <typename T> TVectorOffset<FormattedIndex> GetBody(T& decl);
+    bool ShouldExportDecl(const AST::Decl& decl, const AST::Decl& d, bool onlyVisibleSig) const;
     template <typename T> auto GetVirtualInterfaces(T& decl)
     {
         // SuperInterfaceTypes.
