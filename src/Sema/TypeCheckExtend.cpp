@@ -11,6 +11,7 @@
  */
 #include "TypeCheckUtil.h"
 #include "TypeCheckerImpl.h"
+#include "SearchSymbol.h"
 
 #include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Match.h"
@@ -399,7 +400,7 @@ void TypeChecker::TypeCheckerImpl::BuildExtendMap(ASTContext& ctx)
 {
     std::unordered_set<Ptr<ExtendDecl>> allExtends;
     // Collect current package's source extends.
-    auto syms = GetSymsByASTKind(ctx, ASTKind::EXTEND_DECL, Sort::posAsc);
+    auto syms = SearchSymbol::GetSymsByASTKind(ctx, ASTKind::EXTEND_DECL, Sort::posAsc);
     for (auto& sym : syms) {
         if (auto ed = AST::As<ASTKind::EXTEND_DECL>(sym->node); ed) {
             allExtends.emplace(ed);
@@ -437,7 +438,7 @@ void TypeChecker::TypeCheckerImpl::CheckExtendRules(const ASTContext& ctx)
     if (ctx.curPackage->TestAttr(Attribute::IMPORTED)) {
         return; // OrphanRule and generic consistency check can be ignored for imported package.
     }
-    std::vector<Symbol*> syms = GetSymsByASTKind(ctx, ASTKind::EXTEND_DECL, Sort::posAsc);
+    std::vector<Symbol*> syms = SearchSymbol::GetSymsByASTKind(ctx, ASTKind::EXTEND_DECL, Sort::posAsc);
     for (auto& sym : syms) {
         auto extendDecl = As<ASTKind::EXTEND_DECL>(sym->node);
         bool invalid =

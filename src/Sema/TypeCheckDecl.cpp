@@ -18,6 +18,7 @@
 #include "Diags.h"
 #include "BuiltInOperatorUtil.h"
 #include "TypeCheckUtil.h"
+#include "SearchSymbol.h"
 
 #include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Match.h"
@@ -411,7 +412,7 @@ void TypeChecker::TypeCheckerImpl::BuildImportedEnumConstructorMap(ASTContext& c
 
 void TypeChecker::TypeCheckerImpl::BuildEnumConstructorMap(ASTContext& ctx) const
 {
-    auto syms = GetSymsByASTKind(ctx, ASTKind::ENUM_DECL);
+    auto syms = SearchSymbol::GetSymsByASTKind(ctx, ASTKind::ENUM_DECL);
     for (auto sym : syms) {
         if (auto ed = DynamicCast<EnumDecl*>(sym->node)) {
             InsertEnumConstructors(ctx, *ed, ci->invocation.globalOptions.enableMacroInLSP);

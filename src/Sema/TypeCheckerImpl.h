@@ -650,17 +650,6 @@ private:
     void DesugarSpawnExpr(const ASTContext& ctx, AST::SpawnExpr& se);
     void DesugarSpawnArgExpr(const ASTContext& ctx, const AST::SpawnExpr& se);
 
-    /** Get decls with symbol by context searcher. */
-    std::vector<AST::Symbol*> GetToplevelDecls(const ASTContext& ctx) const;
-    std::vector<AST::Symbol*> GetAllDecls(const ASTContext& ctx) const;
-    std::vector<AST::Symbol*> GetGenericCandidates(const ASTContext& ctx) const;
-    std::vector<AST::Symbol*> GetAllStructDecls(const ASTContext& ctx) const;
-
-    void WarmupCache(const ASTContext& ctx) const;
-
-    std::vector<AST::Symbol*> GetSymsByASTKind(
-        const ASTContext& ctx, AST::ASTKind astKind, const Order& order = Sort::posDesc) const;
-
     /**
      * Get the target members for the extends of @param ty.
      */
