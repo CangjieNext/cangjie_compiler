@@ -381,6 +381,64 @@ void GenerateInJavaImplReferenceWrapper::Process(AfterTypeCheckContext& ctx)
     }
 }
 
+namespace {
+
+void AddUserParams(FuncDecl& commonCtor, FuncBody& ctorBody, std::vector<Ptr<Ty>>& paramTys)
+{
+    if (!commonCtor.funcBody || commonCtor.funcBody->paramLists.empty() ||
+        !commonCtor.funcBody->paramLists[0]) {
+        return;
+    }
+    for (auto& userParam : commonCtor.funcBody->paramLists[0]->params) {
+        if (userParam && userParam->type) {
+            auto clonedParam = ASTCloner::Clone(Ptr<FuncParam>(userParam.get()));
+            ctorBody.paramLists[0]->params.push_back(std::move(clonedParam));
+        }
+        if (userParam && Ty::IsTyCorrect(userParam->GetTy())) {
+            paramTys.push_back(userParam->GetTy());
+        }
+    }
+}
+
+OwnedPtr<FuncBody> BuildJavaSideConstructorBody(FuncDecl& commonCtor, VarDecl& companionRefField,
+    ClassDecl& companion, ClassDecl& refWrapper, Ptr<FuncDecl> parentCtor,
+    const Ptr<Ty>& javaEntityTy, OwnedPtr<FuncParam>& entityParam, OwnedPtr<FuncParam>& regCompanionParam)
+{
+    std::vector<Ptr<Ty>> paramTys;
+    paramTys.push_back(javaEntityTy);
+    paramTys.push_back(companion.GetTy());
+
+    auto ctorBody = MakeOwned<FuncBody>();
+    ctorBody->EnableAttr(Attribute::COMPILER_ADD);
+    ctorBody->paramLists.push_back(MakeOwned<FuncParamList>());
+    ctorBody->paramLists[0]->EnableAttr(Attribute::COMPILER_ADD);
+    ctorBody->parentClassLike = &refWrapper;
+
+    ctorBody->paramLists[0]->params.push_back(std::move(entityParam));
+    ctorBody->paramLists[0]->params.push_back(std::move(regCompanionParam));
+
+    AddUserParams(commonCtor, *ctorBody, paramTys);
+
+    Ptr<FuncDecl> ctorPtr(parentCtor.get());
+    auto superCall = CreateSuperCall(refWrapper, *ctorPtr, parentCtor->GetTy());
+    superCall->args.push_back(CreateFuncArg(
+        WithinFile(CreateRefExpr(*ctorBody->paramLists[0]->params[0]), commonCtor.curFile)));
+
+    auto regCompanionAssignment = CreateAssignExpr(
+        WithinFile(CreateRefExpr(companionRefField), commonCtor.curFile),
+        WithinFile(CreateRefExpr(*ctorBody->paramLists[0]->params[1]), commonCtor.curFile),
+        TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+
+    auto block = CreateBlock({});
+    block->SetTy(refWrapper.GetTy());
+    block->body.push_back(std::move(regCompanionAssignment));
+    block->body.insert(block->body.begin(), std::move(superCall));
+    ctorBody->body = std::move(block);
+    return ctorBody;
+}
+
+}
+
 OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstructorForFromCommonPart(
     FuncDecl& commonCtor, VarDecl& companionRefField, ClassDecl& companion) const
 {
@@ -392,37 +450,17 @@ OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstruct
         return nullptr;
     }
 
-    auto ctor = MakeOwned<FuncDecl>();
-    ctor->identifier = commonCtor.identifier;
-    ctor->outerDecl = &refWrapper;
-    ctor->EnableAttr(Attribute::COMPILER_ADD, Attribute::FROM_COMMON_PART);
-
-    auto ctorBody = MakeOwned<FuncBody>();
-    ctorBody->EnableAttr(Attribute::COMPILER_ADD);
-    ctorBody->paramLists.push_back(MakeOwned<FuncParamList>());
-    ctorBody->paramLists[0]->EnableAttr(Attribute::COMPILER_ADD);
-    ctorBody->parentClassLike = &refWrapper;
-
-    auto& params = ctorBody->paramLists[0]->params;
-
-    params.insert(params.begin(),
-        CreateFuncParam(JAVA_IMPL_ENTITY_ARG_NAME_IN_GENERATED_CTOR,
-            CreateRefType(*javaEntityDecl), nullptr, javaEntityDecl->GetTy()));
-    auto& entityParam = *params[0];
-
-    params.insert(params.begin() + 1,
-        CreateFuncParam("reg", CreateRefType(companion), nullptr, companion.GetTy()));
-    auto& regCompanionParam = *params[1];
-
-    if (commonCtor.funcBody && !commonCtor.funcBody->paramLists.empty() &&
-        commonCtor.funcBody->paramLists[0]) {
-        for (auto& userParam : commonCtor.funcBody->paramLists[0]->params) {
-            if (userParam && userParam->type) {
-                auto clonedParam = ASTCloner::Clone(Ptr<FuncParam>(userParam.get()));
-                params.push_back(std::move(clonedParam));
-            }
-        }
+    Ptr<FuncDecl> parentCtor = GetGeneratedJavaMirrorConstructor(*refWrapper.GetSuperClassDecl());
+    if (!parentCtor) {
+        return nullptr;
     }
+
+    auto entityParam = CreateFuncParam(JAVA_IMPL_ENTITY_ARG_NAME_IN_GENERATED_CTOR,
+        CreateRefType(*javaEntityDecl), nullptr, javaEntityDecl->GetTy());
+    auto regCompanionParam = CreateFuncParam("reg", CreateRefType(companion), nullptr, companion.GetTy());
+
+    auto ctorBody = BuildJavaSideConstructorBody(commonCtor, companionRefField, companion, refWrapper,
+        parentCtor, javaEntityDecl->GetTy(), entityParam, regCompanionParam);
 
     std::vector<Ptr<Ty>> paramTys;
     paramTys.push_back(javaEntityDecl->GetTy());
@@ -437,26 +475,10 @@ OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstruct
     }
     auto ctorTy = typeManager.GetFunctionTy(paramTys, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
 
-    Ptr<FuncDecl> parentCtor = GetGeneratedJavaMirrorConstructor(*refWrapper.GetSuperClassDecl());
-    if (!parentCtor) {
-        return nullptr;
-    }
-
-    auto superCall = CreateSuperCall(refWrapper, *parentCtor, parentCtor->GetTy());
-    superCall->args.push_back(CreateFuncArg(WithinFile(CreateRefExpr(entityParam), curFile)));
-
-    auto regCompanionAssignment = CreateAssignExpr(
-        WithinFile(CreateRefExpr(companionRefField), curFile),
-        WithinFile(CreateRefExpr(regCompanionParam), curFile),
-        TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
-
-    auto block = CreateBlock({});
-    block->SetTy(refWrapper.GetTy());
-
-    block->body.insert(block->body.begin(), std::move(regCompanionAssignment));
-    block->body.insert(block->body.begin(), std::move(superCall));
-
-    ctorBody->body = std::move(block);
+    auto ctor = MakeOwned<FuncDecl>();
+    ctor->identifier = commonCtor.identifier;
+    ctor->outerDecl = &refWrapper;
+    ctor->EnableAttr(Attribute::COMPILER_ADD, Attribute::FROM_COMMON_PART);
     ctor->funcBody = std::move(ctorBody);
     ctor->funcBody->funcDecl = ctor.get();
     ctor->funcBody->SetTy(ctorTy);

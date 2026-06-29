@@ -584,6 +584,36 @@ void AST2CHIR::SetFuncAttributeAndLinkageType(const AST::FuncDecl& astFunc, Func
     chirFunc.SetFastNative(astFunc.isFastNative);
 }
 
+// Handle CJMP collision where a Function already has a body from a counterpart FuncDecl
+// (e.g. common mirror getter created before this specific one, or vice versa).
+// SPECIFIC replaces common; matched common just reuses the specific body.
+// Returns true if the collision was resolved and the caller should return early.
+bool AST2CHIR::HandleCJMPFunctionCollision(const AST::FuncDecl& funcDecl, Function*& fn,
+    const std::string& mangledName, const std::vector<FeatureId>& features)
+{
+    if (!opts.IsCompilingCJMP()) { return false; }
+    auto exist = package->TryGetGlobalFunc(GLOBAL_VALUE_PREFIX + mangledName);
+    if (!exist) { return false; }
+    fn = exist;
+    TryUpdateExistingValue(*fn, features);
+    if (!fn->GetBody()) { return false; }
+    if (funcDecl.TestAttr(AST::Attribute::SPECIFIC)) {
+        ResetSpecificFunc(funcDecl, *fn);
+        globalCache.Set(funcDecl, *fn);
+        if (IsSrcCodeImportedGlobalDecl(funcDecl, opts)) {
+            srcCodeImportedFuncs.emplace(fn);
+        }
+        fn->SetFeatures(features);
+        return true;
+    }
+    if (funcDecl.specificImplementation) {
+        globalCache.Set(funcDecl, *fn);
+        return true;
+    }
+    fn->DestroyFuncBody();
+    return false;
+}
+
 void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDecl)
 {
     if (funcDecl.TestAttr(AST::Attribute::GENERIC)) {
@@ -627,35 +657,8 @@ void AST2CHIR::CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDec
     }
     auto srcCodeName = funcDecl.identifier;
     auto rawMangledName = funcDecl.rawMangleName;
-    if (opts.IsCompilingCJMP()) {
-        if (auto exist = package->TryGetGlobalFunc(GLOBAL_VALUE_PREFIX + mangledName)) {
-            fn = exist;
-            // Update features set
-            TryUpdateExistingValue(*fn, features);
-            // CJMP collision: Function already has body from a counterpart FuncDecl
-            // (e.g. common mirror getter created before this specific one, or vice versa).
-            // SPECIFIC replaces common; matched common just reuses the specific body.
-            if (fn->GetBody()) {
-                if (funcDecl.TestAttr(AST::Attribute::SPECIFIC)) {
-                    ResetSpecificFunc(funcDecl, *fn);
-                    globalCache.Set(funcDecl, *fn);
-                    if (IsSrcCodeImportedGlobalDecl(funcDecl, opts)) {
-                        srcCodeImportedFuncs.emplace(fn);
-                    }
-                    fn->SetFeatures(features);
-                    return;
-                }
-                // matched common decl (specificImplementation set by LinkMatchedCommonPropToSpecific):
-                // the SPECIFIC counterpart already set up this Function via ResetSpecificFunc,
-                // so just cache the mapping — skip InitBody/attributes/params to avoid overwriting SPECIFIC state
-                if (funcDecl.specificImplementation) {
-                    globalCache.Set(funcDecl, *fn);
-                    return;
-                }
-                fn->DestroyFuncBody(); // fallback: unexpected collision — destroy and recreate from scratch
-            }
-        }
-    }
+    auto earlyExit = HandleCJMPFunctionCollision(funcDecl, fn, mangledName, features);
+    if (earlyExit) { return; }
     if (fn == nullptr) {
         fn = builder.CreateFunction(funcTy, mangledName, srcCodeName, rawMangledName, pkgName, genericParamTy);
         fn->SetDebugLocation(loc);
@@ -1801,6 +1804,64 @@ bool HasObjectAsSuperClass(const ClassDef& classDef)
     auto superId = superClass->GetIdentifier();
     return superId.find("6ObjectE") != std::string::npos;  // inherits from Object
 }
+
+namespace {
+
+const AST::ClassLikeDecl* FindSpecificAstDecl(
+    const ClassDef& classDef,
+    const std::vector<Ptr<const AST::Decl>>& nominalDecls,
+    const std::vector<Ptr<const AST::Decl>>& importedNominalDecls)
+{
+    std::string className = classDef.GetIdentifierWithoutPrefix();
+    for (const auto& container : {nominalDecls, importedNominalDecls}) {
+        for (const auto& decl : container) {
+            if (decl->astKind == AST::ASTKind::CLASS_DECL &&
+                decl->TestAttr(AST::Attribute::SPECIFIC) &&
+                decl->mangledName == className) {
+                return StaticCast<const AST::ClassLikeDecl*>(decl.get());
+            }
+        }
+    }
+    return nullptr;
+}
+
+ClassType* ResolveChirSuperClassTy(const AST::ClassTy& astClassTy, CHIRType& chirType)
+{
+    auto superClassTy = astClassTy.GetSuperClassTy();
+    if (!superClassTy) { return nullptr; }
+
+    Type* chirSuperTy = chirType.TranslateType(*superClassTy);
+    if (!chirSuperTy) { return nullptr; }
+
+    if (chirSuperTy->IsClass()) {
+        return StaticCast<ClassType*>(chirSuperTy);
+    }
+    if (chirSuperTy->IsRef()) {
+        auto refTy = StaticCast<RefType*>(chirSuperTy);
+        auto baseTy = refTy->GetBaseType();
+        if (baseTy && baseTy->IsClass()) {
+            return StaticCast<ClassType*>(baseTy);
+        }
+    }
+    return nullptr;
+}
+
+bool CheckPlatformMirror(const AST::ClassTy& astClassTy, const ClassType& chirSuperClassTy)
+{
+    auto superClassDef = chirSuperClassTy.GetClassDef();
+    if (superClassDef && IsPlatformMirrorClass(*superClassDef)) {
+        return true;
+    }
+    auto astSuperClassTy = astClassTy.GetSuperClassTy();
+    if (astSuperClassTy && astSuperClassTy->decl) {
+        if (astSuperClassTy->decl->HasAnno(AST::AnnotationKind::JAVA_MIRROR) ||
+            astSuperClassTy->decl->HasAnno(AST::AnnotationKind::OBJ_C_MIRROR)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }
 
 void AST2CHIR::PatchCJMPSuperClass()
@@ -1812,82 +1873,19 @@ void AST2CHIR::PatchCJMPSuperClass()
     auto allClasses = package->GetAllClassDef();
 
     for (auto classDef : allClasses) {
-        if (!classDef->TestAttr(Attribute::SPECIFIC)) {
-            continue;
-        }
+        if (!classDef->TestAttr(Attribute::SPECIFIC)) continue;
+        if (!HasObjectAsSuperClass(*classDef)) continue;
 
-        if (!HasObjectAsSuperClass(*classDef)) {
-            continue;
-        }
-
-        std::string className = classDef->GetIdentifierWithoutPrefix();
-
-        const AST::ClassLikeDecl* astDecl = nullptr;
-        for (const auto& container : {nominalDecls, importedNominalDecls}) {
-            for (const auto& decl : container) {
-                if (decl->astKind == AST::ASTKind::CLASS_DECL &&
-                    decl->TestAttr(AST::Attribute::SPECIFIC) &&
-                    decl->mangledName == className) {
-                    astDecl = StaticCast<const AST::ClassLikeDecl*>(decl.get());
-                    break;
-                }
-            }
-            if (astDecl) break;
-        }
-
-        if (!astDecl) {
-            continue;
-        }
+        auto astDecl = FindSpecificAstDecl(*classDef, nominalDecls, importedNominalDecls);
+        if (!astDecl) continue;
 
         auto astClassTy = DynamicCast<AST::ClassTy*>(astDecl->GetTy());
-        if (!astClassTy) {
-            continue;
-        }
+        if (!astClassTy) continue;
 
-        auto superClassTy = astClassTy->GetSuperClassTy();
-        if (!superClassTy) {
-            continue;
-        }
+        auto chirSuperClassTy = ResolveChirSuperClassTy(*astClassTy, chirType);
+        if (!chirSuperClassTy) continue;
 
-        Type* chirSuperTy = chirType.TranslateType(*superClassTy);
-        if (!chirSuperTy) {
-            continue;
-        }
-
-        ClassType* chirSuperClassTy = nullptr;
-        if (chirSuperTy->IsClass()) {
-            chirSuperClassTy = StaticCast<ClassType*>(chirSuperTy);
-        } else if (chirSuperTy->IsRef()) {
-            auto refTy = StaticCast<RefType*>(chirSuperTy);
-            auto baseTy = refTy->GetBaseType();
-            if (baseTy && baseTy->IsClass()) {
-                chirSuperClassTy = StaticCast<ClassType*>(baseTy);
-            }
-        }
-
-        if (!chirSuperClassTy) {
-            continue;
-        }
-
-        auto superClassDef = chirSuperClassTy->GetClassDef();
-
-        bool isPlatformMirror = false;
-        if (superClassDef && IsPlatformMirrorClass(*superClassDef)) {
-            isPlatformMirror = true;
-        }
-        auto astSuperClassTy = astClassTy->GetSuperClassTy();
-        if (astSuperClassTy && astSuperClassTy->decl) {
-            if (astSuperClassTy->decl->HasAnno(AST::AnnotationKind::JAVA_MIRROR)) {
-                isPlatformMirror = true;
-            }
-            if (astSuperClassTy->decl->HasAnno(AST::AnnotationKind::OBJ_C_MIRROR)) {
-                isPlatformMirror = true;
-            }
-        }
-
-        if (!isPlatformMirror) {
-            continue;
-        }
+        if (!CheckPlatformMirror(*astClassTy, *chirSuperClassTy)) continue;
 
         classDef->SetSuperClassTy(*chirSuperClassTy);
     }

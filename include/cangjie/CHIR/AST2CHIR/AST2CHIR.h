@@ -286,6 +286,10 @@ private:
     void CreateGlobalVarSignature(const std::vector<Ptr<const AST::Decl>>& decls, bool isLocalConst = false);
 
     void CreateFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDecl);
+    // Handle CJMP collision where a Function already has a body from a counterpart FuncDecl.
+    // Returns true if the collision was resolved and the caller should return early.
+    bool HandleCJMPFunctionCollision(const AST::FuncDecl& funcDecl, Function*& fn,
+        const std::string& mangledName, const std::vector<FeatureId>& features);
     void CreateImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDecl);
     void CreateImportedValueSignatureAndSetGlobalCache(const AST::VarDecl& varDecl);
     void CreatePseudoImportedFuncSignatureAndSetGlobalCache(const AST::FuncDecl& funcDecl);

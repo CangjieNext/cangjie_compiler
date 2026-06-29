@@ -90,6 +90,12 @@ private:
     /// Returns `true` if there is not platform declaration,
     /// in other cases check that common can me matched with platform(e.g. modifiers conform)
     bool MatchCommonNominalDeclWithSpecific(const AST::InheritableDecl& commonDecl);
+    // Match super interfaces between common and specific declarations.
+    bool MatchCommonSpecificSuperInterfaces(const AST::InheritableDecl& commonDecl,
+        const AST::InheritableDecl& specificDecl, TypeSubst& genericTyMap);
+    // Match super class between common and specific declarations (with Object→PlatformParent relaxation).
+    bool MatchCommonSpecificSuperClass(const AST::InheritableDecl& commonDecl,
+        const AST::InheritableDecl& specificDecl);
     void CheckCommonSpecificGenericMatch(const AST::Decl& specificDecl, const AST::Decl& commonDecl);
 
 public:

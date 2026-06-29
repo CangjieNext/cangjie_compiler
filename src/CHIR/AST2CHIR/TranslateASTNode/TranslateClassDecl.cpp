@@ -370,6 +370,46 @@ void Translator::TranslateClassLikeMemberFuncDecl(ClassDef& classDef, const AST:
     AddMemberMethodToCustomTypeDef(decl, classDef);
 }
 
+// Find a getter in classDef with matching return type for specific-mirror skipping.
+bool Translator::FindMatchingGetterInClass(ClassDef& classDef, const AST::FuncDecl& decl, const Type* declRetTy) const
+{
+    for (auto method : classDef.GetMethods()) {
+        if (method->GetFuncKind() != FuncKind::GETTER || !decl.isGetter) continue;
+        auto methodRetTy = method->GetReturnType();
+        if (methodRetTy && declRetTy && *methodRetTy == *declRetTy) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Find a setter in classDef with matching parameter type for specific-mirror skipping.
+bool Translator::FindMatchingSetterInClass(ClassDef& classDef, const AST::FuncDecl& decl, const Type* declParamTy) const
+{
+    for (auto method : classDef.GetMethods()) {
+        if (method->GetFuncKind() != FuncKind::SETTER || !decl.isSetter) continue;
+        auto params = method->GetParams();
+        if (params.size() < 2) continue;
+        auto methodParamTy = params[1]->GetType();
+        if (methodParamTy && declParamTy && *methodParamTy == *declParamTy) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Translator::SkipGetterSetterForSpecificMerging(ClassDef& classDef, const AST::FuncDecl& decl)
+{
+    if (decl.TestAttr(AST::Attribute::JAVA_IMPL)) {
+        return false;
+    }
+    auto declRetTy = chirTy.TranslateType(*decl.GetTy());
+    if (decl.isGetter) {
+        return FindMatchingGetterInClass(classDef, decl, declRetTy);
+    }
+    return FindMatchingSetterInClass(classDef, decl, declRetTy);
+}
+
 bool Translator::SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::FuncDecl& decl)
 {
     if (!mergingSpecific || !classDef.TestAttr(CHIR::Attribute::DESERIALIZED)) {
@@ -377,29 +417,7 @@ bool Translator::SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::
     }
 
     if (decl.isGetter || decl.isSetter) {
-        if (decl.TestAttr(AST::Attribute::JAVA_IMPL)) {
-            return false;
-        }
-        for (auto method : classDef.GetMethods()) {
-            if (method->GetFuncKind() == FuncKind::GETTER && decl.isGetter) {
-                auto methodRetTy = method->GetReturnType();
-                auto declRetTy = chirTy.TranslateType(*decl.GetTy());
-                if (methodRetTy && declRetTy && *methodRetTy == *declRetTy) {
-                    return true;
-                }
-            }
-            if (method->GetFuncKind() == FuncKind::SETTER && decl.isSetter) {
-                auto params = method->GetParams();
-                if (params.size() >= 2) {
-                    auto methodParamTy = params[1]->GetType();
-                    auto declParamTy = chirTy.TranslateType(*decl.GetTy());
-                    if (methodParamTy && declParamTy && *methodParamTy == *declParamTy) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
+        return SkipGetterSetterForSpecificMerging(classDef, decl);
     }
 
     auto it = genericFuncMap.find(&decl);

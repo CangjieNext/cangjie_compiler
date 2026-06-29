@@ -19,6 +19,73 @@
 
 using namespace Cangjie::CHIR;
 
+namespace {
+
+size_t FindRegFieldIndex(const std::vector<MemberVarInfo>& allFields, MemberVarInfo& regField)
+{
+    for (size_t i = 0; i < allFields.size(); ++i) {
+        if (allFields[i].name == "$reg" && allFields[i].TestAttr(Attribute::COMPILER_ADD)) {
+            regField = allFields[i];
+            return i;
+        }
+    }
+    return allFields.size();
+}
+
+void FindCregStore(Function& ctor, size_t regIdx, Value*& cregRef, Block*& targetBlock)
+{
+    Visitor::Visit(ctor, [&](Expression& e) -> VisitResult {
+        if (auto storeRef = DynamicCast<StoreElementRef*>(&e)) {
+            auto path = storeRef->GetPath();
+            if (!path.empty() && path[0] == regIdx) {
+                cregRef = storeRef->GetValue();
+                targetBlock = storeRef->GetParentBlock();
+                return VisitResult::STOP;
+            }
+        } else if (auto storeByName = DynamicCast<StoreElementByName*>(&e)) {
+            auto names = storeByName->GetNames();
+            if (!names.empty() && names[0] == "$reg") {
+                cregRef = storeByName->GetValue();
+                targetBlock = storeByName->GetParentBlock();
+                return VisitResult::STOP;
+            }
+        }
+        return VisitResult::CONTINUE;
+    });
+}
+
+void InitFieldsInCompanion(const std::vector<MemberVarInfo>& allFields, CHIRBuilder& builder,
+    Value* thisParam, Value* cregRef, Block* targetBlock)
+{
+    auto terminator = targetBlock->GetTerminator();
+    for (auto& field : allFields) {
+        if (field.TestAttr(Attribute::COMPILER_ADD)) continue;
+        if (!field.initializerFunc) continue;
+        if (field.TestAttr(Attribute::MUT)) continue;
+
+        auto initApply = builder.CreateExpression<Apply>(
+            field.initializerFunc->GetReturnType(),
+            StaticCast<Value*>(field.initializerFunc),
+            FuncCallContext{
+                .args = {thisParam},
+                .instTypeArgs = {},
+                .thisType = thisParam->GetType()
+            },
+            targetBlock);
+        initApply->MoveBefore(terminator);
+
+        auto initStore = builder.CreateExpression<StoreElementByName>(
+            builder.GetUnitTy(),
+            initApply->GetResult(),
+            cregRef,
+            std::vector<std::string>{field.name},
+            targetBlock);
+        initStore->MoveBefore(terminator);
+    }
+}
+
+}
+
 PatchCJMPImplBodies::PatchCJMPImplBodies(Package& pkg, CHIRBuilder& builder)
     : pkg(pkg), builder(builder)
 {
@@ -210,7 +277,6 @@ Expression* PatchCJMPImplBodies::TryPatchStoreElementRef(StoreElementRef& store,
     auto baseValue = store.GetLocation();
     auto storedValue = store.GetValue();
     auto path = store.GetPath();
-
     if (path.empty()) return nullptr;
     auto fieldIdx = path[0];
 
@@ -244,15 +310,8 @@ void PatchCJMPImplBodies::PatchConstructorFieldInit(Function& ctor, ClassDef& im
 {
     auto allFields = implClassDef.GetAllInstanceVars();
 
-    size_t regIdx = allFields.size();
     MemberVarInfo regField;
-    for (size_t i = 0; i < allFields.size(); ++i) {
-        if (allFields[i].name == "$reg" && allFields[i].TestAttr(Attribute::COMPILER_ADD)) {
-            regIdx = i;
-            regField = allFields[i];
-            break;
-        }
-    }
+    size_t regIdx = FindRegFieldIndex(allFields, regField);
     if (regIdx >= allFields.size()) { return; }
 
     auto regFieldType = regField.type;
@@ -267,53 +326,11 @@ void PatchCJMPImplBodies::PatchConstructorFieldInit(Function& ctor, ClassDef& im
 
     Value* cregRef = nullptr;
     Block* targetBlock = nullptr;
-
-    Visitor::Visit(ctor, [&](Expression& e) -> VisitResult {
-        if (auto storeRef = DynamicCast<StoreElementRef*>(&e)) {
-            auto path = storeRef->GetPath();
-            if (!path.empty() && path[0] == regIdx) {
-                cregRef = storeRef->GetValue();
-                targetBlock = storeRef->GetParentBlock();
-                return VisitResult::STOP;
-            }
-        } else if (auto storeByName = DynamicCast<StoreElementByName*>(&e)) {
-            auto names = storeByName->GetNames();
-            if (!names.empty() && names[0] == "$reg") {
-                cregRef = storeByName->GetValue();
-                targetBlock = storeByName->GetParentBlock();
-                return VisitResult::STOP;
-            }
-        }
-        return VisitResult::CONTINUE;
-    });
-
+    FindCregStore(ctor, regIdx, cregRef, targetBlock);
     if (!cregRef || !targetBlock) { return; }
 
     auto terminator = targetBlock->GetTerminator();
     if (!terminator) { return; }
 
-    for (auto& field : allFields) {
-        if (field.TestAttr(Attribute::COMPILER_ADD)) continue;
-        if (!field.initializerFunc) continue;
-        if (field.TestAttr(Attribute::MUT)) continue;
-
-        auto initApply = builder.CreateExpression<Apply>(
-            field.initializerFunc->GetReturnType(),
-            StaticCast<Value*>(field.initializerFunc),
-            FuncCallContext{
-                .args = {thisParam},
-                .instTypeArgs = {},
-                .thisType = thisParam->GetType()
-            },
-            targetBlock);
-        initApply->MoveBefore(terminator);
-
-        auto initStore = builder.CreateExpression<StoreElementByName>(
-            builder.GetUnitTy(),
-            initApply->GetResult(),
-            cregRef,
-            std::vector<std::string>{field.name},
-            targetBlock);
-        initStore->MoveBefore(terminator);
-    }
+    InitFieldsInCompanion(allFields, builder, thisParam, cregRef, targetBlock);
 }

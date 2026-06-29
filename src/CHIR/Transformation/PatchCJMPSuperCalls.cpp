@@ -86,6 +86,23 @@ Function* PatchCJMPSuperCalls::FindPlatformParentEmptyConstructor(const ClassDef
     return nullptr;
 }
 
+namespace {
+
+bool TryReplaceExistingSuperCall(Apply* existingSuperCall, Value* platformConstructor)
+{
+    auto callee = existingSuperCall->GetCallee();
+    if (!callee || !callee->IsFunc()) { return false; }
+    auto calleeFunc = StaticCast<Function*>(callee);
+    auto calleeParent = calleeFunc->GetParentCustomTypeDef();
+    if (!calleeParent || !calleeParent->IsClass()) { return false; }
+    auto calleeParentClass = StaticCast<ClassDef*>(calleeParent);
+    if (calleeParentClass->GetSuperClassDef() != nullptr) { return false; }
+    existingSuperCall->ReplaceOperand(static_cast<size_t>(0), StaticCast<Value*>(platformConstructor));
+    return true;
+}
+
+}
+
 void PatchCJMPSuperCalls::PatchConstructorSuperCall(Function& constructor, ClassDef& platformParent)
 {
     auto platformConstructor = FindPlatformParentEmptyConstructor(platformParent);
@@ -115,17 +132,7 @@ void PatchCJMPSuperCalls::PatchConstructorSuperCall(Function& constructor, Class
     }
 
     if (existingSuperCall) {
-        auto callee = existingSuperCall->GetCallee();
-        if (callee && callee->IsFunc()) {
-            auto calleeFunc = StaticCast<Function*>(callee);
-            auto calleeParent = calleeFunc->GetParentCustomTypeDef();
-            if (calleeParent && calleeParent->IsClass()) {
-                auto calleeParentClass = StaticCast<ClassDef*>(calleeParent);
-                if (calleeParentClass->GetSuperClassDef() == nullptr) {
-                    existingSuperCall->ReplaceOperand(static_cast<size_t>(0), StaticCast<Value*>(platformConstructor));
-                }
-            }
-        }
+        TryReplaceExistingSuperCall(existingSuperCall, platformConstructor);
         return;
     }
 
