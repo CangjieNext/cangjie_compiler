@@ -235,7 +235,8 @@ void WrapVirtualFunc::CreateWrapperFuncBody(Function& wrapperFunc,
         ty = RemoveBoxTypeShellIfNeed(*ty);
     }
     if (!rawFunc->TestAttr(Attribute::STATIC)) {
-        if (auto modal = rawFunc->GetFuncType()->GetParamTypes()[0]->GetModalInfo(); modal != ModalInfo()) {
+        if (auto modal = rawFunc->GetFuncType()->GetParamTypes()[0]->StripAllRefs()->GetModalInfo();
+            modal != ModalInfo()) {
             instParentType = builder.WithModal(instParentType, modal);
         }
         expectedParamTypes[0] = instParentType;
@@ -327,7 +328,7 @@ Function* WrapVirtualFunc::CreateVirtualWrapperIfNeeded(const VirtualMethodInfo&
     // 2. Collect replace map for generic type params
     auto genericTable = GetReplaceTableForVirtualFunc(parentTy, funcIdentifier, parentFuncInfo);
     // 3. Get func type
-    auto modal = isStatic ? ModalInfo() : curFunc->GetFuncType()->GetParamTypes()[0]->GetModalInfo();
+    auto modal = isStatic ? ModalInfo() : curFunc->GetFuncType()->GetParamTypes()[0]->StripAllRefs()->GetModalInfo();
     auto wrapperTy =
         GetWrapperFuncType(*parentFuncTyWithoutThisArg, selfTy, genericTable.replaceTable, isStatic, modal);
     // 4. Create the function

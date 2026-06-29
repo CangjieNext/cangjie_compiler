@@ -349,7 +349,8 @@ std::vector<VTableSearchRes> CustomTypeDef::GetFuncIndexInVTable(const FuncCallT
     for (const auto& vtableIt : vtable.GetTypeVTables()) {
         for (size_t i = 0; i < vtableIt.GetMethodNum(); ++i) {
             const auto& funcInfo = vtableIt.GetVirtualMethods()[i];
-            if (funcInfo.FuncSigIsMatched(funcCallType, replaceTable, builder)) {
+            if (funcInfo.FuncSigIsMatched(
+                funcCallType, funcInfo.GetAttributeInfo().TestAttr(Attribute::STATIC), replaceTable, builder)) {
                 auto originalParentType = vtableIt.GetSrcParentType();
                 auto instSrcParentTy = ReplaceRawGenericArgType(*originalParentType, replaceTable, builder);
                 res.emplace_back(VTableSearchRes {

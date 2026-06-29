@@ -359,9 +359,6 @@ std::vector<VTableSearchRes> DynamicDispatchWithException::GetVirtualMethodInfo(
     for (auto arg : GetArgs()) {
         instParamTypes.emplace_back(arg->GetType());
     }
-    if (!IsInvokeStaticBase()) {
-        instParamTypes.erase(instParamTypes.begin());
-    }
     auto instFuncType = builder.GetType<FuncType>(instParamTypes, builder.GetUnitTy());
     FuncCallType funcCallType{virMethodCtx.funcName, instFuncType, instantiatedTypeArgs};
     auto res = GetFuncIndexInVTable(*thisTypeDeref, funcCallType, builder);

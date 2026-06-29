@@ -450,10 +450,9 @@ Type* ReplaceRawGenericArgType(
 
 Type* ReplaceThisTypeToConcreteType(Type& type, Type& concreteType, CHIRBuilder& builder)
 {
-    if (auto refTy = DynamicCast<RefType*>(&type); refTy && refTy->GetBaseType()->IsThis()) {
-        return &concreteType;
-    } else if (type.IsThis()) {
-        return &concreteType;
+    auto derefType = type.StripAllRefs();
+    if (derefType->IsThis()) {
+        return builder.WithModal(&concreteType, derefType->GetModalInfo());
     }
     std::vector<Type*> newArgs;
     for (auto argTy : type.GetTypeArgs()) {
