@@ -14,6 +14,8 @@
 
 #include "TypeCheckUtil.h"
 
+#include "cangjie/AST/Utils.h"
+
 using namespace Cangjie;
 using namespace Cangjie::AST;
 using namespace TypeCheckUtil;
@@ -96,6 +98,16 @@ void CheckAnnoFrozen(const Decl& decl, const Annotation& anno, DiagnosticEngine&
     }
 }
 
+void CheckAnnoDemode(const Decl& decl, const Annotation& anno, DiagnosticEngine& diag)
+{
+    if (!anno.args.empty()) {
+        diag.Diagnose(*anno.args[0], DiagKind::sema_annotation_error_arg_num, "@Demode", "no");
+    }
+    if (decl.astKind != ASTKind::VAR_DECL || !IsInstanceMember(decl)) {
+        diag.Diagnose(anno, DiagKind::sema_illegal_use_of_annotation, DeclKindToString(decl), "@Demode");
+    }
+}
+
 using AnnoCheckMap = std::unordered_map<AnnotationKind, std::function<void(Decl&, Annotation&, DiagnosticEngine&)>>;
 
 AnnoCheckMap& GetAnnoCheckMap()
@@ -105,6 +117,7 @@ AnnoCheckMap& GetAnnoCheckMap()
         {AnnotationKind::CALLING_CONV, CheckAnnoCallingConv},
         {AnnotationKind::FASTNATIVE, CheckAnnoFastNative},
         {AnnotationKind::FROZEN, CheckAnnoFrozen},
+        {AnnotationKind::DEMODE, CheckAnnoDemode},
     };
     return annoCheckMap;
 }

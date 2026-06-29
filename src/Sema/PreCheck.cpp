@@ -1948,8 +1948,8 @@ void TypeChecker::TypeCheckerImpl::PreSetDeclType(const ASTContext& ctx)
             // Static init has return type of unit. Instance init has return type of current typeDecl.
             retTy = fd->TestAttr(Attribute::STATIC)
                 ? ModalTy{TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)}
-                : (fd->outerDecl && fd->outerDecl->IsNominalDecl() ? fd->outerDecl->GetTy()
-                                                                   : ModalTy{TypeManager::GetInvalidTy()});
+                : (fd->outerDecl && fd->outerDecl->IsNominalDecl()
+                ? fd->outerDecl->GetTy() : ModalTy{TypeManager::GetInvalidTy()});
             retTy = retTy.With(GetThisParamModal(*fd));
             fd->SetTy({typeManager.GetFunctionTy(paramTys, retTy)});
             continue;

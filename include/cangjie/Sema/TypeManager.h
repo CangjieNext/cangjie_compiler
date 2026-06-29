@@ -40,7 +40,6 @@ class InstCtxScope;
 enum class ModalMatchMode {
     SUBTYPE,
     EXACT,
-    IGNORE,
 };
 
 class TypeManager {

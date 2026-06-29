@@ -155,6 +155,9 @@ AttributeInfo BuildVarDeclAttr(const AST::VarDecl& decl)
     if (decl.isConst) {
         attrInfo.SetAttr(Attribute::CONST, true);
     }
+    if (decl.HasAnno(AST::AnnotationKind::DEMODE)) {
+        attrInfo.SetAttr(Attribute::DEMODE, true);
+    }
     return attrInfo;
 }
 
@@ -298,22 +301,61 @@ void SetCompileTimeValueFlagRecursively(Function& initFunc)
     Visitor::Visit(initFunc, preVisit);
 }
 
-MemberVarInfo GetMemberVarByName(const CustomTypeDef& def, const std::string& varName)
-{
-    auto vars = def.GetAllInstanceVars();
-    for (auto it = vars.crbegin(); it != vars.crend(); ++it) {
-        if (it->name == varName) {
-            return *it;
-        }
-    }
-    CJC_ABORT();
-    return MemberVarInfo{.attributeInfo = AttributeInfo{}};
-}
-
 Type* GetInstMemberTypeByName(const CustomType& rootType, const std::vector<std::string>& names, CHIRBuilder& builder)
 {
     return GetInstMemberTypeByNameCheckingReadOnly(rootType, names, builder).first;
 }
+
+namespace {
+std::vector<uint64_t> GetMemberPathByNames(
+    const CustomType& rootType, const std::vector<std::string>& names, CHIRBuilder& builder)
+{
+    std::vector<uint64_t> path;
+    const CustomType* baseType = &rootType;
+    for (const auto& name : names) {
+        auto allMemberVars = baseType->GetCustomTypeDef()->GetAllInstanceVars();
+        uint64_t index = allMemberVars.size();
+        Type* memberVarInstType = nullptr;
+        for (auto it = allMemberVars.crbegin(); it != allMemberVars.crend(); ++it) {
+            --index;
+            if (it->name == name) {
+                std::unordered_map<const GenericType*, Type*> instMap;
+                baseType->GetInstMap(instMap, builder);
+                memberVarInstType = ReplaceRawGenericArgType(*it->type, instMap, builder);
+                break;
+            }
+        }
+        CJC_NULLPTR_CHECK(memberVarInstType);
+        path.emplace_back(index);
+        if (path.size() < names.size()) {
+            auto pureMemberTy = memberVarInstType->StripAllRefs();
+            if (pureMemberTy->IsNominal()) {
+                baseType = StaticCast<CustomType*>(pureMemberTy);
+            } else if (pureMemberTy->IsGeneric()) {
+                Type* concreteType = nullptr;
+                for (auto upperBound : StaticCast<GenericType*>(pureMemberTy)->GetUpperBounds()) {
+                    auto upperBoundCustomType = StaticCast<CustomType*>(upperBound->StripAllRefs());
+                    if (upperBoundCustomType->GetCustomTypeDef()->IsClassLike()) {
+                        if (concreteType == nullptr) {
+                            concreteType = upperBound;
+                        } else if (upperBoundCustomType->IsEqualOrSubTypeOf(*concreteType, builder)) {
+                            concreteType = upperBound;
+                        }
+                    }
+                }
+                CJC_NULLPTR_CHECK(concreteType);
+                if (pureMemberTy->IsModal()) {
+                    concreteType = builder.WithModal(concreteType->StripAllRefs(), pureMemberTy->GetModalInfo());
+                }
+                baseType = StaticCast<CustomType*>(concreteType->StripAllRefs());
+            } else {
+                CJC_ABORT();
+            }
+        }
+    }
+    return path;
+}
+} // namespace
 
 std::pair<Type*, bool> GetInstMemberTypeByNameCheckingReadOnly(
     const CustomType& rootType, const std::vector<std::string>& names, CHIRBuilder& builder)
@@ -325,37 +367,7 @@ std::pair<Type*, bool> GetInstMemberTypeByNameCheckingReadOnly(
         CJC_ABORT();
 #endif
     }
-    auto customTypeDef = rootType.GetCustomTypeDef();
-    std::unordered_map<const GenericType*, Type*> instMap;
-    rootType.GetInstMap(instMap, builder);
-    auto currentName = names.front();
-    auto member = GetMemberVarByName(*customTypeDef, currentName);
-    // if one member is readonly in path, the result is readonly
-    bool isReadOnly = member.TestAttr(Attribute::READONLY);
-    Type* memberTy = member.type;
-    if (rootType.IsModal()) {
-        memberTy = builder.WithModal(memberTy, rootType.GetModalInfo());
-    }
-    memberTy = ReplaceRawGenericArgType(*memberTy, instMap, builder);
-    if (names.size() > 1) {
-        auto pureMemberTy = memberTy->StripAllRefs();
-        if (pureMemberTy->IsNominal()) {
-            auto subNames = names;
-            subNames.erase(subNames.begin());
-            auto [memberType, isMemberReadOnly] =
-                GetInstMemberTypeByNameCheckingReadOnly(*StaticCast<CustomType*>(pureMemberTy), subNames, builder);
-            return {memberType, isReadOnly || isMemberReadOnly};
-        } else if (pureMemberTy->IsGeneric()) {
-            auto subNames = names;
-            subNames.erase(subNames.begin());
-            auto [memberType, isMemberReadOnly] =
-                GetInstMemberTypeByNameCheckingReadOnly(*StaticCast<GenericType*>(pureMemberTy), subNames, builder);
-            return {memberType, isReadOnly || isMemberReadOnly};
-        } else {
-            CJC_ABORT();
-        }
-    }
-    return {memberTy, isReadOnly};
+    return rootType.GetInstMemberTypeByPathCheckingReadOnly(GetMemberPathByNames(rootType, names, builder), builder);
 }
 
 std::pair<Type*, bool> GetInstMemberTypeByNameCheckingReadOnly(

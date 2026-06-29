@@ -12,13 +12,13 @@
 #include "cangjie/AST/ASTContext.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Node.h"
+#include "cangjie/AST/ScopeManagerApi.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Sema/TypeManager.h"
 
 #include <algorithm>
-#include <unordered_set>
 
 namespace Cangjie {
 using namespace AST;
@@ -37,12 +37,6 @@ static FuncBody* GetFuncBody(const Node& funcLike)
     return StaticCast<MainDecl>(&funcLike)->funcBody.get();
 }
 
-/// Track function context with default param value state
-struct FuncContext {
-    Node* func = nullptr;
-    bool inDefaultParamValue = false;
-};
-
 /// All checks:
 /// 1. Check return expression of a function body cannot have internal @local! type
 /// 2. Check global var cannot have local type
@@ -51,14 +45,15 @@ struct FuncContext {
 /// 5. Check local of captured variables
 /// 6. Check non-struct types cannot inherit Copyable (in PreCheckInvalidInherit)
 /// 7. Check assignment/member-assignment
-/// 8. Check exclave expr is inside a function, or global or static var initializer (not counting default param values
-/// as inside that function)
-/// 9. Check exclave expr is not in static init, finalizer, main, or spawn expr
-/// 10. Check instance&static member var is of data type
-/// 11. Check instance member var does not have initializer when there are mixed local type init
-/// 12. Check the whole body of local?/local! constructor must be in exclave expr
-/// 13. Check finalizer cannot have non ~local this param
-/// 14. Check type arguments of a type are data type (function type allowed); skip for function type and fun call
+/// 8. Check exclave expr is inside a func-like body whose signature has a non-Copyable or
+/// non-data return/parameter/this type; not in param default values or global/static initializer
+/// 9. Check exclave expr is not nested inside another exclave or exclave function
+/// 10. Check exclave expr is not in static init, finalizer, main, or spawn expr
+/// 11. Check instance&static member var is of data type
+/// 12. Check instance member var does not have initializer when there are mixed local type init
+/// 13. Check the whole body of local?/local! constructor must be in exclave expr
+/// 14. Check finalizer cannot have non ~local this param
+/// 15. Check type arguments of a type are data type (function type allowed); skip for function type and fun call
 struct ModalTypeChecker {
     ModalTypeChecker(DiagnosticEngine& diag, TypeManager& m) : d(diag), type{m}
     {
@@ -113,25 +108,15 @@ struct ModalTypeChecker {
                     if (Is<FuncDecl>(node) || Is<LambdaExpr>(node)) {
                         CheckCaptures(ctx, *node);
                     }
-                    // Push function context
-                    funcStack.push_back({node, false});
-                }
-                // Track entering default param value
-                if (auto fp = DynamicCast<FuncParam>(node); fp && fp->assignment && !funcStack.empty()) {
-                    funcStack.back().inDefaultParamValue = true;
                 }
                 // Track entering spawn block (only if not already inside one)
                 if (Is<SpawnExpr>(node) && currentSpawnExpr == nullptr) {
                     currentSpawnExpr = node;
                 }
-                // Track entering global/static var initializer (only if not already inside one)
-                if (auto var = DynamicCast<VarDecl>(node);
-                    var && var->initializer && IsGlobalOrMember(*var) && currentGlobalStaticVar == nullptr) {
-                    currentGlobalStaticVar = node;
-                }
                 // Check exclave expr
                 if (auto exclave = DynamicCast<ExclaveExpr>(node)) {
-                    CheckExclaveInsideFunction(*exclave);
+                    CheckNestedExclave(ctx, *exclave);
+                    CheckExclaveInsideFunction(ctx, *exclave);
                     CheckExclaveInCtor(ctx, *exclave);
                 }
                 if (auto lambda = DynamicCast<LambdaExpr>(node)) {
@@ -147,21 +132,9 @@ struct ModalTypeChecker {
                 return VisitAction::WALK_CHILDREN;
             },
             [this](Node* node) -> VisitAction {
-                // Pop function context when exiting
-                if (node->IsFuncLike() && !funcStack.empty() && funcStack.back().func == node) {
-                    funcStack.pop_back();
-                }
-                // Track exiting default param value
-                if (auto fp = DynamicCast<FuncParam>(node); fp && fp->assignment && !funcStack.empty()) {
-                    funcStack.back().inDefaultParamValue = false;
-                }
                 // Track exiting spawn block
                 if (node == currentSpawnExpr) {
                     currentSpawnExpr = nullptr;
-                }
-                // Track exiting global/static var initializer
-                if (node == currentGlobalStaticVar) {
-                    currentGlobalStaticVar = nullptr;
                 }
                 return VisitAction::WALK_CHILDREN;
             });
@@ -221,41 +194,110 @@ private:
         if (!body || !body->retType || !body->retType->GetTy().IsCorrect()) {
             return;
         }
-        auto retLocal = body->retType->TyMode().local;
-        if (retLocal == LocalModal::NOT) {
+        if (body->retType->GetTy().IsDataType()) {
             return;
         }
         auto r = CollectReturnedExpr(*body);
         for (auto& e : r) {
             if (!IsExternalLocal(ctx, *e) && !type.ImplementsCopyInterface(e->DataTy()) &&
-                !IsInExclaveExpr(ctx, *e)) {
+                !IsInExclaveExpr(ctx, *e) && e->GetTy().IsLocalType()) {
                 DiagBadInternalLocalReturn(*e);
             }
         }
     }
 
-    /// Check that exclave is inside a function body (not counting default param values as inside that function), global
-    /// or static var initializer
-    void CheckExclaveInsideFunction(const ExclaveExpr& expr)
+    void CheckNestedExclave(const ASTContext& ctx, const ExclaveExpr& expr)
     {
-        // Exclave is allowed inside global/static var initializer
-        if (currentGlobalStaticVar) {
+        auto outFun = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, expr.scopeName);
+        if (!outFun) {
+            // skip exclave outside fun
             return;
         }
-        // Find the first function where we're not in its default param value
-        Node* enclosingFunc = nullptr;
-        for (auto it = funcStack.rbegin(); it != funcStack.rend(); ++it) {
-            if (!it->inDefaultParamValue) {
-                enclosingFunc = it->func;
-                break;
+        if (auto outerExclave = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, expr.scopeName,
+            [e = &expr](Symbol& sym) { return sym.node != e && sym.node->astKind == ASTKind::EXCLAVE_EXPR; })) {
+            auto outerOutFun = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, outerExclave->scopeName);
+            if (outerOutFun && outerOutFun->node == outFun->node) {
+                DiagNestedExclave(expr, *outerExclave->node);
             }
-        }
-        if (!enclosingFunc) {
-            DiagExclaveOutsideFunc(expr);
+        } else if (auto fd = DynamicCast<FuncDecl>(outFun->node)) {
+            if (TypeCheckUtil::HasModifier(fd->modifiers, TokenKind::EXCLAVE)) {
+                DiagNestedExclave(expr, *fd);
+            }
         }
     }
 
-    /// Check exclave expr is not in static init, finalizer, main, or spawn expr (in ctor it is allowed)
+    void DiagNestedExclave(const ExclaveExpr& expr, const Node& outerNode)
+    {
+        auto db = d.DiagnoseRefactor(DiagKindRefactor::sema_nested_exclave, expr);
+        db.AddHint(MakeRange(outerNode.begin, outerNode.end));
+    }
+
+    void CheckExclaveInsideFunction(const ASTContext& ctx, const ExclaveExpr& expr)
+    {
+        std::string scopeName = ScopeManagerApi::GetScopeNameWithoutTail(expr.scopeName);
+        auto refFuncBody = TypeCheckUtil::GetCurFuncBody(ctx, scopeName);
+        if (!refFuncBody || !IsExclaveInFuncBodyStatement(*refFuncBody, expr)) {
+            DiagExclaveOutsideFunc(expr);
+            return;
+        }
+        auto funcSym = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, scopeName);
+        if (!funcSym || !funcSym->node || !FuncLikeSignatureAllowsExclave(*funcSym->node)) {
+            DiagExclaveInvalidFuncSignature(expr);
+        }
+    }
+
+    bool IsExclaveInFuncBodyStatement(const FuncBody& fb, const ExclaveExpr& ee)
+    {
+        if (!fb.body) {
+            return false;
+        }
+        bool found = false;
+        Walker walker(fb.body.get(), [&ee, &found](Node* node) -> VisitAction {
+            if (node == &ee) {
+                found = true;
+                return VisitAction::STOP_NOW;
+            }
+            return VisitAction::WALK_CHILDREN;
+        });
+        walker.Walk();
+        return found;
+    }
+
+    bool FuncLikeSignatureAllowsExclave(const Node& funcLike)
+    {
+        if (!funcLike.GetTy().IsCorrect()) {
+            return false;
+        }
+        auto funcTy = DynamicCast<FuncTy*>(funcLike.DataTy());
+        if (!funcTy) {
+            return false;
+        }
+        if (IsNonCopyNonDataModalTy(funcTy->retTy)) {
+            return true;
+        }
+        for (auto& paramTy : funcTy->paramTys) {
+            if (IsNonCopyNonDataModalTy(paramTy)) {
+                return true;
+            }
+        }
+        if (auto func = DynamicCast<FuncDecl>(&funcLike); func && type.HasThisParam(*func)) {
+            if (IsNonCopyNonDataModalTy(type.GetThisParamTy(*func))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void DiagExclaveOutsideFunc(const ExclaveExpr& expr)
+    {
+        d.DiagnoseRefactor(DiagKindRefactor::sema_exclave_outside_function, expr);
+    }
+
+    void DiagExclaveInvalidFuncSignature(const ExclaveExpr& expr)
+    {
+        d.DiagnoseRefactor(DiagKindRefactor::sema_exclave_invalid_func_signature, expr);
+    }
+
     void CheckExclaveInCtor(const ASTContext& ctx, const ExclaveExpr& expr)
     {
         // check whether in spawn
@@ -275,6 +317,14 @@ private:
         }
     }
 
+    bool IsNonCopyNonDataModalTy(ModalTy targetTy)
+    {
+        if (!Ty::IsTyCorrect(targetTy)) {
+            return false;
+        }
+        return !type.ImplementsCopyInterface(targetTy.Ty()) && targetTy.IsLocalType();
+    }
+
     void DiagExclaveInMain(const ExclaveExpr& expr, const Node& node)
     {
         auto name = ASTKIND_TO_STR.at(node.astKind);
@@ -288,11 +338,6 @@ private:
             }
         }
         d.DiagnoseRefactor(DiagKindRefactor::sema_exclave_in_main, expr, name);
-    }
-
-    void DiagExclaveOutsideFunc(const ExclaveExpr& expr)
-    {
-        d.DiagnoseRefactor(DiagKindRefactor::sema_exclave_outside_function, expr);
     }
 
     /// Check the whole body of local?/local! constructor must be in exclave expr.
@@ -340,8 +385,8 @@ private:
                 return VisitAction::SKIP_CHILDREN;
             }
             if (auto ref = DynamicCast<NameReferenceExpr>(node)) {
-                if (auto target = ref->GetTarget(); target && target->TestAttr(Attribute::ENUM_CONSTRUCTOR) &&
-                    !type.ImplementsCopyInterface(ref->DataTy()) && !ref->GetTy().IsDataType()) {
+                if (auto target = ref->GetTarget();
+                    target && target->TestAttr(Attribute::ENUM_CONSTRUCTOR) && IsNonCopyNonDataModalTy(ref->GetTy())) {
                     needsRegion = true;
                     return VisitAction::SKIP_CHILDREN;
                 }
@@ -376,10 +421,8 @@ private:
                     targetTy = call->GetTy();
                 }
                 CJC_NULLPTR_CHECK(targetTy);
-
                 // non copy non @~local type, needs a region
-                if ((targetTy.IsLocalType() && !type.ImplementsCopyInterface(targetTy.Ty())) ||
-                    (!type.ImplementsCopyInterface(targetTy.Ty()) && !targetTy.IsDataType())) {
+                if (IsNonCopyNonDataModalTy(targetTy)) {
                     needsRegion = true;
                     return VisitAction::STOP_NOW;
                 }
@@ -426,6 +469,9 @@ private:
     {
         if (auto ref = DynamicCast<RefExpr>(left)) {
             auto target = ref->GetTarget();
+            if (auto vd = DynamicCast<VarDecl>(target); vd && vd->HasAnno(AnnotationKind::DEMODE)) {
+                return LocalModal::NOT;
+            }
             if (target && target->IsMemberDecl()) {
                 // Implicit this access: use receiver (this param) type, same as GetThisArgTy.
                 if (auto fn = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(
@@ -448,6 +494,9 @@ private:
             return left->GetTy().IsLocalType() ? left->TyMode().local : LocalModal::NOT;
         }
         if (auto ma = DynamicCast<MemberAccess>(left)) {
+            if (auto vd = DynamicCast<VarDecl>(ma->GetTarget()); vd && vd->HasAnno(AnnotationKind::DEMODE)) {
+                return LocalModal::NOT;
+            }
             return ma->baseExpr->GetTy().IsLocalType() ? ma->baseExpr->TyMode().local : LocalModal::NOT;
         }
         // VArray member access
@@ -731,6 +780,10 @@ private:
     {
         auto body = GetFuncBody(func);
         Walker walker(body, [this, &ctx, &func](Node* node) {
+            if (node->astKind == ASTKind::LAMBDA_EXPR || node->astKind == ASTKind::FUNC_DECL) {
+                // skip nested fun
+                return VisitAction::SKIP_CHILDREN;
+            }
             if (auto re = DynamicCast<RefExpr>(node)) {
                 if (re->isThis || re->isSuper) {
                     if (auto localf = DynamicCast<FuncDecl>(&func); localf && Is<InheritableDecl>(localf->outerDecl)) {
@@ -1027,9 +1080,7 @@ private:
 
     DiagnosticEngine& d;
     TypeManager& type;
-    std::vector<FuncContext> funcStack;
-    Node* currentSpawnExpr = nullptr;       // Cache for tracking if we're inside a spawn block
-    Node* currentGlobalStaticVar = nullptr; // Cache for tracking if we're inside a global/static var initializer
+    Node* currentSpawnExpr{}; // Cache for tracking if we're inside a spawn block
 };
 
 ModalTypeChecker* TypeChecker::TypeCheckerImpl::NewModalTypeChecker()
@@ -1061,27 +1112,14 @@ void TypeChecker::TypeCheckerImpl::ExpectSubtypeOf(
     }
 }
 
-using namespace Sema;
 bool TypeChecker::TypeCheckerImpl::ChkExclaveExpr(ASTContext& ctx, ModalTy target, ExclaveExpr& expr)
 {
-    auto type = SynExclaveExpr(ctx, expr);
-    if (!Ty::IsTyCorrect(type)) {
-        return false;
-    }
-    // syn exclave either returns invalid, or returns Nothing, so subtype always holds
-    // but in our design, InvalidTy is not a subtype of anything, so we still need to check
-    if (!typeManager.IsSubtype(type, target)) {
-        DiagMismatchedTypes(diag, expr, target);
+    if (!ChkBlock(ctx, target, *expr.body)) {
         expr.SetTy({TypeManager::GetInvalidTy()});
         return false;
     }
+    expr.SetTy({TypeManager::GetNothingTy()});
     return true;
-}
-
-void TypeChecker::TypeCheckerImpl::DiagNestedExclave(const ExclaveExpr& expr, const AST::Node& outerNode)
-{
-    auto db = diag.DiagnoseRefactor(DiagKindRefactor::sema_nested_exclave, expr);
-    db.AddHint(MakeRange(outerNode.begin, outerNode.end));
 }
 
 void TypeChecker::TypeCheckerImpl::DiagExpectedDataType(const AST::Node& node)
@@ -1091,37 +1129,6 @@ void TypeChecker::TypeCheckerImpl::DiagExpectedDataType(const AST::Node& node)
 
 ModalTy TypeChecker::TypeCheckerImpl::SynExclaveExpr(ASTContext& ctx, ExclaveExpr& expr)
 {
-    // DiagExclaveOutsideFunc is only reported in ModalCheckExclaveInsideFunction.
-
-    // Check for nested exclave (prefer outer exclave expr over exclave-modified function as outer)
-    if (auto outerExclave = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, expr.scopeName,
-        [e = &expr](Symbol& sym) { return sym.node != e && sym.node->astKind == ASTKind::EXCLAVE_EXPR; })) {
-        DiagNestedExclave(expr, *outerExclave->node);
-        // but we can still synthesize the type, so do not return invalid ty here
-    } else if (auto outFun = ScopeManager::GetOutMostSymbol(ctx, SymbolKind::FUNC_LIKE, expr.scopeName)) {
-        if (auto fd = DynamicCast<FuncDecl>(outFun->node)) {
-            if (fd->IsMemberDecl() && TypeCheckUtil::HasModifier(fd->modifiers, TokenKind::EXCLAVE)) {
-                DiagNestedExclave(expr, *fd);
-            }
-        }
-    }
-
-    // Target from global/static var initializer (use var's type for last expr / exclave type)
-    VarDecl* gv = topLevelVar.get();
-    if (gv && gv->initializer) {
-        if (!gv->GetTy().IsCorrect() || gv->GetTy()->kind == TypeKind::TYPE_QUEST) {
-            SynBlock({ctx, SynPos::EXPR_ARG}, *expr.body);
-            expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
-            return expr.GetTy();
-        }
-        if (!ChkBlock(ctx, gv->GetTy(), *expr.body)) {
-            expr.SetTy({TypeManager::GetInvalidTy()});
-            return expr.GetTy();
-        }
-        expr.SetTy(ModalTy{TypeManager::GetNothingTy()});
-        return expr.GetTy();
-    }
-
     // Target from enclosing function return type
     auto fun = ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, expr.scopeName);
     if (fun && fun->node) {

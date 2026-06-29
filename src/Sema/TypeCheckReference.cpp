@@ -408,13 +408,13 @@ bool TypeChecker::TypeCheckerImpl::FilterAndCheckTargetsOfRef(
     bool hasTarget = ctx.HasTargetTy(&re) || re.isInFlowExpr;
     bool referenceNeedTypeInfer = !hasTarget && re.isAlone;
     if (referenceNeedTypeInfer) {
-        return FilterTargetsForFuncReference(re, targets);
+        return FilterTargetsForFuncReference(ctx, re, targets);
     }
     hasTarget = hasTarget || re.callOrPattern != nullptr;
     return !targets.empty() ? CheckForQuestFuncRetType(diag, *targets[0], re, hasTarget) : false;
 }
 
-bool TypeChecker::TypeCheckerImpl::FilterTargetsForFuncReference(const Expr& expr, std::vector<Ptr<Decl>>& targets)
+bool TypeChecker::TypeCheckerImpl::FilterTargetsForFuncReference(const ASTContext& ctx, const Expr& expr, std::vector<Ptr<Decl>>& targets)
 {
     auto typeArgs = expr.GetTypeArgs();
     // Reference without target type and used alone must be inferred.
@@ -427,6 +427,20 @@ bool TypeChecker::TypeCheckerImpl::FilterTargetsForFuncReference(const Expr& exp
         }
     }
 
+    std::vector<Ptr<Decl>> valid;
+    // drop func that has incompatible this type
+    for (auto target : targets) {
+        if (target->IsFunc() && !CheckThisTypeForFunRef(
+            ctx, *StaticCast<FuncDecl>(target), StaticCast<NameReferenceExpr>(expr))) {
+            continue;
+        }
+        valid.push_back(target);
+    }
+    std::swap(targets, valid);
+    if (targets.empty() && !valid.empty()) {
+        diag.Diagnose(expr, DiagKind::sema_no_match_function_declaration_for_ref, valid[0]->identifier.Val());
+        return false;
+    }
     // If this reference needs to be inferred and has multiple function targets, the target cannot be distinguished.
     if (targets.size() > 1 && IsAllFuncDecl(targets)) {
         DiagAmbiguousUse(diag, expr, targets.front()->identifier, targets, importManager);
@@ -531,7 +545,7 @@ bool TypeChecker::TypeCheckerImpl::FilterAndCheckTargetsOfNameAccess(
             diag.Diagnose(*ma.baseExpr, DiagKind::sema_generic_type_without_type_argument);
             return false;
         }
-        return FilterTargetsForFuncReference(ma, targets);
+        return FilterTargetsForFuncReference(ctx, ma, targets);
     }
     bool hasTarget = ctx.HasTargetTy(&ma) || ma.isInFlowExpr || ma.callOrPattern != nullptr;
     return !targets.empty() ? CheckForQuestFuncRetType(diag, *targets[0], ma, hasTarget) : false;
@@ -572,7 +586,7 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::FilterAndGetTargetsOfObjAccess(
         }
         auto accessibleDecls = GetAccessibleDecls(ctx, ma, targets);
         // If there are accessible decls, checking for function reference resovling.
-        if (!accessibleDecls.empty() && !FilterTargetsForFuncReference(ma, accessibleDecls)) {
+        if (!accessibleDecls.empty() && !FilterTargetsForFuncReference(ctx, ma, accessibleDecls)) {
             return nullptr;
         }
         return accessibleDecls.empty() ? targets[0] : accessibleDecls[0];
@@ -619,9 +633,9 @@ void TypeChecker::TypeCheckerImpl::InstantiateReferenceType(
         expr.SetTy({TypeManager::GetInvalidTy()});
     } else if (auto fd = DynamicCast<FuncDecl*>(target); fd) {
         DynamicBindingThisType(expr, *fd, typeMapping);
-    } else if (auto ma = DynamicCast<MemberAccess>(&expr);
-        ma && ma->baseExpr && ma->baseExpr->GetTy().IsCorrect() && Is<VarDecl>(ma->GetTarget()) &&
-        !Is<PropDecl>(ma->GetTarget())) {
+    } else if (auto ma = DynamicCast<MemberAccess>(&expr); ma && ma->baseExpr && ma->baseExpr->GetTy().IsCorrect() &&
+        Is<VarDecl>(ma->GetTarget()) && !Is<PropDecl>(ma->GetTarget()) &&
+        !ma->GetTarget()->HasAnno(AnnotationKind::DEMODE)) {
         expr.SetTy(expr.GetTy().With(ma->baseExpr->TyMode()));
     }
 }

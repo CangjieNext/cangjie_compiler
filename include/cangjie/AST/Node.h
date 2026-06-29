@@ -550,6 +550,7 @@ enum class AnnotationKind {
     FROZEN,
     ENSURE_PREPARED_TO_MOCK,
     NON_PRODUCT,
+    DEMODE,
     UNKNOWN
 };
 

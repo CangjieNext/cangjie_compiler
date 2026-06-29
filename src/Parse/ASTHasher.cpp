@@ -837,6 +837,7 @@ struct ASTHasherImpl {
             case AnnotationKind::ANNOTATION:
             case AnnotationKind::CUSTOM:
             case AnnotationKind::FROZEN:
+            case AnnotationKind::DEMODE:
                 return false;
             default:
                 CJC_ASSERT(false);
@@ -854,6 +855,7 @@ struct ASTHasherImpl {
             case AnnotationKind::CUSTOM:
             case AnnotationKind::DEPRECATED:
             case AnnotationKind::FROZEN:
+            case AnnotationKind::DEMODE:
                 return true;
             case AnnotationKind::C:
             case AnnotationKind::CALLING_CONV:

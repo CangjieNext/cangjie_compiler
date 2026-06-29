@@ -292,20 +292,24 @@ bool CompareThisParamTy(
     // ctor call has special rules for modal, because the modal can be deduced.
     // in case let c: C@local? = C(), @local? is better, if no @local? is found, the other modals are equally good.
     // in case let c: C = C(), only @~local is accepted.
-    // in case let c = C(), this means let c: C@~local = C(), so only @~local is accepted.
-    if ((ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) && target &&
-        !tyMgr.ImplementsCopyInterface(target.Ty())) {
-        ModalInfo refModal = target.Mode();
-        if (auto ceModal = GetCallBaseModal(ce)) {
-            refModal = *ceModal;
+    // in case let c = C(), any mode is accepted.
+    if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
+        if (!GetCallBaseModal(ce) && !Ty::IsTyCorrect(target)) {
+            return iThis.Mode() == jThis.Mode();
         }
-        if (iThis.Mode() == refModal && jThis.Mode() != refModal) {
-            return true;
+        if (target && !tyMgr.ImplementsCopyInterface(target.Ty())) {
+            ModalInfo refModal = target.Mode();
+            if (auto ceModal = GetCallBaseModal(ce)) {
+                refModal = *ceModal;
+            }
+            if (iThis.Mode() == refModal && jThis.Mode() != refModal) {
+                return true;
+            }
+            if (iThis.Mode() != refModal && jThis.Mode() == refModal) {
+                return false;
+            }
+            return iThis.Mode() == jThis.Mode();
         }
-        if (iThis.Mode() != refModal && jThis.Mode() == refModal) {
-            return false;
-        }
-        return iThis.Mode() == jThis.Mode();
     }
     auto r = iThis.Mode().IsSubModal(jThis.Mode());
     return r;
@@ -1361,23 +1365,30 @@ ModalTy TypeChecker::TypeCheckerImpl::GetThisArgTy(const ASTContext& ctx, const 
         return TypeCheckUtil::GetRealTarget(ce.baseFunc->GetTarget())->GetTy();
     }
     if (auto ref = DynamicCast<RefExpr>(&*ce.baseFunc)) {
-        // get outer func ty (must be instance method so GetThisParamTy is valid)
-        if (auto fn = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, ref->scopeName, [](const Symbol& sym) {
-            auto node = sym.node;
-            if (auto func = DynamicCast<FuncDecl>(node)) {
-                return Is<InheritableDecl>(func->outerDecl) && !func->TestAttr(Attribute::STATIC);
-            }
-            return false;
-        })) {
-            auto fd = StaticCast<FuncDecl>(fn->node);
-            return typeManager.GetThisParamTy(*fd);
-        }
-        // not inside func, then inside member var init, use type @~local
-        if (auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, ref->scopeName)) {
-            return sym->node->GetTy();
-        }
+        return GetThisParamTyInScope(ctx, ref->scopeName);
     }
     CJC_ABORT_WITH_MSG("call not a member access or ref expr");
+    return {};
+}
+
+AST::ModalTy TypeChecker::TypeCheckerImpl::GetThisParamTyInScope(const ASTContext& ctx, const std::string& scopeName)
+{
+    // get outer func ty (must be instance method so GetThisParamTy is valid)
+    if (auto fn = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, scopeName, [](const Symbol& sym) {
+        auto node = sym.node;
+        if (auto func = DynamicCast<FuncDecl>(node)) {
+            return Is<InheritableDecl>(func->outerDecl) && !func->TestAttr(Attribute::STATIC);
+        }
+        return false;
+    })) {
+        auto fd = StaticCast<FuncDecl>(fn->node);
+        return typeManager.GetThisParamTy(*fd);
+    }
+    // not inside func, then inside member var init, use type @~local
+    if (auto sym = ScopeManager::GetCurSymbolByKind(SymbolKind::STRUCT, ctx, scopeName)) {
+        return sym->node->GetTy();
+    }
+    CJC_ABORT_WITH_MSG("no this param found in scope");
     return {};
 }
 
@@ -1644,12 +1655,9 @@ OwnedPtr<FunctionMatchingUnit> TypeChecker::TypeCheckerImpl::CheckCandidate(
         }
         // a created object can be converted to any modal
         ModalMatchMode modalMode;
-        if (typeManager.ImplementsCopyInterface(instRet.Ty())) { // copy type can always use any mode
-            modalMode = ModalMatchMode::IGNORE;
-        } else if (auto ceModal = GetCallBaseModal(candidate.ce)) {
+        if (auto ceModal = GetCallBaseModal(candidate.ce)) {
             // let c: C @local! = C @local!() — exact; let c: C @local? = C @local!() — @local! <: @local?
-            modalMode =
-                targetRet.Mode() == *ceModal ? ModalMatchMode::EXACT : ModalMatchMode::SUBTYPE;
+            modalMode = targetRet.Mode() == *ceModal ? ModalMatchMode::EXACT : ModalMatchMode::SUBTYPE;
         } else {
             modalMode = ModalMatchMode::SUBTYPE;
         }
@@ -1661,13 +1669,15 @@ OwnedPtr<FunctionMatchingUnit> TypeChecker::TypeCheckerImpl::CheckCandidate(
             return nullptr;
         }
     } else if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
-        // ctor call without target, use the modal used in CallExpr
-        auto modal = GetCallBaseModal(candidate.ce).value_or(ModalInfo{});
-        auto thisParamTy = typeManager.GetThisParamTy(fd);
-        if (thisParamTy.Mode() != modal && !typeManager.ImplementsCopyInterface(thisParamTy.Ty())) {
-            DiagSemaMismatchedTypes(diag, ce, thisParamTy->String(), thisParamTy.With(modal)->String());
-            return nullptr;
+        // no target type, let c = C @local!(), use exact mode
+        if (auto ceModal = GetCallBaseModal(candidate.ce)) {
+            auto thisParamTy = typeManager.GetThisParamTy(fd);
+            if (thisParamTy.Mode() != *ceModal && !typeManager.ImplementsCopyInterface(thisParamTy.Ty())) {
+                DiagSemaMismatchedTypes(diag, ce, thisParamTy->String(), thisParamTy.With(*ceModal)->String());
+                return nullptr;
+            }
         }
+        // otherwise it is let c = C(), any mode is accepted, no filter required here.
     }
     return candidate.stat.argNameValid ? MakeOwned<FunctionMatchingUnit>(fd, paramTyInArgOrder, typeMapping) : nullptr;
 }
@@ -2245,9 +2255,11 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::MatchFunctionForCall(
                 FilterSumUpperbound(*ma, *RawStaticCast<GenericsTy*>(ma->baseExpr->DataTy()), *ret[0]);
             }
         }
-        // For ctor calls, widen @~local result to the context target (e.g. let c: C @local? = C()).
-        // Do not rewrite an already-local result (e.g. init @local!); assignment uses modal subtyping.
-        if (Ty::IsTyCorrect(ce.GetTy()) && Ty::IsTyCorrect(target) && ce.callKind == CallKind::CALL_OBJECT_CREATION &&
+        // After a class ctor match, infer the call's modal from the contextual target type when the call site
+        // does not specify one (e.g. let c: C@local? = C() gives C() the @local? modal). Skip when the call
+        // already carries an explicit modal (e.g. C @local!()).
+        if (Ty::IsTyCorrect(ce.GetTy()) && Ty::IsTyCorrect(target) &&
+            (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) &&
             !ce.GetTy().IsLocalType()) {
             ce.SetTy(ce.GetTy().With(target.Mode()));
         }
@@ -3442,9 +3454,11 @@ void TypeChecker::TypeCheckerImpl::SpreadInstantiationTy(Node& node, const Subst
     Walker walkerExpr(&node, [this, &typeMapping](Ptr<Node> n) -> VisitAction {
         if (n->GetTy().IsCorrect()) {
             n->SetTy(typeManager.ApplySubstPack(n->GetTy(), typeMapping));
-            if (auto* ma = DynamicCast<MemberAccess>(n.get());
-                ma && ma->baseExpr && ma->baseExpr->GetTy().IsCorrect()) {
-                n->SetTy(n->GetTy().With(ma->baseExpr->TyMode()));
+            if (auto ma = DynamicCast<MemberAccess>(n.get()); ma && ma->baseExpr && ma->baseExpr->GetTy().IsCorrect()) {
+                auto target = DynamicCast<VarDecl>(ma->GetTarget());
+                if (!target || !target->HasAnno(AnnotationKind::DEMODE)) {
+                    n->SetTy(n->GetTy().With(ma->baseExpr->TyMode()));
+                }
             }
             return VisitAction::WALK_CHILDREN;
         }

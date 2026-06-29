@@ -17,6 +17,7 @@
 
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
+#include "cangjie/AST/Node.h"
 #include "cangjie/Basic/Match.h"
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Macro/TestEntryConstructor.h"
@@ -368,6 +369,31 @@ void TypeChecker::TypeCheckerImpl::DiagMemberAccessNotFound(const MemberAccess& 
     }
 }
 
+bool TypeChecker::TypeCheckerImpl::CheckThisTypeForFunRef(
+    const ASTContext& ctx, const FuncDecl& fd, const NameReferenceExpr& refNode)
+{
+    if (!typeManager.HasThisParam(fd)) {
+        return true;
+    }
+    auto fdThisTy = typeManager.GetThisParamTy(fd);
+    // check for modal compatibility, because can only access a member func with compatible modal
+    if (auto re = DynamicCast<RefExpr>(&refNode)) {
+        if (Is<BuiltInDecl>(fd.outerDecl) || Is<InheritableDecl>(fd.outerDecl)) {
+            // implicit this. access
+            auto thisMode = GetThisParamTyInScope(ctx, re->scopeName);
+            if (!typeManager.IsSubtype(thisMode, fdThisTy)) {
+                return false;
+            }
+        }
+    }
+    if (auto ma = DynamicCast<MemberAccess>(&refNode)) {
+        if (!typeManager.IsSubtype(ma->baseExpr->GetTy(), fdThisTy)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool TypeChecker::TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, ModalTy target, NameReferenceExpr& refNode)
 {
     Synthesize({ctx, SynPos::EXPR_ARG}, &refNode);
@@ -387,8 +413,9 @@ bool TypeChecker::TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, ModalTy target, N
     Ptr<FuncDecl> matchedFd = nullptr;
     ModalTy validCandidateTy{};
     for (auto [fd, fdTy, mapping] : candidates) {
-        if (!typeManager.IsSubtype(fdTy, target)) {
-            if (!validCandidateTy && Ty::IsTyCorrect(fdTy) && !StaticCast<FuncTy*>(fdTy.Ty())->retTy->IsQuest()) {
+        bool isSubtype = typeManager.IsSubtype(fdTy, target) && CheckThisTypeForFunRef(ctx, *fd, refNode);
+        if (!isSubtype) {
+            if (!validCandidateTy && Ty::IsTyCorrect(fdTy) && !StaticCast<FuncTy>(fdTy.Ty())->retTy->IsQuest()) {
                 validCandidateTy = fdTy;
             }
             continue;
@@ -537,8 +564,8 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
     if (!decl->IsFunc() || re.isAlone) {
         // Only check non-function or non-call target. Functions will be check after function overload resolution.
         InstantiateReferenceType(ctx, re);
-        // Member var (implicit this access): use current this modal.
-        if (decl->astKind == ASTKind::VAR_DECL && decl->IsMemberDecl() &&
+        // Member var (implicit this access): use current this modal if not demode.
+        if (decl->astKind == ASTKind::VAR_DECL && decl->IsMemberDecl() && !decl->HasAnno(AnnotationKind::DEMODE) &&
             !decl->TestAnyAttr(Attribute::STATIC, Attribute::ENUM_CONSTRUCTOR)) {
             re.SetTy(re.GetTy().With(GetCurThisModal(ctx, re.scopeName)));
         }
@@ -681,9 +708,11 @@ void TypeChecker::TypeCheckerImpl::InferMemberAccess(ASTContext& ctx, MemberAcce
             ma.SetTy(typeManager.SubstituteTypeAliasInTy(ma.target->GetTy()));
         }
     } else if (Is<VarDecl>(ma.GetTarget())) {
-        // unless there is modality on the member.
+        // use baseExpr ty unless demode.
         ma.SetTy(typeManager.SubstituteTypeAliasInTy(ma.target->GetTy()));
-        ma.SetTy(ma.GetTy().With(ma.baseExpr->TyMode()));
+        if (!ma.GetTarget()->HasAnno(AnnotationKind::DEMODE)) {
+            ma.SetTy(ma.GetTy().With(ma.baseExpr->TyMode()));
+        }
     } else {
         ma.SetTy(typeManager.SubstituteTypeAliasInTy(ma.target->GetTy()));
     }

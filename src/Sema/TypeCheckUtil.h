@@ -19,6 +19,8 @@
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
 
+#include <unordered_set>
+
 namespace Cangjie::TypeCheckUtil {
 // The comparison result of two types.
 // If left < right, return LT.

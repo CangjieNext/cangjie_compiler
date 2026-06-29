@@ -991,6 +991,10 @@ private:
      */
     AST::ModalTy GetThisArgTy(const ASTContext& ctx, const AST::CallExpr& ce);
     /**
+     * Get the type of this in the given scope.
+     */
+    AST::ModalTy GetThisParamTyInScope(const ASTContext& ctx, const std::string& scopeName);
+    /**
      * When the candidate is a generic function, or function is a member of generic class/interface/struct...,
      * we should use this function to do compatibility check. First we will build a unordered map to represent
      * the mapping of generic types. Then we check the compatibility. Pay attention to checking generic constraints.
@@ -1192,7 +1196,7 @@ private:
      * @param expr [in] reference expression which target type is not given.
      * @param targets [in/out]
      */
-    bool FilterTargetsForFuncReference(const AST::Expr& expr, std::vector<Ptr<AST::Decl>>& targets);
+    bool FilterTargetsForFuncReference(const ASTContext& ctx, const AST::Expr& expr, std::vector<Ptr<AST::Decl>>& targets);
     bool IsLegalAccessFromStaticFunc(const ASTContext& ctx, const AST::RefExpr& re, const AST::Decl& decl);
     /** Filter targets of reference @p re . */
     void FilterCandidatesForRef(const ASTContext& ctx, const AST::RefExpr& re, std::vector<Ptr<AST::Decl>>& targets);
@@ -1212,6 +1216,11 @@ private:
     void CheckImmutableFuncAccessMutableFunc(
         const Position& pos, const AST::Node& srcNode, const AST::Decl& destNode, bool isLeftStructValue) const;
     void CheckForbiddenFuncReferenceAccess(const Position& pos, const AST::FuncDecl& fd, const AST::Decl& decl) const;
+    /**
+     * During non-call function-reference overload resolution, reject a candidate whose `this` modal is
+     * incompatible with the receiver
+     */
+    bool CheckThisTypeForFunRef(const ASTContext& ctx, const AST::FuncDecl& fd, const AST::NameReferenceExpr& refNode);
     /**
      * Check whether given node can match target type. refNode can be RefExpr or MemberAccess.
      */
@@ -1762,7 +1771,6 @@ private:
     void CheckModalType(const ASTContext& ctx, AST::Package& pkg);
     bool ChkExclaveExpr(ASTContext& ctx, AST::ModalTy target, AST::ExclaveExpr& expr);
     AST::ModalTy SynExclaveExpr(ASTContext& ctx, AST::ExclaveExpr& expr);
-    void DiagNestedExclave(const AST::ExclaveExpr& expr, const AST::Node& outerNode);
     /// Report an error if \ref expect is not a subtype (possibly via modaling) to \ref actual.
     void ExpectSubtypeOf(Ptr<AST::Node> node, AST::ModalTy expect, AST::ModalTy actual, ModalMatchMode modal);
     bool IsExternalLocal(const ASTContext& ctx, const AST::Expr& expr);
@@ -1818,9 +1826,6 @@ private:
      * Needed for Java, Objective C interop Synthetic class wrappers generation.
      */
     std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap> structMemberMap;
-    // top level (global/static) var that is begin checked
-    // set in TypeChecker::TypeCheckerImpl::CheckVarDecl, used in TypeChecker::TypeCheckerImpl::SynExclaveExpr
-    Ptr<AST::VarDecl> topLevelVar{};
 };
 } // namespace Cangjie
 #endif

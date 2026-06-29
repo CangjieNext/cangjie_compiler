@@ -24,6 +24,13 @@
 
 using namespace Cangjie::CHIR;
 
+namespace {
+ModalInfo GetInstanceMemberVarAccessModal(const MemberVarInfo& member, ModalInfo receiverModal)
+{
+    return member.TestAttr(Attribute::DEMODE) ? ModalInfo{} : receiverModal;
+}
+} // namespace
+
 Type::Type(TypeKind kind, ModalInfo modal) : kind(kind), modal(modal)
 {
     for (auto ty : argTys) {
@@ -458,14 +465,13 @@ std::pair<Type*, bool> CustomType::GetInstMemberTypeByPathCheckingReadOnly(
 #endif
     }
     auto customTypeDef = GetCustomTypeDef();
-    std::unordered_map<const GenericType*, Type*> instMap;
-    GetInstMap(instMap, builder);
     auto currentIdx = path.front();
     auto member = customTypeDef->GetAllInstanceVars()[currentIdx];
     // if one member is readonly in path, the result is readonly
     bool isReadOnly = member.TestAttr(Attribute::READONLY);
-    auto memberTy = ReplaceRawGenericArgType(*member.type, instMap, builder);
-    memberTy = builder.WithModal(memberTy, GetModalInfo());
+    auto memberTys = const_cast<CustomType*>(this)->GetInstantiatedMemberTys(builder);
+    CJC_ASSERT(currentIdx < memberTys.size());
+    auto memberTy = memberTys[currentIdx];
     if (path.size() > 1) {
         auto pureMemberTy = memberTy;
         while (pureMemberTy->IsRef()) {
@@ -503,7 +509,12 @@ std::vector<Type*> CustomType::CalculateCurDefInstantiatedMemberTys(CHIRBuilder&
 
     std::vector<Type*> ret;
     for (auto& var : def->GetDirectInstanceVars()) {
-        ret.emplace_back(ReplaceRawGenericArgType(*var.type, replaceTable, builder));
+        auto memberTy = ReplaceRawGenericArgType(*var.type, replaceTable, builder);
+        if (auto accessModal = GetInstanceMemberVarAccessModal(var, GetModalInfo());
+            accessModal.Local() != LocalModal::NONE) {
+            memberTy = builder.WithModal(memberTy, accessModal);
+        }
+        ret.emplace_back(memberTy);
     }
     return ret;
 }
@@ -512,7 +523,11 @@ std::vector<Type*> CustomType::GetInstantiatedMemberTys(CHIRBuilder& builder)
 {
     std::vector<Type*> ret;
     if (auto classTy = DynamicCast<ClassType*>(this); classTy && classTy->GetSuperClassTy(&builder) != nullptr) {
-        ret = classTy->GetSuperClassTy(&builder)->GetInstantiatedMemberTys(builder);
+        auto superTy = classTy->GetSuperClassTy(&builder);
+        if (IsModal()) {
+            superTy = StaticCast<ClassType*>(builder.WithModal(superTy, GetModalInfo()));
+        }
+        ret = superTy->GetInstantiatedMemberTys(builder);
     }
 
     std::unique_lock<std::mutex> lock(setInstMemberTyMtx);
@@ -1299,6 +1314,7 @@ namespace Cangjie::CHIR {
 Type* GetFieldOfType(Type& baseTy, uint64_t index, CHIRBuilder& builder)
 {
     Type* type = nullptr;
+    bool memberTyHasAccessModal = false;
     if (baseTy.IsRef()) {
         type = GetFieldOfType(*StaticCast<RefType&>(baseTy).GetBaseType(), index, builder);
     } else if (baseTy.IsTuple()) {
@@ -1311,12 +1327,14 @@ Type* GetFieldOfType(Type& baseTy, uint64_t index, CHIRBuilder& builder)
         auto memberTys = structTy.GetInstantiatedMemberTys(builder);
         if (index < memberTys.size()) {
             type = memberTys[index];
+            memberTyHasAccessModal = true;
         }
     } else if (baseTy.IsClass()) {
         auto& classTy = StaticCast<ClassType&>(baseTy);
         auto memberTys = classTy.GetInstantiatedMemberTys(builder);
         if (index < memberTys.size()) {
             type = memberTys[index];
+            memberTyHasAccessModal = true;
         }
     } else if (baseTy.IsEnum()) {
         if (index == 0) {
@@ -1329,7 +1347,7 @@ Type* GetFieldOfType(Type& baseTy, uint64_t index, CHIRBuilder& builder)
     } else if (baseTy.IsRawArray()) {
         type = StaticCast<RawArrayType&>(baseTy).GetElementType();
     }
-    if (baseTy.IsModal() && type != nullptr) {
+    if (!memberTyHasAccessModal && baseTy.IsModal() && type != nullptr) {
         type = builder.WithModal(type, baseTy.GetModalInfo());
     }
     return type;

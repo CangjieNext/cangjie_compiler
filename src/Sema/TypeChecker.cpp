@@ -2767,8 +2767,8 @@ ModalTy TypeChecker::TypeCheckerImpl::CalcFuncRetTyFromBody(const FuncBody& fb)
                 retTys.emplace(re->expr->GetTy());
             }
         } else if (auto exclave = DynamicCast<ExclaveExpr>(node)) {
-            if (auto exclaveBodyTy = DynamicCast<FuncTy>(exclave->body->DataTy())) {
-                retTys.emplace(exclaveBodyTy->retTy);
+            if (exclave->body->GetTy().IsCorrect()) {
+                retTys.emplace(exclave->body->GetTy());
             }
         }
         return VisitAction::WALK_CHILDREN;

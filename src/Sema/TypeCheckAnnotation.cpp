@@ -187,7 +187,8 @@ void TypeChecker::TypeCheckerImpl::CheckAnnotations(ASTContext& ctx, Decl& decl)
             case AnnotationKind::C:
             case AnnotationKind::CALLING_CONV:
             case AnnotationKind::FASTNATIVE:
-            case AnnotationKind::FROZEN: {
+            case AnnotationKind::FROZEN:
+            case AnnotationKind::DEMODE: {
                 break;
             }
             case AnnotationKind::JAVA_HAS_DEFAULT: {
