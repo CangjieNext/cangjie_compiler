@@ -13,8 +13,8 @@
 #include "MPTypeCheckerImpl.h"
 
 #include "../Sema/InheritanceChecker/StructInheritanceChecker.h"
-#include "Collector.h"
 #include "Diags.h"
+#include "SymbolTable/Collector.cpp"
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Node.h"

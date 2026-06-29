@@ -15,7 +15,7 @@
 
 #include <unordered_set>
 
-#include "ScopeManager.h"
+#include "SymbolTable/ScopeManager.h"
 #include "cangjie/AST/Cache.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"

@@ -14,7 +14,7 @@
 
 #include "Desugar/DesugarInTypeCheck.h"
 #include "Diags.h"
-#include "ScopeManager.h"
+#include "SymbolTable/ScopeManager.h"
 #include "TypeCheckUtil.h"
 
 #include "cangjie/AST/ASTContext.h"

@@ -11,7 +11,7 @@
 #ifndef CANGJIE_SEMA_MPTYPECHECKER_IMPL_H
 #define CANGJIE_SEMA_MPTYPECHECKER_IMPL_H
 
-#include "ScopeManager.h"
+#include "SymbolTable/ScopeManager.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
