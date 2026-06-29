@@ -744,19 +744,24 @@ std::set<Ptr<InterfaceTy>> CollectCommonSuperInterfaces(
     return commonDecl.GetSuperInterfaceTys();
 }
 
+bool HasMatchingInterface(const Ptr<InterfaceTy>& target,
+    const std::set<Ptr<InterfaceTy>>& candidates, TypeManager& typeManager)
+{
+    for (auto& candidate : candidates) {
+        if (typeManager.IsTyEqual(target, candidate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Match common super interfaces against specific super interfaces.
 bool MatchInterfaceSets(const std::set<Ptr<InterfaceTy>>& comSupInters,
     const std::set<Ptr<InterfaceTy>>& platSupInters, const InheritableDecl& specificDecl,
     DiagnosticEngine& diag, TypeManager& typeManager)
 {
     for (auto& comSupInter : comSupInters) {
-        bool match = false;
-        for (auto& platSupInter : platSupInters) {
-            if (typeManager.IsTyEqual(comSupInter, platSupInter)) {
-                match = true;
-                break;
-            }
-        }
-        if (!match) {
+        if (!HasMatchingInterface(comSupInter, platSupInters, typeManager)) {
             DiagNotMatchedSuperType(diag, specificDecl);
             return false;
         }

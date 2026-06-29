@@ -1028,6 +1028,19 @@ void JavaSourceCodeGenerator::CollectFuncDeclsFromMembers(
     }
 }
 
+bool JavaSourceCodeGenerator::HasValidFuncParams(const FuncDecl& funcDecl) const
+{
+    if (funcDecl.funcBody->paramLists.empty() || !funcDecl.funcBody->paramLists[0]) {
+        return true;
+    }
+    for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
+        if (!param || !param->type || !Ty::IsTyCorrect(param->type->GetTy())) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void JavaSourceCodeGenerator::AddMethods()
 {
     bool hasHashcodeMethod = false;
@@ -1044,34 +1057,25 @@ void JavaSourceCodeGenerator::AddMethods()
             continue;
         }
         const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(fdecl);
-        // Hidden interopCJ configure unexposed symbol.
         if (isInteropCJPackageConfig && funcDecl.symbol && !funcDecl.symbol->isNeedExposedToInterop) {
             continue;
         }
         if (!IsVisibalFunc(funcDecl, *decl, genericConfig)) {
             continue;
         }
-        if (funcDecl.funcBody && funcDecl.funcBody->retType && Ty::IsTyCorrect(funcDecl.funcBody->retType->GetTy())) {
-            bool hasValidParams = true;
-            if (!funcDecl.funcBody->paramLists.empty() && funcDecl.funcBody->paramLists[0]) {
-                for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
-                    if (!param || !param->type || !Ty::IsTyCorrect(param->type->GetTy())) {
-                        hasValidParams = false;
-                        break;
-                    }
-                }
-            }
-            if (hasValidParams) {
-                if (funcDecl.TestAttr(Attribute::STATIC)) {
-                    AddStaticMethod(funcDecl);
-                } else {
-                    AddInstanceMethod(funcDecl);
-                }
-                hasHashcodeMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_HASHCODE_METHOD_NAME;
-                hasEqualsMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_EQUALS_METHOD_NAME;
-                hasToStringMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_TOSTRING_METHOD_NAME;
-            }
+        if (!funcDecl.funcBody || !funcDecl.funcBody->retType ||
+            !Ty::IsTyCorrect(funcDecl.funcBody->retType->GetTy()) ||
+            !HasValidFuncParams(funcDecl)) {
+            continue;
         }
+        if (funcDecl.TestAttr(Attribute::STATIC)) {
+            AddStaticMethod(funcDecl);
+        } else {
+            AddInstanceMethod(funcDecl);
+        }
+        hasHashcodeMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_HASHCODE_METHOD_NAME;
+        hasEqualsMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_EQUALS_METHOD_NAME;
+        hasToStringMethod = GetJavaMemberName(funcDecl) == JAVA_OBJECT_TOSTRING_METHOD_NAME;
     }
     AddEqualOrIdentityMethod(hasHashcodeMethod, hasEqualsMethod, hasToStringMethod);
 }

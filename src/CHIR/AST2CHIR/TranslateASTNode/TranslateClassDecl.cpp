@@ -389,7 +389,7 @@ bool Translator::FindMatchingSetterInClass(ClassDef& classDef, const AST::FuncDe
     for (auto method : classDef.GetMethods()) {
         if (method->GetFuncKind() != FuncKind::SETTER || !decl.isSetter) continue;
         auto params = method->GetParams();
-        if (params.size() < 2) continue;
+        if (params.size() < 2) continue; // setter needs instance + value params
         auto methodParamTy = params[1]->GetType();
         if (methodParamTy && declParamTy && *methodParamTy == *declParamTy) {
             return true;

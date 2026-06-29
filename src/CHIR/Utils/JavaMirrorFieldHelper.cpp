@@ -52,7 +52,7 @@ Function* FindSetterForField(const ClassDef& def, const MemberVarInfo& field, At
             continue;
         }
         auto params = method->GetParams();
-        if (params.size() < 2) {
+        if (params.size() < 2) { // setter needs instance + value params
             continue;
         }
         auto paramType = params[1]->GetType();
@@ -142,7 +142,7 @@ Function* FindInstanceSetterByName(const ClassDef& def, const std::string& field
             continue;
         }
         auto methodParams = method->GetParams();
-        if (methodParams.size() < 2) {
+        if (methodParams.size() < 2) { // setter needs instance + value params
             continue;
         }
         auto methodSrcCodeId = method->GetSrcCodeIdentifier();
