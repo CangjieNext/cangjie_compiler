@@ -520,6 +520,22 @@ std::string Expression::AddExtraComment() const
     return "";
 }
 
+bool Expression::IsInBlockGroupRecursively(const BlockGroup& target) const
+{
+    auto blockGroup = GetParentBlockGroup();
+    while (blockGroup != nullptr) {
+        if (blockGroup == &target) {
+            return true;
+        }
+        if (auto ownerFunc = blockGroup->GetOwnerFunc()) {
+            return false;
+        } else if (auto ownerExpression = blockGroup->GetOwnerExpression()) {
+            blockGroup = ownerExpression->GetParentBlockGroup();
+        }
+    }
+    return false;
+}
+
 Value* UnaryExpression::GetOperand() const
 {
     return GetOperand(0);
@@ -1559,7 +1575,7 @@ std::vector<Value*> Lambda::GetCapturedVariables() const
             bool isEnv = false;
             if (op->IsLocalVar()) {
                 auto localVar = static_cast<LocalVar*>(op);
-                if (localVar != GetResult() && localVar->GetOwnerBlockGroup() != GetBody()) {
+                if (localVar != GetResult() && !localVar->GetExpr()->IsInBlockGroupRecursively(*GetBody())) {
                     isEnv = true;
                 }
             } else if (op->IsParameter()) {

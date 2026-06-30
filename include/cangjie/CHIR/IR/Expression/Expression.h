@@ -201,6 +201,8 @@ public:
      */
     Function* GetTopLevelFunc() const;
 
+    bool IsInBlockGroupRecursively(const BlockGroup& target) const;
+
     // ===--------------------------------------------------------------------===//
     // Operand
     // ===--------------------------------------------------------------------===//
