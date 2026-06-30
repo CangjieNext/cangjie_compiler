@@ -49,9 +49,6 @@ void Darwin_CJNATIVE::GenerateLinkOptionsForLTO(Tool& tool) const
     if (driverOptions.IsFullLTOEnabled()) {
         tool.AppendArg("-mllvm");
         tool.AppendArg("-cangjie-full-lto");
-    } else {
-        tool.AppendArg("-cache_path_lto");
-        tool.AppendArg(driverOptions.compilationCachedPath);
     }
     if (GetEffectiveOptimizationLevel(driverOptions) == GlobalOptions::OptimizationLevel::O2) {
         tool.AppendArg("-mllvm");
@@ -157,6 +154,10 @@ TempFileInfo Darwin_CJNATIVE::GenerateLinkingTool(const std::vector<TempFileInfo
     if (driverOptions.IsLTOEnabled()) {
         tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
         GenerateLinkOptionsForLTO(*tool);
+        if (!driverOptions.IsFullLTOEnabled()) {
+            tool->AppendArg("-cache_path_lto");
+            tool->AppendArg(driverOptions.compilationCachedPath);
+        }
     }
     tool->AppendArgIf(driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB, "-dylib");
     tool->AppendArg("-arch", GetTargetArchString());
