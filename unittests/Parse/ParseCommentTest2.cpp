@@ -11,7 +11,7 @@
  */
 #include "gtest/gtest.h"
 
-#include "TestCompilerInstance.h"
+#include "ParseTestBase.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Parse/Parser.h"
 #include "cangjie/Utils/CastingTemplate.h"
@@ -19,46 +19,15 @@
 using namespace Cangjie;
 using namespace AST;
 
-class ParseCommentTest : public testing::Test {
+class ParseCommentTest : public ParseTestBase {
 protected:
     void SetUp() override
     {
-#ifdef _WIN32
-        srcPath = projectPath + "\\unittests\\Parse\\ParseCangjieFiles\\";
-#else
-        srcPath = projectPath + "/unittests/Parse/ParseCangjieFiles/";
-#endif
-#ifdef __x86_64__
-        invocation.globalOptions.target.arch = Cangjie::Triple::ArchType::X86_64;
-#else
-        invocation.globalOptions.target.arch = Cangjie::Triple::ArchType::AARCH64;
-#endif
-#ifdef _WIN32
-        invocation.globalOptions.target.os = Cangjie::Triple::OSType::WINDOWS;
-        invocation.globalOptions.executablePath = projectPath + "\\output\\bin\\";
-#elif defined(__unix__)
-        invocation.globalOptions.target.os = Cangjie::Triple::OSType::LINUX;
-        invocation.globalOptions.executablePath = projectPath + "/output/bin/";
-#endif
-        invocation.globalOptions.importPaths = {definePath};
+        ParseTestBase::SetUp();
         diag.SetSourceManager(&sm);
     }
 
-#ifdef PROJECT_SOURCE_DIR
-    // Gets the absolute path of the project from the compile parameter.
-    std::string projectPath = PROJECT_SOURCE_DIR;
-#else
-    // Just in case, give it a default value.
-    // Assume the initial is in the build directory.
-    std::string projectPath = "..";
-#endif
-    std::string srcPath;
-    std::string definePath;
-    DiagnosticEngine diag;
-    SourceManager sm;
     std::string code;
-    CompilerInvocation invocation;
-    std::unique_ptr<TestCompilerInstance> instance;
 };
 
 TEST_F(ParseCommentTest, MacroExpandDecl)

@@ -13,11 +13,15 @@
 #ifndef CANGJIE_FRONTEND_TESTCOMPILERINSTANCE_H
 #define CANGJIE_FRONTEND_TESTCOMPILERINSTANCE_H
 
+#include <unordered_map>
+
 #include "cangjie/Frontend/CompilerInstance.h"
 #include "cangjie/Modules/PackageManager.h"
 #include "cangjie/Sema/TypeManager.h"
 
 namespace Cangjie {
+std::unordered_map<std::string, std::string> GetEnvironmentVars();
+
 class TestCompilerInstance : public CompilerInstance {
 public:
     TestCompilerInstance(CompilerInvocation& invocation, DiagnosticEngine& diag) : CompilerInstance(invocation, diag)

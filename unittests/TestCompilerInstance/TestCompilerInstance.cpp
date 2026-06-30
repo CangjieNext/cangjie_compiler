@@ -12,11 +12,38 @@
 
 #include "TestCompilerInstance.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "cangjie/IncrementalCompilation/ASTCacheCalculator.h"
 #include "cangjie/Parse/Parser.h"
 
 using namespace Cangjie;
 using namespace AST;
+
+std::unordered_map<std::string, std::string> Cangjie::GetEnvironmentVars()
+{
+    std::unordered_map<std::string, std::string> envVars;
+#ifdef _WIN32
+    char **env = _environ;
+#else
+    char **env = environ;
+#endif
+    while (env && *env) {
+        std::string entry(*env);
+        size_t pos = entry.find('=');
+        if (pos != std::string::npos) {
+            std::string key = entry.substr(0, pos);
+            std::string value = entry.substr(pos + 1);
+            envVars[key] = value;
+        }
+        ++env;
+    }
+    return envVars;
+}
 
 namespace {
 RawMangled2DeclMap RunASTCacheCalculation(const Package& sourcePackage, const GlobalOptions op)

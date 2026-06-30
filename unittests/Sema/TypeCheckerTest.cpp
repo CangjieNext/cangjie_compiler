@@ -4,143 +4,20 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-#include <cstdlib>
 #include <string>
 #include <unordered_map>
 #include <vector>
 #include "gtest/gtest.h"
-#include "TestCompilerInstance.h"
+#include "SemaTestBase.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/PrintNode.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Match.h"
 
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
-
 using namespace Cangjie;
 using namespace AST;
 
-namespace {
-std::unordered_map<std::string, std::string> GetEnvironmentVars()
-{
-    std::unordered_map<std::string, std::string> envVars;
-#ifdef _WIN32
-    char **env = _environ;
-#else
-    char **env = environ;
-#endif
-    while (env && *env) {
-        std::string entry(*env);
-        size_t pos = entry.find('=');
-        if (pos != std::string::npos) {
-            std::string key = entry.substr(0, pos);
-            std::string value = entry.substr(pos + 1);
-            envVars[key] = value;
-        }
-        ++env;
-    }
-    return envVars;
-}
-}
-
-class TypeCheckerTest : public testing::Test {
-protected:
-    void SetUp() override
-    {
-        instance = std::make_unique<TestCompilerInstance>(invocation, diag);
-#ifdef PROJECT_SOURCE_DIR
-        // Gets the absolute path of the project from the compile parameter.
-        projectPath = PROJECT_SOURCE_DIR;
-#else
-        // Just in case, give it a default value.
-        // Assume the initial is in the build directory.
-        projectPath = "..";
-#endif
-#ifdef __x86_64__
-        instance->invocation.globalOptions.target.arch = Cangjie::Triple::ArchType::X86_64;
-#else
-        instance->invocation.globalOptions.target.arch = Cangjie::Triple::ArchType::AARCH64;
-#endif
-#ifdef _WIN32
-        instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::WINDOWS;
-        invocation.globalOptions.executablePath = projectPath + "\\output\\bin\\";
-#elif defined(__APPLE__)
-        instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::DARWIN;
-        invocation.globalOptions.executablePath = projectPath + "/output/bin/";
-#elif defined(__unix__)
-        instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::LINUX;
-        invocation.globalOptions.executablePath = projectPath + "/output/bin/";
-#endif
-        std::string cangjieHome = projectPath + "/output";
-#if defined(_WIN32)
-        std::string platform = "windows_x86_64";
-#elif defined(__APPLE__) && defined(__x86_64__)
-        std::string platform = "darwin_x86_64";
-#elif defined(__APPLE__)
-        std::string platform = "darwin_arm64";
-#elif defined(__x86_64__)
-        std::string platform = "linux_x86_64";
-#else
-        std::string platform = "linux_aarch64";
-#endif
-        std::string cangjiePath = cangjieHome + "/modules/" + platform + "_cjnative";
-#ifdef _WIN32
-        char* oldHome = getenv("CANGJIE_HOME");
-        char* oldPath = getenv("CANGJIE_PATH");
-        if (oldHome) savedCangjieHome = oldHome;
-        if (oldPath) savedCangjiePath = oldPath;
-        _putenv_s("CANGJIE_HOME", cangjieHome.c_str());
-        _putenv_s("CANGJIE_PATH", cangjiePath.c_str());
-#else
-        char* oldHome = getenv("CANGJIE_HOME");
-        char* oldPath = getenv("CANGJIE_PATH");
-        if (oldHome) savedCangjieHome = oldHome;
-        if (oldPath) savedCangjiePath = oldPath;
-        setenv("CANGJIE_HOME", cangjieHome.c_str(), 1);
-        setenv("CANGJIE_PATH", cangjiePath.c_str(), 1);
-#endif
-        invocation.globalOptions.ReadPathsFromEnvironmentVars(GetEnvironmentVars());
-        Cangjie::MacroProcMsger::GetInstance().CloseMacroSrv();
-    }
-
-    void TearDown() override
-    {
-#ifdef _WIN32
-        if (savedCangjieHome.empty()) {
-            _putenv_s("CANGJIE_HOME", "");
-        } else {
-            _putenv_s("CANGJIE_HOME", savedCangjieHome.c_str());
-        }
-        if (savedCangjiePath.empty()) {
-            _putenv_s("CANGJIE_PATH", "");
-        } else {
-            _putenv_s("CANGJIE_PATH", savedCangjiePath.c_str());
-        }
-#else
-        if (savedCangjieHome.empty()) {
-            unsetenv("CANGJIE_HOME");
-        } else {
-            setenv("CANGJIE_HOME", savedCangjieHome.c_str(), 1);
-        }
-        if (savedCangjiePath.empty()) {
-            unsetenv("CANGJIE_PATH");
-        } else {
-            setenv("CANGJIE_PATH", savedCangjiePath.c_str(), 1);
-        }
-#endif
-    }
-
-    std::string srcPath;
-    std::string projectPath;
-    std::string savedCangjieHome;
-    std::string savedCangjiePath;
-    DiagnosticEngine diag;
-    CompilerInvocation invocation;
-    std::unique_ptr<TestCompilerInstance> instance;
+class TypeCheckerTest : public SemaTestBase {
 };
 
 TEST_F(TypeCheckerTest, TypecheckTest)

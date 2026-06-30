@@ -19,136 +19,14 @@
 using namespace Cangjie;
 using namespace AST;
 
-class ImportIncrTest : public testing::Test {
+#include "ModuleTestBase.h"
+
+class ImportIncrTest : public ModuleTestBase {
 protected:
-    void SetUp() override
+    void BeforeCompileSingleFile() override
     {
-        SetupTempDirectory();
-        SetupCompilerOptions();
-        CompileCoreMock();
-        CompileAllFiles();
-    }
-
-    void SetupTempDirectory()
-    {
-#ifdef _WIN32
-        std::string command;
-        int err = 0;
-        if (FileUtil::FileExist("testTempFiles")) {
-            std::string command = "rmdir /s /q testTempFiles";
-            int err = system(command.c_str());
-            std::cout << err;
-        }
-        command = "mkdir testTempFiles";
-        err = system(command.c_str());
-        ASSERT_EQ(0, err);
-        srcPath = projectPath + "\\unittests\\Modules\\CangjieFiles\\";
-        packagePath = packagePath + "\\";
-#else
-        std::string command;
-        int err = 0;
-        if (FileUtil::FileExist("testTempFiles")) {
-            command = "rm -rf testTempFiles";
-            err = system(command.c_str());
-            ASSERT_EQ(0, err);
-        }
-        command = "mkdir -p testTempFiles";
-        err = system(command.c_str());
-        ASSERT_EQ(0, err);
-        srcPath = projectPath + "/unittests/Modules/CangjieFiles/";
-        packagePath = packagePath + "/";
-#endif
-    }
-
-    void SetupCompilerOptions()
-    {
-#ifdef __x86_64__
-        invocation.globalOptions.target.arch = Cangjie::Triple::ArchType::X86_64;
-#else
-        invocation.globalOptions.target.arch = Cangjie::Triple::ArchType::AARCH64;
-#endif
-#ifdef _WIN32
-        invocation.globalOptions.target.os = Cangjie::Triple::OSType::WINDOWS;
-#elif defined(__unix__)
-        invocation.globalOptions.target.os = Cangjie::Triple::OSType::LINUX;
-#endif
-        invocation.globalOptions.outputMode = GlobalOptions::OutputMode::STATIC_LIB;
-        invocation.globalOptions.disableReflection = true;
-        invocation.globalOptions.importPaths = {packagePath};
-        invocation.globalOptions.compilationCachedPath = ".";
-    }
-
-    void CompileCoreMock()
-    {
-        auto coreFile = srcPath + "coremock.cj";
-        std::string failedReason;
-        auto content = FileUtil::ReadFileContent(coreFile, failedReason);
-        if (!content.has_value()) {
-            diag.DiagnoseRefactor(
-                DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, coreFile, failedReason);
-        }
-        instance = std::make_unique<TestCompilerInstance>(invocation, diag);
-        CreateModulesDirectory();
-        instance->code = std::move(content.value());
-        instance->invocation.globalOptions.implicitPrelude = false;
-        instance->Compile(CompileStage::DESUGAR_AFTER_SEMA);
-        std::vector<uint8_t> astData;
-        instance->importManager->ExportAST(false, astData, *instance->GetSourcePackages()[0]);
-        allAstData["std.core"] = astData;
-        instance->invocation.globalOptions.implicitPrelude = true; // reset to default
-    }
-
-    void CreateModulesDirectory()
-    {
-        auto modulesName = FileUtil::JoinPath(instance->cangjieHome, "modules");
-        auto libPathName = invocation.globalOptions.GetCangjieLibTargetPathName();
-        auto cangjieModules = FileUtil::JoinPath(modulesName, libPathName);
-        if (!FileUtil::FileExist(cangjieModules)) {
-            FileUtil::CreateDirs(FileUtil::JoinPath(cangjieModules, ""));
-        }
-    }
-
-    void CompileAllFiles()
-    {
-        for (unsigned int i = 0; i < fileNames.size(); i++) {
-            CompileSingleFile(fileNames[i]);
-        }
-    }
-
-    void CompileSingleFile(const std::string& fileName)
-    {
-        auto srcFile = srcPath + fileName + ".cj";
-        std::string failedReason;
-        auto content = FileUtil::ReadFileContent(srcFile, failedReason);
-        if (!content.has_value()) {
-            diag.DiagnoseRefactor(
-                DiagKindRefactor::module_read_file_to_buffer_failed, DEFAULT_POSITION, srcFile, failedReason);
-        }
-        instance = std::make_unique<TestCompilerInstance>(invocation, diag);
         instance->importManager->SetPackageCjoCache("std.core", allAstData["std.core"]);
-        instance->code = std::move(content.value());
-        instance->Compile();
-        std::vector<uint8_t> astData;
-        instance->importManager->ExportAST(false, astData, *instance->GetSourcePackages()[0]);
-        allAstData[fileName] = astData;
-        diag.Reset();
     }
-#ifdef PROJECT_SOURCE_DIR
-    // Gets the absolute path of the project from the compile parameter.
-    std::string projectPath = PROJECT_SOURCE_DIR;
-#else
-    // Just in case, give it a default value.
-    // Assume the initial is in the build directory.
-    std::string projectPath = "..";
-#endif
-    std::vector<std::string> fileNames{
-        "vardecl", "funcdecl", "math", "recorddecl", "interfacedecl", "classdecl", "extenddecl"};
-    std::string packagePath = "testTempFiles";
-    std::string srcPath;
-    DiagnosticEngine diag;
-    CompilerInvocation invocation;
-    std::unique_ptr<TestCompilerInstance> instance;
-    std::unordered_map<std::string, std::vector<uint8_t>> allAstData;
 };
 
 namespace {
