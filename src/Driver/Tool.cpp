@@ -143,7 +143,7 @@ bool Tool::InternalImplementedCommandExec() const
     bool res = false;
     if (type == ToolType::INTERNAL_IMPLEMENTED && name == "RemoveFile") {
         auto& arguments = GetFullArgs();
-        // arguments[1] - absolute name of file to remove
+        // arguments[1] - absolute name of file/directory to remove
         return !FileUtil::FileExist(arguments[1]) || FileUtil::Remove(arguments[1]);
     }
     if (type == ToolType::INTERNAL_IMPLEMENTED && name == "CacheCopy") {
