@@ -15,6 +15,7 @@
 
 #include <future>
 #include <list>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -171,6 +172,14 @@ public:
     }
 
     /**
+     * @brief Append all files with the given extension from a directory when the tool is executed.
+     *
+     * @param dir The directory to scan.
+     * @param extension The file extension for collection.
+     */
+    void AppendArgsFromDirAtExecution(const std::string& dir, const std::string& extension);
+
+    /**
      * @brief Set LD_LIBRARY_PATH.
      *
      * @param newLdLibraryPath The new LD_LIBRARY_PATH to set.
@@ -223,10 +232,18 @@ public:
     std::unique_ptr<ToolFuture> Execute(bool verbose) const;
 
 private:
+    struct DeferredDirArgs {
+        std::string dir;
+        std::string extension;
+    };
+
     std::vector<std::string> args{};       /**< Arguments for this tool. */
+    std::vector<DeferredDirArgs> deferredDirArgs{};
     std::string ldLibraryPath{""};       /**< LD_LIBRARY_PATH */
 
     std::string GenerateCommand() const;
+    std::optional<size_t> GetDeferredDirArgIndex(const std::string& arg) const;
+    std::vector<std::string> ExpandArgs() const;
 
 #ifndef _WIN32
     std::list<std::string> BuildEnvironmentVector() const;
