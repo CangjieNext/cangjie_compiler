@@ -43,10 +43,9 @@ TempFileInfo IOS_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>
     }
     auto tool = std::make_unique<Tool>(ldPath, ToolType::BACKEND, driverOptions.environment.allVariables);
     tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
-    auto tempBinaryInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_DYLIB);
+    auto tempBinaryInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::T_DYLIB_MAC);
     auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_OBJ);
     auto ltoObjectDir = outputFileInfo.filePath + ".lto";
-    auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, "0." + GetTargetArchString() + ".lto.o");
     tool->AppendArg("-o", tempBinaryInfo.filePath);
     GenerateLinkOptionsForLTO(*tool);
     tool->AppendArg("-object_path_lto", ltoObjectDir);
@@ -70,7 +69,7 @@ TempFileInfo IOS_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>
     GenerateRuntimePath(*tool);
 
     backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
-    outputFileInfo.filePath = ltoObjectPath;
+    outputFileInfo.filePath = ltoObjectDir;
     outputFileInfo.rawPath = ltoObjectDir;
     return outputFileInfo;
 }
