@@ -824,9 +824,17 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::SelectTypeMatchedImplMember(Moda
         if (usableDecls.empty()) {
             usableDecls.emplace(implMember);
         }
-        auto found = std::find_if(usableDecls.begin(), usableDecls.end(), [this, iFuncTy](auto it) {
-            auto fty = DynamicCast<FuncTy>(it->DataTy());
-            return fty && iFuncTy && typeManager.IsFuncParameterTypesIdentical(*fty, *iFuncTy);
+        auto found = std::find_if(usableDecls.begin(), usableDecls.end(), [this, iFuncTy, &interfaceFunc](auto decl) {
+            auto implFunc = RawStaticCast<FuncDecl*>(decl.get());
+            auto fty = DynamicCast<FuncTy>(implFunc->DataTy());
+            if (!fty || !iFuncTy) {
+                return false;
+            }
+            auto implPT = GetParamTypes(*implFunc);
+            implPT.paramTys = fty->paramTys;
+            auto ifacePT = GetParamTypes(interfaceFunc);
+            ifacePT.paramTys = iFuncTy->paramTys;
+            return typeManager.IsFuncParameterTypesIdentical(implPT, ifacePT);
         });
         if (found != usableDecls.end()) {
             member = *found;

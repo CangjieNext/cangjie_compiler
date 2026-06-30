@@ -13,6 +13,7 @@
 #ifndef CANGJIE_SEMA_TYPECHECKUTIL_H
 #define CANGJIE_SEMA_TYPECHECKUTIL_H
 
+#include "ParamTypes.h"
 #include "ScopeManager.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"

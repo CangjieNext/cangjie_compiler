@@ -1913,22 +1913,15 @@ Ptr<Decl> TypeChecker::TypeCheckerImpl::GetImplementedTargetIfExist(
             auto ts = GenerateTypeMappingBetweenFuncs(typeManager, *memberFuncDecl, *targetFuncDecl);
             mts.merge(ts);
             // Cannot be a reference type. Otherwise, SemaTy will be modified.
-            auto memberParamTys = memberFuncTy->paramTys;
-            auto targetParamTys = targetFuncTy->paramTys;
-            for (auto& it : memberParamTys) {
+            auto memberPT = GetParamTypes(*memberFuncDecl);
+            auto targetPT = GetParamTypes(*targetFuncDecl);
+            for (auto& it : memberPT.paramTys) {
                 it = typeManager.GetBestInstantiatedTy(it, mts);
             }
-            for (auto& it : targetParamTys) {
+            for (auto& it : targetPT.paramTys) {
                 it = typeManager.GetBestInstantiatedTy(it, mts);
             }
-            bool thisParamMatch{true};
-            if (typeManager.HasThisParam(*memberFuncDecl)) {
-                thisParamMatch =
-                    typeManager.CheckTypeCompatibility(typeManager.GetThisParamTy(*memberFuncDecl),
-                        typeManager.GetThisParamTy(*targetFuncDecl), false) == TypeCompatibility::IDENTICAL;
-            }
-            isSameSignature =
-                typeManager.IsFuncParameterTypesIdentical(memberParamTys, targetParamTys) && thisParamMatch;
+            isSameSignature = typeManager.IsFuncParameterTypesIdentical(memberPT, targetPT);
         } else if (member->astKind == ASTKind::PROP_DECL && target.astKind == ASTKind::PROP_DECL) {
             if (!TypeCheckUtil::IsOverrideOrShadow(
                 typeManager, *RawStaticCast<PropDecl*>(member), static_cast<PropDecl&>(target))) {

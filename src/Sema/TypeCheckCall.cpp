@@ -279,40 +279,49 @@ bool CompareParamTys(TypeManager& tyMgr, const std::vector<ModalTy>& iTys, const
     return true;
 }
 
-// Check whether arg of i can be passed as arg of j (T_i <: T_j), or if i is better than j for ctor call.
-// Always return true if either does not have this param.
-bool CompareThisParamTy(
-    TypeManager& tyMgr, const FuncDecl& i, const FuncDecl& j, const CallExpr& ce, AST::ModalTy target)
+enum class OverloadCmp {
+    BETTER,
+    WORSE,
+    EQUAL
+};
+
+// Check whether arg of i can be passed as arg of j (T_i <: T_j), or to say i is better than j for ctor call.
+OverloadCmp CompareThisParamTy(
+    TypeManager& tyMgr, const FuncDecl& i, const FuncDecl& j, const CallExpr& ce, ModalTy target)
 {
     if (!tyMgr.HasThisParam(i) || !tyMgr.HasThisParam(j)) {
-        return true;
+        return OverloadCmp::EQUAL;
     }
     auto iThis = tyMgr.GetThisParamTy(i);
     auto jThis = tyMgr.GetThisParamTy(j);
+    if (tyMgr.ImplementsCopyInterface(iThis.Ty()) && tyMgr.ImplementsCopyInterface(jThis.Ty())) {
+        return OverloadCmp::EQUAL;
+    }
     // ctor call has special rules for modal, because the modal can be deduced.
+    // in case let c: C@XXX = C @m(), use @m mode only. This rule is checked outside and not considered here.
     // in case let c: C@local? = C(), @local? is better, if no @local? is found, the other modals are equally good.
     // in case let c: C = C(), only @~local is accepted.
-    // in case let c = C(), any mode is accepted.
+    // in case let c = C(), any mode is accepted, but prefer @~local for compatibility.
     if (ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) {
-        if (!GetCallBaseModal(ce) && !Ty::IsTyCorrect(target)) {
-            return iThis.Mode() == jThis.Mode();
+        auto ceModal = GetCallBaseModal(ce);
+        if (!ceModal && !Ty::IsTyCorrect(target)) {
+            return OverloadCmp::EQUAL;
         }
-        if (target && !tyMgr.ImplementsCopyInterface(target.Ty())) {
-            ModalInfo refModal = target.Mode();
-            if (auto ceModal = GetCallBaseModal(ce)) {
-                refModal = *ceModal;
-            }
+        if (Ty::IsTyCorrect(target)) {
+            ModalInfo refModal = ceModal.value_or(target.Mode());
             if (iThis.Mode() == refModal && jThis.Mode() != refModal) {
-                return true;
+                return OverloadCmp::BETTER;
             }
             if (iThis.Mode() != refModal && jThis.Mode() == refModal) {
-                return false;
+                return OverloadCmp::WORSE;
             }
-            return iThis.Mode() == jThis.Mode();
+            return OverloadCmp::EQUAL;
         }
     }
-    auto r = iThis.Mode().IsSubModal(jThis.Mode());
-    return r;
+    if (iThis.Mode().IsSubModal(jThis.Mode())) {
+        return OverloadCmp::BETTER;
+    }
+    return iThis.Mode() == jThis.Mode() ? OverloadCmp::EQUAL : OverloadCmp::WORSE;
 }
 
 std::vector<SubstPack> ResolveTypeMappings(
@@ -373,20 +382,6 @@ void DiagnoseForMultiMapping(DiagnosticEngine& diag, const CallExpr& ce, const F
     } else {
         diag.Diagnose(ce, DiagKind::sema_ambiguous_arg_type);
     }
-}
-
-bool IsInterfaceFuncWithSameSignature(TypeManager& tyMgr, const FunctionMatchingUnit& i, const FunctionMatchingUnit& j)
-{
-    // Check whether both candidates are abstract interface function with same signature.
-    bool bothInInterface = i.fd.outerDecl && i.fd.outerDecl->astKind == ASTKind::INTERFACE_DECL && j.fd.outerDecl &&
-        j.fd.outerDecl->astKind == ASTKind::INTERFACE_DECL && i.fd.TestAttr(Attribute::ABSTRACT) &&
-        j.fd.TestAttr(Attribute::ABSTRACT);
-    if (bothInInterface) {
-        auto iTy = tyMgr.ApplySubstPack(i.fd.GetTy(), i.typeMapping);
-        auto jTy = tyMgr.ApplySubstPack(j.fd.GetTy(), j.typeMapping);
-        return iTy == jTy;
-    }
-    return false;
 }
 
 bool IsFuncDeclPossibleVariadic(const FuncDecl& fd)
@@ -675,6 +670,34 @@ bool CheckUseTrailingClosureWithFunctionType(
     return false;
 }
 
+/// For `let c = C()`: drop ctor overloads whose `this` is @local when an @~local ctor exists.
+/// When it is not ctor call, or target exists, do not call this fun.
+void FilterBetterThisMode(TypeManager& tm,
+    const std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, std::vector<bool>& targetMark)
+{
+    bool hasNotLocalThisCtor = false;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (!targetMark[i]) {
+            continue;
+        }
+        if (tm.HasThisParam(candidates[i]->fd) && !tm.GetThisParamTy(candidates[i]->fd).IsLocalType()) {
+            hasNotLocalThisCtor = true;
+            break;
+        }
+    }
+    if (!hasNotLocalThisCtor) {
+        return;
+    }
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (!targetMark[i] || !tm.HasThisParam(candidates[i]->fd)) {
+            continue;
+        }
+        if (tm.GetThisParamTy(candidates[i]->fd).IsLocalType()) {
+            targetMark[i] = false;
+        }
+    }
+}
+
 void FilterOverriden(
     TypeManager& tm, std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, std::vector<bool>& targetMark)
 {
@@ -825,8 +848,28 @@ bool TypeChecker::TypeCheckerImpl::IsGenericCall(const ASTContext& ctx, const Ca
     return false;
 }
 
+bool TypeChecker::TypeCheckerImpl::IsInterfaceFuncWithSameSignature(
+    const FunctionMatchingUnit& i, const FunctionMatchingUnit& j)
+{
+    // Check whether both candidates are abstract interface function with same signature.
+    bool bothInInterface = i.fd.outerDecl && i.fd.outerDecl->astKind == ASTKind::INTERFACE_DECL && j.fd.outerDecl &&
+        j.fd.outerDecl->astKind == ASTKind::INTERFACE_DECL && i.fd.TestAttr(Attribute::ABSTRACT) &&
+        j.fd.TestAttr(Attribute::ABSTRACT);
+    if (bothInInterface) {
+        if (TypeManager::HasThisParam(i.fd) && TypeManager::HasThisParam(j.fd)) {
+            if (GetThisParamModal(i.fd) != GetThisParamModal(j.fd)) {
+                return false;
+            }
+        }
+        auto iTy = typeManager.ApplySubstPack(i.fd.GetTy(), i.typeMapping);
+        auto jTy = typeManager.ApplySubstPack(j.fd.GetTy(), j.typeMapping);
+        return iTy == jTy;
+    }
+    return false;
+}
+
 bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
-    FunctionMatchingUnit& i, FunctionMatchingUnit& j, const CallExpr& ce, AST::ModalTy target)
+    FunctionMatchingUnit& i, FunctionMatchingUnit& j, const CallExpr& ce, ModalTy target)
 {
     size_t argSize = i.tysInArgOrder.size();
     // Only resolve for generic when candidate is generic related and its parameter's types contains generic type.
@@ -855,19 +898,13 @@ bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
                 return false;
             }
         }
-        return CompareThisParamTy(typeManager, i.fd, j.fd, ce, target);
+        return CompareThisParamTy(typeManager, i.fd, j.fd, ce, target) != OverloadCmp::WORSE;
     }
     if (i.fd.outerDecl && j.fd.outerDecl) {
         // Since interface allows multiple inheritance, and have default functions, we need to resolve shadow case.
         // When both candidates are member functions and they have the same size of parameters and function signatures,
         // resolve them by deciding whether one is implementing the other.
-        bool sameNumberOfParams = j.fd.GetTy()->typeArgs.size() == i.fd.GetTy()->typeArgs.size();
-        bool sameThisParam{true};
-        if (typeManager.HasThisParam(i.fd) && typeManager.HasThisParam(j.fd)) {
-            sameThisParam = GetThisParamModal(i.fd) == GetThisParamModal(j.fd);
-        }
-        if (sameNumberOfParams && sameThisParam &&
-            typeManager.IsFuncParameterTypesIdentical(i.tysInArgOrder, j.tysInArgOrder)) {
+        if (typeManager.IsFuncParameterTypesIdentical(GetParamTypes(i.fd), GetParamTypes(j.fd))) {
             bool isJImplementable =
                 j.fd.outerDecl->astKind == ASTKind::INTERFACE_DECL || j.fd.TestAttr(Attribute::ABSTRACT);
             bool isITheImplementation =
@@ -877,11 +914,11 @@ bool TypeChecker::TypeCheckerImpl::CompareFuncCandidates(
     }
     // Check whether T_i <: T_j
     return CompareParamTys(typeManager, i.tysInArgOrder, j.tysInArgOrder) &&
-        CompareThisParamTy(typeManager, i.fd, j.fd, ce, target);
+        CompareThisParamTy(typeManager, i.fd, j.fd, ce, target) != OverloadCmp::WORSE;
 }
 
 std::vector<size_t> TypeChecker::TypeCheckerImpl::ResolveOverload(
-    std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, const CallExpr& ce, AST::ModalTy target)
+    std::vector<OwnedPtr<FunctionMatchingUnit>>& candidates, const CallExpr& ce, ModalTy target)
 {
     auto targetNum = candidates.size();
     std::vector<bool> targetMark(targetNum, true); // When get false, the target is excluded.
@@ -902,12 +939,17 @@ std::vector<size_t> TypeChecker::TypeCheckerImpl::ResolveOverload(
                 targetMark[i] = false;
                 break;
             }
-            if (IsInterfaceFuncWithSameSignature(typeManager, *candidates[i], *candidates[j])) {
+            if (IsInterfaceFuncWithSameSignature(*candidates[i], *candidates[j])) {
                 // When two interface candidates have same signature, disable one of them.
                 targetMark[i] = false;
                 break;
             }
         }
+    }
+
+    if ((ce.callKind == CallKind::CALL_OBJECT_CREATION || ce.callKind == CallKind::CALL_STRUCT_CREATION) &&
+        !GetCallBaseModal(ce) && !Ty::IsTyCorrect(target)) {
+        FilterBetterThisMode(typeManager, candidates, targetMark);
     }
     std::vector<size_t> results;
     for (size_t i = 0; i < targetMark.size(); ++i) {
@@ -1371,7 +1413,7 @@ ModalTy TypeChecker::TypeCheckerImpl::GetThisArgTy(const ASTContext& ctx, const 
     return {};
 }
 
-AST::ModalTy TypeChecker::TypeCheckerImpl::GetThisParamTyInScope(const ASTContext& ctx, const std::string& scopeName)
+ModalTy TypeChecker::TypeCheckerImpl::GetThisParamTyInScope(const ASTContext& ctx, const std::string& scopeName)
 {
     // get outer func ty (must be instance method so GetThisParamTy is valid)
     if (auto fn = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, scopeName, [](const Symbol& sym) {
@@ -1778,7 +1820,7 @@ TypeChecker::TypeCheckerImpl::FuncTyPair TypeChecker::TypeCheckerImpl::CollectVa
     ASTContext& ctx, std::vector<Ptr<FuncDecl>>& funcs, Expr& expr, Ptr<FuncTy> targetTy)
 {
     FilterShadowedFunc(funcs); // Filter invalid and shadowed function.
-    std::vector<std::tuple<Ptr<AST::FuncDecl>, AST::ModalTy, TypeSubst>> candidates;
+    std::vector<std::tuple<Ptr<AST::FuncDecl>, ModalTy, TypeSubst>> candidates;
     auto typeArgs = expr.GetTypeArgs();
     bool genericIgnored = false;
     auto ds = DiagSuppressor(diag);
@@ -1969,18 +2011,11 @@ void TypeChecker::TypeCheckerImpl::RemoveShadowedFunc(
     if (targetLevel >= currentLevel) {
         return;
     }
-    auto paramTys = GetParamTys(fd);
-    auto isFuncSignatureSame = [this, &fd, &paramTys](auto& target) -> bool {
+    auto isFuncSignatureSame = [this, &fd](auto& target) -> bool {
         if (fd.TestAttr(Attribute::GENERIC) != target->TestAttr(Attribute::GENERIC)) {
             return false;
         }
-        auto targetParamTys = GetParamTys(*target);
-        bool thisParamMatch{true};
-        if (TypeManager::HasThisParam(*target) && TypeManager::HasThisParam(fd)) {
-            thisParamMatch = typeManager.CheckTypeCompatibility(typeManager.GetThisParamTy(*target),
-                typeManager.GetThisParamTy(fd), false) == TypeCompatibility::IDENTICAL;
-        }
-        return typeManager.IsFuncParameterTypesIdentical(targetParamTys, paramTys) && thisParamMatch;
+        return typeManager.IsFuncParameterTypesIdentical(GetParamTypes(fd), GetParamTypes(*target));
     };
     funcs.erase(std::remove_if(funcs.begin(), funcs.end(), isFuncSignatureSame), funcs.end());
 }
@@ -2045,12 +2080,7 @@ void TypeChecker::TypeCheckerImpl::FilterExtendImplAbstractFunc(std::vector<Ptr<
             if (!flag) {
                 continue;
             }
-            auto params1 = StaticCast<FuncTy*>(typeManager.GetInstantiatedTy(fd1->DataTy(), typeMapping))->paramTys;
-            if (TypeManager::HasThisParam(*fd1)) {
-                params1.insert(params1.begin(), typeManager.GetThisParamTy(*fd1));
-            }
-            auto params2 = GetParamTys(*fd2);
-            if (typeManager.IsFuncParameterTypesIdentical(params1, params2) &&
+            if (typeManager.IsFuncParameterTypesIdentical(GetParamTypes(*fd1), GetParamTypes(*fd2), typeMapping) &&
                 typeManager.IsSubtype(fd2->GetTy(), fd1->GetTy())) {
                 implementedOrOverridenFuncs.insert(fd1);
             }
@@ -2292,7 +2322,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::MatchFunctionForCall(
         auto ret = CheckCandidate(ctx, candidate, target, typeMapping);
         // Check result & If current function declaration is already matched, do not add again.
         if (!ret || (!legals.empty() && legals.back()->id == static_cast<int64_t>(i))) {
-            illegals.emplace_back(*orderedCandidates[i], std::vector<AST::ModalTy>(), SubstPack());
+            illegals.emplace_back(*orderedCandidates[i], std::vector<ModalTy>(), SubstPack());
             illegals.back().diags = std::make_pair(ds.GetSuppressedDiag(), candidate.stat);
             PData::Reset(typeManager.constraints);
             continue;
@@ -2307,7 +2337,7 @@ std::vector<Ptr<FuncDecl>> TypeChecker::TypeCheckerImpl::MatchFunctionForCall(
 }
 
 void TypeChecker::TypeCheckerImpl::ReInferCallArgs(
-    ASTContext& ctx, const CallExpr& ce, const FunctionMatchingUnit& legal, AST::ModalTy target)
+    ASTContext& ctx, const CallExpr& ce, const FunctionMatchingUnit& legal, ModalTy target)
 {
     for (size_t i = 0; i < legal.tysInArgOrder.size(); ++i) {
         auto instTy = typeManager.ApplySubstPack(legal.tysInArgOrder[i], legal.typeMapping);

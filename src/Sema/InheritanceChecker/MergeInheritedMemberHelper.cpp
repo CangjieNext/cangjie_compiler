@@ -159,8 +159,14 @@ MemberSignature StructInheritanceChecker::UpdateInheritedMemberIfNeeded(
             auto childFuncTy = DynamicCast<FuncTy>(child.ty);
             bool sameStatus = parent.decl->TestAttr(Attribute::STATIC) == child.decl->TestAttr(Attribute::STATIC) &&
                 child.decl->TestAttr(Attribute::GENERIC) == parent.decl->TestAttr(Attribute::GENERIC);
+            auto parentDecl = RawStaticCast<FuncDecl*>(parent.decl);
+            auto childDecl = RawStaticCast<FuncDecl*>(child.decl);
+            auto parentPT = GetParamTypes(*parentDecl);
+            parentPT.paramTys = parentFuncTy->paramTys;
+            auto childPT = GetParamTypes(*childDecl);
+            childPT.paramTys = childFuncTy->paramTys;
             shouldUpdate = sameStatus && parentFuncTy && childFuncTy &&
-                typeManager.IsFuncParameterTypesIdentical(*parentFuncTy, *childFuncTy);
+                typeManager.IsFuncParameterTypesIdentical(parentPT, childPT);
             auto consistent = ComputeInconsistentTypes(
                 child, parent, updated, {shouldUpdate, inheritedInterfaces}, inconsistentTypes);
             inconsistentType = inconsistentType && !consistent;

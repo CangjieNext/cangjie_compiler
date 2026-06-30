@@ -279,6 +279,20 @@ std::vector<ModalTy> GetFuncBodyParamTys(const FuncBody& fb)
     return ret;
 }
 
+ParamTypes GetParamTypes(const FuncDecl& fd)
+{
+    ParamTypes pt;
+    if (fd.GetTy().IsCorrect() && fd.GetTy()->IsFunc()) {
+        pt.paramTys = DynamicCast<FuncTy*>(fd.DataTy())->paramTys;
+    } else {
+        pt.paramTys = GetParamTys(fd);
+    }
+    if (TypeManager::HasThisParam(fd)) {
+        pt.thisMode = GetThisParamModal(fd);
+    }
+    return pt;
+}
+
 // Generate type mapping for src is an override or implement of target.
 MultiTypeSubst GenerateTypeMappingBetweenFuncs(TypeManager& typeManager, const FuncDecl& src, const FuncDecl& target)
 {
@@ -305,12 +319,6 @@ bool IsOverrideOrShadow(
         // we do not record a negative result in `overrideOrShadowCache` (to avoid unnecessary cache growth) and
         // return false directly.
         return false;
-    }
-    // override this param must use the same modal. data type always equals.
-    if (typeManager.HasThisParam(src) && typeManager.HasThisParam(target)) {
-        if (typeManager.GetThisParamTy(src).Mode() != typeManager.GetThisParamTy(target).Mode()) {
-            return false;
-        }
     }
     auto srcFt = DynamicCast<FuncTy*>(src.DataTy());
     auto targetFt = DynamicCast<FuncTy*>(target.DataTy());
@@ -348,14 +356,7 @@ bool IsOverrideOrShadow(
                 typeMapping.merge(MultiTypeSubstToTypeSubst(m));
             }
         }
-        // Instantiated parameter's types.
-        for (auto& it : srcParamTys) {
-            it = typeManager.GetInstantiatedTy(it, typeMapping);
-        }
-        for (auto& it : targetParamTys) {
-            it = typeManager.GetInstantiatedTy(it, typeMapping);
-        }
-        if (typeManager.IsFuncParameterTypesIdentical(srcParamTys, targetParamTys)) {
+        if (typeManager.IsFuncParameterTypesIdentical(GetParamTypes(src), GetParamTypes(target), typeMapping)) {
             bool isCrossPlatform =
                 (src.TestAttr(AST::Attribute::COMMON) && target.TestAttr(AST::Attribute::SPECIFIC)) ||
                 (src.TestAttr(AST::Attribute::SPECIFIC) && target.TestAttr(AST::Attribute::COMMON));

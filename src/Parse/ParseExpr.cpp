@@ -1049,7 +1049,7 @@ OwnedPtr<Expr> ParserImpl::ParseExclaveExpr()
     ChainScope cs(*this, ret.get());
     ret->begin = lastToken.Begin();
     ret->exclavePos = lastToken.Begin();
-    ret->body = ParseBlock();
+    ret->body = ParseBlock(ScopeKind::FUNC_BODY);
     ret->end = lastToken.End();
     return ret;
 }

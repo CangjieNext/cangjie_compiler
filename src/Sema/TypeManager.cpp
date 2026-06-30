@@ -1246,31 +1246,23 @@ bool TypeManager::IsLitBoxableType(DataTy leaf, DataTy root)
     return false;
 }
 
-bool TypeManager::IsFuncParameterTypesIdentical(const FuncTy& t1, const FuncTy& t2)
-{
-    bool result{false};
-    if (Ty::IsTyCorrect(&t1) && Ty::IsTyCorrect(&t2) && t1.paramTys.size() == t2.paramTys.size()) {
-        result = true;
-        for (size_t i = 0; i < t2.paramTys.size(); i++) {
-            result =
-                result && CheckTypeCompatibility(t1.paramTys[i], t2.paramTys[i], false) == TypeCompatibility::IDENTICAL;
-        }
-    }
-    return result;
-}
-
 bool TypeManager::IsFuncParameterTypesIdentical(
-    const std::vector<ModalTy>& paramTys1, const std::vector<ModalTy>& paramTys2, const TypeSubst& typeMapping)
+    const TypeCheckUtil::ParamTypes& t1, const TypeCheckUtil::ParamTypes& t2, const TypeSubst& typeMapping)
 {
-    bool result{false};
-    if (paramTys1.size() == paramTys2.size()) {
-        result = true;
-        for (size_t i = 0; i < paramTys2.size(); i++) {
-            auto paramTy1 = GetInstantiatedTy(paramTys1[i], typeMapping);
-            result = result && CheckTypeCompatibility(paramTy1, paramTys2[i], false) == TypeCompatibility::IDENTICAL;
+    if (t1.paramTys.size() != t2.paramTys.size()) {
+        return false;
+    }
+    if (t1.thisMode != t2.thisMode) {
+        return false;
+    }
+    for (size_t i = 0; i < t2.paramTys.size(); i++) {
+        auto paramTy1 = GetInstantiatedTy(t1.paramTys[i], typeMapping);
+        auto paramTy2 = GetInstantiatedTy(t2.paramTys[i], typeMapping);
+        if (CheckTypeCompatibility(paramTy1, paramTy2, false) != TypeCompatibility::IDENTICAL) {
+            return false;
         }
     }
-    return result;
+    return true;
 }
 
 bool TypeManager::HasThisParam(const FuncDecl& fd)
@@ -2173,7 +2165,8 @@ bool TypeManager::IsFuncDeclSubType(const FuncDecl& decl, const FuncDecl& funcDe
 
 bool TypeManager::IsFuncTySubType(const FuncTy& type1, const FuncTy& type2)
 {
-    return IsFuncParameterTypesIdentical(type1.paramTys, type2.paramTys) && IsSubtype(type1.retTy, type2.retTy);
+    return IsFuncParameterTypesIdentical(ParamTypes::FromFuncTyOnly(type1), ParamTypes::FromFuncTyOnly(type2)) &&
+        IsSubtype(type1.retTy, type2.retTy);
 }
 #endif
 

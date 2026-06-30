@@ -86,7 +86,6 @@ static const std::string CPOINTER_GET_POINTER_ADDRESS_NAME = "getPointerAddress"
 static const std::string CPOINTER_READ_NAME = "readPointer";
 static const std::string CPOINTER_WRITE_NAME = "writePointer";
 static const std::string CPOINTER_ADD_NAME = "addPointer";
-static const std::string CPOINTER_ADD2_NAME = "addPointer2";
 
 static const std::string CSTRING_CONVERT_CSTR_TO_PTR_NAME = "convertCStr2Ptr";
 static const std::string BIT_CAST_NAME = "bitCast";

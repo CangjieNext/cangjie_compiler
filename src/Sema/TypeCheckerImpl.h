@@ -1111,6 +1111,7 @@ private:
      */
     bool CompareFuncCandidates(
         FunctionMatchingUnit& i, FunctionMatchingUnit& j, const AST::CallExpr& ce, AST::ModalTy target);
+    bool IsInterfaceFuncWithSameSignature(const FunctionMatchingUnit& i, const FunctionMatchingUnit& j);
     /**
      * Check non-static calling in static method.
      * @return If callExpr is in static method and target is non-static, returns false. Else returns true.

@@ -1694,8 +1694,6 @@ bool TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
         auto it1 = std::partition(it, funcs.end(), [&it, this](Ptr<FuncDecl> fd) {
             // Function redefinition check is moved to PreCheck when the ty of function is not set, because the
             // return type need to be inferred in type check stage.
-            auto paramTys1 = GetParamTys(**it);
-            auto paramTys2 = GetParamTys(*fd);
             // Get substituteMap S = [X11 -> X21, ..., X1n -> X2m]. from '*it' to 'fd' if exists.
             TypeSubst substituteMap = GetSubstituteMap(typeManager, **it, *fd);
             bool visibilityMatch = true;
@@ -1711,14 +1709,8 @@ bool TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
             }
             // 'this' parameter modal participates in signature identity.
             // Otherwise, overloads that only differ by `this @local...` will be treated as conflicting.
-            if (TypeManager::HasThisParam(*fd) && TypeManager::HasThisParam(**it)) {
-                auto this1 = typeManager.GetThisParamTy(**it);
-                auto this2 = typeManager.GetThisParamTy(*fd);
-                if (typeManager.CheckTypeCompatibility(this1, this2, false) != TypeCompatibility::IDENTICAL) {
-                    return false;
-                }
-            }
-            return visibilityMatch && typeManager.IsFuncParameterTypesIdentical(paramTys1, paramTys2, substituteMap) &&
+            return visibilityMatch &&
+                typeManager.IsFuncParameterTypesIdentical(GetParamTypes(**it), GetParamTypes(*fd), substituteMap) &&
                 fd->TestAttr(Attribute::STATIC) == (*it)->TestAttr(Attribute::STATIC) &&
                 fd->TestAttr(Attribute::CONSTRUCTOR) == (*it)->TestAttr(Attribute::CONSTRUCTOR) &&
                 fd->TestAttr(Attribute::MAIN_ENTRY) == (*it)->TestAttr(Attribute::MAIN_ENTRY) &&

@@ -1372,15 +1372,12 @@ bool StructInheritanceChecker::CheckImplementationRelation(
     }
     auto parentFuncTy = DynamicCast<FuncTy*>(parentTy);
     auto childFuncTy = DynamicCast<FuncTy*>(child.ty);
-    bool sameSignature =
-        parentFuncTy && childFuncTy && typeManager.IsFuncParameterTypesIdentical(*parentFuncTy, *childFuncTy);
-    auto pf = StaticCast<FuncDecl>(parentDecl);
-    auto cf = StaticCast<FuncDecl>(child.decl);
-    auto pmodal = GetThisParamModal(*pf);
-    auto cmodal = GetThisParamModal(*cf);
-    if (pmodal != cmodal) {
-        sameSignature = false;
-    }
+    auto parentPT = GetParamTypes(*parentFunc);
+    parentPT.paramTys = parentFuncTy->paramTys;
+    auto childPT = GetParamTypes(*childFunc);
+    childPT.paramTys = childFuncTy->paramTys;
+    bool sameSignature = parentFuncTy && childFuncTy &&
+        typeManager.IsFuncParameterTypesIdentical(parentPT, childPT);
     if (sameSignature) {
         CJC_ASSERT(parentFunc->funcBody && childFunc->funcBody);
         bool isParamListCorrect = !parentFunc->funcBody->paramLists.empty() && !childFunc->funcBody->paramLists.empty();

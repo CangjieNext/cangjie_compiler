@@ -421,8 +421,14 @@ void StructInheritanceChecker::DiagnoseForInstantiatedMember(
     auto parentFuncTy = DynamicCast<FuncTy>(parent.ty);
     auto childFuncTy = DynamicCast<FuncTy>(child.ty);
     bool sameStatus = parent.decl->TestAttr(Attribute::STATIC) == child.decl->TestAttr(Attribute::STATIC);
+    auto parentDecl = RawStaticCast<FuncDecl*>(parent.decl);
+    auto childDecl = RawStaticCast<FuncDecl*>(child.decl);
+    auto parentPT = GetParamTypes(*parentDecl);
+    parentPT.paramTys = parentFuncTy->paramTys;
+    auto childPT = GetParamTypes(*childDecl);
+    childPT.paramTys = childFuncTy->paramTys;
     bool isConflicted = sameStatus && parentFuncTy && childFuncTy &&
-        typeManager.IsFuncParameterTypesIdentical(*parentFuncTy, *childFuncTy);
+        typeManager.IsFuncParameterTypesIdentical(parentPT, childPT);
     if (isConflicted) {
         std::string functionName = child.decl->identifier;
         OrderedDeclSet candidates = {parent.decl, child.decl};

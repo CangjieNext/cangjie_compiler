@@ -60,7 +60,7 @@ bool CheckEnumCtorModal(ModalTy target, Expr& expr)
     // refNode is enum ctor, target ty is the enum with any local, it is good if
     // 1) either refNode's modal is subtype of target's modal (which is checked later)
     // 2) or refNode does not specify modal. in this case, convert refNode's modal to target's modal
-    // the following to if's are both of 2)
+    // the following two if's are both of 2)
     if (Is<RefExpr>(&expr)) {
         expr.SetTy(expr.GetTy().With(target.Mode()));
         return true;
@@ -381,13 +381,13 @@ bool TypeChecker::TypeCheckerImpl::CheckThisTypeForFunRef(
         if (Is<BuiltInDecl>(fd.outerDecl) || Is<InheritableDecl>(fd.outerDecl)) {
             // implicit this. access
             auto thisMode = GetThisParamTyInScope(ctx, re->scopeName);
-            if (!typeManager.IsSubtype(thisMode, fdThisTy)) {
+            if (!thisMode.Mode().IsSubModal(fdThisTy.Mode())) {
                 return false;
             }
         }
     }
     if (auto ma = DynamicCast<MemberAccess>(&refNode)) {
-        if (!typeManager.IsSubtype(ma->baseExpr->GetTy(), fdThisTy)) {
+        if (!ma->baseExpr->TyMode().IsSubModal(fdThisTy.Mode())) {
             return false;
         }
     }
