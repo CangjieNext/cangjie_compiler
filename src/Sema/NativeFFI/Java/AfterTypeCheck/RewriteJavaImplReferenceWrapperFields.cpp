@@ -33,6 +33,7 @@ void InsertProxyPropertyGetter(PropDecl& prop, VarDecl& actualField, VarDecl& re
     CJC_ASSERT(IsImplReferenceWrapper(*prop.outerDecl));
     prop.getters.emplace_back(WithinFile(MakeOwned<FuncDecl>(), prop.curFile));
     auto& getter = *prop.getters.back();
+    CopyPos(&prop, &getter);
     getter.identifier = "$" + prop.identifier + "get";
     getter.outerDecl = prop.outerDecl;
     getter.fullPackageName = prop.fullPackageName;
@@ -48,14 +49,17 @@ void InsertProxyPropertyGetter(PropDecl& prop, VarDecl& actualField, VarDecl& re
 
     getter.funcBody = WithinFile(MakeOwned<FuncBody>(), prop.curFile);
     auto& getterBody = *getter.funcBody;
+    CopyPos(&prop, &getterBody);
     getterBody.SetTy(prop.GetTy());
     getterBody.EnableAttr(Attribute::COMPILER_ADD);
     getterBody.paramLists.push_back(WithinFile(MakeOwned<FuncParamList>(), prop.curFile));
     getterBody.paramLists.begin()->get()->EnableAttr(Attribute::COMPILER_ADD);
+    CopyPos(&prop, getterBody.paramLists.back().get());
     getterBody.funcDecl = &getter;
 
     getterBody.body = WithinFile(CreateBlock({}, prop.GetTy()), prop.curFile);
     getterBody.body->SetTy(prop.GetTy());
+    CopyPos(&prop, getterBody.body.get());
 
     getterBody.body->body.emplace_back(
         CreateMemberAccess(
@@ -71,6 +75,7 @@ void InsertProxyPropertySetter(PropDecl& prop, VarDecl& actualField, VarDecl& re
 
     prop.setters.emplace_back(WithinFile(MakeOwned<FuncDecl>(), prop.curFile));
     auto& setter = *prop.setters.back();
+    CopyPos(&prop, &setter);
     setter.identifier = "$" + prop.identifier + "set";
     setter.outerDecl = prop.outerDecl;
     setter.propDecl = &prop;
@@ -85,19 +90,23 @@ void InsertProxyPropertySetter(PropDecl& prop, VarDecl& actualField, VarDecl& re
 
     setter.funcBody = WithinFile(MakeOwned<FuncBody>(), prop.curFile);
     auto& setterBody = *setter.funcBody;
+    CopyPos(&prop, &setterBody);
     setterBody.SetTy(unitTy);
     setterBody.EnableAttr(Attribute::COMPILER_ADD);
     setterBody.paramLists.push_back(WithinFile(MakeOwned<FuncParamList>(), prop.curFile));
     setterBody.paramLists.begin()->get()->EnableAttr(Attribute::COMPILER_ADD);
+    CopyPos(&prop, setterBody.paramLists.back().get());
     setterBody.paramLists.begin()->get()->params.push_back(MakeOwned<FuncParam>());
     auto& setterParam = **setterBody.paramLists.begin()->get()->params.begin();
     setterParam.SetTy(prop.GetTy());
     setterParam.EnableAttr(Attribute::COMPILER_ADD);
     setterParam.identifier = "set";
+    CopyPos(&prop, &setterParam);
     setterBody.funcDecl = &setter;
 
     setterBody.body = WithinFile(CreateBlock({}, prop.GetTy()), prop.curFile);
     setterBody.body->SetTy(unitTy);
+    CopyPos(&prop, setterBody.body.get());
 
     // $reg.<actualField> = set
     setterBody.body->body.emplace_back(

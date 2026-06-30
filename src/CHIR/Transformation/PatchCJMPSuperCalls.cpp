@@ -140,9 +140,10 @@ void PatchCJMPSuperCalls::PatchConstructorSuperCall(Function& constructor, Class
         .thisType = thisParam->GetType()
     };
 
+    auto loc = constructor.GetDebugLocation();
     auto resultTy = builder.GetUnitTy();
     auto superCall = builder.CreateExpression<Apply>(
-        resultTy, StaticCast<Value*>(platformConstructor), callContext, entryBlock);
+        loc, resultTy, StaticCast<Value*>(platformConstructor), callContext, entryBlock);
     superCall->SetSuperCall();
 
     entryBlock->InsertExprIntoHead(*superCall);

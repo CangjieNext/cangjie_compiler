@@ -35,10 +35,10 @@ private:
     Expression* TryPatchLoadGlobal(Load& load);
     ClassDef* GetMirrorClassDefFromType(Type* ty);
     ClassDef* GetMirrorClassDefFromGlobalVar(GlobalVar* gv);
-    Expression* CreateGetterCall(Value* baseValue, Function* getter, Block* parentBlock);
-    Expression* CreateSetterCall(Value* baseValue, Value* valueToStore, Function* setter, Block* parentBlock);
-    Expression* CreateStaticGetterCall(Function* getter, Block* parentBlock);
-    Expression* CreateStaticSetterCall(Value* valueToStore, Function* setter, Block* parentBlock);
+    Expression* CreateGetterCall(const DebugLocation& loc, Value* baseValue, Function* getter, Block* parentBlock);
+    Expression* CreateSetterCall(const DebugLocation& loc, Value* baseValue, Value* valueToStore, Function* setter, Block* parentBlock);
+    Expression* CreateStaticGetterCall(const DebugLocation& loc, Function* getter, Block* parentBlock);
+    Expression* CreateStaticSetterCall(const DebugLocation& loc, Value* valueToStore, Function* setter, Block* parentBlock);
 };
 
 } // namespace Cangjie::CHIR

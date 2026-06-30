@@ -656,6 +656,17 @@ std::vector<VarDeclWithPosition> GetVarsInitializationOrderWithPositions(const D
     return resultDecls;
 }
 
+// Copies begin/end/curFile from source onto target. See doc comment in AST/Utils.h.
+// Used by FFI/CJMP synthesis paths to give generated sub-nodes a valid source position.
+void CopyPos(Ptr<const Node> source, Ptr<Node> target)
+{
+    if (source && target) {
+        target->begin = source->begin;
+        target->end = source->end;
+        target->curFile = source->curFile;
+    }
+}
+
 void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
 {
     auto getter = MakeOwned<FuncDecl>();
@@ -678,7 +689,9 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
     getterBody->EnableAttr(Attribute::COMPILER_ADD);
     getterBody->paramLists.push_back(MakeOwned<FuncParamList>());
     getterBody->paramLists.begin()->get()->EnableAttr(Attribute::COMPILER_ADD);
+    CopyPos(&prop, getterBody->paramLists.back().get());
     getterBody->begin = prop.begin;
+    getterBody->end = prop.end;
     getterBody->curFile = prop.curFile;
     getter->funcBody = std::move(getterBody);
     getter->funcBody->funcDecl = getter.get();
@@ -707,12 +720,15 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
     OwnedPtr<FuncBody> setterBody = MakeOwned<FuncBody>();
     setterBody->EnableAttr(Attribute::COMPILER_ADD);
     setterBody->paramLists.push_back(MakeOwned<FuncParamList>());
+    CopyPos(&prop, setterBody->paramLists.back().get());
     setterBody->begin = prop.begin;
+    setterBody->end = prop.end;
     setterBody->curFile = prop.curFile;
     auto setterParam = MakeOwned<FuncParam>();
     setterParam->EnableAttr(Attribute::COMPILER_ADD);
     setterParam->identifier = "set";
     setterParam->begin = prop.begin;
+    setterParam->end = prop.end;
     setterParam->curFile = prop.curFile;
     if (prop.type) {
         setterParam->type = ASTCloner::Clone(prop.type.get());
@@ -815,16 +831,9 @@ void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
 
 } // namespace Cangjie::AST
 
-namespace {
+// Keep Cangjie::AST names visible to the Cangjie::Interop::Java / ObjC namespace blocks below
+// (previously provided by the anonymous namespace that held SetPositionAndCurFileByProvidedNode).
 using namespace Cangjie::AST;
-
-void SetPositionAndCurFileByProvidedNode(Node& consumer, Node& provider)
-{
-    consumer.curFile = provider.curFile;
-    consumer.begin = provider.begin;
-    consumer.end = provider.end;
-}
-}
 
 namespace Cangjie::Interop::Java {
 bool IsImpl(const Node& node)
@@ -901,10 +910,10 @@ void InsertSyntheticClassDecl(ClassLikeDecl& decl, File& file)
     synthetic->inheritedTypes.emplace_back(CreateRefType(decl));
 
     synthetic->fullPackageName = decl.fullPackageName;
-    SetPositionAndCurFileByProvidedNode(*synthetic, decl);
+    CopyPos(&decl, synthetic.get());
 
     synthetic->body = MakeOwned<ClassBody>();
-    SetPositionAndCurFileByProvidedNode(*synthetic->body, *synthetic);
+    CopyPos(synthetic.get(), synthetic->body.get());
 
     synthetic->moduleName = ::Cangjie::Utils::GetRootPackageName(decl.fullPackageName);
 

@@ -141,7 +141,8 @@ Expression* CHIRFieldReferencePatcher::TryPatchLoadGlobalVar(Load& load)
     auto getter = FindStaticGetterForGlobalVar(*mirrorClassDef, *globalVar);
     if (!getter) return nullptr;
 
-    return CreateStaticGetterCall(getter, load.GetParentBlock());
+    auto loc = load.GetDebugLocation();
+    return CreateStaticGetterCall(loc, getter, load.GetParentBlock());
 }
 
 Expression* CHIRFieldReferencePatcher::TryPatchStoreGlobalVar(Store& store)
@@ -156,7 +157,8 @@ Expression* CHIRFieldReferencePatcher::TryPatchStoreGlobalVar(Store& store)
     auto setter = FindStaticSetterForGlobalVar(*mirrorClassDef, *globalVar);
     if (!setter) return nullptr;
 
-    return CreateStaticSetterCall(store.GetValue(), setter, store.GetParentBlock());
+    auto loc = store.GetDebugLocation();
+    return CreateStaticSetterCall(loc, store.GetValue(), setter, store.GetParentBlock());
 }
 
 Expression* CHIRFieldReferencePatcher::TryPatchFieldGlobal(Field& fieldExpr)
@@ -178,7 +180,8 @@ Expression* CHIRFieldReferencePatcher::TryPatchFieldGlobal(Field& fieldExpr)
     auto getter = FindGetterForField(*mirrorClassDef, field, mirrorAttr);
     if (!getter) return nullptr;
 
-    return CreateGetterCall(baseValue, getter, fieldExpr.GetParentBlock());
+    auto loc = fieldExpr.GetDebugLocation();
+    return CreateGetterCall(loc, baseValue, getter, fieldExpr.GetParentBlock());
 }
 
 Expression* CHIRFieldReferencePatcher::TryPatchLoadGlobal(Load& load)
@@ -212,7 +215,8 @@ Expression* CHIRFieldReferencePatcher::TryPatchLoadGlobal(Load& load)
             if (!getter) return nullptr;
         }
 
-        return CreateGetterCall(baseValue, getter, load.GetParentBlock());
+        auto loc = load.GetDebugLocation();
+        return CreateGetterCall(loc, baseValue, getter, load.GetParentBlock());
     }
 
     if (localVarExpr->GetExprKind() == ExprKind::GET_ELEMENT_BY_NAME) {
@@ -227,7 +231,8 @@ Expression* CHIRFieldReferencePatcher::TryPatchLoadGlobal(Load& load)
         auto getter = FindInstanceGetterByName(*mirrorClassDef, names[0]);
         if (!getter) return nullptr;
 
-        return CreateGetterCall(baseValue, getter, load.GetParentBlock());
+        auto loc = load.GetDebugLocation();
+        return CreateGetterCall(loc, baseValue, getter, load.GetParentBlock());
     }
 
     return nullptr;
@@ -256,7 +261,8 @@ Expression* CHIRFieldReferencePatcher::TryPatchLoad(Load& load, ClassDef& parent
     if (!getter) return nullptr;
 
     auto baseValue = getRef->GetLocation();
-    return CreateGetterCall(baseValue, getter, load.GetParentBlock());
+    auto loc = load.GetDebugLocation();
+    return CreateGetterCall(loc, baseValue, getter, load.GetParentBlock());
 }
 
 Expression* CHIRFieldReferencePatcher::TryPatchStoreElementRef(StoreElementRef& store, ClassDef& parentDef)
@@ -277,7 +283,8 @@ Expression* CHIRFieldReferencePatcher::TryPatchStoreElementRef(StoreElementRef& 
     auto setter = FindSetterForField(parentDef, field, mirrorAttr);
     if (!setter) return nullptr;
 
-    return CreateSetterCall(baseValue, valueToStore, setter, store.GetParentBlock());
+    auto loc = store.GetDebugLocation();
+    return CreateSetterCall(loc, baseValue, valueToStore, setter, store.GetParentBlock());
 }
 
 Expression* CHIRFieldReferencePatcher::TryPatchField(Field& fieldExpr, ClassDef& parentDef)
@@ -297,10 +304,12 @@ Expression* CHIRFieldReferencePatcher::TryPatchField(Field& fieldExpr, ClassDef&
     auto getter = FindGetterForField(parentDef, field, mirrorAttr);
     if (!getter) return nullptr;
 
-    return CreateGetterCall(baseValue, getter, fieldExpr.GetParentBlock());
+    auto loc = fieldExpr.GetDebugLocation();
+    return CreateGetterCall(loc, baseValue, getter, fieldExpr.GetParentBlock());
 }
 
-Expression* CHIRFieldReferencePatcher::CreateGetterCall(Value* baseValue, Function* getter, Block* parentBlock)
+Expression* CHIRFieldReferencePatcher::CreateGetterCall(
+    const DebugLocation& loc, Value* baseValue, Function* getter, Block* parentBlock)
 {
     auto returnType = getter->GetReturnType();
 
@@ -314,11 +323,11 @@ Expression* CHIRFieldReferencePatcher::CreateGetterCall(Value* baseValue, Functi
 
     FuncCallContext ctx{.args = args, .thisType = thisType};
 
-    return builder.CreateExpression<Apply>(returnType, getter, ctx, parentBlock);
+    return builder.CreateExpression<Apply>(loc, returnType, getter, ctx, parentBlock);
 }
 
 Expression* CHIRFieldReferencePatcher::CreateSetterCall(
-    Value* baseValue, Value* valueToStore, Function* setter, Block* parentBlock)
+    const DebugLocation& loc, Value* baseValue, Value* valueToStore, Function* setter, Block* parentBlock)
 {
     std::vector<Value*> args = {baseValue, valueToStore};
 
@@ -330,10 +339,11 @@ Expression* CHIRFieldReferencePatcher::CreateSetterCall(
 
     FuncCallContext ctx{.args = args, .thisType = thisType};
 
-    return builder.CreateExpression<Apply>(builder.GetUnitTy(), setter, ctx, parentBlock);
+    return builder.CreateExpression<Apply>(loc, builder.GetUnitTy(), setter, ctx, parentBlock);
 }
 
-Expression* CHIRFieldReferencePatcher::CreateStaticGetterCall(Function* getter, Block* parentBlock)
+Expression* CHIRFieldReferencePatcher::CreateStaticGetterCall(
+    const DebugLocation& loc, Function* getter, Block* parentBlock)
 {
     auto returnType = getter->GetReturnType();
 
@@ -342,10 +352,11 @@ Expression* CHIRFieldReferencePatcher::CreateStaticGetterCall(Function* getter, 
 
     FuncCallContext ctx{.args = {}, .thisType = thisType};
 
-    return builder.CreateExpression<Apply>(returnType, getter, ctx, parentBlock);
+    return builder.CreateExpression<Apply>(loc, returnType, getter, ctx, parentBlock);
 }
 
-Expression* CHIRFieldReferencePatcher::CreateStaticSetterCall(Value* valueToStore, Function* setter, Block* parentBlock)
+Expression* CHIRFieldReferencePatcher::CreateStaticSetterCall(
+    const DebugLocation& loc, Value* valueToStore, Function* setter, Block* parentBlock)
 {
     std::vector<Value*> args = {valueToStore};
 
@@ -354,7 +365,7 @@ Expression* CHIRFieldReferencePatcher::CreateStaticSetterCall(Value* valueToStor
 
     FuncCallContext ctx{.args = args, .thisType = thisType};
 
-    return builder.CreateExpression<Apply>(builder.GetUnitTy(), setter, ctx, parentBlock);
+    return builder.CreateExpression<Apply>(loc, builder.GetUnitTy(), setter, ctx, parentBlock);
 }
 
 } // namespace Cangjie::CHIR

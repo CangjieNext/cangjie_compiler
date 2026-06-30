@@ -113,6 +113,7 @@ void JavaDesugarManager::InsertJavaRefVarDecl(ClassDecl& decl)
     javaref->SetTy(javaEntityDecl.GetTy());
     javaref->EnableAttr(Attribute::JAVA_MIRROR, Attribute::COMPILER_ADD);
     javaref->begin = decl.body ? decl.body->begin : decl.begin;
+    javaref->end = decl.body ? decl.body->end : decl.end;
     javaref->curFile = decl.curFile;
 
     Modifier protectedMod = Modifier(TokenKind::PUBLIC, javaref->begin);
@@ -133,6 +134,7 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
     auto& javaEntityDecl = *lib.GetJavaEntityDecl();
 
     auto param = CreateFuncParam("$ref", CreateRefType(javaEntityDecl), nullptr, javaEntityDecl.GetTy());
+    CopyPos(&decl, param.get());
 
     std::vector<OwnedPtr<Node>> ctorNodes;
 
@@ -169,12 +171,15 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
     std::vector<OwnedPtr<FuncParam>> ctorParams;
     ctorParams.push_back(std::move(param));
     auto paramList = CreateFuncParamList(std::move(ctorParams));
+    CopyPos(&decl, paramList.get());
 
     std::vector<OwnedPtr<FuncParamList>> paramLists;
     paramLists.push_back(std::move(paramList));
 
     auto ctorFuncBody = CreateFuncBody(
         std::move(paramLists), CreateRefType(decl), CreateBlock(std::move(ctorNodes), decl.GetTy()), decl.GetTy());
+    CopyPos(&decl, ctorFuncBody.get());
+    CopyPos(&decl, ctorFuncBody->body.get());
 
     auto fd = CreateFuncDecl("init", std::move(ctorFuncBody), ctorFuncTy);
     fd->fullPackageName = decl.fullPackageName;
@@ -186,6 +191,7 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
         Attribute::IN_CLASSLIKE, Attribute::CONSTRUCTOR);
     fd->funcBody->parentClassLike = &decl;
     fd->begin = decl.begin;
+    fd->end = decl.end;
     fd->curFile = decl.curFile;
     fd->fullPackageName = decl.fullPackageName;
 
@@ -204,6 +210,7 @@ void JavaDesugarManager::InsertJavaMirrorHasInited(ClassDecl& mirror)
     auto initializer = CreateLitConstExpr(LitConstKind::BOOL, "false", boolTy);
     auto ret = WithinFile(CreateVarDecl(HAS_INITED_IDENT, std::move(initializer)), curFile);
     ret->isVar = true;
+    CopyPos(&mirror, ret.get());
     ret->fullPackageName = mirror.fullPackageName;
     ret->outerDecl = Ptr(&mirror);
     ret->EnableAttr(
@@ -451,9 +458,11 @@ void JavaDesugarManager::InsertJavaMirrorPropGetter(PropDecl& prop)
     auto jniGetterCallRes = CreateTmpVarDecl(nullptr, std::move(jniGetterCall));
     jniGetterCallRes->SetTy(jniGetterCallRes->initializer->GetTy());
     CopyBasicInfo(jniGetterCallRes->initializer.get(), jniGetterCallRes.get());
+    CopyPos(&prop, jniGetterCallRes.get());
 
     auto callResRef = CreateRefExpr(*jniGetterCallRes);
     CopyBasicInfo(jniGetterCallRes.get(), callResRef.get());
+    CopyPos(&prop, callResRef.get());
 
     auto outerDecl = As<ASTKind::CLASS_LIKE_DECL>(prop.outerDecl);
     OwnedPtr<Expr> unwrapJavaEntityCall = isArrayGetLength || !outerDecl
@@ -469,6 +478,7 @@ void JavaDesugarManager::InsertJavaMirrorPropGetter(PropDecl& prop)
     auto& getterBody = getter->funcBody;
     getterBody->body = CreateBlock({}, prop.GetTy());
     getterBody->SetTy(prop.GetTy());
+    CopyPos(&prop, getterBody->body.get());
 
     getterBody->body->body.emplace_back(std::move(jniGetterCallRes));
     getterBody->body->body.emplace_back(CreateReturnExpr(std::move(unwrapJavaEntityCall), getterBody.get()));
@@ -484,6 +494,7 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
     CJC_ASSERT_WITH_MSG(!prop.setters[0]->funcBody->paramLists.empty(), "setter paramLists cannot be empty");
     CJC_ASSERT_WITH_MSG(!prop.setters[0]->funcBody->paramLists[0]->params.empty(), "setter params cannot be empty");
     auto paramRef = WithinFile(CreateRefExpr(*prop.setters[0]->funcBody->paramLists[0]->params[0]), curFile);
+    CopyPos(&prop, paramRef.get());
 
     if (prop.TestAttr(Attribute::STATIC)) {
         jniSetterCall = lib.CreateSetStaticFieldCall(lib.CreateGetJniEnvCall(curFile),
@@ -497,6 +508,7 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
     }
 
     auto block = CreateBlock({}, prop.GetTy());
+    CopyPos(&prop, block.get());
     auto unitTy = TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT);
 
     auto& setter = *prop.setters.begin();

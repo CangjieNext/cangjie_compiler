@@ -132,8 +132,9 @@ Expression* PatchCJMPImplBodies::TryPatchLoad(Load& load, ClassDef& implClassDef
         .thisType = baseValue ? baseValue->GetType() : nullptr
     };
 
+    auto loc = load.GetDebugLocation();
     auto resultTy = getter->GetReturnType();
-    return builder.CreateExpression<Apply>(resultTy, StaticCast<Value*>(getter), callContext, load.GetParentBlock());
+    return builder.CreateExpression<Apply>(loc, resultTy, StaticCast<Value*>(getter), callContext, load.GetParentBlock());
 }
 
 Expression* PatchCJMPImplBodies::TryPatchLoadByName(Load& load, ClassDef& implClassDef)
@@ -160,8 +161,9 @@ Expression* PatchCJMPImplBodies::TryPatchLoadByName(Load& load, ClassDef& implCl
         .thisType = baseValue ? baseValue->GetType() : nullptr
     };
 
+    auto loc = load.GetDebugLocation();
     auto resultTy = getter->GetReturnType();
-    return builder.CreateExpression<Apply>(resultTy, StaticCast<Value*>(getter), callContext, load.GetParentBlock());
+    return builder.CreateExpression<Apply>(loc, resultTy, StaticCast<Value*>(getter), callContext, load.GetParentBlock());
 }
 
 void PatchCJMPImplBodies::TryPatchStoreElementByName(StoreElementByName& storeByName, ClassDef& implClassDef)
@@ -184,6 +186,7 @@ void PatchCJMPImplBodies::TryPatchStoreElementByName(StoreElementByName& storeBy
     }
 
     auto setter = FindInstanceSetterByName(implClassDef, names[0]);
+    auto loc = storeByName.GetDebugLocation();
     if (setter && setter->TestAttr(Attribute::JAVA_IMPL)) {
         auto thisValue = storeByName.GetLocation();
         auto storedValue = storeByName.GetValue();
@@ -195,12 +198,12 @@ void PatchCJMPImplBodies::TryPatchStoreElementByName(StoreElementByName& storeBy
             };
             auto resultTy = builder.GetUnitTy();
             auto newExpr = builder.CreateExpression<Apply>(
-                resultTy, StaticCast<Value*>(setter), callContext, storeByName.GetParentBlock());
+                loc, resultTy, StaticCast<Value*>(setter), callContext, storeByName.GetParentBlock());
             storeByName.ReplaceWith(*newExpr);
         }
     } else {
         auto unitExpr = builder.CreateConstantExpression<UnitLiteral>(
-            builder.GetUnitTy(), storeByName.GetParentBlock());
+            loc, builder.GetUnitTy(), storeByName.GetParentBlock());
         storeByName.ReplaceWith(*unitExpr);
     }
 }
@@ -224,8 +227,9 @@ Expression* PatchCJMPImplBodies::TryPatchStoreElementRef(StoreElementRef& store,
     if (fieldName.empty()) return nullptr;
 
     auto setter = FindInstanceSetterByName(implClassDef, fieldName);
+    auto loc = store.GetDebugLocation();
     if (!setter || !setter->TestAttr(Attribute::JAVA_IMPL)) {
-        auto unitExpr = builder.CreateConstantExpression<UnitLiteral>(builder.GetUnitTy(), store.GetParentBlock());
+        auto unitExpr = builder.CreateConstantExpression<UnitLiteral>(loc, builder.GetUnitTy(), store.GetParentBlock());
         store.ReplaceWith(*unitExpr);
         return nullptr;
     }
@@ -237,7 +241,7 @@ Expression* PatchCJMPImplBodies::TryPatchStoreElementRef(StoreElementRef& store,
     };
 
     auto resultTy = builder.GetUnitTy();
-    return builder.CreateExpression<Apply>(resultTy, StaticCast<Value*>(setter), callContext, store.GetParentBlock());
+    return builder.CreateExpression<Apply>(loc, resultTy, StaticCast<Value*>(setter), callContext, store.GetParentBlock());
 }
 
 void PatchCJMPImplBodies::PatchConstructorFieldInit(Function& ctor, ClassDef& implClassDef)
@@ -292,12 +296,14 @@ void PatchCJMPImplBodies::PatchConstructorFieldInit(Function& ctor, ClassDef& im
     auto terminator = targetBlock->GetTerminator();
     if (!terminator) { return; }
 
+    auto loc = ctor.GetDebugLocation();
     for (auto& field : allFields) {
         if (field.TestAttr(Attribute::COMPILER_ADD)) continue;
         if (!field.initializerFunc) continue;
         if (field.TestAttr(Attribute::MUT)) continue;
 
         auto initApply = builder.CreateExpression<Apply>(
+            loc,
             field.initializerFunc->GetReturnType(),
             StaticCast<Value*>(field.initializerFunc),
             FuncCallContext{
@@ -309,6 +315,7 @@ void PatchCJMPImplBodies::PatchConstructorFieldInit(Function& ctor, ClassDef& im
         initApply->MoveBefore(terminator);
 
         auto initStore = builder.CreateExpression<StoreElementByName>(
+            loc,
             builder.GetUnitTy(),
             initApply->GetResult(),
             cregRef,
