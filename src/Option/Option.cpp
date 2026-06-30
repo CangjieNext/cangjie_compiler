@@ -636,8 +636,7 @@ bool GlobalOptions::CheckLTOPkgVisibilityOptions() const
         bool validForDylib = (outputMode == OutputMode::SHARED_LIB && target.os == OSType::LINUX);
         bool validForStaticLib = (outputMode == OutputMode::STATIC_LIB && target.os == OSType::IOS);
         if (!validForDylib && !validForStaticLib) {
-            DiagnosticEngine diag;
-            diag.DiagnoseRefactor(DiagKindRefactor::driver_visible_pkgs_only_for_dylib, DEFAULT_POSITION);
+            Warningln("Option '--lto-keep-pkg-visibility' does not take effect under the current configuration.");
         }
     }
 
