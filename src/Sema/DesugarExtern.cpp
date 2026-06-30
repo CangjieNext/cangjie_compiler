@@ -633,7 +633,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::DesugarAmbiguousOrdinaryCall(
     // report cleanly; otherwise the call already emitted its own error.
     if (typeValid) {
         afce.desugarExpr = nullptr;
-        diag.Diagnose(afce, DiagKind::sema_invalid_forced_cast_expr);
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_forced_cast_expr, afce);
     }
     afce.SetTy(TypeManager::GetInvalidTy());
     return TypeManager::GetInvalidTy();
@@ -701,7 +701,7 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynAmbiguousForcedCastExpr(
     // Juxtaposition `(U)e` with no ordinary reading: a malformed forced cast when `U`
     // is a type, otherwise let the operand's own diagnostics surface.
     if (typeValid) {
-        diag.Diagnose(afce, DiagKind::sema_invalid_forced_cast_expr);
+        diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_forced_cast_expr, afce);
     } else {
         (void)Synthesize(ctx, afce.rightExpr.get());
     }
