@@ -1094,10 +1094,52 @@ OwnedPtr<Expr> ParserImpl::ParseLeftParenExpr()
     return ParseLeftParenExprInKind(ExprKind::ALL);
 }
 
+// `U` as an expression for the ordinary reading of `(U)X`: a nominal `RefType`
+// becomes a `RefExpr`; other types have no ordinary reading, so this returns null.
+static OwnedPtr<Expr> DeriveExprFromType(const Type& type)
+{
+    if (auto rt = DynamicCast<const RefType*>(&type)) {
+        auto re = MakeOwned<RefExpr>();
+        re->ref.identifier = rt->ref.identifier;
+        re->begin = rt->begin;
+        re->end = rt->end;
+        re->leftAnglePos = rt->leftAnglePos;
+        re->rightAnglePos = rt->rightAnglePos;
+        for (auto& ta : rt->typeArguments) {
+            re->typeArguments.emplace_back(ASTCloner::Clone(ta.get()));
+        }
+        return re;
+    }
+    // A qualified type `a.b` (e.g. `pkg.Type`, `obj.member`) reads as a member access
+    // `a.b` when the construct turns out to be an ordinary call/subscript rather than
+    // a forced cast (e.g. `(obj.method)(args)`). Derive it recursively so the operand
+    // form stays consistent with simple `RefType` names.
+    if (auto qt = DynamicCast<const QualifiedType*>(&type)) {
+        auto base = DeriveExprFromType(*qt->baseType);
+        if (!base) {
+            return nullptr;
+        }
+        auto ma = MakeOwned<MemberAccess>();
+        ma->baseExpr = std::move(base);
+        ma->field = qt->field;
+        ma->dotPos = qt->dotPos;
+        ma->begin = qt->begin;
+        ma->end = qt->end;
+        ma->leftAnglePos = qt->leftAnglePos;
+        ma->rightAnglePos = qt->rightAnglePos;
+        for (auto& ta : qt->typeArguments) {
+            ma->typeArguments.emplace_back(ASTCloner::Clone(ta.get()));
+        }
+        return ma;
+    }
+    return nullptr;
+}
+
 OwnedPtr<AST::Expr> ParserImpl::ParseLeftParenExprInKind(ExprKind ek)
 {
-    // Parse conventional ParenExpr
-    Position leftParenPos = lookahead.Begin();
+    Position leftParenPos = lastToken.Begin();
+    // Reset point so the speculative forced-cast type parse below can rewind.
+    ParserScope contentScope(*this);
     if (Skip(TokenKind::RPAREN)) {
         // LitConstExpr(unit_literal) is parsed from TWO Tokens.
         OwnedPtr<LitConstExpr> ret = MakeOwned<LitConstExpr>();
@@ -1112,6 +1154,28 @@ OwnedPtr<AST::Expr> ParserImpl::ParseLeftParenExprInKind(ExprKind ek)
             return ret;
         }
     }
+
+    // Forced cast: content parses as a type, then `)`, then an operand. `-` keeps
+    // `(U)-e` binary and `[` keeps `(U)[i]` a subscript (both excluded); SeeingExpr()
+    // excludes other binary/postfix operators. Speculative-parse diags are discarded.
+    OwnedPtr<Type> typeCandidate;
+    diag.Prepare();
+    {
+        auto candidate = ParseType();
+        bool isForcedCast = candidate && candidate->astKind != ASTKind::INVALID_TYPE &&
+            Skip(TokenKind::RPAREN) && !newlineSkipped && SeeingExpr() && !Seeing(TokenKind::SUB) &&
+            !Seeing(TokenKind::LSQUARE);
+        if (isForcedCast) {
+            diag.Commit();
+            typeCandidate = std::move(candidate);
+        }
+    }
+    if (typeCandidate) {
+        return ParseForcedCastTail(ek, leftParenPos, std::move(typeCandidate));
+    }
+    diag.ClearTransaction();
+    contentScope.ResetParserScope();
+
     // Not identifier.
     OwnedPtr<Expr> expr = ParseExpr(
         ek == ExprKind::IF_COND_EXPR || ek == ExprKind::EXPR_IN_IF_COND_TUPLE ? ExprKind::EXPR_IN_IF_COND_TUPLE
@@ -1139,6 +1203,39 @@ OwnedPtr<AST::Expr> ParserImpl::ParseLeftParenExprInKind(ExprKind ek)
     ret->begin = leftParenPos;
     ret->end = lastToken.End();
     return ret;
+}
+
+OwnedPtr<AST::Expr> ParserImpl::ParseForcedCastTail(
+    ExprKind ek, const Position& leftParenPos, OwnedPtr<AST::Type> typeCandidate)
+{
+    // The type parse already consumed the content and ')'; `lastToken` is the ')'.
+    Position rightParenPos = lastToken.Begin();
+    bool isCallForm = Seeing(TokenKind::LPAREN);
+    // `leftExpr` (U as an expression) is derived from the type, not re-parsed.
+    OwnedPtr<Expr> leftExpr = DeriveExprFromType(*typeCandidate);
+
+    // Operand, parsed once and shared by both readings.
+    OwnedPtr<Expr> operand;
+    if (isCallForm) {
+        // Call form `(U)(args)`: capture only the immediate `(args)`; trailing postfix
+        // binds to the resolved node, so `(f)(a)(b)` is `((f a) b)`.
+        (void)Skip(TokenKind::LPAREN);
+        operand = ParseLeftParenExprInKind(ExprKind::ALL);
+    } else {
+        // Juxtaposition `(U)e` absorbs trailing postfix into the operand: `(U)e.f` is
+        // `(U)(e.f)`.
+        operand = ParseBaseExpr(nullptr, ek);
+    }
+
+    auto node = MakeOwned<AmbiguousForcedCastExpr>();
+    node->type = std::move(typeCandidate);
+    node->leftExpr = std::move(leftExpr);
+    node->rightExpr = std::move(operand);
+    node->leftParenPos = leftParenPos;
+    node->rightParenPos = rightParenPos;
+    node->begin = leftParenPos;
+    node->end = node->rightExpr ? node->rightExpr->end : rightParenPos;
+    return node;
 }
 
 OwnedPtr<FuncArg> ParserImpl::ParseFuncArg()

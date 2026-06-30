@@ -59,6 +59,8 @@ enum class ExprKind : uint8_t {
 
 const std::vector<TokenKind>& GetTypeFirst();
 
+class ParserScope;
+
 class ParserImpl final {
 public:
     ParserImpl(unsigned int fileID, const std::string& input, DiagnosticEngine& diag, SourceManager& sm,
@@ -643,6 +645,8 @@ private:
      */
     OwnedPtr<AST::Expr> ParseLeftParenExpr();
     OwnedPtr<AST::Expr> ParseLeftParenExprInKind(ExprKind ek);
+    OwnedPtr<AST::Expr> ParseForcedCastTail(
+        ExprKind ek, const Position& leftParenPos, OwnedPtr<AST::Type> typeCandidate);
     OwnedPtr<AST::TupleLit> ParseTupleLitForParenExpr(const Position& leftParenPos);
     OwnedPtr<AST::TupleLit> ParseTupleLitForParenExprComma(const Position& leftParenPos, OwnedPtr<AST::Expr> expr);
     /**
@@ -1135,18 +1139,21 @@ public:
           oldLastNoneNLToken(parser.lastNoneNLToken),
           oldNewlineSkipped(parser.newlineSkipped)
     {
-        parser.lexer->SetResetPoint();
+        parser.lexer->PushResetPoint();
     }
     void ResetParserScope()
     {
         ref->lookahead = oldLookAhead;
         ref->lastToken = oldSkipToken;
-        ref->lexer->Reset();
+        ref->lexer->RestoreResetPoint();
         ref->lastToken = oldLastToken;
         ref->lastNoneNLToken = oldLastNoneNLToken;
         ref->newlineSkipped = oldNewlineSkipped;
     }
-    ~ParserScope() = default;
+    ~ParserScope()
+    {
+        ref->lexer->DropResetPoint();
+    }
 
 private:
     ParserImpl* ref;
