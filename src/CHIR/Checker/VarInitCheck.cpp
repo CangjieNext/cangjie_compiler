@@ -43,8 +43,13 @@ void VarInitCheck::RunOnPackage(const Package* package, size_t threadNum)
             func->Get<SkipCheck>() != SkipKind::SKIP_VIC) {
             // Skip deserialized CJMP constructors - they were validated during common compilation
             // and their body was compiled before superclass patching for platform mirrors.
+            // After CJMP merge, the class is marked SPECIFIC but may use deserialized common constructor.
+            // For SPECIFIC types, we must still check because specific vars may be uninitialized.
             if (func->IsConstructor() && func->TestAttr(Attribute::DESERIALIZED)) {
-                continue;
+                auto outerDef = func->GetOuterDeclaredOrExtendedDef();
+                if (!outerDef || !outerDef->TestAttr(Attribute::SPECIFIC)) {
+                    continue;
+                }
             }
             funcs.emplace_back(func);
         }
