@@ -20,7 +20,9 @@
 #include <cstring>
 #include <sys/wait.h>
 #endif
+#include <algorithm>
 #include <fstream>
+#include <sstream>
 #include <type_traits>
 
 #include "cangjie/Utils/FileUtil.h"
@@ -95,6 +97,8 @@ const static std::string LD_LIBRARY_PATH = "LD_LIBRARY_PATH";
 const static std::string LD_PRELOAD = "LD_PRELOAD";
 #endif
 
+const static std::string DEFERRED_DIR_ARG_PREFIX = "@dir:";
+
 void Tool::AppendMultiArgs(const std::string& argStr)
 {
     auto splitArgs = Utils::SplitString(argStr, " ");
@@ -105,16 +109,61 @@ void Tool::AppendMultiArgs(const std::string& argStr)
     }
 }
 
+void Tool::AppendArgsFromDirAtExecution(const std::string& dir, const std::string& extension)
+{
+    deferredDirArgs.emplace_back(DeferredDirArgs{dir, extension});
+    args.emplace_back(DEFERRED_DIR_ARG_PREFIX + std::to_string(deferredDirArgs.size() - 1));
+}
+
+std::optional<size_t> Tool::GetDeferredDirArgIndex(const std::string& arg) const
+{
+    if (arg.find(DEFERRED_DIR_ARG_PREFIX) != 0) {
+        return std::nullopt;
+    }
+    std::istringstream stream(arg.substr(DEFERRED_DIR_ARG_PREFIX.size()));
+    size_t index = 0;
+    stream >> index;
+    if (stream.fail() || !stream.eof() || index >= deferredDirArgs.size()) {
+        return std::nullopt;
+    }
+    return index;
+}
+
+std::vector<std::string> Tool::ExpandArgs() const
+{
+    std::vector<std::string> expandedArgs;
+    for (const auto& arg : args) {
+        auto deferredIndex = GetDeferredDirArgIndex(arg);
+        if (!deferredIndex.has_value()) {
+            expandedArgs.emplace_back(arg);
+            continue;
+        }
+        const auto& deferredArg = deferredDirArgs[deferredIndex.value()];
+        auto files = FileUtil::GetAllFilesUnderCurrentPath(deferredArg.dir, deferredArg.extension);
+        std::sort(files.begin(), files.end());
+        for (const auto& file : files) {
+            expandedArgs.emplace_back(FileUtil::JoinPath(deferredArg.dir, file));
+        }
+    }
+    return expandedArgs;
+}
+
 std::string Tool::GenerateCommand() const
 {
     std::string tempCommand;
     std::string argStr;
-    auto& argList = GetArgs();
-    std::for_each(argList.begin(), argList.end(), [&argStr](const std::string& s) {
+    auto argList = GetArgs();
+    std::for_each(argList.begin(), argList.end(), [this, &argStr](const std::string& s) {
+        std::string arg = s;
+        auto deferredIndex = GetDeferredDirArgIndex(s);
+        if (deferredIndex.has_value()) {
+            const auto& deferredArg = deferredDirArgs[deferredIndex.value()];
+            arg = FileUtil::JoinPath(deferredArg.dir, "*." + deferredArg.extension);
+        }
 #ifdef _WIN32
-        argStr = argStr + FileUtil::GetQuoted(s) + " ";
+        argStr = argStr + FileUtil::GetQuoted(arg) + " ";
 #else
-        argStr = argStr + GetSingleQuoted(s) + " ";
+        argStr = argStr + GetSingleQuoted(arg) + " ";
 #endif
     });
 #ifndef _WIN32
@@ -184,7 +233,8 @@ std::unique_ptr<ToolFuture> Tool::Run() const
     }
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
-    auto& arguments = GetFullArgs();
+    auto arguments = ExpandArgs();
+    arguments.insert(arguments.begin(), name);
     std::ostringstream oss;
     for (size_t i = 0; i < arguments.size(); ++i) {
         if (i != 0) {
@@ -217,7 +267,8 @@ std::unique_ptr<ToolFuture> Tool::Run() const
         Utils::Semaphore::Get().Acquire();
         return std::make_unique<ThreadFuture>(std::async(&Tool::InternalImplementedCommandExec, this));
     }
-    auto& arguments = GetFullArgs();
+    auto arguments = ExpandArgs();
+    arguments.insert(arguments.begin(), name);
 
     // Convert arguments to char * array for argv argument.
     std::vector<char*> rawArgumentArray = {};
