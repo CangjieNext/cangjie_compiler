@@ -20,7 +20,9 @@
 #include <cstring>
 #include <sys/wait.h>
 #endif
+#include <algorithm>
 #include <fstream>
+#include <sstream>
 #include <type_traits>
 
 #include "cangjie/Utils/FileUtil.h"
@@ -101,15 +103,49 @@ void Tool::AppendMultiArgs(const std::string& argStr)
     for (const auto& a : splitArgs) {
         if (!a.empty()) {
             args.emplace_back(a);
+            argKinds.push_back(ArgKind::Literal);
         }
     }
+}
+
+void Tool::AppendArgsFromDirAtExecution(const std::string& dir, const std::string& extension)
+{
+    size_t deferredIdx = deferredDirArgs.size();
+    deferredDirArgs.push_back({dir, extension});
+    deferredArgMap[args.size()] = deferredIdx;
+    args.emplace_back("<expand_dir:" + extension + ">");
+    argKinds.push_back(ArgKind::DeferredDir);
+}
+
+std::vector<std::string> Tool::ExpandArgs() const
+{
+    if (deferredArgMap.empty())
+        return args;
+
+    std::vector<std::string> expandedArgs;
+    for (size_t pos = 0; pos < args.size(); ++pos) {
+        if (argKinds[pos] != ArgKind::DeferredDir) {
+            expandedArgs.emplace_back(args[pos]);
+            continue;
+        }
+        const auto& deferredArg = deferredDirArgs[deferredArgMap.at(pos)];
+        // GetFileExtension finds the last dot, so "lto.o" → "o".
+        auto files = FileUtil::GetAllFilesUnderCurrentPath(
+            deferredArg.dir,
+            FileUtil::GetFileExtension(deferredArg.extension));
+        std::sort(files.begin(), files.end());
+        for (const auto& file : files) {
+            expandedArgs.emplace_back(FileUtil::JoinPath(deferredArg.dir, file));
+        }
+    }
+    return expandedArgs;
 }
 
 std::string Tool::GenerateCommand() const
 {
     std::string tempCommand;
     std::string argStr;
-    auto& argList = GetArgs();
+    auto argList = ExpandArgs();
     std::for_each(argList.begin(), argList.end(), [&argStr](const std::string& s) {
 #ifdef _WIN32
         argStr = argStr + FileUtil::GetQuoted(s) + " ";
@@ -217,7 +253,8 @@ std::unique_ptr<ToolFuture> Tool::Run() const
         Utils::Semaphore::Get().Acquire();
         return std::make_unique<ThreadFuture>(std::async(&Tool::InternalImplementedCommandExec, this));
     }
-    auto& arguments = GetFullArgs();
+    auto arguments = ExpandArgs();
+    arguments.insert(arguments.begin(), name);
 
     // Convert arguments to char * array for argv argument.
     std::vector<char*> rawArgumentArray = {};

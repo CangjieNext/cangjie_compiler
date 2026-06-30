@@ -94,10 +94,16 @@ void Darwin_CJNATIVE::GenerateArchiveTool(const std::vector<TempFileInfo>& objFi
         return;
     }
     auto ltoObject = GenerateLTOObjectFile(objFiles);
-    if (driverOptions.enableVerbose) {
-        Infoln("preserved Darwin LTO object at: " + ltoObject.filePath);
-    }
-    MachO::GenerateArchiveTool({ltoObject});
+    auto archiveTool = std::make_unique<Tool>(arPath, ToolType::BACKEND, driverOptions.environment.allVariables);
+    archiveTool->AppendArg("cr");
+    auto archiveOutput = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_STATICLIB);
+    auto removeArchive = std::make_unique<Tool>("RemoveFile", ToolType::INTERNAL_IMPLEMENTED,
+        driverOptions.environment.allVariables);
+    removeArchive->AppendArg(archiveOutput.filePath);
+    backendCmds.emplace_back(MakeSingleToolBatch({std::move(removeArchive)}));
+    archiveTool->AppendArg(archiveOutput.filePath);
+    archiveTool->AppendArgsFromDirAtExecution(ltoObject.rawPath, "lto.o");
+    backendCmds.emplace_back(MakeSingleToolBatch({std::move(archiveTool)}));
 }
 
 TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>& objFiles)
@@ -109,11 +115,10 @@ TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileIn
     }
     auto tool = std::make_unique<Tool>(ldPath, ToolType::BACKEND, driverOptions.environment.allVariables);
     tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
-    auto tempBinaryInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_DYLIB);
-    auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::O_OBJ);
+    auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::T_OBJ);
     auto ltoObjectDir = outputFileInfo.filePath + ".lto";
+    // Linker always produces nums.<arch>.lto.o inside -object_path_lto, so the name must match.
     auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, "0." + GetTargetArchString() + ".lto.o");
-    tool->AppendArg("-o", tempBinaryInfo.filePath);
     GenerateLinkOptionsForLTO(*tool);
     tool->AppendArg("-object_path_lto", ltoObjectDir);
     tool->AppendArg("-lto-emit-obj-only");
