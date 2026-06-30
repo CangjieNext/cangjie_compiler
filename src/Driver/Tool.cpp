@@ -16,11 +16,14 @@
 #include <windows.h>
 #include <iomanip>
 #else
+#include <dirent.h>
 #include <spawn.h>
 #include <cstring>
 #include <sys/wait.h>
 #endif
+#include <algorithm>
 #include <fstream>
+#include <sstream>
 #include <type_traits>
 
 #include "cangjie/Utils/FileUtil.h"
@@ -101,20 +104,71 @@ void Tool::AppendMultiArgs(const std::string& argStr)
     for (const auto& a : splitArgs) {
         if (!a.empty()) {
             args.emplace_back(a);
+            argKinds.push_back(ArgKind::Literal);
         }
     }
+}
+
+void Tool::AppendArgsFromDirAtExecution(const std::string& dir, const std::string& extension)
+{
+    size_t deferredIdx = deferredDirArgs.size();
+    deferredDirArgs.push_back({dir, extension});
+    deferredArgMap[args.size()] = deferredIdx;
+    args.emplace_back("<expand_dir:" + extension + ">");
+    argKinds.push_back(ArgKind::DeferredDir);
+}
+
+std::vector<std::string> Tool::ExpandArgs() const
+{
+    // Fast path: no deferred args → no expansion needed.
+    // On platforms that never use AppendArgsFromDirAtExecution (e.g. Windows),
+    // this returns immediately without iterating.
+    if (deferredArgMap.empty())
+        return args;
+
+    std::vector<std::string> expandedArgs;
+    for (size_t pos = 0; pos < args.size(); ++pos) {
+        if (argKinds[pos] != ArgKind::DeferredDir) {
+            expandedArgs.emplace_back(args[pos]);
+            continue;
+        }
+        const auto& deferredArg = deferredDirArgs[deferredArgMap.at(pos)];
+        std::vector<std::string> files;
+        auto dotExt = "." + deferredArg.extension;
+#ifdef _WIN32
+        files = FileUtil::GetAllFilesUnderCurrentPath(deferredArg.dir, deferredArg.extension);
+#else
+        DIR* dirHandle = opendir(deferredArg.dir.c_str());
+        if (dirHandle != nullptr) {
+            for (auto entry = readdir(dirHandle); entry != nullptr; entry = readdir(dirHandle)) {
+                std::string fileName(entry->d_name);
+                if (fileName.size() > dotExt.size() &&
+                    fileName.compare(fileName.size() - dotExt.size(), dotExt.size(), dotExt) == 0) {
+                    files.emplace_back(fileName);
+                }
+            }
+            closedir(dirHandle);
+        }
+#endif
+        std::sort(files.begin(), files.end());
+        for (const auto& file : files) {
+            expandedArgs.emplace_back(FileUtil::JoinPath(deferredArg.dir, file));
+        }
+    }
+    return expandedArgs;
 }
 
 std::string Tool::GenerateCommand() const
 {
     std::string tempCommand;
     std::string argStr;
-    auto& argList = GetArgs();
+    auto argList = ExpandArgs();
     std::for_each(argList.begin(), argList.end(), [&argStr](const std::string& s) {
+        std::string arg = s;
 #ifdef _WIN32
-        argStr = argStr + FileUtil::GetQuoted(s) + " ";
+        argStr = argStr + FileUtil::GetQuoted(arg) + " ";
 #else
-        argStr = argStr + GetSingleQuoted(s) + " ";
+        argStr = argStr + GetSingleQuoted(arg) + " ";
 #endif
     });
 #ifndef _WIN32
@@ -184,7 +238,8 @@ std::unique_ptr<ToolFuture> Tool::Run() const
     }
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
-    auto& arguments = GetFullArgs();
+    auto arguments = ExpandArgs();
+    arguments.insert(arguments.begin(), name);
     std::ostringstream oss;
     for (size_t i = 0; i < arguments.size(); ++i) {
         if (i != 0) {
@@ -217,7 +272,8 @@ std::unique_ptr<ToolFuture> Tool::Run() const
         Utils::Semaphore::Get().Acquire();
         return std::make_unique<ThreadFuture>(std::async(&Tool::InternalImplementedCommandExec, this));
     }
-    auto& arguments = GetFullArgs();
+    auto arguments = ExpandArgs();
+    arguments.insert(arguments.begin(), name);
 
     // Convert arguments to char * array for argv argument.
     std::vector<char*> rawArgumentArray = {};
