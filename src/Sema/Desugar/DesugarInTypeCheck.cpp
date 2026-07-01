@@ -693,9 +693,12 @@ OwnedPtr<MemberAccess> DesugarRef2MemberAccess(
     auto baseExpr = MakeOwned<RefExpr>();
     baseExpr->ref.identifier = target->outerDecl->identifier;
     // Get inst decl ty where the target static function in.
-    auto targetOuterDeclTy = Promotion(typeManager).Promote(*curTopDeclTy, *target->outerDecl->ty);
-    if (targetOuterDeclTy.size() != 1) {
-        return nullptr; // Ambiguous or invalid, skip desugar.
+    auto targetOuterDeclTy = Promotion(typeManager).Promote(*curTopDeclTy, *target->outerDecl->GetTy());
+    // Promote should not return an empty container. When there are multiple versions of the parent type, directly use
+    // the first element for the non-implementation check, and the uniqueness of the candidate should be guaranteed by
+    // other diagnostics.
+    if (targetOuterDeclTy.empty()) {
+        return nullptr;
     }
     baseExpr->ty = *targetOuterDeclTy.begin();
     baseExpr->SetTarget(target->outerDecl);
