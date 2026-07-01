@@ -606,13 +606,15 @@ bool GlobalOptions::CheckCompileAsExeOptions() const
     }
     if (IsCompileAsExeEnabled() && !IsLTOEnabled()) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_compile_as_exe, DEFAULT_POSITION);
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_option_requires_lto, DEFAULT_POSITION,
+            "--compile-as-exe");
         return false;
     }
     auto osType = target.GetOSFamily();
     if (osType == OSType::WINDOWS || osType == OSType::DARWIN || osType == OSType::IOS) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_compile_as_exe_platform, DEFAULT_POSITION);
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_unsupported_platform, DEFAULT_POSITION,
+            "--compile-as-exe", "Windows, Mac, IOS");
         return false;
     }
     return true;
@@ -622,13 +624,15 @@ bool GlobalOptions::CheckLTOPkgVisibilityOptions() const
 {
     if (IsLTOPkgVisibilityEnabled() && !IsLTOEnabled()) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_visible_pkgs, DEFAULT_POSITION);
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_option_requires_lto, DEFAULT_POSITION,
+            "--lto-keep-pkg-visibility");
         return false;
     }
 
     if (!ltoVisiblePkgs.empty() && IsCompileAsExeEnabled()) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_invalid_visible_pkgs_conflict, DEFAULT_POSITION);
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_conflicting_options, DEFAULT_POSITION,
+            "--lto-keep-pkg-visibility", "--compile-as-exe");
         return false;
     }
 
@@ -637,7 +641,8 @@ bool GlobalOptions::CheckLTOPkgVisibilityOptions() const
         bool validForStaticLib = (outputMode == OutputMode::STATIC_LIB && target.os == OSType::IOS);
         if (!validForDylib && !validForStaticLib) {
             DiagnosticEngine diag;
-            diag.DiagnoseRefactor(DiagKindRefactor::driver_visible_pkgs_only_for_dylib, DEFAULT_POSITION);
+            diag.DiagnoseRefactor(DiagKindRefactor::driver_ineffective_option, DEFAULT_POSITION,
+                "--lto-keep-pkg-visibility");
         }
     }
 

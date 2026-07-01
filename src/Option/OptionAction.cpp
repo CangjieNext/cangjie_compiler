@@ -603,7 +603,7 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     // ---------- GENERAL COMPILE OPTIONS ----------
     { Options::ID::MODULE_NAME, []([[maybe_unused]] GlobalOptions& opts, const OptionArgInstance& arg) {
         DiagnosticEngine diag;
-        diag.DiagnoseRefactor(DiagKindRefactor::driver_useless_option, DEFAULT_POSITION, arg.name);
+        diag.DiagnoseRefactor(DiagKindRefactor::driver_deprecated_option, DEFAULT_POSITION, arg.name, "");
         return true;
     }},
     { Options::ID::PACKAGE_COMPILE, OPTION_TRUE_ACTION(opts.compilePackage = true) },
