@@ -1142,6 +1142,13 @@ static OwnedPtr<Expr> DeriveExprFromType(const Type& type)
 // responsible for rewinding the parser scope.
 OwnedPtr<AST::Type> ParserImpl::TryParseForcedCastType()
 {
+    // When the parenthesized content is not a type, ParseType emits parse diagnostics whose
+    // range can be zero in bare/libast parsing contexts, which would trip CheckRange's
+    // InternalError. These speculative diagnostics are always discarded (see the transaction
+    // below), so downgrade range checks to an error code instead of an ICE while trying, then
+    // restore the previous mode.
+    bool restoreRangeMode = !diag.IsCheckRangeErrorCodeRatherICE();
+    diag.EnableCheckRangeErrorCodeRatherICE();
     diag.Prepare();
     auto candidate = ParseType();
     bool isForcedCast = candidate && candidate->astKind != ASTKind::INVALID_TYPE &&
@@ -1149,10 +1156,14 @@ OwnedPtr<AST::Type> ParserImpl::TryParseForcedCastType()
         !Seeing(TokenKind::LSQUARE);
     if (isForcedCast) {
         diag.Commit();
-        return candidate;
+    } else {
+        diag.ClearTransaction();
+        candidate.reset();
     }
-    diag.ClearTransaction();
-    return nullptr;
+    if (restoreRangeMode) {
+        diag.DisableCheckRangeErrorCodeRatherICE();
+    }
+    return candidate;
 }
 
 OwnedPtr<AST::Expr> ParserImpl::FinishParenExpr(const Position& leftParenPos, OwnedPtr<AST::Expr> expr)
