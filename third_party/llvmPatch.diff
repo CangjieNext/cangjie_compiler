@@ -32185,7 +32185,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..c573e1594 100644
+index b391fe1ea..7870f9c2f 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -32241,7 +32241,7 @@ index b391fe1ea..c573e1594 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.2.0-beta.01";
++    g_version_str += "\n  cangjie 1.2.0-beta.02";
    }
  
    return g_version_str.c_str();
@@ -59004,7 +59004,7 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..f238f0691
+index 000000000..e4a48b35e
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 @@ -0,0 +1,3422 @@
@@ -61286,7 +61286,7 @@ index 000000000..f238f0691
 +    }
 +    return true;
 +  }
-+  return true;
++  return false;
 +}
 +
 +class EscapeAnalysisImpl : public InstVisitor<EscapeAnalysisImpl>,
@@ -63532,7 +63532,7 @@ index 4d32266eb..552e571d7 100644
          continue;
        }
 diff --git a/llvm/lib/Transforms/IPO/MergeFunctions.cpp b/llvm/lib/Transforms/IPO/MergeFunctions.cpp
-index b850591b4..f5754d089 100644
+index b850591b4..da4c027b7 100644
 --- a/llvm/lib/Transforms/IPO/MergeFunctions.cpp
 +++ b/llvm/lib/Transforms/IPO/MergeFunctions.cpp
 @@ -119,6 +119,7 @@
@@ -63547,14 +63547,15 @@ index b850591b4..f5754d089 100644
    }
  
    bool runOnModule(Module &M);
-+  void doExceptionOutline(Module &M);
++  bool doExceptionOutline(Module &M);
  
  private:
    // The function comparison operator is provided here so that FunctionNodes do
-@@ -408,9 +410,118 @@ static bool isEligibleForMerging(Function &F) {
+@@ -408,9 +410,119 @@ static bool isEligibleForMerging(Function &F) {
    return !F.isDeclaration() && !F.hasAvailableExternallyLinkage();
  }
  
+-bool MergeFunctions::runOnModule(Module &M) {
 +static bool isBBEligibleForOutline(llvm::BasicBlock *BB) {
 +  if (!BB)
 +    return false;
@@ -63644,7 +63645,8 @@ index b850591b4..f5754d089 100644
 +  return Func;
 +}
 +
-+void MergeFunctions::doExceptionOutline(Module &M) {
++bool MergeFunctions::doExceptionOutline(Module &M) {
+   bool Changed = false;
 +  SmallVector<std::pair<llvm::BasicBlock *, llvm::Function *>> ExceptionBBs;
 +
 +  for (Function &F : M) {
@@ -63658,20 +63660,19 @@ index b850591b4..f5754d089 100644
 +      }
 +    }
 +  }
-+
 +  for (auto &pair : ExceptionBBs) {
-+    generateFunc(pair.first, pair.second);
++      if (generateFunc(pair.first, pair.second))
++        Changed = true;
 +  }
++  return Changed;
 +}
-+
- bool MergeFunctions::runOnModule(Module &M) {
-   bool Changed = false;
--
-+  doExceptionOutline(M);
+ 
++bool MergeFunctions::runOnModule(Module &M) {
++  bool Changed = doExceptionOutline(M);
    SmallVector<GlobalValue *, 4> UsedV;
    collectUsedGlobalVariables(M, UsedV, /*CompilerUsed=*/false);
    collectUsedGlobalVariables(M, UsedV, /*CompilerUsed=*/true);
-@@ -661,6 +772,27 @@ static bool canCreateThunkFor(Function *F) {
+@@ -661,6 +773,27 @@ static bool canCreateThunkFor(Function *F) {
    // Don't merge tiny functions using a thunk, since it can just end up
    // making the function larger.
    if (F->size() == 1) {
@@ -63700,7 +63701,7 @@ index b850591b4..f5754d089 100644
        LLVM_DEBUG(dbgs() << "canCreateThunkFor: " << F->getName()
                          << " is too small to bother creating a thunk for\n");
 diff --git a/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp b/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
-index f1b6f2bb7..eb6a58c34 100644
+index f1b6f2bb7..99f9a0ffa 100644
 --- a/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
 +++ b/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
 @@ -17,6 +17,7 @@
@@ -63727,7 +63728,7 @@ index f1b6f2bb7..eb6a58c34 100644
 +    "enable-cj-generic-intrinsic-opt", cl::init(true), cl::Hidden,
 +    cl::desc("Enable cangjie generic intrinsics optimization"));
 +cl::opt<bool> EnableCJGCInstrTransform("enable-cj-gcinstr-transform",
-+                                       cl::Hidden, cl::init(true));
++                                       cl::Hidden, cl::init(false));
  static cl::opt<bool>
  UseGVNAfterVectorization("use-gvn-after-vectorization",
    cl::init(false), cl::Hidden,
@@ -75679,7 +75680,7 @@ index 000000000..14b0d3f87
 +                    "Cangjie Loop Float Optimize", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJObjectReuseOpt.cpp b/llvm/lib/Transforms/Scalar/CJObjectReuseOpt.cpp
 new file mode 100644
-index 000000000..ab99ea191
+index 000000000..ebbf41ac3
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJObjectReuseOpt.cpp
 @@ -0,0 +1,558 @@
@@ -75931,7 +75932,7 @@ index 000000000..ab99ea191
 +          continue;
 +        }
 +        auto *ClassInfo = GV->getInitializer();
-+        if (ClassInfo->getNumOperands() < ClassInfoFieldType::CIT_SIZE) {
++        if (ClassInfo->getNumOperands() <= ClassInfoFieldType::CIT_SIZE) {
 +          continue;
 +        }
 +        uint64_t BitSize = dyn_cast<Constant>(ClassInfo->getOperand(
