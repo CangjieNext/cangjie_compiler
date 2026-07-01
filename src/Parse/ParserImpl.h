@@ -1139,7 +1139,8 @@ public:
           oldSkipToken(parser.lastToken),
           oldLastToken(parser.lastToken),
           oldLastNoneNLToken(parser.lastNoneNLToken),
-          oldNewlineSkipped(parser.newlineSkipped)
+          oldNewlineSkipped(parser.newlineSkipped),
+          oldBracketsStack(parser.bracketsStack)
     {
         parser.lexer->PushResetPoint();
     }
@@ -1151,6 +1152,10 @@ public:
         ref->lastToken = oldLastToken;
         ref->lastNoneNLToken = oldLastNoneNLToken;
         ref->newlineSkipped = oldNewlineSkipped;
+        // The bracket-matching stack is mutated while speculatively advancing (e.g. a
+        // trial ParseType that skips a ')'); rewinding the token position must also
+        // rewind it, or delimiter diagnostics for the rest of the file are corrupted.
+        ref->bracketsStack = oldBracketsStack;
     }
     ~ParserScope()
     {
@@ -1164,6 +1169,7 @@ private:
     Token oldLastToken;
     Token oldLastNoneNLToken;
     bool oldNewlineSkipped;
+    std::vector<TokenKind> oldBracketsStack;
 };
 
 inline AST::TypeKind LookupPrimitiveTypeKind(TokenKind kind)
