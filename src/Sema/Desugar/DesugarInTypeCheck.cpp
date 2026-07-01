@@ -694,9 +694,9 @@ OwnedPtr<MemberAccess> DesugarRef2MemberAccess(
     baseExpr->ref.identifier = target->outerDecl->identifier;
     // Get inst decl ty where the target static function in.
     auto targetOuterDeclTy = Promotion(typeManager).Promote(*curTopDeclTy, *target->outerDecl->GetTy());
-    if (targetOuterDeclTy.size() > 1) {
-        return nullptr; // Ambiguous, skip desugar.
-    }
+    // Promote should not return an empty container. When there are multiple versions of the parent type, the first one
+    // should be selected preferentially, and the uniqueness of the candidate should be guaranteed by other diagnostics.
+    CJC_ASSERT(!targetOuterDeclTy.empty());
     baseExpr->SetTy(*targetOuterDeclTy.begin());
     baseExpr->SetTarget(target->outerDecl);
     baseExpr->isAlone = false; // Desugared not alone, it's a static member access by type name.
