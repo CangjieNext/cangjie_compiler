@@ -202,8 +202,11 @@ void DeadCodeElimination::ReportUnusedCode(const Package& package, const GlobalO
         ReportUnusedGlobalVar(*globalVar);
     }
 
+    // `ReflectPackageIsUsed` scans all imported decls of the package, so it must be computed once
+    // here rather than per-function inside `ReportUnusedFunc` (see issue #987).
+    auto usingReflectPackage = ReflectPackageIsUsed(curPkg);
     for (auto func : package.GetGlobalFuncsWithBody()) {
-        ReportUnusedFunc(*func, opts);
+        ReportUnusedFunc(*func, opts, usingReflectPackage);
         bool isCommonFunctionWithoutBody = func->TestAttr(Attribute::SKIP_ANALYSIS);
         if (isCommonFunctionWithoutBody) {
             continue; // Nothing to visit
@@ -233,7 +236,7 @@ void DeadCodeElimination::ReportUnusedCodeInFunc(const BlockGroup& body, const G
     }
 }
 
-void DeadCodeElimination::ReportUnusedFunc(const Function& func, const GlobalOptions& opts)
+void DeadCodeElimination::ReportUnusedFunc(const Function& func, const GlobalOptions& opts, bool usingReflectPackage)
 {
     if (func.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING) {
         return;
@@ -271,7 +274,6 @@ void DeadCodeElimination::ReportUnusedFunc(const Function& func, const GlobalOpt
         return;
     }
     // check unused function
-    auto usingReflectPackage = ReflectPackageIsUsed(curPkg);
     if (!func.TestAttr(Attribute::COMPILER_ADD) && CheckUselessFunc(func, opts, usingReflectPackage)) {
         auto ident = GetFuncIdent(func);
         auto debugPos = GetDebugPos(func);

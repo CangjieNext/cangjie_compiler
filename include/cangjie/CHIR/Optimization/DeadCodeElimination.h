@@ -118,7 +118,7 @@ private:
 
     // =============== Functions for dce reporter =============== //
     void TryReportUnusedOnExpr(Expression& expr, const GlobalOptions& opts, bool blockUsed);
-    void ReportUnusedFunc(const Function& func, const GlobalOptions& opts);
+    void ReportUnusedFunc(const Function& func, const GlobalOptions& opts, bool usingReflectPackage);
     void ReportUnusedGlobalVar(const GlobalVar& globalVar);
     void DiagUnusedVariable(const Debug& expr);
     void ReportUnusedLocalVariable(const Expression& expr, bool isDebug);
