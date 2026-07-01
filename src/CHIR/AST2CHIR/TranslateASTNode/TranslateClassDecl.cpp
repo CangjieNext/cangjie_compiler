@@ -124,6 +124,12 @@ void Translator::AddMemberVarDecl(CustomTypeDef& def, const AST::VarDecl& decl)
         for (size_t i = 0; i < memberVars.size(); i++) {
             if (memberVars[i].TestAttr(Attribute::DESERIALIZED) && memberVars[i].name == decl.identifier) {
                 varInfo.initializerFunc = memberVars[i].initializerFunc;
+                // Preserve DESERIALIZED: BuildVarDeclAttr builds from AST attrs only,
+                // but DESERIALIZED is a CHIR-only attr set during CHIR deserialization.
+                // Without this, the updated member loses DESERIALIZED, causing
+                // VarInitCheck's skip (COMMON && !DESERIALIZED) to suppress
+                // chir_class_uninitialized_field errors for common constructors.
+                varInfo.attributeInfo.SetAttr(Attribute::DESERIALIZED, true);
                 memberVars[i] = varInfo;
                 def.SetDirectInstanceVars(memberVars);
                 return;
@@ -286,6 +292,14 @@ bool Translator::ShouldTranslateMember(const AST::Decl& decl, const AST::Decl& m
     bool justIntroducedSpecific = !decl.TestAttr(AST::Attribute::IMPORTED) && decl.TestAttr(AST::Attribute::SPECIFIC);
     if (mergingSpecific && justIntroducedSpecific && DeclaredInDifferentFiles(decl, member)) {
         // Skip decls from common part when compiling platform
+        if (member.astKind == AST::ASTKind::VAR_DECL && member.IsCommonMatchedWithSpecific()) {
+            // Exception: the second loop in MergeCommonIntoSpecific moved this
+            // common-matched VarDecl into the specific class body and emptied
+            // the common class body. Without this, AddMemberVarDecl never runs
+            // for it, leaving the deserialized CHIR MemberVarInfo stale
+            // (unrefreshed type/annoInfo), causing runtime type resolution failures.
+            return true;
+        }
         return false;
     }
 

@@ -282,6 +282,19 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
                 if (commonDeclIt != commonVariablesIds.end()) {
                     auto& commonDeclT = mergedDecls[commonDeclIt->second];
                     commonDeclT->specificImplementation = specificDeclT;
+                    // Prevent duplicate exportId in CJO: both common and specific
+                    // vars share the same mangled name, so the common one must not
+                    // be exported when its specific counterpart is already present.
+                    commonDeclT->doNotExport = true;
+                    // NOTE: INITIALIZED propagation is NOT done here — it was
+                    // considered but rejected because the specific part can amend
+                    // constructors. Propagating INITIALIZED would incorrectly
+                    // suppress sema_class_uninitialized_field for specific vars
+                    // whose constructors don't actually initialize them.
+                    // Instead, FieldLookup in LookUpImpl.cpp skips common-matched
+                    // VarDecls (FROM_COMMON_PART + specificImplementation) so the
+                    // resolver finds the specific var, and the constructor body
+                    // analysis marks it INITIALIZED naturally.
                     std::swap(specificDeclT, commonDeclT);
                     continue;
                 } else {
@@ -296,6 +309,19 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
         mergedDecls.emplace_back(std::move(specificDeclT));
     }
     std::swap(specificDecls, mergedDecls);
+
+    // Second loop: move all common VarDecls from mergedDecls into specificDecls,
+    // leaving the common class body empty. After the swap, mergedDecls holds the
+    // old specificDecls content which includes matched common VarDecls (swapped
+    // in during the matching loop above). Moving them to specificDecls ensures
+    // that InsertMirrorVarProp can transform all fields (common + specific) to
+    // PropDecls, and LinkMatchedCommonPropToSpecific can link the matched pairs.
+    // This keeps matching same-kind (PROP↔PROP), never cross-kind.
+    for (auto& decl : mergedDecls) {
+        if (decl && decl->astKind == ASTKind::VAR_DECL) {
+            specificDecls.emplace_back(std::move(decl));
+        }
+    }
 
     commonDecls.clear();
     for (auto& decl : mergedDecls) {
