@@ -1,5 +1,13 @@
 # CJMP Java FFI Interop — Technical Design Document
 
+## Executive Summary
+
+This change enables CJMP (common/specific) compilation to work with Java and ObjC FFI interop (`@JavaMirror`, `@JavaImpl`, `@ObjCMirror`, `@ObjCImpl`). The core challenge: common-part members flow into specific FFI-annotated classes without FFI attributes, type information, or AST bodies (their bodies are already in RAW CHIR). The solution has three pillars:
+
+1. **Merge-time adjustments** — a second loop in `MergeCommonIntoSpecific` moves all common VarDecls into the specific class body, enabling `InsertMirrorVarProp` to transform them to PropDecls alongside their specific counterparts
+2. **CHIR-level patching** — FROM_COMMON_PART constructors have `funcBody->body == nullptr` (body is RAW CHIR); super call patching and field access patching happen at CHIR level via `PatchCJMPSuperCalls`, `PatchCJMPImplBodies`, and `CHIRFieldReferencePatcher`
+3. **Two-tier FFI filtering** — matched common members (`FROM_COMMON_PART + specificImplementation`) are skipped in FFI desugaring; unmatched common members are diagnosed as errors
+
 ## Overview
 
 This document describes the changes in commit `c8636f0c` (feat(cjmp): allow common/specific with Java FFI)
@@ -123,12 +131,24 @@ PrepareTypeCheck4CJMP → MergeCJMPNominalsExceptExtension
      as valid platform parent annotations, allowing the relaxation
    - Relaxations stored in `pendingRelaxations` and validated later
 
-2. **Member matching for FFI classes**:
-   - Common VarDecl can match specific PropDecl (created by `InsertMirrorVarProp`)
-   - This is a cross-kind match — `CheckMatchedVariableTypes` in reference docs
-     ([REF:CJMP_COMMON_SPECIFIC.md:286-297]) only covers VarDecl→VarDecl
-   - `CheckReturnAndVariableTypes` handles VarDecl→PropDecl type comparison
-     using `DESUGARED_MIRROR_FIELD` attribute as the structural signal
+2. **Member matching for FFI classes — second loop moves all common VarDecls to specific**:
+   - **Key design principle: fields always match fields, properties always match
+     properties. Cross-kind (VarDecl↔PropDecl) matching is never used.**
+   - `MergeCommonIntoSpecific` includes a **second loop** that moves ALL common
+     VarDecls from `mergedDecls` into `specificDecls`, leaving the **common class
+     body empty**. Both common matched VarDecls (with `specificImplementation` set)
+     and their specific counterparts end up in the specific class body.
+   - `InsertMirrorVarProp` then runs on the specific @JavaMirror class and
+     transforms **all** VarDecls (common + specific) to PropDecls.
+   - The linking loop in `InsertMirrorVarProp` (`Utils.cpp:814-822`) fires
+     correctly: the common VarDecl has `specificImplementation` pointing to the
+     specific VarDecl (set by the merge), and both are in `varToPropMap` →
+     `LinkMatchedCommonPropToSpecific(commonProp, specificProp)` is called,
+     linking the common PropDecl (and its getter/setter) to the specific PropDecl.
+   - CJMP matching then matches common PropDecl ↔ specific PropDecl →
+     **same-kind PROP↔PROP** — no cross-kind hack needed.
+   - `CheckReturnAndVariableTypes` validates the matched pair normally
+     (both are PropDecls with `DESUGARED_MIRROR_FIELD`).
 
 3. **Annotation filtering** (`CheckCJMPAnnotations.cpp`):
    - `PlatformSpecificAnnotations` set includes JAVA_IMPL, JAVA_MIRROR, OBJ_C_MIRROR,
@@ -202,8 +222,16 @@ Common members are already present in the specific class when this stage runs.
    - Previously: collect all VarDecls, convert to PropDecls, remove VarDecls
    - Now: uses `varToPropMap` and `transformedIndices` to track which VarDecl becomes
      which PropDecl, then calls `LinkMatchedCommonPropToSpecific` to link matched pairs
+   - **Why the linking works**: The second loop in `MergeCommonIntoSpecific` moves
+     all common VarDecls into the specific class body. So when `InsertMirrorVarProp`
+     runs on the specific @JavaMirror class, **both** the common VarDecl (with
+     `specificImplementation` set by the merge) and the specific VarDecl are in
+     `varToPropMap`. The linking loop reads the common VarDecl's
+     `specificImplementation` (pointing to the specific VarDecl), looks it up in
+     `varToPropMap` to find the corresponding specific PropDecl, and calls
+     `LinkMatchedCommonPropToSpecific(commonProp, specificProp)`.
    - `LinkMatchedCommonPropToSpecific`: sets `specificImplementation` on common PropDecl
-     getters/setters pointing to their specific counterparts
+     and its getters/setters pointing to their specific counterparts
    - **Extends documented pattern**: The FFI filtering pattern
      ([REF:CJMP_ATTRIBUTES_AND_LINKS.md:74-86]) uses `FROM_COMMON_PART + specificImplementation`
      to skip merged members. Our linking enables this pattern for getter/setter pairs too.
@@ -549,6 +577,23 @@ CHIR Checker ([REF:CHIR/CHIR_CHECKER.md]):
 
 ## Key Design Principles
 
+### 0. Fields match fields, properties match properties — never cross-kind
+
+**This is a fundamental design principle: the CJMP matching loop
+(`MatchSpecificDeclWithCommonDecls`) always matches same-kind pairs
+(VAR_DECL↔VAR_DECL, PROP_DECL↔PROP_DECL, FUNC_DECL↔FUNC_DECL). Cross-kind
+matching (e.g., common VarDecl ↔ specific PropDecl) is never used.**
+
+This is achieved by the **second loop** in `MergeCommonIntoSpecific`, which moves
+all common VarDecls into the specific class body. When `InsertMirrorVarProp` then
+transforms all VarDecls (common + specific) to PropDecls, both sides are PropDecls,
+and same-kind PROP↔PROP matching works naturally.
+
+The `CheckReturnAndVariableTypes` function (`CheckCJMP.cpp:628-685`) retains a
+cross-kind branch (line 654, gated by `DESUGARED_MIRROR_FIELD`) as a safety net,
+but with the second loop this branch is **inert**: the common class body is empty,
+so no common VarDecls are visited. The branch exists for robustness only.
+
 ### 1. Two-tier CJMP member handling
 
 This extends the documented FFI filtering pattern
@@ -629,21 +674,42 @@ After matching common and specific member declarations, the function:
 
 1. **Swaps matched pairs**: When a specific var matches a common var (by identifier),
    the two are swapped in the merged list. The common var ends up in `specificDecls`
-   and the specific var ends up in `mergedDecls`.
+   and the specific var ends up in `mergedDecls`. The common var's
+   `specificImplementation` is set to point to the specific var.
 2. **Full swap**: `std::swap(specificDecls, mergedDecls)` exchanges the complete lists.
-3. **doNotExport on common-matched vars**: Common vars that have a
+3. **Second loop (critical)**: ALL remaining VarDecls in `mergedDecls` (which include
+   the matched common vars that were swapped in step 1) are moved to
+   `specificDecls`. This leaves the **common class body empty** and puts both
+   the common matched VarDecl (with `specificImplementation`) and the specific
+   VarDecl in the specific class body. This is essential for `InsertMirrorVarProp`
+   to transform all fields (common + specific) to PropDecls.
+4. **doNotExport on common-matched vars**: Common vars that have a
    `specificImplementation` counterpart are marked `doNotExport = true` to prevent
    `CheckForConflictExportId` from detecting duplicate exportIds (the specific
-   counterpart is already in the member list with the same exportId).
-4. **Common-only vars preserved**: Common vars WITHOUT `specificImplementation`
+   counterpart is already in the member list with the same exportId). This must
+   be set for **instance** VarDecls too, not just static/global — otherwise
+   `ASTWriter` serializes both decls with the same exportId, producing a corrupt CJO.
+5. **Common-only vars preserved**: Common vars WITHOUT `specificImplementation`
    (no specific counterpart) are NOT marked doNotExport — they must remain visible.
 
+**Why the common class body must be empty**: The common class shares the same CHIR
+`CustomTypeDef` as the specific class (via deserialization). If the common class
+body is non-empty, `TranslateClassLikeDecl` processes its members, and
+`AddMemberVarDecl` refreshes the deserialized CHIR `MemberVarInfo` (type, annoInfo)
+for common VarDecls. With the second loop, the common class body is empty, so this
+refresh must happen during the **specific** class translation instead (see §9
+below for the `ShouldTranslateMember` fix).
+
 **Migration of matched vars**: After the merge, `specificDecls` contains both the
-specific var and the swapped-in common var. The common-matched var (with doNotExport)
+specific var and the common-matched var. The common-matched var (with doNotExport)
 is skipped by:
 - `ASTWriter::CheckForConflictExportId` — checks `doNotExport`
+- `ASTWriter::shouldExportDecl` — returns false when `doNotExport` is set
 - `ShouldTranslateMember` — returns false for members from different files
+  (BUT see §9 for the exception for common-matched VAR_DECLs that need CHIR refresh)
 - `IsCommonMatchedWithSpecific()` — in `TranslateVariablesInit` skip
+- `InitializationChecker::CheckLetFlag` — must skip common-matched vars to avoid
+  resolving bare identifiers to the common (immutable) var instead of the specific one
 
 ### 7. `$varInit` creation and constructor patching
 
@@ -681,7 +747,8 @@ for (auto [member, fieldPosition] : initOrder) {
 
 **Constructor patching** (`TranslateConstructorFunc`):
 
-When the constructor is translated (step 4 of `TranslateAllDecls`), it checks:
+When a fresh (non-deserialized) constructor is translated, it inserts the
+`Apply($varInit, this)` call at the start of the body:
 ```cpp
 if (!HasDelegatedThisCall(funcBody)) {
     Function* varInitFunc = typeDef->GetVarInitializationFunc();
@@ -690,25 +757,337 @@ if (!HasDelegatedThisCall(funcBody)) {
 }
 ```
 
-This works for deserialized constructors too because `TranslateFuncDecl` re-translates
-the body of a deserialized function: it creates a new entry block, populates it with
-the AST body + $varInit Apply call, and replaces the old entry.
+For **deserialized** (FROM_COMMON_PART) constructors, the early-return guard at
+`TranslateFuncDecl.cpp:204-208` skips body translation entirely:
+```cpp
+if (func.TestAttr(FROM_COMMON_PART) && func.TestAttr(CONSTRUCTOR) &&
+    curFunc->IsFuncWithBody() && func.funcBody->body == nullptr) {
+    return curFunc;  // Use deserialized CHIR body directly
+}
+```
+The deserialized body already contains `Apply($varInit, this)` from common
+compilation. Since `ClearOrCreateVarInitFunc` finds the deserialized `$varInit`
+by mangled name and replaces its body in-place (same `Function*` object), the
+deserialized constructor's `Apply` call automatically invokes the new
+(specific-side) `$varInit` body. No re-translation needed.
 
 **VarInitCheck adjustment**: Deserialized constructors were entirely skipped in
 `VarInitCheck::RunOnPackage`, which prevented `chir_class_uninitialized_field` for
-SPECIFIC types. Fixed to only skip when the enclosing type is NOT SPECIFIC.
+SPECIFIC types. Fixed to only skip when the enclosing type is NOT SPECIFIC:
+```cpp
+if (func->IsConstructor() && func->TestAttr(Attribute::DESERIALIZED)) {
+    auto outerDef = func->GetOuterDeclaredOrExtendedDef();
+    if (!outerDef || !outerDef->TestAttr(Attribute::SPECIFIC)) {
+        continue;  // Skip non-SPECIFIC deserialized constructors
+    }
+    // SPECIFIC deserialized constructors ARE checked
+}
+```
 
-### 8. Remaining gap: constructor-less specific classes
+### 8. Plain CJMP test failures with the second loop — root causes and fixes
 
-When the specific class has no own constructor (inherits from common), the inherited
-deserialized constructor IS re-translated (as above). The `$varInit` call is added
-correctly by `TranslateConstructorFunc`. However, if the common class had NO vars
-with initializers (so no deserialized `$varInit` existed), the per-field init for
-specific-only variables may still be missing from the constructor body.
+The second loop moves all common VarDecls into the specific class body. For plain
+CJMP classes (no `@JavaMirror`, no `InsertMirrorVarProp`), this creates duplicate
+VarDecls (common + specific for the same field) in the specific class AST. The
+common matched VarDecl has `specificImplementation` set and `doNotExport = true`,
+so it should be skipped by downstream stages. Six tests fail because not all
+stages check these markers. Each failure has a distinct root cause:
 
-This manifests in tests like `use_platform_member_define_global_variable` where
-`specific let A1:Int32=1` is not initialized (outputs 0 instead of 1), and
-`check_types` where the MTable resolution fails at runtime.
+#### T1: `common_no_initializer` — Sema `InitializationChecker`
+
+**Root cause**: After `MergeCommonIntoSpecific`'s second loop, both the
+common-matched VarDecl `c_a` and the specific VarDecl `s_a` are in the specific
+class body. The Cangjie name resolver has two paths for finding `a`:
+1. **Decl map lookup** (`LookupImpl` at `LookUpImpl.cpp:650`): returns all decls
+   with matching name+scope. Both `c_a` and `s_a` are in the map.
+2. **Field iteration** (`FieldLookup` at `LookUpImpl.cpp:278`): iterates the
+   class body's member list. `c_a` appears before `s_a` in the list.
+
+The resolver finds `c_a` first via path 1 (decl map), and the constructor body
+analysis at `CheckInitInAssignExpr` marks `c_a` (already `INITIALIZED` from its
+`= 1` initializer) as initialized — missing `s_a` entirely. The
+InitializationChecker then reports `sema_class_uninitialized_field` because
+`s_a` was never visited by the constructor body analysis.
+
+Additionally, `CheckLetFlag` resolves `a` to `c_a` and reports
+`DiagCJMPCannotAssignToImmutableCommonInCtor` (the visible effect).
+
+The CHIR layer is unaffected (`ShouldTranslateMember` filters `c_a` in CHIR
+translation, so `a = 4` correctly targets `s_a`'s offset at runtime).
+
+**Fix** (two layers, in `LookUpImpl.cpp` and `InitializationChecker.cpp`):
+
+1. **Primary — name resolution** (`LookUpImpl.cpp`): Skip common-matched VarDecls
+   (`IsCommonMatchedWithSpecific()`) in BOTH the decl map lookup (`LookupImpl`)
+   and the member list iteration (`FieldLookup`). This ensures the resolver
+   always finds `s_a` instead of `c_a`. The constructor body analysis then sees
+   `a = 4` as assigning to `s_a` and marks it `INITIALIZED` naturally via
+   `UpdateInitializationStatus`.
+
+2. **Safety net — CheckLetFlag** (`InitializationChecker.cpp`):
+   `IsCommonMatchedWithSpecific` skip in `CheckLetFlag` and
+   `CheckLetFlagInMemberAccess`, ensuring that even if the resolver somehow
+   finds `c_a` through other code paths, the "cannot assign to immutable"
+   diagnostic is suppressed.
+
+**Note**: Propagating `INITIALIZED` from common to specific (during the swap in
+`MergeCommonIntoSpecific`) was considered and REJECTED. The specific part can
+amend constructors, so marking a specific var as `INITIALIZED` at AST level
+would incorrectly suppress `sema_class_uninitialized_field` for vars whose
+specific constructors don't actually initialize them. The name-resolution fix
+is the correct approach — it lets the constructor body analysis determine
+initialization naturally.
+
+#### T2: `check_types` — stale CHIR `MemberVarInfo`
+
+**Root cause**: With the common class body empty (second loop), the common class's
+`TranslateClassLikeDecl` processes no members, so `AddMemberVarDecl` is **never
+called** for the common matched VarDecl `c_b`. Its deserialized CHIR
+`MemberVarInfo` (type, annoInfo) is **stale** — not refreshed from the AST. For
+`c_b` whose type is `?ToString` (Option containing a ToString interface), the
+stale type reference causes a SIGSEGV at runtime. Without the second loop, `c_b`
+stays in the common class body, `ShouldTranslateMember` returns true (IMPORTED
+common class), and `AddMemberVarDecl`'s deserialized update path
+(`TranslateClassDecl.cpp:122-131`) refreshes the varInfo.
+
+**Fix**: Modify `ShouldTranslateMember` (`TranslateClassDecl.cpp:287-290`) to
+**not skip** common-matched VAR_DECLs:
+```cpp
+if (mergingSpecific && justIntroducedSpecific && DeclaredInDifferentFiles(decl, member)) {
+    if (member->astKind == ASTKind::VAR_DECL && member->IsCommonMatchedWithSpecific()) {
+        return true;  // let AddMemberVarDecl refresh the deserialized CHIR member
+    }
+    return false;
+}
+```
+This allows `AddMemberVarDecl` to find the deserialized member by name and refresh
+its varInfo. For @JavaMirror classes, common matched VarDecls are already
+transformed to PropDecls by `InsertMirrorVarProp` (runs before AST2CHIR), so this
+check doesn't affect them — `AddMemberPropDecl` is called instead, and
+getter/setter are linked to specific via `specificImplementation`.
+
+#### T3: `use_platform_member_define_global_variable` — resolved
+
+Same underlying issues as T2 (stale `MemberVarInfo`) and T4 (duplicate
+exportId). Both are fixed by the `ShouldTranslateMember` exception and
+`doNotExport` on swap in `MergeCommonIntoSpecific`. Test passes with
+the staged changes.
+
+#### T4: `var5`, `var11` — ExportId conflict in CJO serialization
+
+**Root cause**: Both `c_a` (common, `doNotExport = false`) and `s_a` (specific)
+are serialized to CJO with the **same exportId** (`MangleVarDecl` doesn't include
+COMMON/SPECIFIC attrs). `ASTWriter.cpp:145-147` skip prevents the error from
+being *reported*, but `shouldExportDecl` (`ASTWriter.cpp:472-495`) still exports
+`c_a` (instance vars are always exported for layout; `doNotExport = false`) →
+corrupt CJO with duplicate exportIds.
+
+**Fix**: Set `doNotExport = true` during the swap in `MergeCommonIntoSpecific`
+(line 285), before the second loop moves the VarDecl into `specificDecls`. This
+applies to ALL matched VarDecls (instance + static/global) in one place, not
+just static/global in `MatchCJMPVar`. The specific counterpart `s_a` is in the
+CJO for layout; the deserialized CHIR layout is not rebuilt from the CJO member
+list, so not exporting `c_a` is safe.
+
+#### T5: `var2`, `var23` — already fixed
+
+Already fixed by the VarInitCheck SPECIFIC guard (§7). The second loop does not
+introduce new VarInitCheck issues for these tests.
+
+### 9. `ShouldTranslateMember` exception for common-matched VAR_DECLs
+
+With the second loop emptying the common class body, common matched VarDecls
+reside in the **specific** class body but are from a different file (common source).
+`ShouldTranslateMember` normally returns `false` for cross-file members, which
+prevents `AddMemberVarDecl` from being called. This means the deserialized CHIR
+`MemberVarInfo` is never refreshed (stale type/annoInfo), causing runtime issues
+(T2).
+
+The fix adds an exception: common-matched VAR_DECLs (IsCommonMatchedWithSpecific)
+are **not** skipped, so `AddMemberVarDecl` runs and refreshes the deserialized
+member via the name-based update path (`TranslateClassDecl.cpp:122-131`). This
+does not create duplicate CHIR members — the update path finds the existing
+deserialized member by name and overwrites it.
+
+This exception only applies to VAR_DECLs (not PropDecls or FuncDecls). For
+@JavaMirror classes, `InsertMirrorVarProp` has already converted these VarDecls
+to PropDecls before AST2CHIR runs, so the exception is inert for FFI classes.
+
+---
+
+## Retrospective Rationale
+
+This section captures the design rationale for each major decision. Unlike the
+pipeline description (which focuses on *what* the code does), this section explains
+*why* each approach was chosen and what alternatives were rejected. Rationale was
+synthesized from the implementation after the design was completed.
+
+### R1. Second loop: move all common VarDecls into specific class body
+
+**Constraint**: `InsertMirrorVarProp` runs on the **specific** class only (the common
+class is a plain Cangjie class, not `@JavaMirror`). It transforms all VarDecls in
+the specific class body to PropDecls. Common VarDecls that remain in the common
+class would miss this transform entirely.
+
+**Chosen approach**: After `MergeCommonIntoSpecific` swaps matched common↔specific
+pairs, a second loop moves ALL remaining VarDecls from `mergedDecls` into
+`specificDecls`. The common class body ends up empty. Both the common-matched
+VarDecl (with `specificImplementation` set) and the specific VarDecl are now
+PropDecls after `InsertMirrorVarProp`, enabling same-kind PROP↔PROP matching.
+
+**Alternatives rejected**:
+- **Cross-kind VAR↔PROP matching** — rejected because CJMP matching infrastructure
+  expects same-kind pairs everywhere (`MergeCommonIntoSpecific`,
+  `MatchSpecificDeclWithCommonDecls`, `CheckReturnAndVariableTypes`). Adding
+  cross-kind support would touch every CJMP matching site.
+- **Run InsertMirrorVarProp on common class too** — rejected because the common
+  class is a plain Cangjie class, not `@JavaMirror`. Running unconditionally
+  would incorrectly transform non-FFI fields.
+- **Clone common VarDecls into specific** — rejected because cloning would create
+  a third CHIR copy. Common-matched VarDecls already have `specificImplementation`
+  set; the original in common is `doNotExport=true` and skipped by translation.
+
+**Trade-off**: The empty common class body means `AddMemberVarDecl` no longer runs
+during common class translation. The deserialized CHIR `MemberVarInfo` (type,
+annoInfo) becomes stale (T2). A `ShouldTranslateMember` exception for
+common-matched VAR_DECLs is needed to refresh it. Also, duplicate exportIds in
+CJO serialization (T4) require `doNotExport=true` on common-matched instance
+VarDecls.
+
+**Second loop is conditional**: The T1–T5 test failures described in §8 occur ONLY
+when the second loop is present. Without the second loop, common VarDecls stay in
+the common class body and these issues don't arise.
+
+### R2. Object→PlatformParent relaxation during matching (not earlier)
+
+**Constraint**: JObject is auto-inserted for `@JavaImpl` classes during PreCheck
+by `AddSuperClassObjectForClassDecl`, which runs AFTER CJMP merge but BEFORE CJMP
+matching validation. The common class implicitly extends `Object` (Cangjie default).
+
+**Chosen approach**: During `MatchCommonNominalDeclWithSpecific`, if common parent
+is `Object` (or null) and specific parent is a platform parent (`@JavaMirror`,
+`@JavaImpl`, `@ObjCMirror`, `@ObjCImpl`), the mismatch is allowed via
+`pendingRelaxations`. Constructor validation (platform parent must have empty
+constructor) is deferred to `ValidateCJMPConstructorConstraints` in PostTypeCheck.
+
+**Alternatives rejected**:
+- **Fix JObject insertion order** — insert JObject before CJMP merge so common
+  sees it. Rejected because `AddSuperClassObjectForClassDecl` depends on resolved
+  annotation state that doesn't exist during the merge phase.
+- **Override common parent to JObject during merge** — rejected because common has
+  no knowledge of `@JavaImpl`/`@JavaMirror` annotations. Changing its parent would
+  alter semantics for the common compilation.
+- **Skip super type matching entirely for FFI classes** — rejected because
+  non-parent super types (interfaces) still need matching. The relaxation is
+  narrowly scoped to the superclass slot.
+
+**Trade-off**: Constructor validation is deferred. Platform parent without empty
+constructor gets `sema_cjmp_platform_parent_no_empty_constructor` diagnostic.
+
+### R3. AssignMirrorPropGetterSetterTypes: separate from InsertMirrorVarProp
+
+**Constraint**: `InsertMirrorVarProp` lives in `AST/Utils.cpp` (the AST layer),
+which has no access to `TypeManager` or `ImportManager`. Function type creation
+(`GetFunctionTy`) requires `TypeManager`, which is only available in Sema layer.
+This is a deliberate architectural separation
+([REF:SEMA_FFI_OVERVIEW.md:167-190]).
+
+**Chosen approach**: Two-phase post-processing. `InsertMirrorVarProp` creates
+PropDecls with null function types. A separate Sema-layer function
+`AssignMirrorPropGetterSetterTypes` (in `NativeFFI/Java/BeforeTypeCheck/Utils.cpp`)
+assigns proper function types to getters/setters right after. The guard
+`Ty::IsTyCorrect(pd.GetTy())` skips properties whose type is still `InitialTy`
+(CJMP deserialized VarDecls have `InitialTy` until TypeCheck resolves it).
+
+**Alternatives rejected**:
+- **Add TypeManager to AST layer** — rejected because AST layer must remain
+  independent of Sema (shared infrastructure pattern).
+- **Defer type assignment to TypeCheck** — rejected because TypeCheck expects
+  proper function types on all getters/setters before constraint solving.
+
+**Trade-off**: Dependency ordering — `AssignMirrorPropGetterSetterTypes` must be
+called immediately after `InsertMirrorVarProp` and before any stage that examines
+getter/setter types.
+
+### R4. CHIR-level patching vs AST-level desugaring for FROM_COMMON_PART bodies
+
+**Constraint**: FROM_COMMON_PART constructors have `funcBody->body == nullptr` —
+their bodies were already translated to RAW CHIR during common compilation. Java
+FFI desugaring is expression-based (`expr.desugarExpr`) and can't operate on
+RAW CHIR instructions. The upstream pipeline (`55510c72`) crashes on null body
+access.
+
+**Chosen approach**: Three CHIR-level patches:
+1. `PatchCJMPSuperCalls` (new canonicalization Pass 6) — patches `Object.init()`
+   → `JObject.init()` in constructor RAW CHIR bodies
+2. `PatchCJMPSuperClass` (during AST2CHIR) — patches the CHIR ClassDef super
+   class reference from `Object` to `JObject`
+3. `PatchCJMPImplBodies` / `CHIRFieldReferencePatcher` — replaces field
+   load/store with getter/setter Apply calls
+
+**Alternatives rejected** (detailed in §The FROM_COMMON_PART Null Body Problem):
+- **Skip FROM_COMMON_PART constructors entirely** — rejected because when no
+  specific constructor exists, the common constructor IS the only constructor.
+  Skipping means no Java wrapper for the class.
+- **Create synthetic AST body** — rejected because synthetic body logic would be
+  incorrect (common logic ≠ @JavaImpl logic). Would need to be discarded anyway.
+- **Handle null funcBody->body in each stage** — partially adopted, but too many
+  crash sites in the upstream pipeline.
+
+**Why a new canonicalization pass**: The 5 standard passes (`GenerateVTable`,
+`MarkClassHasInited`, `UpdateMemberVarPath`, `NoSideEffectMarker`,
+`BoxRecursionValueType`) don't handle super call patching. Pass 6 runs after
+all 5 and only processes classes with `FROM_COMMON_PART + JAVA_IMPL` attributes.
+
+### R5. FROM_COMMON_PART + specificImplementation filtering pattern
+
+**Constraint**: Common-part members lack FFI attributes (`JAVA_MIRROR`,
+`JAVA_IMPL`). Running FFI desugaring on them would operate on members with no
+JNI-related information. Their bodies reference common-part-only variables that
+don't exist in the FFI context.
+
+**Chosen approach**: Two-tier filter applied consistently across all 6 Java FFI
+sub-stages, ObjC FFI stages, and Java source code generation:
+- Matched members (`FROM_COMMON_PART + specificImplementation`): skip entirely
+  — specific counterpart handles FFI work
+- Unmatched members (`FROM_COMMON_PART`, no `specificImplementation`): diagnose
+  error and mark `IS_BROKEN` — can't be desugared
+
+**Unmatched members are errors** (not warnings) because:
+- Common constructors in `@JavaMirror` reference common-part-only variables
+  that can't be resolved during JNI desugaring
+- Common methods in `@JavaMirror` have RAW CHIR bodies that aren't compatible
+  with expression-based desugaring
+- The user must define a specific counterpart or restructure the common design
+
+**Alternatives rejected**:
+- **Add FFI attributes to common during merge** — rejected because common has
+  no knowledge of platform-specific annotations. Adding FFI attrs would pollute
+  the common compilation.
+- **Generate specific-only stubs for every common member** — rejected because
+  that would require cross-file code generation, violating common/specific
+  separation.
+
+### R6. IsTyCorrect → pd.type for setter skip condition
+
+**Constraint**: CJMP deserialized VarDecls have `pd.GetTy()` returning `InitialTy`
+before TypeCheck resolves it. `IsTyCorrect(InitialTy)` returns `false`, which
+incorrectly triggers the skip in `AddReturnTypeForPropMemDecl` — setters are not
+processed and their `funcBody->retType` stays null.
+
+**Chosen approach**: Changed `!Ty::IsTyCorrect(pd.GetTy())` to `!pd.type` for
+the setter skip condition. `pd.type` (syntactic type) is present for deserialized
+declarations even when the semantic type is still `InitialTy`.
+
+**Alternatives rejected**:
+- **Set semantic type during deserialization** — rejected because semantic types
+  depend on `TypeManager` state that's not available during CJO deserialization.
+- **Skip the check entirely for deserialized props** — rejected because some
+  deserialized props have valid types and DO need the check to fire.
+
+**Trade-off**: `!pd.type` is less precise than `IsTyCorrect` — a VarDecl with
+`pd.type` set to an invalid type would incorrectly pass. But `pd.type` is set by
+the parser and is always valid for syntactically valid programs.
 
 ---
 
@@ -729,8 +1108,11 @@ This manifests in tests like `use_platform_member_define_global_variable` where
 
 | Novel Element | Purpose | Why Novel |
 |---------------|---------|-----------|
+| Second loop in `MergeCommonIntoSpecific` | Moves all common VarDecls to specific class body, emptying common class | Enables `InsertMirrorVarProp` to transform all fields; enables same-kind PROP↔PROP matching. Not documented in reference docs. |
+| `doNotExport` on common-matched instance VarDecls | Prevents duplicate exportId in CJO serialization | Reference docs don't cover the interaction between CJMP merge and CJO export for instance vars |
+| `ShouldTranslateMember` exception for common-matched VAR_DECLs | Allows `AddMemberVarDecl` to refresh deserialized CHIR `MemberVarInfo` | Needed because empty common class body means `AddMemberVarDecl` no longer runs during common class translation |
+| `IsCommonMatchedWithSpecific` skip in `InitializationChecker::CheckLetFlag` | Prevents Sema from resolving bare identifiers to common (immutable) var | Needed because both common and specific VarDecls are in the specific class body after the second loop |
 | Object→PlatformParent relaxation | Allow `Object→JObject` super type mismatch | Reference docs identify the problem ([REF:CJMP_COMMON_SPECIFIC.md:497-513]) but don't document the solution |
-| VarDecl→PropDecl cross-kind matching | Common VarDecl matches specific PropDecl | Reference docs only cover same-kind matching ([REF:CJMP_COMMON_SPECIFIC.md:286-297]) |
 | `PatchCJMPSuperCalls` | Patch `Object.init()` → `JObject.init()` in RAW CHIR | New canonicalization pass — reference docs list only 5 passes ([REF:CANONICALIZATION.md:16-18]) |
 | `PatchCommonFieldsForMirror` | Replace `GetElementByName` with getter/setter Apply | Extends `UpdateMemberVarPath` ([REF:CANONICALIZATION.md:191-193]) but adds FFI-specific field→accessor replacement |
 | `CHIRFieldReferencePatcher` | General CHIR field reference patching utility | No equivalent in reference docs |
@@ -868,7 +1250,30 @@ to replace the Function pointer target.
 
 ## Test Coverage
 
-Key test cases in `cangjie_test/testsuites/LLT/compiler/CJMP/java/sema/`:
+Tests live in `cangjie_test/testsuites/LLT/compiler/CJMP/`. The test list is
+specified in `test_cjmp_ffi.sh` via `--test_list testsuites/LLT/cjmp_javaffi`.
+
+### Test Areas
+
+| Area | Path | Count | Purpose |
+|------|------|-------|---------|
+| Sema | `java/sema/java_cjmp_*.cj` | ~20 | Compile-time CJMP+FFI validation (semantic checks, matching, diagnostics) |
+| Integration | `java/integration/` | ~60 test dirs | End-to-end runtime: mirror fields, super call patching, impl-inherits-mirror, etc. |
+| Compiler | `java/compiler/` | ~8 test dirs | Compiler-specific behavior (escape checks, type casts, multi-file) |
+| Java codegen | `java/gen/` | ~20 `.cj` | Java source generation quality and correctness |
+| Parser | `java/parser/` | ~80+ `.cj` | Parsing validation for FFI annotations (`@JavaMirror`, `@JavaImpl`) |
+| Merging (plain CJMP) | `merging/` | ~50+ test dirs | Plain CJMP regression (second loop must not break non-FFI) |
+
+### Key Integration Tests
+
+| Test | Scenario | Mechanism Exercised |
+|------|----------|--------------------|
+| `integration/cjmp-mirror-field/` | Common class with `let x: Int32` fields → `@JavaMirror` with matching fields | Second loop + `InsertMirrorVarProp` + CHIR field reference patching |
+| `integration/patch-super-calls/` | Common `Child.init()` with implicit `super()` to `Object` → specific `@JavaImpl` with `JObject` parent | `PatchCJMPSuperClass` + `PatchCJMPSuperCalls` (Canonicalization Pass 6) |
+| `integration/impl-inherits-mirror/` | Common `Exception` class → specific `@JavaImpl` inheriting `@JavaMirror` | FROM_COMMON_PART filter + CHIR field access patching |
+| `integration/default_jobject/` | Common class without explicit parent → specific `@JavaImpl` | Object→JObject relaxation |
+
+### CJMP+Java FFI Sema Tests
 
 | Test | Scenario |
 |------|----------|
@@ -883,6 +1288,43 @@ Key test cases in `cangjie_test/testsuites/LLT/compiler/CJMP/java/sema/`:
 | `java_cjmp_impl_extra_methods.cj` | @JavaImpl with extra specific methods |
 | `java_cjmp_relaxation_allowed.cj` | Object→JObject parent relaxation |
 | `java_cjmp_platform_parent_no_empty_ctor.cj` | Platform parent without empty constructor (error case) |
+| `java_cjmp_impl_inherits_mirror.cj` | @JavaImpl inheriting from @JavaMirror |
+| `java_cjmp_mirror_with_mirror_parent.cj` | @JavaMirror inheriting from @JavaMirror |
+| `java_cjmp_full_integration.cj` | Combined CJMP+FFI scenario |
+| `java_cjmp_common_non_object_parent.cj` | Common class with non-Object parent (disallowed) |
+| `java_cjmp_impl_explicit_jobject.cj` | @JavaImpl with explicit JObject import |
+| `java_cjmp_constructor_validation_pass.cj` | Constructor validation positive case |
+| `java_cjmp_mirror_explicit_jobject.cj` | @JavaMirror with explicit JObject |
+| `java_cjmp_mirror_extra_ctor.cj` | @JavaMirror with extra specific constructors |
+| `java_cjmp_mirror_regular_no_parent.cj` | @JavaMirror (non-subtype) without parent |
+| `java_cjmp_impl_specific_mirror_parent.cj` | @JavaImpl with specific-only @JavaMirror parent |
+| `java_cjmp_impl_with_regular_mirror_parent.cj` | @JavaImpl with regular @JavaMirror parent |
+
+### Plain CJMP Merging Tests
+
+These tests in `cangjie_test/testsuites/LLT/compiler/CJMP/merging/` verify the
+second loop doesn't break non-FFI CJMP. Failures occur ONLY when the second
+loop is present:
+
+| Test | Scenario | Fix |
+|------|----------|-----|
+| `common_no_initializer` | Duplicate `a` in specific body; resolver finds common var | §8 T1: `IsCommonMatchedWithSpecific` skip in `LookupImpl` + `FieldLookup` + `CheckLetFlag` safety net |
+| `check_types` | Stale CHIR `MemberVarInfo` for common matched VarDecl | §8 T2: `ShouldTranslateMember` exception for common-matched VAR_DECLs |
+| `use_platform_member_define_global_variable` | Stale varInfo + exportId (T2/T4 combo) | §8 T3: resolved by T2 + T4 infrastructure |
+| `var5`, `var11` | ExportId conflict (duplicate in CJO) | §8 T4: `doNotExport = true` during swap in `MergeCommonIntoSpecific` |
+| `var2`, `var23` | VarInitCheck guard | §8 T5: SPECIFIC guard (skip non-SPECIFIC deserialized constructors) |
+| `class_annotation` | Unaffected by second loop | None needed |
+
+---
+
+## Known Limitations
+
+| Limitation | Impact | Status |
+|------------|--------|--------|
+| **Generics + CJMP + FFI unsupported** | CJMP classes with generic type parameters cannot use `@JavaMirror`/`@JavaImpl` annotations. Java FFI does not support generics. The `CheckCommonSpecificGenericMatch` function validates generic parameter compatibility for plain CJMP only. | Documented limitation — no future work planned |
+| **ObjC + CJMP test coverage** | Source code handles ObjC (`IsPlatformParent` recognizes `OBJ_C_IMPL`, `OBJ_C_MIRROR`; CHIR patchers support ObjC attributes), but no dedicated ObjC+CJMP test cases exist. | Untested — should be verified before production use |
+| **Multi-level CJMP** | No test for common→specific where the specific class itself has a further common/specific split. Likely works if each level is independent, but interactions are unverified. | Untested |
+| **Performance profiling** | No performance data for `PatchCJMPSuperCalls` (new canonicalization Pass 6), `CHIRFieldReferencePatcher` (walks all CHIR instructions), or the second loop overhead. Each pass only processes classes with matching attributes, so cost is proportional to CJMP+FFI class count. | Not measured |
 
 ---
 
@@ -894,6 +1336,8 @@ Key test cases in `cangjie_test/testsuites/LLT/compiler/CJMP/java/sema/`:
 | Deferred compilation stages | Deferred Compilation Stages Interaction | [REF:CJMP_COMMON_SPECIFIC.md:516-803] |
 | RAW vs Canonicalized CHIR | CHIR Phase context | [REF:CJMP_COMMON_SPECIFIC.md:715-803] |
 | CJMP merge pipeline | Phase 1a | [REF:CJMP_COMMON_SPECIFIC.md:59-82] |
+| Second loop (empty common class) | Key Design Principles #0, #6 | Not documented in reference docs |
+| Same-kind matching principle | Key Design Principles #0 | [REF:CJMP_COMMON_SPECIFIC.md:286-297] |
 | Object→JObject problem | Phase 1a (relaxation) | [REF:CJMP_COMMON_SPECIFIC.md:497-513] |
 | FFI filtering pattern | Key Design Principles #1 | [REF:CJMP_ATTRIBUTES_AND_LINKS.md:74-86] |
 | Field→Property transformation | Phase 1c | [REF:JAVA_FFI_JAVAIMPL.md:453-533] |
@@ -908,3 +1352,14 @@ Key test cases in `cangjie_test/testsuites/LLT/compiler/CJMP/java/sema/`:
 | Sema three-phase pipeline | Compilation Pipeline intro | [REF:Sema.md:24-55] |
 | Null body problem | The FROM_COMMON_PART Null Body Problem | [REF:CJMP_COMMON_SPECIFIC.md:516-803] |
 | FFI compatibility with RAW | CHIR Phase context | [REF:CJMP_COMMON_SPECIFIC.md:1149-1177] |
+| Plain CJMP test failures (second loop) | Key Design Principles #8 | Not documented in reference docs |
+| ShouldTranslateMember exception | Key Design Principles #9 | Not documented in reference docs |
+| Second loop rationale | Retrospective Rationale R1 | Not documented in reference docs |
+| Object→PlatformParent relaxation rationale | Retrospective Rationale R2 | Not documented in reference docs |
+| AssignMirrorPropGetterSetterTypes rationale | Retrospective Rationale R3 | Not documented in reference docs |
+| CHIR-level patching rationale | Retrospective Rationale R4 | Not documented in reference docs |
+| FROM_COMMON_PART filter rationale | Retrospective Rationale R5 | Not documented in reference docs |
+| IsTyCorrect→pd.type rationale | Retrospective Rationale R6 | Not documented in reference docs |
+| Generics + FFI limitation | Known Limitations | Java FFI does not support generics |
+| ObjC test coverage gap | Known Limitations | Not documented in reference docs |
+| T3 resolution | Test Coverage (merging table) | Not documented in reference docs |
