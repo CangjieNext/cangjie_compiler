@@ -24,6 +24,7 @@ PatchCJMPImplBodies::PatchCJMPImplBodies(Package& pkg, CHIRBuilder& builder)
 {
 }
 
+/// \copydoc PatchCJMPImplBodies::Run
 void PatchCJMPImplBodies::Run()
 {
     Utils::ProfileRecorder recorder("TranslateNominalDecls", "PatchCJMPImplBodies");
@@ -52,6 +53,7 @@ void PatchCJMPImplBodies::Run()
     }
 }
 
+/// \copydoc PatchCJMPImplBodies::RunCtorFieldInitOnly
 void PatchCJMPImplBodies::RunCtorFieldInitOnly()
 {
     for (auto classDef : pkg.GetAllClassDef()) {
@@ -73,6 +75,7 @@ void PatchCJMPImplBodies::RunCtorFieldInitOnly()
     }
 }
 
+/// \copydoc PatchCJMPImplBodies::PatchFieldReferences
 void PatchCJMPImplBodies::PatchFieldReferences(Function& func, ClassDef& implClassDef)
 {
     auto preVisit = [this, &implClassDef](Expression& e) {
@@ -98,6 +101,7 @@ void PatchCJMPImplBodies::PatchFieldReferences(Function& func, ClassDef& implCla
     Visitor::Visit(func, preVisit);
 }
 
+/// \copydoc PatchCJMPImplBodies::TryPatchLoad
 Expression* PatchCJMPImplBodies::TryPatchLoad(Load& load, ClassDef& implClassDef)
 {
     auto location = load.GetLocation();
@@ -137,6 +141,7 @@ Expression* PatchCJMPImplBodies::TryPatchLoad(Load& load, ClassDef& implClassDef
     return builder.CreateExpression<Apply>(loc, resultTy, StaticCast<Value*>(getter), callContext, load.GetParentBlock());
 }
 
+/// \copydoc PatchCJMPImplBodies::TryPatchLoadByName
 Expression* PatchCJMPImplBodies::TryPatchLoadByName(Load& load, ClassDef& implClassDef)
 {
     auto location = load.GetLocation();
@@ -166,6 +171,7 @@ Expression* PatchCJMPImplBodies::TryPatchLoadByName(Load& load, ClassDef& implCl
     return builder.CreateExpression<Apply>(loc, resultTy, StaticCast<Value*>(getter), callContext, load.GetParentBlock());
 }
 
+/// \copydoc PatchCJMPImplBodies::TryPatchStoreElementByName
 void PatchCJMPImplBodies::TryPatchStoreElementByName(StoreElementByName& storeByName, ClassDef& implClassDef)
 {
     auto names = storeByName.GetNames();
@@ -208,6 +214,7 @@ void PatchCJMPImplBodies::TryPatchStoreElementByName(StoreElementByName& storeBy
     }
 }
 
+/// \copydoc PatchCJMPImplBodies::TryPatchStoreElementRef
 Expression* PatchCJMPImplBodies::TryPatchStoreElementRef(StoreElementRef& store, ClassDef& implClassDef)
 {
     auto baseValue = store.GetLocation();
@@ -244,59 +251,75 @@ Expression* PatchCJMPImplBodies::TryPatchStoreElementRef(StoreElementRef& store,
     return builder.CreateExpression<Apply>(loc, resultTy, StaticCast<Value*>(setter), callContext, store.GetParentBlock());
 }
 
+/// \copydoc PatchCJMPImplBodies::PatchConstructorFieldInit
 void PatchCJMPImplBodies::PatchConstructorFieldInit(Function& ctor, ClassDef& implClassDef)
 {
     auto allFields = implClassDef.GetAllInstanceVars();
 
-    size_t regIdx = allFields.size();
-    MemberVarInfo regField;
-    for (size_t i = 0; i < allFields.size(); ++i) {
-        if (allFields[i].name == "$reg" && allFields[i].TestAttr(Attribute::COMPILER_ADD)) {
-            regIdx = i;
-            regField = allFields[i];
-            break;
-        }
-    }
+    size_t regIdx = FindRegFieldIndex(allFields);
     if (regIdx >= allFields.size()) { return; }
 
-    auto regFieldType = regField.type;
-    if (!regFieldType) { return; }
-    auto regCustomType = DynamicCast<CustomType*>(regFieldType->StripAllRefs());
-    if (!regCustomType) { return; }
-    auto companionClassDef = DynamicCast<ClassDef*>(regCustomType->GetCustomTypeDef());
-    if (!companionClassDef) { return; }
+    auto store = FindRegStore(ctor, regIdx);
+    if (!store.cregRef || !store.targetBlock) { return; }
 
     auto thisParam = ctor.GetParam(0);
     if (!thisParam) { return; }
 
-    Value* cregRef = nullptr;
-    Block* targetBlock = nullptr;
+    InsertFieldInitializations(allFields, *store.cregRef, *store.targetBlock,
+                               *thisParam, ctor.GetDebugLocation());
+}
+
+/// \copydoc PatchCJMPImplBodies::FindRegFieldIndex
+size_t PatchCJMPImplBodies::FindRegFieldIndex(const std::vector<MemberVarInfo>& allFields) const
+{
+    for (size_t i = 0; i < allFields.size(); ++i) {
+        if (allFields[i].name != "$reg" || !allFields[i].TestAttr(Attribute::COMPILER_ADD)) {
+            continue;
+        }
+        auto fieldType = allFields[i].type;
+        if (!fieldType) { return allFields.size(); }
+        auto customType = DynamicCast<CustomType*>(fieldType->StripAllRefs());
+        if (!customType) { return allFields.size(); }
+        if (!DynamicCast<ClassDef*>(customType->GetCustomTypeDef())) { return allFields.size(); }
+        return i;
+    }
+    return allFields.size();
+}
+
+/// \copydoc PatchCJMPImplBodies::FindRegStore
+PatchCJMPImplBodies::RegStoreInfo PatchCJMPImplBodies::FindRegStore(Function& ctor, size_t regIdx) const
+{
+    RegStoreInfo result;
 
     Visitor::Visit(ctor, [&](Expression& e) -> VisitResult {
         if (auto storeRef = DynamicCast<StoreElementRef*>(&e)) {
             auto path = storeRef->GetPath();
             if (!path.empty() && path[0] == regIdx) {
-                cregRef = storeRef->GetValue();
-                targetBlock = storeRef->GetParentBlock();
+                result.cregRef = storeRef->GetValue();
+                result.targetBlock = storeRef->GetParentBlock();
                 return VisitResult::STOP;
             }
         } else if (auto storeByName = DynamicCast<StoreElementByName*>(&e)) {
             auto names = storeByName->GetNames();
             if (!names.empty() && names[0] == "$reg") {
-                cregRef = storeByName->GetValue();
-                targetBlock = storeByName->GetParentBlock();
+                result.cregRef = storeByName->GetValue();
+                result.targetBlock = storeByName->GetParentBlock();
                 return VisitResult::STOP;
             }
         }
         return VisitResult::CONTINUE;
     });
 
-    if (!cregRef || !targetBlock) { return; }
+    return result;
+}
 
-    auto terminator = targetBlock->GetTerminator();
+/// \copydoc PatchCJMPImplBodies::InsertFieldInitializations
+void PatchCJMPImplBodies::InsertFieldInitializations(const std::vector<MemberVarInfo>& allFields,
+    Value& cregRef, Block& targetBlock, Value& thisParam, const DebugLocation& loc)
+{
+    auto terminator = targetBlock.GetTerminator();
     if (!terminator) { return; }
 
-    auto loc = ctor.GetDebugLocation();
     for (auto& field : allFields) {
         if (field.TestAttr(Attribute::COMPILER_ADD)) continue;
         if (!field.initializerFunc) continue;
@@ -307,20 +330,20 @@ void PatchCJMPImplBodies::PatchConstructorFieldInit(Function& ctor, ClassDef& im
             field.initializerFunc->GetReturnType(),
             StaticCast<Value*>(field.initializerFunc),
             FuncCallContext{
-                .args = {thisParam},
+                .args = {&thisParam},
                 .instTypeArgs = {},
-                .thisType = thisParam->GetType()
+                .thisType = thisParam.GetType()
             },
-            targetBlock);
+            &targetBlock);
         initApply->MoveBefore(terminator);
 
         auto initStore = builder.CreateExpression<StoreElementByName>(
             loc,
             builder.GetUnitTy(),
             initApply->GetResult(),
-            cregRef,
+            &cregRef,
             std::vector<std::string>{field.name},
-            targetBlock);
+            &targetBlock);
         initStore->MoveBefore(terminator);
     }
 }
