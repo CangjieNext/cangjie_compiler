@@ -129,6 +129,11 @@ void CheckForConflictExportId(const std::vector<Ptr<const Decl>>& decls)
         if (!decl->TestAttr(Attribute::GLOBAL) || decl->astKind == ASTKind::EXTEND_DECL) {
             continue;
         }
+        // In CJMP, common-matched globals have their specific counterpart elsewhere.
+        // Skip them here to avoid duplicate exportId errors.
+        if (decl->IsCommonMatchedWithSpecific()) {
+            continue;
+        }
 
         if (auto found = exportIdDeclMap.find(decl->exportId); found != exportIdDeclMap.end()) {
             InternalError("Found same exportID when export the package.");
@@ -142,7 +147,7 @@ void CheckForConflictExportId(const std::vector<Ptr<const Decl>>& decls)
             }
             // In CJMP, common-matched vars have their specific counterpart elsewhere in
             // the same member list. Skip them here to avoid duplicate exportId errors.
-            if (it->specificImplementation && it->TestAttr(AST::Attribute::COMMON)) {
+            if (it->IsCommonMatchedWithSpecific()) {
                 continue;
             }
             if (auto found = exportIdDeclMap.find(it->exportId); found != exportIdDeclMap.end()) {
@@ -474,7 +479,7 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
         // stored in cjo as long as the type is externally visible.
         const bool isInstMemberVar = d->astKind == ASTKind::VAR_DECL && !d->TestAttr(Attribute::STATIC);
         // For LSP usage, the invalid vpd will exists, we can ignore it.
-        if (d->doNotExport || d->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL ||
+        if (d->doNotExport || d->IsCommonMatchedWithSpecific() || d->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL ||
             // For LSP usage, we can ignore invisible members.
             (onlyVisibleSig && !d->IsExportedDecl())) {
             return false;
@@ -637,6 +642,10 @@ void ASTWriter::ASTWriterImpl::PreSaveFullExportDecls(Package& package)
 bool ASTWriter::ASTWriterImpl::NeedToExportDecl(Ptr<const Decl> decl)
 {
     if (decl->doNotExport) {
+        return false;
+    }
+    // In CJMP, common-matched decls have their specific counterpart elsewhere.
+    if (decl->IsCommonMatchedWithSpecific()) {
         return false;
     }
     // For incremental data or common part, export all toplevel decls.
@@ -847,7 +856,11 @@ FormattedIndex ASTWriter::ASTWriterImpl::GetDeclIndex(Ptr<const Decl> decl)
 // 3. if decl is not imported, get the index from savedDeclMap.
 TFullIdOffset ASTWriter::ASTWriterImpl::GetFullDeclIndex(Ptr<const Decl> decl)
 {
-    if (!decl || decl->doNotExport) {
+    if (!decl || decl->doNotExport || decl->IsCommonMatchedWithSpecific()) {
+        // Ideally we'd call a shared function (e.g. NeedToExportDecl) here
+        // instead of duplicating the IsCommonMatchedWithSpecific check, but the
+        // impact of refactoring GetFullDeclIndex to use it is unknown and needs
+        // separate investigation.
         return PackageFormat::CreateFullId(builder, INVALID_PACKAGE_INDEX, builder.CreateString(""));
     }
     if (decl->astKind == ASTKind::PACKAGE_DECL) {
