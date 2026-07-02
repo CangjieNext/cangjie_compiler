@@ -1596,7 +1596,7 @@ inline bool IsSameDeserializedFunction(Ptr<FuncDecl> f1, Ptr<FuncDecl> f2)
 
 /// CJMP common/specific pairs should not be considered overload conflicts.
 /// One is from deserialized common CHIR (FROM_COMMON_PART), the other is from specific source.
-inline bool IsCJMPCommonSpecificPair(Ptr<FuncDecl> f1, Ptr<FuncDecl> f2)
+bool IsCJMPCommonSpecificPair(Ptr<FuncDecl> f1, Ptr<FuncDecl> f2)
 {
     // Check if one is FROM_COMMON_PART (merged from common) and other is SPECIFIC
     bool f1FromCommon = f1->TestAttr(Attribute::FROM_COMMON_PART);
