@@ -201,6 +201,12 @@ Ptr<Value> Translator::Visit(const AST::FuncDecl& func)
         curFunc->SetPropLocation(propLoc);
     }
 
+    // CJMP: Skip body translation for FROM_COMMON_PART constructors with deserialized bodies
+    if (func.TestAttr(AST::Attribute::FROM_COMMON_PART) && func.TestAttr(AST::Attribute::CONSTRUCTOR) &&
+        curFunc->IsFuncWithBody() && func.funcBody->body == nullptr) {
+        return curFunc;  // Use deserialized CHIR body directly
+    }
+
     auto body = curFunc->GetBody();
     blockGroupStack.emplace_back(body);
     auto entry = builder.CreateBlock(body);
@@ -342,6 +348,10 @@ void Translator::TranslateVariablesInit(const AST::Decl& parent, CHIR::Parameter
     for (auto [member, fieldPosition] : initOrder) {
         // Fields declared in primary constructor cannot have initializer
         CJC_ASSERT(!member->isMemberParam || !member->initializer);
+
+        if (member->IsCommonMatchedWithSpecific()) {
+            continue;
+        }
 
         MemberVarInfo* varInfo = varInfoByName.at(member->identifier);
         if (ShouldTranslateMember(parent, *member)) {
