@@ -65,6 +65,7 @@ TARGET_DICTIONARY = {
     "android-aarch64": "aarch64-linux-android31",
     "android31-aarch64": "aarch64-linux-android31",
     "android26-aarch64": "aarch64-linux-android26",
+    "android23-aarch64": "aarch64-linux-android23",
     "android23-arm": "arm-linux-android23",
     "android-x86_64": "x86_64-linux-android",
     "android31-x86_64": "x86_64-linux-android31",
