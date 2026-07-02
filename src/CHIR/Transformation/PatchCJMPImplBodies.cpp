@@ -15,6 +15,7 @@
 #include "cangjie/CHIR/Utils/JavaMirrorFieldHelper.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/Utils/CastingTemplate.h"
+#include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie::CHIR;
@@ -273,7 +274,7 @@ void PatchCJMPImplBodies::PatchConstructorFieldInit(Function& ctor, ClassDef& im
 size_t PatchCJMPImplBodies::FindRegFieldIndex(const std::vector<MemberVarInfo>& allFields) const
 {
     for (size_t i = 0; i < allFields.size(); ++i) {
-        if (allFields[i].name != "$reg" || !allFields[i].TestAttr(Attribute::COMPILER_ADD)) {
+        if (allFields[i].name != Cangjie::Interop::Java::JAVA_IMPL_REGISTRY_COMPANION_REF_FIELD_NAME || !allFields[i].TestAttr(Attribute::COMPILER_ADD)) {
             continue;
         }
         auto fieldType = allFields[i].type;
@@ -301,7 +302,7 @@ PatchCJMPImplBodies::RegStoreInfo PatchCJMPImplBodies::FindRegStore(Function& ct
             }
         } else if (auto storeByName = DynamicCast<StoreElementByName*>(&e)) {
             auto names = storeByName->GetNames();
-            if (!names.empty() && names[0] == "$reg") {
+            if (!names.empty() && names[0] == Cangjie::Interop::Java::JAVA_IMPL_REGISTRY_COMPANION_REF_FIELD_NAME) {
                 result.cregRef = storeByName->GetValue();
                 result.targetBlock = storeByName->GetParentBlock();
                 return VisitResult::STOP;
