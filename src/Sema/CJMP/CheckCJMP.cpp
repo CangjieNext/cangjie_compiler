@@ -883,7 +883,8 @@ bool MPTypeCheckerImpl::MatchCJMPDeclAttrs(
                     diag.DiagnoseRefactor(DiagKindRefactor::sema_property_have_same_declaration_in_inherit_immut,
                         common, common.identifier.Val());
                 }
-            } else if (common.astKind == ASTKind::CLASS_DECL && (attr == Attribute::SEALED || attr == Attribute::OPEN) &&
+            } else if (common.astKind == ASTKind::CLASS_DECL &&
+                (attr == Attribute::SEALED || attr == Attribute::OPEN) &&
                 // Keep silent due to overloaded common funcs.
                 // Allow specific sealed abstract when common is abstract
                 specific.TestAttr(Attribute::SEALED) && common.TestAttr(Attribute::ABSTRACT)) {
@@ -1333,7 +1334,8 @@ void MPTypeCheckerImpl::MatchCJMPDecls(std::vector<Ptr<Decl>>& commonDecls, std:
             continue;
         }
         // need check Attribute::ABSTRACT for abstract class?
-        std::vector<Attribute> matchedAttrs = { Attribute::STATIC, Attribute::MUT, Attribute::PRIVATE, Attribute::PUBLIC,
+        std::vector<Attribute> matchedAttrs = {
+            Attribute::STATIC, Attribute::MUT, Attribute::PRIVATE, Attribute::PUBLIC,
             Attribute::PROTECTED, Attribute::FOREIGN, Attribute::UNSAFE, Attribute::OPEN,
             Attribute::ABSTRACT};
         MatchCJMPDeclAttrs(matchedAttrs, *commonDecl, *specificDecl);
