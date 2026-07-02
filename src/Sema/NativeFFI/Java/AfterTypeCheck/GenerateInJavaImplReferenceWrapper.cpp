@@ -24,6 +24,35 @@ using namespace Cangjie::Interop::Java;
 
 namespace {
 
+// Clone user params from commonCtor's param list into params.
+void AppendClonedUserParams(FuncDecl& commonCtor, std::vector<OwnedPtr<FuncParam>>& params)
+{
+    if (!commonCtor.funcBody || commonCtor.funcBody->paramLists.empty() ||
+        !commonCtor.funcBody->paramLists[0]) {
+        return;
+    }
+    for (auto& userParam : commonCtor.funcBody->paramLists[0]->params) {
+        if (userParam && userParam->type) {
+            auto clonedParam = ASTCloner::Clone(Ptr<FuncParam>(userParam.get()));
+            params.push_back(std::move(clonedParam));
+        }
+    }
+}
+
+// Collect user param types from commonCtor into paramTys.
+void AppendUserParamTypes(FuncDecl& commonCtor, std::vector<Ptr<Ty>>& paramTys)
+{
+    if (!commonCtor.funcBody || commonCtor.funcBody->paramLists.empty() ||
+        !commonCtor.funcBody->paramLists[0]) {
+        return;
+    }
+    for (auto& userParam : commonCtor.funcBody->paramLists[0]->params) {
+        if (userParam && Ty::IsTyCorrect(userParam->GetTy())) {
+            paramTys.push_back(userParam->GetTy());
+        }
+    }
+}
+
 OwnedPtr<CallExpr> CreateRegistryCompanionConstructorCall(ClassDecl& companion, VarDecl& javaRefField)
 {
     auto curFile = companion.curFile;
@@ -401,27 +430,12 @@ OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstruct
         CreateFuncParam("reg", CreateRefType(companion), nullptr, companion.GetTy()));
     auto& regCompanionParam = *params[1];
 
-    if (commonCtor.funcBody && !commonCtor.funcBody->paramLists.empty() &&
-        commonCtor.funcBody->paramLists[0]) {
-        for (auto& userParam : commonCtor.funcBody->paramLists[0]->params) {
-            if (userParam && userParam->type) {
-                auto clonedParam = ASTCloner::Clone(Ptr<FuncParam>(userParam.get()));
-                params.push_back(std::move(clonedParam));
-            }
-        }
-    }
+    AppendClonedUserParams(commonCtor, params);
 
     std::vector<Ptr<Ty>> paramTys;
     paramTys.push_back(javaEntityDecl->GetTy());
     paramTys.push_back(companion.GetTy());
-    if (commonCtor.funcBody && !commonCtor.funcBody->paramLists.empty() &&
-        commonCtor.funcBody->paramLists[0]) {
-        for (auto& userParam : commonCtor.funcBody->paramLists[0]->params) {
-            if (userParam && Ty::IsTyCorrect(userParam->GetTy())) {
-                paramTys.push_back(userParam->GetTy());
-            }
-        }
-    }
+    AppendUserParamTypes(commonCtor, paramTys);
     auto ctorTy = typeManager.GetFunctionTy(paramTys, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
 
     Ptr<FuncDecl> parentCtor = GetGeneratedJavaMirrorConstructor(*refWrapper.GetSuperClassDecl());
