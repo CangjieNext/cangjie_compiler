@@ -705,7 +705,82 @@ llvm::Constant* GetReadOnlyArrayKlassInfo(const CGModule& cgMod)
 }
 } // namespace
 
-void InitializeCjStringLiteral(const CGModule& cgMod)
+// Each cjstring literal gets its own content-addressed byte buffer
+// (instead of one shared pool per package). A dead literal's private
+// buffer dies with it under GlobalDCE. Cross-package duplicates share the
+// same content-addressed name, but the buffers are PrivateLinkage, so LTO
+// *renames* (not merges) them -- the backend CJStringPoolMerge pass
+// (content-based, not name-based) does the actual cross-package dedup and
+// substring sharing after GlobalDCE.
+//
+// Only used under full LTO, where that backend pass runs; otherwise the
+// legacy per-package pool (InitCjStringLiteralPooled) is used.
+static void InitCjStringLiteralDeferred(const CGModule& cgMod)
+{
+    auto& ctx = cgMod.GetLLVMContext();
+    auto int8PtrType = llvm::Type::getInt8PtrTy(ctx);
+    auto int32Type = llvm::Type::getInt32Ty(ctx);
+    auto int64Type = llvm::Type::getInt64Ty(ctx);
+    auto cjStringType = cgMod.GetCGContext().GetCjStringType();
+    auto arrayKlassInfo = GetReadOnlyArrayKlassInfo(cgMod);
+    auto klassInfoPtr = llvm::ConstantExpr::getBitCast(arrayKlassInfo, int8PtrType);
+    auto module = cgMod.GetLLVMModule();
+    auto addr1I8PtrType = llvm::Type::getInt8PtrTy(ctx, 1u);
+
+    auto& cjStrings = cgMod.GetCGContext().GetCJStrings();
+    for (const auto& cjStringIter : cjStrings) {
+        const auto& cjStringName = cjStringIter.first;
+        const auto& cjStringContent = cjStringIter.second;
+        auto literalGV = llvm::cast_or_null<llvm::GlobalVariable>(module->getNamedValue(cjStringName));
+        if (!literalGV) {
+            // cjString may be codeGen built-in data and optimized away.
+            continue;
+        }
+
+        // 1. Per-literal content-addressed buffer: { klassInfo, len, [len x i8] data }
+        auto strContent = llvm::ConstantDataArray::getString(ctx, cjStringContent, false);
+        std::vector<llvm::Type*> elemTypes{int8PtrType, int64Type, strContent->getType()};
+        auto bufType = llvm::StructType::get(ctx, elemTypes);
+        auto bufInit = llvm::ConstantStruct::get(bufType,
+            {klassInfoPtr,
+                llvm::ConstantInt::getSigned(int64Type, static_cast<int64_t>(cjStringContent.size())),
+                strContent});
+
+        // Content-addressed name -> same content in any package yields the same
+        // buffer name. Buffers are PrivateLinkage, so LTO renames (not merges)
+        // cross-package copies by name; the backend CJStringPoolMerge pass
+        // dedups them by content bytes after GlobalDCE.
+        std::string bufName = GetCjStringDataLiteralName(cjStringContent);
+        auto bufGV = llvm::cast<llvm::GlobalVariable>(module->getOrInsertGlobal(bufName, bufType));
+        CJC_NULLPTR_CHECK(bufGV);
+        // The name is a 64-bit hash of the content (HashString64 -> std::hash).
+        // Two different contents hashing to the same 64-bit value would alias
+        // here and the second setInitializer would silently corrupt the first
+        // literal's data. Same-length collisions are the silent-dangerous case
+        // (different length -> bufType differs -> cast<GlobalVariable> asserts).
+        // Detect it and abort instead of corrupting. (Pre-existing risk shared
+        // with the legacy per-package pool; probability ~N^2/2^65.)
+        CJC_ASSERT_WITH_MSG(!bufGV->hasInitializer() || bufGV->getInitializer() == bufInit,
+            (std::string("cjstring hash collision: two different contents map to ") + bufName));
+        bufGV->setInitializer(bufInit);
+        bufGV->setConstant(true);
+        bufGV->addAttribute(CJSTRING_DATA_ATTR);
+        bufGV->setLinkage(llvm::GlobalValue::PrivateLinkage);
+
+        // 2. Literal initializer: { addrspacecast(buf), 0, len }
+        auto bufPtr = llvm::ConstantExpr::getBitCast(bufGV, int8PtrType);
+        auto bufPtrAddr1 = llvm::ConstantExpr::getAddrSpaceCast(bufPtr, addr1I8PtrType);
+        auto dataStart = llvm::ConstantInt::getSigned(int32Type, 0);
+        auto strSize = llvm::ConstantInt::getSigned(int32Type, static_cast<int32_t>(cjStringContent.size()));
+        auto cjStringInit = llvm::ConstantStruct::get(cjStringType, {bufPtrAddr1, dataStart, strSize});
+        literalGV->setInitializer(cjStringInit);
+    }
+}
+
+// Legacy path: concatenate (dedup + substring-share) all cjstring contents
+// of the package into one $const_cjstring_data pool; each literal points in
+// via {ptr, offset, len}. Used when full LTO is not enabled.
+static void InitCjStringLiteralPooled(const CGModule& cgMod)
 {
     auto& ctx = cgMod.GetLLVMContext();
     auto int8PtrType = llvm::Type::getInt8PtrTy(ctx);
@@ -779,6 +854,18 @@ void InitializeCjStringLiteral(const CGModule& cgMod)
         auto gv = llvm::cast<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getNamedValue(cjStringName));
         CJC_NULLPTR_CHECK(gv);
         gv->setInitializer(cjStringInit);
+    }
+}
+
+void InitializeCjStringLiteral(const CGModule& cgMod)
+{
+    // Full LTO emits per-literal buffers (deferred pooling) so GlobalDCE /
+    // ConstantMerge / the backend CJStringPoolMerge pass can trim, dedup and
+    // repack them. Otherwise use the legacy per-package pool.
+    if (cgMod.GetCGContext().GetCompileOptions().IsFullLTOEnabled()) {
+        InitCjStringLiteralDeferred(cgMod);
+    } else {
+        InitCjStringLiteralPooled(cgMod);
     }
 }
 
