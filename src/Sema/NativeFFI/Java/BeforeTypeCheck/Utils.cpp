@@ -87,6 +87,39 @@ ClassDecl& GetExceptionDecl(const ImportManager& importManager)
     return *exception;
 }
 
+void AssignMirrorPropGetters(PropDecl& pd, TypeManager& typeManager)
+{
+    for (auto& getter : pd.getters) {
+        if (!Ty::IsTyCorrect(getter->GetTy())) {
+            getter->SetTy(typeManager.GetFunctionTy({}, pd.GetTy()));
+            getter->funcBody->SetTy(getter->GetTy());
+        }
+    }
+}
+
+void AssignMirrorSetterParamType(PropDecl& pd, FuncDecl& setter)
+{
+    if (setter.funcBody->paramLists.empty() || setter.funcBody->paramLists[0]->params.empty()) {
+        return;
+    }
+    auto& setterParam = setter.funcBody->paramLists[0]->params[0];
+    if (!Ty::IsTyCorrect(setterParam->GetTy())) {
+        setterParam->SetTy(pd.GetTy());
+    }
+}
+
+void AssignMirrorPropSetters(PropDecl& pd, TypeManager& typeManager)
+{
+    for (auto& setter : pd.setters) {
+        if (!Ty::IsTyCorrect(setter->GetTy())) {
+            setter->SetTy(typeManager.GetFunctionTy(
+                {pd.GetTy()}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
+            setter->funcBody->SetTy(setter->GetTy());
+        }
+        AssignMirrorSetterParamType(pd, *setter);
+    }
+}
+
 void AssignMirrorPropGetterSetterTypes(ClassDecl& decl, TypeManager& typeManager)
 {
     for (auto& d : decl.body->decls) {
@@ -100,25 +133,8 @@ void AssignMirrorPropGetterSetterTypes(ClassDecl& decl, TypeManager& typeManager
         if (!Ty::IsTyCorrect(pd.GetTy())) {
             continue;
         }
-        for (auto& getter : pd.getters) {
-            if (!Ty::IsTyCorrect(getter->GetTy())) {
-                getter->SetTy(typeManager.GetFunctionTy({}, pd.GetTy()));
-                getter->funcBody->SetTy(getter->GetTy());
-            }
-        }
-        for (auto& setter : pd.setters) {
-            if (!Ty::IsTyCorrect(setter->GetTy())) {
-                setter->SetTy(typeManager.GetFunctionTy(
-                    {pd.GetTy()}, TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT)));
-                setter->funcBody->SetTy(setter->GetTy());
-            }
-            if (!setter->funcBody->paramLists.empty() && !setter->funcBody->paramLists[0]->params.empty()) {
-                auto& setterParam = setter->funcBody->paramLists[0]->params[0];
-                if (!Ty::IsTyCorrect(setterParam->GetTy())) {
-                    setterParam->SetTy(pd.GetTy());
-                }
-            }
-        }
+        AssignMirrorPropGetters(pd, typeManager);
+        AssignMirrorPropSetters(pd, typeManager);
     }
 }
 
