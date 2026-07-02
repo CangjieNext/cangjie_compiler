@@ -908,22 +908,31 @@ bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(const InheritableDecl
 {
     auto specificDecl = commonDecl.specificImplementation;
     if (!specificDecl) {
-        // It's okay if common nominative declaration have no platform,
-        // either all member are implemented in common one
-        // or it's not yet compiling into binary, so it can be matched at later phases.
         return true;
     }
-    // Match attributes (modifiers).
     std::vector<Attribute> matchedAttr = {
         Attribute::ABSTRACT, Attribute::PUBLIC, Attribute::OPEN, Attribute::PROTECTED, Attribute::C, Attribute::SEALED};
     if (!MatchCJMPDeclAttrs(matchedAttr, commonDecl, *specificDecl)) {
         return false;
     }
-    // Match super types.
+    if (!MatchSuperInterfaces(commonDecl, *specificDecl)) {
+        return false;
+    }
+    if (!MatchSuperClass(commonDecl, *specificDecl)) {
+        return false;
+    }
+    CheckCommonSpecificGenericMatch(*specificDecl, commonDecl);
+    return true;
+}
+
+bool MPTypeCheckerImpl::MatchSuperInterfaces(
+    const InheritableDecl& commonDecl, const Decl& specificDecl)
+{
     std::set<Ptr<InterfaceTy>> comSupInters;
-    auto platSupInters = StaticCast<InheritableDecl>(specificDecl)->GetSuperInterfaceTys();
+    auto& specificInheritable = *StaticCast<InheritableDecl>(&specificDecl);
+    auto platSupInters = specificInheritable.GetSuperInterfaceTys();
     TypeSubst genericTyMap;
-    MapCJMPGenericTypeArgs(genericTyMap, commonDecl, *specificDecl);
+    MapCJMPGenericTypeArgs(genericTyMap, commonDecl, specificDecl);
     if (!genericTyMap.empty()) {
         for (auto superInterface : commonDecl.GetSuperInterfaceTys()) {
             auto updatedInterfaceType = typeManager.GetInstantiatedTy(superInterface, genericTyMap);
@@ -933,7 +942,7 @@ bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(const InheritableDecl
         comSupInters = commonDecl.GetSuperInterfaceTys();
     }
     if (comSupInters.size() != platSupInters.size()) {
-        DiagNotMatchedSuperType(diag, *specificDecl);
+        DiagNotMatchedSuperType(diag, specificDecl);
         return false;
     }
     bool match = false;
@@ -945,44 +954,47 @@ bool MPTypeCheckerImpl::MatchCommonNominalDeclWithSpecific(const InheritableDecl
             }
         }
         if (!match) {
-            DiagNotMatchedSuperType(diag, *specificDecl);
+            DiagNotMatchedSuperType(diag, specificDecl);
             return false;
         }
     }
-    // Match super class if need.
-    if (commonDecl.astKind == ASTKind::CLASS_DECL) {
-        auto comSupClass = StaticCast<ClassDecl>(&commonDecl)->GetSuperClassDecl();
-        auto platSupIClass = StaticCast<ClassDecl>(specificDecl)->GetSuperClassDecl();
+    return true;
+}
+
+bool MPTypeCheckerImpl::MatchSuperClass(
+    const InheritableDecl& commonDecl, const Decl& specificDecl)
+{
+    if (commonDecl.astKind != ASTKind::CLASS_DECL) {
+        return true;
+    }
+    auto comSupClass = StaticCast<ClassDecl>(&commonDecl)->GetSuperClassDecl();
+    auto platSupIClass = StaticCast<ClassDecl>(&specificDecl)->GetSuperClassDecl();
 // CJMP Object→PlatformParent Relaxation:
-        // Allow common class extending Object to match with specific class extending platform parent.
-        // This enables FFI interop patterns where:
-        //   - Common: class MyClass { } (implicitly extends Object)
-        //   - Specific: @JavaImpl specific class MyClass <: MyJavaMirrorParent { }
-        // Relaxation is allowed only when:
-        //   1. Common parent is Object (or null/invalid - means implicit Object)
-        //   2. Specific parent is a platform parent (@JavaMirror/@ObjCMirror or @JavaImpl/@ObjCImpl)
-        // Constructor validation is deferred to PostTypeCheck phase.
-        if (!comSupClass || comSupClass->identifier == "Object") {
-            if (platSupIClass && IsPlatformParent(platSupIClass)) {
-                pendingRelaxations.push_back({&commonDecl, specificDecl});
-                return true;
-            }
-        }
-
-        // Standard type equality check (both must have valid superclasses)
-        if (comSupClass && platSupIClass) {
-            if (!typeManager.IsTyEqual(comSupClass->GetTy(), platSupIClass->GetTy())) {
-                DiagNotMatchedSuperType(diag, *specificDecl);
-                return false;
-            }
-        } else if (comSupClass || platSupIClass) {
-            DiagNotMatchedSuperType(diag, *specificDecl);
-            return false;
+    // Allow common class extending Object to match with specific class extending platform parent.
+    // This enables FFI interop patterns where:
+    //   - Common: class MyClass { } (implicitly extends Object)
+    //   - Specific: @JavaImpl specific class MyClass <: MyJavaMirrorParent { }
+    // Relaxation is allowed only when:
+    //   1. Common parent is Object (or null/invalid - means implicit Object)
+    //   2. Specific parent is a platform parent (@JavaMirror/@ObjCMirror or @JavaImpl/@ObjCImpl)
+    // Constructor validation is deferred to PostTypeCheck phase.
+    if (!comSupClass || comSupClass->identifier == "Object") {
+        if (platSupIClass && IsPlatformParent(platSupIClass)) {
+            pendingRelaxations.push_back({&commonDecl, &specificDecl});
+            return true;
         }
     }
 
-    CheckCommonSpecificGenericMatch(*specificDecl, commonDecl);
-
+    // Standard type equality check (both must have valid superclasses)
+    if (comSupClass && platSupIClass) {
+        if (!typeManager.IsTyEqual(comSupClass->GetTy(), platSupIClass->GetTy())) {
+            DiagNotMatchedSuperType(diag, specificDecl);
+            return false;
+        }
+    } else if (comSupClass || platSupIClass) {
+        DiagNotMatchedSuperType(diag, specificDecl);
+        return false;
+    }
     return true;
 }
 
