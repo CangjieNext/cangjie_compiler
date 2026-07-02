@@ -52,7 +52,8 @@ Function* FindSetterForField(const ClassDef& def, const MemberVarInfo& field, At
             continue;
         }
         auto params = method->GetParams();
-        if (params.size() < 2) {
+        constexpr size_t minParams = 2;
+        if (params.size() < minParams) {
             continue;
         }
         auto paramType = params[1]->GetType();
@@ -142,7 +143,8 @@ Function* FindInstanceSetterByName(const ClassDef& def, const std::string& field
             continue;
         }
         auto methodParams = method->GetParams();
-        if (methodParams.size() < 2) {
+        constexpr size_t minParams = 2;
+        if (methodParams.size() < minParams) {
             continue;
         }
         auto methodSrcCodeId = method->GetSrcCodeIdentifier();
