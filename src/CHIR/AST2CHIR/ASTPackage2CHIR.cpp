@@ -1803,15 +1803,68 @@ bool HasObjectAsSuperClass(const ClassDef& classDef)
 }
 }
 
+ClassType* AST2CHIR::TranslateSuperClassToChirType(const AST::ClassLikeDecl& astDecl)
+{
+    auto astClassTy = DynamicCast<AST::ClassTy*>(astDecl.GetTy());
+    if (!astClassTy) return nullptr;
+
+    auto superClassTy = astClassTy->GetSuperClassTy();
+    if (!superClassTy) return nullptr;
+
+    Type* chirSuperTy = chirType.TranslateType(*superClassTy);
+    if (!chirSuperTy) return nullptr;
+
+    if (chirSuperTy->IsClass()) {
+        return StaticCast<ClassType*>(chirSuperTy);
+    }
+    if (chirSuperTy->IsRef()) {
+        auto refTy = StaticCast<RefType*>(chirSuperTy);
+        auto baseTy = refTy->GetBaseType();
+        if (baseTy && baseTy->IsClass()) {
+            return StaticCast<ClassType*>(baseTy);
+        }
+    }
+    return nullptr;
+}
+
+bool AST2CHIR::IsPlatformMirrorSuperClass(const AST::ClassLikeDecl& astDecl, const ClassType& chirSuperClassTy)
+{
+    auto superClassDef = chirSuperClassTy.GetClassDef();
+    if (superClassDef && IsPlatformMirrorClass(*superClassDef)) {
+        return true;
+    }
+
+    auto astClassTy = DynamicCast<AST::ClassTy*>(astDecl.GetTy());
+    if (!astClassTy) return false;
+
+    auto astSuperClassTy = astClassTy->GetSuperClassTy();
+    if (!astSuperClassTy || !astSuperClassTy->decl) return false;
+
+    if (astSuperClassTy->decl->HasAnno(AST::AnnotationKind::JAVA_MIRROR)) return true;
+    if (astSuperClassTy->decl->HasAnno(AST::AnnotationKind::OBJ_C_MIRROR)) return true;
+
+    return false;
+}
+
 void AST2CHIR::PatchCJMPSuperClass()
 {
     if (!opts.IsCompilingCJMPSpecific()) {
         return;
     }
 
-    auto allClasses = package->GetAllClassDef();
+    std::unordered_map<std::string, const AST::ClassLikeDecl*> specificAstByName;
+    specificAstByName.reserve(nominalDecls.size() + importedNominalDecls.size());
+    for (const auto* container : {&nominalDecls, &importedNominalDecls}) {
+        for (const auto& decl : *container) {
+            if (decl->astKind == AST::ASTKind::CLASS_DECL &&
+                decl->TestAttr(AST::Attribute::SPECIFIC)) {
+                specificAstByName.try_emplace(decl->mangledName,
+                    StaticCast<const AST::ClassLikeDecl*>(decl.get()));
+            }
+        }
+    }
 
-    for (auto classDef : allClasses) {
+    for (auto classDef : package->GetAllClassDef()) {
         if (!classDef->TestAttr(Attribute::SPECIFIC)) {
             continue;
         }
@@ -1820,72 +1873,18 @@ void AST2CHIR::PatchCJMPSuperClass()
             continue;
         }
 
-        std::string className = classDef->GetIdentifierWithoutPrefix();
-
-        const AST::ClassLikeDecl* astDecl = nullptr;
-        for (const auto& container : {nominalDecls, importedNominalDecls}) {
-            for (const auto& decl : container) {
-                if (decl->astKind == AST::ASTKind::CLASS_DECL &&
-                    decl->TestAttr(AST::Attribute::SPECIFIC) &&
-                    decl->mangledName == className) {
-                    astDecl = StaticCast<const AST::ClassLikeDecl*>(decl.get());
-                    break;
-                }
-            }
-            if (astDecl) break;
-        }
-
+        auto it = specificAstByName.find(classDef->GetIdentifierWithoutPrefix());
+        const AST::ClassLikeDecl* astDecl = (it != specificAstByName.end()) ? it->second : nullptr;
         if (!astDecl) {
             continue;
         }
 
-        auto astClassTy = DynamicCast<AST::ClassTy*>(astDecl->GetTy());
-        if (!astClassTy) {
-            continue;
-        }
-
-        auto superClassTy = astClassTy->GetSuperClassTy();
-        if (!superClassTy) {
-            continue;
-        }
-
-        Type* chirSuperTy = chirType.TranslateType(*superClassTy);
-        if (!chirSuperTy) {
-            continue;
-        }
-
-        ClassType* chirSuperClassTy = nullptr;
-        if (chirSuperTy->IsClass()) {
-            chirSuperClassTy = StaticCast<ClassType*>(chirSuperTy);
-        } else if (chirSuperTy->IsRef()) {
-            auto refTy = StaticCast<RefType*>(chirSuperTy);
-            auto baseTy = refTy->GetBaseType();
-            if (baseTy && baseTy->IsClass()) {
-                chirSuperClassTy = StaticCast<ClassType*>(baseTy);
-            }
-        }
-
+        auto chirSuperClassTy = TranslateSuperClassToChirType(*astDecl);
         if (!chirSuperClassTy) {
             continue;
         }
 
-        auto superClassDef = chirSuperClassTy->GetClassDef();
-
-        bool isPlatformMirror = false;
-        if (superClassDef && IsPlatformMirrorClass(*superClassDef)) {
-            isPlatformMirror = true;
-        }
-        auto astSuperClassTy = astClassTy->GetSuperClassTy();
-        if (astSuperClassTy && astSuperClassTy->decl) {
-            if (astSuperClassTy->decl->HasAnno(AST::AnnotationKind::JAVA_MIRROR)) {
-                isPlatformMirror = true;
-            }
-            if (astSuperClassTy->decl->HasAnno(AST::AnnotationKind::OBJ_C_MIRROR)) {
-                isPlatformMirror = true;
-            }
-        }
-
-        if (!isPlatformMirror) {
+        if (!IsPlatformMirrorSuperClass(*astDecl, *chirSuperClassTy)) {
             continue;
         }
 
