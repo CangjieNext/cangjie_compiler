@@ -312,6 +312,9 @@ void GenerateNativeBridgeForJavaImpl::Process(ClassDecl& companion, ClassDecl& r
         if (member->TestAttr(Attribute::IS_BROKEN)) {
             continue;
         }
+        if (member->TestAttr(Attribute::FROM_COMMON_PART)) {
+            continue;
+        }
         if (!member->TestAnyAttr(Attribute::PUBLIC, Attribute::PROTECTED)) {
             continue;
         }
