@@ -37,6 +37,7 @@ struct AfterTypeCheckContext {
     AST::FuncDecl& GetJavaImplWrappingConstructor(AST::ClassDecl& refWrapper);
 
     std::vector<Ptr<AST::FuncDecl>> GetJavaImplUserDefinedConstructors(AST::ClassDecl& refWrapper);
+    std::vector<Ptr<AST::FuncDecl>> GetJavaImplFromCommonPartConstructors(AST::ClassDecl& refWrapper);
 
     void AddGeneratedDecl(OwnedPtr<AST::Decl>&& decl);
 
