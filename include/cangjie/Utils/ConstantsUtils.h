@@ -126,6 +126,7 @@ inline const std::string INTEROP_JSTRING_NAME = "JString";
 inline const std::string INTEROP_JARRAY_NAME = "JArray";
 inline const std::string INTEROP_JAVA_LANG_PACKAGE = "java.lang";
 inline const std::string JAVA_REF_FIELD_NAME = "$javaref";
+inline const std::string JAVA_IMPL_REGISTRY_COMPANION_REF_FIELD_NAME = "$reg";
 inline const std::string JAVA_FWD_CLASS_SUFFIX = "_fwd";
 inline const std::string JAVA_INTERFACE_FWD_CLASS_DEFAULT_METHOD_SUFFIX = "_default_impl";
 inline const std::string JAVA_SELF_OBJECT = "selfobj";
