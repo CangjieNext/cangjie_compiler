@@ -1191,7 +1191,7 @@ void TypeChecker::TypeCheckerImpl::AddSuperInterfaceForClassLikeDecl(ASTContext&
         if (!sym->node->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
             continue;
         }
-        
+
         if (auto classLikeDecl = As<ASTKind::CLASS_LIKE_DECL>(sym->node); classLikeDecl) {
             AddObjCIdSuperInterfaceObjCInterop(ctx, *classLikeDecl);
         }
@@ -1580,6 +1580,27 @@ void TypeChecker::TypeCheckerImpl::PreCheckFuncStaticConflict(const std::vector<
     }
 }
 
+namespace {
+/// CJMP common/specific pairs should not be considered overload conflicts.
+/// One is from deserialized common CHIR (FROM_COMMON_PART), the other is from specific source.
+bool IsCJMPCommonSpecificPair(Ptr<FuncDecl> f1, Ptr<FuncDecl> f2)
+{
+    // Check if one is FROM_COMMON_PART (merged from common) and other is SPECIFIC
+    bool f1FromCommon = f1->TestAttr(Attribute::FROM_COMMON_PART);
+    bool f2FromCommon = f2->TestAttr(Attribute::FROM_COMMON_PART);
+    bool f1Specific = f1->TestAttr(Attribute::SPECIFIC);
+    bool f2Specific = f2->TestAttr(Attribute::SPECIFIC);
+
+    // CJMP pair: one from common, one specific
+    if ((f1FromCommon && f2Specific) || (f2FromCommon && f1Specific)) {
+        // Check if they have matching specificImplementation pointers
+        if (f1->specificImplementation == f2 || f2->specificImplementation == f1) {
+            return true;
+        }
+    }
+    return false;
+}
+}
 bool TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
     std::vector<Ptr<FuncDecl>> funcs, bool needReportErr)
 {
@@ -1610,7 +1631,8 @@ bool TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
                 fd->TestAttr(Attribute::STATIC) == (*it)->TestAttr(Attribute::STATIC) &&
                 fd->TestAttr(Attribute::CONSTRUCTOR) == (*it)->TestAttr(Attribute::CONSTRUCTOR) &&
                 fd->TestAttr(Attribute::MAIN_ENTRY) == (*it)->TestAttr(Attribute::MAIN_ENTRY) &&
-                !IsSameDeserializedFunction(*fd, **it);
+                !IsSameDeserializedFunction(*fd, **it) &&
+                !IsCJMPCommonSpecificPair(fd, *it);
         });
         std::vector<Ptr<FuncDecl>> sameSigFuncs;
         std::copy(funcs.begin(), it1, std::back_inserter(sameSigFuncs));
@@ -1995,7 +2017,7 @@ void TypeChecker::TypeCheckerImpl::PreCheck(const std::vector<Ptr<ASTContext>>& 
         CheckRedefinition(*ctx);
     }
     Utils::ProfileRecorder::Stop("PreCheck", "CheckRedefinition");
- 	 
+
     Utils::ProfileRecorder::Start("PreCheck", "ResolveDecls");
     for (auto& ctx : contexts) {
         // Stage 2: Set decl sema type without checking inside the decl body.
