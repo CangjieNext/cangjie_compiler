@@ -30,6 +30,7 @@ void InsertProxyPropertyGetter(PropDecl& prop, VarDecl& userField, VarDecl& regC
     CJC_ASSERT(IsImplReferenceWrapper(*prop.outerDecl));
     prop.getters.emplace_back(WithinFile(MakeOwned<FuncDecl>(), prop.curFile));
     auto& getter = *prop.getters.back();
+    CopyPos(&prop, &getter);
     getter.identifier = "$" + prop.identifier + "get";
     getter.outerDecl = prop.outerDecl;
     getter.fullPackageName = prop.fullPackageName;
@@ -41,17 +42,21 @@ void InsertProxyPropertyGetter(PropDecl& prop, VarDecl& userField, VarDecl& regC
     getter.CloneAttrs(prop);
     getter.DisableAttr(Attribute::MUT);
     getter.EnableAttr(Attribute::COMPILER_ADD);
+    getter.EnableAttr(Attribute::JAVA_IMPL);
 
     getter.funcBody = WithinFile(MakeOwned<FuncBody>(), prop.curFile);
     auto& getterBody = *getter.funcBody;
+    CopyPos(&prop, &getterBody);
     getterBody.SetTy(prop.GetTy());
     getterBody.EnableAttr(Attribute::COMPILER_ADD);
     getterBody.paramLists.push_back(WithinFile(MakeOwned<FuncParamList>(), prop.curFile));
     getterBody.paramLists.begin()->get()->EnableAttr(Attribute::COMPILER_ADD);
+    CopyPos(&prop, getterBody.paramLists.back().get());
     getterBody.funcDecl = &getter;
 
     getterBody.body = WithinFile(CreateBlock({}, prop.GetTy()), prop.curFile);
     getterBody.body->SetTy(prop.GetTy());
+    CopyPos(&prop, getterBody.body.get());
 
     getterBody.body->body.emplace_back(
         CreateMemberAccess(
@@ -66,6 +71,7 @@ void InsertProxyPropertySetter(PropDecl& prop, VarDecl& userField, VarDecl& regC
 
     prop.setters.emplace_back(WithinFile(MakeOwned<FuncDecl>(), prop.curFile));
     auto& setter = *prop.setters.back();
+    CopyPos(&prop, &setter);
     setter.identifier = "$" + prop.identifier + "set";
     setter.outerDecl = prop.outerDecl;
     setter.propDecl = &prop;
@@ -76,22 +82,27 @@ void InsertProxyPropertySetter(PropDecl& prop, VarDecl& userField, VarDecl& regC
     setter.CloneAttrs(prop);
     setter.DisableAttr(Attribute::MUT);
     setter.EnableAttr(Attribute::COMPILER_ADD);
+    setter.EnableAttr(Attribute::JAVA_IMPL);
 
     setter.funcBody = WithinFile(MakeOwned<FuncBody>(), prop.curFile);
     auto& setterBody = *setter.funcBody;
+    CopyPos(&prop, &setterBody);
     setterBody.SetTy(unitTy);
     setterBody.EnableAttr(Attribute::COMPILER_ADD);
     setterBody.paramLists.push_back(WithinFile(MakeOwned<FuncParamList>(), prop.curFile));
     setterBody.paramLists.begin()->get()->EnableAttr(Attribute::COMPILER_ADD);
+    CopyPos(&prop, setterBody.paramLists.back().get());
     setterBody.paramLists.begin()->get()->params.push_back(MakeOwned<FuncParam>());
     auto& setterParam = **setterBody.paramLists.begin()->get()->params.begin();
     setterParam.SetTy(prop.GetTy());
     setterParam.EnableAttr(Attribute::COMPILER_ADD);
     setterParam.identifier = "set";
+    CopyPos(&prop, &setterParam);
     setterBody.funcDecl = &setter;
 
     setterBody.body = WithinFile(CreateBlock({}, prop.GetTy()), prop.curFile);
     setterBody.body->SetTy(unitTy);
+    CopyPos(&prop, setterBody.body.get());
 
     // $reg.<actualField> = set
     setterBody.body->body.emplace_back(
@@ -114,6 +125,10 @@ void RewriteJavaImplReferenceWrapperFields::RelocateFields(AfterTypeCheckContext
         if (member->astKind != ASTKind::VAR_DECL || !Is<VarDecl>(member)) {
             continue;
         }
+        if (member->TestAttr(Attribute::FROM_COMMON_PART) && member->specificImplementation) {
+            itm++;
+            continue;
+        }
 
         // Original reference wrapper field
         auto& field = *StaticAs<ASTKind::VAR_DECL>(member.get());
@@ -122,7 +137,7 @@ void RewriteJavaImplReferenceWrapperFields::RelocateFields(AfterTypeCheckContext
             continue;
         }
 
-        generatedProps[&field] = GenerateProxyProperty(field, regCompanionField);
+        generatedProps[&field] = GenerateProxyProperty(field, regCompanionField, refWrapper);
 
         registryCompanion.GetMemberDecls().emplace_back(std::move(member));
         member = nullptr; // removed and erased from the vector below
@@ -273,9 +288,9 @@ void RewriteJavaImplReferenceWrapperFields::RewriteFieldAccess(AfterTypeCheckCon
 }
 
 OwnedPtr<PropDecl> RewriteJavaImplReferenceWrapperFields::GenerateProxyProperty(VarDecl& userField,
-    VarDecl& regCompanionRefField) const
+    VarDecl& regCompanionRefField, ClassDecl& refWrapper) const
 {
-    auto propDecl = WithinFile(MakeOwned<PropDecl>(), userField.curFile);
+    auto propDecl = WithinFile(MakeOwned<PropDecl>(), refWrapper.curFile);
     propDecl->begin = userField.begin;
     propDecl->end = userField.end;
     propDecl->keywordPos = userField.keywordPos;
@@ -293,7 +308,7 @@ OwnedPtr<PropDecl> RewriteJavaImplReferenceWrapperFields::GenerateProxyProperty(
     if (userField.isVar) {
         propDecl->EnableAttr(Attribute::MUT);
         Modifier mut = Modifier(TokenKind::MUT, userField.begin);
-        mut.curFile = userField.curFile;
+        mut.curFile = refWrapper.curFile;
         propDecl->modifiers.insert(std::move(mut));
     }
     propDecl->outerDecl = userField.outerDecl;
