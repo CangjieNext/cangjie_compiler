@@ -778,14 +778,11 @@ void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, PropDecl** pr
 void LinkMatchedCommonPropToSpecific(PropDecl& commonProp, PropDecl& specificProp)
 {
     commonProp.specificImplementation = &specificProp;
-    commonProp.doNotExport = true;
     if (!commonProp.getters.empty() && !specificProp.getters.empty()) {
         commonProp.getters[0]->specificImplementation = specificProp.getters[0].get();
-        commonProp.getters[0]->doNotExport = true;
     }
     if (!commonProp.setters.empty() && !specificProp.setters.empty()) {
         commonProp.setters[0]->specificImplementation = specificProp.setters[0].get();
-        commonProp.setters[0]->doNotExport = true;
     }
 }
 
