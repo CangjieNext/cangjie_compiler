@@ -65,6 +65,10 @@ private:
     void MatchCJMPDecls(std::vector<Ptr<AST::Decl>>& commonDecls, std::vector<Ptr<AST::Decl>>& specificDecls);
     bool MatchSpecificDeclWithCommonDecls(AST::Decl& specificDecl, const std::vector<Ptr<AST::Decl>>& commonDecls);
     void CheckAbstractClassMembers(const AST::InheritableDecl& specificDecl);
+    /// Check return-type compatibility for a common function matched with its specific implementation.
+    void CheckMatchedFuncDecl(const Ptr<AST::Node>& node);
+    /// Check type compatibility for a common variable matched with its specific implementation.
+    void CheckMatchedVarDecl(const Ptr<AST::Node>& node);
 
     bool MatchEnumFuncTypes(const AST::FuncDecl& specific, const AST::FuncDecl& common);
     bool MatchCJMPEnumConstructor(AST::Decl& specificDecl, AST::Decl& commonDecl);

@@ -641,73 +641,69 @@ void MPTypeCheckerImpl::CheckMatchedVariableTypes(AST::VarDecl& specificVar, AST
     MatchCJMPVar(specificVar, commonVar); // the diagnostic is reported by the function
 }
 
-static bool IsCommon(const AST::Node& decl)
+namespace {
+bool IsCommon(const AST::Node& decl)
 {
     return decl.TestAttr(Attribute::COMMON);
 }
 
-static bool IsEnumConstructor(const AST::Node& decl)
+bool IsEnumConstructor(const AST::Node& decl)
 {
     return decl.TestAttr(Attribute::ENUM_CONSTRUCTOR);
 }
+} // namespace
 
 void MPTypeCheckerImpl::CheckReturnAndVariableTypes(AST::Package& pkg)
 {
     std::function<VisitAction(Ptr<Node>)> visitor = [this](const Ptr<Node>& node) {
         if (node->astKind == ASTKind::FUNC_DECL) {
-            if (!IsCommon(*node) || IsEnumConstructor(*node)) {
-                return VisitAction::SKIP_CHILDREN;
-            }
-            auto common = StaticAs<ASTKind::FUNC_DECL>(node);
-            auto specific = common->specificImplementation;
-            if (specific) {
-                CJC_ASSERT_WITH_MSG(specific->astKind == AST::ASTKind::FUNC_DECL,
-                    "Common function can be only matched to a function but got another kind");
-                auto& commonFunc = *common;
-                auto& specificFunc = *StaticCast<FuncDecl>(specific);
-
-                CheckMatchedFunctionReturnTypes(specificFunc, commonFunc);
-            }
+            CheckMatchedFuncDecl(node);
             return VisitAction::SKIP_CHILDREN;
-        } else if (node->astKind == ASTKind::VAR_DECL) {
-            if (!IsCommon(*node) || IsEnumConstructor(*node)) {
-                return VisitAction::SKIP_CHILDREN;
-            }
-            auto common = StaticAs<ASTKind::VAR_DECL>(node);
-            auto specific = common->specificImplementation;
-            if (specific) {
-                // For CJMP @JavaMirror, VarDecl may be matched with PropDecl (desugared from mirror field)
-                if (specific->TestAttr(Attribute::DESUGARED_MIRROR_FIELD)) {
-                    // Type check using ty (resolved type)
-                    auto& commonVar = *common;
-                    auto& specificProp = *StaticCast<PropDecl>(specific);
-                    if (Ty::IsTyCorrect(commonVar.GetTy()) && Ty::IsTyCorrect(specificProp.GetTy())) {
-                        auto cType = commonVar.GetTy();
-                        auto pType = specificProp.GetTy();
-                        if (!typeManager.IsTyEqual(cType, pType) && !Ty::IsInitialTy(pType)) {
-                            diag.DiagnoseRefactor(
-                                DiagKindRefactor::sema_specific_has_different_type, specificProp, "property");
-                        }
-                    }
-                } else {
-                    CJC_ASSERT_WITH_MSG(specific->astKind == AST::ASTKind::VAR_DECL,
-                        "Common variable can be only matched to a variable but got another kind");
-                    auto& commonVar = *common;
-                    auto& specificVar = *StaticCast<VarDecl>(specific);
-
-                    CheckMatchedVariableTypes(specificVar, commonVar);
-                }
-            } else if (!common->TestAttr(Attribute::INITIALIZED) && common->TestAttr(Attribute::FROM_COMMON_PART)) {
-                // this has been postponed, we need this to handle the case when a common var has no matched specified
-                // but it does't fail because there is an initializer for it
-                DiagNotMatchedSpecificDecl(diag, *common);
-            }
+        }
+        if (node->astKind == ASTKind::VAR_DECL) {
+            CheckMatchedVarDecl(node);
             return VisitAction::SKIP_CHILDREN;
         }
         return VisitAction::WALK_CHILDREN;
     };
     Walker walker(&pkg, visitor);
     walker.Walk();
+}
+
+void MPTypeCheckerImpl::CheckMatchedFuncDecl(const Ptr<Node>& node)
+{
+    if (!IsCommon(*node) || IsEnumConstructor(*node)) {
+        return;
+    }
+    auto common = StaticAs<ASTKind::FUNC_DECL>(node);
+    auto specific = common->specificImplementation;
+    if (specific) {
+        CJC_ASSERT_WITH_MSG(specific->astKind == AST::ASTKind::FUNC_DECL,
+            "Common function can be only matched to a function but got another kind");
+        auto& commonFunc = *common;
+        auto& specificFunc = *StaticCast<FuncDecl>(specific);
+        CheckMatchedFunctionReturnTypes(specificFunc, commonFunc);
+    }
+}
+
+void MPTypeCheckerImpl::CheckMatchedVarDecl(const Ptr<Node>& node)
+{
+    if (!IsCommon(*node) || IsEnumConstructor(*node)) {
+        return;
+    }
+    auto common = StaticAs<ASTKind::VAR_DECL>(node);
+    auto specific = common->specificImplementation;
+    if (specific) {
+        CJC_ASSERT_WITH_MSG(specific->astKind == AST::ASTKind::VAR_DECL,
+            "Common variable can be only matched to a variable but got another kind");
+        auto& commonVar = *common;
+        auto& specificVar = *StaticCast<VarDecl>(specific);
+        CheckMatchedVariableTypes(specificVar, commonVar);
+    } else if (!common->TestAttr(Attribute::INITIALIZED) && common->TestAttr(Attribute::FROM_COMMON_PART)) {
+        // this has been postponed, we need this to handle the case when a common var has no matched specified
+        // but it does't fail because there is an initializer for it
+        DiagNotMatchedSpecificDecl(diag, *common);
+    }
 }
 
 void MPTypeCheckerImpl::ValidateMatchedAnnotationsAndModifiers(AST::Package& pkg)
@@ -728,6 +724,26 @@ void MPTypeCheckerImpl::ValidateMatchedAnnotationsAndModifiers(AST::Package& pkg
     walker.Walk();
 }
 
+namespace {
+/// Returns true if \p classDecl declares a constructor whose first parameter list is empty
+/// (i.e. an empty constructor), false otherwise.
+bool HasEmptyConstructor(const ClassDecl& classDecl)
+{
+    for (const auto& member : classDecl.GetMemberDeclPtrs()) {
+        if (member->astKind != ASTKind::FUNC_DECL) {
+            continue;
+        }
+        auto funcDecl = StaticCast<FuncDecl>(member);
+        if (funcDecl->TestAttr(Attribute::CONSTRUCTOR) && funcDecl->funcBody &&
+            !funcDecl->funcBody->paramLists.empty() &&
+            funcDecl->funcBody->paramLists[0]->params.empty()) {
+            return true;
+        }
+    }
+    return false;
+}
+} // namespace
+
 void MPTypeCheckerImpl::ValidateCJMPConstructorConstraints(AST::Package& pkg)
 {
     (void)pkg;
@@ -741,20 +757,7 @@ void MPTypeCheckerImpl::ValidateCJMPConstructorConstraints(AST::Package& pkg)
         if (!platformParent) {
             continue;
         }
-        const auto& memberDecls = platformParent->GetMemberDeclPtrs();
-        bool hasEmptyConstructor = false;
-        for (const auto& member : memberDecls) {
-            if (member->astKind == ASTKind::FUNC_DECL) {
-                auto funcDecl = StaticCast<FuncDecl>(member);
-                if (funcDecl->TestAttr(Attribute::CONSTRUCTOR) && funcDecl->funcBody &&
-                    !funcDecl->funcBody->paramLists.empty() &&
-                    funcDecl->funcBody->paramLists[0]->params.empty()) {
-                    hasEmptyConstructor = true;
-                    break;
-                }
-            }
-        }
-        if (!hasEmptyConstructor) {
+        if (!HasEmptyConstructor(*platformParent)) {
             diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_platform_parent_no_empty_constructor,
                 *specificClass, platformParent->identifier.Val());
         }
