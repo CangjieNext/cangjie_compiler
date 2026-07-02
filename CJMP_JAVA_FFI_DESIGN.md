@@ -913,6 +913,123 @@ This exception only applies to VAR_DECLs (not PropDecls or FuncDecls). For
 @JavaMirror classes, `InsertMirrorVarProp` has already converted these VarDecls
 to PropDecls before AST2CHIR runs, so the exception is inert for FFI classes.
 
+### 10. CHIR-level clashes caused by moving common decls into specific
+
+The second loop and the merge process move common declarations (VarDecls,
+PropDecls, FuncDecls) from the common class body into the specific class body.
+At the AST level this is straightforward — the declarations simply change
+containers. But at the CHIR level, the specific class's `ClassDef` already
+contains deserialized members from the common CJO. When AST2CHIR translation
+re-processes the now-relocated members, the new CHIR entries **clash** with
+the deserialized ones. Five distinct clash categories were discovered and fixed:
+
+#### C1. Duplicate exportIds in CJO serialization
+
+**What**: Both the common-matched VarDecl and its specific counterpart end up
+in the specific class body. Both produce the same mangled name → same exportId.
+`ASTWriter` serializes both, producing a corrupt CJO.
+
+**Why it happens**: `MangleVarDecl` doesn't include COMMON/SPECIFIC attributes,
+so matched pairs collide.
+
+**Fix**: Set `doNotExport = true` on the common-matched VarDecl during the
+swap in `MergeCommonIntoSpecific`. The specific counterpart provides the
+layout entry; the common one is suppressed.
+
+#### C2. Stale CHIR `MemberVarInfo`
+
+**What**: With the common class body empty, `TranslateClassLikeDecl` for the
+common class processes no members. The deserialized CHIR `MemberVarInfo`
+(type, annoInfo) for common-matched VarDecls is never refreshed from the AST.
+For complex types (e.g., `?ToString`), the stale type reference causes runtime
+crashes.
+
+**Why it happens**: `ShouldTranslateMember` skips cross-file members by
+default. The common-matched VarDecl is from a different file (common source)
+but now lives in the specific class body.
+
+**Fix**: Exception in `ShouldTranslateMember` — common-matched VAR_DECLs are
+not skipped, so `AddMemberVarDecl` runs and refreshes the deserialized member
+via the name-based update path.
+
+#### C3. Lost `DESERIALIZED` attribute during CHIR member refresh
+
+**What**: When `AddMemberVarDecl` refreshes a deserialized `MemberVarInfo`,
+it builds a fresh `varInfo` from AST data and overwrites the existing entry.
+`BuildVarDeclAttr` constructs attributes from AST only — `DESERIALIZED` is a
+CHIR-only attribute set during CJO loading, not present on the AST. The
+overwrite loses it.
+
+**Why it matters**: `VarInitCheck` uses `COMMON && !DESERIALIZED` to decide
+whether to skip a member. Without `DESERIALIZED`, the member is incorrectly
+treated as "freshly added" and skipped — hiding real initialization errors.
+
+**Fix**: Explicitly preserve `DESERIALIZED` on the refreshed `varInfo` before
+the overwrite. This is a targeted fix for a known CHIR-only attribute; a more
+general solution would merge attributes instead of replacing the struct.
+
+#### C4. Duplicate vtable entries for property getters/setters
+
+**What**: After the merge, the specific interface has both the common `prop foo`
+and the specific `prop foo`. Both generate getter functions with the same
+mangled name. The specific `ClassDef` ends up with two identical function
+entries in its method list, producing duplicate vtable slots. The CHIR checker
+reports "virtual method unimplemented" because class A has one implementation
+but the interface vtable expects two.
+
+**Why it happens**: `SkipMemberFuncInSpecificMerging` was supposed to
+deduplicate getters/setters, but two bugs prevented it:
+1. The `!DESERIALIZED` guard skipped deduplication for newly-created CHIR
+   ClassDefs (not just deserialized ones)
+2. The return-type comparison (`*methodRetTy == *declRetTy`) failed because
+   deserialized and freshly-translated CHIR types have different pointer
+   identities even when they represent the same type
+
+**Fix**: Remove the `DESERIALIZED` guard (so dedup runs for all CJMP-specific
+classes) and replace the return-type comparison with a mangled-name comparison
+(`method->GetIdentifierWithoutPrefix() == decl.mangledName`), which is
+stable across deserialization and translation.
+
+#### C5. Name resolution finds common var instead of specific var
+
+**What**: After the second loop, both `c_a` (common-matched, `INITIALIZED`)
+and `s_a` (specific, not `INITIALIZED`) are in the specific class body. The
+name resolver finds `c_a` first (it appears earlier in the member list and
+the decl map). The constructor body analysis marks `c_a` as initialized,
+missing `s_a` entirely. The InitializationChecker then reports
+`sema_class_uninitialized_field` for `s_a`.
+
+**Why it happens**: The resolver has two paths — decl map lookup and member
+list iteration — and neither was aware of CJMP common/specific pairing.
+
+**Fix**: Skip common-matched VarDecls (`IsCommonMatchedWithSpecific()`) in
+both the decl map lookup (`LookupImpl`) and the member list iteration
+(`FieldLookup`). This ensures the resolver always finds the specific var,
+and the constructor body analysis marks it `INITIALIZED` naturally.
+
+**Why not propagate `INITIALIZED`**: Propagating `INITIALIZED` from common
+to specific was considered and rejected. The specific part can amend
+constructors — marking a specific var as `INITIALIZED` at AST level would
+incorrectly suppress `sema_class_uninitialized_field` for vars whose
+specific constructors don't actually initialize them. The name-resolution
+fix is correct because it lets the constructor body analysis determine
+initialization naturally.
+
+#### Summary
+
+| Clash | What breaks | Fix location |
+|-------|-------------|--------------|
+| C1 exportId | Corrupt CJO | `MergeCommonIntoSpecific` (doNotExport) |
+| C2 stale varInfo | Runtime SIGSEGV | `ShouldTranslateMember` exception |
+| C3 lost DESERIALIZED | VarInitCheck false negative | `AddMemberVarDecl` update path |
+| C4 duplicate vtable | CHIR checker false positive | `SkipMemberFuncInSpecificMerging` |
+| C5 name resolution | Sema false positive | `LookupImpl` + `FieldLookup` |
+
+The pattern across all five: moving declarations from common to specific
+exposes them to CHIR and Sema stages that were not designed to handle
+duplicate entries. Each fix follows the same principle — **the specific
+counterpart is canonical; the common-matched one is suppressed or skipped**.
+
 ---
 
 ## Retrospective Rationale

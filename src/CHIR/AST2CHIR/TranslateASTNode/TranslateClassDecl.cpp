@@ -386,7 +386,7 @@ void Translator::TranslateClassLikeMemberFuncDecl(ClassDef& classDef, const AST:
 
 bool Translator::SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::FuncDecl& decl)
 {
-    if (!mergingSpecific || !classDef.TestAttr(CHIR::Attribute::DESERIALIZED)) {
+    if (!mergingSpecific) {
         return false;
     }
 
@@ -395,21 +395,10 @@ bool Translator::SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::
             return false;
         }
         for (auto method : classDef.GetMethods()) {
-            if (method->GetFuncKind() == FuncKind::GETTER && decl.isGetter) {
-                auto methodRetTy = method->GetReturnType();
-                auto declRetTy = chirTy.TranslateType(*decl.GetTy());
-                if (methodRetTy && declRetTy && *methodRetTy == *declRetTy) {
+            if ((method->GetFuncKind() == FuncKind::GETTER && decl.isGetter) ||
+                (method->GetFuncKind() == FuncKind::SETTER && decl.isSetter)) {
+                if (method->GetIdentifierWithoutPrefix() == decl.mangledName) {
                     return true;
-                }
-            }
-            if (method->GetFuncKind() == FuncKind::SETTER && decl.isSetter) {
-                auto params = method->GetParams();
-                if (params.size() >= 2) {
-                    auto methodParamTy = params[1]->GetType();
-                    auto declParamTy = chirTy.TranslateType(*decl.GetTy());
-                    if (methodParamTy && declParamTy && *methodParamTy == *declParamTy) {
-                        return true;
-                    }
                 }
             }
         }
