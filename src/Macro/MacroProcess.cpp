@@ -6,6 +6,7 @@
 
 #include <fstream>
 #include <algorithm>
+#include <optional>
 
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Frontend/CompilerInstance.h"
@@ -291,13 +292,13 @@ void RemoveMacroCallFile(File& file)
 void GenerateMacroCallFile(const std::vector<Ptr<File>>& fileSucVec,
     std::map<Ptr<File>, std::vector<Ptr<Node>>>& macroCallMap, CompilerInstance& ci)
 {
-    bool isCjmpFile = ci.invocation.globalOptions.IsCompilingCJMPSpecific();
+    bool isCjmpFile = ci.invocation.globalOptions.IsCompilingCJMP();
     auto& sm = ci.GetSourceManager();
     std::string content;
     for (const auto& file : fileSucVec) {
         auto nodes = macroCallMap.at(file);
         auto curFilePosBase = file->begin;
-        auto fileID = sm.AddSource(file->macroCallFilePath, "");
+        auto fileID = sm.AddSource(file->macroCallFilePath, "", std::nullopt, isCjmpFile);
         for (auto& node : nodes) {
             auto pMacroInvocation = node->GetInvocation();
             if (!pMacroInvocation) {

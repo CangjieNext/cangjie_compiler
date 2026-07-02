@@ -87,6 +87,9 @@ std::vector<Ptr<FuncDecl>> AfterTypeCheckContext::GetJavaImplUserDefinedConstruc
         if (!member->TestAttr(Attribute::CONSTRUCTOR)) {
             continue;
         }
+        if (member->TestAttr(Attribute::FROM_COMMON_PART)) {
+            continue;
+        }
 
         // Skip original primary constructors and only consider its FuncDecl counterpart.
         auto ctor = As<ASTKind::FUNC_DECL>(member);
@@ -100,6 +103,28 @@ std::vector<Ptr<FuncDecl>> AfterTypeCheckContext::GetJavaImplUserDefinedConstruc
         // Visit implicit constructors too (compiler added without any parameters).
         auto isImplicit = member->TestAttr(Attribute::COMPILER_ADD, Attribute::IMPLICIT_ADD) && !hasParams;
         if (!isPrimary && !isImplicit && member->TestAttr(Attribute::COMPILER_ADD)) {
+            continue;
+        }
+
+        ctors.emplace_back(ctor);
+    }
+    return ctors;
+}
+
+std::vector<Ptr<FuncDecl>> AfterTypeCheckContext::GetJavaImplFromCommonPartConstructors(ClassDecl& refWrapper)
+{
+    std::vector<Ptr<FuncDecl>> ctors;
+
+    for (auto member : refWrapper.GetMemberDeclPtrs()) {
+        if (!member->TestAttr(Attribute::CONSTRUCTOR)) {
+            continue;
+        }
+        if (!member->TestAttr(Attribute::FROM_COMMON_PART)) {
+            continue;
+        }
+
+        auto ctor = As<ASTKind::FUNC_DECL>(member);
+        if (!ctor) {
             continue;
         }
 
