@@ -85,8 +85,7 @@ void RewriteRefWrapperPrimaryConstructor(ClassDecl& refWrapper, ClassDecl& compa
 OwnedPtr<VarDecl> GenerateJavaImplRegistryCompanionReferenceField::CreateJavaImplRegistryCompanionReferenceField(
     ClassDecl& companion) const
 {
-    constexpr auto registryCompanionReferenceFieldName = "$reg";
-    auto field = CreateVarDecl(registryCompanionReferenceFieldName, nullptr, CreateRefType(companion));
+    auto field = CreateVarDecl(JAVA_IMPL_REGISTRY_COMPANION_REF_FIELD_NAME, nullptr, CreateRefType(companion));
     field->SetTy(companion.GetTy());
     field->doNotExport = true;
     field->isVar = false;
