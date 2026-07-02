@@ -22,7 +22,6 @@ target_link_libraries(
     ${CMAKE_DL_LIBS}
     ${BASE_UTIL_SRC}
     $<TARGET_OBJECTS:CangjieProfileUtils>
-    $<TARGET_OBJECTS:CangjieUnittestsMangle>
     GTest::gtest
     GTest::gtest_main)
 endif()

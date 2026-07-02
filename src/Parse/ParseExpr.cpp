@@ -13,6 +13,7 @@
 
 #include "ParserImpl.h"
 
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Utils/Utils.h"
@@ -964,7 +965,16 @@ OwnedPtr<Expr> ParserImpl::ParseCallExpr(OwnedPtr<Expr> baseExpr)
         DiagExpectedRightDelimiter("(", ret->leftParenPos);
     }
     ret->rightParenPos = lastToken.Begin();
-    ret->end = lastToken.End();
+    if (!newlineSkipped) {
+        if (auto modal = ParseModalInfo()) {
+            ret->modal = std::move(modal);
+            ret->end = ret->modal.End();
+        } else {
+            ret->end = lastToken.End();
+        }
+    } else {
+        ret->end = lastToken.End();
+    }
     return ret;
 }
 

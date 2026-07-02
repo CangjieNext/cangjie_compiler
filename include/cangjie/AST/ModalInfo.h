@@ -18,7 +18,6 @@
 #include <string_view>
 
 namespace Cangjie {
-
 enum class LocalModal : uint8_t {
     NOT = 1,  // @~local
     FULL = 2, // @local!
@@ -59,7 +58,6 @@ struct ModalInfo {
 constexpr int MODAL_INFO_COUNT = 3;
 int ToIndex(ModalInfo modal);
 ModalInfo ToModalInfo(int index);
-
 } // namespace Cangjie
 
 #endif // CANGJIE_UTILS_MODALINFO_H

@@ -137,14 +137,22 @@ OwnedPtr<Expr> ParserImpl::ParsePrimitiveTypeExpr()
     Next();
     auto modal = ParseModalInfo();
     if (token.kind <= TokenKind::RUNE && Seeing(TokenKind::LPAREN)) {
-        return ParseTypeConvExprWith(std::move(token), std::move(modal));
+        if (modal.HasLocal()) {
+            DiagUnexpectedModal(MakeRange(modal.LocalBegin(), modal.LocalEnd()));
+        }
+        return ParseTypeConvExprWith(std::move(token));
     }
     // Optimize those Seeing().
     // If seeing a primitive type + dot, should be a static function call like Int64.foo().
+    // in this case, modal type is forbidden.
     if (Seeing(TokenKind::DOT)) {
         auto ret = MakeOwned<PrimitiveTypeExpr>(LookupPrimitiveTypeKind(token.kind));
         ret->begin = token.Begin();
         ret->end = lastToken.End();
+        if (modal.HasLocal()) {
+            DiagUnexpectedModal(MakeRange(modal.LocalBegin(), modal.LocalEnd()));
+            ret->EnableAttr(Attribute::HAS_BROKEN);
+        }
         ret->modal = std::move(modal);
         return ret;
     }
@@ -1366,9 +1374,9 @@ OwnedPtr<Expr> ParserImpl::ParseWildcardExpr()
     return expr;
 }
 
-void ParserImpl::DiagUnexpectedModal(const Range& range)
+DiagnosticBuilder ParserImpl::DiagUnexpectedModal(const Range& range)
 {
-    ParseDiagnoseRefactor(DiagKindRefactor::parse_unexpected_modal_type, range);
+    return ParseDiagnoseRefactor(DiagKindRefactor::parse_unexpected_modal_type, range);
 }
 
 OwnedPtr<RefExpr> ParserImpl::ParseRefExpr(ExprKind ek)
@@ -1401,12 +1409,6 @@ OwnedPtr<RefExpr> ParserImpl::ParseRefExpr(ExprKind ek)
         if (ret->rightAnglePos != INVALID_POSITION) {
             ret->end = ret->rightAnglePos;
             ret->end.column += 1;
-        }
-    }
-    if (!ret->isThis && !ret->isSuper) {
-        if (auto modal = ParseModalInfo()) {
-            ret->modal = std::move(modal);
-            ret->end = ret->modal.LocalEnd();
         }
     }
     return ret;
@@ -1693,7 +1695,8 @@ OwnedPtr<LambdaExpr> ParserImpl::ParseBaseLambdaExpr()
     return ret;
 }
 
-OwnedPtr<AST::Expr> ParserImpl::ParseTypeConvExprWith(Token&& tok, ModalASTInfo&& modal)
+/// Parse PrimitiveType (of data type) with LParen postfix
+OwnedPtr<AST::Expr> ParserImpl::ParseTypeConvExprWith(Token&& tok)
 {
     OwnedPtr<TypeConvExpr> ret = MakeOwned<TypeConvExpr>();
     ret->begin = tok.Begin();
@@ -1702,10 +1705,6 @@ OwnedPtr<AST::Expr> ParserImpl::ParseTypeConvExprWith(Token&& tok, ModalASTInfo&
     ret->end = type->end = tok.End();
     type->str = tok.Value();
     type->kind = LookupPrimitiveTypeKind(tok.kind);
-    if (modal) {
-        ret->end = type->end = modal.End();
-    }
-    type->modal = std::move(modal);
     ret->type = std::move(type);
     CJC_ASSERT(lookahead.kind == TokenKind::LPAREN); // caller guaranteed
     Next();
@@ -1717,6 +1716,8 @@ OwnedPtr<AST::Expr> ParserImpl::ParseTypeConvExprWith(Token&& tok, ModalASTInfo&
         return MakeOwned<InvalidExpr>(lookahead.Begin());
     }
     ret->rightParenPos = lastToken.Begin();
+    // it is allowed to have mode after PrimitiveTypeExpr like CallExpr, e.g. Int64(...) @local!
+    ret->modal = ParseModalInfo();
     ret->end = lastToken.End();
     return ret;
 }

@@ -457,6 +457,7 @@ struct ASTHasherImpl {
     {
         HashExpr<whatTypeToHash>(ce);
         SUPERHash<whatTypeToHash>(ce.baseFunc, ce.args);
+        CombineHash<whatTypeToHash>(ce.modal);
     }
     template <int whatTypeToHash> void HashDoWhileExpr(const DoWhileExpr& dwe)
     {
@@ -534,7 +535,7 @@ struct ASTHasherImpl {
     {
         HashExpr<whatTypeToHash>(re);
         SUPERHash<whatTypeToHash>(
-            re.ref.identifier.Val(), re.typeArguments, re.isThis, re.isSuper, re.isQuoteDollar, re.modal);
+            re.ref.identifier.Val(), re.typeArguments, re.isThis, re.isSuper, re.isQuoteDollar);
         if (auto refTarget = re.ref.target) {
             SUPERHash<whatTypeToHash>(refTarget->rawMangleName);
             CJC_ASSERT(refTarget->GetTy());

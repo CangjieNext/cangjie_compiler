@@ -744,6 +744,7 @@ private:
                     VisitToken(a->commaPos);
                 }
                 VisitToken(e->rightParenPos);
+                VisitModal(e->modal);
                 break;
             }
             case ASTKind::FUNC_ARG: {

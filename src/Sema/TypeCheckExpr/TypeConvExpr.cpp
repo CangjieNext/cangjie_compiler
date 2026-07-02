@@ -25,16 +25,18 @@ ModalTy TypeChecker::TypeCheckerImpl::SynTypeConvExpr(ASTContext& ctx, TypeConvE
         return SynNumTypeConvExpr(tce);
     }
 
-    // The TypeConvExpr supports conversion between primitive types and conversion from CPointer to CFunc.
-    // Therefore, the function should be returned in either of the above two branches.
-    // Otherwise, there must be errors reported by other modules or logic codes.
+    // CPointer to CFunc is handled elsewhere.
+    // Therefore, the function should return already.
+    // Otherwise, there must be errors reported.
     tce.SetTy({TypeManager::GetInvalidTy()});
     return tce.GetTy();
 }
 
 ModalTy TypeChecker::TypeCheckerImpl::SynNumTypeConvExpr(TypeConvExpr& tce)
 {
-    tce.SetTy({TypeManager::GetPrimitiveTy(StaticCast<PrimitiveType*>(tce.type.get())->kind)});
+    // use explicit modal written after Int64(3) ...
+    // although most primitive types are Copyable.
+    tce.SetTy({TypeManager::GetPrimitiveTy(StaticCast<PrimitiveType*>(tce.type.get())->kind), tce.modal.ToModalInfo()});
     if (!tce.expr->GetTy().IsCorrect() || !tce.GetTy().IsCorrect()) {
         tce.SetTy({TypeManager::GetInvalidTy()});
         return tce.GetTy();

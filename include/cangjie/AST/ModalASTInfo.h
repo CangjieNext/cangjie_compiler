@@ -12,9 +12,8 @@
 #include <string_view>
 
 namespace Cangjie::AST {
-using Cangjie::LocalModal;
-using Cangjie::ModalInfo;
-
+/// locality used in AST node, parse representation. It has one more than LocalModal, that is None, which
+/// defaults to LocalModal::NOT.
 enum class LocalModalAST {
     NONE,
     NOT,

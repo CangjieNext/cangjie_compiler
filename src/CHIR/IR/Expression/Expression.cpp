@@ -527,7 +527,7 @@ bool Expression::IsInBlockGroupRecursively(const BlockGroup& target) const
         if (blockGroup == &target) {
             return true;
         }
-        if (auto ownerFunc = blockGroup->GetOwnerFunc()) {
+        if (blockGroup->GetOwnerFunc()) {
             return false;
         } else if (auto ownerExpression = blockGroup->GetOwnerExpression()) {
             blockGroup = ownerExpression->GetParentBlockGroup();

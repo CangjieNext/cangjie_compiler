@@ -331,6 +331,46 @@ void DiagForGenericParamMemberNotFound(DiagnosticEngine& diag, const MemberAcces
             "exposed generic parameter", gpd.identifier.Val());
     }
 }
+
+ModalInfo GetFunRefCaptureModal(const ASTContext& ctx, const NameReferenceExpr& nre)
+{
+    if (auto ma = DynamicCast<MemberAccess>(&nre)) {
+        if (!ma->baseExpr) {
+            return {};
+        }
+        if (auto targetOfBase = ma->baseExpr->GetTarget();
+            targetOfBase && targetOfBase->IsTypeDecl() && !IsThisOrSuper(*ma->baseExpr)) {
+            return {};
+        }
+        return ma->baseExpr->TyMode();
+    }
+    if (auto re = DynamicCast<RefExpr>(&nre)) {
+        if (re->isSuper) {
+            return {};
+        }
+        if (re->isThis) {
+            return re->TyMode();
+        }
+        return GetCurThisModal(ctx, re->scopeName);
+    }
+    return {};
+}
+
+bool IsCapturingLocalFullInFunRef(
+    const ASTContext& ctx, const TypeManager& tm, const NameReferenceExpr& nre, const FuncDecl& fd)
+{
+    if (!nre.isAlone || nre.callOrPattern || !tm.HasThisParam(fd)) {
+        return false;
+    }
+    return GetFunRefCaptureModal(ctx, nre).local == LocalModal::FULL;
+}
+
+void DiagLocalFullFunRefCapture(
+    DiagnosticEngine& diag, const ASTContext& ctx, const NameReferenceExpr& nre, const std::string& capturedName)
+{
+    diag.DiagnoseRefactor(DiagKindRefactor::sema_bad_capture_local, nre, GetFunRefCaptureModal(ctx, nre).ToString(),
+        capturedName, "member function", "reference");
+}
 } // namespace
 
 void TypeChecker::TypeCheckerImpl::DiagMemberAccessNotFound(const MemberAccess& ma)
@@ -412,8 +452,14 @@ bool TypeChecker::TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, ModalTy target, N
     TypeSubst resultMapping;
     Ptr<FuncDecl> matchedFd = nullptr;
     ModalTy validCandidateTy{};
+    bool rejectedByLocalCapture = false;
     for (auto [fd, fdTy, mapping] : candidates) {
-        bool isSubtype = typeManager.IsSubtype(fdTy, target) && CheckThisTypeForFunRef(ctx, *fd, refNode);
+        if (IsCapturingLocalFullInFunRef(ctx, typeManager, refNode, *fd) &&
+            typeManager.IsSubtype(fdTy, target) && CheckThisTypeForFunRef(ctx, *fd, refNode)) {
+            rejectedByLocalCapture = true;
+        }
+        bool isSubtype = typeManager.IsSubtype(fdTy, target) && CheckThisTypeForFunRef(ctx, *fd, refNode) &&
+            !IsCapturingLocalFullInFunRef(ctx, typeManager, refNode, *fd);
         if (!isSubtype) {
             if (!validCandidateTy && Ty::IsTyCorrect(fdTy) && !StaticCast<FuncTy>(fdTy.Ty())->retTy->IsQuest()) {
                 validCandidateTy = fdTy;
@@ -440,6 +486,14 @@ bool TypeChecker::TypeCheckerImpl::ChkRefExpr(ASTContext& ctx, ModalTy target, N
         if (refNode.GetTy().IsCorrect() && refNode.GetTy()->HasQuestTy()) {
             CJC_ASSERT(refNode.GetTarget());
             DiagUnableToInferReturnType(diag, *targets[0], refNode);
+        } else if (rejectedByLocalCapture) {
+            if (auto ma = DynamicCast<MemberAccess>(&refNode)) {
+                DiagLocalFullFunRefCapture(diag, ctx, refNode, ma->field.Val());
+            } else if (auto re = DynamicCast<RefExpr>(&refNode)) {
+                auto reTarget = GetRealTarget(re, re->GetTarget());
+                auto implicitThis = Is<InheritableDecl>(reTarget) || Is<BuiltInDecl>(reTarget);
+                DiagLocalFullFunRefCapture(diag, ctx, refNode, implicitThis ? "this" : re->ref.identifier.Val());
+            }
         } else if (genericIgnored) {
             diag.Diagnose(refNode, DiagKind::sema_generic_type_without_type_argument);
         } else if (validCandidateTy) {
@@ -518,6 +572,15 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
         re.SetTy({TypeManager::GetInvalidTy()});
         return;
     }
+    if (re.isAlone && !re.callOrPattern && !ctx.HasTargetTy(&re) && IsAllFuncDecl(targets)) {
+        for (auto target : targets) {
+            if (target && IsCapturingLocalFullInFunRef(ctx, typeManager, re, *StaticCast<FuncDecl>(target))) {
+                DiagLocalFullFunRefCapture(diag, ctx, re, target->identifier.Val());
+                re.SetTy({TypeManager::GetInvalidTy()});
+                return;
+            }
+        }
+    }
     // 'targets' must not empty.
     auto decl = GetAccessibleDecl(ctx, re, targets);
     if (!decl) {
@@ -526,11 +589,6 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
     ModifyTargetOfRef(re, decl, targets);
     // Legality of using refExpr will be checked after typecheck in 'CheckLegalityOfReference'.
     CJC_ASSERT(re.GetTarget()); // 're.GetTarget()' should be set in 'ModifyTargetOfRef'.
-    if (!Is<InheritableDecl>(decl) && !Is<BuiltInDecl>(decl) && !Is<TypeAliasDecl>(decl) && re.modal) {
-        DiagExpectedDataType(re);
-        re.SetTy({TypeManager::GetInvalidTy()});
-        return;
-    }
 
     if (auto target = re.ref.target; target->IsBuiltIn()) {
         if (auto cfunc = StaticCast<BuiltInDecl>(target); cfunc->type == BuiltInType::CFUNC) {
@@ -569,9 +627,6 @@ void TypeChecker::TypeCheckerImpl::InferRefExpr(ASTContext& ctx, RefExpr& re)
             !decl->TestAnyAttr(Attribute::STATIC, Attribute::ENUM_CONSTRUCTOR)) {
             re.SetTy(re.GetTy().With(GetCurThisModal(ctx, re.scopeName)));
         }
-    }
-    if (re.modal) { // valid when ref is a type name followed by '.'
-        re.SetTy(re.GetTy().With(re.modal.ToModalInfo()));
     }
     if (Ty::IsInitialTy(re.DataTy())) {
         re.SetTy({TypeManager::GetInvalidTy()});
@@ -861,6 +916,11 @@ void TypeChecker::TypeCheckerImpl::InferInstanceAccess(const ASTContext& ctx, Me
         ma.SetTy(typeManager.GetAccessorTargetTy(*acc));
     }
     ReplaceTarget(&ma, target);
+    if (target->IsFunc() && ma.isAlone && !ma.callOrPattern && !ctx.HasTargetTy(&ma) &&
+        IsCapturingLocalFullInFunRef(ctx, typeManager, ma, *StaticCast<FuncDecl>(target))) {
+        DiagLocalFullFunRefCapture(diag, ctx, ma, ma.field.Val());
+        ma.SetTy({TypeManager::GetInvalidTy()});
+    }
 }
 
 Ptr<Decl> TypeChecker::TypeCheckerImpl::CheckUpperBoundTargetsCaseFuncCall(

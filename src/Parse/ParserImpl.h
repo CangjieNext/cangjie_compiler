@@ -643,7 +643,7 @@ private:
      */
     OwnedPtr<AST::Expr> ParseArrayLitExpr();
     OwnedPtr<AST::Expr> ParseTypeConvExpr();
-    OwnedPtr<AST::Expr> ParseTypeConvExprWith(Token&& tok, AST::ModalASTInfo&& modal);
+    OwnedPtr<AST::Expr> ParseTypeConvExprWith(Token&& tok);
     OwnedPtr<AST::Expr> ParseBreakJumpExpr();
     OwnedPtr<AST::Expr> ParseContinueJumpExpr();
     OwnedPtr<AST::Expr> ParseLitConst();
@@ -841,7 +841,7 @@ private:
     void DiagExpectedMoreFieldInTuplePattern();
     void DiagExpectedTypeNameAfterAs(const Token& tok);
     void DiagExpectedTypeName();
-    void DiagUnexpectedModal(const Range& range);
+    DiagnosticBuilder DiagUnexpectedModal(const Range& range);
     void DiagInvalidLeftHandExpr(const AST::Expr& expr, const Token& tok);
     void DiagNoneAssociativeOp(const Token& preT, const Token& tok);
     void DiagInvalidInheritType(const AST::Type& type);

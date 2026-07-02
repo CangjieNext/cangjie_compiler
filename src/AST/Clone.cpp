@@ -888,7 +888,6 @@ OwnedPtr<RefExpr> ASTCloner::CloneRefExpr(const RefExpr& re, const VisitFunc& vi
     expr->instTys = re.instTys;
     expr->matchedParentTy = re.matchedParentTy;
     expr->callOrPattern = re.callOrPattern;
-    expr->modal = re.modal;
     return expr;
 }
 

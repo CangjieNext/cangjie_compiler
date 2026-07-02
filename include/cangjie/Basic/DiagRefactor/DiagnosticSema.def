@@ -436,6 +436,7 @@ ERROR(sema_expected_data_type, "expected data type here, got modal type '%s'")
 ERROR(sema_member_var_initalizer_in_mixed_init, "member variable '%s' of non-Copyable type '%s' cannot have initializer in "
     "%s with initializers that have different this locality")
 ERROR(sema_init_modal_must_be_in_exclave, "whole body of %s constructor must be in exclave")
+ERROR(sema_mode_on_non_constructor_call, "cannot specify mode for non constructor call")
 ERROR(sema_property_setter_this_local_half_disallowed,
     "property setter cannot have 'this' with local half (@local?) parameter")
 ERROR(sema_prop_method_target_type_mismatch, "expect the same data type '%s' as the property, got '%s'")

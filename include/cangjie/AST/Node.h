@@ -2542,6 +2542,7 @@ struct CallExpr : Expr {
     Position leftParenPos;                     /**< Position of '('. */
     std::vector<OwnedPtr<FuncArg>> args;       /**< Arguments to the function. */
     Position rightParenPos;                    /**< Position of ')'. */
+    ModalASTInfo modal;                        /**< Postfix modal on constructor call, e.g. C() @local!. */
     Ptr<FuncDecl> resolvedFunction{nullptr};   /**< Resolved called function. */
     CallKind callKind{CallKind::CALL_INVALID}; /**< Kind of the call. */
     std::optional<std::vector<Ptr<FuncArg>>>
@@ -2781,6 +2782,7 @@ struct TypeConvExpr : Expr {
     Position leftParenPos;  /**< Position of '('. */
     OwnedPtr<Expr> expr;    /**< The expr to be convert. */
     Position rightParenPos; /**< Position of ')'. */
+    ModalASTInfo modal;     /**< Postfix modal on type conv, Optional. e.g. Int64(3) @local!. */
     TypeConvExpr() : Expr(ASTKind::TYPE_CONV_EXPR)
     {
     }
@@ -2795,7 +2797,6 @@ struct RefExpr : NameReferenceExpr {
     bool isThis{false};
     bool isSuper{false};
     bool isQuoteDollar{false};
-    ModalASTInfo modal; /**< Modal type info for constructor call or type conversion. */
     RefExpr() : NameReferenceExpr(ASTKind::REF_EXPR)
     {
     }

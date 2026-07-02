@@ -461,16 +461,12 @@ bool GIM::GenericInstantiationManagerImpl::IsImplementationFunc(
     // 3. compare two func's signature. structure declaration mapping relation if signatures are same.
     // when function have multiple instantiated types, only need one of them passed.
     // Actual type will be decided in rearrange stage.
-    return std::any_of(interfaceFuncTys.begin(), interfaceFuncTys.end(), [this, implementedFuncTy, &fd, &interfaceFunc](auto instTy) {
-        if (!implementedFuncTy || !instTy) {
-            return false;
-        }
-        auto implPT = GetParamTypes(fd);
-        implPT.paramTys = implementedFuncTy->paramTys;
-        auto ifacePT = GetParamTypes(interfaceFunc);
-        ifacePT.paramTys = RawStaticCast<FuncTy*>(instTy.get())->paramTys;
-        return typeManager.IsFuncParameterTypesIdentical(implPT, ifacePT);
-    });
+    return std::any_of(interfaceFuncTys.begin(), interfaceFuncTys.end(),
+        [this, &fd, &interfaceFunc, implementedFuncTy](auto instTy) {
+            return implementedFuncTy && instTy &&
+                typeManager.IsFuncParameterTypesIdentical(*implementedFuncTy, *RawStaticCast<FuncTy*>(instTy.get())) &&
+                GetThisParamModal(fd) == GetThisParamModal(interfaceFunc);
+        });
 }
 
 void GIM::GenericInstantiationManagerImpl::BuildAbstractFuncMapHelper(DataTy ty)

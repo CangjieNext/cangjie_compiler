@@ -13,7 +13,6 @@
 #ifndef CANGJIE_SEMA_TYPECHECKUTIL_H
 #define CANGJIE_SEMA_TYPECHECKUTIL_H
 
-#include "ParamTypes.h"
 #include "ScopeManager.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Utils.h"
@@ -229,8 +228,6 @@ inline Ptr<AST::InheritableDecl> GetCurInheritableDecl(const ASTContext& ctx, co
 
 /* Utils for TypeCheckCall and TypeArgumentInference */
 bool IsCStringConstructor(const AST::FuncDecl& fd);
-/// Get a ctor call modal written by the user, e.g. Foo @local!() or Option<Int> @local.Some(1). Returns empty if none.
-std::optional<ModalInfo> GetCallBaseModal(const AST::CallExpr& ce);
 bool IsEnumCtorWithoutTypeArgs(const AST::Expr& expr, Ptr<const AST::Decl> target);
 TyVars GetTyVars(const AST::FuncDecl& fd, const AST::CallExpr& ce, bool ignoreContext = false);
 TyVars GetTyVarsToSolve(const SubstPack& maps);

@@ -110,8 +110,8 @@ ModalTy TypeChecker::TypeCheckerImpl::InferTypeOfThis(const ASTContext& ctx, Ref
         typeDecl = RawStaticCast<InheritableDecl*>(realTypeDecl);
     }
     ReplaceTarget(&re, typeDecl);
-    // Use the enclosing function's this param modal when present; otherwise use the ref expr's modal.
-    ModalInfo modalToUse = re.modal.ToModalInfo();
+    // Use the enclosing function's this param modal when present; otherwise default (~local).
+    ModalInfo modalToUse{};
     if (auto funcNode = ScopeManager::GetCurSatisfiedSymbolUntilTopLevel(ctx, re.scopeName, [](AST::Symbol& sym) {
         if (auto funcDecl = DynamicCast<FuncDecl*>(sym.node)) {
             return Is<InheritableDecl>(funcDecl->outerDecl) && !funcDecl->TestAttr(Attribute::STATIC);

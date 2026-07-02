@@ -1709,8 +1709,16 @@ bool TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
             }
             // 'this' parameter modal participates in signature identity.
             // Otherwise, overloads that only differ by `this @local...` will be treated as conflicting.
-            return visibilityMatch &&
-                typeManager.IsFuncParameterTypesIdentical(GetParamTypes(**it), GetParamTypes(*fd), substituteMap) &&
+            auto paramTys1 = GetParamTys(**it);
+            auto paramTys2 = GetParamTys(*fd);
+            if (TypeManager::HasThisParam(*fd) && TypeManager::HasThisParam(**it)) {
+                auto this1 = typeManager.GetThisParamTy(**it);
+                auto this2 = typeManager.GetThisParamTy(*fd);
+                if (typeManager.CheckTypeCompatibility(this1, this2, false) != TypeCompatibility::IDENTICAL) {
+                    return false;
+                }
+            }
+            return visibilityMatch && typeManager.IsFuncParameterTypesIdentical(paramTys1, paramTys2, substituteMap) &&
                 fd->TestAttr(Attribute::STATIC) == (*it)->TestAttr(Attribute::STATIC) &&
                 fd->TestAttr(Attribute::CONSTRUCTOR) == (*it)->TestAttr(Attribute::CONSTRUCTOR) &&
                 fd->TestAttr(Attribute::MAIN_ENTRY) == (*it)->TestAttr(Attribute::MAIN_ENTRY) &&

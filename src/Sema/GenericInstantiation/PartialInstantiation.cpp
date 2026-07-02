@@ -934,7 +934,6 @@ OwnedPtr<RefExpr> PartialInstantiation::InstantiateRefExpr(const RefExpr& re, co
     expr->instTys = re.instTys;
     expr->matchedParentTy = re.matchedParentTy;
     expr->callOrPattern = re.callOrPattern;
-    expr->modal = re.modal;
     return expr;
 }
 

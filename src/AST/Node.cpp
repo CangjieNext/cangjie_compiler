@@ -175,6 +175,10 @@ std::string CallExpr::ToString() const
         }
     }
     ss << NextSpan(")", curSpanBegin, rightParenPos, 1);
+    curSpanBegin = rightParenPos + Position{0, 0, 1};
+    if (modal) {
+        ss << NextSpan(modal.ToModalInfo().ToString(), curSpanBegin, modal.End());
+    }
     return ss.str();
 }
 
@@ -234,6 +238,7 @@ std::string MemberAccess::ToString() const
         curSpanBegin = dotPos + Position{0, 0, 1};
     }
     ss << NextSpan(field, curSpanBegin, field.Begin(), static_cast<int>(field.Length()));
+    curSpanBegin = field.GetRawEndPos();
     return ss.str();
 }
 

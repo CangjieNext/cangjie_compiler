@@ -1093,9 +1093,6 @@ void PrintRefExpr(unsigned indent, const RefExpr& refExpr, std::ostream& stream 
 {
     PrintIndent(stream, indent, "RefExpr:", refExpr.ref.identifier.Val(), "{");
     PrintBasic(indent + ONE_INDENT, refExpr, stream);
-    if (refExpr.modal) {
-        PrintIndent(stream, indent + ONE_INDENT, "modal:", refExpr.modal.ToModalInfo().ToString());
-    }
     if (refExpr.typeArguments.empty()) {
         PrintIndent(stream, indent + ONE_INDENT, "// no type arguments");
     } else {

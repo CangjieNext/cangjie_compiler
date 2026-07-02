@@ -22,10 +22,6 @@
 #include "cangjie/Utils/Utils.h"
 
 namespace Cangjie {
-namespace TypeCheckUtil {
-struct ParamTypes;
-}
-
 namespace AST {
 struct Block;
 struct ExtendDecl;
@@ -174,11 +170,16 @@ public:
     bool NeverImplementsCopyInterface(AST::DataTy ty);
 
     /**
-     * Check if two functions have the same parameter signature (explicit params and optional `this` mode).
-     * Substitutes @p t1.paramTys with @p typeMapping before comparing to @p t2.paramTys .
+     * Check if two function types have the same parameter type. This is used for checking function overloading and
+     * function overriding.
      */
-    bool IsFuncParameterTypesIdentical(
-        const TypeCheckUtil::ParamTypes& t1, const TypeCheckUtil::ParamTypes& t2, const TypeSubst& typeMapping = {});
+    bool IsFuncParameterTypesIdentical(const AST::FuncTy& t1, const AST::FuncTy& t2);
+    /**
+     * Check if two set of param types are same.
+     * Firstly, substituting @p paramTys1 with the @p typeMapping and then checking with @p paramTys2 .
+     */
+    bool IsFuncParameterTypesIdentical(const std::vector<AST::ModalTy>& paramTys1,
+        const std::vector<AST::ModalTy>& paramTys2, const TypeSubst& typeMapping = {});
     static bool HasThisParam(const AST::FuncDecl& fd);
     AST::ModalTy GetThisParamTy(const AST::FuncDecl& fd);
     /// Get modal of this param of prop accessor
