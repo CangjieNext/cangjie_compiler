@@ -37,6 +37,7 @@ struct AfterTypeCheckContext {
     AST::FuncDecl& GetJavaImplWrappingConstructor(AST::ClassDecl& refWrapper);
 
     std::vector<Ptr<AST::FuncDecl>> GetJavaImplUserDefinedConstructors(AST::ClassDecl& refWrapper);
+    std::vector<Ptr<AST::FuncDecl>> GetJavaImplFromCommonPartConstructors(AST::ClassDecl& refWrapper);
 
     void CacheJavaImplSuperCtorArgNativeFunc(const AST::FuncDecl& ctor, Ptr<AST::FuncDecl> nativeFunc);
     const std::vector<Ptr<AST::FuncDecl>> GetJavaImplSuperCtorArgNativeFuncs(const AST::FuncDecl& ctor);

@@ -38,7 +38,8 @@ private:
 
     void PushProxyProperties() const;
 
-    OwnedPtr<AST::PropDecl> GenerateProxyProperty(AST::VarDecl& userField, AST::VarDecl& regCompanionRefField) const;
+    OwnedPtr<AST::PropDecl> GenerateProxyProperty(
+        AST::VarDecl& userField, AST::VarDecl& regCompanionRefField, ClassDecl& refWrapper) const;
 
     AST::VarDecl& CloneField(AST::VarDecl& sample, AST::ClassDecl& registryCompanion) const;
 

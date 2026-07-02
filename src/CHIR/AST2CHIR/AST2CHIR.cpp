@@ -435,7 +435,11 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
     TranslateAnnotationRelatedDecls();
     Utils::ProfileRecorder::Stop("TranslateAllDecls", "TranslateOtherTopLevelDecls");
 
-    // step 5: set `CompileTimeValue` for lambda
+    // step 5: Patch field initialization for @JavaImpl FROM_COMMON_PART constructors
+    // (requires constructor bodies to be translated first)
+    PatchCtorFieldInitForJavaImpl();
+
+    // step 6: set `CompileTimeValue` for lambda
     Utils::ProfileRecorder::Start("TranslateAllDecls", "SetCompileTimeValueFlag");
     for (auto func : package->GetGlobalFuncsWithBody()) {
         if (func->TestAttr(Attribute::CONST)) {

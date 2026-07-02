@@ -369,6 +369,12 @@ private:
         return noNeedToTranslateDecls.find(&decl) == noNeedToTranslateDecls.end();
     }
     void ProcessCommonAndSpecificExtends();
+    void PatchCJMPSuperClass();
+    void PatchCommonFieldsForMirror();
+    void PatchCommonFieldsForJavaImpl();
+    void PatchFieldReferencesForMirror();
+    void PatchFieldReferencesForJavaImpl();
+    void PatchCtorFieldInitForJavaImpl();
     void ProcessClassStructVarInits(Translator& trans);
     const GlobalOptions& opts;
     const GenericInstantiationManager* gim;
