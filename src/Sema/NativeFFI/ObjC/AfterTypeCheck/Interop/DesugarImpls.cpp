@@ -34,6 +34,12 @@ void DesugarImpls::HandleImpl(InteropContext& ctx)
             if (memberDecl->TestAttr(Attribute::IS_BROKEN)) {
                 continue;
             }
+            // CJMP: Skip matched members from common part
+            // Unmatched members need processing
+            if (memberDecl->TestAttr(Attribute::FROM_COMMON_PART) &&
+                memberDecl->specificImplementation) {
+                continue;
+            }
 
             switch (memberDecl->astKind) {
                 case ASTKind::FUNC_DECL: {

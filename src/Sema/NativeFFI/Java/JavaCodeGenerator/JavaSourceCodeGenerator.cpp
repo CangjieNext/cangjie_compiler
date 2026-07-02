@@ -919,6 +919,9 @@ void JavaSourceCodeGenerator::AddAllCtorsForCJMappingEnum(const EnumDecl& enumDe
 void JavaSourceCodeGenerator::AddConstructors()
 {
     for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
+        if (declPtr->TestAttr(Attribute::FROM_COMMON_PART) && declPtr->specificImplementation) {
+            continue;
+        }
         auto fd = As<ASTKind::FUNC_DECL>(declPtr.get());
         if (!fd || fd->TestAttr(Attribute::PRIVATE) || !fd->TestAttr(Attribute::CONSTRUCTOR)) {
             continue;
@@ -1025,6 +1028,9 @@ void JavaSourceCodeGenerator::AddMethods()
     std::vector<Ptr<Decl>> funcDecls;
     for (auto extendDecl : extendDecls) {
         for (OwnedPtr<Decl>& declPtr : extendDecl->GetMemberDecls()) {
+            if (declPtr->TestAttr(Attribute::FROM_COMMON_PART) && declPtr->specificImplementation) {
+                continue;
+            }
             if (IsCJMapping(*decl) && !declPtr->TestAttr(Attribute::PUBLIC)) {
                 continue;
             }
@@ -1034,6 +1040,9 @@ void JavaSourceCodeGenerator::AddMethods()
         }
     }
     for (OwnedPtr<Decl>& declPtr : decl->GetMemberDecls()) {
+        if (declPtr->TestAttr(Attribute::FROM_COMMON_PART) && declPtr->specificImplementation) {
+            continue;
+        }
         bool needGenerate = (isOpen && declPtr->TestAttr(Attribute::PROTECTED)) || declPtr->TestAttr(Attribute::PUBLIC);
         if (IsCJMapping(*decl) && !needGenerate) {
             continue;
@@ -1043,6 +1052,9 @@ void JavaSourceCodeGenerator::AddMethods()
         }
     }
     for (auto& fdecl : funcDecls) {
+        if (fdecl->TestAttr(Attribute::FROM_COMMON_PART) && fdecl->specificImplementation) {
+            continue;
+        }
         const FuncDecl& funcDecl = *StaticAs<ASTKind::FUNC_DECL>(fdecl);
         // Hidden interopCJ configure unexposed symbol.
         if (isInteropCJPackageConfig && funcDecl.symbol && !funcDecl.symbol->isNeedExposedToInterop) {
@@ -1051,11 +1063,22 @@ void JavaSourceCodeGenerator::AddMethods()
         if (!IsVisibalFunc(funcDecl, *decl, genericConfig)) {
             continue;
         }
-        if (funcDecl.funcBody && funcDecl.funcBody->retType) {
-            if (funcDecl.TestAttr(Attribute::STATIC)) {
-                AddStaticMethod(funcDecl);
-            } else {
-                AddInstanceMethod(funcDecl);
+        if (funcDecl.funcBody && funcDecl.funcBody->retType && Ty::IsTyCorrect(funcDecl.funcBody->retType->GetTy())) {
+            bool hasValidParams = true;
+            if (!funcDecl.funcBody->paramLists.empty() && funcDecl.funcBody->paramLists[0]) {
+                for (auto& param : funcDecl.funcBody->paramLists[0]->params) {
+                    if (!param || !param->type || !Ty::IsTyCorrect(param->type->GetTy())) {
+                        hasValidParams = false;
+                        break;
+                    }
+                }
+            }
+            if (hasValidParams) {
+                if (funcDecl.TestAttr(Attribute::STATIC)) {
+                    AddStaticMethod(funcDecl);
+                } else {
+                    AddInstanceMethod(funcDecl);
+                }
             }
             hasHashcodeMethod = hasHashcodeMethod || GetJavaMemberName(funcDecl) == JAVA_OBJECT_HASHCODE_METHOD_NAME;
             hasEqualsMethod = hasEqualsMethod || GetJavaMemberName(funcDecl) == JAVA_OBJECT_EQUALS_METHOD_NAME;
