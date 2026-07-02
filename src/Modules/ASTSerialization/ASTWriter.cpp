@@ -474,7 +474,7 @@ template <typename T> TVectorOffset<FormattedIndex> ASTWriter::ASTWriterImpl::Ge
         // stored in cjo as long as the type is externally visible.
         const bool isInstMemberVar = d->astKind == ASTKind::VAR_DECL && !d->TestAttr(Attribute::STATIC);
         // For LSP usage, the invalid vpd will exists, we can ignore it.
-        if (d->doNotExport || d->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL ||
+        if (d->doNotExport || d->IsCommonMatchedWithSpecific() || d->astKind == AST::ASTKind::VAR_WITH_PATTERN_DECL ||
             // For LSP usage, we can ignore invisible members.
             (onlyVisibleSig && !d->IsExportedDecl())) {
             return false;
