@@ -77,6 +77,7 @@ bool DiagnosticEngine::GetIsDumpErrCnt() const
 
 void DiagnosticEngine::SetSourceManager(SourceManager* sm)
 {
+    CJC_ASSERT(false);
     return impl->SetSourceManager(sm);
 }
 
