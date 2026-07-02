@@ -50,6 +50,7 @@ using namespace Cangjie;
 
 int main(int argc, const char** argv, const char** envp)
 {
+    CJC_ASSERT(false);
 #ifndef CANGJIE_ENABLE_GCOV
     try {
 #endif
