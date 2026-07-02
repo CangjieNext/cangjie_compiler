@@ -15,6 +15,7 @@
 #include "cangjie/CHIR/Utils/JavaMirrorFieldHelper.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/Utils/CastingTemplate.h"
+#include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie::CHIR;
@@ -138,7 +139,8 @@ Expression* PatchCJMPImplBodies::TryPatchLoad(Load& load, ClassDef& implClassDef
 
     auto loc = load.GetDebugLocation();
     auto resultTy = getter->GetReturnType();
-    return builder.CreateExpression<Apply>(loc, resultTy, StaticCast<Value*>(getter), callContext, load.GetParentBlock());
+    return builder.CreateExpression<Apply>(
+        loc, resultTy, StaticCast<Value*>(getter), callContext, load.GetParentBlock());
 }
 
 /// \copydoc PatchCJMPImplBodies::TryPatchLoadByName
@@ -168,7 +170,8 @@ Expression* PatchCJMPImplBodies::TryPatchLoadByName(Load& load, ClassDef& implCl
 
     auto loc = load.GetDebugLocation();
     auto resultTy = getter->GetReturnType();
-    return builder.CreateExpression<Apply>(loc, resultTy, StaticCast<Value*>(getter), callContext, load.GetParentBlock());
+    return builder.CreateExpression<Apply>(
+        loc, resultTy, StaticCast<Value*>(getter), callContext, load.GetParentBlock());
 }
 
 /// \copydoc PatchCJMPImplBodies::TryPatchStoreElementByName
@@ -248,7 +251,8 @@ Expression* PatchCJMPImplBodies::TryPatchStoreElementRef(StoreElementRef& store,
     };
 
     auto resultTy = builder.GetUnitTy();
-    return builder.CreateExpression<Apply>(loc, resultTy, StaticCast<Value*>(setter), callContext, store.GetParentBlock());
+    return builder.CreateExpression<Apply>(
+        loc, resultTy, StaticCast<Value*>(setter), callContext, store.GetParentBlock());
 }
 
 /// \copydoc PatchCJMPImplBodies::PatchConstructorFieldInit
@@ -273,7 +277,8 @@ void PatchCJMPImplBodies::PatchConstructorFieldInit(Function& ctor, ClassDef& im
 size_t PatchCJMPImplBodies::FindRegFieldIndex(const std::vector<MemberVarInfo>& allFields) const
 {
     for (size_t i = 0; i < allFields.size(); ++i) {
-        if (allFields[i].name != "$reg" || !allFields[i].TestAttr(Attribute::COMPILER_ADD)) {
+        if (allFields[i].name != Cangjie::Interop::Java::JAVA_IMPL_REGISTRY_COMPANION_REF_FIELD_NAME ||
+            !allFields[i].TestAttr(Attribute::COMPILER_ADD)) {
             continue;
         }
         auto fieldType = allFields[i].type;
@@ -301,7 +306,7 @@ PatchCJMPImplBodies::RegStoreInfo PatchCJMPImplBodies::FindRegStore(Function& ct
             }
         } else if (auto storeByName = DynamicCast<StoreElementByName*>(&e)) {
             auto names = storeByName->GetNames();
-            if (!names.empty() && names[0] == "$reg") {
+            if (!names.empty() && names[0] == Cangjie::Interop::Java::JAVA_IMPL_REGISTRY_COMPANION_REF_FIELD_NAME) {
                 result.cregRef = storeByName->GetValue();
                 result.targetBlock = storeByName->GetParentBlock();
                 return VisitResult::STOP;
