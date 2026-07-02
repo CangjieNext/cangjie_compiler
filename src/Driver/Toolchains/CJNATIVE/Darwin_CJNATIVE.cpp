@@ -121,14 +121,12 @@ TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileIn
     auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, "0." + GetTargetArchString() + ".lto.o");
     GenerateLinkOptionsForLTO(*tool);
     tool->AppendArg("-object_path_lto", ltoObjectDir);
-    tool->AppendArg("-lto-emit-obj-only");
     tool->AppendArg("-dylib");
+    tool->AppendArg("-lto-emit-obj-only");
     tool->AppendArg("-arch", GetTargetArchString());
 
     tool->AppendArg("-platform_version");
-    tool->AppendArg("macos");
-    tool->AppendArg("12.0.0");
-    tool->AppendArg(darwinSDKVersion.value_or("12"));
+    AppendPlatformVersion(*tool, darwinSDKVersion);
 
     tool->AppendArg("-syslibroot");
     tool->AppendArg(driverOptions.sysroot.empty() ? "/" : driverOptions.sysroot);
@@ -139,6 +137,13 @@ TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileIn
     outputFileInfo.filePath = ltoObjectPath;
     outputFileInfo.rawPath = ltoObjectDir;
     return outputFileInfo;
+}
+
+void Darwin_CJNATIVE::AppendPlatformVersion(Tool& tool, const std::optional<std::string>& darwinSDKVersion) const
+{
+    tool.AppendArg("macos");
+    tool.AppendArg("12.0.0");
+    tool.AppendArg(darwinSDKVersion.value_or("12"));
 }
 
 TempFileInfo Darwin_CJNATIVE::GenerateLinkingTool(const std::vector<TempFileInfo>& objFiles,

@@ -305,8 +305,7 @@ void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
 
     bool shouldSetVisiblePkgs = (driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB &&
                                     driverOptions.target.os == Triple::OSType::LINUX) ||
-        (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB &&
-            driverOptions.target.os == Triple::OSType::IOS &&
+        (driverOptions.target.os == Triple::OSType::IOS &&
             driverOptions.ShouldEmitStaticLibInLTO());
     if (shouldSetVisiblePkgs) {
         if (!driverOptions.GetLtoVisiblePkgs().empty()) {

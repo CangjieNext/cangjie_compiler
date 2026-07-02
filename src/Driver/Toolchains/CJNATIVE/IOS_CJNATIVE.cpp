@@ -29,48 +29,16 @@ void IOS_CJNATIVE::AddSystemLibraryPaths()
     MachO::AddSystemLibraryPaths();
 }
 
-// This function shares most of its logic with Darwin_CJNATIVE::GenerateLTOObjectFile.
-// The only difference is the -platform_version args (platform name, version, default SDK).
-// Consider extracting the platform-specific parts into a virtual function (e.g. AppendPlatformVersion)
-// if more Apple-platform subclasses are added in the future. For now, the duplication is minimal
-// and not worth the indirection.
-TempFileInfo IOS_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>& objFiles)
+void IOS_CJNATIVE::AppendPlatformVersion(Tool& tool, const std::optional<std::string>& darwinSDKVersion) const
 {
-    std::optional<std::string> darwinSDKVersion = GetDarwinSDKVersion(driverOptions.sysroot);
-    if (driverOptions.enableVerbose) {
-        Infoln("selected Darwin SDK path: " + driverOptions.sysroot +
-            " (SDK Version: " + darwinSDKVersion.value_or("N/A") + ")");
-    }
-    auto tool = std::make_unique<Tool>(ldPath, ToolType::BACKEND, driverOptions.environment.allVariables);
-    tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
-    auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::T_OBJ);
-    auto ltoObjectDir = outputFileInfo.filePath + ".lto";
-    auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, "0." + GetTargetArchString() + ".lto.o");
-    GenerateLinkOptionsForLTO(*tool);
-    tool->AppendArg("-object_path_lto", ltoObjectDir);
-    tool->AppendArg("-dylib");
-    tool->AppendArg("-lto-emit-obj-only");
-    tool->AppendArg("-arch", GetTargetArchString());
-
-    tool->AppendArg("-platform_version");
     if (driverOptions.target.env == Triple::Environment::SIMULATOR) {
-        tool->AppendArg("ios-simulator");
-        tool->AppendArg("17.5.0");
+        tool.AppendArg("ios-simulator");
+        tool.AppendArg("17.5.0");
     } else {
-        tool->AppendArg("ios");
-        tool->AppendArg("17.5.0");
+        tool.AppendArg("ios");
+        tool.AppendArg("17.5.0");
     }
-    tool->AppendArg(darwinSDKVersion.value_or("17.5"));
-
-    tool->AppendArg("-syslibroot");
-    tool->AppendArg(driverOptions.sysroot.empty() ? "/" : driverOptions.sysroot);
-    HandleLLVMLinkOptions(objFiles, *tool);
-    GenerateRuntimePath(*tool);
-
-    backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
-    outputFileInfo.filePath = ltoObjectPath;
-    outputFileInfo.rawPath = ltoObjectDir;
-    return outputFileInfo;
+    tool.AppendArg(darwinSDKVersion.value_or("17.5"));
 }
 
 TempFileInfo IOS_CJNATIVE::GenerateLinkingTool(
