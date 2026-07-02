@@ -21,6 +21,12 @@ public:
 private:
     void PatchConstructorSuperCall(Function& constructor, ClassDef& platformParent);
     Function* FindPlatformParentEmptyConstructor(const ClassDef& platformParent);
+    /// Repoint an existing common-part super call (targeting Object.init) to the platform
+    /// parent's empty constructor. Only repoints when the callee's parent is the root class.
+    void RepointExistingSuperCall(Apply& superCall, Function& platformConstructor);
+    /// Insert a new super call to the platform parent's empty constructor at the head of the
+    /// constructor's entry block, for common-part constructors that had no super call.
+    void InsertSuperCall(Function& constructor, Function& platformConstructor, Block& entryBlock);
 
     Package& pkg;
     CHIRBuilder& builder;
