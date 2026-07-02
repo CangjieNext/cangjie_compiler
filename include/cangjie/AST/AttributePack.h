@@ -577,6 +577,13 @@ enum class Attribute {
     JAVA_IMPL,
 
     /**
+     * Mark whether a decl is @JavaImpl declaration.
+     * W: Sema.
+     * R: Sema, AST2CHIR.
+     */
+    JAVA_IMPL,
+
+    /**
      * Mark whether a function of @JavaMirror interface has default implementation on java side.
      * W: Parser.
      * R: Sema.

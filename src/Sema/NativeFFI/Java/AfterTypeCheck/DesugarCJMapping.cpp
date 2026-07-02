@@ -635,6 +635,7 @@ void JavaDesugarManager::InsertJavaObjectControllerVarDecl(ClassDecl& fwdClassDe
     javaObjectControllerVarDecl->isVar = false;
     javaObjectControllerVarDecl->outerDecl = Ptr(&fwdClassDecl);
     javaObjectControllerVarDecl->fullPackageName = fwdClassDecl.fullPackageName;
+    javaObjectControllerVarDecl->EnableAttr(Attribute::COMPILER_ADD);
 
     fwdClassDecl.body->decls.push_back(std::move(javaObjectControllerVarDecl));
 }
@@ -653,6 +654,7 @@ void JavaDesugarManager::InsertOverrideMaskVar(AST::ClassDecl& fwdClassDecl)
     overrideMaskVar->isVar = false;
     overrideMaskVar->outerDecl = Ptr(&fwdClassDecl);
     overrideMaskVar->fullPackageName = fwdClassDecl.fullPackageName;
+    overrideMaskVar->EnableAttr(Attribute::COMPILER_ADD);
 
     fwdClassDecl.body->decls.push_back(std::move(overrideMaskVar));
 }

@@ -680,15 +680,21 @@ bool IsGenericParam(const Ptr<Ty> ty, const AST::Decl& decl, Native::FFI::Generi
 bool IsVisibalFunc(const FuncDecl& funcDecl, const AST::Decl& decl, Native::FFI::GenericConfigInfo* genericConfig)
 {
     bool hasGenericParm = false;
+
+    if (!funcDecl.funcBody || funcDecl.funcBody->paramLists.empty()) {
+        return false;
+    }
+
     auto& params = funcDecl.funcBody->paramLists[0]->params;
     auto retTy = StaticCast<FuncTy&>(*funcDecl.GetTy()).retTy;
     for (auto& param : params) {
-        if (IsGenericParam(param->GetTy(), decl, genericConfig)) {
+        if (param && Ty::IsTyCorrect(param->GetTy()) &&
+            IsGenericParam(param->GetTy(), decl, genericConfig)) {
             hasGenericParm = true;
             break;
         }
     }
-    if (!hasGenericParm) {
+    if (!hasGenericParm && Ty::IsTyCorrect(retTy)) {
         hasGenericParm = IsGenericParam(retTy, decl, genericConfig);
     }
 

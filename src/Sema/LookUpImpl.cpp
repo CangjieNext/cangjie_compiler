@@ -296,6 +296,16 @@ void LookUpImpl::FieldLookup(
         if (notValid) {
             continue;
         }
+        // CJMP: skip common-matched members when resolving names. After
+        // MergeCommonIntoSpecific's second loop, both the common-matched VarDecl and
+        // its specific counterpart are in the class body. Without this skip, the
+        // resolver finds the common var first (it's earlier in the member list),
+        // and the constructor body analysis marks it as initialized — missing the
+        // specific var. The InitializationChecker then reports
+        // sema_class_uninitialized_field because the specific var was never visited.
+        if (decl->IsCommonMatchedWithSpecific()) {
+            continue;
+        }
         auto staticAndNotClassLike = !decl->IsClassLikeDecl() && decl->TestAttr(Attribute::STATIC);
         auto foundTy = info.baseTy;
         if (staticAndNotClassLike) {
@@ -652,6 +662,13 @@ bool LookUpImpl::LookupImpl(const std::string& name, std::string scopeName, cons
         for (auto decl : targetDecls) {
             CJC_NULLPTR_CHECK(decl);
             if (IsTargetVisibleToNode(*decl, node)) {
+                // CJMP: skip common-matched VarDecls from the decl map lookup.
+                // After MergeCommonIntoSpecific's second loop, both the common-matched
+                // VarDecl and its specific counterpart may be in the same scope.
+                // The common one must be skipped so the resolver finds the specific var.
+                if (decl->IsCommonMatchedWithSpecific()) {
+                    continue;
+                }
                 resultsMap.emplace(decl->begin, decl);
             }
         }
