@@ -282,10 +282,6 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
                 if (commonDeclIt != commonVariablesIds.end()) {
                     auto& commonDeclT = mergedDecls[commonDeclIt->second];
                     commonDeclT->specificImplementation = specificDeclT;
-                    // Prevent duplicate exportId in CJO: both common and specific
-                    // vars share the same mangled name, so the common one must not
-                    // be exported when its specific counterpart is already present.
-                    commonDeclT->doNotExport = true;
                     // NOTE: INITIALIZED propagation is NOT done here — it was
                     // considered but rejected because the specific part can amend
                     // constructors. Propagating INITIALIZED would incorrectly
@@ -336,7 +332,6 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
     // Check common member without initializer not match with specific one.
     Check4CommonInstanceVar(diag, specificDecl);
 
-    commonDecl.doNotExport = true;
     commonDecl.specificImplementation = &specificDecl;
 }
 }
@@ -1063,7 +1058,6 @@ bool MPTypeCheckerImpl::TrySetSpecificImpl(Decl& specificDecl, Decl& commonDecl,
         return false;
     }
     commonDecl.specificImplementation = &specificDecl;
-    commonDecl.doNotExport = true;
     return true;
 }
 
@@ -1175,7 +1169,6 @@ bool MPTypeCheckerImpl::MatchCJMPVar(VarDecl& specificVar, VarDecl& commonVar)
     }
     if (specificVar.IsStaticOrGlobal()) {
         commonVar.specificImplementation = &specificVar;
-        commonVar.doNotExport = true;
     } else if (commonVar.TestAttr(Attribute::STATIC) == specificVar.TestAttr(Attribute::STATIC)) {
         // Instance variables must already be matched unless we have modifiers mismatch
         // that will be reported later
