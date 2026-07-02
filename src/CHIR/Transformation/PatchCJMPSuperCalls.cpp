@@ -105,30 +105,44 @@ void PatchCJMPSuperCalls::PatchConstructorSuperCall(Function& constructor, Class
 
     Apply* existingSuperCall = nullptr;
     for (auto expr : entryBlock->GetExpressions()) {
-        if (!expr) continue;
-        if (auto apply = DynamicCast<Apply*>(expr)) {
-            if (apply->IsSuperCall()) {
-                existingSuperCall = apply;
-                break;
-            }
+        if (!expr) {
+            continue;
+        }
+        auto apply = DynamicCast<Apply*>(expr);
+        if (apply && apply->IsSuperCall()) {
+            existingSuperCall = apply;
+            break;
         }
     }
 
     if (existingSuperCall) {
-        auto callee = existingSuperCall->GetCallee();
-        if (callee && callee->IsFunc()) {
-            auto calleeFunc = StaticCast<Function*>(callee);
-            auto calleeParent = calleeFunc->GetParentCustomTypeDef();
-            if (calleeParent && calleeParent->IsClass()) {
-                auto calleeParentClass = StaticCast<ClassDef*>(calleeParent);
-                if (calleeParentClass->GetSuperClassDef() == nullptr) {
-                    existingSuperCall->ReplaceOperand(static_cast<size_t>(0), StaticCast<Value*>(platformConstructor));
-                }
-            }
-        }
+        RepointExistingSuperCall(*existingSuperCall, *platformConstructor);
         return;
     }
 
+    InsertSuperCall(constructor, *platformConstructor, *entryBlock);
+}
+
+void PatchCJMPSuperCalls::RepointExistingSuperCall(Apply& superCall, Function& platformConstructor)
+{
+    auto callee = superCall.GetCallee();
+    if (!callee || !callee->IsFunc()) {
+        return;
+    }
+    auto calleeFunc = StaticCast<Function*>(callee);
+    auto calleeParent = calleeFunc->GetParentCustomTypeDef();
+    if (!calleeParent || !calleeParent->IsClass()) {
+        return;
+    }
+    auto calleeParentClass = StaticCast<ClassDef*>(calleeParent);
+    if (calleeParentClass->GetSuperClassDef() != nullptr) {
+        return;
+    }
+    superCall.ReplaceOperand(static_cast<size_t>(0), StaticCast<Value*>(&platformConstructor));
+}
+
+void PatchCJMPSuperCalls::InsertSuperCall(Function& constructor, Function& platformConstructor, Block& entryBlock)
+{
     auto thisParam = constructor.GetParams().empty() ? nullptr : constructor.GetParams()[0];
     if (!thisParam) {
         return;
@@ -143,8 +157,7 @@ void PatchCJMPSuperCalls::PatchConstructorSuperCall(Function& constructor, Class
     auto loc = constructor.GetDebugLocation();
     auto resultTy = builder.GetUnitTy();
     auto superCall = builder.CreateExpression<Apply>(
-        loc, resultTy, StaticCast<Value*>(platformConstructor), callContext, entryBlock);
+        loc, resultTy, StaticCast<Value*>(&platformConstructor), callContext, &entryBlock);
     superCall->SetSuperCall();
-
-    entryBlock->InsertExprIntoHead(*superCall);
+    entryBlock.InsertExprIntoHead(*superCall);
 }
