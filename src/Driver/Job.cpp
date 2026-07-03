@@ -114,11 +114,12 @@ bool Job::Execute() const
             }
             auto future = cmd->Execute(verbose);
             if (!future || !future->spawnErrorMessage.empty()) {
+                std::string errorStr = future ? future->spawnErrorMessage : "spawn failed";
 #ifdef _WIN32
                 std::optional<std::wstring> wcmdString =
                     Cangjie::StringConvertor::StringToWString(cmd->GetCommandString());
                 std::optional<std::wstring> werrString =
-                    Cangjie::StringConvertor::StringToWString(future->spawnErrorMessage);
+                    Cangjie::StringConvertor::StringToWString(errorStr);
                 if (wcmdString.has_value() && werrString.has_value() && !werrString.value().empty()) {
                     WErrorf(L"%ls: command failed (%ls)\n", wcmdString.value().c_str(), werrString.value().c_str());
                 } else if (wcmdString.has_value()) {
@@ -126,11 +127,7 @@ bool Job::Execute() const
                 }
 #else
                 std::string commandString = cmd->GetCommandString();
-                if (!future->spawnErrorMessage.empty()) {
-                    Errorf("%s: command failed (%s)\n", commandString.c_str(), future->spawnErrorMessage.c_str());
-                } else {
-                    Errorf("%s: command failed (use -V to see invocation)\n", commandString.c_str());
-                }
+                Errorf("%s: command failed (%s)\n", commandString.c_str(), errorStr.c_str());
 #endif
                 return false;
             }
