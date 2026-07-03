@@ -392,7 +392,9 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
     std::unordered_map<std::string, std::size_t> memberParamIds;
 
     CollectCommonMembers(commonDecl, specificDecl, mergedDecls, commonVariablesIds, memberParamIds);
-    MatchSpecificInstanceVarsWithCommon(diag, specificDecl.GetMemberDecls(), mergedDecls, commonVariablesIds, memberParamIds);
+    MatchSpecificInstanceVarsWithCommon(
+        diag, specificDecl.GetMemberDecls(), mergedDecls,
+        commonVariablesIds, memberParamIds);
     FinalizeCJMPMerge(diag, commonDecl, specificDecl, mergedDecls);
 }
 }
