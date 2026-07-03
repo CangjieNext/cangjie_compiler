@@ -634,7 +634,7 @@ void ASTWriter::ASTWriterImpl::PreSaveFullExportDecls(Package& package)
     }
 }
 
-inline bool ASTWriter::ASTWriterImpl::NeedToExportDecl(Ptr<const Decl> decl)
+bool ASTWriter::ASTWriterImpl::NeedToExportDecl(Ptr<const Decl> decl)
 {
     if (decl->doNotExport) {
         return false;
