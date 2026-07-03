@@ -644,6 +644,10 @@ inline bool ASTWriter::ASTWriterImpl::NeedToExportDecl(Ptr<const Decl> decl)
     if (decl->doNotExport) {
         return false;
     }
+    // In CJMP, common-matched decls have their specific counterpart elsewhere.
+    if (decl->IsCommonMatchedWithSpecific()) {
+        return false;
+    }
     // For incremental data or common part, export all toplevel decls.
     // For normal cases, decl which does not always need to be export or does not be collected during preExport.
     bool canSkip = !config.exportForIncr && !ShouldAlwaysExport(*decl, serializingCommon) &&
