@@ -96,6 +96,15 @@ private:
     bool MatchCommonNominalDeclWithSpecific(const AST::InheritableDecl& commonDecl);
     bool MatchSuperInterfaces(const AST::InheritableDecl& commonDecl, const AST::Decl& specificDecl);
     bool MatchSuperClass(const AST::InheritableDecl& commonDecl, const AST::Decl& specificDecl);
+    /// Build the common declaration's super-interface set, instantiating generic
+    /// type arguments through the common-to-specific mapping when one is present.
+    std::set<Ptr<AST::InterfaceTy>> BuildCommonSuperInterfaces(
+        const AST::InheritableDecl& commonDecl, const AST::Decl& specificDecl);
+    /// Check that every common super-interface has an equal counterpart in the
+    /// specific set. Returns false on cardinality mismatch or any unmatched
+    /// common interface; the caller is responsible for emitting the diagnostic.
+    bool InterfaceSetMatches(const std::set<Ptr<AST::InterfaceTy>>& commonSet,
+        const std::set<Ptr<AST::InterfaceTy>>& specificSet);
     void CheckCommonSpecificGenericMatch(const AST::Decl& specificDecl, const AST::Decl& commonDecl);
 
 public:
