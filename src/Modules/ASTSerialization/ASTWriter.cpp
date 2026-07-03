@@ -856,7 +856,11 @@ FormattedIndex ASTWriter::ASTWriterImpl::GetDeclIndex(Ptr<const Decl> decl)
 // 3. if decl is not imported, get the index from savedDeclMap.
 TFullIdOffset ASTWriter::ASTWriterImpl::GetFullDeclIndex(Ptr<const Decl> decl)
 {
-    if (!decl || decl->doNotExport) {
+    if (!decl || decl->doNotExport || decl->IsCommonMatchedWithSpecific()) {
+        // Ideally we'd call a shared function (e.g. NeedToExportDecl) here
+        // instead of duplicating the IsCommonMatchedWithSpecific check, but the
+        // impact of refactoring GetFullDeclIndex to use it is unknown and needs
+        // separate investigation.
         return PackageFormat::CreateFullId(builder, INVALID_PACKAGE_INDEX, builder.CreateString(""));
     }
     if (decl->astKind == ASTKind::PACKAGE_DECL) {
