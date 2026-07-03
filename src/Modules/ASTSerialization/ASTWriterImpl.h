@@ -67,7 +67,7 @@ public:
     void SetSerializingCommon();
     void PreSaveFullExportDecls(AST::Package& package);
     void SaveOptions(bool debug, GlobalOptions::OptimizationLevel level);
-    inline bool NeedToExportDecl(Ptr<const AST::Decl> decl);
+    bool NeedToExportDecl(Ptr<const AST::Decl> decl);
     void DFSCollectFilesDeclarations(Ptr<AST::File> file,
         std::unordered_set<AST::File*>& alreadyVisitedFiles,
         std::vector<Ptr<const AST::Decl>>& topLevelDeclsOrdered,
