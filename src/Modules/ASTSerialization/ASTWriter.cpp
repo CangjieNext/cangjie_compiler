@@ -129,6 +129,11 @@ void CheckForConflictExportId(const std::vector<Ptr<const Decl>>& decls)
         if (!decl->TestAttr(Attribute::GLOBAL) || decl->astKind == ASTKind::EXTEND_DECL) {
             continue;
         }
+        // In CJMP, common-matched globals have their specific counterpart elsewhere.
+        // Skip them here to avoid duplicate exportId errors.
+        if (decl->IsCommonMatchedWithSpecific()) {
+            continue;
+        }
 
         if (auto found = exportIdDeclMap.find(decl->exportId); found != exportIdDeclMap.end()) {
             InternalError("Found same exportID when export the package.");
@@ -142,7 +147,7 @@ void CheckForConflictExportId(const std::vector<Ptr<const Decl>>& decls)
             }
             // In CJMP, common-matched vars have their specific counterpart elsewhere in
             // the same member list. Skip them here to avoid duplicate exportId errors.
-            if (it->specificImplementation && it->TestAttr(AST::Attribute::COMMON)) {
+            if (it->IsCommonMatchedWithSpecific()) {
                 continue;
             }
             if (auto found = exportIdDeclMap.find(it->exportId); found != exportIdDeclMap.end()) {
