@@ -53,6 +53,72 @@ void AppendUserParamTypes(FuncDecl& commonCtor, std::vector<Ptr<Ty>>& paramTys)
     }
 }
 
+// Prepend the synthetic Java_CFFI_JavaEntity ("an") and companion ("reg")
+// params to params; returns references to the inserted entity and reg params.
+std::pair<FuncParam&, FuncParam&> InsertJavaImplSyntheticParams(
+    std::vector<OwnedPtr<FuncParam>>& params, StructDecl& javaEntityDecl, ClassDecl& companion)
+{
+    params.insert(params.begin(),
+        CreateFuncParam(JAVA_IMPL_ENTITY_ARG_NAME_IN_GENERATED_CTOR,
+            CreateRefType(javaEntityDecl), nullptr, javaEntityDecl.GetTy()));
+    params.insert(params.begin() + 1,
+        CreateFuncParam("reg", CreateRefType(companion), nullptr, companion.GetTy()));
+    return {*params[0], *params[1]};
+}
+
+// Build the super-call (forwarding the entity param) and the `$reg = regParam`
+// assignment, then prepend both to block (super-call ends up first).
+void PrependJavaImplCtorBodyStatements(Block& block, ClassDecl& refWrapper,
+    FuncDecl& parentCtor, FuncParam& entityParam, FuncParam& regParam,
+    VarDecl& companionRefField, Ptr<File> curFile)
+{
+    auto superCall = CreateSuperCall(refWrapper, parentCtor, parentCtor.GetTy());
+    superCall->args.push_back(CreateFuncArg(WithinFile(CreateRefExpr(entityParam), curFile)));
+    auto regAssignment = CreateAssignExpr(
+        WithinFile(CreateRefExpr(companionRefField), curFile),
+        WithinFile(CreateRefExpr(regParam), curFile),
+        TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
+    block.body.insert(block.body.begin(), std::move(regAssignment));
+    block.body.insert(block.body.begin(), std::move(superCall));
+}
+
+// Create the compiler-generated FROM_COMMON_PART constructor FuncDecl shell
+// (identifier/outerDecl/attrs cloned from commonCtor).
+OwnedPtr<FuncDecl> CreateFromCommonPartCtor(FuncDecl& commonCtor, ClassDecl& refWrapper)
+{
+    auto ctor = MakeOwned<FuncDecl>();
+    ctor->identifier = commonCtor.identifier;
+    ctor->outerDecl = &refWrapper;
+    ctor->EnableAttr(Attribute::COMPILER_ADD, Attribute::FROM_COMMON_PART);
+    return ctor;
+}
+
+// Create the FROM_COMMON_PART constructor FuncBody shell: a compiler-generated
+// body with one (compiler-generated) param list and parentClassLike set.
+OwnedPtr<FuncBody> CreateFromCommonPartCtorBody(ClassDecl& refWrapper)
+{
+    auto ctorBody = MakeOwned<FuncBody>();
+    ctorBody->EnableAttr(Attribute::COMPILER_ADD);
+    ctorBody->paramLists.push_back(MakeOwned<FuncParamList>());
+    ctorBody->paramLists[0]->EnableAttr(Attribute::COMPILER_ADD);
+    ctorBody->parentClassLike = &refWrapper;
+    return ctorBody;
+}
+
+// Remove existing super-constructor calls from a cloned constructor body, so
+// the new super-call (prepended by PrependJavaImplCtorBodyStatements) replaces them.
+void EraseSuperConstructorCalls(Block& block)
+{
+    block.body.erase(std::remove_if(block.body.begin(), block.body.end(),
+        [](auto& node) {
+            if (auto call = As<ASTKind::CALL_EXPR>(node.get())) {
+                return IsSuperConstructorCall(*call);
+            }
+            return false;
+        }),
+        block.body.end());
+}
+
 OwnedPtr<CallExpr> CreateRegistryCompanionConstructorCall(ClassDecl& companion, VarDecl& javaRefField)
 {
     auto curFile = companion.curFile;
@@ -192,19 +258,13 @@ OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstruct
     CJC_ASSERT(!ctor->funcBody->paramLists.empty());
     auto& params = ctor->funcBody->paramLists[0]->params;
 
-    // reg: companion.ty
-    auto& regCompanionParam = **params.emplace(params.begin(),
-        CreateFuncParam("reg", CreateRefType(companion), nullptr, companion.GetTy()));
-
     // obj: Java_CFFI_JavaEntity
     auto javaEntityDecl = ilib.GetJavaEntityDecl();
     if (!javaEntityDecl) {
         return nullptr;
     }
 
-    auto& entityParam = **params.emplace(params.begin(),
-        CreateFuncParam(JAVA_IMPL_ENTITY_ARG_NAME_IN_GENERATED_CTOR,
-            CreateRefType(*javaEntityDecl), nullptr, javaEntityDecl->GetTy()));
+    auto [entityParam, regCompanionParam] = InsertJavaImplSyntheticParams(params, *javaEntityDecl, companion);
 
     Ptr<FuncDecl> parentCtor = GetGeneratedJavaMirrorConstructor(*refWrapper.GetSuperClassDecl());
     CJC_ASSERT(parentCtor);
@@ -218,27 +278,11 @@ OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstruct
     }
     auto ctorTy = typeManager.GetFunctionTy(paramTys, StaticCast<FuncTy*>(userCtor.GetTy().get())->retTy);
 
-    auto superCall = CreateSuperCall(refWrapper, *parentCtor, parentCtor->GetTy());
-    superCall->args.push_back(CreateFuncArg(WithinFile(CreateRefExpr(entityParam), curFile)));
-
     auto& block = ctor->funcBody->body;
+    EraseSuperConstructorCalls(*block);
 
-    block->body.erase(std::remove_if(block->body.begin(), block->body.end(),
-        [](auto& node) {
-            if (auto call = As<ASTKind::CALL_EXPR>(node.get())) {
-                return IsSuperConstructorCall(*call);
-            }
-            return false;
-        }),
-        block->body.end());
-
-    auto regCompanionAssignment = CreateAssignExpr(
-        WithinFile(CreateRefExpr(companionRefField), curFile),
-        WithinFile(CreateRefExpr(regCompanionParam), curFile),
-        TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
-
-    block->body.insert(block->body.begin(), std::move(regCompanionAssignment));
-    block->body.insert(block->body.begin(), std::move(superCall));
+    PrependJavaImplCtorBodyStatements(*block, refWrapper, *parentCtor,
+        entityParam, regCompanionParam, companionRefField, curFile);
 
     ctor->funcBody->SetTy(ctorTy);
     ctor->SetTy(ctorTy);
@@ -408,27 +452,11 @@ OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstruct
         return nullptr;
     }
 
-    auto ctor = MakeOwned<FuncDecl>();
-    ctor->identifier = commonCtor.identifier;
-    ctor->outerDecl = &refWrapper;
-    ctor->EnableAttr(Attribute::COMPILER_ADD, Attribute::FROM_COMMON_PART);
-
-    auto ctorBody = MakeOwned<FuncBody>();
-    ctorBody->EnableAttr(Attribute::COMPILER_ADD);
-    ctorBody->paramLists.push_back(MakeOwned<FuncParamList>());
-    ctorBody->paramLists[0]->EnableAttr(Attribute::COMPILER_ADD);
-    ctorBody->parentClassLike = &refWrapper;
+    auto ctor = CreateFromCommonPartCtor(commonCtor, refWrapper);
+    auto ctorBody = CreateFromCommonPartCtorBody(refWrapper);
 
     auto& params = ctorBody->paramLists[0]->params;
-
-    params.insert(params.begin(),
-        CreateFuncParam(JAVA_IMPL_ENTITY_ARG_NAME_IN_GENERATED_CTOR,
-            CreateRefType(*javaEntityDecl), nullptr, javaEntityDecl->GetTy()));
-    auto& entityParam = *params[0];
-
-    params.insert(params.begin() + 1,
-        CreateFuncParam("reg", CreateRefType(companion), nullptr, companion.GetTy()));
-    auto& regCompanionParam = *params[1];
+    auto [entityParam, regCompanionParam] = InsertJavaImplSyntheticParams(params, *javaEntityDecl, companion);
 
     AppendClonedUserParams(commonCtor, params);
 
@@ -443,19 +471,10 @@ OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstruct
         return nullptr;
     }
 
-    auto superCall = CreateSuperCall(refWrapper, *parentCtor, parentCtor->GetTy());
-    superCall->args.push_back(CreateFuncArg(WithinFile(CreateRefExpr(entityParam), curFile)));
-
-    auto regCompanionAssignment = CreateAssignExpr(
-        WithinFile(CreateRefExpr(companionRefField), curFile),
-        WithinFile(CreateRefExpr(regCompanionParam), curFile),
-        TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
-
     auto block = CreateBlock({});
     block->SetTy(refWrapper.GetTy());
-
-    block->body.insert(block->body.begin(), std::move(regCompanionAssignment));
-    block->body.insert(block->body.begin(), std::move(superCall));
+    PrependJavaImplCtorBodyStatements(*block, refWrapper, *parentCtor,
+        entityParam, regCompanionParam, companionRefField, curFile);
 
     ctorBody->body = std::move(block);
     ctor->funcBody = std::move(ctorBody);
