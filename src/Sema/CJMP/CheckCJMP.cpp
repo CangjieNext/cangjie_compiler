@@ -274,6 +274,39 @@ void CollectCommonMembers(
 }
 
 /**
+ * Process one specific instance VarDecl from the specific side of a CJMP pair.
+ *
+ * A SPECIFIC instance VarDecl is swapped with its named COMMON counterpart in
+ * mergedDecls (linking specificImplementation); if no common counterpart
+ * exists it is diagnosed and still appended. Member params with a common
+ * counterpart are skipped. Everything else is appended to mergedDecls.
+ */
+void ProcessSpecificVar(DiagnosticEngine& diag, OwnedPtr<Decl>& specificDeclT,
+    std::vector<OwnedPtr<Decl>>& mergedDecls,
+    const std::unordered_map<std::string, std::size_t>& commonVariablesIds,
+    const std::unordered_map<std::string, std::size_t>& memberParamIds)
+{
+    auto varDecl = StaticCast<AST::VarDecl>(specificDeclT.get());
+    const auto& id = varDecl->identifier;
+    if (specificDeclT->TestAttr(Attribute::SPECIFIC)) {
+        auto commonDeclIt = commonVariablesIds.find(id);
+        if (commonDeclIt != commonVariablesIds.end()) {
+            auto& commonDeclT = mergedDecls[commonDeclIt->second];
+            commonDeclT->specificImplementation = specificDeclT;
+            std::swap(specificDeclT, commonDeclT);
+            return;
+        }
+        DiagNotMatchedCommonDecl(diag, *varDecl);
+        mergedDecls.emplace_back(std::move(specificDeclT));
+        return;
+    }
+    if (varDecl->isMemberParam && memberParamIds.count(id) != 0) {
+        return;
+    }
+    mergedDecls.emplace_back(std::move(specificDeclT));
+}
+
+/**
  * Match specific instance VarDecls against common ones and swap matched pairs.
  *
  * For each SPECIFIC instance VarDecl in specificDecls, looks up a matching
@@ -300,25 +333,10 @@ void MatchSpecificInstanceVarsWithCommon(
 {
     for (auto& specificDeclT : specificDecls) {
         if (specificDeclT->astKind == ASTKind::VAR_DECL && !specificDeclT->IsStaticOrGlobal()) {
-            auto varDecl = StaticCast<AST::VarDecl>(specificDeclT.get());
-            auto id = varDecl->identifier;
-            if (specificDeclT->TestAttr(Attribute::SPECIFIC)) {
-                auto commonDeclIt = commonVariablesIds.find(id);
-                if (commonDeclIt != commonVariablesIds.end()) {
-                    auto& commonDeclT = mergedDecls[commonDeclIt->second];
-                    commonDeclT->specificImplementation = specificDeclT;
-                    std::swap(specificDeclT, commonDeclT);
-                    continue;
-                } else {
-                    DiagNotMatchedCommonDecl(diag, *varDecl);
-                }
-            } else if (varDecl->isMemberParam) {
-                if (memberParamIds.find(id) != memberParamIds.end()) {
-                    continue;
-                }
-            }
+            ProcessSpecificVar(diag, specificDeclT, mergedDecls, commonVariablesIds, memberParamIds);
+        } else {
+            mergedDecls.emplace_back(std::move(specificDeclT));
         }
-        mergedDecls.emplace_back(std::move(specificDeclT));
     }
 }
 
