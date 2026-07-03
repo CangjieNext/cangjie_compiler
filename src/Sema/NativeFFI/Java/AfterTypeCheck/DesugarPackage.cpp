@@ -27,7 +27,7 @@ void JavaDesugarManager::ProcessJavaMirrorImplStage(AfterTypeCheckContext& ctx,
         GenerateInMirrors(*file, true);
     }
 
-    Process<GenerateJavaImplWrappingConstructorStub>(ctx, typeManager, lib, jniBridge);
+    Process<GenerateJavaImplApiStub>(ctx, typeManager, lib, jniBridge);
 
     for (auto& file : ctx.pkg.files) {
         GenerateInMirrors(*file, false);

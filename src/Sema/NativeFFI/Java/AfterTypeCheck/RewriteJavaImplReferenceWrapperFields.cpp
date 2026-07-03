@@ -17,6 +17,7 @@
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/AST/Walker.h"
+#include <algorithm>
 
 namespace Cangjie::Native::FFI::Java {
 using namespace Interop::Java;
@@ -109,11 +110,8 @@ void RewriteJavaImplReferenceWrapperFields::RelocateFields(AfterTypeCheckContext
 {
     auto& regCompanionField = ctx.GetJavaImplRegistryCompanionReferenceField(refWrapper);
     auto& wrapperMembers = refWrapper.GetMemberDecls();
-    auto itm = wrapperMembers.begin();
-    while (itm != wrapperMembers.end()) {
-        auto& member = *itm;
+    for (auto& member : wrapperMembers) {
         if (member->astKind != ASTKind::VAR_DECL || !Is<VarDecl>(member)) {
-            itm++;
             continue;
         }
 
@@ -121,14 +119,13 @@ void RewriteJavaImplReferenceWrapperFields::RelocateFields(AfterTypeCheckContext
         auto& field = *StaticAs<ASTKind::VAR_DECL>(member.get());
 
         if (IsJavaImplRegistryCompanionReferenceField(field)) {
-            itm++;
             continue;
         }
 
         generatedProps[&field] = GenerateProxyProperty(field, regCompanionField);
 
         registryCompanion.GetMemberDecls().emplace_back(std::move(member));
-        wrapperMembers.erase(itm);
+        member = nullptr; // removed and erased from the vector below
 
         field.outerDecl = &registryCompanion;
         field.isVar = true;
@@ -139,6 +136,15 @@ void RewriteJavaImplReferenceWrapperFields::RelocateFields(AfterTypeCheckContext
             field.initializer = utils.CreateZeroValue(field.GetTy(), *field.curFile);
         }
     }
+
+    wrapperMembers.erase(
+        std::remove_if(
+            wrapperMembers.begin(),
+            wrapperMembers.end(),
+            [](OwnedPtr<Decl>& member) {
+                return member == nullptr;
+            }),
+        wrapperMembers.end());
 }
 
 namespace {
