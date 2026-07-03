@@ -26,9 +26,9 @@ using namespace Interop::Java;
  * Generates API stubs for Java Impls.
  * Note: Corresponding API for passing impl objects from java to cangjie is available after this stage (wrap/unwrap).
  */
-class GenerateJavaImplWrappingConstructorStub : public AfterTypeCheckStage {
+class GenerateJavaImplApiStub : public AfterTypeCheckStage {
 public:
-    explicit GenerateJavaImplWrappingConstructorStub(
+    explicit GenerateJavaImplApiStub(
         TypeManager& typeManager,
         InteropLibBridge& ilib,
         JniBridge& jni);
