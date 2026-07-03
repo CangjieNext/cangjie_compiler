@@ -238,24 +238,23 @@ void Check4CommonInstanceVar(DiagnosticEngine& diag, const Decl& specificDecl)
     }
 }
 
-// Merge common nominative decl into specific one, do some match for fields.
-void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& specificDecl)
+/**
+ * Collect common member declarations into mergedDecls and build name index maps.
+ *
+ * Moves all common member declarations out of commonDecls into mergedDecls,
+ * reparents their outerDecl to specificDecl, and resets doNotExport to false.
+ * Builds two index maps consumed by MatchSpecificInstanceVarsWithCommon:
+ * - commonVariablesIds: COMMON VarDecl name -> position in mergedDecls
+ * - memberParamIds: member param VarDecl name -> position in mergedDecls
+ */
+void CollectCommonMembers(
+    Decl& commonDecl, Decl& specificDecl,
+    std::vector<OwnedPtr<Decl>>& mergedDecls,
+    std::unordered_map<std::string, std::size_t>& commonVariablesIds,
+    std::unordered_map<std::string, std::size_t>& memberParamIds)
 {
-    CJC_ASSERT(commonDecl.TestAttr(AST::Attribute::COMMON));
-    CJC_ASSERT(specificDecl.TestAttr(AST::Attribute::SPECIFIC));
-    if (!MatchNominativeDecl(diag, commonDecl, specificDecl)) {
-        return;
-    }
-
     auto& commonDecls = commonDecl.GetMemberDecls();
-    auto& specificDecls = specificDecl.GetMemberDecls();
-    std::vector<OwnedPtr<Decl>> mergedDecls;
-    mergedDecls.reserve(commonDecls.size() + specificDecls.size());
-    // Common instance member vars (including common member params)
-    std::unordered_map<std::string, std::size_t> commonVariablesIds;
-    // General member instance member vars from member params
-    std::unordered_map<std::string, std::size_t> memberParamIds;
-    // Collect candidates to be matched in common decl
+    mergedDecls.reserve(commonDecls.size() + specificDecl.GetMemberDecls().size());
     for (auto& commonDeclT : commonDecls) {
         auto newDecl = std::move(commonDeclT);
         newDecl->outerDecl = &specificDecl;
@@ -272,7 +271,33 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
         }
         mergedDecls.emplace_back(std::move(newDecl));
     }
-    // Match instance member and merge into specific decl.
+}
+
+/**
+ * Match specific instance VarDecls against common ones and swap matched pairs.
+ *
+ * For each SPECIFIC instance VarDecl in specificDecls, looks up a matching
+ * COMMON VarDecl by name. When a match is found, sets specificImplementation
+ * on the common VarDecl and swaps the pair (common -> specificDecls,
+ * specific -> mergedDecls). This enables InsertMirrorVarProp to transform
+ * both sides to PropDecls with proper linking.
+ *
+ * INITIALIZED propagation is intentionally NOT done here: the specific part
+ * can amend constructors, so propagating INITIALIZED would incorrectly
+ * suppress sema_class_uninitialized_field. Instead, FieldLookup in
+ * LookUpImpl.cpp skips common-matched VarDecls so the resolver always
+ * finds the specific var.
+ *
+ * Member params with a common counterpart are silently skipped.
+ * Unmatched SPECIFIC instance VarDecls are diagnosed as errors.
+ */
+void MatchSpecificInstanceVarsWithCommon(
+    DiagnosticEngine& diag,
+    std::vector<OwnedPtr<Decl>>& specificDecls,
+    std::vector<OwnedPtr<Decl>>& mergedDecls,
+    const std::unordered_map<std::string, std::size_t>& commonVariablesIds,
+    const std::unordered_map<std::string, std::size_t>& memberParamIds)
+{
     for (auto& specificDeclT : specificDecls) {
         if (specificDeclT->astKind == ASTKind::VAR_DECL && !specificDeclT->IsStaticOrGlobal()) {
             auto varDecl = StaticCast<AST::VarDecl>(specificDeclT.get());
@@ -282,15 +307,6 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
                 if (commonDeclIt != commonVariablesIds.end()) {
                     auto& commonDeclT = mergedDecls[commonDeclIt->second];
                     commonDeclT->specificImplementation = specificDeclT;
-                    // NOTE: INITIALIZED propagation is NOT done here — it was
-                    // considered but rejected because the specific part can amend
-                    // constructors. Propagating INITIALIZED would incorrectly
-                    // suppress sema_class_uninitialized_field for specific vars
-                    // whose constructors don't actually initialize them.
-                    // Instead, FieldLookup in LookUpImpl.cpp skips common-matched
-                    // VarDecls (FROM_COMMON_PART + specificImplementation) so the
-                    // resolver finds the specific var, and the constructor body
-                    // analysis marks it INITIALIZED naturally.
                     std::swap(specificDeclT, commonDeclT);
                     continue;
                 } else {
@@ -304,14 +320,35 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
         }
         mergedDecls.emplace_back(std::move(specificDeclT));
     }
+}
+
+/**
+ * Finalize the CJMP merge: move VarDecls to specific, return others to common.
+ *
+ * After CollectCommonMembers and MatchSpecificInstanceVarsWithCommon:
+ * 1. Swap lists so specificDecls receives the merged content
+ * 2. Move all VarDecls from the swapped-out list into specificDecls (second loop),
+ *    leaving the common class body empty — this enables InsertMirrorVarProp
+ *    to transform all fields (common + specific) to PropDecls
+ * 3. Return remaining non-VarDecl items to commonDecls
+ * 4. Update Var dependencies and validate unmatched common-only instance vars
+ * 5. Set specificImplementation on commonDecl
+ */
+void FinalizeCJMPMerge(
+    DiagnosticEngine& diag,
+    Decl& commonDecl, Decl& specificDecl,
+    std::vector<OwnedPtr<Decl>>& mergedDecls)
+{
+    auto& specificDecls = specificDecl.GetMemberDecls();
+    auto& commonDecls = commonDecl.GetMemberDecls();
     std::swap(specificDecls, mergedDecls);
 
-    // Second loop: move all common VarDecls from mergedDecls into specificDecls,
-    // leaving the common class body empty. After the swap, mergedDecls holds the
-    // old specificDecls content which includes matched common VarDecls (swapped
-    // in during the matching loop above). Moving them to specificDecls ensures
-    // that InsertMirrorVarProp can transform all fields (common + specific) to
-    // PropDecls, and LinkMatchedCommonPropToSpecific can link the matched pairs.
+    // Second loop: move all VarDecls from mergedDecls into specificDecls,
+    // leaving the common class body empty. After the swap, mergedDecls holds
+    // the old specificDecls content including matched common VarDecls (swapped
+    // in during the matching phase). Moving them to specificDecls ensures
+    // InsertMirrorVarProp can transform all fields to PropDecls and
+    // LinkMatchedCommonPropToSpecific can link the matched pairs.
     // This keeps matching same-kind (PROP↔PROP), never cross-kind.
     for (auto& decl : mergedDecls) {
         if (decl && decl->astKind == ASTKind::VAR_DECL) {
@@ -329,10 +366,34 @@ void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& spe
     for (auto& decl : specificDecls) {
         UpdateVarDependencies(*decl);
     }
-    // Check common member without initializer not match with specific one.
     Check4CommonInstanceVar(diag, specificDecl);
 
     commonDecl.specificImplementation = &specificDecl;
+}
+
+/**
+ * Merge common nominative decl into specific one, do some match for fields.
+ *
+ * Orchestrates three phases:
+ * 1. CollectCommonMembers — drains common members into mergedDecls with indices
+ * 2. MatchSpecificInstanceVarsWithCommon — matches and swaps VarDecl pairs
+ * 3. FinalizeCJMPMerge — distributes members, updates dependencies, validates
+ */
+void MergeCommonIntoSpecific(DiagnosticEngine& diag, Decl& commonDecl, Decl& specificDecl)
+{
+    CJC_ASSERT(commonDecl.TestAttr(AST::Attribute::COMMON));
+    CJC_ASSERT(specificDecl.TestAttr(AST::Attribute::SPECIFIC));
+    if (!MatchNominativeDecl(diag, commonDecl, specificDecl)) {
+        return;
+    }
+
+    std::vector<OwnedPtr<Decl>> mergedDecls;
+    std::unordered_map<std::string, std::size_t> commonVariablesIds;
+    std::unordered_map<std::string, std::size_t> memberParamIds;
+
+    CollectCommonMembers(commonDecl, specificDecl, mergedDecls, commonVariablesIds, memberParamIds);
+    MatchSpecificInstanceVarsWithCommon(diag, specificDecl.GetMemberDecls(), mergedDecls, commonVariablesIds, memberParamIds);
+    FinalizeCJMPMerge(diag, commonDecl, specificDecl, mergedDecls);
 }
 }
 
