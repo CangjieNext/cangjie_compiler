@@ -172,14 +172,14 @@ std::string DecimalToManglingNumber(const std::string& decimal)
     return base62 + MANGLE_WILDCARD_PREFIX;
 }
 
-std::string MangleLocalModifier(Cangjie::AST::ModalInfo modal)
+std::string MangleLocalModifier(ModalInfo modal)
 {
     switch (modal.local) {
-        case Cangjie::AST::LocalModal::NOT:
+        case LocalModal::NOT:
             return "";
-        case Cangjie::AST::LocalModal::HALF:
+        case LocalModal::HALF:
             return "?";
-        case Cangjie::AST::LocalModal::FULL:
+        case LocalModal::FULL:
             return "!";
         default:
             CJC_ABORT();
@@ -187,14 +187,14 @@ std::string MangleLocalModifier(Cangjie::AST::ModalInfo modal)
     }
 }
 
-std::string MangleLocalModifier(Cangjie::CHIR::ModalInfo modal)
+std::string MangleLocalModifier(CHIR::ModalInfo modal)
 {
     switch (modal.Local()) {
-        case Cangjie::CHIR::LocalModal::NONE:
+        case CHIR::LocalModal::NONE:
             return "";
-        case Cangjie::CHIR::LocalModal::MAYBE:
+        case CHIR::LocalModal::MAYBE:
             return "?";
-        case Cangjie::CHIR::LocalModal::MUST:
+        case CHIR::LocalModal::MUST:
             return "!";
         default:
             CJC_ASSERT(false && "unexpected modal to be mangled");

@@ -845,6 +845,7 @@ template <typename Container> std::string Ty::GetTypesToStableStr(const Containe
     return GetTypesToStr(sortedTys, delimiter);
 }
 template std::string Ty::GetTypesToStableStr(const std::unordered_set<DataTy>& tys, const std::string& delimiter);
+template std::string Ty::GetTypesToStableStr(const std::set<DataTy>& tys, const std::string& delimiter);
 template <typename Container>
 std::string Ty::GetModalTypesToStableStr(const Container& tys, const std::string& delimiter)
 {

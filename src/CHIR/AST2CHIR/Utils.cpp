@@ -406,14 +406,14 @@ Type* AddRefIfFuncIsMutOrClass(Type& thisType, const AST::FuncDecl& funcDecl, CH
     }
 }
 
-ModalInfo ASTModal2CHIRModal(const AST::ModalInfo& astModal)
+ModalInfo ASTModal2CHIRModal(const Cangjie::ModalInfo& astModal)
 {
     switch (astModal.local) {
-        case AST::LocalModal::NOT:
+        case Cangjie::LocalModal::NOT:
             return ModalInfo(LocalModal::NONE);
-        case AST::LocalModal::HALF:
+        case Cangjie::LocalModal::HALF:
             return ModalInfo(LocalModal::MAYBE);
-        case AST::LocalModal::FULL:
+        case Cangjie::LocalModal::FULL:
             return ModalInfo(LocalModal::MUST);
         default:
             CJC_ABORT();

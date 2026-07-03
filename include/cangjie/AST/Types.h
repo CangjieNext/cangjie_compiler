@@ -31,9 +31,6 @@
 #include "cangjie/Utils/SafePointer.h"
 
 namespace Cangjie::AST {
-using Cangjie::LocalModal;
-using Cangjie::ModalInfo;
-
 struct Decl;
 struct GenericParamDecl;
 struct ClassDecl;

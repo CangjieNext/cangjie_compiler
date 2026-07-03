@@ -222,7 +222,7 @@ std::pair<Type*, bool> GetInstMemberTypeByNameCheckingReadOnly(
 
 Type* AddRefIfFuncIsMutOrClass(Type& thisType, const AST::FuncDecl& funcDecl, CHIRBuilder& builder);
 
-ModalInfo ASTModal2CHIRModal(const AST::ModalInfo& astModal);
+ModalInfo ASTModal2CHIRModal(const Cangjie::ModalInfo& astModal);
 } // namespace CHIR
 } // namespace Cangjie
 

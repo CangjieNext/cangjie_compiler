@@ -71,7 +71,7 @@ public:
         AST::ModalTy ty, std::variant<std::stack<std::string>, AST::ModalTy>& metRes);
 
     /** Join locality modes; skips copy types (see `BatchJoin(set<ModalTy>)`). */
-    static AST::ModalInfo JoinMode(TypeManager& tyMgr, const std::set<AST::ModalTy>& tyms);
+    static ModalInfo JoinMode(TypeManager& tyMgr, const std::set<AST::ModalTy>& tyms);
 
     // Convert the input type to a user-visible one by eliminating intersection and union types.
     // Use a boolean value isJoin to distinguish the join and meet mode.

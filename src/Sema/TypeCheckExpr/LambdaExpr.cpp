@@ -166,6 +166,139 @@ std::pair<std::string, std::set<Ptr<Decl>>> FindCandidatesFromAccess(
     }
     return {"", {}};
 }
+
+Block* GetFuncLikeBody(const Node& funcLike)
+{
+    if (auto fd = DynamicCast<FuncDecl>(&funcLike)) {
+        return fd->funcBody ? fd->funcBody->body.get() : nullptr;
+    }
+    if (auto le = DynamicCast<LambdaExpr>(&funcLike)) {
+        return le->funcBody ? le->funcBody->body.get() : nullptr;
+    }
+    return nullptr;
+}
+
+FuncBody* GetFuncLikeFuncBody(Node& funcLike)
+{
+    if (auto fd = DynamicCast<FuncDecl>(&funcLike)) {
+        return fd->funcBody.get();
+    }
+    if (auto le = DynamicCast<LambdaExpr>(&funcLike)) {
+        return le->funcBody.get();
+    }
+    return nullptr;
+}
+
+LocalModal GetRefCaptureLocalModal(const ASTContext& ctx, const NameReferenceExpr& nre)
+{
+    if (auto ma = DynamicCast<MemberAccess>(&nre)) {
+        if (ma->baseExpr && IsThisOrSuper(*ma->baseExpr)) {
+            auto local = ma->baseExpr->TyMode().local;
+            if (local == LocalModal::NOT) {
+                local = GetCurThisModal(ctx, nre.scopeName).local;
+            }
+            return local;
+        }
+    }
+    if (auto re = DynamicCast<RefExpr>(&nre)) {
+        if (re->isThis || re->isSuper) {
+            auto local = re->TyMode().local;
+            if (local == LocalModal::NOT) {
+                local = GetCurThisModal(ctx, re->scopeName).local;
+            }
+            return local;
+        }
+        if (auto target = re->GetTarget()) {
+            if (target->IsMemberDecl() && !target->TestAnyAttr(Attribute::STATIC, Attribute::GLOBAL)) {
+                return GetCurThisModal(ctx, re->scopeName).local;
+            }
+            return target->TyMode().local;
+        }
+    }
+    return nre.TyMode().local;
+}
+
+std::string GetRefCaptureName(const NameReferenceExpr& nre)
+{
+    if (auto ma = DynamicCast<MemberAccess>(&nre)) {
+        if (ma->baseExpr && IsThisOrSuper(*ma->baseExpr)) {
+            return "this";
+        }
+        return ma->field.Val();
+    }
+    if (auto re = DynamicCast<RefExpr>(&nre)) {
+        if (re->isThis || re->isSuper) {
+            return "this";
+        }
+        if (auto target = re->GetTarget()) {
+            return target->identifier.Val();
+        }
+    }
+    return "";
+}
+
+bool IsImplicitThisMemberRef(const ASTContext& ctx, const RefExpr& re)
+{
+    if (re.isThis || re.isSuper) {
+        return false;
+    }
+    auto target = re.GetTarget();
+    if (!target || !target->IsMemberDecl() || target->TestAnyAttr(Attribute::STATIC, Attribute::GLOBAL)) {
+        return false;
+    }
+    return GetCurThisModal(ctx, re.scopeName).local != LocalModal::NOT;
+}
+
+bool IsReceiverCapture(const ASTContext& ctx, const NameReferenceExpr& nre)
+{
+    if (auto ma = DynamicCast<MemberAccess>(&nre)) {
+        return ma->baseExpr && IsThisOrSuper(*ma->baseExpr);
+    }
+    if (auto re = DynamicCast<RefExpr>(&nre)) {
+        if (re->isThis || re->isSuper) {
+            return true;
+        }
+        return IsImplicitThisMemberRef(ctx, *re);
+    }
+    return false;
+}
+
+template <typename Fn>
+void WalkFuncLikeLocalCaptureRefs(const ASTContext& ctx, const Node& funcLike, Block* body, Fn&& visit)
+{
+    Walker(body, [&ctx, &funcLike, &visit](Ptr<Node> node) {
+        if (node->astKind == ASTKind::LAMBDA_EXPR || node->astKind == ASTKind::FUNC_DECL) {
+            return VisitAction::SKIP_CHILDREN;
+        }
+        if (node->TestAttr(Attribute::COMPILER_ADD)) {
+            return VisitAction::SKIP_CHILDREN;
+        }
+        if (auto ma = DynamicCast<MemberAccess>(node); ma && ma->baseExpr && IsThisOrSuper(*ma->baseExpr)) {
+            visit(*ma);
+            return VisitAction::SKIP_CHILDREN;
+        }
+        if (auto re = DynamicCast<RefExpr>(node)) {
+            if (re->isThis || re->isSuper) {
+                visit(*re);
+                return VisitAction::SKIP_CHILDREN;
+            }
+            if (IsImplicitThisMemberRef(ctx, *re)) {
+                visit(*re);
+                return VisitAction::SKIP_CHILDREN;
+            }
+            if (auto target = DynamicCast<VarDecl>(re->GetTarget());
+                target && !target->TestAnyAttr(Attribute::STATIC, Attribute::GLOBAL)) {
+                auto targetDefSite =
+                    ScopeManager::GetCurSymbolByKind(SymbolKind::FUNC_LIKE, ctx, target->scopeName);
+                if (!targetDefSite || !targetDefSite->node || targetDefSite->node == &funcLike) {
+                    return VisitAction::WALK_CHILDREN;
+                }
+                visit(*re);
+            }
+        }
+        return VisitAction::WALK_CHILDREN;
+    }).Walk();
+}
 } // namespace
 
 void TypeChecker::TypeCheckerImpl::ResetLambdaForReinfer(ASTContext& ctx, const AST::LambdaExpr& le)
@@ -309,7 +442,87 @@ ModalTy TypeChecker::TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le
     } else {
         le.funcBody->retType->SetTy({TypeManager::GetInvalidTy()});
     }
+    if (le.GetTy().IsCorrect()) {
+        InferLamExprModal(ctx, le);
+        CheckFuncLikeLocalCaptures(ctx, le);
+    }
     return le.GetTy();
+}
+
+void TypeChecker::TypeCheckerImpl::DiagInvalidLocalFuncType(const Node& le)
+{
+    diag.DiagnoseRefactor(DiagKindRefactor::sema_invalid_local_func_type, le,
+        le.astKind == ASTKind::LAMBDA_EXPR ? "lambda" : "local function");
+}
+
+bool TypeChecker::TypeCheckerImpl::IsLocalFuncDecl(const FuncDecl& fd)
+{
+    return !IsGlobalOrMember(fd);
+}
+
+bool TypeChecker::TypeCheckerImpl::CheckLocalCapture(
+    const ASTContext& ctx, const Node& func, const NameReferenceExpr& expr) const
+{
+    auto funcLocal = func.TyMode().local;
+    auto varLocal = GetRefCaptureLocalModal(ctx, expr);
+    if (!IsReceiverCapture(ctx, expr)) {
+        if (auto target = expr.GetTarget()) {
+            if (typeManager.ImplementsCopyInterface(target->DataTy())) {
+                return true;
+            }
+        }
+    }
+    if (funcLocal == LocalModal::NOT && varLocal == LocalModal::NOT) {
+        return true;
+    }
+    if (funcLocal == LocalModal::HALF && varLocal != LocalModal::FULL) {
+        return true;
+    }
+    diag.DiagnoseRefactor(DiagKindRefactor::sema_bad_capture_local, expr,
+        std::string(ToString(GetRefCaptureLocalModal(ctx, expr))), GetRefCaptureName(expr),
+        func.TyMode().LocalString(), func.astKind == ASTKind::FUNC_DECL ? "function" : "lambda");
+    return false;
+}
+
+void TypeChecker::TypeCheckerImpl::CheckFuncLikeLocalCaptures(const ASTContext& ctx, Node& funcLike)
+{
+    if (!funcLike.GetTy().IsCorrect()) {
+        return;
+    }
+    auto body = GetFuncLikeBody(funcLike);
+    if (!body) {
+        return;
+    }
+    bool ok = true;
+    WalkFuncLikeLocalCaptureRefs(ctx, funcLike, body, [this, &ctx, &funcLike, &ok](const NameReferenceExpr& nre) {
+        ok = CheckLocalCapture(ctx, funcLike, nre) && ok;
+    });
+    if (!ok) {
+        funcLike.SetTy({TypeManager::GetInvalidTy()});
+        if (auto fb = GetFuncLikeFuncBody(funcLike)) {
+            fb->SetTy({TypeManager::GetInvalidTy()});
+        }
+    }
+}
+
+void TypeChecker::TypeCheckerImpl::InferLamExprModal(ASTContext& ctx, LambdaExpr& le)
+{
+    if (!le.funcBody || !le.funcBody->body || !le.GetTy().IsCorrect()) {
+        return;
+    }
+
+    // @local? if any outer @local? var / this / super / implicit-this member; @local! ignored for inference.
+    bool capturesLocalHalf = false;
+    WalkFuncLikeLocalCaptureRefs(ctx, le, le.funcBody->body.get(), [&ctx, &capturesLocalHalf](const NameReferenceExpr& nre) {
+        if (GetRefCaptureLocalModal(ctx, nre) == LocalModal::HALF) {
+            capturesLocalHalf = true;
+        }
+    });
+
+    if (capturesLocalHalf) {
+        le.SetTy(le.GetTy().With(LocalModal::HALF));
+        le.funcBody->SetTy(le.funcBody->GetTy().With(LocalModal::HALF));
+    }
 }
 
 bool TypeChecker::TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, ModalTy target, LambdaExpr& le)
@@ -333,7 +546,13 @@ bool TypeChecker::TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, ModalTy target, L
         ds.ReportDiag();
         return false;
     }
+    if (targetTy.Mode().local == LocalModal::FULL) {
+        DiagInvalidLocalFuncType(le);
+        le.SetTy({TypeManager::GetInvalidTy()});
+        return false;
+    }
 
+    bool chkSucceeded = false;
     { // Suppress errors if check lambda failed. Only report when type check succeed.
         auto ds = DiagSuppressor(diag);
         auto tgtTy = StaticCast<FuncTy*>(targetTy.Ty());
@@ -357,12 +576,16 @@ bool TypeChecker::TypeCheckerImpl::ChkLamExpr(ASTContext& ctx, ModalTy target, L
                 {tgtTy->isC, tgtTy->isClosureTy, tgtTy->hasVariableLenArg})};
             le.funcBody->SetTy(fnTy.With(target.Mode()));
             le.SetTy(le.funcBody->GetTy());
-            return true;
+            chkSucceeded = true;
         } else if (IsLambdaIncompatible(le, !paramsMatched)) {
             // User omitted parameter's type. We should quit early.
             ds.ReportDiag();
             return false;
         }
+    }
+    if (chkSucceeded) {
+        CheckFuncLikeLocalCaptures(ctx, le);
+        return le.GetTy().IsCorrect();
     }
     // In the LSP that uses macros, the ast before the macro expansion needs to save the complete ty information to
     // prevent 'Synthesize' skipping child nodes in the lambda body due to cache.

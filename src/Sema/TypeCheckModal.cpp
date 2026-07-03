@@ -105,7 +105,7 @@ struct ModalTypeChecker {
                         return VisitAction::SKIP_CHILDREN;
                     }
                     CheckReturnModalType(ctx, *node);
-                    if (Is<FuncDecl>(node) || Is<LambdaExpr>(node)) {
+                    if (Is<FuncDecl>(node)) {
                         CheckCaptures(ctx, *node);
                     }
                 }
@@ -187,7 +187,7 @@ struct ModalTypeChecker {
     }
 
 private:
-    /// Functions that return internal @local! or @local? must return so via exclave. External @local! or Copy is ok.
+    /// Functions that return internal @local! must return so via exclave. External @local! or Copy is ok.
     void CheckReturnModalType(const ASTContext& ctx, const Node& func)
     {
         auto body = GetFuncBody(func);
@@ -200,7 +200,7 @@ private:
         auto r = CollectReturnedExpr(*body);
         for (auto& e : r) {
             if (!IsExternalLocal(ctx, *e) && !type.ImplementsCopyInterface(e->DataTy()) &&
-                !IsInExclaveExpr(ctx, *e) && e->GetTy().IsLocalType()) {
+                !IsInExclaveExpr(ctx, *e) && e->TyMode().local == LocalModal::FULL) {
                 DiagBadInternalLocalReturn(*e);
             }
         }
@@ -765,7 +765,6 @@ private:
                 return;
             }
             auto varLocal = target->TyMode().local;
-            // these are the only allowed cases
             if (funcLocal == LocalModal::NOT && varLocal == LocalModal::NOT) {
                 return;
             }
@@ -781,7 +780,6 @@ private:
         auto body = GetFuncBody(func);
         Walker walker(body, [this, &ctx, &func](Node* node) {
             if (node->astKind == ASTKind::LAMBDA_EXPR || node->astKind == ASTKind::FUNC_DECL) {
-                // skip nested fun
                 return VisitAction::SKIP_CHILDREN;
             }
             if (auto re = DynamicCast<RefExpr>(node)) {
@@ -812,7 +810,7 @@ private:
 
     void DiagBadCapture(const Node& func, const NameReferenceExpr& capture)
     {
-        auto db = d.DiagnoseRefactor(DiagKindRefactor::sema_bad_capture_local, capture, capture.TyMode().LocalString(),
+        d.DiagnoseRefactor(DiagKindRefactor::sema_bad_capture_local, capture, capture.TyMode().LocalString(),
             capture.GetTarget()->identifier.Val(), func.TyMode().LocalString(),
             func.astKind == ASTKind::FUNC_DECL ? "function" : "lambda");
     }
@@ -1036,10 +1034,9 @@ private:
                 continue;
             }
             auto param = GetFuncParam(call, i);
-            if (param.modal.local == LocalModal::FULL) {
-                if (IsExternalLocal(ctx, *arg) && !type.ImplementsCopyInterface(arg->DataTy())) {
-                    DiagBadExternalLocalArg(param, *arg);
-                }
+            if (param.modal.local == LocalModal::FULL && arg->TyMode().local == LocalModal::FULL &&
+                IsExternalLocal(ctx, *arg) && !type.ImplementsCopyInterface(arg->DataTy())) {
+                DiagBadExternalLocalArg(param, *arg);
             }
         }
     }

@@ -253,16 +253,16 @@ private:
     AST::ModalTy GetTyFromASTType(ASTContext& ctx, AST::OptionType& optionType);
     std::vector<AST::DataTy> GetTyFromASTType(ASTContext& ctx, std::vector<OwnedPtr<AST::Type>>& typeArguments);
     std::vector<AST::ModalTy> GetModalTysFromASTType(ASTContext& ctx, std::vector<OwnedPtr<AST::Type>>& typeArguments);
-    AST::ModalTy GetTyFromASTType(AST::Decl& decl, const std::vector<AST::ModalTy>& typeArgs, AST::ModalInfo modal);
+    AST::ModalTy GetTyFromASTType(AST::Decl& decl, const std::vector<AST::ModalTy>& typeArgs, ModalInfo modal);
     std::vector<AST::DataTy> GetTyFromASTType(const std::vector<OwnedPtr<AST::GenericParamDecl>>& typeParameters);
     AST::ModalTy GetTyFromBuiltinDecl(
-        const AST::BuiltInDecl& bid, const std::vector<AST::DataTy>& typeArgs, AST::ModalInfo modal);
+        const AST::BuiltInDecl& bid, const std::vector<AST::DataTy>& typeArgs, ModalInfo modal);
     AST::ModalTy GetTyFromBuiltinDecl(
-        const AST::BuiltInDecl& bid, const std::vector<AST::ModalTy>& typeArgs, AST::ModalInfo modal);
-    AST::ModalTy GetBuiltInArrayType(const std::vector<AST::DataTy>& typeArgs, AST::ModalInfo modal);
-    AST::ModalTy GetBuiltInVArrayType(const std::vector<AST::DataTy>& typeArgs, AST::ModalInfo modal);
-    AST::ModalTy GetBuiltinCFuncType(const std::vector<AST::ModalTy>& typeArgs, AST::ModalInfo modal);
-    AST::ModalTy GetBuiltInPointerType(const std::vector<AST::DataTy>& typeArgs, AST::ModalInfo modal);
+        const AST::BuiltInDecl& bid, const std::vector<AST::ModalTy>& typeArgs, ModalInfo modal);
+    AST::ModalTy GetBuiltInArrayType(const std::vector<AST::DataTy>& typeArgs, ModalInfo modal);
+    AST::ModalTy GetBuiltInVArrayType(const std::vector<AST::DataTy>& typeArgs, ModalInfo modal);
+    AST::ModalTy GetBuiltinCFuncType(const std::vector<AST::ModalTy>& typeArgs, ModalInfo modal);
+    AST::ModalTy GetBuiltInPointerType(const std::vector<AST::DataTy>& typeArgs, ModalInfo modal);
 
     /** Check legality of attributes for all decls. */
     void CheckAllDeclAttributes(const ASTContext& ctx);
@@ -757,6 +757,14 @@ private:
     bool ChkLamParamTys(ASTContext& ctx, AST::LambdaExpr& le, const std::vector<AST::ModalTy>& tgtParamTys,
         std::vector<AST::ModalTy>& lamParamTys);
     bool ChkLamBody(ASTContext& ctx, AST::FuncBody& lamFb);
+    void DiagInvalidLocalFuncType(const AST::Node& le);
+    static bool IsLocalFuncDecl(const AST::FuncDecl& fd);
+    /// Check validity of one nre.
+    bool CheckLocalCapture(const ASTContext& ctx, const AST::Node& func, const AST::NameReferenceExpr& expr) const;
+    /// Check validity of all @local captures in a lambda or local function.
+    void CheckFuncLikeLocalCaptures(const ASTContext& ctx, AST::Node& funcLike);
+    /// When a lambda has @local? capture, infer to @local? fun; otherwise @~local.
+    void InferLamExprModal(ASTContext& ctx, AST::LambdaExpr& le);
     AST::ModalTy SynIfExpr(const CheckerContext& ctx, AST::IfExpr& ie);
     bool ChkIfExpr(ASTContext& ctx, AST::ModalTy tgtTy, AST::IfExpr& ie);
     bool ChkIfExprNoElse(ASTContext& ctx, AST::ModalTy target, AST::IfExpr& ie);

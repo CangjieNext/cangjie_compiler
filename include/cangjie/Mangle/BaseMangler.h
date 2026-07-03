@@ -657,7 +657,7 @@ std::string MangleFilePrivate(const AST::Decl& decl);
  */
 std::string DecimalToManglingNumber(const std::string& decimal);
 
-std::string MangleLocalModifier(AST::ModalInfo modal);
+std::string MangleLocalModifier(ModalInfo modal);
 std::string MangleLocalModifier(CHIR::ModalInfo modal);
 } // namespace MangleUtils
 } // namespace Cangjie

@@ -164,7 +164,7 @@ public:
     bool HasExtensionRelation(AST::Ty& childTy, AST::Ty& interfaceTy);
 
     bool IsModalSubtype(AST::ModalTy leaf, AST::ModalTy root);
-    bool IsModalSubtype(AST::ModalInfo leaf, AST::ModalInfo root);
+    bool IsModalSubtype(ModalInfo leaf, ModalInfo root);
     /** Copy type for modal/locality checking; see `TypeManager::ImplementsCopyInterface` in TypeManager.cpp. */
     bool ImplementsCopyInterface(AST::DataTy ty);
     bool NeverImplementsCopyInterface(AST::DataTy ty);

@@ -68,6 +68,11 @@ void TypeChecker::TypeCheckerImpl::CheckFuncDecl(ASTContext& ctx, FuncDecl& fd)
         return;
     }
     fd.EnableAttr(Attribute::IS_CHECK_VISITED);
+    if (IsLocalFuncDecl(fd) && fd.modal.Local() == LocalModalAST::FULL) {
+        DiagInvalidLocalFuncType(fd);
+        fd.SetTy({TypeManager::GetInvalidTy()});
+        return;
+    }
     // NOTE: Property decl's getter/setter function should be ignored from 'redef' checking.
     auto redefModifier = TypeCheckUtil::FindModifier(fd, TokenKind::REDEF);
     auto staticModifier = TypeCheckUtil::FindModifier(fd, TokenKind::STATIC);
@@ -85,8 +90,13 @@ void TypeChecker::TypeCheckerImpl::CheckFuncDecl(ASTContext& ctx, FuncDecl& fd)
         fd.SetTy({
             typeManager.GetFunctionTy(DynamicCast<FuncTy*>(fd.DataTy())->paramTys, {TypeManager::GetInvalidTy()})});
     }
-    if (fd.GetTy().IsCorrect() && fd.modal.HasLocal()) {
-        fd.SetTy(fd.GetTy().With(fd.modal.ToModalInfo()));
+    if (fd.GetTy().IsCorrect()) {
+        if (fd.modal.HasLocal()) {
+            fd.SetTy(fd.GetTy().With(fd.modal.ToModalInfo()));
+        }
+        if (IsLocalFuncDecl(fd) && !fd.TestAttr(Attribute::COMPILER_ADD)) {
+            CheckFuncLikeLocalCaptures(ctx, fd);
+        }
     }
     if (fd.propDecl) {
         CheckPropMethodTargetType(fd);
