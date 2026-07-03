@@ -126,7 +126,6 @@ void RewriteJavaImplReferenceWrapperFields::RelocateFields(AfterTypeCheckContext
             continue;
         }
         if (member->TestAttr(Attribute::FROM_COMMON_PART) && member->specificImplementation) {
-            itm++;
             continue;
         }
 
