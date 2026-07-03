@@ -114,7 +114,7 @@ This is where common and specific declarations are matched and merged
 PrepareTypeCheck4CJMP → MergeCJMPNominalsExceptExtension
   → MergeCommonIntoSpecific for each matched pair
   → Set specificImplementation pointer
-  → Mark common as doNotExport = true
+  → Export suppressed via serialization-layer checks (IsCommonMatchedWithSpecific)
 ```
 
 **Our changes in `CheckCJMP.cpp`:**
@@ -683,14 +683,19 @@ After matching common and specific member declarations, the function:
    the common matched VarDecl (with `specificImplementation`) and the specific
    VarDecl in the specific class body. This is essential for `InsertMirrorVarProp`
    to transform all fields (common + specific) to PropDecls.
-4. **doNotExport on common-matched vars**: Common vars that have a
-   `specificImplementation` counterpart are marked `doNotExport = true` to prevent
-   `CheckForConflictExportId` from detecting duplicate exportIds (the specific
-   counterpart is already in the member list with the same exportId). This must
-   be set for **instance** VarDecls too, not just static/global — otherwise
-   `ASTWriter` serializes both decls with the same exportId, producing a corrupt CJO.
+4. **Export suppression of common-matched members**: Common vars that have a
+   `specificImplementation` counterpart must not be included in the serialized CJO
+   — their specific counterpart already provides the layout/export entry. Instead of
+   setting a `doNotExport` flag on the AST decl, the serialization layer itself skips
+   them via `IsCommonMatchedWithSpecific()`. This check is applied in four places:
+   - `ASTWriter::shouldExportDecl` — member-level iteration in `GetBody`
+   - `ASTWriter::CheckForConflictExportId` — both outer (top-level) and inner (member) loops
+   - `ASTWriter::ShouldAlwaysExport` — top-level decls
+   - `ASTWriter::ShouldFullExportFunc` / `ASTWriter::ShouldExportSource` — function body / var source export
+   This centralizes the serialization concern in the serialization layer and avoids
+   mutating AST state during the merge phase for a purely serialization purpose.
 5. **Common-only vars preserved**: Common vars WITHOUT `specificImplementation`
-   (no specific counterpart) are NOT marked doNotExport — they must remain visible.
+   (no specific counterpart) are NOT skipped — they must remain visible.
 
 **Why the common class body must be empty**: The common class shares the same CHIR
 `CustomTypeDef` as the specific class (via deserialization). If the common class
@@ -701,10 +706,9 @@ refresh must happen during the **specific** class translation instead (see §9
 below for the `ShouldTranslateMember` fix).
 
 **Migration of matched vars**: After the merge, `specificDecls` contains both the
-specific var and the common-matched var. The common-matched var (with doNotExport)
-is skipped by:
-- `ASTWriter::CheckForConflictExportId` — checks `doNotExport`
-- `ASTWriter::shouldExportDecl` — returns false when `doNotExport` is set
+specific var and the common-matched var. The common-matched var is skipped by:
+- `ASTWriter::CheckForConflictExportId` — checks `IsCommonMatchedWithSpecific()`
+- `ASTWriter::shouldExportDecl` — returns false via `IsCommonMatchedWithSpecific()`
 - `ShouldTranslateMember` — returns false for members from different files
   (BUT see §9 for the exception for common-matched VAR_DECLs that need CHIR refresh)
 - `IsCommonMatchedWithSpecific()` — in `TranslateVariablesInit` skip
@@ -789,8 +793,9 @@ if (func->IsConstructor() && func->TestAttr(Attribute::DESERIALIZED)) {
 The second loop moves all common VarDecls into the specific class body. For plain
 CJMP classes (no `@JavaMirror`, no `InsertMirrorVarProp`), this creates duplicate
 VarDecls (common + specific for the same field) in the specific class AST. The
-common matched VarDecl has `specificImplementation` set and `doNotExport = true`,
-so it should be skipped by downstream stages. Six tests fail because not all
+common matched VarDecl has `specificImplementation` set and is skipped by
+`IsCommonMatchedWithSpecific()` in the serialization layer, so it should be
+skipped by downstream stages. Six tests fail because not all
 stages check these markers. Each failure has a distinct root cause:
 
 #### T1: `common_no_initializer` — Sema `InitializationChecker`
@@ -870,24 +875,22 @@ getter/setter are linked to specific via `specificImplementation`.
 
 Same underlying issues as T2 (stale `MemberVarInfo`) and T4 (duplicate
 exportId). Both are fixed by the `ShouldTranslateMember` exception and
-`doNotExport` on swap in `MergeCommonIntoSpecific`. Test passes with
+the `IsCommonMatchedWithSpecific()` serialization-layer guards. Test passes with
 the staged changes.
 
 #### T4: `var5`, `var11` — ExportId conflict in CJO serialization
 
-**Root cause**: Both `c_a` (common, `doNotExport = false`) and `s_a` (specific)
+**Root cause**: Both `c_a` (common) and `s_a` (specific)
 are serialized to CJO with the **same exportId** (`MangleVarDecl` doesn't include
-COMMON/SPECIFIC attrs). `ASTWriter.cpp:145-147` skip prevents the error from
-being *reported*, but `shouldExportDecl` (`ASTWriter.cpp:472-495`) still exports
-`c_a` (instance vars are always exported for layout; `doNotExport = false`) →
-corrupt CJO with duplicate exportIds.
+COMMON/SPECIFIC attrs). Without a guard, `shouldExportDecl` in `GetBody` exports
+`c_a` (instance vars are always exported for layout) → corrupt CJO with duplicate exportIds.
 
-**Fix**: Set `doNotExport = true` during the swap in `MergeCommonIntoSpecific`
-(line 285), before the second loop moves the VarDecl into `specificDecls`. This
-applies to ALL matched VarDecls (instance + static/global) in one place, not
-just static/global in `MatchCJMPVar`. The specific counterpart `s_a` is in the
-CJO for layout; the deserialized CHIR layout is not rebuilt from the CJO member
-list, so not exporting `c_a` is safe.
+**Fix**: Instead of setting `doNotExport = true` during the swap in `MergeCommonIntoSpecific`,
+the serialization layer itself skips common-matched decls via `IsCommonMatchedWithSpecific()`.
+This check is applied in `shouldExportDecl` (member-level), both loops of
+`CheckForConflictExportId` (top-level + member-level), and `ShouldAlwaysExport` (top-level).
+The specific counterpart `s_a` is in the CJO for layout; the deserialized CHIR layout
+is not rebuilt from the CJO member list, so skipping `c_a` is safe.
 
 #### T5: `var2`, `var23` — already fixed
 
@@ -932,9 +935,10 @@ in the specific class body. Both produce the same mangled name → same exportId
 **Why it happens**: `MangleVarDecl` doesn't include COMMON/SPECIFIC attributes,
 so matched pairs collide.
 
-**Fix**: Set `doNotExport = true` on the common-matched VarDecl during the
-swap in `MergeCommonIntoSpecific`. The specific counterpart provides the
-layout entry; the common one is suppressed.
+**Fix**: Skip common-matched VarDecls in the serialization layer via
+`IsCommonMatchedWithSpecific()` (in `shouldExportDecl`, `CheckForConflictExportId`,
+and `ShouldAlwaysExport`) instead of setting `doNotExport`. The specific counterpart
+provides the layout entry; the common one is suppressed.
 
 #### C2. Stale CHIR `MemberVarInfo`
 
@@ -1019,7 +1023,7 @@ initialization naturally.
 
 | Clash | What breaks | Fix location |
 |-------|-------------|--------------|
-| C1 exportId | Corrupt CJO | `MergeCommonIntoSpecific` (doNotExport) |
+| C1 exportId | Corrupt CJO | `IsCommonMatchedWithSpecific()` in `shouldExportDecl`, `CheckForConflictExportId`, `ShouldAlwaysExport` |
 | C2 stale varInfo | Runtime SIGSEGV | `ShouldTranslateMember` exception |
 | C3 lost DESERIALIZED | VarInitCheck false negative | `AddMemberVarDecl` update path |
 | C4 duplicate vtable | CHIR checker false positive | `SkipMemberFuncInSpecificMerging` |
@@ -1062,14 +1066,14 @@ PropDecls after `InsertMirrorVarProp`, enabling same-kind PROP↔PROP matching.
   would incorrectly transform non-FFI fields.
 - **Clone common VarDecls into specific** — rejected because cloning would create
   a third CHIR copy. Common-matched VarDecls already have `specificImplementation`
-  set; the original in common is `doNotExport=true` and skipped by translation.
+   set; the original in common is skipped by `IsCommonMatchedWithSpecific()` in serialization.
 
 **Trade-off**: The empty common class body means `AddMemberVarDecl` no longer runs
 during common class translation. The deserialized CHIR `MemberVarInfo` (type,
 annoInfo) becomes stale (T2). A `ShouldTranslateMember` exception for
 common-matched VAR_DECLs is needed to refresh it. Also, duplicate exportIds in
-CJO serialization (T4) require `doNotExport=true` on common-matched instance
-VarDecls.
+CJO serialization (T4) require skipping common-matched instance VarDecls via
+`IsCommonMatchedWithSpecific()` in the serialization layer.
 
 **Second loop is conditional**: The T1–T5 test failures described in §8 occur ONLY
 when the second loop is present. Without the second loop, common VarDecls stay in
@@ -1226,7 +1230,7 @@ the parser and is always valid for syntactically valid programs.
 | Novel Element | Purpose | Why Novel |
 |---------------|---------|-----------|
 | Second loop in `MergeCommonIntoSpecific` | Moves all common VarDecls to specific class body, emptying common class | Enables `InsertMirrorVarProp` to transform all fields; enables same-kind PROP↔PROP matching. Not documented in reference docs. |
-| `doNotExport` on common-matched instance VarDecls | Prevents duplicate exportId in CJO serialization | Reference docs don't cover the interaction between CJMP merge and CJO export for instance vars |
+| `IsCommonMatchedWithSpecific()` in serialization layer | Prevents duplicate exportId in CJO serialization | Replaces `doNotExport` flag approach; applies in `shouldExportDecl`, `CheckForConflictExportId`, `ShouldAlwaysExport` |
 | `ShouldTranslateMember` exception for common-matched VAR_DECLs | Allows `AddMemberVarDecl` to refresh deserialized CHIR `MemberVarInfo` | Needed because empty common class body means `AddMemberVarDecl` no longer runs during common class translation |
 | `IsCommonMatchedWithSpecific` skip in `InitializationChecker::CheckLetFlag` | Prevents Sema from resolving bare identifiers to common (immutable) var | Needed because both common and specific VarDecls are in the specific class body after the second loop |
 | Object→PlatformParent relaxation | Allow `Object→JObject` super type mismatch | Reference docs identify the problem ([REF:CJMP_COMMON_SPECIFIC.md:497-513]) but don't document the solution |
@@ -1429,7 +1433,7 @@ loop is present:
 | `common_no_initializer` | Duplicate `a` in specific body; resolver finds common var | §8 T1: `IsCommonMatchedWithSpecific` skip in `LookupImpl` + `FieldLookup` + `CheckLetFlag` safety net |
 | `check_types` | Stale CHIR `MemberVarInfo` for common matched VarDecl | §8 T2: `ShouldTranslateMember` exception for common-matched VAR_DECLs |
 | `use_platform_member_define_global_variable` | Stale varInfo + exportId (T2/T4 combo) | §8 T3: resolved by T2 + T4 infrastructure |
-| `var5`, `var11` | ExportId conflict (duplicate in CJO) | §8 T4: `doNotExport = true` during swap in `MergeCommonIntoSpecific` |
+| `var5`, `var11` | ExportId conflict (duplicate in CJO) | §8 T4: `IsCommonMatchedWithSpecific()` in serialization layer |
 | `var2`, `var23` | VarInitCheck guard | §8 T5: SPECIFIC guard (skip non-SPECIFIC deserialized constructors) |
 | `class_annotation` | Unaffected by second loop | None needed |
 
