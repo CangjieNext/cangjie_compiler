@@ -32185,7 +32185,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..7870f9c2f 100644
+index b391fe1ea..00437d1ed 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -32241,7 +32241,7 @@ index b391fe1ea..7870f9c2f 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.2.0-beta.02";
++    g_version_str += "\n  cangjie 1.2.0-beta.03";
    }
  
    return g_version_str.c_str();
@@ -59004,7 +59004,7 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..f238f0691
+index 000000000..e4a48b35e
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 @@ -0,0 +1,3422 @@
@@ -61286,7 +61286,7 @@ index 000000000..f238f0691
 +    }
 +    return true;
 +  }
-+  return true;
++  return false;
 +}
 +
 +class EscapeAnalysisImpl : public InstVisitor<EscapeAnalysisImpl>,
@@ -63701,7 +63701,7 @@ index b850591b4..da4c027b7 100644
        LLVM_DEBUG(dbgs() << "canCreateThunkFor: " << F->getName()
                          << " is too small to bother creating a thunk for\n");
 diff --git a/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp b/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
-index f1b6f2bb7..eb6a58c34 100644
+index f1b6f2bb7..99f9a0ffa 100644
 --- a/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
 +++ b/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
 @@ -17,6 +17,7 @@
@@ -63728,7 +63728,7 @@ index f1b6f2bb7..eb6a58c34 100644
 +    "enable-cj-generic-intrinsic-opt", cl::init(true), cl::Hidden,
 +    cl::desc("Enable cangjie generic intrinsics optimization"));
 +cl::opt<bool> EnableCJGCInstrTransform("enable-cj-gcinstr-transform",
-+                                       cl::Hidden, cl::init(true));
++                                       cl::Hidden, cl::init(false));
  static cl::opt<bool>
  UseGVNAfterVectorization("use-gvn-after-vectorization",
    cl::init(false), cl::Hidden,
