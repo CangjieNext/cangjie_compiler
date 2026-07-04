@@ -46,6 +46,8 @@ protected:
     virtual void GenerateArchiveTool(const std::vector<TempFileInfo>& objFiles);
     void HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Tool& tool);
     virtual void HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath);
+    std::vector<std::string> GetLibrarySearchPaths(
+        const std::string& cangjieLibPath = "") const override;
 
     virtual void AddCRuntimeLibraryPaths();
     // Gather library paths from LIBRARY_PATH and compiler guesses.
