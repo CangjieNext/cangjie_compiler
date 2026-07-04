@@ -272,6 +272,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckLTOStaticLibFormatOptions();
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
+    success = success && CheckLinkNameOptions();
     success = success && ReprocessObfuseOption();
     success = success && CheckCJMPOptions();
     RefactJobs();
@@ -601,6 +602,31 @@ bool GlobalOptions::CheckOutputModeOptions()
     if (!compilePackage && srcFiles.empty() && !inputObjs.empty() && !experimentalMode) {
         DiagnosticEngine diag;
         diag.DiagnoseRefactor(DiagKindRefactor::driver_require_experimental, DEFAULT_POSITION);
+        return false;
+    }
+
+    return true;
+}
+
+bool GlobalOptions::CheckLinkNameOptions() const
+{
+    if (linkNameLibs.empty()) {
+        return true;
+    }
+    if (outputMode != OutputMode::STATIC_LIB && outputMode != OutputMode::OBJ) {
+        Errorf("'--link-name' can only be used with '--output-type=staticlib' or '--output-type=obj'.\n");
+        return false;
+    }
+    // The dependency is recorded per object format: an ELF '.deplibs' section from
+    // 'llvm.dependent-libraries', or a '/DEFAULTLIB:' directive in the COFF '.drectve' section from
+    // 'llvm.linker.options'. Apple targets have no working channel: the Mach-O lowering emits
+    // '__TEXT,__linker_options', but LLD's Mach-O port never reads that section from object files,
+    // so accepting the option there would silently drop the dependency. Reject it outright rather
+    // than mislead the user into thinking the library will be linked automatically.
+    if (!target.IsELF() && !target.IsMinGW()) {
+        Errorf("'--link-name' is only supported for ELF and MinGW targets, but '%s' is neither. "
+               "The Mach-O port of LLD does not support automatic linking from object files.\n",
+            target.ToTripleString().c_str());
         return false;
     }
 

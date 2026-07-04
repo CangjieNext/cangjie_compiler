@@ -397,6 +397,44 @@ void GenSubCHIRPackage(CGModule& cgMod)
     GenerateStaticGIs(cgMod);
     DumpIRIfNeeded(cgMod, "GenStaticGIs", subDirNum);
     CreateLLVMUsedGVs(cgMod);
+    // Write the automatic-linking dependency metadata for --link-name. Each object format has its
+    // own channel:
+    //   ELF  -> llvm.dependent-libraries: the ELF lowering emits a .deplibs section, which
+    //           lld-ELF resolves as if the libraries were given with -l on the command line.
+    //   COFF -> llvm.linker.options: the COFF lowering emits a .drectve section. lld/COFF accepts
+    //           /DEFAULTLIB: there (a plain -l is rejected inside .drectve) and pulls the library
+    //           in when symbols from it are needed.
+    //   MachO -> unsupported: the Mach-O lowering would emit __TEXT,__linker_options, but LLD's
+    //            Mach-O port never reads that section (it only honours LC_LINKER_OPTION load
+    //            commands, which exist in the final product, not in object files). CheckLinkNameOptions()
+    //            rejects --link-name on Apple targets for this reason, so nothing is emitted here.
+    // --disable-auto-link is handled per target: on ELF the metadata is kept and LLD receives
+    // --no-dependent-libraries; on COFF there is no linker switch for .drectve processing, so the
+    // metadata is simply not emitted.
+    // This runs per sub-module: when a package is split for parallel codegen, every resulting object
+    // deliberately carries the full dependency list, so a dependency cannot be lost when the linker
+    // pulls only a subset of the objects out of the archive. LLD de-duplicates the entries.
+    const auto& options = cgMod.GetCGContext().GetCompileOptions();
+    const auto& linkNameLibs = options.GetLinkNameLibs();
+    if (linkNameLibs.empty()) {
+        // fall through
+    } else if (options.target.IsELF()) {
+        auto* module = cgMod.GetLLVMModule();
+        auto& ctx = cgMod.GetLLVMContext();
+        auto* namedMD = module->getOrInsertNamedMetadata("llvm.dependent-libraries");
+        for (const auto& libName : linkNameLibs) {
+            llvm::Metadata* mdOps[] = {llvm::MDString::get(ctx, libName)};
+            namedMD->addOperand(llvm::MDTuple::get(ctx, mdOps));
+        }
+    } else if (options.target.IsMinGW() && !options.GetDisableAutoLink()) {
+        auto* module = cgMod.GetLLVMModule();
+        auto& ctx = cgMod.GetLLVMContext();
+        auto* namedMD = module->getOrInsertNamedMetadata("llvm.linker.options");
+        for (const auto& libName : linkNameLibs) {
+            llvm::Metadata* mdOps[] = {llvm::MDString::get(ctx, "/DEFAULTLIB:" + libName)};
+            namedMD->addOperand(llvm::MDTuple::get(ctx, mdOps));
+        }
+    }
     // Incremental compilation generates invalid IRs, which need to be deleted by EraseUselessGVAndFunctions.
     // Therefore, the verification is performed after incremental compilation.
     auto success = cgMod.Verify();

@@ -29,6 +29,11 @@ public:
 protected:
     void AddCRuntimeLibraryPaths() override;
     bool PrepareDependencyPath() override;
+    // PrepareDependencyPath() always resolves 'ldPath' to the bundled LLD.
+    bool IsUsingLLDLinker() const override
+    {
+        return true;
+    }
 
     bool GenerateLinking(const std::vector<TempFileInfo>& objFiles) override;
     void GenerateLinkingTool(const std::vector<TempFileInfo>& objFiles, const std::string& gccLibPath,
