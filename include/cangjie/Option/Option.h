@@ -206,6 +206,20 @@ struct Info {
         return vendor == Vendor::APPLE && (os == OSType::DARWIN || os == OSType::IOS);
     }
 
+    /**
+     * @brief Determine if the target uses the ELF object file format.
+     *
+     * Windows targets produce COFF and Apple targets produce Mach-O; every other supported OS
+     * (Linux, including the OHOS and Android environments) produces ELF. Features that rely on
+     * ELF-specific sections, such as '.deplibs' emitted for '--link-name', must check this.
+     *
+     * @return bool Return true if the target object file format is ELF.
+     */
+    inline bool IsELF() const
+    {
+        return os == OSType::LINUX;
+    }
+
     inline bool IsArm32() const
     {
         return arch == ArchType::ARM32;
@@ -544,6 +558,9 @@ public:
     std::vector<std::tuple<std::string, uint64_t>> inputLinkOptionsOrder;
     // Mark the input link option and their input order.
     std::vector<std::tuple<std::string, uint64_t>> inputLinkOptionOrder;
+
+    std::vector<std::string> linkNameLibs; /**< Libraries declared via --link-name for automatic linking. */
+    bool disableAutoLink = false; /**< Disable automatic resolution of .deplibs sections at link stage. */
 
     /**
      * @brief Replaces an old input filename with a new one in the list.
@@ -1183,6 +1200,16 @@ public:
         return jobs.value_or(std::thread::hardware_concurrency());
     }
 
+    const std::vector<std::string>& GetLinkNameLibs() const
+    {
+        return linkNameLibs;
+    }
+
+    bool GetDisableAutoLink() const
+    {
+        return disableAutoLink;
+    }
+
     enum class CandidateEmitCHIRPhase : uint8_t {
         NA,
         RAW,
@@ -1233,6 +1260,7 @@ private:
     bool CheckSanitizerOptions() const;
     bool CheckLtoOptions() const;
     bool CheckOutputModeOptions();
+    bool CheckLinkNameOptions() const;
     bool CheckCompileAsExeOptions() const;
     bool CheckLTOPkgVisibilityOptions() const;
     bool CheckLTOStaticLibFormatOptions() const;

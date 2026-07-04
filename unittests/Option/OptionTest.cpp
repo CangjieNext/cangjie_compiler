@@ -152,6 +152,116 @@ TEST_F(OptionTest, EmptyModuleNameTest)
     EXPECT_FALSE(succ);
 }
 
+TEST_F(OptionTest, LinkNameOnStaticLibTest)
+{
+    std::vector<std::string> argStrs = {
+        "cjc", "--no-prelude", "--target=x86_64-unknown-linux-gnu", "--output-type", "staticlib",
+        "--link-name", "foo", "--link-name", "bar", srcFile};
+    ArgList argList;
+    EXPECT_TRUE(optTbl->ParseArgs(argStrs, argList));
+
+    EXPECT_TRUE(gblOpts->ParseFromArgs(argList));
+    std::vector<std::string> expected = {"foo", "bar"};
+    EXPECT_EQ(gblOpts->GetLinkNameLibs(), expected);
+}
+
+TEST_F(OptionTest, LinkNameDeduplicatesTest)
+{
+    std::vector<std::string> argStrs = {
+        "cjc", "--no-prelude", "--target=x86_64-unknown-linux-gnu", "--output-type", "obj",
+        "--link-name", "foo", "--link-name", "foo", srcFile};
+    ArgList argList;
+    EXPECT_TRUE(optTbl->ParseArgs(argStrs, argList));
+
+    EXPECT_TRUE(gblOpts->ParseFromArgs(argList));
+    std::vector<std::string> expected = {"foo"};
+    EXPECT_EQ(gblOpts->GetLinkNameLibs(), expected);
+}
+
+TEST_F(OptionTest, LinkNameRejectedOnExecutableTest)
+{
+    // '--link-name' records a dependency inside an intermediate artifact, so it is meaningless
+    // when the final product is already being linked.
+    std::vector<std::string> argStrs = {
+        "cjc", "--no-prelude", "--target=x86_64-unknown-linux-gnu", "--link-name", "foo", srcFile};
+    ArgList argList;
+    EXPECT_TRUE(optTbl->ParseArgs(argStrs, argList));
+
+    EXPECT_FALSE(gblOpts->ParseFromArgs(argList));
+}
+
+TEST_F(OptionTest, LinkNameOnMinGWTargetTest)
+{
+    // MinGW records the dependency as a '/DEFAULTLIB:' directive in the COFF '.drectve' section
+    // (written from 'llvm.linker.options'), which lld/COFF resolves when linking the consumer.
+    std::vector<std::string> argStrs = {
+        "cjc", "--no-prelude", "--target=x86_64-windows-gnu", "--output-type", "staticlib",
+        "--link-name", "foo", srcFile};
+    ArgList argList;
+    EXPECT_TRUE(optTbl->ParseArgs(argStrs, argList));
+
+    EXPECT_TRUE(gblOpts->ParseFromArgs(argList));
+    std::vector<std::string> expected = {"foo"};
+    EXPECT_EQ(gblOpts->GetLinkNameLibs(), expected);
+}
+
+TEST_F(OptionTest, LinkNameRejectedOnAppleTargetTest)
+{
+    // The Mach-O lowering would emit '__TEXT,__linker_options', but LLD's Mach-O port never reads
+    // that section from object files, so the option is rejected instead of silently ignored.
+    std::vector<std::string> argStrs = {
+        "cjc", "--no-prelude", "--target=x86_64-apple-darwin", "--output-type", "staticlib",
+        "--link-name", "foo", srcFile};
+    ArgList argList;
+    EXPECT_TRUE(optTbl->ParseArgs(argStrs, argList));
+
+    EXPECT_FALSE(gblOpts->ParseFromArgs(argList));
+}
+
+TEST_F(OptionTest, LinkNameRejectsEmptyValueTest)
+{
+    std::vector<std::string> argStrs = {
+        "cjc", "--no-prelude", "--target=x86_64-unknown-linux-gnu", "--output-type", "staticlib",
+        "--link-name", "", srcFile};
+    ArgList argList;
+    EXPECT_TRUE(optTbl->ParseArgs(argStrs, argList));
+
+    EXPECT_FALSE(gblOpts->ParseFromArgs(argList));
+}
+
+TEST_F(OptionTest, DisableAutoLinkTest)
+{
+    std::vector<std::string> argStrs = {"cjc", "--no-prelude", "--disable-auto-link", srcFile};
+    ArgList argList;
+    EXPECT_TRUE(optTbl->ParseArgs(argStrs, argList));
+
+    EXPECT_TRUE(gblOpts->ParseFromArgs(argList));
+    EXPECT_TRUE(gblOpts->GetDisableAutoLink());
+}
+
+TEST(TripleIsELFTest, ObjectFormatByOS)
+{
+    Triple::Info linuxGnu = {
+        Triple::ArchType::X86_64, Triple::Vendor::UNKNOWN, Triple::OSType::LINUX, Triple::Environment::GNU};
+    Triple::Info linuxOhos = {
+        Triple::ArchType::AARCH64, Triple::Vendor::UNKNOWN, Triple::OSType::LINUX, Triple::Environment::OHOS};
+    Triple::Info linuxAndroid = {
+        Triple::ArchType::AARCH64, Triple::Vendor::UNKNOWN, Triple::OSType::LINUX, Triple::Environment::ANDROID};
+    Triple::Info windows = {
+        Triple::ArchType::X86_64, Triple::Vendor::PC, Triple::OSType::WINDOWS, Triple::Environment::GNU};
+    Triple::Info darwin = {
+        Triple::ArchType::AARCH64, Triple::Vendor::APPLE, Triple::OSType::DARWIN, Triple::Environment::NOT_AVAILABLE};
+    Triple::Info ios = {
+        Triple::ArchType::AARCH64, Triple::Vendor::APPLE, Triple::OSType::IOS, Triple::Environment::NOT_AVAILABLE};
+
+    EXPECT_TRUE(linuxGnu.IsELF());
+    EXPECT_TRUE(linuxOhos.IsELF());
+    EXPECT_TRUE(linuxAndroid.IsELF());
+    EXPECT_FALSE(windows.IsELF());
+    EXPECT_FALSE(darwin.IsELF());
+    EXPECT_FALSE(ios.IsELF());
+}
+
 TEST(IsPossibleMatchingTripleNameTest, VaildTripleName1)
 {
     Triple::Info t = {

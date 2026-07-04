@@ -144,6 +144,20 @@ protected:
     // Generate the link options of built-in libraries.
     void GenerateLinkOptionsOfBuiltinLibs(Tool& tool) const;
 
+    // Whether the linker this toolchain drives is LLD. Toolchains that always pick the bundled
+    // LLD override this to return true; Gnu decides based on the same condition it uses when
+    // resolving 'ldPath' in PrepareDependencyPath().
+    virtual bool IsUsingLLDLinker() const
+    {
+        return false;
+    }
+
+    // '--no-dependent-libraries' is an ELF-only LLD option: neither the Mach-O nor the MinGW/COFF
+    // port of LLD accepts it, and GNU ld does not know it either. Appending it unconditionally
+    // turns '--disable-auto-link' into a hard link failure on those targets, so gate it on both
+    // the object format and the actual linker rather than on the linker's file name.
+    void AppendDisableAutoLinkOption(Tool& tool) const;
+
     // Generate the static link options of built-in libraries except 'std-ast'.
     // The 'std-ast' library is dynamically linked by default.
     virtual void GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const;

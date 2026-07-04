@@ -40,6 +40,12 @@ protected:
     virtual std::pair<std::string, std::string> GetGccCrtFilePair() const;
 
     bool PrepareDependencyPath() override;
+    // Keep in sync with PrepareDependencyPath(), which only resolves 'ldPath' to the bundled LLD
+    // under these two conditions and otherwise falls back to the system 'ld'.
+    bool IsUsingLLDLinker() const override
+    {
+        return driverOptions.IsLTOEnabled() || driverOptions.EnableHwAsan();
+    }
     bool ProcessGeneration(std::vector<TempFileInfo>& objFiles) override;
     bool PerformPartialLinkAndContinue(std::vector<TempFileInfo>& objFiles);
     virtual std::string GenerateGCCLibPath(const std::pair<std::string, std::string>& gccCrtFilePair) const;
