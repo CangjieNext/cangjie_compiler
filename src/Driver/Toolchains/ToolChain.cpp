@@ -16,7 +16,7 @@
 
 namespace {
 const std::string LINK_PREFIX = "-l:";
-const std::string STATIC_LIB_EXTEBSION = ".a";
+const std::string STATIC_LIB_EXTENSION = ".a";
 
 const std::map<std::string, std::string> LLVM_LTO_CSTD_FFI_OPTION_MAP = {
 #define CJNATIVE_LTO_CSTD_FFI_OPTIONS(STATILIB, FFILIB) {STATILIB, FFILIB},
@@ -42,6 +42,18 @@ std::optional<std::tuple<std::string, uint64_t>> GetElementFromOrderVector(
 
 using namespace Cangjie;
 
+void ToolChain::AppendDisableAutoLinkOption(Tool& tool) const
+{
+    if (!driverOptions.GetDisableAutoLink()) {
+        return;
+    }
+    // Empty means no switch is needed: in practice Gnu falling back to the system 'ld', which never
+    // resolves '.deplibs'. Targets that cannot honour the option are rejected by validation.
+    if (auto arg = GetDisableAutoLinkArg(); !arg.empty()) {
+        tool.AppendArg(arg);
+    }
+}
+
 void ToolChain::GenerateLinkOptionsOfBuiltinLibs(Tool& tool) const
 {
     bool notOutputDylib = driverOptions.outputMode != GlobalOptions::OutputMode::SHARED_LIB;
@@ -65,7 +77,7 @@ void ToolChain::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
     const std::function<void(const std::unordered_set<std::string>&)> getDyDependencies =
         [this, &dyDependencies](const std::unordered_set<std::string>& dependencies) {
             for (auto& cjoFileName : dependencies) {
-                auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION);
+                auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTENSION);
                 if (ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.find(staticLib) !=
                     ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.end()) {
                     dyDependencies.emplace(staticLib);
@@ -81,7 +93,7 @@ void ToolChain::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
     const std::function<void(std::string)> appendStaticLibsToTool =
         [this, &dynamicLibraries, &staticLibraries, &ltoBuiltInDependencies, &dyDependencies]
             (const std::string& cjoFileName) {
-            auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION);
+            auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTENSION);
             if (dyDependencies.find(staticLib) != dyDependencies.end() && !driverOptions.linkStatic) {
                 dynamicLibraries.emplace(LINK_PREFIX +
                     FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, GetSharedLibraryExtension()));

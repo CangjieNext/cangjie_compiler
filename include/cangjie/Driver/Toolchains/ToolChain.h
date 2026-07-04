@@ -144,6 +144,22 @@ protected:
     // Generate the link options of built-in libraries.
     void GenerateLinkOptionsOfBuiltinLibs(Tool& tool) const;
 
+    // Whether the linker this toolchain drives is LLD; Gnu mirrors PrepareDependencyPath()'s choice.
+    virtual bool IsUsingLLDLinker() const
+    {
+        return false;
+    }
+
+    // The argument that makes this toolchain's linker ignore the dependencies recorded in its input
+    // files, for '--disable-auto-link'. Empty means this link needs no argument.
+    virtual std::string GetDisableAutoLinkArg() const
+    {
+        return {};
+    }
+
+    // Append GetDisableAutoLinkArg() to the link command when '--disable-auto-link' was given.
+    void AppendDisableAutoLinkOption(Tool& tool) const;
+
     // Generate the static link options of built-in libraries except 'std-ast'.
     // The 'std-ast' library is dynamically linked by default.
     virtual void GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const;

@@ -348,6 +348,48 @@ void EmitCJSDKVersion(const CGModule& cgMod)
     cgMod.GetCGContext().AddLLVMUsedVars(cjSdkVersion->getName().str());
 }
 
+// Record the '--link-name' libraries in the produced artifact. Each object format has its own
+// channel, all honoured by LLD for object and bitcode (LTO) inputs:
+//   ELF    -> 'llvm.dependent-libraries' -> '.deplibs'.
+//   COFF   -> 'llvm.linker.options' -> '.drectve', which takes '/DEFAULTLIB:' and rejects '-l'.
+//   Mach-O -> 'llvm.linker.options' -> 'LC_LINKER_OPTION', which takes only '-l<name>'.
+// Runs per sub-module so every object carries the full list; LLD de-duplicates.
+void EmitAutoLinkMetadata(CGModule& cgMod)
+{
+    const auto& options = cgMod.GetCGContext().GetCompileOptions();
+    const auto& linkNameLibs = options.GetLinkNameLibs();
+    if (linkNameLibs.empty()) {
+        return;
+    }
+
+    std::string metadataName;
+    std::string entryPrefix;
+    switch (options.target.GetObjectFormat()) {
+        case Triple::ObjectFormat::ELF:
+            metadataName = "llvm.dependent-libraries";
+            break;
+        case Triple::ObjectFormat::COFF:
+            metadataName = "llvm.linker.options";
+            entryPrefix = "/DEFAULTLIB:";
+            break;
+        case Triple::ObjectFormat::MACH_O:
+            metadataName = "llvm.linker.options";
+            entryPrefix = "-l";
+            break;
+        default:
+            // Rejected earlier by GlobalOptions::CheckAutoLinkOptions().
+            return;
+    }
+
+    auto* module = cgMod.GetLLVMModule();
+    auto& ctx = cgMod.GetLLVMContext();
+    auto* namedMD = module->getOrInsertNamedMetadata(metadataName);
+    for (const auto& libName : linkNameLibs) {
+        llvm::Metadata* mdOps[] = {llvm::MDString::get(ctx, entryPrefix + libName)};
+        namedMD->addOperand(llvm::MDTuple::get(ctx, mdOps));
+    }
+}
+
 void GenSubCHIRPackage(CGModule& cgMod)
 {
     auto& subCHIRPkg = cgMod.GetCGContext().GetSubCHIRPackage();
@@ -397,6 +439,7 @@ void GenSubCHIRPackage(CGModule& cgMod)
     GenerateStaticGIs(cgMod);
     DumpIRIfNeeded(cgMod, "GenStaticGIs", subDirNum);
     CreateLLVMUsedGVs(cgMod);
+    EmitAutoLinkMetadata(cgMod);
     // Incremental compilation generates invalid IRs, which need to be deleted by EraseUselessGVAndFunctions.
     // Therefore, the verification is performed after incremental compilation.
     auto success = cgMod.Verify();
