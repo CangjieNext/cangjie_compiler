@@ -272,6 +272,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckLTOStaticLibFormatOptions();
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
+    success = success && CheckAutoLinkOptions();
     success = success && ReprocessObfuseOption();
     success = success && CheckCJMPOptions();
     RefactJobs();
@@ -602,6 +603,50 @@ bool GlobalOptions::CheckOutputModeOptions()
         DiagnosticEngine diag;
         diag.DiagnoseRefactor(DiagKindRefactor::driver_require_experimental, DEFAULT_POSITION);
         return false;
+    }
+
+    return true;
+}
+
+bool GlobalOptions::CheckAutoLinkOptions() const
+{
+    // Producer: every format has a channel ('.deplibs' on ELF, '/DEFAULTLIB:' on COFF,
+    // 'LC_LINKER_OPTION' on Mach-O), so only a target with no object writer is rejected.
+    if (!linkNameLibs.empty()) {
+        if (outputMode != OutputMode::STATIC_LIB && outputMode != OutputMode::OBJ) {
+            Errorf("'--link-name' can only be used with '--output-type=staticlib' or '--output-type=obj'.\n");
+            return false;
+        }
+        if (target.GetObjectFormat() == Triple::ObjectFormat::UNKNOWN) {
+            Errorf("'--link-name' is not supported for target '%s': its object file format is not known, "
+                   "so there is no channel to record the dependency in.\n",
+                target.ToTripleString().c_str());
+            return false;
+        }
+    }
+
+    // Consumer: suppression needs a linker switch, so only the formats whose linker has one are
+    // accepted. Which switch is a toolchain question, see ToolChain::GetDisableAutoLinkArg().
+    if (disableAutoLink) {
+        switch (target.GetObjectFormat()) {
+            case Triple::ObjectFormat::ELF:
+                // '--no-dependent-libraries' in lld's ELF port.
+                break;
+            case Triple::ObjectFormat::COFF:
+                // '/nodefaultlib' in lld's COFF port, reached through the MinGW driver's '-Xlink='.
+                break;
+            case Triple::ObjectFormat::MACH_O:
+                // ld64's '-ignore_auto_link' is declared in lld's option table but never implemented.
+                Errorf("'--disable-auto-link' is not supported for target '%s': the Mach-O port of LLD cannot be "
+                       "told to ignore the 'LC_LINKER_OPTION' dependencies recorded in its input files.\n",
+                    target.ToTripleString().c_str());
+                return false;
+            default:
+                Errorf("'--disable-auto-link' is not supported for target '%s': its object file format is not "
+                       "known, so there is no way to tell its linker to ignore recorded dependencies.\n",
+                    target.ToTripleString().c_str());
+                return false;
+        }
     }
 
     return true;
@@ -1675,6 +1720,9 @@ std::vector<std::string> GlobalOptions::ToSerialized() const
     result.emplace_back(SanitizerTypeToSerializedString());
     result.emplace_back(BoolToSerializedString(experimentalMode));
     result.emplace_back(OverflowStrategyToSerializedString());
+    // '--link-name' changes the generated artifact: without it here, a NO_CHANGE build reuses
+    // cached objects still carrying the previous run's libraries.
+    result.emplace_back(VectorStrToSerializedString(linkNameLibs, ":"));
     (void)result.emplace_back(BoolToSerializedString(interpreter));
     (void)result.emplace_back(VectorStrToSerializedString(interpreterSearchPaths, ":"));
     (void)result.emplace_back(VectorStrToSerializedString(interpLoadLib, ":"));

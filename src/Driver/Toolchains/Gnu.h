@@ -40,6 +40,20 @@ protected:
     virtual std::pair<std::string, std::string> GetGccCrtFilePair() const;
 
     bool PrepareDependencyPath() override;
+    // Keep in sync with PrepareDependencyPath(), which uses the same two conditions for 'ldPath'.
+    bool IsUsingLLDLinker() const override
+    {
+        return driverOptions.IsLTOEnabled() || driverOptions.EnableHwAsan();
+    }
+    // lld resolves '.deplibs' (bitcode inputs included) unless given this. The system 'ld' never
+    // resolves it, and would reject the ELF-only option.
+    std::string GetDisableAutoLinkArg() const override
+    {
+        if (!IsUsingLLDLinker()) {
+            return {};
+        }
+        return "--no-dependent-libraries";
+    }
     bool ProcessGeneration(std::vector<TempFileInfo>& objFiles) override;
     bool PerformPartialLinkAndContinue(std::vector<TempFileInfo>& objFiles);
     virtual std::string GenerateGCCLibPath(const std::pair<std::string, std::string>& gccCrtFilePair) const;
