@@ -422,7 +422,7 @@ bool TypeChecker::TypeCheckerImpl::ChkEnumPattern(ASTContext& ctx, ModalTy targe
     }
     if (mayMatch) {
         if (auto enumTy = DynamicCast<EnumTy>(p.constructor->DataTy());
-            enumTy && typeManager.IsSameDataType(p.constructor->GetTy(), target)) {
+            enumTy && typeManager.IsSubtype(p.constructor->GetTy(), target)) {
             p.SetTy(target);
             return true;
         } else if (auto funcTy = DynamicCast<FuncTy>(p.constructor->DataTy()); funcTy) {
@@ -457,7 +457,7 @@ bool TypeChecker::TypeCheckerImpl::IsFuncTyEnumPatternMatched(
             return false;
         }
     }
-    if (!typeManager.IsSameDataType(funcTy.retTy, target)) {
+    if (!typeManager.IsSubtype(funcTy.retTy, target)) {
         diag.Diagnose(p, DiagKind::sema_pattern_not_match, "enum");
         return false;
     }

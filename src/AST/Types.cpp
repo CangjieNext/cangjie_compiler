@@ -192,10 +192,7 @@ bool ModalTy::IsCorrect() const
 
 bool ModalTy::operator==(const ModalTy& other) const
 {
-    if (!dataTy || !other.dataTy) {
-        return this == &other;
-    }
-    return *dataTy == *other.dataTy && modal == other.modal;
+    return dataTy == other.dataTy && modal == other.modal;
 }
 
 bool ModalTy::operator!=(const ModalTy& other) const
