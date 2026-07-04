@@ -272,6 +272,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckLTOStaticLibFormatOptions();
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
+    success = success && CheckLinkNameOptions();
     success = success && ReprocessObfuseOption();
     success = success && CheckCJMPOptions();
     RefactJobs();
@@ -601,6 +602,16 @@ bool GlobalOptions::CheckOutputModeOptions()
     if (!compilePackage && srcFiles.empty() && !inputObjs.empty() && !experimentalMode) {
         DiagnosticEngine diag;
         diag.DiagnoseRefactor(DiagKindRefactor::driver_require_experimental, DEFAULT_POSITION);
+        return false;
+    }
+
+    return true;
+}
+
+bool GlobalOptions::CheckLinkNameOptions() const
+{
+    if (!linkNameLibs.empty() && outputMode != OutputMode::STATIC_LIB && outputMode != OutputMode::OBJ) {
+        Errorf("'--link-name' can only be used with '--output-type=staticlib' or '--output-type=obj'.\n");
         return false;
     }
 

@@ -540,6 +540,9 @@ public:
     std::vector<std::tuple<std::string, uint64_t>> inputFileOrder;
     // Mark the input library(-l) files and their input order.
     std::vector<std::tuple<std::string, uint64_t>> inputLibraryOrder;
+    std::vector<std::string> linkNameLibs; /**< Libraries declared via --link-name for automatic linking. */
+    bool disableAutoLink = false; /**< Disable automatic resolution of .deplibs sections at link stage. */
+
     // Mark the input link options and their input order.
     std::vector<std::tuple<std::string, uint64_t>> inputLinkOptionsOrder;
     // Mark the input link option and their input order.
@@ -1183,6 +1186,16 @@ public:
         return jobs.value_or(std::thread::hardware_concurrency());
     }
 
+    const std::vector<std::string>& GetLinkNameLibs() const
+    {
+        return linkNameLibs;
+    }
+
+    bool GetDisableAutoLink() const
+    {
+        return disableAutoLink;
+    }
+
     enum class CandidateEmitCHIRPhase : uint8_t {
         NA,
         RAW,
@@ -1233,6 +1246,7 @@ private:
     bool CheckSanitizerOptions() const;
     bool CheckLtoOptions() const;
     bool CheckOutputModeOptions();
+    bool CheckLinkNameOptions() const;
     bool CheckCompileAsExeOptions() const;
     bool CheckLTOPkgVisibilityOptions() const;
     bool CheckLTOStaticLibFormatOptions() const;

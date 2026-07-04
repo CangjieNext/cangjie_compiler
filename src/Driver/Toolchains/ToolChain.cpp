@@ -13,10 +13,12 @@
 #include "cangjie/Driver/Toolchains/ToolChain.h"
 #include "cangjie/Driver/Utils.h"
 #include "cangjie/Driver/TempFileManager.h"
+#include "cangjie/Utils/FileUtil.h"
+#include "cangjie/Basic/Print.h"
 
 namespace {
 const std::string LINK_PREFIX = "-l:";
-const std::string STATIC_LIB_EXTEBSION = ".a";
+const std::string STATIC_LIB_EXTENSION = ".a";
 
 const std::map<std::string, std::string> LLVM_LTO_CSTD_FFI_OPTION_MAP = {
 #define CJNATIVE_LTO_CSTD_FFI_OPTIONS(STATILIB, FFILIB) {STATILIB, FFILIB},
@@ -42,6 +44,58 @@ std::optional<std::tuple<std::string, uint64_t>> GetElementFromOrderVector(
 
 using namespace Cangjie;
 
+std::vector<std::string> ToolChain::GetLibrarySearchPaths(const std::string& cangjieLibPath) const
+{
+    (void)cangjieLibPath;
+    // Default: user -L paths + LIBRARY_PATH / CRT paths.
+    // Platforms override this to include built-in / runtime library directories.
+    std::vector<std::string> paths;
+    paths.insert(paths.end(), driverOptions.librarySearchPaths.begin(),
+                 driverOptions.librarySearchPaths.end());
+    auto libPaths = GetLibraryPaths();
+    paths.insert(paths.end(), libPaths.begin(), libPaths.end());
+    return paths;
+}
+
+void ToolChain::WarnUnresolvedLinkNameLibs()
+{
+    if (driverOptions.linkNameLibs.empty()) {
+        return;
+    }
+
+    auto searchPaths = GetLibrarySearchPaths();
+
+    // Mirror LLD's searchLibrary logic:
+    //   :name  → findFromSearchPaths (exact filename)
+    //   name   → searchLibraryBaseName (lib<name>.so, then lib<name>.a)
+    auto findFileInPaths = [&](const std::string& name) -> bool {
+        for (const auto& dir : searchPaths) {
+            if (FileUtil::FileExist(FileUtil::JoinPath(dir, name))) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    for (const auto& libName : driverOptions.linkNameLibs) {
+        if (libName.empty()) {
+            continue;
+        }
+        bool found = false;
+        if (libName[0] == ':') {
+            // -l:libfoo.a style: exact filename match
+            found = findFileInPaths(libName.substr(1));
+        } else {
+            // -l style: lib<name>.so first, then lib<name>.a
+            found = findFileInPaths("lib" + libName + ".so") ||
+                    findFileInPaths("lib" + libName + ".a");
+        }
+        if (!found) {
+            Warningf("library '%s' declared by '--link-name' not found in search paths", libName.c_str());
+        }
+    }
+}
+
 void ToolChain::GenerateLinkOptionsOfBuiltinLibs(Tool& tool) const
 {
     bool notOutputDylib = driverOptions.outputMode != GlobalOptions::OutputMode::SHARED_LIB;
@@ -65,7 +119,7 @@ void ToolChain::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
     const std::function<void(const std::unordered_set<std::string>&)> getDyDependencies =
         [this, &dyDependencies](const std::unordered_set<std::string>& dependencies) {
             for (auto& cjoFileName : dependencies) {
-                auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION);
+                auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTENSION);
                 if (ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.find(staticLib) !=
                     ALWAYS_DYNAMIC_LINK_STD_LIBRARIES.end()) {
                     dyDependencies.emplace(staticLib);
@@ -81,7 +135,7 @@ void ToolChain::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
     const std::function<void(std::string)> appendStaticLibsToTool =
         [this, &dynamicLibraries, &staticLibraries, &ltoBuiltInDependencies, &dyDependencies]
             (const std::string& cjoFileName) {
-            auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTEBSION);
+            auto staticLib = FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, STATIC_LIB_EXTENSION);
             if (dyDependencies.find(staticLib) != dyDependencies.end() && !driverOptions.linkStatic) {
                 dynamicLibraries.emplace(LINK_PREFIX +
                     FileUtil::ConvertFilenameToLibCangjieFormat(cjoFileName, GetSharedLibraryExtension()));

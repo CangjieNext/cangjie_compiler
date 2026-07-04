@@ -107,10 +107,16 @@ protected:
         libraryPaths.insert(libraryPaths.end(), paths.begin(), paths.end());
     }
 
-    std::vector<std::string> GetLibraryPaths()
+    std::vector<std::string> GetLibraryPaths() const
     {
         return libraryPaths;
     }
+
+    // Assemble the full ordered search paths that the linker will receive.
+    // Each platform overrides to include its own built-in / runtime library paths.
+    // If cangjieLibPath is non-empty, it is used directly; otherwise it is computed.
+    virtual std::vector<std::string> GetLibrarySearchPaths(
+        const std::string& cangjieLibPath = "") const;
 
     std::string GetDynamicLinkerPath(const Triple::Info& tripleInfo) const
     {
@@ -143,6 +149,10 @@ protected:
 
     // Generate the link options of built-in libraries.
     void GenerateLinkOptionsOfBuiltinLibs(Tool& tool) const;
+
+    // Warn if any --link-name libraries cannot be found in linker search paths.
+    // Uses GetLibrarySearchPaths() to get platform-specific search paths.
+    void WarnUnresolvedLinkNameLibs();
 
     // Generate the static link options of built-in libraries except 'std-ast'.
     // The 'std-ast' library is dynamically linked by default.

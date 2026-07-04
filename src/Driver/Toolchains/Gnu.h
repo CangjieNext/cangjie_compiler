@@ -53,6 +53,8 @@ protected:
     void HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, const std::string& gccLibPath, Tool& tool,
         const std::string& cjldScript);
     virtual void HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath);
+    std::vector<std::string> GetLibrarySearchPaths(
+        const std::string& cangjieLibPath = "") const override;
 
     void InitializeLibraryPaths() override;
     virtual void AddCRuntimeLibraryPaths();

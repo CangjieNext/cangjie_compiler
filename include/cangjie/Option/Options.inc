@@ -527,6 +527,13 @@ OPTION("--library-path", LIBRARY_PATH, SEPARATED, { BACKEND(ALL) },
 OPTION("--library", LIBRARY, SEPARATED, { BACKEND(ALL) },
     { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, "-l", {}, MULTIPLE_OCCURRENCE,
     "Link library")
+OPTION("--link-name", LINK_NAME, SEPARATED, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Add library dependency to static library for automatic linking at final link stage")
+OPTION("--disable-auto-link", DISABLE_AUTO_LINK, FLAG, { BACKEND(ALL) },
+    { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Disable automatic resolution of .deplibs sections (passes --no-dependent-libraries to linker)")
+
 OPTION("--set-runtime-rpath", USE_RUNTIME_RPATH, FLAG, { BACKEND(CJNATIVE) },
     { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Add cangjie runtime directory to rpath")
