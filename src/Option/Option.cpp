@@ -272,6 +272,7 @@ bool GlobalOptions::PerformPostActions()
     success = success && CheckLTOStaticLibFormatOptions();
     success = success && CheckPgoOptions();
     success = success && CheckOutputModeOptions();
+    success = success && CheckAutoLinkOptions();
     success = success && ReprocessObfuseOption();
     success = success && CheckCJMPOptions();
     RefactJobs();
@@ -602,6 +603,69 @@ bool GlobalOptions::CheckOutputModeOptions()
         DiagnosticEngine diag;
         diag.DiagnoseRefactor(DiagKindRefactor::driver_require_experimental, DEFAULT_POSITION);
         return false;
+    }
+
+    return true;
+}
+
+bool GlobalOptions::CheckAutoLinkOptions() const
+{
+    // The producer and the consumer halves of automatic linking are validated independently: a
+    // target may well be able to record a dependency without being able to ignore one, and
+    // rejecting the producer because the consumer is unsupported would deny users a feature that
+    // works perfectly for anyone linking the result with a linker that does honour it.
+
+    // Producer side. Every object format this compiler emits has a channel for the record, so the
+    // only target rejected here is one we have no object writer for:
+    //   ELF    -> a '.deplibs' section, lowered from the 'llvm.dependent-libraries' metadata.
+    //   COFF   -> a '/DEFAULTLIB:' directive in '.drectve', lowered from 'llvm.linker.options'.
+    //   Mach-O -> an 'LC_LINKER_OPTION' load command holding '-l<name>', also lowered from
+    //             'llvm.linker.options'. The load command is written into the object file itself,
+    //             and lld/MachO parses it back out when that object is linked.
+    if (!linkNameLibs.empty()) {
+        if (outputMode != OutputMode::STATIC_LIB && outputMode != OutputMode::OBJ) {
+            Errorf("'--link-name' can only be used with '--output-type=staticlib' or '--output-type=obj'.\n");
+            return false;
+        }
+        if (target.GetObjectFormat() == Triple::ObjectFormat::UNKNOWN) {
+            Errorf("'--link-name' is not supported for target '%s': its object file format is not known, "
+                   "so there is no channel to record the dependency in.\n",
+                target.ToTripleString().c_str());
+            return false;
+        }
+    }
+
+    // Consumer side. Suppression needs a linker switch, so the check is a whitelist of the formats
+    // whose linker actually has one -- anything else is rejected. Accepting an option we cannot
+    // carry out would leave the dependencies linked while reporting success, which is precisely the
+    // outcome '--disable-auto-link' exists to prevent, so silence is never the safe default here.
+    // Note that this is a property of the target alone, so it can be decided here; whether the
+    // *linker* can honour it is a toolchain question, answered by ToolChain::GetDisableAutoLinkArgs().
+    if (disableAutoLink) {
+        switch (target.GetObjectFormat()) {
+            case Triple::ObjectFormat::ELF:
+                // '--no-dependent-libraries' in lld's ELF port.
+                break;
+            case Triple::ObjectFormat::COFF:
+                // '/nodefaultlib' in lld's COFF port, reached through the MinGW driver's '-Xlink='.
+                break;
+            case Triple::ObjectFormat::MACH_O:
+                // ld64's '-ignore_auto_link' is declared in lld's option table but never implemented;
+                // it is parsed, reported as an unimplemented option, and then ignored.
+                Errorf("'--disable-auto-link' is not supported for target '%s': the Mach-O port of LLD cannot be "
+                       "told to ignore the 'LC_LINKER_OPTION' dependencies recorded in its input files.\n",
+                    target.ToTripleString().c_str());
+                return false;
+            default:
+                // Rejected for the same reason the producer side rejects it: with no known object
+                // format there is no known channel, hence no way to tell which switch -- if any --
+                // would suppress it. Treating an unknown target as if it were ELF would accept the
+                // option on the strength of a guess.
+                Errorf("'--disable-auto-link' is not supported for target '%s': its object file format is not "
+                       "known, so there is no way to tell its linker to ignore recorded dependencies.\n",
+                    target.ToTripleString().c_str());
+                return false;
+        }
     }
 
     return true;

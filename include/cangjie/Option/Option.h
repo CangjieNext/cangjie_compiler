@@ -131,6 +131,20 @@ enum class Environment : uint8_t {
     NOT_AVAILABLE,
 };
 
+/**
+ * Object file format produced for a target.
+ *
+ * Automatic linking records a library dependency inside the produced object, and every format
+ * carries it in its own channel, so both the code that writes the record and the code that asks
+ * the linker to ignore it must dispatch on the format rather than on the OS.
+ */
+enum class ObjectFormat : uint8_t {
+    ELF,
+    COFF,
+    MACH_O,
+    UNKNOWN,
+};
+
 inline static const std::string DEFALUT_ANDROID_API {"31"};
 inline static const std::string MIN_ANDROID_API {"26"};
 
@@ -204,6 +218,41 @@ struct Info {
     inline bool IsMacOS() const
     {
         return vendor == Vendor::APPLE && (os == OSType::DARWIN || os == OSType::IOS);
+    }
+
+    /**
+     * @brief Get the object file format produced for this target.
+     *
+     * MinGW targets produce COFF and Apple targets produce Mach-O; Linux produces ELF, and that
+     * covers the OHOS and Android targets too, because those are modelled as an 'Environment' on
+     * top of 'OSType::LINUX' rather than as an OS of their own. Anything else is a target this
+     * compiler has no object writer for, and is reported as UNKNOWN instead of being silently
+     * lumped in with ELF.
+     *
+     * @return ObjectFormat The target object file format.
+     */
+    inline ObjectFormat GetObjectFormat() const
+    {
+        if (os == OSType::LINUX) {
+            return ObjectFormat::ELF;
+        }
+        if (IsMinGW()) {
+            return ObjectFormat::COFF;
+        }
+        if (IsMacOS()) {
+            return ObjectFormat::MACH_O;
+        }
+        return ObjectFormat::UNKNOWN;
+    }
+
+    /**
+     * @brief Determine if the target uses the ELF object file format.
+     *
+     * @return bool Return true if the target object file format is ELF.
+     */
+    inline bool IsELF() const
+    {
+        return GetObjectFormat() == ObjectFormat::ELF;
     }
 
     inline bool IsArm32() const
@@ -544,6 +593,16 @@ public:
     std::vector<std::tuple<std::string, uint64_t>> inputLinkOptionsOrder;
     // Mark the input link option and their input order.
     std::vector<std::tuple<std::string, uint64_t>> inputLinkOptionOrder;
+
+    // Automatic linking has two independent halves, and they must not be confused with each other:
+    //   producer ('--link-name'): record a library dependency inside the artifact being produced
+    //                             (an object file, or the bitcode/objects inside a static library).
+    //   consumer ('--disable-auto-link'): when linking, ignore the dependencies recorded in the
+    //                             input artifacts.
+    // A compilation can be a producer, a consumer, or neither; the two options are orthogonal and
+    // neither one may be implemented in terms of the other.
+    std::vector<std::string> linkNameLibs; /**< Producer side: libraries to record in the produced artifact. */
+    bool disableAutoLink = false; /**< Consumer side: ignore dependencies recorded in link inputs. */
 
     /**
      * @brief Replaces an old input filename with a new one in the list.
@@ -1183,6 +1242,16 @@ public:
         return jobs.value_or(std::thread::hardware_concurrency());
     }
 
+    const std::vector<std::string>& GetLinkNameLibs() const
+    {
+        return linkNameLibs;
+    }
+
+    bool GetDisableAutoLink() const
+    {
+        return disableAutoLink;
+    }
+
     enum class CandidateEmitCHIRPhase : uint8_t {
         NA,
         RAW,
@@ -1233,6 +1302,7 @@ private:
     bool CheckSanitizerOptions() const;
     bool CheckLtoOptions() const;
     bool CheckOutputModeOptions();
+    bool CheckAutoLinkOptions() const;
     bool CheckCompileAsExeOptions() const;
     bool CheckLTOPkgVisibilityOptions() const;
     bool CheckLTOStaticLibFormatOptions() const;

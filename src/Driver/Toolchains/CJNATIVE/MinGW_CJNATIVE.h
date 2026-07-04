@@ -41,6 +41,31 @@ protected:
 
     void AddCRuntimeLibraryPaths() override;
     bool PrepareDependencyPath() override;
+    // PrepareDependencyPath() always resolves 'ldPath' to the bundled LLD. Note that this is LLD's
+    // MinGW driver, which rejects ELF-only options such as '--no-dependent-libraries'.
+    bool IsUsingLLDLinker() const override
+    {
+        return true;
+    }
+    // COFF: the dependency is a '/DEFAULTLIB:' directive in '.drectve', which lld's COFF port
+    // resolves in LinkerDriver::findLib(). '/nodefaultlib' in its argument-less form makes that
+    // function refuse every default library, which is the suppression we need.
+    //
+    // The MinGW driver has no option of its own for this, but it forwards the value of '-Xlink='
+    // verbatim to the COFF driver, so the switch is reachable from here.
+    //
+    // This override is not optional: Gnu, our base class, answers '--no-dependent-libraries', and
+    // because IsUsingLLDLinker() is true here we would inherit it and hand an ELF-only option to
+    // the MinGW driver, turning '--disable-auto-link' into a link failure.
+    //
+    // The granularity is coarser than the ELF switch: it also drops '/DEFAULTLIB:' directives
+    // contributed by third-party objects rather than only the ones '--link-name' recorded. That is
+    // the closest COFF equivalent available, and it is still the right kind of behaviour -- it acts
+    // at link time on the consumer, which is what '--disable-auto-link' is defined to do.
+    std::vector<std::string> GetDisableAutoLinkArgs() const override
+    {
+        return {"-Xlink=/nodefaultlib"};
+    }
 
     // Gather library paths from LIBRARY_PATH and compiler guesses.
     void AddSystemLibraryPaths() override;

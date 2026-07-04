@@ -144,6 +144,34 @@ protected:
     // Generate the link options of built-in libraries.
     void GenerateLinkOptionsOfBuiltinLibs(Tool& tool) const;
 
+    // Whether the linker this toolchain drives is LLD. Toolchains that always pick the bundled
+    // LLD override this to return true; Gnu decides based on the same condition it uses when
+    // resolving 'ldPath' in PrepareDependencyPath(). The linker cannot be identified by its file
+    // name, because the Gnu toolchain only resolves 'ldPath' to the bundled LLD under LTO or
+    // HWASan and otherwise uses whatever 'ld' the system provides.
+    virtual bool IsUsingLLDLinker() const
+    {
+        return false;
+    }
+
+    // Consumer side of automatic linking: the arguments that make this toolchain's linker ignore
+    // the library dependencies recorded in its input files, for '--disable-auto-link'.
+    //
+    // Every linker spells this differently ('--no-dependent-libraries' for lld's ELF port,
+    // '/nodefaultlib' for its COFF port) and some cannot do it at all, so the knowledge belongs to
+    // the toolchain that owns the linker rather than to the option layer. Returning the arguments,
+    // rather than a bool the caller would have to translate, keeps that spelling in one place.
+    //
+    // An empty result means no argument is needed for this link. That is not the same as "the
+    // option is unsupported": see AppendDisableAutoLinkOption().
+    virtual std::vector<std::string> GetDisableAutoLinkArgs() const
+    {
+        return {};
+    }
+
+    // Append GetDisableAutoLinkArgs() to the link command when '--disable-auto-link' was given.
+    void AppendDisableAutoLinkOption(Tool& tool) const;
+
     // Generate the static link options of built-in libraries except 'std-ast'.
     // The 'std-ast' library is dynamically linked by default.
     virtual void GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const;

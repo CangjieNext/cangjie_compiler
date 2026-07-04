@@ -308,6 +308,7 @@ void Gnu::HandleLLVMLinkOptions(
     // 3.1 Frontend output files (.o)
     // 3.2 Pass to the linker in the order of input files (.o, .a, -l)
     SortInputlibraryFileAndAppend(tool, objFiles);
+    AppendDisableAutoLinkOption(tool);
     // Note that the pgo options must be inserted after those from SortInputlibraryFileAndAppend
     tool.AppendArgIf(driverOptions.enablePgoInstrGen, "-u", "__llvm_profile_runtime");
     tool.AppendArgIf(driverOptions.enablePgoInstrGen || driverOptions.enableCoverage,
