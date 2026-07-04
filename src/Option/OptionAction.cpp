@@ -12,6 +12,7 @@
 
 #include "cangjie/Option/Option.h"
 
+#include <algorithm>
 #include <string>
 #include <unordered_map>
 
@@ -618,6 +619,19 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
     { Options::ID::DY_STD, OPTION_TRUE_ACTION(opts.linkStaticStd = false) },
     { Options::ID::STATIC_LIBS, OPTION_TRUE_ACTION((void)opts) },
     { Options::ID::DY_LIBS, OPTION_TRUE_ACTION((void)opts) },
+    { Options::ID::LINK_NAME, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        // The value goes verbatim into the dependency record, where an empty name is undiagnosable.
+        if (arg.value.empty()) {
+            Errorf("'--link-name' requires a non-empty library name.\n");
+            return false;
+        }
+        if (std::find(opts.linkNameLibs.begin(), opts.linkNameLibs.end(), arg.value) ==
+            opts.linkNameLibs.end()) {
+            opts.linkNameLibs.push_back(arg.value);
+        }
+        return true;
+    }},
+    { Options::ID::DISABLE_AUTO_LINK, OPTION_TRUE_ACTION(opts.disableAutoLink = true) },
     { Options::ID::LTO,  [](GlobalOptions& opts, const OptionArgInstance& arg) {
         if (LTO_MODE_MAP.count(arg.value) == 0) {
             return false;

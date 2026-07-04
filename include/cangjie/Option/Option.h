@@ -131,6 +131,17 @@ enum class Environment : uint8_t {
     NOT_AVAILABLE,
 };
 
+/**
+ * Object file format produced for a target. Automatic linking carries its dependency record in a
+ * different channel per format, so the related code dispatches on the format rather than the OS.
+ */
+enum class ObjectFormat : uint8_t {
+    ELF,
+    COFF,
+    MACH_O,
+    UNKNOWN,
+};
+
 inline static const std::string DEFALUT_ANDROID_API {"31"};
 inline static const std::string MIN_ANDROID_API {"26"};
 
@@ -204,6 +215,38 @@ struct Info {
     inline bool IsMacOS() const
     {
         return vendor == Vendor::APPLE && (os == OSType::DARWIN || os == OSType::IOS);
+    }
+
+    /**
+     * @brief Get the object file format produced for this target.
+     *
+     * OHOS and Android are modelled as an 'Environment' on 'OSType::LINUX', so they land on ELF.
+     * A target we have no object writer for is UNKNOWN rather than being lumped in with ELF.
+     *
+     * @return ObjectFormat The target object file format.
+     */
+    inline ObjectFormat GetObjectFormat() const
+    {
+        if (os == OSType::LINUX) {
+            return ObjectFormat::ELF;
+        }
+        if (IsMinGW()) {
+            return ObjectFormat::COFF;
+        }
+        if (IsMacOS()) {
+            return ObjectFormat::MACH_O;
+        }
+        return ObjectFormat::UNKNOWN;
+    }
+
+    /**
+     * @brief Determine if the target uses the ELF object file format.
+     *
+     * @return bool Return true if the target object file format is ELF.
+     */
+    inline bool IsELF() const
+    {
+        return GetObjectFormat() == ObjectFormat::ELF;
     }
 
     inline bool IsArm32() const
@@ -544,6 +587,11 @@ public:
     std::vector<std::tuple<std::string, uint64_t>> inputLinkOptionsOrder;
     // Mark the input link option and their input order.
     std::vector<std::tuple<std::string, uint64_t>> inputLinkOptionOrder;
+
+    // The two orthogonal halves of automatic linking: '--link-name' records a dependency in the
+    // artifact being produced, '--disable-auto-link' ignores the ones carried by the link inputs.
+    std::vector<std::string> linkNameLibs; /**< Producer side: libraries to record in the produced artifact. */
+    bool disableAutoLink = false; /**< Consumer side: ignore dependencies recorded in link inputs. */
 
     /**
      * @brief Replaces an old input filename with a new one in the list.
@@ -1183,6 +1231,16 @@ public:
         return jobs.value_or(std::thread::hardware_concurrency());
     }
 
+    const std::vector<std::string>& GetLinkNameLibs() const
+    {
+        return linkNameLibs;
+    }
+
+    bool GetDisableAutoLink() const
+    {
+        return disableAutoLink;
+    }
+
     enum class CandidateEmitCHIRPhase : uint8_t {
         NA,
         RAW,
@@ -1233,6 +1291,7 @@ private:
     bool CheckSanitizerOptions() const;
     bool CheckLtoOptions() const;
     bool CheckOutputModeOptions();
+    bool CheckAutoLinkOptions() const;
     bool CheckCompileAsExeOptions() const;
     bool CheckLTOPkgVisibilityOptions() const;
     bool CheckLTOStaticLibFormatOptions() const;

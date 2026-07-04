@@ -27,6 +27,15 @@ public:
     bool ProcessGeneration(std::vector<TempFileInfo>& objFiles) override;
 
     bool PrepareDependencyPath() override;
+    // PrepareDependencyPath() always resolves 'ldPath' to the bundled ld64.lld. Note that LLD's
+    // Mach-O driver rejects ELF-only options such as '--no-dependent-libraries'.
+    bool IsUsingLLDLinker() const override
+    {
+        return true;
+    }
+    // GetDisableAutoLinkArgs() is deliberately not overridden: lld's Mach-O port has no working way
+    // to ignore the 'LC_LINKER_OPTION' load commands of its inputs ('-ignore_auto_link' is declared
+    // but never implemented), so CheckAutoLinkOptions() rejects '--disable-auto-link' here.
 
     void InitializeLibraryPaths() override;
 

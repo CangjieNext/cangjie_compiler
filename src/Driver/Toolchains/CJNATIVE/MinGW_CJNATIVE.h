@@ -41,6 +41,22 @@ protected:
 
     void AddCRuntimeLibraryPaths() override;
     bool PrepareDependencyPath() override;
+    // PrepareDependencyPath() always resolves 'ldPath' to the bundled LLD. Note that this is LLD's
+    // MinGW driver, which rejects ELF-only options such as '--no-dependent-libraries'.
+    bool IsUsingLLDLinker() const override
+    {
+        return true;
+    }
+    // COFF: the dependency is a '/DEFAULTLIB:' directive in '.drectve', resolved by lld's COFF port
+    // in LinkerDriver::findLib(); argument-less '/nodefaultlib' makes it refuse every default
+    // library. The MinGW driver has no option of its own but forwards '-Xlink=' verbatim to the
+    // COFF driver. Overriding is required: Gnu would otherwise answer the ELF-only
+    // '--no-dependent-libraries' and turn the option into a link failure. Coarser than the ELF
+    // switch -- it also drops directives contributed by third-party objects.
+    std::vector<std::string> GetDisableAutoLinkArgs() const override
+    {
+        return {"-Xlink=/nodefaultlib"};
+    }
 
     // Gather library paths from LIBRARY_PATH and compiler guesses.
     void AddSystemLibraryPaths() override;

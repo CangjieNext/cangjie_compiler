@@ -527,6 +527,14 @@ OPTION("--library-path", LIBRARY_PATH, SEPARATED, { BACKEND(ALL) },
 OPTION("--library", LIBRARY, SEPARATED, { BACKEND(ALL) },
     { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, "-l", {}, MULTIPLE_OCCURRENCE,
     "Link library")
+// Producer side; GROUP(GLOBAL) because the record is written during codegen, which cjc-frontend runs too.
+OPTION("--link-name", LINK_NAME, SEPARATED, { BACKEND(ALL) },
+    { GROUP(GLOBAL) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "Record a library dependency in the produced object file or static library for automatic linking")
+// Consumer side; GROUP(DRIVER) because it only alters the link command line.
+OPTION("--disable-auto-link", DISABLE_AUTO_LINK, FLAG, { BACKEND(ALL) },
+    { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
+    "When linking, ignore the library dependencies recorded in the input files")
 OPTION("--set-runtime-rpath", USE_RUNTIME_RPATH, FLAG, { BACKEND(CJNATIVE) },
     { GROUP(DRIVER) COMMA GROUP(STABLE) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
     "Add cangjie runtime directory to rpath")
