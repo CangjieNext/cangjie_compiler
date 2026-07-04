@@ -41,6 +41,12 @@ protected:
 
     void AddCRuntimeLibraryPaths() override;
     bool PrepareDependencyPath() override;
+    // PrepareDependencyPath() always resolves 'ldPath' to the bundled LLD. Note that this is LLD's
+    // MinGW driver, which rejects ELF-only options such as '--no-dependent-libraries'.
+    bool IsUsingLLDLinker() const override
+    {
+        return true;
+    }
 
     // Gather library paths from LIBRARY_PATH and compiler guesses.
     void AddSystemLibraryPaths() override;

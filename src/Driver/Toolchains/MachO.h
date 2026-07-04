@@ -27,6 +27,12 @@ public:
     bool ProcessGeneration(std::vector<TempFileInfo>& objFiles) override;
 
     bool PrepareDependencyPath() override;
+    // PrepareDependencyPath() always resolves 'ldPath' to the bundled ld64.lld. Note that LLD's
+    // Mach-O driver rejects ELF-only options such as '--no-dependent-libraries'.
+    bool IsUsingLLDLinker() const override
+    {
+        return true;
+    }
 
     void InitializeLibraryPaths() override;
 
