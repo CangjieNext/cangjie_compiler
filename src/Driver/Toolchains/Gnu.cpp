@@ -307,6 +307,17 @@ void Gnu::HandleLLVMLinkOptions(
     // 3.1 Frontend output files (.o)
     // 3.2 Pass to the linker in the order of input files (.o, .a, -l)
     SortInputlibraryFileAndAppend(tool, objFiles);
+    // Warn when --link-name libraries are not found in linker search paths.
+    WarnUnresolvedLinkNameLibs();
+    // Pass --no-dependent-libraries to linker when --disable-auto-link is set.
+    // Only meaningful for LLD; system ld ignores .deplibs sections by default,
+    // so the flag has no equivalent there and would be an unrecognised option.
+    if (driverOptions.GetDisableAutoLink()) {
+        auto linkerName = FileUtil::GetFileName(ldPath);
+        if (linkerName.find("lld") != std::string::npos) {
+            tool.AppendArg("--no-dependent-libraries");
+        }
+    }
     // Note that the pgo options must be inserted after those from SortInputlibraryFileAndAppend
     tool.AppendArgIf(driverOptions.enablePgoInstrGen, "-u", "__llvm_profile_runtime");
     tool.AppendArgIf(driverOptions.enablePgoInstrGen || driverOptions.enableCoverage,
@@ -318,25 +329,41 @@ void Gnu::HandleLLVMLinkOptions(
     GenerateLinkOptions(tool);
 }
 
-void Gnu::HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath)
+std::vector<std::string> Gnu::GetLibrarySearchPaths(const std::string& cangjieLibPath) const
 {
-    // Append -L (those specified in command) as search paths
-    tool.AppendArg(PrependToPaths("-L", driverOptions.librarySearchPaths));
-    // Path to built-in libraries is placed between -L search paths and LIBRARY_PATH so that
-    // 1) user can explicitly specify a library path which contains libcangjie-<sth> to force Linker
-    //    link against such libraries.
-    // 2) Linker will not be confused if user's LIBRARY_PATH is polluted, for example, LIBRARY_PATH
-    //    contains the path to the library folder of a different version of cjc.
-    tool.AppendArgIf(driverOptions.EnableSanitizer(),
-        "-L" + FileUtil::JoinPath(cangjieLibPath, driverOptions.SanitizerTypeToShortString()));
-    tool.AppendArg("-L" + cangjieLibPath);
+    auto actualLibPath = cangjieLibPath.empty()
+        ? FileUtil::JoinPath(FileUtil::JoinPath(driver.cangjieHome, "lib"),
+                             driverOptions.GetCangjieLibTargetPathName())
+        : cangjieLibPath;
+
+    std::vector<std::string> paths;
+    paths.insert(paths.end(), driverOptions.librarySearchPaths.begin(),
+                 driverOptions.librarySearchPaths.end());
+    if (driverOptions.EnableSanitizer()) {
+        paths.push_back(
+            FileUtil::JoinPath(actualLibPath, driverOptions.SanitizerTypeToShortString()));
+    }
+    paths.push_back(actualLibPath);
     auto cangjieRuntimeLibPath = FileUtil::JoinPath(
         FileUtil::JoinPath(driver.cangjieHome, "runtime/lib"), driverOptions.GetCangjieLibTargetPathName());
-    tool.AppendArgIf(driverOptions.EnableSanitizer(),
-        "-L" + FileUtil::JoinPath(cangjieRuntimeLibPath, driverOptions.SanitizerTypeToShortString()));
-    tool.AppendArg("-L" + cangjieRuntimeLibPath);
-    // Append LIBRARY_PATH as search paths
-    tool.AppendArg(PrependToPaths("-L", GetLibraryPaths()));
+    if (driverOptions.EnableSanitizer()) {
+        paths.push_back(
+            FileUtil::JoinPath(cangjieRuntimeLibPath, driverOptions.SanitizerTypeToShortString()));
+    }
+    paths.push_back(cangjieRuntimeLibPath);
+    auto libPaths = GetLibraryPaths();
+    paths.insert(paths.end(), libPaths.begin(), libPaths.end());
+    return paths;
+}
+
+void Gnu::HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath)
+{
+    auto paths = GetLibrarySearchPaths(cangjieLibPath);
+    for (const auto& p : paths) {
+        tool.AppendArg("-L" + p);
+    }
+    auto cangjieRuntimeLibPath = FileUtil::JoinPath(
+        FileUtil::JoinPath(driver.cangjieHome, "runtime/lib"), driverOptions.GetCangjieLibTargetPathName());
     if (driverOptions.IsCrossCompiling() && !driverOptions.target.IsMinGW()) {
         tool.AppendArg("-rpath-link");
         tool.AppendArg(cangjieRuntimeLibPath);

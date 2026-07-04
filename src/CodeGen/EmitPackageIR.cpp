@@ -440,6 +440,19 @@ void GenSubCHIRPackage(CGModule& cgMod)
     GenerateStaticGIs(cgMod);
     DumpIRIfNeeded(cgMod, "GenStaticGIs", subDirNum);
     CreateLLVMUsedGVs(cgMod);
+    // Write llvm.dependent-libraries named metadata for --link-name.
+    // LLVM backend automatically converts this to .deplibs section in .o.
+    // LLD natively reads .deplibs (and the metadata in bitcode for LTO) and resolves -l automatically.
+    const auto& linkNameLibs = cgMod.GetCGContext().GetCompileOptions().GetLinkNameLibs();
+    if (!linkNameLibs.empty()) {
+        auto* module = cgMod.GetLLVMModule();
+        auto& ctx = cgMod.GetLLVMContext();
+        auto* namedMD = module->getOrInsertNamedMetadata("llvm.dependent-libraries");
+        for (const auto& libName : linkNameLibs) {
+            llvm::Metadata* mdOps[] = {llvm::MDString::get(ctx, libName)};
+            namedMD->addOperand(llvm::MDTuple::get(ctx, mdOps));
+        }
+    }
     // Incremental compilation generates invalid IRs, which need to be deleted by EraseUselessGVAndFunctions.
     // Therefore, the verification is performed after incremental compilation.
     auto success = cgMod.Verify();

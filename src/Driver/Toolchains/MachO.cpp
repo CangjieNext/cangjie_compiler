@@ -125,6 +125,14 @@ void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Too
     // 3.1 Frontend output files (.o)
     // 3.2 Pass to the linker in the order of input files (.o, .a, -l)
     SortInputlibraryFileAndAppend(tool, objFiles);
+    // Warn when --link-name libraries are not found in linker search paths.
+    WarnUnresolvedLinkNameLibs();
+    if (driverOptions.GetDisableAutoLink()) {
+        auto linkerName = FileUtil::GetFileName(ldPath);
+        if (linkerName.find("lld") != std::string::npos) {
+            tool.AppendArg("--no-dependent-libraries");
+        }
+    }
     // Note that the pgo options must be inserted after those from SortInputlibraryFileAndAppend
     tool.AppendArgIf(driverOptions.enablePgoInstrGen, "-u", "___llvm_profile_runtime");
     tool.AppendArgIf(driverOptions.enablePgoInstrGen || driverOptions.enableCoverage,
@@ -135,25 +143,35 @@ void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Too
     GenerateLinkOptions(tool);
 }
 
-void MachO::HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath)
+std::vector<std::string> MachO::GetLibrarySearchPaths(const std::string& cangjieLibPath) const
 {
-    // Append -L (those specified in command) as search paths
-    tool.AppendArg(PrependToPaths("-L", driverOptions.librarySearchPaths));
-    // path to built-in libraries is placed between -L search paths and LIBRARY_PATH so that
-    // 1) user can explicitly specify a library path which contains libcangjie-<sth> to force Linker
-    //    link against such libraries.
-    // 2) Linker will not be confused if user's LIBRARY_PATH is polluted, for example, LIBRARY_PATH
-    //    contains the path to the library folder of a different version of cjc.
+    auto actualLibPath = cangjieLibPath.empty()
+        ? FileUtil::JoinPath(FileUtil::JoinPath(driver.cangjieHome, "lib"),
+                             driverOptions.GetCangjieLibTargetPathName())
+        : cangjieLibPath;
+
+    std::vector<std::string> paths;
+    paths.insert(paths.end(), driverOptions.librarySearchPaths.begin(),
+                 driverOptions.librarySearchPaths.end());
     auto cangjieRuntimeLibPath = FileUtil::JoinPath(
         FileUtil::JoinPath(driver.cangjieHome, "runtime/lib"), driverOptions.GetCangjieLibTargetPathName());
-    // Different from Gnu toolchain, we pass runtime library path first here. ld64 does not support -l:<filename>
-    // passing style, thus we use -l<libname> for dynamic linkage and pass full path for static libraries (.a files).
-    // Passing runtime library path first ensures -l<libname> always find dynamic libraries before the static one.
-    tool.AppendArg("-L" + cangjieRuntimeLibPath);
-    tool.AppendArg("-L" + cangjieLibPath);
-    // Append LIBRARY_PATH as search paths
-    tool.AppendArg(PrependToPaths("-L", GetLibraryPaths()));
+    // ld64: runtime path first so -l<libname> finds dynamic libraries before static ones.
+    paths.push_back(cangjieRuntimeLibPath);
+    paths.push_back(actualLibPath);
+    auto libPaths = GetLibraryPaths();
+    paths.insert(paths.end(), libPaths.begin(), libPaths.end());
+    return paths;
+}
+
+void MachO::HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath)
+{
+    auto paths = GetLibrarySearchPaths(cangjieLibPath);
+    for (const auto& p : paths) {
+        tool.AppendArg("-L" + p);
+    }
     if (driverOptions.IsCrossCompiling()) {
+        auto cangjieRuntimeLibPath = FileUtil::JoinPath(
+            FileUtil::JoinPath(driver.cangjieHome, "runtime/lib"), driverOptions.GetCangjieLibTargetPathName());
         tool.AppendArg("-L");
         tool.AppendArg(cangjieRuntimeLibPath);
     }
