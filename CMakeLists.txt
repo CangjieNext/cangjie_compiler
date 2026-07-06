@@ -47,7 +47,7 @@ option(CANGJIE_DISABLE_STACK_GROW_FEATURE "Disable stack grow feature for cjnati
 option(CANGJIE_ENABLE_COMPILER_TSAN
     "Enable tsan for compiler and tools (relwithbebinfo or debug, Linux builds only)" OFF)
 option(CANGJIE_GENERATE_UNICODE_TABLE "Regenerated unicode data tables (should be used only when the Unicode standard cangjie conforms to changes)" OFF)
-option(CANGJIE_WRITE_PROFILE "`--profile-compile-time` and `--profile-compile-memory` options for cjc are supported even in release, and write result into PACKAGE_NAME.cj.prof and PACKAGE_NAME.cj.mem.prof." OFF)
+option(CANGJIE_WRITE_PROFILE "`--profile-compile-time` and `--profile-compile-memory` options for cjc are supported even in release, and write result into PACKAGE_NAME.time.prof, PACKAGE_NAME.mem.prof (and an accompanying PACKAGE_NAME.info.prof) under the output directory." OFF)
 option(CANGJIE_ENABLE_ASAN_COV "build with asan and sanitize-coverage, used for cjc_fuzz and lsp_test" OFF)
 option(CANGJIE_VISIBLE_OPTIONS_ONLY "open CANGJIE_VISIBLE_OPTIONS_ONLY to only build options that are visible to users" ON)
 option(CANGJIE_USE_OH_LLVM_REPO "use OpenHarmony llvm repo with Cangjie llvm patch instead of cangjie llvm repo for building" OFF)

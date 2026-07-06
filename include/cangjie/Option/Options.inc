@@ -337,10 +337,10 @@ OPTION("--lto-keep-pkg-visibility", LTO_KEEP_PKG_VISIBILITY, SEPARATED, {BACKEND
 
 OPTION("--profile-compile-time", PROFILE_COMPILE_TIME, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(VISIBLE) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
-    "Print time spent of all phases in the compilation")
+    "Write time spent of all phases to <package>.time.prof in the output directory")
 OPTION("--profile-compile-memory", PROFILE_COMPILE_MEMORY, FLAG, { BACKEND(ALL) },
     { GROUP(GLOBAL) COMMA GROUP(VISIBLE) COMMA GROUP(STABLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
-    "Print memory usage of all phases in the compilation")
+    "Write memory usage of all phases to <package>.mem.prof in the output directory")
 #ifndef DISABLE_EFFECT_HANDLERS
 OPTION("--enable-eh", ENABLE_EFFECTS, FLAG, { BACKEND(CJNATIVE) },
     { GROUP(GLOBAL) COMMA GROUP(VISIBLE) }, nullptr, {}, MULTIPLE_OCCURRENCE,
