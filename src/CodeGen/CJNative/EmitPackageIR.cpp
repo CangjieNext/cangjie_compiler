@@ -35,8 +35,7 @@ void CreatePrintStackTraceCall(IRBuilder2& irBuilder, llvm::Value* exceptionValu
     // `printStackTrace` is the 3rd virtual method defined in `class Error`
     auto idxOfError = irBuilder.getInt64(1U);
     auto idxOfPrintStackTrace = irBuilder.getInt64(2U);
-    auto funcInt8Ptr = irBuilder.CallIntrinsicGetVTableFunc(
-        exceptionTi, idxOfError, idxOfPrintStackTrace,
+    auto funcInt8Ptr = irBuilder.CallIntrinsicGetVTableFunc(exceptionTi, idxOfError, idxOfPrintStackTrace,
         irBuilder.CreateTypeInfo(printStackTraceFuncNode->GetParentCustomTypeDef()->GetType()));
     auto meta =
         llvm::MDTuple::get(cgCtx.GetLLVMContext(), llvm::MDString::get(cgCtx.GetLLVMContext(), "std.core:Error"));
@@ -117,10 +116,10 @@ void CreateUnwindBlockForTryCatchWrapper(
     IRBuilder2& irBuilder, const std::function<void()>& createRetInst, bool needAtexitCallbacks)
 {
     auto& cgMod = irBuilder.GetCGModule();
-    auto classOutOfMemoryErrorDef = StaticCast<CHIR::ClassDef*>(
-        GetTypeDefFromImplicitUsedFuncParam(cgMod, "_CNat16OutOfMemoryError6<init>Hv", 0));
-    auto classErrorDef = StaticCast<CHIR::ClassDef*>(
-        GetTypeDefFromImplicitUsedFuncParam(cgMod, "_CNat5Error15printStackTraceHv", 0));
+    auto classOutOfMemoryErrorDef =
+        StaticCast<CHIR::ClassDef*>(GetTypeDefFromImplicitUsedFuncParam(cgMod, "_CNat16OutOfMemoryError6<init>Hv", 0));
+    auto classErrorDef =
+        StaticCast<CHIR::ClassDef*>(GetTypeDefFromImplicitUsedFuncParam(cgMod, "_CNat5Error15printStackTraceHv", 0));
     auto classExceptionDef = StaticCast<CHIR::ClassDef*>(
         GetTypeDefFromImplicitUsedFuncParam(cgMod, "_CNat9Exception15printStackTraceHv", 0));
     auto& cgCtx = irBuilder.GetCGContext();
@@ -233,8 +232,8 @@ llvm::Function* GenerateEntryFunction(CGModule& cgMod, llvm::Function& userMain)
             auto commandLineArgs = irBuilder.CreateEntryAlloca(retCGType->GetLLVMType());
             irBuilder.CreateCJMemSetStructWith0(commandLineArgs);
             irBuilder.CreateGetCommandLineArgsCall({commandLineArgs});
-            userMainArgs.emplace_back(irBuilder.CreatePointerBitCastOrAddrSpaceCast(
-                commandLineArgs, userMain.args().begin()->getType()));
+            userMainArgs.emplace_back(
+                irBuilder.CreatePointerBitCastOrAddrSpaceCast(commandLineArgs, userMain.args().begin()->getType()));
         }
         auto userMainRetVal = irBuilder.CreateCallOrInvoke(&userMain, userMainArgs);
         irBuilder.CreateExecAtExitCallbacksCall();
@@ -340,7 +339,7 @@ void CollectDependentPackages(llvm::Function& func, std::vector<std::string>& gi
     }
 }
 
-void CallDependentPackageGlobalResetCall(IRBuilder2 & irBuilder)
+void CallDependentPackageGlobalResetCall(IRBuilder2& irBuilder)
 {
     auto& cgCtx = irBuilder.GetCGContext();
     auto llvmMod = irBuilder.GetLLVMModule();
@@ -361,8 +360,8 @@ llvm::Function* CreatePackageInitFlagResetFunction(CGModule& cgMod)
     auto& cgCtx = cgMod.GetCGContext();
     auto llvmMod = cgMod.GetLLVMModule();
     auto pkgInitFuncName = cgCtx.GetCHIRPackage().GetPackageInitFunc()->GetIdentifierWithoutPrefix();
-    std::string targetSuffix = SPECIAL_NAME_FOR_INIT_FLAG_RESET_FUNCTION + MANGLE_FUNC_PARAM_TYPE_PREFIX +
-        MANGLE_VOID_TY_SUFFIX;
+    std::string targetSuffix =
+        SPECIAL_NAME_FOR_INIT_FLAG_RESET_FUNCTION + MANGLE_FUNC_PARAM_TYPE_PREFIX + MANGLE_VOID_TY_SUFFIX;
     auto funcName = pkgInitFuncName.substr(0, pkgInitFuncName.size() - targetSuffix.size()) + targetSuffix;
     if (auto f = llvmMod->getFunction(funcName)) {
         return f;
@@ -424,10 +423,10 @@ void RegisterExceptionRaiser(CGModule& cgMod)
 void CreatePackageInitResetFunction(CGModule& cgMod)
 {
     auto llvmMod = cgMod.GetLLVMModule();
-    std::string pkgInitFuncName = cgMod.GetCGContext().GetCHIRPackage().GetPackageInitFunc()->
-        GetIdentifierWithoutPrefix();
-    std::string targetSuffix = SPECIAL_NAME_FOR_INIT_RESET_FUNCTION + MANGLE_FUNC_PARAM_TYPE_PREFIX +
-        MANGLE_VOID_TY_SUFFIX;
+    std::string pkgInitFuncName =
+        cgMod.GetCGContext().GetCHIRPackage().GetPackageInitFunc()->GetIdentifierWithoutPrefix();
+    std::string targetSuffix =
+        SPECIAL_NAME_FOR_INIT_RESET_FUNCTION + MANGLE_FUNC_PARAM_TYPE_PREFIX + MANGLE_VOID_TY_SUFFIX;
     std::string funcName = pkgInitFuncName.substr(0, pkgInitFuncName.size() - targetSuffix.size()) + targetSuffix;
     if (!llvmMod->getFunction(funcName)) {
         /**
@@ -456,8 +455,8 @@ void CreatePackageInitResetFunction(CGModule& cgMod)
             (void)irBuilder.CreateCallOrInvoke(flagResetFunc, {});
 
             // Step 2: re-initialize the literal GVs.
-            std::string targetSuffix = SPECIAL_NAME_FOR_INIT_LITERAL_FUNCTION + MANGLE_FUNC_PARAM_TYPE_PREFIX +
-                MANGLE_VOID_TY_SUFFIX;
+            std::string targetSuffix =
+                SPECIAL_NAME_FOR_INIT_LITERAL_FUNCTION + MANGLE_FUNC_PARAM_TYPE_PREFIX + MANGLE_VOID_TY_SUFFIX;
             auto literalInitFunc = llvmMod->getFunction(
                 pkgInitFuncName.substr(0, pkgInitFuncName.size() - targetSuffix.size()) + targetSuffix);
             if (literalInitFunc) {
@@ -478,14 +477,13 @@ void CreatePackageInitResetFunction(CGModule& cgMod)
             /// Add a wrapper function for the CFunc (for details see GetIndirectCFuncCallWrapper).
             auto wrapperFunc = GetGVResetCallBack(cgMod, cFuncType);
             auto castParam = irBuilder.CreateBitCast(func->arg_begin(), param->getPointerTo());
-            (void)irBuilder.CreateCallOrInvoke(wrapperFunc, {
-                // 0: the index of cfunc
-                irBuilder.LLVMIRBuilder2::CreateLoad(
-                    param->getStructElementType(0), irBuilder.CreateStructGEP(param, castParam, 0)),
-                // 1: the index of cFunc param
-                irBuilder.LLVMIRBuilder2::CreateLoad(
-                    param->getStructElementType(1), irBuilder.CreateStructGEP(param, castParam, 1))
-            });
+            (void)irBuilder.CreateCallOrInvoke(wrapperFunc,
+                {// 0: the index of cfunc
+                    irBuilder.LLVMIRBuilder2::CreateLoad(
+                        param->getStructElementType(0), irBuilder.CreateStructGEP(param, castParam, 0)),
+                    // 1: the index of cFunc param
+                    irBuilder.LLVMIRBuilder2::CreateLoad(
+                        param->getStructElementType(1), irBuilder.CreateStructGEP(param, castParam, 1))});
             (void)irBuilder.CreateRetVoid();
         };
         createTryScopeInst();
@@ -705,7 +703,78 @@ llvm::Constant* GetReadOnlyArrayKlassInfo(const CGModule& cgMod)
 }
 } // namespace
 
-void InitializeCjStringLiteral(const CGModule& cgMod)
+// Each cjstring literal gets its own content-addressed byte buffer
+// (instead of one shared pool per package). A dead literal's private
+// buffer dies with it under GlobalDCE. Cross-package duplicates share the
+// same content-addressed name, but the buffers are PrivateLinkage, so LTO
+// *renames* (not merges) them -- the backend CJStringPoolMerge pass
+// (content-based, not name-based) does the actual cross-package dedup and
+// substring sharing after GlobalDCE.
+//
+// Only used under full LTO, where that backend pass runs; otherwise the
+// legacy per-package pool (InitCjStringLiteralPooled) is used.
+static void InitCjStringLiteralDeferred(const CGModule& cgMod)
+{
+    auto& ctx = cgMod.GetLLVMContext();
+    auto int8PtrType = llvm::Type::getInt8PtrTy(ctx);
+    auto int32Type = llvm::Type::getInt32Ty(ctx);
+    auto int64Type = llvm::Type::getInt64Ty(ctx);
+    auto cjStringType = cgMod.GetCGContext().GetCjStringType();
+    auto arrayKlassInfo = GetReadOnlyArrayKlassInfo(cgMod);
+    auto klassInfoPtr = llvm::ConstantExpr::getBitCast(arrayKlassInfo, int8PtrType);
+    auto module = cgMod.GetLLVMModule();
+    auto addr1I8PtrType = llvm::Type::getInt8PtrTy(ctx, 1u);
+
+    auto& cjStrings = cgMod.GetCGContext().GetCJStrings();
+    for (const auto& cjStringIter : cjStrings) {
+        const auto& cjStringName = cjStringIter.first;
+        const auto& cjStringContent = cjStringIter.second;
+        auto literalGV = llvm::cast_or_null<llvm::GlobalVariable>(module->getNamedValue(cjStringName));
+        if (!literalGV) {
+            // cjString may be codeGen built-in data and optimized away.
+            continue;
+        }
+
+        // 1. Per-literal content-addressed buffer: { klassInfo, len, [len x i8] data }
+        auto strContent = llvm::ConstantDataArray::getString(ctx, cjStringContent, false);
+        std::vector<llvm::Type*> elemTypes{int8PtrType, int64Type, strContent->getType()};
+        auto bufType = llvm::StructType::get(ctx, elemTypes);
+        auto bufInit = llvm::ConstantStruct::get(bufType,
+            {klassInfoPtr, llvm::ConstantInt::getSigned(int64Type, static_cast<int64_t>(cjStringContent.size())),
+                strContent});
+
+        // Buffer name derives from the literal's sequence name (same seq
+        // suffix), not from a content hash, so collisions cannot occur.
+        // Buffers are PrivateLinkage + unnamed_addr, so LTO renames (not
+        // merges) cross-package copies by name; the backend CJStringPoolMerge
+        // pass dedups them by content bytes after GlobalDCE, and ConstantMerge
+        // can also merge identical unnamed_addr buffers across packages.
+        std::string bufName = GetCjStringDataNameFromLiteralName(cjStringName);
+        auto bufGV = llvm::cast<llvm::GlobalVariable>(module->getOrInsertGlobal(bufName, bufType));
+        CJC_NULLPTR_CHECK(bufGV);
+        bufGV->setInitializer(bufInit);
+        bufGV->setConstant(true);
+        bufGV->addAttribute(CJSTRING_DATA_ATTR);
+        bufGV->setLinkage(llvm::GlobalValue::PrivateLinkage);
+        // Address identity is never compared (only memcpy'd / passed to
+        // gcwrite), so mark unnamed_addr to let ConstantMerge dedup identical
+        // buffers across packages after LTO linking.
+        bufGV->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+
+        // 2. Literal initializer: { addrspacecast(buf), 0, len }
+        auto bufPtr = llvm::ConstantExpr::getBitCast(bufGV, int8PtrType);
+        auto bufPtrAddr1 = llvm::ConstantExpr::getAddrSpaceCast(bufPtr, addr1I8PtrType);
+        auto dataStart = llvm::ConstantInt::getSigned(int32Type, 0);
+        auto strSize = llvm::ConstantInt::getSigned(int32Type, static_cast<int32_t>(cjStringContent.size()));
+        auto cjStringInit = llvm::ConstantStruct::get(cjStringType, {bufPtrAddr1, dataStart, strSize});
+        literalGV->setInitializer(cjStringInit);
+    }
+}
+
+// Legacy path: concatenate (dedup + substring-share) all cjstring contents
+// of the package into one $const_cjstring_data pool; each literal points in
+// via {ptr, offset, len}. Used when full LTO is not enabled.
+static void InitCjStringLiteralPooled(const CGModule& cgMod)
 {
     auto& ctx = cgMod.GetLLVMContext();
     auto int8PtrType = llvm::Type::getInt8PtrTy(ctx);
@@ -779,6 +848,18 @@ void InitializeCjStringLiteral(const CGModule& cgMod)
         auto gv = llvm::cast<llvm::GlobalVariable>(cgMod.GetLLVMModule()->getNamedValue(cjStringName));
         CJC_NULLPTR_CHECK(gv);
         gv->setInitializer(cjStringInit);
+    }
+}
+
+void InitializeCjStringLiteral(const CGModule& cgMod)
+{
+    // Full LTO emits per-literal buffers (deferred pooling) so GlobalDCE /
+    // ConstantMerge / the backend CJStringPoolMerge pass can trim, dedup and
+    // repack them. Otherwise use the legacy per-package pool.
+    if (cgMod.GetCGContext().GetCompileOptions().IsFullLTOEnabled()) {
+        InitCjStringLiteralDeferred(cgMod);
+    } else {
+        InitCjStringLiteralPooled(cgMod);
     }
 }
 
