@@ -873,6 +873,9 @@ bool IsNeedRuntimeCheck(TypeManager& typeManager, Ty& srcTy, Ty& targetTy)
         }
         return false;
     };
+    if (targetTy.IsNothing()) {
+        return false;
+    }
     if (isFinalType(srcTy) && isFinalType(targetTy)) {
         auto srcDecl = Ty::GetDeclPtrOfTy(&srcTy);
         auto targetDecl = Ty::GetDeclPtrOfTy(&targetTy);
