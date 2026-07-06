@@ -263,30 +263,32 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitializa
     CJC_ASSERT(ctor.funcBody->paramLists.size() == 1);
     auto& paramList = *ctor.funcBody->paramLists[0];
 
-    // Java_CFFI_newJavaObject_raw call.
     // No global reference is created here:
     // it is wrapped into global reference in `super` constructors chain call: within `JObject`.
-    if (auto newObjCall = ilib.CreateCFFINewJavaObjectCall(WithinFile(CreateRefExpr(*jniEnvVar), ctor.curFile),
-        utils.GetJavaClassNormalizeSignature(*refWrapper.GetTy()), paramList, false, *ctor.curFile)) {
-            auto jniEnvRef = WithinFile(CreateRefExpr(*jniEnvVar), curFile);
-            std::vector<OwnedPtr<Node>> nodes;
-            nodes.push_back(std::move(jniEnvVar));
-            nodes.push_back(std::move(newObjCall));
-            auto lambdaCall = WrapReturningLambdaCall(typeManager, std::move(nodes));
-            auto superCall = CreateSuperCall(*ctor.outerDecl, parentCtor, parentCtor.GetTy());
-
-            superCall->args.insert(superCall->args.begin(), CreateFuncArg(std::move(lambdaCall)));
-
-            // Inserts assignment of registry companion into an instance.
-            ctor.funcBody->body->body.insert(ctor.funcBody->body->body.begin(),
-                CreateRegistryCompanionRefFieldAssignment(companion, refWrapper, companionRefField));
-            // Inserts generated super call at the beginning of the constructor.
-            // Original super call was removed at `DesugarJavaImplSuperConstructorCall` stage.
-            ctor.funcBody->body->body.insert(ctor.funcBody->body->body.begin(), std::move(superCall));
-    } else {
+    auto javaCtorExpr = ilib.CreateJavaConstructorBlock(refWrapper.GetTy(), paramList, curFile, false);
+    if (!javaCtorExpr) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         companion.EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
+        return;
     }
+
+    auto superCall = CreateSuperCall(*ctor.outerDecl, parentCtor, parentCtor.GetTy());
+    superCall->args.insert(superCall->args.begin(), CreateFuncArg(std::move(javaCtorExpr)));
+
+    if (!ctor.funcBody->body->body.empty()) {
+        auto firstNode = ctor.funcBody->body->body[0].get();
+        if (auto callExpr = As<ASTKind::CALL_EXPR>(firstNode); callExpr && IsSuperConstructorCall(*callExpr)) {
+             // This super-constructor call `callExpr` is removed in `JavaSourceCodeGenerator`.
+            // TODO: remove it here and memoize with context/cache.
+            callExpr->EnableAttr(Attribute::JAVA_MIRROR, Attribute::UNREACHABLE);
+        }
+    }
+
+     // Inserts assignment of registry companion into an instance.
+    ctor.funcBody->body->body.insert(ctor.funcBody->body->body.begin(),
+        CreateRegistryCompanionRefFieldAssignment(companion, refWrapper, companionRefField));
+    // Inserts generated super call at the beginning of the constructor.
+    ctor.funcBody->body->body.insert(ctor.funcBody->body->body.begin(), std::move(superCall));
 }
 
 void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorsInitialization(AfterTypeCheckContext& ctx,
@@ -329,8 +331,8 @@ void GenerateInJavaImplReferenceWrapper::Process(ClassDecl& refWrapper, AfterTyp
 }
 
 GenerateInJavaImplReferenceWrapper::GenerateInJavaImplReferenceWrapper(TypeManager& typeManager,
-    const ImportManager& importManager, InteropLibBridge& ilib, Native::FFI::Java::Utils& utils)
-    : typeManager(typeManager), importManager(importManager), ilib(ilib), utils(utils)
+    const ImportManager& importManager, InteropLibBridge& ilib)
+    : typeManager(typeManager), importManager(importManager), ilib(ilib)
 {
 }
 
