@@ -29,6 +29,18 @@ void IOS_CJNATIVE::AddSystemLibraryPaths()
     MachO::AddSystemLibraryPaths();
 }
 
+void IOS_CJNATIVE::AppendPlatformVersion(Tool& tool, const std::optional<std::string>& darwinSDKVersion) const
+{
+    if (driverOptions.target.env == Triple::Environment::SIMULATOR) {
+        tool.AppendArg("ios-simulator");
+        tool.AppendArg("17.5.0");
+    } else {
+        tool.AppendArg("ios");
+        tool.AppendArg("17.5.0");
+    }
+    tool.AppendArg(darwinSDKVersion.value_or("17.5"));
+}
+
 TempFileInfo IOS_CJNATIVE::GenerateLinkingTool(
     const std::vector<TempFileInfo>& objFiles, const std::string& darwinSDKVersion)
 {
@@ -44,6 +56,14 @@ TempFileInfo IOS_CJNATIVE::GenerateLinkingTool(
     }
     std::string outputFile = outputFileInfo.filePath;
     tool->AppendArg("-o", outputFile);
+    if (driverOptions.IsLTOEnabled()) {
+        tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
+        GenerateLinkOptionsForLTO(*tool);
+        if (!driverOptions.IsFullLTOEnabled()) {
+            tool->AppendArg("-cache_path_lto");
+            tool->AppendArg(driverOptions.compilationCachedPath);
+        }
+    }
     tool->AppendArgIf(driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB, "-dylib");
     tool->AppendArg("-arch", GetTargetArchString());
 
@@ -81,5 +101,14 @@ void IOS_CJNATIVE::GenerateLinkOptions(Tool& tool)
         tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "libclang_rt.iossim.a"));
     } else {
         tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "libclang_rt.ios.a"));
+    }
+}
+
+std::string IOS_CJNATIVE::GetClangRTProfileLibraryName() const
+{
+    if (driverOptions.target.env == Triple::Environment::SIMULATOR) {
+        return "libclang_rt.profile_iossim.a";
+    } else {
+        return "libclang_rt.profile_ios.a";
     }
 }

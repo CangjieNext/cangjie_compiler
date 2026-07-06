@@ -158,8 +158,12 @@ bool CJNATIVEBackend::ProcessGenerationOfNormalCompile(const std::vector<TempFil
         }
         auto processedFrontendFiles = GeneratePreprocessTools(frontendOutputFiles);
         preprocessedFiles.insert(preprocessedFiles.end(), processedFrontendFiles.begin(), processedFrontendFiles.end());
-        // When compiling a static library in LTO mode, the compilation process stops at the opt stage.
-        if (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB) {
+        // By default, compiling a static library in LTO mode stops at the opt stage.
+        // On Apple platforms an explicit opt-in allows the toolchain to continue
+        // and preserve the LTO-generated native object emitted by the linker flow.
+        if (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB &&
+            (!driverOptions.ShouldEmitStaticLibInLTO() ||
+                driverOptions.target.os != Triple::OSType::IOS)) {
             return true;
         }
         // In LTO mode, compilation is not performed using llc.
@@ -221,7 +225,9 @@ bool CJNATIVEBackend::ProcessGenerationOfIncrementalNoChangeCompile(const std::v
             preprocessorInputs.emplace_back(tempFile);
         }
         auto preprocessedFiles = GeneratePreprocessTools(preprocessorInputs);
-        if (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB) {
+        if (driverOptions.outputMode == GlobalOptions::OutputMode::STATIC_LIB &&
+            (!driverOptions.ShouldEmitStaticLibInLTO() ||
+                driverOptions.target.os != Triple::OSType::IOS)) {
             return true;
         }
         return TC->ProcessGeneration(preprocessedFiles);

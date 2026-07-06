@@ -136,6 +136,7 @@ void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
         setOptionHandler("--cangjie-lto");
         setOptionHandler("--module-summary");
         setOptionHandler("--module-hash");
+        setOptionHandler("--preserve-bc-uselistorder=false");
     }
 }
 
@@ -301,8 +302,17 @@ void SetLTOOptions(SetFuncType setOptionHandler, const DriverOptions& driverOpti
     setOptionHandler("--cj-lto-opt");
     setOptionHandler("--allow-multiple-definition");
     setOptionHandler("--plugin-opt=no-opaque-pointers");
-    if (driverOptions.IsCompileAsExeEnabled()) {
-        setOptionHandler("--compile-as-exe");
+
+    bool shouldSetVisiblePkgs = (driverOptions.outputMode == GlobalOptions::OutputMode::SHARED_LIB &&
+                                    driverOptions.target.os == Triple::OSType::LINUX) ||
+        (driverOptions.target.os == Triple::OSType::IOS &&
+            driverOptions.ShouldEmitStaticLibInLTO());
+    if (shouldSetVisiblePkgs) {
+        if (!driverOptions.GetLtoVisiblePkgs().empty()) {
+            setOptionHandler("--visible-pkgs=" + Utils::JoinStrings(driverOptions.GetLtoVisiblePkgs(), ","));
+        } else if (driverOptions.ltoHideAllPkgs || driverOptions.IsCompileAsExeEnabled()) {
+            setOptionHandler("--visible-pkgs=");
+        }
     }
 }
 
