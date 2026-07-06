@@ -283,7 +283,7 @@ PostTypeCheck (CJMP-specific):
 
 - `ValidateCJMPConstructorConstraints` (called from `TypeChecker::PostTypeCheck`):
   - Validates that platform parent has an empty constructor
-  - Diagnoses `sema_cjmp_no_empty_ctor_in_platform_parent` if validation fails
+  - Diagnoses `sema_cjmp_platform_parent_no_empty_constructor` if validation fails
   - **Why**: CJMP @JavaImpl constructors need to call platform parent's empty
     constructor via CHIR-level `PatchCJMPSuperCalls`. If the platform parent
     (e.g., JObject) lacks an empty constructor, the CHIR patching would fail
@@ -1357,11 +1357,12 @@ to replace the Function pointer target.
 
 | Diagnostic | Condition | Pipeline Phase | FFI Sub-stage |
 |------------|-----------|---------------|---------------|
-| `sema_cjmp_no_empty_ctor_in_platform_parent` | Platform parent lacks empty constructor | PostTypeCheck | CJMP validation |
+| `sema_cjmp_platform_parent_no_empty_constructor` | Lacks empty constructor | PostTypeCheck | CJMP validation |
 | `sema_cjmp_mirror_ctor_from_common_has_body` | Common constructor in @JavaMirror | PostTypeCheck | MIRROR_DESUGAR |
 | `sema_cjmp_mirror_method_from_common_has_body` | Common method in @JavaMirror | PostTypeCheck | MIRROR_DESUGAR |
 | `sema_cjmp_mirror_prop_from_common` | Common property in @JavaMirror | PostTypeCheck | MIRROR_DESUGAR |
-| `sema_cjmp_relaxation_allowed` (note) | Object→platform parent relaxation allowed | PreTypeCheck | CJMP matching |
+
+> Relaxation context (Object to platform-specific parent) is attached as a note on the platform-parent error.
 
 ---
 
