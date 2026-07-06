@@ -873,6 +873,10 @@ bool IsNeedRuntimeCheck(TypeManager& typeManager, Ty& srcTy, Ty& targetTy)
         }
         return false;
     };
+    // Nothing type is a special type that can be assigned to any type, so don't need to check it in runtime.
+    if (targetTy.IsNothing()) {
+        return false;
+    }
     if (isFinalType(srcTy) && isFinalType(targetTy)) {
         auto srcDecl = Ty::GetDeclPtrOfTy(&srcTy);
         auto targetDecl = Ty::GetDeclPtrOfTy(&targetTy);
