@@ -692,9 +692,14 @@ OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObjectReturningObjCSelf(const Decl& t
     auto wrapperParamList = MakeOwned<FuncParamList>();
     auto& wrapperParams = wrapperParamList->params;
     auto& ctorParams = ctor.funcBody->paramLists[0]->params;
-    std::transform(ctorParams.begin(), ctorParams.end(), std::back_inserter(wrapperParams), [this](auto& p) {
-        return CreateFuncParam(p->identifier.Val(), nullptr, nullptr, typeMapper.Cj2CType(p->GetTy()));
-    });
+
+    for (auto& param : ctorParams) {
+        if (param->identifier.Val() == "$mrk") {
+            continue;
+        }
+        auto wrapperParam = CreateFuncParam(param->identifier.Val(), nullptr, nullptr, typeMapper.Cj2CType(param->GetTy()));
+        wrapperParams.emplace_back(std::move(wrapperParam));
+    }
 
     std::vector<Ptr<Ty>> wrapperParamTys;
     std::transform(wrapperParams.begin(), wrapperParams.end(), std::back_inserter(wrapperParamTys),
@@ -706,15 +711,21 @@ OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObjectReturningObjCSelf(const Decl& t
     wrapperParamLists.emplace_back(std::move(wrapperParamList));
 
     std::vector<OwnedPtr<FuncArg>> ctorCallArgs;
-    auto objCSelf = CreateRefExpr(*wrapperParams[0]);
-    ctorCallArgs.emplace_back(CreateFuncArg(std::move(objCSelf)));
-    size_t argIdx = 1;
-    while (argIdx < ctorParams.size()) {
-        auto& wrapperParam = wrapperParams[argIdx];
+    size_t offset = 0;
+    for (size_t i = 0; i < ctorParams.size(); i++) {
+        auto& ctorParam = ctorParams[i];
+        if (ctorParam->identifier.Val() == "$mrk") {
+            auto marker = CreateNativeHandleMarker();
+            // auto& markerTy = *marker->GetTy();
+            auto callArg = CreateFuncArg(std::move(marker));
+            ctorCallArgs.emplace_back(std::move(callArg));
+            offset = 1;
+            continue;
+        }
+        auto& wrapperParam = wrapperParams[i-offset];
         auto paramRef = WithinFile(CreateRefExpr(*wrapperParam), curFile);
-        auto ctorCallArg = CreateFuncArg(WrapEntity(std::move(paramRef), *ctorParams[argIdx]->GetTy()));
+        auto ctorCallArg = CreateFuncArg(WrapEntity(std::move(paramRef), *ctorParam->GetTy()));
         ctorCallArgs.emplace_back(std::move(ctorCallArg));
-        ++argIdx;
     }
 
     auto ctorCall = WithinFile(CreateCallExpr(CreateRefExpr(ctor), std::move(ctorCallArgs), Ptr(&ctor), target.GetTy(),
