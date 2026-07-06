@@ -172,15 +172,7 @@ public:
      */
     Ptr<FuncDecl> GetJavaArrayGetLengthDecl();
 
-    /**
-     * Java_CFFI_callVirtualMethod_raw
-     */
-    Ptr<FuncDecl> GetCallMethodDecl();
-
-    /**
-     * Java_CFFI_callNonVirtualMethod_raw
-     */
-    Ptr<FuncDecl> GetNonVirtualCallMethodDecl();
+    Ptr<FuncDecl> GetJNIHandlePendingExceptionDecl();
 
     /**
      * Java_CFFI_callStaticMethod_raw
@@ -300,6 +292,7 @@ public:
     Ptr<FuncDecl> GetWithExceptionHandlingDecl();
 
     Ptr<FuncDecl> GetJClassDecl();
+    Ptr<FuncDecl> GetGetMethodIdDecl();
     Ptr<FuncDecl> GetParseMethodSignatureDecl();
     Ptr<FuncDecl> GetParseComponentSignatureDecl();
     Ptr<FuncDecl> GetCallNestDecl();
@@ -337,6 +330,8 @@ public:
      * getJavaLambdaEntity(fun : Any, className: String) decl
      */
     Ptr<FuncDecl> GetJavaLambdaEntityDecl();
+
+    Ptr<Ty> GetJValueTy();
 
     /**
      * JNIEnv_ptr ty
@@ -397,7 +392,7 @@ public:
     /**
      * Java_CFFI_JavaEntityJobject(jobject: CPointer<Unit>)
      */
-    OwnedPtr<Expr> CreateJavaEntityJobjectCall(OwnedPtr<Expr> arg);
+    OwnedPtr<CallExpr> CreateJavaEntityJobjectCall(OwnedPtr<Expr> arg);
 
     /**
      * Java_CFFI_JavaEntityJobjectNull()
@@ -474,14 +469,6 @@ public:
     OwnedPtr<CallExpr> CreateDeleteGlobalRefCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj);
 
     /**
-     * CFFI method call:
-     * Java_CFFI_callVirtualMethod_raw(jniEnv, obj, typeSignature, methodName, "(<argsSignature>)ReTy", cffiMethodArgs)
-     */
-    OwnedPtr<CallExpr> CreateCFFICallMethodCall(Ptr<Expr> jniEnv, OwnedPtr<Expr> obj,
-                                                const MemberJNISignature& signature,
-                                                FuncParamList& params, File& curFile);
-
-    /**
      * Java_CFFI_arrayGetLength(env)
      */
     OwnedPtr<CallExpr> CreateCFFIArrayLengthGetCall(OwnedPtr<Expr> javarefExpr, Ptr<File> curFile);
@@ -493,31 +480,24 @@ public:
      */
     OwnedPtr<AST::Expr> CreateCFFICallArrayMethodCall(OwnedPtr<AST::Expr> jniEnv, OwnedPtr<AST::Expr> obj,
         AST::FuncParamList& params, const Ptr<AST::GenericParamDecl> genericParam, ArrayOperationKind kind);
-
-    /**
-     * CFFI static method call:
-     * Java_CFFI_callStaticMethod_raw(
-     *     jniEnv, signature.classTypeSignature, signature.name, "(<argsSignature>)ReTy", cffiMethodArgs)
-     */
-    OwnedPtr<CallExpr> CreateCFFICallStaticMethodCall(
-        Ptr<Expr> jniEnv, const MemberJNISignature& signature, FuncParamList& params, File& curFile);
-
+    
     /**
      * <callMethod>(env, obj, signature.classTypeSignature, signature.name, signature.signature, [args])
      * where <callMethod> is Java_CFFI_callVirtualMethod_raw or Java_CFFI_callNonVirtualMethod_raw
      *
      * @param virt should the call be virtual or not
      */
-    OwnedPtr<CallExpr> CreateCallMethodCall(Ptr<Expr> env, OwnedPtr<Expr> obj,
+     
+    OwnedPtr<CallExpr> CreateCallMethodCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj,
                                             const MemberJNISignature& signature,
-                                            std::vector<OwnedPtr<Expr>> args, File& curFile,
-                                            bool virt = true);
+                                            OwnedPtr<Expr> argsExpr, Ptr<Ty> retTy,
+                                            File& curFile, bool virt = true);
 
     /**
      * Java_CFFI_callStaticMethod_raw(env, signature.classTypeSignature, signature.name, signature.signature, [args])
      */
-    OwnedPtr<CallExpr> CreateCallStaticMethodCall(Ptr<Expr> env, const MemberJNISignature& signature,
-                                                  std::vector<OwnedPtr<Expr>> args, File& curFile);
+    OwnedPtr<CallExpr> CreateCallStaticMethodCall(OwnedPtr<Expr> env, OwnedPtr<Expr> clazz,
+        const MemberJNISignature& signature, OwnedPtr<Expr> argsExpr, Ptr<Ty> retTy, File& curFile);
 
     /**
      * Java_CFFI_removeFromRegistry(registryId)
@@ -652,6 +632,8 @@ public:
     Ptr<FuncDecl> FindStringStartsWithDecl();
     Ptr<FuncDecl> FindArrayJavaEntityGetDecl(ClassDecl& jArrayDecl) const;
     Ptr<FuncDecl> FindArrayJavaEntitySetDecl(ClassDecl& jArrayDecl) const;
+    Ptr<FuncDecl> FindAsJValueDecl();
+    Ptr<FuncDecl> FindAsJObjectDecl();
 
     OwnedPtr<Expr> SelectJSigByTypeKind(TypeKind kind, Ptr<Ty> ty);
     OwnedPtr<Expr> SelectJPrimitiveNameByTypeKind(TypeKind kind, Ptr<Ty> ty);
@@ -684,6 +666,10 @@ public:
     void CheckInteropLibVersion();
     static bool IsInteropLibAccessible(const ImportManager& importManager);
     static bool IsJavaEntityTy(Ty& ty);
+
+    OwnedPtr<VarDecl> CreateCFFIJValueArgsVar(FuncParamList& params, File& curFile);
+    OwnedPtr<VarDecl> CreateCFFIArgsVar(std::vector<OwnedPtr<Expr>> args, File& curFile);
+    OwnedPtr<VarDecl> CreateCFFIClassVar(OwnedPtr<Expr> env, const std::string& className, File& curFile);
 private:
    /**
     * Version value should be the same as for java interop library for the same SDK.
@@ -731,6 +717,14 @@ private:
 
     Ptr<FuncDecl> GetJavaObjectControllerMethodDecl(std::string methodName);
     OwnedPtr<Expr> CreateParamExpr(FuncParam& param, Ptr<File> curFile);
+    OwnedPtr<Expr> CreateJValueParamExpr(FuncParam& param, Ptr<File> curFile);
+    OwnedPtr<FuncArg> CreateInoutFuncArg(OwnedPtr<Expr> expr);
+    OwnedPtr<CallExpr> CreateJNIEnvReadCall(OwnedPtr<Expr> env);
+    Ptr<StructDecl> GetJNINativeInterfaceDecl();
+    Ptr<VarDecl> GetJNINativeInterfaceField(const std::string& name);
+    const char* SelectJNIStaticMethodName(TypeKind kind, bool hasArgs);
+    const char* SelectJNIInstanceMethodName(TypeKind kind, bool virt, bool hasArgs);
+    OwnedPtr<Expr> CreateReinterpretCastExpr(OwnedPtr<Expr> expr, Ptr<Ty> fromTy, Ptr<Ty> toTy, Ptr<File> curFile);
 
     const ImportManager& importManager;
     TypeManager& typeManager;
