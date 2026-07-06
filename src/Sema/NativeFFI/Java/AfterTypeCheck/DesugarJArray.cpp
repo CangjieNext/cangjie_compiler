@@ -162,15 +162,14 @@ void DesugarJArray::InsertConstructorBody(FuncDecl& constr) const
 {
     CJC_ASSERT_WITH_MSG(IsJArray(*constr.outerDecl), "Expected JArray decl");
 
-    auto jniEnvCall = ilib.CreateGetJniEnvCall(constr.curFile);
     auto jniEnvPtrDecl = ilib.GetJniEnvPtrDecl();
 
-    if (!jniEnvCall || !jniEnvPtrDecl) {
+    if (!jniEnvPtrDecl) {
         constr.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
 
-    auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, jniEnvCall);
+    auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, ilib.CreateGetJniEnvCall(constr.curFile));
     auto newObjectCall = ilib.CreateCFFINewJavaArrayCall(
         WithinFile(CreateRefExpr(*jniEnvVar), constr.curFile), *constr.funcBody->paramLists[0]);
     std::vector<OwnedPtr<Node>> lambdaNodes = Nodes(std::move(jniEnvVar), std::move(newObjectCall));

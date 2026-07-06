@@ -437,7 +437,7 @@ public:
      * Java_CFFI_newJavaObject(env, classTypeSignature, constructorSignature, [args])
      */
     OwnedPtr<CallExpr> CreateNewJavaObjectCall(
-        OwnedPtr<Expr> env,
+        Ptr<Expr> env,
         const std::string& classTypeSignature,
         const std::string& constructorSignature,
         std::vector<OwnedPtr<Expr>> args);
@@ -477,7 +477,7 @@ public:
      * CFFI method call:
      * Java_CFFI_callVirtualMethod_raw(jniEnv, obj, typeSignature, methodName, "(<argsSignature>)ReTy", cffiMethodArgs)
      */
-    OwnedPtr<CallExpr> CreateCFFICallMethodCall(OwnedPtr<Expr> jniEnv, OwnedPtr<Expr> obj,
+    OwnedPtr<CallExpr> CreateCFFICallMethodCall(Ptr<Expr> jniEnv, OwnedPtr<Expr> obj,
                                                 const MemberJNISignature& signature,
                                                 FuncParamList& params, File& curFile);
 
@@ -500,7 +500,7 @@ public:
      *     jniEnv, signature.classTypeSignature, signature.name, "(<argsSignature>)ReTy", cffiMethodArgs)
      */
     OwnedPtr<CallExpr> CreateCFFICallStaticMethodCall(
-        OwnedPtr<Expr> jniEnv, const MemberJNISignature& signature, FuncParamList& params, File& curFile);
+        Ptr<Expr> jniEnv, const MemberJNISignature& signature, FuncParamList& params, File& curFile);
 
     /**
      * <callMethod>(env, obj, signature.classTypeSignature, signature.name, signature.signature, [args])
@@ -508,7 +508,7 @@ public:
      *
      * @param virt should the call be virtual or not
      */
-    OwnedPtr<CallExpr> CreateCallMethodCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj,
+    OwnedPtr<CallExpr> CreateCallMethodCall(Ptr<Expr> env, OwnedPtr<Expr> obj,
                                             const MemberJNISignature& signature,
                                             std::vector<OwnedPtr<Expr>> args, File& curFile,
                                             bool virt = true);
@@ -516,7 +516,7 @@ public:
     /**
      * Java_CFFI_callStaticMethod_raw(env, signature.classTypeSignature, signature.name, signature.signature, [args])
      */
-    OwnedPtr<CallExpr> CreateCallStaticMethodCall(OwnedPtr<Expr> env, const MemberJNISignature& signature,
+    OwnedPtr<CallExpr> CreateCallStaticMethodCall(Ptr<Expr> env, const MemberJNISignature& signature,
                                                   std::vector<OwnedPtr<Expr>> args, File& curFile);
 
     /**
@@ -568,27 +568,27 @@ public:
     /**
      * Java_CFFI_getField_raw(env, obj, typeSignature, fieldName, fieldSignature)
      */
-    OwnedPtr<CallExpr> CreateGetFieldCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj, std::string typeSignature,
+    OwnedPtr<CallExpr> CreateGetFieldCall(Ptr<Expr> env, OwnedPtr<Expr> obj, std::string typeSignature,
                                           std::string fieldName, std::string fieldSignature);
 
     /**
      * Java_CFFI_getStaticField_raw(env, typeSignature, fieldName, fieldSignature)
      */
-    OwnedPtr<CallExpr> CreateGetStaticFieldCall(OwnedPtr<Expr> env, std::string typeSignature,
+    OwnedPtr<CallExpr> CreateGetStaticFieldCall(Ptr<Expr> env, std::string typeSignature,
                                           std::string fieldName, std::string fieldSignature);
 
     /**
      * Java_CFFI_setField_raw(env, obj, signature.classTypeSignature,
      *                        signature.name, signature.signature, Java_CFFI_JavaEntity(value))
      */
-    OwnedPtr<CallExpr> CreateSetFieldCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj,
+    OwnedPtr<CallExpr> CreateSetFieldCall(Ptr<Expr> env, OwnedPtr<Expr> obj,
                                           const MemberJNISignature& signature,
                                           OwnedPtr<Expr> value);
 
     /**
      * Java_CFFI_setStaticField_raw(env, typeSignature, fieldName, fieldSignature, Java_CFFI_JavaEntity(value))
      */
-    OwnedPtr<CallExpr> CreateSetStaticFieldCall(OwnedPtr<Expr> env, std::string typeSignature, std::string fieldName,
+    OwnedPtr<CallExpr> CreateSetStaticFieldCall(Ptr<Expr> env, std::string typeSignature, std::string fieldName,
                                           std::string fieldSignature, OwnedPtr<Expr> value);
 
     /**

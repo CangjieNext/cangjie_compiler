@@ -685,7 +685,7 @@ OwnedPtr<Expr> InteropLibBridge::StringToJObject(OwnedPtr<Expr> cjStringExpr, Pt
     return CreateJavaEntityCall(std::move(cjExpr));
 }
 
-OwnedPtr<CallExpr> InteropLibBridge::CreateNewJavaObjectCall(OwnedPtr<Expr> env, const std::string& classTypeSignature,
+OwnedPtr<CallExpr> InteropLibBridge::CreateNewJavaObjectCall(Ptr<Expr> env, const std::string& classTypeSignature,
     const std::string& constructorSignature, std::vector<OwnedPtr<Expr>> args)
 {
     auto curFile = env->curFile;
@@ -715,9 +715,9 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateNewJavaObjectCall(OwnedPtr<Expr> env,
     lConstructorSignature->curFile = curFile;
     auto lmethodName = CreateLitConstExpr(LitConstKind::STRING, JAVA_CONSTRUCTOR, strTy);
     lmethodName->curFile = curFile;
-    auto jclass = CreateCall(jclassInitFuncDecl, curFile, CreateGetJniEnvCall(curFile), std::move(lclassName));
+    auto jclass = CreateCall(jclassInitFuncDecl, curFile, ASTCloner::Clone(env), std::move(lclassName));
     auto methodSignature = CreateCall(parseSignatureFuncDecl, curFile, std::move(lConstructorSignature));
-    auto methodID = CreateCall(methodIDFuncDecl, curFile, CreateGetJniEnvCall(curFile), ASTCloner::Clone(jclass.get()),
+    auto methodID = CreateCall(methodIDFuncDecl, curFile, ASTCloner::Clone(env), ASTCloner::Clone(jclass.get()),
         std::move(lmethodName), std::move(methodSignature));
 
     auto arrayStruct = importManager.GetCoreDecl<StructDecl>(STD_LIB_ARRAY);
@@ -731,8 +731,8 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateNewJavaObjectCall(OwnedPtr<Expr> env,
     auto argsAsArray = WithinFile(CreateArrayLit(std::move(args), arrayTy), curFile);
     auto callNest = CreateCall(callNestFuncDecl, curFile, std::move(argsSize));
 
-    return CreateCall(funcDecl, curFile, std::move(env), std::move(jclass), std::move(methodID), std::move(argsAsArray),
-        std::move(callNest));
+    return CreateCall(funcDecl, curFile,
+        ASTCloner::Clone(env), std::move(jclass), std::move(methodID), std::move(argsAsArray), std::move(callNest));
 }
 
 OwnedPtr<Expr> InteropLibBridge::SelectJSigByTypeKind([[maybe_unused]] TypeKind kind, Ptr<Ty> ty)
@@ -905,7 +905,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateDeleteGlobalRefCall(OwnedPtr<Expr> en
     return CreateCall(GetDeleteGlobalRefDecl(), curFile, std::move(env), std::move(obj));
 }
 
-OwnedPtr<CallExpr> InteropLibBridge::CreateCallMethodCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj,
+OwnedPtr<CallExpr> InteropLibBridge::CreateCallMethodCall(Ptr<Expr> env, OwnedPtr<Expr> obj,
     const MemberJNISignature& signature, std::vector<OwnedPtr<Expr>> args, File& curFile, bool virt)
 {
     auto pcurFile = Ptr(&curFile);
@@ -935,9 +935,9 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateCallMethodCall(OwnedPtr<Expr> env, Ow
     lmethodName->curFile = pcurFile;
     auto lsignature = CreateLitConstExpr(LitConstKind::STRING, signature.signature, strTy);
     lsignature->curFile = pcurFile;
-    auto jclass = CreateCall(jclassInitFuncDecl, pcurFile, CreateGetJniEnvCall(pcurFile), std::move(lclassName));
+    auto jclass = CreateCall(jclassInitFuncDecl, pcurFile, ASTCloner::Clone(env), std::move(lclassName));
     auto methodSignature = CreateCall(parseSignatureFuncDecl, pcurFile, std::move(lsignature));
-    auto methodID = CreateCall(methodIDFuncDecl, pcurFile, CreateGetJniEnvCall(pcurFile), std::move(jclass),
+    auto methodID = CreateCall(methodIDFuncDecl, pcurFile, ASTCloner::Clone(env), std::move(jclass),
         std::move(lmethodName), std::move(methodSignature));
 
     auto arrayStruct = importManager.GetCoreDecl<StructDecl>(STD_LIB_ARRAY);
@@ -955,12 +955,12 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateCallMethodCall(OwnedPtr<Expr> env, Ow
     auto argsSize = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(args.size()), intTy);
     auto callNest = CreateCall(callNestFuncDecl, pcurFile, std::move(argsSize));
 
-    return CreateCall(funcDecl, pcurFile, std::move(env), std::move(obj), std::move(methodID),
+    return CreateCall(funcDecl, pcurFile, ASTCloner::Clone(env), std::move(obj), std::move(methodID),
         CreateArrayLit(std::move(args), arrayTy), std::move(callNest));
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreateCallStaticMethodCall(
-    OwnedPtr<Expr> env, const MemberJNISignature& signature, std::vector<OwnedPtr<Expr>> args, File& curFile)
+    Ptr<Expr> env, const MemberJNISignature& signature, std::vector<OwnedPtr<Expr>> args, File& curFile)
 {
     auto pcurFile = Ptr(&curFile);
     auto funcDecl = GetCallStaticMethodDecl();
@@ -989,9 +989,9 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateCallStaticMethodCall(
     lmethodName->curFile = pcurFile;
     auto lsignature = CreateLitConstExpr(LitConstKind::STRING, signature.signature, strTy);
     lsignature->curFile = pcurFile;
-    auto jclass = CreateCall(jclassInitFuncDecl, pcurFile, CreateGetJniEnvCall(pcurFile), std::move(lclassName));
+    auto jclass = CreateCall(jclassInitFuncDecl, pcurFile, ASTCloner::Clone(env), std::move(lclassName));
     auto methodSignature = CreateCall(parseSignatureFuncDecl, pcurFile, std::move(lsignature));
-    auto methodID = CreateCall(methodIDFuncDecl, pcurFile, CreateGetJniEnvCall(pcurFile),
+    auto methodID = CreateCall(methodIDFuncDecl, pcurFile, ASTCloner::Clone(env),
         ASTCloner::Clone(jclass.get()), std::move(lmethodName), std::move(methodSignature));
     auto arrayStruct = importManager.GetCoreDecl<StructDecl>(STD_LIB_ARRAY);
     if (!arrayStruct) {
@@ -1008,7 +1008,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateCallStaticMethodCall(
     auto argsSize = CreateLitConstExpr(LitConstKind::INTEGER, std::to_string(args.size()), intTy);
     auto callNest = CreateCall(callNestFuncDecl, pcurFile, std::move(argsSize));
 
-    return CreateCall(funcDecl, pcurFile, std::move(env), std::move(jclass), std::move(methodID),
+    return CreateCall(funcDecl, pcurFile, ASTCloner::Clone(env), std::move(jclass), std::move(methodID),
         CreateArrayLit(std::move(args), arrayTy), std::move(callNest));
 }
 
@@ -1090,7 +1090,7 @@ OwnedPtr<Expr> InteropLibBridge::CreateCFFICallArrayMethodCall(OwnedPtr<Expr> jn
         WithinFile(CreateRefExpr(*indexArg), curFile), std::move(valueEntity));
 }
 
-OwnedPtr<CallExpr> InteropLibBridge::CreateCFFICallMethodCall(OwnedPtr<Expr> jniEnv, OwnedPtr<Expr> obj,
+OwnedPtr<CallExpr> InteropLibBridge::CreateCFFICallMethodCall(Ptr<Expr> jniEnv, OwnedPtr<Expr> obj,
     const MemberJNISignature& signature, FuncParamList& params, File& curFile)
 {
     std::vector<OwnedPtr<Expr>> cffiMethodArgs;
@@ -1100,11 +1100,11 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateCFFICallMethodCall(OwnedPtr<Expr> jni
         cffiMethodArgs.push_back(std::move(paramRef));
     }
 
-    return CreateCallMethodCall(std::move(jniEnv), std::move(obj), signature, std::move(cffiMethodArgs), curFile);
+    return CreateCallMethodCall(jniEnv, std::move(obj), signature, std::move(cffiMethodArgs), curFile);
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreateCFFICallStaticMethodCall(
-    OwnedPtr<Expr> jniEnv, const MemberJNISignature& signature, FuncParamList& params, File& curFile)
+    Ptr<Expr> jniEnv, const MemberJNISignature& signature, FuncParamList& params, File& curFile)
 {
     std::vector<OwnedPtr<Expr>> cffiMethodArgs;
 
@@ -1113,7 +1113,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateCFFICallStaticMethodCall(
         cffiMethodArgs.push_back(std::move(paramExpr));
     }
 
-    return CreateCallStaticMethodCall(std::move(jniEnv), signature, std::move(cffiMethodArgs), curFile);
+    return CreateCallStaticMethodCall(jniEnv, signature, std::move(cffiMethodArgs), curFile);
 }
 
 OwnedPtr<Expr> InteropLibBridge::CreateParamExpr(FuncParam& param, Ptr<File> curFile)
@@ -1235,7 +1235,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateGetFromRegistryOptionCall(OwnedPtr<Ex
     return CreateCallExpr(std::move(fdRef), std::move(callArgs), funcDecl, ty, CallKind::CALL_DECLARED_FUNCTION);
 }
 
-OwnedPtr<CallExpr> InteropLibBridge::CreateGetFieldCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj,
+OwnedPtr<CallExpr> InteropLibBridge::CreateGetFieldCall(Ptr<Expr> env, OwnedPtr<Expr> obj,
     std::string typeSignature, std::string fieldName, std::string fieldSignature)
 {
     auto curFile = obj->curFile;
@@ -1257,16 +1257,16 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateGetFieldCall(OwnedPtr<Expr> env, Owne
     auto fieldNameExpr = CreateLitConstExpr(LitConstKind::STRING, fieldName, strTy);
     auto fsigExpr = CreateLitConstExpr(LitConstKind::STRING, fieldSignature, strTy);
 
-    auto jclass = CreateCall(jclassInitFuncDecl, curFile, CreateGetJniEnvCall(curFile), std::move(tsigExpr));
+    auto jclass = CreateCall(jclassInitFuncDecl, curFile, ASTCloner::Clone(env), std::move(tsigExpr));
     auto filedSignature = CreateCall(parseSignatureFuncDecl, curFile, std::move(fsigExpr));
-    auto fieldID = CreateCall(fieldIDFuncDecl, curFile, CreateGetJniEnvCall(curFile), std::move(jclass),
+    auto fieldID = CreateCall(fieldIDFuncDecl, curFile, ASTCloner::Clone(env), std::move(jclass),
         std::move(fieldNameExpr), std::move(filedSignature));
 
-    return CreateCall(funcDecl, curFile, std::move(env), std::move(obj), std::move(fieldID));
+    return CreateCall(funcDecl, curFile, ASTCloner::Clone(env), std::move(obj), std::move(fieldID));
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreateGetStaticFieldCall(
-    OwnedPtr<Expr> env, std::string typeSignature, std::string fieldName, std::string fieldSignature)
+    Ptr<Expr> env, std::string typeSignature, std::string fieldName, std::string fieldSignature)
 {
     auto curFile = env->curFile;
     auto funcDecl = GetGetStaticFieldDecl();
@@ -1292,16 +1292,16 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateGetStaticFieldCall(
     auto fieldNameExpr = CreateLitConstExpr(LitConstKind::STRING, fieldName, strTy);
     auto fsigExpr = CreateLitConstExpr(LitConstKind::STRING, fieldSignature, strTy);
 
-    auto jclass = CreateCall(jclassInitFuncDecl, curFile, CreateGetJniEnvCall(curFile), std::move(tsigExpr));
+    auto jclass = CreateCall(jclassInitFuncDecl, curFile, ASTCloner::Clone(env), std::move(tsigExpr));
     auto filedSignature = CreateCall(parseSignatureFuncDecl, curFile, std::move(fsigExpr));
-    auto fieldID = CreateCall(fieldIDFuncDecl, curFile, CreateGetJniEnvCall(curFile), ASTCloner::Clone(jclass.get()),
+    auto fieldID = CreateCall(fieldIDFuncDecl, curFile, ASTCloner::Clone(env), ASTCloner::Clone(jclass.get()),
         std::move(fieldNameExpr), std::move(filedSignature));
 
-    return CreateCall(funcDecl, curFile, std::move(env), std::move(jclass), std::move(fieldID));
+    return CreateCall(funcDecl, curFile, ASTCloner::Clone(env), std::move(jclass), std::move(fieldID));
 }
 
 OwnedPtr<CallExpr> InteropLibBridge::CreateSetFieldCall(
-    OwnedPtr<Expr> env, OwnedPtr<Expr> obj, const MemberJNISignature& signature, OwnedPtr<Expr> value)
+    Ptr<Expr> env, OwnedPtr<Expr> obj, const MemberJNISignature& signature, OwnedPtr<Expr> value)
 {
     auto curFile = value->curFile;
     auto funcDecl = GetSetFieldDecl();
@@ -1325,16 +1325,16 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateSetFieldCall(
     auto fsigExpr = CreateLitConstExpr(LitConstKind::STRING, signature.signature, strTy);
     fsigExpr->curFile = curFile;
 
-    auto jclass = CreateCall(jclassInitFuncDecl, curFile, CreateGetJniEnvCall(curFile), std::move(tsigExpr));
+    auto jclass = CreateCall(jclassInitFuncDecl, curFile, ASTCloner::Clone(env), std::move(tsigExpr));
     auto filedSignature = CreateCall(parseSignatureFuncDecl, curFile, std::move(fsigExpr));
-    auto fieldID = CreateCall(fieldIDFuncDecl, curFile, CreateGetJniEnvCall(curFile), std::move(jclass),
+    auto fieldID = CreateCall(fieldIDFuncDecl, curFile, ASTCloner::Clone(env), std::move(jclass),
         std::move(fieldNameExpr), std::move(filedSignature));
 
-    return CreateCall(
-        funcDecl, curFile, std::move(env), std::move(obj), std::move(fieldID), WrapJavaEntity(std::move(value)));
+    return CreateCall(funcDecl,
+        curFile, ASTCloner::Clone(env), std::move(obj), std::move(fieldID), WrapJavaEntity(std::move(value)));
 }
 
-OwnedPtr<CallExpr> InteropLibBridge::CreateSetStaticFieldCall(OwnedPtr<Expr> env, std::string typeSignature,
+OwnedPtr<CallExpr> InteropLibBridge::CreateSetStaticFieldCall(Ptr<Expr> env, std::string typeSignature,
     std::string fieldName, std::string fieldSignature, OwnedPtr<Expr> value)
 {
     auto curFile = value->curFile;
@@ -1359,12 +1359,12 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateSetStaticFieldCall(OwnedPtr<Expr> env
     auto fsigExpr = CreateLitConstExpr(LitConstKind::STRING, fieldSignature, strTy);
     fsigExpr->curFile = curFile;
 
-    auto jclass = CreateCall(jclassInitFuncDecl, curFile, CreateGetJniEnvCall(curFile), std::move(tsigExpr));
+    auto jclass = CreateCall(jclassInitFuncDecl, curFile, ASTCloner::Clone(env), std::move(tsigExpr));
     auto filedSignature = CreateCall(parseSignatureFuncDecl, curFile, std::move(fsigExpr));
-    auto fieldID = CreateCall(fieldIDFuncDecl, curFile, CreateGetJniEnvCall(curFile), ASTCloner::Clone(jclass.get()),
+    auto fieldID = CreateCall(fieldIDFuncDecl, curFile, ASTCloner::Clone(env), ASTCloner::Clone(jclass.get()),
         std::move(fieldNameExpr), std::move(filedSignature));
-    return CreateCall(
-        funcDecl, curFile, std::move(env), std::move(jclass), std::move(fieldID), WrapJavaEntity(std::move(value)));
+    return CreateCall(funcDecl,
+        curFile, ASTCloner::Clone(env), std::move(jclass), std::move(fieldID), WrapJavaEntity(std::move(value)));
 }
 
 OwnedPtr<Expr> InteropLibBridge::WrapExceptionHandling(OwnedPtr<Expr> env, OwnedPtr<LambdaExpr> action)
