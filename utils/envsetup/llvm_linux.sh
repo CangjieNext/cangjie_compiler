@@ -14,6 +14,7 @@ fi
 
 # Detect the current shell type
 _cj_detect_shell_name() {
+    local _comm
     # Prefer shell-provided version variables when sourced
     if [ -n "${ZSH_VERSION:-}" ]; then
         printf '%s\n' "zsh"
@@ -27,26 +28,26 @@ _cj_detect_shell_name() {
     # Fallback: detect by process name. In some container setups /proc/$$/exe can be misleading
     # (e.g. rosetta), so we avoid it.
     if command -v ps >/dev/null 2>&1; then
-        comm="$(ps -o comm= -p "$$" 2>/dev/null | tr -d '\n')"
-        comm="${comm##*/}"
-        case "$comm" in
-            -*) comm="${comm#-}" ;;
+        _comm="$(ps -o comm= -p "$$" 2>/dev/null | tr -d '\n')"
+        _comm="${_comm##*/}"
+        case "$_comm" in
+            -*) _comm="${_comm#-}" ;;
         esac
-        case "$comm" in
-            zsh|bash) printf '%s\n' "$comm"; return 0 ;;
+        case "$_comm" in
+            zsh|bash) printf '%s\n' "$_comm"; return 0 ;;
             sh|dash|ash|busybox) printf '%s\n' "sh"; return 0 ;;
         esac
     fi
 
     # If ps is not available, try reading from /proc filesystem
     if [ -r "/proc/$$/comm" ]; then
-        comm="$(tr -d '\n' < "/proc/$$/comm" 2>/dev/null)"
-        comm="${comm##*/}"
-        case "$comm" in
-            -*) comm="${comm#-}" ;;
+        _comm="$(tr -d '\n' < "/proc/$$/comm" 2>/dev/null)"
+        _comm="${_comm##*/}"
+        case "$_comm" in
+            -*) _comm="${_comm#-}" ;;
         esac
-        case "$comm" in
-            zsh|bash) printf '%s\n' "$comm"; return 0 ;;
+        case "$_comm" in
+            zsh|bash) printf '%s\n' "$_comm"; return 0 ;;
             sh|dash|ash|busybox) printf '%s\n' "sh"; return 0 ;;
         esac
     fi
@@ -58,13 +59,16 @@ _cj_detect_shell_name() {
 
 # Resolve relative path to absolute path
 _cj_resolve_abs_path() {
-    input="$1"
-    [ -n "$input" ] || return 1
+    # NOTE: avoid the name "path" — in zsh it is tied to PATH (array form),
+    # and declaring `local path` corrupts the global PATH on return. Use _rpath instead.
+    local _input _rpath _dirname _basename
+    _input="$1"
+    [ -n "$_input" ] || return 1
 
     # Handle relative and absolute paths
-    case "${input}" in
-        /*) path="$input" ;;
-        *) path="$PWD/$input" ;;
+    case "${_input}" in
+        /*) _rpath="$_input" ;;
+        *) _rpath="$PWD/$_input" ;;
     esac
 
     # Try multiple tools to resolve absolute path, in order of preference:
@@ -74,38 +78,39 @@ _cj_resolve_abs_path() {
     # 4. python
     # 5. pure shell implementation
     if command -v realpath >/dev/null 2>&1; then
-        realpath "$path" 2>/dev/null && return 0
+        realpath "$_rpath" 2>/dev/null && return 0
     fi
     if command -v readlink >/dev/null 2>&1; then
-        readlink -f "$path" 2>/dev/null && return 0
+        readlink -f "$_rpath" 2>/dev/null && return 0
     fi
     if command -v python3 >/dev/null 2>&1; then
-        python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$path" 2>/dev/null && return 0
+        python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$_rpath" 2>/dev/null && return 0
     fi
     if command -v python >/dev/null 2>&1; then
-        python -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$path" 2>/dev/null && return 0
+        python -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$_rpath" 2>/dev/null && return 0
     fi
 
     # Pure shell implementation: cd to directory then pwd
-    d="${path%/*}"
-    b="${path##*/}"
-    (cd -P "$d" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$b") || return 1
+    _dirname="${_rpath%/*}"
+    _basename="${_rpath##*/}"
+    (cd -P "$_dirname" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$_basename") || return 1
 }
 
 # Get absolute path of the script directory from the script path
 _cj_script_dir_from_path() {
-    input_path="$1"
-    [ -n "$input_path" ] || return 1
+    local _input_path _absolute_path _directory_part
+    _input_path="$1"
+    [ -n "$_input_path" ] || return 1
 
     # First resolve to absolute path
-    absolute_path="$(_cj_resolve_abs_path "$input_path" 2>/dev/null || true)"
-    [ -n "$absolute_path" ] || absolute_path="$input_path"
+    _absolute_path="$(_cj_resolve_abs_path "$_input_path" 2>/dev/null || true)"
+    [ -n "$_absolute_path" ] || _absolute_path="$_input_path"
 
     # Get directory part
-    directory_part="${absolute_path%/*}"
-    [ -n "$directory_part" ] || directory_part="."
+    _directory_part="${_absolute_path%/*}"
+    [ -n "$_directory_part" ] || _directory_part="."
     # Change to directory and output absolute path
-    (cd -P "$directory_part" 2>/dev/null && pwd -P) || return 1
+    (cd -P "$_directory_part" 2>/dev/null && pwd -P) || return 1
 }
 
 # ==================== MAIN LOGIC ====================
@@ -189,39 +194,40 @@ hw_arch="${sys_name}_${hw_arch}"
 
 # Remove Cangjie-related paths from an environment variable
 _remove_cangjie_paths() {
-    env_var_name="$1"
-    env_var_value=""
+    local _env_var_name="$1"
+    local _env_var_value=""
+    local _item=""
+    local _new_env_var_value=""
+    local _remaining=""
 
     # Read environment variable by name in a way that works in both bash and zsh.
-    eval "env_var_value=\${$env_var_name}"
+    eval "_env_var_value=\${$_env_var_name}"
 
-    if [ -n "${env_var_value}" ]; then
+    if [ -n "${_env_var_value}" ]; then
         # IMPORTANT: use explicit ':' splitting with parameter expansion.
         # Do not rely on shell word-splitting behavior, which differs across sh/bash/zsh
-        item=""
-        new_env_var_value=""
-        remaining="${env_var_value}"
+        _remaining="${_env_var_value}"
         while :; do
-            case "${remaining}" in
+            case "${_remaining}" in
                 *:*)
-                    item="${remaining%%:*}"
-                    remaining="${remaining#*:}"
+                    _item="${_remaining%%:*}"
+                    _remaining="${_remaining#*:}"
                     ;;
                 *)
-                    item="${remaining}"
-                    remaining=""
+                    _item="${_remaining}"
+                    _remaining=""
                     ;;
             esac
-            case "${item}" in
+            case "${_item}" in
                 "${CANGJIE_HOME}/"*) ;;
                 "${HOME}/.cjpm/bin") ;;
                 *)
-                    new_env_var_value="${new_env_var_value}${new_env_var_value:+:}${item}"
+                    _new_env_var_value="${_new_env_var_value}${_new_env_var_value:+:}${_item}"
                     ;;
             esac
-            [ -n "${remaining}" ] || break
+            [ -n "${_remaining}" ] || break
         done
-        eval "export ${env_var_name}=\"\${new_env_var_value}\""
+        eval "export ${_env_var_name}=\"\${_new_env_var_value}\""
     fi
 }
 if [ -n "${CANGJIE_HOME-}" ]; then
@@ -237,3 +243,5 @@ export LD_LIBRARY_PATH="${CANGJIE_HOME}/runtime/lib/linux${hw_arch}_cjnative:${C
 # Clean up temporary variables
 unset hw_arch
 unset sys_name
+unset script_dir
+unset shell_name

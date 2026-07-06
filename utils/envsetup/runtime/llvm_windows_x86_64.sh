@@ -8,6 +8,11 @@
 
 # This script needs to be placed in the output directory of Cangjie compiler.
 # ** NOTE: Please use `source' command to execute this script. **
+if ! (return 0 2>/dev/null); then
+    echo "[ERROR] This script must be sourced, not executed directly."
+    echo "        Please run: 'source $0' or '. $0'"
+    exit 1
+fi
 
 # Get current shell name.
 shell_path=$(readlink -f /proc/$$/exe)
@@ -28,3 +33,7 @@ case "${shell_name}" in
 esac
 
 export PATH=${script_dir}/lib/windows_x86_64_cjnative:${PATH}
+
+unset script_dir
+unset shell_name
+unset shell_path
