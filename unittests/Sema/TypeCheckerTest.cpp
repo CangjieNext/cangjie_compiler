@@ -553,3 +553,27 @@ TEST_F(TypeCheckerTest, OrderOfInitializationCheck)
     EXPECT_TRUE(foundB);
     EXPECT_LT(astBFileID, astAFileID);
 }
+
+TEST_F(TypeCheckerTest, NeedRuntimeCheck)
+{
+    std::string code = R"(
+main() {
+    let x = 3 is Nothing
+}
+    )";
+
+    instance->code = code;
+    instance->invocation.globalOptions.implicitPrelude = true;
+    instance->Compile(CompileStage::DESUGAR_AFTER_SEMA);
+    // should finish without any error.
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+
+    // Walk the AST to find the TypePattern and verify needRuntimeTypeCheck is false for "3 is Nothing".
+    Walker walker(instance->GetSourcePackages()[0]->files[0].get(), [](Ptr<Node> node) -> VisitAction {
+        if (auto tp = DynamicCast<TypePattern>(node); tp) {
+            EXPECT_FALSE(tp->needRuntimeTypeCheck) << "3 is Nothing should not require runtime type check";
+        }
+        return VisitAction::WALK_CHILDREN;
+    });
+    walker.Walk();
+}
