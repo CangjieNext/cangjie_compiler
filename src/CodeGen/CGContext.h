@@ -211,10 +211,10 @@ public:
     void AddVirtualCallInfo4LICM(const CGFunction* cgfunc, const VirtualCallInfo4LICM& info)
     {
         // ensure there's an entry for this function
-        auto &vec = virtualCallInfo4LICMMap[cgfunc];
+        auto& vec = virtualCallInfo4LICMMap[cgfunc];
         // avoid duplicates based on prepForVirtualCallBB
         auto it = std::find_if(vec.rbegin(), vec.rend(),
-            [&](const VirtualCallInfo4LICM &v) { return v.prepForVirtualCallBB == info.prepForVirtualCallBB; });
+            [&](const VirtualCallInfo4LICM& v) { return v.prepForVirtualCallBB == info.prepForVirtualCallBB; });
         if (it == vec.rend()) {
             vec.emplace_back(info);
         }
@@ -228,9 +228,9 @@ public:
             return;
         }
 
-        auto &vec = foundCGFunc->second;
+        auto& vec = foundCGFunc->second;
         auto it = std::find_if(vec.rbegin(), vec.rend(),
-            [&](const VirtualCallInfo4LICM &v) { return v.prepForVirtualCallBB == prepForVirtualCallBB; });
+            [&](const VirtualCallInfo4LICM& v) { return v.prepForVirtualCallBB == prepForVirtualCallBB; });
         if (it == vec.rend()) {
             return;
         }
@@ -268,6 +268,27 @@ public:
     void AddCJString(const std::string& cjStringName, const std::string& cjStringContent)
     {
         cjStrings.emplace(std::make_pair(cjStringName, cjStringContent));
+    }
+
+    // Per-module content->name dedup for cj string literals. Under the
+    // deferred (full-LTO) path literals are named by a per-module sequence
+    // number (NOT a content hash), so collisions cannot occur. To still
+    // dedup within a module (a literal may be referenced many times), the
+    // first occurrence of a content allocates a sequence number and is
+    // remembered; later occurrences reuse it. This map is per-CGContext
+    // (i.e. per module/split) and never shared across modules, so it is
+    // lock-free even if codegen is parallelized across splits. Cross-package
+    // dedup is left to the backend (ConstantMerge / CJStringPoolMerge),
+    // which works by initializer bytes, not by name.
+    const std::string& GetOrCreateCjStringName(const std::string& content)
+    {
+        auto it = cjStringContentToName.find(content);
+        if (it != cjStringContentToName.end()) {
+            return it->second;
+        }
+        std::string name = CJSTRING_LITERAL_PREFIX + std::to_string(cjStringSeq++);
+        auto emplaced = cjStringContentToName.emplace(content, std::move(name));
+        return emplaced.first->second;
     }
 
     const std::unordered_map<std::string, std::string>& GetCJStrings() const
@@ -469,6 +490,10 @@ private:
     // Key: The global variable's name of the cjString
     // Value: Store the content of cjString
     std::unordered_map<std::string, std::string> cjStrings;
+    // Per-module content -> sequence-name map for intra-module dedup under
+    // the deferred (full-LTO) path. See GetOrCreateCjStringName.
+    std::unordered_map<std::string, std::string> cjStringContentToName;
+    uint64_t cjStringSeq = 0;
     std::unordered_map<llvm::Constant*, size_t> indegreeOfTypes;
     std::unordered_map<std::string, std::unordered_set<std::string>> codegenAddedFuncsOrVars;
     std::unordered_map<const CHIR::EnumDef*, std::vector<llvm::Constant*>> enumInfoCache;
