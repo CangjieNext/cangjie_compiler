@@ -13,6 +13,7 @@
 #include "cangjie/CHIR/Transformation/CHIRFieldReferencePatcher.h"
 #include "cangjie/CHIR/Transformation/PatchCJMPImplBodies.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
+#include "cangjie/CHIR/Utils/PlatformFFIClass.h"
 #include "cangjie/Utils/CastingTemplate.h"
 
 namespace Cangjie::CHIR {
@@ -76,23 +77,6 @@ void AST2CHIR::PatchCtorFieldInitForJavaImpl()
     }
 
     PatchCJMPImplBodies(*package, builder).RunCtorFieldInitOnly();
-}
-
-namespace {
-bool IsPlatformMirrorClass(const ClassDef& classDef)
-{
-    return classDef.TestAttr(Attribute::JAVA_MIRROR) || classDef.TestAttr(Attribute::OBJ_C_MIRROR);
-}
-
-bool HasObjectAsSuperClass(const ClassDef& classDef)
-{
-    auto superClass = classDef.GetSuperClassDef();
-    if (superClass == nullptr) {
-        return true;  // classDef is Object itself (no superclass)
-    }
-    auto superId = superClass->GetIdentifier();
-    return superId.find("6ObjectE") != std::string::npos;  // inherits from Object
-}
 }
 
 ClassType* AST2CHIR::TranslateSuperClassToChirType(const AST::ClassLikeDecl& astDecl)
