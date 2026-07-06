@@ -10,28 +10,12 @@
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
+#include "cangjie/CHIR/Utils/PlatformFFIClass.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/ProfileRecorder.h"
 
 using namespace Cangjie::CHIR;
-
-namespace {
-bool IsJavaMirror(const ClassDef& classDef)
-{
-    return classDef.TestAttr(Attribute::JAVA_MIRROR);
-}
-
-bool IsObjCMirror(const ClassDef& classDef)
-{
-    return classDef.TestAttr(Attribute::OBJ_C_MIRROR);
-}
-
-bool IsPlatformMirrorClass(const ClassDef& classDef)
-{
-    return IsJavaMirror(classDef) || IsObjCMirror(classDef);
-}
-}
 
 PatchCJMPSuperCalls::PatchCJMPSuperCalls(Package& pkg, CHIRBuilder& builder)
     : pkg(pkg), builder(builder)
