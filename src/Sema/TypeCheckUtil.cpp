@@ -873,6 +873,10 @@ bool IsNeedRuntimeCheck(TypeManager& typeManager, Ty& srcTy, Ty& targetTy)
         }
         return false;
     };
+    // Nothing is a subtype of any other type; casting any Non-Nothing type to Nothing will always be false.
+    if (targetTy.IsNothing()) {
+        return false;
+    }
     if (isFinalType(srcTy) && isFinalType(targetTy)) {
         auto srcDecl = Ty::GetDeclPtrOfTy(&srcTy);
         auto targetDecl = Ty::GetDeclPtrOfTy(&targetTy);
