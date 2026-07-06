@@ -27,7 +27,7 @@ using namespace Interop::Java;
 class GenerateInJavaImplReferenceWrapper : public AfterTypeCheckStage {
 public:
     explicit GenerateInJavaImplReferenceWrapper(TypeManager& typeManager,
-        const ImportManager& importManager, InteropLibBridge& ilib, Native::FFI::Java::Utils& utils);
+        const ImportManager& importManager, InteropLibBridge& ilib);
 protected:
     void Process(AfterTypeCheckContext& ctx) override;
 private:
@@ -121,7 +121,6 @@ private:
     TypeManager& typeManager;
     const ImportManager& importManager;
     InteropLibBridge& ilib;
-    Native::FFI::Java::Utils& utils;
 };
 
 /**

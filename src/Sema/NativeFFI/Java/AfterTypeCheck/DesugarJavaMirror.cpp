@@ -21,6 +21,8 @@
 #include "cangjie/AST/Utils.h"
 
 #include "cangjie/Utils/SafePointer.h"
+#include "cangjie/AST/Create.h"
+
 
 namespace Cangjie::Interop::Java {
 using namespace Cangjie::Native::FFI;
@@ -291,30 +293,18 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
     CJC_ASSERT(ctor.TestAttr(Attribute::CONSTRUCTOR));
     ctor.constructorCall = ConstructorCall::OTHER_INIT;
     auto thisCall = CreateThisCall(*ctor.outerDecl, generatedCtor, generatedCtor.GetTy(), curFile);
-
     CJC_ASSERT(ctor.funcBody);
     CJC_ASSERT(ctor.funcBody->paramLists.size() == 1);
-
-    auto jniEnvPtrDecl = lib.GetJniEnvPtrDecl();
-    if (!jniEnvPtrDecl) {
+    auto& body = ctor.funcBody->body->body;
+        auto& paramList = *ctor.funcBody->paramLists[0];
+    auto constructorExpr = lib.CreateJavaConstructorBlock(ctor.outerDecl->GetTy(),
+        paramList, curFile, true);
+    if (!constructorExpr) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
-
-    auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, lib.CreateGetJniEnvCall(curFile));
-    OwnedPtr<CallExpr> newObjectCall = lib.CreateCFFINewJavaObjectCall(WithinFile(CreateRefExpr(*jniEnvVar), curFile),
-        utils.GetJavaClassNormalizeSignature(*ctor.outerDecl->GetTy()), *ctor.funcBody->paramLists[0], true, *curFile);
-
-    if (newObjectCall) {
-        std::vector<OwnedPtr<Node>> nodes;
-        nodes.push_back(std::move(jniEnvVar));
-        nodes.push_back(std::move(newObjectCall));
-
-        thisCall->args.push_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(nodes))));
-        ctor.funcBody->body->body.push_back(std::move(thisCall));
-    } else {
-        ctor.EnableAttr(Attribute::IS_BROKEN);
-    }
+    thisCall->args.push_back(CreateFuncArg(std::move(constructorExpr)));
+    body.push_back(std::move(thisCall));
 }
 
 void JavaDesugarManager::AddJavaMirrorMethodBody(
@@ -330,34 +320,29 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     auto retTy = fun.funcBody->retType->GetTy();
     fun.funcBody->body = CreateBlock({}, retTy);
     auto& body = fun.funcBody->body->body;
-
-    auto& jniEnv = *StaticAs<ASTKind::VAR_DECL>(
-        body.emplace_back(CreateTmpVarDecl(nullptr, lib.CreateGetJniEnvCall(curFile))).get());
-
-    OwnedPtr<Expr> methodCall;
     CJC_ASSERT_WITH_MSG(!fun.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& paramList = *fun.funcBody->paramLists[0].get();
-    if (fun.TestAttr(Attribute::STATIC)) {
-        auto memberJNISignature =
-            genericConfig ? MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
-        methodCall = lib.CreateCFFICallStaticMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
-            memberJNISignature, paramList, *curFile);
-    } else {
-        if (IsJArray(mirror)) {
-            CJC_ASSERT_WITH_MSG(!mirror.generic->typeParameters.empty(), "JArray ctor must be generic");
-            auto genericParam = mirror.generic->typeParameters[0].get();
-            CJC_ASSERT(genericParam);
-            methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
-                std::move(javaRefCall), paramList, genericParam, GetArrayOperationKind(fun));
-        } else {
-            auto memberJNISignature = genericConfig
-                ? MemberJNISignature(utils, fun, genericConfig)
-                : MemberJNISignature(utils, fun);
-            methodCall = lib.CreateCFFICallMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
-                std::move(javaRefCall), memberJNISignature, paramList, *fun.curFile);
-        }
-    }
+    OwnedPtr<Expr> methodCall;
 
+    if (IsJArray(mirror) && !fun.TestAttr(Attribute::STATIC)) {
+        auto& jniEnv = *StaticAs<ASTKind::VAR_DECL>(
+            body.emplace_back(CreateTmpVarDecl(nullptr, lib.CreateGetJniEnvCall(curFile))).get());
+        CJC_ASSERT_WITH_MSG(!mirror.generic->typeParameters.empty(), "JArray ctor must be generic");
+        auto genericParam = mirror.generic->typeParameters[0].get();
+        CJC_ASSERT(genericParam);
+        methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
+            std::move(javaRefCall), paramList, genericParam, GetArrayOperationKind(fun));
+    } else {
+        auto memberJNISignature = genericConfig ?
+            MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
+        auto methodBlock = lib.CreateJavaMethodCallBlock(curFile, paramList, retTy,
+            fun.TestAttr(Attribute::STATIC), std::move(javaRefCall), memberJNISignature);
+        if (!methodBlock) {
+            fun.EnableAttr(Attribute::IS_BROKEN);
+            return;
+        }
+        methodCall = WrapReturningLambdaCall(typeManager, std::move(methodBlock->body));
+    }
     if (!methodCall) {
         fun.EnableAttr(Attribute::IS_BROKEN);
         return;
@@ -368,27 +353,25 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     methodCallRes.SetTy(methodCallRes.initializer->GetTy());
     CopyBasicInfo(methodCallRes.initializer.get(), &methodCallRes);
     methodCallRes.begin = fun.begin;
-    methodCallRes.curFile = fun.curFile;
-
-    auto callResRef = CreateRefExpr(methodCallRes);
-    CopyBasicInfo(&methodCallRes, callResRef.get());
-
+    methodCallRes.curFile = curFile;
+    auto callResRef = WithinFile(CreateRefExpr(methodCallRes), curFile);
     OwnedPtr<Expr> retCallExpr = nullptr;
-    // cjmapping interface return param support lambda.
+    // CJMapping interface return parameters support lambdas.
     if (retTy->kind == TypeKind::TYPE_FUNC && fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
         retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), retTy, mirror);
     } else {
-        retCallExpr = lib.UnwrapJavaEntity(std::move(callResRef), retTy, mirror);
+        retCallExpr = lib.ConvertJavaResultToCJ(std::move(callResRef), retTy, mirror);
     }
-
     if (!retCallExpr) {
         fun.EnableAttr(Attribute::IS_BROKEN);
         return;
     }
+
     auto& retExpr = *StaticAs<ASTKind::RETURN_EXPR>(
         body.emplace_back(CreateReturnExpr(std::move(retCallExpr), fun.funcBody.get())).get());
     retExpr.SetTy(TypeManager::GetNothingTy());
     retExpr.refFuncBody = fun.funcBody.get();
+
     fun.funcBody->SetTy(TypeManager::GetNothingTy());
     if (fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
         fun.funcBody->parentClassLike = &mirror;

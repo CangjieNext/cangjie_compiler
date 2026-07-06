@@ -36,7 +36,7 @@ void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
 
     Process<GenerateInJavaImplRegistryCompanion>(ctx, typeManager, lib);
     Process<DesugarJavaImplSuperConstructorCall>(ctx, typeManager, lib, jniBridge, diag, utils);
-    Process<GenerateInJavaImplReferenceWrapper>(ctx, typeManager, importManager, lib, utils);
+    Process<GenerateInJavaImplReferenceWrapper>(ctx, typeManager, importManager, lib);
     Process<DesugarJavaImplSuperMethodCall>(ctx, lib, utils);
     Process<RewriteJavaImplReferenceWrapperFields>(ctx, typeManager, utils, desugarPropRef);
     Process<GenerateNativeBridgeForJavaImpl>(ctx, typeManager, importManager, lib, jniBridge);
