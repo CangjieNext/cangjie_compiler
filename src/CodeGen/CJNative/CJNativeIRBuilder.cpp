@@ -1263,19 +1263,13 @@ llvm::Value* IRBuilder2::CallArrayIntrinsicInitWithContent(const CHIR::RawArrayL
 
 llvm::Value* IRBuilder2::CreateStringLiteral(const std::string& str)
 {
-    const std::string baseName = GetCjStringLiteralName(str);
-    std::string cjStringName = baseName;
-    auto& cjStrings = GetCGContext().GetCJStrings();
-    for (size_t collisionId = 1;; ++collisionId) {
-        auto cachedCjString = cgMod.GetLLVMModule()->getNamedValue(cjStringName);
-        if (!cachedCjString) {
-            break;
-        }
-        if (auto it = cjStrings.find(cjStringName);
-            llvm::isa<llvm::GlobalVariable>(cachedCjString) && it != cjStrings.end() && it->second == str) {
-            return cachedCjString;
-        }
-        cjStringName = baseName + "." + std::to_string(collisionId);
+    // Per-module content->name dedup: same content reuses one literal global
+    // (avoids 5x IR bloat from repeated literals). Name is a per-module
+    // sequence number, not a content hash, so collisions cannot occur.
+    const std::string& cjStringName = GetCGContext().GetOrCreateCjStringName(str);
+    auto cachedCjString = cgMod.GetLLVMModule()->getNamedValue(cjStringName);
+    if (cachedCjString) {
+        return cachedCjString;
     }
 
     // Generate ArrayLayout.UInt8 here to ensure it is inserted to func for_keeping_some_types$
@@ -1296,6 +1290,9 @@ llvm::Value* IRBuilder2::CreateStringLiteral(const std::string& str)
     gvCjString->setConstant(true);
     gvCjString->addAttribute(CJSTRING_LITERAL_ATTR);
     gvCjString->setLinkage(llvm::GlobalValue::PrivateLinkage);
+    // Address identity is never compared (only memcpy'd / passed as arg), so
+    // mark unnamed_addr to let ConstantMerge dedup identical literals.
+    gvCjString->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     GetCGContext().AddCJString(gvCjString->getName().str(), str);
     return gvCjString;
 }
