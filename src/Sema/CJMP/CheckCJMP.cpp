@@ -758,8 +758,10 @@ void MPTypeCheckerImpl::ValidateCJMPConstructorConstraints(AST::Package& pkg)
             continue;
         }
         if (!HasEmptyConstructor(*platformParent)) {
-            diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_platform_parent_no_empty_constructor,
+            auto builder = diag.DiagnoseRefactor(
+                DiagKindRefactor::sema_cjmp_platform_parent_no_empty_constructor,
                 *specificClass, platformParent->identifier.Val());
+            builder.AddNote(*specificClass, "CJMP relaxation: object matched to platform-specific parent");
         }
     }
 }
