@@ -800,10 +800,18 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateFwdClassMethod(
 
     // Java_CFFI_callVirtualMethod
     auto& paramList = *fun->funcBody->paramLists[0].get();
+    auto argsVar = lib.CreateCFFIJValueArgsVar(paramList, *curFile);
+    OwnedPtr<Expr> argsRef = nullptr;
+    if (argsVar) {
+        argsVar->isVar = true;
+        argsRef = CreateRefExpr(*argsVar);
+        CopyBasicInfo(argsVar.get(), argsRef.get());
+    }
+
     auto callEnvRef = WithinFile(CreateRefExpr(*envVar), curFile);
     auto callLocalRef = WithinFile(CreateRefExpr(*localRefVar), curFile);
-    OwnedPtr<Expr> methodCall = lib.CreateCFFICallMethodCall(
-        std::move(callEnvRef), std::move(callLocalRef), MemberJNISignature(utils, *fun), paramList, *curFile);
+    OwnedPtr<Expr> methodCall = lib.CreateCallMethodCall(std::move(callEnvRef), std::move(callLocalRef), MemberJNISignature(utils, *fun),
+        std::move(argsRef), fun->funcBody->retType->GetTy(), *curFile);
     if (!methodCall) {
         fun->EnableAttr(Attribute::IS_BROKEN);
         return nullptr;
@@ -830,6 +838,9 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateFwdClassMethod(
     thenRetExpr->refFuncBody = fun->funcBody.get();
     thenBodyNodes.push_back(std::move(envVar));
     thenBodyNodes.push_back(std::move(localRefVar));
+    if (argsVar) {
+        thenBodyNodes.push_back(std::move(argsVar));
+    }
     thenBodyNodes.push_back(std::move(methodCallRes));
     thenBodyNodes.push_back(std::move(deleteCallExpr));
     thenBodyNodes.push_back(std::move(thenRetExpr));
@@ -1134,12 +1145,21 @@ OwnedPtr<LambdaExpr> JavaDesugarManager::GenerateLambdaExpr(File& file, LambdaPa
     // block
     // let tmp = Java_CFFI_callVirtualMethod()
     OwnedPtr<Expr> objParamRef = WithinFile(CreateRefExpr(funcParam), curFile);
-    MemberJNISignature MemberJNISignature(
+    MemberJNISignature memberJNISignature(
         NormalizeJavaSignature(file.curPackage->fullPackageName + "/" + GetLambdaJavaClassName(pattern)), "call",
         utils.GetJavaTypeSignature(*retTy, paramTys));
 
-    OwnedPtr<Expr> methodCall = lib.CreateCFFICallMethodCall(lib.CreateGetJniEnvCall(curFile),
-        lib.CreateJavaEntityJobjectCall(std::move(objParamRef)), MemberJNISignature, *funcParamList, *curFile);
+    auto argsVar = lib.CreateCFFIJValueArgsVar(*funcParamList, *curFile);
+    OwnedPtr<Expr> argsRef = nullptr;
+    if (argsVar) {
+        argsVar->isVar = true;
+        argsRef = CreateRefExpr(*argsVar);
+        CopyBasicInfo(argsVar.get(), argsRef.get());
+    }
+
+    OwnedPtr<Expr> methodCall = lib.CreateCallMethodCall(lib.CreateGetJniEnvCall(curFile), lib.CreateJavaEntityJobjectCall(std::move(objParamRef)),
+        memberJNISignature, std::move(argsRef), retTy, *curFile);
+
     CJC_NULLPTR_CHECK(methodCall);
     auto methodCallRes = WithinFile(CreateTmpVarDecl(nullptr, std::move(methodCall)), curFile);
 
@@ -1152,6 +1172,9 @@ OwnedPtr<LambdaExpr> JavaDesugarManager::GenerateLambdaExpr(File& file, LambdaPa
     returnExpr->SetTy(TypeManager::GetNothingTy());
 
     std::vector<OwnedPtr<Node>> nodes;
+    if (argsVar) {
+        nodes.push_back(std::move(argsVar));
+    }
     nodes.push_back(std::move(methodCallRes));
     nodes.push_back(std::move(returnExpr));
 

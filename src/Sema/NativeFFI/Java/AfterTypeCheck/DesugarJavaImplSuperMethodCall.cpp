@@ -33,15 +33,23 @@ void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(CallExpr& call,
     auto parent = As<ASTKind::CLASS_DECL>(&outerDecl);
     auto curFile = call.curFile;
 
-    std::vector<OwnedPtr<Expr>> args;
+    std::vector<OwnedPtr<Expr>> cffiArgs;
 
     for (auto& arg : call.args) {
-        auto desugaredArg = ilib.WrapJavaEntity(ASTCloner::Clone(arg->expr.get()));
-        args.emplace_back(std::move(desugaredArg));
+        cffiArgs.emplace_back(ilib.WrapJavaEntity(ASTCloner::Clone(arg->expr.get())));
+    }
+
+    OwnedPtr<VarDecl> argsVar = nullptr;
+    OwnedPtr<Expr> argsRef = nullptr;
+
+    if (!cffiArgs.empty()) {
+        argsVar = ilib.CreateCFFIArgsVar(std::move(cffiArgs), *curFile);
+        argsRef = CreateRefExpr(*argsVar);
+        CopyBasicInfo(argsVar.get(), argsRef.get());
     }
 
     auto desugaredCall = ilib.CreateCallMethodCall(ilib.CreateGetJniEnvCall(curFile), CreateJavaRefCall(impl, curFile),
-        MemberJNISignature(utils, *call.resolvedFunction, parent), std::move(args), *curFile, false);
+        MemberJNISignature(utils, *call.resolvedFunction, parent), std::move(argsRef), call.GetTy(), *curFile, false);
     desugaredCall->desugarArgs = std::nullopt;
 
     call.desugarExpr = call.GetTy()->IsUnit()
