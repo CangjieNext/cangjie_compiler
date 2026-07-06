@@ -1606,10 +1606,6 @@ bool IsCJMPCommonSpecificPair(Ptr<FuncDecl> f1, Ptr<FuncDecl> f2)
 
     // CJMP pair: one from common, one specific
     if ((f1FromCommon && f2Specific) || (f2FromCommon && f1Specific)) {
-        // Check if they're part of the same class (same outerDecl)
-        if (f1->outerDecl && f2->outerDecl && f1->outerDecl == f2->outerDecl) {
-            return true;
-        }
         // Check if they have matching specificImplementation pointers
         if (f1->specificImplementation == f2 || f2->specificImplementation == f1) {
             return true;
