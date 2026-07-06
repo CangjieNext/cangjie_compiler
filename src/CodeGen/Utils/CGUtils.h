@@ -7,6 +7,7 @@
 #ifndef CANGJIE_CGUTILS_H
 #define CANGJIE_CGUTILS_H
 
+#include "Constants.h"
 #include <string>
 #include <vector>
 
@@ -378,6 +379,21 @@ CHIR::CustomTypeDef* GetTypeDefFromImplicitUsedFuncParam(
 inline std::string GetCjStringDataLiteralName(const std::string& cjStr)
 {
     return CJSTRING_DATA_PREFIX + Utils::HashString64(cjStr);
+}
+
+// Derive the data-buffer name from a literal name by swapping the literal
+// prefix with the data prefix. Used by the deferred (full-LTO) path where
+// per-literal names are sequence numbers assigned per module (see
+// CGContext::GetOrCreateCjStringName), so the buffer and literal share the
+// same sequence suffix.
+inline std::string GetCjStringDataNameFromLiteralName(const std::string& litName)
+{
+    // litName starts with CJSTRING_LITERAL_PREFIX; replace it with
+    // CJSTRING_DATA_PREFIX. The prefixes differ only in "_data".
+    if (litName.compare(0, CJSTRING_LITERAL_PREFIX.size(), CJSTRING_LITERAL_PREFIX) != 0) {
+        return std::string();
+    }
+    return CJSTRING_DATA_PREFIX + litName.substr(CJSTRING_LITERAL_PREFIX.size());
 }
 
 inline std::string GetCjStringLiteralName(const std::string& cjStr)
