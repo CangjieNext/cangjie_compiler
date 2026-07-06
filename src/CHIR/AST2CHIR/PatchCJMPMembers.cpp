@@ -17,6 +17,14 @@
 #include "cangjie/Utils/CastingTemplate.h"
 
 namespace Cangjie::CHIR {
+/**
+ * Patches common-part instance fields of @JavaMirror/@ObjCMirror classes during
+ * CJMP specific compilation. For each mirror class, delegates to
+ * CHIRFieldPatcher to collapse a field's CHIR type to Unit where a matching
+ * mirror getter exists, since field access is redirected through JNI
+ * getter/setter calls (patched by PatchFieldReferencesForMirror). No-op unless
+ * compiling the CJMP specific part.
+ */
 void AST2CHIR::PatchCommonFieldsForMirror()
 {
     if (!opts.IsCompilingCJMPSpecific()) {
@@ -34,6 +42,12 @@ void AST2CHIR::PatchCommonFieldsForMirror()
     }
 }
 
+/**
+ * Patches common-part instance fields of @JavaImpl classes during CJMP specific
+ * compilation. Same field-to-Unit collapse as PatchCommonFieldsForMirror, but
+ * matching on the JAVA_IMPL getter. No-op unless compiling the CJMP specific
+ * part.
+ */
 void AST2CHIR::PatchCommonFieldsForJavaImpl()
 {
     if (!opts.IsCompilingCJMPSpecific()) {
@@ -48,6 +62,13 @@ void AST2CHIR::PatchCommonFieldsForJavaImpl()
     }
 }
 
+/**
+ * Rewrites field load/store instructions in common-part method bodies of
+ * @JavaMirror and @ObjCMirror classes to call the mirror JNI getter/setter
+ * instead of accessing the field directly. Runs CHIRFieldReferencePatcher for
+ * both the Java and ObjC mirror attributes. No-op unless compiling the CJMP
+ * specific part.
+ */
 void AST2CHIR::PatchFieldReferencesForMirror()
 {
     if (!opts.IsCompilingCJMPSpecific()) {
@@ -61,6 +82,12 @@ void AST2CHIR::PatchFieldReferencesForMirror()
     objcPatcher.Run();
 }
 
+/**
+ * Patches field references in @JavaImpl constructor and method bodies
+ * inherited from the common part, redirecting direct field access to the
+ * impl-side accessors. Delegates to PatchCJMPImplBodies::Run. No-op unless
+ * compiling the CJMP specific part.
+ */
 void AST2CHIR::PatchFieldReferencesForJavaImpl()
 {
     if (!opts.IsCompilingCJMPSpecific()) {
@@ -70,6 +97,12 @@ void AST2CHIR::PatchFieldReferencesForJavaImpl()
     PatchCJMPImplBodies(*package, builder).Run();
 }
 
+/**
+ * Patches field initialization in @JavaImpl constructors inherited from the
+ * common part. Delegates to PatchCJMPImplBodies::RunCtorFieldInitOnly, which
+ * processes only the constructor field-init sites rather than full method
+ * bodies. No-op unless compiling the CJMP specific part.
+ */
 void AST2CHIR::PatchCtorFieldInitForJavaImpl()
 {
     if (!opts.IsCompilingCJMPSpecific()) {
@@ -79,6 +112,12 @@ void AST2CHIR::PatchCtorFieldInitForJavaImpl()
     PatchCJMPImplBodies(*package, builder).RunCtorFieldInitOnly();
 }
 
+/**
+ * Translates the AST superclass type of @p astDecl into a CHIR ClassType,
+ * unwrapping a RefType wrapper when the translated super type is a reference to
+ * a class. Returns null if @p astDecl has no superclass, the type fails to
+ * translate, or the result is neither a class nor a ref-to-class.
+ */
 ClassType* AST2CHIR::TranslateSuperClassToChirType(const AST::ClassLikeDecl& astDecl)
 {
     auto astClassTy = DynamicCast<AST::ClassTy*>(astDecl.GetTy());
@@ -103,6 +142,14 @@ ClassType* AST2CHIR::TranslateSuperClassToChirType(const AST::ClassLikeDecl& ast
     return nullptr;
 }
 
+/**
+ * Returns true if the superclass of @p astDecl is a platform "mirror" class
+ * (@JavaMirror or @ObjCMirror). The CHIR superclass ClassDef is checked first
+ * (via IsPlatformMirrorClass); if that is inconclusive, the AST superclass
+ * declaration's annotations are consulted as a fallback. Used by
+ * PatchCJMPSuperClass to decide whether the Object super reference should be
+ * repointed to the platform parent.
+ */
 bool AST2CHIR::IsPlatformMirrorSuperClass(const AST::ClassLikeDecl& astDecl, const ClassType& chirSuperClassTy)
 {
     auto superClassDef = chirSuperClassTy.GetClassDef();
@@ -122,6 +169,16 @@ bool AST2CHIR::IsPlatformMirrorSuperClass(const AST::ClassLikeDecl& astDecl, con
     return false;
 }
 
+/**
+ * Repoints the CHIR superclass reference of CJMP specific classes whose super
+ * is the implicit Cangjie Object root to the real platform mirror superclass
+ * (@JavaMirror/@ObjCMirror). A name->AST map of SPECIFIC class decls is built
+ * once (across local and imported nominals) to look up the AST decl matching
+ * each SPECIFIC CHIR ClassDef; its super type is translated to CHIR and, when
+ * that super is a platform mirror, applied via SetSuperClassTy. Classes that
+ * already inherit a real non-Object superclass are skipped
+ * (HasObjectAsSuperClass). No-op unless compiling the CJMP specific part.
+ */
 void AST2CHIR::PatchCJMPSuperClass()
 {
     if (!opts.IsCompilingCJMPSpecific()) {
