@@ -275,6 +275,27 @@ public:
         return cjStrings;
     }
 
+    // Per-module content->name dedup for cj string literals. Under the
+    // deferred (full-LTO) path literals are named by a per-module sequence
+    // number (NOT a content hash), so collisions cannot occur. To still
+    // dedup within a module (a literal may be referenced many times), the
+    // first occurrence of a content allocates a sequence number and is
+    // remembered; later occurrences reuse it. This map is per-CGContext
+    // (i.e. per module/split) and never shared across modules, so it is
+    // lock-free even if codegen is parallelized across splits. Cross-package
+    // dedup is left to the backend (ConstantMerge / CJStringPoolMerge),
+    // which works by initializer bytes, not by name.
+    const std::string& GetOrCreateCjStringName(const std::string& content)
+    {
+        auto it = cjStringContentToName.find(content);
+        if (it != cjStringContentToName.end()) {
+            return it->second;
+        }
+        std::string name = CJSTRING_LITERAL_PREFIX + std::to_string(cjStringSeq++);
+        auto emplaced = cjStringContentToName.emplace(content, std::move(name));
+        return emplaced.first->second;
+    }
+
     void AddCodeGenAddedFuncsOrVars(const CHIR::Type& ty, std::string& codegenAddedName)
     {
         if (!cgPkgContext.GetGlobalOptions().enIncrementalCompilation) {
@@ -469,6 +490,10 @@ private:
     // Key: The global variable's name of the cjString
     // Value: Store the content of cjString
     std::unordered_map<std::string, std::string> cjStrings;
+    // Per-module content -> sequence-name map for intra-module dedup under
+    // the deferred (full-LTO) path. See GetOrCreateCjStringName.
+    std::unordered_map<std::string, std::string> cjStringContentToName;
+    uint64_t cjStringSeq = 0;
     std::unordered_map<llvm::Constant*, size_t> indegreeOfTypes;
     std::unordered_map<std::string, std::unordered_set<std::string>> codegenAddedFuncsOrVars;
     std::unordered_map<const CHIR::EnumDef*, std::vector<llvm::Constant*>> enumInfoCache;
