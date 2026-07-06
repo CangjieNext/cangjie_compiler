@@ -5,7 +5,6 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "DesugarJavaImplSuperMethodCall.h"
-#include "Utils.h"
 #include "InteropLibBridge.h"
 
 #include "cangjie/AST/Match.h"
@@ -19,8 +18,8 @@
 namespace Cangjie::Native::FFI::Java {
 using namespace Cangjie::Interop::Java;
 
-void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(CallExpr& call,
-    ClassDecl& impl) const
+void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(
+    CallExpr& call, ClassDecl& impl) const
 {
     CJC_ASSERT(call.baseFunc && call.baseFunc->astKind == ASTKind::MEMBER_ACCESS);
     auto& ma = *StaticAs<ASTKind::MEMBER_ACCESS>(call.baseFunc.get());
@@ -31,22 +30,10 @@ void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(CallExpr& call,
     auto& outerDecl = *call.resolvedFunction->outerDecl;
     CJC_ASSERT(outerDecl.IsJavaMirror());
     auto parent = As<ASTKind::CLASS_DECL>(&outerDecl);
-    auto curFile = call.curFile;
-
-    std::vector<OwnedPtr<Expr>> args;
-
-    for (auto& arg : call.args) {
-        auto desugaredArg = ilib.WrapJavaEntity(ASTCloner::Clone(arg->expr.get()));
-        args.emplace_back(std::move(desugaredArg));
-    }
-
-    auto desugaredCall = ilib.CreateCallMethodCall(ilib.CreateGetJniEnvCall(curFile), CreateJavaRefCall(impl, curFile),
-        MemberJNISignature(utils, *call.resolvedFunction, parent), std::move(args), *curFile, false);
-    desugaredCall->desugarArgs = std::nullopt;
-
-    call.desugarExpr = call.GetTy()->IsUnit()
-        ? std::move(desugaredCall)
-        : ilib.UnwrapJavaEntity(std::move(desugaredCall), call.GetTy(), impl);
+    MemberJNISignature signature(utils, *call.resolvedFunction, parent);
+    auto resultExpr = ilib.CreateJavaSuperMethodCallBlock(impl, call, signature);
+    CJC_NULLPTR_CHECK(resultExpr);
+    call.desugarExpr = std::move(resultExpr);
 }
 
 DesugarJavaImplSuperMethodCall::DesugarJavaImplSuperMethodCall(

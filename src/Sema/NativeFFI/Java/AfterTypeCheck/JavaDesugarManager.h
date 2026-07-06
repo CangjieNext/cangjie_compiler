@@ -176,23 +176,22 @@ private:
      */
     void InsertJavaRefGetterWithBody(ClassDecl& decl);
 
-    /**
-     * before [ctor]:
-     *   init(a1: A, a2: B, ..., an: N) { // empty body generated on the previous compilation steps
+     /**
+     * Rewrites a Java mirror constructor to initialize the generated wrapper
+     * with a Java object created via JNI.
+     *
+     * before:
+     *   init(a1: A, ..., an: N) {
      *   }
-     * --------
+     *
      * after:
-     *   init(a1: A, a2: B, ..., an: N) {
+     *   init(a1: A, ..., an: N) {
      *       this({
-     *           let jniEnv = Java_CFFI_get_env()
-     *           Java_CFFI_newJavaObject(jniEnv, typeSignature, "(<argsSignature>)V", [
-     *               Java_CFFI_JavaEntity(a1),
-     *               Java_CFFI_JavaEntity(a2),
-     *               ...,
-     *               Java_CFFI_JavaEntity(an)])
+     *           // Create Java object via JNI.
+     *           ...
      *       })
      *   }
-     */
+    */
     void DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& generatedCtor);
 
     OwnedPtr<CallExpr> GetFwdClassInstance(OwnedPtr<RefExpr> paramRef, Decl& fwdClassDecl);
