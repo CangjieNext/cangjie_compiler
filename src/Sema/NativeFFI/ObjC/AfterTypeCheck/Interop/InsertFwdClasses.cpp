@@ -13,6 +13,7 @@
 #include "Handlers.h"
 #include "NativeFFI/ObjC/Utils/Common.h"
 #include "NativeFFI/Utils.h"
+#include "cangjie/AST/AttributePack.h"
 
 using namespace Cangjie::AST;
 using namespace Cangjie::Interop::ObjC;
@@ -27,7 +28,8 @@ OwnedPtr<ClassDecl> InsertFwdClasses::InitInterfaceFwdClassDecl(const Ptr<AST::C
     fwdclassDecl->moduleName = ::Cangjie::Utils::GetRootPackageName(interfaceDecl->fullPackageName);
     fwdclassDecl->curFile = interfaceDecl->curFile;
 
-    fwdclassDecl->EnableAttr(Attribute::PUBLIC, Attribute::COMPILER_ADD, Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD,  Attribute::ABSTRACT);
+    fwdclassDecl->EnableAttr(Attribute::PUBLIC, Attribute::COMPILER_ADD, Attribute::CJ_MIRROR_OBJC_INTERFACE_FWD,
+                             Attribute::ABSTRACT, Attribute::NO_REFLECT_INFO);
 
     fwdclassDecl->body = MakeOwned<ClassBody>();
     return fwdclassDecl;
