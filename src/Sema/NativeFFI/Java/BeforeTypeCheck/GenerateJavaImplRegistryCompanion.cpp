@@ -7,6 +7,7 @@
 #include "GenerateJavaImplRegistryCompanion.h"
 #include "JavaInteropManager.h"
 #include "NativeFFI/Java/BeforeTypeCheck/Utils.h"
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Utils/SafePointer.h"
 #include "cangjie/AST/Utils.h"
@@ -24,7 +25,7 @@ OwnedPtr<AST::ClassDecl> GenerateJavaImplRegistryCompanion::GenerateRegistryComp
 {
     CJC_ASSERT(IsImpl(impl));
     auto regCompanion = CloneClassSkeleton(impl, GetImplRegistryCompanionClassName(impl));
-    regCompanion->EnableAttr(Attribute::JAVA_IMPL_REGISTRY_COMPANION);
+    regCompanion->EnableAttr(Attribute::JAVA_IMPL_REGISTRY_COMPANION, Attribute::NO_REFLECT_INFO);
 
     return regCompanion;
 }

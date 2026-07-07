@@ -7,6 +7,7 @@
 #include "GenerateJavaMirrorReferenceWrapperClass.h"
 #include "JavaInteropManager.h"
 #include "NativeFFI/Java/BeforeTypeCheck/Utils.h"
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Utils/SafePointer.h"
 #include "cangjie/AST/Utils.h"
@@ -47,7 +48,8 @@ OwnedPtr<ClassDecl> GenerateJavaMirrorReferenceWrapperClass::GenerateWrapperClas
     wrapper->EnableAttr(
         Attribute::JAVA_MIRROR,
         Attribute::JAVA_MIRROR_SUBTYPE,
-        Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER);
+        Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER,
+        Attribute::NO_REFLECT_INFO);
 
     InsertSuperTypes(*wrapper, mirror);
     return wrapper;
