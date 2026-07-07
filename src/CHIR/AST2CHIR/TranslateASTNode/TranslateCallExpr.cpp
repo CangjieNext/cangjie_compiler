@@ -519,35 +519,14 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
         return nullptr;
     }
 
-    auto target = expr.baseFunc->GetTarget();
+    // Get intrinsic kind
+    auto target = StaticCast<AST::FuncDecl*>(expr.baseFunc->GetTarget());
     CJC_NULLPTR_CHECK(target);
-    std::string identifier = target->identifier;
-
-    // Translate code position info
-    const auto& loc = TranslateLocation(expr);
-
-    auto ty = chirTy.TranslateType(*expr.GetTy());
-
-    // Get the intrinsic kind
-    std::string packageName{};
-    if (target->genericDecl) {
-        packageName = target->genericDecl->fullPackageName;
-    } else if (target->outerDecl && target->outerDecl->genericDecl) {
-        packageName = target->outerDecl->genericDecl->fullPackageName;
-    } else {
-        packageName = target->fullPackageName;
-    }
-    CHIR::IntrinsicKind intrinsicKind{NOT_INTRINSIC};
-    // Should handle headlessIntrinsics first, because it can appear in any package
-    if (auto it1 = headlessIntrinsics.find(identifier); it1 != headlessIntrinsics.end()) {
-        intrinsicKind = it1->second;
-    } else if (auto it = packageMap.find(packageName); it != packageMap.end()) {
-        CJC_ASSERT(it->second.find(identifier) != it->second.end());
-        intrinsicKind = it->second.at(identifier);
-    }
+    auto intrinsicKind = GetIntrinsicKindFromFuncDecl(*target);
 
     // Translate arguments
     auto args = TranslateFuncArgs(expr, nullptr, nullptr);
+    auto ty = chirTy.TranslateType(*expr.GetTy());
     auto retTy = ty;
     if (intrinsicKind == BLACK_BOX) {
         // intrinsic blackBox's signature is blackBox<T>(v: T): T,
@@ -561,6 +540,7 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
         .args = args,
         .instTypeArgs = TranslateASTTypes(ne->instTys)
     };
+    const auto& loc = TranslateLocation(expr);
     auto intriVar = TryCreate<Intrinsic>(currentBlock, loc, retTy, callContext)->GetResult();
 
     // what is this for

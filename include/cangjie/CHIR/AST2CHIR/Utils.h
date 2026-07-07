@@ -12,6 +12,7 @@
 #include "cangjie/CHIR/IR/CHIRContext.h"
 #include "cangjie/CHIR/IR/Type/CHIRType.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
+#include "cangjie/CHIR/IR/IntrinsicKind.h"
 #include "cangjie/Option/Option.h"
 
 namespace Cangjie {
@@ -221,6 +222,14 @@ std::pair<Type*, bool> GetInstMemberTypeByNameCheckingReadOnly(
     const GenericType& rootType, const std::vector<std::string>& names, CHIRBuilder& builder);
 
 Type* AddRefIfFuncIsMutOrClass(Type& thisType, const AST::FuncDecl& funcDecl, CHIRBuilder& builder);
+
+/**
+ * @brief Retrieves the intrinsic kind from an intrinsic function declaration.
+ *
+ * @param funcDecl The intrinsic function declaration.
+ * @return The corresponding intrinsic kind.
+ */
+IntrinsicKind GetIntrinsicKindFromFuncDecl(const AST::FuncDecl& funcDecl);
 } // namespace CHIR
 } // namespace Cangjie
 
