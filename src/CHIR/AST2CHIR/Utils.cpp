@@ -7,10 +7,50 @@
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 
 #include "cangjie/AST/Utils.h"
+#include "cangjie/CHIR/IR/IntrinsicKind.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 
 namespace Cangjie {
 namespace CHIR {
+
+namespace {
+const std::unordered_map<std::string, const std::unordered_map<std::string, IntrinsicKind>> packageMap = {
+    {CORE_PACKAGE_NAME, coreIntrinsicMap},
+    {SYNC_PACKAGE_NAME, cjnativeSyncIntrinsicMap},
+    {OVERFLOW_PACKAGE_NAME, overflowIntrinsicMap},
+    {RUNTIME_PACKAGE_NAME, runtimeIntrinsicMap},
+    {REFLECT_PACKAGE_NAME, reflectIntrinsicMap},
+    {MATH_PACKAGE_NAME, mathIntrinsicMap},
+    {INTEROP_PACKAGE_NAME, interOpIntrinsicMap},
+    {"ohos.ark_interop", ohosArkInteropIntrinsicMap}
+};
+
+const std::unordered_map<std::string, IntrinsicKind> headlessIntrinsics = {
+    {GET_TYPE_FOR_TYPE_PARAMETER_NAME, IntrinsicKind::GET_TYPE_FOR_TYPE_PARAMETER},
+    {IS_SUBTYPE_TYPES_NAME, IntrinsicKind::IS_SUBTYPE_TYPES},
+};
+} // namespace
+
+IntrinsicKind GetIntrinsicKindFromFuncDecl(const AST::FuncDecl& funcDecl)
+{
+    std::string identifier = funcDecl.identifier.Val();
+    std::string packageName;
+    if (funcDecl.genericDecl) {
+        packageName = funcDecl.genericDecl->fullPackageName;
+    } else if (funcDecl.outerDecl && funcDecl.outerDecl->genericDecl) {
+        packageName = funcDecl.outerDecl->genericDecl->fullPackageName;
+    } else {
+        packageName = funcDecl.fullPackageName;
+    }
+    if (auto it = headlessIntrinsics.find(identifier); it != headlessIntrinsics.end()) {
+        return it->second;
+    }
+    if (auto pkgIt = packageMap.find(packageName); pkgIt != packageMap.end()) {
+        CJC_ASSERT(pkgIt->second.find(identifier) != pkgIt->second.end());
+        return pkgIt->second.at(identifier);
+    }
+    return IntrinsicKind::NOT_INTRINSIC;
+}
 
 inline std::map<Cangjie::AST::Attribute, Attribute> g_attrMap = {
     {Cangjie::AST::Attribute::GENERIC_INSTANTIATED, Attribute::GENERIC_INSTANTIATED},

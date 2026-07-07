@@ -833,6 +833,7 @@ private:
     Value* TranslateVarRef(const AST::RefExpr& refExpr);
     Value* TranslateGlobalOrLocalFuncRef(const AST::RefExpr& refExpr, Value& originalFunc);
     Value* TranslateMemberFuncRef(const AST::RefExpr& refExpr);
+    Value* WrapIntrinsicFuncByLambda(const AST::FuncDecl& funcDecl, const AST::RefExpr& refExpr);
     Value* TranslateFuncRef(const AST::RefExpr& refExpr);
 
     // ===--------------------------------------------------------------------===//
@@ -1167,23 +1168,6 @@ static const std::unordered_map<Cangjie::TokenKind, ExprKind> op2ExprKind = {
     {Cangjie::TokenKind::GE, ExprKind::GE},
     {Cangjie::TokenKind::NOTEQ, ExprKind::NOTEQUAL},
     {Cangjie::TokenKind::EQUAL, ExprKind::EQUAL},
-};
-
-const static std::unordered_map<std::string, const std::unordered_map<std::string, IntrinsicKind>> packageMap = {
-    {CORE_PACKAGE_NAME, coreIntrinsicMap},
-    {SYNC_PACKAGE_NAME, cjnativeSyncIntrinsicMap},
-    {OVERFLOW_PACKAGE_NAME, overflowIntrinsicMap},
-    {RUNTIME_PACKAGE_NAME, runtimeIntrinsicMap},
-    {REFLECT_PACKAGE_NAME, reflectIntrinsicMap},
-    {MATH_PACKAGE_NAME, mathIntrinsicMap},
-    {INTEROP_PACKAGE_NAME, interOpIntrinsicMap},
-    {"ohos.ark_interop", ohosArkInteropIntrinsicMap}
-};
-
-// Below are instrinsics without a source-level declaration, their delcaration should be dinamically generated
-const static std::unordered_map<std::string, IntrinsicKind> headlessIntrinsics = {
-    {GET_TYPE_FOR_TYPE_PARAMETER_NAME, IntrinsicKind::GET_TYPE_FOR_TYPE_PARAMETER},
-    {IS_SUBTYPE_TYPES_NAME, IntrinsicKind::IS_SUBTYPE_TYPES},
 };
 } // namespace Cangjie::CHIR
 
