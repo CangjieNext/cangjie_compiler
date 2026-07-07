@@ -753,7 +753,6 @@ static void InitCjStringLiteralDeferred(const CGModule& cgMod)
         // can also merge identical unnamed_addr buffers across packages.
         std::string bufName = GetCjStringDataNameFromLiteralName(cjStringName);
         auto bufGV = llvm::cast<llvm::GlobalVariable>(module->getOrInsertGlobal(bufName, bufType));
-        CJC_NULLPTR_CHECK(bufGV);
         bufGV->setInitializer(bufInit);
         bufGV->setConstant(true);
         bufGV->addAttribute(CJSTRING_DATA_ATTR);
