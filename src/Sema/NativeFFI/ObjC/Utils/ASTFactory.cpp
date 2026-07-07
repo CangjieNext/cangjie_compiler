@@ -715,9 +715,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObjectReturningObjCSelf(const Decl& t
     for (size_t i = 0; i < ctorParams.size(); i++) {
         auto& ctorParam = ctorParams[i];
         if (ctorParam->identifier.Val() == "$mrk") {
-            auto marker = CreateNativeHandleMarker();
-            // auto& markerTy = *marker->GetTy();
-            auto callArg = CreateFuncArg(std::move(marker));
+            auto callArg = CreateFuncArg(CreateNativeHandleMarker());
             ctorCallArgs.emplace_back(std::move(callArg));
             offset = 1;
             continue;
@@ -1349,12 +1347,12 @@ OwnedPtr<FuncDecl> ASTFactory::CreateBaseCtorDecl(ClassDecl& target)
     auto nativeObjCIdTy = bridge.GetNativeObjCIdTy();
     auto param = CreateFuncParam(NATIVE_HANDLE_IDENT, CreateType(nativeObjCIdTy), nullptr, nativeObjCIdTy);
 
-    auto nativeObjCIdBoxTy = bridge.GetNativeObjCIdBoxTy();
-    auto markerParam = CreateFuncParam(NATIVE_HANDLE_MARKER, CreateType(nativeObjCIdBoxTy), nullptr, nativeObjCIdBoxTy);
+    auto nativeObjCIdMarkerTy = bridge.GetNativeObjCIdMarkerTy();
+    auto markerParam = CreateFuncParam(NATIVE_HANDLE_MARKER, CreateType(nativeObjCIdMarkerTy), nullptr, nativeObjCIdMarkerTy);
 
     std::vector<Ptr<Ty>> ctorFuncParamTys;
     ctorFuncParamTys.emplace_back(param->GetTy());
-    ctorFuncParamTys.emplace_back(nativeObjCIdBoxTy);
+    ctorFuncParamTys.emplace_back(nativeObjCIdMarkerTy);
 
     auto ctorFuncTy = typeManager.GetFunctionTy(std::move(ctorFuncParamTys), target.GetTy());
 
@@ -1383,10 +1381,10 @@ OwnedPtr<FuncDecl> ASTFactory::CreateBaseCtorDecl(ClassDecl& target)
 }
 
 OwnedPtr<CallExpr> ASTFactory::CreateNativeHandleMarker() {
-    auto nativeObjCIdBoxCtor = bridge.GetNativeObjCIdBoxConstructor(); 
-    auto refExpr = CreateRefExpr(*nativeObjCIdBoxCtor);
-    std::vector<OwnedPtr<FuncArg>> nativeObjCIdBoxCtorArgs;
-    return CreateCallExpr(std::move(refExpr), std::move(nativeObjCIdBoxCtorArgs), nativeObjCIdBoxCtor, nativeObjCIdBoxCtor->GetTy(), CallKind::CALL_STRUCT_CREATION);
+    auto nativeObjCIdMarkerCtor = bridge.GetNativeObjCIdMarkerConstructor(); 
+    auto refExpr = CreateRefExpr(*nativeObjCIdMarkerCtor);
+    std::vector<OwnedPtr<FuncArg>> nativeObjCIdMarkerCtorArgs;
+    return CreateCallExpr(std::move(refExpr), std::move(nativeObjCIdMarkerCtorArgs), nativeObjCIdMarkerCtor, nativeObjCIdMarkerCtor->GetTy(), CallKind::CALL_STRUCT_CREATION);
 }
 
 OwnedPtr<FuncDecl> ASTFactory::CreateImplCtor(FuncDecl& from)
@@ -1400,7 +1398,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateImplCtor(FuncDecl& from)
     std::vector<OwnedPtr<FuncParam>> specialParams;
     specialParams.emplace_back(WithinFile(CreateFuncParam(NATIVE_HANDLE_IDENT, CreateType(nativeHandleTy), nullptr, nativeHandleTy), curFile));
 
-    auto markerTy = bridge.GetNativeObjCIdBoxTy();
+    auto markerTy = bridge.GetNativeObjCIdMarkerTy();
     specialParams.emplace_back(WithinFile(CreateFuncParam(NATIVE_HANDLE_MARKER, CreateType(markerTy), nullptr, markerTy), curFile));
 
     implCtorParams.insert(implCtorParams.begin(), std::make_move_iterator(specialParams.begin()), std::make_move_iterator(specialParams.end()));

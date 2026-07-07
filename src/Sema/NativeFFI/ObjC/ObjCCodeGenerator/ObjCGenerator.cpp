@@ -466,11 +466,6 @@ void ObjCGenerator::GenerateForwardDeclarations()
     // remove our own declaration from the set
     dependencies.erase(decl);
 
-    // add marker decl
-    // NOCHECKIN: Move to constant
-    // AddWithIndent("struct NativeObjCIdBox {};", GenerationTarget::HEADER);
-    // AddWithIndent("extern struct NativeObjCIdBox __markerBox;", GenerationTarget::HEADER);
-
     for (auto&& dep : dependencies) {
         std::string keyword;
         switch (dep->astKind) {
@@ -1057,9 +1052,6 @@ std::vector<std::string> ObjCGenerator::ConvertParamsListToCallableParamsString(
 
     if (withSelf) {
         result.emplace_back(std::string(CAST_TO_VOID_PTR) + SELF_NAME);
-        // NOCHECKIN: Move to constant
-        // result.emplace_back("(struct NativeObjCIdBox){}");
-        // result.emplace_back("__markerBox");
     }
 
     if (!paramLists.empty() && paramLists[0]) {

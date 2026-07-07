@@ -22,7 +22,7 @@ namespace {
 
 constexpr auto INTEROPLIB_OBJ_C_ID = "ObjCId";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_ID = "NativeObjCId";
-constexpr auto INTEROPLIB_NATIVE_OBJ_C_ID_BOX = "NativeObjCIdBox";
+constexpr auto INTEROPLIB_NATIVE_OBJ_C_ID_MARKER = "NativeObjCIdMarker";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_SEL = "NativeObjCSel";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_SUPER_PTR = "NativeObjCSuperPtr";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_CLASS = "NativeObjCClass";
@@ -162,19 +162,19 @@ Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCIdDecl()
     return decl;
 }
 
-Ptr<StructDecl> InteropLibBridge::GetNativeObjCIdBoxDecl()
+Ptr<StructDecl> InteropLibBridge::GetNativeObjCIdMarkerDecl()
 {
-    static auto decl = GetInteropLibDecl<ASTKind::STRUCT_DECL>(INTEROPLIB_NATIVE_OBJ_C_ID_BOX);
+    static auto decl = GetInteropLibDecl<ASTKind::STRUCT_DECL>(INTEROPLIB_NATIVE_OBJ_C_ID_MARKER);
     return decl;
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetNativeObjCIdBoxConstructor()
+Ptr<FuncDecl> InteropLibBridge::GetNativeObjCIdMarkerConstructor()
 {
     static Ptr<FuncDecl> result = nullptr;
     if (result) {
         return result;
     }
-    auto outer = GetNativeObjCIdBoxDecl();
+    auto outer = GetNativeObjCIdMarkerDecl();
     for (auto& member : outer->body->decls) {
         if (auto funcDecl = DynamicCast<FuncDecl*>(member.get())) {
             if (funcDecl->TestAttr(Attribute::CONSTRUCTOR)
@@ -200,9 +200,9 @@ Ptr<Ty> InteropLibBridge::GetNativeObjCIdTy()
     return GetNativeObjCIdDecl()->type->GetTy();
 }
 
-Ptr<Ty> InteropLibBridge::GetNativeObjCIdBoxTy()
+Ptr<Ty> InteropLibBridge::GetNativeObjCIdMarkerTy()
 {
-    return GetNativeObjCIdBoxDecl()->GetTy();
+    return GetNativeObjCIdMarkerDecl()->GetTy();
 }
 
 Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCSelDecl()

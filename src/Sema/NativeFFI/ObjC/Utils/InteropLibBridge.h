@@ -53,11 +53,11 @@ public:
     Ptr<AST::TypeAliasDecl> GetNativeObjCIdDecl();
 
     /**
-     * Gets NativeObjCIdBox declaration.
-     * id or Instance Method Pointer type, boxed.
+     * Gets NativeObjCIdMarker declaration.
+     * Used as argument for generated internal constructors.
      */
-    Ptr<AST::StructDecl> GetNativeObjCIdBoxDecl();
-    Ptr<AST::FuncDecl> GetNativeObjCIdBoxConstructor();
+    Ptr<AST::StructDecl> GetNativeObjCIdMarkerDecl();
+    Ptr<AST::FuncDecl> GetNativeObjCIdMarkerConstructor();
 
     Ptr<AST::InterfaceDecl> GetObjCIdDecl();
 
@@ -67,9 +67,9 @@ public:
     Ptr<AST::Ty> GetNativeObjCIdTy();
 
     /**
-     * Gets NativeObjCIdBox semantic type.
+     * Gets NativeObjCIdMarker semantic type.
      */
-    Ptr<AST::Ty> GetNativeObjCIdBoxTy();
+    Ptr<AST::Ty> GetNativeObjCIdMarkerTy();
 
     /**
      * Gets NativeObjCSel declaration.

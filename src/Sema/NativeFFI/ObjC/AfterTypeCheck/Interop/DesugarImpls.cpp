@@ -140,8 +140,8 @@ void DesugarSuperCtorCall(InteropContext& ctx, ClassDecl& impl, FuncDecl& ctor)
     CJC_NULLPTR_CHECK(baseCtor);
     auto baseCtorCall = WithinFile(CreateSuperCall(*baseCtor->outerDecl, *baseCtor, baseCtor->GetTy()), curFile);
     baseCtorCall->args.push_back(CreateFuncArg(std::move(withMethodEnv)));
-    auto boxCall = ctx.factory.CreateNativeHandleMarker();
-    baseCtorCall->args.push_back(CreateFuncArg(std::move(boxCall)));
+    auto marker = ctx.factory.CreateNativeHandleMarker();
+    baseCtorCall->args.push_back(CreateFuncArg(std::move(marker)));
     ce->desugarExpr = std::move(baseCtorCall);
 }
 
