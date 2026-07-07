@@ -396,11 +396,6 @@ inline std::string GetCjStringDataNameFromLiteralName(const std::string& litName
     return CJSTRING_DATA_PREFIX + litName.substr(CJSTRING_LITERAL_PREFIX.size());
 }
 
-inline std::string GetCjStringLiteralName(const std::string& cjStr)
-{
-    return CJSTRING_LITERAL_PREFIX + Utils::HashString64(cjStr);
-}
-
 inline std::string GetConstantTupleName(const std::string& string)
 {
     return CONST_TUPLE_PREFIX + Utils::HashString64(string);
