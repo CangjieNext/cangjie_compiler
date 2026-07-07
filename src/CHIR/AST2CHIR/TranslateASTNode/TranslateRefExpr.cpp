@@ -347,6 +347,70 @@ Value* Translator::TranslateMemberFuncRef(const AST::RefExpr& refExpr)
     }
 }
 
+Value* Translator::WrapIntrinsicFuncByLambda(const AST::FuncDecl& funcDecl, const AST::RefExpr& refExpr)
+{
+    auto topLevelFunc = currentBlock->GetTopLevelFunc();
+    CJC_NULLPTR_CHECK(topLevelFunc);
+    auto lambdaMangledName =
+        CHIRMangling::GenerateLambdaFuncMangleName(*topLevelFunc, lambdaWrapperIndex++);
+    auto funcType = StaticCast<FuncType*>(TranslateType(*refExpr.GetTy()));
+    auto lambdaParamTypes = funcType->GetParamTypes();
+    auto lambdaRetType = funcType->GetReturnType();
+    auto lambdaType = builder.GetType<FuncType>(lambdaParamTypes, lambdaRetType);
+    Lambda* lambda = CreateAndAppendExpression<Lambda>(
+        lambdaType, lambdaType, currentBlock, false, lambdaMangledName, funcDecl.identifier);
+
+    auto lambdaBlockGroup = builder.CreateBlockGroup(*topLevelFunc);
+    lambda->InitBody(*lambdaBlockGroup);
+    auto entry = builder.CreateBlock(lambdaBlockGroup);
+    lambdaBlockGroup->SetEntryBlock(entry);
+
+    for (auto paramTy : lambdaParamTypes) {
+        builder.CreateParameter(paramTy, INVALID_LOCATION, *lambda);
+    }
+
+    auto retVal = CreateAndAppendExpression<Allocate>(
+        INVALID_LOCATION, builder.GetType<RefType>(lambdaRetType), lambdaRetType, entry)->GetResult();
+    lambda->SetReturnValue(*retVal);
+
+    auto currentBlockBackup = currentBlock;
+    currentBlock = entry;
+    auto lambdaArgs = lambda->GetParams();
+    std::vector<Value*> args{lambdaArgs.begin(), lambdaArgs.end()};
+
+    auto intrinsicKind = GetIntrinsicKindFromFuncDecl(funcDecl);
+    CJC_ASSERT(intrinsicKind != IntrinsicKind::NOT_INTRINSIC);
+    auto intrinsicRetTy = lambdaRetType;
+    if (intrinsicKind == BLACK_BOX) {
+        // intrinsic blackBox's signature is blackBox<T>(v: T): T,
+        // and args need to be converted into reference types to control variable lifetimes.
+        BlackBoxModifyArgTypeToRef(args);
+        intrinsicRetTy = args[0]->GetType();
+    }
+    auto loc = TranslateLocation(refExpr);
+    auto callContext = IntrisicCallContext {
+        .kind = intrinsicKind,
+        .args = args,
+        .instTypeArgs = TranslateASTTypes(refExpr.instTys)
+    };
+    Value* ret = nullptr;
+    if (lambdaRetType->IsUnit()) {
+        CreateAndAppendExpression<Intrinsic>(loc, intrinsicRetTy, callContext, currentBlock);
+        ret = CreateAndAppendConstantExpression<UnitLiteral>(builder.GetUnitTy(), *currentBlock)->GetResult();
+    } else {
+        auto intriVar = CreateAndAppendExpression<Intrinsic>(loc, intrinsicRetTy, callContext, currentBlock)->GetResult();
+        if (intrinsicRetTy != lambdaRetType && intrinsicKind == BLACK_BOX) {
+            ret = CreateAndAppendExpression<Load>(lambdaRetType, intriVar, currentBlock)->GetResult();
+        } else {
+            ret = intriVar;
+        }
+    }
+    CreateAndAppendWrappedStore(*ret, *retVal);
+    CreateAndAppendTerminator<Exit>(currentBlock);
+    currentBlock = currentBlockBackup;
+    return lambda->GetResult();
+}
+
 Value* Translator::TranslateGlobalOrLocalFuncRef(const AST::RefExpr& refExpr, Value& originalFunc)
 {
     auto outerDeclaredTypes = GetOutDefDeclaredTypes(originalFunc);
@@ -430,8 +494,11 @@ Value* Translator::TranslateFuncRef(const AST::RefExpr& refExpr)
     if (target->outerDecl != nullptr && target->outerDecl->IsNominalDecl()) {
         // Case 1: member method
         return TranslateMemberFuncRef(refExpr);
+    } else if (target->TestAttr(AST::Attribute::INTRINSIC)) {
+        // Case 2: intrinsic function
+        return WrapIntrinsicFuncByLambda(*StaticCast<FuncDecl*>(target), refExpr);
     } else {
-        // Case 2: global or local function
+        // Case 3: global or local function
         auto targetFunc = GetSymbolTable(*target);
         return TranslateGlobalOrLocalFuncRef(refExpr, *targetFunc);
     }
