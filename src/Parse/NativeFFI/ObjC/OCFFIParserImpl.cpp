@@ -12,6 +12,7 @@
 
 #include "OCFFIParserImpl.h"
 #include "../../ParserImpl.h"
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/AST/Utils.h"
 
@@ -49,6 +50,7 @@ void OCFFIParserImpl::CheckMirrorSignature(ClassLikeDecl& decl, const PtrVector<
 {
     CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::OBJ_C_MIRROR));
     decl.EnableAttr(Attribute::OBJ_C_MIRROR);
+    decl.EnableAttr(Attribute::NO_REFLECT_INFO);
 
     if (decl.TestAttr(Attribute::SEALED)) {
         DiagObjCMirrorCannotBeSealed(decl);
@@ -60,6 +62,7 @@ void OCFFIParserImpl::CheckMirrorSignature(FuncDecl& decl, const PtrVector<Annot
 {
     CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::OBJ_C_MIRROR));
     decl.EnableAttr(Attribute::OBJ_C_MIRROR);
+    decl.EnableAttr(Attribute::NO_REFLECT_INFO);
 
     if (decl.TestAttr(Attribute::FOREIGN)) {
         DiagObjCMirrorFuncCannotBeForeign(decl);
@@ -96,6 +99,7 @@ void OCFFIParserImpl::CheckImplSignature(ClassLikeDecl& decl, const PtrVector<An
 {
     CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::OBJ_C_IMPL));
     decl.EnableAttr(Attribute::OBJ_C_MIRROR_SUBTYPE);
+    decl.EnableAttr(Attribute::NO_REFLECT_INFO);
 
     if (decl.GetGeneric() != nullptr) {
         DiagObjCImplCannotBeGeneric(decl);

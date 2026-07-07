@@ -9,6 +9,7 @@
 #include "NativeFFI/Java/JavaCodeGenerator/JavaSourceCodeGenerator.h"
 #include "Utils.h"
 
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
@@ -562,7 +563,8 @@ OwnedPtr<ClassDecl> JavaDesugarManager::InitInterfaceFwdClassDecl(AST::Interface
     fwdclassDecl->fullPackageName = interfaceDecl.fullPackageName;
     fwdclassDecl->moduleName = ::Cangjie::Utils::GetRootPackageName(interfaceDecl.fullPackageName);
     fwdclassDecl->curFile = interfaceDecl.curFile;
-    fwdclassDecl->EnableAttr(Attribute::PUBLIC, Attribute::COMPILER_ADD, Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD);
+    fwdclassDecl->EnableAttr(Attribute::PUBLIC, Attribute::COMPILER_ADD, Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD,
+        Attribute::NO_REFLECT_INFO);
     fwdclassDecl->body = MakeOwned<ClassBody>();
     return fwdclassDecl;
 }
@@ -928,7 +930,8 @@ void JavaDesugarManager::GenerateForCJOpenClassMapping(AfterTypeCheckContext& ct
     CJC_ASSERT(classLikeTy);
     classLikeTy->directSubtypes.insert(fwdclassDecl->GetTy());
 
-    fwdclassDecl->EnableAttr(Attribute::PUBLIC, Attribute::COMPILER_ADD, Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD);
+    fwdclassDecl->EnableAttr(Attribute::PUBLIC, Attribute::COMPILER_ADD, Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD,
+        Attribute::NO_REFLECT_INFO);
 
     fwdclassDecl->body = MakeOwned<ClassBody>();
 

@@ -10,6 +10,7 @@
  * This file implements logics related to parsing in java FFI in Cangjie Native
  */
 #include "../../ParserImpl.h"
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Utils.h"
 
 #include "JFFIParserImpl.h"
@@ -69,6 +70,7 @@ void JFFIParserImpl::CheckMirrorSignature(AST::ClassLikeDecl& decl, const PtrVec
 {
     CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::JAVA_MIRROR));
     decl.MarkAsJavaMirror();
+    decl.EnableAttr(Attribute::NO_REFLECT_INFO);
     if (decl.TestAttr(Attribute::SEALED)) {
         DiagJavaMirrorCannotBeSealed(decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
@@ -79,6 +81,7 @@ void JFFIParserImpl::CheckImplSignature(AST::ClassLikeDecl& decl, const PtrVecto
 {
     CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::JAVA_IMPL));
     decl.MarkAsJavaImpl();
+    decl.EnableAttr(Attribute::NO_REFLECT_INFO);
 
     // Avoid CJ-MAPPING Generic Check.
     if (decl.GetGeneric() != nullptr && !decl.TestAttr(Attribute::JAVA_CJ_MAPPING)) {
