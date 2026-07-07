@@ -15,6 +15,7 @@
 #include "NativeFFI/Utils.h"
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/ASTCasting.h"
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Create.h"
 #include "NativeFFI/ObjC/Utils/ASTFactory.h"
 
@@ -133,7 +134,7 @@ OwnedPtr<ClassDecl> GenerateFwdClass::GenerateFwdClassDecl(ClassDecl& decl)
     auto classTy = DynamicCast<ClassTy*>(decl.GetTy());
     CJC_ASSERT(classTy);
     classTy->directSubtypes.insert(fwd->GetTy());
-    fwd->EnableAttr(Attribute::PUBLIC, Attribute::COMPILER_ADD);
+    fwd->EnableAttr(Attribute::PUBLIC, Attribute::COMPILER_ADD, Attribute::NO_REFLECT_INFO);
     fwd->body = MakeOwned<ClassBody>();
     fwdClass = fwd.get();
     // Generate fields
