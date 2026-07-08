@@ -1112,21 +1112,11 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
         !decl.toBeCompiled) {
         customTypeDef->EnableAttr(Attribute::NON_RECOMPILE);
     }
-    if (!customTypeDef->TestAttr(Attribute::DESERIALIZED)) {
-        SetCustomTypeDefAttr(*customTypeDef, decl);
-        if (decl.TestAttr(AST::Attribute::IS_ANNOTATION)) {
-            classDeclWithAnnotation.emplace_back(
-                std::make_pair(StaticCast<const AST::ClassDecl*>(&decl), StaticCast<ClassDef*>(customTypeDef)));
-        }
-    } else {
-        // For CJMP: deserialized ClassDefs may have different attributes in specific compilation
-        // (e.g., @JavaMirror is only in specific, not in common)
-        // Ensure FFI-related attributes are correctly set
-        if (Interop::Java::IsImpl(decl)) {
-            customTypeDef->EnableAttr(Attribute::JAVA_IMPL);
-        } else if (Interop::Java::IsMirror(decl)) {
-            customTypeDef->EnableAttr(Attribute::JAVA_MIRROR);
-        }
+    SetCustomTypeDefAttr(*customTypeDef, decl);
+    if (!customTypeDef->TestAttr(Attribute::DESERIALIZED) &&
+        decl.TestAttr(AST::Attribute::IS_ANNOTATION)) {
+        classDeclWithAnnotation.emplace_back(
+            std::make_pair(StaticCast<const AST::ClassDecl*>(&decl), StaticCast<ClassDef*>(customTypeDef)));
     }
     chirType.SetGlobalNominalCache(decl, *customTypeDef);
     if (uniqueDecl != nullptr && uniqueDecl != &decl) {
