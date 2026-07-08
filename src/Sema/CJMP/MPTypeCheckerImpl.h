@@ -39,7 +39,7 @@ public:
     void RemoveCommonCandidatesIfHasSpecific(std::vector<Ptr<AST::FuncDecl>>& candidates);
     void CheckReturnAndVariableTypes(AST::Package& pkg);
     void ValidateMatchedAnnotationsAndModifiers(AST::Package& pkg);
-    void ValidateCJMPConstructorConstraints(AST::Package& pkg);
+    void ValidateCJMPConstructorConstraints();
     void CheckMatchedFunctionReturnTypes(AST::FuncDecl& specificFunc, AST::FuncDecl& commonFunc);
     void CheckMatchedVariableTypes(AST::VarDecl& specificVar, AST::VarDecl& commonVar);
     void MatchSpecificWithCommon(AST::Package& pkg);
