@@ -19,6 +19,7 @@
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
+#include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/Modules/ImportManager.h"
@@ -63,8 +64,9 @@ namespace {
     if (!cls) return false;
     return FindFirstAnnotation(*cls, AnnotationKind::JAVA_IMPL) ||
            FindFirstAnnotation(*cls, AnnotationKind::OBJ_C_IMPL) ||
-           cls->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE,
-                            Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE);
+           Cangjie::Interop::Java::IsMirror(*cls) ||
+           Cangjie::Interop::Java::IsImpl(*cls) ||
+           cls->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE);
 }
 
 std::string GetTypeNameFromTy(
@@ -1069,7 +1071,7 @@ bool MPTypeCheckerImpl::MatchSuperClass(
     //   1. Common parent is Object (or null/invalid - means implicit Object)
     //   2. Specific parent is a platform parent (@JavaMirror/@ObjCMirror or @JavaImpl/@ObjCImpl)
     // Constructor validation is deferred to PostTypeCheck phase.
-    if (!comSupClass || comSupClass->identifier == "Object") {
+    if (!comSupClass || comSupClass->identifier == OBJECT_NAME) {
         if (platSupIClass && IsPlatformParent(platSupIClass)) {
             pendingRelaxations.push_back({&commonDecl, &specificDecl});
             return true;
