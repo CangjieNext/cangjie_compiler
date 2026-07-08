@@ -678,9 +678,7 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
     getter->CloneAttrs(prop);
     getter->DisableAttr(Attribute::MUT);
     getter->EnableAttr(Attribute::COMPILER_ADD, attrToBeSet);
-    getter->begin = prop.begin;
-    getter->end = prop.end;
-    getter->curFile = prop.curFile;
+    CopyPos(&prop, getter.get());
 
     if (prop.outerDecl->astKind == ASTKind::INTERFACE_DECL) {
         getter->EnableAttr(Attribute::PUBLIC);
@@ -691,9 +689,7 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
     getterBody->paramLists.push_back(MakeOwned<FuncParamList>());
     getterBody->paramLists.begin()->get()->EnableAttr(Attribute::COMPILER_ADD);
     CopyPos(&prop, getterBody->paramLists.back().get());
-    getterBody->begin = prop.begin;
-    getterBody->end = prop.end;
-    getterBody->curFile = prop.curFile;
+    CopyPos(&prop, getterBody.get());
     getter->funcBody = std::move(getterBody);
     getter->funcBody->funcDecl = getter.get();
 
@@ -710,9 +706,7 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
     setter->CloneAttrs(prop);
     setter->DisableAttr(Attribute::MUT);
     setter->EnableAttr(Attribute::COMPILER_ADD, attrToBeSet);
-    setter->begin = prop.begin;
-    setter->end = prop.end;
-    setter->curFile = prop.curFile;
+    CopyPos(&prop, setter.get());
 
     if (prop.outerDecl->astKind == ASTKind::INTERFACE_DECL) {
         setter->EnableAttr(Attribute::PUBLIC);
@@ -722,15 +716,11 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
     setterBody->EnableAttr(Attribute::COMPILER_ADD);
     setterBody->paramLists.push_back(MakeOwned<FuncParamList>());
     CopyPos(&prop, setterBody->paramLists.back().get());
-    setterBody->begin = prop.begin;
-    setterBody->end = prop.end;
-    setterBody->curFile = prop.curFile;
+    CopyPos(&prop, setterBody.get());
     auto setterParam = MakeOwned<FuncParam>();
     setterParam->EnableAttr(Attribute::COMPILER_ADD);
     setterParam->identifier = "set";
-    setterParam->begin = prop.begin;
-    setterParam->end = prop.end;
-    setterParam->curFile = prop.curFile;
+    CopyPos(&prop, setterParam.get());
     if (prop.type) {
         setterParam->type = ASTCloner::Clone(prop.type.get());
     }
@@ -742,12 +732,11 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
     prop.setters.emplace_back(std::move(setter));
 }
 
-void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, PropDecl** propPtr, Attribute attrToBeSet)
+PropDecl& InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribute attrToBeSet)
 {
     auto propDecl = MakeOwned<PropDecl>();
 
-    propDecl->begin = varDecl.begin;
-    propDecl->end = varDecl.end;
+    CopyPos(&varDecl, propDecl.get());
     propDecl->keywordPos = varDecl.keywordPos;
     propDecl->identifier = varDecl.identifier;
     propDecl->colonPos = varDecl.colonPos;
@@ -757,7 +746,6 @@ void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, PropDecl** pr
     propDecl->EnableAttr(Attribute::DESUGARED_MIRROR_FIELD, Attribute::COMPILER_ADD);
     propDecl->modifiers.insert(varDecl.modifiers.begin(), varDecl.modifiers.end());
     propDecl->isVar = varDecl.isVar;
-    propDecl->curFile = varDecl.curFile;
     for (auto& anno : varDecl.annotations) {
         propDecl->annotations.emplace_back(ASTCloner::Clone(anno.get()));
     }
@@ -768,12 +756,13 @@ void InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, PropDecl** pr
         propDecl->modifiers.insert(std::move(mut));
     }
     propDecl->outerDecl = varDecl.outerDecl;
-    *propPtr = propDecl.get();
-    InsertPropGetterSignature(*propDecl.get(), attrToBeSet);
+    PropDecl* result = propDecl.get();
+    InsertPropGetterSignature(*propDecl, attrToBeSet);
     if (varDecl.isVar) {
-        InsertPropSetterSignature(*propDecl.get(), attrToBeSet);
+        InsertPropSetterSignature(*propDecl, attrToBeSet);
     }
     decl.body->decls.emplace_back(std::move(propDecl));
+    return *result;
 }
 
 void LinkMatchedCommonPropToSpecific(PropDecl& commonProp, PropDecl& specificProp)
@@ -799,19 +788,20 @@ void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
             continue;
         }
         auto field = StaticAs<ASTKind::VAR_DECL>(member.get());
+        // fields without syntactic type specified are invalid and should be skipped here
+        // (unless they carry @common/@specific attributes for CJMP matching)
         if (!field->type && !field->TestAttr(Attribute::COMMON) && !field->TestAttr(Attribute::SPECIFIC)) {
             continue;
         }
 
-        PropDecl* propPtr = nullptr;
-        InsertPropConvertedByField(decl, *field, &propPtr, attrToBeSet);
-        varToPropMap[field] = propPtr;
+        auto& prop = InsertPropConvertedByField(decl, *field, attrToBeSet);
+        varToPropMap[field] = &prop;
         transformedIndices.emplace_back(i);
     }
 
     for (auto& [varDecl, propDecl] : varToPropMap) {
         if (varDecl->specificImplementation) {
-            auto specificVar = static_cast<VarDecl*>(varDecl->specificImplementation.get());
+            auto specificVar = StaticCast<VarDecl>(varDecl->specificImplementation.get());
             auto it = varToPropMap.find(specificVar);
             if (it != varToPropMap.end()) {
                 LinkMatchedCommonPropToSpecific(*propDecl, *StaticAs<ASTKind::PROP_DECL>(it->second));
