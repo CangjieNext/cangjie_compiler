@@ -2057,7 +2057,7 @@ void TypeChecker::TypeCheckerImpl::PostTypeCheck(std::vector<Ptr<ASTContext>>& c
         Utils::ProfileRecorder::Start("Post TypeCheck", "CheckCJMPRules");
         mpImpl->CheckReturnAndVariableTypes(*ctx->curPackage);
         mpImpl->ValidateMatchedAnnotationsAndModifiers(*ctx->curPackage);
-        mpImpl->ValidateCJMPConstructorConstraints(*ctx->curPackage);
+        mpImpl->ValidateCJMPConstructorConstraints();
         Utils::ProfileRecorder::Stop("Post TypeCheck", "CheckCJMPRules");
         AddAttrForDefaultFuncParam(*ctx->curPackage);
         // Because of the cjlint checking policy, desugar of propDecl should be done in sema stage for now.
