@@ -113,9 +113,7 @@ void JavaDesugarManager::InsertJavaRefVarDecl(ClassDecl& decl)
     auto javaref = CreateVarDecl(JAVA_REF_FIELD_NAME, nullptr, CreateRefType(javaEntityDecl));
     javaref->SetTy(javaEntityDecl.GetTy());
     javaref->EnableAttr(Attribute::INITIALIZATION_CHECKED, Attribute::INITIALIZED, Attribute::COMPILER_ADD);
-    javaref->begin = decl.body ? decl.body->begin : decl.begin;
-    javaref->end = decl.body ? decl.body->end : decl.end;
-    javaref->curFile = decl.curFile;
+    CopyPos(&decl, javaref.get());
 
     Modifier protectedMod = Modifier(TokenKind::PUBLIC, javaref->begin);
     protectedMod.curFile = decl.curFile;
@@ -189,9 +187,7 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
     fd->constructorCall = ConstructorCall::SUPER;
     fd->EnableAttr(Attribute::PUBLIC, Attribute::IN_CLASSLIKE, Attribute::CONSTRUCTOR);
     fd->funcBody->parentClassLike = &decl;
-    fd->begin = decl.begin;
-    fd->end = decl.end;
-    fd->curFile = decl.curFile;
+    CopyPos(&decl, fd.get());
     fd->fullPackageName = decl.fullPackageName;
 
     decl.body->decls.emplace_back(std::move(fd));
@@ -294,7 +290,7 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
 {
     bool isFromCommonPart = ctor.TestAttr(Attribute::FROM_COMMON_PART) ||
         (ctor.curFile && ctor.curFile->TestAttr(Attribute::FROM_COMMON_PART));
-    if (isFromCommonPart && !ctor.TestAttr(Attribute::JAVA_MIRROR)) {
+    if (isFromCommonPart && !IsMirror(ctor)) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_ctor_from_common_has_body, ctor);
         ctor.EnableAttr(Attribute::IS_BROKEN);
         return;
@@ -417,7 +413,7 @@ void JavaDesugarManager::DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& m
 {
     bool isFromCommonPart = fun.TestAttr(Attribute::FROM_COMMON_PART) ||
         (fun.curFile && fun.curFile->TestAttr(Attribute::FROM_COMMON_PART));
-    if (isFromCommonPart && !fun.TestAttr(Attribute::JAVA_MIRROR)) {
+    if (isFromCommonPart && !IsMirror(fun)) {
         diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_method_from_common_has_body, fun);
         fun.EnableAttr(Attribute::IS_BROKEN);
         return;
