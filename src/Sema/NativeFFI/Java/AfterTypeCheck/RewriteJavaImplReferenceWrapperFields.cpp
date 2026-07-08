@@ -42,7 +42,6 @@ void InsertProxyPropertyGetter(PropDecl& prop, VarDecl& userField, VarDecl& regC
     getter.CloneAttrs(prop);
     getter.DisableAttr(Attribute::MUT);
     getter.EnableAttr(Attribute::COMPILER_ADD);
-    getter.EnableAttr(Attribute::JAVA_IMPL);
 
     getter.funcBody = WithinFile(MakeOwned<FuncBody>(), prop.curFile);
     auto& getterBody = *getter.funcBody;
@@ -82,7 +81,6 @@ void InsertProxyPropertySetter(PropDecl& prop, VarDecl& userField, VarDecl& regC
     setter.CloneAttrs(prop);
     setter.DisableAttr(Attribute::MUT);
     setter.EnableAttr(Attribute::COMPILER_ADD);
-    setter.EnableAttr(Attribute::JAVA_IMPL);
 
     setter.funcBody = WithinFile(MakeOwned<FuncBody>(), prop.curFile);
     auto& setterBody = *setter.funcBody;
