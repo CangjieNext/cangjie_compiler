@@ -4,7 +4,7 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-#include "cangjie/CHIR/AST2CHIR/AST2CHIR.h"
+#include "cangjie/CHIR/Transformation/PatchCJMPMembers.h"
 
 #include <unordered_map>
 
@@ -17,6 +17,11 @@
 #include "cangjie/Utils/CastingTemplate.h"
 
 namespace Cangjie::CHIR {
+PatchCJMPMembers::PatchCJMPMembers(const GlobalOptions& opts, Package& pkg, CHIRBuilder& builder, CHIRType& chirType)
+    : compilingSpecific(opts.IsCompilingCJMPSpecific()), pkg(pkg), builder(builder), chirType(chirType)
+{
+}
+
 /**
  * Patches common-part instance fields of @JavaMirror/@ObjCMirror classes during
  * CJMP specific compilation. For each mirror class, delegates to
@@ -25,14 +30,14 @@ namespace Cangjie::CHIR {
  * getter/setter calls (patched by PatchFieldReferencesForMirror). No-op unless
  * compiling the CJMP specific part.
  */
-void AST2CHIR::PatchCommonFieldsForMirror()
+void PatchCJMPMembers::PatchCommonFieldsForMirror()
 {
-    if (!opts.IsCompilingCJMPSpecific()) {
+    if (!compilingSpecific) {
         return;
     }
 
     CHIRFieldPatcher patcher(builder);
-    for (auto& classDef : package->GetClasses()) {
+    for (auto& classDef : pkg.GetClasses()) {
         if (classDef->TestAttr(Attribute::JAVA_MIRROR)) {
             patcher.PatchCommonFieldsForMirror(classDef, Attribute::JAVA_MIRROR);
         }
@@ -48,14 +53,14 @@ void AST2CHIR::PatchCommonFieldsForMirror()
  * matching on the JAVA_IMPL getter. No-op unless compiling the CJMP specific
  * part.
  */
-void AST2CHIR::PatchCommonFieldsForJavaImpl()
+void PatchCJMPMembers::PatchCommonFieldsForJavaImpl()
 {
-    if (!opts.IsCompilingCJMPSpecific()) {
+    if (!compilingSpecific) {
         return;
     }
 
     CHIRFieldPatcher patcher(builder);
-    for (auto& classDef : package->GetClasses()) {
+    for (auto& classDef : pkg.GetClasses()) {
         if (classDef->TestAttr(Attribute::JAVA_IMPL)) {
             patcher.PatchCommonFieldsForJavaImpl(classDef);
         }
@@ -69,16 +74,16 @@ void AST2CHIR::PatchCommonFieldsForJavaImpl()
  * both the Java and ObjC mirror attributes. No-op unless compiling the CJMP
  * specific part.
  */
-void AST2CHIR::PatchFieldReferencesForMirror()
+void PatchCJMPMembers::PatchFieldReferencesForMirror()
 {
-    if (!opts.IsCompilingCJMPSpecific()) {
+    if (!compilingSpecific) {
         return;
     }
 
-    CHIRFieldReferencePatcher javaPatcher(*package, builder, Attribute::JAVA_MIRROR);
+    CHIRFieldReferencePatcher javaPatcher(pkg, builder, Attribute::JAVA_MIRROR);
     javaPatcher.Run();
 
-    CHIRFieldReferencePatcher objcPatcher(*package, builder, Attribute::OBJ_C_MIRROR);
+    CHIRFieldReferencePatcher objcPatcher(pkg, builder, Attribute::OBJ_C_MIRROR);
     objcPatcher.Run();
 }
 
@@ -88,13 +93,13 @@ void AST2CHIR::PatchFieldReferencesForMirror()
  * impl-side accessors. Delegates to PatchCJMPImplBodies::Run. No-op unless
  * compiling the CJMP specific part.
  */
-void AST2CHIR::PatchFieldReferencesForJavaImpl()
+void PatchCJMPMembers::PatchFieldReferencesForJavaImpl()
 {
-    if (!opts.IsCompilingCJMPSpecific()) {
+    if (!compilingSpecific) {
         return;
     }
 
-    PatchCJMPImplBodies(*package, builder).Run();
+    PatchCJMPImplBodies(pkg, builder).Run();
 }
 
 /**
@@ -103,13 +108,13 @@ void AST2CHIR::PatchFieldReferencesForJavaImpl()
  * processes only the constructor field-init sites rather than full method
  * bodies. No-op unless compiling the CJMP specific part.
  */
-void AST2CHIR::PatchCtorFieldInitForJavaImpl()
+void PatchCJMPMembers::PatchCtorFieldInitForJavaImpl()
 {
-    if (!opts.IsCompilingCJMPSpecific()) {
+    if (!compilingSpecific) {
         return;
     }
 
-    PatchCJMPImplBodies(*package, builder).RunCtorFieldInitOnly();
+    PatchCJMPImplBodies(pkg, builder).RunCtorFieldInitOnly();
 }
 
 /**
@@ -118,7 +123,7 @@ void AST2CHIR::PatchCtorFieldInitForJavaImpl()
  * a class. Returns null if @p astDecl has no superclass, the type fails to
  * translate, or the result is neither a class nor a ref-to-class.
  */
-ClassType* AST2CHIR::TranslateSuperClassToChirType(const AST::ClassLikeDecl& astDecl)
+ClassType* PatchCJMPMembers::TranslateSuperClassToChirType(const AST::ClassLikeDecl& astDecl)
 {
     auto astClassTy = DynamicCast<AST::ClassTy*>(astDecl.GetTy());
     if (!astClassTy) return nullptr;
@@ -147,10 +152,11 @@ ClassType* AST2CHIR::TranslateSuperClassToChirType(const AST::ClassLikeDecl& ast
  * (@JavaMirror or @ObjCMirror). The CHIR superclass ClassDef is checked first
  * (via IsPlatformMirrorClass); if that is inconclusive, the AST superclass
  * declaration's annotations are consulted as a fallback. Used by
- * PatchCJMPSuperClass to decide whether the Object super reference should be
+ * PatchSuperClass to decide whether the Object super reference should be
  * repointed to the platform parent.
  */
-bool AST2CHIR::IsPlatformMirrorSuperClass(const AST::ClassLikeDecl& astDecl, const ClassType& chirSuperClassTy)
+bool PatchCJMPMembers::IsPlatformMirrorSuperClass(
+    const AST::ClassLikeDecl& astDecl, const ClassType& chirSuperClassTy)
 {
     auto superClassDef = chirSuperClassTy.GetClassDef();
     if (superClassDef && IsPlatformMirrorClass(*superClassDef)) {
@@ -179,9 +185,10 @@ bool AST2CHIR::IsPlatformMirrorSuperClass(const AST::ClassLikeDecl& astDecl, con
  * already inherit a real non-Object superclass are skipped
  * (HasObjectAsSuperClass). No-op unless compiling the CJMP specific part.
  */
-void AST2CHIR::PatchCJMPSuperClass()
+void PatchCJMPMembers::PatchSuperClass(const std::vector<Ptr<const AST::Decl>>& nominalDecls,
+    const std::vector<Ptr<const AST::Decl>>& importedNominalDecls)
 {
-    if (!opts.IsCompilingCJMPSpecific()) {
+    if (!compilingSpecific) {
         return;
     }
 
@@ -197,7 +204,7 @@ void AST2CHIR::PatchCJMPSuperClass()
         }
     }
 
-    for (auto classDef : package->GetAllClassDef()) {
+    for (auto classDef : pkg.GetAllClassDef()) {
         if (!classDef->TestAttr(Attribute::SPECIFIC)) {
             continue;
         }
