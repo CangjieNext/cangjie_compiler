@@ -4,6 +4,7 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include "cangjie/AST/Utils.h"
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/Translator.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
@@ -391,7 +392,8 @@ bool Translator::SkipMemberFuncInSpecificMerging(ClassDef& classDef, const AST::
     }
 
     if (decl.isGetter || decl.isSetter) {
-        if (decl.TestAttr(AST::Attribute::JAVA_IMPL)) {
+        if (decl.outerDecl && Cangjie::Interop::Java::IsImpl(*decl.outerDecl) &&
+            decl.TestAttr(AST::Attribute::COMPILER_ADD)) {
             return false;
         }
         for (auto method : classDef.GetMethods()) {
