@@ -369,16 +369,6 @@ private:
         return noNeedToTranslateDecls.find(&decl) == noNeedToTranslateDecls.end();
     }
     void ProcessCommonAndSpecificExtends();
-    void PatchCJMPSuperClass();
-    // Translate AST super class type to CHIR ClassType (unwrapping RefType if needed).
-    ClassType* TranslateSuperClassToChirType(const AST::ClassLikeDecl& astDecl);
-    // Check whether the super class has a platform mirror annotation (Java or ObjC).
-    bool IsPlatformMirrorSuperClass(const AST::ClassLikeDecl& astDecl, const ClassType& chirSuperClassTy);
-    void PatchCommonFieldsForMirror();
-    void PatchCommonFieldsForJavaImpl();
-    void PatchFieldReferencesForMirror();
-    void PatchFieldReferencesForJavaImpl();
-    void PatchCtorFieldInitForJavaImpl();
     void ProcessClassStructVarInits(Translator& trans);
     const GlobalOptions& opts;
     const GenericInstantiationManager* gim;
