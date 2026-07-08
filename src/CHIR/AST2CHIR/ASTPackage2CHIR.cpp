@@ -21,6 +21,7 @@
 #include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/CHIR/IR/Type/PrivateTypeConverter.h"
+#include "cangjie/CHIR/Transformation/PatchCJMPMembers.h"
 
 namespace Cangjie::CHIR {
 namespace {
@@ -1349,8 +1350,9 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     trans.SetGenericFuncMap(genericFuncMap);
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "SetGenericFuncMap");
 
+    PatchCJMPMembers cjmpMemberPatcher(opts, *package, builder, chirType);
     Utils::ProfileRecorder::Start("TranslateNominalDecls", "PatchCJMPSuperClass");
-    PatchCJMPSuperClass();
+    cjmpMemberPatcher.PatchSuperClass(nominalDecls, importedNominalDecls);
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "PatchCJMPSuperClass");
 
     Utils::ProfileRecorder::Start("TranslateNominalDecls", "TranslateDecls");
@@ -1364,13 +1366,13 @@ void AST2CHIR::TranslateNominalDecls(const AST::Package& pkg)
     // Update some info for common specific
     Utils::ProfileRecorder::Start("TranslateNominalDecls", "ProcessCommonAndSpecific");
     ProcessCommonAndSpecificExtends();
-    PatchCommonFieldsForMirror();
-    PatchCommonFieldsForJavaImpl();
-    PatchFieldReferencesForMirror();
+    cjmpMemberPatcher.PatchCommonFieldsForMirror();
+    cjmpMemberPatcher.PatchCommonFieldsForJavaImpl();
+    cjmpMemberPatcher.PatchFieldReferencesForMirror();
     SetExtendInfo();
     UpdateExtendParent();
     ProcessClassStructVarInits(trans);
-    PatchFieldReferencesForJavaImpl();
+    cjmpMemberPatcher.PatchFieldReferencesForJavaImpl();
     Utils::ProfileRecorder::Stop("TranslateNominalDecls", "ProcessCommonAndSpecific");
 }
 
