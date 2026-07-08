@@ -17,6 +17,7 @@
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/Utils/Visitor/Visitor.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
+#include "cangjie/CHIR/Transformation/PatchCJMPMembers.h"
 #include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Utils/ParallelUtil.h"
@@ -436,7 +437,7 @@ void AST2CHIR::TranslateAllDecls(const AST::Package& pkg, const InitOrder& initO
 
     // step 5: Patch field initialization for @JavaImpl FROM_COMMON_PART constructors
     // (requires constructor bodies to be translated first)
-    PatchCtorFieldInitForJavaImpl();
+    PatchCJMPMembers(opts, *package, builder, chirType).PatchCtorFieldInitForJavaImpl();
 
     // step 6: set `CompileTimeValue` for lambda
     Utils::ProfileRecorder::Start("TranslateAllDecls", "SetCompileTimeValueFlag");
