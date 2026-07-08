@@ -667,6 +667,18 @@ void CopyPos(Ptr<const Node> source, Ptr<Node> target)
     }
 }
 
+/**
+ * Synthesizes the getter FuncDecl (signature + empty body) for @p prop and
+ * attaches it to prop.getters. Clones the property's attributes onto the
+ * getter, marks it COMPILER_ADD, and copies source positions from @p prop via
+ * CopyPos so that diagnostics, source mapping, and CJMP deserialization behave
+ * for compiler-synthesized getters. For interface properties the getter is
+ * forced PUBLIC. The getter is created with an empty param list and no return
+ * type here; the function type is filled in later by AssignMirrorPropGetters
+ * (Sema layer), since the AST layer has no TypeManager.
+ * @param prop Property to attach the getter to.
+ * @param attrToBeSet FFI attribute (e.g. JAVA_MIRROR) to enable on the getter.
+ */
 void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
 {
     auto getter = MakeOwned<FuncDecl>();
@@ -695,6 +707,17 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
     prop.getters.emplace_back(std::move(getter));
 }
 
+/**
+ * Synthesizes the setter FuncDecl (signature + empty body) for a mutable @p
+ * prop and attaches it to prop.setters. Like the getter, it clones attrs, marks
+ * COMPILER_ADD, and copies positions via CopyPos. Adds a single "set" FuncParam
+ * whose syntactic type is cloned from prop.type when present; this lets TypeCheck
+ * resolve the setter parameter even for CJMP-deserialized VarDecls whose semantic
+ * type is still InitialTy. The setter function type is assigned later by
+ * AssignMirrorPropSetters.
+ * @param prop Mutable property to attach the setter to.
+ * @param attrToBeSet FFI attribute (e.g. JAVA_MIRROR) to enable on the setter.
+ */
 void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
 {
     auto setter = MakeOwned<FuncDecl>();
@@ -731,6 +754,20 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
     prop.setters.emplace_back(std::move(setter));
 }
 
+/**
+ * Converts a VarDecl field into a PropDecl and appends it to @p decl's body,
+ * returning a reference to the created property. Moves the var's type, attrs,
+ * modifiers, and annotations onto the prop, enables DESUGARED_MIRROR_FIELD +
+ * COMPILER_ADD, copies positions via CopyPos, and synthesizes a getter (and a
+ * setter when the var is mutable) via InsertPropGetterSignature /
+ * InsertPropSetterSignature. The original VarDecl is left in place for the
+ * caller (InsertMirrorVarProp) to erase. Returns the PropDecl so the caller can
+ * track it in a var->prop map for CJMP common<->specific linking.
+ * @param decl Class whose body receives the new PropDecl.
+ * @param varDecl Source field to convert.
+ * @param attrToBeSet FFI attribute to enable on the property/getter/setter.
+ * @return Reference to the inserted PropDecl.
+ */
 PropDecl& InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribute attrToBeSet)
 {
     auto propDecl = MakeOwned<PropDecl>();
@@ -764,6 +801,18 @@ PropDecl& InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribut
     return *result;
 }
 
+/**
+ * Links a common-part PropDecl (and its first getter/setter) to its specific
+ * counterpart via specificImplementation. Sets commonProp.specificImplementation
+ * to &specificProp, and links the first getter and first setter when both sides
+ * have them. This is what makes the two-tier FFI filter
+ * (FROM_COMMON_PART + specificImplementation -> skip) work for mirror
+ * properties: matched common getters/setters are skipped during FFI desugaring
+ * and CHIR collision handling. Called from InsertMirrorVarProp after both the
+ * common and specific VarDecls have been converted to PropDecls.
+ * @param commonProp Common-part property (specificImplementation will be set).
+ * @param specificProp Specific counterpart property.
+ */
 void LinkMatchedCommonPropToSpecific(PropDecl& commonProp, PropDecl& specificProp)
 {
     commonProp.specificImplementation = &specificProp;
@@ -775,6 +824,24 @@ void LinkMatchedCommonPropToSpecific(PropDecl& commonProp, PropDecl& specificPro
     }
 }
 
+/**
+ * Rewrites every VarDecl field of a @JavaMirror/@ObjCMirror class into a
+ * PropDecl with a synthesized getter/setter. Three phases: (1) convert each
+ * eligible VarDecl via InsertPropConvertedByField, recording a var->prop map and
+ * the transformed member indices; (2) CJMP linking loop - for each common
+ * VarDecl whose specificImplementation points at a specific VarDecl, look up
+ * both in the map and call LinkMatchedCommonPropToSpecific on the resulting
+ * PropDecls, so matched common/specific getter-setter pairs are linked and later
+ * skipped by FFI desugaring and CHIR dedup; (3) erase the original VarDecls. The
+ * Sema-layer AssignMirrorPropGetterSetterTypes runs immediately after (from
+ * RewriteJavaMirrorFields) to fill in function types, since the AST layer has no
+ * TypeManager. Fields without a syntactic type are skipped unless they carry
+ * COMMON/SPECIFIC attributes (CJMP matching markers that must survive even
+ * without a type).
+ * @param decl Mirror class whose VarDecl fields are rewritten.
+ * @param attrToBeSet FFI attribute (e.g. JAVA_MIRROR) to enable on generated
+ *                    properties/getters/setters.
+ */
 void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
 {
     auto& members = decl.GetMemberDecls();
