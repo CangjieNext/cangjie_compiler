@@ -128,7 +128,7 @@ Expression* PatchCJMPImplBodies::TryPatchLoad(Load& load, ClassDef& implClassDef
     if (fieldName.empty()) return nullptr;
 
     auto getter = FindInstanceGetterByName(implClassDef, fieldName);
-    if (!getter || !getter->TestAttr(Attribute::JAVA_IMPL)) return nullptr;
+    if (!getter || !getter->TestAttr(Attribute::COMPILER_ADD)) return nullptr;
 
     auto baseValue = getRef->GetLocation();
     FuncCallContext callContext {
@@ -159,7 +159,7 @@ Expression* PatchCJMPImplBodies::TryPatchLoadByName(Load& load, ClassDef& implCl
     if (names.empty()) return nullptr;
 
     auto getter = FindInstanceGetterByName(implClassDef, names[0]);
-    if (!getter || !getter->TestAttr(Attribute::JAVA_IMPL)) return nullptr;
+    if (!getter || !getter->TestAttr(Attribute::COMPILER_ADD)) return nullptr;
 
     auto baseValue = getByName->GetLocation();
     FuncCallContext callContext {
@@ -196,7 +196,7 @@ void PatchCJMPImplBodies::TryPatchStoreElementByName(StoreElementByName& storeBy
 
     auto setter = FindInstanceSetterByName(implClassDef, names[0]);
     auto loc = storeByName.GetDebugLocation();
-    if (setter && setter->TestAttr(Attribute::JAVA_IMPL)) {
+    if (setter && setter->TestAttr(Attribute::COMPILER_ADD)) {
         auto thisValue = storeByName.GetLocation();
         auto storedValue = storeByName.GetValue();
         if (thisValue && storedValue) {
@@ -238,7 +238,7 @@ Expression* PatchCJMPImplBodies::TryPatchStoreElementRef(StoreElementRef& store,
 
     auto setter = FindInstanceSetterByName(implClassDef, fieldName);
     auto loc = store.GetDebugLocation();
-    if (!setter || !setter->TestAttr(Attribute::JAVA_IMPL)) {
+    if (!setter || !setter->TestAttr(Attribute::COMPILER_ADD)) {
         auto unitExpr = builder.CreateConstantExpression<UnitLiteral>(loc, builder.GetUnitTy(), store.GetParentBlock());
         store.ReplaceWith(*unitExpr);
         return nullptr;
