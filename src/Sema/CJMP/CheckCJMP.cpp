@@ -822,9 +822,8 @@ bool HasEmptyConstructor(const ClassDecl& classDecl)
 }
 } // namespace
 
-void MPTypeCheckerImpl::ValidateCJMPConstructorConstraints(AST::Package& pkg)
+void MPTypeCheckerImpl::ValidateCJMPConstructorConstraints()
 {
-    (void)pkg;
     for (const auto& relaxInfo : pendingRelaxations) {
         auto specificDecl = relaxInfo.specificDecl;
         if (!specificDecl || specificDecl->astKind != ASTKind::CLASS_DECL) {
@@ -1061,8 +1060,8 @@ bool MPTypeCheckerImpl::MatchSuperClass(
         return true;
     }
     auto comSupClass = StaticCast<ClassDecl>(&commonDecl)->GetSuperClassDecl();
-    auto platSupIClass = StaticCast<ClassDecl>(&specificDecl)->GetSuperClassDecl();
-// CJMP Object→PlatformParent Relaxation:
+    auto platSupClass = StaticCast<ClassDecl>(&specificDecl)->GetSuperClassDecl();
+    // CJMP Object→PlatformParent Relaxation:
     // Allow common class extending Object to match with specific class extending platform parent.
     // This enables FFI interop patterns where:
     //   - Common: class MyClass { } (implicitly extends Object)
@@ -1071,20 +1070,20 @@ bool MPTypeCheckerImpl::MatchSuperClass(
     //   1. Common parent is Object (or null/invalid - means implicit Object)
     //   2. Specific parent is a platform parent (@JavaMirror/@ObjCMirror or @JavaImpl/@ObjCImpl)
     // Constructor validation is deferred to PostTypeCheck phase.
-    if (!comSupClass || comSupClass->identifier == OBJECT_NAME) {
-        if (platSupIClass && IsPlatformParent(platSupIClass)) {
+    if (!comSupClass || (comSupClass->GetTy() && comSupClass->GetTy()->IsObject())) {
+        if (platSupClass && IsPlatformParent(platSupClass)) {
             pendingRelaxations.push_back({&commonDecl, &specificDecl});
             return true;
         }
     }
 
     // Standard type equality check (both must have valid superclasses)
-    if (comSupClass && platSupIClass) {
-        if (!typeManager.IsTyEqual(comSupClass->GetTy(), platSupIClass->GetTy())) {
+    if (comSupClass && platSupClass) {
+        if (!typeManager.IsTyEqual(comSupClass->GetTy(), platSupClass->GetTy())) {
             DiagNotMatchedSuperType(diag, specificDecl);
             return false;
         }
-    } else if (comSupClass || platSupIClass) {
+    } else if (comSupClass || platSupClass) {
         DiagNotMatchedSuperType(diag, specificDecl);
         return false;
     }
