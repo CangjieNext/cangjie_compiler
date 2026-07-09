@@ -40,3 +40,4 @@ ExternalProject_Add(
         ${FLATBUFFERS_COMPILE_OPTIONS})
 externalproject_get_property(flatbuffers SOURCE_DIR)
 set(FLATBUFFERS_SRC ${SOURCE_DIR})
+set(FLATBUFFERS_SOURCE_DIR ${SOURCE_DIR} PARENT_SCOPE)

@@ -38,3 +38,26 @@ set(FLATBUFFERS_INCLUDE_DIR
     ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_BINARY_DIR}/include
     PARENT_SCOPE)
 add_custom_target(CangjieFlatbuffersHeaders DEPENDS ${FLATC_OUTPUTS} ${FLATC_LIBAST_OUTPUTS})
+
+# Install flatbuffers toolchain and runtime support for std.ast / libast consumers.
+set(FLATBUFFERS_CANGJIE_RUNTIME_SRC
+    builder.cj
+    constants.cj
+    decode.cj
+    exception.cj
+    flatbuffer_object.cj
+    table.cj)
+set(FLATBUFFERS_CANGJIE_INSTALL_FILES)
+foreach(CJ_FILE ${FLATBUFFERS_CANGJIE_RUNTIME_SRC})
+    list(APPEND FLATBUFFERS_CANGJIE_INSTALL_FILES ${FLATBUFFERS_SOURCE_DIR}/cangjie/${CJ_FILE})
+endforeach()
+
+install(PROGRAMS ${FLATC_EXECUTABLE} DESTINATION third_party/flatbuffers)
+install(DIRECTORY ${FLATBUFFERS_SOURCE_DIR}/include/flatbuffers
+    DESTINATION third_party/flatbuffers/include)
+install(
+    FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/PackageFormat.fbs
+        ${CMAKE_CURRENT_SOURCE_DIR}/NodeFormat.fbs
+    DESTINATION third_party/flatbuffers)
+install(FILES ${FLATBUFFERS_CANGJIE_INSTALL_FILES} DESTINATION third_party/flatbuffers/cangjie)
