@@ -95,7 +95,15 @@ public:
         searchPath.emplace_back(".");
         searchPath.insert(searchPath.end(), globalOptions.environment.cangjiePaths.cbegin(),
             globalOptions.environment.cangjiePaths.cend());
+        // Same as CANGJIE_HOME/modules/<triple>: when CANGJIE_HOME is known, also search
+        // third_party/flatbuffers/modules for flatbuffers.cjo.
+        // BTW, flatbuffers.cjo is generated while building std.ast package,
+        // and copied to CANGJIE_HOME/third_party/flatbuffers/modules when install stdlib
         searchPath.emplace_back(cangjieModules);
+        if (!globalOptions.cangjieHome.empty()) {
+            searchPath.emplace_back(
+                FileUtil::JoinPath(globalOptions.cangjieHome, "third_party/flatbuffers/modules"));
+        }
     }
     const std::vector<std::string>& GetSearchPath() const
     {
