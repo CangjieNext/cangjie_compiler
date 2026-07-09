@@ -21,6 +21,23 @@
 
 namespace Cangjie::Sema {
 using namespace AST;
+
+inline bool IsSamePosition(const Position& pos1, const Position& pos2)
+{
+    return pos1 == pos2 && pos1.fileID == pos2.fileID;
+}
+
+/// When compiling CJMP package, there can be several parent CJO each having the same function.
+/// Both function are deserialized, so it's not duplicate, it's actulayy the same function.
+inline bool IsSameDeserializedFunction(const Decl& left, const Decl& right)
+{
+    if (&left == &right) {
+        return false;
+    }
+    return IsSamePosition(left.begin, right.begin) &&
+        (left.TestAttr(Attribute::ALREADY_LOADED) || right.TestAttr(Attribute::ALREADY_LOADED));
+}
+
 Range MakeRangeForDeclIdentifier(const AST::Decl& decl);
 void DiagRedefinitionWithFoundNode(DiagnosticEngine& diag, const Decl& current, const Decl& previous);
 void DiagOverloadConflict(DiagnosticEngine& diag, const std::vector<Ptr<FuncDecl>>& sameSigFuncs);

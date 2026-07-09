@@ -1580,21 +1580,6 @@ void TypeChecker::TypeCheckerImpl::PreCheckFuncStaticConflict(const std::vector<
     }
 }
 
-namespace {
-inline bool IsSamePosition(const Position& pos1, const Position& pos2)
-{
-    return pos1 == pos2 && pos1.fileID == pos2.fileID;
-}
-
-/// When compiling CJMP package, there can be several parent CJO each having the same function.
-/// Both function are deserialized, so it's not duplicate, it's actulayy the same function.
-inline bool IsSameDeserializedFunction(Ptr<FuncDecl> f1, Ptr<FuncDecl> f2)
-{
-    return IsSamePosition(f1->begin, f2->begin) &&
-        (f1->TestAttr(Attribute::ALREADY_LOADED) || f2->TestAttr(Attribute::ALREADY_LOADED));
-}
-}
-
 bool TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
     std::vector<Ptr<FuncDecl>> funcs, bool needReportErr)
 {
@@ -1625,7 +1610,7 @@ bool TypeChecker::TypeCheckerImpl::PreCheckFuncRedefinitionWithSameSignature(
                 fd->TestAttr(Attribute::STATIC) == (*it)->TestAttr(Attribute::STATIC) &&
                 fd->TestAttr(Attribute::CONSTRUCTOR) == (*it)->TestAttr(Attribute::CONSTRUCTOR) &&
                 fd->TestAttr(Attribute::MAIN_ENTRY) == (*it)->TestAttr(Attribute::MAIN_ENTRY) &&
-                !IsSameDeserializedFunction(fd, *it);
+                !IsSameDeserializedFunction(*fd, **it);
         });
         std::vector<Ptr<FuncDecl>> sameSigFuncs;
         std::copy(funcs.begin(), it1, std::back_inserter(sameSigFuncs));

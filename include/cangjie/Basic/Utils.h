@@ -23,7 +23,12 @@ namespace Cangjie::Utils {
 const uint8_t LINUX_LINE_TERMINATOR_LENGTH = 1;
 const uint8_t WINDOWS_LINE_TERMINATOR_LENGTH = 2;
 
-/// Get hash value by std::hash<std::string>.
+/// 64 bit FNV-1a algorithm. 
+///
+/// Produces identical hashes across different platforms. 
+/// This is required for proper work of CJMP and C/S features
+///
+/// If you don't need platform independent hashes, use `std::hash`
 uint64_t GetHash(const std::string& content);
 /// Split a string by '\r\n' and '\n' to form a vector of strings.
 std::vector<std::string> SplitLines(const std::string& str);

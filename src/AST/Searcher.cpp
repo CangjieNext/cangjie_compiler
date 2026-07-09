@@ -287,11 +287,26 @@ Order Sort::posAsc = [](const Symbol* a, const Symbol* b) noexcept {
     if (!a->node || !b->node) {
         return a->node < b->node;
     }
-    if (a->node->begin.fileID < b->node->begin.fileID) {
+    // For CJMP files, use filePath (string comparison) for
+    // deterministic cross-platform symbol ordering.
+    // For non-CJMP files, fileID is sequential and deterministic.
+    auto fileA = a->node->curFile;
+    auto fileB = b->node->curFile;
+    bool bothCjmp = fileA && fileB && (fileA->isCommon || fileA->isSpecific) &&
+        (fileB->isCommon || fileB->isSpecific);
+    if (bothCjmp) {
+        if (fileA->filePath != fileB->filePath) {
+            return fileA->filePath < fileB->filePath;
+        }
+    } else {
+        if (a->node->begin.fileID != b->node->begin.fileID) {
+            return a->node->begin.fileID < b->node->begin.fileID;
+        }
+    }
+    // Same file — compare by position within the file
+    if (a->node->begin < b->node->begin) {
         return true;
-    } else if (a->node->begin.fileID == b->node->begin.fileID && a->node->begin < b->node->begin) {
-        return true;
-    } else if (a->node->begin.fileID == b->node->begin.fileID && a->node->begin == b->node->begin) {
+    } else if (a->node->begin == b->node->begin) {
         // If the begin positions of different nodes are the same, the one with the bigger end position should be at the
         // front.
         return a->node->end == b->node->end ? a->astKind < b->astKind : b->node->end < a->node->end;

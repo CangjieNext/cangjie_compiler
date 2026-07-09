@@ -88,13 +88,15 @@ unsigned int SourceManager::GetFileId(
     } else {
         auto fileID = static_cast<unsigned int>(sources.size());
         if (isCjmpFile) {
-            // CJMP files can not have incremental file IDs,
-            // because 1) Some IDs may already be used for parent source set files
+            // CJMP files can not have incremental file IDs.
+            // 1) Some IDs may already be used for parent source set files
             // 2) Or in neighbour source set.
-            // So IDs need to be evaluated based path.
-            std::hash<std::string> hasher;
-            size_t hashValue = hasher(normalizedPath);
-            fileID = static_cast<unsigned int>(hashValue);
+            // Thus IDs are evaluated based path.
+
+            auto hash64 = Utils::GetHash(normalizedPath);
+
+            // XOR-folding down to 32 bits to avoid collisions
+            fileID = static_cast<uint32_t>(hash64 >> 32) ^ static_cast<uint32_t>(hash64 & 0xFFFFFFFF);
         }
 
         sources.emplace(fileID, Source(fileID, normalizedPath, buffer, fileHash, packageName));
