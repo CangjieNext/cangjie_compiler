@@ -68,8 +68,8 @@ third_party/pcre2-10.44-h1
 third_party/libxml2-2.14.0
 third_party/binary
 # flatc generated file
-libs/std/ast/NodeFormat_generated.cj
-libs/std/ast/nodeformat_generated.cj
+libs/std/ast/ASTFormat_generated.cj
+libs/std/ast/astformat_generated.cj
 libs/std/ast/table.cj
 libs/std/ast/flatbuffer_object.cj
 libs/std/ast/decode.cj
