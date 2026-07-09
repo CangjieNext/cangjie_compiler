@@ -6,7 +6,7 @@
 
 // Tips:
 // 1. EXPRKIND(expression kind, exression name for human reading, Expression class)
-// 2. Remember to modify CHIRCasting.h and PackageFormat.fbs after adding a new expression
+// 2. Remember to modify CHIRCasting.h and CHIRFormat.fbs after adding a new expression
 
 #if defined(MAJORKIND) && defined(EXPRKIND)
 
