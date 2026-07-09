@@ -40,7 +40,7 @@ ERROR(sema_invalid_subscript_assign_return, "the return type of subscript assign
 ERROR(sema_overload_conflicts, "%s '%s' has overload conflicts")
 ERROR(sema_static_function_overload_conflicts, "overloaded functions '%s' cannot mix static and non-static")
 ERROR(sema_use_mutable_func_alone, "mutable function '%s' cannot be used alone as reference")
-ERROR(sema_unsafe_func_can_only_be_called, "the unsafe function can only be called rather than as name reference")
+ERROR(sema_func_can_only_be_called, "the %s function can only be called rather than as name reference")
 ERROR(sema_ambiguous_match_primitive_extend, "ambiguous match for function call '%s' of these extended type: %s")
 ERROR(sema_immutable_access_mutable_func, "cannot use mutable function on immutable value", "is immutable")
 ERROR(sema_recursive_constructor_call, "recursive constructor calling detected")
