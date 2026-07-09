@@ -208,6 +208,9 @@ void SetOptions(SetFuncType setOptionHandler, const DriverOptions& driverOptions
         (!driverOptions.enableCompileDebug && !driverOptions.enableCoverage && driverOptions.displayLineInfo),
         "-disable-debug-info-print");
     setOptionHandler("--relocation-model=pic");
+    SetOptionIf(setOptionHandler,
+        driverOptions.target.os == Triple::OSType::IOS && driverOptions.target.arch == Triple::ArchType::AARCH64,
+        "--code-model=large");
     if (driverOptions.target.arch == Triple::ArchType::ARM32 &&
         driverOptions.optimizationLevel == GlobalOptions::OptimizationLevel::O2) {
         setOptionHandler("--frame-pointer=all");
