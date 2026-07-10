@@ -341,7 +341,7 @@ private:
 inline std::string HashString64(const std::string& str)
 {
     Out64 printer{0, false, false};
-    printer << static_cast<uint_fast64_t>(std::hash<std::string>{}(str));
+    printer << SipHash::GetHashValue(str);
     std::stringstream ss;
     ss << printer;
     return std::move(*ss.rdbuf()).str();

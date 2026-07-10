@@ -979,3 +979,11 @@ TEST(UtilsTest, IsUnderFlowFloat)
     // This should not occur in actual calls.
     EXPECT_EQ(underUse("1.0"), false);
 }
+
+TEST(UtilsTest, HashString64NoCollisionOnByte3Difference)
+{
+    // std::hash for libc++ problem data
+    EXPECT_NE(HashString64("altGlyph"), HashString64("altglyph"));
+    EXPECT_NE(HashString64("mmm0qrst"), HashString64("mmmpqrst"));
+}
+
