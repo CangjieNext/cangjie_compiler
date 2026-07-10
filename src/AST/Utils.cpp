@@ -17,6 +17,7 @@
 #include <sstream>
 #include <unordered_map>
 
+#include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
@@ -657,22 +658,11 @@ std::vector<VarDeclWithPosition> GetVarsInitializationOrderWithPositions(const D
     return resultDecls;
 }
 
-// Copies begin/end/curFile from source onto target. See doc comment in AST/Utils.h.
-// Used by FFI/CJMP synthesis paths to give generated sub-nodes a valid source position.
-void CopyPos(Ptr<const Node> source, Ptr<Node> target)
-{
-    if (source && target) {
-        target->begin = source->begin;
-        target->end = source->end;
-        target->curFile = source->curFile;
-    }
-}
-
 /**
  * Synthesizes the getter FuncDecl (signature + empty body) for @p prop and
  * attaches it to prop.getters. Clones the property's attributes onto the
  * getter, marks it COMPILER_ADD, and copies source positions from @p prop via
- * CopyPos so that diagnostics, source mapping, and CJMP deserialization behave
+ * CopyBasicInfo so that diagnostics, source mapping, and CJMP deserialization behave
  * for compiler-synthesized getters. For interface properties the getter is
  * forced PUBLIC. The getter is created with an empty param list and no return
  * type here; the function type is filled in later by AssignMirrorPropGetters
@@ -690,7 +680,7 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
     getter->CloneAttrs(prop);
     getter->DisableAttr(Attribute::MUT);
     getter->EnableAttr(Attribute::COMPILER_ADD, attrToBeSet);
-    CopyPos(&prop, getter.get());
+    CopyBasicInfo(&prop, getter.get());
 
     if (prop.outerDecl->astKind == ASTKind::INTERFACE_DECL) {
         getter->EnableAttr(Attribute::PUBLIC);
@@ -700,8 +690,8 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
     getterBody->EnableAttr(Attribute::COMPILER_ADD);
     getterBody->paramLists.push_back(MakeOwned<FuncParamList>());
     getterBody->paramLists.begin()->get()->EnableAttr(Attribute::COMPILER_ADD);
-    CopyPos(&prop, getterBody->paramLists.back().get());
-    CopyPos(&prop, getterBody.get());
+    CopyBasicInfo(&prop, getterBody->paramLists.back().get());
+    CopyBasicInfo(&prop, getterBody.get());
     getter->funcBody = std::move(getterBody);
     getter->funcBody->funcDecl = getter.get();
 
@@ -711,7 +701,7 @@ void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet)
 /**
  * Synthesizes the setter FuncDecl (signature + empty body) for a mutable @p
  * prop and attaches it to prop.setters. Like the getter, it clones attrs, marks
- * COMPILER_ADD, and copies positions via CopyPos. Adds a single "set" FuncParam
+ * COMPILER_ADD, and copies positions via CopyBasicInfo. Adds a single "set" FuncParam
  * whose syntactic type is cloned from prop.type when present; this lets TypeCheck
  * resolve the setter parameter even for CJMP-deserialized VarDecls whose semantic
  * type is still InitialTy. The setter function type is assigned later by
@@ -729,7 +719,7 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
     setter->CloneAttrs(prop);
     setter->DisableAttr(Attribute::MUT);
     setter->EnableAttr(Attribute::COMPILER_ADD, attrToBeSet);
-    CopyPos(&prop, setter.get());
+    CopyBasicInfo(&prop, setter.get());
 
     if (prop.outerDecl->astKind == ASTKind::INTERFACE_DECL) {
         setter->EnableAttr(Attribute::PUBLIC);
@@ -738,12 +728,12 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
     OwnedPtr<FuncBody> setterBody = MakeOwned<FuncBody>();
     setterBody->EnableAttr(Attribute::COMPILER_ADD);
     setterBody->paramLists.push_back(MakeOwned<FuncParamList>());
-    CopyPos(&prop, setterBody->paramLists.back().get());
-    CopyPos(&prop, setterBody.get());
+    CopyBasicInfo(&prop, setterBody->paramLists.back().get());
+    CopyBasicInfo(&prop, setterBody.get());
     auto setterParam = MakeOwned<FuncParam>();
     setterParam->EnableAttr(Attribute::COMPILER_ADD);
     setterParam->identifier = "set";
-    CopyPos(&prop, setterParam.get());
+    CopyBasicInfo(&prop, setterParam.get());
     if (prop.type) {
         setterParam->type = ASTCloner::Clone(prop.type.get());
     }
@@ -759,7 +749,7 @@ void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet)
  * Converts a VarDecl field into a PropDecl and appends it to @p decl's body,
  * returning a reference to the created property. Moves the var's type, attrs,
  * modifiers, and annotations onto the prop, enables DESUGARED_MIRROR_FIELD +
- * COMPILER_ADD, copies positions via CopyPos, and synthesizes a getter (and a
+ * COMPILER_ADD, copies positions via CopyBasicInfo, and synthesizes a getter (and a
  * setter when the var is mutable) via InsertPropGetterSignature /
  * InsertPropSetterSignature. The original VarDecl is left in place for the
  * caller (InsertMirrorVarProp) to erase. Returns the PropDecl so the caller can
@@ -773,7 +763,7 @@ PropDecl& InsertPropConvertedByField(ClassDecl& decl, VarDecl& varDecl, Attribut
 {
     auto propDecl = MakeOwned<PropDecl>();
 
-    CopyPos(&varDecl, propDecl.get());
+    CopyBasicInfo(&varDecl, propDecl.get());
     propDecl->keywordPos = varDecl.keywordPos;
     propDecl->identifier = varDecl.identifier;
     propDecl->colonPos = varDecl.colonPos;
@@ -976,10 +966,10 @@ void InsertSyntheticClassDecl(ClassLikeDecl& decl, File& file)
     synthetic->inheritedTypes.emplace_back(CreateRefType(decl));
 
     synthetic->fullPackageName = decl.fullPackageName;
-    CopyPos(&decl, synthetic.get());
+    CopyBasicInfo(&decl, synthetic.get());
 
     synthetic->body = MakeOwned<ClassBody>();
-    CopyPos(synthetic.get(), synthetic->body.get());
+    CopyBasicInfo(synthetic.get(), synthetic->body.get());
 
     synthetic->moduleName = ::Cangjie::Utils::GetRootPackageName(decl.fullPackageName);
 
