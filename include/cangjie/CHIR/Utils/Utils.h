@@ -198,10 +198,20 @@ inline bool IsSemanticAbstractInstance(const AST::FuncDecl& func)
 }
 
 /**
+ * @brief Get successors excluding blocks marked with Attribute::UNREACHABLE.
+ *
+ * @param bb The block to get successors from.
+ * @return Reachable successor blocks.
+ */
+std::vector<Block*> GetReachableSuccessors(Block* bb);
+
+/**
  * @brief Performs a topological sort on a set of blocks starting from the entry block.
  *
+ * Blocks marked with Attribute::UNREACHABLE are excluded from traversal and the result.
+ *
  * @param entrybb The entry block to start the sort.
- * @return A deque of blocks in topological order.
+ * @return A deque of reachable blocks in topological order.
  */
 std::deque<Block*> TopologicalSort(Block* entrybb);
 

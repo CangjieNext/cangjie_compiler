@@ -178,6 +178,9 @@ public:
             auto bb = worklist.front();
             worklist.pop_front();
             worklistSet.erase(bb);
+            if (bb->TestAttr(Attribute::UNREACHABLE)) {
+                continue;
+            }
 #ifdef AnalysisDevDebug
             std::cout << "processing " << bb->GetIdentifier() << std::endl;
 #endif
@@ -232,7 +235,14 @@ public:
                 //   then spread top state to its successors
                 targetSucc = std::nullopt;
             }
-            auto succs = targetSucc.has_value() ? std::vector<Block*>{targetSucc.value()} : bb->GetSuccessors();
+            std::vector<Block*> succs;
+            if (targetSucc.has_value()) {
+                if (!targetSucc.value()->TestAttr(Attribute::UNREACHABLE)) {
+                    succs.emplace_back(targetSucc.value());
+                }
+            } else {
+                succs = GetReachableSuccessors(bb);
+            }
             for (auto succ : succs) {
 #ifdef AnalysisDevDebug
                 std::cout << succ->GetIdentifier() << " is joining with " << bb->GetIdentifier() << std::endl;

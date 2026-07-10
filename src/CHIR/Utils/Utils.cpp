@@ -254,23 +254,38 @@ struct VisitStackElem {
     }
 };
 
+std::vector<Block*> GetReachableSuccessors(Block* bb)
+{
+    std::vector<Block*> successors;
+    for (auto succ : bb->GetSuccessors()) {
+        if (!succ->TestAttr(Attribute::UNREACHABLE)) {
+            successors.push_back(succ);
+        }
+    }
+    return successors;
+}
+
 std::deque<Block*> TopologicalSort(Block* entrybb)
 {
     CJC_NULLPTR_CHECK(entrybb);
     std::deque<Block*> res;
 
+    if (entrybb->TestAttr(Attribute::UNREACHABLE)) {
+        return res;
+    }
+
     std::unordered_set<Block*> visited;
     std::stack<VisitStackElem> visitStack;
 
     visited.insert(entrybb);
-    visitStack.emplace(entrybb, entrybb->GetSuccessors());
+    visitStack.emplace(entrybb, GetReachableSuccessors(entrybb));
 
     while (!visitStack.empty()) {
         while (!visitStack.top().successors.empty()) {
             auto lastSuc = visitStack.top().successors.back();
             visitStack.top().successors.pop_back();
             if (auto [_, hasInserted] = visited.emplace(lastSuc); hasInserted) {
-                visitStack.emplace(lastSuc, lastSuc->GetSuccessors());
+                visitStack.emplace(lastSuc, GetReachableSuccessors(lastSuc));
             }
         }
 
