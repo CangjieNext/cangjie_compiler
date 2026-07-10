@@ -32185,7 +32185,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..00437d1ed 100644
+index b391fe1ea..d5bcaeae1 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -32241,7 +32241,7 @@ index b391fe1ea..00437d1ed 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.2.0-beta.03";
++    g_version_str += "\n  cangjie 1.2.0-beta.rc";
    }
  
    return g_version_str.c_str();
@@ -39591,10 +39591,10 @@ index f8eba1a00..f6356240b 100644
  /// or unreachable). These paths are hidden if the corresponding cl::opts
 diff --git a/llvm/lib/Analysis/CJAliasAnalysis.cpp b/llvm/lib/Analysis/CJAliasAnalysis.cpp
 new file mode 100644
-index 000000000..096c78996
+index 000000000..4957ac303
 --- /dev/null
 +++ b/llvm/lib/Analysis/CJAliasAnalysis.cpp
-@@ -0,0 +1,302 @@
+@@ -0,0 +1,303 @@
 +//===- CJAliasAnalysis.cpp --------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -39660,8 +39660,9 @@ index 000000000..096c78996
 +    return true;
 +  if (isa<Argument>(V))
 +    return isGCPointerType(V->getType());
-+  if (auto *LI = dyn_cast<LoadInst>(V))
-+    return isGCPointerOrGlobalBase(LI->getPointerOperand(), --MaxLookup);
++  if (auto *LI = dyn_cast<LoadInst>(V)) {
++    return false;
++  }
 +  if (auto *II = dyn_cast<IntrinsicInst>(V)) {
 +    switch (II->getIntrinsicID()) {
 +    case Intrinsic::cj_gcread_ref:
@@ -40896,7 +40897,7 @@ index 413ec6dd4..67652db5d 100644
  }
  
 diff --git a/llvm/lib/Analysis/MemoryDependenceAnalysis.cpp b/llvm/lib/Analysis/MemoryDependenceAnalysis.cpp
-index fce9d5b24..84b5ee5f4 100644
+index fce9d5b24..1eb697dfe 100644
 --- a/llvm/lib/Analysis/MemoryDependenceAnalysis.cpp
 +++ b/llvm/lib/Analysis/MemoryDependenceAnalysis.cpp
 @@ -34,6 +34,7 @@
@@ -40930,7 +40931,7 @@ index fce9d5b24..84b5ee5f4 100644
 +          if (const CallBase *CB =
 +                  dyn_cast<CallBase>(getUnderlyingObject(Loc.Ptr))) {
 +            Function *F = CB->getCalledFunction();
-+            if (F && (F->getName() == "CJ_MCC_NewFinalizerStub" ||
++            if (F && (F->getName().startswith("CJ_MCC_NewFinalizer") ||
 +                      F->getName() == "CJ_MCC_OnFinalizerCreated"))
 +              continue;
 +          }
@@ -51493,7 +51494,7 @@ index b51ea45f6..f74c68a4c 100644
  // If it does not exist, return null.
  //
 diff --git a/llvm/lib/IR/SafepointIRVerifier.cpp b/llvm/lib/IR/SafepointIRVerifier.cpp
-index 5d3fa28f7..e22cadf61 100644
+index 5d3fa28f7..2df996ed4 100644
 --- a/llvm/lib/IR/SafepointIRVerifier.cpp
 +++ b/llvm/lib/IR/SafepointIRVerifier.cpp
 @@ -35,15 +35,23 @@
@@ -51807,7 +51808,7 @@ index 5d3fa28f7..e22cadf61 100644
 +  for (auto *Base : Bases) {
 +    if (auto *CB = dyn_cast<CallBase>(Base)) {
 +      auto *F = CB->getCalledFunction();
-+      if (F && F->getName() == "CJ_MCC_NewFinalizerStub")
++      if (F && F->getName().startswith("CJ_MCC_NewFinalizer"))
 +        return true;
 +    }
 +  }
@@ -59004,10 +59005,10 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..e4a48b35e
+index 000000000..9616fa522
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
-@@ -0,0 +1,3422 @@
+@@ -0,0 +1,3624 @@
 +//===- CJPartialEscapeAnalysis.cpp - escape analysis for Cangjie ----------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -59043,6 +59044,7 @@ index 000000000..e4a48b35e
 +#include "llvm/IR/SafepointIRVerifier.h"
 +#include "llvm/Transforms/Scalar/CJFillMetadata.h"
 +#include "llvm/Transforms/Utils/CallGraphUpdater.h"
++#include "llvm/Transforms/Utils/Cloning.h"
 +#include "llvm/Transforms/Utils/Local.h"
 +#include "llvm/Transforms/Scalar.h"
 +
@@ -59059,6 +59061,8 @@ index 000000000..e4a48b35e
 +namespace llvm {
 +cl::opt<bool> CJDisablePEA("cj-disable-partial-ea",
 +                                  cl::Hidden, cl::init(false));
++cl::opt<bool> CJEASupportFinalizer("cj-ea-support-finalizer",
++                                  cl::Hidden, cl::init(true));
 +
 +GlobalVariable *getNewKlass(CallBase *I) {
 +  GlobalVariable *Klass =
@@ -59135,10 +59139,39 @@ index 000000000..e4a48b35e
 +  auto FuncName = F->getName();
 +  if (FuncName.startswith("CJ_MCC_NewObject") ||
 +      FuncName.startswith("CJ_MCC_NewArray") ||
++      FuncName.startswith("CJ_MCC_NewFinalizer") ||
 +      FuncName.startswith("CJ_MCC_NewObjArray")) {
 +    return true;
 +  }
 +  return false;
++}
++
++bool isCangjieNewFinalizerFunc(Function *F) {
++  return F->getName().startswith("CJ_MCC_NewFinalizer");
++}
++
++Function *getFinalizerMethod(GlobalVariable *Klass, Module *M) {
++  if (Klass == nullptr)
++    return nullptr;
++  Constant *Init = Klass->getInitializer();
++  if (Init == nullptr)
++    return nullptr;
++  for (unsigned I = 0; I < Init->getNumOperands(); ++I) {
++    Constant *Op = Init->getAggregateElement(I);
++    if (Op == nullptr || !Op->getType()->isPointerTy())
++      continue;
++    Value *Ptr = Op;
++    if (auto *BC = dyn_cast<ConstantExpr>(Op)) {
++      if (!BC->isCast() || !BC->getOperand(0)->getType()->isPointerTy())
++        continue;
++      Ptr = BC->getOperand(0);
++    }
++    Function *F = dyn_cast<Function>(Ptr);
++    if (F && F->getName().contains("~init"))
++      return F;
++  }
++  LLVM_DEBUG(dbgs() << "Cannot extract finalizer method from TypeInfo.\n");
++  return nullptr;
 +}
 +
 +class NonEscapeRewriter : public InstVisitor<NonEscapeRewriter> {
@@ -59146,21 +59179,182 @@ index 000000000..e4a48b35e
 +
 +public:
 +  explicit NonEscapeRewriter(
-+      CallGraphUpdater *CGUpdater, Module *M)
-+      : CGUpdater(CGUpdater), M(M) {
++      CallGraphUpdater *CGUpdater, Module *M, LoopInfo *LI = nullptr)
++      : CGUpdater(CGUpdater), M(M), LI(LI) {
 +    CJMemset = Intrinsic::getDeclaration(
 +        M, Intrinsic::cj_memset,
 +        {IntegerType::getInt8PtrTy(M->getContext(), 0)});
 +  }
 +
++  void setLoopInfo(LoopInfo *LoopInfo) { LI = LoopInfo; }
++
++  bool prepareFinalizer(SmallVectorImpl<Instruction *> &InsertPoints) {
++    CallBase *CB = dyn_cast<CallBase>(OldInst);
++    if (!CB || !CB->getCalledFunction() ||
++        !isCangjieNewFinalizerFunc(CB->getCalledFunction()))
++      return true;
++    IsFinalizer = true;
++    FinalizerKlass = getNewKlass(CB);
++    FinalizerMethod = getFinalizerMethod(FinalizerKlass, M);
++    FinalizerInsertBB = CB->getParent();
++    if (FinalizerMethod == nullptr)
++      return false;
++    if (hasExceptionPath(FinalizerInsertBB))
++      return false;
++    collectFinalizerInsertPoints(InsertPoints);
++    if (InsertPoints.empty())
++      return false;
++    return true;
++  }
++
 +  bool rewrite(Instruction *Old, BasicBlock *NewInstInsertBB) {
 +    OldInst = Old;
 +    Visited.clear();
++    IsFinalizer = false;
++    FinalizerMethod = nullptr;
++    FinalizerInsertBB = nullptr;
++    FinalizerKlass = nullptr;
++    SmallVector<Instruction *, 4> InsertPoints;
++    if (CJEASupportFinalizer && !prepareFinalizer(InsertPoints)) {
++      return false;
++    }
 +    if (!createNewAllocaInst(NewInstInsertBB)) {
 +      return false;
 +    }
 +    rewriteNewInst();
++    if (IsFinalizer && FinalizerInsertBB != nullptr) {
++      insertFinalizerCall(InsertPoints);
++    }
 +    return true;
++  }
++
++  bool hasExceptionPath(BasicBlock *CreateBB) {
++    SmallSet<BasicBlock *, 16> VisitedBB;
++    SmallVector<BasicBlock *, 8> Stack;
++    Stack.push_back(CreateBB);
++    while (!Stack.empty()) {
++      BasicBlock *BB = Stack.pop_back_val();
++      if (!VisitedBB.insert(BB).second)
++        continue;
++
++      Instruction *T = BB->getTerminator();
++      if (isa<UnreachableInst>(T) || isa<ResumeInst>(T))
++        return true;
++
++      for (BasicBlock *Succ : successors(BB)) {
++        if (VisitedBB.count(Succ) == 0)
++          Stack.push_back(Succ);
++      }
++    }
++    return false;
++  }
++
++  bool isFinalizerUsedAcrossBBs() {
++    BasicBlock *CreateBB = FinalizerInsertBB;
++    SmallVector<Instruction *, 16> Worklist;
++    SmallPtrSet<Instruction *, 16> Visited;
++
++    for (User *U : OldInst->users()) {
++      if (auto *I = dyn_cast<Instruction>(U))
++        Worklist.push_back(I);
++    }
++
++    while (!Worklist.empty()) {
++      Instruction *I = Worklist.pop_back_val();
++      if (!Visited.insert(I).second)
++        continue;
++
++      if (I->getParent() != CreateBB)
++        return true;
++
++      if (isa<PHINode>(I))
++        return true;
++
++      if (isa<BitCastInst>(I) || isa<AddrSpaceCastInst>(I) ||
++          isa<GetElementPtrInst>(I) || isa<SelectInst>(I)) {
++        for (User *U : I->users()) {
++          if (auto *UI = dyn_cast<Instruction>(U))
++            Worklist.push_back(UI);
++        }
++      }
++    }
++    return false;
++  }
++
++  void collectFinalizerInsertPoints(SmallVectorImpl<Instruction *> &Points) {
++    Instruction *Term = FinalizerInsertBB->getTerminator();
++
++    if (isa<ReturnInst>(Term)) {
++      Points.push_back(Term);
++      return;
++    }
++
++    bool IsInLoop = false;
++    if (LI) {
++      IsInLoop = (LI->getLoopFor(FinalizerInsertBB) != nullptr);
++    } else {
++      for (BasicBlock *Succ : successors(FinalizerInsertBB)) {
++        if (Succ == FinalizerInsertBB) {
++          IsInLoop = true;
++          break;
++        }
++      }
++    }
++    if (IsInLoop) {
++      if (!isFinalizerUsedAcrossBBs())
++        Points.push_back(Term);
++      return;
++    }
++
++    SmallSet<BasicBlock *, 16> VisitedBB;
++    SmallVector<BasicBlock *, 8> Stack;
++    Stack.push_back(FinalizerInsertBB);
++    while (!Stack.empty()) {
++      BasicBlock *BB = Stack.pop_back_val();
++      if (!VisitedBB.insert(BB).second)
++        continue;
++
++      Instruction *T = BB->getTerminator();
++      if (isa<ReturnInst>(T)) {
++        Points.push_back(T);
++        continue;
++      }
++
++      for (BasicBlock *Succ : successors(BB)) {
++        if (VisitedBB.count(Succ) == 0)
++          Stack.push_back(Succ);
++      }
++    }
++  }
++
++  void insertFinalizerCall(SmallVectorImpl<Instruction *> &InsertPoints) {
++    bool ShouldInline = (InsertPoints.size() == 1);
++    if (ShouldInline) {
++      FinalizerMethod->removeFnAttr(Attribute::NoInline);
++    }
++
++    Type *PI8AS1Ty = Type::getInt8PtrTy(M->getContext(), 1);
++    for (Instruction *InsertPoint : InsertPoints) {
++      IRBuilder<> Builder(InsertPoint);
++      Value *ObjPtr = Builder.CreateAddrSpaceCast(NewInst, PI8AS1Ty);
++      SmallVector<Value *, 4> Args;
++      Args.push_back(ObjPtr);
++      if (FinalizerMethod->getFunctionType()->getNumParams() > 1) {
++        Value *OuterTI = Builder.CreateBitCast(
++            FinalizerKlass,
++            FinalizerMethod->getFunctionType()->getParamType(1));
++        Args.push_back(OuterTI);
++      }
++      CallInst *CI = Builder.CreateCall(FinalizerMethod, Args);
++
++      if (CGUpdater)
++        CGUpdater->removeCallSite(*CI);
++
++      if (ShouldInline) {
++        InlineFunctionInfo IFI;
++        InlineFunction(*CI, IFI);
++      }
++    }
 +  }
 +
 +  bool handleStructAS1Cast(AllocaInst *Old) {
@@ -59497,7 +59691,12 @@ index 000000000..e4a48b35e
 +  Function *CJMemset;
 +  SmallVector<Instruction *, 8> Queue;
 +  SmallSetVector<User *, 8> Visited;
++  bool IsFinalizer = false;
++  Function *FinalizerMethod = nullptr;
++  BasicBlock *FinalizerInsertBB = nullptr;
++  GlobalVariable *FinalizerKlass = nullptr;
 +  bool StructAS1Replace = false;
++  LoopInfo *LI = nullptr;
 +  static DenseMap<PHINode *, SmallSetVector<Instruction *, 8>> RewritePhiIncoming;
 +  DenseMap<SelectInst *, SmallSetVector<Instruction *, 8>> RewriteSIIncoming;
 +  DenseMap<CallInst *, SmallSetVector<Instruction *, 8>> RewriteArrayCopy;
@@ -59995,6 +60194,8 @@ index 000000000..e4a48b35e
 +      // New Obj in loop can't handle now.
 +      if (!AllLocations[i]->isEscaped()) {
 +        NewLocation *New = dyn_cast<NewLocation>(AllLocations[i]);
++        Function *F = dyn_cast<Instruction>(New->Val)->getParent()->getParent();
++        Rewriter.setLoopInfo(&LookupLoopInfo(*F));
 +        Changed |= Rewriter.rewrite(dyn_cast<Instruction>(New->Val),
 +                                    New->NewInstInsertBB);
 +      }
@@ -61614,6 +61815,8 @@ index 000000000..e4a48b35e
 +      if (!OnceEscapedValue.count(Partial.first)) {
 +        LLVM_DEBUG(dbgs() << "not escaped obj:");
 +        LLVM_DEBUG(dbgs() << "  " << *Partial.first << "\n");
++        Function *F = Partial.first->getParent()->getParent();
++        Rewriter.setLoopInfo(&LookupLoopInfo(*F));
 +        Rewriter.rewrite(Partial.first, Partial.second);
 +        Changed = true;
 +      } else {
@@ -63701,7 +63904,7 @@ index b850591b4..da4c027b7 100644
        LLVM_DEBUG(dbgs() << "canCreateThunkFor: " << F->getName()
                          << " is too small to bother creating a thunk for\n");
 diff --git a/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp b/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
-index f1b6f2bb7..99f9a0ffa 100644
+index f1b6f2bb7..eb6a58c34 100644
 --- a/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
 +++ b/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
 @@ -17,6 +17,7 @@
@@ -63728,7 +63931,7 @@ index f1b6f2bb7..99f9a0ffa 100644
 +    "enable-cj-generic-intrinsic-opt", cl::init(true), cl::Hidden,
 +    cl::desc("Enable cangjie generic intrinsics optimization"));
 +cl::opt<bool> EnableCJGCInstrTransform("enable-cj-gcinstr-transform",
-+                                       cl::Hidden, cl::init(false));
++                                       cl::Hidden, cl::init(true));
  static cl::opt<bool>
  UseGVNAfterVectorization("use-gvn-after-vectorization",
    cl::init(false), cl::Hidden,
@@ -118142,7 +118345,7 @@ index 000000000..3d297ab2a
 +}
 diff --git a/llvm/test/Transforms/Cangjie/GVN/cj-finalizer.ll b/llvm/test/Transforms/Cangjie/GVN/cj-finalizer.ll
 new file mode 100644
-index 000000000..90c6e3b85
+index 000000000..6533817d3
 --- /dev/null
 +++ b/llvm/test/Transforms/Cangjie/GVN/cj-finalizer.ll
 @@ -0,0 +1,20 @@
@@ -118152,12 +118355,12 @@ index 000000000..90c6e3b85
 +@_ZN7default1AE.objKlass = weak_odr global %KlassInfo.0 { [0 x %KlassInfo.0*] zeroinitializer }
 +%Unit.Type = type { i8 }
 +
-+declare i8 addrspace(1)* @CJ_MCC_NewFinalizerStub(i8*, i32)
++declare i8 addrspace(1)* @CJ_MCC_NewFinalizer(i8*, i32)
 +declare %Unit.Type @CJ_MCC_InvokeGC(i1)
 +
 +define i64 @foo() {
 +entry:
-+  %0 = call noalias i8 addrspace(1)* @CJ_MCC_NewFinalizerStub(i8* bitcast (%KlassInfo.0* @_ZN7default1AE.objKlass to i8*), i32 16)
++  %0 = call noalias i8 addrspace(1)* @CJ_MCC_NewFinalizer(i8* bitcast (%KlassInfo.0* @_ZN7default1AE.objKlass to i8*), i32 16)
 +  %1 = getelementptr inbounds i8, i8 addrspace(1)* %0
 +  %2 = bitcast i8 addrspace(1)* %1 to i64 addrspace(1)*
 +  store i64 0, i64 addrspace(1)* %2, align 8
