@@ -340,8 +340,18 @@ private:
 
 inline std::string HashString64(const std::string& str)
 {
+    // FNV-1a 64-bit: deterministic across platforms, every byte and the length
+    // participate, and there is no truncation or sampling defect. This replaces
+    // std::hash<std::string> (which collided on libc++ CityHash64 for certain
+    // 8-byte pairs) and avoids SipHash (whose non-standard lack of length-
+    // padding caused trailing-\0 collisions such as "Chunked" vs "Chunked\0").
+    uint64_t hash = 0xcbf29ce484222325ULL;
+    for (unsigned char c : str) {
+        hash ^= c;
+        hash *= 0x100000001b3ULL;
+    }
     Out64 printer{0, false, false};
-    printer << static_cast<uint_fast64_t>(std::hash<std::string>{}(str));
+    printer << hash;
     std::stringstream ss;
     ss << printer;
     return std::move(*ss.rdbuf()).str();
