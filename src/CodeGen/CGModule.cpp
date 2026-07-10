@@ -530,11 +530,19 @@ llvm::GlobalVariable* CGModule::GeneratePrivateUnnamedAddrConstant(
 llvm::GlobalVariable* CGModule::GetOrCreateGlobalVariable(
     llvm::Constant* constVal, const std::string& gvContent, bool isTuple)
 {
-    std::string name = isTuple ? GetConstantTupleName(gvContent) : GetConstantArrayName(gvContent);
-    if (auto gv = module->getGlobalVariable(name, true); gv) {
-        return gv;
-    } else {
-        return GeneratePrivateUnnamedAddrConstant(name, constVal);
+    const std::string baseName = isTuple ? GetConstantTupleName(gvContent) : GetConstantArrayName(gvContent);
+    std::string name = baseName;
+    for (size_t collisionId = 1;; ++collisionId) {
+        auto namedValue = module->getNamedValue(name);
+        if (!namedValue) {
+            return GeneratePrivateUnnamedAddrConstant(name, constVal);
+        }
+        // Constants are uniqued within an LLVMContext, so pointer equality also verifies their contents.
+        if (auto gv = llvm::dyn_cast<llvm::GlobalVariable>(namedValue);
+            gv && gv->hasInitializer() && gv->getInitializer() == constVal) {
+            return gv;
+        }
+        name = baseName + "." + std::to_string(collisionId);
     }
 }
 
