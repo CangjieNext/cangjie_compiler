@@ -39,13 +39,13 @@ public:
         ImportManager& im, TypeManager& tm, DiagnosticEngine& diag, const GlobalOptions& compilationOptions
     );
     void PreparePackageForTestIfNeeded(AST::Package& pkg);
-    void MarkDeclsForTestIfNeeded(std::vector<Ptr<AST::Package>> pkgs) const;
+    void MarkDeclsForTestIfNeeded(const std::vector<Ptr<AST::Package>>& pkgs) const;
     static bool IsDeclOpenToMock(const AST::Decl& decl);
     static bool IsDeclGeneratedForTest(const AST::Decl& decl);
     static bool IsMockAccessor(const AST::Decl& decl);
     ~TestManager();
 
-    void PrepareToMock(AST::Package& pkg);
+    void PrepareToMock(const std::vector<Ptr<AST::Package>>& pkgs);
     void HandleCreateMock(AST::Package& pkg);
 
 private:
@@ -62,6 +62,7 @@ private:
     OwnedPtr<MockSupportManager> mockSupportManager {nullptr};
     Ptr<MockUtils> mockUtils {nullptr};
 
+    void PrepareToMock(AST::Package& pkg);
     Ptr<AST::ClassDecl> GenerateMockClassIfNeededAndGet(const AST::CallExpr& callExpr, AST::Package& pkg);
     void GenerateAccessors(AST::Package& pkg);
     void ReplaceCallsWithAccessors(AST::Package& pkg);
