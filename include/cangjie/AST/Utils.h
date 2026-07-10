@@ -239,21 +239,6 @@ struct VarDeclWithPosition {
  */
 std::vector<VarDeclWithPosition> GetVarsInitializationOrderWithPositions(const Decl& parentDecl);
 
-/**
- * @brief Copies source-position info (begin, end, curFile) from @p source onto @p target.
- *
- * Unlike CopyBasicInfo, this also copies @c curFile (which CopyBasicInfo omits) and does not
- * touch macro-call/comments/scope info. Intended for compiler-synthesized nodes produced by
- * the Java/ObjC FFI and CJMP transformations, where a generated sub-node (e.g. a getter/setter
- * FuncBody, FuncParamList, FuncParam, or Block) should inherit the position of the declaration
- * it was derived from so that diagnostics, source mapping, and CJMP deserialization behave
- * correctly. Both @p source and @p target must be non-null (no-op otherwise).
- *
- * @param source Node to copy positions from (typically the originating field/property/ctor).
- * @param target Synthesized node to receive the positions.
- */
-void CopyPos(Ptr<const Node> source, Ptr<Node> target);
-
 void InsertPropGetterSignature(PropDecl& prop, Attribute attrToBeSet);
 
 void InsertPropSetterSignature(PropDecl& prop, Attribute attrToBeSet);
