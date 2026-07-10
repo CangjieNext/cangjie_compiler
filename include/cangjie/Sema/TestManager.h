@@ -39,12 +39,13 @@ public:
         ImportManager& im, TypeManager& tm, DiagnosticEngine& diag, const GlobalOptions& compilationOptions
     );
     void PreparePackageForTestIfNeeded(AST::Package& pkg);
-    void MarkDeclsForTestIfNeeded(std::vector<Ptr<AST::Package>> pkgs) const;
+    void MarkDeclsForTestIfNeeded(const std::vector<Ptr<AST::Package>>& pkgs) const;
     static bool IsDeclOpenToMock(const AST::Decl& decl);
     static bool IsDeclGeneratedForTest(const AST::Decl& decl);
     static bool IsMockAccessor(const AST::Decl& decl);
     ~TestManager();
 
+    void PrepareToMock(const std::vector<Ptr<AST::Package>>& pkgs);
     void PrepareToMock(AST::Package& pkg);
     void HandleCreateMock(AST::Package& pkg);
 
