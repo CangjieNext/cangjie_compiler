@@ -14,6 +14,13 @@
 
 namespace Cangjie::Utils {
 
+// NOTE: This implementation deviates from standard SipHash-2-4 in that it does
+// NOT write the message length (length & 0xff) into the final block. As a
+// result, strings that differ only by trailing null bytes (e.g. "Chunked"
+// (len=7) and "Chunked\0" (len=8)) produce the same hash. For hash-table / cache
+// use where inputs are well-formed identifiers this is benign, but do NOT rely
+// on it to distinguish arbitrary user-supplied string literals — use a
+// proper length-aware hash (e.g. FNV-1a-64) for that purpose instead.
 class SipHash {
 public:
     template <uint64_t N> static uint64_t GetHashValue(const std::bitset<N>& rawData)
