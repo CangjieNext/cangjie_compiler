@@ -713,6 +713,7 @@ bool CompilerInstance::PerformDesugarAfterSema()
 {
     testManager->MarkDeclsForTestIfNeeded(GetSourcePackages());
     compileStrategy->DesugarAfterSema();
+    testManager->PrepareToMock(GetSourcePackages());
     if (!srcPkgs.empty() && invocation.globalOptions.NeedDumpASTToFile()) {
         DumpAST(GetSourcePackages(), invocation.globalOptions.output, "desugar");
     }

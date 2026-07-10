@@ -283,9 +283,6 @@ void GIM::GenericInstantiationManagerImpl::GenericInstantiatePackage(Package& pk
     // Collect extend decls by usage.
     RecordExtend(*curPkg);
     Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "RecordExtend");
-    Utils::ProfileRecorder::Start("GenericInstantiatePackage", "testManager::PrepareToMock");
-    testManager->PrepareToMock(*curPkg);
-    Utils::ProfileRecorder::Stop("GenericInstantiatePackage", "testManager::PrepareToMock");
     Utils::ProfileRecorder::Start("GenericInstantiatePackage", "instantiate");
     if (curPkg->TestAttr(Attribute::INCRE_COMPILE)) {
         InstantiateForIncrementalPackage();
