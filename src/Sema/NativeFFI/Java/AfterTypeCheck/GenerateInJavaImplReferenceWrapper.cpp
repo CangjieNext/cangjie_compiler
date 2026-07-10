@@ -228,7 +228,7 @@ void GenerateInJavaImplReferenceWrapper::GenerateWrappingConstructorBody(FuncDec
     CJC_ASSERT(parentCtor->funcBody->paramLists[0]->params.size() == 1); // Java_CFFI_JavaEntity
 
     auto superCall = CreateSuperCall(refWrapper, *parentCtor, parentCtor->GetTy());
-    CopyPos(&wrappingCtor, superCall.get());
+    CopyBasicInfo(&wrappingCtor, superCall.get());
     superCall->args.push_back(CreateFuncArg(WithinFile(CreateRefExpr(entityParam), curFile)));
 
     auto& block = wrappingCtor.funcBody->body;
@@ -242,10 +242,12 @@ void GenerateInJavaImplReferenceWrapper::GenerateWrappingConstructorBody(FuncDec
             WithinFile(CreateRefExpr(regIdParam), curFile),
             companion.GetTy()),
         TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
-    CopyPos(&wrappingCtor, regCompanionAssignment.get());
+    CopyBasicInfo(&wrappingCtor, regCompanionAssignment.get());
 
     block->body.insert(block->body.begin(), std::move(regCompanionAssignment));
     block->body.insert(block->body.begin(), std::move(superCall));
+
+    AddCurFile(*block, wrappingCtor.curFile);
 }
 
 OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstructor(FuncDecl& userCtor,

@@ -113,7 +113,7 @@ void JavaDesugarManager::InsertJavaRefVarDecl(ClassDecl& decl)
     auto javaref = CreateVarDecl(JAVA_REF_FIELD_NAME, nullptr, CreateRefType(javaEntityDecl));
     javaref->SetTy(javaEntityDecl.GetTy());
     javaref->EnableAttr(Attribute::INITIALIZATION_CHECKED, Attribute::INITIALIZED, Attribute::COMPILER_ADD);
-    CopyPos(&decl, javaref.get());
+    CopyBasicInfo(&decl, javaref.get());
 
     Modifier protectedMod = Modifier(TokenKind::PUBLIC, javaref->begin);
     protectedMod.curFile = decl.curFile;
@@ -122,6 +122,8 @@ void JavaDesugarManager::InsertJavaRefVarDecl(ClassDecl& decl)
     javaref->isVar = false;
     javaref->outerDecl = Ptr(&decl);
     javaref->fullPackageName = decl.fullPackageName;
+
+    AddCurFile(*javaref, decl.curFile);
 
     decl.body->decls.push_back(std::move(javaref));
 }
@@ -133,7 +135,7 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
     auto& javaEntityDecl = *lib.GetJavaEntityDecl();
 
     auto param = CreateFuncParam("$ref", CreateRefType(javaEntityDecl), nullptr, javaEntityDecl.GetTy());
-    CopyPos(&decl, param.get());
+    CopyBasicInfo(&decl, param.get());
 
     std::vector<OwnedPtr<Node>> ctorNodes;
 
@@ -170,15 +172,15 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
     std::vector<OwnedPtr<FuncParam>> ctorParams;
     ctorParams.push_back(std::move(param));
     auto paramList = CreateFuncParamList(std::move(ctorParams));
-    CopyPos(&decl, paramList.get());
+    CopyBasicInfo(&decl, paramList.get());
 
     std::vector<OwnedPtr<FuncParamList>> paramLists;
     paramLists.push_back(std::move(paramList));
 
     auto ctorFuncBody = CreateFuncBody(
         std::move(paramLists), CreateRefType(decl), CreateBlock(std::move(ctorNodes), decl.GetTy()), decl.GetTy());
-    CopyPos(&decl, ctorFuncBody.get());
-    CopyPos(&decl, ctorFuncBody->body.get());
+    CopyBasicInfo(&decl, ctorFuncBody.get());
+    CopyBasicInfo(&decl, ctorFuncBody->body.get());
 
     auto fd = CreateFuncDecl("init", std::move(ctorFuncBody), ctorFuncTy);
     fd->fullPackageName = decl.fullPackageName;
@@ -187,8 +189,10 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
     fd->constructorCall = ConstructorCall::SUPER;
     fd->EnableAttr(Attribute::PUBLIC, Attribute::IN_CLASSLIKE, Attribute::CONSTRUCTOR);
     fd->funcBody->parentClassLike = &decl;
-    CopyPos(&decl, fd.get());
+    CopyBasicInfo(&decl, fd.get());
     fd->fullPackageName = decl.fullPackageName;
+
+    AddCurFile(*fd, decl.curFile);
 
     decl.body->decls.emplace_back(std::move(fd));
 }
@@ -205,12 +209,14 @@ void JavaDesugarManager::InsertJavaMirrorHasInited(ClassDecl& mirror)
     auto initializer = CreateLitConstExpr(LitConstKind::BOOL, "false", boolTy);
     auto ret = WithinFile(CreateVarDecl(HAS_INITED_IDENT, std::move(initializer)), curFile);
     ret->isVar = true;
-    CopyPos(&mirror, ret.get());
+    CopyBasicInfo(&mirror, ret.get());
     ret->fullPackageName = mirror.fullPackageName;
     ret->outerDecl = Ptr(&mirror);
     ret->EnableAttr(
         Attribute::PRIVATE, Attribute::NO_REFLECT_INFO,
         Attribute::IN_CLASSLIKE, Attribute::HAS_INITED_FIELD, Attribute::COMPILER_ADD);
+
+    AddCurFile(*ret, mirror.curFile);
 
     mirror.body->decls.emplace_back(std::move(ret));
 }
@@ -428,7 +434,7 @@ void JavaDesugarManager::InsertJavaMirrorPropGetter(PropDecl& prop)
     auto& getter = *prop.getters.begin();
     getter->funcBody->body = CreateBlock({}, prop.GetTy());
     getter->funcBody->SetTy(prop.GetTy());
-    CopyPos(&prop, getter->funcBody->body.get());
+    CopyBasicInfo(&prop, getter->funcBody->body.get());
     auto& body = getter->funcBody->body->body;
     auto curFile = prop.curFile;
     auto& jniEnv = *StaticAs<ASTKind::VAR_DECL>(
@@ -455,11 +461,15 @@ void JavaDesugarManager::InsertJavaMirrorPropGetter(PropDecl& prop)
         body.emplace_back(CreateTmpVarDecl(nullptr, std::move(jniGetterCall))).get());
     jniGetterCallRes.SetTy(jniGetterCallRes.initializer->GetTy());
     CopyBasicInfo(jniGetterCallRes.initializer.get(), &jniGetterCallRes);
-    CopyPos(&prop, &jniGetterCallRes);
+    jniGetterCallRes.begin = prop.begin;
+    jniGetterCallRes.end = prop.end;
+    jniGetterCallRes.curFile = prop.curFile;
 
     auto callResRef = CreateRefExpr(jniGetterCallRes);
     CopyBasicInfo(&jniGetterCallRes, callResRef.get());
-    CopyPos(&prop, callResRef.get());
+    callResRef->begin = prop.begin;
+    callResRef->end = prop.end;
+    callResRef->curFile = prop.curFile;
 
     auto outerDecl = As<ASTKind::CLASS_LIKE_DECL>(prop.outerDecl);
     OwnedPtr<Expr> unwrapJavaEntityCall = isArrayGetLength || !outerDecl
@@ -471,6 +481,8 @@ void JavaDesugarManager::InsertJavaMirrorPropGetter(PropDecl& prop)
         return;
     }
     body.emplace_back(CreateReturnExpr(std::move(unwrapJavaEntityCall), getter->funcBody.get()));
+
+    AddCurFile(*getter, prop.curFile);
 }
 
 void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
@@ -483,7 +495,7 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
     auto& setter = *prop.setters.begin();
     setter->funcBody->body = CreateBlock({}, prop.GetTy());
     setter->funcBody->SetTy(unitTy);
-    CopyPos(&prop, setter->funcBody->body.get());
+    CopyBasicInfo(&prop, setter->funcBody->body.get());
 
     auto& body = setter->funcBody->body->body;
     auto& jniEnv = *StaticAs<ASTKind::VAR_DECL>(
@@ -495,7 +507,7 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
     CJC_ASSERT_WITH_MSG(!prop.setters[0]->funcBody->paramLists.empty(), "setter paramLists cannot be empty");
     CJC_ASSERT_WITH_MSG(!prop.setters[0]->funcBody->paramLists[0]->params.empty(), "setter params cannot be empty");
     auto paramRef = WithinFile(CreateRefExpr(*prop.setters[0]->funcBody->paramLists[0]->params[0]), curFile);
-    CopyPos(&prop, paramRef.get());
+    CopyBasicInfo(&prop, paramRef.get());
 
     if (prop.TestAttr(Attribute::STATIC)) {
         jniSetterCall = lib.CreateSetStaticFieldCall(WithinFile(CreateRefExpr(jniEnv), curFile),
@@ -508,6 +520,8 @@ void JavaDesugarManager::InsertJavaMirrorPropSetter(PropDecl& prop)
             std::move(paramRef));
     }
     body.emplace_back(std::move(jniSetterCall));
+
+    AddCurFile(*setter, prop.curFile);
 }
 
 void JavaDesugarManager::DesugarJavaMirrorProp(PropDecl& prop)
