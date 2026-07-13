@@ -89,19 +89,29 @@ std::vector<llvm::Metadata*> UnwindGenericRelateType(llvm::LLVMContext& llvmCtx,
 {
     std::vector<llvm::Metadata*> tyArgMeta{};
     if (ty.IsGeneric()) {
+        // Uninstantiated generic type parameter (e.g. the T in `interface I<T>` while
+        // emitting a call site `fn<T>(v: I<T>)`). Emit a sentinel so the VFE decoder
+        // can mark this dimension as "does not participate in discrimination".
+        tyArgMeta.emplace_back(llvm::MDString::get(llvmCtx, "$g"));
         return tyArgMeta;
     }
 
-    if (ty.GetTypeArgs().size() > 0) {
+    if (!ty.GetTypeArgs().empty()) {
         std::string ttName = CGType::GetNameOfTypeTemplateGV(ty);
         tyArgMeta.emplace_back(llvm::MDString::get(llvmCtx, ttName));
-        auto tyArg = ty.GetTypeArgs()[0];
-        if (CGType::GetCGGenericKind(*tyArg) == CGType::CGGenericKind::CONCRETE) {
-            std::string tiName = CGType::GetNameOfTypeInfoGV(*tyArg);
-            tyArgMeta.emplace_back(llvm::MDString::get(llvmCtx, tiName));
-        } else {
-            auto ti = UnwindGenericRelateType(llvmCtx, *DeRef(*tyArg));
-            if (!ti.empty()) {
+        // Each argument is itself either a concrete leaf (MDString ".ti") or a
+        // nested instantiation (recursively flattened MDNode). The backend decoder
+        // (CangjieDCE::resolveVFEMeta) DFS-flattens this into the trie Path.
+        for (auto tyArg : ty.GetTypeArgs()) {
+            if (CGType::GetCGGenericKind(*tyArg) == CGType::CGGenericKind::CONCRETE) {
+                std::string tiName = CGType::GetNameOfTypeInfoGV(*tyArg);
+                tyArgMeta.emplace_back(llvm::MDString::get(llvmCtx, tiName));
+            } else {
+                auto ti = UnwindGenericRelateType(llvmCtx, *DeRef(*tyArg));
+                // Wrap unconditionally. ti is never empty on reachable paths: a
+                // generic type parameter hits the IsGeneric() branch above and
+                // returns ["$g"]; a nested instantiation returns [ttName, ...].
+                CJC_ASSERT_WITH_MSG(!ti.empty(), "ti is empty for type: " + tyArg->ToString());
                 tyArgMeta.emplace_back(llvm::MDTuple::get(llvmCtx, ti));
             }
         }
