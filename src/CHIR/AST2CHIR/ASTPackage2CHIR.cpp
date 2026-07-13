@@ -1102,7 +1102,12 @@ void AST2CHIR::CreateCustomTypeDef(const AST::Decl& decl, bool isImported)
         chirType.SetGlobalNominalCache(*uniqueDecl, *customTypeDef);
     }
     if (decl.TestAttr(AST::Attribute::COMMON) && !decl.TestAttr(AST::Attribute::FROM_COMMON_PART)) {
-        customTypeDef->EnableAttr(Attribute::COMMON);
+        if (isImported && decl.TestAttr(AST::Attribute::COMMON_WITH_DEFAULT)) {
+            customTypeDef->EnableAttr(Attribute::SPECIFIC);
+            customTypeDef->DisableAttr(Attribute::COMMON);
+        } else {
+            customTypeDef->EnableAttr(Attribute::COMMON);
+        }
     }
     if (decl.TestAttr(AST::Attribute::SPECIFIC)) {
         customTypeDef->EnableAttr(Attribute::SPECIFIC);
