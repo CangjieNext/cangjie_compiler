@@ -62,7 +62,6 @@ void ToolChain::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
     std::set<std::string> dynamicLibraries;
     std::set<std::string> staticLibraries;
     std::set<std::string> ltoBuiltInDependencies;
-    std::vector<std::string> processedLTOBuiltInDependencies;
     std::unordered_set<std::string> dyDependencies;
     const std::function<void(const std::unordered_set<std::string>&)> getDyDependencies =
         [this, &dyDependencies](const std::unordered_set<std::string>& dependencies) {
@@ -112,8 +111,7 @@ void ToolChain::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
     ForEachBuiltinDependencies(driverOptions.directBuiltinDependencies, appendStaticLibsToTool);
     ForEachBuiltinDependencies(driverOptions.indirectBuiltinDependencies, appendStaticLibsToTool);
     if (driverOptions.IsLTOEnabled()) {
-        processedLTOBuiltInDependencies.assign(ltoBuiltInDependencies.begin(), ltoBuiltInDependencies.end());
-        for (const auto& bcFile : processedLTOBuiltInDependencies) {
+        for (const auto& bcFile : ltoBuiltInDependencies) {
             tool.AppendArg(bcFile);
         }
     }
