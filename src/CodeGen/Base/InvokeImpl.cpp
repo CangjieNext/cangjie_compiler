@@ -26,10 +26,9 @@ using namespace CHIR;
 namespace {
 llvm::MDTuple* GenObjTyMetaForVirtualCall(IRBuilder2& irBuilder, const CHIR::Type& ty)
 {
-    CJC_ASSERT(ty.GetTypeArgs().size() <= 1);
     llvm::LLVMContext& llvmCtx = irBuilder.GetCGContext().GetLLVMContext();
     std::vector<llvm::Metadata*> objTyMeta{};
-    if (ty.GetTypeArgs().size() == 1) {
+    if (!ty.GetTypeArgs().empty()) {
         objTyMeta = UnwindGenericRelateType(llvmCtx, ty);
     } else {
         std::string tiName = CGType::GetNameOfTypeInfoGV(ty);
@@ -73,10 +72,8 @@ llvm::Value* GenerateFuncPtrForNonAutoEnv(IRBuilder2& irBuilder, llvm::Value* th
         auto meta = llvm::MDTuple::get(llvmCtx, llvm::MDString::get(llvmCtx, GetTypeQualifiedName(*introType)));
         llvm::cast<llvm::Instruction>(funcPtr)->setMetadata("IntroType", meta);
     }
-    if (introType->GetTypeArgs().size() <= 1) {
-        auto objTyMeta = GenObjTyMetaForVirtualCall(irBuilder, *introType);
-        llvm::cast<llvm::Instruction>(funcPtr)->setMetadata("objType", objTyMeta);
-    }
+    auto objTyMeta = GenObjTyMetaForVirtualCall(irBuilder, *introType);
+    llvm::cast<llvm::Instruction>(funcPtr)->setMetadata("objType", objTyMeta);
 
     auto prepForVirtualCallBB = invokeExpr.GetPrepForVirtualCallBB();
     if (prepForVirtualCallBB) {
