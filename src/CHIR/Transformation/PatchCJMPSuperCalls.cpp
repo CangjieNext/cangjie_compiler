@@ -54,7 +54,7 @@ void PatchCJMPSuperCalls::Run()
     }
 }
 
-Function* PatchCJMPSuperCalls::FindPlatformParentEmptyConstructor(const ClassDef& platformParent)
+Function* PatchCJMPSuperCalls::FindPlatformParentParameterlessConstructor(const ClassDef& platformParent)
 {
     auto methods = platformParent.GetMethods();
 
@@ -72,7 +72,7 @@ Function* PatchCJMPSuperCalls::FindPlatformParentEmptyConstructor(const ClassDef
 
 void PatchCJMPSuperCalls::PatchConstructorSuperCall(Function& constructor, ClassDef& platformParent)
 {
-    auto platformConstructor = FindPlatformParentEmptyConstructor(platformParent);
+    auto platformConstructor = FindPlatformParentParameterlessConstructor(platformParent);
     if (!platformConstructor) {
         return;
     }
