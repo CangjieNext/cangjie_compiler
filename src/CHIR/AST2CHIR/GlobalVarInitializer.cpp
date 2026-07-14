@@ -9,6 +9,8 @@
 #include "cangjie/AST/Node.h"
 #include "cangjie/CHIR/AST2CHIR/Utils.h"
 #include "cangjie/CHIR/IR/Annotation.h"
+#include "cangjie/CHIR/IR/Expression/Expression.h"
+#include "cangjie/CHIR/IR/IntrinsicKind.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/CHIR/Utils/Utils.h"
@@ -789,6 +791,39 @@ void GlobalVarInitializer::InsertInitializerIntoPackageInitializer(Function& ini
     trans.CreateAndAppendGVInitFuncCall(init);
 }
 
+void GlobalVarInitializer::InsertAnnoFactoryInitsIntoPackageInit(Function& packageInit)
+{
+    if (initFuncsForAnnoFactory.empty()) {
+        return;
+    }
+    auto blockWithInitializers = GetBlockWithInitializers(*packageInit.GetBody());
+    trans.SetCurrentBlock(*blockWithInitializers);
+
+    // Place anno inits right after CJ_MRT_PreInitializePackage (exactly one such intrinsic).
+    Expression* insertAfter = nullptr;
+    for (auto expr : blockWithInitializers->GetExpressions()) {
+        if (auto intrinsic = DynamicCast<Intrinsic>(expr);
+            intrinsic && intrinsic->GetIntrinsicKind() == IntrinsicKind::PREINITIALIZE) {
+            insertAfter = expr;
+            break;
+        }
+    }
+    // Without this anchor, Apply would stay at block end (after user gv inits) — silent mis-order / crash at
+    // reflect. Missing PreInitialize is a compiler invariant failure.
+    CJC_NULLPTR_CHECK(insertAfter);
+
+    // insertAfter advances after each call so multiple anno inits keep declaration order
+    // (all after PreInitialize, before later file/gv inits). FindApplyIn avoids a second Apply.
+    for (auto initFunc : initFuncsForAnnoFactory) {
+        auto initCallExpr = FindApplyIn(*blockWithInitializers, *initFunc);
+        if (!initCallExpr) {
+            initCallExpr = StaticCast<Apply*>(trans.CreateAndAppendGVInitFuncCall(*initFunc));
+        }
+        initCallExpr->MoveAfter(insertAfter);
+        insertAfter = initCallExpr;
+    }
+}
+
 inline std::pair<Function*, Block*> GlobalVarInitializer::PreparePackageInit(const AST::Package& curPackage)
 {
     // create/use deserialized base of package initializer function.
@@ -818,12 +853,17 @@ inline std::pair<Function*, Block*> GlobalVarInitializer::PreparePackageInit(con
     return std::make_pair(packageInit, curBlock);
 }
 
-/// Generate package initializer - the function that calls initializers of files
-/// in order that was defined and verified in previous stages.
-/// Package initalizer also call initializer of dependent package.
+/// Generate package initializer. Runtime call order inside package init body:
+/// 1. once-guard: return if already initialized
+/// 2. set once-guard flag
+/// 3. imported packages' init
+/// 4. call runtime CJ_MRT_PreInitializePackage
+/// 5. annotation factory instance inits
+/// 6. current package file / global-var inits
 void GlobalVarInitializer::CreatePackageInit(const AST::Package& curPackage, const InitOrder& initOrder)
 {
     auto [packageInit, curBlock] = PreparePackageInit(curPackage);
+    InsertAnnoFactoryInitsIntoPackageInit(*packageInit);
 
     for (auto& fileAndVars : initOrder) {
         // maybe there isn't global var decl in one file, in this case, we don't generate file init func

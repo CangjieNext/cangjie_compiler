@@ -293,7 +293,8 @@ void AST2CHIR::TranslateInitOfGlobalVars(const AST::Package& pkg, const InitOrde
 {
     Utils::ProfileRecorder recorder("TranslateAllDecls", "TranslateInitOfGlobalVars");
     auto trans = CreateTranslator();
-    GlobalVarInitializer initializer(trans, importManager, initFuncsForConstVar, kind == IncreKind::INCR);
+    GlobalVarInitializer initializer(
+        trans, importManager, initFuncsForConstVar, initFuncsForAnnoFactory, kind == IncreKind::INCR);
     initializer.Run(pkg, initOrder);
     SetInitFuncForStaticVar();
 }

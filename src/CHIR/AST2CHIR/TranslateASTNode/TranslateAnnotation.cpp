@@ -141,18 +141,6 @@ void Translator::TranslateAnnotationsArrayBody(const Decl& decl, Function& func)
     }
     CJC_ASSERT(decl.annotationsArray->children.size() == annoChildrenId);
 #endif
-
-    // call the Annotation instance func in the package init func, for the sake of consteval
-    auto pkgInit = builder.GetChirContext().GetCurPackage()->GetPackageInitFunc();
-    blockGroupStack.push_back(pkgInit->GetBody());
-    currentBlock = pkgInit->GetEntryBlock()->GetSuccessors()[1];
-    currentBlock->GetTerminator()->RemoveSelfFromBlock();
-    for (size_t i{0}; i < annoInsts.size(); ++i) {
-        CreateAndAppendExpression<Apply>(
-            builder.GetUnitTy(), annoInsts[i]->GetInitFunc(), FuncCallContext{}, currentBlock);
-    }
-    CreateAndAppendTerminator<Exit>(currentBlock);
-    blockGroupStack.pop_back();
 }
 #endif
 
