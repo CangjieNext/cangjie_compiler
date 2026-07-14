@@ -32185,7 +32185,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..00437d1ed 100644
+index b391fe1ea..d5bcaeae1 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -32241,7 +32241,7 @@ index b391fe1ea..00437d1ed 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.2.0-beta.03";
++    g_version_str += "\n  cangjie 1.2.0-beta.rc";
    }
  
    return g_version_str.c_str();
@@ -38573,10 +38573,10 @@ index 000000000..8868a53b3
 \ No newline at end of file
 diff --git a/llvm/include/llvm/Transforms/Scalar/ReflectionInfo.h b/llvm/include/llvm/Transforms/Scalar/ReflectionInfo.h
 new file mode 100644
-index 000000000..ea43b39a0
+index 000000000..9a83ed3aa
 --- /dev/null
 +++ b/llvm/include/llvm/Transforms/Scalar/ReflectionInfo.h
-@@ -0,0 +1,296 @@
+@@ -0,0 +1,300 @@
 +//===- ReflectionInfo.h - ---------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -38629,6 +38629,7 @@ index 000000000..ea43b39a0
 +  ERT_GENERIC_CLASS,
 +  ERT_INSTANCE_METHOD,
 +  ERT_STATIC_METHOD,
++  ERT_CTOR_ANNOTATIONS,
 +  ERT_ATTRIBUTE,
 +  ERT_MAX,
 +};
@@ -38788,6 +38789,7 @@ index 000000000..ea43b39a0
 +  SmallVector<EnumCtorInfo, 8> EnumCtors;
 +  SmallVector<MethodInfo *, 8> InstanceMethods;
 +  SmallVector<MethodInfo *, 8> StaticMethods;
++  SmallVector<Constant*, 8> CtorAnnotationMethods;
 +
 +  explicit EnumReflectInfo(Module &M) : BaseInfo(M) {}
 +
@@ -38848,6 +38850,8 @@ index 000000000..ea43b39a0
 +                              MDTuple *MethodMDs);
 +  void parseStaticMethodMDs(SmallVectorImpl<MethodInfo *> &Infos,
 +                            MDTuple *MethodMDs);
++  void parseCtorAnnotationMDs(SmallVectorImpl<Constant*> &Infos,
++                              MDTuple *CtorAnnoMDs);
 +  void parseEnumCtorMDs(SmallVectorImpl<EnumCtorInfo> &Info, MDTuple *CtorMDs);
 +  void parseOneInstanceFieldMd(FieldInfo &Info, MDTuple *FieldMD);
 +  void parseOneStaticFieldMd(FieldInfo &Info, MDTuple *FieldMD);
@@ -39591,10 +39595,10 @@ index f8eba1a00..f6356240b 100644
  /// or unreachable). These paths are hidden if the corresponding cl::opts
 diff --git a/llvm/lib/Analysis/CJAliasAnalysis.cpp b/llvm/lib/Analysis/CJAliasAnalysis.cpp
 new file mode 100644
-index 000000000..096c78996
+index 000000000..4957ac303
 --- /dev/null
 +++ b/llvm/lib/Analysis/CJAliasAnalysis.cpp
-@@ -0,0 +1,302 @@
+@@ -0,0 +1,303 @@
 +//===- CJAliasAnalysis.cpp --------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -39660,8 +39664,9 @@ index 000000000..096c78996
 +    return true;
 +  if (isa<Argument>(V))
 +    return isGCPointerType(V->getType());
-+  if (auto *LI = dyn_cast<LoadInst>(V))
-+    return isGCPointerOrGlobalBase(LI->getPointerOperand(), --MaxLookup);
++  if (auto *LI = dyn_cast<LoadInst>(V)) {
++    return false;
++  }
 +  if (auto *II = dyn_cast<IntrinsicInst>(V)) {
 +    switch (II->getIntrinsicID()) {
 +    case Intrinsic::cj_gcread_ref:
@@ -63701,7 +63706,7 @@ index b850591b4..da4c027b7 100644
        LLVM_DEBUG(dbgs() << "canCreateThunkFor: " << F->getName()
                          << " is too small to bother creating a thunk for\n");
 diff --git a/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp b/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
-index f1b6f2bb7..99f9a0ffa 100644
+index f1b6f2bb7..eb6a58c34 100644
 --- a/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
 +++ b/llvm/lib/Transforms/IPO/PassManagerBuilder.cpp
 @@ -17,6 +17,7 @@
@@ -63728,7 +63733,7 @@ index f1b6f2bb7..99f9a0ffa 100644
 +    "enable-cj-generic-intrinsic-opt", cl::init(true), cl::Hidden,
 +    cl::desc("Enable cangjie generic intrinsics optimization"));
 +cl::opt<bool> EnableCJGCInstrTransform("enable-cj-gcinstr-transform",
-+                                       cl::Hidden, cl::init(false));
++                                       cl::Hidden, cl::init(true));
  static cl::opt<bool>
  UseGVNAfterVectorization("use-gvn-after-vectorization",
    cl::init(false), cl::Hidden,
@@ -69735,10 +69740,10 @@ index 000000000..9b2a99555
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp b/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp
 new file mode 100644
-index 000000000..c22ba410c
+index 000000000..ebff9254b
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp
-@@ -0,0 +1,1627 @@
+@@ -0,0 +1,1648 @@
 +//===- CJFillMetadata.cpp - Fill Cangjie Metadata ---------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -70667,7 +70672,7 @@ index 000000000..c22ba410c
 +}
 +
 +// Reflection: !{type name, enum ctors, instance methods, static methods,
-+//               type attributes}
++//               ctor annotationMethods, type attributes}
 +Constant *ReflectInfo::getEnumReflectInfo(const MDTuple *ReflectMD) {
 +  // record all reflection info
 +  EnumReflectInfo Info(M);
@@ -70679,6 +70684,8 @@ index 000000000..c22ba410c
 +                         getMDOperand(ReflectMD, ERT_INSTANCE_METHOD));
 +  parseStaticMethodMDs(Info.StaticMethods,
 +                       getMDOperand(ReflectMD, ERT_STATIC_METHOD));
++  parseCtorAnnotationMDs(Info.CtorAnnotationMethods,
++                         getMDOperand(ReflectMD, ERT_CTOR_ANNOTATIONS));
 +
 +  SmallVector<Constant *, 0> BodyVec(FET_PTRS);
 +  fillEnumReflectInfo(Info, BodyVec);
@@ -70922,6 +70929,9 @@ index 000000000..c22ba410c
 +  for (unsigned Idx = 0; Idx < Info.StaticMethods.size(); ++Idx) {
 +    BodyVec.push_back(Info.StaticMethods[Idx]->fillMethodInfo(Idx, TIName));
 +  }
++  for (unsigned Idx = 0; Idx < Info.CtorAnnotationMethods.size(); ++Idx) {
++    BodyVec.push_back(Info.CtorAnnotationMethods[Idx]);
++  }
 +}
 +
 +void ReflectInfo::fillEnumCtorReflectInfo(EnumCtorReflectInfo &Info,
@@ -71078,6 +71088,22 @@ index 000000000..c22ba410c
 +    CtorInfo.CtorName = getStringFromMD(MethodMD, 0);
 +    CtorInfo.TypeName = getStringFromMD(MethodMD, 1);
 +    Info.emplace_back(CtorInfo);
++  }
++}
++
++void ReflectInfo::parseCtorAnnotationMDs(SmallVectorImpl<Constant *> &Infos,
++                                         MDTuple *CtorAnnoMDs) {
++  for (unsigned Idx = 0; Idx < CtorAnnoMDs->getNumOperands(); ++Idx) {
++    StringRef AnnoMethodName = getStringFromMD(CtorAnnoMDs, Idx);
++    if (AnnoMethodName.empty()) {
++      Infos.push_back(Int8PtrNull);
++      continue;
++    }
++    Function *Func = M.getFunction(AnnoMethodName);
++    if (Func == nullptr) {
++      report_fatal_error(AnnoMethodName + ": can't find this ctor anno func!");
++    }
++    Infos.push_back(ConstantExpr::getBitCast(Func, Int8PtrTy));
 +  }
 +}
 +
@@ -74183,10 +74209,10 @@ index 000000000..5af2b9047
 +                "Cangjie Generic Intrinsics Optimize", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJIRVerifier.cpp b/llvm/lib/Transforms/Scalar/CJIRVerifier.cpp
 new file mode 100644
-index 000000000..c39ac195d
+index 000000000..e45592c18
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJIRVerifier.cpp
-@@ -0,0 +1,815 @@
+@@ -0,0 +1,824 @@
 +//===- CJIRVerifier.cpp - Cangjie IR Verifier --------------*- C++ -*------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -74706,7 +74732,7 @@ index 000000000..c39ac195d
 +  }
 +
 +  // !{<name>, !{enum ctors}, !{instance methods}, !{static methods},
-+  //   !{attributes}}
++  //   !{ctor annotationMethods}, !{attributes}}
 +  void verifyEnumReflection(MDTuple *ReflectMD) {
 +    Assert(ReflectMD->getNumOperands() == ERT_MAX ||
 +           ReflectMD->getNumOperands() == ECRT_MAX,
@@ -74740,6 +74766,15 @@ index 000000000..c39ac195d
 +    // check type attribute
 +    const MDTuple *AttributeMD = getMDOperand(ReflectMD, ERT_ATTRIBUTE);
 +    verifyReflectionAttribute(AttributeMD);
++    // check ctor annotation methods
++    const MDTuple *CtorAnnoMDs = getMDOperand(ReflectMD, ERT_CTOR_ANNOTATIONS);
++    for (unsigned Idx = 0; Idx < CtorAnnoMDs->getNumOperands(); ++Idx) {
++      auto AnnoMethodName = getStringFromMD(CtorAnnoMDs, Idx);
++      if (!AnnoMethodName.empty()) {
++        Function *Func = M.getFunction(AnnoMethodName);
++        Assert(Func, "Enum ctor annotation method not found!", ReflectMD);
++      }
++    }
 +  }
 +
 +  // !{<name>, !{enum ctors}, !{attributes}}
@@ -80672,10 +80707,10 @@ index 000000000..bedd16770
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
 new file mode 100644
-index 000000000..f66e25fc3
+index 000000000..0ed70333d
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
-@@ -0,0 +1,1173 @@
+@@ -0,0 +1,1178 @@
 +//===- CJRuntimeLowering.cpp - CJ Runtime Lowering --------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -81551,14 +81586,19 @@ index 000000000..f66e25fc3
 +      if (TT.isARM())
 +        ElemTypes.push_back(IRB.getInt32Ty());
 +      ElemTypes.push_back(ST);
-+      AI = IRB.CreateAlloca(StructType::get(C, ElemTypes));
++      StructType *AllocaTy = StructType::get(C, ElemTypes);
++      AI = IRB.CreateAlloca(AllocaTy);
 +      Value *BC = IRB.CreateBitCast(AI, IRB.getInt8PtrTy()->getPointerTo());
 +      Value *GVExpr = ConstantExpr::getBitCast(GV, IRB.getInt8PtrTy());
 +      IRB.CreateStore(GVExpr, BC);
-+      uint64_t MemSize = DL.getStructLayout(ST)->getSizeInBytes();
-+      // %x.payload = getelementptr i8*, %x.i, i32 1
-+      // call @memset(%x.payload, 0, size)
-+      Value *Data = IRB.CreateGEP(IRB.getInt8PtrTy(), BC, {IRB.getInt32(1)});
++      const StructLayout *AllocaSL = DL.getStructLayout(AllocaTy);
++      uint64_t HeaderSize = DL.getTypeAllocSize(TIType->getPointerTo()).getFixedSize();
++      uint64_t MemSize = AllocaSL->getSizeInBytes() - HeaderSize;
++      // %x.payload = getelementptr i8*, %x.i, HeaderSize
++      // call @memset(%x.payload, 0, MemSize)
++      Value *Data =
++          IRB.CreateGEP(IRB.getInt8Ty(), IRB.CreateBitCast(AI, IRB.getInt8PtrTy()),
++                        {IRB.getInt32(HeaderSize)});
 +      IRB.SetInsertPoint(CI);
 +      IRB.CreateMemSet(Data, IRB.getInt8(0), MemSize, Align(8));
 +    }
