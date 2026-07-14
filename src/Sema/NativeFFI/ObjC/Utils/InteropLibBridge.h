@@ -57,7 +57,12 @@ public:
      * Used as argument for generated internal constructors.
      */
     Ptr<AST::StructDecl> GetNativeObjCIdMarkerDecl();
-    Ptr<AST::FuncDecl> GetNativeObjCIdMarkerConstructor();
+
+    /**
+     * Gets __NATIVE_OBJC_ID_MARKER instance.
+     * Used as argument for generated internal constructors.
+     */
+    Ptr<AST::VarDecl> GetNativeObjCIdMarkerInstance();
 
     Ptr<AST::InterfaceDecl> GetObjCIdDecl();
 

@@ -1380,11 +1380,8 @@ OwnedPtr<FuncDecl> ASTFactory::CreateBaseCtorDecl(ClassDecl& target)
     return ctor;
 }
 
-OwnedPtr<CallExpr> ASTFactory::CreateNativeHandleMarker() {
-    auto nativeObjCIdMarkerCtor = bridge.GetNativeObjCIdMarkerConstructor(); 
-    auto refExpr = CreateRefExpr(*nativeObjCIdMarkerCtor);
-    std::vector<OwnedPtr<FuncArg>> nativeObjCIdMarkerCtorArgs;
-    return CreateCallExpr(std::move(refExpr), std::move(nativeObjCIdMarkerCtorArgs), nativeObjCIdMarkerCtor, nativeObjCIdMarkerCtor->GetTy(), CallKind::CALL_STRUCT_CREATION);
+OwnedPtr<RefExpr> ASTFactory::CreateNativeHandleMarker() {
+    return CreateRefExpr(*bridge.GetNativeObjCIdMarkerInstance());
 }
 
 OwnedPtr<FuncDecl> ASTFactory::CreateImplCtor(FuncDecl& from)

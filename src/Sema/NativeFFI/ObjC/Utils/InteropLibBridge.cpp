@@ -23,6 +23,7 @@ namespace {
 constexpr auto INTEROPLIB_OBJ_C_ID = "ObjCId";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_ID = "NativeObjCId";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_ID_MARKER = "NativeObjCIdMarker";
+constexpr auto INTEROPLIB_NATIVE_OBJ_C_ID_MARKER_INSTANCE = "__NATIVE_OBJC_ID_MARKER";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_SEL = "NativeObjCSel";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_SUPER_PTR = "NativeObjCSuperPtr";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_CLASS = "NativeObjCClass";
@@ -168,25 +169,10 @@ Ptr<StructDecl> InteropLibBridge::GetNativeObjCIdMarkerDecl()
     return decl;
 }
 
-Ptr<FuncDecl> InteropLibBridge::GetNativeObjCIdMarkerConstructor()
+Ptr<VarDecl> InteropLibBridge::GetNativeObjCIdMarkerInstance()
 {
-    static Ptr<FuncDecl> result = nullptr;
-    if (result) {
-        return result;
-    }
-    auto outer = GetNativeObjCIdMarkerDecl();
-    for (auto& member : outer->body->decls) {
-        if (auto funcDecl = DynamicCast<FuncDecl*>(member.get())) {
-            if (funcDecl->TestAttr(Attribute::CONSTRUCTOR)
-                && funcDecl->funcBody
-                && funcDecl->funcBody->paramLists[0]
-                && funcDecl->funcBody->paramLists[0]->params.size() == 0) {
-                result = funcDecl;
-                break;
-            }
-        }
-    }
-    return result;
+    static auto decl = GetInteropLibDecl<ASTKind::VAR_DECL>(INTEROPLIB_NATIVE_OBJ_C_ID_MARKER_INSTANCE);
+    return decl;
 }
 
 Ptr<InterfaceDecl> InteropLibBridge::GetObjCIdDecl()
