@@ -259,7 +259,11 @@ bool DefaultCIImpl::EmitLLVMSimilarBytecode(bool enableIncrement)
         return true;
     }
     auto fullPackageName = curPackage->GetName();
-    auto llvmModules = CodeGen::GenPackageModules(ci, enableIncrement);
+    bool fatalErrorOccurred = false;
+    auto llvmModules = CodeGen::GenPackageModules(ci, enableIncrement, fatalErrorOccurred);
+    if (fatalErrorOccurred) {
+        return false;
+    }
 
     // 2. save LLVM IR to bc file
     Utils::ProfileRecorder recorder("CodeGen", "Save bc file");

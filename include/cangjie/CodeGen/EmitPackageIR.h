@@ -27,7 +27,7 @@ namespace Cangjie::CodeGen {
  */
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(
-    DefaultCompilerInstance& compilerInstance, bool enableIncrement);
+    DefaultCompilerInstance& compilerInstance, bool enableIncrement, bool& fatalErrorOccurred);
 #endif
 
 /**

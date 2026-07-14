@@ -8,6 +8,7 @@
 
 #include "CGContext.h"
 #include "CGModule.h"
+#include "CGPkgContext.h"
 
 namespace Cangjie::CodeGen {
 void CGVArrayType::CalculateSizeAndAlign()
@@ -27,7 +28,34 @@ llvm::Type* CGVArrayType::GenLLVMType()
 
     auto& varrType = StaticCast<const CHIR::VArrayType&>(chirType);
     auto varrElementType = varrType.GetElementType();
-    llvmType = llvm::ArrayType::get(CGType::GetOrCreate(cgMod, varrElementType)->GetLLVMType(), varrType.GetSize());
+    auto elemLLVMType = CGType::GetOrCreate(cgMod, varrElementType)->GetLLVMType();
+    uint64_t numOfElements = varrType.GetSize();
+
+    // A VArray is a stack-allocated value whose total byte size is numOfElements * elementByteSize.
+    // The 2GB stacksize guard in the LLVM backend rejects oversized VArrays, but only when the
+    // byte-size computation does not silently wrap to a small value. When numOfElements *
+    // elementByteSize overflows uint64 and lands below 2GB, that guard is bypassed and cjc
+    // emits a broken binary that crashes at runtime. Detect this wraparound here and reject it
+    // as a compile error. (Overflows that still land above 2GB, and legitimately large VArrays,
+    // keep being handled by the existing 2GB stacksize check downstream.) CodeGen runs on a
+    // thread pool, so we must not exit()/abort() from here; record the failure on the package
+    // context and let the driver exit cleanly with a non-zero status after joining.
+    auto& dataLayout = cgMod.GetLLVMModule()->getDataLayout();
+    uint64_t elementByteSize = dataLayout.getTypeAllocSize(elemLLVMType);
+    uint64_t totalByteSize = 0;
+    constexpr uint64_t maxStackSize = 2147483648ULL; // 2GB, matches the LLVM backend guard
+    bool overflowed = __builtin_mul_overflow(numOfElements, elementByteSize, &totalByteSize);
+    if (overflowed && totalByteSize < maxStackSize) {
+        cgCtx.GetCGPkgContext().RecordFatalError(
+            "the total size of 'VArray<$" + std::to_string(numOfElements) + ", ...>' (" +
+            std::to_string(numOfElements) + " * " + std::to_string(elementByteSize) +
+            " bytes) wraps around and exceeds cangjie max stacksize(2GB).");
+        // Emit a placeholder type so CodeGen keeps producing a self-consistent (but never linked)
+        // module; the driver drops it after seeing the recorded fatal error.
+        llvmType = llvm::ArrayType::get(elemLLVMType, 1U);
+    } else {
+        llvmType = llvm::ArrayType::get(elemLLVMType, numOfElements);
+    }
 
     auto layoutName = "VArray." + std::to_string(varrType.GetSize()) + MangleType(*varrElementType);
     layoutType = llvm::StructType::getTypeByName(cgCtx.GetLLVMContext(), layoutName);

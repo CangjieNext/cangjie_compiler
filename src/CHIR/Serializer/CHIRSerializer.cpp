@@ -358,7 +358,7 @@ flatbuffers::Offset<PackageFormat::VArrayType> CHIRSerializer::CHIRSerializerImp
 {
     auto base = Serialize<PackageFormat::Type>(static_cast<const Type&>(obj));
     auto size = obj.GetSize();
-    return PackageFormat::CreateVArrayType(builder, base, size);
+    return PackageFormat::CreateVArrayType(builder, base, static_cast<int64_t>(size));
 }
 
 template <>

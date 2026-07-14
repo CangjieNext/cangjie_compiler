@@ -432,6 +432,15 @@ public:
         return cgPkgCtx.ReleaseLLVMModules();
     }
 
+    bool HasFatalError() const
+    {
+        return cgPkgCtx.HasFatalError();
+    }
+    std::string GetFatalErrorMessage()
+    {
+        return cgPkgCtx.GetFatalErrorMessage();
+    }
+
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 private:
     bool InitIncrementalGen()
@@ -592,8 +601,9 @@ void PackageGeneratorImpl::EmitIR()
 
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(
-    DefaultCompilerInstance& compilerInstance, bool enableIncrement)
+    DefaultCompilerInstance& compilerInstance, bool enableIncrement, bool& fatalErrorOccurred)
 {
+    fatalErrorOccurred = false;
     CachedMangleMap cachedMangleMap;
     if (enableIncrement) {
         cachedMangleMap = StaticCast<Cangjie::IncrementalCompilerInstance&>(compilerInstance).cacheMangles;
@@ -603,6 +613,13 @@ std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(
         auto temp = PackageGeneratorImpl(
             *compilerInstance.chirData, compilerInstance.invocation.globalOptions, enableIncrement, cachedMangleMap);
         temp.EmitIR();
+        if (temp.HasFatalError()) {
+            // A worker (e.g. VArray total-size overflow) recorded a fatal error. Do not hand the
+            // possibly-incomplete modules to llc; report and bail out so cjc exits non-zero.
+            Errorln(temp.GetFatalErrorMessage());
+            fatalErrorOccurred = true;
+            return llvmModules;
+        }
         llvmModules = temp.ReleaseLLVMModules();
     }
     compilerInstance.FreeCHIRData();

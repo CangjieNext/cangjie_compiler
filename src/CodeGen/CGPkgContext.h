@@ -7,7 +7,9 @@
 #ifndef CANGJIE_CODEGEN_PACKAGE_CONTEXT_H
 #define CANGJIE_CODEGEN_PACKAGE_CONTEXT_H
 
+#include <atomic>
 #include <mutex>
+#include <string>
 
 #include "llvm/IR/Module.h"
 
@@ -39,6 +41,28 @@ public:
         bool enableIncrement, const CachedMangleMap& cachedMangleMap);
     ~CGPkgContext();
     void Clear();
+
+    // CodeGen runs per sub-package on a thread pool; a fatal error discovered inside a worker
+    // (e.g. a VArray whose total size overflows) must not call exit()/abort() (that races with
+    // the other workers and turns into a SIGSEGV). Workers instead record the failure here and
+    // the driver inspects it after joining, so cjc can exit cleanly with a non-zero status.
+    bool HasFatalError() const
+    {
+        return fatalError.load(std::memory_order_acquire);
+    }
+    void RecordFatalError(std::string msg)
+    {
+        fatalError.store(true, std::memory_order_release);
+        std::lock_guard<std::mutex> lock(fatalErrorMsgMutex);
+        if (fatalErrorMsg.empty()) {
+            fatalErrorMsg = std::move(msg);
+        }
+    }
+    std::string GetFatalErrorMessage()
+    {
+        std::lock_guard<std::mutex> lock(fatalErrorMsgMutex);
+        return fatalErrorMsg;
+    }
 
     CHIR::CHIRBuilder& GetCHIRBuilder()
     {
@@ -103,6 +127,10 @@ private:
     // The symbols, which need to be changed linkageType after the link.
     ObjectLocker<std::set<std::string>> localizedSymbols;
 #endif
+
+    std::atomic<bool> fatalError {false};
+    std::mutex fatalErrorMsgMutex;
+    std::string fatalErrorMsg;
 };
 } // namespace CodeGen
 } // namespace Cangjie
