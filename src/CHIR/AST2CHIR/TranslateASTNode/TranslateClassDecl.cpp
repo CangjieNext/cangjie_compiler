@@ -314,6 +314,14 @@ void Translator::AddMemberMethodToCustomTypeDef(const AST::FuncDecl& decl, Custo
     }
     auto func = StaticCast<Function>(GetSymbolTable(decl));
 
+    // Remove any existing deserialized common constructor with matching mangled
+    // name so AddMethod below doesn't create a duplicate. Needed for @JavaImpl
+    // reference wrapper constructors (GenerateJavaSideConstructorForFromCommonPart):
+    // they have FROM_COMMON_PART+COMPILER_ADD, not SPECIFIC, so the general
+    // "specific wins" path (ResetSpecificFunc in CreateFuncSignatureAndSetGlobalCache,
+    // which fires only for SPECIFIC) doesn't replace the common Function in-place.
+    // The condition is intentionally broad — SPECIFIC and deserialized constructors
+    // that also match are no-ops (same Function* removed and re-added).
     if (def.TestAttr(CHIR::Attribute::JAVA_IMPL) && decl.TestAttr(AST::Attribute::CONSTRUCTOR)) {
         auto methods = def.GetMethods();
         auto it = std::find_if(methods.begin(), methods.end(),
