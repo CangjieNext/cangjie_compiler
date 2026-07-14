@@ -574,7 +574,7 @@ void Devirtualization::CollectCandidates(
     auto& subtypeMap = devirtFuncInfo.GetSubtypeMap();
     auto it = subtypeMap.find(specificDef);
     if (it == subtypeMap.end()) {
-        // return if has no subtype
+        // return if has no subtypefsdfsfds
         return;
     }
     // 2. Get candidate from subtypes
