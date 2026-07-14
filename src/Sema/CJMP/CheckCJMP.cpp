@@ -804,8 +804,8 @@ void MPTypeCheckerImpl::ValidateMatchedAnnotationsAndModifiers(AST::Package& pkg
 
 namespace {
 /// Returns true if \p classDecl declares a constructor whose first parameter list is empty
-/// (i.e. an empty constructor), false otherwise.
-bool HasEmptyConstructor(const ClassDecl& classDecl)
+/// (i.e. a parameterless constructor), false otherwise.
+bool HasParameterlessConstructor(const ClassDecl& classDecl)
 {
     for (const auto& member : classDecl.GetMemberDeclPtrs()) {
         if (member->astKind != ASTKind::FUNC_DECL) {
@@ -834,9 +834,9 @@ void MPTypeCheckerImpl::ValidateCJMPConstructorConstraints()
         if (!platformParent) {
             continue;
         }
-        if (!HasEmptyConstructor(*platformParent)) {
+        if (!HasParameterlessConstructor(*platformParent)) {
             auto builder = diag.DiagnoseRefactor(
-                DiagKindRefactor::sema_cjmp_platform_parent_no_empty_constructor,
+                DiagKindRefactor::sema_cjmp_platform_parent_no_parameterless_constructor,
                 *specificClass, platformParent->identifier.Val());
             builder.AddNote(*specificClass, "CJMP relaxation: object matched to platform-specific parent");
         }
