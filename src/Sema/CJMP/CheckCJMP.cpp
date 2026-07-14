@@ -15,6 +15,7 @@
 #include "../Sema/InheritanceChecker/StructInheritanceChecker.h"
 #include "Collector.h"
 #include "Diags.h"
+#include "NativeFFI/ObjC/Utils/TypeMapper.h"
 #include "TypeCheckUtil.h"
 #include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Node.h"
@@ -47,9 +48,9 @@ namespace {
 /**
  * Check if a class is a platform-specific parent for CJMP relaxation.
  *
- * A platform parent is a class marked with platform-specific annotations:
- * - @JavaImpl or @ObjCImpl: Implementation classes for Java/ObjC interop
- * - @JavaMirror subtype or @ObjCMirror subtype: Mirror classes inheriting from platform mirrors
+ * A platform parent is a class marked with FFI interop annotations:
+ * - @JavaMirror / @ObjCMirror: detected via Java::IsMirror / TypeMapper::IsObjCMirror
+ * - @JavaImpl / @ObjCImpl: detected via Java::IsImpl / TypeMapper::IsObjCImpl
  *
  * This is used in CJMP Object→PlatformParent relaxation where:
  * - Common class extends Object (implicitly or explicitly)
@@ -59,14 +60,13 @@ namespace {
  * @param cls The class declaration to check
  * @return true if the class is a platform-specific parent, false otherwise
  */
-[[maybe_unused]] bool IsPlatformParent(const Ptr<ClassDecl>& cls)
+bool IsPlatformParent(const Ptr<ClassDecl>& cls)
 {
     if (!cls) return false;
-    return FindFirstAnnotation(*cls, AnnotationKind::JAVA_IMPL) ||
-           FindFirstAnnotation(*cls, AnnotationKind::OBJ_C_IMPL) ||
-           Cangjie::Interop::Java::IsMirror(*cls) ||
+    return Cangjie::Interop::Java::IsMirror(*cls) ||
            Cangjie::Interop::Java::IsImpl(*cls) ||
-           cls->TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE);
+           Cangjie::Interop::ObjC::TypeMapper::IsObjCMirror(*cls) ||
+           Cangjie::Interop::ObjC::TypeMapper::IsObjCImpl(*cls);
 }
 
 std::string GetTypeNameFromTy(
