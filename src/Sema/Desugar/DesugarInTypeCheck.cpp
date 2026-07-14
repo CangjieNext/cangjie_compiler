@@ -371,6 +371,9 @@ void DesugarOperatorOverloadExpr(ASTContext& ctx, SubscriptExpr& se)
         callExpr->args.push_back(std::move(funcArg));
     }
     callExpr->sourceExpr = &se;
+    // Store mapExpr pointer of SubscriptExpr node to CallExpr, because srouce export only export desugarExpr.
+    // If mapExpr point to SubscriptExpr, mapExpr will set to mapExpr's desugar node.
+    callExpr->mapExpr = se.mapExpr;
     if (se.TestAttr(Attribute::UNSAFE)) {
         callExpr->EnableAttr(Attribute::UNSAFE);
     }

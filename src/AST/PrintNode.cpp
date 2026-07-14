@@ -117,9 +117,7 @@ void PrintBasic(unsigned indent, const Node& node, std::ostream& stream = std::c
     if (!node.scopeName.empty()) {
         PrintIndent(stream, indent, "scopeName:", "\"" + node.scopeName + "\"");
     }
-    if (!Ty::IsInitialTy(node.GetTy())) {
-        PrintIndent(stream, indent, "ty:", node.GetTy()->String());
-    }
+    PrintIndent(stream, indent, "ty:", node.GetTy()->String());
     PrintIndent(stream, indent, "ptr:", &node);
     const auto& fullPkgName = node.GetFullPackageName();
     if (!fullPkgName.empty() && fullPkgName != "default") {
@@ -148,6 +146,10 @@ void PrintBasic(unsigned indent, const Node& node, std::ostream& stream = std::c
     } else if (auto t = DynamicCast<Type>(&node)) {
         if (!Ty::IsInitialTy(t->aliasTy)) {
             PrintIndent(stream, indent, "aliasTy:", t->aliasTy->String());
+        }
+    } else if (auto e = DynamicCast<Expr>(&node)) {
+        if (e->mapExpr) {
+            PrintIndent(stream, indent, "mapExpr:", e->mapExpr.get());
         }
     }
     if (!node.comments.IsEmpty()) {
@@ -1500,7 +1502,7 @@ void PrintNode(Ptr<const Node> node, unsigned indent, const std::string& additio
     if (node->IsExpr()) {
         auto expr = RawStaticCast<const Expr*>(node);
         if (expr->desugarExpr) {
-            return PrintNode(expr->desugarExpr.get(), indent, addition, stream);
+            return PrintNode(expr->desugarExpr.get(), indent, "desugarExpr", stream);
         }
     }
     match (*node)([&indent, &stream](const Package& package) { PrintPackage(indent, package, stream); },
