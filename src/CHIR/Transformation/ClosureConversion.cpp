@@ -1364,7 +1364,8 @@ Type* ClosureConversion::ConvertRawArrayType(const RawArrayType& type)
 
 Type* ClosureConversion::ConvertVArrayType(const VArrayType& type)
 {
-    return builder.GetType<VArrayType>(ConvertTypeToClosureType(*type.GetElementType()), type.GetSize());
+    return builder.GetType<VArrayType>(ConvertTypeToClosureType(*type.GetElementType()),
+        static_cast<int64_t>(type.GetSize()));
 }
 
 Type* ClosureConversion::ConvertCPointerType(const CPointerType& type)

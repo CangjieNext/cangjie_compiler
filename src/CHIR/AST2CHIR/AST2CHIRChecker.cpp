@@ -177,7 +177,8 @@ bool CheckVArrayType(const Cangjie::AST::Ty& astTy, const Type& chirTy)
     }
     auto astArray = Cangjie::StaticCast<const Cangjie::AST::VArrayTy&>(astTy);
     auto& chirArray = Cangjie::StaticCast<const VArrayType&>(chirTy);
-    return astArray.size == chirArray.GetSize() && CheckType(*astTy.typeArgs[0], *chirTy.GetTypeArgs()[0]);
+    return static_cast<uint64_t>(astArray.size) == chirArray.GetSize() &&
+        CheckType(*astTy.typeArgs[0], *chirTy.GetTypeArgs()[0]);
 }
 
 bool CheckCPointerType(const Cangjie::AST::Ty& astTy, const Type& chirTy)

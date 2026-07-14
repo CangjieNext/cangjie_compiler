@@ -28,6 +28,15 @@ namespace Cangjie::CodeGen {
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
 std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(
     DefaultCompilerInstance& compilerInstance, bool enableIncrement);
+
+/**
+ * @brief Scan generated LLVM modules for a VArray whose total byte size (elementCount * elementByteSize)
+ * overflows uint64 and wraps below the 2GB stacksize limit. Such a VArray would silently bypass
+ * the LLVM backend's 2GB stacksize guard (which only rejects oversized allocs whose computed
+ * size does not wrap small) and produce a binary that crashes at runtime. Returns false (after
+ * printing the error) if such a wraparound is found, so cjc exits non-zero without running llc.
+ */
+bool CheckVArraySizeOverflow(const std::vector<std::unique_ptr<llvm::Module>>& llvmModules);
 #endif
 
 /**

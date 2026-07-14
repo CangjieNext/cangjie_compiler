@@ -609,6 +609,43 @@ std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(
     Utils::FreeIdleMemoryToOS();
     return llvmModules;
 }
+
+bool CheckVArraySizeOverflow(const std::vector<std::unique_ptr<llvm::Module>>& llvmModules)
+{
+    // A Cangjie VArray maps to an identified struct type `%VArray.<N>.<elem> = type { [N x T] }`
+    // (and the same [N x T] also shows up as a static alloca). When numOfElements * elementByteSize
+    // overflows uint64 and lands below 2GB, the LLVM backend's 2GB stacksize guard (which only
+    // rejects oversized allocs whose computed size does not wrap small) is bypassed and cjc
+    // emits a binary that crashes at runtime. Detect that wraparound here, single-threaded,
+    // after the parallel CodeGen joined and before handing modules to llc. (Overflows that still
+    // land at or above 2GB, and legitimately large VArrays, are left to the existing 2GB guard.)
+    constexpr uint64_t maxStackSize = 2147483648ULL; // 2GB, matches the LLVM backend guard
+    for (const auto& module : llvmModules) {
+        if (!module) {
+            continue;
+        }
+        const auto& dataLayout = module->getDataLayout();
+        for (auto* structTy : module->getIdentifiedStructTypes()) {
+            for (const auto* elemTy : structTy->elements()) {
+                auto arrayTy = llvm::dyn_cast<llvm::ArrayType>(elemTy);
+                if (arrayTy == nullptr) {
+                    continue;
+                }
+                uint64_t numOfElements = arrayTy->getNumElements();
+                uint64_t elementByteSize = dataLayout.getTypeAllocSize(arrayTy->getElementType());
+                uint64_t totalByteSize = 0;
+                if (__builtin_mul_overflow(numOfElements, elementByteSize, &totalByteSize) &&
+                    totalByteSize < maxStackSize) {
+                    Errorln("the total size of 'VArray<$", std::to_string(numOfElements),
+                        ", ...>' (", std::to_string(numOfElements), " * ", std::to_string(elementByteSize),
+                        " bytes) wraps around and exceeds cangjie max stacksize(2GB).");
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
 #endif
 
 bool SavePackageModule(const llvm::Module& module, const std::string& bcFilePath)

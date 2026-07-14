@@ -261,6 +261,15 @@ bool DefaultCIImpl::EmitLLVMSimilarBytecode(bool enableIncrement)
     auto fullPackageName = curPackage->GetName();
     auto llvmModules = CodeGen::GenPackageModules(ci, enableIncrement);
 
+    // VArray total-size wraparound check (issue #1036): a VArray whose numOfElements * elemByteSize
+    // overflows uint64 and wraps below 2GB silently bypasses the LLVM backend's 2GB stacksize
+    // guard (which only fires for oversized allocs whose computed size does NOT wrap small).
+    // CodeGen builds such modules fine (the huge [N x T] type is valid metadata), so detect it
+    // here, single-threaded after the parallel CodeGen joined and before handing modules to llc.
+    if (!CodeGen::CheckVArraySizeOverflow(llvmModules)) {
+        return false;
+    }
+
     // 2. save LLVM IR to bc file
     Utils::ProfileRecorder recorder("CodeGen", "Save bc file");
     ci.invocation.globalOptions.UpdateCachedDirName(fullPackageName);
