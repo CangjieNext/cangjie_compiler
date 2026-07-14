@@ -6,20 +6,10 @@
 
 #include "cangjie/CHIR/Utils/PlatformFFIClass.h"
 
-#include <string>
-#include <string_view>
-
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
+#include "cangjie/CHIR/Utils/Utils.h"
 
 namespace Cangjie::CHIR {
-
-/**
- * Itanium-mangled source-name encoding of the implicit Cangjie `Object` root
- * class: `6` is the length prefix, `Object` is the name, and `E` closes the
- * nested-name component. Matched as a substring of `ClassDef::GetIdentifier()`
- * to recognize classes whose direct superclass is `Object`.
- */
-constexpr std::string_view kCangjieObjectMangledName = "6ObjectE";
 
 bool IsJavaMirrorClass(const ClassDef& classDef)
 {
@@ -42,8 +32,7 @@ bool HasObjectAsSuperClass(const ClassDef& classDef)
     if (superClass == nullptr) {
         return true;  // classDef is Object itself (no superclass)
     }
-    auto superId = superClass->GetIdentifier();
-    return superId.find(kCangjieObjectMangledName) != std::string::npos;  // inherits from Object
+    return IsCoreObject(*superClass);
 }
 
 } // namespace Cangjie::CHIR
