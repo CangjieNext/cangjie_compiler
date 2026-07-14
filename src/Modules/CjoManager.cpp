@@ -223,6 +223,20 @@ const std::map<std::string, OrderedDeclSet>& CjoManager::GetPackageMembers(const
     return EMPTY_MAP;
 }
 
+AST::AccessLevel CjoManager::GetRealAccessLevel(const std::string& fullPackageName, const Ptr<Decl> decl) const
+{
+    const static std::map<std::string, OrderedDeclSet> EMPTY_MAP;
+    auto iter = impl->GetPackageNameMap().find(fullPackageName);
+    if (iter != impl->GetPackageNameMap().cend()) {
+        CJC_NULLPTR_CHECK(iter->second);
+        auto decl2AccessIter = iter->second->declAccessLevels.find(decl);
+        if (decl2AccessIter != iter->second->declAccessLevels.cend()) {
+            return decl2AccessIter->second;
+        }
+    }
+    return GetAccessLevel(*decl);
+}
+
 const OrderedDeclSet& CjoManager::GetPackageMembersByName(
     const std::string& fullPackageName, const std::string& name) const
 {
@@ -515,27 +529,28 @@ void CjoManager::AddImportedPackageFromASTNode(OwnedPtr<AST::Package>&& pkg) con
 }
 
 void CjoManagerImpl::AddImportsToMap(
-    const ImportSpec& import, const std::string& importedPackage, std::map<std::string, OrderedDeclSet>& declMap) const
+    const ImportSpec& import, const std::string& importedPackage, CjoManagerImpl::PackageInfo& srcPkgInfo) const
 {
     auto pkgInfo = GetPackageInfo(importedPackage);
     if (!pkgInfo) {
         return; // Failed to load current package.
     }
+    auto& declMap = srcPkgInfo.declMap;
     auto importLevel = GetAccessLevel(import);
     if (import.content.kind == ImportKind::IMPORT_ALL) {
         for (auto& [name, decls] : pkgInfo->declMap) {
             auto& targetMap = declMap[name];
-            Modules::AddImportedDeclToMap(decls, targetMap, importLevel);
+            Modules::AddImportedDeclToMap(decls, targetMap, importLevel, srcPkgInfo.declAccessLevels);
         }
         return;
     }
     auto& decls = pkgInfo->declMap[import.content.identifier];
     if (import.content.kind == ImportKind::IMPORT_SINGLE) {
         auto& targetMap = declMap[import.content.identifier];
-        Modules::AddImportedDeclToMap(decls, targetMap, importLevel);
+        Modules::AddImportedDeclToMap(decls, targetMap, importLevel, srcPkgInfo.declAccessLevels);
     } else if (import.content.kind == ImportKind::IMPORT_ALIAS) {
         auto& targetMap = declMap[import.content.aliasName];
-        Modules::AddImportedDeclToMap(decls, targetMap, importLevel);
+        Modules::AddImportedDeclToMap(decls, targetMap, importLevel, srcPkgInfo.declAccessLevels);
     }
 }
 
@@ -574,7 +589,8 @@ void CjoManager::AddPackageDeclMap(const std::string& fullPackageName, const std
             }
             AddPackageDeclMap(pkgName, fullPackageName);
             if (import->IsReExport() && Modules::IsVisible(*import, relation)) {
-                impl->AddImportsToMap(*import, pkgName, pkgInfo->declMap);
+                // Add re-exported decls to current package's declMap.
+                impl->AddImportsToMap(*import, pkgName, *pkgInfo);
             }
         }
     }

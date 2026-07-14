@@ -1266,7 +1266,8 @@ std::map<std::string, AST::OrderedDeclSet> ImportManager::GetPackageMembers(
     for (auto& [name, decls] : members) {
         AST::OrderedDeclSet visibleDecls;
         for (auto it : decls) {
-            if (Modules::IsVisible(*it, relation)) {
+            AccessLevel importLevel = cjoManager->GetRealAccessLevel(targetFullPackageName, it);
+            if (Modules::IsVisible(importLevel, relation)) {
                 visibleDecls.emplace(it.get());
             }
         }

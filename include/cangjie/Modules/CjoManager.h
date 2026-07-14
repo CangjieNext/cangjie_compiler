@@ -78,6 +78,18 @@ public:
 
     const std::map<std::string, AST::OrderedDeclSet>& GetPackageMembers(
         const std::string& fullPackageName) const;
+    /**
+     * @brief Get the access level of a declaration in a package, considering the package's imports.
+     *  Because the access level of a declaration can be affected by the package's imports, this function
+     *  determines the effective access level of the declaration in the context of the specified package.
+     *  eg: 'public class A {}' in package 'pkg1'.
+     *      'pkg2' imports 'pkg1' with 'internal import pkg1.A'.
+     *      Only 'pkg2' and it's sub-package can access 'A' when a package only 'import pkg2.*'.
+     * @param fullPackageName The full name of the package where the declaration is located.
+     * @param decl The declaration for which to determine the access level.
+     * @return The access level of the declaration in the context of the specified package.
+     */
+    AST::AccessLevel GetRealAccessLevel(const std::string& fullPackageName, const Ptr<AST::Decl> decl) const;
     const AST::OrderedDeclSet& GetPackageMembersByName(
         const std::string& fullPackageName, const std::string& name) const;
     Ptr<AST::Decl> GetImplicitPackageMembersByName(const std::string& fullPackageName, const std::string& name) const;

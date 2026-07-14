@@ -1400,3 +1400,105 @@ TEST_F(PackageTest, TypeAliasRefExport)
         return VisitAction::WALK_CHILDREN;
     }).Walk();
 }
+
+// Test for the real access level of re-exported decls.
+// Setup:
+//   - package 'a' defines a 'public class A'.
+//   - package 'b' re-exports 'A' via 'internal import a.A', so 'A' is only
+//     visible to 'b' and its sub-packages (e.g. 'b.c').
+//   - package 'c' only imports 'b' and is NOT a sub-package of 'b'.
+// After loading each package with LoadPackageFromCjo, querying the visible
+// members of 'b' from 'c' via GetPackageMembers(c, b) must NOT return 'A',
+// because the re-export access level of 'A' in 'b' is 'internal' and the
+// relation between 'c' and 'b' is NONE.
+// Regression: before the fix, GetRealAccessLevel fell back to the original
+// 'public' access level of 'A', so 'A' was wrongly visible from 'c'.
+TEST_F(PackageTest, ReExportAccessLevelForInternalImport)
+{
+    diag.ClearError();
+    std::string reExportSrcPath = FileUtil::JoinPath(srcPath, "ReExportAccessLevel");
+    const std::vector<std::string> reExportFileNames{"a", "b", "c"};
+    std::unordered_map<std::string, std::vector<uint8_t>> pkgName2AstData;
+
+    // Compile each package and serialize it to a .cjo file under packagePath.
+    for (auto& fileName : reExportFileNames) {
+        auto srcFile = FileUtil::JoinPath(reExportSrcPath, fileName + ".cj");
+        std::string failedReason;
+        auto content = FileUtil::ReadFileContent(srcFile, failedReason);
+        ASSERT_TRUE(content.has_value());
+        instance = std::make_unique<TestCompilerInstance>(invocation, diag);
+        instance->invocation.globalOptions.implicitPrelude = true;
+        instance->code = std::move(content.value());
+        ASSERT_TRUE(instance->Compile());
+        ASSERT_EQ(diag.GetErrorCount(), 0);
+        std::vector<uint8_t> astData;
+        instance->importManager->ExportAST(false, astData, *instance->GetSourcePackages()[0]);
+        pkgName2AstData[fileName] = astData;
+        std::string astFile = packagePath + fileName + ".cjo";
+        ASSERT_TRUE(FileUtil::WriteBufferToASTFile(astFile, astData));
+        diag.Reset();
+    }
+
+    // Load each package from its .cjo, so that the re-exported decl maps are built.
+    auto testIns = std::make_unique<TestCompilerInstance>(invocation, diag);
+    testIns->invocation.globalOptions.implicitPrelude = true;
+    testIns->code = "main() {}";
+    testIns->Compile(CompileStage::IMPORT_PACKAGE);
+    for (auto& fileName : reExportFileNames) {
+        auto pkg = testIns->importManager->LoadPackageFromCjo(
+            fileName, FileUtil::JoinPath(packagePath, fileName + ".cjo"));
+        ASSERT_NE(pkg, nullptr);
+        EXPECT_FALSE(pkg->files.empty());
+    }
+    ASSERT_EQ(diag.GetErrorCount(), 0);
+
+    // From 'c' (relation NONE to 'b'), the internal re-exported 'A' must be invisible.
+    auto cVisibleInB = testIns->importManager->GetPackageMembers("c", "b");
+    bool cSawA = false;
+    for (auto& [name, decls] : cVisibleInB) {
+        for (auto& decl : decls) {
+            if (decl->identifier == "A") {
+                cSawA = true;
+            }
+        }
+    }
+    EXPECT_FALSE(cSawA);
+
+    // Sanity check: the real access level of 'A' recorded for 'b' is 'internal'.
+    auto pkgB = testIns->importManager->GetCjoManager()->GetPackage("b");
+    ASSERT_TRUE(pkgB != nullptr);
+    Ptr<Decl> declA = nullptr;
+    for (auto& file : pkgB->files) {
+        for (auto& decl : file->decls) {
+            if (decl->identifier == "A") {
+                declA = decl.get();
+            }
+        }
+    }
+    // 'A' is a re-exported decl, it lives in package 'a' not 'b'; fetch it from 'a'.
+    auto pkgA = testIns->importManager->GetCjoManager()->GetPackage("a");
+    ASSERT_TRUE(pkgA != nullptr);
+    for (auto& file : pkgA->files) {
+        for (auto& decl : file->decls) {
+            if (decl->identifier == "A") {
+                declA = decl.get();
+            }
+        }
+    }
+    ASSERT_TRUE(declA != nullptr);
+    EXPECT_EQ(testIns->importManager->GetCjoManager()->GetRealAccessLevel("b", declA),
+        AST::AccessLevel::INTERNAL);
+
+    // Sanity check: a sub-package relation would see 'A'. Simulate by querying with
+    // a sub-package name 'b.c' (relation CHILD to 'b'), 'A' should be visible.
+    auto bcVisibleInB = testIns->importManager->GetPackageMembers("b.c", "b");
+    bool bcSawA = false;
+    for (auto& [name, decls] : bcVisibleInB) {
+        for (auto& decl : decls) {
+            if (decl->identifier == "A") {
+                bcSawA = true;
+            }
+        }
+    }
+    EXPECT_TRUE(bcSawA);
+}

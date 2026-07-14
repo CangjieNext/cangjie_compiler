@@ -38,4 +38,20 @@ PackageRelation GetPackageRelation(const std::string& srcFullPkgName, const std:
 
     return srcPath.front() == targetPath.front() ? PackageRelation::SAME_MODULE : PackageRelation::NONE;
 }
+
+void AddImportedDeclToMap(const AST::OrderedDeclSet& decls, AST::OrderedDeclSet& targetSet,
+    AST::AccessLevel importLevel, std::map<Ptr<AST::Decl>, AST::AccessLevel>& declAccessLevels)
+{
+    for (auto decl : decls) {
+        if (IsCompatibleAccessLevel(importLevel, GetAccessLevel(*decl))) {
+            targetSet.emplace(decl);
+        }
+        auto found = declAccessLevels.find(decl);
+        if (found != declAccessLevels.end() && found->second <= importLevel) {
+            found->second = importLevel;
+        } else {
+            declAccessLevels.emplace(decl, importLevel);
+        }
+    }
+}
 } // namespace Cangjie::Modules

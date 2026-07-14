@@ -26,6 +26,9 @@ public:
         OwnedPtr<AST::PackageDecl> pkgDecl;
         std::unordered_map<std::string, Ptr<AST::Decl>> exportIDDeclMap;
         std::map<std::string, AST::OrderedDeclSet> declMap;
+        // Record the real access level of each re-exported decl of current package.
+        // Real access level is the minimum access level of the decl and the import spec(max of multiple import specs).
+        std::map<Ptr<AST::Decl>, AST::AccessLevel> declAccessLevels;
         std::map<std::string, Ptr<AST::Decl>> implicitDeclMap;
         std::string cjoPath;
         bool onlyUsedByMacro{false};
@@ -129,8 +132,7 @@ public:
     {
         visitedPkgs.emplace(fullPackageName);
     }
-    void AddImportsToMap(const AST::ImportSpec& import, const std::string& importedPackage,
-        std::map<std::string, AST::OrderedDeclSet>& declMap) const;
+    void AddImportsToMap(const AST::ImportSpec& import, const std::string& importedPackage, PackageInfo& declMap) const;
     void ClearCjoCache()
     {
         cjoFileCacheMap.clear();

@@ -76,15 +76,16 @@ inline bool IsVisible(const AST::Node& node, PackageRelation relation)
             (relation == PackageRelation::CHILD || relation == PackageRelation::SAME_PACKAGE));
 }
 
-inline void AddImportedDeclToMap(
-    const AST::OrderedDeclSet& decls, AST::OrderedDeclSet& targetSet, AST::AccessLevel importLevel)
+inline bool IsVisible(const AST::AccessLevel& level, PackageRelation relation)
 {
-    for (auto decl : decls) {
-        if (IsCompatibleAccessLevel(importLevel, GetAccessLevel(*decl))) {
-            targetSet.emplace(decl);
-        }
-    }
+    return level == AST::AccessLevel::PUBLIC || relation == PackageRelation::SAME_PACKAGE ||
+        (level == AST::AccessLevel::PROTECTED && relation != PackageRelation::NONE) ||
+        (level == AST::AccessLevel::INTERNAL &&
+            (relation == PackageRelation::CHILD || relation == PackageRelation::SAME_PACKAGE));
 }
+
+void AddImportedDeclToMap(const AST::OrderedDeclSet& decls, AST::OrderedDeclSet& targetSet,
+    AST::AccessLevel importLevel, std::map<Ptr<AST::Decl>, AST::AccessLevel>& declAccessLevels);
 
 inline AST::OrderedDeclSet GetVisibleDeclToMap(
     const AST::OrderedDeclSet& decls, AST::AccessLevel importLevel, PackageRelation relation)
