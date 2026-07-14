@@ -609,6 +609,48 @@ std::vector<std::unique_ptr<llvm::Module>> GenPackageModules(
     Utils::FreeIdleMemoryToOS();
     return llvmModules;
 }
+
+static bool HasOverflowingVArrayElement(const llvm::StructType& structTy, const llvm::DataLayout& dataLayout)
+{
+    for (const auto* elemTy : structTy.elements()) {
+        auto arrayTy = llvm::dyn_cast<llvm::ArrayType>(elemTy);
+        if (arrayTy == nullptr) {
+            continue;
+        }
+        uint64_t numOfElements = arrayTy->getNumElements();
+        uint64_t elementByteSize = dataLayout.getTypeAllocSize(arrayTy->getElementType());
+        uint64_t totalByteSize = 0;
+        if (__builtin_mul_overflow(numOfElements, elementByteSize, &totalByteSize)) {
+            Errorln("the total size of VArray of ", std::to_string(numOfElements), " elements (",
+                std::to_string(elementByteSize), " bytes per element) is too large.");
+            return true;
+        }
+    }
+    return false;
+}
+
+bool CheckVArraySizeOverflow(const std::vector<std::unique_ptr<llvm::Module>>& llvmModules)
+{
+    // A Cangjie VArray maps to an identified struct type `%VArray.<N>.<elem> = type { [N x T] }`
+    // (and the same [N x T] also shows up as a static alloca). If numOfElements * elementByteSize
+    // overflows uint64, the backend would compute a wrapped, tiny allocation size and silently
+    // bypass its stacksize limit, emitting a binary that crashes at runtime. CodeGen builds such
+    // modules fine (the huge [N x T] type is valid metadata), so reject any overflow here,
+    // single-threaded after the parallel CodeGen joined and before handing modules to llc. The
+    // stacksize limit itself is owned and enforced solely by the backend and may change; an
+    // overflow is invalid regardless of the limit's value, so this check does not know the limit.
+    for (const auto& module : llvmModules) {
+        if (!module) {
+            continue;
+        }
+        for (auto* structTy : module->getIdentifiedStructTypes()) {
+            if (HasOverflowingVArrayElement(*structTy, module->getDataLayout())) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
 #endif
 
 bool SavePackageModule(const llvm::Module& module, const std::string& bcFilePath)
