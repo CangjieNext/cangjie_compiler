@@ -837,7 +837,6 @@ void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
 {
     auto& members = decl.GetMemberDecls();
     std::unordered_map<VarDecl*, PropDecl*> varToPropMap;
-    std::vector<size_t> transformedIndices;
 
     for (size_t i = 0; i < members.size(); ++i) {
         auto& member = members[i];
@@ -853,7 +852,6 @@ void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
 
         auto& prop = InsertPropConvertedByField(decl, *field, attrToBeSet);
         varToPropMap[field] = &prop;
-        transformedIndices.emplace_back(i);
     }
 
     for (auto& [varDecl, propDecl] : varToPropMap) {
@@ -866,11 +864,11 @@ void InsertMirrorVarProp(ClassDecl& decl, Attribute attrToBeSet)
         }
     }
 
-    for (auto idx : transformedIndices) {
-        members[idx].reset();
-    }
     members.erase(std::remove_if(members.begin(), members.end(),
-        [](auto& node) { return !node.get(); }),
+        [&varToPropMap](auto& node) {
+            return node->astKind == ASTKind::VAR_DECL &&
+                   varToPropMap.count(StaticCast<VarDecl>(node.get()));
+        }),
         members.end());
 }
 
