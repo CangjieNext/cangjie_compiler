@@ -142,39 +142,6 @@ OwnedPtr<AssignExpr> CreateRegistryCompanionRefFieldAssignment(ClassDecl& compan
         CreateRegistryCompanionConstructorCall(companion, *GetJavaRefField(refWrapper)),
         TypeManager::GetPrimitiveTy(TypeKind::TYPE_UNIT));
 }
-
-/**
-  * For original PrimaryCtorDecl, insert dummy registry companion reference initializer
-  * since it is not actually used after desugaring into FuncDecl, but still participates in CHIR-level checks.
-  */
-void RewriteRefWrapperPrimaryConstructor(ClassDecl& refWrapper, ClassDecl& companion, VarDecl& companionRefField)
-{
-    CJC_ASSERT(Interop::Java::IsImplReferenceWrapper(refWrapper));
-
-    for (auto member : refWrapper.GetMemberDeclPtrs()) {
-        if (member->TestAttr(Attribute::FROM_COMMON_PART)) {
-            continue;
-        }
-        auto pctor = As<ASTKind::PRIMARY_CTOR_DECL>(member);
-        if (!pctor) {
-            continue;
-        }
-
-        auto init = CreateRegistryCompanionRefFieldAssignment(companion, refWrapper, companionRefField);
-        auto& pbody = pctor->funcBody->body->body;
-        auto initPos = pbody.begin();
-
-        if (!pbody.empty()) {
-            auto firstNode = pbody[0].get();
-            if (auto callExpr = As<ASTKind::CALL_EXPR>(firstNode); callExpr && IsSuperConstructorCall(*callExpr)) {
-                // Insert field initialization right after parent constructor call.
-                initPos++;
-            }
-        }
-
-        pbody.insert(initPos, std::move(init));
-    }
-}
 } // namespace
 
 OwnedPtr<VarDecl> GenerateJavaImplRegistryCompanionReferenceField::CreateJavaImplRegistryCompanionReferenceField(
@@ -387,8 +354,6 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorsInitializ
     for (auto ctor : ctx.GetJavaImplUserDefinedConstructors(refWrapper)) {
         RewriteUserDefinedConstructorInitialization(*ctor, companionRefField, companion);
     }
-
-    RewriteRefWrapperPrimaryConstructor(refWrapper, companion, companionRefField);
 }
 
 void GenerateInJavaImplReferenceWrapper::InsertFinalizer(ClassDecl& refWrapper) const
