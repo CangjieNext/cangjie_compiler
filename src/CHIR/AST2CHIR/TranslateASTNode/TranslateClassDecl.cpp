@@ -60,7 +60,7 @@ void Translator::TranslateClassLikeDecl(ClassDef& classDef, const AST::ClassLike
 
     // common and specific upper bounds are same, do not set again
     // specific instantiations require inheritance setup because common side uses templates without instantiation
-    bool needInitialSuperClassSetup = !decl.TestAttr(AST::Attribute::SPECIFIC) ||
+    bool needInitialSuperClassSetup = !mergingSpecific || !decl.TestAttr(AST::Attribute::SPECIFIC) ||
         decl.TestAttr(AST::Attribute::IMPORTED) || decl.TestAttr(AST::Attribute::GENERIC_INSTANTIATED);
     if (needInitialSuperClassSetup) {
         // set super class
