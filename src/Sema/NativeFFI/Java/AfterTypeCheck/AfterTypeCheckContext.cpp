@@ -151,6 +151,10 @@ std::vector<Ptr<FuncDecl>> AfterTypeCheckContext::GetJavaImplFromCommonPartConst
 
         auto ctor = As<ASTKind::FUNC_DECL>(member);
         if (!ctor) {
+            CJC_ABORT_WITH_MSG(
+                "GetJavaImplFromCommonPartConstructors: unexpected non-FuncDecl "
+                "member with CONSTRUCTOR + FROM_COMMON_PART; PrimaryCtorDecls "
+                "should never have FROM_COMMON_PART (doNotExport=true, never serialized)");
             continue;
         }
 
