@@ -418,13 +418,6 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
 
 void JavaDesugarManager::DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror, GenericConfigInfo* genericConfig)
 {
-    bool isFromCommonPart = fun.TestAttr(Attribute::FROM_COMMON_PART) ||
-        (fun.curFile && fun.curFile->TestAttr(Attribute::FROM_COMMON_PART));
-    if (isFromCommonPart && !IsMirror(fun)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_method_from_common_has_body, fun);
-        fun.EnableAttr(Attribute::IS_BROKEN);
-        return;
-    }
     CJC_ASSERT(!fun.TestAttr(Attribute::CONSTRUCTOR) &&
         (fun.TestAttr(Attribute::JAVA_MIRROR) || fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)));
     AddJavaMirrorMethodBody(mirror, fun, CreateJavaRefCall(mirror, mirror.curFile), genericConfig);
@@ -560,6 +553,11 @@ void JavaDesugarManager::DesugarJavaMirror(ClassDecl& mirror)
                 }
             } else if (fd->TestAttr(Attribute::JAVA_MIRROR)) {
                 DesugarJavaMirrorMethod(*fd, mirror);
+            } else if (fd->TestAttr(Attribute::FROM_COMMON_PART) &&
+                       fd->TestAttr(Attribute::COMMON) &&
+                       !fd->specificImplementation) {
+                diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_method_from_common_has_body, *fd);
+                fd->EnableAttr(Attribute::IS_BROKEN);
             }
         } else if (auto prop = As<ASTKind::PROP_DECL>(decl.get())) {
             DesugarJavaMirrorProp(*prop);
@@ -584,6 +582,11 @@ void JavaDesugarManager::DesugarJavaMirror(InterfaceDecl& mirror)
             bool isDefault = decl->TestAttr(Attribute::JAVA_HAS_DEFAULT);
             if (isMirror && (isStatic || isDefault)) {
                 DesugarJavaMirrorMethod(*fd, mirror);
+            } else if (decl->TestAttr(Attribute::FROM_COMMON_PART) &&
+                       decl->TestAttr(Attribute::COMMON) &&
+                       !decl->specificImplementation) {
+                diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_method_from_common_has_body, *fd);
+                fd->EnableAttr(Attribute::IS_BROKEN);
             }
         } else {
             // Properties are forbidden for JavaMirror and should be filtered out during parse checks
