@@ -264,10 +264,10 @@ bool TypeMapper::IsObjCCompatible(const Ty& ty)
                 return std::all_of(std::begin(tyArg->typeArgs), std::end(tyArg->typeArgs),
                     [](auto ty) { return IsObjCCompatible(*ty); });
             }
-            return false;
+            break;
         case TypeKind::TYPE_CLASS:
         case TypeKind::TYPE_INTERFACE:
-            if (IsValidObjCMirror(ty) || IsObjCImpl(ty)) {
+            if (IsObjCMirror(ty) || IsObjCImpl(ty)) {
                 return true;
             }
             if (IsObjCBlock(ty)) {
@@ -279,26 +279,24 @@ bool TypeMapper::IsObjCCompatible(const Ty& ty)
                 return std::all_of(std::begin(tyArg->typeArgs), std::end(tyArg->typeArgs),
                     [](auto ty) { return IsObjCCompatible(*ty); });
             }
-            return false;
+            break;
         case TypeKind::TYPE_ENUM:
             if (!ty.IsCoreOptionType()) {
                 return false;
             };
             CJC_ASSERT(ty.typeArgs[0]);
-            if (IsValidObjCMirror(*ty.typeArgs[0]) || IsObjCImpl(*ty.typeArgs[0])) {
-                return true;
-            }
+            return IsObjCMirror(*ty.typeArgs[0]) || IsObjCImpl(*ty.typeArgs[0]);
         case TypeKind::TYPE_FUNC:
-            if (ty.IsCFunc()) {
-                return true;
-            }
+            return ty.IsCFunc();
         case TypeKind::TYPE_CSTRING:
-            if (ty.IsCString()) {
-                return true;
-            }
+            return true;
+        case TypeKind::TYPE_POINTER:
+            return true;
         default:
             return false;
     }
+
+    return false;
 }
 
 bool TypeMapper::IsObjCCompatibleFuncTy(const Ty& ty)

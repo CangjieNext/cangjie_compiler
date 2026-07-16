@@ -14,6 +14,7 @@
 #include "NativeFFI/ObjC/Utils/Common.h"
 #include "NativeFFI/Utils.h"
 #include "cangjie/AST/Create.h"
+#include "cangjie/AST/Node.h"
 
 namespace Cangjie::Interop::ObjC {
 
@@ -41,6 +42,7 @@ void InsertBaseCtorBody::HandleImpl(InteropContext& ctx)
             auto superCtor = ctx.factory.GetGeneratedBaseCtor(*mirrorClass->GetSuperClassDecl());
             auto superCall = CreateSuperCall(*mirrorClass, *superCtor, superCtor->GetTy());
             superCall->args.emplace_back(CreateFuncArg(std::move(handleParam)));
+            ctx.factory.AddMarkerToCallIfNeeded(*superCall);
             ctor->funcBody->body->body.emplace_back(std::move(superCall));
         } else {
             auto lhs = ctx.factory.CreateNativeHandleFieldExpr(*mirrorClass);
