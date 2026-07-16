@@ -22,6 +22,8 @@ namespace {
 
 constexpr auto INTEROPLIB_OBJ_C_ID = "ObjCId";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_ID = "NativeObjCId";
+constexpr auto INTEROPLIB_NATIVE_OBJ_C_ID_MARKER = "NativeObjCIdMarker";
+constexpr auto INTEROPLIB_NATIVE_OBJ_C_ID_MARKER_INSTANCE = "__NATIVE_OBJC_ID_MARKER";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_SEL = "NativeObjCSel";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_SUPER_PTR = "NativeObjCSuperPtr";
 constexpr auto INTEROPLIB_NATIVE_OBJ_C_CLASS = "NativeObjCClass";
@@ -87,6 +89,18 @@ Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCIdDecl()
     return decl;
 }
 
+Ptr<StructDecl> InteropLibBridge::GetNativeObjCIdMarkerDecl()
+{
+    static auto decl = GetInteropLibDecl<ASTKind::STRUCT_DECL>(INTEROPLIB_NATIVE_OBJ_C_ID_MARKER);
+    return decl;
+}
+
+Ptr<VarDecl> InteropLibBridge::GetNativeObjCIdMarkerInstance()
+{
+    static auto decl = GetInteropLibDecl<ASTKind::VAR_DECL>(INTEROPLIB_NATIVE_OBJ_C_ID_MARKER_INSTANCE);
+    return decl;
+}
+
 Ptr<InterfaceDecl> InteropLibBridge::GetObjCIdDecl()
 {
     static auto decl = GetObjCLangDecl<ASTKind::INTERFACE_DECL>(INTEROPLIB_OBJ_C_ID);
@@ -96,6 +110,11 @@ Ptr<InterfaceDecl> InteropLibBridge::GetObjCIdDecl()
 Ptr<Ty> InteropLibBridge::GetNativeObjCIdTy()
 {
     return GetNativeObjCIdDecl()->type->GetTy();
+}
+
+Ptr<Ty> InteropLibBridge::GetNativeObjCIdMarkerTy()
+{
+    return GetNativeObjCIdMarkerDecl()->GetTy();
 }
 
 Ptr<TypeAliasDecl> InteropLibBridge::GetNativeObjCSelDecl()
