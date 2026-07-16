@@ -130,6 +130,7 @@ void DesugarMirrors::DesugarCtor(InteropContext& ctx, ClassLikeDecl& mirror, Fun
     labmda->curFile = mirror.curFile;
 
     thisCall->args.emplace_back(CreateFuncArg(std::move(labmda)));
+    ctx.factory.AddMarkerToCallIfNeeded(*thisCall);
 
     ctor.constructorCall = ConstructorCall::OTHER_INIT;
     ctor.funcBody->body->body.emplace_back(std::move(thisCall));
