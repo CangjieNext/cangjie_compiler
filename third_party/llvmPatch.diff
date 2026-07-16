@@ -38573,10 +38573,10 @@ index 000000000..8868a53b3
 \ No newline at end of file
 diff --git a/llvm/include/llvm/Transforms/Scalar/ReflectionInfo.h b/llvm/include/llvm/Transforms/Scalar/ReflectionInfo.h
 new file mode 100644
-index 000000000..ea43b39a0
+index 000000000..9a83ed3aa
 --- /dev/null
 +++ b/llvm/include/llvm/Transforms/Scalar/ReflectionInfo.h
-@@ -0,0 +1,296 @@
+@@ -0,0 +1,300 @@
 +//===- ReflectionInfo.h - ---------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -38629,6 +38629,7 @@ index 000000000..ea43b39a0
 +  ERT_GENERIC_CLASS,
 +  ERT_INSTANCE_METHOD,
 +  ERT_STATIC_METHOD,
++  ERT_CTOR_ANNOTATIONS,
 +  ERT_ATTRIBUTE,
 +  ERT_MAX,
 +};
@@ -38788,6 +38789,7 @@ index 000000000..ea43b39a0
 +  SmallVector<EnumCtorInfo, 8> EnumCtors;
 +  SmallVector<MethodInfo *, 8> InstanceMethods;
 +  SmallVector<MethodInfo *, 8> StaticMethods;
++  SmallVector<Constant*, 8> CtorAnnotationMethods;
 +
 +  explicit EnumReflectInfo(Module &M) : BaseInfo(M) {}
 +
@@ -38848,6 +38850,8 @@ index 000000000..ea43b39a0
 +                              MDTuple *MethodMDs);
 +  void parseStaticMethodMDs(SmallVectorImpl<MethodInfo *> &Infos,
 +                            MDTuple *MethodMDs);
++  void parseCtorAnnotationMDs(SmallVectorImpl<Constant*> &Infos,
++                              MDTuple *CtorAnnoMDs);
 +  void parseEnumCtorMDs(SmallVectorImpl<EnumCtorInfo> &Info, MDTuple *CtorMDs);
 +  void parseOneInstanceFieldMd(FieldInfo &Info, MDTuple *FieldMD);
 +  void parseOneStaticFieldMd(FieldInfo &Info, MDTuple *FieldMD);
@@ -40897,7 +40901,7 @@ index 413ec6dd4..67652db5d 100644
  }
  
 diff --git a/llvm/lib/Analysis/MemoryDependenceAnalysis.cpp b/llvm/lib/Analysis/MemoryDependenceAnalysis.cpp
-index fce9d5b24..1eb697dfe 100644
+index fce9d5b24..84b5ee5f4 100644
 --- a/llvm/lib/Analysis/MemoryDependenceAnalysis.cpp
 +++ b/llvm/lib/Analysis/MemoryDependenceAnalysis.cpp
 @@ -34,6 +34,7 @@
@@ -40931,7 +40935,7 @@ index fce9d5b24..1eb697dfe 100644
 +          if (const CallBase *CB =
 +                  dyn_cast<CallBase>(getUnderlyingObject(Loc.Ptr))) {
 +            Function *F = CB->getCalledFunction();
-+            if (F && (F->getName().startswith("CJ_MCC_NewFinalizer") ||
++            if (F && (F->getName() == "CJ_MCC_NewFinalizerStub" ||
 +                      F->getName() == "CJ_MCC_OnFinalizerCreated"))
 +              continue;
 +          }
@@ -51494,7 +51498,7 @@ index b51ea45f6..f74c68a4c 100644
  // If it does not exist, return null.
  //
 diff --git a/llvm/lib/IR/SafepointIRVerifier.cpp b/llvm/lib/IR/SafepointIRVerifier.cpp
-index 5d3fa28f7..2df996ed4 100644
+index 5d3fa28f7..e22cadf61 100644
 --- a/llvm/lib/IR/SafepointIRVerifier.cpp
 +++ b/llvm/lib/IR/SafepointIRVerifier.cpp
 @@ -35,15 +35,23 @@
@@ -51808,7 +51812,7 @@ index 5d3fa28f7..2df996ed4 100644
 +  for (auto *Base : Bases) {
 +    if (auto *CB = dyn_cast<CallBase>(Base)) {
 +      auto *F = CB->getCalledFunction();
-+      if (F && F->getName().startswith("CJ_MCC_NewFinalizer"))
++      if (F && F->getName() == "CJ_MCC_NewFinalizerStub")
 +        return true;
 +    }
 +  }
@@ -53976,7 +53980,7 @@ index 6696d158b..1255795b2 100644
        .StartsWith("vertex", Triple::Vertex)
        .StartsWith("geometry", Triple::Geometry)
 diff --git a/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp b/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
-index c568f7347..fe3d0a2aa 100644
+index c568f7347..9fab9f496 100644
 --- a/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
 @@ -32,6 +32,7 @@
@@ -53987,7 +53991,11 @@ index c568f7347..fe3d0a2aa 100644
  #include "llvm/CodeGen/FaultMaps.h"
  #include "llvm/CodeGen/MachineBasicBlock.h"
  #include "llvm/CodeGen/MachineFunction.h"
-@@ -43,6 +44,7 @@
+@@ -40,9 +41,11 @@
+ #include "llvm/CodeGen/MachineModuleInfoImpls.h"
+ #include "llvm/CodeGen/MachineOperand.h"
+ #include "llvm/CodeGen/StackMaps.h"
++#include "llvm/Support/CodeGen.h"
  #include "llvm/CodeGen/TargetRegisterInfo.h"
  #include "llvm/IR/DataLayout.h"
  #include "llvm/IR/DebugInfoMetadata.h"
@@ -53995,7 +54003,7 @@ index c568f7347..fe3d0a2aa 100644
  #include "llvm/MC/MCAsmInfo.h"
  #include "llvm/MC/MCContext.h"
  #include "llvm/MC/MCInst.h"
-@@ -66,11 +68,17 @@ using namespace llvm;
+@@ -66,11 +69,17 @@ using namespace llvm;
  
  #define DEBUG_TYPE "asm-printer"
  
@@ -54013,7 +54021,7 @@ index c568f7347..fe3d0a2aa 100644
    FaultMaps FM;
    const AArch64Subtarget *STI;
    bool ShouldEmitWeakSwiftAsyncExtendedFramePointerFlags = false;
-@@ -78,7 +86,9 @@ class AArch64AsmPrinter : public AsmPrinter {
+@@ -78,7 +87,9 @@ class AArch64AsmPrinter : public AsmPrinter {
  public:
    AArch64AsmPrinter(TargetMachine &TM, std::unique_ptr<MCStreamer> Streamer)
        : AsmPrinter(TM, std::move(Streamer)), MCInstLowering(OutContext, *this),
@@ -54024,7 +54032,7 @@ index c568f7347..fe3d0a2aa 100644
  
    StringRef getPassName() const override { return "AArch64 Assembly Printer"; }
  
-@@ -155,10 +165,14 @@ public:
+@@ -155,10 +166,14 @@ public:
      // Emit the XRay table for this function.
      emitXRayTable();
  
@@ -54039,7 +54047,7 @@ index c568f7347..fe3d0a2aa 100644
  private:
    void printOperand(const MachineInstr *MI, unsigned OpNum, raw_ostream &O);
    bool printAsmMRegister(const MachineOperand &MO, char Mode, raw_ostream &O);
-@@ -193,6 +207,64 @@ private:
+@@ -193,6 +208,65 @@ private:
    bool shouldEmitWeakSwiftAsyncExtendedFramePointerFlags() const override {
      return ShouldEmitWeakSwiftAsyncExtendedFramePointerFlags;
    }
@@ -54101,10 +54109,11 @@ index c568f7347..fe3d0a2aa 100644
 +  int emitCJSafepointInlineCall(unsigned Index) override;
 +  void emitGcStateCheck() override;
 +  void emitGetCJTLSData(int64_t Offset);
++  void emitCangjieRuntimeCall(MCSymbol *Sym);
  };
  
  } // end anonymous namespace
-@@ -579,7 +651,7 @@ void AArch64AsmPrinter::emitEndOfAsmFile(Module &M) {
+@@ -579,7 +653,7 @@ void AArch64AsmPrinter::emitEndOfAsmFile(Module &M) {
      // generates code that does this, it is always safe to set.
      OutStreamer->emitAssemblerFlag(MCAF_SubsectionsViaSymbols);
    }
@@ -54113,7 +54122,7 @@ index c568f7347..fe3d0a2aa 100644
    // Emit stack and fault map information.
    emitStackMaps(SM);
    FM.serializeToFaultMapSection();
-@@ -1050,24 +1122,261 @@ void AArch64AsmPrinter::LowerPATCHPOINT(MCStreamer &OutStreamer, StackMaps &SM,
+@@ -1050,24 +1124,277 @@ void AArch64AsmPrinter::LowerPATCHPOINT(MCStreamer &OutStreamer, StackMaps &SM,
      EmitToStreamer(OutStreamer, MCInstBuilder(AArch64::HINT).addImm(0));
  }
  
@@ -54244,6 +54253,26 @@ index c568f7347..fe3d0a2aa 100644
 +  OutStreamer->emitLabel(EndSym);
 +}
 +
++void AArch64AsmPrinter::emitCangjieRuntimeCall(MCSymbol *Sym) {
++  using namespace AArch64;
++  if (TM.getCodeModel() == CodeModel::Large &&
++      getSubtargetInfo().getTargetTriple().isOSBinFormatMachO()) {
++    EmitToStreamer(*OutStreamer, MCInstBuilder(ADRP).addReg(X16).addExpr(
++        MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_GOTPAGE, OutContext)));
++    EmitToStreamer(*OutStreamer,
++                   MCInstBuilder(LDRXui)
++                       .addReg(X16)
++                       .addReg(X16)
++                       .addExpr(MCSymbolRefExpr::create(
++                           Sym, MCSymbolRefExpr::VK_GOTPAGEOFF, OutContext))
++                       .addImm(0));
++    EmitToStreamer(*OutStreamer, MCInstBuilder(BLR).addReg(X16));
++  } else {
++    EmitToStreamer(*OutStreamer, MCInstBuilder(BL).addExpr(
++        MCSymbolRefExpr::create(Sym, OutContext)));
++  }
++}
++
 +// Note: emit specific inst should update inst size info in
 +// AArch64InstrInfo::getInstSizeInBytes for AArch64 at the same time
 +// >>>>>>>>>>>>>>>>>>>>>>> disable stackgrow
@@ -54273,18 +54302,14 @@ index c568f7347..fe3d0a2aa 100644
 +    } else {
 +      Sym = Ctx.getOrCreateSymbol("CJ_MCC_ThrowStackOverflowError");
 +    }
-+    MCInst BLToSOFE = MCInstBuilder(BL).addExpr(
-+        MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, Ctx));
 +    EmitToStreamer(*OutStreamer, Mov);
-+    EmitToStreamer(*OutStreamer, BLToSOFE);
++    emitCangjieRuntimeCall(Sym);
 +    return 3; // 3: instruction nums.
 +  } else {    // stack grow
 +    MCInst MovX9 = MCInstBuilder(MOVZXi).addReg(X9).addImm(LeftSize).addImm(0);
 +    MCSymbol *Sym = Ctx.getOrCreateSymbol("CJ_MCC_StackGrowStub");
-+    MCInst BLToCall = MCInstBuilder(BL).addExpr(
-+        MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, Ctx));
 +    EmitToStreamer(*OutStreamer, MovX9);
-+    EmitToStreamer(*OutStreamer, BLToCall);
++    emitCangjieRuntimeCall(Sym);
 +    SM.recordCJStackMap(MI, true);
 +
 +    // revert sp
@@ -54380,7 +54405,7 @@ index c568f7347..fe3d0a2aa 100644
      case MachineOperand::MO_Immediate:
        CallTargetMCOp = MCOperand::createImm(CallTarget.getImm());
        CallOpcode = AArch64::BL;
-@@ -1085,6 +1394,11 @@ void AArch64AsmPrinter::LowerSTATEPOINT(MCStreamer &OutStreamer, StackMaps &SM,
+@@ -1085,6 +1412,11 @@ void AArch64AsmPrinter::LowerSTATEPOINT(MCStreamer &OutStreamer, StackMaps &SM,
                     MCInstBuilder(CallOpcode).addOperand(CallTargetMCOp));
    }
  
@@ -54392,7 +54417,7 @@ index c568f7347..fe3d0a2aa 100644
    auto &Ctx = OutStreamer.getContext();
    MCSymbol *MILabel = Ctx.createTempSymbol();
    OutStreamer.emitLabel(MILabel);
-@@ -1196,12 +1510,69 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
+@@ -1196,12 +1528,69 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
      OutStreamer->emitLabel(LOHLabel);
    }
  
@@ -54462,7 +54487,7 @@ index c568f7347..fe3d0a2aa 100644
    case AArch64::HINT: {
      // CurrentPatchableFunctionEntrySym can be CurrentFnBegin only for
      // -fpatchable-function-entry=N,0. The entry MBB is guaranteed to be
-@@ -1559,6 +1930,516 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
+@@ -1559,6 +1948,516 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
    MCInstLowering.Lower(MI, TmpInst);
    EmitToStreamer(*OutStreamer, TmpInst);
  }
@@ -54708,9 +54733,11 @@ index c568f7347..fe3d0a2aa 100644
 +  MCSymbol *LFinish = OutContext.createTempSymbol("NewArrayFin", true);
 +  const MCSymbolRefExpr *FinExpr = MCSymbolRefExpr::create(LFinish, OutContext);
 +  MCInst BranchToFin = MCInstBuilder(B).addExpr(FinExpr);
-+  MCOperand CallSlowPath;
-+  MCInstLowering.lowerOperand(MOSym, CallSlowPath);
-+  MCInst CallNewArraySlowPath = MCInstBuilder(BL).addOperand(CallSlowPath);
++  MCOperand CallSlowPathMCOp;
++  MCInstLowering.lowerOperand(MOSym, CallSlowPathMCOp);
++  unsigned SlowCallOpcode = MOSym.isReg() ? BLR : BL;
++  MCInst CallNewArraySlowPath =
++      MCInstBuilder(SlowCallOpcode).addOperand(CallSlowPathMCOp);
 +  OutStreamer->emitLabel(LFast);
 +  EmitToStreamer(*OutStreamer, GetAllocBuffer);
 +  EmitToStreamer(*OutStreamer, GetRegionPtr);
@@ -54819,9 +54846,7 @@ index c568f7347..fe3d0a2aa 100644
 +    EmitToStreamer(*OutStreamer, Ldr2);
 +    MCSymbol *FuncSym =
 +        OutContext.getOrCreateSymbol("_CJ_MRT_PreInitializePackage");
-+    MCInst BLToCall = MCInstBuilder(AArch64::BL)
-+                          .addExpr(MCSymbolRefExpr::create(FuncSym, Ctx));
-+    EmitToStreamer(*OutStreamer, BLToCall);
++    emitCangjieRuntimeCall(FuncSym);
 +  }
 +}
 +
@@ -55390,7 +55415,7 @@ index f59860a24..62de8bad7 100644
    /// the function.
    void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
 diff --git a/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp b/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
-index 06e21f90e..b88ca0cc0 100644
+index 06e21f90e..3561674e0 100644
 --- a/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
 @@ -706,6 +706,8 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
@@ -55477,7 +55502,7 @@ index 06e21f90e..b88ca0cc0 100644
  
      // FPDiff will be negative if this tail call requires more space than we
      // would automatically have in our incoming argument space. Positive if we
-@@ -6841,9 +6872,16 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
+@@ -6841,9 +6872,21 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
    // direct call is) turn it into a TargetGlobalAddress/TargetExternalSymbol
    // node so that legalize doesn't hack it.
    if (auto *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
@@ -55489,12 +55514,17 @@ index 06e21f90e..b88ca0cc0 100644
          Subtarget->classifyGlobalFunctionReference(GV, getTargetMachine());
 +    // safepoint stub is local, and safepoint call will still be got load.
 +    if (CalleeFunc->isCangjieSafepointStub() ||
-+        CalleeFunc->isCangjieSafePoint())
++        CalleeFunc->isCangjieSafePoint() ||
++        CalleeFunc->isCangjieStackCheck() ||
++        CalleeFunc->getName().isGetGCPhase() ||
++        CalleeFunc->isGetCJThreadId() ||
++        CalleeFunc->getName().isSetDebugLocation() ||
++        CalleeFunc->getName().equals("CJ_MRT_PreInitializePackage"))
 +      OpFlags = AArch64II::MO_NO_FLAG;
      if (OpFlags & AArch64II::MO_GOT) {
        Callee = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0, OpFlags);
        Callee = DAG.getNode(AArch64ISD::LOADgot, DL, PtrVT, Callee);
-@@ -8700,7 +8738,11 @@ SDValue AArch64TargetLowering::LowerSPONENTRY(SDValue Op,
+@@ -8700,7 +8743,11 @@ SDValue AArch64TargetLowering::LowerSPONENTRY(SDValue Op,
  // this table could be generated automatically from RegInfo.
  Register AArch64TargetLowering::
  getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const {
@@ -55507,7 +55537,7 @@ index 06e21f90e..b88ca0cc0 100644
    if (AArch64::X1 <= Reg && Reg <= AArch64::X28) {
      const MCRegisterInfo *MRI = Subtarget->getRegisterInfo();
      unsigned DwarfRegNum = MRI->getDwarfRegNum(Reg, false);
-@@ -8709,8 +8751,7 @@ getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const
+@@ -8709,8 +8756,7 @@ getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const
    }
    if (Reg)
      return Reg;
@@ -55517,7 +55547,7 @@ index 06e21f90e..b88ca0cc0 100644
  }
  
  SDValue AArch64TargetLowering::LowerADDROFRETURNADDR(SDValue Op,
-@@ -13636,6 +13677,10 @@ bool AArch64TargetLowering::generateFMAsInMachineCombiner(
+@@ -13636,6 +13682,10 @@ bool AArch64TargetLowering::generateFMAsInMachineCombiner(
           !useSVEForFixedLengthVectorVT(VT);
  }
  
@@ -55551,7 +55581,7 @@ index ff3bfe897..3276e7f4b 100644
    SDValue LowerSET_ROUNDING(SDValue Op, SelectionDAG &DAG) const;
    SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
 diff --git a/llvm/lib/Target/AArch64/AArch64InstrInfo.cpp b/llvm/lib/Target/AArch64/AArch64InstrInfo.cpp
-index 835a7b6cc..92b99ffe2 100644
+index 835a7b6cc..d3a75fd1d 100644
 --- a/llvm/lib/Target/AArch64/AArch64InstrInfo.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64InstrInfo.cpp
 @@ -33,6 +33,7 @@
@@ -55562,7 +55592,7 @@ index 835a7b6cc..92b99ffe2 100644
  #include "llvm/MC/MCAsmInfo.h"
  #include "llvm/MC/MCInst.h"
  #include "llvm/MC/MCInstBuilder.h"
-@@ -73,6 +74,59 @@ AArch64InstrInfo::AArch64InstrInfo(const AArch64Subtarget &STI)
+@@ -73,6 +74,69 @@ AArch64InstrInfo::AArch64InstrInfo(const AArch64Subtarget &STI)
                            AArch64::CATCHRET),
        RI(STI.getTargetTriple()), Subtarget(STI) {}
  
@@ -55593,6 +55623,14 @@ index 835a7b6cc..92b99ffe2 100644
 +  if (Callee == nullptr) {
 +    return 0;
 +  }
++  // Under large code model on MachO, emitCangjieRuntimeCall emits ADRP+LDR+BLR
++  // (12B) instead of BL (4B) for runtime calls embedded in the inline lowering
++  // of some cangjie sentinels (e.g. CJStackCheck -> emitStackOverflowCall).
++  // Add the +8B delta under large MachO so jump-table offset computation
++  // (AArch64CompressJumpTables) stays conservative: over-estimate is safe,
++  // under-estimate risks picking too-narrow jump-table entry width.
++  const TargetMachine &TM = MI.getMF()->getTarget();
++  const unsigned GotExtra = (TM.getCodeModel() == CodeModel::Large) ? 8 : 0;
 +  if (Callee->isCangjieSafePoint()) {
 +    // If Jmp size beyond the 19bit, emitting safepoint on following inst
 +    // instead of emit it at the end of the function.
@@ -55604,7 +55642,9 @@ index 835a7b6cc..92b99ffe2 100644
 +    }
 +  }
 +  if (Callee->getName().isCJStackCheck()) {
-+    return 12; // 12: 12 bytes(3 insts) for safepoint call
++    // emitCJStackCheck -> emitStackOverflowCall uses emitCangjieRuntimeCall,
++    // which under large MachO expands BL to ADRP+LDR+BLR (+8B).
++    return 12 + GotExtra; // 12B base + GOT-call expansion under large MachO
 +  }
 +  if (Callee->getName().isGetGCPhase()) {
 +    return 4; // 4: 4 bytes(1 insts) for GetGCPhase call
@@ -55622,7 +55662,7 @@ index 835a7b6cc..92b99ffe2 100644
  /// GetInstSize - Return the number of bytes of code the specified
  /// instruction may be.  This returns the maximum number of bytes.
  unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
-@@ -90,9 +144,13 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
+@@ -90,9 +154,13 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
    if (MI.isMetaInstruction())
      return 0;
  
@@ -55637,7 +55677,7 @@ index 835a7b6cc..92b99ffe2 100644
    const MCInstrDesc &Desc = MI.getDesc();
  
    // Size should be preferably set in
-@@ -2098,6 +2156,36 @@ unsigned AArch64InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
+@@ -2098,6 +2166,36 @@ unsigned AArch64InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
    return 0;
  }
  
@@ -55674,7 +55714,7 @@ index 835a7b6cc..92b99ffe2 100644
  unsigned AArch64InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                                int &FrameIndex) const {
    switch (MI.getOpcode()) {
-@@ -2122,6 +2210,50 @@ unsigned AArch64InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
+@@ -2122,6 +2220,50 @@ unsigned AArch64InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
    return 0;
  }
  
@@ -59005,10 +59045,10 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..9616fa522
+index 000000000..e4a48b35e
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
-@@ -0,0 +1,3624 @@
+@@ -0,0 +1,3422 @@
 +//===- CJPartialEscapeAnalysis.cpp - escape analysis for Cangjie ----------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -59044,7 +59084,6 @@ index 000000000..9616fa522
 +#include "llvm/IR/SafepointIRVerifier.h"
 +#include "llvm/Transforms/Scalar/CJFillMetadata.h"
 +#include "llvm/Transforms/Utils/CallGraphUpdater.h"
-+#include "llvm/Transforms/Utils/Cloning.h"
 +#include "llvm/Transforms/Utils/Local.h"
 +#include "llvm/Transforms/Scalar.h"
 +
@@ -59061,8 +59100,6 @@ index 000000000..9616fa522
 +namespace llvm {
 +cl::opt<bool> CJDisablePEA("cj-disable-partial-ea",
 +                                  cl::Hidden, cl::init(false));
-+cl::opt<bool> CJEASupportFinalizer("cj-ea-support-finalizer",
-+                                  cl::Hidden, cl::init(true));
 +
 +GlobalVariable *getNewKlass(CallBase *I) {
 +  GlobalVariable *Klass =
@@ -59139,39 +59176,10 @@ index 000000000..9616fa522
 +  auto FuncName = F->getName();
 +  if (FuncName.startswith("CJ_MCC_NewObject") ||
 +      FuncName.startswith("CJ_MCC_NewArray") ||
-+      FuncName.startswith("CJ_MCC_NewFinalizer") ||
 +      FuncName.startswith("CJ_MCC_NewObjArray")) {
 +    return true;
 +  }
 +  return false;
-+}
-+
-+bool isCangjieNewFinalizerFunc(Function *F) {
-+  return F->getName().startswith("CJ_MCC_NewFinalizer");
-+}
-+
-+Function *getFinalizerMethod(GlobalVariable *Klass, Module *M) {
-+  if (Klass == nullptr)
-+    return nullptr;
-+  Constant *Init = Klass->getInitializer();
-+  if (Init == nullptr)
-+    return nullptr;
-+  for (unsigned I = 0; I < Init->getNumOperands(); ++I) {
-+    Constant *Op = Init->getAggregateElement(I);
-+    if (Op == nullptr || !Op->getType()->isPointerTy())
-+      continue;
-+    Value *Ptr = Op;
-+    if (auto *BC = dyn_cast<ConstantExpr>(Op)) {
-+      if (!BC->isCast() || !BC->getOperand(0)->getType()->isPointerTy())
-+        continue;
-+      Ptr = BC->getOperand(0);
-+    }
-+    Function *F = dyn_cast<Function>(Ptr);
-+    if (F && F->getName().contains("~init"))
-+      return F;
-+  }
-+  LLVM_DEBUG(dbgs() << "Cannot extract finalizer method from TypeInfo.\n");
-+  return nullptr;
 +}
 +
 +class NonEscapeRewriter : public InstVisitor<NonEscapeRewriter> {
@@ -59179,182 +59187,21 @@ index 000000000..9616fa522
 +
 +public:
 +  explicit NonEscapeRewriter(
-+      CallGraphUpdater *CGUpdater, Module *M, LoopInfo *LI = nullptr)
-+      : CGUpdater(CGUpdater), M(M), LI(LI) {
++      CallGraphUpdater *CGUpdater, Module *M)
++      : CGUpdater(CGUpdater), M(M) {
 +    CJMemset = Intrinsic::getDeclaration(
 +        M, Intrinsic::cj_memset,
 +        {IntegerType::getInt8PtrTy(M->getContext(), 0)});
 +  }
 +
-+  void setLoopInfo(LoopInfo *LoopInfo) { LI = LoopInfo; }
-+
-+  bool prepareFinalizer(SmallVectorImpl<Instruction *> &InsertPoints) {
-+    CallBase *CB = dyn_cast<CallBase>(OldInst);
-+    if (!CB || !CB->getCalledFunction() ||
-+        !isCangjieNewFinalizerFunc(CB->getCalledFunction()))
-+      return true;
-+    IsFinalizer = true;
-+    FinalizerKlass = getNewKlass(CB);
-+    FinalizerMethod = getFinalizerMethod(FinalizerKlass, M);
-+    FinalizerInsertBB = CB->getParent();
-+    if (FinalizerMethod == nullptr)
-+      return false;
-+    if (hasExceptionPath(FinalizerInsertBB))
-+      return false;
-+    collectFinalizerInsertPoints(InsertPoints);
-+    if (InsertPoints.empty())
-+      return false;
-+    return true;
-+  }
-+
 +  bool rewrite(Instruction *Old, BasicBlock *NewInstInsertBB) {
 +    OldInst = Old;
 +    Visited.clear();
-+    IsFinalizer = false;
-+    FinalizerMethod = nullptr;
-+    FinalizerInsertBB = nullptr;
-+    FinalizerKlass = nullptr;
-+    SmallVector<Instruction *, 4> InsertPoints;
-+    if (CJEASupportFinalizer && !prepareFinalizer(InsertPoints)) {
-+      return false;
-+    }
 +    if (!createNewAllocaInst(NewInstInsertBB)) {
 +      return false;
 +    }
 +    rewriteNewInst();
-+    if (IsFinalizer && FinalizerInsertBB != nullptr) {
-+      insertFinalizerCall(InsertPoints);
-+    }
 +    return true;
-+  }
-+
-+  bool hasExceptionPath(BasicBlock *CreateBB) {
-+    SmallSet<BasicBlock *, 16> VisitedBB;
-+    SmallVector<BasicBlock *, 8> Stack;
-+    Stack.push_back(CreateBB);
-+    while (!Stack.empty()) {
-+      BasicBlock *BB = Stack.pop_back_val();
-+      if (!VisitedBB.insert(BB).second)
-+        continue;
-+
-+      Instruction *T = BB->getTerminator();
-+      if (isa<UnreachableInst>(T) || isa<ResumeInst>(T))
-+        return true;
-+
-+      for (BasicBlock *Succ : successors(BB)) {
-+        if (VisitedBB.count(Succ) == 0)
-+          Stack.push_back(Succ);
-+      }
-+    }
-+    return false;
-+  }
-+
-+  bool isFinalizerUsedAcrossBBs() {
-+    BasicBlock *CreateBB = FinalizerInsertBB;
-+    SmallVector<Instruction *, 16> Worklist;
-+    SmallPtrSet<Instruction *, 16> Visited;
-+
-+    for (User *U : OldInst->users()) {
-+      if (auto *I = dyn_cast<Instruction>(U))
-+        Worklist.push_back(I);
-+    }
-+
-+    while (!Worklist.empty()) {
-+      Instruction *I = Worklist.pop_back_val();
-+      if (!Visited.insert(I).second)
-+        continue;
-+
-+      if (I->getParent() != CreateBB)
-+        return true;
-+
-+      if (isa<PHINode>(I))
-+        return true;
-+
-+      if (isa<BitCastInst>(I) || isa<AddrSpaceCastInst>(I) ||
-+          isa<GetElementPtrInst>(I) || isa<SelectInst>(I)) {
-+        for (User *U : I->users()) {
-+          if (auto *UI = dyn_cast<Instruction>(U))
-+            Worklist.push_back(UI);
-+        }
-+      }
-+    }
-+    return false;
-+  }
-+
-+  void collectFinalizerInsertPoints(SmallVectorImpl<Instruction *> &Points) {
-+    Instruction *Term = FinalizerInsertBB->getTerminator();
-+
-+    if (isa<ReturnInst>(Term)) {
-+      Points.push_back(Term);
-+      return;
-+    }
-+
-+    bool IsInLoop = false;
-+    if (LI) {
-+      IsInLoop = (LI->getLoopFor(FinalizerInsertBB) != nullptr);
-+    } else {
-+      for (BasicBlock *Succ : successors(FinalizerInsertBB)) {
-+        if (Succ == FinalizerInsertBB) {
-+          IsInLoop = true;
-+          break;
-+        }
-+      }
-+    }
-+    if (IsInLoop) {
-+      if (!isFinalizerUsedAcrossBBs())
-+        Points.push_back(Term);
-+      return;
-+    }
-+
-+    SmallSet<BasicBlock *, 16> VisitedBB;
-+    SmallVector<BasicBlock *, 8> Stack;
-+    Stack.push_back(FinalizerInsertBB);
-+    while (!Stack.empty()) {
-+      BasicBlock *BB = Stack.pop_back_val();
-+      if (!VisitedBB.insert(BB).second)
-+        continue;
-+
-+      Instruction *T = BB->getTerminator();
-+      if (isa<ReturnInst>(T)) {
-+        Points.push_back(T);
-+        continue;
-+      }
-+
-+      for (BasicBlock *Succ : successors(BB)) {
-+        if (VisitedBB.count(Succ) == 0)
-+          Stack.push_back(Succ);
-+      }
-+    }
-+  }
-+
-+  void insertFinalizerCall(SmallVectorImpl<Instruction *> &InsertPoints) {
-+    bool ShouldInline = (InsertPoints.size() == 1);
-+    if (ShouldInline) {
-+      FinalizerMethod->removeFnAttr(Attribute::NoInline);
-+    }
-+
-+    Type *PI8AS1Ty = Type::getInt8PtrTy(M->getContext(), 1);
-+    for (Instruction *InsertPoint : InsertPoints) {
-+      IRBuilder<> Builder(InsertPoint);
-+      Value *ObjPtr = Builder.CreateAddrSpaceCast(NewInst, PI8AS1Ty);
-+      SmallVector<Value *, 4> Args;
-+      Args.push_back(ObjPtr);
-+      if (FinalizerMethod->getFunctionType()->getNumParams() > 1) {
-+        Value *OuterTI = Builder.CreateBitCast(
-+            FinalizerKlass,
-+            FinalizerMethod->getFunctionType()->getParamType(1));
-+        Args.push_back(OuterTI);
-+      }
-+      CallInst *CI = Builder.CreateCall(FinalizerMethod, Args);
-+
-+      if (CGUpdater)
-+        CGUpdater->removeCallSite(*CI);
-+
-+      if (ShouldInline) {
-+        InlineFunctionInfo IFI;
-+        InlineFunction(*CI, IFI);
-+      }
-+    }
 +  }
 +
 +  bool handleStructAS1Cast(AllocaInst *Old) {
@@ -59691,12 +59538,7 @@ index 000000000..9616fa522
 +  Function *CJMemset;
 +  SmallVector<Instruction *, 8> Queue;
 +  SmallSetVector<User *, 8> Visited;
-+  bool IsFinalizer = false;
-+  Function *FinalizerMethod = nullptr;
-+  BasicBlock *FinalizerInsertBB = nullptr;
-+  GlobalVariable *FinalizerKlass = nullptr;
 +  bool StructAS1Replace = false;
-+  LoopInfo *LI = nullptr;
 +  static DenseMap<PHINode *, SmallSetVector<Instruction *, 8>> RewritePhiIncoming;
 +  DenseMap<SelectInst *, SmallSetVector<Instruction *, 8>> RewriteSIIncoming;
 +  DenseMap<CallInst *, SmallSetVector<Instruction *, 8>> RewriteArrayCopy;
@@ -60194,8 +60036,6 @@ index 000000000..9616fa522
 +      // New Obj in loop can't handle now.
 +      if (!AllLocations[i]->isEscaped()) {
 +        NewLocation *New = dyn_cast<NewLocation>(AllLocations[i]);
-+        Function *F = dyn_cast<Instruction>(New->Val)->getParent()->getParent();
-+        Rewriter.setLoopInfo(&LookupLoopInfo(*F));
 +        Changed |= Rewriter.rewrite(dyn_cast<Instruction>(New->Val),
 +                                    New->NewInstInsertBB);
 +      }
@@ -61815,8 +61655,6 @@ index 000000000..9616fa522
 +      if (!OnceEscapedValue.count(Partial.first)) {
 +        LLVM_DEBUG(dbgs() << "not escaped obj:");
 +        LLVM_DEBUG(dbgs() << "  " << *Partial.first << "\n");
-+        Function *F = Partial.first->getParent()->getParent();
-+        Rewriter.setLoopInfo(&LookupLoopInfo(*F));
 +        Rewriter.rewrite(Partial.first, Partial.second);
 +        Changed = true;
 +      } else {
@@ -68126,10 +67964,10 @@ index 000000000..317cea86d
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJBarrierOpt.cpp b/llvm/lib/Transforms/Scalar/CJBarrierOpt.cpp
 new file mode 100644
-index 000000000..0dad10939
+index 000000000..cf13c1964
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJBarrierOpt.cpp
-@@ -0,0 +1,824 @@
+@@ -0,0 +1,911 @@
 +//===- CJBarrierOpt.cpp - optimize cangjie write barriers -----------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -68148,6 +67986,7 @@ index 000000000..0dad10939
 +#include "llvm/Transforms/Scalar/CJBarrierOpt.h"
 +
 +#include "llvm/ADT/SetVector.h"
++#include "llvm/ADT/SmallPtrSet.h"
 +#include "llvm/Analysis/CFG.h"
 +#include "llvm/Analysis/LoopInfo.h"
 +#include "llvm/Analysis/ValueTracking.h"
@@ -68594,8 +68433,95 @@ index 000000000..0dad10939
 +      BasePtr = Barrier->getArgOperand(0);
 +      break;
 +    }
-+    return {getUnderlyingObject(BasePtr),
-+            FieldPtr ? getUnderlyingObject(FieldPtr) : nullptr};
++    return {BasePtr, FieldPtr};
++  }
++
++  bool hasGlobalOrArgumentOriginInInt(Value *V,
++                                      SmallPtrSetImpl<Value *> &Visited) {
++    if (!Visited.insert(V).second) {
++      return false;
++    }
++
++    auto *Op = dyn_cast<Operator>(V);
++    if (Op == nullptr) {
++      return false;
++    }
++
++    switch (Op->getOpcode()) {
++    case Instruction::PtrToInt:
++      return hasGlobalOrArgumentOrigin(Op->getOperand(0), Visited);
++    case Instruction::Add:
++    case Instruction::Or:
++    case Instruction::And:
++    case Instruction::Xor:
++      for (Value *Operand : Op->operands()) {
++        if (isa<ConstantInt>(Operand)) {
++          continue;
++        }
++        if (hasGlobalOrArgumentOriginInInt(Operand, Visited)) {
++          return true;
++        }
++      }
++      return false;
++    case Instruction::Sub:
++      return isa<ConstantInt>(Op->getOperand(1)) &&
++             hasGlobalOrArgumentOriginInInt(Op->getOperand(0), Visited);
++    case Instruction::ZExt:
++    case Instruction::SExt:
++    case Instruction::Trunc:
++      return hasGlobalOrArgumentOriginInInt(Op->getOperand(0), Visited);
++    default:
++      return false;
++    }
++  }
++
++  bool hasGlobalOrArgumentOrigin(Value *Ptr,
++                                 SmallPtrSetImpl<Value *> &Visited) {
++    Ptr = Ptr->stripPointerCasts();
++    if (!Visited.insert(Ptr).second) {
++      return false;
++    }
++
++    if (isa<GlobalValue>(Ptr) || isa<Argument>(Ptr)) {
++      return true;
++    }
++
++    if (auto *GEP = dyn_cast<GEPOperator>(Ptr)) {
++      return hasGlobalOrArgumentOrigin(GEP->getPointerOperand(), Visited);
++    }
++
++    if (auto *GA = dyn_cast<GlobalAlias>(Ptr)) {
++      if (GA->isInterposable()) {
++        return true;
++      }
++      return hasGlobalOrArgumentOrigin(GA->getAliasee(), Visited);
++    }
++
++    auto *Op = dyn_cast<Operator>(Ptr);
++    if (Op == nullptr) {
++      return false;
++    }
++
++    switch (Op->getOpcode()) {
++    case Instruction::IntToPtr:
++      return hasGlobalOrArgumentOriginInInt(Op->getOperand(0), Visited);
++    case Instruction::PHI:
++    case Instruction::Select:
++      for (Value *Operand : Op->operands()) {
++        if (Operand->getType()->isPointerTy() &&
++            hasGlobalOrArgumentOrigin(Operand, Visited)) {
++          return true;
++        }
++      }
++      return false;
++    default:
++      return false;
++    }
++  }
++
++  bool hasGlobalOrArgumentOrigin(Value *Ptr) {
++    SmallPtrSet<Value *, 8> Visited;
++    return hasGlobalOrArgumentOrigin(Ptr, Visited);
 +  }
 +
 +  bool optStructBarrier(CallBase *Barrier) {
@@ -68624,9 +68550,8 @@ index 000000000..0dad10939
 +          return true;
 +        return false;
 +      });
-+      bool IsFieldNotGV = PtrCheck(FieldPtr, [](Value *Ptr) {
-+        Value *BP = Ptr->stripPointerCasts();
-+        return !isa<GlobalValue>(BP) && !isa<Argument>(BP);
++      bool IsFieldNotGV = PtrCheck(FieldPtr, [this](Value *Ptr) {
++        return !hasGlobalOrArgumentOrigin(Ptr);
 +      });
 +      // gcread/gcwrite to static pointer cannot be replace, even if base is
 +      // nullptr.
@@ -69938,10 +69863,10 @@ index 000000000..9b2a99555
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp b/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp
 new file mode 100644
-index 000000000..c22ba410c
+index 000000000..ebff9254b
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJFillMetadata.cpp
-@@ -0,0 +1,1627 @@
+@@ -0,0 +1,1648 @@
 +//===- CJFillMetadata.cpp - Fill Cangjie Metadata ---------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -70870,7 +70795,7 @@ index 000000000..c22ba410c
 +}
 +
 +// Reflection: !{type name, enum ctors, instance methods, static methods,
-+//               type attributes}
++//               ctor annotationMethods, type attributes}
 +Constant *ReflectInfo::getEnumReflectInfo(const MDTuple *ReflectMD) {
 +  // record all reflection info
 +  EnumReflectInfo Info(M);
@@ -70882,6 +70807,8 @@ index 000000000..c22ba410c
 +                         getMDOperand(ReflectMD, ERT_INSTANCE_METHOD));
 +  parseStaticMethodMDs(Info.StaticMethods,
 +                       getMDOperand(ReflectMD, ERT_STATIC_METHOD));
++  parseCtorAnnotationMDs(Info.CtorAnnotationMethods,
++                         getMDOperand(ReflectMD, ERT_CTOR_ANNOTATIONS));
 +
 +  SmallVector<Constant *, 0> BodyVec(FET_PTRS);
 +  fillEnumReflectInfo(Info, BodyVec);
@@ -71125,6 +71052,9 @@ index 000000000..c22ba410c
 +  for (unsigned Idx = 0; Idx < Info.StaticMethods.size(); ++Idx) {
 +    BodyVec.push_back(Info.StaticMethods[Idx]->fillMethodInfo(Idx, TIName));
 +  }
++  for (unsigned Idx = 0; Idx < Info.CtorAnnotationMethods.size(); ++Idx) {
++    BodyVec.push_back(Info.CtorAnnotationMethods[Idx]);
++  }
 +}
 +
 +void ReflectInfo::fillEnumCtorReflectInfo(EnumCtorReflectInfo &Info,
@@ -71281,6 +71211,22 @@ index 000000000..c22ba410c
 +    CtorInfo.CtorName = getStringFromMD(MethodMD, 0);
 +    CtorInfo.TypeName = getStringFromMD(MethodMD, 1);
 +    Info.emplace_back(CtorInfo);
++  }
++}
++
++void ReflectInfo::parseCtorAnnotationMDs(SmallVectorImpl<Constant *> &Infos,
++                                         MDTuple *CtorAnnoMDs) {
++  for (unsigned Idx = 0; Idx < CtorAnnoMDs->getNumOperands(); ++Idx) {
++    StringRef AnnoMethodName = getStringFromMD(CtorAnnoMDs, Idx);
++    if (AnnoMethodName.empty()) {
++      Infos.push_back(Int8PtrNull);
++      continue;
++    }
++    Function *Func = M.getFunction(AnnoMethodName);
++    if (Func == nullptr) {
++      report_fatal_error(AnnoMethodName + ": can't find this ctor anno func!");
++    }
++    Infos.push_back(ConstantExpr::getBitCast(Func, Int8PtrTy));
 +  }
 +}
 +
@@ -74386,10 +74332,10 @@ index 000000000..5af2b9047
 +                "Cangjie Generic Intrinsics Optimize", false, false)
 diff --git a/llvm/lib/Transforms/Scalar/CJIRVerifier.cpp b/llvm/lib/Transforms/Scalar/CJIRVerifier.cpp
 new file mode 100644
-index 000000000..c39ac195d
+index 000000000..e45592c18
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJIRVerifier.cpp
-@@ -0,0 +1,815 @@
+@@ -0,0 +1,824 @@
 +//===- CJIRVerifier.cpp - Cangjie IR Verifier --------------*- C++ -*------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -74909,7 +74855,7 @@ index 000000000..c39ac195d
 +  }
 +
 +  // !{<name>, !{enum ctors}, !{instance methods}, !{static methods},
-+  //   !{attributes}}
++  //   !{ctor annotationMethods}, !{attributes}}
 +  void verifyEnumReflection(MDTuple *ReflectMD) {
 +    Assert(ReflectMD->getNumOperands() == ERT_MAX ||
 +           ReflectMD->getNumOperands() == ECRT_MAX,
@@ -74943,6 +74889,15 @@ index 000000000..c39ac195d
 +    // check type attribute
 +    const MDTuple *AttributeMD = getMDOperand(ReflectMD, ERT_ATTRIBUTE);
 +    verifyReflectionAttribute(AttributeMD);
++    // check ctor annotation methods
++    const MDTuple *CtorAnnoMDs = getMDOperand(ReflectMD, ERT_CTOR_ANNOTATIONS);
++    for (unsigned Idx = 0; Idx < CtorAnnoMDs->getNumOperands(); ++Idx) {
++      auto AnnoMethodName = getStringFromMD(CtorAnnoMDs, Idx);
++      if (!AnnoMethodName.empty()) {
++        Function *Func = M.getFunction(AnnoMethodName);
++        Assert(Func, "Enum ctor annotation method not found!", ReflectMD);
++      }
++    }
 +  }
 +
 +  // !{<name>, !{enum ctors}, !{attributes}}
@@ -80875,10 +80830,10 @@ index 000000000..bedd16770
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
 new file mode 100644
-index 000000000..f66e25fc3
+index 000000000..0ed70333d
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
-@@ -0,0 +1,1173 @@
+@@ -0,0 +1,1178 @@
 +//===- CJRuntimeLowering.cpp - CJ Runtime Lowering --------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -81754,14 +81709,19 @@ index 000000000..f66e25fc3
 +      if (TT.isARM())
 +        ElemTypes.push_back(IRB.getInt32Ty());
 +      ElemTypes.push_back(ST);
-+      AI = IRB.CreateAlloca(StructType::get(C, ElemTypes));
++      StructType *AllocaTy = StructType::get(C, ElemTypes);
++      AI = IRB.CreateAlloca(AllocaTy);
 +      Value *BC = IRB.CreateBitCast(AI, IRB.getInt8PtrTy()->getPointerTo());
 +      Value *GVExpr = ConstantExpr::getBitCast(GV, IRB.getInt8PtrTy());
 +      IRB.CreateStore(GVExpr, BC);
-+      uint64_t MemSize = DL.getStructLayout(ST)->getSizeInBytes();
-+      // %x.payload = getelementptr i8*, %x.i, i32 1
-+      // call @memset(%x.payload, 0, size)
-+      Value *Data = IRB.CreateGEP(IRB.getInt8PtrTy(), BC, {IRB.getInt32(1)});
++      const StructLayout *AllocaSL = DL.getStructLayout(AllocaTy);
++      uint64_t HeaderSize = DL.getTypeAllocSize(TIType->getPointerTo()).getFixedSize();
++      uint64_t MemSize = AllocaSL->getSizeInBytes() - HeaderSize;
++      // %x.payload = getelementptr i8*, %x.i, HeaderSize
++      // call @memset(%x.payload, 0, MemSize)
++      Value *Data =
++          IRB.CreateGEP(IRB.getInt8Ty(), IRB.CreateBitCast(AI, IRB.getInt8PtrTy()),
++                        {IRB.getInt32(HeaderSize)});
 +      IRB.SetInsertPoint(CI);
 +      IRB.CreateMemSet(Data, IRB.getInt8(0), MemSize, Align(8));
 +    }
@@ -102803,6 +102763,43 @@ index 000000000..a1af4fb00
 +attributes #0 = { "cj-runtime" "gc-leaf-function" }
 +
 +!0 = !{!"branch_weights", i32 1, i32 2000}
+diff --git a/llvm/test/Transforms/CJBarrierOpt/read_barrier_tagged_global.ll b/llvm/test/Transforms/CJBarrierOpt/read_barrier_tagged_global.ll
+new file mode 100644
+index 000000000..012727a47
+--- /dev/null
++++ b/llvm/test/Transforms/CJBarrierOpt/read_barrier_tagged_global.ll
+@@ -0,0 +1,31 @@
++; RUN: opt -enable-new-pm=false --cj-barrier-opt -S < %s | FileCheck %s
++; RUN: opt -passes=cj-barrier-opt -S < %s | FileCheck %s
++
++%record = type { i8 addrspace(1)* }
++
++@Global0 = internal global %record zeroinitializer
++
++declare i8 addrspace(1)* @llvm.cj.gcread.ref(i8 addrspace(1)*, i8 addrspace(1)* addrspace(1)*)
++
++define i8 addrspace(1)* @foo() gc "cangjie" {
++entry:
++  %0 = call i8 addrspace(1)* @llvm.cj.gcread.ref(
++    i8 addrspace(1)* null,
++    i8 addrspace(1)* addrspace(1)* getelementptr (
++      %record,
++      %record addrspace(1)* inttoptr (
++        i64 or (
++          i64 ptrtoint (%record addrspace(1)* addrspacecast (%record* @Global0 to %record addrspace(1)*) to i64),
++          i64 -9223372036854775808
++        ) to %record addrspace(1)*
++      ),
++      i64 0,
++      i32 0
++    )
++  )
++  ret i8 addrspace(1)* %0
++}
++
++; CHECK-LABEL: @foo(
++; CHECK: call i8 addrspace(1)* @llvm.cj.gcread.ref
++; CHECK-NOT: load i8 addrspace(1)*, i8 addrspace(1)* addrspace(1)*
 diff --git a/llvm/test/Transforms/CJBarrierOpt/write_barrier_gep_fail.ll b/llvm/test/Transforms/CJBarrierOpt/write_barrier_gep_fail.ll
 new file mode 100644
 index 000000000..9456bbbfa
@@ -118345,7 +118342,7 @@ index 000000000..3d297ab2a
 +}
 diff --git a/llvm/test/Transforms/Cangjie/GVN/cj-finalizer.ll b/llvm/test/Transforms/Cangjie/GVN/cj-finalizer.ll
 new file mode 100644
-index 000000000..6533817d3
+index 000000000..90c6e3b85
 --- /dev/null
 +++ b/llvm/test/Transforms/Cangjie/GVN/cj-finalizer.ll
 @@ -0,0 +1,20 @@
@@ -118355,12 +118352,12 @@ index 000000000..6533817d3
 +@_ZN7default1AE.objKlass = weak_odr global %KlassInfo.0 { [0 x %KlassInfo.0*] zeroinitializer }
 +%Unit.Type = type { i8 }
 +
-+declare i8 addrspace(1)* @CJ_MCC_NewFinalizer(i8*, i32)
++declare i8 addrspace(1)* @CJ_MCC_NewFinalizerStub(i8*, i32)
 +declare %Unit.Type @CJ_MCC_InvokeGC(i1)
 +
 +define i64 @foo() {
 +entry:
-+  %0 = call noalias i8 addrspace(1)* @CJ_MCC_NewFinalizer(i8* bitcast (%KlassInfo.0* @_ZN7default1AE.objKlass to i8*), i32 16)
++  %0 = call noalias i8 addrspace(1)* @CJ_MCC_NewFinalizerStub(i8* bitcast (%KlassInfo.0* @_ZN7default1AE.objKlass to i8*), i32 16)
 +  %1 = getelementptr inbounds i8, i8 addrspace(1)* %0
 +  %2 = bitcast i8 addrspace(1)* %1 to i64 addrspace(1)*
 +  store i64 0, i64 addrspace(1)* %2, align 8
