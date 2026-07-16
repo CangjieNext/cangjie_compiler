@@ -53980,7 +53980,7 @@ index 6696d158b..1255795b2 100644
        .StartsWith("vertex", Triple::Vertex)
        .StartsWith("geometry", Triple::Geometry)
 diff --git a/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp b/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
-index c568f7347..fe3d0a2aa 100644
+index c568f7347..9fab9f496 100644
 --- a/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64AsmPrinter.cpp
 @@ -32,6 +32,7 @@
@@ -53991,7 +53991,11 @@ index c568f7347..fe3d0a2aa 100644
  #include "llvm/CodeGen/FaultMaps.h"
  #include "llvm/CodeGen/MachineBasicBlock.h"
  #include "llvm/CodeGen/MachineFunction.h"
-@@ -43,6 +44,7 @@
+@@ -40,9 +41,11 @@
+ #include "llvm/CodeGen/MachineModuleInfoImpls.h"
+ #include "llvm/CodeGen/MachineOperand.h"
+ #include "llvm/CodeGen/StackMaps.h"
++#include "llvm/Support/CodeGen.h"
  #include "llvm/CodeGen/TargetRegisterInfo.h"
  #include "llvm/IR/DataLayout.h"
  #include "llvm/IR/DebugInfoMetadata.h"
@@ -53999,7 +54003,7 @@ index c568f7347..fe3d0a2aa 100644
  #include "llvm/MC/MCAsmInfo.h"
  #include "llvm/MC/MCContext.h"
  #include "llvm/MC/MCInst.h"
-@@ -66,11 +68,17 @@ using namespace llvm;
+@@ -66,11 +69,17 @@ using namespace llvm;
  
  #define DEBUG_TYPE "asm-printer"
  
@@ -54017,7 +54021,7 @@ index c568f7347..fe3d0a2aa 100644
    FaultMaps FM;
    const AArch64Subtarget *STI;
    bool ShouldEmitWeakSwiftAsyncExtendedFramePointerFlags = false;
-@@ -78,7 +86,9 @@ class AArch64AsmPrinter : public AsmPrinter {
+@@ -78,7 +87,9 @@ class AArch64AsmPrinter : public AsmPrinter {
  public:
    AArch64AsmPrinter(TargetMachine &TM, std::unique_ptr<MCStreamer> Streamer)
        : AsmPrinter(TM, std::move(Streamer)), MCInstLowering(OutContext, *this),
@@ -54028,7 +54032,7 @@ index c568f7347..fe3d0a2aa 100644
  
    StringRef getPassName() const override { return "AArch64 Assembly Printer"; }
  
-@@ -155,10 +165,14 @@ public:
+@@ -155,10 +166,14 @@ public:
      // Emit the XRay table for this function.
      emitXRayTable();
  
@@ -54043,7 +54047,7 @@ index c568f7347..fe3d0a2aa 100644
  private:
    void printOperand(const MachineInstr *MI, unsigned OpNum, raw_ostream &O);
    bool printAsmMRegister(const MachineOperand &MO, char Mode, raw_ostream &O);
-@@ -193,6 +207,64 @@ private:
+@@ -193,6 +208,65 @@ private:
    bool shouldEmitWeakSwiftAsyncExtendedFramePointerFlags() const override {
      return ShouldEmitWeakSwiftAsyncExtendedFramePointerFlags;
    }
@@ -54105,10 +54109,11 @@ index c568f7347..fe3d0a2aa 100644
 +  int emitCJSafepointInlineCall(unsigned Index) override;
 +  void emitGcStateCheck() override;
 +  void emitGetCJTLSData(int64_t Offset);
++  void emitCangjieRuntimeCall(MCSymbol *Sym);
  };
  
  } // end anonymous namespace
-@@ -579,7 +651,7 @@ void AArch64AsmPrinter::emitEndOfAsmFile(Module &M) {
+@@ -579,7 +653,7 @@ void AArch64AsmPrinter::emitEndOfAsmFile(Module &M) {
      // generates code that does this, it is always safe to set.
      OutStreamer->emitAssemblerFlag(MCAF_SubsectionsViaSymbols);
    }
@@ -54117,7 +54122,7 @@ index c568f7347..fe3d0a2aa 100644
    // Emit stack and fault map information.
    emitStackMaps(SM);
    FM.serializeToFaultMapSection();
-@@ -1050,24 +1122,261 @@ void AArch64AsmPrinter::LowerPATCHPOINT(MCStreamer &OutStreamer, StackMaps &SM,
+@@ -1050,24 +1124,277 @@ void AArch64AsmPrinter::LowerPATCHPOINT(MCStreamer &OutStreamer, StackMaps &SM,
      EmitToStreamer(OutStreamer, MCInstBuilder(AArch64::HINT).addImm(0));
  }
  
@@ -54248,6 +54253,26 @@ index c568f7347..fe3d0a2aa 100644
 +  OutStreamer->emitLabel(EndSym);
 +}
 +
++void AArch64AsmPrinter::emitCangjieRuntimeCall(MCSymbol *Sym) {
++  using namespace AArch64;
++  if (TM.getCodeModel() == CodeModel::Large &&
++      getSubtargetInfo().getTargetTriple().isOSBinFormatMachO()) {
++    EmitToStreamer(*OutStreamer, MCInstBuilder(ADRP).addReg(X16).addExpr(
++        MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_GOTPAGE, OutContext)));
++    EmitToStreamer(*OutStreamer,
++                   MCInstBuilder(LDRXui)
++                       .addReg(X16)
++                       .addReg(X16)
++                       .addExpr(MCSymbolRefExpr::create(
++                           Sym, MCSymbolRefExpr::VK_GOTPAGEOFF, OutContext))
++                       .addImm(0));
++    EmitToStreamer(*OutStreamer, MCInstBuilder(BLR).addReg(X16));
++  } else {
++    EmitToStreamer(*OutStreamer, MCInstBuilder(BL).addExpr(
++        MCSymbolRefExpr::create(Sym, OutContext)));
++  }
++}
++
 +// Note: emit specific inst should update inst size info in
 +// AArch64InstrInfo::getInstSizeInBytes for AArch64 at the same time
 +// >>>>>>>>>>>>>>>>>>>>>>> disable stackgrow
@@ -54277,18 +54302,14 @@ index c568f7347..fe3d0a2aa 100644
 +    } else {
 +      Sym = Ctx.getOrCreateSymbol("CJ_MCC_ThrowStackOverflowError");
 +    }
-+    MCInst BLToSOFE = MCInstBuilder(BL).addExpr(
-+        MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, Ctx));
 +    EmitToStreamer(*OutStreamer, Mov);
-+    EmitToStreamer(*OutStreamer, BLToSOFE);
++    emitCangjieRuntimeCall(Sym);
 +    return 3; // 3: instruction nums.
 +  } else {    // stack grow
 +    MCInst MovX9 = MCInstBuilder(MOVZXi).addReg(X9).addImm(LeftSize).addImm(0);
 +    MCSymbol *Sym = Ctx.getOrCreateSymbol("CJ_MCC_StackGrowStub");
-+    MCInst BLToCall = MCInstBuilder(BL).addExpr(
-+        MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, Ctx));
 +    EmitToStreamer(*OutStreamer, MovX9);
-+    EmitToStreamer(*OutStreamer, BLToCall);
++    emitCangjieRuntimeCall(Sym);
 +    SM.recordCJStackMap(MI, true);
 +
 +    // revert sp
@@ -54384,7 +54405,7 @@ index c568f7347..fe3d0a2aa 100644
      case MachineOperand::MO_Immediate:
        CallTargetMCOp = MCOperand::createImm(CallTarget.getImm());
        CallOpcode = AArch64::BL;
-@@ -1085,6 +1394,11 @@ void AArch64AsmPrinter::LowerSTATEPOINT(MCStreamer &OutStreamer, StackMaps &SM,
+@@ -1085,6 +1412,11 @@ void AArch64AsmPrinter::LowerSTATEPOINT(MCStreamer &OutStreamer, StackMaps &SM,
                     MCInstBuilder(CallOpcode).addOperand(CallTargetMCOp));
    }
  
@@ -54396,7 +54417,7 @@ index c568f7347..fe3d0a2aa 100644
    auto &Ctx = OutStreamer.getContext();
    MCSymbol *MILabel = Ctx.createTempSymbol();
    OutStreamer.emitLabel(MILabel);
-@@ -1196,12 +1510,69 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
+@@ -1196,12 +1528,69 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
      OutStreamer->emitLabel(LOHLabel);
    }
  
@@ -54466,7 +54487,7 @@ index c568f7347..fe3d0a2aa 100644
    case AArch64::HINT: {
      // CurrentPatchableFunctionEntrySym can be CurrentFnBegin only for
      // -fpatchable-function-entry=N,0. The entry MBB is guaranteed to be
-@@ -1559,6 +1930,516 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
+@@ -1559,6 +1948,516 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
    MCInstLowering.Lower(MI, TmpInst);
    EmitToStreamer(*OutStreamer, TmpInst);
  }
@@ -54712,9 +54733,11 @@ index c568f7347..fe3d0a2aa 100644
 +  MCSymbol *LFinish = OutContext.createTempSymbol("NewArrayFin", true);
 +  const MCSymbolRefExpr *FinExpr = MCSymbolRefExpr::create(LFinish, OutContext);
 +  MCInst BranchToFin = MCInstBuilder(B).addExpr(FinExpr);
-+  MCOperand CallSlowPath;
-+  MCInstLowering.lowerOperand(MOSym, CallSlowPath);
-+  MCInst CallNewArraySlowPath = MCInstBuilder(BL).addOperand(CallSlowPath);
++  MCOperand CallSlowPathMCOp;
++  MCInstLowering.lowerOperand(MOSym, CallSlowPathMCOp);
++  unsigned SlowCallOpcode = MOSym.isReg() ? BLR : BL;
++  MCInst CallNewArraySlowPath =
++      MCInstBuilder(SlowCallOpcode).addOperand(CallSlowPathMCOp);
 +  OutStreamer->emitLabel(LFast);
 +  EmitToStreamer(*OutStreamer, GetAllocBuffer);
 +  EmitToStreamer(*OutStreamer, GetRegionPtr);
@@ -54823,9 +54846,7 @@ index c568f7347..fe3d0a2aa 100644
 +    EmitToStreamer(*OutStreamer, Ldr2);
 +    MCSymbol *FuncSym =
 +        OutContext.getOrCreateSymbol("_CJ_MRT_PreInitializePackage");
-+    MCInst BLToCall = MCInstBuilder(AArch64::BL)
-+                          .addExpr(MCSymbolRefExpr::create(FuncSym, Ctx));
-+    EmitToStreamer(*OutStreamer, BLToCall);
++    emitCangjieRuntimeCall(FuncSym);
 +  }
 +}
 +
@@ -55394,7 +55415,7 @@ index f59860a24..62de8bad7 100644
    /// the function.
    void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
 diff --git a/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp b/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
-index 06e21f90e..b88ca0cc0 100644
+index 06e21f90e..3561674e0 100644
 --- a/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64ISelLowering.cpp
 @@ -706,6 +706,8 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
@@ -55481,7 +55502,7 @@ index 06e21f90e..b88ca0cc0 100644
  
      // FPDiff will be negative if this tail call requires more space than we
      // would automatically have in our incoming argument space. Positive if we
-@@ -6841,9 +6872,16 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
+@@ -6841,9 +6872,21 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
    // direct call is) turn it into a TargetGlobalAddress/TargetExternalSymbol
    // node so that legalize doesn't hack it.
    if (auto *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
@@ -55493,12 +55514,17 @@ index 06e21f90e..b88ca0cc0 100644
          Subtarget->classifyGlobalFunctionReference(GV, getTargetMachine());
 +    // safepoint stub is local, and safepoint call will still be got load.
 +    if (CalleeFunc->isCangjieSafepointStub() ||
-+        CalleeFunc->isCangjieSafePoint())
++        CalleeFunc->isCangjieSafePoint() ||
++        CalleeFunc->isCangjieStackCheck() ||
++        CalleeFunc->getName().isGetGCPhase() ||
++        CalleeFunc->isGetCJThreadId() ||
++        CalleeFunc->getName().isSetDebugLocation() ||
++        CalleeFunc->getName().equals("CJ_MRT_PreInitializePackage"))
 +      OpFlags = AArch64II::MO_NO_FLAG;
      if (OpFlags & AArch64II::MO_GOT) {
        Callee = DAG.getTargetGlobalAddress(GV, DL, PtrVT, 0, OpFlags);
        Callee = DAG.getNode(AArch64ISD::LOADgot, DL, PtrVT, Callee);
-@@ -8700,7 +8738,11 @@ SDValue AArch64TargetLowering::LowerSPONENTRY(SDValue Op,
+@@ -8700,7 +8743,11 @@ SDValue AArch64TargetLowering::LowerSPONENTRY(SDValue Op,
  // this table could be generated automatically from RegInfo.
  Register AArch64TargetLowering::
  getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const {
@@ -55511,7 +55537,7 @@ index 06e21f90e..b88ca0cc0 100644
    if (AArch64::X1 <= Reg && Reg <= AArch64::X28) {
      const MCRegisterInfo *MRI = Subtarget->getRegisterInfo();
      unsigned DwarfRegNum = MRI->getDwarfRegNum(Reg, false);
-@@ -8709,8 +8751,7 @@ getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const
+@@ -8709,8 +8756,7 @@ getRegisterByName(const char* RegName, LLT VT, const MachineFunction &MF) const
    }
    if (Reg)
      return Reg;
@@ -55521,7 +55547,7 @@ index 06e21f90e..b88ca0cc0 100644
  }
  
  SDValue AArch64TargetLowering::LowerADDROFRETURNADDR(SDValue Op,
-@@ -13636,6 +13677,10 @@ bool AArch64TargetLowering::generateFMAsInMachineCombiner(
+@@ -13636,6 +13682,10 @@ bool AArch64TargetLowering::generateFMAsInMachineCombiner(
           !useSVEForFixedLengthVectorVT(VT);
  }
  
@@ -55555,7 +55581,7 @@ index ff3bfe897..3276e7f4b 100644
    SDValue LowerSET_ROUNDING(SDValue Op, SelectionDAG &DAG) const;
    SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
 diff --git a/llvm/lib/Target/AArch64/AArch64InstrInfo.cpp b/llvm/lib/Target/AArch64/AArch64InstrInfo.cpp
-index 835a7b6cc..92b99ffe2 100644
+index 835a7b6cc..d3a75fd1d 100644
 --- a/llvm/lib/Target/AArch64/AArch64InstrInfo.cpp
 +++ b/llvm/lib/Target/AArch64/AArch64InstrInfo.cpp
 @@ -33,6 +33,7 @@
@@ -55566,7 +55592,7 @@ index 835a7b6cc..92b99ffe2 100644
  #include "llvm/MC/MCAsmInfo.h"
  #include "llvm/MC/MCInst.h"
  #include "llvm/MC/MCInstBuilder.h"
-@@ -73,6 +74,59 @@ AArch64InstrInfo::AArch64InstrInfo(const AArch64Subtarget &STI)
+@@ -73,6 +74,69 @@ AArch64InstrInfo::AArch64InstrInfo(const AArch64Subtarget &STI)
                            AArch64::CATCHRET),
        RI(STI.getTargetTriple()), Subtarget(STI) {}
  
@@ -55597,6 +55623,14 @@ index 835a7b6cc..92b99ffe2 100644
 +  if (Callee == nullptr) {
 +    return 0;
 +  }
++  // Under large code model on MachO, emitCangjieRuntimeCall emits ADRP+LDR+BLR
++  // (12B) instead of BL (4B) for runtime calls embedded in the inline lowering
++  // of some cangjie sentinels (e.g. CJStackCheck -> emitStackOverflowCall).
++  // Add the +8B delta under large MachO so jump-table offset computation
++  // (AArch64CompressJumpTables) stays conservative: over-estimate is safe,
++  // under-estimate risks picking too-narrow jump-table entry width.
++  const TargetMachine &TM = MI.getMF()->getTarget();
++  const unsigned GotExtra = (TM.getCodeModel() == CodeModel::Large) ? 8 : 0;
 +  if (Callee->isCangjieSafePoint()) {
 +    // If Jmp size beyond the 19bit, emitting safepoint on following inst
 +    // instead of emit it at the end of the function.
@@ -55608,7 +55642,9 @@ index 835a7b6cc..92b99ffe2 100644
 +    }
 +  }
 +  if (Callee->getName().isCJStackCheck()) {
-+    return 12; // 12: 12 bytes(3 insts) for safepoint call
++    // emitCJStackCheck -> emitStackOverflowCall uses emitCangjieRuntimeCall,
++    // which under large MachO expands BL to ADRP+LDR+BLR (+8B).
++    return 12 + GotExtra; // 12B base + GOT-call expansion under large MachO
 +  }
 +  if (Callee->getName().isGetGCPhase()) {
 +    return 4; // 4: 4 bytes(1 insts) for GetGCPhase call
@@ -55626,7 +55662,7 @@ index 835a7b6cc..92b99ffe2 100644
  /// GetInstSize - Return the number of bytes of code the specified
  /// instruction may be.  This returns the maximum number of bytes.
  unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
-@@ -90,9 +144,13 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
+@@ -90,9 +154,13 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
    if (MI.isMetaInstruction())
      return 0;
  
@@ -55641,7 +55677,7 @@ index 835a7b6cc..92b99ffe2 100644
    const MCInstrDesc &Desc = MI.getDesc();
  
    // Size should be preferably set in
-@@ -2098,6 +2156,36 @@ unsigned AArch64InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
+@@ -2098,6 +2166,36 @@ unsigned AArch64InstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
    return 0;
  }
  
@@ -55678,7 +55714,7 @@ index 835a7b6cc..92b99ffe2 100644
  unsigned AArch64InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                                int &FrameIndex) const {
    switch (MI.getOpcode()) {
-@@ -2122,6 +2210,50 @@ unsigned AArch64InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
+@@ -2122,6 +2220,50 @@ unsigned AArch64InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
    return 0;
  }
  
@@ -67928,10 +67964,10 @@ index 000000000..317cea86d
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJBarrierOpt.cpp b/llvm/lib/Transforms/Scalar/CJBarrierOpt.cpp
 new file mode 100644
-index 000000000..0dad10939
+index 000000000..cf13c1964
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJBarrierOpt.cpp
-@@ -0,0 +1,824 @@
+@@ -0,0 +1,911 @@
 +//===- CJBarrierOpt.cpp - optimize cangjie write barriers -----------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -67950,6 +67986,7 @@ index 000000000..0dad10939
 +#include "llvm/Transforms/Scalar/CJBarrierOpt.h"
 +
 +#include "llvm/ADT/SetVector.h"
++#include "llvm/ADT/SmallPtrSet.h"
 +#include "llvm/Analysis/CFG.h"
 +#include "llvm/Analysis/LoopInfo.h"
 +#include "llvm/Analysis/ValueTracking.h"
@@ -68396,8 +68433,95 @@ index 000000000..0dad10939
 +      BasePtr = Barrier->getArgOperand(0);
 +      break;
 +    }
-+    return {getUnderlyingObject(BasePtr),
-+            FieldPtr ? getUnderlyingObject(FieldPtr) : nullptr};
++    return {BasePtr, FieldPtr};
++  }
++
++  bool hasGlobalOrArgumentOriginInInt(Value *V,
++                                      SmallPtrSetImpl<Value *> &Visited) {
++    if (!Visited.insert(V).second) {
++      return false;
++    }
++
++    auto *Op = dyn_cast<Operator>(V);
++    if (Op == nullptr) {
++      return false;
++    }
++
++    switch (Op->getOpcode()) {
++    case Instruction::PtrToInt:
++      return hasGlobalOrArgumentOrigin(Op->getOperand(0), Visited);
++    case Instruction::Add:
++    case Instruction::Or:
++    case Instruction::And:
++    case Instruction::Xor:
++      for (Value *Operand : Op->operands()) {
++        if (isa<ConstantInt>(Operand)) {
++          continue;
++        }
++        if (hasGlobalOrArgumentOriginInInt(Operand, Visited)) {
++          return true;
++        }
++      }
++      return false;
++    case Instruction::Sub:
++      return isa<ConstantInt>(Op->getOperand(1)) &&
++             hasGlobalOrArgumentOriginInInt(Op->getOperand(0), Visited);
++    case Instruction::ZExt:
++    case Instruction::SExt:
++    case Instruction::Trunc:
++      return hasGlobalOrArgumentOriginInInt(Op->getOperand(0), Visited);
++    default:
++      return false;
++    }
++  }
++
++  bool hasGlobalOrArgumentOrigin(Value *Ptr,
++                                 SmallPtrSetImpl<Value *> &Visited) {
++    Ptr = Ptr->stripPointerCasts();
++    if (!Visited.insert(Ptr).second) {
++      return false;
++    }
++
++    if (isa<GlobalValue>(Ptr) || isa<Argument>(Ptr)) {
++      return true;
++    }
++
++    if (auto *GEP = dyn_cast<GEPOperator>(Ptr)) {
++      return hasGlobalOrArgumentOrigin(GEP->getPointerOperand(), Visited);
++    }
++
++    if (auto *GA = dyn_cast<GlobalAlias>(Ptr)) {
++      if (GA->isInterposable()) {
++        return true;
++      }
++      return hasGlobalOrArgumentOrigin(GA->getAliasee(), Visited);
++    }
++
++    auto *Op = dyn_cast<Operator>(Ptr);
++    if (Op == nullptr) {
++      return false;
++    }
++
++    switch (Op->getOpcode()) {
++    case Instruction::IntToPtr:
++      return hasGlobalOrArgumentOriginInInt(Op->getOperand(0), Visited);
++    case Instruction::PHI:
++    case Instruction::Select:
++      for (Value *Operand : Op->operands()) {
++        if (Operand->getType()->isPointerTy() &&
++            hasGlobalOrArgumentOrigin(Operand, Visited)) {
++          return true;
++        }
++      }
++      return false;
++    default:
++      return false;
++    }
++  }
++
++  bool hasGlobalOrArgumentOrigin(Value *Ptr) {
++    SmallPtrSet<Value *, 8> Visited;
++    return hasGlobalOrArgumentOrigin(Ptr, Visited);
 +  }
 +
 +  bool optStructBarrier(CallBase *Barrier) {
@@ -68426,9 +68550,8 @@ index 000000000..0dad10939
 +          return true;
 +        return false;
 +      });
-+      bool IsFieldNotGV = PtrCheck(FieldPtr, [](Value *Ptr) {
-+        Value *BP = Ptr->stripPointerCasts();
-+        return !isa<GlobalValue>(BP) && !isa<Argument>(BP);
++      bool IsFieldNotGV = PtrCheck(FieldPtr, [this](Value *Ptr) {
++        return !hasGlobalOrArgumentOrigin(Ptr);
 +      });
 +      // gcread/gcwrite to static pointer cannot be replace, even if base is
 +      // nullptr.
@@ -102640,6 +102763,43 @@ index 000000000..a1af4fb00
 +attributes #0 = { "cj-runtime" "gc-leaf-function" }
 +
 +!0 = !{!"branch_weights", i32 1, i32 2000}
+diff --git a/llvm/test/Transforms/CJBarrierOpt/read_barrier_tagged_global.ll b/llvm/test/Transforms/CJBarrierOpt/read_barrier_tagged_global.ll
+new file mode 100644
+index 000000000..012727a47
+--- /dev/null
++++ b/llvm/test/Transforms/CJBarrierOpt/read_barrier_tagged_global.ll
+@@ -0,0 +1,31 @@
++; RUN: opt -enable-new-pm=false --cj-barrier-opt -S < %s | FileCheck %s
++; RUN: opt -passes=cj-barrier-opt -S < %s | FileCheck %s
++
++%record = type { i8 addrspace(1)* }
++
++@Global0 = internal global %record zeroinitializer
++
++declare i8 addrspace(1)* @llvm.cj.gcread.ref(i8 addrspace(1)*, i8 addrspace(1)* addrspace(1)*)
++
++define i8 addrspace(1)* @foo() gc "cangjie" {
++entry:
++  %0 = call i8 addrspace(1)* @llvm.cj.gcread.ref(
++    i8 addrspace(1)* null,
++    i8 addrspace(1)* addrspace(1)* getelementptr (
++      %record,
++      %record addrspace(1)* inttoptr (
++        i64 or (
++          i64 ptrtoint (%record addrspace(1)* addrspacecast (%record* @Global0 to %record addrspace(1)*) to i64),
++          i64 -9223372036854775808
++        ) to %record addrspace(1)*
++      ),
++      i64 0,
++      i32 0
++    )
++  )
++  ret i8 addrspace(1)* %0
++}
++
++; CHECK-LABEL: @foo(
++; CHECK: call i8 addrspace(1)* @llvm.cj.gcread.ref
++; CHECK-NOT: load i8 addrspace(1)*, i8 addrspace(1)* addrspace(1)*
 diff --git a/llvm/test/Transforms/CJBarrierOpt/write_barrier_gep_fail.ll b/llvm/test/Transforms/CJBarrierOpt/write_barrier_gep_fail.ll
 new file mode 100644
 index 000000000..9456bbbfa
