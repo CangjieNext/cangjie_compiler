@@ -32,12 +32,29 @@ public:
      */
     Ptr<AST::TypeAliasDecl> GetNativeObjCIdDecl();
 
+    /**
+     * Gets NativeObjCIdMarker declaration.
+     * Used as argument for generated internal constructors.
+     */
+    Ptr<AST::StructDecl> GetNativeObjCIdMarkerDecl();
+
+    /**
+     * Gets __NATIVE_OBJC_ID_MARKER instance.
+     * Used as argument for generated internal constructors.
+     */
+    Ptr<AST::VarDecl> GetNativeObjCIdMarkerInstance();
+
     Ptr<AST::InterfaceDecl> GetObjCIdDecl();
 
     /**
      * Gets NativeObjCId semantic type.
      */
     Ptr<AST::Ty> GetNativeObjCIdTy();
+
+    /**
+     * Gets NativeObjCIdMarker semantic type.
+     */
+    Ptr<AST::Ty> GetNativeObjCIdMarkerTy();
 
     /**
      * Gets NativeObjCSel declaration.
