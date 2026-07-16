@@ -465,6 +465,7 @@ void ObjCGenerator::GenerateForwardDeclarations()
     }
     // remove our own declaration from the set
     dependencies.erase(decl);
+
     for (auto&& dep : dependencies) {
         std::string keyword;
         switch (dep->astKind) {
