@@ -94,45 +94,6 @@ void DiagJavaDeclCannotBeExtendedWithInterface(DiagnosticEngine& diag, ExtendDec
     diag.DiagnoseRefactor(kind, decl);
 }
 
-const std::string& GetVarKindName(const Decl& varDecl)
-{
-    static const std::string GLOBAL_VAR_NAME = "global variable";
-    static const std::string MEMBER_VAR_NAME = "member variable";
-    static const std::string ENUM_CONSTRUCTOR_PARAMETER = "enum constructor parameter";
-
-    if (varDecl.TestAttr(Attribute::GLOBAL)) {
-        return GLOBAL_VAR_NAME;
-    } else if (varDecl.outerDecl && varDecl.outerDecl->TestAttr(Attribute::IN_ENUM)) {
-        return ENUM_CONSTRUCTOR_PARAMETER;
-    } else if (varDecl.outerDecl) {
-        return MEMBER_VAR_NAME;
-    } else {
-        CJC_ABORT();
-        static const std::string UNDEFINED = "";
-        return UNDEFINED;
-    }
-}
-
-const std::string& GetOuterDeclKindName(const Decl& outerDecl)
-{
-    static const std::string CLASS_NAME = "class";
-    static const std::string ENUM_NAME = "enum";
-    static const std::string STRUCT_NAME = "struct";
-
-    switch (outerDecl.astKind) {
-        case ASTKind::CLASS_DECL:
-            return CLASS_NAME;
-        case ASTKind::STRUCT_DECL:
-            return STRUCT_NAME;
-        case ASTKind::ENUM_DECL:
-            return ENUM_NAME;
-        default:
-            CJC_ABORT();
-            static const std::string UNDEFINED = "";
-            return UNDEFINED;
-    }
-}
-
 void DiagJavaTypesAsGenericParam(DiagnosticEngine& diag, const Node& expr, std::vector<Ptr<Decl>>&& javaDecls)
 {
     if (javaDecls.empty()) {

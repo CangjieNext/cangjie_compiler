@@ -515,6 +515,9 @@ void JavaDesugarManager::DesugarJavaMirror(ClassDecl& mirror)
                 DesugarJavaMirrorMethod(*fd, mirror);
             }
         } else if (auto prop = As<ASTKind::PROP_DECL>(decl.get())) {
+            if (prop->TestAttr(Attribute::IS_BROKEN)) {
+                continue;
+            }
             DesugarJavaMirrorProp(*prop);
         }
     }

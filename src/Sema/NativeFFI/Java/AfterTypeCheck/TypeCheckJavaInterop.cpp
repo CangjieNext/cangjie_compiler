@@ -397,16 +397,13 @@ void JavaInteropManager::CheckTypes(ClassLikeDecl& classLikeDecl)
 
     hasMirrorOrImpl = true;
 
-    if (auto id = As<ASTKind::INTERFACE_DECL>(&classLikeDecl);
-        id && id->TestAttr(Attribute::JAVA_MIRROR_SUBTYPE) && !id->TestAttr(Attribute::JAVA_MIRROR)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *id, "@JavaImpl interface");
-        classLikeDecl.EnableAttr(Attribute::IS_BROKEN);
+    if (auto id = As<ASTKind::INTERFACE_DECL>(&classLikeDecl); id && IsImpl(*id)) {
+        CJC_ABORT(); // Parser-level diagnostic
         return;
     }
 
     if (auto cd = As<ASTKind::CLASS_DECL>(&classLikeDecl); cd && cd->TestAttr(Attribute::ABSTRACT) && IsImpl(*cd)) {
-        diag.DiagnoseRefactor(DiagKindRefactor::sema_java_interop_not_supported, *cd, "@JavaImpl abstract");
-        classLikeDecl.EnableAttr(Attribute::IS_BROKEN);
+        CJC_ABORT(); // Parser-level diagnostic
         return;
     }
 
