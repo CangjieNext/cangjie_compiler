@@ -126,14 +126,28 @@ public:
     std::set<Ptr<AST::FuncDecl>> GetAllParentCtors(AST::ClassDecl& target) const;
     OwnedPtr<AST::FuncDecl> CreateImplCtor(AST::FuncDecl& from);
     OwnedPtr<AST::FuncDecl> CreateBaseCtorDecl(AST::ClassDecl& target);
+    OwnedPtr<AST::RefExpr> CreateNativeHandleMarker();
     bool IsGeneratedMember(const AST::Decl& decl) const;
     bool IsGeneratedNativeHandleField(const AST::Decl& decl) const;
     bool IsGeneratedGetObjCClassFunction(const AST::Decl& decl) const;
     bool IsGeneratedHasInitedField(const AST::Decl& decl) const;
     bool IsGeneratedCtor(const AST::Decl& decl) const;
     bool IsGeneratedBaseCtor(const AST::Decl& decl) const;
+    bool IsGeneratedLegacyBaseCtor(const AST::Decl& decl) const;
     bool IsGeneratedNativeHandleGetter(const AST::Decl& decl) const;
     Ptr<AST::FuncDecl> GetGeneratedBaseCtor(AST::Decl& decl);
+
+    /**
+     * Adds a special `NativeHandleMarker` empty-struct marker to generated base constructor if needed.
+     * Marker was introduced to allow `CPointer<T>` being used in ObjC-related classes, such as mirrors and impls. It
+     * resolves possible clashes between `init(CPointer<Unit>)` constructor used internally and the same signature
+     * constructor that can be introduced by a user. We had to stick to constructors as they are important for super
+     * calls from other constructors, and had to support both new mirrors and possibly previously compiled mirrors with
+     * old types of constructors. Therefore, this function along with `IsGeneratedLegacyBaseCtor` distinguish two types
+     * of constructors we might create calls for during desugar stage.
+     */
+    void AddMarkerToCallIfNeeded(AST::CallExpr& callExpr);
+
     Ptr<AST::FuncDecl> GetGeneratedImplCtor(const AST::Decl& declArg, const AST::FuncDecl& origin);
     OwnedPtr<AST::CallExpr> CreateObjCMsgSendCall(OwnedPtr<AST::Expr> nativeHandle, const std::string& selector,
         Ptr<AST::Ty> retTy, std::vector<OwnedPtr<AST::Expr>> args);
