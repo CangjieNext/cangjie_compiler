@@ -199,7 +199,7 @@ OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy, Retain wi
             default:
                 break;
         }
-        return CreateCallExpr(CreateRefExpr(*ctor), Nodes<FuncArg>(CreateFuncArg(std::move(expr))), ctor, classLikeTy,
+        return CreateCallExpr(CreateRefExpr(*ctor), Nodes<FuncArg>(CreateFuncArg(std::move(expr)), CreateFuncArg(CreateNativeHandleMarker())), ctor, classLikeTy,
             CallKind::CALL_OBJECT_CREATION);
     }
 
@@ -277,7 +277,7 @@ OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy, Retain wi
         auto fwdClassDecl = Ty::GetDeclOfTy(fwdTy);
 
         auto ctor = GetGeneratedBaseCtor(*fwdClassDecl);
-        return CreateCallExpr(CreateRefExpr(*ctor), Nodes<FuncArg>(CreateFuncArg(std::move(expr))), ctor, fwdTy,
+        return CreateCallExpr(CreateRefExpr(*ctor), Nodes<FuncArg>(CreateFuncArg(std::move(expr)), CreateFuncArg(CreateNativeHandleMarker())), ctor, fwdTy,
             CallKind::CALL_OBJECT_CREATION);
     }
 
@@ -291,8 +291,8 @@ OwnedPtr<Expr> ASTFactory::WrapEntity(OwnedPtr<Expr> expr, Ty& wrapTy, Retain wi
     }
 
     CJC_ASSERT(expr->GetTy()->IsPrimitive() || Ty::IsCStructType(*expr->GetTy()) || expr->GetTy()->IsCFunc() ||
-        expr->GetTy()->IsCString());
-    CJC_ASSERT(wrapTy.IsPrimitive() || Ty::IsCStructType(wrapTy) || wrapTy.IsCFunc() || wrapTy.IsCString());
+        expr->GetTy()->IsCString() || expr->GetTy()->IsPointer());
+    CJC_ASSERT(wrapTy.IsPrimitive() || Ty::IsCStructType(wrapTy) || wrapTy.IsCFunc() || wrapTy.IsCString() || wrapTy.IsPointer());
     return expr;
 }
 
@@ -497,7 +497,7 @@ OwnedPtr<Expr> ASTFactory::CreateMirrorConstructorCall(OwnedPtr<Expr> entity, Pt
         auto mirrorCtor = GetGeneratedBaseCtor(*cld);
         CJC_NULLPTR_CHECK(mirrorCtor);
 
-        auto ctorCall = CreateCall(mirrorCtor, curFile, std::move(entity));
+        auto ctorCall = CreateCall(mirrorCtor, curFile, std::move(entity), CreateNativeHandleMarker());
         if (ctorCall) {
             ctorCall->callKind = CallKind::CALL_OBJECT_CREATION;
             ctorCall->SetTy(mirrorTy);
@@ -705,9 +705,14 @@ OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObjectReturningObjCSelf(const Decl& t
     auto wrapperParamList = MakeOwned<FuncParamList>();
     auto& wrapperParams = wrapperParamList->params;
     auto& ctorParams = ctor.funcBody->paramLists[0]->params;
-    std::transform(ctorParams.begin(), ctorParams.end(), std::back_inserter(wrapperParams), [this](auto& p) {
-        return CreateFuncParam(p->identifier.Val(), nullptr, nullptr, typeMapper.Cj2CType(p->GetTy()));
-    });
+
+    for (auto& param : ctorParams) {
+        if (param->identifier.Val() == "$mrk") {
+            continue;
+        }
+        auto wrapperParam = CreateFuncParam(param->identifier.Val(), nullptr, nullptr, typeMapper.Cj2CType(param->GetTy()));
+        wrapperParams.emplace_back(std::move(wrapperParam));
+    }
 
     std::vector<Ptr<Ty>> wrapperParamTys;
     std::transform(wrapperParams.begin(), wrapperParams.end(), std::back_inserter(wrapperParamTys),
@@ -719,15 +724,19 @@ OwnedPtr<FuncDecl> ASTFactory::CreateInitCjObjectReturningObjCSelf(const Decl& t
     wrapperParamLists.emplace_back(std::move(wrapperParamList));
 
     std::vector<OwnedPtr<FuncArg>> ctorCallArgs;
-    auto objCSelf = CreateRefExpr(*wrapperParams[0]);
-    ctorCallArgs.emplace_back(CreateFuncArg(std::move(objCSelf)));
-    size_t argIdx = 1;
-    while (argIdx < ctorParams.size()) {
-        auto& wrapperParam = wrapperParams[argIdx];
+    size_t offset = 0;
+    for (size_t i = 0; i < ctorParams.size(); i++) {
+        auto& ctorParam = ctorParams[i];
+        if (ctorParam->identifier.Val() == "$mrk") {
+            auto callArg = CreateFuncArg(CreateNativeHandleMarker());
+            ctorCallArgs.emplace_back(std::move(callArg));
+            offset = 1;
+            continue;
+        }
+        auto& wrapperParam = wrapperParams[i-offset];
         auto paramRef = WithinFile(CreateRefExpr(*wrapperParam), curFile);
-        auto ctorCallArg = CreateFuncArg(WrapEntity(std::move(paramRef), *ctorParams[argIdx]->GetTy()));
+        auto ctorCallArg = CreateFuncArg(WrapEntity(std::move(paramRef), *ctorParam->GetTy()));
         ctorCallArgs.emplace_back(std::move(ctorCallArg));
-        ++argIdx;
     }
 
     auto ctorCall = WithinFile(CreateCallExpr(CreateRefExpr(ctor), std::move(ctorCallArgs), Ptr(&ctor), target.GetTy(),
@@ -1376,12 +1385,18 @@ OwnedPtr<FuncDecl> ASTFactory::CreateBaseCtorDecl(ClassDecl& target)
     auto nativeObjCIdTy = bridge.GetNativeObjCIdTy();
     auto param = CreateFuncParam(NATIVE_HANDLE_IDENT, CreateType(nativeObjCIdTy), nullptr, nativeObjCIdTy);
 
+    auto nativeObjCIdMarkerTy = bridge.GetNativeObjCIdMarkerTy();
+    auto markerParam = CreateFuncParam(NATIVE_HANDLE_MARKER, CreateType(nativeObjCIdMarkerTy), nullptr, nativeObjCIdMarkerTy);
+
     std::vector<Ptr<Ty>> ctorFuncParamTys;
     ctorFuncParamTys.emplace_back(param->GetTy());
+    ctorFuncParamTys.emplace_back(nativeObjCIdMarkerTy);
+
     auto ctorFuncTy = typeManager.GetFunctionTy(std::move(ctorFuncParamTys), target.GetTy());
 
     std::vector<OwnedPtr<FuncParam>> ctorParams;
     ctorParams.emplace_back(std::move(param));
+    ctorParams.emplace_back(std::move(markerParam));
     auto paramList = CreateFuncParamList(std::move(ctorParams));
 
     std::vector<OwnedPtr<Node>> ctorNodes;
@@ -1403,6 +1418,10 @@ OwnedPtr<FuncDecl> ASTFactory::CreateBaseCtorDecl(ClassDecl& target)
     return ctor;
 }
 
+OwnedPtr<RefExpr> ASTFactory::CreateNativeHandleMarker() {
+    return CreateRefExpr(*bridge.GetNativeObjCIdMarkerInstance());
+}
+
 OwnedPtr<FuncDecl> ASTFactory::CreateImplCtor(FuncDecl& from)
 {
     auto nativeHandleTy = bridge.GetNativeObjCIdTy();
@@ -1411,8 +1430,13 @@ OwnedPtr<FuncDecl> ASTFactory::CreateImplCtor(FuncDecl& from)
 
     auto& implCtorParams = ctor->funcBody->paramLists[0]->params;
 
-    implCtorParams.insert(implCtorParams.begin(),
-        WithinFile(CreateFuncParam(NATIVE_HANDLE_IDENT, CreateType(nativeHandleTy), nullptr, nativeHandleTy), curFile));
+    std::vector<OwnedPtr<FuncParam>> specialParams;
+    specialParams.emplace_back(WithinFile(CreateFuncParam(NATIVE_HANDLE_IDENT, CreateType(nativeHandleTy), nullptr, nativeHandleTy), curFile));
+
+    auto markerTy = bridge.GetNativeObjCIdMarkerTy();
+    specialParams.emplace_back(WithinFile(CreateFuncParam(NATIVE_HANDLE_MARKER, CreateType(markerTy), nullptr, markerTy), curFile));
+
+    implCtorParams.insert(implCtorParams.begin(), std::make_move_iterator(specialParams.begin()), std::make_move_iterator(specialParams.end()));
 
     std::vector<Ptr<Ty>> implCtorParamTys;
     std::transform(implCtorParams.begin(), implCtorParams.end(), std::back_inserter(implCtorParamTys),
@@ -1464,11 +1488,11 @@ bool ASTFactory::IsGeneratedBaseCtor(const Decl& decl) const
     // taking first param list probably is not the best idea
     auto& params = paramLists[0]->params;
 
-    if (params.size() != 1) {
+    if (params.size() != 2) {
         return false;
     }
 
-    return params[0]->identifier == NATIVE_HANDLE_IDENT;
+    return params[0]->identifier == NATIVE_HANDLE_IDENT && params[1]->identifier == NATIVE_HANDLE_MARKER;
 }
 
 bool ASTFactory::IsGeneratedCtor(const Decl& decl) const
@@ -1487,11 +1511,11 @@ bool ASTFactory::IsGeneratedCtor(const Decl& decl) const
     // taking first param list probably is not the best idea
     auto& params = paramLists[0]->params;
 
-    if (params.empty()) {
+    if (params.size() < 2) {
         return false;
     }
 
-    return params[0]->identifier == NATIVE_HANDLE_IDENT;
+    return params[0]->identifier == NATIVE_HANDLE_IDENT && params[1]->identifier == NATIVE_HANDLE_MARKER;
 }
 
 bool ASTFactory::IsGeneratedNativeHandleGetter(const Decl& decl) const
@@ -1543,15 +1567,15 @@ Ptr<FuncDecl> ASTFactory::GetGeneratedImplCtor(const Decl& declArg, const FuncDe
             // taking first param list probably is not the best idea
             const auto& fdParams = fdParamLists[0]->params;
 
-            if (originParams.size() + 1 != fdParams.size()) {
+            if (originParams.size() + 2 != fdParams.size()) {
                 continue;
             }
 
             auto matched = true;
-            // assume that first fd param if $obj: NativeObjCId
-            for (size_t i = 1; i < fdParams.size(); ++i) {
+            // assume that first fd param is $obj: NativeObjCId, second is $mrk: NativeObjCMarker
+            for (size_t i = 2; i < fdParams.size(); ++i) {
                 const auto fdParam = fdParams[i].get();
-                const auto originParam = originParams[i - 1].get();
+                const auto originParam = originParams[i - 2].get();
                 if (fdParam->identifier != originParam->identifier || fdParam->GetTy() != originParam->GetTy()) {
                     matched = false;
                     break;
@@ -2314,6 +2338,7 @@ OwnedPtr<Expr> ASTFactory::CreateObjectGetClassCall(OwnedPtr<Expr> id, Ptr<File>
 
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateFuncArg(std::move(id)));
+    args.emplace_back(CreateFuncArg(CreateNativeHandleMarker()));
     auto objectGetClassCallExpr = CreateCallExpr(std::move(objectGetClassExpr), std::move(args), objectGetClassDecl,
         typeManager.GetBoolTy(), CallKind::CALL_DECLARED_FUNCTION);
     return WithinFile(std::move(objectGetClassCallExpr), curFile);
