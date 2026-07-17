@@ -663,7 +663,19 @@ bool TypeChecker::TypeCheckerImpl::ChkInoutMemberAccess(const MemberAccess& ma)
 Ptr<Ty> TypeChecker::TypeCheckerImpl::SynFuncArg(ASTContext& ctx, FuncArg& fa)
 {
     if (fa.expr) {
+        // Propagate an expected-type target (if any, injected by PrepareTyArgsSynthesis) from the FuncArg
+        // down to its expression, so that a questable expr (e.g. lambda with omitted param types) can read
+        // it during Synthesize. The target is cleared afterwards to avoid polluting later checks.
+        bool propagatedTarget = false;
+        auto it = ctx.targetTypeMap.find(&fa);
+        if (it != ctx.targetTypeMap.end() && it->second != nullptr && IsQuestableNode(*fa.expr)) {
+            ctx.targetTypeMap[fa.expr.get()] = it->second;
+            propagatedTarget = true;
+        }
         Synthesize({ctx, SynPos::EXPR_ARG}, fa.expr.get());
+        if (propagatedTarget) {
+            ctx.targetTypeMap[fa.expr.get()] = nullptr;
+        }
         if (fa.withInout) {
             if (!Ty::IsTyCorrect(fa.expr->GetTy()) || !ChkInoutFuncArg(fa)) {
                 fa.SetTy(TypeManager::GetInvalidTy());

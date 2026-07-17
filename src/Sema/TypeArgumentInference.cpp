@@ -359,6 +359,27 @@ void DisableBodyInferForArgs(ASTContext& ctx, CallExpr& ce)
     }
 }
 
+// Propagate the expected (formal) parameter type as target context to the argument node via targetTypeMap,
+// so that Synthesize of a questable argument (e.g. a lambda with omitted param types) can read it and infer
+// its structure from the expected type. Returns true if a target was injected (caller must clear it after
+// the Synthesize call to avoid polluting subsequent checks of the same node).
+// The target may still contain unsolved type vars; that is intentional — the callee's Synthesize is
+// responsible for resolving the solved portion (e.g. via TryGreedySubst) and leaving the rest as placeholder.
+bool PropagateArgTarget(ASTContext& ctx, Ptr<Node> argNode, Ptr<Ty> expectedTy)
+{
+    if (!argNode || !Ty::IsTyCorrect(expectedTy) || !IsQuestableNode(*argNode)) {
+        return false;
+    }
+    // Only propagate when the expected type can provide structural info (a function type, possibly wrapped
+    // in option). Bare type vars / placeholders carry no usable structure for lambda param inference.
+    auto unboxed = TypeCheckUtil::UnboxOptionType(expectedTy);
+    if (!Ty::IsTyCorrect(unboxed) || !unboxed->IsFunc()) {
+        return false;
+    }
+    ctx.targetTypeMap[argNode] = expectedTy;
+    return true;
+}
+
 bool NeedLastTry(CallExpr& ce)
 {
     bool ret = false;
@@ -480,12 +501,23 @@ ErrOrSubst TypeChecker::TypeCheckerImpl::PrepareTyArgsSynthesis(
             } else if (Ty::IsInitialTy(stat.argTys[i])) {
                 // Initially, every arg goes into this branch. If the inference eventually fails,
                 // errors from this synthesize should be reported
+                // Propagate the expected (parameter) type as target context to the argument's Synthesize,
+                // so that a lambda argument with omitted param types can infer them from the parameter type
+                // (see SynLamExpr). The target may still contain unsolved type vars; that is fine.
+                const bool injectedTarget = PropagateArgTarget(ctx, ce.args[i].get(), paramsTyInOrder[i]);
                 stat.argTys[i] = SynthesizeWithCache({ctx, SynPos::EXPR_ARG}, ce.args[i].get());
+                if (injectedTarget) {
+                    ctx.targetTypeMap[ce.args[i].get()] = nullptr;
+                }
             } else if (stat.failSet[i] && !stat.lastResortUnused) {
                 // If some arg is a lambda, try to infer its param type from its body,
                 // as a last resort in case no enough contextual info is provided.
                 auto ds3 = DiagSuppressor(diag);
+                const bool injectedTarget = PropagateArgTarget(ctx, ce.args[i].get(), paramsTyInOrder[i]);
                 stat.argTys[i] = Synthesize({ctx, SynPos::EXPR_ARG}, ce.args[i].get());
+                if (injectedTarget) {
+                    ctx.targetTypeMap[ce.args[i].get()] = nullptr;
+                }
             }
         }
         // 2. collect valid arg tys & update failSet

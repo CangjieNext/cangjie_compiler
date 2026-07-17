@@ -321,11 +321,52 @@ Ptr<Ty> TypeChecker::TypeCheckerImpl::SynLamExpr(ASTContext& ctx, LambdaExpr& le
     le.funcBody->retType->end = le.end;
     CJC_ASSERT(le.funcBody && !le.funcBody->paramLists.empty());
     TyVarScope sc(typeManager);
-    for (auto& node : le.funcBody->paramLists[0]->params) {
+    // When this lambda is a func-call argument whose expected (parameter) type is known via targetTypeMap
+    // (see PrepareTyArgsSynthesis), use the target function type's parameter types to assign types to
+    // omitted lambda parameters, instead of creating fresh placeholder TyVars ('T-Lam') that are unrelated
+    // to the call's generic type variables. This lets the lambda synthesize a concrete type (e.g.
+    // (Int64) -> A) so that UnifyFuncTy can establish constraints (e.g. T = A) during type-argument inference.
+    Ptr<FuncTy> tgtFuncTy = nullptr;
+    if (ctx.funcArgReachable.count(&le) != 0) {
+        auto it = ctx.targetTypeMap.find(&le);
+        if (it != ctx.targetTypeMap.end() && it->second != nullptr) {
+            auto unboxed = TypeCheckUtil::UnboxOptionType(it->second);
+            if (Ty::IsTyCorrect(unboxed) && unboxed->IsFunc()) {
+                tgtFuncTy = StaticCast<FuncTy*>(unboxed);
+            }
+        }
+    }
+    auto& lamParams = le.funcBody->paramLists[0]->params;
+    const bool tgtParamTysAvail =
+        tgtFuncTy != nullptr && tgtFuncTy->paramTys.size() == lamParams.size();
+    for (size_t i = 0; i < lamParams.size(); ++i) {
+        auto& node = lamParams[i];
         CJC_NULLPTR_CHECK(node);
         Ptr<Ty> ty = Synthesize({ctx, SynPos::NONE}, node->type.get());
         if (Ty::IsTyCorrect(ty)) {
             node->SetTy(ty);
+        } else if (tgtParamTysAvail && !node->type) {
+            // Omitted param type: take it from the expected function type. For a generic callee the
+            // expected param type may still contain unsolved type vars (e.g. T); resolve the solved
+            // portion via TryGreedySubst so a concrete param type (e.g. Int64) is assigned when possible.
+            Ptr<Ty> paramTy = tgtFuncTy->paramTys[i];
+            if (DynamicCast<TyVar*>(paramTy)) {
+                auto concreteTy = typeManager.TryGreedySubst(paramTy);
+                if (concreteTy != paramTy && !concreteTy->IsPlaceholder()) {
+                    paramTy = concreteTy;
+                }
+            }
+            if (Ty::IsTyCorrect(paramTy) && !paramTy->IsPlaceholder()) {
+                // Suppress errors from this tentative Check; real errors are reported when type inference
+                // fails (see PrepareTyArgsSynthesis) or during the post-check of arguments.
+                auto ds = DiagSuppressor(diag);
+                (void)Check(ctx, paramTy, node.get());
+                if (!Ty::IsTyCorrect(node->GetTy())) {
+                    node->SetTy(typeManager.AllocTyVar("T-Lam", true));
+                }
+            } else {
+                node->SetTy(typeManager.AllocTyVar("T-Lam", true));
+            }
         } else if (ctx.funcArgReachable.count(&le) == 0 && !node->type) {
             node->SetTy(typeManager.AllocTyVar("T-Lam", true));
         } else {
