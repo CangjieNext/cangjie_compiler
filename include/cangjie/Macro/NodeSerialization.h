@@ -119,6 +119,7 @@ private:
     flatbuffers::Offset<NodeFormat::Expr> SerializeLitConstExpr(AstExpr expr);
     flatbuffers::Offset<NodeFormat::Expr> SerializeUnaryExpr(AstExpr expr);
     flatbuffers::Offset<NodeFormat::Expr> SerializeParenExpr(AstExpr expr);
+    flatbuffers::Offset<NodeFormat::Expr> SerializeAmbiguousForcedCastExpr(AstExpr expr);
     flatbuffers::Offset<NodeFormat::Expr> SerializeCallExpr(const AST::Expr* expr);
     flatbuffers::Offset<NodeFormat::Expr> SerializeRefExpr(const AST::Expr* expr);
     flatbuffers::Offset<NodeFormat::Expr> SerializeReturnExpr(AstExpr expr);

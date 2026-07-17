@@ -94,6 +94,20 @@ flatbuffers::Offset<NodeFormat::Expr> NodeWriter::SerializeParenExpr(AstExpr exp
     return NodeFormat::CreateExpr(builder, fbNodeBase, NodeFormat::AnyExpr_PAREN_EXPR, fbParenExpr.Union());
 }
 
+flatbuffers::Offset<NodeFormat::Expr> NodeWriter::SerializeAmbiguousForcedCastExpr(AstExpr expr)
+{
+    auto forcedCastExpr = RawStaticCast<const AmbiguousForcedCastExpr*>(expr);
+    auto fbNodeBase = SerializeNodeBase(forcedCastExpr);
+    auto type = SerializeType(forcedCastExpr->type.get());
+    auto leftParenPos = FlatPosCreateHelper(forcedCastExpr->leftParenPos);
+    auto operand = SerializeExpr(forcedCastExpr->rightExpr.get());
+    auto rightParenPos = FlatPosCreateHelper(forcedCastExpr->rightParenPos);
+    auto fbForcedCastExpr = NodeFormat::CreateAmbiguousForcedCastExpr(
+        builder, fbNodeBase, type, &leftParenPos, operand, &rightParenPos);
+    return NodeFormat::CreateExpr(builder, fbNodeBase, NodeFormat::AnyExpr_AMBIGUOUS_FORCED_CAST_EXPR,
+        fbForcedCastExpr.Union());
+}
+
 flatbuffers::Offset<NodeFormat::FuncArg> NodeWriter::SerializeFuncArg(AstFuncArg funcArg)
 {
     if (funcArg == nullptr) {
@@ -644,6 +658,8 @@ flatbuffers::Offset<NodeFormat::Expr> NodeWriter::SerializeExpr(AstExpr expr)
             {ASTKind::LIT_CONST_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeLitConstExpr(expr); }},
             {ASTKind::UNARY_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeUnaryExpr(expr); }},
             {ASTKind::PAREN_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeParenExpr(expr); }},
+            {ASTKind::AMBIGUOUS_FORCED_CAST_EXPR,
+                [](NodeWriter& nw, AstExpr expr) { return nw.SerializeAmbiguousForcedCastExpr(expr); }},
             {ASTKind::CALL_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeCallExpr(expr); }},
             {ASTKind::REF_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeRefExpr(expr); }},
             {ASTKind::RETURN_EXPR, [](NodeWriter& nw, AstExpr expr) { return nw.SerializeReturnExpr(expr); }},
