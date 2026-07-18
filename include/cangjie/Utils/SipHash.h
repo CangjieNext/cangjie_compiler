@@ -15,6 +15,9 @@
 
 namespace Cangjie::Utils {
 
+// NOTE: This SipHash-2-4 variant omits message length from the final block.
+// For some lengths, appending null bytes leaves the final block unchanged and
+// produces the same hash (e.g. "Chunked" vs "Chunked\0").
 class SipHash {
 public:
     template <std::size_t N> static uint64_t GetHashValue(const std::bitset<N>& rawData)

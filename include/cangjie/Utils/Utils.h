@@ -340,8 +340,13 @@ private:
 
 inline std::string HashString64(const std::string& str)
 {
+    uint64_t hash = 0xcbf29ce484222325ULL;
+    for (auto c : str) {
+        hash ^= static_cast<unsigned char>(c);
+        hash *= 0x100000001b3ULL;
+    }
     Out64 printer{0, false, false};
-    printer << static_cast<uint_fast64_t>(std::hash<std::string>{}(str));
+    printer << hash;
     std::stringstream ss;
     ss << printer;
     return std::move(*ss.rdbuf()).str();

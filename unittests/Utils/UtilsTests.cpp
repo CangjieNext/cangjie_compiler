@@ -984,3 +984,17 @@ TEST(UtilsTest, IsUnderFlowFloat)
     // This should not occur in actual calls.
     EXPECT_EQ(underUse("1.0"), false);
 }
+
+TEST(UtilsTest, HashString64)
+{
+    EXPECT_EQ(HashString64(""), "cLODei48ycB");
+    EXPECT_EQ(HashString64("altGlyph"), "5N3ZvZh0S8i");
+
+    // Collision inputs from the libc++ std::hash implementation.
+    EXPECT_NE(HashString64("altGlyph"), HashString64("altglyph"));
+    EXPECT_NE(HashString64("mmm0qrst"), HashString64("mmmpqrst"));
+
+    // Collision inputs from the repository's non-standard SipHash implementation.
+    EXPECT_NE(HashString64("Chunked"), HashString64(std::string("Chunked\0", 8)));
+    EXPECT_NE(HashString64("HEAD"), HashString64(std::string("HEAD\0", 5)));
+}
