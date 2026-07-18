@@ -44,12 +44,10 @@ TempFileInfo IOS_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>
     auto tool = std::make_unique<Tool>(ldPath, ToolType::BACKEND, driverOptions.environment.allVariables);
     tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
     auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::T_OBJ);
-    auto ltoObjectDir = outputFileInfo.filePath + ".lto";
-    auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, "0." + GetTargetArchString() + ".lto.o");
+    auto ltoObjectPath = outputFileInfo.filePath;
     GenerateLinkOptionsForLTO(*tool);
-    tool->AppendArg("-object_path_lto", ltoObjectDir);
-    tool->AppendArg("-dylib");
-    tool->AppendArg("-lto-emit-obj-only");
+    tool->AppendArg("-r");
+    tool->AppendArg("-o", ltoObjectPath);
     tool->AppendArg("-arch", GetTargetArchString());
 
     tool->AppendArg("-platform_version");
@@ -64,12 +62,13 @@ TempFileInfo IOS_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileInfo>
 
     tool->AppendArg("-syslibroot");
     tool->AppendArg(driverOptions.sysroot.empty() ? "/" : driverOptions.sysroot);
-    HandleLLVMLinkOptions(objFiles, *tool);
-    GenerateRuntimePath(*tool);
+    // For LTO staticlib production, only pass bc files (user code + stdlib),
+    // not runtime .a/.dylib. Runtime libraries are resolved at the final link step.
+    AppendLTOBcInputs(objFiles, *tool);
 
     backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
     outputFileInfo.filePath = ltoObjectPath;
-    outputFileInfo.rawPath = ltoObjectDir;
+    outputFileInfo.rawPath = ltoObjectPath;
     return outputFileInfo;
 }
 
