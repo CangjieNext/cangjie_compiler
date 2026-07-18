@@ -19,8 +19,8 @@
 namespace Cangjie::Native::FFI::Java {
 using namespace Cangjie::Interop::Java;
 
-void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(CallExpr& call,
-    ClassDecl& impl) const
+void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(
+    CallExpr& call, ClassDecl& impl) const
 {
     CJC_ASSERT(call.baseFunc && call.baseFunc->astKind == ASTKind::MEMBER_ACCESS);
     auto& ma = *StaticAs<ASTKind::MEMBER_ACCESS>(call.baseFunc.get());
@@ -33,28 +33,41 @@ void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(CallExpr& call,
     auto parent = As<ASTKind::CLASS_DECL>(&outerDecl);
     auto curFile = call.curFile;
 
-    std::vector<OwnedPtr<Expr>> cffiArgs;
+    std::vector<OwnedPtr<Expr>> jniArgs;
 
     for (auto& arg : call.args) {
-        cffiArgs.emplace_back(ilib.WrapJavaEntity(ASTCloner::Clone(arg->expr.get())));
+        auto argExpr = ASTCloner::Clone(arg->expr.get());
+        CJC_NULLPTR_CHECK(argExpr);
+        auto jvalueExpr = ilib.CreateJValueExpr(std::move(argExpr), curFile);
+        jniArgs.emplace_back(std::move(jvalueExpr));
     }
 
     OwnedPtr<VarDecl> argsVar = nullptr;
     OwnedPtr<Expr> argsRef = nullptr;
 
-    if (!cffiArgs.empty()) {
-        argsVar = ilib.CreateCFFIArgsVar(std::move(cffiArgs), *curFile);
+    if (!jniArgs.empty()) {
+        argsVar = ilib.CreateJNIArgsVar(std::move(jniArgs), *curFile);
         argsRef = CreateRefExpr(*argsVar);
         CopyBasicInfo(argsVar.get(), argsRef.get());
     }
 
-    auto desugaredCall = ilib.CreateCallMethodCall(ilib.CreateGetJniEnvCall(curFile), CreateJavaRefCall(impl, curFile),
-        MemberJNISignature(utils, *call.resolvedFunction, parent), std::move(argsRef), call.GetTy(), *curFile, false);
-    desugaredCall->desugarArgs = std::nullopt;
+    auto env = ilib.CreateGetJniEnvCall(curFile);
+    auto javaRef = CreateJavaRefCall(impl, curFile);
+    MemberJNISignature signature(utils, *call.resolvedFunction, parent);
+    auto desugaredCall = ilib.CreateJNIMethodCall(std::move(env), std::move(javaRef), signature,
+        std::move(argsRef), call.GetTy(), *curFile, false);
+    auto resultExpr = ilib.ConvertJNIResult(std::move(desugaredCall), call.GetTy(), impl);
 
-    call.desugarExpr = call.GetTy()->IsUnit()
-        ? std::move(desugaredCall)
-        : ilib.UnwrapJavaEntity(std::move(desugaredCall), call.GetTy(), impl);
+    if (call.args.empty()) {
+        call.desugarExpr = std::move(resultExpr);
+        return;
+    }
+
+    std::vector<OwnedPtr<Node>> nodes;
+    nodes.emplace_back(std::move(argsVar));
+    nodes.emplace_back(std::move(resultExpr));
+    auto block = CreateBlock(std::move(nodes), call.GetTy());
+    call.desugarExpr = std::move(block);
 }
 
 DesugarJavaImplSuperMethodCall::DesugarJavaImplSuperMethodCall(

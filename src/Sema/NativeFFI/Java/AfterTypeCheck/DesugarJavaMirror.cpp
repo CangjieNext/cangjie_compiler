@@ -338,48 +338,46 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     CopyBasicInfo(envVar.get(), envRef.get());
 
     OwnedPtr<Expr> methodCall;
-    OwnedPtr<VarDecl> argsVar = nullptr;
+    OwnedPtr<VarDecl> argsVar;
     OwnedPtr<VarDecl> clazzVar = nullptr;
 
     CJC_ASSERT_WITH_MSG(!fun.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& paramList = *fun.funcBody->paramLists[0].get();
-    if (fun.TestAttr(Attribute::STATIC)) {
-        auto memberJNISignature =
-            genericConfig ? MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
-            clazzVar = lib.CreateCFFIClassVar(ASTCloner::Clone(envRef.get()),
-                memberJNISignature.classTypeSignature, *curFile);
-            argsVar = lib.CreateCFFIJValueArgsVar(paramList, *curFile);
-            OwnedPtr<Expr> argsRef = nullptr;
-            if (argsVar) {
-                argsVar->isVar = true;
-                argsRef = CreateRefExpr(*argsVar);
-                CopyBasicInfo(argsVar.get(), argsRef.get());
-            }
-            OwnedPtr<Expr> clazzRef = CreateRefExpr(*clazzVar);
-            CopyBasicInfo(clazzVar.get(), clazzRef.get());
-            methodCall = lib.CreateCallStaticMethodCall(std::move(envRef), std::move(clazzRef), memberJNISignature,
-                std::move(argsRef), retTy, *curFile);
+
+    if (IsJArray(mirror) && !fun.TestAttr(Attribute::STATIC)) {
+        CJC_ASSERT_WITH_MSG(!mirror.generic->typeParameters.empty(), "JArray ctor must be generic");
+        auto genericParam = mirror.generic->typeParameters[0].get();
+        CJC_ASSERT(genericParam);
+
+        methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile(std::move(envRef), curFile),
+            std::move(javaRefCall), paramList, genericParam, GetArrayOperationKind(fun));
     } else {
-        if (IsJArray(mirror)) {
-            CJC_ASSERT_WITH_MSG(!mirror.generic->typeParameters.empty(), "JArray ctor must be generic");
-            auto genericParam = mirror.generic->typeParameters[0].get();
-            CJC_ASSERT(genericParam);
-            methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile(std::move(envRef), curFile),
-                std::move(javaRefCall), paramList, genericParam, GetArrayOperationKind(fun));
-        } else {
-            auto memberJNISignature =
-                genericConfig ? MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
-            argsVar = lib.CreateCFFIJValueArgsVar(paramList, *curFile);
+        auto memberJNISignature = 
+            genericConfig ? MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
 
-            OwnedPtr<Expr> argsRef = nullptr;
-            if (argsVar) {
-                argsVar->isVar = true;
-                argsRef = CreateRefExpr(*argsVar);
-                CopyBasicInfo(argsVar.get(), argsRef.get());
+        OwnedPtr<Expr> argsRef = nullptr;
+        if (!paramList.params.empty()) {
+            argsRef = lib.CreateJNIArgsRef(paramList, *curFile, argsVar);
+            if (!argsRef) {
+                fun.EnableAttr(Attribute::IS_BROKEN);
+                return;
             }
+        }
 
-            methodCall = lib.CreateCallMethodCall(std::move(envRef), std::move(javaRefCall), memberJNISignature,
-                std::move(argsRef), retTy, *curFile);
+        if (fun.TestAttr(Attribute::STATIC)) {
+            clazzVar =
+                lib.CreateJNIClassVar(ASTCloner::Clone(envRef.get()), memberJNISignature.classTypeSignature, *curFile);
+            if (!clazzVar) {
+                fun.EnableAttr(Attribute::IS_BROKEN);
+                return;
+            }
+            auto clazzRef = CreateRefExpr(*clazzVar);
+            CopyBasicInfo(clazzVar.get(), clazzRef.get());
+            methodCall = lib.CreateJNIStaticMethodCall(std::move(envRef), std::move(clazzRef),
+                memberJNISignature, std::move(argsRef), retTy, *curFile);
+        } else {
+            methodCall = lib.CreateJNIMethodCall(std::move(envRef), std::move(javaRefCall),
+                memberJNISignature, std::move(argsRef), retTy, *curFile, true);
         }
     }
 
@@ -402,15 +400,8 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     if (fun.funcBody->retType->TyKind() == TypeKind::TYPE_FUNC &&
         fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
         retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), retTy, mirror);
-    } else if (!retTy->IsPrimitive()) {
-        retCallExpr = lib.UnwrapJavaEntity(std::move(callResRef), retTy, mirror);
-    } else if (retTy->kind == TypeKind::TYPE_BOOLEAN) {
-        auto zero = CreateLitConstExpr(LitConstKind::INTEGER, "0", callResRef->GetTy());
-        auto cmp = CreateBinaryExpr(std::move(callResRef), std::move(zero), TokenKind::NOTEQ);
-        cmp->SetTy(typeManager.GetPrimitiveTy(TypeKind::TYPE_BOOLEAN));
-        retCallExpr = std::move(cmp);
     } else {
-        retCallExpr = std::move(callResRef);
+        retCallExpr = lib.ConvertJNIResult(std::move(callResRef), retTy, mirror);
     }
 
     if (!retCallExpr) {
@@ -428,10 +419,11 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     auto handlePendingCall = CreateCall(handlePendingDecl, curFile, std::move(envRef2));
 
     blockNodes.push_back(std::move(envVar));
-    if (clazzVar) {
+    if (clazzVar) { // static call
         blockNodes.push_back(std::move(clazzVar));
     }
     if (argsVar) {
+        // !paramList.params.empty()
         blockNodes.push_back(std::move(argsVar));
     }
     blockNodes.push_back(std::move(methodCallRes));

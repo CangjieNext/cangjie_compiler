@@ -95,7 +95,7 @@ public:
     /**
      * Java_CFFI_JavaEntity
      */
-    Ptr<StructDecl> GetJavaEntityDecl();
+    Ptr<StructDecl> GetJavaEntityDecl() const;
 
     /**
      * Java_CFFI_JavaEntityKind
@@ -480,23 +480,63 @@ public:
      */
     OwnedPtr<AST::Expr> CreateCFFICallArrayMethodCall(OwnedPtr<AST::Expr> jniEnv, OwnedPtr<AST::Expr> obj,
         AST::FuncParamList& params, const Ptr<AST::GenericParamDecl> genericParam, ArrayOperationKind kind);
+
+    /**
+     * Creates a Cangjie VArray containing JNI jvalue-compatible representation
+     * for a non-empty function parameter list and returns a reference to its storage.
+     *
+     * The generated variable declaration is returned through argsVar so that the
+     * caller can insert it into the enclosing AST block and keep the argument
+     * storage alive for the JNI call.
+     *
+     * The caller must handle an empty parameter list explicitly.
+     */
+    OwnedPtr<Expr> CreateJNIArgsRef(FuncParamList& paramList, File& curFile, OwnedPtr<VarDecl>& argsVar);
+
+    /**
+     * Converts the result of a direct JNI method call to the Cangjie value expected
+     * by the generated code.
+     *
+     * Object results are represented as JavaEntity and converted using the existing
+     * interop unwrapping logic. JNI boolean results are normalized to Cangjie Bool.
+     * Other primitive results are returned unchanged.
+     */
+    OwnedPtr<Expr> ConvertJNIResult(OwnedPtr<Expr> result, Ptr<Ty> resultTy, Decl& scope);
+
     
     /**
-     * <callMethod>(env, obj, signature.classTypeSignature, signature.name, signature.signature, [args])
-     * where <callMethod> is Java_CFFI_callVirtualMethod_raw or Java_CFFI_callNonVirtualMethod_raw
-     *
-     * @param virt should the call be virtual or not
+     * Converts a Cangjie expression to the representation used in a JNI  - jvalue argument array.
      */
-     
-    OwnedPtr<CallExpr> CreateCallMethodCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj,
+    OwnedPtr<Expr> CreateJValueExpr(OwnedPtr<Expr> expr, Ptr<File> curFile);
+    
+    /**
+     * Generates a direct JNI instance method call.
+     *
+     * Selects the appropriate Call<Type>MethodA or CallNonvirtual<Type>MethodA
+     * function according to the return type and the virt flag. For non-virtual
+     * calls, the declaring class is passed explicitly as required by JNI.
+     *
+     * Primitive JNI results are returned directly. Object results are wrapped into
+     * JavaEntity to preserve the interop-layer result representation.
+     *
+     * @param virt true to generate a virtual JNI call; false to generate a
+     *             non-virtual JNI call.
+     */
+    OwnedPtr<CallExpr> CreateJNIMethodCall(OwnedPtr<Expr> env, OwnedPtr<Expr> obj,
                                             const MemberJNISignature& signature,
                                             OwnedPtr<Expr> argsExpr, Ptr<Ty> retTy,
                                             File& curFile, bool virt = true);
 
     /**
-     * Java_CFFI_callStaticMethod_raw(env, signature.classTypeSignature, signature.name, signature.signature, [args])
+     * Generates a direct JNI static method call.
+     *
+     * Selects the appropriate CallStatic<Type>MethodA function according to the
+     * return type and passes the supplied class as the JNI call receiver.
+     *
+     * Primitive JNI results are returned directly. Object results are wrapped into
+     * JavaEntity to preserve the interop-layer result representation.
      */
-    OwnedPtr<CallExpr> CreateCallStaticMethodCall(OwnedPtr<Expr> env, OwnedPtr<Expr> clazz,
+    OwnedPtr<CallExpr> CreateJNIStaticMethodCall(OwnedPtr<Expr> env, OwnedPtr<Expr> clazz,
         const MemberJNISignature& signature, OwnedPtr<Expr> argsExpr, Ptr<Ty> retTy, File& curFile);
 
     /**
@@ -632,8 +672,8 @@ public:
     Ptr<FuncDecl> FindStringStartsWithDecl();
     Ptr<FuncDecl> FindArrayJavaEntityGetDecl(ClassDecl& jArrayDecl) const;
     Ptr<FuncDecl> FindArrayJavaEntitySetDecl(ClassDecl& jArrayDecl) const;
-    Ptr<FuncDecl> FindAsJValueDecl();
-    Ptr<FuncDecl> FindAsJObjectDecl();
+    Ptr<FuncDecl> FindAsJValueDecl() const;
+    Ptr<FuncDecl> FindAsJObjectDecl() const;
 
     OwnedPtr<Expr> SelectJSigByTypeKind(TypeKind kind, Ptr<Ty> ty);
     OwnedPtr<Expr> SelectJPrimitiveNameByTypeKind(TypeKind kind, Ptr<Ty> ty);
@@ -667,9 +707,27 @@ public:
     static bool IsInteropLibAccessible(const ImportManager& importManager);
     static bool IsJavaEntityTy(Ty& ty);
 
-    OwnedPtr<VarDecl> CreateCFFIJValueArgsVar(FuncParamList& params, File& curFile);
-    OwnedPtr<VarDecl> CreateCFFIArgsVar(std::vector<OwnedPtr<Expr>> args, File& curFile);
-    OwnedPtr<VarDecl> CreateCFFIClassVar(OwnedPtr<Expr> env, const std::string& className, File& curFile);
+    /**
+    * Creates a variable holding a Cangjie VArray of JNI jvalue-compatible
+    * argument representations.
+    *
+    * The input expressions must already be converted to the representation
+    * expected in JNI argument slots.
+    *
+    * Returns nullptr if the argument list is empty
+    */
+    OwnedPtr<VarDecl> CreateJNIArgsVar(std::vector<OwnedPtr<Expr>> args, File& curFile);
+
+   /**
+    * Creates a variable holding the Java class resolved by its JNI class name.
+    *
+    * Generates a Java_CFFI_ClassInit(env, className) call and stores its result
+    * in a temporary variable for use by subsequent JNI operations.
+    *
+    * Returns nullptr if the required CFFI class initialization function
+    * cannot be resolved.
+    */
+    OwnedPtr<VarDecl> CreateJNIClassVar(OwnedPtr<Expr> env, const std::string& className, File& curFile);
 private:
    /**
     * Version value should be the same as for java interop library for the same SDK.
@@ -716,8 +774,6 @@ private:
     }
 
     Ptr<FuncDecl> GetJavaObjectControllerMethodDecl(std::string methodName);
-    OwnedPtr<Expr> CreateParamExpr(FuncParam& param, Ptr<File> curFile);
-    OwnedPtr<Expr> CreateJValueParamExpr(FuncParam& param, Ptr<File> curFile);
     OwnedPtr<FuncArg> CreateInoutFuncArg(OwnedPtr<Expr> expr);
     OwnedPtr<CallExpr> CreateJNIEnvReadCall(OwnedPtr<Expr> env);
     Ptr<StructDecl> GetJNINativeInterfaceDecl();

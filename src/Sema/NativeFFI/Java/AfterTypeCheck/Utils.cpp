@@ -1080,34 +1080,6 @@ Ptr<FuncDecl> InteropLibBridge::FindStringStartsWithDecl()
     return nullptr;
 }
 
-Ptr<FuncDecl> InteropLibBridge::FindAsJValueDecl()
-{
-    auto entityDecl = GetJavaEntityDecl();
-
-    for (auto& decl : entityDecl->GetMemberDeclPtrs()) {
-        if (decl->identifier == "asJValue") {
-            return As<ASTKind::FUNC_DECL>(decl.get());
-        }
-    }
-
-    CJC_ABORT();
-    return nullptr;
-}
-
-Ptr<FuncDecl> InteropLibBridge::FindAsJObjectDecl()
-{
-    auto entityDecl = GetJavaEntityDecl();
-
-    for (auto& decl : entityDecl->GetMemberDeclPtrs()) {
-        if (decl->identifier == "asJObject") {
-            return As<ASTKind::FUNC_DECL>(decl.get());
-        }
-    }
-
-    CJC_ABORT();
-    return nullptr;
-}
-
 OwnedPtr<Expr> InteropLibBridge::CreateGetTypeForTypeParameterCall(const Ptr<GenericParamDecl> genericParam) const
 {
     static auto getTypeForTypeParamDecl = FindGetTypeForTypeParamDecl(*genericParam->curFile);

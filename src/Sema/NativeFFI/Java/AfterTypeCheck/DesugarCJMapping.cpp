@@ -798,19 +798,19 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateFwdClassMethod(
     auto deleteLocalRef = WithinFile(CreateRefExpr(*localRefVar), curFile);
     auto deleteCallExpr = CreateCall(deleteLocalRefDecl, curFile, std::move(deleteEnvRef), std::move(deleteLocalRef));
 
-    // Java_CFFI_callVirtualMethod
+    // JNI virtual method call
     auto& paramList = *fun->funcBody->paramLists[0].get();
-    auto argsVar = lib.CreateCFFIJValueArgsVar(paramList, *curFile);
+    OwnedPtr<VarDecl> argsVar = nullptr;
     OwnedPtr<Expr> argsRef = nullptr;
-    if (argsVar) {
-        argsVar->isVar = true;
-        argsRef = CreateRefExpr(*argsVar);
-        CopyBasicInfo(argsVar.get(), argsRef.get());
+
+    if (!paramList.params.empty()) {
+        argsRef = lib.CreateJNIArgsRef(paramList, *curFile, argsVar);
+        CJC_NULLPTR_CHECK(argsRef);
     }
 
     auto callEnvRef = WithinFile(CreateRefExpr(*envVar), curFile);
     auto callLocalRef = WithinFile(CreateRefExpr(*localRefVar), curFile);
-    OwnedPtr<Expr> methodCall = lib.CreateCallMethodCall(std::move(callEnvRef), std::move(callLocalRef), MemberJNISignature(utils, *fun),
+    OwnedPtr<Expr> methodCall = lib.CreateJNIMethodCall(std::move(callEnvRef), std::move(callLocalRef), MemberJNISignature(utils, *fun),
         std::move(argsRef), fun->funcBody->retType->GetTy(), *curFile);
     if (!methodCall) {
         fun->EnableAttr(Attribute::IS_BROKEN);
@@ -824,7 +824,7 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateFwdClassMethod(
     if (fun->funcBody->retType->TyKind() == TypeKind::TYPE_FUNC) {
         retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), fun->funcBody->retType->GetTy(), fwdDecl);
     } else {
-        retCallExpr = lib.UnwrapJavaEntity(std::move(callResRef), fun->funcBody->retType->GetTy(), fwdDecl);
+        retCallExpr = lib.ConvertJNIResult(std::move(callResRef), fun->funcBody->retType->GetTy(), fwdDecl);
     }
 
     if (!retCallExpr) {
@@ -1143,21 +1143,20 @@ OwnedPtr<LambdaExpr> JavaDesugarManager::GenerateLambdaExpr(File& file, LambdaPa
     auto retTy = GetTyByName(pattern.returnType);
 
     // block
-    // let tmp = Java_CFFI_callVirtualMethod()
+    // create JNI virtual method call
     OwnedPtr<Expr> objParamRef = WithinFile(CreateRefExpr(funcParam), curFile);
     MemberJNISignature memberJNISignature(
         NormalizeJavaSignature(file.curPackage->fullPackageName + "/" + GetLambdaJavaClassName(pattern)), "call",
         utils.GetJavaTypeSignature(*retTy, paramTys));
 
-    auto argsVar = lib.CreateCFFIJValueArgsVar(*funcParamList, *curFile);
+    OwnedPtr<VarDecl> argsVar = nullptr;
     OwnedPtr<Expr> argsRef = nullptr;
-    if (argsVar) {
-        argsVar->isVar = true;
-        argsRef = CreateRefExpr(*argsVar);
-        CopyBasicInfo(argsVar.get(), argsRef.get());
+    if (!funcParamList->params.empty()) {
+        argsRef = lib.CreateJNIArgsRef(*funcParamList, *curFile, argsVar);
+        CJC_NULLPTR_CHECK(argsRef);
     }
 
-    OwnedPtr<Expr> methodCall = lib.CreateCallMethodCall(lib.CreateGetJniEnvCall(curFile), lib.CreateJavaEntityJobjectCall(std::move(objParamRef)),
+    OwnedPtr<Expr> methodCall = lib.CreateJNIMethodCall(lib.CreateGetJniEnvCall(curFile), lib.CreateJavaEntityJobjectCall(std::move(objParamRef)),
         memberJNISignature, std::move(argsRef), retTy, *curFile);
 
     CJC_NULLPTR_CHECK(methodCall);
@@ -1166,9 +1165,8 @@ OwnedPtr<LambdaExpr> JavaDesugarManager::GenerateLambdaExpr(File& file, LambdaPa
     // return Java_CFFI_unwrapJavaEntityAsValue()
     auto callResRef = WithinFile(CreateRefExpr(*methodCallRes), curFile);
     Decl emptyDecl;
-    auto unwrapJavaEntityCall = lib.UnwrapJavaEntity(std::move(callResRef), retTy, emptyDecl);
-    CJC_NULLPTR_CHECK(unwrapJavaEntityCall);
-    auto returnExpr = CreateReturnExpr(std::move(unwrapJavaEntityCall));
+    auto resultExpr = lib.ConvertJNIResult(std::move(callResRef), retTy, emptyDecl);
+    auto returnExpr = CreateReturnExpr(std::move(resultExpr));
     returnExpr->SetTy(TypeManager::GetNothingTy());
 
     std::vector<OwnedPtr<Node>> nodes;
