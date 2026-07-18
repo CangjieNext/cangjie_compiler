@@ -44,7 +44,12 @@ protected:
     virtual std::string GetTargetArchString() const;
 
     virtual void GenerateArchiveTool(const std::vector<TempFileInfo>& objFiles);
-    void HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Tool& tool);
+    void HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Tool& tool,
+                                bool bcOnly = false);
+  private:
+    // When true, GenerateLinkOptionsOfBuiltinLibsForStaticLink skips .a/.dylib.
+    // Set by HandleLLVMLinkOptions for LTO staticlib production with -r.
+    mutable bool bcOnlyForStaticLink_ = false;
     virtual void HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath);
 
     virtual void AddCRuntimeLibraryPaths();
