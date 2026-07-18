@@ -32185,7 +32185,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..d5bcaeae1 100644
+index b391fe1ea..4c3840036 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -32241,7 +32241,7 @@ index b391fe1ea..d5bcaeae1 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.2.0-beta.rc";
++    g_version_str += "\n  cangjie 1.2.0-beta.rc1";
    }
  
    return g_version_str.c_str();
@@ -39595,10 +39595,10 @@ index f8eba1a00..f6356240b 100644
  /// or unreachable). These paths are hidden if the corresponding cl::opts
 diff --git a/llvm/lib/Analysis/CJAliasAnalysis.cpp b/llvm/lib/Analysis/CJAliasAnalysis.cpp
 new file mode 100644
-index 000000000..4957ac303
+index 000000000..ba63d66e1
 --- /dev/null
 +++ b/llvm/lib/Analysis/CJAliasAnalysis.cpp
-@@ -0,0 +1,303 @@
+@@ -0,0 +1,325 @@
 +//===- CJAliasAnalysis.cpp --------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -39655,6 +39655,22 @@ index 000000000..4957ac303
 +  return DT && Inv.invalidate<DominatorTreeAnalysis>(Fn, PA);
 +}
 +
++// An alloca produced by PEA stackification carries the "ea_val" metadata (set
++// by CJPartialEscapeAnalysis::setEscapeMeta). Its body may hold GC pointers,
++// and gcwrite may store an as1-cast of such an alloca into a heap object's
++// field; a later load from that field then returns a value whose type is
++// addrspace(1) but that points back to the stack alloca at run time. The
++// stack-vs-heap NoAlias rule below would misclassify that pair as NoAlias.
++// Treat any side whose underlying object is a PEA-degraded alloca as
++// MayAlias so the NoAlias fast path is not taken. The caller must pass an
++// already-resolved underlying object (i.e. the result of getUnderlyingObject);
++// this helper does not re-resolve.
++static bool isPEADegradedAlloca(const Value *O) {
++  if (const auto *AI = dyn_cast<AllocaInst>(O))
++    return AI->getMetadata("ea_val") != nullptr;
++  return false;
++}
++
 +static bool isGCPointerOrGlobalBase(const Value *V,
 +                                    unsigned MaxLookup = MaxLookupSearchDepth) {
 +  V = getUnderlyingObject(V, 0);
@@ -39662,11 +39678,8 @@ index 000000000..4957ac303
 +    return false;
 +  if (isa<GlobalValue>(V))
 +    return true;
-+  if (isa<Argument>(V))
++  if (isa<Argument>(V) || isa<LoadInst>(V))
 +    return isGCPointerType(V->getType());
-+  if (auto *LI = dyn_cast<LoadInst>(V)) {
-+    return false;
-+  }
 +  if (auto *II = dyn_cast<IntrinsicInst>(V)) {
 +    switch (II->getIntrinsicID()) {
 +    case Intrinsic::cj_gcread_ref:
@@ -39708,6 +39721,15 @@ index 000000000..4957ac303
 +                              const MemoryLocation &LocB, AAQueryInfo &AAQI) {
 +  const Value *O1 = getUnderlyingObject(LocA.Ptr, MaxLookupSearchDepth);
 +  const Value *O2 = getUnderlyingObject(LocB.Ptr, MaxLookupSearchDepth);
++  // A PEA-degraded alloca can be read back through a heap field (gcwrite stores
++  // an as1-cast of it, a later load returns a value typed as1 but pointing to
++  // the stack). Do not apply the stack-vs-heap NoAlias rule when either side
++  // is such an alloca; fall back to the default (MayAlias) instead. Check this
++  // on the already-resolved O1/O2 (reuses the getUnderlyingObject results
++  // above) and before computing IsStackValue, so the fast path is skipped
++  // entirely for the affected pair.
++  if (isPEADegradedAlloca(O1) || isPEADegradedAlloca(O2))
++    return AAResultBase::alias(LocA, LocB, AAQI);
 +  // In cangjie, stack space and heap space has different addrspace, and they
 +  // can never be aliased.
 +  bool IsStackValue1 = isa<AllocaInst>(O1) ||
