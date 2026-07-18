@@ -86,7 +86,8 @@ void MachO::GenerateArchiveTool(const std::vector<TempFileInfo>& objFiles)
 }
 
 // Have no idea how to use linker script on MacOS currently.
-void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Tool& tool)
+void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Tool& tool,
+                                   bool bcOnly)
 {
     // The order of linkage of object files & libraries is as follows:
     //
@@ -133,7 +134,9 @@ void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Too
     tool.AppendArgIf(driverOptions.enablePgoInstrGen || driverOptions.enableCoverage,
         FileUtil::JoinPath(cangjieLibPath, GetClangRTProfileLibraryName()));
     // 4. The built-in library dependencies
+    bcOnlyForStaticLink_ = bcOnly;
     GenerateLinkOptionsOfBuiltinLibs(tool);
+    bcOnlyForStaticLink_ = false;
     // 5. System library dependencies required by the backend
     GenerateLinkOptions(tool);
 }
@@ -340,11 +343,15 @@ void MachO::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
         }
     }
     // Static libraries are not sorted, thus we need to group them or symbols may be discarded by the linker.
-    for (const auto& other : staticLibraries) {
-        tool.AppendArg(other);
-    }
-    for (const auto& lib : dynamicLibraries) {
-        tool.AppendArg(lib);
+    // When bcOnlyForStaticLink_ is set (LTO staticlib production with -r), skip .a and .dylib
+    // — runtime symbols should be resolved at the final link step.
+    if (!bcOnlyForStaticLink_) {
+        for (const auto& other : staticLibraries) {
+            tool.AppendArg(other);
+        }
+        for (const auto& lib : dynamicLibraries) {
+            tool.AppendArg(lib);
+        }
     }
 }
 

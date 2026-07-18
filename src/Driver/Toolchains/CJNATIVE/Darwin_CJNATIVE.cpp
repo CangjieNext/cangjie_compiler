@@ -102,7 +102,7 @@ void Darwin_CJNATIVE::GenerateArchiveTool(const std::vector<TempFileInfo>& objFi
     removeArchive->AppendArg(archiveOutput.filePath);
     backendCmds.emplace_back(MakeSingleToolBatch({std::move(removeArchive)}));
     archiveTool->AppendArg(archiveOutput.filePath);
-    archiveTool->AppendArgsFromDirAtExecution(ltoObject.rawPath, "lto.o");
+    archiveTool->AppendArg(ltoObject.filePath);
     backendCmds.emplace_back(MakeSingleToolBatch({std::move(archiveTool)}));
 }
 
@@ -116,13 +116,10 @@ TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileIn
     auto tool = std::make_unique<Tool>(ldPath, ToolType::BACKEND, driverOptions.environment.allVariables);
     tool->SetLdLibraryPath(FileUtil::JoinPath(FileUtil::GetDirPath(ldPath), "../lib"));
     auto outputFileInfo = CreateNewFileInfoWrapper(objFiles, TempFileKind::T_OBJ);
-    auto ltoObjectDir = outputFileInfo.filePath + ".lto";
-    // Linker always produces nums.<arch>.lto.o inside -object_path_lto, so the name must match.
-    auto ltoObjectPath = FileUtil::JoinPath(ltoObjectDir, "0." + GetTargetArchString() + ".lto.o");
+    auto ltoObjectPath = outputFileInfo.filePath;
     GenerateLinkOptionsForLTO(*tool);
-    tool->AppendArg("-object_path_lto", ltoObjectDir);
-    tool->AppendArg("-lto-emit-obj-only");
-    tool->AppendArg("-dylib");
+    tool->AppendArg("-r");
+    tool->AppendArg("-o", ltoObjectPath);
     tool->AppendArg("-arch", GetTargetArchString());
 
     tool->AppendArg("-platform_version");
@@ -132,12 +129,13 @@ TempFileInfo Darwin_CJNATIVE::GenerateLTOObjectFile(const std::vector<TempFileIn
 
     tool->AppendArg("-syslibroot");
     tool->AppendArg(driverOptions.sysroot.empty() ? "/" : driverOptions.sysroot);
-    HandleLLVMLinkOptions(objFiles, *tool);
-    GenerateRuntimePath(*tool);
+    // For LTO staticlib production, only pass bc files, not runtime .a/.dylib.
+    // Runtime libraries are resolved at the final link step, not here.
+    HandleLLVMLinkOptions(objFiles, *tool, /*bcOnly=*/true);
 
     backendCmds.emplace_back(MakeSingleToolBatch({std::move(tool)}));
     outputFileInfo.filePath = ltoObjectPath;
-    outputFileInfo.rawPath = ltoObjectDir;
+    outputFileInfo.rawPath = ltoObjectPath;
     return outputFileInfo;
 }
 
