@@ -86,7 +86,8 @@ void MachO::GenerateArchiveTool(const std::vector<TempFileInfo>& objFiles)
 }
 
 // Have no idea how to use linker script on MacOS currently.
-void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Tool& tool)
+void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Tool& tool,
+                                   bool bcOnly)
 {
     // The order of linkage of object files & libraries is as follows:
     //
@@ -117,25 +118,30 @@ void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Too
 
     auto cangjieLibPath =
         FileUtil::JoinPath(FileUtil::JoinPath(driver.cangjieHome, "lib"), driverOptions.GetCangjieLibTargetPathName());
-    // 1. The -L library path
-    HandleLibrarySearchPaths(tool, cangjieLibPath);
 
-    // 2. cjstart.o
-    tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "section.o"));
-    tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "cjstart.o"));
+    if (!bcOnly) {
+        // 1. The -L library path
+        HandleLibrarySearchPaths(tool, cangjieLibPath);
+
+        // 2. section.o / cjstart.o — only for final executable/dylib links
+        tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "section.o"));
+        tool.AppendArg(FileUtil::JoinPath(cangjieLibPath, "cjstart.o"));
+    }
 
     // 3. Frontend output or input files
-    // 3.1 Frontend output files (.o)
-    // 3.2 Pass to the linker in the order of input files (.o, .a, -l)
     SortInputlibraryFileAndAppend(tool, objFiles);
     // Note that the pgo options must be inserted after those from SortInputlibraryFileAndAppend
     tool.AppendArgIf(driverOptions.enablePgoInstrGen, "-u", "___llvm_profile_runtime");
     tool.AppendArgIf(driverOptions.enablePgoInstrGen || driverOptions.enableCoverage,
         FileUtil::JoinPath(cangjieLibPath, GetClangRTProfileLibraryName()));
     // 4. The built-in library dependencies
+    bcOnlyForStaticLink_ = bcOnly;
     GenerateLinkOptionsOfBuiltinLibs(tool);
     // 5. System library dependencies required by the backend
-    GenerateLinkOptions(tool);
+    //    Skip when bcOnly: runtime symbols belong to the final link step.
+    if (!bcOnly)
+        GenerateLinkOptions(tool);
+    bcOnlyForStaticLink_ = false;
 }
 
 void MachO::HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath)
@@ -334,17 +340,25 @@ void MachO::GenerateLinkOptionsOfBuiltinLibsForStaticLink(Tool& tool) const
 
     ForEachBuiltinDependencies(driverOptions.directBuiltinDependencies, appendStaticLibsToTool);
     ForEachBuiltinDependencies(driverOptions.indirectBuiltinDependencies, appendStaticLibsToTool);
-    if (driverOptions.IsLTOEnabled()) {
+    bool linkStdDynamically =
+        driverOptions.linkStaticStd.has_value() && !driverOptions.linkStaticStd.value();
+    // When bcOnly (LTO staticlib) and user chose dynamic std, skip .bc files
+    // — stdlib will be linked dynamically at the final link stage.
+    if (driverOptions.IsLTOEnabled() && !(bcOnlyForStaticLink_ && linkStdDynamically)) {
         for (const auto& bcFile : ltoBuiltInDependencies) {
             tool.AppendArg(bcFile);
         }
     }
     // Static libraries are not sorted, thus we need to group them or symbols may be discarded by the linker.
-    for (const auto& other : staticLibraries) {
-        tool.AppendArg(other);
-    }
-    for (const auto& lib : dynamicLibraries) {
-        tool.AppendArg(lib);
+    // When bcOnlyForStaticLink_ is set (LTO staticlib production with -r), skip .a and .dylib
+    // — runtime symbols should be resolved at the final link step.
+    if (!bcOnlyForStaticLink_) {
+        for (const auto& other : staticLibraries) {
+            tool.AppendArg(other);
+        }
+        for (const auto& lib : dynamicLibraries) {
+            tool.AppendArg(lib);
+        }
     }
 }
 
