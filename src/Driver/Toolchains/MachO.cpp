@@ -138,6 +138,24 @@ void MachO::HandleLLVMLinkOptions(const std::vector<TempFileInfo>& objFiles, Too
     GenerateLinkOptions(tool);
 }
 
+void MachO::AppendLTOBcInputs(const std::vector<TempFileInfo>& objFiles, Tool& tool)
+{
+    // For LTO staticlib production with -r, only pass bitcode files so they
+    // participate in LTO cross-module optimization. Runtime .a/.dylib, section.o,
+    // cjstart.o, and -L paths are skipped — they belong to the final link step.
+    SortInputlibraryFileAndAppend(tool, objFiles);
+
+    if (!driverOptions.IsLTOEnabled())
+        return;
+
+    // Append stdlib .bc files from built-in dependencies so they participate in LTO.
+    const std::function<void(std::string)> appendBcToTool = [&tool](const std::string& cjoFileName) {
+        tool.AppendArg(FileUtil::ConvertFilenameToLtoLibCangjieFormat(cjoFileName));
+    };
+    ForEachBuiltinDependencies(driverOptions.directBuiltinDependencies, appendBcToTool);
+    ForEachBuiltinDependencies(driverOptions.indirectBuiltinDependencies, appendBcToTool);
+}
+
 void MachO::HandleLibrarySearchPaths(Tool& tool, const std::string& cangjieLibPath)
 {
     // Append -L (those specified in command) as search paths
