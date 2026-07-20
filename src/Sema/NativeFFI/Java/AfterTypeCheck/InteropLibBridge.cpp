@@ -75,7 +75,8 @@ constexpr auto INTEROPLIB_CFFI_GET_REGISTRY_ID_OR_NONE = "Java_CFFI_getRegistryI
 constexpr auto INTEROPLIB_CFFI_JAVA_STRING_TO_CANGJIE = "Java_CFFI_JavaStringToCangjie";
 constexpr auto INTEROPLIB_CFFI_CANGJIE_STRING_TO_JAVA = "Java_CFFI_CangjieStringToJava";
 constexpr auto INTEROPLIB_CFFI_WITH_EXCEPTION_HANDLING_ID = "withExceptionHandling";
-constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS_ID = "Java_CFFI_ClassInit";
+constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS_INIT = "Java_CFFI_ClassInit";
+constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS_ID = "Java_CFFI_getClassID";
 constexpr auto INTEROPLIB_CFFI_PARSE_METHOD_SIGNATURE_ID = "Java_CFFI_parseMethodSignature";
 constexpr auto INTEROPLIB_CFFI_PARSE_COMPONENT_SIGNATURE_ID = "Java_CFFI_parseComponentSignature";
 constexpr auto INTEROPLIB_CFFI_JAVA_CALLNEST_ID = "Java_CFFI_JavaCallNestInit";
@@ -232,7 +233,8 @@ Ptr<FuncDecl> InteropLibBridge::FindAsJObjectDecl() const
     return result;
 }
 
-Ptr<VarDecl> InteropLibBridge::GetJNINativeInterfaceField(const std::string& name){
+Ptr<VarDecl> InteropLibBridge::GetJNINativeInterfaceField(const std::string& name)
+{
     auto st = GetJNINativeInterfaceDecl();
     if (!st) {
         return nullptr;
@@ -375,6 +377,11 @@ Ptr<FuncDecl> InteropLibBridge::GetWithExceptionHandlingDecl()
 }
 
 Ptr<FuncDecl> InteropLibBridge::GetJClassDecl()
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_CLASS_INIT);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetJClassIdDecl()
 {
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_CLASS_ID);
 }
@@ -756,7 +763,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateNewJavaObjectCall(Ptr<Expr> env, cons
 {
     auto curFile = env->curFile;
     auto funcDecl = GetNewJavaObjectDecl();
-    auto jclassInitFuncDecl = GetJClassDecl();
+    auto jclassInitFuncDecl = GetJClassIdDecl();
     auto parseSignatureFuncDecl = GetParseMethodSignatureDecl();
     auto callNestFuncDecl = GetCallNestDecl();
     auto methodIDFuncDecl = GetMethodIdConstr();
@@ -987,11 +994,12 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateJNIMethodCall(OwnedPtr<Expr> env, Own
     OwnedPtr<Expr> argsExpr, Ptr<Ty> retTy, File& curFile, bool virt)
 {
     auto pcurFile = Ptr(&curFile);
-    auto callMethodVar = GetJNINativeInterfaceField(SelectJNIInstanceMethodName(retTy->kind, virt, argsExpr != nullptr));
+    auto callMethodVar = GetJNINativeInterfaceField(
+        SelectJNIInstanceMethodName(retTy->kind, virt, argsExpr != nullptr));
     if (!callMethodVar) {
         return nullptr;
     }
-    auto jclassInitFuncDecl = GetJClassDecl();
+    auto jclassInitFuncDecl = GetJClassIdDecl();
     auto getMethodIdFuncDecl = GetGetMethodIdDecl();
 
     if (!jclassInitFuncDecl || !getMethodIdFuncDecl) {
@@ -1027,7 +1035,8 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateJNIMethodCall(OwnedPtr<Expr> env, Own
     auto asJObjectDecl = FindAsJObjectDecl();
     auto asJObjectMember = WithinFile(CreateMemberAccess(std::move(obj), *asJObjectDecl), pcurFile);
     auto asJObjectFuncTy = StaticCast<FuncTy*>(asJObjectDecl->GetTy());
-    auto asJObjectCall = CreateCallExpr(std::move(asJObjectMember), {}, asJObjectDecl, asJObjectFuncTy->retTy, CallKind::CALL_DECLARED_FUNCTION);
+    auto asJObjectCall = CreateCallExpr(std::move(asJObjectMember), {}, asJObjectDecl,
+        asJObjectFuncTy->retTy, CallKind::CALL_DECLARED_FUNCTION);
     asJObjectCall->curFile = pcurFile;
 
     OwnedPtr<Expr> envForClass2 = nullptr;
@@ -1052,7 +1061,8 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateJNIMethodCall(OwnedPtr<Expr> env, Own
     }
 
     auto funcTy = StaticCast<FuncTy*>(callMethodVar->GetTy());
-    auto callExpr = CreateCallExpr(std::move(methodAccess), std::move(callArgs), nullptr, funcTy->retTy, CallKind::CALL_FUNCTION_PTR);
+    auto callExpr = CreateCallExpr(std::move(methodAccess), std::move(callArgs), nullptr,
+        funcTy->retTy, CallKind::CALL_FUNCTION_PTR);
     callExpr->EnableAttr(Attribute::UNSAFE);
 
     if (retTy->IsPrimitive()) {
@@ -1253,63 +1263,63 @@ struct JNIMethodNames {
 namespace {
 
 constexpr JNIMethodNames BYTE_METHODS{
-    "CallByteMethod",          "CallByteMethodA",
-    "CallNonvirtualByteMethod","CallNonvirtualByteMethodA",
-    "CallStaticByteMethod",    "CallStaticByteMethodA"
+    "CallByteMethod",           "CallByteMethodA",
+    "CallNonvirtualByteMethod", "CallNonvirtualByteMethodA",
+    "CallStaticByteMethod",     "CallStaticByteMethodA"
 };
 
 constexpr JNIMethodNames CHAR_METHODS{
-    "CallCharMethod",          "CallCharMethodA",
-    "CallNonvirtualCharMethod","CallNonvirtualCharMethodA",
-    "CallStaticCharMethod",    "CallStaticCharMethodA"
+    "CallCharMethod",           "CallCharMethodA",
+    "CallNonvirtualCharMethod", "CallNonvirtualCharMethodA",
+    "CallStaticCharMethod",     "CallStaticCharMethodA"
 };
 
 constexpr JNIMethodNames SHORT_METHODS{
-    "CallShortMethod",          "CallShortMethodA",
-    "CallNonvirtualShortMethod","CallNonvirtualShortMethodA",
-    "CallStaticShortMethod",    "CallStaticShortMethodA"
+    "CallShortMethod",           "CallShortMethodA",
+    "CallNonvirtualShortMethod", "CallNonvirtualShortMethodA",
+    "CallStaticShortMethod",     "CallStaticShortMethodA"
 };
 
 constexpr JNIMethodNames INT_METHODS{
-    "CallIntMethod",          "CallIntMethodA",
-    "CallNonvirtualIntMethod","CallNonvirtualIntMethodA",
-    "CallStaticIntMethod",    "CallStaticIntMethodA"
+    "CallIntMethod",           "CallIntMethodA",
+    "CallNonvirtualIntMethod", "CallNonvirtualIntMethodA",
+    "CallStaticIntMethod",     "CallStaticIntMethodA"
 };
 
 constexpr JNIMethodNames LONG_METHODS{
-    "CallLongMethod",          "CallLongMethodA",
-    "CallNonvirtualLongMethod","CallNonvirtualLongMethodA",
-    "CallStaticLongMethod",    "CallStaticLongMethodA"
+    "CallLongMethod",           "CallLongMethodA",
+    "CallNonvirtualLongMethod", "CallNonvirtualLongMethodA",
+    "CallStaticLongMethod",     "CallStaticLongMethodA"
 };
 
 constexpr JNIMethodNames FLOAT_METHODS{
-    "CallFloatMethod",          "CallFloatMethodA",
-    "CallNonvirtualFloatMethod","CallNonvirtualFloatMethodA",
-    "CallStaticFloatMethod",    "CallStaticFloatMethodA"
+    "CallFloatMethod",           "CallFloatMethodA",
+    "CallNonvirtualFloatMethod", "CallNonvirtualFloatMethodA",
+    "CallStaticFloatMethod",     "CallStaticFloatMethodA"
 };
 
 constexpr JNIMethodNames DOUBLE_METHODS{
-    "CallDoubleMethod",          "CallDoubleMethodA",
-    "CallNonvirtualDoubleMethod","CallNonvirtualDoubleMethodA",
-    "CallStaticDoubleMethod",    "CallStaticDoubleMethodA"
+    "CallDoubleMethod",           "CallDoubleMethodA",
+    "CallNonvirtualDoubleMethod", "CallNonvirtualDoubleMethodA",
+    "CallStaticDoubleMethod",     "CallStaticDoubleMethodA"
 };
 
 constexpr JNIMethodNames BOOLEAN_METHODS{
-    "CallBooleanMethod",          "CallBooleanMethodA",
-    "CallNonvirtualBooleanMethod","CallNonvirtualBooleanMethodA",
-    "CallStaticBooleanMethod",    "CallStaticBooleanMethodA"
+    "CallBooleanMethod",           "CallBooleanMethodA",
+    "CallNonvirtualBooleanMethod", "CallNonvirtualBooleanMethodA",
+    "CallStaticBooleanMethod",     "CallStaticBooleanMethodA"
 };
 
 constexpr JNIMethodNames VOID_METHODS{
-    "CallVoidMethod",          "CallVoidMethodA",
-    "CallNonvirtualVoidMethod","CallNonvirtualVoidMethodA",
-    "CallStaticVoidMethod",    "CallStaticVoidMethodA"
+    "CallVoidMethod",           "CallVoidMethodA",
+    "CallNonvirtualVoidMethod", "CallNonvirtualVoidMethodA",
+    "CallStaticVoidMethod",     "CallStaticVoidMethodA"
 };
 
 constexpr JNIMethodNames OBJECT_METHODS{
-    "CallObjectMethod",          "CallObjectMethodA",
-    "CallNonvirtualObjectMethod","CallNonvirtualObjectMethodA",
-    "CallStaticObjectMethod",    "CallStaticObjectMethodA"
+    "CallObjectMethod",           "CallObjectMethodA",
+    "CallNonvirtualObjectMethod", "CallNonvirtualObjectMethodA",
+    "CallStaticObjectMethod",     "CallStaticObjectMethodA"
 };
 
 } // namespace
@@ -1347,26 +1357,24 @@ const char* InteropLibBridge::SelectJNIStaticMethodName(TypeKind kind, bool hasA
     return hasArgs ? m.staticArgs : m.staticNoArgs;
 }
 
-OwnedPtr<Expr> InteropLibBridge::CreateReinterpretCastExpr(OwnedPtr<Expr> expr,
+OwnedPtr<Expr> InteropLibBridge::CreateBitCastExpr(OwnedPtr<Expr> expr,
     Ptr<Ty> resultTy, Ptr<Ty> valueTy, Ptr<File> curFile)
 {
-    static auto reinterpretCastDecl = GetInteropLibDecl<ASTKind::FUNC_DECL>("reinterpretCast");
-    if (!reinterpretCastDecl) {
+    auto bitCastDecl = importManager.GetCoreDecl<FuncDecl>("bitCast");
+    if (!bitCastDecl) {
         return nullptr;
     }
-
-    auto ref = CreateRefExpr(*reinterpretCastDecl);
-    ref->instTys.emplace_back(resultTy);
+    auto ref = CreateRefExpr(*bitCastDecl);
     ref->instTys.emplace_back(valueTy);
-    ref->typeArguments.emplace_back(CreateType(resultTy));
+    ref->instTys.emplace_back(resultTy);
     ref->typeArguments.emplace_back(CreateType(valueTy));
-    ref->SetTy(typeManager.GetInstantiatedTy(reinterpretCastDecl->GetTy(),
-        GenerateTypeMapping(*reinterpretCastDecl, ref->instTys)));
-
+    ref->typeArguments.emplace_back(CreateType(resultTy));
+    ref->SetTy(typeManager.GetInstantiatedTy(bitCastDecl->GetTy(),
+        GenerateTypeMapping(*bitCastDecl, ref->instTys)));
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateFuncArg(std::move(expr)));
-    auto call = CreateCallExpr(std::move(ref), std::move(args),
-        reinterpretCastDecl, resultTy, CallKind::CALL_DECLARED_FUNCTION);
+    auto call = CreateCallExpr(std::move(ref), std::move(args), bitCastDecl, resultTy,
+        CallKind::CALL_INTRINSIC_FUNCTION);
     call->curFile = curFile;
     return call;
 }
@@ -1374,11 +1382,8 @@ OwnedPtr<Expr> InteropLibBridge::CreateReinterpretCastExpr(OwnedPtr<Expr> expr,
 OwnedPtr<VarDecl> InteropLibBridge::CreateJNIClassVar(OwnedPtr<Expr> env, const std::string& className, File& curFile)
 {
     auto pcurFile = Ptr(&curFile);
-    auto jclassInitFuncDecl = GetJClassDecl();
-    if (!jclassInitFuncDecl) {
-        return nullptr;
-    }
-
+    auto jclassInitFuncDecl = GetJClassIdDecl();
+    CJC_NULLPTR_CHECK(jclassInitFuncDecl);
     auto strTy = jclassInitFuncDecl->funcBody->paramLists[0]->params[1]->GetTy();
     auto classNameExpr = CreateLitConstExpr(LitConstKind::STRING, className, strTy);
     classNameExpr->curFile = pcurFile;
@@ -1410,12 +1415,12 @@ OwnedPtr<Expr> InteropLibBridge::CreateJValueExpr(OwnedPtr<Expr> expr, Ptr<File>
     if (ty->IsPrimitive()) {
         switch (ty->kind) {
             case TypeKind::TYPE_FLOAT32:
-                return CreateReinterpretCastExpr(std::move(expr),
+                return CreateBitCastExpr(std::move(expr),
                     typeManager.GetPrimitiveTy(TypeKind::TYPE_UINT32),
                     typeManager.GetPrimitiveTy(TypeKind::TYPE_FLOAT32),
                     curFile);
             case TypeKind::TYPE_FLOAT64:
-                return CreateReinterpretCastExpr(std::move(expr),
+                return CreateBitCastExpr(std::move(expr),
                     typeManager.GetPrimitiveTy(TypeKind::TYPE_UINT64),
                     typeManager.GetPrimitiveTy(TypeKind::TYPE_FLOAT64),
                     curFile);
@@ -1441,13 +1446,13 @@ OwnedPtr<Expr> InteropLibBridge::CreateJNIArgsRef(FuncParamList& paramList, File
     std::vector<OwnedPtr<Expr>> args;
     args.reserve(paramList.params.size());
     for (auto& param : paramList.params) {
-        args.emplace_back(CreateJValueExpr(WithinFile(CreateRefExpr(*param), Ptr(&curFile)), Ptr(&curFile)));
+        auto arg = CreateJValueExpr(WithinFile(CreateRefExpr(*param), Ptr(&curFile)), Ptr(&curFile));
+        CJC_NULLPTR_CHECK(arg);
+        args.emplace_back(std::move(arg));
     }
 
     argsVar = CreateJNIArgsVar(std::move(args), curFile);
-    if (!argsVar) {
-        return nullptr;
-    }
+    CJC_NULLPTR_CHECK(argsVar);
     return WithinFile(CreateRefExpr(*argsVar), Ptr(&curFile));
 }
 
