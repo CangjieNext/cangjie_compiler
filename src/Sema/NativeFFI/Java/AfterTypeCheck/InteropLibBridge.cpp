@@ -1448,9 +1448,7 @@ OwnedPtr<Expr> InteropLibBridge::CreateJNIArgsRef(FuncParamList& paramList, File
     if (!argsVar) {
         return nullptr;
     }
-    auto argsRef = CreateRefExpr(*argsVar);
-    CopyBasicInfo(argsVar.get(), argsRef.get());
-    return argsRef;
+    return WithinFile(CreateRefExpr(*argsVar), Ptr(&curFile));
 }
 
 OwnedPtr<Expr> InteropLibBridge::ConvertJNIResult(OwnedPtr<Expr> result, Ptr<Ty> resultTy, Decl& scope)
