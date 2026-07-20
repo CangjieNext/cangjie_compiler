@@ -32,33 +32,31 @@ void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(
     CJC_ASSERT(IsMirror(outerDecl));
     auto parent = As<ASTKind::CLASS_DECL>(&outerDecl);
     auto curFile = call.curFile;
+    CJC_NULLPTR_CHECK(curFile);
 
     std::vector<OwnedPtr<Expr>> jniArgs;
-
     for (auto& arg : call.args) {
         auto argExpr = ASTCloner::Clone(arg->expr.get());
         CJC_NULLPTR_CHECK(argExpr);
-        auto jvalueExpr = ilib.CreateJValueExpr(std::move(argExpr), curFile);
-        jniArgs.emplace_back(std::move(jvalueExpr));
+        jniArgs.emplace_back(ilib.CreateJValueExpr(std::move(argExpr), curFile));
     }
 
     OwnedPtr<VarDecl> argsVar = nullptr;
     OwnedPtr<Expr> argsRef = nullptr;
-
     if (!jniArgs.empty()) {
         argsVar = ilib.CreateJNIArgsVar(std::move(jniArgs), *curFile);
-        argsRef = CreateRefExpr(*argsVar);
-        CopyBasicInfo(argsVar.get(), argsRef.get());
+        CJC_NULLPTR_CHECK(argsVar);
+        argsRef = WithinFile(CreateRefExpr(*argsVar), curFile);
     }
 
-    auto env = ilib.CreateGetJniEnvCall(curFile);
-    auto javaRef = CreateJavaRefCall(impl, curFile);
     MemberJNISignature signature(utils, *call.resolvedFunction, parent);
-    auto desugaredCall = ilib.CreateJNIMethodCall(std::move(env), std::move(javaRef), signature,
-        std::move(argsRef), call.GetTy(), *curFile, false);
-    auto resultExpr = ilib.ConvertJNIResult(std::move(desugaredCall), call.GetTy(), impl);
+    auto jniCall = ilib.CreateJNIMethodCall(ilib.CreateGetJniEnvCall(curFile), CreateJavaRefCall(impl, curFile),
+        signature, std::move(argsRef), call.GetTy(), *curFile, false);
+    CJC_NULLPTR_CHECK(jniCall);
+    auto resultExpr = ilib.ConvertJNIResult(std::move(jniCall), call.GetTy(), impl);
+    CJC_NULLPTR_CHECK(resultExpr);
 
-    if (call.args.empty()) {
+    if (!argsVar) {
         call.desugarExpr = std::move(resultExpr);
         return;
     }
@@ -66,8 +64,7 @@ void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(
     std::vector<OwnedPtr<Node>> nodes;
     nodes.emplace_back(std::move(argsVar));
     nodes.emplace_back(std::move(resultExpr));
-    auto block = CreateBlock(std::move(nodes), call.GetTy());
-    call.desugarExpr = std::move(block);
+    call.desugarExpr = CreateBlock(std::move(nodes), call.GetTy());
 }
 
 DesugarJavaImplSuperMethodCall::DesugarJavaImplSuperMethodCall(
