@@ -292,6 +292,7 @@ public:
     Ptr<FuncDecl> GetWithExceptionHandlingDecl();
 
     Ptr<FuncDecl> GetJClassDecl();
+    Ptr<FuncDecl> GetJClassIdDecl();
     Ptr<FuncDecl> GetGetMethodIdDecl();
     Ptr<FuncDecl> GetParseMethodSignatureDecl();
     Ptr<FuncDecl> GetParseComponentSignatureDecl();
@@ -780,7 +781,7 @@ private:
     Ptr<VarDecl> GetJNINativeInterfaceField(const std::string& name);
     const char* SelectJNIStaticMethodName(TypeKind kind, bool hasArgs);
     const char* SelectJNIInstanceMethodName(TypeKind kind, bool virt, bool hasArgs);
-    OwnedPtr<Expr> CreateReinterpretCastExpr(OwnedPtr<Expr> expr, Ptr<Ty> fromTy, Ptr<Ty> toTy, Ptr<File> curFile);
+    OwnedPtr<Expr> CreateBitCastExpr(OwnedPtr<Expr> expr, Ptr<Ty> resultTy, Ptr<Ty> valueTy, Ptr<File> curFile);
 
     const ImportManager& importManager;
     TypeManager& typeManager;
