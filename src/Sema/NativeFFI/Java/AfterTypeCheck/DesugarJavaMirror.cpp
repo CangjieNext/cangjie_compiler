@@ -343,37 +343,31 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
         CJC_ASSERT_WITH_MSG(!mirror.generic->typeParameters.empty(), "JArray ctor must be generic");
         auto genericParam = mirror.generic->typeParameters[0].get();
         CJC_ASSERT(genericParam);
-        methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
+
+        methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile (CreateRefExpr(jniEnv), curFile),
             std::move(javaRefCall), paramList, genericParam, GetArrayOperationKind(fun));
     } else {
-        auto memberJNISignature = 
+        auto memberJNISignature =
             genericConfig ? MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
 
         OwnedPtr<Expr> argsRef = nullptr;
         if (!paramList.params.empty()) {
             OwnedPtr<VarDecl> argsVar = nullptr;
             argsRef = lib.CreateJNIArgsRef(paramList, *curFile, argsVar);
-            if (!argsRef) {
-                fun.EnableAttr(Attribute::IS_BROKEN);
-                return;
-            }
             body.emplace_back(std::move(argsVar));
         }
 
         if (fun.TestAttr(Attribute::STATIC)) {
             auto clazzVar =
-                lib.CreateJNIClassVar(WithinFile(CreateRefExpr(jniEnv), curFile), memberJNISignature.classTypeSignature, *curFile);
-            if (!clazzVar) {
-                fun.EnableAttr(Attribute::IS_BROKEN);
-                return;
-            }
-
+                lib.CreateJNIClassVar(WithinFile(CreateRefExpr(jniEnv), curFile),
+                    memberJNISignature.classTypeSignature, *curFile);
             methodCall = lib.CreateJNIStaticMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
-                WithinFile(CreateRefExpr(*clazzVar), curFile), memberJNISignature, std::move(argsRef), retTy, *curFile);
+                WithinFile(CreateRefExpr(*clazzVar), curFile), memberJNISignature,
+                std::move(argsRef), retTy, *curFile);
             body.emplace_back(std::move(clazzVar));
         } else {
-            methodCall = lib.CreateJNIMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile), std::move(javaRefCall),
-                memberJNISignature, std::move(argsRef), retTy, *curFile, true);
+            methodCall = lib.CreateJNIMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
+                std::move(javaRefCall), memberJNISignature, std::move(argsRef), retTy, *curFile, true);
         }
     }
 

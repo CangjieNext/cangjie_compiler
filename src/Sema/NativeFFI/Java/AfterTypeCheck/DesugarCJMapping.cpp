@@ -814,7 +814,6 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateFwdClassMethod(
     auto methodCall = lib.CreateJNIMethodCall(WithinFile(CreateRefExpr(*envVar), curFile),
         WithinFile(CreateRefExpr(*localRefVar), curFile), MemberJNISignature(utils, *fun),
         std::move(argsRef), fun->funcBody->retType->GetTy(), *curFile);
-
     if (!methodCall) {
         fun->EnableAttr(Attribute::IS_BROKEN);
         return nullptr;
