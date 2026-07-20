@@ -292,6 +292,7 @@ public:
     Ptr<FuncDecl> GetWithExceptionHandlingDecl();
 
     Ptr<FuncDecl> GetJClassDecl();
+    Ptr<FuncDecl> GetJClassIdDecl();
     Ptr<FuncDecl> GetGetMethodIdDecl();
     Ptr<FuncDecl> GetParseMethodSignatureDecl();
     Ptr<FuncDecl> GetParseComponentSignatureDecl();

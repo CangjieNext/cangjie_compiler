@@ -75,7 +75,8 @@ constexpr auto INTEROPLIB_CFFI_GET_REGISTRY_ID_OR_NONE = "Java_CFFI_getRegistryI
 constexpr auto INTEROPLIB_CFFI_JAVA_STRING_TO_CANGJIE = "Java_CFFI_JavaStringToCangjie";
 constexpr auto INTEROPLIB_CFFI_CANGJIE_STRING_TO_JAVA = "Java_CFFI_CangjieStringToJava";
 constexpr auto INTEROPLIB_CFFI_WITH_EXCEPTION_HANDLING_ID = "withExceptionHandling";
-constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS_ID = "Java_CFFI_ClassInit";
+constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS_INIT = "Java_CFFI_ClassInit";
+constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS_ID = "Java_CFFI_getClassID";
 constexpr auto INTEROPLIB_CFFI_PARSE_METHOD_SIGNATURE_ID = "Java_CFFI_parseMethodSignature";
 constexpr auto INTEROPLIB_CFFI_PARSE_COMPONENT_SIGNATURE_ID = "Java_CFFI_parseComponentSignature";
 constexpr auto INTEROPLIB_CFFI_JAVA_CALLNEST_ID = "Java_CFFI_JavaCallNestInit";
@@ -375,6 +376,11 @@ Ptr<FuncDecl> InteropLibBridge::GetWithExceptionHandlingDecl()
 }
 
 Ptr<FuncDecl> InteropLibBridge::GetJClassDecl()
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_CLASS_INIT);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetJClassIdDecl()
 {
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_CLASS_ID);
 }
@@ -756,7 +762,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateNewJavaObjectCall(Ptr<Expr> env, cons
 {
     auto curFile = env->curFile;
     auto funcDecl = GetNewJavaObjectDecl();
-    auto jclassInitFuncDecl = GetJClassDecl();
+    auto jclassInitFuncDecl = GetJClassIdDecl();
     auto parseSignatureFuncDecl = GetParseMethodSignatureDecl();
     auto callNestFuncDecl = GetCallNestDecl();
     auto methodIDFuncDecl = GetMethodIdConstr();
@@ -991,7 +997,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateJNIMethodCall(OwnedPtr<Expr> env, Own
     if (!callMethodVar) {
         return nullptr;
     }
-    auto jclassInitFuncDecl = GetJClassDecl();
+    auto jclassInitFuncDecl = GetJClassIdDecl();
     auto getMethodIdFuncDecl = GetGetMethodIdDecl();
 
     if (!jclassInitFuncDecl || !getMethodIdFuncDecl) {
@@ -1374,7 +1380,7 @@ OwnedPtr<Expr> InteropLibBridge::CreateReinterpretCastExpr(OwnedPtr<Expr> expr,
 OwnedPtr<VarDecl> InteropLibBridge::CreateJNIClassVar(OwnedPtr<Expr> env, const std::string& className, File& curFile)
 {
     auto pcurFile = Ptr(&curFile);
-    auto jclassInitFuncDecl = GetJClassDecl();
+    auto jclassInitFuncDecl = GetJClassIdDecl();
     if (!jclassInitFuncDecl) {
         return nullptr;
     }
