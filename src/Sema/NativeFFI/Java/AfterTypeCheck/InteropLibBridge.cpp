@@ -75,7 +75,8 @@ constexpr auto INTEROPLIB_CFFI_GET_REGISTRY_ID_OR_NONE = "Java_CFFI_getRegistryI
 constexpr auto INTEROPLIB_CFFI_JAVA_STRING_TO_CANGJIE = "Java_CFFI_JavaStringToCangjie";
 constexpr auto INTEROPLIB_CFFI_CANGJIE_STRING_TO_JAVA = "Java_CFFI_CangjieStringToJava";
 constexpr auto INTEROPLIB_CFFI_WITH_EXCEPTION_HANDLING_ID = "withExceptionHandling";
-constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS_ID = "Java_CFFI_ClassInit";
+constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS_INIT = "Java_CFFI_ClassInit";
+constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS_ID = "Java_CFFI_getClassID";
 constexpr auto INTEROPLIB_CFFI_PARSE_METHOD_SIGNATURE_ID = "Java_CFFI_parseMethodSignature";
 constexpr auto INTEROPLIB_CFFI_PARSE_COMPONENT_SIGNATURE_ID = "Java_CFFI_parseComponentSignature";
 constexpr auto INTEROPLIB_CFFI_JAVA_CALLNEST_ID = "Java_CFFI_JavaCallNestInit";
@@ -375,6 +376,11 @@ Ptr<FuncDecl> InteropLibBridge::GetWithExceptionHandlingDecl()
 }
 
 Ptr<FuncDecl> InteropLibBridge::GetJClassDecl()
+{
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_CLASS_INIT);
+}
+
+Ptr<FuncDecl> InteropLibBridge::GetJClassIdDecl()
 {
     return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_CLASS_ID);
 }
@@ -756,7 +762,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateNewJavaObjectCall(Ptr<Expr> env, cons
 {
     auto curFile = env->curFile;
     auto funcDecl = GetNewJavaObjectDecl();
-    auto jclassInitFuncDecl = GetJClassDecl();
+    auto jclassInitFuncDecl = GetJClassIdDecl();
     auto parseSignatureFuncDecl = GetParseMethodSignatureDecl();
     auto callNestFuncDecl = GetCallNestDecl();
     auto methodIDFuncDecl = GetMethodIdConstr();
@@ -991,7 +997,7 @@ OwnedPtr<CallExpr> InteropLibBridge::CreateJNIMethodCall(OwnedPtr<Expr> env, Own
     if (!callMethodVar) {
         return nullptr;
     }
-    auto jclassInitFuncDecl = GetJClassDecl();
+    auto jclassInitFuncDecl = GetJClassIdDecl();
     auto getMethodIdFuncDecl = GetGetMethodIdDecl();
 
     if (!jclassInitFuncDecl || !getMethodIdFuncDecl) {
@@ -1347,26 +1353,23 @@ const char* InteropLibBridge::SelectJNIStaticMethodName(TypeKind kind, bool hasA
     return hasArgs ? m.staticArgs : m.staticNoArgs;
 }
 
-OwnedPtr<Expr> InteropLibBridge::CreateReinterpretCastExpr(OwnedPtr<Expr> expr,
-    Ptr<Ty> resultTy, Ptr<Ty> valueTy, Ptr<File> curFile)
+OwnedPtr<Expr> InteropLibBridge::CreateBitCastExpr(OwnedPtr<Expr> expr, Ptr<Ty> resultTy, Ptr<Ty> valueTy, Ptr<File> curFile)
 {
-    static auto reinterpretCastDecl = GetInteropLibDecl<ASTKind::FUNC_DECL>("reinterpretCast");
-    if (!reinterpretCastDecl) {
+    auto bitCastDecl = importManager.GetCoreDecl<FuncDecl>("bitCast");
+    if (!bitCastDecl) {
         return nullptr;
     }
-
-    auto ref = CreateRefExpr(*reinterpretCastDecl);
-    ref->instTys.emplace_back(resultTy);
+    auto ref = CreateRefExpr(*bitCastDecl);
     ref->instTys.emplace_back(valueTy);
-    ref->typeArguments.emplace_back(CreateType(resultTy));
+    ref->instTys.emplace_back(resultTy);
     ref->typeArguments.emplace_back(CreateType(valueTy));
-    ref->SetTy(typeManager.GetInstantiatedTy(reinterpretCastDecl->GetTy(),
-        GenerateTypeMapping(*reinterpretCastDecl, ref->instTys)));
-
+    ref->typeArguments.emplace_back(CreateType(resultTy));
+    ref->SetTy(typeManager.GetInstantiatedTy(bitCastDecl->GetTy(),
+        GenerateTypeMapping(*bitCastDecl, ref->instTys)));
     std::vector<OwnedPtr<FuncArg>> args;
     args.emplace_back(CreateFuncArg(std::move(expr)));
-    auto call = CreateCallExpr(std::move(ref), std::move(args),
-        reinterpretCastDecl, resultTy, CallKind::CALL_DECLARED_FUNCTION);
+    auto call = CreateCallExpr(std::move(ref), std::move(args), bitCastDecl, resultTy,
+        CallKind::CALL_INTRINSIC_FUNCTION);
     call->curFile = curFile;
     return call;
 }
@@ -1374,7 +1377,7 @@ OwnedPtr<Expr> InteropLibBridge::CreateReinterpretCastExpr(OwnedPtr<Expr> expr,
 OwnedPtr<VarDecl> InteropLibBridge::CreateJNIClassVar(OwnedPtr<Expr> env, const std::string& className, File& curFile)
 {
     auto pcurFile = Ptr(&curFile);
-    auto jclassInitFuncDecl = GetJClassDecl();
+    auto jclassInitFuncDecl = GetJClassIdDecl();
     if (!jclassInitFuncDecl) {
         return nullptr;
     }
@@ -1410,12 +1413,12 @@ OwnedPtr<Expr> InteropLibBridge::CreateJValueExpr(OwnedPtr<Expr> expr, Ptr<File>
     if (ty->IsPrimitive()) {
         switch (ty->kind) {
             case TypeKind::TYPE_FLOAT32:
-                return CreateReinterpretCastExpr(std::move(expr),
+                return CreateBitCastExpr(std::move(expr),
                     typeManager.GetPrimitiveTy(TypeKind::TYPE_UINT32),
                     typeManager.GetPrimitiveTy(TypeKind::TYPE_FLOAT32),
                     curFile);
             case TypeKind::TYPE_FLOAT64:
-                return CreateReinterpretCastExpr(std::move(expr),
+                return CreateBitCastExpr(std::move(expr),
                     typeManager.GetPrimitiveTy(TypeKind::TYPE_UINT64),
                     typeManager.GetPrimitiveTy(TypeKind::TYPE_FLOAT64),
                     curFile);
