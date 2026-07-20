@@ -14,7 +14,9 @@
 #define CANGJIE_MODULES_NODESERIALIZATION_H
 
 #include <cstdint>
+#include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "flatbuffers/NodeFormat_generated.h"
@@ -77,6 +79,9 @@ public:
     }
     uint8_t* ExportNode(); // uint8_t* -> unsafePtr in CangJie
 private:
+    using ExprSerializer = std::function<NodeFormatExpr(NodeWriter&, AstExpr)>;
+    static const std::unordered_map<AST::ASTKind, ExprSerializer> SERIALIZE_EXPR_MAP;
+
     std::vector<uint8_t> bufferData;
     Ptr<AST::Node> nodePtr = nullptr; // nodePtr is the AST node to be serialized
     flatbuffers::Offset<NodeFormat::DeclBase> emptyDeclBase = flatbuffers::Offset<NodeFormat::DeclBase>();
