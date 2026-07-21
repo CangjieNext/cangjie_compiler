@@ -31,8 +31,15 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#define CJ_ENVIRON _environ
+#elif defined(__APPLE__)
+// macOS does not declare `environ` in <unistd.h>; it exposes it via
+// <crt_externs.h>::_NSGetEnviron(). Use that to obtain the environ pointer.
+#include <crt_externs.h>
+#define CJ_ENVIRON (*_NSGetEnviron())
 #else
 #include <unistd.h>
+#define CJ_ENVIRON environ
 #endif
 
 using namespace Cangjie;
@@ -42,11 +49,7 @@ namespace {
 std::unordered_map<std::string, std::string> GetEnvironmentVars()
 {
     std::unordered_map<std::string, std::string> envVars;
-#ifdef _WIN32
-    char **env = _environ;
-#else
-    char **env = environ;
-#endif
+    char **env = CJ_ENVIRON;
     while (env && *env) {
         std::string entry(*env);
         size_t pos = entry.find('=');

@@ -212,6 +212,14 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND) # i.e. "--compile-backend" option
             -DCMAKE_AR=${CMAKE_AR}
             -DCMAKE_RANLIB=${CMAKE_RANLIB}
             -DCMAKE_CXX_STANDARD=17)
+        if(MACOS)
+            # Cangjie never consumes the macOS sanitizer dynamic runtimes (only static
+            # libclang_rt.*.a, and TSan is Linux/Windows-only per CMakeLists.txt:149).
+            # compiler-rt's default Darwin build otherwise produces fat *_osx_dynamic
+            # dylibs that fail to link on Xcode 26's ld ("32-bit pointer in 64-bit arch"
+            # in tsan_rtl_aarch64.S.o's arm64 slice).
+            list(APPEND LLVM_CMAKE_ARGS -DCOMPILER_RT_BUILD_SANITIZERS=OFF)
+        endif()
         if(OHOS)
             list(APPEND LLVM_CMAKE_ARGS
                 -DOHOS=ON
