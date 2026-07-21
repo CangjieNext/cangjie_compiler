@@ -364,6 +364,10 @@ void ToolChain::GenerateRuntimePath(Tool& tool)
         // --sanitize-set-rpath needs rpath, not runpath
         tool.AppendArg("--disable-new-dtags");
         tool.AppendArg("-rpath", sanitizerRuntimePath);
+    } else if (driverOptions.target.os == Triple::OSType::DARWIN) {
+        auto cangjieRuntimeLibPath = FileUtil::JoinPath(
+            FileUtil::JoinPath(driver.cangjieHome, "runtime/lib"), driverOptions.GetCangjieLibTargetPathName());
+        tool.AppendArg("-rpath", cangjieRuntimeLibPath);
     }
 }
 

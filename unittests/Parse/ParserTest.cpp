@@ -4,6 +4,7 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include <algorithm>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -3204,8 +3205,13 @@ TEST_F(ParserTest, LSP)
     OwnedPtr<File> file = parser.ParseTopLevel();
     auto p = diag.GetCategoryDiagnostic(DiagCategory::LEX);
     ASSERT_EQ(p.size(), 2);
-    ASSERT_EQ(p[0].errorMessage, std::string{"illegal integer suffix 'i'"});
-    ASSERT_EQ(p[1].errorMessage, std::string{"unexpected digit 'd' in decimal"});
+    // Diagnostics are stored in an unordered container, so GetCategoryDiagnostic
+    // returns them in an unspecified order. Sort by position to make the
+    // subsequent index assertions deterministic across libstdc++/libc++.
+    std::sort(p.begin(), p.end(),
+        [](const auto& a, const auto& b) { return a.mainHint.range.begin < b.mainHint.range.begin; });
+    ASSERT_EQ(p[0].errorMessage, std::string{"unexpected digit 'd' in decimal"});
+    ASSERT_EQ(p[1].errorMessage, std::string{"illegal integer suffix 'i'"});
 }
 
 TEST(PositionTest, Attribute)
