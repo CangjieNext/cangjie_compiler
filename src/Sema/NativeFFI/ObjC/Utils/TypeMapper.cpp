@@ -53,9 +53,9 @@ void MangleTypedefName(std::string& name)
 }
 } // namespace
 
-template <class TypeRep, class ToString>
+template <class TypeRep, class MapType>
 MappedCType TypeMapper::BuildFunctionalCType(const FuncTy& funcType, const std::vector<TypeRep>& argTypes,
-    const TypeRep& resultType, bool isBlock, ToString toString)
+    const TypeRep& resultType, bool isBlock, MapType mapType)
 {
     auto typedefNamePrefix = isBlock ? "Block" : "Func";
     auto designator = isBlock ? '^' : '*';
@@ -63,21 +63,31 @@ MappedCType TypeMapper::BuildFunctionalCType(const FuncTy& funcType, const std::
     auto mangledName = mangler.MangleType(funcType);
     MangleTypedefName(mangledName);
     mangledName = typedefNamePrefix + mangledName;
+    auto result = MappedCType(mangledName);
 
     std::string decl = TYPEDEF_PREFIX;
-    decl.append(toString(resultType));
+    auto resMapped = mapType(resultType);
+    if (resMapped.decl != "") {
+        result.dependencies.emplace_back(resMapped);
+    }
+    decl.append(resMapped.usage);
     decl.append({'(', designator});
     decl.append(mangledName);
     decl.append({')', '('});
     for (auto& argType : argTypes) {
-        decl.append(toString(argType));
+        auto argMapped = mapType(argType);
+        if (argMapped.decl != "") {
+            result.dependencies.emplace_back(argMapped);
+        }
+        decl.append(argMapped.usage);
         decl.push_back(',');
     }
     if (decl.back() == ',') {
         decl.pop_back();
     }
     decl.push_back(')');
-    return {mangledName, decl};
+    result.decl = decl;
+    return result;
 }
 
 Ptr<Ty> TypeMapper::Cj2CType(Ptr<Ty> cjty) const
@@ -166,7 +176,7 @@ MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from)
                     return UNSUPPORTED_TYPE;
                 }
                 return BuildFunctionalCType(*actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, false,
-                    [](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
+                    [](Ptr<Ty> t) { return Cj2ObjCForObjC(*t); });
             }
             CJC_ABORT();
             return UNSUPPORTED_TYPE;
@@ -177,7 +187,7 @@ MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from)
                     return UNSUPPORTED_TYPE;
                 }
                 return BuildFunctionalCType(*actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, true,
-                    [](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
+                    [](Ptr<Ty> t) { return Cj2ObjCForObjC(*t); });
             }
             if (IsObjCObjectType(from)) {
                 auto decl = Ty::GetDeclOfTy(&from);
@@ -207,7 +217,7 @@ MappedCType TypeMapper::Cj2ObjCForObjC(const Ty& from)
             auto actualFuncType = DynamicCast<FuncTy>(&from);
             CJC_NULLPTR_CHECK(actualFuncType);
             return BuildFunctionalCType(*actualFuncType, actualFuncType->paramTys, actualFuncType->retTy, false,
-                [](Ptr<Ty> t) { return Cj2ObjCForObjC(*t).usage; });
+                [](Ptr<Ty> t) { return Cj2ObjCForObjC(*t); });
         }
         case TypeKind::TYPE_ENUM:
             if (IsObjCCJMapping(from)) {

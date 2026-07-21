@@ -303,8 +303,12 @@ void Transpiler::ProcessMemberDecls(
             : Emitter::EmitForwardDeclaration(dependenciesStream, identifier);
         Emitter::EmitFileImport(sourceImport, identifier);
     }
+    std::vector<std::string> visited;
     for (auto td : typedefs) {
-        Emitter::EmitTypedef(headerImport, td);
+        if (std::find(visited.begin(), visited.end(), td) == visited.end()) {
+            Emitter::EmitTypedef(headerImport, td);
+            visited.emplace_back(td);
+        }
     }
 
     if (interopType == InteropType::ObjC_Mirror && classDecl) {
