@@ -11,9 +11,11 @@
  */
 
 #include "JavaSourceCodeGenerator.h"
+#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Symbol.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/StdUtils.h"
 
 namespace {
@@ -111,66 +113,59 @@ bool IsCJMappingOpenClass(const FuncDecl& fd)
 
 namespace Cangjie::Interop::Java {
 JavaSourceCodeGenerator::JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-    const std::string& outputFilePath, std::string cjLibName, bool isInteropCJPackageConfig)
-    : AbstractSourceCodeGenerator(outputFilePath),
+    AfterTypeCheckContext& ctx, const std::optional<std::string>& outputFolderPath, const std::string& outputFileName,
+    std::string cjLibName)
+    : AbstractSourceCodeGenerator(
+        outputFolderPath.value_or(JavaSourceCodeGenerator::DEFAULT_OUTPUT_DIR), outputFileName),
       decl(decl),
       cjLibName(std::move(cjLibName)),
       mangler(mangler),
       typeManager(typeManager),
-      isInteropCJPackageConfig(isInteropCJPackageConfig)
+      ctx(ctx),
+      isInteropCJPackageConfig(false)
 {
 }
 
 JavaSourceCodeGenerator::JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-    const std::optional<std::string>& outputFolderPath, const std::string& outputFileName, std::string cjLibName,
-    bool isInteropCJPackageConfig)
+    AfterTypeCheckContext& ctx, const std::optional<std::string>& outputFolderPath, const std::string& outputFileName,
+    std::string cjLibName, GenericConfigInfo* genericConfig, bool isInteropCJPackageConfig)
     : AbstractSourceCodeGenerator(
           outputFolderPath.value_or(JavaSourceCodeGenerator::DEFAULT_OUTPUT_DIR), outputFileName),
       decl(decl),
       cjLibName(std::move(cjLibName)),
       mangler(mangler),
       typeManager(typeManager),
-      isInteropCJPackageConfig(isInteropCJPackageConfig)
-{
-}
-
-JavaSourceCodeGenerator::JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-    const std::optional<std::string>& outputFolderPath, const std::string& outputFileName, std::string cjLibName,
-    GenericConfigInfo* genericConfig, bool isInteropCJPackageConfig)
-    : AbstractSourceCodeGenerator(
-          outputFolderPath.value_or(JavaSourceCodeGenerator::DEFAULT_OUTPUT_DIR), outputFileName),
-      decl(decl),
-      cjLibName(std::move(cjLibName)),
-      mangler(mangler),
-      typeManager(typeManager),
+      ctx(ctx),
       genericConfig(genericConfig),
       isInteropCJPackageConfig(isInteropCJPackageConfig)
 {
 }
 
 JavaSourceCodeGenerator::JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-    const std::optional<std::string>& outputFolderPath, const std::string& outputFileName, std::string cjLibName,
-    std::vector<Ptr<ExtendDecl>> extends, bool isInteropCJPackageConfig)
+    AfterTypeCheckContext& ctx, const std::optional<std::string>& outputFolderPath, const std::string& outputFileName,
+    std::string cjLibName, std::vector<Ptr<ExtendDecl>> extends, bool isInteropCJPackageConfig)
     : AbstractSourceCodeGenerator(
           outputFolderPath.value_or(JavaSourceCodeGenerator::DEFAULT_OUTPUT_DIR), outputFileName),
       decl(decl),
       cjLibName(std::move(cjLibName)),
       mangler(mangler),
       typeManager(typeManager),
+      ctx(ctx),
       extendDecls(extends),
       isInteropCJPackageConfig(isInteropCJPackageConfig)
 {
 }
 
 JavaSourceCodeGenerator::JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-    const std::optional<std::string>& outputFolderPath, const std::string& outputFileName, std::string cjLibName,
-    Ptr<TupleTy>& tupleTy, bool isCjMappingTuple, bool isInteropCJpackageConfig)
+    AfterTypeCheckContext& ctx, const std::optional<std::string>& outputFolderPath, const std::string& outputFileName,
+    std::string cjLibName, Ptr<TupleTy>& tupleTy, bool isCjMappingTuple, bool isInteropCJpackageConfig)
     : AbstractSourceCodeGenerator(
           outputFolderPath.value_or(JavaSourceCodeGenerator::DEFAULT_OUTPUT_DIR), outputFileName),
       decl(decl),
       cjLibName(std::move(cjLibName)),
       mangler(mangler),
       typeManager(typeManager),
+      ctx(ctx),
       tupleTy(tupleTy),
       isCjMappingTuple(isCjMappingTuple),
       isInteropCJPackageConfig(isInteropCJpackageConfig)
@@ -178,13 +173,14 @@ JavaSourceCodeGenerator::JavaSourceCodeGenerator(Decl* decl, const BaseMangler& 
 }
 
 JavaSourceCodeGenerator::JavaSourceCodeGenerator(const BaseMangler& mangler, TypeManager& typeManager,
-    const std::optional<std::string>& outputFolderPath, const std::string& outputFileName, std::string cjLibName,
-    Ptr<LambdaPattern> pattern)
+    AfterTypeCheckContext& ctx, const std::optional<std::string>& outputFolderPath, const std::string& outputFileName,
+    std::string cjLibName, Ptr<LambdaPattern> pattern)
     : AbstractSourceCodeGenerator(
           outputFolderPath.value_or(JavaSourceCodeGenerator::DEFAULT_OUTPUT_DIR), outputFileName),
       cjLibName(std::move(cjLibName)),
       mangler(mangler),
       typeManager(typeManager),
+      ctx(ctx),
       lambdaPattern(pattern)
 {
 }
@@ -742,14 +738,9 @@ std::string JavaSourceCodeGenerator::GenerateParamLists(const std::vector<OwnedP
  * @param params is original constructor parameters
  */
 std::pair<std::string, std::string> JavaSourceCodeGenerator::GenNativeSuperArgCall(
-    const FuncArg& arg, const std::vector<OwnedPtr<FuncParam>>& params)
+    const FuncArg& arg, const FuncDecl& nativeFunc, const std::vector<OwnedPtr<FuncParam>>& params)
 {
-    CJC_ASSERT(arg.expr->desugarExpr->astKind == ASTKind::REF_EXPR);
-    auto ref = StaticCast<const RefExpr*>(arg.expr->desugarExpr.get());
-    CJC_NULLPTR_CHECK(ref->ref.target);
-    CJC_ASSERT(ref->ref.target->astKind == ASTKind::FUNC_DECL);
-    auto nativeFn = StaticCast<FuncDecl*>(ref->ref.target);
-    std::string id = nativeFn->identifier.Val();
+    std::string id = nativeFunc.identifier.Val();
     const std::string keyword = "_super";
     size_t pos = id.rfind(keyword);
     CJC_ASSERT(pos != std::string::npos);
@@ -778,45 +769,39 @@ std::pair<std::string, std::string> JavaSourceCodeGenerator::GenNativeSuperArgCa
 
 // Generate super call and collection native func declaration.
 std::string JavaSourceCodeGenerator::GenerateSuperCall(
-    const CallExpr& call, const std::vector<OwnedPtr<FuncParam>>& params, std::vector<std::string>& nativeArgs)
+    const CallExpr& call, std::vector<Ptr<FuncDecl>> nativeFuncs,
+    const std::vector<OwnedPtr<FuncParam>>& params, std::vector<std::string>& nativeFunctions)
 {
     // generate logic
     std::vector<std::string> args;
-    for (auto& arg : call.args) {
-        if (arg->expr->desugarExpr) {
-            auto [superCall, superNative] = GenNativeSuperArgCall(*arg, params);
-            args.push_back(superCall);
-            nativeArgs.push_back(superNative);
-        } else {
-            args.push_back(arg->expr->ToString());
-        }
+    for (auto [nativeFunc, originalArg] = std::tuple{nativeFuncs.begin(), call.args.begin()};
+        nativeFunc != nativeFuncs.end();
+        nativeFunc++, originalArg++) {
+            if (*nativeFunc) {
+                auto [superCall, superNative] = GenNativeSuperArgCall(**originalArg, **nativeFunc, params);
+                args.push_back(superCall);
+                nativeFunctions.push_back(superNative);
+            } else {
+                args.push_back((*originalArg)->expr->ToString());
+            }
     }
     return "super(" + Cangjie::Utils::JoinStrings(args, ", ") + ");";
 }
 
 std::string JavaSourceCodeGenerator::GenerateConstructorSuperCall(
-    const FuncBody& body, std::vector<std::string>& nativeArgs)
+    const FuncDecl& ctor, std::vector<std::string>& nativeFunctions)
 {
-    if (!body.body) {
-        return "";
+    if (!ctx.HasDesugaredJavaImplSuperConstructorCall(ctor)) {
+        return "super();";
     }
-    std::string superCall;
-    auto& params = body.paramLists[0]->params;
+
+    auto& originalCall = ctx.GetJavaImplSuperCtorCall(ctor);
+    auto argNativeFuncs = ctx.GetJavaImplSuperCtorArgNativeFuncs(ctor);
+
+    CJC_ASSERT(!ctor.funcBody->paramLists.empty());
+    auto& params = ctor.funcBody->paramLists[0]->params;
     // Generate super call
-    auto& block = body.body->body;
-    for (auto it = block.begin(); it != block.end(); it++) {
-        if ((*it)->astKind != ASTKind::CALL_EXPR) {
-            continue;
-        }
-        auto call = StaticCast<const CallExpr*>(it->get());
-        if (call->callKind == CallKind::CALL_SUPER_FUNCTION &&
-            call->TestAttr(Attribute::UNREACHABLE, Attribute::JAVA_MIRROR)) {
-            superCall = GenerateSuperCall(*call, params, nativeArgs);
-            // remove after generating java code.
-            block.erase(it);
-            break;
-        }
-    }
+    auto superCall = GenerateSuperCall(originalCall, argNativeFuncs, params, nativeFunctions);
     return superCall;
 }
 
@@ -860,8 +845,8 @@ void JavaSourceCodeGenerator::AddConstructor(const FuncDecl& ctor, const std::st
 
 void JavaSourceCodeGenerator::AddConstructor(const FuncDecl& ctor)
 {
-    std::vector<std::string> nativeArgs;
-    std::string superCall = GenerateConstructorSuperCall(*ctor.funcBody, nativeArgs);
+    std::vector<std::string> nativeFuncitonsForSuperArgs;
+    std::string superCall = GenerateConstructorSuperCall(ctor, nativeFuncitonsForSuperArgs);
     CJC_ASSERT_WITH_MSG(!ctor.funcBody->paramLists.empty(), "paramLists cannot be empty");
     auto& params = ctor.funcBody->paramLists[0]->params;
     // Java side constructor
@@ -870,8 +855,8 @@ void JavaSourceCodeGenerator::AddConstructor(const FuncDecl& ctor)
     AddConstructor(ctor, superCall, true);
     // Add native init
     AddNativeInitCJObject(params, ctor);
-    // Add native super args
-    for (auto& fn : nativeArgs) {
+    // Add native function declarations for super constructor call arguments resolution in java code
+    for (auto& fn : nativeFuncitonsForSuperArgs) {
         AddWithIndent(TAB, fn);
     }
 }

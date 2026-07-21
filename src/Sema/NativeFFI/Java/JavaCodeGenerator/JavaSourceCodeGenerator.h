@@ -1,4 +1,4 @@
-// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 // This source file is part of the Cangjie project, licensed under Apache-2.0
 // with Runtime Library Exception.
 //
@@ -15,34 +15,36 @@
 #include <set>
 
 #include "AbstractSourceCodeGenerator.h"
-#include "NativeFFI/Java/AfterTypeCheck/JavaDesugarManager.h"
-#include "NativeFFI/Java/AfterTypeCheck/Utils.h"
+#include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
+#include "NativeFFI/Utils.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
 #include "cangjie/Mangle/BaseMangler.h"
 
 namespace Cangjie::Interop::Java {
 using namespace AST;
+using namespace Cangjie::Native::FFI;
+using namespace Cangjie::Native::FFI::Java;
 
 class JavaSourceCodeGenerator : public AbstractSourceCodeGenerator {
 public:
     JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-        const std::string& outputFilePath, std::string cjLibName, bool isInteropCJpackageConfig = false);
+        AfterTypeCheckContext& ctx, const std::optional<std::string>& folderPath, const std::string& outputFileName,
+        std::string cjLibName);
     JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-        const std::optional<std::string>& folderPath, const std::string& outputFileName, std::string cjLibName,
-        bool isInteropCJPackageConfig = false);
+        AfterTypeCheckContext& ctx, const std::optional<std::string>& folderPath, const std::string& outputFileName,
+        std::string cjLibName, std::vector<Ptr<ExtendDecl>> extends, bool isInteropCJPackageConfig = false);
     JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-        const std::optional<std::string>& folderPath, const std::string& outputFileName, std::string cjLibName,
-        std::vector<Ptr<ExtendDecl>> extends, bool isInteropCJPackageConfig = false);
+        AfterTypeCheckContext& ctx, const std::optional<std::string>& outputFolderPath,
+        const std::string& outputFileName, std::string cjLibName, GenericConfigInfo* genericConfig,
+        bool isInteropCJPackageConfig);
     JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-        const std::optional<std::string>& outputFolderPath, const std::string& outputFileName, std::string cjLibName,
-        GenericConfigInfo* genericConfig, bool isInteropCJPackageConfig);
-    JavaSourceCodeGenerator(Decl* decl, const BaseMangler& mangler, TypeManager& typeManager,
-        const std::optional<std::string>& outputFolderPath, const std::string& outputFileName, std::string cjLibName,
-        Ptr<TupleTy>& tupleTy, bool isCjMappingTuple, bool isInteropCJpackageConfig = false);
+        AfterTypeCheckContext& ctx, const std::optional<std::string>& outputFolderPath,
+        const std::string& outputFileName, std::string cjLibName, Ptr<TupleTy>& tupleTy, bool isCjMappingTuple,
+        bool isInteropCJpackageConfig = false);
     JavaSourceCodeGenerator(const BaseMangler& mangler, TypeManager& typeManager,
-        const std::optional<std::string>& outputFolderPath, const std::string& outputFileName, std::string cjLibName,
-        Ptr<LambdaPattern> pattern);
+        AfterTypeCheckContext& ctx, const std::optional<std::string>& outputFolderPath,
+        const std::string& outputFileName, std::string cjLibName, Ptr<LambdaPattern> pattern);
     static bool IsDeclAppropriateForGeneration(const Decl& declArg);
 
 private:
@@ -65,6 +67,7 @@ private:
     const std::string cjLibName;
     const BaseMangler& mangler;
     TypeManager& typeManager;
+    AfterTypeCheckContext& ctx;
     std::vector<Ptr<ExtendDecl>> extendDecls;
     GenericConfigInfo* genericConfig = nullptr;
     Ptr<TupleTy> tupleTy{nullptr};
@@ -87,11 +90,13 @@ private:
     std::string GenerateConstructorForEnumDecl(const OwnedPtr<Decl>& ctor);
     // Generate super call argument and native declaration.
     std::pair<std::string, std::string> GenNativeSuperArgCall(
-        const FuncArg& arg, const std::vector<OwnedPtr<FuncParam>>& params);
+        const FuncArg& arg, const FuncDecl& nativeFunc, const std::vector<OwnedPtr<FuncParam>>& params);
     // Generate super call and collection native func declaration.
     std::string GenerateSuperCall(
-        const CallExpr& call, const std::vector<OwnedPtr<FuncParam>>& params, std::vector<std::string>& nativeArgs);
-    std::string GenerateConstructorSuperCall(const FuncBody& body, std::vector<std::string>& nativeArgs);
+        const CallExpr& call,
+        std::vector<Ptr<FuncDecl>> nativeFuncs,
+        const std::vector<OwnedPtr<FuncParam>>& params, std::vector<std::string>& nativeArgs);
+    std::string GenerateConstructorSuperCall(const FuncDecl& ctor, std::vector<std::string>& nativeArgs);
     void AddConstructor(const FuncDecl& ctor, const std::string& superCall, bool isForCangjie);
     // Generate constructors and native funcs.
     void AddConstructor(const FuncDecl& ctor);

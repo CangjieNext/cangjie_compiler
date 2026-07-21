@@ -278,25 +278,12 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitializa
 
             superCall->args.insert(superCall->args.begin(), CreateFuncArg(std::move(lambdaCall)));
 
-            if (!ctor.funcBody->body->body.empty()) {
-                auto firstNode = ctor.funcBody->body->body[0].get();
-                if (auto callExpr = As<ASTKind::CALL_EXPR>(firstNode); callExpr && IsSuperConstructorCall(*callExpr)) {
-                    // This super-constructor call `callExpr` is removed in `JavaSourceCodeGenerator`.
-                    // TODO: remove it here and memoize with context/cache.
-                    callExpr->EnableAttr(Attribute::JAVA_MIRROR, Attribute::UNREACHABLE);
-                }
-            }
-
             // Inserts assignment of registry companion into an instance.
             ctor.funcBody->body->body.insert(ctor.funcBody->body->body.begin(),
                 CreateRegistryCompanionRefFieldAssignment(companion, refWrapper, companionRefField));
             // Inserts generated super call at the beginning of the constructor.
+            // Original super call was removed at `DesugarJavaImplSuperConstructorCall` stage.
             ctor.funcBody->body->body.insert(ctor.funcBody->body->body.begin(), std::move(superCall));
-            /*
-                We can't remove existing user-defined super call on this stage
-                because it is used for java code generation.
-                TODO: fix it.
-            */
     } else {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         companion.EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);

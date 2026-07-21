@@ -369,25 +369,6 @@ public:
     OwnedPtr<Type> CreateJlongType() const;
 
     /**
-     * Lower ?String CJ expression into nullable JNI jobject.
-     *
-     * Some(str) -> jstring jobject
-     * None -> null jobject
-     */
-    OwnedPtr<Expr> OptionStringToJObject(OwnedPtr<Expr> optionExpr, FuncParam& jniEnv, const Decl& outerDecl);
-
-    /**
-     * Convert CJ String expression into JNI jobject (jstring).
-     */
-    OwnedPtr<Expr> StringToJObject(OwnedPtr<Expr> cjStringExpr, Ptr<File> curFile,
-                                   FuncParam& jniEnvParam, const Decl& outerDecl);
-
-    /**
-     * Convert JNI jobject (jstring) into CJ String expression.
-     */
-    OwnedPtr<Expr> JObjectToString(OwnedPtr<Expr> jobjectExpr, Ptr<File> curFile);
-
-    /**
      * Returns cjExpr wrapped into java entity:
      *
      * Java_CFFI_JavaEntity(cjExpr)
