@@ -24,8 +24,15 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#define CJ_ENVIRON _environ
+#elif defined(__APPLE__)
+// macOS does not declare `environ` in <unistd.h>; it exposes it via
+// <crt_externs.h>::_NSGetEnviron(). Use that to obtain the environ pointer.
+#include <crt_externs.h>
+#define CJ_ENVIRON (*_NSGetEnviron())
 #else
 #include <unistd.h>
+#define CJ_ENVIRON environ
 #endif
 
 using namespace Cangjie;
@@ -35,11 +42,7 @@ namespace {
 std::unordered_map<std::string, std::string> GetEnvironmentVars()
 {
     std::unordered_map<std::string, std::string> envVars;
-#ifdef _WIN32
-    char **env = _environ;
-#else
-    char **env = environ;
-#endif
+    char **env = CJ_ENVIRON;
     while (env && *env) {
         std::string entry(*env);
         size_t pos = entry.find('=');
@@ -83,18 +86,12 @@ protected:
         invocation.globalOptions.executablePath = projectPath + "/output/bin/";
 #endif
         std::string cangjieHome = projectPath + "/output";
-#if defined(_WIN32)
-        std::string platform = "windows_x86_64";
-#elif defined(__APPLE__) && defined(__x86_64__)
-        std::string platform = "darwin_x86_64";
-#elif defined(__APPLE__)
-        std::string platform = "darwin_arm64";
-#elif defined(__x86_64__)
-        std::string platform = "linux_x86_64";
-#else
-        std::string platform = "linux_aarch64";
-#endif
-        std::string cangjiePath = cangjieHome + "/modules/" + platform + "_cjnative";
+        // Derive the platform-specific module directory from the target triple
+        // (GetCangjieLibTargetPathName returns "<os>_<arch>_cjnative") instead
+        // of hard-coding "darwin_arm64"/"darwin_aarch64", which must otherwise
+        // be kept in sync with the actual output directory name.
+        std::string cangjiePath =
+            cangjieHome + "/modules/" + invocation.globalOptions.GetCangjieLibTargetPathName();
 #ifdef _WIN32
         char* oldHome = getenv("CANGJIE_HOME");
         char* oldPath = getenv("CANGJIE_PATH");
