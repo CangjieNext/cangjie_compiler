@@ -56,13 +56,6 @@ void GenerateSyntheticClassFuncStub(ClassDecl& synthetic, FuncDecl& fd)
     funcStub->outerDecl = Ptr(&synthetic);
     synthetic.body->decls.emplace_back(std::move(funcStub));
 }
-
-void GenerateSyntheticClassPropStub(ClassDecl& synthetic, PropDecl& fd)
-{
-    CJC_ASSERT(&synthetic);
-    CJC_ASSERT(&fd);
-    // TODO:
-}
 } // namespace
 
 Utils::Utils(ImportManager& importManager, TypeManager& typeManager, Package& pkg)
@@ -214,30 +207,12 @@ Ptr<FuncDecl> GetJavaRefGetter(ClassLikeDecl& mirror)
     }
 }
 
-OwnedPtr<Expr> CreateJavaRefCall(ClassLikeDecl& mirrorLike, FuncDecl& javaRefGetter, Ptr<File> curFile)
-{
-    CJC_ASSERT(mirrorLike.TestAnyAttr(
-        Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE, Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD));
-    auto thisRef = CreateThisRef(&mirrorLike, mirrorLike.GetTy(), curFile);
-    return CreateJavaRefCall(std::move(thisRef), javaRefGetter);
-}
-
-OwnedPtr<Expr> CreateJavaRefCall(ClassLikeDecl& mirrorLike, VarDecl& javaref, Ptr<File> curFile)
-{
-    CJC_ASSERT(mirrorLike.astKind == ASTKind::CLASS_DECL);
-    CJC_ASSERT(mirrorLike.TestAnyAttr(
-        Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE, Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD));
-    auto thisRef = CreateThisRef(&mirrorLike, mirrorLike.GetTy(), curFile);
-    return CreateJavaRefCall(std::move(thisRef), javaref);
-}
-
 OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, FuncDecl& javaRefGetter)
 {
     // expr ty decl and javaRef outerDecl must be the same
-
     CJC_ASSERT(expr->GetTy()->IsClassLike());
-    CJC_ASSERT(StaticCast<ClassLikeTy*>(expr->GetTy())
-        ->commonDecl->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE));
+    CJC_ASSERT(StaticCast<ClassLikeTy*>(expr->GetTy())->commonDecl->TestAnyAttr(
+        Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE));
     auto curFile = expr->curFile;
     CJC_NULLPTR_CHECK(curFile);
 
@@ -1220,9 +1195,6 @@ void GenerateSyntheticClassMemberStubs(ClassDecl& synthetic, const MemberMap& me
         switch (signature.decl->astKind) {
             case ASTKind::FUNC_DECL:
                 GenerateSyntheticClassFuncStub(synthetic, *StaticAs<ASTKind::FUNC_DECL>(signature.decl));
-                break;
-            case ASTKind::PROP_DECL:
-                GenerateSyntheticClassPropStub(synthetic, *StaticAs<ASTKind::PROP_DECL>(signature.decl));
                 break;
             default:
                 continue;

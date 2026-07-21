@@ -254,7 +254,7 @@ OwnedPtr<FuncDecl> DesugarJavaImplSuperConstructorCall::CreateMemberFunc4Argumen
     std::move(funcParams.begin(), funcParams.end(), std::back_inserter(paramList.params));
     body.body.emplace_back(std::move(clonedExpr));
 
-    return std::move(memberFn);
+    return memberFn;
 }
 
 OwnedPtr<FuncDecl> DesugarJavaImplSuperConstructorCall::CreateNativeFunc4Argument(FuncDecl& memberFunc,
@@ -303,7 +303,9 @@ void DesugarJavaImplSuperConstructorCall::DesugarSuperConstructorCall(AfterTypeC
     auto decl = StaticAs<ASTKind::CLASS_LIKE_DECL>(ctor.outerDecl);
     // super call
     auto superCall = TryGetSuperCall(ctor);
-    CJC_NULLPTR_CHECK(superCall);
+    if (!superCall) {
+        return;
+    }
     size_t ctorId = GetCtorId(ctor); // TODO: replace with non-positional mangling
     auto needGen = [](const Expr& expr) {
         if (expr.astKind == ASTKind::LIT_CONST_EXPR) {
@@ -320,14 +322,14 @@ void DesugarJavaImplSuperConstructorCall::DesugarSuperConstructorCall(AfterTypeC
     for (size_t index = 0; index < args.size(); index++) {
         // generate @C func on demand
         if (!needGen(*args[index]->expr)) {
+            ctx.CacheJavaImplSuperCtorArgNativeFunc(ctor, nullptr);
             continue;
         }
 
         if (auto memberFunc = CreateMemberFunc4Argument(*args[index], paramList.params, *decl, ctorId, index)) {
             if (auto argFn = CreateNativeFunc4Argument(*memberFunc, *decl)) {
                 // record desugared function
-                // TODO: replace with memoization within context.
-                args[index]->expr->desugarExpr = CreateRefExpr(*argFn);
+                ctx.CacheJavaImplSuperCtorArgNativeFunc(ctor, argFn);
                 ctx.AddGeneratedDecl(std::move(argFn));
                 decl->GetMemberDecls().push_back(std::move(memberFunc));
             } else {
@@ -337,6 +339,11 @@ void DesugarJavaImplSuperConstructorCall::DesugarSuperConstructorCall(AfterTypeC
             decl->EnableAttr(Attribute::IS_BROKEN, Attribute::HAS_BROKEN);
         }
     }
+
+    ctx.CacheJavaImplSuperCtorCall(ctor, ASTCloner::Clone(superCall));
+    // Remove original user-defined constructor.
+    // At `GenerateInJavaImplReferenceWrapper` stage, other super-call with java reference parameter is inserted.
+    ctor.funcBody->body->body.erase(ctor.funcBody->body->body.begin());
 }
 
 DesugarJavaImplSuperConstructorCall::DesugarJavaImplSuperConstructorCall(

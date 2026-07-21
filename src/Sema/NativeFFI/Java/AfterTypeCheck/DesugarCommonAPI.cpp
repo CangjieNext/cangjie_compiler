@@ -112,7 +112,9 @@ bool JavaDesugarManager::FillMethodParamsByArg(std::vector<OwnedPtr<FuncParam>>&
     } else if (actualArgTy->IsString()) {
         // Convert JNI jobject (jstring) to Cangjie String:
         // jobject -> JavaEntity -> Struct-String.
-        methodArg = CreateFuncArg(lib.JObjectToString(CreateRefExpr(*param), funcDecl.curFile));
+        auto entity = lib.CreateJavaEntityJobjectCall(CreateRefExpr(*param));
+        auto cjstr = lib.UnwrapJavaEntity(std::move(entity), actualArgTy, *outerDecl);
+        methodArg = CreateFuncArg(std::move(cjstr));
     } else {
         methodArg = CreateFuncArg(std::move(paramRef));
     }
@@ -212,6 +214,7 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(
             createCJMappingCall(clazzName, true);
         }
     } else if (retActualTy->IsTuple()) {
+        // "cjmapping"
         if (IsCJMappingTuple(retActualTy, tupleConfigs)) {
             std::string clazzName = decl.fullPackageName + "." + GetCjMappingTupleName(*retActualTy);
             createCJMappingCall(clazzName, true);
@@ -223,26 +226,18 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeMethod(
             sampleMethod.outerDecl->EnableAttr(Attribute::IS_BROKEN);
             return nullptr;
         }
-    } else if (retActualTy->IsString()) {
-		// Convert Cangjie String to JNI jobject (jstring):
-		// JNI boundary: jstring (represented as jobject / CPointer<Unit>)
-        retExpr = lib.StringToJObject(CreateRefExpr(*methodCallRes), curFile, jniEnvParam, *sampleMethod.outerDecl);
-        retActualTy = &lib.GetJniJobjectTy();
     } else if (retActualTy->IsFunc()) {
+        // "cjmapping"
         CheckCjLambdaDeclByTy(retActualTy);
         std::string lambdaJavaClassSign =
             NormalizeJavaSignature(sampleMethod.fullPackageName + "." + GetLambdaJavaClassName(retActualTy) + "$Box");
         auto refExpr = WithinFile(CreateRefExpr(*methodCallRes), curFile);
         retExpr = lib.CreateGetJavaLambdaObjectCall(std::move(refExpr), lambdaJavaClassSign, curFile);
-    } else if (IsOptionOfString(retActualTy)) {
-        retExpr = lib.OptionStringToJObject(WithinFile(CreateRefExpr(*methodCallRes), curFile),
-                                            jniEnvParam,
-                                            *sampleMethod.outerDecl);
-        retActualTy = &lib.GetJniJobjectTy();
     } else {
         OwnedPtr<Expr> methodResRef = WithinFile(CreateRefExpr(*methodCallRes), curFile);
         auto entity = lib.WrapJavaEntity(std::move(methodResRef));
         retExpr = lib.UnwrapJavaEntity(std::move(entity), retActualTy, *(sampleMethod.outerDecl), true);
+        retActualTy = &jniBridge.ConvertCangjieToJniTy(*retActualTy);
     }
 
     auto wrappedNodesLambda = WrapReturningLambdaExpr(typeManager, Nodes(std::move(methodCallRes), std::move(retExpr)));

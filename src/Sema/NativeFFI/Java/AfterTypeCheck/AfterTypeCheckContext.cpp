@@ -108,6 +108,32 @@ std::vector<Ptr<FuncDecl>> AfterTypeCheckContext::GetJavaImplUserDefinedConstruc
     return ctors;
 }
 
+void AfterTypeCheckContext::CacheJavaImplSuperCtorArgNativeFunc(const FuncDecl& ctor, Ptr<FuncDecl> nativeFunc)
+{
+    auto inativeFunc = javaImplUserCtorToNativeFuncs.insert({ &ctor, std::vector<Ptr<FuncDecl>>{} }).first;
+    inativeFunc->second.push_back(nativeFunc);
+}
+
+const std::vector<Ptr<FuncDecl>> AfterTypeCheckContext::GetJavaImplSuperCtorArgNativeFuncs(const FuncDecl& ctor)
+{
+    return javaImplUserCtorToNativeFuncs[&ctor];
+}
+
+bool AfterTypeCheckContext::HasDesugaredJavaImplSuperConstructorCall(const AST::FuncDecl& userCtor) const
+{
+    return javaImplUserCtorToNativeFuncs.find(&userCtor) != javaImplUserCtorToNativeFuncs.end();
+}
+
+void AfterTypeCheckContext::CacheJavaImplSuperCtorCall(const FuncDecl& ctor, OwnedPtr<CallExpr>&& call)
+{
+    javaImplUserCtorToOriginalSuperCall[&ctor] = std::move(call);
+}
+
+CallExpr& AfterTypeCheckContext::GetJavaImplSuperCtorCall(const AST::FuncDecl& ctor)
+{
+    return *javaImplUserCtorToOriginalSuperCall[&ctor];
+}
+
 void AfterTypeCheckContext::AddGeneratedDecl(OwnedPtr<Decl>&& decl)
 {
     CJC_ASSERT(decl->outerDecl == nullptr);
