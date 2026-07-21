@@ -18,8 +18,15 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#define CJ_ENVIRON _environ
+#elif defined(__APPLE__)
+// macOS does not declare `environ` in <unistd.h>; it exposes it via
+// <crt_externs.h>::_NSGetEnviron(). Use that to obtain the environ pointer.
+#include <crt_externs.h>
+#define CJ_ENVIRON (*_NSGetEnviron())
 #else
 #include <unistd.h>
+#define CJ_ENVIRON environ
 #endif
 
 using namespace Cangjie;
@@ -29,11 +36,7 @@ namespace {
 std::unordered_map<std::string, std::string> GetEnvironmentVars()
 {
     std::unordered_map<std::string, std::string> envVars;
-#ifdef _WIN32
-    char **env = _environ;
-#else
-    char **env = environ;
-#endif
+    char **env = CJ_ENVIRON;
     while (env && *env) {
         std::string entry(*env);
         size_t pos = entry.find('=');
@@ -70,18 +73,19 @@ protected:
         packagePath = packagePath + "/";
 #endif
         std::string cangjieHome = projectPath + "/output";
-#if defined(_WIN32)
-        std::string platform = "windows_x86_64";
-#elif defined(__APPLE__) && defined(__x86_64__)
-        std::string platform = "darwin_x86_64";
+        // Derive the platform-specific module directory from the target triple
+        // (GetCangjieLibTargetPathName returns "<os>_<arch>_cjnative") instead
+        // of hard-coding "darwin_arm64"/"darwin_aarch64", which must otherwise
+        // be kept in sync with the actual output directory name.
+        std::string cangjiePath =
+            cangjieHome + "/modules/" + invocation.globalOptions.GetCangjieLibTargetPathName();
+#ifdef _WIN32
+        invocation.globalOptions.executablePath = projectPath + "\\output\\bin\\";
 #elif defined(__APPLE__)
-        std::string platform = "darwin_arm64";
-#elif defined(__x86_64__)
-        std::string platform = "linux_x86_64";
-#else
-        std::string platform = "linux_aarch64";
+        invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+#elif defined(__unix__)
+        invocation.globalOptions.executablePath = projectPath + "/output/bin/";
 #endif
-        std::string cangjiePath = cangjieHome + "/modules/" + platform + "_cjnative";
 #ifdef _WIN32
         char* oldHome = getenv("CANGJIE_HOME");
         char* oldPath = getenv("CANGJIE_PATH");
@@ -444,12 +448,19 @@ TEST_F(SearchPlusTest, MultiFileTest)
 {
 #ifdef _WIN32
     srcPath = srcPath + "\\pkgs";
-#elif defined(__unix__)
+#elif defined(__APPLE__) || defined(__unix__)
     srcPath = srcPath + "/pkgs";
 #endif
 
     CompilerInvocation invocation;
     DiagnosticEngine diag;
+#ifdef _WIN32
+    invocation.globalOptions.executablePath = projectPath + "\\output\\bin\\";
+#elif defined(__APPLE__)
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+#elif defined(__unix__)
+    invocation.globalOptions.executablePath = projectPath + "/output/bin/";
+#endif
     std::unique_ptr<CompilerInstance> instance = std::make_unique<TestCompilerInstance>(invocation, diag);
     instance->srcDirs = {srcPath};
     instance->invocation.globalOptions.implicitPrelude = true;
@@ -460,6 +471,8 @@ TEST_F(SearchPlusTest, MultiFileTest)
 #endif
 #ifdef _WIN32
     instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::WINDOWS;
+#elif defined(__APPLE__)
+    instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::DARWIN;
 #elif defined(__unix__)
     instance->invocation.globalOptions.target.os = Cangjie::Triple::OSType::LINUX;
 #endif

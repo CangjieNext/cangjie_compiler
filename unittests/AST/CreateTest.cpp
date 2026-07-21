@@ -108,7 +108,13 @@ TEST(CreateTest, CreateFuncDecl)
     PrintNode(funcDecl.get());
 }
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__APPLE__)
+// NOTE: This watchdog compares sizeof(AST node) against sizes recorded in
+// "ASTKind.inc". The recorded sizes are measured on Linux with libstdc++; on
+// macOS (libc++) the standard layout of std::string/std::vector/OwnedPtr
+// members differs, so sizeof is consistently smaller and the check is not
+// meaningful. Skip it on macOS to avoid false positives while keeping the
+// Linux watchdog intact.
 TEST(CreateTest, CheckASTSize)
 {
     /**

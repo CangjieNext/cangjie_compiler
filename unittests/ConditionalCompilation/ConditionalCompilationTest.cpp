@@ -118,7 +118,16 @@ TEST_F(ConditionalCompilationTest, PerformConditionCompile_AfterParse)
     EXPECT_TRUE(ccResult);
 
     auto declCountAfter = packages[0]->files[0]->decls.size();
+    // os.cj guards the two `foo` declarations with `@When[os == "Linux"]` and
+    // `@When[os == "Windows"]`. On Linux exactly one matches (2 decls remain);
+    // on macOS the host os is "macOS", so neither matches and only `main`
+    // remains (1 decl). The filtered-out count differs by platform, so the
+    // expected remainder is platform-dependent.
+#ifdef __APPLE__
+    EXPECT_EQ(declCountAfter, 1);
+#else
     EXPECT_EQ(declCountAfter, 2);
+#endif
 }
 
 /**

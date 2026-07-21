@@ -10,13 +10,14 @@
 #include "cangjie/Utils/CheckUtils.h"
 #include <bitset>
 #include <climits>
+#include <cstddef>
 #include <cstdint>
 
 namespace Cangjie::Utils {
 
 class SipHash {
 public:
-    template <uint64_t N> static uint64_t GetHashValue(const std::bitset<N>& rawData)
+    template <std::size_t N> static uint64_t GetHashValue(const std::bitset<N>& rawData)
     {
         const uint64_t data = rawData.to_ullong();
         const uint8_t* bytes = reinterpret_cast<const uint8_t*>(&data);
