@@ -36,7 +36,7 @@ public:
     explicit ObjCParamMapper();
 
     static ArgsList ConvertParamsListToArgsList(
-        std::unordered_set<std::string>* typedefs,
+        std::vector<std::string>& typedefs,
         const std::vector<OwnedPtr<AST::FuncParamList>>& paramLists, bool withRegistryId);
     static std::string ConvertParamsListToArgsListToString(
         const std::vector<OwnedPtr<AST::FuncParamList>>& paramLists, bool withRegistryId);
@@ -46,18 +46,20 @@ public:
     static std::string GenerateSetterParamLists(const std::string& type);
 
     static std::string GenerateFuncParamLists(
-        std::unordered_set<std::string>* typedefs,
+        std::vector<std::string>& typedefs,
         const std::vector<OwnedPtr<AST::FuncParamList>>& paramLists,
         const std::vector<std::string>& selectorComponents,
         FunctionListFormat format = FunctionListFormat::DECLARATION,
         const ObjCFunctionType type = ObjCFunctionType::INSTANCE,
         bool hasForeignNameAnno = true);
     static std::string GenerateArgumentCast(const AST::Ty& retTy, std::string value);
-    static std::string MapCJTypeToObjCType(std::unordered_set<std::string>* typedefs, const AST::Ty& ty);
-    static std::string MapCJTypeToObjCType(std::unordered_set<std::string>* typedefs,
+    static std::string MapCJTypeToObjCType(std::vector<std::string>& typedefs, const AST::Ty& ty);
+    static std::string MapCJTypeToObjCType(std::vector<std::string>& typedefs,
         const Ptr<AST::Type>& type);
-    static std::string MapCJTypeToObjCType(std::unordered_set<std::string>* typedefs,
+    static std::string MapCJTypeToObjCType(std::vector<std::string>& typedefs,
         const Ptr<AST::FuncParam>& param);
+    static void RegisterTypedef(std::vector<std::string>& typedefs, MappedCType cType);
+    static void CollectTypedefs(std::vector<std::string>& typedefs, MappedCType cType);
 
     static struct EmittableObjCFuncMetainfo GetGetterForProp(
         struct EmittableObjCPropMetainfo prop,
