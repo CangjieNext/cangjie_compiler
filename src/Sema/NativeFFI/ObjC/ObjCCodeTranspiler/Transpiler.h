@@ -60,7 +60,7 @@ private:
     std::stringstream defaultFuncImpls;
 
     std::set<Ptr<AST::Decl>> dependencies;
-    std::unordered_set<std::string> typedefs;
+    std::vector<std::string> typedefs;
 
     std::string resPreamble;
     const std::string& outputFilePath;

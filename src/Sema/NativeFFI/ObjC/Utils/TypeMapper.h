@@ -26,6 +26,10 @@ public:
     std::string usage;
     std::string decl;
 
+    std::vector<MappedCType> dependencies = {};
+
+    MappedCType(std::string usage, std::string decl, std::vector<MappedCType> dependencies)
+        : usage(usage), decl(decl), dependencies(dependencies) {}
     MappedCType(std::string usage, std::string decl): usage(usage), decl(decl) {}
     MappedCType(const char* usage): usage(usage) {}
     MappedCType(std::string usage): usage(usage) {}

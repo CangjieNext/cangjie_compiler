@@ -303,8 +303,12 @@ void Transpiler::ProcessMemberDecls(
             : Emitter::EmitForwardDeclaration(dependenciesStream, identifier);
         Emitter::EmitFileImport(sourceImport, identifier);
     }
+    std::vector<std::string> visited;
     for (auto td : typedefs) {
-        Emitter::EmitTypedef(headerImport, td);
+        if (std::find(visited.begin(), visited.end(), td) == visited.end()) {
+            Emitter::EmitTypedef(headerImport, td);
+            visited.emplace_back(td);
+        }
     }
 
     if (interopType == InteropType::ObjC_Mirror && classDecl) {
@@ -440,9 +444,9 @@ struct EmittableObjCPropMetainfo Transpiler::GetObjCPropMetainfoFromProp(VarDecl
     if (isGenericGlueCode && varDecl.GetTy()->IsGeneric()) {
         auto genericActualTy =
             TypeManager::GetPrimitiveTy(GetActualTypeKind(GetGenericActualType(genericConfig, varDecl.GetTy()->name)));
-        empm.type = ObjCParamMapper::MapCJTypeToObjCType(&typedefs, *genericActualTy);
+        empm.type = ObjCParamMapper::MapCJTypeToObjCType(typedefs, *genericActualTy);
     } else {
-        empm.type = ObjCParamMapper::MapCJTypeToObjCType(&typedefs, *varDecl.GetTy());
+        empm.type = ObjCParamMapper::MapCJTypeToObjCType(typedefs, *varDecl.GetTy());
     }
     empm.isReadwrite = varDecl.isVar && !SkipSetterForValueTypeDecl(*decl);
     empm.name = ctx.nameGenerator.GetObjCDeclName(varDecl);
@@ -470,13 +474,13 @@ struct EmittableObjCFuncMetainfo Transpiler::GetObjCFuncMetainfo(FuncDecl& funcD
     eofm.mangledIdentifier   = mangled ? funcDecl.identifier : ctx.nameGenerator.GenerateMethodWrapperName(funcDecl);
     eofm.identifier          = eofm.selectorComponents[0];
     auto& retTy              = *StaticCast<const FuncTy*>(funcDecl.GetTy())->retTy;
-    eofm.retType             = ObjCParamMapper::MapCJTypeToObjCType(&typedefs, retTy);
-    eofm.paramsDecl          = ObjCParamMapper::GenerateFuncParamLists(&typedefs, funcDecl.funcBody->paramLists,
+    eofm.retType             = ObjCParamMapper::MapCJTypeToObjCType(typedefs, retTy);
+    eofm.paramsDecl          = ObjCParamMapper::GenerateFuncParamLists(typedefs, funcDecl.funcBody->paramLists,
         eofm.selectorComponents, FunctionListFormat::DECLARATION,
         eofm.isStatic ? ObjCFunctionType::STATIC : ObjCFunctionType::INSTANCE,
         GetForeignNameAnnotation(funcDecl) != nullptr);
     auto collectTypes = [this](const OwnedPtr<FuncParam>& fp) -> std::string {
-        return ObjCParamMapper::MapCJTypeToObjCType(&typedefs, *fp->GetTy());
+        return ObjCParamMapper::MapCJTypeToObjCType(typedefs, *fp->GetTy());
     };
     eofm.paramStaticRef      = funcDecl.funcBody->paramLists[0]->params.size() == 0
         ? "()"
@@ -514,12 +518,12 @@ struct EmittableObjCFuncMetainfo Transpiler::GetObjCCtorMetainfo(FuncDecl& funcD
     eofm.mangledIdentifier   = cjWrapperName;
     eofm.identifier          = eofm.selectorComponents[0];
     eofm.retType             = ObjCParamMapper::ID_TYPE;
-    eofm.paramsDecl          = ObjCParamMapper::GenerateFuncParamLists(&typedefs, funcDecl.funcBody->paramLists,
+    eofm.paramsDecl          = ObjCParamMapper::GenerateFuncParamLists(typedefs, funcDecl.funcBody->paramLists,
         eofm.selectorComponents, FunctionListFormat::DECLARATION,
         eofm.isStatic ? ObjCFunctionType::STATIC : ObjCFunctionType::INSTANCE,
         GetForeignNameAnnotation(funcDecl) != nullptr);
     auto collectTypes = [this](const OwnedPtr<FuncParam>& fp) -> std::string {
-        return ObjCParamMapper::MapCJTypeToObjCType(&typedefs, *fp->GetTy());
+        return ObjCParamMapper::MapCJTypeToObjCType(typedefs, *fp->GetTy());
     };
     eofm.paramStaticRef      = JoinVec<OwnedPtr<FuncParam>>(funcDecl.funcBody->paramLists[0]->params,
         collectTypes, ",", "(", ")", false);

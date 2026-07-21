@@ -37,7 +37,7 @@ ObjCParamMapper::ObjCParamMapper() {}
  *  STATIC_REF: (arg1Type, arg2Type, ...argNType)
  */
 std::string ObjCParamMapper::GenerateFuncParamLists(
-    std::unordered_set<std::string>* typedefs,
+    std::vector<std::string>& typedefs,
     const std::vector<OwnedPtr<FuncParamList>>& paramLists,
     const std::vector<std::string>& selectorComponents, FunctionListFormat format, const ObjCFunctionType type,
     bool hasForeignNameAnno)
@@ -96,7 +96,7 @@ std::string ObjCParamMapper::GenerateFuncParamLists(
 }
 
 ArgsList ObjCParamMapper::ConvertParamsListToArgsList(
-    std::unordered_set<std::string>* typedefs,
+    std::vector<std::string>& typedefs,
     const std::vector<OwnedPtr<FuncParamList>>& paramLists, bool withRegistryId)
 {
     ArgsList result = ArgsList();
@@ -163,16 +163,32 @@ std::vector<std::string> ObjCParamMapper::ConvertParamsListToCallableParamsStrin
     return result;
 }
 
-std::string ObjCParamMapper::MapCJTypeToObjCType(std::unordered_set<std::string>* typedefs, const Ty& ty)
+void ObjCParamMapper::RegisterTypedef(std::vector<std::string>& typedefs, MappedCType cType)
+{
+    if (cType.decl != "") {
+        typedefs.emplace_back(cType.decl);
+    }
+}
+
+void ObjCParamMapper::CollectTypedefs(std::vector<std::string>& typedefs, MappedCType cType)
+{
+    for (auto child : cType.dependencies) {
+        CollectTypedefs(typedefs, child);
+    }
+    RegisterTypedef(typedefs, cType);
+}
+
+std::string ObjCParamMapper::MapCJTypeToObjCType(std::vector<std::string>& typedefs, const Ty& ty)
 {
     auto objctype = TypeMapper::Cj2ObjCForObjC(ty);
-    if (objctype.decl != "") {
-        typedefs->insert(objctype.decl);
+    for (auto child : objctype.dependencies) {
+        CollectTypedefs(typedefs, child);
     }
+    RegisterTypedef(typedefs, objctype);
     return objctype.usage;
 }
 
-std::string ObjCParamMapper::MapCJTypeToObjCType(std::unordered_set<std::string>* typedefs, const Ptr<Type>& type)
+std::string ObjCParamMapper::MapCJTypeToObjCType(std::vector<std::string>& typedefs, const Ptr<Type>& type)
 {
     if (!type) {
         return UNSUPPORTED_TYPE;
@@ -181,7 +197,7 @@ std::string ObjCParamMapper::MapCJTypeToObjCType(std::unordered_set<std::string>
     return MapCJTypeToObjCType(typedefs, *type->GetTy());
 }
 
-std::string ObjCParamMapper::MapCJTypeToObjCType(std::unordered_set<std::string>* typedefs,
+std::string ObjCParamMapper::MapCJTypeToObjCType(std::vector<std::string>& typedefs,
     const Ptr<FuncParam>& param)
 {
     if (!param) {
