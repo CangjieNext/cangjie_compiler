@@ -619,38 +619,6 @@ OwnedPtr<Expr> InteropLibBridge::CreateJavaEntityCall(OwnedPtr<Expr> arg)
     return call;
 }
 
-OwnedPtr<Expr> InteropLibBridge::JObjectToString(OwnedPtr<Expr> jobjectExpr, Ptr<File> curFile)
-{
-    auto env = CreateGetJniEnvCall(curFile);
-    auto entity = CreateJavaEntityJobjectCall(WithinFile(std::move(jobjectExpr), curFile));
-    return CreateJavaStringToCangjieCall(std::move(env), std::move(entity));
-}
-
-OwnedPtr<Expr> InteropLibBridge::OptionStringToJObject(OwnedPtr<Expr> optionExpr,
-                                                       FuncParam& jniEnv,
-                                                       const Decl& outerDecl)
-{
-    auto curFile = optionExpr->curFile;
-    return utils.CreateOptionMatch(std::move(optionExpr),
-        [&](VarDecl& v) -> OwnedPtr<Expr> {
-            auto inner = WithinFile(CreateRefExpr(v), curFile);
-            auto env = WithinFile(CreateRefExpr(jniEnv), curFile);
-            auto entity = CreateCangjieStringToJavaCall(std::move(env), std::move(inner));
-            return UnwrapJavaEntity(std::move(entity), &GetJniJobjectTy(), outerDecl, true);
-        },
-        [&]() -> OwnedPtr<Expr> { return CreateJobjectNull(); },
-        &GetJniJobjectTy()
-    );
-}
-
-OwnedPtr<Expr> InteropLibBridge::StringToJObject(OwnedPtr<Expr> cjStringExpr, Ptr<File> curFile,
-                                                 FuncParam& jniEnvParam, const Decl& outerDecl)
-{
-    auto env = WithinFile(CreateRefExpr(jniEnvParam), curFile);
-    auto entity = CreateCangjieStringToJavaCall(std::move(env), WithinFile(std::move(cjStringExpr), curFile));
-    return UnwrapJavaEntity(WithinFile(std::move(entity), curFile), &GetJniJobjectTy(), outerDecl, true);
-}
-
 /**
  * Lower CJ expression into Java boundary representation (JavaEntity / jobject).
  */

@@ -14,6 +14,7 @@
 
 #include "AfterTypeCheckStage.h"
 #include "InteropLibBridge.h"
+#include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "NativeFFI/Java/AfterTypeCheck/JniBridge.h"
 #include "Utils.h"
 
@@ -33,15 +34,6 @@ using namespace Native::FFI::Java;
 const std::string JAVA_ARRAY_GET_FOR_REF_TYPES = "$javaarrayget";
 const std::string JAVA_ARRAY_SET_FOR_REF_TYPES = "$javaarrayset";
 const std::string JAVA_IMPL_ENTITY_ARG_NAME_IN_GENERATED_CTOR = "$obj";
-
-enum class DesugarCJImplStage : uint8_t {
-    BEGIN,
-    PRE_GENERATE,
-    FWD_GENERATE,
-    IMPL_GENERATE,
-    IMPL_DESUGAR,
-    END
-};
 
 class JavaDesugarManager {
 public:
@@ -82,8 +74,8 @@ public:
 
     void DesugarJavaMirror(ClassDecl& mirror);
     void DesugarJavaMirror(InterfaceDecl& mirror);
-    void ProcessJavaMirrorImplStage(AfterTypeCheckContext& ctx, std::function<void(AST::Node&)> desugarPropRef);
-    void ProcessCJImplStage(DesugarCJImplStage stage, File& file);
+    void ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx, std::function<void(AST::Node&)> desugarPropRef);
+    void ProcessCangjieMirrorStages(AfterTypeCheckContext& ctx);
 
     /**
      * Generates glue code for CJMapping tuples:
@@ -106,23 +98,23 @@ public:
      *      Java_CFFI_removeFromRegistry(self)
      * }
      */
-    void GenerateTuplesGlueCode(Package& pkg);
+    void GenerateTuplesGlueCode(AfterTypeCheckContext& ctx);
 
     /**
      * Generate forward class for CJMapping data structure
      */
-    void GenerateFwdClassInCJMapping(File& file);
+    void GenerateFwdClassInCJMapping(AfterTypeCheckContext& ctx);
 
     /**
      * Generate constructors and native init/deinit/method call functions (callable from java) for CJMapping
      * data structure
      */
-    void GenerateInCJMapping(File& file);
+    void GenerateInCJMapping(AfterTypeCheckContext& ctx);
 
     /**
      * Desugar in CJMapping data structure
      */
-    void DesugarInCJMapping(File& file);
+    void DesugarInCJMapping(AfterTypeCheckContext& ctx);
 
 private:
     /**
@@ -236,7 +228,7 @@ private:
     OwnedPtr<Decl> GenerateCJMappingNativeDetachCjObjectFunc(ClassDecl& fwdDecl, ClassDecl& classDecl);
 
     // A helper function to for the ctor of Enum.
-    void GenerateNativeInitCJObjectEnumCtor(AST::EnumDecl& enumDecl);
+    void GenerateNativeInitCJObjectEnumCtor(AfterTypeCheckContext& ctx, AST::EnumDecl& enumDecl);
 
     /**
      * @C public func Java_<enum_identifier>_initCJObject(env: JNIEnv_ptr, obj: jobject): jlong {
@@ -336,9 +328,9 @@ private:
      */
     void InsertJStringOfStringCtor(ClassDecl& decl, bool doStub);
 
-    void GenerateForCJStructOrClassTypeMapping(const File &file, AST::Decl* decl);
-    void GenerateForCJEnumMapping(AST::EnumDecl& enumDecl);
-    void GenerateForCJExtendMapping(AST::ExtendDecl& extendDecl);
+    void GenerateForCJStructOrClassTypeMapping(AfterTypeCheckContext& ctx, const File &file, AST::Decl* decl);
+    void GenerateForCJEnumMapping(AfterTypeCheckContext& ctx, AST::EnumDecl& enumDecl);
+    void GenerateForCJExtendMapping(AfterTypeCheckContext& ctx, AST::ExtendDecl& extendDecl);
 
     /**
      * for a cj-mapping interface:
@@ -366,8 +358,8 @@ private:
      *     return CJMappingInterface_fwd(javaref).foo_default_impl()
      * }
      */
-    void GenerateForCJInterfaceMapping(File& file, AST::InterfaceDecl& interfaceDecl);
-    void GenerateNativeForCJInterfaceMapping(AST::ClassDecl& classDecl);
+    void GenerateForCJInterfaceMapping(AfterTypeCheckContext& ctx, File& file, AST::InterfaceDecl& interfaceDecl);
+    void GenerateNativeForCJInterfaceMapping(AfterTypeCheckContext& ctx, AST::ClassDecl& classDecl);
     void GenerateInterfaceFwdclassBody(AST::ClassDecl& fwdclassDecl,
         AST::InterfaceDecl& interfaceDecl,
         GenericConfigInfo* config = nullptr);
@@ -378,7 +370,7 @@ private:
         FuncDecl& interfaceFuncDecl,
         GenericConfigInfo *config = nullptr);
 
-    void GenerateForCJOpenClassMapping(AST::ClassDecl& classDecl);
+    void GenerateForCJOpenClassMapping(AfterTypeCheckContext& ctx, AST::ClassDecl& classDecl);
     void GenerateClassFwdclassBody(AST::ClassDecl& fwdclassDecl,
         AST::ClassDecl& classDecl,
         std::vector<std::pair<Ptr<FuncDecl>,
@@ -393,7 +385,7 @@ private:
         int index);
     OwnedPtr<ClassDecl> InitInterfaceFwdClassDecl(AST::InterfaceDecl& interfaceDecl);
     OwnedPtr<StructDecl> CreateHelperStructDecl(const Ptr<TupleTy>& tupleTy, Package& pkg);
-    void GenerateNativeItemFunc(const Ptr<TupleTy>& tupleTy, Package& pkg);
+    void GenerateNativeItemFunc(AfterTypeCheckContext& ctx, const Ptr<TupleTy>& tupleTy);
 
     /**
      * Add this. for interface fwdclass default method that call self method,
@@ -412,7 +404,7 @@ private:
     OwnedPtr<AST::MemberAccess> GenThisMemAcessForSelfMethod(Ptr<FuncDecl> fd,
         Ptr<InterfaceDecl> interfaceDecl,
         GenericConfigInfo* genericConfig);
-    void PreGenerateInCJMapping(File& file);
+    void PreGenerateInCJMapping(AfterTypeCheckContext& ctx);
 
     /**
      * config (Int32) -> Int32, will generate as follow:
@@ -445,7 +437,7 @@ private:
      *      }
      *   }
      */
-    void GenerateLambdaGlueCode(File& file);
+    void GenerateLambdaGlueCode(AfterTypeCheckContext& ctx, File& file);
 
     /**
      * config (Int32) -> Int32, will generate as follow:
@@ -488,11 +480,6 @@ private:
     const std::optional<std::string>& javaCodeGenPath;
     const std::string& outputLibPath;
     std::unordered_set<Ptr<Ty>> tupleConfigs;
-
-    /**
-     * Top-level declarations generated during desugaring. Should be added at the end of file desugaring
-     */
-    std::vector<OwnedPtr<Decl>> generatedDecls;
 
     // contains the member signatures of structs.
     const std::unordered_map<Ptr<const AST::InheritableDecl>, MemberMap>& memberMap;

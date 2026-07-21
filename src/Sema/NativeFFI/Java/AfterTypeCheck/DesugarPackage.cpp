@@ -11,6 +11,7 @@
 #include "DesugarJavaImplSuperConstructorCall.h"
 #include "DesugarJavaImplSuperMethodCall.h"
 #include "GenerateInJavaImplReferenceWrapper.h"
+#include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "RewriteJavaImplReferenceWrapperFields.h"
 #include "GenerateNativeBridgeForJavaImpl.h"
 #include "DesugarTypeCheckingAndCasting.h"
@@ -20,7 +21,7 @@
 
 namespace Cangjie::Interop::Java {
 
-void JavaDesugarManager::ProcessJavaMirrorImplStage(AfterTypeCheckContext& ctx,
+void JavaDesugarManager::ProcessJavaMirrorImplStages(AfterTypeCheckContext& ctx,
     std::function<void(AST::Node&)> desugarPropRef)
 {
     for (auto& file : ctx.pkg.files) {
@@ -49,27 +50,14 @@ void JavaDesugarManager::ProcessJavaMirrorImplStage(AfterTypeCheckContext& ctx,
     Process<DesugarTypeCheckingAndCasting>(ctx, lib, diag, utils);
 }
 
-void JavaDesugarManager::ProcessCJImplStage(DesugarCJImplStage stage, File& file)
+void JavaDesugarManager::ProcessCangjieMirrorStages(AfterTypeCheckContext& ctx)
 {
-    switch (stage) {
-        case DesugarCJImplStage::PRE_GENERATE:
-            PreGenerateInCJMapping(file);
-            break;
-        case DesugarCJImplStage::FWD_GENERATE:
-            GenerateFwdClassInCJMapping(file);
-            break;
-        case DesugarCJImplStage::IMPL_GENERATE:
-            GenerateInCJMapping(file);
-            break;
-        case DesugarCJImplStage::IMPL_DESUGAR:
-            DesugarInCJMapping(file);
-            break;
-        default:
-            CJC_ABORT(); // unreachable state
-    }
-
-    std::move(generatedDecls.begin(), generatedDecls.end(), std::back_inserter(file.decls));
-    generatedDecls.clear();
+    GenerateTuplesGlueCode(ctx);
+    PreGenerateInCJMapping(ctx);
+    GenerateFwdClassInCJMapping(ctx);
+    GenerateInCJMapping(ctx);
+    DesugarInCJMapping(ctx);
+    ctx.FlushGeneratedDecls();
 }
 
 void JavaInteropManager::DesugarPackage(Package& pkg,
@@ -89,25 +77,13 @@ void JavaInteropManager::DesugarPackage(Package& pkg,
 
     if (hasMirrorOrImpl) {
         AfterTypeCheckContext ctx{importManager, typeManager, pkg};
-        desugarer.ProcessJavaMirrorImplStage(ctx, desugarPropRef);
+        desugarer.ProcessJavaMirrorImplStages(ctx, desugarPropRef);
     }
 
-    // Currently CJMapping is enable by compile config --enable-interop-cjmapping
+    // Currently CJMapping has no publicly available flags to be enabled.
     if (targetInteropLanguage == GlobalOptions::InteropLanguage::Java) {
-        auto nbegin = static_cast<uint8_t>(DesugarCJImplStage::BEGIN);
-        auto nend = static_cast<uint8_t>(DesugarCJImplStage::END);
-        for (uint8_t nstage = nbegin; nstage != nend; nstage++) {
-            auto stage = static_cast<DesugarCJImplStage>(nstage);
-            if (stage == DesugarCJImplStage::BEGIN) {
-                continue;
-            }
-            if (stage == DesugarCJImplStage::PRE_GENERATE) {
-                desugarer.GenerateTuplesGlueCode(pkg);
-            }
-            for (auto& file : pkg.files) {
-                desugarer.ProcessCJImplStage(stage, *file);
-            }
-        }
+        AfterTypeCheckContext ctx{importManager, typeManager, pkg};
+        desugarer.ProcessCangjieMirrorStages(ctx);
     }
 }
 
