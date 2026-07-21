@@ -103,14 +103,13 @@ void DesugarJArray::TransformConstructorCallsToPassJNIParam(File& file) const
 
         Ptr<Ty> jarrayElementType;
         { // update newCallExpr->baseFunc
-            if (auto base = As<ASTKind::REF_EXPR>(newCallExpr->baseFunc)) {
-                CJC_ASSERT_WITH_MSG(!base->typeArguments.empty(), "JArray type must be generic");
-                jarrayElementType = base->typeArguments[0]->GetTy();
-                base->ref.target = jniTypeConstr;
-                base->SetTy(jniTypeConstr->GetTy());
-            } else {
-                CJC_ABORT_WITH_MSG("constructor call of java.lang.JArray expected to be RefExpr");
-            }
+            // constructor call of java.lang.JArray expected to be RefExpr
+            CJC_ASSERT(newCallExpr->baseFunc->astKind == ASTKind::REF_EXPR);
+            auto base = StaticAs<ASTKind::REF_EXPR>(newCallExpr->baseFunc.get());
+            CJC_ASSERT_WITH_MSG(!base->typeArguments.empty(), "JArray type must be generic");
+            jarrayElementType = base->typeArguments[0]->GetTy();
+            base->ref.target = jniTypeConstr;
+            base->SetTy(jniTypeConstr->GetTy());
         }
 
         CJC_ASSERT_WITH_MSG(newCallExpr->args.size() == 1, "expected to be init(length: Int32)");
@@ -148,11 +147,9 @@ void DesugarJArray::InsertJniTypeParamIntoConstructor(FuncDecl& constr) const
 
     { // add new param ty in constr.ty->paramTys
         std::vector<Ptr<Ty>> ctorFuncParamTys;
-        if (auto fty = DynamicCast<FuncTy*>(constr.GetTy())) {
-            ctorFuncParamTys = std::move(fty->paramTys);
-        } else {
-            CJC_ABORT_WITH_MSG("'fd.ty' expected to be 'FuncTy'");
-        }
+        CJC_ASSERT(constr.GetTy()->kind == TypeKind::TYPE_FUNC);
+        auto fty = StaticCast<FuncTy*>(constr.GetTy());
+        ctorFuncParamTys = std::move(fty->paramTys);
         ctorFuncParamTys.push_back(strTy);
         constr.SetTy(typeManager.GetFunctionTy(std::move(ctorFuncParamTys), constr.outerDecl->GetTy()));
     }
@@ -176,16 +173,15 @@ void DesugarJArray::InsertConstructorBody(FuncDecl& constr) const
 
     constr.constructorCall = ConstructorCall::OTHER_INIT;
 
-    if (auto jarray = DynamicCast<ClassLikeDecl*>(constr.outerDecl)) {
-        static auto generatedJavaRefInitConstr = GetGeneratedJavaMirrorConstructor(*jarray);
-        auto thisCall = CreateThisCall(
-            *constr.outerDecl, *generatedJavaRefInitConstr, generatedJavaRefInitConstr->GetTy(), constr.curFile);
-        thisCall->args.push_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(lambdaNodes))));
-        constr.funcBody->body->body.clear();
-        constr.funcBody->body->body.push_back(std::move(thisCall));
-    } else {
-        CJC_ABORT_WITH_MSG("Jarray expected to be ClassLikeDecl");
-    }
+    // JArray expected to be ClassLikeDecl
+    CJC_ASSERT(constr.outerDecl->IsClassLikeDecl());
+    auto jarray = StaticAs<ASTKind::CLASS_LIKE_DECL>(constr.outerDecl);
+    static auto generatedJavaRefInitConstr = GetGeneratedJavaMirrorConstructor(*jarray);
+    auto thisCall = CreateThisCall(
+        *constr.outerDecl, *generatedJavaRefInitConstr, generatedJavaRefInitConstr->GetTy(), constr.curFile);
+    thisCall->args.push_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(lambdaNodes))));
+    constr.funcBody->body->body.clear();
+    constr.funcBody->body->body.push_back(std::move(thisCall));
 }
 
 Ptr<FuncDecl> DesugarJArray::FindSizeJNITypeConstructor(ClassDecl& jarray) const
@@ -205,12 +201,9 @@ Ptr<FuncDecl> DesugarJArray::FindSizeJNITypeConstructor(ClassDecl& jarray) const
 
 Ptr<FuncDecl> DesugarJArray::FindSizeJNITypeConstructorFromInnerDecl(const Decl& decl) const
 {
-    if (auto jarray = As<ASTKind::CLASS_DECL>(decl.outerDecl)) {
-        return FindSizeJNITypeConstructor(*jarray);
-    } else {
-        CJC_ABORT_WITH_MSG("'outerDecl' expected to be java.lang.JArray");
-        return nullptr;
-    }
+    CJC_ASSERT(decl.outerDecl->astKind == ASTKind::CLASS_DECL); // expected to be java.lang.JArray
+    auto jarray = As<ASTKind::CLASS_DECL>(decl.outerDecl);
+    return FindSizeJNITypeConstructor(*jarray);
 }
 
 void DesugarJArray::ReplaceCallsWithArrayJavaEntityGet(File& file) const

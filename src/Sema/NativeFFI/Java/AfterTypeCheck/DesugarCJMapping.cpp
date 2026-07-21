@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "JavaDesugarManager.h"
+#include "NativeFFI/Java/AfterTypeCheck/AfterTypeCheckContext.h"
 #include "NativeFFI/Java/JavaCodeGenerator/JavaSourceCodeGenerator.h"
 #include "Utils.h"
 
@@ -97,7 +98,7 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateCJMappingNativeDetachCjObjectFunc(Cla
 }
 
 // Current support struct, class type.
-void JavaDesugarManager::GenerateForCJStructOrClassTypeMapping(const File& file, AST::Decl* decl)
+void JavaDesugarManager::GenerateForCJStructOrClassTypeMapping(AfterTypeCheckContext& ctx, const File& file, Decl* decl)
 {
     CJC_ASSERT(decl && IsCJMapping(*decl));
     auto classDecl = DynamicCast<AST::ClassDecl*>(decl);
@@ -122,36 +123,36 @@ void JavaDesugarManager::GenerateForCJStructOrClassTypeMapping(const File& file,
                     for (auto genericConfig : genericConfigsVector) {
                         auto nativeMethod = GenerateNativeMethod(*fd, *decl, genericConfig);
                         if (nativeMethod != nullptr) {
-                            generatedDecls.push_back(std::move(nativeMethod));
+                            ctx.AddGeneratedDecl(std::move(nativeMethod));
                         }
                     }
                 } else {
                     auto nativeMethod = GenerateNativeMethod(*fd, *decl);
                     if (nativeMethod != nullptr) {
-                        generatedDecls.push_back(std::move(nativeMethod));
+                        ctx.AddGeneratedDecl(std::move(nativeMethod));
                     }
                 }
             }
         }
     }
     if (!generatedCtors.empty()) {
-        generatedDecls.push_back(GenerateNativeDeleteCjObjectFunc(*decl));
+        ctx.AddGeneratedDecl(GenerateNativeDeleteCjObjectFunc(*decl));
         for (auto generatedCtor : generatedCtors) {
             if (isGenericGlueCode) {
                 for (auto genericConfig : genericConfigsVector) {
-                    generatedDecls.push_back(
+                    ctx.AddGeneratedDecl(
                         GenerateNativeInitCjObjectFunc(*generatedCtor, false, false, nullptr, genericConfig));
                 }
             } else {
-                generatedDecls.push_back(GenerateNativeInitCjObjectFunc(*generatedCtor, false));
+                ctx.AddGeneratedDecl(GenerateNativeInitCjObjectFunc(*generatedCtor, false));
             }
         }
     }
 }
 
-void JavaDesugarManager::GenerateTuplesGlueCode(Package& pkg)
+void JavaDesugarManager::GenerateTuplesGlueCode(AfterTypeCheckContext& ctx)
 {
-    for (const auto& it : pkg.interopTuples) {
+    for (const auto& it : ctx.pkg.interopTuples) {
         std::string result = it;
         if (!result.empty() && result.front() == '(') {
             result.erase(0, 1);
@@ -175,14 +176,14 @@ void JavaDesugarManager::GenerateTuplesGlueCode(Package& pkg)
             continue;
         }
 
-        generatedDecls.push_back(GenerateNativeInitCjObjectFunc(tupleTy, pkg));
-        GenerateNativeItemFunc(tupleTy, pkg);
-        auto helperDecl = CreateHelperStructDecl(tupleTy, pkg);
-        generatedDecls.push_back(GenerateNativeDeleteCjObjectFunc(*helperDecl));
+        ctx.AddGeneratedDecl(GenerateNativeInitCjObjectFunc(tupleTy, ctx.pkg));
+        GenerateNativeItemFunc(ctx, tupleTy);
+        auto helperDecl = CreateHelperStructDecl(tupleTy, ctx.pkg);
+        ctx.AddGeneratedDecl(GenerateNativeDeleteCjObjectFunc(*helperDecl));
         const std::string fileJ = GetCjMappingTupleName(*tupleTy) + ".java";
-        auto codegen = JavaSourceCodeGenerator(helperDecl.get(), mangler, typeManager, javaCodeGenPath, fileJ,
+        auto codegen = JavaSourceCodeGenerator(helperDecl.get(), mangler, typeManager, ctx, javaCodeGenPath, fileJ,
             GetCangjieLibName(outputLibPath, helperDecl.get()->GetFullPackageName()), tupleTy, true,
-            pkg.isInteropCJPackageConfig);
+            ctx.pkg.isInteropCJPackageConfig);
         codegen.Generate();
     }
 }
@@ -235,9 +236,9 @@ OwnedPtr<StructDecl> JavaDesugarManager::CreateHelperStructDecl(const Ptr<TupleT
     return std::move(helperDecl);
 }
 
-void JavaDesugarManager::GenerateNativeItemFunc(const Ptr<TupleTy>& tupleTy, Package& pkg)
+void JavaDesugarManager::GenerateNativeItemFunc(AfterTypeCheckContext& ctx, const Ptr<TupleTy>& tupleTy)
 {
-    auto curFile = pkg.files.at(0).get();
+    auto curFile = ctx.pkg.files.at(0).get();
     CJC_NULLPTR_CHECK(curFile);
     size_t i = 0;
     for (const auto& ty : tupleTy->typeArgs) {
@@ -265,13 +266,13 @@ void JavaDesugarManager::GenerateNativeItemFunc(const Ptr<TupleTy>& tupleTy, Pac
 
         auto wrappedNodesLambda =
             WrapReturningLambdaExpr(typeManager, Nodes(std::move(tupleAccessRes), std::move(retExpr)));
-        auto funcName = jniBridge.GetJniTupleItemName(tupleTy, pkg, i);
+        auto funcName = jniBridge.GetJniTupleItemName(tupleTy, ctx.pkg, i);
 
         std::vector<OwnedPtr<FuncParamList>> paramLists;
         paramLists.push_back(CreateFuncParamList(std::move(params)));
 
-        generatedDecls.push_back(GenerateNativeFuncDeclBylambda(wrappedNodesLambda, paramLists, jniEnvParam, retTy,
-            funcName, curFile, ::Cangjie::Utils::GetRootPackageName(pkg.fullPackageName), pkg.fullPackageName));
+        ctx.AddGeneratedDecl(GenerateNativeFuncDeclBylambda(wrappedNodesLambda, paramLists, jniEnvParam, retTy,
+            funcName, curFile, ::Cangjie::Utils::GetRootPackageName(ctx.pkg.fullPackageName), ctx.pkg.fullPackageName));
         ++i;
     }
 }
@@ -298,7 +299,7 @@ OwnedPtr<Decl> JavaDesugarManager::GenerateNativeInitCjObjectFuncForEnumCtorNoPa
     return GenerateNativeFuncDeclBylambda(ctor, bodyLambda, paramLists, jniEnvParam, jlongTy, funcName);
 }
 
-void JavaDesugarManager::GenerateNativeInitCJObjectEnumCtor(AST::EnumDecl& enumDecl)
+void JavaDesugarManager::GenerateNativeInitCJObjectEnumCtor(AfterTypeCheckContext& ctx, AST::EnumDecl& enumDecl)
 {
     std::vector<GenericConfigInfo*> genericConfigsVector;
     bool isGenericGlueCode = false;
@@ -309,24 +310,24 @@ void JavaDesugarManager::GenerateNativeInitCJObjectEnumCtor(AST::EnumDecl& enumD
             CJC_NULLPTR_CHECK(fd);
             if (isGenericGlueCode) {
                 for (auto genericConfig : genericConfigsVector) {
-                    generatedDecls.push_back(GenerateNativeInitCjObjectFunc(*fd, false, false, nullptr, genericConfig));
+                    ctx.AddGeneratedDecl(GenerateNativeInitCjObjectFunc(*fd, false, false, nullptr, genericConfig));
                 }
             } else {
-                generatedDecls.push_back(GenerateNativeInitCjObjectFunc(*fd, false));
+                ctx.AddGeneratedDecl(GenerateNativeInitCjObjectFunc(*fd, false));
             }
         } else if (ctor->astKind == ASTKind::VAR_DECL) {
             auto varDecl = As<ASTKind::VAR_DECL>(ctor.get());
             CJC_NULLPTR_CHECK(varDecl);
-            generatedDecls.push_back(GenerateNativeInitCjObjectFuncForEnumCtorNoParams(enumDecl, *varDecl));
+            ctx.AddGeneratedDecl(GenerateNativeInitCjObjectFuncForEnumCtorNoParams(enumDecl, *varDecl));
         }
     }
 }
 
-void JavaDesugarManager::GenerateForCJEnumMapping(AST::EnumDecl& enumDecl)
+void JavaDesugarManager::GenerateForCJEnumMapping(AfterTypeCheckContext& ctx, AST::EnumDecl& enumDecl)
 {
     CJC_ASSERT(IsCJMapping(enumDecl));
 
-    GenerateNativeInitCJObjectEnumCtor(enumDecl);
+    GenerateNativeInitCJObjectEnumCtor(ctx, enumDecl);
 
     std::vector<GenericConfigInfo*> genericConfigsVector;
     bool isGenericGlueCode = false;
@@ -338,10 +339,10 @@ void JavaDesugarManager::GenerateForCJEnumMapping(AST::EnumDecl& enumDecl)
         if (auto fd = As<ASTKind::FUNC_DECL>(member.get())) {
             if (isGenericGlueCode) {
                 for (auto genericConfig : genericConfigsVector) {
-                    generatedDecls.push_back(GenerateNativeMethod(*fd, enumDecl, genericConfig));
+                    ctx.AddGeneratedDecl(GenerateNativeMethod(*fd, enumDecl, genericConfig));
                 }
             } else {
-                generatedDecls.push_back(GenerateNativeMethod(*fd, enumDecl));
+                ctx.AddGeneratedDecl(GenerateNativeMethod(*fd, enumDecl));
             }
         } else if (member->astKind == ASTKind::PROP_DECL && !member->TestAttr(Attribute::COMPILER_ADD)) {
             const PropDecl& propDecl = *StaticAs<ASTKind::PROP_DECL>(member.get());
@@ -358,7 +359,7 @@ void JavaDesugarManager::GenerateForCJEnumMapping(AST::EnumDecl& enumDecl)
                     auto nativeMethod = GenerateNativeMethod(*funcDecl.get(), enumDecl, genericConfig);
                     if (nativeMethod != nullptr) {
                         nativeMethod->identifier = getSignature;
-                        generatedDecls.push_back(std::move(nativeMethod));
+                        ctx.AddGeneratedDecl(std::move(nativeMethod));
                     }
                 }
             } else {
@@ -366,16 +367,16 @@ void JavaDesugarManager::GenerateForCJEnumMapping(AST::EnumDecl& enumDecl)
                 auto nativeMethod = GenerateNativeMethod(*funcDecl.get(), enumDecl);
                 if (nativeMethod != nullptr) {
                     nativeMethod->identifier = getSignature;
-                    generatedDecls.push_back(std::move(nativeMethod));
+                    ctx.AddGeneratedDecl(std::move(nativeMethod));
                 }
             }
         }
     }
 
-    generatedDecls.push_back(GenerateNativeDeleteCjObjectFunc(enumDecl));
+    ctx.AddGeneratedDecl(GenerateNativeDeleteCjObjectFunc(enumDecl));
 }
 
-void JavaDesugarManager::GenerateForCJExtendMapping(AST::ExtendDecl& extendDecl)
+void JavaDesugarManager::GenerateForCJExtendMapping(AfterTypeCheckContext& ctx, AST::ExtendDecl& extendDecl)
 {
     CJC_ASSERT(IsCJMapping(extendDecl));
 
@@ -391,7 +392,7 @@ void JavaDesugarManager::GenerateForCJExtendMapping(AST::ExtendDecl& extendDecl)
             continue;
         }
         if (auto fd = As<ASTKind::FUNC_DECL>(member.get())) {
-            generatedDecls.push_back(GenerateNativeMethod(*fd, extendDecl));
+            ctx.AddGeneratedDecl(GenerateNativeMethod(*fd, extendDecl));
         } else if (member->astKind == ASTKind::PROP_DECL && !member->TestAttr(Attribute::COMPILER_ADD)) {
             const PropDecl& propDecl = *StaticAs<ASTKind::PROP_DECL>(member.get());
             if (!propDecl.getters.empty()) {
@@ -400,7 +401,7 @@ void JavaDesugarManager::GenerateForCJExtendMapping(AST::ExtendDecl& extendDecl)
                 auto nativeGetMethod = GenerateNativeMethod(*getFuncDecl.get(), extendDecl);
                 if (nativeGetMethod != nullptr) {
                     nativeGetMethod->identifier = getSignature;
-                    generatedDecls.push_back(std::move(nativeGetMethod));
+                    ctx.AddGeneratedDecl(std::move(nativeGetMethod));
                 }
             }
             if (!propDecl.setters.empty()) {
@@ -409,7 +410,7 @@ void JavaDesugarManager::GenerateForCJExtendMapping(AST::ExtendDecl& extendDecl)
                 auto nativeSetMethod = GenerateNativeMethod(*setFuncDecl.get(), extendDecl);
                 if (nativeSetMethod != nullptr) {
                     nativeSetMethod->identifier = setSignature;
-                    generatedDecls.push_back(std::move(nativeSetMethod));
+                    ctx.AddGeneratedDecl(std::move(nativeSetMethod));
                 }
             }
         }
@@ -566,7 +567,8 @@ OwnedPtr<ClassDecl> JavaDesugarManager::InitInterfaceFwdClassDecl(AST::Interface
     return fwdclassDecl;
 }
 
-void JavaDesugarManager::GenerateForCJInterfaceMapping(File& file, AST::InterfaceDecl& interfaceDecl)
+void JavaDesugarManager::GenerateForCJInterfaceMapping(
+    AfterTypeCheckContext& ctx, File& file, InterfaceDecl& interfaceDecl)
 {
     if (IsCJMappingGeneric(interfaceDecl)) {
         std::vector<GenericConfigInfo*> genericConfigsVector;
@@ -596,7 +598,7 @@ void JavaDesugarManager::GenerateForCJInterfaceMapping(File& file, AST::Interfac
             classLikeTy->directSubtypes.insert(fwdclassDecl->GetTy());
 
             GenerateInterfaceFwdclassBody(*fwdclassDecl, interfaceDecl, config);
-            generatedDecls.push_back(std::move(fwdclassDecl));
+            ctx.AddGeneratedDecl(std::move(fwdclassDecl));
         }
     } else {
         auto fwdclassDecl = InitInterfaceFwdClassDecl(interfaceDecl);
@@ -606,7 +608,7 @@ void JavaDesugarManager::GenerateForCJInterfaceMapping(File& file, AST::Interfac
         CJC_ASSERT(classLikeTy);
         classLikeTy->directSubtypes.insert(fwdclassDecl->GetTy());
         GenerateInterfaceFwdclassBody(*fwdclassDecl, interfaceDecl);
-        generatedDecls.push_back(std::move(fwdclassDecl));
+        ctx.AddGeneratedDecl(std::move(fwdclassDecl));
     }
 }
 
@@ -910,7 +912,7 @@ void JavaDesugarManager::GenerateClassFwdclassBody(AST::ClassDecl& fwdClassDecl,
     }
 }
 
-void JavaDesugarManager::GenerateForCJOpenClassMapping(AST::ClassDecl& classDecl)
+void JavaDesugarManager::GenerateForCJOpenClassMapping(AfterTypeCheckContext& ctx, AST::ClassDecl& classDecl)
 {
     auto fwdclassDecl = MakeOwned<ClassDecl>();
     fwdclassDecl->identifier = classDecl.identifier.Val() + JAVA_FWD_CLASS_SUFFIX;
@@ -933,7 +935,6 @@ void JavaDesugarManager::GenerateForCJOpenClassMapping(AST::ClassDecl& classDecl
     std::vector<std::pair<Ptr<FuncDecl>, Ptr<FuncDecl>>> pairCtors;
     GenerateClassFwdclassBody(*fwdclassDecl, classDecl, pairCtors);
 
-    std::vector<FuncDecl*> generatedCtors;
     for (auto& member : classDecl.GetMemberDecls()) {
         if (member->TestAnyAttr(Attribute::IS_BROKEN, Attribute::PRIVATE)) {
             continue;
@@ -942,23 +943,23 @@ void JavaDesugarManager::GenerateForCJOpenClassMapping(AST::ClassDecl& classDecl
         if (fd && !fd->TestAttr(Attribute::CONSTRUCTOR)) {
             auto nativeMethod = GenerateNativeMethod(*fd, classDecl);
             if (nativeMethod != nullptr) {
-                generatedDecls.push_back(std::move(nativeMethod));
+                ctx.AddGeneratedDecl(std::move(nativeMethod));
             }
             continue;
         }
     }
 
     if (!pairCtors.empty()) {
-        generatedDecls.push_back(GenerateCJMappingNativeDetachCjObjectFunc(*fwdclassDecl, classDecl));
+        ctx.AddGeneratedDecl(GenerateCJMappingNativeDetachCjObjectFunc(*fwdclassDecl, classDecl));
         for (const auto& pair : pairCtors) {
-            generatedDecls.push_back(GenerateNativeInitCjObjectFunc(*pair.first, false, true, pair.second));
+            ctx.AddGeneratedDecl(GenerateNativeInitCjObjectFunc(*pair.first, false, true, pair.second));
         }
     }
 
-    generatedDecls.push_back(std::move(fwdclassDecl));
+    ctx.AddGeneratedDecl(std::move(fwdclassDecl));
 }
 
-void JavaDesugarManager::GenerateNativeForCJInterfaceMapping(AST::ClassDecl& classDecl)
+void JavaDesugarManager::GenerateNativeForCJInterfaceMapping(AfterTypeCheckContext& ctx, AST::ClassDecl& classDecl)
 {
     CJC_ASSERT(IsFwdClass(classDecl));
 
@@ -970,15 +971,17 @@ void JavaDesugarManager::GenerateNativeForCJInterfaceMapping(AST::ClassDecl& cla
             continue;
         }
         if (auto fd = As<ASTKind::FUNC_DECL>(member.get())) {
-            generatedDecls.push_back(GenerateNativeMethod(*fd, classDecl));
+            ctx.AddGeneratedDecl(GenerateNativeMethod(*fd, classDecl));
         }
     }
 }
 
-void JavaDesugarManager::PreGenerateInCJMapping(File& file)
+void JavaDesugarManager::PreGenerateInCJMapping(AfterTypeCheckContext& ctx)
 {
-    if (!isInitLambdaUtilFunc) {
-        GenerateLambdaGlueCode(file);
+    for (auto& file : ctx.pkg.files) {
+        if (!isInitLambdaUtilFunc) {
+            GenerateLambdaGlueCode(ctx, *file);
+        }
     }
 }
 
@@ -1050,7 +1053,7 @@ Ptr<Decl> JavaDesugarManager::GetLambdaTmpDecl(File& file, std::string javaClass
     return decl;
 }
 
-void JavaDesugarManager::GenerateLambdaGlueCode(File& file)
+void JavaDesugarManager::GenerateLambdaGlueCode(AfterTypeCheckContext& ctx, File& file)
 {
     CJC_ASSERT(file.curPackage);
     auto curFile = file.curFile;
@@ -1092,20 +1095,20 @@ void JavaDesugarManager::GenerateLambdaGlueCode(File& file)
         }
         if (funcDecl) {
             auto tmpFuncDecl = funcDecl.get();
-            generatedDecls.push_back(std::move(funcDecl));
+            ctx.AddGeneratedDecl(std::move(funcDecl));
             lambdaConfUtilFuncs.emplace(lambdaTy->String(), tmpFuncDecl);
         }
 
         // generate delete cj object
         Ptr<Decl> decl = GetLambdaTmpDecl(file, className, fullPackageName);
-        generatedDecls.push_back(GenerateNativeDeleteCjObjectFunc(*decl));
+        ctx.AddGeneratedDecl(GenerateNativeDeleteCjObjectFunc(*decl));
 
         // generate callImp native method
-        generatedDecls.push_back(GenerateCallImplNativeMethod(file, lambdaPattern));
+        ctx.AddGeneratedDecl(GenerateCallImplNativeMethod(file, lambdaPattern));
 
         // generate java source code.
         const std::string fileJ = className + ".java";
-        auto codegen = JavaSourceCodeGenerator(mangler, typeManager, javaCodeGenPath, fileJ,
+        auto codegen = JavaSourceCodeGenerator(mangler, typeManager, ctx, javaCodeGenPath, fileJ,
             GetCangjieLibName(outputLibPath, fullPackageName), &lambdaPattern);
         codegen.Generate();
     }
@@ -1166,107 +1169,113 @@ OwnedPtr<LambdaExpr> JavaDesugarManager::GenerateLambdaExpr(File& file, LambdaPa
     return lambdaExpr;
 }
 
-void JavaDesugarManager::GenerateFwdClassInCJMapping(File& file)
+void JavaDesugarManager::GenerateFwdClassInCJMapping(AfterTypeCheckContext& ctx)
 {
-    for (auto& decl : file.decls) {
-        if (!decl.get()->TestAttr(Attribute::PUBLIC) || decl.get()->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
-        auto interfaceDecl = As<ASTKind::INTERFACE_DECL>(decl.get());
-        if (interfaceDecl && IsCJMapping(*interfaceDecl)) {
-            GenerateForCJInterfaceMapping(file, *interfaceDecl);
-            continue;
-        }
-
-        auto classDecl = As<ASTKind::CLASS_DECL>(decl.get());
-        if (classDecl && IsCJMapping(*classDecl) && classDecl->TestAttr(Attribute::OPEN)) {
-            GenerateForCJOpenClassMapping(*classDecl);
-            continue;
-        }
-    }
-}
-
-void JavaDesugarManager::GenerateInCJMapping(File& file)
-{
-    for (auto& decl : file.decls) {
-        if (!decl.get()->TestAttr(Attribute::PUBLIC) || decl.get()->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
-        auto astDecl = As<ASTKind::DECL>(decl.get());
-        if (astDecl && astDecl->TestAttr(Attribute::IS_BROKEN)) {
-            continue;
-        }
-        std::vector<GenericConfigInfo*> genericConfigsVector;
-        bool isGenericGlueCode = false;
-        // Initialize generic-related data type information.
-        InitGenericConfigs(file, decl.get(), genericConfigsVector, isGenericGlueCode);
-        auto structDecl = As<ASTKind::STRUCT_DECL>(decl.get());
-        if (file.curPackage.get()->isInteropCJPackageConfig && structDecl &&
-            !structDecl->symbol->isNeedExposedToInterop) {
-            continue;
-        }
-        if (structDecl && IsCJMapping(*structDecl)) {
-            GenerateForCJStructOrClassTypeMapping(file, structDecl);
-            continue;
-        }
-        auto enumDecl = As<ASTKind::ENUM_DECL>(decl.get());
-        if (enumDecl && IsCJMapping(*enumDecl)) {
-            GenerateForCJEnumMapping(*enumDecl);
-            continue;
-        }
-        auto classDecl = As<ASTKind::CLASS_DECL>(decl.get());
-        if (classDecl && IsCJMapping(*classDecl) && !classDecl->TestAttr(Attribute::OPEN)) {
-            GenerateForCJStructOrClassTypeMapping(file, classDecl);
-            continue;
-        }
-        if (classDecl && IsFwdClass(*classDecl)) {
-            GenerateNativeForCJInterfaceMapping(*classDecl);
-            continue;
-        }
-        auto extendDecl = As<ASTKind::EXTEND_DECL>(decl.get());
-        if (extendDecl && IsCJMapping(*extendDecl)) {
-            GenerateForCJExtendMapping(*extendDecl);
-        }
-    }
-}
-
-void JavaDesugarManager::DesugarInCJMapping(File& file)
-{
-    // origin reference decl mapping to its all extendDecl
-    std::map<Ptr<Decl>, std::vector<Ptr<ExtendDecl>>> ref2extend;
-    // origin reference decl which need generate java glue code file
-    std::vector<Ptr<Decl>> genDecls;
-    for (auto& decl : file.decls) {
-        if (!decl.get()->TestAttr(Attribute::PUBLIC) || decl.get()->TestAttr(Attribute::IS_BROKEN) ||
-            !JavaSourceCodeGenerator::IsDeclAppropriateForGeneration(*decl.get()) || !IsCJMapping(*decl.get())) {
-            continue;
-        }
-        if (auto extendDecl = As<ASTKind::EXTEND_DECL>(decl.get())) {
-            if (auto rt = DynamicCast<const RefType*>(extendDecl->extendedType.get())) {
-                ref2extend[rt->ref.target].emplace_back(extendDecl);
+    for (auto& file : ctx.pkg.files) {
+        for (auto& decl : file->decls) {
+            if (!decl.get()->TestAttr(Attribute::PUBLIC) || decl.get()->TestAttr(Attribute::IS_BROKEN)) {
+                continue;
             }
-        } else {
-            genDecls.emplace_back(decl.get());
+            auto interfaceDecl = As<ASTKind::INTERFACE_DECL>(decl.get());
+            if (interfaceDecl && IsCJMapping(*interfaceDecl)) {
+                GenerateForCJInterfaceMapping(ctx, *file, *interfaceDecl);
+                continue;
+            }
+
+            auto classDecl = As<ASTKind::CLASS_DECL>(decl.get());
+            if (classDecl && IsCJMapping(*classDecl) && classDecl->TestAttr(Attribute::OPEN)) {
+                GenerateForCJOpenClassMapping(ctx, *classDecl);
+                continue;
+            }
         }
     }
-    for (auto decl : genDecls) {
-        if (IsCJMappingGeneric(*decl)) {
+}
+
+void JavaDesugarManager::GenerateInCJMapping(AfterTypeCheckContext& ctx)
+{
+    for (auto& file : ctx.pkg.files) {
+        for (auto& decl : file->decls) {
+            if (!decl.get()->TestAttr(Attribute::PUBLIC) || decl.get()->TestAttr(Attribute::IS_BROKEN)) {
+                continue;
+            }
+            auto astDecl = As<ASTKind::DECL>(decl.get());
+            if (astDecl && astDecl->TestAttr(Attribute::IS_BROKEN)) {
+                continue;
+            }
             std::vector<GenericConfigInfo*> genericConfigsVector;
             bool isGenericGlueCode = false;
-            InitGenericConfigs(file, decl, genericConfigsVector, isGenericGlueCode);
-            for (auto& config : genericConfigsVector) {
-                const std::string fileJ = config->declInstName + ".java";
-                auto codegen = JavaSourceCodeGenerator(decl.get(), mangler, typeManager, javaCodeGenPath, fileJ,
-                    GetCangjieLibName(outputLibPath, decl.get()->GetFullPackageName()), config,
-                    file.curPackage.get()->isInteropCJPackageConfig);
+            // Initialize generic-related data type information.
+            InitGenericConfigs(*file, decl.get(), genericConfigsVector, isGenericGlueCode);
+            auto structDecl = As<ASTKind::STRUCT_DECL>(decl.get());
+            if (ctx.pkg.isInteropCJPackageConfig && structDecl &&
+                !structDecl->symbol->isNeedExposedToInterop) {
+                continue;
+            }
+            if (structDecl && IsCJMapping(*structDecl)) {
+                GenerateForCJStructOrClassTypeMapping(ctx, *file, structDecl);
+                continue;
+            }
+            auto enumDecl = As<ASTKind::ENUM_DECL>(decl.get());
+            if (enumDecl && IsCJMapping(*enumDecl)) {
+                GenerateForCJEnumMapping(ctx, *enumDecl);
+                continue;
+            }
+            auto classDecl = As<ASTKind::CLASS_DECL>(decl.get());
+            if (classDecl && IsCJMapping(*classDecl) && !classDecl->TestAttr(Attribute::OPEN)) {
+                GenerateForCJStructOrClassTypeMapping(ctx, *file, classDecl);
+                continue;
+            }
+            if (classDecl && IsFwdClass(*classDecl)) {
+                GenerateNativeForCJInterfaceMapping(ctx, *classDecl);
+                continue;
+            }
+            auto extendDecl = As<ASTKind::EXTEND_DECL>(decl.get());
+            if (extendDecl && IsCJMapping(*extendDecl)) {
+                GenerateForCJExtendMapping(ctx, *extendDecl);
+            }
+        }
+    }
+}
+
+void JavaDesugarManager::DesugarInCJMapping(AfterTypeCheckContext& ctx)
+{
+    for (auto& file : ctx.pkg.files) {
+        // origin reference decl mapping to its all extendDecl
+        std::map<Ptr<Decl>, std::vector<Ptr<ExtendDecl>>> ref2extend;
+        // origin reference decl which need generate java glue code file
+        std::vector<Ptr<Decl>> genDecls;
+        for (auto& decl : file->decls) {
+            if (!decl.get()->TestAttr(Attribute::PUBLIC) || decl.get()->TestAttr(Attribute::IS_BROKEN) ||
+                !JavaSourceCodeGenerator::IsDeclAppropriateForGeneration(*decl.get()) || !IsCJMapping(*decl.get())) {
+                continue;
+            }
+            if (auto extendDecl = As<ASTKind::EXTEND_DECL>(decl.get())) {
+                if (auto rt = DynamicCast<const RefType*>(extendDecl->extendedType.get())) {
+                    ref2extend[rt->ref.target].emplace_back(extendDecl);
+                }
+            } else {
+                genDecls.emplace_back(decl.get());
+            }
+        }
+        for (auto decl : genDecls) {
+            if (IsCJMappingGeneric(*decl)) {
+                std::vector<GenericConfigInfo*> genericConfigsVector;
+                bool isGenericGlueCode = false;
+                InitGenericConfigs(*file, decl, genericConfigsVector, isGenericGlueCode);
+                for (auto& config : genericConfigsVector) {
+                    const std::string fileJ = config->declInstName + ".java";
+                    auto codegen = JavaSourceCodeGenerator(decl.get(), mangler, typeManager, ctx, javaCodeGenPath,
+                        fileJ, GetCangjieLibName(outputLibPath, decl.get()->GetFullPackageName()), config,
+                        ctx.pkg.isInteropCJPackageConfig);
+                    codegen.Generate();
+                }
+            } else {
+                const std::string fileJ = decl.get()->identifier.Val() + ".java";
+                auto codegen = JavaSourceCodeGenerator(decl.get(), mangler, typeManager, ctx, javaCodeGenPath, fileJ,
+                    GetCangjieLibName(outputLibPath, decl.get()->GetFullPackageName()), ref2extend[decl],
+                    ctx.pkg.isInteropCJPackageConfig);
                 codegen.Generate();
             }
-        } else {
-            const std::string fileJ = decl.get()->identifier.Val() + ".java";
-            auto codegen = JavaSourceCodeGenerator(decl.get(), mangler, typeManager, javaCodeGenPath, fileJ,
-                GetCangjieLibName(outputLibPath, decl.get()->GetFullPackageName()), ref2extend[decl],
-                file.curPackage.get()->isInteropCJPackageConfig);
-            codegen.Generate();
         }
     }
 }

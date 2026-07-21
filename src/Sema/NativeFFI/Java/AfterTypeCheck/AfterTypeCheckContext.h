@@ -38,6 +38,13 @@ struct AfterTypeCheckContext {
 
     std::vector<Ptr<AST::FuncDecl>> GetJavaImplUserDefinedConstructors(AST::ClassDecl& refWrapper);
 
+    void CacheJavaImplSuperCtorArgNativeFunc(const AST::FuncDecl& ctor, Ptr<AST::FuncDecl> nativeFunc);
+    const std::vector<Ptr<AST::FuncDecl>> GetJavaImplSuperCtorArgNativeFuncs(const AST::FuncDecl& ctor);
+    bool HasDesugaredJavaImplSuperConstructorCall(const AST::FuncDecl& userCtor) const;
+
+    void CacheJavaImplSuperCtorCall(const AST::FuncDecl& ctor, OwnedPtr<AST::CallExpr>&& call);
+    AST::CallExpr& GetJavaImplSuperCtorCall(const AST::FuncDecl& ctor);
+
     void AddGeneratedDecl(OwnedPtr<AST::Decl>&& decl);
 
     void FlushGeneratedDecls();
@@ -67,6 +74,18 @@ private:
      * Value: corresponding wrapping constructor.
      */
     std::unordered_map<Ptr<AST::ClassDecl>, Ptr<AST::FuncDecl>> javaImplWrappingConstructors;
+
+    /**
+     * Key: user-defined constructor in @JavaImpl.
+     * Value: vector of corresponding generated native functions with the meaning of argument value computation.
+     */
+    std::unordered_map<Ptr<const AST::FuncDecl>, std::vector<Ptr<AST::FuncDecl>>> javaImplUserCtorToNativeFuncs;
+
+    /**
+     * Key: user-defined constructor in @JavaImpl.
+     * Value: original, user-defined super constructor call within corresponding constructor.
+     */
+    std::unordered_map<Ptr<const AST::FuncDecl>, OwnedPtr<AST::CallExpr>> javaImplUserCtorToOriginalSuperCall;
 
     // Generated top-level declaration.
     std::vector<OwnedPtr<AST::Decl>> generated;

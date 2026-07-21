@@ -160,8 +160,8 @@ OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstruct
     auto& params = ctor->funcBody->paramLists[0]->params;
 
     // reg: companion.ty
-    params.insert(params.begin(), CreateFuncParam("reg", CreateRefType(companion), nullptr, companion.GetTy()));
-    auto& regCompanionParam = *params[0];
+    auto& regCompanionParam = **params.emplace(params.begin(),
+        CreateFuncParam("reg", CreateRefType(companion), nullptr, companion.GetTy()));
 
     // obj: Java_CFFI_JavaEntity
     auto javaEntityDecl = ilib.GetJavaEntityDecl();
@@ -169,10 +169,9 @@ OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstruct
         return nullptr;
     }
 
-    params.insert(params.begin(),
+    auto& entityParam = **params.emplace(params.begin(),
         CreateFuncParam(JAVA_IMPL_ENTITY_ARG_NAME_IN_GENERATED_CTOR,
             CreateRefType(*javaEntityDecl), nullptr, javaEntityDecl->GetTy()));
-    auto& entityParam = *params[0];
 
     Ptr<FuncDecl> parentCtor = GetGeneratedJavaMirrorConstructor(*refWrapper.GetSuperClassDecl());
     CJC_ASSERT(parentCtor);
@@ -278,25 +277,12 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitializa
 
             superCall->args.insert(superCall->args.begin(), CreateFuncArg(std::move(lambdaCall)));
 
-            if (!ctor.funcBody->body->body.empty()) {
-                auto firstNode = ctor.funcBody->body->body[0].get();
-                if (auto callExpr = As<ASTKind::CALL_EXPR>(firstNode); callExpr && IsSuperConstructorCall(*callExpr)) {
-                    // This super-constructor call `callExpr` is removed in `JavaSourceCodeGenerator`.
-                    // TODO: remove it here and memoize with context/cache.
-                    callExpr->EnableAttr(Attribute::JAVA_MIRROR, Attribute::UNREACHABLE);
-                }
-            }
-
             // Inserts assignment of registry companion into an instance.
             ctor.funcBody->body->body.insert(ctor.funcBody->body->body.begin(),
                 CreateRegistryCompanionRefFieldAssignment(companion, refWrapper, companionRefField));
             // Inserts generated super call at the beginning of the constructor.
+            // Original super call was removed at `DesugarJavaImplSuperConstructorCall` stage.
             ctor.funcBody->body->body.insert(ctor.funcBody->body->body.begin(), std::move(superCall));
-            /*
-                We can't remove existing user-defined super call on this stage
-                because it is used for java code generation.
-                TODO: fix it.
-            */
     } else {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         companion.EnableAttr(Attribute::HAS_BROKEN, Attribute::IS_BROKEN);
