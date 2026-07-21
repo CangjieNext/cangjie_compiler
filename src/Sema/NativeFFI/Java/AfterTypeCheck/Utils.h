@@ -113,16 +113,6 @@ OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, FuncDecl& javaRefGetter);
 OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, VarDecl& javaref);
 
 /**
- * this.javaRefGetter(), where this is expr on mirrorLike
- */
-OwnedPtr<Expr> CreateJavaRefCall(ClassLikeDecl& mirrorLike, FuncDecl& javaRefGetter, Ptr<File> curFile);
-
-/**
- * this.javaref, where this is expr on mirrorLike
- */
-OwnedPtr<Expr> CreateJavaRefCall(ClassLikeDecl& mirrorLike, VarDecl& javaref, Ptr<File> curFile);
-
-/**
  * if mirrorLike is abstract class or interface, then:
  *   expr.getJavaRef()
  * else:

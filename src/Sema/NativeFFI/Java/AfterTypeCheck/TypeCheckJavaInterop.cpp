@@ -4,12 +4,9 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
-#include "JavaDesugarManager.h"
 #include "JavaInteropManager.h"
 
 #include "DiagsInterop.h"
-#include "TypeCheckUtil.h"
-#include "TypeCheckerImpl.h"
 #include "Utils.h"
 
 #include "cangjie/AST/Match.h"
@@ -17,7 +14,6 @@
 #include "cangjie/Utils/Utils.h"
 
 using namespace Cangjie;
-using namespace TypeCheckUtil;
 using namespace AST;
 using namespace Cangjie::Interop::Java;
 
