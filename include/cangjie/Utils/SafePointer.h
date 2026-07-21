@@ -21,6 +21,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "Macros.h"
 #include "CheckUtils.h"
 
 /*
@@ -379,8 +380,9 @@ template <typename T> struct std::hash<const Ptr<T>> {
     }
 };
 
+SUPPRESS_WARNING("-Winvalid-specialization")
 template <class T> struct std::remove_pointer<Ptr<T>> {
     using type = T;
 };
-
+UNSUPPRESS_WARNING()
 #endif

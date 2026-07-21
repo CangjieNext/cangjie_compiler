@@ -1475,8 +1475,6 @@ template <> flatbuffers::Offset<void> CHIRSerializer::CHIRSerializerImpl::Dispat
             return Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj)).Union();
         case ExprKind::INVALID:
         case ExprKind::MAX_EXPR_KINDS:
-            CJC_ABORT();
-            return 0;
         default:
             CJC_ABORT();
             return 0;
