@@ -23,6 +23,7 @@
 #include "cangjie/AST/Create.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
+#include "cangjie/Basic/Utils.h"
 #include "cangjie/Basic/Version.h"
 #include "cangjie/Mangle/ASTMangler.h"
 #include "cangjie/Mangle/BaseMangler.h"
@@ -950,7 +951,7 @@ void ASTWriter::ASTWriterImpl::SaveFileInfo(const unsigned int fileID, const std
     unsigned int storedFileID = fileID;
     if (serializingCommon) {
         std::string normalizedPath = FileUtil::Normalize(filePath);
-        storedFileID = static_cast<unsigned int>(std::hash<std::string>{}(normalizedPath));
+        storedFileID = Utils::GetCJMPFileID(normalizedPath);
     }
 
     allFileInfo.push_back(PackageFormat::CreateFileInfo(builder, storedFileID, &begin, &end, feature));

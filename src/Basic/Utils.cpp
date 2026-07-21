@@ -37,6 +37,12 @@ uint64_t Utils::GetHash(const std::string& content)
     return hash;
 }
 
+unsigned int Utils::GetCJMPFileID(const std::string& normalizedPath)
+{
+    auto hash64 = GetHash(normalizedPath);
+    return static_cast<uint32_t>(hash64 >> 32) ^ static_cast<uint32_t>(hash64 & 0xFFFFFFFF);
+}
+
 std::vector<std::string> Utils::SplitLines(const std::string& str)
 {
     std::vector<std::string> res;
