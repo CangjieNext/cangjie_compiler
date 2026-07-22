@@ -39,8 +39,12 @@ uint64_t Utils::GetHash(const std::string& content)
 
 unsigned int Utils::GetCJMPFileID(const std::string& normalizedPath)
 {
+    // XOR-folding: shift by half of 64-bit hash width
+    constexpr uint32_t xorFoldShift = 32;
+    // XOR-folding: mask for lower 32 bits
+    constexpr uint64_t lower32Mask = 0xFFFFFFFF;
     auto hash64 = GetHash(normalizedPath);
-    return static_cast<uint32_t>(hash64 >> 32) ^ static_cast<uint32_t>(hash64 & 0xFFFFFFFF);
+    return static_cast<uint32_t>(hash64 >> xorFoldShift) ^ static_cast<uint32_t>(hash64 & lower32Mask);
 }
 
 std::vector<std::string> Utils::SplitLines(const std::string& str)
