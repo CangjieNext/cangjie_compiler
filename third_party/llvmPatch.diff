@@ -15249,10 +15249,10 @@ index 000000000..b848ed20d
 +endif()
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.cpp
 new file mode 100644
-index 000000000..3b2a3b9ce
+index 000000000..47852df3a
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieASTUtils.cpp
-@@ -0,0 +1,832 @@
+@@ -0,0 +1,830 @@
 +//===-- CangjieASTUtils.cpp -----------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -15815,7 +15815,6 @@ index 000000000..3b2a3b9ce
 +  decl->EnableAttr(Attribute::GENERIC);
 +  decl->funcBody->generic = MakeOwned<Generic>();
 +  // default::Pair<$G_T,$G_U> => Pair<$G_T,$G_U> => T, U
-+  std::vector<std::string> params;
 +  SetGenericByName(decl->funcBody->generic.get(), typeName, decl);
 +}
 +
@@ -15842,7 +15841,6 @@ index 000000000..3b2a3b9ce
 +  decl->EnableAttr(Attribute::GENERIC);
 +  decl->generic = MakeOwned<Generic>();
 +  // default::Pair<$G_T,$G_U> => Pair<$G_T,$G_U> => T, U
-+  std::vector<std::string> params;
 +  auto subname = GetSubNameWithoutPkgname(typeName, decl->fullPackageName);
 +  SetGenericByName(decl->generic.get(), subname, decl);
 +}
@@ -17552,10 +17550,10 @@ index 000000000..225577a05
 +#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CANGJIE_CANGJIECOMPILERINSTANCE_H
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp
 new file mode 100644
-index 000000000..05635d9cd
+index 000000000..8f666d26d
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.cpp
-@@ -0,0 +1,2292 @@
+@@ -0,0 +1,2290 @@
 +//===-- CangjieDeclMap.cpp ------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -17826,7 +17824,6 @@ index 000000000..05635d9cd
 +    if (full_type.IsValid()) {
 +      return full_type;
 +    }
-+    continue;
 +  }
 +
 +  return CompilerType();
@@ -18429,7 +18426,6 @@ index 000000000..05635d9cd
 +    OwnedPtr<AST::Type> ctype = builder.CreateAstType(AstTypeInfo(up), decltmp, m_current_pkgname);
 +
 +    gc->upperBounds.emplace_back(std::move(ctype));
-+    std::string superName = SafeAsCString(superType.GetTypeName());
 +  }
 +  return gc;
 +}
@@ -19850,10 +19846,10 @@ index 000000000..05635d9cd
 +}
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.h b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.h
 new file mode 100644
-index 000000000..b901d5efb
+index 000000000..49bf8362c
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieDeclMap.h
-@@ -0,0 +1,207 @@
+@@ -0,0 +1,205 @@
 +//===-- CangjieDeclMap.h --------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -19949,7 +19945,6 @@ index 000000000..b901d5efb
 +    CompilerType GetDynamicClassType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
 +    CompilerType GetDynamicFuncType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
 +    CompilerType GetDynamicStructType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
-+    CompilerType GetDynamicInterfaceType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
 +    CompilerType GetDynamicTupleType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
 +    CompilerType GetDynamicEnumType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
 +    CompilerType GetEnumType(Ptr<AST::Ty> ty, std::string typeName, CompilerType& genericType);
@@ -20054,7 +20049,6 @@ index 000000000..b901d5efb
 +    CompilerType CreateOrGetGenericType(const CompilerType& type);
 +    void CollectGenericTypeOfVariable(const CompilerType& type);
 +    void CollectOptionValType(CompilerType& type);
-+    void AddFieldToRecordType(const CompilerType& genericType, CompilerType& instancedType, std::string& name);
 +    std::set<ConstString> m_local_func;
 +};
 +
@@ -20365,10 +20359,10 @@ index 000000000..469d03d9f
 +}
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionParser.h b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionParser.h
 new file mode 100644
-index 000000000..900de8606
+index 000000000..8ae3505e4
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieExpressionParser.h
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,85 @@
 +//===-- CangjieExpressionParser.h -----------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -20391,10 +20385,6 @@ index 000000000..900de8606
 +#include "llvm/IR/Module.h"
 +#include <string>
 +#include <vector>
-+
-+namespace llvm {
-+class LLVMContext;
-+}
 +
 +namespace lldb_private {
 +
@@ -20433,14 +20423,8 @@ index 000000000..900de8606
 +  /// True if it was parsed when exe_ctx was in a non-static method.
 +  bool m_in_member_method = false;
 +private:
-+  /// The context to use for IR generation.
-+  std::unique_ptr<llvm::LLVMContext> m_llvm_context;
 +  /// The module to build IR into.
 +  std::unique_ptr<llvm::Module> m_module;
-+  /// The container for the IR, to be JIT-compiled or interpreted.
-+  lldb::IRExecutionUnitSP m_execution_unit_sp;
-+  /// The AST context to build the expression into.
-+  std::unique_ptr<TypeSystemClang> m_ast_context;
 +
 +  lldb_private::Materializer *m_materializer = nullptr;   ///< If non-NULL, the materializer
 +                                          ///to use when reporting used
@@ -20452,7 +20436,6 @@ index 000000000..900de8606
 +  lldb_private::Materializer::PersistentVariableDelegate
 +      *m_error_result_delegate = nullptr; ///< If non-NULL, used to report expression results to
 +                          ///ClangUserExpression.
-+  std::vector<std::string> m_include_directories;
 +  std::string m_result_type_name;
 +  CompilerType m_expr_result_type;
 +  unsigned int m_file_id = 0;
@@ -21186,10 +21169,10 @@ index 000000000..263d6de1b
 +}
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieIRForTarget.h b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieIRForTarget.h
 new file mode 100644
-index 000000000..0c46e8581
+index 000000000..1ee047f7b
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieIRForTarget.h
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,117 @@
 +//===-- CangjieIRForTarget.h ----------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -21210,8 +21193,6 @@ index 000000000..0c46e8581
 +class BasicBlock;
 +class Function;
 +class GlobalValue;
-+class StoreInst;
-+class DataLayout;
 +class GlobalVariable;
 +class CallInst;
 +class Instruction;
@@ -21223,8 +21204,6 @@ index 000000000..0c46e8581
 +
 +namespace lldb_private {
 +class CangjieDeclMap;
-+class IRExecutionUnit;
-+class IRMemoryMap;
 +}
 +
 +class CangjieIRForTarget {
@@ -21597,10 +21576,10 @@ index 000000000..c3e84f057
 +}
 diff --git a/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieUserExpression.h b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieUserExpression.h
 new file mode 100644
-index 000000000..09cd0e18b
+index 000000000..e2de5840e
 --- /dev/null
 +++ b/lldb/source/Plugins/ExpressionParser/Cangjie/CangjieUserExpression.h
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,91 @@
 +//===-- CangjieUserExpression.h -------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -21647,8 +21626,6 @@ index 000000000..09cd0e18b
 +
 +  std::unique_ptr<CangjieExpressionSourceCode> m_source_code;
 +
-+  bool AddVarToArgs(ExecutionContext &exe_ctx);
-+
 +private:
 +  void ScanContext(ExecutionContext &exe_ctx,
 +                   lldb_private::Status &err) override;
@@ -21685,14 +21662,8 @@ index 000000000..09cd0e18b
 +  /// True if it was parsed when exe_ctx was in a static method of class.
 +  bool m_in_static_method = false;
 +
-+  ConstString m_func_name;
-+
 +  CangjiePersistentVariableDelegate m_result_delegate;
 +  CangjiePersistentVariableDelegate m_error_result_delegate;
-+
-+  /// True if "this" or "self" must be looked up and passed in.  False if the
-+  /// expression doesn't really use them and they can be NULL.
-+  bool m_needs_object_ptr = false;
 +
 +  std::unique_ptr<CangjieExpressionParser> m_parser;
 +};
@@ -21909,10 +21880,10 @@ index 53a01cfc4..646750708 100644
  
 diff --git a/lldb/source/Plugins/Language/CPlusPlus/CjTypes.cpp b/lldb/source/Plugins/Language/CPlusPlus/CjTypes.cpp
 new file mode 100644
-index 000000000..778852600
+index 000000000..8e050d58b
 --- /dev/null
 +++ b/lldb/source/Plugins/Language/CPlusPlus/CjTypes.cpp
-@@ -0,0 +1,973 @@
+@@ -0,0 +1,967 @@
 +//===-- CjTypes.cpp ---------------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -22094,7 +22065,6 @@ index 000000000..778852600
 +  if (start != std::string::npos && end != std::string::npos) {
 +    stream.Printf("%s", value.substr(start + prefix.size(), end - start - prefix.size()).c_str());
 +  }
-+  return;
 +}
 +
 +bool lldb_private::formatters::RangeSummaryProvider(
@@ -22372,7 +22342,6 @@ index 000000000..778852600
 +          m_negsign(negSign) { }
 +    std::string ToString() {
 +      int64_t digits = 9;
-+      uint64_t anyBase = 1000000000;
 +      // Get str Arr size
 +      int64_t strArrSize = (32 * (m_len + 2) / int64_t(29) + 1);
 +      std::vector<uint64_t> stringArr;
@@ -22401,7 +22370,6 @@ index 000000000..778852600
 +    int64_t ToBaseString(std::vector<uint8_t>& stringUtf8Arr, int64_t index, uint64_t int1) {
 +      const uint8_t DIGIT_DIFF = 0x30;
 +      const uint8_t LETTER_UPPER_DIFF = 0x41 - 0x0A;
-+      const uint8_t LETTER_LOWER_DIFF = 0x61 - 0x0A;
 +      uint64_t base = 10;
 +      int64_t i = index;
 +      uint64_t quo = int1;
@@ -22498,11 +22466,9 @@ index 000000000..778852600
 +  if (!rawptr || !m_start) {
 +    return "0";
 +  }
-+  auto start = m_start->GetValueAsSigned(INT64_MAX);
 +
 +  auto m_elements = rawptr->GetChildMemberWithName(ConstString("elements"), true);
 +  CompilerType element_type = m_elements->GetCompilerType();
-+  llvm::Optional<uint64_t> size = element_type.GetByteSize(nullptr);
 +  uint64_t element_size = 4; // UInt32's size is 4.
 +
 +  std::vector<uint32_t> big_intArr;
@@ -22819,7 +22785,6 @@ index 000000000..778852600
 +  if (!zoneId) {
 +    return false;
 +  }
-+  auto str_zoneId = zoneId->GetSummaryAsCString();
 +  CangjieDateTime date = CangjieDateTime(secVal, 0);
 +  if (date.Year() > 999 || date.Year() < -999) { // 999, -999 year
 +    stream.Printf("%d-%02d-%02dT%02d:%02d:%02dZ", date.Year(),
@@ -22933,10 +22898,10 @@ index 000000000..86fb31227
 +#endif // liblldb_CjTypes_h_
 diff --git a/lldb/source/Plugins/Language/CPlusPlus/LibCj.cpp b/lldb/source/Plugins/Language/CPlusPlus/LibCj.cpp
 new file mode 100644
-index 000000000..832b71a52
+index 000000000..724eba76d
 --- /dev/null
 +++ b/lldb/source/Plugins/Language/CPlusPlus/LibCj.cpp
-@@ -0,0 +1,843 @@
+@@ -0,0 +1,840 @@
 +//===-- LibCj.cpp ---------------------------------------------------------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -23119,7 +23084,6 @@ index 000000000..832b71a52
 +  bool m_hasvalue = false;
 +  ValueObjectSP m_some =  nullptr;
 +  bool m_children = false;
-+  bool m_dynamic = false;
 +};
 +
 +static std::string DeletePrefixOfTypeName(std::string type_name, std::string prefix) {
@@ -23186,7 +23150,6 @@ index 000000000..832b71a52
 +  }
 +  auto dynamic = value->GetDynamicValue(eDynamicDontRunTarget);
 +  if (dynamic != nullptr) {
-+    m_dynamic = true;
 +    value = dynamic;
 +  }
 +
@@ -23442,7 +23405,6 @@ index 000000000..832b71a52
 +
 +bool CjEnum2SyntheticFrontEnd::Update() {
 +    std::string field_name;
-+    Status err;
 +    auto enum_type = m_backend.GetCompilerType();
 +    auto constructor = enum_type.GetFieldAtIndex(0, field_name, nullptr, nullptr, nullptr);
 +    llvm::APSInt enum_value;
@@ -23834,7 +23796,7 @@ index 5ab494414..6521e8519 100644
    ItaniumABILanguageRuntime.cpp
  
 diff --git a/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp b/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp
-index 1595335cf..f47a78847 100644
+index 1595335cf..44bb884bd 100644
 --- a/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp
 +++ b/lldb/source/Plugins/LanguageRuntime/CPlusPlus/ItaniumABI/ItaniumABILanguageRuntime.cpp
 @@ -4,37 +4,30 @@
@@ -23891,7 +23853,7 @@ index 1595335cf..f47a78847 100644
  
  char ItaniumABILanguageRuntime::ID = 0;
  
-@@ -182,6 +176,1029 @@ TypeAndOrName ItaniumABILanguageRuntime::GetTypeInfoFromVTableAddress(
+@@ -182,6 +176,1003 @@ TypeAndOrName ItaniumABILanguageRuntime::GetTypeInfoFromVTableAddress(
    return TypeAndOrName();
  }
  
@@ -24019,26 +23981,6 @@ index 1595335cf..f47a78847 100644
 +      pos = temp_name.find("/", pos + 2); // size of "::" is 2
 +    }
 +    return ConstString(temp_name.c_str());
-+}
-+
-+CompilerType LookupDynamicType(Process& process, UGTypeKind typekind, ConstString& type_name) {
-+  if (typekind == UGTypeKind::UG_CLASS || typekind == UGTypeKind::UG_INTERFACE ||
-+    typekind == UGTypeKind::UG_COMMON_ENUM) {
-+    return CompilerType();
-+  }
-+  TypeList types;
-+  llvm::DenseSet<SymbolFile *> searched_symbol_files;
-+  auto& target = process.GetTarget();
-+  target.GetImages().FindTypes(nullptr, type_name, true, 1, searched_symbol_files, types);
-+  size_t num_types = types.GetSize();
-+  for (size_t ti = 0; ti < num_types; ++ti) {
-+    auto type_sp = types.GetTypeAtIndex(ti);
-+    auto type = type_sp->GetFullCompilerType();
-+    if (type.IsValid()) {
-+      return type;
-+    }
-+  }
-+  return CompilerType();
 +}
 +
 +bool IsRefType(int8_t type) {
@@ -24200,12 +24142,6 @@ index 1595335cf..f47a78847 100644
 +    }
 +    ast.CompleteTagDeclarationDefinition(dynamic_type);
 +    return dynamic_type;
-+}
-+
-+bool IsFunctionType(ConstString& type_name) {
-+  ConstString compare("(.+::|^)\\(.*\\)( ?)->.+$");
-+  RegularExpression regex(compare.GetStringRef());
-+  return regex.Execute(type_name.AsCString());
 +}
 +
 +ConstString GetFunctionTypeName(std::string type_name,
@@ -24921,7 +24857,7 @@ index 1595335cf..f47a78847 100644
  bool ItaniumABILanguageRuntime::GetDynamicTypeAndAddress(
      ValueObject &in_value, lldb::DynamicValueType use_dynamic,
      TypeAndOrName &class_type_or_name, Address &dynamic_address,
-@@ -193,7 +1210,16 @@ bool ItaniumABILanguageRuntime::GetDynamicTypeAndAddress(
+@@ -193,7 +1184,16 @@ bool ItaniumABILanguageRuntime::GetDynamicTypeAndAddress(
    // contain the full class name. The second pointer above the "address point"
    // is the "offset_to_top".  We'll use that to get the start of the value
    // object which holds the dynamic type.
@@ -32185,7 +32121,7 @@ index 19e00e111..324854824 100644
      if (llvm::Expected<APFloat::opStatus> op =
              f.convertFromString(value_str, APFloat::rmNearestTiesToEven)) {
 diff --git a/lldb/source/Version/Version.cpp b/lldb/source/Version/Version.cpp
-index b391fe1ea..4c3840036 100644
+index b391fe1ea..eb072d8e2 100644
 --- a/lldb/source/Version/Version.cpp
 +++ b/lldb/source/Version/Version.cpp
 @@ -4,6 +4,12 @@
@@ -32241,7 +32177,7 @@ index b391fe1ea..4c3840036 100644
        g_version_str += "\n  llvm revision ";
        g_version_str += llvm_rev;
      }
-+    g_version_str += "\n  cangjie 1.2.0-beta.rc1";
++    g_version_str += "\n  cangjie 1.2.0-beta.rc2";
    }
  
    return g_version_str.c_str();
@@ -39595,10 +39531,10 @@ index f8eba1a00..f6356240b 100644
  /// or unreachable). These paths are hidden if the corresponding cl::opts
 diff --git a/llvm/lib/Analysis/CJAliasAnalysis.cpp b/llvm/lib/Analysis/CJAliasAnalysis.cpp
 new file mode 100644
-index 000000000..4957ac303
+index 000000000..ba63d66e1
 --- /dev/null
 +++ b/llvm/lib/Analysis/CJAliasAnalysis.cpp
-@@ -0,0 +1,303 @@
+@@ -0,0 +1,325 @@
 +//===- CJAliasAnalysis.cpp --------------------------------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -39655,6 +39591,22 @@ index 000000000..4957ac303
 +  return DT && Inv.invalidate<DominatorTreeAnalysis>(Fn, PA);
 +}
 +
++// An alloca produced by PEA stackification carries the "ea_val" metadata (set
++// by CJPartialEscapeAnalysis::setEscapeMeta). Its body may hold GC pointers,
++// and gcwrite may store an as1-cast of such an alloca into a heap object's
++// field; a later load from that field then returns a value whose type is
++// addrspace(1) but that points back to the stack alloca at run time. The
++// stack-vs-heap NoAlias rule below would misclassify that pair as NoAlias.
++// Treat any side whose underlying object is a PEA-degraded alloca as
++// MayAlias so the NoAlias fast path is not taken. The caller must pass an
++// already-resolved underlying object (i.e. the result of getUnderlyingObject);
++// this helper does not re-resolve.
++static bool isPEADegradedAlloca(const Value *O) {
++  if (const auto *AI = dyn_cast<AllocaInst>(O))
++    return AI->getMetadata("ea_val") != nullptr;
++  return false;
++}
++
 +static bool isGCPointerOrGlobalBase(const Value *V,
 +                                    unsigned MaxLookup = MaxLookupSearchDepth) {
 +  V = getUnderlyingObject(V, 0);
@@ -39662,11 +39614,8 @@ index 000000000..4957ac303
 +    return false;
 +  if (isa<GlobalValue>(V))
 +    return true;
-+  if (isa<Argument>(V))
++  if (isa<Argument>(V) || isa<LoadInst>(V))
 +    return isGCPointerType(V->getType());
-+  if (auto *LI = dyn_cast<LoadInst>(V)) {
-+    return false;
-+  }
 +  if (auto *II = dyn_cast<IntrinsicInst>(V)) {
 +    switch (II->getIntrinsicID()) {
 +    case Intrinsic::cj_gcread_ref:
@@ -39708,6 +39657,15 @@ index 000000000..4957ac303
 +                              const MemoryLocation &LocB, AAQueryInfo &AAQI) {
 +  const Value *O1 = getUnderlyingObject(LocA.Ptr, MaxLookupSearchDepth);
 +  const Value *O2 = getUnderlyingObject(LocB.Ptr, MaxLookupSearchDepth);
++  // A PEA-degraded alloca can be read back through a heap field (gcwrite stores
++  // an as1-cast of it, a later load returns a value typed as1 but pointing to
++  // the stack). Do not apply the stack-vs-heap NoAlias rule when either side
++  // is such an alloca; fall back to the default (MayAlias) instead. Check this
++  // on the already-resolved O1/O2 (reuses the getUnderlyingObject results
++  // above) and before computing IsStackValue, so the fast path is skipped
++  // entirely for the affected pair.
++  if (isPEADegradedAlloca(O1) || isPEADegradedAlloca(O2))
++    return AAResultBase::alias(LocA, LocB, AAQI);
 +  // In cangjie, stack space and heap space has different addrspace, and they
 +  // can never be aliased.
 +  bool IsStackValue1 = isa<AllocaInst>(O1) ||
@@ -59045,10 +59003,10 @@ index 8c77b6937..4e65ed2e2 100644
        F->addParamAttr(ArgNo, Attribute::NoAlias);
 diff --git a/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
 new file mode 100644
-index 000000000..e4a48b35e
+index 000000000..9d32f5dc2
 --- /dev/null
 +++ b/llvm/lib/Transforms/IPO/CJPartialEscapeAnalysis.cpp
-@@ -0,0 +1,3422 @@
+@@ -0,0 +1,3567 @@
 +//===- CJPartialEscapeAnalysis.cpp - escape analysis for Cangjie ----------===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -59100,6 +59058,17 @@ index 000000000..e4a48b35e
 +namespace llvm {
 +cl::opt<bool> CJDisablePEA("cj-disable-partial-ea",
 +                                  cl::Hidden, cl::init(false));
++cl::opt<unsigned> CJPEAMaxCycNonzero(
++    "cj-pea-max-cyc-nonzero", cl::Hidden, cl::init(24),
++    // 24 bails the confirmed-pathological case (RedBlackTree.put,
++    // maxCycNonzero=30). The metric counts every non-zero-offset
++    // intra-SCC edge (multi-edges included); the -1 escape-all sentinel
++    // offset is excluded (see countNonzeroIntraEdges).
++    cl::desc("Max non-zero-offset edges inside a cyclic SCC of the PEA "
++             "propagation graph for PEA to proceed; above this PEA bails "
++             "out. A cyclic SCC with non-zero offsets makes spreadMemEscape "
++             "cumulative offset-paths diverge; this is a deterministic graph "
++             "property and the direct topology root cause of the blow-up."));
 +
 +GlobalVariable *getNewKlass(CallBase *I) {
 +  GlobalVariable *Klass =
@@ -61622,6 +61591,129 @@ index 000000000..e4a48b35e
 +    }
 +  }
 +
++  // Compute the maximum number of non-zero-offset edges inside any cyclic
++  // SCC of the propagation graph (built from MP / BaseValue / Alias /
++  // InfoEscapedVec edges). A cyclic SCC carrying non-zero offsets is the
++  // topology root cause of spreadMemEscape blow-up: cumulative offset-paths
++  // diverge, so distinct (node, offset) states grow without bound. This is a
++  // deterministic graph property (independent of ASLR or DenseMap order).
++  unsigned computeMaxCycNonzero() {
++    DenseMap<GCPtr *, SmallVector<GCPtr *>> G;
++    DenseMap<GCPtr *, SmallVector<int64_t>> GOff;
++    auto AddEdge = [&](GCPtr *From, GCPtr *To, int64_t Off) {
++      G[From].push_back(To);
++      GOff[From].push_back(Off);
++      // Pre-register every edge target as a key of G: targets such as
++      // MemPtrs live in AllMemLocInfo and are never values of AllPtrLocInfo,
++      // so without this tarjanMaxCycNonzero would insert them via G[U]
++      // while iterating G, invalidating the iteration (UB).
++      if (G.find(To) == G.end()) {
++        G[To];
++      }
++    };
++    for (auto &KV : AllPtrLocInfo) {
++      GCPtr *P = KV.second;
++      for (GCPtr *M : P->MPs) {
++        AddEdge(P, M, 0);
++      }
++      for (auto &V : P->BaseValue) {
++        for (uint64_t O : V.second) {
++          AddEdge(P, V.first, static_cast<int64_t>(O));
++        }
++      }
++      for (auto &V : P->Alias) {
++        for (int O : V.second) {
++          AddEdge(P, V.first, O);
++        }
++      }
++      for (GCPtr *V : P->InfoEscapedVec) {
++        AddEdge(P, V, 0);
++      }
++    }
++    return tarjanMaxCycNonzero(G, GOff);
++  }
++
++  // Iterative Tarjan SCC. For every cyclic SCC, count non-zero-offset
++  // intra-SCC edges and return the maximum such count.
++  unsigned tarjanMaxCycNonzero(DenseMap<GCPtr *, SmallVector<GCPtr *>> &G,
++                               DenseMap<GCPtr *, SmallVector<int64_t>> &GOff) {
++    unsigned Idx = 0;
++    DenseMap<GCPtr *, unsigned> Disc, Low;
++    SmallVector<GCPtr *> Stk;
++    DenseSet<GCPtr *> OnStk;
++    unsigned MaxCycNonzero = 0;
++    for (auto &KV : G) {
++      if (Disc.count(KV.first)) {
++        continue;
++      }
++      SmallVector<std::pair<GCPtr *, unsigned>> Dfs;
++      Dfs.push_back({KV.first, 0});
++      while (!Dfs.empty()) {
++        GCPtr *U = Dfs.back().first;
++        unsigned &Pos = Dfs.back().second;
++        if (Pos == 0) {
++          Disc[U] = Low[U] = Idx++;
++          Stk.push_back(U);
++          OnStk.insert(U);
++        }
++        if (Pos < G[U].size()) {
++          GCPtr *W = G[U][Pos++];
++          if (!Disc.count(W)) {
++            Dfs.push_back({W, 0});
++            continue;
++          }
++          if (OnStk.count(W)) {
++            Low[U] = std::min(Low[U], Disc[W]);
++          }
++          continue;
++        }
++        Dfs.pop_back();
++        if (!Dfs.empty()) {
++          Low[Dfs.back().first] = std::min(Low[Dfs.back().first], Low[U]);
++        }
++        if (Low[U] != Disc[U]) {
++          continue;
++        }
++        // U roots an SCC; pop it and, if cyclic, count non-zero intra-edges.
++        SmallVector<GCPtr *> Comp;
++        GCPtr *X;
++        do {
++          X = Stk.pop_back_val();
++          OnStk.erase(X);
++          Comp.push_back(X);
++        } while (X != U);
++        if (Comp.size() <= 1) {
++          continue;
++        }
++        DenseSet<GCPtr *> In(Comp.begin(), Comp.end());
++        unsigned Nz = countNonzeroIntraEdges(Comp, G, GOff, In);
++        MaxCycNonzero = std::max(MaxCycNonzero, Nz);
++      }
++    }
++    return MaxCycNonzero;
++  }
++
++  // Count edges within a cyclic SCC whose offset is non-zero. The -1
++  // escape-all sentinel (an unknown, non-constant offset; see getBaseValue)
++  // is excluded: it stops offset accumulation in spreadMemEscape rather
++  // than making cumulative offset-paths diverge, so it must not count as a
++  // diverging edge.
++  unsigned countNonzeroIntraEdges(SmallVectorImpl<GCPtr *> &Comp,
++                                  DenseMap<GCPtr *, SmallVector<GCPtr *>> &G,
++                                  DenseMap<GCPtr *, SmallVector<int64_t>> &GOff,
++                                  DenseSet<GCPtr *> &In) {
++    unsigned Nz = 0;
++    for (GCPtr *N : Comp) {
++      for (unsigned I = 0; I < G[N].size(); ++I) {
++        int64_t Off = GOff[N][I];
++        if (In.count(G[N][I]) && Off != 0 && Off != -1) {
++          ++Nz;
++        }
++      }
++    }
++    return Nz;
++  }
++
 +  bool run() {
 +    bool Changed = false;
 +    if (GCNew.empty()) {
@@ -61634,6 +61726,17 @@ index 000000000..e4a48b35e
 +    }
 +    for (auto LoadPtr : LoadValues) {
 +      processLoadNew(LoadPtr);
++    }
++    // Bail out when the propagation graph has a cyclic SCC with too many
++    // non-zero-offset edges (the direct topology root cause of
++    // spreadMemEscape blow-up: a cycle carrying non-zero offsets makes
++    // cumulative offset-paths diverge into an unbounded number of distinct
++    // (node, offset) states). This is a deterministic compile-time graph
++    // property, so the bail-out decision is order-independent. Keep every
++    // GCNew on the heap (conservative, correct, no stack promotion).
++    if (computeMaxCycNonzero() > CJPEAMaxCycNonzero) {
++      cleanupAnalysisState();
++      return Changed;
 +    }
 +    for (Function *Func : SCCFunctions) {
 +      processFunc(Func);
@@ -71985,10 +72088,10 @@ index 000000000..80e8be1e5
 \ No newline at end of file
 diff --git a/llvm/lib/Transforms/Scalar/CJGCLiveAnalysis.cpp b/llvm/lib/Transforms/Scalar/CJGCLiveAnalysis.cpp
 new file mode 100644
-index 000000000..51e8f13b3
+index 000000000..fd0e05159
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJGCLiveAnalysis.cpp
-@@ -0,0 +1,1459 @@
+@@ -0,0 +1,1466 @@
 +//===- CJGCLiveAnalysis.cpp - GC Live Analysis For Cangjie ------*- C++ -*-===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -72004,6 +72107,7 @@ index 000000000..51e8f13b3
 +#include "llvm/Transforms/Scalar/CJGCLiveAnalysis.h"
 +
 +#include "llvm/ADT/Optional.h"
++#include "llvm/ADT/Triple.h"
 +#include "llvm/IR/Argument.h"
 +#include "llvm/IR/Attributes.h"
 +#include "llvm/IR/BasicBlock.h"
@@ -73089,7 +73193,13 @@ index 000000000..51e8f13b3
 +  }
 +
 +  Type *ValType = SI->getValueOperand()->getType();
-+  if (ValType->isPointerTy() || ValType->isIntegerTy(64)) { // 64bit
++  // On 32-bit ARM a pointer is 4 bytes, so a `store i32` (e.g. zeroing the
++  // payload field) can define a GC field. Route it through the pointer/i64
++  // branch so it is recorded as a def; otherwise the else branch skips it as
++  // a partial store and the GC scans stale data (SIGSEGV on a null gctib).
++  const Triple TT(SI->getModule()->getTargetTriple());
++  if (ValType->isPointerTy() || ValType->isIntegerTy(64) ||
++      (TT.isARM() && ValType->isIntegerTy(32))) {
 +    FieldInfo *Field = getFieldInfoByValue(Ptr);
 +    Value *Base = Field->V;
 +    if (isa<AllocaInst>(Base) || isa<Argument>(Base))
@@ -80830,10 +80940,10 @@ index 000000000..bedd16770
 +}
 diff --git a/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
 new file mode 100644
-index 000000000..0ed70333d
+index 000000000..5318a18d3
 --- /dev/null
 +++ b/llvm/lib/Transforms/Scalar/CJRuntimeLowering.cpp
-@@ -0,0 +1,1178 @@
+@@ -0,0 +1,1182 @@
 +//===- CJRuntimeLowering.cpp - CJ Runtime Lowering --------------*- C++ -*-===//
 +//
 +// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
@@ -81715,7 +81825,11 @@ index 000000000..0ed70333d
 +      Value *GVExpr = ConstantExpr::getBitCast(GV, IRB.getInt8PtrTy());
 +      IRB.CreateStore(GVExpr, BC);
 +      const StructLayout *AllocaSL = DL.getStructLayout(AllocaTy);
-+      uint64_t HeaderSize = DL.getTypeAllocSize(TIType->getPointerTo()).getFixedSize();
++      // Count the arm32 i32 padding (see ElemTypes above) so the memset
++      // starts at the payload @8, not the padding @4.
++      uint64_t HeaderSize =
++          DL.getTypeAllocSize(TIType->getPointerTo()).getFixedSize() +
++          (TT.isARM() ? 4 : 0);
 +      uint64_t MemSize = AllocaSL->getSizeInBytes() - HeaderSize;
 +      // %x.payload = getelementptr i8*, %x.i, HeaderSize
 +      // call @memset(%x.payload, 0, MemSize)
