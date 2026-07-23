@@ -46,7 +46,7 @@ void DiagExpectConstExpr(DiagnosticEngine& diag, const Expr& expr, bool isWeak)
 
 void DiagDefineVarInConstFunction(DiagnosticEngine& diag, const VarDeclAbstract& vda)
 {
-    auto range = MakeRange(vda.identifier);
+    auto range = MakeRangeForDeclIdentifier(vda);
     diag.DiagnoseRefactor(DiagKindRefactor::sema_cannot_define_var_in_const_funciton, vda, range);
 }
 
