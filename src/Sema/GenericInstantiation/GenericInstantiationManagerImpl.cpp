@@ -803,14 +803,56 @@ Ptr<Decl> GIM::GenericInstantiationManagerImpl::SelectTypeMatchedImplMember(
     return member;
 }
 
-Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(Ty& ty, FuncDecl& fd, Ty& targetBaseTy)
+bool GIM::GenericInstantiationManagerImpl::ShouldSkipAbstractFuncResolution(Ty& ty, const FuncDecl& fd) const
 {
     // Only virtual functions require the search for the actual calling target. If the class where the function's
     // calling target is located is within baseTy itself, the target does not need to be re-assigned.
-    bool shouldIgnore = !fd.outerDecl || !IsVirtualMember(fd) ||
-        (ty.IsInterface() && !fd.TestAttr(Attribute::STATIC)) ||
-        (ty.IsClass() && Ty::GetDeclPtrOfTy(fd.outerDecl->GetTy()) == Ty::GetDeclPtrOfTy(&ty));
-    if (shouldIgnore) {
+    if (!fd.outerDecl || !IsVirtualMember(fd)) {
+        return true;
+    }
+    if (ty.IsInterface() && !fd.TestAttr(Attribute::STATIC)) {
+        return true;
+    }
+    return ty.IsClass() && Ty::GetDeclPtrOfTy(fd.outerDecl->GetTy()) == Ty::GetDeclPtrOfTy(&ty);
+}
+
+Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::ResolveConcreteInstFunc(
+    Ty& ty, const FuncDecl& fd, Ptr<FuncDecl> implFunc, const Ptr<Ty>& matchedInstTy) const
+{
+    auto matchedFunc = implFunc;
+    // Get instantiated function or function local on of current impl func.
+    for (auto instOuter : GetInstantiatedDecls(*implFunc->outerDecl)) {
+        if (!typeManager.IsSubtype(&ty, instOuter->GetTy())) {
+            continue;
+        }
+        for (auto& member : instOuter->GetMemberDecls()) {
+            if (member->TestAttr(Attribute::GENERIC)) {
+                continue;
+            }
+            WorkForMembers(*member, [&fd, &matchedInstTy, &matchedFunc](Decl& d) {
+                if (fd.identifier == d.identifier && d.GetTy() == matchedInstTy) {
+                    matchedFunc = StaticCast<FuncDecl>(&d);
+                }
+            });
+        }
+    }
+    return matchedFunc;
+}
+
+Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindExactTypeInstFunc(
+    Ptr<FuncDecl> func, const Ptr<Ty>& matchedInstTy) const
+{
+    for (auto genInstFunc : GetInstantiatedDecls(*func)) {
+        if (genInstFunc->GetTy() == matchedInstTy) {
+            return StaticCast<FuncDecl>(genInstFunc);
+        }
+    }
+    return nullptr;
+}
+
+Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(Ty& ty, FuncDecl& fd, Ty& targetBaseTy)
+{
+    if (ShouldSkipAbstractFuncResolution(ty, fd)) {
         return &fd;
     }
 
@@ -820,6 +862,7 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
     // we need get mapping if [T |-> B1], and substitute function type '(T)->Unit' to '(B1)->T'.
     MultiTypeSubst typeMappings = promotion.GetPromoteTypeMapping(targetBaseTy, *fd.outerDecl->GetTy());
     auto instFuncTys = typeManager.GetInstantiatedTys(fd.GetTy(), typeMappings);
+    (void)instFuncTys;
     for (MemberFuncWithInstTys func : funcs) {
         auto implFunc = func.first;
         bool isInDiffDecl = implFunc->outerDecl != GetGeneralDecl(*fd.outerDecl, true);
@@ -828,30 +871,10 @@ Ptr<FuncDecl> GIM::GenericInstantiationManagerImpl::FindImplFuncForAbstractFunc(
             continue;
         }
 
-        Ptr<FuncDecl> matchedFunc = implFunc;
-        // Get instantiated function or function local on of current impl func.
-        auto genericInstOuters = GetInstantiatedDecls(*implFunc->outerDecl);
-        for (auto instOuter : genericInstOuters) {
-            if (!typeManager.IsSubtype(&ty, instOuter->GetTy())) {
-                continue;
-            }
-            for (auto& member : instOuter->GetMemberDecls()) {
-                if (member->TestAttr(Attribute::GENERIC)) {
-                    continue;
-                }
-                WorkForMembers(*member, [&fd, &matchedInstTy, &matchedFunc](Decl& d) {
-                    if (fd.identifier == d.identifier && d.GetTy() == matchedInstTy) {
-                        matchedFunc = StaticCast<FuncDecl>(&d);
-                    }
-                });
-            }
-        }
-        auto genericInstFuncs = GetInstantiatedDecls(*func.first);
-        for (auto genInstFunc : genericInstFuncs) {
-            if (genInstFunc->GetTy() == matchedInstTy) {
-                matchedFunc = StaticCast<FuncDecl>(genInstFunc);
-                break;
-            }
+        auto matchedFunc = ResolveConcreteInstFunc(ty, fd, implFunc, matchedInstTy);
+        // Prefer the explicitly instantiated func whose type exactly matches the matched instantiation type.
+        if (auto exactMatched = FindExactTypeInstFunc(func.first, matchedInstTy)) {
+            matchedFunc = exactMatched;
         }
         return matchedFunc;
     }

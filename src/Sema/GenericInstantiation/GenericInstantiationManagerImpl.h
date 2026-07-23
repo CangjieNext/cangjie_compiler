@@ -205,6 +205,19 @@ private:
     void PerformUpdateAttrDuringClone(AST::Node& genericNode, AST::Node& clonedNode) const;
     /** Find implemented version function of abstract function @p interfaceFunc in the decl of Ty @p ty. */
     Ptr<AST::FuncDecl> FindImplFuncForAbstractFunc(AST::Ty& ty, AST::FuncDecl& fd, AST::Ty& targetBaseTy);
+    /** Whether the abstract-function resolution can be skipped for @p fd under @p ty. */
+    bool ShouldSkipAbstractFuncResolution(AST::Ty& ty, const AST::FuncDecl& fd) const;
+    /**
+     * Resolve the concrete instantiated FuncDecl among the instantiated decls of @p implFunc's outer decl
+     * (and its generic instantiations) whose type matches @p matchedInstTy, falling back to @p implFunc.
+     */
+    Ptr<AST::FuncDecl> ResolveConcreteInstFunc(
+        AST::Ty& ty, const AST::FuncDecl& fd, Ptr<AST::FuncDecl> implFunc, const Ptr<AST::Ty>& matchedInstTy) const;
+    /**
+     * Among the generic instantiations of @p func, prefer the one whose type exactly matches @p matchedInstTy;
+     * returns nullptr if none matches.
+     */
+    Ptr<AST::FuncDecl> FindExactTypeInstFunc(Ptr<AST::FuncDecl> func, const Ptr<AST::Ty>& matchedInstTy) const;
     /** Find matched implementation function of abstract function @p fd from candidates */
     Ptr<AST::Decl> SelectTypeMatchedImplMember(AST::Ty& ty, const AST::FuncDecl& interfaceFunc,
         std::vector<std::pair<Ptr<AST::Decl>, size_t>>& candidates, AST::Ty& targetBaseTy);

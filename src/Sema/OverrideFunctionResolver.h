@@ -22,8 +22,8 @@
 
 namespace Cangjie {
 
-using MemberFuncsWithInstTys = std::unordered_map<Ptr<AST::FuncDecl>, std::unordered_set<Ptr<AST::Ty>>>;
-using MemberFuncWithInstTys = std::pair<Ptr<AST::FuncDecl>, std::unordered_set<Ptr<AST::Ty>>>;
+using MemberFuncsWithInstTys = std::unordered_map<Ptr<AST::FuncDecl>, std::unordered_set<Ptr<AST::FuncTy>>>;
+using MemberFuncWithInstTys = std::pair<Ptr<AST::FuncDecl>, std::unordered_set<Ptr<AST::FuncTy>>>;
 
 /**
  * A utility class to resolve and manage overridden member functions for a given type.
@@ -104,7 +104,36 @@ private:
      * Check if two functions have an implementation/override relation.
      */
     bool IsImplementationFunc(const AST::FuncDecl& srcFunc, const AST::FuncDecl& superFunc,
-        const Ptr<AST::Ty> srcInstFuncTy, const Ptr<AST::Ty> superInstFuncTy);
+        const Ptr<AST::FuncTy> srcInstFuncTy, const Ptr<AST::FuncTy> superInstFuncTy);
+
+    /**
+     * Remove supers of @p memberFunc that are implemented by it (with instantiation type
+     * @p instMemberFuncTy) from @p funcs, since an overriding function hides its supers.
+     */
+    void RemoveImplementedSupers(
+        AST::FuncDecl& memberFunc, const Ptr<AST::FuncTy> instMemberFuncTy, MemberFuncsWithInstTys& funcs);
+
+    /**
+     * Check whether @p newFunc (with instantiation type @p newFuncInstTy) is implemented by any
+     * existing function in @p funcs. Used to skip already-implemented functions during merge.
+     */
+    bool IsImplementedByAny(
+        const AST::FuncDecl& newFunc, const Ptr<AST::FuncTy> newFuncInstTy, const MemberFuncsWithInstTys& funcs);
+
+    /**
+     * Check whether @p newFunc (with instantiation type @p newFuncInstTy) is implemented by some existing
+     * function in @p funcs along the subclass direction: i.e. some func implements it AND any leaf type of
+     * that func's outer-decl promoted types is a subtype of any root type of @p newFuncOuterDeclInstTys.
+     */
+    bool IsImplementedInSameDirection(AST::Ty& instBaseTy, const AST::FuncDecl& newFunc,
+        const Ptr<AST::FuncTy> newFuncInstTy, const std::set<Ptr<AST::Ty>>& newFuncOuterDeclInstTys,
+        const MemberFuncsWithInstTys& funcs);
+
+    /**
+     * Insert @p instTy into the set of @p funcDecl in @p funcs, creating the entry if absent.
+     */
+    void AddInstTyToFuncs(
+        AST::FuncDecl* funcDecl, const Ptr<AST::FuncTy> instTy, MemberFuncsWithInstTys& funcs);
 
     // Dependencies
     TypeManager* typeManager = nullptr;

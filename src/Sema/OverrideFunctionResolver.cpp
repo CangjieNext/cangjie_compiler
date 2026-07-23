@@ -76,29 +76,12 @@ void OverrideFunctionResolver::CollectDeclMemberFunc(
             }
             auto memberFunc = StaticCast<AST::FuncDecl>(&m);
             auto instMemberTy = typeManager->GetInstantiatedTy(memberFunc->GetTy(), mapping);
-
-            for (auto superFuncIt = funcs.begin(); superFuncIt != funcs.end();) {
-                for (auto superFuncInstTyIt = superFuncIt->second.begin();
-                    superFuncInstTyIt != superFuncIt->second.end();) {
-                    if (IsImplementationFunc(*memberFunc, *superFuncIt->first, instMemberTy, *superFuncInstTyIt)) {
-                        superFuncInstTyIt = superFuncIt->second.erase(superFuncInstTyIt);
-                    } else {
-                        ++superFuncInstTyIt;
-                    }
-                }
-                if (superFuncIt->second.empty()) {
-                    superFuncIt = funcs.erase(superFuncIt);
-                } else {
-                    ++superFuncIt;
-                }
-            }
-
-            auto funcIt = funcs.find(memberFunc);
-            if (funcIt != funcs.end()) {
-                funcIt->second.emplace(instMemberTy);
-            } else {
-                funcs.emplace(std::make_pair(memberFunc, std::unordered_set<Ptr<AST::Ty>>{instMemberTy}));
-            }
+            // The instantiation type of a member function must be a FuncTy.
+            CJC_ASSERT(instMemberTy && instMemberTy->IsFunc());
+            auto instMemberFuncTy = StaticCast<AST::FuncTy>(instMemberTy);
+            // An overriding function hides its supers, remove the implemented ones first.
+            RemoveImplementedSupers(*memberFunc, instMemberFuncTy, funcs);
+            AddInstTyToFuncs(memberFunc, instMemberFuncTy, funcs);
         });
     }
 }
@@ -117,9 +100,12 @@ void OverrideFunctionResolver::GetInstMemberFromSuper(AST::Ty& instBaseTy, Ptr<A
     }
     auto mappingBasePtrDecl2InstTy = TypeCheckUtil::GenerateTypeMappingByTy(baseDecl->GetTy(), &instBaseTy);
     for (auto& superFunc : funcs) {
-        std::unordered_set<Ptr<AST::Ty>> newTySet;
+        std::unordered_set<Ptr<AST::FuncTy>> newTySet;
         for (auto& superFuncInstTy : superFunc.second) {
-            newTySet.emplace(typeManager->GetInstantiatedTy(superFuncInstTy, mappingBasePtrDecl2InstTy));
+            auto instTy = typeManager->GetInstantiatedTy(superFuncInstTy, mappingBasePtrDecl2InstTy);
+            // The instantiation type of a member function must be a FuncTy.
+            CJC_ASSERT(instTy && instTy->IsFunc());
+            newTySet.emplace(StaticCast<AST::FuncTy>(instTy));
         }
         superFunc.second = std::move(newTySet);
     }
@@ -131,43 +117,11 @@ void OverrideFunctionResolver::MergeExtendSuperMember(
     CJC_NULLPTR_CHECK(typeManager);
     for (auto& newFunc : newFuncs) {
         auto newFuncOuterDeclInstTys = Promotion(*typeManager).Promote(instBaseTy, *newFunc.first->outerDecl->GetTy());
-        bool hasImpl = false;
         for (auto newFuncInstTy : newFunc.second) {
-            for (auto& func : funcs) {
-                auto funcOuterDeclInstTys =
-                    Promotion(*typeManager).Promote(instBaseTy, *func.first->outerDecl->GetTy());
-                bool isImplRelation = false;
-                for (auto instTy : func.second) {
-                    if (IsImplementationFunc(*func.first, *newFunc.first, instTy, newFuncInstTy)) {
-                        isImplRelation = true;
-                        break;
-                    }
-                }
-                if (!isImplRelation) {
-                    continue;
-                }
-                // Check if any leaf type is a subtype of any root type
-                for (auto root : newFuncOuterDeclInstTys) {
-                    auto found = std::find_if(funcOuterDeclInstTys.begin(), funcOuterDeclInstTys.end(),
-                        [this, &root](auto leaf) { return typeManager->IsSubtype(leaf, root); });
-                    if (found != funcOuterDeclInstTys.end()) {
-                        hasImpl = true;
-                        break;
-                    }
-                }
-                if (hasImpl) {
-                    break;
-                }
-            }
-            if (hasImpl) {
+            if (IsImplementedInSameDirection(instBaseTy, *newFunc.first, newFuncInstTy, newFuncOuterDeclInstTys, funcs)) {
                 continue;
             }
-            auto foundSameFuncDecl = funcs.find(newFunc.first);
-            if (foundSameFuncDecl != funcs.end()) {
-                foundSameFuncDecl->second.emplace(newFuncInstTy);
-            } else {
-                funcs.emplace(newFunc);
-            }
+            AddInstTyToFuncs(newFunc.first, newFuncInstTy, funcs);
         }
     }
 }
@@ -176,33 +130,82 @@ void OverrideFunctionResolver::MergeIntoFuncs(MemberFuncsWithInstTys& funcs, Mem
 {
     for (auto& newFunc : newFuncs) {
         for (auto newFuncInstTy : newFunc.second) {
-            bool hasImpl = false;
-            for (auto& func : funcs) {
-                for (auto& instTy : func.second) {
-                    if (IsImplementationFunc(*func.first, *newFunc.first, instTy, newFuncInstTy)) {
-                        hasImpl = true;
-                        break;
-                    }
-                }
-                if (hasImpl) {
-                    break;
-                }
-            }
-            if (hasImpl) {
+            if (IsImplementedByAny(*newFunc.first, newFuncInstTy, funcs)) {
                 continue;
             }
-            auto foundSameFuncDecl = funcs.find(newFunc.first);
-            if (foundSameFuncDecl != funcs.end()) {
-                foundSameFuncDecl->second.emplace(newFuncInstTy);
-            } else {
-                funcs.emplace(newFunc);
-            }
+            AddInstTyToFuncs(newFunc.first, newFuncInstTy, funcs);
         }
     }
 }
 
-bool OverrideFunctionResolver::IsImplementationFunc(
-    const FuncDecl& srcFunc, const FuncDecl& superFunc, const Ptr<Ty> srcInstFuncTy, const Ptr<Ty> superInstFuncTy)
+void OverrideFunctionResolver::RemoveImplementedSupers(
+    AST::FuncDecl& memberFunc, const Ptr<AST::FuncTy> instMemberFuncTy, MemberFuncsWithInstTys& funcs)
+{
+    for (auto superFuncIt = funcs.begin(); superFuncIt != funcs.end();) {
+        for (auto superFuncInstTyIt = superFuncIt->second.begin();
+            superFuncInstTyIt != superFuncIt->second.end();) {
+            if (IsImplementationFunc(memberFunc, *superFuncIt->first, instMemberFuncTy, *superFuncInstTyIt)) {
+                superFuncInstTyIt = superFuncIt->second.erase(superFuncInstTyIt);
+            } else {
+                ++superFuncInstTyIt;
+            }
+        }
+        superFuncIt = superFuncIt->second.empty() ? funcs.erase(superFuncIt) : std::next(superFuncIt);
+    }
+}
+
+bool OverrideFunctionResolver::IsImplementedByAny(
+    const AST::FuncDecl& newFunc, const Ptr<AST::FuncTy> newFuncInstTy, const MemberFuncsWithInstTys& funcs)
+{
+    for (auto& func : funcs) {
+        for (auto& instTy : func.second) {
+            if (IsImplementationFunc(*func.first, newFunc, instTy, newFuncInstTy)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool OverrideFunctionResolver::IsImplementedInSameDirection(AST::Ty& instBaseTy, const AST::FuncDecl& newFunc,
+    const Ptr<AST::FuncTy> newFuncInstTy, const std::set<Ptr<AST::Ty>>& newFuncOuterDeclInstTys,
+    const MemberFuncsWithInstTys& funcs)
+{
+    for (auto& func : funcs) {
+        bool isImplRelation = false;
+        for (auto& instTy : func.second) {
+            if (IsImplementationFunc(*func.first, newFunc, instTy, newFuncInstTy)) {
+                isImplRelation = true;
+                break;
+            }
+        }
+        if (!isImplRelation) {
+            continue;
+        }
+        // Confirm subclass direction: any leaf type of the existing func must be a subtype of any root type.
+        auto funcOuterDeclInstTys = Promotion(*typeManager).Promote(instBaseTy, *func.first->outerDecl->GetTy());
+        for (auto root : newFuncOuterDeclInstTys) {
+            if (std::any_of(funcOuterDeclInstTys.begin(), funcOuterDeclInstTys.end(),
+                [this, &root](auto leaf) { return typeManager->IsSubtype(leaf, root); })) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void OverrideFunctionResolver::AddInstTyToFuncs(
+    AST::FuncDecl* funcDecl, const Ptr<AST::FuncTy> instTy, MemberFuncsWithInstTys& funcs)
+{
+    if (auto funcIt = funcs.find(funcDecl); funcIt != funcs.end()) {
+        funcIt->second.emplace(instTy);
+    } else {
+        funcs.emplace(std::make_pair(funcDecl, std::unordered_set<Ptr<AST::FuncTy>>{instTy}));
+    }
+}
+
+bool OverrideFunctionResolver::IsImplementationFunc(const FuncDecl& srcFunc, const FuncDecl& superFunc,
+    const Ptr<FuncTy> srcInstFuncTy, const Ptr<FuncTy> superInstFuncTy)
 {
     CJC_ASSERT(srcFunc.outerDecl && superFunc.outerDecl);
     // Private function cannot be overridden, it is not visible in any derived class.
@@ -219,13 +222,12 @@ bool OverrideFunctionResolver::IsImplementationFunc(
     if (srcFunc.TestAttr(Attribute::GENERIC) && superFunc.TestAttr(Attribute::GENERIC)) {
         TypeSubst mappingBetweenFuncs = typeManager->GenerateGenericMappingFromGeneric(srcFunc, superFunc);
         auto substSrcInstFuncTy = typeManager->GetInstantiatedTy(srcInstFuncTy, mappingBetweenFuncs);
+        // The instantiation type of a member function must be a FuncTy.
+        CJC_ASSERT(substSrcInstFuncTy && substSrcInstFuncTy->IsFunc());
         auto substSrcInstFuncTyF = StaticCast<FuncTy>(substSrcInstFuncTy);
-        auto superInstFuncTyF = StaticCast<FuncTy>(superInstFuncTy);
-        return typeManager->IsFuncTySubType(*substSrcInstFuncTyF, *superInstFuncTyF);
+        return typeManager->IsFuncTySubType(*substSrcInstFuncTyF, *superInstFuncTy);
     }
-    auto srcInstFuncTyF = StaticCast<FuncTy>(srcInstFuncTy);
-    auto superInstFuncTyF = StaticCast<FuncTy>(superInstFuncTy);
-    return typeManager->IsFuncTySubType(*srcInstFuncTyF, *superInstFuncTyF);
+    return typeManager->IsFuncTySubType(*srcInstFuncTy, *superInstFuncTy);
 }
 
 void OverrideFunctionResolver::ClearCache()
@@ -248,10 +250,12 @@ Ptr<Ty> OverrideFunctionResolver::GetMatchedFuncInstTyByGivenTarget(
     auto instFuncTys = typeManager->GetInstantiatedTys(target.GetTy(), typeMappings);
     Ptr<Ty> matchedTy = Ty::GetInitialTy();
     for (auto instTy : candidates.second) {
-        auto substImplFuncTy = instTy;
+        Ptr<Ty> substImplFuncTy = instTy;
         if (implFunc->TestAttr(Attribute::GENERIC) && target.TestAttr(Attribute::GENERIC)) {
             TypeSubst mappingBetweenFuncs = typeManager->GenerateGenericMappingFromGeneric(*implFunc, target);
             substImplFuncTy = typeManager->GetInstantiatedTy(instTy, mappingBetweenFuncs);
+            // The instantiation type of a member function must be a FuncTy.
+            CJC_ASSERT(substImplFuncTy && substImplFuncTy->IsFunc());
         }
         for (auto instFuncTy : instFuncTys) {
             auto substImplFuncTyF = StaticCast<FuncTy>(substImplFuncTy);
