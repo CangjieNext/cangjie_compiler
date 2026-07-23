@@ -1419,7 +1419,7 @@ OwnedPtr<SynchronizedExpr> ParserImpl::ParseSynchronizedExpr()
         ret->EnableAttr(Attribute::HAS_BROKEN);
     }
     ret->rightParenPos = lastToken.Begin();
-    ret->body = ParseBlock();
+    ret->body = ParseBlock(ScopeKind::FUNC_BODY);
     ret->end = ret->body->end;
     return ret;
 }
