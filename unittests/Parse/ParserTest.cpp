@@ -3416,3 +3416,20 @@ TEST(ParserTest2, UnicodeOver255Test)
     auto file = parser.ParseTopLevel();
     ASSERT_GT(diag.GetErrorCount(), 0); // assert no core dumped here
 }
+
+TEST(ParserTest2, SynchronizedBodyRejectsClassDeclaration)
+{
+    std::string code = R"(
+main(): Int64 {
+    synchronized(Mutex()) { class L {} }
+    0
+}
+)";
+    DiagnosticEngine diag{};
+    SourceManager sm;
+    diag.SetSourceManager(&sm);
+    Parser parser(code, diag, sm);
+    auto file = parser.ParseTopLevel();
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(diag.GetErrorCount(), 1);
+}
