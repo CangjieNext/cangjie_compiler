@@ -8,6 +8,7 @@
 #include "cangjie/CHIR/Utils/Utils.h"
 
 #include <queue>
+#include <cstdio>
 
 namespace Cangjie::CHIR {
 
@@ -92,6 +93,19 @@ Type* GetRealGenericRetType(const Apply& apply, Type& genericType, const Functio
             auto customType = StaticCast<CustomType*>(thisType);
             auto defGenericParams = def->GetGenericTypeParams();
             auto genericArgs = customType->GetGenericArgs();
+            if (defGenericParams.size() != genericArgs.size()) {
+                std::fprintf(stderr, "===ICE DEBUG===\n");
+                std::fprintf(stderr, "calleeFunc: %s\n", calleeFunc->ToString(0).c_str());
+                std::fprintf(stderr, "calleeFunc parent def: %s\n", def->ToString().c_str());
+                std::fprintf(stderr, "calleeFunc parent def GENERIC attr: %d\n",
+                    def->TestAttr(Attribute::GENERIC) ? 1 : 0);
+                std::fprintf(stderr, "defGenericParams.size(): %zu\n", defGenericParams.size());
+                std::fprintf(stderr, "apply thisType: %s\n", thisType->ToString().c_str());
+                std::fprintf(stderr, "genericArgs (thisType args).size(): %zu\n", genericArgs.size());
+                std::fprintf(stderr, "realRetTy (genericType): %s\n", genericType.ToString().c_str());
+                std::fprintf(stderr, "apply instTypeArgs.size(): %zu\n", instTypes.size());
+                std::fprintf(stderr, "apply: %s\n", apply.ToString(0).c_str());
+            }
             CJC_ASSERT(defGenericParams.size() == genericArgs.size());
             for (size_t i = 0; i < customType->GetGenericArgs().size(); ++i) {
                 genericMap[defGenericParams[i]] = genericArgs[i];
