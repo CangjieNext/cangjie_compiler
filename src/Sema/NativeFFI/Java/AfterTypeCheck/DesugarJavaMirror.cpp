@@ -350,24 +350,27 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
         auto memberJNISignature =
             genericConfig ? MemberJNISignature(utils, fun, genericConfig) : MemberJNISignature(utils, fun);
 
+        OwnedPtr<VarDecl> argsVar = nullptr;
         OwnedPtr<Expr> argsRef = nullptr;
         if (!paramList.params.empty()) {
-            OwnedPtr<VarDecl> argsVar = nullptr;
-            argsRef = lib.CreateJNIArgsRef(paramList, *curFile, argsVar);
+            auto args = lib.CreateJNIArgJValueExprs(paramList, *curFile);
+            argsVar = lib.CreateJNIArgsVar(std::move(args), *curFile);
+            argsRef = WithinFile(CreateRefExpr(*argsVar), curFile);
             body.emplace_back(std::move(argsVar));
         }
 
         if (fun.TestAttr(Attribute::STATIC)) {
             auto clazzVar =
                 lib.CreateJNIClassVar(WithinFile(CreateRefExpr(jniEnv), curFile),
-                    memberJNISignature.classTypeSignature, *curFile);
+                    memberJNISignature.classTypeSignature);
             methodCall = lib.CreateJNIStaticMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
                 WithinFile(CreateRefExpr(*clazzVar), curFile), memberJNISignature,
-                std::move(argsRef), retTy, *curFile);
+                std::move(argsRef), retTy);
             body.emplace_back(std::move(clazzVar));
         } else {
             methodCall = lib.CreateJNIMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
-                std::move(javaRefCall), memberJNISignature, std::move(argsRef), retTy, *curFile, true);
+                std::move(javaRefCall), memberJNISignature, std::move(argsRef),
+                retTy, true);
         }
     }
 
@@ -394,7 +397,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     if (retTy->kind == TypeKind::TYPE_FUNC && fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
         retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), retTy, mirror);
     } else {
-        retCallExpr = lib.ConvertJNIResult(std::move(callResRef), retTy, mirror);
+        retCallExpr = lib.ConvertJavaResultToCJ(std::move(callResRef), retTy, mirror);
     }
     if (!retCallExpr) {
         fun.EnableAttr(Attribute::IS_BROKEN);

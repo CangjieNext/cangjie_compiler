@@ -804,16 +804,14 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateFwdClassMethod(
     OwnedPtr<VarDecl> argsVar = nullptr;
     OwnedPtr<Expr> argsRef = nullptr;
     if (!paramList.params.empty()) {
-        argsRef = lib.CreateJNIArgsRef(paramList, *curFile, argsVar);
-        if (!argsRef) {
-            fun->EnableAttr(Attribute::IS_BROKEN);
-            return nullptr;
-        }
+        auto args = lib.CreateJNIArgJValueExprs(paramList, *curFile);
+        argsVar = lib.CreateJNIArgsVar(std::move(args), *curFile);
+        argsRef = WithinFile(CreateRefExpr(*argsVar), curFile);
     }
 
     auto methodCall = lib.CreateJNIMethodCall(WithinFile(CreateRefExpr(*envVar), curFile),
         WithinFile(CreateRefExpr(*localRefVar), curFile), MemberJNISignature(utils, *fun),
-        std::move(argsRef), fun->funcBody->retType->GetTy(), *curFile);
+        std::move(argsRef), fun->funcBody->retType->GetTy());
     if (!methodCall) {
         fun->EnableAttr(Attribute::IS_BROKEN);
         return nullptr;
@@ -826,7 +824,7 @@ OwnedPtr<FuncDecl> JavaDesugarManager::GenerateFwdClassMethod(
     if (fun->funcBody->retType->TyKind() == TypeKind::TYPE_FUNC) {
         retCallExpr = CreateGetCJLambdaCallExpr(std::move(callResRef), retTy, fwdDecl);
     } else {
-        retCallExpr = lib.ConvertJNIResult(std::move(callResRef), retTy, fwdDecl);
+        retCallExpr = lib.ConvertJavaResultToCJ(std::move(callResRef), retTy, fwdDecl);
     }
 
     if (!retCallExpr) {
@@ -1155,20 +1153,22 @@ OwnedPtr<LambdaExpr> JavaDesugarManager::GenerateLambdaExpr(File& file, LambdaPa
     OwnedPtr<VarDecl> argsVar = nullptr;
     OwnedPtr<Expr> argsRef = nullptr;
     if (!funcParamList->params.empty()) {
-        argsRef = lib.CreateJNIArgsRef(*funcParamList, *curFile, argsVar);
-        CJC_NULLPTR_CHECK(argsRef);
+        auto args = lib.CreateJNIArgJValueExprs(*funcParamList, *curFile);
+        argsVar = lib.CreateJNIArgsVar(std::move(args), *curFile);
+        CJC_NULLPTR_CHECK(argsVar);
+        argsRef = WithinFile(CreateRefExpr(*argsVar), curFile);
     }
 
     // Call the Java lambda implementation.
     auto methodCall = lib.CreateJNIMethodCall(lib.CreateGetJniEnvCall(curFile),
         lib.CreateJavaEntityJobjectCall(WithinFile(CreateRefExpr(funcParam), curFile)),
-        memberJNISignature, std::move(argsRef), retTy, *curFile);
+        memberJNISignature, std::move(argsRef), retTy);
     CJC_NULLPTR_CHECK(methodCall);
     auto methodCallRes = WithinFile(CreateTmpVarDecl(nullptr, std::move(methodCall)), curFile);
     auto callResRef = WithinFile(CreateRefExpr(*methodCallRes), curFile);
 
     Decl emptyDecl;
-    auto resultExpr = lib.ConvertJNIResult(std::move(callResRef), retTy, emptyDecl);
+    auto resultExpr = lib.ConvertJavaResultToCJ(std::move(callResRef), retTy, emptyDecl);
     CJC_NULLPTR_CHECK(resultExpr);
     auto returnExpr = CreateReturnExpr(std::move(resultExpr));
     returnExpr->SetTy(TypeManager::GetNothingTy());

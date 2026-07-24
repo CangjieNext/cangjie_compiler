@@ -38,7 +38,7 @@ void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(
     for (auto& arg : call.args) {
         auto argExpr = ASTCloner::Clone(arg->expr.get());
         CJC_NULLPTR_CHECK(argExpr);
-        jniArgs.emplace_back(ilib.CreateJValueExpr(std::move(argExpr), curFile));
+        jniArgs.emplace_back(ilib.CreateJValueExpr(std::move(argExpr)));
     }
 
     OwnedPtr<VarDecl> argsVar = nullptr;
@@ -51,9 +51,9 @@ void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(
 
     MemberJNISignature signature(utils, *call.resolvedFunction, parent);
     auto jniCall = ilib.CreateJNIMethodCall(ilib.CreateGetJniEnvCall(curFile), CreateJavaRefCall(impl, curFile),
-        signature, std::move(argsRef), call.GetTy(), *curFile, false);
+        signature, std::move(argsRef), call.GetTy(), false);
     CJC_NULLPTR_CHECK(jniCall);
-    auto resultExpr = ilib.ConvertJNIResult(std::move(jniCall), call.GetTy(), impl);
+    auto resultExpr = ilib.ConvertJavaResultToCJ(std::move(jniCall), call.GetTy(), impl);
     CJC_NULLPTR_CHECK(resultExpr);
 
     if (!argsVar) {
