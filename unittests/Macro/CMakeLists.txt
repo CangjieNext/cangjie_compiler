@@ -10,6 +10,7 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
     add_executable(NodeSerializationTest NodeSerializationTest.cpp)
     add_executable(MacroTest MacroTest.cpp)
     add_executable(MacroForOuterInterfaceTest MacroForOuterInterfaceTest.cpp)
+    add_executable(LSPDeserGuardTest LSPDeserGuardTest.cpp)
 
     target_link_libraries(
         TokenSerializationTest
@@ -43,12 +44,25 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND)
         GTest::gtest_main
         TestCompilerInstanceObject)
 
+    target_link_libraries(
+        LSPDeserGuardTest
+        cangjie-lsp
+        ${LINK_LIBS}
+        boundscheck-static
+        GTest::gtest
+        GTest::gtest_main)
+
     add_dependencies(NodeSerializationTest CangjieFlatbuffersHeaders)
     target_include_directories(NodeSerializationTest PRIVATE ${FLATBUFFERS_INCLUDE_DIR})
+
+    add_dependencies(LSPDeserGuardTest CangjieFlatbuffersHeaders)
+    target_include_directories(LSPDeserGuardTest PRIVATE ${FLATBUFFERS_INCLUDE_DIR})
+    target_include_directories(LSPDeserGuardTest PRIVATE ${CMAKE_BINARY_DIR}/schema)
 
     add_test(NAME TokenSerializationTest COMMAND TokenSerializationTest)
     add_test(NAME NodeSerializationTest COMMAND NodeSerializationTest)
     add_test(NAME MacroTest COMMAND MacroTest)
     add_test(NAME MacroForOuterInterfaceTest COMMAND MacroForOuterInterfaceTest)
+    add_test(NAME LSPDeserGuardTest COMMAND LSPDeserGuardTest)
 
 endif()
