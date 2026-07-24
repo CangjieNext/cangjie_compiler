@@ -8,6 +8,7 @@
 #define CANGJIE_CHIR_TRANSFORMATION_DEAD_CODE_ELIMINATION_H
 
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
+#include "cangjie/CHIR/IR/UnreachableBlockInfo.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Package.h"
@@ -68,7 +69,7 @@ public:
      * @param maybeUnreachableBlocks may be unreachable blocks to report.
      */
     void UnreachableBlockWarningReporter(const Package& package,
-        size_t threadsNum, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks);
+        size_t threadsNum, const UnreachableBlockMap& maybeUnreachableBlocks);
 
     /**
      * @brief process to remove blocks which is marked unreachable.
@@ -133,9 +134,9 @@ private:
     // ============== Functions for clean code in parallel ===========//
     void ReportUnusedCodeInFunc(const BlockGroup& body, const GlobalOptions& opts);
     void UnreachableBlockWarningReporterInSerial(
-        const Package& package, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks);
+        const Package& package, const UnreachableBlockMap& maybeUnreachableBlocks);
     void UnreachableBlockWarningReporterInParallel(const Package& package,
-        size_t threadsNum, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks);
+        size_t threadsNum, const UnreachableBlockMap& maybeUnreachableBlocks);
 };
 } // namespace Cangjie::CHIR
 #endif

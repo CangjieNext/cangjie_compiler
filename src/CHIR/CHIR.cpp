@@ -281,7 +281,7 @@ void ToCHIR::NothingTypeExprElimination()
 void ToCHIR::UnreachableBranchReporter()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBranchReporter");
-    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, chirPkg->GetName());
+    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, chirPkg->GetName(), maybeUnreachable);
     check.RunOnPackage(*chirPkg, opts.GetJobs());
 }
 
@@ -1166,7 +1166,7 @@ bool ToCHIR::Run()
     // 7. do closure conversion
     DoClosureConversion();
     RecordCHIRExprNum("cc");
-    // 8. run constant evaluation
+    // 8. constant evaluation requires closure-converted CHIR.
     if (!RunConstantEvaluation()) {
         return false;
     }

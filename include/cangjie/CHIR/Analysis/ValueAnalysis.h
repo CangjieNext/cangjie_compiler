@@ -20,6 +20,7 @@
 #include "cangjie/CHIR/Utils/Utils.h"
 
 #include <iostream>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -337,13 +338,13 @@ public:
         if (auto it = childrenMap->find(obj); it != childrenMap->end()) {
             return it->second;
         }
-        if (auto it = programState.Find(obj); it != programState.End()) {
-            if (it->second.GetKind() == ValueDomain::ValueKind::REF) {
-                auto ref = it->second.GetRef();
-                if (auto refIt = refMap.find(ref); refIt != refMap.end()) {
-                    CJC_ASSERT(std::holds_alternative<AbstractObject*>(refIt->second));
-                    return GetChildren(std::get<AbstractObject*>(refIt->second));
-                }
+        // RefMap may contain either Ref -> AbstractObject or Ref -> Ref -> AbstractObject.
+        // Resolve it only for a reference state: abstract objects with a top value are
+        // also Value instances, but they do not carry a Ref to resolve.
+        if (auto stateIt = programState.Find(obj);
+            stateIt != programState.End() && stateIt->second.GetKind() == ValueDomain::ValueKind::REF) {
+            if (auto absObj = CheckAbstractObjectRefBy(obj); absObj) {
+                return GetChildren(absObj);
             }
         }
         return {};
@@ -945,7 +946,9 @@ protected:
         if (auto it = childrenMap.find(field->GetBase()); it != childrenMap.end()) {
             auto& children = it->second;
             if (indexes[0] < children.size()) {
-                return state.PropagateWithoutChildren(children[indexes[0]], field->GetResult());
+                // A field can itself be an aggregate. Keep its child facts so nested enum
+                // patterns can project a payload after the outer field has been selected.
+                return state.Propagate(children[indexes[0]], field->GetResult());
             }
         }
         state.SetToTopOrTopRef(dest, dest->GetType()->IsRef());
@@ -1363,6 +1366,7 @@ private:
         //      var a = CA()    a |-> Ref1      a |-> Ref       ...stable :-D
         //  }
         auto dest = allocate->GetResult();
+        RecordLocalValueSource(dest);
         auto allocatedTy = allocate->GetType();
         if (allocatedTy->IsRef()) {
             // %0 : Class-CA&& = Allocate(Class-CA&)
@@ -1424,6 +1428,7 @@ private:
     template <typename T>
     Value* PreHandleFuncCall(State<ValueDomain, ValueStatePool>& state, const T* apply)
     {
+        InvalidateTrackedVars(state);
         auto dest = apply->GetResult();
         auto ty = dest->GetType();
         if (ty->IsRef() || ty->IsGeneric()) {
@@ -1432,6 +1437,51 @@ private:
             state.SetToBound(dest, /* isTop = */ true);
             SetObjChildrenStateToTop(state, dest, ty, builder);
             return nullptr;
+        }
+    }
+
+    /// Local binding provenance is a lowering identity property, not a flow-sensitive fact. Keeping it on the
+    /// analysis avoids losing invalidation coverage when control-flow states are joined.
+    enum class LocalValueSource : uint8_t { TrackedVar, ImmutableLocal, CompileTimeConst };
+    using LocalValueSourceMap = std::unordered_map<Value*, LocalValueSource>;
+
+    void RecordLocalValueSource(Value* value)
+    {
+        if (value->GetSrcCodeIdentifier().empty()) {
+            return;
+        }
+        auto source = LocalValueSource::TrackedVar;
+        if (value->TestAttr(Attribute::CONST)) {
+            source = LocalValueSource::CompileTimeConst;
+        } else if (value->TestAttr(Attribute::READONLY)) {
+            source = LocalValueSource::ImmutableLocal;
+        }
+        localValueSources.emplace(value, source);
+    }
+
+    void InvalidateTrackedVars(State<ValueDomain, ValueStatePool>& state) const
+    {
+        std::vector<Value*> objects;
+        for (const auto& [value, source] : localValueSources) {
+            if (source == LocalValueSource::TrackedVar) {
+                auto object = value->GetType()->IsRef() ? state.CheckAbstractObjectRefBy(value) : value;
+                if (object != nullptr) {
+                    objects.emplace_back(object);
+                }
+            }
+        }
+
+        std::unordered_set<Value*> visited;
+        while (!objects.empty()) {
+            auto object = objects.back();
+            objects.pop_back();
+            if (!visited.emplace(object).second) {
+                continue;
+            }
+            state.SetToBound(object, /* isTop = */ true);
+            for (auto child : state.GetChildren(object)) {
+                objects.emplace_back(child);
+            }
         }
     }
 
@@ -1455,7 +1505,8 @@ private:
                 childrenTypes.emplace_back(ty->IsRef());
             }
         } else if (rootTy->GetTypeKind() == Type::TypeKind::TYPE_ENUM) {
-            // We only focus the state of index of an enum. And its type is not a ref type.
+            // An enum value from an unknown source has no known constructor payload shape.
+            // Keep its tag as the only child fact until a concrete constructor is observed.
             childrenTypes.emplace_back(false);
         } else if (rootTy->GetTypeKind() == Type::TypeKind::TYPE_CLASS) {
             auto classTy = StaticCast<ClassType*>(rootTy);
@@ -1484,16 +1535,27 @@ private:
         state.SetToBound(tuple->GetResult(), /* isTop = */ true);
 
         auto operands = tuple->GetOperands();
-        auto operandNum = tuple->GetResult()->GetType()->IsEnum() ? 1 : operands.size();
+        auto enumTagIndex = tuple->GetResult()->Get<EnumConstructorInfo>();
+        // Enum constructor lowering marks its tag operand explicitly. Only payload operands retain their
+        // structure so pattern lowering can project nested enum values without inferring tuple semantics by type.
+        auto operandNum = operands.size();
         if (auto it = childrenMap.find(tuple->GetResult()); it != childrenMap.end()) {
             auto& children = it->second;
             CJC_ASSERT(children.size() == operandNum);
             for (size_t i = 0; i < operandNum; ++i) {
-                state.PropagateWithoutChildren(operands[i], children[i]);
+                if (enumTagIndex.has_value() && i != enumTagIndex.value()) {
+                    state.Propagate(operands[i], children[i]);
+                } else {
+                    state.PropagateWithoutChildren(operands[i], children[i]);
+                }
             }
         } else {
-            const auto setChildState = [&state, &operands](AbstractObject* child, size_t index) {
-                state.PropagateWithoutChildren(operands[index], child);
+            const auto setChildState = [&state, &operands, enumTagIndex](AbstractObject* child, size_t index) {
+                if (enumTagIndex.has_value() && index != enumTagIndex.value()) {
+                    state.Propagate(operands[index], child);
+                } else {
+                    state.PropagateWithoutChildren(operands[index], child);
+                }
             };
             state.CreateChildren(tuple->GetResult(), operandNum, setChildState);
         }
@@ -1636,6 +1698,7 @@ private:
     typename State<ValueDomain, ValueStatePool>::AllocatedObjMap allocatedObjMap;
     std::vector<std::unique_ptr<Ref>> refPool;
     std::vector<std::unique_ptr<AbstractObject>> absObjPool;
+    LocalValueSourceMap localValueSources;
 
 protected:
     CHIRBuilder& builder;

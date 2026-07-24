@@ -482,5 +482,79 @@ struct GeneratedFromForIn final : public Annotation {
 private:
     bool value;
 };
+
+/// Identifies a Tuple produced by enum constructor lowering and its tag operand.
+/// ConstAnalysis consumes this lowering contract instead of inferring enum layout from the result type.
+struct EnumConstructorInfo final : public Annotation {
+    explicit EnumConstructorInfo() = default;
+    explicit EnumConstructorInfo(std::optional<size_t> tagIndex) : tagIndex(tagIndex) {}
+    explicit EnumConstructorInfo(size_t tagIndex) : tagIndex(tagIndex) {}
+
+    static std::optional<size_t> Extract(const EnumConstructorInfo* info)
+    {
+        return info->tagIndex;
+    }
+
+    std::unique_ptr<Annotation> Clone() override
+    {
+        return std::make_unique<EnumConstructorInfo>(tagIndex);
+    }
+
+    std::string ToString() override
+    {
+        return tagIndex.has_value() ? "enum-constructor tag-index: " + std::to_string(tagIndex.value()) : "";
+    }
+
+private:
+    std::optional<size_t> tagIndex{std::nullopt};
+};
+
+/// Identifies a TypeCast emitted specifically to construct or project an enum tag.
+struct EnumTagAccess final : public Annotation {
+    EnumTagAccess() = default;
+    explicit EnumTagAccess(bool value) : value(value) {}
+
+    static bool Extract(const EnumTagAccess* info)
+    {
+        return info->value;
+    }
+
+    std::unique_ptr<Annotation> Clone() override
+    {
+        return std::make_unique<EnumTagAccess>(value);
+    }
+
+    std::string ToString() override
+    {
+        return "enum-tag-access";
+    }
+
+private:
+    bool value{false};
+};
+
+/// Marks a block reached while matching a case pattern or following its guard failure. The unreachable checker may
+/// traverse this boundary to discover sibling cases, but must never use it for a case body.
+struct MatchDispatchContinuation final : public Annotation {
+    MatchDispatchContinuation() : value{false} {}
+    explicit MatchDispatchContinuation(bool value) : value{value} {}
+    std::unique_ptr<Annotation> Clone() override
+    {
+        return std::make_unique<MatchDispatchContinuation>(value);
+    }
+
+    std::string ToString() override
+    {
+        return "// match-dispatch-continuation ";
+    }
+
+    static bool Extract(const MatchDispatchContinuation* label)
+    {
+        return label->value;
+    }
+
+private:
+    bool value;
+};
 } // namespace Cangjie::CHIR
 #endif

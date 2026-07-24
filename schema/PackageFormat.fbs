@@ -192,6 +192,18 @@ table GeneratedFromForIn {
   value: bool = false;
 }
 
+table MatchDispatchContinuation {
+  value: bool = false;
+}
+
+table EnumConstructorInfo {
+  tagIndex: int64 = -1;
+}
+
+table EnumTagAccess {
+  value: bool = true;
+}
+
 table IsAutoEnvClass {
   value: bool = false;
 }
@@ -229,7 +241,10 @@ union Annotation {
   enumCaseIndex: EnumCaseIndex,
   virMethodOffset: VirMethodOffset,
   wrappedRawMethod: WrappedRawMethod,
-  overrideSrcFuncType : OverrideSrcFuncType
+  overrideSrcFuncType : OverrideSrcFuncType,
+  matchDispatchContinuation: MatchDispatchContinuation,
+  enumConstructorInfo: EnumConstructorInfo,
+  enumTagAccess: EnumTagAccess
 }
 
 table Base {

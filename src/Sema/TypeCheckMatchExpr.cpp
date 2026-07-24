@@ -463,9 +463,14 @@ bool TypeChecker::TypeCheckerImpl::CheckMatchExprNoSelectorExhaustiveness(MatchE
         ret = false;
         diag.Diagnose(me, DiagKind::sema_match_case_must_have_default);
     }
-    // The cases after default should be set UNREACHABLE.
-    for (size_t i = defaultCase + 1; i < me.matchCaseOthers.size(); i++) {
-        me.matchCaseOthers[i]->EnableAttr(Attribute::UNREACHABLE);
+    // In selectorless matches, `_` is the unconditional `true` condition. Each following sibling is therefore
+    // unreachable independently and must receive its own pattern diagnostic.
+    if (hasDefault) {
+        for (size_t i = defaultCase + 1; i < me.matchCaseOthers.size(); i++) {
+            auto& matchCaseOther = me.matchCaseOthers[i];
+            matchCaseOther->EnableAttr(Attribute::UNREACHABLE);
+            diag.DiagnoseRefactor(DiagKindRefactor::sema_unreachable_pattern, *matchCaseOther->matchExpr);
+        }
     }
     return ret;
 }

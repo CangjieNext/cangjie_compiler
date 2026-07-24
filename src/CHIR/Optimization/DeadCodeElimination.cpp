@@ -6,6 +6,7 @@
 
 #include "cangjie/CHIR/Optimization/DeadCodeElimination.h"
 
+#include "cangjie/CHIR/Analysis/UnreachableBlockRegion.h"
 #include "cangjie/CHIR/Analysis/Utils.h"
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/Utils/Utils.h"
@@ -688,7 +689,7 @@ void DeadCodeElimination::UnreachableBlockElimination(const std::vector<const Fu
 }
 
 void DeadCodeElimination::UnreachableBlockWarningReporter(const Package& package,
-    size_t threadsNum, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks)
+    size_t threadsNum, const UnreachableBlockMap& maybeUnreachableBlocks)
 {
     if (threadsNum == 1) {
         UnreachableBlockWarningReporterInSerial(package, maybeUnreachableBlocks);
@@ -698,25 +699,37 @@ void DeadCodeElimination::UnreachableBlockWarningReporter(const Package& package
 }
 
 void DeadCodeElimination::UnreachableBlockWarningReporterInSerial(
-    const Package& package, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks)
+    const Package& package, const UnreachableBlockMap& maybeUnreachableBlocks)
 {
     for (auto func : package.GetGlobalFuncsWithBody()) {
-        bool isPrinted = false;
-        Visitor::Visit(*func, [this, &isPrinted, &maybeUnreachableBlocks](Block& block) {
+        auto regions = GetUnreachableBlockRegions(*func->GetBody(), maybeUnreachableBlocks);
+        std::unordered_set<Block*> reportedRoots;
+        Visitor::Visit(*func, [this, &maybeUnreachableBlocks, &regions, &reportedRoots](Block& block) {
+            auto region = regions.find(&block);
+            if (region != regions.end() && reportedRoots.find(region->second) != reportedRoots.end()) {
+                return VisitResult::SKIP;
+            }
             auto it = maybeUnreachableBlocks.find(&block);
             if (it != maybeUnreachableBlocks.end()) {
-                auto terminator = it->second;
-                if (CheckUselessBlock(block)) {
-                    PrintUnreachableBlockWarning(block, *terminator, isPrinted);
+                CJC_ASSERT(region != regions.end());
+                auto root = region->second;
+                if (reportedRoots.find(root) == reportedRoots.end() && CheckUselessBlock(block)) {
+                    bool isPrinted = false;
+                    PrintUnreachableBlockWarning(block, *it->second.terminator, isPrinted);
+                    if (isPrinted) {
+                        reportedRoots.emplace(root);
+                    }
                 }
             }
-            return VisitResult::CONTINUE;
+            return region != regions.end() && reportedRoots.find(region->second) != reportedRoots.end()
+                ? VisitResult::SKIP
+                : VisitResult::CONTINUE;
         });
     }
 }
 
 void DeadCodeElimination::UnreachableBlockWarningReporterInParallel(const Package& package,
-    size_t threadsNum, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks)
+    size_t threadsNum, const UnreachableBlockMap& maybeUnreachableBlocks)
 {
     Utils::TaskQueue taskQueue(threadsNum);
     for (auto func : package.GetGlobalFuncsWithBody()) {
@@ -726,16 +739,28 @@ void DeadCodeElimination::UnreachableBlockWarningReporterInParallel(const Packag
         }
 
         taskQueue.AddTask<void>([this, func, &maybeUnreachableBlocks]() {
-            bool isPrinted = false;
-            Visitor::Visit(*func, [this, &isPrinted, &maybeUnreachableBlocks](Block& block) {
+            auto regions = GetUnreachableBlockRegions(*func->GetBody(), maybeUnreachableBlocks);
+            std::unordered_set<Block*> reportedRoots;
+            Visitor::Visit(*func, [this, &maybeUnreachableBlocks, &regions, &reportedRoots](Block& block) {
+                auto region = regions.find(&block);
+                if (region != regions.end() && reportedRoots.find(region->second) != reportedRoots.end()) {
+                    return VisitResult::SKIP;
+                }
                 auto it = maybeUnreachableBlocks.find(&block);
                 if (it != maybeUnreachableBlocks.end()) {
-                    auto terminator = it->second;
-                    if (CheckUselessBlock(block)) {
-                        PrintUnreachableBlockWarning(block, *terminator, isPrinted);
+                    CJC_ASSERT(region != regions.end());
+                    auto root = region->second;
+                    if (reportedRoots.find(root) == reportedRoots.end() && CheckUselessBlock(block)) {
+                        bool isPrinted = false;
+                        PrintUnreachableBlockWarning(block, *it->second.terminator, isPrinted);
+                        if (isPrinted) {
+                            reportedRoots.emplace(root);
+                        }
                     }
                 }
-                return VisitResult::CONTINUE;
+                return region != regions.end() && reportedRoots.find(region->second) != reportedRoots.end()
+                    ? VisitResult::SKIP
+                    : VisitResult::CONTINUE;
             });
         });
     }
@@ -1045,7 +1070,10 @@ void DeadCodeElimination::PrintUnreachableBlockWarning(
                 auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable, range, "operator");
                 diagBuilder.AddMainHintArguments("operator");
                 diagBuilder.AddHint(terminalNodeRange);
-            } else if (!isNormal && unreableExpr->GetExprKind() == ExprKind::APPLY) {
+            } else if (!isNormal &&
+                (unreableExpr->GetExprKind() == ExprKind::APPLY ||
+                    (unreableExpr->IsConstantNull() &&
+                        !unreableExpr->Get<DebugLocationInfoForWarning>().IsInvalidPos()))) {
                 auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable, range, "call");
                 diagBuilder.AddMainHintArguments("call");
                 diagBuilder.AddHint(terminalNodeRange);

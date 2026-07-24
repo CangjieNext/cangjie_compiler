@@ -251,6 +251,31 @@ template <> flatbuffers::Offset<PackageFormat::Base> CHIRSerializer::CHIRSeriali
                 .Union());
     };
 
+    // MatchDispatchContinuation
+    annoHandler[typeid(CHIR::MatchDispatchContinuation)] = [this, &annos, &annoTypes](Annotation* anno) {
+        annoTypes.push_back(PackageFormat::Annotation::Annotation_matchDispatchContinuation);
+        annos.emplace_back(PackageFormat::CreateMatchDispatchContinuation(
+            builder, MatchDispatchContinuation::Extract(StaticCast<CHIR::MatchDispatchContinuation*>(anno)))
+                .Union());
+    };
+
+    // EnumConstructorInfo
+    annoHandler[typeid(CHIR::EnumConstructorInfo)] = [this, &annos, &annoTypes](Annotation* anno) {
+        annoTypes.push_back(PackageFormat::Annotation::Annotation_enumConstructorInfo);
+        auto tagIndex = EnumConstructorInfo::Extract(StaticCast<CHIR::EnumConstructorInfo*>(anno));
+        int64_t tagIndexValue = tagIndex.has_value() ? static_cast<int64_t>(tagIndex.value()) : -1;
+        annos.emplace_back(PackageFormat::CreateEnumConstructorInfo(
+            builder, tagIndexValue)
+                .Union());
+    };
+
+    // EnumTagAccess
+    annoHandler[typeid(CHIR::EnumTagAccess)] = [this, &annos, &annoTypes](Annotation* anno) {
+        annoTypes.push_back(PackageFormat::Annotation::Annotation_enumTagAccess);
+        annos.emplace_back(PackageFormat::CreateEnumTagAccess(
+            builder, EnumTagAccess::Extract(StaticCast<CHIR::EnumTagAccess*>(anno))).Union());
+    };
+
     // IsAutoEnvClass
     annoHandler[typeid(CHIR::IsAutoEnvClass)] = [this, &annos, &annoTypes](Annotation* anno) {
         annoTypes.push_back(PackageFormat::Annotation::Annotation_isAutoEnvClass);

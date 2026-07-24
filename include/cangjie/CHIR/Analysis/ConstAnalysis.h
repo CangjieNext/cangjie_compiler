@@ -681,6 +681,22 @@ private:
     template <typename TBinary> ExceptionKind HandleExpOp(TConstDomain& state, const TBinary* binary)
     {
         auto dest = binary->GetResult();
+        if (dest->GetType()->IsFloat()) {
+            auto lhs = StaticCast<const ConstFloatVal*>(state.CheckAbstractValue(binary->GetLHSOperand()));
+            auto rhs = StaticCast<const ConstFloatVal*>(state.CheckAbstractValue(binary->GetRHSOperand()));
+            if (!lhs || !rhs) {
+                state.SetToBound(dest, /* isTop = */ true);
+                return ExceptionKind::NA;
+            }
+            auto result = std::pow(lhs->GetVal(), rhs->GetVal());
+            if (std::isnan(result) || std::isinf(result)) {
+                state.SetToBound(dest, /* isTop = */ true);
+                return ExceptionKind::NA;
+            }
+            state.Update(dest,
+                std::make_unique<ConstFloatVal>(CutOffHighBits(result, dest->GetType()->GetTypeKind())));
+            return ExceptionKind::SUCCESS;
+        }
         if (!dest->GetType()->IsInteger()) {
             state.SetToBound(dest, /* isTop = */ true);
             return ExceptionKind::NA;
@@ -1044,6 +1060,18 @@ private:
     template <typename TTypeCast> ExceptionKind HandleTypeCast(TConstDomain& state, const TTypeCast* cast)
     {
         auto dest = cast->GetResult();
+        if (dest->template Get<EnumTagAccess>()) {
+            if (auto srcAbsVal = state.CheckAbstractValue(cast->GetSourceValue()); srcAbsVal) {
+                state.Update(dest, srcAbsVal->Clone());
+            } else {
+                state.SetToBound(dest, /* isTop = */ true);
+            }
+            return ExceptionKind::NA;
+        }
+        if (dest->template Get<EnumCaseIndex>().has_value()) {
+            state.Propagate(cast->GetSourceValue(), dest);
+            return ExceptionKind::NA;
+        }
         auto srcTy = cast->GetSourceTy();
         if (srcTy->IsInteger()) {
             if (auto srcAbsVal = state.CheckAbstractValue(cast->GetSourceValue()); srcAbsVal) {

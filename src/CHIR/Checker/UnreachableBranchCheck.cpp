@@ -9,8 +9,10 @@
 using namespace Cangjie::CHIR;
 
 UnreachableBranchCheck::UnreachableBranchCheck(
-    ConstAnalysisWrapper* constAnalysisWrapper, DiagnosticEngine& diag, const std::string& packageName)
-    : diag(diag), analysisWrapper(constAnalysisWrapper), currentPackageName(packageName)
+    ConstAnalysisWrapper* constAnalysisWrapper, DiagnosticEngine& diag, const std::string& packageName,
+    const UnreachableBlockMap& maybeUnreachableBlocks)
+    : diag(diag), analysisWrapper(constAnalysisWrapper), currentPackageName(packageName),
+      maybeUnreachableBlocks(maybeUnreachableBlocks)
 {
 }
 
@@ -25,6 +27,12 @@ std::string GetKeyWordBySourceExpr(const Branch& branch)
         return "for";
     }
     return "";
+}
+
+bool IsPatternGuard(const Branch& branch)
+{
+    const auto& trueLoc = branch.GetTrueBlock()->GetDebugLocation();
+    return !trueLoc.IsInvalidPos() && branch.GetCondition()->GetDebugLocation() == trueLoc;
 }
 } // namespace
 void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadNum)
@@ -58,32 +66,64 @@ void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadN
     }
 }
 
+void UnreachableBranchCheck::PrintMatchSuccessors(
+    Block& block, std::set<Block*>& hasProcessed, const UnreachableBlockRegionMap& regions)
+{
+    if (!block.Get<MatchDispatchContinuation>()) {
+        return;
+    }
+    auto terminator = block.GetTerminator();
+    while (auto goTo = DynamicCast<GoTo>(terminator)) {
+        auto destination = goTo->GetDestination();
+        if (!destination->Get<MatchDispatchContinuation>()) {
+            return;
+        }
+        if (!hasProcessed.emplace(destination).second) {
+            return;
+        }
+        terminator = destination->GetTerminator();
+    }
+    if (auto matchBranch = DynamicCast<Branch>(terminator); matchBranch &&
+        matchBranch->GetSourceExpr() == SourceExpr::MATCH_EXPR) {
+        if (IsPatternGuard(*matchBranch)) {
+            // A guard true edge stays within the current case; the false edge enters the next case.
+            auto falseBlock = matchBranch->GetFalseBlock();
+            PrintWarning(
+                *matchBranch, *falseBlock, hasProcessed, falseBlock->Get<MatchDispatchContinuation>(), regions);
+        } else {
+            // Pattern dispatch edges can enter distinct source-level cases, including nested matches.
+            for (auto successor : matchBranch->GetSuccessors()) {
+                PrintWarning(
+                    *matchBranch, *successor, hasProcessed, successor->Get<MatchDispatchContinuation>(), regions);
+            }
+        }
+    } else if (DynamicCast<MultiBranch>(terminator)) {
+        // Match table/or-pattern lowering uses MultiBranch, while ordinary nested control flow uses Branch.
+        for (auto successor : terminator->GetSuccessors()) {
+            PrintWarning(*terminator, *successor, hasProcessed, successor->Get<MatchDispatchContinuation>(), regions);
+        }
+    }
+}
+
 void UnreachableBranchCheck::PrintWarning(
-    const Terminator& node, Block& block, std::set<Block*>& hasProcessed, bool isRecursive)
+    const Terminator& node, Block& block, std::set<Block*>& hasProcessed, bool shouldTraverseMatchCases,
+    const UnreachableBlockRegionMap& regions)
 {
     if (hasProcessed.find(&block) != hasProcessed.end()) {
         return;
     }
     hasProcessed.emplace(&block);
+    if (regions.find(&block) != regions.end()) {
+        return;
+    }
     // Do-while expr do not need to check unreachable branch.
     if (block.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING || node.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING) {
         return;
     }
-    CJC_ASSERT(block.GetTerminator());
-    if (block.GetTerminator()->GetExprKind() == ExprKind::BRANCH ||
-        block.GetTerminator()->GetExprKind() == ExprKind::MULTIBRANCH) {
-        auto branchNode = StaticCast<Terminator*>(block.GetTerminator());
-        bool rec{true};
-        if (auto br = DynamicCast<Branch>(branchNode)) {
-            if (br->GetSourceExpr() == SourceExpr::FOR_IN_EXPR) {
-                rec = false;
-            }
-        }
-        if (rec) {
-            for (auto successor : branchNode->GetSuccessors()) {
-                PrintWarning(*branchNode, *successor, hasProcessed, true);
-            }
-        }
+    // Ordinary CFG successors can be shared continuations or nested if/else blocks. Only match lowering carries
+    // independent source-level pattern diagnostics that require structural traversal beyond the direct successor.
+    if (shouldTraverseMatchCases) {
+        PrintMatchSuccessors(block, hasProcessed, regions);
     }
     auto [res, range] = ToRangeIfNotZero(block.GetDebugLocation());
     if (!res) {
@@ -95,9 +135,7 @@ void UnreachableBranchCheck::PrintWarning(
     if (node.GetExprKind() == ExprKind::BRANCH) {
         auto branch = StaticCast<const Branch*>(&node);
         if (branch->GetSourceExpr() == SourceExpr::QUEST || branch->GetSourceExpr() == SourceExpr::BINARY) {
-            if (!isRecursive) {
-                (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression, range);
-            }
+            (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression, range);
         } else if (branch->GetSourceExpr() == SourceExpr::MATCH_EXPR) {
             (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_unreachable_pattern, range);
         } else {
@@ -112,13 +150,16 @@ void UnreachableBranchCheck::PrintWarning(
 }
 
 template <typename TConstDomain>
-void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result) 
+void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result, const UnreachableBlockRegionMap& regions)
 {
     const auto actionBeforeVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
     const auto actionAfterVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
 
-    const auto actionOnTerminator = [this](
+    const auto actionOnTerminator = [this, &regions](
             const TConstDomain&, Terminator* terminator, std::optional<Block*> targetSucc) {
+        if (regions.find(terminator->GetParentBlock()) != regions.end()) {
+            return;
+        }
         switch (terminator->GetExprKind()) {
             case ExprKind::BRANCH: {
                 if (targetSucc.has_value()) {
@@ -129,7 +170,8 @@ void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
                         if (successor == targetSucc.value()) {
                             continue;
                         }
-                        PrintWarning(*branchNode, *successor, hasProcessed);
+                        bool shouldTraverseMatchCases = successor->Get<MatchDispatchContinuation>();
+                        PrintWarning(*branchNode, *successor, hasProcessed, shouldTraverseMatchCases, regions);
                     }
                 }
                 break;
@@ -143,7 +185,8 @@ void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
                         if (successor == targetSucc.value()) {
                             continue;
                         }
-                        PrintWarning(*multiBranchNode, *successor, hasProcessed);
+                        PrintWarning(*multiBranchNode, *successor, hasProcessed,
+                            successor->Get<MatchDispatchContinuation>(), regions);
                     }
                 }
                 break;
@@ -165,9 +208,10 @@ void UnreachableBranchCheck::RunOnFunc(const Ptr<Function> func)
     if (isCommonFunctionWithoutBody) {
         return; // Nothing to visit
     }
+    auto regions = GetUnreachableBlockRegions(*func->GetBody(), maybeUnreachableBlocks);
     if (auto result = analysisWrapper->CheckFuncResult(*func); result) {
-        VisitFunc<ConstDomain>(*result);
+        VisitFunc<ConstDomain>(*result, regions);
     } else if (auto resultPool = analysisWrapper->CheckFuncActiveResult(*func); resultPool) {
-        VisitFunc<ConstPoolDomain>(*resultPool);
+        VisitFunc<ConstPoolDomain>(*resultPool, regions);
     }
 }

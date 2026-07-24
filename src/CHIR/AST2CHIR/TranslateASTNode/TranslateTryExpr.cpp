@@ -9,23 +9,11 @@
 using namespace Cangjie::CHIR;
 using namespace Cangjie;
 
-/**
- * Type of try expression may be type of expected target,
- * we need to check try body and all catch blocks for real nothing typed control flow.
- */
-static inline bool HasTypeOfNothing(const AST::TryExpr& tryExpr)
-{
-    if (!tryExpr.tryBlock->GetTy()->IsNothing()) {
-        return false;
-    }
-    return std::all_of(
-        tryExpr.catchBlocks.cbegin(), tryExpr.catchBlocks.cend(), [](auto& it) { return it->GetTy()->IsNothing(); });
-}
-
 Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
 {
     // Try must have at least one catch block or finally block.
     CJC_ASSERT(!tryExpr.catchBlocks.empty() || tryExpr.finallyBlock != nullptr);
+    const bool isNestedInUnreachableContinuation = !CanCurrentBlockCompleteNormally();
     auto tryTy = TranslateType(*tryExpr.GetTy());
     auto loc = TranslateLocation(tryExpr.begin, tryExpr.end);
     auto retVal = tryTy->IsUnit() || tryTy->IsNothing() ? nullptr :
@@ -39,6 +27,8 @@ Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
     ScopeContext context(*this);
     context.ScopePlus();
     tryBodyContext.emplace_back(&tryExpr);
+    bool canTryBodyCompleteNormally = false;
+    bool canCatchBodyCompleteNormally = false;
     // 1. Set context for try body & generate try.
     Ptr<Block> exceptionBlock = CreateBlock();
     {
@@ -50,9 +40,15 @@ Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
             CreateAndAppendGVInitFuncCall(*pkgInit);
         }
         auto baseBlock = currentBlock;
-        auto tryVal = TranslateExprArg(*tryExpr.tryBlock);
+        auto tryVal = TranslateSubExprAsValue(*tryExpr.tryBlock);
+        canTryBodyCompleteNormally = CanCurrentBlockCompleteNormally();
         CreateAndAppendTerminator<GoTo>(loc, GetBlockByAST(*tryExpr.tryBlock), baseBlock);
-        if (!HasTypeOfNothing(tryExpr)) {
+        if (canTryBodyCompleteNormally && retVal) {
+            if (!tryVal) {
+                CJC_ASSERT(tryExpr.tryBlock->GetTy()->IsUnit());
+                tryVal = CreateAndAppendConstantExpression<UnitLiteral>(
+                    builder.GetUnitTy(), *currentBlock)->GetResult();
+            }
             // Add location for print warning.
             // example code:
             // var a = try{throw A();1} catch (a:A){2}   ----> the const `1` have a user:`store`, so we shoule add loc
@@ -63,11 +59,11 @@ Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
             } else {
                 valLoc = TranslateLocation(*tryExpr.tryBlock);
             }
-            if (retVal) {
-                CreateAndAppendWrappedStore(*GetDerefedValue(tryVal, valLoc), *retVal, valLoc);
-            }
+            CreateAndAppendWrappedStore(*GetDerefedValue(tryVal, valLoc), *retVal, valLoc);
         }
-        CreateAndAppendTerminator<GoTo>(loc, endBlock, currentBlock)->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        if (canTryBodyCompleteNormally) {
+            CreateAndAppendTerminator<GoTo>(loc, endBlock, currentBlock)->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        }
         tryCatchContext.pop();
     }
 
@@ -76,20 +72,26 @@ Ptr<Value> Translator::Visit(const AST::TryExpr& tryExpr)
         currentBlock = exceptionBlock;
         exceptionBlock->SetExceptions(GetExceptionsForTry(tryExpr));
         context.ScopePlus();
-        exceptionBlock = TranslateCatchBlocks(tryExpr, retVal, endBlock);
+        exceptionBlock = TranslateCatchBlocks(tryExpr, retVal, endBlock, canCatchBodyCompleteNormally);
     }
 
+    bool canCompleteNormally = canTryBodyCompleteNormally || canCatchBodyCompleteNormally;
     // 3. Translate finally block with normal and exception cases.
     // NOTE: if finally is existed create 'endBlock' goto 'finally' and 'exceptionBlock' goto finally block,
     // then update endBlock with new end block of finally.
     if (hasFinally) {
         CJC_ASSERT(exceptionBlock);
         context.ScopePlus();
-        endBlock = TranslateFinally(*tryExpr.finallyBlock, exceptionBlock);
+        bool canFinallyCompleteNormally = false;
+        endBlock = TranslateFinally(*tryExpr.finallyBlock, exceptionBlock, canFinallyCompleteNormally);
+        canCompleteNormally = canCompleteNormally && canFinallyCompleteNormally;
     }
     tryBodyContext.pop_back();
     currentBlock = endBlock;
-    if (HasTypeOfNothing(tryExpr)) {
+    if (!canCompleteNormally) {
+        // The finally normal-flow block is a lowering artifact when every source path through the try cannot
+        // complete. Preserve the outer continuation root, but otherwise start a new sequential diagnostic root.
+        StartUnreachableContinuationForNonCompletingExpr(tryExpr, !isNestedInUnreachableContinuation);
         return nullptr;
     }
     if (!retVal) {
@@ -110,7 +112,8 @@ void Translator::CreateFinallyExpr(bool hasFinally, Ptr<Block> endBlock)
     }
 }
 
-Ptr<Block> Translator::TranslateFinally(const AST::Block& finally, Ptr<Block> exceptionBlock)
+Ptr<Block> Translator::TranslateFinally(
+    const AST::Block& finally, Ptr<Block> exceptionBlock, bool& canCompleteNormally)
 {
     CJC_ASSERT(!finallyContext.empty());
     // 1. Generate rethrow finally block. NOTE: finally context should be kept for rethrow.
@@ -120,7 +123,7 @@ Ptr<Block> Translator::TranslateFinally(const AST::Block& finally, Ptr<Block> ex
     auto finallyControlInfo = finallyContext.top();
     finallyContext.pop();
     // 2. Generate normal finally block for different control flows.
-    TranslateFinallyNormalFlows(finally, finallyControlInfo);
+    canCompleteNormally = TranslateFinallyNormalFlows(finally, finallyControlInfo);
     // Return end block of normal flow.
     auto normalInfo = finallyControlInfo.controlFlowBlocks[static_cast<uint8_t>(ControlType::NORMAL)];
     CJC_ASSERT(normalInfo.size() == 1);
@@ -148,9 +151,18 @@ void Translator::TranslateFinallyRethrowFlows(const AST::Block& finally)
     };
     auto eVal = CreateAndAppendExpression<Intrinsic>(baseETy, callContext, currentBlock)->GetResult();
     // Generate rethrow finally block.
-    TranslateASTNode(finally, exceptionTrans);
+    exceptionTrans.TranslateSubExprAsValue(finally);
     auto finallyBlock = exceptionTrans.GetBlockByAST(finally);
     CreateAndAppendTerminator<GoTo>(finallyBlock, exceptionBlock);
+    if (!exceptionTrans.CanCurrentBlockCompleteNormally()) {
+        auto& [_, controlBlocks] = exceptionTrans.finallyContext.top();
+        for (auto& info : controlBlocks) {
+            for (auto [prevBlock, nextBlock] : info) {
+                CreateAndAppendTerminator<GoTo>(nextBlock, prevBlock);
+            }
+        }
+        return;
+    }
     auto endCatchBB = CreateBlock();
     CreateAndAppendTerminator<GoTo>(endCatchBB, exceptionTrans.currentBlock);
     if (tryCatchContext.empty()) {
@@ -170,8 +182,9 @@ void Translator::TranslateFinallyRethrowFlows(const AST::Block& finally)
     }
 }
 
-void Translator::TranslateFinallyNormalFlows(const AST::Block& finally, const FinallyControlVal& finallyControlInfo)
+bool Translator::TranslateFinallyNormalFlows(const AST::Block& finally, const FinallyControlVal& finallyControlInfo)
 {
+    bool canCompleteNormally = false;
     for (size_t i = 0; i < finallyControlInfo.controlFlowBlocks.size(); ++i) {
         auto& info = finallyControlInfo.controlFlowBlocks[i];
         if (info.empty()) {
@@ -179,12 +192,17 @@ void Translator::TranslateFinallyNormalFlows(const AST::Block& finally, const Fi
         }
         for (auto [prevBlock, nextBlock] : info) {
             Translator normalTrans = *this; // Copy a translator for normal finally.
-            TranslateASTNode(finally, normalTrans);
+            normalTrans.TranslateSubExprAsValue(finally);
             auto finallyBlock = normalTrans.GetBlockByAST(finally);
             CreateAndAppendTerminator<GoTo>(finallyBlock, prevBlock);
             finallyBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
             prevBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
             bool isNormalCase = i == static_cast<uint8_t>(ControlType::NORMAL);
+            if (!normalTrans.CanCurrentBlockCompleteNormally()) {
+                finallyContext = normalTrans.finallyContext;
+                continue;
+            }
+            canCompleteNormally = canCompleteNormally || isNormalCase;
             if (normalTrans.finallyContext.empty() || isNormalCase) {
                 CreateAndAppendTerminator<GoTo>(nextBlock, normalTrans.currentBlock);
             } else {
@@ -203,6 +221,7 @@ void Translator::TranslateFinallyNormalFlows(const AST::Block& finally, const Fi
             finallyContext = normalTrans.finallyContext; // Update context info.
         }
     }
+    return canCompleteNormally;
 }
 
 std::vector<ClassType*> Translator::GetExceptionsForTry(const AST::TryExpr& tryExpr)
@@ -253,7 +272,8 @@ std::vector<ClassType*> Translator::GetExceptionsForTry(const AST::TryExpr& tryE
     return std::vector<ClassType*>(exceptions.begin(), exceptions.end());
 }
 
-Ptr<Block> Translator::TranslateCatchBlocks(const AST::TryExpr& tryExpr, Ptr<Value> retVal, Ptr<Block> endBlock)
+Ptr<Block> Translator::TranslateCatchBlocks(
+    const AST::TryExpr& tryExpr, Ptr<Value> retVal, Ptr<Block> endBlock, bool& canCompleteNormally)
 {
     bool hasFinally = tryExpr.finallyBlock != nullptr;
     // When finally is not existed, do not need to create re-throw block.
@@ -275,7 +295,10 @@ Ptr<Block> Translator::TranslateCatchBlocks(const AST::TryExpr& tryExpr, Ptr<Val
         auto [falseBlock, trueBlock] = TranslateExceptionPattern(*tryExpr.catchPatterns[i], eVal);
         ScopeContext context(*this);
         context.ScopePlus();
-        auto currentBody = TranslateMatchCaseBody(*tryExpr.catchBlocks[i], retVal, endBlock);
+        bool canCurrentCatchCompleteNormally = false;
+        auto currentBody = TranslateMatchCaseBody(
+            *tryExpr.catchBlocks[i], retVal, endBlock, &canCurrentCatchCompleteNormally);
+        canCompleteNormally = canCompleteNormally || canCurrentCatchCompleteNormally;
         CreateAndAppendTerminator<GoTo>(currentBody, trueBlock);
         currentBlock = falseBlock;
     }

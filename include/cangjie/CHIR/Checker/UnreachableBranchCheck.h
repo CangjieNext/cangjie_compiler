@@ -9,6 +9,7 @@
 
 #include "cangjie/CHIR/Analysis/ConstAnalysisWrapper.h"
 #include "cangjie/CHIR/Analysis/ConstAnalysis.h"
+#include "cangjie/CHIR/Analysis/UnreachableBlockRegion.h"
 #include "cangjie/CHIR/Analysis/Utils.h"
 #include "cangjie/Basic/DiagnosticEngine.h"
 #include "cangjie/CHIR/IR/Package.h"
@@ -19,22 +20,28 @@ namespace Cangjie::CHIR {
 class UnreachableBranchCheck {
 public:
     explicit UnreachableBranchCheck(
-        ConstAnalysisWrapper* constAnalysisWrapper, DiagnosticEngine& diag, const std::string& packageName);
+        ConstAnalysisWrapper* constAnalysisWrapper, DiagnosticEngine& diag, const std::string& packageName,
+        const UnreachableBlockMap& maybeUnreachableBlocks);
 
     void RunOnPackage(const Package& package, size_t threadNum);
 
     void RunOnFunc(const Ptr<Function> func);
 
 private:
-    void PrintWarning(const Terminator& node, Block& block, std::set<Block*>& hasProcessed, bool isRecursive = false);
+    void PrintWarning(
+        const Terminator& node, Block& block, std::set<Block*>& hasProcessed, bool shouldTraverseMatchCases,
+        const UnreachableBlockRegionMap& regions);
+    void PrintMatchSuccessors(
+        Block& block, std::set<Block*>& hasProcessed, const UnreachableBlockRegionMap& regions);
 
     template <typename TConstDomain>
-    void VisitFunc(Results<TConstDomain>& result);
+    void VisitFunc(Results<TConstDomain>& result, const UnreachableBlockRegionMap& regions);
 
     DiagnosticEngine& diag;
     ConstAnalysisWrapper* analysisWrapper;
 
     const std::string& currentPackageName;
+    const UnreachableBlockMap& maybeUnreachableBlocks;
 };
 
 } // namespace Cangjie::CHIR

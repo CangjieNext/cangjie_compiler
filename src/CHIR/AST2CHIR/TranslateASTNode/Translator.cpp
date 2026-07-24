@@ -152,14 +152,31 @@ void Translator::SetFuncBlockGroup(BlockGroup& group)
     blockGroupStack.emplace_back(&group);
 }
 
+Ptr<Block> Translator::GetCurrentBlock() const
+{
+    return currentBlock;
+}
+
 void Translator::SetCurrentBlock(Block& block)
 {
     currentBlock = &block;
 }
 
-Ptr<Block> Translator::GetCurrentBlock() const
+bool Translator::CanCurrentBlockCompleteNormally() const
 {
-    return currentBlock;
+    return currentBlock->GetTerminator() == nullptr &&
+        unreachableBlockRoots.find(currentBlock) == unreachableBlockRoots.end();
+}
+
+void Translator::StartUnreachableContinuationForNonCompletingExpr(const AST::Node& node, bool recordForWarning)
+{
+    if (recordForWarning) {
+        StartUnreachableContinuation(node, CompletionStatus::CANNOT_COMPLETE);
+        return;
+    }
+
+    auto terminator = CreateAndAppendTerminator<Exit>(TranslateLocation(node), currentBlock);
+    CreateUnreachableContinuation(*terminator);
 }
 
 Ptr<Function> Translator::CreateEmptyGVInitFunc(const std::string& mangledName, const std::string& identifier,
@@ -261,6 +278,7 @@ void Translator::TranslateSubExprToLoc(const AST::Node& node, Value* location)
 {
     if (!location) {
         TranslateASTNode(node, *this);
+        FinalizeUnreachableContinuation(node);
         return;
     }
     const DebugLocation* debugLoc;
@@ -277,10 +295,12 @@ void Translator::TranslateSubExprToLoc(const AST::Node& node, Value* location, c
     auto value = TranslateASTNode(node, *this);
     /// \ref loc is null if it is of Unit or Nothing type. In this case, no further typecast/store is needed.
     if (!location) {
+        FinalizeUnreachableContinuation(node);
         return;
     }
     auto targetTy = StaticCast<RefType>(location->GetType())->GetBaseType();
     if (targetTy->IsNothing()) {
+        FinalizeUnreachableContinuation(node);
         return;
     }
     // unit can be converted to Any, or any other interface it extends
@@ -291,6 +311,7 @@ void Translator::TranslateSubExprToLoc(const AST::Node& node, Value* location, c
     // this if never collides with the previous if, so no need to write else if
     if (targetTy->IsUnit() || !value) {
         if (!opts.enableCompileDebug) {
+            FinalizeUnreachableContinuation(node);
             return;
         }
         // create a null/unit value if -g
@@ -311,18 +332,26 @@ void Translator::TranslateSubExprToLoc(const AST::Node& node, Value* location, c
     }
     value = GetDerefedValue(value, debugLoc);
     if (value->GetType()->IsNothing()) {
+        FinalizeUnreachableContinuation(node);
         return;
     }
     value = TypeCastOrBoxIfNeeded(*value, *targetTy, debugLoc);
     CreateAndAppendWrappedStore(*value, *location, debugLoc);
+    FinalizeUnreachableContinuation(node);
 }
 
 Ptr<Value> Translator::TranslateSubExprAsValue(const AST::Node& node)
 {
     auto value = TranslateASTNode(node, *this);
+    // A Nothing value already carries the inner expression's non-completing control flow.
+    // Finalizing again would create an overlapping unreachable root for an outer wrapper expression.
+    if (value && value->GetType()->IsNothing()) {
+        return value;
+    }
     if (value && Is<AST::Expr>(node)) {
         value = GetDerefedValue(value, TranslateLocation(node));
     }
+    FinalizeUnreachableContinuation(node);
     return value;
 }
 
@@ -337,5 +366,111 @@ void Translator::TranslateSubExprToDiscarded(const AST::Node& node)
                 unit->GetResult()->EnableAttr(Attribute::COMPILER_ADD);
             }
         }
+    }
+    FinalizeUnreachableContinuation(node);
+}
+
+void Translator::StartUnreachableContinuation(const AST::Node& node)
+{
+    DiscardPendingCallRoot();
+    if (maybeUnreachable.find(currentBlock) != maybeUnreachable.end()) {
+        return;
+    }
+
+    if (auto terminator = currentBlock->GetTerminator()) {
+        // A final Nothing argument closes the current block without creating a diagnostic root. Only create a
+        // continuation once a following source expression actually needs to be translated.
+        auto startsNewRoot = unreachableBlockRoots.find(currentBlock) == unreachableBlockRoots.end();
+        CreateUnreachableContinuation(*terminator, startsNewRoot);
+        return;
+    }
+
+    if (unreachableBlockRoots.find(currentBlock) != unreachableBlockRoots.end()) {
+        StartUnreachableContinuation(node, CompletionStatus::CANNOT_COMPLETE);
+        return;
+    }
+
+    if (!node.GetTy() || !node.GetTy()->IsNothing()) {
+        return;
+    }
+
+    StartUnreachableContinuation(node, CompletionStatus::CANNOT_COMPLETE);
+}
+
+bool Translator::IsCurrentBlockPendingCallRoot() const
+{
+    auto rootIt = unreachableBlockRoots.find(currentBlock);
+    if (rootIt == unreachableBlockRoots.end()) {
+        return false;
+    }
+    auto pendingIt = maybeUnreachable.find(rootIt->second);
+    return pendingIt != maybeUnreachable.end() && pendingIt->second.isPendingCallRoot;
+}
+
+void Translator::DiscardPendingCallRoot()
+{
+    auto rootIt = unreachableBlockRoots.find(currentBlock);
+    if (rootIt == unreachableBlockRoots.end()) {
+        return;
+    }
+    auto pendingIt = maybeUnreachable.find(rootIt->second);
+    if (pendingIt != maybeUnreachable.end() && pendingIt->second.isPendingCallRoot) {
+        maybeUnreachable.erase(pendingIt);
+    }
+}
+
+void Translator::StartUnreachableContinuation(
+    const AST::Node& node, CompletionStatus completion, ContinuationRoot root)
+{
+    if (completion != CompletionStatus::CANNOT_COMPLETE) {
+        return;
+    }
+
+    auto terminator = CreateAndAppendTerminator<Exit>(TranslateLocation(node), currentBlock);
+    CreateUnreachableContinuation(*terminator, root == ContinuationRoot::NEW);
+}
+
+void Translator::FinalizeUnreachableContinuation(const AST::Node& node)
+{
+    if (IsCurrentBlockPendingCallRoot() || unreachableBlockRoots.find(currentBlock) == unreachableBlockRoots.end() ||
+        currentBlock->GetTerminator() != nullptr ||
+        currentBlock->GetExpressions().empty()) {
+        return;
+    }
+
+    // Nested lowering can still append a store after its source block returns. Continue in a fresh unreachable block
+    // and link it to this one so the diagnostic region retains its original root.
+    auto terminator = CreateAndAppendTerminator<Exit>(TranslateLocation(node), currentBlock);
+    CreateUnreachableContinuation(*terminator);
+}
+
+void Translator::StartUnreachableArgumentContinuation(const AST::Node& node)
+{
+    // A nested call can have a pending root for its final Nothing argument. Once the call is used as a callee, its
+    // arguments are the source-level unreachable suffix and must replace that pending call root.
+    DiscardPendingCallRoot();
+    if (auto it = maybeUnreachable.find(currentBlock); it != maybeUnreachable.end()) {
+        it->second.startsNewRoot = true;
+        it->second.sourceRoot = currentBlock;
+        unreachableBlockRoots[currentBlock] = currentBlock;
+        return;
+    }
+    StartUnreachableContinuation(node, CompletionStatus::CANNOT_COMPLETE, ContinuationRoot::NEW);
+}
+
+void Translator::CreateUnreachableContinuation(Terminator& terminator, bool startsNewRoot, bool recordForWarning)
+{
+    Block* sourceRoot = nullptr;
+    if (!startsNewRoot) {
+        auto it = unreachableBlockRoots.find(currentBlock);
+        if (it != unreachableBlockRoots.end()) {
+            sourceRoot = it->second;
+        }
+    }
+    currentBlock = CreateBlock();
+    sourceRoot = sourceRoot ? sourceRoot : currentBlock.get();
+    unreachableBlockRoots[currentBlock] = sourceRoot;
+    if (recordForWarning) {
+        maybeUnreachable.emplace(currentBlock, UnreachableBlockInfo(&terminator, startsNewRoot, sourceRoot));
     }
 }

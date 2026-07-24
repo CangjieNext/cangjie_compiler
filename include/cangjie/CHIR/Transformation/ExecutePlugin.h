@@ -8,6 +8,7 @@
 #define CANGJIE_CHIR_TRANSFORMATION_EXECUTE_PLUGIN_H
 
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
+#include "cangjie/CHIR/IR/UnreachableBlockInfo.h"
 #include <flatbuffers/detached_buffer.h>
 
 namespace Cangjie {
@@ -22,19 +23,19 @@ public:
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
         std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<Block*, Terminator*>& maybeUnreachable);
+        UnreachableBlockMap& maybeUnreachable);
     bool FreeCachedData();
 private:
     void CHIRPtrToString(
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
         std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<Block*, Terminator*>& maybeUnreachable);
+        UnreachableBlockMap& maybeUnreachable);
     void StringToCHIRPtr(
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
         std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<Block*, Terminator*>& maybeUnreachable);
+        UnreachableBlockMap& maybeUnreachable);
 
     struct PluginResult {
         uint8_t* data{nullptr};
@@ -49,7 +50,13 @@ private:
     std::unordered_set<std::string> srcCodeImportedFuncNames;
     std::unordered_set<std::string> srcCodeImportedVarNames;
     std::vector<std::string> initFuncsForConstVarNames;
-    std::unordered_map<std::string, std::pair<std::string, std::string>> unreachableBlockNames;
+    struct UnreachableBlockName {
+        std::string block;
+        std::string terminatorBlock;
+        std::string sourceRoot;
+        bool startsNewRoot{false};
+    };
+    std::unordered_map<std::string, std::vector<UnreachableBlockName>> unreachableBlockNames;
 };
 }
 }

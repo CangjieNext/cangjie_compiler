@@ -247,6 +247,11 @@ OwnedPtr<MatchCase> CreateSomeCaseForForInIter(
     // To : match v { case pat if e2 => b; case _ => continue}
     auto insideMatch = MakeOwnedNode<MatchExpr>();
     insideMatch->matchMode = true;
+    // Preserve the source body as the diagnostic root for the generated guard.
+    // The nested match itself has no user-visible match syntax.
+    insideMatch->sugarKind = Expr::SugarKind::FOR_IN_EXPR;
+    CopyBasicInfo(forInExpr.body.get(), insideMatch.get());
+    AddCurFile(*insideMatch, forInExpr.curFile);
     insideMatch->selector = CreateRefExpr(*vDecl);
 
     // To : case pat if e2 => b

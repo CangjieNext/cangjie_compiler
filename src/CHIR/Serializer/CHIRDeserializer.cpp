@@ -1334,6 +1334,21 @@ void CHIRDeserializer::CHIRDeserializerImpl::ConfigBase(const PackageFormat::Bas
                 obj.Set<CHIR::GeneratedFromForIn>(
                     static_cast<const PackageFormat::GeneratedFromForIn*>(anno)->value());
                 break;
+            case PackageFormat::Annotation::Annotation_matchDispatchContinuation:
+                obj.Set<CHIR::MatchDispatchContinuation>(
+                    static_cast<const PackageFormat::MatchDispatchContinuation*>(anno)->value());
+                break;
+            case PackageFormat::Annotation::Annotation_enumConstructorInfo: {
+                auto tagIndex = static_cast<const PackageFormat::EnumConstructorInfo*>(anno)->tagIndex();
+                if (tagIndex >= 0) {
+                    obj.Set<CHIR::EnumConstructorInfo>(static_cast<size_t>(tagIndex));
+                }
+                break;
+            }
+            case PackageFormat::Annotation::Annotation_enumTagAccess:
+                obj.Set<CHIR::EnumTagAccess>(
+                    static_cast<const PackageFormat::EnumTagAccess*>(anno)->value());
+                break;
             case PackageFormat::Annotation::Annotation_isAutoEnvClass:
                 obj.Set<CHIR::IsAutoEnvClass>(static_cast<const PackageFormat::IsAutoEnvClass*>(anno)->value());
                 break;

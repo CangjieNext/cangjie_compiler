@@ -15,6 +15,7 @@
 
 #include "cangjie/AST/NodeX.h"
 #include "cangjie/CHIR/AST2CHIR/AST2CHIRNodeMap.h"
+#include "cangjie/CHIR/IR/UnreachableBlockInfo.h"
 #include "cangjie/CHIR/AST2CHIR/TranslateASTNode/ExceptionTypeMapping.h"
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
@@ -37,7 +38,7 @@ public:
         const ElementList<Ptr<const AST::FuncDecl>>& localConstFuncs, const IncreKind& kind,
         const std::unordered_map<std::string, Value*>& deserializedVals,
         std::vector<std::pair<const AST::Decl*, Function*>>& annoFactories,
-        std::unordered_map<Block*, Terminator*>& maybeUnreachable,
+        UnreachableBlockMap& maybeUnreachable,
         bool computeAnnotations,
         std::vector<CHIR::Function*>& initFuncForAnnoFactory,
         const Cangjie::TypeManager& typeManager)
@@ -322,6 +323,12 @@ public:
      * @return A pointer to the current block.
      */
     Ptr<Block> GetCurrentBlock() const;
+
+    /// Returns whether the current block has a normal sequential continuation.
+    bool CanCurrentBlockCompleteNormally() const;
+
+    /// Creates the continuation after an expression that cannot complete normally.
+    void StartUnreachableContinuationForNonCompletingExpr(const AST::Node& node, bool recordForWarning);
     
     /**
      * @brief Sets the current block.
@@ -608,7 +615,8 @@ private:
     const bool mergingSpecific; // add by cjmp
     const std::unordered_map<std::string, Value*>& deserializedVals; // add by cjmp
     std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs;
-    std::unordered_map<Block*, Terminator*>& maybeUnreachable;
+    UnreachableBlockMap& maybeUnreachable;
+    std::unordered_map<Block*, Block*> unreachableBlockRoots;
     bool isComputingAnnos{};
     std::vector<CHIR::Function*>& initFuncsForAnnoFactory;
     const Cangjie::TypeManager& typeManager;
@@ -634,6 +642,30 @@ private:
     };
 
 private:
+    enum class CompletionStatus { CAN_COMPLETE, CANNOT_COMPLETE };
+    enum class ContinuationRoot { INHERIT, NEW };
+
+    struct FuncArgsTranslationResult {
+        std::vector<Value*> values;
+        CompletionStatus completion{CompletionStatus::CAN_COMPLETE};
+        bool hasUnreachableArgumentSuffix{false};
+    };
+
+    // A non-final Nothing expression cannot complete normally, so the next
+    // source expression must be translated as an unreachable continuation.
+    void StartUnreachableContinuation(const AST::Node& node);
+    void StartUnreachableContinuation(const AST::Node& node, CompletionStatus completion,
+        ContinuationRoot root = ContinuationRoot::INHERIT);
+    bool IsCurrentBlockPendingCallRoot() const;
+    void DiscardPendingCallRoot();
+    void FinalizeUnreachableContinuation(const AST::Node& node);
+    void StartUnreachableArgumentContinuation(const AST::Node& node);
+    void CreateUnreachableContinuation(
+        Terminator& terminator, bool startsNewRoot = false, bool recordForWarning = true);
+    void RecordFuncArgCompletion(FuncArgsTranslationResult& result, const AST::FuncArg& arg,
+        size_t argIndex, size_t argCount, Block* blockBeforeArg);
+    Ptr<Value> TranslateNonCompletingCall(const FuncArgsTranslationResult& argsResult, const AST::CallExpr& expr);
+
     void SetSymbolTable(const AST::Node& node, Value& val, bool isLocal = true);
     Ptr<Value> GetSymbolTable(const AST::Node& node) const;
     Ptr<CustomTypeDef> GetNominalSymbolTable(const AST::Node& node);
@@ -647,7 +679,11 @@ private:
     }
     Block* CreateBlock()
     {
-        return builder.CreateBlock(blockGroupStack.back());
+        auto block = builder.CreateBlock(blockGroupStack.back());
+        if (auto it = unreachableBlockRoots.find(currentBlock); it != unreachableBlockRoots.end()) {
+            unreachableBlockRoots.emplace(block, it->second);
+        }
+        return block;
     }
     void SetFuncBlockGroup(BlockGroup& group);
     bool OverloadableExprMayThrowException(const AST::OverloadableExpr& expr, const Type& leftValTy) const;
@@ -882,7 +918,8 @@ private:
     void UpdateDelayExitSignal(int64_t level);
     Ptr<Value> GetOuterBlockGroupReturnValLocation();
     void TranslateForInCondControlFlow(Ptr<Value>& condVar);
-    void TranslateForInBodyBlockGroup(const AST::ForInExpr& forInExpr);
+    void TranslateForInBodyBlockGroup(const AST::ForInExpr& forInExpr, Ptr<Block> continueBlock);
+    void FinalizeForInBlockGroup(const AST::ForInExpr& forInExpr, BlockGroup& blockGroup);
     friend class TranslateForInExpr;
 
     // ========Methods used for translating ForInExpr with Range kind========
@@ -980,7 +1017,7 @@ private:
     bool CanOptimizeToSwitch(const AST::LetPatternDestructor& let) const;
 
     Block* TranslateMatchCaseBody(
-        const AST::Block& caseBody, Ptr<Value> retVal, Ptr<Block> endBlock);
+        const AST::Block& caseBody, Ptr<Value> retVal, Ptr<Block> endBlock, bool* canCompleteNormally = nullptr);
     /** Entrance of translating multiple outermost or-pattern case. */
     // return value -> {false block, true block}
     std::pair<Ptr<Block>, Ptr<Block>> TranslateOrPattern(
@@ -995,8 +1032,10 @@ private:
     // return value -> {false block, true block}
     std::pair<Ptr<Block>, Ptr<Block>> TranslateNestingCasePattern(const AST::Pattern& pattern,
         const Ptr<Value> selectorVal, const DebugLocation& originLoc,
-        const SourceExpr& sourceExpr = SourceExpr::MATCH_EXPR);
-    void TranslatePatternGuard(const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock);
+        const SourceExpr& sourceExpr = SourceExpr::MATCH_EXPR, const DebugLocation* matchedBlockLoc = nullptr);
+    void TranslatePatternGuard(
+        const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock, SourceExpr sourceExpr,
+        const DebugLocation& originLoc);
     // ========= helper functions for translating each of nesting patterns ==========
     // NOTE: 'blocks' is pair of {final matched block, next condition block}
     // 'enum pattern''s element value should be generated in 'next condition block'.
@@ -1090,9 +1129,9 @@ private:
 
     Value* TranslateThisObjectForNonStaticMemberFuncCall(const AST::CallExpr& expr, bool needsMutableThis);
     void TranslateFuncArgsWithoutThisObj(
-        const AST::CallExpr& expr, std::vector<Value*>& args, const std::vector<Type*>* expectedParamTys);
+        const AST::CallExpr& expr, FuncArgsTranslationResult& result, const std::vector<Type*>* expectedParamTys);
     Value* TranslateTrivialArgWithNoSugar(const AST::FuncArg& arg, const DebugLocation& loc, Type* expectedTy);
-    std::vector<Value*> TranslateFuncArgs(
+    FuncArgsTranslationResult TranslateFuncArgs(
         const AST::CallExpr& expr, Type* expectedThisObjTy, const std::vector<Type*>* expectedParamTys);
 
     Ptr<Value> GetCurrentThisObject(const AST::FuncDecl& resolved);
@@ -1134,10 +1173,11 @@ private:
 
     // TryExpr
     std::vector<ClassType*> GetExceptionsForTry(const AST::TryExpr& tryExpr);
-    Ptr<Block> TranslateCatchBlocks(const AST::TryExpr& tryExpr, Ptr<Value> retVal, Ptr<Block> endBlock);
+    Ptr<Block> TranslateCatchBlocks(
+        const AST::TryExpr& tryExpr, Ptr<Value> retVal, Ptr<Block> endBlock, bool& canCompleteNormally);
     void CreateFinallyExpr(bool hasFinally, Ptr<Block> endBlock);
-    Ptr<Block> TranslateFinally(const AST::Block& finally, Ptr<Block> exceptionBlock);
-    void TranslateFinallyNormalFlows(const AST::Block& finally, const FinallyControlVal& finallyControlInfo);
+    Ptr<Block> TranslateFinally(const AST::Block& finally, Ptr<Block> exceptionBlock, bool& canCompleteNormally);
+    bool TranslateFinallyNormalFlows(const AST::Block& finally, const FinallyControlVal& finallyControlInfo);
     void TranslateFinallyRethrowFlows(const AST::Block& finally);
     std::pair<Ptr<Block>, Ptr<Block>> TranslateExceptionPattern(const AST::Pattern& pattern, Ptr<Value> eVal);
 

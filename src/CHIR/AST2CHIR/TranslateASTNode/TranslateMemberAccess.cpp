@@ -465,7 +465,9 @@ Ptr<Value> Translator::TranslateEnumMemberAccess(const AST::MemberAccess& member
     auto selectorTy = GetSelectorType(*enumTy);
     if (!enumTy->decl->hasArguments) {
         auto intExpr = CreateAndAppendConstantExpression<IntLiteral>(loc, selectorTy, *currentBlock, enumId);
-        return TypeCastOrBoxIfNeeded(*intExpr->GetResult(), *ty, loc);
+        auto result = TypeCastOrBoxIfNeeded(*intExpr->GetResult(), *ty, loc);
+        result->Set<EnumTagAccess>(true);
+        return result;
     }
     std::vector<Value*> args;
     if (selectorTy->IsBoolean()) {
@@ -476,8 +478,9 @@ Ptr<Value> Translator::TranslateEnumMemberAccess(const AST::MemberAccess& member
         args.emplace_back(intExpr->GetResult());
     }
 
-    return CreateAndAppendExpression<Tuple>(TranslateLocation(member), ty, args, currentBlock)
-        ->GetResult();
+    auto result = CreateAndAppendExpression<Tuple>(TranslateLocation(member), ty, args, currentBlock)->GetResult();
+    result->Set<EnumConstructorInfo>(0);
+    return result;
 }
 
 Ptr<Value> Translator::TranslateInstanceMemberMemberAccess(const AST::MemberAccess& member)

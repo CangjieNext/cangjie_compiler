@@ -24,6 +24,7 @@
 #include "cangjie/AST/Utils.h"
 #include "cangjie/CHIR/AST2CHIR/AST2CHIRNodeMap.h"
 #include "cangjie/CHIR/AST2CHIR/GlobalVarInitializer.h"
+#include "cangjie/CHIR/IR/UnreachableBlockInfo.h"
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/CHIR/IR/Type/CHIRType.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
@@ -212,7 +213,7 @@ public:
         return std::move(initFuncsForConstVar);
     }
 
-    std::unordered_map<Block*, Terminator*>&& GetMaybeUnreachableBlocks()
+    UnreachableBlockMap&& GetMaybeUnreachableBlocks()
     {
         return std::move(maybeUnreachable);
     }
@@ -391,7 +392,7 @@ private:
     std::vector<AST::File*> pkgFiles;
     std::vector<Function*> initFuncsForConstVar;
     std::vector<Function*> initFuncsForAnnoFactory;
-    std::unordered_map<Block*, Terminator*> maybeUnreachable;
+    UnreachableBlockMap maybeUnreachable;
 
     std::string outputPath;
     bool isComputingAnnos{};

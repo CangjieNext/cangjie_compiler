@@ -314,7 +314,7 @@ ForIn* Translator::InitForInExprSkeleton(const AST::ForInExpr& forInExpr, Ptr<Va
     return forIn;
 }
 
-void Translator::TranslateForInBodyBlockGroup(const AST::ForInExpr& forInExpr)
+void Translator::TranslateForInBodyBlockGroup(const AST::ForInExpr& forInExpr, Ptr<Block> continueBlock)
 {
     Ptr<Block> recordBlock = currentBlock;
     // Translate guard var
@@ -327,16 +327,33 @@ void Translator::TranslateForInBodyBlockGroup(const AST::ForInExpr& forInExpr)
     TranslateSubExprToDiscarded(*forInExpr.body);
     auto bodyBlock = GetBlockByAST(*forInExpr.body);
     auto forInBodyLoc = TranslateLocation(*forInExpr.body);
+    bodyBlock->SetDebugLocation(forInBodyLoc);
     recordBlock->SetDebugLocation(forInBodyLoc);
     CreateAndAppendTerminator<Exit>(currentBlock);
     if (guardVar != nullptr) {
-        // Create continue block for translate guard.
-        Ptr<Block> continueBlock = CreateBlock();
         const auto& guardVarLoc = TranslateLocation(*forInExpr.patternGuard);
-        CreateAndAppendTerminator<Exit>(guardVarLoc, continueBlock);
+        // The false successor is the ordinary continuation of this iteration. Keeping
+        // it as a CFG edge makes the body the sole unreachable successor of a false guard.
         CreateWrappedBranch(SourceExpr::FOR_IN_EXPR, guardVarLoc, guardVar, bodyBlock, continueBlock, recordBlock);
     } else {
         CreateAndAppendTerminator<GoTo>(forInBodyLoc, bodyBlock, recordBlock);
+    }
+}
+
+void Translator::FinalizeForInBlockGroup(const AST::ForInExpr& forInExpr, BlockGroup& blockGroup)
+{
+    // FlatForInExpr rewrites every Exit in the structured ForIn sub-CFG. A
+    // non-completing expression can leave an unreachable continuation block
+    // without a terminator, so complete the CFG before the flattening pass.
+    const auto loc = TranslateLocation(forInExpr);
+    for (auto block : blockGroup.GetBlocks()) {
+        if (block->GetTerminator() == nullptr) {
+            // This Exit only completes an empty structural continuation. It has
+            // no source successor, so DCE must not use its for-expression
+            // location as an unreachable diagnostic root after flattening.
+            auto exit = CreateAndAppendTerminator<Exit>(loc, block);
+            exit->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        }
     }
 }
 
@@ -694,7 +711,7 @@ Ptr<Value> Translator::TranslateForInRange(const AST::ForInExpr& forInExpr)
     }
     ScopeContext contextBody(*this);
     contextBody.ScopePlus();
-    TranslateForInBodyBlockGroup(forInExpr);
+    TranslateForInBodyBlockGroup(forInExpr, forIn->GetLatch()->GetEntryBlock());
     blockGroupStack.pop_back();
 
     // 8. Translate latch blockGroup
@@ -717,6 +734,10 @@ Ptr<Value> Translator::TranslateForInRange(const AST::ForInExpr& forInExpr)
     CreateAndAppendWrappedStore(*conditionInCondBG, *condVar, condLoc);
     CreateAndAppendTerminator<Exit>(condLoc, currentBlock);
     blockGroupStack.pop_back();
+
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetBody());
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetLatch());
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetCond());
 
     // Create end branch
     Ptr<Block> endBlock = CreateBlock();
@@ -789,7 +810,7 @@ Ptr<Value> Translator::TranslateForInString(const AST::ForInExpr& forInExpr)
     }
     ScopeContext contextBody(*this);
     contextBody.ScopePlus();
-    TranslateForInBodyBlockGroup(forInExpr);
+    TranslateForInBodyBlockGroup(forInExpr, forIn->GetLatch()->GetEntryBlock());
     blockGroupStack.pop_back();
 
     // 8. Translate latch blockGroup
@@ -810,6 +831,10 @@ Ptr<Value> Translator::TranslateForInString(const AST::ForInExpr& forInExpr)
     CreateAndAppendWrappedStore(*conditionInCondBG, *condVar, condLoc);
     CreateAndAppendTerminator<Exit>(condLoc, currentBlock);
     blockGroupStack.pop_back();
+
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetBody());
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetLatch());
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetCond());
 
     // Create end branch
     Ptr<Block> endBlock = CreateBlock();
@@ -885,7 +910,7 @@ Ptr<Value> Translator::TranslateForInIter(const AST::ForInExpr& forInExpr)
     TranslateForInIterPattern(forInExpr, iterNextLocation);
     ScopeContext contextBody(*this);
     contextBody.ScopePlus();
-    TranslateForInBodyBlockGroup(forInExpr);
+    TranslateForInBodyBlockGroup(forInExpr, forIn->GetLatch()->GetEntryBlock());
     blockGroupStack.pop_back();
 
     // 8. Translate latch blockGroup
@@ -904,6 +929,10 @@ Ptr<Value> Translator::TranslateForInIter(const AST::ForInExpr& forInExpr)
     CreateAndAppendWrappedStore(*conditionInCondBG, *condVar, condLoc);
     CreateAndAppendTerminator<Exit>(condLoc, currentBlock);
     blockGroupStack.pop_back();
+
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetBody());
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetLatch());
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetCond());
 
     // Create end branch
     Ptr<Block> endBlock = CreateBlock();
@@ -974,6 +1003,9 @@ public:
         TranslateBodyBG(*body);
         TranslateCondBG(*cond, *iterEnd);
         TranslateLatchBG(*latch);
+        tr.FinalizeForInBlockGroup(*forin, *body);
+        tr.FinalizeForInBlockGroup(*forin, *cond);
+        tr.FinalizeForInBlockGroup(*forin, *latch);
 
         auto endBlock = tr.CreateBlock();
         tr.CreateAndAppendTerminator<GoTo>(endBlock, bodyBlock);
@@ -1088,7 +1120,7 @@ protected:
         // otherwise the pattern is wildcard. In this case, the value of iterVar need not load.
         Translator::ScopeContext contextBody(tr);
         contextBody.ScopePlus();
-        tr.TranslateForInBodyBlockGroup(*forin);
+        tr.TranslateForInBodyBlockGroup(*forin, res->GetCond()->GetEntryBlock());
         if (auto vp = DynamicCast<VarPattern>(forin->pattern.get())) {
             tr.localValSymbolTable.Erase(*vp->varDecl);
         }

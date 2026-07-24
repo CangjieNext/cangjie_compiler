@@ -170,39 +170,50 @@ protected:
 
     DanglingBlock TranslateLetPattern(const LetPatternDestructor& let, bool isRightmost)
     {
+        DanglingBlock result;
         if (tr.CanOptimizeToSwitch(let)) {
-            return TranslateLetPatternAsTable(let, isRightmost);
+            result = TranslateLetPatternAsTable(let);
         } else {
-            return TranslateLetPatternAsMatch(let, isRightmost);
+            result = TranslateLetPatternAsMatch(let);
         }
+        if (!isRightmost) {
+            return result;
+        }
+        auto tb = TranslateTrueBlock();
+        auto fb = TranslateFalseBlock();
+        // Pattern-dispatch blocks are lowering-only bridges. Keep their diagnostic roots on the enclosing
+        // conditional branches so the warning highlights the source body rather than a pattern token.
+        result.tb->SetDebugLocation(tb->GetDebugLocation());
+        if (result.fb) {
+            result.fb->SetDebugLocation(fb->GetDebugLocation());
+        }
+        CreateGoto(*tb, *result.tb);
+        if (result.fb) {
+            CreateGoto(*fb, *result.fb);
+        }
+        return {};
     }
 
-    DanglingBlock TranslateLetPatternAsMatch(const LetPatternDestructor& let, bool isRightmost)
+    DanglingBlock TranslateLetPatternAsMatch(const LetPatternDestructor& let)
     {
         // translate initializer
         auto selectorVal = tr.TranslateExprArg(*let.initializer);
         Translator::ScopeContext context{tr};
         auto originLoc = tr.TranslateLocation(let);
+        auto matchedBlockLoc = GetTrueBlockDiagnosticLocation();
         {
             // translate let pattern
             context.ScopePlus();
             auto [patternFalseBlock, patternTrueBlock] = let.patterns.size() == 1
-                ? tr.TranslateNestingCasePattern(*let.patterns[0], selectorVal, originLoc, SourceExpr::IF_EXPR)
+                ? tr.TranslateNestingCasePattern(
+                    *let.patterns[0], selectorVal, originLoc, GetSourceExpr(), &matchedBlockLoc)
                 : tr.TranslateOrPattern(let.patterns, selectorVal, originLoc);
 
-            // translate pattern not match block
-            if (isRightmost) {
-                auto tb = TranslateTrueBlock();
-                auto fb = TranslateFalseBlock();
-                CreateGoto(*tb, *patternTrueBlock);
-                CreateGoto(*fb, *patternFalseBlock);
-                return {};
-            }
             return {patternTrueBlock, patternFalseBlock};
         }
     }
 
-    DanglingBlock TranslateLetPatternAsTable(const LetPatternDestructor& let, bool isRightmost)
+    DanglingBlock TranslateLetPatternAsTable(const LetPatternDestructor& let)
     {
         auto selectorTy = let.initializer->GetTy();
         auto selectorVal = tr.TranslateExprArg(*let.initializer);
@@ -218,16 +229,6 @@ protected:
                 let, *GetEnumIDValue(*selectorTy, *selectorVal), enumDecl->constructors.size());
         } else {
             res = TranslateEnumPatternMatchAsTable(let, *selectorVal);
-        }
-        // translate pattern not match block
-        if (isRightmost) {
-            auto tb = TranslateTrueBlock();
-            auto fb = TranslateFalseBlock();
-            CreateGoto(*tb, *res.tb);
-            if (res.fb) {
-                CreateGoto(*fb, *res.fb);
-            }
-            return {};
         }
         return res;
     }
@@ -375,6 +376,7 @@ protected:
 
     virtual Block* TranslateTrueBlock() = 0;
     virtual Block* TranslateFalseBlock() = 0;
+    virtual DebugLocation GetTrueBlockDiagnosticLocation() const = 0;
     virtual SourceExpr GetSourceExpr() = 0;
     virtual const Expr* GetExpr() = 0;
 };
@@ -388,6 +390,8 @@ class TranslateIfExpr final : private TranslateCondCtrlExpr {
     Ptr<Value> retVal{}; // location of value of this IfExpr
 
     Ptr<const IfExpr> e;
+    bool thenCanCompleteNormally{true};
+    bool elseCanCompleteNormally{true};
 
     // tests if both thenBody and elseBody of this IfExpr is empty
     static bool IsEmptyIf(const IfExpr& expr)
@@ -427,6 +431,7 @@ public:
     Ptr<Value> Translate(const IfExpr& e1)
     {
         e = &e1;
+        const bool isNestedInUnreachableContinuation = !tr.CanCurrentBlockCompleteNormally();
         auto ifType = tr.TranslateType(*e1.GetTy());
         // generate an Allocate(Unit&) for debugging, so that the if expr can be stepped in
         bool forceGenerateUnit = opts.enableCompileDebug && IsEmptyIf(e1);
@@ -442,6 +447,12 @@ public:
             CreateGoto(*falseBlock, *topRes.fb);
         }
         tr.SetCurrentBlock(*endBlock);
+        if (e->elseBody && !thenCanCompleteNormally && !elseCanCompleteNormally) {
+            tr.StartUnreachableContinuationForNonCompletingExpr(e1, !isNestedInUnreachableContinuation);
+            // No execution path reaches an if-expression result. Returning a value here would make the caller
+            // materialize a store in the unreachable continuation and leave that block without a terminator.
+            return nullptr;
+        }
         if (retVal) {
             auto ret = tr.GetDerefedValue(retVal, tr.TranslateLocation(e1));
             if (forceGenerateUnit) {
@@ -465,6 +476,10 @@ protected:
         }
         return SourceExpr::IF_EXPR;
     }
+    DebugLocation GetTrueBlockDiagnosticLocation() const override
+    {
+        return tr.TranslateLocation(*e->thenBody);
+    }
     CHIR::Block* TranslateTrueBlock() override
     {
         CJC_ASSERT(!trueBlock);
@@ -481,7 +496,12 @@ protected:
                 trueBlock->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
             }
         }
-        CreateGoto(*endBlock, *tr.GetCurrentBlock())->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        thenCanCompleteNormally = tr.CanCurrentBlockCompleteNormally();
+        if (thenCanCompleteNormally) {
+            // Join edges represent normal completion only and must not carry diagnostic suppression. MergeBlocks can
+            // fold a one-predecessor join into this source branch, propagating edge annotations to its diagnostic root.
+            CreateGoto(*endBlock, *tr.GetCurrentBlock());
+        }
         return trueBlock;
     }
 
@@ -490,6 +510,10 @@ protected:
         CJC_ASSERT(!falseBlock);
         CJC_ASSERT(endBlock);
         if (e->elseBody) {
+            // Translate the sibling from the join block. The true branch may have ended in break, continue,
+            // return, or throw and therefore leave the current block as its unreachable continuation.
+            // That continuation must not become the source root of the independent else branch.
+            tr.SetCurrentBlock(*endBlock);
             auto loc = tr.TranslateLocation(*e);
             if (auto block = DynamicCast<AST::Block>(e->elseBody.get())) {
                 tr.TranslateSubExprToLoc(*block, retVal);
@@ -500,7 +524,10 @@ protected:
                 tr.TranslateSubExprToLoc(*e->elseBody, retVal);
             }
             falseBlock->SetDebugLocation(tr.TranslateLocation(*e->elseBody));
-            CreateGoto(*endBlock, *tr.GetCurrentBlock())->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+            elseCanCompleteNormally = tr.CanCurrentBlockCompleteNormally();
+            if (elseCanCompleteNormally) {
+                CreateGoto(*endBlock, *tr.GetCurrentBlock());
+            }
         } else {
             falseBlock = endBlock;
         }
@@ -613,6 +640,10 @@ protected:
             return SourceExpr::FOR_IN_EXPR;
         }
         return SourceExpr::WHILE_EXPR;
+    }
+    DebugLocation GetTrueBlockDiagnosticLocation() const override
+    {
+        return tr.TranslateLocation(e->body->begin, e->body->end);
     }
 };
 
