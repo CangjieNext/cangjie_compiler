@@ -19,6 +19,67 @@ using namespace Cangjie;
 namespace {
 static const int MACRO_SETITEM_INFO_NUM = 3;
 
+
+#ifndef NDEBUG
+template <typename... Args> static void MacroMsgErrorln(Args&&... args) noexcept
+{
+    std::cerr << RED_ERROR_MARK;
+    ((std::cerr << args), ...);
+    std::cerr << std::endl;
+}
+#else
+template <typename... Args> static void MacroMsgErrorln([[maybe_unused]] Args&&... args) noexcept {}
+#endif
+
+// FlatBuffers verification limits. The macro message crosses the process
+// boundary (LSPServer <-> LSPMacroServer) and is therefore untrusted input.
+// Keep aligned with the other untrusted deserializers that share these limits:
+//   - AST serialization (ASTLoader)
+//   - Incremental compilation (CachedDataSerialization)
+// (Those reuse FB_MAX_DEPTH / FB_MAX_TABLES; the values here mirror them.)
+static constexpr int MACRO_MSG_MAX_DEPTH = 128;
+static constexpr int MACRO_MSG_MAX_TABLES = 2000000;
+
+// Verify the integrity of a MacroMsg buffer before any field is dereferenced.
+// Returns the verified root pointer on success, or nullptr if the buffer is
+// malformed (truncated / OOB offsets / oversized vectors / absent union
+// content). Callers MUST treat nullptr as "drop the message" and never touch
+// any field, otherwise a crafted buffer (e.g. MacroResult with an absent id
+// field) leads to nullptr dereference and crashes the consumer process.
+static const MacroMsgFormat::MacroMsg *GetVerifiedMacroMsg(const std::vector<uint8_t> &bufferData)
+{
+    if (bufferData.empty()) {
+        MacroMsgErrorln("MacroMsg buffer is empty");
+        return nullptr;
+    }
+    flatbuffers::Verifier verifier(bufferData.data(), bufferData.size(),
+        MACRO_MSG_MAX_DEPTH, MACRO_MSG_MAX_TABLES);
+    if (!VerifyMacroMsgBuffer(verifier)) {
+        MacroMsgErrorln("MacroMsg buffer verification failed");
+        return nullptr;
+    }
+    return GetMacroMsg(bufferData.data());
+}
+
+// Verify the buffer and unwrap it as a MacroResult. Returns nullptr (with a
+// uniform "<caller>: ... is absent" log) whenever the buffer is malformed or
+// the content is not a MacroResult, so every DeSerialize*FromResult caller can
+// branch on a single nullptr check instead of repeating the verify + unwrap +
+// field-null-check boilerplate.
+static const MacroMsgFormat::MacroResult *GetVerifiedMacroResult(const std::vector<uint8_t> &bufferData,
+                                                                 const char *caller)
+{
+    auto msg = GetVerifiedMacroMsg(bufferData);
+    if (msg == nullptr) {
+        return nullptr;
+    }
+    auto result = msg->content_as_macroResult();
+    if (result == nullptr) {
+        MacroMsgErrorln(std::string(caller) + ": macroResult is absent");
+    }
+    return result;
+}
+
 static auto CreateTokenVec(FlatBufferBuilder& builder, const std::vector<Cangjie::Token>& tks)
 {
     std::vector<Offset<MacroMsgFormat::Token>> offsetVec;
@@ -239,7 +300,7 @@ static void DeserializeItemsFromItemsBuf(
     for (uoffset_t i = 0; i < num; i++) {
         auto itemBuf = itemsBuf.Get(i);
         if (itemBuf->key() == nullptr) {
-            Errorln("DeserializeItemsFromItemsBuf key is null");
+            MacroMsgErrorln("DeserializeItemsFromItemsBuf key is null");
             continue; // skip item with empty key
         }
         items[i].key = itemBuf->key()->str();
@@ -263,7 +324,7 @@ static void DeserializeItemsFromItemsBuf(
             case OptionValue_NONE:
                 [[fallthrough]]; // error
             default:
-                Errorln("DeserializeItemsFromItemsBuf value type error, key: ", items[i].key);
+                MacroMsgErrorln("DeserializeItemsFromItemsBuf value type error, key: ", items[i].key);
                 break;
         }
     }
@@ -290,7 +351,7 @@ void MacroEvalMsgSerializer::SerializeMacroCallMsg(const Cangjie::MacroCall& mac
     builder.Clear();
     std::vector<Offset<MacroMsgFormat::MacroCall>> callsVec;
     if (macCall.GetInvocation() == nullptr) {
-        Errorln("SerializeMacroCallMsg nullptr");
+        MacroMsgErrorln("SerializeMacroCallMsg nullptr");
         return;
     }
     callsVec.push_back(CreateMacroCall(builder, macCall));
@@ -308,7 +369,7 @@ void MacroEvalMsgSerializer::SerializeMultiCallsMsg(
     std::vector<Offset<MacroMsgFormat::MacroCall>> callsVec;
     for (auto callPtr : macCalls) {
         if (callPtr->GetInvocation() == nullptr) {
-            Errorln("SerializeMultiCallsMsg nullptr");
+            MacroMsgErrorln("SerializeMultiCallsMsg nullptr");
             return;
         }
         callsVec.push_back(CreateMacroCall(builder, *callPtr));
@@ -367,15 +428,32 @@ void MacroEvalMsgSerializer::SerializeExitMsg(std::vector<uint8_t>& bufferData, 
 
 MacroMsgFormat::MsgContent MacroEvalMsgSerializer::GetMacroMsgContenType(const std::vector<uint8_t>& bufferData)
 {
-    return GetMacroMsg(bufferData.data())->content_type();
+    auto msg = GetVerifiedMacroMsg(bufferData);
+    if (msg == nullptr) {
+        // Returning NONE lets the caller's switch fall through to the safe
+        // exit path instead of dereferencing an unverified buffer. The switch
+        // in MacroEvaluationSrv (GetMacroTaskType) routes NONE,
+        // macroResult and the default branch all to EXIT_MACRO_SRV; if that
+        // switch is ever changed, NONE must keep reaching a safe-exit branch.
+        return MacroMsgFormat::MsgContent_NONE;
+    }
+    return msg->content_type();
 }
 
 void MacroEvalMsgSerializer::DeSerializeDeflibMsg(
     std::list<std::string>& macroLibs, const std::vector<uint8_t>& bufferData)
 {
-    auto defLib = GetMacroMsg(bufferData.data())->content_as_defLib();
-    uoffset_t pathNum = defLib->paths()->size();
     macroLibs.clear();
+    auto msg = GetVerifiedMacroMsg(bufferData);
+    if (msg == nullptr) {
+        return;
+    }
+    auto defLib = msg->content_as_defLib();
+    if (defLib == nullptr || defLib->paths() == nullptr) {
+        MacroMsgErrorln("DeSerializeDeflibMsg: defLib or paths is absent");
+        return;
+    }
+    uoffset_t pathNum = defLib->paths()->size();
     for (uoffset_t i = 0; i < pathNum; i++) {
         macroLibs.push_back(defLib->paths()->Get(i)->str());
     }
@@ -431,57 +509,97 @@ void MacroEvalMsgSerializer::DeSerializeChildMsgesFromCall(
 void MacroEvalMsgSerializer::DeSerializeIdInfoFromResult(
     std::string& id, Position& pos, const std::vector<uint8_t>& bufferData)
 {
-    auto result = GetMacroMsg(bufferData.data())->content_as_macroResult();
-    if (result != nullptr) {
-        id = result->id()->name()->str();
-        DeserializePositionFromPositionBuf(pos, *result->id()->pos());
+    auto result = GetVerifiedMacroResult(bufferData, "DeSerializeIdInfoFromResult");
+    if (result == nullptr) {
+        return;
     }
+    // Each access below is one link in result -> id -> name/pos; check them in
+    // turn so the log names the first missing link, not a lumped "id/name/pos".
+    auto rId = result->id();
+    if (rId == nullptr) {
+        MacroMsgErrorln("DeSerializeIdInfoFromResult: id is absent");
+        return;
+    }
+    if (rId->name() == nullptr) {
+        MacroMsgErrorln("DeSerializeIdInfoFromResult: id.name is absent");
+        return;
+    }
+    if (rId->pos() == nullptr) {
+        MacroMsgErrorln("DeSerializeIdInfoFromResult: id.pos is absent");
+        return;
+    }
+    id = rId->name()->str();
+    DeserializePositionFromPositionBuf(pos, *rId->pos());
 }
 
 void MacroEvalMsgSerializer::DeSerializeTksFromResult(std::vector<Token>& tks, const std::vector<uint8_t>& bufferData)
 {
-    auto result = GetMacroMsg(bufferData.data())->content_as_macroResult();
-    if (result != nullptr) {
-        DeserializeTokensFromOffsetTokenVec(tks, *result->tks());
+    tks.clear();
+    auto result = GetVerifiedMacroResult(bufferData, "DeSerializeTksFromResult");
+    if (result == nullptr) {
+        return;
     }
+    if (result->tks() == nullptr) {
+        MacroMsgErrorln("DeSerializeTksFromResult: tks is absent");
+        return;
+    }
+    DeserializeTokensFromOffsetTokenVec(tks, *result->tks());
 }
 
 void MacroEvalMsgSerializer::DeSerializeDiagsFromResult(std::vector<Diagnostic>& diags,
                                                         const std::vector<uint8_t>& bufferData)
 {
-    auto result = GetMacroMsg(bufferData.data())->content_as_macroResult();
-    if (result != nullptr) {
-        DeserializeDiagsFromOffsetDiagVec(diags, *result->diags());
+    diags.clear();
+    auto result = GetVerifiedMacroResult(bufferData, "DeSerializeDiagsFromResult");
+    if (result == nullptr) {
+        return;
     }
+    if (result->diags() == nullptr) {
+        MacroMsgErrorln("DeSerializeDiagsFromResult: diags is absent");
+        return;
+    }
+    DeserializeDiagsFromOffsetDiagVec(diags, *result->diags());
 }
 
 MacroEvalStatus MacroEvalMsgSerializer::DeSerializeStatusFromResult(const std::vector<uint8_t>& bufferData)
 {
-    auto result = GetMacroMsg(bufferData.data())->content_as_macroResult();
-    if (result != nullptr) {
-        return static_cast<MacroEvalStatus>(result->status());
+    auto result = GetVerifiedMacroResult(bufferData, "DeSerializeStatusFromResult");
+    if (result == nullptr) {
+        return MacroEvalStatus::REEVALFAILED;
     }
-    return MacroEvalStatus::REEVALFAILED;
+    return static_cast<MacroEvalStatus>(result->status());
 }
 
 void MacroEvalMsgSerializer::DeSerializeItemsFromResult(
     std::vector<ItemInfo>& items, const std::vector<uint8_t>& bufferData)
 {
-    auto result = GetMacroMsg(bufferData.data())->content_as_macroResult();
-    if (result != nullptr) {
-        DeserializeItemsFromItemsBuf(items, *result->items());
+    items.clear();
+    auto result = GetVerifiedMacroResult(bufferData, "DeSerializeItemsFromResult");
+    if (result == nullptr) {
+        return;
     }
+    if (result->items() == nullptr) {
+        MacroMsgErrorln("DeSerializeItemsFromResult: items is absent");
+        return;
+    }
+    DeserializeItemsFromItemsBuf(items, *result->items());
 }
 
 void MacroEvalMsgSerializer::DeSerializeAssertParentsFromResult(
     std::vector<std::string>& assertParents, const std::vector<uint8_t>& bufferData)
 {
-    auto result = GetMacroMsg(bufferData.data())->content_as_macroResult();
-    if (result != nullptr) {
-        uoffset_t num = result->assertParents()->size();
-        assertParents.resize(num);
-        for (uoffset_t i = 0; i < num; i++) {
-            assertParents[i] = result->assertParents()->Get(i)->str();
-        }
+    assertParents.clear();
+    auto result = GetVerifiedMacroResult(bufferData, "DeSerializeAssertParentsFromResult");
+    if (result == nullptr) {
+        return;
+    }
+    if (result->assertParents() == nullptr) {
+        MacroMsgErrorln("DeSerializeAssertParentsFromResult: assertParents is absent");
+        return;
+    }
+    uoffset_t num = result->assertParents()->size();
+    assertParents.resize(num);
+    for (uoffset_t i = 0; i < num; i++) {
+        assertParents[i] = result->assertParents()->Get(i)->str();
     }
 }
