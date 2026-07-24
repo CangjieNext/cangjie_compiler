@@ -150,7 +150,7 @@ void Translator::TranslateMatchWithSelector(const AST::MatchExpr& matchExpr, Ptr
         auto [falseBlock, trueBlock] = current->patterns.size() == 1
             ? TranslateNestingCasePattern(*current->patterns[0], selectorVal, originLoc, sourceExpr)
             : TranslateOrPattern(current->patterns, selectorVal, originLoc);
-        TranslatePatternGuard(*current, falseBlock, trueBlock);
+        TranslatePatternGuard(*current, falseBlock, trueBlock, sourceExpr);
         if (sourceExpr == SourceExpr::QUEST && i == 0) {
             CJC_ASSERT(caseNum == 2); // 2 denote than QUEST has two cases.
             if (!matchExpr.matchCases[1]->exprOrDecls->body.empty()) {
@@ -179,15 +179,20 @@ void Translator::TranslateMatchWithSelector(const AST::MatchExpr& matchExpr, Ptr
 /**
  * Translate pattern guard if existed, and update @p 'trueBlock' .
  */
-void Translator::TranslatePatternGuard(const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock)
+void Translator::TranslatePatternGuard(
+    const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock, const SourceExpr& sourceExpr)
 {
     if (!matchCase.patternGuard) {
         return;
     }
     currentBlock = trueBlock;
     auto newTrueBlock = CreateBlock();
+    const auto& guardLoc = TranslateLocation(*matchCase.patternGuard);
+    if (sourceExpr != SourceExpr::QUEST) {
+        newTrueBlock->SetDebugLocation(guardLoc);
+    }
     auto cond = TranslateExprArg(*matchCase.patternGuard);
-    CreateAndAppendTerminator<Branch>(cond, newTrueBlock, falseBlock, currentBlock);
+    CreateWrappedBranch(sourceExpr, cond, newTrueBlock, falseBlock, currentBlock);
     trueBlock = newTrueBlock;
 }
 

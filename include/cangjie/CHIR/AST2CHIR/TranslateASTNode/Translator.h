@@ -996,7 +996,8 @@ private:
     std::pair<Ptr<Block>, Ptr<Block>> TranslateNestingCasePattern(const AST::Pattern& pattern,
         const Ptr<Value> selectorVal, const DebugLocation& originLoc,
         const SourceExpr& sourceExpr = SourceExpr::MATCH_EXPR);
-    void TranslatePatternGuard(const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock);
+    void TranslatePatternGuard(
+        const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock, const SourceExpr& sourceExpr);
     // ========= helper functions for translating each of nesting patterns ==========
     // NOTE: 'blocks' is pair of {final matched block, next condition block}
     // 'enum pattern''s element value should be generated in 'next condition block'.

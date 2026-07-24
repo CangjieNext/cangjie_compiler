@@ -26,6 +26,12 @@ std::string GetKeyWordBySourceExpr(const Branch& branch)
     }
     return "";
 }
+
+bool IsPatternGuard(const Branch& branch)
+{
+    const auto& trueLoc = branch.GetTrueBlock()->GetDebugLocation();
+    return !trueLoc.IsInvalidPos() && branch.GetCondition()->GetDebugLocation() == trueLoc;
+}
 } // namespace
 void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadNum)
 {
@@ -58,8 +64,37 @@ void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadN
     }
 }
 
+void UnreachableBranchCheck::PrintMatchSuccessors(Block& block, std::set<Block*>& hasProcessed)
+{
+    auto terminator = block.GetTerminator();
+    while (auto goTo = DynamicCast<GoTo>(terminator)) {
+        auto destination = goTo->GetDestination();
+        if (!hasProcessed.emplace(destination).second) {
+            return;
+        }
+        terminator = destination->GetTerminator();
+    }
+    if (auto matchBranch = DynamicCast<Branch>(terminator); matchBranch &&
+        matchBranch->GetSourceExpr() == SourceExpr::MATCH_EXPR) {
+        if (IsPatternGuard(*matchBranch)) {
+            // A guard true edge stays within the current case; the false edge enters the next case.
+            PrintWarning(*matchBranch, *matchBranch->GetFalseBlock(), hasProcessed, true);
+        } else {
+            // Pattern dispatch edges can enter distinct source-level cases, including nested matches.
+            for (auto successor : matchBranch->GetSuccessors()) {
+                PrintWarning(*matchBranch, *successor, hasProcessed, true);
+            }
+        }
+    } else if (DynamicCast<MultiBranch>(terminator)) {
+        // Match table/or-pattern lowering uses MultiBranch, while ordinary nested control flow uses Branch.
+        for (auto successor : terminator->GetSuccessors()) {
+            PrintWarning(*terminator, *successor, hasProcessed, true);
+        }
+    }
+}
+
 void UnreachableBranchCheck::PrintWarning(
-    const Terminator& node, Block& block, std::set<Block*>& hasProcessed, bool isRecursive)
+    const Terminator& node, Block& block, std::set<Block*>& hasProcessed, bool isMatchCase)
 {
     if (hasProcessed.find(&block) != hasProcessed.end()) {
         return;
@@ -69,21 +104,8 @@ void UnreachableBranchCheck::PrintWarning(
     if (block.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING || node.Get<SkipCheck>() == SkipKind::SKIP_DCE_WARNING) {
         return;
     }
-    CJC_ASSERT(block.GetTerminator());
-    if (block.GetTerminator()->GetExprKind() == ExprKind::BRANCH ||
-        block.GetTerminator()->GetExprKind() == ExprKind::MULTIBRANCH) {
-        auto branchNode = StaticCast<Terminator*>(block.GetTerminator());
-        bool rec{true};
-        if (auto br = DynamicCast<Branch>(branchNode)) {
-            if (br->GetSourceExpr() == SourceExpr::FOR_IN_EXPR) {
-                rec = false;
-            }
-        }
-        if (rec) {
-            for (auto successor : branchNode->GetSuccessors()) {
-                PrintWarning(*branchNode, *successor, hasProcessed, true);
-            }
-        }
+    if (isMatchCase) {
+        PrintMatchSuccessors(block, hasProcessed);
     }
     auto [res, range] = ToRangeIfNotZero(block.GetDebugLocation());
     if (!res) {
@@ -95,9 +117,7 @@ void UnreachableBranchCheck::PrintWarning(
     if (node.GetExprKind() == ExprKind::BRANCH) {
         auto branch = StaticCast<const Branch*>(&node);
         if (branch->GetSourceExpr() == SourceExpr::QUEST || branch->GetSourceExpr() == SourceExpr::BINARY) {
-            if (!isRecursive) {
-                (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression, range);
-            }
+            (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression, range);
         } else if (branch->GetSourceExpr() == SourceExpr::MATCH_EXPR) {
             (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_unreachable_pattern, range);
         } else {
@@ -129,7 +149,8 @@ void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
                         if (successor == targetSucc.value()) {
                             continue;
                         }
-                        PrintWarning(*branchNode, *successor, hasProcessed);
+                        bool isMatchCase = branchNode->GetSourceExpr() == SourceExpr::MATCH_EXPR;
+                        PrintWarning(*branchNode, *successor, hasProcessed, isMatchCase);
                     }
                 }
                 break;
@@ -143,7 +164,7 @@ void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
                         if (successor == targetSucc.value()) {
                             continue;
                         }
-                        PrintWarning(*multiBranchNode, *successor, hasProcessed);
+                        PrintWarning(*multiBranchNode, *successor, hasProcessed, true);
                     }
                 }
                 break;
