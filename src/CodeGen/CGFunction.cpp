@@ -21,20 +21,6 @@ void EmitBasicBlockIR(CGModule& cgMod, const CHIR::Block& chirBB);
 void BuildCJFunc(CGModule& cgMod, const CHIR::Function& chirFunc, const CGFunction& cgFunc);
 
 namespace {
-llvm::Function* CreateFunctionWrapperForNoBasePtrCases(const CHIR::Value* chirFunc, CGModule& cgMod)
-{
-    auto func = StaticCast<CHIR::Function*>(chirFunc);
-    CJC_ASSERT(func);
-    auto cgFunc = cgMod.GetOrInsertCGFunction(chirFunc, true);
-    BuildCJFunc(cgMod, *func, *cgFunc);
-    CodeGenUnwindBlockScope unwindBlockScope(cgMod, nullptr);
-    EmitBasicBlockIR(cgMod, *func->GetBody()->GetEntryBlock());
-    for (auto bb : func->GetBody()->GetBlocks()) {
-        cgMod.SetOrUpdateMappedBB(bb, nullptr);
-    }
-    return cgFunc->GetRawFunction();
-}
-
 void CreateFunctionWrapperForNormalCases(
     llvm::Function* function, llvm::Function* wrapperF, const CGFunctionType& cgType, CGModule& cgMod)
 {
@@ -106,11 +92,6 @@ llvm::Function* CreateFunctionWrapper(
     auto wrapperFName = function->getName().str();
     function->setName(wrapperFName + POSTFIX_WITHOUT_TI);
     function->addFnAttr(HAS_WITH_TI_WRAPPER_ATTR);
-
-    if (!cgCtx.GetCompileOptions().enableCompileDebug && !cgType->HasBasePtr() &&
-        !cgCtx.IsValueOfOtherLLVMModule(*chirFunc)) {
-        return CreateFunctionWrapperForNoBasePtrCases(chirFunc, cgMod);
-    }
 
     auto wrapperFType = function->getFunctionType();
     auto p1This =
