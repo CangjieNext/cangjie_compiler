@@ -26,7 +26,9 @@ public:
     void RunOnFunc(const Ptr<Function> func);
 
 private:
-    void PrintWarning(const Terminator& node, Block& block, std::set<Block*>& hasProcessed, bool isRecursive = false);
+    void PrintWarning(
+        const Terminator& node, Block& block, std::set<Block*>& hasProcessed, bool shouldTraverseMatchCases);
+    void PrintMatchSuccessors(Block& block, std::set<Block*>& hasProcessed);
 
     template <typename TConstDomain>
     void VisitFunc(Results<TConstDomain>& result);

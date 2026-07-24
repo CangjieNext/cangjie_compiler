@@ -705,6 +705,15 @@ public:
         return stack.back();
     }
 
+    PatternStack ReplaceHead(const DestructedPattern& newHead) const
+    {
+        CJC_ASSERT(!stack.empty());
+        std::vector<DestructedPattern> newStack;
+        std::copy(stack.cbegin(), stack.cend() - 1, std::back_inserter(newStack));
+        newStack.emplace_back(newHead);
+        return PatternStack(std::move(newStack));
+    }
+
     PatternStack Specialize(const Constructor& ctor)
     {
         std::vector<DestructedPattern> newStack;
@@ -860,7 +869,7 @@ public:
         }
         if (head.Ctor().Kind() == ConstructorKind::TYPE) {
             PatternStack wildcard =
-                PatternStack(DestructedPattern(Constructor::Wildcard(), {}, head.GoalTy(), nullptr));
+                vec.ReplaceHead(DestructedPattern(Constructor::Wildcard(), {}, head.GoalTy(), nullptr));
             if (FindWitnessesForWildcard(wildcard).empty()) {
                 return {};
             }
