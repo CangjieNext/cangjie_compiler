@@ -815,8 +815,6 @@ llvm::Value* GenerateInout(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& in
 llvm::Value* GenerateExclusiveScope(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
 {
     // Codegen for exclusiveScopeImpl<T>(fn: () -> T): T.
-    // Enter/Leave without try/finally: stdlib still boxes exceptions in Result<T>,
-    // so the exceptional path cannot be reached across this intrinsic.
     irBuilder.SetCHIRExpr(&intrinsic);
     auto& cgMod = irBuilder.GetCGModule();
     auto& cgCtx = irBuilder.GetCGContext();
@@ -865,32 +863,50 @@ llvm::Value* GenerateExclusiveScope(IRBuilder2& irBuilder, const CHIRIntrinsicWr
     auto* expectNeedMCC = irBuilder.CreateIntrinsic(llvm::Intrinsic::expect, {irBuilder.getInt1Ty()},
         {needMCC, irBuilder.getFalse()});
 
-    auto [mccBB, directBB, contBB] = Vec2Tuple<3>(irBuilder.CreateAndInsertBasicBlocks(
-        {GenNameForBB("exclusive.mcc"), GenNameForBB("exclusive.direct"), GenNameForBB("exclusive.cont")}));
+    auto [mccBB, directBB, contBB, lpadBB, doneBB] = Vec2Tuple<5>(irBuilder.CreateAndInsertBasicBlocks(
+        {GenNameForBB("exclusive.mcc"), GenNameForBB("exclusive.direct"), GenNameForBB("exclusive.cont"),
+            GenNameForBB("exclusive.finally.lpad"), GenNameForBB("exclusive.done")}));
 
-    (void)irBuilder.CreateCondBr(expectNeedMCC, mccBB, directBB);
+    {
+        CodeGenUnwindBlockScope unwindScope(cgMod, lpadBB);
+        (void)irBuilder.CreateCondBr(expectNeedMCC, mccBB, directBB);
 
-    // Slow path: CJ_MCC_ExclusiveScope(sret, fn, destSp)
-    irBuilder.SetInsertPoint(mccBB);
-    auto* i8PtrAS1 = irBuilder.getInt8PtrTy(1U);
-    auto* mccFnTy = llvm::FunctionType::get(voidTy, {i8PtrTy, i8PtrAS1, i8PtrTy}, false);
-    auto* mccFn = cgMod.GetOrInsertFunction(PREFIX_OF_BACKEND_SYMS + "ExclusiveScope", mccFnTy);
-    (void)irBuilder.CreateCallOrInvoke(mccFnTy, mccFn,
-        {irBuilder.CreateBitCast(sret, i8PtrTy), irBuilder.CreatePointerCast(fnVal, i8PtrAS1), destSp});
-    (void)irBuilder.CreateBr(contBB);
+        // Slow path: CJ_MCC_ExclusiveScope(sret, fn, destSp)
+        irBuilder.SetInsertPoint(mccBB);
+        auto* i8PtrAS1 = irBuilder.getInt8PtrTy(1U);
+        auto* mccFnTy = llvm::FunctionType::get(voidTy, {i8PtrTy, i8PtrAS1, i8PtrTy}, false);
+        auto* mccFn = cgMod.GetOrInsertFunction(PREFIX_OF_BACKEND_SYMS + "ExclusiveScope", mccFnTy);
+        (void)irBuilder.CreateCallOrInvoke(mccFnTy, mccFn,
+            {irBuilder.CreateBitCast(sret, i8PtrTy), irBuilder.CreatePointerCast(fnVal, i8PtrAS1), destSp});
+        (void)irBuilder.CreateBr(contBB);
 
-    // Fast path: direct AutoEnv Invoke into the same sret
-    irBuilder.SetInsertPoint(directBB);
-    auto* fptr = irBuilder.CreateBitCast(
-        GenerateFuncPtrForAutoEnv(irBuilder, fnVal, methodIdx), llvmMethodTy->getPointerTo());
-    auto* typeInfoPtrTy = CGType::GetOrCreateTypeInfoPtrType(llvmCtx);
-    (void)irBuilder.CreateCallOrInvoke(llvmMethodTy, fptr,
-        {irBuilder.CreatePointerCast(sret, llvmMethodTy->getParamType(0)), fnVal,
-            irBuilder.CreateBitCast(irBuilder.GetTypeInfoFromObject(fnVal), typeInfoPtrTy)});
-    (void)irBuilder.CreateBr(contBB);
+        // Fast path: direct AutoEnv Invoke into the same sret
+        irBuilder.SetInsertPoint(directBB);
+        auto* fptr = irBuilder.CreateBitCast(
+            GenerateFuncPtrForAutoEnv(irBuilder, fnVal, methodIdx), llvmMethodTy->getPointerTo());
+        auto* typeInfoPtrTy = CGType::GetOrCreateTypeInfoPtrType(llvmCtx);
+        (void)irBuilder.CreateCallOrInvoke(llvmMethodTy, fptr,
+            {irBuilder.CreatePointerCast(sret, llvmMethodTy->getParamType(0)), fnVal,
+                irBuilder.CreateBitCast(irBuilder.GetTypeInfoFromObject(fnVal), typeInfoPtrTy)});
+        (void)irBuilder.CreateBr(contBB);
+    }
 
+    // Normal finally: Leave then continue
     irBuilder.SetInsertPoint(contBB);
     (void)irBuilder.CreateCallOrInvoke(leaveFn, {statePtr});
+    (void)irBuilder.CreateBr(doneBB);
+
+    // Exception finally: Leave then rethrow
+    irBuilder.SetInsertPoint(lpadBB);
+    auto* landingPad = irBuilder.CreateLandingPad(CGType::GetLandingPadType(llvmCtx), 0);
+    landingPad->addClause(llvm::Constant::getNullValue(irBuilder.getInt8PtrTy()));
+    auto* exceptionObjWrapper = irBuilder.CallExceptionIntrinsicGetExceptionValue();
+    auto* exceptionValue = irBuilder.CallPostThrowExceptionIntrinsic(exceptionObjWrapper);
+    (void)irBuilder.CreateCallOrInvoke(leaveFn, {statePtr});
+    irBuilder.CallExceptionIntrinsicThrow(exceptionValue);
+    (void)irBuilder.CreateUnreachable();
+
+    irBuilder.SetInsertPoint(doneBB);
     return irBuilder.CreateLoad(resultCGType->GetLLVMType(), sret);
 }
 
