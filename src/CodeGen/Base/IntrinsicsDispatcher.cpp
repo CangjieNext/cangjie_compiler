@@ -18,6 +18,7 @@
 #include "Utils/BlockScopeImpl.h"
 #include "Utils/CGUtils.h"
 #include "Utils/Constants.h"
+#include "cangjie/CHIR/IR/Expression/Expression.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/IntrinsicKind.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
@@ -90,6 +91,62 @@ CGIntrinsicKind GetCGIntrinsicKind(CHIR::IntrinsicKind intrinsicKind)
     }
     return CGIntrinsicKind::UNKNOWN;
 }
+
+// Optional optimization: if the intrinsic result is stored into a single
+// destination (return slot or local) that is already a suitable sret buffer,
+// reuse that address. Returns nullptr otherwise — caller must allocate.
+llvm::Value* GetExclusiveScopeSRet(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
+{
+    auto* result = intrinsic.GetResult();
+    if (result == nullptr) {
+        return nullptr;
+    }
+    auto& cgMod = irBuilder.GetCGModule();
+    auto* cgFunc = irBuilder.GetInsertCGFunction();
+    auto* parent = intrinsic.GetTopLevelFunc();
+
+    auto getFuncSRetArg = [cgFunc]() -> llvm::Value* {
+        if (cgFunc == nullptr || !cgFunc->IsSRet()) {
+            return nullptr;
+        }
+        auto* llvmFunc = cgFunc->GetRawFunction();
+        if (llvmFunc == nullptr || !llvmFunc->hasStructRetAttr() || llvmFunc->arg_size() < 1U) {
+            return nullptr;
+        }
+        return llvmFunc->getArg(0);
+    };
+
+    // Intrinsic result *is* the function return value (no separate Allocate).
+    if (parent != nullptr && result == parent->GetReturnValue()) {
+        return getFuncSRetArg();
+    }
+
+    auto users = result->GetUsers();
+    if (users.size() != 1 || users[0]->GetExprKind() != CHIR::ExprKind::STORE) {
+        return nullptr;
+    }
+    auto& store = StaticCast<const CHIR::Store&>(*users[0]);
+    if (store.GetValue() != result) {
+        return nullptr;
+    }
+    auto* loc = store.GetLocation();
+    CJC_NULLPTR_CHECK(loc);
+
+    // Prefer an already-lowered destination (local or return Allocate).
+    if (auto* mapped = cgMod.GetMappedValue(loc)) {
+        auto* raw = mapped->GetRawValue();
+        if (raw != nullptr && raw->getType()->isPointerTy()) {
+            return raw;
+        }
+    }
+
+    // Store into return slot of an sret function (Allocate not mapped yet).
+    if (parent != nullptr && loc == parent->GetReturnValue()) {
+        return getFuncSRetArg();
+    }
+    return nullptr;
+}
+
 // AutoEnv Invoke ABI for exclusiveScopeImpl's `() -> T` (generic sret): method index + LLVM type.
 std::pair<size_t, llvm::FunctionType*> GetExclusiveScopeAutoEnvInvoke(
     CGModule& cgMod, const CHIR::Type& fnOperandTy)
@@ -836,8 +893,13 @@ llvm::Value* GenerateExclusiveScope(IRBuilder2& irBuilder, const CHIRIntrinsicWr
     auto [methodIdx, llvmMethodTy] =
         GetExclusiveScopeAutoEnvInvoke(cgMod, *intrinsic.GetOperand(0)->GetType());
 
-    auto* resultCGType = CGType::GetOrCreate(cgMod, resultTy);
-    auto* sret = irBuilder.CreateSRetForUnknownSize(*resultTy, *resultTy);
+    auto* sret = GetExclusiveScopeSRet(irBuilder, intrinsic);
+    // Non-null: reuse an existing generic T slot (caller return or local).
+    // Null: allocate a local sret.
+    bool reusedSRet = sret != nullptr;
+    if (!reusedSRet) {
+        sret = irBuilder.CreateSRetForUnknownSize(*resultTy, *resultTy);
+    }
     CJC_NULLPTR_CHECK(sret);
     CJC_ASSERT(sret->getType()->isPointerTy());
 
@@ -907,6 +969,12 @@ llvm::Value* GenerateExclusiveScope(IRBuilder2& irBuilder, const CHIRIntrinsicWr
     (void)irBuilder.CreateUnreachable();
 
     irBuilder.SetInsertPoint(doneBB);
+    // Reused slot: return its address so Store into the same location is a no-op.
+    if (reusedSRet) {
+        return sret;
+    }
+    auto* resultCGType = CGType::GetOrCreate(cgMod, resultTy);
+    CJC_NULLPTR_CHECK(resultCGType);
     return irBuilder.CreateLoad(resultCGType->GetLLVMType(), sret);
 }
 
