@@ -12,12 +12,19 @@
 
 #include "Base/IntrinsicsDispatcher.h"
 
+#include "Base/CGTypes/CGFunctionType.h"
+#include "Base/InvokeImpl.h"
 #include "Base/OverflowDispatcher.h"
+#include "Utils/BlockScopeImpl.h"
 #include "Utils/CGUtils.h"
+#include "Utils/Constants.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/IntrinsicKind.h"
+#include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 #include "cangjie/CHIR/Utils/ToStringUtils.h"
+#include "cangjie/CHIR/Utils/Utils.h"
+#include "cangjie/Utils/ConstantsUtils.h"
 
 namespace Cangjie {
 namespace CodeGen {
@@ -82,6 +89,31 @@ CGIntrinsicKind GetCGIntrinsicKind(CHIR::IntrinsicKind intrinsicKind)
 #endif
     }
     return CGIntrinsicKind::UNKNOWN;
+}
+// AutoEnv Invoke ABI for exclusiveScopeImpl's `() -> T` (generic sret): method index + LLVM type.
+std::pair<size_t, llvm::FunctionType*> GetExclusiveScopeAutoEnvInvoke(
+    CGModule& cgMod, const CHIR::Type& fnOperandTy)
+{
+    auto* fnCHIRTy = DeRef(fnOperandTy);
+    CJC_NULLPTR_CHECK(fnCHIRTy);
+    CJC_ASSERT(fnCHIRTy->IsAutoEnv());
+    auto* autoEnvClsTy = StaticCast<const CHIR::ClassType*>(fnCHIRTy);
+    auto* autoEnvClsDef = autoEnvClsTy->GetClassDef();
+    CJC_NULLPTR_CHECK(autoEnvClsDef);
+    auto methods = autoEnvClsDef->GetMethods();
+    CJC_ASSERT(!methods.empty());
+    auto* abstractMethod = methods.back();
+    CJC_NULLPTR_CHECK(abstractMethod);
+    auto methodIdx = CHIR::GetMethodIdxInAutoEnvObject(abstractMethod->GetSrcCodeIdentifier());
+    auto* methodCGType = static_cast<CGFunctionType*>(CGType::GetOrCreate(
+        cgMod, abstractMethod->GetType(), CGType::TypeExtraInfo{0, true, false, true, {}}));
+    CJC_NULLPTR_CHECK(methodCGType);
+    auto* llvmMethodTy = methodCGType->GetLLVMFunctionType();
+    CJC_NULLPTR_CHECK(llvmMethodTy);
+    CJC_ASSERT(methodCGType->HasSRet());
+    CJC_ASSERT(llvmMethodTy->getNumParams() == 3U);
+    CJC_ASSERT(llvmMethodTy->getParamType(0)->isPointerTy());
+    return {methodIdx, llvmMethodTy};
 }
 } // namespace
 
@@ -782,12 +814,84 @@ llvm::Value* GenerateInout(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& in
 
 llvm::Value* GenerateExclusiveScope(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
 {
+    // Codegen for exclusiveScopeImpl<T>(fn: () -> T): T.
+    // Enter/Leave without try/finally: stdlib still boxes exceptions in Result<T>,
+    // so the exceptional path cannot be reached across this intrinsic.
+    irBuilder.SetCHIRExpr(&intrinsic);
     auto& cgMod = irBuilder.GetCGModule();
-    auto exec = cgMod | intrinsic.GetOperand(0);
-    auto closure = cgMod | intrinsic.GetOperand(1);
-    auto ty = CGType::GetOrCreate(cgMod, intrinsic.GetResult()->GetType());
-    return irBuilder.CallIntrinsicFunction(
-        ty->GetLLVMType(), PREFIX_OF_BACKEND_SYMS + "ExclusiveScope", {exec, closure}, {});
+    auto& cgCtx = irBuilder.GetCGContext();
+    auto& llvmCtx = cgCtx.GetLLVMContext();
+
+    auto* result = intrinsic.GetResult();
+    CJC_NULLPTR_CHECK(result);
+    auto* resultTy = result->GetType();
+    CJC_NULLPTR_CHECK(resultTy);
+    CJC_ASSERT(resultTy->IsGeneric());
+
+    CJC_ASSERT(intrinsic.GetNumOfOperands() == 1);
+    auto fnCGVal = cgMod | intrinsic.GetOperand(0);
+    CJC_NULLPTR_CHECK(fnCGVal);
+    auto* fnVal = **fnCGVal;
+    CJC_NULLPTR_CHECK(fnVal);
+    CJC_ASSERT(fnVal->getType()->isPointerTy());
+
+    auto [methodIdx, llvmMethodTy] =
+        GetExclusiveScopeAutoEnvInvoke(cgMod, *intrinsic.GetOperand(0)->GetType());
+
+    auto* resultCGType = CGType::GetOrCreate(cgMod, resultTy);
+    auto* sret = irBuilder.CreateSRetForUnknownSize(*resultTy, *resultTy);
+    CJC_NULLPTR_CHECK(sret);
+    CJC_ASSERT(sret->getType()->isPointerTy());
+
+    // Stack-allocated ExclusiveScopeState { cnt*, destSp } — two pointer-wide fields.
+    auto* i8PtrTy = irBuilder.getInt8PtrTy();
+    auto* enterTy = llvm::StructType::getTypeByName(llvmCtx, "ExclusiveScopeState");
+    if (enterTy == nullptr) {
+        enterTy = llvm::StructType::create(llvmCtx, {i8PtrTy, i8PtrTy}, "ExclusiveScopeState");
+    }
+    auto* state = irBuilder.CreateEntryAlloca(enterTy, nullptr, "exclusiveScope.state");
+    auto* statePtr = irBuilder.CreateBitCast(state, i8PtrTy);
+
+    auto* voidTy = irBuilder.getVoidTy();
+    auto* enterFnTy = llvm::FunctionType::get(voidTy, {i8PtrTy}, false);
+    auto* enterFn = cgMod.GetOrInsertFunction(PREFIX_OF_BACKEND_SYMS + "ExclusiveScopeEnter", enterFnTy);
+    auto* leaveFn = cgMod.GetOrInsertFunction(PREFIX_OF_BACKEND_SYMS + "ExclusiveScopeLeave", enterFnTy);
+    (void)irBuilder.CreateCallOrInvoke(enterFn, {statePtr});
+
+    auto* destSpPtr = irBuilder.CreateStructGEP(enterTy, state, 1, "destSp.ptr");
+    auto* destSp = irBuilder.LLVMIRBuilder2::CreateLoad(i8PtrTy, destSpPtr, "destSp");
+    auto* needMCC = irBuilder.CreateICmpNE(destSp, llvm::ConstantPointerNull::get(i8PtrTy), "needMCC");
+    // The likely path is the fast path, !needMCC.
+    auto* expectNeedMCC = irBuilder.CreateIntrinsic(llvm::Intrinsic::expect, {irBuilder.getInt1Ty()},
+        {needMCC, irBuilder.getFalse()});
+
+    auto [mccBB, directBB, contBB] = Vec2Tuple<3>(irBuilder.CreateAndInsertBasicBlocks(
+        {GenNameForBB("exclusive.mcc"), GenNameForBB("exclusive.direct"), GenNameForBB("exclusive.cont")}));
+
+    (void)irBuilder.CreateCondBr(expectNeedMCC, mccBB, directBB);
+
+    // Slow path: CJ_MCC_ExclusiveScope(sret, fn, destSp)
+    irBuilder.SetInsertPoint(mccBB);
+    auto* i8PtrAS1 = irBuilder.getInt8PtrTy(1U);
+    auto* mccFnTy = llvm::FunctionType::get(voidTy, {i8PtrTy, i8PtrAS1, i8PtrTy}, false);
+    auto* mccFn = cgMod.GetOrInsertFunction(PREFIX_OF_BACKEND_SYMS + "ExclusiveScope", mccFnTy);
+    (void)irBuilder.CreateCallOrInvoke(mccFnTy, mccFn,
+        {irBuilder.CreateBitCast(sret, i8PtrTy), irBuilder.CreatePointerCast(fnVal, i8PtrAS1), destSp});
+    (void)irBuilder.CreateBr(contBB);
+
+    // Fast path: direct AutoEnv Invoke into the same sret
+    irBuilder.SetInsertPoint(directBB);
+    auto* fptr = irBuilder.CreateBitCast(
+        GenerateFuncPtrForAutoEnv(irBuilder, fnVal, methodIdx), llvmMethodTy->getPointerTo());
+    auto* typeInfoPtrTy = CGType::GetOrCreateTypeInfoPtrType(llvmCtx);
+    (void)irBuilder.CreateCallOrInvoke(llvmMethodTy, fptr,
+        {irBuilder.CreatePointerCast(sret, llvmMethodTy->getParamType(0)), fnVal,
+            irBuilder.CreateBitCast(irBuilder.GetTypeInfoFromObject(fnVal), typeInfoPtrTy)});
+    (void)irBuilder.CreateBr(contBB);
+
+    irBuilder.SetInsertPoint(contBB);
+    (void)irBuilder.CreateCallOrInvoke(leaveFn, {statePtr});
+    return irBuilder.CreateLoad(resultCGType->GetLLVMType(), sret);
 }
 
 llvm::Value* GenerateIntrinsic(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)

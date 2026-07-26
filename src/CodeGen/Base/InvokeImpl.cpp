@@ -90,20 +90,6 @@ llvm::Value* GenerateFuncPtrForNonAutoEnv(IRBuilder2& irBuilder, llvm::Value* th
     return funcPtr;
 }
 
-llvm::Value* GenerateFuncPtrForAutoEnv(IRBuilder2& irBuilder, CHIRInvokeWrapper& invoke)
-{
-    auto i8PtrTy = irBuilder.getInt8PtrTy();
-    auto funcName = invoke.GetMethodName();
-    auto methodIdx = CHIR::GetMethodIdxInAutoEnvObject(funcName);
-    auto payload = irBuilder.GetPayloadFromObject(**(irBuilder.GetCGModule() | invoke.GetObject()));
-    auto vritualPtr = irBuilder.CreateConstGEP1_32(i8PtrTy,
-        irBuilder.LLVMIRBuilder2::CreateBitCast(payload, i8PtrTy->getPointerTo(1U)), static_cast<unsigned>(methodIdx),
-        "virtualFPtr");
-    auto loadInst = irBuilder.LLVMIRBuilder2::CreateLoad(i8PtrTy, vritualPtr);
-    loadInst->setMetadata(llvm::LLVMContext::MD_invariant_load, llvm::MDNode::get(irBuilder.GetLLVMContext(), {}));
-    return llvm::cast<llvm::Value>(loadInst);
-}
-
 void GenIRToUnboxResult(IRBuilder2& irBuilder, const CHIRInvokeWrapper& invoke)
 {
     auto& cgCtx = irBuilder.GetCGModule().GetCGContext();
@@ -129,6 +115,18 @@ void GenIRToUnboxResult(IRBuilder2& irBuilder, const CHIRInvokeWrapper& invoke)
 }
 } // namespace
 
+llvm::Value* CodeGen::GenerateFuncPtrForAutoEnv(IRBuilder2& irBuilder, llvm::Value* autoEnvObj, size_t methodIdx)
+{
+    auto i8PtrTy = irBuilder.getInt8PtrTy();
+    auto payload = irBuilder.GetPayloadFromObject(autoEnvObj);
+    auto virtualPtr = irBuilder.CreateConstGEP1_32(i8PtrTy,
+        irBuilder.LLVMIRBuilder2::CreateBitCast(payload, i8PtrTy->getPointerTo(1U)), static_cast<unsigned>(methodIdx),
+        "virtualFPtr");
+    auto loadInst = irBuilder.LLVMIRBuilder2::CreateLoad(i8PtrTy, virtualPtr);
+    loadInst->setMetadata(llvm::LLVMContext::MD_invariant_load, llvm::MDNode::get(irBuilder.GetLLVMContext(), {}));
+    return llvm::cast<llvm::Value>(loadInst);
+}
+
 llvm::Value* CodeGen::GenerateInvoke(IRBuilder2& irBuilder, CHIRInvokeWrapper invoke)
 {
     irBuilder.SetCHIRExpr(&invoke);
@@ -141,7 +139,8 @@ llvm::Value* CodeGen::GenerateInvoke(IRBuilder2& irBuilder, CHIRInvokeWrapper in
     llvm::Value* funcPtr = nullptr;
     auto objType = DeRef(*invoke.GetObject()->GetType());
     if (objType->IsAutoEnv()) {
-        funcPtr = GenerateFuncPtrForAutoEnv(irBuilder, invoke);
+        auto methodIdx = CHIR::GetMethodIdxInAutoEnvObject(invoke.GetMethodName());
+        funcPtr = GenerateFuncPtrForAutoEnv(irBuilder, **(cgMod | invoke.GetObject()), methodIdx);
     } else {
         auto thisTI = irBuilder.GetTypeInfoFromObject(**(irBuilder.GetCGModule() | invoke.GetObject()));
         funcPtr = GenerateFuncPtrForNonAutoEnv(irBuilder, thisTI, invoke);
