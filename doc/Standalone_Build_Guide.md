@@ -191,7 +191,7 @@ git clone https://gitcode.com/Cangjie/cangjie_compiler.git -b main;
 
 ```shell
 cd $WORKSPACE/cangjie_compiler;
-export ANDROID_NDK_ROOT=/opt/Android-NDK-r25c/AndroidNDK9519653.app/Contents/NDK;
+export ANDROID_NDK_ROOT=/opt/android-ndk-r25c;
 python3 build.py build -t release --build-cjdb --no-tests;
 python3 build.py build -t release \
 	--target android-aarch64 \
