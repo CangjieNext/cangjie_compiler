@@ -344,7 +344,7 @@ The `build` option builds the project files. It provides the following secondary
 - `--target-toolchain`: Specifies the path to the compilation tools.
 - `-I, --include`: Specifies the target platform's header file search path.
 - `--target-sysroot`: Passes the sysroot content to the C/C++ compiler's sysroot option.
-- `--product {all,cjc,libs}`: Specifies the build target products, which can be `all` (default, includes `cjc` and `libs`), `cjc` (compiler binary), or `libs` (compiler libraries required by the standard library).
+- `--product {all,cjc,libs}`: Specifies the build target products, which can be `all` (includes `cjc` and `libs`), `cjc` (compiler binary), or `libs` (compiler libraries required by the standard library). When not specified, the default is `all` for a native build (`--target` omitted or set to `native`), or `libs` for a cross-compilation target.
 - `--build-cjdb`: Enables building the Cangjie debugger.
 - `--enable-sanitize-option`: Make cjc option `--sanitize` visible to developer, in order to build sanitizer version cangjie code.
 - `--cjlib-sanitizer-support`： Build santizer version of cangjie library，you should use it along with `--product=libs` option. Valid values: `asan`, `tsan` or `hwasan`.
