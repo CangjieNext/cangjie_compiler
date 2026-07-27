@@ -343,7 +343,7 @@ python3 build.py install;
 - `--target-toolchain`：指定编译工具所在的路径。
 - `-I, --include` 指定目标平台头文件查找路径。
 - `--target-sysroot`：传递 sysroot 内容到 C/C++ 编译器的 sysroot 选项。
-- `--product {all,cjc,libs}`：指定构建目标产物，可以是`all`(默认值，指定编译包含 `cjc` 和 `libs` 内容)、`cjc`(编译器二进制文件)、`libs`(标准库依赖的编译器库)。
+- `--product {all,cjc,libs}`：指定构建目标产物，可以是`all`(指定编译包含 `cjc` 和 `libs` 内容)、`cjc`(编译器二进制文件)、`libs`(标准库依赖的编译器库)。未指定时，若目标为本机构建（`--target` 未指定或值为 `native`）则默认值为 `all`，若为交叉编译目标则默认值为 `libs`。
 - `--build-cjdb`：开启构建仓颉调试器。
 - `--enable-sanitize-option`: 使 cjc 选项 `--sanitize` 对开发者可见，用于构建 sanitizer 版本。
 - `--cjlib-sanitizer-support`： 构建 sanitizer 版本仓颉库，需配合 `--product=libs` 使用。可选项有 `asan`, `tsan` 和 `hwasan`。
