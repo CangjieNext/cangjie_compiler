@@ -41,7 +41,6 @@ namespace {
 // Annotations with parameters MUST be serialized for common/specific matching
 const std::unordered_map<AnnotationKind, Attribute> NonSerializedAnnotations = {
     {AnnotationKind::C, Attribute::C},
-    {AnnotationKind::JAVA_MIRROR, Attribute::JAVA_MIRROR},
     {AnnotationKind::JAVA_HAS_DEFAULT, Attribute::JAVA_HAS_DEFAULT},
     {AnnotationKind::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR},
     {AnnotationKind::OBJ_C_INIT, Attribute::OBJ_C_INIT},

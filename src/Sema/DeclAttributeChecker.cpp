@@ -382,8 +382,11 @@ void DeclAttributeChecker::CheckPropDeclAttributes(const PropDecl& pd) const
     if (pd.outerDecl && pd.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR)) {
         return;
     }
-
-    if (pd.TestAnyAttr(Attribute::ABSTRACT, Attribute::JAVA_MIRROR) || opts.compileCjd) {
+    if (pd.outerDecl && pd.outerDecl->IsJavaMirror()) {
+        // property in java mirror does not have user-specified getters/setter.
+        return;
+    }
+    if (pd.TestAttr(Attribute::ABSTRACT) || opts.compileCjd) {
         return;
     }
     if (IsCommonWithoutDefault(pd)) {

@@ -29,7 +29,7 @@ void DesugarJavaImplSuperMethodCall::DesugarSuperMethodCall(CallExpr& call,
     CJC_ASSERT(ref.isSuper);
     CJC_ASSERT(call.resolvedFunction && call.resolvedFunction->outerDecl);
     auto& outerDecl = *call.resolvedFunction->outerDecl;
-    CJC_ASSERT(IsMirror(outerDecl));
+    CJC_ASSERT(outerDecl.IsJavaMirror());
     auto parent = As<ASTKind::CLASS_DECL>(&outerDecl);
     auto curFile = call.curFile;
 

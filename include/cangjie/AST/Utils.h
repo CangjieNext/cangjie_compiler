@@ -259,6 +259,10 @@ bool IsJObject(const Decl& decl);
  */
 bool IsJObject(const Decl& decl, const std::string& packageName);
 bool IsMirror(const Node& node);
+/**
+ * For interface and abstract class mirror the synthetic class is generated to store $javaref field.
+ */
+bool IsSyntheticMirrorWrapper(const AST::Node& node);
 bool IsCJMapping(const Node& node);
 bool IsObject(const Node& node);
 

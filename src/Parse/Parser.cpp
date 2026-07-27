@@ -448,12 +448,11 @@ OwnedPtr<Decl> ParserImpl::ParsePropDecl(
 void ParserImpl::CheckClassLikePropAbstractness(AST::PropDecl& prop)
 {
     CJC_NULLPTR_CHECK(prop.outerDecl);
-    if (prop.outerDecl->TestAnyAttr(Attribute::JAVA_MIRROR)) {
+    if (prop.outerDecl->IsJavaMirror()) {
         prop.DisableAttr(Attribute::ABSTRACT);
         return;
     }
-    bool isJavaMirrorOrJavaMirrorSubtype =
-        prop.outerDecl->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE);
+    bool isJavaMirrorOrJavaImpl = prop.outerDecl->IsJavaMirror() || prop.outerDecl->IsJavaImpl();
     bool isCommon = prop.TestAttr(Attribute::COMMON);
     auto outerModifiers = prop.outerDecl->modifiers;
     bool inAbstract = HasModifier(outerModifiers, TokenKind::ABSTRACT);
@@ -464,7 +463,7 @@ void ParserImpl::CheckClassLikePropAbstractness(AST::PropDecl& prop)
     bool inObjCMirror = prop.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR);
 
     if (HasModifier(prop.modifiers, TokenKind::ABSTRACT) && !isCommon && !inAbstractCJMP &&
-        !isJavaMirrorOrJavaMirrorSubtype) {
+        !isJavaMirrorOrJavaImpl) {
         ParseDiagnoseRefactor(DiagKindRefactor::parse_explicitly_abstract_only_for_cjmp_abstract_class,
             lastToken.End(), "property");
     }

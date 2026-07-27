@@ -7,6 +7,7 @@
 #ifndef CANGJIE_SEMA_NATIVE_FFI_JAVA_INTEROPLIB_BRIDGE
 #define CANGJIE_SEMA_NATIVE_FFI_JAVA_INTEROPLIB_BRIDGE
 
+#include "NativeFFI/Java/Utils.h"
 #include "Utils.h"
 #include "NativeFFI/Utils.h"
 
@@ -66,7 +67,7 @@ struct MemberJNISignature {
         CJC_ASSERT(jobject);
         Ptr<Ty> ty = jobject->GetTy();
 
-        if (IsSynthetic(*jobject)) {
+        if (Java::IsSyntheticMirrorWrapper(*jobject)) {
             if (jobject->inheritedTypes.size() > 1) {
                 ty = jobject->inheritedTypes[1]->GetTy(); // take interface ty
             } else {

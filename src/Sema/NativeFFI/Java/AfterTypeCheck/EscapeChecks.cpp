@@ -35,7 +35,7 @@ void CollectJavaTypes(Ptr<Ty> ty, std::vector<Ptr<Decl>>& javaDecls)
     }
 
     if (auto decl = Ty::GetDeclOfTy(ty)) {
-        if (IsMirror(*decl) || IsImpl(*decl)) {
+        if (decl->IsJavaMirror() || decl->IsJavaImpl()) {
             javaDecls.push_back(decl);
         }
     }
