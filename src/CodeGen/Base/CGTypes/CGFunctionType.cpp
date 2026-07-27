@@ -25,7 +25,6 @@ CGFunctionType::CGFunctionType(
     isMethod = extraInfo.isMethod;
     isStaticMethod = extraInfo.isStaticMethod;
     instantiatedParamTypes = extraInfo.instantiatedParamTypes;
-    CJC_ASSERT(!forWrapper && !extraInfo.forWrapper);
 }
 
 CGFunctionType::CGFunctionType(
@@ -37,12 +36,7 @@ CGFunctionType::CGFunctionType(
     this->chirFunc = &chirFunc;
     this->isStaticMethod = chirFunc.TestAttr(CHIR::Attribute::STATIC);
     this->isMethod = chirFunc.GetParentCustomTypeDef();
-    this->forWrapper = extraInfo.forWrapper;
-    if (this->forWrapper) {
-        this->allowBasePtr = false;
-    } else {
-        this->allowBasePtr = extraInfo.allowBasePtr;
-    }
+    this->allowBasePtr = extraInfo.allowBasePtr;
     for (auto gt : chirFunc.GetGenericTypeParams()) {
         this->instantiatedParamTypes.emplace_back(gt);
     }
@@ -117,7 +111,7 @@ llvm::Type* CGFunctionType::GenLLVMType()
         } else if (paramType->IsStruct() || paramType->IsTuple() ||
             (!cgType->GetSize() && !paramType->IsGeneric())) {
             // If current parameter is the first parameter in a struct method, aka `this`
-            if (!forWrapper && containedCGTypeIndex == 1U && this->chirFunc &&
+            if (containedCGTypeIndex == 1U && this->chirFunc &&
                 !this->chirFunc->TestAttr(CHIR::Attribute::STATIC) && IsStructOrExtendMethod(*chirFunc)) {
                 llvmType = cgType->GetLLVMType()->getPointerTo();
             } else {
@@ -182,7 +176,7 @@ void CGFunctionType::GenContainedCGTypes()
     } else if (chirType.IsStruct() || chirType.IsTuple() || (!cgType->GetSize() && !chirType.IsGeneric())) {
         auto refType =  CGType::GetRefTypeOf(cgCtx.GetCHIRBuilder(), chirType);
         // If current parameter is the first parameter in a struct method, aka `this`
-        if (!forWrapper && containedCGTypeIndex == 1U && this->chirFunc && IsStructOrExtendMethod(*chirFunc)) {
+        if (containedCGTypeIndex == 1U && this->chirFunc && IsStructOrExtendMethod(*chirFunc)) {
             return CGType::GetOrCreate(cgMod, refType);
         } else {
             return CGType::GetOrCreate(cgMod, refType, CGType::TypeExtraInfo(cgType->GetSize() ? 0U : 1U));

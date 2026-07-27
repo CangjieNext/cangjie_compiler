@@ -137,7 +137,7 @@ public:
     void GenIncremental();
     void GenCodeGenAddedMetadata() const;
 #endif
-    CGFunction* GetOrInsertCGFunction(const CHIR::Value* func, bool forWrapper = false);
+    CGFunction* GetOrInsertCGFunction(const CHIR::Value* func);
     CGValue* GetOrInsertGlobalVariable(const CHIR::GlobalVar* chirGV);
     llvm::GlobalVariable* GetOrCreateGlobalVariable(
         llvm::Constant* constVal, const std::string& gvContent, bool isTuple);
