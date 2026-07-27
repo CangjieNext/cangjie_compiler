@@ -68,7 +68,7 @@ git apply --reject --whitespace=fix ../llvmPatch.diff
 ```shell
 mkdir -p third_party/llvm-project
 cd third_party/llvm-project
-git clone -b dev --depth 1 https://gitcode.com/Cangjie/llvm-project.git ./
+git clone -b main --depth 1 https://gitcode.com/Cangjie/llvm-project.git ./
 ```
 
 构建项目时，则直接使用 third_party/llvm-project 目录源码进行构建。
