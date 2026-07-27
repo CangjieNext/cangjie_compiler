@@ -125,7 +125,6 @@ private:
     bool allowBasePtr{true};
     bool isMethod{false};
     bool isStaticMethod{false};
-    bool forWrapper{false};
     std::vector<CHIR::Type*> instantiatedParamTypes;
     std::unordered_map<CHIR::GenericType*, size_t> genericParamIndicesMap;
     std::optional<size_t> outerTypeInfoIndex{std::nullopt};

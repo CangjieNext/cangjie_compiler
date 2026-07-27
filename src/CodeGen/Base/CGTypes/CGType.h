@@ -287,7 +287,6 @@ public:
         bool isMethod = false;
         bool isStaticMethod = false;
         bool allowBasePtr = true;
-        bool forWrapper = false;
         std::vector<CHIR::Type*> instantiatedParamTypes;
         TypeExtraInfo()
         {
@@ -308,7 +307,7 @@ public:
         {
             bool ret = instantiatedParamTypes.size() == rhs.instantiatedParamTypes.size() &&
                 addrspace == rhs.addrspace && isMethod == rhs.isMethod && isStaticMethod == rhs.isStaticMethod &&
-                allowBasePtr == rhs.allowBasePtr && forWrapper == rhs.forWrapper;
+                allowBasePtr == rhs.allowBasePtr;
             if (ret) {
                 for (std::size_t idx = 0; idx < instantiatedParamTypes.size(); ++idx) {
                     if (instantiatedParamTypes[idx] != rhs.instantiatedParamTypes[idx]) {
@@ -323,9 +322,10 @@ public:
     struct TypeExtraInfoHasher {
         size_t operator()(const TypeExtraInfo& extraInfo) const
         {
-            size_t ret = (extraInfo.addrspace << 4U) & (static_cast<size_t>(extraInfo.isMethod) << 3U) &
-                (static_cast<size_t>(extraInfo.isStaticMethod) << 2U) &
-                static_cast<size_t>(extraInfo.allowBasePtr << 1U) & static_cast<size_t>(extraInfo.forWrapper);
+            size_t ret = (extraInfo.addrspace << 4U) |
+                (static_cast<size_t>(extraInfo.isMethod) << 3U) |
+                (static_cast<size_t>(extraInfo.isStaticMethod) << 2U) |
+                (static_cast<size_t>(extraInfo.allowBasePtr) << 1U);
             std::string tmp = std::to_string(ret);
             for (auto paramType : extraInfo.instantiatedParamTypes) {
                 tmp += paramType->ToString();
@@ -347,7 +347,7 @@ public:
     /// For getting CGType of chirFunc, the properties(`mut`, method or not, .etc) of the function
     /// are additionally considered.
     static CGType* GetOrCreateWithNode(
-        CGModule& cgModule, const CHIR::Value* chirNode, bool allowBasePtr = true, bool forWrapper = false);
+        CGModule& cgModule, const CHIR::Value* chirNode, bool allowBasePtr = true);
 
     static CGType* GetObjectCGType(CGModule& cgMod);
     /// For specified numeric type
