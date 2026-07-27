@@ -538,6 +538,16 @@ std::vector<Ptr<InterfaceTy>> InheritableDecl::GetStableSuperInterfaceTys() cons
     return std::vector<Ptr<InterfaceTy>>(ret.begin(), ret.end());
 }
 
+void ClassLikeDecl::MarkAsJavaMirror()
+{
+    EnableAttr(Attribute::JAVA_MIRROR);
+}
+
+void ClassLikeDecl::MarkAsJavaImpl()
+{
+    EnableAttr(Attribute::JAVA_IMPL);
+}
+
 std::vector<Ptr<ClassLikeDecl>> InheritableDecl::GetAllSuperDecls()
 {
     std::set<Ptr<ClassLikeDecl>> visited; // to avoid multiple paths or cycle
@@ -1039,7 +1049,7 @@ std::string PackageSpec::GetPackageName() const
     ss << packageName.Val();
     return ss.str();
 }
- 
+
 std::string ImportContent::GetPrefixPath() const
 {
     std::stringstream ss;

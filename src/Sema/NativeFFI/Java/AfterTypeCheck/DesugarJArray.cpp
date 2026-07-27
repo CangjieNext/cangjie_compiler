@@ -176,7 +176,7 @@ void DesugarJArray::InsertConstructorBody(FuncDecl& constr) const
     // JArray expected to be ClassLikeDecl
     CJC_ASSERT(constr.outerDecl->IsClassLikeDecl());
     auto jarray = StaticAs<ASTKind::CLASS_LIKE_DECL>(constr.outerDecl);
-    static auto generatedJavaRefInitConstr = GetGeneratedJavaMirrorConstructor(*jarray);
+    static auto generatedJavaRefInitConstr = GetJavaMirrorWrappingConstructor(*jarray);
     auto thisCall = CreateThisCall(
         *constr.outerDecl, *generatedJavaRefInitConstr, generatedJavaRefInitConstr->GetTy(), constr.curFile);
     thisCall->args.push_back(CreateFuncArg(WrapReturningLambdaCall(typeManager, std::move(lambdaNodes))));

@@ -4,6 +4,7 @@
 //
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
+#include "NativeFFI/Java/Utils.h"
 #include "TypeCheckUtil.h"
 #include "JavaDesugarManager.h"
 
@@ -111,7 +112,7 @@ void JavaDesugarManager::InsertJavaRefVarDecl(ClassDecl& decl)
 
     auto javaref = CreateVarDecl(JAVA_REF_FIELD_NAME, nullptr, CreateRefType(javaEntityDecl));
     javaref->SetTy(javaEntityDecl.GetTy());
-    javaref->EnableAttr(Attribute::JAVA_MIRROR);
+    javaref->EnableAttr(Attribute::INITIALIZATION_CHECKED, Attribute::INITIALIZED);
     javaref->begin = decl.body ? decl.body->begin : decl.begin;
     javaref->curFile = decl.curFile;
 
@@ -152,10 +153,10 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
         ctorNodes.push_back(lib.CreateEnsureNotNullCall(WithinFile(CreateRefExpr(*param), curFile)));
         ctorNodes.push_back(std::move(refAssignment));
     } else if (!doStub) {
-        auto ctor = GetGeneratedJavaMirrorConstructor(decl);
+        auto ctor = GetJavaMirrorWrappingConstructor(decl);
         CJC_NULLPTR_CHECK(ctor);
         auto actualParam = CreateFuncArg(WithinFile(CreateRefExpr(*ctor->funcBody->paramLists[0]->params[0]), curFile));
-        auto& superCtor = *GetGeneratedJavaMirrorConstructor(*decl.GetSuperClassDecl());
+        auto& superCtor = *GetJavaMirrorWrappingConstructor(*decl.GetSuperClassDecl());
         auto superCall = CreateSuperCall(decl, superCtor, superCtor.GetTy());
         superCall->args.emplace_back(std::move(actualParam));
         ctor->funcBody->body->body.emplace_back(std::move(superCall));
@@ -181,9 +182,7 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
     fd->outerDecl = &decl;
     fd->funcBody->funcDecl = fd.get();
     fd->constructorCall = ConstructorCall::SUPER;
-    fd->EnableAttr(
-        Attribute::PUBLIC, Attribute::JAVA_MIRROR,
-        Attribute::IN_CLASSLIKE, Attribute::CONSTRUCTOR);
+    fd->EnableAttr(Attribute::PUBLIC, Attribute::IN_CLASSLIKE, Attribute::CONSTRUCTOR);
     fd->funcBody->parentClassLike = &decl;
     fd->begin = decl.begin;
     fd->curFile = decl.curFile;
@@ -289,7 +288,7 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
         return;
     }
     auto curFile = ctor.curFile;
-    CJC_ASSERT(ctor.TestAttr(Attribute::CONSTRUCTOR) && ctor.TestAttr(Attribute::JAVA_MIRROR));
+    CJC_ASSERT(ctor.TestAttr(Attribute::CONSTRUCTOR));
     ctor.constructorCall = ConstructorCall::OTHER_INIT;
     auto thisCall = CreateThisCall(*ctor.outerDecl, generatedCtor, generatedCtor.GetTy(), curFile);
 
@@ -321,7 +320,7 @@ void JavaDesugarManager::DesugarJavaMirrorConstructor(FuncDecl& ctor, FuncDecl& 
 void JavaDesugarManager::AddJavaMirrorMethodBody(
     ClassLikeDecl& mirror, FuncDecl& fun, OwnedPtr<Expr> javaRefCall, GenericConfigInfo* genericConfig)
 {
-    if (fun.TestAttr(Attribute::ABSTRACT) && !IsSynthetic(mirror)) {
+    if (fun.TestAttr(Attribute::ABSTRACT) && !IsSyntheticMirrorWrapper(mirror)) {
         return;
     }
     auto curFile = fun.curFile;
@@ -394,7 +393,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     if (fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)) {
         fun.funcBody->parentClassLike = &mirror;
     }
-    if (IsSynthetic(mirror)) {
+    if (IsSyntheticMirrorWrapper(mirror)) {
         fun.DisableAttr(Attribute::ABSTRACT);
     }
 }
@@ -402,7 +401,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
 void JavaDesugarManager::DesugarJavaMirrorMethod(FuncDecl& fun, ClassLikeDecl& mirror, GenericConfigInfo* genericConfig)
 {
     CJC_ASSERT(!fun.TestAttr(Attribute::CONSTRUCTOR) &&
-        (fun.TestAttr(Attribute::JAVA_MIRROR) || fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)));
+        (mirror.IsJavaMirror() || fun.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD)));
     AddJavaMirrorMethodBody(mirror, fun, CreateJavaRefCall(mirror, mirror.curFile), genericConfig);
 }
 
@@ -500,24 +499,22 @@ void JavaDesugarManager::DesugarJavaMirrorProp(PropDecl& prop)
 
 void JavaDesugarManager::DesugarJavaMirror(ClassDecl& mirror)
 {
-    Ptr<FuncDecl> generatedCtor = GetGeneratedJavaMirrorConstructor(mirror);
+    Ptr<FuncDecl> generatedCtor = GetJavaMirrorWrappingConstructor(mirror);
     for (auto& decl : mirror.GetMemberDecls()) {
+        if (decl->TestAttr(Attribute::IS_BROKEN)) {
+            continue;
+        }
         if (auto fd = As<ASTKind::FUNC_DECL>(decl.get())) {
-            if (fd->TestAttr(Attribute::IS_BROKEN)) {
+            if (fd->IsFinalizer() || IsJavaRefGetter(*fd) || IsWrappingConstructorOfJavaMirror(*fd)) {
                 continue;
             }
 
             if (fd->TestAttr(Attribute::CONSTRUCTOR)) {
-                if (!IsGeneratedJavaMirrorConstructor(*fd)) {
-                    DesugarJavaMirrorConstructor(*fd, *generatedCtor);
-                }
-            } else if (fd->TestAttr(Attribute::JAVA_MIRROR)) {
+                DesugarJavaMirrorConstructor(*fd, *generatedCtor);
+            } else {
                 DesugarJavaMirrorMethod(*fd, mirror);
             }
         } else if (auto prop = As<ASTKind::PROP_DECL>(decl.get())) {
-            if (prop->TestAttr(Attribute::IS_BROKEN)) {
-                continue;
-            }
             DesugarJavaMirrorProp(*prop);
         }
     }
@@ -532,15 +529,11 @@ void JavaDesugarManager::DesugarJavaMirror(InterfaceDecl& mirror)
         bool isConstructor = decl->TestAttr(Attribute::CONSTRUCTOR);
 
         if (FuncDecl* fd = As<ASTKind::FUNC_DECL>(decl.get()); fd && !isConstructor) {
-            bool isMirror = decl->TestAttr(Attribute::JAVA_MIRROR);
             bool isStatic = decl->TestAttr(Attribute::STATIC);
             bool isDefault = decl->TestAttr(Attribute::JAVA_HAS_DEFAULT);
-            if (isMirror && (isStatic || isDefault)) {
+            if (!IsJavaRefGetter(*fd) && (isStatic || isDefault)) {
                 DesugarJavaMirrorMethod(*fd, mirror);
             }
-        } else {
-            // Properties are forbidden for JavaMirror and should be filtered out during parse checks
-            CJC_ASSERT(As<ASTKind::PROP_DECL>(decl.get()) == nullptr);
         }
     }
 }
@@ -576,7 +569,7 @@ void JavaDesugarManager::GenerateInMirror(ClassDecl& classDecl, bool doStub)
 
 void JavaDesugarManager::GenerateInSynthetic(ClassDecl& cd)
 {
-    if (IsSynthetic(cd)) {
+    if (IsSyntheticMirrorWrapper(cd)) {
         if (auto id = DynamicCast<InheritableDecl*>(&cd)) {
             GenerateSyntheticClassMemberStubs(cd, memberMap.at(id));
         } else {
@@ -598,7 +591,7 @@ void JavaDesugarManager::GenerateInMirrors(File& file, bool doStub)
 
     for (auto& decl : file.decls) {
         if (auto cldecl = As<ASTKind::CLASS_LIKE_DECL>(decl.get())) {
-            if (!cldecl->TestAttr(Attribute::JAVA_MIRROR)) {
+            if (!cldecl->IsJavaMirror()) {
                 continue;
             }
             if (cldecl->TestAttr(Attribute::IS_BROKEN)) {
@@ -621,7 +614,7 @@ void JavaDesugarManager::DesugarMirrors(File& file)
 {
     for (auto& decl : file.decls) {
         if (auto cldecl = As<ASTKind::CLASS_LIKE_DECL>(decl.get())) {
-            if (cldecl->TestAttr(Attribute::JAVA_MIRROR)) {
+            if (cldecl->IsJavaMirror()) {
                 if (cldecl->TestAttr(Attribute::IS_BROKEN)) {
                     return;
                 }
@@ -647,7 +640,7 @@ void JavaDesugarManager::InsertJStringOfStringCtor(ClassDecl& decl, bool doStub)
         // After constructor stub insertion, its body is filled on doStub = false
         CJC_NULLPTR_CHECK(generatedCtor);
         auto& param = generatedCtor->funcBody->paramLists[0]->params[0];
-        auto jObjectCtor = GetGeneratedJavaMirrorConstructor(decl);
+        auto jObjectCtor = GetJavaMirrorWrappingConstructor(decl);
         auto convertCall = CreateCall(lib.GetCangjieStringToJava(), curFile,
             lib.CreateGetJniEnvCall(curFile), WithinFile(CreateRefExpr(*param), curFile));
 
@@ -679,9 +672,7 @@ void JavaDesugarManager::InsertJStringOfStringCtor(ClassDecl& decl, bool doStub)
     fd->funcBody->funcDecl = fd.get();
     fd->constructorCall = ConstructorCall::SUPER;
     fd->funcBody->parentClassLike = &decl;
-    fd->EnableAttr(
-        Attribute::PUBLIC, Attribute::JAVA_MIRROR,
-        Attribute::CONSTRUCTOR, Attribute::IN_CLASSLIKE);
+    fd->EnableAttr(Attribute::PUBLIC, Attribute::CONSTRUCTOR, Attribute::IN_CLASSLIKE);
     fd->curFile = decl.curFile;
     generatedCtor = fd.get();
     decl.body->decls.emplace_back(std::move(fd));

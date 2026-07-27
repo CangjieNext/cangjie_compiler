@@ -20,6 +20,7 @@
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Basic/Utils.h"
+#include "cangjie/Utils/CastingTemplate.h"
 #include "cangjie/Utils/ConstantsUtils.h"
 #include "cangjie/Utils/FloatFormat.h"
 #include "cangjie/Utils/StdUtils.h"
@@ -781,7 +782,10 @@ void SetPositionAndCurFileByProvidedNode(Node& consumer, Node& provider)
 namespace Cangjie::Interop::Java {
 bool IsImpl(const Node& node)
 {
-    return !node.TestAttr(Attribute::JAVA_MIRROR) && node.TestAttr(Attribute::JAVA_MIRROR_SUBTYPE);
+    if (!Is<ClassLikeDecl>(node)) {
+        return false;
+    }
+    return StaticAs<ASTKind::CLASS_LIKE_DECL>(&node)->IsJavaImpl();
 }
 
 bool IsImplRegistryCompanion(const Node& node)
@@ -808,7 +812,15 @@ bool IsJObject(const Decl& decl, const std::string& packageName)
 
 bool IsMirror(const Node& node)
 {
-    return node.TestAttr(Attribute::JAVA_MIRROR);
+    if (!Is<ClassLikeDecl>(node)) {
+        return false;
+    }
+    return StaticAs<ASTKind::CLASS_LIKE_DECL>(&node)->IsJavaMirror();
+}
+
+bool IsSyntheticMirrorWrapper(const Node& node)
+{
+    return node.astKind == ASTKind::CLASS_DECL && node.TestAttr(Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER);
 }
 
 bool IsCJMapping(const Node& node)

@@ -44,10 +44,8 @@ OwnedPtr<ClassDecl> GenerateJavaMirrorReferenceWrapperClass::GenerateWrapperClas
 {
     CJC_ASSERT(ShouldHaveMirrorReferenceWrapper(mirror));
     auto wrapper = CloneClassSkeleton(mirror, GetMirrorReferenceWrapperNameFromClassLike(mirror));
-    wrapper->EnableAttr(
-        Attribute::JAVA_MIRROR,
-        Attribute::JAVA_MIRROR_SUBTYPE,
-        Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER);
+    wrapper->MarkAsJavaMirror();
+    wrapper->EnableAttr(Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER);
 
     InsertSuperTypes(*wrapper, mirror);
     return wrapper;

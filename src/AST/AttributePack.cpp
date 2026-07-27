@@ -100,7 +100,7 @@ const std::unordered_map<AST::Attribute, std::string> ATTR2STR{
     {AST::Attribute::SPECIFIC, "SPECIFIC"},
     {AST::Attribute::COMMON_WITH_DEFAULT, "COMMON_WITH_DEFAULT"},
     {AST::Attribute::JAVA_MIRROR, "JAVA_MIRROR"},
-    {AST::Attribute::JAVA_MIRROR_SUBTYPE, "JAVA_MIRROR_SUBTYPE"},
+    {AST::Attribute::JAVA_IMPL, "JAVA_IMPL"},
     {AST::Attribute::JAVA_HAS_DEFAULT, "JAVA_HAS_DEFAULT"},
     {AST::Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER, "JAVA_MIRROR_SYNTHETIC_WRAPPER"},
     {AST::Attribute::OBJ_C_MIRROR, "OBJ_C_MIRROR"},

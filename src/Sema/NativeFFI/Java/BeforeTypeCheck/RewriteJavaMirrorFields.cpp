@@ -20,7 +20,7 @@ void RewriteJavaMirrorFields::Process(PreTypeCheckContext& ctx)
 {
     for (auto mirror : ctx.javaMirrors) {
         if (auto mirrorClass = As<ASTKind::CLASS_DECL>(mirror)) {
-            InsertMirrorVarProp(*mirrorClass, Attribute::JAVA_MIRROR);
+            InsertMirrorVarProp(*mirrorClass, Attribute::DESUGARED_MIRROR_FIELD);
         }
     }
 }
