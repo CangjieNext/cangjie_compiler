@@ -160,7 +160,7 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND) # i.e. "--compile-backend" option
         set(LLVM_TAG master)
     else()
         set(REPOSITORY_PATH "https://gitcode.com/Cangjie/llvm-project.git")
-        set(LLVM_TAG dev)
+        set(LLVM_TAG main)
     endif()
     # llvm
     message(STATUS "Set cjnative REPOSITORY_PATH: ${REPOSITORY_PATH}")
