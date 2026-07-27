@@ -11,6 +11,7 @@
 
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
+#include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/Utils.h"
 
 using namespace Cangjie;
@@ -34,7 +35,7 @@ bool IsJavaMirrorSubtype(const Ty& ty)
     if (auto classTy = DynamicCast<ClassTy*>(&ty);
         classTy && classTy->GetSuperClassTy() && !classTy->GetSuperClassTy()->IsObject()) {
         if (!IsJavaMirrorSubtype(*classTy->GetSuperClassTy()) &&
-            (!classTy->GetSuperClassTy()->decl || !IsMirror(*classTy->GetSuperClassTy()->decl))) {
+            (!classTy->GetSuperClassTy()->decl || !classTy->GetSuperClassTy()->decl->IsJavaMirror())) {
             return false;
         }
         return true;
@@ -46,7 +47,7 @@ bool IsJavaMirrorSubtype(const Ty& ty)
         }
 
         for (auto parent : ity->GetSuperInterfaceTys()) {
-            if (IsMirror(*parent->decl)) {
+            if (parent->decl->IsJavaMirror()) {
                 return true;
             }
         }
@@ -113,7 +114,7 @@ struct JavaInteropTypeChecker {
                 if (ty.IsObject()) {
                     return true;
                 }
-                return IsMirror(*StaticCast<ClassLikeTy&>(ty).commonDecl);
+                return StaticCast<ClassLikeTy&>(ty).commonDecl->IsJavaMirror();
             case TypeKind::TYPE_STRUCT:
                 if (ty.name == INTEROPLIB_CFFI_JAVA_ENTITY) {
                     // for javaref getter stub wich is generated on Parser stage
@@ -130,15 +131,14 @@ struct JavaInteropTypeChecker {
 
     /*
      * Checks if [ty] is one of:
-     * of @JavaMirror-annotated decl
-     * supported built-in type
-     * direct or indirect successor of @JavaMirror-annotated decl (with already enabled JAVA_MIRROR_SUBTYPE attribute)
+     * - @JavaMirror-annotated decl
+     * - supported built-in type
+     * - @JavaImpl-annotated decl
      */
     bool IsJavaCompatible(const Ty& ty, Position pos = Position::BOTH)
     {
         if (IsSupported(ty, pos)) {
-            if (auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty);
-                classLikeTy && classLikeTy->commonDecl && IsJArray(*classLikeTy->commonDecl)) {
+            if (auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty); classLikeTy && IsJArray(*classLikeTy)) {
                 return IsJavaCompatible(*ty.typeArgs[0]);
             }
             return true;
@@ -148,8 +148,8 @@ struct JavaInteropTypeChecker {
             return IsJavaCompatible(*ty.typeArgs[0]);
         }
 
-        if (auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty); classLikeTy && classLikeTy->commonDecl) {
-            return classLikeTy->commonDecl->TestAttr(Attribute::JAVA_MIRROR_SUBTYPE);
+        if (auto classLikeTy = DynamicCast<ClassLikeTy*>(&ty)) {
+            return IsImpl(*classLikeTy);
         }
         return false;
     }
@@ -277,19 +277,19 @@ void JavaInteropManager::CheckInheritance(ClassLikeDecl& decl) const
 {
     CheckJavaMirrorSubtypeAttrClassLikeDecl(decl);
 
-    if (IsMirror(decl) || IsImpl(decl)) {
+    if (decl.IsJavaMirror() || decl.IsJavaImpl()) {
         CheckNonJavaSuperType(decl);
     }
 }
 
 void JavaInteropManager::CheckNonJavaSuperType(ClassLikeDecl& decl) const
 {
-    CJC_ASSERT(IsMirror(decl) || IsImpl(decl));
+    CJC_ASSERT(decl.IsJavaMirror() || decl.IsJavaImpl());
 
     auto superDecls = decl.GetAllSuperDecls();
 
     for (const auto superDecl : superDecls) {
-        if (!IsMirror(*superDecl) && !IsImpl(*superDecl) && !superDecl->GetTy()->IsObject() &&
+        if (!superDecl->IsJavaMirror() && !superDecl->IsJavaImpl() && !superDecl->GetTy()->IsObject() &&
             !superDecl->GetTy()->IsAny()) {
             DiagJavaDeclCannotInheritPureCangjieType(diag, decl);
             decl.EnableAttr(Attribute::IS_BROKEN);
@@ -306,7 +306,7 @@ void JavaInteropManager::CheckNonJavaSuperType(ClassLikeDecl& decl) const
 void JavaInteropManager::CheckJavaMirrorSubtypeAttrClassLikeDecl(ClassLikeDecl& decl) const
 {
     if (IsJavaMirrorSubtype(*decl.GetTy())) {
-        if (!decl.TestAnyAttr(Attribute::JAVA_MIRROR_SUBTYPE, Attribute::JAVA_MIRROR)) {
+        if (!decl.IsJavaMirror() && !decl.IsJavaImpl()) {
             DiagJavaMirrorChildMustBeAnnotated(diag, decl);
             decl.EnableAttr(Attribute::IS_BROKEN);
         }
@@ -387,25 +387,18 @@ void JavaInteropManager::CheckTypes(File& file)
 
 void JavaInteropManager::CheckTypes(ClassLikeDecl& classLikeDecl)
 {
-    if (!classLikeDecl.TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
+    if (!classLikeDecl.IsJavaMirror() && !classLikeDecl.IsJavaImpl()) {
         return;
     }
 
     hasMirrorOrImpl = true;
 
-    if (auto id = As<ASTKind::INTERFACE_DECL>(&classLikeDecl); id && IsImpl(*id)) {
-        CJC_ABORT(); // Parser-level diagnostic
-        return;
-    }
-
-    if (auto cd = As<ASTKind::CLASS_DECL>(&classLikeDecl); cd && cd->TestAttr(Attribute::ABSTRACT) && IsImpl(*cd)) {
-        CJC_ABORT(); // Parser-level diagnostic
-        return;
-    }
-
-    if (classLikeDecl.TestAttr(Attribute::JAVA_MIRROR)) {
+    if (classLikeDecl.IsJavaMirror()) {
         CheckJavaMirrorTypes(classLikeDecl);
-    } else if (classLikeDecl.TestAttr(Attribute::JAVA_MIRROR_SUBTYPE)) {
+    } else if (classLikeDecl.IsJavaImpl()) {
+        // Java impl can be neither interface nor abstract class
+        CJC_ASSERT(classLikeDecl.astKind != ASTKind::INTERFACE_DECL);
+        CJC_ASSERT(!classLikeDecl.TestAttr(Attribute::ABSTRACT));
         CheckJavaImplTypes(classLikeDecl);
     }
 }

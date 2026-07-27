@@ -126,7 +126,7 @@ void GenerateInJavaImplReferenceWrapper::GenerateWrappingConstructorBody(FuncDec
 
     wrappingCtor.constructorCall = ConstructorCall::SUPER;
 
-    Ptr<FuncDecl> parentCtor = GetGeneratedJavaMirrorConstructor(*refWrapper.GetSuperClassDecl());
+    Ptr<FuncDecl> parentCtor = GetJavaMirrorWrappingConstructor(*refWrapper.GetSuperClassDecl());
     CJC_ASSERT(parentCtor);
     CJC_ASSERT(parentCtor->funcBody->paramLists[0]->params.size() == 1); // Java_CFFI_JavaEntity
 
@@ -173,7 +173,7 @@ OwnedPtr<FuncDecl> GenerateInJavaImplReferenceWrapper::GenerateJavaSideConstruct
         CreateFuncParam(JAVA_IMPL_ENTITY_ARG_NAME_IN_GENERATED_CTOR,
             CreateRefType(*javaEntityDecl), nullptr, javaEntityDecl->GetTy()));
 
-    Ptr<FuncDecl> parentCtor = GetGeneratedJavaMirrorConstructor(*refWrapper.GetSuperClassDecl());
+    Ptr<FuncDecl> parentCtor = GetJavaMirrorWrappingConstructor(*refWrapper.GetSuperClassDecl());
     CJC_ASSERT(parentCtor);
     CJC_ASSERT(parentCtor->funcBody->paramLists[0]->params.size() == 1); // Java_CFFI_JavaEntity
 
@@ -254,7 +254,7 @@ void GenerateInJavaImplReferenceWrapper::RewriteUserDefinedConstructorInitializa
     }
 
     auto& refWrapper = *StaticAs<ASTKind::CLASS_DECL>(ctor.outerDecl);
-    FuncDecl& parentCtor = *GetGeneratedJavaMirrorConstructor(*refWrapper.GetSuperClassDecl());
+    FuncDecl& parentCtor = *GetJavaMirrorWrappingConstructor(*refWrapper.GetSuperClassDecl());
     CJC_ASSERT(parentCtor.funcBody->paramLists[0]->params.size() == 1); // Java_CFFI_JavaEntity
 
     auto jniEnvVar = CreateTmpVarDecl(jniEnvPtrDecl->type, jniEnvCall);

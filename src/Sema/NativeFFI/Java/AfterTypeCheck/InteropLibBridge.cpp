@@ -568,21 +568,17 @@ OwnedPtr<Expr> InteropLibBridge::CreateJavaEntityCall(OwnedPtr<Expr> arg)
     }
 
     if (auto classLTy = DynamicCast<ClassLikeTy*>(arg->GetTy())) {
-        if (auto decl = classLTy->commonDecl;
-            decl && decl->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
+        if (auto decl = classLTy->commonDecl; decl && (decl->IsJavaMirror() || decl->IsJavaImpl())) {
             return CreateJavaRefCall(std::move(arg));
         }
     } else if (arg->GetTy()->IsCoreOptionType()) {
         CJC_ASSERT_WITH_MSG(!arg->GetTy()->typeArgs.empty(), "Option type must be generic");
         if (auto classALTy = DynamicCast<ClassLikeTy*>(arg->GetTy()->typeArgs[0])) {
-            if (auto decl = classALTy->commonDecl;
-                decl && decl->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
+            if (auto decl = classALTy->commonDecl; decl && (decl->IsJavaMirror() || decl->IsJavaImpl())) {
                 return CreateJavaEntityFromOptionMirror(std::move(arg), *decl);
             }
         }
     }
-
-    Ptr<FuncDecl> suitableCtor;
 
     if (arg->GetTy()->IsTuple()) {
         auto curFile = arg->curFile;
@@ -593,6 +589,7 @@ OwnedPtr<Expr> InteropLibBridge::CreateJavaEntityCall(OwnedPtr<Expr> arg)
         return CreateJavaEntityJobjectCall(std::move(entity));
     }
 
+    Ptr<FuncDecl> suitableCtor;
     for (auto& decl : javaEntityDecl->body->decls) {
         if (auto ctor = As<ASTKind::FUNC_DECL>(decl.get()); ctor && ctor->TestAttr(Attribute::CONSTRUCTOR)) {
             CJC_ASSERT_WITH_MSG(!ctor->funcBody->paramLists.empty(), "paramLists cannot be empty");
@@ -1478,7 +1475,7 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaMirrorOption(
     CJC_ASSERT_WITH_MSG(!ty->typeArgs.empty(), "Option type must be generic");
     auto declTy = ty->typeArgs[0];
     auto decl = Ty::GetDeclOfTy(declTy);
-    CJC_ASSERT(IsMirror(*decl) || declTy->IsString() || (toRaw && IsImpl(*decl)));
+    CJC_ASSERT(decl->IsJavaMirror() || declTy->IsString() || (toRaw && decl->IsJavaImpl()));
 
     auto actualTy = toRaw ? Ptr(&GetJniJobjectTy()) : ty;
 
@@ -1629,7 +1626,7 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
         CJC_ASSERT_WITH_MSG(!ty->typeArgs.empty(), "Option type must be generic");
         auto actualTy = ty->typeArgs[0];
         auto actualDecl = Ty::GetDeclOfTy(actualTy);
-        if (IsMirror(*actualDecl) || actualTy->IsString()) {
+        if (actualDecl->IsJavaMirror() || actualTy->IsString()) {
             return UnwrapJavaMirrorOption(std::move(entity), ty, *classLikeDecl, toRaw);
         }
 
@@ -1653,7 +1650,7 @@ OwnedPtr<Expr> InteropLibBridge::UnwrapJavaEntity(OwnedPtr<Expr> entity, Ptr<Ty>
         return nullptr;
     }
 
-    if (IsMirror(*decl)) {
+    if (decl->IsJavaMirror()) {
         return CreateMirrorConstructorCall(importManager, std::move(entity), ty);
     } else {
         CJC_ASSERT(IsImpl(*decl));

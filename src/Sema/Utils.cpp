@@ -380,9 +380,11 @@ void TypeChecker::TypeCheckerImpl::AddDefaultCtor(InheritableDecl& decl) const
 
     // Do not add default constructor to Java mirrors / registry companion / mirror wrapper declarations
     // because it requires explicitly added one.
-    if (decl.TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER,
-        Attribute::JAVA_IMPL_REGISTRY_COMPANION)) {
+    {
+        using namespace Interop::Java;
+        if (decl.IsJavaMirror() || IsImplRegistryCompanion(decl) || IsSyntheticMirrorWrapper(decl)) {
             return;
+        }
     }
 
     // Do not add default constructor to common class(struct) because

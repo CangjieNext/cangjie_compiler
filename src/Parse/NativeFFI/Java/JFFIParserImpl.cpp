@@ -68,10 +68,7 @@ void JFFIParserImpl::CheckImplAnnoArgs(const Annotation& anno) const
 void JFFIParserImpl::CheckMirrorSignature(AST::ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const
 {
     CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::JAVA_MIRROR));
-    decl.EnableAttr(Attribute::JAVA_MIRROR);
-    if (!decl.inheritedTypes.empty()) {
-        decl.EnableAttr(Attribute::JAVA_MIRROR_SUBTYPE);
-    }
+    decl.MarkAsJavaMirror();
     if (decl.TestAttr(Attribute::SEALED)) {
         DiagJavaMirrorCannotBeSealed(decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
@@ -81,7 +78,7 @@ void JFFIParserImpl::CheckMirrorSignature(AST::ClassLikeDecl& decl, const PtrVec
 void JFFIParserImpl::CheckImplSignature(AST::ClassLikeDecl& decl, const PtrVector<Annotation>& annos) const
 {
     CJC_ASSERT(p.HasAnnotation(annos, AnnotationKind::JAVA_IMPL));
-    decl.EnableAttr(Attribute::JAVA_MIRROR_SUBTYPE);
+    decl.MarkAsJavaImpl();
 
     // Avoid CJ-MAPPING Generic Check.
     if (decl.GetGeneric() != nullptr && !decl.TestAttr(Attribute::JAVA_CJ_MAPPING)) {

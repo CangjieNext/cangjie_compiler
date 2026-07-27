@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "Utils.h"
+#include "NativeFFI/Java/AfterTypeCheck/InteropLibBridge.h"
 #include "NativeFFI/Utils.h"
 #include "NativeFFI/Java/Utils.h"
 #include "TypeCheckUtil.h"
@@ -141,22 +142,21 @@ StructDecl& Utils::GetStringDecl()
 
 Ptr<VarDecl> GetJavaRefField(ClassDecl& mirrorLike)
 {
-    if (mirrorLike.TestAttr(Attribute::JAVA_MIRROR_SUBTYPE)) {
-        if (auto superClass = mirrorLike.GetSuperClassDecl(); superClass && !superClass->GetTy()->IsObject() &&
-            superClass->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
-            return GetJavaRefField(*superClass);
+    CJC_ASSERT(!mirrorLike.IsInterfaceDecl()); // no field in interface
+    if ((mirrorLike.IsJavaMirror() || mirrorLike.IsJavaImpl()) && !IsJObject(mirrorLike)) {
+        auto superClass = mirrorLike.GetSuperClassDecl();
+        if (!superClass) {
+            CJC_ABORT();
         }
 
-        auto superClass = mirrorLike.GetSuperClassDecl();
-        if (!superClass || !superClass->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
+        if (!superClass->IsJavaMirror() && !superClass->IsJavaImpl()) {
             CJC_ABORT(); // neither mirror or mirror subtype are super type of [mirror]
         }
 
         return GetJavaRefField(*superClass);
     }
 
-    CJC_ASSERT(mirrorLike.TestAttr(
-        Attribute::JAVA_MIRROR) || mirrorLike.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD));
+    CJC_ASSERT(mirrorLike.IsJavaMirror() || mirrorLike.TestAttr(Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD));
     CJC_ASSERT(IsJObject(mirrorLike) || IsFwdClass(mirrorLike));
     CJC_ASSERT(mirrorLike.body);
 
@@ -189,30 +189,30 @@ bool IsJavaRefGetter(const Decl& fd)
         fd.identifier.Val() == JAVA_REF_GETTER_FUNC_NAME;
 }
 
-Ptr<FuncDecl> GetJavaRefGetter(ClassLikeDecl& mirror)
+Ptr<FuncDecl> GetJavaRefGetter(ClassLikeDecl& mirrorLike)
 {
-    CJC_ASSERT(mirror.TestAnyAttr(Attribute::JAVA_MIRROR_SUBTYPE, Attribute::JAVA_MIRROR));
+    CJC_ASSERT(mirrorLike.IsJavaMirror() || mirrorLike.IsJavaImpl());
     const std::function<bool(const Decl& d)>& isDeclJavaRefGetterFunc = [](const Decl& d) {
         return IsJavaRefGetter(d);
     };
 
-    if (auto cd = DynamicCast<ClassDecl*>(&mirror)) {
-        if (!IsJObject(mirror)) {
+    if (auto cd = DynamicCast<ClassDecl*>(&mirrorLike)) {
+        if (!IsJObject(mirrorLike)) {
             return GetJavaRefGetter(*cd->GetSuperClassDecl());
         } else {
-            return FindFirstMemberDecl<FuncDecl, ASTKind::FUNC_DECL>(mirror, isDeclJavaRefGetterFunc);
+            return FindFirstMemberDecl<FuncDecl, ASTKind::FUNC_DECL>(mirrorLike, isDeclJavaRefGetterFunc);
         }
     } else {
-        return FindFirstMemberDecl<FuncDecl, ASTKind::FUNC_DECL>(mirror, isDeclJavaRefGetterFunc);
+        return FindFirstMemberDecl<FuncDecl, ASTKind::FUNC_DECL>(mirrorLike, isDeclJavaRefGetterFunc);
     }
 }
 
 OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, FuncDecl& javaRefGetter)
 {
     // expr ty decl and javaRef outerDecl must be the same
+    CJC_ASSERT(expr->GetTy());
     CJC_ASSERT(expr->GetTy()->IsClassLike());
-    CJC_ASSERT(StaticCast<ClassLikeTy*>(expr->GetTy())->commonDecl->TestAnyAttr(
-        Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE));
+    CJC_ASSERT(IsMirror(*expr->GetTy()) || IsImpl(*expr->GetTy()));
     auto curFile = expr->curFile;
     CJC_NULLPTR_CHECK(curFile);
 
@@ -225,8 +225,7 @@ OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, VarDecl& javaref)
     // expr ty decl and javaref outerDecl must be the same
 
     CJC_ASSERT(expr->GetTy()->IsClassLike());
-    CJC_ASSERT(StaticCast<ClassLikeTy*>(expr->GetTy())->commonDecl->TestAnyAttr(
-        Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE, Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD));
+    CJC_ASSERT(IsMirror(*expr->GetTy()) || IsImpl(*expr->GetTy()) || IsFwdClass(*Ty::GetDeclOfTy(expr->GetTy())));
 
     auto curFile = expr->curFile;
     CJC_NULLPTR_CHECK(curFile);
@@ -236,8 +235,7 @@ OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, VarDecl& javaref)
 
 OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr, ClassLikeDecl& mirrorLike)
 {
-    CJC_ASSERT(mirrorLike.TestAnyAttr(
-        Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE, Attribute::CJ_MIRROR_JAVA_INTERFACE_FWD));
+    CJC_ASSERT(mirrorLike.IsJavaMirror() || mirrorLike.IsJavaImpl() || IsFwdClass(mirrorLike));
     if (auto mirrorLikeClass = As<ASTKind::CLASS_DECL>(&mirrorLike)) {
         return CreateJavaRefCall(std::move(expr), *GetJavaRefField(*mirrorLikeClass));
     }
@@ -260,19 +258,29 @@ OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr)
     return CreateJavaRefCall(std::move(expr), *classLikeTy->commonDecl);
 }
 
-bool IsGeneratedJavaMirrorConstructor(const FuncDecl& ctor)
+bool IsWrappingConstructorOfJavaMirror(const FuncDecl& ctor)
 {
-    return ctor.TestAttr(Attribute::JAVA_MIRROR) && ctor.TestAttr(Attribute::CONSTRUCTOR) &&
-        ctor.TestAttr(Attribute::COMPILER_ADD);
+    if (!ctor.TestAttr(Attribute::CONSTRUCTOR, Attribute::COMPILER_ADD)) {
+        return false;
+    }
+    if (ctor.funcBody->paramLists.empty()) {
+        return false;
+    }
+    auto& params = ctor.funcBody->paramLists.front()->params;
+    if (params.size() != 1) {
+        return false;
+    }
+    auto& javaEntityParam = *params.front();
+    return InteropLibBridge::IsJavaEntityTy(*javaEntityParam.GetTy());
 }
 
-Ptr<FuncDecl> GetGeneratedConstructorInMirror(ClassDecl& mirror)
+Ptr<FuncDecl> GetJavaMirrorWrappingConstructor(ClassDecl& mirror)
 {
-    CJC_ASSERT(mirror.TestAttr(Attribute::JAVA_MIRROR));
+    CJC_ASSERT(mirror.IsJavaMirror());
     Ptr<FuncDecl> generatedCtor;
 
     for (auto& member : mirror.GetMemberDecls()) {
-        if (auto fd = As<ASTKind::FUNC_DECL>(member); fd && IsGeneratedJavaMirrorConstructor(*fd)) {
+        if (auto fd = As<ASTKind::FUNC_DECL>(member); fd && IsWrappingConstructorOfJavaMirror(*fd)) {
             generatedCtor = fd;
             break;
         }
@@ -281,24 +289,24 @@ Ptr<FuncDecl> GetGeneratedConstructorInMirror(ClassDecl& mirror)
     return generatedCtor;
 }
 
-Ptr<FuncDecl> GetGeneratedJavaMirrorConstructor(ClassLikeDecl& mirror)
+Ptr<FuncDecl> GetJavaMirrorWrappingConstructor(ClassLikeDecl& mirrorLike)
 {
-    CJC_ASSERT(mirror.astKind == AST::ASTKind::CLASS_DECL);
-    if (mirror.TestAttr(Attribute::JAVA_MIRROR_SUBTYPE) && !mirror.TestAttr(Attribute::JAVA_MIRROR)) {
-        for (auto& superType : mirror.inheritedTypes) {
+    CJC_ASSERT(mirrorLike.astKind == AST::ASTKind::CLASS_DECL);
+    if (mirrorLike.IsJavaImpl()) {
+        for (auto& superType : mirrorLike.inheritedTypes) {
             if (superType->TyKind() != TypeKind::TYPE_CLASS) {
                 continue;
             }
-            auto superTy = static_cast<ClassLikeTy*>(superType->GetTy().get());
-            if (superTy->commonDecl->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
-                return GetGeneratedJavaMirrorConstructor(*superTy->commonDecl);
+            auto superTy = StaticCast<ClassLikeTy*>(superType->GetTy().get());
+            if (IsMirror(*superTy) || IsImpl(*superTy)) {
+                return GetJavaMirrorWrappingConstructor(*superTy->commonDecl);
             }
         }
         CJC_ABORT(); // impl class must have mirror parent
     }
-    CJC_ASSERT(mirror.TestAttr(Attribute::JAVA_MIRROR));
-    if (auto mirrorClass = DynamicCast<ClassDecl*>(&mirror)) {
-        auto curCtor = GetGeneratedConstructorInMirror(*mirrorClass);
+    CJC_ASSERT(mirrorLike.IsJavaMirror());
+    if (auto mirrorClass = As<ASTKind::CLASS_DECL>(&mirrorLike)) {
+        auto curCtor = GetJavaMirrorWrappingConstructor(*mirrorClass);
         CJC_ASSERT(curCtor);
         return curCtor;
     }
@@ -865,18 +873,18 @@ OwnedPtr<Expr> CreateMirrorConstructorCall(
     if (!classLikeTy) {
         return nullptr;
     }
-    if (auto decl = classLikeTy->commonDecl; decl && decl->TestAttr(Attribute::JAVA_MIRROR)) {
+    if (auto decl = classLikeTy->commonDecl; decl && decl->IsJavaMirror()) {
         Ptr<FuncDecl> mirrorCtor;
 
         if (decl->astKind == ASTKind::INTERFACE_DECL ||
             (decl->astKind == ASTKind::CLASS_DECL && decl->TestAttr(Attribute::ABSTRACT))) {
             Ptr<ClassDecl> synthetic = GetSyntheticClass(importManager, *decl);
-            mirrorCtor = GetGeneratedConstructorInMirror(*synthetic);
+            mirrorCtor = GetJavaMirrorWrappingConstructor(*synthetic);
             CJC_ASSERT(mirrorCtor);
         } else if (decl->astKind == AST::ASTKind::CLASS_DECL) {
             auto cld = As<ASTKind::CLASS_LIKE_DECL>(decl);
             CJC_ASSERT(cld);
-            mirrorCtor = GetGeneratedJavaMirrorConstructor(*cld);
+            mirrorCtor = GetJavaMirrorWrappingConstructor(*cld);
         } else {
             CJC_ABORT();
         }
@@ -890,11 +898,6 @@ OwnedPtr<Expr> CreateMirrorConstructorCall(
     }
     CJC_ABORT();
     return nullptr;
-}
-
-bool IsSynthetic(const Node& node)
-{
-    return node.astKind == ASTKind::CLASS_DECL && node.TestAttr(Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER);
 }
 
 OwnedPtr<Expr> Utils::CreateOptionMatch(
@@ -980,7 +983,7 @@ bool IsJArray(const Decl& decl)
         return false;
     }
     auto classLikeDecl = StaticCast<const ClassLikeDecl*>(&decl);
-    if (!decl.TestAttr(Attribute::JAVA_MIRROR)) {
+    if (!decl.IsJavaMirror()) {
         return false;
     }
 

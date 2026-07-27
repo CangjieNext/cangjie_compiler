@@ -11,10 +11,12 @@
 
 #include "ParserImpl.h"
 
+#include "cangjie/AST/AttributePack.h"
 #include "cangjie/AST/Match.h"
 #include "cangjie/AST/Utils.h"
 #include "cangjie/AST/Walker.h"
 #include "cangjie/Parse/ParseModifiersRules.h"
+#include "cangjie/Utils/CheckUtils.h"
 #include "cangjie/Utils/Macros.h"
 
 using namespace Cangjie;
@@ -491,7 +493,7 @@ void ParserImpl::CheckOverflowAnno(PtrVector<Annotation>& annos, ScopeKind scope
 
 void ParserImpl::CheckPropDeclJavaMirror(PropDecl& decl)
 {
-    if (decl.outerDecl && decl.outerDecl->TestAttr(Attribute::JAVA_MIRROR)) {
+    if (decl.outerDecl && decl.outerDecl->IsJavaMirror()) {
         ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_prop_is_forbidden, decl);
         decl.EnableAttr(Attribute::IS_BROKEN);
         decl.outerDecl->EnableAttr(Attribute::HAS_BROKEN);
@@ -500,8 +502,7 @@ void ParserImpl::CheckPropDeclJavaMirror(PropDecl& decl)
 
 void ParserImpl::CheckPrimaryCtorDeclJavaMirror(PrimaryCtorDecl& ctor)
 {
-    if (ctor.outerDecl && ctor.outerDecl->TestAttr(Attribute::JAVA_MIRROR)) {
-        ctor.EnableAttr(Attribute::JAVA_MIRROR);
+    if (ctor.outerDecl && ctor.outerDecl->IsJavaMirror()) {
         ctor.EnableAttr(Attribute::IS_BROKEN);
         ParseDiagnoseRefactor(DiagKindRefactor::parse_java_mirror_decl_cannot_have_primary_ctor, ctor);
     }
@@ -509,8 +510,16 @@ void ParserImpl::CheckPrimaryCtorDeclJavaMirror(PrimaryCtorDecl& ctor)
 
 void ParserImpl::CheckInitCtorDeclBody(FuncDecl& ctor)
 {
+    if (ctor.TestAnyAttr(Attribute::COMMON, Attribute::OBJ_C_MIRROR)) {
+        return;
+    }
+    if (ctor.outerDecl && ctor.outerDecl->IsJavaMirror()) {
+        // constructor in java mirror should not have body.
+        return;
+    }
+
     auto& fb = ctor.funcBody;
-    if ((!fb || !fb->body) && !ctor.TestAnyAttr(Attribute::COMMON, Attribute::JAVA_MIRROR, Attribute::OBJ_C_MIRROR)) {
+    if (!fb || !fb->body) {
         DiagMissingBody("constructor", "", ctor.end);
         if (!parseDeclFile) {
             ctor.EnableAttr(Attribute::HAS_BROKEN);
@@ -520,7 +529,7 @@ void ParserImpl::CheckInitCtorDeclBody(FuncDecl& ctor)
 
 void ParserImpl::CheckJavaInteropMember(Decl& decl)
 {
-    if (decl.outerDecl->TestAttr(Attribute::JAVA_MIRROR_SUBTYPE) && !decl.outerDecl->TestAttr(Attribute::JAVA_MIRROR)) {
+    if (decl.outerDecl->IsJavaImpl()) {
         if (decl.GetGeneric() != nullptr && !decl.TestAttr(Attribute::JAVA_CJ_MAPPING)) {
             ffiParser->Java().DiagJavaImplCannotBeGeneric(decl);
             return;
@@ -536,7 +545,7 @@ void ParserImpl::CheckJavaInteropMember(Decl& decl)
             auto& fd = *StaticAs<ASTKind::FUNC_DECL>(pdecl);
             if (fd.TestAttr(Attribute::CONSTRUCTOR)) {
                 CheckInitCtorDeclJavaMirror(fd);
-            } else if (fd.TestAttr(Attribute::FINALIZER) && fd.outerDecl->TestAttr(Attribute::JAVA_MIRROR)) {
+            } else if (fd.TestAttr(Attribute::FINALIZER) && fd.outerDecl->IsJavaMirror()) {
                 ffiParser->Java().DiagJavaMirrorCannotHaveFinalizer(fd);
             } else {
                 // method branch
@@ -620,11 +629,9 @@ void ParserImpl::CheckObjCInteropMember(Decl& member)
 
 void ParserImpl::CheckMemberFuncJavaMirror(FuncDecl& decl)
 {
-    if (!decl.outerDecl || !decl.outerDecl->TestAttr(Attribute::JAVA_MIRROR)) {
+    if (!decl.outerDecl || !decl.outerDecl->IsJavaMirror()) {
         return;
     }
-
-    decl.EnableAttr(Attribute::JAVA_MIRROR);
 
     if (decl.TestAttr(Attribute::PRIVATE)) {
         ffiParser->Java().DiagJavaMirrorCannotHavePrivateMember(decl);
@@ -675,10 +682,9 @@ void ParserImpl::CheckMemberFuncObjCMirror(FuncDecl& func)
 
 void ParserImpl::CheckInitCtorDeclJavaMirror(FuncDecl& ctor)
 {
-    if (!ctor.TestAttr(Attribute::JAVA_MIRROR)) {
+    if (!ctor.outerDecl || !ctor.outerDecl->IsJavaMirror()) {
         return;
     }
-    ctor.EnableAttr(Attribute::JAVA_MIRROR);
     ctor.DisableAttr(Attribute::ABSTRACT);
     ctor.constructorCall = ConstructorCall::OTHER_INIT;
 
@@ -831,8 +837,8 @@ void ParserImpl::CheckCJMappingAttr(Decl& decl) const
     if (!enableInteropCJMapping) {
         return;
     }
-    if (decl.TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE,
-        Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
+    if (decl.IsJavaMirror() || decl.IsJavaImpl() || decl.TestAnyAttr(Attribute::OBJ_C_MIRROR,
+        Attribute::OBJ_C_MIRROR_SUBTYPE)) {
         return;
     }
     // currently only support struct decl, enum decl, class decl interface decl, extend decl.
@@ -1123,20 +1129,17 @@ OwnedPtr<ClassBody> ParserImpl::ParseClassBody(ClassDecl& cd)
             DiagExpectSemiOrNewline();
         }
         auto decl = ParseDecl(ScopeKind::CLASS_BODY);
+        if (decl->IsInvalid()) {
+            continue;
+        }
+        SetMemberParentInheritableDecl(cd, decl);
         if (auto ctor = As<ASTKind::FUNC_DECL>(decl); ctor && ctor->TestAttr(Attribute::CONSTRUCTOR)) {
-            if (cd.TestAttr(Attribute::JAVA_MIRROR)) {
-                ctor->EnableAttr(Attribute::JAVA_MIRROR);
-            }
             if (cd.TestAttr(Attribute::OBJ_C_MIRROR)) {
                 ctor->EnableAttr(Attribute::OBJ_C_MIRROR);
             }
             CheckInitCtorDeclBody(*ctor);
         }
 
-        if (decl->IsInvalid()) {
-            continue;
-        }
-        SetMemberParentInheritableDecl(cd, decl);
 
         if (auto fd = As<ASTKind::FUNC_DECL>(decl.get())) {
             CheckClassLikeFuncBodyAbstractness(*fd);
@@ -1589,16 +1592,13 @@ OwnedPtr<StructBody> ParserImpl::ParseStructBody(StructDecl& sd)
         }
 
         auto decl = ParseDecl(ScopeKind::STRUCT_BODY);
-        if (auto ctor = As<ASTKind::FUNC_DECL>(decl); ctor && ctor->TestAttr(Attribute::CONSTRUCTOR)) {
-            if (sd.TestAttr(Attribute::JAVA_MIRROR)) {
-                ctor->EnableAttr(Attribute::JAVA_MIRROR);
-            }
-            CheckInitCtorDeclBody(*ctor);
-        }
         if (decl->IsInvalid()) {
             continue;
         }
         SetMemberParentInheritableDecl(sd, decl);
+        if (auto ctor = As<ASTKind::FUNC_DECL>(decl); ctor && ctor->TestAttr(Attribute::CONSTRUCTOR)) {
+            CheckInitCtorDeclBody(*ctor);
+        }
         if (decl->astKind == ASTKind::PRIMARY_CTOR_DECL && decl->identifier != sd.identifier) {
             ret->decls.emplace_back(MakeOwned<InvalidDecl>(decl->begin));
             continue;
@@ -2127,11 +2127,10 @@ void ParserImpl::CheckClassLikeFuncBodyAbstractness(FuncDecl& decl)
     bool inAbstractCJMP = inAbstract && inCJMP;
     bool inObjCMirror = decl.outerDecl->TestAttr(Attribute::OBJ_C_MIRROR);
 
-    bool isJavaMirrorOrJavaMirrorSubtype =
-        decl.outerDecl->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE);
+    bool isJavaMirrorOrJavaImpl = decl.outerDecl->IsJavaMirror() || decl.outerDecl->IsJavaImpl();
     // explicit ABSTRACT modifier allowed only in COMMON ABSTRACT class or in JFFI
     if (HasModifier(decl.modifiers, TokenKind::ABSTRACT) && !isCommon && !inAbstractCJMP &&
-        !isJavaMirrorOrJavaMirrorSubtype) {
+        !isJavaMirrorOrJavaImpl) {
         ParseDiagnoseRefactor(DiagKindRefactor::parse_explicitly_abstract_only_for_cjmp_abstract_class,
             decl, "function");
     }
@@ -2164,11 +2163,11 @@ void ParserImpl::CheckClassLikeFuncBodyAbstractness(FuncDecl& decl)
 
     bool hasAbstractModifier = HasModifier(decl.modifiers, TokenKind::ABSTRACT);
 
-    if (isJavaMirrorOrJavaMirrorSubtype) {
+    if (isJavaMirrorOrJavaImpl) {
         if (ffiParser->Java().IsAbstractFunction(decl, *decl.outerDecl)) {
             decl.EnableAttr(Attribute::ABSTRACT);
             return;
-        } else if (Interop::Java::IsMirror(*decl.outerDecl)) {
+        } else if (decl.outerDecl->IsJavaMirror()) {
             decl.DisableAttr(Attribute::ABSTRACT);
         }
     }
@@ -2186,7 +2185,7 @@ void ParserImpl::CheckClassLikeFuncBodyAbstractness(FuncDecl& decl)
         return;
     }
 
-    if (isJavaMirrorOrJavaMirrorSubtype) {
+    if (isJavaMirrorOrJavaImpl) {
         return;
     }
 

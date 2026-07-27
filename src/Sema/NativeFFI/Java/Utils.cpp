@@ -33,7 +33,7 @@ std::string GetMirrorReferenceWrapperNameFromClassLike(const ClassLikeDecl& mirr
 {
     constexpr auto wrapperNameSuffix = "$impl";
     CJC_ASSERT(mirrorDecl.IsInterfaceDecl() || mirrorDecl.IsAbstractClass());
-    CJC_ASSERT(IsMirror(mirrorDecl));
+    CJC_ASSERT(mirrorDecl.IsJavaMirror());
     return mirrorDecl.identifier.Val() + wrapperNameSuffix;
 }
 
@@ -48,7 +48,7 @@ std::vector<Ptr<AST::ClassLikeDecl>> GetJavaMirrors(AST::File& file)
 {
     std::vector<Ptr<ClassLikeDecl>> mirrors;
     for (auto& decl : file.decls) {
-        if (IsMirror(*decl)) {
+        if (decl->IsJavaMirror()) {
             auto mirror = StaticAs<ASTKind::CLASS_LIKE_DECL>(decl.get());
             mirrors.emplace_back(mirror);
         }

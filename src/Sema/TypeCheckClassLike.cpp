@@ -130,7 +130,7 @@ void TypeChecker::TypeCheckerImpl::CheckClassDecl(ASTContext& ctx, ClassDecl& cd
     }
     TypeCheckCompositeBody(ctx, cd, cd.body->decls);
     CheckRecursiveConstructorCall(cd.body->decls);
-    if (cd.TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE, Attribute::JAVA_CJ_MAPPING)) {
+    if (cd.IsJavaMirror() || cd.IsJavaImpl() || Interop::Java::IsCJMapping(cd)) {
         CheckJavaInteropLibImport(cd);
     }
     if (cd.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE, Attribute::OBJ_C_CJ_MAPPING)) {
@@ -213,7 +213,6 @@ bool TypeChecker::TypeCheckerImpl::AddJObjectSuperClassJavaInterop(ASTContext& c
         tmp->ref.target = objectDecl;
         tmp->SetTy(tmp->ref.target->GetTy());
         cd.inheritedTypes.insert(cd.inheritedTypes.begin(), std::move(tmp));
-        cd.EnableAttr(Attribute::JAVA_MIRROR_SUBTYPE);
     } else {
         ctx.diag.DiagnoseRefactor(DiagKindRefactor::sema_member_not_imported, cd.identifier.Begin(),
                                   INTEROP_JAVA_LANG_PACKAGE + "." + INTEROP_JOBJECT_NAME);
@@ -262,7 +261,7 @@ void TypeChecker::TypeCheckerImpl::CheckInterfaceDecl(ASTContext& ctx, Interface
         }
     }
     TypeCheckCompositeBody(ctx, id, id.body->decls);
-    if (id.TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
+    if (id.IsJavaMirror() || id.IsJavaImpl()) {
         CheckJavaInteropLibImport(id);
     }
     if (id.TestAnyAttr(Attribute::OBJ_C_MIRROR, Attribute::OBJ_C_MIRROR_SUBTYPE)) {
