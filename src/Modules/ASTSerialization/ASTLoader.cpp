@@ -925,6 +925,14 @@ OwnedPtr<Decl> ASTLoader::ASTLoaderImpl::LoadNominalDecl(const PackageFormat::De
     if constexpr (std::is_base_of<InheritableDecl, DeclT>::value) {
         astDecl->generic = LoadGeneric(*astDecl, decl.generic());
     }
+    if constexpr (std::is_base_of<ClassLikeDecl, DeclT>::value) {
+        if (astDecl->HasAnno(AnnotationKind::JAVA_MIRROR) ||
+            astDecl->TestAttr(Attribute::JAVA_MIRROR_SYNTHETIC_WRAPPER)) {
+                astDecl->MarkAsJavaMirror();
+        } else if (astDecl->HasAnno(AnnotationKind::JAVA_IMPL)) {
+            astDecl->MarkAsJavaImpl();
+        }
+    }
     return astDecl;
 }
 

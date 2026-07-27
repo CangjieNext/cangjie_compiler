@@ -135,21 +135,21 @@ OwnedPtr<Expr> CreateJavaRefCall(ClassLikeDecl& mirrorLike, Ptr<File> curFile);
 OwnedPtr<Expr> CreateJavaRefCall(OwnedPtr<Expr> expr);
 
 /**
- * Is generated constructor of java mirror of kind: init(Java_CFFI_JavaEntity)
+ * Is generated wrapping constructor of java mirror of kind: init(Java_CFFI_JavaEntity)
  */
-bool IsGeneratedJavaMirrorConstructor(const FuncDecl& ctor);
+bool IsWrappingConstructorOfJavaMirror(const FuncDecl& ctor);
 
 bool IsGeneratedJavaImplConstructor(const FuncDecl& ctor);
 
 /**
- * Recursively searches generated constructor of @JavaMirror in passed @JavaMirror/@JavaImpl `mirror`
+ * Recursively searches generated constructor of @JavaMirror in passed @JavaMirror/@JavaImpl `mirrorLike`
  */
-Ptr<FuncDecl> GetGeneratedJavaMirrorConstructor(ClassLikeDecl& mirror);
+Ptr<FuncDecl> GetJavaMirrorWrappingConstructor(ClassLikeDecl& mirrorLike);
 
 /**
- * Searches generated constructor of current @JavaMirror
+ * Searches generated wrapping constructor of @JavaMirror
  */
-Ptr<FuncDecl> GetGeneratedConstructorInMirror(ClassDecl& mirror);
+Ptr<FuncDecl> GetJavaMirrorWrappingConstructor(ClassDecl& mirror);
 
 /**
  * Returns name of corresponding Java method or field with respect to @ForeignName annotation
@@ -278,12 +278,7 @@ Ptr<VarDecl> GetJavaRefField(ClassDecl& mirrorLike);
 /**
  * for interfaces and abstract classes
  */
-Ptr<FuncDecl> GetJavaRefGetter(ClassLikeDecl& mirror);
-
-/**
- * For interface and abstract class mirror the synthetic class is generated to store $javaref field.
- */
-bool IsSynthetic(const Node& node);
+Ptr<FuncDecl> GetJavaRefGetter(ClassLikeDecl& mirrorLike);
 
 bool IsJavaRefGetter(const Decl& fd);
 

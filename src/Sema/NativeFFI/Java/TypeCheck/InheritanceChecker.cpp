@@ -73,10 +73,10 @@ bool NeedCheck(const MemberSignature& parent, const MemberSignature& child)
     }
     CJC_ASSERT(child.decl->IsFuncOrProp());
 
-    if (!parent.decl->outerDecl->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
+    if (!parent.decl->outerDecl->IsJavaMirror() && !parent.decl->outerDecl->IsJavaImpl()) {
         return false;
     }
-    if (!child.decl->outerDecl->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
+    if (!child.decl->outerDecl->IsJavaMirror() && !child.decl->outerDecl->IsJavaImpl()) {
         // @JavaMirror anottation might be missing here, will report it later
         return false;
     }

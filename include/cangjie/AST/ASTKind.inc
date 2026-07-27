@@ -11,9 +11,9 @@ ASTKIND(DECL, "*decl", Decl, 728) // begin of subtypes of Decl.
 ASTKIND(MAIN_DECL, "main_decl", MainDecl, 752)
 ASTKIND(FUNC_DECL, "func_decl", FuncDecl, 824)
 ASTKIND(MACRO_DECL, "macro_decl", MacroDecl, 744)
-ASTKIND(CLASS_LIKE_DECL, "class_like_decl", ClassLikeDecl, 824) // begin: subtypes of ClassLikeDecl and InheritableDecl.
-ASTKIND(CLASS_DECL, "class_decl", ClassDecl, 840)
-ASTKIND(INTERFACE_DECL, "interface_decl", InterfaceDecl, 832) // end: subtypes of ClassLikeDecl.
+ASTKIND(CLASS_LIKE_DECL, "class_like_decl", ClassLikeDecl, 832) // begin: subtypes of ClassLikeDecl and InheritableDecl.
+ASTKIND(CLASS_DECL, "class_decl", ClassDecl, 848)
+ASTKIND(INTERFACE_DECL, "interface_decl", InterfaceDecl, 840) // end: subtypes of ClassLikeDecl.
 ASTKIND(EXTEND_DECL, "extend_decl", ExtendDecl, 888)
 ASTKIND(ENUM_DECL, "enum_decl", EnumDecl, 928)
 ASTKIND(STRUCT_DECL, "struct_decl", StructDecl, 792) // end of subtypes of InheritableDecl.

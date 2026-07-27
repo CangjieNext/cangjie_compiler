@@ -565,16 +565,18 @@ enum class Attribute {
 
     /**
      * Mark whether a class is java mirror (binding for a java class).
+     * This attribute should not be used directly. Could be removed with other compatibility breaking changes.
      * W: Parser.
      * R: Sema.
      */
     JAVA_MIRROR,
     /**
-     * Mark whether a class is a successor of java mirror (direct or indirect child of java mirror class).
+     * Mark whether a class is java impl (successor of java mirror exported to java).
+     * This attribute should not be used directly. Could be removed with other compatibility breaking changes.
      * W: Parser, Sema.
      * R: Sema.
      */
-    JAVA_MIRROR_SUBTYPE,
+    JAVA_IMPL,
 
     /**
      * Mark whether a function of @JavaMirror interface has default implementation on java side.

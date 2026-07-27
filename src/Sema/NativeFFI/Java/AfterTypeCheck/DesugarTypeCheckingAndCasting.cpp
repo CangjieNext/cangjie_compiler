@@ -27,7 +27,10 @@ bool ShouldDesugarTypecheck(Ptr<Type> type, Ptr<Expr> expr)
     // then will be desugared as regular as
     auto castDecl = DynamicCast<ClassLikeDecl>(Ty::GetDeclOfTy(type->GetTy()));
     auto objDecl = DynamicCast<ClassLikeDecl>(Ty::GetDeclOfTy(expr->GetTy()));
-    if (!objDecl || !castDecl || !castDecl->TestAnyAttr(Attribute::JAVA_MIRROR_SUBTYPE, Attribute::JAVA_MIRROR)) {
+    if (!objDecl || !castDecl) {
+        return false;
+    }
+    if (!castDecl->IsJavaMirror() && !castDecl->IsJavaImpl()) {
         return false;
     }
 
@@ -44,9 +47,8 @@ std::vector<Ptr<TypePattern>> CollectTypePatternsWithJavaClass(Ptr<Pattern> pat)
         if (auto tpat = As<ASTKind::TYPE_PATTERN>(node.get())) {
             auto decl = Ty::GetDeclOfTy(tpat->type->GetTy());
             // Saving for all Java classes, except JObject
-            if (decl && (IsMirror(*decl) || IsImpl(*decl) || decl->TestAttr(Attribute::JAVA_MIRROR_SUBTYPE))
-                && !IsJObject(*decl)) {
-                    res.push_back(tpat);
+            if (decl && (decl->IsJavaMirror() || decl->IsJavaImpl()) && !IsJObject(*decl)) {
+                res.push_back(tpat);
             }
         }
 
@@ -98,7 +100,7 @@ OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateIsInstanceCall(Ptr<VarDecl> 
 OwnedPtr<Expr> DesugarTypeCheckingAndCasting::CreateJObjectCast(Ptr<VarDecl> jObjectVar,
     Ptr<ClassLikeDecl> castDecl, Ptr<File> curFile) const
 {
-    CJC_ASSERT(IsMirror(*castDecl) || IsImpl(*castDecl));
+    CJC_ASSERT(castDecl->IsJavaMirror() || castDecl->IsJavaImpl());
     auto castTy = castDecl->GetTy();
 
     // match (IsInstance(obj.javaref, ...))

@@ -16,7 +16,7 @@ void CheckJavaHasDefaultAnnotation(DiagnosticEngine& diag, const Annotation& ann
         DiagJavaHasDefaultNoArgs(diag, ann);
     }
 
-    auto isOuterDeclJavaMirror = decl.outerDecl && decl.outerDecl->TestAttr(Attribute::JAVA_MIRROR);
+    auto isOuterDeclJavaMirror = decl.outerDecl && decl.outerDecl->IsJavaMirror();
     auto isOuterDeclInterface = isOuterDeclJavaMirror && (decl.outerDecl->astKind == ASTKind::INTERFACE_DECL);
     auto isCurrentDeclFunc = decl.astKind == ASTKind::FUNC_DECL;
 

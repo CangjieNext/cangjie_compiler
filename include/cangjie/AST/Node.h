@@ -495,7 +495,7 @@ protected:
 
 private:
     AttributePack attributes;
-    
+
     /**
      * The semantic type of the Node.
      * W: ASTContext, Clone, Create, Expand, CodeGenHLIR (PrepareImportedAST), ASTSerialization (Load),
@@ -1074,6 +1074,22 @@ struct Decl : Node {
      */
     size_t GetGenericsCount() const;
 
+    /**
+     * @return `true` if declaration is a java mirror (foreign java declaration).
+     */
+    virtual bool IsJavaMirror() const
+    {
+        return false;
+    }
+
+    /**
+     * @return `true` if declaration is a java impl (cangjie declaration exported to java).
+     */
+    virtual bool IsJavaImpl() const
+    {
+        return false;
+    }
+
 protected:
     Decl(ASTKind kind) : Node(kind)
     {
@@ -1464,10 +1480,25 @@ struct InterfaceBody : Node {
  */
 struct ClassLikeDecl : InheritableDecl {
     std::set<Ptr<Decl>> subDecls; /**< A <: B ==>  B.subDecls = {A}. */
+    void MarkAsJavaMirror();
+    void MarkAsJavaImpl();
+
+    bool IsJavaMirror() const override
+    {
+        return isJavaMirror;
+    }
+
+    bool IsJavaImpl() const override
+    {
+        return isJavaImpl;
+    }
 protected:
-    ClassLikeDecl(ASTKind kind) : InheritableDecl(kind)
+    ClassLikeDecl(ASTKind kind) : InheritableDecl(kind), isJavaMirror(false), isJavaImpl(false)
     {
     }
+
+    bool isJavaMirror;
+    bool isJavaImpl;
 };
 
 /**

@@ -1621,25 +1621,6 @@ void InitializationChecker::CheckInitInConstructors(FuncDecl& fd, const std::vec
         return;
     }
 
-    if (auto classDecl = As<ASTKind::CLASS_DECL>(fd.funcBody->parentClassLike)) {
-        if (auto superClass = classDecl->GetSuperClassDecl();
-            superClass && superClass->TestAnyAttr(Attribute::JAVA_MIRROR, Attribute::JAVA_MIRROR_SUBTYPE)) {
-            for (auto decl : unInitNonFuncDecls) {
-                if (decl->astKind != ASTKind::VAR_DECL || !decl->TestAttr(Attribute::COMPILER_ADD)) {
-                    continue;
-                }
-                if (decl->identifier != Interop::Java::JAVA_REF_FIELD_NAME) {
-                    continue;
-                }
-                /*
-                    Only `javaref` field in mirrors and impls initialization has to be skipped.
-                    This field is initialized in JavaInterop desugar stage
-                */
-                decl->EnableAttr(Attribute::INITIALIZED);
-            }
-        }
-    }
-
     // If the constructor is terminated by 'ThrowExpr' directly,
     // the initialization check can be ignored, since the object will not be created.
     auto found = scopeTerminationKinds.find(fd.funcBody->scopeName);

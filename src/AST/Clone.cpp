@@ -292,6 +292,12 @@ OwnedPtr<Decl> ASTCloner::CloneClassDecl(const ClassDecl& cd, const VisitFunc& v
     }
     ret->upperBoundPos = cd.upperBoundPos;
     ret->EnableAttr(Attribute::COMPILER_ADD);
+    if (cd.IsJavaMirror()) {
+        ret->MarkAsJavaMirror();
+    }
+    if (cd.IsJavaImpl()) {
+        ret->MarkAsJavaImpl();
+    }
     return ret;
 }
 
@@ -309,6 +315,12 @@ OwnedPtr<Decl> ASTCloner::CloneInterfaceDecl(const InterfaceDecl& id, const Visi
     }
     ret->upperBoundPos = id.upperBoundPos;
     ret->EnableAttr(Attribute::COMPILER_ADD);
+    if (id.IsJavaMirror()) {
+        ret->MarkAsJavaMirror();
+    }
+    if (id.IsJavaImpl()) {
+        ret->MarkAsJavaImpl();
+    }
     return ret;
 }
 
