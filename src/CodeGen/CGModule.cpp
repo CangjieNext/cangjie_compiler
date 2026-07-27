@@ -282,7 +282,7 @@ void AddToGenericParamMapWithOuterTI(const llvm::Function* function, std::unique
 }
 } // namespace
 
-CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func, bool forWrapper)
+CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func)
 {
     CJC_NULLPTR_CHECK(func);
     if (auto it = valueMapping.find(func); it != valueMapping.end()) {
@@ -290,7 +290,7 @@ CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func, bool forWra
         CJC_NULLPTR_CHECK(cgFunction);
         return cgFunction;
     }
-    auto cgFuncType = StaticCast<CGFunctionType*>(CGType::GetOrCreateWithNode(*this, func, true, forWrapper));
+    auto cgFuncType = StaticCast<CGFunctionType*>(CGType::GetOrCreateWithNode(*this, func, true));
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     auto chirFuncTy = StaticCast<CHIR::FuncType*>(func->GetType());
     CJC_NULLPTR_CHECK(chirFuncTy);
@@ -299,9 +299,6 @@ CGFunction* CGModule::GetOrInsertCGFunction(const CHIR::Value* func, bool forWra
 #endif
     auto function = llvm::cast<llvm::Function>(
         module->getOrInsertFunction(func->GetIdentifierWithoutPrefix(), functionType).getCallee());
-    if (forWrapper) {
-        function->addFnAttr("wrapper");
-    }
     if (func->TestAttr(CHIR::Attribute::NO_INLINE)) {
         function->addFnAttr(llvm::Attribute::NoInline);
     }

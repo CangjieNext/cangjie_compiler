@@ -76,9 +76,6 @@ void CreateFunctionWrapperForNormalCases(
 llvm::Function* CreateFunctionWrapper(
     llvm::Function* function, const CGFunctionType* cgType, const CHIR::Value* chirFunc, CGModule& cgMod)
 {
-    if (function->hasFnAttribute("wrapper")) {
-        return function;
-    }
     auto& cgCtx = cgMod.GetCGContext();
     if (chirFunc->TestAttr(CHIR::Attribute::STATIC) || chirFunc->Get<CHIR::WrappedRawMethod>()) {
         return nullptr;
