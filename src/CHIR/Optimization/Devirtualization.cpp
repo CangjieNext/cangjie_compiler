@@ -238,15 +238,14 @@ void Devirtualization::RewriteToApply(CHIRBuilder& builder, std::vector<RewriteI
         Type* thisType = builder.GetType<RefType>(rewriteInfo->thisType);
         auto& realFunc = rewriteInfo->realCallee;
 
-        if ((rewriteInfo->thisType->IsStruct() || rewriteInfo->thisType->IsEnum()) &&
-            rewriteInfo->realCallee->Get<WrappedRawMethod>()) {
-            thisType = rewriteInfo->thisType;
-            bool isMutFunc =
-                realFunc->TestAttr(Attribute::MUT) || IsConstructor(*realFunc) || IsInstanceVarInit(*realFunc);
-            if (isMutFunc) {
-                thisType = builder.GetType<RefType>(thisType);
+        if (auto rawFunc = rewriteInfo->realCallee->Get<WrappedRawMethod>()) {
+            if (rewriteInfo->thisType->IsValueType()) {
+                thisType = rewriteInfo->thisType;
+                if (realFunc->TestAttr(Attribute::MUT) || IsConstructor(*realFunc) || IsInstanceVarInit(*realFunc)) {
+                    thisType = builder.GetType<RefType>(thisType);
+                }
             }
-            realFunc = rewriteInfo->realCallee->Get<WrappedRawMethod>();
+            realFunc = rawFunc;
         }
         auto args = invoke->GetArgs();
         auto thisDerefType = thisType->StripAllRefs();
