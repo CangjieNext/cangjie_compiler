@@ -281,6 +281,9 @@ MultiTypeSubst GenerateTypeMappingBetweenFuncs(TypeManager& typeManager, const F
 bool IsOverrideOrShadow(TypeManager& typeManager, const FuncDecl& src, const FuncDecl& target, const Ptr<Ty> baseTy,
     const Ptr<AST::Ty> expectInstParent)
 {
+    if (src.TestAttr(Attribute::IS_BROKEN) || target.TestAttr(Attribute::IS_BROKEN)) {
+        return false;
+    }
     if (auto ret = typeManager.GetOverrideCache(&src, &target, baseTy, expectInstParent); ret.has_value()) {
         return ret.value();
     }

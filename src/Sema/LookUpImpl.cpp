@@ -102,6 +102,21 @@ bool IgnoredMember(const Decl& decl)
         decl.astKind == ASTKind::PRIMARY_CTOR_DECL;
 }
 
+void PreferNonBrokenFunctions(std::vector<Ptr<Decl>>& results)
+{
+    auto isNonBrokenFunction = [](auto decl) {
+        auto function = DynamicCast<FuncDecl*>(decl);
+        return function && !function->TestAttr(Attribute::IS_BROKEN);
+    };
+    if (std::none_of(results.cbegin(), results.cend(), isNonBrokenFunction)) {
+        return;
+    }
+    Utils::EraseIf(results, [](auto decl) {
+        auto function = DynamicCast<FuncDecl*>(decl);
+        return function && function->TestAttr(Attribute::IS_BROKEN);
+    });
+}
+
 void UpdatePropOverriddenCache(
     TypeManager& typeManager, const PropDecl& src, std::vector<Ptr<Decl>>& results, Ptr<Ty> baseTy)
 {
@@ -431,23 +446,17 @@ std::vector<Ptr<Decl>> LookUpImpl::FieldLookup(Ptr<Decl> decl, const std::string
     decl = GetSpecificDecl<Decl>(decl);
     if (auto cd = DynamicCast<ClassDecl*>(decl)) {
         FieldLookup(*cd, fieldName, results, info);
-        return results;
-    }
-    if (auto id = DynamicCast<InterfaceDecl*>(decl); id && Ty::IsTyCorrect(id->GetTy())) {
+    } else if (auto id = DynamicCast<InterfaceDecl*>(decl); id && Ty::IsTyCorrect(id->GetTy())) {
         CJC_ASSERT(id->TyKind() == TypeKind::TYPE_INTERFACE);
         FieldLookup(*StaticCast<InterfaceTy>(id->GetTy()), fieldName, results, info);
-        return results;
+    } else if (auto ed = DynamicCast<EnumDecl*>(decl)) {
+        results = FieldLookup(*ed, fieldName, info);
+    } else if (auto sd = DynamicCast<StructDecl*>(decl)) {
+        results = FieldLookup(*sd, fieldName, info);
+    } else if (auto pd = DynamicCast<PackageDecl*>(decl)) {
+        results = FieldLookup(*pd, fieldName);
     }
-    if (auto ed = DynamicCast<EnumDecl*>(decl)) {
-        return FieldLookup(*ed, fieldName, info);
-    }
-    if (auto sd = DynamicCast<StructDecl*>(decl)) {
-        return FieldLookup(*sd, fieldName, info);
-    }
-    if (auto pd = DynamicCast<PackageDecl*>(decl)) {
-        // Lookup package decl.
-        return FieldLookup(*pd, fieldName);
-    }
+    PreferNonBrokenFunctions(results);
     return results;
 }
 
@@ -741,5 +750,6 @@ std::vector<Ptr<Decl>> TypeChecker::TypeCheckerImpl::ExtendFieldLookup(
         LookupInfo info{ty, &file};
         lookUpImpl.FieldLookupExtend(*ty, fieldName, results, info);
     }
+    PreferNonBrokenFunctions(results);
     return results;
 }

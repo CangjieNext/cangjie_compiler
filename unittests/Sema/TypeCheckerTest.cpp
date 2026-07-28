@@ -141,6 +141,62 @@ protected:
     DiagnosticEngine diag;
     CompilerInvocation invocation;
     std::unique_ptr<TestCompilerInstance> instance;
+
+    void CheckInvalidVariadicOverload(const std::string& code, bool expectResolvedFunction)
+    {
+        instance->code = code;
+        instance->invocation.globalOptions.implicitPrelude = true;
+        instance->Compile(CompileStage::SEMA);
+
+        Ptr<CallExpr> memberCall{nullptr};
+        Walker walker(instance->GetSourcePackages()[0]->files[0].get(), [&memberCall](Ptr<Node> node) {
+            auto call = DynamicCast<CallExpr*>(node);
+            auto memberAccess = call ? DynamicCast<MemberAccess*>(call->baseFunc.get()) : nullptr;
+            if (memberAccess && memberAccess->field == "f") {
+                memberCall = call;
+            }
+            return VisitAction::WALK_CHILDREN;
+        });
+        walker.Walk();
+
+        ASSERT_TRUE(memberCall);
+        EXPECT_EQ(diag.GetErrorCount(), 2);
+        if (!expectResolvedFunction) {
+            EXPECT_FALSE(memberCall->resolvedFunction);
+            return;
+        }
+        ASSERT_TRUE(memberCall->resolvedFunction);
+        EXPECT_FALSE(memberCall->resolvedFunction->TestAttr(Attribute::IS_BROKEN));
+        EXPECT_FALSE(memberCall->resolvedFunction->hasVariableLenArg);
+        auto memberAccess = StaticAs<ASTKind::MEMBER_ACCESS>(memberCall->baseFunc.get());
+        EXPECT_EQ(memberAccess->target, memberCall->resolvedFunction);
+    }
+
+    void CheckInvalidVariadicFunctionReference(const std::string& code)
+    {
+        instance->code = code;
+        instance->invocation.globalOptions.implicitPrelude = true;
+        instance->Compile(CompileStage::SEMA);
+
+        Ptr<MemberAccess> functionReference{nullptr};
+        Walker walker(instance->GetSourcePackages()[0]->files[0].get(), [&functionReference](Ptr<Node> node) {
+            auto memberAccess = DynamicCast<MemberAccess*>(node);
+            if (memberAccess && memberAccess->field == "f") {
+                functionReference = memberAccess;
+            }
+            return VisitAction::WALK_CHILDREN;
+        });
+        walker.Walk();
+
+        ASSERT_TRUE(functionReference);
+        EXPECT_EQ(diag.GetErrorCount(), 2);
+        auto target = DynamicCast<FuncDecl*>(functionReference->target);
+        ASSERT_TRUE(target);
+        EXPECT_FALSE(target->TestAttr(Attribute::IS_BROKEN));
+        EXPECT_FALSE(target->hasVariableLenArg);
+        ASSERT_EQ(functionReference->targets.size(), 1);
+        EXPECT_EQ(functionReference->targets[0], target);
+    }
 };
 
 TEST_F(TypeCheckerTest, TypecheckTest)
@@ -167,6 +223,88 @@ main() {
     });
     walker.Walk();
     EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
+TEST_F(TypeCheckerTest, InvalidVariadicFunctionIsNotCallTarget)
+{
+    CheckInvalidVariadicOverload(R"(
+class H {
+    func f(...x: Int64): Unit
+}
+main() { H().f(1) }
+    )", false);
+}
+
+TEST_F(TypeCheckerTest, InvalidVariadicAfterValidOverloadDoesNotAffectCallTarget)
+{
+    CheckInvalidVariadicOverload(R"(
+class H {
+    func f(x: Int64): Unit
+    func f(...x: Int64): Unit
+}
+main() { H().f(1) }
+    )", true);
+}
+
+TEST_F(TypeCheckerTest, InvalidVariadicBeforeValidOverloadDoesNotAffectCallTarget)
+{
+    CheckInvalidVariadicOverload(R"(
+class H {
+    func f(...x: Int64): Unit
+    func f(x: Int64): Unit
+}
+main() { H().f(1) }
+    )", true);
+}
+
+TEST_F(TypeCheckerTest, InvalidVariadicAfterValidOverloadDoesNotAffectFunctionReference)
+{
+    CheckInvalidVariadicFunctionReference(R"(
+class H {
+    func f(x: Int64): Unit
+    func f(...x: Int64): Unit
+}
+main() { let functionReference = H().f }
+    )");
+}
+
+TEST_F(TypeCheckerTest, InvalidVariadicBeforeValidOverloadDoesNotAffectFunctionReference)
+{
+    CheckInvalidVariadicFunctionReference(R"(
+class H {
+    func f(...x: Int64): Unit
+    func f(x: Int64): Unit
+}
+main() { let functionReference = H().f }
+    )");
+}
+
+TEST_F(TypeCheckerTest, InvalidVariadicAfterValidImplementationDoesNotAffectInterfaceConformance)
+{
+    CheckInvalidVariadicOverload(R"(
+interface I {
+    func f(x: Int64): Unit
+}
+class H <: I {
+    func f(x: Int64): Unit {}
+    func f(...x: Int64): Unit
+}
+main() { H().f(1) }
+    )", true);
+}
+
+TEST_F(TypeCheckerTest, InvalidVariadicBeforeValidImplementationDoesNotAffectInterfaceConformance)
+{
+    CheckInvalidVariadicOverload(R"(
+interface I {
+    func f(x: Int64): Unit
+}
+class H <: I {
+    func f(...x: Int64): Unit
+    func f(x: Int64): Unit {}
+}
+main() { H().f(1) }
+    )", true);
 }
 
 TEST_F(TypeCheckerTest, MacroDeclTest)
