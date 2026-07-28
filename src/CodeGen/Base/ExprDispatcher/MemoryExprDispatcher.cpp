@@ -107,6 +107,12 @@ llvm::Value* HandleStoreExpr(IRBuilder2& irBuilder, const CHIR::Store& store)
     }
     irBuilder.EmitLocation(CHIRExprWrapper(store), true);
     auto valueVal = *(cgMod | value);
+    auto destVal = *(cgMod | addr);
+    // Same lowered address for value and location: nothing to write (e.g. sret
+    // already filled in place, where the CGValue *is* the slot address).
+    if (valueVal.GetRawValue() == destVal.GetRawValue()) {
+        return nullptr;
+    }
     if (value->TestAttr(CHIR::Attribute::FOREIGN)) {
         CJC_NULLPTR_CHECK(llvm::dyn_cast<llvm::Function>(valueVal.GetRawValue()));
         llvm::dyn_cast<llvm::Function>(valueVal.GetRawValue())
@@ -145,10 +151,10 @@ llvm::Value* HandleStoreExpr(IRBuilder2& irBuilder, const CHIR::Store& store)
         }
 
         return irBuilder.CreateStore(CGValue(valueToStore, storeValCGType, valueVal.IsSRetArg()),
-            CGValue((cgMod | addr)->GetRawValue(), retAddrCGType, (cgMod | addr)->IsSRetArg()),
+            CGValue(destVal.GetRawValue(), retAddrCGType, destVal.IsSRetArg()),
             DeRef(*addr->GetType())->GetTypeArgs()[0]);
     }
-    return irBuilder.CreateStore(valueVal, *(cgMod | addr));
+    return irBuilder.CreateStore(valueVal, destVal);
 }
 
 llvm::Value* GetElementRefOfOptionLikeT(
