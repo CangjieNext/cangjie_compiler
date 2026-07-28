@@ -550,11 +550,21 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
     // Translate arguments
     auto args = TranslateFuncArgs(expr, nullptr, nullptr);
     auto retTy = ty;
+    Value* exclusiveScopeDest = nullptr;
     if (intrinsicKind == BLACK_BOX) {
         // intrinsic blackBox's signature is blackBox<T>(v: T): T,
         // and args need to be converted into reference types to control variable lifetimes.
         BlackBoxModifyArgTypeToRef(args);
         retTy = args[0]->GetType();
+    } else if (intrinsicKind == EXCLUSIVE_SCOPE) {
+        // AST is (fn): T; CHIR is (fn, dest: T&): Unit.
+        CJC_ASSERT(args.size() == 1);
+        auto* destTy = builder.GetType<RefType>(ty);
+        exclusiveScopeDest = TryCreate<Allocate>(currentBlock, loc, destTy, ty)->GetResult();
+        auto* nullVal = CreateAndAppendConstantExpression<NullLiteral>(loc, ty, *currentBlock)->GetResult();
+        CreateAndAppendWrappedStore(*nullVal, *exclusiveScopeDest, loc);
+        args.push_back(exclusiveScopeDest);
+        retTy = builder.GetUnitTy();
     }
     auto ne = StaticCast<AST::NameReferenceExpr*>(expr.baseFunc.get());
     auto callContext = IntrisicCallContext {
@@ -572,6 +582,10 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
 
     if (retTy != ty && intrinsicKind == BLACK_BOX) {
         return CreateAndAppendExpression<Load>(ty, intriVar, currentBlock)->GetResult();
+    }
+    if (intrinsicKind == EXCLUSIVE_SCOPE) {
+        CJC_NULLPTR_CHECK(exclusiveScopeDest);
+        return CreateAndAppendExpression<Load>(ty, exclusiveScopeDest, currentBlock)->GetResult();
     }
     return intriVar;
 }
