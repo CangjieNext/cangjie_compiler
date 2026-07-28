@@ -117,13 +117,13 @@ Target: xxxx-xxxx-xxxx
 The standalone compiler build environment is largely consistent with the integrated build environment, except for the additional dependency on googletest for executing UTs. For detailed information, please refer to [Cangjie Build Guide (Ubuntu 22.04) - Environment Preparation](https://gitcode.com/Cangjie/cangjie_build/blob/main/doc_en/linux_cross_windows.md#2-environment-preparation).  
 For googletest dependency installation, refer to [General Build Guide](https://github.com/google/googletest/blob/main/googletest/README.md). Alternatively, you can temporarily disable UT builds during compilation using the [`--no-test`](#build-options) option.
 
-> **Note:**
->
-> Ensure the compilation platform has normal network connectivity and can access code hosting platforms like Gitcode or Gitee.
-
 ### Build Commands
 
 Download the source code:
+
+> **Note:**
+>
+> Ensure the compilation platform has normal network connectivity and can access code hosting platforms like Gitcode or Gitee.
 
 ```shell
 export WORKSPACE=$HOME/cangjie_build;
@@ -173,13 +173,13 @@ This step only generates the target platform cjc executable. For building periph
 Except for the additional dependency on googletest for executing unit tests (UT), the standalone build environment for the compiler is basically consistent with the integrated build environment. For detailed information, please refer to the Cangjie Build Guide (Ubuntu 22.04) - Environment Preparation.  
 For googletest dependency installation, refer to [General Build Guide](https://github.com/google/googletest/blob/main/googletest/README.md). Alternatively, you can temporarily disable UT builds during compilation using the [`--no-test`](#build-options) option.
 
-> **Note:**
->
-> Ensure the build platform has normal network connectivity and can access code hosting platforms such as Gitcode or Gitee properly.
-
 ### Build Commands
 
 Download the source code:
+
+> **Note:**
+>
+> Ensure the build platform has normal network connectivity and can access code hosting platforms such as Gitcode or Gitee properly.
 
 ```shell
 export WORKSPACE=$HOME/cangjie_build;
@@ -217,13 +217,13 @@ python3 build.py install --host android-aarch64;
 Except for the additional dependency on googletest for executing unit tests (UT), the standalone build environment for the compiler is basically consistent with the integrated build environment. For detailed information, please refer to the Cangjie Build Guide (macOS 14 Sonoma) - Environment Preparation.  
 For googletest dependency installation, refer to [General Build Guide](https://github.com/google/googletest/blob/main/googletest/README.md). Alternatively, you can temporarily disable UT builds during compilation using the [`--no-test`](#build-options) option.
 
-> **Note:**
->
-> Ensure the build platform has normal network connectivity and can access code hosting platforms such as Gitcode or Gitee properly.
-
 ### Build Commands
 
 Download the source code:
+
+> **Note:**
+>
+> Ensure the build platform has normal network connectivity and can access code hosting platforms such as Gitcode or Gitee properly.
 
 ```shell
 export WORKSPACE=$HOME/cangjie_build;
@@ -261,13 +261,13 @@ python3 build.py install --host android-aarch64
 Except for the additional dependency on googletest for executing unit tests (UT), the standalone build environment for the compiler is basically consistent with the integrated build environment. For detailed information, please refer to the Cangjie Build Guide (macOS 14 Sonoma) - Environment Preparation.  
 For googletest dependency installation, refer to [General Build Guide](https://github.com/google/googletest/blob/main/googletest/README.md). Alternatively, you can temporarily disable UT builds during compilation using the [`--no-test`](#build-options) option.
 
-> **Note:**
->
-> Ensure the build platform has normal network connectivity and can access code hosting platforms such as Gitcode or Gitee properly.
-
 ### Build Commands
 
 Download the source code:
+
+> **Note:**
+>
+> Ensure the build platform has normal network connectivity and can access code hosting platforms such as Gitcode or Gitee properly.
 
 ```shell
 export WORKSPACE=$HOME/cangjie_build;
