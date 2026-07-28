@@ -13,6 +13,8 @@
 #ifndef CANGJIE_INVOKE_H
 #define CANGJIE_INVOKE_H
 
+#include <cstddef>
+
 #include "llvm/IR/Value.h"
 
 namespace Cangjie {
@@ -22,6 +24,8 @@ class CHIRInvokeWrapper;
 class CHIRInvokeStaticWrapper;
 llvm::Value* GenerateInvoke(IRBuilder2& irBuilder, CHIRInvokeWrapper invoke);
 llvm::Value* GenerateInvokeStatic(IRBuilder2& irBuilder, CHIRInvokeStaticWrapper invokeStatic);
+/** Load AutoEnv virtual method pointer (with invariant_load). */
+llvm::Value* GenerateFuncPtrForAutoEnv(IRBuilder2& irBuilder, llvm::Value* autoEnvObj, size_t methodIdx);
 } // namespace CodeGen
 } // namespace Cangjie
 #endif // CANGJIE_INVOKE_H
