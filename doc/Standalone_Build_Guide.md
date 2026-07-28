@@ -117,13 +117,13 @@ Target: xxxx-xxxx-xxxx
 编译器独立构建环境除额外依赖 googletest 执行 UT 外，其他内容与集成构建环境基本一致，详细信息请参阅 [Cangjie 构建指导书 (Ubuntu 22.04)-环境准备](https://gitcode.com/Cangjie/cangjie_build/blob/main/docs/linux_cross_windows.md#2-%E7%8E%AF%E5%A2%83%E5%87%86%E5%A4%87)。
 googletest 依赖安装可参考 [通用构建指导](https://github.com/google/googletest/blob/main/googletest/README.md)，也可以在构建时通过 [--no-test](#build-选项) 选项临时关闭 UT 构建。
 
-> **注意：**
->
-> 请确保编译平台能够正常连接网络并且正常访问 Gitcode 或 Gitee 等代码托管平台。
-
 ### 构建命令
 
 下载源码：
+
+> **注意：**
+>
+> 请确保编译平台能够正常连接网络并且正常访问 Gitcode 或 Gitee 等代码托管平台。
 
 ```shell
 export WORKSPACE=$HOME/cangjie_build;
@@ -174,13 +174,13 @@ cjc.exe -v
 编译器独立构建环境除额外依赖 googletest 执行 UT 外，其他内容与集成构建环境基本一致，详细信息请参阅 Cangjie 构建指导书 (Ubuntu 22.04)-环境准备。
 googletest 依赖安装可参考 [通用构建指导](https://github.com/google/googletest/blob/main/googletest/README.md)，也可以在构建时通过 [--no-test](#build-选项) 选项临时关闭 UT 构建。
 
-> **注意：**
->
-> 请确保编译平台能够正常连接网络并且正常访问 Gitcode 或 Gitee 等代码托管平台。
-
 ### 构建命令
 
 下载源码：
+
+> **注意：**
+>
+> 请确保编译平台能够正常连接网络并且正常访问 Gitcode 或 Gitee 等代码托管平台。
 
 ```shell
 export WORKSPACE=$HOME/cangjie_build;
