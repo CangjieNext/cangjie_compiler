@@ -15,6 +15,7 @@
 #include "Base/CGTypes/CGFunctionType.h"
 #include "Base/InvokeImpl.h"
 #include "Base/OverflowDispatcher.h"
+#include "Utils/BlockScopeImpl.h"
 #include "Utils/CGUtils.h"
 #include "Utils/Constants.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
@@ -157,10 +158,13 @@ private:
     void CreateBasicBlocks()
     {
         auto bbs = irBuilder.CreateAndInsertBasicBlocks(
-            {GenNameForBB("exclusive.mcc"), GenNameForBB("exclusive.direct"), GenNameForBB("exclusive.cont")});
+            {GenNameForBB("exclusive.mcc"), GenNameForBB("exclusive.direct"), GenNameForBB("exclusive.cont"),
+                GenNameForBB("exclusive.finally.lpad"), GenNameForBB("exclusive.done")});
         mccBB = bbs[0];
         directBB = bbs[1];
         contBB = bbs[2];
+        lpadBB = bbs[3];
+        doneBB = bbs[4];
     }
 
     // Fast path: direct AutoEnv Invoke into `sret`.
@@ -220,9 +224,8 @@ private:
         (void)irBuilder.CreateBr(contBB);
     }
 
-    // Enter/Leave without try/finally: stdlib still boxes exceptions in Result<T>,
-    // so the exceptional path cannot be reached across this intrinsic.
-    // Leaves the IR builder at `exclusive.cont`.
+    // Emit MCC/direct invoke under a try scope, then Leave on both normal and exceptional exits.
+    // Leaves the IR builder at `exclusive.done`.
     void EmitMainBody()
     {
         auto* i8PtrTy = irBuilder.getInt8PtrTy();
@@ -230,10 +233,27 @@ private:
         auto* leaveFnTy = llvm::FunctionType::get(voidTy, {i8PtrTy}, false);
         auto* leaveFn = cgMod.GetOrInsertFunction(PREFIX_OF_BACKEND_SYMS + "ExclusiveScopeLeave", leaveFnTy);
 
-        EmitInvokePaths();
+        {
+            CodeGenUnwindBlockScope unwindScope(cgMod, lpadBB);
+            EmitInvokePaths();
+        }
 
+        // Normal finally: Leave then continue
         irBuilder.SetInsertPoint(contBB);
         (void)irBuilder.CreateCallOrInvoke(leaveFn, {statePtr});
+        (void)irBuilder.CreateBr(doneBB);
+
+        // Exception finally: Leave then rethrow
+        irBuilder.SetInsertPoint(lpadBB);
+        auto* landingPad = irBuilder.CreateLandingPad(CGType::GetLandingPadType(llvmCtx), 0);
+        landingPad->addClause(llvm::Constant::getNullValue(irBuilder.getInt8PtrTy()));
+        auto* exceptionObjWrapper = irBuilder.CallExceptionIntrinsicGetExceptionValue();
+        auto* exceptionValue = irBuilder.CallPostThrowExceptionIntrinsic(exceptionObjWrapper);
+        (void)irBuilder.CreateCallOrInvoke(leaveFn, {statePtr});
+        irBuilder.CallExceptionIntrinsicThrow(exceptionValue);
+        (void)irBuilder.CreateUnreachable();
+
+        irBuilder.SetInsertPoint(doneBB);
     }
 
     IRBuilder2& irBuilder;
@@ -253,6 +273,8 @@ private:
     llvm::BasicBlock* mccBB = nullptr;
     llvm::BasicBlock* directBB = nullptr;
     llvm::BasicBlock* contBB = nullptr;
+    llvm::BasicBlock* lpadBB = nullptr;
+    llvm::BasicBlock* doneBB = nullptr;
 };
 } // namespace
 
