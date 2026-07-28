@@ -108,6 +108,7 @@ void PreferNonBrokenFunctions(std::vector<Ptr<Decl>>& results)
         auto function = DynamicCast<FuncDecl*>(decl);
         return function && !function->TestAttr(Attribute::IS_BROKEN);
     };
+    // Filter broken functions only if a valid candidate exists; otherwise, keep them to preserve diagnostics.
     if (std::none_of(results.cbegin(), results.cend(), isNonBrokenFunction)) {
         return;
     }
