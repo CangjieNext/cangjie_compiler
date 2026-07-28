@@ -101,24 +101,19 @@ public:
     {
     }
 
-    llvm::Value* Emit()
+    void Emit()
     {
         Prepare();
         EmitEnter();
         CreateBasicBlocks();
         EmitMainBody();
-        return irBuilder.CreateLoad(resultCGType->GetLLVMType(), sret);
     }
 
 private:
     void Prepare()
     {
-        auto* result = intrinsic.GetResult();
-        CJC_NULLPTR_CHECK(result);
-        auto* resultTy = result->GetType();
-        CJC_ASSERT(resultTy != nullptr && resultTy->IsGeneric());
-
-        CJC_ASSERT(intrinsic.GetArgs().size() == 1);
+        // CHIR: exclusiveScopeImpl(fn, dest: T&): Unit
+        CJC_ASSERT(intrinsic.GetArgs().size() == 2);
         auto fnCGVal = cgMod | intrinsic.GetOperand(0);
         CJC_NULLPTR_CHECK(fnCGVal);
         fnVal = **fnCGVal;
@@ -126,10 +121,17 @@ private:
         fnOperandTy = intrinsic.GetOperand(0)->GetType();
         CJC_NULLPTR_CHECK(fnOperandTy);
 
-        resultCGType = CGType::GetOrCreate(cgMod, resultTy);
+        auto* destOperand = intrinsic.GetOperand(1);
+        CJC_NULLPTR_CHECK(destOperand);
+        CJC_ASSERT(destOperand->GetType() != nullptr && destOperand->GetType()->IsRef());
+        auto* tTy = DeRef(*destOperand->GetType());
+        CJC_ASSERT(tTy != nullptr && tTy->IsGeneric());
+        resultCGType = CGType::GetOrCreate(cgMod, tTy);
         CJC_NULLPTR_CHECK(resultCGType);
 
-        sret = irBuilder.CreateSRetForUnknownSize(*resultTy, *resultTy);
+        auto destCGVal = cgMod | destOperand;
+        CJC_NULLPTR_CHECK(destCGVal);
+        sret = destCGVal->GetRawValue();
         CJC_ASSERT(sret != nullptr && sret->getType()->isPointerTy());
     }
 
@@ -979,10 +981,11 @@ llvm::Value* GenerateInout(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& in
 
 llvm::Value* GenerateExclusiveScope(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
 {
-    // Codegen for exclusiveScopeImpl<T>(fn: () -> T): T.
+    // Codegen for exclusiveScopeImpl<T>(fn: () -> T): T
+    // CHIR has different shape: exclusiveScopeImpl<T>(fn, dest: T&): Unit
     irBuilder.SetCHIRExpr(&intrinsic);
-
-    return ExclusiveScopeCodeGen(irBuilder, intrinsic).Emit();
+    ExclusiveScopeCodeGen(irBuilder, intrinsic).Emit();
+    return irBuilder.GetCGModule().GenerateUnitTypeValue();
 }
 
 llvm::Value* GenerateIntrinsic(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
