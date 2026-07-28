@@ -107,6 +107,11 @@ public:
         EmitEnter();
         CreateBasicBlocks();
         EmitMainBody();
+
+        // Reused slot: return its address so Store into the same location is a no-op.
+        if (reusedSRet) {
+            return sret;
+        }
         return irBuilder.CreateLoad(resultCGType->GetLLVMType(), sret);
     }
 
@@ -129,8 +134,34 @@ private:
         resultCGType = CGType::GetOrCreate(cgMod, resultTy);
         CJC_NULLPTR_CHECK(resultCGType);
 
-        sret = irBuilder.CreateSRetForUnknownSize(*resultTy, *resultTy);
+        sret = GetReusableSRet();
+        // Non-null: reuse an existing generic T slot (caller return).
+        // Null: allocate a local sret.
+        reusedSRet = sret != nullptr;
+        if (!reusedSRet) {
+            sret = irBuilder.CreateSRetForUnknownSize(*resultTy, *resultTy);
+        }
         CJC_ASSERT(sret != nullptr && sret->getType()->isPointerTy());
+    }
+
+    // Optional optimization: if the intrinsic result *is* the function return value,
+    // reuse the caller sret argument. Returns nullptr otherwise — caller must allocate.
+    llvm::Value* GetReusableSRet()
+    {
+        auto* result = intrinsic.GetResult();
+        auto* parent = intrinsic.GetTopLevelFunc();
+        if (result == nullptr || parent == nullptr || result != parent->GetReturnValue()) {
+            return nullptr;
+        }
+        auto* cgFunc = irBuilder.GetInsertCGFunction();
+        if (cgFunc == nullptr || !cgFunc->IsSRet()) {
+            return nullptr;
+        }
+        auto* llvmFunc = cgFunc->GetRawFunction();
+        if (llvmFunc == nullptr || !llvmFunc->hasStructRetAttr() || llvmFunc->arg_size() < 1U) {
+            return nullptr;
+        }
+        return llvmFunc->getArg(0);
     }
 
     // Allocate ExclusiveScopeState, call Enter, load destSp / needMCC.
@@ -265,6 +296,7 @@ private:
     llvm::Value* fnVal = nullptr;
     const CHIR::Type* fnOperandTy = nullptr;
     const CGType* resultCGType = nullptr;
+    bool reusedSRet = false;
 
     llvm::Value* statePtr = nullptr;
     llvm::Value* destSp = nullptr;
