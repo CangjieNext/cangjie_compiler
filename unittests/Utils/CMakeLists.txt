@@ -28,6 +28,16 @@ target_link_libraries(
 endif()
 add_test(NAME UtilsTests COMMAND UtilsTests)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_program(CANGJIE_BASH_EXECUTABLE bash)
+    if(CANGJIE_BASH_EXECUTABLE)
+        add_test(
+            NAME RuntimeEnvSetupTest
+            COMMAND ${CANGJIE_BASH_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/RuntimeEnvSetupTest.sh
+                ${CMAKE_SOURCE_DIR}/utils/envsetup/runtime)
+    endif()
+endif()
+
 set(CAST_TEST_SRC CastASTTests.cpp CastTyTests.cpp)
 set(CAST_TEST_LIB cangjie-lsp ${CMAKE_DL_LIBS})
 

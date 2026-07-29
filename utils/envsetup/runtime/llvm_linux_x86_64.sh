@@ -27,4 +27,4 @@ case "${shell_name}" in
         ;;
 esac
 
-export LD_LIBRARY_PATH=${script_dir}/lib/linux_x86_64_cjnative:${LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH="${script_dir}/lib/linux_x86_64_cjnative${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
