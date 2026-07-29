@@ -130,7 +130,7 @@ private:
 
     // ==================== Rewrite Terminator Expressions ==================== //
 
-    void RewriteTerminator(Terminator* oldTerminator, LiteralValue* newValue, Block* newTarget, bool isDebug) const;
+    void RewriteTerminator(Expression* oldTerminator, LiteralValue* newValue, Block* newTarget, bool isDebug) const;
 
     // ==================== Rewrite Terminator Expressions ==================== //
 

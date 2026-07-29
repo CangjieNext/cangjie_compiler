@@ -14,7 +14,7 @@ Ptr<Value> Translator::Visit(const AST::ThrowExpr& throwExpr)
     auto loc = TranslateLocation(throwExpr.begin, throwExpr.end);
     CJC_NULLPTR_CHECK(throwExpr.expr);
     auto eVal = TranslateExprArg(*throwExpr.expr);
-    Ptr<Terminator> terminator = nullptr;
+    Ptr<Expression> terminator = nullptr;
     if (tryCatchContext.empty()) {
         terminator = CreateAndAppendTerminator<RaiseException>(loc, eVal, currentBlock);
     } else {

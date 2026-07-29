@@ -149,7 +149,7 @@ private:
 
     /** @brief generate bytecode for setting the result variable and jump indexes for
      * x_WITH_EXCEPTION operations */
-    void TranslateTryTerminatorJumps(Context& ctx, const Terminator& expr);
+    void TranslateTryTerminatorJumps(Context& ctx, const Expression& expr);
 
     inline void PushArgs(Context&) const
     {

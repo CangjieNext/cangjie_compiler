@@ -50,7 +50,7 @@ Package* ExecutePlugin::DeserializePluginResult(
     std::unordered_set<Function*>& srcCodeImportedFuncs,
     std::unordered_set<GlobalVar*>& srcCodeImportedVars,
     std::vector<Function*>& initFuncsForConstVar,
-    std::unordered_map<Block*, Terminator*>& maybeUnreachable)
+    std::unordered_map<Block*, Expression*>& maybeUnreachable)
 {
     // 1. convert CHIR pointers to strings
     CHIRPtrToString(srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, maybeUnreachable);
@@ -82,7 +82,7 @@ void ExecutePlugin::CHIRPtrToString(
     std::unordered_set<Function*>& srcCodeImportedFuncs,
     std::unordered_set<GlobalVar*>& srcCodeImportedVars,
     std::vector<Function*>& initFuncsForConstVar,
-    std::unordered_map<Block*, Terminator*>& maybeUnreachable)
+    std::unordered_map<Block*, Expression*>& maybeUnreachable)
 {
     for (auto f : srcCodeImportedFuncs) {
         srcCodeImportedFuncNames.emplace(f->GetIdentifierWithoutPrefix());
@@ -112,7 +112,7 @@ void ExecutePlugin::StringToCHIRPtr(
     std::unordered_set<Function*>& srcCodeImportedFuncs,
     std::unordered_set<GlobalVar*>& srcCodeImportedVars,
     std::vector<Function*>& initFuncsForConstVar,
-    std::unordered_map<Block*, Terminator*>& maybeUnreachable)
+    std::unordered_map<Block*, Expression*>& maybeUnreachable)
 {
     auto chirPkg = builder.GetCurPackage();
     for (auto def : chirPkg->GetAllExtendDef()) {
@@ -162,7 +162,7 @@ void ExecutePlugin::StringToCHIRPtr(
             }
             auto allBlocks = f->GetBody()->GetAllBlocks();
             Block* bb = nullptr;
-            Terminator* tt = nullptr;
+            Expression* tt = nullptr;
             for (auto block : allBlocks) {
                 if (bb != nullptr && tt != nullptr) {
                     break;

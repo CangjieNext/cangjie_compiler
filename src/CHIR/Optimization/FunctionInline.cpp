@@ -486,7 +486,7 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
     //   Exit()
     // }
     CJC_NULLPTR_CHECK(block1->GetTerminator());
-    block1->GetTerminator()->ReplaceSuccessor(*block2, *funcEntry);
+    block1->GetTerminator()->ReplaceOperand(block2, funcEntry);
     // if callee must throw exception, then we can't get `exitBlock`
     for (auto exitBlock : exitBlocks) {
         if (exitBlock != nullptr) {

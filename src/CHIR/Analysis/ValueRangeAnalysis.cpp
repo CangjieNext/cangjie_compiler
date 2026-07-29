@@ -441,7 +441,7 @@ void RangeAnalysis::HandleOthersExpr(RangeDomain& state, const Expression* expre
     }
 }
 
-std::optional<Block*> RangeAnalysis::HandleTerminatorEffect(RangeDomain& state, const Terminator* terminator)
+std::optional<Block*> RangeAnalysis::HandleTerminatorEffect(RangeDomain& state, const Expression* terminator)
 {
     RangeAnalysis::ExceptionKind res = ExceptionKind::NA;
     switch (terminator->GetExprKind()) {

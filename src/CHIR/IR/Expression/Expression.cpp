@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "cangjie/CHIR/IR/Expression/Expression.h"
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 
@@ -246,18 +247,54 @@ const std::vector<BlockGroup*>& Expression::GetBlockGroups() const
 
 size_t Expression::GetNumOfOperands() const
 {
-    return operands.size();
+    return GetSuccessorIndex(0);
 }
 
 std::vector<Value*> Expression::GetOperands() const
 {
-    return operands;
+    CJC_ASSERT(operands.size() >= GetSuccessorIndex(0));
+    return {operands.begin(), operands.begin() + static_cast<long>(GetSuccessorIndex(0))};
 }
 
 Value* Expression::GetOperand(size_t idx) const
 {
-    CJC_ASSERT(idx < operands.size());
+    CJC_ASSERT(idx < GetSuccessorIndex(0));
     return operands[idx];
+}
+
+std::vector<Value*> Expression::GetRawOperands() const
+{
+    return operands;
+}
+
+std::vector<Block*> Expression::GetSuccessors() const
+{
+    std::vector<Block*> succs;
+    for (auto op : operands) {
+        if (op->IsBlock()) {
+            succs.emplace_back(StaticCast<Block*>(op));
+        }
+    }
+    return succs;
+}
+
+size_t Expression::GetSuccessorIndex(size_t index) const
+{
+    size_t firstSuccIdx = 0;
+    while (firstSuccIdx < operands.size() && !operands[firstSuccIdx]->IsBlock()) {
+        ++firstSuccIdx;
+    }
+    return firstSuccIdx + index;
+}
+
+size_t Expression::GetNumOfSuccessor() const
+{
+    return operands.size() - GetSuccessorIndex(0);
+}
+
+Block* Expression::GetSuccessor(size_t index) const
+{
+    return StaticCast<Block*>(operands[GetSuccessorIndex(index)]);
 }
 
 LocalVar* Expression::GetResult() const
@@ -292,6 +329,9 @@ Function* Expression::GetTopLevelFunc() const
  */
 void Expression::RemoveSelfFromBlock()
 {
+    for (auto suc : GetSuccessors()) {
+        suc->RemovePredecessor(*parent);
+    }
     if (parent != nullptr) {
         parent->RemoveExprOnly(*this);
         parent = nullptr;
@@ -301,28 +341,39 @@ void Expression::RemoveSelfFromBlock()
 
 void Expression::ReplaceWith(Expression& newExpr)
 {
-    CJC_ASSERT(!newExpr.IsTerminator());
     // 1. replace result
-    for (auto user : result->GetUsers()) {
-        user->ReplaceOperand(result, newExpr.GetResult());
+    if (result != nullptr) {
+        CJC_NULLPTR_CHECK(newExpr.GetResult());
+        for (auto user : result->GetUsers()) {
+            user->ReplaceOperand(result, newExpr.GetResult());
+        }
     }
-    // 2. break double linkage between operands and current expr
-    EraseOperands();
 
-    // 3. remove new expr from its parent block
+    // 2. store current parent and the position of this expression in the parent block
+    CJC_NULLPTR_CHECK(parent);
+    auto tempParent = parent;
+    auto pos = std::find(tempParent->exprs.begin(), tempParent->exprs.end(), this);
+    CJC_ASSERT(pos != tempParent->exprs.end());
+    auto idx = static_cast<size_t>(pos - tempParent->exprs.begin());
+
+    // 3. remove this expression from its parent block
+    RemoveSelfFromBlock();
+
+    // 4. remove the new expression from its parent block
     if (newExpr.parent != nullptr) {
         newExpr.parent->RemoveExprOnly(newExpr);
     }
 
-    // 4. replace to new expr in parent block
-    CJC_NULLPTR_CHECK(parent);
-    for (size_t i = 0; i < parent->exprs.size(); ++i) {
-        if (parent->exprs[i] == this) {
-            parent->exprs[i] = &newExpr;
-        }
+    // 5. set new parent
+    newExpr.SetParent(tempParent);
+
+    // 6. insert the new expression into the parent block at the same position
+    tempParent->exprs.insert(tempParent->exprs.begin() + static_cast<std::ptrdiff_t>(idx), &newExpr);
+
+    // 7. add the successors of the new expression to the parent block
+    for (auto suc : newExpr.GetSuccessors()) {
+        suc->AddPredecessor(tempParent);
     }
-    newExpr.parent = parent;
-    parent = nullptr;
 }
 
 /**
@@ -368,10 +419,8 @@ void Expression::MoveAfter(Expression* expr)
     CJC_ASSERT(!expr->IsTerminator());
     if (parent != nullptr) {
         parent->RemoveExprOnly(*this);
-        if (IsTerminator()) {
-            for (auto suc : StaticCast<Terminator*>(this)->GetSuccessors()) {
-                suc->RemovePredecessor(*parent);
-            }
+        for (auto suc : GetSuccessors()) {
+            suc->RemovePredecessor(*parent);
         }
     }
     CJC_NULLPTR_CHECK(expr->parent);
@@ -386,10 +435,8 @@ void Expression::MoveTo(Block& block)
     CJC_NULLPTR_CHECK(parent);
     CJC_ASSERT(this->GetParentBlockGroup() == block.GetParentBlockGroup());
     parent->RemoveExprOnly(*this);
-    if (IsTerminator()) {
-        for (auto suc : StaticCast<Terminator*>(this)->GetSuccessors()) {
-            suc->RemovePredecessor(*parent);
-        }
+    for (auto suc : GetSuccessors()) {
+        suc->RemovePredecessor(*parent);
     }
     block.AppendExpression(this);
 }
@@ -403,34 +450,43 @@ void Expression::ReplaceOperand(Value* oldOperand, Value* newOperand)
 {
     CJC_NULLPTR_CHECK(oldOperand);
     CJC_NULLPTR_CHECK(newOperand);
-    if (oldOperand == newOperand) {
+    if (oldOperand == newOperand || std::find(operands.begin(), operands.end(), oldOperand) == operands.end()) {
         return;
     }
-    for (unsigned i = 0; i < operands.size(); i++) {
-        if (operands[i] == oldOperand) {
-            operands[i] = newOperand;
-            operands[i]->AddUserOnly(this);
-            oldOperand->RemoveUserOnly(this);
-        }
+    std::replace(operands.begin(), operands.end(), oldOperand, newOperand);
+    // Block successors update CFG edges (and users) via predecessor APIs.
+    if (auto block = DynamicCast<Block*>(oldOperand)) {
+        block->RemovePredecessor(*GetParentBlock());
+    } else {
+        oldOperand->RemoveUserOnly(this);
+    }
+    if (auto block = DynamicCast<Block*>(newOperand)) {
+        block->AddPredecessor(GetParentBlock());
+    } else {
+        newOperand->AddUserOnly(this);
     }
 }
 
 void Expression::ReplaceOperand(size_t idx, Value* newOperand)
 {
     CJC_ASSERT(idx < operands.size());
+    CJC_NULLPTR_CHECK(newOperand);
     auto oldOperand = operands[idx];
     if (oldOperand == newOperand) {
         return;
     }
     operands[idx] = newOperand;
-    newOperand->AddUserOnly(this);
-    bool needRemoveOldOpUser = true;
-    for (auto op : operands) {
-        if (op == oldOperand) {
-            needRemoveOldOpUser = false;
-        }
+    if (auto block = DynamicCast<Block*>(newOperand)) {
+        block->AddPredecessor(GetParentBlock());
+    } else {
+        newOperand->AddUserOnly(this);
     }
-    if (needRemoveOldOpUser) {
+    if (std::find(operands.begin(), operands.end(), oldOperand) != operands.end()) {
+        return;
+    }
+    if (auto block = DynamicCast<Block*>(oldOperand)) {
+        block->RemovePredecessor(*GetParentBlock());
+    } else {
         oldOperand->RemoveUserOnly(this);
     }
 }

@@ -111,7 +111,7 @@ void BlockGroupCopyHelper::ReplaceExprOperands(
         if (e.GetExprKind() == ExprKind::DEBUGEXPR) {
             return VisitResult::CONTINUE;
         }
-        auto operands = e.GetOperands();
+        auto operands = e.GetRawOperands();
         for (size_t i = 0; i < operands.size(); ++i) {
             auto op = operands[i];
             auto it = valueMap.find(op);
@@ -119,18 +119,6 @@ void BlockGroupCopyHelper::ReplaceExprOperands(
                 continue;
             }
             e.ReplaceOperand(i, it->second);
-        }
-        if (e.IsTerminator()) {
-            auto& terminator = StaticCast<Terminator&>(e);
-            auto successors = terminator.GetSuccessors();
-            for (size_t i = 0; i < successors.size(); ++i) {
-                auto successor = successors[i];
-                auto it = valueMap.find(successor);
-                if (it == valueMap.end()) {
-                    continue;
-                }
-                terminator.ReplaceSuccessor(i, *StaticCast<Block*>(it->second));
-            }
         }
         return VisitResult::CONTINUE;
     };

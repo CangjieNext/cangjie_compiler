@@ -274,7 +274,7 @@ private:
     /**
      * @brief terminator can't jump to another block group
      */
-    void CheckTerminatorJump(const Terminator& terminator, const Function& topLevelFunc);
+    void CheckTerminatorJump(const Expression& terminator, const Function& topLevelFunc);
 
     // ===--------------------------------------------------------------------===//
     // Utils
@@ -286,10 +286,10 @@ private:
     bool OperandNumIsEqual(size_t expectedNum, const Expression& expr, const Function& topLevelFunc);
     bool OperandNumIsEqual(
         const std::vector<size_t>& expectedNum, const Expression& expr, const Function& topLevelFunc);
-    bool SuccessorNumIsEqual(size_t expectedNum, const Terminator& expr, const Function& topLevelFunc);
+    bool SuccessorNumIsEqual(size_t expectedNum, const Expression& expr, const Function& topLevelFunc);
     bool OperandNumAtLeast(size_t expectedNum, const Expression& expr, const Function& topLevelFunc);
-    bool SuccessorNumAtLeast(size_t expectedNum, const Terminator& expr, const Function& topLevelFunc);
-    void ShouldNotHaveResult(const Terminator& expr, const Function& topLevelFunc);
+    bool SuccessorNumAtLeast(size_t expectedNum, const Expression& expr, const Function& topLevelFunc);
+    void ShouldNotHaveResult(const Expression& expr, const Function& topLevelFunc);
     bool CheckHaveResult(const Expression& expr, const Function& topLevelFunc);
 
 private:

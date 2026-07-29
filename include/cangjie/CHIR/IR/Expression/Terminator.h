@@ -38,72 +38,10 @@ enum class SourceExpr : uint8_t {
 class Terminator : public Expression {
     friend class Block;
 
-public:
-    // ===--------------------------------------------------------------------===//
-    // Operand
-    // ===--------------------------------------------------------------------===//
-    std::vector<Value*> GetOperands() const override;
-
-    Value* GetOperand(size_t idx) const override;
-
-    size_t GetNumOfOperands() const override;
-
-    // ===--------------------------------------------------------------------===//
-    // Successor
-    // ===--------------------------------------------------------------------===//
-    size_t GetNumOfSuccessor() const;
-
-    Block* GetSuccessor(size_t index) const;
-
-    /**
-     * @brief Replace `oldSuccessor` with `newSuccessor`
-     *
-     * @param oldSuccessor: one of the current successors
-     * @param newSuccessor: new successor
-     */
-    void ReplaceSuccessor(Block& oldSuccessor, Block& newSuccessor);
-
-    /**
-     * @brief Replaced the successor of this terminator
-     *
-     * @param index: the index-th successor need to be replaced
-     * @param newSuccessor: new successor
-     */
-    void ReplaceSuccessor(size_t index, Block& newSuccessor);
-
-    const std::vector<Block*> GetSuccessors() const;
-
-    // ===--------------------------------------------------------------------===//
-    // Modify Self
-    // ===--------------------------------------------------------------------===//
-    void ReplaceWith(Expression& newTerminator) override;
-
-    /**
-     * @brief Break all connection with its parent and operands
-     * that means you can not get its parent and operands any more, and you can not get this terminator by its parent
-     * and its operands, too. But we don't free this terminator's memory.
-     */
-    void RemoveSelfFromBlock() override;
-
 protected:
     explicit Terminator(
         ExprKind kind, const std::vector<Value*>& operands, const std::vector<Block*>& successors, Block* parent);
     ~Terminator() override = default;
-
-    void AppendSuccessor(Block& block);
-
-    /**
-     * @brief Get first successor's index in operands.
-     *
-     * in another sense, return the num of operand(does not include successors).
-     *
-     * NOTE: because returned value is constant,
-     * call this function only after Terminator's full initialization(operand and successor are properly set).
-     */
-    size_t GetFirstSuccessorIndex() const;
-
-private:
-    void LetSuccessorsRemoveCurBlock() const;
 };
 
 /**

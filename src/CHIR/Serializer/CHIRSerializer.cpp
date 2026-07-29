@@ -722,7 +722,7 @@ flatbuffers::Offset<PackageFormat::Expression> CHIRSerializer::CHIRSerializerImp
 {
     auto base = Serialize<PackageFormat::Base>(static_cast<const Base&>(obj));
     auto kind = ToPackageExprKind(obj);
-    auto operands = GetId<Value>(obj.Expression::GetOperands());
+    auto operands = GetId<Value>(obj.GetRawOperands());
     auto blockGroups = GetId<Value>(obj.GetBlockGroups());
     auto owner = GetId<Value>(obj.GetParentBlock());
     auto resultLocalVar = GetId<Value>(obj.GetResult());
