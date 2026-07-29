@@ -395,7 +395,7 @@ private:
 
     // ======================= Transfer functions for terminators ======================= //
 
-    std::optional<Block*> HandleTerminatorEffect(TConstDomain& state, const Terminator* terminator) override
+    std::optional<Block*> HandleTerminatorEffect(TConstDomain& state, const Expression* terminator) override
     {
         ConstAnalysis::ExceptionKind res = ExceptionKind::NA;
         switch (terminator->GetExprKind()) {
@@ -430,7 +430,7 @@ private:
             }
         }
         if (res == ExceptionKind::SUCCESS) {
-            MarkExpressionAsMustNotOverflow(*const_cast<Terminator*>(terminator));
+            MarkExpressionAsMustNotOverflow(*const_cast<Expression*>(terminator));
             return terminator->GetSuccessor(0);
         } else if (res == ExceptionKind::FAIL) {
             return terminator->GetSuccessor(1);

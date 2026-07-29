@@ -105,7 +105,7 @@ void RedundantLoadElimination::RunOnFunc(const Ptr<const Function>& func, bool i
         }
     };
 
-    const auto actionOnTerminator = [](const ReachingDefinitionDomain&, Terminator*, std::optional<Block*>) {};
+    const auto actionOnTerminator = [](const ReachingDefinitionDomain&, Expression*, std::optional<Block*>) {};
 
     result->VisitWith(actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator);
 

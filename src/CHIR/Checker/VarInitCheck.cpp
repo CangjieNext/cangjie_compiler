@@ -178,7 +178,7 @@ void VarInitCheck::UseBeforeInitCheck(
         }
     };
 
-    const auto actionOnTerminator = [this, func, &members](const MaybeUninitDomain& state, const Terminator* terminator,
+    const auto actionOnTerminator = [this, func, &members](const MaybeUninitDomain& state, const Expression* terminator,
                                         std::optional<Block*>) {
         if (!func->IsConstructor()) {
             return;
@@ -443,7 +443,7 @@ void VarInitCheck::ReassignInitedLetVarCheck(const Function* func, const Constru
         }
     };
     const auto actionAfterVisitExpr = [](const MaybeInitDomain&, Expression*, size_t) {};
-    const auto actionOnTerminator = [](const MaybeInitDomain&, Terminator*, std::optional<Block*>) {};
+    const auto actionOnTerminator = [](const MaybeInitDomain&, Expression*, std::optional<Block*>) {};
 
     result->VisitWith(actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator);
 }

@@ -578,7 +578,7 @@ bool CHIRChecker::OperandNumIsEqual(
     return false;
 }
 
-bool CHIRChecker::SuccessorNumIsEqual(size_t expectedNum, const Terminator& expr, const Function& topLevelFunc)
+bool CHIRChecker::SuccessorNumIsEqual(size_t expectedNum, const Expression& expr, const Function& topLevelFunc)
 {
     auto realNum = expr.GetSuccessors().size();
     if (expectedNum != realNum) {
@@ -602,7 +602,7 @@ bool CHIRChecker::OperandNumAtLeast(size_t expectedNum, const Expression& expr, 
     return true;
 }
 
-bool CHIRChecker::SuccessorNumAtLeast(size_t expectedNum, const Terminator& expr, const Function& topLevelFunc)
+bool CHIRChecker::SuccessorNumAtLeast(size_t expectedNum, const Expression& expr, const Function& topLevelFunc)
 {
     auto realNum = expr.GetSuccessors().size();
     if (expectedNum > realNum) {
@@ -624,7 +624,7 @@ bool CHIRChecker::CheckHaveResult(const Expression& expr, const Function& topLev
     return true;
 }
 
-void CHIRChecker::ShouldNotHaveResult(const Terminator& expr, const Function& topLevelFunc)
+void CHIRChecker::ShouldNotHaveResult(const Expression& expr, const Function& topLevelFunc)
 {
     if (expr.GetResult()) {
         ErrorInExpr(topLevelFunc, expr, "this terminator shouldn't have result.");
@@ -1524,8 +1524,7 @@ void CHIRChecker::CheckUnreachableOpAndGenericTyInBlock(const Block& block, std:
         }
         // 3. check successor blocks
         if (expr->IsTerminator()) {
-            auto terminator = Cangjie::StaticCast<Terminator*>(expr);
-            for (auto suc : terminator->GetSuccessors()) {
+            for (auto suc : expr->GetSuccessors()) {
                 CheckUnreachableOpAndGenericTyInBlock(*suc, reachableValues, reachableGenericTypes, visitedBlocks);
             }
         }
@@ -1738,7 +1737,7 @@ void CHIRChecker::CheckBlock(const Block& block, const Function& topLevelFunc)
                 "the last expression in block " + block.GetIdentifier() + " is not terminator.");
         } else {
             // 7. check terminator's jump
-            CheckTerminatorJump(*StaticCast<Terminator*>(exprs.back()), topLevelFunc);
+            CheckTerminatorJump(*exprs.back(), topLevelFunc);
         }
     }
 
@@ -1751,7 +1750,7 @@ void CHIRChecker::CheckBlock(const Block& block, const Function& topLevelFunc)
     }
 }
 
-void CHIRChecker::CheckTerminatorJump(const Terminator& terminator, const Function& topLevelFunc)
+void CHIRChecker::CheckTerminatorJump(const Expression& terminator, const Function& topLevelFunc)
 {
     // 1. terminator can't jump to another block group
     auto curBlockGroup = terminator.GetParentBlock()->GetParentBlockGroup();
