@@ -754,7 +754,7 @@ std::pair<bool, std::vector<size_t>> EnumConstructorNeedTypeCast(const Expressio
      */
     auto constructor = enumDef->GetCtor(idx);
     auto paramTypes = constructor.funcType->GetParamTypes();
-    auto args = tuple.GetOperands();
+    auto args = tuple.GetElementValues();
     args.erase(args.begin());
     index = OperandNeedTypeCast(args, paramTypes, 1);
     return {!index.empty(), index};
@@ -780,7 +780,7 @@ std::pair<bool, std::vector<size_t>> TupleNeedTypeCast(const Expression& e)
      *  we can cast type from sub type to parent type
      */
     auto expectedTypes = StaticCast<TupleType*>(resultType)->GetElementTypes();
-    auto args = tuple.GetOperands();
+    auto args = tuple.GetElementValues();
     index = OperandNeedTypeCast(args, expectedTypes, 0);
     return {!index.empty(), index};
 }
@@ -2846,7 +2846,7 @@ void ClosureConversion::CastGetElementRefRetIfNeed(GetElementRef& e)
      *  Class-$AutoEnvGenericBase is parent type of Class-$AutoEnvInstBase
      *  we can't cast type from parent type to sub type, a wrapper class is needed
      */
-    auto locationType = e.GetLocation()->GetType();
+    auto locationType = e.GetBase()->GetType();
     for (auto& idx : e.GetPath()) {
         locationType = GetFieldOfType(*locationType, idx, builder);
         CJC_NULLPTR_CHECK(locationType);
@@ -3057,7 +3057,7 @@ void ClosureConversion::CastSpawnArgIfNeed(Spawn& e)
      *  we can cast type from sub type to parent type
      */
     auto funcType = e.GetExecuteClosure()->GetFuncType();
-    auto index = OperandNeedTypeCast(e.GetOperands(), funcType->GetParamTypes(), 0);
+    auto index = OperandNeedTypeCast({e.GetClosure()}, funcType->GetParamTypes(), 0);
     if (!index.empty()) {
         AddTypeCastForOperand({&e, index}, builder);
     }

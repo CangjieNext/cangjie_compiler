@@ -45,7 +45,7 @@ AnnoInstanceValue CreateValue(const LiteralValue& v)
 std::vector<std::pair<std::string, AnnoInstanceValue>> GetTupleArgs(const Tuple& tuple)
 {
     std::vector<std::pair<std::string, AnnoInstanceValue>> args{};
-    for (auto v : tuple.GetOperands()) {
+    for (auto v : tuple.GetElementValues()) {
         args.emplace_back("", GetValue(*v));
     }
     return args;
@@ -82,7 +82,7 @@ AnnoInstanceValue CreateValueOfCustomTypeDef(const Value& v)
     std::vector<std::pair<std::string, AnnoInstanceValue>> ctorArgs{};
     // store StorElementRef values to the result
     for (auto user : alloc->GetResult()->GetUsers()) {
-        if (auto store = DynamicCast<StoreElementRef>(user); store && store->GetLocation() == alloc->GetResult()) {
+        if (auto store = DynamicCast<StoreElementRef>(user); store && store->GetBase() == alloc->GetResult()) {
             if (auto ty = store->GetValue()->GetType(); ty->IsUnit() || ty->IsNothing()) {
                 continue;
             }
@@ -182,8 +182,8 @@ std::vector<AnnoInstance> CreateAnnoInstFromConstEval(const Function& func)
     size_t last{0};
     std::vector<AnnoInstance> ret{};
     for (auto use : rawArray->GetUsers()) {
-        if (auto store = DynamicCast<StoreElementRef>(use); store && store->GetLocation() == rawArray) {
-            CJC_ASSERT(store->GetLocation() == rawArray);
+        if (auto store = DynamicCast<StoreElementRef>(use); store && store->GetBase() == rawArray) {
+            CJC_ASSERT(store->GetBase() == rawArray);
             
             auto& path = store->GetPath();
             CJC_ASSERT(path.size() == 1);

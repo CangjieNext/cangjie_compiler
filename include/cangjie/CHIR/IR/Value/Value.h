@@ -313,7 +313,7 @@ public:
     std::vector<Expression*> GetExpressions() const;
     size_t GetExpressionsNum() const;
     std::vector<Expression*> GetNonTerminatorExpressions() const;
-    Terminator* GetTerminator() const;
+    Expression* GetTerminator() const;
 
     void InsertExprIntoHead(Expression& expr);
 
@@ -348,9 +348,6 @@ private:
 
     void RemoveExprOnly(Expression& expr);
     void AddPredecessor(Block* block);
-
-    void AppendNonTerminatorExpression(Expression* expression);
-    void AppendTerminator(Terminator* term);
 
     void RemovePredecessor(Block& block);
 

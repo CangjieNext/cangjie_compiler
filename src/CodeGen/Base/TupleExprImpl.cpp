@@ -42,8 +42,9 @@ llvm::Value* CodeGen::GenerateStruct(IRBuilder2& irBuilder, const CHIR::Tuple& t
     auto& cgMod = irBuilder.GetCGModule();
     auto& cgCtx = irBuilder.GetCGContext();
 
-    for (unsigned i = 0; i < tuple.GetOperands().size(); i++) {
-        auto cgVal = *(cgMod | tuple.GetOperand(i));
+    auto elements = tuple.GetElementValues();
+    for (unsigned i = 0; i < elements.size(); i++) {
+        auto cgVal = *(cgMod | elements[i]);
         CHIR::Type* fieldType = structType->GetCustomTypeDef()->GetInstanceVar(i).type;
         auto gepType = CGType::GetOrCreate(cgMod, CGType::GetRefTypeOf(cgCtx.GetCHIRBuilder(), *fieldType));
         auto cgAddr = CGValue(irBuilder.CreateStructGEP(cgStructType, structVal, i), gepType);
@@ -67,8 +68,8 @@ llvm::Value* CodeGen::GenerateNativeTuple(IRBuilder2& irBuilder, const CHIR::Tup
     auto [isConstantTuple, serialized] = IsConstantTuple(tuple);
     if (isConstantTuple) {
         std::vector<llvm::Value*> args;
-        for (unsigned i = 0; i < tuple.GetOperands().size(); i++) {
-            args.push_back((cgMod | tuple.GetOperand(i))->GetRawValue());
+        for (auto element : tuple.GetElementValues()) {
+            args.push_back((cgMod | element)->GetRawValue());
         }
         std::vector<llvm::Constant*> cons;
         std::for_each(args.begin(), args.end(), [&cons](llvm::Value* it) {
@@ -83,8 +84,9 @@ llvm::Value* CodeGen::GenerateNativeTuple(IRBuilder2& irBuilder, const CHIR::Tup
     auto res = irBuilder.CreateEntryAlloca(*cgTupleType);
     auto tupleCGValue =
         CGValue(res, CGType::GetOrCreate(cgMod, CGType::GetRefTypeOf(cgCtx.GetCHIRBuilder(), *tupleType)));
-    for (unsigned i = 0; i < tuple.GetOperands().size(); i++) {
-        auto cgVal = *(cgMod | tuple.GetOperand(i));
+    auto elements = tuple.GetElementValues();
+    for (unsigned i = 0; i < elements.size(); i++) {
+        auto cgVal = *(cgMod | elements[i]);
         auto cgAddr = irBuilder.CreateGEP(tupleCGValue, {i});
         if (res->getType()->getPointerAddressSpace() == 1U) {
             cgCtx.SetBasePtr(cgAddr.GetRawValue(), res);
@@ -96,10 +98,11 @@ llvm::Value* CodeGen::GenerateNativeTuple(IRBuilder2& irBuilder, const CHIR::Tup
 namespace {
 std::vector<CHIR::Type*> CollectAssociatedNonRefFieldTypes(const CHIR::Tuple& tuple)
 {
+    auto elements = tuple.GetElementValues();
     std::vector<CHIR::Type*> fieldTypes;
-    fieldTypes.reserve(tuple.GetNumOfOperands());
-    for (unsigned idx = 0U; idx < tuple.GetNumOfOperands(); ++idx) {
-        fieldTypes.emplace_back(tuple.GetOperand(idx)->GetType());
+    fieldTypes.reserve(elements.size());
+    for (auto element : elements) {
+        fieldTypes.emplace_back(element->GetType());
     }
     return fieldTypes;
 }

@@ -544,7 +544,7 @@ void CHIRChecker::TypeCheckError(
 
 bool CHIRChecker::OperandNumIsEqual(size_t expectedNum, const Expression& expr, const Function& topLevelFunc)
 {
-    auto realNum = expr.GetOperands().size();
+    auto realNum = expr.GetNumOfNonSuccessorOperands();
     if (expectedNum != realNum) {
         auto errMsg = "expect " + std::to_string(expectedNum) +
             " operand(s), but there are " + std::to_string(realNum) + " in fact.";
@@ -558,7 +558,7 @@ bool CHIRChecker::OperandNumIsEqual(
     const std::vector<size_t>& expectedNum, const Expression& expr, const Function& topLevelFunc)
 {
     CJC_ASSERT(!expectedNum.empty());
-    auto realNum = expr.GetOperands().size();
+    auto realNum = expr.GetNumOfNonSuccessorOperands();
     for (auto n : expectedNum) {
         if (n == realNum) {
             return true;
@@ -578,7 +578,7 @@ bool CHIRChecker::OperandNumIsEqual(
     return false;
 }
 
-bool CHIRChecker::SuccessorNumIsEqual(size_t expectedNum, const Terminator& expr, const Function& topLevelFunc)
+bool CHIRChecker::SuccessorNumIsEqual(size_t expectedNum, const Expression& expr, const Function& topLevelFunc)
 {
     auto realNum = expr.GetSuccessors().size();
     if (expectedNum != realNum) {
@@ -592,7 +592,7 @@ bool CHIRChecker::SuccessorNumIsEqual(size_t expectedNum, const Terminator& expr
 
 bool CHIRChecker::OperandNumAtLeast(size_t expectedNum, const Expression& expr, const Function& topLevelFunc)
 {
-    auto realNum = expr.GetOperands().size();
+    auto realNum = expr.GetNumOfNonSuccessorOperands();
     if (expectedNum > realNum) {
         auto errMsg = "expect at least " + std::to_string(expectedNum) +
             " operand(s), but there are " + std::to_string(realNum) + " in fact.";
@@ -602,7 +602,7 @@ bool CHIRChecker::OperandNumAtLeast(size_t expectedNum, const Expression& expr, 
     return true;
 }
 
-bool CHIRChecker::SuccessorNumAtLeast(size_t expectedNum, const Terminator& expr, const Function& topLevelFunc)
+bool CHIRChecker::SuccessorNumAtLeast(size_t expectedNum, const Expression& expr, const Function& topLevelFunc)
 {
     auto realNum = expr.GetSuccessors().size();
     if (expectedNum > realNum) {
@@ -624,7 +624,7 @@ bool CHIRChecker::CheckHaveResult(const Expression& expr, const Function& topLev
     return true;
 }
 
-void CHIRChecker::ShouldNotHaveResult(const Terminator& expr, const Function& topLevelFunc)
+void CHIRChecker::ShouldNotHaveResult(const Expression& expr, const Function& topLevelFunc)
 {
     if (expr.GetResult()) {
         ErrorInExpr(topLevelFunc, expr, "this terminator shouldn't have result.");
@@ -1524,8 +1524,7 @@ void CHIRChecker::CheckUnreachableOpAndGenericTyInBlock(const Block& block, std:
         }
         // 3. check successor blocks
         if (expr->IsTerminator()) {
-            auto terminator = Cangjie::StaticCast<Terminator*>(expr);
-            for (auto suc : terminator->GetSuccessors()) {
+            for (auto suc : expr->GetSuccessors()) {
                 CheckUnreachableOpAndGenericTyInBlock(*suc, reachableValues, reachableGenericTypes, visitedBlocks);
             }
         }
@@ -1547,7 +1546,7 @@ void CHIRChecker::CheckUnreachableOpAndGenericTyInExpr(
 
 void CHIRChecker::CheckUnreachableOperandInExpr(const Expression& expr, std::vector<Value*>& reachableValues)
 {
-    for (auto op : expr.GetOperands()) {
+    for (auto op : expr.GetNonSuccessorOperands()) {
         if (op->IsLiteral() || op->IsGlobal()) {
             continue;
         }
@@ -1738,7 +1737,7 @@ void CHIRChecker::CheckBlock(const Block& block, const Function& topLevelFunc)
                 "the last expression in block " + block.GetIdentifier() + " is not terminator.");
         } else {
             // 7. check terminator's jump
-            CheckTerminatorJump(*StaticCast<Terminator*>(exprs.back()), topLevelFunc);
+            CheckTerminatorJump(*exprs.back(), topLevelFunc);
         }
     }
 
@@ -1751,7 +1750,7 @@ void CHIRChecker::CheckBlock(const Block& block, const Function& topLevelFunc)
     }
 }
 
-void CHIRChecker::CheckTerminatorJump(const Terminator& terminator, const Function& topLevelFunc)
+void CHIRChecker::CheckTerminatorJump(const Expression& terminator, const Function& topLevelFunc)
 {
     // 1. terminator can't jump to another block group
     auto curBlockGroup = terminator.GetParentBlock()->GetParentBlockGroup();
@@ -3052,7 +3051,7 @@ void CHIRChecker::CheckInoutOpSrc(const Value& op, const IntrinsicBase& expr, co
         if (auto load = DynamicCast<const Load*>(localExpr)) {
             CheckInoutOpSrc(*load->GetLocation(), expr, topLevelFunc);
         } else if (auto ger = DynamicCast<const GetElementRef*>(localExpr)) {
-            auto locationType = ger->GetLocation()->GetType()->StripAllRefs();
+            auto locationType = ger->GetBase()->GetType()->StripAllRefs();
             for (auto p : ger->GetPath()) {
                 locationType = GetFieldOfType(*locationType, p, builder);
                 if (locationType == nullptr) {
@@ -3065,7 +3064,7 @@ void CHIRChecker::CheckInoutOpSrc(const Value& op, const IntrinsicBase& expr, co
                     return;
                 }
             }
-            CheckInoutOpSrc(*ger->GetLocation(), expr, topLevelFunc);
+            CheckInoutOpSrc(*ger->GetBase(), expr, topLevelFunc);
         } else if (auto field = DynamicCast<const Field*>(localExpr)) {
             auto locationType = field->GetBase()->GetType()->StripAllRefs();
             for (auto p : field->GetPath()) {
@@ -3110,7 +3109,7 @@ void CHIRChecker::CheckInout(const IntrinsicBase& expr, const Function& topLevel
     }
 
     // 3. operand type must be ref, but can't be type&&
-    auto operands = expr.GetOperands();
+    auto operands = expr.GetArgs();
     auto opType = operands[0]->GetType();
     if (!opType->IsRef()) {
         ErrorInExpr(topLevelFunc, *expr.GetRawExpr(),
@@ -3516,7 +3515,7 @@ void CHIRChecker::CheckEnumTuple(const Tuple& expr, const Function& topLevelFunc
 
     // 1. operands can't be empty
     auto result = expr.GetResult();
-    const auto& operands = expr.GetOperands();
+    const auto operands = expr.GetElementValues();
     if (operands.empty()) {
         auto errMsg = "must have one operand in `" + result->ToString(0) +
             "` at least, and the 1st operand's type is UInt32 or Bool.";
@@ -3594,7 +3593,7 @@ void CHIRChecker::CheckStructTuple(const Tuple& expr, const Function& topLevelFu
     // 1. tuple's operands must be struct's instance member vars, so their sizes and types must be equal
     auto result = expr.GetResult();
     auto resultTy = StaticCast<StructType*>(result->GetType());
-    const auto& operands = expr.GetOperands();
+    const auto operands = expr.GetElementValues();
     auto structDef = resultTy->GetStructDef();
     auto memberVarTypes = resultTy->GetInstantiatedMemberTys(builder);
     if (operands.size() != memberVarTypes.size()) {
@@ -3622,7 +3621,7 @@ void CHIRChecker::CheckNormalTuple(const Tuple& expr, const Function& topLevelFu
     // 1. operands's size must equal to size of TupleType's element type
     auto result = expr.GetResult();
     auto resultTy = StaticCast<TupleType*>(result->GetType());
-    const auto& operands = expr.GetOperands();
+    const auto operands = expr.GetElementValues();
     auto elementTypes = StaticCast<TupleType*>(resultTy)->GetElementTypes();
     if (operands.size() != elementTypes.size()) {
         auto errMsg = "size mismatched, there are " + std::to_string(elementTypes.size()) +
@@ -3800,7 +3799,7 @@ void CHIRChecker::CheckRawArrayLiteralInit(const RawArrayLiteralInit& expr, cons
 
     // 3. all elements' type must be equal to RawArray's element type
     auto rawArrayEleTy = StaticCast<RawArrayType*>(rawArray->GetType()->StripAllRefs())->GetElementType();
-    for (auto e : expr.GetElements()) {
+    for (auto e : expr.GetElementValues()) {
         if (!e->GetType()->IsEqualOrSubTypeOf(*rawArrayEleTy, builder)) {
             TypeCheckError(expr, *e, rawArrayEleTy->ToString(), topLevelFunc);
         }
@@ -3850,7 +3849,7 @@ void CHIRChecker::CheckVArray(const VArray& expr, const Function& topLevelFunc)
         ErrorInExpr(topLevelFunc, expr, errMsg + hint);
         return;
     }
-    for (auto arg : expr.GetOperands()) {
+    for (auto arg : expr.GetElementValues()) {
         if (!arg->GetType()->IsEqualOrSubTypeOf(*elemType, builder)) {
             TypeCheckError(expr, *arg, elemType->ToString(), topLevelFunc);
         }
@@ -4211,8 +4210,8 @@ void CHIRChecker::CheckGetElementRef(const GetElementRef& expr, const Function& 
         return;
     }
 
-    // 2. location type must be ref type
-    auto location = expr.GetLocation();
+    // 2. base type must be ref type
+    auto location = expr.GetBase();
     auto locationType = location->GetType();
     if (!locationType->IsRef()) {
         TypeCheckError(expr, *location, locationType->ToString() + "&", topLevelFunc);
@@ -4269,8 +4268,8 @@ void CHIRChecker::CheckStoreElementRef(const StoreElementRef& expr, const Functi
         return;
     }
 
-    // 2. location type must be ref
-    auto location = expr.GetLocation();
+    // 2. base type must be ref
+    auto location = expr.GetBase();
     auto locationType = location->GetType();
     if (!locationType->IsRef()) {
         TypeCheckError(expr, *location, locationType->ToString() + "&", topLevelFunc);

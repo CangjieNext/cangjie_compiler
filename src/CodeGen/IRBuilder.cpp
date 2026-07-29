@@ -415,7 +415,7 @@ void IRBuilder2::CreateBoxedValueForValueType(const CHIR::Debug& debugNode, cons
 
 void IRBuilder2::CreateLoadInstForParameter(const CHIR::Expression& chirExpression)
 {
-    for (auto operand : chirExpression.GetOperands()) {
+    for (auto operand : chirExpression.GetNonSuccessorOperands()) {
         if (auto it = cgMod.GetValuesToLoad(operand); it.has_value()) {
             auto loadInst = LLVMIRBuilder2::CreateLoad(it->first, it->second);
             if (auto basePtr = GetCGContext().GetBasePtrOf(**(cgMod | operand))) {

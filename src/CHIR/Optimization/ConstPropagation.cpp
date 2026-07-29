@@ -51,7 +51,7 @@ template <typename TConstDomain>
 void ConstPropagation::VisitFunc(const Function& func, bool isDebug, bool isCJLint, Results<TConstDomain>& result)
 {
     std::vector<RewriteInfo> toBeRewrited;
-    std::unordered_map<Terminator*, std::pair<LiteralValue*, Block*>> targetSuccMap;
+    std::unordered_map<Expression*, std::pair<LiteralValue*, Block*>> targetSuccMap;
     const auto actionBeforeVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
     const auto actionAfterVisitExpr = [this, &toBeRewrited, &func, isDebug, isCJLint](
                                           const TConstDomain& state, Expression* expr, size_t index) -> void {
@@ -85,7 +85,7 @@ void ConstPropagation::VisitFunc(const Function& func, bool isDebug, bool isCJLi
             }
         }
     };
-    const auto actionOnTerminator = [this, &targetSuccMap, isCJLint](const TConstDomain& state, Terminator* terminator,
+    const auto actionOnTerminator = [this, &targetSuccMap, isCJLint](const TConstDomain& state, Expression* terminator,
                                         std::optional<Block*> targetSucc) {
         if (!targetSucc.has_value()) {
             return;
@@ -296,7 +296,7 @@ void ConstPropagation::ReplaceUsageOfExprResult(
 }
 
 void ConstPropagation::RewriteTerminator(
-    Terminator* oldTerminator, LiteralValue* newValue, Block* newTarget, bool isDebug) const
+    Expression* oldTerminator, LiteralValue* newValue, Block* newTarget, bool isDebug) const
 {
     if (SkipCP(*oldTerminator, opts)) {
         return;
@@ -340,7 +340,7 @@ void ConstPropagation::RecordEffectMap(const Expression* expr, const Function* f
             // %0 = GetElementRef(gv_sa); %1 = Load(%0)
             auto locExpr = StaticCast<LocalVar*>(loc)->GetExpr();
             if (locExpr->GetExprKind() == ExprKind::GET_ELEMENT_REF) {
-                auto base = StaticCast<GetElementRef*>(locExpr)->GetLocation();
+                auto base = StaticCast<GetElementRef*>(locExpr)->GetBase();
                 if (base->IsGlobalVarWithInitializer()) {
                     gv = StaticCast<GlobalVar*>(base);
                 }

@@ -49,7 +49,7 @@ void RedundantGetOrThrowElimination::RunOnFunc(const Ptr<const Function>& func, 
 
     const auto actionAfterVisitExpr = [](const GetOrThrowResultDomain&, Expression*, size_t) {};
 
-    const auto actionOnTerminator = [](const GetOrThrowResultDomain&, Terminator*, std::optional<Block*>) {};
+    const auto actionOnTerminator = [](const GetOrThrowResultDomain&, Expression*, std::optional<Block*>) {};
 
     result->VisitWith(actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator);
 }

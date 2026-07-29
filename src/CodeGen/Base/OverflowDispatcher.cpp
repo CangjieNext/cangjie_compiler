@@ -100,7 +100,7 @@ llvm::Value* GenerateOverflowWrappingArithmeticOp(
 llvm::Value* GenerateOverflowApply(IRBuilder2& irBuilder, const CHIRIntrinsicWrapper& intrinsic)
 {
     const CHIR::IntrinsicKind intrinsicKind = intrinsic.GetIntrinsicKind();
-    std::vector<CHIR::Value*> args = intrinsic.GetOperands();
+    std::vector<CHIR::Value*> args = intrinsic.GetArgs();
     CJC_ASSERT(!args.empty());
     const CHIR::Type* retType = intrinsic.GetResult()->GetType();
     const CHIR::Type* paramType = args[0]->GetType();

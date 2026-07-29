@@ -17,7 +17,7 @@ using namespace Interpreter;
 
 void CHIR2BCHIR::TranslateBinaryExpression(Context& ctx, const Expression& expr)
 {
-    CJC_ASSERT(expr.GetNumOfOperands() == Bchir::FLAG_TWO);
+    CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == Bchir::FLAG_TWO);
     auto binaryExpression = StaticCast<const BinaryExpression*>(&expr);
     auto opCode = Cangjie::CHIR::Interpreter::BinExprKind2OpCode(expr.GetExprKind());
     auto typeKind = binaryExpression->GetOperand(0)->GetType()->GetTypeKind();

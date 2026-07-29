@@ -206,26 +206,52 @@ public:
     // Operand
     // ===--------------------------------------------------------------------===//
     /**
-     * @brief Retrieves the number of operands.
+     * @brief Retrieves the number of operands, including successor blocks.
+     *
+     * Use GetNumOfNonSuccessorOperands() if successor blocks must be excluded.
      *
      * @return The number of operands.
      */
-    virtual size_t GetNumOfOperands() const;
+    size_t GetNumOfOperands() const;
+
+    /**
+     * @brief Retrieves the number of operands except successor blocks.
+     *
+     * This is the number of operands reachable through GetOperand().
+     *
+     * @return The number of the leading non-block operands.
+     */
+    size_t GetNumOfNonSuccessorOperands() const;
 
     /**
      * @brief Retrieves an operand by index.
      *
+     * Successor blocks can not be reached through this function, use GetSuccessor() instead.
+     *
      * @param idx The index of the operand to retrieve.
      * @return The operand at the specified index.
      */
-    virtual Value* GetOperand(size_t idx) const;
+    Value* GetOperand(size_t idx) const;
 
     /**
-     * @brief Retrieves all operands.
+     * @brief Retrieves all operands, including successor blocks.
+     *
+     * Use GetNonSuccessorOperands() if successor blocks must be excluded.
      *
      * @return A vector of pointers to all operands.
      */
-    virtual std::vector<Value*> GetOperands() const;
+    std::vector<Value*> GetOperands() const;
+
+    /**
+     * @brief Retrieves all operands except successor blocks.
+     *
+     * Only useful for code which walks the operands of an arbitrary Expression and can not tell
+     * a data operand from a successor block. Prefer a subclass specific accessor
+     * (e.g. Tuple::GetElementValues(), Apply::GetArgs()) whenever the expression kind is known.
+     *
+     * @return A vector of pointers to the leading non-block operands.
+     */
+    std::vector<Value*> GetNonSuccessorOperands() const;
 
     /**
      * @brief Replace old operand in specified position.
@@ -243,6 +269,34 @@ public:
      * @param newOperand The destination value.
      */
     virtual void ReplaceOperand(Value* oldOperand, Value* newOperand);
+
+    // ===--------------------------------------------------------------------===//
+    // Successor
+    // ===--------------------------------------------------------------------===//
+    /**
+     * @brief Retrieves successor blocks among operands.
+     *
+     * Any operand that is a Block is treated as a successor.
+     *
+     * @return The successor blocks.
+     */
+    std::vector<Block*> GetSuccessors() const;
+
+    /**
+     * @brief Map a successor index to its index in operands.
+     *
+     * Operands are laid out as: op1, op2, ..., block1, block2, ...
+     * Given the index among Block successors, return the corresponding operands index
+     * (successor index plus the number of leading non-block operands).
+     *
+     * @param index The 0-based index among successor blocks.
+     * @return The index in the operands vector.
+     */
+    size_t GetSuccessorIndex(size_t index) const;
+
+    size_t GetNumOfSuccessor() const;
+
+    Block* GetSuccessor(size_t index) const;
 
     // ===--------------------------------------------------------------------===//
     // Modify Self
@@ -581,7 +635,7 @@ public:
      *
      * @return a value with reference type
      */
-    Value* GetLocation() const;
+    Value* GetBase() const;
 
     const std::vector<uint64_t>& GetPath() const;
 
@@ -660,13 +714,13 @@ public:
      * @return The value.
      */
     Value* GetValue() const;
-    
+
     /**
-     * @brief Retrieves the location.
+     * @brief Retrieves the base value which the element belongs to.
      *
-     * @return The location.
+     * @return a value with reference type
      */
-    Value* GetLocation() const;
+    Value* GetBase() const;
 
     /**
      * @brief Retrieves the path.
@@ -1525,7 +1579,7 @@ public:
     /**
      * @brief Retrieves all elements in Array.
      */
-    std::vector<Value*> GetElements() const;
+    std::vector<Value*> GetElementValues() const;
 
 private:
     explicit RawArrayLiteralInit(const Ptr<Value> raw, std::vector<Value*> elements, Block* parent);
@@ -1592,6 +1646,11 @@ public:
      * @brief Retrieves element quantity in VArray.
      */
     int64_t GetSize() const;
+
+    /**
+     * @brief Retrieves all elements in VArray.
+     */
+    std::vector<Value*> GetElementValues() const;
 
 private:
     explicit VArray(std::vector<Value*> elements, Block* parent);

@@ -26,11 +26,6 @@ LocalVar* ExpressionBase::GetResult() const
     return expr->GetResult();
 }
 
-std::vector<Value*> ExpressionBase::GetOperands() const
-{
-    return expr->GetOperands();
-}
-
 FuncCallBase::FuncCallBase(const Expression* e) : ExpressionBase(e)
 {
     CJC_NULLPTR_CHECK(e);
@@ -337,8 +332,10 @@ SpawnBase::SpawnBase(const SpawnWithException* exprE) : ExpressionBase(exprE), e
 
 Value* SpawnBase::GetObject() const
 {
-    return expr ? expr->GetOperands()[0]
-                : exprE->GetOperands()[0];
+    if (IsExecuteClosure()) {
+        return expr ? expr->GetClosure() : exprE->GetClosure();
+    }
+    return expr ? expr->GetFuture() : exprE->GetFuture();
 }
 
 bool SpawnBase::IsExecuteClosure() const
@@ -379,6 +376,12 @@ std::vector<Type*> IntrinsicBase::GetInstantiatedTypeArgs() const
 {
     return expr ? expr->GetInstantiatedTypeArgs()
                 : exprE->GetInstantiatedTypeArgs();
+}
+
+std::vector<Value*> IntrinsicBase::GetArgs() const
+{
+    return expr ? expr->GetArgs()
+                : exprE->GetArgs();
 }
 
 AllocateBase::AllocateBase(const Expression* e) : ExpressionBase(e)

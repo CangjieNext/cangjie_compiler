@@ -79,14 +79,9 @@ public:
         return chirExpr.GetTopLevelFunc();
     }
 
-    unsigned GetNumOfOperands() const
+    unsigned GetNumOfNonSuccessorOperands() const
     {
-        return chirExpr.GetNumOfOperands();
-    }
-
-    std::vector<CHIR::Value*> GetOperands() const
-    {
-        return chirExpr.GetOperands();
+        return chirExpr.GetNumOfNonSuccessorOperands();
     }
 
     CHIR::Value* GetOperand(unsigned idx) const
@@ -552,7 +547,7 @@ public:
         if (GetExprMajorKind() == CHIR::ExprMajorKind::UNARY_EXPR) {
             return StaticCast<const CHIR::UnaryExpression&>(chirExpr).GetOperand();
         } else {
-            return StaticCast<const CHIR::IntOpWithException&>(chirExpr).GetOperands()[0];
+            return StaticCast<const CHIR::IntOpWithException&>(chirExpr).GetLHSOperand();
         }
     }
 
@@ -596,7 +591,7 @@ public:
         if (GetExprMajorKind() == CHIR::ExprMajorKind::BINARY_EXPR) {
             return StaticCast<const CHIR::BinaryExpression&>(chirExpr).GetLHSOperand();
         } else {
-            return StaticCast<const CHIR::IntOpWithException&>(chirExpr).GetOperands()[0];
+            return StaticCast<const CHIR::IntOpWithException&>(chirExpr).GetLHSOperand();
         }
     }
 
@@ -605,7 +600,7 @@ public:
         if (GetExprMajorKind() == CHIR::ExprMajorKind::BINARY_EXPR) {
             return StaticCast<const CHIR::BinaryExpression&>(chirExpr).GetRHSOperand();
         } else {
-            return StaticCast<const CHIR::IntOpWithException&>(chirExpr).GetOperands()[1];
+            return StaticCast<const CHIR::IntOpWithException&>(chirExpr).GetRHSOperand();
         }
     }
 
@@ -767,6 +762,15 @@ public:
             return StaticCast<const CHIR::Intrinsic&>(chirExpr).GetInstantiatedTypeArgs();
         } else {
             return StaticCast<const CHIR::IntrinsicWithException&>(chirExpr).GetInstantiatedTypeArgs();
+        }
+    }
+
+    std::vector<CHIR::Value*> GetArgs() const
+    {
+        if (GetExprKind() == CHIR::ExprKind::INTRINSIC) {
+            return StaticCast<const CHIR::Intrinsic&>(chirExpr).GetArgs();
+        } else {
+            return StaticCast<const CHIR::IntrinsicWithException&>(chirExpr).GetArgs();
         }
     }
 };

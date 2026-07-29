@@ -317,7 +317,7 @@ llvm::Value* IRBuilder2::CallArrayIntrinsicGet(
 llvm::Value* IRBuilder2::AcquireRawData(const CHIRIntrinsicWrapper& intrinsic)
 {
     std::vector<llvm::Value*> args;
-    for (auto arg : intrinsic.GetOperands()) {
+    for (auto arg : intrinsic.GetArgs()) {
         args.emplace_back(**(cgMod | arg));
     }
     CJC_ASSERT(args.size() == 1);
@@ -336,7 +336,7 @@ llvm::Value* IRBuilder2::AcquireRawData(const CHIRIntrinsicWrapper& intrinsic)
 llvm::Value* IRBuilder2::ReleaseRawData(const CHIRIntrinsicWrapper& intrinsic)
 {
     std::vector<llvm::Value*> args;
-    for (auto arg : intrinsic.GetOperands()) {
+    for (auto arg : intrinsic.GetArgs()) {
         args.emplace_back(**(cgMod | arg));
     }
     // The size of parameters must be 2.

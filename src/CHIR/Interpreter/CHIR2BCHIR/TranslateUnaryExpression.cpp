@@ -17,7 +17,7 @@ using namespace Interpreter;
 
 void CHIR2BCHIR::TranslateUnaryExpression(Context& ctx, const Expression& expr)
 {
-    CJC_ASSERT(expr.GetNumOfOperands() == Bchir::FLAG_ONE);
+    CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == Bchir::FLAG_ONE);
     auto opCode = Cangjie::CHIR::Interpreter::UnExprKind2OpCode(expr.GetExprKind());
     auto unaryExpression = StaticCast<const UnaryExpression*>(&expr);
     auto typeKind = expr.GetResult()->GetType()->GetTypeKind();

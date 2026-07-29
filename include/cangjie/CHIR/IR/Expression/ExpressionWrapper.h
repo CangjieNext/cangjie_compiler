@@ -22,7 +22,6 @@ class ExpressionBase {
 public:
     const Expression* GetRawExpr() const;
     LocalVar* GetResult() const;
-    std::vector<Value*> GetOperands() const;
 
 protected:
     explicit ExpressionBase(const Expression* e);
@@ -157,7 +156,8 @@ public:
 
     IntrinsicKind GetIntrinsicKind() const;
     std::vector<Type*> GetInstantiatedTypeArgs() const;
-    
+    std::vector<Value*> GetArgs() const;
+
 private:
     const Intrinsic* expr;
     const IntrinsicWithException* exprE;

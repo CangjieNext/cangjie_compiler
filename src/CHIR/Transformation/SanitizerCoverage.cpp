@@ -740,11 +740,12 @@ void SanitizerCoverage::InjectTraceMemCmp(Expression& expr, bool isDebug)
         return;
     }
     auto applyNode = StaticCast<Apply*>(&expr);
-    if (applyNode->GetOperands().size() < 3U) {
+    auto args = applyNode->GetArgs();
+    if (args.size() < 2U) {
         return;
     }
-    auto oper1 = applyNode->GetOperand(1U);
-    auto oper2 = applyNode->GetOperand(2U);
+    auto oper1 = args[0];
+    auto oper2 = args[1];
     auto [intrinsicName, params] = GetMemFuncSymbols(*oper1, *oper2, *applyNode);
     if (intrinsicName == "" || params.empty()) {
         return;

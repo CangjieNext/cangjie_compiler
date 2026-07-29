@@ -430,12 +430,12 @@ void CHIR2BCHIR::TranslateExpression(Context& ctx, const Expression& expr)
         case ExprKind::INVOKE_WITH_EXCEPTION:
         case ExprKind::INVOKESTATIC:
         case ExprKind::INVOKESTATIC_WITH_EXCEPTION:
-            for (size_t i = 1; i < expr.GetNumOfOperands(); ++i) {
+            for (size_t i = 1; i < expr.GetNumOfNonSuccessorOperands(); ++i) {
                 TranslateValue(ctx, *expr.GetOperand(i));
             }
             break;
         default:
-            for (auto value : expr.GetOperands()) {
+            for (auto value : expr.GetNonSuccessorOperands()) {
                 TranslateValue(ctx, *value);
             }
             break;

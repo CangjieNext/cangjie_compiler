@@ -120,18 +120,6 @@ void BlockGroupCopyHelper::ReplaceExprOperands(
             }
             e.ReplaceOperand(i, it->second);
         }
-        if (e.IsTerminator()) {
-            auto& terminator = StaticCast<Terminator&>(e);
-            auto successors = terminator.GetSuccessors();
-            for (size_t i = 0; i < successors.size(); ++i) {
-                auto successor = successors[i];
-                auto it = valueMap.find(successor);
-                if (it == valueMap.end()) {
-                    continue;
-                }
-                terminator.ReplaceSuccessor(i, *StaticCast<Block*>(it->second));
-            }
-        }
         return VisitResult::CONTINUE;
     };
     for (auto block : blocks) {

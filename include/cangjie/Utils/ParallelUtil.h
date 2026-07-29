@@ -35,7 +35,7 @@ public:
         const ElementList<Ptr<const AST::FuncDecl>>& localConstFuncs, IncreKind& kind,
         const std::unordered_map<std::string, Value*>& deserializedVals,
         const TranslateASTNodeFunc& funcForTranlateASTNode,
-        std::unordered_map<Block*, Terminator*>& maybeUnreachable,
+        std::unordered_map<Block*, Expression*>& maybeUnreachable,
         bool computeAnnotations,
         std::vector<CHIR::Function*>& initFuncsForAnnoFactory,
         const Cangjie::TypeManager& typeManager,
@@ -47,7 +47,7 @@ public:
         std::vector<std::unique_ptr<Translator>> trans;
         std::vector<std::unique_ptr<CHIR::CHIRType>> chirTypes;
         CHIR::CHIRTypeCache chirTypeCache(chirType.GetTypeMap(), chirType.GetGlobalNominalCache());
-        std::vector<std::unordered_map<Block*, Terminator*>> maybeUnreachableBlocks;
+        std::vector<std::unordered_map<Block*, Expression*>> maybeUnreachableBlocks;
         maybeUnreachableBlocks.resize(funcNum);
         for (size_t idx = 0; idx < funcNum; ++idx) {
             auto decl = decls.at(idx);

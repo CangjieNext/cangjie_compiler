@@ -131,8 +131,8 @@ void CHIR2BCHIR::TranslateField(Context& ctx, const Expression& expr)
     if (indexes.size() == 1) {
         PushOpCodeWithAnnotations(ctx, OpCode::FIELD, expr, static_cast<unsigned>(indexes[0]));
     } else {
-        CJC_ASSERT(fieldExpr->GetOperands()[0]->GetType()->IsStruct() ||
-            fieldExpr->GetOperands()[0]->GetType()->IsEnum() || fieldExpr->GetOperands()[0]->GetType()->IsTuple());
+        auto baseType = fieldExpr->GetBase()->GetType();
+        CJC_ASSERT(baseType->IsStruct() || baseType->IsEnum() || baseType->IsTuple());
         PushOpCodeWithAnnotations(ctx, OpCode::FIELD_TPL, expr, static_cast<Bchir::ByteCodeContent>(indexes.size()));
         for (auto i : indexes) {
             ctx.def.Push(static_cast<Bchir::ByteCodeContent>(i));
@@ -220,7 +220,7 @@ void CHIR2BCHIR::TranslateCApplyExpression(Context& ctx, const Apply& apply, con
     // bchir :: CAPPLY
     // :: CFUNC_NUMBER_OF_ARGS :: CFUNC_RESULT_TY :: CFUNC_ARG1_TY :: ... :: CFUNC_ARGN_TY
     // The number of funcTy and GetNumOfOperands
-    size_t numberArgs = apply.GetNumOfOperands() - 1; // remove param 0 func;
+    size_t numberArgs = apply.GetArgs().size(); // remove param 0 func;
     CJC_ASSERT(numberArgs == funcTy.GetParamTypes().size());
     CJC_ASSERT(numberArgs <= static_cast<size_t>(Bchir::BYTECODE_CONTENT_MAX));
     PushOpCodeWithAnnotations<false, true>(
@@ -234,8 +234,7 @@ void CHIR2BCHIR::TranslateCApplyExpression(Context& ctx, const Apply& apply, con
 
 void CHIR2BCHIR::TranslateApplyExpression(Context& ctx, const Apply& apply)
 {
-    auto operands = apply.GetOperands();
-    auto funcExpr = operands[0];
+    auto funcExpr = apply.GetCallee();
     auto funcTy = funcExpr->GetType();
     if ((funcExpr->IsImportedFunc() && funcExpr->GetAttributeInfo().TestAttr(Attribute::FOREIGN)) ||
         funcExpr->GetSrcCodeIdentifier() == "std.core:CJ_CORE_CanUseSIMD") {
@@ -252,15 +251,15 @@ void CHIR2BCHIR::TranslateApplyExpression(Context& ctx, const Apply& apply)
         // bchir :: SYSCALL :: syscallName_STRING_IDX :: NUMBER_OF_ARGS
         // :: ANNOTATION_RESULT_TY :: ANNOTATION_ARG1_TY :: ... :: ANNOTATION_ARGN_TY
         auto strIdx = GetStringIdx(funcExpr->GetSrcCodeIdentifier());
-        auto numberArgs = apply.GetNumOfOperands() - 1;
+        auto args = apply.GetArgs();
+        auto numberArgs = args.size();
         CJC_ASSERT(numberArgs <= static_cast<size_t>(Bchir::BYTECODE_CONTENT_MAX));
         PushOpCodeWithAnnotations<false, true>(
             ctx, OpCode::SYSCALL, apply, strIdx, static_cast<Bchir::ByteCodeContent>(numberArgs));
         auto addTyAnnotation = [this, &ctx](CHIR::Type& type) { ctx.def.Push(GetTypeIdx(type)); };
         addTyAnnotation(*apply.GetResult()->GetType());
-        // skip the first operand which is the function
-        for (size_t i = 1; i < operands.size(); ++i) {
-            addTyAnnotation(*operands[i]->GetType());
+        for (auto arg : args) {
+            addTyAnnotation(*arg->GetType());
         }
         return;
     } else if (StaticCast<const FuncType&>(*funcTy).IsCFunc()) {

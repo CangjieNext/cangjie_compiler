@@ -68,7 +68,7 @@ public:
      * @param maybeUnreachableBlocks may be unreachable blocks to report.
      */
     void UnreachableBlockWarningReporter(const Package& package,
-        size_t threadsNum, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks);
+        size_t threadsNum, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks);
 
     /**
      * @brief process to remove blocks which is marked unreachable.
@@ -114,7 +114,7 @@ private:
     // =============== Functions for Debug Message Dump =============== //
     Ptr<Expression> GetUnreachableExpression(const CHIR::Block& block, bool& isNormal) const;
     void PrintUnreachableBlockWarning(
-        const CHIR::Block& block, const CHIR::Terminator& terminator, bool& isPrinted);
+        const CHIR::Block& block, const CHIR::Expression& terminator, bool& isPrinted);
 
     // =============== Functions for dce reporter =============== //
     void TryReportUnusedOnExpr(Expression& expr, const GlobalOptions& opts, bool blockUsed);
@@ -133,9 +133,9 @@ private:
     // ============== Functions for clean code in parallel ===========//
     void ReportUnusedCodeInFunc(const BlockGroup& body, const GlobalOptions& opts);
     void UnreachableBlockWarningReporterInSerial(
-        const Package& package, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks);
+        const Package& package, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks);
     void UnreachableBlockWarningReporterInParallel(const Package& package,
-        size_t threadsNum, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks);
+        size_t threadsNum, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks);
 };
 } // namespace Cangjie::CHIR
 #endif

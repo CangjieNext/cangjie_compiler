@@ -116,7 +116,7 @@ public:
      * @return blocks return after analysis.
      */
     std::optional<Block*> PropagateTerminatorEffect(
-        ReachingDefinitionDomain& state, const Terminator* terminator) override;
+        ReachingDefinitionDomain& state, const Expression* terminator) override;
 
 private:
     void HandleStoreExpr(ReachingDefinitionDomain& state, const Store* store);
@@ -144,8 +144,9 @@ private:
     {
         // If the tracked object is the parameter of the inout intrinsic
         if (intrinsic->GetIntrinsicKind() == CHIR::IntrinsicKind::INOUT_PARAM) {
-            CJC_ASSERT(intrinsic->GetNumOfOperands() == 1);
-            auto operand = intrinsic->GetOperand(0);
+            auto args = intrinsic->GetArgs();
+            CJC_ASSERT(args.size() == 1);
+            auto operand = args[0];
             if (auto it = allocateIdxMap.find(operand); it != allocateIdxMap.end()) {
                 state.reachingDefs[it->second].SetToBound(/* isTop = */ true);
                 state.reachingLoadDefs[it->second].SetToBound(/* isTop = */ true);

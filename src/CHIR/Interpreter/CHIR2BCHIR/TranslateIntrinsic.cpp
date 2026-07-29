@@ -47,7 +47,7 @@ template <typename T> void CHIR2BCHIR::TranslateIntrinsicExpression(Context& ctx
         case CHIR::IntrinsicKind::ARRAY_BUILT_IN_COPY_TO:
         case CHIR::IntrinsicKind::ARRAY_CLONE:
         case CHIR::IntrinsicKind::ARRAY_ACQUIRE_RAW_DATA: {
-            auto refTy = StaticCast<RefType*>(intrinsic.GetOperands()[0]->GetType());
+            auto refTy = StaticCast<RefType*>(intrinsic.GetArgs()[0]->GetType());
             auto arrayTy = StaticCast<RawArrayType*>(refTy->GetTypeArgs()[0]);
             auto valueTy = arrayTy->GetTypeArgs()[0];
             if (isCType(*valueTy)) {
@@ -62,7 +62,7 @@ template <typename T> void CHIR2BCHIR::TranslateIntrinsicExpression(Context& ctx
         case CHIR::IntrinsicKind::ARRAY_GET_UNCHECKED:
         case CHIR::IntrinsicKind::ARRAY_SET:
         case CHIR::IntrinsicKind::ARRAY_SET_UNCHECKED: {
-            auto refTy = StaticCast<RefType*>(intrinsic.GetOperands()[0]->GetType());
+            auto refTy = StaticCast<RefType*>(intrinsic.GetArgs()[0]->GetType());
             auto arrayTy = StaticCast<RawArrayType*>(refTy->GetTypeArgs()[0]);
             auto valueTy = arrayTy->GetTypeArgs()[0];
             if (isCType(*valueTy)) {
@@ -73,7 +73,7 @@ template <typename T> void CHIR2BCHIR::TranslateIntrinsicExpression(Context& ctx
             break;
         }
         case CHIR::IntrinsicKind::VARRAY_GET: {
-            auto pathSize = static_cast<Bchir::ByteCodeContent>(intrinsic.GetNumOfOperands());
+            auto pathSize = static_cast<Bchir::ByteCodeContent>(intrinsic.GetNumOfNonSuccessorOperands());
             PushOpCodeWithAnnotations<false, true>(ctx, OpCode::VARRAY_GET, intrinsic, pathSize - 1);
             return;
         }

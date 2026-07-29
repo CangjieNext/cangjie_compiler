@@ -20,7 +20,7 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
 {
     switch (expr.GetExprKind()) {
         case ExprKind::GOTO: {
-            CJC_ASSERT(expr.GetNumOfOperands() == 0);
+            CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == 0);
             auto gotoExpr = StaticCast<const GoTo*>(&expr);
             CJC_ASSERT(gotoExpr->GetNumOfSuccessor() == 1);
             auto dest = gotoExpr->GetSuccessor(0);
@@ -30,7 +30,7 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
             break;
         }
         case ExprKind::BRANCH: {
-            CJC_ASSERT(expr.GetNumOfOperands() == 1);
+            CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == 1);
             auto branchExpr = StaticCast<const Branch*>(&expr);
             CJC_ASSERT(branchExpr->GetNumOfSuccessor() == Bchir::FLAG_TWO);
             PushOpCodeWithAnnotations(ctx, OpCode::BRANCH, expr);
@@ -48,7 +48,7 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
             break;
         }
         case ExprKind::EXIT: {
-            CJC_ASSERT(expr.GetNumOfOperands() == 0);
+            CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == 0);
             CJC_ASSERT(expr.GetTopLevelFunc() != nullptr);
             auto ret = expr.GetTopLevelFunc()->GetReturnValue();
             if (ret == nullptr) {
@@ -63,7 +63,7 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
             break;
         }
         case ExprKind::RAISE_EXCEPTION: {
-            CJC_ASSERT(expr.GetNumOfOperands() == 1);
+            CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == 1);
             auto raise = StaticCast<const RaiseException*>(&expr);
             if (raise->GetNumOfSuccessor() == 0) {
                 PushOpCodeWithAnnotations(ctx, OpCode::RAISE, expr);
@@ -109,9 +109,9 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
             break;
         }
         case ExprKind::ALLOCATE_WITH_EXCEPTION: {
-            CJC_ASSERT(expr.GetNumOfOperands() == 0);
+            CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == 0);
             TranslateAllocate(ctx, expr);
-            TranslateTryTerminatorJumps(ctx, *StaticCast<const Terminator*>(&expr));
+            TranslateTryTerminatorJumps(ctx, expr);
             break;
         }
         default: {
@@ -126,11 +126,11 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
 void CHIR2BCHIR::TranslateApplyWithExceptionExpression(Context& ctx, const ApplyWithException& apply)
 {
     PushOpCodeWithAnnotations<false, true>(
-        ctx, OpCode::APPLY_EXC, apply, static_cast<unsigned>(apply.GetNumOfOperands()));
+        ctx, OpCode::APPLY_EXC, apply, static_cast<unsigned>(apply.GetNumOfNonSuccessorOperands()));
     TranslateTryTerminatorJumps(ctx, apply);
 }
 
-void CHIR2BCHIR::TranslateTryTerminatorJumps(Context& ctx, const Terminator& expr)
+void CHIR2BCHIR::TranslateTryTerminatorJumps(Context& ctx, const Expression& expr)
 {
     CJC_ASSERT(expr.GetNumOfSuccessor() == Bchir::FLAG_TWO);
     auto exceptionBB = expr.GetSuccessor(1);
@@ -156,7 +156,7 @@ void CHIR2BCHIR::TranslateMultiBranch(Context& ctx, const MultiBranch& branch)
     // default_target :: case_1_target :: ... :: case_n_target
 
     auto& cases = branch.GetCaseVals();
-    auto& successors = branch.GetSuccessors();
+    auto successors = branch.GetSuccessors();
     auto ty = branch.GetOperand(0)->GetType();
     auto tyKind = ty->IsEnum() ? CHIR::Type::TypeKind::TYPE_UINT64 : ty->GetTypeKind();
 
@@ -192,9 +192,9 @@ void CHIR2BCHIR::TranslateIntOpWithException(Context& ctx, const IntOpWithExcept
     auto overflowStrat = static_cast<Bchir::ByteCodeContent>(Cangjie::OverflowStrategy::THROWING);
 
     if (opCode == OpCode::UN_NEG_EXC) {
-        CJC_ASSERT(expr.GetNumOfOperands() == 1);
+        CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == 1);
     } else {
-        CJC_ASSERT(expr.GetNumOfOperands() == Bchir::FLAG_TWO);
+        CJC_ASSERT(expr.GetNumOfNonSuccessorOperands() == Bchir::FLAG_TWO);
         CJC_ASSERT(opCode == OpCode::BIN_ADD_EXC || opCode == OpCode::BIN_SUB_EXC || opCode == OpCode::BIN_MUL_EXC ||
             opCode == OpCode::BIN_DIV_EXC || opCode == OpCode::BIN_MOD_EXC || opCode == OpCode::BIN_EXP_EXC ||
             opCode == OpCode::BIN_LSHIFT_EXC || opCode == OpCode::BIN_RSHIFT_EXC);

@@ -79,7 +79,7 @@ llvm::Value* HandleLoadExpr(IRBuilder2& irBuilder, const CHIR::Load& load)
         auto localVar = StaticCast<const CHIR::LocalVar*>(load.GetLocation());
         if (IsGetElementRefOfClass(*localVar->GetExpr(), irBuilder.GetCGContext().GetCHIRBuilder())) {
             auto getEleRefExpr = StaticCast<const CHIR::GetElementRef*>(localVar->GetExpr());
-            auto locationCHIRType = DeRef(*getEleRefExpr->GetLocation()->GetType());
+            auto locationCHIRType = DeRef(*getEleRefExpr->GetBase()->GetType());
             if (locationCHIRType->IsClass() &&
                 IsWeakRefClass(*StaticCast<CHIR::ClassType*>(locationCHIRType)->GetClassDef())) {
                 auto addr = value.GetRawValue();
@@ -180,7 +180,7 @@ llvm::Value* GetElementRefOfOptionLikeT(
 llvm::Value* HandleGetElementRef(IRBuilder2& irBuilder, const CHIR::GetElementRef& getEleRef)
 {
     auto& cgMod = irBuilder.GetCGModule();
-    auto base = getEleRef.GetLocation();
+    auto base = getEleRef.GetBase();
     CJC_ASSERT(base->GetType()->IsRef() || base->GetType()->IsGeneric());
     irBuilder.EmitLocation(CHIRExprWrapper(getEleRef));
     llvm::Value* retValue = nullptr;
@@ -233,7 +233,7 @@ void HandleStoreElementRef(IRBuilder2& irBuilder, const CHIR::StoreElementRef& s
 {
     auto& cgMod = irBuilder.GetCGModule();
     auto rhs = storeElementRef.GetValue();
-    auto lhs = storeElementRef.GetLocation();
+    auto lhs = storeElementRef.GetBase();
     auto& path = storeElementRef.GetPath();
     CJC_ASSERT(lhs->GetType()->IsRef() && !path.empty());
     auto value = cgMod | rhs;

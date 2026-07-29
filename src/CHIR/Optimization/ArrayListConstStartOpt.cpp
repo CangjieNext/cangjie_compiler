@@ -92,7 +92,7 @@ bool ArrayListConstStartOpt::IsStartAddIndexExpression(const Field& field, bool 
         return false;
     }
 
-    auto location = getElementRef->GetLocation();
+    auto location = getElementRef->GetBase();
     if (!isIteratorFunc && location->IsParameter()) {
         auto param = StaticCast<Parameter*>(location);
         // the index 0 or 1 parameter of ArrayList Function is class ArrayList
@@ -128,7 +128,7 @@ bool ArrayListConstStartOpt::IsStartAddIndexExpression(const Field& field, bool 
             return false;
         }
 
-        location = getElementRef->GetLocation();
+        location = getElementRef->GetBase();
         if (!location->IsParameter()) {
             return false;
         }

@@ -86,7 +86,7 @@ std::string ToPosInfo(const DebugLocation& loc, bool isPrintFileName)
 
 std::optional<size_t> IsInitialisingMemberVar(const Function& func, const StoreElementRef& store)
 {
-    auto location = store.GetLocation();
+    auto location = store.GetBase();
     if ((func.IsConstructor() || func.GetFuncKind() == FuncKind::INSTANCEVAR_INIT) && location->IsParameter()) {
         auto& paths = store.GetPath();
         // func->GetParam(0) is the `this` arugment.
@@ -103,7 +103,7 @@ const Lambda* IsApplyToLambda(const Expression* expr)
     if (expr->GetExprKind() != ExprKind::APPLY && expr->GetExprKind() != ExprKind::APPLY_WITH_EXCEPTION) {
         return nullptr;
     }
-    CJC_ASSERT(expr->GetNumOfOperands() > 0);
+    CJC_ASSERT(expr->GetNumOfNonSuccessorOperands() > 0);
     if (!expr->GetOperand(0)->IsLocalVar()) {
         return nullptr;
     }

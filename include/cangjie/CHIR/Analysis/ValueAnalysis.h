@@ -869,7 +869,7 @@ public:
      * @return blocks may goto after analysing.
      */
     std::optional<Block*> PropagateTerminatorEffect(
-        State<ValueDomain, ValueStatePool>& state, const Terminator* terminator) override
+        State<ValueDomain, ValueStatePool>& state, const Expression* terminator) override
     {
         switch (terminator->GetExprKind()) {
             case ExprKind::APPLY_WITH_EXCEPTION: {
@@ -1056,7 +1056,7 @@ private:
     template <typename TElemRef> AbstractObject* FindTargetElement(
         State<ValueDomain, ValueStatePool>& state, const TElemRef* elemRef)
     {
-        auto loc = elemRef->GetLocation();
+        auto loc = elemRef->GetBase();
         if (loc->IsGlobal() || loc->TestAttr(Attribute::STATIC)) {
             return AbstractObject::GetTopObjInstance();
         }
@@ -1483,7 +1483,7 @@ private:
     {
         state.SetToBound(tuple->GetResult(), /* isTop = */ true);
 
-        auto operands = tuple->GetOperands();
+        auto operands = tuple->GetElementValues();
         auto operandNum = tuple->GetResult()->GetType()->IsEnum() ? 1 : operands.size();
         if (auto it = childrenMap.find(tuple->GetResult()); it != childrenMap.end()) {
             auto& children = it->second;
@@ -1623,7 +1623,7 @@ private:
     }
 
     virtual std::optional<Block*> HandleTerminatorEffect(
-        State<ValueDomain, ValueStatePool>& state, const Terminator* terminator)
+        State<ValueDomain, ValueStatePool>& state, const Expression* terminator)
     {
         (void)state;
         (void)terminator;

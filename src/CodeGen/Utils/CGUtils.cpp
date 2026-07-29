@@ -220,19 +220,17 @@ std::tuple<bool, std::string> IsAllConstantNode(const std::vector<CHIR::Value*>&
 
 std::tuple<bool, std::string> IsConstantArray(const CHIR::RawArrayLiteralInit& arrayLiteralInit)
 {
-    const auto& operands = arrayLiteralInit.GetOperands();
-    const std::vector<CHIR::Value*> args(operands.begin() + 1, operands.end());
-    return IsAllConstantNode(args);
+    return IsAllConstantNode(arrayLiteralInit.GetElementValues());
 }
 
 std::tuple<bool, std::string> IsConstantVArray(const CHIR::VArray& varray)
 {
-    return IsAllConstantNode(varray.GetOperands());
+    return IsAllConstantNode(varray.GetElementValues());
 }
 
 std::tuple<bool, std::string> IsConstantTuple(const CHIR::Tuple& tuple)
 {
-    return IsAllConstantNode(tuple.GetOperands());
+    return IsAllConstantNode(tuple.GetElementValues());
 }
 
 bool IsReferenceType(const CHIR::Type& ty, CGModule& cgMod)
@@ -386,7 +384,7 @@ bool IsGetElementRefOfClass(const CHIR::Expression& expr, CHIR::CHIRBuilder& bui
         return false;
     }
     auto& getEleRef = dynamic_cast<const CHIR::GetElementRef&>(expr);
-    auto baseType = getEleRef.GetLocation()->GetType()->GetTypeArgs()[0];
+    auto baseType = getEleRef.GetBase()->GetType()->GetTypeArgs()[0];
     auto& path = getEleRef.GetPath();
     CJC_ASSERT(!path.empty());
     for (size_t idx = 0; idx < path.size() - 1; ++idx) {

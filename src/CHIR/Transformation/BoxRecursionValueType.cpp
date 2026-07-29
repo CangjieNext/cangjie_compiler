@@ -110,7 +110,7 @@ bool LeftIsBoxTypeOfRight(const Type& left, const Type& right)
 
 void BoxStoreElementRefSrcValueIfNeed(StoreElementRef& ser, CHIRBuilder& builder)
 {
-    auto targetType = GetTargetType(*ser.GetLocation()->GetType(), ser.GetPath(), builder);
+    auto targetType = GetTargetType(*ser.GetBase()->GetType(), ser.GetPath(), builder);
     auto srcValue = ser.GetValue();
     auto srcType = srcValue->GetType();
     if (LeftIsBoxTypeOfRight(*targetType, *srcType)) {
@@ -126,7 +126,7 @@ void UnBoxGetElementRefResIfNeed(GetElementRef& ger, CHIRBuilder& builder)
 {
     // If the base of the GetElementRef expression is enum, it must be the index on which we want to get enum.
     // Therefore, we do not need to box the targetType.
-    auto baseType = ger.GetLocation()->GetType()->StripAllRefs();
+    auto baseType = ger.GetBase()->GetType()->StripAllRefs();
     if (baseType->IsEnum()) {
         return;
     }
@@ -159,7 +159,7 @@ void BoxTupleOpIfNeed(Tuple& tuple, CHIRBuilder& builder)
     if (!tupleRes->GetType()->IsEnum()) {
         return;
     }
-    auto operands = tuple.GetOperands();
+    auto operands = tuple.GetElementValues();
     auto indexExpr = StaticCast<Constant*>(StaticCast<LocalVar*>(operands[0])->GetExpr());
     size_t index = 0;
     if (indexExpr->IsBoolLit()) {

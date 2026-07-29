@@ -5,6 +5,7 @@
 // See https://cangjie-lang.cn/pages/LICENSE for license information.
 
 #include "cangjie/CHIR/IR/Expression/Expression.h"
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 
@@ -249,6 +250,11 @@ size_t Expression::GetNumOfOperands() const
     return operands.size();
 }
 
+size_t Expression::GetNumOfNonSuccessorOperands() const
+{
+    return GetSuccessorIndex(0);
+}
+
 std::vector<Value*> Expression::GetOperands() const
 {
     return operands;
@@ -256,8 +262,45 @@ std::vector<Value*> Expression::GetOperands() const
 
 Value* Expression::GetOperand(size_t idx) const
 {
-    CJC_ASSERT(idx < operands.size());
+    CJC_ASSERT(idx < GetNumOfNonSuccessorOperands());
     return operands[idx];
+}
+
+std::vector<Value*> Expression::GetNonSuccessorOperands() const
+{
+    auto num = GetNumOfNonSuccessorOperands();
+    CJC_ASSERT(operands.size() >= num);
+    return {operands.begin(), operands.begin() + static_cast<long>(num)};
+}
+
+std::vector<Block*> Expression::GetSuccessors() const
+{
+    std::vector<Block*> succs;
+    for (auto op : operands) {
+        if (op->IsBlock()) {
+            succs.emplace_back(StaticCast<Block*>(op));
+        }
+    }
+    return succs;
+}
+
+size_t Expression::GetSuccessorIndex(size_t index) const
+{
+    size_t firstSuccIdx = 0;
+    while (firstSuccIdx < operands.size() && !operands[firstSuccIdx]->IsBlock()) {
+        ++firstSuccIdx;
+    }
+    return firstSuccIdx + index;
+}
+
+size_t Expression::GetNumOfSuccessor() const
+{
+    return operands.size() - GetSuccessorIndex(0);
+}
+
+Block* Expression::GetSuccessor(size_t index) const
+{
+    return StaticCast<Block*>(operands[GetSuccessorIndex(index)]);
 }
 
 LocalVar* Expression::GetResult() const
@@ -292,6 +335,9 @@ Function* Expression::GetTopLevelFunc() const
  */
 void Expression::RemoveSelfFromBlock()
 {
+    for (auto suc : GetSuccessors()) {
+        suc->RemovePredecessor(*parent);
+    }
     if (parent != nullptr) {
         parent->RemoveExprOnly(*this);
         parent = nullptr;
@@ -301,28 +347,39 @@ void Expression::RemoveSelfFromBlock()
 
 void Expression::ReplaceWith(Expression& newExpr)
 {
-    CJC_ASSERT(!newExpr.IsTerminator());
     // 1. replace result
-    for (auto user : result->GetUsers()) {
-        user->ReplaceOperand(result, newExpr.GetResult());
+    if (result != nullptr) {
+        CJC_NULLPTR_CHECK(newExpr.GetResult());
+        for (auto user : result->GetUsers()) {
+            user->ReplaceOperand(result, newExpr.GetResult());
+        }
     }
-    // 2. break double linkage between operands and current expr
-    EraseOperands();
 
-    // 3. remove new expr from its parent block
+    // 2. store current parent and the position of this expression in the parent block
+    CJC_NULLPTR_CHECK(parent);
+    auto tempParent = parent;
+    auto pos = std::find(tempParent->exprs.begin(), tempParent->exprs.end(), this);
+    CJC_ASSERT(pos != tempParent->exprs.end());
+    auto idx = static_cast<size_t>(pos - tempParent->exprs.begin());
+
+    // 3. remove this expression from its parent block
+    RemoveSelfFromBlock();
+
+    // 4. remove the new expression from its parent block
     if (newExpr.parent != nullptr) {
         newExpr.parent->RemoveExprOnly(newExpr);
     }
 
-    // 4. replace to new expr in parent block
-    CJC_NULLPTR_CHECK(parent);
-    for (size_t i = 0; i < parent->exprs.size(); ++i) {
-        if (parent->exprs[i] == this) {
-            parent->exprs[i] = &newExpr;
-        }
+    // 5. set new parent
+    newExpr.SetParent(tempParent);
+
+    // 6. insert the new expression into the parent block at the same position
+    tempParent->exprs.insert(tempParent->exprs.begin() + static_cast<std::ptrdiff_t>(idx), &newExpr);
+
+    // 7. add the successors of the new expression to the parent block
+    for (auto suc : newExpr.GetSuccessors()) {
+        suc->AddPredecessor(tempParent);
     }
-    newExpr.parent = parent;
-    parent = nullptr;
 }
 
 /**
@@ -368,10 +425,8 @@ void Expression::MoveAfter(Expression* expr)
     CJC_ASSERT(!expr->IsTerminator());
     if (parent != nullptr) {
         parent->RemoveExprOnly(*this);
-        if (IsTerminator()) {
-            for (auto suc : StaticCast<Terminator*>(this)->GetSuccessors()) {
-                suc->RemovePredecessor(*parent);
-            }
+        for (auto suc : GetSuccessors()) {
+            suc->RemovePredecessor(*parent);
         }
     }
     CJC_NULLPTR_CHECK(expr->parent);
@@ -386,10 +441,8 @@ void Expression::MoveTo(Block& block)
     CJC_NULLPTR_CHECK(parent);
     CJC_ASSERT(this->GetParentBlockGroup() == block.GetParentBlockGroup());
     parent->RemoveExprOnly(*this);
-    if (IsTerminator()) {
-        for (auto suc : StaticCast<Terminator*>(this)->GetSuccessors()) {
-            suc->RemovePredecessor(*parent);
-        }
+    for (auto suc : GetSuccessors()) {
+        suc->RemovePredecessor(*parent);
     }
     block.AppendExpression(this);
 }
@@ -403,34 +456,43 @@ void Expression::ReplaceOperand(Value* oldOperand, Value* newOperand)
 {
     CJC_NULLPTR_CHECK(oldOperand);
     CJC_NULLPTR_CHECK(newOperand);
-    if (oldOperand == newOperand) {
+    if (oldOperand == newOperand || std::find(operands.begin(), operands.end(), oldOperand) == operands.end()) {
         return;
     }
-    for (unsigned i = 0; i < operands.size(); i++) {
-        if (operands[i] == oldOperand) {
-            operands[i] = newOperand;
-            operands[i]->AddUserOnly(this);
-            oldOperand->RemoveUserOnly(this);
-        }
+    std::replace(operands.begin(), operands.end(), oldOperand, newOperand);
+    // Block successors update CFG edges (and users) via predecessor APIs.
+    if (auto block = DynamicCast<Block*>(oldOperand)) {
+        block->RemovePredecessor(*GetParentBlock());
+    } else {
+        oldOperand->RemoveUserOnly(this);
+    }
+    if (auto block = DynamicCast<Block*>(newOperand)) {
+        block->AddPredecessor(GetParentBlock());
+    } else {
+        newOperand->AddUserOnly(this);
     }
 }
 
 void Expression::ReplaceOperand(size_t idx, Value* newOperand)
 {
     CJC_ASSERT(idx < operands.size());
+    CJC_NULLPTR_CHECK(newOperand);
     auto oldOperand = operands[idx];
     if (oldOperand == newOperand) {
         return;
     }
     operands[idx] = newOperand;
-    newOperand->AddUserOnly(this);
-    bool needRemoveOldOpUser = true;
-    for (auto op : operands) {
-        if (op == oldOperand) {
-            needRemoveOldOpUser = false;
-        }
+    if (auto block = DynamicCast<Block*>(newOperand)) {
+        block->AddPredecessor(GetParentBlock());
+    } else {
+        newOperand->AddUserOnly(this);
     }
-    if (needRemoveOldOpUser) {
+    if (std::find(operands.begin(), operands.end(), oldOperand) != operands.end()) {
+        return;
+    }
+    if (auto block = DynamicCast<Block*>(oldOperand)) {
+        block->RemovePredecessor(*GetParentBlock());
+    } else {
         oldOperand->RemoveUserOnly(this);
     }
 }
@@ -698,7 +760,7 @@ Value* Store::GetLocation() const
 }
 
 // GetElementRef
-Value* GetElementRef::GetLocation() const
+Value* GetElementRef::GetBase() const
 {
     return operands[0];
 }
@@ -711,7 +773,7 @@ const std::vector<uint64_t>& GetElementRef::GetPath() const
 std::string GetElementRef::OperandsToString() const
 {
     std::stringstream ss;
-    ss << GetLocation()->GetIdentifier();
+    ss << GetBase()->GetIdentifier();
     for (auto p : GetPath()) {
         ss << ", " << p;
     }
@@ -753,7 +815,7 @@ Value* StoreElementRef::GetValue() const
     return operands[0];
 }
 
-Value* StoreElementRef::GetLocation() const
+Value* StoreElementRef::GetBase() const
 {
     return operands[1];
 }
@@ -1419,7 +1481,7 @@ size_t RawArrayLiteralInit::GetSize() const
     return operands.size() - 1;
 }
 
-std::vector<Value*> RawArrayLiteralInit::GetElements() const
+std::vector<Value*> RawArrayLiteralInit::GetElementValues() const
 {
     CJC_ASSERT(operands.size() > 0);
     return {operands.begin() + 1, operands.end()};
@@ -1573,7 +1635,7 @@ std::vector<Value*> Lambda::GetCapturedVariables() const
 {
     std::vector<Value*> envs;
     auto preVisit = [&envs, this](Expression& e) {
-        for (auto op : e.GetOperands()) {
+        for (auto op : e.GetNonSuccessorOperands()) {
             bool isEnv = false;
             if (op->IsLocalVar()) {
                 auto localVar = static_cast<LocalVar*>(op);
@@ -1721,7 +1783,7 @@ Store* Store::Clone(CHIRBuilder& builder, Block& parent) const
 
 GetElementRef* GetElementRef::Clone(CHIRBuilder& builder, Block& parent) const
 {
-    auto newNode = builder.CreateExpression<GetElementRef>(result->GetType(), GetLocation(), GetPath(), &parent);
+    auto newNode = builder.CreateExpression<GetElementRef>(result->GetType(), GetBase(), GetPath(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
@@ -1731,7 +1793,7 @@ std::string StoreElementRef::OperandsToString() const
 {
     std::stringstream ss;
     ss << GetValue()->GetIdentifier() << ", ";
-    ss << GetLocation()->GetIdentifier();
+    ss << GetBase()->GetIdentifier();
     for (auto p : GetPath()) {
         ss << ", " << p;
     }
@@ -1741,7 +1803,7 @@ std::string StoreElementRef::OperandsToString() const
 StoreElementRef* StoreElementRef::Clone(CHIRBuilder& builder, Block& parent) const
 {
     auto newNode =
-        builder.CreateExpression<StoreElementRef>(result->GetType(), GetValue(), GetLocation(), GetPath(), &parent);
+        builder.CreateExpression<StoreElementRef>(result->GetType(), GetValue(), GetBase(), GetPath(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
@@ -1829,6 +1891,11 @@ int64_t VArray::GetSize() const
     return static_cast<int64_t>(operands.size());
 }
 
+std::vector<Value*> VArray::GetElementValues() const
+{
+    return operands;
+}
+
 VArrayBuilder::VArrayBuilder(Value* size, Value* item, Value* initFunc, Block* parent)
     : Expression(ExprKind::VARRAY_BUILDER, {size, item, initFunc}, {}, parent)
 {
@@ -1890,7 +1957,7 @@ RaiseException* RaiseException::Clone(CHIRBuilder& builder, Block& parent) const
 
 Tuple* Tuple::Clone(CHIRBuilder& builder, Block& parent) const
 {
-    auto newNode = builder.CreateExpression<Tuple>(result->GetType(), GetOperands(), &parent);
+    auto newNode = builder.CreateExpression<Tuple>(result->GetType(), GetElementValues(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
@@ -1915,7 +1982,7 @@ RawArrayAllocate* RawArrayAllocate::Clone(CHIRBuilder& builder, Block& parent) c
 RawArrayLiteralInit* RawArrayLiteralInit::Clone(CHIRBuilder& builder, Block& parent) const
 {
     auto newNode =
-        builder.CreateExpression<RawArrayLiteralInit>(result->GetType(), GetRawArray(), GetElements(), &parent);
+        builder.CreateExpression<RawArrayLiteralInit>(result->GetType(), GetRawArray(), GetElementValues(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;
@@ -1932,7 +1999,7 @@ RawArrayInitByValue* RawArrayInitByValue::Clone(CHIRBuilder& builder, Block& par
 
 VArray* VArray::Clone(CHIRBuilder& builder, Block& parent) const
 {
-    auto newNode = builder.CreateExpression<VArray>(result->GetType(), GetOperands(), &parent);
+    auto newNode = builder.CreateExpression<VArray>(result->GetType(), GetElementValues(), &parent);
     parent.AppendExpression(newNode);
     newNode->GetResult()->AppendAttributeInfo(result->GetAttributeInfo());
     return newNode;

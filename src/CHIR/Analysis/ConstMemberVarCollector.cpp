@@ -104,7 +104,7 @@ void ConstMemberVarCollector::HandleStoreElementRef(
     if (index2Type.find(index) == index2Type.end()) {
         return;
     }
-    auto location = stf->GetLocation();
+    auto location = stf->GetBase();
     if (location != firstParam) {
         // not store to this value, skip.
         return;

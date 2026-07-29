@@ -35,7 +35,7 @@ void GetRefToArrayElem::RunOnFunc(const Function& func, CHIRBuilder& builder)
             }
             auto callContext = IntrisicCallContext {
                 .kind = IntrinsicKind::ARRAY_GET_REF_UNCHECKED,
-                .args = intrinsic->GetOperands()
+                .args = intrinsic->GetArgs()
             };
             auto arrayGetRef = builder.CreateExpression<Intrinsic>(
                 builder.GetType<RefType>(intrinsic->GetResult()->GetType()), callContext, intrinsic->GetParentBlock());

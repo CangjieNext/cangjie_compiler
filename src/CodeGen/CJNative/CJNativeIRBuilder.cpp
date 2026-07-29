@@ -1209,7 +1209,7 @@ llvm::Value* IRBuilder2::CallArrayIntrinsicInitWithContent(const CHIR::RawArrayL
     CJC_ASSERT(value);
     auto arrayV = **value;
     auto rawArrTy = static_cast<CHIR::RawArrayType*>(arrTy);
-    auto elements = arrayLiteralInit.GetElements();
+    auto elements = arrayLiteralInit.GetElementValues();
     auto [isConstantArray, serialized] = IsConstantArray(arrayLiteralInit);
     if (isConstantArray) {
         std::vector<CGValue*> params;

@@ -188,7 +188,7 @@ llvm::Value* HandleTerminatorExpression(IRBuilder2& irBuilder, const CHIR::Expre
             auto unwindDest = intOpWithException.GetSuccessor(1);
             CodeGenUnwindBlockScope unwindBlockScope(cgMod, cgMod.GetMappedBB(unwindDest));
             llvm::Value* resultVal = nullptr;
-            if (intOpWithException.GetOperands().size() == 1) {
+            if (intOpWithException.GetNumOfNonSuccessorOperands() == 1) {
                 resultVal = HandleUnaryExpression(irBuilder, CHIRUnaryExprWrapper(intOpWithException));
             } else {
                 resultVal = HandleBinaryExpression(irBuilder, CHIRBinaryExprWrapper(intOpWithException));

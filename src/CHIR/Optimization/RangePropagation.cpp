@@ -91,7 +91,7 @@ void RangePropagation::RunOnFunc(const Ptr<const Function>& func, bool isDebug)
         }
     };
     bool doBlockElimination = false;
-    const auto actionOnTerminator = [this, isDebug, &doBlockElimination](const RangeDomain&, Terminator* terminator,
+    const auto actionOnTerminator = [this, isDebug, &doBlockElimination](const RangeDomain&, Expression* terminator,
                                         std::optional<Block*> targetSucc) {
         switch (terminator->GetExprKind()) {
             case ExprKind::BRANCH:
@@ -155,7 +155,7 @@ void RangePropagation::RewriteToConstExpr(const RewriteInfo& rewriteInfo, bool i
 }
 
 void RangePropagation::RewriteBranchTerminator(
-    const Ptr<Terminator>& branch, const Ptr<Block>& targetSucc, bool isDebug)
+    const Ptr<Expression>& branch, const Ptr<Block>& targetSucc, bool isDebug)
 {
     auto parentBlock = branch->GetParentBlock();
     branch->RemoveSelfFromBlock();
@@ -182,7 +182,7 @@ GlobalVar* RecordLoadEffectMap(const Ptr<const Load>& load)
         // %0 = GetElementRef(gv_sa); %1 = Load(%0)
         auto locExpr = StaticCast<LocalVar*>(loc)->GetExpr();
         if (locExpr->GetExprKind() == ExprKind::GET_ELEMENT_REF) {
-            auto base = StaticCast<GetElementRef*>(locExpr)->GetLocation();
+            auto base = StaticCast<GetElementRef*>(locExpr)->GetBase();
             if (base->IsGlobalVarWithInitializer()) {
                 gv = StaticCast<GlobalVar*>(base);
             }

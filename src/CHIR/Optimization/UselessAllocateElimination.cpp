@@ -39,7 +39,7 @@ void UselessAllocateElimination::RunOnFunc(const Function& func, bool isDebug)
             auto onlyBeenWritten = std::all_of(users.begin(), users.end(), [res](auto e) {
                 return (e->GetExprKind() == ExprKind::STORE && StaticCast<Store*>(e)->GetLocation() == res) ||
                     (e->GetExprKind() == ExprKind::STORE_ELEMENT_REF &&
-                        StaticCast<StoreElementRef*>(e)->GetLocation() == res) ||
+                        StaticCast<StoreElementRef*>(e)->GetBase() == res) ||
                     e->GetExprKind() == ExprKind::DEBUGEXPR;
             });
             if (onlyBeenWritten) {

@@ -395,7 +395,7 @@ private:
 
     // ======================= Transfer functions for terminators ======================= //
 
-    std::optional<Block*> HandleTerminatorEffect(TConstDomain& state, const Terminator* terminator) override
+    std::optional<Block*> HandleTerminatorEffect(TConstDomain& state, const Expression* terminator) override
     {
         ConstAnalysis::ExceptionKind res = ExceptionKind::NA;
         switch (terminator->GetExprKind()) {
@@ -430,7 +430,7 @@ private:
             }
         }
         if (res == ExceptionKind::SUCCESS) {
-            MarkExpressionAsMustNotOverflow(*const_cast<Terminator*>(terminator));
+            MarkExpressionAsMustNotOverflow(*const_cast<Expression*>(terminator));
             return terminator->GetSuccessor(0);
         } else if (res == ExceptionKind::FAIL) {
             return terminator->GetSuccessor(1);
@@ -1393,12 +1393,13 @@ private:
     {
         // Intrinsic/varrayGet(arr, indexes...)
         constexpr size_t varrayOperandIndex = 0;
-        if (intrinsic->GetNumOfOperands() != 2U) {
+        auto args = intrinsic->GetArgs();
+        if (args.size() != 2U) {
             return ExceptionKind::NA;
         }
-        auto arrNode = intrinsic->GetOperand(varrayOperandIndex);
+        auto arrNode = args[varrayOperandIndex];
         constexpr size_t indexOperandIndex = 1;
-        auto indexNode = intrinsic->GetOperand(indexOperandIndex);
+        auto indexNode = args[indexOperandIndex];
         auto indexVal = state.CheckAbstractValue(indexNode);
         if (!indexVal) {
             return ExceptionKind::NA;
@@ -1414,10 +1415,11 @@ private:
     {
         // Intrinsic/varraySet(arr, value, index)
         constexpr size_t varrayOperandIndex = 0;
-        CJC_ASSERT(intrinsic->GetNumOfOperands() == 3U);
-        auto arrRefNode = intrinsic->GetOperand(varrayOperandIndex);
+        auto args = intrinsic->GetArgs();
+        CJC_ASSERT(args.size() == 3U);
+        auto arrRefNode = args[varrayOperandIndex];
         constexpr size_t indexOperandIndex = 2;
-        auto indexNode = intrinsic->GetOperand(indexOperandIndex);
+        auto indexNode = args[indexOperandIndex];
         auto indexVal = state.CheckAbstractValue(indexNode);
         if (!indexVal) {
             return ExceptionKind::NA;

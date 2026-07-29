@@ -111,7 +111,7 @@ public:
      * @param expression next terminator to analyse.
      * @return blocks return after analysis.
      */
-    std::optional<Block*> PropagateTerminatorEffect(MaybeInitDomain& state, const Terminator* expression) override;
+    std::optional<Block*> PropagateTerminatorEffect(MaybeInitDomain& state, const Expression* expression) override;
 
 private:
     void HandleAllocateExpr(MaybeInitDomain& state, const Allocate* allocate);

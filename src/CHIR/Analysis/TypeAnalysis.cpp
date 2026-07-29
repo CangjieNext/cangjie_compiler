@@ -206,7 +206,7 @@ void TypeAnalysis::HandleAllocateExpr(TypeDomain& state, const Allocate* express
     }
 }
 
-std::optional<Block*> TypeAnalysis::HandleTerminatorEffect(TypeDomain& state, const Terminator* terminator)
+std::optional<Block*> TypeAnalysis::HandleTerminatorEffect(TypeDomain& state, const Expression* terminator)
 {
     switch (terminator->GetExprKind()) {
         // already handled by the framework
@@ -350,7 +350,7 @@ template <class MemberAccess>
 static Type* GetInnerTypeFromMemberAccess(const MemberAccess& ma, CHIRBuilder& builder)
 {
     const auto& path = ma.GetPath();
-    auto locationType = ma.GetOperands()[0]->GetType();
+    auto locationType = ma.GetBase()->GetType();
     for (size_t i = 0; i < path.size() - 1; ++i) {
         CJC_NULLPTR_CHECK(locationType);
         auto index = path[i];

@@ -22,10 +22,6 @@
 
 using namespace Cangjie::CHIR;
 
-namespace {
-constexpr size_t WITH_EXCEPTION_SUCCESSOR_NUM = 2;
-}
-
 // Terminator
 Terminator::Terminator(
     ExprKind kind, const std::vector<Value*>& operands, const std::vector<Block*>& successors, Block* parent)
@@ -33,116 +29,8 @@ Terminator::Terminator(
 {
     CJC_NULLPTR_CHECK(parent);
     for (auto succ : successors) {
-        AppendSuccessor(*succ);
+        AppendOperand(*succ);
     }
-}
-
-size_t Terminator::GetFirstSuccessorIndex() const
-{
-    CJC_ASSERT(GetExprMajorKind() == ExprMajorKind::TERMINATOR);
-    if (kind == ExprKind::BRANCH || kind == ExprKind::MULTIBRANCH) {
-        return 1;
-    }
-    if (kind == ExprKind::RAISE_EXCEPTION) {
-        return 1;
-    }
-    if (static_cast<uint64_t>(ExprKind::APPLY_WITH_EXCEPTION) <= static_cast<uint64_t>(kind) &&
-        static_cast<uint64_t>(kind) <= static_cast<uint64_t>(ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION)) {
-        CJC_ASSERT(operands.size() >= WITH_EXCEPTION_SUCCESSOR_NUM);
-        return operands.size() - WITH_EXCEPTION_SUCCESSOR_NUM;
-    }
-    return 0;
-}
-
-void Terminator::ReplaceWith(Expression& newTerminator)
-{
-    CJC_ASSERT(newTerminator.IsTerminator());
-    if (result != nullptr) {
-        CJC_NULLPTR_CHECK(newTerminator.GetResult());
-        for (auto user : result->GetUsers()) {
-            user->ReplaceOperand(result, newTerminator.GetResult());
-        }
-    }
-    auto tempParent = parent;
-    RemoveSelfFromBlock();
-    tempParent->AppendTerminator(StaticCast<Terminator*>(&newTerminator));
-}
-
-size_t Terminator::GetNumOfSuccessor() const
-{
-    return operands.size() - GetFirstSuccessorIndex();
-}
-
-Block* Terminator::GetSuccessor(size_t index) const
-{
-    CJC_ASSERT(operands.size() == 0 || index + GetFirstSuccessorIndex() < operands.size());
-    return StaticCast<Block*>(operands[GetFirstSuccessorIndex() + index]);
-}
-
-size_t Terminator::GetNumOfOperands() const
-{
-    return GetFirstSuccessorIndex();
-}
-
-std::vector<Value*> Terminator::GetOperands() const
-{
-    CJC_ASSERT(operands.size() >= GetFirstSuccessorIndex());
-    return {operands.begin(), operands.begin() + static_cast<long>(GetFirstSuccessorIndex())};
-}
-
-Value* Terminator::GetOperand(size_t idx) const
-{
-    CJC_ASSERT(idx < GetFirstSuccessorIndex());
-    return operands[idx];
-}
-
-const std::vector<Block*> Terminator::GetSuccessors() const
-{
-    std::vector<Block*> succs;
-    for (auto i = GetFirstSuccessorIndex(); i < operands.size(); ++i) {
-        succs.emplace_back(StaticCast<Block*>(operands[i]));
-    }
-    return succs;
-}
-
-void Terminator::ReplaceSuccessor(Block& oldSuccessor, Block& newSuccessor)
-{
-    oldSuccessor.RemovePredecessor(*GetParentBlock());
-    newSuccessor.AddPredecessor(GetParentBlock());
-
-    auto it = std::find(operands.begin(), operands.end(), &oldSuccessor);
-    CJC_ASSERT(it != operands.end());
-    while (it != operands.end()) {
-        *it = &newSuccessor;
-        it = std::find(std::next(it), operands.end(), &oldSuccessor);
-    }
-}
-
-void Terminator::ReplaceSuccessor(size_t index, Block& newSuccessor)
-{
-    CJC_ASSERT(operands.size() == 0 || index + GetFirstSuccessorIndex() < operands.size());
-    GetSuccessor(index)->RemovePredecessor(*GetParentBlock());
-    newSuccessor.AddPredecessor(GetParentBlock());
-    operands[GetFirstSuccessorIndex() + index] = &newSuccessor;
-}
-
-void Terminator::LetSuccessorsRemoveCurBlock() const
-{
-    auto succs = GetSuccessors();
-    for (auto suc : succs) {
-        suc->RemovePredecessor(*parent);
-    }
-}
-
-void Terminator::RemoveSelfFromBlock()
-{
-    LetSuccessorsRemoveCurBlock();
-    Expression::RemoveSelfFromBlock();
-}
-
-void Terminator::AppendSuccessor(Block& block)
-{
-    operands.emplace_back(&block);
 }
 
 GoTo::GoTo(Block* destBlock, Block* parent) : Terminator(ExprKind::GOTO, {}, {destBlock}, parent)
@@ -164,9 +52,9 @@ MultiBranch::MultiBranch(Value* cond, Block* defaultBlock, const std::vector<uin
     CJC_NULLPTR_CHECK(defaultBlock);
     CJC_NULLPTR_CHECK(parent);
     /* Note that successors[0] is used to store the default basic block */
-    AppendSuccessor(*defaultBlock);
+    AppendOperand(*defaultBlock);
     for (auto b : succs) {
-        AppendSuccessor(*b);
+        AppendOperand(*b);
     }
 }
 
@@ -270,8 +158,8 @@ ApplyWithException::ApplyWithException(
         AppendOperand(*op);
     }
 
-    AppendSuccessor(*sucBlock);
-    AppendSuccessor(*errBlock);
+    AppendOperand(*sucBlock);
+    AppendOperand(*errBlock);
 }
 
 Value* ApplyWithException::GetCallee() const
@@ -282,10 +170,10 @@ Value* ApplyWithException::GetCallee() const
 /** @brief Get a list of the ApplyWithException operation argument nodes */
 std::vector<Value*> ApplyWithException::GetArgs() const
 {
-    if (GetFirstSuccessorIndex() <= 1) {
+    if (GetSuccessorIndex(0) <= 1) {
         return {};
     } else {
-        return {operands.begin() + 1, operands.begin() + static_cast<long>(GetFirstSuccessorIndex())};
+        return {operands.begin() + 1, operands.begin() + static_cast<long>(GetSuccessorIndex(0))};
     }
 }
 
@@ -331,8 +219,8 @@ DynamicDispatchWithException::DynamicDispatchWithException(
         AppendOperand(*op);
     }
 
-    AppendSuccessor(*sucBlock);
-    AppendSuccessor(*errBlock);
+    AppendOperand(*sucBlock);
+    AppendOperand(*errBlock);
 }
 
 Function* DynamicDispatchWithException::GetCallee() const
@@ -435,7 +323,7 @@ Value* InvokeWithException::GetObject() const
 /** @brief Get the call args of this InvokeWithException operation */
 std::vector<Value*> InvokeWithException::GetArgs() const
 {
-    return {operands.begin() + 1, operands.begin() + static_cast<long>(GetFirstSuccessorIndex())};
+    return {operands.begin() + 1, operands.begin() + static_cast<long>(GetSuccessorIndex(0))};
 }
 
 std::string DynamicDispatchWithException::OperandsToString() const
@@ -466,7 +354,7 @@ Value* InvokeStaticWithException::GetRTTIValue() const
 
 std::vector<Value*> InvokeStaticWithException::GetArgs() const
 {
-    return {operands.begin() + 2, operands.begin() + static_cast<long>(GetFirstSuccessorIndex())};
+    return {operands.begin() + 2, operands.begin() + static_cast<long>(GetSuccessorIndex(0))};
 }
 
 // IntOpWithException
@@ -560,7 +448,7 @@ const std::vector<Type*>& IntrinsicWithException::GetInstantiatedTypeArgs() cons
 
 const std::vector<Value*> IntrinsicWithException::GetArgs() const
 {
-    return GetOperands();
+    return GetNonSuccessorOperands();
 }
 
 std::string IntrinsicWithException::OperandsToString() const
@@ -636,7 +524,7 @@ void SpawnWithException::SetExecuteClosure(Function& func)
 
 Value* SpawnWithException::GetSpawnArg() const
 {
-    if (GetFirstSuccessorIndex() > 1) {
+    if (GetSuccessorIndex(0) > 1) {
         return operands[1];
     }
     return nullptr;
@@ -851,7 +739,7 @@ IntOpWithException* IntOpWithException::Clone(CHIRBuilder& builder, Block& paren
 {
     CJC_NULLPTR_CHECK(result);
     IntOpWithException* newNode = nullptr;
-    if (GetFirstSuccessorIndex() == 1) {
+    if (GetSuccessorIndex(0) == 1) {
         newNode = builder.CreateExpression<IntOpWithException>(result->GetType(), GetOpKind(), GetLHSOperand(),
             overflowStrategy, GetSuccessBlock(), GetErrorBlock(), &parent);
     } else {
