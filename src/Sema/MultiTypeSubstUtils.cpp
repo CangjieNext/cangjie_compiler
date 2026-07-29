@@ -61,9 +61,6 @@ SubstPack FilterUnusedMapping(const SubstPack& mapping, const std::set<Ptr<Ty>>&
     }
     // collect inst tyvars directly used
     for (auto ty : tys) {
-        if (!ty) {
-            continue;
-        }
         for (auto tvu : ty->GetGenericTyArgs(allu)) {
             reachable.emplace(StaticCast<TyVar*>(mapping.u2i.at(tvu)));
         }
@@ -103,9 +100,6 @@ MultiTypeSubst FilterUnusedMapping(const MultiTypeSubst& mapping, const std::set
     std::queue<Ptr<TyVar>> worklist;
     // collect tyvars directly used
     for (auto ty : tys) {
-        if (!ty) {
-            continue;
-        }
         reachable.merge(ty->GetGenericTyArgs(all));
     }
     for (auto tv : reachable) {
