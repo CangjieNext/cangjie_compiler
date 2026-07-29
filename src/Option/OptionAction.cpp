@@ -12,6 +12,7 @@
 
 #include "cangjie/Option/Option.h"
 
+#include <cctype>
 #include <string>
 #include <unordered_map>
 
@@ -609,6 +610,40 @@ std::unordered_map<Options::ID, std::function<bool(GlobalOptions&, OptionArgInst
         CJC_ASSERT(ValidOverflowStrategy(arg.value));
         if (!ValidOverflowStrategy(arg.value)) { return false; }
         opts.overflowStrategy = StringToOverflowStrategy(arg.value);
+        return true;
+    }},
+    { Options::ID::CHIR_INLINE_THRESHOLD, [](GlobalOptions& opts, const OptionArgInstance& arg) {
+        // Expected form: key=val, e.g. base_o2=50. Split on first '='.
+        const auto& v = arg.value;
+        auto eq = v.find('=');
+        if (eq == std::string::npos || eq == 0 || eq == v.size() - 1) {
+            return false;  // malformed, no '=' or empty key/value
+        }
+        std::string key = v.substr(0, eq);
+        // tolerate uppercase keys from user -> lowercase
+        for (auto& c : key) {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+        const std::string& valStr = v.substr(eq + 1);
+        // parse non-negative integer (reject empty, non-digit, negative, trailing junk)
+        if (valStr.empty()) {
+            return false;
+        }
+        size_t pos = 0;
+        for (auto ch : valStr) {
+            if (ch < '0' || ch > '9') {
+                return false;
+            }
+        }
+        try {
+            unsigned long long parsed = std::stoull(valStr, &pos);
+            if (pos != valStr.size()) {
+                return false;
+            }
+            opts.inlineThresholdOverrides[key] = static_cast<size_t>(parsed);
+        } catch (...) {
+            return false;
+        }
         return true;
     }},
     { Options::ID::STATIC_STD, OPTION_TRUE_ACTION(opts.linkStaticStd = true) },

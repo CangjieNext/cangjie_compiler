@@ -69,6 +69,10 @@ enum class Attribute {
     PREVIOUSLY_DESERIALIZED, /// Mark that deserialization occurs not in the newly created node, but in an existing one.
     DOES_NOT_THROW,   ///< Mark that the function does not throw any exceptions by construction.
 
+    // codesize attributes (bridged to LLVM function attrs in CGModule::GetOrInsertCGFunction)
+    OPTSIZE, ///< Mark a Function so the backend clamps its inliner threshold (225->50). Caller-side only in LLVM.
+    MINSIZE, ///< Mark a Function so the backend clamps its inliner threshold (->5) and disables bonuses. Caller-side only.
+
     ATTR_END
 };
 
@@ -90,7 +94,8 @@ const std::unordered_map<Attribute, std::string> ATTR_TO_STRING{{Attribute::STAT
     {Attribute::OBJ_C_MIRROR, "objCMirror"}, {Attribute::HAS_INITED_FIELD, "hasInitedField"},
     {Attribute::JAVA_HAS_DEFAULT, "javaHasDefault"}, {Attribute::PREVIOUSLY_DESERIALIZED, "previouslyDeserialized"},
     {Attribute::DOES_NOT_THROW, "doesNotThrow"}
-};
+,
+    {Attribute::OPTSIZE, "optsize"}, {Attribute::MINSIZE, "minsize"}};
 
 constexpr uint64_t ATTR_SIZE = 64;
 

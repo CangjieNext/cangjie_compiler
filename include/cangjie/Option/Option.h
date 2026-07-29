@@ -14,11 +14,13 @@
 #define CANGJIE_OPTION_OPTION_H
 
 #include <climits>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -838,6 +840,13 @@ public:
     bool disableDeserializer = false;
 
     bool chirDebugOptimizer = false;
+
+    /**
+     * @brief CHIR inline threshold overrides, parsed from `--chir-inline-threshold key=val`.
+     *        Consumed by GetBaseThreshold/GetCalleeBudget/GetCallerSizeTrigger etc. in later phases.
+     *        Empty by default (use built-in defaults). Internal/tuning only.
+     */
+    std::unordered_map<std::string, size_t> inlineThresholdOverrides;
 
     enum class CHIRMode : uint8_t { NA, STANDARD, WITH_ID, ALL };
 

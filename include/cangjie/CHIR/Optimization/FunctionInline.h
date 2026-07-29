@@ -13,6 +13,8 @@
 #ifndef CANGJIE_CHIR_TRANSFORMATION_FUNCTION_INLINE_H
 #define CANGJIE_CHIR_TRANSFORMATION_FUNCTION_INLINE_H
 
+#include <cstddef>
+
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Package.h"
@@ -54,6 +56,20 @@ public:
      * @param name pass name to pring log.
      */
     void DoFunctionInline(const Apply& apply, const std::string& name);
+
+    /**
+     * @brief Counters for inline decisions and attribute stamping (optsize/minsize/noinline).
+     *        Aggregated across all FunctionInline instances within one compilation unit.
+     *        Populated incrementally in later phases; only `inlineDecisions` is counted in Phase 0.
+     */
+    struct InlineStats {
+        size_t inlineDecisions{0};   // total successful inlines (DoFunctionInline calls)
+        size_t optsizeStamped{0};    // baseline(Os) + selective(O2 caller growth) - Phase 2
+        size_t minsizeStamped{0};    // baseline(Oz) - Phase 2
+        size_t noinlineStamped{0};   // blacklist closure(Phase 0) + callee budget veto(Phase 3)
+    };
+    static InlineStats& GetStats();
+    static void PrintStatsSummary(bool debug);
 
 private:
     bool CheckCanRewrite(const Apply& apply);

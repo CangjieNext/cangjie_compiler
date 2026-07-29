@@ -1152,6 +1152,8 @@ bool ToCHIR::Run()
     // 7. do closure conversion
     DoClosureConversion();
     RecordCHIRExprNum("cc");
+    // All FunctionInline instances (#1..#5) have run by now; print the aggregated stats summary.
+    FunctionInline::PrintStatsSummary(opts.chirDebugOptimizer);
     // 8. run constant evaluation
     if (!RunConstantEvaluation()) {
         return false;
