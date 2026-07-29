@@ -88,6 +88,26 @@ void FunctionInline::InlineImpl(BlockGroup& bg)
     Visitor::Visit(bg, preVisit);
 }
 
+FunctionInline::InlineStats& FunctionInline::GetStats()
+{
+    // Meyers singleton: function-local static, thread-safe since C++11.
+    // Aggregates across all FunctionInline instances in one compilation unit.
+    static InlineStats stats;
+    return stats;
+}
+
+void FunctionInline::PrintStatsSummary(bool dbg)
+{
+    if (!dbg) {
+        return;
+    }
+    auto& s = GetStats();
+    std::cout << "[FunctionInline] decisions=" << s.inlineDecisions
+              << " optsize=" << s.optsizeStamped
+              << " minsize=" << s.minsizeStamped
+              << " noinline=" << s.noinlineStamped << std::endl;
+}
+
 void FunctionInline::Run(Function& func)
 {
     globalFunc = &func;
@@ -242,6 +262,11 @@ bool FunctionInline::CheckCanRewrite(const Apply& apply)
         return false;
     }
     if (InBlackList(*func)) {
+        // Closure: CHIR rejected this callee (blacklist vector: Future::init etc., C func,
+        // MAIN_ENTRY, already-NO_INLINE). Stamp NO_INLINE so the LLVM backend honors the
+        // same decision (CGModule::DeclareLLVMFunction bridges it). Without this, the backend
+        // could re-inline e.g. Future::init and erase the anchor RedundantFutureRemoval relies on.
+        func->EnableAttr(Attribute::NO_INLINE);
         return false;
     }
     if (InWhiteList(*func)) {
@@ -369,6 +394,7 @@ void FunctionInline::DoFunctionInline(const Apply& apply, const std::string& nam
 {
     RecordEffectMap(apply);
     PrintOptInfo(apply, debug, name);
+    ++GetStats().inlineDecisions;
     // inline foo1 to foo2, `apply` node belongs to foo2, apply's callee is foo1, for example:
     // func foo1(param: Int64) { return param }
     // func foo2() { foo1(2) }

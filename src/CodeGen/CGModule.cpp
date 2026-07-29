@@ -339,6 +339,12 @@ llvm::Function* CGModule::DeclareLLVMFunction(const CHIR::Value& func, const CGF
     if (func.TestAttr(CHIR::Attribute::NO_INLINE)) {
         function->addFnAttr(llvm::Attribute::NoInline);
     }
+    if (func.TestAttr(CHIR::Attribute::OPTSIZE)) {
+        function->addFnAttr(llvm::Attribute::OptimizeForSize);
+    }
+    if (func.TestAttr(CHIR::Attribute::MINSIZE)) {
+        function->addFnAttr(llvm::Attribute::MinSize);
+    }
     if (cgFuncType.HasBasePtr()) {
         AddFnAttr(function, llvm::Attribute::get(module->getContext(), STRUCT_MUT_FUNC_ATTR)); // Deprecated
         AddFnAttr(function, llvm::Attribute::get(module->getContext(), THIS_PARAM_HAS_BP));
