@@ -349,9 +349,6 @@ private:
     void RemoveExprOnly(Expression& expr);
     void AddPredecessor(Block* block);
 
-    void AppendNonTerminatorExpression(Expression* expression);
-    void AppendTerminator(Terminator* term);
-
     void RemovePredecessor(Block& block);
 
     void AppendExprOnly(Expression& expr);

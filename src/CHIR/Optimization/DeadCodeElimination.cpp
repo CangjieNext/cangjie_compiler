@@ -614,7 +614,7 @@ template <typename TApply> void HandleNothingTerminator(CHIRBuilder& builder, TA
     newSuccessBlock->AppendExpression(builder.CreateTerminator<Exit>(newSuccessBlock));
 
     auto oldSuccessBlock = expr->GetSuccessBlock();
-    expr->ReplaceSuccessor(*oldSuccessBlock, *newSuccessBlock);
+    expr->ReplaceOperand(oldSuccessBlock, newSuccessBlock);
 }
 } // namespace
 
@@ -865,7 +865,7 @@ void DeadCodeElimination::BreakBranchConnection(const Block& block) const
         } else {
             auto multi = StaticCast<MultiBranch*>(predTerminator);
             CJC_ASSERT(&block == multi->GetDefaultBlock());
-            multi->ReplaceSuccessor(0, *multi->GetSuccessor(1));
+            multi->ReplaceOperand(multi->GetSuccessorIndex(0), multi->GetSuccessor(1));
         }
     }
 }

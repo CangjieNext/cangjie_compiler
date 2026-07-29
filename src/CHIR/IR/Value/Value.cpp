@@ -461,15 +461,6 @@ void Block::AppendExprOnly(Expression& expr)
     exprs.emplace_back(&expr);
 }
 
-void Block::AppendNonTerminatorExpression(Expression* expression)
-{
-    CJC_ASSERT(!expression->IsTerminator());
-    CJC_ASSERT(expression->GetParentBlockGroup() == GetParentBlockGroup());
-    expression->GetParentBlock()->RemoveExprOnly(*expression);
-    expression->SetParent(this);
-    AppendExprOnly(*expression);
-}
-
 void Block::AppendExpressions(const std::vector<Expression*>& expressions)
 {
     for (auto expr : expressions) {
@@ -480,10 +471,12 @@ void Block::AppendExpressions(const std::vector<Expression*>& expressions)
 void Block::AppendExpression(Expression* expression)
 {
     CJC_ASSERT(expression->GetParentBlockGroup() == GetParentBlockGroup());
-    if (expression->IsTerminator()) {
-        AppendTerminator(StaticCast<Terminator*>(expression));
-    } else {
-        AppendNonTerminatorExpression(expression);
+    expression->GetParentBlock()->RemoveExprOnly(*expression);
+    expression->SetParent(this);
+    AppendExprOnly(*expression);
+    // update predecessors if this expression has successor blocks
+    for (auto suc : expression->GetSuccessors()) {
+        suc->AddPredecessor(this);
     }
 }
 
@@ -515,17 +508,6 @@ void Block::SetParentBlockGroup(BlockGroup* parent)
 BlockGroup* Block::GetParentBlockGroup() const
 {
     return parentGroup;
-}
-
-void Block::AppendTerminator(Terminator* term)
-{
-    CJC_ASSERT(term->GetParentBlockGroup() == GetParentBlockGroup());
-    AppendExprOnly(*term);
-    term->SetParent(this);
-    // update precedessors
-    for (auto suc : term->GetSuccessors()) {
-        suc->AddPredecessor(this);
-    }
 }
 
 Function* Block::GetTopLevelFunc() const
@@ -900,7 +882,7 @@ void BlockGroup::CloneBlocks(CHIRBuilder& builder, BlockGroup& parent) const
             if (it != blockMap.end()) {
                 auto expr = block->GetTerminator();
                 CJC_NULLPTR_CHECK(expr);
-                expr->ReplaceSuccessor(i, *it->second);
+                expr->ReplaceOperand(i, it->second);
             }
         }
     }

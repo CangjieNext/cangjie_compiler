@@ -208,24 +208,35 @@ public:
     /**
      * @brief Retrieves the number of operands.
      *
+     * Does not include successor blocks.
+     *
      * @return The number of operands.
      */
-    virtual size_t GetNumOfOperands() const;
+    size_t GetNumOfOperands() const;
 
     /**
      * @brief Retrieves an operand by index.
      *
+     * Does not include successor blocks.
+     *
      * @param idx The index of the operand to retrieve.
      * @return The operand at the specified index.
      */
-    virtual Value* GetOperand(size_t idx) const;
+    Value* GetOperand(size_t idx) const;
 
     /**
      * @brief Retrieves all operands.
      *
+     * Does not include successor blocks. Use GetRawOperands() for the full list.
+     *
      * @return A vector of pointers to all operands.
      */
-    virtual std::vector<Value*> GetOperands() const;
+    std::vector<Value*> GetOperands() const;
+
+    /**
+     * @brief Retrieves all operands including successor blocks.
+     */
+    std::vector<Value*> GetRawOperands() const;
 
     /**
      * @brief Replace old operand in specified position.
@@ -243,6 +254,34 @@ public:
      * @param newOperand The destination value.
      */
     virtual void ReplaceOperand(Value* oldOperand, Value* newOperand);
+
+    // ===--------------------------------------------------------------------===//
+    // Successor
+    // ===--------------------------------------------------------------------===//
+    /**
+     * @brief Retrieves successor blocks among operands.
+     *
+     * Any operand that is a Block is treated as a successor.
+     *
+     * @return The successor blocks.
+     */
+    std::vector<Block*> GetSuccessors() const;
+
+    /**
+     * @brief Map a successor index to its index in operands.
+     *
+     * Operands are laid out as: op1, op2, ..., block1, block2, ...
+     * Given the index among Block successors, return the corresponding operands index
+     * (successor index plus the number of leading non-block operands).
+     *
+     * @param index The 0-based index among successor blocks.
+     * @return The index in the operands vector.
+     */
+    size_t GetSuccessorIndex(size_t index) const;
+
+    size_t GetNumOfSuccessor() const;
+
+    Block* GetSuccessor(size_t index) const;
 
     // ===--------------------------------------------------------------------===//
     // Modify Self
