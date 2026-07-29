@@ -614,7 +614,7 @@ template <typename TApply> void HandleNothingTerminator(CHIRBuilder& builder, TA
     newSuccessBlock->AppendExpression(builder.CreateTerminator<Exit>(newSuccessBlock));
 
     auto oldSuccessBlock = expr->GetSuccessBlock();
-    expr->ReplaceSuccessor(*oldSuccessBlock, *newSuccessBlock);
+    expr->ReplaceOperand(oldSuccessBlock, newSuccessBlock);
 }
 } // namespace
 
@@ -688,7 +688,7 @@ void DeadCodeElimination::UnreachableBlockElimination(const std::vector<const Fu
 }
 
 void DeadCodeElimination::UnreachableBlockWarningReporter(const Package& package,
-    size_t threadsNum, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks)
+    size_t threadsNum, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks)
 {
     if (threadsNum == 1) {
         UnreachableBlockWarningReporterInSerial(package, maybeUnreachableBlocks);
@@ -698,7 +698,7 @@ void DeadCodeElimination::UnreachableBlockWarningReporter(const Package& package
 }
 
 void DeadCodeElimination::UnreachableBlockWarningReporterInSerial(
-    const Package& package, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks)
+    const Package& package, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks)
 {
     for (auto func : package.GetGlobalFuncsWithBody()) {
         bool isPrinted = false;
@@ -716,7 +716,7 @@ void DeadCodeElimination::UnreachableBlockWarningReporterInSerial(
 }
 
 void DeadCodeElimination::UnreachableBlockWarningReporterInParallel(const Package& package,
-    size_t threadsNum, const std::unordered_map<Block*, Terminator*>& maybeUnreachableBlocks)
+    size_t threadsNum, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks)
 {
     Utils::TaskQueue taskQueue(threadsNum);
     for (auto func : package.GetGlobalFuncsWithBody()) {
@@ -865,7 +865,7 @@ void DeadCodeElimination::BreakBranchConnection(const Block& block) const
         } else {
             auto multi = StaticCast<MultiBranch*>(predTerminator);
             CJC_ASSERT(&block == multi->GetDefaultBlock());
-            multi->ReplaceSuccessor(0, *multi->GetSuccessor(1));
+            multi->ReplaceOperand(multi->GetSuccessorIndex(0), multi->GetSuccessor(1));
         }
     }
 }
@@ -1010,7 +1010,7 @@ Ptr<Expression> DeadCodeElimination::GetUnreachableExpression(const CHIR::Block&
 }
 
 void DeadCodeElimination::PrintUnreachableBlockWarning(
-    const CHIR::Block& block, const CHIR::Terminator& terminator, bool& isPrinted)
+    const CHIR::Block& block, const CHIR::Expression& terminator, bool& isPrinted)
 {
     // Get position of nothing type node.
     auto& debugInfo = terminator.GetDebugLocation();

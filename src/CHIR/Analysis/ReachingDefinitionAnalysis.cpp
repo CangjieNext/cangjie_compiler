@@ -164,7 +164,7 @@ void ReachingDefinitionAnalysis::PropagateExpressionEffect(
 }
 
 std::optional<Block*> ReachingDefinitionAnalysis::PropagateTerminatorEffect(
-    ReachingDefinitionDomain& state, const Terminator* terminator)
+    ReachingDefinitionDomain& state, const Expression* terminator)
 {
     if (terminator->GetExprKind() == ExprKind::APPLY_WITH_EXCEPTION) {
         HandleApplyExpr(state, StaticCast<const ApplyWithException*>(terminator));

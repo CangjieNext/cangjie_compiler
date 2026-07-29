@@ -152,7 +152,7 @@ private:
 
     void PreHandleFieldExpr(TypeDomain& state, const Field* field) override;
 
-    std::optional<Block*> HandleTerminatorEffect(TypeDomain& state, const Terminator* terminator) override;
+    std::optional<Block*> HandleTerminatorEffect(TypeDomain& state, const Expression* terminator) override;
 
     const std::unordered_map<Function*, Type*>& realRetTyMap;
 

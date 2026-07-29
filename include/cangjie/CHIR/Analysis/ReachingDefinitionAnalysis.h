@@ -116,7 +116,7 @@ public:
      * @return blocks return after analysis.
      */
     std::optional<Block*> PropagateTerminatorEffect(
-        ReachingDefinitionDomain& state, const Terminator* terminator) override;
+        ReachingDefinitionDomain& state, const Expression* terminator) override;
 
 private:
     void HandleStoreExpr(ReachingDefinitionDomain& state, const Store* store);

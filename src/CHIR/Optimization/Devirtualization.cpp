@@ -105,7 +105,7 @@ void Devirtualization::RunOnFunc(const Function* func, CHIRBuilder& builder)
     };
 
     const auto actionAfterVisitExpr = [](const TypeDomain&, Expression*, size_t) {};
-    const auto actionOnTerminator = [](const TypeDomain&, Terminator*, std::optional<Block*>) {};
+    const auto actionOnTerminator = [](const TypeDomain&, Expression*, std::optional<Block*>) {};
     result->VisitWith(actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator);
 }
 

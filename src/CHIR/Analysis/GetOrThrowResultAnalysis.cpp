@@ -102,7 +102,7 @@ void GetOrThrowResultAnalysis::PropagateExpressionEffect(GetOrThrowResultDomain&
 }
 
 std::optional<Block*> GetOrThrowResultAnalysis::PropagateTerminatorEffect(
-    GetOrThrowResultDomain& state, const Terminator* terminator)
+    GetOrThrowResultDomain& state, const Expression* terminator)
 {
     (void)state;
     (void)terminator;
