@@ -59,7 +59,7 @@ void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadN
 }
 
 void UnreachableBranchCheck::PrintWarning(
-    const Terminator& node, Block& block, std::set<Block*>& hasProcessed, bool isRecursive)
+    const Expression& node, Block& block, std::set<Block*>& hasProcessed, bool isRecursive)
 {
     if (hasProcessed.find(&block) != hasProcessed.end()) {
         return;
@@ -72,7 +72,7 @@ void UnreachableBranchCheck::PrintWarning(
     CJC_ASSERT(block.GetTerminator());
     if (block.GetTerminator()->GetExprKind() == ExprKind::BRANCH ||
         block.GetTerminator()->GetExprKind() == ExprKind::MULTIBRANCH) {
-        auto branchNode = StaticCast<Terminator*>(block.GetTerminator());
+        auto branchNode = block.GetTerminator();
         bool rec{true};
         if (auto br = DynamicCast<Branch>(branchNode)) {
             if (br->GetSourceExpr() == SourceExpr::FOR_IN_EXPR) {
@@ -118,7 +118,7 @@ void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
     const auto actionAfterVisitExpr = [](const TConstDomain&, Expression*, size_t) {};
 
     const auto actionOnTerminator = [this](
-            const TConstDomain&, Terminator* terminator, std::optional<Block*> targetSucc) {
+            const TConstDomain&, Expression* terminator, std::optional<Block*> targetSucc) {
         switch (terminator->GetExprKind()) {
             case ExprKind::BRANCH: {
                 if (targetSucc.has_value()) {

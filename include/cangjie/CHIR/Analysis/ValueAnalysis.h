@@ -869,7 +869,7 @@ public:
      * @return blocks may goto after analysing.
      */
     std::optional<Block*> PropagateTerminatorEffect(
-        State<ValueDomain, ValueStatePool>& state, const Terminator* terminator) override
+        State<ValueDomain, ValueStatePool>& state, const Expression* terminator) override
     {
         switch (terminator->GetExprKind()) {
             case ExprKind::APPLY_WITH_EXCEPTION: {
@@ -1623,7 +1623,7 @@ private:
     }
 
     virtual std::optional<Block*> HandleTerminatorEffect(
-        State<ValueDomain, ValueStatePool>& state, const Terminator* terminator)
+        State<ValueDomain, ValueStatePool>& state, const Expression* terminator)
     {
         (void)state;
         (void)terminator;

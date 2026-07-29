@@ -93,7 +93,7 @@ private:
      * This function will rewrite a Branch terminator or a MultiBranch terminator to a GoTo
      * terminator. The new successor will be @p targetSucc.
      */
-    void RewriteBranchTerminator(const Ptr<Terminator>& branch, const Ptr<Block>& targetSucc, bool isDebug);
+    void RewriteBranchTerminator(const Ptr<Expression>& branch, const Ptr<Block>& targetSucc, bool isDebug);
 
     void RecordEffectMap(const Expression* expr, const Function* func) const;
 

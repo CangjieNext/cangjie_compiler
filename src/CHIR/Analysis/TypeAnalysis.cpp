@@ -206,7 +206,7 @@ void TypeAnalysis::HandleAllocateExpr(TypeDomain& state, const Allocate* express
     }
 }
 
-std::optional<Block*> TypeAnalysis::HandleTerminatorEffect(TypeDomain& state, const Terminator* terminator)
+std::optional<Block*> TypeAnalysis::HandleTerminatorEffect(TypeDomain& state, const Expression* terminator)
 {
     switch (terminator->GetExprKind()) {
         // already handled by the framework

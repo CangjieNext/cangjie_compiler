@@ -313,7 +313,7 @@ public:
     std::vector<Expression*> GetExpressions() const;
     size_t GetExpressionsNum() const;
     std::vector<Expression*> GetNonTerminatorExpressions() const;
-    Terminator* GetTerminator() const;
+    Expression* GetTerminator() const;
 
     void InsertExprIntoHead(Expression& expr);
 

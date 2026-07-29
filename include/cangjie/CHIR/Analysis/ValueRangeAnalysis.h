@@ -181,7 +181,7 @@ private:
 
     // ======================= Transfer functions for terminators ======================= //
 
-    std::optional<Block*> HandleTerminatorEffect(RangeDomain& state, const Terminator* terminator) override;
+    std::optional<Block*> HandleTerminatorEffect(RangeDomain& state, const Expression* terminator) override;
 
     std::optional<Block*> HandleBranchTerminator(const RangeDomain& state, const Branch* branch) const;
 

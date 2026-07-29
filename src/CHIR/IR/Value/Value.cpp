@@ -524,12 +524,16 @@ BlockGroup* Block::GetFuncOrLambdaBody() const
     return blockGroup->GetFuncOrLambdaBody();
 }
 
-Terminator* Block::GetTerminator() const
+Expression* Block::GetTerminator() const
 {
     if (exprs.size() == 0) {
         return nullptr;
     }
-    return DynamicCast<Terminator*>(exprs.back());
+    auto lastExpr = exprs.back();
+    if (lastExpr->IsTerminator()) {
+        return lastExpr;
+    }
+    return nullptr;
 }
 
 std::vector<Block*> Block::GetSuccessors() const
@@ -867,23 +871,10 @@ void BlockGroup::CloneBlocks(CHIRBuilder& builder, BlockGroup& parent) const
 {
     CJC_ASSERT(parent.GetBlocks().empty());
     CJC_ASSERT(parent.GetEntryBlock() == nullptr);
-    std::unordered_map<Block*, Block*> blockMap;
     for (auto block : blocks) {
         Block* newBlock = block->Clone(builder, parent);
         if (block == entryBlock) {
             parent.SetEntryBlock(newBlock);
-        }
-        blockMap.emplace(block, newBlock);
-    }
-    for (auto block : parent.GetBlocks()) {
-        auto successors = block->GetSuccessors();
-        for (size_t i = 0; i < successors.size(); ++i) {
-            auto it = blockMap.find(successors[i]);
-            if (it != blockMap.end()) {
-                auto expr = block->GetTerminator();
-                CJC_NULLPTR_CHECK(expr);
-                expr->ReplaceOperand(i, it->second);
-            }
         }
     }
 }

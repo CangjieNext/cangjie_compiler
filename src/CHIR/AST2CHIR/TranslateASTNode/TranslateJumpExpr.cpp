@@ -39,7 +39,7 @@ void Translator::UpdateDelayExitSignal(int64_t level)
 Ptr<Value> Translator::Visit(const AST::JumpExpr& jumpExpr)
 {
     const auto& loc = TranslateLocation(jumpExpr);
-    Ptr<Terminator> terminator = nullptr;
+    Ptr<Expression> terminator = nullptr;
     DebugLocation loopLocInfo;
     // If there are other blockGroup exprs, please modify the condition here.
     // for example: WHILE, LOOP...

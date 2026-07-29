@@ -22,19 +22,19 @@ public:
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
         std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<Block*, Terminator*>& maybeUnreachable);
+        std::unordered_map<Block*, Expression*>& maybeUnreachable);
     bool FreeCachedData();
 private:
     void CHIRPtrToString(
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
         std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<Block*, Terminator*>& maybeUnreachable);
+        std::unordered_map<Block*, Expression*>& maybeUnreachable);
     void StringToCHIRPtr(
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
         std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<Block*, Terminator*>& maybeUnreachable);
+        std::unordered_map<Block*, Expression*>& maybeUnreachable);
 
     struct PluginResult {
         uint8_t* data{nullptr};
