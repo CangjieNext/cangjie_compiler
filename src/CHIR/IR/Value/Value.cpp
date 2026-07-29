@@ -524,12 +524,12 @@ BlockGroup* Block::GetFuncOrLambdaBody() const
     return blockGroup->GetFuncOrLambdaBody();
 }
 
-Terminator* Block::GetTerminator() const
+Expression* Block::GetTerminator() const
 {
     if (exprs.size() == 0) {
         return nullptr;
     }
-    return DynamicCast<Terminator*>(exprs.back());
+    return exprs.back();
 }
 
 std::vector<Block*> Block::GetSuccessors() const

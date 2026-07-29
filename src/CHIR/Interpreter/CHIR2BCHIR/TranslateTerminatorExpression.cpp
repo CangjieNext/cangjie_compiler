@@ -111,7 +111,7 @@ void CHIR2BCHIR::TranslateTerminatorExpression(Context& ctx, const Expression& e
         case ExprKind::ALLOCATE_WITH_EXCEPTION: {
             CJC_ASSERT(expr.GetNumOfOperands() == 0);
             TranslateAllocate(ctx, expr);
-            TranslateTryTerminatorJumps(ctx, *StaticCast<const Terminator*>(&expr));
+            TranslateTryTerminatorJumps(ctx, expr);
             break;
         }
         default: {
@@ -130,7 +130,7 @@ void CHIR2BCHIR::TranslateApplyWithExceptionExpression(Context& ctx, const Apply
     TranslateTryTerminatorJumps(ctx, apply);
 }
 
-void CHIR2BCHIR::TranslateTryTerminatorJumps(Context& ctx, const Terminator& expr)
+void CHIR2BCHIR::TranslateTryTerminatorJumps(Context& ctx, const Expression& expr)
 {
     CJC_ASSERT(expr.GetNumOfSuccessor() == Bchir::FLAG_TWO);
     auto exceptionBB = expr.GetSuccessor(1);
@@ -156,7 +156,7 @@ void CHIR2BCHIR::TranslateMultiBranch(Context& ctx, const MultiBranch& branch)
     // default_target :: case_1_target :: ... :: case_n_target
 
     auto& cases = branch.GetCaseVals();
-    auto& successors = branch.GetSuccessors();
+    auto successors = branch.GetSuccessors();
     auto ty = branch.GetOperand(0)->GetType();
     auto tyKind = ty->IsEnum() ? CHIR::Type::TypeKind::TYPE_UINT64 : ty->GetTypeKind();
 

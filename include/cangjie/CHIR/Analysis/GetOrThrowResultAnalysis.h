@@ -87,7 +87,7 @@ public:
      * @return blocks return after analysis.
      */
     std::optional<Block*> PropagateTerminatorEffect(
-        GetOrThrowResultDomain& state, const Terminator* terminator) override;
+        GetOrThrowResultDomain& state, const Expression* terminator) override;
 
 private:
     /// from location to index

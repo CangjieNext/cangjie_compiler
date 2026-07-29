@@ -140,7 +140,7 @@ void MaybeUninitAnalysis::PropagateExpressionEffect(MaybeUninitDomain& state, co
 }
 
 std::optional<Block*> MaybeUninitAnalysis::PropagateTerminatorEffect(
-    MaybeUninitDomain& state, const Terminator* expression)
+    MaybeUninitDomain& state, const Expression* expression)
 {
     (void)state;
     (void)expression;

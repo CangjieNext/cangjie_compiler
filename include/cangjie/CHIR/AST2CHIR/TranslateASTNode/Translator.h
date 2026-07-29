@@ -37,7 +37,7 @@ public:
         const ElementList<Ptr<const AST::FuncDecl>>& localConstFuncs, const IncreKind& kind,
         const std::unordered_map<std::string, Value*>& deserializedVals,
         std::vector<std::pair<const AST::Decl*, Function*>>& annoFactories,
-        std::unordered_map<Block*, Terminator*>& maybeUnreachable,
+        std::unordered_map<Block*, Expression*>& maybeUnreachable,
         bool computeAnnotations,
         std::vector<CHIR::Function*>& initFuncForAnnoFactory,
         const Cangjie::TypeManager& typeManager)
@@ -595,7 +595,7 @@ private:
     const bool mergingSpecific; // add by cjmp
     const std::unordered_map<std::string, Value*>& deserializedVals; // add by cjmp
     std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs;
-    std::unordered_map<Block*, Terminator*>& maybeUnreachable;
+    std::unordered_map<Block*, Expression*>& maybeUnreachable;
     bool isComputingAnnos{};
     std::vector<CHIR::Function*>& initFuncsForAnnoFactory;
     const Cangjie::TypeManager& typeManager;

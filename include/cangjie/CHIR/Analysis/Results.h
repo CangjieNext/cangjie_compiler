@@ -52,7 +52,7 @@ public:
      */
     void VisitWith(std::function<void(const Domain&, Expression*, size_t)> actionBeforeVisitExpr,
         std::function<void(const Domain&, Expression*, size_t)> actionAfterVisitExpr,
-        std::function<void(const Domain&, Terminator*, std::optional<Block*>)> actionOnTerminator)
+        std::function<void(const Domain&, Expression*, std::optional<Block*>)> actionOnTerminator)
     {
         for (auto bb : func->GetBody()->GetBlocks()) {
             VisitBlockWith(actionBeforeVisitExpr, actionAfterVisitExpr, actionOnTerminator, *bb, entrySets.get());
@@ -106,7 +106,7 @@ private:
 
     void VisitBlockWith(std::function<void(const Domain&, Expression*, size_t)> actionBeforeVisitExpr,
         std::function<void(const Domain&, Expression*, size_t)> actionAfterVisitExpr,
-        std::function<void(const Domain&, Terminator*, std::optional<Block*>)> actionOnTerminator, Block& block,
+        std::function<void(const Domain&, Expression*, std::optional<Block*>)> actionOnTerminator, Block& block,
         std::unordered_map<Block*, Domain>* entryStates = nullptr)
     {
         if (!entryStates) {

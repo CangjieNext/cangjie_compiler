@@ -212,7 +212,7 @@ public:
         return std::move(initFuncsForConstVar);
     }
 
-    std::unordered_map<Block*, Terminator*>&& GetMaybeUnreachableBlocks()
+    std::unordered_map<Block*, Expression*>&& GetMaybeUnreachableBlocks()
     {
         return std::move(maybeUnreachable);
     }
@@ -391,7 +391,7 @@ private:
     std::vector<AST::File*> pkgFiles;
     std::vector<Function*> initFuncsForConstVar;
     std::vector<Function*> initFuncsForAnnoFactory;
-    std::unordered_map<Block*, Terminator*> maybeUnreachable;
+    std::unordered_map<Block*, Expression*> maybeUnreachable;
 
     std::string outputPath;
     bool isComputingAnnos{};

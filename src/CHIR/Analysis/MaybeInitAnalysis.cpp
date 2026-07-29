@@ -87,7 +87,7 @@ void MaybeInitAnalysis::PropagateExpressionEffect(MaybeInitDomain& state, const 
     }
 }
 
-std::optional<Block*> MaybeInitAnalysis::PropagateTerminatorEffect(MaybeInitDomain& state, const Terminator* expression)
+std::optional<Block*> MaybeInitAnalysis::PropagateTerminatorEffect(MaybeInitDomain& state, const Expression* expression)
 {
     (void)state;
     (void)expression;

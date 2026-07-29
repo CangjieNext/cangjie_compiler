@@ -136,7 +136,7 @@ public:
     }
 
     /// abstract function to update state of all terminators.
-    virtual std::optional<Block*> PropagateTerminatorEffect(Domain& state, const Terminator* terminator)
+    virtual std::optional<Block*> PropagateTerminatorEffect(Domain& state, const Expression* terminator)
     {
         (void)state;
         (void)terminator;

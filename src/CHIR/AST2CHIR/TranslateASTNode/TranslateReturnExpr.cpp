@@ -76,7 +76,7 @@ Ptr<Value> Translator::Visit(const AST::ReturnExpr& expr)
     if (level > 0 && delayExitSignal) {
         UpdateDelayExitSignal(level);
     }
-    Ptr<Terminator> terminator = nullptr;
+    Ptr<Expression> terminator = nullptr;
     if (finallyContext.empty()) {
         terminator = CreateAndAppendTerminator<Exit>(loc, currentBlock);
         /* compile add return expr should not print warning.
