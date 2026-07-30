@@ -759,6 +759,8 @@ void Translator::TranslateTrivialMatchAsTable(
     ScopeContext context(*this);
     for (auto& curCase : match.matchCases) {
         context.ScopePlus();
+        // Table entries are source-level siblings and must start from the selector block.
+        currentBlock = baseBlock;
         auto currentBody = TranslateMatchCaseBody(*curCase->exprOrDecls, retVal, endBlock);
         CJC_ASSERT(!curCase->patterns.empty());
         if (!isStillReachable) {
@@ -828,6 +830,7 @@ void Translator::TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, P
             isStillReachable = false;
             // NOTE: only should to collect first visited wildcard pattern.
             // The sub pattern may contains varPattern, translate when binding second level table.
+            currentBlock = baseBlock;
             firstDefaultBlock = TranslateMatchCaseBody(*matchCase.exprOrDecls, retVal, endBlock);
             const auto& loc = TranslateLocation(matchCase.patterns[0]->begin, matchCase.patterns[0]->end);
             firstDefaultBlock->SetDebugLocation(loc);
@@ -848,12 +851,14 @@ void Translator::TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, P
     CreateAndAppendTerminator<MultiBranch>(firstSelectorVal, firstDefaultBlock, indexes, blocks, baseBlock);
 
     // Create each second switch block.
+    currentBlock = baseBlock;
     auto branchInfos = TranslateSecondLevelAsTable(matchInfo, enumVal, firstDefaultBlock);
     // Finally create goto from case's true block to caseBody block.
     for (size_t i = 0; i < match.matchCases.size(); ++i) {
         if (i == wildcardIdx) {
             continue;
         }
+        currentBlock = baseBlock;
         auto bodyBlock = TranslateMatchCaseBody(*match.matchCases[i]->exprOrDecls, retVal, endBlock);
         for (auto& block : std::as_const(branchInfos[i])) {
             CreateAndAppendTerminator<GoTo>(bodyBlock, block);
