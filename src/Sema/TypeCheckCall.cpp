@@ -2319,16 +2319,6 @@ bool TypeChecker::TypeCheckerImpl::GetCallBaseCandidates(
     if (IsBuiltinTypeAlias(*target) || target->IsBuiltIn()) {
         return false;
     }
-    // Type alias to numeric/rune type: treat `word(20)` as type conversion, not function call.
-    if (target->astKind == ASTKind::TYPE_ALIAS_DECL) {
-        auto& typeAliasDecl = static_cast<const TypeAliasDecl&>(*target);
-        if (typeAliasDecl.type) {
-            auto origTy = typeAliasDecl.type->GetTy();
-            if (origTy && (origTy->IsNumeric() || origTy->kind == TypeKind::TYPE_RUNE)) {
-                return false;
-            }
-        }
-    }
     bool isFunctionCall = true;
     if (IsInstanceConstructor(*target) && target->outerDecl) {
         target = target->outerDecl;
@@ -2402,7 +2392,25 @@ bool TypeChecker::TypeCheckerImpl::ChkCallBaseRefExpr(
     if (!re->ref.target && re->ref.targets.empty()) {
         return false;
     } else {
-        return CheckRefConstructor(ctx, ce, *re) && GetCallBaseCandidates(ctx, ce, *re, target, candidates);
+        if (!CheckRefConstructor(ctx, ce, *re)) {
+            return false;
+        }
+        if (!GetCallBaseCandidates(ctx, ce, *re, target, candidates)) {
+            // Issue #375: type alias to numeric/rune type, treat as type conversion.
+            auto callTarget = GetRealTarget(re, re->ref.target);
+            if (callTarget && callTarget->astKind == ASTKind::TYPE_ALIAS_DECL) {
+                auto& aliasDecl = static_cast<const TypeAliasDecl&>(*callTarget);
+                if (aliasDecl.type) {
+                    auto origTy = aliasDecl.type->GetTy();
+                    if (origTy && (origTy->IsNumeric() || origTy->kind == TypeKind::TYPE_RUNE)) {
+                        ce.SetTy(origTy);
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        return true;
     }
 }
 
