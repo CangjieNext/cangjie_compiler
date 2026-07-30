@@ -551,13 +551,13 @@ void JavaDesugarManager::DesugarJavaMirror(ClassDecl& mirror)
             }
             if (fd->TestAttr(Attribute::CONSTRUCTOR)) {
                 DesugarJavaMirrorConstructor(*fd, *generatedCtor);
-            } else {
-                DesugarJavaMirrorMethod(*fd, mirror);
             } else if (fd->TestAttr(Attribute::FROM_COMMON_PART) &&
                        fd->TestAttr(Attribute::COMMON) &&
                        !fd->specificImplementation) {
                 diag.DiagnoseRefactor(DiagKindRefactor::sema_cjmp_mirror_method_from_common_has_body, *fd);
                 fd->EnableAttr(Attribute::IS_BROKEN);
+            } else {
+                DesugarJavaMirrorMethod(*fd, mirror);
             }
         } else if (auto prop = As<ASTKind::PROP_DECL>(decl.get())) {
             DesugarJavaMirrorProp(*prop);
