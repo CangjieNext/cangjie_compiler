@@ -75,7 +75,7 @@ constexpr auto INTEROPLIB_CFFI_JAVA_STRING_TO_CANGJIE = "Java_CFFI_JavaStringToC
 constexpr auto INTEROPLIB_CFFI_CANGJIE_STRING_TO_JAVA = "Java_CFFI_CangjieStringToJava";
 constexpr auto INTEROPLIB_CFFI_WITH_EXCEPTION_HANDLING_ID = "withExceptionHandling";
 constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS_INIT = "Java_CFFI_ClassInit";
-constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS_ID = "Java_CFFI_getClassID";
+constexpr auto INTEROPLIB_CFFI_JAVA_CFFI_CLASS = "Java_CFFI_getClass";
 constexpr auto INTEROPLIB_CFFI_PARSE_METHOD_SIGNATURE_ID = "Java_CFFI_parseMethodSignature";
 constexpr auto INTEROPLIB_CFFI_PARSE_COMPONENT_SIGNATURE_ID = "Java_CFFI_parseComponentSignature";
 constexpr auto INTEROPLIB_CFFI_JAVA_CALLNEST_ID = "Java_CFFI_JavaCallNestInit";
@@ -238,14 +238,16 @@ Ptr<VarDecl> InteropLibBridge::GetJNINativeInterfaceField(const std::string_view
     if (!st) {
         return nullptr;
     }
-
     for (auto& decl : st->GetMemberDecls()) {
-        auto vd = DynamicCast<VarDecl*>(decl.get());
-        if (vd && vd->identifier.Val() == name) {
+        if (decl->astKind != ASTKind::VAR_DECL) {
+            continue;
+        }
+        auto* vd = StaticAs<ASTKind::VAR_DECL>(decl.get());
+        if (vd->identifier.Val() == name) {
             return vd;
         }
     }
-
+    CJC_ABORT_WITH_MSG("Failed to find JNINativeInterface field");
     return nullptr;
 }
 
@@ -377,7 +379,7 @@ Ptr<FuncDecl> InteropLibBridge::GetJClassDecl() const
 
 Ptr<FuncDecl> InteropLibBridge::GetJClassIdDecl() const
 {
-    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_CLASS_ID);
+    return GetInteropLibDecl<ASTKind::FUNC_DECL>(INTEROPLIB_CFFI_JAVA_CFFI_CLASS);
 }
 
 Ptr<FuncDecl> InteropLibBridge::GetParseMethodSignatureDecl()
@@ -1412,7 +1414,7 @@ OwnedPtr<VarDecl> InteropLibBridge::CreateJNIArgsVar(std::vector<OwnedPtr<Expr>>
     CJC_NULLPTR_CHECK(jvalueTy);
     auto varrayTy = typeManager.GetVArrayTy(*jvalueTy, static_cast<int64_t>(args.size()));
     auto argsArray = CreateArrayLit(std::move(args), varrayTy);
-    auto argsVar = CreateVarDecl("argsPtr", std::move(argsArray), nullptr);
+    auto argsVar = CreateVarDecl("$argsPtr", std::move(argsArray), nullptr);
     argsVar->isVar = true;
     argsVar->SetTy(argsVar->initializer->GetTy());
     CopyBasicInfo(argsVar->initializer.get(), argsVar.get());

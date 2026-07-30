@@ -344,7 +344,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
         auto genericParam = mirror.generic->typeParameters[0].get();
         CJC_ASSERT(genericParam);
 
-        methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile (CreateRefExpr(jniEnv), curFile),
+        methodCall = lib.CreateCFFICallArrayMethodCall(WithinFile(CreateRefExpr(jniEnv), curFile),
             std::move(javaRefCall), paramList, genericParam, GetArrayOperationKind(fun));
     } else {
         auto memberJNISignature =
@@ -386,7 +386,7 @@ void JavaDesugarManager::AddJavaMirrorMethodBody(
     methodCallRes.begin = fun.begin;
     methodCallRes.curFile = curFile;
 
-    auto handlePendingDecl = lib.GetJNIHandlePendingExceptionDecl();
+    static auto handlePendingDecl = lib.GetJNIHandlePendingExceptionDecl();
     auto handlePendingCall = CreateCall(handlePendingDecl, curFile, WithinFile(CreateRefExpr(jniEnv), curFile));
     body.emplace_back(std::move(handlePendingCall));
 
