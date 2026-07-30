@@ -1095,6 +1095,9 @@ private:
     void TranslateFuncArgsWithoutThisObj(
         const AST::CallExpr& expr, std::vector<Value*>& args, const std::vector<Type*>* expectedParamTys);
     Value* TranslateTrivialArgWithNoSugar(const AST::FuncArg& arg, const DebugLocation& loc, Type* expectedTy);
+    Value* CreateNothingValueForUnreachableCall(const AST::CallExpr& expr);
+    void TranslateNonEnumConstructorThisArg(const AST::CallExpr& expr, const DebugLocation& loc,
+        Type* expectedThisObjTy, std::vector<Value*>& args);
     std::vector<Value*> TranslateFuncArgs(
         const AST::CallExpr& expr, Type* expectedThisObjTy, const std::vector<Type*>* expectedParamTys);
 

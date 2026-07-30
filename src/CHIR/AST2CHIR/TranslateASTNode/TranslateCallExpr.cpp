@@ -387,6 +387,9 @@ void Translator::TranslateFuncArgsWithoutThisObj(
             }
             args.emplace_back(TranslateTrivialArgWithNoSugar(*argExprs[i], loc, expectedTy));
         }
+        if (args.back()->GetType()->IsNothing()) {
+            StartUnreachableContinuation(*argExprs[i]->expr);
+        }
     }
 }
 
@@ -412,6 +415,35 @@ Value* Translator::TranslateTrivialArgWithNoSugar(const AST::FuncArg& arg, const
     return argVal;
 }
 
+void Translator::TranslateNonEnumConstructorThisArg(
+    const AST::CallExpr& expr, const DebugLocation& loc, Type* expectedThisObjTy, std::vector<Value*>& args)
+{
+    auto callee = expr.resolvedFunction;
+    auto isNonEnumNonStaticConstructor =
+        callee && callee->IsMemberDecl() && !callee->TestAttr(AST::Attribute::STATIC) &&
+        callee->TestAttr(AST::Attribute::CONSTRUCTOR) && !callee->TestAttr(AST::Attribute::ENUM_CONSTRUCTOR);
+    if (!isNonEnumNonStaticConstructor || HasNothingTypeArg(args)) {
+        return;
+    }
+
+    Value* thisObj = nullptr;
+    if (IsSuperOrThisCall(expr)) {
+        // For super constructor call site, the `this` arg of current constructor should be passed into super
+        // constructor.
+        thisObj = GetCurrentFunc()->GetParam(0);
+    } else {
+        // Object allocation is lifted out so the generated `this` argument can precede source arguments.
+        auto thisTy = chirTy.TranslateType(*expr.GetTy())->StripAllRefs();
+        auto allocateThis = TryCreate<Allocate>(currentBlock, loc, builder.GetType<RefType>(thisTy), thisTy);
+        allocateThis->Set<DebugLocationInfoForWarning>(loc);
+        thisObj = allocateThis->GetResult();
+    }
+    if (expectedThisObjTy != nullptr) {
+        thisObj = TypeCastOrBoxIfNeeded(*thisObj, *expectedThisObjTy);
+    }
+    args.insert(args.begin(), thisObj);
+}
+
 std::vector<Value*> Translator::TranslateFuncArgs(
     const AST::CallExpr& expr, Type* expectedThisObjTy, const std::vector<Type*>* expectedParamTys)
 {
@@ -428,6 +460,11 @@ std::vector<Value*> Translator::TranslateFuncArgs(
             thisObj = TypeCastOrBoxIfNeeded(*thisObj, *expectedThisObjTy);
         }
         args.emplace_back(thisObj);
+        // The receiver is evaluated before explicit call arguments.
+        if (auto memberAccess = DynamicCast<AST::MemberAccess*>(expr.baseFunc.get());
+            memberAccess && memberAccess->baseExpr->GetTy()->IsNothing()) {
+            StartUnreachableContinuation(*memberAccess->baseExpr);
+        }
     }
 
     const auto& loc = TranslateLocation(expr);
@@ -446,35 +483,53 @@ std::vector<Value*> Translator::TranslateFuncArgs(
                 expectedTy = (*expectedParamTys)[i];
             }
             args.emplace_back(TranslateTrivialArgWithNoSugar(*arg, loc, expectedTy));
+            if (args.back()->GetType()->IsNothing()) {
+                StartUnreachableContinuation(*arg->expr);
+            }
         }
     }
 
-    // class or struct constructor, but not static constructor
-    auto isNonEnumNonStaticConstructor =
-        callee && callee->IsMemberDecl() && !callee->TestAttr(AST::Attribute::STATIC) &&
-        callee->TestAttr(AST::Attribute::CONSTRUCTOR) && !callee->TestAttr(AST::Attribute::ENUM_CONSTRUCTOR);
     // call constructor of class or struct, we need to generate the `this` argument at last.
     // because it can't be used in default-value-func.
-    if (isNonEnumNonStaticConstructor) {
-        Value* thisObj = nullptr;
-        if (IsSuperOrThisCall(expr)) {
-            // For super constructor call site, the `this` arg of current constructor should be passed into super
-            // constructor
-            thisObj = GetCurrentFunc()->GetParam(0);
-        } else {
-            // For trivial constructor call site, the object allocation is lifted out and then pass into constructor as
-            // `this` arg
-            auto thisTy = chirTy.TranslateType(*expr.GetTy())->StripAllRefs();
-            auto allocateThis = TryCreate<Allocate>(currentBlock, loc, builder.GetType<RefType>(thisTy), thisTy);
-            allocateThis->Set<DebugLocationInfoForWarning>(loc);
-            thisObj = allocateThis->GetResult();
-        }
-        if (expectedThisObjTy != nullptr) {
-            thisObj = TypeCastOrBoxIfNeeded(*thisObj, *expectedThisObjTy);
-        }
-        args.insert(args.begin(), thisObj);
-    }
+    TranslateNonEnumConstructorThisArg(expr, loc, expectedThisObjTy, args);
     return args;
+}
+
+template <typename Args> static bool HasUnreachableCallSuffix(const Args& args)
+{
+    for (auto it = args.begin(); it != args.end(); ++it) {
+        if ((*it)->expr->GetTy()->IsNothing()) {
+            return std::next(it) != args.end();
+        }
+    }
+    return false;
+}
+
+static bool HasUnreachableCallSuffix(const AST::CallExpr& callExpr)
+{
+    if (callExpr.baseFunc->GetTy()->IsNothing()) {
+        return callExpr.desugarArgs.has_value() ? !callExpr.desugarArgs->empty() : !callExpr.args.empty();
+    }
+    if (auto memberAccess = DynamicCast<AST::MemberAccess*>(callExpr.baseFunc.get());
+        memberAccess && memberAccess->baseExpr->GetTy()->IsNothing()) {
+        return callExpr.desugarArgs.has_value() ? !callExpr.desugarArgs->empty() : !callExpr.args.empty();
+    }
+    return callExpr.desugarArgs.has_value() ? HasUnreachableCallSuffix(*callExpr.desugarArgs)
+                                            : HasUnreachableCallSuffix(callExpr.args);
+}
+
+Value* Translator::CreateNothingValueForUnreachableCall(const AST::CallExpr& expr)
+{
+    auto nothing = CreateAndAppendConstantExpression<NullLiteral>(builder.GetNothingType(), *currentBlock)->GetResult();
+    const auto& warningLoc = expr.baseFunc ? TranslateLocation(*expr.baseFunc) : TranslateLocation(expr);
+    nothing->GetExpr()->Set<DebugLocationInfoForWarning>(warningLoc);
+    auto exit = CreateAndAppendTerminator<Exit>(TranslateLocation(expr), currentBlock);
+    if (!HasUnreachableCallSuffix(expr)) {
+        maybeUnreachable.erase(currentBlock);
+    }
+    CreateUnreachableContinuation(*exit);
+    maybeUnreachable[currentBlock] = exit;
+    return nothing;
 }
 
 void Translator::BlackBoxModifyArgTypeToRef(std::vector<Value*>& args)
@@ -549,6 +604,9 @@ Ptr<Value> Translator::TranslateIntrinsicCall(const AST::CallExpr& expr)
 
     // Translate arguments
     auto args = TranslateFuncArgs(expr, nullptr, nullptr);
+    if (HasNothingTypeArg(args)) {
+        return CreateNothingValueForUnreachableCall(expr);
+    }
     auto retTy = ty;
     if (intrinsicKind == BLACK_BOX) {
         // intrinsic blackBox's signature is blackBox<T>(v: T): T,
@@ -595,6 +653,9 @@ Ptr<Value> Translator::TranslateForeignFuncCall(const AST::CallExpr& expr)
 
     // Translate arguments
     auto args = TranslateFuncArgs(expr, nullptr, &paramInstTys);
+    if (HasNothingTypeArg(args)) {
+        return CreateNothingValueForUnreachableCall(expr);
+    }
     auto callee = GetSymbolTable(*resolvedFunction);
     CJC_ASSERT(callee != nullptr && "TranslateApply: not supported callee now!");
     auto funcCallContext = FuncCallContext {
@@ -611,10 +672,13 @@ Ptr<Value> Translator::TranslateCStringCtorCall(const AST::CallExpr& expr)
         auto ty = TranslateType(*expr.GetTy());
         const auto& loc = TranslateLocation(expr);
         CJC_ASSERT(expr.args.size() == 1);
-        auto argVal = TranslateExprArg(*expr.args[0]);
+        auto args = TranslateFuncArgs(expr, nullptr, nullptr);
+        if (HasNothingTypeArg(args)) {
+            return CreateNothingValueForUnreachableCall(expr);
+        }
         auto callContext = IntrisicCallContext {
             .kind = IntrinsicKind::CSTRING_INIT,
-            .args = std::vector<Value*>{argVal}
+            .args = args
         };
         return CreateAndAppendExpression<Intrinsic>(loc, ty, callContext, currentBlock)->GetResult();
     }
@@ -651,6 +715,9 @@ Ptr<Value> Translator::TranslateEnumCtorCall(const AST::CallExpr& expr)
 
     // Translate arguments
     auto args = TranslateFuncArgs(expr, nullptr, &paramInstTys);
+    if (HasNothingTypeArg(args)) {
+        return CreateNothingValueForUnreachableCall(expr);
+    }
     auto ty = chirTy.TranslateType(*expr.GetTy());
     auto selectorTy = GetSelectorType(*StaticCast<AST::EnumTy>(expr.GetTy()));
     CJC_ASSERT(ty->IsEnum());
@@ -692,6 +759,9 @@ Translator::LeftValueInfo Translator::TranslateStructOrClassCtorCallAsLeftValue(
 
     // Translate arguments
     auto args = TranslateFuncArgs(expr, thisTyRef, &paramInstTys);
+    if (HasNothingTypeArg(args)) {
+        return LeftValueInfo(CreateNothingValueForUnreachableCall(expr), {});
+    }
     auto callee = GetSymbolTable(*expr.resolvedFunction);
     CJC_ASSERT(callee != nullptr && "TranslateApply: not supported callee now!");
     paramInstTys.insert(paramInstTys.begin(), thisTyRef);
@@ -728,6 +798,9 @@ Value* Translator::TranslateStructOrClassCtorCall(const AST::CallExpr& expr)
 
     // Translate arguments
     auto args = TranslateFuncArgs(expr, thisTyRef, &paramInstTys);
+    if (HasNothingTypeArg(args)) {
+        return CreateNothingValueForUnreachableCall(expr);
+    }
     auto callee = GetSymbolTable(*expr.resolvedFunction);
     CJC_ASSERT(callee != nullptr && "TranslateApply: not supported callee now!");
     paramInstTys.insert(paramInstTys.begin(), thisTyRef);
@@ -760,8 +833,12 @@ Ptr<Value> Translator::TranslateCFuncConstructorCall(const AST::CallExpr& expr)
         return nullptr;
     }
     auto& arg = expr.args[0]->expr;
-    auto argValue = TranslateExprArg(*arg, *TranslateType(*expr.GetTy()), true);
-    return argValue;
+    auto args = TranslateFuncArgs(expr, nullptr, nullptr);
+    if (HasNothingTypeArg(args)) {
+        return CreateNothingValueForUnreachableCall(expr);
+    }
+    auto argValue = GetDerefedValue(args[0], TranslateLocation(*arg));
+    return TypeCastOrBoxIfNeeded(*argValue, *TranslateType(*expr.GetTy()), TranslateLocation(*arg));
 }
 
 Ptr<Value> Translator::TranslateFuncTypeValueCall(const AST::CallExpr& expr)
@@ -778,10 +855,21 @@ Ptr<Value> Translator::TranslateFuncTypeValueCall(const AST::CallExpr& expr)
     //   eg: foo()(a), translate foo() first, then translate args a
     auto callee = TranslateExprArg(*expr.baseFunc);
     CJC_ASSERT(callee != nullptr && "TranslateApply: not supported callee now!");
+    if (callee->GetType()->IsNothing()) {
+        if (expr.args.empty()) {
+            return callee;
+        }
+        StartUnreachableContinuation(*expr.baseFunc);
+        static_cast<void>(TranslateFuncArgs(expr, nullptr, nullptr));
+        return CreateNothingValueForUnreachableCall(expr);
+    }
     callee = GenerateLoadIfNeccessary(*callee, false, false, false, loc);
     // Translate arguments
     auto paramInstTys = StaticCast<FuncType*>(callee->GetType())->GetParamTypes();
     auto args = TranslateFuncArgs(expr, nullptr, &paramInstTys);
+    if (HasNothingTypeArg(args)) {
+        return CreateNothingValueForUnreachableCall(expr);
+    }
     auto funcCallContext = FuncCallContext {
         .args = args
     };
@@ -879,6 +967,9 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
         expectedParamTys.erase(expectedParamTys.begin());
     }
     auto args = TranslateFuncArgs(expr, expectedThisObjTy, &expectedParamTys);
+    if (HasNothingTypeArg(args)) {
+        return CreateNothingValueForUnreachableCall(expr);
+    }
     LocalVar* ret = nullptr;
     if (instCallInfo.isVirtualFuncCall) {
         if (resolvedFunction->TestAttr(AST::Attribute::STATIC)) {
@@ -916,10 +1007,6 @@ Value* Translator::TranslateMemberFuncCall(const AST::CallExpr& expr)
                 GenerateInvokeCallContext(instCallInfo, *obj, *resolvedFunction, args, expr.overflowStrategy);
             ret = TryCreate<Invoke>(currentBlock, loc, instCallInfo.instRetTy, invokeInfo)->GetResult();
         }
-        if (HasNothingTypeArg(args)) {
-            const auto& warningLoc = TranslateLocation(*expr.baseFunc);
-            ret->GetExpr()->Set<DebugLocationInfoForWarning>(warningLoc);
-        }
     } else {
         auto callee = GetSymbolTable(*resolvedFunction);
         auto funcCallContext = FuncCallContext {
@@ -949,6 +1036,9 @@ Value* Translator::TranslateTrivialFuncCall(const AST::CallExpr& expr)
 
     // Translate arguments
     auto args = TranslateFuncArgs(expr, nullptr, &paramInstTys);
+    if (HasNothingTypeArg(args)) {
+        return CreateNothingValueForUnreachableCall(expr);
+    }
     auto callee = GetSymbolTable(*resolvedFunction);
     CJC_ASSERT(callee != nullptr && "TranslateApply: not supported callee now!");
     auto funcCallContext = FuncCallContext {
@@ -1138,10 +1228,6 @@ Ptr<Value> Translator::ProcessCallExpr(const AST::CallExpr& expr)
     }
     if (IsCtorCall(expr)) {
         return TranslateStructOrClassCtorCall(expr);
-    }
-    if (bool isNothingCall = !expr.resolvedFunction && expr.baseFunc->TyKind() == AST::TypeKind::TYPE_NOTHING;
-        isNothingCall) {
-        return TranslateExprArg(*expr.baseFunc);
     }
     if (auto res = TranslateFuncTypeValueCall(expr); res) {
         return res;
