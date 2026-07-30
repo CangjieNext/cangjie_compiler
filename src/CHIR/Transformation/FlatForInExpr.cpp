@@ -62,6 +62,18 @@ Block* GetEntryBlock(const ForIn& expr)
     return (*expr.GetExecutionOrder().begin())->GetEntryBlock();
 }
 
+void FinalizeForInBlockGroup(CHIRBuilder& builder, const ForIn& expr, BlockGroup& blockGroup)
+{
+    // Enclosing structured control flow finishes connecting detached continuations before ForIn flattening.
+    for (auto block : blockGroup.GetBlocks()) {
+        if (block->GetTerminator() == nullptr) {
+            auto exit = builder.CreateTerminator<Exit>(expr.GetDebugLocation(), block);
+            exit->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+            block->AppendExpression(exit);
+        }
+    }
+}
+
 using ExprIt = std::vector<Expression*>::iterator;
 /// Move expressions in this block after the ForIn to a new block. The new block will serve as the common block to jump
 /// to after the ForIn is executed in CFG.
@@ -88,6 +100,10 @@ void FlatForInExpr::FlatternForInExpr(ExprIt it, ExprIt end)
     }
     auto parentBlock = expr.GetParentBlock();
     auto forInSuc = MoveExpressionAfterForIn(builder, it, end);
+
+    FinalizeForInBlockGroup(builder, expr, *expr.GetBody());
+    FinalizeForInBlockGroup(builder, expr, *expr.GetLatch());
+    FinalizeForInBlockGroup(builder, expr, *expr.GetCond());
 
     auto bg = expr.GetParentBlockGroup();
     auto jumpBlock = builder.CreateBlock(bg);
@@ -151,6 +167,10 @@ void FlatForInExpr::FlatternForInClosedRange(ExprIt it, ExprIt end)
     auto& expr = StaticCast<ForInClosedRange>(**it);
     auto parentBlock = expr.GetParentBlock();
     auto forInSuc = MoveExpressionAfterForIn(builder, it, end);
+
+    FinalizeForInBlockGroup(builder, expr, *expr.GetBody());
+    FinalizeForInBlockGroup(builder, expr, *expr.GetLatch());
+    FinalizeForInBlockGroup(builder, expr, *expr.GetCond());
 
     auto gotoForin = builder.CreateTerminator<GoTo>(GetEntryBlock(expr), parentBlock);
     CJC_ASSERT(!parentBlock->GetTerminator());
