@@ -125,7 +125,7 @@ void MergeBlocks::RunOnPackage(const Package& package, CHIRBuilder& builder, con
 
 static bool SkipMergeBlock(const Block& bl, const GlobalOptions& opts)
 {
-    if (bl.TestAttr(Attribute::UNREACHABLE)) {
+    if (bl.TestAttr(Attribute::UNREACHABLE) || bl.TestAttr(Attribute::MATCH_PATTERN)) {
         return true;
     }
     if (!opts.enableCompileDebug) {
@@ -142,7 +142,7 @@ void MergeBlocks::RunOnFunc(const BlockGroup& body, CHIRBuilder& builder, const 
             return false;
         }
         auto preds = block.GetPredecessors();
-        if (preds.size() != 1) {
+        if (preds.size() != 1 || preds[0]->TestAttr(Attribute::MATCH_PATTERN)) {
             return false;
         }
         auto succs = preds[0]->GetSuccessors();
