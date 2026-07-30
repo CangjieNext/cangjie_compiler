@@ -1045,6 +1045,16 @@ private:
     {
         auto dest = cast->GetResult();
         auto srcTy = cast->GetSourceTy();
+        if (srcTy->IsEnum() && IsEnumSelectorType(*dest->GetType())) {
+            // An enum selector is the tag stored in child 0 of the enum value.
+            if (auto enumTag = state.GetChild(cast->GetSourceValue(), 0);
+                enumTag && state.CheckAbstractValue(enumTag)) {
+                state.Propagate(enumTag, dest);
+            } else {
+                state.SetToTopOrTopRef(dest, /* isRef = */ false);
+            }
+            return ExceptionKind::NA;
+        }
         if (srcTy->IsInteger()) {
             if (auto srcAbsVal = state.CheckAbstractValue(cast->GetSourceValue()); srcAbsVal) {
                 return HandleTypecastOfInt(state, cast, srcAbsVal);
