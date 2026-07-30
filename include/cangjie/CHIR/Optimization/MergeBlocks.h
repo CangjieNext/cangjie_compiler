@@ -10,6 +10,7 @@
 #include "cangjie/Option/Option.h"
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
+#include "cangjie/CHIR/MatchTraversalInfo.h"
 
 namespace Cangjie::CHIR {
 /**
@@ -28,7 +29,8 @@ public:
      * @param builder CHIR builder for generating IR.
      * @param opts global options from Cangjie inputs.
      */
-    static void RunOnPackage(const Package& package, CHIRBuilder& builder, const GlobalOptions& opts);
+    static void RunOnPackage(const Package& package, CHIRBuilder& builder, const GlobalOptions& opts,
+        const MatchTraversalInfo* matchTraversalInfo = nullptr);
 
     /**
      * @brief Main process to do block merge per func.
@@ -36,7 +38,8 @@ public:
      * @param builder CHIR builder for generating IR.
      * @param opts global options from Cangjie inputs.
      */
-    static void RunOnFunc(const BlockGroup& body, CHIRBuilder& builder, const GlobalOptions& opts);
+    static void RunOnFunc(const BlockGroup& body, CHIRBuilder& builder, const GlobalOptions& opts,
+        const MatchTraversalInfo* matchTraversalInfo = nullptr);
 };
 } // namespace Cangjie::CHIR
 

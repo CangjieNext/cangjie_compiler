@@ -35,7 +35,8 @@ public:
         const ElementList<Ptr<const AST::FuncDecl>>& localConstFuncs, IncreKind& kind,
         const std::unordered_map<std::string, Value*>& deserializedVals,
         const TranslateASTNodeFunc& funcForTranlateASTNode, std::unordered_map<Block*, Expression*>& maybeUnreachable,
-        bool computeAnnotations, std::vector<CHIR::Function*>& initFuncsForAnnoFactory,
+        MatchTraversalInfo& matchTraversalInfo, bool computeAnnotations,
+        std::vector<CHIR::Function*>& initFuncsForAnnoFactory,
         Cangjie::TypeManager& typeManager, std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs)
     {
         size_t funcNum = decls.size();
@@ -46,13 +47,14 @@ public:
         CHIR::CHIRTypeCache chirTypeCache(chirType.GetTypeMap(), chirType.GetGlobalNominalCache());
         std::vector<std::unordered_map<Block*, Expression*>> maybeUnreachableBlocks;
         maybeUnreachableBlocks.resize(funcNum);
+        std::vector<MatchTraversalInfo> matchTraversalInfos(funcNum);
         for (size_t idx = 0; idx < funcNum; ++idx) {
             auto decl = decls.at(idx);
             auto subChirType = std::make_unique<CHIRType>(*builderList[idx], chirTypeCache);
             auto tran = std::make_unique<Translator>(
                 *builderList[idx], *subChirType, opts, gim, globalCache, localConstVars,
                 localConstFuncs, kind, deserializedVals, annoFactoryFuncs, maybeUnreachableBlocks[idx],
-                computeAnnotations, initFuncsForAnnoFactory, typeManager);
+                matchTraversalInfos[idx], computeAnnotations, initFuncsForAnnoFactory, typeManager);
             tran->SetTopLevel(*decl);
             taskQueue.AddTask<void>(
                 [translator = tran.get(), decl, &funcForTranlateASTNode]() {
@@ -68,6 +70,9 @@ public:
         builder.GetChirContext().MergeTypes();
         for (auto& it : maybeUnreachableBlocks) {
             maybeUnreachable.merge(it);
+        }
+        for (auto& info : matchTraversalInfos) {
+            matchTraversalInfo.Merge(std::move(info));
         }
         // If the function RunAST2CHIRInParallel is invoked again, we need revert chirTypePool to the inital state.
     }
