@@ -22,6 +22,25 @@
 
 using namespace Cangjie::CHIR;
 
+namespace {
+std::string SourceExprToString(SourceExpr sourceExpr)
+{
+    const static std::unordered_map<SourceExpr, std::string> SOURCE_EXPR_MAP = {
+        {SourceExpr::IF_EXPR, "IF_EXPR"},
+        {SourceExpr::WHILE_EXPR, "WHILE_EXPR"},
+        {SourceExpr::DO_WHILE_EXPR, "DO_WHILE_EXPR"},
+        {SourceExpr::MATCH_EXPR, "MATCH_EXPR"},
+        {SourceExpr::IF_LET_OR_WHILE_LET, "IF_LET_OR_WHILE_LET"},
+        {SourceExpr::QUEST, "QUEST"},
+        {SourceExpr::BINARY, "BINARY"},
+        {SourceExpr::FOR_IN_EXPR, "FOR_IN_EXPR"},
+        {SourceExpr::OTHER, "OTHER"},
+        {SourceExpr::MATCH_CASE, "MATCH_CASE"},
+    };
+    return SOURCE_EXPR_MAP.at(sourceExpr);
+}
+} // namespace
+
 // Terminator
 Terminator::Terminator(
     ExprKind kind, const std::vector<Value*>& operands, const std::vector<Block*>& successors, Block* parent)
@@ -83,6 +102,16 @@ Block* MultiBranch::GetDefaultBlock() const
     return GetSuccessor(0);
 }
 
+void MultiBranch::SetSourceExpr(SourceExpr srcExpr)
+{
+    sourceExpr = srcExpr;
+}
+
+SourceExpr MultiBranch::GetSourceExpr() const
+{
+    return sourceExpr;
+}
+
 std::vector<Block*> MultiBranch::GetNormalBlocks() const
 {
     auto succs = GetSuccessors();
@@ -100,6 +129,11 @@ std::string MultiBranch::OperandsToString() const
         res.emplace_back("[" + caseValue + ", " + caseId + "]");
     }
     return StringJoin(res, ", ");
+}
+
+std::string MultiBranch::AddExtraComment() const
+{
+    return "sourceExpr: " + SourceExprToString(sourceExpr);
 }
 
 ExpressionWithException::ExpressionWithException(ExprKind kind, Block* parent)
@@ -380,19 +414,7 @@ SourceExpr Branch::GetSourceExpr() const
 
 std::string Branch::AddExtraComment() const
 {
-    const static std::unordered_map<SourceExpr, std::string> SOURCE_EXPR_MAP = {
-        {SourceExpr::IF_EXPR, "IF_EXPR"},
-        {SourceExpr::WHILE_EXPR, "WHILE_EXPR"},
-        {SourceExpr::DO_WHILE_EXPR, "DO_WHILE_EXPR"},
-        {SourceExpr::MATCH_EXPR, "MATCH_EXPR"},
-        {SourceExpr::IF_LET_OR_WHILE_LET, "IF_LET_OR_WHILE_LET"},
-        {SourceExpr::QUEST, "QUEST"},
-        {SourceExpr::BINARY, "BINARY"},
-        {SourceExpr::FOR_IN_EXPR, "FOR_IN_EXPR"},
-        {SourceExpr::OTHER, "OTHER"},
-        {SourceExpr::MATCH_CASE, "MATCH_CASE"},
-    };
-    return "sourceExpr: " + SOURCE_EXPR_MAP.at(sourceExpr);
+    return "sourceExpr: " + SourceExprToString(sourceExpr);
 }
 
 Exit::Exit(Block* parent) : Terminator(ExprKind::EXIT, {}, {}, parent)
@@ -437,6 +459,7 @@ MultiBranch* MultiBranch::Clone(CHIRBuilder& builder, Block& parent) const
     CJC_ASSERT(result == nullptr);
     auto newNode = builder.CreateTerminator<MultiBranch>(
         GetCondition(), GetDefaultBlock(), GetCaseVals(), GetNormalBlocks(), &parent);
+    newNode->SetSourceExpr(GetSourceExpr());
     parent.AppendExpression(newNode);
     return newNode;
 }
