@@ -13,6 +13,8 @@
 #include <string>
 
 namespace Cangjie::CHIR {
+class MatchTraversalInfo;
+
 class CHIRDeserializer {
     class CHIRDeserializerImpl;
 
@@ -20,8 +22,13 @@ public:
     static bool Deserialize(const std::string& fileName, Cangjie::CHIR::CHIRBuilder& chirBuilder, ToCHIR::Phase& phase,
         bool compilePlatform = false);
     static bool Deserialize(uint8_t* data, int64_t size, CHIRBuilder& chirBuilder);
+    static bool Deserialize(
+        uint8_t* data, int64_t size, CHIRBuilder& chirBuilder, MatchTraversalInfo& matchTraversalInfo);
 
 private:
+    static bool Deserialize(
+        uint8_t* data, int64_t size, CHIRBuilder& chirBuilder, MatchTraversalInfo* matchTraversalInfo);
+
     explicit CHIRDeserializer()
     {
     }

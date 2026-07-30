@@ -18,6 +18,7 @@
 #include "cangjie/CHIR/IR/Type/EnumDef.h"
 #include "cangjie/CHIR/IR/Type/StructDef.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
+#include "cangjie/CHIR/MatchTraversalInfo.h"
 #include "cangjie/CHIR/Utils/UserDefinedType.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/Utils/CastingTemplate.h"
@@ -49,6 +50,7 @@ Cangjie::OverflowStrategy DeserializeOverflowStrategy(PackageFormat::OverflowStr
             return OverflowStrategy::NA;
     }
 }
+
 } // namespace
 
 // explicit specialization
@@ -95,6 +97,19 @@ bool CHIRDeserializer::Deserialize(const std::string& fileName, Cangjie::CHIR::C
 
 bool CHIRDeserializer::Deserialize(uint8_t* data, int64_t size, CHIRBuilder& chirBuilder)
 {
+    return Deserialize(data, size, chirBuilder, nullptr);
+}
+
+bool CHIRDeserializer::Deserialize(
+    uint8_t* data, int64_t size, CHIRBuilder& chirBuilder, MatchTraversalInfo& matchTraversalInfo)
+{
+    matchTraversalInfo.Clear();
+    return Deserialize(data, size, chirBuilder, &matchTraversalInfo);
+}
+
+bool CHIRDeserializer::Deserialize(
+    uint8_t* data, int64_t size, CHIRBuilder& chirBuilder, MatchTraversalInfo* matchTraversalInfo)
+{
     bool succeed = true;
 #ifndef CANGJIE_ENABLE_GCOV
     try {
@@ -109,7 +124,7 @@ bool CHIRDeserializer::Deserialize(uint8_t* data, int64_t size, CHIRBuilder& chi
             return false;
         }
         const PackageFormat::CHIRPackage* package = PackageFormat::GetCHIRPackage(data);
-        CHIRDeserializerImpl deserializer(chirBuilder, false);
+        CHIRDeserializerImpl deserializer(chirBuilder, false, matchTraversalInfo);
         deserializer.Run(package);
 #ifndef CANGJIE_ENABLE_GCOV
     } catch (...) {
@@ -1206,7 +1221,9 @@ template <> MultiBranch* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(con
     }
     auto owner = GetValue<Block>(obj->base()->owner());
     auto caseVals = std::vector<uint64_t>(obj->caseValues()->begin(), obj->caseValues()->end());
-    return builder.CreateTerminator<MultiBranch>(cond, defaultBlock, caseVals, caseBlocks, owner);
+    auto result = builder.CreateTerminator<MultiBranch>(cond, defaultBlock, caseVals, caseBlocks, owner);
+    result->SetSourceExpr(CHIR::SourceExpr(obj->sourceExpr()));
+    return result;
 }
 
 template <>
@@ -1444,6 +1461,11 @@ void CHIRDeserializer::CHIRDeserializerImpl::ConfigExpression(const PackageForma
 {
     CJC_NULLPTR_CHECK(buffer);
     ConfigBase(buffer->base(), obj);
+    if (matchTraversalInfo && buffer->isPatternGoTo()) {
+        auto goTo = DynamicCast<GoTo*>(&obj);
+        CJC_ASSERT(goTo);
+        matchTraversalInfo->MarkPatternGoTo(*goTo);
+    }
 }
 
 template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFormat::Lambda* buffer, Lambda& obj)
@@ -1535,6 +1557,13 @@ template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFor
     obj.AppendExpressions(GetExpression<Expression>(buffer->exprs()));
     obj.predecessors.clear();
     obj.predecessors = GetValue<Block>(buffer->predecessors());
+    if (matchTraversalInfo && buffer->isPatternBlock()) {
+        matchTraversalInfo->MarkPatternBlock(obj);
+    }
+    if (matchTraversalInfo && buffer->hasMatchCaseId()) {
+        CJC_ASSERT(buffer->isPatternBlock());
+        matchTraversalInfo->SetCaseId(obj, static_cast<size_t>(buffer->matchCaseId()));
+    }
 }
 
 template <> void CHIRDeserializer::CHIRDeserializerImpl::Config(const PackageFormat::GlobalVar* buffer, GlobalVar& obj)

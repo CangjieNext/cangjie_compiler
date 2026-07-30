@@ -22,6 +22,25 @@
 
 using namespace Cangjie::CHIR;
 
+namespace {
+std::string SourceExprToString(SourceExpr sourceExpr)
+{
+    const static std::unordered_map<SourceExpr, std::string> SOURCE_EXPR_MAP = {
+        {SourceExpr::IF_EXPR, "IF_EXPR"},
+        {SourceExpr::WHILE_EXPR, "WHILE_EXPR"},
+        {SourceExpr::DO_WHILE_EXPR, "DO_WHILE_EXPR"},
+        {SourceExpr::MATCH_EXPR, "MATCH_EXPR"},
+        {SourceExpr::IF_LET_OR_WHILE_LET, "IF_LET_OR_WHILE_LET"},
+        {SourceExpr::QUEST, "QUEST"},
+        {SourceExpr::BINARY, "BINARY"},
+        {SourceExpr::FOR_IN_EXPR, "FOR_IN_EXPR"},
+        {SourceExpr::OTHER, "OTHER"},
+        {SourceExpr::MATCH_CASE, "MATCH_CASE"},
+    };
+    return SOURCE_EXPR_MAP.at(sourceExpr);
+}
+} // namespace
+
 GoTo::GoTo(Block* destBlock, Block* parent) : Expression(ExprKind::GOTO, {}, parent)
 {
     AppendOperand(*destBlock);
@@ -72,6 +91,16 @@ Block* MultiBranch::GetDefaultBlock() const
     return GetSuccessor(0);
 }
 
+void MultiBranch::SetSourceExpr(SourceExpr srcExpr)
+{
+    sourceExpr = srcExpr;
+}
+
+SourceExpr MultiBranch::GetSourceExpr() const
+{
+    return sourceExpr;
+}
+
 std::vector<Block*> MultiBranch::GetNormalBlocks() const
 {
     auto succs = GetSuccessors();
@@ -89,6 +118,11 @@ std::string MultiBranch::OperandsToString() const
         res.emplace_back("[" + caseValue + ", " + caseId + "]");
     }
     return StringJoin(res, ", ");
+}
+
+std::string MultiBranch::AddExtraComment() const
+{
+    return "sourceExpr: " + SourceExprToString(sourceExpr);
 }
 
 TryApply::TryApply(Value* callee, const FuncCallContext& callContext, Block* sucBlock, Block* errBlock, Block* parent)
@@ -288,9 +322,6 @@ GoTo* GoTo::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_ASSERT(result == nullptr);
     auto newNode = builder.CreateTerminator<GoTo>(GetDestination(), &parent);
-    if (TestAttr(Attribute::MATCH_PATTERN)) {
-        newNode->EnableAttr(Attribute::MATCH_PATTERN);
-    }
     parent.AppendExpression(newNode);
     return newNode;
 }
@@ -329,19 +360,7 @@ SourceExpr Branch::GetSourceExpr() const
 
 std::string Branch::AddExtraComment() const
 {
-    const static std::unordered_map<SourceExpr, std::string> SOURCE_EXPR_MAP = {
-        {SourceExpr::IF_EXPR, "IF_EXPR"},
-        {SourceExpr::WHILE_EXPR, "WHILE_EXPR"},
-        {SourceExpr::DO_WHILE_EXPR, "DO_WHILE_EXPR"},
-        {SourceExpr::MATCH_EXPR, "MATCH_EXPR"},
-        {SourceExpr::IF_LET_OR_WHILE_LET, "IF_LET_OR_WHILE_LET"},
-        {SourceExpr::QUEST, "QUEST"},
-        {SourceExpr::BINARY, "BINARY"},
-        {SourceExpr::FOR_IN_EXPR, "FOR_IN_EXPR"},
-        {SourceExpr::OTHER, "OTHER"},
-        {SourceExpr::MATCH_CASE, "MATCH_CASE"},
-    };
-    return "sourceExpr: " + SOURCE_EXPR_MAP.at(sourceExpr);
+    return "sourceExpr: " + SourceExprToString(sourceExpr);
 }
 
 Exit::Exit(Block* parent) : Expression(ExprKind::EXIT, {}, parent)
@@ -387,6 +406,7 @@ MultiBranch* MultiBranch::Clone(CHIRBuilder& builder, Block& parent) const
     CJC_ASSERT(result == nullptr);
     auto newNode = builder.CreateTerminator<MultiBranch>(
         GetCondition(), GetDefaultBlock(), GetCaseVals(), GetNormalBlocks(), &parent);
+    newNode->SetSourceExpr(GetSourceExpr());
     parent.AppendExpression(newNode);
     return newNode;
 }

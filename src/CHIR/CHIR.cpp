@@ -282,7 +282,8 @@ void ToCHIR::NothingTypeExprElimination()
 void ToCHIR::UnreachableBranchReporter()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBranchReporter");
-    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, chirPkg->GetName(), maybeUnreachable);
+    auto check = CHIR::UnreachableBranchCheck(
+        &constAnalysisWrapper, diag, chirPkg->GetName(), maybeUnreachable, matchTraversalInfo);
     check.RunOnPackage(*chirPkg, opts.GetJobs());
 }
 
@@ -472,7 +473,7 @@ void ToCHIR::RunUnreachableMarkBlockRemoval()
 void ToCHIR::RunMergingBlocks(const std::string& firstName, const std::string& secondName)
 {
     Utils::ProfileRecorder recorder(firstName, secondName);
-    MergeBlocks::RunOnPackage(*chirPkg, builder, opts);
+    MergeBlocks::RunOnPackage(*chirPkg, builder, opts, &matchTraversalInfo);
     DumpCHIRToFile(secondName);
 }
 
@@ -1230,7 +1231,7 @@ bool ToCHIR::ExecuteCjPlugins()
     bool succeed = true;
     ExecutePlugin executePlugin(builder);
     // 1. serialize package, get memory pointer and size
-    if (!executePlugin.SerializePackage(*chirPkg)) {
+    if (!executePlugin.SerializePackage(*chirPkg, matchTraversalInfo)) {
         succeed = false;
     }
     // 2. execute all plugins, in fact, all plugins have been registered before, here we just need to
@@ -1241,7 +1242,7 @@ bool ToCHIR::ExecuteCjPlugins()
     // 3. deserialize plugin result, get new package of cpp
     if (succeed) {
         if (auto newPackage = executePlugin.DeserializePluginResult(
-            srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, maybeUnreachable)) {
+            srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, maybeUnreachable, matchTraversalInfo)) {
             chirPkg = newPackage;
         } else {
             succeed = false;
@@ -1351,6 +1352,7 @@ bool ToCHIR::TranslateToCHIR(std::vector<const AST::Decl*>&& annoOnly)
     srcCodeImportedVars = ast2CHIR.GetSrcCodeImportedVars();
     initFuncsForConstVar = ast2CHIR.GetInitFuncsForConstVar();
     maybeUnreachable = ast2CHIR.GetMaybeUnreachableBlocks();
+    matchTraversalInfo = ast2CHIR.GetMatchTraversalInfo();
     if (isComputingAnnos) {
         annoFactoryFuncs = ast2CHIR.GetAnnoFactoryFuncs();
         globalNominalCache = std::move(chirTypeCache.globalNominalCache);

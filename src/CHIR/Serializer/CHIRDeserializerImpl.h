@@ -55,8 +55,11 @@ public:
     template <typename T, typename FBT> void Config(const FBT* buffer, T& obj);
 
     void Run(const PackageFormat::CHIRPackage* package);
-    explicit CHIRDeserializerImpl(CHIRBuilder& chirBuilder, bool compilePlatform = false)
-        : builder(chirBuilder), compilePlatform(compilePlatform){};
+    explicit CHIRDeserializerImpl(CHIRBuilder& chirBuilder, bool compilePlatform = false,
+        MatchTraversalInfo* matchTraversalInfo = nullptr)
+        : builder(chirBuilder), compilePlatform(compilePlatform), matchTraversalInfo(matchTraversalInfo)
+    {
+    }
 
 private:
     Constant* DeserializeConstant(Type& resultTy, LiteralValue& val, Block& parent);
@@ -64,6 +67,7 @@ private:
 private:
     Cangjie::CHIR::CHIRBuilder& builder;
     bool compilePlatform = false;
+    MatchTraversalInfo* matchTraversalInfo;
     const PackageFormat::CHIRPackage* pool{};
 
     // Package object maps

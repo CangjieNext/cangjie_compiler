@@ -217,6 +217,11 @@ public:
         return std::move(maybeUnreachable);
     }
 
+    MatchTraversalInfo&& GetMatchTraversalInfo()
+    {
+        return std::move(matchTraversalInfo);
+    }
+
     std::vector<std::pair<const AST::Decl*, Function*>>&& GetAnnoFactoryFuncs()
     {
         return std::move(annoFactoryFuncs);
@@ -392,6 +397,7 @@ private:
     std::vector<Function*> initFuncsForConstVar;
     std::vector<Function*> initFuncsForAnnoFactory;
     std::unordered_map<Block*, Expression*> maybeUnreachable;
+    MatchTraversalInfo matchTraversalInfo;
 
     std::string outputPath;
     bool isComputingAnnos{};
