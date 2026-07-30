@@ -225,6 +225,7 @@ public:
     ConstAnalysis(const Function* func, CHIRBuilder& builder, bool isDebug, DiagnosticEngine& diagRef)
         : ValueAnalysis<ConstValueDomain, ValueStatePool>(func, builder, isDebug), diag(diagRef)
     {
+        CollectMutableLocalAllocations();
     }
 
     ~ConstAnalysis() final
@@ -232,6 +233,25 @@ public:
     }
 
 private:
+    /**
+     * @brief Collect storage allocations for source-level mutable local variables.
+     */
+    void CollectMutableLocalAllocations()
+    {
+        for (auto block : this->func->GetBody()->GetAllBlocks()) {
+            for (auto expression : block->GetExpressions()) {
+                auto kind = expression->GetExprKind();
+                if (kind != ExprKind::ALLOCATE && kind != ExprKind::ALLOCATE_WITH_EXCEPTION) {
+                    continue;
+                }
+                auto result = expression->GetResult();
+                if (result->GetDebugExpr() && !result->TestAttr(Attribute::READONLY)) {
+                    mutableLocalAllocations.emplace_back(result);
+                }
+            }
+        }
+    }
+
     void PrintDebugMessage(const Expression* expr, const ConstValue* absVal) const
     {
         std::string message = "[ConstAnalysis] The const value of " + expr->GetExprKindName() +
@@ -268,6 +288,9 @@ private:
                 CJC_ABORT();
                 return;
             }
+        }
+        if (expression->IsDynamicDispatch()) {
+            state.InvalidateMutableLocalState(mutableLocalAllocations);
         }
         if (exceptionKind == ExceptionKind::SUCCESS) {
             MarkExpressionAsMustNotOverflow(*const_cast<Expression*>(expression));
@@ -432,6 +455,9 @@ private:
                 }
                 break;
             }
+        }
+        if (terminator->GetExprKind() == ExprKind::INVOKESTATIC_WITH_EXCEPTION) {
+            state.InvalidateMutableLocalState(mutableLocalAllocations);
         }
         if (res == ExceptionKind::SUCCESS) {
             MarkExpressionAsMustNotOverflow(*const_cast<Expression*>(terminator));
@@ -1049,6 +1075,16 @@ private:
     {
         auto dest = cast->GetResult();
         auto srcTy = cast->GetSourceType();
+        if (srcTy->IsEnum() && IsEnumSelectorType(*dest->GetType())) {
+            // An enum selector is the tag stored in child 0 of the enum value.
+            if (auto enumTag = state.GetChild(cast->GetSourceValue(), 0);
+                enumTag && state.CheckAbstractValue(enumTag)) {
+                state.Propagate(enumTag, dest);
+            } else {
+                state.SetToTopOrTopRef(dest, /* isRef = */ false);
+            }
+            return ExceptionKind::NA;
+        }
         if (srcTy->IsInteger()) {
             if (auto srcAbsVal = state.CheckAbstractValue(cast->GetSourceValue()); srcAbsVal) {
                 return HandleTypecastOfInt(state, cast, srcAbsVal);
@@ -1207,10 +1243,18 @@ private:
         }
     }
 
+    std::optional<Block*> HandleInvokeWithExceptionTerminator(
+        TConstDomain& state, const InvokeWithException* /* invoke */, Value* /* refObj */) override
+    {
+        state.InvalidateMutableLocalState(mutableLocalAllocations);
+        return std::nullopt;
+    }
+
     template <typename TApply> ExceptionKind HandleApply(TConstDomain& state, const TApply* apply, Value* /* refObj */)
     {
         auto calleeFunc = DynamicCast<Function*>(apply->GetCallee());
         if (!calleeFunc) {
+            state.InvalidateMutableLocalState(mutableLocalAllocations);
             return ExceptionKind::NA;
         }
 
@@ -1225,6 +1269,9 @@ private:
             return HandleArrayAccess(state, apply);
         } else if (IsExpectedFunction(*calleeFunc, rangeInitFunc)) {
             return HandleRangeInit(state, apply);
+        } else {
+            // Preserve facts maintained by the Array/Range models above; unknown calls invalidate mutable locals.
+            state.InvalidateMutableLocalState(mutableLocalAllocations);
         }
         return ExceptionKind::NA;
     }
@@ -1467,6 +1514,7 @@ private:
         return ExceptionKind::SUCCESS;
     }
 
+    std::vector<Value*> mutableLocalAllocations;
     DiagnosticEngine& diag;
 };
 

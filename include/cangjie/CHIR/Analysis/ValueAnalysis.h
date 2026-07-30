@@ -430,6 +430,42 @@ public:
         }
     }
 
+    /**
+     * @brief Invalidate tracked values stored in source-level mutable local variables.
+     * @param mutableLocals allocation results of source-level mutable local variables.
+     */
+    void InvalidateMutableLocalState(const std::vector<Value*>& mutableLocals)
+    {
+        for (auto local : mutableLocals) {
+            auto localIt = programState.Find(local);
+            if (localIt == programState.End() || localIt->second.GetKind() != ValueDomain::ValueKind::REF) {
+                continue;
+            }
+            auto localRef = localIt->second.GetRef();
+            if (localRef->IsTopRefInstance()) {
+                continue;
+            }
+            auto refIt = refMap.find(localRef);
+            if (refIt == refMap.end()) {
+                continue;
+            }
+            if (std::holds_alternative<Ref*>(refIt->second)) {
+                // A mutable slot containing a reference loses its binding without changing the shared object.
+                refIt->second = Ref::GetTopRefInstance();
+                continue;
+            }
+
+            auto obj = std::get<AbstractObject*>(refIt->second);
+            auto objIt = programState.Find(obj);
+            if (objIt != programState.End()) {
+                objIt->second.SetSelfToBound(/* isTop = */ true);
+            } else {
+                CJC_ASSERT((IsInstanceOfValue<ValueStatePool, ActiveStatePool>));
+            }
+            InvalidateChildrenState(GetChildren(obj));
+        }
+    }
+
 private:
     Ref* CreateNewRef(const Expression* expr = nullptr, bool createTwoLevelRef = false)
     {
@@ -550,6 +586,23 @@ private:
             CJC_ASSERT(childIt != programState.End());
             if (childIt->second.GetKind() == ValueDomain::ValueKind::VAL) {
                 childIt->second = /* isTop = */ true;
+            }
+        }
+    }
+
+    void InvalidateChildrenState(const std::vector<AbstractObject*>& children)
+    {
+        for (auto child : children) {
+            auto childIt = programState.Find(child);
+            if (IsInstanceOfValue<ValueStatePool, ActiveStatePool> && childIt == programState.End()) {
+                continue;
+            }
+            CJC_ASSERT(childIt != programState.End());
+            if (childIt->second.GetKind() == ValueDomain::ValueKind::REF) {
+                // Forget the child binding while preserving other aliases to its pointee.
+                childIt->second.SetSelfToTopRef();
+            } else if (childIt->second.GetKind() == ValueDomain::ValueKind::VAL) {
+                childIt->second.SetSelfToBound(/* isTop = */ true);
             }
         }
     }
