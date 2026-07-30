@@ -288,6 +288,7 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND) # i.e. "--compile-backend" option
             ExternalProject_Add(
                 cjnative
                 SOURCE_DIR ${CANGJIE_CJNATIVE_SOURCE_DIR}
+                BUILD_ALWAYS ON
                 BUILD_BYPRODUCTS ${LLVM_LIBS}
                 SOURCE_SUBDIR llvm
                 PATCH_COMMAND ${APPLY_LLVM_PATCH_COMMAND}
@@ -323,6 +324,7 @@ if(CANGJIE_CODEGEN_CJNATIVE_BACKEND) # i.e. "--compile-backend" option
             ExternalProject_Add(
                 cjnative
                 ${LLVM_REPO_DOWNLOAD_ARGS}
+                BUILD_ALWAYS ON
                 BUILD_BYPRODUCTS ${LLVM_LIBS}
                 SOURCE_SUBDIR llvm
                 PATCH_COMMAND ${APPLY_LLVM_PATCH_COMMAND}

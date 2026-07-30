@@ -30,6 +30,7 @@ endif()
 ExternalProject_Add(
     flatbuffers
     ${FLATBUFFERS_DOWNLOAD_ARGS}
+    BUILD_ALWAYS ON
     CMAKE_ARGS
         # no need to Build tests and install.
         -DFLATBUFFERS_BUILD_TESTS=OFF

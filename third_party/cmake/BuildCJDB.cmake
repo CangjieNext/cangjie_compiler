@@ -172,6 +172,7 @@ ExternalProject_Add(
     lldb
     SOURCE_DIR ${SOURCE_DIR}
     DOWNLOAD_COMMAND ""
+    BUILD_ALWAYS ON
     BUILD_BYPRODUCTS ${LLVM_GC_LLDB_INSTALL_PREFIX}/bin/lldb
     SOURCE_SUBDIR lldb
     BINARY_DIR ${CMAKE_BINARY_DIR}/third_party/lldb-build

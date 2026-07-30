@@ -135,6 +135,7 @@ function(compile_rtlib target_name)
         ExternalProject_Add(
             ${target_name}
             SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/llvm-project
+            BUILD_ALWAYS ON
             BUILD_BYPRODUCTS ${LLVM_RTLIBS}
             SOURCE_SUBDIR compiler-rt
             CMAKE_ARGS ${LLVM_CMAKE_ARGS})
@@ -160,6 +161,7 @@ function(compile_rtlib target_name)
         ExternalProject_Add(
             ${target_name}
             ${LLVM_REPO_DOWNLOAD_ARGS}
+            BUILD_ALWAYS ON
             BUILD_BYPRODUCTS ${LLVM_RTLIBS}
             SOURCE_SUBDIR compiler-rt
             CMAKE_ARGS ${LLVM_CMAKE_ARGS})
