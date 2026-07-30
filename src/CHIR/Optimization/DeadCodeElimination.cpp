@@ -670,18 +670,27 @@ void DeadCodeElimination::UnreachableBlockWarningReporterInSerial(
     const Package& package, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks)
 {
     for (auto func : package.GetGlobalFuncsWithBody()) {
-        bool isPrinted = false;
-        Visitor::Visit(*func, [this, &isPrinted, &maybeUnreachableBlocks](Block& block) {
-            auto it = maybeUnreachableBlocks.find(&block);
-            if (it != maybeUnreachableBlocks.end()) {
-                auto terminator = it->second;
-                if (CheckUselessBlock(block)) {
-                    PrintUnreachableBlockWarning(block, *terminator, isPrinted);
-                }
-            }
-            return VisitResult::CONTINUE;
-        });
+        UnreachableBlockWarningReporterForFunc(*func, maybeUnreachableBlocks);
     }
+}
+
+void DeadCodeElimination::UnreachableBlockWarningReporterForFunc(
+    Function& func, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks)
+{
+    std::unordered_set<Expression*> reportedRoots;
+    Visitor::Visit(func, [this, &reportedRoots, &maybeUnreachableBlocks](Block& block) {
+        auto candidate = maybeUnreachableBlocks.find(&block);
+        if (candidate == maybeUnreachableBlocks.end() ||
+            reportedRoots.find(candidate->second) != reportedRoots.end() || !CheckUselessBlock(block)) {
+            return VisitResult::CONTINUE;
+        }
+        bool isPrinted = false;
+        PrintUnreachableBlockWarning(block, *candidate->second, isPrinted);
+        if (isPrinted) {
+            reportedRoots.emplace(candidate->second);
+        }
+        return VisitResult::CONTINUE;
+    });
 }
 
 void DeadCodeElimination::UnreachableBlockWarningReporterInParallel(const Package& package,
@@ -695,17 +704,7 @@ void DeadCodeElimination::UnreachableBlockWarningReporterInParallel(const Packag
         }
 
         taskQueue.AddTask<void>([this, func, &maybeUnreachableBlocks]() {
-            bool isPrinted = false;
-            Visitor::Visit(*func, [this, &isPrinted, &maybeUnreachableBlocks](Block& block) {
-                auto it = maybeUnreachableBlocks.find(&block);
-                if (it != maybeUnreachableBlocks.end()) {
-                    auto terminator = it->second;
-                    if (CheckUselessBlock(block)) {
-                        PrintUnreachableBlockWarning(block, *terminator, isPrinted);
-                    }
-                }
-                return VisitResult::CONTINUE;
-            });
+            UnreachableBlockWarningReporterForFunc(*func, maybeUnreachableBlocks);
         });
     }
     taskQueue.RunAndWaitForAllTasksCompleted();
@@ -1015,7 +1014,10 @@ void DeadCodeElimination::PrintUnreachableBlockWarning(
                 auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable, range, "operator");
                 diagBuilder.AddMainHintArguments("operator");
                 diagBuilder.AddHint(terminalNodeRange);
-            } else if (!isNormal && unreableExpr->GetExprKind() == ExprKind::APPLY) {
+            } else if (!isNormal &&
+                (unreableExpr->GetExprKind() == ExprKind::APPLY ||
+                    (unreableExpr->IsConstantNull() &&
+                        !unreableExpr->Get<DebugLocationInfoForWarning>().IsInvalidPos()))) {
                 auto diagBuilder = diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable, range, "call");
                 diagBuilder.AddMainHintArguments("call");
                 diagBuilder.AddHint(terminalNodeRange);
