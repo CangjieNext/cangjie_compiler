@@ -857,6 +857,9 @@ flatbuffers::Offset<PackageFormat::Branch> CHIRSerializer::CHIRSerializerImpl::S
 {
     auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
     auto sourceExpr = obj.GetSourceExpr();
+    if (sourceExpr == CHIR::SourceExpr::MATCH_CASE) {
+        sourceExpr = CHIR::SourceExpr::MATCH_EXPR;
+    }
     return PackageFormat::CreateBranch(builder, base, PackageFormat::SourceExpr(sourceExpr));
 }
 

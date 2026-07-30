@@ -288,6 +288,9 @@ GoTo* GoTo::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_ASSERT(result == nullptr);
     auto newNode = builder.CreateTerminator<GoTo>(GetDestination(), &parent);
+    if (TestAttr(Attribute::MATCH_PATTERN)) {
+        newNode->EnableAttr(Attribute::MATCH_PATTERN);
+    }
     parent.AppendExpression(newNode);
     return newNode;
 }
@@ -336,6 +339,7 @@ std::string Branch::AddExtraComment() const
         {SourceExpr::BINARY, "BINARY"},
         {SourceExpr::FOR_IN_EXPR, "FOR_IN_EXPR"},
         {SourceExpr::OTHER, "OTHER"},
+        {SourceExpr::MATCH_CASE, "MATCH_CASE"},
     };
     return "sourceExpr: " + SOURCE_EXPR_MAP.at(sourceExpr);
 }
@@ -373,6 +377,7 @@ Branch* Branch::Clone(CHIRBuilder& builder, Block& parent) const
 {
     CJC_ASSERT(result == nullptr);
     auto newNode = builder.CreateTerminator<Branch>(GetCondition(), GetTrueBlock(), GetFalseBlock(), &parent);
+    newNode->SetSourceExpr(GetSourceExpr());
     parent.AppendExpression(newNode);
     return newNode;
 }
