@@ -101,7 +101,6 @@ Ptr<Value> Translator::Visit(const AST::ReturnExpr& expr)
         controlBlocks[index].emplace_back(prevBlock, currentBlock);
     }
     // For following unreachable expressions, and return also has value of type 'Nothing'.
-    currentBlock = CreateBlock();
-    maybeUnreachable.emplace(currentBlock, terminator);
+    CreateUnreachableContinuation(*terminator);
     return nullptr;
 }

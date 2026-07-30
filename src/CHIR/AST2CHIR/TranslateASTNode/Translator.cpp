@@ -326,9 +326,9 @@ Ptr<Value> Translator::TranslateSubExprAsValue(const AST::Node& node)
     return value;
 }
 
-void Translator::TranslateSubExprToDiscarded(const AST::Node& node)
+Ptr<Value> Translator::TranslateSubExprToDiscarded(const AST::Node& node)
 {
-    TranslateASTNode(node, *this);
+    auto value = TranslateASTNode(node, *this);
     if (auto b = DynamicCast<AST::LitConstExpr>(&node)) {
         if (b->kind == AST::LitConstKind::UNIT) {
             auto unit = CreateAndAppendConstantExpression<UnitLiteral>(
@@ -337,5 +337,39 @@ void Translator::TranslateSubExprToDiscarded(const AST::Node& node)
                 unit->GetResult()->EnableAttr(Attribute::COMPILER_ADD);
             }
         }
+    }
+    return value;
+}
+
+void Translator::StartUnreachableContinuation(const AST::Node& node)
+{
+    if (maybeUnreachable.find(currentBlock) != maybeUnreachable.end()) {
+        return;
+    }
+
+    if (auto terminator = currentBlock->GetTerminator()) {
+        CreateUnreachableContinuation(*terminator);
+        return;
+    }
+
+    if (!node.GetTy() || !node.GetTy()->IsNothing()) {
+        return;
+    }
+
+    auto terminator = CreateAndAppendTerminator<Exit>(TranslateLocation(node), currentBlock);
+    CreateUnreachableContinuation(*terminator);
+}
+
+void Translator::CreateUnreachableContinuation(Terminator& terminator)
+{
+    currentBlock = CreateBlock();
+    maybeUnreachable.emplace(currentBlock, &terminator);
+}
+
+void Translator::FinishUnreachableContinuation(const DebugLocation& loc)
+{
+    if (maybeUnreachable.find(currentBlock) != maybeUnreachable.end() && currentBlock->GetTerminator() == nullptr) {
+        auto exit = CreateAndAppendTerminator<Exit>(loc, currentBlock);
+        exit->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
     }
 }
