@@ -35,6 +35,7 @@ inline constexpr bool IsInstanceOfValue<U<Vs...>, U> = std::true_type{};
 
 namespace Cangjie::CHIR {
 template <typename ValueDomain, typename ValueStatePool> class ValueAnalysis;
+template <typename ValueStatePool> class ConstAnalysis;
 
 /**
  * @brief abstract state to store CHIR value state, mainly store value and reference state.
@@ -44,6 +45,7 @@ template <typename ValueDomain, typename ValueStatePool = FullStatePool<ValueDom
     typename = std::enable_if_t<std::is_base_of_v<AbstractDomain<ValueDomain>, ValueDomain>>>
 class State final : public AbstractDomain<State<ValueDomain, ValueStatePool>> {
     friend class ValueAnalysis<ValueDomain, ValueStatePool>;
+    template <typename> friend class ConstAnalysis;
 
 public:
     /// reference map from CHIR ref to object or other ref.
