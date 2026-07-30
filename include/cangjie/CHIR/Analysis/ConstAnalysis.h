@@ -1007,6 +1007,22 @@ private:
     {
         auto dest = cast->GetResult();
         auto srcTy = cast->GetSourceType();
+        auto targetTy = cast->GetTargetType();
+        // Enums without payload are represented by casts between the enum and its selector.
+        if (targetTy->IsEnum() &&
+            srcTy->GetTypeKind() == GetSelectorType(*StaticCast<EnumType*>(targetTy)->GetEnumDef())) {
+            if (auto srcDomain = state.CheckAbstractValueWithTopBottom(cast->GetSourceValue())) {
+                state.Update(dest, *srcDomain);
+            }
+            return ExceptionKind::NA;
+        }
+        if (srcTy->IsEnum() &&
+            targetTy->GetTypeKind() == GetSelectorType(*StaticCast<EnumType*>(srcTy)->GetEnumDef())) {
+            if (auto srcDomain = state.CheckAbstractValueWithTopBottom(cast->GetSourceValue())) {
+                state.Update(dest, *srcDomain);
+            }
+            return ExceptionKind::NA;
+        }
         if (srcTy->IsInteger()) {
             if (auto srcAbsVal = state.CheckAbstractValue(cast->GetSourceValue()); srcAbsVal) {
                 return HandleTypecastOfInt(state, cast, srcAbsVal);
