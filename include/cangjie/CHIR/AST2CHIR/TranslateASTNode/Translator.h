@@ -1101,6 +1101,7 @@ private:
     void TranslateFuncArgsWithoutThisObj(
         const AST::CallExpr& expr, std::vector<Value*>& args, const std::vector<Type*>* expectedParamTys);
     Value* TranslateTrivialArgWithNoSugar(const AST::FuncArg& arg, const DebugLocation& loc, Type* expectedTy);
+    Value* CreateNothingValueForUnreachableCall(const AST::CallExpr& expr);
     std::vector<Value*> TranslateFuncArgs(
         const AST::CallExpr& expr, Type* expectedThisObjTy, const std::vector<Type*>* expectedParamTys);
 
