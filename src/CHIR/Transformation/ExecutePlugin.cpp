@@ -102,7 +102,7 @@ void ExecutePlugin::CHIRPtrToString(
         // maybe a terminator is created and removed in AST2CHIR, so it doesn't have a parent block
         if (it.second->GetParentBlock()) {
             auto terminatorName = it.second->GetParentBlock()->GetIdentifierWithoutPrefix();
-            unreachableBlockNames[funcName] = {blockName, terminatorName};
+            unreachableBlockNames[funcName].emplace_back(blockName, terminatorName);
         }
     }
     maybeUnreachable.clear();
@@ -160,22 +160,24 @@ void ExecutePlugin::StringToCHIRPtr(
             if (f->GetIdentifierWithoutPrefix() != it.first) {
                 continue;
             }
-            auto allBlocks = f->GetBody()->GetAllBlocks();
-            Block* bb = nullptr;
-            Expression* tt = nullptr;
-            for (auto block : allBlocks) {
+            for (const auto& name : it.second) {
+                auto allBlocks = f->GetBody()->GetAllBlocks();
+                Block* bb = nullptr;
+                Expression* tt = nullptr;
+                for (auto block : allBlocks) {
+                    if (bb != nullptr && tt != nullptr) {
+                        break;
+                    }
+                    if (block->GetIdentifierWithoutPrefix() == name.first) {
+                        bb = block;
+                    }
+                    if (block->GetIdentifierWithoutPrefix() == name.second) {
+                        tt = block->GetTerminator();
+                    }
+                }
                 if (bb != nullptr && tt != nullptr) {
-                    break;
+                    maybeUnreachable.emplace(bb, tt);
                 }
-                if (block->GetIdentifierWithoutPrefix() == it.second.first) {
-                    bb = block;
-                }
-                if (block->GetIdentifierWithoutPrefix() == it.second.second) {
-                    tt = block->GetTerminator();
-                }
-            }
-            if (bb != nullptr && tt != nullptr) {
-                maybeUnreachable.emplace(bb, tt);
             }
         }
     }
