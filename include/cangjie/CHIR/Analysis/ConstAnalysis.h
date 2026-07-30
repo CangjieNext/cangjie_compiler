@@ -1003,6 +1003,29 @@ private:
 
     // =============== Transfer functions for TypeCast expression =============== //
 
+    bool HandleEnumSelectorCast(TConstDomain& state, const ClassStaticCast* cast)
+    {
+        auto dest = cast->GetResult();
+        auto src = cast->GetSourceValue();
+        auto srcTy = cast->GetSourceType();
+        auto targetTy = cast->GetTargetType();
+        // Enums represented by UInt32 selector casts have no payload. Boolean selectors belong to option-like enums
+        // with payloads and are propagated through Tuple child 0 and Field instead.
+        if (targetTy->IsEnum() && srcTy->GetTypeKind() == Type::TypeKind::TYPE_UINT32) {
+            if (auto srcDomain = state.CheckAbstractValueWithTopBottom(src)) {
+                state.Update(dest, *srcDomain);
+            }
+            return true;
+        }
+        if (srcTy->IsEnum() && targetTy->GetTypeKind() == Type::TypeKind::TYPE_UINT32) {
+            if (auto srcDomain = state.CheckAbstractValueWithTopBottom(src)) {
+                state.Update(dest, *srcDomain);
+            }
+            return true;
+        }
+        return false;
+    }
+
     ExceptionKind HandleNumericCast(TConstDomain& state, const NumericCastBase* cast)
     {
         auto dest = cast->GetResult();
@@ -1022,6 +1045,9 @@ private:
         auto dest = cast->GetResult();
         auto src = cast->GetSourceValue();
         auto srcTy = cast->GetSourceType();
+        if (HandleEnumSelectorCast(state, cast)) {
+            return;
+        }
         if (srcTy->IsRef() || srcTy->IsClass()) {
             state.Propagate(src, dest);
             return;
