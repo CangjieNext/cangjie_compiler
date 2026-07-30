@@ -159,6 +159,8 @@ Verify the products:
 
 Since the build products are Windows platform executables, copy them to a Windows machine and use the `./output/envsetup.bat` script to set up the cjc environment.
 
+> Note: Run the following commands in Git Bash or MSYS2 on Windows.
+
 ```bash
 source ./output/envsetup.bat
 cjc.exe -v

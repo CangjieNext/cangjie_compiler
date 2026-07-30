@@ -166,7 +166,7 @@ PREDEFVALUE(output_type_list, {
     VALUE("chir", "emit partially compiled package", { BACKEND(CJNATIVE) }, { GROUP(VISIBLE) }) COMMA
     VALUE("obj", "emit obj", { BACKEND(CJNATIVE) }, { GROUP(VISIBLE) }) COMMA
 #if !defined(CANGJIE_VISIBLE_OPTIONS_ONLY)
-    VALUE("hotreload", "emit dynamic library with hot reload supports", { BACKEND(CJNATIVE) }, { GROUP(VISIBLE) })
+    VALUE("hotreload", "emit dynamic library with hot reload support", { BACKEND(CJNATIVE) }, { GROUP(VISIBLE) })
 #endif
 });
 PREDEFVALUE(compile_target_list, {
@@ -210,9 +210,9 @@ PREDEFVALUE(mock_mode, {
  *      otherwise replace ALL with the backend name your option supports. If your option
  *      supports two or more backends, such as CJNATIVE and OTHER, then you could write
  *      `{ BACKEND(CJNATIVE) COMMA BACKEND(OTHER) }`.
- *    - If your option is a temporary option or is not ready to be released, they you
+ *    - If your option is a temporary option or is not ready to be released, then you
  *      could give your option group `{ GROUP(GLOBAL) }`. If your option is tested and
- *      is listed on `cjc` user manual, they you may mark your option as `GROUP(VISIBLE)`.
+ *      is listed on `cjc` user manual, then you may mark your option as `GROUP(VISIBLE)`.
  *    - Does your option have a short name? Set ALIAS to your option's one character
  *      short name if it has one, set ALIAS `nullptr` otherwise.
  *    - If your option has SEPARATED kind but only recognizes values from a list of
@@ -220,7 +220,7 @@ PREDEFVALUE(mock_mode, {
  *      VALUES otherwise.
  *    - If you are adding a FLAG kind option, then OCCURRENCE should be MULTIPLE_OCCURRENCE.
  *      If you are adding a SEPARATED kind option, and if the option could not be specified
- *      multiple times in a command (if later one overwrites formers), they OCCURRENCE
+ *      multiple times in a command (if a later one overwrites the former), then OCCURRENCE
  *      should be SINGLE_OCCURRENCE. MULTIPLE_OCCURRENCE otherwise.
  *    - HELPTEXT is a string that describes your option. It will be displayed in `cjc -h`.
  * 2. Add corresponding data member in Option.h.
