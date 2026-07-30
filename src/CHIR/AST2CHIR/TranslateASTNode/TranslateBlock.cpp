@@ -73,12 +73,40 @@ Ptr<Value> Translator::Visit(const AST::Block& b)
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     std::vector<Ptr<AST::Node>> nodes = CollectBlockBodyNodes(b, gim);
 #endif
+    Ptr<Value> result = nullptr;
     for (size_t i = 0; i < nodes.size(); ++i) {
         if (i == nodes.size() - 1) {
-            return TranslateSubExprAsValue(*nodes[i]);
+            result = TranslateSubExprAsValue(*nodes[i]);
         } else {
-            TranslateSubExprToDiscarded(*nodes[i]);
+            auto value = TranslateSubExprToDiscarded(*nodes[i]);
+            auto terminator = currentBlock->GetTerminator();
+            auto localVar = DynamicCast<LocalVar>(value);
+            auto expression = localVar ? localVar->GetExpr() : nullptr;
+            auto callExpr = DynamicCast<AST::CallExpr>(nodes[i]);
+            if (callExpr && expression && terminator &&
+                !expression->Get<DebugLocationInfoForWarning>().IsInvalidPos()) {
+                auto expressions = currentBlock->GetNonTerminatorExpressions();
+                if (expression->IsConstantNull() && expression->GetResult()->GetType()->IsNothing() &&
+                    expressions.size() == 1U) {
+                    // A final Nothing argument leaves only the synthetic call value in this block. The next source
+                    // expression is rooted at the argument's terminator, not at the unexecuted outer call.
+                    auto root = maybeUnreachable.find(currentBlock);
+                    CJC_ASSERT(root != maybeUnreachable.end());
+                    CJC_ASSERT(root->second != terminator);
+                    expression->RemoveSelfFromBlock();
+                    terminator->RemoveSelfFromBlock();
+                    CreateUnreachableContinuation(*root->second);
+                } else {
+                    // An unreachable argument suffix has its own source root; the outer call roots the next node.
+                    expression->Remove<DebugLocationInfoForWarning>();
+                    CreateUnreachableContinuation(*terminator);
+                    maybeUnreachable[currentBlock] = terminator;
+                }
+            } else {
+                StartUnreachableContinuation(*nodes[i]);
+            }
         }
     }
-    return nullptr;
+
+    return result;
 }

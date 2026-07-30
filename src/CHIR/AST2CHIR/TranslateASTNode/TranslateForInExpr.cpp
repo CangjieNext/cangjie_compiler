@@ -340,6 +340,18 @@ void Translator::TranslateForInBodyBlockGroup(const AST::ForInExpr& forInExpr)
     }
 }
 
+void Translator::FinalizeForInBlockGroup(const AST::ForInExpr& forInExpr, BlockGroup& blockGroup)
+{
+    // FlatForInExpr rewrites every Exit in a structured ForIn sub-CFG.
+    const auto loc = TranslateLocation(forInExpr);
+    for (auto block : blockGroup.GetBlocks()) {
+        if (block->GetTerminator() == nullptr) {
+            auto exit = CreateAndAppendTerminator<Exit>(loc, block);
+            exit->Set<SkipCheck>(SkipKind::SKIP_DCE_WARNING);
+        }
+    }
+}
+
 void Translator::TranslateForInRangeLatchBlockGroup(const AST::Node& node)
 {
     Ptr<Block> delayExitTrueBlock = CreateBlock();
@@ -718,6 +730,10 @@ Ptr<Value> Translator::TranslateForInRange(const AST::ForInExpr& forInExpr)
     CreateAndAppendTerminator<Exit>(condLoc, currentBlock);
     blockGroupStack.pop_back();
 
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetBody());
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetLatch());
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetCond());
+
     // Create end branch
     Ptr<Block> endBlock = CreateBlock();
     //  GoTo #endBlock
@@ -810,6 +826,10 @@ Ptr<Value> Translator::TranslateForInString(const AST::ForInExpr& forInExpr)
     CreateAndAppendWrappedStore(*conditionInCondBG, *condVar, condLoc);
     CreateAndAppendTerminator<Exit>(condLoc, currentBlock);
     blockGroupStack.pop_back();
+
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetBody());
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetLatch());
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetCond());
 
     // Create end branch
     Ptr<Block> endBlock = CreateBlock();
@@ -905,6 +925,10 @@ Ptr<Value> Translator::TranslateForInIter(const AST::ForInExpr& forInExpr)
     CreateAndAppendTerminator<Exit>(condLoc, currentBlock);
     blockGroupStack.pop_back();
 
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetBody());
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetLatch());
+    FinalizeForInBlockGroup(forInExpr, *forIn->GetCond());
+
     // Create end branch
     Ptr<Block> endBlock = CreateBlock();
     //  GoTo #endBlock
@@ -974,6 +998,9 @@ public:
         TranslateBodyBG(*body);
         TranslateCondBG(*cond, *iterEnd);
         TranslateLatchBG(*latch);
+        tr.FinalizeForInBlockGroup(*forin, *body);
+        tr.FinalizeForInBlockGroup(*forin, *cond);
+        tr.FinalizeForInBlockGroup(*forin, *latch);
 
         auto endBlock = tr.CreateBlock();
         tr.CreateAndAppendTerminator<GoTo>(endBlock, bodyBlock);

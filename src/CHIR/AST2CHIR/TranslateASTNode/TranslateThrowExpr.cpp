@@ -14,6 +14,14 @@ Ptr<Value> Translator::Visit(const AST::ThrowExpr& throwExpr)
     auto loc = TranslateLocation(throwExpr.begin, throwExpr.end);
     CJC_NULLPTR_CHECK(throwExpr.expr);
     auto eVal = TranslateExprArg(*throwExpr.expr);
+    if (eVal->GetType()->IsNothing()) {
+        // The operand has already transferred control to its own continuation, so this outer throw is never
+        // evaluated. Do not turn its synthetic Exit into another diagnostic root.
+        maybeUnreachable.erase(currentBlock);
+        CreateAndAppendTerminator<Exit>(loc, currentBlock);
+        currentBlock = CreateBlock();
+        return eVal;
+    }
     Ptr<Terminator> terminator = nullptr;
     if (tryCatchContext.empty()) {
         terminator = CreateAndAppendTerminator<RaiseException>(loc, eVal, currentBlock);
@@ -22,7 +30,6 @@ Ptr<Value> Translator::Visit(const AST::ThrowExpr& throwExpr)
         terminator = CreateAndAppendTerminator<RaiseException>(loc, eVal, errBB, currentBlock);
     }
     // For following unreachable expressions, and throw also has value of type 'Nothing'.
-    currentBlock = CreateBlock();
-    maybeUnreachable.emplace(currentBlock, terminator);
+    CreateUnreachableContinuation(*terminator);
     return nullptr;
 }
