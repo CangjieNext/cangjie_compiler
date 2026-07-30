@@ -4,7 +4,7 @@
 
 仓颉编程语言是一种面向全场景应用开发的通用编程语言，可以兼顾开发效率和运行性能，并提供良好的编程体验。仓颉语言具有语法简明高效、多范式编程、类型安全等特点，了解更多仓颉语言的介绍，请参阅 [仓颉语言开发指南](https://cangjie-lang.cn/docs?url=%2F1.0.0%2Fuser_manual%2Fsource_zh_cn%2Ffirst_understanding%2Fbasic.html) 以及 [仓颉编程语言白皮书](https://cangjie-lang.cn/docs?url=%2F0.53.18%2Fwhite_paper%2Fsource_zh_cn%2Fcj-wp-abstract.html)。
 
-本仓提供了仓颉编译器相关源码，整体包含两部分：编译器前端和 LLVM 开源修改部分，后者包括 LLVM 编译器后端 opt 优化器、llc、ld 链接器以及调试器等。开源组件依赖可参考[第三方库说明](./third_party/README.md)。
+本仓提供了仓颉编译器相关源码，整体包含两部分：编译器前端和 LLVM 开源修改部分，后者包括 LLVM 编译器后端 opt 优化器、llc、ld 链接器以及调试器等。开源组件依赖可参考[第三方库说明](./third_party/README.md)。 
 
 ## 系统架构
 
