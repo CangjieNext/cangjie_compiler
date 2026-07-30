@@ -51,6 +51,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <variant>
@@ -140,6 +141,51 @@ Ptr<ClassLikeTy> AsSealedLikeClassLikeTy(Ty& ty)
         return &clt;
     }
     return nullptr;
+}
+
+bool IsCurrentPackageDecl(const ClassLikeDecl& decl, const Package& currentPackage)
+{
+    return decl.curFile && decl.curFile->curPackage == &currentPackage &&
+        decl.fullPackageName == currentPackage.fullPackageName;
+}
+
+bool IsClosedSealedHierarchy(const ClassLikeTy& ty, const Package& currentPackage, bool isRoot)
+{
+    if (!ty.commonDecl || !ty.typeArgs.empty() || IsSuperTypeForFFI(ty)) {
+        return false;
+    }
+    const ClassLikeDecl& decl = *ty.commonDecl;
+    // A sealed class is implicitly open so that it can be inherited inside its package. A non-sealed open child,
+    // however, may have unknown descendants and prevents this hierarchy from being enumerated completely.
+    if (!IsCurrentPackageDecl(decl, currentPackage) || decl.TestAnyAttr(Attribute::FOREIGN, Attribute::COMPILER_ADD) ||
+        (!isRoot && decl.TestAttr(Attribute::OPEN) && !decl.TestAttr(Attribute::SEALED))) {
+        return false;
+    }
+    // An abstract or interface node can have further implementations. Such a node must be explicitly sealed before
+    // directSubtypes is a complete description of its runtime values.
+    if ((isRoot || decl.TestAttr(Attribute::ABSTRACT) || ty.IsInterface()) && !decl.TestAttr(Attribute::SEALED)) {
+        return false;
+    }
+    for (Ptr<Ty> subTy : ty.directSubtypes) {
+        if (!Ty::IsTyCorrect(subTy) || !subTy->IsClassLike() ||
+            !IsClosedSealedHierarchy(StaticCast<ClassLikeTy&>(*subTy), currentPackage, false)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool CanExpandSealedHierarchy(const MatchExpr& me)
+{
+    if (!me.selector || !me.selector->GetTy() || !me.curFile || !me.curFile->curPackage) {
+        return false;
+    }
+    Ty& selectorTy = *me.selector->GetTy();
+    if (!selectorTy.IsClassLike()) {
+        return false;
+    }
+    return IsClosedSealedHierarchy(
+        StaticCast<ClassLikeTy&>(selectorTy), *me.curFile->curPackage, true);
 }
 
 bool LitConstExprEq(const LitConstExpr& left, const LitConstExpr& right)
@@ -705,6 +751,15 @@ public:
         return stack.back();
     }
 
+    PatternStack ReplaceHead(const DestructedPattern& newHead) const
+    {
+        CJC_ASSERT(!stack.empty());
+        std::vector<DestructedPattern> newStack;
+        std::copy(stack.cbegin(), stack.cend() - 1, std::back_inserter(newStack));
+        newStack.emplace_back(newHead);
+        return PatternStack(std::move(newStack));
+    }
+
     PatternStack Specialize(const Constructor& ctor)
     {
         std::vector<DestructedPattern> newStack;
@@ -821,11 +876,12 @@ private:
 
 class UsefulnessChecker {
 public:
-    UsefulnessChecker(DiagnosticEngine& diag, TypeManager& typeManager) : diag(diag), typeManager_(typeManager)
+    UsefulnessChecker(DiagnosticEngine& diag, TypeManager& typeManager, bool canExpandSealedHierarchy)
+        : diag(diag), typeManager_(typeManager), canExpandSealedHierarchy_(canExpandSealedHierarchy)
     {
     }
-    UsefulnessChecker(DiagnosticEngine& diag, TypeManager& typeManager, Matrix&& matrix)
-        : diag(diag), typeManager_(typeManager), matrix_(matrix)
+    UsefulnessChecker(DiagnosticEngine& diag, TypeManager& typeManager, Matrix&& matrix, bool canExpandSealedHierarchy)
+        : diag(diag), typeManager_(typeManager), matrix_(matrix), canExpandSealedHierarchy_(canExpandSealedHierarchy)
     {
     }
 
@@ -860,7 +916,7 @@ public:
         }
         if (head.Ctor().Kind() == ConstructorKind::TYPE) {
             PatternStack wildcard =
-                PatternStack(DestructedPattern(Constructor::Wildcard(), {}, head.GoalTy(), nullptr));
+                vec.ReplaceHead(DestructedPattern(Constructor::Wildcard(), {}, head.GoalTy(), nullptr));
             if (FindWitnessesForWildcard(wildcard).empty()) {
                 return {};
             }
@@ -882,12 +938,13 @@ private:
      *     }
      * The missing cases are `Some(true)` and `Some(false)`, but `Some(_)` is preferred.
      */
-    static std::vector<Constructor> SplitWildcard(TypeManager& typeManager, Ty& ty, Matrix& matrix, bool isABIStable)
+    static std::vector<Constructor> SplitWildcard(
+        TypeManager& typeManager, Ty& ty, Matrix& matrix, bool canExpandSealedHierarchy)
     {
         if (matrix.MissingAll()) {
             return {Constructor::Wildcard()};
         }
-        if (auto sealedTy = AsSealedLikeClassLikeTy(ty); sealedTy && !IsSuperTypeForFFI(ty) && !isABIStable) {
+        if (auto sealedTy = AsSealedLikeClassLikeTy(ty); sealedTy && canExpandSealedHierarchy) {
             std::vector<Constructor> ctors;
             SplitWildcardForSealed(ctors, *sealedTy);
             return ctors;
@@ -964,7 +1021,7 @@ private:
         // Split the wildcard into a series of constructors, call FindWitnesses for each constructor and concatenate
         // the witnesses together.
         std::vector<PatternStack> witnesses;
-        auto ctors = SplitWildcard(typeManager_, goalTy, matrix_, keepABIStable);
+        auto ctors = SplitWildcard(typeManager_, goalTy, matrix_, canExpandSealedHierarchy_);
         for (const Constructor& ctor : ctors) {
             for (const PatternStack& witness : FindWitnessesBySpecialization(vec, ctor)) {
                 witnesses.emplace_back(witness);
@@ -977,7 +1034,8 @@ private:
     {
         CJC_ASSERT(!vec.IsEmpty());
         std::vector<PatternStack> witnesses;
-        UsefulnessChecker newChecker(diag, typeManager_, matrix_.Specialize(typeManager_, ctor));
+        UsefulnessChecker newChecker(
+            diag, typeManager_, matrix_.Specialize(typeManager_, ctor), canExpandSealedHierarchy_);
         auto stack = vec.Specialize(ctor);
         for (const PatternStack& witness : newChecker.FindWitnesses(stack)) {
             witnesses.emplace_back(witness.Apply(ctor, vec.Head().GoalTy()));
@@ -987,7 +1045,7 @@ private:
 
     std::vector<PatternStack> FindWitnessesForExpandedOr(std::vector<PatternStack>&& vecs) const
     {
-        UsefulnessChecker newChecker(diag, typeManager_, Matrix(matrix_));
+        UsefulnessChecker newChecker(diag, typeManager_, Matrix(matrix_), canExpandSealedHierarchy_);
         std::vector<Ptr<Node>> unreachables;
         std::vector<PatternStack> totalWitnesses;
         for (PatternStack& vec : vecs) {
@@ -1017,7 +1075,7 @@ private:
     DiagnosticEngine& diag;
     TypeManager& typeManager_;
     Matrix matrix_;
-    bool keepABIStable{true};
+    bool canExpandSealedHierarchy_{false};
 };
 } // namespace
 
@@ -1029,7 +1087,7 @@ bool CheckMatchExprHasSelectorExhaustivenessAndReachability(
         // Avoid exhaustive & reachable checking if fatal errors appeared.
         return true;
     }
-    UsefulnessChecker checker(diag, typeManager);
+    UsefulnessChecker checker(diag, typeManager, CanExpandSealedHierarchy(me));
     for (auto& mc : me.matchCases) {
         if (mc->patterns.empty()) {
             CJC_ABORT();
