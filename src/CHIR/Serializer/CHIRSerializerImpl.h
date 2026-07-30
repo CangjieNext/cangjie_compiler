@@ -33,7 +33,10 @@ namespace Cangjie::CHIR {
 
 class CHIRSerializer::CHIRSerializerImpl {
 public:
-    explicit CHIRSerializerImpl(const Package& package) : package(package){};
+    explicit CHIRSerializerImpl(const Package& package, const MatchTraversalInfo* matchTraversalInfo = nullptr)
+        : package(package), matchTraversalInfo(matchTraversalInfo)
+    {
+    }
 
     // Utility
     void Save(const std::string& filename, ToCHIR::Phase phase);
@@ -43,6 +46,7 @@ public:
 
 private:
     const Package& package;
+    const MatchTraversalInfo* matchTraversalInfo;
 
     flatbuffers::FlatBufferBuilder builder;
     std::deque<const Value*> valueQueue;

@@ -10,6 +10,7 @@
 #include "cangjie/CHIR/Utils/CHIRCasting.h"
 #include "cangjie/CHIR/IR/Annotation.h"
 #include "cangjie/CHIR/IR/IntrinsicKind.h"
+#include "cangjie/CHIR/MatchTraversalInfo.h"
 #include "cangjie/CHIR/Utils/ToStringUtils.h"
 #include "cangjie/CHIR/IR/Type/ClassDef.h"
 #include "cangjie/CHIR/IR/Type/EnumDef.h"
@@ -46,6 +47,7 @@ PackageFormat::OverflowStrategy SerializeOverflowStrategy(Cangjie::OverflowStrat
             return PackageFormat::OverflowStrategy_NA;
     }
 }
+
 } // namespace
 
 void CHIRSerializer::Serialize(const Package& package, const std::string filename, ToCHIR::Phase phase)
@@ -60,6 +62,15 @@ void CHIRSerializer::Serialize(const Package& package, const std::string filenam
 flatbuffers::DetachedBuffer CHIRSerializer::Serialize(const Package& package)
 {
     CHIRSerializerImpl serializer(package);
+    serializer.Initialize();
+    serializer.Dispatch();
+    return serializer.ConvertToMemoryData();
+}
+
+flatbuffers::DetachedBuffer CHIRSerializer::Serialize(
+    const Package& package, const MatchTraversalInfo& matchTraversalInfo)
+{
+    CHIRSerializerImpl serializer(package, &matchTraversalInfo);
     serializer.Initialize();
     serializer.Dispatch();
     return serializer.ConvertToMemoryData();
@@ -498,9 +509,13 @@ template <> flatbuffers::Offset<PackageFormat::Block> CHIRSerializer::CHIRSerial
     auto exprs = GetId<Expression>(obj.GetExpressions());
     auto predecessors = GetId<Value>(obj.GetPredecessors());
     auto exceptionCatchList = GetId<Type>(obj.IsLandingPadBlock() ? obj.GetExceptions() : std::vector<ClassType*>());
+    auto isPatternBlock = matchTraversalInfo && matchTraversalInfo->IsPatternBlock(obj);
+    auto caseId = matchTraversalInfo ? matchTraversalInfo->GetCaseId(obj) : std::nullopt;
+    CJC_ASSERT(!caseId.has_value() || isPatternBlock);
     return PackageFormat::CreateBlockDirect(builder, base, parentGroup, exprs.empty() ? nullptr : &exprs,
         predecessors.empty() ? nullptr : &predecessors, obj.IsLandingPadBlock(),
-        exceptionCatchList.empty() ? nullptr : &exceptionCatchList);
+        exceptionCatchList.empty() ? nullptr : &exceptionCatchList, isPatternBlock, caseId.has_value(),
+        caseId.value_or(0));
 }
 
 template <>
@@ -722,9 +737,11 @@ flatbuffers::Offset<PackageFormat::Expression> CHIRSerializer::CHIRSerializerImp
     auto owner = GetId<Value>(obj.GetParentBlock());
     auto resultLocalVar = GetId<Value>(obj.GetResult());
     auto resultTy = GetId<Type>(obj.GetResult() ? obj.GetResult()->GetType() : nullptr);
+    auto goTo = DynamicCast<const GoTo*>(&obj);
+    auto isPatternGoTo = goTo && matchTraversalInfo && matchTraversalInfo->IsPatternGoTo(*goTo);
     return PackageFormat::CreateExpressionDirect(builder, base, kind,
         operands.empty() ? nullptr : &operands, blockGroups.empty() ? nullptr : &blockGroups, owner,
-        resultLocalVar, resultTy);
+        resultLocalVar, resultTy, isPatternGoTo);
 }
 
 template <>
@@ -856,11 +873,7 @@ template <>
 flatbuffers::Offset<PackageFormat::Branch> CHIRSerializer::CHIRSerializerImpl::Serialize(const Branch& obj)
 {
     auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
-    auto sourceExpr = obj.GetSourceExpr();
-    if (sourceExpr == CHIR::SourceExpr::MATCH_CASE) {
-        sourceExpr = CHIR::SourceExpr::MATCH_EXPR;
-    }
-    return PackageFormat::CreateBranch(builder, base, PackageFormat::SourceExpr(sourceExpr));
+    return PackageFormat::CreateBranch(builder, base, PackageFormat::SourceExpr(obj.GetSourceExpr()));
 }
 
 template <>
@@ -868,7 +881,8 @@ flatbuffers::Offset<PackageFormat::MultiBranch> CHIRSerializer::CHIRSerializerIm
 {
     auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
     auto caseVals = obj.GetCaseVals();
-    return PackageFormat::CreateMultiBranchDirect(builder, base, caseVals.empty() ? nullptr : &caseVals);
+    return PackageFormat::CreateMultiBranchDirect(
+        builder, base, caseVals.empty() ? nullptr : &caseVals, PackageFormat::SourceExpr(obj.GetSourceExpr()));
 }
 
 template <>

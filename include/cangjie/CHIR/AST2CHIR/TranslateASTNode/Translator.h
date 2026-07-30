@@ -19,6 +19,7 @@
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/Type/CHIRType.h"
+#include "cangjie/CHIR/MatchTraversalInfo.h"
 #include "cangjie/CHIR/Utils/Utils.h"
 #include "cangjie/CHIR/IR/Value/Value.h"
 #include "cangjie/Option/Option.h"
@@ -38,6 +39,7 @@ public:
         const std::unordered_map<std::string, Value*>& deserializedVals,
         std::vector<std::pair<const AST::Decl*, Function*>>& annoFactories,
         std::unordered_map<Block*, Expression*>& maybeUnreachable,
+        MatchTraversalInfo& matchTraversalInfo,
         bool computeAnnotations,
         std::vector<CHIR::Function*>& initFuncForAnnoFactory,
         const Cangjie::TypeManager& typeManager)
@@ -53,6 +55,7 @@ public:
           deserializedVals(deserializedVals),
           annoFactoryFuncs(annoFactories),
           maybeUnreachable(maybeUnreachable),
+          matchTraversalInfo(matchTraversalInfo),
           isComputingAnnos{computeAnnotations},
           initFuncsForAnnoFactory{initFuncForAnnoFactory},
           typeManager{typeManager}
@@ -596,6 +599,7 @@ private:
     const std::unordered_map<std::string, Value*>& deserializedVals; // add by cjmp
     std::vector<std::pair<const AST::Decl*, Function*>>& annoFactoryFuncs;
     std::unordered_map<Block*, Expression*>& maybeUnreachable;
+    MatchTraversalInfo& matchTraversalInfo;
     bool isComputingAnnos{};
     std::vector<CHIR::Function*>& initFuncsForAnnoFactory;
     const Cangjie::TypeManager& typeManager;
@@ -988,7 +992,8 @@ private:
     std::pair<Ptr<Block>, Ptr<Block>> TranslateOrPattern(
         const std::vector<OwnedPtr<AST::Pattern>>& patterns, Ptr<Value> selectorVal, const DebugLocation& originLoc,
         SourceExpr sourceExpr);
-    std::pair<Ptr<Block>, Ptr<Block>> TranslateConstantMultiOr(const std::vector<uint64_t> values, Ptr<Value> value);
+    std::pair<Ptr<Block>, Ptr<Block>> TranslateConstantMultiOr(
+        const std::vector<uint64_t> values, Ptr<Value> value, SourceExpr sourceExpr);
     Ptr<Value> GetEnumIDValue(Ptr<AST::Ty> ty, Ptr<Value> selectorVal);
     /* Translate or patterns except constant and enum patterns. */
     std::pair<Ptr<Block>, Ptr<Block>> TranslateComplicatedOrPattern(
@@ -1036,6 +1041,7 @@ private:
     struct SecondSwitchInfo {
         const AST::EnumPattern& ep;
         size_t caseId = 0;
+        DebugLocation loc;
     };
     // NOTE: using map for fixed order of IR generation.
     struct EnumMatchInfo {
@@ -1049,7 +1055,7 @@ private:
     void TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, Ptr<Value> enumVal, Ptr<Value> retVal);
     void CollectEnumPatternInfo(const AST::Pattern& pattern, EnumMatchInfo& info, size_t caseId);
     std::unordered_map<size_t, std::vector<Ptr<Block>>> TranslateSecondLevelAsTable(
-        const EnumMatchInfo& info, Ptr<Value> enumVal, Ptr<Block> firstDefaultBlock);
+        const EnumMatchInfo& info, Ptr<Value> enumVal, Ptr<Block> firstDefaultBlock, SourceExpr sourceExpr);
     /**
      * Translate sub patterns for each case inside second level switch table.
      * @param endBlock [in]: last block when all sub-patterns are not matched.
@@ -1057,6 +1063,8 @@ private:
      * @param enumVal [in]: match selector.
      * @param infos [in]: enum pattern info of current second level swith.
      * @param blockBranchInfos [out]: map to store the true blocks of current match case id.
+     * @param sourceExpr [in]: source expression used after leaving the enclosing pattern condition.
+     * @param fallbackCaseId [in]: source case of the default table, if it starts with another alternative.
      * eg: enum E { R |G(Int64) |B(Rune, Object) }
      *     match(sel) {
      *         case R | G(1) => 0
@@ -1073,7 +1081,8 @@ private:
      */
     void TranslateSecondLevelTable(Ptr<Block> endBlock, const Ptr<Block> tableBlock, const Ptr<Value> enumVal,
         const std::vector<SecondSwitchInfo>& infos,
-        std::unordered_map<size_t, std::vector<Ptr<Block>>>& blockBranchInfos);
+        std::unordered_map<size_t, std::vector<Ptr<Block>>>& blockBranchInfos, SourceExpr sourceExpr,
+        std::optional<size_t> fallbackCaseId = std::nullopt);
 
     void CreateAndAppendWrappedStoreElementByName(
         const DebugLocation& loc, Value& rhs, Value& lhs, const std::vector<std::string>& path);
@@ -1085,6 +1094,13 @@ private:
     {
         auto expr = CreateAndAppendTerminator<Branch>(std::forward<Args>(args)...);
         expr->SetSourceExpr(sourceExpr);
+    }
+
+    template <typename... Args> MultiBranch* CreateWrappedMultiBranch(const SourceExpr& sourceExpr, Args&&... args)
+    {
+        auto expr = CreateAndAppendTerminator<MultiBranch>(std::forward<Args>(args)...);
+        expr->SetSourceExpr(sourceExpr);
+        return expr;
     }
 
     Ptr<LocalVar> CreateGetElementRefWithPath(const DebugLocation& loc, Ptr<Value> lhsBase,
