@@ -73,12 +73,15 @@ Ptr<Value> Translator::Visit(const AST::Block& b)
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     std::vector<Ptr<AST::Node>> nodes = CollectBlockBodyNodes(b, gim);
 #endif
+    Ptr<Value> result = nullptr;
     for (size_t i = 0; i < nodes.size(); ++i) {
         if (i == nodes.size() - 1) {
-            return TranslateSubExprAsValue(*nodes[i]);
+            result = TranslateSubExprAsValue(*nodes[i]);
         } else {
             TranslateSubExprToDiscarded(*nodes[i]);
+            StartUnreachableContinuation(*nodes[i]);
         }
     }
-    return nullptr;
+
+    return result;
 }
