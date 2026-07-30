@@ -79,7 +79,6 @@ Ptr<Value> Translator::Visit(const AST::JumpExpr& jumpExpr)
             terminator = CreateAndAppendTerminator<GoTo>(loc, conditionBlock, currentBlock);
         }
     }
-    currentBlock = CreateBlock();
-    maybeUnreachable.emplace(currentBlock, terminator);
+    CreateUnreachableContinuation(*terminator);
     return nullptr;
 }
