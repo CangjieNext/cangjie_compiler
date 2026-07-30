@@ -2319,6 +2319,16 @@ bool TypeChecker::TypeCheckerImpl::GetCallBaseCandidates(
     if (IsBuiltinTypeAlias(*target) || target->IsBuiltIn()) {
         return false;
     }
+    // Type alias to numeric/rune type: treat `word(20)` as type conversion, not function call.
+    if (target->astKind == ASTKind::TYPE_ALIAS_DECL) {
+        auto& typeAliasDecl = static_cast<const TypeAliasDecl&>(*target);
+        if (typeAliasDecl.type) {
+            auto origTy = typeAliasDecl.type->GetTy();
+            if (origTy && (origTy->IsNumeric() || origTy->kind == TypeKind::TYPE_RUNE)) {
+                return false;
+            }
+        }
+    }
     bool isFunctionCall = true;
     if (IsInstanceConstructor(*target) && target->outerDecl) {
         target = target->outerDecl;
