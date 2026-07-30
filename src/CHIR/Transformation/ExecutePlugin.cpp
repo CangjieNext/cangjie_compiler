@@ -6,6 +6,7 @@
 
 #include "cangjie/CHIR/Transformation/ExecutePlugin.h"
 
+#include "cangjie/CHIR/IR/Annotation.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
 #include "cangjie/CHIR/Serializer/CHIRSerializer.h"
 #include "cangjie/Macro/InvokeUtil.h"
@@ -22,9 +23,9 @@ ExecutePlugin::~ExecutePlugin()
     }
 }
 
-bool ExecutePlugin::SerializePackage(const Package& package)
+bool ExecutePlugin::SerializePackage(const Package& package, const MatchTraversalInfo& matchTraversalInfo)
 {
-    serializedData = CHIRSerializer::Serialize(package);
+    serializedData = CHIRSerializer::Serialize(package, matchTraversalInfo);
     if (serializedData.data() == nullptr || serializedData.size() == 0) {
         return false;
     }
@@ -50,7 +51,8 @@ Package* ExecutePlugin::DeserializePluginResult(
     std::unordered_set<Function*>& srcCodeImportedFuncs,
     std::unordered_set<GlobalVar*>& srcCodeImportedVars,
     std::vector<Function*>& initFuncsForConstVar,
-    std::unordered_map<Block*, Expression*>& maybeUnreachable)
+    std::unordered_map<Block*, Expression*>& maybeUnreachable,
+    MatchTraversalInfo& matchTraversalInfo)
 {
     // 1. convert CHIR pointers to strings
     CHIRPtrToString(srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, maybeUnreachable);
@@ -64,7 +66,7 @@ Package* ExecutePlugin::DeserializePluginResult(
 #ifndef CANGJIE_ENABLE_GCOV
     try {
 #endif
-        if (!CHIRDeserializer::Deserialize(pluginResult.data, pluginResult.size, builder)) {
+        if (!CHIRDeserializer::Deserialize(pluginResult.data, pluginResult.size, builder, matchTraversalInfo)) {
             return nullptr;
         }
 #ifndef CANGJIE_ENABLE_GCOV
