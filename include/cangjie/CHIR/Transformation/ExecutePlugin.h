@@ -8,6 +8,7 @@
 #define CANGJIE_CHIR_TRANSFORMATION_EXECUTE_PLUGIN_H
 
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
+#include "cangjie/CHIR/MatchTraversalInfo.h"
 #include <flatbuffers/detached_buffer.h>
 
 namespace Cangjie {
@@ -16,13 +17,14 @@ class ExecutePlugin {
 public:
     explicit ExecutePlugin(CHIRBuilder& builder);
     ~ExecutePlugin();
-    bool SerializePackage(const Package& package);
+    bool SerializePackage(const Package& package, const MatchTraversalInfo& matchTraversalInfo);
     bool Execute(const std::string& pluginPath);
     Package* DeserializePluginResult(
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
         std::vector<Function*>& initFuncsForConstVar,
-        std::unordered_map<Block*, Expression*>& maybeUnreachable);
+        std::unordered_map<Block*, Expression*>& maybeUnreachable,
+        MatchTraversalInfo& matchTraversalInfo);
     bool FreeCachedData();
 private:
     void CHIRPtrToString(
