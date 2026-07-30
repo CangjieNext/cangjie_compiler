@@ -80,7 +80,9 @@ private:
     }
     void SwapResultsWithInstTy(size_t oldIdx, size_t newIdx, Ptr<Decl> d, Ptr<InterfaceTy> interfaceTy)
     {
-        resultsWithInstTyV.erase(resultsWithInstTyV.begin() + static_cast<long>(oldIdx));
+        if (oldIdx < resultsWithInstTyV.size()) {
+            resultsWithInstTyV.erase(resultsWithInstTyV.begin() + static_cast<long>(oldIdx));
+        }
         InsertResultsWithInstTy(newIdx, d, interfaceTy);
     }
     bool IsTargetMemberVisibleToNode(const Decl& target, const Node& node);
