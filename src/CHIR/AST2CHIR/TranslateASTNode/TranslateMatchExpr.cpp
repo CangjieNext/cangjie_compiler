@@ -363,7 +363,7 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateOrPattern(
         for (auto& it : patterns) {
             values.emplace(GetConstPatternVal(StaticCast<AST::ConstPattern>(*it)));
         }
-        return TranslateConstantMultiOr(Utils::SetToVec<uint64_t>(values), selectorVal);
+        return TranslateConstantMultiOr(Utils::SetToVec<uint64_t>(values), selectorVal, sourceExpr);
     } else if (patternKind == AST::ASTKind::TUPLE_PATTERN || patternKind == AST::ASTKind::TYPE_PATTERN) {
         return TranslateComplicatedOrPattern(patterns, selectorVal, originLoc, sourceExpr);
     }
@@ -373,8 +373,8 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateOrPattern(
         for (auto& it : patterns) {
             values.emplace(GetEnumPatternID(GetRealEnumPattern(*it)));
         }
-        return TranslateConstantMultiOr(
-            Utils::SetToVec<uint64_t>(values), GetEnumIDValue(patterns[0]->GetTy(), selectorVal));
+        return TranslateConstantMultiOr(Utils::SetToVec<uint64_t>(values),
+            GetEnumIDValue(patterns[0]->GetTy(), selectorVal), sourceExpr);
     }
     return TranslateComplicatedOrPattern(patterns, selectorVal, originLoc, sourceExpr);
 }
@@ -392,12 +392,15 @@ Ptr<Value> Translator::GetEnumIDValue(Ptr<AST::Ty> ty, Ptr<Value> selectorVal)
 }
 
 std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateConstantMultiOr(
-    const std::vector<uint64_t> values, Ptr<Value> value)
+    const std::vector<uint64_t> values, Ptr<Value> value, SourceExpr sourceExpr)
 {
     auto falseBlock = CreateBlock();
     auto trueBlock = CreateBlock();
     std::vector<Block*> succs(values.size(), trueBlock);
-    CreateAndAppendTerminator<MultiBranch>(
+    if (IsMatchPatternSource(sourceExpr)) {
+        currentBlock->EnableAttr(Attribute::MATCH_PATTERN);
+    }
+    CreateWrappedMultiBranch(sourceExpr,
         TypeCastOrBoxIfNeeded(*value, *builder.GetUInt64Ty(), value->GetDebugLocation(), false),
         falseBlock, values, succs, currentBlock);
     return {falseBlock, trueBlock};
@@ -828,6 +831,8 @@ void Translator::TranslateTrivialMatchAsTable(
     ScopeContext context(*this);
     for (auto& curCase : match.matchCases) {
         context.ScopePlus();
+        // Table entries are source-level siblings and must start from the selector block.
+        currentBlock = baseBlock;
         auto currentBody = TranslateMatchCaseBody(*curCase->exprOrDecls, retVal, endBlock);
         CJC_ASSERT(!curCase->patterns.empty());
         if (!isStillReachable) {
@@ -872,7 +877,7 @@ void Translator::TranslateTrivialMatchAsTable(
     auto castedVal =
         TypeCastOrBoxIfNeeded(*selectorVal, *targetType, selectorVal->GetDebugLocation(), false);
     const auto& loc = TranslateLocation(match);
-    CreateAndAppendTerminator<MultiBranch>(loc, castedVal, defaultBlock, indexes, blocks, baseBlock);
+    CreateWrappedMultiBranch(SourceExpr::MATCH_EXPR, loc, castedVal, defaultBlock, indexes, blocks, baseBlock);
     currentBlock = endBlock;
 }
 
@@ -897,6 +902,7 @@ void Translator::TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, P
             isStillReachable = false;
             // NOTE: only should to collect first visited wildcard pattern.
             // The sub pattern may contains varPattern, translate when binding second level table.
+            currentBlock = baseBlock;
             firstDefaultBlock = TranslateMatchCaseBody(*matchCase.exprOrDecls, retVal, endBlock);
             const auto& loc = TranslateLocation(matchCase.patterns[0]->begin, matchCase.patterns[0]->end);
             firstDefaultBlock->SetDebugLocation(loc);
@@ -914,15 +920,19 @@ void Translator::TranslateEnumPatternMatchAsTable(const AST::MatchExpr& match, P
         // Exhaustive cases, default block will not be reached, just set it to first valid case block.
         firstDefaultBlock = blocks[0];
     }
-    CreateAndAppendTerminator<MultiBranch>(firstSelectorVal, firstDefaultBlock, indexes, blocks, baseBlock);
+    CreateWrappedMultiBranch(
+        SourceExpr::MATCH_EXPR, firstSelectorVal, firstDefaultBlock, indexes, blocks, baseBlock);
 
     // Create each second switch block.
-    auto branchInfos = TranslateSecondLevelAsTable(matchInfo, enumVal, firstDefaultBlock);
+    currentBlock = baseBlock;
+    auto branchInfos =
+        TranslateSecondLevelAsTable(matchInfo, enumVal, firstDefaultBlock, SourceExpr::MATCH_CASE);
     // Finally create goto from case's true block to caseBody block.
     for (size_t i = 0; i < match.matchCases.size(); ++i) {
         if (i == wildcardIdx) {
             continue;
         }
+        currentBlock = baseBlock;
         auto bodyBlock = TranslateMatchCaseBody(*match.matchCases[i]->exprOrDecls, retVal, endBlock);
         for (auto& block : std::as_const(branchInfos[i])) {
             CreateAndAppendTerminator<GoTo>(bodyBlock, block);
@@ -944,8 +954,9 @@ void Translator::CollectEnumPatternInfo(const AST::Pattern& pattern, EnumMatchIn
         const auto& loc = TranslateLocation(pattern);
         blockIt->second = CreateBlock();
         blockIt->second->SetDebugLocation(loc);
+        blockIt->second->Set<MatchCaseId>(caseId);
     }
-    SecondSwitchInfo switchInfo{enumPattern, caseId};
+    SecondSwitchInfo switchInfo{enumPattern, caseId, TranslateLocation(pattern)};
     auto& secondSwitchMap = info.indexToBodies[patternVal];
     if (enumPattern.patterns.empty()) {
         info.innerDefaultInfos[patternVal].emplace_back(switchInfo);
@@ -967,14 +978,19 @@ void Translator::CollectEnumPatternInfo(const AST::Pattern& pattern, EnumMatchIn
 }
 
 std::unordered_map<size_t, std::vector<Ptr<Block>>> Translator::TranslateSecondLevelAsTable(
-    const EnumMatchInfo& info, Ptr<Value> enumVal, Ptr<Block> firstDefaultBlock)
+    const EnumMatchInfo& info, Ptr<Value> enumVal, Ptr<Block> firstDefaultBlock, SourceExpr sourceExpr)
 {
     std::unordered_map<size_t, std::vector<Ptr<Block>>> blockBranchInfos;
     // Create each second switch block.
     for (auto& [firstIdx, secondMap] : info.indexToBodies) {
         auto firstLevelBlock = info.firstSwitchBlocks.at(firstIdx);
         CJC_NULLPTR_CHECK(firstLevelBlock);
+        firstLevelBlock->EnableAttr(Attribute::MATCH_PATTERN);
         auto found = info.innerDefaultInfos.find(firstIdx);
+        std::optional<size_t> fallbackCaseId;
+        if (found != info.innerDefaultInfos.end() && !found->second.empty()) {
+            fallbackCaseId = found->second.front().caseId;
+        }
         // When there is no default pattern on first sub-pattern, set default as previous default block.
         // When only found one and enum does not have sub-pattern, create direct goto.
         // Otherwise generate all collected patterns for other enum sub-patterns.
@@ -987,7 +1003,8 @@ std::unordered_map<size_t, std::vector<Ptr<Block>>> Translator::TranslateSecondL
             // When 'secondMap' is emtpy, second selector is wildcard,
             // we need pass 'firstLevelBlock' as start block of second table detail.
             secondDefaultBlock = secondMap.empty() ? firstLevelBlock : CreateBlock();
-            TranslateSecondLevelTable(firstDefaultBlock, secondDefaultBlock, enumVal, found->second, blockBranchInfos);
+            TranslateSecondLevelTable(
+                firstDefaultBlock, secondDefaultBlock, enumVal, found->second, blockBranchInfos, sourceExpr);
         }
         if (secondMap.empty()) {
             continue;
@@ -1010,10 +1027,14 @@ std::unordered_map<size_t, std::vector<Ptr<Block>>> Translator::TranslateSecondL
             indexes.emplace_back(index);
             auto block = CreateBlock();
             blocks.emplace_back(block);
-            TranslateSecondLevelTable(secondDefaultBlock, block, enumVal, infos, blockBranchInfos);
+            TranslateSecondLevelTable(
+                secondDefaultBlock, block, enumVal, infos, blockBranchInfos, sourceExpr, fallbackCaseId);
         }
         currentBlock = firstLevelBlock;
-        CreateAndAppendTerminator<MultiBranch>(
+        auto firstCaseId = firstLevelBlock->Get<MatchCaseId>();
+        CJC_ASSERT(firstCaseId.has_value());
+        auto tableSourceExpr = fallbackCaseId == firstCaseId ? SourceExpr::MATCH_EXPR : sourceExpr;
+        CreateWrappedMultiBranch(tableSourceExpr,
             TypeCastOrBoxIfNeeded(
                 *secondSelectVar, *builder.GetUInt64Ty(), secondSelectVar->GetDebugLocation(), false),
             secondDefaultBlock, indexes, blocks, firstLevelBlock);
@@ -1022,7 +1043,8 @@ std::unordered_map<size_t, std::vector<Ptr<Block>>> Translator::TranslateSecondL
 }
 
 void Translator::TranslateSecondLevelTable(Ptr<Block> endBlock, const Ptr<Block> tableBlock, const Ptr<Value> enumVal,
-    const std::vector<SecondSwitchInfo>& infos, std::unordered_map<size_t, std::vector<Ptr<Block>>>& blockBranchInfos)
+    const std::vector<SecondSwitchInfo>& infos, std::unordered_map<size_t, std::vector<Ptr<Block>>>& blockBranchInfos,
+    SourceExpr sourceExpr, std::optional<size_t> fallbackCaseId)
 {
     currentBlock = tableBlock;
     bool hasGotoBase = false;
@@ -1031,11 +1053,16 @@ void Translator::TranslateSecondLevelTable(Ptr<Block> endBlock, const Ptr<Block>
     bool isWildcardPattern = infos[0].ep.patterns[0]->astKind == AST::ASTKind::WILDCARD_PATTERN;
     for (size_t idx = 0; idx < infos.size(); ++idx) {
         const auto& current = infos[idx];
+        currentBlock->SetDebugLocation(current.loc);
+        currentBlock->EnableAttr(Attribute::MATCH_PATTERN);
+        currentBlock->Set<MatchCaseId>(current.caseId);
+        auto nextCaseId = idx + 1 < infos.size() ? std::optional<size_t>{infos[idx + 1].caseId} : fallbackCaseId;
+        auto patternSourceExpr = nextCaseId == current.caseId ? SourceExpr::MATCH_EXPR : sourceExpr;
         // When sub-pattern size is exactly 1, 'tableBlock' should be considered as 'trueBlock'.
         // NOTE: the 'tableBlock' can only be used as 'trueBlock' once.
         auto trueBlock = !hasGotoBase && current.ep.patterns.size() == 1 ? tableBlock.get() : CreateBlock();
         hasGotoBase = hasGotoBase || current.ep.patterns.size() == 1;
-        auto falseBlock = CreateBlock();
+        Block* falseBlock = idx + 1 == infos.size() ? endBlock.get() : CreateBlock();
         std::queue<std::pair<Ptr<const AST::Pattern>, Ptr<Value>>> queue;
         auto elementTys = StaticCast<AST::FuncTy>(current.ep.constructor->GetTy())->paramTys;
         // When first pattern is wildcard and current pattern is not, we need to check from first sub-pattern,
@@ -1058,8 +1085,7 @@ void Translator::TranslateSecondLevelTable(Ptr<Block> endBlock, const Ptr<Block>
             auto cond = DispatchingPattern(queue, {trueBlock, newBlock}, originLoc);
             if (cond) {
                 auto nextBlock = queue.empty() ? trueBlock : newBlock;
-                CreateAndAppendTerminator<Branch>(cond, nextBlock, falseBlock, currentBlock)
-                    ->SetSourceExpr(SourceExpr::MATCH_EXPR);
+                CreateWrappedBranch(patternSourceExpr, cond, nextBlock, falseBlock, currentBlock);
                 currentBlock = nextBlock;
             } else if (queue.empty()) {
                 CreateAndAppendTerminator<GoTo>(trueBlock, currentBlock);
@@ -1071,9 +1097,7 @@ void Translator::TranslateSecondLevelTable(Ptr<Block> endBlock, const Ptr<Block>
         newBlock->RemoveSelfFromBlockGroup();
         // Create 'GOTO' for trueBlock at callee for correct binding of varPattern.
         blockBranchInfos[current.caseId].emplace_back(trueBlock);
-        if (idx == infos.size() - 1) {
-            CreateAndAppendTerminator<GoTo>(endBlock, falseBlock);
-        } else {
+        if (idx + 1 < infos.size()) {
             currentBlock = falseBlock;
         }
     }
