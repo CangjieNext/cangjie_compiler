@@ -131,6 +131,8 @@ private:
 
     // ============== Functions for clean code in parallel ===========//
     void ReportUnusedCodeInFunc(const BlockGroup& body, const GlobalOptions& opts);
+    void UnreachableBlockWarningReporterForFunc(
+        Function& func, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks);
     void UnreachableBlockWarningReporterInSerial(
         const Package& package, const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks);
     void UnreachableBlockWarningReporterInParallel(const Package& package,
