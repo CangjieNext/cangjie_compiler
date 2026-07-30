@@ -309,6 +309,36 @@ private:
     std::optional<size_t> index{std::nullopt};
 };
 
+/**
+ * W: AST2CHIR
+ * R: UnreachableBranchCheck
+ */
+struct MatchCaseId : public Annotation {
+public:
+    explicit MatchCaseId() = default;
+    explicit MatchCaseId(std::optional<size_t> id) : id(id)
+    {
+    }
+
+    static std::optional<size_t> Extract(const MatchCaseId* info)
+    {
+        return info->id;
+    }
+
+    std::unique_ptr<Annotation> Clone() override
+    {
+        return std::make_unique<MatchCaseId>(id);
+    }
+
+    std::string ToString() override
+    {
+        return id.has_value() ? "matchCaseId: " + std::to_string(id.value()) : "";
+    }
+
+private:
+    std::optional<size_t> id{std::nullopt};
+};
+
 struct VirMethodOffset : public Annotation {
 public:
     explicit VirMethodOffset() = default;

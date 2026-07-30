@@ -298,6 +298,9 @@ template <> flatbuffers::Offset<PackageFormat::Base> CHIRSerializer::CHIRSeriali
         annos.emplace_back(PackageFormat::CreateEnumCaseIndex(builder, indexNum).Union());
     };
 
+    // MatchCaseId is transient metadata restored by ExecutePlugin.
+    annoHandler[typeid(CHIR::MatchCaseId)] = Empty;
+
     // VirMethodOffset
     annoHandler[typeid(CHIR::VirMethodOffset)] = [this, &annos, &annoTypes](Annotation* anno) {
         annoTypes.push_back(PackageFormat::Annotation::Annotation_virMethodOffset);
