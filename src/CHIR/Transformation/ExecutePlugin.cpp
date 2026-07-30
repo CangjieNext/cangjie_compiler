@@ -6,6 +6,7 @@
 
 #include "cangjie/CHIR/Transformation/ExecutePlugin.h"
 
+#include "cangjie/CHIR/IR/Annotation.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
 #include "cangjie/CHIR/Serializer/CHIRSerializer.h"
 #include "cangjie/Macro/InvokeUtil.h"
@@ -24,6 +25,7 @@ ExecutePlugin::~ExecutePlugin()
 
 bool ExecutePlugin::SerializePackage(const Package& package)
 {
+    CaptureMatchTraversalInfo(package);
     serializedData = CHIRSerializer::Serialize(package);
     if (serializedData.data() == nullptr || serializedData.size() == 0) {
         return false;
@@ -75,7 +77,79 @@ Package* ExecutePlugin::DeserializePluginResult(
 
     // 4. convert strings to CHIR pointers
     StringToCHIRPtr(srcCodeImportedFuncs, srcCodeImportedVars, initFuncsForConstVar, maybeUnreachable);
+    RestoreMatchTraversalInfo(*builder.GetCurPackage());
     return builder.GetCurPackage();
+}
+
+void ExecutePlugin::CaptureMatchTraversalInfo(const Package& package)
+{
+    matchTraversalInfos.clear();
+    for (auto func : package.GetGlobalFuncsWithBody()) {
+        auto funcName = func->GetIdentifierWithoutPrefix();
+        for (auto block : func->GetBody()->GetAllBlocks()) {
+            auto terminator = block->GetTerminator();
+            auto terminatorKind = ExprKind::INVALID;
+            std::optional<SourceExpr> sourceExpr;
+            if (auto branch = DynamicCast<Branch>(terminator);
+                branch && branch->GetSourceExpr() == SourceExpr::MATCH_CASE) {
+                terminatorKind = ExprKind::BRANCH;
+                sourceExpr = SourceExpr::MATCH_CASE;
+            } else if (auto multiBranch = DynamicCast<MultiBranch>(terminator);
+                       multiBranch && multiBranch->GetSourceExpr() != SourceExpr::OTHER) {
+                terminatorKind = ExprKind::MULTIBRANCH;
+                sourceExpr = multiBranch->GetSourceExpr();
+            }
+            auto caseId = block->Get<MatchCaseId>();
+            if (!sourceExpr.has_value() && !caseId.has_value()) {
+                continue;
+            }
+            matchTraversalInfos[funcName].emplace_back(MatchTraversalInfo{
+                block->GetIdentifierWithoutPrefix(), terminatorKind, sourceExpr, caseId});
+        }
+    }
+}
+
+void ExecutePlugin::RestoreMatchTraversalInfo(const Package& package)
+{
+    for (auto func : package.GetGlobalFuncsWithBody()) {
+        auto found = matchTraversalInfos.find(func->GetIdentifierWithoutPrefix());
+        if (found == matchTraversalInfos.end()) {
+            continue;
+        }
+        RestoreMatchTraversalInfoForFunc(*func, found->second);
+    }
+    matchTraversalInfos.clear();
+}
+
+void ExecutePlugin::RestoreMatchTraversalInfoForFunc(
+    Function& func, const std::vector<MatchTraversalInfo>& traversalInfos)
+{
+    std::unordered_map<std::string, Block*> blocks;
+    for (auto block : func.GetBody()->GetAllBlocks()) {
+        blocks.emplace(block->GetIdentifierWithoutPrefix(), block);
+    }
+    for (const auto& info : traversalInfos) {
+        auto blockIt = blocks.find(info.blockName);
+        if (blockIt == blocks.end()) {
+            continue;
+        }
+        auto block = blockIt->second;
+        if (info.caseId.has_value()) {
+            block->Set<MatchCaseId>(info.caseId.value());
+        }
+        if (!info.sourceExpr.has_value()) {
+            continue;
+        }
+        if (info.terminatorKind == ExprKind::BRANCH) {
+            if (auto branch = DynamicCast<Branch>(block->GetTerminator())) {
+                branch->SetSourceExpr(info.sourceExpr.value());
+            }
+        } else if (info.terminatorKind == ExprKind::MULTIBRANCH) {
+            if (auto multiBranch = DynamicCast<MultiBranch>(block->GetTerminator())) {
+                multiBranch->SetSourceExpr(info.sourceExpr.value());
+            }
+        }
+    }
 }
 
 void ExecutePlugin::CHIRPtrToString(
