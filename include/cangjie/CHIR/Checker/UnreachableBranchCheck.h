@@ -14,19 +14,23 @@
 #include "cangjie/CHIR/IR/Package.h"
 #include "cangjie/Utils/TaskQueue.h"
 
+#include <unordered_map>
+
 namespace Cangjie::CHIR {
 
 class UnreachableBranchCheck {
 public:
     explicit UnreachableBranchCheck(
-        ConstAnalysisWrapper* constAnalysisWrapper, DiagnosticEngine& diag, const std::string& packageName);
+        ConstAnalysisWrapper* constAnalysisWrapper, DiagnosticEngine& diag, const std::string& packageName,
+        const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks);
 
     void RunOnPackage(const Package& package, size_t threadNum);
 
     void RunOnFunc(const Ptr<Function> func);
 
 private:
-    void PrintWarning(const Expression& node, Block& block, std::set<Block*>& hasProcessed, bool isRecursive = false);
+    void PrintWarning(const Expression& node, Block& block, std::set<Block*>& hasProcessed);
+    void PrintMatchSuccessors(Block& block, std::set<Block*>& hasProcessed);
 
     template <typename TConstDomain>
     void VisitFunc(Results<TConstDomain>& result);
@@ -35,6 +39,7 @@ private:
     ConstAnalysisWrapper* analysisWrapper;
 
     const std::string& currentPackageName;
+    const std::unordered_map<Block*, Expression*>& maybeUnreachableBlocks;
 };
 
 } // namespace Cangjie::CHIR

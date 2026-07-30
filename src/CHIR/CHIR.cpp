@@ -281,7 +281,7 @@ void ToCHIR::NothingTypeExprElimination()
 void ToCHIR::UnreachableBranchReporter()
 {
     Utils::ProfileRecorder recorder("RulesChecking", "UnreachableBranchReporter");
-    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, chirPkg->GetName());
+    auto check = CHIR::UnreachableBranchCheck(&constAnalysisWrapper, diag, chirPkg->GetName(), maybeUnreachable);
     check.RunOnPackage(*chirPkg, opts.GetJobs());
 }
 
