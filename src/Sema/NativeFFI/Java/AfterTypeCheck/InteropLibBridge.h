@@ -388,7 +388,7 @@ public:
      * Cangjie Bool. Other primitive results are returned unchanged.
      */
     OwnedPtr<Expr> ConvertJavaResultToCJ(OwnedPtr<Expr> result, Ptr<Ty> resultTy, Decl& scope);
-    
+
    /**
     * Creates a block that prepares the JNI state and invokes a Java method.
     *
@@ -570,6 +570,7 @@ public:
     static bool IsInteropLibAccessible(const ImportManager& importManager);
     static bool IsJavaEntityTy(Ty& ty);
 
+    Ptr<StructDecl> GetJNINativeInterfaceDecl() const;
 private:
    /**
     * Version value should be the same as for java interop library for the same SDK.
@@ -666,7 +667,6 @@ private:
         OwnedPtr<Expr> methodID, OwnedPtr<Expr> argsExpr);
 
     OwnedPtr<CallExpr> CreateJNICall(Ptr<Expr> env, Ptr<VarDecl> jniFunction, std::vector<OwnedPtr<FuncArg>> callArgs);
-    Ptr<StructDecl> GetJNINativeInterfaceDecl() const;
     Ptr<VarDecl> GetJNINativeInterfaceField(const std::string_view name);
     OwnedPtr<FuncArg> PrepareJNIArgsVArray(OwnedPtr<Expr> expr);
     OwnedPtr<CallExpr> CreateJNIEnvReadCall(Ptr<Expr> env);

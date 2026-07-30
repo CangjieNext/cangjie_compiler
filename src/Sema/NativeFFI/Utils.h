@@ -18,6 +18,7 @@
 #include "cangjie/Mangle/BaseMangler.h"
 #include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
+#include "cangjie/Utils/CheckUtils.h"
 
 namespace Cangjie::Native::FFI {
 constexpr std::string_view NSSTRING_CLASS_IDENT = "NSString";
@@ -101,6 +102,42 @@ OwnedPtr<CallExpr> CreateMemberCall(OwnedPtr<Expr> receiver, Ptr<FuncDecl> fd, O
     auto ma = CreateMemberAccess(std::move(receiver), *fd);
     CopyBasicInfo(ma->baseExpr, ma);
     return CreateCallExpr(std::move(ma), std::move(funcArgs), fd, funcTy->retTy, CallKind::CALL_DECLARED_FUNCTION);
+}
+
+template <typename... Args>
+OwnedPtr<CallExpr> CreateMemberCall(TypeManager& typeManager,
+    OwnedPtr<Expr> receiver, VarDecl& vd, OwnedPtr<Args>&&... args)
+{
+    CJC_NULLPTR_CHECK(receiver);
+    CJC_ASSERT(vd.GetTy()->IsFunc() || vd.GetTy()->IsCFunc());
+    std::vector<OwnedPtr<FuncArg>> funcArgs;
+
+    (Details::WrapArg(&funcArgs, std::forward<OwnedPtr<Args>>(args)), ...);
+
+    auto funcTy = StaticCast<FuncTy*>(vd.GetTy());
+
+    // Ensure formal parameters count is the same as passed arguments.
+    CJC_ASSERT(funcTy->paramTys.size() == funcArgs.size());
+    // #ifdef NDEBUG
+    // Ensure passed arguments are subtypes of expected types.
+    for (auto [expectedTy, actualParam] = std::tuple{funcTy->paramTys.begin(), funcArgs.begin()};
+         expectedTy != funcTy->paramTys.end();
+         expectedTy++, actualParam++) {
+             CJC_ASSERT(typeManager.IsSubtype((*actualParam)->GetTy(), *expectedTy));
+        }
+    // #endif // NDEBUG
+    // typeManager.IsSubtype()
+
+    auto ma = CreateMemberAccess(std::move(receiver), vd);
+    if (vd.GetTy()->IsCFunc()) {
+        ma->EnableAttr(Attribute::UNSAFE);
+    }
+    CopyBasicInfo(ma->baseExpr, ma);
+    auto ca = CreateCallExpr(std::move(ma), std::move(funcArgs), nullptr, funcTy->retTy, CallKind::CALL_FUNCTION_PTR);
+    if (vd.GetTy()->IsCFunc()) {
+        ca->EnableAttr(Attribute::UNSAFE);
+    }
+    return ca;
 }
 
 OwnedPtr<Type> CreateType(Ptr<Ty> ty);

@@ -13,20 +13,97 @@
 #define CANGJIE_SEMA_NATIVE_FFI_JAVA_JNI_BRIDGE
 
 #include "NativeFFI/Java/AfterTypeCheck/Utils.h"
+#include "NativeFFI/Utils.h"
+#include "cangjie/AST/Clone.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/Mangle/BaseMangler.h"
+#include "cangjie/Modules/ImportManager.h"
 #include "cangjie/Sema/TypeManager.h"
+#include "cangjie/Utils/CheckUtils.h"
+#include <type_traits>
 
 namespace Cangjie::Native::FFI::Java {
+
+/**
+ * This structure provides bridging API for JNI JNINativeInterface.
+ */
+struct JniNativeInterfaceBridge {
+    explicit JniNativeInterfaceBridge(TypeManager& typeManager, const ImportManager& importManager,
+        AST::StructDecl& jniInterfaceDecl);
+
+    /**
+     * This macro generates "create call" functions based on its names and expected parameters count.
+     *
+     * If you got compile error pointing here while attempting to call such function,
+     * probably arguments count mismatch happenned.
+     * Please, ensure formal parameters count is the same as passed arguments.
+     */
+    #define DEFINE_MEMBER(NAME, AST_KIND, PARAMS)                                                           \
+    template <typename... Args, std::enable_if_t<((sizeof...(Args)) == PARAMS), int> = 0>                   \
+        OwnedPtr<AST::Expr> Create ## NAME ## Call(Ptr<AST::Expr> envPtr, OwnedPtr<Args>&&... args) const   \
+            {                                                                                               \
+                return CreateInterfaceMemberCall(#NAME, envPtr, std::forward<OwnedPtr<Args>>(args) ...);    \
+            }
+    #include "JniNativeInterface.inc"
+    #undef DEFINE_MEMBER
+
+private:
+    OwnedPtr<Expr> CreateJNIEnvReadCall(Ptr<Expr> env) const;
+
+    template <typename... Args>
+    OwnedPtr<AST::Expr> CreateInterfaceMemberCall(const std::string_view memberName,
+        Ptr<AST::Expr> envPtr, OwnedPtr<Args>&&... args) const
+    {
+        auto& member = GetInterfaceMember<ASTKind::VAR_DECL>(memberName);
+        return CreateMemberCall(typeManager,
+            CreateJNIEnvReadCall(envPtr),
+            member,
+            ASTCloner::Clone(envPtr), std::forward<OwnedPtr<Args>>(args) ...);
+    }
+
+    template <ASTKind KIND = ASTKind::DECL>
+    typename NodeKind<KIND>::Type& GetInterfaceMember(const std::string_view memberName) const
+    {
+        Ptr<typename NodeKind<KIND>::Type> member;
+        for (auto decl : jniInterfaceDecl.GetMemberDeclPtrs()) {
+            auto d = As<KIND>(decl);
+            if (d && d->astKind == KIND && d->identifier.Val() == memberName) {
+                member = d;
+                break;
+            }
+        }
+        CJC_NULLPTR_CHECK(member);
+        return *member;
+    }
+
+/**
+ * This macro generates "get member declaration" functions based on its names.
+ */
+#define DEFINE_MEMBER(NAME, KIND, PARAMS)                                                                     \
+    NodeKind<ASTKind::KIND>::Type& Get ## NAME ## Member() const                                              \
+        {                                                                                                     \
+            static typename NodeKind<ASTKind::KIND>::Type& member = GetInterfaceMember<ASTKind::KIND>(#NAME); \
+            return member;                                                                                    \
+        }
+#include "JniNativeInterface.inc"
+#undef DEFINE_MEMBER
+
+    TypeManager& typeManager;
+    const ImportManager& importManager;
+    AST::StructDecl& jniInterfaceDecl;
+};
 
 class JniBridge final {
 public:
     explicit JniBridge(
         TypeManager& typeManager,
+        const ImportManager& importManager,
         const BaseMangler& mangler,
         Interop::Java::Utils& utils,
         AST::Decl& jniEnvPtrDecl,
-        AST::Decl& jniJobjectDecl);
+        AST::Decl& jniJobjectDecl,
+        AST::StructDecl& jniInterfaceDecl
+    );
 
     /**
      * $jnienv: JNIEnv_Ptr
@@ -78,6 +155,9 @@ public:
      * For CType ty, ty is returned. For mirrors and impls JNI jobject is returned
      */
     AST::Ty& ConvertCangjieToJniTy(AST::Ty& javaCompatibleTy) const;
+
+    const JniNativeInterfaceBridge interface;
+
 private:
     AST::Ty& GetJniEnvPtrTy() const;
     AST::Ty& GetJniJobjectDeclTy() const;
@@ -91,6 +171,10 @@ private:
     AST::Decl& jniJobjectDecl;
 };
 
+
+
 } // namespace Cangjie::Native::FFI::Java
 
 #endif // CANGJIE_SEMA_NATIVE_FFI_JAVA_JNI_BRIDGE
+
+// return GetInterfaceMember<ASTKind::AST_KIND>(#NAME);

@@ -46,7 +46,7 @@ public:
           diag(diag),
           mangler(mangler),
           lib(importManager, typeManager, diag, utils),
-          jniBridge(typeManager, mangler, utils, *lib.GetJniEnvPtrDecl(), *lib.GetJobjectDecl()),
+          jniBridge(typeManager, importManager, mangler, utils, *lib.GetJniEnvPtrDecl(), *lib.GetJobjectDecl(), *lib.GetJNINativeInterfaceDecl()),
           javaCodeGenPath(javaCodeGenPath),
           outputLibPath(outputLibPath),
           memberMap(memberMap)

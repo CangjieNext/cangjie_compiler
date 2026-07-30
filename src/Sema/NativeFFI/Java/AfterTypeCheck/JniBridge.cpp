@@ -9,6 +9,8 @@
 #include "Utils.h"
 #include "cangjie/AST/Node.h"
 #include "cangjie/AST/Types.h"
+#include "cangjie/Utils/CheckUtils.h"
+#include "TypeCheckUtil.h"
 #include <string>
 
 namespace Cangjie::Native::FFI::Java {
@@ -51,10 +53,13 @@ std::string ApplyJavaNativeNameEscaping(const std::string& name)
 
 JniBridge::JniBridge(
     TypeManager& typeManager,
+    const ImportManager& importManager,
     const BaseMangler& mangler,
     Interop::Java::Utils& utils,
     Decl& jniEnvPtrDecl,
-    Decl& jniJobjectDecl) : typeManager(typeManager), mangler(mangler), utils(utils),
+    Decl& jniJobjectDecl,
+    StructDecl& jniInterfaceDecl) : interface(typeManager, importManager, jniInterfaceDecl),
+    typeManager(typeManager), mangler(mangler), utils(utils),
     jniEnvPtrDecl(jniEnvPtrDecl), jniJobjectDecl(jniJobjectDecl)
 {}
 
@@ -196,6 +201,58 @@ Ty& JniBridge::ConvertCangjieToJniTy(Ty& javaCompatibleTy) const
 
     CJC_ABORT();
     return javaCompatibleTy; // never succeeding fallback
+}
+
+JniNativeInterfaceBridge::JniNativeInterfaceBridge(
+    TypeManager& typeManager, const ImportManager& importManager, AST::StructDecl& jniInterfaceDecl)
+: typeManager(typeManager), importManager(importManager), jniInterfaceDecl(jniInterfaceDecl) {}
+
+OwnedPtr<Expr> JniNativeInterfaceBridge::CreateJNIEnvReadCall(Ptr<Expr> env) const
+{
+    using namespace Cangjie::TypeCheckUtil;
+    static auto readPointerDecl = importManager.GetCoreDecl<FuncDecl>("readPointer");
+    if (!readPointerDecl) {
+        return nullptr;
+    }
+    // env : CPointer<CPointer<JNINativeInterface_>>
+    auto envTy = env->GetTy();
+    CJC_ASSERT(envTy && envTy->typeArgs.size() == 1);
+
+    // CPointer<JNINativeInterface_>
+    auto ptrTy = envTy->typeArgs[0];
+    CJC_ASSERT(ptrTy && ptrTy->typeArgs.size() == 1);
+
+    // JNINativeInterface_
+    auto interfaceTy = ptrTy->typeArgs[0];
+
+    // readPointer<CPointer<JNINativeInterface_>>(env,0)
+    auto ref1 = CreateRefExpr(*readPointerDecl);
+    ref1->instTys.emplace_back(ptrTy);
+    ref1->typeArguments.emplace_back(CreateType(ptrTy));
+    ref1->SetTy(typeManager.GetInstantiatedTy(readPointerDecl->GetTy(),
+        GenerateTypeMapping(*readPointerDecl, ref1->instTys)));
+    auto int64Ty = typeManager.GetPrimitiveTy(TypeKind::TYPE_INT64);
+    auto zero = CreateLitConstExpr(LitConstKind::INTEGER, "0", int64Ty);
+    std::vector<OwnedPtr<FuncArg>> args1;
+    args1.emplace_back(CreateFuncArg(ASTCloner::Clone(env)));
+    args1.emplace_back(CreateFuncArg(ASTCloner::Clone(zero.get())));
+    auto read1 = CreateCallExpr(std::move(ref1), std::move(args1), readPointerDecl,
+        ptrTy, CallKind::CALL_INTRINSIC_FUNCTION);
+    read1->EnableAttr(Attribute::UNSAFE);
+
+    // readPointer<JNINativeInterface_>(read1,0)
+    auto ref2 = CreateRefExpr(*readPointerDecl);
+    ref2->instTys.emplace_back(interfaceTy);
+    ref2->typeArguments.emplace_back(CreateType(interfaceTy));
+    ref2->SetTy(typeManager.GetInstantiatedTy(readPointerDecl->GetTy(),
+        GenerateTypeMapping(*readPointerDecl, ref2->instTys)));
+    std::vector<OwnedPtr<FuncArg>> args2;
+    args2.emplace_back(CreateFuncArg(std::move(read1)));
+    args2.emplace_back(CreateFuncArg(std::move(zero)));
+    auto read2 = CreateCallExpr(std::move(ref2), std::move(args2), readPointerDecl,
+        interfaceTy, CallKind::CALL_INTRINSIC_FUNCTION);
+    read2->EnableAttr(Attribute::UNSAFE);
+    return read2;
 }
 
 } // namespace Cangjie::Native::FFI::Java
