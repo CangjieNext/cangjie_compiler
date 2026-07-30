@@ -28,9 +28,9 @@ enum class SourceExpr : uint8_t {
     QUEST,
     BINARY,
     FOR_IN_EXPR,
-    OTHER,
     // The false edge advances from one source-level match case to the next.
-    MATCH_CASE
+    MATCH_CASE,
+    OTHER
 };
 
 /**
@@ -114,10 +114,17 @@ public:
     /** @brief Get the default block of this MultiBranch Expression */
     Block* GetDefaultBlock() const;
 
+    /** @brief Set the source expression represented by this MultiBranch */
+    void SetSourceExpr(SourceExpr srcExpr);
+
+    /** @brief Get the source expression represented by this MultiBranch */
+    SourceExpr GetSourceExpr() const;
+
     std::vector<Block*> GetNormalBlocks() const;
 
 protected:
     std::string OperandsToString() const override;
+    std::string AddExtraComment() const override;
 
 private:
     explicit MultiBranch(Value* cond, Block* defaultBlock, const std::vector<uint64_t>& vals,
@@ -131,6 +138,7 @@ private:
      * Note that default Block does not have the case val.
      */
     std::vector<uint64_t> caseVals;
+    SourceExpr sourceExpr{SourceExpr::OTHER};
 };
 
 /**

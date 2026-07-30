@@ -183,7 +183,7 @@ PackageFormat::SourceExpr Serialize(const SourceExpr& kind)
             ret = SourceExpr_OTHER;
             break;
         case SourceExpr::MATCH_CASE:
-            ret = SourceExpr_MATCH_EXPR;
+            ret = SourceExpr_MATCH_CASE;
             break;
     }
     return ret;
@@ -1824,13 +1824,14 @@ TEST_F(CHIRSerialzierTest, SourceExprEnum)
     using namespace PackageFormat;
     using Cangjie::CHIR::SourceExpr;
     SourceExpr enumBegin = SourceExpr::IF_EXPR;
-    SourceExpr enumEnd = SourceExpr::OTHER; // make sure this is max one we defined
+    SourceExpr enumEnd = SourceExpr::FOR_IN_EXPR;
     EXPECT_EQ(static_cast<size_t>(enumBegin), 0);
     for (size_t i = static_cast<size_t>(enumBegin); i <= static_cast<size_t>(enumEnd); i++) {
         EXPECT_EQ(PackageFormat::SourceExpr(static_cast<SourceExpr>(i)), Serialize(static_cast<SourceExpr>(i)))
             << "cur i: " << i;
     }
-    EXPECT_EQ(PackageFormat::SourceExpr_MATCH_EXPR, Serialize(SourceExpr::MATCH_CASE));
+    EXPECT_EQ(PackageFormat::SourceExpr_OTHER, Serialize(SourceExpr::OTHER));
+    EXPECT_EQ(PackageFormat::SourceExpr_MATCH_CASE, Serialize(SourceExpr::MATCH_CASE));
 }
 
 TEST_F(CHIRSerialzierTest, LinkageEnum)

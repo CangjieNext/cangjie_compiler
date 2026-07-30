@@ -12,9 +12,13 @@
 #include "gtest/gtest.h"
 
 #include "cangjie/Basic/Print.h"
+#include "cangjie/CHIR/IR/CHIRBuilder.h"
+#include "cangjie/CHIR/IR/CHIRContext.h"
 #include "cangjie/CHIR/IR/Expression/Terminator.h"
 #include "cangjie/CHIR/IR/IntrinsicKind.h"
+#include "cangjie/CHIR/MatchTraversalInfo.h"
 #include "cangjie/CHIR/Serializer/CHIRDeserializer.h"
+#include "cangjie/CHIR/Serializer/CHIRSerializer.h"
 #include "cangjie/CHIR/IR/Type/CustomTypeDef.h"
 #include "cangjie/CHIR/IR/Type/Type.h"
 
@@ -177,6 +181,9 @@ SourceExpr DeSerialize(const PackageFormat::SourceExpr& kind)
             break;
         case SourceExpr_OTHER:
             ret = SourceExpr::OTHER;
+            break;
+        case SourceExpr_MATCH_CASE:
+            ret = SourceExpr::MATCH_CASE;
             break;
     }
     return ret;
@@ -1814,12 +1821,89 @@ TEST_F(CHIRDeSerialzierTest, SourceExprEnum)
 {
     using Cangjie::CHIR::SourceExpr;
     auto enumBegin = PackageFormat::SourceExpr_MIN;
-    auto enumEnd = PackageFormat::SourceExpr_MAX;
+    auto enumEnd = PackageFormat::SourceExpr_FOR_IN_EXPR;
 
     for (size_t i = static_cast<size_t>(enumBegin); i <= static_cast<size_t>(enumEnd); i++) {
         EXPECT_EQ(SourceExpr(static_cast<PackageFormat::SourceExpr>(i)),
             DeSerialize(static_cast<PackageFormat::SourceExpr>(i)));
     }
+    EXPECT_EQ(SourceExpr::OTHER, DeSerialize(PackageFormat::SourceExpr_OTHER));
+    EXPECT_EQ(SourceExpr::MATCH_CASE, DeSerialize(PackageFormat::SourceExpr_MATCH_CASE));
+}
+
+TEST_F(CHIRDeSerialzierTest, MatchTraversalInfoRoundTrip)
+{
+    std::unordered_map<unsigned int, std::string> sourceNameMap;
+    CHIRContext sourceContext(&sourceNameMap);
+    CHIRBuilder sourceBuilder(sourceContext);
+    auto package = sourceBuilder.CreatePackage("test.package");
+    auto funcTy = sourceBuilder.GetType<FuncType>(std::vector<Type*>{}, sourceBuilder.GetUnitTy());
+    auto func = sourceBuilder.CreateFunction(funcTy, "test.func", "test.func", "", "test.package");
+    auto body = sourceBuilder.CreateBlockGroup(*func);
+    func->InitBody(*body);
+
+    auto entry = sourceBuilder.CreateBlock(body);
+    auto table = sourceBuilder.CreateBlock(body);
+    auto fallback = sourceBuilder.CreateBlock(body);
+    auto caseBlock = sourceBuilder.CreateBlock(body);
+    body->SetEntryBlock(entry);
+    package->SetPackageInitFunc(func);
+    package->SetPackageLiteralInitFunc(func);
+
+    auto branchCond = sourceBuilder.CreateConstantExpression<BoolLiteral>(sourceBuilder.GetBoolTy(), entry, true);
+    entry->AppendExpression(branchCond);
+    auto branch = sourceBuilder.CreateTerminator<Branch>(branchCond->GetResult(), table, fallback, entry);
+    branch->SetSourceExpr(SourceExpr::MATCH_CASE);
+    entry->AppendExpression(branch);
+
+    auto patternGoTo = sourceBuilder.CreateTerminator<GoTo>(table, fallback);
+    fallback->AppendExpression(patternGoTo);
+
+    auto tableCond = sourceBuilder.CreateConstantExpression<BoolLiteral>(sourceBuilder.GetBoolTy(), table, true);
+    table->AppendExpression(tableCond);
+    auto multiBranch = sourceBuilder.CreateTerminator<MultiBranch>(
+        tableCond->GetResult(), fallback, std::vector<uint64_t>{0}, std::vector<Block*>{caseBlock}, table);
+    multiBranch->SetSourceExpr(SourceExpr::MATCH_CASE);
+    table->AppendExpression(multiBranch);
+    caseBlock->AppendExpression(sourceBuilder.CreateTerminator<Exit>(caseBlock));
+
+    MatchTraversalInfo sourceInfo;
+    sourceInfo.MarkPatternBlock(*table);
+    sourceInfo.SetCaseId(*table, 0);
+    sourceInfo.MarkPatternGoTo(*patternGoTo);
+    auto buffer = CHIRSerializer::Serialize(*package, sourceInfo);
+
+    std::unordered_map<unsigned int, std::string> destinationNameMap;
+    CHIRContext destinationContext(&destinationNameMap);
+    CHIRBuilder destinationBuilder(destinationContext);
+    MatchTraversalInfo destinationInfo;
+    ASSERT_TRUE(CHIRDeserializer::Deserialize(buffer.data(), static_cast<int64_t>(buffer.size()), destinationBuilder,
+        destinationInfo));
+
+    bool foundPatternBlock = false;
+    bool foundPatternGoTo = false;
+    bool foundMatchCaseBranch = false;
+    bool foundMatchCaseMultiBranch = false;
+    for (auto block : destinationBuilder.GetCurPackage()->GetGlobalFuncsWithBody().front()->GetBody()->GetAllBlocks()) {
+        if (destinationInfo.IsPatternBlock(*block)) {
+            auto caseId = destinationInfo.GetCaseId(*block);
+            ASSERT_TRUE(caseId.has_value());
+            EXPECT_EQ(caseId.value(), 0);
+            foundPatternBlock = true;
+        }
+        auto terminator = block->GetTerminator();
+        if (auto goTo = Cangjie::DynamicCast<GoTo>(terminator)) {
+            foundPatternGoTo |= destinationInfo.IsPatternGoTo(*goTo);
+        } else if (auto deserializedBranch = Cangjie::DynamicCast<Branch>(terminator)) {
+            foundMatchCaseBranch |= deserializedBranch->GetSourceExpr() == SourceExpr::MATCH_CASE;
+        } else if (auto deserializedMultiBranch = Cangjie::DynamicCast<MultiBranch>(terminator)) {
+            foundMatchCaseMultiBranch |= deserializedMultiBranch->GetSourceExpr() == SourceExpr::MATCH_CASE;
+        }
+    }
+    EXPECT_TRUE(foundPatternBlock);
+    EXPECT_TRUE(foundPatternGoTo);
+    EXPECT_TRUE(foundMatchCaseBranch);
+    EXPECT_TRUE(foundMatchCaseMultiBranch);
 }
 
 TEST_F(CHIRDeSerialzierTest, LinkageEnum)
