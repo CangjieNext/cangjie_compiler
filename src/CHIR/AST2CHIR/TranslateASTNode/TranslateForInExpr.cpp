@@ -973,7 +973,6 @@ public:
         TranslateBodyBG(*body);
         TranslateCondBG(*cond, *iterEnd);
         TranslateLatchBG(*latch);
-
         auto endBlock = tr.CreateBlock();
         tr.CreateAndAppendTerminator<GoTo>(endBlock, bodyBlock);
         tr.SetCurrentBlock(*endBlock);
