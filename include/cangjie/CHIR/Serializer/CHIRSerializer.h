@@ -15,11 +15,14 @@
 
 namespace Cangjie::CHIR {
 
+class MatchTraversalInfo;
+
 class CHIRSerializer {
     class CHIRSerializerImpl;
 public:
     static void Serialize(const Package& package, const std::string filename, ToCHIR::Phase phase);
     static flatbuffers::DetachedBuffer Serialize(const Package& package);
+    static flatbuffers::DetachedBuffer Serialize(const Package& package, const MatchTraversalInfo& matchTraversalInfo);
 };
 
 } // namespace Cangjie::CHIR

@@ -182,6 +182,9 @@ PackageFormat::SourceExpr Serialize(const SourceExpr& kind)
         case SourceExpr::OTHER:
             ret = SourceExpr_OTHER;
             break;
+        case SourceExpr::MATCH_CASE:
+            ret = SourceExpr_MATCH_CASE;
+            break;
     }
     return ret;
 }
@@ -1821,7 +1824,7 @@ TEST_F(CHIRSerialzierTest, SourceExprEnum)
     using namespace PackageFormat;
     using Cangjie::CHIR::SourceExpr;
     SourceExpr enumBegin = SourceExpr::IF_EXPR;
-    SourceExpr enumEnd = SourceExpr::OTHER; // make sure this is max one we defined
+    SourceExpr enumEnd = SourceExpr::OTHER;
     EXPECT_EQ(static_cast<size_t>(enumBegin), 0);
     for (size_t i = static_cast<size_t>(enumBegin); i <= static_cast<size_t>(enumEnd); i++) {
         EXPECT_EQ(PackageFormat::SourceExpr(static_cast<SourceExpr>(i)), Serialize(static_cast<SourceExpr>(i)))
