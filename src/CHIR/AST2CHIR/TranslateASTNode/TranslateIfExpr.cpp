@@ -266,10 +266,12 @@ protected:
             indices.push_back(p.first);
             blocks.push_back(p.second);
         }
-        tr.CreateAndAppendTerminator<MultiBranch>(firstSelectorVal, firstDefaultBlock, indices, blocks, baseBlock);
+        tr.CreateWrappedMultiBranch(
+            GetSourceExpr(), firstSelectorVal, firstDefaultBlock, indices, blocks, baseBlock);
 
         // Create second switch block.
-        auto branchInfos = tr.TranslateSecondLevelAsTable(matchInfo, &enumVal, firstDefaultBlock);
+        auto branchInfos =
+            tr.TranslateSecondLevelAsTable(matchInfo, &enumVal, firstDefaultBlock, GetSourceExpr());
         // Finally create goto from case's true block to caseBody block.
         for (auto& block : std::as_const(branchInfos[0])) {
             CreateGoto(*tb, *block);
@@ -332,7 +334,8 @@ protected:
         }
         auto castedVal = tr.TypeCastOrBoxIfNeeded(val, *targetType, {});
         auto loc = tr.TranslateLocation(let);
-        auto multib = tr.CreateAndAppendTerminator<MultiBranch>(castedVal, defaultBlock, indices, blocks, baseBlock);
+        auto multib =
+            tr.CreateWrappedMultiBranch(GetSourceExpr(), castedVal, defaultBlock, indices, blocks, baseBlock);
         multib->SetDebugLocation(loc);
         tr.currentBlock = endBlock;
         return {tb, isStillReachable ? defaultBlock : nullptr};

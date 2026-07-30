@@ -10,6 +10,8 @@
 #include "cangjie/CHIR/IR/CHIRBuilder.h"
 #include <flatbuffers/detached_buffer.h>
 
+#include <optional>
+
 namespace Cangjie {
 namespace CHIR {
 class ExecutePlugin {
@@ -30,6 +32,15 @@ private:
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
         std::vector<Function*>& initFuncsForConstVar,
         std::unordered_map<Block*, Expression*>& maybeUnreachable);
+    void CaptureMatchTraversalInfo(const Package& package);
+    void RestoreMatchTraversalInfo(const Package& package);
+
+    struct MatchTraversalInfo {
+        std::string blockName;
+        ExprKind terminatorKind{ExprKind::INVALID};
+        std::optional<SourceExpr> sourceExpr;
+        std::optional<size_t> caseId;
+    };
     void StringToCHIRPtr(
         std::unordered_set<Function*>& srcCodeImportedFuncs,
         std::unordered_set<GlobalVar*>& srcCodeImportedVars,
@@ -50,6 +61,7 @@ private:
     std::unordered_set<std::string> srcCodeImportedVarNames;
     std::vector<std::string> initFuncsForConstVarNames;
     std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>> unreachableBlockNames;
+    std::unordered_map<std::string, std::vector<MatchTraversalInfo>> matchTraversalInfos;
 };
 }
 }
