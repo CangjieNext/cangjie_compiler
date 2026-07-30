@@ -1003,9 +1003,36 @@ private:
 
     // =============== Transfer functions for TypeCast expression =============== //
 
+    bool HandleEnumSelectorCast(TConstDomain& state, const TypeCast* cast)
+    {
+        auto dest = cast->GetResult();
+        auto src = cast->GetSourceValue();
+        auto srcTy = cast->GetSourceType();
+        auto targetTy = cast->GetTargetType();
+        // Enums without payload are represented by casts between the enum and its selector.
+        if (targetTy->IsEnum() &&
+            srcTy->GetTypeKind() == GetSelectorType(*StaticCast<EnumType*>(targetTy)->GetEnumDef())) {
+            if (auto srcDomain = state.CheckAbstractValueWithTopBottom(src)) {
+                state.Update(dest, *srcDomain);
+            }
+            return true;
+        }
+        if (srcTy->IsEnum() &&
+            targetTy->GetTypeKind() == GetSelectorType(*StaticCast<EnumType*>(srcTy)->GetEnumDef())) {
+            if (auto srcDomain = state.CheckAbstractValueWithTopBottom(src)) {
+                state.Update(dest, *srcDomain);
+            }
+            return true;
+        }
+        return false;
+    }
+
     ExceptionKind HandleNumericCast(TConstDomain& state, const NumericCastBase* cast)
     {
         auto dest = cast->GetResult();
+        if (HandleEnumSelectorCast(state, cast)) {
+            return ExceptionKind::NA;
+        }
         auto srcTy = cast->GetSourceType();
         if (srcTy->IsInteger()) {
             if (auto srcAbsVal = state.CheckAbstractValue(cast->GetSourceValue()); srcAbsVal) {
@@ -1022,6 +1049,9 @@ private:
         auto dest = cast->GetResult();
         auto src = cast->GetSourceValue();
         auto srcTy = cast->GetSourceType();
+        if (HandleEnumSelectorCast(state, cast)) {
+            return;
+        }
         if (srcTy->IsRef() || srcTy->IsClass()) {
             state.Propagate(src, dest);
             return;
