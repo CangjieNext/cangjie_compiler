@@ -1045,6 +1045,22 @@ private:
     {
         auto dest = cast->GetResult();
         auto srcTy = cast->GetSourceTy();
+        // The enum selector is lowered as a TypeCast to its integer or Bool tag. Enum values retain the tag at child 0.
+        if (srcTy->IsEnum() && (dest->GetType()->IsInteger() || dest->GetType()->IsBoolean())) {
+            auto enumValue = cast->GetSourceValue();
+            if (auto enumTag = state.GetChild(enumValue, 0); enumTag && state.CheckAbstractValue(enumTag)) {
+                state.Propagate(enumTag, dest);
+            } else if (auto constEnum = state.CheckAbstractValue(enumValue)) {
+                state.Update(dest, constEnum->Clone());
+            } else {
+                state.SetToBound(dest, /* isTop = */ true);
+            }
+            return ExceptionKind::NA;
+        }
+        if (dest->GetType()->IsEnum() && (srcTy->IsInteger() || srcTy->IsBoolean())) {
+            state.Propagate(cast->GetSourceValue(), dest);
+            return ExceptionKind::NA;
+        }
         if (srcTy->IsInteger()) {
             if (auto srcAbsVal = state.CheckAbstractValue(cast->GetSourceValue()); srcAbsVal) {
                 return HandleTypecastOfInt(state, cast, srcAbsVal);
@@ -1057,6 +1073,55 @@ private:
 
         state.SetToTopOrTopRef(dest, /* isRef = */ dest->GetType()->IsRef());
         return ExceptionKind::NA;
+    }
+
+    static bool IsMatchedEnumCase(const ConstValue* enumTag, size_t enumCaseIndex)
+    {
+        switch (enumTag->GetConstKind()) {
+            case ConstValue::ConstKind::BOOL:
+                return enumCaseIndex < 2 && StaticCast<const ConstBoolVal*>(enumTag)->GetVal() ==
+                    static_cast<bool>(enumCaseIndex);
+            case ConstValue::ConstKind::UINT:
+                return StaticCast<const ConstUIntVal*>(enumTag)->GetVal() == enumCaseIndex;
+            case ConstValue::ConstKind::INT: {
+                auto value = StaticCast<const ConstIntVal*>(enumTag)->GetVal();
+                return value >= 0 && static_cast<uint64_t>(value) == enumCaseIndex;
+            }
+            default:
+                return false;
+        }
+    }
+
+    void PreHandleFieldExpr(TConstDomain& state, const Field* field) override
+    {
+        const auto& path = field->GetPath();
+        auto base = field->GetBase();
+        auto tupleCast =
+            base->IsLocalVar() ? DynamicCast<TypeCast>(StaticCast<LocalVar*>(base)->GetExpr()) : nullptr;
+        if (!path.empty() && path[0] > 0 && tupleCast != nullptr && tupleCast->GetSourceTy()->IsEnum()) {
+            auto enumCaseIndex = tupleCast->GetResult()->Get<EnumCaseIndex>();
+            auto source = tupleCast->GetSourceValue();
+            auto sourceTuple =
+                source->IsLocalVar() ? DynamicCast<Tuple>(StaticCast<LocalVar*>(source)->GetExpr()) : nullptr;
+            if (enumCaseIndex.has_value() && sourceTuple != nullptr && sourceTuple->GetResult() == source) {
+                auto sourceElements = sourceTuple->GetElementValues();
+                auto enumTag = state.GetChild(source, 0);
+                auto enumTagValue = enumTag ? state.CheckAbstractValue(enumTag) : nullptr;
+                if (path[0] < sourceElements.size() && enumTagValue != nullptr &&
+                    IsMatchedEnumCase(enumTagValue, enumCaseIndex.value())) {
+                    // Enum pattern lowering projects payload i as Field(TypeCast(enum, Tuple<tag, payload...>), 1 + i).
+                    auto payload = sourceElements[path[0]];
+                    for (size_t i = 1; payload != nullptr && i < path.size(); ++i) {
+                        payload = state.GetChild(payload, path[i]);
+                    }
+                    if (payload != nullptr && payload->GetType() == field->GetResult()->GetType()) {
+                        state.Propagate(payload, field->GetResult());
+                        return;
+                    }
+                }
+            }
+        }
+        ValueAnalysis<ConstValueDomain, ValueStatePool>::PreHandleFieldExpr(state, field);
     }
 
     template <typename TTypeCast>
@@ -1200,8 +1265,22 @@ private:
         }
     }
 
+    void HandleInvokeExpr(TConstDomain& state, const Invoke* /* invoke */, Value* /* refObj */) override
+    {
+        state.SetMutableLocalStatesToTop();
+    }
+
+    std::optional<Block*> HandleInvokeWithExceptionTerminator(
+        TConstDomain& state, const InvokeWithException* /* invoke */, Value* /* refObj */) override
+    {
+        state.SetMutableLocalStatesToTop();
+        return std::nullopt;
+    }
+
     template <typename TApply> ExceptionKind HandleApply(TConstDomain& state, const TApply* apply, Value* /* refObj */)
     {
+        state.SetMutableLocalStatesToTop();
+
         auto calleeFunc = DynamicCast<Function*>(apply->GetCallee());
         if (!calleeFunc) {
             return ExceptionKind::NA;

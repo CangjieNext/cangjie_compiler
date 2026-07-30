@@ -430,6 +430,22 @@ public:
         }
     }
 
+    /// Set the state of source-level mutable local variables and their children to Top.
+    void SetMutableLocalStatesToTop()
+    {
+        std::vector<Value*> mutableLocals;
+        for (auto it = programState.Begin(); it != programState.End(); ++it) {
+            auto value = it->first;
+            if (value->IsLocalVar() && !value->GetSrcCodeIdentifier().empty() &&
+                !value->TestAttr(Attribute::READONLY)) {
+                mutableLocals.emplace_back(value);
+            }
+        }
+        for (auto value : mutableLocals) {
+            SetSelfAndChildrenStateToTop(value);
+        }
+    }
+
 private:
     Ref* CreateNewRef(const Expression* expr = nullptr, bool createTwoLevelRef = false)
     {
