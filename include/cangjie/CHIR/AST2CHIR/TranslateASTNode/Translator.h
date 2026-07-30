@@ -625,6 +625,10 @@ private:
     };
 
 private:
+    void StartUnreachableContinuation(const AST::Node& node);
+    void CreateUnreachableContinuation(Expression& terminator);
+    void FinishUnreachableContinuation(const DebugLocation& loc);
+
     void SetSymbolTable(const AST::Node& node, Value& val, bool isLocal = true);
     Ptr<Value> GetSymbolTable(const AST::Node& node) const;
     Ptr<CustomTypeDef> GetNominalSymbolTable(const AST::Node& node);
@@ -638,7 +642,11 @@ private:
     }
     Block* CreateBlock()
     {
-        return builder.CreateBlock(blockGroupStack.back());
+        auto block = builder.CreateBlock(blockGroupStack.back());
+        if (auto it = maybeUnreachable.find(currentBlock); it != maybeUnreachable.end()) {
+            maybeUnreachable.emplace(block, it->second);
+        }
+        return block;
     }
     void SetFuncBlockGroup(BlockGroup& group);
     bool OverloadableExprMayThrowException(const AST::OverloadableExpr& expr, const Type& leftValTy) const;
