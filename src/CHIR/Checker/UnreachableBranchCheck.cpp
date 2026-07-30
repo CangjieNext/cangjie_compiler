@@ -6,8 +6,6 @@
 
 #include "cangjie/CHIR/Checker/UnreachableBranchCheck.h"
 
-#include <algorithm>
-
 using namespace Cangjie::CHIR;
 
 UnreachableBranchCheck::UnreachableBranchCheck(
@@ -33,18 +31,22 @@ std::string GetKeyWordBySourceExpr(const Branch& branch)
 
 bool IsMatchCaseFailureEdge(const Branch& branch)
 {
-    if (branch.GetSourceExpr() != SourceExpr::MATCH_EXPR) {
-        return false;
+    return branch.GetSourceExpr() == SourceExpr::MATCH_CASE;
+}
+
+void ClearMatchPattern(const BlockGroup& group)
+{
+    for (auto block : group.GetBlocks()) {
+        block->DisableAttr(Attribute::MATCH_PATTERN);
+        if (auto goTo = Cangjie::DynamicCast<GoTo>(block->GetTerminator())) {
+            goTo->DisableAttr(Attribute::MATCH_PATTERN);
+        }
+        for (auto expression : block->GetExpressions()) {
+            if (auto lambda = Cangjie::DynamicCast<Lambda>(expression)) {
+                ClearMatchPattern(*lambda->GetBody());
+            }
+        }
     }
-    const auto& caseScope = branch.GetParentBlock()->GetDebugLocation().GetScopeInfo();
-    const auto& matchedScope = branch.GetTrueBlock()->GetDebugLocation().GetScopeInfo();
-    const auto& nextCaseScope = branch.GetFalseBlock()->GetDebugLocation().GetScopeInfo();
-    if (caseScope.empty() || matchedScope != caseScope || nextCaseScope.size() != caseScope.size()) {
-        return false;
-    }
-    // Match case branches stay in the current case scope and advance its last scope index on the false edge.
-    return std::equal(caseScope.begin(), caseScope.end() - 1, nextCaseScope.begin()) &&
-        nextCaseScope.back() != caseScope.back();
 }
 
 } // namespace
@@ -77,35 +79,52 @@ void UnreachableBranchCheck::RunOnPackage(const Package& package, size_t threadN
         }
         taskQueue.RunAndWaitForAllTasksCompleted();
     }
+    for (auto func : package.GetGlobalFuncsWithBody()) {
+        ClearMatchPattern(*func->GetBody());
+    }
 }
 
 void UnreachableBranchCheck::PrintMatchSuccessors(
     Block& block, std::set<Block*>& hasProcessed)
 {
-    if (maybeUnreachableBlocks.find(&block) != maybeUnreachableBlocks.end()) {
-        return;
-    }
-    auto terminator = block.GetTerminator();
-    while (auto goTo = DynamicCast<GoTo>(terminator)) {
-        auto destination = goTo->GetDestination();
-        if (maybeUnreachableBlocks.find(destination) != maybeUnreachableBlocks.end()) {
+    auto current = &block;
+    while (true) {
+        if (maybeUnreachableBlocks.find(current) != maybeUnreachableBlocks.end() ||
+            !current->TestAttr(Attribute::MATCH_PATTERN)) {
             return;
         }
-        if (!hasProcessed.emplace(destination).second) {
+        auto terminator = current->GetTerminator();
+        while (auto goTo = DynamicCast<GoTo>(terminator)) {
+            auto destination = goTo->GetDestination();
+            if (maybeUnreachableBlocks.find(destination) != maybeUnreachableBlocks.end() ||
+                !goTo->TestAttr(Attribute::MATCH_PATTERN) || !hasProcessed.emplace(destination).second) {
+                return;
+            }
+            current = destination;
+            terminator = current->GetTerminator();
+        }
+        auto matchBranch = DynamicCast<Branch>(terminator);
+        if (matchBranch == nullptr) {
+            if (auto multiBranch = DynamicCast<MultiBranch>(terminator)) {
+                // Table lowering can dispatch directly to several source-level cases.
+                for (auto successor : multiBranch->GetSuccessors()) {
+                    PrintWarning(*multiBranch, *successor, hasProcessed);
+                }
+            }
             return;
         }
-        terminator = destination->GetTerminator();
-    }
-    if (auto matchBranch = DynamicCast<Branch>(terminator); matchBranch && IsMatchCaseFailureEdge(*matchBranch)) {
-        // A match false edge enters the next source-level case. Do not traverse the true case body.
         auto nextCase = matchBranch->GetFalseBlock();
-        PrintWarning(*matchBranch, *nextCase, hasProcessed);
-        PrintMatchSuccessors(*nextCase, hasProcessed);
-    } else if (auto multiBranch = DynamicCast<MultiBranch>(terminator)) {
-        // Table lowering can dispatch directly to several source-level cases.
-        for (auto successor : multiBranch->GetSuccessors()) {
-            PrintWarning(*multiBranch, *successor, hasProcessed);
+        if (matchBranch->GetSourceExpr() == SourceExpr::MATCH_EXPR) {
+            current = nextCase;
+            continue;
         }
+        if (IsMatchCaseFailureEdge(*matchBranch)) {
+            // A MATCH_CASE false edge enters the next source-level case.
+            PrintWarning(*matchBranch, *nextCase, hasProcessed);
+            current = nextCase;
+            continue;
+        }
+        return;
     }
 }
 
@@ -132,7 +151,8 @@ void UnreachableBranchCheck::PrintWarning(
         auto branch = StaticCast<const Branch*>(&node);
         if (branch->GetSourceExpr() == SourceExpr::QUEST || branch->GetSourceExpr() == SourceExpr::BINARY) {
             (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_dce_unreachable_expression, range);
-        } else if (branch->GetSourceExpr() == SourceExpr::MATCH_EXPR) {
+        } else if (branch->GetSourceExpr() == SourceExpr::MATCH_EXPR ||
+            branch->GetSourceExpr() == SourceExpr::MATCH_CASE) {
             (void)diag.DiagnoseRefactor(DiagKindRefactor::chir_unreachable_pattern, range);
         } else {
             auto keyWord = GetKeyWordBySourceExpr(*branch);
@@ -167,7 +187,8 @@ void UnreachableBranchCheck::VisitFunc(Results<TConstDomain>& result)
                             continue;
                         }
                         PrintWarning(*branchNode, *successor, hasProcessed);
-                        if (branchNode->GetSourceExpr() == SourceExpr::MATCH_EXPR &&
+                        if ((branchNode->GetSourceExpr() == SourceExpr::MATCH_EXPR ||
+                                branchNode->GetSourceExpr() == SourceExpr::MATCH_CASE) &&
                             successor == branchNode->GetFalseBlock()) {
                             PrintMatchSuccessors(*successor, hasProcessed);
                         }
