@@ -31,9 +31,18 @@ public:
 private:
     void PrintWarning(const Expression& node, Block& block, std::set<Block*>& hasProcessed);
     void PrintMatchSuccessors(Block& block, std::set<Block*>& hasProcessed);
+    void PrintMatchTableSuccessors(Block& block, std::set<Block*>& hasProcessed,
+        std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups);
+    void PrintMatchTableCases(MultiBranch& table, std::set<Block*>& hasProcessed,
+        std::set<size_t>& reportedCaseIds, const std::set<Block*>& constructorGroups);
+    void VisitBranch(Branch& branch, Block& target, const std::set<Block*>& constructorGroups);
+    void VisitMultiBranch(MultiBranch& branch, Block& target, const std::set<Block*>& constructorGroups);
+    void VisitMultiBranchSuccessor(MultiBranch& branch, Block& successor, bool isOuterMatchTable,
+        std::set<Block*>& hasProcessed, std::set<size_t>& reportedCaseIds,
+        const std::set<Block*>& constructorGroups);
 
     template <typename TConstDomain>
-    void VisitFunc(Results<TConstDomain>& result);
+    void VisitFunc(Results<TConstDomain>& result, const std::set<Block*>& constructorGroups);
 
     DiagnosticEngine& diag;
     ConstAnalysisWrapper* analysisWrapper;
