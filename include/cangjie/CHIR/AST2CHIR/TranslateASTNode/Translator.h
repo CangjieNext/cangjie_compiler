@@ -634,6 +634,10 @@ private:
     };
 
 private:
+    void StartUnreachableContinuation(const AST::Node& node);
+    void CreateUnreachableContinuation(Terminator& terminator);
+    void FinishUnreachableContinuation(const DebugLocation& loc);
+
     void SetSymbolTable(const AST::Node& node, Value& val, bool isLocal = true);
     Ptr<Value> GetSymbolTable(const AST::Node& node) const;
     Ptr<CustomTypeDef> GetNominalSymbolTable(const AST::Node& node);
@@ -647,7 +651,11 @@ private:
     }
     Block* CreateBlock()
     {
-        return builder.CreateBlock(blockGroupStack.back());
+        auto block = builder.CreateBlock(blockGroupStack.back());
+        if (auto it = maybeUnreachable.find(currentBlock); it != maybeUnreachable.end()) {
+            maybeUnreachable.emplace(block, it->second);
+        }
+        return block;
     }
     void SetFuncBlockGroup(BlockGroup& group);
     bool OverloadableExprMayThrowException(const AST::OverloadableExpr& expr, const Type& leftValTy) const;
@@ -883,6 +891,7 @@ private:
     Ptr<Value> GetOuterBlockGroupReturnValLocation();
     void TranslateForInCondControlFlow(Ptr<Value>& condVar);
     void TranslateForInBodyBlockGroup(const AST::ForInExpr& forInExpr);
+    void FinalizeForInBlockGroup(const AST::ForInExpr& forInExpr, BlockGroup& blockGroup);
     friend class TranslateForInExpr;
 
     // ========Methods used for translating ForInExpr with Range kind========
