@@ -96,6 +96,7 @@ enum SourceExpr: uint8 {
   QUEST,
   BINARY,
   FOR_IN_EXPR,
+  MATCH_CASE,
   OTHER,
 }
 
@@ -383,6 +384,9 @@ table Block {
   predecessors: [uint32];  // use values id
   isLandingPadBlock: bool;
   exceptionCatchList: [uint32];  // use types id
+  isPatternBlock: bool = false;
+  hasMatchCaseId: bool = false;
+  matchCaseId: uint64 = 0;
 }
 
 table BlockGroup {
@@ -1034,6 +1038,7 @@ table Expression {
   owner: uint32; // enclosing Block, use values id
   resultLocalVar: uint32; // use values id
   resultTy: uint32; // use types id
+  isPatternGoTo: bool = false;
 }
 
 table UnaryExpressionBase {
@@ -1085,6 +1090,7 @@ table Branch {
 table MultiBranch {
   base: Expression;
   caseValues: [uint64];
+  sourceExpr: SourceExpr = OTHER;
 }
 
 table GetElementRef {

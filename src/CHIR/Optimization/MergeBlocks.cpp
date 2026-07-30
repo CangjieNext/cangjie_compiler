@@ -112,20 +112,23 @@ void MergeForInCondBlock(CHIRBuilder& builder, Block& block)
 }
 } // namespace
 
-void MergeBlocks::RunOnPackage(const Package& package, CHIRBuilder& builder, const GlobalOptions& opts)
+void MergeBlocks::RunOnPackage(const Package& package, CHIRBuilder& builder, const GlobalOptions& opts,
+    const MatchTraversalInfo* matchTraversalInfo)
 {
     for (auto func : package.GetGlobalFuncsWithBody()) {
         bool isCommonFunctionWithoutBody = func->TestAttr(Attribute::SKIP_ANALYSIS);
         if (isCommonFunctionWithoutBody) {
             continue; // Nothing to visit
         }
-        RunOnFunc(*func->GetBody(), builder, opts);
+        RunOnFunc(*func->GetBody(), builder, opts, matchTraversalInfo);
     }
 }
 
-static bool SkipMergeBlock(const Block& bl, const GlobalOptions& opts)
+static bool SkipMergeBlock(
+    const Block& bl, const GlobalOptions& opts, const MatchTraversalInfo* matchTraversalInfo)
 {
-    if (bl.TestAttr(Attribute::UNREACHABLE) || bl.TestAttr(Attribute::MATCH_PATTERN)) {
+    if (bl.TestAttr(Attribute::UNREACHABLE) ||
+        (matchTraversalInfo && matchTraversalInfo->IsPatternBlock(bl))) {
         return true;
     }
     if (!opts.enableCompileDebug) {
@@ -135,73 +138,88 @@ static bool SkipMergeBlock(const Block& bl, const GlobalOptions& opts)
     return term && !term->GetDebugLocation().IsInvalidPos();
 }
 
-void MergeBlocks::RunOnFunc(const BlockGroup& body, CHIRBuilder& builder, const GlobalOptions& opts)
+static bool CheckSingleEntrySingleExit(
+    const Block& block, const GlobalOptions& opts, const MatchTraversalInfo* matchTraversalInfo)
 {
-    auto checkSingleEntrySingleExit = [](const Block& block, const GlobalOptions& opts) {
-        if (SkipMergeBlock(block, opts)) {
-            return false;
+    if (SkipMergeBlock(block, opts, matchTraversalInfo)) {
+        return false;
+    }
+    auto preds = block.GetPredecessors();
+    if (preds.size() != 1 || (matchTraversalInfo && matchTraversalInfo->IsPatternBlock(*preds[0]))) {
+        return false;
+    }
+    auto succs = preds[0]->GetSuccessors();
+    if (succs.size() != 1) {
+        return false;
+    }
+    // The terminator of pred must be GoTo
+    auto term = preds[0]->GetTerminator();
+    if (term == nullptr || term->GetExprKind() != CHIR::ExprKind::GOTO) {
+        return false;
+    }
+    if (opts.enableCompileDebug || opts.enableCoverage) {
+        auto [line, column] = term->GetDebugLocation().GetBeginPos();
+        return line == 0 && column == 0;
+    }
+    return true;
+}
+
+static bool CheckGotoOnly(
+    const Block& block, const GlobalOptions& opts, const MatchTraversalInfo* matchTraversalInfo)
+{
+    if (block.GetExpressions().size() != 1 || block.IsEntry() ||
+        SkipMergeBlock(block, opts, matchTraversalInfo)) {
+        return false;
+    }
+    auto term = block.GetTerminator();
+    if (term == nullptr || term->GetExprKind() != CHIR::ExprKind::GOTO) {
+        return false;
+    }
+    if (auto preds = block.GetPredecessors(); std::find(preds.begin(), preds.end(), &block) != preds.end()) {
+        /* The following chir cannot be merged.
+         *
+         *  Block #1: // preds:
+         *    ...
+         *    Goto(#2)
+         *
+         *  Block #2: // preds: #1, #2
+         *    Goto(#2)
+         */
+        return false;
+    }
+    if (opts.enableCompileDebug || opts.enableCoverage) {
+        auto [line, column] = term->GetDebugLocation().GetBeginPos();
+        return line == 0 && column == 0;
+    }
+    return true;
+}
+
+static void MergeLambdaBlocks(const Block& block, CHIRBuilder& builder, const GlobalOptions& opts,
+    const MatchTraversalInfo* matchTraversalInfo)
+{
+    for (auto expr : block.GetExpressions()) {
+        if (expr->GetExprKind() == CHIR::ExprKind::LAMBDA) {
+            MergeBlocks::RunOnFunc(
+                *StaticCast<const Lambda*>(expr)->GetBody(), builder, opts, matchTraversalInfo);
         }
-        auto preds = block.GetPredecessors();
-        if (preds.size() != 1 || preds[0]->TestAttr(Attribute::MATCH_PATTERN)) {
-            return false;
-        }
-        auto succs = preds[0]->GetSuccessors();
-        if (succs.size() != 1) {
-            return false;
-        }
-        // The terminator of pred must be GoTo
-        auto term = preds[0]->GetTerminator();
-        if (term == nullptr || term->GetExprKind() != ExprKind::GOTO) {
-            return false;
-        }
-        if (opts.enableCompileDebug || opts.enableCoverage) {
-            auto [line, column] = term->GetDebugLocation().GetBeginPos();
-            return line == 0 && column == 0;
-        }
-        return true;
-    };
-    auto checkGotoOnly = [](const Block& block, const GlobalOptions& opts) {
-        if (block.GetExpressions().size() != 1 || block.IsEntry() || SkipMergeBlock(block, opts)) {
-            return false;
-        }
-        auto term = block.GetTerminator();
-        if (term == nullptr || term->GetExprKind() != ExprKind::GOTO) {
-            return false;
-        }
-        if (auto preds = block.GetPredecessors(); std::find(preds.begin(), preds.end(), &block) != preds.end()) {
-            /* The following chir cannot be merged.
-             *
-             *  Block #1: // preds:
-             *    ...
-             *    Goto(#2)
-             *
-             *  Block #2: // preds: #1, #2
-             *    Goto(#2)
-             */
-            return false;
-        }
-        if (opts.enableCompileDebug || opts.enableCoverage) {
-            auto [line, column] = term->GetDebugLocation().GetBeginPos();
-            return line == 0 && column == 0;
-        }
-        return true;
-    };
+    }
+}
+
+void MergeBlocks::RunOnFunc(const BlockGroup& body, CHIRBuilder& builder, const GlobalOptions& opts,
+    const MatchTraversalInfo* matchTraversalInfo)
+{
     bool isStable;
     do {
         isStable = true;
         for (auto block : body.GetBlocks()) {
-            for (auto expr : block->GetExpressions()) {
-                if (expr->GetExprKind() == ExprKind::LAMBDA) {
-                    RunOnFunc(*StaticCast<const Lambda*>(expr)->GetBody(), builder, opts);
-                }
-            }
+            MergeLambdaBlocks(*block, builder, opts, matchTraversalInfo);
             if (block->Get<GeneratedFromForIn>()) {
                 isStable = false;
                 MergeForInCondBlock(builder, *block);
-            } else if (checkSingleEntrySingleExit(*block, opts)) {
+            } else if (CheckSingleEntrySingleExit(*block, opts, matchTraversalInfo)) {
                 isStable = false;
                 MergeIntoPredecessor(*block);
-            } else if (checkGotoOnly(*block, opts)) {
+            } else if (CheckGotoOnly(*block, opts, matchTraversalInfo)) {
                 isStable = false;
                 MergeGotoOnlyBlock(*block);
             }
