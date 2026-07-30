@@ -97,6 +97,7 @@ enum SourceExpr: uint8 {
   BINARY,
   FOR_IN_EXPR,
   OTHER,
+  MATCH_CASE,
 }
 
 table Type {
