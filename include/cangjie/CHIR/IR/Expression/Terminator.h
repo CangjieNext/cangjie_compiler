@@ -28,7 +28,9 @@ enum class SourceExpr : uint8_t {
     QUEST,
     BINARY,
     FOR_IN_EXPR,
-    OTHER
+    OTHER,
+    // The false edge advances from one source-level match case to the next.
+    MATCH_CASE
 };
 
 /**

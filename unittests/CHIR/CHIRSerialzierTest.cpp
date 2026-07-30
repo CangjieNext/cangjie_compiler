@@ -182,6 +182,9 @@ PackageFormat::SourceExpr Serialize(const SourceExpr& kind)
         case SourceExpr::OTHER:
             ret = SourceExpr_OTHER;
             break;
+        case SourceExpr::MATCH_CASE:
+            ret = SourceExpr_MATCH_EXPR;
+            break;
     }
     return ret;
 }
@@ -1803,6 +1806,7 @@ TEST_F(CHIRSerialzierTest, SourceExprEnum)
         EXPECT_EQ(PackageFormat::SourceExpr(static_cast<SourceExpr>(i)), Serialize(static_cast<SourceExpr>(i)))
             << "cur i: " << i;
     }
+    EXPECT_EQ(PackageFormat::SourceExpr_MATCH_EXPR, Serialize(SourceExpr::MATCH_CASE));
 }
 
 TEST_F(CHIRSerialzierTest, LinkageEnum)
