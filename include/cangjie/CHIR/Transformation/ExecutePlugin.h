@@ -49,7 +49,7 @@ private:
     std::unordered_set<std::string> srcCodeImportedFuncNames;
     std::unordered_set<std::string> srcCodeImportedVarNames;
     std::vector<std::string> initFuncsForConstVarNames;
-    std::unordered_map<std::string, std::pair<std::string, std::string>> unreachableBlockNames;
+    std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>> unreachableBlockNames;
 };
 }
 }
