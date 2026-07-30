@@ -298,6 +298,17 @@ template <> flatbuffers::Offset<PackageFormat::Base> CHIRSerializer::CHIRSeriali
         annos.emplace_back(PackageFormat::CreateEnumCaseIndex(builder, indexNum).Union());
     };
 
+    // MatchCaseId
+    annoHandler[typeid(CHIR::MatchCaseId)] = [this, &annos, &annoTypes](Annotation* anno) {
+        annoTypes.push_back(PackageFormat::Annotation::Annotation_matchCaseId);
+        auto id = MatchCaseId::Extract(StaticCast<CHIR::MatchCaseId*>(anno));
+        int64_t idNum = -1;
+        if (id.has_value()) {
+            idNum = static_cast<int64_t>(id.value());
+        }
+        annos.emplace_back(PackageFormat::CreateMatchCaseId(builder, idNum).Union());
+    };
+
     // VirMethodOffset
     annoHandler[typeid(CHIR::VirMethodOffset)] = [this, &annos, &annoTypes](Annotation* anno) {
         annoTypes.push_back(PackageFormat::Annotation::Annotation_virMethodOffset);
@@ -954,7 +965,9 @@ flatbuffers::Offset<PackageFormat::MultiBranch> CHIRSerializer::CHIRSerializerIm
 {
     auto base = Serialize<PackageFormat::Expression>(static_cast<const Expression&>(obj));
     auto caseVals = obj.GetCaseVals();
-    return PackageFormat::CreateMultiBranchDirect(builder, base, caseVals.empty() ? nullptr : &caseVals);
+    auto sourceExpr = obj.GetSourceExpr();
+    return PackageFormat::CreateMultiBranchDirect(
+        builder, base, caseVals.empty() ? nullptr : &caseVals, PackageFormat::SourceExpr(sourceExpr));
 }
 
 template <>

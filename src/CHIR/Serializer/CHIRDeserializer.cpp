@@ -1212,7 +1212,10 @@ template <> MultiBranch* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(con
     }
     auto owner = GetValue<Block>(obj->base()->owner());
     auto caseVals = std::vector<uint64_t>(obj->caseValues()->begin(), obj->caseValues()->end());
-    return builder.CreateTerminator<MultiBranch>(cond, defaultBlock, caseVals, caseBlocks, owner);
+    auto sourceExpr = CHIR::SourceExpr(obj->sourceExpr());
+    auto result = builder.CreateTerminator<MultiBranch>(cond, defaultBlock, caseVals, caseBlocks, owner);
+    result->SetSourceExpr(sourceExpr);
+    return result;
 }
 
 template <>
@@ -1363,6 +1366,13 @@ void CHIRDeserializer::CHIRDeserializerImpl::ConfigBase(const PackageFormat::Bas
                 int64_t index = static_cast<const PackageFormat::EnumCaseIndex*>(anno)->index();
                 if (index != -1) {
                     obj.Set<CHIR::EnumCaseIndex>(static_cast<size_t>(index));
+                }
+                break;
+            }
+            case PackageFormat::Annotation::Annotation_matchCaseId: {
+                int64_t id = static_cast<const PackageFormat::MatchCaseId*>(anno)->id();
+                if (id != -1) {
+                    obj.Set<CHIR::MatchCaseId>(static_cast<size_t>(id));
                 }
                 break;
             }

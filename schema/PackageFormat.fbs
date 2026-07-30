@@ -216,6 +216,10 @@ table OverrideSrcFuncType {
   type: uint32;  // use types id
 }
 
+table MatchCaseId {
+  id: int64 = -1;
+}
+
 union Annotation {
   needCheckArrayBound: NeedCheckArrayBound,
   needCheckCast: NeedCheckCast,
@@ -229,7 +233,8 @@ union Annotation {
   enumCaseIndex: EnumCaseIndex,
   virMethodOffset: VirMethodOffset,
   wrappedRawMethod: WrappedRawMethod,
-  overrideSrcFuncType : OverrideSrcFuncType
+  overrideSrcFuncType : OverrideSrcFuncType,
+  matchCaseId: MatchCaseId
 }
 
 table Base {
@@ -1086,6 +1091,7 @@ table Branch {
 table MultiBranch {
   base: Expression;
   caseValues: [uint64];
+  sourceExpr: SourceExpr = OTHER;
 }
 
 table GetElementRef {
