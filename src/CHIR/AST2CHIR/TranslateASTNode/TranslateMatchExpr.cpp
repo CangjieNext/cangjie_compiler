@@ -146,11 +146,17 @@ void Translator::TranslateMatchWithSelector(const AST::MatchExpr& matchExpr, Ptr
             context->ScopePlus();
         }
         auto current = matchExpr.matchCases[i].get();
+        std::optional<DebugLocation> matchedBlockLoc;
+        if (current->patterns.size() == 1 && current->patternGuard) {
+            // A case rejected before its guard is evaluated diagnoses the complete case head.
+            matchedBlockLoc.emplace(TranslateLocation(current->patterns.front()->begin, current->patternGuard->end));
+        }
         // Generate case pattern condition and set var pattern symbol.
         auto [falseBlock, trueBlock] = current->patterns.size() == 1
-            ? TranslateNestingCasePattern(*current->patterns[0], selectorVal, originLoc, sourceExpr)
+            ? TranslateNestingCasePattern(*current->patterns[0], selectorVal, originLoc, sourceExpr,
+                matchedBlockLoc ? &*matchedBlockLoc : nullptr)
             : TranslateOrPattern(current->patterns, selectorVal, originLoc);
-        TranslatePatternGuard(*current, falseBlock, trueBlock);
+        TranslatePatternGuard(*current, falseBlock, trueBlock, sourceExpr, originLoc);
         if (sourceExpr == SourceExpr::QUEST && i == 0) {
             CJC_ASSERT(caseNum == 2); // 2 denote than QUEST has two cases.
             if (!matchExpr.matchCases[1]->exprOrDecls->body.empty()) {
@@ -177,17 +183,24 @@ void Translator::TranslateMatchWithSelector(const AST::MatchExpr& matchExpr, Ptr
 }
 
 /**
- * Translate pattern guard if existed, and update @p 'trueBlock' .
+ * Translate pattern guard if existed, and update @p 'trueBlock'. Keep @p sourceExpr on the generated branch so
+ * unreachable checking can distinguish match guards from ordinary control flow.
  */
-void Translator::TranslatePatternGuard(const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock)
+void Translator::TranslatePatternGuard(
+    const AST::MatchCase& matchCase, Ptr<Block> falseBlock, Ptr<Block>& trueBlock, SourceExpr sourceExpr,
+    const DebugLocation& originLoc)
 {
     if (!matchCase.patternGuard) {
         return;
     }
     currentBlock = trueBlock;
     auto newTrueBlock = CreateBlock();
+    const auto& guardLoc = TranslateLocation(*matchCase.patternGuard);
+    if (sourceExpr != SourceExpr::QUEST && !originLoc.IsInvalidPos()) {
+        newTrueBlock->SetDebugLocation(guardLoc);
+    }
     auto cond = TranslateExprArg(*matchCase.patternGuard);
-    CreateAndAppendTerminator<Branch>(cond, newTrueBlock, falseBlock, currentBlock);
+    CreateWrappedBranch(sourceExpr, cond, newTrueBlock, falseBlock, currentBlock);
     trueBlock = newTrueBlock;
 }
 
@@ -197,8 +210,11 @@ Block* Translator::TranslateMatchCaseBody(
     auto loc = caseBody.rightCurlPos.IsZero() ? caseBody.body.empty() ? TranslateLocation(caseBody.end, caseBody.end)
         : TranslateLocation(*caseBody.body.back()) : TranslateLocation(caseBody);
     TranslateSubExprToLoc(caseBody, retVal, loc);
+    FinishUnreachableContinuation(loc);
     auto currentBody = GetBlockByAST(caseBody);
-    CreateAndAppendTerminator<GoTo>(endBlock, currentBlock);
+    if (currentBlock->GetTerminator() == nullptr && maybeUnreachable.find(currentBlock) == maybeUnreachable.end()) {
+        CreateAndAppendTerminator<GoTo>(endBlock, currentBlock);
+    }
     // Return the free block for connecting control flow at outside.
     return currentBody;
 }
@@ -387,7 +403,8 @@ Ptr<Value> Translator::DispatchingPattern(std::queue<std::pair<Ptr<const AST::Pa
 }
 
 std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateNestingCasePattern(const AST::Pattern& pattern,
-    const Ptr<Value> selectorVal, const DebugLocation& originLoc, const SourceExpr& sourceExpr)
+    const Ptr<Value> selectorVal, const DebugLocation& originLoc, const SourceExpr& sourceExpr,
+    const DebugLocation* matchedBlockLoc)
 {
     auto falseBlock = CreateBlock();
     auto trueBlock = CreateBlock();
@@ -396,7 +413,7 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateNestingCasePattern(const 
     auto newBlock = CreateBlock();
     const auto& patternLoc = TranslateLocation(pattern);
     if (sourceExpr != SourceExpr::QUEST) {
-        currentBlock->SetDebugLocation(patternLoc);
+        currentBlock->SetDebugLocation(matchedBlockLoc ? *matchedBlockLoc : patternLoc);
     }
     while (!queue.empty()) {
         // Typecast of varPattern must be generated at the real trueBlock.
@@ -404,7 +421,7 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateNestingCasePattern(const 
         if (cond) {
             auto nextBlock = queue.empty() ? trueBlock : newBlock;
             if (sourceExpr != SourceExpr::QUEST) {
-                nextBlock->SetDebugLocation(patternLoc);
+                nextBlock->SetDebugLocation(matchedBlockLoc ? *matchedBlockLoc : patternLoc);
             }
             CreateWrappedBranch(sourceExpr, GetDerefedValue(cond), nextBlock, falseBlock, currentBlock);
             currentBlock = nextBlock;
@@ -413,7 +430,7 @@ std::pair<Ptr<Block>, Ptr<Block>> Translator::TranslateNestingCasePattern(const 
             }
         } else if (queue.empty()) {
             if (sourceExpr != SourceExpr::QUEST) {
-                currentBlock->SetDebugLocation(patternLoc);
+                currentBlock->SetDebugLocation(matchedBlockLoc ? *matchedBlockLoc : patternLoc);
             }
             CreateAndAppendTerminator<GoTo>(trueBlock, currentBlock);
         }
@@ -972,7 +989,8 @@ void Translator::TranslateSecondLevelTable(Ptr<Block> endBlock, const Ptr<Block>
             auto cond = DispatchingPattern(queue, {trueBlock, newBlock}, originLoc);
             if (cond) {
                 auto nextBlock = queue.empty() ? trueBlock : newBlock;
-                CreateAndAppendTerminator<Branch>(cond, nextBlock, falseBlock, currentBlock);
+                CreateAndAppendTerminator<Branch>(cond, nextBlock, falseBlock, currentBlock)
+                    ->SetSourceExpr(SourceExpr::MATCH_EXPR);
                 currentBlock = nextBlock;
             } else if (queue.empty()) {
                 CreateAndAppendTerminator<GoTo>(trueBlock, currentBlock);
