@@ -200,11 +200,13 @@ protected:
         auto selectorVal = tr.TranslateExprArg(*let.initializer);
         Translator::ScopeContext context{tr};
         auto originLoc = tr.TranslateLocation(let);
+        auto matchedBlockLoc = GetTrueBlockDiagnosticLocation();
         {
             // translate let pattern
             context.ScopePlus();
             auto [patternFalseBlock, patternTrueBlock] = let.patterns.size() == 1
-                ? tr.TranslateNestingCasePattern(*let.patterns[0], selectorVal, originLoc, GetSourceExpr())
+                ? tr.TranslateNestingCasePattern(
+                    *let.patterns[0], selectorVal, originLoc, GetSourceExpr(), &matchedBlockLoc)
                 : tr.TranslateOrPattern(let.patterns, selectorVal, originLoc);
 
             return {patternTrueBlock, patternFalseBlock};
@@ -390,6 +392,7 @@ protected:
 
     virtual Block* TranslateTrueBlock() = 0;
     virtual Block* TranslateFalseBlock() = 0;
+    virtual DebugLocation GetTrueBlockDiagnosticLocation() const = 0;
     virtual SourceExpr GetSourceExpr() = 0;
     virtual const Expr* GetExpr() = 0;
 };
@@ -483,6 +486,10 @@ protected:
             return SourceExpr::FOR_IN_EXPR;
         }
         return SourceExpr::IF_EXPR;
+    }
+    DebugLocation GetTrueBlockDiagnosticLocation() const override
+    {
+        return tr.TranslateLocation(*e->thenBody);
     }
     CHIR::Block* TranslateTrueBlock() override
     {
@@ -635,6 +642,10 @@ protected:
             return SourceExpr::FOR_IN_EXPR;
         }
         return SourceExpr::WHILE_EXPR;
+    }
+    DebugLocation GetTrueBlockDiagnosticLocation() const override
+    {
+        return tr.TranslateLocation(e->body->begin, e->body->end);
     }
 };
 
