@@ -733,8 +733,14 @@ bool MustMatchWithPlatform(const Decl& decl, const bool compilingCommon)
     }
     return true;
 }
-} // namespace
 
+/**
+ * True when `common` provides a default body (COMMON_WITH_DEFAULT, not
+ * ABSTRACT) but the matching `specific` member is declared ABSTRACT (no body).
+ * In that case `sema_specific_member_must_have_implementation`
+ * ("the member %s must have body in 'specific' %s") is reported instead of
+ * the misleading modifier-mismatch diagnostic.
+ */
 bool NeedToReportMissingBody(const Decl& common, const Decl& specific)
 {
     if (common.outerDecl && common.TestAttr(Attribute::COMMON_WITH_DEFAULT) && !common.TestAttr(Attribute::ABSTRACT) &&
@@ -744,6 +750,7 @@ bool NeedToReportMissingBody(const Decl& common, const Decl& specific)
 
     return false;
 }
+} // namespace
 
 // PostTypeCheck for CJMP
 bool MPTypeCheckerImpl::MatchCJMPDeclAttrs(
