@@ -179,8 +179,8 @@ void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, co
             }
         }
     };
-    auto preVisit = [overflowStrategy, optionStrategy, setOverflowStrategyInFuncBody](
-                        Ptr<Node> curNode) -> VisitAction {
+    const auto effectiveStrategy = overflowStrategy == OverflowStrategy::NA ? optionStrategy : overflowStrategy;
+    auto preVisit = [effectiveStrategy, setOverflowStrategyInFuncBody](Ptr<Node> curNode) -> VisitAction {
         switch (curNode->astKind) {
             case ASTKind::FUNC_DECL:
             case ASTKind::LAMBDA_EXPR: {
@@ -196,11 +196,7 @@ void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, co
             case ASTKind::BINARY_EXPR:
             case ASTKind::TYPE_CONV_EXPR: {
                 auto expr = RawStaticCast<Expr*>(curNode);
-                if (overflowStrategy == OverflowStrategy::NA) {
-                    expr->overflowStrategy = optionStrategy;
-                } else {
-                    expr->overflowStrategy = overflowStrategy;
-                }
+                expr->overflowStrategy = effectiveStrategy;
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
                 // mark call to operator func with overflowStrategy, used in split operator
                 if (expr->desugarExpr) {
@@ -212,15 +208,11 @@ void SetOverflowStrategy(Node& node, const OverflowStrategy overflowStrategy, co
             case ASTKind::CALL_EXPR: {
                 // Mock call-base expressions are synthesized after the initial
                 // type checking pass, so they do not inherit the strategy from
-                // a source arithmetic expression.  Give them the same
+                // a source arithmetic expression. Give them the same
                 // effective strategy as the function body that contains them.
                 auto callExpr = RawStaticCast<CallExpr*>(curNode);
                 if (callExpr->TestAttr(Attribute::GENERATED_TO_MOCK)) {
-                    if (overflowStrategy == OverflowStrategy::NA) {
-                        callExpr->overflowStrategy = optionStrategy;
-                    } else {
-                        callExpr->overflowStrategy = overflowStrategy;
-                    }
+                    callExpr->overflowStrategy = effectiveStrategy;
                 }
                 break;
             }
