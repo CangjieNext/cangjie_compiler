@@ -36,6 +36,7 @@ namespace {
 
 constexpr auto VALUE_IDENT = "value";
 constexpr auto FINALIZER_IDENT = "~init";
+constexpr auto GET_POINTER_ADDRESS_INTRINSIC = "getPointerAddress";
 
 } // namespace
 
@@ -461,7 +462,7 @@ OwnedPtr<Expr> ASTFactory::CreateOptionalMethodGuard(
 {
     std::vector<OwnedPtr<Node>> nodes;
     auto baseTy = msgSend->GetTy();
-    auto selectorCall = CreateRegisterNameCall(selector, curFile);
+    auto selectorCall = CreateGetCachedSelectorAccess(selector, curFile);
     auto isRespondToSelectorCall = CreateObjCRespondsToSelectorCall(std::move(cls), std::move(selectorCall), curFile);
 
     // case true => return msgSend(...)
@@ -512,30 +513,31 @@ OwnedPtr<Expr> ASTFactory::CreateMirrorConstructorCall(OwnedPtr<Expr> entity, Pt
 // return tmp.isNull()
 OwnedPtr<Expr> ASTFactory::CreateGetObjcEntityOrNullCall(VarDecl &entity, Ptr<File> file)
 {
-    // CPointer<Unit>()
-    auto baseTy = typeManager.GetPointerTy(typeManager.GetInvalidTy());
-    auto extendTy = typeManager.GetTyForExtendMap(*baseTy);
-    auto extends = typeManager.GetBuiltinTyExtends(*extendTy);
-    CJC_ASSERT(extends.size() != 0);
-    auto members = (extends.begin())->get();
-    Ptr<FuncDecl> isNullMember;
-    for (auto m : members->GetMemberDeclPtrs()) {
-        if (m->identifier.GetRawText() == "isNull") {
-            isNullMember = StaticAs<ASTKind::FUNC_DECL>(m);
-            break;
-        }
-    }
-    CJC_ASSERT(isNullMember);
+    static auto getPointerAddressFunc = importManager.GetCoreDecl<FuncDecl>(
+        GET_POINTER_ADDRESS_INTRINSIC);
+    CJC_NULLPTR_CHECK(getPointerAddressFunc);
+    auto readPointerRef = WithinFile(CreateRefExpr(*getPointerAddressFunc), file);
+    auto uintNativeTy = typeManager.GetPrimitiveTy(TypeKind::TYPE_UINT_NATIVE);
+    CJC_ASSERT(entity.GetTy()->IsPointer());
+    readPointerRef->instTys.push_back(entity.GetTy()->typeArgs.front());
+    readPointerRef->SetTy(
+        typeManager.GetFunctionTy(
+            std::vector{entity.GetTy()},
+            uintNativeTy));
+    std::vector<OwnedPtr<FuncArg>> callArgs;
+    callArgs.push_back(CreateFuncArg(WithinFile(CreateRefExpr(entity), file)));
+    auto getPointerAddressCall = CreateCallExpr(
+        std::move(readPointerRef),
+        std::move(callArgs),
+        getPointerAddressFunc,
+        uintNativeTy,
+        CallKind::CALL_INTRINSIC_FUNCTION);
 
-    auto isNullAccessMa = CreateMemberAccess(CreateRefExpr(entity), *isNullMember);
-    auto isNullAccess = WithinFile(std::move(isNullAccessMa), file);
-    isNullAccess->SetTy(bridge.GetNativeObjCIdTy());
-    isNullAccess->begin = entity.begin;
-    isNullAccess->curFile = entity.curFile;
-
-    auto resultCall = CreateCallExpr(std::move(isNullAccess), {},
-        isNullMember, typeManager.GetBoolTy(), CallKind::CALL_DECLARED_FUNCTION);
-    auto result = WithinFile(std::move(resultCall), file);
+    auto result = CreateBinaryExpr(
+        std::move(getPointerAddressCall),
+        CreateLitConstExpr(LitConstKind::INTEGER, "0", uintNativeTy),
+        TokenKind::EQUAL);
+    // CreateBinaryExpr sets type to type of left or right operand, which is incorrect for ==
     result->SetTy(typeManager.GetBoolTy());
     return result;
 }
@@ -563,7 +565,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateGetObjCClassDecl(ClassLikeDecl& target)
     auto paramList = MakeOwned<FuncParamList>();
     std::vector<OwnedPtr<FuncParamList>> wrapperParamLists;
     wrapperParamLists.push_back(std::move(paramList));
-    auto getClassCall = CreateGetClassCall(*StaticCast<ClassLikeTy>(target.GetTy()), curFile);
+    auto getClassCall = CreateGetCachedClassAccess(*StaticCast<ClassLikeTy>(target.GetTy()), curFile);
     auto wrapperBody = CreateFuncBody(std::move(wrapperParamLists), CreateType(nativeObjCClassTy),
         CreateBlock({}, nativeObjCClassTy), nativeObjCClassTy);
 
@@ -583,7 +585,7 @@ OwnedPtr<FuncDecl> ASTFactory::CreateGetObjCClassDecl(ClassLikeDecl& target)
 OwnedPtr<FuncDecl> ASTFactory::CreateGetObjCClass(ClassLikeDecl& target)
 {
     auto curFile = target.curFile;
-    auto getClassCall = CreateGetClassCall(*StaticCast<ClassTy>(target.GetTy()), curFile);
+    auto getClassCall = CreateGetCachedClassAccess(*StaticCast<ClassTy>(target.GetTy()), curFile);
     auto classDecl = CreateGetObjCClassDecl(target);
     classDecl->funcBody->body = CreateBlock(Nodes<Node>(std::move(getClassCall)));
     return classDecl;
@@ -1892,7 +1894,7 @@ OwnedPtr<CallExpr> ASTFactory::CreateObjCMsgSendCall(
 OwnedPtr<CallExpr> ASTFactory::CreateObjCMsgSendCall(
     OwnedPtr<Expr> nativeHandle, const std::string& selector, Ptr<Ty> retTy, std::vector<OwnedPtr<Expr>> args)
 {
-    auto selectorCall = CreateRegisterNameCall(selector, nativeHandle->curFile);
+    auto selectorCall = CreateGetCachedSelectorAccess(selector, nativeHandle->curFile);
 
     auto ft = MakeOwned<FuncType>();
     ft->retType = CreateType(retTy);
@@ -1964,21 +1966,19 @@ OwnedPtr<CallExpr> ASTFactory::CreateRegisterNameCall(const std::string& selecto
     return CreateRegisterNameCall(std::move(selectorAsLit));
 }
 
-OwnedPtr<CallExpr> ASTFactory::CreateAllocCall(OwnedPtr<Expr> className)
+OwnedPtr<CallExpr> ASTFactory::CreateAllocCall(OwnedPtr<Expr> nativeClassExpr)
 {
     auto allocDecl = bridge.GetAllocDecl();
     auto allocExpr = CreateRefExpr(*allocDecl);
 
-    auto curFile = className->curFile;
-    return CreateCall(allocDecl, curFile, std::move(className));
+    auto curFile = nativeClassExpr->curFile;
+    return CreateCall(allocDecl, curFile, std::move(nativeClassExpr));
 }
 
 OwnedPtr<CallExpr> ASTFactory::CreateAllocCall(Decl& decl, Ptr<File> curFile)
 {
     auto objcname = nameGenerator.GetObjCDeclName(decl);
-    auto classNameExpr =
-        WithinFile(CreateLitConstExpr(LitConstKind::STRING, objcname, GetStringDecl(importManager).GetTy()), curFile);
-    return CreateAllocCall(std::move(classNameExpr));
+    return CreateAllocCall(WithinFile(CreateGetCachedClassAccess(objcname, curFile), curFile));
 }
 
 OwnedPtr<Expr> ASTFactory::CreateMethodCallViaMsgSend(
@@ -2258,7 +2258,7 @@ OwnedPtr<Expr> ASTFactory::CreatePropSetterCallViaMsgSendSuper(
 OwnedPtr<CallExpr> ASTFactory::CreateObjCMsgSendSuperCall(OwnedPtr<Expr> receiver, OwnedPtr<Expr> objCSuper,
     const std::string& selector, Ptr<Ty> retTy, std::vector<OwnedPtr<Expr>> rawArgs)
 {
-    auto selCall = CreateRegisterNameCall(selector, receiver->curFile);
+    auto selCall = CreateGetCachedSelectorAccess(selector, receiver->curFile);
 
     auto ft = MakeOwned<FuncType>();
     ft->retType = CreateType(retTy);
@@ -2356,4 +2356,88 @@ OwnedPtr<Expr> ASTFactory::CreateObjCRetainAutoreleasedReturnValueCall(OwnedPtr<
     auto curFile = id->curFile;
     auto objCRetainAutoreleasedReturnValueDecl = bridge.GetObjCRetainAutoreleasedReturnValue();
     return CreateCall(std::move(objCRetainAutoreleasedReturnValueDecl), curFile, std::move(id));
+}
+
+OwnedPtr<Expr> ASTFactory::CreateGetCachedSelectorAccess(std::string selector, Ptr<File> curFile)
+{
+    auto nativeObjCSelTy = bridge.GetNativeObjCSelDecl()->type->GetTy();
+    auto&& cachedSelectors = declarationCache.cachedSelectorDecls;
+    if (auto it = cachedSelectors.find(selector); it != std::end(cachedSelectors)) {
+        auto& varDecl = *it->second;
+        std::vector<OwnedPtr<Node>> ifNull;
+        ifNull.push_back(
+            CreateAssignExpr(
+                WithinFile(CreateRefExpr(varDecl), curFile),
+                CreateRegisterNameCall(selector, curFile),
+                typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT)));
+        ifNull.push_back(WithinFile(CreateRefExpr(varDecl), curFile));
+
+        std::vector<OwnedPtr<Node>> ifNotNull;
+        ifNotNull.push_back(WithinFile(CreateRefExpr(varDecl), curFile));
+        return CreateIfExpr(
+            CreateGetObjcEntityOrNullCall(varDecl, curFile),
+            CreateBlock(std::move(ifNull), nativeObjCSelTy),
+            CreateBlock(std::move(ifNotNull), nativeObjCSelTy),
+            nativeObjCSelTy);
+    } else {
+        std::string selectorVarName = "objcSelector$";
+        // selector names may contain : and $ symbols,
+        // so we conservatively fix them
+        for (auto ch : selector) {
+            if (ch == '$') {
+                selectorVarName += "$DOLLAR$";
+            } else if (ch == ':') {
+                selectorVarName += "$$";
+            } else {
+                selectorVarName += ch;
+            }
+        }
+        auto null = MakeOwned<PointerExpr>();
+        null->SetTy(nativeObjCSelTy);
+        auto varDecl = CreateVar(selectorVarName, nativeObjCSelTy, true, std::move(null));
+        varDecl->EnableAttr(Attribute::INTERNAL, Attribute::GLOBAL, Attribute::INITIALIZED);
+        PutDeclToFile(*varDecl, *curFile);
+        declarationCache.cachedSelectorDecls[selector] = std::move(varDecl);
+        return CreateGetCachedSelectorAccess(selector, curFile);
+    }
+}
+
+OwnedPtr<Expr> ASTFactory::CreateGetCachedClassAccess(std::string className, Ptr<File> curFile)
+{
+    auto nativeObjCClassTy = bridge.GetNativeObjCClassTy();
+    auto&& cachedClasses = declarationCache.cachedClassDecls;
+    if (auto it = cachedClasses.find(className); it != std::end(cachedClasses)) {
+        auto& varDecl = *it->second;
+        std::vector<OwnedPtr<Node>> ifNull;
+        ifNull.push_back(
+            CreateAssignExpr(
+                WithinFile(CreateRefExpr(varDecl), curFile),
+                CreateGetClassCall(className, curFile),
+                typeManager.GetPrimitiveTy(TypeKind::TYPE_UNIT)));
+        ifNull.push_back(WithinFile(CreateRefExpr(varDecl), curFile));
+
+        std::vector<OwnedPtr<Node>> ifNotNull;
+        ifNotNull.push_back(WithinFile(CreateRefExpr(varDecl), curFile));
+        return CreateIfExpr(
+            CreateGetObjcEntityOrNullCall(varDecl, curFile),
+            CreateBlock(std::move(ifNull), nativeObjCClassTy),
+            CreateBlock(std::move(ifNotNull), nativeObjCClassTy),
+            nativeObjCClassTy);
+    } else {
+        // unlike selectors, classes are required to be valid identifiers
+        std::string classVarName = "objcClass$" + className;
+        auto null = MakeOwned<PointerExpr>();
+        null->SetTy(nativeObjCClassTy);
+        auto varDecl = CreateVar(classVarName, nativeObjCClassTy, true, std::move(null));
+        varDecl->EnableAttr(Attribute::INTERNAL, Attribute::GLOBAL, Attribute::INITIALIZED);
+        PutDeclToFile(*varDecl, *curFile);
+        declarationCache.cachedClassDecls[className] = std::move(varDecl);
+        return CreateGetCachedClassAccess(className, curFile);
+    }
+}
+
+OwnedPtr<Expr> ASTFactory::CreateGetCachedClassAccess(ClassLikeTy& ty, Ptr<File> curFile)
+{
+    std::string name = nameGenerator.GetObjCDeclName(*Ty::GetDeclOfTy(&ty));
+    return CreateGetCachedClassAccess(name, curFile);
 }
