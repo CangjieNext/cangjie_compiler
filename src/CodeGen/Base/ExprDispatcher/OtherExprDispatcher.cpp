@@ -89,7 +89,7 @@ llvm::Value* HandleFieldExpr(IRBuilder2& irBuilder, const CHIR::Expression& chir
 
     if (auto lv = DynamicCast<CHIR::LocalVar>(field.GetBase())) {
         auto typeCast = DynamicCast<CHIR::TypeCast*>(lv->GetExpr());
-        if (typeCast && typeCast->GetSourceValue()->GetType()->IsEnum() && typeCast->GetTargetTy()->IsTuple()) {
+        if (typeCast && typeCast->GetSourceValue()->GetType()->IsEnum() && typeCast->GetTargetType()->IsTuple()) {
             return irBuilder.CreateEnumGEP(field);
         }
     }
@@ -113,8 +113,7 @@ llvm::Value* HandleFieldExpr(IRBuilder2& irBuilder, const CHIR::Expression& chir
 
 llvm::Value* HandleTypecastExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
 {
-    auto& typeCast = StaticCast<const CHIR::TypeCast&>(chirExpr);
-    return GenerateTypeCast(irBuilder, CHIRTypeCastWrapper(typeCast));
+    return GenerateTypeCast(irBuilder, StaticCast<const CHIR::TypeCast&>(chirExpr));
 }
 
 llvm::Value* HandleTupleExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
@@ -154,8 +153,7 @@ llvm::Value* HandleRawArrayLiteralInitExpr(IRBuilder2& irBuilder, const CHIR::Ex
 
 llvm::Value* HandleRawArrayAllocateExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
 {
-    auto& rawArray = StaticCast<const CHIR::RawArrayAllocate&>(chirExpr);
-    return GenerateRawArrayAllocate(irBuilder, CHIRRawArrayAllocateWrapper(rawArray));
+    return GenerateRawArrayAllocate(irBuilder, StaticCast<const CHIR::RawArrayAllocate&>(chirExpr));
 }
 
 llvm::Value* HandleRawArrayInitByValueExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
@@ -172,8 +170,7 @@ llvm::Value* HandleInstanceOfExpr(IRBuilder2& irBuilder, const CHIR::Expression&
 
 llvm::Value* HandleSpawnExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
 {
-    auto& spawn = StaticCast<const CHIR::Spawn&>(chirExpr);
-    return GenerateSpawn(irBuilder, CHIRSpawnWrapper(spawn));
+    return GenerateSpawn(irBuilder, StaticCast<const CHIR::Spawn&>(chirExpr));
 }
 
 llvm::Value* HandleGetExceptionExpr(IRBuilder2& irBuilder, const CHIR::Expression&)
@@ -181,21 +178,21 @@ llvm::Value* HandleGetExceptionExpr(IRBuilder2& irBuilder, const CHIR::Expressio
     return irBuilder.CallExceptionIntrinsicGetExceptionValue();
 }
 
-llvm::Value* HandleTransformToGenericExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
+llvm::Value* HandleCastToGenericExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
 {
-    auto& castToGenericExpr = StaticCast<const CHIR::TransformToGeneric&>(chirExpr);
+    auto& castToGenericExpr = StaticCast<const CHIR::CastToGeneric&>(chirExpr);
     auto& cgMod = irBuilder.GetCGModule();
     auto cgVal = *(cgMod | castToGenericExpr.GetSourceValue());
-    auto srcCGType = CGType::GetOrCreate(cgMod, castToGenericExpr.GetSourceTy());
-    auto targetCGType = CGType::GetOrCreate(cgMod, castToGenericExpr.GetTargetTy());
+    auto srcCGType = CGType::GetOrCreate(cgMod, castToGenericExpr.GetSourceType());
+    auto targetCGType = CGType::GetOrCreate(cgMod, castToGenericExpr.GetTargetType());
     CJC_ASSERT_WITH_MSG(srcCGType->GetSize(), "Source type must have size.");
-    if (srcCGType->IsReference() && castToGenericExpr.GetTargetTy()->IsGeneric()) {
+    if (srcCGType->IsReference() && castToGenericExpr.GetTargetType()->IsGeneric()) {
         return cgVal.GetRawValue();
     }
     if (srcCGType->GetSize() == targetCGType->GetSize()) {
         return cgVal.GetRawValue();
     }
-    auto srcCHIRType = castToGenericExpr.GetSourceTy();
+    auto srcCHIRType = castToGenericExpr.GetSourceType();
     // 1. Allocate memory for boxing srcValue.
     llvm::Value* temp = irBuilder.CallClassIntrinsicAlloc(*DeRef(*srcCHIRType));
     // 2. store srcValue to temp
@@ -217,7 +214,7 @@ llvm::Value* HandleBoxExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirEx
     auto& cgMod = irBuilder.GetCGModule();
     auto srcObject = boxExpr.GetSourceValue();
     auto cgVal = *(cgMod | srcObject);
-    auto srcCHIRType = boxExpr.GetSourceTy();
+    auto srcCHIRType = boxExpr.GetSourceType();
     auto srcCGType = CGType::GetOrCreate(cgMod, srcCHIRType);
 
     auto result = GenerateGenericTypeCast(irBuilder, cgVal, *srcCHIRType, *boxExpr.GetResult()->GetType());
@@ -266,14 +263,14 @@ llvm::Value* HandleBoxExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirEx
 llvm::Value* HandleUnBoxExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
 {
     auto& cgMod = irBuilder.GetCGModule();
-    auto& unboxExpr = StaticCast<const CHIR::UnBox&>(chirExpr);
+    auto& unboxExpr = StaticCast<const CHIR::UnBoxToValue&>(chirExpr);
     auto cgVal = (cgMod | unboxExpr.GetSourceValue());
-    auto targetCHIRType = unboxExpr.GetTargetTy();
+    auto targetCHIRType = unboxExpr.GetTargetType();
     auto targetCGType = CGType::GetOrCreate(cgMod, targetCHIRType);
     // if unbox a boxtype parameter, need to check the real type from OverrideSrcFuncType
     // and if the real type has size, then we just return the src value
     auto srcFuncType = chirExpr.GetTopLevelFunc()->Get<CHIR::OverrideSrcFuncType>();
-    if (srcFuncType && unboxExpr.GetSourceValue()->IsParameter() && DeRef(*unboxExpr.GetSourceTy())->IsBox()) {
+    if (srcFuncType && unboxExpr.GetSourceValue()->IsParameter() && DeRef(*unboxExpr.GetSourceType())->IsBox()) {
         for (size_t i = 0; i < chirExpr.GetTopLevelFunc()->GetNumOfParams(); i++) {
             if (unboxExpr.GetSourceValue() == chirExpr.GetTopLevelFunc()->GetParam(i)) {
                 auto cgParamType = CGType::GetOrCreate(cgMod, srcFuncType->GetParamType(i));
@@ -287,7 +284,7 @@ llvm::Value* HandleUnBoxExpr(IRBuilder2& irBuilder, const CHIR::Expression& chir
     if (targetCGType->IsReference()) {
         return cgVal->GetRawValue();
     }
-    // For UnBox(%0, ValueType&)
+    // For UnBoxToValue(%0, ValueType&)
     if (targetCHIRType->IsRef()) {
         return irBuilder.GetPayloadFromObject(cgVal->GetRawValue());
     }
@@ -300,17 +297,17 @@ llvm::Value* HandleUnBoxExpr(IRBuilder2& irBuilder, const CHIR::Expression& chir
     return cgVal->GetRawValue();
 }
 
-llvm::Value* HandleTransformToConcreteExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
+llvm::Value* HandleCastToConcreteExpr(IRBuilder2& irBuilder, const CHIR::Expression& chirExpr)
 {
     auto& cgMod = irBuilder.GetCGModule();
-    auto& castToConcreteExpr = StaticCast<const CHIR::TransformToConcrete&>(chirExpr);
+    auto& castToConcreteExpr = StaticCast<const CHIR::CastToConcrete&>(chirExpr);
 
     auto sourceValue = castToConcreteExpr.GetSourceValue();
     auto cgVal = *(cgMod | sourceValue);
-    auto targetCHIRType = castToConcreteExpr.GetTargetTy();
+    auto targetCHIRType = castToConcreteExpr.GetTargetType();
     auto targetCGType = CGType::GetOrCreate(cgMod, targetCHIRType);
     CJC_ASSERT_WITH_MSG(targetCGType->GetSize(), "target type must have size");
-    auto srcCHIRType = castToConcreteExpr.GetSourceTy();
+    auto srcCHIRType = castToConcreteExpr.GetSourceType();
     const CGType* srcCGType = CGType::GetOrCreate(cgMod, srcCHIRType);
 
     if (IsGenericRef(*srcCHIRType)) {
@@ -371,7 +368,7 @@ llvm::Value* HandleUnBoxToRefExpr(IRBuilder2& irBuilder, const CHIR::Expression&
     auto& cgMod = irBuilder.GetCGModule();
     auto& unboxToRefExpr = StaticCast<const CHIR::UnBoxToRef&>(chirExpr);
     auto cgVal = (cgMod | unboxToRefExpr.GetSourceValue());
-    auto targetCHIRType = DeRef(*unboxToRefExpr.GetTargetTy());
+    auto targetCHIRType = DeRef(*unboxToRefExpr.GetTargetType());
     auto targetCGType = CGType::GetOrCreate(cgMod, targetCHIRType);
     if (targetCGType->GetSize()) {
         return irBuilder.GetPayloadFromObject(cgVal->GetRawValue());
@@ -405,7 +402,8 @@ llvm::Value* HandleOthersExpression(IRBuilder2& irBuilder, const CHIR::Expressio
         handleExprMap = {
             {CHIR::ExprKind::APPLY, HandleApplyExpr}, {CHIR::ExprKind::INVOKE, HandleInvokeExpr},
             {CHIR::ExprKind::INVOKESTATIC, HandleInvokeStaticExpr}, {CHIR::ExprKind::DEBUGEXPR, HandleDebugExpr},
-            {CHIR::ExprKind::FIELD, HandleFieldExpr}, {CHIR::ExprKind::TYPECAST, HandleTypecastExpr},
+            {CHIR::ExprKind::FIELD, HandleFieldExpr}, {CHIR::ExprKind::CLASS_STATIC_CAST, HandleTypecastExpr},
+            {CHIR::ExprKind::NUMERIC_CAST, HandleTypecastExpr},
             {CHIR::ExprKind::TUPLE, HandleTupleExpr}, {CHIR::ExprKind::VARRAY, HandleVArrayExpr},
             {CHIR::ExprKind::VARRAY_BUILDER, HandleVArrayBuilderExpr},
             {CHIR::ExprKind::INTRINSIC, HandleIntrinsicExpr},
@@ -414,9 +412,9 @@ llvm::Value* HandleOthersExpression(IRBuilder2& irBuilder, const CHIR::Expressio
             {CHIR::ExprKind::RAW_ARRAY_INIT_BY_VALUE, HandleRawArrayInitByValueExpr},
             {CHIR::ExprKind::INSTANCEOF, HandleInstanceOfExpr}, {CHIR::ExprKind::SPAWN, HandleSpawnExpr},
             {CHIR::ExprKind::GET_EXCEPTION, HandleGetExceptionExpr}, {CHIR::ExprKind::BOX, HandleBoxExpr},
-            {CHIR::ExprKind::UNBOX, HandleUnBoxExpr},
-            {CHIR::ExprKind::TRANSFORM_TO_GENERIC, HandleTransformToGenericExpr},
-            {CHIR::ExprKind::TRANSFORM_TO_CONCRETE, HandleTransformToConcreteExpr},
+            {CHIR::ExprKind::UNBOX_TO_VALUE, HandleUnBoxExpr},
+            {CHIR::ExprKind::CAST_TO_GENERIC, HandleCastToGenericExpr},
+            {CHIR::ExprKind::CAST_TO_CONCRETE, HandleCastToConcreteExpr},
             {CHIR::ExprKind::UNBOX_TO_REF, HandleUnBoxToRefExpr},
             {CHIR::ExprKind::GET_RTTI, HandleGetRTTI},
             {CHIR::ExprKind::GET_RTTI_STATIC, HandleGetRTTIStatic},

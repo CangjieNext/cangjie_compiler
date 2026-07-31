@@ -107,9 +107,9 @@ static Type* GetRuntimeTypeFromFunc(const Value* retVal, bool isInLambda = false
         }
         auto expr = StaticCast<LocalVar*>(val)->GetExpr();
         auto srcTy = val->GetType();
-        if (expr->GetExprKind() == ExprKind::TYPECAST) {
-            auto cast = StaticCast<TypeCast*>(expr);
-            srcTy = cast->GetSourceTy();
+        if (expr->GetExprKind() == ExprKind::CLASS_STATIC_CAST) {
+            auto cast = StaticCast<ClassStaticCast*>(expr);
+            srcTy = cast->GetSourceType();
         } else if (expr->GetExprKind() == ExprKind::APPLY && !isInLambda) {
             auto applyResType = GetRuntimeTypeFromLambda(*StaticCast<Apply*>(expr), srcTy);
             srcTy = applyResType != nullptr ? applyResType : srcTy;

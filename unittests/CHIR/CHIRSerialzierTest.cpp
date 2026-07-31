@@ -441,7 +441,7 @@ PackageFormat::CHIRExprKind Serialize(const ExprKind& kind)
         case ExprKind::SPAWN_WITH_EXCEPTION:
             ret = CHIRExprKind_TrySpawn;
             break;
-        case ExprKind::TYPECAST_WITH_EXCEPTION:
+        case ExprKind::NUMERIC_CAST_WITH_EXCEPTION:
             ret = CHIRExprKind_TryNumericCast;
             break;
         case ExprKind::INTRINSIC_WITH_EXCEPTION:
@@ -579,7 +579,10 @@ PackageFormat::CHIRExprKind Serialize(const ExprKind& kind)
         case ExprKind::INSTANCEOF:
             ret = CHIRExprKind_InstanceOf;
             break;
-        case ExprKind::TYPECAST:
+        case ExprKind::CLASS_STATIC_CAST:
+            ret = CHIRExprKind_StaticCast;
+            break;
+        case ExprKind::NUMERIC_CAST:
             ret = CHIRExprKind_NumericCast;
             break;
         case ExprKind::GET_EXCEPTION:
@@ -612,13 +615,13 @@ PackageFormat::CHIRExprKind Serialize(const ExprKind& kind)
         case ExprKind::BOX:
             ret = CHIRExprKind_Box;
             break;
-        case ExprKind::UNBOX:
+        case ExprKind::UNBOX_TO_VALUE:
             ret = CHIRExprKind_UnboxToValue;
             break;
-        case ExprKind::TRANSFORM_TO_GENERIC:
+        case ExprKind::CAST_TO_GENERIC:
             ret = CHIRExprKind_CastToGeneric;
             break;
-        case ExprKind::TRANSFORM_TO_CONCRETE:
+        case ExprKind::CAST_TO_CONCRETE:
             ret = CHIRExprKind_CastToConcrete;
             break;
         case ExprKind::UNBOX_TO_REF:

@@ -9,10 +9,12 @@
 #include "llvm/IR/Value.h"
 
 namespace Cangjie {
+namespace CHIR {
+class SpawnBase;
+} // namespace CHIR
 namespace CodeGen {
 class IRBuilder2;
-class CHIRSpawnWrapper;
-llvm::Value* GenerateSpawn(IRBuilder2& irBuilder, const CHIRSpawnWrapper& spawn);
+llvm::Value* GenerateSpawn(IRBuilder2& irBuilder, const CHIR::SpawnBase& spawn);
 } // namespace CodeGen
 } // namespace Cangjie
 #endif // CANGJIE_SPAWNEXPRIMPL_H

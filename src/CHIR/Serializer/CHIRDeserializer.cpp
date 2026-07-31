@@ -717,7 +717,7 @@ static std::pair<ExprKind, bool> CHIRExprKindToExprKind(PackageFormat::CHIRExprK
         case FK::CHIRExprKind_TryIntrinsic:       return {ExprKind::INTRINSIC_WITH_EXCEPTION, true};
         case FK::CHIRExprKind_RaiseException:     return {ExprKind::RAISE_EXCEPTION, false};
         case FK::CHIRExprKind_TrySpawn:           return {ExprKind::SPAWN_WITH_EXCEPTION, true};
-        case FK::CHIRExprKind_TryNumericCast:     return {ExprKind::TYPECAST_WITH_EXCEPTION, true};
+        case FK::CHIRExprKind_TryNumericCast:     return {ExprKind::NUMERIC_CAST_WITH_EXCEPTION, true};
         case FK::CHIRExprKind_TryAllocate:        return {ExprKind::ALLOCATE_WITH_EXCEPTION, true};
         case FK::CHIRExprKind_TryRawArrayAllocate: return {ExprKind::RAW_ARRAY_ALLOCATE_WITH_EXCEPTION, true};
         case FK::CHIRExprKind_TryNeg:             return {ExprKind::NEG, true};
@@ -754,13 +754,13 @@ static std::pair<ExprKind, bool> CHIRExprKindToExprKind(PackageFormat::CHIRExprK
         case FK::CHIRExprKind_And:                return {ExprKind::AND, false};
         case FK::CHIRExprKind_Or:                 return {ExprKind::OR, false};
         // type cast
-        case FK::CHIRExprKind_StaticCast:         return {ExprKind::TYPECAST, false};
+        case FK::CHIRExprKind_StaticCast:         return {ExprKind::CLASS_STATIC_CAST, false};
         case FK::CHIRExprKind_Box:                return {ExprKind::BOX, false};
-        case FK::CHIRExprKind_UnboxToValue:       return {ExprKind::UNBOX, false};
+        case FK::CHIRExprKind_UnboxToValue:       return {ExprKind::UNBOX_TO_VALUE, false};
         case FK::CHIRExprKind_UnboxToRef:         return {ExprKind::UNBOX_TO_REF, false};
-        case FK::CHIRExprKind_NumericCast:        return {ExprKind::TYPECAST, false};
-        case FK::CHIRExprKind_CastToConcrete:     return {ExprKind::TRANSFORM_TO_CONCRETE, false};
-        case FK::CHIRExprKind_CastToGeneric:      return {ExprKind::TRANSFORM_TO_GENERIC, false};
+        case FK::CHIRExprKind_NumericCast:        return {ExprKind::NUMERIC_CAST, false};
+        case FK::CHIRExprKind_CastToConcrete:     return {ExprKind::CAST_TO_CONCRETE, false};
+        case FK::CHIRExprKind_CastToGeneric:      return {ExprKind::CAST_TO_GENERIC, false};
         // memory expr
         case FK::CHIRExprKind_Allocate:           return {ExprKind::ALLOCATE, false};
         case FK::CHIRExprKind_Load:               return {ExprKind::LOAD, false};
@@ -878,20 +878,23 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
         case ExprKind::STORE:
             CJC_ASSERT(operands.size() == 2);
             return builder.CreateExpression<Store>(resultTy, operands[0], operands[1], owner);
-        case ExprKind::TRANSFORM_TO_CONCRETE:
+        case ExprKind::CAST_TO_CONCRETE:
             CJC_ASSERT(operands.size() == 1);
-            return builder.CreateExpression<TransformToConcrete>(resultTy, operands[0], owner);
-        case ExprKind::TRANSFORM_TO_GENERIC:
+            return builder.CreateExpression<CastToConcrete>(resultTy, operands[0], owner);
+        case ExprKind::CAST_TO_GENERIC:
             CJC_ASSERT(operands.size() == 1);
-            return builder.CreateExpression<TransformToGeneric>(resultTy, operands[0], owner);
+            return builder.CreateExpression<CastToGeneric>(resultTy, operands[0], owner);
         case ExprKind::TUPLE:
             return builder.CreateExpression<Tuple>(resultTy, operands, owner);
-        case ExprKind::UNBOX:
+        case ExprKind::UNBOX_TO_VALUE:
             CJC_ASSERT(operands.size() == 1);
-            return builder.CreateExpression<UnBox>(resultTy, operands[0], owner);
+            return builder.CreateExpression<UnBoxToValue>(resultTy, operands[0], owner);
         case ExprKind::UNBOX_TO_REF:
             CJC_ASSERT(operands.size() == 1);
             return builder.CreateExpression<UnBoxToRef>(resultTy, operands[0], owner);
+        case ExprKind::CLASS_STATIC_CAST:
+            CJC_ASSERT(operands.size() == 1);
+            return builder.CreateExpression<ClassStaticCast>(resultTy, operands[0], owner);
         case ExprKind::VARRAY:
             CJC_ASSERT(!operands.empty());
             return builder.CreateExpression<VArray>(resultTy, operands, owner);
@@ -1115,9 +1118,10 @@ template <> Expression* CHIRDeserializer::CHIRDeserializerImpl::Deserialize(cons
     if (CHIRExprKindToExprKind(base->kind()).second) {
         auto normalBlock = StaticCast<Block*>(GetValue<Value>(base->operands()->Get(1)));
         auto exceptionBlock = StaticCast<Block*>(GetValue<Value>(base->operands()->Get(2)));
-        return builder.CreateExpression<TypeCastWithException>(resultTy, operand, normalBlock, exceptionBlock, owner);
+        return builder.CreateExpression<NumericCastWithException>(
+            resultTy, operand, normalBlock, exceptionBlock, owner);
     } else {
-        return builder.CreateExpression<TypeCast>(resultTy, operand, ofs, owner);
+        return builder.CreateExpression<NumericCast>(resultTy, operand, ofs, owner);
     }
 }
 

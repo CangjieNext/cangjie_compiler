@@ -195,16 +195,20 @@ private:
 
     template <typename TTypeCast> ExceptionKind HandleTypeCast(RangeDomain& state, const TTypeCast* cast)
     {
-        auto from = cast->GetSourceTy();
-        auto to = cast->GetTargetTy();
+        auto from = cast->GetSourceType();
+        auto to = cast->GetTargetType();
         if (!from->IsInteger() || !to->IsInteger()) {
             state.SetToTopOrTopRef(cast->GetResult(), cast->GetResult()->GetType()->IsRef());
             return ExceptionKind::NA;
         }
         auto value = cast->GetSourceValue();
         const auto& sourceDomain = GetSIntDomainFromState(state, value);
+        OverflowStrategy ov = OverflowStrategy::NA;
+        if constexpr (std::is_base_of_v<NumericCastBase, TTypeCast>) {
+            ov = cast->GetOverflowStrategy();
+        }
         auto res = ComputeTypeCast(
-            state, value, sourceDomain, ToWidth(*to), to->IsUnsignedInteger(), cast->GetOverflowStrategy());
+            state, value, sourceDomain, ToWidth(*to), to->IsUnsignedInteger(), ov);
         state.Update(cast->GetResult(), std::make_unique<SIntRange>(res));
         return ExceptionKind::NA;
     }

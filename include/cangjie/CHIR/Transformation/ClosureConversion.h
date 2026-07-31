@@ -146,7 +146,7 @@ private:
     void CastRawArrayInitByValueArgIfNeed(RawArrayInitByValue& e);
     void CastTypeCastArgIfNeed(TypeCast& e);
     void WrapTypeCastSrcVal(TypeCast& typecast);
-    void CastSpawnArgIfNeed(Spawn& e);
+    void CastSpawnArgIfNeed(SpawnBase& e);
     ClassDef* GetOrCreateAutoEnvWrapper(ClassType& instAutoEnvBaseType);
     ClassDef* CreateAutoEnvWrapper(const std::string& className, ClassType& superClassType);
     void CreateMemberVarInAutoEnvWrapper(ClassDef& autoEnvWrapperDef);

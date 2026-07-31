@@ -201,7 +201,7 @@ Cangjie::CHIR::Value* IVal2CHIR::ConvertEnumToChir(
     if (ty.GetEnumDef()->IsAllCtorsTrivial()) {
         auto expr = chirBuilder.CreateConstantExpression<IntLiteral>(
             selectorTy, &parent, IValUtils::Get<IUInt32>(val).content);
-        auto ret = chirBuilder.CreateExpression<TypeCast>(&ty, expr->GetResult(), &parent);
+        auto ret = chirBuilder.CreateExpression<ClassStaticCast>(&ty, expr->GetResult(), &parent);
         insertExpr(expr);
         insertExpr(ret);
         return ret->GetResult();
@@ -272,7 +272,7 @@ Cangjie::CHIR::Value* IVal2CHIR::ConvertRefToChir(
                     chirBuilder.GetUnitTy(), memberVal, classVal, std::vector<std::uint64_t>{idx}, &parent));
             }
             if (needCast) {
-                auto typeCast = chirBuilder.CreateExpression<TypeCast>(&ty, classVal, &parent);
+                auto typeCast = chirBuilder.CreateExpression<ClassStaticCast>(&ty, classVal, &parent);
                 insertExpr(typeCast);
                 return typeCast->GetResult();
             }
