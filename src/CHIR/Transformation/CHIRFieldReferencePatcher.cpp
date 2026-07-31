@@ -83,7 +83,7 @@ void CHIRFieldReferencePatcher::PatchGlobalFunction(Function& func)
                 fieldExpr->ReplaceWith(*newExpr);
             }
         } else if (auto storeElementRef = DynamicCast<StoreElementRef*>(&e)) {
-            auto mirrorClass = GetMirrorClassDefFromType(storeElementRef->GetLocation()->GetType());
+            auto mirrorClass = GetMirrorClassDefFromType(storeElementRef->GetBase()->GetType());
             if (!mirrorClass) {
                 return VisitResult::CONTINUE;
             }
@@ -195,7 +195,7 @@ Expression* CHIRFieldReferencePatcher::TryPatchLoadGlobal(Load& load)
 
     if (localVarExpr->GetExprKind() == ExprKind::GET_ELEMENT_REF) {
         auto getRef = StaticCast<GetElementRef*>(localVarExpr);
-        auto baseValue = getRef->GetLocation();
+        auto baseValue = getRef->GetBase();
         auto mirrorClassDef = GetMirrorClassDefFromType(baseValue->GetType());
         if (!mirrorClassDef) return nullptr;
 
@@ -260,14 +260,14 @@ Expression* CHIRFieldReferencePatcher::TryPatchLoad(Load& load, ClassDef& parent
     auto getter = FindGetterForField(parentDef, field, mirrorAttr);
     if (!getter) return nullptr;
 
-    auto baseValue = getRef->GetLocation();
+    auto baseValue = getRef->GetBase();
     auto loc = load.GetDebugLocation();
     return CreateGetterCall(loc, baseValue, getter, load.GetParentBlock());
 }
 
 Expression* CHIRFieldReferencePatcher::TryPatchStoreElementRef(StoreElementRef& store, ClassDef& parentDef)
 {
-    auto baseValue = store.GetLocation();
+    auto baseValue = store.GetBase();
     auto valueToStore = store.GetValue();
     auto path = store.GetPath();
 

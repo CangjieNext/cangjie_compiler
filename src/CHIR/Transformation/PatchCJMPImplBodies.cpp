@@ -130,7 +130,7 @@ Expression* PatchCJMPImplBodies::TryPatchLoad(Load& load, ClassDef& implClassDef
     auto getter = FindInstanceGetterByName(implClassDef, fieldName);
     if (!getter || !getter->TestAttr(Attribute::COMPILER_ADD)) return nullptr;
 
-    auto baseValue = getRef->GetLocation();
+    auto baseValue = getRef->GetBase();
     FuncCallContext callContext {
         .args = {baseValue},
         .instTypeArgs = {},
@@ -220,7 +220,7 @@ void PatchCJMPImplBodies::TryPatchStoreElementByName(StoreElementByName& storeBy
 /// \copydoc PatchCJMPImplBodies::TryPatchStoreElementRef
 Expression* PatchCJMPImplBodies::TryPatchStoreElementRef(StoreElementRef& store, ClassDef& implClassDef)
 {
-    auto baseValue = store.GetLocation();
+    auto baseValue = store.GetBase();
     auto storedValue = store.GetValue();
     auto path = store.GetPath();
 
