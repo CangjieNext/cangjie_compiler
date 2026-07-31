@@ -644,6 +644,33 @@ void TypeChecker::TypeCheckerImpl::DesugarArrayCall(ASTContext& ctx, CallExpr& c
     AddCurFile(ce, ce.curFile);
 }
 
+void TypeChecker::TypeCheckerImpl::DesugarNumericTypeAliasCall(ASTContext& ctx, CallExpr& ce)
+{
+    CJC_ASSERT(ce.baseFunc && ce.args.size() == 1);
+    auto baseFuncTy =
+        ce.baseFunc->GetTy() ? typeManager.SubstituteTypeAliasInTy(*ce.baseFunc->GetTy()) : TypeManager::GetInvalidTy();
+    CJC_ASSERT(baseFuncTy && (baseFuncTy->IsNumeric() || baseFuncTy->IsRune()));
+
+    auto typeConv = MakeOwnedNode<TypeConvExpr>();
+    auto primitiveType = MakeOwnedNode<PrimitiveType>();
+    CopyBasicInfo(&ce, typeConv.get());
+    CopyBasicInfo(ce.baseFunc.get(), primitiveType.get());
+    ctx.RemoveTypeCheckCache(*typeConv);
+    ctx.RemoveTypeCheckCache(*primitiveType);
+    primitiveType->kind = baseFuncTy->kind;
+    primitiveType->str = baseFuncTy->String();
+    primitiveType->SetTy(baseFuncTy);
+    typeConv->type = std::move(primitiveType);
+    typeConv->leftParenPos = ce.leftParenPos;
+    typeConv->rightParenPos = ce.rightParenPos;
+    typeConv->expr = std::move(ce.args[0]->expr);
+    ce.args.clear();
+    typeConv->scopeName = ce.scopeName;
+    typeConv->sourceExpr = &ce;
+    ce.desugarExpr = std::move(typeConv);
+    AddCurFile(ce, ce.curFile);
+}
+
 void DesugarPrimaryCtor(Decl& decl, PrimaryCtorDecl& fd)
 {
     if (decl.astKind != ASTKind::CLASS_DECL && decl.astKind != ASTKind::STRUCT_DECL) {

@@ -220,6 +220,28 @@ main() {
     EXPECT_EQ(diag.GetErrorCount(), 0);
 }
 
+TEST_F(TypeCheckerTest, NumericTypeAliasCanBeUsedForTypeConversion)
+{
+    std::string code = R"(
+type word = UInt16
+type sameWord = word
+type ratio = Float32
+type codepoint = Rune
+
+main() {
+    let a: word = word(20)
+    let b: sameWord = sameWord(a)
+    let c: ratio = ratio(1.5)
+    let d: codepoint = codepoint(97)
+}
+    )";
+
+    instance->code = code;
+    instance->Compile(CompileStage::SEMA);
+
+    EXPECT_EQ(diag.GetErrorCount(), 0);
+}
+
 TEST_F(TypeCheckerTest, InvalidVariadicFunctionIsNotCallTarget)
 {
     CheckInvalidVariadicOverload(R"(
