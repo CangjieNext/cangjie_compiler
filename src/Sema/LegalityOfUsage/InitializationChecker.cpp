@@ -1601,6 +1601,29 @@ void InitializationChecker::CheckInitInTypeDecl(
     }
 }
 
+static void MarkJavarefInitializedIfJavaSuper(ClassLikeDecl* parentClassLike,
+    const std::vector<Ptr<Decl>>& unInitNonFuncDecls)
+{
+    auto classDecl = As<ASTKind::CLASS_DECL>(parentClassLike);
+    if (!classDecl) {
+        return;
+    }
+    auto superClass = classDecl->GetSuperClassDecl();
+    if (!superClass || (!superClass->IsJavaMirror() && !superClass->IsJavaImpl())) {
+        return;
+    }
+    for (auto decl : unInitNonFuncDecls) {
+        if (decl->astKind == ASTKind::VAR_DECL && decl->TestAttr(Attribute::COMPILER_ADD) &&
+            decl->identifier == Interop::Java::JAVA_REF_FIELD_NAME) {
+            /*
+                Only `javaref` field in mirrors and impls initialization has to be skipped.
+                This field is initialized in JavaInterop desugar stage
+            */
+            decl->EnableAttr(Attribute::INITIALIZED);
+        }
+    }
+}
+
 void InitializationChecker::CheckInitInConstructors(FuncDecl& fd, const std::vector<Ptr<Decl>>& unInitNonFuncDecls)
 {
     if (fd.constructorCall != ConstructorCall::OTHER_INIT) {
@@ -1621,24 +1644,7 @@ void InitializationChecker::CheckInitInConstructors(FuncDecl& fd, const std::vec
         return;
     }
 
-    if (auto classDecl = As<ASTKind::CLASS_DECL>(fd.funcBody->parentClassLike)) {
-        if (auto superClass = classDecl->GetSuperClassDecl();
-            superClass && (superClass->IsJavaMirror() || superClass->IsJavaImpl())) {
-            for (auto decl : unInitNonFuncDecls) {
-                if (decl->astKind != ASTKind::VAR_DECL || !decl->TestAttr(Attribute::COMPILER_ADD)) {
-                    continue;
-                }
-                if (decl->identifier != Interop::Java::JAVA_REF_FIELD_NAME) {
-                    continue;
-                }
-                /*
-                    Only `javaref` field in mirrors and impls initialization has to be skipped.
-                    This field is initialized in JavaInterop desugar stage
-                */
-                decl->EnableAttr(Attribute::INITIALIZED);
-            }
-        }
-    }
+    MarkJavarefInitializedIfJavaSuper(fd.funcBody->parentClassLike, unInitNonFuncDecls);
 
     // If the constructor is terminated by 'ThrowExpr' directly,
     // the initialization check can be ignored, since the object will not be created.

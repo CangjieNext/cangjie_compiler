@@ -165,6 +165,12 @@ void JavaDesugarManager::InsertJavaMirrorCtor(ClassDecl& decl, bool doStub)
         return;
     }
 
+    AppendMirrorCtorFuncDecl(decl, std::move(ctorNodes), std::move(param));
+}
+
+void JavaDesugarManager::AppendMirrorCtorFuncDecl(ClassDecl& decl,
+    std::vector<OwnedPtr<Node>> ctorNodes, OwnedPtr<FuncParam> param)
+{
     std::vector<Ptr<Ty>> ctorFuncParamTys;
     ctorFuncParamTys.push_back(param->GetTy());
     auto ctorFuncTy = typeManager.GetFunctionTy(std::move(ctorFuncParamTys), decl.GetTy());
