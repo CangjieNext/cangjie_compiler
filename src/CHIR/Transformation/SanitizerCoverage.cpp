@@ -320,8 +320,10 @@ void SanitizerCoverage::InjectTraceForCmp(BinaryExpression& binary, bool isDebug
     if (auto intTy = StaticCast<IntType*>(lhs->GetType()); intTy && intTy->IsSigned()) {
         // Note: If the operand type is int8, convert it to uint8. int16, int32, int64 is similar.
         auto unsignedType = builder.GetType<IntType>(GetTraceCompareType(lhs->GetType()->GetTypeKind()));
-        auto lhsCast = builder.CreateExpression<TypeCast>(binary.GetDebugLocation(), unsignedType, lhs, parent);
-        auto rhsCast = builder.CreateExpression<TypeCast>(binary.GetDebugLocation(), unsignedType, rhs, parent);
+        auto lhsCast = builder.CreateExpression<NumericCast>(
+            binary.GetDebugLocation(), unsignedType, lhs, OverflowStrategy::NA, parent);
+        auto rhsCast = builder.CreateExpression<NumericCast>(
+            binary.GetDebugLocation(), unsignedType, rhs, OverflowStrategy::NA, parent);
         lhs = lhsCast->GetResult();
         rhs = rhsCast->GetResult();
         lhsCast->MoveBefore(&binary);
@@ -383,7 +385,8 @@ void SanitizerCoverage::InjectTraceForSwitch(MultiBranch& mb, bool isDebug)
     // 4. create cast if need
     auto switchVal = mb.GetCondition();
     if (switchVal->GetType()->GetTypeKind() != Type::TypeKind::TYPE_UINT64) {
-        auto typeCast = builder.CreateExpression<TypeCast>(mb.GetDebugLocation(), u64Ty, switchVal, parent);
+        auto typeCast = builder.CreateExpression<NumericCast>(
+            mb.GetDebugLocation(), u64Ty, switchVal, OverflowStrategy::NA, parent);
         switchVal = typeCast->GetResult();
         typeCast->MoveBefore(&mb);
     }
@@ -452,7 +455,8 @@ std::vector<Value*> SanitizerCoverage::GenerateCStringMemCmp(
         auto sizeN = CreateMemberApply(
             builder.GetInt64Ty(), getSize, oper1.GetType(), {&oper1}, parent, builder, loc);
         sizeN->MoveBefore(&apply);
-        auto sizeNCasted = builder.CreateExpression<TypeCast>(loc, builder.GetUInt32Ty(), sizeN->GetResult(), parent);
+        auto sizeNCasted = builder.CreateExpression<NumericCast>(
+            loc, builder.GetUInt32Ty(), sizeN->GetResult(), OverflowStrategy::NA, parent);
         sizeNCasted->MoveBefore(&apply);
         res.push_back(sizeNCasted->GetResult());
     }
@@ -477,7 +481,8 @@ Expression* SanitizerCoverage::CreateOneCPointFromList(Value& array, Apply& appl
     start->MoveBefore(&apply);
     auto startRes = start->GetResult();
     if (startRes->GetType() != builder.GetInt64Ty()) {
-        auto castToInt64 = builder.CreateExpression<TypeCast>(loc, builder.GetInt64Ty(), startRes, parent);
+        auto castToInt64 = builder.CreateExpression<NumericCast>(
+            loc, builder.GetInt64Ty(), startRes, OverflowStrategy::NA, parent);
         castToInt64->MoveBefore(&apply);
         startRes = castToInt64->GetResult();
     }
@@ -621,7 +626,8 @@ std::vector<Value*> SanitizerCoverage::GenerateArrayCmp(
         auto calSize = builder.CreateExpression<BinaryExpression>(loc, builder.GetInt64Ty(),
             ExprKind::MUL, sizeN->GetResult(), elementSize->GetResult(), OverflowStrategy::WRAPPING, parent);
         calSize->MoveBefore(&apply);
-        auto sizeNCasted = builder.CreateExpression<TypeCast>(loc, builder.GetUInt32Ty(), calSize->GetResult(), parent);
+        auto sizeNCasted = builder.CreateExpression<NumericCast>(
+            loc, builder.GetUInt32Ty(), calSize->GetResult(), OverflowStrategy::NA, parent);
         sizeNCasted->MoveBefore(&apply);
         res.push_back(sizeNCasted->GetResult());
     }
@@ -1139,7 +1145,8 @@ Function* SanitizerCoverage::CreatePCTableInitFunc()
             rawDataAcquireFileName->GetResult()->GetType(), rawDataAcquireLine->GetResult()->GetType()};
     auto pcInitType = builder.GetType<FuncType>(paramTypeList, builder.GetUnitTy(), false, true);
     auto pcInitFunc = GenerateForeignFunc(SanCovCreatePCTable, INVALID_LOCATION, *pcInitType, packageName);
-    auto typecast = builder.CreateExpression<TypeCast>(builder.GetUInt64Ty(), funcSize->GetResult(), block0);
+    auto typecast = builder.CreateExpression<NumericCast>(
+        builder.GetUInt64Ty(), funcSize->GetResult(), OverflowStrategy::NA, block0);
     block0->AppendExpression(typecast);
     block0->AppendExpression(CreateNonMemberApply(builder.GetUnitTy(), pcInitFunc,
         std::vector<Value*>{packCString->GetResult(), typecast->GetResult(), rawDataAcquireString->GetResult(),

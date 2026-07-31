@@ -308,42 +308,6 @@ Cangjie::OverflowStrategy BinaryExprBase::GetOverflowStrategy() const
                 : exprE->GetOverflowStrategy();
 }
 
-SpawnBase::SpawnBase(const Expression* e) : ExpressionBase(e)
-{
-    CJC_NULLPTR_CHECK(e);
-    if (e->GetExprKind() == ExprKind::SPAWN) {
-        expr = Cangjie::StaticCast<const Spawn*>(e);
-        exprE = nullptr;
-    } else {
-        expr = nullptr;
-        exprE = Cangjie::StaticCast<const SpawnWithException*>(e);
-    }
-}
-
-SpawnBase::SpawnBase(const Spawn* expr) : ExpressionBase(expr), expr(expr), exprE(nullptr)
-{
-    CJC_NULLPTR_CHECK(expr);
-}
-
-SpawnBase::SpawnBase(const SpawnWithException* exprE) : ExpressionBase(exprE), expr(nullptr), exprE(exprE)
-{
-    CJC_NULLPTR_CHECK(exprE);
-}
-
-Value* SpawnBase::GetObject() const
-{
-    if (IsExecuteClosure()) {
-        return expr ? expr->GetClosure() : exprE->GetClosure();
-    }
-    return expr ? expr->GetFuture() : exprE->GetFuture();
-}
-
-bool SpawnBase::IsExecuteClosure() const
-{
-    return expr ? expr->IsExecuteClosure()
-                : exprE->IsExecuteClosure();
-}
-
 IntrinsicBase::IntrinsicBase(const Expression* e) : ExpressionBase(e)
 {
     CJC_NULLPTR_CHECK(e);
@@ -382,68 +346,4 @@ std::vector<Value*> IntrinsicBase::GetArgs() const
 {
     return expr ? expr->GetArgs()
                 : exprE->GetArgs();
-}
-
-AllocateBase::AllocateBase(const Expression* e) : ExpressionBase(e)
-{
-    CJC_NULLPTR_CHECK(e);
-    if (e->GetExprKind() == ExprKind::ALLOCATE) {
-        expr = Cangjie::StaticCast<const Allocate*>(e);
-        exprE = nullptr;
-    } else {
-        expr = nullptr;
-        exprE = Cangjie::StaticCast<const AllocateWithException*>(e);
-    }
-}
-
-AllocateBase::AllocateBase(const Allocate* expr) : ExpressionBase(expr), expr(expr), exprE(nullptr)
-{
-    CJC_NULLPTR_CHECK(expr);
-}
-
-AllocateBase::AllocateBase(const AllocateWithException* exprE) : ExpressionBase(exprE), expr(nullptr), exprE(exprE)
-{
-    CJC_NULLPTR_CHECK(exprE);
-}
-
-Type* AllocateBase::GetType() const
-{
-    return expr ? expr->GetType()
-                : exprE->GetType();
-}
-
-RawArrayAllocateBase::RawArrayAllocateBase(const Expression* e) : ExpressionBase(e)
-{
-    CJC_NULLPTR_CHECK(e);
-    if (e->GetExprKind() == ExprKind::RAW_ARRAY_ALLOCATE) {
-        expr = Cangjie::StaticCast<const RawArrayAllocate*>(e);
-        exprE = nullptr;
-    } else {
-        expr = nullptr;
-        exprE = Cangjie::StaticCast<const RawArrayAllocateWithException*>(e);
-    }
-}
-
-RawArrayAllocateBase::RawArrayAllocateBase(const RawArrayAllocate* expr)
-    : ExpressionBase(expr), expr(expr), exprE(nullptr)
-{
-    CJC_NULLPTR_CHECK(expr);
-}
-
-RawArrayAllocateBase::RawArrayAllocateBase(const RawArrayAllocateWithException* exprE)
-    : ExpressionBase(exprE), expr(nullptr), exprE(exprE)
-{
-    CJC_NULLPTR_CHECK(exprE);
-}
-
-Type* RawArrayAllocateBase::GetElementType() const
-{
-    return expr ? expr->GetElementType()
-                : exprE->GetElementType();
-}
-
-Value* RawArrayAllocateBase::GetSize() const
-{
-    return expr ? expr->GetSize()
-                : exprE->GetSize();
 }

@@ -498,7 +498,13 @@ Value* TypeCastIfNeeded(
             parentBlock.AppendExpression(load);
             tmpValue = load->GetResult();
         }
-        auto ret = builder.CreateExpression<TypeCast>(loc, &expectedTy, tmpValue, &parentBlock);
+        Expression* ret = nullptr;
+        if (val.GetType()->IsNumeric() && expectedTy.IsNumeric()) {
+            ret = builder.CreateExpression<NumericCast>(
+                loc, &expectedTy, tmpValue, OverflowStrategy::NA, &parentBlock);
+        } else {
+            ret = builder.CreateExpression<ClassStaticCast>(loc, &expectedTy, tmpValue, &parentBlock);
+        }
         parentBlock.AppendExpression(ret);
         ret->Set<NeedCheckCast>(needCheck);
         return ret->GetResult();
@@ -540,11 +546,11 @@ Ptr<Value> TransformGenericIfNeeded(
     }
 
     if (HasGenericInNonFuncScope(expectedTy) && !HasGenericInNonFuncScope(*val.GetType())) {
-        auto ret = builder.CreateExpression<TransformToGeneric>(loc, &expectedTy, &val, &parentBlock);
+        auto ret = builder.CreateExpression<CastToGeneric>(loc, &expectedTy, &val, &parentBlock);
         parentBlock.AppendExpression(ret);
         return ret->GetResult();
     } else if (HasGenericInNonFuncScope(*val.GetType()) && !HasGenericInNonFuncScope(expectedTy)) {
-        auto ret = builder.CreateExpression<TransformToConcrete>(loc, &expectedTy, &val, &parentBlock);
+        auto ret = builder.CreateExpression<CastToConcrete>(loc, &expectedTy, &val, &parentBlock);
         parentBlock.AppendExpression(ret);
         return ret->GetResult();
     }
@@ -600,12 +606,12 @@ Ptr<Value> BoxIfNeeded(
             parentBlock.AppendExpression(ret);
             return ret->GetResult();
         } else {
-            auto ret = builder.CreateExpression<UnBox>(loc, &expectedTy, &val, &parentBlock);
+            auto ret = builder.CreateExpression<UnBoxToValue>(loc, &expectedTy, &val, &parentBlock);
             parentBlock.AppendExpression(ret);
             return ret->GetResult();
         }
     } else if (LeftTypeIsBoxOfRightType(*srcTy, expectedTy)) {
-        auto ret = builder.CreateExpression<UnBox>(loc, &expectedTy, &val, &parentBlock);
+        auto ret = builder.CreateExpression<UnBoxToValue>(loc, &expectedTy, &val, &parentBlock);
         parentBlock.AppendExpression(ret);
         return ret->GetResult();
     } else if (LeftTypeIsBoxOfRightType(expectedTy, *srcTy)) {
@@ -1201,18 +1207,18 @@ bool IsConstructor(const Value& value)
 
 Value* GetCastOriginalTarget(const Expression& expr)
 {
-    if (expr.GetExprKind() == ExprKind::TYPECAST) {
+    if (expr.GetExprKind() == ExprKind::CLASS_STATIC_CAST) {
         return StaticCast<TypeCast*>(&expr)->GetSourceValue();
     }
     if (expr.GetExprKind() == ExprKind::UNBOX_TO_REF) {
         // from struct& -> class&
         return StaticCast<UnBoxToRef*>(&expr)->GetSourceValue();
     }
-    if (expr.GetExprKind() == ExprKind::TRANSFORM_TO_GENERIC) {
-        return StaticCast<TransformToGeneric*>(&expr)->GetSourceValue();
+    if (expr.GetExprKind() == ExprKind::CAST_TO_GENERIC) {
+        return StaticCast<CastToGeneric*>(&expr)->GetSourceValue();
     }
-    if (expr.GetExprKind() == ExprKind::TRANSFORM_TO_CONCRETE) {
-        return StaticCast<TransformToConcrete*>(&expr)->GetSourceValue();
+    if (expr.GetExprKind() == ExprKind::CAST_TO_CONCRETE) {
+        return StaticCast<CastToConcrete*>(&expr)->GetSourceValue();
     }
     if (expr.GetExprKind() == ExprKind::BOX) {
         return StaticCast<Box*>(&expr)->GetSourceValue();

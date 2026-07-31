@@ -111,7 +111,7 @@ void Translator::TranslateAnnotationsArrayBody(const Decl& decl, Function& func)
         auto gv = annoInsts[i];
         auto load =
             CreateAndAppendExpression<Load>(StaticCast<RefType>(gv->GetType())->GetBaseType(), gv, currentBlock);
-        auto typecast = CreateAndAppendExpression<TypeCast>(objectTy, load->GetResult(), currentBlock);
+        auto typecast = CreateAndAppendExpression<ClassStaticCast>(objectTy, load->GetResult(), currentBlock);
         CreateAndAppendExpression<StoreElementRef>(
             builder.GetUnitTy(), typecast->GetResult(), rawArray->GetResult(), std::vector<uint64_t>{i}, currentBlock);
     }

@@ -6,8 +6,8 @@
 
 #include "Base/ArrayImpl.h"
 
-#include "Base/CHIRExprWrapper.h"
 #include "IRBuilder.h"
+#include "cangjie/CHIR/IR/Expression/Expression.h"
 
 using namespace Cangjie;
 using namespace CodeGen;
@@ -36,18 +36,18 @@ llvm::Value* CodeGen::GenerateRawArrayInitByValue(
 #endif
 }
 
-llvm::Value* CodeGen::GenerateRawArrayAllocate(IRBuilder2& irBuilder, const CHIRRawArrayAllocateWrapper& rawArray)
+llvm::Value* CodeGen::GenerateRawArrayAllocate(IRBuilder2& irBuilder, const CHIR::RawArrayAllocateBase& rawArray)
 {
     // Sized array must have its size operand
     CJC_NULLPTR_CHECK(rawArray.GetSize());
     auto& cgMod = irBuilder.GetCGModule();
     auto arrTy = StaticCast<CHIR::RawArrayType*>(rawArray.GetResult()->GetType()->GetTypeArgs()[0]);
-    auto length = **(cgMod | rawArray.GetOperand(0));
+    auto length = **(cgMod | rawArray.GetSize());
 #ifdef CANGJIE_CODEGEN_CJNATIVE_BACKEND
     // If we already know the length of rawArray is greater than or equal to 0, we can remove the throw branch.
-    if (rawArray.GetOperand(0)->IsLocalVar() &&
-        StaticCast<CHIR::LocalVar*>(rawArray.GetOperand(0))->GetExpr()->IsConstant()) {
-        auto constExpr = StaticCast<CHIR::Constant*>(StaticCast<CHIR::LocalVar*>(rawArray.GetOperand(0))->GetExpr());
+    if (rawArray.GetSize()->IsLocalVar() &&
+        StaticCast<CHIR::LocalVar*>(rawArray.GetSize())->GetExpr()->IsConstant()) {
+        auto constExpr = StaticCast<CHIR::Constant*>(StaticCast<CHIR::LocalVar*>(rawArray.GetSize())->GetExpr());
         if (constExpr->GetSignedIntLitVal() >= 0) {
             return irBuilder.AllocateArray(*arrTy, length);
         }

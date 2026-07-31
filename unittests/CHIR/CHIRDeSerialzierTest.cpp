@@ -438,7 +438,7 @@ ExprKind DeSerialize(const PackageFormat::CHIRExprKind& kind)
             ret = ExprKind::SPAWN_WITH_EXCEPTION;
             break;
         case CHIRExprKind_TryNumericCast:
-            ret = ExprKind::TYPECAST_WITH_EXCEPTION;
+            ret = ExprKind::NUMERIC_CAST_WITH_EXCEPTION;
             break;
         case CHIRExprKind_TryIntrinsic:
             ret = ExprKind::INTRINSIC_WITH_EXCEPTION;
@@ -518,7 +518,7 @@ ExprKind DeSerialize(const PackageFormat::CHIRExprKind& kind)
             ret = ExprKind::OR;
             break;
         case CHIRExprKind_StaticCast:
-            ret = ExprKind::INVALID;
+            ret = ExprKind::CLASS_STATIC_CAST;
             break;
             // Memory
         case CHIRExprKind_Allocate:
@@ -571,7 +571,7 @@ ExprKind DeSerialize(const PackageFormat::CHIRExprKind& kind)
             ret = ExprKind::INSTANCEOF;
             break;
         case CHIRExprKind_NumericCast:
-            ret = ExprKind::TYPECAST;
+            ret = ExprKind::NUMERIC_CAST;
             break;
         case CHIRExprKind_GetException:
             ret = ExprKind::GET_EXCEPTION;
@@ -604,13 +604,13 @@ ExprKind DeSerialize(const PackageFormat::CHIRExprKind& kind)
             ret = ExprKind::BOX;
             break;
         case CHIRExprKind_UnboxToValue:
-            ret = ExprKind::UNBOX;
+            ret = ExprKind::UNBOX_TO_VALUE;
             break;
         case CHIRExprKind_CastToGeneric:
-            ret = ExprKind::TRANSFORM_TO_GENERIC;
+            ret = ExprKind::CAST_TO_GENERIC;
             break;
         case CHIRExprKind_CastToConcrete:
-            ret = ExprKind::TRANSFORM_TO_CONCRETE;
+            ret = ExprKind::CAST_TO_CONCRETE;
             break;
         case CHIRExprKind_UnboxToRef:
             ret = ExprKind::UNBOX_TO_REF;

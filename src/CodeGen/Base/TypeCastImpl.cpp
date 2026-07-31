@@ -11,6 +11,8 @@
  */
 
 #include "Base/TypeCastImpl.h"
+#include "cangjie/CHIR/IR/Expression/Expression.h"
+#include "cangjie/CHIR/Utils/CHIRCasting.h"
 
 #include "Base/CGTypes/CGEnumType.h"
 #include "CGModule.h"
@@ -583,11 +585,16 @@ llvm::Value* GenerateGenericTypeCast(IRBuilder2& irBuilder, const CGValue& cgSrc
     }
 }
 
-llvm::Value* GenerateTypeCast(IRBuilder2& irBuilder, const CHIRTypeCastWrapper& typeCast)
+llvm::Value* GenerateTypeCast(IRBuilder2& irBuilder, const CHIR::TypeCast& typeCast)
 {
-    auto targetTy = typeCast.GetTargetTy();
-    auto srcTy = typeCast.GetSourceTy();
+    auto targetTy = typeCast.GetTargetType();
+    auto srcTy = typeCast.GetSourceType();
     CJC_ASSERT(srcTy && targetTy);
+
+    OverflowStrategy overflowStrategy = OverflowStrategy::NA;
+    if (auto numericCast = DynamicCast<const CHIR::NumericCastBase*>(&typeCast)) {
+        overflowStrategy = numericCast->GetOverflowStrategy();
+    }
 
     auto& cgMod = irBuilder.GetCGModule();
     auto cgSrcValue = cgMod | typeCast.GetSourceValue();
@@ -631,7 +638,7 @@ llvm::Value* GenerateTypeCast(IRBuilder2& irBuilder, const CHIRTypeCastWrapper& 
             irBuilder, srcValue, targetType->GetLLVMType(), *StaticCast<CHIR::IntType*>(srcTy));
     } else if (targetTy->IsInteger() && srcTy->IsFloat()) {
         return GenerateFloatToIntegerConvExpr(
-            irBuilder, typeCast.GetOverflowStrategy(), *srcValue, *targetType, *StaticCast<CHIR::FloatType*>(srcTy));
+            irBuilder, overflowStrategy, *srcValue, *targetType, *StaticCast<CHIR::FloatType*>(srcTy));
     } else if (irBuilder.GetTypeKindFromType(*targetTy) == CHIR::Type::TypeKind::TYPE_UINT32 && srcTy->IsRune()) {
         return srcValue;
     } else if (targetTy->IsRune() && srcTy->IsInteger()) {
@@ -648,7 +655,7 @@ llvm::Value* GenerateTypeCast(IRBuilder2& irBuilder, const CHIRTypeCastWrapper& 
         return irBuilder.CreateBitOrPointerCast(srcValue, castedTo);
     } else if (targetTy->IsInteger() && srcTy->IsInteger()) {
         return GenerateIntegerConversionExpr(
-            irBuilder, typeCast.GetOverflowStrategy(), *srcValue, *targetType, *StaticCast<CHIR::IntType*>(srcTy));
+            irBuilder, overflowStrategy, *srcValue, *targetType, *StaticCast<CHIR::IntType*>(srcTy));
     } else if (targetType->GetLLVMType() == srcType->GetLLVMType()) {
         return srcValue;
     } else if (IsCFunc(*targetTy) && srcTy->IsCPointer()) {

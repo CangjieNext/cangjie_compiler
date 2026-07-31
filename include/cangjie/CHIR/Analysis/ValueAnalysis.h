@@ -1010,7 +1010,8 @@ private:
                 PreHandleInvokeExpr(state, StaticCast<const Invoke*>(expression));
                 return true;
             }
-            case ExprKind::TYPECAST: {
+            case ExprKind::NUMERIC_CAST:
+            case ExprKind::CLASS_STATIC_CAST: {
                 auto cast = StaticCast<TypeCast*>(expression);
                 if (!cast->Get<NeedCheckCast>()) {
                     return PreHandleNonCheckedTypeCast(state, cast);
@@ -1523,7 +1524,7 @@ private:
             auto targetClassDef = getClassDef(*ty);
             bool isCollection = targetClassDef && targetClassDef->GetSrcCodeIdentifier() == "Collection" &&
                 targetClassDef->GetPackageName() == Cangjie::CORE_PACKAGE_NAME;
-            auto sourceClassDef = getClassDef(*cast->GetSourceTy());
+            auto sourceClassDef = getClassDef(*cast->GetSourceType());
             bool isBoxArray = sourceClassDef &&
                 sourceClassDef->GetSrcCodeIdentifier().find(Cangjie::BOX_DECL_PREFIX) == 0 &&
                 sourceClassDef->GetAllInstanceVarNum() == 1 && sourceClassDef->GetInstanceVar(0).type->IsStructArray();
